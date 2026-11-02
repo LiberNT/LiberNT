@@ -438,20 +438,8 @@ static DWORD WINAPI SchedulingReleaseGate(void *Parameter)
 
 static NTSTATUS SchedulingSubmit(D3DKMT_HANDLE Context, D3DKMT_HANDLE Fence, UINT64 Value)
 {
-    PFND3DKMT_SUBMITCOMMAND Submit = (PFND3DKMT_SUBMITCOMMAND)LoadD3DKMTProc("D3DKMTSubmitCommand");
-    D3DKMT_SUBMITCOMMAND Command;
     D3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU Signal;
-    NTSTATUS Status;
 
-    memset(&Command, 0, sizeof(Command));
-    Command.Commands = 0x10000;
-    Command.CommandLength = sizeof(ULONG);
-    Command.Flags.NullRendering = 1;
-    Command.BroadcastContextCount = 1;
-    Command.BroadcastContext[0] = Context;
-    Status = Submit(&Command);
-    if (!NT_SUCCESS(Status))
-        return Status;
     memset(&Signal, 0, sizeof(Signal));
     Signal.hContext = Context;
     Signal.ObjectCount = 1;
@@ -491,9 +479,9 @@ START_TEST(scheduling)
     pfnWaitFromGpu = (PFND3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU)LoadD3DKMTProc("D3DKMTWaitForSynchronizationObjectFromGpu");
     pfnSignalFromGpu = (PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU)LoadD3DKMTProc("D3DKMTSignalSynchronizationObjectFromGpu");
     if (!CreateContext || !DestroyContext || !CreateSync || !DestroySync || !WaitCpu ||
-        !Gate.Signal || !pfnWaitFromGpu || !pfnSignalFromGpu || !LoadD3DKMTProc("D3DKMTSubmitCommand"))
+        !Gate.Signal || !pfnWaitFromGpu || !pfnSignalFromGpu)
     {
-        skip("WDDM virtual submission and monitored fences are required\n");
+        skip("WDDM virtual contexts and monitored fences are required\n");
         return;
     }
 

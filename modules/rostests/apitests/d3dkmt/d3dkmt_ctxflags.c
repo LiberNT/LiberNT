@@ -262,6 +262,22 @@ Cleanup:
     CtxFlagsDestroy(Api, hContext);
 }
 
+static NTSTATUS
+CtxFlagsNullRefusal(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, PBOOLEAN Known)
+{
+    D3DKMT_QUERYADAPTERINFO Query;
+    D3DKMT_WDDM_2_0_CAPS Caps;
+
+    memset(&Caps, 0, sizeof(Caps));
+    memset(&Query, 0, sizeof(Query));
+    Query.hAdapter = hAdapter;
+    Query.Type = KMTQAITYPE_WDDM_2_0_CAPS;
+    Query.pPrivateDriverData = &Caps;
+    Query.PrivateDriverDataSize = sizeof(Caps);
+    *Known = NT_SUCCESS(Api->QueryAdapterInfo(&Query)) && (Caps.GpuMmuSupported || Caps.IoMmuSupported);
+    return Caps.GpuMmuSupported ? STATUS_INVALID_PARAMETER : STATUS_INVALID_USER_BUFFER;
+}
+
 static VOID
 CtxFlagsAdapter(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, LUID Luid, BOOL Software)
 {
@@ -270,7 +286,8 @@ CtxFlagsAdapter(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, LUID Luid, BOOL Softw
     D3DDDI_RESERVEGPUVIRTUALADDRESS Reserve;
     D3DKMT_FREEGPUVIRTUALADDRESS Free;
     D3DKMT_HANDLE hDevice, hContext;
-    NTSTATUS Status, Control;
+    NTSTATUS Status, Control, Expected;
+    BOOLEAN Known;
     ULONG Index;
 
     hDevice = CreateTestDevice(hAdapter);
@@ -332,7 +349,8 @@ CtxFlagsAdapter(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, LUID Luid, BOOL Softw
     if (NT_SUCCESS(Status))
     {
         Control = CtxFlagsSubmitNull(Api, hContext, 0);
-        ok(Control == STATUS_INVALID_USER_BUFFER, "Submission without commands returned 0x%08lx\n", Control);
+        Expected = CtxFlagsNullRefusal(Api, hAdapter, &Known);
+        ok(Control == Expected, "Submission without commands returned 0x%08lx, expected 0x%08lx\n", Control, Expected);
         CtxFlagsDestroy(Api, hContext);
     }
     CtxFlagsSyncContext(Api, hDevice, 0x00000008, "SynchronizationOnly", 0, Control);
@@ -349,6 +367,205 @@ Cleanup:
     memset(&DestroyQueue, 0, sizeof(DestroyQueue));
     DestroyQueue.hPagingQueue = CreateQueue.hPagingQueue;
     Api->DestroyPagingQueue(&DestroyQueue);
+    DestroyTestDevice(hDevice);
+}
+
+static NTSTATUS
+CtxFlagsSubmitProbe(CTXFLAGS_API *Api, D3DKMT_HANDLE hContext, D3DGPU_VIRTUAL_ADDRESS CommandVa, UINT Length, PVOID Data, UINT Size)
+{
+    D3DKMT_SUBMITCOMMAND Submit;
+
+    memset(&Submit, 0, sizeof(Submit));
+    Submit.BroadcastContextCount = 1;
+    Submit.BroadcastContext[0] = hContext;
+    Submit.Commands = CommandVa;
+    Submit.CommandLength = Length;
+    Submit.Flags.NullRendering = 1;
+    Submit.pPrivateDriverData = Data;
+    Submit.PrivateDriverDataSize = Size;
+    return Api->Submit(&Submit);
+}
+
+static VOID
+CtxFlagsCheckRefused(LUID Luid, CONST char *Name, NTSTATUS Status, NTSTATUS Expected, BOOLEAN Known)
+{
+    if (Known)
+        ok(Status == Expected, "Adapter %08lx:%08lx: NullRendering submission %s returned 0x%08lx, expected 0x%08lx\n",
+           (ULONG)Luid.HighPart, Luid.LowPart, Name, Status, Expected);
+    else
+        trace("CTXFLAGS adapter=%08lx:%08lx NullRendering submission %s status=0x%08lx\n",
+              (ULONG)Luid.HighPart, Luid.LowPart, Name, Status);
+}
+
+static D3DKMT_HANDLE
+CtxFlagsCreateCommandAllocation(D3DKMT_HANDLE hDevice, PVOID Heap, D3DKMT_HANDLE *hResource)
+{
+    PFND3DKMT_CREATEALLOCATION CreateAllocation2 = (PFND3DKMT_CREATEALLOCATION)LoadD3DKMTProc("D3DKMTCreateAllocation2");
+    PFND3DKMT_CREATEALLOCATION CreateAllocation = (PFND3DKMT_CREATEALLOCATION)LoadD3DKMTProc("D3DKMTCreateAllocation");
+    D3DKMT_CREATESTANDARDALLOCATION Standard;
+    D3DKMT_CREATEALLOCATION Create;
+    D3DDDI_ALLOCATIONINFO2 Info2;
+    D3DDDI_ALLOCATIONINFO Info;
+
+    *hResource = 0;
+    if (CreateAllocation2 != NULL && Heap != NULL)
+    {
+        memset(&Standard, 0, sizeof(Standard));
+        Standard.Type = D3DKMT_STANDARDALLOCATIONTYPE_EXISTINGHEAP;
+        Standard.ExistingHeapData.Size = 0x1000;
+        memset(&Info2, 0, sizeof(Info2));
+        Info2.pSystemMem = Heap;
+        memset(&Create, 0, sizeof(Create));
+        Create.hDevice = hDevice;
+        Create.pStandardAllocation = &Standard;
+        Create.NumAllocations = 1;
+        Create.pAllocationInfo2 = &Info2;
+        Create.Flags.CreateResource = 1;
+        Create.Flags.CreateShared = 1;
+        Create.Flags.CrossAdapter = 1;
+        Create.Flags.StandardAllocation = 1;
+        Create.Flags.ExistingSysMem = 1;
+        if (NT_SUCCESS(CreateAllocation2(&Create)) && Info2.hAllocation != 0)
+        {
+            *hResource = Create.hResource;
+            return Info2.hAllocation;
+        }
+    }
+    if (CreateAllocation == NULL)
+        return 0;
+    memset(&Info, 0, sizeof(Info));
+    memset(&Create, 0, sizeof(Create));
+    Create.hDevice = hDevice;
+    Create.NumAllocations = 1;
+    Create.pAllocationInfo = &Info;
+    return NT_SUCCESS(CreateAllocation(&Create)) ? Info.hAllocation : 0;
+}
+
+static VOID
+CtxFlagsProbeMapped(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, D3DKMT_HANDLE hDevice, D3DKMT_HANDLE hContext, LUID Luid,
+                    NTSTATUS Expected, BOOLEAN Known)
+{
+    PFND3DKMT_DESTROYALLOCATION DestroyAllocation = (PFND3DKMT_DESTROYALLOCATION)LoadD3DKMTProc("D3DKMTDestroyAllocation");
+    PFND3DKMT_MAPGPUVIRTUALADDRESS MapGpuVa = (PFND3DKMT_MAPGPUVIRTUALADDRESS)LoadD3DKMTProc("D3DKMTMapGpuVirtualAddress");
+    D3DKMT_CREATEPAGINGQUEUE Queue;
+    D3DDDI_DESTROYPAGINGQUEUE DestroyQueue;
+    D3DKMT_DESTROYALLOCATION Destroy;
+    D3DDDI_MAPGPUVIRTUALADDRESS Map;
+    D3DKMT_FREEGPUVIRTUALADDRESS Free;
+    D3DKMT_HANDLE hAllocation, hResource;
+    ULONG PrivateData[4];
+    NTSTATUS Status;
+    PVOID Heap;
+    DWORD Start;
+
+    if (DestroyAllocation == NULL || MapGpuVa == NULL)
+        return;
+    memset(&Queue, 0, sizeof(Queue));
+    Queue.hDevice = hDevice;
+    Queue.Priority = D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL;
+    if (!NT_SUCCESS(Api->CreatePagingQueue(&Queue)))
+        return;
+    Heap = VirtualAlloc(NULL, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    hAllocation = CtxFlagsCreateCommandAllocation(hDevice, Heap, &hResource);
+    if (hAllocation != 0)
+    {
+        memset(&Map, 0, sizeof(Map));
+        Map.hPagingQueue = Queue.hPagingQueue;
+        Map.hAllocation = hAllocation;
+        Map.SizeInPages = 1;
+        Map.Protection.Write = 1;
+        Map.Protection.Execute = 1;
+        Status = MapGpuVa(&Map);
+        if (NT_SUCCESS(Status) && Map.VirtualAddress != 0)
+        {
+            Start = GetTickCount();
+            while (Queue.FenceValueCPUVirtualAddress != NULL &&
+                   *(volatile const UINT64 *)Queue.FenceValueCPUVirtualAddress < Map.PagingFenceValue &&
+                   GetTickCount() - Start < CTXFLAGS_FENCE_TIMEOUT_MS)
+                Sleep(1);
+            memset(PrivateData, 0, sizeof(PrivateData));
+            CtxFlagsCheckRefused(Luid, "on a mapped executable page",
+                                 CtxFlagsSubmitProbe(Api, hContext, Map.VirtualAddress, sizeof(ULONG), NULL, 0), Expected, Known);
+            CtxFlagsCheckRefused(Luid, "of a whole mapped page",
+                                 CtxFlagsSubmitProbe(Api, hContext, Map.VirtualAddress, 0x1000, NULL, 0), Expected, Known);
+            CtxFlagsCheckRefused(Luid, "on a mapped page with private data",
+                                 CtxFlagsSubmitProbe(Api, hContext, Map.VirtualAddress, sizeof(ULONG), PrivateData, sizeof(PrivateData)),
+                                 Expected, Known);
+            memset(&Free, 0, sizeof(Free));
+            Free.hAdapter = hAdapter;
+            Free.BaseAddress = Map.VirtualAddress;
+            Free.Size = 0x1000;
+            Api->Free(&Free);
+        }
+        else
+        {
+            trace("CTXFLAGS adapter=%08lx:%08lx map status=0x%08lx\n", (ULONG)Luid.HighPart, Luid.LowPart, Status);
+        }
+        memset(&Destroy, 0, sizeof(Destroy));
+        Destroy.hDevice = hDevice;
+        Destroy.hResource = hResource;
+        if (hResource == 0)
+        {
+            Destroy.phAllocationList = &hAllocation;
+            Destroy.AllocationCount = 1;
+        }
+        DestroyAllocation(&Destroy);
+    }
+    if (Heap != NULL)
+        VirtualFree(Heap, 0, MEM_RELEASE);
+    memset(&DestroyQueue, 0, sizeof(DestroyQueue));
+    DestroyQueue.hPagingQueue = Queue.hPagingQueue;
+    Api->DestroyPagingQueue(&DestroyQueue);
+}
+
+static VOID
+CtxFlagsProbeCommandAddress(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, LUID Luid)
+{
+    D3DKMT_HANDLE hDevice, hContext, hAfter;
+    NTSTATUS Expected, After;
+    PULONG UserBuffer, ReservedBuffer;
+    ULONG PrivateData[4];
+    BOOLEAN Known;
+
+    Expected = CtxFlagsNullRefusal(Api, hAdapter, &Known);
+    hDevice = CreateTestDevice(hAdapter);
+    if (hDevice == 0)
+        return;
+    if (!NT_SUCCESS(CtxFlagsCreate(Api, hDevice, 0x00000001, &hContext)))
+    {
+        DestroyTestDevice(hDevice);
+        return;
+    }
+    UserBuffer = VirtualAlloc(NULL, 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    ReservedBuffer = VirtualAlloc(NULL, 0x10000, MEM_RESERVE, PAGE_NOACCESS);
+    memset(PrivateData, 0, sizeof(PrivateData));
+
+    CtxFlagsCheckRefused(Luid, "at address 0", CtxFlagsSubmitProbe(Api, hContext, 0, sizeof(ULONG), NULL, 0), Expected, Known);
+    CtxFlagsCheckRefused(Luid, "at address 1", CtxFlagsSubmitProbe(Api, hContext, 1, sizeof(ULONG), NULL, 0), Expected, Known);
+    if (UserBuffer != NULL)
+    {
+        UserBuffer[0] = 0;
+        CtxFlagsCheckRefused(Luid, "on committed user memory",
+                             CtxFlagsSubmitProbe(Api, hContext, (ULONG_PTR)UserBuffer, sizeof(ULONG), NULL, 0), Expected, Known);
+    }
+    if (ReservedBuffer != NULL)
+        CtxFlagsCheckRefused(Luid, "on reserved user memory",
+                             CtxFlagsSubmitProbe(Api, hContext, (ULONG_PTR)ReservedBuffer, sizeof(ULONG), NULL, 0), Expected, Known);
+    CtxFlagsCheckRefused(Luid, "with private data at an unreserved address",
+                         CtxFlagsSubmitProbe(Api, hContext, 0x7F000000000ull, sizeof(ULONG), PrivateData, sizeof(PrivateData)),
+                         Expected, Known);
+    CtxFlagsProbeMapped(Api, hAdapter, hDevice, hContext, Luid, Expected, Known);
+
+    After = CtxFlagsCreate(Api, hDevice, 0x00000001, &hAfter);
+    ok_succeeded(After, "Adapter %08lx:%08lx: context refused after refused submissions (0x%08lx)\n",
+                 (ULONG)Luid.HighPart, Luid.LowPart, After);
+    if (NT_SUCCESS(After))
+        CtxFlagsDestroy(Api, hAfter);
+    CtxFlagsDestroy(Api, hContext);
+    if (ReservedBuffer != NULL)
+        VirtualFree(ReservedBuffer, 0, MEM_RELEASE);
+    if (UserBuffer != NULL)
+        VirtualFree(UserBuffer, 0, MEM_RELEASE);
     DestroyTestDevice(hDevice);
 }
 
@@ -409,6 +626,9 @@ START_TEST(ctxflags)
         CtxFlagsAdapter(&Api, Enum.Adapters[Index].hAdapter, Enum.Adapters[Index].AdapterLuid, Type.SoftwareDevice);
         ++Tested;
     }
+
+    for (Index = 0; Index < Enum.NumAdapters && Index < CTXFLAGS_MAX_ADAPTERS; ++Index)
+        CtxFlagsProbeCommandAddress(&Api, Enum.Adapters[Index].hAdapter, Enum.Adapters[Index].AdapterLuid);
 
     for (Index = 0; Index < Enum.NumAdapters; ++Index)
         CloseAdapter(Enum.Adapters[Index].hAdapter);

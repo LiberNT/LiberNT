@@ -10980,6 +10980,12 @@ DxgkSubmitCommand(
         DxgkDereferenceContext(Context);
         return Status;
     }
+    /* TODO: INFO_NEEDED: NullRendering submissions on contexts created without NullRendering; Windows 11 refuses every probed one on a NullRendering context */
+    if (SubmitCommand->Flags.NullRendering && Context->UserModeCreateFlags.NullRendering && Adapter->GpuMmuCapsValid)
+    {
+        DxgkDereferenceContext(Context);
+        return STATUS_INVALID_PARAMETER;
+    }
     if (SubmitCommand->Commands == 0)
     {
         DxgkDereferenceContext(Context);
