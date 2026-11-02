@@ -3249,6 +3249,7 @@ LxLookupWalk(
 #define LX_VCACHE_LOOKUP    1
 #define LX_VCACHE_STAT      2
 #define LX_VCACHE_FILEID    3
+#define LX_VCACHE_SEARCH    4
 
 typedef struct _LX_VCACHE_ENTRY
 {
@@ -3260,6 +3261,7 @@ typedef struct _LX_VCACHE_ENTRY
     ULONG Flags;
     ULONG Hash;
     LONG64 Generation;
+    LONG64 ModeGeneration;
     LONG64 Time;
     LONG Error;
     BOOLEAN Exists;
@@ -3276,6 +3278,7 @@ static LIST_ENTRY LxVcacheLru;
 static FAST_MUTEX LxVcacheLock;
 static ULONG LxVcacheCount;
 static volatile LONG64 LxVcacheGeneration = 1;
+static volatile LONG64 LxVcacheModeGeneration = 1;
 
 VOID
 LxVcacheInitialize(VOID)
@@ -3523,6 +3526,52 @@ LxLookupCacheKey(
 }
 
 static
+PSTR
+LxLookupSearchKey(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Dir,
+    _In_ PCSTR Path)
+{
+    static const CHAR Digits[] = "0123456789abcdef";
+    ULONG64 Values[4 + RTL_NUMBER_OF(Process->Groups)];
+    SIZE_T DirLength = strlen(Dir), PathLength = strlen(Path), Size, Used;
+    ULONG Count = 0, Index;
+    PSTR Key;
+
+    while ((PathLength > 0) && (Path[PathLength - 1] == '/'))
+        PathLength--;
+    while ((PathLength > 0) && (Path[PathLength - 1] != '/'))
+        PathLength--;
+    Values[Count++] = Process->Fsgid;
+    Values[Count++] = Process->CapEffective;
+    Values[Count++] = (ULONG64)(ULONG_PTR)LxCredUserNs(Process);
+    Values[Count++] = Process->GroupCount;
+    for (Index = 0; (Index < Process->GroupCount) && (Index < RTL_NUMBER_OF(Process->Groups)); Index++)
+        Values[Count++] = Process->Groups[Index];
+    Size = DirLength + PathLength + (Count * 17) + 3;
+    Key = LxAlloc(Size);
+    if (Key == NULL)
+        return NULL;
+    RtlCopyMemory(Key, Dir, DirLength);
+    Used = DirLength;
+    Key[Used++] = '\n';
+    RtlCopyMemory(Key + Used, Path, PathLength);
+    Used += PathLength;
+    Key[Used++] = '\n';
+    for (Index = 0; Index < Count; Index++)
+    {
+        ULONG64 Value = Values[Index];
+        LONG Shift;
+
+        for (Shift = 60; Shift >= 0; Shift -= 4)
+            Key[Used++] = Digits[(Value >> Shift) & 15];
+        Key[Used++] = ',';
+    }
+    Key[Used] = '\0';
+    return Key;
+}
+
+static
 LONG
 LxLookupMaySearch(
     _In_ PLX_PROCESS Process,
@@ -3530,8 +3579,11 @@ LxLookupMaySearch(
     _In_ PCSTR Path)
 {
     PCSTR Cursor = Path;
-    PSTR Dir, Root;
-    BOOLEAN Checked = FALSE;
+    PSTR Dir, Root, Key = NULL;
+    BOOLEAN Checked = FALSE, Complete = TRUE;
+    LONG64 Generation = LxVcacheGeneration, ModeGeneration = LxVcacheModeGeneration;
+    PLX_NS Owner = LxProcessNs(Process, LxNsMnt);
+    ULONG Hash = 0;
     LONG Error = 0;
 
     if ((LxCredUserNs(Process)->Parent == NULL) &&
@@ -3539,6 +3591,11 @@ LxLookupMaySearch(
     {
         return 0;
     }
+    while (*Cursor == '/')
+        Cursor++;
+    if (*Cursor == '\0')
+        return 0;
+    Cursor = Path;
     Root = (strncmp(Path, "/.lxcore-detached/", 18) == 0) ? LxStrDup("/") : LxProcessRoot(Process);
     if (Root == NULL)
         return -LX_ENOMEM;
@@ -3566,6 +3623,33 @@ LxLookupMaySearch(
     {
         LxFree(Root);
         return 0;
+    }
+    if ((Owner != NULL) && (strstr(Path, "..") == NULL))
+        Key = LxLookupSearchKey(Process, Dir, Path);
+    if (Key != NULL)
+    {
+        LONG64 Now = (LONG64)KeQueryInterruptTime();
+        PLX_VCACHE_ENTRY Entry;
+        BOOLEAN Hit = FALSE;
+
+        Hash = LxVcacheHash(Owner, LX_VCACHE_SEARCH, Key);
+        ExAcquireFastMutex(&LxVcacheLock);
+        Entry = LxVcacheFind(Owner, LX_VCACHE_SEARCH, Process->Fsuid, Key, Hash);
+        if ((Entry != NULL) && (Entry->Generation == Generation) && (Entry->ModeGeneration == ModeGeneration) &&
+            (Now - Entry->Time < LX_VCACHE_STAT_TTL))
+        {
+            Hit = TRUE;
+            RemoveEntryList(&Entry->Lru);
+            InsertHeadList(&LxVcacheLru, &Entry->Lru);
+        }
+        ExReleaseFastMutex(&LxVcacheLock);
+        if (Hit)
+        {
+            LxFree(Key);
+            LxFree(Dir);
+            LxFree(Root);
+            return 0;
+        }
     }
 
     /* FIXME: directories reached through symbolic links are not checked */
@@ -3596,12 +3680,14 @@ LxLookupMaySearch(
                 break;
             }
             RtlZeroMemory(&Node, sizeof(Node));
+            Complete = FALSE;
             if (LxLookupFinish(Process, &Node, Copy, TRUE, LX_S_IFDIR, NULL) == 0)
             {
                 if ((Node.Mount != NULL) && (LxVfsStatNode(Process, &Node, &Stat) == 0) &&
                     ((Stat.Mode & LX_S_IFMT) == LX_S_IFDIR))
                 {
                     Error = LxPermission(Process, Stat.Mode, Stat.Uid, Stat.Gid, LX_MAY_EXEC);
+                    Complete = TRUE;
                 }
                 LxNodeFree(&Node);
             }
@@ -3611,8 +3697,13 @@ LxLookupMaySearch(
         }
         while (*Cursor == '/')
             Cursor++;
-        if ((*Cursor == '\0') || (Length >= sizeof(Name)))
+        if (*Cursor == '\0')
             break;
+        if (Length >= sizeof(Name))
+        {
+            Complete = FALSE;
+            break;
+        }
         if ((Length == 1) && (Component[0] == '.'))
             continue;
         if ((Length == 2) && (Component[0] == '.') && (Component[1] == '.'))
@@ -3632,11 +3723,34 @@ LxLookupMaySearch(
         Name[Length] = '\0';
         Next = LxPathJoin(Dir, Name);
         if (Next == NULL)
+        {
+            Complete = FALSE;
             break;
+        }
         LxFree(Dir);
         Dir = Next;
         Checked = FALSE;
     }
+    if ((Key != NULL) && (Error == 0) && Complete)
+    {
+        PLX_VCACHE_ENTRY Entry = LxAlloc(sizeof(*Entry));
+
+        if (Entry != NULL)
+        {
+            Entry->Instance = Process->Instance;
+            Entry->Owner = Owner;
+            Entry->Kind = LX_VCACHE_SEARCH;
+            Entry->Flags = Process->Fsuid;
+            Entry->Hash = Hash;
+            Entry->Generation = Generation;
+            Entry->ModeGeneration = ModeGeneration;
+            Entry->Time = (LONG64)KeQueryInterruptTime();
+            Entry->Key = Key;
+            Key = NULL;
+            LxVcachePut(Entry);
+        }
+    }
+    LxFree(Key);
     LxFree(Dir);
     LxFree(Root);
     return Error;
@@ -5044,7 +5158,10 @@ LxVfsSetAttributes(
     }
     else if ((File == NULL) && (Node != NULL) && (Node->Mount != NULL) && (Node->Mount->Kind == LxFsCgroup))
     {
-        return LxCgroupSetAttributes(Process, Node, Mode, Uid, Gid);
+        Error = LxCgroupSetAttributes(Process, Node, Mode, Uid, Gid);
+        if (Error == 0)
+            InterlockedIncrement64(&LxVcacheModeGeneration);
+        return Error;
     }
     else if ((File != NULL) && (LxFileGetTty(File) != NULL))
     {
@@ -5197,6 +5314,8 @@ LxVfsSetAttributes(
         LxVcacheInvalidatePath(LxProcessNs(Process, LxNsMnt), Node->Path);
     if ((File != NULL) && (File->Path != NULL) && (File->Mount != NULL))
         LxVcacheInvalidatePath(File->Mount->Ns, File->Path);
+    if (Error == 0)
+        InterlockedIncrement64(&LxVcacheModeGeneration);
     if ((Error == 0) && (Node != NULL))
         LxInotifyEvent(Process, Node->Path, 0x00000004, FALSE);
     return Error;
