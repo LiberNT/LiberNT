@@ -119,6 +119,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ndis/NdisRwLock.c
     ndis/NdisProcessorGroup.c
     ndis/NdisLegacyHelpers.c
+    ndis/NdisMiniportCharacteristics.c
     npfs/NpfsConnect.c
     npfs/NpfsCreate.c
     npfs/NpfsFileInfo.c

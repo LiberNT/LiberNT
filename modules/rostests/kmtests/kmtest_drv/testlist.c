@@ -276,6 +276,7 @@ KMT_TESTFUNC Test_NdisIfProvider;
 KMT_TESTFUNC Test_NdisRwLock;
 KMT_TESTFUNC Test_NdisProcessorGroup;
 KMT_TESTFUNC Test_NdisLegacyHelpers;
+KMT_TESTFUNC Test_NdisMiniportCharacteristics;
 KMT_TESTFUNC Test_NpfsConnect;
 KMT_TESTFUNC Test_NpfsCreate;
 KMT_TESTFUNC Test_NpfsFileInfo;
@@ -593,6 +594,7 @@ const KMT_TEST TestList[] =
     { "NdisRwLock",                         Test_NdisRwLock },
     { "NdisProcessorGroup",                 Test_NdisProcessorGroup },
     { "NdisLegacyHelpers",                  Test_NdisLegacyHelpers },
+    { "NdisMiniportCharacteristics",        Test_NdisMiniportCharacteristics },
     { "NpfsConnect",                        Test_NpfsConnect },
     { "NpfsCreate",                         Test_NpfsCreate },
     { "NpfsFileInfo",                       Test_NpfsFileInfo },
