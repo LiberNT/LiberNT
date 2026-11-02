@@ -12482,6 +12482,7 @@ DxgkpDispatchBufferedIoctlWorker(
                 Packet->Version != RXGK_WDDM_PACKET_VERSION_1 ||
                 Packet->PagingQueueHandle == 0 ||
                 Packet->AllocationHandle == 0 ||
+                Packet->PropertyMaskValue == 0 ||
                 (Packet->PropertyMaskValue & ~0x7UL) != 0)
             {
                 return STATUS_INVALID_PARAMETER;
