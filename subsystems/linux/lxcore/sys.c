@@ -22,9 +22,10 @@ LxTracePathArgument(
     if ((Handler == LxSysOpenat) || (Handler == LxSysNewfstatat) || (Handler == LxSysStatx) ||
         (Handler == LxSysFaccessat) || (Handler == LxSysFaccessat2) || (Handler == LxSysReadlinkat) ||
         (Handler == LxSysMkdirat) || (Handler == LxSysUnlinkat) || (Handler == LxSysMknodat) ||
-        (Handler == LxSysUtimensat) || (Handler == LxSysFchmodat) || (Handler == LxSysFchownat) ||
-        (Handler == LxSysExecveat) || (Handler == LxSysMount) || (Handler == LxSysSymlinkat) ||
-        (Handler == LxSysRenameat) || (Handler == LxSysRenameat2) || (Handler == LxSysInotifyAddWatch))
+        (Handler == LxSysUtimensat) || (Handler == LxSysFchmodat) || (Handler == LxSysFchmodat2) ||
+        (Handler == LxSysFchownat) || (Handler == LxSysExecveat) || (Handler == LxSysMount) ||
+        (Handler == LxSysSymlinkat) || (Handler == LxSysRenameat) || (Handler == LxSysRenameat2) ||
+        (Handler == LxSysInotifyAddWatch))
     {
         return 1;
     }

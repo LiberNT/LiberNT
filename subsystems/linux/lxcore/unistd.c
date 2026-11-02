@@ -278,7 +278,7 @@ static LX_SYSCALL_ENTRY LxGenericSyscalls[] =
     LX_ENTRY(441, LxSysEpollPwait2, "epoll_pwait2"),
     LX_ENTRY(442, LxSysMountSetattr, "mount_setattr"),
     LX_ENTRY(449, LxSysFutexWaitv, "futex_waitv"),
-    LX_ENTRY(452, LxSysFchmodat, "fchmodat2"),
+    LX_ENTRY(452, LxSysFchmodat2, "fchmodat2"),
     LX_ENTRY(454, LxSysFutexWake, "futex_wake"),
     LX_ENTRY(463, LxSysSetxattrat, "setxattrat"),
     LX_ENTRY(464, LxSysGetxattrat, "getxattrat"),
