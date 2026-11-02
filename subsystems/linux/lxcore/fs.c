@@ -2640,6 +2640,40 @@ LxXattrFind(
     return NULL;
 }
 
+LONG
+LxXattrRemoveName(
+    _In_opt_ PLX_TMPFS_INODE Inode,
+    _In_opt_ HANDLE Handle,
+    _In_ PCSTR Name)
+{
+    PUCHAR Blob = LxAlloc(LX_XATTR_BLOB_MAX), Record;
+    ULONG Length, RecordLength;
+    USHORT ValueLength;
+    LONG Error;
+
+    if (Blob == NULL)
+        return -LX_ENOMEM;
+    if (Inode != NULL)
+        Error = LxTmpfsXattrRead(Inode, Blob, LX_XATTR_BLOB_MAX, &Length);
+    else
+        Error = LxXattrRead(Handle, Blob, LX_XATTR_BLOB_MAX, &Length);
+    if (Error == 0)
+    {
+        Record = LxXattrFind(Blob, Length, Name, &RecordLength, &ValueLength);
+        if (Record != NULL)
+        {
+            RtlMoveMemory(Record, Record + RecordLength, Length - (ULONG)(Record - Blob) - RecordLength);
+            Length -= RecordLength;
+            if (Inode != NULL)
+                Error = LxTmpfsXattrWrite(Inode, Blob, Length);
+            else
+                Error = LxXattrWrite(Handle, Blob, Length);
+        }
+    }
+    LxFree(Blob);
+    return Error;
+}
+
 static
 LONG64
 LxXattrGetCommon(
