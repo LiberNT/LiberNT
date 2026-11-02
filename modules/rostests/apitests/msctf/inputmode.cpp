@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include <ctffunc.h>
 #include <olectl.h>
 #include <ime/indicml.h>
 #include <inputindicator.h>
