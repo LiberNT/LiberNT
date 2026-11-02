@@ -3950,6 +3950,7 @@ VidSchSubmitCommandTrackedMeasured(
     {
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        DxgkReturnAdoptedTrackedDmaBufferDeviceWork(Reservation);
         if (OrderedPacket)
             DxgkContextOrderAbortPacket(Packet, Status);
         if (OrderedContext != NULL)

@@ -4667,6 +4667,12 @@ NTAPI
 DxgkAdoptTrackedDmaBuffer(
     _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
 
+/* The scheduler refused an adopted submission: its device work goes back to the submitter. */
+VOID
+NTAPI
+DxgkReturnAdoptedTrackedDmaBufferDeviceWork(
+    _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
+
 NTSTATUS
 NTAPI
 DxgkActivateTrackedDmaBuffer(

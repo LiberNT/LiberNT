@@ -3463,8 +3463,17 @@ NTAPI
 DxgkAdoptTrackedDmaBuffer(
     _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry)
 {
+    if (Entry != NULL && DxgkTrackedWorkCoreClaimExternalCleanup(&Entry->TrackedWork))
+        DxgkTrackedWorkCoreSetDeviceWorkTransferred(&Entry->TrackedWork, TRUE);
+}
+
+VOID
+NTAPI
+DxgkReturnAdoptedTrackedDmaBufferDeviceWork(
+    _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry)
+{
     if (Entry != NULL)
-        (VOID)DxgkTrackedWorkCoreClaimExternalCleanup(&Entry->TrackedWork);
+        DxgkTrackedWorkCoreSetDeviceWorkTransferred(&Entry->TrackedWork, FALSE);
 }
 
 NTSTATUS
