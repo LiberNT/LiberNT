@@ -56,7 +56,7 @@ extern PATTACHINFO gpai;
 #define LP_DO_NOT_CARE_BIT (1<<25) // For GetKeyNameText
 
 /* General */
-CODE_SEG("INIT") NTSTATUS NTAPI InitInputImpl(VOID);
+CODE_SEG("INIT") NTSTATUS NTAPI InitInputImpl(PDRIVER_OBJECT DriverObject);
 VOID NTAPI RawInputThreadMain(VOID);
 BOOL FASTCALL IntBlockInput(PTHREADINFO W32Thread, BOOL BlockIt);
 NTSTATUS FASTCALL UserAttachThreadInput(PTHREADINFO,PTHREADINFO,BOOL);
@@ -69,6 +69,9 @@ CODE_SEG("INIT") NTSTATUS NTAPI InitKeyboardImpl(VOID);
 VOID NTAPI UserInitKeyboard(HANDLE hKeyboardDevice);
 VOID NTAPI UserGetKeyboardTypematic(PULONG Delay, PULONG Rate);
 VOID NTAPI UserSetKeyboardTypematic(VOID);
+BOOL NTAPI UserKeyboardPresent(VOID);
+VOID NTAPI UserRefreshKeyboardIndicators(VOID);
+VOID NTAPI UserSendKeyboardControl(ULONG IoControlCode, PVOID Input, ULONG InputLength);
 PKL W32kGetDefaultKeyLayout(VOID);
 VOID NTAPI UserProcessKeyboardInput(PKEYBOARD_INPUT_DATA pKeyInput);
 BOOL NTAPI UserSendKeyboardInput(KEYBDINPUT *pKbdInput, BOOL bInjected);
@@ -92,6 +95,7 @@ VOID NTAPI RawInputProcessKeyboard(WORD wScanCode, WORD wVk, DWORD dwFlags, UINT
 VOID NTAPI RawInputProcessMouseData(PMOUSE_INPUT_DATA pMouseInputData);
 VOID NTAPI RawInputProcessMouseInput(const MOUSEINPUT *pMouseInput);
 VOID NTAPI RawInputSetMouseAttributes(HANDLE hMouseDevice);
+VOID NTAPI RawInputSetSourceDevice(PCUNICODE_STRING Path);
 VOID NTAPI RawInputUpdateDevices(VOID);
 BOOL FASTCALL RawInputIsNoLegacy(PPROCESSINFO ppi, DWORD dwType);
 VOID FASTCALL RawInputSetThreadData(PTHREADINFO pti, PUSER_MESSAGE Message, BOOL bRemove);
@@ -162,7 +166,6 @@ VOID FASTCALL IntFreeImeHotKeys(VOID);
 
 extern DWORD gSystemFS;
 extern UINT gSystemCPCharSet; 
-extern HANDLE ghKeyboardDevice;
 extern PTHREADINFO ptiRawInput;
 extern BYTE gafAsyncKeyState[256 * 2 / 8]; // 2 bits per key
 

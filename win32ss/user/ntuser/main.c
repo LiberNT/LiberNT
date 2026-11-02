@@ -1250,7 +1250,7 @@ DriverEntry(
     USERLOCK_AND_ROF(InitUserImpl());
     NT_ROF(InitWindowStationImpl());
     NT_ROF(InitDesktopImpl());
-    NT_ROF(InitInputImpl());
+    NT_ROF(InitInputImpl(DriverObject));
     NT_ROF(InitHidInputImpl(DriverObject));
     NT_ROF(InitTouchInputImpl(DriverObject));
     NT_ROF(InitKeyboardImpl());
