@@ -282,6 +282,16 @@ DxgkPresentQueueTestDmaGeometry(VOID)
                  TRUE, 8192, 0, 0,
                  DXGK_PRESENT_DMA_MAX_ALLOCATIONS + 1, 2, 64, &Geometry);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+    Status = DxgkPresentDmaCoreSelectGeometry(
+                 TRUE, 12288, 0, 4512, 0, 0, 64, &Geometry);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Geometry.AllocationListSize, DXGK_PRESENT_DMA_MIN_ALLOCATIONS);
+    ok_eq_ulong(Geometry.DmaBufferPrivateDataSize, 4512);
+    ok_eq_ulong(Geometry.PatchLocationListSize, 64);
+    Status = DxgkPresentDmaCoreSelectGeometry(
+                 TRUE, 8192, 0, 0, 1, 2, 64, &Geometry);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Geometry.AllocationListSize, DXGK_PRESENT_DMA_MIN_ALLOCATIONS);
     Status = DxgkPresentDmaCoreAllocationListBytes(
                  DXGK_PRESENT_DMA_MIN_ALLOCATIONS,
                  (SIZE_T)MAXULONG_PTR,

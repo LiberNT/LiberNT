@@ -65,11 +65,11 @@ DxgkPresentDmaCoreSelectGeometry(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    if (AllocationListSize < DXGK_PRESENT_DMA_MIN_ALLOCATIONS ||
-        AllocationListSize > DXGK_PRESENT_DMA_MAX_ALLOCATIONS)
-    {
+    if (AllocationListSize > DXGK_PRESENT_DMA_MAX_ALLOCATIONS)
         return STATUS_INVALID_PARAMETER;
-    }
+    /* A GPU virtual address context declares no list; a present still carries its source and destination. */
+    if (AllocationListSize < DXGK_PRESENT_DMA_MIN_ALLOCATIONS)
+        AllocationListSize = DXGK_PRESENT_DMA_MIN_ALLOCATIONS;
 
     if (PatchLocationListSize == 0 ||
         PatchLocationListSize > MaximumPatchLocationListSize)
