@@ -70,6 +70,43 @@ CtxValidateRenderFlags(D3DKMT_HANDLE hDevice, LUID Luid)
 }
 
 static void
+CtxValidateQueuedLimit(D3DKMT_HANDLE hDevice, LUID Luid)
+{
+    PFND3DKMT_SETQUEUEDLIMIT pfnSetQueuedLimit = (PFND3DKMT_SETQUEUEDLIMIT)LoadD3DKMTProc("D3DKMTSetQueuedLimit");
+    static const UINT Values[] = { 1, 16, 17, 0 };
+    static const UINT Expected[] = { 1, 16, 17, 3 };
+    D3DKMT_SETQUEUEDLIMIT Limit;
+    NTSTATUS Status;
+    ULONG Index;
+
+    if (pfnSetQueuedLimit == NULL)
+        return;
+    for (Index = 0; Index < RTL_NUMBER_OF(Values); ++Index)
+    {
+        memset(&Limit, 0, sizeof(Limit));
+        Limit.hDevice = hDevice;
+        Limit.Type = D3DKMT_SET_QUEUEDLIMIT_PRESENT;
+        Limit.QueuedPresentLimit = Values[Index];
+        Status = pfnSetQueuedLimit(&Limit);
+        ok(Status == STATUS_SUCCESS, "Adapter %08lx:%08lx: queued present limit %u returned 0x%08lx\n",
+           (ULONG)Luid.HighPart, Luid.LowPart, Values[Index], (ULONG)Status);
+        memset(&Limit, 0, sizeof(Limit));
+        Limit.hDevice = hDevice;
+        Limit.Type = D3DKMT_GET_QUEUEDLIMIT_PRESENT;
+        Status = pfnSetQueuedLimit(&Limit);
+        ok(Status == STATUS_SUCCESS && Limit.QueuedPresentLimit == Expected[Index],
+           "Adapter %08lx:%08lx: queued present limit after %u: 0x%08lx %u\n",
+           (ULONG)Luid.HighPart, Luid.LowPart, Values[Index], (ULONG)Status, Limit.QueuedPresentLimit);
+    }
+    memset(&Limit, 0, sizeof(Limit));
+    Limit.hDevice = hDevice;
+    Limit.Type = 3;
+    Status = pfnSetQueuedLimit(&Limit);
+    ok(Status == STATUS_INVALID_PARAMETER, "Adapter %08lx:%08lx: queued limit type 3 returned 0x%08lx\n",
+       (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
+}
+
+static void
 CtxValidateEnumFilter(void)
 {
     PFND3DKMT_ENUMADAPTERS3 pfnEnumAdapters3 = (PFND3DKMT_ENUMADAPTERS3)LoadD3DKMTProc("D3DKMTEnumAdapters3");
@@ -156,6 +193,7 @@ START_TEST(ctxvalidate)
                        (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
                 }
                 CtxValidateRenderFlags(Device.hDevice, Luid);
+                CtxValidateQueuedLimit(Device.hDevice, Luid);
                 CtxValidateRefused(Device.hDevice, Luid, "node ordinal past the last node", 0x1000, 0, NULL, 0);
                 CtxValidateRefused(Device.hDevice, Luid, "engine affinity naming a second physical adapter", 0, 2, NULL, 0);
                 CtxValidateRefused(Device.hDevice, Luid, "private data without a size", 0, 0, PrivateData, 0);

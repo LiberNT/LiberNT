@@ -554,7 +554,9 @@ static VOID DxgkPresentQueueTestLimits(VOID)
     { NTSTATUS Observed = DxgkPresentLimitCoreSet(&State, 0, 3, 16); ok_eq_hex(Observed, STATUS_SUCCESS); }
     ok_eq_long(KeReadStateEvent(&State.AvailableEvent), 1);
     ok_eq_ulong(DxgkPresentLimitCoreGetLimit(&State), 3);
-    { NTSTATUS Observed = DxgkPresentLimitCoreSet(&State, 17, 3, 16); ok_eq_hex(Observed, STATUS_INVALID_PARAMETER); }
+    { NTSTATUS Observed = DxgkPresentLimitCoreSet(&State, 17, 3, 16); ok_eq_hex(Observed, STATUS_SUCCESS); }
+    ok_eq_ulong(DxgkPresentLimitCoreGetLimit(&State), 17);
+    { NTSTATUS Observed = DxgkPresentLimitCoreSet(&State, 0, 3, 16); ok_eq_hex(Observed, STATUS_SUCCESS); }
     ok_eq_ulong(DxgkPresentLimitCoreGetLimit(&State), 3);
     DxgkPresentLimitCoreRelease(&State);
     DxgkPresentLimitCoreRelease(&State);

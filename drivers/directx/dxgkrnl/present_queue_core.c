@@ -28,6 +28,7 @@ VOID DxgkPresentLimitCoreInitialize(_Out_ PDXGK_PRESENT_LIMIT_CORE State, _In_ U
     KeInitializeSpinLock(&State->Lock);
     KeInitializeEvent(&State->AvailableEvent, NotificationEvent, TRUE);
     State->Limit = DefaultLimit;
+    State->RequestedLimit = DefaultLimit;
     State->Reserved = 0;
 }
 
@@ -39,10 +40,10 @@ NTSTATUS DxgkPresentLimitCoreSet(_Inout_ PDXGK_PRESENT_LIMIT_CORE State, _In_ UL
     if (State == NULL || DefaultLimit == 0 || MaximumLimit < DefaultLimit)
         return STATUS_INVALID_PARAMETER;
     NewLimit = RequestedLimit != 0 ? RequestedLimit : DefaultLimit;
-    if (NewLimit > MaximumLimit)
-        return STATUS_INVALID_PARAMETER;
     KeAcquireSpinLock(&State->Lock, &OldIrql);
-    State->Limit = NewLimit;
+    State->RequestedLimit = NewLimit;
+    /* FIXME: a limit above the queue depth admits only as many presents as the queue holds */
+    State->Limit = min(NewLimit, MaximumLimit);
     if (State->Reserved < State->Limit)
         KeSetEvent(&State->AvailableEvent, IO_NO_INCREMENT, FALSE);
     else
@@ -106,7 +107,7 @@ ULONG DxgkPresentLimitCoreGetLimit(_Inout_ PDXGK_PRESENT_LIMIT_CORE State)
     if (State == NULL)
         return 0;
     KeAcquireSpinLock(&State->Lock, &OldIrql);
-    Limit = State->Limit;
+    Limit = State->RequestedLimit;
     KeReleaseSpinLock(&State->Lock, OldIrql);
     return Limit;
 }
