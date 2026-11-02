@@ -21,8 +21,12 @@
 #ifndef __WINE_HTTP_H
 #define __WINE_HTTP_H
 
+#if !defined(_NTDDK_) && !defined(_NTIFS_)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#else
+#include <ws2def.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +50,8 @@ typedef struct _HTTPAPI_VERSION
 #define HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY     0x00000001
 #define HTTP_RECEIVE_REQUEST_FLAG_FLUSH_BODY    0x00000002
 
+#define HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER 0x00000001
+
 #define HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS   0x00000001
 #define HTTP_REQUEST_FLAG_IP_ROUTED                 0x00000002
 #define HTTP_REQUEST_FLAG_HTTP2                     0x00000004
@@ -67,6 +73,20 @@ typedef enum _HTTP_SERVICE_CONFIG_ID
     HttpServiceConfigTimeout,
     HttpServiceConfigMax
 } HTTP_SERVICE_CONFIG_ID, *PHTTP_SERVICE_CONFIG_ID;
+
+typedef enum _HTTP_SERVICE_CONFIG_TIMEOUT_KEY
+{
+    IdleConnectionTimeout = 0,
+    HeaderWaitTimeout
+} HTTP_SERVICE_CONFIG_TIMEOUT_KEY, *PHTTP_SERVICE_CONFIG_TIMEOUT_KEY;
+
+typedef USHORT HTTP_SERVICE_CONFIG_TIMEOUT_PARAM, *PHTTP_SERVICE_CONFIG_TIMEOUT_PARAM;
+
+typedef struct _HTTP_SERVICE_CONFIG_TIMEOUT_SET
+{
+    HTTP_SERVICE_CONFIG_TIMEOUT_KEY KeyDesc;
+    HTTP_SERVICE_CONFIG_TIMEOUT_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_TIMEOUT_SET, *PHTTP_SERVICE_CONFIG_TIMEOUT_SET;
 
 #define HTTP_NULL_ID ((ULONGLONG)0)
 
@@ -427,6 +447,40 @@ typedef struct _HTTP_BINDING_INFO
     HANDLE RequestQueueHandle;
 } HTTP_BINDING_INFO, *PHTTP_BINDING_INFO;
 
+typedef enum _HTTP_QOS_SETTING_TYPE
+{
+    HttpQosSettingTypeBandwidth,
+    HttpQosSettingTypeConnectionLimit,
+    HttpQosSettingTypeFlowRate,
+} HTTP_QOS_SETTING_TYPE, *PHTTP_QOS_SETTING_TYPE;
+
+typedef struct _HTTP_BANDWIDTH_LIMIT_INFO
+{
+    HTTP_PROPERTY_FLAGS Flags;
+    ULONG MaxBandwidth;
+} HTTP_BANDWIDTH_LIMIT_INFO, *PHTTP_BANDWIDTH_LIMIT_INFO;
+
+typedef struct _HTTP_CONNECTION_LIMIT_INFO
+{
+    HTTP_PROPERTY_FLAGS Flags;
+    ULONG MaxConnections;
+} HTTP_CONNECTION_LIMIT_INFO, *PHTTP_CONNECTION_LIMIT_INFO;
+
+typedef struct _HTTP_FLOWRATE_INFO
+{
+    HTTP_PROPERTY_FLAGS Flags;
+    ULONG MaxBandwidth;
+    ULONG MaxPeakBandwidth;
+    ULONG BurstSize;
+} HTTP_FLOWRATE_INFO, *PHTTP_FLOWRATE_INFO;
+
+typedef struct _HTTP_QOS_SETTING_INFO
+{
+    HTTP_QOS_SETTING_TYPE QosType;
+    void *QosSetting;
+} HTTP_QOS_SETTING_INFO, *PHTTP_QOS_SETTING_INFO;
+
+#if !defined(_NTDDK_) && !defined(_NTIFS_)
 ULONG WINAPI HttpAddUrl(HANDLE,PCWSTR,PVOID);
 ULONG WINAPI HttpAddUrlToUrlGroup(HTTP_URL_GROUP_ID id, const WCHAR *url, HTTP_URL_CONTEXT context, ULONG reserved);
 ULONG WINAPI HttpCloseRequestQueue(HANDLE handle);
@@ -441,11 +495,13 @@ ULONG WINAPI HttpInitialize(HTTPAPI_VERSION version, ULONG flags, void *reserved
 ULONG WINAPI HttpTerminate(ULONG flags, void *reserved);
 ULONG WINAPI HttpQueryServiceConfiguration(HANDLE,HTTP_SERVICE_CONFIG_ID,PVOID,ULONG,PVOID,ULONG,PULONG,LPOVERLAPPED);
 ULONG WINAPI HttpReceiveHttpRequest(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, HTTP_REQUEST *request, ULONG size, ULONG *ret_size, OVERLAPPED *ovl);
+ULONG WINAPI HttpReceiveRequestEntityBody(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, PVOID buffer, ULONG size, ULONG *ret_size, OVERLAPPED *ovl);
 ULONG WINAPI HttpRemoveUrl(HANDLE queue, const WCHAR *url);
 ULONG WINAPI HttpRemoveUrlFromUrlGroup(HTTP_URL_GROUP_ID id, const WCHAR *url, ULONG flags);
 ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, HTTP_RESPONSE *response, HTTP_CACHE_POLICY *cache_policy, ULONG *ret_size, void *reserved1, ULONG reserved2, OVERLAPPED *ovl, HTTP_LOG_DATA *log_data);
 ULONG WINAPI HttpSetServiceConfiguration(HANDLE,HTTP_SERVICE_CONFIG_ID,PVOID,ULONG,LPOVERLAPPED);
 ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY property, void *value, ULONG length);
+#endif
 
 #ifdef __cplusplus
 }
