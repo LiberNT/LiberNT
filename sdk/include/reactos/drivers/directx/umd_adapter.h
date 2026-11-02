@@ -41,8 +41,11 @@ RosUmdQueryAdapterInfo2(
     D3DKMT_QUERYADAPTERINFO Query = {0};
     NTSTATUS Status;
 
-    if (!Adapter || (ULONG_PTR)Adapter > MAXDWORD || !Info ||
-        !Info->pPrivateDriverData || !Info->PrivateDriverDataSize || !QueryAdapterInfo)
+    if (!Adapter || (ULONG_PTR)Adapter > MAXDWORD || !Info)
+        return E_INVALIDARG;
+    if (Info->QueryType == D3DDDI_QUERYADAPTERTYPE_APPLICATIONSPECIFICDRIVERBLOB)
+        return D3DDDIERR_NOTAVAILABLE;
+    if (!Info->pPrivateDriverData || !Info->PrivateDriverDataSize || !QueryAdapterInfo)
         return E_INVALIDARG;
 
     switch (Info->QueryType)
@@ -54,6 +57,7 @@ RosUmdQueryAdapterInfo2(
             Query.Type = KMTQAITYPE_QUERYREGISTRY;
             break;
         default:
+            /* TODO: D3DDDI_QUERYADAPTERTYPE_SINGLEADAPTERHYBRIDMODE and _APPLICATIONDESC */
             return E_INVALIDARG;
     }
     Query.hAdapter = (D3DKMT_HANDLE)(ULONG_PTR)Adapter;

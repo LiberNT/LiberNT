@@ -235,8 +235,36 @@ static void Test_DriverNamedForEveryRuntime(void)
     CloseAdapter(hAdapter);
 }
 
+static void Test_QueryAdapterInfo2Contract(void)
+{
+    D3DDDICB_QUERYADAPTERINFO2 Info;
+    BYTE Buffer[64];
+
+    memset(&Info, 0, sizeof(Info));
+    Info.QueryType = D3DDDI_QUERYADAPTERTYPE_APPLICATIONSPECIFICDRIVERBLOB;
+    Info.pPrivateDriverData = Buffer;
+    Info.PrivateDriverDataSize = sizeof(Buffer);
+    ok_hex(RosUmdQueryAdapterInfo2((HANDLE)1, &Info, pfnQueryAdapterInfo), D3DDDIERR_NOTAVAILABLE);
+    ok_int(Info.PrivateDriverDataSize, sizeof(Buffer));
+
+    Info.pPrivateDriverData = NULL;
+    Info.PrivateDriverDataSize = 0;
+    ok_hex(RosUmdQueryAdapterInfo2((HANDLE)1, &Info, pfnQueryAdapterInfo), D3DDDIERR_NOTAVAILABLE);
+
+    Info.QueryType = D3DDDI_QUERYADAPTERTYPE_DRIVERPRIVATE;
+    ok_hex(RosUmdQueryAdapterInfo2((HANDLE)1, &Info, pfnQueryAdapterInfo), E_INVALIDARG);
+    ok_hex(RosUmdQueryAdapterInfo2(NULL, &Info, pfnQueryAdapterInfo), E_INVALIDARG);
+    ok_hex(RosUmdQueryAdapterInfo2((HANDLE)1, NULL, pfnQueryAdapterInfo), E_INVALIDARG);
+
+    Info.QueryType = (D3DDDI_QUERYADAPTERTYPE)0x7f;
+    Info.pPrivateDriverData = Buffer;
+    Info.PrivateDriverDataSize = sizeof(Buffer);
+    ok_hex(RosUmdQueryAdapterInfo2((HANDLE)1, &Info, pfnQueryAdapterInfo), E_INVALIDARG);
+}
+
 START_TEST(umdload)
 {
+    Test_QueryAdapterInfo2Contract();
     pfnQueryAdapterInfo = (PFND3DKMT_QUERYADAPTERINFO)LoadD3DKMTProc("D3DKMTQueryAdapterInfo");
     if (pfnQueryAdapterInfo == NULL)
     {
