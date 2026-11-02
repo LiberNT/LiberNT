@@ -896,16 +896,6 @@ LxSplitPath(
     return Count;
 }
 
-static
-ULONG
-LxProcessTtyNumber(
-    _In_ PLX_PROCESS Process)
-{
-    if (Process->Tty == NULL)
-        return 0;
-    return (ULONG)LxTtyDevice(Process->Tty);
-}
-
 #define LX_TIMENS_MAX_SECONDS (MAXLONG64 / 1000000000LL / 2)
 
 static
@@ -1096,9 +1086,19 @@ LxGenPidStat(
     CHAR State;
     LONG64 Start;
     BOOLEAN Mapped;
+    PLX_TTY Tty;
+    ULONG TtyNumber = 0;
+    LONG Foreground = -1;
 
     if (Process == NULL)
         return;
+    Tty = LxProcessGetTty(Process);
+    if (Tty != NULL)
+    {
+        TtyNumber = (ULONG)LxTtyDevice(Tty);
+        Foreground = (LONG)LxGlobalToNrIn(LxProcPidNs(Self, Synth), Tty->ForegroundPgrp);
+        LxTtyDereference(Tty);
+    }
     LxProcessUsage(Process, NULL, &Usage);
     Mapped = !Process->Exited;
     State = Process->Exited ? 'Z' : ((Process == Self) ? 'R' : 'S');
@@ -1145,8 +1145,7 @@ LxGenPidStat(
                  LxGlobalToNrIn(LxProcPidNs(Self, Synth), Synth->Tid ? Synth->Tid : Process->Pid), Comm, State,
                  LxPidNsIsInit(Process) ? 0UL : LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->ParentPid),
                  LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Pgid), LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Sid),
-                 LxProcessTtyNumber(Process),
-                 Process->Tty ? (LONG)LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Tty->ForegroundPgrp) : -1L,
+                 TtyNumber, Foreground,
                  0x400000U, (ULONG)Usage.MinFlt, (ULONG)ChildFaults, 0UL, 0UL, (ULONG64)UserTime / LX_PROC_TICKS,
                  (ULONG64)KernelTime / LX_PROC_TICKS, ChildUser / LX_PROC_TICKS, ChildKernel / LX_PROC_TICKS, 20L, 0L,
                  Threads, 0L, Start);

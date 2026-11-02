@@ -333,18 +333,188 @@ LxTtyList(
     return Used;
 }
 
-VOID
+PLX_TTY
+LxProcessGetTty(
+    _In_ PLX_PROCESS Process)
+{
+    PLX_TTY Tty;
+
+    ExAcquireFastMutex(&Process->Lock);
+    Tty = Process->Tty;
+    if (Tty != NULL)
+        LxTtyReference(Tty);
+    ExReleaseFastMutex(&Process->Lock);
+    return Tty;
+}
+
+static
+BOOLEAN
+LxTtySetControlling(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_TTY Tty)
+{
+    BOOLEAN Attached = FALSE;
+
+    LxTtyReference(Tty);
+    ExAcquireFastMutex(&Process->Lock);
+    if (Process->Tty == NULL)
+    {
+        Process->Tty = Tty;
+        Attached = TRUE;
+    }
+    ExReleaseFastMutex(&Process->Lock);
+    if (!Attached)
+        LxTtyDereference(Tty);
+    return Attached;
+}
+
+BOOLEAN
 LxTtyAttachControlling(
     _In_ PLX_PROCESS Process,
     _In_ PLX_TTY Tty)
 {
-    if ((Process->Sid != Process->Pid) || (Process->Tty != NULL))
-        return;
+    BOOLEAN Claimed = FALSE;
+    BOOLEAN Held;
 
-    LxTtyReference(Tty);
-    Process->Tty = Tty;
-    Tty->Session = Process->Sid;
-    Tty->ForegroundPgrp = Process->Pgid;
+    if ((Process->Sid != Process->Pid) || (Process->Tty != NULL))
+        return FALSE;
+
+    LxTtyLock(Tty);
+    if ((Tty->Session == 0) || (Tty->Session == Process->Sid))
+    {
+        Tty->Session = Process->Sid;
+        Tty->ForegroundPgrp = Process->Pgid;
+        Claimed = TRUE;
+    }
+    LxTtyUnlock(Tty);
+    if (!Claimed)
+        return FALSE;
+    if (LxTtySetControlling(Process, Tty))
+        return TRUE;
+    ExAcquireFastMutex(&Process->Lock);
+    Held = (Process->Tty == Tty);
+    ExReleaseFastMutex(&Process->Lock);
+    if (Held)
+        return TRUE;
+    LxTtyLock(Tty);
+    if (Tty->Session == Process->Sid)
+    {
+        Tty->Session = 0;
+        Tty->ForegroundPgrp = 0;
+    }
+    LxTtyUnlock(Tty);
+    return FALSE;
+}
+
+static
+VOID
+LxTtyClearSession(
+    _In_ PLX_INSTANCE Instance,
+    _In_ PLX_TTY Tty,
+    _In_ ULONG Session)
+{
+    PLX_PROCESS Targets[128];
+    PLIST_ENTRY Entry;
+    ULONG Count, Index;
+
+    LxTtyLock(Tty);
+    if (Tty->Session == Session)
+    {
+        Tty->Session = 0;
+        Tty->ForegroundPgrp = 0;
+    }
+    LxTtyUnlock(Tty);
+
+    do
+    {
+        Count = 0;
+        ExAcquireFastMutex(&LxProcessListLock);
+        for (Entry = LxProcessList.Flink; (Entry != &LxProcessList) && (Count < RTL_NUMBER_OF(Targets)); Entry = Entry->Flink)
+        {
+            PLX_PROCESS Process = CONTAINING_RECORD(Entry, LX_PROCESS, GlobalLink);
+
+            if ((Process->Instance == Instance) && (Process->Sid == Session) && (Process->Tty == Tty))
+            {
+                LxProcessReference(Process);
+                Targets[Count++] = Process;
+            }
+        }
+        ExReleaseFastMutex(&LxProcessListLock);
+
+        for (Index = 0; Index < Count; Index++)
+        {
+            PLX_PROCESS Process = Targets[Index];
+            BOOLEAN Release = FALSE;
+
+            ExAcquireFastMutex(&Process->Lock);
+            if (Process->Tty == Tty)
+            {
+                Process->Tty = NULL;
+                Release = TRUE;
+            }
+            ExReleaseFastMutex(&Process->Lock);
+            if (Release)
+                LxTtyDereference(Tty);
+            LxProcessDereference(Process);
+        }
+    } while (Count == RTL_NUMBER_OF(Targets));
+}
+
+VOID
+LxTtyCheckSession(
+    _In_ PLX_PROCESS Process)
+{
+    PLX_TTY Tty = LxProcessGetTty(Process);
+    BOOLEAN Release = FALSE;
+    BOOLEAN Keep;
+
+    if (Tty == NULL)
+        return;
+    LxTtyLock(Tty);
+    Keep = (Tty->Session == Process->Sid);
+    LxTtyUnlock(Tty);
+    if (!Keep)
+    {
+        ExAcquireFastMutex(&Process->Lock);
+        if (Process->Tty == Tty)
+        {
+            Process->Tty = NULL;
+            Release = TRUE;
+        }
+        ExReleaseFastMutex(&Process->Lock);
+        if (Release)
+            LxTtyDereference(Tty);
+    }
+    LxTtyDereference(Tty);
+}
+
+VOID
+LxTtyDisassociate(
+    _In_ PLX_PROCESS Process,
+    _In_ BOOLEAN Exiting)
+{
+    PLX_TTY Tty;
+    LX_SIGINFO Info;
+    ULONG Foreground;
+
+    if (Process->Sid != Process->Pid)
+        return;
+    Tty = LxProcessGetTty(Process);
+    if (Tty == NULL)
+        return;
+    LxTtyLock(Tty);
+    Foreground = (Tty->Session == Process->Sid) ? Tty->ForegroundPgrp : 0;
+    LxTtyUnlock(Tty);
+    if (Foreground != 0)
+    {
+        RtlZeroMemory(&Info, sizeof(Info));
+        Info.Code = LX_SI_KERNEL;
+        LxSignalGroupInfo(Process->Instance, NULL, Foreground, LX_SIGHUP, &Info, NULL, NULL);
+        if (!Exiting)
+            LxSignalGroupInfo(Process->Instance, NULL, Foreground, LX_SIGCONT, &Info, NULL, NULL);
+    }
+    LxTtyClearSession(Process->Instance, Tty, Process->Sid);
+    LxTtyDereference(Tty);
 }
 
 static
@@ -1081,14 +1251,44 @@ LxTtyIoctl(
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_TIOCSCTTY:
-            LxTtyLock(Tty);
-            Tty->Session = Process->Sid;
-            Tty->ForegroundPgrp = Process->Pgid;
-            LxTtyUnlock(Tty);
-            if (Process->Tty == NULL)
+            for (;;)
             {
-                LxTtyReference(Tty);
-                Process->Tty = Tty;
+                LxTtyLock(Tty);
+                Value = (LONG)Tty->Session;
+                LxTtyUnlock(Tty);
+                if ((Process->Tty == Tty) && ((ULONG)Value == Process->Sid))
+                    return 0;
+                if ((Process->Sid != Process->Pid) || (Process->Tty != NULL))
+                    return -LX_EPERM;
+                if ((Value != 0) && ((ULONG)Value != Process->Sid))
+                {
+                    if ((Argument != 1) || !LxCapable(Process, LX_CAP_SYS_ADMIN))
+                        return -LX_EPERM;
+                    LxTtyClearSession(Process->Instance, Tty, (ULONG)Value);
+                }
+                if (LxTtyAttachControlling(Process, Tty))
+                    return 0;
+            }
+
+        case LX_TIOCNOTTY:
+            if (Process->Tty != Tty)
+                return -LX_ENOTTY;
+            if (Process->Sid == Process->Pid)
+            {
+                LxTtyDisassociate(Process, FALSE);
+            }
+            else
+            {
+                BOOLEAN Release;
+
+                ExAcquireFastMutex(&Process->Lock);
+                Release = (Process->Tty == Tty);
+                if (Release)
+                    Process->Tty = NULL;
+                ExReleaseFastMutex(&Process->Lock);
+                if (!Release)
+                    return -LX_ENOTTY;
+                LxTtyDereference(Tty);
             }
             return 0;
 
@@ -1117,7 +1317,6 @@ LxTtyIoctl(
 
         case LX_TCSBRK:
         case LX_TCXONC:
-        case LX_TIOCNOTTY:
         case LX_TIOCVHANGUP:
         case LX_TIOCEXCL:
         case LX_TIOCNXCL:
@@ -1479,6 +1678,10 @@ LxPtmxFileIoctl(
             LxTtyUnlock(Tty);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
+        case LX_TIOCNOTTY:
+            return -LX_ENOTTY;
+
+        /* FIXME: TIOCSCTTY on the master attaches the replica, so /dev/tty then opens the replica instead of the master */
         default:
             return LxTtyIoctl(Thread->Process, Tty, Request, Argument);
     }
