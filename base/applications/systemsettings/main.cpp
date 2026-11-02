@@ -2074,7 +2074,7 @@ private:
             const PageInfo *parent;
             SearchEntry entry;
 
-            if (!table[i].Build || table[i].Id == PageId::Search)
+            if (!table[i].Build || table[i].Id == PageId::Search || !PageAvailable(&table[i]))
                 continue;
             table[i].Build(page);
             for (parent = FindPage(table[i].Parent); parent; parent = FindPage(parent->Parent))
@@ -2241,7 +2241,7 @@ PageFromCommandLine(LPCWSTR commandLine, PageId *page, std::wstring *param)
         return;
     for (UINT i = 0; i < count; i++)
     {
-        LPCWSTR list = table[i].Uri;
+        LPCWSTR list = PageAvailable(&table[i]) ? table[i].Uri : NULL;
         while (list && *list)
         {
             LPCWSTR end = StrChrW(list, L';');
@@ -2284,7 +2284,7 @@ DumpSettingRows(VOID)
     {
         PageBuilder page(&host, std::wstring(), false);
 
-        if (!pages[i].Build || pages[i].Id == PageId::BootEntry)
+        if (!pages[i].Build || pages[i].Id == PageId::BootEntry || !PageAvailable(&pages[i]))
             continue;
         pages[i].Build(page);
         for (const SettingGroup &group : page.Groups)

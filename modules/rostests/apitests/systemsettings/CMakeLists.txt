@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    RemoteDesktopPage.c
     SettingsChoiceCommit.c
     testlist.c)
 

@@ -43,6 +43,7 @@ enum class PageId
     Power,
     Storage,
     Multitasking,
+    RemoteDesktop,
     About,
     Environment,
     Recovery,
@@ -326,6 +327,7 @@ public:
 };
 
 typedef void (*PAGE_BUILD)(PageBuilder &page);
+typedef bool (*PAGE_AVAILABLE)();
 
 struct PageInfo
 {
@@ -335,9 +337,11 @@ struct PageInfo
     PageId Parent;
     PAGE_BUILD Build;
     LPCWSTR Uri;
+    PAGE_AVAILABLE Available;
 };
 
 const PageInfo *FindPage(PageId id);
+bool PageAvailable(const PageInfo *info);
 const PageInfo *PageTable(UINT *count);
 
 std::wstring Str(UINT id);
@@ -383,6 +387,8 @@ void BuildSound(PageBuilder &page);
 void BuildPower(PageBuilder &page);
 void BuildStorage(PageBuilder &page);
 void BuildMultitasking(PageBuilder &page);
+void BuildRemoteDesktop(PageBuilder &page);
+bool RemoteDesktopAvailable();
 void BuildAbout(PageBuilder &page);
 void BuildEnvironment(PageBuilder &page);
 void BuildRecovery(PageBuilder &page);
