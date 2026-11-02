@@ -400,7 +400,9 @@ public:
 
     STDMETHODIMP OnUpdate(DWORD dwFlags) override
     {
+        AddRef();
         Publish();
+        Release();
         return S_OK;
     }
 
