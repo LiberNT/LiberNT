@@ -527,12 +527,29 @@ DWORD _RpcScan(
     PDOT11_SSID pDot11Ssid,
     PWLAN_RAW_DATA pIeData)
 {
+    PWLANSVC_INTERFACE iface;
+    DWORD dwResult = ERROR_SUCCESS;
+
     UNREFERENCED_PARAMETER(pIeData);
 
     if (!WlanSvcValidateHandle(hClientHandle))
         return ERROR_INVALID_HANDLE;
+    if (pDot11Ssid != NULL && pDot11Ssid->uSSIDLength > DOT11_SSID_MAX_LENGTH)
+        return ERROR_INVALID_PARAMETER;
 
-    return WlanSvcScanInterface(pInterfaceGuid, pDot11Ssid);
+    EnterCriticalSection(&WlanSvcLock);
+    iface = WlanSvcFindInterface(pInterfaceGuid);
+    if (iface == NULL)
+        dwResult = ERROR_NOT_FOUND;
+    else if (!iface->RadioOn)
+        dwResult = ERROR_INVALID_STATE;
+    else if (pDot11Ssid != NULL && pDot11Ssid->uSSIDLength != 0)
+        iface->ScanRequestSsid = *pDot11Ssid;
+    LeaveCriticalSection(&WlanSvcLock);
+
+    if (dwResult == ERROR_SUCCESS)
+        WlanSvcRequestScan();
+    return dwResult;
 }
 
 DWORD _RpcGetAvailableNetworkList(

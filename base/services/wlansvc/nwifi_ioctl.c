@@ -395,6 +395,8 @@ NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
                     if (dwResult == ERROR_SUCCESS && bssList != NULL)
                         WlanSvcApplyBssCache(iface, bssList);
                     WlanSvcIndicateAcm(iface, wlan_notification_acm_scan_complete);
+                    if (!iface->Connected)
+                        WlanSvcTryAutoConnect(iface);
                 }
 
                 if (bssList != NULL)

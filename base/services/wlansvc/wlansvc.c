@@ -93,6 +93,9 @@ ScanThreadRoutine(LPVOID lpParameter)
     HANDLE waitEvents[2] = { ScanStopEvent, ScanRequestEvent };
     PLIST_ENTRY entry;
     PWLANSVC_INTERFACE iface;
+    GUID *guids;
+    DOT11_SSID *ssids;
+    ULONG count, i;
     DWORD wait;
 
     UNREFERENCED_PARAMETER(lpParameter);
@@ -102,24 +105,50 @@ ScanThreadRoutine(LPVOID lpParameter)
 
     do
     {
+        guids = NULL;
+        ssids = NULL;
+        count = 0;
+
         EnterCriticalSection(&WlanSvcLock);
         WlanSvcRefreshInterfaces();
         for (entry = WlanSvcInterfaceListHead.Flink;
              entry != &WlanSvcInterfaceListHead;
              entry = entry->Flink)
         {
-            iface = CONTAINING_RECORD(entry, WLANSVC_INTERFACE, ListEntry);
-            if (!iface->Connected &&
-                WlanSvcDoScan(iface, NULL) == ERROR_SUCCESS &&
-                !iface->Connected)
+            count++;
+        }
+        if (count != 0)
+        {
+            guids = HeapAlloc(GetProcessHeap(), 0, count * sizeof(*guids));
+            ssids = HeapAlloc(GetProcessHeap(), 0, count * sizeof(*ssids));
+        }
+        count = 0;
+        if (guids != NULL && ssids != NULL)
+        {
+            for (entry = WlanSvcInterfaceListHead.Flink;
+                 entry != &WlanSvcInterfaceListHead;
+                 entry = entry->Flink)
             {
-                /* Drive auto-connect from the background scan too, not only the
-                 * RPC scan path, so a saved connectionMode=auto profile connects
-                 * on boot with no UI interaction. */
-                WlanSvcTryAutoConnect(iface);
+                iface = CONTAINING_RECORD(entry, WLANSVC_INTERFACE, ListEntry);
+                if (!iface->RadioOn)
+                    continue;
+                guids[count] = iface->InterfaceGuid;
+                ssids[count] = iface->ScanRequestSsid;
+                iface->ScanRequestSsid.uSSIDLength = 0;
+                count++;
             }
         }
         LeaveCriticalSection(&WlanSvcLock);
+
+        for (i = 0; i < count; i++)
+            WlanSvcScanInterface(&guids[i], ssids[i].uSSIDLength != 0 ? &ssids[i] : NULL);
+
+        if (guids != NULL)
+            HeapFree(GetProcessHeap(), 0, guids);
+        if (ssids != NULL)
+            HeapFree(GetProcessHeap(), 0, ssids);
+
+        /* TODO: derive the background scan interval from the active power profile instead of a fixed 60 s. */
         wait = WaitForMultipleObjects(2, waitEvents, FALSE, 60000);
     } while (wait == WAIT_TIMEOUT || wait == WAIT_OBJECT_0 + 1);
 

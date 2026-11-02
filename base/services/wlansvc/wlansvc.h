@@ -289,6 +289,7 @@ typedef struct _WLANSVC_INTERFACE
     /* Scan/BSS cache. */
     LIST_ENTRY            BssListHead;
     ULONG                 BssCount;
+    DOT11_SSID            ScanRequestSsid;
 
     /* Profile store. */
     LIST_ENTRY            ProfileListHead;
