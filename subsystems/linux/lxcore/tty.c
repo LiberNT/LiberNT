@@ -799,10 +799,23 @@ LxTtyMasterRead(
         ULONG Count;
 
         LxTtyLock(Tty);
+        if (Tty->Packet && (Tty->PacketStatus != 0))
+        {
+            *(PUCHAR)Buffer = Tty->PacketStatus;
+            Tty->PacketStatus = 0;
+            if ((Tty->OutputLength == 0) && !Tty->Hangup && !LxTtySlaveGone(Tty))
+                KeClearEvent(&Tty->OutputReady);
+            LxTtyUnlock(Tty);
+            return 1;
+        }
         if (Tty->OutputLength != 0)
         {
-            Count = min(Length, Tty->OutputLength);
-            RtlCopyMemory(Buffer, Tty->Output, Count);
+            ULONG Header = Tty->Packet ? 1 : 0;
+
+            Count = min(Length - Header, Tty->OutputLength);
+            if (Header != 0)
+                *(PUCHAR)Buffer = 0;
+            RtlCopyMemory((PUCHAR)Buffer + Header, Tty->Output, Count);
             RtlMoveMemory(Tty->Output, Tty->Output + Count, Tty->OutputLength - Count);
             Tty->OutputLength -= Count;
             if ((Tty->OutputLength == 0) && !Tty->Hangup && !LxTtySlaveGone(Tty))
@@ -810,7 +823,7 @@ LxTtyMasterRead(
             KeSetEvent(&Tty->OutputSpace, IO_NO_INCREMENT, FALSE);
             LxTtyUnlock(Tty);
             LxPollWake(&Tty->Poll, LX_POLLOUT | LX_POLLWRNORM);
-            return Count;
+            return Count + Header;
         }
 
         if (Tty->Hangup || LxTtySlaveGone(Tty))
@@ -1160,27 +1173,85 @@ LxTtyPgrpInSession(
 
 static
 VOID
+LxTtyFlushInput(
+    _In_ PLX_TTY Tty)
+{
+    Tty->LineLength = 0;
+    Tty->ReadyLength = 0;
+    KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+LxTtyFlushOutput(
+    _In_ PLX_TTY Tty,
+    _In_ BOOLEAN Delivered)
+{
+    Tty->OutputLength = Delivered ? 0 : min(Tty->OutputLength, LX_TTY_BUFFER - 1);
+    if ((Tty->OutputLength == 0) && !Tty->Hangup && !LxTtySlaveGone(Tty) && !(Tty->Packet && (Tty->PacketStatus != 0)))
+        KeClearEvent(&Tty->OutputReady);
+    KeSetEvent(&Tty->OutputSpace, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+LxTtySetPacketStatus(
+    _In_ PLX_TTY Tty,
+    _In_ UCHAR Clear,
+    _In_ UCHAR Set)
+{
+    Tty->PacketStatus = (Tty->PacketStatus & ~Clear) | Set;
+    KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
+}
+
+static
+BOOLEAN
+LxTtyFlowControl(
+    _In_ PLX_TERMIOS Termios)
+{
+    return (Termios->Iflag & LX_IXON) && (Termios->Cc[LX_VSTOP] == 0x13) && (Termios->Cc[LX_VSTART] == 0x11);
+}
+
+static
+VOID
 LxTtySetTermios(
     _In_ PLX_TTY Tty,
     _In_ PLX_TERMIOS Termios,
     _In_ BOOLEAN Flush)
 {
+    BOOLEAN Notify = FALSE;
+
     LxTtyLock(Tty);
     if (Flush)
     {
-        Tty->LineLength = 0;
-        Tty->ReadyLength = 0;
-        KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+        LxTtyFlushInput(Tty);
+        LxTtyFlushOutput(Tty, FALSE);
+        if (Tty->Packet)
+            LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD | LX_TIOCPKT_FLUSHWRITE);
+        Notify = Tty->Packet;
     }
     else if ((Tty->Termios.Lflag & LX_ICANON) && !(Termios->Lflag & LX_ICANON) && (Tty->LineLength != 0))
     {
         LxTtyCommitLine(Tty);
         KeSetEvent(&Tty->DataReady, IO_NO_INCREMENT, FALSE);
     }
+    if (Tty->Packet)
+    {
+        BOOLEAN OldFlow = LxTtyFlowControl(&Tty->Termios), NewFlow = LxTtyFlowControl(Termios);
+        BOOLEAN ExtProc = ((Tty->Termios.Lflag | Termios->Lflag) & LX_EXTPROC) != 0;
+
+        if (OldFlow != NewFlow)
+            LxTtySetPacketStatus(Tty, LX_TIOCPKT_DOSTOP | LX_TIOCPKT_NOSTOP, NewFlow ? LX_TIOCPKT_DOSTOP : LX_TIOCPKT_NOSTOP);
+        if (ExtProc)
+            LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_IOCTL);
+        Notify |= (OldFlow != NewFlow) || ExtProc;
+    }
     Tty->Termios = *Termios;
     if (LxTtyInputRoom(Tty))
         KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
     LxTtyUnlock(Tty);
+    if (Notify)
+        LxPollWake(&Tty->MasterPoll, LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI);
 }
 
 LONG64
@@ -1397,14 +1468,22 @@ LxTtyIoctl(
         case LX_TCFLSH:
             if (Argument > LX_TCIOFLUSH)
                 return -LX_EINVAL;
-            if ((Argument == LX_TCIFLUSH) || (Argument == LX_TCIOFLUSH))
+            LxTtyLock(Tty);
+            if (Argument != LX_TCOFLUSH)
             {
-                LxTtyLock(Tty);
-                Tty->LineLength = 0;
-                Tty->ReadyLength = 0;
-                KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
-                LxTtyUnlock(Tty);
+                LxTtyFlushInput(Tty);
+                if (Tty->Packet)
+                    LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD);
             }
+            if (Argument != LX_TCIFLUSH)
+            {
+                LxTtyFlushOutput(Tty, FALSE);
+                if (Tty->Packet)
+                    LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHWRITE);
+            }
+            LxTtyUnlock(Tty);
+            LxPollWake(&Tty->Poll, LX_POLLOUT | LX_POLLWRNORM);
+            LxPollWake(&Tty->MasterPoll, LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI | LX_POLLOUT | LX_POLLWRNORM);
             return 0;
 
         case LX_TIOCOUTQ:
@@ -1795,6 +1874,34 @@ LxPtmxFileIoctl(
         case LX_TIOCNOTTY:
             return -LX_ENOTTY;
 
+        case LX_TIOCPKT:
+            Result = LxCopyFromUser(&Value, Argument, sizeof(Value));
+            if (Result != 0)
+                return Result;
+            LxTtyLock(Tty);
+            if ((Value != 0) && !Tty->Packet)
+                Tty->PacketStatus = 0;
+            Tty->Packet = (Value != 0);
+            LxTtyUnlock(Tty);
+            return 0;
+
+        case LX_TIOCGPKT:
+            LxTtyLock(Tty);
+            Value = Tty->Packet ? 1 : 0;
+            LxTtyUnlock(Tty);
+            return LxCopyToUser(Argument, &Value, sizeof(Value));
+
+        case LX_TCFLSH:
+            if (Argument > LX_TCIOFLUSH)
+                return -LX_EINVAL;
+            LxTtyLock(Tty);
+            if (Argument != LX_TCOFLUSH)
+                LxTtyFlushOutput(Tty, TRUE);
+            LxTtyUnlock(Tty);
+            LxPollWake(&Tty->Poll, LX_POLLOUT | LX_POLLWRNORM);
+            LxPollWake(&Tty->MasterPoll, LX_POLLOUT | LX_POLLWRNORM);
+            return 0;
+
         /* FIXME: TIOCSCTTY on the master attaches the replica, so /dev/tty then opens the replica instead of the master */
         default:
             return LxTtyIoctl(Thread->Process, Tty, Request, Argument);
@@ -1816,6 +1923,8 @@ LxPtmxFilePoll(
     LxTtyLock(Tty);
     if (Tty->OutputLength != 0)
         Mask |= LX_POLLIN | LX_POLLRDNORM;
+    if (Tty->Packet && (Tty->PacketStatus != 0))
+        Mask |= LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI;
     if (LxTtySlaveGone(Tty))
         Mask |= LX_POLLHUP;
     if (LxTtyInputRoom(Tty))

@@ -249,6 +249,8 @@ typedef struct _LX_TTY
     BOOLEAN SlaveOpened;
     BOOLEAN NtMaster;
     BOOLEAN EofPending;
+    BOOLEAN Packet;
+    UCHAR PacketStatus;
     ULONG LineLength;
     ULONG ReadyLength;
     ULONG OutputLength;

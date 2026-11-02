@@ -375,6 +375,7 @@ typedef struct _LX_SCHED_ATTR
 #define LX_TIOCGWINSZ       0x5413
 #define LX_TIOCSWINSZ       0x5414
 #define LX_FIONREAD         0x541B
+#define LX_TIOCPKT          0x5420
 #define LX_TIOCNOTTY        0x5422
 #define LX_TIOCSETD         0x5423
 #define LX_TIOCGETD         0x5424
@@ -386,6 +387,7 @@ typedef struct _LX_SCHED_ATTR
 #define LX_TIOCSPTLCK       0x40045431
 #define LX_TIOCGPTPEER      0x5441
 #define LX_TIOCVHANGUP      0x5437
+#define LX_TIOCGPKT         0x80045438
 #define LX_TIOCEXCL         0x540C
 #define LX_TIOCNXCL         0x540D
 #define LX_TIOCSTI          0x5412
@@ -422,7 +424,13 @@ typedef struct _LX_SCHED_ATTR
 #define LX_TCOOFF           0
 #define LX_TCION            3
 #define LX_TCIFLUSH         0
+#define LX_TCOFLUSH         1
 #define LX_TCIOFLUSH        2
+#define LX_TIOCPKT_FLUSHREAD  0x01
+#define LX_TIOCPKT_FLUSHWRITE 0x02
+#define LX_TIOCPKT_NOSTOP     0x10
+#define LX_TIOCPKT_DOSTOP     0x20
+#define LX_TIOCPKT_IOCTL      0x40
 
 #define LX_INLCR            0000100
 #define LX_IGNCR            0000200
@@ -445,6 +453,7 @@ typedef struct _LX_SCHED_ATTR
 #define LX_IEXTEN           0100000
 #define LX_ECHOCTL          0001000
 #define LX_ECHOKE           0004000
+#define LX_EXTPROC          0200000
 
 #define LX_SIGHUP           1
 #define LX_SIGINT           2
