@@ -56,6 +56,7 @@ ULONG DxgkCapsCoreReportedVersion(_In_ const DXGK_CAPS_INPUT *Input);
  */
 ULONG DxgkCapsCoreInterfaceVersionToLevel(_In_ ULONG InterfaceVersion);
 ULONG DxgkCapsCoreDriverCapsSize(_In_ ULONG InterfaceVersion);
+ULONG DxgkCapsCorePhysicalAdapterCapsSize(_In_ ULONG InterfaceVersion);
 BOOLEAN DxgkCapsCoreInterfaceVersionAtLeast(
     _In_ ULONG InterfaceVersion,
     _In_ ULONG MinimumLevel);

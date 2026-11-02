@@ -334,9 +334,19 @@ static VOID TestDriverCapsQuerySize(VOID)
     }
 }
 
+static VOID TestPhysicalAdapterCapsQuerySize(VOID)
+{
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0x5023), 0x14);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0x6003), 0x18);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0xB004), 0x18);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0xC004), 0x20);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0x11007), 0x20);
+}
+
 START_TEST(DxgkAdapterCaps)
 {
     TestDriverCapsQuerySize();
+    TestPhysicalAdapterCapsQuerySize();
     TestVersionIsTheMinimum();
     TestRenderSupport();
     TestFeatureGating();

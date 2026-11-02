@@ -231,6 +231,18 @@ DxgkCapsCoreDriverCapsSize(
     return 0;
 }
 
+/* Windows 11 sizes DXGKQAITYPE_PHYSICALADAPTERCAPS by the DDI version as well. */
+ULONG
+DxgkCapsCorePhysicalAdapterCapsSize(
+    _In_ ULONG InterfaceVersion)
+{
+    if (InterfaceVersion >= 0xC003)
+        return 0x20;
+    if (InterfaceVersion >= 0x6000)
+        return 0x18;
+    return 0x14;
+}
+
 BOOLEAN
 DxgkCapsCoreInterfaceVersionAtLeast(
     _In_ ULONG InterfaceVersion,

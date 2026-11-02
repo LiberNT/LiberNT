@@ -14382,7 +14382,7 @@ DxgkAdapterStart(
         QueryArgs.pInputData = &CapsIn;
         QueryArgs.InputDataSize = sizeof(CapsIn);
         QueryArgs.pOutputData = &Adapter->PhysicalAdapterCaps;
-        QueryArgs.OutputDataSize = sizeof(Adapter->PhysicalAdapterCaps);
+        QueryArgs.OutputDataSize = DxgkCapsCorePhysicalAdapterCapsSize(Adapter->MiniportContext->InitData.s.Version);
         CapsStatus = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(Adapter->MiniportDeviceContext, &QueryArgs);
         DxgkReleaseKmdCall(Adapter);
         Adapter->PhysicalAdapterCapsValid = NT_SUCCESS(CapsStatus);
