@@ -365,7 +365,7 @@ typedef struct _DXGKVMM_VIRTUAL_DMA_BACKING
         BOOLEAN Write;
         BOOLEAN Pinned;
         BOOLEAN Borrowed;
-    } DataMappings[2];
+    } DataMappings[8];
 } DXGKVMM_VIRTUAL_DMA_BACKING, *PDXGKVMM_VIRTUAL_DMA_BACKING;
 
 typedef struct _DXGKVMM_ALLOCATION_SNAPSHOT_ENTRY
@@ -1693,17 +1693,22 @@ DxgkVidMmMapVirtualPresentAllocation(
         (VOID)DxgkpVidMmFreeVirtualDmaBufferMapping(Backing, Index);
         break;
     }
-    /* Make room by retiring an idle mapping of some other binding. */
+    /* Make room by retiring an idle mapping of another binding, borrowed first: only an owned one costs a page-table update. */
     if (Backing->DataMappingCount >= RTL_NUMBER_OF(Backing->DataMappings))
     {
+        ULONG Victim = MAXULONG;
+
         for (Index = 0; Index < Backing->DataMappingCount; Index++)
         {
-            if (!Backing->DataMappings[Index].Pinned)
-            {
-                (VOID)DxgkpVidMmFreeVirtualDmaBufferMapping(Backing, Index);
+            if (Backing->DataMappings[Index].Pinned)
+                continue;
+            if (Victim == MAXULONG || Backing->DataMappings[Index].Borrowed)
+                Victim = Index;
+            if (Backing->DataMappings[Index].Borrowed)
                 break;
-            }
         }
+        if (Victim != MAXULONG)
+            (VOID)DxgkpVidMmFreeVirtualDmaBufferMapping(Backing, Victim);
         if (Backing->DataMappingCount >= RTL_NUMBER_OF(Backing->DataMappings))
             return STATUS_INVALID_PARAMETER;
     }
