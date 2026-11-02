@@ -843,8 +843,7 @@ NtfsAssignCreateSecurity(
     _Out_ PSECURITY_DESCRIPTOR* NewDescriptor)
 {
     PNtfsFileRecord ParentFile = NULL;
-    PUCHAR ParentDescriptor = NULL;
-    ULONG DescriptorLength = 0;
+    PSECURITY_DESCRIPTOR ParentDescriptor;
     ULONG RemainingNameLength = 0;
     ULONG AutoInheritFlags = 0;
     SECURITY_DESCRIPTOR_CONTROL Control = 0;
@@ -875,36 +874,13 @@ NtfsAssignCreateSecurity(
         Parent = ParentFile;
     }
 
-    Status = NtfsFileRecordReadSecurityDescriptor(Parent, NULL, &DescriptorLength);
-    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_NOT_FOUND)
-    {
-        if (ParentFile)
-            NtfsFileRecordDestroy(ParentFile);
-        return Status;
-    }
-    if (Status == STATUS_BUFFER_TOO_SMALL)
-    {
-        ParentDescriptor = (PUCHAR)ExAllocatePoolWithTag(PagedPool, DescriptorLength, TAG_NTFS);
-        if (!ParentDescriptor)
-        {
-            if (ParentFile)
-                NtfsFileRecordDestroy(ParentFile);
-            return STATUS_INSUFFICIENT_RESOURCES;
-        }
-        Status = NtfsFileRecordReadSecurityDescriptor(Parent, ParentDescriptor, &DescriptorLength);
-        if (!NT_SUCCESS(Status))
-        {
-            ExFreePoolWithTag(ParentDescriptor, TAG_NTFS);
-            if (ParentFile)
-                NtfsFileRecordDestroy(ParentFile);
-            return Status;
-        }
-    }
+    Status = NtfsReadRecordSecurityDescriptor(Parent, &ParentDescriptor);
     if (ParentFile)
         NtfsFileRecordDestroy(ParentFile);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
-    if (ParentDescriptor &&
-        !(AccessState->Flags & TOKEN_HAS_RESTORE_PRIVILEGE) &&
+    if (!(AccessState->Flags & TOKEN_HAS_RESTORE_PRIVILEGE) &&
         !SeAccessCheck(ParentDescriptor,
                        &AccessState->SubjectSecurityContext,
                        FALSE,
@@ -920,8 +896,7 @@ NtfsAssignCreateSecurity(
         return Status;
     }
 
-    if (ParentDescriptor)
-        ParentControl = ((PISECURITY_DESCRIPTOR_RELATIVE)ParentDescriptor)->Control;
+    ParentControl = ((PISECURITY_DESCRIPTOR_RELATIVE)ParentDescriptor)->Control;
     if (AccessState->SecurityDescriptor)
         Control = ((PISECURITY_DESCRIPTOR_RELATIVE)AccessState->SecurityDescriptor)->Control;
     if (!(Control & SE_DACL_PRESENT) && (ParentControl & SE_DACL_AUTO_INHERITED))
@@ -939,8 +914,7 @@ NtfsAssignCreateSecurity(
                                 IoGetFileObjectGenericMapping(),
                                 PagedPool);
 
-    if (ParentDescriptor)
-        ExFreePoolWithTag(ParentDescriptor, TAG_NTFS);
+    ExFreePoolWithTag(ParentDescriptor, TAG_NTFS);
     return Status;
 }
 
