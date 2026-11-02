@@ -12,6 +12,7 @@
 #include <reactos/debug.h>
 
 static CRITICAL_SECTION ApiCriticalSection;
+static CONDITION_VARIABLE LeaseCondition = CONDITION_VARIABLE_INIT;
 
 extern HANDLE hAdapterStateChangedEvent;
 
@@ -29,6 +30,31 @@ VOID ApiUnlock() {
 
 VOID ApiFree() {
     DeleteCriticalSection( &ApiCriticalSection );
+}
+
+VOID ApiSignalLeaseChange(VOID)
+{
+    WakeAllConditionVariable(&LeaseCondition);
+}
+
+DWORD ApiWaitForLease(const WCHAR *AdapterName)
+{
+    ULONGLONG Deadline = GetTickCount64() + DHCP_ACQUIRE_TIMEOUT * 1000ULL;
+    PDHCP_ADAPTER Adapter;
+    ULONGLONG Now;
+
+    for (;;)
+    {
+        Adapter = AdapterFindName(AdapterName);
+        if (Adapter == NULL || Adapter->DhclientState.state == S_STATIC)
+            return ERROR_FILE_NOT_FOUND;
+        if (Adapter->DhclientState.state == S_BOUND)
+            return ERROR_SUCCESS;
+        Now = GetTickCount64();
+        if (Now >= Deadline)
+            return ERROR_SEM_TIMEOUT;
+        SleepConditionVariableCS(&LeaseCondition, &ApiCriticalSection, (DWORD)(Deadline - Now));
+    }
 }
 
 DWORD
@@ -163,6 +189,7 @@ Server_EnableDhcp(
         proto = find_protocol_by_adapter(&Adapter->DhclientInfo);
         if (proto)
             remove_protocol(proto);
+        ApiSignalLeaseChange();
     }
 
     if (hAdapterStateChangedEvent != NULL)
@@ -211,6 +238,8 @@ Server_AcquireParameters(
 
     if (hAdapterStateChangedEvent != NULL)
         SetEvent(hAdapterStateChangedEvent);
+
+    ret = ApiWaitForLease(AdapterName);
 
 done:
     ApiUnlock();

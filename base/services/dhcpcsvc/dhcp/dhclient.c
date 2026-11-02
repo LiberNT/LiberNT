@@ -1008,6 +1008,7 @@ bind_lease(struct interface_info *ip)
     }
     set_name_servers( Adapter, new_lease );
     set_domain( Adapter, new_lease );
+    ApiSignalLeaseChange();
 }
 
 void
