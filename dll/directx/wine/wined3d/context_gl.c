@@ -524,6 +524,8 @@ static inline void wined3d_context_gl_set_fbo_key_for_render_target(const struct
     key->objects[idx].target = wined3d_texture_gl_get_sub_resource_target(texture_gl, sub_resource_idx);
     key->objects[idx].level = sub_resource_idx % texture_gl->t.level_count;
     key->objects[idx].layer = sub_resource_idx / texture_gl->t.level_count;
+    if (resource->type == WINED3D_RTYPE_TEXTURE_3D)
+        key->objects[idx].layer = render_target->layer_idx;
 
     if (render_target->layer_count != 1)
         key->objects[idx].layer = WINED3D_ALL_LAYERS;
@@ -3255,6 +3257,8 @@ BOOL wined3d_context_gl_apply_clear_state(struct wined3d_context_gl *context_gl,
                     context_gl->blit_targets[i].gl_view = rtv_gl->gl_view;
                     context_gl->blit_targets[i].resource = rtv_gl->v.resource;
                     context_gl->blit_targets[i].sub_resource_idx = rtv_gl->v.sub_resource_idx;
+                    if (rtv_gl->v.resource->type == WINED3D_RTYPE_TEXTURE_3D)
+                        context_gl->blit_targets[i].layer_idx = rtv_gl->v.desc.u.texture.layer_idx;
                     context_gl->blit_targets[i].layer_count = rtv_gl->v.layer_count;
                 }
                 if (rts[i] && rts[i]->format->id != WINED3DFMT_NULL)
@@ -3420,6 +3424,8 @@ void context_state_fb(struct wined3d_context *context, const struct wined3d_stat
         context_gl->blit_targets[i].gl_view = view_gl->gl_view;
         context_gl->blit_targets[i].resource = view_gl->v.resource;
         context_gl->blit_targets[i].sub_resource_idx = view_gl->v.sub_resource_idx;
+        if (view_gl->v.resource->type == WINED3D_RTYPE_TEXTURE_3D)
+            context_gl->blit_targets[i].layer_idx = view_gl->v.desc.u.texture.layer_idx;
         context_gl->blit_targets[i].layer_count = view_gl->v.layer_count;
 
         if (!color_location)
