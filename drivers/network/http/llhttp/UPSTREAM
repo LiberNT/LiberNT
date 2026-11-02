@@ -1,0 +1,8 @@
+nodejs/llhttp release/v9.4.3
+Commit: 0e815792b167a9bd8ace259b95b7da953776c288
+
+Local changes:
+- HTTP_REQUEST and HTTP_RESPONSE renamed to LLHTTP_REQUEST and LLHTTP_RESPONSE; they collide with HTTP_REQUEST in http.h.
+- LLHTTP_EXPORT is empty when LIBERNT_KERNEL is defined.
+- api.c: no stdio; abort() paths return an error or an unknown name, and llhttp__debug doesn't print.
+- Trailing whitespace stripped.
