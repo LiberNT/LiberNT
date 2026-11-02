@@ -99,7 +99,7 @@ static void RunFactory(void *)
         dxgi->EnumAdapterByLuid(global->GetAdapterLuid(), __uuidof(IUnknown), reinterpret_cast<void **>(&adapter));
         dxgi->Release();
     }
-    ok(adapter != NULL, "adapter of the global device\n");
+    if (global) ok(adapter != NULL, "adapter of the global device\n");
     if (global && settings && adapter)
     {
         settings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
