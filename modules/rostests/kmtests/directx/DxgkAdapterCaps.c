@@ -301,8 +301,42 @@ TestFeatureQueryNegotiation(VOID)
                 DXGK_FEATURE_QUERY_RESULT_SUPPORTED_ON_CONFIG);
 }
 
+static VOID TestDriverCapsQuerySize(VOID)
+{
+    static const struct
+    {
+        ULONG Selector;
+        ULONG Size;
+    } Cases[] =
+    {
+        { 0x104D, 0 },
+        { 0x1052, 0x150 },
+        { 0x2000, 0 },
+        { 0x2005, 0x210 },
+        { 0x300E, 0x220 },
+        { 0x4002, 0x228 },
+        { 0x5003, 0 },
+        { 0x5010, 0x228 },
+        { 0x5023, 0x240 },
+        { 0x8001, 0x240 },
+        { 0x9006, 0x248 },
+        { 0xD001, 0x248 },
+        { 0xE003, 0x250 },
+        { 0x11007, 0x250 },
+    };
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Cases); ++Index)
+    {
+        ok(DxgkCapsCoreDriverCapsSize(Cases[Index].Selector) == Cases[Index].Size,
+           "DRIVERCAPS size for 0x%lx is 0x%lx, expected 0x%lx\n", Cases[Index].Selector,
+           DxgkCapsCoreDriverCapsSize(Cases[Index].Selector), Cases[Index].Size);
+    }
+}
+
 START_TEST(DxgkAdapterCaps)
 {
+    TestDriverCapsQuerySize();
     TestVersionIsTheMinimum();
     TestRenderSupport();
     TestFeatureGating();

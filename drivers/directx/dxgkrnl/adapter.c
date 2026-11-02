@@ -12677,12 +12677,8 @@ DxgkpMessageIsrTrampoline(
 
 /*
  * DxgkpQueryDriverCaps — DXGKQAITYPE_DRIVERCAPS into a caller buffer of
- * DXGKP_DRIVERCAPS_QUERY_SIZE bytes (see dxgkrnl_private.h).
- *
- * First asks with our own sizeof; if the miniport was built against a
- * newer WDK whose DXGK_DRIVERCAPS is bigger it fails the size check
- * (STATUS_BUFFER_TOO_SMALL/INVALID_PARAMETER) — retry with the large
- * zeroed buffer so callers can read the stable head fields.
+ * DXGKP_DRIVERCAPS_QUERY_SIZE bytes (see dxgkrnl_private.h), sized for the
+ * miniport's DDI version.
  */
 NTSTATUS
 DxgkpQueryDriverCaps(
@@ -12691,8 +12687,10 @@ DxgkpQueryDriverCaps(
 {
     PDXGKDDI_QUERY_ADAPTER_INFO PfnQueryAdapterInfo;
     DXGKARG_QUERYADAPTERINFO QueryArgs;
-    ULONG Attempt;
+    ULONG CapsSize;
     NTSTATUS Status;
+
+    C_ASSERT(sizeof(DXGK_DRIVERCAPS) <= DXGKP_DRIVERCAPS_QUERY_SIZE);
 
     if (Caps == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -12702,35 +12700,29 @@ DxgkpQueryDriverCaps(
     if (Adapter == NULL || Adapter->MiniportContext == NULL)
         return STATUS_INVALID_PARAMETER;
 
+    CapsSize = DxgkCapsCoreDriverCapsSize(Adapter->MiniportContext->InitData.s.Version);
+    if (CapsSize == 0)
+        return STATUS_NOT_SUPPORTED;
     PfnQueryAdapterInfo = DXGK_CB(Adapter, DxgkDdiQueryAdapterInfo);
     if (PfnQueryAdapterInfo == NULL)
         return STATUS_NOT_SUPPORTED;
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DELETE_PENDING;
 
-    Status = STATUS_UNSUCCESSFUL;
-    for (Attempt = 0; Attempt < 2; Attempt++)
+    RtlZeroMemory(&QueryArgs, sizeof(QueryArgs));
+    QueryArgs.Type = DXGKQAITYPE_DRIVERCAPS;
+    QueryArgs.pOutputData = Caps;
+    QueryArgs.OutputDataSize = CapsSize;
+
+    _SEH2_TRY
     {
-        RtlZeroMemory(Caps, DXGKP_DRIVERCAPS_QUERY_SIZE);
-        RtlZeroMemory(&QueryArgs, sizeof(QueryArgs));
-        QueryArgs.Type = DXGKQAITYPE_DRIVERCAPS;
-        QueryArgs.pOutputData = Caps;
-        QueryArgs.OutputDataSize = (Attempt == 0) ? sizeof(DXGK_DRIVERCAPS)
-                                                  : DXGKP_DRIVERCAPS_QUERY_SIZE;
-
-        _SEH2_TRY
-        {
-            Status = PfnQueryAdapterInfo(Adapter->MiniportDeviceContext, &QueryArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-
-        if (NT_SUCCESS(Status))
-            break;
+        Status = PfnQueryAdapterInfo(Adapter->MiniportDeviceContext, &QueryArgs);
     }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
 
     DxgkReleaseKmdCall(Adapter);
     return Status;

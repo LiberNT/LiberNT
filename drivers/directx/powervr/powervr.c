@@ -370,9 +370,11 @@ PowerVrDdiQueryAdapterInfo(
             return STATUS_SUCCESS;
 
         case DXGKQAITYPE_DRIVERCAPS:
-            if (!QueryAdapterInfo->pOutputData || QueryAdapterInfo->OutputDataSize < sizeof(DXGK_DRIVERCAPS))
+            if (!QueryAdapterInfo->pOutputData ||
+                QueryAdapterInfo->OutputDataSize < RTL_SIZEOF_THROUGH_FIELD(DXGK_DRIVERCAPS, SupportSurpriseRemoval))
                 return STATUS_BUFFER_TOO_SMALL;
-            RtlCopyMemory(QueryAdapterInfo->pOutputData, &PowerVrDriverCaps, sizeof(DXGK_DRIVERCAPS));
+            RtlCopyMemory(QueryAdapterInfo->pOutputData, &PowerVrDriverCaps,
+                          min(QueryAdapterInfo->OutputDataSize, sizeof(DXGK_DRIVERCAPS)));
             return STATUS_SUCCESS;
 
         case DXGKQAITYPE_QUERYSEGMENT:

@@ -1624,10 +1624,10 @@ Rpi5Vc4DdiQueryAdapterInfo(
 
             if (Caps == NULL)
                 return STATUS_INVALID_PARAMETER;
-            if (QueryAdapterInfo->OutputDataSize < sizeof(DXGK_DRIVERCAPS))
+            if (QueryAdapterInfo->OutputDataSize < RTL_SIZEOF_THROUGH_FIELD(DXGK_DRIVERCAPS, SupportSurpriseRemoval))
                 return STATUS_BUFFER_TOO_SMALL;
 
-            RtlZeroMemory(Caps, sizeof(DXGK_DRIVERCAPS));
+            RtlZeroMemory(Caps, min(QueryAdapterInfo->OutputDataSize, sizeof(DXGK_DRIVERCAPS)));
             Caps->HighestAcceptableAddress.QuadPart = (LONGLONG)-1;
 
             /* Driver-owned ARGB cursor on both HVS and fixed scanout. */
