@@ -184,6 +184,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoAcpiIoctl.c
     ntos_io/IoPciPdoPnp.c
     ntos_io/IoAcpiCmosRegion.c
+    ntos_io/IoErrorLogEntry.c
     ntos_io/IoPciD3Cold.c
     ntos_io/IoPciExpressInterfaces.c
     ntos_io/IoPciRom.c
@@ -218,8 +219,8 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KePcr.c
     ntos_ke/KeQueue.c
     ntos_ke/KeProcessStackCount.c
-    ntos_ke/KeProcessor.c
     ntos_ke/KeQueryBasePriority.c
+    ntos_ke/KeProcessor.c
     ntos_ke/KeSemaphore.c
     ntos_ke/KeSpinLock.c
     ntos_ke/KeThreadedDpc.c

@@ -3273,8 +3273,18 @@ USBH_FdoPnP(IN PUSBHUB_FDO_EXTENSION HubExtension,
 
         case IRP_MN_DEVICE_USAGE_NOTIFICATION:
             DPRINT_PNP("FDO IRP_MN_DEVICE_USAGE_NOTIFICATION\n");
-            Irp->IoStatus.Status = STATUS_SUCCESS;
-            Status = USBH_PassIrp(HubExtension->LowerDevice, Irp);
+            Status = STATUS_UNSUCCESSFUL;
+            if (IoForwardIrpSynchronously(HubExtension->LowerDevice, Irp))
+                Status = Irp->IoStatus.Status;
+
+            if (NT_SUCCESS(Status) &&
+                IoStack->Parameters.UsageNotification.Type == DeviceUsageTypeHibernation)
+            {
+                IoAdjustPagingPathCount(&HubExtension->HibernationPathCount,
+                                        IoStack->Parameters.UsageNotification.InPath);
+            }
+
+            USBH_CompleteIrp(Irp, Status);
             break;
 
         case IRP_MN_SURPRISE_REMOVAL:
@@ -3347,6 +3357,42 @@ USBH_PdoQueryReenumerateSelfInterface(IN PUSBHUB_PORT_PDO_EXTENSION PortExtensio
     Interface->InterfaceDereference = USBH_InterfaceNop;
     Interface->SurpriseRemoveAndReenumerateSelf = USBH_SurpriseRemoveAndReenumerateSelf;
     return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+USBH_NotifyParentUsage(IN PDEVICE_OBJECT ParentDevice,
+                       IN PIO_STACK_LOCATION IoStack)
+{
+    PDEVICE_OBJECT TopDevice;
+    PIO_STACK_LOCATION NextStack;
+    IO_STATUS_BLOCK IoStatus;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    TopDevice = IoGetAttachedDeviceReference(ParentDevice);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, TopDevice, NULL, 0, NULL, &Event, &IoStatus);
+    if (Irp == NULL)
+    {
+        ObDereferenceObject(TopDevice);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    NextStack = IoGetNextIrpStackLocation(Irp);
+    NextStack->MinorFunction = IRP_MN_DEVICE_USAGE_NOTIFICATION;
+    NextStack->Parameters.UsageNotification = IoStack->Parameters.UsageNotification;
+    Status = IoCallDriver(TopDevice, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    ObDereferenceObject(TopDevice);
+    return Status;
 }
 
 NTSTATUS
@@ -3578,7 +3624,9 @@ USBH_PdoPnP(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
 
         case IRP_MN_DEVICE_USAGE_NOTIFICATION:
             DPRINT_PNP("PDO IRP_MN_DEVICE_USAGE_NOTIFICATION\n");
-            Status = Irp->IoStatus.Status;
+            HubExtension = PortExtension->HubExtension;
+            Status = HubExtension ? USBH_NotifyParentUsage(HubExtension->Common.SelfDevice, IoStack)
+                                  : STATUS_NO_SUCH_DEVICE;
             break;
 
         case IRP_MN_SURPRISE_REMOVAL:

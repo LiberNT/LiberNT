@@ -91,6 +91,28 @@ BOOL EnableDialogTheme(HWND hwnd)
     }
 }
 
+static HHOOK hMsgFilterHook;
+
+static LRESULT CALLBACK
+MsgFilterProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    LPMSG pMsg = (LPMSG)lParam;
+    INT nCount;
+
+    if (nCode == MSGF_DIALOGBOX && pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_TAB &&
+        (GetKeyState(VK_CONTROL) & 0x8000) && hMainWnd && hTabWnd &&
+        (pMsg->hwnd == hMainWnd || IsChild(hMainWnd, pMsg->hwnd)) &&
+        !(SendMessageW(pMsg->hwnd, WM_GETDLGCODE, pMsg->wParam, (LPARAM)pMsg) & DLGC_WANTMESSAGE) &&
+        (nCount = TabCtrl_GetItemCount(hTabWnd)) > 0)
+    {
+        INT nIndex = TabCtrl_GetCurSel(hTabWnd) + ((GetKeyState(VK_SHIFT) & 0x8000) ? nCount - 1 : 1);
+        TabCtrl_SetCurFocus(hTabWnd, nIndex % nCount);
+        return TRUE;
+    }
+
+    return CallNextHookEx(hMsgFilterHook, nCode, wParam, lParam);
+}
+
 int APIENTRY wWinMain(HINSTANCE hInstance,
                       HINSTANCE hPrevInstance,
                       LPWSTR    lpCmdLine,
@@ -173,7 +195,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
      */
     SetProcessShutdownParameters(1, SHUTDOWN_NORETRY);
 
+    hMsgFilterHook = SetWindowsHookExW(WH_MSGFILTER, MsgFilterProc, NULL, GetCurrentThreadId());
     DialogBoxW(hInst, (LPCWSTR)IDD_TASKMGR_DIALOG, NULL, TaskManagerWndProc);
+    if (hMsgFilterHook)
+        UnhookWindowsHookEx(hMsgFilterHook);
 
     /* Save our settings to the registry */
     SaveSettings();

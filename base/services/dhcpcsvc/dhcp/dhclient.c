@@ -998,13 +998,17 @@ bind_lease(struct interface_info *ip)
 
     Adapter = AdapterFindInfo( ip );
 
-    if( Adapter )  setup_adapter( Adapter, new_lease );
+    if( Adapter ) {
+        Adapter->ApipaWaitStart = 0;
+        setup_adapter( Adapter, new_lease );
+    }
     else {
         warning("Could not find adapter for info %p\n", ip);
         return;
     }
     set_name_servers( Adapter, new_lease );
     set_domain( Adapter, new_lease );
+    ApiSignalLeaseChange();
 }
 
 void

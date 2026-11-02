@@ -1329,6 +1329,12 @@ PoRequestPowerIrp(
     {
         Stack->Parameters.Power.Type = DevicePowerState;
         Stack->Parameters.Power.State = PowerState;
+        if (MinorFunction == IRP_MN_SET_POWER &&
+            PowerState.DeviceState > PowerDeviceD0 &&
+            PopAction.IrpMinor == IRP_MN_SET_POWER)
+        {
+            Stack->Parameters.Power.ShutdownType = PopAction.Action;
+        }
     }
 
     if (pIrp != NULL)

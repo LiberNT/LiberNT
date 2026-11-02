@@ -188,6 +188,14 @@ AlpcpWaitForPortReferences(
 
     Port->ReferenceWaiter = &WaitEvent;
     Port->ReferenceWaitTarget = ReferenceCount;
+    KeMemoryBarrier();
+    if (Port->ReferenceCount == ReferenceCount)
+    {
+        Port->ReferenceWaiter = NULL;
+        Port->ReferenceWaitTarget = 0;
+        AlpcpReleasePortLock(Port);
+        return STATUS_SUCCESS;
+    }
     AlpcpReleasePortLock(Port);
 
     do

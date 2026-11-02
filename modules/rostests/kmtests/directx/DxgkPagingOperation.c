@@ -148,12 +148,74 @@ static VOID TestPageTableAndTlb(VOID)
     { NTSTATUS Observed = DxgkPagingCoreValidate(&Request, LEVELS); ok_eq_hex(Observed, STATUS_INTEGER_OVERFLOW); }
 }
 
+static VOID TestContextResourceHints(VOID)
+{
+    PUCHAR Object;
+    PVOID Mapping;
+    PMDL Mdl;
+    PHYSICAL_ADDRESS Low, High, Skip;
+    ULONG Class;
+    PVOID Resource;
+
+    Object = ExAllocatePoolWithTag(NonPagedPool, 0x800, 'tHxD');
+    if (skip(Object != NULL, "No pool\n"))
+        return;
+    RtlZeroMemory(Object, 0x800);
+    *(PULONG)(Object + 0x10) = 7;
+    *(PVOID *)(Object + 0x758) = Object;
+    ok_eq_bool(DxgkPagingCoreReadContextResourceHints(Object, &Class, &Resource), TRUE);
+    ok_eq_ulong(Class, 7UL);
+    ok_eq_pointer(Resource, Object);
+    ExFreePoolWithTag(Object, 'tHxD');
+
+    Class = 1;
+    Resource = &Class;
+    ok_eq_bool(DxgkPagingCoreReadContextResourceHints(NULL, &Class, &Resource), FALSE);
+    ok_eq_ulong(Class, 0UL);
+    ok_eq_pointer(Resource, NULL);
+
+    /* An object that ends before +0x758, followed by an unmapped page. */
+    Mapping = MmAllocateMappingAddress(2 * PAGE_SIZE, 'tHxD');
+    if (skip(Mapping != NULL, "No reserved mapping\n"))
+        return;
+    Low.QuadPart = 0;
+    High.QuadPart = MAXLONGLONG;
+    Skip.QuadPart = 0;
+    Mdl = MmAllocatePagesForMdl(Low, High, Skip, PAGE_SIZE);
+    if (!skip(Mdl != NULL && MmGetMdlByteCount(Mdl) == PAGE_SIZE, "No page\n"))
+    {
+        PUCHAR Page = MmMapLockedPagesWithReservedMapping(Mapping, 'tHxD', Mdl, MmCached);
+
+        ok(Page != NULL, "MmMapLockedPagesWithReservedMapping failed\n");
+        if (Page != NULL)
+        {
+            Object = Page + PAGE_SIZE - 0x100;
+            RtlZeroMemory(Object, 0x100);
+            *(PULONG)(Object + 0x10) = 7;
+            ok_eq_bool(MmIsAddressValid(Page + PAGE_SIZE), FALSE);
+            Class = 1;
+            Resource = &Class;
+            ok_eq_bool(DxgkPagingCoreReadContextResourceHints(Object, &Class, &Resource), FALSE);
+            ok_eq_ulong(Class, 0UL);
+            ok_eq_pointer(Resource, NULL);
+            MmUnmapReservedMapping(Mapping, 'tHxD', Mdl);
+        }
+    }
+    if (Mdl != NULL)
+    {
+        MmFreePagesFromMdl(Mdl);
+        ExFreePool(Mdl);
+    }
+    MmFreeMappingAddress(Mapping, 'tHxD');
+}
+
 START_TEST(DxgkPagingOperation)
 {
     TestOperationRange();
     TestTransfer();
     TestFillAndAperture();
     TestPageTableAndTlb();
+    TestContextResourceHints();
 }
 
 /* EOF */

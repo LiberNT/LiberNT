@@ -160,4 +160,13 @@ ULONGLONG
 DxgkPagingFenceQueueCoreQueryCommitted(
     _Inout_ PDXGK_PAGING_FENCE_QUEUE_CORE Queue);
 
+#define DXGK_PAGING_CORE_CONTEXT_CLASS_OFFSET    0x10
+#define DXGK_PAGING_CORE_CONTEXT_RESOURCE_OFFSET 0x758
+
+BOOLEAN
+DxgkPagingCoreReadContextResourceHints(
+    _In_ PVOID DriverAllocation,
+    _Out_ PULONG AllocationClass,
+    _Out_ PVOID *ContextResource);
+
 #endif /* _DXGK_PAGING_CORE_H_ */

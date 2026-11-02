@@ -252,6 +252,7 @@ typedef struct _USBHUB_FDO_EXTENSION {
   PRKEVENT pResetPortEvent;
   KSEMAPHORE HubPortSemaphore;
   LONG ResetRequestCount;
+  LONG HibernationPathCount;
   KEVENT ResetEvent;
   PIRP PendingIdleIrp;
   PIRP PendingWakeIrp;

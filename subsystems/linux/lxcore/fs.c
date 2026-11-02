@@ -1543,7 +1543,7 @@ LxSetAttributesFile(
         LxNodeFree(&Node);
         return Error;
     }
-    if (((File->Handle == NULL) && (LxTmpfsFileInode(File) == NULL)) || File->NtPipe)
+    if (((File->Handle == NULL) && (LxTmpfsFileInode(File) == NULL) && (LxFileGetTty(File) == NULL)) || File->NtPipe)
         return 0;
     Error = LxVfsSetAttributes(Process, NULL, File, Mode, Uid, Gid);
     if ((Error != -LX_EACCES) || (File->Path == NULL) || (File->Path[0] != '/'))

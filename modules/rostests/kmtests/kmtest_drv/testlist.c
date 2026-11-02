@@ -318,6 +318,7 @@ KMT_TESTFUNC Test_IoStackKM;
 KMT_TESTFUNC Test_IoActivityId;
 KMT_TESTFUNC Test_IoAcpiCmosRegion;
 KMT_TESTFUNC Test_IoAcpiIoctl;
+KMT_TESTFUNC Test_IoErrorLogEntry;
 KMT_TESTFUNC Test_IoPciPdoPnp;
 KMT_TESTFUNC Test_IoPciD3Cold;
 KMT_TESTFUNC Test_IoPciExpressInterfaces;
@@ -497,6 +498,7 @@ const KMT_TEST TestList[] =
     { "IoActivityId",                       Test_IoActivityId },
     { "IoAcpiCmosRegion",                   Test_IoAcpiCmosRegion },
     { "IoAcpiIoctl",                        Test_IoAcpiIoctl },
+    { "IoErrorLogEntry",                    Test_IoErrorLogEntry },
     { "IoPciPdoPnp",                        Test_IoPciPdoPnp },
     { "IoPciD3Cold",                        Test_IoPciD3Cold },
     { "IoPciExpressInterfaces",             Test_IoPciExpressInterfaces },
@@ -557,9 +559,9 @@ const KMT_TEST TestList[] =
     { "KePcr",                              Test_KePcr },
     { "KeQueue",                            Test_KeQueue },
     { "KeProcessStackCount",                Test_KeProcessStackCount },
+    { "KeQueryBasePriority",                Test_KeQueryBasePriority },
     { "KeProcessor",                        Test_KeProcessor },
     { "KeSemaphore",                        Test_KeSemaphore },
-    { "KeQueryBasePriority",                Test_KeQueryBasePriority },
     { "KeSpinLock",                         Test_KeSpinLock },
     { "KeThreadedDpc",                      Test_KeThreadedDpc },
     { "KeTime",                             Test_KeTime },

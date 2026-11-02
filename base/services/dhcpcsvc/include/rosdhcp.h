@@ -30,6 +30,8 @@
 #define DHCP_DISCOVER_INTERVAL 5
 #define DHCP_REBOOT_TIMEOUT 10
 #define DHCP_PANIC_TIMEOUT 20
+/* Windows returns ERROR_SEM_TIMEOUT from DhcpAcquireParameters after ~126 s without an offer. */
+#define DHCP_ACQUIRE_TIMEOUT 126
 #define DHCP_BACKOFF_MAX 300
 #define DHCP_DEFAULT_LEASE_TIME 43200 /* 12 hours */
 #define _PATH_DHCLIENT_PID "\\systemroot\\system32\\drivers\\etc\\dhclient.pid"
@@ -122,6 +124,8 @@ extern VOID ApiInit(VOID);
 extern VOID ApiFree(VOID);
 extern VOID ApiLock(VOID);
 extern VOID ApiUnlock(VOID);
+extern VOID ApiSignalLeaseChange(VOID);
+extern DWORD ApiWaitForLease(const WCHAR *AdapterName);
 time_t GetMonotonicTime(VOID);
 extern int inet_aton(const char *s, struct in_addr *addr);
 int warn( char *format, ... );

@@ -13631,6 +13631,7 @@ DxgkpSetVsyncInterruptState(
     _SEH2_END;
 
     DxgkReleaseMiniportCallback(Adapter);
+    Status = DxgkAdapterStartVsyncControlStatus(Status);
     /* This is the only place the vsync interrupt is turned on or off, so it
      * is the only place that can answer whether it is on. */
     if (NT_SUCCESS(Status))

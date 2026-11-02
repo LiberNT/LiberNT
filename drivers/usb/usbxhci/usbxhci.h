@@ -149,6 +149,19 @@ typedef struct _XHCI_PROTOCOL_SEGMENT {
 
 #define XHCI_MAX_PROTOCOL_SEGMENTS 8
 
+typedef struct _XHCI_COMMAND_CONTEXT {
+  LIST_ENTRY ListEntry;
+  volatile LONG References;
+  KEVENT CompletionEvent;
+  ULONGLONG CommandPointer;
+  ULONG CommandType;
+  ULONG CompletionCode;
+  UCHAR SlotId;
+  volatile LONG Completed;
+  BOOLEAN InList;
+  BOOLEAN Embedded;
+} XHCI_COMMAND_CONTEXT, *PXHCI_COMMAND_CONTEXT;
+
 typedef struct _XHCI_EXTENSION {
   ULONG Signature;
   PDEVICE_OBJECT FunctionalDeviceObject;
@@ -266,19 +279,8 @@ typedef struct _XHCI_EXTENSION {
   BOOLEAN TimerResolutionRaised;
   BOOLEAN DebugShare;
   KD_USB_SHARE DebugShareInfo;
+  XHCI_COMMAND_CONTEXT FrozenCommand;
 } XHCI_EXTENSION, *PXHCI_EXTENSION;
-
-typedef struct _XHCI_COMMAND_CONTEXT {
-  LIST_ENTRY ListEntry;
-  volatile LONG References;
-  KEVENT CompletionEvent;
-  ULONGLONG CommandPointer;
-  ULONG CommandType;
-  ULONG CompletionCode;
-  UCHAR SlotId;
-  volatile LONG Completed;
-  BOOLEAN InList;
-} XHCI_COMMAND_CONTEXT, *PXHCI_COMMAND_CONTEXT;
 
 typedef struct _XHCI_ENDPOINT {
     ULONG Signature;

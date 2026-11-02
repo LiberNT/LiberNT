@@ -3906,7 +3906,8 @@ KdbpCmdBackTrace(ULONG Argc, PCHAR Argv[])
         Context = *KdbCurrentTrapFrame;
     }
 
-    KdbpPrintBackTraceContext(&Context, Verbose, FALSE);
+    /* A frozen processor's user stack belongs to another address space than the debugger's. */
+    KdbpPrintBackTraceContext(&Context, Verbose, KdbSelectedProcessor >= 0);
 
     return TRUE;
 }
@@ -10068,6 +10069,32 @@ KdbpCmdAnalyze(
     return TRUE;
 }
 
+static VOID
+KdbpPrintFrozenProcessors(VOID)
+{
+    CHAR Command[16];
+    ULONG Processor;
+
+    KdbpDoCommand("cpu");
+    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    {
+        if (Processor == KeGetCurrentProcessorNumber() || KiProcessorBlock[Processor] == NULL)
+            continue;
+        RtlStringCbPrintfA(Command, sizeof(Command), "cpu %lu", Processor);
+        KdbpDoCommand(Command);
+        KdbpDoCommand("bt");
+    }
+    KdbpDoCommand("cpu current");
+}
+
+static VOID
+KdbpPersistSessionLog(VOID)
+{
+    /* Writing through the crash storage path resets the boot disk, so only a bugcheck session may do it. */
+    if (KiBugCheckData[0])
+        (VOID)KdpWriteBootLogAtCrash(NULL, NULL);
+}
+
 /*!\brief KDB Main Loop.
  *
  * \param EnteredOnSingleStep  TRUE if KDB was entered on single step.
@@ -10118,6 +10145,9 @@ KdbpCliMainLoop(
         // KdbPuts("\nEntered debugger\n");
         KdbPuts("\nType \"help\" for a list of commands.\n");
     }
+    if (!EnteredOnSingleStep && KiBugCheckData[0])
+        KdbpPrintFrozenProcessors();
+    KdbpPersistSessionLog();
 
     /* Main loop */
     while (Continue)
@@ -10150,6 +10180,7 @@ KdbpCliMainLoop(
 
         /* Invoke the command */
         Continue = KdbpDoCommand(Command);
+        KdbpPersistSessionLog();
     }
 }
 

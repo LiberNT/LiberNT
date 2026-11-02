@@ -49,3 +49,7 @@ DxgkAdapterStartVsyncControlDdi(
     _In_ BOOLEAN HasControlInterrupt3,
     _In_ BOOLEAN HasControlInterrupt2,
     _In_ BOOLEAN HasControlInterrupt);
+
+NTSTATUS
+DxgkAdapterStartVsyncControlStatus(
+    _In_ NTSTATUS MiniportStatus);

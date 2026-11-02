@@ -16,6 +16,21 @@ typedef struct _ALPC_WAIT_REFERENCES_CONTEXT
     NTSTATUS Status;
 } ALPC_WAIT_REFERENCES_CONTEXT, *PALPC_WAIT_REFERENCES_CONTEXT;
 
+#define ALPC_REFERENCE_RACE_ROUNDS 4096
+
+typedef struct _ALPC_REFERENCE_RACE_CONTEXT
+{
+    HANDLE Port;
+    HANDLE StartEvent;
+    HANDLE DoneEvent;
+    volatile LONG Ready;
+    volatile LONG Go;
+    volatile BOOLEAN Stop;
+    LONG WaiterDelay;
+    ULONG Target;
+    NTSTATUS Status;
+} ALPC_REFERENCE_RACE_CONTEXT, *PALPC_REFERENCE_RACE_CONTEXT;
+
 static DWORD WINAPI AlpcWaitForReferencesThread(_In_ PVOID Parameter);
 
 static
@@ -201,6 +216,128 @@ AlpcWaitForReferencesThread(
 
 static
 VOID
+AlpcTestSpin(
+    _In_ LONG Count)
+{
+    volatile LONG Spin;
+
+    for (Spin = 0; Spin < Count; Spin++)
+        ;
+}
+
+static
+DWORD
+WINAPI
+AlpcReferenceRaceThread(
+    _In_ PVOID Parameter)
+{
+    PALPC_REFERENCE_RACE_CONTEXT Context = Parameter;
+    ULONG Target;
+
+    while (WaitForSingleObject(Context->StartEvent, INFINITE) == WAIT_OBJECT_0 && !Context->Stop)
+    {
+        Target = Context->Target;
+        InterlockedExchange(&Context->Ready, 1);
+        while (!Context->Go)
+            YieldProcessor();
+        AlpcTestSpin(Context->WaiterDelay);
+        Context->Status = NtAlpcQueryInformation(Context->Port, AlpcWaitForPortReferences, &Target, sizeof(Target), NULL);
+        SetEvent(Context->DoneEvent);
+    }
+    return 0;
+}
+
+static
+BOOLEAN
+AlpcTestReferenceRaceRound(
+    _In_ PALPC_REFERENCE_RACE_CONTEXT Context,
+    _In_ ULONG Target,
+    _In_ LONG Offset)
+{
+    Context->Target = Target;
+    Context->WaiterDelay = (Offset < 0) ? -Offset : 0;
+    Context->Ready = 0;
+    Context->Go = 0;
+    Context->Status = STATUS_PENDING;
+    SetEvent(Context->StartEvent);
+    while (!Context->Ready)
+        YieldProcessor();
+    InterlockedExchange(&Context->Go, 1);
+    AlpcTestSpin((Offset > 0) ? Offset : 0);
+    NtAlpcSendWaitReceivePort(Context->Port, ALPC_MSGFLG_TRACK_PORT_REFERENCES, NULL, NULL, NULL, NULL, NULL, NULL);
+    return WaitForSingleObject(Context->DoneEvent, 1000) == WAIT_OBJECT_0;
+}
+
+static
+VOID
+AlpcTestWaitForReferencesRace(VOID)
+{
+    PALPC_REFERENCE_RACE_CONTEXT Context;
+    ALPC_PORT_ATTRIBUTES Attributes;
+    SYSTEM_INFO SystemInfo;
+    HANDLE Thread;
+    ULONG Target;
+    BOOLEAN Woken = TRUE;
+    NTSTATUS Status;
+
+    GetSystemInfo(&SystemInfo);
+    if (SystemInfo.dwNumberOfProcessors < 2)
+    {
+        skip("Query.WaitForReferences.race needs two processors\n");
+        return;
+    }
+
+    Context = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Context));
+    ok(Context != NULL, "reference race context allocation failed\n");
+    if (!Context)
+        return;
+    AlpcTestInitializePortAttributes(&Attributes, 0);
+    Status = NtAlpcCreatePort(&Context->Port, NULL, &Attributes);
+    ok_hex(Status, STATUS_SUCCESS);
+    Context->StartEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+    Context->DoneEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+    Thread = CreateThread(NULL, 0, AlpcReferenceRaceThread, Context, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (!NT_SUCCESS(Status) || !Context->StartEvent || !Context->DoneEvent || !Thread)
+        Woken = FALSE;
+
+    if (Woken && (!AlpcTestReferenceRaceRound(Context, 1, 1000000) || Context->Status != STATUS_SUCCESS))
+    {
+        trace("ALPC_OBSERVE value Query.WaitForReferences.race gate_status=%08lx\n", Context->Status);
+        skip("Query.WaitForReferences does not wake on a tracked send\n");
+        Woken = FALSE;
+    }
+
+    for (Target = 2; Woken && Target <= ALPC_REFERENCE_RACE_ROUNDS; Target++)
+    {
+        Woken = AlpcTestReferenceRaceRound(Context, Target, (LONG)(Target % 2048) - 1024);
+        ok(Woken, "Query.WaitForReferences.race lost the wakeup for reference %lu\n", Target);
+        if (Woken)
+            ok_hex(Context->Status, STATUS_SUCCESS);
+    }
+
+    if (Thread)
+    {
+        Context->Stop = TRUE;
+        SetEvent(Context->StartEvent);
+        if (WaitForSingleObject(Thread, 2000) != WAIT_OBJECT_0)
+        {
+            TerminateThread(Thread, STATUS_TIMEOUT);
+            WaitForSingleObject(Thread, 2000);
+        }
+        CloseHandle(Thread);
+    }
+    if (Context->DoneEvent)
+        CloseHandle(Context->DoneEvent);
+    if (Context->StartEvent)
+        CloseHandle(Context->StartEvent);
+    if (Context->Port)
+        NtClose(Context->Port);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Context);
+}
+
+static
+VOID
 AlpcTestServerInformation(
     _In_ HANDLE Port)
 {
@@ -316,6 +453,7 @@ START_TEST(NtAlpcInformation)
     AlpcTestSetInformation(ServerPort);
     AlpcTestAccessChecks(ServerPort);
     AlpcTestWaitForReferences(ServerPort);
+    AlpcTestWaitForReferencesRace();
 
     AlpcTestCloseConnectedPorts(ConnectionPort, ServerPort, ClientPort);
 }

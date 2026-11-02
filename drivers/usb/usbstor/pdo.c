@@ -685,6 +685,13 @@ USBSTOR_PdoHandlePnp(
             }
            break;
        }
+       case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+       {
+           Status = STATUS_UNSUCCESSFUL;
+           if (IoForwardIrpSynchronously(DeviceExtension->LowerDeviceObject, Irp))
+               Status = Irp->IoStatus.Status;
+           break;
+       }
        case IRP_MN_QUERY_REMOVE_DEVICE:
        case IRP_MN_QUERY_STOP_DEVICE:
        {

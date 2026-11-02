@@ -5,7 +5,9 @@ list(APPEND SOURCE
     category.cpp
     composition.cpp
     editsession.cpp
+    inputmode.cpp
     langbar.cpp
+    langbarmgr.cpp
     layouttip.cpp
     owner.cpp
     profiles.cpp

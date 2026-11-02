@@ -32,6 +32,7 @@ typedef struct TF_LMLATTELEMENT
 } TF_LMLATTELEMENT;
 
 cpp_quote("EXTERN_C const CLSID CLSID_SapiLayr;")
+cpp_quote("EXTERN_C const GUID GUID_LBI_INPUTMODE;")
 
 interface IEnumTfCandidates;
 interface IEnumTfLatticeElements;

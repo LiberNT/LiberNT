@@ -574,6 +574,16 @@ USBH_FdoPower(IN PUSBHUB_FDO_EXTENSION HubExtension,
                 DPRINT_PWR("USBH_FdoPower: PowerState - %x\n",
                            PowerState.DeviceState);
 
+                if (PowerState.DeviceState == PowerDeviceD3 &&
+                    IoStack->Parameters.Power.ShutdownType == PowerActionHibernate &&
+                    HubExtension->HibernationPathCount != 0)
+                {
+                    DPRINT1("USBH_FdoPower: hub stays powered for the hibernation file\n");
+                    IoCopyCurrentIrpStackLocationToNext(Irp);
+                    PoStartNextPowerIrp(Irp);
+                    return PoCallDriver(HubExtension->LowerDevice, Irp);
+                }
+
                 if (HubExtension->CurrentPowerState.DeviceState == PowerState.DeviceState)
                 {
                     IoCopyCurrentIrpStackLocationToNext(Irp);

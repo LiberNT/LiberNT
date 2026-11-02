@@ -24,6 +24,7 @@ list(APPEND SOURCE
     DestroyCursorIcon.c
     DestroyActiveWindow.c
     DestroyWindow.c
+    DialogAccelerator.c
     DialogDpiChangeBehavior.c
     DM_REPOSITION.c
     Dpi.c

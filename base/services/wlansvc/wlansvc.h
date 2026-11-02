@@ -289,6 +289,7 @@ typedef struct _WLANSVC_INTERFACE
     /* Scan/BSS cache. */
     LIST_ENTRY            BssListHead;
     ULONG                 BssCount;
+    DOT11_SSID            ScanRequestSsid;
 
     /* Profile store. */
     LIST_ENTRY            ProfileListHead;
@@ -342,6 +343,7 @@ VOID WlanSvcCleanup(VOID);
 PWLANSVC_INTERFACE WlanSvcFindInterface(const GUID *pInterfaceGuid);
 PWLANSVC_INTERFACE WlanSvcFindInterfaceByIndex(ULONG NwifiIndex);
 VOID WlanSvcRefreshInterfaces(VOID);
+VOID WlanSvcSeedLinkState(PWLANSVC_INTERFACE Iface);
 VOID WlanSvcRequestScan(VOID);
 BOOL WlanSvcGetAdapterDescription(const GUID *AdapterGuid, PWCHAR Description, ULONG Length);
 PWLANSVCHANDLE WlanSvcGetHandleEntry(WLANSVC_RPC_HANDLE ClientHandle);

@@ -470,7 +470,7 @@ USBCCGP_FormatMsCompatIds(
 NTSTATUS
 USBCCGP_InitFunctionDescriptor(
     IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
-    IN ULONG FunctionNumber,
+    IN ULONG AssociationIndex,
     OUT PUSBC_FUNCTION_DESCRIPTOR FunctionDescriptor)
 {
     PUSB_INTERFACE_ASSOCIATION_DESCRIPTOR Descriptor;
@@ -479,12 +479,11 @@ USBCCGP_InitFunctionDescriptor(
     WCHAR Buffer[320];
     ULONG Index;
 
-    // init function number
-    FunctionDescriptor->FunctionNumber = (UCHAR)FunctionNumber;
-
     // get association descriptor
-    Descriptor = USBCCGP_GetAssociationDescriptorAtIndex(FDODeviceExtension->ConfigurationDescriptor, FunctionNumber);
+    Descriptor = USBCCGP_GetAssociationDescriptorAtIndex(FDODeviceExtension->ConfigurationDescriptor, AssociationIndex);
     ASSERT(Descriptor);
+
+    FunctionDescriptor->FunctionNumber = Descriptor->bFirstInterface;
 
     // store number interfaces
     FunctionDescriptor->NumberOfInterfaces = Descriptor->bInterfaceCount;
@@ -624,12 +623,54 @@ USBCCGP_InitFunctionDescriptor(
     return STATUS_SUCCESS;
 }
 
+/* Forward declaration: defined later in this file, used for standalone interfaces. */
+NTSTATUS
+USBCCG_InitIdsWithInterfaceDescriptor(
+    IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
+    IN PUSB_INTERFACE_DESCRIPTOR Descriptor,
+    IN ULONG FunctionIndex,
+    OUT PUSBC_FUNCTION_DESCRIPTOR FunctionDescriptor);
+
+static
+BOOLEAN
+USBCCGP_IsInterfaceInAnyAssociation(
+    IN PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
+    IN UCHAR InterfaceNumber)
+{
+    PUSB_INTERFACE_ASSOCIATION_DESCRIPTOR Descriptor;
+    PUCHAR Offset, End;
+
+    Offset = (PUCHAR)ConfigurationDescriptor + ConfigurationDescriptor->bLength;
+    End = (PUCHAR)ConfigurationDescriptor + ConfigurationDescriptor->wTotalLength;
+
+    while (Offset + sizeof(USB_INTERFACE_ASSOCIATION_DESCRIPTOR) <= End)
+    {
+        Descriptor = (PUSB_INTERFACE_ASSOCIATION_DESCRIPTOR)Offset;
+
+        if (Descriptor->bLength == 0)
+            break;
+
+        if (Descriptor->bLength == sizeof(USB_INTERFACE_ASSOCIATION_DESCRIPTOR) &&
+            Descriptor->bDescriptorType == USB_INTERFACE_ASSOCIATION_DESCRIPTOR_TYPE &&
+            InterfaceNumber >= Descriptor->bFirstInterface &&
+            (ULONG)InterfaceNumber < (ULONG)Descriptor->bFirstInterface + Descriptor->bInterfaceCount)
+        {
+            return TRUE;
+        }
+
+        Offset += Descriptor->bLength;
+    }
+
+    return FALSE;
+}
+
 NTSTATUS
 USBCCGP_EnumWithAssociationDescriptor(
     IN PDEVICE_OBJECT DeviceObject)
 {
-    ULONG DescriptorCount, Index;
+    ULONG DescriptorCount, StandaloneCount, TotalCount, Index, FuncIndex, IfIndex;
     PFDO_DEVICE_EXTENSION FDODeviceExtension;
+    PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor;
     NTSTATUS Status = STATUS_SUCCESS;
 
     //
@@ -651,15 +692,36 @@ USBCCGP_EnumWithAssociationDescriptor(
     }
 
     //
+    // A composite device may mix IAD-grouped functions (for example a Bluetooth
+    // radio spanning two interfaces) with standalone single-interface functions
+    // (for example a vendor Wi-Fi interface). Count the interfaces that are not
+    // claimed by any association descriptor so each gets its own function PDO.
+    //
+    StandaloneCount = 0;
+    for (IfIndex = 0; IfIndex < FDODeviceExtension->ConfigurationDescriptor->bNumInterfaces; IfIndex++)
+    {
+        InterfaceDescriptor = USBD_ParseConfigurationDescriptorEx(FDODeviceExtension->ConfigurationDescriptor,
+                                                                  FDODeviceExtension->ConfigurationDescriptor,
+                                                                  IfIndex, 0, -1, -1, -1);
+        if (InterfaceDescriptor != NULL &&
+            !USBCCGP_IsInterfaceInAnyAssociation(FDODeviceExtension->ConfigurationDescriptor, InterfaceDescriptor->bInterfaceNumber))
+        {
+            StandaloneCount++;
+        }
+    }
+
+    TotalCount = DescriptorCount + StandaloneCount;
+
+    //
     // allocate function descriptor array
     //
-    FDODeviceExtension->FunctionDescriptor = AllocateItem(NonPagedPool, sizeof(USBC_FUNCTION_DESCRIPTOR) * DescriptorCount);
+    FDODeviceExtension->FunctionDescriptor = AllocateItem(NonPagedPool, sizeof(USBC_FUNCTION_DESCRIPTOR) * TotalCount);
     if (!FDODeviceExtension->FunctionDescriptor)
     {
         //
         // no memory
         //
-        DPRINT1("USBCCGP_EnumWithAssociationDescriptor failed to allocate function descriptor count %x\n", DescriptorCount);
+        DPRINT1("USBCCGP_EnumWithAssociationDescriptor failed to allocate function descriptor count %x\n", TotalCount);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
     FDODeviceExtension->FunctionDescriptorOwned = TRUE;
@@ -667,7 +729,7 @@ USBCCGP_EnumWithAssociationDescriptor(
     for (Index = 0; Index < DescriptorCount; Index++)
     {
         //
-        // init function descriptors
+        // init function descriptors for each association
         //
         Status = USBCCGP_InitFunctionDescriptor(FDODeviceExtension, Index, &FDODeviceExtension->FunctionDescriptor[Index]);
         if (!NT_SUCCESS(Status))
@@ -680,9 +742,45 @@ USBCCGP_EnumWithAssociationDescriptor(
     }
 
     //
+    // init a single-interface function descriptor for each standalone interface
+    //
+    FuncIndex = DescriptorCount;
+    for (IfIndex = 0; IfIndex < FDODeviceExtension->ConfigurationDescriptor->bNumInterfaces; IfIndex++)
+    {
+        InterfaceDescriptor = USBD_ParseConfigurationDescriptorEx(FDODeviceExtension->ConfigurationDescriptor,
+                                                                  FDODeviceExtension->ConfigurationDescriptor,
+                                                                  IfIndex, 0, -1, -1, -1);
+        if (InterfaceDescriptor == NULL ||
+            USBCCGP_IsInterfaceInAnyAssociation(FDODeviceExtension->ConfigurationDescriptor, InterfaceDescriptor->bInterfaceNumber))
+        {
+            continue;
+        }
+
+        FDODeviceExtension->FunctionDescriptor[FuncIndex].FunctionNumber = InterfaceDescriptor->bInterfaceNumber;
+        FDODeviceExtension->FunctionDescriptor[FuncIndex].NumberOfInterfaces = 1;
+        FDODeviceExtension->FunctionDescriptor[FuncIndex].InterfaceDescriptorList = AllocateItem(NonPagedPool, sizeof(PUSB_INTERFACE_DESCRIPTOR));
+        if (!FDODeviceExtension->FunctionDescriptor[FuncIndex].InterfaceDescriptorList)
+        {
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        FDODeviceExtension->FunctionDescriptor[FuncIndex].InterfaceDescriptorList[0] = InterfaceDescriptor;
+
+        Status = USBCCG_InitIdsWithInterfaceDescriptor(FDODeviceExtension,
+                                                       InterfaceDescriptor,
+                                                       InterfaceDescriptor->bInterfaceNumber,
+                                                       &FDODeviceExtension->FunctionDescriptor[FuncIndex]);
+        if (!NT_SUCCESS(Status))
+        {
+            return Status;
+        }
+
+        FuncIndex++;
+    }
+
+    //
     // store function descriptor count
     //
-    FDODeviceExtension->FunctionDescriptorCount = DescriptorCount;
+    FDODeviceExtension->FunctionDescriptorCount = TotalCount;
 
     //
     // done

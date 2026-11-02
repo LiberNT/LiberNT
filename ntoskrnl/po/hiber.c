@@ -57,6 +57,7 @@ typedef struct _POP_HIBER_STATE
     ULONG RuntimeRangeCount;
     BOOLEAN Ready;
     BOOLEAN Prepared;
+    BOOLEAN InHibernationPath;
     WORK_QUEUE_ITEM WorkItem;
     POP_HIBER_WAKE_CONTEXT Context;
 } POP_HIBER_STATE;
@@ -591,9 +592,48 @@ PopHiberSystemHandler(
 }
 
 static
+NTSTATUS
+PopHiberNotifyUsage(
+    _In_ BOOLEAN InPath)
+{
+    PDEVICE_OBJECT DeviceObject;
+    PIO_STACK_LOCATION Stack;
+    IO_STATUS_BLOCK IoStatus;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    DeviceObject = IoGetRelatedDeviceObject(PopHiber.FileObject);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, DeviceObject, NULL, 0, NULL, &Event, &IoStatus);
+    if (Irp == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    Stack = IoGetNextIrpStackLocation(Irp);
+    Stack->MinorFunction = IRP_MN_DEVICE_USAGE_NOTIFICATION;
+    Stack->FileObject = PopHiber.FileObject;
+    Stack->Parameters.UsageNotification.InPath = InPath;
+    Stack->Parameters.UsageNotification.Type = DeviceUsageTypeHibernation;
+    Status = IoCallDriver(DeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+    return Status;
+}
+
+static
 VOID
 PopHiberCloseFile(VOID)
 {
+    if (PopHiber.InHibernationPath)
+    {
+        PopHiberNotifyUsage(FALSE);
+        PopHiber.InHibernationPath = FALSE;
+    }
+
     if (PopHiber.Extents)
     {
         ExFreePoolWithTag(PopHiber.Extents, POP_HIBER_TAG);
@@ -883,6 +923,13 @@ PopHiberOpenFile(
         Status = STATUS_FILE_CORRUPT_ERROR;
         goto Failure;
     }
+
+    Status = PopHiberNotifyUsage(TRUE);
+    if (NT_SUCCESS(Status))
+        PopHiber.InHibernationPath = TRUE;
+    else
+        /* FIXME: Windows keeps no hibernation file when a driver in its path fails the usage notification; storport and scsiport do not handle it yet */
+        DPRINT1("Hibernation path usage notification failed: 0x%08lx\n", Status);
 
     PopHiber.Capacity = Size;
     PopHiber.Ready = TRUE;

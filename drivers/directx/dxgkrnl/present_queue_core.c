@@ -175,3 +175,8 @@ DxgkPresentQueueCoreRemove(
     KeReleaseSpinLock(Lock, OldIrql);
     return FALSE;
 }
+
+NTSTATUS DxgkPresentVBlankWaitResult(_In_ BOOLEAN VBlankArrived)
+{
+    return VBlankArrived ? STATUS_SUCCESS : STATUS_TIMEOUT;
+}

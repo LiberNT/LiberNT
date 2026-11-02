@@ -1922,7 +1922,7 @@ VOID
 XHCI_DereferenceCommandContext(
     _Inout_ PXHCI_COMMAND_CONTEXT Context)
 {
-    if (InterlockedDecrement(&Context->References) == 0)
+    if (InterlockedDecrement(&Context->References) == 0 && !Context->Embedded)
         ExFreePoolWithTag(Context, XHCI_TAG);
 }
 
@@ -6814,7 +6814,8 @@ XHCI_HandleCommandCompletion(
     if (CommandContext)
     {
         InterlockedExchange(&CommandContext->Completed, TRUE);
-        KeSetEvent(&CommandContext->CompletionEvent, IO_NO_INCREMENT, FALSE);
+        if (KeGetCurrentIrql() <= DISPATCH_LEVEL)
+            KeSetEvent(&CommandContext->CompletionEvent, IO_NO_INCREMENT, FALSE);
         XHCI_DereferenceCommandContext(CommandContext);
     }
 }
@@ -10172,10 +10173,14 @@ XHCI_SendCommand(
     if (Extension->FatalError || Extension->StoppingOrRemoved)
         return MP_STATUS_HW_ERROR;
 
-    /* IRQL check: We can handle PASSIVE through DISPATCH_LEVEL, not higher */
-    ASSERT(CurrentIrql <= DISPATCH_LEVEL);
+    /* The frozen bugcheck/hibernate owner is the only HIGH_LEVEL caller. */
+    ASSERT(CurrentIrql <= DISPATCH_LEVEL || CurrentIrql == HIGH_LEVEL);
 
-    if (CurrentIrql > PASSIVE_LEVEL)
+    if (CurrentIrql == HIGH_LEVEL)
+    {
+        RetryCommands = FALSE;
+    }
+    else if (CurrentIrql > PASSIVE_LEVEL)
     {
         /*
          * DISPATCH_LEVEL BOUNDED POLLING:
@@ -10218,11 +10223,18 @@ XHCI_SendCommand(
 
     while (Attempts--)
     {
+        if (CurrentIrql == HIGH_LEVEL)
+        {
+            CommandContext = &Extension->FrozenCommand;
+        }
+        else
+        {
 #if defined(NonPagedPoolNx)
-        CommandContext = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*CommandContext), XHCI_TAG);
+            CommandContext = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*CommandContext), XHCI_TAG);
 #else
-        CommandContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(*CommandContext), XHCI_TAG);
+            CommandContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(*CommandContext), XHCI_TAG);
 #endif
+        }
         if (!CommandContext)
         {
             Status = MP_STATUS_NO_RESOURCES;
@@ -10230,6 +10242,7 @@ XHCI_SendCommand(
         }
 
         XHCI_CommandContextInit(CommandContext, TrbType);
+        CommandContext->Embedded = (CommandContext == &Extension->FrozenCommand);
 
         KeAcquireSpinLock(&Extension->CommandLock, &OldIrql);
         Status = XHCI_QueueCommand(Extension,
@@ -13825,7 +13838,8 @@ XHCI_StopController(PVOID MiniPortExtension,
         Context->InList = FALSE;
         InterlockedExchange(&Context->Completed, TRUE);
         Context->CompletionCode = XHCI_COMPLETION_STOPPED;
-        KeSetEvent(&Context->CompletionEvent, IO_NO_INCREMENT, FALSE);
+        if (KeGetCurrentIrql() <= DISPATCH_LEVEL)
+            KeSetEvent(&Context->CompletionEvent, IO_NO_INCREMENT, FALSE);
         XHCI_DereferenceCommandContext(Context);
     }
     InitializeListHead(&Extension->CommandContextList);

@@ -417,6 +417,7 @@ AdapterRemove(
     cancel_timeout(state_bound, &Adapter->DhclientInfo);
     RemoveEntryList(&Adapter->ListEntry);
     FreeAdapter(Adapter);
+    ApiSignalLeaseChange();
 }
 
 static VOID NETIOAPI_API_ AdapterInterfaceChanged(PVOID Context, PMIB_IPINTERFACE_ROW Row, MIB_NOTIFICATION_TYPE NotificationType) {
@@ -428,6 +429,7 @@ static VOID NETIOAPI_API_ AdapterAddressChanged(PVOID Context, PMIB_UNICASTIPADD
         return;
     ApiLock();
     apipa_address_changed(Row->InterfaceIndex);
+    ApiSignalLeaseChange();
     ApiUnlock();
     SetEvent(hAdapterStateChangedEvent);
 }

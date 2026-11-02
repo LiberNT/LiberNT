@@ -93,6 +93,7 @@ LxTtyCreate(
     Tty->Index = -1;
     Tty->Uid = Uid;
     Tty->Gid = LX_TTY_GID;
+    Tty->Mode = 0620;
     Tty->Locked = (Flags & LX_TTY_LOCKED) != 0;
     Tty->NtMaster = (Flags & LX_TTY_NT_MASTER) != 0;
 
@@ -1079,7 +1080,7 @@ LxTtyFileStat(
     LARGE_INTEGER Now;
 
     RtlZeroMemory(Stat, sizeof(*Stat));
-    Stat->Mode = LX_S_IFCHR | 0620;
+    Stat->Mode = LX_S_IFCHR | Tty->Mode;
     Stat->Nlink = 1;
     Stat->Rdev = File->Rdev ? File->Rdev : LxTtyDevice(Tty);
     Stat->Ino = File->Ino;
@@ -1173,6 +1174,34 @@ LxFileGetTty(
     _In_ PLX_FILE File)
 {
     return (File->Ops == &LxTtyFileOps) ? File->Object : NULL;
+}
+
+VOID
+LxTtyGetAttributes(
+    _In_ PLX_TTY Tty,
+    _Out_ PULONG Mode,
+    _Out_ PULONG Uid,
+    _Out_ PULONG Gid)
+{
+    LxTtyLock(Tty);
+    *Mode = LX_S_IFCHR | Tty->Mode;
+    *Uid = Tty->Uid;
+    *Gid = Tty->Gid;
+    LxTtyUnlock(Tty);
+}
+
+VOID
+LxTtySetAttributes(
+    _In_ PLX_TTY Tty,
+    _In_ ULONG Mode,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid)
+{
+    LxTtyLock(Tty);
+    Tty->Mode = Mode & 07777;
+    Tty->Uid = Uid;
+    Tty->Gid = Gid;
+    LxTtyUnlock(Tty);
 }
 
 static

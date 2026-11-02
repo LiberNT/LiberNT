@@ -1018,7 +1018,7 @@ CmpCreateKeyControlBlock(IN PHHIVE Hive,
                 Kcb->KcbLastWriteTime = Node->LastWriteTime;
                 Kcb->KcbMaxNameLen = (USHORT)Node->MaxNameLen;
                 Kcb->KcbMaxValueNameLen = (USHORT)Node->MaxValueNameLen;
-                Kcb->KcbMaxValueDataLen = (USHORT)Node->MaxValueDataLen;
+                Kcb->KcbMaxValueDataLen = Node->MaxValueDataLen;
             }
             else
             {

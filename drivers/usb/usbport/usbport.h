@@ -552,6 +552,7 @@ typedef struct _USBPORT_DEVICE_EXTENSION {
   PUSBPORT_IRP_TABLE ActiveIrpTable;
   /* Power */
   LONG SetPowerLockCounter;
+  LONG HibernationPathCount;
   KSPIN_LOCK PowerWakeSpinLock;
   volatile LONG HcWakeState;
   PIRP HcWakeIrp;

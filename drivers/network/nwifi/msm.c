@@ -628,22 +628,6 @@ NwifiMsmConnect(
         goto ConnectFailed;
     }
 
-    {
-        /* Program the lower miniport's hardware receive filter. A full-MAC (WDI)
-         * adapter drops every received frame until its filter is set, so without
-         * this the EAPOL 4-way handshake never starts (the AP's M1 is discarded
-         * in firmware). Best-effort: softmac adapters that filter in software
-         * accept it too; nwifi still software-filters toward TCP/IP on
-         * CurrentPacketFilter. */
-        ULONG RxFilter = NDIS_PACKET_TYPE_DIRECTED | NDIS_PACKET_TYPE_BROADCAST |
-                         NDIS_PACKET_TYPE_MULTICAST;
-        NDIS_STATUS FilterStatus = NwifiProtocolDoRequest(
-            Adapter, NdisRequestSetInformation, OID_GEN_CURRENT_PACKET_FILTER,
-            &RxFilter, sizeof(RxFilter), NULL);
-        if (FilterStatus != NDIS_STATUS_SUCCESS)
-            DPRINT1("NWIFI: lower CURRENT_PACKET_FILTER set failed 0x%08X\n", FilterStatus);
-    }
-
     Status = NwifiProgramDesiredSsid(Adapter, &Params->Ssid);
     if (Status != NDIS_STATUS_SUCCESS)
     {
@@ -687,6 +671,24 @@ NwifiMsmConnect(
 
     if (Params->Secure)
     {
+        DOT11_PRIVACY_EXEMPTION_LIST ExemptList;
+        NDIS_STATUS ExemptStatus;
+
+        /* EAPOL must pass unencrypted until the PTK exists; usEtherType is in network byte order. */
+        RtlZeroMemory(&ExemptList, sizeof(ExemptList));
+        ExemptList.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+        ExemptList.Header.Revision = DOT11_PRIVACY_EXEMPTION_LIST_REVISION_1;
+        ExemptList.Header.Size = sizeof(ExemptList);
+        ExemptList.uNumOfEntries = 1;
+        ExemptList.uTotalNumOfEntries = 1;
+        ExemptList.PrivacyExemptionEntries[0].usEtherType = RtlUshortByteSwap(0x888E);
+        ExemptList.PrivacyExemptionEntries[0].usExemptionActionType = DOT11_EXEMPT_ON_KEY_MAPPING_KEY_UNAVAILABLE;
+        ExemptList.PrivacyExemptionEntries[0].usExemptionPacketType = DOT11_EXEMPT_BOTH;
+        ExemptStatus = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+            OID_DOT11_PRIVACY_EXEMPTION_LIST, &ExemptList, sizeof(ExemptList), NULL);
+        if (ExemptStatus != NDIS_STATUS_SUCCESS)
+            DPRINT1("NWIFI: EAPOL privacy exemption set failed 0x%08X\n", ExemptStatus);
+
         if (Params->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
             Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
         {
