@@ -684,7 +684,18 @@ public:
         punk->AddRef();
         ++m_cItems;
         if (info.guidItem == GUID_LBI_INPUTMODE && !m_pIndicator)
-            m_pIndicator = CTipInputModeIndicator::Create(punk);
+        {
+            CTipInputModeIndicator *pIndicator = CTipInputModeIndicator::Create(punk);
+            if (pIndicator && (m_pIndicator || !HasItem(punk)))
+            {
+                pIndicator->Close();
+                pIndicator->Release();
+            }
+            else
+            {
+                m_pIndicator = pIndicator;
+            }
+        }
         return S_OK;
     }
 
@@ -876,6 +887,16 @@ private:
         for (ULONG i = 0; i < m_cItems; ++i)
             m_items[i].item->Release();
         cicMemFree(m_items);
+    }
+
+    BOOL HasItem(ITfLangBarItem *punk) const
+    {
+        for (ULONG i = 0; i < m_cItems; ++i)
+        {
+            if (m_items[i].item == punk)
+                return TRUE;
+        }
+        return FALSE;
     }
 
     LONG Find(REFGUID guid) const
