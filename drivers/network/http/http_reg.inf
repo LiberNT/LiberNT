@@ -1,0 +1,9 @@
+; HTTP.sys driver registration
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\HTTP","DisplayName",0x00000000,"HTTP Service"
+HKLM,"SYSTEM\CurrentControlSet\Services\HTTP","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\HTTP","Group",0x00000000,"Streams Drivers"
+HKLM,"SYSTEM\CurrentControlSet\Services\HTTP","ImagePath",0x00020000,"system32\drivers\http.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\HTTP","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\HTTP","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\HTTP\Parameters",,0x00000010
