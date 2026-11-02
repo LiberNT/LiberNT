@@ -43,6 +43,7 @@ enum class PageId
     Power,
     Storage,
     Multitasking,
+    RemoteDesktop,
     About,
     Environment,
     Recovery,
@@ -383,6 +384,7 @@ void BuildSound(PageBuilder &page);
 void BuildPower(PageBuilder &page);
 void BuildStorage(PageBuilder &page);
 void BuildMultitasking(PageBuilder &page);
+void BuildRemoteDesktop(PageBuilder &page);
 void BuildAbout(PageBuilder &page);
 void BuildEnvironment(PageBuilder &page);
 void BuildRecovery(PageBuilder &page);
