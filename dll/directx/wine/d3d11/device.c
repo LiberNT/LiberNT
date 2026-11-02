@@ -2744,6 +2744,8 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_context_FinishCommandList(ID3D11De
     if (context->type == D3D11_DEVICE_CONTEXT_IMMEDIATE)
     {
         WARN("Attempt to record command list on an immediate context; returning DXGI_ERROR_INVALID_CALL.\n");
+        if (command_list)
+            *command_list = NULL;
         return DXGI_ERROR_INVALID_CALL;
     }
 
