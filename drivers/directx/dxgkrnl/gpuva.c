@@ -58,6 +58,8 @@ C_ASSERT(DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL == DXGK_PAGETABLEUPDATE_GPU_PHYSICA
 /*
  * Minimum alignment for GPU VA allocations: 4 KB (GPU page size).
  */
+C_ASSERT(sizeof(DXGK_PTE) == 2 * sizeof(ULONGLONG));
+
 #define GPUVA_PAGE_SIZE             (4096ULL)
 #define GPUVA_PAGE_MASK             (GPUVA_PAGE_SIZE - 1ULL)
 #define GPUVA_RESERVATION_ALIGNMENT (64ULL * 1024ULL)
@@ -2524,13 +2526,30 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
              * allocation, but still come from the coherent snapshot. */
             ULONG Count = Snapshot->EndIndex - Snapshot->StartIndex;
             ULONG First = 0;
+            ULONG WriteEnd = 0;
 
             while (First < Count)
             {
-                ULONG PageSize = Snapshot->Entries[First].PageTablePageSize;
+                ULONG PageSize;
                 ULONG Run = 1;
 
-                while (First + Run < Count &&
+                if (First >= WriteEnd)
+                {
+                    ULONG Writable;
+
+                    if (!DxgkGpuVaCoreNextWriteRun((const ULONGLONG *)Snapshot->Entries,
+                                                   (const ULONGLONG *)Snapshot->Entries64KB,
+                                                   Count,
+                                                   Snapshot->InitialUpdatePending,
+                                                   &First,
+                                                   &Writable))
+                    {
+                        break;
+                    }
+                    WriteEnd = First + Writable;
+                }
+                PageSize = Snapshot->Entries[First].PageTablePageSize;
+                while (First + Run < WriteEnd &&
                        (Table->Level != 1 || Snapshot->Entries[First + Run].PageTablePageSize == PageSize))
                 {
                     Run++;
@@ -2581,20 +2600,35 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
                     PieceEndIndex = Table->EntryCount;
                 if (PieceStartIndex < PieceEndIndex)
                 {
-                    Op.PageTableEntries = Snapshot->Entries +
-                                          (PieceStartIndex - Snapshot->StartIndex);
-                    Op.StartIndex = PieceStartIndex;
-                    Op.NumPageTableEntries = PieceEndIndex - PieceStartIndex;
-                    Op.StartVirtualAddress = Cursor;
-                    Op.hMiniportAllocation = Span != NULL ? Span->MiniportHandle : NULL;
-                    Op.AllocationOffsetInBytes = Span != NULL && Span->MiniportHandle != NULL ? Span->AllocationOffset + (Cursor - Span->Start) : 0;
-                    Op.DriverProtection = Span != NULL ? Span->DriverProtection : 0;
-                    Status = GpuVaAppendPagingOperation(&Operations,
-                                                         &OperationCount,
-                                                         &OperationCapacity,
-                                                         &Op);
-                    if (!NT_SUCCESS(Status))
-                        goto Requeue;
+                    DXGK_PTE *PieceEntries = Snapshot->Entries + (PieceStartIndex - Snapshot->StartIndex);
+                    ULONG PieceCount = PieceEndIndex - PieceStartIndex;
+                    ULONG RunStart = 0;
+                    ULONG RunLength;
+
+                    while (DxgkGpuVaCoreNextWriteRun((const ULONGLONG *)PieceEntries,
+                                                     NULL,
+                                                     PieceCount,
+                                                     Snapshot->InitialUpdatePending,
+                                                     &RunStart,
+                                                     &RunLength))
+                    {
+                        ULONGLONG RunAddress = Cursor + (ULONGLONG)RunStart * EntryCoverage;
+
+                        Op.PageTableEntries = PieceEntries + RunStart;
+                        Op.StartIndex = PieceStartIndex + RunStart;
+                        Op.NumPageTableEntries = RunLength;
+                        Op.StartVirtualAddress = RunAddress;
+                        Op.hMiniportAllocation = Span != NULL ? Span->MiniportHandle : NULL;
+                        Op.AllocationOffsetInBytes = Span != NULL && Span->MiniportHandle != NULL ? Span->AllocationOffset + (RunAddress - Span->Start) : 0;
+                        Op.DriverProtection = Span != NULL ? Span->DriverProtection : 0;
+                        Status = GpuVaAppendPagingOperation(&Operations,
+                                                             &OperationCount,
+                                                             &OperationCapacity,
+                                                             &Op);
+                        if (!NT_SUCCESS(Status))
+                            goto Requeue;
+                        RunStart += RunLength;
+                    }
                 }
                 Cursor = PieceEnd;
             }
