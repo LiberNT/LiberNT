@@ -14,6 +14,8 @@ typedef struct _DXGK_CONTEXT_SYNC_TEST_OBJECT
     volatile LONG64 FenceValue;
     volatile LONG MutexOwned;
     volatile LONG64 SemaphoreCount;
+    PVOID volatile MutexQueuedOwner;
+    volatile LONG64 SemaphoreQueuedCount;
     KEVENT StateEvent;
     KEVENT NotificationEvent;
 } DXGK_CONTEXT_SYNC_TEST_OBJECT, *PDXGK_CONTEXT_SYNC_TEST_OBJECT;
@@ -35,6 +37,8 @@ DxgkContextSyncTestInitializeObject(
     Object->FenceValue = InitialValue;
     Object->MutexOwned = Type == D3DDDI_SYNCHRONIZATION_MUTEX && InitialValue == 0;
     Object->SemaphoreCount = InitialValue;
+    Object->MutexQueuedOwner = Object->MutexOwned ? DXGK_CONTEXT_SYNC_MUTEX_CREATOR_OWNER : NULL;
+    Object->SemaphoreQueuedCount = InitialValue;
     KeInitializeEvent(&Object->StateEvent, NotificationEvent, InitialValue != 0);
     KeInitializeEvent(&Object->NotificationEvent, NotificationEvent, FALSE);
     Object->Core.Identity = Object;
@@ -46,6 +50,8 @@ DxgkContextSyncTestInitializeObject(
     Object->Core.SemaphoreLimit = SemaphoreLimit;
     Object->Core.StateEvent = &Object->StateEvent;
     Object->Core.NotificationEvent = Type == D3DDDI_CPU_NOTIFICATION ? &Object->NotificationEvent : NULL;
+    Object->Core.MutexQueuedOwner = &Object->MutexQueuedOwner;
+    Object->Core.SemaphoreQueuedCount = &Object->SemaphoreQueuedCount;
 }
 
 static VOID
@@ -228,6 +234,62 @@ DxgkContextSyncTestSignalAtomicity(VOID)
 }
 
 static VOID
+DxgkContextSyncTestQueuedOwnership(VOID)
+{
+    DXGK_CONTEXT_SYNC_TEST_OBJECT Owned;
+    DXGK_CONTEXT_SYNC_TEST_OBJECT Free;
+    DXGK_CONTEXT_SYNC_TEST_OBJECT Semaphore;
+    DXGK_CONTEXT_SYNC_CORE_OBJECT Batch[2];
+    ULONG Waiters[2];
+    NTSTATUS Status;
+
+    DxgkContextSyncTestInitializeObject(&Owned, D3DDDI_SYNCHRONIZATION_MUTEX, 0, 0);
+    DxgkContextSyncTestInitializeObject(&Free, D3DDDI_SYNCHRONIZATION_MUTEX, 1, 0);
+    Status = DxgkContextSyncCoreAdmitWait(&Owned.Core, 1, &Waiters[0]);
+    ok_eq_hex(Status, STATUS_UNSUCCESSFUL);
+    ok(Owned.MutexQueuedOwner == DXGK_CONTEXT_SYNC_MUTEX_CREATOR_OWNER, "refused wait changed the queued owner\n");
+    DxgkContextSyncCoreAdmitSignal(&Owned.Core, 1);
+    ok(Owned.MutexQueuedOwner == NULL, "queued release kept the owner\n");
+    Status = DxgkContextSyncCoreAdmitWait(&Owned.Core, 1, &Waiters[0]);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = DxgkContextSyncCoreAdmitWait(&Owned.Core, 1, &Waiters[1]);
+    ok_eq_hex(Status, STATUS_UNSUCCESSFUL);
+    ok(Owned.MutexQueuedOwner == &Waiters[0], "second wait replaced the queued owner\n");
+    DxgkContextSyncCoreAdmitSignal(&Owned.Core, 1);
+    DxgkContextSyncCoreAdmitSignal(&Owned.Core, 1);
+    ok(Owned.MutexQueuedOwner == NULL, "repeated release left an owner\n");
+
+    Batch[0] = Free.Core;
+    Batch[1] = Free.Core;
+    Status = DxgkContextSyncCoreAdmitWait(Batch, RTL_NUMBER_OF(Batch), &Waiters[0]);
+    ok_eq_hex(Status, STATUS_UNSUCCESSFUL);
+    ok(Free.MutexQueuedOwner == NULL, "refused batch kept its first claim\n");
+    Batch[1] = Owned.Core;
+    Owned.MutexQueuedOwner = &Waiters[1];
+    Status = DxgkContextSyncCoreAdmitWait(Batch, RTL_NUMBER_OF(Batch), &Waiters[0]);
+    ok_eq_hex(Status, STATUS_UNSUCCESSFUL);
+    ok(Free.MutexQueuedOwner == NULL, "batch refused on its second mutex kept the first\n");
+    Status = DxgkContextSyncCoreAdmitWait(&Free.Core, 1, &Waiters[0]);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    DxgkContextSyncCoreCancelWait(&Free.Core, 1, &Waiters[1]);
+    ok(Free.MutexQueuedOwner == &Waiters[0], "cancel by another waiter dropped the claim\n");
+    DxgkContextSyncCoreCancelWait(&Free.Core, 1, &Waiters[0]);
+    ok(Free.MutexQueuedOwner == NULL, "cancelled wait kept its claim\n");
+
+    DxgkContextSyncTestInitializeObject(&Semaphore, D3DDDI_SEMAPHORE, 1, 2);
+    Status = DxgkContextSyncCoreAdmitWait(&Semaphore.Core, 1, &Waiters[0]);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = DxgkContextSyncCoreAdmitWait(&Semaphore.Core, 1, &Waiters[0]);
+    ok_eq_hex(Status, STATUS_UNSUCCESSFUL);
+    ok(Semaphore.SemaphoreQueuedCount == 0, "refused semaphore wait changed the queued count\n");
+    DxgkContextSyncCoreAdmitSignal(&Semaphore.Core, 1);
+    DxgkContextSyncCoreAdmitSignal(&Semaphore.Core, 1);
+    DxgkContextSyncCoreAdmitSignal(&Semaphore.Core, 1);
+    ok(Semaphore.SemaphoreQueuedCount == 2, "queued releases passed the semaphore limit\n");
+    ok(Semaphore.SemaphoreCount == 1, "admission touched the executed semaphore count\n");
+}
+
+static VOID
 DxgkContextSyncTestDestroyAndRelease(VOID)
 {
     DXGK_CONTEXT_SYNC_TEST_OBJECT Semaphore;
@@ -264,5 +326,6 @@ START_TEST(DxgkContextSync)
     DxgkContextSyncTestValidation();
     DxgkContextSyncTestWaitAtomicity();
     DxgkContextSyncTestSignalAtomicity();
+    DxgkContextSyncTestQueuedOwnership();
     DxgkContextSyncTestDestroyAndRelease();
 }

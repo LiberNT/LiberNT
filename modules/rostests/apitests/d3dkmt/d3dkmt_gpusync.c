@@ -294,6 +294,87 @@ static void Test_PerObjectValuesReachTheKernel(D3DKMT_HANDLE hDevice, D3DKMT_HAN
     pfnDestroy(&Destroy);
 }
 
+static NTSTATUS GpuSyncQueue(BOOL Signal, D3DKMT_HANDLE hContext, D3DKMT_HANDLE hObject)
+{
+    D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU Wait;
+    D3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 Release;
+
+    if (Signal)
+    {
+        memset(&Release, 0, sizeof(Release));
+        Release.ObjectCount = 1;
+        Release.ObjectHandleArray = &hObject;
+        Release.BroadcastContextCount = 1;
+        Release.BroadcastContextArray = &hContext;
+        return pfnSignalFromGpu2(&Release);
+    }
+    memset(&Wait, 0, sizeof(Wait));
+    Wait.hContext = hContext;
+    Wait.ObjectCount = 1;
+    Wait.ObjectHandleArray = &hObject;
+    return pfnWaitFromGpu(&Wait);
+}
+
+/* Each step is a wait (W) or a release (S) queued on hContext, or a release queued on hHelper (H). */
+static void GpuSyncQueueSequence(D3DKMT_HANDLE hDevice, D3DKMT_HANDLE hContext, D3DKMT_HANDLE hHelper,
+                                 const D3DDDI_SYNCHRONIZATIONOBJECTINFO2 *Info, const char *Name,
+                                 const char *Steps, const NTSTATUS *Expected)
+{
+    PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2 pfnCreate2 = (PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2)LoadD3DKMTProc("D3DKMTCreateSynchronizationObject2");
+    PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT pfnDestroy = (PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT)LoadD3DKMTProc("D3DKMTDestroySynchronizationObject");
+    D3DKMT_CREATESYNCHRONIZATIONOBJECT2 Create;
+    D3DKMT_DESTROYSYNCHRONIZATIONOBJECT Destroy;
+    NTSTATUS Status;
+    ULONG Step;
+
+    if (pfnCreate2 == NULL || pfnDestroy == NULL || pfnWaitFromGpu == NULL || pfnSignalFromGpu2 == NULL)
+        return;
+    memset(&Create, 0, sizeof(Create));
+    Create.hDevice = hDevice;
+    Create.Info = *Info;
+    Status = pfnCreate2(&Create);
+    ok(NT_SUCCESS(Status), "%s not created (0x%08lX)\n", Name, (long)Status);
+    if (!NT_SUCCESS(Status))
+        return;
+    for (Step = 0; Steps[Step] != 0; ++Step)
+    {
+        if (Steps[Step] == 'H')
+            Status = GpuSyncQueue(TRUE, hHelper, Create.hSyncObject);
+        else
+            Status = GpuSyncQueue(Steps[Step] == 'S', hContext, Create.hSyncObject);
+        ok(Status == Expected[Step], "%s step %lu (%c of %s) returned 0x%08lX, expected 0x%08lX\n",
+           Name, Step, Steps[Step], Steps, (long)Status, (long)Expected[Step]);
+    }
+    memset(&Destroy, 0, sizeof(Destroy));
+    Destroy.hSyncObject = Create.hSyncObject;
+    pfnDestroy(&Destroy);
+}
+
+static void Test_GpuWaitsNeedAQueuedRelease(D3DKMT_HANDLE hDevice, D3DKMT_HANDLE hContext, D3DKMT_HANDLE hHelper)
+{
+    static const NTSTATUS OwnedWait[] = { STATUS_UNSUCCESSFUL, STATUS_SUCCESS, STATUS_SUCCESS, STATUS_SUCCESS };
+    static const NTSTATUS OwnedRelease[] = { STATUS_SUCCESS, STATUS_SUCCESS, STATUS_SUCCESS, STATUS_SUCCESS, STATUS_SUCCESS };
+    static const NTSTATUS FreeWait[] = { STATUS_SUCCESS, STATUS_UNSUCCESSFUL, STATUS_SUCCESS, STATUS_SUCCESS, STATUS_SUCCESS };
+    static const NTSTATUS EmptySemaphore[] = { STATUS_UNSUCCESSFUL, STATUS_SUCCESS, STATUS_SUCCESS, STATUS_UNSUCCESSFUL, STATUS_SUCCESS };
+    static const NTSTATUS OneToken[] = { STATUS_SUCCESS, STATUS_UNSUCCESSFUL, STATUS_SUCCESS, STATUS_SUCCESS, STATUS_SUCCESS };
+    D3DDDI_SYNCHRONIZATIONOBJECTINFO2 Info;
+
+    memset(&Info, 0, sizeof(Info));
+    Info.Type = D3DDDI_SYNCHRONIZATION_MUTEX;
+    Info.SynchronizationMutex.InitialState = FALSE;
+    GpuSyncQueueSequence(hDevice, hContext, hHelper, &Info, "owned mutex", "WHWS", OwnedWait);
+    GpuSyncQueueSequence(hDevice, hContext, hHelper, &Info, "owned mutex", "SWSWS", OwnedRelease);
+    Info.SynchronizationMutex.InitialState = TRUE;
+    GpuSyncQueueSequence(hDevice, hContext, hHelper, &Info, "free mutex", "WWSWS", FreeWait);
+    memset(&Info, 0, sizeof(Info));
+    Info.Type = D3DDDI_SEMAPHORE;
+    Info.Semaphore.MaxCount = 2;
+    Info.Semaphore.InitialCount = 0;
+    GpuSyncQueueSequence(hDevice, hContext, hHelper, &Info, "empty semaphore", "WSWWH", EmptySemaphore);
+    Info.Semaphore.InitialCount = 1;
+    GpuSyncQueueSequence(hDevice, hContext, hHelper, &Info, "one-token semaphore", "WWSWS", OneToken);
+}
+
 static void Test_LegacyObjectsWaitWithoutValues(D3DKMT_HANDLE hDevice, D3DKMT_HANDLE hContext)
 {
     D3DKMT_CREATESYNCHRONIZATIONOBJECT2 Mutex, Fence;
@@ -314,7 +395,7 @@ static void Test_LegacyObjectsWaitWithoutValues(D3DKMT_HANDLE hDevice, D3DKMT_HA
     memset(&Mutex, 0, sizeof(Mutex));
     Mutex.hDevice = hDevice;
     Mutex.Info.Type = D3DDDI_SYNCHRONIZATION_MUTEX;
-    Mutex.Info.SynchronizationMutex.InitialState = FALSE;
+    Mutex.Info.SynchronizationMutex.InitialState = TRUE;
     Status = pfnCreate2(&Mutex);
     ok(NT_SUCCESS(Status), "mutex not created (0x%08lX)\n", (long)Status);
     if (NT_SUCCESS(Status))
@@ -544,6 +625,27 @@ START_TEST(gpusync)
         Test_LegacyFenceTakesFenceValue(hDevice, hContext);
         Test_MixedObjectKindsRefused(hDevice, hContext);
         Test_CpuSignalAcceptsDuplicates(hDevice);
+        if (pfnCreateContext != NULL)
+        {
+            D3DKMT_CREATECONTEXT Helper;
+
+            memset(&Helper, 0, sizeof(Helper));
+            Helper.hDevice = hDevice;
+            if (NT_SUCCESS(pfnCreateContext(&Helper)))
+            {
+                Test_GpuWaitsNeedAQueuedRelease(hDevice, hContext, Helper.hContext);
+                if (pfnDestroyContext != NULL)
+                {
+                    D3DKMT_DESTROYCONTEXT Destroy;
+
+                    memset(&Destroy, 0, sizeof(Destroy));
+                    Destroy.hContext = Helper.hContext;
+                    pfnDestroyContext(&Destroy);
+                }
+            }
+            else
+                skip("no second context for the cross-context release\n");
+        }
     }
     else
         skip("no context: the GPU-side operations are all scheduled on one\n");

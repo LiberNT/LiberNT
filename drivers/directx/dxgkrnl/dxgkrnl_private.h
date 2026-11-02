@@ -2223,6 +2223,8 @@ typedef struct _DXGKRNL_SYNC_OBJECT
     volatile LONG               MutexOwned;
     volatile LONG64             SemaphoreCount;
     ULONG                       SemaphoreLimit;
+    PVOID volatile              MutexQueuedOwner;
+    volatile LONG64             SemaphoreQueuedCount;
     PKEVENT                     CpuNotificationEvent;
     BOOLEAN                     CpuNotificationEventReferenced;
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)

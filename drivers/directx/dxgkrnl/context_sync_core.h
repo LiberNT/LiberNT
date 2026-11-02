@@ -53,7 +53,11 @@ typedef struct _DXGK_CONTEXT_SYNC_CORE_OBJECT
     ULONG SemaphoreLimit;
     PKEVENT StateEvent;
     PKEVENT NotificationEvent;
+    PVOID volatile *MutexQueuedOwner;
+    volatile LONG64 *SemaphoreQueuedCount;
 } DXGK_CONTEXT_SYNC_CORE_OBJECT, *PDXGK_CONTEXT_SYNC_CORE_OBJECT;
+
+#define DXGK_CONTEXT_SYNC_MUTEX_CREATOR_OWNER ((PVOID)(LONG_PTR)-1)
 
 typedef struct _DXGK_CONTEXT_SYNC_CORE_REFERENCE
 {
@@ -109,6 +113,23 @@ DxgkContextSyncCoreValidate(
     _In_ UINT64 PayloadValue,
     _In_reads_opt_(ObjectCount) CONST UINT64 *PayloadValueArray,
     _In_ BOOLEAN EventReferenced);
+
+NTSTATUS
+DxgkContextSyncCoreAdmitWait(
+    _In_reads_(ObjectCount) PDXGK_CONTEXT_SYNC_CORE_OBJECT Objects,
+    _In_ ULONG ObjectCount,
+    _In_ PVOID Waiter);
+
+VOID
+DxgkContextSyncCoreCancelWait(
+    _In_reads_(ObjectCount) PDXGK_CONTEXT_SYNC_CORE_OBJECT Objects,
+    _In_ ULONG ObjectCount,
+    _In_ PVOID Waiter);
+
+VOID
+DxgkContextSyncCoreAdmitSignal(
+    _In_reads_opt_(ObjectCount) PDXGK_CONTEXT_SYNC_CORE_OBJECT Objects,
+    _In_ ULONG ObjectCount);
 
 NTSTATUS
 DxgkContextSyncCoreExecuteWait(

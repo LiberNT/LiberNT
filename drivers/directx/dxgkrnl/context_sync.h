@@ -49,6 +49,18 @@ NTSTATUS
 DxgkContextSyncExecute(
     _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture);
 
+NTSTATUS
+DxgkContextSyncAdmitWaitState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture);
+
+VOID
+DxgkContextSyncCancelWaitState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture);
+
+VOID
+DxgkContextSyncAdmitSignalState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture);
+
 VOID
 DxgkContextSyncRelease(
     _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture);

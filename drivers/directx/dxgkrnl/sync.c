@@ -1768,7 +1768,9 @@ DxgkpCreateSynchronizationObjectInternal(
     {
         case D3DDDI_SYNCHRONIZATION_MUTEX:
             SyncObj->Info.SynchronizationMutex.InitialState = Info->SynchronizationMutex.InitialState ? TRUE : FALSE;
-            SyncObj->MutexOwned = Info->SynchronizationMutex.InitialState ? 1 : 0;
+            /* Windows 11 creates the mutex free when InitialState is TRUE and owned by its creator when FALSE. */
+            SyncObj->MutexOwned = Info->SynchronizationMutex.InitialState ? 0 : 1;
+            SyncObj->MutexQueuedOwner = SyncObj->MutexOwned ? DXGK_CONTEXT_SYNC_MUTEX_CREATOR_OWNER : NULL;
             SyncObj->FenceValue = SyncObj->MutexOwned ? 0 : 1;
             InitialEventState = !SyncObj->MutexOwned;
             break;
@@ -1777,6 +1779,7 @@ DxgkpCreateSynchronizationObjectInternal(
             SyncObj->Info.Semaphore.InitialCount = Info->Semaphore.InitialCount;
             SyncObj->SemaphoreLimit = Info->Semaphore.MaxCount;
             SyncObj->SemaphoreCount = Info->Semaphore.InitialCount;
+            SyncObj->SemaphoreQueuedCount = Info->Semaphore.InitialCount;
             SyncObj->FenceValue = Info->Semaphore.InitialCount;
             InitialEventState = Info->Semaphore.InitialCount != 0;
             break;

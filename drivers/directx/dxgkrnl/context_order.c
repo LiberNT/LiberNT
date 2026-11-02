@@ -755,6 +755,7 @@ NTSTATUS DxgkContextOrderAdmitWait(_Inout_ PDXGKRNL_CONTEXT Context, _In_ DXGK_C
     DXGMMS2_ADMIT_CONTEXT_WAIT_V1 Info;
     ULONGLONG Deadline = 0;
     ULONGLONG Sequence = 0;
+    BOOLEAN QueuedStateClaimed = FALSE;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -797,6 +798,14 @@ NTSTATUS DxgkContextOrderAdmitWait(_Inout_ PDXGKRNL_CONTEXT Context, _In_ DXGK_C
     Info.ObjectId = (ULONGLONG)(ULONG_PTR)Operation;
     Info.FenceValue = FenceValue;
     Info.ClientTag = (ULONGLONG)(ULONG_PTR)Operation;
+    Status = DxgkContextSyncAdmitWaitState(Capture);
+    if (!NT_SUCCESS(Status))
+    {
+        KeReleaseMutex(&Context->StreamAdmissionMutex, FALSE);
+        DxgkpContextOrderFreeUnpublishedOperation(Operation);
+        return Status;
+    }
+    QueuedStateClaimed = TRUE;
 
 RetryAdmission:
     Status = Interface.AdmitWait(Interface.AdapterHandle, Context->Mms2ContextStream, &Info, &Sequence);
@@ -848,6 +857,8 @@ RetryAdmission:
     return STATUS_SUCCESS;
 
 Failure:
+    if (QueuedStateClaimed)
+        DxgkContextSyncCancelWaitState(Capture);
     KeReleaseMutex(&Context->StreamAdmissionMutex, FALSE);
     DxgkpContextOrderFreeUnpublishedOperation(Operation);
     return Status;
@@ -922,6 +933,7 @@ NTSTATUS DxgkContextOrderAdmitSignal(_In_reads_(ContextCount) PDXGKRNL_CONTEXT c
         (SignalFlags & DXGK_CONTEXT_SYNC_SIGNAL_AT_SUBMISSION) == 0 &&
         DxgkpContextOrderAttachRetireSignal(Contexts[0], Capture))
     {
+        DxgkContextSyncAdmitSignalState(Capture);
         Operation->Payload = NULL;
         while (LockedCount != 0)
             KeReleaseMutex(&SortedContexts[--LockedCount]->StreamAdmissionMutex, FALSE);
@@ -952,6 +964,7 @@ NTSTATUS DxgkContextOrderAdmitSignal(_In_reads_(ContextCount) PDXGKRNL_CONTEXT c
     if (!NT_SUCCESS(Status))
         goto Failure;
     ASSERT(TransactionId != 0);
+    DxgkContextSyncAdmitSignalState(Capture);
     for (ContextIndex = 0; ContextIndex < ContextCount; ++ContextIndex)
         DxgkpContextOrderPublishMarker(Operation, ContextIndex, Contexts[ContextIndex], Sequences[ContextIndex]);
     while (LockedCount != 0)

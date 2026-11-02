@@ -51,6 +51,8 @@ DxgkpContextSyncInitializeCoreObject(
     CoreObject->SemaphoreLimit = SyncObject->SemaphoreLimit;
     CoreObject->StateEvent = &SyncObject->CpuEvent;
     CoreObject->NotificationEvent = SyncObject->CpuNotificationEvent;
+    CoreObject->MutexQueuedOwner = &SyncObject->MutexQueuedOwner;
+    CoreObject->SemaphoreQueuedCount = &SyncObject->SemaphoreQueuedCount;
 }
 
 static NTSTATUS
@@ -275,6 +277,30 @@ DxgkContextSyncExecute(
     KeReleaseSpinLock(&Device->SyncWaitRegistry.Lock, OldIrql);
     KeReleaseSpinLock(&Capture->Lock, CaptureOldIrql);
     return Status;
+}
+
+NTSTATUS
+DxgkContextSyncAdmitWaitState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
+{
+    if (Capture->ObjectCount == 0)
+        return STATUS_SUCCESS;
+    return DxgkContextSyncCoreAdmitWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+}
+
+VOID
+DxgkContextSyncCancelWaitState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
+{
+    if (Capture->ObjectCount != 0)
+        DxgkContextSyncCoreCancelWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+}
+
+VOID
+DxgkContextSyncAdmitSignalState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
+{
+    DxgkContextSyncCoreAdmitSignal(Capture->CoreObjects, Capture->ObjectCount);
 }
 
 VOID
