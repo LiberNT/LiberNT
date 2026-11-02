@@ -1158,6 +1158,31 @@ LxTtyPgrpInSession(
     return Result;
 }
 
+static
+VOID
+LxTtySetTermios(
+    _In_ PLX_TTY Tty,
+    _In_ PLX_TERMIOS Termios,
+    _In_ BOOLEAN Flush)
+{
+    LxTtyLock(Tty);
+    if (Flush)
+    {
+        Tty->LineLength = 0;
+        Tty->ReadyLength = 0;
+        KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+    }
+    else if ((Tty->Termios.Lflag & LX_ICANON) && !(Termios->Lflag & LX_ICANON) && (Tty->LineLength != 0))
+    {
+        LxTtyCommitLine(Tty);
+        KeSetEvent(&Tty->DataReady, IO_NO_INCREMENT, FALSE);
+    }
+    Tty->Termios = *Termios;
+    if (LxTtyInputRoom(Tty))
+        KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+    LxTtyUnlock(Tty);
+}
+
 LONG64
 LxTtyIoctl(
     _In_ PLX_PROCESS Process,
@@ -1166,6 +1191,7 @@ LxTtyIoctl(
     _In_ ULONG64 Argument)
 {
     LX_TERMIOS Termios;
+    LX_TERMIO Termio;
     LX_WINSIZE WinSize;
     LONG Value;
     LONG64 Result;
@@ -1178,8 +1204,14 @@ LxTtyIoctl(
         case LX_TCSETS2:
         case LX_TCSETSW2:
         case LX_TCSETSF2:
+        case LX_TCSETA:
+        case LX_TCSETAW:
+        case LX_TCSETAF:
         case LX_TCFLSH:
         case LX_TCSBRK:
+        case LX_TCSBRKP:
+        case LX_TIOCSBRK:
+        case LX_TIOCCBRK:
         case LX_TCXONC:
         case LX_TIOCSPGRP:
             Result = LxTtyCheckChange(Tty, LX_SIGTTOU);
@@ -1216,23 +1248,48 @@ LxTtyIoctl(
             Result = LxCopyFromUser(&Termios, Argument, sizeof(Termios));
             if (Result != 0)
                 return Result;
-            LxTtyLock(Tty);
-            if ((Request == LX_TCSETSF) || (Request == LX_TCSETSF2))
-            {
-                Tty->LineLength = 0;
-                Tty->ReadyLength = 0;
-                KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
-            }
-            else if ((Tty->Termios.Lflag & LX_ICANON) && !(Termios.Lflag & LX_ICANON) && (Tty->LineLength != 0))
-            {
-                LxTtyCommitLine(Tty);
-                KeSetEvent(&Tty->DataReady, IO_NO_INCREMENT, FALSE);
-            }
-            Tty->Termios = Termios;
-            if (LxTtyInputRoom(Tty))
-                KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
-            LxTtyUnlock(Tty);
+            LxTtySetTermios(Tty, &Termios, (Request == LX_TCSETSF) || (Request == LX_TCSETSF2));
             return 0;
+
+        case LX_TCGETA:
+            LxTtyLock(Tty);
+            Termios = Tty->Termios;
+            LxTtyUnlock(Tty);
+            Termio.Iflag = (USHORT)Termios.Iflag;
+            Termio.Oflag = (USHORT)Termios.Oflag;
+            Termio.Cflag = (USHORT)Termios.Cflag;
+            Termio.Lflag = (USHORT)Termios.Lflag;
+            Termio.Line = Termios.Line;
+            RtlCopyMemory(Termio.Cc, Termios.Cc, sizeof(Termio.Cc));
+            return LxCopyToUser(Argument, &Termio, sizeof(Termio));
+
+        case LX_TCSETA:
+        case LX_TCSETAW:
+        case LX_TCSETAF:
+            Result = LxCopyFromUser(&Termio, Argument, sizeof(Termio));
+            if (Result != 0)
+                return Result;
+            LxTtyLock(Tty);
+            Termios = Tty->Termios;
+            LxTtyUnlock(Tty);
+            Termios.Iflag = (Termios.Iflag & 0xFFFF0000) | Termio.Iflag;
+            Termios.Oflag = (Termios.Oflag & 0xFFFF0000) | Termio.Oflag;
+            Termios.Cflag = (Termios.Cflag & 0xFFFF0000) | Termio.Cflag;
+            Termios.Lflag = (Termios.Lflag & 0xFFFF0000) | Termio.Lflag;
+            Termios.Line = Termio.Line;
+            RtlCopyMemory(Termios.Cc, Termio.Cc, sizeof(Termio.Cc));
+            LxTtySetTermios(Tty, &Termios, Request == LX_TCSETAF);
+            return 0;
+
+        case LX_TIOCGETD:
+            Value = LX_N_TTY;
+            return LxCopyToUser(Argument, &Value, sizeof(Value));
+
+        case LX_TIOCSETD:
+            Result = LxCopyFromUser(&Value, Argument, sizeof(Value));
+            if (Result != 0)
+                return Result;
+            return (Value == LX_N_TTY) ? 0 : -LX_EINVAL;
 
         case LX_TIOCGWINSZ:
             LxTtyLock(Tty);
@@ -1338,7 +1395,9 @@ LxTtyIoctl(
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_TCFLSH:
-            if ((Argument == 0) || (Argument == 2))
+            if (Argument > LX_TCIOFLUSH)
+                return -LX_EINVAL;
+            if ((Argument == LX_TCIFLUSH) || (Argument == LX_TCIOFLUSH))
             {
                 LxTtyLock(Tty);
                 Tty->LineLength = 0;
@@ -1354,8 +1413,14 @@ LxTtyIoctl(
             LxTtyUnlock(Tty);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
-        case LX_TCSBRK:
         case LX_TCXONC:
+            /* TODO: TCOOFF and TCIOFF do not stop output or send STOP */
+            return (Argument <= LX_TCION) ? 0 : -LX_EINVAL;
+
+        case LX_TCSBRK:
+        case LX_TCSBRKP:
+        case LX_TIOCSBRK:
+        case LX_TIOCCBRK:
         case LX_TIOCVHANGUP:
         case LX_TIOCEXCL:
         case LX_TIOCNXCL:

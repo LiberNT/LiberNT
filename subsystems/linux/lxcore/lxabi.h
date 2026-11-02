@@ -361,6 +361,10 @@ typedef struct _LX_SCHED_ATTR
 #define LX_TCSETS           0x5402
 #define LX_TCSETSW          0x5403
 #define LX_TCSETSF          0x5404
+#define LX_TCGETA           0x5405
+#define LX_TCSETA           0x5406
+#define LX_TCSETAW          0x5407
+#define LX_TCSETAF          0x5408
 #define LX_TCSBRK           0x5409
 #define LX_TCXONC           0x540A
 #define LX_TCFLSH           0x540B
@@ -372,6 +376,11 @@ typedef struct _LX_SCHED_ATTR
 #define LX_TIOCSWINSZ       0x5414
 #define LX_FIONREAD         0x541B
 #define LX_TIOCNOTTY        0x5422
+#define LX_TIOCSETD         0x5423
+#define LX_TIOCGETD         0x5424
+#define LX_TCSBRKP          0x5425
+#define LX_TIOCSBRK         0x5427
+#define LX_TIOCCBRK         0x5428
 #define LX_TIOCGSID         0x5429
 #define LX_TIOCGPTN         0x80045430
 #define LX_TIOCSPTLCK       0x40045431
@@ -408,6 +417,12 @@ typedef struct _LX_SCHED_ATTR
 #define LX_VLNEXT           15
 #define LX_VEOL2            16
 #define LX_KERNEL_NCCS      19
+#define LX_NCC              8
+#define LX_N_TTY            0
+#define LX_TCOOFF           0
+#define LX_TCION            3
+#define LX_TCIFLUSH         0
+#define LX_TCIOFLUSH        2
 
 #define LX_INLCR            0000100
 #define LX_IGNCR            0000200
@@ -1112,6 +1127,18 @@ typedef struct _LX_TERMIOS
 } LX_TERMIOS, *PLX_TERMIOS;
 
 C_ASSERT(sizeof(LX_TERMIOS) == 36);
+
+typedef struct _LX_TERMIO
+{
+    USHORT Iflag;
+    USHORT Oflag;
+    USHORT Cflag;
+    USHORT Lflag;
+    UCHAR Line;
+    UCHAR Cc[LX_NCC];
+} LX_TERMIO, *PLX_TERMIO;
+
+C_ASSERT(sizeof(LX_TERMIO) == 18);
 
 typedef struct _LX_WINSIZE
 {
