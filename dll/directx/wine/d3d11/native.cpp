@@ -3670,6 +3670,28 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateRenderTargetView(ID3D11Resource *r
 
 static bool NativeDisplayFormat(DXGI_FORMAT format);
 
+struct NATIVE_FORMAT_REQUIREMENT
+{
+    DXGI_FORMAT Format;
+    UINT Support[3];
+    UINT RequiredLevels;
+};
+
+#include "native_formats.inl"
+
+static UINT NativeRequiredFormatSupport(DXGI_FORMAT format, D3D_FEATURE_LEVEL level, bool driver_support)
+{
+    /* TODO: feature level 9 requirements from the DirectX-Specs FL9_x format lists */
+    if (level < D3D_FEATURE_LEVEL_10_0) return 0;
+    UINT index = level >= D3D_FEATURE_LEVEL_11_0 ? 2 : level >= D3D_FEATURE_LEVEL_10_1 ? 1 : 0;
+    for (const NATIVE_FORMAT_REQUIREMENT &entry : NativeFormatRequirements)
+    {
+        if (entry.Format != format) continue;
+        return driver_support || (entry.RequiredLevels & (1u << index)) ? entry.Support[index] : 0;
+    }
+    return 0;
+}
+
 static bool NativeIntegerFormat(DXGI_FORMAT format)
 {
     switch (format)
@@ -3767,24 +3789,12 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFormatSupport(DXGI_FORMAT format, U
     }
     if (NativeDisplayFormat(format) && (*support & D3D11_FORMAT_SUPPORT_RENDER_TARGET))
         *support |= D3D11_FORMAT_SUPPORT_DISPLAY;
-    if (feature_level >= D3D_FEATURE_LEVEL_10_0
-            && (*support & (D3D11_FORMAT_SUPPORT_TEXTURE1D | D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_TEXTURE3D))
-            && ((format >= DXGI_FORMAT_R32G32B32A32_TYPELESS && format <= DXGI_FORMAT_R10G10B10A2_UINT)
-            || (format >= DXGI_FORMAT_R8G8B8A8_TYPELESS && format <= DXGI_FORMAT_R8_SINT)
-            || (format >= DXGI_FORMAT_BC1_TYPELESS && format <= DXGI_FORMAT_BC5_SNORM)
-            || (format >= DXGI_FORMAT_B8G8R8A8_UNORM && format <= DXGI_FORMAT_BC7_UNORM_SRGB)))
-        *support |= D3D11_FORMAT_SUPPORT_CAST_WITHIN_BIT_LAYOUT;
+    *support |= NativeRequiredFormatSupport(format, feature_level, *support != 0);
     if ((*support & D3D11_FORMAT_SUPPORT_DISPLAY) && (format == DXGI_FORMAT_R8G8B8A8_UNORM
             || format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB || format == DXGI_FORMAT_R10G10B10A2_UNORM
             || format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM || format == DXGI_FORMAT_B8G8R8A8_UNORM
             || format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB))
         *support |= D3D11_FORMAT_SUPPORT_BACK_BUFFER_CAST;
-    if (feature_level >= D3D_FEATURE_LEVEL_10_0 && (*support & D3D11_FORMAT_SUPPORT_BUFFER)
-            && ((format >= DXGI_FORMAT_R32G32B32A32_FLOAT && format <= DXGI_FORMAT_R32G32B32A32_SINT)
-            || (format >= DXGI_FORMAT_R32G32B32_FLOAT && format <= DXGI_FORMAT_R32G32B32_SINT)
-            || (format >= DXGI_FORMAT_R32G32_FLOAT && format <= DXGI_FORMAT_R32G32_SINT)
-            || (format >= DXGI_FORMAT_R32_FLOAT && format <= DXGI_FORMAT_R32_SINT)))
-        *support |= D3D11_FORMAT_SUPPORT_SO_BUFFER;
     return *support ? S_OK : E_FAIL;
 }
 
