@@ -64,6 +64,7 @@ typedef struct _D3DUMDRT_ALLOCATION_DEALLOCATION
 typedef struct _D3DUMDRT_SYNC_OBJECT
 {
     D3DKMT_HANDLE hSyncObject;
+    BOOL MonitoredFence;
     BOOL Destroying;
     struct _D3DUMDRT_SYNC_OBJECT *Next;
 } D3DUMDRT_SYNC_OBJECT, *PD3DUMDRT_SYNC_OBJECT;
@@ -2880,6 +2881,8 @@ D3DUmdRtCreateSynchronizationObject2Cb(
         return E_FAIL;
     }
 
+    SyncObject->MonitoredFence = pData->Info.Type == D3DDDI_MONITORED_FENCE ||
+                                 pData->Info.Type == D3DDDI_PERIODIC_MONITORED_FENCE;
     D3DUmdRtTrackSynchronizationObject(Device, SyncObject,
                                        Create.hSyncObject);
     pData->Info = Create.Info;
@@ -3232,6 +3235,37 @@ D3DUmdRtSignalSynchronizationObjectFromGpuCb(
                pfnSignalSynchronizationObjectFromGpu(&Signal));
 }
 
+/* Counts how many of the handles name monitored fences this device created; an untracked handle counts as neither. */
+static VOID
+D3DUmdRtCountMonitoredFences(
+    PD3DUMDRT_DEVICE Device,
+    CONST D3DKMT_HANDLE *Handles,
+    UINT Count,
+    UINT *Monitored,
+    UINT *Other)
+{
+    PD3DUMDRT_SYNC_OBJECT SyncObject;
+    UINT Index;
+
+    *Monitored = 0;
+    *Other = 0;
+    EnterCriticalSection(&D3DUmdRtDeviceLock);
+    for (Index = 0; Index < Count; ++Index)
+    {
+        for (SyncObject = Device->SyncObjects; SyncObject != NULL; SyncObject = SyncObject->Next)
+        {
+            if (SyncObject->hSyncObject != Handles[Index])
+                continue;
+            if (SyncObject->MonitoredFence)
+                ++*Monitored;
+            else
+                ++*Other;
+            break;
+        }
+    }
+    LeaveCriticalSection(&D3DUmdRtDeviceLock);
+}
+
 static HRESULT APIENTRY
 D3DUmdRtSignalSynchronizationObjectFromGpu2Cb(
     HANDLE hDevice,
@@ -3249,6 +3283,39 @@ D3DUmdRtSignalSynchronizationObjectFromGpu2Cb(
         pData->BroadcastContextArray == NULL)
     {
         return E_INVALIDARG;
+    }
+    if (!pData->Flags.EnqueueCpuEvent &&
+        pData->ObjectCount != 0 &&
+        pData->ObjectCount <= D3DDDI_MAX_OBJECT_SIGNALED &&
+        pData->ObjectHandleArray != NULL)
+    {
+        UINT Monitored;
+        UINT Other;
+
+        /* The value union is FenceValue for objects that are not monitored
+         * fences; that is the SignalSynchronizationObject2 form. */
+        D3DUmdRtCountMonitoredFences(Device, pData->ObjectHandleArray, pData->ObjectCount, &Monitored, &Other);
+        if (Other == pData->ObjectCount)
+        {
+            D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 Legacy;
+
+            ZeroMemory(&Legacy, sizeof(Legacy));
+            Legacy.hContext = (D3DKMT_HANDLE)(ULONG_PTR)pData->BroadcastContextArray[0];
+            Legacy.ObjectCount = pData->ObjectCount;
+            CopyMemory(Legacy.ObjectHandleArray, pData->ObjectHandleArray,
+                       pData->ObjectCount * sizeof(Legacy.ObjectHandleArray[0]));
+            Legacy.Flags = pData->Flags;
+            Legacy.BroadcastContextCount = pData->BroadcastContextCount - 1;
+            for (Index = 1; Index < pData->BroadcastContextCount; ++Index)
+                Legacy.BroadcastContext[Index - 1] = (D3DKMT_HANDLE)(ULONG_PTR)pData->BroadcastContextArray[Index];
+            Legacy.Fence.FenceValue = pData->FenceValue;
+            if (pfnSignalSynchronizationObject2 == NULL)
+                return E_INVALIDARG;
+            return D3DUmdRtStatusToHresult(pfnSignalSynchronizationObject2(&Legacy));
+        }
+        /* TODO: split a signal that mixes monitored fences with other object types */
+        if (Other != 0)
+            return E_INVALIDARG;
     }
     if ((pData->Flags.EnqueueCpuEvent && pData->ObjectCount != 0) ||
         (!pData->Flags.EnqueueCpuEvent &&
