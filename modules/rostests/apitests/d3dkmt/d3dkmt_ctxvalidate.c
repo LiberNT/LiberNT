@@ -37,6 +37,39 @@ CtxValidateRefused(D3DKMT_HANDLE hDevice, LUID Luid, const char *What, UINT Node
 }
 
 static void
+CtxValidateRenderFlags(D3DKMT_HANDLE hDevice, LUID Luid)
+{
+    PFND3DKMT_CREATECONTEXT pfnCreateContext = (PFND3DKMT_CREATECONTEXT)LoadD3DKMTProc("D3DKMTCreateContext");
+    PFND3DKMT_RENDER pfnRender = (PFND3DKMT_RENDER)LoadD3DKMTProc("D3DKMTRender");
+    D3DKMT_CREATECONTEXT Create;
+    D3DKMT_DESTROYCONTEXT Destroy;
+    D3DKMT_RENDER Render;
+    NTSTATUS Status;
+
+    if (pfnCreateContext == NULL || pfnRender == NULL)
+        return;
+    memset(&Create, 0, sizeof(Create));
+    Create.hDevice = hDevice;
+    if (!NT_SUCCESS(pfnCreateContext(&Create)))
+        return;
+    memset(&Render, 0, sizeof(Render));
+    Render.hContext = Create.hContext;
+    Render.Flags.RenderKm = 1;
+    Status = pfnRender(&Render);
+    ok(Status == STATUS_INVALID_PARAMETER, "Adapter %08lx:%08lx: render with RenderKm returned 0x%08lx\n",
+       (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
+    memset(&Render, 0, sizeof(Render));
+    Render.hContext = Create.hContext;
+    Render.Flags.RenderKmReadback = 1;
+    Status = pfnRender(&Render);
+    ok(Status == STATUS_INVALID_PARAMETER, "Adapter %08lx:%08lx: render with RenderKmReadback returned 0x%08lx\n",
+       (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
+    memset(&Destroy, 0, sizeof(Destroy));
+    Destroy.hContext = Create.hContext;
+    pfnDestroyContext(&Destroy);
+}
+
+static void
 CtxValidateEnumFilter(void)
 {
     PFND3DKMT_ENUMADAPTERS3 pfnEnumAdapters3 = (PFND3DKMT_ENUMADAPTERS3)LoadD3DKMTProc("D3DKMTEnumAdapters3");
@@ -122,6 +155,7 @@ START_TEST(ctxvalidate)
                     ok(Status == STATUS_INVALID_PARAMETER, "Adapter %08lx:%08lx: evict without allocations returned 0x%08lx\n",
                        (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
                 }
+                CtxValidateRenderFlags(Device.hDevice, Luid);
                 CtxValidateRefused(Device.hDevice, Luid, "node ordinal past the last node", 0x1000, 0, NULL, 0);
                 CtxValidateRefused(Device.hDevice, Luid, "engine affinity naming a second physical adapter", 0, 2, NULL, 0);
                 CtxValidateRefused(Device.hDevice, Luid, "private data without a size", 0, 0, PrivateData, 0);

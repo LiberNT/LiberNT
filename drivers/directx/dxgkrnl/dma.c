@@ -277,7 +277,7 @@ DxgkRender(
         return STATUS_INVALID_PARAMETER;
 
     if (pRender->Flags.RenderKm || pRender->Flags.RenderKmReadback)
-        return STATUS_NOT_SUPPORTED;
+        return STATUS_INVALID_PARAMETER;
 
     Context = DxgkLookupContextByHandle(pRender->hContext, &Adapter, &Device);
     if (Context == NULL)
