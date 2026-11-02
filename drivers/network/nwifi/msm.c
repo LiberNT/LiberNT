@@ -687,6 +687,24 @@ NwifiMsmConnect(
 
     if (Params->Secure)
     {
+        DOT11_PRIVACY_EXEMPTION_LIST ExemptList;
+        NDIS_STATUS ExemptStatus;
+
+        /* EAPOL must pass unencrypted until the PTK exists; usEtherType is in network byte order. */
+        RtlZeroMemory(&ExemptList, sizeof(ExemptList));
+        ExemptList.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+        ExemptList.Header.Revision = DOT11_PRIVACY_EXEMPTION_LIST_REVISION_1;
+        ExemptList.Header.Size = sizeof(ExemptList);
+        ExemptList.uNumOfEntries = 1;
+        ExemptList.uTotalNumOfEntries = 1;
+        ExemptList.PrivacyExemptionEntries[0].usEtherType = RtlUshortByteSwap(0x888E);
+        ExemptList.PrivacyExemptionEntries[0].usExemptionActionType = DOT11_EXEMPT_ON_KEY_MAPPING_KEY_UNAVAILABLE;
+        ExemptList.PrivacyExemptionEntries[0].usExemptionPacketType = DOT11_EXEMPT_BOTH;
+        ExemptStatus = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+            OID_DOT11_PRIVACY_EXEMPTION_LIST, &ExemptList, sizeof(ExemptList), NULL);
+        if (ExemptStatus != NDIS_STATUS_SUCCESS)
+            DPRINT1("NWIFI: EAPOL privacy exemption set failed 0x%08X\n", ExemptStatus);
+
         if (Params->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
             Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
         {
