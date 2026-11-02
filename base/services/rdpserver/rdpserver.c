@@ -46,6 +46,13 @@ static ULONG AddressContext;
 static BOOL AddressAdded;
 static WCHAR TransferRoot[MAX_PATH];
 static BOOL UseNla;
+static SERVICE_STATUS_HANDLE ServiceHandle;
+static SERVICE_STATUS ServiceState;
+static HANDLE ServiceStopEvent;
+static char ServiceConfig[MAX_PATH];
+
+#define SERVICE_NAME "LiberNTRDPServer"
+#define SERVICE_STOP_EVENT "Global\\LiberNT-RDPServer-Stop"
 
 typedef struct DESKTOP_CONTEXT
 {
@@ -55,6 +62,7 @@ typedef struct DESKTOP_CONTEXT
     HDC ScreenDC, MemoryDC;
     HBITMAP Bitmap;
     HGDIOBJ OldBitmap;
+    HDESK Desktop, HomeDesktop;
     BYTE *Pixels, *Previous;
     BYTE Tile[64 * 32 * 4 + 2];
     BITMAP_PLANAR_CONTEXT *Planar;
@@ -78,10 +86,12 @@ static void Log(const char *fmt, ...)
     if (DebugPrint) DebugPrint("RDPTEST: %s\n", buffer);
 }
 
+static BOOL FollowInputDesktop(DESKTOP_CONTEXT *ctx);
+
 static BOOL InputReady(rdpInput *input)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
-    return ctx->Authorized && ctx->Active;
+    return ctx->Authorized && ctx->Active && FollowInputDesktop(ctx);
 }
 
 static BOOL ConfiguredInterface(const IP_ADAPTER_INFO *adapter)
@@ -242,7 +252,37 @@ static BOOL AllocateCapture(DESKTOP_CONTEXT *ctx)
     if (!ctx->OldBitmap || ctx->OldBitmap == HGDI_ERROR) { ctx->OldBitmap = NULL; return FALSE; }
     ctx->Previous = calloc((size_t)ctx->Width * ctx->Height, 4);
     ctx->Refresh = TRUE;
+    ctx->Refresh = TRUE;
     return ctx->Previous != NULL;
+}
+
+/* Winlogon owns input before logon and while locked; follow the input desktop. */
+static BOOL FollowInputDesktop(DESKTOP_CONTEXT *ctx)
+{
+    char inputName[64], currentName[64];
+    DWORD length;
+    HDESK current = GetThreadDesktop(GetCurrentThreadId());
+    HDESK input = OpenInputDesktop(0, FALSE, GENERIC_ALL);
+    if (!input) return ctx->ScreenDC || AllocateCapture(ctx);
+    if (GetUserObjectInformationA(input, UOI_NAME, inputName, sizeof(inputName), &length) &&
+        GetUserObjectInformationA(current, UOI_NAME, currentName, sizeof(currentName), &length) &&
+        !_stricmp(inputName, currentName))
+    {
+        CloseDesktop(input);
+        return ctx->ScreenDC || AllocateCapture(ctx);
+    }
+    FreeDesktopCapture(ctx);
+    if (!ctx->HomeDesktop) ctx->HomeDesktop = current;
+    if (!SetThreadDesktop(input))
+    {
+        Log("Cannot switch to the input desktop error=%lu", GetLastError());
+        CloseDesktop(input);
+        return FALSE;
+    }
+    if (ctx->Desktop) CloseDesktop(ctx->Desktop);
+    ctx->Desktop = input;
+    Log("Following input desktop %s", inputName);
+    return AllocateCapture(ctx);
 }
 
 static BOOL Capabilities(freerdp_peer *peer)
@@ -294,7 +334,7 @@ static BOOL PostConnect(freerdp_peer *peer)
         return FALSE;
     }
     ctx->Authorized = TRUE;
-    if (!AllocateCapture(ctx)) return FALSE;
+    if (!FollowInputDesktop(ctx)) return FALSE;
     if (*TransferRoot && WTSVirtualChannelManagerIsChannelJoined(ctx->Vcm, "rdpdr"))
     {
         ctx->Transfer = TransferStart(ctx->Vcm, &ctx->rdp, TransferRoot, Log);
@@ -344,6 +384,7 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
     BITMAP_DATA rectangle = {0};
     BITMAP_UPDATE update = {0};
     if (!ctx->Authorized || !ctx->Active || ctx->Suppressed) return TRUE;
+    if (!FollowInputDesktop(ctx)) return FALSE;
     if (ctx->Width != GetSystemMetrics(SM_CXSCREEN) || ctx->Height != GetSystemMetrics(SM_CYSCREEN))
     {
         if (!AllocateCapture(ctx) ||
@@ -430,6 +471,7 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     if (event.mi.dwFlags) SendInput(1, &event, sizeof(event));
     Log("Session closed: frames=%llu updates=%llu input events=%llu", ctx->Frames, ctx->Updates, ctx->Inputs);
     FreeDesktopCapture(ctx);
+    if (ctx->Desktop && SetThreadDesktop(ctx->HomeDesktop)) CloseDesktop(ctx->Desktop);
 }
 
 static DWORD WINAPI ClientThread(void *arg)
@@ -521,6 +563,111 @@ static BOOL WINAPI Stop(DWORD event)
     return TRUE;
 }
 
+static void ReportService(DWORD state, DWORD exitCode)
+{
+    ServiceState.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    ServiceState.dwCurrentState = state;
+    ServiceState.dwControlsAccepted = state == SERVICE_RUNNING ? SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN : 0;
+    ServiceState.dwWin32ExitCode = exitCode;
+    ServiceState.dwWaitHint = state == SERVICE_STOP_PENDING ? 15000 : 0;
+    SetServiceStatus(ServiceHandle, &ServiceState);
+}
+
+static DWORD WINAPI ServiceControl(DWORD control, DWORD type, void *data, void *context)
+{
+    (void)type; (void)data; (void)context;
+    if (control != SERVICE_CONTROL_STOP && control != SERVICE_CONTROL_SHUTDOWN) return NO_ERROR;
+    ReportService(SERVICE_STOP_PENDING, NO_ERROR);
+    SetEvent(ServiceStopEvent);
+    return NO_ERROR;
+}
+
+/* Session 0 has no interactive desktop; serve the console session as SYSTEM. */
+static HANDLE StartSessionServer(DWORD session)
+{
+    char path[MAX_PATH], command[2 * MAX_PATH + 16];
+    HANDLE token = NULL, primary = NULL;
+    STARTUPINFOA startup = {0};
+    PROCESS_INFORMATION process = {0};
+    BOOL started = FALSE;
+    startup.cb = sizeof(startup);
+    startup.lpDesktop = "winsta0\\default";
+    if (GetModuleFileNameA(NULL, path, sizeof(path)) &&
+        snprintf(command, sizeof(command), "\"%s\" /session \"%s\"", path, ServiceConfig) < (int)sizeof(command) &&
+        OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, &token) &&
+        DuplicateTokenEx(token, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation, TokenPrimary, &primary) &&
+        SetTokenInformation(primary, TokenSessionId, &session, sizeof(session)))
+        started = CreateProcessAsUserA(primary, path, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
+                                       NULL, NULL, &startup, &process);
+    if (!started) Log("Cannot start the server in console session %lu error=%lu", session, GetLastError());
+    if (primary) CloseHandle(primary);
+    if (token) CloseHandle(token);
+    if (!started) return NULL;
+    CloseHandle(process.hThread);
+    Log("Server started in console session %lu", session);
+    return process.hProcess;
+}
+
+static void WINAPI ServiceMain(DWORD argc, char **argv)
+{
+    HANDLE server = NULL;
+    DWORD session = 0, console, code = 0;
+    (void)argc; (void)argv;
+    ServiceHandle = RegisterServiceCtrlHandlerExA(SERVICE_NAME, ServiceControl, NULL);
+    if (!ServiceHandle) return;
+    if (!GetPrivateProfileIntA("server", "enabled", 0, ServiceConfig))
+    {
+        ReportService(SERVICE_STOPPED, NO_ERROR);
+        return;
+    }
+    ServiceStopEvent = CreateEventA(NULL, TRUE, FALSE, SERVICE_STOP_EVENT);
+    if (!ServiceStopEvent)
+    {
+        ReportService(SERVICE_STOPPED, GetLastError());
+        return;
+    }
+    ReportService(SERVICE_RUNNING, NO_ERROR);
+    for (;;)
+    {
+        console = WTSGetActiveConsoleSessionId();
+        if (server && WaitForSingleObject(server, 0) == WAIT_OBJECT_0)
+        {
+            GetExitCodeProcess(server, &code);
+            CloseHandle(server);
+            server = NULL;
+            Log("Server in console session %lu exited with %lu", session, code);
+            if (code == 2) break;
+        }
+        if (server && console != session)
+        {
+            TerminateProcess(server, 1);
+            WaitForSingleObject(server, 5000);
+            CloseHandle(server);
+            server = NULL;
+        }
+        if (!server && console != 0 && console != 0xFFFFFFFF)
+        {
+            server = StartSessionServer(console);
+            session = console;
+        }
+        if (WaitForSingleObject(ServiceStopEvent, 2000) != WAIT_TIMEOUT) break;
+    }
+    if (server)
+    {
+        SetEvent(ServiceStopEvent);
+        if (WaitForSingleObject(server, 10000) == WAIT_TIMEOUT) TerminateProcess(server, 1);
+        CloseHandle(server);
+    }
+    CloseHandle(ServiceStopEvent);
+    ReportService(SERVICE_STOPPED, code == 2 ? ERROR_BAD_CONFIGURATION : NO_ERROR);
+}
+
+static DWORD WINAPI WaitServiceStop(void *event)
+{
+    if (WaitForSingleObject(event, INFINITE) == WAIT_OBJECT_0) SetEvent(StopEvent);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     char config[MAX_PATH];
@@ -530,9 +677,19 @@ int main(int argc, char **argv)
     HANDLE events[32], singleton;
     DWORD count, status;
     WSADATA winsock;
+    HANDLE serviceStop = NULL, thread;
+    BOOL serviceMode = argc == 3 && !_stricmp(argv[1], "/service");
+    BOOL sessionMode = argc == 3 && !_stricmp(argv[1], "/session");
     DebugPrint = (DEBUG_PRINT)(void *)GetProcAddress(GetModuleHandleA("ntdll.dll"), "DbgPrint");
-    if (argc != 2 || !GetFullPathNameA(argv[1], sizeof(config), config, NULL))
-    { Log("Usage: rdpserver.exe path-to-test-config.ini"); return 2; }
+    if ((argc != 2 && !serviceMode && !sessionMode) ||
+        !GetFullPathNameA(argv[argc - 1], sizeof(config), config, NULL))
+    { Log("Usage: rdpserver.exe [/service] path-to-test-config.ini"); return 2; }
+    if (serviceMode)
+    {
+        SERVICE_TABLE_ENTRYA table[] = {{(char *)SERVICE_NAME, ServiceMain}, {NULL, NULL}};
+        strcpy(ServiceConfig, config);
+        return StartServiceCtrlDispatcherA(table) ? 0 : 1;
+    }
     if (!GetPrivateProfileIntA("server", "enabled", 0, config)) return 0;
     GetPrivateProfileStringA("server", "bind", "", BindAddress, sizeof(BindAddress), config);
     GetPrivateProfileStringA("server", "allow", "", AllowedPeer, sizeof(AllowedPeer), config);
@@ -584,6 +741,13 @@ int main(int argc, char **argv)
     if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT)) return 1;
     StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!StopEvent) return 1;
+    if (sessionMode)
+    {
+        serviceStop = OpenEventA(SYNCHRONIZE, FALSE, SERVICE_STOP_EVENT);
+        thread = serviceStop ? CreateThread(NULL, 0, WaitServiceStop, serviceStop, 0, NULL) : NULL;
+        if (!thread) { Log("Cannot watch the service stop event error=%lu", GetLastError()); return 1; }
+        CloseHandle(thread);
+    }
     SetConsoleCtrlHandler(Stop, TRUE);
     listener = freerdp_listener_new();
     if (!listener) return 1;

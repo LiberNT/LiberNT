@@ -1,5 +1,11 @@
-; LiberNT RDP console server: start with the interactive desktop.
-; The server exits at once unless rdpserver.ini sets enabled=1.
+; LiberNT RDP console server: a service that serves the console session from boot.
+; The service stops at once unless rdpserver.ini sets enabled=1.
 
 [AddReg]
-HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Run","LiberNTRDPServer",0x00020000,"%SystemRoot%\system32\rdpserver\rdpserver.exe %SystemRoot%\system32\rdpserver\rdpserver.ini"
+HKLM,"SYSTEM\CurrentControlSet\Services\LiberNTRDPServer","DisplayName",0x00000000,"LiberNT RDP Console Server"
+HKLM,"SYSTEM\CurrentControlSet\Services\LiberNTRDPServer","Description",0x00000000,"Mirrors the console session, including the logon screen, over RDP for a test LAN."
+HKLM,"SYSTEM\CurrentControlSet\Services\LiberNTRDPServer","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\LiberNTRDPServer","ImagePath",0x00020000,"%SystemRoot%\system32\rdpserver\rdpserver.exe /service %SystemRoot%\system32\rdpserver\rdpserver.ini"
+HKLM,"SYSTEM\CurrentControlSet\Services\LiberNTRDPServer","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\LiberNTRDPServer","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\LiberNTRDPServer","Type",0x00010001,0x00000010
