@@ -246,6 +246,7 @@ public:
     NativePrivateData private_data;
     NativeContext *context = NULL;
     D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_11_0;
+    UINT maximum_frame_latency = 3;
     volatile LONG pending_releases = 0;
     UINT threading_caps = 0;
     UINT shader_caps = 0;
@@ -2602,19 +2603,17 @@ HRESULT STDMETHODCALLTYPE NativeDevice::SetMaximumFrameLatency(UINT latency)
     limit.hDevice = km_device;
     limit.Type = D3DKMT_SET_QUEUEDLIMIT_PRESENT;
     limit.QueuedPresentLimit = latency;
-    return StatusToHresult(D3DKMTSetQueuedLimit(&limit));
+    HRESULT hr = StatusToHresult(D3DKMTSetQueuedLimit(&limit));
+    if (SUCCEEDED(hr)) maximum_frame_latency = latency;
+    return hr;
 }
 
 HRESULT STDMETHODCALLTYPE NativeDevice::GetMaximumFrameLatency(UINT *latency)
 {
     if (!latency) return DXGI_ERROR_INVALID_CALL;
     NativeLock guard(this);
-    D3DKMT_SETQUEUEDLIMIT limit = {};
-    limit.hDevice = km_device;
-    limit.Type = D3DKMT_GET_QUEUEDLIMIT_PRESENT;
-    HRESULT hr = StatusToHresult(D3DKMTSetQueuedLimit(&limit));
-    if (SUCCEEDED(hr)) *latency = limit.QueuedPresentLimit;
-    return hr;
+    *latency = maximum_frame_latency;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE NativeDevice::EnqueueSetEvent(HANDLE event)

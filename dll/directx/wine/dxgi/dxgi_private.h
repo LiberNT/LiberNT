@@ -44,6 +44,7 @@
 
 enum dxgi_frame_latency
 {
+    DXGI_FRAME_LATENCY_DEFAULT = 3,
     DXGI_FRAME_LATENCY_MAX     = 16,
 };
 
@@ -152,6 +153,7 @@ struct dxgi_device
     struct wined3d_device *wined3d_device;
     struct wined3d_swapchain *implicit_swapchain;
     IWineDXGIAdapter *adapter;
+    UINT max_frame_latency;
 };
 
 HRESULT dxgi_device_init(struct dxgi_device *device, struct dxgi_device_layer *layer,

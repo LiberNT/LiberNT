@@ -2965,6 +2965,31 @@ D3DUmdRtSignalSynchronizationObject2Cb(
 /* Called after the runtime flushes the UMD. The CPU event is one broadcast
  * marker, so it is set only after every captured engine context reaches it.
  * This is render completion, not notification that a Present was displayed. */
+#if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WIN8)
+static HRESULT
+D3DUmdRtSetEventNow(HANDLE Event)
+{
+    DWORD Error;
+
+    if (SetEvent(Event))
+        return S_OK;
+    Error = GetLastError();
+    switch (Error)
+    {
+        case ERROR_ACCESS_DENIED:
+            return E_ACCESSDENIED;
+        case ERROR_INVALID_HANDLE:
+        case ERROR_INVALID_PARAMETER:
+            return E_INVALIDARG;
+        case ERROR_NOT_ENOUGH_MEMORY:
+        case ERROR_OUTOFMEMORY:
+            return E_OUTOFMEMORY;
+        default:
+            return HRESULT_FROM_WIN32(Error);
+    }
+}
+#endif
+
 HRESULT WINAPI
 D3DUmdRtEnqueueSetEvent(HANDLE hDevice, HANDLE Event)
 {
@@ -3005,11 +3030,11 @@ D3DUmdRtEnqueueSetEvent(HANDLE hDevice, HANDLE Event)
         NTSTATUS Status = pfnSignalSynchronizationObject2(&Signal);
         /* Pseudo-handles and handles to another object type are invalid
          * event arguments too; insufficient event access is not E_FAIL. */
-        Result = Status == STATUS_OBJECT_TYPE_MISMATCH || Status == STATUS_ACCESS_DENIED ?
-            E_INVALIDARG : D3DUmdRtStatusToHresult(Status);
+        Result = Status == STATUS_ACCESS_DENIED ? E_ACCESSDENIED :
+            Status == STATUS_OBJECT_TYPE_MISMATCH ? E_INVALIDARG : D3DUmdRtStatusToHresult(Status);
     }
     else
-        Result = SetEvent(Event) ? S_OK : E_INVALIDARG;
+        Result = D3DUmdRtSetEventNow(Event);
 
     EnterCriticalSection(&D3DUmdRtDeviceLock);
     for (Index = 0; Index < Count; ++Index)

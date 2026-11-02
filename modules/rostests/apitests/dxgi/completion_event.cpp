@@ -46,6 +46,8 @@ START_TEST(completion_event)
         Hr = Dxgi->EnqueueSetEvent(INVALID_HANDLE_VALUE);
         ok(Hr == E_INVALIDARG, "Invalid event: %#lx\n", Hr);
         UINT Latency = 0;
+        Hr = Dxgi->GetMaximumFrameLatency(&Latency);
+        ok(Hr == S_OK && Latency == 3, "Initial frame latency: %#lx, %u\n", Hr, Latency);
         Hr = Dxgi->SetMaximumFrameLatency(17);
         ok(Hr == DXGI_ERROR_INVALID_CALL, "Invalid frame latency: %#lx\n", Hr);
         Hr = Dxgi->SetMaximumFrameLatency(1);
@@ -55,7 +57,39 @@ START_TEST(completion_event)
         Hr = Dxgi->SetMaximumFrameLatency(0);
         ok(SUCCEEDED(Hr), "Restore default frame latency: %#lx\n", Hr);
         Hr = Dxgi->GetMaximumFrameLatency(&Latency);
-        ok(Hr == S_OK && Latency == 3, "Default frame latency: %#lx, %u\n", Hr, Latency);
+        ok(Hr == S_OK && Latency == 0, "Frame latency after restoring the default: %#lx, %u\n", Hr, Latency);
+
+        static const struct { DWORD Access; const char *Name; } Rights[] =
+        {
+            {EVENT_ALL_ACCESS, "all"},
+            {EVENT_MODIFY_STATE, "modify"},
+            {SYNCHRONIZE, "synchronize"},
+            {EVENT_MODIFY_STATE | SYNCHRONIZE, "modify+synchronize"},
+            {EVENT_ALL_ACCESS & ~0x0001, "all-query"},
+            {EVENT_ALL_ACCESS & ~EVENT_MODIFY_STATE, "all-modify"},
+            {EVENT_ALL_ACCESS & ~DELETE, "all-delete"},
+            {EVENT_ALL_ACCESS & ~READ_CONTROL, "all-readcontrol"},
+            {EVENT_ALL_ACCESS & ~WRITE_DAC, "all-writedac"},
+            {EVENT_ALL_ACCESS & ~WRITE_OWNER, "all-writeowner"},
+            {EVENT_ALL_ACCESS & ~SYNCHRONIZE, "all-synchronize"},
+            {0x0001 | EVENT_MODIFY_STATE | SYNCHRONIZE, "query+modify+synchronize"},
+        };
+        for (UINT Right = 0; Right != ARRAYSIZE(Rights); ++Right)
+        {
+            HANDLE Event = CreateEventW(NULL, TRUE, FALSE, NULL), Limited = NULL;
+            if (!Event) continue;
+            if (DuplicateHandle(GetCurrentProcess(), Event, GetCurrentProcess(), &Limited, Rights[Right].Access, FALSE, 0))
+            {
+                Hr = Dxgi->EnqueueSetEvent(Limited);
+                CloseHandle(Limited);
+                if (Rights[Right].Access == EVENT_ALL_ACCESS)
+                    ok(Hr == S_OK && WaitForSingleObject(Event, 5000) == WAIT_OBJECT_0,
+                       "EnqueueSetEvent with all access: %#lx\n", Hr);
+                else
+                    ok(Hr == E_ACCESSDENIED, "EnqueueSetEvent with %s access: %#lx\n", Rights[Right].Name, Hr);
+            }
+            CloseHandle(Event);
+        }
 
         if (Target && Query)
         {
@@ -75,11 +109,11 @@ START_TEST(completion_event)
                     Context->End(Query);
                     HANDLE Modify = NULL;
                     BOOL Duplicated = DuplicateHandle(GetCurrentProcess(), Event, GetCurrentProcess(),
-                        &Modify, EVENT_MODIFY_STATE, FALSE, 0);
+                        &Modify, 0, FALSE, DUPLICATE_SAME_ACCESS);
                     ok(Duplicated, "DuplicateHandle: %lu\n", GetLastError());
                     if (!Duplicated) break;
                     /* Enqueue itself flushes, and must retain the event object
-                     * after the caller closes the passed modify-only handle. */
+                     * after the caller closes the passed handle. */
                     Hr = Dxgi->EnqueueSetEvent(Modify);
                     CloseHandle(Modify);
                     ok(SUCCEEDED(Hr), "EnqueueSetEvent: %#lx\n", Hr);
