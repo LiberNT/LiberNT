@@ -56,6 +56,16 @@ START_TEST(DxgkGpuFaultPolicy)
         "completion-DPC packet cleanup must be deferred");
 
     ok_bool_true(
+        VidSchPolicyResubmissionAllowed(0, 0, 1),
+        "an idle engine accepts a handed-back packet");
+    ok_bool_true(
+        VidSchPolicyResubmissionAllowed(1, 0, 1),
+        "a running engine accepts a handed-back packet");
+    ok_bool_false(
+        VidSchPolicyResubmissionAllowed(6, 0, 1),
+        "a resetting engine does not");
+
+    ok_bool_true(
         SoftGpuDmaCommandAddressClassAllowed(
             FALSE,
             SoftGpuDmaAddressPhysicalSurface),

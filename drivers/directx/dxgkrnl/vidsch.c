@@ -927,7 +927,7 @@ BOOLEAN VidSchIsContextOrderPacketResubmittable(_In_ PVIDSCH_DMA_PACKET Packet)
         return FALSE;
     Engine = Packet->OwnerEngine;
     KeAcquireSpinLock(&Engine->QueueLock, &OldIrql);
-    Resubmittable = !Packet->Kicked && VidSchpReadState(Engine) == VidSchEngineIdle && Engine->Scheduler != NULL && (VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerRunning || VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerSuspending);
+    Resubmittable = !Packet->Kicked && VidSchPolicyResubmissionAllowed(VidSchpReadState(Engine), VidSchEngineIdle, VidSchEngineRunning) && Engine->Scheduler != NULL && (VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerRunning || VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerSuspending);
     KeReleaseSpinLock(&Engine->QueueLock, OldIrql);
     return Resubmittable;
 }

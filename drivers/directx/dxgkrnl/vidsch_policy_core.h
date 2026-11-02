@@ -61,4 +61,15 @@ VidSchPolicyPacketCleanupMustDefer(
     return CurrentIrql > APC_LEVEL;
 }
 
+/* The engine only returns to idle once its whole queue drained, including the packet awaiting resubmission. */
+FORCEINLINE
+BOOLEAN
+VidSchPolicyResubmissionAllowed(
+    _In_ LONG EngineState,
+    _In_ LONG IdleState,
+    _In_ LONG RunningState)
+{
+    return EngineState == IdleState || EngineState == RunningState;
+}
+
 #endif /* _VIDSCH_POLICY_CORE_H_ */
