@@ -9,6 +9,7 @@
 #include <initguid.h>
 #include <bthdef.h>
 #include <bluetoothapis.h>
+#include <bthioctl.h>
 #include <setupapi.h>
 #include <cfgmgr32.h>
 #include <devguid.h>
@@ -101,6 +102,40 @@ BluetoothDevices(HANDLE radio, bool inquiry)
     } while (BluetoothFindNextDevice(find, &info));
     BluetoothFindDeviceClose(find);
     return devices;
+}
+
+static void
+AddPairedLeDevices(HANDLE radio, std::vector<BLUETOOTH_DEVICE_INFO> &devices)
+{
+    std::vector<BYTE> buffer(sizeof(BTH_DEVICE_INFO_LIST) + 63 * sizeof(BTH_DEVICE_INFO));
+    BTH_DEVICE_INFO_LIST *list = (BTH_DEVICE_INFO_LIST *)buffer.data();
+    DWORD bytes, count;
+
+    if (!DeviceIoControl(radio, IOCTL_BTH_GET_DEVICE_INFO, NULL, 0, buffer.data(), (DWORD)buffer.size(), &bytes, NULL))
+        return;
+    count = min(list->numOfDevices, 64UL);
+    for (DWORD i = 0; i < count; i++)
+    {
+        const BTH_DEVICE_INFO &entry = list->deviceList[i];
+        BLUETOOTH_DEVICE_INFO device = { sizeof(device) };
+        bool known = false;
+
+        if (!(entry.flags & BDIF_LE_PAIRED))
+            continue;
+        for (size_t j = 0; j < devices.size() && !known; j++)
+            known = devices[j].Address.ullLong == entry.address;
+        if (known)
+            continue;
+        device.Address.ullLong = entry.address;
+        /* TODO: LE remotes carry no class of device; derive the icon from the GAP appearance */
+        device.ulClassofDevice = entry.classOfDevice;
+        device.fConnected = (entry.flags & BDIF_LE_CONNECTED) != 0;
+        device.fRemembered = (entry.flags & BDIF_LE_PERSONAL) != 0;
+        device.fAuthenticated = TRUE;
+        MultiByteToWideChar(CP_UTF8, 0, entry.name, (int)strnlen(entry.name, sizeof(entry.name)), device.szName,
+                            BLUETOOTH_MAX_NAME_SIZE - 1);
+        devices.push_back(device);
+    }
 }
 
 struct PairContext
@@ -351,6 +386,7 @@ BuildBluetooth(PageBuilder &page)
                 });
 
     devices = BluetoothDevices(radio, false);
+    AddPairedLeDevices(radio, devices);
     CloseHandle(radio);
     page.Group(Str(IDS_BT_DEVICES));
     if (devices.empty())
