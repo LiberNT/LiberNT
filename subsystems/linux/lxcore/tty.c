@@ -757,6 +757,7 @@ LxTtyFlushInput(
     Tty->ReadyLength = 0;
     Tty->LineCount = 0;
     Tty->LiteralNext = FALSE;
+    Tty->HeldLength = 0;
     if (Pending)
         Tty->PendingLength = 0;
     if (!Tty->Hangup)
@@ -799,9 +800,33 @@ LxTtyStop(
     if (Tty->Packet)
         LxTtySetPacketStatus(Tty, LX_TIOCPKT_STOP | LX_TIOCPKT_START, Stop ? LX_TIOCPKT_STOP : LX_TIOCPKT_START);
     if (Stop)
+    {
         KeClearEvent(&Tty->OutputSpace);
-    else
-        KeSetEvent(&Tty->OutputSpace, IO_NO_INCREMENT, FALSE);
+        return;
+    }
+    if (Tty->HeldLength != 0)
+    {
+        ULONG Count = min(Tty->HeldLength, LX_TTY_OUTPUT - Tty->OutputLength);
+
+        RtlCopyMemory(Tty->Output + Tty->OutputLength, Tty->Held, Count);
+        Tty->OutputLength += Count;
+        Tty->HeldLength = 0;
+        KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
+    }
+    KeSetEvent(&Tty->OutputSpace, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+LxTtyHoldEchoes(
+    _In_ PLX_TTY Tty,
+    _In_ ULONG Mark)
+{
+    ULONG Count = min(Tty->OutputLength - Mark, LX_TTY_BUFFER - Tty->HeldLength);
+
+    RtlCopyMemory(Tty->Held + Tty->HeldLength, Tty->Output + Mark, Count);
+    Tty->HeldLength += Count;
+    Tty->OutputLength = Mark;
 }
 
 static
@@ -976,6 +1001,8 @@ LxTtyInputByte(
                 if (Tty->Packet)
                     LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD | LX_TIOCPKT_FLUSHWRITE);
             }
+            if ((Termios->Iflag & LX_IXON) && !Tty->TcoStopped)
+                LxTtyStop(Tty, FALSE);
             if (DoEcho)
                 LxTtyEchoByte(Tty, Byte);
             *Signal = Raised;
@@ -1086,7 +1113,13 @@ LxTtyReceive(
         OutputBefore = Tty->OutputLength;
         StatusBefore = Tty->PacketStatus;
         while ((Used < Tty->PendingLength) && (Signal == 0) && LxTtyReceiveRoom(Tty))
+        {
+            ULONG Mark = Tty->OutputLength;
+
             LxTtyInputByte(Tty, Tty->Pending[Used++], &Signal);
+            if (Tty->Stopped && (Tty->OutputLength > Mark))
+                LxTtyHoldEchoes(Tty, Mark);
+        }
         if (Used != 0)
         {
             RtlMoveMemory(Tty->Pending, Tty->Pending + Used, Tty->PendingLength - Used);
@@ -1142,6 +1175,17 @@ LxTtyMasterWrite(
         {
             LxTtyUnlock(Tty);
             return (Done != 0) ? (LONG64)Done : -LX_EIO;
+        }
+        if (Tty->MasterStopped)
+        {
+            KeClearEvent(&Tty->InputSpace);
+            LxTtyUnlock(Tty);
+            if (NonBlocking)
+                return (Done != 0) ? (LONG64)Done : -LX_EAGAIN;
+            Status = KeWaitForSingleObject(&Tty->InputSpace, UserRequest, UserMode, TRUE, NULL);
+            if (Status != STATUS_SUCCESS)
+                return (Done != 0) ? (LONG64)Done : -LX_EINTR;
+            continue;
         }
         Count = min(Length - Done, LX_TTY_PENDING - Tty->PendingLength);
         RtlCopyMemory(Tty->Pending + Tty->PendingLength, Data + Done, Count);
@@ -1199,7 +1243,7 @@ LxTtyMasterRead(
         {
             ULONG Header = Tty->Packet ? 1 : 0;
 
-            Count = min(Length - Header, Tty->OutputLength);
+            Count = min(min(Length - Header, Tty->OutputLength), LX_TTY_BUFFER - 1);
             if (Header != 0)
                 *(PUCHAR)Buffer = 0;
             RtlCopyMemory((PUCHAR)Buffer + Header, Tty->Output, Count);
@@ -1578,16 +1622,20 @@ LxTtySetTermios(
     _In_ PLX_TERMIOS Termios,
     _In_ BOOLEAN Flush)
 {
-    BOOLEAN Notify = FALSE, Readable;
+    BOOLEAN Notify = FALSE, Readable, Started = FALSE;
 
     LxTtyLock(Tty);
     if (Flush)
     {
-        LxTtyFlushInput(Tty, FALSE);
-        LxTtyFlushOutput(Tty, FALSE);
+        LxTtyFlushInput(Tty, TRUE);
         if (Tty->Packet)
-            LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD | LX_TIOCPKT_FLUSHWRITE);
+            LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD);
         Notify = Tty->Packet;
+    }
+    if ((Tty->Termios.Iflag & LX_IXON) && !(Termios->Iflag & LX_IXON) && Tty->Stopped && !Tty->TcoStopped)
+    {
+        LxTtyStop(Tty, FALSE);
+        Started = TRUE;
     }
     if ((Tty->Termios.Lflag ^ Termios->Lflag) & LX_ICANON)
     {
@@ -1619,8 +1667,12 @@ LxTtySetTermios(
     LxTtyUnlock(Tty);
     if (Readable)
         LxPollWake(&Tty->Poll, LX_POLLIN | LX_POLLRDNORM);
-    if (Notify)
+    if (Started)
+        LxPollWake(&Tty->Poll, LX_POLLOUT | LX_POLLWRNORM);
+    if (Notify || Started)
         LxPollWake(&Tty->MasterPoll, LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI);
+    if (Flush)
+        LxPollWake(&Tty->MasterPoll, LX_POLLOUT | LX_POLLWRNORM);
     LxTtyReceive(Tty);
 }
 
@@ -1696,6 +1748,7 @@ LxTtyIoctl(
             LxTtyLock(Tty);
             Termios = Tty->Termios;
             LxTtyUnlock(Tty);
+            RtlZeroMemory(&Termio, sizeof(Termio));
             Termio.Iflag = (USHORT)Termios.Iflag;
             Termio.Oflag = (USHORT)Termios.Oflag;
             Termio.Cflag = (USHORT)Termios.Cflag;
@@ -2311,6 +2364,27 @@ LxPtmxFileIoctl(
             LxPollWake(&Tty->MasterPoll, LX_POLLOUT | LX_POLLWRNORM);
             return 0;
 
+        case LX_TCXONC:
+            if (Argument > LX_TCION)
+                return -LX_EINVAL;
+            LxTtyLock(Tty);
+            if ((Argument == LX_TCOOFF) || (Argument == LX_TCOON))
+            {
+                Tty->MasterStopped = (Argument == LX_TCOOFF);
+                if (!Tty->MasterStopped)
+                    KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+            }
+            else
+            {
+                Value = Tty->Termios.Cc[(Argument == LX_TCIOFF) ? LX_VSTOP : LX_VSTART];
+                if ((Value != 0) && (Tty->PendingLength < LX_TTY_PENDING))
+                    Tty->Pending[Tty->PendingLength++] = (UCHAR)Value;
+            }
+            LxTtyUnlock(Tty);
+            LxTtyReceive(Tty);
+            LxPollWake(&Tty->MasterPoll, LX_POLLOUT | LX_POLLWRNORM);
+            return 0;
+
         /* FIXME: TIOCSCTTY on the master attaches the replica, so /dev/tty then opens the replica instead of the master */
         default:
             return LxTtyIoctl(Thread->Process, Tty, Request, Argument);
@@ -2336,7 +2410,7 @@ LxPtmxFilePoll(
         Mask |= LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI;
     if (LxTtySlaveGone(Tty))
         Mask |= LX_POLLHUP;
-    if (LxTtyInputRoom(Tty))
+    if (LxTtyInputRoom(Tty) && !Tty->MasterStopped)
         Mask |= LX_POLLOUT | LX_POLLWRNORM;
     LxTtyUnlock(Tty);
     return Mask;

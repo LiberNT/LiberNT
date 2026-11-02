@@ -255,6 +255,7 @@ typedef struct _LX_TTY
     BOOLEAN LiteralNext;
     BOOLEAN Stopped;
     BOOLEAN TcoStopped;
+    BOOLEAN MasterStopped;
     BOOLEAN Packet;
     UCHAR PacketStatus;
     ULONG Column;
@@ -264,6 +265,7 @@ typedef struct _LX_TTY
     ULONG LineCount;
     ULONG PendingLength;
     ULONG OutputLength;
+    ULONG HeldLength;
     LX_POLL_HEAD Poll;
     LX_POLL_HEAD MasterPoll;
     PLX_INSTANCE Instance;
@@ -272,6 +274,7 @@ typedef struct _LX_TTY
     UCHAR Ready[LX_TTY_BUFFER];
     UCHAR Pending[LX_TTY_PENDING];
     UCHAR Output[LX_TTY_OUTPUT];
+    UCHAR Held[LX_TTY_BUFFER];
 } LX_TTY, *PLX_TTY;
 
 struct _LX_FILE
