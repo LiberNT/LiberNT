@@ -470,7 +470,7 @@ USBCCGP_FormatMsCompatIds(
 NTSTATUS
 USBCCGP_InitFunctionDescriptor(
     IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
-    IN ULONG FunctionNumber,
+    IN ULONG AssociationIndex,
     OUT PUSBC_FUNCTION_DESCRIPTOR FunctionDescriptor)
 {
     PUSB_INTERFACE_ASSOCIATION_DESCRIPTOR Descriptor;
@@ -479,12 +479,11 @@ USBCCGP_InitFunctionDescriptor(
     WCHAR Buffer[320];
     ULONG Index;
 
-    // init function number
-    FunctionDescriptor->FunctionNumber = (UCHAR)FunctionNumber;
-
     // get association descriptor
-    Descriptor = USBCCGP_GetAssociationDescriptorAtIndex(FDODeviceExtension->ConfigurationDescriptor, FunctionNumber);
+    Descriptor = USBCCGP_GetAssociationDescriptorAtIndex(FDODeviceExtension->ConfigurationDescriptor, AssociationIndex);
     ASSERT(Descriptor);
+
+    FunctionDescriptor->FunctionNumber = Descriptor->bFirstInterface;
 
     // store number interfaces
     FunctionDescriptor->NumberOfInterfaces = Descriptor->bInterfaceCount;
