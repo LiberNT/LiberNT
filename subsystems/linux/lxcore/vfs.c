@@ -2566,7 +2566,45 @@ LxMountOptions(
                        (Mount->Flags & LX_MS_NOSUID) ? ",nosuid" : "",
                        (Mount->Flags & LX_MS_NODEV) ? ",nodev" : "",
                        (Mount->Flags & LX_MS_NOEXEC) ? ",noexec" : "",
-                       ",relatime");
+                       (Mount->Flags & LX_MS_NOATIME) ? ",noatime" : ",relatime");
+}
+
+static
+PSTR
+LxMountEscape(
+    _In_ PCSTR Text)
+{
+    SIZE_T Count = 0, Index, Out = 0;
+    PSTR Escaped;
+
+    for (Index = 0; Text[Index] != '\0'; Index++)
+    {
+        if ((Text[Index] == ' ') || (Text[Index] == '\t') || (Text[Index] == '\n') || (Text[Index] == '\\'))
+            Count++;
+    }
+    if (Count == 0)
+        return NULL;
+    Escaped = LxAlloc(Index + 3 * Count + 1);
+    if (Escaped == NULL)
+        return NULL;
+    for (Index = 0; Text[Index] != '\0'; Index++)
+    {
+        UCHAR Character = (UCHAR)Text[Index];
+
+        if ((Character == ' ') || (Character == '\t') || (Character == '\n') || (Character == '\\'))
+        {
+            Escaped[Out++] = '\\';
+            Escaped[Out++] = (CHAR)('0' + ((Character >> 6) & 7));
+            Escaped[Out++] = (CHAR)('0' + ((Character >> 3) & 7));
+            Escaped[Out++] = (CHAR)('0' + (Character & 7));
+        }
+        else
+        {
+            Escaped[Out++] = (CHAR)Character;
+        }
+    }
+    Escaped[Out] = '\0';
+    return Escaped;
 }
 
 PSTR
@@ -2616,7 +2654,7 @@ LxMountInfoNs(
             CHAR Options[64];
             size_t Remaining = Size - Used;
             PCSTR Target = Mount->Target;
-            PSTR End;
+            PSTR End, EscapedRoot, EscapedTarget, EscapedSource;
             NTSTATUS Status;
 
             if (Mount->Detached)
@@ -2628,6 +2666,9 @@ LxMountInfoNs(
                 Target = (Target[RootLength] == '\0') ? "/" : Target + RootLength;
             }
             LxMountOptions(Mount, Options, sizeof(Options));
+            EscapedRoot = LxMountEscape(Mount->Root);
+            EscapedTarget = LxMountEscape(Target);
+            EscapedSource = LxMountEscape(Mount->Source);
             if (Full)
             {
                 CHAR Optional[48];
@@ -2645,15 +2686,20 @@ LxMountInfoNs(
                 Status = RtlStringCbPrintfExA(Buffer + Used, Remaining, &End, NULL, 0,
                                               "%lu %lu 0:%lu %s %s %s%s - %s %s %s\n",
                                               Mount->Id, Mount->ParentId, Mount->Dev & 0xFF,
-                                              Mount->Root, Target, Options, Optional,
-                                              Mount->FsType, Mount->Source,
+                                              (EscapedRoot != NULL) ? EscapedRoot : Mount->Root,
+                                              (EscapedTarget != NULL) ? EscapedTarget : Target, Options, Optional,
+                                              Mount->FsType, (EscapedSource != NULL) ? EscapedSource : Mount->Source,
                                               (Mount->Flags & LX_MS_RDONLY) ? "ro" : "rw");
             }
             else
             {
                 Status = RtlStringCbPrintfExA(Buffer + Used, Remaining, &End, NULL, 0, "%s %s %s %s 0 0\n",
-                                              Mount->Source, Target, Mount->FsType, Options);
+                                              (EscapedSource != NULL) ? EscapedSource : Mount->Source,
+                                              (EscapedTarget != NULL) ? EscapedTarget : Target, Mount->FsType, Options);
             }
+            LxFree(EscapedRoot);
+            LxFree(EscapedTarget);
+            LxFree(EscapedSource);
             if (!NT_SUCCESS(Status))
             {
                 Overflow = TRUE;
