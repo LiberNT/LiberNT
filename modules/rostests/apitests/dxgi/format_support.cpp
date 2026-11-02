@@ -102,6 +102,49 @@ static void TestRequiredSupport(ID3D11Device *Device)
     }
 }
 
+static void TestListedSupport(ID3D11Device *Device)
+{
+    static const struct
+    {
+        DXGI_FORMAT Format;
+        UINT Disallowed;
+    } Tests[] =
+    {
+        {DXGI_FORMAT_R32G32B32A32_TYPELESS, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_LOAD
+            | D3D11_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D11_FORMAT_SUPPORT_MULTISAMPLE_LOAD},
+        {DXGI_FORMAT_B8G8R8A8_TYPELESS, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_BLENDABLE
+            | D3D11_FORMAT_SUPPORT_SHADER_LOAD},
+        {DXGI_FORMAT_D32_FLOAT, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_LOAD},
+        {DXGI_FORMAT_D24_UNORM_S8_UINT, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_LOAD},
+        {DXGI_FORMAT_NV12, D3D11_FORMAT_SUPPORT_TEXTURE3D | D3D11_FORMAT_SUPPORT_TEXTURECUBE | D3D11_FORMAT_SUPPORT_MIP},
+    };
+    const UINT MipGeneration = D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE | D3D11_FORMAT_SUPPORT_MIP;
+    D3D_FEATURE_LEVEL Level = Device->GetFeatureLevel();
+    UINT Support;
+    HRESULT Hr;
+
+    if (Level < D3D_FEATURE_LEVEL_10_0)
+    {
+        skip("Feature level %#x has no D3D10+ format list\n", Level);
+        return;
+    }
+    for (UINT i = 0; i < ARRAYSIZE(Tests); ++i)
+    {
+        Support = QuerySupport(Device, Tests[i].Format, &Hr);
+        ok(!(Support & Tests[i].Disallowed), "level %#x format %u support %#x has disallowed %#x\n",
+           Level, Tests[i].Format, Support, Support & Tests[i].Disallowed);
+    }
+    Support = QuerySupport(Device, DXGI_FORMAT_R1_UNORM, &Hr);
+    ok(Hr == E_FAIL && !Support, "level %#x R1_UNORM: %#lx, support %#x\n", Level, Hr, Support);
+    for (UINT Format = 1; Format <= DXGI_FORMAT_B4G4R4A4_UNORM; ++Format)
+    {
+        Support = QuerySupport(Device, static_cast<DXGI_FORMAT>(Format), &Hr);
+        ok(!(Support & D3D11_FORMAT_SUPPORT_MIP_AUTOGEN) == ((Support & MipGeneration) != MipGeneration),
+           "level %#x format %u support %#x: MIP_AUTOGEN does not follow render target, sample and mip\n",
+           Level, Format, Support);
+    }
+}
+
 static void TestOverlaySupport(ID3D11Device *Device)
 {
     IDXGIDevice *DxgiDevice = NULL;
@@ -178,6 +221,7 @@ START_TEST(format_support)
 
     TestFormatSupport(Device);
     TestRequiredSupport(Device);
+    TestListedSupport(Device);
     TestOverlaySupport(Device);
     TestTrim(Device);
 
@@ -190,6 +234,7 @@ START_TEST(format_support)
         ok(Hr == S_OK, "D3D11CreateDevice level %#x: %#lx\n", Levels[i], Hr);
         if (FAILED(Hr)) continue;
         TestRequiredSupport(Device);
+        TestListedSupport(Device);
         Device->Release();
     }
     FreeLibrary(Module);

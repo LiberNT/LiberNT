@@ -3674,22 +3674,32 @@ struct NATIVE_FORMAT_REQUIREMENT
 {
     DXGI_FORMAT Format;
     UINT Support[3];
+    UINT Allowed[3];
     UINT RequiredLevels;
 };
 
 #include "native_formats.inl"
 
-static UINT NativeRequiredFormatSupport(DXGI_FORMAT format, D3D_FEATURE_LEVEL level, bool driver_support)
+/* Drivers extend typed UAV support beyond the D3D11.3 lists; back-buffer cast and encoder have no list column. */
+static const UINT NativeFormatListedSupport = ~(D3D11_FORMAT_SUPPORT_BACK_BUFFER_CAST
+        | D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW | D3D11_FORMAT_SUPPORT_VIDEO_ENCODER);
+
+static UINT NativeListedFormatSupport(DXGI_FORMAT format, D3D_FEATURE_LEVEL level, UINT support)
 {
     /* TODO: feature level 9 requirements from the DirectX-Specs FL9_x format lists */
-    if (level < D3D_FEATURE_LEVEL_10_0) return 0;
+    if (level < D3D_FEATURE_LEVEL_10_0) return support;
     UINT index = level >= D3D_FEATURE_LEVEL_11_0 ? 2 : level >= D3D_FEATURE_LEVEL_10_1 ? 1 : 0;
+    const NATIVE_FORMAT_REQUIREMENT *found = NULL;
     for (const NATIVE_FORMAT_REQUIREMENT &entry : NativeFormatRequirements)
     {
-        if (entry.Format != format) continue;
-        return driver_support || (entry.RequiredLevels & (1u << index)) ? entry.Support[index] : 0;
+        if (entry.Format == format) found = &entry;
     }
-    return 0;
+    if (format <= DXGI_FORMAT_B4G4R4A4_UNORM)
+        support &= ~NativeFormatListedSupport | (found ? found->Allowed[index] : 0);
+    if (found && (support || (found->RequiredLevels & (1u << index)))) support |= found->Support[index];
+    const UINT mip_generation = D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE | D3D11_FORMAT_SUPPORT_MIP;
+    if ((support & mip_generation) == mip_generation) support |= D3D11_FORMAT_SUPPORT_MIP_AUTOGEN;
+    return support;
 }
 
 static bool NativeIntegerFormat(DXGI_FORMAT format)
@@ -3789,7 +3799,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFormatSupport(DXGI_FORMAT format, U
     }
     if (NativeDisplayFormat(format) && (*support & D3D11_FORMAT_SUPPORT_RENDER_TARGET))
         *support |= D3D11_FORMAT_SUPPORT_DISPLAY;
-    *support |= NativeRequiredFormatSupport(format, feature_level, *support != 0);
+    /* TODO: decoder, video processor and encoder bits from the driver's video capabilities */
+    *support = NativeListedFormatSupport(format, feature_level, *support);
     if ((*support & D3D11_FORMAT_SUPPORT_DISPLAY) && (format == DXGI_FORMAT_R8G8B8A8_UNORM
             || format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB || format == DXGI_FORMAT_R10G10B10A2_UNORM
             || format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM || format == DXGI_FORMAT_B8G8R8A8_UNORM
