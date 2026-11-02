@@ -317,6 +317,16 @@ typedef enum _LX_FS_KIND
     LxFsTmpfs
 } LX_FS_KIND;
 
+typedef struct _LX_DRVFS_OPTIONS
+{
+    BOOLEAN Metadata;
+    ULONG Uid;
+    ULONG Gid;
+    ULONG Umask;
+    ULONG Fmask;
+    ULONG Dmask;
+} LX_DRVFS_OPTIONS, *PLX_DRVFS_OPTIONS;
+
 struct _LX_MOUNT
 {
     LIST_ENTRY Link;
@@ -346,6 +356,8 @@ struct _LX_MOUNT
     BOOLEAN Unbindable;
     ULONG PeerGroup;
     ULONG MasterGroup;
+    BOOLEAN Drvfs;
+    LX_DRVFS_OPTIONS DrvfsOptions;
 };
 
 #define LX_MS_RDONLY        0x00000001
@@ -474,6 +486,9 @@ struct _LX_INSTANCE
     ULONG NextDetachedId;
     ULONG NextPeerGroup;
     LIST_ENTRY Loops;
+    BOOLEAN DrvfsDefaults;
+    ULONG DrvfsUid;
+    ULONG DrvfsGid;
 };
 
 typedef struct _LX_NODE
@@ -1258,6 +1273,13 @@ LONG LxVfsSetTimes(_In_opt_ PLX_NODE Node, _In_opt_ PLX_FILE File, _In_ PLX_TIME
 LONG LxVfsTruncate(_In_ PLX_NODE Node, _In_ LONG64 Length);
 LONG LxVfsReadlink(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _Out_ PSTR *Target);
 LONG LxNtStatHandleType(_In_ HANDLE Handle, _Out_ PLX_STAT Stat);
+LONG LxDrvfsParseSource(_In_ PCSTR Source, _Out_ PUNICODE_STRING NtRoot, _Out_ PSTR *Display);
+LONG LxDrvfsParseOptions(_In_ PLX_PROCESS Process, _In_opt_ PCSTR Data, _Out_ PLX_DRVFS_OPTIONS Options);
+VOID LxDrvfsFormatOptions(_In_ PLX_MOUNT Mount, _Out_writes_(Size) PSTR Buffer, _In_ SIZE_T Size);
+VOID LxDrvfsAdjustStat(_In_ PLX_MOUNT Mount, _In_ HANDLE Handle, _In_ ULONG LxFlags, _In_ ULONG FileAttributes,
+                       _Inout_ PLX_STAT Stat);
+LONG LxDrvfsSetMode(_In_ HANDLE Handle, _In_ ULONG Mode);
+VOID LxDrvfsAutomount(_In_ PLX_PROCESS Process, _In_ PCSTR Root, _In_opt_ PCSTR Options);
 LONG LxFifoOpen(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Flags, _Out_ PLX_FILE *Result);
 LONG LxPipeCreatePair(_In_opt_ PLX_PROCESS Process, _In_ ULONG Flags, _Out_ PLX_FILE *ReadEnd, _Out_ PLX_FILE *WriteEnd);
 LONG LxPipeSetSize(_In_ PLX_FILE File, _In_ ULONG Size);

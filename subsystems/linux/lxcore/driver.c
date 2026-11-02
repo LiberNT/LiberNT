@@ -598,7 +598,7 @@ LxIoctlCreateProcess(
     ULONG InLength = Stack->Parameters.DeviceIoControl.InputBufferLength;
     ULONG OutLength = Stack->Parameters.DeviceIoControl.OutputBufferLength;
     PUCHAR Buffer = (PUCHAR)In;
-    PUCHAR Root, Cwd, FileName, Args, Env;
+    PUCHAR Root, Cwd, FileName, Args, Env, AutomountRoot = NULL, AutomountOptions = NULL;
     PLX_EXEC_REQUEST Request = NULL;
     PLX_PROCESS Process = NULL;
     PLX_THREAD Thread = NULL;
@@ -607,7 +607,7 @@ LxIoctlCreateProcess(
     HANDLE ProcessHandle = NULL, ThreadHandle = NULL, UserHandle = NULL;
     PEPROCESS EProcess = NULL;
     CONTEXT Context;
-    BOOLEAN Listed = FALSE;
+    BOOLEAN Listed = FALSE, Created = FALSE;
     NTSTATUS Status;
     LONG Fd;
 
@@ -626,6 +626,18 @@ LxIoctlCreateProcess(
         Status = LxCaptureRange(Buffer, InLength, In->ArgOffset, In->ArgLength, LX_MAX_ARG_TOTAL, &Args);
     if (NT_SUCCESS(Status))
         Status = LxCaptureRange(Buffer, InLength, In->EnvOffset, In->EnvLength, LX_MAX_ARG_TOTAL, &Env);
+    if (NT_SUCCESS(Status) && (In->Flags & LX_CREATE_AUTOMOUNT))
+    {
+        Status = LxCaptureRange(Buffer, InLength, In->AutomountRootOffset, In->AutomountRootLength, LX_PATH_MAX - 1,
+                                &AutomountRoot);
+        if (NT_SUCCESS(Status))
+        {
+            Status = LxCaptureRange(Buffer, InLength, In->AutomountOptionsOffset, In->AutomountOptionsLength, 4096,
+                                    &AutomountOptions);
+        }
+        if (NT_SUCCESS(Status) && (In->AutomountRootLength == 0))
+            Status = STATUS_INVALID_PARAMETER;
+    }
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -636,7 +648,7 @@ LxIoctlCreateProcess(
     }
 
     if (In->Flags & ~(LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE | LX_CREATE_TRACE | LX_CREATE_TRACE_ALL | LX_CREATE_JOIN |
-                      LX_CREATE_USER | LX_CREATE_SEARCH_PATH | LX_CREATE_RUNTIME_DIR))
+                      LX_CREATE_USER | LX_CREATE_SEARCH_PATH | LX_CREATE_RUNTIME_DIR | LX_CREATE_AUTOMOUNT))
         return STATUS_INVALID_PARAMETER;
     if (((In->Flags & LX_CREATE_RUNTIME_DIR) && !(In->Flags & LX_CREATE_USER)) ||
         (In->GroupCount > LX_CREATE_MAX_GROUPS))
@@ -666,7 +678,10 @@ LxIoctlCreateProcess(
         return STATUS_NOT_FOUND;
     }
     if (Instance == NULL)
+    {
         Instance = LxInstanceCreate(&RootNt, (In->Flags & LX_CREATE_BOOT) != 0);
+        Created = TRUE;
+    }
     KeSetEvent(&LxInstanceCreateLock, IO_NO_INCREMENT, FALSE);
     if (Instance == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -717,6 +732,16 @@ LxIoctlCreateProcess(
     Process->Pgid = Process->Pid;
     Process->Sid = Process->Pid;
     LxCgroupAttach(Process, Process->Instance->RootCgroup);
+    if (Created && (In->Flags & LX_CREATE_AUTOMOUNT))
+    {
+        PSTR MountRoot = LxCaptureUtf8(AutomountRoot, In->AutomountRootLength);
+        PSTR MountOptions = LxCaptureUtf8(AutomountOptions, In->AutomountOptionsLength);
+
+        if ((MountRoot != NULL) && (MountOptions != NULL))
+            LxDrvfsAutomount(Process, MountRoot, MountOptions);
+        LxFree(MountRoot);
+        LxFree(MountOptions);
+    }
 
     if ((In->TtyMask & ~7UL) || ((In->TtyMask != 0) && (In->Pty == NULL)))
     {

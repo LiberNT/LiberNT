@@ -57,5 +57,7 @@ BOOL LxRootHasFile(_In_ PCWSTR Root, _In_ PCWSTR Relative);
 BOOL LxRootDefaultUser(_In_ PCWSTR Root, _Out_writes_z_(Size) PCHAR Name, _In_ SIZE_T Size);
 BOOL LxRootGroupId(_In_ PCWSTR Root, _In_ PCSTR Name, _Out_ PULONG Gid);
 BOOL LxRootAccount(_In_ PCWSTR Root, _In_opt_ PCSTR Name, _In_ ULONG Uid, _Out_ PLX_ACCOUNT Account);
+BOOL LxRootAutomount(_In_ PCWSTR Root, _Out_writes_z_(RootSize) PCHAR MountRoot, _In_ SIZE_T RootSize,
+                     _Out_writes_z_(OptionsSize) PCHAR Options, _In_ SIZE_T OptionsSize);
 BOOL LxSetSession(_Inout_ PLX_LAUNCH Launch, _In_ PCWSTR Root, _In_ PLX_ACCOUNT Account);
 VOID LxKeepResolvConf(_In_ PCWSTR Root);

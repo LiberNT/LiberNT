@@ -4,6 +4,7 @@ list(APPEND SOURCE
     coredump.c
     cred.c
     driver.c
+    drvfs.c
     exec.c
     fdobj.c
     file.c

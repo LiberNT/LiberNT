@@ -496,6 +496,8 @@ LxLaunch(
     DWORD OldInputMode = 0, OldOutputMode = 0;
     BOOL ConsoleIn, ConsoleOut;
     CONSOLE_SCREEN_BUFFER_INFO ScreenInfo;
+    CHAR MountRoot[MAX_PATH], MountOptions[1024];
+    BOOL Automount;
     int Index;
 
     if (!GetFullPathNameW(Launch->Root, MAX_PATH, FullRoot, NULL) ||
@@ -585,8 +587,9 @@ LxLaunch(
         }
     }
 
+    Automount = LxRootAutomount(Launch->Root, MountRoot, sizeof(MountRoot), MountOptions, sizeof(MountOptions));
     Size = sizeof(*In) + NtRoot.Length + (ULONG)strlen(Launch->Cwd) + (ULONG)strlen(Launch->FileName) +
-           Launch->Args.Length + Launch->Env.Length;
+           Launch->Args.Length + Launch->Env.Length + (ULONG)strlen(MountRoot) + (ULONG)strlen(MountOptions);
     In = calloc(1, Size);
     if (In == NULL)
         return 1;
@@ -633,6 +636,19 @@ LxLaunch(
     In->EnvLength = Launch->Env.Length;
     In->EnvCount = Launch->Env.Count;
     memcpy((PUCHAR)In + Offset, Launch->Env.Buffer, Launch->Env.Length);
+    Offset += Launch->Env.Length;
+
+    if (Automount)
+    {
+        In->Flags |= LX_CREATE_AUTOMOUNT;
+        In->AutomountRootOffset = Offset;
+        In->AutomountRootLength = (ULONG)strlen(MountRoot);
+        memcpy((PUCHAR)In + Offset, MountRoot, In->AutomountRootLength);
+        Offset += In->AutomountRootLength;
+        In->AutomountOptionsOffset = Offset;
+        In->AutomountOptionsLength = (ULONG)strlen(MountOptions);
+        memcpy((PUCHAR)In + Offset, MountOptions, In->AutomountOptionsLength);
+    }
 
     if (Launch->Terminal)
     {

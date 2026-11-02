@@ -1133,7 +1133,7 @@ static
 LONG
 LxNtStatQuery(
     _In_ HANDLE Handle,
-    _In_ ULONG Dev,
+    _In_opt_ PLX_MOUNT Mount,
     _In_ ULONG64 FallbackIno,
     _Out_ PLX_STAT Stat)
 {
@@ -1146,7 +1146,9 @@ LxNtStatQuery(
         Status = LxNtQueryStatLegacy(Handle, &Info);
     if (!NT_SUCCESS(Status))
         return -LxStatusToErrno(Status);
-    LxNtStatFromInformation(&Info, Dev, FallbackIno, Stat);
+    LxNtStatFromInformation(&Info, (Mount != NULL) ? Mount->Dev : 0x801, FallbackIno, Stat);
+    if (Mount != NULL)
+        LxDrvfsAdjustStat(Mount, Handle, Info.LxFlags, Info.FileAttributes, Stat);
     return 0;
 }
 
@@ -1165,7 +1167,7 @@ LxNtStat(
         Stat->Ino = File->Ino;
         return 0;
     }
-    return LxNtStatQuery(File->Handle, (File->Mount != NULL) ? File->Mount->Dev : 0x801, File->Ino, Stat);
+    return LxNtStatQuery(File->Handle, File->Mount, File->Ino, Stat);
 }
 
 LONG
@@ -1181,6 +1183,8 @@ LxNtStatHandle(
     if (NT_SUCCESS(ZwQueryInformationFile(Handle, &Iosb, &Info, sizeof(Info), FileStatLxInformation)))
     {
         LxNtStatFromInformation(&Info, (Mount != NULL) ? Mount->Dev : 0x801, 0, Stat);
+        if (Mount != NULL)
+            LxDrvfsAdjustStat(Mount, Handle, Info.LxFlags, Info.FileAttributes, Stat);
         return 0;
     }
     if (NT_SUCCESS(ZwQueryVolumeInformationFile(Handle, &Iosb, &Device, sizeof(Device), FileFsDeviceInformation)) &&
@@ -1192,7 +1196,7 @@ LxNtStatHandle(
         Stat->Mode = LX_S_IFIFO | 0600;
         return 0;
     }
-    return LxNtStatQuery(Handle, (Mount != NULL) ? Mount->Dev : 0x801, 0, Stat);
+    return LxNtStatQuery(Handle, Mount, 0, Stat);
 }
 
 static

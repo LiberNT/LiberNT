@@ -166,6 +166,82 @@ LxRootDefaultUser(
 }
 
 static
+PCHAR
+LxConfValue(
+    _In_ PCHAR Line,
+    _In_ PCSTR Key)
+{
+    SIZE_T Length = strlen(Key), End;
+    PCHAR Value;
+
+    if ((_strnicmp(Line, Key, Length) != 0) || ((Line[Length] != '=') && (Line[Length] != ' ') && (Line[Length] != '\t')))
+        return NULL;
+    Value = Line + Length + strspn(Line + Length, " \t");
+    if (*Value != '=')
+        return NULL;
+    Value++;
+    Value += strspn(Value, " \t");
+    if (*Value == '"')
+    {
+        PCHAR Close = strchr(++Value, '"');
+
+        if (Close != NULL)
+            *Close = '\0';
+        return Value;
+    }
+    Value[strcspn(Value, "#")] = '\0';
+    End = strlen(Value);
+    while ((End != 0) && ((Value[End - 1] == ' ') || (Value[End - 1] == '\t')))
+        Value[--End] = '\0';
+    return Value;
+}
+
+BOOL
+LxRootAutomount(
+    _In_ PCWSTR Root,
+    _Out_writes_z_(RootSize) PCHAR MountRoot,
+    _In_ SIZE_T RootSize,
+    _Out_writes_z_(OptionsSize) PCHAR Options,
+    _In_ SIZE_T OptionsSize)
+{
+    PCHAR Data = LxReadRootFile(Root, L"\\etc\\wsl.conf"), Cursor = Data, Line, Value;
+    CHAR Extra[512] = "", User[64];
+    LX_ACCOUNT Account;
+    BOOL InAutomount = FALSE, Enabled = TRUE;
+
+    strcpy_s(MountRoot, RootSize, "/mnt/");
+    Options[0] = '\0';
+    while ((Line = LxNextLine(&Cursor)) != NULL)
+    {
+        Line += strspn(Line, " \t");
+        if (Line[0] == '[')
+        {
+            InAutomount = (_strnicmp(Line, "[automount]", 11) == 0);
+            continue;
+        }
+        if (!InAutomount)
+            continue;
+        if ((Value = LxConfValue(Line, "enabled")) != NULL)
+            Enabled = (_stricmp(Value, "false") != 0);
+        else if (((Value = LxConfValue(Line, "root")) != NULL) && (Value[0] == '/') && (strlen(Value) < RootSize))
+            strcpy_s(MountRoot, RootSize, Value);
+        else if (((Value = LxConfValue(Line, "options")) != NULL) && (strlen(Value) < sizeof(Extra)))
+            strcpy_s(Extra, sizeof(Extra), Value);
+    }
+    free(Data);
+
+    if (LxRootDefaultUser(Root, User, sizeof(User)) && LxRootAccount(Root, User, 0, &Account))
+        sprintf_s(Options, OptionsSize, "uid=%lu,gid=%lu", Account.Uid, Account.Gid);
+    if ((Extra[0] != '\0') && (strlen(Options) + strlen(Extra) + 2 <= OptionsSize))
+    {
+        if (Options[0] != '\0')
+            strcat_s(Options, OptionsSize, ",");
+        strcat_s(Options, OptionsSize, Extra);
+    }
+    return Enabled;
+}
+
+static
 BOOL
 LxNameInList(
     _In_ PCSTR List,
