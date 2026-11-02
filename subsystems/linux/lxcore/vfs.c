@@ -3524,6 +3524,126 @@ LxLookupCacheKey(
 
 static
 LONG
+LxLookupMaySearch(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG DirFd,
+    _In_ PCSTR Path)
+{
+    PCSTR Cursor = Path;
+    PSTR Dir, Root;
+    BOOLEAN Checked = FALSE;
+    LONG Error = 0;
+
+    if ((LxCredUserNs(Process)->Parent == NULL) &&
+        (LxCapable(Process, LX_CAP_DAC_OVERRIDE) || LxCapable(Process, LX_CAP_DAC_READ_SEARCH)))
+    {
+        return 0;
+    }
+    Root = (strncmp(Path, "/.lxcore-detached/", 18) == 0) ? LxStrDup("/") : LxProcessRoot(Process);
+    if (Root == NULL)
+        return -LX_ENOMEM;
+    if (Path[0] == '/')
+    {
+        Dir = LxStrDup(Root);
+    }
+    else if (DirFd == LX_AT_FDCWD)
+    {
+        Dir = LxProcessCwd(Process);
+    }
+    else
+    {
+        PLX_FILE File = LxFdGet(Process, DirFd);
+
+        Dir = NULL;
+        if (File != NULL)
+        {
+            if ((File->Type == LX_S_IFDIR) && (File->Path != NULL))
+                Dir = LxFileLookupBase(Process, File, NULL);
+            LxFileDereference(File);
+        }
+    }
+    if (Dir == NULL)
+    {
+        LxFree(Root);
+        return 0;
+    }
+
+    /* FIXME: directories reached through symbolic links are not checked */
+    for (;;)
+    {
+        CHAR Name[256];
+        PCSTR Component;
+        SIZE_T Length;
+        PSTR Next;
+
+        while (*Cursor == '/')
+            Cursor++;
+        if (*Cursor == '\0')
+            break;
+        Component = Cursor;
+        while ((*Cursor != '\0') && (*Cursor != '/'))
+            Cursor++;
+        Length = (SIZE_T)(Cursor - Component);
+        if (!Checked)
+        {
+            PSTR Copy = LxStrDup(Dir);
+            LX_NODE Node;
+            LX_STAT Stat;
+
+            if (Copy == NULL)
+            {
+                Error = -LX_ENOMEM;
+                break;
+            }
+            RtlZeroMemory(&Node, sizeof(Node));
+            if (LxLookupFinish(Process, &Node, Copy, TRUE, LX_S_IFDIR, NULL) == 0)
+            {
+                if ((Node.Mount != NULL) && (LxVfsStatNode(Process, &Node, &Stat) == 0) &&
+                    ((Stat.Mode & LX_S_IFMT) == LX_S_IFDIR))
+                {
+                    Error = LxPermission(Process, Stat.Mode, Stat.Uid, Stat.Gid, LX_MAY_EXEC);
+                }
+                LxNodeFree(&Node);
+            }
+            if (Error != 0)
+                break;
+            Checked = TRUE;
+        }
+        while (*Cursor == '/')
+            Cursor++;
+        if ((*Cursor == '\0') || (Length >= sizeof(Name)))
+            break;
+        if ((Length == 1) && (Component[0] == '.'))
+            continue;
+        if ((Length == 2) && (Component[0] == '.') && (Component[1] == '.'))
+        {
+            PSTR Slash = strrchr(Dir, '/');
+
+            if (strcmp(Dir, Root) == 0)
+                continue;
+            if ((Slash != NULL) && (Slash != Dir))
+                *Slash = '\0';
+            else
+                Dir[1] = '\0';
+            Checked = FALSE;
+            continue;
+        }
+        RtlCopyMemory(Name, Component, Length);
+        Name[Length] = '\0';
+        Next = LxPathJoin(Dir, Name);
+        if (Next == NULL)
+            break;
+        LxFree(Dir);
+        Dir = Next;
+        Checked = FALSE;
+    }
+    LxFree(Dir);
+    LxFree(Root);
+    return Error;
+}
+
+static
+LONG
 LxLookupIn(
     _In_ PLX_PROCESS Process,
     _In_ LONG DirFd,
@@ -3543,6 +3663,12 @@ LxLookupIn(
 
     if ((Length > 1) && (Path[Length - 1] == '/'))
         KeyFlags |= 0x80000000;
+    Error = LxLookupMaySearch(Process, DirFd, Path);
+    if (Error != 0)
+    {
+        RtlZeroMemory(Node, sizeof(*Node));
+        return Error;
+    }
     Key = LxLookupCacheKey(Process, DirFd, Path);
     if (Key != NULL)
     {
