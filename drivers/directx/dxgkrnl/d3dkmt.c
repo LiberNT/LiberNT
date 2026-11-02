@@ -9285,7 +9285,7 @@ DxgkWaitForSynchronizationObjectFromGpu(
         return STATUS_INVALID_PARAMETER;
     if (pData->ObjectCount == 0 || pData->ObjectCount > D3DDDI_MAX_OBJECT_WAITED_ON)
         return STATUS_INVALID_PARAMETER;
-    if (pData->ObjectHandleArray == NULL || pData->MonitoredFenceValueArray == NULL)
+    if (pData->ObjectHandleArray == NULL)
         return STATUS_INVALID_PARAMETER;
 
     Status = DxgkReferenceContextByHandle(pData->hContext, PsGetCurrentProcess(), &Adapter, &Device, &Context);

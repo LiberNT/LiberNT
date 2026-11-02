@@ -4697,7 +4697,7 @@ D3DKMTWaitForSynchronizationObjectFromGpu(
     if (!NT_SUCCESS(Status))
         return Status;
     if (Captured.ObjectCount == 0 || Captured.ObjectCount > D3DDDI_MAX_OBJECT_WAITED_ON ||
-        Captured.ObjectHandleArray == NULL || Captured.MonitoredFenceValueArray == NULL)
+        Captured.ObjectHandleArray == NULL)
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -4705,18 +4705,21 @@ D3DKMTWaitForSynchronizationObjectFromGpu(
     Status = WddmBridgeSizeForCount(Captured.ObjectCount, sizeof(ObjectHandles[0]), &HandleArraySize);
     if (!NT_SUCCESS(Status))
         return Status;
-    Status = WddmBridgeSizeForCount(Captured.ObjectCount, sizeof(FenceValues[0]), &FenceArraySize);
-    if (!NT_SUCCESS(Status))
-        return Status;
     Status = WddmBridgeSafeCopyFrom(ObjectHandles, Captured.ObjectHandleArray, HandleArraySize);
     if (!NT_SUCCESS(Status))
         return Status;
-    Status = WddmBridgeSafeCopyFrom(FenceValues, Captured.MonitoredFenceValueArray, FenceArraySize);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
     Captured.ObjectHandleArray = ObjectHandles;
-    Captured.MonitoredFenceValueArray = FenceValues;
+    /* FIXME: a D3DDDI_FENCE wait carries a nonzero FenceValue in this union, which is captured as an array pointer */
+    if (Captured.MonitoredFenceValueArray != NULL)
+    {
+        Status = WddmBridgeSizeForCount(Captured.ObjectCount, sizeof(FenceValues[0]), &FenceArraySize);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Status = WddmBridgeSafeCopyFrom(FenceValues, Captured.MonitoredFenceValueArray, FenceArraySize);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Captured.MonitoredFenceValueArray = FenceValues;
+    }
     return WddmBridgeSendIoctl(IOCTL_D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU, &Captured, sizeof(Captured), NULL, 0);
 }
 

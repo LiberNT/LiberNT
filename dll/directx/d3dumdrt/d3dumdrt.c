@@ -3192,8 +3192,7 @@ D3DUmdRtWaitForSynchronizationObjectFromGpuCb(
         pData->hContext == NULL ||
         pData->ObjectCount == 0 ||
         pData->ObjectCount > D3DDDI_MAX_OBJECT_WAITED_ON ||
-        pData->ObjectHandleArray == NULL ||
-        pData->MonitoredFenceValueArray == NULL)
+        pData->ObjectHandleArray == NULL)
     {
         return E_INVALIDARG;
     }

@@ -294,6 +294,63 @@ static void Test_PerObjectValuesReachTheKernel(D3DKMT_HANDLE hDevice, D3DKMT_HAN
     pfnDestroy(&Destroy);
 }
 
+static void Test_LegacyObjectsWaitWithoutValues(D3DKMT_HANDLE hDevice, D3DKMT_HANDLE hContext)
+{
+    D3DKMT_CREATESYNCHRONIZATIONOBJECT2 Mutex, Fence;
+    D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU Wait;
+    D3DKMT_DESTROYSYNCHRONIZATIONOBJECT Destroy;
+    PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2 pfnCreate2;
+    PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT pfnDestroy;
+    NTSTATUS Status;
+
+    pfnCreate2 = (PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2)LoadD3DKMTProc("D3DKMTCreateSynchronizationObject2");
+    pfnDestroy = (PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT)LoadD3DKMTProc("D3DKMTDestroySynchronizationObject");
+    if (pfnCreate2 == NULL || pfnDestroy == NULL || pfnWaitFromGpu == NULL)
+    {
+        skip("synchronization objects or the GPU-side wait are unavailable\n");
+        return;
+    }
+
+    memset(&Mutex, 0, sizeof(Mutex));
+    Mutex.hDevice = hDevice;
+    Mutex.Info.Type = D3DDDI_SYNCHRONIZATION_MUTEX;
+    Mutex.Info.SynchronizationMutex.InitialState = FALSE;
+    Status = pfnCreate2(&Mutex);
+    ok(NT_SUCCESS(Status), "mutex not created (0x%08lX)\n", (long)Status);
+    if (NT_SUCCESS(Status))
+    {
+        memset(&Wait, 0, sizeof(Wait));
+        Wait.hContext = hContext;
+        Wait.ObjectCount = 1;
+        Wait.ObjectHandleArray = &Mutex.hSyncObject;
+        Wait.MonitoredFenceValueArray = NULL;
+        Status = pfnWaitFromGpu(&Wait);
+        ok(NT_SUCCESS(Status), "GPU wait on a mutex without fence values returned 0x%08lX\n", (long)Status);
+        memset(&Destroy, 0, sizeof(Destroy));
+        Destroy.hSyncObject = Mutex.hSyncObject;
+        pfnDestroy(&Destroy);
+    }
+
+    memset(&Fence, 0, sizeof(Fence));
+    Fence.hDevice = hDevice;
+    Fence.Info.Type = D3DDDI_MONITORED_FENCE;
+    Status = pfnCreate2(&Fence);
+    if (!NT_SUCCESS(Status))
+    {
+        skip("monitored fence not created (0x%08lX)\n", (long)Status);
+        return;
+    }
+    memset(&Wait, 0, sizeof(Wait));
+    Wait.hContext = hContext;
+    Wait.ObjectCount = 1;
+    Wait.ObjectHandleArray = &Fence.hSyncObject;
+    Wait.MonitoredFenceValueArray = NULL;
+    ok_failed(pfnWaitFromGpu(&Wait), "GPU wait on a monitored fence without its value array accepted\n");
+    memset(&Destroy, 0, sizeof(Destroy));
+    Destroy.hSyncObject = Fence.hSyncObject;
+    pfnDestroy(&Destroy);
+}
+
 START_TEST(gpusync)
 {
     D3DKMT_HANDLE hAdapter, hDevice, hContext = 0;
@@ -340,7 +397,10 @@ START_TEST(gpusync)
     Test_SignalRefusesMalformed(hContext);
     Test_Signal2BroadcastContract(hContext);
     if (hContext)
+    {
         Test_PerObjectValuesReachTheKernel(hDevice, hContext);
+        Test_LegacyObjectsWaitWithoutValues(hDevice, hContext);
+    }
     else
         skip("no context: the GPU-side operations are all scheduled on one\n");
 
