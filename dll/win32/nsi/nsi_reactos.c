@@ -556,7 +556,7 @@ static DWORD enumerate_ipv6_unicast(struct nsi_enumerate_all_ex *params)
 {
     ULONG count;
     IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableAddresses, &count);
-    IP6_ADDRESS_ROW *rows = (IP6_ADDRESS_ROW *)(header + 1);
+    IP6_ADDRESS_ROW *rows = header ? (IP6_ADDRESS_ROW *)(header + 1) : NULL;
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
     UINT_PTR i, limit = count < params->count ? count : params->count;
 
@@ -657,7 +657,7 @@ static DWORD enumerate_ipv6_forward(struct nsi_enumerate_all_ex *params)
 {
     ULONG count;
     IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableRoutes, &count);
-    IP6_ROUTE_ROW *rows = (IP6_ROUTE_ROW *)(header + 1);
+    IP6_ROUTE_ROW *rows = header ? (IP6_ROUTE_ROW *)(header + 1) : NULL;
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
     UINT_PTR i, limit = count < params->count ? count : params->count;
 
