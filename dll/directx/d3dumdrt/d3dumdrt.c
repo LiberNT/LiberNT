@@ -2307,6 +2307,8 @@ static HRESULT APIENTRY D3DUmdRtReserveGpuVirtualAddressCb(HANDLE hDevice,
 
     if (Device == NULL || pData == NULL || pfnReserveGpuVirtualAddress == NULL)
         return E_INVALIDARG;
+    if (pData->hAdapter == 0)
+        pData->hAdapter = Device->hAdapter;
     /* Shared structure again: reserve, map, and free all take exactly what
      * D3DKMT takes, so nothing is translated and nothing can be lost. */
     return D3DUmdRtStatusToHresult(pfnReserveGpuVirtualAddress(pData));
