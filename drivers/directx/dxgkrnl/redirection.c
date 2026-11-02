@@ -399,6 +399,7 @@ typedef struct _DXGKP_REDIRECTED_BLT_WORK
     DXGKRNL_REDIRECTED_BLT_PRESENT Present;
     HANDLE Context;
     BOOLEAN Complete;
+    PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture;
     UINT DirtyRectCount;
     RECT DirtyRects[DXGK_PRESENT_CORE_MAX_SUBRECTS];
 } DXGKP_REDIRECTED_BLT_WORK, *PDXGKP_REDIRECTED_BLT_WORK;
@@ -416,16 +417,24 @@ DxgkpRedirectedBltWorker(
     _In_ PVOID Parameter)
 {
     PDXGKP_REDIRECTED_BLT_WORK Work = Parameter;
+    NTSTATUS Status = Work->Complete ? STATUS_SUCCESS : STATUS_CANCELLED;
 
-    if (!Work->Complete ||
-        !NT_SUCCESS(DxgkpCompleteRedirectedBltPresentWithHandle(&Work->Present,
-                                                                Work->DirtyRects,
-                                                                Work->DirtyRectCount,
-                                                                Work->Context)))
+    if (NT_SUCCESS(Status) && Work->GdiBltTexture != NULL)
     {
-        DxgkCancelRedirectedBltPresent(&Work->Present);
+        Status = Work->DirtyRectCount != 0 ?
+            DxgkExecuteCddGdiBitBlt(Work->GdiBltTexture, Work->DirtyRects, Work->DirtyRectCount) :
+            DxgkExecuteCddGdiBitBlt(Work->GdiBltTexture, &Work->Present.DestinationRect, 1);
     }
+    if (NT_SUCCESS(Status))
+        Status = DxgkpCompleteRedirectedBltPresentWithHandle(&Work->Present,
+                                                             Work->DirtyRects,
+                                                             Work->DirtyRectCount,
+                                                             Work->Context);
+    if (!NT_SUCCESS(Status))
+        DxgkCancelRedirectedBltPresent(&Work->Present);
     KeSetEvent(&DxgkpWindowBltRetiredEvent, IO_NO_INCREMENT, FALSE);
+    if (Work->GdiBltTexture != NULL)
+        DxgkDereferenceGdiBltTexture(Work->GdiBltTexture);
     ObDereferenceObject(Work->Present.OwnerProcess);
     ExFreePoolWithTag(Work, TAG_DXGK_PRESENT);
 }
@@ -450,7 +459,8 @@ DxgkQueueRedirectedBltPresent(
     _In_ BOOLEAN Complete,
     _In_reads_opt_(DirtyRectCount) const RECT *DirtyRects,
     _In_ UINT DirtyRectCount,
-    _In_opt_ struct _DXGKRNL_CONTEXT *Context)
+    _In_opt_ struct _DXGKRNL_CONTEXT *Context,
+    _In_opt_ PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture)
 {
     PDXGKP_REDIRECTED_BLT_WORK Item = Work;
 
@@ -460,6 +470,7 @@ DxgkQueueRedirectedBltPresent(
     Item->Present = *Present;
     Item->Context = Context != NULL ? (HANDLE)(ULONG_PTR)Context->Handle : NULL;
     Item->Complete = Complete;
+    Item->GdiBltTexture = GdiBltTexture;
     Item->DirtyRectCount = DirtyRectCount;
     if (DirtyRectCount != 0)
         RtlCopyMemory(Item->DirtyRects, DirtyRects, DirtyRectCount * sizeof(RECT));
@@ -511,6 +522,220 @@ DxgkpCompleteRedirectedBltPresentWithHandle(
     ExfReleasePushLockShared(&DxgkpWin32kCddInterfaceLock);
     KeLeaveCriticalRegion();
     return Status;
+}
+
+static NTSTATUS
+DxgkpCreateGdiBltTexture(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG StagingShare,
+    _Out_ PDXGKRNL_GDI_BLT_TEXTURE *OutTexture)
+{
+    DXGK_REDIRECTION_SURFACE_CREATE Create;
+    const DWM_DX_SHARED_SURFACE_INFO *Info;
+    PDXGKVMM_RESOURCE Resource = NULL;
+    PDXGKVMM_ALLOCATION *Allocations = NULL;
+    PDXGKRNL_GDI_BLT_TEXTURE Texture = NULL;
+    UINT AllocationCount = 0;
+    UINT PrivateDataSize = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    *OutTexture = NULL;
+    Status = DxgkVidMmReferenceResource(StagingShare, TRUE, NULL, &Resource);
+    if (!NT_SUCCESS(Status))
+        return STATUS_NOT_FOUND;
+    Info = Resource->PrivateRuntimeData;
+    if (Resource->Adapter != Adapter || Resource->Device != NULL || Info == NULL ||
+        Resource->PrivateRuntimeDataSize != sizeof(*Info) ||
+        Info->Magic != DWM_DX_SURFACE_INFO_MAGIC ||
+        Info->Format != DWM_DX_FORMAT_B8G8R8A8_UNORM ||
+        Info->Width == 0 || Info->Height == 0 || Info->Pitch < Info->Width * sizeof(ULONG))
+    {
+        Status = STATUS_NOT_SUPPORTED;
+    }
+    else
+    {
+        Status = DxgkVidMmSnapshotResourceAllocations(Resource, Adapter, &Allocations,
+                                                      &AllocationCount, &PrivateDataSize);
+    }
+    if (NT_SUCCESS(Status) &&
+        (AllocationCount != 1 ||
+         InterlockedCompareExchangePointer((PVOID volatile *)&Allocations[0]->RedirectionSurfaceHandle,
+                                           NULL, NULL) == NULL))
+    {
+        Status = STATUS_NOT_SUPPORTED;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Texture = ExAllocatePoolZero(PagedPool, sizeof(*Texture), TAG_DXGK_DISPLAY);
+        if (Texture == NULL)
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        RtlZeroMemory(&Create, sizeof(Create));
+        Create.StructSize = sizeof(Create);
+        Create.Width = Info->Width;
+        Create.Height = Info->Height;
+        Create.Format = Info->Format;
+        Status = DxgkCreateGdiTextureSurface(Adapter, &Create);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Texture->ReferenceCount = 1;
+        Texture->Adapter = Adapter;
+        Texture->StagingShare = StagingShare;
+        Texture->StagingAllocation = Allocations[0]->Handle;
+        Texture->StagingPitch = Info->Pitch;
+        Texture->Width = Info->Width;
+        Texture->Height = Info->Height;
+        Texture->TextureAllocation = (D3DKMT_HANDLE)Create.AllocationHandle;
+        Texture->TextureResource = Create.ResourceHandle;
+        Texture->TextureShare = Create.GlobalShare;
+        Texture->TexturePitch = Create.Pitch;
+        *OutTexture = Texture;
+        Texture = NULL;
+    }
+    if (Texture != NULL)
+        ExFreePoolWithTag(Texture, TAG_DXGK_DISPLAY);
+    DxgkVidMmReleaseAllocationSnapshot(Allocations, AllocationCount);
+    DxgkVidMmDereferenceResource(Resource);
+    return Status;
+}
+
+static VOID
+DxgkpDestroyGdiBltTexture(
+    _In_ PDXGKRNL_GDI_BLT_TEXTURE Texture)
+{
+    DXGK_REDIRECTION_SURFACE_DESTROY Destroy;
+
+    PAGED_CODE();
+    DxgkReleaseCddGdiBltBindings(Texture);
+    if (Texture->TextureAllocation != 0)
+    {
+        RtlZeroMemory(&Destroy, sizeof(Destroy));
+        Destroy.StructSize = sizeof(Destroy);
+        Destroy.AllocationHandle = Texture->TextureAllocation;
+        Destroy.ResourceHandle = Texture->TextureResource;
+        Destroy.GlobalShare = Texture->TextureShare;
+        (VOID)DxgkDestroyRedirectionSurface(Texture->Adapter, &Destroy);
+    }
+    ExFreePoolWithTag(Texture, TAG_DXGK_DISPLAY);
+}
+
+NTSTATUS
+DxgkReferenceGdiBltTexture(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG StagingShare,
+    _Out_ PDXGKRNL_GDI_BLT_TEXTURE *OutTexture)
+{
+    PDXGKRNL_GDI_BLT_TEXTURE Texture = NULL;
+    PLIST_ENTRY Link;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+    *OutTexture = NULL;
+    if (Adapter == NULL || StagingShare == 0)
+        return STATUS_INVALID_PARAMETER;
+    if (!Adapter->GdiHardwareAcceleration)
+        return STATUS_NOT_SUPPORTED;
+
+    KeWaitForSingleObject(&Adapter->GdiBltTextureMutex, Executive, KernelMode, FALSE, NULL);
+    for (Link = Adapter->GdiBltTextureList.Flink; Link != &Adapter->GdiBltTextureList; Link = Link->Flink)
+    {
+        PDXGKRNL_GDI_BLT_TEXTURE Candidate = CONTAINING_RECORD(Link, DXGKRNL_GDI_BLT_TEXTURE, Link);
+
+        if (Candidate->StagingShare == StagingShare)
+        {
+            Texture = Candidate;
+            break;
+        }
+    }
+    if (Texture == NULL)
+    {
+        Status = DxgkpCreateGdiBltTexture(Adapter, StagingShare, &Texture);
+        if (NT_SUCCESS(Status))
+        {
+            InsertTailList(&Adapter->GdiBltTextureList, &Texture->Link);
+            Texture->Linked = TRUE;
+        }
+    }
+    if (Texture != NULL)
+        InterlockedIncrement(&Texture->ReferenceCount);
+    KeReleaseMutex(&Adapter->GdiBltTextureMutex, FALSE);
+    *OutTexture = Texture;
+    return Status;
+}
+
+VOID
+DxgkDereferenceGdiBltTexture(
+    _In_ PDXGKRNL_GDI_BLT_TEXTURE Texture)
+{
+    LONG References = InterlockedDecrement(&Texture->ReferenceCount);
+
+    ASSERT(References >= 0);
+    if (References == 0)
+        DxgkpDestroyGdiBltTexture(Texture);
+}
+
+VOID
+DxgkRetireGdiBltTexture(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG StagingShare)
+{
+    PDXGKRNL_GDI_BLT_TEXTURE Texture = NULL;
+    PLIST_ENTRY Link;
+
+    PAGED_CODE();
+    if (Adapter == NULL || StagingShare == 0)
+        return;
+    KeWaitForSingleObject(&Adapter->GdiBltTextureMutex, Executive, KernelMode, FALSE, NULL);
+    for (Link = Adapter->GdiBltTextureList.Flink; Link != &Adapter->GdiBltTextureList; Link = Link->Flink)
+    {
+        PDXGKRNL_GDI_BLT_TEXTURE Candidate = CONTAINING_RECORD(Link, DXGKRNL_GDI_BLT_TEXTURE, Link);
+
+        if (Candidate->StagingShare == StagingShare)
+        {
+            RemoveEntryList(&Candidate->Link);
+            Candidate->Linked = FALSE;
+            Texture = Candidate;
+            break;
+        }
+    }
+    KeReleaseMutex(&Adapter->GdiBltTextureMutex, FALSE);
+    if (Texture != NULL)
+        DxgkDereferenceGdiBltTexture(Texture);
+}
+
+VOID
+DxgkForgetGdiBltTextures(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LIST_ENTRY Retired;
+
+    PAGED_CODE();
+    InitializeListHead(&Retired);
+    KeWaitForSingleObject(&Adapter->GdiBltTextureMutex, Executive, KernelMode, FALSE, NULL);
+    while (!IsListEmpty(&Adapter->GdiBltTextureList))
+    {
+        PLIST_ENTRY Link = RemoveHeadList(&Adapter->GdiBltTextureList);
+        PDXGKRNL_GDI_BLT_TEXTURE Texture = CONTAINING_RECORD(Link, DXGKRNL_GDI_BLT_TEXTURE, Link);
+
+        /* The adapter's handles are purged with its devices; nothing is left to close. */
+        Texture->Linked = FALSE;
+        Texture->CddDevice = 0;
+        Texture->CddTextureBinding = 0;
+        Texture->CddStagingBinding = 0;
+        Texture->TextureAllocation = 0;
+        InsertTailList(&Retired, Link);
+    }
+    KeReleaseMutex(&Adapter->GdiBltTextureMutex, FALSE);
+    while (!IsListEmpty(&Retired))
+    {
+        PLIST_ENTRY Link = RemoveHeadList(&Retired);
+
+        DxgkDereferenceGdiBltTexture(CONTAINING_RECORD(Link, DXGKRNL_GDI_BLT_TEXTURE, Link));
+    }
 }
 
 static NTSTATUS

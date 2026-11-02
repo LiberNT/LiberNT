@@ -2468,6 +2468,7 @@ DxgkCleanupAdapterDevices(
     Adapter->CddPrimaryBindingHandle = 0;
     Adapter->CddBindingGeneration = 0;
     DxgkpForgetCddCapture(Adapter);
+    DxgkForgetGdiBltTextures(Adapter);
     (VOID)KeWaitForSingleObject(&Adapter->AdapterMutex, Executive, KernelMode, FALSE, NULL);
     while (!IsListEmpty(&Adapter->DeviceListHead))
     {

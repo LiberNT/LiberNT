@@ -1434,6 +1434,9 @@ struct _DXGKRNL_ADAPTER
     D3DKMT_HANDLE               CddPrimaryBindingHandle;
     ULONG64                     CddBindingGeneration;
     struct _DXGKRNL_CDD_CAPTURE *CddCapture;
+    BOOLEAN                     GdiHardwareAcceleration;
+    KMUTEX                      GdiBltTextureMutex;
+    LIST_ENTRY                  GdiBltTextureList;
     /* Set by an adapter reset and by a miniport Present that rejects the
      * persistent CDD bindings: the KMD's device-specific opens are gone and
      * the next Present must recreate them. */
@@ -3736,8 +3739,14 @@ DxgkCreateCaptureSurface(
     _In_ PDXGKRNL_DEVICE Device,
     _Inout_ struct _DXGK_REDIRECTION_SURFACE_CREATE *Create);
 
+NTSTATUS
+DxgkCreateGdiTextureSurface(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ struct _DXGK_REDIRECTION_SURFACE_CREATE *Create);
+
 /* Adapter device cleanup owns the resources; discard only the cache record. */
 VOID DxgkpForgetCddCapture(_In_ PDXGKRNL_ADAPTER Adapter);
+VOID DxgkForgetGdiBltTextures(_In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS
 DxgkDestroyRedirectionSurface(

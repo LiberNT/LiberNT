@@ -14198,6 +14198,7 @@ DxgkAdapterStart(
 
         Adapter->SupportMultiPlaneOverlay = FALSE;
         Adapter->MaxOverlayPlanes = 0;
+        Adapter->GdiHardwareAcceleration = FALSE;
         Caps = ExAllocatePoolWithTag(NonPagedPool, DXGKP_DRIVERCAPS_QUERY_SIZE, TAG_DXGK_ADAPTER);
         if (Caps != NULL)
         {
@@ -14211,6 +14212,9 @@ DxgkAdapterStart(
             if (NT_SUCCESS(CapsStatus))
             {
                 Adapter->ApertureSegmentCommitLimit = Caps->ApertureSegmentCommitLimit;
+                Adapter->GdiHardwareAcceleration =
+                    Caps->PresentationCaps.SupportKernelModeCommandBuffer &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiRenderKm) != NULL;
                 if (DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
                     Adapter->SupportSurpriseRemoval = Caps->SupportSurpriseRemoval;
                 Adapter->SupportPerEngineTdr =
@@ -17159,6 +17163,8 @@ DxgkpAddDeviceRegistered(
     KeInitializeSpinLock(&Adapter->CommittedMultisampleLock);
     KeInitializeSpinLock(&Adapter->AdvancedColorLock);
     KeInitializeMutex(&Adapter->CddPresentMutex, 0);
+    KeInitializeMutex(&Adapter->GdiBltTextureMutex, 0);
+    InitializeListHead(&Adapter->GdiBltTextureList);
     KeInitializeSpinLock(&Adapter->SubmitDmaLock);
     KeInitializeSpinLock(&Adapter->DmaBufferCacheLock);
     KeInitializeSpinLock(&Adapter->TdrHistoryLock);

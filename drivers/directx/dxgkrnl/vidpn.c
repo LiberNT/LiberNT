@@ -6394,6 +6394,14 @@ DxgkCreateRedirectionSurface(
 }
 
 NTSTATUS
+DxgkCreateGdiTextureSurface(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ PDXGK_REDIRECTION_SURFACE_CREATE Create)
+{
+    return DxgkpCreateGdiSurface(Adapter, NULL, Create, D3DKMDT_GDISURFACE_TEXTURE);
+}
+
+NTSTATUS
 DxgkCreateCaptureSurface(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PDXGKRNL_DEVICE Device,
@@ -6420,6 +6428,7 @@ DxgkDestroyRedirectionSurface(
         return STATUS_INVALID_PARAMETER;
     }
 
+    DxgkRetireGdiBltTexture(Adapter, Destroy->GlobalShare);
     Status = DxgkVidMmReferenceResource(
         Destroy->ResourceHandle, FALSE, NULL, &Resource);
     if (!NT_SUCCESS(Status))

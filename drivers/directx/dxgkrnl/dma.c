@@ -884,7 +884,9 @@ DxgkpResolveWindowBltDestination(
     _Inout_ PDXGKRNL_PRESENT_ENTRY Entry,
     _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target)
 {
+    PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture = NULL;
     RECT Destination;
+    ULONG Share = 0;
     BOOLEAN Visible;
     NTSTATUS Status;
 
@@ -902,15 +904,25 @@ DxgkpResolveWindowBltDestination(
     }
     Visible = Destination.right > Destination.left && Destination.bottom > Destination.top;
     if (!Visible)
-        Status = STATUS_GRAPHICS_PRESENT_OCCLUDED;
-    if (Visible)
     {
-        /* FIXME: the Blt targets the CPU-visible staging redirection surface, which is only a copy-only GDI bitblt destination */
+        Status = STATUS_GRAPHICS_PRESENT_OCCLUDED;
+    }
+    else
+    {
+        Share = Target->GlobalShare;
+        Status = DxgkReferenceGdiBltTexture(Adapter, Target->GlobalShare, &GdiBltTexture);
+        if (NT_SUCCESS(Status))
+            Share = GdiBltTexture->TextureShare;
+        else if (Status == STATUS_NOT_SUPPORTED)
+            Status = STATUS_SUCCESS; /* FIXME: without GDI hardware acceleration the Blt targets the CPU-visible staging surface itself */
+    }
+    if (Visible && NT_SUCCESS(Status))
+    {
         KeWaitForSingleObject(&Device->WindowBltMutex, Executive, KernelMode, FALSE, NULL);
-        if (Device->WindowBltResource == 0 || Device->WindowBltShare != Target->GlobalShare)
+        if (Device->WindowBltResource == 0 || Device->WindowBltShare != Share)
         {
             DxgkpCloseWindowBltShare(Device);
-            Status = DxgkpOpenWindowBltShare(Device, Target->GlobalShare);
+            Status = DxgkpOpenWindowBltShare(Device, Share);
         }
         if (NT_SUCCESS(Status))
         {
@@ -930,9 +942,16 @@ DxgkpResolveWindowBltDestination(
     }
 
     if (NT_SUCCESS(Status))
+    {
         Entry->DstRect = Destination;
+        Entry->GdiBltTexture = GdiBltTexture;
+    }
     else
+    {
+        if (GdiBltTexture != NULL)
+            DxgkDereferenceGdiBltTexture(GdiBltTexture);
         DxgkCancelWindowBltTarget(Entry->Window, Target->UpdateId);
+    }
     return Status;
 }
 
@@ -1400,15 +1419,27 @@ DxgkpPresent(
 
     if (Entry.DestinationAllocation != NULL)
     {
+        PDXGKVMM_ALLOCATION Redirected = Entry.DestinationAllocation;
+        PDXGKVMM_ALLOCATION Staging = NULL;
         ULONG_PTR SurfaceHandle;
         D3DKMT_HANDLE RedirectedShare = 0;
 
+        /* A GDI blt texture stands in for the window's staging redirection surface. */
+        if (Entry.GdiBltTexture != NULL &&
+            NT_SUCCESS(DxgkVidMmReferenceAllocation((HANDLE)(ULONG_PTR)Entry.GdiBltTexture->StagingAllocation,
+                                                    Adapter, NULL, &Staging)))
+        {
+            Redirected = Staging;
+        }
         SurfaceHandle = (ULONG_PTR)InterlockedCompareExchangePointer(
-            (PVOID volatile *)&Entry.DestinationAllocation
-                                  ->RedirectionSurfaceHandle,
+            (PVOID volatile *)&Redirected->RedirectionSurfaceHandle,
             NULL, NULL);
-        if (SurfaceHandle != 0 && Entry.DestinationAllocation->Resource != NULL)
-            RedirectedShare = Entry.DestinationAllocation->Resource->GlobalShareHandle;
+        if (Entry.GdiBltTexture != NULL && Staging == NULL)
+            SurfaceHandle = 0;
+        if (SurfaceHandle != 0 && Redirected->Resource != NULL)
+            RedirectedShare = Redirected->Resource->GlobalShareHandle;
+        if (Staging != NULL)
+            DxgkVidMmDereferenceAllocation(Staging);
         if (SurfaceHandle != 0)
         {
             if (Entry.Type != DxgkPresentTypeBlt || RedirectedShare == 0 ||
