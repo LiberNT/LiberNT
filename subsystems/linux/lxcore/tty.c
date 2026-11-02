@@ -234,7 +234,7 @@ LxTtyCreate(
 
     Tty->Termios.Iflag = LX_ICRNL | LX_IXON;
     Tty->Termios.Oflag = LX_OPOST | LX_ONLCR;
-    Tty->Termios.Cflag = LX_B38400 | LX_CS8 | LX_CREAD | LX_HUPCL;
+    Tty->Termios.Cflag = LX_B38400 | LX_CS8 | LX_CREAD | ((Flags & LX_TTY_CONSOLE) ? LX_HUPCL : 0);
     Tty->Termios.Lflag = LX_ISIG | LX_ICANON | LX_ECHO | LX_ECHOE | LX_ECHOK |
                          LX_IEXTEN | LX_ECHOCTL | LX_ECHOKE;
     Tty->Termios.Cc[LX_VINTR] = 0x03;
@@ -527,12 +527,57 @@ LxTtySlaveGone(
 
 static
 BOOLEAN
+LxTtyCanonical(
+    _In_ PLX_TTY Tty)
+{
+    return (Tty->Termios.Lflag & LX_ICANON) != 0;
+}
+
+static
+BOOLEAN
+LxTtyHasInput(
+    _In_ PLX_TTY Tty)
+{
+    if (LxTtyCanonical(Tty))
+        return Tty->LineCount != 0;
+    return Tty->ReadyLength != 0;
+}
+
+static
+BOOLEAN
 LxTtyInputRoom(
     _In_ PLX_TTY Tty)
 {
-    if (Tty->Termios.Lflag & LX_ICANON)
-        return Tty->ReadyLength + Tty->LineLength < LX_TTY_BUFFER;
-    return Tty->ReadyLength < LX_TTY_BUFFER;
+    return Tty->PendingLength < LX_TTY_PENDING;
+}
+
+static
+BOOLEAN
+LxTtyControl(
+    _In_ UCHAR Byte)
+{
+    return (Byte < 0x20) || (Byte == 0x7F);
+}
+
+static
+BOOLEAN
+LxTtyContinuation(
+    _In_ PLX_TTY Tty,
+    _In_ UCHAR Byte)
+{
+    return (Tty->Termios.Iflag & LX_IUTF8) && ((Byte & 0xC0) == 0x80);
+}
+
+static
+BOOLEAN
+LxTtyOutputRaw(
+    _In_ PLX_TTY Tty,
+    _In_ UCHAR Byte)
+{
+    if (Tty->OutputLength >= LX_TTY_OUTPUT)
+        return FALSE;
+    Tty->Output[Tty->OutputLength++] = Byte;
+    return TRUE;
 }
 
 static
@@ -541,18 +586,73 @@ LxTtyOutputByte(
     _In_ PLX_TTY Tty,
     _In_ UCHAR Byte)
 {
-    if ((Byte == '\n') && ((Tty->Termios.Oflag & (LX_OPOST | LX_ONLCR)) == (LX_OPOST | LX_ONLCR)))
-    {
-        if (Tty->OutputLength + 2 > LX_TTY_BUFFER)
-            return FALSE;
-        Tty->Output[Tty->OutputLength++] = '\r';
-    }
-    else if (Tty->OutputLength >= LX_TTY_BUFFER)
-    {
+    ULONG Oflag = Tty->Termios.Oflag;
+    ULONG Spaces;
+
+    if (!(Oflag & LX_OPOST))
+        return LxTtyOutputRaw(Tty, Byte);
+    if (Tty->OutputLength >= LX_TTY_OUTPUT)
         return FALSE;
+
+    switch (Byte)
+    {
+        case '\n':
+            if (Oflag & LX_ONLRET)
+                Tty->Column = 0;
+            if (Oflag & LX_ONLCR)
+            {
+                if (Tty->OutputLength + 2 > LX_TTY_OUTPUT)
+                    return FALSE;
+                Tty->CanonColumn = Tty->Column = 0;
+                LxTtyOutputRaw(Tty, '\r');
+                return LxTtyOutputRaw(Tty, '\n');
+            }
+            Tty->CanonColumn = Tty->Column;
+            break;
+
+        case '\r':
+            if ((Oflag & LX_ONOCR) && (Tty->Column == 0))
+                return TRUE;
+            if (Oflag & LX_OCRNL)
+            {
+                Byte = '\n';
+                if (Oflag & LX_ONLRET)
+                    Tty->CanonColumn = Tty->Column = 0;
+                break;
+            }
+            Tty->CanonColumn = Tty->Column = 0;
+            break;
+
+        case '\t':
+            Spaces = 8 - (Tty->Column & 7);
+            if ((Oflag & LX_TABDLY) == LX_XTABS)
+            {
+                if (Tty->OutputLength + Spaces > LX_TTY_OUTPUT)
+                    return FALSE;
+                Tty->Column += Spaces;
+                while (Spaces-- != 0)
+                    LxTtyOutputRaw(Tty, ' ');
+                return TRUE;
+            }
+            Tty->Column += Spaces;
+            break;
+
+        case '\b':
+            if (Tty->Column > 0)
+                Tty->Column--;
+            break;
+
+        default:
+            if (!LxTtyControl(Byte))
+            {
+                if ((Oflag & LX_OLCUC) && (((Byte >= 'a') && (Byte <= 'z')) || ((Byte >= 0xDF) && (Byte != 0xF7))))
+                    Byte -= 0x20;
+                if (!LxTtyContinuation(Tty, Byte))
+                    Tty->Column++;
+            }
+            break;
     }
-    Tty->Output[Tty->OutputLength++] = Byte;
-    return TRUE;
+    return LxTtyOutputRaw(Tty, Byte);
 }
 
 static
@@ -561,10 +661,13 @@ LxTtyEchoByte(
     _In_ PLX_TTY Tty,
     _In_ UCHAR Byte)
 {
-    if ((Tty->Termios.Lflag & LX_ECHOCTL) && (Byte < 0x20) && (Byte != '\n') && (Byte != '\t'))
+    if ((Tty->Termios.Lflag & LX_ECHOCTL) && LxTtyControl(Byte) && (Byte != '\t'))
     {
-        if (LxTtyOutputByte(Tty, '^'))
-            LxTtyOutputByte(Tty, Byte + 0x40);
+        if (Tty->OutputLength + 2 > LX_TTY_OUTPUT)
+            return;
+        LxTtyOutputRaw(Tty, '^');
+        LxTtyOutputRaw(Tty, Byte ^ 0x40);
+        Tty->Column += 2;
     }
     else
     {
@@ -577,7 +680,7 @@ VOID
 LxTtyEchoErase(
     _In_ PLX_TTY Tty)
 {
-    if (Tty->OutputLength + 3 > LX_TTY_BUFFER)
+    if (Tty->OutputLength + 3 > LX_TTY_OUTPUT)
         return;
     LxTtyOutputByte(Tty, '\b');
     LxTtyOutputByte(Tty, ' ');
@@ -586,17 +689,228 @@ LxTtyEchoErase(
 
 static
 VOID
-LxTtyCommitLine(
+LxTtyEchoEraseTab(
+    _In_ PLX_TTY Tty,
+    _In_ ULONG End)
+{
+    ULONG Columns = 0, Back;
+    BOOLEAN AfterTab = FALSE;
+
+    while (End != 0)
+    {
+        UCHAR Byte = Tty->Line[--End];
+
+        if (Byte == '\t')
+        {
+            AfterTab = TRUE;
+            break;
+        }
+        if (LxTtyControl(Byte))
+        {
+            if (Tty->Termios.Lflag & LX_ECHOCTL)
+                Columns += 2;
+        }
+        else if (!LxTtyContinuation(Tty, Byte))
+        {
+            Columns++;
+        }
+    }
+    if (!AfterTab)
+        Columns += Tty->CanonColumn;
+    Back = 8 - (Columns & 7);
+    if (Tty->OutputLength + Back > LX_TTY_OUTPUT)
+        return;
+    while (Back-- != 0)
+        LxTtyOutputByte(Tty, '\b');
+}
+
+static
+VOID
+LxTtyEchoLineStart(
     _In_ PLX_TTY Tty)
 {
     if (Tty->LineLength == 0)
-        Tty->EofPending = TRUE;
-    if (Tty->ReadyLength + Tty->LineLength <= LX_TTY_BUFFER)
-    {
-        RtlCopyMemory(Tty->Ready + Tty->ReadyLength, Tty->Line, Tty->LineLength);
-        Tty->ReadyLength += Tty->LineLength;
-    }
+        Tty->CanonColumn = Tty->Column;
+}
+
+static
+VOID
+LxTtyCommitLine(
+    _In_ PLX_TTY Tty,
+    _In_ BOOLEAN Eof)
+{
+    if (Eof)
+        Tty->Line[Tty->LineLength++] = 0;
+    RtlCopyMemory(Tty->Ready + Tty->ReadyLength, Tty->Line, Tty->LineLength);
+    Tty->ReadyLength += Tty->LineLength;
+    Tty->LineEnds[Tty->LineCount++] = Tty->ReadyLength | (Eof ? LX_TTY_LINE_EOF : 0);
     Tty->LineLength = 0;
+}
+
+static
+VOID
+LxTtyFlushInput(
+    _In_ PLX_TTY Tty,
+    _In_ BOOLEAN Pending)
+{
+    Tty->LineLength = 0;
+    Tty->ReadyLength = 0;
+    Tty->LineCount = 0;
+    Tty->LiteralNext = FALSE;
+    if (Pending)
+        Tty->PendingLength = 0;
+    if (!Tty->Hangup)
+        KeClearEvent(&Tty->DataReady);
+    KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+LxTtyFlushOutput(
+    _In_ PLX_TTY Tty,
+    _In_ BOOLEAN Delivered)
+{
+    Tty->OutputLength = Delivered ? 0 : min(Tty->OutputLength, LX_TTY_BUFFER - 1);
+    if ((Tty->OutputLength == 0) && !Tty->Hangup && !LxTtySlaveGone(Tty) && !(Tty->Packet && (Tty->PacketStatus != 0)))
+        KeClearEvent(&Tty->OutputReady);
+    KeSetEvent(&Tty->OutputSpace, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+LxTtySetPacketStatus(
+    _In_ PLX_TTY Tty,
+    _In_ UCHAR Clear,
+    _In_ UCHAR Set)
+{
+    Tty->PacketStatus = (Tty->PacketStatus & ~Clear) | Set;
+    KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+LxTtyStop(
+    _In_ PLX_TTY Tty,
+    _In_ BOOLEAN Stop)
+{
+    if (Tty->Stopped == Stop)
+        return;
+    Tty->Stopped = Stop;
+    if (Tty->Packet)
+        LxTtySetPacketStatus(Tty, LX_TIOCPKT_STOP | LX_TIOCPKT_START, Stop ? LX_TIOCPKT_STOP : LX_TIOCPKT_START);
+    if (Stop)
+        KeClearEvent(&Tty->OutputSpace);
+    else
+        KeSetEvent(&Tty->OutputSpace, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+LxTtyErase(
+    _In_ PLX_TTY Tty,
+    _In_ UCHAR Byte)
+{
+    PLX_TERMIOS Termios = &Tty->Termios;
+    BOOLEAN Echo = (Termios->Lflag & LX_ECHO) != 0;
+    ULONG Kind, SeenAlnum = 0;
+
+    if (Tty->LineLength == 0)
+        return;
+    if (Byte == Termios->Cc[LX_VERASE])
+    {
+        Kind = LX_VERASE;
+    }
+    else if (Byte == Termios->Cc[LX_VWERASE])
+    {
+        Kind = LX_VWERASE;
+    }
+    else
+    {
+        if (!Echo)
+        {
+            Tty->LineLength = 0;
+            return;
+        }
+        if ((Termios->Lflag & (LX_ECHOK | LX_ECHOKE | LX_ECHOE)) != (LX_ECHOK | LX_ECHOKE | LX_ECHOE))
+        {
+            Tty->LineLength = 0;
+            LxTtyEchoByte(Tty, Byte);
+            if (Termios->Lflag & LX_ECHOK)
+                LxTtyOutputByte(Tty, '\n');
+            return;
+        }
+        Kind = LX_VKILL;
+    }
+
+    /* TODO: ECHOPRT does not print the erased characters between backslash and slash */
+    while (Tty->LineLength != 0)
+    {
+        ULONG Head = Tty->LineLength;
+        UCHAR Last;
+
+        do
+        {
+            Last = Tty->Line[--Head];
+        } while (LxTtyContinuation(Tty, Last) && (Head != 0));
+        if (LxTtyContinuation(Tty, Last))
+            break;
+        if (Kind == LX_VWERASE)
+        {
+            if (((Last >= '0') && (Last <= '9')) || ((Last | 0x20) >= 'a' && (Last | 0x20) <= 'z') || (Last == '_'))
+                SeenAlnum++;
+            else if (SeenAlnum != 0)
+                break;
+        }
+        Tty->LineLength = Head;
+        if (Echo)
+        {
+            if ((Kind == LX_VERASE) && !(Termios->Lflag & LX_ECHOE))
+            {
+                LxTtyEchoByte(Tty, Termios->Cc[LX_VERASE]);
+            }
+            else if (Last == '\t')
+            {
+                LxTtyEchoEraseTab(Tty, Head);
+            }
+            else
+            {
+                if (LxTtyControl(Last) && (Termios->Lflag & LX_ECHOCTL))
+                    LxTtyEchoErase(Tty);
+                if (!LxTtyControl(Last) || (Termios->Lflag & LX_ECHOCTL))
+                    LxTtyEchoErase(Tty);
+            }
+        }
+        if (Kind == LX_VERASE)
+            break;
+    }
+}
+
+static
+BOOLEAN
+LxTtyReceiveRoom(
+    _In_ PLX_TTY Tty)
+{
+    LONG Room = LX_TTY_BUFFER - (LONG)(Tty->ReadyLength + Tty->LineLength) - 1;
+
+    if (Room > 0)
+        return TRUE;
+    if (!LxTtyCanonical(Tty) || (Tty->ReadyLength != 0))
+        return FALSE;
+    if (Room < 0)
+        Tty->LineLength--;
+    return TRUE;
+}
+
+static
+VOID
+LxTtyStoreByte(
+    _In_ PLX_TTY Tty,
+    _In_ UCHAR Byte)
+{
+    if (LxTtyCanonical(Tty))
+        Tty->Line[Tty->LineLength++] = Byte;
+    else
+        Tty->Ready[Tty->ReadyLength++] = Byte;
 }
 
 static
@@ -608,17 +922,38 @@ LxTtyInputByte(
 {
     PLX_TERMIOS Termios = &Tty->Termios;
     BOOLEAN DoEcho = (Termios->Lflag & LX_ECHO) != 0;
+    BOOLEAN Canonical = LxTtyCanonical(Tty);
 
-    if (Byte == '\r')
+    if (Termios->Iflag & LX_ISTRIP)
+        Byte &= 0x7F;
+    if ((Termios->Iflag & LX_IUCLC) && (Termios->Lflag & LX_IEXTEN) && (Byte >= 'A') && (Byte <= 'Z'))
+        Byte += 0x20;
+
+    if (Tty->LiteralNext)
     {
-        if (Termios->Iflag & LX_IGNCR)
-            return;
-        if (Termios->Iflag & LX_ICRNL)
-            Byte = '\n';
+        Tty->LiteralNext = FALSE;
+        if (DoEcho)
+        {
+            LxTtyEchoLineStart(Tty);
+            LxTtyEchoByte(Tty, Byte);
+        }
+        LxTtyStoreByte(Tty, Byte);
+        return;
     }
-    else if ((Byte == '\n') && (Termios->Iflag & LX_INLCR))
+
+    if (Termios->Iflag & LX_IXON)
     {
-        Byte = '\r';
+        if (Byte == Termios->Cc[LX_VSTART])
+        {
+            if (!Tty->TcoStopped)
+                LxTtyStop(Tty, FALSE);
+            return;
+        }
+        if (Byte == Termios->Cc[LX_VSTOP])
+        {
+            LxTtyStop(Tty, TRUE);
+            return;
+        }
     }
 
     if ((Termios->Lflag & LX_ISIG) && (Byte != 0))
@@ -636,8 +971,10 @@ LxTtyInputByte(
         {
             if (!(Termios->Lflag & LX_NOFLSH))
             {
-                Tty->LineLength = 0;
-                Tty->ReadyLength = 0;
+                LxTtyFlushInput(Tty, FALSE);
+                LxTtyFlushOutput(Tty, FALSE);
+                if (Tty->Packet)
+                    LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD | LX_TIOCPKT_FLUSHWRITE);
             }
             if (DoEcho)
                 LxTtyEchoByte(Tty, Byte);
@@ -646,74 +983,142 @@ LxTtyInputByte(
         }
     }
 
-    if (Termios->Lflag & LX_ICANON)
+    if (((Termios->Iflag & (LX_IXON | LX_IXANY)) == (LX_IXON | LX_IXANY)) && !Tty->TcoStopped)
+        LxTtyStop(Tty, FALSE);
+
+    if (Byte == '\r')
     {
-        if ((Byte == Termios->Cc[LX_VERASE]) || (Byte == '\b'))
+        if (Termios->Iflag & LX_IGNCR)
+            return;
+        if (Termios->Iflag & LX_ICRNL)
+            Byte = '\n';
+    }
+    else if ((Byte == '\n') && (Termios->Iflag & LX_INLCR))
+    {
+        Byte = '\r';
+    }
+
+    if (Canonical && (Byte != 0))
+    {
+        if ((Byte == Termios->Cc[LX_VERASE]) || (Byte == Termios->Cc[LX_VKILL]) ||
+            ((Byte == Termios->Cc[LX_VWERASE]) && (Termios->Lflag & LX_IEXTEN)))
         {
-            if (Tty->LineLength != 0)
+            LxTtyErase(Tty, Byte);
+            return;
+        }
+
+        if ((Byte == Termios->Cc[LX_VLNEXT]) && (Termios->Lflag & LX_IEXTEN))
+        {
+            Tty->LiteralNext = TRUE;
+            if (DoEcho && (Termios->Lflag & LX_ECHOCTL))
             {
-                Tty->LineLength--;
-                if (DoEcho && (Termios->Lflag & LX_ECHOE))
-                    LxTtyEchoErase(Tty);
+                LxTtyOutputByte(Tty, '^');
+                LxTtyOutputByte(Tty, '\b');
             }
             return;
         }
 
-        if (Byte == Termios->Cc[LX_VKILL])
+        if ((Byte == Termios->Cc[LX_VREPRINT]) && DoEcho && (Termios->Lflag & LX_IEXTEN))
         {
-            while (Tty->LineLength != 0)
-            {
-                Tty->LineLength--;
-                if (DoEcho && (Termios->Lflag & LX_ECHOKE))
-                    LxTtyEchoErase(Tty);
-            }
+            ULONG Index;
+
+            LxTtyEchoByte(Tty, Byte);
+            LxTtyOutputByte(Tty, '\n');
+            for (Index = 0; Index < Tty->LineLength; Index++)
+                LxTtyEchoByte(Tty, Tty->Line[Index]);
             return;
         }
 
-        if ((Termios->Lflag & LX_IEXTEN) && (Byte == Termios->Cc[LX_VWERASE]))
+        if (Byte == '\n')
         {
-            while ((Tty->LineLength != 0) && (Tty->Line[Tty->LineLength - 1] == ' '))
-            {
-                Tty->LineLength--;
-                if (DoEcho)
-                    LxTtyEchoErase(Tty);
-            }
-            while ((Tty->LineLength != 0) && (Tty->Line[Tty->LineLength - 1] != ' '))
-            {
-                Tty->LineLength--;
-                if (DoEcho)
-                    LxTtyEchoErase(Tty);
-            }
+            if (DoEcho || (Termios->Lflag & LX_ECHONL))
+                LxTtyOutputByte(Tty, '\n');
+            LxTtyStoreByte(Tty, Byte);
+            LxTtyCommitLine(Tty, FALSE);
             return;
         }
 
         if (Byte == Termios->Cc[LX_VEOF])
         {
-            LxTtyCommitLine(Tty);
+            LxTtyCommitLine(Tty, TRUE);
             return;
         }
 
-        if ((Tty->LineLength < LX_TTY_BUFFER - 1) || ((Byte == '\n') && (Tty->LineLength < LX_TTY_BUFFER)))
-            Tty->Line[Tty->LineLength++] = Byte;
-
-        if (DoEcho)
-            LxTtyEchoByte(Tty, Byte);
-        else if ((Byte == '\n') && (Termios->Lflag & LX_ECHONL))
-            LxTtyEchoByte(Tty, Byte);
-
-        if ((Byte == '\n') ||
-            ((Termios->Cc[LX_VEOL] != 0) && (Byte == Termios->Cc[LX_VEOL])) ||
-            ((Termios->Cc[LX_VEOL2] != 0) && (Byte == Termios->Cc[LX_VEOL2])))
+        if ((Byte == Termios->Cc[LX_VEOL]) || ((Byte == Termios->Cc[LX_VEOL2]) && (Termios->Lflag & LX_IEXTEN)))
         {
-            LxTtyCommitLine(Tty);
+            if (DoEcho)
+            {
+                LxTtyEchoLineStart(Tty);
+                LxTtyEchoByte(Tty, Byte);
+            }
+            LxTtyStoreByte(Tty, Byte);
+            LxTtyCommitLine(Tty, FALSE);
+            return;
         }
-        return;
     }
 
-    if (Tty->ReadyLength < LX_TTY_BUFFER)
-        Tty->Ready[Tty->ReadyLength++] = Byte;
     if (DoEcho)
-        LxTtyEchoByte(Tty, Byte);
+    {
+        if (Canonical)
+            LxTtyEchoLineStart(Tty);
+        if (Byte == '\n')
+            LxTtyOutputByte(Tty, Byte);
+        else
+            LxTtyEchoByte(Tty, Byte);
+    }
+    LxTtyStoreByte(Tty, Byte);
+}
+
+static
+VOID
+LxTtyReceive(
+    _In_ PLX_TTY Tty)
+{
+    for (;;)
+    {
+        PLX_INSTANCE Instance = NULL;
+        ULONG OutputBefore, Foreground = 0, Used = 0;
+        LONG Signal = 0;
+        UCHAR StatusBefore;
+        BOOLEAN Echoed, Readable;
+
+        LxTtyLock(Tty);
+        OutputBefore = Tty->OutputLength;
+        StatusBefore = Tty->PacketStatus;
+        while ((Used < Tty->PendingLength) && (Signal == 0) && LxTtyReceiveRoom(Tty))
+            LxTtyInputByte(Tty, Tty->Pending[Used++], &Signal);
+        if (Used != 0)
+        {
+            RtlMoveMemory(Tty->Pending, Tty->Pending + Used, Tty->PendingLength - Used);
+            Tty->PendingLength -= Used;
+            KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+        }
+        Readable = LxTtyHasInput(Tty);
+        if (Readable)
+            KeSetEvent(&Tty->DataReady, IO_NO_INCREMENT, FALSE);
+        Echoed = (Tty->OutputLength != OutputBefore) || (Tty->PacketStatus != StatusBefore);
+        if (Echoed)
+            KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
+        if ((Signal != 0) && (Tty->ForegroundPgrp != 0) && (Tty->Instance != NULL))
+        {
+            Foreground = Tty->ForegroundPgrp;
+            Instance = Tty->Instance;
+            LxInstanceReference(Instance);
+        }
+        LxTtyUnlock(Tty);
+
+        if (Used == 0)
+            return;
+        if (Readable)
+            LxPollWake(&Tty->Poll, LX_POLLIN | LX_POLLRDNORM);
+        LxPollWake(&Tty->Poll, LX_POLLOUT | LX_POLLWRNORM);
+        LxPollWake(&Tty->MasterPoll, (Echoed ? (LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI) : 0) | LX_POLLOUT | LX_POLLWRNORM);
+        if (Instance != NULL)
+        {
+            LxSignalGroup(Instance, NULL, Foreground, Signal);
+            LxInstanceDereference(Instance);
+        }
+    }
 }
 
 LONG64
@@ -729,10 +1134,8 @@ LxTtyMasterWrite(
 
     while (Done < Length)
     {
-        PLX_INSTANCE Instance = NULL;
-        ULONG OutputBefore, Foreground = 0;
-        LONG Signal = 0;
-        BOOLEAN Room, Echoed;
+        ULONG Count;
+        BOOLEAN Room;
 
         LxTtyLock(Tty);
         if (Tty->Hangup || LxTtySlaveGone(Tty))
@@ -740,35 +1143,19 @@ LxTtyMasterWrite(
             LxTtyUnlock(Tty);
             return (Done != 0) ? (LONG64)Done : -LX_EIO;
         }
+        Count = min(Length - Done, LX_TTY_PENDING - Tty->PendingLength);
+        RtlCopyMemory(Tty->Pending + Tty->PendingLength, Data + Done, Count);
+        Tty->PendingLength += Count;
+        Done += Count;
+        LxTtyUnlock(Tty);
 
-        OutputBefore = Tty->OutputLength;
-        while ((Done < Length) && (Signal == 0) && LxTtyInputRoom(Tty))
-            LxTtyInputByte(Tty, Data[Done++], &Signal);
+        LxTtyReceive(Tty);
 
-        if ((Tty->ReadyLength != 0) || Tty->EofPending)
-            KeSetEvent(&Tty->DataReady, IO_NO_INCREMENT, FALSE);
-        Echoed = (Tty->OutputLength != OutputBefore);
-        if (Echoed)
-            KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
+        LxTtyLock(Tty);
         Room = LxTtyInputRoom(Tty);
         if (!Room)
             KeClearEvent(&Tty->InputSpace);
-        if ((Signal != 0) && (Tty->ForegroundPgrp != 0) && (Tty->Instance != NULL))
-        {
-            Foreground = Tty->ForegroundPgrp;
-            Instance = Tty->Instance;
-            LxInstanceReference(Instance);
-        }
         LxTtyUnlock(Tty);
-
-        LxPollWake(&Tty->Poll, LX_POLLIN | LX_POLLRDNORM);
-        if (Echoed)
-            LxPollWake(&Tty->MasterPoll, LX_POLLIN | LX_POLLRDNORM);
-        if (Instance != NULL)
-        {
-            LxSignalGroup(Instance, NULL, Foreground, Signal);
-            LxInstanceDereference(Instance);
-        }
 
         if ((Done < Length) && !Room)
         {
@@ -937,7 +1324,7 @@ LxTtyReadable(
     BOOLEAN Readable;
 
     LxTtyLock(Tty);
-    Readable = (Tty->ReadyLength != 0) || Tty->EofPending || Tty->Hangup;
+    Readable = LxTtyHasInput(Tty) || Tty->Hangup;
     LxTtyUnlock(Tty);
     return Readable;
 }
@@ -972,29 +1359,37 @@ LxTtyRead(
         ULONG Count;
 
         LxTtyLock(Tty);
-        if (Tty->ReadyLength != 0)
+        if (LxTtyHasInput(Tty))
         {
-            Count = (ULONG)min(Length, Tty->ReadyLength);
-            if (Tty->Termios.Lflag & LX_ICANON)
-            {
-                ULONG Index;
+            ULONG Consume;
 
-                for (Index = 0; Index < Count; Index++)
+            if (LxTtyCanonical(Tty))
+            {
+                ULONG End = Tty->LineEnds[0] & ~LX_TTY_LINE_EOF, Index;
+                ULONG DataLength = End - ((Tty->LineEnds[0] & LX_TTY_LINE_EOF) ? 1 : 0);
+
+                Count = (ULONG)min(Length, DataLength);
+                Consume = (Count == DataLength) ? End : Count;
+                for (Index = 0; Index < Tty->LineCount; Index++)
+                    Tty->LineEnds[Index] -= (USHORT)Consume;
+                if (Consume == End)
                 {
-                    if (Tty->Ready[Index] == '\n')
-                    {
-                        Count = Index + 1;
-                        break;
-                    }
+                    Tty->LineCount--;
+                    RtlMoveMemory(Tty->LineEnds, Tty->LineEnds + 1, Tty->LineCount * sizeof(Tty->LineEnds[0]));
                 }
             }
+            else
+            {
+                Count = (ULONG)min(Length, Tty->ReadyLength);
+                Consume = Count;
+            }
             RtlCopyMemory(Data, Tty->Ready, Count);
-            RtlMoveMemory(Tty->Ready, Tty->Ready + Count, Tty->ReadyLength - Count);
-            Tty->ReadyLength -= Count;
-            if ((Tty->ReadyLength == 0) && !Tty->EofPending && !Tty->Hangup)
+            RtlMoveMemory(Tty->Ready, Tty->Ready + Consume, Tty->ReadyLength - Consume);
+            Tty->ReadyLength -= Consume;
+            if (!LxTtyHasInput(Tty) && !Tty->Hangup)
                 KeClearEvent(&Tty->DataReady);
-            KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
             LxTtyUnlock(Tty);
+            LxTtyReceive(Tty);
             LxPollWake(&Tty->MasterPoll, LX_POLLOUT | LX_POLLWRNORM);
             Result = LxCopyToUser(Buffer, Data, Count);
             if (Result == 0)
@@ -1002,11 +1397,8 @@ LxTtyRead(
             break;
         }
 
-        if (Tty->EofPending || Tty->Hangup)
+        if (Tty->Hangup)
         {
-            Tty->EofPending = FALSE;
-            if (!Tty->Hangup)
-                KeClearEvent(&Tty->DataReady);
             LxTtyUnlock(Tty);
             Result = 0;
             break;
@@ -1087,7 +1479,7 @@ LxTtyWrite(
                 LxTtyUnlock(Tty);
                 return (Total != 0) ? (LONG64)Total : -LX_EIO;
             }
-            while ((Used < Chunk) && LxTtyOutputByte(Tty, Data[Used]))
+            while ((Used < Chunk) && !Tty->Stopped && LxTtyOutputByte(Tty, Data[Used]))
                 Used++;
             if (Used != Before)
                 KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
@@ -1172,39 +1564,6 @@ LxTtyPgrpInSession(
 }
 
 static
-VOID
-LxTtyFlushInput(
-    _In_ PLX_TTY Tty)
-{
-    Tty->LineLength = 0;
-    Tty->ReadyLength = 0;
-    KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
-}
-
-static
-VOID
-LxTtyFlushOutput(
-    _In_ PLX_TTY Tty,
-    _In_ BOOLEAN Delivered)
-{
-    Tty->OutputLength = Delivered ? 0 : min(Tty->OutputLength, LX_TTY_BUFFER - 1);
-    if ((Tty->OutputLength == 0) && !Tty->Hangup && !LxTtySlaveGone(Tty) && !(Tty->Packet && (Tty->PacketStatus != 0)))
-        KeClearEvent(&Tty->OutputReady);
-    KeSetEvent(&Tty->OutputSpace, IO_NO_INCREMENT, FALSE);
-}
-
-static
-VOID
-LxTtySetPacketStatus(
-    _In_ PLX_TTY Tty,
-    _In_ UCHAR Clear,
-    _In_ UCHAR Set)
-{
-    Tty->PacketStatus = (Tty->PacketStatus & ~Clear) | Set;
-    KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
-}
-
-static
 BOOLEAN
 LxTtyFlowControl(
     _In_ PLX_TERMIOS Termios)
@@ -1219,21 +1578,26 @@ LxTtySetTermios(
     _In_ PLX_TERMIOS Termios,
     _In_ BOOLEAN Flush)
 {
-    BOOLEAN Notify = FALSE;
+    BOOLEAN Notify = FALSE, Readable;
 
     LxTtyLock(Tty);
     if (Flush)
     {
-        LxTtyFlushInput(Tty);
+        LxTtyFlushInput(Tty, FALSE);
         LxTtyFlushOutput(Tty, FALSE);
         if (Tty->Packet)
             LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD | LX_TIOCPKT_FLUSHWRITE);
         Notify = Tty->Packet;
     }
-    else if ((Tty->Termios.Lflag & LX_ICANON) && !(Termios->Lflag & LX_ICANON) && (Tty->LineLength != 0))
+    if ((Tty->Termios.Lflag ^ Termios->Lflag) & LX_ICANON)
     {
-        LxTtyCommitLine(Tty);
-        KeSetEvent(&Tty->DataReady, IO_NO_INCREMENT, FALSE);
+        RtlCopyMemory(Tty->Ready + Tty->ReadyLength, Tty->Line, Tty->LineLength);
+        Tty->ReadyLength += Tty->LineLength;
+        Tty->LineLength = 0;
+        Tty->LineCount = 0;
+        Tty->LiteralNext = FALSE;
+        if ((Termios->Lflag & LX_ICANON) && (Tty->ReadyLength != 0))
+            Tty->LineEnds[Tty->LineCount++] = (USHORT)Tty->ReadyLength;
     }
     if (Tty->Packet)
     {
@@ -1247,11 +1611,17 @@ LxTtySetTermios(
         Notify |= (OldFlow != NewFlow) || ExtProc;
     }
     Tty->Termios = *Termios;
-    if (LxTtyInputRoom(Tty))
-        KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+    Readable = LxTtyHasInput(Tty);
+    if (Readable)
+        KeSetEvent(&Tty->DataReady, IO_NO_INCREMENT, FALSE);
+    else if (!Tty->Hangup)
+        KeClearEvent(&Tty->DataReady);
     LxTtyUnlock(Tty);
+    if (Readable)
+        LxPollWake(&Tty->Poll, LX_POLLIN | LX_POLLRDNORM);
     if (Notify)
         LxPollWake(&Tty->MasterPoll, LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI);
+    LxTtyReceive(Tty);
 }
 
 LONG64
@@ -1462,6 +1832,16 @@ LxTtyIoctl(
         case LX_FIONREAD:
             LxTtyLock(Tty);
             Value = (LONG)Tty->ReadyLength;
+            if (LxTtyCanonical(Tty))
+            {
+                ULONG Index;
+
+                for (Index = 0; Index < Tty->LineCount; Index++)
+                {
+                    if (Tty->LineEnds[Index] & LX_TTY_LINE_EOF)
+                        Value--;
+                }
+            }
             LxTtyUnlock(Tty);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
@@ -1471,7 +1851,7 @@ LxTtyIoctl(
             LxTtyLock(Tty);
             if (Argument != LX_TCOFLUSH)
             {
-                LxTtyFlushInput(Tty);
+                LxTtyFlushInput(Tty, TRUE);
                 if (Tty->Packet)
                     LxTtySetPacketStatus(Tty, 0, LX_TIOCPKT_FLUSHREAD);
             }
@@ -1493,8 +1873,32 @@ LxTtyIoctl(
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_TCXONC:
-            /* TODO: TCOOFF and TCIOFF do not stop output or send STOP */
-            return (Argument <= LX_TCION) ? 0 : -LX_EINVAL;
+            if (Argument > LX_TCION)
+                return -LX_EINVAL;
+            LxTtyLock(Tty);
+            if ((Argument == LX_TCOOFF) && !Tty->TcoStopped)
+            {
+                Tty->TcoStopped = TRUE;
+                LxTtyStop(Tty, TRUE);
+            }
+            else if ((Argument == LX_TCOON) && Tty->TcoStopped)
+            {
+                Tty->TcoStopped = FALSE;
+                LxTtyStop(Tty, FALSE);
+            }
+            else if ((Argument == LX_TCIOFF) || (Argument == LX_TCION))
+            {
+                Value = Tty->Termios.Cc[(Argument == LX_TCIOFF) ? LX_VSTOP : LX_VSTART];
+                if (Value != 0)
+                {
+                    LxTtyOutputRaw(Tty, (UCHAR)Value);
+                    KeSetEvent(&Tty->OutputReady, IO_NO_INCREMENT, FALSE);
+                }
+            }
+            LxTtyUnlock(Tty);
+            LxPollWake(&Tty->Poll, LX_POLLOUT | LX_POLLWRNORM);
+            LxPollWake(&Tty->MasterPoll, LX_POLLIN | LX_POLLRDNORM | LX_POLLPRI);
+            return 0;
 
         case LX_TCSBRK:
         case LX_TCSBRKP:
@@ -1581,9 +1985,9 @@ LxTtyFilePoll(
     }
     else
     {
-        if ((Tty->ReadyLength != 0) || Tty->EofPending)
+        if (LxTtyHasInput(Tty))
             Mask |= LX_POLLIN | LX_POLLRDNORM;
-        if (Tty->OutputLength < LX_TTY_BUFFER)
+        if ((Tty->OutputLength < LX_TTY_OUTPUT) && !Tty->Stopped)
             Mask |= LX_POLLOUT | LX_POLLWRNORM;
     }
     LxTtyUnlock(Tty);
@@ -1857,7 +2261,7 @@ LxPtmxFileIoctl(
 
         case LX_FIONREAD:
             LxTtyLock(Tty);
-            Value = (LONG)Tty->OutputLength;
+            Value = (LONG)min(Tty->OutputLength, LX_TTY_BUFFER - 1);
             LxTtyUnlock(Tty);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
@@ -1897,6 +2301,11 @@ LxPtmxFileIoctl(
             LxTtyLock(Tty);
             if (Argument != LX_TCOFLUSH)
                 LxTtyFlushOutput(Tty, TRUE);
+            if (Argument != LX_TCIFLUSH)
+            {
+                Tty->PendingLength = 0;
+                KeSetEvent(&Tty->InputSpace, IO_NO_INCREMENT, FALSE);
+            }
             LxTtyUnlock(Tty);
             LxPollWake(&Tty->Poll, LX_POLLOUT | LX_POLLWRNORM);
             LxPollWake(&Tty->MasterPoll, LX_POLLOUT | LX_POLLWRNORM);

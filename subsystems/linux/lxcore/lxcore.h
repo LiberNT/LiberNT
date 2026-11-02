@@ -209,6 +209,10 @@ typedef struct _LX_FILE_OPS
 } LX_FILE_OPS, *PLX_FILE_OPS;
 
 #define LX_TTY_BUFFER 4096
+/* FIXME: Linux bounds the pending queues by tty_buffer memory accounting, so what it accepts depends on write sizes */
+#define LX_TTY_PENDING 16384
+#define LX_TTY_OUTPUT (LX_TTY_BUFFER + LX_TTY_PENDING)
+#define LX_TTY_LINE_EOF 0x8000
 #define LX_TTY_CONSOLE   0x00000001
 #define LX_TTY_LOCKED    0x00000002
 #define LX_TTY_NT_MASTER 0x00000004
@@ -248,18 +252,26 @@ typedef struct _LX_TTY
     BOOLEAN Locked;
     BOOLEAN SlaveOpened;
     BOOLEAN NtMaster;
-    BOOLEAN EofPending;
+    BOOLEAN LiteralNext;
+    BOOLEAN Stopped;
+    BOOLEAN TcoStopped;
     BOOLEAN Packet;
     UCHAR PacketStatus;
+    ULONG Column;
+    ULONG CanonColumn;
     ULONG LineLength;
     ULONG ReadyLength;
+    ULONG LineCount;
+    ULONG PendingLength;
     ULONG OutputLength;
     LX_POLL_HEAD Poll;
     LX_POLL_HEAD MasterPoll;
     PLX_INSTANCE Instance;
+    USHORT LineEnds[LX_TTY_BUFFER];
     UCHAR Line[LX_TTY_BUFFER];
     UCHAR Ready[LX_TTY_BUFFER];
-    UCHAR Output[LX_TTY_BUFFER];
+    UCHAR Pending[LX_TTY_PENDING];
+    UCHAR Output[LX_TTY_OUTPUT];
 } LX_TTY, *PLX_TTY;
 
 struct _LX_FILE
