@@ -490,6 +490,7 @@ static const CATEGORY_RULE Rules[] =
     { "acpi_apitest", "*", "system:storage" },
     { "fltlib_apitest", "*", "system:storage" },
     { "mountmgr_apitest", "*", "system:storage" },
+    { "ntfs_apitest", "*", "system:storage" },
     { "partmgr_apitest", "*", "system:storage" },
     { "parttest", "*", "system:storage" },
     { "pdh_winetest", "*", "system:wmi" },

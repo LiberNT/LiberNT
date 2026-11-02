@@ -11,6 +11,88 @@
 #pragma alloc_text(PAGE, NtfsFsdSetSecurity)
 #endif
 
+static
+NTSTATUS
+NtfsBuildDefaultSecurityDescriptor(
+    _Outptr_ PSECURITY_DESCRIPTOR *Descriptor)
+{
+    SECURITY_DESCRIPTOR Absolute;
+    ULONG AclBuffer[(sizeof(ACL) + 2 * (FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + SECURITY_MAX_SID_SIZE)) / sizeof(ULONG)];
+    PACL Dacl = (PACL)AclBuffer;
+    ULONG Length;
+    NTSTATUS Status;
+
+    Length = sizeof(ACL) +
+             FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + RtlLengthSid(SeExports->SeLocalSystemSid) +
+             FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + RtlLengthSid(SeExports->SeAliasAdminsSid);
+    Status = RtlCreateAcl(Dacl, Length, ACL_REVISION);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, FILE_ALL_ACCESS, SeExports->SeLocalSystemSid);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, FILE_ALL_ACCESS, SeExports->SeAliasAdminsSid);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = RtlCreateSecurityDescriptor(&Absolute, SECURITY_DESCRIPTOR_REVISION);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = RtlSetOwnerSecurityDescriptor(&Absolute, SeExports->SeAliasAdminsSid, FALSE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = RtlSetGroupSecurityDescriptor(&Absolute, SeExports->SeLocalSystemSid, FALSE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = RtlSetDaclSecurityDescriptor(&Absolute, TRUE, Dacl, FALSE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Length = 0;
+    Status = RtlAbsoluteToSelfRelativeSD(&Absolute, NULL, &Length);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+        return NT_SUCCESS(Status) ? STATUS_INTERNAL_ERROR : Status;
+
+    *Descriptor = ExAllocatePoolWithTag(PagedPool, Length, TAG_NTFS);
+    if (!*Descriptor)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = RtlAbsoluteToSelfRelativeSD(&Absolute, *Descriptor, &Length);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(*Descriptor, TAG_NTFS);
+        *Descriptor = NULL;
+    }
+    return Status;
+}
+
+NTSTATUS
+NtfsReadRecordSecurityDescriptor(
+    _In_ PNtfsFileRecord File,
+    _Outptr_ PSECURITY_DESCRIPTOR *Descriptor)
+{
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    *Descriptor = NULL;
+    Status = NtfsFileRecordReadSecurityDescriptor(File, NULL, &Length);
+    /* Windows 11 applies O:BAG:SYD:(A;;FA;;;SY)(A;;FA;;;BA) to a record whose descriptor cannot be found. */
+    if (Status == STATUS_NOT_FOUND)
+        return NtfsBuildDefaultSecurityDescriptor(Descriptor);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+        return Status;
+
+    *Descriptor = ExAllocatePoolWithTag(PagedPool, Length, TAG_NTFS);
+    if (!*Descriptor)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = NtfsFileRecordReadSecurityDescriptor(File, (PUCHAR)*Descriptor, &Length);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(*Descriptor, TAG_NTFS);
+        *Descriptor = NULL;
+    }
+    return Status;
+}
+
 NTSTATUS
 NtfsCheckRecordAccess(
     _In_ PNtfsFileRecord File,
@@ -21,8 +103,7 @@ NtfsCheckRecordAccess(
     _Out_ PACCESS_MASK GrantedAccess,
     _Out_ PPRIVILEGE_SET* Privileges)
 {
-    PUCHAR Descriptor;
-    ULONG DescriptorLength = 0;
+    PSECURITY_DESCRIPTOR Descriptor;
     NTSTATUS Status;
 
     *Privileges = NULL;
@@ -39,33 +120,19 @@ NtfsCheckRecordAccess(
         return STATUS_SUCCESS;
     }
 
-    Status = NtfsFileRecordReadSecurityDescriptor(File, NULL, &DescriptorLength);
-    if (Status == STATUS_NOT_FOUND)
-    {
-        *GrantedAccess = PreviouslyGrantedAccess | (DesiredAccess & ~MAXIMUM_ALLOWED);
-        if (DesiredAccess & MAXIMUM_ALLOWED)
-            *GrantedAccess |= FILE_ALL_ACCESS;
-        return STATUS_SUCCESS;
-    }
-    if (Status != STATUS_BUFFER_TOO_SMALL)
+    Status = NtfsReadRecordSecurityDescriptor(File, &Descriptor);
+    if (!NT_SUCCESS(Status))
         return Status;
-    Descriptor = ExAllocatePoolWithTag(PagedPool, DescriptorLength, TAG_NTFS);
-    if (!Descriptor)
-        return STATUS_INSUFFICIENT_RESOURCES;
-    Status = NtfsFileRecordReadSecurityDescriptor(File, Descriptor, &DescriptorLength);
-    if (NT_SUCCESS(Status))
-    {
-        SeAccessCheck(Descriptor,
-                       SubjectContext,
-                       FALSE,
-                       DesiredAccess,
-                       PreviouslyGrantedAccess,
-                       Privileges,
-                       IoGetFileObjectGenericMapping(),
-                       AccessMode,
-                       GrantedAccess,
-                       &Status);
-    }
+    SeAccessCheck(Descriptor,
+                  SubjectContext,
+                  FALSE,
+                  DesiredAccess,
+                  PreviouslyGrantedAccess,
+                  Privileges,
+                  IoGetFileObjectGenericMapping(),
+                  AccessMode,
+                  GrantedAccess,
+                  &Status);
     ExFreePoolWithTag(Descriptor, TAG_NTFS);
     return Status;
 }
@@ -79,34 +146,17 @@ NtfsQuerySecurityDescriptor(
     _Out_ PULONG ResultLength)
 {
     PSECURITY_DESCRIPTOR SecurityDescriptor;
-    PUCHAR RawDescriptor;
-    ULONG RawLength = 0;
+    PSECURITY_DESCRIPTOR RawDescriptor;
     ULONG QueryLength;
     NTSTATUS Status;
 
     *ResultLength = 0;
 
-    Status = NtfsFileRecordReadSecurityDescriptor(FileCB->FileRec,
-                                                  NULL,
-                                                  &RawLength);
-    if (Status == STATUS_NOT_FOUND)
-        return STATUS_NO_SECURITY_ON_OBJECT;
-    if (Status != STATUS_BUFFER_TOO_SMALL)
+    Status = NtfsReadRecordSecurityDescriptor(FileCB->FileRec, &RawDescriptor);
+    if (!NT_SUCCESS(Status))
         return Status;
 
-    RawDescriptor = (PUCHAR)ExAllocatePoolWithTag(PagedPool,
-                                                  RawLength,
-                                                  TAG_NTFS);
-    if (!RawDescriptor)
-        return STATUS_INSUFFICIENT_RESOURCES;
-
-    Status = NtfsFileRecordReadSecurityDescriptor(FileCB->FileRec,
-                                                  RawDescriptor,
-                                                  &RawLength);
-    if (!NT_SUCCESS(Status))
-        goto Done;
-
-    SecurityDescriptor = (PSECURITY_DESCRIPTOR)RawDescriptor;
+    SecurityDescriptor = RawDescriptor;
     QueryLength = OutputLength;
     Status = SeQuerySecurityDescriptorInfo(&SecurityInformation,
                                            (PSECURITY_DESCRIPTOR)Output,
@@ -116,7 +166,6 @@ NtfsQuerySecurityDescriptor(
     if (Status == STATUS_BUFFER_TOO_SMALL)
         Status = STATUS_BUFFER_OVERFLOW;
 
-Done:
     ExFreePoolWithTag(RawDescriptor, TAG_NTFS);
     return Status;
 }
@@ -219,11 +268,9 @@ NtfsSetSecurityDescriptor(
 {
     PSECURITY_DESCRIPTOR SecurityDescriptor = NULL;
     SECURITY_DESCRIPTOR NormalizedDescriptor;
-    SECURITY_SUBJECT_CONTEXT SubjectContext;
     PACL Sacl;
     BOOLEAN Present, Defaulted;
-    PUCHAR RawDescriptor = NULL;
-    ULONG RawLength = 0;
+    PSECURITY_DESCRIPTOR RawDescriptor;
     NTSTATUS Status;
 
     if (SecurityInformation & SACL_SECURITY_INFORMATION)
@@ -246,55 +293,20 @@ NtfsSetSecurityDescriptor(
         }
     }
 
-    Status = NtfsFileRecordReadSecurityDescriptor(FileCB->FileRec,
-                                                  NULL,
-                                                  &RawLength);
-    if (Status == STATUS_BUFFER_TOO_SMALL)
-    {
-        RawDescriptor = (PUCHAR)ExAllocatePoolWithTag(PagedPool,
-                                                      RawLength,
-                                                      TAG_NTFS);
-        if (!RawDescriptor)
-            return STATUS_INSUFFICIENT_RESOURCES;
+    Status = NtfsReadRecordSecurityDescriptor(FileCB->FileRec, &RawDescriptor);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
-        Status = NtfsFileRecordReadSecurityDescriptor(FileCB->FileRec,
-                                                      RawDescriptor,
-                                                      &RawLength);
-        if (!NT_SUCCESS(Status))
-            goto Done;
-
-        SecurityDescriptor = (PSECURITY_DESCRIPTOR)RawDescriptor;
-        Status = SeSetSecurityDescriptorInfo(NULL,
-                                             &SecurityInformation,
-                                             ModificationDescriptor,
-                                             &SecurityDescriptor,
-                                             PagedPool,
-                                             IoGetFileObjectGenericMapping());
-        if (!NT_SUCCESS(Status))
-        {
-            SecurityDescriptor = NULL;
-            goto Done;
-        }
-    }
-    else if (Status == STATUS_NOT_FOUND)
+    SecurityDescriptor = RawDescriptor;
+    Status = SeSetSecurityDescriptorInfo(NULL,
+                                         &SecurityInformation,
+                                         ModificationDescriptor,
+                                         &SecurityDescriptor,
+                                         PagedPool,
+                                         IoGetFileObjectGenericMapping());
+    if (!NT_SUCCESS(Status))
     {
-        SeCaptureSubjectContext(&SubjectContext);
-        Status = SeAssignSecurity(NULL,
-                                  ModificationDescriptor,
-                                  &SecurityDescriptor,
-                                  !!(NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY),
-                                  &SubjectContext,
-                                  IoGetFileObjectGenericMapping(),
-                                  PagedPool);
-        SeReleaseSubjectContext(&SubjectContext);
-        if (!NT_SUCCESS(Status))
-        {
-            SecurityDescriptor = NULL;
-            goto Done;
-        }
-    }
-    else
-    {
+        SecurityDescriptor = NULL;
         goto Done;
     }
 
@@ -303,10 +315,9 @@ NtfsSetSecurityDescriptor(
                                                  RtlLengthSecurityDescriptor(SecurityDescriptor));
 
 Done:
-    if (SecurityDescriptor && SecurityDescriptor != (PSECURITY_DESCRIPTOR)RawDescriptor)
+    if (SecurityDescriptor && SecurityDescriptor != RawDescriptor)
         ExFreePool(SecurityDescriptor);
-    if (RawDescriptor)
-        ExFreePoolWithTag(RawDescriptor, TAG_NTFS);
+    ExFreePoolWithTag(RawDescriptor, TAG_NTFS);
     return Status;
 }
 

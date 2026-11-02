@@ -461,6 +461,11 @@ NtfsCheckRecordAccess(
     _Out_ PACCESS_MASK GrantedAccess,
     _Out_ PPRIVILEGE_SET* Privileges);
 
+NTSTATUS
+NtfsReadRecordSecurityDescriptor(
+    _In_ PNtfsFileRecord File,
+    _Outptr_ PSECURITY_DESCRIPTOR *Descriptor);
+
 BOOLEAN
 NtfsSplitParentName(
     _In_ PUNICODE_STRING Name,
