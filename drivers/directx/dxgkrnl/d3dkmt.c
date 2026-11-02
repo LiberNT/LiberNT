@@ -10628,10 +10628,10 @@ DxgkProcessPriorityCleanup(
 
 /*
  * Correlates the engine's clock with the CPU's so a profiler can put GPU
- * timestamps on the same timeline as CPU ones.  Every engine in this tree is
- * executed by the CPU, so the two counters are the same counter -- reporting
- * one performance-counter reading for both is the honest answer, and it is what
- * the reference VM's display-only adapter reports too.
+ * timestamps on the same timeline as CPU ones.  A miniport that implements
+ * DxgkDdiCalibrateGpuClock owns its GPU clock; engines executed by the CPU
+ * share the performance counter, which is what the reference VM's
+ * display-only adapter reports too.
  */
 static NTSTATUS
 NTAPI
@@ -10639,6 +10639,8 @@ DxgkQueryClockCalibration(
     _Inout_ D3DKMT_QUERYCLOCKCALIBRATION *pData)
 {
     PDXGKRNL_ADAPTER Adapter;
+    PDXGKDDI_CALIBRATEGPUCLOCK CalibrateGpuClock;
+    DXGKARG_CALIBRATEGPUCLOCK Calibration;
     LARGE_INTEGER Counter;
     LARGE_INTEGER Frequency;
     NTSTATUS Status;
@@ -10654,6 +10656,28 @@ DxgkQueryClockCalibration(
     {
         DxgkDereferenceAdapter(Adapter);
         return STATUS_INVALID_PARAMETER;
+    }
+
+    CalibrateGpuClock = DXGK_CB_FULL(Adapter, DxgkDdiCalibrateGpuClock);
+    if (CalibrateGpuClock != NULL)
+    {
+        if (!DxgkAcquireKmdCall(Adapter))
+        {
+            DxgkDereferenceAdapter(Adapter);
+            return STATUS_DEVICE_NOT_READY;
+        }
+        RtlZeroMemory(&Calibration, sizeof(Calibration));
+        Status = CalibrateGpuClock(Adapter->MiniportDeviceContext, pData->NodeOrdinal, 0, &Calibration);
+        DxgkReleaseKmdCall(Adapter);
+        if (NT_SUCCESS(Status))
+        {
+            RtlZeroMemory(&pData->ClockData, sizeof(pData->ClockData));
+            pData->ClockData.GpuFrequency = Calibration.GpuFrequency;
+            pData->ClockData.GpuClockCounter = Calibration.GpuClockCounter;
+            pData->ClockData.CpuClockCounter = Calibration.CpuClockCounter;
+        }
+        DxgkDereferenceAdapter(Adapter);
+        return Status;
     }
 
     Counter = KeQueryPerformanceCounter(&Frequency);

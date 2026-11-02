@@ -287,6 +287,50 @@ static void Test_QueryClockCalibration_RealAdapter(void)
     CloseAdapter(hAdapter);
 }
 
+static void Test_QueryClockCalibration_RenderAdapter(void)
+{
+    D3DKMT_QUERYCLOCKCALIBRATION qcc;
+    LARGE_INTEGER Before, After;
+    D3DKMT_HANDLE hAdapter;
+    BOOL Software = FALSE;
+    NTSTATUS Status;
+
+    LOADFN(PFND3DKMT_QUERYCLOCKCALIBRATION, p, "D3DKMTQueryClockCalibration");
+
+    hAdapter = OpenRenderAdapterEx(NULL, &Software);
+    if (!hAdapter) { skip("No render adapter\n"); return; }
+    if (Software)
+    {
+        skip("Render adapter is a software adapter\n");
+        CloseAdapter(hAdapter);
+        return;
+    }
+
+    memset(&qcc, 0, sizeof(qcc));
+    qcc.hAdapter = hAdapter;
+    QueryPerformanceCounter(&Before);
+    Status = p(&qcc);
+    QueryPerformanceCounter(&After);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok(qcc.ClockData.GpuFrequency != 0, "GpuFrequency is zero\n");
+        ok(qcc.ClockData.CpuClockCounter >= (ULONGLONG)Before.QuadPart &&
+           qcc.ClockData.CpuClockCounter <= (ULONGLONG)After.QuadPart,
+           "CpuClockCounter %llu outside [%llu, %llu]\n",
+           (unsigned long long)qcc.ClockData.CpuClockCounter,
+           (unsigned long long)Before.QuadPart, (unsigned long long)After.QuadPart);
+        ok(qcc.ClockData.GpuClockCounter != qcc.ClockData.CpuClockCounter,
+           "GpuClockCounter is the CPU counter %llu\n",
+           (unsigned long long)qcc.ClockData.GpuClockCounter);
+        trace("ClockCalibration render node0: GpuFrequency=%llu GpuClock=%llu CpuClock=%llu\n",
+              (unsigned long long)qcc.ClockData.GpuFrequency,
+              (unsigned long long)qcc.ClockData.GpuClockCounter,
+              (unsigned long long)qcc.ClockData.CpuClockCounter);
+    }
+    CloseAdapter(hAdapter);
+}
+
 /* =====================================================================
  *  Stable power state (per the typedef this takes a single struct pointer
  *  carrying { hAdapter, Enabled }, not separate arguments)
@@ -1054,6 +1098,7 @@ START_TEST(misc)
     Test_QueryClockCalibration_NullArg();
     Test_QueryClockCalibration_BadHandle();
     Test_QueryClockCalibration_RealAdapter();
+    Test_QueryClockCalibration_RenderAdapter();
 
     /* Stable power state */
     Test_SetStablePowerState_NullArg();
