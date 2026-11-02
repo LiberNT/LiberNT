@@ -1620,7 +1620,7 @@ LX_SYSCALL(LxSysFchmodat)
 
 LX_SYSCALL(LxSysFchmodat2)
 {
-    if (Call->Args[3] & ~(ULONG64)(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+    if ((ULONG)Call->Args[3] & ~(ULONG)(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
         return -LX_EINVAL;
     return LxSetAttributesAt(Call, (LONG)Call->Args[0], Call->Args[1], (ULONG)Call->Args[3],
                              (ULONG)Call->Args[2] & 07777, MAXULONG, MAXULONG);
@@ -1673,7 +1673,7 @@ LX_SYSCALL(LxSysFchownat)
 {
     ULONG Uid = (ULONG)Call->Args[2], Gid = (ULONG)Call->Args[3];
 
-    if (Call->Args[4] & ~(ULONG64)(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+    if ((ULONG)Call->Args[4] & ~(ULONG)(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
         return -LX_EINVAL;
     if (!LxChownIds(Call->Process, &Uid, &Gid))
         return -LX_EINVAL;
