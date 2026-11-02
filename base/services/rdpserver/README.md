@@ -25,9 +25,18 @@ built in for NTLM):
   `-DRDPSERVER_PAYLOAD=/path/to/payload.zip`. Without either, the server is
   left out.
 
-The images then carry a single `%SystemRoot%\system32\rdpserver\rdpserver.exe`, its
-`rdpserver.ini`, an HKCU `Run` value that starts the server with the
-interactive desktop and the FreeRDP and OpenSSL licenses in `licenses`.
+The images then carry a single `%SystemRoot%\system32\rdpserver\rdpserver.exe`,
+its `rdpserver.ini`, the automatic `LiberNTRDPServer` service and the FreeRDP
+and OpenSSL licenses in `licenses`. The server is reachable from boot, before
+anyone logs on.
+
+The service (`rdpserver.exe /service <ini>`) runs in session 0, which has no
+interactive desktop. It starts the server as SYSTEM in the active console
+session and restarts it when it exits or when the console session changes.
+The server follows the desktop that receives input, so a client sees and
+drives the logon screen and the lock screen as well as the user's desktop.
+Started by hand with only the configuration path, the server runs in the
+caller's session and reaches the Winlogon desktop only when it runs as SYSTEM.
 
 ## Configuration
 
