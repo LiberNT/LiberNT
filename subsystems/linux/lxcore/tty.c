@@ -1133,6 +1133,31 @@ LxTtyCheckChange(
     return -LX_ERESTARTSYS;
 }
 
+static
+LONG
+LxTtyPgrpInSession(
+    _In_ PLX_INSTANCE Instance,
+    _In_ ULONG Pgid,
+    _In_ ULONG Sid)
+{
+    PLIST_ENTRY Entry;
+    LONG Result = -LX_ESRCH;
+
+    ExAcquireFastMutex(&LxProcessListLock);
+    for (Entry = LxProcessList.Flink; Entry != &LxProcessList; Entry = Entry->Flink)
+    {
+        PLX_PROCESS Process = CONTAINING_RECORD(Entry, LX_PROCESS, GlobalLink);
+
+        if ((Process->Instance == Instance) && (Process->Pgid == Pgid))
+        {
+            Result = (Process->Sid == Sid) ? 0 : -LX_EPERM;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&LxProcessListLock);
+    return Result;
+}
+
 LONG64
 LxTtyIoctl(
     _In_ PLX_PROCESS Process,
@@ -1223,6 +1248,8 @@ LxTtyIoctl(
             return 0;
 
         case LX_TIOCGPGRP:
+            if (Process->Tty != Tty)
+                return -LX_ENOTTY;
             LxTtyLock(Tty);
             Value = (LONG)Tty->ForegroundPgrp;
             LxTtyUnlock(Tty);
@@ -1233,20 +1260,32 @@ LxTtyIoctl(
             Result = LxCopyFromUser(&Value, Argument, sizeof(Value));
             if (Result != 0)
                 return Result;
-            if (Value <= 0)
+            if (Value < 0)
                 return -LX_EINVAL;
-            Value = (LONG)LxNrToGlobal(Process, (ULONG)Value);
+            LxTtyLock(Tty);
+            Result = ((Process->Tty != Tty) || (Tty->Session != Process->Sid)) ? -LX_ENOTTY : 0;
+            LxTtyUnlock(Tty);
+            if (Result != 0)
+                return Result;
+            Value = (Value != 0) ? (LONG)LxNrToGlobal(Process, (ULONG)Value) : 0;
             if (Value <= 0)
-                return -LX_EPERM;
+                return -LX_ESRCH;
+            Result = LxTtyPgrpInSession(Process->Instance, (ULONG)Value, Process->Sid);
+            if (Result != 0)
+                return Result;
             LxTtyLock(Tty);
             Tty->ForegroundPgrp = (ULONG)Value;
             LxTtyUnlock(Tty);
             return 0;
 
         case LX_TIOCGSID:
+            if (Process->Tty != Tty)
+                return -LX_ENOTTY;
             LxTtyLock(Tty);
             Value = (LONG)Tty->Session;
             LxTtyUnlock(Tty);
+            if (Value == 0)
+                return -LX_ENOTTY;
             Value = (LONG)LxGlobalToNr(Process, (ULONG)Value);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
@@ -1676,6 +1715,16 @@ LxPtmxFileIoctl(
             LxTtyLock(Tty);
             Value = (LONG)Tty->OutputLength;
             LxTtyUnlock(Tty);
+            return LxCopyToUser(Argument, &Value, sizeof(Value));
+
+        case LX_TIOCGPGRP:
+        case LX_TIOCGSID:
+            LxTtyLock(Tty);
+            Value = (LONG)((Request == LX_TIOCGSID) ? Tty->Session : Tty->ForegroundPgrp);
+            LxTtyUnlock(Tty);
+            if ((Value == 0) && (Request == LX_TIOCGSID))
+                return -LX_ENOTTY;
+            Value = (LONG)LxGlobalToNr(Thread->Process, (ULONG)Value);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_TIOCNOTTY:
