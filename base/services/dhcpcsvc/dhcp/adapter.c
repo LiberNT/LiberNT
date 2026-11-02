@@ -429,6 +429,7 @@ static VOID NETIOAPI_API_ AdapterAddressChanged(PVOID Context, PMIB_UNICASTIPADD
         return;
     ApiLock();
     apipa_address_changed(Row->InterfaceIndex);
+    ApiSignalLeaseChange();
     ApiUnlock();
     SetEvent(hAdapterStateChangedEvent);
 }

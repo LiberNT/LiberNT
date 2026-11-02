@@ -7,6 +7,7 @@
  */
 
 #include <rosdhcp.h>
+#include <netioapi.h>
 
 #define NDEBUG
 #include <reactos/debug.h>
@@ -37,6 +38,31 @@ VOID ApiSignalLeaseChange(VOID)
     WakeAllConditionVariable(&LeaseCondition);
 }
 
+static BOOL ApiLeaseAddressUsable(PDHCP_ADAPTER Adapter)
+{
+    struct client_lease *Lease = Adapter->DhclientState.active;
+    PMIB_UNICASTIPADDRESS_TABLE Table;
+    BOOL Usable = TRUE;
+    ULONG Address, Index;
+
+    if (Lease == NULL || Lease->address.len != sizeof(Address))
+        return TRUE;
+    memcpy(&Address, Lease->address.iabuf, sizeof(Address));
+    if (GetUnicastIpAddressTable(AF_INET, &Table) != NO_ERROR)
+        return TRUE;
+    for (Index = 0; Index < Table->NumEntries; Index++)
+    {
+        if (Table->Table[Index].InterfaceIndex == Adapter->IfMib.dwIndex &&
+            Table->Table[Index].Address.Ipv4.sin_addr.s_addr == Address)
+        {
+            Usable = Table->Table[Index].DadState == IpDadStatePreferred;
+            break;
+        }
+    }
+    FreeMibTable(Table);
+    return Usable;
+}
+
 DWORD ApiWaitForLease(const WCHAR *AdapterName)
 {
     ULONGLONG Deadline = GetTickCount64() + DHCP_ACQUIRE_TIMEOUT * 1000ULL;
@@ -48,7 +74,7 @@ DWORD ApiWaitForLease(const WCHAR *AdapterName)
         Adapter = AdapterFindName(AdapterName);
         if (Adapter == NULL || Adapter->DhclientState.state == S_STATIC)
             return ERROR_FILE_NOT_FOUND;
-        if (Adapter->DhclientState.state == S_BOUND)
+        if (Adapter->DhclientState.state == S_BOUND && ApiLeaseAddressUsable(Adapter))
             return ERROR_SUCCESS;
         Now = GetTickCount64();
         if (Now >= Deadline)

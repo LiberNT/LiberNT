@@ -9,7 +9,11 @@
 
 #define WIN32_NO_STATUS
 #include <winnls.h>
+#include <winsock2.h>
+#include <ws2ipdef.h>
 #include <iphlpapi.h>
+#include <netioapi.h>
+#include <stdio.h>
 
 typedef DWORD (WINAPI *PFN_DHCP_CAPI_INITIALIZE)(LPDWORD Version);
 typedef VOID (WINAPI *PFN_DHCP_CAPI_CLEANUP)(VOID);
@@ -55,6 +59,28 @@ QueryAdapterAddress(DWORD Index, PSTR Address, INT AddressSize)
     if (Info)
         HeapFree(GetProcessHeap(), 0, Info);
     return Found;
+}
+
+static BOOL
+IsAddressPreferred(DWORD Index, PCSTR Address)
+{
+    PMIB_UNICASTIPADDRESS_TABLE Table;
+    BOOL Preferred = FALSE;
+    CHAR Text[16];
+    PUCHAR Bytes;
+    ULONG Entry;
+
+    if (GetUnicastIpAddressTable(AF_INET, &Table) != NO_ERROR)
+        return FALSE;
+    for (Entry = 0; Entry < Table->NumEntries; Entry++)
+    {
+        Bytes = (PUCHAR)&Table->Table[Entry].Address.Ipv4.sin_addr;
+        sprintf(Text, "%u.%u.%u.%u", Bytes[0], Bytes[1], Bytes[2], Bytes[3]);
+        if (Table->Table[Entry].InterfaceIndex == Index && !strcmp(Text, Address))
+            Preferred = Table->Table[Entry].DadState == IpDadStatePreferred;
+    }
+    FreeMibTable(Table);
+    return Preferred;
 }
 
 static BOOL
@@ -127,12 +153,14 @@ START_TEST(DhcpAcquireParameters)
     ok(QueryAdapterAddress(Index, Address, sizeof(Address)), "Adapter %lu is gone 3 s after release\n", Index);
     ok(strcmp(Address, "0.0.0.0") == 0, "Address 3 s after release is %s\n", Address);
 
+    trace("Acquiring a lease for adapter %lu\n", Index);
     Start = GetTickCount64();
     Status = pDhcpAcquireParameters(Name);
     ok(Status == ERROR_SUCCESS, "DhcpAcquireParameters returned %lu\n", Status);
     ok(QueryAdapterAddress(Index, Address, sizeof(Address)), "Adapter %lu is gone after acquire\n", Index);
     ok(IsLeaseAddress(Address), "Address when DhcpAcquireParameters returned after %lu ms is %s\n",
        (ULONG)(GetTickCount64() - Start), Address);
+    ok(IsAddressPreferred(Index, Address), "Address %s is not preferred when DhcpAcquireParameters returned\n", Address);
     trace("DhcpAcquireParameters took %lu ms, address %s\n", (ULONG)(GetTickCount64() - Start), Address);
 
     pDhcpCApiCleanup();
