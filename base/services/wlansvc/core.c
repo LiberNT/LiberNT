@@ -49,7 +49,7 @@ WlanSvcSynthesizeGuid(PNWIFI_INTERFACE_REF Ref, GUID *pGuid)
 }
 
 /* Pull the live link state from nwifi into an interface (lock held). */
-static VOID
+VOID
 WlanSvcSeedLinkState(PWLANSVC_INTERFACE Iface)
 {
     NWIFI_LINK_STATE ls;
