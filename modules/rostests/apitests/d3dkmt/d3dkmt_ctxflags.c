@@ -54,8 +54,8 @@ static const struct
     { 0x00000004, "DisableGpuTimeout", CtxFlagsAccepted },
     { 0x00000008, "SynchronizationOnly", CtxFlagsAccepted },
     { 0x00000010, "HwQueueSupported", CtxFlagsHwQueue },
-    { 0x00000020, "NoKmdAccess", CtxFlagsAccepted },
-    { 0x00000040, "TestContext", CtxFlagsAccepted },
+    { 0x00000020, "NoKmdAccess", CtxFlagsInvalid },
+    { 0x00000040, "TestContext", CtxFlagsInvalid },
     { 0x00000080, "Reserved7", CtxFlagsInvalid },
     { 0x80000000, "Reserved31", CtxFlagsInvalid },
 };
@@ -318,8 +318,8 @@ CtxFlagsAdapter(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, LUID Luid, BOOL Softw
         if (CtxFlagBits[Index].Expect == CtxFlagsAccepted)
             ok(NT_SUCCESS(Status), "%s context refused (0x%08lx)\n", CtxFlagBits[Index].Name, Status);
         else if (CtxFlagBits[Index].Expect == CtxFlagsInvalid)
-            ok(Status == STATUS_INVALID_PARAMETER, "Reserved context flag 0x%08x returned 0x%08lx\n",
-               CtxFlagBits[Index].Value, Status);
+            ok(Status == STATUS_INVALID_PARAMETER, "%s context flag 0x%08x returned 0x%08lx\n",
+               CtxFlagBits[Index].Name, CtxFlagBits[Index].Value, Status);
         else
             ok(NT_SUCCESS(Status) || Status == STATUS_UNSUCCESSFUL, "%s context returned 0x%08lx\n",
                CtxFlagBits[Index].Name, Status);
@@ -336,7 +336,6 @@ CtxFlagsAdapter(CTXFLAGS_API *Api, D3DKMT_HANDLE hAdapter, LUID Luid, BOOL Softw
         CtxFlagsDestroy(Api, hContext);
     }
     CtxFlagsSyncContext(Api, hDevice, 0x00000008, "SynchronizationOnly", 0, Control);
-    CtxFlagsSyncContext(Api, hDevice, 0x00000020, "NoKmdAccess", 0, Control);
 
 Cleanup:
     if (Reserve.VirtualAddress != 0)

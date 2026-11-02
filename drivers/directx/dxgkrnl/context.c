@@ -2896,6 +2896,9 @@ DxgkCreateContextVirtual(
 
     if (pCreateContext == NULL || (pCreateContext->Flags.Value & ~RXGK_CREATECONTEXTVIRTUAL_SUPPORTED_FLAGS) != 0)
         return STATUS_INVALID_PARAMETER;
+    /* TODO: NoKmdAccess and TestContext contexts; Windows 11 refuses both from user mode in its default configuration */
+    if (pCreateContext->Flags.NoKmdAccess || pCreateContext->Flags.TestContext)
+        return STATUS_INVALID_PARAMETER;
 
     Status = DxgkReferenceOwnedDeviceByHandle(pCreateContext->hDevice, PsGetCurrentProcess(), &Adapter, &Device);
     if (!NT_SUCCESS(Status))
@@ -2966,12 +2969,6 @@ DxgkCreateContextVirtual(
     CreateContextArg.Flags.Value = 0;
     CreateContextArg.Flags.VirtualAddressing = 1;
     CreateContextArg.Flags.GdiContext = Device->GdiDevice;
-    if (pCreateContext->Flags.TestContext &&
-        DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version,
-                                            DXGK_CAPS_CORE_LEVEL_WDDM_3_2))
-    {
-        CreateContextArg.Flags.TestContext = 1;
-    }
     CreateContextArg.pPrivateDriverData = pCreateContext->pPrivateDriverData;
     CreateContextArg.PrivateDriverDataSize = pCreateContext->PrivateDriverDataSize;
 
