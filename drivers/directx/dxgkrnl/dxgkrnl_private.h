@@ -1636,6 +1636,12 @@ struct _DXGKRNL_DEVICE
     LIST_ENTRY                  OverlayListHead;
 
     FAST_MUTEX                  DeviceMutex;
+
+    /* Open of the window surface this device last Blt-presented to by window; protected by WindowBltMutex. */
+    KMUTEX                      WindowBltMutex;
+    ULONG                       WindowBltShare;
+    D3DKMT_HANDLE               WindowBltResource;
+    D3DKMT_HANDLE               WindowBltAllocation;
 };
 
 /* A published overlay owns its device and displayed-allocation references. */
@@ -3773,6 +3779,16 @@ DxgkPublishRedirectionPresent(
 
 NTSTATUS
 DxgkQueryWindowPresentState(_In_ ULONG_PTR WindowHandle);
+
+NTSTATUS
+DxgkIssueWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target);
+
+VOID
+DxgkCancelWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _In_ ULONGLONG UpdateId);
 
 VOID
 DxgkRequestCompositionRefresh(VOID);

@@ -3957,6 +3957,134 @@ IntCompositionUpdateDxPlacement(
     return TRUE;
 }
 
+static NTSTATUS
+IntCompositionIssueGdiUpdate(
+    _Inout_ REDIRECT_ENTRY *Entry,
+    _In_ PWND TopWnd,
+    _In_ BOOLEAN SupersedeUnadmitted,
+    _Out_ PULONGLONG UpdateId)
+{
+    if (IntCompositionEnsureSurface(TopWnd, &Entry->Redirect) == NULL ||
+        Entry->Redirect.BackGlobalShare == 0)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    /* An issued update that never reached the GPU only versions the surface; a newer present replaces it. */
+    if (SupersedeUnadmitted &&
+        Entry->Redirect.GdiIssuedUpdateId > Entry->Redirect.GdiConsumedUpdateId &&
+        Entry->Redirect.GdiAdmittedUpdateId != Entry->Redirect.GdiIssuedUpdateId &&
+        Entry->Redirect.GdiPublishedUpdateId != Entry->Redirect.GdiIssuedUpdateId)
+    {
+        Entry->Redirect.GdiConsumedUpdateId = Entry->Redirect.GdiIssuedUpdateId;
+    }
+    if (Entry->Redirect.GdiIssuedUpdateId >
+        Entry->Redirect.GdiConsumedUpdateId &&
+        Entry->Redirect.GdiPublishedUpdateId !=
+        Entry->Redirect.GdiIssuedUpdateId)
+    {
+        return STATUS_DEVICE_BUSY;
+    }
+
+    if (++g_GdiUpdateSequence == 0)
+        ++g_GdiUpdateSequence;
+    Entry->Redirect.GdiIssuedUpdateId = g_GdiUpdateSequence;
+    Entry->Redirect.GdiAdmittedUpdateId =
+        Entry->Redirect.GdiConsumedUpdateId;
+    Entry->Redirect.GdiPublishedUpdateId =
+        Entry->Redirect.GdiConsumedUpdateId;
+    *UpdateId = g_GdiUpdateSequence;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+IntCompositionCancelGdiUpdate(
+    _Inout_ REDIRECT_ENTRY *Entry,
+    _In_ ULONGLONG UpdateId)
+{
+    if (UpdateId == 0 ||
+        UpdateId != Entry->Redirect.GdiIssuedUpdateId ||
+        UpdateId <= Entry->Redirect.GdiConsumedUpdateId)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (Entry->Redirect.GdiAdmittedUpdateId == UpdateId)
+        return STATUS_DEVICE_BUSY;
+    Entry->Redirect.GdiConsumedUpdateId = UpdateId;
+    return STATUS_SUCCESS;
+}
+
+static REDIRECT_ENTRY *
+IntCompositionFindOwnedWindow(
+    _In_ HWND hWnd,
+    _Out_ PWND *SourceWnd,
+    _Out_ PWND *TopWnd)
+{
+    PPROCESSINFO ProcessInfo = PsGetCurrentProcessWin32Process();
+
+    *SourceWnd = ValidateHwndNoErr(hWnd);
+    *TopWnd = IntCompositionTopLevel(*SourceWnd);
+    if (*SourceWnd == NULL || *TopWnd == NULL || (*SourceWnd)->head.pti == NULL ||
+        ProcessInfo == NULL || (*SourceWnd)->head.pti->ppi != ProcessInfo)
+    {
+        return NULL;
+    }
+    return IntCompositionFind(*TopWnd);
+}
+
+NTSTATUS
+IntCompositionIssueWindowBltTarget(
+    _In_ HWND hWnd,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target)
+{
+    REDIRECT_ENTRY *Entry;
+    PWND SourceWnd;
+    PWND TopWnd;
+    RECTL Client;
+    NTSTATUS Status;
+
+    if (!gbCompositionEnabled || !g_DwmAttached)
+        return STATUS_DEVICE_NOT_READY;
+    Entry = IntCompositionFindOwnedWindow(hWnd, &SourceWnd, &TopWnd);
+    if (Entry == NULL)
+        return STATUS_NOT_FOUND;
+
+    Status = IntCompositionIssueGdiUpdate(Entry, TopWnd, TRUE, &Target->UpdateId);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Client.left = max(SourceWnd->rcClient.left - TopWnd->rcWindow.left, Entry->Redirect.rcClient.left);
+    Client.top = max(SourceWnd->rcClient.top - TopWnd->rcWindow.top, Entry->Redirect.rcClient.top);
+    Client.right = min(SourceWnd->rcClient.right - TopWnd->rcWindow.left, Entry->Redirect.rcClient.right);
+    Client.bottom = min(SourceWnd->rcClient.bottom - TopWnd->rcWindow.top, Entry->Redirect.rcClient.bottom);
+    if (Client.right <= Client.left || Client.bottom <= Client.top)
+    {
+        (VOID)IntCompositionCancelGdiUpdate(Entry, Target->UpdateId);
+        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+    }
+
+    Target->GlobalShare = Entry->Redirect.BackGlobalShare;
+    Target->ClientRect.left = Client.left;
+    Target->ClientRect.top = Client.top;
+    Target->ClientRect.right = Client.right;
+    Target->ClientRect.bottom = Client.bottom;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+IntCompositionCancelWindowBltTarget(
+    _In_ HWND hWnd,
+    _In_ ULONGLONG UpdateId)
+{
+    REDIRECT_ENTRY *Entry;
+    PWND SourceWnd;
+    PWND TopWnd;
+
+    Entry = IntCompositionFindOwnedWindow(hWnd, &SourceWnd, &TopWnd);
+    if (Entry == NULL)
+        return STATUS_NOT_FOUND;
+    return IntCompositionCancelGdiUpdate(Entry, UpdateId);
+}
+
 NTSTATUS
 IntCompositionDwmDxSurface(_In_ PVOID pUser)
 {
@@ -4342,31 +4470,13 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             break;
 
         case DWM_DX_SURFACE_ISSUE_GDI:
-            if (IntCompositionEnsureSurface(TopWnd, &Entry->Redirect) == NULL ||
-                Entry->Redirect.BackGlobalShare == 0)
-            {
-                return STATUS_NOT_SUPPORTED;
-            }
-            if (Entry->Redirect.GdiIssuedUpdateId >
-                Entry->Redirect.GdiConsumedUpdateId &&
-                Entry->Redirect.GdiPublishedUpdateId !=
-                Entry->Redirect.GdiIssuedUpdateId)
-            {
-                return STATUS_DEVICE_BUSY;
-            }
-
-            if (++g_GdiUpdateSequence == 0)
-                ++g_GdiUpdateSequence;
-            Entry->Redirect.GdiIssuedUpdateId = g_GdiUpdateSequence;
-            Entry->Redirect.GdiAdmittedUpdateId =
-                Entry->Redirect.GdiConsumedUpdateId;
-            Entry->Redirect.GdiPublishedUpdateId =
-                Entry->Redirect.GdiConsumedUpdateId;
+            Status = IntCompositionIssueGdiUpdate(Entry, TopWnd, FALSE, &Request.UpdateId);
+            if (!NT_SUCCESS(Status))
+                return Status;
 
             Request.GlobalShare = Entry->Redirect.BackGlobalShare;
             Request.SurfaceId = (ULONG)(Entry - g_Redirects);
             Request.Generation = Entry->Redirect.BackGeneration;
-            Request.UpdateId = g_GdiUpdateSequence;
             Request.Info.Magic = DWM_DX_SURFACE_INFO_MAGIC;
             Request.Info.Version = DWM_DX_SURFACE_INFO_VERSION;
             Request.Info.Width = (ULONG)Entry->Redirect.cx;
@@ -4378,15 +4488,9 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             break;
 
         case DWM_DX_SURFACE_CANCEL_GDI:
-            if (Request.UpdateId == 0 ||
-                Request.UpdateId != Entry->Redirect.GdiIssuedUpdateId ||
-                Request.UpdateId <= Entry->Redirect.GdiConsumedUpdateId)
-            {
-                return STATUS_INVALID_PARAMETER;
-            }
-            if (Entry->Redirect.GdiAdmittedUpdateId == Request.UpdateId)
-                return STATUS_DEVICE_BUSY;
-            Entry->Redirect.GdiConsumedUpdateId = Request.UpdateId;
+            Status = IntCompositionCancelGdiUpdate(Entry, Request.UpdateId);
+            if (!NT_SUCCESS(Status))
+                return Status;
             break;
 
         case DWM_DX_SURFACE_UPDATE_GDI:

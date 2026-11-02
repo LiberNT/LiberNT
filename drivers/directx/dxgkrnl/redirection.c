@@ -21,6 +21,8 @@ ExfReleasePushLockShared(_Inout_ PEX_PUSH_LOCK PushLock);
 
 #define DXGKP_REDIRECTION_SYNC_MAX_SURFACES 1024u
 #define DXGKP_REDIRECTION_SYNC_TIMEOUT_MS 2000u
+#define DXGKP_WINDOW_BLT_ISSUE_TIMEOUT_MS 1000u
+#define DXGKP_WINDOW_BLT_RETRY_MS 10u
 
 typedef struct _DXGKP_REDIRECTION_SYNC_SNAPSHOT
 {
@@ -33,6 +35,7 @@ typedef struct _DXGKP_REDIRECTION_SYNC_SNAPSHOT
 
 static EX_PUSH_LOCK DxgkpWin32kCddInterfaceLock;
 static DXGKRNL_WIN32K_CDD_INTERFACE DxgkpWin32kCddInterface;
+static KEVENT DxgkpWindowBltRetiredEvent;
 
 static BOOLEAN
 DxgkpRedirectionFenceReached(
@@ -49,6 +52,7 @@ DxgkRedirectionInitialize(VOID)
                   sizeof(DxgkpWin32kCddInterfaceLock));
     RtlZeroMemory(&DxgkpWin32kCddInterface,
                   sizeof(DxgkpWin32kCddInterface));
+    KeInitializeEvent(&DxgkpWindowBltRetiredEvent, NotificationEvent, FALSE);
 }
 
 NTSTATUS
@@ -91,6 +95,12 @@ DxgkRegisterWin32kCddInterface(
     }
     else if (Interface->Version ==
              DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_6)
+    {
+        RequiredSize = FIELD_OFFSET(DXGKRNL_WIN32K_CDD_INTERFACE,
+                                    IssueWindowBltTarget);
+    }
+    else if (Interface->Version ==
+             DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_7)
     {
         RequiredSize = sizeof(*Interface);
     }
@@ -235,6 +245,60 @@ DxgkQueryWindowPresentState(_In_ ULONG_PTR WindowHandle)
     return Callback != NULL ? Callback(WindowHandle) : STATUS_NOT_SUPPORTED;
 }
 
+NTSTATUS
+DxgkIssueWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target)
+{
+    PDXGKENG_ISSUE_WINDOW_BLT_TARGET Callback;
+    LARGE_INTEGER Interval;
+    ULONGLONG Start100ns;
+    NTSTATUS Status;
+
+    KeEnterCriticalRegion();
+    ExfAcquirePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    Callback = DxgkpWin32kCddInterface.IssueWindowBltTarget;
+    ExfReleasePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    KeLeaveCriticalRegion();
+
+    if (Callback == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    /* A window takes one update at a time; a Blt behind one still in flight waits for it to retire. */
+    Start100ns = KeQueryInterruptTime();
+    Interval.QuadPart = -(LONGLONG)DXGKP_WINDOW_BLT_RETRY_MS * 10000;
+    for (;;)
+    {
+        KeClearEvent(&DxgkpWindowBltRetiredEvent);
+        RtlZeroMemory(Target, sizeof(*Target));
+        Target->Size = sizeof(*Target);
+        Status = Callback(WindowHandle, Target);
+        if (Status != STATUS_DEVICE_BUSY ||
+            KeQueryInterruptTime() - Start100ns >= (ULONGLONG)DXGKP_WINDOW_BLT_ISSUE_TIMEOUT_MS * 10000)
+        {
+            return Status;
+        }
+        (VOID)KeWaitForSingleObject(&DxgkpWindowBltRetiredEvent, Executive, KernelMode, FALSE, &Interval);
+    }
+}
+
+VOID
+DxgkCancelWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _In_ ULONGLONG UpdateId)
+{
+    PDXGKENG_CANCEL_WINDOW_BLT_TARGET Callback;
+
+    KeEnterCriticalRegion();
+    ExfAcquirePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    Callback = DxgkpWin32kCddInterface.CancelWindowBltTarget;
+    ExfReleasePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    KeLeaveCriticalRegion();
+
+    if (Callback != NULL)
+        (VOID)Callback(WindowHandle, UpdateId);
+}
+
 static WORK_QUEUE_ITEM DxgkpCompositionRefreshWorkItem;
 static volatile LONG DxgkpCompositionRefreshQueued;
 
@@ -361,6 +425,7 @@ DxgkpRedirectedBltWorker(
     {
         DxgkCancelRedirectedBltPresent(&Work->Present);
     }
+    KeSetEvent(&DxgkpWindowBltRetiredEvent, IO_NO_INCREMENT, FALSE);
     ObDereferenceObject(Work->Present.OwnerProcess);
     ExFreePoolWithTag(Work, TAG_DXGK_PRESENT);
 }

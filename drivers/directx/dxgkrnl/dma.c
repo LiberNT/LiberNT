@@ -799,6 +799,163 @@ DxgkpCaptureRedirectedBltPresent(
     return DxgkAdmitRedirectedBltPresent(RedirectedPresent);
 }
 
+static VOID
+DxgkpCloseWindowBltShare(
+    _Inout_ PDXGKRNL_DEVICE Device)
+{
+    D3DKMT_DESTROYALLOCATION Destroy;
+
+    if (Device->WindowBltResource != 0)
+    {
+        RtlZeroMemory(&Destroy, sizeof(Destroy));
+        Destroy.hDevice = Device->Handle;
+        Destroy.hResource = Device->WindowBltResource;
+        (VOID)DxgkDestroyAllocation(&Destroy);
+    }
+    Device->WindowBltShare = 0;
+    Device->WindowBltResource = 0;
+    Device->WindowBltAllocation = 0;
+}
+
+static NTSTATUS
+DxgkpOpenWindowBltShare(
+    _Inout_ PDXGKRNL_DEVICE Device,
+    _In_ ULONG GlobalShare)
+{
+    D3DKMT_OPENRESOURCE Open;
+    D3DDDI_OPENALLOCATIONINFO Info;
+    PVOID RuntimeData = NULL;
+    PVOID ResourceData = NULL;
+    PVOID TotalData = NULL;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Open, sizeof(Open));
+    Open.hDevice = Device->Handle;
+    Open.hGlobalShare = GlobalShare;
+    Status = DxgkOpenResource(&Open);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+        return NT_SUCCESS(Status) ? STATUS_INVALID_PARAMETER : Status;
+    if (Open.NumAllocations != 1)
+        return STATUS_NOT_SUPPORTED;
+
+    if (Open.PrivateRuntimeDataSize != 0)
+        RuntimeData = ExAllocatePoolWithTag(NonPagedPool, Open.PrivateRuntimeDataSize, TAG_DXGK_PRESENT);
+    if (Open.ResourcePrivateDriverDataSize != 0)
+        ResourceData = ExAllocatePoolWithTag(NonPagedPool, Open.ResourcePrivateDriverDataSize, TAG_DXGK_PRESENT);
+    if (Open.TotalPrivateDriverDataBufferSize != 0)
+        TotalData = ExAllocatePoolWithTag(NonPagedPool, Open.TotalPrivateDriverDataBufferSize, TAG_DXGK_PRESENT);
+    if ((Open.PrivateRuntimeDataSize != 0 && RuntimeData == NULL) ||
+        (Open.ResourcePrivateDriverDataSize != 0 && ResourceData == NULL) ||
+        (Open.TotalPrivateDriverDataBufferSize != 0 && TotalData == NULL))
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    else
+    {
+        RtlZeroMemory(&Info, sizeof(Info));
+        Open.pOpenAllocationInfo = &Info;
+        Open.pPrivateRuntimeData = RuntimeData;
+        Open.pResourcePrivateDriverData = ResourceData;
+        Open.pTotalPrivateDriverDataBuffer = TotalData;
+        Status = DxgkOpenResource(&Open);
+        if (NT_SUCCESS(Status))
+        {
+            Device->WindowBltShare = GlobalShare;
+            Device->WindowBltResource = Open.hResource;
+            Device->WindowBltAllocation = Info.hAllocation;
+        }
+    }
+
+    if (TotalData != NULL)
+        ExFreePoolWithTag(TotalData, TAG_DXGK_PRESENT);
+    if (ResourceData != NULL)
+        ExFreePoolWithTag(ResourceData, TAG_DXGK_PRESENT);
+    if (RuntimeData != NULL)
+        ExFreePoolWithTag(RuntimeData, TAG_DXGK_PRESENT);
+    return Status;
+}
+
+/* A Blt with hDestination 0 (destination unknown) presents into the window's GDI redirection surface. */
+static NTSTATUS
+DxgkpResolveWindowBltDestination(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ const D3DKMT_PRESENT *Present,
+    _Inout_ PDXGKRNL_PRESENT_ENTRY Entry,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target)
+{
+    RECT Destination;
+    BOOLEAN Visible;
+    NTSTATUS Status;
+
+    Status = DxgkIssueWindowBltTarget(Entry->Window, Target);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Destination = Target->ClientRect;
+    if (Present->Flags.DstRectValid)
+    {
+        Destination.left = max(Target->ClientRect.left + Present->DstRect.left, Target->ClientRect.left);
+        Destination.top = max(Target->ClientRect.top + Present->DstRect.top, Target->ClientRect.top);
+        Destination.right = min(Target->ClientRect.left + Present->DstRect.right, Target->ClientRect.right);
+        Destination.bottom = min(Target->ClientRect.top + Present->DstRect.bottom, Target->ClientRect.bottom);
+    }
+    Visible = Destination.right > Destination.left && Destination.bottom > Destination.top;
+    if (!Visible)
+        Status = STATUS_GRAPHICS_PRESENT_OCCLUDED;
+    if (Visible)
+    {
+        /* FIXME: the Blt targets the CPU-visible staging redirection surface, which is only a copy-only GDI bitblt destination */
+        KeWaitForSingleObject(&Device->WindowBltMutex, Executive, KernelMode, FALSE, NULL);
+        if (Device->WindowBltResource == 0 || Device->WindowBltShare != Target->GlobalShare)
+        {
+            DxgkpCloseWindowBltShare(Device);
+            Status = DxgkpOpenWindowBltShare(Device, Target->GlobalShare);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            Entry->hDestination = Device->WindowBltAllocation;
+            Status = DxgkVidMmReferenceAllocation((HANDLE)(ULONG_PTR)Entry->hDestination, Adapter, Device,
+                                                  &Entry->DestinationAllocation);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            Status = DxgkVidMmReferenceOpenBinding((HANDLE)(ULONG_PTR)Entry->hDestination, Adapter, Device,
+                                                   &Entry->DestinationOpenBindingHandle,
+                                                   &Entry->DestinationOpenBindingReference);
+            if (Status == STATUS_NOT_FOUND)
+                Status = STATUS_SUCCESS;
+        }
+        KeReleaseMutex(&Device->WindowBltMutex, FALSE);
+    }
+
+    if (NT_SUCCESS(Status))
+        Entry->DstRect = Destination;
+    else
+        DxgkCancelWindowBltTarget(Entry->Window, Target->UpdateId);
+    return Status;
+}
+
+static NTSTATUS
+DxgkpAdmitWindowRedirectedBlt(
+    _In_ ULONG_PTR Window,
+    _In_ ULONG_PTR SurfaceHandle,
+    _In_ PEPROCESS OwnerProcess,
+    _In_ const DXGKRNL_WINDOW_BLT_TARGET *Target,
+    _In_ const RECT *DestinationRect,
+    _Out_ DXGKRNL_REDIRECTED_BLT_PRESENT *RedirectedPresent)
+{
+    RtlZeroMemory(RedirectedPresent, sizeof(*RedirectedPresent));
+    RedirectedPresent->Size = sizeof(*RedirectedPresent);
+    RedirectedPresent->SurfaceHandle = SurfaceHandle;
+    RedirectedPresent->WindowHandle = Window;
+    RedirectedPresent->OwnerProcess = OwnerProcess;
+    RedirectedPresent->GlobalShare = Target->GlobalShare;
+    RedirectedPresent->UpdateId = Target->UpdateId;
+    RedirectedPresent->DestinationRect = *DestinationRect;
+    return DxgkAdmitRedirectedBltPresent(RedirectedPresent);
+}
+
 /*
  * Overlay planes ride a compositor flip: each is referenced for the queued
  * entry, and the miniport must accept the whole configuration now, so that
@@ -892,6 +1049,8 @@ DxgkpPresent(
     ULONG64                  PresentId;
     NTSTATUS                 Status;
     BOOLEAN                  DestinationIsInternal = FALSE;
+    BOOLEAN                  WindowTargetIssued = FALSE;
+    DXGKRNL_WINDOW_BLT_TARGET WindowTarget;
 
     PAGED_CODE();
 
@@ -1024,7 +1183,8 @@ DxgkpPresent(
     /*
      * KMT rectangles are in source space, while DxgkDdiPresent consumes
      * destination-space rectangles.  Snapshot them now because this present
-     * may remain queued after the caller's buffer goes away.
+     * may remain queued after the caller's buffer goes away; they are mapped
+     * once the destination rectangle is final.
      */
     if (pPresent->SubRectCnt != 0)
     {
@@ -1070,31 +1230,6 @@ DxgkpPresent(
             Status = _SEH2_GetExceptionCode();
         }
         _SEH2_END;
-        if (!NT_SUCCESS(Status))
-        {
-            DxgkpReleasePresentEntry(&Entry);
-            return Status;
-        }
-
-        if (Entry.Type == DxgkPresentTypeColorFill)
-        {
-            Status = DxgkPresentCoreCopyDestinationSubRects(
-                         &Entry.DstRect,
-                         Entry.DstSubRects,
-                         pPresent->SubRectCnt,
-                         Entry.DstSubRects,
-                         pPresent->SubRectCnt);
-        }
-        else
-        {
-            Status = DxgkPresentCoreMapSourceSubRects(
-                         &Entry.SrcRect,
-                         &Entry.DstRect,
-                         Entry.DstSubRects,
-                         pPresent->SubRectCnt,
-                         Entry.DstSubRects,
-                         pPresent->SubRectCnt);
-        }
         if (!NT_SUCCESS(Status))
         {
             DxgkpReleasePresentEntry(&Entry);
@@ -1216,53 +1351,105 @@ DxgkpPresent(
         if (!Adapter->MiniportContext->IsDisplayOnlyDriver &&
             DXGK_CB_FULL(Adapter, DxgkDdiPresent) != NULL)
         {
+            RtlZeroMemory(&WindowTarget, sizeof(WindowTarget));
+            Status = DxgkpResolveWindowBltDestination(Adapter, Device, pPresent, &Entry, &WindowTarget);
+            if (!NT_SUCCESS(Status))
+            {
+                DxgkpReleasePresentEntry(&Entry);
+                /* TODO: present into a window whose composition surface lives on another adapter */
+                if (Status == STATUS_DEVICE_NOT_READY || Status == STATUS_NOT_SUPPORTED ||
+                    Status == STATUS_NOT_FOUND || Status == STATUS_INVALID_HANDLE)
+                {
+                    return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+                }
+                return Status;
+            }
+            WindowTargetIssued = TRUE;
+        }
+    }
+
+    if (Entry.DstSubRectCount != 0)
+    {
+        if (Entry.Type == DxgkPresentTypeColorFill)
+        {
+            Status = DxgkPresentCoreCopyDestinationSubRects(
+                         &Entry.DstRect,
+                         Entry.DstSubRects,
+                         Entry.DstSubRectCount,
+                         Entry.DstSubRects,
+                         Entry.DstSubRectCount);
+        }
+        else
+        {
+            Status = DxgkPresentCoreMapSourceSubRects(
+                         &Entry.SrcRect,
+                         &Entry.DstRect,
+                         Entry.DstSubRects,
+                         Entry.DstSubRectCount,
+                         Entry.DstSubRects,
+                         Entry.DstSubRectCount);
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            if (WindowTargetIssued)
+                DxgkCancelWindowBltTarget(Entry.Window, WindowTarget.UpdateId);
             DxgkpReleasePresentEntry(&Entry);
-            return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+            return Status;
         }
     }
 
     if (Entry.DestinationAllocation != NULL)
     {
         ULONG_PTR SurfaceHandle;
+        D3DKMT_HANDLE RedirectedShare = 0;
 
         SurfaceHandle = (ULONG_PTR)InterlockedCompareExchangePointer(
             (PVOID volatile *)&Entry.DestinationAllocation
                                   ->RedirectionSurfaceHandle,
             NULL, NULL);
+        if (SurfaceHandle != 0 && Entry.DestinationAllocation->Resource != NULL)
+            RedirectedShare = Entry.DestinationAllocation->Resource->GlobalShareHandle;
         if (SurfaceHandle != 0)
         {
-            PDXGKVMM_RESOURCE Resource =
-                Entry.DestinationAllocation->Resource;
-
-            if (Entry.Type != DxgkPresentTypeBlt ||
-                Resource == NULL || Resource->GlobalShareHandle == 0)
+            if (Entry.Type != DxgkPresentTypeBlt || RedirectedShare == 0 ||
+                (WindowTargetIssued && RedirectedShare != WindowTarget.GlobalShare))
             {
-                DxgkpReleasePresentEntry(&Entry);
-                return STATUS_INVALID_PARAMETER;
+                Status = STATUS_INVALID_PARAMETER;
             }
-
-            Entry.RedirectedBltWork = DxgkAllocateRedirectedBltWork();
-            if (Entry.RedirectedBltWork == NULL)
+            else
             {
-                DxgkpReleasePresentEntry(&Entry);
-                return STATUS_INSUFFICIENT_RESOURCES;
+                Entry.RedirectedBltWork = DxgkAllocateRedirectedBltWork();
+                if (Entry.RedirectedBltWork == NULL)
+                    Status = STATUS_INSUFFICIENT_RESOURCES;
+                else if (WindowTargetIssued)
+                    Status = DxgkpAdmitWindowRedirectedBlt(Entry.Window, SurfaceHandle, Device->OwnerProcess,
+                                                           &WindowTarget, &Entry.DstRect,
+                                                           &Entry.RedirectedBltPresent);
+                else
+                    Status = DxgkpCaptureRedirectedBltPresent(
+                                 pPresent,
+                                 InputLength,
+                                 SurfaceHandle,
+                                 Device->OwnerProcess,
+                                 RedirectedShare,
+                                 &Entry.DstRect,
+                                 &Entry.RedirectedBltPresent);
             }
-
-            Status = DxgkpCaptureRedirectedBltPresent(
-                         pPresent,
-                         InputLength,
-                         SurfaceHandle,
-                         Device->OwnerProcess,
-                         Resource->GlobalShareHandle,
-                         &Entry.DstRect,
-                         &Entry.RedirectedBltPresent);
             if (!NT_SUCCESS(Status))
             {
+                if (WindowTargetIssued)
+                    DxgkCancelWindowBltTarget(Entry.Window, WindowTarget.UpdateId);
                 DxgkpReleasePresentEntry(&Entry);
                 return Status;
             }
             Entry.RedirectedBltPresentAdmitted = TRUE;
         }
+    }
+    if (WindowTargetIssued && !Entry.RedirectedBltPresentAdmitted)
+    {
+        DxgkCancelWindowBltTarget(Entry.Window, WindowTarget.UpdateId);
+        DxgkpReleasePresentEntry(&Entry);
+        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
     }
 
     Entry.SourceIsSharedPrimary = Entry.SourceAllocation != NULL && Entry.SourceAllocation == Entry.SharedSurface.PrimaryAllocation;

@@ -194,6 +194,16 @@ IntCompositionAdmitRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present);
 
 NTSTATUS
+IntCompositionIssueWindowBltTarget(
+    _In_ HWND hWnd,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target);
+
+NTSTATUS
+IntCompositionCancelWindowBltTarget(
+    _In_ HWND hWnd,
+    _In_ ULONGLONG UpdateId);
+
+NTSTATUS
 IntCompositionValidateRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present);
 

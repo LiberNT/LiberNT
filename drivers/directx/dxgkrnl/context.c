@@ -1548,6 +1548,7 @@ DxgkCreatePagingSystemContext(
     DxgkPresentLimitCoreInitialize(&Device->PresentLimit,
                                    DXGKRNL_DEFAULT_QUEUED_PRESENT_LIMIT);
     ExInitializeFastMutex(&Device->DeviceMutex);
+    KeInitializeMutex(&Device->WindowBltMutex, 0);
     KeInitializeEvent(&Device->ReferencesDrainedEvent,
                       NotificationEvent,
                       FALSE);
@@ -2115,6 +2116,7 @@ DxgkpCreateDevice(
 #endif
     DxgkPresentLimitCoreInitialize(&Device->PresentLimit, DXGKRNL_DEFAULT_QUEUED_PRESENT_LIMIT);
     ExInitializeFastMutex(&Device->DeviceMutex);
+    KeInitializeMutex(&Device->WindowBltMutex, 0);
     KeInitializeEvent(&Device->ReferencesDrainedEvent, NotificationEvent, FALSE);
 
     /*
