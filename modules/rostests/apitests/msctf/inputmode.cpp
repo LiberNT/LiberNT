@@ -353,7 +353,24 @@ FakeIndicatorThread(void *pv)
 }
 
 static void
-TestRemoveDuringUpdate(ITfLangBarItemMgr *pMgr)
+TestRemoveDuringAdd(CModeButton *pButton, ITfLangBarItemMgr *pMgr)
+{
+    g_pRemoveMgr = pMgr;
+    g_pRemoveItem = static_cast<ITfLangBarItem *>(pButton);
+    g_fRemoveArmed = TRUE;
+    ok_hr(pMgr->AddItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
+    ok(!g_fRemoveArmed, "the item was not removed while it was added\n");
+    ok(FindTipWindow() == NULL, "an input mode window is left for a removed item\n");
+    ok(pButton->m_pSink == NULL, "the sink of a removed item is still advised\n");
+    ok_long(pButton->m_cUnadvise, pButton->m_cAdvise);
+    ITfLangBarItem *pItem = (ITfLangBarItem *)(ULONG_PTR)1;
+    ok_hr(pMgr->GetItem(GUID_LBI_INPUTMODE, &pItem), S_FALSE);
+    if (pItem && pItem != (ITfLangBarItem *)(ULONG_PTR)1)
+        pItem->Release();
+}
+
+static void
+TestRemoveDuringPublish(ITfLangBarItemMgr *pMgr, BOOL fDuringAdd)
 {
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = RemoverWndProc;
@@ -375,9 +392,16 @@ TestRemoveDuringUpdate(ITfLangBarItemMgr *pMgr)
        "the test indicator %p is not the one msctf finds\n", g_hwndFakeIndicator);
 
     CModeButton *pButton = new CModeButton();
-    ok_hr(pMgr->AddItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
-    ok(pButton->m_pSink != NULL, "no item sink\n");
-    if (g_hwndRemover && g_hwndFakeIndicator && pButton->m_pSink)
+    if (fDuringAdd && g_hwndRemover && g_hwndFakeIndicator)
+    {
+        TestRemoveDuringAdd(pButton, pMgr);
+    }
+    else if (!fDuringAdd)
+    {
+        ok_hr(pMgr->AddItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
+        ok(pButton->m_pSink != NULL, "no item sink\n");
+    }
+    if (!fDuringAdd && g_hwndRemover && g_hwndFakeIndicator && pButton->m_pSink)
     {
         g_pRemoveMgr = pMgr;
         g_pRemoveItem = static_cast<ITfLangBarItem *>(pButton);
@@ -514,7 +538,8 @@ START_TEST(inputmode)
             TestRemoveFromOtherThread(pMgr);
             TestNoIndicator(pMgr, TRUE, &GUID_LBI_INPUTMODE);
             TestNoIndicator(pMgr, FALSE, &GUID_TEST_OTHER_ITEM);
-            TestRemoveDuringUpdate(pMgr);
+            TestRemoveDuringPublish(pMgr, TRUE);
+            TestRemoveDuringPublish(pMgr, FALSE);
         }
         pMgr->Release();
     }
