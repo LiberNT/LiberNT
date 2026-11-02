@@ -1667,7 +1667,7 @@ DxgkpCreateSynchronizationObjectInternal(
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_0)
     if (Info->Flags.SignalByKmd)
     {
-        if (Info->Type != D3DDDI_CPU_NOTIFICATION || Info->Flags.Shared)
+        if (Info->Type != D3DDDI_CPU_NOTIFICATION || Info->Flags.Shared || Info->Flags.CrossAdapter)
             return STATUS_INVALID_PARAMETER;
 #if (REACTOS_WDDM_TARGET_LEVEL < 3000)
         return STATUS_NOT_SUPPORTED;

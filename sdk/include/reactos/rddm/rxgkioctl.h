@@ -303,6 +303,22 @@ typedef struct _RXGK_RECLAIMALLOCATIONS2_PACKET
  *PRXGK_RECLAIMALLOCATIONS2_PACKET;
 
 /*
+ * Trailer after a D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU or
+ * D3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 request.  The request keeps its
+ * value union as the caller passed it, a FenceValue or a pointer to per-object
+ * values depending on the object types; Values holds what could be captured
+ * through it as a pointer, and CaptureStatus the outcome of that capture.
+ */
+#define RXGK_GPU_SYNC_MAX_VALUES 32U
+
+typedef struct _RXGK_GPU_SYNC_VALUES
+{
+    LONG        CaptureStatus;
+    ULONG       Reserved;
+    ULONGLONG   Values[RXGK_GPU_SYNC_MAX_VALUES];
+} RXGK_GPU_SYNC_VALUES, *PRXGK_GPU_SYNC_VALUES;
+
+/*
  * Pointer-free WDDM 2.1 allocation-property update.
  *
  * The public D3DDDI_UPDATEALLOCPROPERTY layout contains a target-dependent

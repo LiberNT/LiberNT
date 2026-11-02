@@ -89,7 +89,7 @@ DxgkContextSyncCapture(
     DxgkContextSyncCoreInitializeRetention(&Capture->Retention, DxgkpContextSyncReleaseReference, NULL);
     if (Device == NULL || OwnerProcess == NULL || ObjectCount > D3DDDI_MAX_OBJECT_SIGNALED)
         return STATUS_INVALID_PARAMETER;
-    if ((SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) != 0 && ObjectCount != 0)
+    if ((SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) != 0 && (ObjectCount != 0 || PayloadValue == 0))
         return STATUS_INVALID_PARAMETER;
     if ((SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) == 0 && ObjectCount != 0 && ObjectHandles == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -128,7 +128,7 @@ DxgkContextSyncCapture(
             Status = STATUS_ACCESS_DENIED;
             goto Failure;
         }
-        Status = ObReferenceObjectByHandle(EventHandle, EVENT_MODIFY_STATE, *ExEventObjectType, AccessMode, (PVOID *)&Capture->EnqueueEvent, NULL);
+        Status = ObReferenceObjectByHandle(EventHandle, EVENT_ALL_ACCESS, *ExEventObjectType, AccessMode, (PVOID *)&Capture->EnqueueEvent, NULL);
         if (!NT_SUCCESS(Status))
             goto Failure;
         Status = DxgkpContextSyncRetain(Capture, Capture->EnqueueEvent, DxgkContextSyncReferenceEvent);
