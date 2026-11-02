@@ -22,6 +22,8 @@
 #include <freerdp/listener.h>
 #include <freerdp/settings.h>
 #include <freerdp/constants.h>
+#include <freerdp/codec/color.h>
+#include <freerdp/codec/planar.h>
 #include <freerdp/crypto/certificate.h>
 #include <freerdp/crypto/privatekey.h>
 #include <winpr/ssl.h>
@@ -54,7 +56,8 @@ typedef struct DESKTOP_CONTEXT
     HBITMAP Bitmap;
     HGDIOBJ OldBitmap;
     BYTE *Pixels, *Previous;
-    BYTE Tile[64 * 32 * 4];
+    BYTE Tile[64 * 32 * 4 + 2];
+    BITMAP_PLANAR_CONTEXT *Planar;
     BOOL Keys[512];
     DWORD MouseButtons;
     ULONGLONG Frames, Updates, Inputs;
@@ -306,6 +309,13 @@ static BOOL Activate(freerdp_peer *peer)
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
     POINTER_SYSTEM_UPDATE pointer = {0};
     if (!ctx->Authorized) return FALSE;
+    if (!ctx->Planar)
+    {
+        DWORD flags = PLANAR_FORMAT_HEADER_RLE;
+        if (freerdp_settings_get_bool(ctx->rdp.settings, FreeRDP_DrawAllowSkipAlpha)) flags |= PLANAR_FORMAT_HEADER_NA;
+        ctx->Planar = freerdp_bitmap_planar_context_new(flags, 64, 32);
+        if (!ctx->Planar) return FALSE;
+    }
     ctx->Active = TRUE;
     ctx->Refresh = TRUE;
     pointer.type = SYSPTR_NULL;
@@ -361,7 +371,7 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
     }
     GdiFlush();
     update.number = 1; update.rectangles = &rectangle; update.skipCompression = TRUE;
-    rectangle.bitsPerPixel = 32; rectangle.bitmapDataStream = ctx->Tile;
+    rectangle.bitsPerPixel = 32; rectangle.compressed = TRUE;
     for (y = 0; y < ctx->Height; y += 32)
         for (x = 0; x < ctx->Width; x += 64)
         {
@@ -373,13 +383,17 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
                 changed = memcmp(ctx->Pixels + offset, ctx->Previous + offset, width * 4) != 0;
             }
             if (!changed) continue;
-            for (row = 0; row < height; ++row)
-                memcpy(ctx->Tile + (size_t)row * width * 4,
-                       ctx->Pixels + ((size_t)(y + height - 1 - row) * ctx->Width + x) * 4, width * 4);
+            rectangle.bitmapLength = 0;
+            rectangle.bitmapDataStream = freerdp_bitmap_compress_planar(ctx->Planar,
+                ctx->Pixels + ((size_t)y * ctx->Width + x) * 4, PIXEL_FORMAT_BGRX32, width, height,
+                ctx->Width * 4, ctx->Tile, &rectangle.bitmapLength);
+            if (!rectangle.bitmapDataStream) return FALSE;
             rectangle.destLeft = x; rectangle.destTop = y;
             rectangle.destRight = x + width - 1; rectangle.destBottom = y + height - 1;
             rectangle.width = width; rectangle.height = height;
-            rectangle.bitmapLength = width * height * 4;
+            rectangle.cbScanWidth = width * 4;
+            rectangle.cbUncompressedSize = width * height * 4;
+            rectangle.cbCompMainBodySize = rectangle.bitmapLength;
             if (!ctx->rdp.update->BitmapUpdate(&ctx->rdp, &update)) return FALSE;
             ++ctx->Updates;
         }
@@ -396,6 +410,7 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     INPUT event = {0};
     (void)peer;
     TransferStop(ctx->Transfer);
+    freerdp_bitmap_planar_context_free(ctx->Planar);
     if (ctx->Vcm) WTSCloseServer(ctx->Vcm);
     /* A disconnected controller must not leave Ctrl/Alt or mouse buttons held. */
     for (i = 0; i < 512; ++i)
