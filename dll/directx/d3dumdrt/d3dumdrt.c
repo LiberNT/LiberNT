@@ -477,6 +477,13 @@ static HRESULT D3DUmdRtStatusToHresult(NTSTATUS Status)
     }
 }
 
+static HRESULT D3DUmdRtPagingStatusToHresult(NTSTATUS Status)
+{
+    if (Status == STATUS_PENDING)
+        return E_PENDING;
+    return D3DUmdRtStatusToHresult(Status);
+}
+
 /* ------------------------------------------------------------------------ *
  * Allocation
  * ------------------------------------------------------------------------ */
@@ -1815,7 +1822,7 @@ static HRESULT APIENTRY D3DUmdRtMakeResidentCb(HANDLE hDevice, D3DDDI_MAKERESIDE
      * freeing the amount it was just told to free.
      */
     pData->hPagingQueue = pData->hPagingQueue;
-    return D3DUmdRtStatusToHresult(pfnMakeResident(pData));
+    return D3DUmdRtPagingStatusToHresult(pfnMakeResident(pData));
 }
 
 static HRESULT APIENTRY D3DUmdRtEvictCb(HANDLE hDevice, D3DDDICB_EVICT *pData)
@@ -2327,7 +2334,7 @@ static HRESULT APIENTRY D3DUmdRtMapGpuVirtualAddressCb(HANDLE hDevice,
      * pData, so a driver that used the address immediately would be reading a
      * page table entry that has not been written yet.
      */
-    return D3DUmdRtStatusToHresult(pfnMapGpuVirtualAddress(pData));
+    return D3DUmdRtPagingStatusToHresult(pfnMapGpuVirtualAddress(pData));
 }
 
 static HRESULT APIENTRY D3DUmdRtFreeGpuVirtualAddressCb(HANDLE hDevice,
