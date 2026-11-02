@@ -3369,7 +3369,8 @@ D3DKMTEnumAdapters3(
     Status = WddmBridgeRejectBadBuffer(Status);
     if (!NT_SUCCESS(Status))
         return Status;
-    if ((Captured.Filter.Value & ~(ULONGLONG)0x3) != 0)
+    /* TODO: virtual-GPU-only adapters; none exist here, so IncludeVirtualGpuOnly selects nothing more */
+    if (Captured.Filter.Reserved != 0)
         return STATUS_INVALID_PARAMETER;
 
     UserAdapters = Captured.pAdapters;

@@ -36,6 +36,25 @@ CtxValidateRefused(D3DKMT_HANDLE hDevice, LUID Luid, const char *What, UINT Node
     }
 }
 
+static void
+CtxValidateEnumFilter(void)
+{
+    PFND3DKMT_ENUMADAPTERS3 pfnEnumAdapters3 = (PFND3DKMT_ENUMADAPTERS3)LoadD3DKMTProc("D3DKMTEnumAdapters3");
+    D3DKMT_ENUMADAPTERS3 Enum;
+    NTSTATUS Status;
+
+    if (pfnEnumAdapters3 == NULL)
+        return;
+    memset(&Enum, 0, sizeof(Enum));
+    Enum.Filter.IncludeVirtualGpuOnly = 1;
+    Status = pfnEnumAdapters3(&Enum);
+    ok(NT_SUCCESS(Status), "EnumAdapters3 including virtual-GPU-only adapters returned 0x%08lx\n", (ULONG)Status);
+    memset(&Enum, 0, sizeof(Enum));
+    Enum.Filter.Value = 0x8;
+    Status = pfnEnumAdapters3(&Enum);
+    ok(Status == STATUS_INVALID_PARAMETER, "EnumAdapters3 with a reserved filter bit returned 0x%08lx\n", (ULONG)Status);
+}
+
 START_TEST(ctxvalidate)
 {
     PFND3DKMT_ENUMADAPTERS2 pfnEnumAdapters2 = (PFND3DKMT_ENUMADAPTERS2)LoadD3DKMTProc("D3DKMTEnumAdapters2");
@@ -52,6 +71,7 @@ START_TEST(ctxvalidate)
 
     pfnCreateContextVirtual = (PFND3DKMT_CREATECONTEXTVIRTUAL)LoadD3DKMTProc("D3DKMTCreateContextVirtual");
     pfnDestroyContext = (PFND3DKMT_DESTROYCONTEXT)LoadD3DKMTProc("D3DKMTDestroyContext");
+    CtxValidateEnumFilter();
     if (pfnEnumAdapters2 == NULL || pfnCloseAdapter == NULL || pfnCreateDevice == NULL || pfnDestroyDevice == NULL ||
         pfnCreateContextVirtual == NULL || pfnDestroyContext == NULL)
     {
