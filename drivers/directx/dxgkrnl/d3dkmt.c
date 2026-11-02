@@ -6310,10 +6310,10 @@ DxgkpEscapeCaptured(
                                         &SignalSyncObject,
                                         &SignalFenceValue))
         {
-            if (EscDevice == NULL)
+            if (EscDevice == NULL || (Adapter->SchedulingCaps.MultiEngineAware && EscContext == NULL))
             {
-                DXGKRNL_WARN("DxgkEscape: command packet without valid device 0x%X\n",
-                             pEscape->hDevice);
+                DXGKRNL_WARN("DxgkEscape: command packet without valid device 0x%X or context 0x%X\n",
+                             pEscape->hDevice, pEscape->hContext);
                 Status = STATUS_INVALID_PARAMETER;
                 goto Cleanup;
             }
