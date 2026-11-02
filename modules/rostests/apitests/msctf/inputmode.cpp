@@ -20,7 +20,7 @@ class CModeButton : public ITfLangBarItemButton, public ITfSource
 {
 public:
     CModeButton() : m_cRefs(1), m_pSink(NULL), m_cAdvise(0), m_cUnadvise(0), m_cInfo(0), m_cStatus(0), m_cIcon(0),
-                    m_cTooltip(0), m_cText(0), m_cClick(0), m_dwOtherThread(0)
+                    m_cTooltip(0), m_cText(0), m_cClick(0), m_dwOtherThread(0), m_hIconLast(NULL)
     {
     }
     virtual ~CModeButton()
@@ -85,6 +85,7 @@ public:
     {
         Count(&m_cIcon);
         *phIcon = CopyIcon(LoadIconW(NULL, (LPCWSTR)IDI_APPLICATION));
+        m_hIconLast = *phIcon;
         return S_OK;
     }
     STDMETHODIMP GetText(BSTR *pbstr) override
@@ -125,6 +126,7 @@ public:
     ITfLangBarItemSink *m_pSink;
     LONG m_cAdvise, m_cUnadvise, m_cInfo, m_cStatus, m_cIcon, m_cTooltip, m_cText, m_cClick;
     DWORD m_dwOtherThread;
+    HICON m_hIconLast;
 };
 
 DWORD CModeButton::g_dwMainThread;
@@ -190,6 +192,99 @@ TestPrivateChannel(CModeButton *pButton)
                            &dwResult), "SendMessageTimeout failed with %lu\n", GetLastError());
     ok(dwResult == FALSE, "short data was accepted\n");
     ok(IsWindow(hwndIndicator), "the input indicator is gone\n");
+}
+
+static ITfLangBarItemMgr *g_pRemoveMgr;
+static ITfLangBarItem *g_pRemoveItem;
+static HWND g_hwndRemover, g_hwndFakeIndicator;
+static BOOL g_fRemoveArmed;
+static HANDLE g_hFakeReady;
+
+static LRESULT CALLBACK
+RemoverWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_APP)
+        return g_pRemoveMgr->RemoveItem(g_pRemoveItem);
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
+
+static LRESULT CALLBACK
+FakeIndicatorWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg != WM_COPYDATA)
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    if (g_fRemoveArmed)
+    {
+        g_fRemoveArmed = FALSE;
+        SendMessageW(g_hwndRemover, WM_APP, 0, 0);
+    }
+    return TRUE;
+}
+
+static DWORD WINAPI
+FakeIndicatorThread(void *pv)
+{
+    MSG msg;
+    g_hwndFakeIndicator = CreateWindowW(INDICATOR_CLASSW, NULL, 0, 0, 0, 1, 1, NULL, NULL, GetModuleHandleW(NULL),
+                                        NULL);
+    SetEvent(g_hFakeReady);
+    while (g_hwndFakeIndicator && GetMessageW(&msg, NULL, 0, 0) > 0)
+        DispatchMessageW(&msg);
+    if (g_hwndFakeIndicator)
+        DestroyWindow(g_hwndFakeIndicator);
+    return 0;
+}
+
+static void
+TestRemoveDuringUpdate(ITfLangBarItemMgr *pMgr)
+{
+    WNDCLASSW wc = { 0 };
+    wc.lpfnWndProc = RemoverWndProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"MsctfInputModeRemover";
+    RegisterClassW(&wc);
+    wc.lpfnWndProc = FakeIndicatorWndProc;
+    wc.lpszClassName = INDICATOR_CLASSW;
+    RegisterClassW(&wc);
+    g_hwndRemover = CreateWindowW(L"MsctfInputModeRemover", NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL,
+                                  GetModuleHandleW(NULL), NULL);
+    ok(g_hwndRemover != NULL, "CreateWindow failed with %lu\n", GetLastError());
+
+    DWORD dwFakeThread;
+    g_hFakeReady = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE hThread = CreateThread(NULL, 0, FakeIndicatorThread, NULL, 0, &dwFakeThread);
+    ok(WaitForSingleObject(g_hFakeReady, 5000) == WAIT_OBJECT_0, "the indicator thread did not start\n");
+    ok(g_hwndFakeIndicator && FindWindowW(INDICATOR_CLASSW, NULL) == g_hwndFakeIndicator,
+       "the test indicator %p is not the one msctf finds\n", g_hwndFakeIndicator);
+
+    CModeButton *pButton = new CModeButton();
+    ok_hr(pMgr->AddItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
+    ok(pButton->m_pSink != NULL, "no item sink\n");
+    if (g_hwndRemover && g_hwndFakeIndicator && pButton->m_pSink)
+    {
+        g_pRemoveMgr = pMgr;
+        g_pRemoveItem = static_cast<ITfLangBarItem *>(pButton);
+        g_fRemoveArmed = TRUE;
+        ok_hr(pButton->m_pSink->OnUpdate(TF_LBI_ICON | TF_LBI_TOOLTIP), S_OK);
+        ok(!g_fRemoveArmed, "the item was not removed during the update\n");
+        ok(pButton->m_pSink == NULL, "the item sink is still advised\n");
+        ok(pButton->m_hIconLast != NULL, "no icon was read during the update\n");
+        HICON hIconCopy = pButton->m_hIconLast ? CopyIcon(pButton->m_hIconLast) : NULL;
+        ok(hIconCopy == NULL, "the icon read during the update was not destroyed\n");
+        if (hIconCopy)
+            DestroyIcon(hIconCopy);
+    }
+    g_fRemoveArmed = FALSE;
+    pMgr->RemoveItem(static_cast<ITfLangBarItem *>(pButton));
+    pButton->Release();
+
+    PostThreadMessageW(dwFakeThread, WM_QUIT, 0, 0);
+    ok(WaitForSingleObject(hThread, 5000) == WAIT_OBJECT_0, "the indicator thread did not exit\n");
+    CloseHandle(hThread);
+    CloseHandle(g_hFakeReady);
+    DestroyWindow(g_hwndRemover);
+    UnregisterClassW(INDICATOR_CLASSW, GetModuleHandleW(NULL));
+    UnregisterClassW(L"MsctfInputModeRemover", GetModuleHandleW(NULL));
 }
 
 START_TEST(inputmode)
@@ -297,6 +392,8 @@ START_TEST(inputmode)
         ok_long(pButton->m_cUnadvise, 1);
         ok(pButton->m_pSink == NULL, "the item sink is still advised\n");
         ok(pButton->m_dwOtherThread == 0, "the item was called from thread %lu\n", pButton->m_dwOtherThread);
+        if (is_reactos())
+            TestRemoveDuringUpdate(pMgr);
         pMgr->Release();
     }
     pButton->Release();
