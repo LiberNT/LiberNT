@@ -1480,6 +1480,8 @@ struct _DXGKRNL_ADAPTER
     KSPIN_LOCK                  PagingBufferPoolLock;
     LIST_ENTRY                  PagingBufferPoolList;
     KEVENT                      PagingBufferPoolEvent;
+    /* Set by the completion DPC after it retires a node fence; waiters clear it before checking. */
+    KEVENT                      FenceProgressEvent;
 
     /*
      * GUID_DISPLAY_DEVICE_ARRIVAL device interface.

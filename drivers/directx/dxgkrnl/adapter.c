@@ -17203,6 +17203,7 @@ DxgkpAddDeviceRegistered(
     KeInitializeSpinLock(&Adapter->InterruptMessageLock);
     InitializeListHead(&Adapter->PagingBufferPoolList);
     KeInitializeEvent(&Adapter->PagingBufferPoolEvent, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&Adapter->FenceProgressEvent, NotificationEvent, FALSE);
     Adapter->PagingVirtualReady = 0;
     Adapter->PagingApertureReady = 0;
     Adapter->PagingAperturePoolCount = 0;

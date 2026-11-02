@@ -463,11 +463,12 @@ DxgkpWaitForRedirectionFence(
         return STATUS_INVALID_PARAMETER;
 
     Start100ns = KeQueryInterruptTime();
-    Interval.QuadPart = -10 * 1000;
+    Interval.QuadPart = -10 * 10000;
     for (;;)
     {
         ULONG CompletedFenceId;
 
+        KeClearEvent(&Adapter->FenceProgressEvent);
         DxgkRetireCompletedDmaBuffers(Adapter);
         CompletedFenceId = (ULONG)InterlockedCompareExchange(
             (volatile LONG *)&Adapter->NodeLastCompletedFenceId[NodeOrdinal],
@@ -487,7 +488,7 @@ DxgkpWaitForRedirectionFence(
              * publishing a synchronized surface until GPU work retires. */
             return STATUS_IO_TIMEOUT;
         }
-        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+        (VOID)KeWaitForSingleObject(&Adapter->FenceProgressEvent, Executive, KernelMode, FALSE, &Interval);
     }
 }
 

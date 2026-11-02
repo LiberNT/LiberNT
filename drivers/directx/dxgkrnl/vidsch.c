@@ -2341,6 +2341,7 @@ VidSchpProcessCompletion(
 
     /* Signal completion event so VidSchWaitForIdle can wake up. */
     KeSetEvent(&Engine->CompletionEvent, IO_NO_INCREMENT, FALSE);
+    KeSetEvent(&Engine->Adapter->FenceProgressEvent, IO_NO_INCREMENT, FALSE);
 
 }
 
