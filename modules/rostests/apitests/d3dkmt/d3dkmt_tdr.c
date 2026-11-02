@@ -53,9 +53,12 @@ START_TEST(D3dkmtTdr)
     HKEY Key;
     NTSTATUS Status;
     ULONG Waited;
+    D3DKMT_QUERYADAPTERINFO Query;
+    D3DKMT_ADAPTERTYPE AdapterType;
 
     LOAD_D3DKMT(D3DKMTEscape);
     LOAD_D3DKMT(D3DKMTGetDeviceState);
+    LOAD_D3DKMT(D3DKMTQueryAdapterInfo);
 
     hAdapter = OpenAdapterFromDisplay1();
     if (!hAdapter)
@@ -63,6 +66,13 @@ START_TEST(D3dkmtTdr)
         skip("Cannot open the display adapter\n");
         return;
     }
+    memset(&AdapterType, 0, sizeof(AdapterType));
+    memset(&Query, 0, sizeof(Query));
+    Query.hAdapter = hAdapter;
+    Query.Type = KMTQAITYPE_ADAPTERTYPE;
+    Query.pPrivateDriverData = &AdapterType;
+    Query.PrivateDriverDataSize = sizeof(AdapterType);
+    ok_eq_hex(pfnD3DKMTQueryAdapterInfo(&Query), STATUS_SUCCESS);
     if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, graphics_drivers_key, 0, NULL, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, NULL,
             &Key, NULL) != ERROR_SUCCESS)
     {
@@ -98,9 +108,12 @@ START_TEST(D3dkmtTdr)
             break;
         Sleep(100);
     }
-    trace("device state %d after %lu ms\n", State, Waited);
-    ok(State == D3DKMT_DEVICEEXECUTION_RESET || State == D3DKMT_DEVICEEXECUTION_HUNG,
-       "the device survived the forced timeout in state %d\n", State);
+    trace("device state %d after %lu ms, render %u\n", State, Waited, AdapterType.RenderSupported);
+    if (AdapterType.RenderSupported)
+        ok(State == D3DKMT_DEVICEEXECUTION_RESET || State == D3DKMT_DEVICEEXECUTION_HUNG,
+           "the device survived the forced timeout in state %d\n", State);
+    else
+        ok(State == D3DKMT_DEVICEEXECUTION_ACTIVE, "display-only device left the active state: %d\n", State);
 
     hNewDevice = CreateTestDevice(hAdapter);
     ok(hNewDevice != 0, "CreateDevice after the recovery failed\n");
