@@ -12,6 +12,7 @@
 #include <inputindicator.h>
 
 static const GUID GUID_TEST_SERVICE = {0x6b3a3f82, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
+static const GUID GUID_TEST_OTHER_ITEM = {0x6b3a3f83, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
 
 typedef HRESULT (WINAPI *FN_TF_CreateLangBarItemMgr)(ITfLangBarItemMgr **);
 typedef BOOL (WINAPI *FN_ImmDisableIME)(DWORD);
@@ -20,7 +21,8 @@ class CModeButton : public ITfLangBarItemButton, public ITfSource
 {
 public:
     CModeButton() : m_cRefs(1), m_pSink(NULL), m_cAdvise(0), m_cUnadvise(0), m_cInfo(0), m_cStatus(0), m_cIcon(0),
-                    m_cTooltip(0), m_cText(0), m_cClick(0), m_dwOtherThread(0), m_hIconLast(NULL)
+                    m_cTooltip(0), m_cText(0), m_cClick(0), m_dwOtherThread(0), m_hIconLast(NULL),
+                    m_clickLast(TF_LBI_CLK_LEFT), m_ptClickLast(), m_guidItem(GUID_LBI_INPUTMODE), m_fNoButton(FALSE)
     {
     }
     virtual ~CModeButton()
@@ -31,7 +33,7 @@ public:
     STDMETHODIMP QueryInterface(REFIID riid, void **ppv) override
     {
         if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_ITfLangBarItem) ||
-            IsEqualIID(riid, IID_ITfLangBarItemButton))
+            (IsEqualIID(riid, IID_ITfLangBarItemButton) && !m_fNoButton))
             *ppv = static_cast<ITfLangBarItemButton *>(this);
         else if (IsEqualIID(riid, IID_ITfSource))
             *ppv = static_cast<ITfSource *>(this);
@@ -55,7 +57,7 @@ public:
     {
         Count(&m_cInfo);
         pInfo->clsidService = GUID_TEST_SERVICE;
-        pInfo->guidItem = GUID_LBI_INPUTMODE;
+        pInfo->guidItem = m_guidItem;
         pInfo->dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_SHOWNINTRAY;
         pInfo->ulSort = 0;
         StringCchCopyW(pInfo->szDescription, _countof(pInfo->szDescription), L"Test input mode");
@@ -77,6 +79,8 @@ public:
     STDMETHODIMP OnClick(TfLBIClick click, POINT pt, const RECT *prc) override
     {
         Count(&m_cClick);
+        m_clickLast = click;
+        m_ptClickLast = pt;
         return S_OK;
     }
     STDMETHODIMP InitMenu(ITfMenu *pMenu) override { return E_NOTIMPL; }
@@ -127,6 +131,10 @@ public:
     LONG m_cAdvise, m_cUnadvise, m_cInfo, m_cStatus, m_cIcon, m_cTooltip, m_cText, m_cClick;
     DWORD m_dwOtherThread;
     HICON m_hIconLast;
+    TfLBIClick m_clickLast;
+    POINT m_ptClickLast;
+    GUID m_guidItem;
+    BOOL m_fNoButton;
 };
 
 DWORD CModeButton::g_dwMainThread;
@@ -158,8 +166,48 @@ FindTipWindow(VOID)
     return NULL;
 }
 
+static DWORD_PTR
+SendTipState(HWND hwndIndicator, HWND hwndSender, ULONG_PTR dwData, DWORD cbData, PVOID pData, int line)
+{
+    COPYDATASTRUCT cds = { dwData, cbData, pData };
+    DWORD_PTR dwResult = 0xdead;
+    ok_(__FILE__, line)(SendMessageTimeoutW(hwndIndicator, WM_COPYDATA, (WPARAM)hwndSender, (LPARAM)&cds,
+                                            SMTO_ABORTIFHUNG, 5000, &dwResult),
+                        "SendMessageTimeout failed with %lu\n", GetLastError());
+    return dwResult;
+}
+
 static void
-TestPrivateChannel(CModeButton *pButton)
+TestDeferredClick(CModeButton *pButton, HWND hwndTip, HWND hwndFocus)
+{
+    LONG cClick = pButton->m_cClick;
+    SetFocus(NULL);
+    ok(GetFocus() == NULL, "the thread still has the focus\n");
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_LEFT, MAKELPARAM(10, 20)),
+       "PostMessage failed\n");
+    PumpFor(100);
+    ok_long(pButton->m_cClick, cClick);
+    SetFocus(hwndFocus);
+    ok(GetFocus() == hwndFocus, "the focus did not come back\n");
+    PumpFor(200);
+    ok_long(pButton->m_cClick, cClick + 1);
+    ok(pButton->m_clickLast == TF_LBI_CLK_LEFT, "click %d\n", pButton->m_clickLast);
+    ok(pButton->m_ptClickLast.x == 10 && pButton->m_ptClickLast.y == 20, "point (%ld, %ld)\n",
+       pButton->m_ptClickLast.x, pButton->m_ptClickLast.y);
+
+    SetFocus(NULL);
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_RIGHT, MAKELPARAM(30, 40)),
+       "PostMessage failed\n");
+    PumpFor(1000);
+    ok_long(pButton->m_cClick, cClick + 2);
+    ok(pButton->m_clickLast == TF_LBI_CLK_RIGHT, "click %d\n", pButton->m_clickLast);
+    SetFocus(hwndFocus);
+    PumpFor(100);
+    ok_long(pButton->m_cClick, cClick + 2);
+}
+
+static void
+TestPrivateChannel(CModeButton *pButton, HWND hwndFocus)
 {
     HWND hwndTip = FindTipWindow();
     ok(hwndTip != NULL, "no input mode window in this thread\n");
@@ -170,9 +218,18 @@ TestPrivateChannel(CModeButton *pButton)
     ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_LEFT, 0), "PostMessage failed\n");
     PumpFor(1000);
     ok_long(pButton->m_cClick, cClick + 1);
+    ok(pButton->m_clickLast == TF_LBI_CLK_LEFT, "click %d\n", pButton->m_clickLast);
     ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_RIGHT + 1, 0), "PostMessage failed\n");
     PumpFor(1000);
     ok_long(pButton->m_cClick, cClick + 1);
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_RIGHT, MAKELPARAM(-5, -7)),
+       "PostMessage failed\n");
+    PumpFor(500);
+    ok_long(pButton->m_cClick, cClick + 2);
+    ok(pButton->m_clickLast == TF_LBI_CLK_RIGHT, "click %d\n", pButton->m_clickLast);
+    ok(pButton->m_ptClickLast.x == -5 && pButton->m_ptClickLast.y == -7, "point (%ld, %ld)\n",
+       pButton->m_ptClickLast.x, pButton->m_ptClickLast.y);
+    TestDeferredClick(pButton, hwndTip, hwndFocus);
 
     HWND hwndIndicator = FindWindowW(INDICATOR_CLASSW, NULL);
     if (!hwndIndicator)
@@ -192,10 +249,70 @@ TestPrivateChannel(CModeButton *pButton)
                            &dwResult), "SendMessageTimeout failed with %lu\n", GetLastError());
     ok(dwResult == FALSE, "short data was accepted\n");
     ok(IsWindow(hwndIndicator), "the input indicator is gone\n");
+
+    ok(SendTipState(hwndIndicator, hwndTip, INPUTINDICATOR_COPYDATA_ID + 1, sizeof(state), &state, __LINE__) ==
+       FALSE, "data with another ID was accepted\n");
+    INPUTINDICATOR_TIPSTATE stateSmall = state;
+    stateSmall.cbSize = sizeof(stateSmall) - 1;
+    ok(SendTipState(hwndIndicator, hwndTip, INPUTINDICATOR_COPYDATA_ID, sizeof(stateSmall), &stateSmall,
+                    __LINE__) == FALSE, "a state with a short size was accepted\n");
+    ok(SendTipState(hwndIndicator, hwndFocus, INPUTINDICATOR_COPYDATA_ID, sizeof(state), &state, __LINE__) ==
+       FALSE, "a state sent for another window was accepted\n");
+    ok(SendTipState(hwndIndicator, hwndTip, INPUTINDICATOR_COPYDATA_ID, sizeof(state), &state, __LINE__) == TRUE,
+       "a valid state was rejected\n");
+    ok(IsWindow(hwndIndicator), "the input indicator is gone\n");
+    ok_hr(pButton->m_pSink ? pButton->m_pSink->OnUpdate(TF_LBI_ICON) : E_UNEXPECTED, S_OK);
 }
 
 static ITfLangBarItemMgr *g_pRemoveMgr;
 static ITfLangBarItem *g_pRemoveItem;
+
+static DWORD WINAPI
+RemoveItemThread(void *pv)
+{
+    HRESULT *phr = (HRESULT *)pv;
+    *phr = g_pRemoveMgr->RemoveItem(g_pRemoveItem);
+    return 0;
+}
+
+static void
+TestRemoveFromOtherThread(ITfLangBarItemMgr *pMgr)
+{
+    CModeButton *pButton = new CModeButton();
+    ok_hr(pMgr->AddItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
+    HWND hwndTip = FindTipWindow();
+    ok(hwndTip != NULL, "no input mode window in this thread\n");
+
+    HRESULT hr = E_FAIL;
+    g_pRemoveMgr = pMgr;
+    g_pRemoveItem = static_cast<ITfLangBarItem *>(pButton);
+    HANDLE hThread = CreateThread(NULL, 0, RemoveItemThread, &hr, 0, NULL);
+    ok(WaitForSingleObject(hThread, 5000) == WAIT_OBJECT_0, "RemoveItem did not return\n");
+    CloseHandle(hThread);
+    ok_hr(hr, S_OK);
+    ok_long(pButton->m_cUnadvise, 1);
+    ok(pButton->m_pSink == NULL, "the item sink is still advised\n");
+    ok(hwndTip && IsWindow(hwndTip), "the input mode window was destroyed off its thread\n");
+    PumpFor(200);
+    ok(!IsWindow(hwndTip), "the input mode window is still there\n");
+    ok(FindTipWindow() == NULL, "an input mode window is left in this thread\n");
+    pButton->Release();
+}
+
+static void
+TestNoIndicator(ITfLangBarItemMgr *pMgr, BOOL fNoButton, const GUID *pguidItem)
+{
+    CModeButton *pButton = new CModeButton();
+    pButton->m_fNoButton = fNoButton;
+    pButton->m_guidItem = *pguidItem;
+    ok_hr(pMgr->AddItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
+    ok(FindTipWindow() == NULL, "an input mode window was created\n");
+    ok_long(pButton->m_cAdvise, 0);
+    ok_hr(pMgr->RemoveItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
+    ok_long(pButton->m_cUnadvise, 0);
+    pButton->Release();
+}
+
 static HWND g_hwndRemover, g_hwndFakeIndicator;
 static BOOL g_fRemoveArmed;
 static HANDLE g_hFakeReady;
@@ -368,7 +485,7 @@ START_TEST(inputmode)
         ok_long(pButton->m_cAdvise, 1);
 
         if (is_reactos())
-            TestPrivateChannel(pButton);
+            TestPrivateChannel(pButton, hwnd);
 
         hr = pMgr->GetItem(GUID_LBI_INPUTMODE, &pItem);
         ok_hr(hr, S_OK);
@@ -393,7 +510,12 @@ START_TEST(inputmode)
         ok(pButton->m_pSink == NULL, "the item sink is still advised\n");
         ok(pButton->m_dwOtherThread == 0, "the item was called from thread %lu\n", pButton->m_dwOtherThread);
         if (is_reactos())
+        {
+            TestRemoveFromOtherThread(pMgr);
+            TestNoIndicator(pMgr, TRUE, &GUID_LBI_INPUTMODE);
+            TestNoIndicator(pMgr, FALSE, &GUID_TEST_OTHER_ITEM);
             TestRemoveDuringUpdate(pMgr);
+        }
         pMgr->Release();
     }
     pButton->Release();
