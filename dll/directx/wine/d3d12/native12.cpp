@@ -448,15 +448,6 @@ static HRESULT APIENTRY Native12KernelAllocate(HANDLE handle, D3DDDICB_ALLOCATE 
     return hr;
 }
 
-static HRESULT APIENTRY Native12KernelSubmit(HANDLE handle, const D3DDDICB_SUBMITCOMMAND *args)
-{
-    Native12Device *device = Native12Device::FromKernelHandle(handle);
-    if (!device || !args || !device->kernel_callbacks.pfnSubmitCommandCb) return E_INVALIDARG;
-    for (UINT i = 0; i < args->BroadcastContextCount && i < ARRAYSIZE(args->BroadcastContext); ++i)
-        Native12NoteSubmission(device, args->BroadcastContext[i]);
-    return device->kernel_callbacks.pfnSubmitCommandCb(handle, args);
-}
-
 static HRESULT APIENTRY Native12Deallocate(D3D12DDI_HRTDEVICE handle, const D3D12DDICB_DEALLOCATE_0022 *args)
 {
     Native12Device *device = Native12Device::FromRuntime(handle.handle);
@@ -762,7 +753,6 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     create_args.Version = size_args.Version;
     driver_callbacks = kernel_callbacks;
     driver_callbacks.pfnAllocateCb = Native12KernelAllocate;
-    if (kernel_callbacks.pfnSubmitCommandCb) driver_callbacks.pfnSubmitCommandCb = Native12KernelSubmit;
     create_args.pKTCallbacks = &driver_callbacks;
     if (WARN_ON(d3d12))
     {

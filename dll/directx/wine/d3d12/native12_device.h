@@ -354,6 +354,5 @@ public:
 Native12Device *Native12QueueDevice(HANDLE queue);
 void Native12QueueAddContext(HANDLE queue, HANDLE context);
 void Native12QueueRemoveContext(HANDLE queue, HANDLE context);
-void Native12NoteSubmission(Native12Device *device, HANDLE context);
 void Native12SetCommandListErrorObject(HANDLE list, HRESULT hr);
 void Native12SetCommandListTableObject(HANDLE list, HANDLE table);

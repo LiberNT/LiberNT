@@ -196,7 +196,6 @@ void Native12CommandQueue::AddContext(HANDLE context)
     if (context_count < ARRAYSIZE(contexts))
     {
         contexts[context_count] = context;
-        submitted[context_count] = false;
         ++context_count;
     }
     else WARN("Queue %p has no room to track context %p.\n", this, context);
@@ -210,44 +209,10 @@ void Native12CommandQueue::RemoveContext(HANDLE context)
     {
         if (contexts[i] != context) continue;
         --context_count;
-        for (UINT j = i; j < context_count; ++j)
-        {
-            contexts[j] = contexts[j + 1];
-            submitted[j] = submitted[j + 1];
-        }
+        for (UINT j = i; j < context_count; ++j) contexts[j] = contexts[j + 1];
         break;
     }
     ReleaseSRWLockExclusive(&context_lock);
-}
-
-bool Native12CommandQueue::NoteSubmission(HANDLE context)
-{
-    bool found = false;
-    AcquireSRWLockExclusive(&context_lock);
-    for (UINT i = 0; i < context_count; ++i)
-    {
-        if (contexts[i] != context) continue;
-        submitted[i] = true;
-        found = true;
-        break;
-    }
-    ReleaseSRWLockExclusive(&context_lock);
-    return found;
-}
-
-UINT Native12CommandQueue::SignalContexts(HANDLE *out)
-{
-    UINT count = 0;
-    AcquireSRWLockExclusive(&context_lock);
-    for (UINT i = 0; i < context_count; ++i)
-    {
-        if (!submitted[i]) continue;
-        submitted[i] = false;
-        out[count++] = contexts[i];
-    }
-    if (!count && context_count) out[count++] = contexts[0];
-    ReleaseSRWLockExclusive(&context_lock);
-    return count;
 }
 
 UINT Native12CommandQueue::WaitContexts(HANDLE *out)
@@ -267,16 +232,6 @@ void Native12QueueAddContext(HANDLE queue, HANDLE context)
 void Native12QueueRemoveContext(HANDLE queue, HANDLE context)
 {
     if (queue) static_cast<Native12CommandQueue *>(queue)->RemoveContext(context);
-}
-
-void Native12NoteSubmission(Native12Device *device, HANDLE context)
-{
-    AcquireSRWLockShared(&device->queue_lock);
-    for (Native12CommandQueue *queue = device->queues; queue; queue = queue->next_queue)
-    {
-        if (queue->NoteSubmission(context)) break;
-    }
-    ReleaseSRWLockShared(&device->queue_lock);
 }
 
 HRESULT STDMETHODCALLTYPE Native12CommandQueue::QueryInterface(REFIID iid, void **out)
@@ -438,7 +393,8 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Signal(ID3D12Fence *fence, UINT6
     D3DDDICB_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 signal = {};
     signal.ObjectCount = 1;
     signal.ObjectHandleArray = &native->sync;
-    signal.BroadcastContextCount = SignalContexts(targets);
+    /* Every context of the queue, as Windows does: work still running on any of them precedes the signal. */
+    signal.BroadcastContextCount = WaitContexts(targets);
     signal.BroadcastContextArray = targets;
     signal.MonitoredFenceValueArray = &value;
     signal.Flags.AllowFenceRewind = 1;

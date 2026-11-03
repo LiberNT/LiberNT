@@ -93,7 +93,6 @@ public:
     SRWLOCK context_lock = SRWLOCK_INIT;
     SRWLOCK submit_lock = SRWLOCK_INIT;
     HANDLE contexts[D3DDDI_MAX_BROADCAST_CONTEXT] = {};
-    bool submitted[D3DDDI_MAX_BROADCAST_CONTEXT] = {};
     UINT context_count = 0;
 
     using Native12Child::Native12Child;
@@ -101,8 +100,6 @@ public:
     HRESULT Initialize(const D3D12_COMMAND_QUEUE_DESC *input);
     void AddContext(HANDLE context);
     void RemoveContext(HANDLE context);
-    bool NoteSubmission(HANDLE context);
-    UINT SignalContexts(HANDLE *out);
     UINT WaitContexts(HANDLE *out);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
     void STDMETHODCALLTYPE UpdateTileMappings(ID3D12Resource *resource, UINT region_count,
