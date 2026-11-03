@@ -332,6 +332,8 @@ VOID NTAPI RtlGetCallersAddress(PVOID *Caller, PVOID *CallersCaller)
     RtlCaptureContext(&Current);
     Current.ContextFlags |= CONTEXT_UNWOUND_TO_CALL;
     if (!NT_SUCCESS(Step(0, &Current, &Next, &Dc, &Nv))) return;
+    Current = Next;
+    if (!NT_SUCCESS(Step(0, &Current, &Next, &Dc, &Nv))) return;
     *Caller = (PVOID)Next.Pc;
     Current = Next;
     if (NT_SUCCESS(Step(0, &Current, &Next, &Dc, &Nv)))
