@@ -58,7 +58,10 @@ MiTrimPage(
     MiArchTlbInvalidate(VirtualAddress, 1, TRUE);
 
     if (MiArchPteIsDirty(Pte))
+    {
         MiPfnSetModified(&System->Pfn, Frame);
+        MiWriteWatchNoteWriteLocked(Space, VirtualAddress);
+    }
 
     MiPfnShareDecrement(&System->Pfn, Frame, FALSE);
     MI_ATOMIC_ADD64(&Space->ResidentPages, -1);

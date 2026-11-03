@@ -408,6 +408,7 @@ NTSTATUS MiWriteWatchAttach(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad
 NTSTATUS MiWriteWatchDuplicate(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad);
 VOID MiWriteWatchRelease(_Inout_ PMI_VAD Vad);
 VOID MiWriteWatchNoteWrite(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
+VOID MiWriteWatchNoteWriteLocked(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
 NTSTATUS MiGetWriteWatch(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base, _In_ ULONG64 Size, _In_ BOOLEAN Reset,
                          _Out_ PULONG64 Addresses, _Inout_ PULONG64 Count);
 NTSTATUS MiResetWriteWatch(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base, _In_ ULONG64 Size);

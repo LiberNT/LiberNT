@@ -296,7 +296,10 @@ MiSetPrivatePageProtectionAt(
                       (MiArchPteIsDirty(Pte) ? MI_LEAF_DIRTY : 0);
 
         if (MiArchPteIsDirty(Pte))
+        {
             MiPfnSetModified(&System->Pfn, Frame);
+            MiWriteWatchNoteWriteLocked(Space, VirtualAddress);
+        }
 
         if (!(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE))
             Entry->OriginalPte = MiSoftWithProtection(Entry->OriginalPte, Protection);

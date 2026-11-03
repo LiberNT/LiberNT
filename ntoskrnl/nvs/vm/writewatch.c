@@ -71,20 +71,31 @@ MiWriteWatchRelease(
 }
 
 VOID
-MiWriteWatchNoteWrite(
+MiWriteWatchNoteWriteLocked(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _In_ ULONG64 VirtualAddress)
 {
     ULONG64 Page;
     PMI_VAD Vad;
 
-    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    if (!Space->HasWriteWatch)
+        return;
+
     Vad = MiVadLocate(Space, VirtualAddress);
     if (Vad != NULL && Vad->WriteWatchBits != NULL)
     {
         Page = (MI_PAGE_ALIGN_DOWN(VirtualAddress) - Vad->WriteWatchBase) >> PAGE_SHIFT;
         MI_ATOMIC_OR8(&Vad->WriteWatchBits[Page / 8], 1u << (Page % 8));
     }
+}
+
+VOID
+MiWriteWatchNoteWrite(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 VirtualAddress)
+{
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    MiWriteWatchNoteWriteLocked(Space, VirtualAddress);
     MI_RW_RELEASE_SHARED(&Space->Lock);
 }
 
@@ -97,6 +108,28 @@ MiWriteWatchTestPage(
     ULONG64 Page = (Va - Vad->WriteWatchBase) >> PAGE_SHIFT;
 
     return (BOOLEAN)((MI_ATOMIC_READ8(&Vad->WriteWatchBits[Page / 8]) >> (Page % 8)) & 1);
+}
+
+static
+BOOLEAN
+MiWriteWatchTestPte(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Va)
+{
+    ULONG TableFrame;
+    PMI_PTE Slot;
+    MI_PTE Pte;
+    KIRQL OldIrql;
+
+    Slot = MiPtLookup(Space, Va, &TableFrame);
+    if (Slot == NULL)
+        return FALSE;
+
+    OldIrql = MiPfnLock(&Space->System->Pfn, TableFrame);
+    Pte = MiArchPteRead(Slot);
+    MiPfnUnlock(&Space->System->Pfn, TableFrame, OldIrql);
+
+    return MiArchPteIsLeafDescriptor(Pte) && MiArchPteIsWritable(Pte) && MiArchPteIsDirty(Pte);
 }
 
 static
@@ -127,6 +160,7 @@ MiWriteWatchResetLocked(
         Pte = MiArchPteRead(Slot);
         if (MiArchPteIsLeafDescriptor(Pte) && MiArchPteIsWritable(Pte) && MiArchPteIsDirty(Pte))
         {
+            MiPfnSetModified(&Space->System->Pfn, (ULONG)MiArchPteFrame(Pte));
             MiArchPteWrite(Slot, MiArchPteSetDirty(Pte, FALSE));
             MiArchTlbInvalidate(Va, 1, TRUE);
         }
@@ -180,7 +214,7 @@ MiGetWriteWatch(
     {
         for (Va = Start; Found < *Count && Va < End; Va += PAGE_SIZE)
         {
-            if (MiWriteWatchTestPage(Vad, Va))
+            if (MiWriteWatchTestPage(Vad, Va) || MiWriteWatchTestPte(Space, Va))
                 Addresses[Found++] = Va;
         }
 
