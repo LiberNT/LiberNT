@@ -159,7 +159,6 @@ BOOL d3d12_test_execute(struct d3d12_test_context *context, ID3D12GraphicsComman
     hr = context->queue->Signal(context->fence, ++context->fence_value);
     ok(hr == S_OK, "Signal: %#lx\n", hr);
     if (FAILED(hr)) return FALSE;
-    if (context->fence->GetCompletedValue() >= context->fence_value) return TRUE;
     hr = context->fence->SetEventOnCompletion(context->fence_value, context->event);
     ok(hr == S_OK, "SetEventOnCompletion: %#lx\n", hr);
     return SUCCEEDED(hr) && WaitForSingleObject(context->event, timeout) == WAIT_OBJECT_0;

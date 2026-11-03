@@ -2410,6 +2410,9 @@ DxgkpSyncObjectPublishRetiredFence(
     DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_SIGNAL);
     NTSTATUS Result = DxgkpSyncObjectPublishRetiredFenceMeasured(SyncObj, FenceValue);
     DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Result), 0);
+    /* A context stream may be parked on this fence, and nothing else may wake it. */
+    if (NT_SUCCESS(Result))
+        DxgkContextOrderQueueDeviceWake(SyncObj->Device);
     return Result;
 }
 

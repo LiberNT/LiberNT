@@ -1632,6 +1632,10 @@ struct _DXGKRNL_DEVICE
      */
     LIST_ENTRY                  ContextListHead;
 
+    /* Wakes ordered waits for publishers above APC_LEVEL, which cannot take DeviceMutex. */
+    volatile LONG               StreamWakeQueued;
+    WORK_QUEUE_ITEM             StreamWakeWorkItem;
+
     /*
      * List of D3DKMT_SYNCHRONIZATIONOBJECT handles created against this
      * device.  Protected by DeviceMutex.
@@ -3245,6 +3249,10 @@ DxgkContextOrderAdmitCompletion(
 
 VOID
 DxgkContextOrderWakeDevice(
+    _Inout_ PDXGKRNL_DEVICE Device);
+
+VOID
+DxgkContextOrderQueueDeviceWake(
     _Inout_ PDXGKRNL_DEVICE Device);
 
 VOID

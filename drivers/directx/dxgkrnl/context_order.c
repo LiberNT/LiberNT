@@ -310,6 +310,29 @@ VOID DxgkContextOrderWakeDevice(_Inout_ PDXGKRNL_DEVICE Device)
     ExReleaseFastMutex(&Device->DeviceMutex);
 }
 
+static VOID NTAPI DxgkpContextOrderDeviceWakeWorker(_In_ PVOID Parameter)
+{
+    PDXGKRNL_DEVICE Device = Parameter;
+
+    /* Cleared first: a publish that lands during the wake must queue another. */
+    InterlockedExchange(&Device->StreamWakeQueued, 0);
+    DxgkContextOrderWakeDevice(Device);
+    DxgkDereferenceDevice(Device);
+}
+
+VOID DxgkContextOrderQueueDeviceWake(_Inout_ PDXGKRNL_DEVICE Device)
+{
+    if (Device == NULL || InterlockedCompareExchange(&Device->StreamWakeQueued, 1, 0) != 0)
+        return;
+    if (!DxgkReferenceDevice(Device))
+    {
+        InterlockedExchange(&Device->StreamWakeQueued, 0);
+        return;
+    }
+    ExInitializeWorkItem(&Device->StreamWakeWorkItem, DxgkpContextOrderDeviceWakeWorker, Device);
+    ExQueueWorkItem(&Device->StreamWakeWorkItem, CriticalWorkQueue);
+}
+
 static BOOLEAN DxgkpContextOrderFindNextMarker(_In_ PDXGKRNL_CONTEXT Context, _In_ ULONGLONG Sequence, _Out_ PDXGK_CONTEXT_ORDER_MARKER *Marker)
 {
     PLIST_ENTRY Entry;
