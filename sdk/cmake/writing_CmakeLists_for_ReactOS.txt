@@ -14,7 +14,7 @@ ARGUMENTS:
 <target>: name of the target. The module must have been added with add_executable or add_library before calling this function.
 <type>: one of win32gui, win32cui, win32dll, win32ocx, cpl, nativecui, nativedll, kernelmodedriver.
 UNICODE: provide this if the module was written for unicode API.
-<baseaddress>: provide this if you want your module to have a different base address than the default one (according to <type>). For win32dll modules, please use baseaddress.cmake instead.
+<baseaddress>: provide this if you want your module to have a different base address than the default one (according to <type>).
 <entrypoint>: name of the function which will be the entry point of the module. If it's not provided, it's guessed from the module type.
 <stacksize>: Size of stack required for the parameters of <entrypoint>.
 

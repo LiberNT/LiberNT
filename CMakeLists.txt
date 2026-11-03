@@ -396,27 +396,6 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
 
     add_subdirectory(sdk/include)
 
-    if(ARCH MATCHES "64$")
-        include(sdk/cmake/baseaddress64.cmake)
-        if(ARCH STREQUAL "arm64")
-            set(_baseaddress_shift "+ 0x77FF00000000")
-        elseif(ARCH STREQUAL "riscv64")
-            set(_baseaddress_shift "- 0x7c000000000")
-        endif()
-        if(DEFINED _baseaddress_shift)
-            get_cmake_property(_baseaddress_vars VARIABLES)
-            foreach(_baseaddress_var ${_baseaddress_vars})
-                if(_baseaddress_var MATCHES "^baseaddress_")
-                    math(EXPR ${_baseaddress_var} "${${_baseaddress_var}} ${_baseaddress_shift}" OUTPUT_FORMAT HEXADECIMAL)
-                endif()
-            endforeach()
-        endif()
-    elseif(MSVC)
-        include(sdk/cmake/baseaddress_msvc.cmake)
-    else()
-        include(sdk/cmake/baseaddress_dwarf.cmake)
-    endif()
-
     # For MSVC builds, this puts all debug symbols file in the same directory.
     if(MSVC)
         set(CMAKE_PDB_OUTPUT_DIRECTORY "${REACTOS_BINARY_DIR}/msvc_pdb")

@@ -1,6 +1,4 @@
 
-set(baseaddress_fusion_2_0 ${baseaddress_fusion})
-
 set(fusion_folder "${CMAKE_CURRENT_SOURCE_DIR}/..")
 spec2def(fusion.dll fusion.spec)
 
