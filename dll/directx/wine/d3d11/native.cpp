@@ -5968,6 +5968,7 @@ public:
     LONG layer_x = 0, layer_y = 0;
     RECT layer_clip = {};
     bool layer_has_clip = false;
+    UINT source_width = 0, source_height = 0;
     /* The overlay planes of the compositor output's present in progress. */
     UINT overlay_count = 0;
     D3DKMT_MULTIPLANE_OVERLAY overlays[DWM_MAX_OVERLAY_PLANES] = {};
@@ -6280,16 +6281,22 @@ public:
     HRESULT STDMETHODCALLTYPE SetSourceSize(UINT width, UINT height) override
     {
         NativeLock guard(device);
+        if (composition)
+        {
+            if (width > desc.Width || height > desc.Height) return DXGI_ERROR_INVALID_CALL;
+            source_width = width;
+            source_height = height;
+            return S_OK;
+        }
         if (!width || !height || width > desc.Width || height > desc.Height) return E_INVALIDARG;
-        /* Publication currently covers the complete texture. Do not silently
-         * accept a crop that the compositor would then ignore. */
+        /* TODO: source region of window swap chains (crop and scaling of the window publication) */
         return width == desc.Width && height == desc.Height ? S_OK : DXGI_ERROR_UNSUPPORTED;
     }
     HRESULT STDMETHODCALLTYPE GetSourceSize(UINT *width, UINT *height) override
     {
         if (!width || !height) return E_INVALIDARG;
         NativeLock guard(device);
-        *width = desc.Width; *height = desc.Height;
+        *width = source_width; *height = source_height;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE SetMaximumFrameLatency(UINT latency) override
@@ -6401,22 +6408,16 @@ HRESULT STDMETHODCALLTYPE NativeSwapChain::SetPrivateData(REFGUID guid, UINT siz
 void NativeSwapChain::SetLayer(DWM_DX_SURFACE_EXCHANGE &exchange) const
 {
     const LONG limit = NATIVE_LAYER_LIMIT;
+    RECT clip = {layer_x, layer_y, min(limit, layer_x + static_cast<LONG>(source_width)),
+            min(limit, layer_y + static_cast<LONG>(source_height))};
+    if (layer_has_clip && !IntersectRect(&clip, &clip, &layer_clip))
+        SetRect(&clip, layer_x, layer_y, layer_x, layer_y);
     exchange.LayerOffsetX = layer_x;
     exchange.LayerOffsetY = layer_y;
-    if (layer_has_clip)
-    {
-        exchange.LayerClip.left = layer_clip.left;
-        exchange.LayerClip.top = layer_clip.top;
-        exchange.LayerClip.right = layer_clip.right;
-        exchange.LayerClip.bottom = layer_clip.bottom;
-    }
-    else
-    {
-        exchange.LayerClip.left = layer_x;
-        exchange.LayerClip.top = layer_y;
-        exchange.LayerClip.right = min(limit, layer_x + static_cast<LONG>(desc.Width));
-        exchange.LayerClip.bottom = min(limit, layer_y + static_cast<LONG>(desc.Height));
-    }
+    exchange.LayerClip.left = clip.left;
+    exchange.LayerClip.top = clip.top;
+    exchange.LayerClip.right = clip.right;
+    exchange.LayerClip.bottom = clip.bottom;
 }
 
 void NativeSwapChain::Place()
@@ -7208,6 +7209,8 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
         transport = NULL;
         transport_valid = false;
         desc = requested;
+        source_width = desc.Width;
+        source_height = desc.Height;
         publish_format = new_publish_format;
         CloseReleaseEvents();
         if (foreign_target) foreign_target->Drop();
@@ -7563,7 +7566,8 @@ HRESULT STDMETHODCALLTYPE NativeSwapChain::ResizeBuffers(UINT count, UINT width,
         if (buffers[i] && buffers[i]->references) return DXGI_ERROR_INVALID_CALL;
     DXGI_SWAP_CHAIN_DESC1 requested = desc;
     RECT client = {};
-    if (composition ? (!width || !height) : !GetClientRect(window, &client)) return DXGI_ERROR_INVALID_CALL;
+    if (composition && (!width || !height)) return E_INVALIDARG;
+    if (!composition && !GetClientRect(window, &client)) return DXGI_ERROR_INVALID_CALL;
     if (count) requested.BufferCount = count;
     requested.Width = width ? width : max(1l, client.right - client.left);
     requested.Height = height ? height : max(1l, client.bottom - client.top);

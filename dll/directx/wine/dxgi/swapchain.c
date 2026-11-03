@@ -1159,7 +1159,7 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetSourceSize(IDXGISwapChain4 *
     if (width > wined3d_desc.backbuffer_width || height > wined3d_desc.backbuffer_height)
     {
         wined3d_mutex_unlock();
-        return E_INVALIDARG;
+        return swapchain->composition ? DXGI_ERROR_INVALID_CALL : E_INVALIDARG;
     }
     swapchain->source_width = width;
     swapchain->source_height = height;

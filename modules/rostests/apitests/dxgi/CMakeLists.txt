@@ -6,6 +6,7 @@ add_executable(dxgi_apitest
     texture_dimensions.cpp
     composition.cpp
     composition_damage.cpp
+    composition_source.cpp
     composition_lifetime.cpp
     completion_event.cpp
     counters.cpp
