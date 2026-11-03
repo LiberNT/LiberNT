@@ -11,7 +11,6 @@
 extern UCHAR KiUserExceptionDispatcher[];
 extern UCHAR KiRiscvUserExceptionDispatcherEnd[];
 
-/* A fault must not re-enter the dispatcher that is reading. */
 NTSTATUS
 NTAPI
 RtlpRiscv64ReadMemory(
@@ -19,7 +18,17 @@ RtlpRiscv64ReadMemory(
     _In_reads_bytes_(Length) const VOID *Source,
     _In_ SIZE_T Length)
 {
-    return NtReadVirtualMemory(NtCurrentProcess(), (PVOID)Source, Destination, Length, NULL);
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Destination, Source, Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return STATUS_SUCCESS;
 }
 
 DECLSPEC_NORETURN
