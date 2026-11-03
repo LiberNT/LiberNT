@@ -7241,6 +7241,22 @@ DxgkGetSharedPrimaryHandle(
     }
 
     (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    if (pGetSharedPrimaryHandle->VidPnSourceId < Adapter->NumberOfVideoPresentSources)
+    {
+        D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
+
+        /* FIXME: one shared primary per adapter; a second desktop source of a multi-output adapter gets none */
+        if ((Adapter->SharedPrimaryAllocationHandle != NULL &&
+             Adapter->SharedPrimaryVidPnSourceId != pGetSharedPrimaryHandle->VidPnSourceId) ||
+            (Adapter->SharedPrimaryAllocationHandle == NULL && Adapter->VidPnCommitted &&
+             !NT_SUCCESS(DxgkVidPnResolveTargetForSource(Adapter, pGetSharedPrimaryHandle->VidPnSourceId, &TargetId))))
+        {
+            pGetSharedPrimaryHandle->hSharedPrimary = 0;
+            KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
+            Status = STATUS_SUCCESS;
+            goto Cleanup;
+        }
+    }
     Status = DxgkpEnsureSharedPrimaryLocked(Adapter, pGetSharedPrimaryHandle->VidPnSourceId);
     if (!NT_SUCCESS(Status))
     {
