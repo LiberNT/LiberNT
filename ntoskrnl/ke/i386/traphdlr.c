@@ -1046,11 +1046,12 @@ KiTrap0DHandler(IN PKTRAP_FRAME TrapFrame)
                 /* Test if it's any of the privileged two-byte opcodes */
                 if (((Instructions[i + 1] == 0x00) &&              // LLDT or LTR
                      (((Instructions[i + 2] & 0x38) == 0x10) ||        // LLDT
-                      (Instructions[i + 2] == 0x18))) ||               // LTR
+                      ((Instructions[i + 2] & 0x38) == 0x18))) ||      // LTR
                     ((Instructions[i + 1] == 0x01) &&              // LGDT or LIDT or LMSW
+                     (((Instructions[i + 2] >> 6) != 3) || ((Instructions[i + 2] & 0x38) == 0x30)) &&
                      (((Instructions[i + 2] & 0x38) == 0x10) ||        // LGDT
-                      (Instructions[i + 2] == 0x18) ||                 // LIDT
-                      (Instructions[i + 2] == 0x30))) ||               // LMSW
+                      ((Instructions[i + 2] & 0x38) == 0x18) ||        // LIDT
+                      ((Instructions[i + 2] & 0x38) == 0x30))) ||      // LMSW
                     (Instructions[i + 1] == 0x08) ||               // INVD
                     (Instructions[i + 1] == 0x09) ||               // WBINVD
                     (Instructions[i + 1] == 0x35) ||               // SYSEXIT
@@ -1060,6 +1061,7 @@ KiTrap0DHandler(IN PKTRAP_FRAME TrapFrame)
                     (Instructions[i + 1] == 0x22) ||               // MOV XXX, CR
                     (Instructions[i + 1] == 0x23) ||               // MOV YYY, DR
                     (Instructions[i + 1] == 0x30) ||               // WRMSR
+                    (Instructions[i + 1] == 0x32) ||               // RDMSR
                     (Instructions[i + 1] == 0x33))                 // RDPMC
                     // INVLPG, INVLPGA, SYSRET
                 {
