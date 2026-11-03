@@ -64,6 +64,13 @@ SETUP_DetectDeviceHandler(
     IN PSP_CLASSINSTALL_HEADER ClassInstallParams OPTIONAL,
     IN DWORD ClassInstallParamsSize);
 
+static BOOL
+SETUP_RemoveDeviceHandler(
+    IN HDEVINFO DeviceInfoSet,
+    IN PSP_DEVINFO_DATA DeviceInfoData OPTIONAL,
+    IN PSP_CLASSINSTALL_HEADER ClassInstallParams OPTIONAL,
+    IN DWORD ClassInstallParamsSize);
+
 typedef struct _INSTALL_PARAMS_DATA
 {
     DI_FUNCTION Function;
@@ -79,6 +86,7 @@ static const INSTALL_PARAMS_DATA InstallParamsData[] = {
     ADD_PARAM_HANDLER(DIF_PROPERTYCHANGE, SETUP_PropertyChangeHandler, SP_PROPCHANGE_PARAMS, PropChangeParams)
     ADD_PARAM_HANDLER(DIF_ADDPROPERTYPAGE_ADVANCED, SETUP_PropertyAddPropertyAdvancedHandler, SP_ADDPROPERTYPAGE_DATA, AddPropertyPageData)
     ADD_PARAM_HANDLER(DIF_DETECT, SETUP_DetectDeviceHandler, SP_DETECTDEVICE_PARAMS, DetectDeviceParams)
+    ADD_PARAM_HANDLER(DIF_REMOVE, SETUP_RemoveDeviceHandler, SP_REMOVEDEVICE_PARAMS, RemoveDeviceParams)
 };
 #undef ADD_PARAM_HANDLER
 
@@ -1887,3 +1895,34 @@ done:
     SetLastError(Error);
     return (cr == CR_SUCCESS);
 }
+
+static BOOL
+SETUP_RemoveDeviceHandler(
+    IN HDEVINFO DeviceInfoSet,
+    IN PSP_DEVINFO_DATA DeviceInfoData OPTIONAL,
+    IN PSP_CLASSINSTALL_HEADER ClassInstallParams OPTIONAL,
+    IN DWORD ClassInstallParamsSize)
+{
+    PSP_REMOVEDEVICE_PARAMS *Current;
+
+    /* FIXME: the default DIF_REMOVE handler removes the device globally whatever the stored Scope */
+    if (ClassInstallParamsSize != sizeof(SP_REMOVEDEVICE_PARAMS))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (DeviceInfoData)
+        Current = &((struct DeviceInfo *)DeviceInfoData->Reserved)->ClassInstallParams.RemoveDeviceParams;
+    else
+        Current = &((struct DeviceInfoSet *)DeviceInfoSet)->ClassInstallParams.RemoveDeviceParams;
+    MyFree(*Current);
+    *Current = MyMalloc(ClassInstallParamsSize);
+    if (!*Current)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    memcpy(*Current, ClassInstallParams, ClassInstallParamsSize);
+    return TRUE;
+}
+

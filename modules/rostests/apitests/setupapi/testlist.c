@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_ClassInstallParams(void);
 extern void func_devclass(void);
 extern void func_DevicePowerOnDisable(void);
 extern void func_InterruptAffinityPolicy(void);
@@ -15,6 +16,7 @@ extern void func_UsbInterfaceIds(void);
 
 const struct test winetest_testlist[] =
 {
+    { "ClassInstallParams", func_ClassInstallParams },
     { "devclass", func_devclass },
     { "DevicePowerOnDisable", func_DevicePowerOnDisable },
     { "InterruptAffinityPolicy", func_InterruptAffinityPolicy },

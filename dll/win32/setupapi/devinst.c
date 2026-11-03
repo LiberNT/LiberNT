@@ -704,6 +704,7 @@ DestroyClassInstallParams(struct ClassInstallParams* installParams)
     HeapFree(GetProcessHeap(), 0, installParams->PropChangeParams);
     HeapFree(GetProcessHeap(), 0, installParams->AddPropertyPageData);
     HeapFree(GetProcessHeap(), 0, installParams->DetectDeviceParams);
+    HeapFree(GetProcessHeap(), 0, installParams->RemoveDeviceParams);
     return TRUE;
 }
 

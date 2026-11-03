@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    ClassInstallParams.c
     devclass.c
     DevicePowerOnDisable.c
     InterruptAffinityPolicy.c
