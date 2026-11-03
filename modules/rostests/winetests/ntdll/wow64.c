@@ -93,6 +93,9 @@ static USHORT native_machine = IMAGE_FILE_MACHINE_ARMNT;
 #elif defined __aarch64__
 static USHORT current_machine = IMAGE_FILE_MACHINE_ARM64;
 static USHORT native_machine = IMAGE_FILE_MACHINE_ARM64;
+#elif defined(__REACTOS__) && defined(__riscv)
+static USHORT current_machine = IMAGE_FILE_MACHINE_RISCV64;
+static USHORT native_machine = IMAGE_FILE_MACHINE_RISCV64;
 #else
 static USHORT current_machine;
 static USHORT native_machine;
@@ -222,6 +225,11 @@ static void init(void)
         case PROCESSOR_ARCHITECTURE_AMD64:
             native_machine = IMAGE_FILE_MACHINE_AMD64;
             break;
+#ifdef __REACTOS__
+        case PROCESSOR_ARCHITECTURE_RISCV64:
+            native_machine = IMAGE_FILE_MACHINE_RISCV64;
+            break;
+#endif
         }
     }
 
@@ -1472,7 +1480,11 @@ static void test_image_mappings(void)
             "NtMapViewOfSection returned %08lx\n", status );
         NtUnmapViewOfSection( process, ptr );
     }
+#ifdef __REACTOS__
+    else if (current_machine == IMAGE_FILE_MACHINE_ARM64 || current_machine == IMAGE_FILE_MACHINE_RISCV64)
+#else
     else if (current_machine == IMAGE_FILE_MACHINE_ARM64)
+#endif
     {
         todo_wine
         ok( status == STATUS_IMAGE_MACHINE_TYPE_MISMATCH, "NtMapViewOfSection returned %08lx\n", status );
