@@ -475,7 +475,7 @@ static const DWORD table_c0000001[411] =
    ERROR_INVALID_PARAMETER,                /* c000000b (STATUS_INVALID_CID) */
    0,                                      /* c000000c (STATUS_TIMER_NOT_CANCELED) */
    ERROR_INVALID_PARAMETER,                /* c000000d (STATUS_INVALID_PARAMETER) */
-   ERROR_FILE_NOT_FOUND,                   /* c000000e (STATUS_NO_SUCH_DEVICE) */
+   ERROR_NO_SUCH_DEVICE,                   /* c000000e (STATUS_NO_SUCH_DEVICE) */
    ERROR_FILE_NOT_FOUND,                   /* c000000f (STATUS_NO_SUCH_FILE) */
    ERROR_INVALID_FUNCTION,                 /* c0000010 (STATUS_INVALID_DEVICE_REQUEST) */
    ERROR_HANDLE_EOF,                       /* c0000011 (STATUS_END_OF_FILE) */
