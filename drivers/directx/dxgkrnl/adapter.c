@@ -14222,7 +14222,8 @@ DxgkAdapterStart(
                     DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_1_2) &&
                     Caps->SupportPerEngineTDR &&
                     DXGK_CB_FULL(Adapter, DxgkDdiResetEngine) != NULL &&
-                    DXGK_CB_FULL(Adapter, DxgkDdiQueryEngineStatus) != NULL;
+                    DXGK_CB_FULL(Adapter, DxgkDdiQueryEngineStatus) != NULL &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiQueryDependentEngineGroup) != NULL;
                 Adapter->HybridDiscrete = Caps->HybridDiscrete;
                 Adapter->HybridIntegrated = Caps->HybridIntegrated;
                 /* Ranges are usable only with both swizzling-range DDIs. */

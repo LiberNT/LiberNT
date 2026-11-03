@@ -24,6 +24,23 @@ VidSchPolicyNodeEngineSupported(
     return NodeOrdinal < NodeCount && EngineOrdinal == 0;
 }
 
+/* The nodes Windows 11 stops before resetting NodeOrdinal: its dependents on this adapter, not itself. */
+FORCEINLINE
+ULONGLONG
+VidSchPolicyDependentNodes(
+    _In_ ULONGLONG DependentNodeOrdinalMask,
+    _In_ ULONG NodeOrdinal,
+    _In_ ULONG NodeCount)
+{
+    ULONGLONG Nodes = DependentNodeOrdinalMask;
+
+    if (NodeOrdinal < 64)
+        Nodes &= ~(1ULL << NodeOrdinal);
+    if (NodeCount < 64)
+        Nodes &= (1ULL << NodeCount) - 1;
+    return Nodes;
+}
+
 /*
  * Context-owned work is cancelled as one ordered stream.  Contextless paging
  * and tracked packets still need a nonzero, stable owner, supplied by their

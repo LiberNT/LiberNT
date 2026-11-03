@@ -3320,10 +3320,6 @@ VidSchSubmitCommand(
     return STATUS_SUCCESS;
 }
 
-/*
- * Queues a WDDM 2.0 GPU-virtual command. Context arrives with one transient
- * reference; ownership transfers to the packet only on STATUS_SUCCESS.
- */
 NTSTATUS
 VidSchSubmitCommandVirtual(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4841,6 +4837,49 @@ VidSchKickEngines(
     VidSchpReleaseCall(Adapter);
 }
 
+#define VIDSCH_RESET_DEPENDENT_PREEMPT_WAIT_MS 100
+
+/* Windows 11 stops the engines the driver ties to the one being reset, and
+ * resets the adapter instead when the driver cannot name them. */
+static NTSTATUS
+VidSchpPrepareToResetEngine(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PVIDSCH_CONTEXT Ctx,
+    _In_ ULONG NodeOrdinal)
+{
+    DXGKARG_QUERYDEPENDENTENGINEGROUP Query;
+    ULONGLONG Nodes;
+    ULONG Node;
+    NTSTATUS Status;
+
+    if (DXGK_CB_FULL(Adapter, DxgkDdiQueryDependentEngineGroup) == NULL)
+        return STATUS_SUCCESS;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+    RtlZeroMemory(&Query, sizeof(Query));
+    Query.NodeOrdinal = NodeOrdinal;
+    DxgkEnterSchedulerClass(Adapter);
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiQueryDependentEngineGroup)(Adapter->MiniportDeviceContext, &Query);
+    DxgkLeaveSchedulerClass(Adapter);
+    DxgkReleaseKmdCall(Adapter);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Nodes = VidSchPolicyDependentNodes(Query.DependentNodeOrdinalMask, NodeOrdinal, Ctx->EngineCount);
+    for (Node = 0; Nodes != 0; ++Node, Nodes >>= 1)
+    {
+        ULONG PreemptionFenceId = 0;
+
+        if ((Nodes & 1) != 0 &&
+            NT_SUCCESS(VidSchPreemptEngine(Adapter, Node, 0, &PreemptionFenceId)) &&
+            PreemptionFenceId != 0)
+        {
+            (VOID)VidSchWaitForPreemption(Adapter, Node, 0, PreemptionFenceId, VIDSCH_RESET_DEPENDENT_PREEMPT_WAIT_MS);
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 VidSchResetEngine(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4890,6 +4929,14 @@ VidSchResetEngine(
     {
         VidSchpReleaseCall(Adapter);
         return STATUS_DEVICE_NOT_READY;
+    }
+    Status = VidSchpPrepareToResetEngine(Adapter, Ctx, EngineOrdinal);
+    if (!NT_SUCCESS(Status))
+    {
+        if (EndTdrDdiDeadline)
+            DxgkpDisarmTdrDdiDeadline(Adapter);
+        VidSchpReleaseCall(Adapter);
+        return Status;
     }
     ExAcquireFastMutex(&Ctx->LifecycleMutex);
     if (VidSchpReadSchedulerState(Ctx) != VidSchSchedulerRunning && VidSchpReadSchedulerState(Ctx) != VidSchSchedulerSuspended)
