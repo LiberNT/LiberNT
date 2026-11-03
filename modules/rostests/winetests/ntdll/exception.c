@@ -9513,6 +9513,8 @@ static void test_user_apc(void)
         context.R0 = 0xabacab;
 #elif defined(__aarch64__)
         context.X0 = 0xabacab;
+#elif defined(__REACTOS__) && defined(__riscv)
+        context.A0 = 0xabacab;
 #endif
 
         c[0] = context;
