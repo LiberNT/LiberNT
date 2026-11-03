@@ -340,6 +340,9 @@ struct env_stack
     } u;
     WCHAR *strings;
     BOOL delayedsubst;        /* Is delayed substitution in effect */
+#ifdef __REACTOS__
+    BOOL extensions;
+#endif
 };
 
 /* Data structure to save setlocal and pushd information */
@@ -383,6 +386,9 @@ extern WCHAR quals[MAXSTRING], param1[MAXSTRING], param2[MAXSTRING];
 extern int errorlevel;
 extern struct batch_context *context;
 extern BOOL delayedsubst;
+#ifdef __REACTOS__
+extern BOOL extensions;
+#endif
 
 static inline BOOL WCMD_is_in_context(const WCHAR *ext)
 {

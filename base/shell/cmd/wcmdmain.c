@@ -63,6 +63,9 @@ int errorlevel;
 WCHAR quals[MAXSTRING], param1[MAXSTRING], param2[MAXSTRING];
 FOR_CONTEXT *forloopcontext; /* The 'for' loop context */
 BOOL delayedsubst = FALSE; /* The current delayed substitution setting */
+#ifdef __REACTOS__
+BOOL extensions = TRUE;
+#endif
 
 WCHAR anykey[100], version_string[100];
 
@@ -1016,7 +1019,11 @@ static WCHAR *WCMD_expand_envvar(WCHAR *start)
 
     /* env variables (when set) have priority over magic env variables */
     len = GetEnvironmentVariableW(thisVar, thisVarContents, ARRAY_SIZE(thisVarContents));
+#ifdef __REACTOS__
+    if (!len && extensions)
+#else
     if (!len)
+#endif
     {
         if (CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE | SORT_STRINGSORT, thisVar, -1, L"ERRORLEVEL", -1) == CSTR_EQUAL)
             len = wsprintfW(thisVarContents, L"%d", errorlevel);
@@ -4845,6 +4852,12 @@ static void parse_command_line_parameters(struct cmd_parameters *parameters)
             if (arg[2] == L':')
                 delayedsubst = wcsnicmp(&arg[3], L"OFF", 3);
             break;
+#ifdef __REACTOS__
+        case L'e':
+            if (arg[2] == L':')
+                extensions = wcsnicmp(&arg[3], L"OFF", 3);
+            break;
+#endif
         }
 
         if (parameters->opt_c || parameters->opt_k)

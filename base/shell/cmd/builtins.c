@@ -2208,6 +2208,9 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
   struct env_stack *env_copy;
   WCHAR cwd[MAX_PATH];
   BOOL newdelay;
+#ifdef __REACTOS__
+  BOOL newext;
+#endif
   int argno = 0;
   WCHAR *argN = args;
 
@@ -2215,6 +2218,9 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
   if (!WCMD_is_in_context(NULL))
       return NO_ERROR;
   newdelay = delayedsubst;
+#ifdef __REACTOS__
+  newext = extensions;
+#endif
   while (argN)
   {
       WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, FALSE, FALSE);
@@ -2223,9 +2229,17 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
           newdelay = TRUE;
       else if (!wcsicmp(thisArg, L"DISABLEDELAYEDEXPANSION"))
           newdelay = FALSE;
+#ifdef __REACTOS__
+      /* TODO: only the dynamic variables follow the extensions setting */
+      else if (!wcsicmp(thisArg, L"ENABLEEXTENSIONS"))
+          newext = TRUE;
+      else if (!wcsicmp(thisArg, L"DISABLEEXTENSIONS"))
+          newext = FALSE;
+#else
       /* ENABLE/DISABLE EXTENSIONS ignored for now */
       else if (!wcsicmp(thisArg, L"ENABLEEXTENSIONS") || !wcsicmp(thisArg, L"DISABLEEXTENSIONS"))
       {}
+#endif
       else
           return errorlevel = ERROR_INVALID_FUNCTION;
       TRACE("Setting delayed expansion to %d\n", newdelay);
@@ -2241,6 +2255,10 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
     env_copy->next = saved_environment;
     env_copy->delayedsubst = delayedsubst;
     delayedsubst = newdelay;
+#ifdef __REACTOS__
+    env_copy->extensions = extensions;
+    extensions = newext;
+#endif
     saved_environment = env_copy;
 
     /* Save the current drive letter */
@@ -2300,6 +2318,9 @@ RETURN_CODE WCMD_endlocal(void)
   env = temp->strings;
   len = 0;
   delayedsubst = temp->delayedsubst;
+#ifdef __REACTOS__
+  extensions = temp->extensions;
+#endif
   WINE_TRACE("Delayed expansion now %d\n", delayedsubst);
   while (env[len]) {
     n = lstrlenW(&env[len]) + 1;
