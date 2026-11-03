@@ -1812,6 +1812,22 @@ RETURN_CODE WCMD_pushd(const WCHAR *args)
       return errorlevel = ERROR_INVALID_FUNCTION;
     }
 
+#ifdef __REACTOS__
+    {
+      BOOL quoted = FALSE;
+      const WCHAR *pos;
+
+      for (pos = args; *pos; pos++) {
+        if (*pos == '"')
+          quoted = !quoted;
+        else if (*pos == '/' && !quoted) {
+          WCMD_output_stderr(WCMD_LoadMessage(WCMD_SYNTAXERR));
+          return errorlevel = ERROR_INVALID_FUNCTION;
+        }
+      }
+    }
+#endif
+
     curdir  = xalloc(sizeof(struct env_stack));
     thisdir = xalloc(1024 * sizeof(WCHAR));
 
