@@ -316,8 +316,14 @@ static void test_process_architecture( SYSTEM_INFORMATION_CLASS class, HANDLE pr
         USHORT current = 0xdead, native = 0xbeef;
         status = pRtlWow64GetProcessMachines( process, &current, &native );
         ok( !status, "failed %lx\n", status );
+#ifdef __REACTOS__
+        if ((expect_machine != IMAGE_FILE_MACHINE_I386 &&
+             expect_machine != IMAGE_FILE_MACHINE_ARMNT) ||
+            expect_machine == expect_native)
+#else
         if (expect_machine != IMAGE_FILE_MACHINE_I386 &&
             expect_machine != IMAGE_FILE_MACHINE_ARMNT)
+#endif
             ok( current == 0, "wrong current machine %x / %x\n", current, expect_machine );
         else
             ok( current == expect_machine, "wrong current machine %x / %x\n", current, expect_machine );
