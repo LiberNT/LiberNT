@@ -41,6 +41,53 @@ HasProtectiveEntry(
 }
 
 static void
+CheckLayout(
+    _In_ HANDLE Disk,
+    _In_ ULONG Number,
+    _In_ ULONG SectorSize,
+    _Out_writes_bytes_(SectorSize) PBYTE Sector,
+    _Out_writes_bytes_(LayoutSize) PDRIVE_LAYOUT_INFORMATION_EX Layout,
+    _In_ DWORD LayoutSize,
+    _Inout_ PULONG BlankDisks,
+    _Inout_ PULONG MbrDisks)
+{
+    DWORD Returned;
+
+    if (!ReadFile(Disk, Sector, SectorSize, &Returned, NULL) || Returned != SectorSize)
+    {
+        skip("Disk %lu: reading sector 0 failed with %lu\n", Number, GetLastError());
+        return;
+    }
+
+    if (!DeviceIoControl(Disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, Layout, LayoutSize, &Returned, NULL))
+    {
+        ok(0, "Disk %lu: IOCTL_DISK_GET_DRIVE_LAYOUT_EX failed with %lu\n", Number, GetLastError());
+        return;
+    }
+
+    if (IsZero(Sector, SectorSize))
+    {
+        (*BlankDisks)++;
+        ok(Layout->PartitionStyle == PARTITION_STYLE_MBR, "Disk %lu: blank disk style %lu\n", Number,
+           Layout->PartitionStyle);
+        ok(Layout->PartitionCount == 0, "Disk %lu: blank disk has %lu entries\n", Number, Layout->PartitionCount);
+        ok(Layout->Mbr.Signature == 0, "Disk %lu: blank disk signature 0x%08lx\n", Number, Layout->Mbr.Signature);
+        ok(Returned == FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry), "Disk %lu: returned %lu\n", Number,
+           Returned);
+    }
+    else if (Sector[510] == 0x55 && Sector[511] == 0xAA && !HasProtectiveEntry(Sector))
+    {
+        (*MbrDisks)++;
+        ok(Layout->PartitionStyle == PARTITION_STYLE_MBR, "Disk %lu: MBR disk style %lu\n", Number,
+           Layout->PartitionStyle);
+        ok(Layout->PartitionCount >= 4 && Layout->PartitionCount % 4 == 0, "Disk %lu: MBR disk has %lu entries\n",
+           Number, Layout->PartitionCount);
+        ok(Layout->Mbr.Signature == *(ULONG UNALIGNED *)&Sector[0x1B8], "Disk %lu: MBR signature 0x%08lx\n", Number,
+           Layout->Mbr.Signature);
+    }
+}
+
+static void
 TestDisk(
     _In_ ULONG Number,
     _Inout_ PULONG BlankDisks,
@@ -69,46 +116,11 @@ TestDisk(
 
     Sector = HeapAlloc(GetProcessHeap(), 0, Geometry.Geometry.BytesPerSector);
     Layout = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size);
-    if (!Sector || !Layout)
-    {
+    if (Sector && Layout)
+        CheckLayout(Disk, Number, Geometry.Geometry.BytesPerSector, Sector, Layout, Size, BlankDisks, MbrDisks);
+    else
         skip("Out of memory\n");
-        goto Quit;
-    }
-    if (!ReadFile(Disk, Sector, Geometry.Geometry.BytesPerSector, &Returned, NULL) ||
-        Returned != Geometry.Geometry.BytesPerSector)
-    {
-        skip("Disk %lu: reading sector 0 failed with %lu\n", Number, GetLastError());
-        goto Quit;
-    }
 
-    if (!DeviceIoControl(Disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, Layout, Size, &Returned, NULL))
-    {
-        ok(0, "Disk %lu: IOCTL_DISK_GET_DRIVE_LAYOUT_EX failed with %lu\n", Number, GetLastError());
-        goto Quit;
-    }
-
-    if (IsZero(Sector, Geometry.Geometry.BytesPerSector))
-    {
-        (*BlankDisks)++;
-        ok(Layout->PartitionStyle == PARTITION_STYLE_MBR, "Disk %lu: blank disk style %lu\n", Number,
-           Layout->PartitionStyle);
-        ok(Layout->PartitionCount == 0, "Disk %lu: blank disk has %lu entries\n", Number, Layout->PartitionCount);
-        ok(Layout->Mbr.Signature == 0, "Disk %lu: blank disk signature 0x%08lx\n", Number, Layout->Mbr.Signature);
-        ok(Returned == FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry), "Disk %lu: returned %lu\n", Number,
-           Returned);
-    }
-    else if (Sector[510] == 0x55 && Sector[511] == 0xAA && !HasProtectiveEntry(Sector))
-    {
-        (*MbrDisks)++;
-        ok(Layout->PartitionStyle == PARTITION_STYLE_MBR, "Disk %lu: MBR disk style %lu\n", Number,
-           Layout->PartitionStyle);
-        ok(Layout->PartitionCount >= 4 && Layout->PartitionCount % 4 == 0, "Disk %lu: MBR disk has %lu entries\n",
-           Number, Layout->PartitionCount);
-        ok(Layout->Mbr.Signature == *(ULONG UNALIGNED *)&Sector[0x1B8], "Disk %lu: MBR signature 0x%08lx\n", Number,
-           Layout->Mbr.Signature);
-    }
-
-Quit:
     if (Layout)
         HeapFree(GetProcessHeap(), 0, Layout);
     if (Sector)
