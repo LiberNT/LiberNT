@@ -3,7 +3,7 @@
 @ stdcall ApphelpCheckInstallShieldPackage(ptr wstr)
 @ stub ApphelpCheckMsiPackage
 @ stub ApphelpCheckRunApp
-@ stdcall ApphelpCheckRunAppEx(ptr ptr ptr wstr ptr long ptr ptr ptr ptr ptr ptr ptr ptr)
+@ stdcall ApphelpCheckRunAppEx(ptr ptr ptr wstr ptr ptr long ptr ptr ptr ptr ptr ptr ptr ptr)
 @ stdcall ApphelpCheckShellObject(ptr long ptr)
 @ stub ApphelpCreateAppcompatData
 @ stub ApphelpFixMsiPackage

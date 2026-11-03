@@ -168,6 +168,7 @@ BOOL WINAPIV ShimDbgPrint(SHIM_LOG_LEVEL Level, PCSTR FunctionName, PCSTR Format
  * @param [in]  Unk2
  * @param [in]  ApplicationName             Exe to check
  * @param [in]  Environment                 The environment variables to use, or NULL to use the current environment.
+ * @param [in]  Unk3
  * @param [in]  ExeType                     Exe type (MACHINE_TYPE_XXXX)
  * @param [in,out]  Reason                  Input/output flags
  * @param [in]  SdbQueryAppCompatData       The resulting data.
@@ -188,6 +189,7 @@ ApphelpCheckRunAppEx(
     _In_opt_ PVOID Unk2,
     _In_opt_z_ PCWSTR ApplicationName,
     _In_opt_ PVOID Environment,
+    _In_opt_ PVOID Unk3,
     _In_opt_ USHORT ExeType,
     _Inout_opt_ PULONG Reason,
     _Out_opt_ PVOID* SdbQueryAppCompatData,

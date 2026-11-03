@@ -20,7 +20,7 @@ static BOOL g_ApphelpInitialized = FALSE;
 static PVOID g_pApphelpCheckRunAppEx;
 static PVOID g_pSdbPackAppCompatData;
 
-typedef BOOL (WINAPI *tApphelpCheckRunAppEx)(HANDLE FileHandle, PVOID Unk1, PVOID Unk2, PWCHAR ApplicationName, PVOID Environment, USHORT ExeType, PULONG Reason,
+typedef BOOL (WINAPI *tApphelpCheckRunAppEx)(HANDLE FileHandle, PVOID Unk1, PVOID Unk2, PWCHAR ApplicationName, PVOID Environment, PVOID Unk3, USHORT ExeType, PULONG Reason,
                                              PVOID* SdbQueryAppCompatData, PULONG SdbQueryAppCompatDataSize, PVOID* SxsData, PULONG SxsDataSize,
                                              PULONG FusionFlags, PULONG64 SomeFlag1, PULONG SomeFlag2);
 typedef BOOL (WINAPI *tSdbPackAppCompatData)(PVOID hsdb, PVOID pQueryResult, PVOID* ppData, DWORD *dwSize);
@@ -327,7 +327,7 @@ BaseCheckRunApp(IN HANDLE FileHandle,
     if (pReason)
         Reason = *pReason;
 
-    Continue = pApphelpCheckRunAppEx(FileHandle, NULL, NULL, ApplicationName, Environment, ExeType, &Reason,
+    Continue = pApphelpCheckRunAppEx(FileHandle, NULL, NULL, ApplicationName, Environment, NULL, ExeType, &Reason,
         &QueryResult, &QueryResultSize, SxsData, SxsDataSize, FusionFlags, &Flags1, &Flags2);
 
     if (pReason)
