@@ -35,6 +35,10 @@ list(REMOVE_ITEM INCLUDE_DIRS "${REACTOS_SOURCE_DIR}/sdk/include/crt")
 set_property(DIRECTORY . PROPERTY INCLUDE_DIRECTORIES ${INCLUDE_DIRS})
 include_directories(${REACTOS_SOURCE_DIR}/sdk/include/ucrt)
 
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-fno-builtin)
+endif()
+
 add_definitions(
     -DUSE_WINE_TODOS
     -D_USE_MATH_DEFINES

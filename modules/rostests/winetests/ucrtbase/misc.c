@@ -1791,7 +1791,7 @@ static void test_nearbyint(void)
                "%s case %u: %.17g, expected %.17g\n", names[0][j], i, result, cases[i].expected);
             if (fabs(cases[i].x) < 16777216.0)
             {
-                float x = (float)cases[i].x;
+                volatile float x = (float)cases[i].x;
 
                 feclearexcept(FE_ALL_EXCEPT);
                 result = ffunc(x);
