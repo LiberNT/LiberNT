@@ -48,7 +48,7 @@ ScmValidateTriggers(const SERVICE_TRIGGER_INFO *lpInfo)
 {
     DWORD i, j;
 
-    if (lpInfo->pReserved != NULL || lpInfo->cTriggers > SCM_MAX_TRIGGERS ||
+    if (lpInfo->cTriggers > SCM_MAX_TRIGGERS ||
         (lpInfo->cTriggers != 0 && lpInfo->pTriggers == NULL))
         return ERROR_INVALID_PARAMETER;
 
