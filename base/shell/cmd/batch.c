@@ -44,7 +44,18 @@ static RETURN_CODE WCMD_batch_main_loop(void)
             }
             break;
         case RPL_SYNTAXERROR:
+#ifdef __REACTOS__
+            {
+                struct batch_context *ctx;
+
+                errorlevel = context->batch_file ? RETURN_CODE_SYNTAX_ERROR : ERROR_INVALID_FUNCTION;
+                for (ctx = context; ctx; ctx = ctx->prev_context)
+                    ctx->file_position.QuadPart = WCMD_FILE_POSITION_EOF;
+                return_code = RETURN_CODE_ABORTED;
+            }
+#else
             return_code = RETURN_CODE_SYNTAX_ERROR;
+#endif
             break;
         }
     }

@@ -2984,6 +2984,9 @@ static BOOL node_builder_parse(struct node_builder *builder, unsigned precedence
             {
                 node_builder_consume(builder);
                 ERROR_IF(!node_builder_parse(builder, token_get_precedence(tkn), &right));
+#ifdef __REACTOS__
+                ERROR_IF(!right);
+#endif
                 left = node_create_binary(CMD_ONSUCCESS, left, right);
             }
             break;
@@ -2993,6 +2996,9 @@ static BOOL node_builder_parse(struct node_builder *builder, unsigned precedence
             {
                 node_builder_consume(builder);
                 ERROR_IF(!node_builder_parse(builder, token_get_precedence(tkn), &right));
+#ifdef __REACTOS__
+                ERROR_IF(!right);
+#endif
                 left = node_create_binary(CMD_PIPE, left, right);
             }
             break;
@@ -3002,6 +3008,9 @@ static BOOL node_builder_parse(struct node_builder *builder, unsigned precedence
             {
                 node_builder_consume(builder);
                 ERROR_IF(!node_builder_parse(builder, token_get_precedence(tkn), &right));
+#ifdef __REACTOS__
+                ERROR_IF(!right);
+#endif
                 left = node_create_binary(CMD_ONFAILURE, left, right);
             }
             break;
@@ -3115,6 +3124,9 @@ static BOOL node_builder_parse(struct node_builder *builder, unsigned precedence
             break;
         case TKN_REDIRECTION:
             ERROR_IF(left && (left->op == CMD_IF || left->op == CMD_FOR));
+#ifdef __REACTOS__
+            ERROR_IF(pmt.redirection->kind != REDIR_WRITE_CLONE && !pmt.redirection->file[0]);
+#endif
             redirection_list_append(left ? &left->redirects : &redir, pmt.redirection);
             node_builder_consume(builder);
             break;
