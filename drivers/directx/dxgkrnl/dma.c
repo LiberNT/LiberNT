@@ -729,7 +729,7 @@ Cleanup:
  * IRQL: PASSIVE_LEVEL
  * ====================================================================== */
 static NTSTATUS
-DxgkpCaptureRedirectedBltPresent(
+DxgkpBuildRedirectedBltPresent(
     _In_ const D3DKMT_PRESENT *Present,
     _In_ ULONG InputLength,
     _In_ ULONG_PTR SurfaceHandle,
@@ -796,7 +796,84 @@ DxgkpCaptureRedirectedBltPresent(
     RedirectedPresent->GlobalShare = GlobalShare;
     RedirectedPresent->UpdateId = EventId;
     RedirectedPresent->DestinationRect = *DestinationRect;
-    return DxgkAdmitRedirectedBltPresent(RedirectedPresent);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+DxgkpCaptureRedirectedBltPresent(
+    _In_ const D3DKMT_PRESENT *Present,
+    _In_ ULONG InputLength,
+    _In_ ULONG_PTR SurfaceHandle,
+    _In_ PEPROCESS OwnerProcess,
+    _In_ ULONG GlobalShare,
+    _In_ const RECT *DestinationRect,
+    _Out_ DXGKRNL_REDIRECTED_BLT_PRESENT *RedirectedPresent)
+{
+    NTSTATUS Status = DxgkpBuildRedirectedBltPresent(Present, InputLength, SurfaceHandle, OwnerProcess,
+                                                     GlobalShare, DestinationRect, RedirectedPresent);
+
+    return NT_SUCCESS(Status) ? DxgkAdmitRedirectedBltPresent(RedirectedPresent) : Status;
+}
+
+/* The source of a redirected Blt is the whole source allocation and its destination the window client of the
+ * redirection surface, each clipped by a valid SrcRect or DstRect. */
+static NTSTATUS
+DxgkpResolveRedirectedBltRects(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ const D3DKMT_PRESENT *Present,
+    _In_ ULONG InputLength,
+    _Inout_ PDXGKRNL_PRESENT_ENTRY Entry)
+{
+    DXGKRNL_REDIRECTED_BLT_PRESENT Query;
+    DXGKARG_DESCRIBEALLOCATION Describe;
+    RECT Client, Source, Destination;
+    ULONG_PTR SurfaceHandle;
+    NTSTATUS Status;
+
+    SurfaceHandle = (ULONG_PTR)InterlockedCompareExchangePointer(
+        (PVOID volatile *)&Entry->DestinationAllocation->RedirectionSurfaceHandle, NULL, NULL);
+    if (SurfaceHandle == 0 || Entry->DestinationAllocation->Resource == NULL ||
+        Entry->DestinationAllocation->Resource->GlobalShareHandle == 0)
+        return STATUS_SUCCESS;
+    if (Entry->SourceAllocation == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkpBuildRedirectedBltPresent(Present, InputLength, SurfaceHandle, Device->OwnerProcess,
+                                            Entry->DestinationAllocation->Resource->GlobalShareHandle,
+                                            &Entry->DstRect, &Query);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = DxgkQueryRedirectedBltClient(&Query, &Client);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (DXGK_CB_FULL(Adapter, DxgkDdiDescribeAllocation) == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    RtlZeroMemory(&Describe, sizeof(Describe));
+    Describe.hAllocation = Entry->SourceAllocation->MiniportHandle;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiDescribeAllocation)(Adapter->MiniportDeviceContext, &Describe);
+    DxgkReleaseKmdCall(Adapter);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Client.right <= Client.left || Client.bottom <= Client.top ||
+        !DxgkPresentCoreComputeBltRects(Describe.Width, Describe.Height,
+                                        (ULONG)(Client.right - Client.left), (ULONG)(Client.bottom - Client.top),
+                                        Present->Flags.SrcRectValid ? &Present->SrcRect : NULL,
+                                        Present->Flags.DstRectValid ? &Present->DstRect : NULL,
+                                        &Source, &Destination))
+    {
+        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+    }
+    Destination.left += Client.left;
+    Destination.top += Client.top;
+    Destination.right += Client.left;
+    Destination.bottom += Client.top;
+    Entry->SrcRect = Source;
+    Entry->DstRect = Destination;
+    return STATUS_SUCCESS;
 }
 
 static VOID
@@ -1384,6 +1461,17 @@ DxgkpPresent(
                 return Status;
             }
             WindowTargetIssued = TRUE;
+        }
+    }
+
+    if (Entry.Type == DxgkPresentTypeBlt && !WindowTargetIssued && pPresent->Flags.RedirectedBlt &&
+        Entry.DestinationAllocation != NULL && Entry.Window != 0)
+    {
+        Status = DxgkpResolveRedirectedBltRects(Adapter, Device, pPresent, InputLength, &Entry);
+        if (!NT_SUCCESS(Status))
+        {
+            DxgkpReleasePresentEntry(&Entry);
+            return Status;
         }
     }
 

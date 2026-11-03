@@ -190,6 +190,11 @@ VOID IntCompositionCommitOpenGLFrame(_In_opt_ PSURFACE psurf,
                                      _In_ const RECTL *prcDest);
 
 NTSTATUS
+IntCompositionQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect);
+
+NTSTATUS
 IntCompositionAdmitRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present);
 

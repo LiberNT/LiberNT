@@ -2264,6 +2264,21 @@ IntCompositionValidateRedirectedBltRect(
 }
 
 NTSTATUS
+IntCompositionQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect)
+{
+    REDIRECT_ENTRY *Entry;
+    NTSTATUS Status;
+
+    Status = IntCompositionLookupRedirectedBltPresent(Present, &Entry);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    *ClientRect = Entry->Redirect.rcClient;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 IntCompositionAdmitRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present)
 {

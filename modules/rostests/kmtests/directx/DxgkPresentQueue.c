@@ -564,6 +564,62 @@ static VOID DxgkPresentQueueTestLimits(VOID)
 }
 
 static VOID
+DxgkPresentQueueTestCheckBltRects(
+    _In_ ULONG SourceWidth,
+    _In_ ULONG SourceHeight,
+    _In_ ULONG ClientWidth,
+    _In_ ULONG ClientHeight,
+    _In_opt_ const RECT *SrcRect,
+    _In_opt_ const RECT *DstRect,
+    _In_ BOOLEAN Expected,
+    _In_ const RECT *ExpectedSource,
+    _In_ const RECT *ExpectedDestination)
+{
+    RECT Source = {0}, Destination = {0};
+    BOOLEAN Result;
+
+    Result = DxgkPresentCoreComputeBltRects(SourceWidth, SourceHeight, ClientWidth, ClientHeight,
+                                            SrcRect, DstRect, &Source, &Destination);
+    ok_eq_bool(Result, Expected);
+    if (!Result || !Expected)
+        return;
+    ok(RtlEqualMemory(&Source, ExpectedSource, sizeof(Source)),
+       "Source (%ld,%ld,%ld,%ld), expected (%ld,%ld,%ld,%ld)\n", Source.left, Source.top, Source.right,
+       Source.bottom, ExpectedSource->left, ExpectedSource->top, ExpectedSource->right, ExpectedSource->bottom);
+    ok(RtlEqualMemory(&Destination, ExpectedDestination, sizeof(Destination)),
+       "Destination (%ld,%ld,%ld,%ld), expected (%ld,%ld,%ld,%ld)\n", Destination.left, Destination.top,
+       Destination.right, Destination.bottom, ExpectedDestination->left, ExpectedDestination->top,
+       ExpectedDestination->right, ExpectedDestination->bottom);
+}
+
+static VOID
+DxgkPresentQueueTestBltRects(VOID)
+{
+    static const RECT Full = {0, 0, 1024, 768};
+    static const RECT Client = {0, 0, 800, 600};
+    static const RECT ClientSource = {0, 0, 800, 600};
+    static const RECT WideSource = {0, 0, 200, 100};
+    static const RECT SmallSurface = {0, 0, 100, 100};
+    static const RECT HalfWide = {0, 0, 200, 100};
+    static const RECT OffClient = {800, 0, 900, 10};
+    static const RECT OffSurface = {200, 0, 300, 10};
+    static const RECT BothSource = {0, 0, 100, 100};
+    static const RECT BothDestination = {0, 0, 200, 200};
+    static const RECT BothClipped = {0, 0, 150, 150};
+    static const RECT BothBack = {0, 0, 75, 75};
+
+    DxgkPresentQueueTestCheckBltRects(1024, 768, 800, 600, NULL, NULL, TRUE, &Full, &Client);
+    DxgkPresentQueueTestCheckBltRects(1024, 768, 800, 600, &ClientSource, NULL, TRUE, &ClientSource, &Client);
+    DxgkPresentQueueTestCheckBltRects(100, 100, 400, 100, &WideSource, NULL, TRUE, &SmallSurface, &HalfWide);
+    DxgkPresentQueueTestCheckBltRects(1024, 768, 800, 600, NULL, &Full, TRUE, &ClientSource, &Client);
+    DxgkPresentQueueTestCheckBltRects(1024, 768, 800, 600, NULL, &OffClient, FALSE, NULL, NULL);
+    DxgkPresentQueueTestCheckBltRects(100, 100, 100, 100, &OffSurface, NULL, FALSE, NULL, NULL);
+    DxgkPresentQueueTestCheckBltRects(100, 100, 150, 150, &BothSource, &BothDestination, TRUE, &BothBack, &BothClipped);
+    DxgkPresentQueueTestCheckBltRects(0, 768, 800, 600, NULL, NULL, FALSE, NULL, NULL);
+    DxgkPresentQueueTestCheckBltRects(1024, 768, 0, 600, NULL, NULL, FALSE, NULL, NULL);
+}
+
+static VOID
 TestVBlankWaitResult(VOID)
 {
     ok_eq_ulonglong(DXGK_VBLANK_WAIT_TIMEOUT_100NS, 800000ULL);
@@ -592,6 +648,7 @@ START_TEST(DxgkPresentQueue)
     DxgkPresentQueueTestExecutionOrder();
     DxgkPresentQueueTestDmaGeometry();
     DxgkPresentQueueTestContract();
+    DxgkPresentQueueTestBltRects();
     DxgkPresentQueueTestLimits();
 
     DxgkPresentQueueTestInitialize(&Queue);

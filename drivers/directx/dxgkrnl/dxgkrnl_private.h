@@ -3811,6 +3811,11 @@ NTSTATUS
 DxgkQueryWindowPresentState(_In_ ULONG_PTR WindowHandle);
 
 NTSTATUS
+DxgkQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect);
+
+NTSTATUS
 DxgkIssueWindowBltTarget(
     _In_ ULONG_PTR WindowHandle,
     _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target);

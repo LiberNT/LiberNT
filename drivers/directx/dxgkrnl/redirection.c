@@ -102,6 +102,12 @@ DxgkRegisterWin32kCddInterface(
     else if (Interface->Version ==
              DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_7)
     {
+        RequiredSize = FIELD_OFFSET(DXGKRNL_WIN32K_CDD_INTERFACE,
+                                    QueryRedirectedBltClient);
+    }
+    else if (Interface->Version ==
+             DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_8)
+    {
         RequiredSize = sizeof(*Interface);
     }
     else
@@ -243,6 +249,23 @@ DxgkQueryWindowPresentState(_In_ ULONG_PTR WindowHandle)
     KeLeaveCriticalRegion();
 
     return Callback != NULL ? Callback(WindowHandle) : STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+DxgkQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect)
+{
+    PDXGKENG_QUERY_REDIRECTED_BLT_CLIENT Callback;
+    NTSTATUS Status;
+
+    KeEnterCriticalRegion();
+    ExfAcquirePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    Callback = DxgkpWin32kCddInterface.QueryRedirectedBltClient;
+    Status = Callback != NULL ? Callback(Present, ClientRect) : STATUS_NOT_SUPPORTED;
+    ExfReleasePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    KeLeaveCriticalRegion();
+    return Status;
 }
 
 NTSTATUS

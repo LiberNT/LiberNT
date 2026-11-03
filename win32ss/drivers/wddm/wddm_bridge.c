@@ -119,6 +119,12 @@ DxgkEngCancelWindowBltTarget(
 
 NTSTATUS
 NTAPI
+DxgkEngQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect);
+
+NTSTATUS
+NTAPI
 DxgkEngCancelRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present);
 
@@ -572,6 +578,7 @@ WddmBridgeInit(VOID)
         CddInterface.RefreshComposition = DxgkEngRefreshComposition;
         CddInterface.IssueWindowBltTarget = DxgkEngIssueWindowBltTarget;
         CddInterface.CancelWindowBltTarget = DxgkEngCancelWindowBltTarget;
+        CddInterface.QueryRedirectedBltClient = DxgkEngQueryRedirectedBltClient;
         Status = WddmBridgeSendIoctlToDevice(
                      DeviceObject,
                      IOCTL_DXGKRNL_REGISTER_WIN32K_CDD_INTERFACE,

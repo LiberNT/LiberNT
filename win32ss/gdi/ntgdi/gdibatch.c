@@ -345,6 +345,23 @@ DxgkEngAdmitRedirectedBltPresent(
 
 NTSTATUS
 NTAPI
+DxgkEngQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect)
+{
+    NTSTATUS Status;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    UserEnterShared();
+    Status = IntCompositionQueryRedirectedBltClient(Present, ClientRect);
+    UserLeave();
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 DxgkEngCancelRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present)
 {
