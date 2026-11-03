@@ -62,6 +62,8 @@ add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:CXX>>:-nostdinc>")
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-aggressive-loop-optimizations)
+    # Wine code passes NULL to strdup, and the builtin's nonnull deletes the checks after the call
+    add_compile_options(-fno-builtin-strdup)
     if (DBG)
         add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wold-style-declaration>")
     endif()
