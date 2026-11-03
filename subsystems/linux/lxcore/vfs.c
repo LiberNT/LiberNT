@@ -2214,6 +2214,7 @@ LxMountNsCopy(
         Copy->PidNs = Source->PidNs;
         Copy->NsFile = Source->NsFile;
         Copy->Tmpfs = Source->Tmpfs;
+        Copy->Devpts = Source->Devpts;
         Copy->Unbindable = Source->Unbindable;
         Copy->PeerGroup = Source->PeerGroup;
         Copy->MasterGroup = Source->MasterGroup;
