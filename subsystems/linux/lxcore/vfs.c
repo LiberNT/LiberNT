@@ -876,7 +876,7 @@ LxInstanceCreate(
 {
     static const WCHAR TmpSuffix[] = L".lxtmp";
     PLX_INSTANCE Instance;
-    PLX_MOUNT Dev;
+    PLX_MOUNT Dev, Pts;
     UCHAR Random[16];
     ULONG Index;
     PLX_NS Ns;
@@ -899,6 +899,7 @@ LxInstanceCreate(
     Instance->TmpNt.MaximumLength = RootNt->Length + sizeof(TmpSuffix) + 16 * sizeof(WCHAR);
     Instance->TmpNt.Buffer = LxAlloc(Instance->TmpNt.MaximumLength);
     Instance->RootCgroup = LxCgroupCreateRoot();
+    LxDevptsCreate(NULL, Instance, NULL, &Instance->Devpts);
     KeInitializeEvent(&Instance->InitExited, NotificationEvent, FALSE);
     if (Instance->RootCgroup != NULL)
         Instance->RootCgroup->Instance = Instance;
@@ -910,7 +911,7 @@ LxInstanceCreate(
             break;
     }
     if ((Instance->RootNt.Buffer == NULL) || (Instance->TmpNt.Buffer == NULL) || (Instance->RootCgroup == NULL) ||
-        (Index != LxNsCount))
+        (Instance->Devpts == NULL) || (Index != LxNsCount))
     {
         for (Index = 0; Index < LxNsCount; Index++)
         {
@@ -921,6 +922,7 @@ LxInstanceCreate(
         LxFree(Instance->TmpNt.Buffer);
         if (Instance->RootCgroup != NULL)
             LxCgroupFreeTree(Instance->RootCgroup);
+        LxDevptsFreeAll(Instance);
         LxFree(Instance);
         return NULL;
     }
@@ -970,18 +972,13 @@ LxInstanceCreate(
                              LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC, LxFsCgroup, LX_MAGIC_CGROUP2, NULL);
     if (LxInstanceTmpfs(Ns, "/dev", "devtmpfs", LX_MS_NOSUID, 0755, &Dev) == 0)
         LxPopulateDev(Dev);
-    if (LxDevptsCreate(NULL, Instance, NULL, &Instance->Devpts) == 0)
+    Instance->Devpts->Mode = 0620;
+    Instance->Devpts->Gid = 5;
+    Instance->Devpts->GidSet = TRUE;
+    if (LxInstanceMountSynthetic(Ns, "/dev/pts", "devpts", "devpts", LX_MS_NOSUID | LX_MS_NOEXEC,
+                                 LxFsDevpts, LX_MAGIC_DEVPTS, &Pts) == 0)
     {
-        PLX_MOUNT Pts;
-
-        Instance->Devpts->Mode = 0620;
-        Instance->Devpts->Gid = 5;
-        Instance->Devpts->GidSet = TRUE;
-        if (LxInstanceMountSynthetic(Ns, "/dev/pts", "devpts", "devpts", LX_MS_NOSUID | LX_MS_NOEXEC,
-                                     LxFsDevpts, LX_MAGIC_DEVPTS, &Pts) == 0)
-        {
-            Pts->Devpts = Instance->Devpts;
-        }
+        Pts->Devpts = Instance->Devpts;
     }
     LxInstanceTmpfs(Ns, "/dev/shm", "tmpfs", LX_MS_NOSUID | LX_MS_NODEV, 01777, NULL);
     LxInstanceTmpfs(Ns, "/run", "tmpfs", LX_MS_NOSUID | LX_MS_NODEV, 0755, NULL);
