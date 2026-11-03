@@ -14,6 +14,11 @@ HKLM,"SOFTWARE\Classes\Wow6432Node",,0x00000012
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\ReactOS RISC-V64","Directory",,"riscv64"
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\ReactOS RISC-V64\Print Processors",,0x00000010
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\ReactOS RISC-V64\Print Processors\winprint","Driver",,"winprint.dll"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86","Directory",,"W32X86"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3","Directory",,"3"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3","MajorVersion",0x00010001,3
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3","MinorVersion",0x00010001,0
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Print Processors",,0x00000010
 
 ; The HAL enumerates the device-tree platform and implements no ACPI interfaces,
 ; so acpi.sys is not built.
