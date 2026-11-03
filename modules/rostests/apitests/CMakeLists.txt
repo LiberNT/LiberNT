@@ -106,6 +106,7 @@ add_subdirectory(wlanapi)
 add_subdirectory(wldp)
 add_subdirectory(ws2_32)
 add_subdirectory(wscript)
+add_subdirectory(wtsapi32)
 add_subdirectory(zipfldr)
 
 add_subdirectory(runtimeexports)
