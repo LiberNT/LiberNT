@@ -567,9 +567,9 @@ int WINAPI _tWinMain(
 
         if (IsOrdinalEntry(lptFuncName))
         {
-            /* "#n" names the export with ordinal n, called with the ANSI command line */
-            fnDllWinMainW = 0;
-            fnDllWinMainA = (DllWinMainA)GetProcAddress(hDll, MAKEINTRESOURCEA(_wtoi(lptFuncName + 1)));
+            /* "#n" names the export with ordinal n, called with the Unicode command line */
+            fnDllWinMainA = 0;
+            fnDllWinMainW = (DllWinMainW)GetProcAddress(hDll, MAKEINTRESOURCEA(_wtoi(lptFuncName + 1)));
         }
         else
         {

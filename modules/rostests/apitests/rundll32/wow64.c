@@ -95,33 +95,44 @@ static WORD export_ordinal(HMODULE module, PCSTR name)
     return 0;
 }
 
-START_TEST(ordinal)
+/* rundll32 passes the Unicode command line to an entry point named by ordinal. */
+static void check_ordinal(PCWSTR system, PCWSTR rundll32, PCWSTR inf, PCSTR export, PCSTR value, PCWSTR value_name,
+                          BOOL runs)
 {
-    WCHAR system[MAX_PATH], rundll32[MAX_PATH], dll[MAX_PATH], temp[MAX_PATH], inf[MAX_PATH];
+    WCHAR dll[MAX_PATH];
     HMODULE setupapi;
     WORD ordinal;
     DWORD code;
+
+    setupapi = LoadLibraryW(L"setupapi.dll");
+    ordinal = setupapi ? export_ordinal(setupapi, export) : 0;
+    if (setupapi)
+        FreeLibrary(setupapi);
+    if (!ordinal)
+    {
+        skip("no %s export\n", export);
+        return;
+    }
+    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
+    ok(write_inf(inf, value), "cannot write %ls\n", inf);
+    StringCbPrintfW(dll, sizeof(dll), L"%ls\\setupapi.dll,#%u", system, ordinal);
+    code = run_rundll32_entry(rundll32, dll, inf);
+    ok(code == 0, "%s entry #%u: exit code %lu\n", export, ordinal, code);
+    ok(value_written(value_name) == runs, "%s entry #%u: the section %s\n", export, ordinal,
+       runs ? "did not run" : "ran");
+    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
+}
+
+START_TEST(ordinal)
+{
+    WCHAR system[MAX_PATH], rundll32[MAX_PATH], temp[MAX_PATH], inf[MAX_PATH];
 
     GetSystemDirectoryW(system, ARRAYSIZE(system));
     GetTempPathW(ARRAYSIZE(temp), temp);
     StringCbPrintfW(rundll32, sizeof(rundll32), L"%ls\\rundll32.exe", system);
     StringCbPrintfW(inf, sizeof(inf), L"%lslntrundll32o.inf", temp);
-    setupapi = LoadLibraryW(L"setupapi.dll");
-    ordinal = setupapi ? export_ordinal(setupapi, "InstallHinfSectionA") : 0;
-    if (setupapi)
-        FreeLibrary(setupapi);
-    if (!ordinal)
-    {
-        skip("no InstallHinfSectionA export\n");
-        return;
-    }
-    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
-    ok(write_inf(inf, "Ordinal"), "cannot write %ls\n", inf);
-    StringCbPrintfW(dll, sizeof(dll), L"%ls\\setupapi.dll,#%u", system, ordinal);
-    code = run_rundll32_entry(rundll32, dll, inf);
-    ok(code == 0, "ordinal entry: exit code %lu\n", code);
-    ok(value_written(L"Ordinal"), "entry #%u did not run\n", ordinal);
-    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
+    check_ordinal(system, rundll32, inf, "InstallHinfSectionW", "OrdinalW", L"OrdinalW", TRUE);
+    check_ordinal(system, rundll32, inf, "InstallHinfSectionA", "OrdinalA", L"OrdinalA", FALSE);
     DeleteFileW(inf);
 }
 
