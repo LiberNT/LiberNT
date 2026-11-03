@@ -2966,6 +2966,30 @@ QSI_DEF(SystemNumaAvailableMemory)
     return STATUS_SUCCESS;
 }
 
+/* Class 101 - NUMA node of a proximity domain */
+QSI_DEF(SystemNumaProximityNodeInformation)
+{
+    PSYSTEM_NUMA_PROXIMITY_MAP ProximityMap = (PSYSTEM_NUMA_PROXIMITY_MAP)Buffer;
+    ULONG ProximityId;
+    ULONG Node;
+
+    *ReqSize = sizeof(SYSTEM_NUMA_PROXIMITY_MAP);
+    if (Size < sizeof(SYSTEM_NUMA_PROXIMITY_MAP))
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    ProximityId = ProximityMap->NodeProximityId;
+    for (Node = 0; Node < KeNumberNodes; Node++)
+    {
+        if (KeNodeBlock[Node]->ProximityId == ProximityId)
+        {
+            ProximityMap->NodeNumber = (USHORT)Node;
+            return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_NOT_FOUND;
+}
+
 /* Class 62 - Emulation Basic Information */
 QSI_DEF(SystemEmulationBasicInformation)
 {
@@ -3945,6 +3969,7 @@ CallQS[] =
     SI_QX(SystemProcessorCycleTimeInformation),
     SI_QX(SystemNativeBasicInformation),
     SI_QX(SystemProcessorFeaturesInformation),
+    SI_QX(SystemNumaProximityNodeInformation),
 
     // Win10 RS4 and later (gaps in between stay NULL and fail
     // with STATUS_NOT_IMPLEMENTED)
