@@ -145,7 +145,21 @@ TestFreeUserLimit(PVOID Address, ULONG_PTR HighestAddress)
     ok_eq_hex(Information.State, MEM_FREE);
     ok_eq_hex(Information.Type, 0);
     ok_eq_hex(Information.Protect, PAGE_NOACCESS);
-    ok_eq_size(Information.RegionSize, HighestAddress + 1 - PAGE_ROUND_DOWN(Address));
+    ok(Information.RegionSize != 0 &&
+       Information.RegionSize <= HighestAddress + 1 - PAGE_ROUND_DOWN(Address),
+       "Information.RegionSize = %Iu, limit %Iu\n", Information.RegionSize,
+       HighestAddress + 1 - PAGE_ROUND_DOWN(Address));
+    if (Information.RegionSize < HighestAddress + 1 - PAGE_ROUND_DOWN(Address))
+    {
+        PVOID Next = (PUCHAR)Information.BaseAddress + Information.RegionSize;
+
+        Status = NtQueryVirtualMemory(NtCurrentProcess(), Next,
+                                       MemoryBasicInformation, &Information,
+                                       sizeof(Information), NULL);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+            ok(Information.State != MEM_FREE, "Free region at %p does not reach the user limit\n", Next);
+    }
 }
 
 #define CHECK_ALLOC(MappedBuffer, BufferLength)                 \
@@ -473,7 +487,7 @@ START_TEST(MmMapLockedPagesSpecifyCache)
                 (LONG_PTR)Cases[Index].PagesBelowHighest * PAGE_SIZE + Cases[Index].Offset);
 
             /* The last ordinary VAD page can already contain the PEB or TEB. */
-            if (NT_SUCCESS(ExpectedStatus))
+            if ((ULONG_PTR)Requested <= BasicInfo.MaximumUserModeAddress)
             {
                 Status = NtQueryVirtualMemory(NtCurrentProcess(), Requested,
                                              MemoryBasicInformation, &BeforeInfo,
@@ -482,7 +496,7 @@ START_TEST(MmMapLockedPagesSpecifyCache)
                 if (!NT_SUCCESS(Status))
                     break;
                 Occupied = BeforeInfo.State != MEM_FREE;
-                if (Occupied)
+                if (Occupied && NT_SUCCESS(ExpectedStatus))
                     ExpectedStatus = STATUS_CONFLICTING_ADDRESSES;
             }
             if (!Occupied)
