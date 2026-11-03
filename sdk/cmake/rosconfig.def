@@ -96,9 +96,9 @@ config OARCH_I386
     prompt "CPU instruction set"
     type choice
     var OARCH
-    value pentium    "Pentium"
-    value pentiumpro "Pentium Pro"
-    default pentium
+    value i686       "Pentium Pro (i686)"
+    value pentium4   "Pentium 4"
+    default i686
     depends ARCH=i386
     help
       Oldest CPU the generated code must run on (the OARCH variable,

@@ -19,9 +19,9 @@ elseif(ARCH STREQUAL "arm64")
 endif()
 
 if(ARCH STREQUAL "i386")
-    set(OARCH "pentium" CACHE STRING
+    set(OARCH "i686" CACHE STRING
     "Generate instructions for this CPU type. Specify one of:
-     pentium, pentiumpro")
+     i686, pentium4")
 elseif(ARCH STREQUAL "amd64")
     set(OARCH "athlon64" CACHE STRING
     "Generate instructions for this CPU type. Specify one of:

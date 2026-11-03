@@ -180,7 +180,7 @@ endforeach()
 get_filename_component(_wow64_toolchain "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE BASE_DIR "${REACTOS_SOURCE_DIR}")
 set(_wow64_i386_cmake_args
     -DARCH:STRING=i386
-    -DOARCH:STRING=pentium
+    -DOARCH:STRING=i686
     -DENABLE_WOW64:BOOL=OFF
     -DWOW64_I386_RUNTIME:BOOL=ON
     -DNVS:BOOL=ON
