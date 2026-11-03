@@ -182,7 +182,15 @@ RtlpCloseCommittedRun(PHEAP_SEGMENT Segment,
     RunSize = EndEntry - FirstEntry;
 
     if (UcrSize != 0)
+    {
         ClosingSize = HEAP_UCR_TAIL_SIZE;
+        if ((Segment->Heap->Flags & HEAP_CREATE_ALIGN_16) &&
+            (((ULONG_PTR)(EndEntry - ClosingSize) + sizeof(HEAP_ENTRY)) & 15) &&
+            RunSize >= ClosingSize + 1 && RunSize != ClosingSize + 2)
+        {
+            ClosingSize++;
+        }
+    }
     else if (EndEntry == Segment->LastValidEntry)
         ClosingSize = 1;
     else
@@ -286,6 +294,8 @@ RtlpInitializeHeap(OUT PHEAP Heap,
     }
 
     HeaderSize = ROUND_UP(HeaderSize, HEAP_ENTRY_SIZE);
+    if ((Flags & HEAP_CREATE_ALIGN_16) && (((ULONG_PTR)Heap + HeaderSize + HEAP_ENTRY_SIZE) & 15))
+        HeaderSize += HEAP_ENTRY_SIZE;
     /* Sanity check */
     ASSERT(HeaderSize <= PAGE_SIZE);
 
@@ -982,6 +992,11 @@ RtlpInitializeHeapSegment(IN OUT PHEAP Heap,
     if ((PHEAP_SEGMENT) (Heap) != Segment)
     {
         Segment->Entry.Size = ROUND_UP(sizeof(HEAP_SEGMENT), sizeof(HEAP_ENTRY)) >> HEAP_ENTRY_SHIFT;
+        if ((Heap->Flags & HEAP_CREATE_ALIGN_16) &&
+            (((ULONG_PTR)Segment + ((SIZE_T)Segment->Entry.Size << HEAP_ENTRY_SHIFT) + sizeof(HEAP_ENTRY)) & 15))
+        {
+            Segment->Entry.Size++;
+        }
         Segment->Entry.Flags = HEAP_ENTRY_BUSY;
         Segment->Entry.SmallTagIndex = LOBYTE(Segment->Entry.Size) ^ HIBYTE(Segment->Entry.Size) ^ Segment->Entry.Flags;
         Segment->Entry.PreviousSize = 0;
