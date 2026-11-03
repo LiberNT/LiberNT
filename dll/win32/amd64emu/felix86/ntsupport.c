@@ -289,6 +289,15 @@ F86LazyRemember(
     _In_ ULONG Protect)
 {
     BOOLEAN Remembered = FALSE;
+    HANDLE DebugPort = NULL;
+
+    /* TODO: mappings remembered before a debugger attaches still fault into that debugger on first touch */
+    if (!NT_SUCCESS(ZwQueryInformationProcess(NtCurrentProcess(), ProcessDebugPort, &DebugPort, sizeof(DebugPort),
+                                              NULL)) ||
+        DebugPort != NULL)
+    {
+        return FALSE;
+    }
 
     if (!InterlockedCompareExchange(&F86LazyHandler, 1, 0) && !RtlAddVectoredExceptionHandler(1, F86LazyFault))
         InterlockedExchange(&F86LazyHandler, 0);
