@@ -57,6 +57,7 @@ list(APPEND SOURCE
     LoadLibraryExW.c
     LockFileEx.c
     OpenFileByIdRename.c
+    PagingFileOpen.c
     SandboxLaunch.c
     SystemImageCatalog.c
     TebSegmentAfterWait.c

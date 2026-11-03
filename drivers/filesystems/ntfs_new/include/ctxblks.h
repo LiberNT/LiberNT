@@ -321,6 +321,7 @@ typedef struct _SCB
     BOOLEAN Deleted;
     BOOLEAN DeletePending;
     BOOLEAN Unlinked;
+    BOOLEAN PagingFile;
     LONG UncleanCount;
     NTFS_NATIVE_SCB NativeScb;
 } StreamContextBlock, *PStreamContextBlock;
@@ -377,6 +378,7 @@ typedef struct _FCB
     BOOLEAN PosixDelete;
     BOOLEAN WriteTimesStamped;
     BOOLEAN ShareAccessSet;
+    BOOLEAN PagingFileOpen;
 
     BOOLEAN RecordFlushArmed;
     ULONGLONG FlushedAllocation;
@@ -408,6 +410,8 @@ typedef struct _FCB
 
     /* Non-NULL when FileRec is on loan from the volume's record cache. */
     struct _NtfsCachedRecord* CachedRecord;
+
+    struct _NTFS_PAGING_FILE* PagingFile;
 
     /* Links this block into the volume's idle list while it is not in use. */
     LIST_ENTRY IdleLink;
@@ -469,6 +473,20 @@ NtfsForwardVolumeIo(_In_ PVolumeContextBlock VolCB,
                     _In_ PFileContextBlock FileCB,
                     _Inout_ PIRP Irp,
                     _In_ BOOLEAN Write);
+
+BOOLEAN
+NtfsPagingFileIo(_In_ PVolumeContextBlock VolCB,
+                 _In_ PFileContextBlock FileCB,
+                 _Inout_ PIRP Irp,
+                 _In_ BOOLEAN Write,
+                 _Out_ PNTSTATUS Status);
+
+VOID
+NtfsPagingFileRefresh(_In_ PVolumeContextBlock VolCB,
+                      _Inout_ PFileContextBlock FileCB);
+
+VOID
+NtfsPagingFileClose(_Inout_ PFileContextBlock FileCB);
 
 PStreamContextBlock
 NtfsReferenceStreamContext(

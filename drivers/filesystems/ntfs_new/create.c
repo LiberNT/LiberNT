@@ -1777,6 +1777,8 @@ NtfsCompleteFailedCreate(
                 ExAcquireFastMutex(&Vol->StreamListMutex);
                 IoRemoveShareAccess(IoGetCurrentIrpStackLocation(Irp)->FileObject,
                                     &FileCB->StreamCB->ShareAccess);
+                if (FileCB->PagingFileOpen)
+                    FileCB->StreamCB->PagingFile = FALSE;
                 ExReleaseFastMutex(&Vol->StreamListMutex);
                 FileCB->ShareAccessSet = FALSE;
                 InterlockedDecrement(&FileCB->StreamCB->UncleanCount);
@@ -2893,6 +2895,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
     FileCB->LastAccessStampPending = NtfsShouldStampLastAccess(FileCB);
     FileCB->CreateOptions = IrpSp->Parameters.Create.Options;
+    FileCB->PagingFileOpen = BooleanFlagOn(IrpSp->Flags, SL_OPEN_PAGING_FILE);
     FileCB->ManageVolumeAccess = SeSinglePrivilegeCheck(SeExports->SeManageVolumePrivilege, Irp->RequestorMode);
     if (NamedDataStream)
     {
@@ -3064,11 +3067,13 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         LARGE_INTEGER ZeroSize;
 
         ExAcquireFastMutex(&VolCB->StreamListMutex);
-        Status = IoCheckShareAccess(FileCB->DesiredAccess,
-                                    IrpSp->Parameters.Create.ShareAccess,
-                                    FileObject,
-                                    &FileCB->StreamCB->ShareAccess,
-                                    FALSE);
+        Status = FileCB->StreamCB->PagingFile
+            ? STATUS_SHARING_VIOLATION
+            : IoCheckShareAccess(FileCB->DesiredAccess,
+                                 IrpSp->Parameters.Create.ShareAccess,
+                                 FileObject,
+                                 &FileCB->StreamCB->ShareAccess,
+                                 FALSE);
         ExReleaseFastMutex(&VolCB->StreamListMutex);
         if (!NT_SUCCESS(Status))
         {
@@ -3102,14 +3107,17 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     else
     {
         ExAcquireFastMutex(&VolCB->StreamListMutex);
-        Status = IoCheckShareAccess(FileCB->DesiredAccess,
-                                    IrpSp->Parameters.Create.ShareAccess,
-                                    FileObject,
-                                    &FileCB->StreamCB->ShareAccess,
-                                    TRUE);
+        Status = FileCB->StreamCB->PagingFile
+            ? STATUS_SHARING_VIOLATION
+            : IoCheckShareAccess(FileCB->DesiredAccess,
+                                 IrpSp->Parameters.Create.ShareAccess,
+                                 FileObject,
+                                 &FileCB->StreamCB->ShareAccess,
+                                 TRUE);
         if (NT_SUCCESS(Status))
         {
             FileCB->ShareAccessSet = TRUE;
+            FileCB->StreamCB->PagingFile = FileCB->PagingFileOpen;
             InterlockedIncrement(&FileCB->StreamCB->UncleanCount);
         }
         ExReleaseFastMutex(&VolCB->StreamListMutex);

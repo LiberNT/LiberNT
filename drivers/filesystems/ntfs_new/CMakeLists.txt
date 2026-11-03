@@ -7,6 +7,7 @@ list(APPEND SOURCE
      fsctrl.c
      ntblockio.c
      ntfsinit.c
+     pagingfile.c
      pnp.c
      read.c
      registry.c

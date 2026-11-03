@@ -2661,6 +2661,7 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     BOOLEAN ResourceAcquired = FALSE;
     BOOLEAN PagingResourceAcquired = FALSE;
     BOOLEAN MetadataResourceAcquired = FALSE;
+    BOOLEAN PagingMapStale = FALSE;
 
     IrpSp = IoGetCurrentIrpStackLocation(Irp);
     FileObject = IrpSp->FileObject;
@@ -3038,6 +3039,7 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             FO_FILE_MODIFIED |
             FO_FILE_SIZE_CHANGED;
         FileCB->NotifyFilter |= FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE;
+        PagingMapStale = FileCB->PagingFileOpen;
     }
 
 Complete:
@@ -3052,6 +3054,8 @@ Complete:
         ExReleaseResourceLite(NtfsGetMainResource(FileCB));
         KeLeaveCriticalRegion();
     }
+    if (PagingMapStale)
+        NtfsPagingFileRefresh(VolCB, FileCB);
     Irp->IoStatus.Status = Status;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_DISK_INCREMENT);

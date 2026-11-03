@@ -357,6 +357,9 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     if (FileCB->IsVolumeOpen)
         return NtfsForwardVolumeIo(VolCB, FileCB, Irp, TRUE);
 
+    if (BooleanFlagOn(Irp->Flags, IRP_PAGING_IO) && NtfsPagingFileIo(VolCB, FileCB, Irp, TRUE, &Status))
+        return Status;
+
     FileRec = FileCB->FileRec;
     if (!FileRec)
     {
@@ -471,14 +474,6 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
     }
 
-    NtfsAcquireMetadata(VolCB);
-    if (PagingIo && FileCB->StreamCB && FileCB->StreamCB->Deleted)
-    {
-        NtfsReleaseMetadata(VolCB);
-        Status = STATUS_SUCCESS;
-        Irp->IoStatus.Information = Length;
-        goto Complete;
-    }
     /*
      * A paging write hands us the section's own pages. Passing them straight
      * through means the storage stack probes and locks pages that Mm has
@@ -492,6 +487,17 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             RtlCopyMemory(BounceBuffer, Buffer, Length);
             Buffer = BounceBuffer;
         }
+    }
+
+    NtfsAcquireMetadata(VolCB);
+    if (PagingIo && FileCB->StreamCB && FileCB->StreamCB->Deleted)
+    {
+        NtfsReleaseMetadata(VolCB);
+        if (BounceBuffer)
+            ExFreePoolWithTag(BounceBuffer, TAG_NTFS);
+        Status = STATUS_SUCCESS;
+        Irp->IoStatus.Information = Length;
+        goto Complete;
     }
 
     if (!PagingIo && Length != 0 && Buffer != NULL &&
