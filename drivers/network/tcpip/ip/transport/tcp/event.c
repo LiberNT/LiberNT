@@ -399,8 +399,6 @@ TCPRecvEventHandler(void *arg)
     PIRP Irp;
     PMDL Mdl;
     UINT Received;
-    UINT RecvLen;
-    PUCHAR RecvBuffer;
     NTSTATUS Status;
 
     LockObject(Connection);
@@ -413,9 +411,7 @@ TCPRecvEventHandler(void *arg)
         Irp = Bucket->Request.RequestContext;
         Mdl = Irp->MdlAddress;
 
-        NdisQueryBuffer( Mdl, &RecvBuffer, &RecvLen );
-
-        Status = LibTCPGetDataFromConnectionQueue(Connection, RecvBuffer, RecvLen, &Received, TRUE);
+        Status = LibTCPGetDataFromConnectionQueue(Connection, Mdl, &Received, TRUE);
         if (Status == STATUS_PENDING)
         {
             InsertHeadList(&Connection->ReceiveRequest, &Bucket->Entry);

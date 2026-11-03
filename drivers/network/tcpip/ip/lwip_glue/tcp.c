@@ -136,12 +136,14 @@ LibTCPRecved(PCONNECTION_ENDPOINT Connection, u32_t Length, const int safe)
     UNLOCK_TCPIP_CORE();
 }
 
-NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHAR RecvBuffer, UINT RecvLen, UINT *Received, const int safe)
+NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PMDL RecvMdl, UINT *Received, const int safe)
 {
     PQUEUE_ENTRY qp;
     struct pbuf* p;
     NTSTATUS Status = STATUS_SUCCESS;
     UINT ReadLength, PayloadLength, Offset, Copied;
+    UINT RecvLen = MmGetMdlByteCount(RecvMdl);
+    PUCHAR RecvBuffer;
     BOOLEAN AtMark;
 
     (*Received) = 0;
@@ -150,6 +152,13 @@ NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHA
 
     if (!IsListEmpty(&Connection->PacketQueue))
     {
+        RecvBuffer = MmGetSystemAddressForMdlSafe(RecvMdl, NormalPagePriority);
+        if (!RecvBuffer)
+        {
+            UnlockObject(Connection);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
         while ((qp = LibTCPDequeuePacket(Connection)) != NULL)
         {
             p = qp->p;

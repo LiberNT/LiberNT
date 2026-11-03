@@ -669,16 +669,13 @@ NTSTATUS TCPReceiveData
   PVOID Context )
 {
     PTDI_BUCKET Bucket;
-    PUCHAR DataBuffer;
-    UINT DataLen, Received;
+    UINT Received;
     NTSTATUS Status;
 
     TI_DbgPrint(DEBUG_TCP,("[IP, TCPReceiveData] Called for %d bytes (on socket %x)\n",
                            ReceiveLength, Connection->SocketContext));
 
-    NdisQueryBuffer(Buffer, &DataBuffer, &DataLen);
-
-    Status = LibTCPGetDataFromConnectionQueue(Connection, DataBuffer, DataLen, &Received, FALSE);
+    Status = LibTCPGetDataFromConnectionQueue(Connection, Buffer, &Received, FALSE);
 
     if (Status == STATUS_PENDING)
     {
