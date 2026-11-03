@@ -270,6 +270,7 @@ _Check_return_ float __cdecl tanhf(_In_ float x);
 _Check_return_ __CRT_INLINE float _chgsignf(_In_ float x) { return (float)_chgsign((double)x); }
 _Check_return_ __CRT_INLINE float _copysignf(_In_ float x, _In_ float y) { return (float)_copysign((double)x, (double)y); }
 _Check_return_ __CRT_INLINE float _hypotf(_In_ float x, _In_ float y) { return (float)_hypot((double)x, (double)y); }
+#if defined(__i386__) || defined(_M_IX86)
 _Check_return_ __CRT_INLINE float acosf(_In_ float x) { return (float)acos((double)x); }
 _Check_return_ __CRT_INLINE float asinf(_In_ float x) { return (float)asin((double)x); }
 _Check_return_ __CRT_INLINE float atanf(_In_ float x) { return (float)atan((double)x); }
@@ -289,6 +290,7 @@ _Check_return_ __CRT_INLINE float sinhf(_In_ float x) { return (float)sinh((doub
 _Check_return_ __CRT_INLINE float sqrtf(_In_ float x) { return (float)sqrt((double)x); }
 _Check_return_ __CRT_INLINE float tanf(_In_ float x) { return (float)tan((double)x); }
 _Check_return_ __CRT_INLINE float tanhf(_In_ float x) { return (float)tanh((double)x); }
+#endif
 #endif /* !defined(_CRTBLD) */
 
 _Check_return_ __CRT_INLINE double hypot(_In_ double x, _In_ double y) { return _hypot(x, y); }
