@@ -450,6 +450,25 @@ static LSTATUS query_class_property( HKEY hkey, struct property *prop )
     return query_property( hkey, L"Properties\\", DEVPROP_TYPE_EMPTY, prop );
 }
 
+#ifdef __REACTOS__
+static LSTATUS get_interface_class_property( const GUID *class, struct property *prop )
+{
+    WCHAR path[39];
+    LSTATUS err;
+    HKEY hkey;
+
+    guid_string( class, path, ARRAY_SIZE(path) );
+    if (!(err = open_device_classes_key( HKEY_LOCAL_MACHINE, path, KEY_QUERY_VALUE, TRUE, &hkey )))
+    {
+        err = query_property( hkey, L"Properties\\", DEVPROP_TYPE_EMPTY, prop );
+        RegCloseKey( hkey );
+    }
+
+    if (err && err != ERROR_MORE_DATA) *prop->size = 0;
+    return err;
+}
+#endif
+
 static LSTATUS get_class_property( const GUID *class, struct property *prop )
 {
     WCHAR path[39];
@@ -2005,10 +2024,17 @@ CONFIGRET WINAPI CM_Get_Class_Property_ExW( const GUID *class, const DEVPROPKEY 
 #else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
 #endif
+#ifdef __REACTOS__
+    if (flags & ~CM_CLASS_PROPERTY_BITS) return CR_INVALID_FLAG;
+#else
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
+#endif
 
     if (!class) return CR_INVALID_POINTER;
     if ((err = init_property( &prop, key, type, buffer, size, TRUE ))) return map_error( err );
+#ifdef __REACTOS__
+    if (flags == CM_CLASS_PROPERTY_INTERFACE) return map_error( get_interface_class_property( class, &prop ) );
+#endif
     return map_error( get_class_property( class, &prop ) );
 }
 

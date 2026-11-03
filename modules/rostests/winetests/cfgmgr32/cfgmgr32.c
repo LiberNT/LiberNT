@@ -671,7 +671,13 @@ static void test_CM_Get_Device_Interface_Property_Keys(void)
     ok( !memcmp( buffer + 0, &DEVPKEY_DeviceInterface_Enabled, sizeof(*buffer) ), "got {%s,%#lx}\n", debugstr_guid( &buffer[0].fmtid ), buffer[0].pid );
     ok( !memcmp( buffer + 1, &DEVPKEY_Device_InstanceId, sizeof(*buffer) ), "got {%s,%#lx}\n", debugstr_guid( &buffer[1].fmtid ), buffer[1].pid );
     ok( !memcmp( buffer + 2, &DEVPKEY_DeviceInterface_ClassGuid, sizeof(*buffer) ), "got {%s,%#lx}\n", debugstr_guid( &buffer[2].fmtid ), buffer[2].pid );
+#ifdef __REACTOS__
+    ok( !memcmp( buffer + 3, &DEVPKEY_Device_ContainerId, sizeof(*buffer) ) ||
+        !memcmp( buffer + 3, &DEVPKEY_DeviceInterface_ReferenceString, sizeof(*buffer) ),
+        "got {%s,%#lx}\n", debugstr_guid( &buffer[3].fmtid ), buffer[3].pid );
+#else
     todo_wine ok( !memcmp( buffer + 3, &DEVPKEY_Device_ContainerId, sizeof(*buffer) ), "got {%s,%#lx}\n", debugstr_guid( &buffer[3].fmtid ), buffer[3].pid );
+#endif
 
     tmp = wcsrchr( iface, '{' );
     tmp[1] = '6';
@@ -2516,6 +2522,23 @@ static void test_CM_Get_Class_Property(void)
     ok_x4( ret, ==, CR_NO_SUCH_REGISTRY_KEY );
     ok_x4( len, ==, 0 );
 
+#ifdef __REACTOS__
+    len = sizeof(buffer);
+    ret = CM_Get_Class_Property_ExW( &guid, &DEVPKEY_DeviceClass_Name, &type, buffer, &len, CM_CLASS_PROPERTY_INTERFACE, NULL );
+    ok_x4( ret, ==, CR_NO_SUCH_REGISTRY_KEY );
+    ok_x4( len, ==, 0 );
+
+    guid = GUID_DEVCLASS_DISPLAY;
+    len = sizeof(buffer);
+    ret = CM_Get_Class_Property_ExW( &guid, &DEVPKEY_DeviceClass_Name, &type, buffer, &len, CM_CLASS_PROPERTY_BITS + 1, NULL );
+    ok_x4( ret, ==, CR_INVALID_FLAG );
+
+    guid = GUID_DEVINTERFACE_DISPLAY_ADAPTER;
+    len = sizeof(buffer);
+    ret = CM_Get_Class_Property_ExW( &guid, &DEVPKEY_DeviceClass_Name, &type, buffer, &len, CM_CLASS_PROPERTY_INTERFACE, NULL );
+    ok_x4( ret, ==, CR_NO_SUCH_VALUE );
+    ok_x4( len, ==, 0 );
+#endif
 
     guid = GUID_DEVCLASS_DISPLAY;
     len = sizeof(buffer);
@@ -2778,6 +2801,10 @@ static void test_CM_Get_Device_Interface_List(void)
 
         /* lower case instance, refstr and guid suffix */
         wcscpy( substr, wcschr( substr + 25, '#' ) );
+#ifdef __REACTOS__
+        /* Windows 11 keeps the case of the reference string */
+        if (wcschr( substr, '\\' )) *wcschr( substr, '\\' ) = 0;
+#endif
         wcscpy( upper, substr );
         wcslwr( upper );
         flaky_wine ok_wcs( upper, substr );
