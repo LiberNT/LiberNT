@@ -352,6 +352,7 @@ typedef struct _FCB
     BOOLEAN DismountedVolume;
     ULONG CreateOptions;
     ACCESS_MASK DesiredAccess;
+    ACCESS_MASK MaximumAccess;
     ULONG AutomaticTimestampMask;
 
     // Used for file name information;

@@ -357,8 +357,7 @@ GetFileStatInformation(_In_ PVolumeContextBlock VolCB,
     Buffer->EndOfFile = Standard.EndOfFile;
     Buffer->FileAttributes = Basic.FileAttributes;
     Buffer->NumberOfLinks = Standard.NumberOfLinks;
-    /* FIXME: Windows reports the caller's maximum access to the file here, not the access granted to this open */
-    Buffer->EffectiveAccess = FileCB->DesiredAccess;
+    Buffer->EffectiveAccess = FileCB->MaximumAccess;
     Status = GetFileReparseTag(FileCB, Basic.FileAttributes, &Buffer->ReparseTag);
     if (NT_SUCCESS(Status) && Lx)
         Status = NtfsQueryLxMetadata(FileCB, Buffer);

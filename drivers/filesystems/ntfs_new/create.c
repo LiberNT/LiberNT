@@ -1878,6 +1878,7 @@ NtfsOpenVolume(
         FileCB->DesiredAccess |=
             SecurityContext->AccessState->PreviouslyGrantedAccess;
     }
+    FileCB->MaximumAccess = FileCB->DesiredAccess;
 
     ExAcquireFastMutex(&VolCB->VolumeStateMutex);
     if (VolCB->Dismounting || VolCB->Dismounted)
@@ -2923,10 +2924,28 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
     }
     FileCB->DesiredAccess = IrpSp->Parameters.Create.SecurityContext->DesiredAccess;
+    FileCB->MaximumAccess = FileCB->DesiredAccess;
     if (IrpSp->Parameters.Create.SecurityContext->AccessState)
     {
+        PPRIVILEGE_SET Privileges = NULL;
+        ACCESS_MASK MaximumAccess;
+
         FileCB->DesiredAccess |=
             IrpSp->Parameters.Create.SecurityContext->AccessState->PreviouslyGrantedAccess;
+        FileCB->MaximumAccess = FileCB->DesiredAccess;
+        if (CurrentFile &&
+            NT_SUCCESS(NtfsCheckRecordAccess(CurrentFile,
+                                             &IrpSp->Parameters.Create.SecurityContext->AccessState->SubjectSecurityContext,
+                                             MAXIMUM_ALLOWED,
+                                             0,
+                                             (IrpSp->Flags & SL_FORCE_ACCESS_CHECK) ? UserMode : Irp->RequestorMode,
+                                             &MaximumAccess,
+                                             &Privileges)))
+        {
+            FileCB->MaximumAccess = MaximumAccess;
+        }
+        if (Privileges)
+            SeFreePrivileges(Privileges);
     }
     /* A read-only file may still be opened to change its attributes, but it
      * cannot be opened for data writes or an overwriting disposition. */
