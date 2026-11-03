@@ -11,6 +11,7 @@ list(APPEND SOURCE
     db.cpp
     env.c
     layerapi.c
+    layerrun.c
     register.cpp
     testlist.c
     testdata.rc
@@ -26,3 +27,8 @@ set_module_type(apphelp_apitest win32cui)
 target_link_libraries(apphelp_apitest ${PSEH_LIB} cpprt atl_classes)
 add_importlibs(apphelp_apitest advapi32 userenv version shlwapi msvcrt kernel32 ntdll)
 add_rostests_file(TARGET apphelp_apitest)
+
+add_executable(apphelp_layerchild layerchild.c)
+set_module_type(apphelp_layerchild win32cui)
+add_importlibs(apphelp_layerchild msvcrt kernel32)
+add_rostests_file(TARGET apphelp_layerchild)

@@ -7,6 +7,7 @@ extern void func_apphelp(void);
 extern void func_db(void);
 extern void func_env(void);
 extern void func_layerapi(void);
+extern void func_layerrun(void);
 extern void func_register(void);
 
 const struct test winetest_testlist[] =
@@ -15,6 +16,7 @@ const struct test winetest_testlist[] =
     { "db", func_db },
     { "env", func_env },
     { "layerapi", func_layerapi },
+    { "layerrun", func_layerrun },
     { "register", func_register },
     { 0, 0 }
 };
