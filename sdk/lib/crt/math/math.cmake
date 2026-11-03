@@ -111,7 +111,10 @@ if(ARCH STREQUAL "i386")
         math/logb.c
     )
     if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        set_source_files_properties(math/i386/libm_crt.c math/ldexp.c
+        set_source_files_properties(
+            math/i386/libm_crt.c math/ldexp.c
+            math/ieee754/j0_y0.c math/ieee754/j1_y1.c math/ieee754/jn_yn.c
+            math/j0_y0.c math/j1_y1.c math/jn_yn.c
             PROPERTIES COMPILE_OPTIONS "-msse2;-mfpmath=sse")
     endif()
 elseif(ARCH STREQUAL "amd64")
