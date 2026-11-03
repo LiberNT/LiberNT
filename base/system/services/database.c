@@ -808,8 +808,6 @@ ScmServiceImageTerminated(ULONG ImageSerial)
 {
     PSERVICE_IMAGE pServiceImage = NULL;
     PLIST_ENTRY Entry;
-    LPCWSTR lpLogStrings[2];
-    WCHAR szCount[16];
 
     if (ScmShutdown)
         return;
@@ -844,16 +842,8 @@ ScmServiceImageTerminated(ULONG ImageSerial)
         lpService->Status.dwServiceSpecificExitCode = 0;
         lpService->Status.dwCheckPoint = 0;
         lpService->Status.dwWaitHint = 0;
-        lpService->dwFailureCount++;
         ScmNotifyServiceStatus(lpService);
-
-        StringCchPrintfW(szCount, ARRAYSIZE(szCount), L"%lu", lpService->dwFailureCount);
-        lpLogStrings[0] = lpService->lpDisplayName;
-        lpLogStrings[1] = szCount;
-        ScmLogEvent(EVENT_SERVICE_CRASH_NO_ACTION,
-                    EVENTLOG_ERROR_TYPE,
-                    ARRAYSIZE(lpLogStrings),
-                    lpLogStrings);
+        ScmServiceFailure(lpService, TRUE);
 
         pServiceImage->dwImageRunCount--;
         lpService->lpImage = NULL;
@@ -918,6 +908,79 @@ ScmWatchServiceImage(PSERVICE_IMAGE pServiceImage)
     }
     CloseHandle(hThread);
     pServiceImage->bProcessWatched = TRUE;
+}
+
+
+/* A recovery program runs under the account of the service, like its processes. */
+DWORD
+ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine)
+{
+    PROCESS_INFORMATION ProcessInformation;
+    STARTUPINFOW StartupInfo;
+    SERVICE_IMAGE Image;
+    LPVOID lpEnvironment = NULL;
+    HKEY hServiceKey;
+    DWORD dwError;
+    BOOL bResult = FALSE;
+
+    ZeroMemory(&Image, sizeof(Image));
+    if (ScmOpenServiceKey(pService->lpServiceName, KEY_READ, &hServiceKey) == ERROR_SUCCESS)
+    {
+        ScmReadString(hServiceKey, L"ObjectName", &Image.pszAccountName);
+        RegCloseKey(hServiceKey);
+    }
+
+    dwError = ScmLogonService(pService, &Image);
+    if (dwError == ERROR_SUCCESS)
+    {
+        ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+        StartupInfo.cb = sizeof(StartupInfo);
+        if (!CreateEnvironmentBlock(&lpEnvironment, Image.hToken, Image.hToken == NULL))
+            lpEnvironment = NULL;
+
+        if (Image.hToken != NULL)
+        {
+            if (ImpersonateLoggedOnUser(Image.hToken))
+            {
+                bResult = CreateProcessAsUserW(Image.hToken, NULL, lpCommandLine, NULL, NULL, FALSE,
+                                               CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS,
+                                               lpEnvironment, NULL, &StartupInfo, &ProcessInformation);
+                dwError = bResult ? ERROR_SUCCESS : GetLastError();
+                RevertToSelf();
+            }
+            else
+            {
+                dwError = GetLastError();
+            }
+        }
+        else
+        {
+            bResult = CreateProcessW(NULL, lpCommandLine, NULL, NULL, FALSE,
+                                     CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS,
+                                     lpEnvironment, NULL, &StartupInfo, &ProcessInformation);
+            dwError = bResult ? ERROR_SUCCESS : GetLastError();
+        }
+
+        if (bResult)
+        {
+            CloseHandle(ProcessInformation.hThread);
+            CloseHandle(ProcessInformation.hProcess);
+        }
+        if (lpEnvironment != NULL)
+            DestroyEnvironmentBlock(lpEnvironment);
+        if (Image.hProfile != NULL)
+        {
+            ScmEnableBackupRestorePrivileges(Image.hToken, TRUE);
+            UnloadUserProfile(Image.hToken, Image.hProfile);
+            ScmEnableBackupRestorePrivileges(Image.hToken, FALSE);
+        }
+        if (Image.hToken != NULL)
+            CloseHandle(Image.hToken);
+    }
+
+    if (Image.pszAccountName != NULL)
+        HeapFree(GetProcessHeap(), 0, Image.pszAccountName);
+    return dwError;
 }
 
 

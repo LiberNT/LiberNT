@@ -161,9 +161,12 @@ typedef struct _SERVICE_DELAYED_AUTO_START_INFO {
     BOOL fDelayedAutoStart;
 } SERVICE_DELAYED_AUTO_START_INFO, *LPSERVICE_DELAYED_AUTO_START_INFO;
 
+cpp_quote("#ifndef _SERVICE_FAILURE_ACTIONS_FLAG_DEFINED_")
+cpp_quote("#define _SERVICE_FAILURE_ACTIONS_FLAG_DEFINED_")
 typedef struct _SERVICE_FAILURE_ACTIONS_FLAG {
     BOOL fFailureActionsOnNonCrashFailures;
 } SERVICE_FAILURE_ACTIONS_FLAG, *LPSERVICE_FAILURE_ACTIONS_FLAG;
+cpp_quote("#endif")
 
 typedef struct _SERVICE_SID_INFO {
     DWORD dwServicesSidType;

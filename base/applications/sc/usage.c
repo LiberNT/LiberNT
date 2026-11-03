@@ -36,9 +36,11 @@ VOID MainUsage(VOID)
     _T("\t  config         : Changes the configuration of a service (persistent).\n")
     _T("\t  description    : Changes the description of a service.\n")
     _T("\t  failure        : Changes the actions taken by a service upon failure.\n")
+    _T("\t  failureflag    : Changes the failure actions flag of a service.\n")
     _T("\t  qc             : Queries the configuration information for a service.\n")
     _T("\t  qdescription   : Queries the description for a service.\n")
     _T("\t  qfailure       : Queries the actions taken by a service upon failure.\n")
+    _T("\t  qfailureflag   : Queries the failure actions flag of a service.\n")
     _T("\t  delete         : Deletes a service (from the registry).\n")
     _T("\t  create         : Creates a service (adds it to the registry).\n")
     _T("\t  control        : Sends a control to a service.\n")
@@ -218,6 +220,14 @@ VOID QueryFailureUsage(VOID)
              _T("        sc <server> qfailure [service name] <bufferSize>\n"));
 }
 
+VOID QueryFailureFlagUsage(VOID)
+{
+    _tprintf(_T("DESCRIPTION:\n")
+             _T("        Queries the failure actions flag setting of a service.\n")
+             _T("USAGE:\n")
+             _T("        sc <server> qfailureflag [service name]\n"));
+}
+
 VOID SetDescriptionUsage(VOID)
 {
     _tprintf(_T("DESCRIPTION:\n")
@@ -263,6 +273,19 @@ VOID SetFailureUsage(VOID)
              _T("                  separated by / (forward slash) -- e.g., run/5000/reboot/800\n")
              _T("                  Valid actions are <run|restart|reboot> >\n")
              _T("                 (Must be used in conjunction with the reset= option)\n"));
+}
+
+VOID SetFailureFlagUsage(VOID)
+{
+    _tprintf(_T("DESCRIPTION:\n")
+             _T("        Changes the failure actions flag setting of a service.\n")
+             _T("        With 0, the configured failure actions run only when the service process\n")
+             _T("        terminates while the service is not stopped.\n")
+             _T("        With 1, they also run when the service stops with a Win32 exit code\n")
+             _T("        other than 0.\n")
+             _T("        The flag is ignored when the service has no failure actions configured.\n")
+             _T("USAGE:\n")
+             _T("        sc <server> failureflag [service name] [flag]\n"));
 }
 
 VOID GetDisplayNameUsage(VOID)

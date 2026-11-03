@@ -8,4 +8,8 @@ BEGIN
     IDS_SERVICE_RUNNING "Uruchomiono"
     IDS_SERVICE_STOPPED "Zatrzymano"
     IDS_SERVICE_PAUSED  "Wstrzymano"
+    IDS_RECOVERY_NONE        "No action"
+    IDS_RECOVERY_RESTART     "Restart the service"
+    IDS_RECOVERY_REBOOT      "Restart the computer"
+    IDS_RECOVERY_RUN_COMMAND "Run the configured recovery program"
 END

@@ -11,6 +11,7 @@ list(APPEND SOURCE
     controlset.c
     database.c
     driver.c
+    failure.c
     groupdb.c
     lock.c
     rpcserver.c

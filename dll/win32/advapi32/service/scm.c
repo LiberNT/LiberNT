@@ -268,6 +268,10 @@ ChangeServiceConfig2A(SC_HANDLE hService,
             Info.psfa = lpInfo;
             break;
 
+        case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+            Info.psfaf = lpInfo;
+            break;
+
         default:
             WARN("Unknown info level 0x%lx\n", dwInfoLevel);
             SetLastError(ERROR_INVALID_PARAMETER);
@@ -324,6 +328,10 @@ ChangeServiceConfig2W(SC_HANDLE hService,
 
         case SERVICE_CONFIG_FAILURE_ACTIONS:
             Info.psfa = lpInfo;
+            break;
+
+        case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+            Info.psfaf = lpInfo;
             break;
 
         default:
@@ -2520,6 +2528,7 @@ QueryServiceConfig2A(SC_HANDLE hService,
 {
     SERVICE_DESCRIPTIONA ServiceDescription;
     SERVICE_FAILURE_ACTIONSA ServiceFailureActions;
+    SERVICE_FAILURE_ACTIONS_FLAG FailureActionsFlag;
     LPBYTE lpTempBuffer;
     BOOL bUseTempBuffer = FALSE;
     DWORD dwBufferSize;
@@ -2547,6 +2556,15 @@ QueryServiceConfig2A(SC_HANDLE hService,
             {
                 lpTempBuffer = (LPBYTE)&ServiceFailureActions;
                 dwBufferSize = sizeof(SERVICE_FAILURE_ACTIONSA);
+                bUseTempBuffer = TRUE;
+            }
+            break;
+
+        case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+            if ((lpBuffer == NULL) || (cbBufSize < sizeof(SERVICE_FAILURE_ACTIONS_FLAG)))
+            {
+                lpTempBuffer = (LPBYTE)&FailureActionsFlag;
+                dwBufferSize = sizeof(SERVICE_FAILURE_ACTIONS_FLAG);
                 bUseTempBuffer = TRUE;
             }
             break;
@@ -2637,6 +2655,7 @@ QueryServiceConfig2W(SC_HANDLE hService,
 {
     SERVICE_DESCRIPTIONW ServiceDescription;
     SERVICE_FAILURE_ACTIONSW ServiceFailureActions;
+    SERVICE_FAILURE_ACTIONS_FLAG FailureActionsFlag;
     LPBYTE lpTempBuffer;
     BOOL bUseTempBuffer = FALSE;
     DWORD dwBufferSize;
@@ -2664,6 +2683,15 @@ QueryServiceConfig2W(SC_HANDLE hService,
             {
                 lpTempBuffer = (LPBYTE)&ServiceFailureActions;
                 dwBufferSize = sizeof(SERVICE_FAILURE_ACTIONSW);
+                bUseTempBuffer = TRUE;
+            }
+            break;
+
+        case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
+            if ((lpBuffer == NULL) || (cbBufSize < sizeof(SERVICE_FAILURE_ACTIONS_FLAG)))
+            {
+                lpTempBuffer = (LPBYTE)&FailureActionsFlag;
+                dwBufferSize = sizeof(SERVICE_FAILURE_ACTIONS_FLAG);
                 bUseTempBuffer = TRUE;
             }
             break;
