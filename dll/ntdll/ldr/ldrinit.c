@@ -3473,9 +3473,16 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     /* Check if we had Shim Data */
     if (OldShimData)
     {
+        WCHAR ShimEngineBuffer[MAX_PATH];
+        UNICODE_STRING ShimEngine;
+
+        RtlInitEmptyUnicodeString(&ShimEngine, ShimEngineBuffer, sizeof(ShimEngineBuffer));
+        RtlAppendUnicodeToString(&ShimEngine, SharedUserData->NtSystemRoot);
+        RtlAppendUnicodeToString(&ShimEngine, L"\\System32\\apphelp.dll");
+
         /* Load the Shim Engine */
         Peb->AppCompatInfo = NULL;
-        LdrpLoadShimEngine(OldShimData, &ImagePathName, OldShimData);
+        LdrpLoadShimEngine(ShimEngine.Buffer, &ImagePathName, OldShimData);
     }
     else
     {

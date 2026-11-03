@@ -21,28 +21,38 @@
 
 typedef struct _ShimData
 {
-    WCHAR szModule[MAX_PATH];
     DWORD dwSize;
     DWORD dwMagic;
+    DWORD dwReserved1[2];
     SDBQUERYRESULT Query;
     WCHAR szLayer[MAX_LAYER_LENGTH];
+    BYTE Reserved2[1892];
+    WCHAR szLayerEnv[MAX_LAYER_LENGTH];
+    WCHAR Reserved3[MAX_LAYER_LENGTH];
     // Start ReactOS specific
     DWORD dwRosProcessCompatVersion;
-#ifdef _M_AMD64
-    PVOID RtlGetCurrentDirectory_U_RtlpMsysDecoy;
-#endif
+    union
+    {
+        PVOID RtlGetCurrentDirectory_U_RtlpMsysDecoy;
+        ULONGLONG ullReserved;
+    };
+    DWORD dwReserved4[16];
 } ShimData;
 
 #define SHIMDATA_MAGIC  0xAC0DEDAB
 #define REACTOS_COMPATVERSION_IGNOREMANIFEST 0xffffffff
 
 C_ASSERT(SHIMDATA_MAGIC == REACTOS_SHIMDATA_MAGIC);
+C_ASSERT(sizeof(ShimData) == 3976);
+C_ASSERT(offsetof(ShimData, Query) == 16);
+C_ASSERT(offsetof(ShimData, szLayer) == 472);
+C_ASSERT(offsetof(ShimData, szLayerEnv) == 2876);
+C_ASSERT(offsetof(ShimData, dwRosProcessCompatVersion) == 3900);
 C_ASSERT(sizeof(ShimData) == sizeof(ReactOS_ShimData));
+C_ASSERT(offsetof(ShimData, dwSize) == offsetof(ReactOS_ShimData, dwSize));
 C_ASSERT(offsetof(ShimData, dwMagic) == offsetof(ReactOS_ShimData, dwMagic));
 C_ASSERT(offsetof(ShimData, dwRosProcessCompatVersion) == offsetof(ReactOS_ShimData, dwRosProcessCompatVersion));
-#ifdef _M_AMD64
 C_ASSERT(offsetof(ShimData, RtlGetCurrentDirectory_U_RtlpMsysDecoy) == offsetof(ReactOS_ShimData, RtlGetCurrentDirectory_U_RtlpMsysDecoy));
-#endif
 
 static BOOL WINAPI SdbpFileExists(LPCWSTR path)
 {
@@ -735,7 +745,6 @@ BOOL WINAPI SdbTagIDToTagRef(HSDB hsdb, PDB pdb, TAGID tiWhich, TAGREF* ptrWhich
 BOOL WINAPI SdbPackAppCompatData(HSDB hsdb, PSDBQUERYRESULT pQueryResult, PVOID* ppData, DWORD *pdwSize)
 {
     ShimData* pData;
-    HRESULT hr;
     DWORD n;
     BOOL bCloseDatabase = FALSE;
 
@@ -752,15 +761,6 @@ BOOL WINAPI SdbPackAppCompatData(HSDB hsdb, PSDBQUERYRESULT pQueryResult, PVOID*
         return FALSE;
     }
 
-    GetSystemWindowsDirectoryW(pData->szModule, _countof(pData->szModule));
-    hr = StringCchCatW(pData->szModule, _countof(pData->szModule), L"\\system32\\apphelp.dll");
-    if (!SUCCEEDED(hr))
-    {
-        SHIM_ERR("Unable to append module name (0x%x)\n", hr);
-        RtlFreeHeap(RtlGetProcessHeap(), 0, pData);
-        return FALSE;
-    }
-
     pData->dwSize = sizeof(*pData);
     pData->dwMagic = SHIMDATA_MAGIC;
     pData->Query = *pQueryResult;
@@ -769,9 +769,9 @@ BOOL WINAPI SdbPackAppCompatData(HSDB hsdb, PSDBQUERYRESULT pQueryResult, PVOID*
         static const UNICODE_STRING EnvKey = RTL_CONSTANT_STRING(L"__COMPAT_LAYER");
         UNICODE_STRING EnvValue;
 
-        RtlInitEmptyUnicodeString(&EnvValue, pData->szLayer, sizeof(pData->szLayer) - sizeof(WCHAR));
+        RtlInitEmptyUnicodeString(&EnvValue, pData->szLayerEnv, sizeof(pData->szLayerEnv) - sizeof(WCHAR));
         if (!NT_SUCCESS(RtlQueryEnvironmentVariable_U(NULL, &EnvKey, &EnvValue)))
-            pData->szLayer[0] = UNICODE_NULL;
+            pData->szLayerEnv[0] = UNICODE_NULL;
     }
 
     SHIM_INFO("\ndwFlags    0x%x\ndwMagic    0x%x\ntrExe      0x%x\ntrLayer    0x%x\n",
