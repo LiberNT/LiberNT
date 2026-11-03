@@ -39,6 +39,12 @@ START_TEST(MmUserLayout)
     NTSTATUS Status;
     ULONG Regions = 0, LowRegions = 0, HighRegions = 0;
 
+    if (sizeof(PVOID) < sizeof(ULONG64))
+    {
+        skip(FALSE, "The layout checks describe a 64-bit user address space\n");
+        return;
+    }
+
     LastGb = (ULONG_PTR)MmHighestUserAddress + 1 - LAYOUT_GB;
     trace("layout highest=%p probe=%p\n", MmHighestUserAddress, (PVOID)MmUserProbeAddress);
 
