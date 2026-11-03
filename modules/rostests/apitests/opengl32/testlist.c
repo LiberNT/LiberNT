@@ -10,6 +10,7 @@ extern void func_wgl_streaming(void);
 extern void func_wgl_fence_readback(void);
 extern void func_wgl_hidden_present(void);
 extern void func_wgl_context_rebind(void);
+extern void func_wgl_icd_adapter(void);
 
 const struct test winetest_testlist[] =
 {
@@ -21,6 +22,7 @@ const struct test winetest_testlist[] =
     { "wgl_fence_readback", func_wgl_fence_readback },
     { "wgl_hidden_present", func_wgl_hidden_present },
     { "wgl_context_rebind", func_wgl_context_rebind },
+    { "wgl_icd_adapter", func_wgl_icd_adapter },
 
     { 0, 0 }
 };
