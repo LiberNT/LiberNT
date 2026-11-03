@@ -447,6 +447,17 @@ KiRiscvTrapHandler(_Inout_ PKTRAP_FRAME TrapFrame)
                      * second-chance debugger may intervene before exit. */
                     if (KeGetTrapFrameInterruptState(TrapFrame))
                         _enable();
+                    if (!Thread->Header.Minimal)
+                    {
+                        if (PsGetCurrentProcess()->DebugPort)
+                            DbgkForwardException(&Record, TRUE, TRUE);
+                        ZwTerminateProcess(NtCurrentProcess(), STATUS_STACK_BUFFER_OVERRUN);
+                        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
+                                     STATUS_STACK_BUFFER_OVERRUN,
+                                     (ULONG_PTR)Record.ExceptionAddress,
+                                     (ULONG_PTR)TrapFrame,
+                                     0);
+                    }
                     KiDispatchException(&Record, NULL, TrapFrame, UserMode, FALSE);
                     _disable();
                     Thread->TrapFrame = TrapFrame->PreviousTrapFrame;
