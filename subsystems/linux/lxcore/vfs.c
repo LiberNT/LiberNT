@@ -2772,6 +2772,33 @@ LxNodeQuery(
     return 0;
 }
 
+LONG
+LxDevptsForPtmx(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Path,
+    _Out_ PLX_DEVPTS *Devpts)
+{
+    PCSTR Slash = strrchr(Path, '/'), Relative;
+    PLX_MOUNT Mount;
+    PSTR Pts;
+    ULONG Type;
+    LONG Error;
+
+    *Devpts = NULL;
+    if (Slash == NULL)
+        return -LX_ENOENT;
+    Pts = LxStrPrintf("%.*spts", (int)(Slash - Path + 1), Path);
+    if (Pts == NULL)
+        return -LX_ENOMEM;
+    Error = LxNodeQuery(Process, Pts, &Mount, &Relative, &Type, NULL, NULL);
+    if ((Error == 0) && ((Mount->Kind != LxFsDevpts) || (Relative[0] != '\0') || (Mount->Devpts == NULL)))
+        Error = -LX_ENODEV;
+    if (Error == 0)
+        *Devpts = Mount->Devpts;
+    LxFree(Pts);
+    return Error;
+}
+
 static
 LONG
 LxLookupFinish(

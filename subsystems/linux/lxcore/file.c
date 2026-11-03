@@ -1874,13 +1874,6 @@ LxDeviceOpenFile(
             default: return NULL;
         }
     }
-    else if ((Major == 5) && (Minor == 2))
-    {
-        if (LxPtmxOpen(Process, LxDevptsForPtmx(Process, Path), Flags, &File) != 0)
-            return NULL;
-        File->Path = LxStrDup(Path);
-        return File;
-    }
     else if (Major == 136)
     {
         Tty = LxTtyLookup(Process->Instance, Process->Instance->Devpts, Minor);
@@ -1954,6 +1947,17 @@ LxDeviceOpen(
             (*Result)->Rdev = (1 << 8) | 11;
             (*Result)->Path = LxStrDup(Path);
         }
+        return Error;
+    }
+    if (Device == ((5ULL << 32) | 2))
+    {
+        PLX_DEVPTS Devpts;
+
+        Error = LxDevptsForPtmx(Process, Path, &Devpts);
+        if (Error == 0)
+            Error = LxPtmxOpen(Process, Devpts, Flags, Result);
+        if (Error == 0)
+            (*Result)->Path = LxStrDup(Path);
         return Error;
     }
     *Result = LxDeviceOpenFile(Process, Device, Flags, Path);

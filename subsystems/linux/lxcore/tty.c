@@ -173,34 +173,6 @@ LxDevptsFreeAll(
     Instance->Devpts = NULL;
 }
 
-PLX_DEVPTS
-LxDevptsForPtmx(
-    _In_ PLX_PROCESS Process,
-    _In_opt_ PCSTR Path)
-{
-    PLX_DEVPTS Devpts = Process->Instance->Devpts;
-    PCSTR Slash = (Path != NULL) ? strrchr(Path, '/') : NULL;
-    PSTR Pts;
-    LX_NODE Node;
-
-    if (Slash == NULL)
-        return Devpts;
-    Pts = LxStrPrintf("%.*spts", (int)(Slash - Path + 1), Path);
-    if (Pts == NULL)
-        return Devpts;
-    if (LxLookup(Process, LX_AT_FDCWD, Pts, LX_LOOKUP_FOLLOW, &Node) == 0)
-    {
-        if ((Node.Mount != NULL) && (Node.Mount->Kind == LxFsDevpts) && (Node.Relative[0] == '\0') &&
-            (Node.Mount->Devpts != NULL))
-        {
-            Devpts = Node.Mount->Devpts;
-        }
-        LxNodeFree(&Node);
-    }
-    LxFree(Pts);
-    return Devpts;
-}
-
 static
 BOOLEAN
 LxTtyIndexUsed(
