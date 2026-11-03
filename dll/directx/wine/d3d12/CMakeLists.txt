@@ -53,7 +53,7 @@ include(${REACTOS_SOURCE_DIR}/submodules/dxilconv.cmake)
 
 if(REACTOS_USE_WDDM)
     set(D3D12_DXC_INCLUDE_DIR "${REACTOS_SOURCE_DIR}/submodules/dxc/include")
-    if(ENABLE_DXILCONV AND EXISTS "${D3D12_DXC_INCLUDE_DIR}/dxc/HLSL/ViewIDPipelineValidation.inl")
+    if(EXISTS "${D3D12_DXC_INCLUDE_DIR}/dxc/HLSL/ViewIDPipelineValidation.inl")
         add_library(d3d12_viewid STATIC native12_viewid.cpp)
         target_include_directories(d3d12_viewid PRIVATE ${D3D12_DXC_INCLUDE_DIR})
         target_compile_options(d3d12_viewid PRIVATE -Wno-unused-but-set-variable)
