@@ -299,7 +299,7 @@ MiAllocateVirtualMemoryNt(
     PAGED_CODE();
 
     if (!MiHighestAddressFromZeroBits(ZeroBits, &Highest))
-        return STATUS_INVALID_PARAMETER;
+        return STATUS_INVALID_PARAMETER_3;
 
     if (HighestEndingAddress != 0 && HighestEndingAddress < Highest)
         Highest = HighestEndingAddress;
