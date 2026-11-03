@@ -47,6 +47,7 @@ typedef struct _FELIX_THREAD
     SIZE_T UnmapSize;
     HANDLE ParkEvent;
     HANDLE ReleaseEvent;
+    BOOLEAN RaisingBreakpoint;
 } FELIX_THREAD, *PFELIX_THREAD;
 
 #pragma pack(push, 1)
@@ -296,6 +297,38 @@ Felix86NtSystemService32(
     Thread->EntryContext = EntryContext;
     Felix86NtSetFrame(Thread->Cpu, Frame);
     FelixLoadCpuArea(Thread, &Status, Bop);
+}
+
+VOID
+Felix86NtBreakpoint(
+    _In_ PVOID Owner,
+    _Inout_ PULONG64 Registers,
+    _In_ ULONG64 Next)
+{
+    PFELIX_THREAD Thread = Owner;
+    ULONG InService = Thread->InService;
+    volatile BOOLEAN Raised = FALSE;
+    EXCEPTION_RECORD Record;
+    CONTEXT Context;
+
+    RtlZeroMemory(&Record, sizeof(Record));
+    Record.ExceptionCode = STATUS_WX86_BREAKPOINT;
+    Record.ExceptionAddress = ULongToPtr((ULONG)Next - 1);
+    Record.NumberParameters = 1;
+    Registers[FelixRip] = (ULONG)Next;
+    FelixSaveState(Thread, FelixCpuArea());
+
+    Thread->InService = InService + 1;
+    RtlCaptureContext(&Context);
+    if (!Raised)
+    {
+        Raised = TRUE;
+        Thread->RaisingBreakpoint = TRUE;
+        NtRaiseException(&Record, &Context, TRUE);
+    }
+    Thread->RaisingBreakpoint = FALSE;
+    Thread->InService = InService;
+    FelixLoadCpuArea(Thread, NULL, 0);
 }
 
 ULONG64
@@ -569,6 +602,13 @@ BTCpuResetToConsistentState(
     int Result;
 
     if (!Thread || !Thread->Cpu || !Thread->EntryContext) return STATUS_SUCCESS;
+    if (Thread->RaisingBreakpoint && Record->ExceptionCode == STATUS_WX86_BREAKPOINT)
+    {
+        Thread->RaisingBreakpoint = FALSE;
+        Record->ExceptionCode = STATUS_BREAKPOINT;
+        *NativeContext = *Thread->EntryContext;
+        return STATUS_SUCCESS;
+    }
     if (Felix86NtHostFault(Pointers)) NtContinue(NativeContext, FALSE);
 
     RtlZeroMemory(&Native, sizeof(Native));

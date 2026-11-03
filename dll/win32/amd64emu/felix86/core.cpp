@@ -165,6 +165,11 @@ void felix86_syscall32(felix86_frame* frame, u32 rip_next) {
     Felix86NtSystemService32(cpu->owner, cpu->state.ctx.gprs);
 }
 
+void felix86_breakpoint(felix86_frame* frame, u64 rip_next) {
+    NtCpu* cpu = (NtCpu*)frame->state;
+    Felix86NtBreakpoint(cpu->owner, cpu->state.ctx.gprs, rip_next);
+}
+
 void felix86_raise_hardware_breakpoint(ThreadState* state, u64 rip, int index) {
     ERROR("Hardware breakpoint %d at %llx", index, (unsigned long long)rip);
 }
