@@ -92,6 +92,8 @@ RemoveTestFiles(VOID)
     DeleteFileW(TestPath(L"zero_dir\\inner.txt"));
     DeleteFileW(TestPath(L"zero_dir\\renamed.txt"));
     DeleteFileW(TestPath(L"zero_dir\\elevated.txt"));
+    DeleteFileW(TestPath(L"zero_dir\\limited.txt"));
+    RemoveDirectoryW(TestPath(L"zero_dir\\limited"));
     DeleteFileW(TestPath(L"control.txt"));
     for (Index = 0; Index < ARRAYSIZE(Objects); Index++)
     {
@@ -588,19 +590,26 @@ CheckResult(BOOL Result, DWORD ExpectedError, PCSTR Operation)
 static HANDLE
 CreateLimitedToken(VOID)
 {
-    SID_AND_ATTRIBUTES DenyOnly = { NULL, 0 };
+    SID_AND_ATTRIBUTES DenyOnly[2] = { { NULL, 0 }, { NULL, 0 } };
+    PTOKEN_USER User;
     HANDLE Process;
     HANDLE Limited = NULL;
 
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY, &Process))
         return NULL;
-    ConvertStringSidToSidA("S-1-5-32-544", &DenyOnly.Sid);
-    if (!CreateRestrictedToken(Process, DISABLE_MAX_PRIVILEGE | LUA_TOKEN, 1, &DenyOnly, 0, NULL, 0, NULL,
-                               &Limited))
+    User = QueryToken(Process, TokenUser);
+    ConvertStringSidToSidA("S-1-5-32-544", &DenyOnly[0].Sid);
+    if (User && DenyOnly[0].Sid)
     {
-        Limited = NULL;
+        DenyOnly[1].Sid = User->User.Sid;
+        if (!CreateRestrictedToken(Process, DISABLE_MAX_PRIVILEGE | LUA_TOKEN, ARRAYSIZE(DenyOnly), DenyOnly,
+                                   0, NULL, 0, NULL, &Limited))
+        {
+            Limited = NULL;
+        }
     }
-    LocalFree(DenyOnly.Sid);
+    LocalFree(DenyOnly[0].Sid);
+    HeapFree(GetProcessHeap(), 0, User);
     CloseHandle(Process);
     return Limited;
 }
