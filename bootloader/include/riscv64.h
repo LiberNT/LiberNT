@@ -52,6 +52,14 @@ BOOLEAN
 RiscvFinalizePageTables(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
+BOOLEAN
+RiscvMapFirmwareRuntime(
+    _In_ ULONGLONG PhysicalStart,
+    _In_ ULONGLONG PageCount,
+    _In_ BOOLEAN Device,
+    _In_ BOOLEAN Executable,
+    _Out_ PULONGLONG VirtualStart);
+
 VOID
 RiscvJh7110ResumeDisplay(
     _In_reads_bytes_(DeviceTreeSize) const VOID *DeviceTree,
