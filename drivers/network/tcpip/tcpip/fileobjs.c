@@ -572,7 +572,7 @@ VOID AddrFileFree(
   /* Remove address file from the global list */
   TcpipAcquireSpinLock(&AddressFileListLock, &OldIrql);
   RemoveEntryList(&AddrFile->ListEntry);
-  if (AddrFile->Protocol == IPPROTO_UDP &&
+  if (AddrFile->Protocol == IPPROTO_UDP && !AddrFile->Raw &&
       AddrHoldsIPv4Port(AddrFile) &&
       !AddrPortInUseLocked(AddrFile))
   {
@@ -655,6 +655,7 @@ static BOOLEAN AddrAuthorizeBind(
   BOOLEAN WildcardPort,
   BOOLEAN DualStack,
   USHORT Protocol,
+  BOOLEAN Raw,
   ULONG64 EndpointId)
 {
   WFP_SHIM_ENDPOINT Endpoint;
@@ -666,7 +667,7 @@ static BOOLEAN AddrAuthorizeBind(
   Endpoint.EndpointId = EndpointId;
   Endpoint.WildcardAddress = AddrIsUnspecified(Address);
   Endpoint.WildcardPort = WildcardPort;
-  Endpoint.Raw = (Protocol != IPPROTO_TCP && Protocol != IPPROTO_UDP);
+  Endpoint.Raw = Raw || (Protocol != IPPROTO_TCP && Protocol != IPPROTO_UDP);
   Endpoint.Protocol = (UCHAR)Protocol;
   if (Address->Type == IP_ADDRESS_V4)
     Endpoint.LocalAddress = DN2H(Address->Address.IPv4Address);
@@ -692,6 +693,7 @@ NTSTATUS FileOpenAddress(
   PTDI_REQUEST Request,
   PTA_IP_ADDRESS Address,
   USHORT Protocol,
+  BOOLEAN Raw,
   BOOLEAN Shared,
   BOOLEAN Exclusive,
   PVOID Options)
@@ -720,7 +722,7 @@ NTSTATUS FileOpenAddress(
         return Status;
     if (SharedFile != NULL && Protocol != IPPROTO_UDP)
     {
-        if (!AddrAuthorizeBind(&BindAddress, BindPort, FALSE, DualStack, Protocol, SharedFile->WfpEndpointId))
+        if (!AddrAuthorizeBind(&BindAddress, BindPort, FALSE, DualStack, Protocol, SharedFile->Raw, SharedFile->WfpEndpointId))
         {
             DereferenceObject(SharedFile);
             return STATUS_ACCESS_DENIED;
@@ -748,13 +750,14 @@ NTSTATUS FileOpenAddress(
   AddrFile->Reuse = Shared;
   AddrFile->Exclusive = Exclusive;
   AddrFile->DualStack = DualStack;
+  AddrFile->Raw = Raw;
 
   /* Set our default options */
   AddrFile->TTL = 128;
   AddrFile->MulticastTTL = 1;
   AddrFile->DF = 0;
   AddrFile->BCast = 1;
-  AddrFile->HeaderIncl = 1;
+  AddrFile->HeaderIncl = 0;
   AddrFile->ProcessId = PsGetCurrentProcessId();
   AddrFile->WfpEndpointId = InterlockedIncrement64(&NextWfpEndpointId);
 
@@ -798,7 +801,7 @@ NTSTATUS FileOpenAddress(
     A2S(&AddrFile->Address), Protocol, IPPROTO_UDP));
 
   /* Protocol specific handling */
-  switch (Protocol) {
+  switch (Raw && (Protocol == IPPROTO_TCP || Protocol == IPPROTO_UDP) ? IPPROTO_RAW : Protocol) {
   case IPPROTO_TCP:
       if (BindPort)
       {
@@ -959,7 +962,7 @@ NTSTATUS FileOpenAddress(
   if (SharedFile != NULL)
       DereferenceObject(SharedFile);
 
-  if (!AddrAuthorizeBind(&AddrFile->Address, AddrFile->Port, BindPort == 0, DualStack, Protocol, AddrFile->WfpEndpointId))
+  if (!AddrAuthorizeBind(&AddrFile->Address, AddrFile->Port, BindPort == 0, DualStack, Protocol, Raw, AddrFile->WfpEndpointId))
   {
       Request->Handle.AddressHandle = NULL;
       DereferenceObject(AddrFile);

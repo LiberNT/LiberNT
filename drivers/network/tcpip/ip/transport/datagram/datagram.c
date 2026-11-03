@@ -157,19 +157,10 @@ DGDeliverData(
 
     LockObject(AddrFile);
 
-    if (AddrFile->Protocol == IPPROTO_UDP)
-    {
+    if (AddrFile->Protocol == IPPROTO_UDP && !AddrFile->Raw)
         DataBuffer = IPPacket->Data;
-    }
-    else if (AddrFile->HeaderIncl)
-    {
-        DataBuffer = IPPacket->Header;
-    }
     else
-    {
-        DataBuffer = IPPacket->Data;
-        DataSize -= IPPacket->HeaderSize;
-    }
+        DataBuffer = IPPacket->Header;
 
     if (!IsListEmpty(&AddrFile->ReceiveQueue))
     {
