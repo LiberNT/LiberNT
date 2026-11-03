@@ -43,6 +43,8 @@ str_to_flag platform_to_flag[] = {
     {"X86", PLATFORM_X86},
     {"I386", PLATFORM_X86},
     {"AMD64", PLATFORM_AMD64},
+    {"ARM64", PLATFORM_ARM64},
+    {"RISCV64", PLATFORM_RISCV64},
     {"ANY", PLATFORM_ANY},
     {nullptr, 0},
 };

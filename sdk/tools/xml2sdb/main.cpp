@@ -247,7 +247,7 @@ int main(int argc, char * argv[])
         printf("  -i <input.xml>   : Input XML file to convert\n");
         printf("  -o <output.sdb>  : Output SDB file to create\n");
         printf("  -l <loglevel>    : Set log level (1=ERR, 2=WARN, 3=INFO)\n");
-        printf("  -p <platform>    : Set the runtime platform (X86, AMD64, ANY)\n");
+        printf("  -p <platform>    : Set the runtime platform (X86, AMD64, ARM64, RISCV64, ANY)\n");
         return 1;
     }
 

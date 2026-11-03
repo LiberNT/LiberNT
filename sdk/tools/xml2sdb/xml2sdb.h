@@ -92,8 +92,10 @@ enum PlatformType
     // There is another platform here, but we don't support it yet
     // https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/kshim/drvmain.htm
     PLATFORM_AMD64 = 4,
+    PLATFORM_ARM64 = 8,
+    PLATFORM_RISCV64 = 16,
 
-    PLATFORM_ANY = PLATFORM_X86 | PLATFORM_AMD64
+    PLATFORM_ANY = PLATFORM_X86 | PLATFORM_AMD64 | PLATFORM_ARM64 | PLATFORM_RISCV64
 };
 
 struct str_to_flag
