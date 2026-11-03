@@ -127,6 +127,19 @@ DxgkAdapterStartValidateCaps(
     {
         return STATUS_INVALID_PARAMETER;
     }
+    {
+        BOOLEAN HybridDdi = Caps->InterfaceVersion >= 0x4000;
+        BOOLEAN CrossAdapter = HybridDdi && (Caps->MemoryManagementCaps & CrossAdapterResource) != 0;
+        BOOLEAN Discrete = HybridDdi && Caps->HybridDiscrete;
+
+        if (Discrete && Caps->InterfaceVersion < 0x5005 &&
+            (Caps->NumberOfVideoPresentSources != 0 || Caps->NumberOfChildren != 0))
+            return STATUS_INVALID_PARAMETER;
+        if ((Discrete || Caps->HybridIntegrated) && !CrossAdapter)
+            return STATUS_INVALID_PARAMETER;
+        if (Caps->HybridIntegrated && (Discrete || Caps->NumberOfChildren == 0))
+            return STATUS_INVALID_PARAMETER;
+    }
     if (Caps->SupportPerEngineTdr && !Caps->HasEngineResetDdis)
         return STATUS_INVALID_PARAMETER;
     if (Caps->SupportKernelModeCommandBuffer && !Caps->HasRenderKm)
@@ -168,7 +181,7 @@ DxgkAdapterStartValidateCaps(
     }
     if (Caps->WddmVersion >= 0x2400 && Caps->HasQueryDiagnosticTypesSupport != Caps->HasControlDiagnosticReporting)
         return STATUS_INVALID_PARAMETER;
-    /* TODO: hybrid, WDDM 1.2/1.3 mandatory feature, stable power and MultiEngineAware rules */
+    /* TODO: WDDM 1.2/1.3 mandatory feature, stable power and MultiEngineAware rules */
     return STATUS_SUCCESS;
 }
 

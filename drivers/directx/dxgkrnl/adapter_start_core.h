@@ -82,6 +82,10 @@ typedef struct _DXGK_ADAPTER_START_CAPS
     BOOLEAN HasSetTargetGamma;
     BOOLEAN HasQueryDiagnosticTypesSupport;
     BOOLEAN HasControlDiagnosticReporting;
+    BOOLEAN HybridDiscrete;
+    BOOLEAN HybridIntegrated;
+    ULONG NumberOfVideoPresentSources;
+    ULONG NumberOfChildren;
 } DXGK_ADAPTER_START_CAPS, *PDXGK_ADAPTER_START_CAPS;
 
 NTSTATUS

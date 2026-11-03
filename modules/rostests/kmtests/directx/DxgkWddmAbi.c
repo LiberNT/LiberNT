@@ -254,6 +254,37 @@ TestStartCapsValidation(VOID)
     Caps.HasQueryDiagnosticTypesSupport = FALSE;
     Caps.WddmVersion = 0x2300;
     ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x3200;
+    Caps.HasControlDiagnosticReporting = FALSE;
+
+    /* Win11 NVIDIA laptop GPU: hybrid discrete with outputs and cross-adapter resources. */
+    Caps.HybridDiscrete = TRUE;
+    Caps.NumberOfVideoPresentSources = 4;
+    Caps.NumberOfChildren = 4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MemoryManagementCaps = 1UL << 4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.InterfaceVersion = 0x5004;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.NumberOfVideoPresentSources = 0;
+    Caps.NumberOfChildren = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.InterfaceVersion = 0x3FFF;
+    Caps.MemoryManagementCaps = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.InterfaceVersion = 0x11007;
+    Caps.HybridDiscrete = FALSE;
+
+    Caps.HybridIntegrated = TRUE;
+    Caps.NumberOfChildren = 2;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MemoryManagementCaps = 1UL << 4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.NumberOfChildren = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.NumberOfChildren = 2;
+    Caps.HybridDiscrete = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
 }
 
 START_TEST(DxgkWddmAbi)

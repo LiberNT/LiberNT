@@ -14248,6 +14248,10 @@ DxgkAdapterStart(
                 StartCaps.HasSetTargetGamma = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiSetTargetGamma) != NULL;
                 StartCaps.HasQueryDiagnosticTypesSupport = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiQueryDiagnosticTypesSupport) != NULL;
                 StartCaps.HasControlDiagnosticReporting = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiControlDiagnosticReporting) != NULL;
+                StartCaps.HybridDiscrete = Caps->HybridDiscrete;
+                StartCaps.HybridIntegrated = Caps->HybridIntegrated;
+                StartCaps.NumberOfVideoPresentSources = Adapter->NumberOfVideoPresentSources;
+                StartCaps.NumberOfChildren = Adapter->NumberOfChildren;
                 CapsStatus = DxgkAdapterStartValidateCaps(&StartCaps);
                 if (!NT_SUCCESS(CapsStatus))
                     DXGKRNL_ERR("DxgkAdapterStart: driver caps rejected 0x%08lX (WDDM 0x%x misc 0x%x vidmm 0x%x)\n",
