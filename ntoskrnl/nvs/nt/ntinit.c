@@ -470,7 +470,7 @@ MiInitializePhase0(
     {
         /* System PTE demand (kernel stacks, device and display mappings,
          * driver images) does not shrink with physical memory. */
-        SystemPteBytes = 128 * _1MB;
+        SystemPteBytes = 512 * _1MB;
         NonPagedBytes = MiClampBytes(PhysicalBytes / 8, 64 * _1MB, 128 * _1MB);
         PagedBytes = MiClampBytes(PhysicalBytes / 4, 128 * _1MB, 256 * _1MB);
     }
