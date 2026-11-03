@@ -103,6 +103,18 @@ CcNtKickLazyWriter(VOID)
         KeSetEvent(&CcNtLazyWriterEvent, IO_NO_INCREMENT, FALSE);
 }
 
+ULONG
+CcUnmapIdleViews(
+    _In_ SIZE_T Bytes)
+{
+    ULONG64 Views = ((ULONG64)Bytes >> CC_VIEW_SHIFT) + 2;
+
+    if (!CcNtReady)
+        return 0;
+
+    return CcCacheReleaseIdle(&CcNtCache, (ULONG)min(Views, (ULONG64)MAXULONG));
+}
+
 VOID
 CcNtProcessDeferredWrites(VOID)
 {

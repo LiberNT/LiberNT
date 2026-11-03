@@ -1978,6 +1978,9 @@ MiMapSectionView(
             continue;
         }
 
+        if (Status == STATUS_NO_MEMORY && Space->IsSystem && CcUnmapIdleViews((SIZE_T)Size) != 0)
+            continue;
+
         if (Status != STATUS_NO_MEMORY || !NT_SUCCESS(MiWaitForMemory(Status, &Attempts)))
             break;
     }
