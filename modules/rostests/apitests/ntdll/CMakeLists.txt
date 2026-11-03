@@ -180,6 +180,7 @@ list(APPEND SOURCE
     RtlReAllocateHeap.c
     RtlSRWLock.c
     RtlRemovePrivileges.c
+    SehHandlerLocals.c
     RtlUnhandledExceptionFilter.c
     RtlUnicodeStringToAnsiString.c
     RtlUnicodeStringToCountedOemString.c

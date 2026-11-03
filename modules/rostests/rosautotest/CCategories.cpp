@@ -38,6 +38,7 @@ static const CATEGORY_RULE Rules[] =
     { "ntdll_apitest", "RtlCaptureContext", "core:exceptions" },
     { "ntdll_apitest", "RtlVirtualUnwind", "core:exceptions" },
     { "ntdll_apitest", "RtlVirtualUnwindChainedHandler", "core:exceptions" },
+    { "ntdll_apitest", "SehHandlerLocals", "core:exceptions" },
     { "ntdll_apitest", "UserModeException", "core:exceptions" },
     { "ntdll_apitest", "RtlUnhandledExceptionFilter", "core:exceptions" },
     { "ntdll_apitest", "StackOverflow", "core:exceptions" },

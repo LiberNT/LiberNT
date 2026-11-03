@@ -58,9 +58,7 @@ C_ASSERT(SEH3_REGISTRATION_FRAME_Ebx == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, E
 C_ASSERT(SEH3_REGISTRATION_FRAME_Esi == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, Esi));
 C_ASSERT(SEH3_REGISTRATION_FRAME_Edi == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, Edi));
 #endif
-#ifdef __clang__
 C_ASSERT(SEH3_REGISTRATION_FRAME_ReturnAddress == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, ReturnAddress));
-#endif
 C_ASSERT(SEH3_SCOPE_TABLE_Filter == FIELD_OFFSET(SEH3$_SCOPE_TABLE, Filter));
 C_ASSERT(SEH3_SCOPE_TABLE_Target == FIELD_OFFSET(SEH3$_SCOPE_TABLE, Target));
 
@@ -178,7 +176,7 @@ _SEH3$_InvokeFilter(
     else if (HandlerType == _SEH3$_CPP_HANDLER)
     {
         /* Call the embedded filter function */
-        return _SEH3$_InvokeEmbeddedFilter(RegistrationFrame);
+        return _SEH3$_InvokeEmbeddedFilterFromRegistration(RegistrationFrame);
     }
     else if (HandlerType == _SEH3$_CLANG_HANDLER)
     {
@@ -297,15 +295,18 @@ _SEH3$_JumpToTarget(
             "movl 24(%%ecx), %%esp\n\t"
             "movl 28(%%ecx), %%ebp\n\t"
 
+            "movl 40(%%ecx), %%ebx\n\t"
+            "movl 44(%%ecx), %%esi\n\t"
+            "movl 48(%%ecx), %%edi\n\t"
+
             /* Stack pointer is 4 off from the call to __SEH3$_RegisterFrame */
             "addl $4, %%esp\n\t"
 
-            /* Jump into the exception handler */
-            "jmp *%[Target]"
+            /* Resume at the registration, which takes the edge to the handler */
+            "movl $2, %%eax\n\t"
+            "jmp *52(%%ecx)"
             : :
-            "c" (RegistrationFrame),
-            "a" (RegistrationFrame->ScopeTable),
-             [Target] "m" (RegistrationFrame->ScopeTable->Target)
+            "c" (RegistrationFrame)
         );
 #endif
 
