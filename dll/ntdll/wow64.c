@@ -274,30 +274,22 @@ RtlWow64GetThreadSelectorEntry(HANDLE handle,
                                ULONG *retlen)
 {
     ULONG selector, code_selector, data_selector, teb_selector;
-#if !defined(__REACTOS__) || !defined(_M_ARM64)
+#if !defined(__REACTOS__) || defined(_M_IX86) || defined(_M_AMD64)
     WOW64_CONTEXT context = { WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_SEGMENTS };
-#endif
-#if defined(__REACTOS__) && !defined(_M_IX86) && !defined(_M_AMD64) && !defined(_M_ARM64)
-    NTSTATUS status;
 #endif
     LDT_ENTRY entry = { 0 };
 
     if (size != sizeof(*info))
         return STATUS_INFO_LENGTH_MISMATCH;
 
-#if defined(__REACTOS__) && defined(_M_ARM64)
-    /* ARM64 uses fixed software descriptors for the WoW64 address space. */
+#if defined(__REACTOS__) && !defined(_M_IX86) && !defined(_M_AMD64)
+    /* A software x86 CPU uses fixed descriptors for the WoW64 address space. */
     selector = info->Selector & ~3u;
     code_selector = 0x18;
     data_selector = 0x20;
     teb_selector = 0x38;
     if (!selector)
         goto done;
-#else
-#if defined(__REACTOS__) && !defined(_M_IX86) && !defined(_M_AMD64)
-    status = RtlWow64GetThreadContext(handle, &context);
-    if (status)
-        return status;
 #else
     if (RtlWow64GetThreadContext(handle, &context))
     {
@@ -308,7 +300,6 @@ RtlWow64GetThreadSelectorEntry(HANDLE handle,
         context.SegFs = native.SegFs;
         context.SegSs = native.SegSs;
     }
-#endif
 
     selector = info->Selector | 3;
     if (selector == 0x03)
