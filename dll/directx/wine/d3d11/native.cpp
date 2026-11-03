@@ -1930,6 +1930,9 @@ template<class A, class B> static bool NativeViewsOverlap(A *a, B *b)
             && x.first < y.first + y.count && y.first < x.first + x.count;
 }
 
+#define NATIVE_QUERY_POLLS_BEFORE_FLUSH 0xfe
+#define NATIVE_QUERY_FLUSH_REQUESTED 0xff
+
 class NativeQuery : public NativeChild<ID3D11Query1, &IID_ID3D11Query>
 {
 public:
@@ -1954,6 +1957,7 @@ public:
     bool created = false;
     bool ended = false;
     bool begun = false;
+    UINT8 pending_polls = 0;
     bool is_predicate = false;
     bool is_counter = false;
     explicit NativeQuery(NativeDevice *d) : NativeChild(d) {}
@@ -5831,6 +5835,7 @@ void STDMETHODCALLTYPE NativeContext::End(ID3D11Asynchronous *async)
     device->functions.pfnQueryEnd(device->driver_device, query->handle);
     query->begun = false;
     query->ended = true;
+    query->pending_polls = 0;
 }
 HRESULT STDMETHODCALLTYPE NativeContext::GetData(ID3D11Asynchronous *async, void *data, UINT size, UINT flags)
 {
@@ -5843,10 +5848,14 @@ HRESULT STDMETHODCALLTYPE NativeContext::GetData(ID3D11Asynchronous *async, void
     if (!query->ended || (query->desc.MiscFlags & D3D11_QUERY_MISC_PREDICATEHINT)) return DXGI_ERROR_INVALID_CALL;
     /* A non-NULL pointer with zero size is a readiness poll, not a data read. */
     if (!size) data = NULL;
+    /* An app that only polls with DONOTFLUSH would otherwise wait forever on work the driver still holds back. */
+    if (query->pending_polls == NATIVE_QUERY_POLLS_BEFORE_FLUSH) flags &= ~D3D11_ASYNC_GETDATA_DONOTFLUSH;
     device->BeginCall();
     device->functions.pfnQueryGetData(device->driver_device, query->handle, data, size, flags);
-    if (device->operation_error == DXGI_DDI_ERR_WASSTILLDRAWING || device->operation_error == DXGI_ERROR_WAS_STILL_DRAWING) return S_FALSE;
-    return device->operation_error;
+    bool pending = device->operation_error == DXGI_DDI_ERR_WASSTILLDRAWING || device->operation_error == DXGI_ERROR_WAS_STILL_DRAWING;
+    if (!(flags & D3D11_ASYNC_GETDATA_DONOTFLUSH)) query->pending_polls = NATIVE_QUERY_FLUSH_REQUESTED;
+    else if (pending && query->pending_polls < NATIVE_QUERY_POLLS_BEFORE_FLUSH) ++query->pending_polls;
+    return pending ? S_FALSE : device->operation_error;
 }
 
 void STDMETHODCALLTYPE NativeContext::ClearState()
