@@ -3924,7 +3924,9 @@ DxgkpQueryAdapterInfoCaptured(
                 Adapter->MiniportContext != NULL && !Adapter->MiniportContext->UseDodLayout &&
                 DxgkAdapterTypeCoreSetTimingsFromVidPn(Adapter->DriverCapsWddmVersion,
                                                        Adapter->MiniportContext->InitData.s.Version,
-                                                       DXGK_CB_FULL(Adapter, DxgkDdiSetTimingsFromVidPn) != NULL);
+                                                       DXGK_CB_FULL(Adapter, DxgkDdiSetTimingsFromVidPn) != NULL,
+                                                       !Adapter->MiniportContext->IsDisplayOnlyDriver,
+                                                       DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3) != NULL);
             AdapterType.RuntimePowerManagement = Adapter->PoFxHandle != NULL;
             _SEH2_TRY
             {

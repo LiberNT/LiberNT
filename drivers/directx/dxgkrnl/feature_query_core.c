@@ -151,8 +151,10 @@ BOOLEAN
 DxgkAdapterTypeCoreSetTimingsFromVidPn(
     _In_ ULONG WddmVersion,
     _In_ ULONG InterfaceVersion,
-    _In_ BOOLEAN HasSetTimingsFromVidPn)
+    _In_ BOOLEAN HasSetTimingsFromVidPn,
+    _In_ BOOLEAN RenderCapable,
+    _In_ BOOLEAN HasMultiPlaneOverlay3)
 {
-    /* FIXME: Windows also requires a second, unidentified DDI on render-capable adapters */
-    return WddmVersion >= 0x2200UL && InterfaceVersion >= 0x7007UL && HasSetTimingsFromVidPn;
+    return WddmVersion >= 0x2200UL && InterfaceVersion >= 0x7007UL && HasSetTimingsFromVidPn &&
+           (!RenderCapable || HasMultiPlaneOverlay3);
 }
