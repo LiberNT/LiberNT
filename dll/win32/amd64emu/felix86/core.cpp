@@ -528,6 +528,9 @@ static bool hint_fault(ThreadState* state, FELIX86_NT_NATIVE* native, FELIX86_NT
     case FELIX86_HINT_GP:
         set_fault(guest, NT_STATUS_PRIVILEGED_INSTRUCTION);
         break;
+    case FELIX86_HINT_SEGMENT_GP:
+        set_fault(guest, NT_STATUS_ACCESS_VIOLATION, 2, 0, -1ull);
+        break;
     case FELIX86_HINT_INT_GP:
         set_fault(guest, NT_STATUS_ACCESS_VIOLATION, 2, 0, -1ull);
         guest->Interrupt = *(u32*)(pc + 8) >> 20;
