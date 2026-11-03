@@ -53,3 +53,8 @@ DxgkAdapterStartVsyncControlDdi(
 NTSTATUS
 DxgkAdapterStartVsyncControlStatus(
     _In_ NTSTATUS MiniportStatus);
+
+NTSTATUS
+DxgkAdapterStartNativeFenceStatus(
+    _In_ BOOLEAN NativeGpuFenceCap,
+    _In_ BOOLEAN NativeFenceFeatureEnabled);

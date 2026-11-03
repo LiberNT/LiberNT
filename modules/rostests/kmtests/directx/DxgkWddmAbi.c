@@ -126,12 +126,22 @@ TestVsyncControlStatus(VOID)
     ok_eq_hex(DxgkAdapterStartVsyncControlStatus(STATUS_DEVICE_REMOVED), STATUS_DEVICE_REMOVED);
 }
 
+static VOID
+TestNativeFenceStatus(VOID)
+{
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(TRUE, FALSE), STATUS_INVALID_PARAMETER);
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(TRUE, TRUE), STATUS_SUCCESS);
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(FALSE, FALSE), STATUS_SUCCESS);
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(FALSE, TRUE), STATUS_SUCCESS);
+}
+
 START_TEST(DxgkWddmAbi)
 {
     TestMapMemoryContractCore();
     TestAdapterStartRolePolicy();
     TestVsyncControlDdiSelection();
     TestVsyncControlStatus();
+    TestNativeFenceStatus();
 
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_4, 0x9006);
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_5, 0xA00B);

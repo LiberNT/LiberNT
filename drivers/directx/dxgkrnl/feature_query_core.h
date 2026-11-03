@@ -53,4 +53,22 @@ DxgkFeatureQueryCoreEvaluate(
     _In_ const DXGK_FEATURE_QUERY_CORE_INPUT *Input,
     _Out_ DXGK_FEATURE_QUERY_CORE_RESULT *Result);
 
+typedef struct _DXGK_WDDM_CAPS_CORE_INPUT
+{
+    BOOLEAN RenderCapable;
+    UCHAR HwSchSupportState;
+    BOOLEAN HwSchEnabled;
+    UCHAR HwFlipQueueSupportState;
+    BOOLEAN HwFlipQueueEnabled;
+    BOOLEAN IndependentVidPnVSyncControl;
+    BOOLEAN DisplayableSupport;
+    BOOLEAN NativeGpuFence;
+} DXGK_WDDM_CAPS_CORE_INPUT, *PDXGK_WDDM_CAPS_CORE_INPUT;
+
+/* D3DKMT_WDDM_2_7_CAPS, _2_9_CAPS, _3_0_CAPS and _3_1_CAPS values. */
+ULONG DxgkWddmCapsCore27(_In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input);
+ULONG DxgkWddmCapsCore29(_In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input);
+ULONG DxgkWddmCapsCore30(_In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input);
+ULONG DxgkWddmCapsCore31(_In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input);
+
 #endif /* _DXGK_FEATURE_QUERY_CORE_H_ */

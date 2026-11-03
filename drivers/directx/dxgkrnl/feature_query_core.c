@@ -98,3 +98,42 @@ DxgkFeatureQueryCoreEvaluate(
     Result->Value |= DXGK_FEATURE_QUERY_RESULT_ENABLED;
     return TRUE;
 }
+
+/* Windows answers these only for an adapter that can render; HwSchEnabledByDefault is never set. */
+ULONG
+DxgkWddmCapsCore27(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    if (!Input->RenderCapable)
+        return 0;
+    return (Input->HwSchSupportState != 0 ? 0x1UL : 0) |
+           (Input->HwSchEnabled ? 0x2UL : 0) |
+           (Input->IndependentVidPnVSyncControl ? 0x8UL : 0);
+}
+
+ULONG
+DxgkWddmCapsCore29(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    if (!Input->RenderCapable)
+        return 0;
+    return (Input->HwSchSupportState & 0x3UL) | (Input->HwSchEnabled ? 0x4UL : 0);
+}
+
+ULONG
+DxgkWddmCapsCore30(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    if (!Input->RenderCapable)
+        return 0;
+    return (Input->HwFlipQueueSupportState & 0x3UL) |
+           (Input->HwFlipQueueEnabled ? 0x4UL : 0) |
+           (Input->DisplayableSupport ? 0x8UL : 0);
+}
+
+ULONG
+DxgkWddmCapsCore31(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    return Input->RenderCapable && Input->NativeGpuFence ? 0x1UL : 0;
+}

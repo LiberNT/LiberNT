@@ -7581,6 +7581,7 @@ DxgkCbQueryFeatureSupport(
         return STATUS_INVALID_PARAMETER;
     }
 
+    Adapter->DriverFeatureSupportState[(ULONG)Args->FeatureId & DXGK_FEATURE_ID_MASK] = (UCHAR)Args->DriverSupportState;
     if (Args->FeatureId == DXGK_FEATURE_KMD_SIGNAL_CPU_EVENT &&
         Args->DriverSupportState >= DXGK_FEATURE_SUPPORT_STABLE)
     {
@@ -14200,10 +14201,14 @@ DxgkAdapterStart(
         Adapter->SupportMultiPlaneOverlay = FALSE;
         Adapter->MaxOverlayPlanes = 0;
         Adapter->GdiHardwareAcceleration = FALSE;
+        Adapter->DisplayableSupport = FALSE;
         Caps = ExAllocatePoolWithTag(NonPagedPool, DXGKP_DRIVERCAPS_QUERY_SIZE, TAG_DXGK_ADAPTER);
         if (Caps != NULL)
         {
             CapsStatus = DxgkpQueryDriverCaps(Adapter, Caps);
+            /* TODO: native GPU fences; until then the NativeFence feature is disabled */
+            if (NT_SUCCESS(CapsStatus))
+                CapsStatus = DxgkAdapterStartNativeFenceStatus(Caps->SchedulingCaps.NativeGpuFence, FALSE);
             if (NT_SUCCESS(CapsStatus))
             {
                 (VOID)DxgkpInitializeBlockList(Adapter, Caps->WDDMVersion);
@@ -14249,6 +14254,9 @@ DxgkAdapterStart(
                     Adapter->IndependentVidPnVSyncControl =
                         DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_7) &&
                         Caps->MiscCaps.IndependentVidPnVSyncControl;
+                    Adapter->DisplayableSupport =
+                        DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_3_0) &&
+                        Caps->MiscCaps.DisplayableSupport;
                     DXGKRNL_TRACE("DxgkAdapterStart: %lu GPU node(s) reported\n", Adapter->NodeCount);
                     CapsStatus = DxgkpQueryStartNodeMetadata(Adapter);
                 }

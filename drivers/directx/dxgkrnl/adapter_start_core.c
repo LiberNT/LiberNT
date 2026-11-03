@@ -72,3 +72,12 @@ DxgkAdapterStartVsyncControlStatus(
     /* Windows VidSch records the new vsync state when the miniport answers STATUS_NOT_IMPLEMENTED. */
     return MiniportStatus == STATUS_NOT_IMPLEMENTED ? STATUS_SUCCESS : MiniportStatus;
 }
+
+/* Windows refuses the NativeGpuFence scheduling cap while its NativeFence feature is disabled. */
+NTSTATUS
+DxgkAdapterStartNativeFenceStatus(
+    _In_ BOOLEAN NativeGpuFenceCap,
+    _In_ BOOLEAN NativeFenceFeatureEnabled)
+{
+    return NativeGpuFenceCap && !NativeFenceFeatureEnabled ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS;
+}

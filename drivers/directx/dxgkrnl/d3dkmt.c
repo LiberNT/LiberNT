@@ -756,6 +756,22 @@ DxgkpAdapterSupportsRender(
            DXGK_CB_FULL(Adapter, DxgkDdiCreateContext) != NULL;
 }
 
+static VOID
+DxgkpQueryWddmCapsInput(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PDXGK_WDDM_CAPS_CORE_INPUT Input)
+{
+    RtlZeroMemory(Input, sizeof(*Input));
+    Input->RenderCapable = Adapter->MiniportContext != NULL &&
+                           !Adapter->MiniportContext->UseDodLayout &&
+                           !Adapter->MiniportContext->IsDisplayOnlyDriver;
+    Input->HwSchSupportState = Adapter->DriverFeatureSupportState[DXGK_DRIVER_FEATURE_HWSCH];
+    Input->HwFlipQueueSupportState = Adapter->DriverFeatureSupportState[DXGK_DRIVER_FEATURE_HWFLIPQUEUE];
+    Input->IndependentVidPnVSyncControl = Adapter->IndependentVidPnVSyncControl;
+    Input->DisplayableSupport = Adapter->DisplayableSupport;
+    /* TODO: hardware scheduling and the hardware flip queue; both stay disabled, as by Windows default policy */
+}
+
 static NTSTATUS
 DxgkpOpenAdapterDriverKey(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4018,13 +4034,15 @@ DxgkpQueryAdapterInfoCaptured(
         case KMTQAITYPE_WDDM_2_7_CAPS:
         {
             D3DKMT_WDDM_2_7_CAPS Caps;
+            DXGK_WDDM_CAPS_CORE_INPUT CapsInput;
 
             if (pQueryAdapterInfo->pPrivateDriverData == NULL ||
                 pQueryAdapterInfo->PrivateDriverDataSize < sizeof(Caps))
             {
                 DXGKP_QUERY_RETURN(STATUS_BUFFER_TOO_SMALL);
             }
-            RtlZeroMemory(&Caps, sizeof(Caps));
+            DxgkpQueryWddmCapsInput(Adapter, &CapsInput);
+            Caps.Value = DxgkWddmCapsCore27(&CapsInput);
             _SEH2_TRY
             {
                 *(D3DKMT_WDDM_2_7_CAPS *)pQueryAdapterInfo->pPrivateDriverData = Caps;
@@ -4040,14 +4058,15 @@ DxgkpQueryAdapterInfoCaptured(
         case KMTQAITYPE_WDDM_2_9_CAPS:
         {
             D3DKMT_WDDM_2_9_CAPS Caps;
+            DXGK_WDDM_CAPS_CORE_INPUT CapsInput;
 
             if (pQueryAdapterInfo->pPrivateDriverData == NULL ||
                 pQueryAdapterInfo->PrivateDriverDataSize < sizeof(Caps))
             {
                 DXGKP_QUERY_RETURN(STATUS_BUFFER_TOO_SMALL);
             }
-            RtlZeroMemory(&Caps, sizeof(Caps));
-            Caps.HwSchSupportState = DXGK_FEATURE_SUPPORT_ALWAYS_OFF;
+            DxgkpQueryWddmCapsInput(Adapter, &CapsInput);
+            Caps.Value = DxgkWddmCapsCore29(&CapsInput);
             _SEH2_TRY
             {
                 *(D3DKMT_WDDM_2_9_CAPS *)pQueryAdapterInfo->pPrivateDriverData = Caps;
@@ -4063,14 +4082,15 @@ DxgkpQueryAdapterInfoCaptured(
         case KMTQAITYPE_WDDM_3_0_CAPS:
         {
             D3DKMT_WDDM_3_0_CAPS Caps;
+            DXGK_WDDM_CAPS_CORE_INPUT CapsInput;
 
             if (pQueryAdapterInfo->pPrivateDriverData == NULL ||
                 pQueryAdapterInfo->PrivateDriverDataSize < sizeof(Caps))
             {
                 DXGKP_QUERY_RETURN(STATUS_BUFFER_TOO_SMALL);
             }
-            RtlZeroMemory(&Caps, sizeof(Caps));
-            Caps.HwFlipQueueSupportState = DXGK_FEATURE_SUPPORT_ALWAYS_OFF;
+            DxgkpQueryWddmCapsInput(Adapter, &CapsInput);
+            Caps.Value = DxgkWddmCapsCore30(&CapsInput);
             _SEH2_TRY
             {
                 *(D3DKMT_WDDM_3_0_CAPS *)pQueryAdapterInfo->pPrivateDriverData = Caps;

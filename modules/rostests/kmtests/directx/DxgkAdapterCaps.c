@@ -367,8 +367,56 @@ static VOID TestStablePowerCounting(VOID)
     ok_bool_false(DxgkCapsCoreStablePowerRelease(&Process1, &Adapter), "exit without a request stays silent");
 }
 
+static VOID TestWddmCaps(VOID)
+{
+    DXGK_WDDM_CAPS_CORE_INPUT Input;
+
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.HwSchSupportState = 2;
+    Input.HwSchEnabled = TRUE;
+    Input.HwFlipQueueSupportState = 1;
+    Input.HwFlipQueueEnabled = TRUE;
+    Input.IndependentVidPnVSyncControl = TRUE;
+    Input.DisplayableSupport = TRUE;
+    Input.NativeGpuFence = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0UL);
+    ok_eq_ulong(DxgkWddmCapsCore30(&Input), 0UL);
+    ok_eq_ulong(DxgkWddmCapsCore31(&Input), 0UL);
+
+    /* Win11 NVIDIA, hardware scheduling off: WDDM_2_7_CAPS 0x9. */
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.RenderCapable = TRUE;
+    Input.HwSchSupportState = 2;
+    Input.IndependentVidPnVSyncControl = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0x9UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0x2UL);
+    Input.HwSchEnabled = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0xBUL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0x6UL);
+    Input.HwSchSupportState = 1;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input) & 0x1UL, 0x1UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input) & 0x3UL, 0x1UL);
+    Input.HwSchSupportState = 3;
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input) & 0x3UL, 0x3UL);
+    Input.HwSchSupportState = 0;
+    Input.HwSchEnabled = FALSE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0x8UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0UL);
+
+    Input.HwFlipQueueSupportState = 2;
+    ok_eq_ulong(DxgkWddmCapsCore30(&Input), 0x2UL);
+    Input.HwFlipQueueEnabled = TRUE;
+    Input.DisplayableSupport = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore30(&Input), 0xEUL);
+    ok_eq_ulong(DxgkWddmCapsCore31(&Input), 0UL);
+    Input.NativeGpuFence = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore31(&Input), 0x1UL);
+}
+
 START_TEST(DxgkAdapterCaps)
 {
+    TestWddmCaps();
     TestDriverCapsQuerySize();
     TestStablePowerCounting();
     TestPhysicalAdapterCapsQuerySize();

@@ -847,6 +847,7 @@ struct _DXGKRNL_ADAPTER
     FAST_MUTEX                  KmdFeatureCacheLock;
     ULONGLONG                   KmdFeatureCached;
     DXGKARG_QUERYFEATURESUPPORT KmdFeatureCache[DXGK_DRIVER_FEATURE_MAX];
+    UCHAR                       DriverFeatureSupportState[DXGK_DRIVER_FEATURE_MAX];
     LUID                        AdapterLuid;
 
     /*
@@ -938,6 +939,7 @@ struct _DXGKRNL_ADAPTER
     BOOLEAN                     SupportMultiPlaneOverlay;
     UINT                        MaxOverlayPlanes;
     BOOLEAN                     IndependentVidPnVSyncControl;
+    BOOLEAN                     DisplayableSupport;
     BOOLEAN                     SurpriseRemovalHandled;
 
     /*
