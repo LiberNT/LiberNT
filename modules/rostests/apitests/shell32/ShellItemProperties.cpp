@@ -13,6 +13,7 @@
 #include <propvarutil.h>
 #include <stdio.h>
 #include <strsafe.h>
+#include <aclapi.h>
 
 static WCHAR g_Dir[MAX_PATH];
 static WCHAR g_Txt[MAX_PATH];
@@ -117,6 +118,31 @@ DumpStore(IPropertyStore *Store, LPCWSTR What)
     }
 }
 
+static BOOL
+ExpectedOwner(LPCWSTR Path, LPWSTR Owner, SIZE_T cchOwner)
+{
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    PSID Sid = NULL;
+    WCHAR Name[256], Domain[256];
+    DWORD cchName = _countof(Name), cchDomain = _countof(Domain);
+    SID_NAME_USE Use;
+    BOOL Found;
+
+    *Owner = UNICODE_NULL;
+    if (GetNamedSecurityInfoW(const_cast<LPWSTR>(Path), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, &Sid, NULL, NULL,
+                              NULL, &Descriptor) != ERROR_SUCCESS)
+        return FALSE;
+    Found = Sid && LookupAccountSidW(NULL, Sid, Name, &cchName, Domain, &cchDomain, &Use);
+    LocalFree(Descriptor);
+    if (!Found)
+        return FALSE;
+    if (*Domain && Use != SidTypeAlias && Use != SidTypeWellKnownGroup)
+        StringCchPrintfW(Owner, cchOwner, L"%s\\%s", Domain, Name);
+    else
+        StringCchCopyW(Owner, cchOwner, Name);
+    return TRUE;
+}
+
 static void
 CheckString(IShellItem2 *Item, REFPROPERTYKEY Key, LPCWSTR Expected, LPCSTR What)
 {
@@ -143,7 +169,7 @@ TraceStore(IShellItem2 *Item, GETPROPERTYSTOREFLAGS Flags, LPCWSTR What)
 static void
 CheckCommon(IShellItem2 *Item, LPCWSTR Path, BOOL Folder)
 {
-    WCHAR Parent[MAX_PATH], Owner[256], Computer[MAX_COMPUTERNAME_LENGTH + 1];
+    WCHAR Parent[MAX_PATH], Owner[512], Computer[MAX_COMPUTERNAME_LENGTH + 1];
     DWORD Length = _countof(Computer);
     PROPVARIANT Value;
     ULONG Flags = 0;
@@ -156,14 +182,8 @@ CheckCommon(IShellItem2 *Item, LPCWSTR Path, BOOL Folder)
     CheckString(Item, PKEY_ItemFolderNameDisplay, PathFindFileNameW(Parent), "folder name");
     GetComputerNameW(Computer, &Length);
     CheckString(Item, PKEY_ComputerName, Computer, "computer name");
-    {
-        LPWSTR Text = NULL;
-        ok_hr(Item->GetString(PKEY_FileOwner, &Text), S_OK);
-        ok(Text && wcschr(Text, L'\\'), "owner %s\n", Esc(Text));
-        StringCchCopyW(Owner, _countof(Owner), Text ? Text : L"");
-        trace("owner %s\n", Esc(Owner));
-        CoTaskMemFree(Text);
-    }
+    ok(ExpectedOwner(Path, Owner, _countof(Owner)), "no owner for %s\n", Esc(Path));
+    CheckString(Item, PKEY_FileOwner, Owner, "owner");
     PROPERTYKEY IsFolderKey;
     ok_hr(PSGetPropertyKeyFromName(L"System.IsFolder", &IsFolderKey), S_OK);
     ok_hr(Item->GetBool(IsFolderKey, &IsFolder), S_OK);
