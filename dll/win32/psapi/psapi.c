@@ -299,7 +299,7 @@ EnumDeviceDrivers(LPVOID *lpImageBase,
                   LPDWORD lpcbNeeded)
 {
     NTSTATUS Status;
-    DWORD NewSize, Count;
+    DWORD Count;
     PRTL_PROCESS_MODULES Information;
     /* By default, to prevent too many reallocations, we already make room for 4 modules */
     DWORD Size = sizeof(RTL_PROCESS_MODULES) + 3 * sizeof(RTL_PROCESS_MODULE_INFORMATION);
@@ -319,9 +319,7 @@ EnumDeviceDrivers(LPVOID *lpImageBase,
         /* In case of an error */
         if (!NT_SUCCESS(Status))
         {
-            /* Save the amount of output modules */
-            NewSize = Information->NumberOfModules;
-            /* And free buffer */
+            /* Free buffer */
             LocalFree(Information);
 
             /* If it was not a length mismatch (ie, buffer too small), just leave */
@@ -331,21 +329,15 @@ EnumDeviceDrivers(LPVOID *lpImageBase,
                 return FALSE;
             }
 
-            /* Compute new size length */
-            ASSERT(Size >= sizeof(RTL_PROCESS_MODULES));
-            NewSize *= sizeof(RTL_PROCESS_MODULE_INFORMATION);
-            NewSize += sizeof(ULONG);
-            ASSERT(NewSize >= sizeof(RTL_PROCESS_MODULES));
             /* Check whether it is really bigger - otherwise, leave */
-            if (NewSize < Size)
+            if (Count <= Size)
             {
-                ASSERT(NewSize > Size);
                 SetLastError(RtlNtStatusToDosError(STATUS_INFO_LENGTH_MISMATCH));
                 return FALSE;
             }
 
-            /* Loop again with that new buffer */
-            Size = NewSize;
+            /* Loop again with the required size */
+            Size = Count;
             continue;
         }
 
