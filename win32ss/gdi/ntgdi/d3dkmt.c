@@ -13,7 +13,6 @@
 #include <debug.h>
 
 #define IOCTL_RXGK_OPENADAPTERFROMDEVICENAME CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x112, METHOD_BUFFERED, FILE_ANY_ACCESS)
-#define IOCTL_RXGK_OPENLOGICALADAPTERFROMDEVICENAME CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x113, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_RXGK_CLOSEADAPTER CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x103, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_D3DKMT_CHECKOCCLUSION CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x169, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
@@ -163,7 +162,6 @@ D3dkmtCloseCapturedAdapter(
 static NTSTATUS
 D3dkmtOpenAdapterByCapturedNtDeviceName(
     _In_ PCWSTR DeviceName,
-    _In_ BOOLEAN PreferRenderPair,
     _Out_ D3DKMT_HANDLE *AdapterHandle,
     _Out_ LUID *AdapterLuid)
 {
@@ -178,8 +176,7 @@ D3dkmtOpenAdapterByCapturedNtDeviceName(
     RtlZeroMemory(&OpenByName, sizeof(OpenByName));
     OpenByName.pDeviceName = DeviceName;
     Status = WddmBridgeSendIoctlWithInformation(
-                 PreferRenderPair ? IOCTL_RXGK_OPENLOGICALADAPTERFROMDEVICENAME
-                                  : IOCTL_RXGK_OPENADAPTERFROMDEVICENAME,
+                 IOCTL_RXGK_OPENADAPTERFROMDEVICENAME,
                  &OpenByName,
                  sizeof(OpenByName),
                  &OpenByName,
@@ -586,7 +583,6 @@ NtGdiDdDDIOpenAdapterFromGdiDisplayName(_Inout_ D3DKMT_OPENADAPTERFROMGDIDISPLAY
         return Status;
     Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
                  NtDeviceName,
-                 FALSE,
                  &Captured.hAdapter,
                  &Captured.AdapterLuid);
     if (!NT_SUCCESS(Status))
@@ -650,7 +646,6 @@ NtGdiDdDDIOpenAdapterFromHdc(_Inout_ D3DKMT_OPENADAPTERFROMHDC* unnamedParam1)
 
     Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
                  DeviceName,
-                 TRUE,
                  &Captured.hAdapter,
                  &Captured.AdapterLuid);
     if (!NT_SUCCESS(Status))
@@ -2621,7 +2616,6 @@ NtGdiDdDDIQueryVidPnExclusiveOwnership(_Inout_ struct _D3DKMT_QUERYVIDPNEXCLUSIV
     {
         Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
                      NtDeviceName,
-                     FALSE,
                      &AdapterHandle,
                      &QueryAdapterLuid);
         if (!NT_SUCCESS(Status))
