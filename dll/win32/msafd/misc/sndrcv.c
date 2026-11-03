@@ -77,6 +77,7 @@ WSPAsyncSelect(IN  SOCKET Handle,
 
     /* Set up the Async Data */
     AsyncData->ParentSocket = Socket;
+    InterlockedIncrement(&Socket->RefCount);
     AsyncData->SequenceNumber = Socket->SharedData->SequenceNumber;
 
     /* Begin Async Select by using I/O Completion */

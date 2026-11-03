@@ -218,6 +218,7 @@ WSPSocket(int AddressFamily,
         goto error;
     }
     RtlZeroMemory(Socket, sizeof(*Socket));
+    Socket->RefCount = 1;
     if (SharedData)
     {
         Socket->SharedData = SharedData;
@@ -1032,19 +1033,36 @@ ok:
     NtClose((HANDLE)Handle);
     NtClose(SockEvent);
 
-    if( Socket->SharedDataHandle != INVALID_HANDLE_VALUE )
+    SockDereferenceSocket(Socket);
+    return MsafdReturnWithErrno(STATUS_SUCCESS, lpErrno, 0, NULL);
+}
+
+VOID
+SockDereferenceSocket(PSOCKET_INFORMATION Socket)
+{
+    if (InterlockedDecrement(&Socket->RefCount))
+        return;
+
+    if (Socket->SharedDataHandle != INVALID_HANDLE_VALUE)
     {
         /* It is a duplicated socket, so unmap the memory */
         UnmapViewOfFile(Socket->SharedData);
         NtClose(Socket->SharedDataHandle);
-        Socket->SharedData = NULL;
     }
-    if( !References && Socket->SharedData )
+    else if (!Socket->SharedData->RefCount)
     {
         HeapFree(GlobalHeap, 0, Socket->SharedData);
     }
     HeapFree(GlobalHeap, 0, Socket);
-    return MsafdReturnWithErrno(STATUS_SUCCESS, lpErrno, 0, NULL);
+}
+
+static VOID
+SockFreeAsyncData(PASYNC_DATA AsyncData)
+{
+    PSOCKET_INFORMATION Socket = AsyncData->ParentSocket;
+
+    HeapFree(GetProcessHeap(), 0, AsyncData);
+    SockDereferenceSocket(Socket);
 }
 
 
@@ -4634,6 +4652,7 @@ SockAdoptInheritedSocket(SOCKET Handle)
     Socket = HeapAlloc(GlobalHeap, HEAP_ZERO_MEMORY, sizeof(*Socket));
     if (!Socket)
         goto fail;
+    Socket->RefCount = 1;
 
     Socket->SharedData = HeapAlloc(GlobalHeap, 0, sizeof(*Socket->SharedData));
     if (!Socket->SharedData)
@@ -4968,6 +4987,7 @@ VOID SockAsyncSelectCompletionRoutine(PVOID Context, PIO_STATUS_BLOCK IoStatusBl
     /* Check if the Sequence  Number Changed behind our back */
     if (AsyncData->SequenceNumber != Socket->SharedData->SequenceNumber )
     {
+        SockFreeAsyncData(AsyncData);
         return;
     }
 
@@ -4975,6 +4995,7 @@ VOID SockAsyncSelectCompletionRoutine(PVOID Context, PIO_STATUS_BLOCK IoStatusBl
     if (!NT_SUCCESS(IoStatusBlock->Status))
     {
         /* FIXME: Perform Upcall */
+        SockFreeAsyncData(AsyncData);
         return;
     }
 
@@ -5070,6 +5091,7 @@ VOID SockAsyncSelectCompletionRoutine(PVOID Context, PIO_STATUS_BLOCK IoStatusBl
     /* Check if there are any events left for us to check */
     if ((Socket->SharedData->AsyncEvents & (~Socket->SharedData->AsyncDisabledEvents)) == 0 )
     {
+        SockFreeAsyncData(AsyncData);
         return;
     }
 
@@ -5188,7 +5210,7 @@ VOID SockProcessQueuedAsyncSelect(PVOID Context, PIO_STATUS_BLOCK IoStatusBlock)
     /* Free the Context */
     if (FreeContext)
     {
-        HeapFree(GetProcessHeap(), 0, AsyncData);
+        SockFreeAsyncData(AsyncData);
     }
 
     return;
@@ -5224,6 +5246,7 @@ SockReenableAsyncSelectEvent (IN PSOCKET_INFORMATION Socket,
 
     /* Set up the Async Data */
     AsyncData->ParentSocket = Socket;
+    InterlockedIncrement(&Socket->RefCount);
     AsyncData->SequenceNumber = Socket->SharedData->SequenceNumber;
 
     /* Begin Async Select by using I/O Completion */

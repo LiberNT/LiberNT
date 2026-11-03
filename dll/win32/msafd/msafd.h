@@ -64,6 +64,7 @@ typedef struct _SOCKET_INFORMATION {
 	WSAPROTOCOL_INFOW ProtocolInfo;
 	struct _SOCKET_INFORMATION *NextSocket;
 	BOOL RandomizePort;
+	LONG RefCount;
 } SOCKET_INFORMATION, *PSOCKET_INFORMATION;
 
 
@@ -513,6 +514,11 @@ BOOLEAN SockGetAsyncSelectHelperAfdHandle(
 VOID SockProcessQueuedAsyncSelect(
 	PVOID Context,
 	PIO_STATUS_BLOCK IoStatusBlock
+);
+
+VOID
+SockDereferenceSocket(
+	PSOCKET_INFORMATION Socket
 );
 
 VOID

@@ -6,6 +6,7 @@
  */
 
 #include "ws2_32.h"
+#include <winuser.h>
 
 void Test_CloseDuplicatedSocket()
 {
@@ -174,6 +175,63 @@ void Test_CloseWhileSelectDuplicatedSocket()
     return;
 }
 
+void Test_CloseWithPendingAsyncSelect()
+{
+    HWND hwnd;
+    SOCKET listener, client, server, sck;
+    struct sockaddr_in addr = { AF_INET, 0, {{{ 0x7f, 0x00, 0x00, 0x01 }}} };
+    int len, err, i;
+    MSG msg;
+
+    hwnd = CreateWindowExA(0, "STATIC", NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+    ok(hwnd != NULL, "CreateWindowExA failed %lu\n", GetLastError());
+    if (!hwnd)
+        return;
+
+    listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(listener != INVALID_SOCKET, "socket failed %d\n", WSAGetLastError());
+    err = bind(listener, (struct sockaddr *)&addr, sizeof(addr));
+    ok(err == 0, "bind err = %d %d\n", err, WSAGetLastError());
+    err = listen(listener, SOMAXCONN);
+    ok(err == 0, "listen err = %d %d\n", err, WSAGetLastError());
+    len = sizeof(addr);
+    err = getsockname(listener, (struct sockaddr *)&addr, &len);
+    ok(err == 0, "getsockname err = %d %d\n", err, WSAGetLastError());
+
+    for (i = 0; i < 200; i++)
+    {
+        client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        ok(client != INVALID_SOCKET, "socket failed %d\n", WSAGetLastError());
+        err = connect(client, (struct sockaddr *)&addr, sizeof(addr));
+        ok(err == 0, "connect err = %d %d\n", err, WSAGetLastError());
+        server = accept(listener, NULL, NULL);
+        ok(server != INVALID_SOCKET, "accept failed %d\n", WSAGetLastError());
+        err = WSAAsyncSelect(server, hwnd, WM_USER, FD_READ | FD_CLOSE);
+        ok(err == 0, "WSAAsyncSelect err = %d %d\n", err, WSAGetLastError());
+        err = closesocket(server);
+        ok(err == 0, "closesocket server err = %d %d\n", err, WSAGetLastError());
+        err = closesocket(client);
+        ok(err == 0, "closesocket client err = %d %d\n", err, WSAGetLastError());
+    }
+
+    for (i = 0; i < 500; i++)
+    {
+        sck = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        ok(sck != INVALID_SOCKET, "socket failed %d\n", WSAGetLastError());
+        err = WSAAsyncSelect(sck, hwnd, WM_USER, FD_READ | FD_WRITE | FD_CLOSE);
+        ok(err == 0, "WSAAsyncSelect err = %d %d\n", err, WSAGetLastError());
+        err = closesocket(sck);
+        ok(err == 0, "closesocket err = %d %d\n", err, WSAGetLastError());
+    }
+
+    Sleep(500);
+    while (PeekMessageA(&msg, hwnd, 0, 0, PM_REMOVE))
+        DispatchMessageA(&msg);
+
+    closesocket(listener);
+    DestroyWindow(hwnd);
+}
+
 START_TEST(close)
 {
     int err;
@@ -186,6 +244,7 @@ START_TEST(close)
     Test_CloseDuplicatedSocket();
     Test_CloseWhileSelectSameSocket();
     Test_CloseWhileSelectDuplicatedSocket();
+    Test_CloseWithPendingAsyncSelect();
 
     WSACleanup();
 }
