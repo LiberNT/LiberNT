@@ -25,9 +25,6 @@ typedef BOOL (WINAPI *tApphelpCheckRunAppEx)(HANDLE FileHandle, PVOID Unk1, PVOI
                                              PULONG FusionFlags, PULONG64 SomeFlag1, PULONG SomeFlag2);
 typedef BOOL (WINAPI *tSdbPackAppCompatData)(PVOID hsdb, PVOID pQueryResult, PVOID* ppData, DWORD *dwSize);
 
-#define APPHELP_VALID_RESULT        0x10000
-#define APPHELP_RESULT_NOTFOUND     0x20000
-#define APPHELP_RESULT_FOUND        0x40000
 
 
 /* FUNCTIONS ******************************************************************/
@@ -335,7 +332,7 @@ BaseCheckRunApp(IN HANDLE FileHandle,
 
     if (Continue)
     {
-        if ((Reason & (APPHELP_VALID_RESULT|APPHELP_RESULT_FOUND)) == (APPHELP_VALID_RESULT|APPHELP_RESULT_FOUND))
+        if (Flags2)
         {
             if (!pSdbPackAppCompatData(NULL, QueryResult, SdbQueryAppCompatData, SdbQueryAppCompatDataSize))
             {

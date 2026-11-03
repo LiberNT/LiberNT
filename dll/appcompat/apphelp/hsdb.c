@@ -15,6 +15,7 @@
 #include "compat_undoc.h"
 
 #define MAX_LAYER_LENGTH            256
+#define SHIMREG_HAS_LAYER_VARIABLE  0x20
 #define GPLK_USER                   1
 #define GPLK_MACHINE                2
 
@@ -358,6 +359,7 @@ static BOOL SdbpPropagateEnvLayers(HSDB hsdb, LPWSTR Environment, PSDBQUERYRESUL
     if (!NT_SUCCESS(Status))
         return FALSE;
 
+    Result->dwFlags |= SHIMREG_HAS_LAYER_VARIABLE;
     return SdbpAddLayerMatches(hsdb, Buffer, EnvValue.Length, Result) > 0;
 }
 
@@ -607,9 +609,14 @@ HRESULT WINAPI SdbGetAppPatchDir(HSDB hsdb, LPWSTR path, DWORD size)
     static WCHAR* default_dir = NULL;
     static CONST WCHAR szAppPatch[] = {'\\','A','p','p','P','a','t','c','h',0};
 
+    if (!path)
+        return S_OK;
+
+    if (!size)
+        return S_FALSE;
+
     /* In case function fails, path holds empty string */
-    if (size > 0)
-        *path = 0;
+    *path = 0;
 
     if (!default_dir)
     {
@@ -641,7 +648,9 @@ HRESULT WINAPI SdbGetAppPatchDir(HSDB hsdb, LPWSTR path, DWORD size)
 
     if (!hsdb)
     {
-        return StringCchCopyW(path, size, default_dir);
+        HRESULT hr = StringCchCopyW(path, size, default_dir);
+
+        return hr == STRSAFE_E_INSUFFICIENT_BUFFER ? S_OK : hr;
     }
     else
     {
@@ -743,7 +752,14 @@ BOOL WINAPI SdbPackAppCompatData(HSDB hsdb, PSDBQUERYRESULT pQueryResult, PVOID*
     pData->dwMagic = SHIMDATA_MAGIC;
     pData->Query = *pQueryResult;
     pData->dwRosProcessCompatVersion = 0;
-    pData->szLayer[0] = UNICODE_NULL;   /* TODO */
+    {
+        static const UNICODE_STRING EnvKey = RTL_CONSTANT_STRING(L"__COMPAT_LAYER");
+        UNICODE_STRING EnvValue;
+
+        RtlInitEmptyUnicodeString(&EnvValue, pData->szLayer, sizeof(pData->szLayer) - sizeof(WCHAR));
+        if (!NT_SUCCESS(RtlQueryEnvironmentVariable_U(NULL, &EnvKey, &EnvValue)))
+            pData->szLayer[0] = UNICODE_NULL;
+    }
 
     SHIM_INFO("\ndwFlags    0x%x\ndwMagic    0x%x\ntrExe      0x%x\ntrLayer    0x%x\n",
               pData->Query.dwFlags, pData->dwMagic, pData->Query.atrExes[0], pData->Query.atrLayers[0]);

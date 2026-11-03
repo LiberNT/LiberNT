@@ -455,6 +455,8 @@
         <LAYER NAME="640X480">
             <SHIM_REF NAME="Force640x480" />
         </LAYER>
+        <LAYER NAME="HIGHDPIAWARE">
+        </LAYER>
 
 
         <!-- misc layers -->
