@@ -21,6 +21,7 @@ typedef struct
 Verb verbs[] = {
     { L"hashfile", hash_file },
     { L"asn", asn_dump },
+    { L"decodehex", decode_hex },
 };
 
 static void print_usage()
@@ -29,6 +30,8 @@ static void print_usage()
     ConPuts(StdOut, L"  -hashfile           -- Display cryptographic hash over a file\n");
     ConPuts(StdOut, L"                         Usage: -hashfile <file> [MD2|MD4|MD5|SHA1|SHA256|SHA384|SHA512]\n");
     ConPuts(StdOut, L"  -asn                -- Display ASN.1 encoding of a file\n");
+    ConPuts(StdOut, L"  -decodehex          -- Decode a hexadecimal-encoded file\n");
+    ConPuts(StdOut, L"                         Usage: -decodehex <infile> <outfile>\n");
     ConPuts(StdOut, L"\n");
     ConPuts(StdOut, L"CertUtil -?           -- Display a list of all verbs\n");
     ConPuts(StdOut, L"CertUtil -hashfile -? -- Display help text for the 'hashfile' verb\n");

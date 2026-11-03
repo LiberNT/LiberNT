@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     asn.cpp
     certutil.cpp
+    decodehex.cpp
     hashfile.cpp
     precomp.h)
 
