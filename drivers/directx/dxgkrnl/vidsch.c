@@ -1534,6 +1534,7 @@ VidSchQuerySystemNodeStatistics(
     return STATUS_SUCCESS;
 }
 
+/* TODO: DxgkDdiCancelCommand for undispatched packets of CancelCommandAware drivers; it needs PASSIVE_LEVEL, which this path does not guarantee */
 static VOID VidSchpFinalizeDequeuedPacket(_Inout_ PVIDSCH_DMA_PACKET Packet, _In_ NTSTATUS CompletionStatus)
 {
     VidSchAccountNodeRetire(Packet);
@@ -3320,6 +3321,39 @@ VidSchSubmitCommand(
     return STATUS_SUCCESS;
 }
 
+/* Windows 11 lets a driver refuse the private data of a submission before it is queued. */
+static NTSTATUS
+VidSchpValidateSubmitCommand(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_CONTEXT Context,
+    _In_ D3DGPU_VIRTUAL_ADDRESS DmaBufferGpuVa,
+    _In_ ULONG DmaBufferSize,
+    _In_ PVIDSCH_DMA_PACKET Packet)
+{
+    DXGKARG_VALIDATESUBMITCOMMAND Args;
+    NTSTATUS Status;
+
+    if (Packet->DriverPrivateDataSize == 0 || DXGK_CB_FULL(Adapter, DxgkDdiValidateSubmitCommand) == NULL)
+        return STATUS_SUCCESS;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+    RtlZeroMemory(&Args, sizeof(Args));
+    Args.Commands = DmaBufferGpuVa;
+    Args.CommandLength = DmaBufferSize;
+    Args.ContextCount = 1;
+    Args.Context[0] = Context->hMiniportContext;
+    Args.pPrivateDriverData = Packet->DriverPrivateData;
+    Args.PrivateDriverDataSize = Packet->DriverPrivateDataSize;
+    Args.UmdPrivateDataSize = Packet->UmdPrivateDataSize;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiValidateSubmitCommand)(Adapter->MiniportDeviceContext, &Args);
+    DxgkReleaseKmdCall(Adapter);
+    return Status;
+}
+
+/*
+ * Queues a WDDM 2.0 GPU-virtual command. Context arrives with one transient
+ * reference; ownership transfers to the packet only on STATUS_SUCCESS.
+ */
 NTSTATUS
 VidSchSubmitCommandVirtual(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -3437,6 +3471,13 @@ VidSchSubmitCommandVirtual(
         Packet->DriverPrivateDataSize = KmdPrivateDataSize;
     }
     Packet->UmdPrivateDataSize = DriverPrivateDataSize;
+    Status = VidSchpValidateSubmitCommand(Adapter, Context, DmaBufferGpuVa, DmaBufferSize, Packet);
+    if (!NT_SUCCESS(Status))
+    {
+        VidSchpDereferencePacket(Packet);
+        VidSchpReleaseCall(Adapter);
+        return Status;
+    }
 
     Packet->DmaBufferGpuVa = DmaBufferGpuVa;
     Packet->VirtualDmaBufferSize = DmaBufferSize;
