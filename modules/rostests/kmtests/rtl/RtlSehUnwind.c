@@ -7,7 +7,9 @@
 
 #define KMT_EMULATE_KERNEL
 #include <kmt_test.h>
+#ifndef _M_IX86
 #include <setjmp.h>
+#endif
 
 #define FIRST_STATUS STATUS_INVALID_PARAMETER_1
 #define SECOND_STATUS STATUS_INVALID_PARAMETER_2
@@ -219,6 +221,8 @@ TestRecursion(VOID)
     ok_eq_ulong(RecursionFinallyCount, 3UL);
 }
 
+/* ntoskrnl exports setjmp and longjmp on every target except i386 */
+#ifndef _M_IX86
 static
 DECLSPEC_NOINLINE
 VOID
@@ -269,6 +273,7 @@ TestLongjmpIntoScope(VOID)
     ok_eq_hex(Flags, 31UL);
     ok_eq_ulong(Count, 1UL);
 }
+#endif
 
 START_TEST(RtlSehUnwind)
 {
@@ -276,5 +281,7 @@ START_TEST(RtlSehUnwind)
     TestExceptionInFinally();
     TestExceptionInFinallyUnwoundFrame();
     TestRecursion();
+#ifndef _M_IX86
     TestLongjmpIntoScope();
+#endif
 }
