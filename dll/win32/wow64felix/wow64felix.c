@@ -24,6 +24,7 @@
 #define FELIX_INTERRUPT_ASSERT   0x2C
 #define FELIX_INTERRUPT_DEBUG    0x2D
 #define FELIX_PARK_TIMEOUT       (-10 * 1000 * 1000)
+#define FELIX_EFLAGS_TF          0x100
 
 enum
 {
@@ -338,6 +339,21 @@ Felix86NtBreakpoint(
     Record.NumberParameters = 1;
     Registers[FelixRip] = (ULONG)Next;
     FelixRaiseGuest(Owner, &Record);
+}
+
+VOID
+Felix86NtSingleStep(
+    _In_ PVOID Owner,
+    _Inout_ PULONG64 Registers)
+{
+    PFELIX_THREAD Thread = Owner;
+    EXCEPTION_RECORD Record;
+
+    RtlZeroMemory(&Record, sizeof(Record));
+    Record.ExceptionCode = STATUS_WX86_SINGLE_STEP;
+    Record.ExceptionAddress = ULongToPtr((ULONG)Registers[FelixRip]);
+    Felix86NtSetFlags(Thread->Cpu, Felix86NtGetFlags(Thread->Cpu) & ~(ULONG64)FELIX_EFLAGS_TF);
+    FelixRaiseGuest(Thread, &Record);
 }
 
 static
@@ -666,6 +682,7 @@ BTCpuResetToConsistentState(
     {
         Thread->RaisingGuest = FALSE;
         if (Record->ExceptionCode == STATUS_WX86_BREAKPOINT) Record->ExceptionCode = STATUS_BREAKPOINT;
+        else if (Record->ExceptionCode == STATUS_WX86_SINGLE_STEP) Record->ExceptionCode = STATUS_SINGLE_STEP;
         *NativeContext = *Thread->EntryContext;
         return STATUS_SUCCESS;
     }

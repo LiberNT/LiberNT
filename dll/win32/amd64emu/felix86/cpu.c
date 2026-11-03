@@ -9,6 +9,7 @@
 #include "bridge.h"
 
 #define EMU_CONTEXT_HAS(Flags, Part) (((Flags) & (Part)) == (Part))
+#define EMU_EFLAGS_TF 0x100
 
 C_ASSERT(sizeof(((AMD64_CONTEXT *)0)->FltSave) == 512);
 
@@ -325,6 +326,21 @@ Felix86NtBreakpoint(
     Record.NumberParameters = 1;
     ((PEMU_REGISTERS)Registers)->Rip = Next - 1;
     Felix86NtDispatch(Owner, EMU_NO_INTERRUPT, &Record);
+}
+
+VOID
+Felix86NtSingleStep(
+    _In_ PVOID Owner,
+    _Inout_ PULONG64 Registers)
+{
+    PEMU_THREAD Thread = Owner;
+    EXCEPTION_RECORD Record;
+
+    RtlZeroMemory(&Record, sizeof(Record));
+    Record.ExceptionCode = STATUS_SINGLE_STEP;
+    Record.ExceptionAddress = (PVOID)(ULONG_PTR)((PEMU_REGISTERS)Registers)->Rip;
+    Felix86NtSetFlags((FELIX86_NT_CPU *)Thread->Cpu, Felix86NtGetFlags((FELIX86_NT_CPU *)Thread->Cpu) & ~(ULONG64)EMU_EFLAGS_TF);
+    Felix86NtDispatch(Thread, EMU_NO_INTERRUPT, &Record);
 }
 
 VOID

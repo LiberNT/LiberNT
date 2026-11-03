@@ -175,6 +175,11 @@ void felix86_interrupt(felix86_frame* frame, u64 rip_next, u64 vector) {
     Felix86NtInterrupt(cpu->owner, cpu->state.ctx.gprs, rip_next, (u32)vector);
 }
 
+void felix86_single_step(felix86_frame* frame) {
+    NtCpu* cpu = (NtCpu*)frame->state;
+    Felix86NtSingleStep(cpu->owner, cpu->state.ctx.gprs);
+}
+
 void felix86_raise_hardware_breakpoint(ThreadState* state, u64 rip, int index) {
     ERROR("Hardware breakpoint %d at %llx", index, (unsigned long long)rip);
 }
@@ -337,9 +342,13 @@ uint64_t Felix86NtGetFlags(FELIX86_NT_CPU* handle) {
 
 void Felix86NtSetFlags(FELIX86_NT_CPU* handle, uint64_t flags) {
     ThreadState* state = &((NtCpu*)handle)->state;
+    bool old_tf = state->ctx.tf;
     state->ctx.SetFlags(flags);
     state->ac_bit = (flags >> 18) & 1;
     state->cpuid_bit = (flags >> 21) & 1;
+    if (state->ctx.tf != old_tf) {
+        felix86_tf_changed(state, state->ctx.tf);
+    }
 }
 
 void Felix86NtSaveFloating(FELIX86_NT_CPU* handle, void* area) {
