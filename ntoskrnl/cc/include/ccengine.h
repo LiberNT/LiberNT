@@ -190,6 +190,7 @@ typedef struct _CC_READ_AHEAD
 NTSTATUS CcCacheInitialize(_Out_ PCC_CACHE Cache, _In_ ULONG ViewCount, _In_ LONG64 DirtyPageThreshold);
 VOID CcCacheUninitialize(_Inout_ PCC_CACHE Cache);
 ULONG CcCacheTrim(_Inout_ PCC_CACHE Cache, _In_ ULONG ViewTarget);
+ULONG CcCacheReleaseIdle(_Inout_ PCC_CACHE Cache, _In_ ULONG ViewTarget);
 ULONG CcCacheCheck(_In_ PCC_CACHE Cache);
 
 VOID CcMapInitialize(_Out_ PCC_MAP Map, _In_ PCC_CACHE Cache, _In_ PCC_BACKING_OPS Ops, _In_ PVOID Context,

@@ -32,6 +32,11 @@ FileMapView(PVOID Context, ULONG64 Offset, SIZE_T Length, PVOID *Base)
     }
 
     (void)Length;
+    if (File->MapLimit != 0 && __atomic_load_n(&File->MappedViews, __ATOMIC_SEQ_CST) >= File->MapLimit)
+    {
+        __sync_fetch_and_add(&File->MapFailures, 1);
+        return STATUS_NO_MEMORY;
+    }
     __sync_fetch_and_add(&File->MappedViews, 1);
     *Base = File->Pages + Offset;
     return STATUS_SUCCESS;
@@ -262,6 +267,7 @@ typedef struct _TEST_ENTRY
 static const TEST_ENTRY Tests[] =
 {
     { "views", TestViews },
+    { "valimit", TestViewAddressLimit },
     { "dirty", TestDirty },
     { "bcb", TestBcb },
     { "ntpin", TestNtPin },
