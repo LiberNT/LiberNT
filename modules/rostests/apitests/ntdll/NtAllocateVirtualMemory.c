@@ -796,12 +796,47 @@ CheckSomeDefaultAddresses(VOID)
 
 #define RUNS 32
 
+static
+VOID
+CheckZeroBits(VOID)
+{
+    static const struct
+    {
+        ULONG_PTR ZeroBits;
+        NTSTATUS Status;
+    } Tests[] =
+    {
+        { 21, STATUS_INVALID_PARAMETER },
+        { 22, STATUS_INVALID_PARAMETER },
+        { 31, STATUS_INVALID_PARAMETER },
+    };
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(Tests); i++)
+    {
+        PVOID Base = NULL;
+        SIZE_T Size = PAGE_SIZE;
+        NTSTATUS Status;
+
+        Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Base, Tests[i].ZeroBits, &Size,
+                                         MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        ok(Status == Tests[i].Status, "ZeroBits %Iu: Status = 0x%08lx\n", Tests[i].ZeroBits, Status);
+        ok(Base == NULL, "ZeroBits %Iu: Base = %p\n", Tests[i].ZeroBits, Base);
+        if (NT_SUCCESS(Status))
+        {
+            Size = 0;
+            NtFreeVirtualMemory(NtCurrentProcess(), &Base, &Size, MEM_RELEASE);
+        }
+    }
+}
+
 START_TEST(NtAllocateVirtualMemory)
 {
     PVOID Mem1, Mem2;
     SIZE_T Size1, Size2;
     ULONG i;
 
+    CheckZeroBits();
     CheckAlignment();
     CheckAdjacentVADs();
     CheckSomeDefaultAddresses();
