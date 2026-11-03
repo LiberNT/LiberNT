@@ -75,7 +75,7 @@ UCHAR IopQueryOperationLength[FileMaximumInformation] =
     0,
     0,
     0,
-    0,
+    sizeof(FILE_NUMA_NODE_INFORMATION),
     0,
     0,
     0,

@@ -2859,6 +2859,7 @@ NtQueryInformationFile(IN HANDLE FileHandle,
     KIRQL OldIrql;
     IO_STATUS_BLOCK KernelIosb;
     BOOLEAN CallDriver = TRUE;
+    NTSTATUS LocalStatus = STATUS_SUCCESS;
     PFILE_ACCESS_INFORMATION AccessBuffer;
     PFILE_MODE_INFORMATION ModeBuffer;
     PFILE_ALIGNMENT_INFORMATION AlignmentBuffer;
@@ -2893,7 +2894,9 @@ NtQueryInformationFile(IN HANDLE FileHandle,
             ProbeForWriteIoStatusBlock(IoStatusBlock);
 
             /* Probe the information */
-            ProbeForWrite(FileInformation, Length, sizeof(ULONG));
+            ProbeForWrite(FileInformation,
+                          Length,
+                          (FileInformationClass == FileNumaNodeInformation) ? sizeof(USHORT) : sizeof(ULONG));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -3156,6 +3159,19 @@ NtQueryInformationFile(IN HANDLE FileHandle,
         Irp->IoStatus.Information = sizeof(FILE_IO_COMPLETION_NOTIFICATION_INFORMATION);
         CallDriver = FALSE;
     }
+    else if (FileInformationClass == FileNumaNodeInformation)
+    {
+        PFILE_NUMA_NODE_INFORMATION NumaBuffer = Irp->AssociatedIrp.SystemBuffer;
+        PDEVICE_OBJECT BaseDevice = IoGetDeviceAttachmentBaseRef(FileObject->DeviceObject);
+
+        if (IopGetDeviceNode(BaseDevice) == NULL)
+            LocalStatus = STATUS_NO_SUCH_DEVICE;
+        else
+            LocalStatus = IoGetDeviceNumaNode(BaseDevice, &NumaBuffer->NodeNumber);
+        ObDereferenceObject(BaseDevice);
+        Irp->IoStatus.Information = NT_SUCCESS(LocalStatus) ? sizeof(FILE_NUMA_NODE_INFORMATION) : 0;
+        CallDriver = FALSE;
+    }
     else if (FileInformationClass == FileAllInformation)
     {
         AllBuffer = Irp->AssociatedIrp.SystemBuffer;
@@ -3174,8 +3190,8 @@ NtQueryInformationFile(IN HANDLE FileHandle,
     }
     else
     {
-        Status = STATUS_SUCCESS;
-        Irp->IoStatus.Status = STATUS_SUCCESS;
+        Status = LocalStatus;
+        Irp->IoStatus.Status = LocalStatus;
     }
 
     if (Status == STATUS_PENDING)
