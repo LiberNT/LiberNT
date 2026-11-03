@@ -1,0 +1,25 @@
+{
+  "abi": "softfloat",
+  "abi-return-struct-as-int": true,
+  "arch": "x86",
+  "binary-format": "coff",
+  "cpu": "pentium",
+  "data-layout": "e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:32-n8:16:32-a:0:32-S32",
+  "emit-debug-gdb-scripts": false,
+  "env": "gnu",
+  "features": "+soft-float",
+  "frame-pointer": "always",
+  "has-thread-local": true,
+  "is-like-windows": true,
+  "linker-flavor": "gnu-cc",
+  "llvm-target": "i686-pc-windows-gnu",
+  "max-atomic-width": 64,
+  "os": "windows",
+  "requires-uwtable": true,
+  "rustc-abi": "softfloat",
+  "target-family": [
+    "windows"
+  ],
+  "target-pointer-width": 32,
+  "vendor": "pc"
+}

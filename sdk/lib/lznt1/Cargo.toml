@@ -1,0 +1,15 @@
+[package]
+name = "lznt1_rs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

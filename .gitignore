@@ -1,5 +1,6 @@
 compile_commands.json
 output-*
+target/
 /.rosconfig/
 modules/optional
 modules/bootcd_extras

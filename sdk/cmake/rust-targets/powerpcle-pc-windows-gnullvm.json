@@ -1,0 +1,16 @@
+{
+  "arch": "powerpc",
+  "archive-format": "coff",
+  "binary-format": "coff",
+  "cpu": "604",
+  "data-layout": "e-m:e-p:32:32-Fn32-i64:64-n32",
+  "env": "gnu",
+  "is-like-windows": true,
+  "llvm-target": "powerpcle-pc-windows-gnu",
+  "os": "windows",
+  "panic-strategy": "abort",
+  "target-endian": "little",
+  "target-family": ["windows"],
+  "target-pointer-width": 32,
+  "vendor": "pc"
+}

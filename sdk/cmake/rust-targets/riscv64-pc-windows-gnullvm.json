@@ -1,0 +1,18 @@
+{
+  "arch": "riscv64",
+  "code-model": "medium",
+  "cpu": "generic-rv64",
+  "data-layout": "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128",
+  "env": "gnu",
+  "features": "+m,+a,+f,+d,+c,-relax",
+  "is-like-windows": true,
+  "linker-flavor": "gnu-lld",
+  "llvm-abiname": "lp64",
+  "llvm-target": "riscv64-pc-windows-gnu",
+  "max-atomic-width": 64,
+  "os": "windows",
+  "panic-strategy": "abort",
+  "target-family": ["windows"],
+  "target-pointer-width": 64,
+  "vendor": "pc"
+}

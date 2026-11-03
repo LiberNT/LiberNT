@@ -191,6 +191,8 @@ endif()
 
 add_asm_files(rtl_asm ${ASM_SOURCE})
 add_library(rtl ${SOURCE} ${rtl_asm})
+
+target_link_libraries(rtl PRIVATE lznt1_rs)
 if(ARCH STREQUAL "riscv64")
     # One reader-driven decoder shared by native RTL and remote DbgHelp walks.
     add_library(riscv64_rvuw STATIC riscv64/rvuw.c)
