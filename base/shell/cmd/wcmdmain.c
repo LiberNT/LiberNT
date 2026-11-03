@@ -1546,28 +1546,43 @@ static BOOL if_condition_parse(WCHAR *start, WCHAR **end, CMD_IF_CONDITION *cond
     /* /I is the only option supported */
     if (!wcsicmp(param_copy, L"/I"))
     {
+#ifdef __REACTOS__
+        if (cond) wcscpy(cond->case_option, param_copy);
+#endif
         param_copy = WCMD_parameter(start, narg++, &param_start, TRUE, FALSE);
         if (cond) cond->case_insensitive = 1;
     }
     if (!wcsicmp(param_copy, L"NOT"))
     {
+#ifdef __REACTOS__
+        if (cond) wcscpy(cond->negation, param_copy);
+#endif
         param_copy = WCMD_parameter(start, narg++, &param_start, TRUE, FALSE);
         if (cond) cond->negated = 1;
     }
     if (!wcsicmp(param_copy, L"errorlevel"))
     {
+#ifdef __REACTOS__
+        if (cond) wcscpy(cond->unary, param_copy);
+#endif
         param_copy = WCMD_parameter(start, narg++, &param_start, TRUE, FALSE);
         if (cond) cond->op = CMD_IF_ERRORLEVEL;
         if (cond) cond->operand = wcsdup(param_copy);
     }
     else if (!wcsicmp(param_copy, L"exist"))
     {
+#ifdef __REACTOS__
+        if (cond) wcscpy(cond->unary, param_copy);
+#endif
         param_copy = WCMD_parameter(start, narg++, &param_start, FALSE, FALSE);
         if (cond) cond->op = CMD_IF_EXIST;
         if (cond) cond->operand = wcsdup(param_copy);
     }
     else if (!wcsicmp(param_copy, L"defined"))
     {
+#ifdef __REACTOS__
+        if (cond) wcscpy(cond->unary, param_copy);
+#endif
         param_copy = WCMD_parameter(start, narg++, &param_start, TRUE, FALSE);
         if (cond) cond->op = CMD_IF_DEFINED;
         if (cond) cond->operand = wcsdup(param_copy);
@@ -2990,6 +3005,9 @@ static BOOL node_builder_parse(struct node_builder *builder, unsigned precedence
                 CMD_IF_CONDITION cond;
                 CMD_NODE *then_block;
                 CMD_NODE *else_block;
+#ifdef __REACTOS__
+                const WCHAR *keyword = pmt.none;
+#endif
 
                 node_builder_consume(builder);
                 tkn = node_builder_peek_next_token(builder, &pmt);
@@ -3002,6 +3020,9 @@ static BOOL node_builder_parse(struct node_builder *builder, unsigned precedence
                     break;
                 }
                 ERROR_IF(!if_condition_parse(pmt.command, &end, &cond));
+#ifdef __REACTOS__
+                cond.keyword = keyword;
+#endif
                 free(pmt.command);
                 node_builder_consume(builder);
                 if (!node_builder_parse(builder, 0, &then_block))
@@ -3009,7 +3030,12 @@ static BOOL node_builder_parse(struct node_builder *builder, unsigned precedence
                     if_condition_dispose(&cond);
                     ERROR_IF(TRUE);
                 }
+#ifdef __REACTOS__
+                tkn = node_builder_peek_next_token(builder, &pmt);
+                cond.else_keyword = tkn == TKN_ELSE ? pmt.none : NULL;
+#else
                 tkn = node_builder_peek_next_token(builder, NULL);
+#endif
                 if (tkn == TKN_ELSE)
                 {
                     node_builder_consume(builder);
@@ -3314,6 +3340,9 @@ struct rebuild_flags
 {
     unsigned in_echo : 1,
              depth;
+#ifdef __REACTOS__
+    unsigned show_noecho : 1;
+#endif
 };
 
 static BOOL rebuild_append(struct command_rebuild *rb, const WCHAR *toappend)
@@ -3406,6 +3435,22 @@ static BOOL rebuild_append_all_redirections(struct command_rebuild *rb, const CM
 
 static BOOL rebuild_append_command(struct command_rebuild *rb, const CMD_NODE *node, struct rebuild_flags rbflags);
 
+#ifdef __REACTOS__
+static BOOL rebuild_command_has_arguments(const WCHAR *command)
+{
+    BOOL in_quotes = FALSE;
+
+    for (; *command; command++)
+    {
+        if (*command == L'"')
+            in_quotes = !in_quotes;
+        else if (!in_quotes && (*command == L' ' || *command == L'\t'))
+            return TRUE;
+    }
+    return FALSE;
+}
+#endif
+
 static BOOL rebuild_shall_echo(const CMD_NODE *node)
 {
     if (!node->do_echo) return FALSE;
@@ -3436,6 +3481,17 @@ static BOOL rebuild_command_binary(struct command_rebuild *rb, const CMD_NODE *n
     default: return FALSE;
     }
 
+#ifdef __REACTOS__
+    if (rbflags.in_echo)
+    {
+        new_rbflags.depth = rbflags.depth;
+        ret = rebuild_append_command(rb, node->left, new_rbflags);
+        if (rebuild_shall_echo(node->left))
+            ret = ret && rebuild_append(rb, L" ") && rebuild_append(rb, op_string) &&
+                rebuild_append(rb, L" ") && rebuild_append_command(rb, node->right, new_rbflags);
+        return ret;
+    }
+#endif
     ret = rebuild_append_command(rb, node->left, new_rbflags) &&
         ((node->left->op == CMD_SINGLE && node->op == CMD_CONCAT) ? rebuild_append(rb, L" ") : TRUE);
     if (!rbflags.in_echo || rebuild_shall_echo(node->left))
@@ -3452,9 +3508,20 @@ static BOOL rebuild_command_if(struct command_rebuild *rb, const CMD_NODE *node,
     struct rebuild_flags new_rbflags = {.depth = rbflags.depth + 1, .in_echo = rbflags.in_echo};
     BOOL ret;
 
+#ifdef __REACTOS__
+    if (rbflags.in_echo)
+        new_rbflags.depth = rbflags.depth;
+    ret = rebuild_append(rb, node->condition.keyword ? node->condition.keyword : L"if") &&
+        rebuild_append(rb, L" ");
+    if (node->condition.case_insensitive)
+        ret = ret && rebuild_append(rb, node->condition.case_option) && rebuild_append(rb, L" ");
+    if (node->condition.negated)
+        ret = ret && rebuild_append(rb, node->condition.negation) && rebuild_append(rb, L" ");
+#else
     ret = rebuild_append(rb, L"if ");
     if (node->condition.case_insensitive) ret = ret && rebuild_append(rb, L"/i ");
     if (node->condition.negated)          ret = ret && rebuild_append(rb, L"not ");
+#endif
 
     switch (node->condition.op)
     {
@@ -3475,7 +3542,11 @@ static BOOL rebuild_command_if(struct command_rebuild *rb, const CMD_NODE *node,
     }
     if (unop)
     {
+#ifdef __REACTOS__
+        ret = ret && rebuild_append(rb, node->condition.unary) && rebuild_append(rb, L" ");
+#else
         ret = ret && rebuild_append(rb, unop);
+#endif
         ret = ret && rebuild_expand_and_append(rb, node->condition.operand, rbflags.depth == 0);
     }
     else if (binop)
@@ -3487,6 +3558,17 @@ static BOOL rebuild_command_if(struct command_rebuild *rb, const CMD_NODE *node,
     else
         return FALSE;
     ret = ret && rebuild_append(rb, L" ");
+#ifdef __REACTOS__
+    if (node->else_block && rbflags.in_echo)
+    {
+        ret = ret && rebuild_append_command(rb, node->then_block, new_rbflags);
+        ret = ret && rebuild_append(rb, L" ") &&
+            rebuild_append(rb, node->condition.else_keyword ? node->condition.else_keyword : L"else") &&
+            rebuild_append(rb, L" ");
+        ret = ret && rebuild_append_command(rb, node->else_block, new_rbflags);
+    }
+    else
+#endif
     if (node->else_block)
     {
         ret = ret && rebuild_append(rb, L"(");
@@ -3570,12 +3652,21 @@ static BOOL rebuild_command_for(struct command_rebuild *rb, const CMD_NODE *node
         break;
     }
 
+#ifdef __REACTOS__
+    new_rflags.show_noecho = 1;
+    if (rbflags.in_echo)
+        new_rflags.depth = rbflags.depth;
+#endif
     /* append variable and the rest */
     ret = ret && rebuild_sprintf(rb, L"%%%c in (", for_ctrl->variable_index) &&
         rebuild_expand_and_append(rb, for_ctrl->set, rbflags.depth == 0) &&
         rebuild_append(rb, L") do ") &&
         rebuild_append_command(rb, node->do_block, new_rflags);
+#ifdef __REACTOS__
+    if (ret && node->do_block->op == CMD_SINGLE && !rbflags.in_echo)
+#else
     if (ret && node->do_block->op == CMD_SINGLE)
+#endif
         ret = rebuild_append(rb, L" ");
     return ret;
 }
@@ -3586,13 +3677,21 @@ static BOOL rebuild_append_command(struct command_rebuild *rb, const CMD_NODE *n
 
     if (!node->do_echo)
     {
+#ifdef __REACTOS__
+        if (rbflags.in_echo && !rbflags.show_noecho) return TRUE;
+#else
         if (rbflags.in_echo) return TRUE;
+#endif
         if (!rebuild_append(rb, L"@")) return FALSE;
     }
     switch (node->op)
     {
     case CMD_SINGLE:
         ret = rebuild_expand_and_append(rb, node->command, rbflags.depth == 0);
+#ifdef __REACTOS__
+        if (rbflags.in_echo && rebuild_command_has_arguments(node->command))
+            rebuild_append(rb, L" ");
+#else
         /* I don't know why Windows puts a space here but it does */
         /* Except for lines starting with 'echo.', 'echo:' or 'echo/'. Ask MS why */
         if (rbflags.in_echo &&
@@ -3600,6 +3699,7 @@ static BOOL rebuild_append_command(struct command_rebuild *rb, const CMD_NODE *n
              node->command[4] == L'\0' ||
              wcschr(L".:/", node->command[4]) == NULL))
             rebuild_append(rb, L" ");
+#endif
         break;
     case CMD_PIPE:
     case CMD_CONCAT:
@@ -3615,7 +3715,20 @@ static BOOL rebuild_append_command(struct command_rebuild *rb, const CMD_NODE *n
         break;
     case CMD_BLOCK:
         {
+#ifdef __REACTOS__
+            unsigned depth = rbflags.depth;
+#endif
             struct rebuild_flags new_rbflags = {.depth = rbflags.depth = 1, .in_echo = rbflags.in_echo};
+#ifdef __REACTOS__
+            if (rbflags.in_echo)
+            {
+                rbflags.depth = new_rbflags.depth = depth;
+                ret = rebuild_append(rb, L"(") &&
+                    rebuild_append_command(rb, node->block, new_rbflags) &&
+                    rebuild_append(rb, L") ");
+            }
+            else
+#endif
             ret = rebuild_append(rb, L"( ") &&
                 rebuild_append_command(rb, node->block, new_rbflags) &&
                 rebuild_append(rb, L" ) ");
@@ -3626,9 +3739,31 @@ static BOOL rebuild_append_command(struct command_rebuild *rb, const CMD_NODE *n
         ret = FALSE;
     }
     ret = ret && rebuild_append_all_redirections(rb, node, rbflags.depth == 0);
+#ifdef __REACTOS__
+    if (rbflags.in_echo && node->redirects)
+        ret = ret && rebuild_append(rb, L" ");
+#endif
 
     return ret;
 }
+
+#ifdef __REACTOS__
+static const WCHAR *lexer_keyword(const WCHAR *source, unsigned len)
+{
+    static WCHAR keywords[32][5];
+    static unsigned count;
+    unsigned i;
+
+    for (i = 0; i < count; i++)
+        if (!wcsncmp(keywords[i], source, len) && !keywords[i][len])
+            return keywords[i];
+    if (count == ARRAY_SIZE(keywords) || len >= ARRAY_SIZE(keywords[0]))
+        return NULL;
+    memcpy(keywords[count], source, len * sizeof(WCHAR));
+    keywords[count][len] = L'\0';
+    return keywords[count++];
+}
+#endif
 
 static BOOL lexer_can_accept_do(const struct node_builder *builder)
 {
@@ -3784,8 +3919,14 @@ enum read_parse_line WCMD_ReadAndParseLine(CMD_NODE **output)
            would take and skip parsing it here. */
         } else if (lexer_at_command_start(&builder) && WCMD_keyword_ws_found(L"if", curPos)) {
           WCHAR *command;
+#ifdef __REACTOS__
+          union token_parameter if_pmt = {.none = (void *)lexer_keyword(curPos, 2)};
+
+          node_builder_push_token_parameter(&builder, TKN_IF, if_pmt);
+#else
 
           node_builder_push_token(&builder, TKN_IF);
+#endif
 
           curPos = WCMD_skip_leading_spaces(curPos + 2); /* "if" */
           if (if_condition_parse(curPos, &command, NULL))
@@ -3805,7 +3946,13 @@ enum read_parse_line WCMD_ReadAndParseLine(CMD_NODE **output)
           }
           continue;
         } else if (WCMD_keyword_ws_found(L"else", curPos)) {
+#ifdef __REACTOS__
+          union token_parameter else_pmt = {.none = (void *)lexer_keyword(curPos, 4)};
+
+          node_builder_push_token_parameter(&builder, TKN_ELSE, else_pmt);
+#else
           node_builder_push_token(&builder, TKN_ELSE);
+#endif
 
           curPos = WCMD_skip_leading_spaces(curPos + 4 /* else */);
           continue;
@@ -4687,7 +4834,17 @@ static RETURN_CODE node_execute_with_echo(CMD_NODE *node, BOOL with_echo)
         WCHAR buffer[MAXSTRING];
         struct command_rebuild rb = {buffer, ARRAY_SIZE(buffer), 0};
         struct rebuild_flags rbflags = {.depth = 0, .in_echo = 1};
+#ifdef __REACTOS__
+        BOOL saved_delayed = delayedsubst;
+        BOOL rebuilt;
+
+        delayedsubst = FALSE;
+        rebuilt = rebuild_append_command(&rb, node, rbflags);
+        delayedsubst = saved_delayed;
+        if (rebuilt)
+#else
         if (rebuild_append_command(&rb, node, rbflags))
+#endif
         {
             WCMD_output_asis(L"\r\n");
             WCMD_show_prompt();

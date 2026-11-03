@@ -100,6 +100,13 @@ typedef struct _CMD_IF_CONDITION
     unsigned case_insensitive : 1,
              negated : 1,
              op;
+#ifdef __REACTOS__
+    const WCHAR *keyword;
+    const WCHAR *else_keyword;
+    WCHAR case_option[3];
+    WCHAR negation[4];
+    WCHAR unary[11];
+#endif
     union
     {
         /* CMD_IF_ERRORLEVEL, CMD_IF_EXIST, CMD_IF_DEFINED */
