@@ -1556,9 +1556,11 @@ TestInitialize(VOID)
         {
             if (Local.OsData != NULL)
             {
-                RtlStringCbPrintfA(Line, sizeof(Line), "removed=%u ref=%ld dev=%p cur=%p not=%p list=%u",
+                RtlStringCbPrintfA(Line, sizeof(Line), "removed=%u ref=%ld dev=%016I64X cur=%016I64X not=%016I64X list=%u",
                                    Local.OsData->RemoveLock.Removed, Local.OsData->RemoveLock.RefCount,
-                                   Local.OsData->DeviceObject, Local.OsData->CurrentIrp, Local.OsData->NotificationIrp,
+                                   (ULONG64)(ULONG_PTR)Local.OsData->DeviceObject,
+                                   (ULONG64)(ULONG_PTR)Local.OsData->CurrentIrp,
+                                   (ULONG64)(ULONG_PTR)Local.OsData->NotificationIrp,
                                    IsListEmpty(&Local.OsData->RemoveLock.TagList));
                 Check("osdata %lu", Index);
             }
