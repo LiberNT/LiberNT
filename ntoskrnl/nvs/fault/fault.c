@@ -523,7 +523,8 @@ RetryPage:
             System->Pfn.Pfn[Frame].PteFrame = TableFrame;
             Status = MiMakePageValid(Space, PageVa, Slot, TableFrame, Frame, Protection,
                                      (BOOLEAN)(Access == MiFaultWrite ||
-                                               (MI_PFN_FLAGS(&System->Pfn.Pfn[Frame]) & MI_PFN_FLAG_MODIFIED)));
+                                               ((MI_PFN_FLAGS(&System->Pfn.Pfn[Frame]) & MI_PFN_FLAG_MODIFIED) &&
+                                                Vad->WriteWatchBits == NULL)));
             MI_ATOMIC_ADD64(&Space->TransitionFaults, 1);
             break;
 
