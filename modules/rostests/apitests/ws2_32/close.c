@@ -344,6 +344,87 @@ static void Test_ReadRacesClose(void)
     }
 }
 
+typedef struct _BLOCKED_RECV_CONTEXT
+{
+    SOCKET Client;
+    HANDLE Started;
+    int Received;
+    int Error;
+} BLOCKED_RECV_CONTEXT;
+
+static DWORD WINAPI BlockedRecvThread(PVOID Parameter)
+{
+    BLOCKED_RECV_CONTEXT *Context = Parameter;
+    char Buffer[64];
+
+    SetEvent(Context->Started);
+    Context->Received = recv(Context->Client, Buffer, sizeof(Buffer), 0);
+    Context->Error = WSAGetLastError();
+    return 0;
+}
+
+/* A recv blocked in one thread must survive another thread closing its socket */
+static void Test_CloseRacesBlockedRecv(void)
+{
+    enum { ITERATIONS = 40, SPRAY_COUNT = 256 };
+    struct sockaddr_in Address = { 0 };
+    int Length = sizeof(Address), i, j, Failed = 0;
+    PVOID Spray[SPRAY_COUNT];
+    SOCKET Listener;
+
+    Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Listener != INVALID_SOCKET, "socket failed with %d\n", WSAGetLastError());
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ok(bind(Listener, (struct sockaddr *)&Address, sizeof(Address)) == 0, "bind failed with %d\n", WSAGetLastError());
+    ok(listen(Listener, 5) == 0, "listen failed with %d\n", WSAGetLastError());
+    ok(getsockname(Listener, (struct sockaddr *)&Address, &Length) == 0, "getsockname failed with %d\n", WSAGetLastError());
+
+    for (i = 0; i < ITERATIONS && !Failed; i++)
+    {
+        BLOCKED_RECV_CONTEXT Context;
+        SOCKET Server;
+        HANDLE Thread;
+
+        Context.Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        Context.Started = CreateEventW(NULL, TRUE, FALSE, NULL);
+        Context.Received = 0;
+        Context.Error = 0;
+        ok(connect(Context.Client, (struct sockaddr *)&Address, sizeof(Address)) == 0, "connect failed with %d\n", WSAGetLastError());
+        Server = accept(Listener, NULL, NULL);
+        ok(Server != INVALID_SOCKET, "accept failed with %d\n", WSAGetLastError());
+
+        Thread = CreateThread(NULL, 0, BlockedRecvThread, &Context, 0, NULL);
+        ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+        WaitForSingleObject(Context.Started, INFINITE);
+        Sleep(20);
+
+        ok(closesocket(Context.Client) == 0, "closesocket failed with %d\n", WSAGetLastError());
+        for (j = 0; j < SPRAY_COUNT; j++)
+        {
+            SIZE_T Size = 64 + (j % 32) * 64;
+
+            Spray[j] = HeapAlloc(GetProcessHeap(), 0, Size);
+            if (Spray[j])
+                memset(Spray[j], 0xFF, Size);
+        }
+
+        ok(WaitForSingleObject(Thread, 5000) == WAIT_OBJECT_0, "Iteration %d: the blocked recv did not return\n", i);
+        ok(Context.Received == SOCKET_ERROR, "Iteration %d: recv returned %d\n", i, Context.Received);
+        ok(Context.Error == WSAECONNABORTED, "Iteration %d: recv error %d\n", i, Context.Error);
+        if (Context.Received != SOCKET_ERROR || Context.Error != WSAECONNABORTED)
+            Failed = 1;
+
+        for (j = 0; j < SPRAY_COUNT; j++)
+            HeapFree(GetProcessHeap(), 0, Spray[j]);
+        CloseHandle(Thread);
+        CloseHandle(Context.Started);
+        closesocket(Server);
+    }
+
+    closesocket(Listener);
+}
+
 typedef struct _SEND_RACE_CONTEXT
 {
     SOCKET Listener;
@@ -454,6 +535,7 @@ START_TEST(close)
     Test_CloseWithPendingAsyncSelect();
     Test_RebindAfterCloseWithPendingReceive();
     Test_ReadRacesClose();
+    Test_CloseRacesBlockedRecv();
     Test_SendRacesAck();
     Test_AcceptAfterPeerClose();
 

@@ -3899,6 +3899,138 @@ SendToHelper:
     return (Errno == NO_ERROR) ? NO_ERROR : SOCKET_ERROR;
 }
 
+static PSOCKET_INFORMATION
+SockFindAndReferenceSocket(SOCKET Handle)
+{
+    PSOCKET_INFORMATION Socket;
+
+    EnterCriticalSection(&SocketListLock);
+    for (Socket = SocketListHead; Socket != NULL; Socket = Socket->NextSocket)
+    {
+        if (Socket->Handle == Handle)
+        {
+            InterlockedIncrement(&Socket->RefCount);
+            break;
+        }
+    }
+    LeaveCriticalSection(&SocketListLock);
+
+    return Socket;
+}
+
+static VOID
+SockReleaseCallReference(PSOCKET_INFORMATION Socket)
+{
+    if (Socket != NULL)
+        SockDereferenceSocket(Socket);
+}
+
+#define SOCK_REFERENCED_CALL(Type, Handle, Call) \
+    { \
+        PSOCKET_INFORMATION Socket = SockFindAndReferenceSocket(Handle); \
+        Type Result = Call; \
+        SockReleaseCallReference(Socket); \
+        return Result; \
+    }
+
+static SOCKET WSPAPI
+SockWSPAccept(SOCKET s, struct sockaddr FAR *addr, LPINT addrlen, LPCONDITIONPROC lpfnCondition,
+              DWORD_PTR dwCallbackData, LPINT lpErrno)
+SOCK_REFERENCED_CALL(SOCKET, s, WSPAccept(s, addr, addrlen, lpfnCondition, dwCallbackData, lpErrno))
+
+static INT WSPAPI
+SockWSPAsyncSelect(SOCKET s, HWND hWnd, UINT wMsg, LONG lEvent, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPAsyncSelect(s, hWnd, wMsg, lEvent, lpErrno))
+
+static INT WSPAPI
+SockWSPBind(SOCKET s, CONST SOCKADDR *name, INT namelen, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPBind(s, name, namelen, lpErrno))
+
+static INT WSPAPI
+SockWSPCloseSocket(SOCKET s, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPCloseSocket(s, lpErrno))
+
+static INT WSPAPI
+SockWSPConnect(SOCKET s, CONST SOCKADDR *name, INT namelen, LPWSABUF lpCallerData, LPWSABUF lpCalleeData,
+               LPQOS lpSQOS, LPQOS lpGQOS, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPConnect(s, name, namelen, lpCallerData, lpCalleeData, lpSQOS, lpGQOS, lpErrno))
+
+static INT WSPAPI
+SockWSPDuplicateSocket(SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOW lpProtocolInfo, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPDuplicateSocket(s, dwProcessId, lpProtocolInfo, lpErrno))
+
+static INT WSPAPI
+SockWSPEnumNetworkEvents(SOCKET s, WSAEVENT hEventObject, LPWSANETWORKEVENTS lpNetworkEvents, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPEnumNetworkEvents(s, hEventObject, lpNetworkEvents, lpErrno))
+
+static INT WSPAPI
+SockWSPEventSelect(SOCKET s, WSAEVENT hEventObject, LONG lNetworkEvents, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPEventSelect(s, hEventObject, lNetworkEvents, lpErrno))
+
+static BOOL WSPAPI
+SockWSPGetOverlappedResult(SOCKET s, LPWSAOVERLAPPED lpOverlapped, LPDWORD lpcbTransfer, BOOL fWait,
+                           LPDWORD lpdwFlags, LPINT lpErrno)
+SOCK_REFERENCED_CALL(BOOL, s, WSPGetOverlappedResult(s, lpOverlapped, lpcbTransfer, fWait, lpdwFlags, lpErrno))
+
+static INT WSPAPI
+SockWSPGetPeerName(SOCKET s, LPSOCKADDR name, LPINT namelen, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPGetPeerName(s, name, namelen, lpErrno))
+
+static INT WSPAPI
+SockWSPGetSockName(SOCKET s, LPSOCKADDR name, LPINT namelen, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPGetSockName(s, name, namelen, lpErrno))
+
+static INT WSPAPI
+SockWSPGetSockOpt(SOCKET s, INT level, INT optname, CHAR FAR *optval, LPINT optlen, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPGetSockOpt(s, level, optname, optval, optlen, lpErrno))
+
+static INT WSPAPI
+SockWSPIoctl(SOCKET s, DWORD dwIoControlCode, LPVOID lpvInBuffer, DWORD cbInBuffer, LPVOID lpvOutBuffer,
+             DWORD cbOutBuffer, LPDWORD lpcbBytesReturned, LPWSAOVERLAPPED lpOverlapped,
+             LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine, LPWSATHREADID lpThreadId, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPIoctl(s, dwIoControlCode, lpvInBuffer, cbInBuffer, lpvOutBuffer, cbOutBuffer,
+                                      lpcbBytesReturned, lpOverlapped, lpCompletionRoutine, lpThreadId, lpErrno))
+
+static INT WSPAPI
+SockWSPListen(SOCKET s, INT backlog, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPListen(s, backlog, lpErrno))
+
+static INT WSPAPI
+SockWSPRecv(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesRecvd, LPDWORD lpFlags,
+            LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+            LPWSATHREADID lpThreadId, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPRecv(s, lpBuffers, dwBufferCount, lpNumberOfBytesRecvd, lpFlags, lpOverlapped,
+                                     lpCompletionRoutine, lpThreadId, lpErrno))
+
+static INT WSPAPI
+SockWSPRecvFrom(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesRecvd, LPDWORD lpFlags,
+                LPSOCKADDR lpFrom, LPINT lpFromlen, LPWSAOVERLAPPED lpOverlapped,
+                LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine, LPWSATHREADID lpThreadId, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPRecvFrom(s, lpBuffers, dwBufferCount, lpNumberOfBytesRecvd, lpFlags, lpFrom,
+                                         lpFromlen, lpOverlapped, lpCompletionRoutine, lpThreadId, lpErrno))
+
+static INT WSPAPI
+SockWSPSend(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent, DWORD dwFlags,
+            LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+            LPWSATHREADID lpThreadId, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPSend(s, lpBuffers, dwBufferCount, lpNumberOfBytesSent, dwFlags, lpOverlapped,
+                                     lpCompletionRoutine, lpThreadId, lpErrno))
+
+static INT WSPAPI
+SockWSPSendTo(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent, DWORD dwFlags,
+              CONST SOCKADDR *lpTo, INT iTolen, LPWSAOVERLAPPED lpOverlapped,
+              LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine, LPWSATHREADID lpThreadId, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPSendTo(s, lpBuffers, dwBufferCount, lpNumberOfBytesSent, dwFlags, lpTo, iTolen,
+                                       lpOverlapped, lpCompletionRoutine, lpThreadId, lpErrno))
+
+static INT WSPAPI
+SockWSPSetSockOpt(SOCKET s, INT level, INT optname, CONST CHAR FAR *optval, INT optlen, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPSetSockOpt(s, level, optname, optval, optlen, lpErrno))
+
+static INT WSPAPI
+SockWSPShutdown(SOCKET s, INT how, LPINT lpErrno)
+SOCK_REFERENCED_CALL(INT, s, WSPShutdown(s, how, lpErrno))
+
 /*
  * FUNCTION: Initialize service provider for a client
  * ARGUMENTS:
@@ -3935,34 +4067,34 @@ WSPStartup(
 
     if (Status == NO_ERROR)
     {
-        lpProcTable->lpWSPAccept = WSPAccept;
+        lpProcTable->lpWSPAccept = SockWSPAccept;
         lpProcTable->lpWSPAddressToString = WSPAddressToString;
-        lpProcTable->lpWSPAsyncSelect = WSPAsyncSelect;
-        lpProcTable->lpWSPBind = WSPBind;
+        lpProcTable->lpWSPAsyncSelect = SockWSPAsyncSelect;
+        lpProcTable->lpWSPBind = SockWSPBind;
         lpProcTable->lpWSPCancelBlockingCall = WSPCancelBlockingCall;
         lpProcTable->lpWSPCleanup = WSPCleanup;
-        lpProcTable->lpWSPCloseSocket = WSPCloseSocket;
-        lpProcTable->lpWSPConnect = WSPConnect;
-        lpProcTable->lpWSPDuplicateSocket = WSPDuplicateSocket;
-        lpProcTable->lpWSPEnumNetworkEvents = WSPEnumNetworkEvents;
-        lpProcTable->lpWSPEventSelect = WSPEventSelect;
-        lpProcTable->lpWSPGetOverlappedResult = WSPGetOverlappedResult;
-        lpProcTable->lpWSPGetPeerName = WSPGetPeerName;
-        lpProcTable->lpWSPGetSockName = WSPGetSockName;
-        lpProcTable->lpWSPGetSockOpt = WSPGetSockOpt;
+        lpProcTable->lpWSPCloseSocket = SockWSPCloseSocket;
+        lpProcTable->lpWSPConnect = SockWSPConnect;
+        lpProcTable->lpWSPDuplicateSocket = SockWSPDuplicateSocket;
+        lpProcTable->lpWSPEnumNetworkEvents = SockWSPEnumNetworkEvents;
+        lpProcTable->lpWSPEventSelect = SockWSPEventSelect;
+        lpProcTable->lpWSPGetOverlappedResult = SockWSPGetOverlappedResult;
+        lpProcTable->lpWSPGetPeerName = SockWSPGetPeerName;
+        lpProcTable->lpWSPGetSockName = SockWSPGetSockName;
+        lpProcTable->lpWSPGetSockOpt = SockWSPGetSockOpt;
         lpProcTable->lpWSPGetQOSByName = WSPGetQOSByName;
-        lpProcTable->lpWSPIoctl = WSPIoctl;
+        lpProcTable->lpWSPIoctl = SockWSPIoctl;
         lpProcTable->lpWSPJoinLeaf = WSPJoinLeaf;
-        lpProcTable->lpWSPListen = WSPListen;
-        lpProcTable->lpWSPRecv = WSPRecv;
+        lpProcTable->lpWSPListen = SockWSPListen;
+        lpProcTable->lpWSPRecv = SockWSPRecv;
         lpProcTable->lpWSPRecvDisconnect = WSPRecvDisconnect;
-        lpProcTable->lpWSPRecvFrom = WSPRecvFrom;
+        lpProcTable->lpWSPRecvFrom = SockWSPRecvFrom;
         lpProcTable->lpWSPSelect = WSPSelect;
-        lpProcTable->lpWSPSend = WSPSend;
+        lpProcTable->lpWSPSend = SockWSPSend;
         lpProcTable->lpWSPSendDisconnect = WSPSendDisconnect;
-        lpProcTable->lpWSPSendTo = WSPSendTo;
-        lpProcTable->lpWSPSetSockOpt = WSPSetSockOpt;
-        lpProcTable->lpWSPShutdown = WSPShutdown;
+        lpProcTable->lpWSPSendTo = SockWSPSendTo;
+        lpProcTable->lpWSPSetSockOpt = SockWSPSetSockOpt;
+        lpProcTable->lpWSPShutdown = SockWSPShutdown;
         lpProcTable->lpWSPSocket = WSPSocket;
         lpProcTable->lpWSPStringToAddress = WSPStringToAddress;
         lpWSPData->wVersion     = MAKEWORD(2, 2);
