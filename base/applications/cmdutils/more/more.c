@@ -977,6 +977,9 @@ int wmain(int argc, WCHAR* argv[])
         return 0;
     }
 
+    if (hStdIn == NULL || hStdIn == INVALID_HANDLE_VALUE)
+        return 0;
+
     /* Load the registry settings */
     LoadRegistrySettings(HKEY_LOCAL_MACHINE);
     LoadRegistrySettings(HKEY_CURRENT_USER);
