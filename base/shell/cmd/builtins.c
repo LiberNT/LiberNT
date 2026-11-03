@@ -3756,6 +3756,11 @@ RETURN_CODE WCMD_more(WCHAR *args)
     int argno = 0;
     WCHAR *argN;
 
+#ifdef __REACTOS__
+    if (!GetStdHandle(STD_INPUT_HANDLE) || GetStdHandle(STD_INPUT_HANDLE) == INVALID_HANDLE_VALUE)
+        return errorlevel = NO_ERROR;
+
+#endif
     if (param1[0] == 0x00)
     {
         WINE_TRACE("No parms - working probably in pipe mode\n");
