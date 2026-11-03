@@ -801,7 +801,7 @@
 #@ stdcall GetWriteWatch(long ptr long ptr ptr ptr)
 #@ stdcall GetWsChanges(long ptr long)
 #@ stdcall GetWsChangesEx(long ptr ptr)
-@ stdcall -arch=x86_64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
+@ stdcall -arch=i386,x86_64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
 #@ stdcall GlobalAlloc(long long)
 #@ stdcall GlobalFree(long)
 #@ stdcall GlobalMemoryStatusEx(ptr)
@@ -836,8 +836,8 @@
 #@ stdcall InitOnceInitialize(ptr) ntdll.RtlRunOnceInitialize
 @ stdcall InitializeAcl(ptr long long) kernelbase.InitializeAcl
 @ stdcall InitializeConditionVariable(ptr) kernelbase.InitializeConditionVariable
-@ stdcall -arch=win64 InitializeContext(ptr long ptr ptr) kernelbase.InitializeContext
-@ stdcall -arch=win64 InitializeContext2(ptr long ptr ptr int64) kernelbase.InitializeContext2
+@ stdcall InitializeContext(ptr long ptr ptr) kernelbase.InitializeContext
+@ stdcall InitializeContext2(ptr long ptr ptr int64) kernelbase.InitializeContext2
 #@ stdcall InitializeCriticalSection(ptr) ntdll.RtlInitializeCriticalSection
 #@ stdcall InitializeCriticalSectionAndSpinCount(ptr long)
 #@ stdcall InitializeCriticalSectionEx(ptr long long)
@@ -978,7 +978,7 @@
 #@ stdcall LocalReAlloc(long long long)
 #@ stdcall LocalUnlock(long)
 @ stdcall LocaleNameToLCID(wstr long) kernelbase.LocaleNameToLCID
-@ stdcall -arch=x86_64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
+@ stdcall -arch=i386,x86_64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
 #@ stdcall LockFile(long long long long long)
 #@ stdcall LockFileEx(long long long long long ptr)
 #@ stdcall LockResource(long)
@@ -1552,7 +1552,7 @@
 @ stdcall SetUserGeoName(wstr) kernelbase.SetUserGeoName
 #@ stdcall SetWaitableTimer(long ptr long ptr ptr long)
 @ stdcall SetWaitableTimerEx(long ptr long ptr ptr ptr long) kernelbase.SetWaitableTimerEx
-@ stdcall -arch=x86_64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
+@ stdcall -arch=i386,x86_64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
 #@ stdcall SetupComm(long long long)
 # #@ stub SharedLocalIsEnabled
 #@ stdcall SignalObjectAndWait(long long long long)

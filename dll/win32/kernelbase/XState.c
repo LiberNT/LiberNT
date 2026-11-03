@@ -12,8 +12,6 @@
 #include "winternl.h"
 #include "wine/kernelbase.h"
 
-#ifdef _WIN64
-
 BOOL WINAPI InitializeContext2(void *buffer, DWORD flags, CONTEXT **context,
                               DWORD *length, ULONG64 compaction_mask)
 {
@@ -49,8 +47,6 @@ BOOL WINAPI CopyContext(CONTEXT *dst, DWORD context_flags, CONTEXT *src)
 {
     return set_ntstatus(RtlCopyContext(dst, context_flags, src));
 }
-
-#endif
 
 #ifdef __x86_64__
 
@@ -90,6 +86,42 @@ void *WINAPI LocateXStateFeature(CONTEXT *context, DWORD feature, DWORD *length)
     }
     if (length) *length = FIELD_OFFSET(XSAVE_FORMAT, XmmRegisters);
     return &context->FltSave;
+}
+
+#elif defined(__i386__)
+
+BOOL WINAPI GetXStateFeaturesMask(CONTEXT *context, DWORD64 *mask)
+{
+    if (!(context->ContextFlags & CONTEXT_i386)) return FALSE;
+    *mask = (context->ContextFlags & CONTEXT_EXTENDED_REGISTERS) == CONTEXT_EXTENDED_REGISTERS ? 3 : 0;
+    if ((context->ContextFlags & CONTEXT_XSTATE) == CONTEXT_XSTATE)
+        *mask |= RtlGetExtendedFeaturesMask((CONTEXT_EX *)(context + 1));
+    return TRUE;
+}
+
+BOOL WINAPI SetXStateFeaturesMask(CONTEXT *context, DWORD64 mask)
+{
+    if (!(context->ContextFlags & CONTEXT_i386)) return FALSE;
+    if (mask & 3) context->ContextFlags |= CONTEXT_EXTENDED_REGISTERS;
+    if ((context->ContextFlags & CONTEXT_XSTATE) != CONTEXT_XSTATE)
+        return !(mask & ~(DWORD64)3);
+    RtlSetExtendedFeaturesMask((CONTEXT_EX *)(context + 1), mask);
+    return TRUE;
+}
+
+void *WINAPI LocateXStateFeature(CONTEXT *context, DWORD feature, DWORD *length)
+{
+    if (!(context->ContextFlags & CONTEXT_i386)) return NULL;
+    if (feature >= 2)
+        return (context->ContextFlags & CONTEXT_XSTATE) == CONTEXT_XSTATE
+            ? RtlLocateExtendedFeature((CONTEXT_EX *)(context + 1), feature, length) : NULL;
+    if (feature == 1)
+    {
+        if (length) *length = sizeof(M128A) * 8;
+        return (BYTE *)&context->ExtendedRegisters + FIELD_OFFSET(XSAVE_FORMAT, XmmRegisters);
+    }
+    if (length) *length = FIELD_OFFSET(XSAVE_FORMAT, XmmRegisters);
+    return &context->ExtendedRegisters;
 }
 
 #endif
