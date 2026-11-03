@@ -5991,6 +5991,7 @@ public:
     bool foreign = false, foreign_known = false;
     D3DKMT_HANDLE foreign_share = 0;
     NativeTexture2D *foreign_target = NULL;
+    NativeTexture2D *crop_texture = NULL;
     bool ForeignAdapter();
     HRESULT PublishForeign(NativeTexture2D *);
     void DumpTrace();
@@ -6048,6 +6049,7 @@ public:
         if (publishes_drained) CloseHandle(publishes_drained);
         for (UINT i = 0; i < 3; ++i) if (transports[i]) transports[i]->Drop();
         if (foreign_target) foreign_target->Drop();
+        if (crop_texture) crop_texture->Drop();
         if (resolved) resolved->Drop();
         for (UINT i = 0; i < 16; ++i) if (buffers[i]) buffers[i]->Drop();
         if (device_child) device->ChildRelease();
@@ -6803,7 +6805,6 @@ bool NativeSwapChain::ForeignAdapter()
 
 HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
 {
-    /* FIXME: the source region is not applied when another adapter owns the window */
     typedef HRESULT (WINAPI *GetSurface)(HWND, LUID, HMONITOR, DWORD, UINT *, HANDLE *, ULONGLONG *);
     typedef HRESULT (WINAPI *UpdateSurface)(HWND, ULONGLONG, DWORD, HMONITOR, const RECT *);
     static GetSurface get_surface;
@@ -6841,15 +6842,46 @@ HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
             foreign_share = share;
         }
     }
+    NativeTexture2D *region = texture;
+    if (SUCCEEDED(hr) && source_width && source_height &&
+            (source_width < texture->desc.Width || source_height < texture->desc.Height))
+    {
+        if (crop_texture && (crop_texture->desc.Width != source_width || crop_texture->desc.Height != source_height))
+        {
+            crop_texture->Drop();
+            crop_texture = NULL;
+        }
+        if (!crop_texture)
+        {
+            D3D11_TEXTURE2D_DESC crop_desc = texture->desc;
+            ID3D11Texture2D *created = NULL;
+            crop_desc.Width = source_width;
+            crop_desc.Height = source_height;
+            crop_desc.MiscFlags = 0;
+            hr = device->CreateTexture(&crop_desc, NULL, &created, true);
+            if (SUCCEEDED(hr))
+            {
+                crop_texture = static_cast<NativeTexture2D *>(created);
+                crop_texture->Retain();
+                created->Release();
+            }
+        }
+        if (SUCCEEDED(hr))
+        {
+            D3D11_BOX box = {0, 0, 0, source_width, source_height, 1};
+            device->context->CopySubresourceRegion(crop_texture, 0, 0, 0, 0, texture, 0, &box);
+            region = crop_texture;
+        }
+    }
     RECT rect = {};
     if (SUCCEEDED(hr))
     {
         rect.right = foreign_target->desc.Width;
         rect.bottom = foreign_target->desc.Height;
-        bool convert = NativeFormatFamily(foreign_target->desc.Format) != NativeFormatFamily(texture->desc.Format);
-        bool stretch = foreign_target->desc.Width != texture->desc.Width || foreign_target->desc.Height != texture->desc.Height;
+        bool convert = NativeFormatFamily(foreign_target->desc.Format) != NativeFormatFamily(region->desc.Format);
+        bool stretch = foreign_target->desc.Width != region->desc.Width || foreign_target->desc.Height != region->desc.Height;
         if (!convert && !stretch)
-            device->context->CopyResource(foreign_target, texture);
+            device->context->CopyResource(foreign_target, region);
         else if (device->dxgi_functions.pfnBlt)
         {
             DXGI_DDI_ARG_BLT blt = {};
@@ -6857,7 +6889,7 @@ HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
             blt.hDstResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(foreign_target->handle.pDrvPrivate);
             blt.DstRight = foreign_target->desc.Width;
             blt.DstBottom = foreign_target->desc.Height;
-            blt.hSrcResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(texture->handle.pDrvPrivate);
+            blt.hSrcResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(region->handle.pDrvPrivate);
             blt.Flags.Convert = convert;
             blt.Flags.Stretch = stretch;
             blt.Rotate = DXGI_DDI_MODE_ROTATION_IDENTITY;
@@ -7219,6 +7251,8 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
         foreign_target = NULL;
         foreign_share = 0;
         foreign_known = false;
+        if (crop_texture) crop_texture->Drop();
+        crop_texture = NULL;
     }
     for (UINT i = 0; i < 3; ++i) if (new_transports[i]) new_transports[i]->Drop();
     if (new_resolved) new_resolved->Drop();
