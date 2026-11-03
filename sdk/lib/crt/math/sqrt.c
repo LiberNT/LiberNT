@@ -16,10 +16,9 @@ __cdecl
 sqrt(
     double x)
 {
-    const double threehalfs = 1.5;
-    const double x2 = x * 0.5;
-    long long bits;
-    double inv, y;
+    union { double d; unsigned long long u; } value;
+    unsigned long long bits, mantissa, high, low, root, remainder, trial, significand;
+    int exponent, i;
 
     /* Handle special cases */
     if (x == 0.0)
@@ -32,42 +31,64 @@ sqrt(
     }
 
     /* Convert into a 64  bit integer */
-    bits = *(long long *)&x;
+    value.d = x;
+    bits = value.u;
 
     /* Check for !finite(x) */
-    if ((bits & 0x7ff0000000000000LL) == 0x7ff0000000000000LL)
+    if ((bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL)
     {
         return x + x;
     }
 
-    /* Step 1: quick approximation of 1/sqrt(x) with bit magic
-       See http://en.wikipedia.org/wiki/Fast_inverse_square_root */
-    bits = 0x5fe6eb50c7b537a9ll - (bits >> 1);
-    inv = *(double*)&bits;
+    exponent = (int)(bits >> 52);
+    mantissa = bits & 0x000fffffffffffffULL;
+    if (exponent == 0)
+    {
+        exponent = 1;
+        while (!(mantissa & 0x0010000000000000ULL))
+        {
+            mantissa <<= 1;
+            exponent--;
+        }
+    }
+    else
+    {
+        mantissa |= 0x0010000000000000ULL;
+    }
 
-    /* Step 2: 3 Newton iterations to approximate 1 / sqrt(x) */
-    inv = inv * (threehalfs - (x2 * inv * inv));
-    inv = inv * (threehalfs - (x2 * inv * inv));
-    inv = inv * (threehalfs - (x2 * inv * inv));
+    exponent -= 1075;
+    if (exponent & 1)
+    {
+        mantissa <<= 1;
+        exponent--;
+    }
 
-    /* Step 3: 1 additional Heron iteration has shown to maximize the precision.
-       Normally the formula would be: y = (y + (x / y)) * 0.5;
-       Instead we use the inverse sqrt directly */
-    y = ((1 / inv) + (x * inv)) * 0.5;
+    high = mantissa >> 10;
+    low = mantissa << 54;
+    root = 0;
+    remainder = 0;
+    for (i = 0; i < 64; i++)
+    {
+        remainder = (remainder << 2) | (high >> 62);
+        high = (high << 2) | (low >> 62);
+        low <<= 2;
+        trial = (root << 2) | 1;
+        root <<= 1;
+        if (remainder >= trial)
+        {
+            remainder -= trial;
+            root |= 1;
+        }
+    }
 
-    //assert(y == (double)((y + (x / y)) * 0.5));
-    /* GCC BUG: While the C-Standard requires that an explicit cast to
-       double converts the result of a computation to the appropriate
-       64 bit value, our GCC ignores this and uses an 80 bit FPU register
-       in an intermediate value, so we need to make sure it is stored in
-       a memory location before comparison */
-//#if DBG
-//    {
-//        volatile double y1 = y, y2;
-//        y2 = (y + (x / y)) * 0.5;
-//        assert(y1 == y2);
-//    }
-//#endif
+    significand = (root + 1) >> 1;
+    exponent = (exponent - 54) / 2 + 1;
+    if (significand == 0x0020000000000000ULL)
+    {
+        significand >>= 1;
+        exponent++;
+    }
 
-    return y;
+    value.u = ((unsigned long long)(exponent + 1075) << 52) | (significand & 0x000fffffffffffffULL);
+    return value.d;
 }
