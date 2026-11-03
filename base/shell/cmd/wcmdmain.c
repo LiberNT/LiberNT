@@ -2414,6 +2414,24 @@ static RETURN_CODE execute_single_command(const WCHAR *command)
     return_code = search_command(cmd, &sc, TRUE);
     if (return_code != NO_ERROR && sc.cmd_index == WCMD_EXIT + 1)
     {
+#ifdef __REACTOS__
+        WCHAR *file_part = sc.has_path ? wcsrchr(sc.path, L'\\') : NULL;
+        DWORD attributes = INVALID_FILE_ATTRIBUTES;
+
+        if (file_part)
+        {
+            *file_part = L'\0';
+            attributes = GetFileAttributesW(sc.path);
+        }
+        if (file_part && (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)))
+        {
+            SetLastError(ERROR_PATH_NOT_FOUND);
+            WCMD_print_error();
+            errorlevel = ERROR_PATH_NOT_FOUND;
+        }
+        else
+        {
+#endif
         /* Not found anywhere - give up */
         WCMD_output_stderr(WCMD_LoadMessage(WCMD_NO_COMMAND_FOUND), cmd);
 
@@ -2421,6 +2439,9 @@ static RETURN_CODE execute_single_command(const WCHAR *command)
          * does not seem to have any associated constant definition
          */
         errorlevel = RETURN_CODE_CANT_LAUNCH;
+#ifdef __REACTOS__
+        }
+#endif
         return_code = ERROR_INVALID_FUNCTION;
     }
     else if (sc.cmd_index <= WCMD_EXIT && (return_code != NO_ERROR || (!sc.has_path && !sc.has_extension)))
