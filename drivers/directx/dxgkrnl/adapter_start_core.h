@@ -58,3 +58,23 @@ NTSTATUS
 DxgkAdapterStartNativeFenceStatus(
     _In_ BOOLEAN NativeGpuFenceCap,
     _In_ BOOLEAN NativeFenceFeatureEnabled);
+
+typedef struct _DXGK_ADAPTER_START_CAPS
+{
+    ULONG InterfaceVersion;
+    ULONG WddmVersion;
+    ULONG MiscCaps;
+    ULONG MemoryManagementCaps;
+    BOOLEAN SupportPerEngineTdr;
+    BOOLEAN SupportKernelModeCommandBuffer;
+    BOOLEAN SupportRuntimePowerManagement;
+    BOOLEAN HasControlInterrupt3;
+    BOOLEAN HasEngineResetDdis;
+    BOOLEAN HasRenderKm;
+    BOOLEAN HasRuntimePowerDdis;
+} DXGK_ADAPTER_START_CAPS, *PDXGK_ADAPTER_START_CAPS;
+
+NTSTATUS
+DxgkAdapterStartValidateCaps(
+    _In_ const DXGK_ADAPTER_START_CAPS *Caps);
+

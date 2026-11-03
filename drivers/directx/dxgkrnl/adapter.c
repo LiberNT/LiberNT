@@ -14212,6 +14212,33 @@ DxgkAdapterStart(
                 CapsStatus = DxgkAdapterStartNativeFenceStatus(Caps->SchedulingCaps.NativeGpuFence, FALSE);
             if (NT_SUCCESS(CapsStatus))
             {
+                DXGK_ADAPTER_START_CAPS StartCaps;
+                BOOLEAN FullTable = !Adapter->MiniportContext->UseDodLayout;
+
+                RtlZeroMemory(&StartCaps, sizeof(StartCaps));
+                StartCaps.InterfaceVersion = Adapter->MiniportContext->InitData.s.Version;
+                StartCaps.WddmVersion = Caps->WDDMVersion;
+                StartCaps.MiscCaps = Caps->MiscCaps.Value;
+                StartCaps.MemoryManagementCaps = Caps->MemoryManagementCaps.Value;
+                StartCaps.SupportPerEngineTdr = Caps->SupportPerEngineTDR;
+                StartCaps.SupportKernelModeCommandBuffer = Caps->PresentationCaps.SupportKernelModeCommandBuffer;
+                StartCaps.SupportRuntimePowerManagement = Caps->SupportRuntimePowerManagement;
+                StartCaps.HasControlInterrupt3 = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiControlInterrupt3) != NULL;
+                StartCaps.HasEngineResetDdis = FullTable &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiResetEngine) != NULL &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiQueryEngineStatus) != NULL &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiQueryDependentEngineGroup) != NULL;
+                StartCaps.HasRenderKm = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiRenderKm) != NULL;
+                StartCaps.HasRuntimePowerDdis = FullTable &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiSetPowerComponentFState) != NULL &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiPowerRuntimeControlRequest) != NULL;
+                CapsStatus = DxgkAdapterStartValidateCaps(&StartCaps);
+                if (!NT_SUCCESS(CapsStatus))
+                    DXGKRNL_ERR("DxgkAdapterStart: driver caps rejected 0x%08lX (WDDM 0x%x misc 0x%x vidmm 0x%x)\n",
+                                CapsStatus, StartCaps.WddmVersion, StartCaps.MiscCaps, StartCaps.MemoryManagementCaps);
+            }
+            if (NT_SUCCESS(CapsStatus))
+            {
                 Adapter->DriverCapsWddmVersion = Caps->WDDMVersion;
                 (VOID)DxgkpInitializeBlockList(Adapter, Caps->WDDMVersion);
                 if (Caps->MemoryManagementCaps.IoMmuSecureModeSupported)

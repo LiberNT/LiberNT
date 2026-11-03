@@ -81,3 +81,59 @@ DxgkAdapterStartNativeFenceStatus(
 {
     return NativeGpuFenceCap && !NativeFenceFeatureEnabled ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS;
 }
+
+static BOOLEAN
+DxgkAdapterStartKnownWddmVersion(
+    _In_ ULONG WddmVersion)
+{
+    static const ULONG Known[] =
+    {
+        0x1000, 0x1200, 0x1300, 0x2000, 0x2100, 0x2200, 0x2300, 0x2400,
+        0x2500, 0x2600, 0x2700, 0x2800, 0x2900, 0x3000, 0x3100, 0x3200
+    };
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Known); ++Index)
+    {
+        if (Known[Index] == WddmVersion)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* Windows DXGADAPTER::Initialize capability checks, in its order. */
+NTSTATUS
+DxgkAdapterStartValidateCaps(
+    _In_ const DXGK_ADAPTER_START_CAPS *Caps)
+{
+    const ULONG CrossAdapterResource = 1UL << 4;
+    const ULONG CrossAdapterResourceTexture = 1UL << 15;
+    const ULONG CrossAdapterResourceScanout = 1UL << 16;
+
+    if (Caps->WddmVersion >= 0x2400 && Caps->MiscCaps > 0x1FF)
+        return STATUS_INVALID_PARAMETER;
+    if ((Caps->MiscCaps & (1UL << 4)) != 0 && !Caps->HasControlInterrupt3)
+        return STATUS_INVALID_PARAMETER;
+    if (Caps->InterfaceVersion > 0x3000 && !DxgkAdapterStartKnownWddmVersion(Caps->WddmVersion))
+        return STATUS_REVISION_MISMATCH;
+    if ((Caps->MemoryManagementCaps & CrossAdapterResourceScanout) != 0)
+    {
+        if ((Caps->MemoryManagementCaps & CrossAdapterResourceTexture) == 0 ||
+            (Caps->MemoryManagementCaps & CrossAdapterResource) == 0)
+            return STATUS_INVALID_PARAMETER;
+    }
+    else if ((Caps->MemoryManagementCaps & CrossAdapterResourceTexture) != 0 &&
+             (Caps->MemoryManagementCaps & CrossAdapterResource) == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (Caps->SupportPerEngineTdr && !Caps->HasEngineResetDdis)
+        return STATUS_INVALID_PARAMETER;
+    if (Caps->SupportKernelModeCommandBuffer && !Caps->HasRenderKm)
+        return STATUS_INVALID_PARAMETER;
+    if (Caps->SupportRuntimePowerManagement && !Caps->HasRuntimePowerDdis)
+        return STATUS_INVALID_PARAMETER;
+    /* TODO: hybrid, multiplane overlay, color space, diagnostic, WDDM 1.2/1.3 feature, stable power and MultiEngineAware rules */
+    return STATUS_SUCCESS;
+}
+
