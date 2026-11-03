@@ -276,6 +276,24 @@ static void Native12HeapPlacement(Native12Device *device, const D3D12_HEAP_PROPE
     heap->VisibleNodeMask = properties->VisibleNodeMask ? properties->VisibleNodeMask : 1;
 }
 
+HRESULT Native12Device::QueryPlacedResourceSupport(D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO *caps)
+{
+    D3D12DDI_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO_106 placed = {};
+    D3D12DDIARG_CREATEHEAP_0001 heap = {};
+    HRESULT hr;
+
+    Native12HeapPlacement(this, &caps->DestHeapProperties, &heap);
+    placed.Format = caps->Format;
+    placed.ResourceType = static_cast<D3D12DDI_RESOURCE_TYPE>(caps->Dimension);
+    placed.MemoryPool = heap.MemoryPool;
+    placed.CPUPageProperty = heap.CPUPageProperty;
+    placed.CreationNodeMask = heap.CreationNodeMask;
+    placed.VisibleNodeMask = heap.VisibleNodeMask;
+    hr = QueryFeature106(D3D12DDI_FEATURE_PLACED_RESOURCE_SUPPORT_INFO_106, &placed, sizeof(placed), &placed.Supported);
+    caps->Supported = placed.Supported;
+    return hr;
+}
+
 static UINT64 Native12DefaultAlignment(const D3D12_RESOURCE_DESC *desc)
 {
     return desc->SampleDesc.Count > 1 && desc->Layout == D3D12_TEXTURE_LAYOUT_UNKNOWN

@@ -591,6 +591,20 @@ HRESULT Native12Device::QueryCaps(D3D12DDICAPS_TYPE type, void *info, void *data
     return adapter_functions.pfnGetCaps(driver_adapter, &caps);
 }
 
+HRESULT Native12Device::QueryFeature106(D3D12DDICAPS_TYPE type, void *data, UINT size, BOOL *supported)
+{
+    HRESULT hr;
+
+    if (ddi_build < D3D12DDI_BUILD_VERSION_0106)
+    {
+        *supported = TRUE;
+        return S_OK;
+    }
+    if (FAILED(hr = QueryCaps(type, NULL, data, size))) return hr;
+    /* Optional only on D3D_FEATURE_LEVEL_1_0_GENERIC, which this runtime does not create. */
+    return *supported ? S_OK : DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+}
+
 HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_LEVEL minimum_level)
 {
     DXGI_ADAPTER_DESC desc;
@@ -1749,6 +1763,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS17 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->NonNormalizedCoordinateSamplersSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0100;
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS18:
@@ -1809,19 +1824,19 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         {
             D3D12_FEATURE_DATA_PREDICATION *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            return E_UNEXPECTED;
+            return QueryFeature106(D3D12DDI_FEATURE_D3D12_PREDICATION_106, caps, sizeof(*caps), &caps->Supported);
         }
         case D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO:
         {
             D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            return E_UNEXPECTED;
+            return QueryPlacedResourceSupport(caps);
         }
         case D3D12_FEATURE_HARDWARE_COPY:
         {
             D3D12_FEATURE_DATA_HARDWARE_COPY *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            return E_UNEXPECTED;
+            return QueryFeature106(D3D12DDI_FEATURE_HARDWARE_COPY_106, caps, sizeof(*caps), &caps->Supported);
         }
         default:
             WARN("Unknown feature %#x.\n", feature);

@@ -149,6 +149,8 @@ public:
     ~Native12Device();
     HRESULT Initialize(IDXGIAdapter *, D3D_FEATURE_LEVEL);
     HRESULT QueryCaps(D3D12DDICAPS_TYPE, void *, void *, UINT);
+    HRESULT QueryFeature106(D3D12DDICAPS_TYPE type, void *data, UINT size, BOOL *supported);
+    HRESULT QueryPlacedResourceSupport(D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO *caps);
     HRESULT WaitForPaging(UINT64 fence_value);
     static Native12Device *FromRuntime(HANDLE);
     static Native12Device *FromKernelHandle(HANDLE);
