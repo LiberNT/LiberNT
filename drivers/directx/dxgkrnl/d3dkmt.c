@@ -791,6 +791,27 @@ DxgkpOpenAdapterDriverKey(
                                    KeyHandle);
 }
 
+static BOOLEAN
+DxgkpDriverKeyDwordSet(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PCWSTR Name)
+{
+    ULONG Buffer[(sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG) + sizeof(ULONG) - 1) / sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Info = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    UNICODE_STRING ValueName;
+    HANDLE Key;
+    ULONG Size;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(DxgkpOpenAdapterDriverKey(Adapter, &Key)))
+        return FALSE;
+    RtlInitUnicodeString(&ValueName, Name);
+    Status = ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Info, sizeof(Buffer), &Size);
+    ZwClose(Key);
+    return NT_SUCCESS(Status) && Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG) &&
+           *(const ULONG *)Info->Data != 0;
+}
+
 static NTSTATUS
 DxgkpOpenMiniportServiceKey(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -3896,6 +3917,15 @@ DxgkpQueryAdapterInfoCaptured(
             AdapterType.SoftwareDevice = Adapter->MiniportContext != NULL && Adapter->MiniportContext->IsBasicDisplayFallback;
             AdapterType.HybridDiscrete = Adapter->HybridDiscrete ? 1 : 0;
             AdapterType.HybridIntegrated = Adapter->HybridIntegrated ? 1 : 0;
+            AdapterType.ACGSupported =
+                DxgkAdapterTypeCoreAcgSupported(DxgkpDriverKeyDwordSet(Adapter, L"ACGSupported"),
+                                                Adapter->DriverCapsWddmVersion);
+            AdapterType.SupportSetTimingsFromVidPn =
+                Adapter->MiniportContext != NULL && !Adapter->MiniportContext->UseDodLayout &&
+                DxgkAdapterTypeCoreSetTimingsFromVidPn(Adapter->DriverCapsWddmVersion,
+                                                       Adapter->MiniportContext->InitData.s.Version,
+                                                       DXGK_CB_FULL(Adapter, DxgkDdiSetTimingsFromVidPn) != NULL);
+            AdapterType.RuntimePowerManagement = Adapter->PoFxHandle != NULL;
             _SEH2_TRY
             {
                 *pAdapterType = AdapterType;

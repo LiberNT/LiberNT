@@ -1209,6 +1209,17 @@ Test_WddmCapsPerAdapter(PFND3DKMT_QUERYADAPTERINFO pfn)
               Enum.Adapters[i].AdapterLuid.HighPart, Enum.Adapters[i].AdapterLuid.LowPart,
               (unsigned)type.Value, (long)stType, (unsigned)caps27.Value, (long)st27, (unsigned)caps29.Value, (long)st29,
               (unsigned)caps30.Value, (long)st30, (unsigned)caps31.Value, (long)st31);
+        if (NT_SUCCESS(stType))
+        {
+            D3DKMT_DRIVERVERSION version = KMT_DRIVERVERSION_WDDM_1_0;
+
+            if (NT_SUCCESS(QueryAI(pfn, h, KMTQAITYPE_DRIVERVERSION, &version, sizeof(version))) &&
+                version >= KMT_DRIVERVERSION_WDDM_2_2)
+                ok(type.ACGSupported, "adapter %lu: driver version %d without ACGSupported (0x%08X)\n",
+                   i, (int)version, (unsigned)type.Value);
+            ok(!type.SupportSetTimingsFromVidPn || type.DisplaySupported,
+               "adapter %lu: SupportSetTimingsFromVidPn without display (0x%08X)\n", i, (unsigned)type.Value);
+        }
         if (NT_SUCCESS(st27))
             ok(!caps27.HwSchEnabledByDefault, "adapter %lu: HwSchEnabledByDefault set (0x%08X)\n", i, (unsigned)caps27.Value);
         if (NT_SUCCESS(st27) && NT_SUCCESS(st29))

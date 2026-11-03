@@ -137,3 +137,22 @@ DxgkWddmCapsCore31(
 {
     return Input->RenderCapable && Input->NativeGpuFence ? 0x1UL : 0;
 }
+
+/* Windows sets ACGSupported from the driver key's ACGSupported value or for a WDDM 2.2 or later driver. */
+BOOLEAN
+DxgkAdapterTypeCoreAcgSupported(
+    _In_ BOOLEAN AcgSupportedValue,
+    _In_ ULONG WddmVersion)
+{
+    return AcgSupportedValue || WddmVersion >= 0x2200UL;
+}
+
+BOOLEAN
+DxgkAdapterTypeCoreSetTimingsFromVidPn(
+    _In_ ULONG WddmVersion,
+    _In_ ULONG InterfaceVersion,
+    _In_ BOOLEAN HasSetTimingsFromVidPn)
+{
+    /* FIXME: Windows also requires a second, unidentified DDI on render-capable adapters */
+    return WddmVersion >= 0x2200UL && InterfaceVersion >= 0x7007UL && HasSetTimingsFromVidPn;
+}

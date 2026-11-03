@@ -71,4 +71,9 @@ ULONG DxgkWddmCapsCore29(_In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input);
 ULONG DxgkWddmCapsCore30(_In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input);
 ULONG DxgkWddmCapsCore31(_In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input);
 
+/* D3DKMT_ADAPTERTYPE bits that depend on the driver's caps (WDDMVersion, DDI interface version). */
+BOOLEAN DxgkAdapterTypeCoreAcgSupported(_In_ BOOLEAN AcgSupportedValue, _In_ ULONG WddmVersion);
+BOOLEAN DxgkAdapterTypeCoreSetTimingsFromVidPn(_In_ ULONG WddmVersion, _In_ ULONG InterfaceVersion,
+                                               _In_ BOOLEAN HasSetTimingsFromVidPn);
+
 #endif /* _DXGK_FEATURE_QUERY_CORE_H_ */

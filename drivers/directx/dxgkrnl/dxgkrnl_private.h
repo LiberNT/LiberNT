@@ -940,6 +940,7 @@ struct _DXGKRNL_ADAPTER
     UINT                        MaxOverlayPlanes;
     BOOLEAN                     IndependentVidPnVSyncControl;
     BOOLEAN                     DisplayableSupport;
+    ULONG                       DriverCapsWddmVersion;
     BOOLEAN                     SurpriseRemovalHandled;
 
     /*

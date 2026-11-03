@@ -414,8 +414,25 @@ static VOID TestWddmCaps(VOID)
     ok_eq_ulong(DxgkWddmCapsCore31(&Input), 0x1UL);
 }
 
+static VOID TestAdapterTypeBits(VOID)
+{
+    /* Win11: NVIDIA (WDDM 3.2) 0x2313, Basic Render (WDDM 3.2) 0x105, Basic Display (WDDM 1.3, ACGSupported value) 0x10a. */
+    ok_bool_true(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x3200), "WDDM 3.2 driver");
+    ok_bool_true(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x2200), "WDDM 2.2 driver");
+    ok_bool_false(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x2100), "WDDM 2.1 driver");
+    ok_bool_false(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x1300), "WDDM 1.3 driver");
+    ok_bool_true(DxgkAdapterTypeCoreAcgSupported(TRUE, 0x1300), "ACGSupported value");
+
+    ok_bool_true(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x11007, TRUE), "WDDM 3.2 display driver");
+    ok_bool_false(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x11007, FALSE), "no SetTimingsFromVidPn");
+    ok_bool_false(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x2100, 0x11007, TRUE), "WDDM 2.1 caps");
+    ok_bool_false(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x7006, TRUE), "DDI before 0x7007");
+    ok_bool_true(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x2200, 0x7007, TRUE), "lowest accepted pair");
+}
+
 START_TEST(DxgkAdapterCaps)
 {
+    TestAdapterTypeBits();
     TestWddmCaps();
     TestDriverCapsQuerySize();
     TestStablePowerCounting();

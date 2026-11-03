@@ -14202,6 +14202,7 @@ DxgkAdapterStart(
         Adapter->MaxOverlayPlanes = 0;
         Adapter->GdiHardwareAcceleration = FALSE;
         Adapter->DisplayableSupport = FALSE;
+        Adapter->DriverCapsWddmVersion = 0;
         Caps = ExAllocatePoolWithTag(NonPagedPool, DXGKP_DRIVERCAPS_QUERY_SIZE, TAG_DXGK_ADAPTER);
         if (Caps != NULL)
         {
@@ -14211,6 +14212,7 @@ DxgkAdapterStart(
                 CapsStatus = DxgkAdapterStartNativeFenceStatus(Caps->SchedulingCaps.NativeGpuFence, FALSE);
             if (NT_SUCCESS(CapsStatus))
             {
+                Adapter->DriverCapsWddmVersion = Caps->WDDMVersion;
                 (VOID)DxgkpInitializeBlockList(Adapter, Caps->WDDMVersion);
                 if (Caps->MemoryManagementCaps.IoMmuSecureModeSupported)
                     CapsStatus = DxgkpCreateFrameBufferSaveArea(Adapter);
