@@ -1007,6 +1007,19 @@ add_custom_target(liberntramimg
     VERBATIM)
 add_dependencies(liberntramimg preinstall_partition)
 
+set(_ntfstest_image_file ${REACTOS_BINARY_DIR}/ntfstest.img)
+set(_ntfstest_partition_file ${CMAKE_CURRENT_BINARY_DIR}/ntfstest.ntfs)
+add_custom_command(
+    OUTPUT ${_ntfstest_image_file}
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${_ntfstest_image_file} ${_ntfstest_partition_file}
+    COMMAND native-ntfsimg --format ${_ntfstest_partition_file} 131072 2048 8 NTFSTEST
+    COMMAND native-mkdiskimg -o ${_ntfstest_image_file} -partition ${_ntfstest_partition_file} -start 2048 -type 07
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${_ntfstest_partition_file}
+    DEPENDS native-ntfsimg native-mkdiskimg
+    VERBATIM)
+add_custom_target(ntfstestimg DEPENDS ${_ntfstest_image_file})
+add_dependencies(liberntimg ntfstestimg)
+
 if(STARFIVE_JH7110_SUPPORT)
     set(_jh7110_boot_partition_file ${CMAKE_CURRENT_BINARY_DIR}/jh7110-bootfs.img)
     set(_jh7110_sd_image_file ${REACTOS_BINARY_DIR}/JH7110-SD.img)
