@@ -343,9 +343,7 @@ static BOOL Activate(freerdp_peer *peer)
     if (!ctx->Authorized) return FALSE;
     if (!ctx->Planar)
     {
-        DWORD flags = PLANAR_FORMAT_HEADER_RLE;
-        if (freerdp_settings_get_bool(ctx->rdp.settings, FreeRDP_DrawAllowSkipAlpha)) flags |= PLANAR_FORMAT_HEADER_NA;
-        ctx->Planar = freerdp_bitmap_planar_context_new(flags, 64, 32);
+        ctx->Planar = freerdp_bitmap_planar_context_new(PLANAR_FORMAT_HEADER_RLE, 64, 32);
         if (!ctx->Planar) return FALSE;
     }
     ctx->Active = TRUE;
