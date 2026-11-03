@@ -426,15 +426,8 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Signal(ID3D12Fence *fence, UINT6
     if (!fence) return E_INVALIDARG;
     if (!device->kernel_callbacks.pfnSignalSynchronizationObjectFromGpu2Cb) return E_NOINTERFACE;
     Native12Fence *native = static_cast<Native12Fence *>(fence);
-    D3D12DDIARG_FENCE_OPERATION operation = {};
-    operation.Fence = native->driver;
-    operation.Value = value;
-    operation.PhysicalAdapterMask = 1;
+    /* TODO: linked adapters also call pfnSignalFence, masked by pfnGetImplicitPhysicalAdapterMask */
     AcquireSRWLockExclusive(&submit_lock);
-    if (VideoFunctions())
-        VideoFunctions()->pfnSignalFence(driver, &operation);
-    else
-        device->queue_functions.pfnSignalFence(driver, &operation);
     if (FAILED(device->removed_reason))
     {
         ReleaseSRWLockExclusive(&submit_lock);
@@ -466,15 +459,8 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Wait(ID3D12Fence *fence, UINT64 
     if (!fence) return E_INVALIDARG;
     if (!device->kernel_callbacks.pfnWaitForSynchronizationObjectFromGpuCb) return E_NOINTERFACE;
     Native12Fence *native = static_cast<Native12Fence *>(fence);
-    D3D12DDIARG_FENCE_OPERATION operation = {};
-    operation.Fence = native->driver;
-    operation.Value = value;
-    operation.PhysicalAdapterMask = 1;
+    /* TODO: linked adapters also call pfnWaitForFence, masked by pfnGetImplicitPhysicalAdapterMask */
     AcquireSRWLockExclusive(&submit_lock);
-    if (VideoFunctions())
-        VideoFunctions()->pfnWaitForFence(driver, &operation);
-    else
-        device->queue_functions.pfnWaitForFence(driver, &operation);
     if (FAILED(device->removed_reason))
     {
         ReleaseSRWLockExclusive(&submit_lock);
