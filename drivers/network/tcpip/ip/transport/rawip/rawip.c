@@ -123,14 +123,6 @@ NTSTATUS BuildRawIpPacket(
             DataLen > 65535)
             return STATUS_INVALID_PARAMETER;
 
-        IPv4Header = (PIPv4_HEADER)DataBuffer;
-        HeaderSize = (IPv4Header->VerIHL & 0x0f) * 4;
-        if ((IPv4Header->VerIHL >> 4) != 4 ||
-            HeaderSize < sizeof(IPv4_HEADER) ||
-            HeaderSize > DataLen ||
-            ((WN2H(IPv4Header->FlagsFragOfs) & IPv4_FRAGOFS_MASK) << 3) + DataLen > 65535)
-            return STATUS_INVALID_PARAMETER;
-
         Packet->TotalSize = DataLen;
         Status = AllocatePacketWithBuffer(&Packet->NdisPacket, DataBuffer, DataLen);
         if (!NT_SUCCESS(Status))
@@ -143,6 +135,17 @@ NTSTATUS BuildRawIpPacket(
         {
             Packet->Free(Packet);
             return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        IPv4Header = (PIPv4_HEADER)PacketData;
+        HeaderSize = (IPv4Header->VerIHL & 0x0f) * 4;
+        if ((IPv4Header->VerIHL >> 4) != 4 ||
+            HeaderSize < sizeof(IPv4_HEADER) ||
+            HeaderSize > DataLen ||
+            ((WN2H(IPv4Header->FlagsFragOfs) & IPv4_FRAGOFS_MASK) << 3) + DataLen > 65535)
+        {
+            Packet->Free(Packet);
+            return STATUS_INVALID_PARAMETER;
         }
 
         Packet->Header = PacketData;
