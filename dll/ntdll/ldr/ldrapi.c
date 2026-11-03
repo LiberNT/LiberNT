@@ -471,9 +471,8 @@ LdrLoadDll(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
-    /* TODO: a loaded module that is not pinned still waits for the loader lock; Windows references dependencies once per module (DDAG) */
     if (!LdrpInLdrInit && !ShowSnaps && !LdrpOwnsLoaderLock() &&
-        LdrpFindPinnedDll(SearchPath, DllName, RedirectedDll && !ApiSetRedirected, BaseAddress))
+        LdrpReferenceLoadedDll(SearchPath, DllName, RedirectedDll && !ApiSetRedirected, BaseAddress))
     {
         if (DynamicString.Buffer)
             RtlFreeUnicodeString(&DynamicString);
@@ -896,7 +895,7 @@ Quickie:
             else
             {
                 /* Increase the load count */
-                LdrEntry->LoadCount++;
+                InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
                 LoadFlag = LDRP_UPDATE_REFCOUNT;
             }
 
@@ -1487,7 +1486,7 @@ LdrAddRefDll(
             else
             {
                 /* Increase its load count by one */
-                LdrEntry->LoadCount++;
+                InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
                 LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
             }
 
@@ -1519,6 +1518,8 @@ quickie:
     return Status;
 }
 
+static ULONG LdrpUnloadScanDepth;
+
 /*
  * @implemented
  */
@@ -1536,16 +1537,28 @@ LdrUnloadDll(
     RTL_CALLER_ALLOCATED_ACTIVATION_CONTEXT_STACK_FRAME_EXTENDED ActCtx;
     PVOID CorImageData;
     ULONG ComSectionSize;
-    BOOLEAN Pinned;
+    LDRP_WALK_SET Set;
+    BOOLEAN Released = FALSE, Walk = FALSE, SetReady = FALSE;
 
-    /* TODO: releasing a module that is not pinned still waits for the loader lock, even when its count stays above zero */
-    if (!LdrpInLdrInit && !LdrpOwnsLoaderLock())
+    if (!LdrpInLdrInit && !ShowSnaps && !LdrpShutdownInProgress && !LdrpOwnsLoaderLock())
     {
+        RtlAcquireSRWLockShared(&LdrpLoadCountWalkLock);
         RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
-        Pinned = LdrpCheckForLoadedDllHandle(BaseAddress, &LdrEntry) &&
-                 (*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF);
+        if (LdrpCheckForLoadedDllHandle(BaseAddress, &LdrEntry))
+        {
+            if (*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF)
+                Released = TRUE;
+            else if ((SetReady = LdrpAllocateWalkSet(&Set)))
+                Released = LdrpTryReferenceModule(LdrEntry, TRUE, &Walk);
+        }
         RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
-        if (Pinned)
+
+        if (Walk)
+            LdrpWalkLoadCount(LdrEntry, LDRP_UPDATE_DEREFCOUNT, &Set);
+        RtlReleaseSRWLockShared(&LdrpLoadCountWalkLock);
+        if (SetReady)
+            LdrpFreeWalkSet(&Set);
+        if (Released)
             return STATUS_SUCCESS;
     }
 
@@ -1569,7 +1582,7 @@ LdrUnloadDll(
     if (LdrEntry->LoadCount != 0xFFFF)
     {
         /* Decrease it */
-        LdrEntry->LoadCount--;
+        InterlockedDecrement16((PSHORT)&LdrEntry->LoadCount);
 
         /* If it's a dll */
         if (LdrEntry->Flags & LDRP_IMAGE_DLL)
@@ -1601,6 +1614,9 @@ LdrUnloadDll(
 
     /* Check if this is our only unload and initialize the list if so */
     if (LdrpActiveUnloadCount == 1) InitializeListHead(&LdrpUnloadHead);
+
+    if (!LdrpUnloadScanDepth++)
+        RtlAcquireSRWLockExclusive(&LdrpLoadCountWalkLock);
 
     /* Loop the modules to build the list */
     NextEntry = Peb->Ldr->InInitializationOrderModuleList.Blink;
@@ -1657,6 +1673,9 @@ LdrUnloadDll(
             InsertTailList(&LdrpUnloadHead, &CurrentEntry->HashLinks);
         }
     }
+
+    if (!--LdrpUnloadScanDepth)
+        RtlReleaseSRWLockExclusive(&LdrpLoadCountWalkLock);
 
     /* Only call the entrypoints once */
     if (LdrpActiveUnloadCount > 1) goto Quickie;
@@ -1939,7 +1958,7 @@ LdrGetDllHandleByName(
 
         if (LdrEntry->LoadCount != 0xFFFF)
         {
-            LdrEntry->LoadCount++;
+            InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
             LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
             LdrpClearLoadInProgress();
         }

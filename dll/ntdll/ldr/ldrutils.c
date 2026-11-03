@@ -170,12 +170,74 @@ LdrpCheckForLoadedImport(IN PVOID ImportBase,
     return LdrpCheckForLoadedDll(NULL, ImportName, TRUE, RedirectedDll, Entry);
 }
 
-/* NOTE: This function is broken */
+static
+BOOLEAN
+LdrpWalkSetAdd(
+    _In_ PLDRP_WALK_SET Set,
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    ULONG i;
+
+    for (i = 0; i < Set->Count; i++)
+    {
+        if (Set->Entries[i] == LdrEntry)
+            return FALSE;
+    }
+
+    if (Set->Count == Set->Size)
+        return FALSE;
+
+    Set->Entries[Set->Count++] = LdrEntry;
+    return TRUE;
+}
+
+static
 VOID
-NTAPI
+LdrpUpdateImportLoadCount(
+    _In_ PLDR_DATA_TABLE_ENTRY Entry,
+    _In_ ULONG Flags)
+{
+    switch (Flags)
+    {
+    case LDRP_UPDATE_REFCOUNT:
+        InterlockedIncrement16((PSHORT)&Entry->LoadCount);
+        break;
+    case LDRP_UPDATE_DEREFCOUNT:
+        InterlockedDecrement16((PSHORT)&Entry->LoadCount);
+        break;
+    case LDRP_UPDATE_PIN:
+        Entry->LoadCount = 0xFFFF;
+        break;
+    }
+}
+
+static
+BOOLEAN
+LdrpWalkFindImport(
+    _In_ PVOID ImportBase,
+    _In_ PUNICODE_STRING ImportName,
+    _In_ BOOLEAN RedirectedDll,
+    _In_opt_ PLDRP_WALK_SET Visited,
+    _Out_ PLDR_DATA_TABLE_ENTRY *Entry)
+{
+    BOOLEAN Found;
+
+    if (!Visited)
+        return LdrpCheckForLoadedImport(ImportBase, ImportName, RedirectedDll, Entry);
+
+    RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
+    Found = LdrpCheckForLoadedImport(ImportBase, ImportName, RedirectedDll, Entry);
+    RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
+    return Found;
+}
+
+/* NOTE: This function is broken */
+static
+VOID
 LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                      IN ULONG Flags,
-                     OUT PUNICODE_STRING UpdateString)
+                     OUT PUNICODE_STRING UpdateString,
+                     IN PLDRP_WALK_SET Visited OPTIONAL)
 {
     PIMAGE_BOUND_FORWARDER_REF NewImportForwarder;
     PIMAGE_BOUND_IMPORT_DESCRIPTOR FirstEntry;
@@ -202,7 +264,12 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                                            LdrEntry->EntryPointActivationContext);
 
     /* Check the action we need to perform */
-    if ((Flags == LDRP_UPDATE_REFCOUNT) || (Flags == LDRP_UPDATE_PIN))
+    if (Visited)
+    {
+        if (!LdrpWalkSetAdd(Visited, LdrEntry))
+            goto done;
+    }
+    else if ((Flags == LDRP_UPDATE_REFCOUNT) || (Flags == LDRP_UPDATE_PIN))
     {
         /* Make sure entry is not being loaded already */
         if (LdrEntry->Flags & LDRP_LOAD_IN_PROGRESS)
@@ -231,9 +298,9 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
     if (FirstEntry)
     {
         /* Set entry flags if refing/derefing */
-        if (Flags == LDRP_UPDATE_REFCOUNT)
+        if (!Visited && Flags == LDRP_UPDATE_REFCOUNT)
             LdrEntry->Flags |= LDRP_LOAD_IN_PROGRESS;
-        else if (Flags == LDRP_UPDATE_DEREFCOUNT)
+        else if (!Visited && Flags == LDRP_UPDATE_DEREFCOUNT)
             LdrEntry->Flags |= LDRP_UNLOAD_IN_PROGRESS;
 
         BoundEntry = FirstEntry;
@@ -264,23 +331,12 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
 
                 if (NT_SUCCESS(Status))
                 {
-                    if (LdrpCheckForLoadedImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, &Entry))
+                    if (LdrpWalkFindImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, Visited, &Entry))
                     {
                         if (Entry->LoadCount != 0xFFFF)
                         {
                             /* Perform the required action */
-                            switch (Flags)
-                            {
-                            case LDRP_UPDATE_REFCOUNT:
-                                Entry->LoadCount++;
-                                break;
-                            case LDRP_UPDATE_DEREFCOUNT:
-                                Entry->LoadCount--;
-                                break;
-                            case LDRP_UPDATE_PIN:
-                                Entry->LoadCount = 0xFFFF;
-                                break;
-                            }
+                            LdrpUpdateImportLoadCount(Entry, Flags);
 
                             /* Show snaps */
                             if (ShowSnaps)
@@ -290,7 +346,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                         }
 
                         /* Recurse into this entry */
-                        LdrpUpdateLoadCount3(Entry, Flags, UpdateString);
+                        LdrpUpdateLoadCount3(Entry, Flags, UpdateString, Visited);
                     }
                     else if (RedirectedDll)
                     {
@@ -332,23 +388,12 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
 
                     if (NT_SUCCESS(Status))
                     {
-                        if (LdrpCheckForLoadedImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, &Entry))
+                        if (LdrpWalkFindImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, Visited, &Entry))
                         {
                             if (Entry->LoadCount != 0xFFFF)
                             {
                                 /* Perform the required action */
-                                switch (Flags)
-                                {
-                                case LDRP_UPDATE_REFCOUNT:
-                                    Entry->LoadCount++;
-                                    break;
-                                case LDRP_UPDATE_DEREFCOUNT:
-                                    Entry->LoadCount--;
-                                    break;
-                                case LDRP_UPDATE_PIN:
-                                    Entry->LoadCount = 0xFFFF;
-                                    break;
-                                }
+                                LdrpUpdateImportLoadCount(Entry, Flags);
 
                                 /* Show snaps */
                                 if (ShowSnaps)
@@ -358,7 +403,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                             }
 
                             /* Recurse into this entry */
-                            LdrpUpdateLoadCount3(Entry, Flags, UpdateString);
+                            LdrpUpdateLoadCount3(Entry, Flags, UpdateString, Visited);
                         }
                         else if (RedirectedDll)
                         {
@@ -425,23 +470,12 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
 
                 if (NT_SUCCESS(Status))
                 {
-                    if (LdrpCheckForLoadedImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, &Entry))
+                    if (LdrpWalkFindImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, Visited, &Entry))
                     {
                         if (Entry->LoadCount != 0xFFFF)
                         {
                             /* Perform the required action */
-                            switch (Flags)
-                            {
-                            case LDRP_UPDATE_REFCOUNT:
-                                Entry->LoadCount++;
-                                break;
-                            case LDRP_UPDATE_DEREFCOUNT:
-                                Entry->LoadCount--;
-                                break;
-                            case LDRP_UPDATE_PIN:
-                                Entry->LoadCount = 0xFFFF;
-                                break;
-                            }
+                            LdrpUpdateImportLoadCount(Entry, Flags);
 
                             /* Show snaps */
                             if (ShowSnaps)
@@ -451,7 +485,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                         }
 
                         /* Recurse */
-                        LdrpUpdateLoadCount3(Entry, Flags, UpdateString);
+                        LdrpUpdateLoadCount3(Entry, Flags, UpdateString, Visited);
                     }
                     else if (RedirectedDll)
                     {
@@ -486,7 +520,68 @@ LdrpUpdateLoadCount2(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
 
     /* Setup the string and call the extended API */
     RtlInitEmptyUnicodeString(&UpdateString, Buffer, sizeof(Buffer));
-    LdrpUpdateLoadCount3(LdrEntry, Flags, &UpdateString);
+    LdrpUpdateLoadCount3(LdrEntry, Flags, &UpdateString, NULL);
+}
+
+BOOLEAN
+NTAPI
+LdrpAllocateWalkSet(OUT PLDRP_WALK_SET Set)
+{
+    PLIST_ENTRY ListHead, Entry;
+    ULONG Count = 0;
+
+    ListHead = &NtCurrentPeb()->Ldr->InLoadOrderModuleList;
+    for (Entry = ListHead->Flink; Entry != ListHead; Entry = Entry->Flink)
+        Count++;
+
+    Set->Count = 0;
+    Set->Size = Count;
+    Set->Entries = RtlAllocateHeap(RtlGetProcessHeap(), 0, Count * sizeof(PLDR_DATA_TABLE_ENTRY));
+    return Set->Entries != NULL;
+}
+
+VOID
+NTAPI
+LdrpFreeWalkSet(IN PLDRP_WALK_SET Set)
+{
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Set->Entries);
+}
+
+VOID
+NTAPI
+LdrpWalkLoadCount(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
+                  IN ULONG Flags,
+                  IN PLDRP_WALK_SET Set)
+{
+    WCHAR Buffer[MAX_PATH];
+    UNICODE_STRING UpdateString;
+
+    RtlInitEmptyUnicodeString(&UpdateString, Buffer, sizeof(Buffer));
+    LdrpUpdateLoadCount3(LdrEntry, Flags, &UpdateString, Set);
+}
+
+BOOLEAN
+NTAPI
+LdrpTryReferenceModule(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
+                       IN BOOLEAN Release,
+                       OUT PBOOLEAN Walk)
+{
+    USHORT Count;
+
+    *Walk = FALSE;
+    do
+    {
+        Count = *(volatile USHORT *)&LdrEntry->LoadCount;
+        if (Count == 0xFFFF)
+            return TRUE;
+        if (Release ? (Count < 2) : (Count == 0))
+            return FALSE;
+    } while ((USHORT)InterlockedCompareExchange16((PSHORT)&LdrEntry->LoadCount,
+                                                  (SHORT)(Release ? Count - 1 : Count + 1),
+                                                  (SHORT)Count) != Count);
+
+    *Walk = (LdrEntry->Flags & LDRP_IMAGE_DLL) != 0;
+    return TRUE;
 }
 
 VOID
@@ -3108,7 +3203,7 @@ LdrpLoadDll(IN BOOLEAN Redirected,
             if ((LdrEntry->Flags & LDRP_IMAGE_DLL) && (LdrEntry->LoadCount != 0xFFFF))
             {
                 /* Increase load count */
-                LdrEntry->LoadCount++;
+                InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
                 LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
 
                 /* Clear the load in progress */
@@ -3117,7 +3212,7 @@ LdrpLoadDll(IN BOOLEAN Redirected,
             else
             {
                 /* Not a DLL, just increase the load count */
-                if (LdrEntry->LoadCount != 0xFFFF) LdrEntry->LoadCount++;
+                if (LdrEntry->LoadCount != 0xFFFF) InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
             }
         }
 

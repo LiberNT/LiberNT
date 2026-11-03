@@ -192,6 +192,7 @@ START_TEST(LoaderLock)
     HMODULE Ntdll = GetModuleHandleW(L"ntdll.dll");
     PLDR_LOCK_LOADER_LOCK Lock = (PLDR_LOCK_LOADER_LOCK)GetProcAddress(Ntdll, "LdrLockLoaderLock");
     PLDR_UNLOCK_LOADER_LOCK Unlock = (PLDR_UNLOCK_LOADER_LOCK)GetProcAddress(Ntdll, "LdrUnlockLoaderLock");
+    HMODULE Module;
 
     TestModuleFileNameLimits();
 
@@ -210,7 +211,18 @@ START_TEST(LoaderLock)
     TestCall(Lock, Unlock, CallLoadLibraryLoaded, "LoadLibrary loaded", TRUE);
 
     if (GetModuleHandleW(L"mpr.dll"))
+    {
         skip("mpr.dll is already loaded\n");
-    else
-        TestCall(Lock, Unlock, CallLoadLibraryNew, "LoadLibrary new", FALSE);
+        return;
+    }
+
+    TestCall(Lock, Unlock, CallLoadLibraryNew, "LoadLibrary new", FALSE);
+
+    Module = LoadLibraryW(L"mpr.dll");
+    ok(Module != NULL, "LoadLibrary(mpr.dll) failed with %lu\n", GetLastError());
+    if (!Module)
+        return;
+    TestCall(Lock, Unlock, CallLoadLibraryNew, "LoadLibrary and FreeLibrary loaded unpinned", TRUE);
+    ok(GetModuleHandleW(L"mpr.dll") == Module, "mpr.dll was unloaded while still referenced\n");
+    FreeLibrary(Module);
 }

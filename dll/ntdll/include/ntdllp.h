@@ -16,6 +16,13 @@
 #define LDRP_UPDATE_DEREFCOUNT 0x02
 #define LDRP_UPDATE_PIN        0x03
 
+typedef struct _LDRP_WALK_SET
+{
+    struct _LDR_DATA_TABLE_ENTRY **Entries;
+    ULONG Count;
+    ULONG Size;
+} LDRP_WALK_SET, *PLDRP_WALK_SET;
+
 /* Loader flags */
 #define IMAGE_LOADER_FLAGS_COMPLUS 0x00000001
 #define IMAGE_LOADER_FLAGS_SYSTEM_GLOBAL 0x01000000
@@ -75,6 +82,7 @@ NTSTATUS
 /* Global data */
 extern RTL_CRITICAL_SECTION LdrpLoaderLock;
 extern RTL_SRWLOCK LdrpModuleDatatableLock;
+extern RTL_SRWLOCK LdrpLoadCountWalkLock;
 extern BOOLEAN LdrpInLdrInit;
 extern PVOID LdrpHeap;
 extern LIST_ENTRY LdrpHashTable[LDR_HASH_TABLE_ENTRIES];
@@ -154,7 +162,7 @@ LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
 
 BOOLEAN
 NTAPI
-LdrpFindPinnedDll(
+LdrpReferenceLoadedDll(
     _In_opt_ PWSTR DllPath,
     _In_ PUNICODE_STRING DllName,
     _In_ BOOLEAN Redirected,
@@ -237,6 +245,22 @@ LdrpLoadDll(IN BOOLEAN Redirected,
 VOID NTAPI
 LdrpUpdateLoadCount2(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                      IN ULONG Flags);
+
+BOOLEAN NTAPI
+LdrpAllocateWalkSet(OUT PLDRP_WALK_SET Set);
+
+VOID NTAPI
+LdrpFreeWalkSet(IN PLDRP_WALK_SET Set);
+
+VOID NTAPI
+LdrpWalkLoadCount(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
+                  IN ULONG Flags,
+                  IN PLDRP_WALK_SET Set);
+
+BOOLEAN NTAPI
+LdrpTryReferenceModule(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
+                       IN BOOLEAN Release,
+                       OUT PBOOLEAN Walk);
 
 ULONG NTAPI
 LdrpClearLoadInProgress(VOID);

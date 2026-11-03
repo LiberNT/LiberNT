@@ -1244,36 +1244,51 @@ LdrpFindReferencedForwarder(
 
 BOOLEAN
 NTAPI
-LdrpFindPinnedDll(
+LdrpReferenceLoadedDll(
     _In_opt_ PWSTR DllPath,
     _In_ PUNICODE_STRING DllName,
     _In_ BOOLEAN Redirected,
     _Out_ PVOID *BaseAddress)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
-    PVOID Base = NULL;
+    PLDR_DATA_TABLE_ENTRY LdrEntry = NULL;
+    LDRP_WALK_SET Set;
+    BOOLEAN Referenced = FALSE, Walk = FALSE, SetReady = FALSE;
 
+#if defined(_M_ARM64)
+    if (ChpeIsChpeProcess())
+        return FALSE;
+#endif
+
+    RtlAcquireSRWLockShared(&LdrpLoadCountWalkLock);
     RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
     _SEH2_TRY
     {
         if (LdrpFindLoadedForwarder(DllPath, DllName, Redirected, &LdrEntry) &&
-            LdrpIsModuleReady(LdrEntry) &&
-            (*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF))
+            LdrpIsModuleReady(LdrEntry))
         {
-            Base = LdrEntry->DllBase;
+            if (*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF)
+                Referenced = TRUE;
+            else if ((SetReady = LdrpAllocateWalkSet(&Set)))
+                Referenced = LdrpTryReferenceModule(LdrEntry, FALSE, &Walk);
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        Base = NULL;
+        Referenced = FALSE;
     }
     _SEH2_END;
     RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
 
-    if (!Base)
+    if (Walk)
+        LdrpWalkLoadCount(LdrEntry, LDRP_UPDATE_REFCOUNT, &Set);
+    RtlReleaseSRWLockShared(&LdrpLoadCountWalkLock);
+    if (SetReady)
+        LdrpFreeWalkSet(&Set);
+
+    if (!Referenced)
         return FALSE;
 
-    *BaseAddress = Base;
+    *BaseAddress = LdrEntry->DllBase;
     return TRUE;
 }
 
