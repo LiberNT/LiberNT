@@ -471,6 +471,7 @@ LdrLoadDll(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
+    /* TODO: a loaded module that is not pinned still waits for the loader lock; Windows references dependencies once per module (DDAG) */
     if (!LdrpInLdrInit && !ShowSnaps && !LdrpOwnsLoaderLock() &&
         LdrpFindPinnedDll(SearchPath, DllName, RedirectedDll && !ApiSetRedirected, BaseAddress))
     {
@@ -1537,6 +1538,7 @@ LdrUnloadDll(
     ULONG ComSectionSize;
     BOOLEAN Pinned;
 
+    /* TODO: releasing a module that is not pinned still waits for the loader lock, even when its count stays above zero */
     if (!LdrpInLdrInit && !LdrpOwnsLoaderLock())
     {
         RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
