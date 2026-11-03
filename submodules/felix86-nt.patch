@@ -107,7 +107,7 @@ index fcf5a42..d58c6f7 100644
  extern "C" u8 softfloat_getRoundPrecision() {
      ThreadState* state = ThreadState::Get();
 diff --git a/src/felix86/v2/handlers.cpp b/src/felix86/v2/handlers.cpp
-index 04754f8..f5fcfdf 100644
+index 04754f8..b938f0b 100644
 --- a/src/felix86/v2/handlers.cpp
 +++ b/src/felix86/v2/handlers.cpp
 @@ -26,6 +26,11 @@ void felix86_syscall32(felix86_frame* frame, u32 rip_nex);
@@ -122,7 +122,7 @@ index 04754f8..f5fcfdf 100644
  [[nodiscard]] constexpr static int sew_to_bits(SEW sew) {
      return 8 << static_cast<int>(sew);
  }
-@@ -549,11 +554,30 @@ static void SHIFT_noflags(Recompiler& rec, u64 rip, Assembler& as, ZydisDecodedI
+@@ -549,11 +554,45 @@ static void SHIFT_noflags(Recompiler& rec, u64 rip, Assembler& as, ZydisDecodedI
      rec.setGPR(&operands[0], result);
  }
  
@@ -141,7 +141,22 @@ index 04754f8..f5fcfdf 100644
 +    rec.popScratch();
 +}
 +
++static bool is_system_register(const ZydisDecodedOperand& operand) {
++    return operand.type == ZYDIS_OPERAND_TYPE_REGISTER &&
++           ((operand.reg.value >= ZYDIS_REGISTER_CR0 && operand.reg.value <= ZYDIS_REGISTER_CR15) ||
++            (operand.reg.value >= ZYDIS_REGISTER_DR0 && operand.reg.value <= ZYDIS_REGISTER_DR15));
++}
++
  FAST_HANDLE(MOV) {
++    if (is_system_register(operands[0]) || is_system_register(operands[1])) {
++        as.SD(x0, 0, x0);
++        as.SLTIU(x0, x0, FELIX86_HINT_GP);
++        as.C_UNDEF();
++        as.C_UNDEF();
++        rec.stopCompiling();
++        return;
++    }
++
      if (is_segment(operands[0])) {
          if (MODE32) {
              ASSERT(operands[0].reg.value != ZYDIS_REGISTER_CS);
@@ -153,7 +168,7 @@ index 04754f8..f5fcfdf 100644
              rec.writebackState();
              as.MV(a1, src);
              as.LI(a2, operands[0].reg.value);
-@@ -1174,6 +1198,11 @@ FAST_HANDLE(CMP) {
+@@ -1174,6 +1213,11 @@ FAST_HANDLE(CMP) {
      bool needs_any_flag = needs_cf || needs_of || needs_pf || needs_sf || needs_zf || needs_af;
      if (!needs_any_flag) {
          // Same as TEST, don't warn here
@@ -165,7 +180,7 @@ index 04754f8..f5fcfdf 100644
          return;
      }
  
-@@ -1893,7 +1922,7 @@ FAST_HANDLE(CALL) {
+@@ -1893,7 +1937,7 @@ FAST_HANDLE(CALL) {
              as.XORI(tmp, new_cs, 0x33);
              as.BEQZ(tmp, &cs_ok);
              as.SD(x0, 0, x0);
@@ -174,7 +189,7 @@ index 04754f8..f5fcfdf 100644
              as.C_UNDEF();
              as.C_UNDEF();
              as.Bind(&cs_ok);
-@@ -1919,6 +1948,39 @@ FAST_HANDLE(CALL) {
+@@ -1919,6 +1963,39 @@ FAST_HANDLE(CALL) {
  
      biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
  
@@ -214,7 +229,7 @@ index 04754f8..f5fcfdf 100644
      switch (operands[0].type) {
      case ZYDIS_OPERAND_TYPE_REGISTER:
      case ZYDIS_OPERAND_TYPE_MEMORY: {
-@@ -1997,7 +2059,7 @@ FAST_HANDLE(RET) {
+@@ -1997,7 +2074,7 @@ FAST_HANDLE(RET) {
          as.XORI(tmp, new_cs, 0x33);
          as.BEQZ(tmp, &cs_ok);
          as.SD(x0, 0, x0);
@@ -223,7 +238,7 @@ index 04754f8..f5fcfdf 100644
          as.C_UNDEF();
          as.C_UNDEF();
          as.Bind(&cs_ok);
-@@ -2057,7 +2119,7 @@ FAST_HANDLE(IRETD) {
+@@ -2057,7 +2134,7 @@ FAST_HANDLE(IRETD) {
      as.XORI(tmp, new_cs, 0x33);
      as.BEQZ(tmp, &cs_ok);
      as.SD(x0, 0, x0);
@@ -232,7 +247,7 @@ index 04754f8..f5fcfdf 100644
      as.C_UNDEF();
      as.C_UNDEF();
      as.Bind(&cs_ok);
-@@ -2084,7 +2146,7 @@ FAST_HANDLE(IRETQ) {
+@@ -2084,7 +2161,7 @@ FAST_HANDLE(IRETQ) {
      as.XORI(tmp, new_cs, 0x33);
      as.BEQZ(tmp, &cs_ok);
      as.SD(x0, 0, x0);
@@ -241,7 +256,7 @@ index 04754f8..f5fcfdf 100644
      as.C_UNDEF();
      as.C_UNDEF();
      as.Bind(&cs_ok);
-@@ -2209,6 +2271,9 @@ FAST_HANDLE(POP) {
+@@ -2209,6 +2286,9 @@ FAST_HANDLE(POP) {
          biscuit::GPR rsp = rec.getGPR(X86_REF_RSP, rec.stackWidth());
          int imm = size_to_bytes(instruction.operand_width);
          rec.readMemory(src, rsp, 0, X86_SIZE_WORD);
@@ -251,7 +266,7 @@ index 04754f8..f5fcfdf 100644
          rec.writebackState();
          as.MV(a0, rec.threadStatePointer());
          as.MV(a1, src);
-@@ -2233,6 +2298,16 @@ FAST_HANDLE(POP) {
+@@ -2233,6 +2313,16 @@ FAST_HANDLE(POP) {
                  rec.setGPR(operands[0].reg.value, X86_SIZE_QWORD, reg);
                  as.ADDI(rsp, rsp, imm);
                  rec.setGPR(X86_REF_RSP, X86_SIZE_QWORD, rsp);
@@ -268,7 +283,7 @@ index 04754f8..f5fcfdf 100644
              } else {
                  rec.readMemory(result, rsp, 0, rec.zydisToSize(instruction.operand_width));
                  as.ADDI(rsp, rsp, imm);
-@@ -2973,7 +3048,7 @@ FAST_HANDLE(JMP) {
+@@ -2973,7 +3063,7 @@ FAST_HANDLE(JMP) {
              as.XORI(tmp, cs, 0x33);
              as.BEQZ(tmp, &cs_ok);
              as.SD(x0, 0, x0);
@@ -277,7 +292,7 @@ index 04754f8..f5fcfdf 100644
              as.C_UNDEF();
              as.C_UNDEF();
              as.Bind(&cs_ok);
-@@ -3016,6 +3091,28 @@ FAST_HANDLE(JMP) {
+@@ -3016,6 +3106,28 @@ FAST_HANDLE(JMP) {
          rec.stopCompiling();
          break;
      }
@@ -306,7 +321,7 @@ index 04754f8..f5fcfdf 100644
      default: {
          UNREACHABLE();
          break;
-@@ -3295,6 +3392,9 @@ FAST_HANDLE(TEST) {
+@@ -3295,6 +3407,9 @@ FAST_HANDLE(TEST) {
      if (!needs_any_flag) {
          // Weirdly enough some x86 programs run test al, al and use no flags and overwrite them right after
          // Unsure if this is some sort of special nop or something, but in any case we don't warn about this
@@ -316,7 +331,7 @@ index 04754f8..f5fcfdf 100644
          return;
      }
  
-@@ -4733,6 +4833,9 @@ FAST_HANDLE(SYSCALL) {
+@@ -4733,6 +4848,9 @@ FAST_HANDLE(SYSCALL) {
      rec.setGPR(X86_REF_RCX, X86_SIZE_QWORD, rcx);
  
      // Normally the syscall instruction also writes the flags to R11 but we don't need them in our syscall handler
@@ -326,7 +341,7 @@ index 04754f8..f5fcfdf 100644
      rec.writebackState();
      as.MV(a0, sp);
      rec.callPointer(offsetof(ThreadState, felix86_syscall));
-@@ -4741,7 +4844,11 @@ FAST_HANDLE(SYSCALL) {
+@@ -4741,7 +4859,11 @@ FAST_HANDLE(SYSCALL) {
      biscuit::Label after;
      // TODO: we can get this faster by returning
      biscuit::GPR temp = rec.scratch();
@@ -339,7 +354,7 @@ index 04754f8..f5fcfdf 100644
      as.BEQ(ripreg, temp, &after);
      // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
      rec.backToDispatcher();
-@@ -9639,7 +9746,7 @@ FAST_HANDLE(XGETBV) {
+@@ -9639,7 +9761,7 @@ FAST_HANDLE(XGETBV) {
      biscuit::GPR ecx = rec.getGPR(X86_REF_RCX, X86_SIZE_DWORD);
      as.BEQZ(ecx, &is_zero);
      as.MV(a0, ecx);
@@ -348,7 +363,7 @@ index 04754f8..f5fcfdf 100644
      as.JALR(scratch);
      as.C_UNDEF();
      as.C_UNDEF();
-@@ -11472,6 +11579,7 @@ FAST_HANDLE(STMXCSR) {
+@@ -11472,6 +11594,7 @@ FAST_HANDLE(STMXCSR) {
  }
  
  FAST_HANDLE(LDMXCSR) {
@@ -356,7 +371,7 @@ index 04754f8..f5fcfdf 100644
      biscuit::GPR src = rec.getGPR(&operands[0]);
      biscuit::GPR rc = rec.scratch(); // rounding control
      biscuit::GPR temp = rec.scratch();
-@@ -12174,7 +12282,7 @@ FAST_HANDLE(CMPXCHG16B) {
+@@ -12174,7 +12297,7 @@ FAST_HANDLE(CMPXCHG16B) {
          biscuit::Label spinloop, writeloop;
          biscuit::GPR lock_address = rec.scratch();
          biscuit::GPR lock = rec.scratch();
@@ -365,7 +380,7 @@ index 04754f8..f5fcfdf 100644
          // We will pick one of 256 different spinlocks based on a hash created by our address
          // This means that if two cmpxchg16b target the same address they will spin on the same lock
          // but if they target a different address they will likely get a different lock, which should decrease
-@@ -12715,6 +12823,7 @@ FAST_HANDLE(FPTAN) {
+@@ -12715,6 +12838,7 @@ FAST_HANDLE(FPTAN) {
  }
  
  FAST_HANDLE(FWAIT) {
@@ -373,7 +388,7 @@ index 04754f8..f5fcfdf 100644
      WARN("FWAIT encountered, treating as NOP");
  }
  
-@@ -13630,6 +13739,21 @@ X87_HANDLE(FFREEP);
+@@ -13630,6 +13754,21 @@ X87_HANDLE(FFREEP);
  #undef X87_HANDLE
  
  FAST_HANDLE(INT3) {
@@ -395,7 +410,7 @@ index 04754f8..f5fcfdf 100644
      WARN_ONCE("INT3 instruction being compiled?");
      as.SD(x0, 0, x0);
      // This hint will tell the handle_synchronous signal handler to change si_code to SI_KERNEL
-@@ -13638,6 +13762,7 @@ FAST_HANDLE(INT3) {
+@@ -13638,6 +13777,7 @@ FAST_HANDLE(INT3) {
      // Unreachable
      as.C_UNDEF();
      as.C_UNDEF();
@@ -403,7 +418,7 @@ index 04754f8..f5fcfdf 100644
      rec.stopCompiling();
  }
  
-@@ -13668,6 +13793,9 @@ FAST_HANDLE(INT) {
+@@ -13668,6 +13808,9 @@ FAST_HANDLE(INT) {
              rec.addi(ripreg, ripreg, offset);
          }
          rec.insertSafepoint();
@@ -413,7 +428,7 @@ index 04754f8..f5fcfdf 100644
          rec.writebackState();
          as.MV(a0, sp);
          as.ADDI(a1, ripreg, instruction.length);
-@@ -13677,7 +13805,11 @@ FAST_HANDLE(INT) {
+@@ -13677,7 +13820,11 @@ FAST_HANDLE(INT) {
          biscuit::Label after;
          // TODO: we can get this faster by returning
          biscuit::GPR temp = rec.scratch();
@@ -426,7 +441,7 @@ index 04754f8..f5fcfdf 100644
          as.BEQ(ripreg, temp, &after);
          // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
          rec.backToDispatcher();
-@@ -13690,6 +13822,23 @@ FAST_HANDLE(INT) {
+@@ -13690,6 +13837,23 @@ FAST_HANDLE(INT) {
      } else if (operands[0].imm.value.u == 3) {
          fast_INT3(rec, rip, as, instruction, operands);
      } else {
@@ -450,7 +465,7 @@ index 04754f8..f5fcfdf 100644
          WARN("INT encountered with unknown immediate: %lx", operands[0].imm.value.u);
          as.SD(x0, 0, x0);
          // This hint will tell the handle_synchronous signal handler to change si_code from SEGV_MAPERR to SI_KERNEL
-@@ -13700,6 +13849,7 @@ FAST_HANDLE(INT) {
+@@ -13700,6 +13864,7 @@ FAST_HANDLE(INT) {
          // Unreachable
          as.C_UNDEF();
          as.C_UNDEF();
