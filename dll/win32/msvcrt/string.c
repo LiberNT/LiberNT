@@ -2677,7 +2677,7 @@ struct _I10_OUTPUT_DATA {
 /* Writes count significant digits of a finite non-zero value, returns the digits before the point */
 static int i10_digits(const struct MSVCRT__LDOUBLE *ld, char *digits, int count)
 {
-    BYTE bnum_data[FIELD_OFFSET(struct bnum, data[BNUM_PREC80])];
+    BYTE bnum_data[FIELD_OFFSET(struct bnum, data) + BNUM_PREC80 * sizeof(DWORD)];
     struct bnum *b = (struct bnum *)bnum_data;
     int exp = (ld->exp & 0x7fff) - 0x3fff - 63;
     char limb[LIMB_DIGITS + 1];
