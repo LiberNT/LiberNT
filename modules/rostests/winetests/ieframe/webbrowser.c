@@ -4530,6 +4530,24 @@ START_TEST(webbrowser)
 
     OleInitialize(NULL);
 
+#ifdef __REACTOS__
+    {
+        IHTMLDocument2 *doc;
+        HRESULT hres;
+
+        /* The browser tests dereference the document and need an HTML engine */
+        hres = CoCreateInstance(&CLSID_HTMLDocument, NULL, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER,
+                                &IID_IHTMLDocument2, (void **)&doc);
+        ok(hres == S_OK, "CoCreateInstance(CLSID_HTMLDocument) failed: %08lx\n", hres);
+        if (FAILED(hres))
+        {
+            OleUninitialize();
+            return;
+        }
+        IHTMLDocument2_Release(doc);
+    }
+#endif
+
     test_SetQueryNetSessionCount();
 
     container_hwnd = create_container_window();

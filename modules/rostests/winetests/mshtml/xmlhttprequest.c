@@ -1269,6 +1269,16 @@ static IHTMLDocument2 *create_doc_from_url(const WCHAR *start_url)
 #endif
     ok(hres == S_OK, "CoCreateInstance failed: 0x%08lx\n", hres);
 
+#ifdef __REACTOS__
+    if (FAILED(hres))
+    {
+        IMoniker_Release(url_mon);
+        SysFreeString(url);
+        IBindCtx_Release(bc);
+        return NULL;
+    }
+#endif
+
     hres = IHTMLDocument2_QueryInterface(doc, &IID_IPersistMoniker,
             (void**)&persist_mon);
     ok(hres == S_OK, "IHTMLDocument2_QueryInterface failed: 0x%08lx\n", hres);

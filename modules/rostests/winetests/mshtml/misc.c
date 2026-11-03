@@ -128,6 +128,16 @@ static IHTMLDocument2 *create_doc_from_url(const WCHAR *start_url)
             (void**)&doc);
     ok(hres == S_OK, "CoCreateInstance failed: 0x%08lx\n", hres);
 
+#ifdef __REACTOS__
+    if (FAILED(hres))
+    {
+        IMoniker_Release(url_mon);
+        SysFreeString(url);
+        IBindCtx_Release(bc);
+        return NULL;
+    }
+#endif
+
     hres = IHTMLDocument2_QueryInterface(doc, &IID_IPersistMoniker,
             (void**)&persist_mon);
     ok(hres == S_OK, "IHTMLDocument2_QueryInterface failed: 0x%08lx\n", hres);
@@ -210,6 +220,14 @@ static void test_HTMLStorage(void)
 
     doc = create_doc_from_url(L"http://www.codeweavers.com/");
     doc2 = create_doc_from_url(L"http://www.codeweavers.com/");
+#ifdef __REACTOS__
+    if (!doc || !doc2)
+    {
+        if (doc) IHTMLDocument2_Release(doc);
+        if (doc2) IHTMLDocument2_Release(doc2);
+        return;
+    }
+#endif
 
     hres = get_localstorage(doc, &storage);
     if(hres != S_OK) {
