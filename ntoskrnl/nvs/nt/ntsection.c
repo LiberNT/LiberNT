@@ -1631,7 +1631,7 @@ MiCreateSectionWithMode(
         if ((AllocationAttributes & SEC_RESERVE) && Size > SizeLimit)
             return STATUS_INSUFFICIENT_RESOURCES;
 
-        Size = ROUND_TO_PAGES(Size);
+        Size = (Size + PAGE_SIZE - 1) & ~((ULONG64)PAGE_SIZE - 1);
 
         Control = MiAllocateControlArea(NULL, FALSE);
         if (Control == NULL)
