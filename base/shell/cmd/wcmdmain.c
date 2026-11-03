@@ -1863,8 +1863,15 @@ static RETURN_CODE spawn_external_full_path(const WCHAR *file, WCHAR *full_cmdli
     {
         SHELLEXECUTEINFOW sei = {.cbSize = sizeof(sei)};
         WCHAR *args;
+#ifdef __REACTOS__
+        WCHAR *start;
+        const WCHAR *program = WCMD_parameter(full_cmdline, 0, &start, TRUE, TRUE);
+
+        args = start ? start + wcslen(program) : NULL;
+#else
 
         WCMD_parameter(full_cmdline, 1, &args, FALSE, TRUE);
+#endif
         /* FIXME: when the file extension is not registered,
          * native cmd does popup a dialog box to register an app for this extension.
          * Also, ShellExecuteW returns before the dialog box is closed.
