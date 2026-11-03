@@ -2539,6 +2539,7 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         if (tmp)
         {
             wszApplicationName.Attach(tmp);
+            dwApplicationNameLen = lstrlenW(tmp) + 1;
             sei_tmp.lpFile = wszApplicationName;
         }
     }
@@ -2619,6 +2620,7 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         }
 
         wszApplicationName.Attach(buf.Detach());
+        dwApplicationNameLen = MAX_PATH;
         sei_tmp.lpFile = wszApplicationName;
     }
 
@@ -2688,7 +2690,29 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         {
             StringCchCopyW(wszExePath, _countof(wszExePath), wszApplicationName);
             if (PathFindOnPathW(wszExePath, SearchPaths))
+            {
+                DWORD ExePathLen = lstrlenW(wszExePath) + 1;
+
+                if (ExePathLen > dwApplicationNameLen)
+                {
+                    BOOL FileIsName = (lpFile == wszApplicationName);
+                    BOOL TmpFileIsName = (sei_tmp.lpFile == wszApplicationName);
+                    CHeapPtr<WCHAR, CLocalAllocator> ExePath;
+
+                    if (!ExePath.Allocate(ExePathLen))
+                    {
+                        SetLastError(ERROR_OUTOFMEMORY);
+                        return FALSE;
+                    }
+                    wszApplicationName.Attach(ExePath.Detach());
+                    dwApplicationNameLen = ExePathLen;
+                    if (TmpFileIsName)
+                        sei_tmp.lpFile = wszApplicationName;
+                    if (FileIsName)
+                        lpFile = wszApplicationName;
+                }
                 StringCchCopyW(wszApplicationName, dwApplicationNameLen, wszExePath);
+            }
         }
 
         len = lstrlenW(wszApplicationName) + 3;
