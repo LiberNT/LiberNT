@@ -898,17 +898,10 @@ GpuVaProtectionValid(
     _In_ D3DDDIGPUVIRTUALADDRESS_PROTECTION_TYPE Protection,
     _In_ BOOLEAN UnmapProtection)
 {
-    if (Protection.SystemUseOnly || Protection.Reserved != 0)
+    if (Protection.SystemUseOnly || Protection.Reserved != 0 ||
+        !DxgkGpuVaCoreProtectionValid((ULONG)Protection.Value))
         return FALSE;
-    if (Protection.Zero || Protection.NoAccess)
-    {
-        if (Protection.Write || Protection.Execute || Protection.Zero == Protection.NoAccess)
-            return FALSE;
-        return TRUE;
-    }
-    if (UnmapProtection)
-        return FALSE;
-    return TRUE;
+    return !UnmapProtection || Protection.Zero || Protection.NoAccess;
 }
 
 static NTSTATUS

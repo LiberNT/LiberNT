@@ -9,6 +9,13 @@
 
 static PFND3DKMT_RESERVEGPUVIRTUALADDRESS pfnReserve;
 static PFND3DKMT_FREEGPUVIRTUALADDRESS pfnFree;
+static PFND3DKMT_MAPGPUVIRTUALADDRESS pfnMap;
+
+#define GPUVA_PROTECTION_WRITE 0x01
+#define GPUVA_PROTECTION_EXECUTE 0x02
+#define GPUVA_PROTECTION_ZERO 0x04
+#define GPUVA_PROTECTION_NO_ACCESS 0x08
+#define GPUVA_PROTECTION_SYSTEM_USE_ONLY 0x10
 
 static NTSTATUS
 GpuVaReserve(D3DKMT_HANDLE hPagingQueue, D3DGPU_SIZE_T Size, D3DGPU_VIRTUAL_ADDRESS *Address)
@@ -39,6 +46,57 @@ GpuVaFree(D3DKMT_HANDLE hAdapter, D3DGPU_VIRTUAL_ADDRESS Address, D3DGPU_SIZE_T 
        (ULONG)Luid.HighPart, Luid.LowPart, (ULONG64)Size, (ULONG64)Address, (ULONG)Status);
 }
 
+static NTSTATUS
+GpuVaMapState(D3DKMT_HANDLE hPagingQueue, D3DGPU_VIRTUAL_ADDRESS Address, UINT64 Protection)
+{
+    D3DDDI_MAPGPUVIRTUALADDRESS Map;
+
+    memset(&Map, 0, sizeof(Map));
+    Map.hPagingQueue = hPagingQueue;
+    Map.BaseAddress = Address;
+    Map.SizeInPages = 1;
+    Map.Protection.Value = Protection;
+    return pfnMap(&Map);
+}
+
+static void
+GpuVaMapStates(D3DKMT_HANDLE hAdapter, D3DKMT_HANDLE hPagingQueue, LUID Luid)
+{
+    static const struct
+    {
+        UINT64 Protection;
+        BOOLEAN Accepted;
+    } Cases[] =
+    {
+        { GPUVA_PROTECTION_ZERO, TRUE },
+        { GPUVA_PROTECTION_ZERO | GPUVA_PROTECTION_WRITE, TRUE },
+        { GPUVA_PROTECTION_ZERO | GPUVA_PROTECTION_WRITE | GPUVA_PROTECTION_EXECUTE, TRUE },
+        { GPUVA_PROTECTION_NO_ACCESS, TRUE },
+        { GPUVA_PROTECTION_NO_ACCESS | GPUVA_PROTECTION_WRITE, FALSE },
+        { GPUVA_PROTECTION_NO_ACCESS | GPUVA_PROTECTION_EXECUTE, FALSE },
+        { GPUVA_PROTECTION_NO_ACCESS | GPUVA_PROTECTION_ZERO, FALSE },
+        { GPUVA_PROTECTION_ZERO | GPUVA_PROTECTION_SYSTEM_USE_ONLY, FALSE },
+        { GPUVA_PROTECTION_ZERO | 0x20, FALSE },
+    };
+    D3DGPU_VIRTUAL_ADDRESS Address;
+    NTSTATUS Status;
+    ULONG Index;
+
+    Status = GpuVaReserve(hPagingQueue, 0x10000, &Address);
+    ok(NT_SUCCESS(Status), "Adapter %08lx:%08lx: reservation returned 0x%08lx\n",
+       (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
+    if (!NT_SUCCESS(Status))
+        return;
+    for (Index = 0; Index < RTL_NUMBER_OF(Cases); ++Index)
+    {
+        Status = GpuVaMapState(hPagingQueue, Address, Cases[Index].Protection);
+        ok(Cases[Index].Accepted ? NT_SUCCESS(Status) : Status == STATUS_INVALID_PARAMETER,
+           "Adapter %08lx:%08lx: map with protection 0x%I64x returned 0x%08lx\n",
+           (ULONG)Luid.HighPart, Luid.LowPart, Cases[Index].Protection, (ULONG)Status);
+    }
+    GpuVaFree(hAdapter, Address, 0x10000, Luid);
+}
+
 static void
 GpuVaReserveQueue(D3DKMT_HANDLE hAdapter, D3DKMT_HANDLE hPagingQueue, LUID Luid)
 {
@@ -66,6 +124,8 @@ GpuVaReserveQueue(D3DKMT_HANDLE hAdapter, D3DKMT_HANDLE hPagingQueue, LUID Luid)
        (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
     if (NT_SUCCESS(Status))
         GpuVaFree(hAdapter, Address, 0x1800, Luid);
+
+    GpuVaMapStates(hAdapter, hPagingQueue, Luid);
 }
 
 static void
@@ -112,7 +172,8 @@ START_TEST(gpuvareserve)
 
     pfnReserve = (PFND3DKMT_RESERVEGPUVIRTUALADDRESS)LoadD3DKMTProc("D3DKMTReserveGpuVirtualAddress");
     pfnFree = (PFND3DKMT_FREEGPUVIRTUALADDRESS)LoadD3DKMTProc("D3DKMTFreeGpuVirtualAddress");
-    if (pfnEnumAdapters2 == NULL || pfnCloseAdapter == NULL || pfnReserve == NULL || pfnFree == NULL)
+    pfnMap = (PFND3DKMT_MAPGPUVIRTUALADDRESS)LoadD3DKMTProc("D3DKMTMapGpuVirtualAddress");
+    if (pfnEnumAdapters2 == NULL || pfnCloseAdapter == NULL || pfnReserve == NULL || pfnFree == NULL || pfnMap == NULL)
     {
         skip("D3DKMT adapter or GPU virtual address entry points are not exported\n");
         return;

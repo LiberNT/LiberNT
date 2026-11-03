@@ -16,6 +16,10 @@ static VOID TestProtectionValidation(VOID)
     ok_bool_true(DxgkGpuVaCoreProtectionValid(0), "read-only is the empty set");
     ok_bool_true(DxgkGpuVaCoreProtectionValid(DXGK_GPUVA_PROT_WRITE), "write");
     ok_bool_true(DxgkGpuVaCoreProtectionValid(DXGK_GPUVA_PROT_WRITE | DXGK_GPUVA_PROT_EXECUTE), "write+execute");
+    ok_bool_true(DxgkGpuVaCoreProtectionValid(DXGK_GPUVA_PROT_ZERO), "zero alone");
+    ok_bool_true(DxgkGpuVaCoreProtectionValid(DXGK_GPUVA_PROT_ZERO | DXGK_GPUVA_PROT_WRITE), "zero with write");
+    ok_bool_true(DxgkGpuVaCoreProtectionValid(DXGK_GPUVA_PROT_ZERO | DXGK_GPUVA_PROT_WRITE | DXGK_GPUVA_PROT_EXECUTE),
+                 "zero with write and execute");
     ok_bool_true(DxgkGpuVaCoreProtectionValid(DXGK_GPUVA_PROT_NO_ACCESS), "no-access alone");
     ok_bool_true(DxgkGpuVaCoreProtectionValid(DXGK_GPUVA_PROT_NO_ACCESS | DXGK_GPUVA_PROT_SYSTEM_USE_ONLY),
                  "no-access on a kernel-owned range");
