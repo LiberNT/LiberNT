@@ -68,6 +68,9 @@ struct _jsval_t {
     } u;
 #else
     jsval_type_t type;
+#ifdef __REACTOS__
+    BOOL currency;
+#endif
     union {
         IDispatch *obj;
         jsstr_t *str;
@@ -167,10 +170,45 @@ static inline jsval_t jsval_number(double n)
     }
 #else
     ret.type = JSV_NUMBER;
+#ifdef __REACTOS__
+    ret.currency = FALSE;
+#endif
     ret.u.n = n;
 #endif
     return ret;
 }
+
+#ifdef __REACTOS__
+#ifdef JSVAL_DOUBLE_LAYOUT_PTR32
+/* A quiet NaN pattern no double reaches: jsval_number normalizes NaN to 0x7ff80000 */
+#define JSV_CURRENCY_TAG 0x7ffc0000
+
+static inline jsval_t jsval_currency(int n)
+{
+    jsval_t ret;
+    ret.u.s.tag = JSV_CURRENCY_TAG;
+    ret.u.s.u.as_uintptr = n;
+    return ret;
+}
+
+static inline BOOL is_currency(jsval_t v)
+{
+    return v.u.s.tag == JSV_CURRENCY_TAG;
+}
+#else
+static inline jsval_t jsval_currency(int n)
+{
+    jsval_t ret = jsval_number(n);
+    ret.currency = TRUE;
+    return ret;
+}
+
+static inline BOOL is_currency(jsval_t v)
+{
+    return v.type == JSV_NUMBER && v.currency;
+}
+#endif
+#endif
 
 static inline BOOL is_object_instance(jsval_t v)
 {
@@ -232,6 +270,10 @@ static inline IDispatch *get_object(jsval_t v)
 
 static inline double get_number(jsval_t v)
 {
+#if defined(__REACTOS__) && defined(JSVAL_DOUBLE_LAYOUT_PTR32)
+    if(is_currency(v))
+        return (int)v.u.s.u.as_uintptr;
+#endif
     return v.u.n;
 }
 

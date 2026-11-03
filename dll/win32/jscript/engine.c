@@ -2477,6 +2477,10 @@ static HRESULT interp_tonum(script_ctx_t *ctx)
     TRACE("\n");
 
     v = stack_pop(ctx);
+#ifdef __REACTOS__
+    if(is_number(v))
+        return stack_push(ctx, v);
+#endif
     hres = to_number(ctx, v, &n);
     jsval_release(v);
     if(FAILED(hres))
