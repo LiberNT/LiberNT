@@ -243,6 +243,22 @@ static void test_CM_Get_Device_ID_List_setupapi(void)
     ret = CM_Get_Device_ID_ListW(NULL, wbuf, len, 0);
     ok(!ret, "got %#lx.\n", ret);
 
+#ifdef __REACTOS__
+    set = SetupDiGetClassDevsW(&GUID_DEVCLASS_DISPLAY, NULL, NULL, DIGCF_PRESENT);
+    if (set != INVALID_HANDLE_VALUE)
+    {
+        BOOL present = SetupDiEnumDeviceInfo(set, 0, &device);
+
+        SetupDiDestroyDeviceInfoList(set);
+        if (!present)
+        {
+            skip("No display adapter is present.\n");
+            free(wbuf);
+            free(buf);
+            return;
+        }
+    }
+#endif
     len = 0xdeadbeef;
     ret = CM_Get_Device_ID_List_SizeW(&len, wguid_str, CM_GETIDLIST_FILTER_CLASS | CM_GETIDLIST_FILTER_PRESENT);
     ok(!ret, "got %#lx.\n", ret);
