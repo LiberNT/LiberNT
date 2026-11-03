@@ -6934,7 +6934,7 @@ HRESULT NativeSwapChain::Publish(NativeTexture2D *texture)
         exchange.Flags |= DWM_DX_PUBLISH_LAYER;
         SetLayer(exchange);
     }
-    /* FIXME: a zero-size source region presents the whole buffer */
+    /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
     else if (source_width && source_height && (source_width < desc.Width || source_height < desc.Height))
     {
         exchange.Flags |= DWM_DX_PUBLISH_SOURCE_REGION;

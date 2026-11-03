@@ -161,6 +161,36 @@ START_TEST(hwnd_source)
 
     if (Chain) Chain->Release();
     if (Chain1) Chain1->Release();
+    Chain = NULL;
+    Chain1 = NULL;
+    if (Factory && Window && Screen)
+    {
+        DXGI_SWAP_CHAIN_DESC1 Desc = {};
+        Desc.Width = WIDTH;
+        Desc.Height = HEIGHT;
+        Desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        Desc.SampleDesc.Count = 1;
+        Desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        Desc.BufferCount = 2;
+        Desc.Scaling = DXGI_SCALING_NONE;
+        Desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        Hr = Factory->CreateSwapChainForHwnd(Device, Window, &Desc, NULL, NULL, &Chain1);
+        ok(Hr == S_OK && Chain1, "CreateSwapChainForHwnd(DXGI_SCALING_NONE): %#lx\n", Hr);
+        if (Chain1) Chain1->QueryInterface(IID_IDXGISwapChain2, reinterpret_cast<void **>(&Chain));
+        if (Chain)
+        {
+            CheckSourceSize(Chain, SOURCE_WIDTH, SOURCE_HEIGHT, S_OK, SOURCE_WIDTH, SOURCE_HEIGHT);
+            if (PresentFrame(Context, Chain))
+            {
+                ok(WaitForScreenColor(Screen, Origin, WIDTH * 3 / 4, HEIGHT * 3 / 4, Inside),
+                   "DXGI_SCALING_NONE: the source region was not stretched over the window\n");
+                ok(WaitForScreenColor(Screen, Origin, WIDTH * 3 / 4, HEIGHT / 4, Inside),
+                   "DXGI_SCALING_NONE: the source region does not cover the top right\n");
+            }
+        }
+    }
+    if (Chain) Chain->Release();
+    if (Chain1) Chain1->Release();
     if (Screen) ReleaseDC(NULL, Screen);
     if (Window) DestroyWindow(Window);
     if (Factory) Factory->Release();

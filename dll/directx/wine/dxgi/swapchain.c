@@ -482,7 +482,7 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
 
         wined3d_mutex_lock();
         wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &wined3d_desc);
-        /* FIXME: a zero-size source region presents the whole buffer; DXGI_SCALING_NONE stretches the region */
+        /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
         if (swapchain->source_width && swapchain->source_height &&
                 (swapchain->source_width < wined3d_desc.backbuffer_width ||
                  swapchain->source_height < wined3d_desc.backbuffer_height))

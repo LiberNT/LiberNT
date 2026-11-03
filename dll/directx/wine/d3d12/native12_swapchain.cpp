@@ -854,7 +854,7 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         exchange.Info.Format = desc.Format;
         exchange.Flags = DWM_DX_PUBLISH_RETAINED;
         if (desc.AlphaMode == DXGI_ALPHA_MODE_PREMULTIPLIED) exchange.Flags |= DWM_DX_PUBLISH_PREMULTIPLIED;
-        /* FIXME: a zero-size source region presents the whole buffer */
+        /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
         if (source_width && source_height && (source_width < desc.Width || source_height < desc.Height))
         {
             exchange.Flags |= DWM_DX_PUBLISH_SOURCE_REGION;
