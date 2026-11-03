@@ -231,8 +231,27 @@ TestNextWriteRun(VOID)
     ok_bool_false(DxgkGpuVaCoreNextWriteRun(NULL, NULL, 6, FALSE, &Cursor, &Run), "no entries");
 }
 
+static VOID
+TestTableSnapshot(VOID)
+{
+    ULONG State;
+
+    /* A table created after the flush placed the pending ones is placed first. */
+    for (State = 0; State < 8; ++State)
+        ok_eq_int(DxgkGpuVaCoreTableSnapshot(TRUE, (State & 1) != 0, (State & 2) != 0, (State & 4) != 0),
+                  DxgkGpuVaTableSnapshotAwaitPlacement);
+
+    ok_eq_int(DxgkGpuVaCoreTableSnapshot(FALSE, TRUE, FALSE, FALSE), DxgkGpuVaTableSnapshotWhole);
+    ok_eq_int(DxgkGpuVaCoreTableSnapshot(FALSE, TRUE, TRUE, TRUE), DxgkGpuVaTableSnapshotWhole);
+    ok_eq_int(DxgkGpuVaCoreTableSnapshot(FALSE, FALSE, TRUE, FALSE), DxgkGpuVaTableSnapshotSpan);
+    ok_eq_int(DxgkGpuVaCoreTableSnapshot(FALSE, FALSE, TRUE, TRUE), DxgkGpuVaTableSnapshotSpan);
+    ok_eq_int(DxgkGpuVaCoreTableSnapshot(FALSE, FALSE, FALSE, TRUE), DxgkGpuVaTableSnapshotDirty);
+    ok_eq_int(DxgkGpuVaCoreTableSnapshot(FALSE, FALSE, FALSE, FALSE), DxgkGpuVaTableSnapshotNone);
+}
+
 START_TEST(DxgkGpuVaPageTable)
 {
+    TestTableSnapshot();
     TestTableUpdateMode();
     Test64KBEntries();
     TestNextWriteRun();

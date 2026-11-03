@@ -478,4 +478,23 @@ DxgkGpuVaCoreUsesPagingProcessVa(
            AdapterUpdateMode == DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL;
 }
 
+/* An update described before placement lands where the table will not be. */
+DXGK_GPUVA_TABLE_SNAPSHOT
+DxgkGpuVaCoreTableSnapshot(
+    _In_ BOOLEAN PlacementPending,
+    _In_ BOOLEAN InitialUpdatePending,
+    _In_ BOOLEAN ResendSpan,
+    _In_ BOOLEAN Dirty)
+{
+    if (PlacementPending)
+        return DxgkGpuVaTableSnapshotAwaitPlacement;
+    if (InitialUpdatePending)
+        return DxgkGpuVaTableSnapshotWhole;
+    if (ResendSpan)
+        return DxgkGpuVaTableSnapshotSpan;
+    if (Dirty)
+        return DxgkGpuVaTableSnapshotDirty;
+    return DxgkGpuVaTableSnapshotNone;
+}
+
 /* EOF */

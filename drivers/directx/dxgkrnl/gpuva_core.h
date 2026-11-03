@@ -125,6 +125,22 @@ BOOLEAN
 DxgkGpuVaCoreUsesPagingProcessVa(
     _In_ ULONG AdapterUpdateMode);
 
+typedef enum _DXGK_GPUVA_TABLE_SNAPSHOT
+{
+    DxgkGpuVaTableSnapshotNone = 0,
+    DxgkGpuVaTableSnapshotWhole,
+    DxgkGpuVaTableSnapshotSpan,
+    DxgkGpuVaTableSnapshotDirty,
+    DxgkGpuVaTableSnapshotAwaitPlacement
+} DXGK_GPUVA_TABLE_SNAPSHOT;
+
+DXGK_GPUVA_TABLE_SNAPSHOT
+DxgkGpuVaCoreTableSnapshot(
+    _In_ BOOLEAN PlacementPending,
+    _In_ BOOLEAN InitialUpdatePending,
+    _In_ BOOLEAN ResendSpan,
+    _In_ BOOLEAN Dirty);
+
 /* --- page-table geometry --------------------------------------------- */
 
 NTSTATUS DxgkGpuVaCoreValidateGeometry(_In_ const DXGK_GPUVA_GEOMETRY *Geometry);
