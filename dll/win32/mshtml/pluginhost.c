@@ -493,6 +493,7 @@ static void load_plugin(PluginHost *host)
 static void initialize_plugin_object(PluginHost *host)
 {
     IClientSecurity *client_security;
+    IOleControl *ole_control;
     IQuickActivate *quick_activate;
     IOleObject *ole_obj = NULL;
     IOleCommandTarget *cmdtrg;
@@ -503,12 +504,21 @@ static void initialize_plugin_object(PluginHost *host)
 
     /* Note native calls QI on plugin for an undocumented IID and CLSID_HTMLDocument */
 
-    /* FIXME: call FreezeEvents(TRUE) */
+    hres = IUnknown_QueryInterface(host->plugin_unk, &IID_IOleControl, (void**)&ole_control);
+    if(SUCCEEDED(hres)) {
+        IOleControl_FreezeEvents(ole_control, TRUE);
+        IOleControl_Release(ole_control);
+    }
 
     hres = IUnknown_QueryInterface(host->plugin_unk, &IID_IClientSecurity, (void**)&client_security);
     if(SUCCEEDED(hres)) {
         FIXME("Handle IClientSecurity\n");
         IClientSecurity_Release(client_security);
+        hres = IUnknown_QueryInterface(host->plugin_unk, &IID_IOleControl, (void**)&ole_control);
+        if(SUCCEEDED(hres)) {
+            IOleControl_FreezeEvents(ole_control, FALSE);
+            IOleControl_Release(ole_control);
+        }
         return;
     }
 
@@ -545,6 +555,12 @@ static void initialize_plugin_object(PluginHost *host)
         }else {
             TRACE("Plugin does not support IOleObject\n");
         }
+    }
+
+    hres = IUnknown_QueryInterface(host->plugin_unk, &IID_IOleControl, (void**)&ole_control);
+    if(SUCCEEDED(hres)) {
+        IOleControl_FreezeEvents(ole_control, FALSE);
+        IOleControl_Release(ole_control);
     }
 
     load_plugin(host);
@@ -591,6 +607,7 @@ static void embed_plugin_object(PluginHost *host)
 {
     IOleObject *ole_obj;
     RECT rect;
+    SIZEL extent;
     HRESULT hres;
 
     hres = IUnknown_QueryInterface(host->plugin_unk, &IID_IOleObject, (void**)&ole_obj);
@@ -600,6 +617,10 @@ static void embed_plugin_object(PluginHost *host)
     }
 
     get_pos_rect(host, &rect);
+    extent.cx = rect.right - rect.left;
+    extent.cy = rect.bottom - rect.top;
+    IOleObject_SetExtent(ole_obj, DVASPECT_CONTENT, &extent);
+    IOleObject_GetExtent(ole_obj, DVASPECT_CONTENT, &extent);
     hres = IOleObject_DoVerb(ole_obj, OLEIVERB_INPLACEACTIVATE, NULL, &host->IOleClientSite_iface, 0, host->hwnd, &rect);
     IOleObject_Release(ole_obj);
     if(FAILED(hres))
