@@ -163,7 +163,7 @@ ScmLogServiceFailure(PSERVICE lpService, const SC_ACTION *lpAction)
     StringCchPrintfW(szCount, ARRAYSIZE(szCount), L"%lu", lpService->dwFailureCount);
     lpLogStrings[0] = lpService->lpDisplayName;
     lpLogStrings[1] = szCount;
-    if (lpAction == NULL)
+    if (lpAction == NULL || lpAction->Type == SC_ACTION_NONE)
     {
         ScmLogEvent(EVENT_SERVICE_CRASH_NO_ACTION, EVENTLOG_ERROR_TYPE, 2, lpLogStrings);
         return;
