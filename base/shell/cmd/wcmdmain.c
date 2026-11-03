@@ -3844,6 +3844,10 @@ enum read_parse_line WCMD_ReadAndParseLine(CMD_NODE **output)
     static WCHAR    *extraSpace = NULL;  /* Deliberately never freed */
     struct node_builder builder;
     BOOL      ret;
+#ifdef __REACTOS__
+    const WCHAR *redirEnd = NULL, *redirStart;
+    int       redirEndLen = 0;
+#endif
 
     *output = NULL;
     /* Allocate working space for a command read from keyboard, file etc */
@@ -3879,6 +3883,9 @@ enum read_parse_line WCMD_ReadAndParseLine(CMD_NODE **output)
       /* If we have reached the end, add this command into the list
          Do not add command to list if escape char ^ was last */
       if (*curPos == L'\0') {
+#ifdef __REACTOS__
+          redirEnd = NULL;
+#endif
           /* Add an entry to the command list */
           lexer_push_command(&builder, curString, &curStringLen,
                              curRedirs, &curRedirsLen,
@@ -3995,6 +4002,10 @@ enum read_parse_line WCMD_ReadAndParseLine(CMD_NODE **output)
       case L' ':
           /* If finishing off a redirect, add a whitespace delimiter */
           if (curCopyTo == curRedirs) {
+#ifdef __REACTOS__
+              redirEnd = curPos;
+              redirEndLen = curStringLen;
+#endif
               curCopyTo[(*curLen)++] = L' ';
               curCopyTo = curString;
               curLen = &curStringLen;
@@ -4009,6 +4020,10 @@ enum read_parse_line WCMD_ReadAndParseLine(CMD_NODE **output)
           curCopyTo = curRedirs;
           curLen = &curRedirsLen;
 
+#ifdef __REACTOS__
+          redirStart = (curStringLen && curPos[-1] >= L'1' && curPos[-1] <= L'9' &&
+                        (curStringLen == 1 || iswspace(curPos[-2]))) ? curPos - 1 : curPos;
+#endif
           /* See if 1>, 2> etc, in which case we have some patching up
              to do (provided there's a preceding whitespace, and enough
              chars read so far) */
@@ -4019,6 +4034,19 @@ enum read_parse_line WCMD_ReadAndParseLine(CMD_NODE **output)
               curString[curStringLen] = L'\0';
               curCopyTo[(*curLen)++] = curPos[-1];
           }
+#ifdef __REACTOS__
+          if (redirEnd && redirEndLen <= curStringLen)
+          {
+              const WCHAR *ws = redirEnd;
+
+              while (ws < redirStart && wcschr(L" \t,=", *ws)) ws++;
+              if (ws == redirStart)
+              {
+                  curStringLen = redirEndLen;
+                  curString[curStringLen] = L'\0';
+              }
+          }
+#endif
 
           curCopyTo[(*curLen)++] = *curPos;
 
