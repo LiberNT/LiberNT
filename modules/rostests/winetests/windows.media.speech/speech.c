@@ -416,6 +416,10 @@ static void await_async_inspectable_( unsigned int line, IAsyncOperation_IInspec
     ok_(__FILE__, line)(hr == S_OK, "IAsyncOperation_IInspectable_put_Completed failed, hr %#lx.\n", hr);
     ok_(__FILE__, line)(!WaitForSingleObject(handler->event_finished , 5000), "Wait for event_finished failed.\n");
     CloseHandle(handler->event_finished);
+#ifdef __REACTOS__
+    /* The handler lives on the caller's stack and the worker still releases it after signaling */
+    for (unsigned int i = 0; i < 1000 && handler->ref > 1; i++) Sleep(1);
+#endif
 }
 
 #define check_async_info(obj, exp_id, exp_status, exp_hr) check_async_info_(__LINE__, obj, exp_id, exp_status, exp_hr)
