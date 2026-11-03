@@ -386,10 +386,12 @@ VOID DefaultProtocolHandler(
  *     IPPacket = Pointer to an IP packet that was received
  */
 {
+    if (RawIpReceive(Interface, IPPacket))
+        return;
+
     TI_DbgPrint(MID_TRACE, ("[IF %x] Packet of unknown Internet protocol "
 			    "discarded.\n", Interface));
 
-    RawIpReceive(Interface, IPPacket);
     Interface->Stats.InDiscardedUnknownProto++;
 }
 
