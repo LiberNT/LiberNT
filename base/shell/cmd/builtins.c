@@ -276,6 +276,10 @@ RETURN_CODE WCMD_clear_screen(void)
       FillConsoleOutputAttribute(hStdOut, consoleInfo.wAttributes, screenSize, topLeft, &written);
       SetConsoleCursorPosition(hStdOut, topLeft);
   }
+#ifdef __REACTOS__
+  else
+      WCMD_output_asis(L"\f");
+#endif
   return NO_ERROR;
 }
 
