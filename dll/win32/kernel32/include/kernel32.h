@@ -313,6 +313,10 @@ PVOID
 WINAPI
 BasepIsRealtimeAllowed(IN BOOLEAN Keep);
 
+BOOLEAN
+WINAPI
+BasepIsValidNumaNode(IN ULONG Node);
+
 VOID
 WINAPI
 BasepAnsiStringToHeapUnicodeString(IN LPCSTR AnsiString,

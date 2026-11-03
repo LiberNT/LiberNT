@@ -154,6 +154,56 @@ CreateFileMappingW(HANDLE hFile,
     return SectionHandle;
 }
 
+HANDLE
+WINAPI
+CreateFileMappingNumaW(IN HANDLE hFile,
+                       IN LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
+                       IN DWORD flProtect,
+                       IN DWORD dwMaximumSizeHigh,
+                       IN DWORD dwMaximumSizeLow,
+                       IN LPCWSTR lpName,
+                       IN DWORD nndPreferred)
+{
+    if ((nndPreferred != NUMA_NO_PREFERRED_NODE) && !BasepIsValidNumaNode(nndPreferred))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    /* TODO: nndPreferred does not steer the frame choice; any node is used */
+    return CreateFileMappingW(hFile,
+                              lpFileMappingAttributes,
+                              flProtect,
+                              dwMaximumSizeHigh,
+                              dwMaximumSizeLow,
+                              lpName);
+}
+
+HANDLE
+WINAPI
+CreateFileMappingNumaA(IN HANDLE hFile,
+                       IN LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
+                       IN DWORD flProtect,
+                       IN DWORD dwMaximumSizeHigh,
+                       IN DWORD dwMaximumSizeLow,
+                       IN LPCSTR lpName,
+                       IN DWORD nndPreferred)
+{
+    if ((nndPreferred != NUMA_NO_PREFERRED_NODE) && !BasepIsValidNumaNode(nndPreferred))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    /* TODO: nndPreferred does not steer the frame choice; any node is used */
+    return CreateFileMappingA(hFile,
+                              lpFileMappingAttributes,
+                              flProtect,
+                              dwMaximumSizeHigh,
+                              dwMaximumSizeLow,
+                              lpName);
+}
+
 /*
  * @implemented
  */
@@ -221,6 +271,32 @@ MapViewOfFileEx(HANDLE hFileMappingObject,
 
     /* Return the base */
     return ViewBase;
+}
+
+LPVOID
+WINAPI
+MapViewOfFileExNuma(IN HANDLE hFileMappingObject,
+                    IN DWORD dwDesiredAccess,
+                    IN DWORD dwFileOffsetHigh,
+                    IN DWORD dwFileOffsetLow,
+                    IN SIZE_T dwNumberOfBytesToMap,
+                    IN LPVOID lpBaseAddress,
+                    IN DWORD nndPreferred)
+{
+    /* FIXME: Windows checks the section handle before the node */
+    if ((nndPreferred != NUMA_NO_PREFERRED_NODE) && !BasepIsValidNumaNode(nndPreferred))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    /* TODO: nndPreferred does not steer the frame choice; any node is used */
+    return MapViewOfFileEx(hFileMappingObject,
+                           dwDesiredAccess,
+                           dwFileOffsetHigh,
+                           dwFileOffsetLow,
+                           dwNumberOfBytesToMap,
+                           lpBaseAddress);
 }
 
 /*
