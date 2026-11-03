@@ -64,6 +64,10 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-aggressive-loop-optimizations)
     # Wine code passes NULL to strdup, and the builtin's nonnull deletes the checks after the call
     add_compile_options(-fno-builtin-strdup)
+    # GCC 15 makes {0} set only the first union member; the tree relies on {0} clearing the whole union
+    if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fzero-init-padding-bits=unions>")
+    endif()
     if (DBG)
         add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wold-style-declaration>")
     endif()
