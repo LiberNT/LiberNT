@@ -762,6 +762,7 @@ NTSTATUS TCPSendData
         InsertTailList( &Connection->SendRequest, &Bucket->Entry );
         TI_DbgPrint(DEBUG_TCP,("[IP, TCPSendData] Queued write irp\n"));
         UnlockObject(Connection);
+        LibTCPRecheckSend(Connection);
     }
 
 

@@ -344,6 +344,101 @@ static void Test_ReadRacesClose(void)
     }
 }
 
+typedef struct _SEND_RACE_CONTEXT
+{
+    SOCKET Listener;
+    ULONG Received;
+} SEND_RACE_CONTEXT;
+
+static DWORD WINAPI SendRaceServer(PVOID Parameter)
+{
+    SEND_RACE_CONTEXT *Context = Parameter;
+    SOCKET Client = accept(Context->Listener, NULL, NULL);
+    char Buffer[1024];
+    int Received;
+
+    if (Client == INVALID_SOCKET)
+        return 1;
+    while ((Received = recv(Client, Buffer, sizeof(Buffer), 0)) > 0)
+        Context->Received += Received;
+    closesocket(Client);
+    return 0;
+}
+
+/* A send queued while the last outstanding data is acknowledged must still go out */
+static void Test_SendRacesAck(void)
+{
+    enum { CHUNK = 65536, CHUNKS = 64, TIMEOUT_MS = 5000 };
+    SEND_RACE_CONTEXT Context = { INVALID_SOCKET, 0 };
+    struct sockaddr_in Address = { 0 };
+    int Length = sizeof(Address), i, Sent = 0;
+    DWORD Timeout = TIMEOUT_MS;
+    char *Data;
+    HANDLE Thread;
+    SOCKET Client;
+
+    Data = calloc(1, CHUNK);
+    Context.Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ok(bind(Context.Listener, (struct sockaddr *)&Address, sizeof(Address)) == 0, "bind failed with %d\n", WSAGetLastError());
+    ok(listen(Context.Listener, 1) == 0, "listen failed with %d\n", WSAGetLastError());
+    ok(getsockname(Context.Listener, (struct sockaddr *)&Address, &Length) == 0, "getsockname failed with %d\n", WSAGetLastError());
+    Thread = CreateThread(NULL, 0, SendRaceServer, &Context, 0, NULL);
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    setsockopt(Client, SOL_SOCKET, SO_SNDTIMEO, (const char *)&Timeout, sizeof(Timeout));
+    ok(connect(Client, (struct sockaddr *)&Address, sizeof(Address)) == 0, "connect failed with %d\n", WSAGetLastError());
+    for (i = 0; i < CHUNKS; i++)
+    {
+        int Result = send(Client, Data, CHUNK, 0);
+
+        if (Result != CHUNK)
+        {
+            ok(0, "Chunk %d: send returned %d, error %d\n", i, Result, WSAGetLastError());
+            break;
+        }
+        Sent += Result;
+    }
+    shutdown(Client, SD_SEND);
+    ok(WaitForSingleObject(Thread, TIMEOUT_MS) == WAIT_OBJECT_0, "The receiver did not see the end of the data\n");
+    ok(Context.Received == (ULONG)Sent, "Received %lu of %d bytes\n", Context.Received, Sent);
+    closesocket(Client);
+    closesocket(Context.Listener);
+    CloseHandle(Thread);
+    free(Data);
+}
+
+/* A peer that connects and closes before accept is posted must read as a closed stream */
+static void Test_AcceptAfterPeerClose(void)
+{
+    struct sockaddr_in Address = { 0 };
+    int Length = sizeof(Address), Received;
+    DWORD Timeout = 3000;
+    SOCKET Listener, Client, Accepted;
+    char Buffer[16];
+
+    Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ok(bind(Listener, (struct sockaddr *)&Address, sizeof(Address)) == 0, "bind failed with %d\n", WSAGetLastError());
+    ok(listen(Listener, 1) == 0, "listen failed with %d\n", WSAGetLastError());
+    ok(getsockname(Listener, (struct sockaddr *)&Address, &Length) == 0, "getsockname failed with %d\n", WSAGetLastError());
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(connect(Client, (struct sockaddr *)&Address, sizeof(Address)) == 0, "connect failed with %d\n", WSAGetLastError());
+    closesocket(Client);
+    Sleep(300);
+
+    Accepted = accept(Listener, NULL, NULL);
+    ok(Accepted != INVALID_SOCKET, "accept failed with %d\n", WSAGetLastError());
+    setsockopt(Accepted, SOL_SOCKET, SO_RCVTIMEO, (const char *)&Timeout, sizeof(Timeout));
+    Received = recv(Accepted, Buffer, sizeof(Buffer), 0);
+    ok(Received == 0, "recv returned %d, error %d\n", Received, WSAGetLastError());
+    closesocket(Accepted);
+    closesocket(Listener);
+}
+
 START_TEST(close)
 {
     int err;
@@ -359,6 +454,8 @@ START_TEST(close)
     Test_CloseWithPendingAsyncSelect();
     Test_RebindAfterCloseWithPendingReceive();
     Test_ReadRacesClose();
+    Test_SendRacesAck();
+    Test_AcceptAfterPeerClose();
 
     WSACleanup();
 }

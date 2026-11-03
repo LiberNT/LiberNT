@@ -298,6 +298,7 @@ typedef struct _TCP_PENDING_ACCEPT {
     LIST_ENTRY Entry;
     PCONNECTION_ENDPOINT Listener;
     PVOID SocketContext;
+    BOOLEAN FinReceived;
 } TCP_PENDING_ACCEPT, *PTCP_PENDING_ACCEPT;
 
 
