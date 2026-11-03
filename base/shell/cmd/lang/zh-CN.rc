@@ -18,6 +18,8 @@ STRINGTABLE
     WCMD_CD, "CD <目录> 是 CHDIR 的缩写版本。它可以切换当前的默认目录。\n"
     WCMD_CHDIR, "CHDIR <目录> 可切换当前默认目录。\n"
     WCMD_CLS, "CLS 可清空控制台屏幕。\n"
+    WCMD_BREAK, "BREAK 设置或清除 DOS 的扩展 CTRL+C 检查。它在 Windows 中没有作用，\n\
+仅为 DOS 批处理文件保留。\n"
     WCMD_COPY, "COPY <文件名> 可复制一个文件。\n"
     WCMD_DATE, "DATE 可显示或更改系统日期。\n"
     WCMD_DEL, "DEL <filename> 可删除一个或一组文件。\n"

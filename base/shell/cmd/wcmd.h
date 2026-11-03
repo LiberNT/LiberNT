@@ -411,6 +411,9 @@ static inline BOOL WCMD_is_in_context(const WCHAR *ext)
 #define WCMD_CLS       3
 #define WCMD_COPY      4
 /* no longer used slot */
+#ifdef __REACTOS__
+#define WCMD_BREAK     5
+#endif
 #define WCMD_DATE      6
 #define WCMD_DEL       7
 #define WCMD_DIR       8

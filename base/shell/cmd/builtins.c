@@ -50,7 +50,11 @@ const WCHAR inbuilt[][10] = {
         L"CHDIR",
         L"CLS",
         L"COPY",
+#ifdef __REACTOS__
+        L"BREAK",
+#else
         L"",
+#endif
         L"DATE",
         L"DEL",
         L"DIR",

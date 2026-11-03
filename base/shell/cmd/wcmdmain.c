@@ -2296,6 +2296,11 @@ RETURN_CODE WCMD_run_builtin_command(int cmd_index, WCHAR *cmd)
     case WCMD_REM:
         return_code = NO_ERROR;
         break;
+#ifdef __REACTOS__
+    case WCMD_BREAK:
+        return_code = NO_ERROR;
+        break;
+#endif
     case WCMD_REN:
     case WCMD_RENAME:
         return_code = WCMD_rename();
