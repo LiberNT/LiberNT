@@ -3,6 +3,7 @@ list(APPEND SOURCE
     cmd.c
     confirm.c
     fc.c
+    script.c
     testlist.c)
 
 add_executable(cmd_apitest ${SOURCE})
