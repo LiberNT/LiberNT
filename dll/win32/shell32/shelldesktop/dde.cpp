@@ -233,11 +233,21 @@ static DWORD ProgmanAddItem(PCWSTR LastGroup, int Argc, PWSTR *Argv)
     return FAILED(hr) ? DDE_FNOTPROCESSED : DDE_FACK;
 }
 
+static DWORD WINAPI ProgmanShowGroupThread(PVOID Parameter)
+{
+    PWSTR Path = (PWSTR)Parameter;
+
+    ShellExecuteW(NULL, NULL, Path, NULL, NULL, SW_SHOWNORMAL);
+    CoTaskMemFree(Path);
+    return 0;
+}
+
 static DWORD ProgmanExecute(PCWSTR Command, int Argc, PWSTR *Argv)
 {
     static PWSTR LastGroup;
     PWSTR Path, From;
     SHFILEOPSTRUCTW Operation = { 0 };
+    PWSTR ShownPath;
     SIZE_T Length;
     BOOL Deleted;
     int Result;
@@ -251,7 +261,9 @@ static DWORD ProgmanExecute(PCWSTR Command, int Argc, PWSTR *Argv)
             return DDE_FNOTPROCESSED;
         if (!_wcsicmp(Command, L"CreateGroup"))
             CreateDirectoryW(Path, NULL);
-        ShellExecuteW(NULL, NULL, Path, NULL, NULL, SW_SHOWNORMAL);
+        ShownPath = ProgmanDuplicate(Path, wcslen(Path));
+        if (ShownPath && !SHCreateThread(ProgmanShowGroupThread, ShownPath, CTF_COINIT_STA | CTF_INSIST, NULL))
+            CoTaskMemFree(ShownPath);
         CoTaskMemFree(LastGroup);
         LastGroup = Path;
         return DDE_FACK;
