@@ -283,6 +283,8 @@ MiAllocateVirtualMemoryNt(
     _In_ ULONG64 HighestEndingAddress,
     _In_ ULONG64 Alignment,
     _In_ BOOLEAN EcCode,
+    _In_ BOOLEAN NumaNodePresent,
+    _In_ ULONG64 NumaNode,
     _In_ BOOLEAN Extended)
 {
     MI_PROCESS_REFERENCE Target;
@@ -411,6 +413,13 @@ MiAllocateVirtualMemoryNt(
     if (!NT_SUCCESS(Status))
         return Status;
 
+    if (NumaNodePresent && NumaNode >= KeNumberNodes)
+    {
+        MiReleaseTargetProcess(&Target);
+        return STATUS_INVALID_PARAMETER;
+    }
+    /* TODO: NumaNode does not steer the frame choice; any node is used */
+
     if (AllocationType & MEM_RESET)
     {
         MI_MEMORY_INFORMATION Info;
@@ -536,7 +545,7 @@ NtAllocateVirtualMemory(
     _In_ ULONG Protect)
 {
     return MiAllocateVirtualMemoryNt(ProcessHandle, UBaseAddress, ZeroBits, URegionSize, AllocationType, Protect,
-                                     0, 0, 0, FALSE, FALSE);
+                                     0, 0, 0, FALSE, FALSE, 0, FALSE);
 }
 
 static
@@ -547,7 +556,9 @@ MiCaptureAddressRequirements(
     _Out_ PULONG64 LowestAddress,
     _Out_ PULONG64 HighestEndingAddress,
     _Out_ PULONG64 Alignment,
-    _Out_ PBOOLEAN EcCode)
+    _Out_ PBOOLEAN EcCode,
+    _Out_ PBOOLEAN NumaNodePresent,
+    _Out_ PULONG64 NumaNode)
 {
     NTSTATUS Status = STATUS_SUCCESS;
     ULONG Present = 0;
@@ -557,6 +568,8 @@ MiCaptureAddressRequirements(
     *HighestEndingAddress = 0;
     *Alignment = 0;
     *EcCode = FALSE;
+    *NumaNodePresent = FALSE;
+    *NumaNode = 0;
 
     _SEH2_TRY
     {
@@ -577,7 +590,11 @@ MiCaptureAddressRequirements(
             Present |= 1u << Parameter.Type;
 
             if (Parameter.Type == MemExtendedParameterNumaNode)
+            {
+                *NumaNodePresent = TRUE;
+                *NumaNode = Parameter.ULong64;
                 continue;
+            }
 
             if (Parameter.Type == MemExtendedParameterAttributeFlags)
             {
@@ -657,7 +674,9 @@ NtAllocateVirtualMemoryEx(
     ULONG64 LowestAddress = 0;
     ULONG64 HighestEndingAddress = 0;
     ULONG64 Alignment = 0;
+    ULONG64 NumaNode = 0;
     BOOLEAN EcCode = FALSE;
+    BOOLEAN NumaNodePresent = FALSE;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -668,7 +687,8 @@ NtAllocateVirtualMemoryEx(
             return STATUS_INVALID_PARAMETER;
 
         Status = MiCaptureAddressRequirements(ExtendedParameters, ExtendedParameterCount, &LowestAddress,
-                                              &HighestEndingAddress, &Alignment, &EcCode);
+                                              &HighestEndingAddress, &Alignment, &EcCode, &NumaNodePresent,
+                                              &NumaNode);
         if (!NT_SUCCESS(Status))
             return Status;
     }
@@ -678,7 +698,8 @@ NtAllocateVirtualMemoryEx(
     }
 
     return MiAllocateVirtualMemoryNt(ProcessHandle, BaseAddress, 0, RegionSize, AllocationType, PageProtection,
-                                     LowestAddress, HighestEndingAddress, Alignment, EcCode, TRUE);
+                                     LowestAddress, HighestEndingAddress, Alignment, EcCode, NumaNodePresent,
+                                     NumaNode, TRUE);
 }
 
 NTSTATUS
