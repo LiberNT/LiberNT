@@ -51,11 +51,18 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpvReserved)
         DisableThreadLibraryCalls(hInstDLL);
         MSACM_hHeap = HeapCreate(0, 0x10000, 0);
         MSACM_hInstance32 = hInstDLL;
+#ifdef __REACTOS__
+        MSACM_InitializeDriverList();
+#else
         MSACM_RegisterAllDrivers();
+#endif
 	break;
     case DLL_PROCESS_DETACH:
         MSACM_UnregisterAllDrivers();
         if (lpvReserved) break;
+#ifdef __REACTOS__
+        MSACM_DeleteDriverList();
+#endif
         HeapDestroy(MSACM_hHeap);
 	break;
     default:

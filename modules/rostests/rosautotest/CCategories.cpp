@@ -455,6 +455,7 @@ static const CATEGORY_RULE Rules[] =
     { "appsmoke_apitest", "*", "system:appcompat" },
     { "cfg_apitest", "*", "system:compat" },
     { "utildll_apitest", "*", "system:compat" },
+    { "msacm32_apitest", "*", "system:compat" },
     { "version_apitest", "*", "system:compat" },
     { "version_winetest", "*", "system:compat" },
     { "reg_winetest", "*", "system:registry" },

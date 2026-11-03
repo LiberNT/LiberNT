@@ -121,6 +121,10 @@ MMRESULT WINAPI acmDriverAddW(PHACMDRIVERID phadid, HINSTANCE hinstModule,
 	return MMSYSERR_INVALFLAG;
     }
 
+#ifdef __REACTOS__
+    MSACM_GetFirstDriverID();
+#endif
+
     switch (fdwAdd & ACM_DRIVERADDF_TYPEMASK) {
     case ACM_DRIVERADDF_NAME:
         /*
