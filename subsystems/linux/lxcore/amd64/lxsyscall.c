@@ -605,36 +605,15 @@ static LX_SYSCALL_ENTRY LxAmd64Syscalls[] =
     LX_ENTRY(331, LxSysPkeyFree, "pkey_free"),
     LX_ENTRY(332, LxSysStatx, "statx"),
     LX_ENTRY(334, NULL, "rseq"),
-    LX_ENTRY(424, LxSysPidfdSendSignal, "pidfd_send_signal"),
-    LX_ENTRY(428, LxSysOpenTree, "open_tree"),
-    LX_ENTRY(429, LxSysMoveMount, "move_mount"),
-    LX_ENTRY(430, LxSysFsopen, "fsopen"),
-    LX_ENTRY(431, LxSysFsconfig, "fsconfig"),
-    LX_ENTRY(432, LxSysFsmount, "fsmount"),
-    LX_ENTRY(433, NULL, "fspick"),
-    LX_ENTRY(434, LxSysPidfdOpen, "pidfd_open"),
-    LX_ENTRY(435, LxSysClone3, "clone3"),
-    LX_ENTRY(436, LxSysCloseRange, "close_range"),
-    LX_ENTRY(437, LxSysOpenat2, "openat2"),
-    LX_ENTRY(438, LxSysPidfdGetfd, "pidfd_getfd"),
-    LX_ENTRY(439, LxSysFaccessat2, "faccessat2"),
-    LX_ENTRY(441, LxSysEpollPwait2, "epoll_pwait2"),
-    LX_ENTRY(442, LxSysMountSetattr, "mount_setattr"),
-    LX_ENTRY(449, LxSysFutexWaitv, "futex_waitv"),
-    LX_ENTRY(452, LxSysFchmodat2, "fchmodat2"),
-    LX_ENTRY(454, LxSysFutexWake, "futex_wake"),
-    LX_ENTRY(455, LxSysFutexWait, "futex_wait"),
-    LX_ENTRY(456, LxSysFutexRequeue, "futex_requeue"),
-    LX_ENTRY(463, LxSysSetxattrat, "setxattrat"),
-    LX_ENTRY(464, LxSysGetxattrat, "getxattrat"),
-    LX_ENTRY(465, LxSysListxattrat, "listxattrat"),
-    LX_ENTRY(466, LxSysRemovexattrat, "removexattrat"),
 };
 
 PLX_SYSCALL_ENTRY
 LxAmd64SyscallEntry(
     _In_ ULONG Number)
 {
+    /* Linux numbers the system calls from 424 on the same way on every architecture */
+    if (Number >= 424)
+        return LxGenericSyscallEntry(Number);
     if (Number >= RTL_NUMBER_OF(LxAmd64Syscalls))
         return NULL;
     return &LxAmd64Syscalls[Number];
