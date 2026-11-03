@@ -47,7 +47,7 @@ START_TEST(IoIommu)
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (NT_SUCCESS(Status))
     {
-        ok_eq_size(Interface.Size, 0x78);
+        ok_eq_size(Interface.Size, FIELD_OFFSET(DMA_IOMMU_INTERFACE_EX, V1) + sizeof(Interface.V1));
         ok_eq_ulong(Interface.Version, 1);
         Routines = (PVOID *)&Interface.V1;
         for (Index = 0; Index != 13; Index++)
@@ -83,7 +83,8 @@ START_TEST(IoIommu)
         }
 
         ok_eq_hex(Status, STATUS_SUCCESS);
-        ok_eq_size(Interface.Size, Version == 2 ? 0xC0 : 0xE8);
+        ok_eq_size(Interface.Size, Version == 2 ? FIELD_OFFSET(DMA_IOMMU_INTERFACE_EX, V2) + sizeof(Interface.V2) :
+                                                  FIELD_OFFSET(DMA_IOMMU_INTERFACE_EX, V3) + sizeof(Interface.V3));
         ok_eq_ulong(Interface.Version, Version);
 
         Routines = Version == 2 ? (PVOID *)&Interface.V2 :
