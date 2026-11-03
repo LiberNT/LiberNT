@@ -13,6 +13,7 @@ add_library(dwmcore MODULE
     ../../../base/system/dwm/framebuttons.c
     ../../../base/system/dwm/settings.c
     ../../../base/system/dwm/dxsurface.c
+    ../../../base/system/dwm/dxreadback.cpp
     ../../../base/system/dwm/gpucomp.c
     ../../../base/system/dwm/gpud3d.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/dwmcore.def)

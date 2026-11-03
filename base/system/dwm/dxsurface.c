@@ -563,6 +563,24 @@ DwmDxGetSurfaceSnapshot(const DWM_WIN *Window)
 }
 
 const BYTE *
+DwmDxGetSurfacePixels(const DWM_WIN *Window, ULONG *Pitch)
+{
+    *Pitch = 0;
+    if (Window == NULL || Window->DxGlobalShare == 0)
+        return NULL;
+    if (Window->DxPitch == 0)
+        return DwmDxReadbackSurface(Window, Pitch);
+    *Pitch = Window->DxPitch;
+    return DwmDxGetSurfaceSnapshot(Window);
+}
+
+BOOL
+DwmDxSurfaceReadBack(const DWM_WIN *Window)
+{
+    return Window != NULL && (Window->DxPitch != 0 || DwmDxReadbackCurrent(Window));
+}
+
+const BYTE *
 DwmDxGetRedirectionSnapshot(const DWM_WIN *Window)
 {
     DWM_DX_SOURCE Source;
@@ -871,6 +889,7 @@ DwmDxCleanupSurfaces(void)
     /* Release locked mappings before destroying their owning devices. */
     for (Index = 0; Index < DWM_DX_MAX_VIEWS; ++Index)
         DwmDxDropView(&g_Views[Index]);
+    DwmDxReadbackCleanup();
 
     /* Composition has stopped, so no retained frame is read any more. */
     for (Index = 0; Index < ARRAYSIZE(g_HeldFrames); ++Index)

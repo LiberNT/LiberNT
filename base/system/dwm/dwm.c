@@ -3603,7 +3603,7 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
 static void
 DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
                       LONG clipL, LONG clipT, LONG clipR, LONG clipB,
-                      const BYTE *pix, const BYTE *dxpix, const DWM_WIN *w,
+                      const BYTE *pix, const BYTE *dxpix, ULONG dxPitch, const DWM_WIN *w,
                       const ULONG *backdropBase)
 {
     LONG dstX = w->AnimX - g_originX;
@@ -3646,7 +3646,7 @@ DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
         if (cx < 1) cx = 1;
         if (cy < 1) cy = 1;
         DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
-                      dxpix, (LONG)w->DxWidth, (LONG)w->DxHeight, w->DxPitch,
+                      dxpix, (LONG)w->DxWidth, (LONG)w->DxHeight, dxPitch,
                       dstX + (LONG)((LONGLONG)w->DxClientX * drawCx / w->cx),
                       dstY + (LONG)((LONGLONG)w->DxClientY * drawCy / w->cy),
                       cx, cy, alpha, NULL, NULL, 0);
@@ -4604,6 +4604,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                 {
                     const BYTE *pix;
                     const BYTE *dxpix;
+                    ULONG dxPitch;
                     const ULONG *backdropBase;
                     const RECTL *windowBlurRects = NULL;
                     RECTL Cover;
@@ -4650,8 +4651,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                         DwmStatCounter(&stgA);
                         DwmBlitWindowAnimated((ULONG *)g_compBits, g_W,
                                               cl, ct, cr, cb, pix,
-                                              DwmDxGetSurfaceSnapshot(&wins[i]),
-                                              &wins[i], animatedBackdrop);
+                                              DwmDxGetSurfacePixels(&wins[i], &dxPitch),
+                                              dxPitch, &wins[i], animatedBackdrop);
                         DwmBlitReplaced((ULONG *)g_compBits, g_W, cl, ct, cr, cb, &wins[i]);
                         DwmStatCounter(&stgB);
                         if (g_frameStats)
@@ -4690,7 +4691,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     if (g_frameStats)
                         g_statBlitTicks += (ULONGLONG)(stgA.QuadPart - stgB.QuadPart);
 
-                    dxpix = DwmDxGetSurfaceSnapshot(&wins[i]);
+                    dxpix = DwmDxGetSurfacePixels(&wins[i], &dxPitch);
                     if (dxpix != NULL)
                     {
                         DWM_WIN client = wins[i];
@@ -4703,7 +4704,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                         client.y += wins[i].DxClientY;
                         client.cx = (LONG)wins[i].DxWidth;
                         client.cy = (LONG)wins[i].DxHeight;
-                        client.Stride = wins[i].DxPitch;
+                        client.Stride = dxPitch;
                         if (client.BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT)
                             client.BackdropType = 0;
                         if (ClipL < ClipR && ClipT < ClipB)
@@ -4769,9 +4770,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                         DptCount(&g_DwmPresentTrace, DPT_FRAME, (ULONGLONG)(pr - pl) * (pb - pt) * 4);
                         for (i = 0; i < hdr->Count; ++i)
                         {
-                            /* Native GPU textures have no linear CPU view.
-                             * A software frame cannot acknowledge their use. */
-                            if (wins[i].DxPitch != 0)
+                            /* A native GPU texture is used only once read back. */
+                            if (DwmDxSurfaceReadBack(&wins[i]))
                                 DwmDxAcknowledgeSurface(&wins[i]);
                         }
                         NtUserCallOneParam(0, DWM_ROUTINE_PRESENTED);

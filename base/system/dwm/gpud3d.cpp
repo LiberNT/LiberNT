@@ -1156,18 +1156,20 @@ BOOL ForeignAdapter(const DWM_WIN *Window)
 
 Texture *ImportForeign(const DWM_WIN *Window, DXGI_FORMAT Format)
 {
-    if (Window->DxUpdateId == 0 || Window->DxPitch < Window->DxWidth * sizeof(ULONG))
+    if (Window->DxUpdateId == 0)
         return NULL;
     Surface *Slot = FindSurface(Window, TRUE);
     if (Slot->Image.Resource == NULL || Slot->Share != Window->DxGlobalShare ||
         Slot->Generation != Window->DxGeneration || Slot->UpdateId != Window->DxUpdateId)
     {
-        const BYTE *Pixels = DwmDxGetSurfaceSnapshot(Window);
-        if (Pixels == NULL ||
-            !EnsureTexture(Slot->Image, (LONG)Window->DxWidth, (LONG)Window->DxHeight, FALSE, Format))
+        ULONG Pitch;
+        const BYTE *Pixels = DwmDxGetSurfacePixels(Window, &Pitch);
+        if (Pixels == NULL || Pitch < Window->DxWidth * sizeof(ULONG) ||
+            !EnsureTexture(Slot->Image, (LONG)Window->DxWidth, (LONG)Window->DxHeight, FALSE,
+                           Window->DxPitch == 0 ? DXGI_FORMAT_B8G8R8A8_UNORM : Format))
             return NULL;
         UnbindTextures();
-        State.Context->UpdateSubresource(Slot->Image.Resource, 0, NULL, Pixels, Window->DxPitch, 0);
+        State.Context->UpdateSubresource(Slot->Image.Resource, 0, NULL, Pixels, Pitch, 0);
         State.WorkPending = TRUE;
         Slot->Share = Window->DxGlobalShare;
         Slot->Generation = Window->DxGeneration;
