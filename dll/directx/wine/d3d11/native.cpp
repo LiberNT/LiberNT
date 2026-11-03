@@ -230,6 +230,8 @@ public:
     HRESULT (WINAPI *signal_fence)(HANDLE, D3DKMT_HANDLE, UINT64) = NULL;
     HRESULT (WINAPI *wait_fence)(HANDLE, D3DKMT_HANDLE, UINT64) = NULL;
     HRESULT (WINAPI *open_sync_from_nt_handle)(HANDLE, HANDLE, D3DKMT_HANDLE *, PVOID *, D3DGPU_VIRTUAL_ADDRESS *) = NULL;
+    HRESULT (WINAPI *set_context_priority)(HANDLE, INT) = NULL;
+    INT gpu_thread_priority = 0;
     LONG references = 1;
     LONG total_references = 1;
     LONG children = 0;
@@ -2243,6 +2245,8 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     wait_fence = reinterpret_cast<decltype(wait_fence)>(GetProcAddress(runtime, "D3DUmdRtWaitFence"));
     open_sync_from_nt_handle = reinterpret_cast<decltype(open_sync_from_nt_handle)>(
             GetProcAddress(runtime, "D3DUmdRtOpenSyncObjectFromNtHandle"));
+    set_context_priority = reinterpret_cast<decltype(set_context_priority)>(
+            GetProcAddress(runtime, "D3DUmdRtSetContextSchedulingPriority"));
     if (!create_callbacks || !destroy_callbacks || !register_resource || !get_resource_handles
             || !adopt_resource || !release_resource) return E_NOINTERFACE;
     /* D3D10/11 AllocateCb uses D3DDDI_ALLOCATIONINFO; pAllocationInfo2 is
@@ -2641,8 +2645,21 @@ HRESULT STDMETHODCALLTYPE NativeDevice::OpenSharedResourceByName(LPCWSTR name, D
 }
 HRESULT STDMETHODCALLTYPE NativeDevice::SetExceptionMode(UINT mode) { if (mode & ~D3D11_RAISE_FLAG_DRIVER_INTERNAL_ERROR) return E_INVALIDARG; exception_mode = mode; return S_OK; }
 UINT STDMETHODCALLTYPE NativeDevice::GetExceptionMode() { return exception_mode; }
-HRESULT STDMETHODCALLTYPE NativeDevice::SetGPUThreadPriority(INT) { return E_NOTIMPL; }
-HRESULT STDMETHODCALLTYPE NativeDevice::GetGPUThreadPriority(INT *out) { if (!out) return E_INVALIDARG; *out = 0; return E_NOTIMPL; }
+HRESULT STDMETHODCALLTYPE NativeDevice::SetGPUThreadPriority(INT priority)
+{
+    if (priority < -7 || priority > 7) return E_INVALIDARG;
+    if (!set_context_priority) return E_NOTIMPL;
+    NativeLock guard(this);
+    HRESULT hr = set_context_priority(runtime_device, priority);
+    if (SUCCEEDED(hr)) gpu_thread_priority = priority;
+    return hr;
+}
+HRESULT STDMETHODCALLTYPE NativeDevice::GetGPUThreadPriority(INT *out)
+{
+    if (!out) return E_INVALIDARG;
+    *out = gpu_thread_priority;
+    return S_OK;
+}
 
 HRESULT STDMETHODCALLTYPE NativeDevice::SetMaximumFrameLatency(UINT latency)
 {

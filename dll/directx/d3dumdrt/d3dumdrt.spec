@@ -11,3 +11,4 @@
 @ stdcall D3DUmdRtSignalFence(ptr long int64)
 @ stdcall D3DUmdRtWaitFence(ptr long int64)
 @ stdcall D3DUmdRtOpenSyncObjectFromNtHandle(ptr ptr ptr ptr ptr)
+@ stdcall D3DUmdRtSetContextSchedulingPriority(ptr long)

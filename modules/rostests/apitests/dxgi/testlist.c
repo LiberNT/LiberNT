@@ -9,6 +9,7 @@ extern void func_dwm_render(void);
 extern void func_completion_event(void);
 extern void func_shared_fence(void);
 extern void func_shared_name(void);
+extern void func_gpu_priority(void);
 extern void func_counters(void);
 extern void func_query_order(void);
 extern void func_composition(void);
@@ -35,6 +36,7 @@ const struct test winetest_testlist[] =
     { "completion_event", func_completion_event },
     { "shared_fence", func_shared_fence },
     { "shared_name", func_shared_name },
+    { "gpu_priority", func_gpu_priority },
     { "counters", func_counters },
     { "query_order", func_query_order },
     { "composition", func_composition },

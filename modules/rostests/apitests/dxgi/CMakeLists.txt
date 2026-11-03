@@ -12,6 +12,7 @@ add_executable(dxgi_apitest
     completion_event.cpp
     shared_fence.cpp
     shared_name.cpp
+    gpu_priority.cpp
     counters.cpp
     query_order.cpp
     buffer_copy.cpp

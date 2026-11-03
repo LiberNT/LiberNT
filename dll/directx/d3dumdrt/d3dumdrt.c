@@ -118,6 +118,7 @@ typedef struct _D3DUMDRT_DEVICE
 #if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WDDM2_1_2)
     PD3DUMDRT_SYNC_TOKEN     SyncTokens;
 #endif
+    INT                      SchedulingPriority;
     struct _D3DUMDRT_DEVICE *Next;
 } D3DUMDRT_DEVICE, *PD3DUMDRT_DEVICE;
 
@@ -143,6 +144,7 @@ static PFND3DKMT_LOCK              pfnLock;
 static PFND3DKMT_UNLOCK            pfnUnlock;
 static PFND3DKMT_RENDER            pfnRender;
 static PFND3DKMT_CREATECONTEXT     pfnCreateContext;
+static PFND3DKMT_SETCONTEXTSCHEDULINGPRIORITY pfnSetContextSchedulingPriority;
 static PFND3DKMT_DESTROYCONTEXT    pfnDestroyContext;
 static PFND3DKMT_ESCAPE            pfnEscape;
 static PFND3DKMT_SETDISPLAYMODE    pfnSetDisplayMode;
@@ -213,6 +215,7 @@ static BOOL D3DUmdRtResolveProcs(VOID)
     RESOLVE(Unlock, UNLOCK);
     RESOLVE(Render, RENDER);
     RESOLVE(CreateContext, CREATECONTEXT);
+    RESOLVE(SetContextSchedulingPriority, SETCONTEXTSCHEDULINGPRIORITY);
     RESOLVE(DestroyContext, DESTROYCONTEXT);
     RESOLVE(Escape, ESCAPE);
     RESOLVE(SetDisplayMode, SETDISPLAYMODE);
@@ -349,18 +352,62 @@ D3DUmdRtEndOverlayCall(
     LeaveCriticalSection(&D3DUmdRtDeviceLock);
 }
 
+static HRESULT D3DUmdRtStatusToHresult(NTSTATUS Status);
+
 static VOID
 D3DUmdRtTrackContext(
     PD3DUMDRT_DEVICE Device,
     PD3DUMDRT_CONTEXT Context,
     D3DKMT_HANDLE hContext)
 {
+    INT Priority;
+
     Context->hContext = hContext;
     EnterCriticalSection(&D3DUmdRtDeviceLock);
     Context->Next = Device->Contexts;
     Device->Contexts = Context;
     InterlockedIncrement(&Device->LiveObjectCount);
+    Priority = Device->SchedulingPriority;
     LeaveCriticalSection(&D3DUmdRtDeviceLock);
+    if (Priority != 0 && pfnSetContextSchedulingPriority != NULL)
+    {
+        D3DKMT_SETCONTEXTSCHEDULINGPRIORITY Set;
+
+        Set.hContext = hContext;
+        Set.Priority = Priority;
+        (VOID)pfnSetContextSchedulingPriority(&Set);
+    }
+}
+
+/* IDXGIDevice::SetGPUThreadPriority: every context of the device, present and future. */
+HRESULT WINAPI
+D3DUmdRtSetContextSchedulingPriority(HANDLE hRuntimeDevice, INT Priority)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hRuntimeDevice);
+    D3DKMT_SETCONTEXTSCHEDULINGPRIORITY Set;
+    PD3DUMDRT_CONTEXT Context;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Device == NULL || Priority < -7 || Priority > 7)
+        return E_INVALIDARG;
+    if (pfnSetContextSchedulingPriority == NULL)
+        return E_NOTIMPL;
+    EnterCriticalSection(&D3DUmdRtDeviceLock);
+    Device->SchedulingPriority = Priority;
+    for (Context = Device->Contexts; Context != NULL; Context = Context->Next)
+    {
+        NTSTATUS ContextStatus;
+
+        if (Context->Destroying)
+            continue;
+        Set.hContext = Context->hContext;
+        Set.Priority = Priority;
+        ContextStatus = pfnSetContextSchedulingPriority(&Set);
+        if (ContextStatus < 0 && Status >= 0)
+            Status = ContextStatus;
+    }
+    LeaveCriticalSection(&D3DUmdRtDeviceLock);
+    return D3DUmdRtStatusToHresult(Status);
 }
 
 static HRESULT
