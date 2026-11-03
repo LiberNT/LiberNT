@@ -568,6 +568,11 @@ static void test_device_interfaces(void)
     }
     error = GetLastError();
     ok(error == ERROR_NO_MORE_ITEMS, "Expected error %u, got %lu.\n", ERROR_NO_MORE_ITEMS, error);
+#ifdef __REACTOS__
+    if (!device_idx)
+        skip("No display adapter is present.\n");
+    else
+#endif
     ok(device_idx > 0, "Expected at least one GPU.\n");
     SetupDiDestroyDeviceInfoList(devinfo);
 

@@ -5367,6 +5367,11 @@ static void test_device_enum(void)
 
     i = 0;
     next = SetupDiEnumDeviceInfo(set, i, &devinfodata);
+#ifdef __REACTOS__
+    if (!next && GetLastError() == ERROR_NO_MORE_ITEMS)
+        skip("No display adapter is present.\n");
+    else
+#endif
     ok(next, "Failed getting at least one element from SetupDiEnumDeviceInfo with error %lu.\n", GetLastError());
 
     while (next)
