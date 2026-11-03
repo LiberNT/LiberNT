@@ -2074,6 +2074,15 @@ RETURN_CODE WCMD_remove_dir(WCHAR *args)
           if (!ok) return ERROR_INVALID_FUNCTION;
         }
 
+#ifdef __REACTOS__
+        if (GetFileAttributesW(thisArg) == INVALID_FILE_ATTRIBUTES)
+        {
+            RETURN_CODE return_code = GetLastError();
+            WCMD_print_error();
+            return return_code;
+        }
+
+#endif
         /* Do the delete */
         lpDir.hwnd   = NULL;
         lpDir.pTo    = NULL;
