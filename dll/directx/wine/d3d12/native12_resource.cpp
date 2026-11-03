@@ -332,6 +332,14 @@ static void Native12ResourceArguments(const D3D12_RESOURCE_DESC *desc, D3D12_RES
     args->InitialBarrierLayout = Native12InitialLayout(desc, initial_state);
 }
 
+static void Native12ApplyCreationLayout(const Native12CreationLayout *layout, D3D12DDIARG_CREATERESOURCE_0109 *args)
+{
+    if (!layout) return;
+    args->InitialBarrierLayout = static_cast<D3D12DDI_BARRIER_LAYOUT>(layout->layout);
+    args->NumCastableFormats = layout->castable_format_count;
+    args->pCastableFormats = layout->castable_formats;
+}
+
 UINT Native12Resource::SubresourceCount() const
 {
     Native12FormatInfo format = {};
@@ -361,6 +369,7 @@ HRESULT Native12Resource::Initialize(const D3D12_HEAP_PROPERTIES *properties, D3
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
     Native12ResourceArguments(&desc, initial_state, &resource_args);
+    Native12ApplyCreationLayout(creation_layout, &resource_args);
     memcpy(&resource_args.SamplerFeedbackMipRegion, &mip_region, sizeof(resource_args.SamplerFeedbackMipRegion));
 
     UINT optimization = D3D12DDI_RESOURCE_OPTIMIZATION_FLAG_NONE;
@@ -683,6 +692,7 @@ HRESULT Native12Resource::InitializeReserved(const D3D12_RESOURCE_DESC *input, D
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
     Native12ResourceArguments(&desc, initial_state, &resource_args);
+    Native12ApplyCreationLayout(creation_layout, &resource_args);
     D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session = {};
     D3D12DDI_HEAP_AND_RESOURCE_SIZES sizes = device->functions.pfnCalcPrivateHeapAndResourceSizes(
             device->driver_device, NULL, &resource_args, session);
@@ -733,6 +743,7 @@ HRESULT Native12Resource::InitializePlaced(Native12Heap *parent, UINT64 offset, 
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
     Native12ResourceArguments(&desc, initial_state, &resource_args);
+    Native12ApplyCreationLayout(creation_layout, &resource_args);
     memcpy(&resource_args.SamplerFeedbackMipRegion, &mip_region, sizeof(resource_args.SamplerFeedbackMipRegion));
     D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 allocation = {};
     device->functions.pfnCheckResourceAllocationInfo(device->driver_device, &resource_args,
@@ -1224,7 +1235,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource(const D3D12_HE
 
 HRESULT Native12Device::CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
         const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value,
-        const D3D12_MIP_REGION *mip_region, REFIID iid, void **out)
+        const D3D12_MIP_REGION *mip_region, REFIID iid, void **out, const Native12CreationLayout *layout)
 {
     if (!properties || !desc) return E_INVALIDARG;
     if (out) *out = NULL;
@@ -1240,7 +1251,9 @@ HRESULT Native12Device::CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIE
     Native12Resource *resource = new Native12Resource(this);
     if (!resource) return E_OUTOFMEMORY;
     if (mip_region) resource->mip_region = *mip_region;
+    resource->creation_layout = layout;
     hr = resource->Initialize(properties, flags, desc, initial_state, clear_value);
+    resource->creation_layout = NULL;
     if (SUCCEEDED(hr)) DredTrack(resource);
     if (SUCCEEDED(hr)) hr = out ? resource->QueryInterface(iid, out) : S_FALSE;
     resource->Release();

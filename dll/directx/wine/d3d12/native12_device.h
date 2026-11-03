@@ -26,6 +26,13 @@ struct Native12BackgroundWork
 
 DWORD WINAPI Native12BackgroundWorker(void *parameter);
 
+struct Native12CreationLayout
+{
+    D3D12_BARRIER_LAYOUT layout;
+    UINT32 castable_format_count;
+    const DXGI_FORMAT *castable_formats;
+};
+
 class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2,
         public ID3D12DeviceConfiguration1, public ID3D12VideoDevice3, public Native12Allocation
 {
@@ -76,6 +83,7 @@ public:
     D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_11_0;
     UINT ddi_build = NATIVE12_DDI_BUILD;
     D3D12DDI_D3D12_OPTIONS_DATA_0089 options = {};
+    D3D12DDI_OPTIONS_DATA_0090 relaxed_casting = {};
     D3D12DDI_SHADER_CAPS_0084 shader_caps = {};
     D3D12DDI_ARCHITECTURE_INFO_DATA architecture = {};
     D3D12DDI_MEMORY_ARCHITECTURE_CAPS_0041 memory = {};
@@ -102,10 +110,14 @@ public:
     void BackgroundDone();
     HRESULT CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
             const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value,
-            const D3D12_MIP_REGION *mip_region, REFIID iid, void **out);
+            const D3D12_MIP_REGION *mip_region, REFIID iid, void **out,
+            const Native12CreationLayout *layout = NULL);
     HRESULT CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offset, const D3D12_RESOURCE_DESC *desc,
             D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value, const D3D12_MIP_REGION *mip_region,
-            REFIID iid, void **out);
+            REFIID iid, void **out,
+            const Native12CreationLayout *layout = NULL);
+    HRESULT CreateReservedResourceRegion(const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state,
+            const D3D12_CLEAR_VALUE *clear_value, REFIID iid, void **out, const Native12CreationLayout *layout);
     D3D12_RESOURCE_ALLOCATION_INFO *GetResourceAllocationInfoRegion(D3D12_RESOURCE_ALLOCATION_INFO *out, UINT count,
             const D3D12_RESOURCE_DESC *descs, const D3D12_MIP_REGION *mip_region);
     D3D12_SAMPLER_FEEDBACK_TIER SamplerFeedbackTier() const;
@@ -149,6 +161,12 @@ public:
     ~Native12Device();
     HRESULT Initialize(IDXGIAdapter *, D3D_FEATURE_LEVEL);
     HRESULT QueryCaps(D3D12DDICAPS_TYPE, void *, void *, UINT);
+    HRESULT ValidateCreationLayout(const D3D12_RESOURCE_DESC *desc, D3D12_BARRIER_LAYOUT layout, UINT32 castable_count,
+            const DXGI_FORMAT *castable_formats);
+    bool EnhancedBarriersSupported() const
+    {
+        return ddi_build >= D3D12DDI_BUILD_VERSION_0094 && options.EnhancedBarriersSupported;
+    }
     HRESULT QueryFeature106(D3D12DDICAPS_TYPE type, void *data, UINT size, BOOL *supported);
     HRESULT QueryPlacedResourceSupport(D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO *caps);
     HRESULT WaitForPaging(UINT64 fence_value);

@@ -807,6 +807,8 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     if (FAILED(hr = FillListTables(list_table_size))) return hr;
 
     QueryCaps(D3D12DDICAPS_TYPE_D3D12_OPTIONS, NULL, &options, sizeof(options));
+    if (ddi_build >= D3D12DDI_BUILD_VERSION_0090)
+        QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0090, NULL, &relaxed_casting, sizeof(relaxed_casting));
     background_supported = options.BackgroundProcessingSupported && functions.pfnSetBackgroundProcessingMode;
     if (background_supported)
     {
@@ -1703,8 +1705,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS12 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             caps->MSPrimitivesPipelineStatisticIncludesCulledPrimitives = D3D12_TRI_STATE_UNKNOWN;
-            caps->EnhancedBarriersSupported = FALSE;
-            caps->RelaxedFormatCastingSupported = FALSE;
+            caps->EnhancedBarriersSupported = EnhancedBarriersSupported();
+            caps->RelaxedFormatCastingSupported = EnhancedBarriersSupported() && relaxed_casting.RelaxedFormatCastingSupported;
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS13:

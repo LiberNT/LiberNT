@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     allocator.cpp
+    barrier.cpp
     budget.cpp
     bgwork.cpp
     blend.cpp

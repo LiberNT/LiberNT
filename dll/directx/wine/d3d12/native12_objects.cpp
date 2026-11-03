@@ -1077,18 +1077,122 @@ void STDMETHODCALLTYPE Native12CommandList::RSSetShadingRateImage(ID3D12Resource
 
 void STDMETHODCALLTYPE Native12CommandList::DispatchMesh(UINT, UINT, UINT) {}
 
+#define NATIVE12_SAME_LAYOUT(name) static_assert(static_cast<UINT>(D3D12_BARRIER_LAYOUT_##name) \
+        == static_cast<UINT>(D3D12DDI_BARRIER_LAYOUT_##name), "barrier layout " #name)
+NATIVE12_SAME_LAYOUT(UNDEFINED);
+NATIVE12_SAME_LAYOUT(COMMON);
+NATIVE12_SAME_LAYOUT(PRESENT);
+NATIVE12_SAME_LAYOUT(GENERIC_READ);
+NATIVE12_SAME_LAYOUT(RENDER_TARGET);
+NATIVE12_SAME_LAYOUT(UNORDERED_ACCESS);
+NATIVE12_SAME_LAYOUT(DEPTH_STENCIL_WRITE);
+NATIVE12_SAME_LAYOUT(DEPTH_STENCIL_READ);
+NATIVE12_SAME_LAYOUT(SHADER_RESOURCE);
+NATIVE12_SAME_LAYOUT(COPY_SOURCE);
+NATIVE12_SAME_LAYOUT(COPY_DEST);
+NATIVE12_SAME_LAYOUT(RESOLVE_SOURCE);
+NATIVE12_SAME_LAYOUT(RESOLVE_DEST);
+NATIVE12_SAME_LAYOUT(SHADING_RATE_SOURCE);
+NATIVE12_SAME_LAYOUT(VIDEO_DECODE_READ);
+NATIVE12_SAME_LAYOUT(VIDEO_DECODE_WRITE);
+NATIVE12_SAME_LAYOUT(VIDEO_PROCESS_READ);
+NATIVE12_SAME_LAYOUT(VIDEO_PROCESS_WRITE);
+NATIVE12_SAME_LAYOUT(VIDEO_ENCODE_READ);
+NATIVE12_SAME_LAYOUT(VIDEO_ENCODE_WRITE);
+NATIVE12_SAME_LAYOUT(DIRECT_QUEUE_COMMON);
+NATIVE12_SAME_LAYOUT(DIRECT_QUEUE_GENERIC_READ);
+NATIVE12_SAME_LAYOUT(DIRECT_QUEUE_UNORDERED_ACCESS);
+NATIVE12_SAME_LAYOUT(DIRECT_QUEUE_SHADER_RESOURCE);
+NATIVE12_SAME_LAYOUT(DIRECT_QUEUE_COPY_SOURCE);
+NATIVE12_SAME_LAYOUT(DIRECT_QUEUE_COPY_DEST);
+NATIVE12_SAME_LAYOUT(COMPUTE_QUEUE_COMMON);
+NATIVE12_SAME_LAYOUT(COMPUTE_QUEUE_GENERIC_READ);
+NATIVE12_SAME_LAYOUT(COMPUTE_QUEUE_UNORDERED_ACCESS);
+NATIVE12_SAME_LAYOUT(COMPUTE_QUEUE_SHADER_RESOURCE);
+NATIVE12_SAME_LAYOUT(COMPUTE_QUEUE_COPY_SOURCE);
+NATIVE12_SAME_LAYOUT(COMPUTE_QUEUE_COPY_DEST);
+NATIVE12_SAME_LAYOUT(VIDEO_QUEUE_COMMON);
+#undef NATIVE12_SAME_LAYOUT
+static_assert(static_cast<UINT>(D3D12_BARRIER_TYPE_GLOBAL) == static_cast<UINT>(D3D12DDI_BARRIER_TYPE_GLOBAL), "global barrier");
+static_assert(static_cast<UINT>(D3D12_BARRIER_TYPE_TEXTURE) == static_cast<UINT>(D3D12DDI_BARRIER_TYPE_TEXTURE), "texture barrier");
+static_assert(static_cast<UINT>(D3D12_BARRIER_TYPE_BUFFER) == static_cast<UINT>(D3D12DDI_BARRIER_TYPE_BUFFER), "buffer barrier");
+static_assert(sizeof(D3D12_BARRIER_SUBRESOURCE_RANGE) == sizeof(D3D12DDI_BARRIER_SUBRESOURCE_RANGE_0088), "subresource range");
+
 void STDMETHODCALLTYPE Native12CommandList::Barrier(UINT32 group_count, const D3D12_BARRIER_GROUP *groups)
 {
+    D3D12DDIARG_BARRIER_0094 local[16];
+    D3D12DDIARG_BARRIER_0094 *barriers = local;
+    UINT32 total = 0, index = 0;
+
     Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_BARRIER);
     if (RejectInBundle()) return;
     for (UINT32 i = 0; i < group_count; ++i)
     {
-        if (groups[i].NumBarriers)
+        if (groups[i].Type > D3D12_BARRIER_TYPE_BUFFER)
         {
             if (SUCCEEDED(error)) error = E_FAIL;
             return;
         }
+        total += groups[i].NumBarriers;
     }
+    if (!total) return;
+    /* TODO: CEnhancedBarrierValidator rejects invalid sync, access and layout combinations */
+    if (!device->EnhancedBarriersSupported() || !table->pfnBarrier)
+    {
+        if (SUCCEEDED(error)) error = E_FAIL;
+        return;
+    }
+    if (total > ARRAYSIZE(local)
+            && !(barriers = static_cast<D3D12DDIARG_BARRIER_0094 *>(HeapAlloc(GetProcessHeap(), 0, total * sizeof(*barriers)))))
+    {
+        if (SUCCEEDED(error)) error = E_OUTOFMEMORY;
+        return;
+    }
+    ZeroMemory(barriers, total * sizeof(*barriers));
+    for (UINT32 i = 0; i < group_count; ++i)
+    {
+        for (UINT32 j = 0; j < groups[i].NumBarriers; ++j, ++index)
+        {
+            D3D12DDIARG_BARRIER_0094 *out = &barriers[index];
+
+            out->Type = static_cast<D3D12DDI_BARRIER_TYPE>(groups[i].Type);
+            if (groups[i].Type == D3D12_BARRIER_TYPE_GLOBAL)
+            {
+                const D3D12_GLOBAL_BARRIER *in = &groups[i].pGlobalBarriers[j];
+
+                out->GlobalBarrier.SyncBefore = static_cast<D3D12DDI_BARRIER_SYNC>(in->SyncBefore);
+                out->GlobalBarrier.SyncAfter = static_cast<D3D12DDI_BARRIER_SYNC>(in->SyncAfter);
+                out->GlobalBarrier.AccessBefore = static_cast<D3D12DDI_BARRIER_ACCESS>(in->AccessBefore);
+                out->GlobalBarrier.AccessAfter = static_cast<D3D12DDI_BARRIER_ACCESS>(in->AccessAfter);
+            }
+            else if (groups[i].Type == D3D12_BARRIER_TYPE_TEXTURE)
+            {
+                const D3D12_TEXTURE_BARRIER *in = &groups[i].pTextureBarriers[j];
+
+                out->TextureBarrier.SyncBefore = static_cast<D3D12DDI_BARRIER_SYNC>(in->SyncBefore);
+                out->TextureBarrier.SyncAfter = static_cast<D3D12DDI_BARRIER_SYNC>(in->SyncAfter);
+                out->TextureBarrier.AccessBefore = static_cast<D3D12DDI_BARRIER_ACCESS>(in->AccessBefore);
+                out->TextureBarrier.AccessAfter = static_cast<D3D12DDI_BARRIER_ACCESS>(in->AccessAfter);
+                out->TextureBarrier.LayoutBefore = static_cast<D3D12DDI_BARRIER_LAYOUT>(in->LayoutBefore);
+                out->TextureBarrier.LayoutAfter = static_cast<D3D12DDI_BARRIER_LAYOUT>(in->LayoutAfter);
+                out->TextureBarrier.hResource = Native12UnwrapResource(in->pResource)->driver;
+                memcpy(&out->TextureBarrier.Subresources, &in->Subresources, sizeof(in->Subresources));
+                out->TextureBarrier.Flags = static_cast<D3D12DDI_TEXTURE_BARRIER_FLAGS_0088>(in->Flags);
+            }
+            else
+            {
+                const D3D12_BUFFER_BARRIER *in = &groups[i].pBufferBarriers[j];
+
+                out->BufferBarrier.SyncBefore = static_cast<D3D12DDI_BARRIER_SYNC>(in->SyncBefore);
+                out->BufferBarrier.SyncAfter = static_cast<D3D12DDI_BARRIER_SYNC>(in->SyncAfter);
+                out->BufferBarrier.AccessBefore = static_cast<D3D12DDI_BARRIER_ACCESS>(in->AccessBefore);
+                out->BufferBarrier.AccessAfter = static_cast<D3D12DDI_BARRIER_ACCESS>(in->AccessAfter);
+                out->BufferBarrier.hResource = Native12UnwrapResource(in->pResource)->driver;
+            }
+        }
+    }
+    table->pfnBarrier(driver, total, barriers);
+    if (barriers != local) HeapFree(GetProcessHeap(), 0, barriers);
 }
 
 void STDMETHODCALLTYPE Native12CommandList::OMSetFrontAndBackStencilRef(UINT front, UINT back)
@@ -1178,7 +1282,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource(ID3D12Heap *heap,
 
 HRESULT Native12Device::CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offset, const D3D12_RESOURCE_DESC *desc,
         D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value, const D3D12_MIP_REGION *mip_region,
-        REFIID iid, void **out)
+        REFIID iid, void **out, const Native12CreationLayout *layout)
 {
     if (out) *out = NULL;
     if (!heap || !desc) return E_INVALIDARG;
@@ -1188,8 +1292,10 @@ HRESULT Native12Device::CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offs
     Native12Resource *resource = new Native12Resource(this);
     if (!resource) return E_OUTOFMEMORY;
     if (mip_region) resource->mip_region = *mip_region;
+    resource->creation_layout = layout;
     hr = resource->InitializePlaced(static_cast<Native12Heap *>(heap), offset, desc, initial_state,
             clear_value);
+    resource->creation_layout = NULL;
     if (SUCCEEDED(hr)) DredTrack(resource);
     if (SUCCEEDED(hr)) hr = out ? resource->QueryInterface(iid, out) : S_FALSE;
     resource->Release();
@@ -1199,6 +1305,13 @@ HRESULT Native12Device::CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offs
 HRESULT STDMETHODCALLTYPE Native12Device::CreateReservedResource(const D3D12_RESOURCE_DESC *desc,
         D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value, REFIID iid, void **out)
 {
+    return CreateReservedResourceRegion(desc, initial_state, clear_value, iid, out, NULL);
+}
+
+HRESULT Native12Device::CreateReservedResourceRegion(const D3D12_RESOURCE_DESC *desc,
+        D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value, REFIID iid, void **out,
+        const Native12CreationLayout *layout)
+{
     if (out) *out = NULL;
     if (!desc) return E_INVALIDARG;
     if (desc->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER && desc->Layout != D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE)
@@ -1207,7 +1320,9 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateReservedResource(const D3D12_RES
     if (FAILED(hr)) return hr;
     Native12Resource *resource = new Native12Resource(this);
     if (!resource) return E_OUTOFMEMORY;
+    resource->creation_layout = layout;
     hr = resource->InitializeReserved(desc, initial_state, clear_value);
+    resource->creation_layout = NULL;
     if (SUCCEEDED(hr)) hr = out ? resource->QueryInterface(iid, out) : S_FALSE;
     resource->Release();
     return hr;

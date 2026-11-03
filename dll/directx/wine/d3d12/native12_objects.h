@@ -205,6 +205,7 @@ public:
     using Native12Child::Native12Child;
     ~Native12Resource();
     D3D12_MIP_REGION mip_region = {};
+    const Native12CreationLayout *creation_layout = NULL;
 
     HRESULT Initialize(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
             const D3D12_RESOURCE_DESC *input, D3D12_RESOURCE_STATES initial_state,

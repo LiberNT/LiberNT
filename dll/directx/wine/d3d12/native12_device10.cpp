@@ -251,26 +251,68 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandQueue1(const D3D12_COMMAN
     return CreateCommandQueue(desc, iid, out);
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource3(const D3D12_HEAP_PROPERTIES *, D3D12_HEAP_FLAGS,
-        const D3D12_RESOURCE_DESC1 *, D3D12_BARRIER_LAYOUT, const D3D12_CLEAR_VALUE *, ID3D12ProtectedResourceSession *,
-        UINT32, DXGI_FORMAT *, REFIID, void **out)
+/* TODO: ValidateResourceStateCore also checks the layout against the resource flags and heap type */
+HRESULT Native12Device::ValidateCreationLayout(const D3D12_RESOURCE_DESC *desc, D3D12_BARRIER_LAYOUT layout,
+        UINT32 castable_count, const DXGI_FORMAT *castable_formats)
 {
-    if (out) *out = NULL;
-    return E_INVALIDARG;
+    if (!EnhancedBarriersSupported()) return E_INVALIDARG;
+    if (castable_count && (!castable_formats || !relaxed_casting.RelaxedFormatCastingSupported)) return E_INVALIDARG;
+    if (desc->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+        return layout == D3D12_BARRIER_LAYOUT_UNDEFINED ? S_OK : E_INVALIDARG;
+    if ((desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS) && layout != D3D12_BARRIER_LAYOUT_COMMON)
+        return E_INVALIDARG;
+    return S_OK;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource2(ID3D12Heap *, UINT64, const D3D12_RESOURCE_DESC1 *,
-        D3D12_BARRIER_LAYOUT, const D3D12_CLEAR_VALUE *, UINT32, DXGI_FORMAT *, REFIID, void **out)
+static D3D12_RESOURCE_STATES Native12LayoutHeapState(D3D12_HEAP_TYPE type)
 {
-    if (out) *out = NULL;
-    return E_INVALIDARG;
+    if (type == D3D12_HEAP_TYPE_UPLOAD) return D3D12_RESOURCE_STATE_GENERIC_READ;
+    if (type == D3D12_HEAP_TYPE_READBACK) return D3D12_RESOURCE_STATE_COPY_DEST;
+    return D3D12_RESOURCE_STATE_COMMON;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::CreateReservedResource2(const D3D12_RESOURCE_DESC *, D3D12_BARRIER_LAYOUT,
-        const D3D12_CLEAR_VALUE *, ID3D12ProtectedResourceSession *, UINT32, DXGI_FORMAT *, REFIID, void **out)
+HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource3(const D3D12_HEAP_PROPERTIES *properties,
+        D3D12_HEAP_FLAGS flags, const D3D12_RESOURCE_DESC1 *desc, D3D12_BARRIER_LAYOUT layout,
+        const D3D12_CLEAR_VALUE *clear, ID3D12ProtectedResourceSession *session, UINT32 castable_count,
+        DXGI_FORMAT *castable_formats, REFIID iid, void **out)
 {
+    Native12CreationLayout creation = { layout, castable_count, castable_formats };
+    D3D12_RESOURCE_DESC desc0;
+
     if (out) *out = NULL;
-    return E_INVALIDARG;
+    if (!desc || !properties || session || !Native12ValidMipRegion(desc, SamplerFeedbackTier())) return E_INVALIDARG;
+    Native12ResourceDesc(desc, &desc0);
+    if (FAILED(ValidateCreationLayout(&desc0, layout, castable_count, castable_formats))) return E_INVALIDARG;
+    return CreateCommittedResourceRegion(properties, flags, &desc0, Native12LayoutHeapState(properties->Type), clear,
+            &desc->SamplerFeedbackMipRegion, iid, out, &creation);
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource2(ID3D12Heap *heap, UINT64 offset,
+        const D3D12_RESOURCE_DESC1 *desc, D3D12_BARRIER_LAYOUT layout, const D3D12_CLEAR_VALUE *clear,
+        UINT32 castable_count, DXGI_FORMAT *castable_formats, REFIID iid, void **out)
+{
+    Native12CreationLayout creation = { layout, castable_count, castable_formats };
+    D3D12_RESOURCE_DESC desc0;
+
+    if (out) *out = NULL;
+    if (!desc || !heap || !Native12ValidMipRegion(desc, SamplerFeedbackTier())) return E_INVALIDARG;
+    Native12ResourceDesc(desc, &desc0);
+    if (FAILED(ValidateCreationLayout(&desc0, layout, castable_count, castable_formats))) return E_INVALIDARG;
+    return CreatePlacedResourceRegion(heap, offset, &desc0,
+            Native12LayoutHeapState(static_cast<Native12Heap *>(heap)->desc.Properties.Type), clear,
+            &desc->SamplerFeedbackMipRegion, iid, out, &creation);
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreateReservedResource2(const D3D12_RESOURCE_DESC *desc,
+        D3D12_BARRIER_LAYOUT layout, const D3D12_CLEAR_VALUE *clear, ID3D12ProtectedResourceSession *session,
+        UINT32 castable_count, DXGI_FORMAT *castable_formats, REFIID iid, void **out)
+{
+    Native12CreationLayout creation = { layout, castable_count, castable_formats };
+
+    if (out) *out = NULL;
+    if (!desc || session || FAILED(ValidateCreationLayout(desc, layout, castable_count, castable_formats)))
+        return E_INVALIDARG;
+    return CreateReservedResourceRegion(desc, D3D12_RESOURCE_STATE_COMMON, clear, iid, out, &creation);
 }
 
 D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE Native12Device::GetResourceAllocationInfo3(
