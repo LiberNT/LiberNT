@@ -347,7 +347,7 @@ NTSTATUS RawIPSendDatagram(
 }
 
 
-VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
+BOOLEAN RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
 /*
  * FUNCTION: Receives and queues a RawIp datagram
  * ARGUMENTS:
@@ -363,6 +363,7 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
   PADDRESS_FILE AddrFile;
   PIP_ADDRESS DstAddress, SrcAddress;
   UINT DataSize;
+  BOOLEAN Delivered;
 
   TI_DbgPrint(MAX_TRACE, ("Called.\n"));
 
@@ -380,10 +381,10 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
     TI_DbgPrint(MIN_TRACE, ("Discarded IPv6 datagram (%i bytes).\n", IPPacket->TotalSize));
 
     /* FIXME: IPv6 is not supported */
-    return;
+    return FALSE;
 
   default:
-    return;
+    return FALSE;
   }
 
   /* Locate a receive request on destination address file object
@@ -395,6 +396,7 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
                              0,
                              IPv4Header->Protocol,
                              &SearchContext);
+  Delivered = AddrFile != NULL;
   if (AddrFile) {
     do {
       DGDeliverData(AddrFile,
@@ -416,6 +418,7 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
     /* FIXME: Send ICMP reply */
   }
   TI_DbgPrint(MAX_TRACE, ("Leaving.\n"));
+  return Delivered;
 }
 
 
@@ -428,9 +431,6 @@ NTSTATUS RawIPStartup(VOID)
 {
   RtlZeroMemory(&UDPStats, sizeof(UDP_STATISTICS));
 
-  /* Register this protocol with IP layer */
-  IPRegisterProtocol(IPPROTO_RAW, RawIpReceive);
-
   return STATUS_SUCCESS;
 }
 
@@ -442,9 +442,6 @@ NTSTATUS RawIPShutdown(VOID)
  *     Status of operation
  */
 {
-  /* Deregister this protocol with IP layer */
-  IPRegisterProtocol(IPPROTO_RAW, NULL);
-
   return STATUS_SUCCESS;
 }
 
