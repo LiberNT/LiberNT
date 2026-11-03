@@ -1274,8 +1274,8 @@ void test_mode_generic(const WCHAR* workdir, HSDB hsdb, size_t cur)
         expect_flags = 0x101;
     else
     {
-        expect_flags = 0x121;   /* for 2 and 3, this becomes 101 when not elevated. */
-        if ((cur == 2 || cur == 3) && !IsUserAdmin())
+        expect_flags = 0x121;   /* Windows 11 gives 0x101 for 2 and 3, elevated or not. */
+        if (cur == 2 || cur == 3)
             expect_flags &= ~0x20;
     }
 
