@@ -1389,17 +1389,61 @@ static NTSTATUS WSKAPI
 WskDisconnect(_In_ PWSK_SOCKET SocketParam, _In_opt_ PWSK_BUF Buffer, _In_ ULONG Flags, _Inout_ PIRP Irp)
 {
     PWSK_SOCKET_INTERNAL Socket = CONTAINING_RECORD(SocketParam, WSK_SOCKET_INTERNAL, Socket);
+    PNETIO_CONTEXT NetioContext;
+    PIRP TdiIrp = NULL;
+    NTSTATUS Status;
 
     FUNCTION_TRACE;
 
-    SocketShutdown(Socket);
+    if (!(Flags & WSK_FLAG_ABORTIVE))
+    {
+        SocketShutdown(Socket);
+
+        IoSetNextIrpStackLocation(Irp);
+
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+
+        return STATUS_PENDING;
+    }
 
     IoSetNextIrpStackLocation(Irp);
+    if (Buffer || (Flags & ~WSK_FLAG_ABORTIVE))
+    {
+        Status = STATUS_INVALID_PARAMETER;
+        goto err_out;
+    }
+    if (!Socket->ConnectionFile)
+    {
+        Status = STATUS_FILE_FORCED_CLOSED;
+        goto err_out;
+    }
 
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+    NetioContext = ExAllocatePoolZero(NonPagedPool, sizeof(*NetioContext), TAG_NETIO);
+    if (!NetioContext)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto err_out;
+    }
+    NetioContext->socket = Socket;
+    NetioContext->UserIrp = Irp;
 
+    IoMarkIrpPending(Irp);
+    ReferenceSocket(Socket);
+    Status = TdiDisconnect(&TdiIrp, Socket->ConnectionFile, NULL, TDI_DISCONNECT_ABORT,
+                           NetioComplete, NetioContext, NULL, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DereferenceSocket(Socket);
+        ExFreePoolWithTag(NetioContext, TAG_NETIO);
+        goto err_out;
+    }
     return STATUS_PENDING;
+
+err_out:
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+    return Status;
 }
 
 
