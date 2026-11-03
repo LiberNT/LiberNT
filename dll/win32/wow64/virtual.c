@@ -132,7 +132,11 @@ static NTSTATUS mem_extended_parameters_32to64( MEM_EXTENDED_PARAMETER **ret_par
         params[i].Pointer = req;
         *count = i + 1;
     }
+#ifdef __REACTOS__
+    *ret_params = *count ? params : NULL;
+#else
     *ret_params = params;
+#endif
     return STATUS_SUCCESS;
 }
 
