@@ -1179,6 +1179,10 @@ static void handleExpansion(WCHAR *cmd, BOOL atExecute) {
   WCHAR *delayedp = NULL;
   WCHAR  startchar = '%';
   WCHAR *normalp;
+#ifdef __REACTOS__
+  BOOL carets = delayed && wcschr(cmd, L'!') != NULL;
+  WCHAR *caretp = NULL;
+#endif
 
   /* Display the FOR variables in effect */
   for (i=0;i<ARRAY_SIZE(forloopcontext->variable);i++) {
@@ -1193,11 +1197,25 @@ static void handleExpansion(WCHAR *cmd, BOOL atExecute) {
     /* Find the next environment variable delimiter */
     normalp = wcschr(p, '%');
     if (delayed) delayedp = wcschr(p, '!');
+#ifdef __REACTOS__
+    if (carets) caretp = wcschr(p, L'^');
+#endif
     if (!normalp) p = delayedp;
     else if (!delayedp) p = normalp;
     else p = min(p,delayedp);
+#ifdef __REACTOS__
+    if (caretp && (!p || caretp < p)) p = caretp;
+#endif
     if (!p) break;
     startchar = *p;
+#ifdef __REACTOS__
+    if (startchar == L'^')
+    {
+        WCMD_strsubstW(p, p + 1, NULL, 0);
+        if (*p) p++;
+        continue;
+    }
+#endif
 
     WINE_TRACE("Translate command:%s %d (at: %s)\n",
                    wine_dbgstr_w(cmd), atExecute, wine_dbgstr_w(p));
