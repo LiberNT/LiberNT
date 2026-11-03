@@ -374,6 +374,96 @@ BOOL RegisterBlankClass(HINSTANCE hInstance, HINSTANCE hPrevInstance)
     return (RegisterClassEx(&wcex) != (ATOM)0);
 }
 
+static LPCWSTR
+SkipProgramName(LPCWSTR p)
+{
+    if (*p == L'"')
+    {
+        for (p++; *p != UNICODE_NULL && *p != L'"'; p++);
+        if (*p == L'"')
+            p++;
+    }
+    else
+    {
+        while (*p != UNICODE_NULL && *p != L' ' && *p != L'\t')
+            p++;
+    }
+    while (*p == L' ' || *p == L'\t')
+        p++;
+    return p;
+}
+
+static BOOL
+IsDllFor32BitMachine(LPCWSTR lpDllName)
+{
+    MEMORY_BASIC_INFORMATION Info;
+    PIMAGE_DOS_HEADER DosHeader;
+    PIMAGE_NT_HEADERS NtHeaders;
+    HMODULE hImage;
+    SIZE_T cbMapped;
+    BOOL bResult = FALSE;
+
+    hImage = LoadLibraryExW(lpDllName, NULL, LOAD_LIBRARY_AS_DATAFILE);
+    if (hImage == NULL)
+        return FALSE;
+    DosHeader = (PIMAGE_DOS_HEADER)((ULONG_PTR)hImage & ~(ULONG_PTR)3);
+    if (VirtualQuery(DosHeader, &Info, sizeof(Info)) &&
+        DosHeader->e_magic == IMAGE_DOS_SIGNATURE && DosHeader->e_lfanew > 0)
+    {
+        cbMapped = Info.RegionSize - (SIZE_T)((PBYTE)DosHeader - (PBYTE)Info.BaseAddress);
+        if ((SIZE_T)DosHeader->e_lfanew + FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader) <= cbMapped)
+        {
+            NtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)DosHeader + DosHeader->e_lfanew);
+            bResult = NtHeaders->Signature == IMAGE_NT_SIGNATURE &&
+                      (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_32BIT_MACHINE);
+        }
+    }
+    FreeLibrary(hImage);
+    return bResult;
+}
+
+/* A 64-bit rundll32 hands a DLL built for a 32-bit machine to the rundll32 of the WoW64 directory and waits for it. */
+static BOOL
+RunWow64Rundll32(LPCWSTR lpDllName, int nCmdShow)
+{
+    WCHAR szRundll32[MAX_PATH];
+    PROCESS_INFORMATION ProcessInfo;
+    STARTUPINFOW StartupInfo;
+    LPCWSTR lpArguments;
+    LPWSTR lpCommandLine;
+    SIZE_T cchCommandLine;
+    UINT cchDirectory;
+    BOOL bResult;
+
+    if (sizeof(void *) < 8 || GetLastError() != ERROR_BAD_EXE_FORMAT || !IsDllFor32BitMachine(lpDllName))
+        return FALSE;
+    cchDirectory = GetSystemWow64DirectoryW(szRundll32, _countof(szRundll32));
+    if (cchDirectory == 0 || cchDirectory + sizeof("\\rundll32.exe") > _countof(szRundll32))
+        return FALSE;
+    wcscat(szRundll32, L"\\rundll32.exe");
+
+    lpArguments = SkipProgramName(GetCommandLineW());
+    cchCommandLine = wcslen(szRundll32) + wcslen(lpArguments) + 4;
+    lpCommandLine = malloc(cchCommandLine * sizeof(WCHAR));
+    if (lpCommandLine == NULL)
+        return FALSE;
+    _snwprintf(lpCommandLine, cchCommandLine, L"\"%s\" %s", szRundll32, lpArguments);
+    lpCommandLine[cchCommandLine - 1] = UNICODE_NULL;
+
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
+    StartupInfo.wShowWindow = (WORD)nCmdShow;
+    bResult = CreateProcessW(szRundll32, lpCommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &StartupInfo, &ProcessInfo);
+    free(lpCommandLine);
+    if (!bResult)
+        return FALSE;
+    CloseHandle(ProcessInfo.hThread);
+    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+    CloseHandle(ProcessInfo.hProcess);
+    return TRUE;
+}
+
 int WINAPI _tWinMain(
   HINSTANCE hInstance,
   HINSTANCE hPrevInstance,
@@ -537,7 +627,7 @@ int WINAPI _tWinMain(
         // The dll function has finished executing, so unload it
         FreeLibrary(hDll);
     }
-    else {
+    else if (!RunWow64Rundll32(lptDllName, nCmdShow)) {
         // The dll could not be loaded; display an error message
         GetModuleTitle();
         LoadString( GetModuleHandle(NULL), IDS_DllNotLoaded, (LPTSTR) szMsg,RC_STRING_MAX_SIZE);
