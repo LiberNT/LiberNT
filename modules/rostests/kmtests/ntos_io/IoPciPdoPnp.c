@@ -46,6 +46,19 @@ FindPciPdo(VOID)
 
 static
 NTSTATUS
+NTAPI
+CaptureInformation(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    *(PULONG_PTR)Context = Irp->IoStatus.Information;
+    return STATUS_CONTINUE_COMPLETION;
+}
+
+static
+NTSTATUS
 SendPnp(
     _In_ PDEVICE_OBJECT Pdo,
     _In_ UCHAR Minor,
@@ -67,13 +80,14 @@ SendPnp(
     Irp->IoStatus.Information = 0;
     Stack = IoGetNextIrpStackLocation(Irp);
     Stack->MinorFunction = Minor;
+    *Information = (ULONG_PTR)-1;
+    IoSetCompletionRoutine(Irp, CaptureInformation, Information, TRUE, TRUE, TRUE);
     Status = IoCallDriver(Pdo, Irp);
     if (Status == STATUS_PENDING)
     {
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
         Status = IoStatus.Status;
     }
-    *Information = IoStatus.Information;
     return Status;
 }
 
