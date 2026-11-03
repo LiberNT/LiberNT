@@ -277,6 +277,26 @@ static const char *debugstr_DEVPROPKEY( const DEVPROPKEY *key )
     return wine_dbg_sprintf( "{%s, %04lx}", debugstr_guid( &key->fmtid ), key->pid );
 }
 
+#ifdef __REACTOS__
+static HRESULT activate_property_set( HSTRING name, IPropertySet **propset )
+{
+    static IActivationFactory *cached_factory;
+    IActivationFactory *factory, *previous;
+    HRESULT hr;
+
+    if (!(factory = InterlockedCompareExchangePointer( (void **)&cached_factory, NULL, NULL )))
+    {
+        if (FAILED(hr = RoGetActivationFactory( name, &IID_IActivationFactory, (void **)&factory ))) return hr;
+        if ((previous = InterlockedCompareExchangePointer( (void **)&cached_factory, factory, NULL )))
+        {
+            IActivationFactory_Release( factory );
+            factory = previous;
+        }
+    }
+    return IActivationFactory_ActivateInstance( factory, (IInspectable **)propset );
+}
+#endif
+
 static HRESULT create_device_properties( const DEVPROPERTY *props, ULONG len, IMap_HSTRING_IInspectable **map )
 {
     static const WCHAR *propertyset_name = RuntimeClass_Windows_Foundation_Collections_PropertySet;
@@ -292,7 +312,11 @@ static HRESULT create_device_properties( const DEVPROPERTY *props, ULONG len, IM
     TRACE( "props %p, len %lu, map %p.\n", props, len, map );
 
     WindowsCreateStringReference( propertyset_name, wcslen( propertyset_name ), &hdr, &str );
+#ifdef __REACTOS__
+    if (FAILED(hr = activate_property_set( str, &propset ))) return hr;
+#else
     if (FAILED(hr = RoActivateInstance( str, (IInspectable **)&propset ))) return hr;
+#endif
     hr = IPropertySet_QueryInterface( propset, &IID_IMap_HSTRING_IInspectable, (void **)map );
     IPropertySet_Release( propset );
     if (FAILED(hr)) goto done;
