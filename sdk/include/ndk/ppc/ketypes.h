@@ -246,6 +246,7 @@ struct _KPRCB
     ULONG QueueIndex;
     LIST_ENTRY DispatcherReadyListHead[MAXIMUM_PRIORITY];
     SINGLE_LIST_ENTRY DeferredReadyListHead;
+    ULONGLONG StartCycles;
     ULONGLONG CycleTime;
     LIST_ENTRY WaitListHead;
     KSPIN_LOCK WaitLock;
