@@ -872,10 +872,18 @@ static void _setfp( unsigned int *cw, unsigned int cw_mask,
 
     if (sw)
     {
+#ifdef __REACTOS__
+#ifdef _MSC_VER
+        __asm { fnstsw newsw }
+#else
+        __asm__ __volatile__( "fnstsw %0" : "=m" (newsw) );
+#endif
+#else
 #ifdef _MSC_VER
         __asm { fstsw newsw }
 #else
         __asm__ __volatile__( "fstsw %0" : "=m" (newsw) );
+#endif
 #endif
         oldsw = newsw;
 
@@ -949,6 +957,9 @@ static void _setfp( unsigned int *cw, unsigned int cw_mask,
         case _PC_64: newcw |= 0x300; break;
         case _PC_53: newcw |= 0x200; break;
         case _PC_24: newcw |= 0x0; break;
+#ifdef __REACTOS__
+        case _MCW_PC: *cw &= ~_PC_53; break;
+#endif
         }
         if (*cw & _IC_AFFINE) newcw |= 0x1000;
     }
