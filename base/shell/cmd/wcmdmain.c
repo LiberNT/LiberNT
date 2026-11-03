@@ -5255,7 +5255,11 @@ int __cdecl wmain(int argc, WCHAR *argvW[])
     {
         RETURN_CODE return_code = WCMD_call_batch(NULL, parameters.initial_command);
         if (return_code == RETURN_CODE_GOTO) return NO_ERROR;
+#ifdef __REACTOS__
+        if (return_code != RETURN_CODE_ABORTED && return_code != RETURN_CODE_EXITED)
+#else
         if (return_code != RETURN_CODE_ABORTED && return_code != RETURN_CODE_EXITED && return_code != NO_ERROR)
+#endif
             return return_code;
         return errorlevel;
     }
