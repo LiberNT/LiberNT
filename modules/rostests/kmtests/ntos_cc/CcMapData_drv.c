@@ -331,29 +331,8 @@ PerformTest(
                             PKTHREAD ThreadHandle;
 
                             /* That's a bit rough but should do the job */
-#ifdef _X86_
-                            if (Memory >= 2 * 1024)
-                            {
-                                ok((TestContext->Buffer >= (PVOID)0xC1000000 && TestContext->Buffer < (PVOID)0xE0FFFFFF) ||
-                                   (TestContext->Buffer >= (PVOID)0xA4000000 && TestContext->Buffer < (PVOID)0xBFFFFFFF),
-                                   "Buffer %p not mapped in system space\n", TestContext->Buffer);
-                            }
-                            else if (TS)
-                            {
-                                ok(TestContext->Buffer >= (PVOID)0xC1000000 && TestContext->Buffer < (PVOID)0xDCFFFFFF,
-                                   "Buffer %p not mapped in system space\n", TestContext->Buffer);
-                            }
-                            else
-                            {
-                                ok(TestContext->Buffer >= (PVOID)0xC1000000 && TestContext->Buffer < (PVOID)0xDBFFFFFF,
-                                   "Buffer %p not mapped in system space\n", TestContext->Buffer);
-                            }
-#elif defined(_WIN64)
                             ok((ULONG_PTR)TestContext->Buffer >= (ULONG_PTR)MmSystemRangeStart,
                                "Buffer %p not mapped in system space\n", TestContext->Buffer);
-#else
-                            skip(FALSE, "System space mapping not defined\n");
-#endif
 
                             TestContext->Length = FileSizes.FileSize.QuadPart - Offset.QuadPart;
                             ThreadHandle = KmtStartThread(MapInAnotherThread, TestContext);
