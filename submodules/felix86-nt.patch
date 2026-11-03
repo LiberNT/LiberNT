@@ -107,21 +107,22 @@ index fcf5a42..d58c6f7 100644
  extern "C" u8 softfloat_getRoundPrecision() {
      ThreadState* state = ThreadState::Get();
 diff --git a/src/felix86/v2/handlers.cpp b/src/felix86/v2/handlers.cpp
-index 04754f8..073bfcc 100644
+index 04754f8..cfd0ffa 100644
 --- a/src/felix86/v2/handlers.cpp
 +++ b/src/felix86/v2/handlers.cpp
-@@ -26,6 +26,10 @@ void felix86_syscall32(felix86_frame* frame, u32 rip_nex);
+@@ -26,6 +26,11 @@ void felix86_syscall32(felix86_frame* frame, u32 rip_nex);
  
  void felix86_cpuid(ThreadState* state);
  
 +#ifndef __linux__
 +void felix86_breakpoint(felix86_frame* frame, u64 rip_next);
++void felix86_interrupt(felix86_frame* frame, u64 rip_next, u64 vector);
 +#endif
 +
  [[nodiscard]] constexpr static int sew_to_bits(SEW sew) {
      return 8 << static_cast<int>(sew);
  }
-@@ -1174,6 +1178,11 @@ FAST_HANDLE(CMP) {
+@@ -1174,6 +1179,11 @@ FAST_HANDLE(CMP) {
      bool needs_any_flag = needs_cf || needs_of || needs_pf || needs_sf || needs_zf || needs_af;
      if (!needs_any_flag) {
          // Same as TEST, don't warn here
@@ -133,7 +134,7 @@ index 04754f8..073bfcc 100644
          return;
      }
  
-@@ -1893,7 +1902,7 @@ FAST_HANDLE(CALL) {
+@@ -1893,7 +1903,7 @@ FAST_HANDLE(CALL) {
              as.XORI(tmp, new_cs, 0x33);
              as.BEQZ(tmp, &cs_ok);
              as.SD(x0, 0, x0);
@@ -142,7 +143,7 @@ index 04754f8..073bfcc 100644
              as.C_UNDEF();
              as.C_UNDEF();
              as.Bind(&cs_ok);
-@@ -1919,6 +1928,39 @@ FAST_HANDLE(CALL) {
+@@ -1919,6 +1929,39 @@ FAST_HANDLE(CALL) {
  
      biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
  
@@ -182,7 +183,7 @@ index 04754f8..073bfcc 100644
      switch (operands[0].type) {
      case ZYDIS_OPERAND_TYPE_REGISTER:
      case ZYDIS_OPERAND_TYPE_MEMORY: {
-@@ -1997,7 +2039,7 @@ FAST_HANDLE(RET) {
+@@ -1997,7 +2040,7 @@ FAST_HANDLE(RET) {
          as.XORI(tmp, new_cs, 0x33);
          as.BEQZ(tmp, &cs_ok);
          as.SD(x0, 0, x0);
@@ -191,7 +192,7 @@ index 04754f8..073bfcc 100644
          as.C_UNDEF();
          as.C_UNDEF();
          as.Bind(&cs_ok);
-@@ -2057,7 +2099,7 @@ FAST_HANDLE(IRETD) {
+@@ -2057,7 +2100,7 @@ FAST_HANDLE(IRETD) {
      as.XORI(tmp, new_cs, 0x33);
      as.BEQZ(tmp, &cs_ok);
      as.SD(x0, 0, x0);
@@ -200,7 +201,7 @@ index 04754f8..073bfcc 100644
      as.C_UNDEF();
      as.C_UNDEF();
      as.Bind(&cs_ok);
-@@ -2084,7 +2126,7 @@ FAST_HANDLE(IRETQ) {
+@@ -2084,7 +2127,7 @@ FAST_HANDLE(IRETQ) {
      as.XORI(tmp, new_cs, 0x33);
      as.BEQZ(tmp, &cs_ok);
      as.SD(x0, 0, x0);
@@ -209,7 +210,7 @@ index 04754f8..073bfcc 100644
      as.C_UNDEF();
      as.C_UNDEF();
      as.Bind(&cs_ok);
-@@ -2233,6 +2275,16 @@ FAST_HANDLE(POP) {
+@@ -2233,6 +2276,16 @@ FAST_HANDLE(POP) {
                  rec.setGPR(operands[0].reg.value, X86_SIZE_QWORD, reg);
                  as.ADDI(rsp, rsp, imm);
                  rec.setGPR(X86_REF_RSP, X86_SIZE_QWORD, rsp);
@@ -226,7 +227,7 @@ index 04754f8..073bfcc 100644
              } else {
                  rec.readMemory(result, rsp, 0, rec.zydisToSize(instruction.operand_width));
                  as.ADDI(rsp, rsp, imm);
-@@ -2973,7 +3025,7 @@ FAST_HANDLE(JMP) {
+@@ -2973,7 +3026,7 @@ FAST_HANDLE(JMP) {
              as.XORI(tmp, cs, 0x33);
              as.BEQZ(tmp, &cs_ok);
              as.SD(x0, 0, x0);
@@ -235,7 +236,7 @@ index 04754f8..073bfcc 100644
              as.C_UNDEF();
              as.C_UNDEF();
              as.Bind(&cs_ok);
-@@ -3016,6 +3068,28 @@ FAST_HANDLE(JMP) {
+@@ -3016,6 +3069,28 @@ FAST_HANDLE(JMP) {
          rec.stopCompiling();
          break;
      }
@@ -264,7 +265,7 @@ index 04754f8..073bfcc 100644
      default: {
          UNREACHABLE();
          break;
-@@ -3295,6 +3369,9 @@ FAST_HANDLE(TEST) {
+@@ -3295,6 +3370,9 @@ FAST_HANDLE(TEST) {
      if (!needs_any_flag) {
          // Weirdly enough some x86 programs run test al, al and use no flags and overwrite them right after
          // Unsure if this is some sort of special nop or something, but in any case we don't warn about this
@@ -274,7 +275,7 @@ index 04754f8..073bfcc 100644
          return;
      }
  
-@@ -4733,6 +4810,9 @@ FAST_HANDLE(SYSCALL) {
+@@ -4733,6 +4811,9 @@ FAST_HANDLE(SYSCALL) {
      rec.setGPR(X86_REF_RCX, X86_SIZE_QWORD, rcx);
  
      // Normally the syscall instruction also writes the flags to R11 but we don't need them in our syscall handler
@@ -284,7 +285,7 @@ index 04754f8..073bfcc 100644
      rec.writebackState();
      as.MV(a0, sp);
      rec.callPointer(offsetof(ThreadState, felix86_syscall));
-@@ -4741,7 +4821,11 @@ FAST_HANDLE(SYSCALL) {
+@@ -4741,7 +4822,11 @@ FAST_HANDLE(SYSCALL) {
      biscuit::Label after;
      // TODO: we can get this faster by returning
      biscuit::GPR temp = rec.scratch();
@@ -297,7 +298,7 @@ index 04754f8..073bfcc 100644
      as.BEQ(ripreg, temp, &after);
      // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
      rec.backToDispatcher();
-@@ -9639,7 +9723,7 @@ FAST_HANDLE(XGETBV) {
+@@ -9639,7 +9724,7 @@ FAST_HANDLE(XGETBV) {
      biscuit::GPR ecx = rec.getGPR(X86_REF_RCX, X86_SIZE_DWORD);
      as.BEQZ(ecx, &is_zero);
      as.MV(a0, ecx);
@@ -306,7 +307,7 @@ index 04754f8..073bfcc 100644
      as.JALR(scratch);
      as.C_UNDEF();
      as.C_UNDEF();
-@@ -12174,7 +12258,7 @@ FAST_HANDLE(CMPXCHG16B) {
+@@ -12174,7 +12259,7 @@ FAST_HANDLE(CMPXCHG16B) {
          biscuit::Label spinloop, writeloop;
          biscuit::GPR lock_address = rec.scratch();
          biscuit::GPR lock = rec.scratch();
@@ -315,7 +316,7 @@ index 04754f8..073bfcc 100644
          // We will pick one of 256 different spinlocks based on a hash created by our address
          // This means that if two cmpxchg16b target the same address they will spin on the same lock
          // but if they target a different address they will likely get a different lock, which should decrease
-@@ -13630,6 +13714,21 @@ X87_HANDLE(FFREEP);
+@@ -13630,6 +13715,21 @@ X87_HANDLE(FFREEP);
  #undef X87_HANDLE
  
  FAST_HANDLE(INT3) {
@@ -337,7 +338,7 @@ index 04754f8..073bfcc 100644
      WARN_ONCE("INT3 instruction being compiled?");
      as.SD(x0, 0, x0);
      // This hint will tell the handle_synchronous signal handler to change si_code to SI_KERNEL
-@@ -13638,6 +13737,7 @@ FAST_HANDLE(INT3) {
+@@ -13638,6 +13738,7 @@ FAST_HANDLE(INT3) {
      // Unreachable
      as.C_UNDEF();
      as.C_UNDEF();
@@ -345,7 +346,7 @@ index 04754f8..073bfcc 100644
      rec.stopCompiling();
  }
  
-@@ -13668,6 +13768,9 @@ FAST_HANDLE(INT) {
+@@ -13668,6 +13769,9 @@ FAST_HANDLE(INT) {
              rec.addi(ripreg, ripreg, offset);
          }
          rec.insertSafepoint();
@@ -355,7 +356,7 @@ index 04754f8..073bfcc 100644
          rec.writebackState();
          as.MV(a0, sp);
          as.ADDI(a1, ripreg, instruction.length);
-@@ -13677,7 +13780,11 @@ FAST_HANDLE(INT) {
+@@ -13677,7 +13781,11 @@ FAST_HANDLE(INT) {
          biscuit::Label after;
          // TODO: we can get this faster by returning
          biscuit::GPR temp = rec.scratch();
@@ -368,6 +369,38 @@ index 04754f8..073bfcc 100644
          as.BEQ(ripreg, temp, &after);
          // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
          rec.backToDispatcher();
+@@ -13690,6 +13798,23 @@ FAST_HANDLE(INT) {
+     } else if (operands[0].imm.value.u == 3) {
+         fast_INT3(rec, rip, as, instruction, operands);
+     } else {
++#ifndef __linux__
++        u64 offset = rip - rec.getCurrentRipregValue();
++        biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
++        if (offset != 0) {
++            rec.setCurrentRipregValue(rec.getCurrentRipregValue() + offset);
++            rec.addi(ripreg, ripreg, offset);
++        }
++        rec.writebackState();
++        as.MV(a0, sp);
++        as.ADDI(a1, ripreg, instruction.length);
++        as.LI(a2, operands[0].imm.value.u & 0xFF);
++        rec.loadHostAddress(t4, (u64)felix86_interrupt);
++        as.JALR(t4);
++        rec.restoreState();
++        rec.backToDispatcher();
++        rec.stopCompiling();
++#else
+         WARN("INT encountered with unknown immediate: %lx", operands[0].imm.value.u);
+         as.SD(x0, 0, x0);
+         // This hint will tell the handle_synchronous signal handler to change si_code from SEGV_MAPERR to SI_KERNEL
+@@ -13700,6 +13825,7 @@ FAST_HANDLE(INT) {
+         // Unreachable
+         as.C_UNDEF();
+         as.C_UNDEF();
++#endif
+     }
+ 
+     if (MODE32) {
 diff --git a/src/felix86/v2/recompiler.cpp b/src/felix86/v2/recompiler.cpp
 index f3c0aaf..50a93db 100644
 --- a/src/felix86/v2/recompiler.cpp

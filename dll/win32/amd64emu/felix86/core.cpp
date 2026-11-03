@@ -170,6 +170,11 @@ void felix86_breakpoint(felix86_frame* frame, u64 rip_next) {
     Felix86NtBreakpoint(cpu->owner, cpu->state.ctx.gprs, rip_next);
 }
 
+void felix86_interrupt(felix86_frame* frame, u64 rip_next, u64 vector) {
+    NtCpu* cpu = (NtCpu*)frame->state;
+    Felix86NtInterrupt(cpu->owner, cpu->state.ctx.gprs, rip_next, (u32)vector);
+}
+
 void felix86_raise_hardware_breakpoint(ThreadState* state, u64 rip, int index) {
     ERROR("Hardware breakpoint %d at %llx", index, (unsigned long long)rip);
 }

@@ -285,34 +285,63 @@ Felix86NtSystemService32(
     EmuFatal(STATUS_ILLEGAL_INSTRUCTION, "32-bit system call in an AMD64 process");
 }
 
+static
+VOID
+Felix86NtDispatch(
+    _In_ PEMU_THREAD Thread,
+    _In_ ULONG Interrupt,
+    _Inout_ PEXCEPTION_RECORD Record)
+{
+    NTSTATUS Status;
+
+    /* TODO: report the exception to a debugger of the process before the guest dispatch */
+    Thread->HostDepth++;
+    if (Interrupt == EMU_NO_INTERRUPT || !EmuSoftwareInterrupt(Thread, Interrupt, Record))
+    {
+        Status = EmuDispatchException(Thread, Record);
+        if (!NT_SUCCESS(Status))
+        {
+            DbgPrint("AMD64EMU: exception %08lx at %p cannot be dispatched: %08lx\n",
+                     Record->ExceptionCode,
+                     Record->ExceptionAddress,
+                     Status);
+            NtTerminateProcess(NtCurrentProcess(), Record->ExceptionCode);
+        }
+    }
+    Thread->HostDepth--;
+}
+
 VOID
 Felix86NtBreakpoint(
     _In_ PVOID Owner,
     _Inout_ PULONG64 Registers,
     _In_ ULONG64 Next)
 {
-    PEMU_THREAD Thread = Owner;
     EXCEPTION_RECORD Record;
-    NTSTATUS Status;
 
     RtlZeroMemory(&Record, sizeof(Record));
     Record.ExceptionCode = STATUS_BREAKPOINT;
     Record.ExceptionAddress = (PVOID)(ULONG_PTR)(Next - 1);
     Record.NumberParameters = 1;
     ((PEMU_REGISTERS)Registers)->Rip = Next - 1;
+    Felix86NtDispatch(Owner, EMU_NO_INTERRUPT, &Record);
+}
 
-    /* TODO: report the breakpoint to a debugger of the process before the guest dispatch */
-    Thread->HostDepth++;
-    Status = EmuDispatchException(Thread, &Record);
-    Thread->HostDepth--;
-    if (!NT_SUCCESS(Status))
-    {
-        DbgPrint("AMD64EMU: exception %08lx at %p cannot be dispatched: %08lx\n",
-                 Record.ExceptionCode,
-                 Record.ExceptionAddress,
-                 Status);
-        NtTerminateProcess(NtCurrentProcess(), Record.ExceptionCode);
-    }
+VOID
+Felix86NtInterrupt(
+    _In_ PVOID Owner,
+    _Inout_ PULONG64 Registers,
+    _In_ ULONG64 Next,
+    _In_ uint32_t Vector)
+{
+    EXCEPTION_RECORD Record;
+
+    RtlZeroMemory(&Record, sizeof(Record));
+    Record.ExceptionCode = STATUS_ACCESS_VIOLATION;
+    Record.ExceptionAddress = (PVOID)(ULONG_PTR)((PEMU_REGISTERS)Registers)->Rip;
+    Record.NumberParameters = 2;
+    Record.ExceptionInformation[1] = (ULONG_PTR)-1;
+    Felix86NtDispatch(Owner, Vector, &Record);
 }
 
 ULONG64
