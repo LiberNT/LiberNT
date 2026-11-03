@@ -1353,7 +1353,7 @@ VOID LxCgroupFreeTree(_In_ PLX_CGROUP Cgroup);
 NTSTATUS LxTtyCreate(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_DEVPTS Devpts, _In_ ULONG Flags, _In_ ULONG Uid, _In_ ULONG Gid, _In_ USHORT Rows, _In_ USHORT Columns, _Out_ PLX_TTY *Tty);
 LONG LxDevptsCreate(_In_opt_ PLX_PROCESS Process, _In_ PLX_INSTANCE Instance, _In_opt_ PCSTR Data, _Out_ PLX_DEVPTS *Devpts);
 VOID LxDevptsFreeAll(_In_ PLX_INSTANCE Instance);
-PLX_DEVPTS LxDevptsForPtmx(_In_ PLX_PROCESS Process, _In_opt_ PCSTR Path);
+LONG LxDevptsForPtmx(_In_ PLX_PROCESS Process, _In_ PCSTR Path, _Out_ PLX_DEVPTS *Devpts);
 VOID LxTtyReference(_In_ PLX_TTY Tty);
 VOID LxTtyDereference(_In_ PLX_TTY Tty);
 LONG64 LxTtyRead(_In_ PLX_TTY Tty, _In_ ULONG64 Buffer, _In_ ULONG64 Length, _In_ BOOLEAN NonBlocking);
