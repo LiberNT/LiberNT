@@ -73,6 +73,17 @@ jobs:
         echo "CCACHE_MAXSIZE=1G" >> $GITHUB_ENV
         echo "CCACHE_SLOPPINESS=time_macros" >> $GITHUB_ENV
 
+    - name: Install Rust toolchain
+      run: rustup toolchain install
+
+    - name: Check Rust crates
+      run: |
+        . "$HOME/.cargo/env"
+        for manifest in $(git ls-files '*Cargo.toml'); do
+          cargo test --locked --offline --manifest-path "$manifest"
+          cargo clippy --locked --offline --manifest-path "$manifest" --all-targets -- -Dwarnings
+        done
+
     - name: Configure
       id: configure
       run: |
@@ -188,6 +199,17 @@ jobs:
         Copy-Item "$tools\win_flex.exe" "$tools\flex.exe" -Force
         Copy-Item "$tools\win_bison.exe" "$tools\bison.exe" -Force
         echo "$tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Install Rust toolchain
+      run: rustup toolchain install
+
+    - name: Check Rust crates
+      shell: pwsh
+      run: |
+        foreach ($manifest in (git ls-files '*Cargo.toml')) {
+          cargo test --locked --offline --manifest-path $manifest
+          cargo clippy --locked --offline --manifest-path $manifest --all-targets -- -Dwarnings
+        }
 
     - name: Configure
       id: configure
