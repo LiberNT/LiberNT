@@ -14232,6 +14232,22 @@ DxgkAdapterStart(
                 StartCaps.HasRuntimePowerDdis = FullTable &&
                     DXGK_CB_FULL(Adapter, DxgkDdiSetPowerComponentFState) != NULL &&
                     DXGK_CB_FULL(Adapter, DxgkDdiPowerRuntimeControlRequest) != NULL;
+                StartCaps.SupportMultiPlaneOverlay = Caps->SupportMultiPlaneOverlay;
+                StartCaps.SupportDirectFlip = Caps->SupportDirectFlip;
+                StartCaps.MaxOverlayPlanes = Caps->MaxOverlayPlanes;
+                StartCaps.HasMpoSetAddress = FullTable &&
+                    (DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay) != NULL ||
+                     DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2) != NULL ||
+                     DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3) != NULL);
+                StartCaps.HasMpoCheck = FullTable &&
+                    (DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport) != NULL ||
+                     DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport2) != NULL ||
+                     DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport3) != NULL);
+                StartCaps.ColorTransformCaps = Caps->ColorTransformCaps.Value;
+                StartCaps.HasUpdateActiveVidPnPresentPath = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiUpdateActiveVidPnPresentPath) != NULL;
+                StartCaps.HasSetTargetGamma = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiSetTargetGamma) != NULL;
+                StartCaps.HasQueryDiagnosticTypesSupport = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiQueryDiagnosticTypesSupport) != NULL;
+                StartCaps.HasControlDiagnosticReporting = FullTable && DXGK_CB_FULL(Adapter, DxgkDdiControlDiagnosticReporting) != NULL;
                 CapsStatus = DxgkAdapterStartValidateCaps(&StartCaps);
                 if (!NT_SUCCESS(CapsStatus))
                     DXGKRNL_ERR("DxgkAdapterStart: driver caps rejected 0x%08lX (WDDM 0x%x misc 0x%x vidmm 0x%x)\n",

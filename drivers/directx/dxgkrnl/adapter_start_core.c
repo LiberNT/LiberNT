@@ -133,7 +133,42 @@ DxgkAdapterStartValidateCaps(
         return STATUS_INVALID_PARAMETER;
     if (Caps->SupportRuntimePowerManagement && !Caps->HasRuntimePowerDdis)
         return STATUS_INVALID_PARAMETER;
-    /* TODO: hybrid, multiplane overlay, color space, diagnostic, WDDM 1.2/1.3 feature, stable power and MultiEngineAware rules */
+    if (Caps->SupportMultiPlaneOverlay)
+    {
+        if (Caps->InterfaceVersion < 0x300B)
+            return STATUS_INVALID_PARAMETER;
+        if (Caps->InterfaceVersion > 0x4000)
+        {
+            if (Caps->MaxOverlayPlanes == 0)
+                return STATUS_INVALID_PARAMETER;
+            if (Caps->MaxOverlayPlanes > 8 &&
+                (Caps->WddmVersion < 0x2200 ? Caps->WddmVersion < 0x2000 || Caps->MaxOverlayPlanes != 10
+                                            : Caps->MaxOverlayPlanes > 10))
+                return STATUS_INVALID_PARAMETER;
+        }
+        if (!Caps->HasMpoSetAddress)
+            return STATUS_INVALID_PARAMETER;
+        if (Caps->InterfaceVersion > 0x4002 && !Caps->HasMpoCheck)
+            return STATUS_INVALID_PARAMETER;
+        if (!Caps->SupportDirectFlip)
+            return STATUS_INVALID_PARAMETER;
+    }
+    if (Caps->WddmVersion >= 0x2300)
+    {
+        ULONG Transform3x4 = (Caps->ColorTransformCaps >> 2) & 1;
+        ULONG WideColor = (Caps->ColorTransformCaps >> 3) & 1;
+        ULONG HighColor = (Caps->ColorTransformCaps >> 4) & 1;
+        BOOLEAN TargetGamma = Caps->InterfaceVersion > 0x7009 && Caps->WddmVersion >= 0x2200 &&
+                              (!Caps->HasUpdateActiveVidPnPresentPath || Caps->HasSetTargetGamma);
+
+        if (Transform3x4 < WideColor || WideColor < HighColor)
+            return STATUS_INVALID_PARAMETER;
+        if (Transform3x4 && !TargetGamma)
+            return STATUS_INVALID_PARAMETER;
+    }
+    if (Caps->WddmVersion >= 0x2400 && Caps->HasQueryDiagnosticTypesSupport != Caps->HasControlDiagnosticReporting)
+        return STATUS_INVALID_PARAMETER;
+    /* TODO: hybrid, WDDM 1.2/1.3 mandatory feature, stable power and MultiEngineAware rules */
     return STATUS_SUCCESS;
 }
 

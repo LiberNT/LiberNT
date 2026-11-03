@@ -193,6 +193,67 @@ TestStartCapsValidation(VOID)
     ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
     Caps.HasRuntimePowerDdis = TRUE;
     ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+
+    Caps.SupportMultiPlaneOverlay = TRUE;
+    Caps.SupportDirectFlip = TRUE;
+    Caps.MaxOverlayPlanes = 4;
+    Caps.HasMpoSetAddress = TRUE;
+    Caps.HasMpoCheck = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MaxOverlayPlanes = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MaxOverlayPlanes = 10;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MaxOverlayPlanes = 11;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.WddmVersion = 0x2100;
+    Caps.MaxOverlayPlanes = 10;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MaxOverlayPlanes = 9;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.WddmVersion = 0x1300;
+    Caps.MaxOverlayPlanes = 10;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.WddmVersion = 0x3200;
+    Caps.MaxOverlayPlanes = 4;
+    Caps.HasMpoSetAddress = FALSE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasMpoSetAddress = TRUE;
+    Caps.HasMpoCheck = FALSE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasMpoCheck = TRUE;
+    Caps.SupportDirectFlip = FALSE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.SupportDirectFlip = TRUE;
+    Caps.InterfaceVersion = 0x300A;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.InterfaceVersion = 0x11007;
+
+    Caps.ColorTransformCaps = 0x4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.HasUpdateActiveVidPnPresentPath = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasSetTargetGamma = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.ColorTransformCaps = 0x8;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.ColorTransformCaps = 0x14;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.ColorTransformCaps = 0x1C;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x2200;
+    Caps.ColorTransformCaps = 0x8;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x3200;
+    Caps.ColorTransformCaps = 0;
+
+    Caps.HasQueryDiagnosticTypesSupport = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasControlDiagnosticReporting = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.HasQueryDiagnosticTypesSupport = FALSE;
+    Caps.WddmVersion = 0x2300;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
 }
 
 START_TEST(DxgkWddmAbi)

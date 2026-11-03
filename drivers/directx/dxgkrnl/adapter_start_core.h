@@ -72,6 +72,16 @@ typedef struct _DXGK_ADAPTER_START_CAPS
     BOOLEAN HasEngineResetDdis;
     BOOLEAN HasRenderKm;
     BOOLEAN HasRuntimePowerDdis;
+    BOOLEAN SupportMultiPlaneOverlay;
+    BOOLEAN SupportDirectFlip;
+    ULONG MaxOverlayPlanes;
+    BOOLEAN HasMpoSetAddress;
+    BOOLEAN HasMpoCheck;
+    ULONG ColorTransformCaps;
+    BOOLEAN HasUpdateActiveVidPnPresentPath;
+    BOOLEAN HasSetTargetGamma;
+    BOOLEAN HasQueryDiagnosticTypesSupport;
+    BOOLEAN HasControlDiagnosticReporting;
 } DXGK_ADAPTER_START_CAPS, *PDXGK_ADAPTER_START_CAPS;
 
 NTSTATUS
