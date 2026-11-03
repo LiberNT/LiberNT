@@ -228,7 +228,7 @@ START_TEST(SHDefExtractIcon)
     hIcoLarge = hIcoSmall = NULL;
     hr = SHDefExtractIcon(path, index, GIL_SIMULATEDOC, &hIcoLarge, &hIcoSmall, 0);
     ok_hex(hr, S_OK);
-    ok(hIcoLarge && hIcoSmall && GetIcoSize(hIcoSmall) == GetSystemMetrics(SM_CXSMICON), "GIL_SIMULATEDOC small icon failed\n");
+    ok(hIcoLarge && hIcoSmall && GetIcoSize(hIcoSmall) == (UINT)GetSystemMetrics(SM_CXSMICON), "GIL_SIMULATEDOC small icon failed\n");
     SafeDestroyIcon(hIcoLarge);
     SafeDestroyIcon(hIcoSmall);
 
