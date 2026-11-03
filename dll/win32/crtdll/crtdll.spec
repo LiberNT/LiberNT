@@ -268,7 +268,7 @@
 @ stub _setsystime(ptr long)
 @ cdecl _sleep(long)
 @ varargs _snprintf(str long str) CRTDLL__snprintf
-@ varargs _snwprintf(wstr long wstr)
+@ varargs _snwprintf(wstr long wstr) CRTDLL__snwprintf
 @ varargs _sopen(str long long)
 @ varargs _spawnl(long str str)
 @ varargs _spawnle(long str str)

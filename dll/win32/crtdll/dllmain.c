@@ -315,6 +315,23 @@ int CRTDLL__vsnwprintf(wchar_t* buffer, size_t count, const wchar_t* format, va_
     return ret;
 }
 
+/*********************************************************************
+ *    _snwprintf (CRTDLL.@)
+ */
+int CRTDLL__snwprintf(wchar_t* buffer, size_t count, const wchar_t* format, ...)
+{
+    va_list args;
+    int ret;
+    if (count)
+    {
+        (void)*(volatile wchar_t*)buffer;
+    }
+    va_start(args, format);
+    ret = CRTDLL__vsnwprintf(buffer, count, format, args);
+    va_end(args);
+    return ret;
+}
+
 
 /* Dummy for rand_s, not used. */
 BOOLEAN
