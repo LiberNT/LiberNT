@@ -1946,7 +1946,7 @@ MiMapSectionView(
             return STATUS_INVALID_VIEW_SIZE;
     }
 
-    Base &= ~(((AllocationType & MEM_REPLACE_PLACEHOLDER) ? PAGE_SIZE : Space->Granularity) - 1);
+    Base &= ~(((AllocationType & (MEM_REPLACE_PLACEHOLDER | MEM_DOS_LIM)) ? PAGE_SIZE : Space->Granularity) - 1);
 
     for (;;)
     {
@@ -1955,7 +1955,8 @@ MiMapSectionView(
 
         Status = MiMapViewEx(Space, Control->Segment, &TryBase, Offset, &TrySize, Protection,
                              (AllocationType & (MEM_TOP_DOWN | MEM_RESERVE | MEM_LARGE_PAGES)) |
-                             ((AllocationType & MEM_REPLACE_PLACEHOLDER) ? MI_MEM_REPLACE_PLACEHOLDER : 0),
+                             ((AllocationType & MEM_REPLACE_PLACEHOLDER) ? MI_MEM_REPLACE_PLACEHOLDER : 0) |
+                             ((AllocationType & MEM_DOS_LIM) ? MI_MEM_PAGE_GRANULAR : 0),
                              Highest, Control->Image ? 0 : Section->Protection, Inherit);
 
         if (NT_SUCCESS(Status))

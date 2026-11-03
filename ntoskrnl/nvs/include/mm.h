@@ -179,6 +179,7 @@ VOID MiPtUnpinRange(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress
 #define MI_MEM_PHYSICAL             0x00400000
 #define MI_MEM_IMAGE                0x01000000
 #define MI_MEM_LARGE_PAGES          0x20000000
+#define MI_MEM_PAGE_GRANULAR        0x40000000
 #define MI_MEM_ROTATE               0x00800000
 #define MI_MEM_RESERVE_PLACEHOLDER  0x00080000
 #define MI_MEM_REPLACE_PLACEHOLDER  0x02000000

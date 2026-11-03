@@ -1331,6 +1331,15 @@ SectionPlaceholderView(void)
     Base = Place;
     Size = 0;
     CHECK(NT_SUCCESS(MiFreeVirtualMemory(&A, &Base, &Size, MI_MEM_RELEASE)));
+
+    Base = Place + PAGE_SIZE;
+    ViewSize = PAGE_SIZE;
+    CHECK(MiMapViewEx(&A, Segment, &Base, 0, &ViewSize, MI_PROT_READWRITE, 0, ~0ULL, MI_PROT_READWRITE, FALSE) ==
+          STATUS_INVALID_PARAMETER);
+    CHECK(NT_SUCCESS(MiMapViewEx(&A, Segment, &Base, 0, &ViewSize, MI_PROT_READWRITE, MI_MEM_PAGE_GRANULAR, ~0ULL,
+                                 MI_PROT_READWRITE, FALSE)));
+    CHECK(Base == Place + PAGE_SIZE && ViewSize == PAGE_SIZE);
+    CHECK(NT_SUCCESS(MiUnmapView(&A, Base)));
     MiSegmentDereference(Segment);
     SpaceDestroy(&World, 0, &A);
     WorldExpectClean(&World, 256);

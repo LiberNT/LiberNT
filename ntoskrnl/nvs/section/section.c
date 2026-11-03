@@ -2132,9 +2132,10 @@ MiMapViewInternal(
     PMI_VAD Vad;
     PMI_VAD Placeholder = NULL;
     BOOLEAN Replace = (BOOLEAN)((AllocationType & MI_MEM_REPLACE_PLACEHOLDER) != 0);
+    BOOLEAN PageGranular = (BOOLEAN)((AllocationType & MI_MEM_PAGE_GRANULAR) != 0);
 
     if ((SectionOffset & (Space->Granularity - 1)) ||
-        (Start & ((Replace ? PAGE_SIZE : Space->Granularity) - 1)) ||
+        (Start & (((Replace || PageGranular) ? PAGE_SIZE : Space->Granularity) - 1)) ||
         (Replace && (Start == 0 || (AllocationType & MI_MEM_LARGE_PAGES))))
         return STATUS_INVALID_PARAMETER;
 
