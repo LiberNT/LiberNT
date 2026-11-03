@@ -58,6 +58,7 @@ list(APPEND SOURCE
     LoadLibraryExW.c
     LockFileEx.c
     OpenFileByIdRename.c
+    LoaderLock.c
     PagingFileOpen.c
     SandboxLaunch.c
     SystemImageCatalog.c

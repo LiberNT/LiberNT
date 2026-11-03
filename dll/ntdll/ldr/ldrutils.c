@@ -1238,7 +1238,9 @@ LdrpFreeModuleLoadPath(
     if (!LoadPath)
         return;
 
+    RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
     RemoveEntryList(&LoadPath->Links);
+    RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
     RtlFreeHeap(LdrpHeap, 0, LoadPath);
 }
 
@@ -1258,7 +1260,9 @@ LdrpSaveModuleLoadPath(
 
     LoadPath->LdrEntry = LdrEntry;
     RtlCopyMemory(LoadPath->DllPath, DllPath, Size);
+    RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
     InsertTailList(&LdrpModuleLoadPathList, &LoadPath->Links);
+    RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
 }
 
 PWSTR
@@ -1625,9 +1629,7 @@ SkipCheck:
         if (NT_SUCCESS(HardErrorStatus) && Response == ResponseCancel)
         {
             /* Remove the DLL from the lists */
-            RemoveEntryList(&LdrEntry->InLoadOrderLinks);
-            RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
-            RemoveEntryList(&LdrEntry->HashLinks);
+            LdrpRemoveMemoryTableEntry(LdrEntry);
 
             /* Remove the LDR Entry */
             RtlFreeHeap(LdrpHeap, 0, LdrEntry );
@@ -1817,9 +1819,7 @@ FailRelocate:
             if (!NT_SUCCESS(Status))
             {
                 /* Remove it from the lists */
-                RemoveEntryList(&LdrEntry->InLoadOrderLinks);
-                RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
-                RemoveEntryList(&LdrEntry->HashLinks);
+                LdrpRemoveMemoryTableEntry(LdrEntry);
 
                 /* Unmap it, clear the entry */
                 NtUnmapViewOfSection(NtCurrentProcess(), ViewBase);
@@ -1876,9 +1876,7 @@ RelocDone:;
         {
             DPRINT1("LDR: CFG initialization failed for %wZ, Status = 0x%08lx\n", &LdrEntry->BaseDllName, Status);
 
-            RemoveEntryList(&LdrEntry->InLoadOrderLinks);
-            RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
-            RemoveEntryList(&LdrEntry->HashLinks);
+            LdrpRemoveMemoryTableEntry(LdrEntry);
 
             NtUnmapViewOfSection(NtCurrentProcess(), LdrEntry->DllBase);
             LdrEntry = NULL;
@@ -1891,9 +1889,7 @@ RelocDone:;
     {
         DPRINT1("LDR: CHPE failed to register image code ranges for %wZ\n", &LdrEntry->BaseDllName);
 
-        RemoveEntryList(&LdrEntry->InLoadOrderLinks);
-        RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
-        RemoveEntryList(&LdrEntry->HashLinks);
+        LdrpRemoveMemoryTableEntry(LdrEntry);
 
         NtUnmapViewOfSection(NtCurrentProcess(), LdrEntry->DllBase);
         LdrEntry = NULL;
@@ -1960,6 +1956,8 @@ LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
     PPEB_LDR_DATA PebData = NtCurrentPeb()->Ldr;
     ULONG i;
 
+    RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
+
     /* Insert into hash table */
     i = LDR_GET_HASH_ENTRY(LdrEntry->BaseDllName.Buffer[0]);
     InsertTailList(&LdrpHashTable[i], &LdrEntry->HashLinks);
@@ -1968,7 +1966,22 @@ LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
     InsertTailList(&PebData->InLoadOrderModuleList, &LdrEntry->InLoadOrderLinks);
     InsertTailList(&PebData->InMemoryOrderModuleList, &LdrEntry->InMemoryOrderLinks);
 
+    RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
+
     LdrpGuardInvalidateModuleCache();
+}
+
+VOID
+NTAPI
+LdrpRemoveMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
+    RemoveEntryList(&LdrEntry->InLoadOrderLinks);
+    RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
+    RemoveEntryList(&LdrEntry->HashLinks);
+    LdrpLoadedDllHandleCache = NULL;
+    LdrpGetModuleHandleCache = NULL;
+    RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
 }
 
 VOID
@@ -2007,11 +2020,12 @@ LdrpCheckForLoadedDllHandle(IN PVOID Base,
     PLIST_ENTRY ListHead, Next;
 
     /* Check the cache first */
-    if ((LdrpLoadedDllHandleCache) &&
-        (LdrpLoadedDllHandleCache->DllBase == Base))
+    Current = *(PLDR_DATA_TABLE_ENTRY volatile *)&LdrpLoadedDllHandleCache;
+    if ((Current) &&
+        (Current->DllBase == Base))
     {
         /* We got lucky, return the cached entry */
-        *LdrEntry = LdrpLoadedDllHandleCache;
+        *LdrEntry = Current;
         return TRUE;
     }
 
@@ -2630,6 +2644,50 @@ lookinhash:
     return FALSE;
 }
 
+static
+NTSTATUS
+LdrpLookupProcedureAddress(
+    _In_ PVOID BaseAddress,
+    _In_opt_ PVOID ImportName,
+    _Inout_ PIMAGE_THUNK_DATA Thunk,
+    _In_opt_ PWSTR DllPath)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PIMAGE_EXPORT_DIRECTORY ExportDir;
+    ULONG ExportDirSize;
+    BOOLEAN Found, Ready;
+    NTSTATUS Status;
+
+    RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
+    Found = LdrpCheckForLoadedDllHandle(BaseAddress, &LdrEntry);
+    Ready = Found && LdrpIsModuleReady(LdrEntry);
+    RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
+
+    if (!Found)
+        return STATUS_DLL_NOT_FOUND;
+    if (!Ready)
+        return STATUS_RETRY;
+
+    _SEH2_TRY
+    {
+        ExportDir = RtlImageDirectoryEntryToData(BaseAddress,
+                                                 TRUE,
+                                                 IMAGE_DIRECTORY_ENTRY_EXPORT,
+                                                 &ExportDirSize);
+        if (!ExportDir)
+            Status = STATUS_PROCEDURE_NOT_FOUND;
+        else
+            Status = LdrpSnapThunk(BaseAddress, ImportName, Thunk, Thunk, ExportDir, ExportDirSize, FALSE, NULL, DllPath, TRUE);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = STATUS_RETRY;
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 LdrpGetProcedureAddress(
@@ -2643,7 +2701,7 @@ LdrpGetProcedureAddress(
     NTSTATUS Status = STATUS_SUCCESS;
     UCHAR ImportBuffer[64]; // 128 since NT6.2
     PLDR_DATA_TABLE_ENTRY LdrEntry;
-    IMAGE_THUNK_DATA Thunk;
+    IMAGE_THUNK_DATA Thunk, LookupThunk;
     PVOID ImageBase;
     PIMAGE_IMPORT_BY_NAME ImportName = NULL;
     PIMAGE_EXPORT_DIRECTORY ExportDir;
@@ -2719,6 +2777,21 @@ LdrpGetProcedureAddress(
         Thunk.u1.Ordinal = Ordinal | IMAGE_ORDINAL_FLAG;
     }
 
+    if (!LdrpInLdrInit && !ShowSnaps && !LdrpOwnsLoaderLock())
+    {
+        LookupThunk = Thunk;
+        Status = LdrpLookupProcedureAddress(BaseAddress, ImageBase, &LookupThunk, DllPath);
+        if (Status != STATUS_RETRY)
+        {
+            if (NT_SUCCESS(Status))
+                *ProcedureAddress = (PVOID)LookupThunk.u1.Function;
+            if (ImportName && (ImportName != (PIMAGE_IMPORT_BY_NAME)ImportBuffer))
+                RtlFreeHeap(RtlGetProcessHeap(), 0, ImportName);
+            return Status;
+        }
+        Status = STATUS_SUCCESS;
+    }
+
     /* Acquire lock unless we are initting */
     if (!LdrpInLdrInit) RtlEnterCriticalSection(&LdrpLoaderLock);
 
@@ -2757,7 +2830,8 @@ LdrpGetProcedureAddress(
                                ExportDirSize,
                                FALSE,
                                NULL,
-                               DllPath);
+                               DllPath,
+                               FALSE);
 
         /* Finally, see if we're supposed to run the init routines */
         if ((NT_SUCCESS(Status)) && (ExecuteInit))

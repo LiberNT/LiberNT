@@ -106,6 +106,7 @@ RTL_CRITICAL_SECTION LdrpLoaderLock =
     0,
     0
 };
+RTL_SRWLOCK LdrpModuleDatatableLock = RTL_SRWLOCK_INIT;
 RTL_CRITICAL_SECTION FastPebLock;
 
 BOOLEAN ShowSnaps;
@@ -950,7 +951,7 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
         }
 
         /* Set the flag */
-        LdrEntry->Flags |= LDRP_ENTRY_PROCESSED;
+        InterlockedOr((PLONG)&LdrEntry->Flags, LDRP_ENTRY_PROCESSED);
         NextEntry = NextEntry->Flink;
     }
 

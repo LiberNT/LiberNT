@@ -74,6 +74,7 @@ NTSTATUS
 
 /* Global data */
 extern RTL_CRITICAL_SECTION LdrpLoaderLock;
+extern RTL_SRWLOCK LdrpModuleDatatableLock;
 extern BOOLEAN LdrpInLdrInit;
 extern PVOID LdrpHeap;
 extern LIST_ENTRY LdrpHashTable[LDR_HASH_TABLE_ENTRIES];
@@ -144,11 +145,20 @@ LdrpSnapThunk(IN PVOID ExportBase,
               IN ULONG ExportSize,
               IN BOOLEAN Static,
               IN LPSTR DllName,
-              IN PWSTR DllPath OPTIONAL);
+              IN PWSTR DllPath OPTIONAL,
+              IN BOOLEAN LookupOnly);
 
 NTSTATUS NTAPI
 LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
                          IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+
+BOOLEAN
+NTAPI
+LdrpFindPinnedDll(
+    _In_opt_ PWSTR DllPath,
+    _In_ PUNICODE_STRING DllName,
+    _In_ BOOLEAN Redirected,
+    _Out_ PVOID *BaseAddress);
 
 /* libsupp.c */
 NTSYSAPI
@@ -197,6 +207,24 @@ LdrpAllocateDataTableEntry(IN PVOID BaseAddress);
 
 VOID NTAPI
 LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+
+VOID NTAPI
+LdrpRemoveMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+
+FORCEINLINE
+BOOLEAN
+LdrpOwnsLoaderLock(VOID)
+{
+    return LdrpLoaderLock.OwningThread == NtCurrentTeb()->ClientId.UniqueThread;
+}
+
+FORCEINLINE
+BOOLEAN
+LdrpIsModuleReady(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    return (ReadAcquire((volatile LONG *)&LdrEntry->Flags) & LDRP_ENTRY_PROCESSED) != 0;
+}
 
 NTSTATUS NTAPI
 LdrpLoadDll(IN BOOLEAN Redirected,
