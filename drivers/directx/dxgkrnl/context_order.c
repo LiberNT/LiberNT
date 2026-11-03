@@ -233,6 +233,8 @@ static BOOLEAN DxgkpContextOrderAttachRetireSignal(_Inout_ PDXGKRNL_CONTEXT Cont
             Operation->RetireSignalCount < DXGK_CONTEXT_ORDER_MAX_RETIRE_SIGNALS)
         {
             Operation->RetireSignals[Operation->RetireSignalCount++] = Capture;
+            /* Retirement owns and frees the capture once this lock drops. */
+            DxgkContextSyncAdmitSignalState(Capture);
             Attached = TRUE;
         }
     }
@@ -933,7 +935,6 @@ NTSTATUS DxgkContextOrderAdmitSignal(_In_reads_(ContextCount) PDXGKRNL_CONTEXT c
         (SignalFlags & DXGK_CONTEXT_SYNC_SIGNAL_AT_SUBMISSION) == 0 &&
         DxgkpContextOrderAttachRetireSignal(Contexts[0], Capture))
     {
-        DxgkContextSyncAdmitSignalState(Capture);
         Operation->Payload = NULL;
         while (LockedCount != 0)
             KeReleaseMutex(&SortedContexts[--LockedCount]->StreamAdmissionMutex, FALSE);
