@@ -12,7 +12,7 @@
 #include <d3d11_4.h>
 #include <d3d10_1.h>
 #include <d3d11on12.h>
-#include <dxgi1_4.h>
+#include <dxgi1_5.h>
 #include <d3dkmthk.h>
 #include <d3d10umddi.h>
 #include <drivers/directx/umd_adapter.h>
@@ -214,7 +214,7 @@ struct NativeRemovedEvent
 
 class NativeD3D10Device;
 
-class NativeDevice final : public ID3D11Device5, public IDXGIDevice2, public ID3D11Multithread,
+class NativeDevice final : public ID3D11Device5, public IDXGIDevice4, public ID3D11Multithread,
         public IWineDXGISwapChainFactory, public NativeAllocation
 {
 public:
@@ -374,13 +374,27 @@ public:
     }
     HRESULT STDMETHODCALLTYPE CreateSurface(const DXGI_SURFACE_DESC *desc, UINT count, DXGI_USAGE usage,
             const DXGI_SHARED_RESOURCE *shared, IDXGISurface **out) override;
-    HRESULT STDMETHODCALLTYPE QueryResourceResidency(IUnknown *const *, DXGI_RESIDENCY *, UINT) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE QueryResourceResidency(IUnknown *const *resources, DXGI_RESIDENCY *status, UINT count) override;
     HRESULT STDMETHODCALLTYPE SetGPUThreadPriority(INT priority) override;
     HRESULT STDMETHODCALLTYPE GetGPUThreadPriority(INT *priority) override;
     HRESULT STDMETHODCALLTYPE SetMaximumFrameLatency(UINT latency) override;
     HRESULT STDMETHODCALLTYPE GetMaximumFrameLatency(UINT *latency) override;
-    HRESULT STDMETHODCALLTYPE OfferResources(UINT, IDXGIResource *const *, DXGI_OFFER_RESOURCE_PRIORITY) override { return E_NOTIMPL; }
-    HRESULT STDMETHODCALLTYPE ReclaimResources(UINT, IDXGIResource *const *, BOOL *) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE OfferResources(UINT count, IDXGIResource *const *resources, DXGI_OFFER_RESOURCE_PRIORITY priority) override
+    {
+        return OfferResources1(count, resources, priority, 0);
+    }
+    HRESULT STDMETHODCALLTYPE ReclaimResources(UINT count, IDXGIResource *const *resources, BOOL *discarded) override
+    {
+        return Reclaim(count, resources, discarded, NULL);
+    }
+    void STDMETHODCALLTYPE Trim() override;
+    HRESULT STDMETHODCALLTYPE OfferResources1(UINT count, IDXGIResource *const *resources, DXGI_OFFER_RESOURCE_PRIORITY priority, UINT flags) override;
+    HRESULT STDMETHODCALLTYPE ReclaimResources1(UINT count, IDXGIResource *const *resources, DXGI_RECLAIM_RESOURCE_RESULTS *results) override
+    {
+        return Reclaim(count, resources, NULL, results);
+    }
+    HRESULT Reclaim(UINT count, IDXGIResource *const *resources, BOOL *discarded, DXGI_RECLAIM_RESOURCE_RESULTS *results);
+    void SetResourcePriority(const D3D10DDI_HRESOURCE &resource, UINT priority);
     HRESULT STDMETHODCALLTYPE EnqueueSetEvent(HANDLE event) override;
     HRESULT STDMETHODCALLTYPE CreateBuffer(const D3D11_BUFFER_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Buffer **ppBuffer) override;
     HRESULT STDMETHODCALLTYPE CreateTexture1D(const D3D11_TEXTURE1D_DESC *, const D3D11_SUBRESOURCE_DATA *, ID3D11Texture1D **) override;
@@ -1003,7 +1017,8 @@ public:
     FLOAT min_lod = 0;
     D3D10DDI_HRESOURCE handle = {};
     D3D10DDI_HRTRESOURCE runtime_handle;
-    UINT priority = 0;
+    UINT priority = DXGI_RESOURCE_PRIORITY_NORMAL;
+    bool offered = false;
     bool created = false;
     DXGI_USAGE usage = 0;
     NativeTextureResource dxgi_resource;
@@ -1036,7 +1051,7 @@ public:
         return NativeChild::QueryInterface(iid, out);
     }
     void STDMETHODCALLTYPE GetType(D3D11_RESOURCE_DIMENSION *out) override { if (out) *out = D3D11_RESOURCE_DIMENSION_TEXTURE1D; }
-    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; }
+    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; if (created) device->SetResourcePriority(handle, value); }
     UINT STDMETHODCALLTYPE GetEvictionPriority() override { return priority; }
     void STDMETHODCALLTYPE GetDesc(D3D11_TEXTURE1D_DESC *out) override { if (out) *out = desc; }
 };
@@ -1056,7 +1071,8 @@ public:
     FLOAT min_lod = 0;
     D3D10DDI_HRESOURCE handle = {};
     D3D10DDI_HRTRESOURCE runtime_handle;
-    UINT priority = 0;
+    UINT priority = DXGI_RESOURCE_PRIORITY_NORMAL;
+    bool offered = false;
     bool created = false;
     bool registered = false;
     bool read_only = false;
@@ -1158,7 +1174,7 @@ public:
         return hr;
     }
     void STDMETHODCALLTYPE GetType(D3D11_RESOURCE_DIMENSION *out) override { if (out) *out = D3D11_RESOURCE_DIMENSION_TEXTURE2D; }
-    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; }
+    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; if (created) device->SetResourcePriority(handle, value); }
     UINT STDMETHODCALLTYPE GetEvictionPriority() override { return priority; }
     void STDMETHODCALLTYPE GetDesc(D3D11_TEXTURE2D_DESC *out) override { if (out) *out = desc; }
 };
@@ -1257,7 +1273,8 @@ public:
     FLOAT min_lod = 0;
     D3D10DDI_HRESOURCE handle = {};
     D3D10DDI_HRTRESOURCE runtime_handle;
-    UINT priority = 0;
+    UINT priority = DXGI_RESOURCE_PRIORITY_NORMAL;
+    bool offered = false;
     bool created = false;
     BYTE *mapped = NULL;
     DXGI_USAGE usage = 0;
@@ -1288,7 +1305,7 @@ public:
         return NativeChild::QueryInterface(iid, out);
     }
     void STDMETHODCALLTYPE GetType(D3D11_RESOURCE_DIMENSION *out) override { if (out) *out = D3D11_RESOURCE_DIMENSION_TEXTURE3D; }
-    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; }
+    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; if (created) device->SetResourcePriority(handle, value); }
     UINT STDMETHODCALLTYPE GetEvictionPriority() override { return priority; }
     void STDMETHODCALLTYPE GetDesc(D3D11_TEXTURE3D_DESC *out) override { if (out) *out = desc; }
 };
@@ -2439,8 +2456,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::QueryInterface(REFIID iid, void **out)
             || IsEqualGUID(iid, IID_ID3D11Device5))
         *out = static_cast<ID3D11Device5 *>(this);
     else if (IsEqualGUID(iid, IID_IDXGIObject) || IsEqualGUID(iid, IID_IDXGIDevice)
-            || IsEqualGUID(iid, IID_IDXGIDevice1) || IsEqualGUID(iid, IID_IDXGIDevice2))
-        *out = static_cast<IDXGIDevice2 *>(this);
+            || IsEqualGUID(iid, IID_IDXGIDevice1) || IsEqualGUID(iid, IID_IDXGIDevice2)
+            || IsEqualGUID(iid, IID_IDXGIDevice3) || IsEqualGUID(iid, IID_IDXGIDevice4))
+        *out = static_cast<IDXGIDevice4 *>(this);
     else if (IsEqualGUID(iid, IID_IWineDXGISwapChainFactory))
         *out = static_cast<IWineDXGISwapChainFactory *>(this);
     else if (IsEqualGUID(iid, IID_ID3D11Multithread))
@@ -2702,7 +2720,8 @@ public:
     D3D11_BUFFER_DESC desc = {};
     D3D10DDI_HRESOURCE handle = {};
     D3D10DDI_HRTRESOURCE runtime_handle;
-    UINT priority = 0;
+    UINT priority = DXGI_RESOURCE_PRIORITY_NORMAL;
+    bool offered = false;
     bool created = false;
     bool mapped = false;
     DXGI_USAGE usage = 0;
@@ -2733,7 +2752,7 @@ public:
         return NativeChild::QueryInterface(iid, out);
     }
     void STDMETHODCALLTYPE GetType(D3D11_RESOURCE_DIMENSION *out) override { if (out) *out = D3D11_RESOURCE_DIMENSION_BUFFER; }
-    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; }
+    void STDMETHODCALLTYPE SetEvictionPriority(UINT value) override { priority = value; if (created) device->SetResourcePriority(handle, value); }
     UINT STDMETHODCALLTYPE GetEvictionPriority() override { return priority; }
     void STDMETHODCALLTYPE GetDesc(D3D11_BUFFER_DESC *out) override { if (out) *out = desc; }
 };
@@ -2749,6 +2768,183 @@ static NativeBuffer *GetNativeBuffer(ID3D11Resource *resource, NativeDevice *dev
     bool same = owner == static_cast<ID3D11Device *>(device);
     if (owner) owner->Release();
     return same ? static_cast<NativeBuffer *>(static_cast<ID3D11Buffer *>(resource)) : NULL;
+}
+
+static bool *NativeOfferState(ID3D11Resource *resource)
+{
+    D3D11_RESOURCE_DIMENSION dimension;
+    resource->GetType(&dimension);
+    switch (dimension)
+    {
+    case D3D11_RESOURCE_DIMENSION_BUFFER: return &static_cast<NativeBuffer *>(static_cast<ID3D11Buffer *>(resource))->offered;
+    case D3D11_RESOURCE_DIMENSION_TEXTURE1D: return &static_cast<NativeTexture1D *>(static_cast<ID3D11Texture1D *>(resource))->offered;
+    case D3D11_RESOURCE_DIMENSION_TEXTURE2D: return &static_cast<NativeTexture2D *>(static_cast<ID3D11Texture2D *>(resource))->offered;
+    case D3D11_RESOURCE_DIMENSION_TEXTURE3D: return &static_cast<NativeTexture3D *>(static_cast<ID3D11Texture3D *>(resource))->offered;
+    default: return NULL;
+    }
+}
+
+struct NativeResidencyTarget
+{
+    NativeDevice *device;
+    DXGI_DDI_HDEVICE driver_device;
+    DXGI_DDI_HRESOURCE handle;
+    bool *offered;
+};
+
+/* Windows 11 accepts the resources of any device; each is handed to the driver of the device that created it. */
+class NativeResidencyTargets
+{
+    NativeResidencyTarget *items = NULL;
+    UINT count = 0;
+public:
+    ~NativeResidencyTargets()
+    {
+        for (UINT i = 0; i < count; ++i)
+            if (items[i].device) items[i].device->Release();
+        HeapFree(GetProcessHeap(), 0, items);
+    }
+    NativeResidencyTarget &operator[](UINT i) { return items[i]; }
+    HRESULT Resolve(IUnknown *const *objects, UINT n)
+    {
+        if (!n) return S_OK;
+        SIZE_T bytes = static_cast<SIZE_T>(n) * sizeof(*items);
+        if (bytes / sizeof(*items) != n) return E_OUTOFMEMORY;
+        items = static_cast<NativeResidencyTarget *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes));
+        if (!items) return E_OUTOFMEMORY;
+        count = n;
+        for (UINT i = 0; i < n; ++i)
+            if (!Resolve(objects[i], &items[i])) return E_INVALIDARG;
+        return S_OK;
+    }
+private:
+    static bool Resolve(IUnknown *object, NativeResidencyTarget *target)
+    {
+        ID3D11Resource *resource = NULL;
+        ID3D11Device *owner = NULL, *native = NULL;
+        if (!object || FAILED(object->QueryInterface(IID_ID3D11Resource, reinterpret_cast<void **>(&resource))))
+            return false;
+        resource->GetDevice(&owner);
+        if (owner && SUCCEEDED(owner->QueryInterface(NativeDevicePrivateGuid, reinterpret_cast<void **>(&native))))
+        {
+            NativeDevice *device = static_cast<NativeDevice *>(native);
+            NativeBuffer *buffer = GetNativeBuffer(resource, device);
+            NativeTextureInfo info;
+            if (buffer || GetNativeTexture(resource, device, &info))
+            {
+                target->device = device;
+                target->driver_device = reinterpret_cast<DXGI_DDI_HDEVICE>(device->driver_device.pDrvPrivate);
+                target->handle = reinterpret_cast<DXGI_DDI_HRESOURCE>((buffer ? buffer->handle : info.handle).pDrvPrivate);
+                target->offered = NativeOfferState(resource);
+                native = NULL;
+            }
+        }
+        if (native) native->Release();
+        if (owner) owner->Release();
+        resource->Release();
+        return target->device && target->offered;
+    }
+};
+
+static_assert(static_cast<int>(DXGI_RESIDENCY_FULLY_RESIDENT) == static_cast<int>(DXGI_DDI_RESIDENCY_FULLY_RESIDENT), "residency");
+static_assert(static_cast<int>(DXGI_RESIDENCY_RESIDENT_IN_SHARED_MEMORY) == static_cast<int>(DXGI_DDI_RESIDENCY_RESIDENT_IN_SHARED_MEMORY), "residency");
+static_assert(static_cast<int>(DXGI_RESIDENCY_EVICTED_TO_DISK) == static_cast<int>(DXGI_DDI_RESIDENCY_EVICTED_TO_DISK), "residency");
+static_assert(static_cast<int>(DXGI_OFFER_RESOURCE_PRIORITY_LOW) == static_cast<int>(D3DDDI_OFFER_PRIORITY_LOW), "offer priority");
+static_assert(static_cast<int>(DXGI_OFFER_RESOURCE_PRIORITY_HIGH) == static_cast<int>(D3DDDI_OFFER_PRIORITY_HIGH), "offer priority");
+
+HRESULT STDMETHODCALLTYPE NativeDevice::QueryResourceResidency(IUnknown *const *resources, DXGI_RESIDENCY *status, UINT count)
+{
+    NativeResidencyTargets targets;
+    if (!resources || !status) return E_INVALIDARG;
+    HRESULT hr = targets.Resolve(resources, count);
+    if (FAILED(hr)) return hr;
+    for (UINT i = 0; i < count; ++i)
+    {
+        NativeDevice *owner = targets[i].device;
+        DXGI_DDI_RESIDENCY residency = DXGI_DDI_RESIDENCY_FULLY_RESIDENT;
+        DXGI_DDI_ARG_QUERYRESOURCERESIDENCY args = { targets[i].driver_device, &targets[i].handle, &residency, 1 };
+        if (!owner->dxgi_functions.pfnQueryResourceResidency) return DXGI_ERROR_UNSUPPORTED;
+        {
+            NativeLock guard(owner);
+            hr = owner->dxgi_functions.pfnQueryResourceResidency(&args);
+        }
+        if (FAILED(hr)) return hr;
+        status[i] = static_cast<DXGI_RESIDENCY>(residency);
+    }
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE NativeDevice::OfferResources1(UINT count, IDXGIResource *const *resources,
+        DXGI_OFFER_RESOURCE_PRIORITY priority, UINT flags)
+{
+    NativeResidencyTargets targets;
+    if (!resources || priority < DXGI_OFFER_RESOURCE_PRIORITY_LOW || priority > DXGI_OFFER_RESOURCE_PRIORITY_HIGH)
+        return E_INVALIDARG;
+    /* TODO: DXGI_OFFER_RESOURCE_FLAG_ALLOW_DECOMMIT needs the DXGI 1.5 pfnOfferResources1 DDI; the offer keeps its commitment */
+    (void)flags;
+    HRESULT hr = targets.Resolve(reinterpret_cast<IUnknown *const *>(resources), count);
+    if (FAILED(hr)) return hr;
+    for (UINT i = 0; i < count; ++i)
+        if (*targets[i].offered) return E_INVALIDARG;
+    for (UINT i = 0; i < count; ++i)
+    {
+        NativeDevice *owner = targets[i].device;
+        if (*targets[i].offered) return E_INVALIDARG;
+        if (owner->wddm20 && owner->wddm20_dxgi.pfnOfferResources)
+        {
+            DXGI_DDI_ARG_OFFERRESOURCES args = { targets[i].driver_device, &targets[i].handle, 1,
+                    static_cast<D3DDDI_OFFER_PRIORITY>(priority) };
+            NativeLock guard(owner);
+            hr = owner->wddm20_dxgi.pfnOfferResources(&args);
+            if (FAILED(hr)) return hr;
+        }
+        *targets[i].offered = true;
+    }
+    return S_OK;
+}
+
+HRESULT NativeDevice::Reclaim(UINT count, IDXGIResource *const *resources, BOOL *discarded,
+        DXGI_RECLAIM_RESOURCE_RESULTS *results)
+{
+    NativeResidencyTargets targets;
+    if (!resources) return E_INVALIDARG;
+    HRESULT hr = targets.Resolve(reinterpret_cast<IUnknown *const *>(resources), count);
+    if (FAILED(hr)) return hr;
+    for (UINT i = 0; i < count; ++i)
+        if (!*targets[i].offered) return E_INVALIDARG;
+    for (UINT i = 0; i < count; ++i)
+    {
+        NativeDevice *owner = targets[i].device;
+        BOOL lost = FALSE;
+        if (!*targets[i].offered) return E_INVALIDARG;
+        if (owner->wddm20 && owner->wddm20_dxgi.pfnReclaimResources)
+        {
+            DXGI_DDI_ARG_RECLAIMRESOURCES args = { targets[i].driver_device, &targets[i].handle, &lost, 1 };
+            NativeLock guard(owner);
+            hr = owner->wddm20_dxgi.pfnReclaimResources(&args);
+            if (FAILED(hr)) return hr;
+        }
+        *targets[i].offered = false;
+        if (discarded) discarded[i] = lost;
+        if (results) results[i] = lost ? DXGI_RECLAIM_RESOURCE_RESULT_DISCARDED : DXGI_RECLAIM_RESOURCE_RESULT_OK;
+    }
+    return S_OK;
+}
+
+void STDMETHODCALLTYPE NativeDevice::Trim()
+{
+    NativeLock guard(this);
+    if (wddm20 && wddm20_functions.pfnFlush) wddm20_functions.pfnFlush(driver_device, 0, D3DWDDM1_3DDI_TRIM_MEMORY);
+    else functions.pfnFlush(driver_device);
+}
+
+void NativeDevice::SetResourcePriority(const D3D10DDI_HRESOURCE &resource, UINT value)
+{
+    if (!resource.pDrvPrivate || !dxgi_functions.pfnSetResourcePriority) return;
+    DXGI_DDI_ARG_SETRESOURCEPRIORITY args = { reinterpret_cast<DXGI_DDI_HDEVICE>(driver_device.pDrvPrivate),
+            reinterpret_cast<DXGI_DDI_HRESOURCE>(resource.pDrvPrivate), value };
+    NativeLock guard(this);
+    dxgi_functions.pfnSetResourcePriority(&args);
 }
 
 #define NATIVE_RESOURCE_REFERENCE(Name, Method) \

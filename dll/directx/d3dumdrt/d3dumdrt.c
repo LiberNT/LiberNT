@@ -140,6 +140,8 @@ static BOOL D3DUmdRtDeviceLockReady;
 static PFND3DKMT_CREATEALLOCATION  pfnCreateAllocation;
 static PFND3DKMT_CREATEALLOCATION2 pfnCreateAllocation2;
 static PFND3DKMT_DESTROYALLOCATION pfnDestroyAllocation;
+static PFND3DKMT_SETALLOCATIONPRIORITY pfnSetAllocationPriority;
+static PFND3DKMT_QUERYALLOCATIONRESIDENCY pfnQueryAllocationResidency;
 static PFND3DKMT_LOCK              pfnLock;
 static PFND3DKMT_UNLOCK            pfnUnlock;
 static PFND3DKMT_RENDER            pfnRender;
@@ -211,6 +213,8 @@ static BOOL D3DUmdRtResolveProcs(VOID)
     RESOLVE(CreateAllocation, CREATEALLOCATION);
     RESOLVE(CreateAllocation2, CREATEALLOCATION2);
     RESOLVE(DestroyAllocation, DESTROYALLOCATION);
+    RESOLVE(SetAllocationPriority, SETALLOCATIONPRIORITY);
+    RESOLVE(QueryAllocationResidency, QUERYALLOCATIONRESIDENCY);
     RESOLVE(Lock, LOCK);
     RESOLVE(Unlock, UNLOCK);
     RESOLVE(Render, RENDER);
@@ -1382,6 +1386,88 @@ static HRESULT APIENTRY D3DUmdRtRenderCb(HANDLE hDevice, D3DDDICB_RENDER *pData)
     pData->NewCommandBuffer = Render.NewCommandBuffer;
 #endif
     return S_OK;
+}
+
+/* ------------------------------------------------------------------------ *
+ * Allocation priority and residency
+ * ------------------------------------------------------------------------ */
+
+C_ASSERT(sizeof(D3DDDI_RESIDENCYSTATUS) == sizeof(D3DKMT_ALLOCATIONRESIDENCYSTATUS));
+C_ASSERT((INT)D3DDDI_RESIDENCYSTATUS_RESIDENTINGPUMEMORY == (INT)D3DKMT_ALLOCATIONRESIDENCYSTATUS_RESIDENTINGPUMEMORY);
+C_ASSERT((INT)D3DDDI_RESIDENCYSTATUS_RESIDENTINSHAREDMEMORY == (INT)D3DKMT_ALLOCATIONRESIDENCYSTATUS_RESIDENTINSHAREDMEMORY);
+C_ASSERT((INT)D3DDDI_RESIDENCYSTATUS_NOTRESIDENT == (INT)D3DKMT_ALLOCATIONRESIDENCYSTATUS_NOTRESIDENT);
+
+/* A runtime resource names all of its allocations; otherwise the handle list does. */
+static HRESULT
+D3DUmdRtAllocationTarget(
+    _In_ PD3DUMDRT_DEVICE Device,
+    _In_opt_ HANDLE hResource,
+    _In_ UINT NumAllocations,
+    _In_opt_ CONST D3DKMT_HANDLE *HandleList,
+    _Out_ D3DKMT_HANDLE *KmResource)
+{
+    D3DKMT_HANDLE *Handles;
+    HRESULT Result;
+
+    *KmResource = 0;
+    if (hResource == NULL)
+        return (NumAllocations == 0 || HandleList == NULL) ? E_INVALIDARG : S_OK;
+    Result = D3DUmdRtTranslateResourceHandles(Device, &hResource, 1, &Handles);
+    if (FAILED(Result))
+        return Result;
+    *KmResource = Handles[0];
+    HeapFree(GetProcessHeap(), 0, Handles);
+    return S_OK;
+}
+
+static HRESULT APIENTRY
+D3DUmdRtSetPriorityCb(
+    HANDLE hDevice,
+    D3DDDICB_SETPRIORITY *pData)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hDevice);
+    D3DKMT_SETALLOCATIONPRIORITY Set;
+    HRESULT Result;
+
+    if (Device == NULL || pData == NULL || pData->pPriorities == NULL || pfnSetAllocationPriority == NULL)
+        return E_INVALIDARG;
+    ZeroMemory(&Set, sizeof(Set));
+    Result = D3DUmdRtAllocationTarget(Device, pData->hResource, pData->NumAllocations, pData->HandleList, &Set.hResource);
+    if (FAILED(Result))
+        return Result;
+    Set.hDevice = Device->hDevice;
+    if (Set.hResource == 0)
+    {
+        Set.phAllocationList = pData->HandleList;
+        Set.AllocationCount = pData->NumAllocations;
+    }
+    Set.pPriorities = pData->pPriorities;
+    return D3DUmdRtStatusToHresult(pfnSetAllocationPriority(&Set));
+}
+
+static HRESULT APIENTRY
+D3DUmdRtQueryResidencyCb(
+    HANDLE hDevice,
+    CONST D3DDDICB_QUERYRESIDENCY *pData)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hDevice);
+    D3DKMT_QUERYALLOCATIONRESIDENCY Query;
+    HRESULT Result;
+
+    if (Device == NULL || pData == NULL || pData->pResidencyStatus == NULL || pfnQueryAllocationResidency == NULL)
+        return E_INVALIDARG;
+    ZeroMemory(&Query, sizeof(Query));
+    Result = D3DUmdRtAllocationTarget(Device, pData->hResource, pData->NumAllocations, pData->HandleList, &Query.hResource);
+    if (FAILED(Result))
+        return Result;
+    Query.hDevice = Device->hDevice;
+    if (Query.hResource == 0)
+    {
+        Query.phAllocationList = pData->HandleList;
+        Query.AllocationCount = pData->NumAllocations;
+    }
+    Query.pResidencyStatus = (D3DKMT_ALLOCATIONRESIDENCYSTATUS *)pData->pResidencyStatus;
+    return D3DUmdRtStatusToHresult(pfnQueryAllocationResidency(&Query));
 }
 
 /* ------------------------------------------------------------------------ *
@@ -3519,6 +3605,8 @@ D3DUmdRtCreateDeviceCallbacksEx(
     ZeroMemory(pCallbacks, sizeof(*pCallbacks));
     pCallbacks->pfnAllocateCb = D3DUmdRtAllocateCb;
     pCallbacks->pfnDeallocateCb = D3DUmdRtDeallocateCb;
+    pCallbacks->pfnSetPriorityCb = D3DUmdRtSetPriorityCb;
+    pCallbacks->pfnQueryResidencyCb = D3DUmdRtQueryResidencyCb;
     pCallbacks->pfnSetDisplayModeCb = D3DUmdRtSetDisplayModeCb;
     pCallbacks->pfnLockCb = D3DUmdRtLockCb;
     pCallbacks->pfnUnlockCb = D3DUmdRtUnlockCb;
