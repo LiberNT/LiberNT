@@ -877,6 +877,8 @@ IntCompositionFreeDxSurface(_Inout_ PWND_REDIRECT r)
     RtlZeroMemory(&r->DxAdapterLuid, sizeof(r->DxAdapterLuid));
     r->DxWindow = 0;
     r->DxFlags = 0;
+    r->DxSourceWidth = 0;
+    r->DxSourceHeight = 0;
     r->DxClientX = 0;
     r->DxClientY = 0;
     r->DxLayerX = 0;
@@ -3176,6 +3178,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         g_DwmFrameWindows[count].DxHeight = e->Redirect.DxInfo.Height;
         g_DwmFrameWindows[count].DxDrawWidth = e->Redirect.DxDrawWidth ? e->Redirect.DxDrawWidth : e->Redirect.DxInfo.Width;
         g_DwmFrameWindows[count].DxDrawHeight = e->Redirect.DxDrawHeight ? e->Redirect.DxDrawHeight : e->Redirect.DxInfo.Height;
+        g_DwmFrameWindows[count].DxSourceWidth = e->Redirect.DxSourceWidth ? e->Redirect.DxSourceWidth : e->Redirect.DxInfo.Width;
+        g_DwmFrameWindows[count].DxSourceHeight = e->Redirect.DxSourceHeight ? e->Redirect.DxSourceHeight : e->Redirect.DxInfo.Height;
         g_DwmFrameWindows[count].DxPitch = e->Redirect.DxInfo.Pitch;
         g_DwmFrameWindows[count].DxFormat = e->Redirect.DxInfo.Format;
         g_DwmFrameWindows[count].BaseGlobalShare =
@@ -4241,7 +4245,13 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                 if (Request.Info.Version != DWM_DX_SURFACE_INFO_VERSION_GPU ||
                     Request.Info.Pitch != 0 ||
                     (Request.Flags & ~(DWM_DX_PUBLISH_PREMULTIPLIED | DWM_DX_PUBLISH_RETAINED |
-                                       DWM_DX_PUBLISH_SCANOUT | DWM_DX_PUBLISH_LAYER)) != 0 ||
+                                       DWM_DX_PUBLISH_SCANOUT | DWM_DX_PUBLISH_LAYER |
+                                       DWM_DX_PUBLISH_SOURCE_REGION)) != 0 ||
+                    ((Request.Flags & DWM_DX_PUBLISH_SOURCE_REGION) &&
+                     ((Request.Flags & (DWM_DX_PUBLISH_LAYER | DWM_DX_PUBLISH_SCANOUT)) ||
+                      Request.SourceWidth == 0 || Request.SourceHeight == 0 ||
+                      Request.SourceWidth > Request.Info.Width ||
+                      Request.SourceHeight > Request.Info.Height)) ||
                     ((Request.Flags & DWM_DX_PUBLISH_SCANOUT) &&
                      !(Request.Flags & DWM_DX_PUBLISH_RETAINED)) ||
                     (Request.Info.Format != DWM_DX_FORMAT_B8G8R8A8_UNORM &&
@@ -4371,6 +4381,8 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             Entry->Redirect.DxInfo = Request.Info;
             Entry->Redirect.DxDrawWidth = Layer ? Request.Info.Width : ClientWidth;
             Entry->Redirect.DxDrawHeight = Layer ? Request.Info.Height : ClientHeight;
+            Entry->Redirect.DxSourceWidth = (Request.Flags & DWM_DX_PUBLISH_SOURCE_REGION) ? Request.SourceWidth : Request.Info.Width;
+            Entry->Redirect.DxSourceHeight = (Request.Flags & DWM_DX_PUBLISH_SOURCE_REGION) ? Request.SourceHeight : Request.Info.Height;
             Entry->Redirect.DxFlags = Publish ? Request.Flags : 0;
             Entry->Redirect.DxWindow = Request.Window;
             IntCompositionSetDxLayer(SourceWnd, TopWnd, Layer ? &Request : NULL,

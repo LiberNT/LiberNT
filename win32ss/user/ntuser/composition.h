@@ -80,6 +80,8 @@ typedef struct _WND_REDIRECT
     LONG      DxClientY;
     ULONG     DxDrawWidth;
     ULONG     DxDrawHeight;
+    ULONG     DxSourceWidth;
+    ULONG     DxSourceHeight;
     LONG      DxLayerX;
     LONG      DxLayerY;
     RECTL     DxLayerClip;

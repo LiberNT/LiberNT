@@ -31,6 +31,7 @@ public:
     IDXGIFactory *factory;
     HWND window;
     DXGI_SWAP_CHAIN_DESC1 desc = {};
+    UINT source_width = 0, source_height = 0;
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen_desc = {};
     DXGI_RGBA background = {};
     Native12PrivateData private_data;
@@ -339,14 +340,23 @@ public:
     }
     HRESULT STDMETHODCALLTYPE SetSourceSize(UINT width, UINT height) override
     {
-        if (!width || !height || width > desc.Width || height > desc.Height) return E_INVALIDARG;
-        return width == desc.Width && height == desc.Height ? S_OK : DXGI_ERROR_UNSUPPORTED;
+        AcquireSRWLockExclusive(&lock);
+        HRESULT hr = width > desc.Width || height > desc.Height ? DXGI_ERROR_INVALID_CALL : S_OK;
+        if (hr == S_OK)
+        {
+            source_width = width;
+            source_height = height;
+        }
+        ReleaseSRWLockExclusive(&lock);
+        return hr;
     }
     HRESULT STDMETHODCALLTYPE GetSourceSize(UINT *width, UINT *height) override
     {
         if (!width || !height) return E_INVALIDARG;
-        *width = desc.Width;
-        *height = desc.Height;
+        AcquireSRWLockShared(&lock);
+        *width = source_width;
+        *height = source_height;
+        ReleaseSRWLockShared(&lock);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE SetMaximumFrameLatency(UINT value) override
@@ -774,6 +784,8 @@ HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requeste
         TRACE("Back buffer %u: resource %p, share %#x.\n", i, buffers[i], shares[i]);
     }
     desc = requested;
+    source_width = desc.Width;
+    source_height = desc.Height;
     current = 0;
     return S_OK;
 }
@@ -842,6 +854,13 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         exchange.Info.Format = desc.Format;
         exchange.Flags = DWM_DX_PUBLISH_RETAINED;
         if (desc.AlphaMode == DXGI_ALPHA_MODE_PREMULTIPLIED) exchange.Flags |= DWM_DX_PUBLISH_PREMULTIPLIED;
+        /* FIXME: a zero-size source region presents the whole buffer */
+        if (source_width && source_height && (source_width < desc.Width || source_height < desc.Height))
+        {
+            exchange.Flags |= DWM_DX_PUBLISH_SOURCE_REGION;
+            exchange.SourceWidth = source_width;
+            exchange.SourceHeight = source_height;
+        }
         exchange.ReadyEvent = reinterpret_cast<ULONG_PTR>(release_events[current]);
         exchange.UpdateRect.right = desc.Width;
         exchange.UpdateRect.bottom = desc.Height;

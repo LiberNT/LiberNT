@@ -6281,16 +6281,10 @@ public:
     HRESULT STDMETHODCALLTYPE SetSourceSize(UINT width, UINT height) override
     {
         NativeLock guard(device);
-        if (composition)
-        {
-            if (width > desc.Width || height > desc.Height) return DXGI_ERROR_INVALID_CALL;
-            source_width = width;
-            source_height = height;
-            return S_OK;
-        }
-        if (!width || !height || width > desc.Width || height > desc.Height) return E_INVALIDARG;
-        /* TODO: source region of window swap chains (crop and scaling of the window publication) */
-        return width == desc.Width && height == desc.Height ? S_OK : DXGI_ERROR_UNSUPPORTED;
+        if (width > desc.Width || height > desc.Height) return DXGI_ERROR_INVALID_CALL;
+        source_width = width;
+        source_height = height;
+        return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetSourceSize(UINT *width, UINT *height) override
     {
@@ -6809,6 +6803,7 @@ bool NativeSwapChain::ForeignAdapter()
 
 HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
 {
+    /* FIXME: the source region is not applied when another adapter owns the window */
     typedef HRESULT (WINAPI *GetSurface)(HWND, LUID, HMONITOR, DWORD, UINT *, HANDLE *, ULONGLONG *);
     typedef HRESULT (WINAPI *UpdateSurface)(HWND, ULONGLONG, DWORD, HMONITOR, const RECT *);
     static GetSurface get_surface;
@@ -6906,6 +6901,13 @@ HRESULT NativeSwapChain::Publish(NativeTexture2D *texture)
     {
         exchange.Flags |= DWM_DX_PUBLISH_LAYER;
         SetLayer(exchange);
+    }
+    /* FIXME: a zero-size source region presents the whole buffer */
+    else if (source_width && source_height && (source_width < desc.Width || source_height < desc.Height))
+    {
+        exchange.Flags |= DWM_DX_PUBLISH_SOURCE_REGION;
+        exchange.SourceWidth = source_width;
+        exchange.SourceHeight = source_height;
     }
     exchange.ReadyEvent = reinterpret_cast<ULONG_PTR>(release);
     /* A transport retains undamaged pixels across Present1 calls, and a flip

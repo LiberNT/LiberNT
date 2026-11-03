@@ -3646,7 +3646,7 @@ DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
         if (cx < 1) cx = 1;
         if (cy < 1) cy = 1;
         DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
-                      dxpix, (LONG)w->DxWidth, (LONG)w->DxHeight, dxPitch,
+                      dxpix, (LONG)w->DxSourceWidth, (LONG)w->DxSourceHeight, dxPitch,
                       dstX + (LONG)((LONGLONG)w->DxClientX * drawCx / w->cx),
                       dstY + (LONG)((LONGLONG)w->DxClientY * drawCy / w->cy),
                       cx, cy, alpha, NULL, NULL, 0);
@@ -4707,7 +4707,17 @@ DwmComposeLoop(HANDLE hStopEvent)
                         client.Stride = dxPitch;
                         if (client.BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT)
                             client.BackdropType = 0;
-                        if (ClipL < ClipR && ClipT < ClipB)
+                        if (ClipL < ClipR && ClipT < ClipB &&
+                            (wins[i].DxSourceWidth != wins[i].DxDrawWidth ||
+                             wins[i].DxSourceHeight != wins[i].DxDrawHeight))
+                        {
+                            DwmBlitScaled((ULONG *)g_compBits, g_W, ClipL, ClipT, ClipR, ClipB,
+                                          dxpix, (LONG)wins[i].DxSourceWidth, (LONG)wins[i].DxSourceHeight,
+                                          dxPitch, client.x - g_originX, client.y - g_originY,
+                                          (LONG)wins[i].DxDrawWidth, (LONG)wins[i].DxDrawHeight,
+                                          255, NULL, NULL, 0);
+                        }
+                        else if (ClipL < ClipR && ClipT < ClipB)
                         {
                             DwmBlitWindowVisible((ULONG *)g_compBits, g_W,
                                                  ClipL, ClipT, ClipR, ClipB, dxpix,

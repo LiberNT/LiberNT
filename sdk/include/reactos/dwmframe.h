@@ -395,6 +395,8 @@ typedef struct _DWM_WIN
     ULONG CaptionState;
     ULONG DxDrawWidth;
     ULONG DxDrawHeight;
+    ULONG DxSourceWidth; /* top-left texels shown over the draw size */
+    ULONG DxSourceHeight;
 } DWM_WIN, *PDWM_WIN;
 
 typedef struct _DWM_FRAME_HEADER
@@ -498,6 +500,8 @@ typedef struct _DWM_DX_SHARED_SURFACE_INFO
 /* The retained buffer can also be scanned out as an overlay plane. */
 #define DWM_DX_PUBLISH_SCANOUT       0x00000004u
 #define DWM_DX_PUBLISH_LAYER         0x00000008u
+/* SourceWidth x SourceHeight at the texture origin is stretched over the client. */
+#define DWM_DX_PUBLISH_SOURCE_REGION 0x00000010u
 
 #define DWM_DX_UPDATE_CANCEL     0x80000000u
 
@@ -538,6 +542,8 @@ typedef struct _DWM_DX_SURFACE_EXCHANGE
     LONG LayerOffsetX;
     LONG LayerOffsetY;
     RECTL LayerClip;
+    ULONG SourceWidth;
+    ULONG SourceHeight;
 } DWM_DX_SURFACE_EXCHANGE, *PDWM_DX_SURFACE_EXCHANGE;
 
 #pragma pack(pop)

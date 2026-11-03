@@ -7,6 +7,7 @@ add_executable(dxgi_apitest
     composition.cpp
     composition_damage.cpp
     composition_source.cpp
+    hwnd_source.cpp
     composition_lifetime.cpp
     completion_event.cpp
     counters.cpp
