@@ -68,6 +68,9 @@ KiDumpTrapFrame(IN PKTRAP_FRAME TrapFrame)
     DbgPrint("V86Gs: %x\n", TrapFrame->V86Gs);
 }
 
+#define KI_INTERRUPT_TRAP_FRAME ((ULONG)-2)
+#define KI_EXCEPTION_ACTIVE_FRAME 0x100
+
 #if DBG
 FORCEINLINE
 VOID
@@ -142,7 +145,8 @@ KiExitTrapDebugChecks(IN PKTRAP_FRAME TrapFrame,
     }
 
     /* If we're ignoring previous mode, make sure caller doesn't actually want it */
-    if (SkipPreviousMode && (TrapFrame->PreviousPreviousMode != (ULONG)-1))
+    if (SkipPreviousMode && (TrapFrame->PreviousPreviousMode != (ULONG)-1) &&
+        (TrapFrame->PreviousPreviousMode != KI_INTERRUPT_TRAP_FRAME))
     {
         DbgPrint("Exiting a trap witout restoring previous mode, yet previous mode seems valid: %lx\n", TrapFrame->PreviousPreviousMode);
         __debugbreak();
@@ -181,7 +185,7 @@ KiExitTrapDebugChecks(IN PKTRAP_FRAME TrapFrame,
 
 #else
 #define KiExitTrapDebugChecks(x, y)
-#define KiFillTrapFrameDebug(x)
+#define KiFillTrapFrameDebug(x) ((x)->PreviousPreviousMode = (ULONG)-1)
 #endif
 
 FORCEINLINE
@@ -392,6 +396,7 @@ KiEnterInterruptTrap(IN PKTRAP_FRAME TrapFrame)
 
     /* Set debug header */
     KiFillTrapFrameDebug(TrapFrame);
+    TrapFrame->PreviousPreviousMode = KI_INTERRUPT_TRAP_FRAME;
 }
 
 //

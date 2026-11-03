@@ -894,8 +894,10 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
             return;
         }
 
+        TrapFrame->PreviousPreviousMode |= KI_EXCEPTION_ACTIVE_FRAME;
+
         /* User mode exception, was it first-chance? */
-        if (FirstChance)
+        if (FirstChance && ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN)
         {
             /*
              * Break into the kernel debugger unless a user mode debugger
@@ -930,6 +932,7 @@ DispatchToUser:
             {
                 ULONG Size;
                 ULONG_PTR Stack, NewStack;
+                PCONTEXT_EX ContextEx;
 
                 /* Make sure we have a valid SS and that this isn't V86 mode */
                 if ((TrapFrame->HardwareSegSs != (KGDT_R3_DATA | RPL_MASK)) ||
@@ -943,12 +946,20 @@ DispatchToUser:
                 }
 
                 /* Align context size and get stack pointer */
-                Size = (sizeof(CONTEXT) + 3) & ~3;
+                Size = (sizeof(CONTEXT) + sizeof(CONTEXT_EX) + 3) & ~3;
                 Stack = (Context.Esp & ~3) - Size;
 
                 /* Probe stack and copy Context */
                 ProbeForWrite((PVOID)Stack, Size, sizeof(ULONG));
                 RtlCopyMemory((PVOID)Stack, &Context, sizeof(CONTEXT));
+
+                ContextEx = (PCONTEXT_EX)(Stack + sizeof(CONTEXT));
+                RtlZeroMemory(ContextEx, sizeof(*ContextEx));
+                ContextEx->Legacy.Offset = -(LONG)sizeof(CONTEXT);
+                ContextEx->Legacy.Length = sizeof(CONTEXT);
+                ContextEx->XState.Offset = sizeof(CONTEXT_EX);
+                ContextEx->All.Offset = -(LONG)sizeof(CONTEXT);
+                ContextEx->All.Length = sizeof(CONTEXT) + sizeof(CONTEXT_EX);
 
                 /* Align exception record size and get stack pointer */
                 Size = (sizeof(EXCEPTION_RECORD) -
@@ -1017,7 +1028,8 @@ DispatchToUser:
             /* Handled, get out */
             return;
         }
-        else if (DbgkForwardException(ExceptionRecord, FALSE, TRUE))
+        else if (ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN &&
+                 DbgkForwardException(ExceptionRecord, FALSE, TRUE))
         {
             /* Handled, get out */
             return;

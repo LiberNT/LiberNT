@@ -80,8 +80,23 @@ PspGetOrSetContextKernelRoutine(IN PKAPC Apc,
     }
     else
     {
+        ULONG ContextFlags;
+
         /* Get the Context */
         PspGetContext(TrapFrame, NULL, Context);
+
+        ContextFlags = Context->ContextFlags &
+                       ~(CONTEXT_EXCEPTION_REPORTING | CONTEXT_SERVICE_ACTIVE | CONTEXT_EXCEPTION_ACTIVE);
+        if (ContextFlags & CONTEXT_EXCEPTION_REQUEST)
+        {
+            ContextFlags |= CONTEXT_EXCEPTION_REPORTING;
+            if (TrapFrame->PreviousPreviousMode != KI_INTERRUPT_TRAP_FRAME)
+            {
+                ContextFlags |= (TrapFrame->PreviousPreviousMode & KI_EXCEPTION_ACTIVE_FRAME) ?
+                                CONTEXT_EXCEPTION_ACTIVE : CONTEXT_SERVICE_ACTIVE;
+            }
+        }
+        Context->ContextFlags = ContextFlags;
     }
 
     /* Notify the Native API that we are done */
@@ -156,7 +171,8 @@ PspArchSetInstrumentationCallback(
     UNREFERENCED_PARAMETER(Length);
     UNREFERENCED_PARAMETER(PreviousMode);
 
-    return STATUS_INVALID_INFO_CLASS;
+    /* TODO: run the callback on the return to 32-bit user mode */
+    return STATUS_NOT_SUPPORTED;
 }
 
 VOID

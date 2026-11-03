@@ -205,7 +205,7 @@ KiInitializeContextThread(IN PKTHREAD Thread,
         TrapFrame->DbgArgMark = 0xBADB0D00;
 
         /* Set the previous mode as user */
-        TrapFrame->PreviousPreviousMode = UserMode;
+        TrapFrame->PreviousPreviousMode = UserMode | KI_EXCEPTION_ACTIVE_FRAME;
 
         /* Terminate the Exception Handler List */
         TrapFrame->ExceptionList = EXCEPTION_CHAIN_END;
