@@ -540,6 +540,27 @@ MiPfnReclaimStandby(
     return Frame;
 }
 
+static
+BOOLEAN
+MiPfnAboveFloor(
+    _In_ PMI_PFN_DATABASE Db,
+    _In_ ULONG Floor)
+{
+    ULONG64 Total = 0;
+    ULONG i;
+
+    if (Floor == 0)
+        return TRUE;
+
+    for (i = 0; i < MI_PFN_SHARDS && Total <= Floor; i++)
+    {
+        Total += MI_PEEK(Db->Shard[i].List[MiPageZeroed].Count) + MI_PEEK(Db->Shard[i].List[MiPageFree].Count) +
+                 MI_PEEK(Db->Shard[i].List[MiPageStandby].Count);
+    }
+
+    return Total > Floor;
+}
+
 ULONG
 MiPfnAllocatePage(
     _Inout_ PMI_PFN_DATABASE Db,
@@ -572,6 +593,9 @@ MiPfnAllocatePage(
         if (Frame == MI_FRAME_INVALID && !(Flags & MI_ALLOCATE_NO_RECLAIM))
             Frame = MiPfnReclaimStandby(Db, Cpu, MI_PFN_SHARDS);
     }
+
+    if (Frame == MI_FRAME_INVALID && Db->ReserveFloor != NULL && !MiPfnAboveFloor(Db, Db->ReserveFloor(Db)))
+        return MI_FRAME_INVALID;
 
     if (Frame == MI_FRAME_INVALID)
     {

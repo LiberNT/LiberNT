@@ -77,7 +77,7 @@ MiWaitForMemory(
     if (Status != STATUS_NO_MEMORY)
         return STATUS_SUCCESS;
 
-    if (++*Attempts > 64 || KeGetCurrentIrql() > APC_LEVEL)
+    if (++*Attempts > 64 || KeGetCurrentIrql() > APC_LEVEL || PsGetCurrentThread()->MemoryMaker)
         return STATUS_NO_MEMORY;
 
     if (MiSystemPtesRefillTables(&MiSystem) != 0)
