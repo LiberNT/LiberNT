@@ -295,7 +295,7 @@ CheckWin11ObjectTypeMetadata(
     BOOLEAN MaintainTypeList = ((Flags) & OBT_MAINTAIN_TYPE_LIST) != 0;             \
     BOOLEAN MaintainHandleCount = ((Flags) & OBT_MAINTAIN_HANDLE_COUNT) != 0;       \
     POOL_TYPE PoolType = ((Flags) & OBT_PAGED_POOL) ? PagedPool : ((NtDdiVersion >= NTDDI_WIN11_GE) ? NonPagedPoolNx : NonPagedPool); \
-    ULONG ExpectedLength = ((NtDdiVersion >= NTDDI_WIN11_GE) && ((Flags) & OBT_LENGTH_128)) ? 128 : sizeof(OBJECT_TYPE_INITIALIZER); \
+    ULONG ExpectedLength = ((NtDdiVersion >= NTDDI_WIN11_GE) && ((Flags) & OBT_LENGTH_128)) ? sizeof(OBJECT_TYPE_INITIALIZER) + 2 * sizeof(ULONG) : sizeof(OBJECT_TYPE_INITIALIZER); \
     BOOLEAN CustomKey = ((Flags) & OBT_CUSTOM_KEY) != 0;                            \
     ULONG Index = GetTypeIndex(TypeName, NtDdiVersion);                             \
                                                                                     \

@@ -407,7 +407,7 @@ ObtCheckExtendedObjectType<NTDDI_WIN11_GE>(
     PACL Dacl = (PACL)(ULONG_PTR)-1;
     NTSTATUS Status;
 
-    ok_eq_uint(ObjectType->TypeInfo.Length, 128);
+    ok_eq_uint(ObjectType->TypeInfo.Length, sizeof(ObjectType->TypeInfo) + 2 * sizeof(ULONG));
     ok_eq_ulong(ObjectType->TypeInfo.PoolType, NonPagedPoolNx);
     ok_eq_ulong(ObjectType->TypeInfo.DefaultPagedPoolCharge, 0x456);
     ok_eq_ulong(ObjectType->TypeInfo.DefaultNonPagedPoolCharge, 0x123 + HeaderCharge);
