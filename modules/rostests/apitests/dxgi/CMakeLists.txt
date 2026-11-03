@@ -10,6 +10,7 @@ add_executable(dxgi_apitest
     hwnd_source.cpp
     composition_lifetime.cpp
     completion_event.cpp
+    shared_fence.cpp
     counters.cpp
     query_order.cpp
     buffer_copy.cpp

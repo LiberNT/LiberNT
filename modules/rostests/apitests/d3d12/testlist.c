@@ -30,6 +30,7 @@ extern void func_renderpass(void);
 extern void func_rootsig(void);
 extern void func_rootstate(void);
 extern void func_sampler(void);
+extern void func_sharedfence(void);
 extern void func_stablepower(void);
 extern void func_swapchain(void);
 extern void func_swizzle(void);
@@ -64,6 +65,7 @@ const struct test winetest_testlist[] =
     { "rootsig", func_rootsig },
     { "rootstate", func_rootstate },
     { "sampler", func_sampler },
+    { "sharedfence", func_sharedfence },
     { "stablepower", func_stablepower },
     { "swapchain", func_swapchain },
     { "swizzle", func_swizzle },

@@ -184,6 +184,7 @@ static PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMCPU pfnSignalSynchronizationObje
 static PFND3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU pfnWaitForSynchronizationObjectFromGpu;
 static PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU  pfnSignalSynchronizationObjectFromGpu;
 static PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 pfnSignalSynchronizationObjectFromGpu2;
+static PFND3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 pfnOpenSyncObjectFromNtHandle2;
 #endif
 #if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WDDM2_1_1)
 static PFND3DKMT_UPDATEALLOCATIONPROPERTY pfnUpdateAllocationProperty;
@@ -252,6 +253,7 @@ static BOOL D3DUmdRtResolveProcs(VOID)
     RESOLVE(WaitForSynchronizationObjectFromGpu, WAITFORSYNCHRONIZATIONOBJECTFROMGPU);
     RESOLVE(SignalSynchronizationObjectFromGpu, SIGNALSYNCHRONIZATIONOBJECTFROMGPU);
     RESOLVE(SignalSynchronizationObjectFromGpu2, SIGNALSYNCHRONIZATIONOBJECTFROMGPU2);
+    RESOLVE(OpenSyncObjectFromNtHandle2, OPENSYNCOBJECTFROMNTHANDLE2);
 #endif
 #if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WDDM2_1_1)
     RESOLVE(UpdateAllocationProperty, UPDATEALLOCATIONPROPERTY);
@@ -2887,6 +2889,42 @@ D3DUmdRtCreateSynchronizationObject2Cb(
                                        Create.hSyncObject);
     pData->Info = Create.Info;
     pData->hSyncObject = Create.hSyncObject;
+    return S_OK;
+}
+
+HRESULT WINAPI
+D3DUmdRtOpenSyncObjectFromNtHandle(HANDLE hRuntimeDevice, HANDLE NtHandle, D3DKMT_HANDLE *SyncObjectHandle,
+                                   PVOID *CpuValue, D3DGPU_VIRTUAL_ADDRESS *GpuValue)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hRuntimeDevice);
+    D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 Open;
+    PD3DUMDRT_SYNC_OBJECT SyncObject;
+    NTSTATUS Status;
+
+    if (SyncObjectHandle != NULL) *SyncObjectHandle = 0;
+    if (CpuValue != NULL) *CpuValue = NULL;
+    if (GpuValue != NULL) *GpuValue = 0;
+    if (Device == NULL || NtHandle == NULL || SyncObjectHandle == NULL || CpuValue == NULL || GpuValue == NULL)
+        return E_INVALIDARG;
+    if (pfnOpenSyncObjectFromNtHandle2 == NULL)
+        return E_NOTIMPL;
+    SyncObject = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*SyncObject));
+    if (SyncObject == NULL)
+        return E_OUTOFMEMORY;
+    ZeroMemory(&Open, sizeof(Open));
+    Open.hNtHandle = NtHandle;
+    Open.hDevice = Device->hDevice;
+    Status = pfnOpenSyncObjectFromNtHandle2(&Open);
+    if (Status < 0 || Open.hSyncObject == 0)
+    {
+        HeapFree(GetProcessHeap(), 0, SyncObject);
+        return Status < 0 ? D3DUmdRtStatusToHresult(Status) : E_FAIL;
+    }
+    SyncObject->MonitoredFence = TRUE;
+    D3DUmdRtTrackSynchronizationObject(Device, SyncObject, Open.hSyncObject);
+    *SyncObjectHandle = Open.hSyncObject;
+    *CpuValue = Open.MonitoredFence.FenceValueCPUVirtualAddress;
+    *GpuValue = Open.MonitoredFence.FenceValueGPUVirtualAddress;
     return S_OK;
 }
 

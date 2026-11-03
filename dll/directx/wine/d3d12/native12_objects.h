@@ -68,6 +68,8 @@ public:
     using Native12Child::Native12Child;
     ~Native12Fence();
     HRESULT Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS flags);
+    HRESULT InitializeOpened(D3DKMT_HANDLE opened, const volatile UINT64 *cpu_value, D3DGPU_VIRTUAL_ADDRESS gpu_value);
+    HRESULT CreateDriverFence(D3DGPU_VIRTUAL_ADDRESS gpu_value);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
     UINT64 STDMETHODCALLTYPE GetCompletedValue() override;
     HRESULT STDMETHODCALLTYPE SetEventOnCompletion(UINT64 value, HANDLE event) override;

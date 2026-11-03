@@ -700,6 +700,8 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
             GetProcAddress(runtime, "D3DUmdRtAdoptResource"));
     enqueue_set_event = reinterpret_cast<HRESULT (WINAPI *)(HANDLE, HANDLE)>(
             GetProcAddress(runtime, "D3DUmdRtEnqueueSetEvent"));
+    open_sync_from_nt_handle = reinterpret_cast<HRESULT (WINAPI *)(HANDLE, HANDLE, D3DKMT_HANDLE *, PVOID *,
+            D3DGPU_VIRTUAL_ADDRESS *)>(GetProcAddress(runtime, "D3DUmdRtOpenSyncObjectFromNtHandle"));
     if (!create_callbacks || !destroy_callbacks || !release_resource) return E_NOINTERFACE;
     if (FAILED(hr = create_callbacks(km_adapter, km_device, 2, &kernel_callbacks, &runtime_device))) return hr;
 

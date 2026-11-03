@@ -53,7 +53,7 @@ C_ASSERT(sizeof(RXGK_ISFEATUREENABLED_PACKET) == RXGK_ISFEATUREENABLED_PACKET_SI
 #endif
 C_ASSERT(sizeof(RXGK_GETRESOURCEPRESENTPRIVATE_PACKET) == RXGK_GETRESOURCEPRESENTPRIVATE_PACKET_V1_SIZE);
 C_ASSERT(sizeof(RXGK_INVALIDATECACHE_PACKET) == RXGK_INVALIDATECACHE_PACKET_V1_SIZE);
-C_ASSERT(sizeof(RXGK_SHAREOBJECTS_PACKET) == RXGK_SHAREOBJECTS_PACKET_V1_SIZE);
+C_ASSERT(sizeof(RXGK_SHAREOBJECTS_PACKET) == RXGK_SHAREOBJECTS_PACKET_V2_SIZE);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, Size) == 0);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, Version) == 4);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, ObjectCount) == 8);
@@ -61,6 +61,8 @@ C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, DesiredAccess) == 12);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, ObjectHandles) == 16);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, ObjectAttributesPresent) == 28);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, SharedNtHandle) == 32);
+C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, Attributes) == 40);
+C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, SecurityDescriptor) == 48);
 C_ASSERT(sizeof(RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET) ==
          RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET_V1_SIZE);
 C_ASSERT(sizeof(RXGK_VALIDATESHAREDRESOURCEOWNER_PACKET) == RXGK_VALIDATESHAREDRESOURCEOWNER_PACKET_V1_SIZE);
@@ -369,24 +371,30 @@ DxgkpShareObjects(
     _Inout_ PRXGK_SHAREOBJECTS_PACKET Packet)
 {
     PDXGKRNL_SHARED_RESOURCE_OBJECT SharedObject;
+    OBJECT_ATTRIBUTES ObjectAttributes;
     PDXGKVMM_RESOURCE Resource;
     HANDLE SharedNtHandle;
     NTSTATUS Status;
 
     if (Packet == NULL ||
-        Packet->Size != RXGK_SHAREOBJECTS_PACKET_V1_SIZE ||
-        Packet->Version != RXGK_WDDM_PACKET_VERSION_1 ||
+        Packet->Size != RXGK_SHAREOBJECTS_PACKET_V2_SIZE ||
+        Packet->Version != RXGK_SHAREOBJECTS_PACKET_VERSION_2 ||
         Packet->ObjectCount != 1 ||
         Packet->ObjectHandles[0] == 0 ||
         Packet->ObjectHandles[1] != 0 ||
         Packet->ObjectHandles[2] != 0 ||
         Packet->ObjectAttributesPresent != 1 ||
-        Packet->SharedNtHandle != 0)
+        Packet->SharedNtHandle != 0 ||
+        (Packet->Attributes & ~OBJ_INHERIT) != 0 ||
+        Packet->Reserved != 0 ||
+        Packet->SecurityDescriptor > (ULONGLONG)(ULONG_PTR)-1)
     {
         return STATUS_INVALID_PARAMETER;
     }
     if (DxgkSharedResourceObjectType == NULL)
         return STATUS_DEVICE_NOT_READY;
+    InitializeObjectAttributes(&ObjectAttributes, NULL, Packet->Attributes, NULL,
+                               (PSECURITY_DESCRIPTOR)(ULONG_PTR)Packet->SecurityDescriptor);
 
     Status = DxgkVidMmReferenceResource(Packet->ObjectHandles[0],
                                         FALSE,
@@ -394,7 +402,7 @@ DxgkpShareObjects(
                                         &Resource);
     if (!NT_SUCCESS(Status))
     {
-        Status = DxgkSyncShareNtObject(Packet->ObjectHandles[0], Packet->DesiredAccess, &SharedNtHandle);
+        Status = DxgkSyncShareNtObject(Packet->ObjectHandles[0], Packet->DesiredAccess, &ObjectAttributes, &SharedNtHandle);
         if (NT_SUCCESS(Status))
             Packet->SharedNtHandle = (ULONGLONG)(ULONG_PTR)SharedNtHandle;
         return Status;
@@ -411,7 +419,7 @@ DxgkpShareObjects(
 
     Status = ObCreateObject(KernelMode,
                             DxgkSharedResourceObjectType,
-                            NULL,
+                            &ObjectAttributes,
                             KernelMode,
                             NULL,
                             sizeof(*SharedObject),
@@ -13813,8 +13821,8 @@ DxgkpDispatchBufferedIoctlWorker(
             {
                 return STATUS_ACCESS_DENIED;
             }
-            if (InputLength < RXGK_SHAREOBJECTS_PACKET_V1_SIZE ||
-                OutputLength < RXGK_SHAREOBJECTS_PACKET_V1_SIZE ||
+            if (InputLength < RXGK_SHAREOBJECTS_PACKET_V2_SIZE ||
+                OutputLength < RXGK_SHAREOBJECTS_PACKET_V2_SIZE ||
                 SystemBuffer == NULL)
             {
                 return STATUS_BUFFER_TOO_SMALL;
@@ -13823,7 +13831,7 @@ DxgkpDispatchBufferedIoctlWorker(
             Packet = (PRXGK_SHAREOBJECTS_PACKET)SystemBuffer;
             Status = DxgkpShareObjects(Packet);
             if (NT_SUCCESS(Status))
-                KmtRequest->Information = RXGK_SHAREOBJECTS_PACKET_V1_SIZE;
+                KmtRequest->Information = RXGK_SHAREOBJECTS_PACKET_V2_SIZE;
             return Status;
         }
 

@@ -3379,6 +3379,7 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
 {
     RXGK_SHAREOBJECTS_PACKET Packet;
     OBJECT_ATTRIBUTES ObjectAttributes;
+    PSECURITY_DESCRIPTOR SecurityDescriptor = NULL;
     ULONG_PTR Information = 0;
     NTSTATUS Status;
     UINT Index;
@@ -3409,20 +3410,32 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
 
     if (ObjectAttributes.Length != sizeof(ObjectAttributes))
         return STATUS_INVALID_PARAMETER;
+    /* TODO: named shared objects (ObjectName, RootDirectory) */
     if (ObjectAttributes.RootDirectory != NULL ||
         ObjectAttributes.ObjectName != NULL ||
-        ObjectAttributes.Attributes != 0 ||
-        ObjectAttributes.SecurityDescriptor != NULL ||
+        (ObjectAttributes.Attributes & ~OBJ_INHERIT) != 0 ||
         ObjectAttributes.SecurityQualityOfService != NULL)
     {
         return STATUS_NOT_SUPPORTED;
     }
+    if (ObjectAttributes.SecurityDescriptor != NULL)
+    {
+        Status = SeCaptureSecurityDescriptor(ObjectAttributes.SecurityDescriptor,
+                                             ExGetPreviousMode(),
+                                             PagedPool,
+                                             TRUE,
+                                             &SecurityDescriptor);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
 
-    Packet.Size = RXGK_SHAREOBJECTS_PACKET_V1_SIZE;
-    Packet.Version = RXGK_WDDM_PACKET_VERSION_1;
+    Packet.Size = RXGK_SHAREOBJECTS_PACKET_V2_SIZE;
+    Packet.Version = RXGK_SHAREOBJECTS_PACKET_VERSION_2;
     Packet.ObjectCount = cObjects;
     Packet.DesiredAccess = dwDesiredAccess;
     Packet.ObjectAttributesPresent = 1;
+    Packet.Attributes = ObjectAttributes.Attributes;
+    Packet.SecurityDescriptor = (ULONGLONG)(ULONG_PTR)SecurityDescriptor;
 
     Status = WddmBridgeSendIoctlWithInformation(
                  IOCTL_D3DKMT_SHAREOBJECTS,
@@ -3431,9 +3444,11 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
                  &Packet,
                  sizeof(Packet),
                  &Information);
+    if (SecurityDescriptor != NULL)
+        SeReleaseSecurityDescriptor(SecurityDescriptor, ExGetPreviousMode(), TRUE);
     if (!NT_SUCCESS(Status))
         return Status;
-    if (Information != RXGK_SHAREOBJECTS_PACKET_V1_SIZE ||
+    if (Information != RXGK_SHAREOBJECTS_PACKET_V2_SIZE ||
         Packet.SharedNtHandle == 0 ||
         Packet.SharedNtHandle > (ULONGLONG)(ULONG_PTR)-1)
     {

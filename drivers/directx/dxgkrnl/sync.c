@@ -2372,6 +2372,7 @@ NTSTATUS
 DxgkSyncShareNtObject(
     _In_ D3DKMT_HANDLE hSyncObject,
     _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
     _Out_ PHANDLE NtHandle)
 {
     PDXGKRNL_SHARED_SYNC_OBJECT SharedObject;
@@ -2390,7 +2391,7 @@ DxgkSyncShareNtObject(
         DxgkpDereferenceSyncObject(SyncObj);
         return STATUS_INVALID_PARAMETER;
     }
-    Status = ObCreateObject(KernelMode, DxgkSharedSyncObjectType, NULL, KernelMode, NULL,
+    Status = ObCreateObject(KernelMode, DxgkSharedSyncObjectType, ObjectAttributes, KernelMode, NULL,
                             sizeof(*SharedObject), 0, 0, (PVOID *)&SharedObject);
     if (!NT_SUCCESS(Status))
     {

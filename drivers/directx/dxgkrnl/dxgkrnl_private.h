@@ -3468,6 +3468,7 @@ NTSTATUS
 DxgkSyncShareNtObject(
     _In_ D3DKMT_HANDLE hSyncObject,
     _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
     _Out_ PHANDLE NtHandle);
 
 NTSTATUS

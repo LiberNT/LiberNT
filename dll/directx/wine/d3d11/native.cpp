@@ -207,6 +207,7 @@ public:
     UINT query_context = 1;
     HRESULT (WINAPI *signal_fence)(HANDLE, D3DKMT_HANDLE, UINT64) = NULL;
     HRESULT (WINAPI *wait_fence)(HANDLE, D3DKMT_HANDLE, UINT64) = NULL;
+    HRESULT (WINAPI *open_sync_from_nt_handle)(HANDLE, HANDLE, D3DKMT_HANDLE *, PVOID *, D3DGPU_VIRTUAL_ADDRESS *) = NULL;
     LONG references = 1;
     LONG total_references = 1;
     LONG children = 0;
@@ -2223,6 +2224,8 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     enqueue_event = reinterpret_cast<decltype(enqueue_event)>(GetProcAddress(runtime, "D3DUmdRtEnqueueSetEvent"));
     signal_fence = reinterpret_cast<decltype(signal_fence)>(GetProcAddress(runtime, "D3DUmdRtSignalFence"));
     wait_fence = reinterpret_cast<decltype(wait_fence)>(GetProcAddress(runtime, "D3DUmdRtWaitFence"));
+    open_sync_from_nt_handle = reinterpret_cast<decltype(open_sync_from_nt_handle)>(
+            GetProcAddress(runtime, "D3DUmdRtOpenSyncObjectFromNtHandle"));
     if (!create_callbacks || !destroy_callbacks || !register_resource || !get_resource_handles
             || !adopt_resource || !release_resource) return E_NOINTERFACE;
     /* D3D10/11 AllocateCb uses D3DDDI_ALLOCATIONINFO; pAllocationInfo2 is

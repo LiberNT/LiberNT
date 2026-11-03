@@ -7,6 +7,7 @@ extern void func_stub_surface(void);
 extern void func_d3d11_render_probe(void);
 extern void func_dwm_render(void);
 extern void func_completion_event(void);
+extern void func_shared_fence(void);
 extern void func_counters(void);
 extern void func_query_order(void);
 extern void func_composition(void);
@@ -31,6 +32,7 @@ const struct test winetest_testlist[] =
     { "d3d11_render_probe", func_d3d11_render_probe },
     { "dwm_render", func_dwm_render },
     { "completion_event", func_completion_event },
+    { "shared_fence", func_shared_fence },
     { "counters", func_counters },
     { "query_order", func_query_order },
     { "composition", func_composition },

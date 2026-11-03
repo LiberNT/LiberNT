@@ -21,6 +21,7 @@ list(APPEND SOURCE
     renderpass.cpp
     rootsig.cpp
     rootstate.cpp
+    sharedfence.cpp
     sampler.cpp
     shaders.cpp
     stablepower.cpp

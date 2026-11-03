@@ -1332,24 +1332,37 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateSharedHandle(ID3D12DeviceChild *
         const SECURITY_ATTRIBUTES *attributes, DWORD access, const WCHAR *name, HANDLE *out)
 {
     if (!object || !out) return E_INVALIDARG;
-    *out = NULL;
     if (name)
     {
         FIXME("Named shared handles are not supported.\n");
         return E_NOTIMPL;
     }
     ID3D12Resource *resource = NULL;
-    if (FAILED(object->QueryInterface(IID_ID3D12Resource, reinterpret_cast<void **>(&resource))))
-    {
-        FIXME("Only resources can be shared.\n");
-        return E_NOTIMPL;
-    }
-    Native12Resource *impl = Native12UnwrapResource(resource);
+    ID3D12Fence *fence = NULL;
     D3DKMT_HANDLE km_resource = 0;
     HRESULT hr = E_INVALIDARG;
-    if (impl->nt_sharing && get_resource_handles)
-        hr = get_resource_handles(runtime_device, impl->identity, &km_resource, NULL);
-    resource->Release();
+    if (SUCCEEDED(object->QueryInterface(IID_ID3D12Fence, reinterpret_cast<void **>(&fence))))
+    {
+        Native12Fence *impl = static_cast<Native12Fence *>(fence);
+        if (impl->flags & (D3D12_FENCE_FLAG_SHARED | D3D12_FENCE_FLAG_SHARED_CROSS_ADAPTER))
+        {
+            km_resource = impl->sync;
+            hr = S_OK;
+        }
+        fence->Release();
+    }
+    else if (SUCCEEDED(object->QueryInterface(IID_ID3D12Resource, reinterpret_cast<void **>(&resource))))
+    {
+        Native12Resource *impl = Native12UnwrapResource(resource);
+        if (impl->nt_sharing && get_resource_handles)
+            hr = get_resource_handles(runtime_device, impl->identity, &km_resource, NULL);
+        resource->Release();
+    }
+    else
+    {
+        FIXME("Only resources and fences can be shared.\n");
+        return E_NOTIMPL;
+    }
     if (FAILED(hr)) return hr;
     OBJECT_ATTRIBUTES attributes_nt = {};
     attributes_nt.Length = sizeof(attributes_nt);
@@ -1361,10 +1374,34 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateSharedHandle(ID3D12DeviceChild *
     return hr;
 }
 
+HRESULT Native12Device::OpenSharedFence(HANDLE handle, REFIID iid, void **out)
+{
+    D3DGPU_VIRTUAL_ADDRESS gpu_value = 0;
+    D3DKMT_HANDLE sync = 0;
+    PVOID cpu_value = NULL;
+    if (!open_sync_from_nt_handle) return E_NOTIMPL;
+    HRESULT hr = open_sync_from_nt_handle(runtime_device, handle, &sync, &cpu_value, &gpu_value);
+    if (FAILED(hr)) return E_INVALIDARG;
+    Native12Fence *fence = new Native12Fence(this);
+    if (!fence)
+    {
+        D3DDDICB_DESTROYSYNCHRONIZATIONOBJECT destroy = {};
+        destroy.hSyncObject = sync;
+        kernel_callbacks.pfnDestroySynchronizationObjectCb(runtime_device, &destroy);
+        return E_OUTOFMEMORY;
+    }
+    hr = fence->InitializeOpened(sync, static_cast<const volatile UINT64 *>(cpu_value), gpu_value);
+    if (SUCCEEDED(hr)) hr = out ? fence->QueryInterface(iid, out) : S_FALSE;
+    fence->Release();
+    return hr;
+}
+
 HRESULT STDMETHODCALLTYPE Native12Device::OpenSharedHandle(HANDLE handle, REFIID iid, void **out)
 {
     if (out) *out = NULL;
     if (!handle) return E_INVALIDARG;
+    if (IsEqualGUID(iid, IID_ID3D12Fence) || IsEqualGUID(iid, IID_ID3D12Fence1))
+        return OpenSharedFence(handle, iid, out);
     if (!IsEqualGUID(iid, IID_ID3D12Resource) && !IsEqualGUID(iid, IID_ID3D12Resource1)
             && !IsEqualGUID(iid, IID_ID3D12Pageable) && !IsEqualGUID(iid, IID_ID3D12DeviceChild)
             && !IsEqualGUID(iid, IID_ID3D12Object) && !IsEqualGUID(iid, IID_IUnknown))
@@ -1376,7 +1413,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::OpenSharedHandle(HANDLE handle, REFIID
     query.hDevice = km_device;
     query.hNtHandle = handle;
     HRESULT hr = Native12StatusToHresult(D3DKMTQueryResourceInfoFromNtHandle(&query));
-    if (FAILED(hr)) return hr;
+    if (FAILED(hr)) return OpenSharedFence(handle, iid, out);
     if (query.PrivateRuntimeDataSize != sizeof(Native12SharedTextureData) || !query.NumAllocations
             || query.NumAllocations > ~0u / sizeof(D3DDDI_OPENALLOCATIONINFO2)) return E_INVALIDARG;
 

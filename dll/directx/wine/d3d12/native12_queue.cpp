@@ -45,6 +45,12 @@ HRESULT Native12Fence::Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS creati
     create.Info.Type = D3DDDI_MONITORED_FENCE;
     create.Info.MonitoredFence.InitialFenceValue = initial_value;
     create.Info.MonitoredFence.EngineAffinity = 1;
+    /* TODO: D3D12_FENCE_FLAG_SHARED_CROSS_ADAPTER fences on another adapter */
+    if (creation_flags & (D3D12_FENCE_FLAG_SHARED | D3D12_FENCE_FLAG_SHARED_CROSS_ADAPTER))
+    {
+        create.Info.Flags.Shared = 1;
+        create.Info.Flags.NtSecuritySharing = 1;
+    }
     HRESULT hr = device->kernel_callbacks.pfnCreateSynchronizationObject2Cb(device->runtime_device, &create);
     if (FAILED(hr))
     {
@@ -54,9 +60,24 @@ HRESULT Native12Fence::Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS creati
     sync = create.hSyncObject;
     value = static_cast<const volatile UINT64 *>(create.Info.MonitoredFence.FenceValueCPUVirtualAddress);
     if (!value) return E_FAIL;
+    return CreateDriverFence(create.Info.MonitoredFence.FenceValueGPUVirtualAddress);
+}
 
+HRESULT Native12Fence::InitializeOpened(D3DKMT_HANDLE opened, const volatile UINT64 *cpu_value,
+        D3DGPU_VIRTUAL_ADDRESS gpu_value)
+{
+    flags = D3D12_FENCE_FLAG_SHARED;
+    sync = opened;
+    value = cpu_value;
+    if (!value) return E_FAIL;
+    return CreateDriverFence(gpu_value);
+}
+
+HRESULT Native12Fence::CreateDriverFence(D3DGPU_VIRTUAL_ADDRESS gpu_value)
+{
+    HRESULT hr;
     D3D12DDI_FENCE info = {};
-    info.FenceValue.BaseAddress = create.Info.MonitoredFence.FenceValueGPUVirtualAddress;
+    info.FenceValue.BaseAddress = gpu_value;
     D3D12DDIARG_CREATE_FENCE args = {};
     args.FenceCount = 1;
     args.Fences = &info;

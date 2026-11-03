@@ -61,6 +61,7 @@ public:
     HRESULT (WINAPI *get_resource_handles)(HANDLE, HANDLE, D3DKMT_HANDLE *, D3DKMT_HANDLE *) = NULL;
     HRESULT (WINAPI *adopt_resource)(HANDLE, HANDLE, D3DKMT_HANDLE, D3DKMT_HANDLE, D3DKMT_HANDLE) = NULL;
     HRESULT (WINAPI *enqueue_set_event)(HANDLE, HANDLE) = NULL;
+    HRESULT (WINAPI *open_sync_from_nt_handle)(HANDLE, HANDLE, D3DKMT_HANDLE *, PVOID *, D3DGPU_VIRTUAL_ADDRESS *) = NULL;
     ROS_UMD_ADAPTER_CALLBACKS adapter_callbacks = {};
     D3D12DDI_ADAPTERFUNCS_0109 adapter_functions = {};
     D3D12DDI_HADAPTER driver_adapter = {};
@@ -223,6 +224,7 @@ public:
     HRESULT STDMETHODCALLTYPE CreateSharedHandle(ID3D12DeviceChild *, const SECURITY_ATTRIBUTES *, DWORD,
             const WCHAR *, HANDLE *) override;
     HRESULT STDMETHODCALLTYPE OpenSharedHandle(HANDLE, REFIID, void **) override;
+    HRESULT OpenSharedFence(HANDLE handle, REFIID iid, void **out);
     HRESULT STDMETHODCALLTYPE OpenSharedHandleByName(const WCHAR *, DWORD, HANDLE *) override;
     HRESULT STDMETHODCALLTYPE MakeResident(UINT, ID3D12Pageable *const *) override;
     HRESULT STDMETHODCALLTYPE Evict(UINT, ID3D12Pageable *const *) override;
