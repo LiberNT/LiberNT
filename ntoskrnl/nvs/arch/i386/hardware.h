@@ -12,6 +12,7 @@
 #define MI_I386_PTE_LARGE    (1u << 7)
 #define MI_I386_PTE_GLOBAL   (1u << 8)
 #define MI_I386_PTE_COPY     (1u << 9)
+#define MI_I386_PTE_EXECUTE  (1u << 10)
 #define MI_I386_PTE_WRITABLE (1u << 11)
 #define MI_I386_PTE_FRAME    0xFFFFF000u
 #define MI_I386_SELF_BASE    0xC0000000u
