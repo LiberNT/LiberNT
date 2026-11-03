@@ -624,6 +624,12 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect)
         BYTE *target = static_cast<BYTE *>(lock_args.pData);
         UINT width = readback_layout.Footprint.Width, height = readback_layout.Footprint.Height;
         bool swap = readback_layout.Footprint.Format == DXGI_FORMAT_R8G8B8A8_UNORM;
+        /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
+        if (source_width && source_height && (source_width < width || source_height < height))
+        {
+            width = source_width;
+            height = source_height;
+        }
         for (UINT y = 0; y < foreign_height; ++y)
         {
             const UINT32 *row = reinterpret_cast<const UINT32 *>(source
