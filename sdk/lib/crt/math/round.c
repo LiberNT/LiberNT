@@ -9,6 +9,14 @@
 
 double round(double arg)
 {
+    unsigned long long u64 = *(unsigned long long *)&arg;
+
+    if ((u64 & ~(1ULL << 63)) > 0x7FF0000000000000ULL)
+    {
+        u64 |= 0x0008000000000000ULL;
+        return *(double *)&u64;
+    }
+
     if (arg < 0.0)
         return ceil(arg - 0.5);
     else if (arg > 0.0)

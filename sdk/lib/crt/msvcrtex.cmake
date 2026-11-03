@@ -33,6 +33,10 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
         math/trunc.c
         math/truncf.c
         )
+    if(ARCH STREQUAL "amd64")
+        list(REMOVE_ITEM MSVCRTEX_SOURCE math/round.c math/roundf.c)
+        list(APPEND MSVCRTEX_SOURCE math/amd64/round.c math/amd64/roundf.c)
+    endif()
 endif()
 
 if(ARCH STREQUAL "i386")

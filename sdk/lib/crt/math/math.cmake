@@ -118,8 +118,11 @@ if(ARCH STREQUAL "i386")
             PROPERTIES COMPILE_OPTIONS "-msse2;-mfpmath=sse")
     endif()
 elseif(ARCH STREQUAL "amd64")
+    list(REMOVE_ITEM LIBCNTPR_MATH_SOURCE math/round.c math/roundf.c)
     list(APPEND LIBCNTPR_MATH_SOURCE
         math/amd64/_set_statfp.c
+        math/amd64/round.c
+        math/amd64/roundf.c
         # math/libm_sse2/_chgsign.c
         # math/libm_sse2/_chgsignf.c
         # math/libm_sse2/_copysign.c
