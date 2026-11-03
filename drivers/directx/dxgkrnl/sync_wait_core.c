@@ -209,6 +209,27 @@ DxgkSyncWaitCorePublishBatch(
     return STATUS_SUCCESS;
 }
 
+/* Completes requests an update published under another registry satisfied. */
+VOID
+DxgkSyncWaitCoreReevaluate(
+    _Inout_ PDXGK_SYNC_WAIT_CORE_REGISTRY Registry)
+{
+    LIST_ENTRY CompletionList;
+    KIRQL OldIrql;
+
+    if (Registry == NULL)
+        return;
+    InitializeListHead(&CompletionList);
+    KeAcquireSpinLock(&Registry->Lock, &OldIrql);
+    if (!Registry->ShuttingDown)
+    {
+        KeMemoryBarrier();
+        DxgkpSyncWaitCollectSatisfiedLocked(Registry, &CompletionList);
+    }
+    KeReleaseSpinLock(&Registry->Lock, OldIrql);
+    DxgkpSyncWaitCompleteList(&CompletionList);
+}
+
 VOID
 DxgkSyncWaitCoreCancelObject(
     _Inout_ PDXGK_SYNC_WAIT_CORE_REGISTRY Registry,

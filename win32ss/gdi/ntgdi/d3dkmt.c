@@ -1988,7 +1988,7 @@ APIENTRY
 NtGdiDdDDIOpenSyncObjectFromNtHandle(_Inout_ struct _D3DKMT_OPENSYNCOBJECTFROMNTHANDLE* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenSyncObjectFromNtHandle(unnamedParam1);
 }
 
 NTSTATUS
@@ -1996,7 +1996,7 @@ APIENTRY
 NtGdiDdDDIOpenSyncObjectFromNtHandle2(_Inout_ struct _D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenSyncObjectFromNtHandle2(unnamedParam1);
 }
 
 NTSTATUS

@@ -328,9 +328,10 @@ DxgkSharedObjectsInitialize(VOID)
     OBJECT_TYPE_INITIALIZER TypeInitializer;
     GENERIC_MAPPING GenericMapping;
     UNICODE_STRING TypeName;
+    NTSTATUS Status;
 
     if (DxgkSharedResourceObjectType != NULL)
-        return STATUS_SUCCESS;
+        return DxgkSyncSharedObjectsInitialize();
 
     GenericMapping.GenericRead = STANDARD_RIGHTS_READ;
     GenericMapping.GenericWrite = STANDARD_RIGHTS_WRITE |
@@ -354,10 +355,13 @@ DxgkSharedObjectsInitialize(VOID)
     TypeInitializer.DeleteProcedure =
         DxgkpDeleteSharedResourceObject;
 
-    return ObCreateObjectType(&TypeName,
-                              &TypeInitializer,
-                              NULL,
-                              &DxgkSharedResourceObjectType);
+    Status = ObCreateObjectType(&TypeName,
+                                &TypeInitializer,
+                                NULL,
+                                &DxgkSharedResourceObjectType);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return DxgkSyncSharedObjectsInitialize();
 }
 
 static NTSTATUS
@@ -389,7 +393,12 @@ DxgkpShareObjects(
                                         NULL,
                                         &Resource);
     if (!NT_SUCCESS(Status))
-        return STATUS_INVALID_PARAMETER;
+    {
+        Status = DxgkSyncShareNtObject(Packet->ObjectHandles[0], Packet->DesiredAccess, &SharedNtHandle);
+        if (NT_SUCCESS(Status))
+            Packet->SharedNtHandle = (ULONGLONG)(ULONG_PTR)SharedNtHandle;
+        return Status;
+    }
     if (Resource->Device == NULL ||
         Resource->Device->OwnerProcess != PsGetCurrentProcess() ||
         !Resource->Shareable ||
@@ -9186,8 +9195,14 @@ DxgkCreateSynchronizationObject2(
         /* A shared monitored fence asked for without the NT security
          * parameters is a bad parameter on Windows 11, not an unsupported
          * operation -- answer that before the generic unsupported-bit sweep. */
-        if (pData->Info.Flags.Shared)
+        if (pData->Info.Flags.Shared &&
+            (pData->Info.Type != D3DDDI_MONITORED_FENCE || !pData->Info.Flags.NtSecuritySharing))
             return STATUS_INVALID_PARAMETER;
+        if (pData->Info.Flags.Shared)
+        {
+            SupportedFlags.Shared = 1;
+            SupportedFlags.NtSecuritySharing = 1;
+        }
         if ((pData->Info.Flags.Value & ~SupportedFlags.Value) != 0)
             return STATUS_NOT_SUPPORTED;
     }
@@ -11499,7 +11514,7 @@ DxgkpDispatchPublicOperation(_Inout_ PRXGK_PUBLIC_OPERATION_PACKET Packet)
 #endif
     NTSTATUS Status;
 
-    if (Packet == NULL || Packet->Size != sizeof(*Packet) || Packet->Version != RXGK_WDDM_PACKET_VERSION_1 || Packet->Reserved != 0 || Packet->Operation < RxgkPublicAdjustFullscreenGamma || Packet->Operation > RxgkPublicRegisterVailProcess)
+    if (Packet == NULL || Packet->Size != sizeof(*Packet) || Packet->Version != RXGK_WDDM_PACKET_VERSION_1 || Packet->Reserved != 0 || Packet->Operation < RxgkPublicAdjustFullscreenGamma || Packet->Operation > RxgkPublicOpenSyncObjectFromNtHandle2)
         return STATUS_INVALID_PARAMETER;
 
     switch ((RXGK_PUBLIC_OPERATION)Packet->Operation)
@@ -11510,6 +11525,33 @@ DxgkpDispatchPublicOperation(_Inout_ PRXGK_PUBLIC_OPERATION_PACKET Packet)
 
         case RxgkPublicRegisterVailProcess:
             return STATUS_GRAPHICS_VAIL_STATE_CHANGED;
+
+        case RxgkPublicOpenSyncObjectFromNtHandle:
+        {
+            D3DKMT_HANDLE hSyncObject;
+
+            Status = DxgkSyncOpenFromNtHandle((HANDLE)(ULONG_PTR)Packet->Pointer0, &hSyncObject);
+            if (NT_SUCCESS(Status))
+                Packet->Handle1 = hSyncObject;
+            return Status;
+        }
+
+        case RxgkPublicOpenSyncObjectFromNtHandle2:
+        {
+            D3DGPU_VIRTUAL_ADDRESS GpuVa;
+            D3DKMT_HANDLE hSyncObject;
+            PVOID CpuVa;
+
+            Status = DxgkSyncOpenFromNtHandle2((HANDLE)(ULONG_PTR)Packet->Pointer0, Packet->Handle0, Packet->Flags,
+                                               &hSyncObject, &CpuVa, &GpuVa);
+            if (NT_SUCCESS(Status))
+            {
+                Packet->Handle1 = hSyncObject;
+                Packet->Pointer0 = (ULONGLONG)(ULONG_PTR)CpuVa;
+                Packet->Value0 = GpuVa;
+            }
+            return Status;
+        }
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
         case RxgkPublicGetPostCompositionCaps:

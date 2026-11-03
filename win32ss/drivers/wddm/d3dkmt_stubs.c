@@ -5866,6 +5866,44 @@ D3DKMTCreateNativeFence(_Inout_ D3DKMT_CREATENATIVEFENCE *pData)
 
 NTSTATUS
 APIENTRY
+D3DKMTOpenSyncObjectFromNtHandle(_Inout_ D3DKMT_OPENSYNCOBJECTFROMNTHANDLE *pData)
+{
+    D3DKMT_OPENSYNCOBJECTFROMNTHANDLE Captured;
+    RXGK_PUBLIC_OPERATION_PACKET Result;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    Status = D3dkmtSendPublicOperation(RxgkPublicOpenSyncObjectFromNtHandle, 0, 0, 0, 0, (ULONGLONG)(ULONG_PTR)Captured.hNtHandle, 0, &Result);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Captured.hSyncObject = Result.Handle1;
+    return WddmBridgeRejectBadBuffer(WddmBridgeSafeCopyTo(pData, &Captured, sizeof(Captured)));
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTOpenSyncObjectFromNtHandle2(_Inout_ D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 *pData)
+{
+    D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 Captured;
+    RXGK_PUBLIC_OPERATION_PACKET Result;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    Status = D3dkmtSendPublicOperation(RxgkPublicOpenSyncObjectFromNtHandle2, Captured.hDevice, 0, Captured.Flags.Value, 0, (ULONGLONG)(ULONG_PTR)Captured.hNtHandle, 0, &Result);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Captured.hSyncObject = Result.Handle1;
+    Captured.MonitoredFence.FenceValueCPUVirtualAddress = (PVOID)(ULONG_PTR)Result.Pointer0;
+    Captured.MonitoredFence.FenceValueGPUVirtualAddress = Result.Value0;
+    return WddmBridgeRejectBadBuffer(WddmBridgeSafeCopyTo(pData, &Captured, sizeof(Captured)));
+}
+
+NTSTATUS
+APIENTRY
 D3DKMTOpenNativeFenceFromNtHandle(_Inout_ D3DKMT_OPENNATIVEFENCEFROMNTHANDLE *pData)
 {
     D3DKMT_OPENNATIVEFENCEFROMNTHANDLE Captured;

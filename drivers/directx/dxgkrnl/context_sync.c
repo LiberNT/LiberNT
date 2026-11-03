@@ -143,10 +143,16 @@ DxgkContextSyncCapture(
     }
     for (Index = 0; Index < ObjectCount && Index < RTL_NUMBER_OF(Capture->Objects); ++Index)
     {
-        Status = DxgkpReferenceSyncObjectByHandle(ObjectHandles[Index], OwnerProcess, &Capture->Objects[Index]);
+        D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS ViewFlags;
+        PDXGKRNL_DEVICE ViewDevice;
+
+        Status = DxgkpReferenceSyncObjectView(ObjectHandles[Index], OwnerProcess, &Capture->Objects[Index], &ViewDevice, &ViewFlags);
         if (!NT_SUCCESS(Status))
             goto Failure;
-        if (Capture->Objects[Index]->Device != Device || Capture->Objects[Index]->OwnerProcess != OwnerProcess)
+        /* TODO: legacy objects opened on another device; their state changes serialize per device */
+        if (ViewDevice != Device || Capture->Objects[Index]->Device == NULL ||
+            Capture->Objects[Index]->Device->Adapter != Device->Adapter ||
+            (Capture->Objects[Index]->Device != Device && Capture->Objects[Index]->PublicType != D3DDDI_MONITORED_FENCE))
         {
             DxgkpDereferenceSyncObject(Capture->Objects[Index]);
             Capture->Objects[Index] = NULL;
@@ -161,6 +167,7 @@ DxgkContextSyncCapture(
             goto Failure;
         }
         DxgkpContextSyncInitializeCoreObject(&Capture->CoreObjects[Index], Capture->Objects[Index]);
+        Capture->CoreObjects[Index].ObjectFlags = ViewFlags.Value;
     }
     Status = DxgkContextSyncCoreValidate(Operation, Capture->CoreObjects, ObjectCount, SignalFlags, (SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) != 0 ? 0 : PayloadValue, Capture->PerObjectValues ? Capture->PayloadValues : NULL, Capture->EnqueueEvent != NULL);
     if (!NT_SUCCESS(Status))

@@ -142,7 +142,9 @@ typedef enum _RXGK_PUBLIC_OPERATION
     RxgkPublicNotifyWorkSubmission,
     RxgkPublicOpenNativeFenceFromNtHandle,
     RxgkPublicOutputDuplPresentToHwQueue,
-    RxgkPublicRegisterVailProcess
+    RxgkPublicRegisterVailProcess,
+    RxgkPublicOpenSyncObjectFromNtHandle,
+    RxgkPublicOpenSyncObjectFromNtHandle2
 } RXGK_PUBLIC_OPERATION;
 
 typedef struct _RXGK_PUBLIC_OPERATION_PACKET

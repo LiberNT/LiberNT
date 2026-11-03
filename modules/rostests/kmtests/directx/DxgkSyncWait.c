@@ -364,6 +364,46 @@ static VOID DxgkSyncWaitTestDispatchPublish(VOID)
     ok_bool_true(DxgkSyncWaitCoreIsEmpty(&Registry), "DPC completion removes request");
 }
 
+/* A wait registered with one registry on a value published under another
+ * completes when its own registry is re-evaluated, and only then. */
+static VOID DxgkSyncWaitTestReevaluateOtherRegistry(VOID)
+{
+    DXGK_SYNC_WAIT_CORE_REGISTRY PublishRegistry;
+    DXGK_SYNC_WAIT_CORE_REGISTRY WaitRegistry;
+    DXGK_SYNC_WAIT_CORE_REQUEST Request;
+    DXGK_SYNC_WAIT_CORE_TARGET Target;
+    DXGK_SYNC_WAIT_CORE_UPDATE Update;
+    DXGK_SYNC_WAIT_TEST_CONTEXT Context;
+    volatile LONG64 FenceValue = 0;
+    ULONG Object = 7;
+    NTSTATUS Status;
+
+    DxgkSyncWaitCoreInitializeRegistry(&PublishRegistry);
+    DxgkSyncWaitCoreInitializeRegistry(&WaitRegistry);
+    DxgkSyncWaitTestInitializeContext(&Context);
+    DxgkSyncWaitTestInitializeTarget(&Target, &Object, &FenceValue, 5);
+    DxgkSyncWaitCoreInitializeRequest(&Request, &Target, 1, FALSE, NULL, DxgkSyncWaitTestComplete, &Context);
+    Status = DxgkSyncWaitCoreRegister(&WaitRegistry, &Request);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    DxgkSyncWaitCoreReevaluate(&WaitRegistry);
+    ok_eq_long(Context.CompletionCount, 0);
+
+    DxgkSyncWaitTestInitializeUpdate(&Update, &Object, &FenceValue, NULL, 5);
+    Status = DxgkSyncWaitCorePublishBatch(&PublishRegistry, &Update, 1, FALSE, NULL, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_long(Context.CompletionCount, 0);
+    ok_bool_false(DxgkSyncWaitCoreIsEmpty(&WaitRegistry), "publish under another registry left the wait registered");
+
+    DxgkSyncWaitCoreReevaluate(&WaitRegistry);
+    ok_eq_long(Context.CompletionCount, 1);
+    ok_eq_hex(Context.CompletionStatus, STATUS_SUCCESS);
+    ok_bool_true(DxgkSyncWaitCoreIsEmpty(&WaitRegistry), "re-evaluation removes the satisfied request");
+
+    DxgkSyncWaitCoreReevaluate(&WaitRegistry);
+    ok_eq_long(Context.CompletionCount, 1);
+}
+
 START_TEST(DxgkSyncWait)
 {
     DxgkSyncWaitTestWaitAllAtomicBatch();
@@ -371,4 +411,5 @@ START_TEST(DxgkSyncWait)
     DxgkSyncWaitTestAdmissionAndRewind();
     DxgkSyncWaitTestCancelAndShutdown();
     DxgkSyncWaitTestDispatchPublish();
+    DxgkSyncWaitTestReevaluateOtherRegistry();
 }

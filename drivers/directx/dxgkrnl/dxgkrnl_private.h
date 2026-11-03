@@ -2280,13 +2280,17 @@ typedef struct _DXGKRNL_SYNC_OBJECT
     /*
      * Legacy sharing.  A supported legacy object that asked for Shared gets
      * a private global share handle and an alias to the authoritative state.
-     * Monitored-fence sharing is refused: it requires the native NT
-     * synchronization-object lifetime, access, and security contract.
+     * A monitored fence created with NtSecuritySharing is shared through an
+     * NT handle instead; opening it creates the same kind of alias.
      */
     D3DKMT_HANDLE               GlobalShareHandle;
     BOOLEAN                     Shareable;
     struct _DXGKRNL_SYNC_OBJECT *BackingSyncObject;
     LIST_ENTRY                  GlobalShareListEntry;
+    LIST_ENTRY                  ViewListHead;
+    LIST_ENTRY                  ViewListEntry;
+    volatile LONG               ViewCount;
+    volatile LONG               MonitoredPageQuarantined;
 
     /*
      * WDDM 2.2 periodic monitored fence.  The KMD owns one notification
@@ -3444,6 +3448,41 @@ DxgkpReferenceSyncObjectByHandle(
     _In_ D3DKMT_HANDLE Handle,
     _In_opt_ PEPROCESS OwnerProcess,
     _Out_ PDXGKRNL_SYNC_OBJECT *OutSyncObj);
+
+NTSTATUS
+DxgkpReferenceSyncObjectView(
+    _In_ D3DKMT_HANDLE Handle,
+    _In_opt_ PEPROCESS OwnerProcess,
+    _Out_ PDXGKRNL_SYNC_OBJECT *OutSyncObj,
+    _Out_opt_ PDXGKRNL_DEVICE *ViewDevice,
+    _Out_opt_ D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS *ViewFlags);
+
+VOID
+DxgkSyncWakeViews(
+    _In_opt_ PDXGKRNL_SYNC_OBJECT SyncObj);
+
+NTSTATUS
+DxgkSyncSharedObjectsInitialize(VOID);
+
+NTSTATUS
+DxgkSyncShareNtObject(
+    _In_ D3DKMT_HANDLE hSyncObject,
+    _In_ ACCESS_MASK DesiredAccess,
+    _Out_ PHANDLE NtHandle);
+
+NTSTATUS
+DxgkSyncOpenFromNtHandle(
+    _In_ HANDLE NtHandle,
+    _Out_ D3DKMT_HANDLE *hSyncObject);
+
+NTSTATUS
+DxgkSyncOpenFromNtHandle2(
+    _In_ HANDLE NtHandle,
+    _In_ D3DKMT_HANDLE hDevice,
+    _In_ UINT FlagsValue,
+    _Out_ D3DKMT_HANDLE *hSyncObject,
+    _Out_ PVOID *CpuVa,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *GpuVa);
 
 VOID
 DxgkpDereferenceSyncObject(
