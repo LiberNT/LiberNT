@@ -3542,7 +3542,7 @@ QSI_DEF(SystemFirmwareTableInformation)
             }
             if (Index == RTL_NUMBER_OF(FirmTables))
             {
-                Status = STATUS_INVALID_PARAMETER_1;
+                Status = STATUS_ILLEGAL_FUNCTION;
                 break;
             }
 
