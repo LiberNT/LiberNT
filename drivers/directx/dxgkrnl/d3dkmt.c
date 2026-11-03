@@ -54,6 +54,7 @@ C_ASSERT(sizeof(RXGK_ISFEATUREENABLED_PACKET) == RXGK_ISFEATUREENABLED_PACKET_SI
 C_ASSERT(sizeof(RXGK_GETRESOURCEPRESENTPRIVATE_PACKET) == RXGK_GETRESOURCEPRESENTPRIVATE_PACKET_V1_SIZE);
 C_ASSERT(sizeof(RXGK_INVALIDATECACHE_PACKET) == RXGK_INVALIDATECACHE_PACKET_V1_SIZE);
 C_ASSERT(sizeof(RXGK_SHAREOBJECTS_PACKET) == RXGK_SHAREOBJECTS_PACKET_V3_SIZE);
+C_ASSERT(sizeof(RXGK_OUTPUTDUPL_PACKET) == RXGK_OUTPUTDUPL_PACKET_V1_SIZE);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, Size) == 0);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, Version) == 4);
 C_ASSERT(FIELD_OFFSET(RXGK_SHAREOBJECTS_PACKET, ObjectCount) == 8);
@@ -368,6 +369,38 @@ DxgkSharedObjectsInitialize(VOID)
     return DxgkSyncSharedObjectsInitialize();
 }
 
+POBJECT_TYPE
+DxgkSharedResourceType(VOID)
+{
+    return DxgkSharedResourceObjectType;
+}
+
+static NTSTATUS
+DxgkpOutputDupl(
+    _Inout_ PRXGK_OUTPUTDUPL_PACKET Packet)
+{
+    HANDLE Surfaces[RTL_NUMBER_OF(Packet->Surfaces)];
+    ULONG Index;
+
+    if (Packet->Size != RXGK_OUTPUTDUPL_PACKET_V1_SIZE || Packet->Version != RXGK_WDDM_PACKET_VERSION_1 ||
+        Packet->Reserved != 0 || Packet->SurfaceCount > RTL_NUMBER_OF(Packet->Surfaces))
+        return STATUS_INVALID_PARAMETER;
+    switch (Packet->Operation)
+    {
+        case RxgkOutputDuplCreate:
+            for (Index = 0; Index < Packet->SurfaceCount; ++Index)
+                Surfaces[Index] = (HANDLE)(ULONG_PTR)Packet->Surfaces[Index];
+            return DxgkOutputDuplCreate(Packet->hAdapter, Packet->VidPnSourceId, Packet->SurfaceCount, Surfaces,
+                                        &Packet->RequiredSurfaceCount);
+        case RxgkOutputDuplDestroy:
+            return DxgkOutputDuplDestroy(Packet->hAdapter, Packet->VidPnSourceId);
+        case RxgkOutputDuplFrameAccess:
+            return DxgkOutputDuplFrameAccess(Packet->hAdapter, Packet->VidPnSourceId);
+        default:
+            return STATUS_INVALID_PARAMETER;
+    }
+}
+
 static NTSTATUS
 DxgkpShareObjects(
     _Inout_ PRXGK_SHAREOBJECTS_PACKET Packet)
@@ -642,6 +675,7 @@ DxgkpKmtIoctlMinimumConfiguredLevel(
         case IOCTL_D3DKMT_GETSHAREDRESOURCEADAPTERLUID:
         case IOCTL_D3DKMT_SHAREOBJECTS:
         case IOCTL_RXGK_RESOLVESHAREDRESOURCENTHANDLE:
+        case IOCTL_RXGK_OUTPUTDUPL:
         case IOCTL_DXGKRNL_GET_DOD_INIT_ENTRY:
             return DXGK_CAPS_CORE_LEVEL_WDDM_1_2;
 
@@ -11529,7 +11563,7 @@ DxgkpDispatchPublicOperation(_Inout_ PRXGK_PUBLIC_OPERATION_PACKET Packet)
 #endif
     NTSTATUS Status;
 
-    if (Packet == NULL || Packet->Size != sizeof(*Packet) || Packet->Version != RXGK_WDDM_PACKET_VERSION_1 || Packet->Reserved != 0 || Packet->Operation < RxgkPublicAdjustFullscreenGamma || Packet->Operation > RxgkPublicOpenSyncObjectNtHandleFromName)
+    if (Packet == NULL || Packet->Size != sizeof(*Packet) || Packet->Version != RXGK_WDDM_PACKET_VERSION_1 || Packet->Reserved != 0 || Packet->Operation < RxgkPublicAdjustFullscreenGamma || Packet->Operation > RxgkPublicCancelPresents)
         return STATUS_INVALID_PARAMETER;
 
     switch ((RXGK_PUBLIC_OPERATION)Packet->Operation)
@@ -11549,6 +11583,36 @@ DxgkpDispatchPublicOperation(_Inout_ PRXGK_PUBLIC_OPERATION_PACKET Packet)
             if (NT_SUCCESS(Status))
                 Packet->Handle1 = hSyncObject;
             return Status;
+        }
+
+        case RxgkPublicSharedPrimaryUnLockNotification:
+        {
+            PDXGKRNL_ADAPTER Adapters[16];
+            ULONG Count = DxgkReferenceStartedAdapters(Adapters, RTL_NUMBER_OF(Adapters));
+            ULONG Index;
+
+            /* FIXME: GDI CPU locks of the shared primary are not tracked; Windows 11 refuses the unlock of every source of a known adapter */
+            Status = STATUS_SUCCESS;
+            for (Index = 0; Index < Count; ++Index)
+            {
+                if (Adapters[Index]->AdapterLuid.LowPart == (ULONG)Packet->Value0 &&
+                    Adapters[Index]->AdapterLuid.HighPart == (LONG)(Packet->Value0 >> 32) &&
+                    Packet->Handle1 < Adapters[Index]->NumberOfVideoPresentSources)
+                    Status = STATUS_INVALID_PARAMETER;
+                DxgkDereferenceAdapter(Adapters[Index]);
+            }
+            return Status;
+        }
+
+        case RxgkPublicCancelPresents:
+        {
+            PDXGKRNL_DEVICE Device;
+
+            if (Packet->Value0 == 0 || !NT_SUCCESS(DxgkpValidateDeviceHandleForIoctl(Packet->Handle0, NULL, &Device)))
+                return STATUS_INVALID_PARAMETER;
+            DxgkDereferenceDevice(Device);
+            /* TODO: composition surfaces; until they exist no present is queued on one, so nothing is cancelled */
+            return STATUS_SUCCESS;
         }
 
         case RxgkPublicOpenNtHandleFromName:
@@ -13858,6 +13922,24 @@ DxgkpDispatchBufferedIoctlWorker(
             return Status;
         }
 
+        case IOCTL_RXGK_OUTPUTDUPL:
+        {
+            if (!KmtRequest->Internal ||
+                KmtRequest->RequestorMode != KernelMode)
+            {
+                return STATUS_ACCESS_DENIED;
+            }
+            if (InputLength < RXGK_OUTPUTDUPL_PACKET_V1_SIZE ||
+                OutputLength < RXGK_OUTPUTDUPL_PACKET_V1_SIZE ||
+                SystemBuffer == NULL)
+            {
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+            Status = DxgkpOutputDupl((PRXGK_OUTPUTDUPL_PACKET)SystemBuffer);
+            KmtRequest->Information = RXGK_OUTPUTDUPL_PACKET_V1_SIZE;
+            return Status;
+        }
+
         case IOCTL_RXGK_RESOLVESHAREDRESOURCENTHANDLE:
         {
             PRXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET Packet;
@@ -15257,6 +15339,7 @@ DxgkpIsBufferedKmtIoctl(
 #endif
         case IOCTL_D3DKMT_PUBLIC_OPERATION:
         case IOCTL_D3DKMT_SHAREOBJECTS:
+        case IOCTL_RXGK_OUTPUTDUPL:
         case IOCTL_RXGK_RESOLVESHAREDRESOURCENTHANDLE:
         case IOCTL_RXGK_VALIDATESHAREDRESOURCEOWNER:
         case IOCTL_RXGK_SETCOMPOSITORSOURCEOWNER:

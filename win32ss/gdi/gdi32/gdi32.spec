@@ -797,8 +797,6 @@
 @ stdcall -version=0x600+ D3DKMTGetContextInProcessSchedulingPriority(ptr) NtGdiDdDDIGetContextInProcessSchedulingPriority
 @ stdcall -version=0x600+ D3DKMTRegisterTrimNotification(ptr) NtGdiDdDDIRegisterTrimNotification
 @ stdcall -version=0x600+ D3DKMTUnregisterTrimNotification(ptr) NtGdiDdDDIUnregisterTrimNotification
-@ stdcall -version=0x600+ D3DKMTRegisterBudgetChangeNotification(ptr) NtGdiDdDDIRegisterBudgetChangeNotification
-@ stdcall -version=0x600+ D3DKMTUnregisterBudgetChangeNotification(ptr) NtGdiDdDDIUnregisterBudgetChangeNotification
 @ stdcall -version=0xA00+ D3DKMTInvalidateCache(ptr) NtGdiDdDDIInvalidateCache
 @ stdcall -version=0x600+ D3DKMTGetSharedResourceAdapterLuid(ptr) NtGdiDdDDIGetSharedResourceAdapterLuid
 @ stdcall -version=0x600+ D3DKMTOpenResourceFromNtHandle(ptr) NtGdiDdDDIOpenResourceFromNtHandle

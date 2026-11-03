@@ -511,8 +511,11 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDISharedPrimaryLockNotification(_In_ const D3DKMT_SHAREDPRIMARYLOCKNOTIFICATION* unnamedParam1)
 {
+    D3DKMT_SHAREDPRIMARYLOCKNOTIFICATION Captured;
+
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    /* Windows 11 accepts the notification for any adapter LUID, source and rectangle. */
+    return D3dkmtCaptureUserStructure((PVOID)unnamedParam1, sizeof(Captured), &Captured);
 }
 
 NTSTATUS
@@ -520,7 +523,7 @@ APIENTRY
 NtGdiDdDDISharedPrimaryUnLockNotification(_In_ const D3DKMT_SHAREDPRIMARYUNLOCKNOTIFICATION* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTSharedPrimaryUnLockNotification(unnamedParam1);
 }
 
 NTSTATUS
@@ -2020,7 +2023,7 @@ APIENTRY
 NtGdiDdDDICreateOutputDupl(_In_ const struct _D3DKMT_CREATE_OUTPUTDUPL* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTCreateOutputDupl(unnamedParam1);
 }
 
 NTSTATUS
@@ -2028,7 +2031,7 @@ APIENTRY
 NtGdiDdDDIDestroyOutputDupl(_In_ const struct _D3DKMT_DESTROY_OUTPUTDUPL* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTDestroyOutputDupl(unnamedParam1);
 }
 
 NTSTATUS
@@ -2036,7 +2039,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplGetFrameInfo(_Inout_ struct _D3DKMT_OUTPUTDUPL_GET_FRAMEINFO* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplGetFrameInfo(unnamedParam1);
 }
 
 NTSTATUS
@@ -2044,7 +2047,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplGetMetaData(_Inout_ struct _D3DKMT_OUTPUTDUPL_METADATA* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplGetMetaData(unnamedParam1);
 }
 
 NTSTATUS
@@ -2052,7 +2055,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplGetPointerShapeData(_Inout_ struct _D3DKMT_OUTPUTDUPL_GET_POINTER_SHAPE_DATA* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplGetPointerShapeData(unnamedParam1);
 }
 
 NTSTATUS
@@ -2068,7 +2071,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplReleaseFrame(_In_ const struct _D3DKMT_OUTPUTDUPL_RELEASE_FRAME* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplReleaseFrame((D3DKMT_OUTPUTDUPL_RELEASE_FRAME *)unnamedParam1);
 }
 
 /* ---- Multi-plane overlays ------------------------------------------------- */
@@ -2462,7 +2465,7 @@ APIENTRY
 NtGdiDdDDICancelPresents(_In_ const struct _D3DKMT_CANCEL_PRESENTS* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTCancelPresents((D3DKMT_CANCEL_PRESENTS *)unnamedParam1);
 }
 
 NTSTATUS

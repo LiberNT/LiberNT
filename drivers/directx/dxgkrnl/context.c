@@ -3182,6 +3182,7 @@ DxgkProcessCleanup(
     DxgkAdapterProcessCleanup(Process);
     DxgkVidMmProcessCleanup(Process);
     DxgkD3dkmtProcessCleanup(Process);
+    DxgkOutputDuplProcessCleanup(Process);
     DxgkKeyedMutexProcessCleanup(Process);
     DxgkTrimNotificationProcessCleanup(Process);
     DxgkProcessPriorityCleanup(Process);

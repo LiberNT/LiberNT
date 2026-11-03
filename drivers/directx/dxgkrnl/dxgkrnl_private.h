@@ -3467,6 +3467,31 @@ DxgkSyncSharedObjectsInitialize(VOID);
 POBJECT_TYPE
 DxgkSyncSharedObjectType(VOID);
 
+POBJECT_TYPE
+DxgkSharedResourceType(VOID);
+
+NTSTATUS
+DxgkOutputDuplCreate(
+    _In_ D3DKMT_HANDLE hAdapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG SurfaceCount,
+    _In_reads_(SurfaceCount) CONST HANDLE *Surfaces,
+    _Out_ PULONG RequiredSurfaceCount);
+
+NTSTATUS
+DxgkOutputDuplDestroy(
+    _In_ D3DKMT_HANDLE hAdapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId);
+
+NTSTATUS
+DxgkOutputDuplFrameAccess(
+    _In_ D3DKMT_HANDLE hAdapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId);
+
+VOID
+DxgkOutputDuplProcessCleanup(
+    _In_ PEPROCESS Process);
+
 NTSTATUS
 DxgkSyncShareNtObject(
     _In_ D3DKMT_HANDLE hSyncObject,

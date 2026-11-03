@@ -5865,6 +5865,119 @@ D3DKMTCreateNativeFence(_Inout_ D3DKMT_CREATENATIVEFENCE *pData)
 }
 
 static NTSTATUS
+D3dkmtSendOutputDupl(_In_ RXGK_OUTPUTDUPL_OPERATION Operation, _In_ D3DKMT_HANDLE hAdapter,
+                     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId, _In_ ULONG SurfaceCount,
+                     _In_reads_opt_(SurfaceCount) CONST D3DKMT_OUTPUTDUPL_KEYEDMUTEX *Surfaces,
+                     _Out_opt_ PULONG RequiredSurfaceCount)
+{
+    RXGK_OUTPUTDUPL_PACKET Packet;
+    ULONG_PTR Information = 0;
+    NTSTATUS Status;
+    ULONG Index;
+
+    RtlZeroMemory(&Packet, sizeof(Packet));
+    Packet.Size = sizeof(Packet);
+    Packet.Version = RXGK_WDDM_PACKET_VERSION_1;
+    Packet.Operation = Operation;
+    Packet.hAdapter = hAdapter;
+    Packet.VidPnSourceId = VidPnSourceId;
+    if (SurfaceCount > RTL_NUMBER_OF(Packet.Surfaces))
+        return STATUS_INVALID_PARAMETER;
+    Packet.SurfaceCount = SurfaceCount;
+    for (Index = 0; Index < SurfaceCount; ++Index)
+        Packet.Surfaces[Index] = (ULONGLONG)(ULONG_PTR)Surfaces[Index].hSharedSurfaceNt;
+    Status = WddmBridgeSendIoctlWithInformation(IOCTL_RXGK_OUTPUTDUPL, &Packet, sizeof(Packet), &Packet, sizeof(Packet), &Information);
+    if (Information != sizeof(Packet))
+        return NT_SUCCESS(Status) ? STATUS_INFO_LENGTH_MISMATCH : Status;
+    if (RequiredSurfaceCount != NULL)
+        *RequiredSurfaceCount = Packet.RequiredSurfaceCount;
+    return Status;
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTCreateOutputDupl(_In_ const D3DKMT_CREATE_OUTPUTDUPL *pData)
+{
+    D3DKMT_CREATE_OUTPUTDUPL Captured;
+    ULONG Required = 0;
+    NTSTATUS Status;
+    NTSTATUS CopyStatus;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    Status = D3dkmtSendOutputDupl(RxgkOutputDuplCreate, Captured.hAdapter, Captured.VidPnSourceId,
+                                  Captured.KeyedMutexCount, Captured.KeyedMutexs, &Required);
+    if (Required == 0)
+        return Status;
+    Captured.RequiredKeyedMutexCount = Required;
+    CopyStatus = WddmBridgeSafeCopyTo((PVOID)pData, &Captured, sizeof(Captured));
+    return NT_SUCCESS(CopyStatus) ? Status : WddmBridgeRejectBadBuffer(CopyStatus);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTDestroyOutputDupl(_In_ const D3DKMT_DESTROY_OUTPUTDUPL *pData)
+{
+    D3DKMT_DESTROY_OUTPUTDUPL Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendOutputDupl(RxgkOutputDuplDestroy, Captured.hAdapter, Captured.VidPnSourceId, 0, NULL, NULL);
+}
+
+/* The frame entry points all begin with hAdapter and VidPnSourceId. */
+static NTSTATUS
+D3dkmtOutputDuplFrameAccess(_In_ CONST VOID *pData)
+{
+    struct { D3DKMT_HANDLE hAdapter; D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId; } Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendOutputDupl(RxgkOutputDuplFrameAccess, Captured.hAdapter, Captured.VidPnSourceId, 0, NULL, NULL);
+}
+
+NTSTATUS APIENTRY D3DKMTOutputDuplGetFrameInfo(_Inout_ D3DKMT_OUTPUTDUPL_GET_FRAMEINFO *pData) { return D3dkmtOutputDuplFrameAccess(pData); }
+NTSTATUS APIENTRY D3DKMTOutputDuplGetMetaData(_Inout_ D3DKMT_OUTPUTDUPL_METADATA *pData) { return D3dkmtOutputDuplFrameAccess(pData); }
+NTSTATUS APIENTRY D3DKMTOutputDuplGetPointerShapeData(_Inout_ D3DKMT_OUTPUTDUPL_GET_POINTER_SHAPE_DATA *pData) { return D3dkmtOutputDuplFrameAccess(pData); }
+NTSTATUS APIENTRY D3DKMTOutputDuplReleaseFrame(_Inout_ D3DKMT_OUTPUTDUPL_RELEASE_FRAME *pData) { return D3dkmtOutputDuplFrameAccess(pData); }
+
+NTSTATUS
+APIENTRY
+D3DKMTSharedPrimaryUnLockNotification(_In_ const D3DKMT_SHAREDPRIMARYUNLOCKNOTIFICATION *pData)
+{
+    D3DKMT_SHAREDPRIMARYUNLOCKNOTIFICATION Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendPublicOperation(RxgkPublicSharedPrimaryUnLockNotification, 0, Captured.VidPnSourceId, 0, 0, 0,
+                                     ((ULONGLONG)(ULONG)Captured.AdapterLuid.HighPart << 32) | Captured.AdapterLuid.LowPart, NULL);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTCancelPresents(_In_ D3DKMT_CANCEL_PRESENTS *pData)
+{
+    D3DKMT_CANCEL_PRESENTS Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    if (Captured.cbSize != sizeof(Captured))
+        return STATUS_INVALID_PARAMETER;
+    return D3dkmtSendPublicOperation(RxgkPublicCancelPresents, Captured.hDevice, 0, Captured.Operation, 0,
+                                     Captured.BindId,
+                                     ((ULONGLONG)(ULONG)Captured.CompSurfaceLuid.HighPart << 32) | Captured.CompSurfaceLuid.LowPart, NULL);
+}
+
+static NTSTATUS
 D3dkmtOpenNtHandleByName(_In_ RXGK_PUBLIC_OPERATION Operation, _Inout_ D3DKMT_OPENNTHANDLEFROMNAME *pData)
 {
     D3DKMT_OPENNTHANDLEFROMNAME Captured;
