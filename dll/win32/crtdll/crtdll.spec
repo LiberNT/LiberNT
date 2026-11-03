@@ -215,7 +215,7 @@
 @ cdecl _mbsnbset(str long long)
 @ cdecl _mbsncat(str str long) CRTDLL__mbsncat
 @ cdecl _mbsnccnt(str long)
-@ cdecl _mbsncmp(str str long)
+@ cdecl _mbsncmp(str str long) CRTDLL__mbsncmp
 @ cdecl _mbsncpy(str str long)
 @ cdecl _mbsnextc(str)
 @ cdecl _mbsnicmp(str str long)
