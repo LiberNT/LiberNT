@@ -113,10 +113,10 @@ else()
         list(APPEND UCRT_STRING_ASM_SOURCES
             ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
             ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strlen.S
-            ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strncmp.S
             ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strnlen.S
             ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcsnlen.S
             string/arm64/strcmp_simd.S
+            string/arm64/strncmp_simd.S
             string/arm64/wcscmp_simd.S
         )
         list(APPEND UCRT_STRING_SOURCES
