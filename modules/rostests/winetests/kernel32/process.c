@@ -2255,6 +2255,8 @@ static void test_IsWow64Process2(void)
     USHORT expect_native = IMAGE_FILE_MACHINE_ARMNT;
 #elif defined __aarch64__
     USHORT expect_native = IMAGE_FILE_MACHINE_ARM64;
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+    USHORT expect_native = IMAGE_FILE_MACHINE_RISCV64;
 #else
     USHORT expect_native = 0;
 #endif
