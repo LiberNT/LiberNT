@@ -292,7 +292,7 @@ ScmGetServiceImageByImagePath(LPWSTR lpImagePath)
         CurrentImage = CONTAINING_RECORD(ImageEntry,
                                          SERVICE_IMAGE,
                                          ImageListEntry);
-        if (_wcsicmp(CurrentImage->pszImagePath, lpImagePath) == 0)
+        if (!CurrentImage->bStopping && _wcsicmp(CurrentImage->pszImagePath, lpImagePath) == 0)
         {
             DPRINT("Found image: '%S'\n", CurrentImage->pszImagePath);
             return CurrentImage;
@@ -910,6 +910,20 @@ ScmWatchServiceImage(PSERVICE_IMAGE pServiceImage)
     pServiceImage->bProcessWatched = TRUE;
 }
 
+
+/* Whether a service still runs in the image; stopped services are detached from theirs. The database lock must be held. */
+BOOL
+ScmImageHasServices(PSERVICE_IMAGE pServiceImage)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = ServiceListHead.Flink; Entry != &ServiceListHead; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, SERVICE, ServiceListEntry)->lpImage == pServiceImage)
+            return TRUE;
+    }
+    return FALSE;
+}
 
 /* A recovery program runs under the account of the service, like its processes. */
 DWORD

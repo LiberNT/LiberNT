@@ -1775,23 +1775,34 @@ ScmIsValidServiceState(DWORD dwCurrentState)
     }
 }
 
+/* A stopped service hands its share of the image to the thread completing the stop. */
+typedef struct _SCM_STOP_CONTEXT
+{
+    PSERVICE lpService;
+    PSERVICE_IMAGE lpImage;
+} SCM_STOP_CONTEXT, *PSCM_STOP_CONTEXT;
+
 static
 DWORD
 WINAPI
 ScmStopThread(PVOID pParam)
 {
-    PSERVICE lpService = (PSERVICE)pParam;
+    PSCM_STOP_CONTEXT pContext = (PSCM_STOP_CONTEXT)pParam;
+    PSERVICE lpService = pContext->lpService;
+    PSERVICE_IMAGE lpImage = pContext->lpImage;
     WCHAR szLogBuffer[80];
     LPCWSTR lpLogStrings[2];
 
+    HeapFree(GetProcessHeap(), 0, pContext);
+
     /* Check if we are about to stop this service */
-    if (lpService->lpImage->dwImageRunCount == 1)
+    if (lpImage != NULL && lpImage->bStopping)
     {
         /* Stop the dispatcher thread.
          * We must not send a control message while holding the database lock, otherwise it can cause timeouts
          * We are sure that the service won't be deleted in the meantime because we still have a reference to it. */
         DPRINT("Stopping the dispatcher thread for service %S\n", lpService->lpServiceName);
-        ScmControlService(lpService->lpImage->hControlPipe,
+        ScmControlService(lpImage->hControlPipe,
                           L"",
                           SERVICE_CONTROL_STOP,
                           lpService->dwResumeCount);
@@ -1800,19 +1811,19 @@ ScmStopThread(PVOID pParam)
     /* Lock the service database exclusively */
     ScmLockDatabaseExclusive();
 
-    DPRINT("Service %S image count:%d\n", lpService->lpServiceName, lpService->lpImage->dwImageRunCount);
-
     /* Decrement the image run counter */
-    lpService->lpImage->dwImageRunCount--;
-
-    /* If we just stopped the last running service... */
-    if (lpService->lpImage->dwImageRunCount == 0)
+    if (lpImage != NULL)
     {
-        /* Remove the service image */
-        DPRINT("Removing service image for %S\n", lpService->lpServiceName);
-        ScmRemoveServiceImage(lpService->lpImage);
+        lpImage->dwImageRunCount--;
+
+        /* If we just stopped the last running service... */
+        if (lpImage->dwImageRunCount == 0)
+        {
+            /* Remove the service image */
+            DPRINT("Removing service image for %S\n", lpService->lpServiceName);
+            ScmRemoveServiceImage(lpImage);
+        }
     }
-    lpService->lpImage = NULL;
 
     /* Report the results of the status change here */
     if (lpService->Status.dwWin32ExitCode != ERROR_SUCCESS)
@@ -1976,17 +1987,41 @@ RSetServiceStatus(
          * This thread will remove the reference that was added when the service started.
          * This will ensure that the service will remain valid as long as this reference is still held.
          */
-        hStopThread = CreateThread(NULL,
-                                   0,
-                                   ScmStopThread,
-                                   (LPVOID)lpService,
-                                   0,
-                                   &dwStopThreadId);
+        PSCM_STOP_CONTEXT pStopContext = HeapAlloc(GetProcessHeap(), 0, sizeof(*pStopContext));
+
+        hStopThread = NULL;
+        if (pStopContext != NULL)
+        {
+            pStopContext->lpService = lpService;
+            pStopContext->lpImage = lpService->lpImage;
+            lpService->lpImage = NULL;
+
+            /* A start request from now on gets a new process when this image is about to exit */
+            if (pStopContext->lpImage != NULL && !ScmImageHasServices(pStopContext->lpImage))
+                pStopContext->lpImage->bStopping = TRUE;
+            hStopThread = CreateThread(NULL,
+                                       0,
+                                       ScmStopThread,
+                                       pStopContext,
+                                       0,
+                                       &dwStopThreadId);
+        }
         if (hStopThread == NULL)
         {
             DPRINT1("Failed to create thread to complete service stop\n");
-            /* We can't leave without releasing the reference.
-             * We also can't remove it without holding the lock. */
+            if (pStopContext != NULL)
+            {
+                lpService->lpImage = pStopContext->lpImage;
+                HeapFree(GetProcessHeap(), 0, pStopContext);
+            }
+            if (lpService->lpImage != NULL)
+            {
+                lpService->lpImage->bStopping = FALSE;
+                if (--lpService->lpImage->dwImageRunCount == 0)
+                    ScmRemoveServiceImage(lpService->lpImage);
+                lpService->lpImage = NULL;
+            }
+            /* We can't leave without releasing the reference. */
             ScmDereferenceService(lpService);
             DPRINT1("Service %S has %d references after stop\n", lpService->lpServiceName, lpService->RefCount);
         }

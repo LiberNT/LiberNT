@@ -57,6 +57,7 @@ typedef struct _SERVICE_IMAGE
     HANDLE hProfile;
     ULONG ImageSerial;
     BOOL bProcessWatched;
+    BOOL bStopping;
 } SERVICE_IMAGE, *PSERVICE_IMAGE;
 
 
@@ -208,6 +209,7 @@ DWORD ScmDereferenceService(PSERVICE lpService);
 
 VOID ScmRemoveServiceImage(PSERVICE_IMAGE pServiceImage);
 DWORD ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine);
+BOOL ScmImageHasServices(PSERVICE_IMAGE pServiceImage);
 PSERVICE ScmGetServiceEntryByName(LPCWSTR lpServiceName);
 PSERVICE ScmGetServiceEntryByDisplayName(LPCWSTR lpDisplayName);
 PSERVICE ScmGetServiceEntryByResumeCount(DWORD dwResumeCount);
