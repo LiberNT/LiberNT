@@ -193,7 +193,8 @@ FelixSaveState(
 {
     PULONG64 Registers = Felix86NtRegisters(Thread->Cpu);
 
-    Context->ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+    Context->ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS |
+                            WOW64_CONTEXT_DEBUG_REGISTERS;
     Context->Eax = (ULONG)Registers[FelixRax];
     Context->Ecx = (ULONG)Registers[FelixRcx];
     Context->Edx = (ULONG)Registers[FelixRdx];
@@ -210,7 +211,7 @@ FelixSaveState(
     Context->SegSs = FELIX_SEG_DATA;
     Context->SegGs = FELIX_SEG_DATA;
     Context->SegFs = FELIX_SEG_TEB;
-    Context->Dr0 = Context->Dr1 = Context->Dr2 = Context->Dr3 = Context->Dr6 = Context->Dr7 = 0;
+    /* FIXME: hardware breakpoints in Dr0-3/Dr7 are kept but never fire */
     RtlZeroMemory(Context->ExtendedRegisters, sizeof(Context->ExtendedRegisters));
     Felix86NtSaveFloating(Thread->Cpu, Context->ExtendedRegisters);
     FelixFxsaveToFloatSave((PFELIX_FXSAVE)Context->ExtendedRegisters, &Context->FloatSave);
