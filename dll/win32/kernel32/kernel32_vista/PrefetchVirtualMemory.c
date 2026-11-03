@@ -27,7 +27,6 @@ PrefetchVirtualMemory(
         return FALSE;
     }
 
-#if defined(_WIN64)
     NTSTATUS Status;
     ULONG PrefetchFlags = Flags;
 
@@ -41,7 +40,6 @@ PrefetchVirtualMemory(
         }
         return TRUE;
     }
-#endif
 
     GetSystemInfo(&SystemInfo);
 
