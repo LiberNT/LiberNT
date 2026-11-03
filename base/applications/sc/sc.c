@@ -299,6 +299,17 @@ ScControl(LPCTSTR Server,       // remote machine name
     {
         SetFailureFlag(ServiceArgs, ArgCount);
     }
+    else if (!lstrcmpi(Command, _T("triggerinfo")))
+    {
+        SetTriggerInfo(ServiceArgs, ArgCount);
+    }
+    else if (!lstrcmpi(Command, _T("qtriggerinfo")))
+    {
+        if (ArgCount > 0)
+            QueryTriggerInfo(*ServiceArgs);
+        else
+            QueryTriggerInfoUsage();
+    }
     else if (!lstrcmpi(Command, _T("GetDisplayName")))
     {
         if (ArgCount > 0)

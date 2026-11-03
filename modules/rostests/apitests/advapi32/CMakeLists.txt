@@ -33,6 +33,7 @@ list(APPEND SOURCE
     ServiceCrash.c
     ServiceEnv.c
     ServiceNetwork.c
+    TriggerInfo.c
     TokenBnoIsolation.c
     TraceGuids.c
     svchlp.c)

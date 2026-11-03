@@ -5250,7 +5250,8 @@ ScmIsSupportedConfigLevel(DWORD dwInfoLevel)
 {
     return dwInfoLevel == SERVICE_CONFIG_DESCRIPTION ||
            dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS ||
-           dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG;
+           dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG ||
+           dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO;
 }
 
 static DWORD
@@ -5304,6 +5305,8 @@ RChangeServiceConfig2A(
     InfoW.dwInfoLevel = Info.dwInfoLevel;
     if (Info.dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG)
         InfoW.psfaf = Info.psfaf;
+    else if (Info.dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+        InfoW.psti = Info.psti;
 
     if (InfoW.dwInfoLevel == SERVICE_CONFIG_DESCRIPTION)
     {
@@ -5758,6 +5761,12 @@ RChangeServiceConfig2W(
     {
         dwError = ScmSetFailureActionsFlag(hServiceKey, Info.psfaf);
     }
+    else if (Info.dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+    {
+        dwError = ScmSetServiceTriggers(hServiceKey, Info.psti);
+        if (dwError == ERROR_SUCCESS)
+            ScmTriggersChanged();
+    }
 
 done:
     if (hServiceKey != NULL)
@@ -5975,6 +5984,10 @@ RQueryServiceConfig2A(
     {
         dwError = ScmQueryFailureActionsFlag(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
     }
+    else if (dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+    {
+        dwError = ScmQueryServiceTriggers(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
+    }
 
 done:
     /* Unlock the service database */
@@ -6177,6 +6190,10 @@ RQueryServiceConfig2W(
     else if (dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG)
     {
         dwError = ScmQueryFailureActionsFlag(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
+    }
+    else if (dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+    {
+        dwError = ScmQueryServiceTriggers(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
     }
 
 done:

@@ -271,6 +271,14 @@ DWORD ScmControlDriver(PSERVICE lpService,
 VOID ScmServiceFailure(PSERVICE lpService, BOOL bCrashed);
 
 
+/* trigger.c */
+
+DWORD ScmSetServiceTriggers(HKEY hServiceKey, const SERVICE_TRIGGER_INFO *lpInfo);
+DWORD ScmQueryServiceTriggers(HKEY hServiceKey, LPBYTE lpBuffer, DWORD cbBufSize, LPDWORD pcbBytesNeeded);
+VOID ScmStartTriggers(VOID);
+VOID ScmTriggersChanged(VOID);
+
+
 /* groupdb.c */
 
 PSERVICE_GROUP

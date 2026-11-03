@@ -41,6 +41,8 @@ VOID MainUsage(VOID)
     _T("\t  qdescription   : Queries the description for a service.\n")
     _T("\t  qfailure       : Queries the actions taken by a service upon failure.\n")
     _T("\t  qfailureflag   : Queries the failure actions flag of a service.\n")
+    _T("\t  triggerinfo    : Configures the trigger parameters of a service.\n")
+    _T("\t  qtriggerinfo   : Queries the trigger parameters of a service.\n")
     _T("\t  delete         : Deletes a service (from the registry).\n")
     _T("\t  create         : Creates a service (adds it to the registry).\n")
     _T("\t  control        : Sends a control to a service.\n")
@@ -218,6 +220,38 @@ VOID QueryFailureUsage(VOID)
              _T("        Retrieves the actions performed on service failure.\n")
              _T("USAGE:\n")
              _T("        sc <server> qfailure [service name] <bufferSize>\n"));
+}
+
+VOID QueryTriggerInfoUsage(VOID)
+{
+    _tprintf(_T("DESCRIPTION:\n")
+             _T("        Queries the trigger parameters of a service.\n")
+             _T("USAGE:\n")
+             _T("        sc <server> qtriggerinfo [service name]\n"));
+}
+
+VOID SetTriggerInfoUsage(VOID)
+{
+    _tprintf(_T("DESCRIPTION:\n")
+             _T("        Changes the trigger parameters of a service.\n")
+             _T("USAGE:\n")
+             _T("        sc <server> triggerinfo [service name] <option1> <option2>...\n")
+             _T("OPTIONS:\n")
+             _T("        start/device/UUID/HwId1/...     Start on arrival of a device interface of class UUID\n")
+             _T("                                        matching one of the hardware or compatible IDs.\n")
+             _T("        start/custom/UUID/data0/...     Start (or stop/custom/...) on an event of the custom ETW\n")
+             _T("                                        provider UUID carrying the hexadecimal data items.\n")
+             _T("        start/strcustom/UUID/data0/...  Same, with string data items (stop/strcustom/...).\n")
+             _T("        start/levelcustom/UUID/level    Same, with an event level (stop/levelcustom/...).\n")
+             _T("        start/anykeywordcustom/UUID/keyword, start/allkeywordcustom/UUID/keyword\n")
+             _T("                                        Same, with event keywords (also stop/...).\n")
+             _T("        start/portopen/parameter        Start when a firewall port opens; stop/portclose/...\n")
+             _T("                                        parameter: port number;protocol;image path;service.\n")
+             _T("        start/networkon, stop/networkoff Start on the first IP address, stop on the last one gone.\n")
+             _T("        start/domainjoin, stop/domainleave Start on joining a domain, stop on leaving it.\n")
+             _T("        start/machinepolicy, start/userpolicy Start when machine or user policy is present.\n")
+             _T("        start/rpcinterface/UUID, start/namedpipe/pipename Start on a network endpoint request.\n")
+             _T("        delete                          Delete the trigger parameters.\n"));
 }
 
 VOID QueryFailureFlagUsage(VOID)

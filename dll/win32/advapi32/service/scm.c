@@ -272,6 +272,10 @@ ChangeServiceConfig2A(SC_HANDLE hService,
             Info.psfaf = lpInfo;
             break;
 
+        case SERVICE_CONFIG_TRIGGER_INFO:
+            Info.psti = lpInfo;
+            break;
+
         default:
             WARN("Unknown info level 0x%lx\n", dwInfoLevel);
             SetLastError(ERROR_INVALID_PARAMETER);
@@ -332,6 +336,10 @@ ChangeServiceConfig2W(SC_HANDLE hService,
 
         case SERVICE_CONFIG_FAILURE_ACTIONS_FLAG:
             Info.psfaf = lpInfo;
+            break;
+
+        case SERVICE_CONFIG_TRIGGER_INFO:
+            Info.psti = lpInfo;
             break;
 
         default:
@@ -2514,6 +2522,32 @@ QueryServiceConfigW(SC_HANDLE hService,
 }
 
 
+/* The SCM returns trigger information with offsets from the start of the buffer in place of pointers. */
+static VOID
+ScmRelocateTriggerInfo(PSERVICE_TRIGGER_INFO lpInfo)
+{
+    ULONG_PTR Base = (ULONG_PTR)lpInfo;
+    DWORD i, j;
+
+    if (lpInfo->pTriggers != NULL)
+        lpInfo->pTriggers = (PSERVICE_TRIGGER)(Base + (ULONG_PTR)lpInfo->pTriggers);
+    for (i = 0; i < lpInfo->cTriggers; i++)
+    {
+        PSERVICE_TRIGGER lpTrigger = &lpInfo->pTriggers[i];
+
+        if (lpTrigger->pTriggerSubtype != NULL)
+            lpTrigger->pTriggerSubtype = (GUID *)(Base + (ULONG_PTR)lpTrigger->pTriggerSubtype);
+        if (lpTrigger->pDataItems != NULL)
+            lpTrigger->pDataItems = (PSERVICE_TRIGGER_SPECIFIC_DATA_ITEM)(Base + (ULONG_PTR)lpTrigger->pDataItems);
+        for (j = 0; j < lpTrigger->cDataItems; j++)
+        {
+            if (lpTrigger->pDataItems[j].pData != NULL)
+                lpTrigger->pDataItems[j].pData = (PBYTE)(Base + (ULONG_PTR)lpTrigger->pDataItems[j].pData);
+        }
+    }
+}
+
+
 /**********************************************************************
  *  QueryServiceConfig2A
  *
@@ -2529,6 +2563,7 @@ QueryServiceConfig2A(SC_HANDLE hService,
     SERVICE_DESCRIPTIONA ServiceDescription;
     SERVICE_FAILURE_ACTIONSA ServiceFailureActions;
     SERVICE_FAILURE_ACTIONS_FLAG FailureActionsFlag;
+    SERVICE_TRIGGER_INFO TriggerInfo;
     LPBYTE lpTempBuffer;
     BOOL bUseTempBuffer = FALSE;
     DWORD dwBufferSize;
@@ -2565,6 +2600,15 @@ QueryServiceConfig2A(SC_HANDLE hService,
             {
                 lpTempBuffer = (LPBYTE)&FailureActionsFlag;
                 dwBufferSize = sizeof(SERVICE_FAILURE_ACTIONS_FLAG);
+                bUseTempBuffer = TRUE;
+            }
+            break;
+
+        case SERVICE_CONFIG_TRIGGER_INFO:
+            if ((lpBuffer == NULL) || (cbBufSize < sizeof(SERVICE_TRIGGER_INFO)))
+            {
+                lpTempBuffer = (LPBYTE)&TriggerInfo;
+                dwBufferSize = sizeof(SERVICE_TRIGGER_INFO);
                 bUseTempBuffer = TRUE;
             }
             break;
@@ -2633,6 +2677,10 @@ QueryServiceConfig2A(SC_HANDLE hService,
                         (LPSC_ACTION)((ULONG_PTR)lpPtr + (ULONG_PTR)lpPtr->lpsaActions);
             }
             break;
+
+        case SERVICE_CONFIG_TRIGGER_INFO:
+            ScmRelocateTriggerInfo((PSERVICE_TRIGGER_INFO)lpTempBuffer);
+            break;
     }
 
     TRACE("QueryServiceConfig2A() done\n");
@@ -2656,6 +2704,7 @@ QueryServiceConfig2W(SC_HANDLE hService,
     SERVICE_DESCRIPTIONW ServiceDescription;
     SERVICE_FAILURE_ACTIONSW ServiceFailureActions;
     SERVICE_FAILURE_ACTIONS_FLAG FailureActionsFlag;
+    SERVICE_TRIGGER_INFO TriggerInfo;
     LPBYTE lpTempBuffer;
     BOOL bUseTempBuffer = FALSE;
     DWORD dwBufferSize;
@@ -2692,6 +2741,15 @@ QueryServiceConfig2W(SC_HANDLE hService,
             {
                 lpTempBuffer = (LPBYTE)&FailureActionsFlag;
                 dwBufferSize = sizeof(SERVICE_FAILURE_ACTIONS_FLAG);
+                bUseTempBuffer = TRUE;
+            }
+            break;
+
+        case SERVICE_CONFIG_TRIGGER_INFO:
+            if ((lpBuffer == NULL) || (cbBufSize < sizeof(SERVICE_TRIGGER_INFO)))
+            {
+                lpTempBuffer = (LPBYTE)&TriggerInfo;
+                dwBufferSize = sizeof(SERVICE_TRIGGER_INFO);
                 bUseTempBuffer = TRUE;
             }
             break;
@@ -2759,6 +2817,10 @@ QueryServiceConfig2W(SC_HANDLE hService,
                     lpPtr->lpsaActions =
                         (LPSC_ACTION)((ULONG_PTR)lpPtr + (ULONG_PTR)lpPtr->lpsaActions);
             }
+            break;
+
+        case SERVICE_CONFIG_TRIGGER_INFO:
+            ScmRelocateTriggerInfo((PSERVICE_TRIGGER_INFO)lpTempBuffer);
             break;
     }
 
