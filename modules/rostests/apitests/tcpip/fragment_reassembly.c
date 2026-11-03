@@ -19,6 +19,7 @@ typedef struct _FRAGMENT
     USHORT Offset;
     USHORT Length;
     BOOL More;
+    UCHAR Xor;
 } FRAGMENT;
 
 typedef struct _REASSEMBLY_TEST
@@ -26,7 +27,7 @@ typedef struct _REASSEMBLY_TEST
     PCSTR Name;
     BOOL Delivered;
     UINT Count;
-    FRAGMENT Fragments[3];
+    FRAGMENT Fragments[4];
 } REASSEMBLY_TEST;
 
 static const REASSEMBLY_TEST Tests[] =
@@ -39,6 +40,13 @@ static const REASSEMBLY_TEST Tests[] =
     { "gap", FALSE, 2, { { 0, 16, TRUE }, { 24, 16, FALSE } } },
     { "past end before last", FALSE, 3, { { 0, 16, TRUE }, { 40, 8, TRUE }, { 16, 24, FALSE } } },
     { "past end after last", FALSE, 2, { { 16, 24, FALSE }, { 0, 48, TRUE } } },
+    { "overlap later fragment", FALSE, 2, { { 0, 24, TRUE }, { 16, 24, FALSE, 0x5a } } },
+    { "overlap earlier fragment", FALSE, 2, { { 16, 24, FALSE }, { 0, 24, TRUE, 0x5a } } },
+    { "overlap inside", TRUE, 3, { { 0, 24, TRUE }, { 8, 8, TRUE, 0x5a }, { 24, 16, FALSE } } },
+    { "overlap then fill", FALSE, 3, { { 0, 16, TRUE }, { 8, 16, TRUE, 0x5a }, { 16, 24, FALSE } } },
+    { "overlap superset", FALSE, 3, { { 8, 8, TRUE }, { 0, 24, TRUE, 0x5a }, { 24, 16, FALSE } } },
+    { "overlap same range", TRUE, 3, { { 0, 16, TRUE }, { 0, 16, TRUE, 0x5a }, { 16, 24, FALSE } } },
+    { "overlap two fragments", TRUE, 4, { { 0, 16, TRUE }, { 16, 16, TRUE }, { 8, 16, TRUE, 0x5a }, { 32, 8, FALSE } } },
 };
 
 static
@@ -119,6 +127,7 @@ RunReassemblyTest(
     const REASSEMBLY_TEST *Test)
 {
     UCHAR Datagram[64] = {0};
+    UCHAR Fragmented[64];
     UCHAR Buffer[64];
     USHORT Value;
     UINT Index;
@@ -135,10 +144,15 @@ RunReassemblyTest(
     for (Index = 0; Index < Test->Count; Index++)
     {
         const FRAGMENT *Fragment = &Test->Fragments[Index];
+        UINT Byte;
+
+        memcpy(Fragmented, Datagram, sizeof(Fragmented));
+        for (Byte = max(Fragment->Offset, 8); Byte < Fragment->Offset + Fragment->Length; Byte++)
+            Fragmented[Byte] ^= Fragment->Xor;
 
         Result = SendIPv4Fragment(Sender, Address, Identification,
                                   (Fragment->More ? 0x2000 : 0) | (Fragment->Offset / 8),
-                                  Datagram + Fragment->Offset, Fragment->Length);
+                                  Fragmented + Fragment->Offset, Fragment->Length);
         ok(Result, "%s: fragment %u send failed with %d\n", Test->Name, Index, WSAGetLastError());
         if (!Result)
             return;
