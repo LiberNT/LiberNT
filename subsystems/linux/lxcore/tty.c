@@ -114,6 +114,7 @@ LxDevptsCreate(
         }
         if (Key + KeyLength < End)
             Value = Key + KeyLength + 1;
+        /* FIXME: Linux fails the mount with EINVAL on an unknown option; unknown options are ignored here */
         if (Value == NULL)
             continue;
         if (LxDevptsOptionIs(Key, KeyLength, "mode") || LxDevptsOptionIs(Key, KeyLength, "ptmxmode"))
@@ -255,6 +256,7 @@ LxTtyCreate(
     if (!(Flags & LX_TTY_CONSOLE) && (Devpts != NULL))
     {
         ExAcquireFastMutex(&Instance->Lock);
+        /* TODO: limit the instance to its max= option; only the global limit applies */
         for (Index = 0; Index < LX_PTY_MAX; Index++)
         {
             if (!LxTtyIndexUsed(Devpts, Index))
