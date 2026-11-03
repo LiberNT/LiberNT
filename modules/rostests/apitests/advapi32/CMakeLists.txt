@@ -30,6 +30,7 @@ list(APPEND SOURCE
     RtlEncryptMemory.c
     SaferIdentifyLevel.c
     ServiceArgs.c
+    ServiceCrash.c
     ServiceEnv.c
     ServiceNetwork.c
     TokenBnoIsolation.c

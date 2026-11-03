@@ -55,6 +55,8 @@ typedef struct _SERVICE_IMAGE
     DWORD dwProcessId;
     HANDLE hToken;
     HANDLE hProfile;
+    ULONG ImageSerial;
+    BOOL bProcessWatched;
 } SERVICE_IMAGE, *PSERVICE_IMAGE;
 
 
@@ -76,6 +78,7 @@ typedef struct _SERVICE
 
     DWORD dwServiceBits;
     DWORD dwServiceTag;
+    DWORD dwFailureCount;
 
     ULONG Flags;
 

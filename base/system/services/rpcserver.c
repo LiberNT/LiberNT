@@ -1811,8 +1811,8 @@ ScmStopThread(PVOID pParam)
         /* Remove the service image */
         DPRINT("Removing service image for %S\n", lpService->lpServiceName);
         ScmRemoveServiceImage(lpService->lpImage);
-        lpService->lpImage = NULL;
     }
+    lpService->lpImage = NULL;
 
     /* Report the results of the status change here */
     if (lpService->Status.dwWin32ExitCode != ERROR_SUCCESS)
