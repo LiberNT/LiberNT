@@ -117,6 +117,7 @@ extern void func_UncoveredWindow(void);
 extern void func_UpdateRegion(void);
 extern void func_UserHandleGrantAccess(void);
 extern void func_VirtualKey(void);
+extern void func_WaitForInputIdle(void);
 extern void func_WindowBand(void);
 extern void func_CallWindowProc(void);
 extern void func_WndProc(void);
@@ -239,6 +240,7 @@ const struct test winetest_testlist[] =
     { "UpdateRegion", func_UpdateRegion },
     { "UserHandleGrantAccess", func_UserHandleGrantAccess },
     { "VirtualKey", func_VirtualKey },
+    { "WaitForInputIdle", func_WaitForInputIdle },
     { "WindowBand", func_WindowBand },
     { "CallWindowProc", func_CallWindowProc },
     { "WndProc", func_WndProc },

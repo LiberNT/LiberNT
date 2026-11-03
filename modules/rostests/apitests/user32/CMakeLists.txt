@@ -117,6 +117,7 @@ list(APPEND SOURCE
     UpdateRegion.c
     UserHandleGrantAccess.c
     VirtualKey.c
+    WaitForInputIdle.c
     WindowBand.c
     WndProc.c
     wsprintf.c)
