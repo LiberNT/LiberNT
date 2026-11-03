@@ -3341,6 +3341,9 @@ RETURN_CODE WCMD_start(WCHAR *args)
     RETURN_CODE return_code = NO_ERROR;
     int argno;
     int have_title;
+#ifdef __REACTOS__
+    BOOL wait = FALSE;
+#endif
     WCHAR file[MAX_PATH];
     WCHAR *cmdline, *cmdline_params;
     STARTUPINFOW st;
@@ -3391,6 +3394,22 @@ RETURN_CODE WCMD_start(WCHAR *args)
      * - need to access start.exe's child to get its running state
      *   (not start.exe itself)
      */
+#ifdef __REACTOS__
+    have_title = FALSE;
+    for (argno = 0; ; argno++) {
+        WCHAR *thisArg, *argN = NULL;
+
+        thisArg = WCMD_parameter_with_delims(args, argno, &argN, FALSE, FALSE, L" \t/");
+        if (!argN)
+            break;
+        if (argN[0] == '"' && !have_title)
+            have_title = TRUE;
+        else if (argN != args && argN[-1] == '/')
+            wait |= !wcsicmp(thisArg, L"WAIT");
+        else
+            break;
+    }
+#endif
     have_title = FALSE;
     for (argno=0; ; argno++) {
         WCHAR *thisArg, *argN;
@@ -3447,7 +3466,15 @@ RETURN_CODE WCMD_start(WCHAR *args)
         DWORD exit_code;
         WaitForSingleObject( pi.hProcess, INFINITE );
         GetExitCodeProcess( pi.hProcess, &exit_code );
+#ifdef __REACTOS__
+        /* Without /WAIT start.exe exits with its own status, not the program's */
+        if (wait)
+            errorlevel = (exit_code == STILL_ACTIVE) ? NO_ERROR : exit_code;
+        else if (exit_code != NO_ERROR)
+            return_code = errorlevel = exit_code;
+#else
         errorlevel = (exit_code == STILL_ACTIVE) ? NO_ERROR : exit_code;
+#endif
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
     }
