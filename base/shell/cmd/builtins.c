@@ -2397,6 +2397,14 @@ RETURN_CODE WCMD_setshow_default(const WCHAR *args)
       pos--;
     *pos = 0x00;
 
+#ifdef __REACTOS__
+    if (!*string) {
+      lstrcatW(cwd, L"\r\n");
+      WCMD_output_asis (cwd);
+      return errorlevel = NO_ERROR;
+    }
+#endif
+
     /* Search for appropriate directory */
     WINE_TRACE("Looking for directory '%s'\n", wine_dbgstr_w(string));
     hff = FindFirstFileW(string, &fd);
