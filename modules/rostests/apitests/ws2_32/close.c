@@ -232,6 +232,48 @@ void Test_CloseWithPendingAsyncSelect()
     DestroyWindow(hwnd);
 }
 
+void Test_RebindAfterCloseWithPendingReceive(void)
+{
+    SOCKET first, second;
+    struct sockaddr_in addr;
+    WSAOVERLAPPED overlapped;
+    WSABUF buffer;
+    char data[16];
+    DWORD flags = 0;
+    BOOL reuse = TRUE;
+    int err, len = sizeof(addr);
+
+    first = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ok(first != INVALID_SOCKET, "socket failed %d\n", WSAGetLastError());
+    err = setsockopt(first, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(reuse));
+    ok(err == 0, "setsockopt err = %d %d\n", err, WSAGetLastError());
+    ZeroMemory(&addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    err = bind(first, (const struct sockaddr *)&addr, sizeof(addr));
+    ok(err == 0, "bind err = %d %d\n", err, WSAGetLastError());
+    err = getsockname(first, (struct sockaddr *)&addr, &len);
+    ok(err == 0, "getsockname err = %d %d\n", err, WSAGetLastError());
+
+    ZeroMemory(&overlapped, sizeof(overlapped));
+    overlapped.hEvent = WSACreateEvent();
+    buffer.buf = data;
+    buffer.len = sizeof(data);
+    err = WSARecvFrom(first, &buffer, 1, NULL, &flags, NULL, NULL, &overlapped, NULL);
+    ok(err == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING, "WSARecvFrom err = %d %d\n", err, WSAGetLastError());
+    err = closesocket(first);
+    ok(err == 0, "closesocket err = %d %d\n", err, WSAGetLastError());
+
+    second = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ok(second != INVALID_SOCKET, "socket failed %d\n", WSAGetLastError());
+    err = setsockopt(second, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(reuse));
+    ok(err == 0, "setsockopt err = %d %d\n", err, WSAGetLastError());
+    err = bind(second, (const struct sockaddr *)&addr, sizeof(addr));
+    ok(err == 0, "bind err = %d %d\n", err, WSAGetLastError());
+    closesocket(second);
+    WSACloseEvent(overlapped.hEvent);
+}
+
 START_TEST(close)
 {
     int err;
@@ -245,6 +287,7 @@ START_TEST(close)
     Test_CloseWhileSelectSameSocket();
     Test_CloseWhileSelectDuplicatedSocket();
     Test_CloseWithPendingAsyncSelect();
+    Test_RebindAfterCloseWithPendingReceive();
 
     WSACleanup();
 }

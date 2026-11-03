@@ -390,6 +390,14 @@ NTSTATUS AddrCheckSharing(
         if ((Current->Port != Port) || (Current->Protocol != Protocol))
             continue;
 
+        /* A closed UDP address only waits for its last reference, its port stays held */
+        if (Protocol == IPPROTO_UDP && !Current->Sharers)
+        {
+            if (BindAddress->Type != IP_ADDRESS_V6)
+                *PortHeld = TRUE;
+            continue;
+        }
+
         if (Current->Address.Type != BindAddress->Type)
         {
             if (Current->DualStack && Current->Exclusive)
