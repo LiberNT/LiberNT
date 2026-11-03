@@ -12,6 +12,10 @@
 #include <kdbg/kdb.h>
 #endif
 
+#ifndef EXCEPTION_SOFTWARE_ORIGINATE
+#define EXCEPTION_SOFTWARE_ORIGINATE 0x80
+#endif
+
 static const CHAR *const KiRiscvRegisterNames[32] =
 {
     "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
@@ -582,6 +586,17 @@ KiDispatchException(
                 if (KiDebugRoutine(TrapFrame, ExceptionFrame, ExceptionRecord,
                                    &Context, PreviousMode, FALSE))
                     goto Handled;
+            }
+            if ((ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) &&
+                (ExceptionRecord->NumberParameters == 1) &&
+                !(ExceptionRecord->ExceptionFlags & EXCEPTION_SOFTWARE_ORIGINATE) &&
+                ((ULONG_PTR)ExceptionRecord->ExceptionAddress == TrapFrame->Context.Pc))
+            {
+                USHORT Instruction = 0;
+
+                if (NT_SUCCESS(KiRiscvCopyFromUser(&Instruction, (PVOID)(ULONG_PTR)TrapFrame->Context.Pc,
+                                                   sizeof(Instruction))))
+                    TrapFrame->Context.Pc += ((Instruction & 3) == 3) ? 4 : 2;
             }
             if (DbgkForwardException(ExceptionRecord, TRUE, FALSE)) return;
             if (KiRiscvDeliverUserException(TrapFrame, &Context, ExceptionRecord)) return;
