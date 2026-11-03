@@ -766,6 +766,13 @@ RETURN_CODE WCMD_copy(WCHAR * args)
             }
           }
         } else {
+#ifdef __REACTOS__
+          if (towupper(*thisparam) != 'L') {
+            WCMD_output_asis(WCMD_LoadMessage(WCMD_SYNTAXERR));
+            return_code = ERROR_INVALID_FUNCTION;
+            goto exitreturn;
+          }
+#endif
           WINE_FIXME("Unexpected copy switch %s\n", wine_dbgstr_w(thisparam));
         }
         thisparam++;
