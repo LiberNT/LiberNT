@@ -160,6 +160,95 @@ Finish:
     }
 }
 
+static void
+FailedAllocationsWriteFilePages(ULONG Large)
+{
+    UNICODE_STRING FileName = RTL_CONSTANT_STRING(L"\\SystemRoot\\kmtest-MmLargePages.tmp");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    SYSTEM_PERFORMANCE_INFORMATION Performance;
+    LARGE_INTEGER Maximum, Offset;
+    HANDLE File = NULL, Section = NULL, Huge = NULL;
+    PHYSICAL_MEMORY_RANGE *Ranges;
+    PHYSICAL_ADDRESS Lowest, Highest, Boundary;
+    PVOID Base = NULL, Contiguous;
+    SIZE_T Size = 0;
+    ULONG64 Headroom, End = 0;
+    ULONG Value, i;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, &FileName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateFile(&File, GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE, &ObjectAttributes, &IoStatusBlock,
+                          NULL, FILE_ATTRIBUTE_NORMAL, 0, FILE_SUPERSEDE,
+                          FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE | FILE_DELETE_ON_CLOSE, NULL, 0);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    Offset.QuadPart = 16 * PAGE_SIZE;
+    Status = ZwCreateSection(&Section, SECTION_ALL_ACCESS, NULL, &Offset, PAGE_READWRITE, SEC_COMMIT, File);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        goto Finish;
+    Offset.QuadPart = 0;
+    Status = ZwMapViewOfSection(Section, NtCurrentProcess(), &Base, 0, 0, &Offset, &Size, ViewUnmap, 0,
+                                PAGE_READWRITE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        goto Finish;
+    KmtStartSeh();
+    for (i = 0; i < 16; i++)
+        *(volatile ULONG *)((PUCHAR)Base + (SIZE_T)i * PAGE_SIZE) = 0x5EED0000 + i;
+    KmtEndSeh(STATUS_SUCCESS);
+    Status = ZwUnmapViewOfSection(NtCurrentProcess(), Base);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    Ranges = MmGetPhysicalMemoryRanges();
+    ok(Ranges != NULL, "MmGetPhysicalMemoryRanges failed\n");
+    if (Ranges != NULL)
+    {
+        for (i = 0; Ranges[i].NumberOfBytes.QuadPart != 0; i++)
+            if ((ULONG64)(Ranges[i].BaseAddress.QuadPart + Ranges[i].NumberOfBytes.QuadPart) > End)
+                End = (ULONG64)(Ranges[i].BaseAddress.QuadPart + Ranges[i].NumberOfBytes.QuadPart);
+        ExFreePool(Ranges);
+        Lowest.QuadPart = (LONGLONG)(End + 256 * 1024 * 1024);
+        Highest.QuadPart = Lowest.QuadPart + 16 * 1024 * 1024 - 1;
+        Boundary.QuadPart = 0;
+        Contiguous = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, Lowest, Highest, Boundary, MmCached);
+        ok(Contiguous == NULL, "Contiguous page above physical memory at %p\n", Contiguous);
+        if (Contiguous != NULL)
+            MmFreeContiguousMemory(Contiguous);
+    }
+
+    Status = ZwQuerySystemInformation(SystemPerformanceInformation, &Performance, sizeof(Performance), NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        goto Finish;
+    Maximum.QuadPart = (LONGLONG)((((ULONG64)Performance.AvailablePages << PAGE_SHIFT) + 2 * (ULONG64)Large) &
+                                  ~((ULONG64)Large - 1));
+    Headroom = (ULONG64)(Performance.CommitLimit - Performance.CommittedPages) << PAGE_SHIFT;
+    if (!skip(Headroom > (ULONG64)Maximum.QuadPart + 8 * 1024 * 1024,
+              "Commit headroom %I64u below available memory %I64d\n", Headroom, Maximum.QuadPart))
+    {
+        Status = ZwCreateSection(&Huge, SECTION_ALL_ACCESS, NULL, &Maximum, PAGE_READWRITE,
+                                 SEC_COMMIT | SEC_LARGE_PAGES, NULL);
+        if (NT_SUCCESS(Status))
+            ZwClose(Huge);
+    }
+
+    for (i = 0; i < 16; i++)
+    {
+        Value = 0;
+        Offset.QuadPart = (LONGLONG)i * PAGE_SIZE;
+        Status = ZwReadFile(File, NULL, NULL, NULL, &IoStatusBlock, &Value, sizeof(Value), &Offset, NULL);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        ok_eq_hex(Value, 0x5EED0000 + i);
+    }
+Finish:
+    if (Section != NULL)
+        ZwClose(Section);
+    ZwClose(File);
+}
+
 START_TEST(MmLargePages)
 {
     ULONG Large = SharedUserData->LargePageMinimum;
@@ -284,4 +373,5 @@ START_TEST(MmLargePages)
         ok_eq_hex(Status, STATUS_SUCCESS);
     }
     LargeSectionViews(Large);
+    FailedAllocationsWriteFilePages(Large);
 }

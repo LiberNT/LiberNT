@@ -245,9 +245,13 @@ MiControlAcquireForModWrite(
 
     *Token = NULL;
     End.QuadPart = (LONGLONG)EndingOffset;
+    KeEnterCriticalRegion();
     Status = FsRtlAcquireFileForModWriteEx(Control->FileObject, &End, (PERESOURCE *)Token);
     if (!NT_SUCCESS(Status))
+    {
+        KeLeaveCriticalRegion();
         return Status;
+    }
 
     /* The file system then knows the write comes from the modified writer. */
     ASSERT(IoGetTopLevelIrp() == NULL);
@@ -266,6 +270,7 @@ MiControlReleaseForModWrite(
     IoSetTopLevelIrp(NULL);
     if (Token != NULL)
         FsRtlReleaseFileForModWrite(Control->FileObject, (PERESOURCE)Token);
+    KeLeaveCriticalRegion();
 }
 
 static
