@@ -272,6 +272,7 @@ VOID NTAPI KiRiscvSynchronizeInterruptMask(VOID);
 #define KI_RISCV_FENCE_SLEEPING ((LONG)0x80000000L)
 KAFFINITY NTAPI KiRiscvDeferSleepingFences(_In_ KAFFINITY Targets, _In_ LONG Request);
 ULONG NTAPI KiRiscvQueryCacheBlockSize(VOID);
+ULONG NTAPI KiRiscvQueryLargestCacheLine(VOID);
 BOOLEAN NTAPI KiRiscvIsPhysicalCached(_In_ ULONG64 PhysicalAddress);
 BOOLEAN NTAPI KiRiscvFlushDmaRange(_In_ ULONG64 PhysicalAddress, _In_ SIZE_T Length, _In_ BOOLEAN Invalidate);
 extern KI_RISCV_PROCESSOR_FEATURES KiRiscvProcessorFeatures;
