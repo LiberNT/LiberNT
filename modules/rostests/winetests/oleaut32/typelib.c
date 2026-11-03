@@ -1382,6 +1382,8 @@ static int WINAPI int_func( int a0, int a1, int a2, int a3, int a4 )
     ok( a1 == -1, "wrong arg1 %x\n", a1 );
 #ifdef __arm__  /* parameters are extended on arm */
     ok( a2 == 1234, "wrong arg2 %x\n", a2 );
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+    ok( a2 == 1234, "wrong arg2 %x\n", a2 );
 #else
     ok( a2 == (0x55550000 | 1234), "wrong arg2 %x\n", a2 );
 #endif
@@ -1466,6 +1468,22 @@ static VARIANT WINAPI variant_func2(VARIANT v1, VARIANT v2)
 }
 
 #ifdef __aarch64__
+static VARIANT WINAPI inst_func2(void *inst, VARIANT v1, VARIANT v2)
+{
+    VARIANT ret;
+
+    ok( (*(void ***)inst)[3] == inst_func2, "wrong ptr %p\n", inst );
+
+    ok(V_VT(&v1) == VT_I4, "unexpected %d\n", V_VT(&v1));
+    ok(V_I4(&v1) == 2, "unexpected %ld\n", V_I4(&v1));
+    ok(V_VT(&v2) == VT_BSTR, "unexpected %d\n", V_VT(&v2));
+    ok(lstrcmpW(V_BSTR(&v2), testW) == 0, "unexpected %s\n", wine_dbgstr_w(V_BSTR(&v2)));
+
+    V_VT(&ret) = VT_UI4;
+    V_I4(&ret) = 4321;
+    return ret;
+}
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
 static VARIANT WINAPI inst_func2(void *inst, VARIANT v1, VARIANT v2)
 {
     VARIANT ret;
