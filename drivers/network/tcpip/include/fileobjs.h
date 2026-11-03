@@ -17,6 +17,7 @@ NTSTATUS FileOpenAddress(
   PTDI_REQUEST Request,
   PTA_IP_ADDRESS AddrList,
   USHORT Protocol,
+  BOOLEAN Raw,
   BOOLEAN Shared,
   BOOLEAN Exclusive,
   PVOID Options);

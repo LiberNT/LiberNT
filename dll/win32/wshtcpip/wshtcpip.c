@@ -484,8 +484,16 @@ WSHGetSocketInformation(
         *OptionLength = sizeof(DWORD);
         return NO_ERROR;
     }
-    if (Level == IPPROTO_IP && OptionName == IP_HDRINCL && Context->SocketType != SOCK_RAW)
-        return WSAEINVAL;
+    if (Level == IPPROTO_IP && OptionName == IP_HDRINCL)
+    {
+        if (Context->SocketType != SOCK_RAW)
+            return WSAEINVAL;
+        if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
+            return WSAEFAULT;
+        *(DWORD *)OptionValue = Context->HeaderIncl ? 1 : 0;
+        *OptionLength = sizeof(DWORD);
+        return NO_ERROR;
+    }
     if (Level == IPPROTO_IPV6 && OptionName == IPV6_V6ONLY)
     {
         if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
@@ -1648,11 +1656,6 @@ WSHSetSocketInformation(
                     OptionLength = sizeof(ULONG);
                     break;
 
-                case IP_HDRINCL:
-                    if (Context->SocketType != SOCK_RAW)
-                        return WSAEINVAL;
-                    break;
-
                 case IP_TTL:
                     if (!OptionValue || OptionLength < 1)
                         return WSAEFAULT;
@@ -1663,6 +1666,17 @@ WSHSetSocketInformation(
                     if (!OptionValue || OptionLength < sizeof(struct ip_mreq))
                         return WSAEFAULT;
                     OptionLength = sizeof(struct ip_mreq);
+                    break;
+
+                case IP_HDRINCL:
+                    if (Context->SocketType != SOCK_RAW)
+                        return WSAEINVAL;
+                    if (!OptionValue || OptionLength < 1)
+                        return WSAEFAULT;
+                    memcpy(&RecvValue, OptionValue, min(OptionLength, (INT)sizeof(ULONG)));
+                    RecvValue = (RecvValue != 0);
+                    OptionValue = (PCHAR)&RecvValue;
+                    OptionLength = sizeof(ULONG);
                     break;
 
                 case IP_DONTFRAGMENT:
@@ -1856,6 +1870,8 @@ WSHSetSocketInformation(
             Context->Ttl = *(PUCHAR)OptionValue;
         if (Level == IPPROTO_IP && OptionName == IP_DONTFRAGMENT)
             Context->DontFragment = (RecvValue != 0);
+        if (Level == IPPROTO_IP && OptionName == IP_HDRINCL)
+            Context->HeaderIncl = (RecvValue != 0);
         if (Level == SOL_SOCKET && OptionName == SO_KEEPALIVE)
             Context->KeepAlive = (*(DWORD *)OptionValue != 0);
         return 0;
@@ -1883,6 +1899,8 @@ WSHSetSocketInformation(
         Context->Ttl = *(PUCHAR)OptionValue;
     if (!Status && Level == IPPROTO_IP && OptionName == IP_DONTFRAGMENT)
         Context->DontFragment = (RecvValue != 0);
+    if (!Status && Level == IPPROTO_IP && OptionName == IP_HDRINCL)
+        Context->HeaderIncl = (RecvValue != 0);
     if (!Status && Level == SOL_SOCKET && OptionName == SO_KEEPALIVE)
         Context->KeepAlive = (*(DWORD *)OptionValue != 0);
 

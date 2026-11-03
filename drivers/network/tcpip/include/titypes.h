@@ -122,6 +122,7 @@ typedef struct _ADDRESS_FILE {
     BOOLEAN Reuse;
     BOOLEAN Exclusive;
     BOOLEAN DualStack;
+    BOOLEAN Raw;
     UCHAR TTL;                            /* Time to live stored in packets sent from this address file */
     UINT DF;                              /* Don't fragment */
     UINT BCast;                           /* Receive broadcast packets */

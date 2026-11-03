@@ -63,6 +63,7 @@ typedef struct _SOCKET_CONTEXT {
     ULONG RecvInfoOptions;
     ULONG Ttl;
     BOOLEAN DontFragment;
+    BOOLEAN HeaderIncl;
     BOOL V6Only;
     HANDLE MembershipHandle;
 } SOCKET_CONTEXT, *PSOCKET_CONTEXT;

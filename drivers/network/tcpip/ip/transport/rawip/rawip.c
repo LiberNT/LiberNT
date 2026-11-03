@@ -106,11 +106,52 @@ NTSTATUS BuildRawIpPacket(
 {
     NTSTATUS Status;
     PCHAR Payload;
+    PCHAR PacketData;
+    PIPv4_HEADER IPv4Header;
+    UINT AvailableSize;
+    UCHAR HeaderSize;
 
     TI_DbgPrint(MAX_TRACE, ("Called.\n"));
 
     /* FIXME: Assumes IPv4 */
     IPInitializePacket(Packet, IP_ADDRESS_V4);
+
+    if (AddrFile->HeaderIncl)
+    {
+        if (RemoteAddress->Type != IP_ADDRESS_V4 ||
+            DataLen < sizeof(IPv4_HEADER) ||
+            DataLen > 65535)
+            return STATUS_INVALID_PARAMETER;
+
+        IPv4Header = (PIPv4_HEADER)DataBuffer;
+        HeaderSize = (IPv4Header->VerIHL & 0x0f) * 4;
+        if ((IPv4Header->VerIHL >> 4) != 4 ||
+            HeaderSize < sizeof(IPv4_HEADER) ||
+            HeaderSize > DataLen ||
+            ((WN2H(IPv4Header->FlagsFragOfs) & IPv4_FRAGOFS_MASK) << 3) + DataLen > 65535)
+            return STATUS_INVALID_PARAMETER;
+
+        Packet->TotalSize = DataLen;
+        Status = AllocatePacketWithBuffer(&Packet->NdisPacket, DataBuffer, DataLen);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        AvailableSize = 0;
+        PacketData = NULL;
+        GetDataPtr(Packet->NdisPacket, 0, &PacketData, &AvailableSize);
+        if (!PacketData || AvailableSize < DataLen)
+        {
+            Packet->Free(Packet);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        Packet->Header = PacketData;
+        Packet->HeaderSize = HeaderSize;
+        Packet->Data = PacketData + HeaderSize;
+        Packet->MappedHeader = TRUE;
+        Packet->Flags |= IP_PACKET_FLAG_RAW;
+        return STATUS_SUCCESS;
+    }
 
     Packet->TotalSize = sizeof(IPv4_HEADER) + DataLen;
 

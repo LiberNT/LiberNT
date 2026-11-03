@@ -17,6 +17,7 @@ typedef struct IPFRAGMENT_CONTEXT {
     PNDIS_PACKET Datagram;              /* Pointer to original NDIS packet */
     PVOID DatagramData;                 /* Pointer to datagram data */
     UINT HeaderSize;                    /* IP datagram header size */
+    USHORT FlagsFragOfs;                /* IP datagram flags and fragment offset */
     PNDIS_PACKET NdisPacket;            /* Pointer to NDIS packet */
     PNDIS_BUFFER NdisBuffer;            /* Pointer to NDIS buffer */
     PVOID Header;                       /* Pointer to IP header in fragment buffer */

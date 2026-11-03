@@ -101,15 +101,13 @@ BOOLEAN PrepareNextFragment(
         RtlCopyMemory(IFC->Data, IFC->DatagramData, DataSize); // SAFE
 
         /* Fragment offset is in 8 byte blocks */
-        FragOfs = (USHORT)(IFC->Position / 8);
+        FragOfs = (USHORT)((IFC->FlagsFragOfs & IPv4_FRAGOFS_MASK) + IFC->Position / 8);
 
-        if (MoreFragments)
+        if (MoreFragments || (IFC->FlagsFragOfs & IPv4_MF_MASK))
             FragOfs |= IPv4_MF_MASK;
-        else
-            FragOfs &= ~IPv4_MF_MASK;
 
         Header = IFC->Header;
-        FragOfs |= WN2H(Header->FlagsFragOfs) & IPv4_DF_MASK;
+        FragOfs |= IFC->FlagsFragOfs & IPv4_DF_MASK;
         Header->FlagsFragOfs = WH2N(FragOfs);
         Header->TotalLength = WH2N((USHORT)(DataSize + IFC->HeaderSize));
 
@@ -196,6 +194,7 @@ NTSTATUS SendFragments(
     IFC->Datagram     = IPPacket->NdisPacket;
     IFC->DatagramData = ((PCHAR)IPPacket->Header) + IPPacket->HeaderSize;
     IFC->HeaderSize   = IPPacket->HeaderSize;
+    IFC->FlagsFragOfs = WN2H(((PIPv4_HEADER)IPPacket->Header)->FlagsFragOfs);
     IFC->PathMTU      = PathMTU;
     IFC->NCE          = NCE;
     IFC->Position     = 0;
