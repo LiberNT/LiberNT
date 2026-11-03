@@ -40,6 +40,20 @@ NTSTATUS IRPFinish( PIRP Irp, NTSTATUS Status ) {
     return Status;
 }
 
+static
+VOID
+DispFinishCancelledQueuedIrp(
+    PCONNECTION_ENDPOINT Connection,
+    PIRP Irp,
+    NTSTATUS Status)
+{
+    if (Status == STATUS_PENDING && Irp->Cancel && TCPRemoveIRP(Connection, Irp))
+    {
+        Irp->IoStatus.Information = 0;
+        IRPFinish(Irp, STATUS_CANCELLED);
+    }
+}
+
 NTSTATUS DispPrepareIrpForCancel(
     PTRANSPORT_CONTEXT Context,
     PIRP Irp,
@@ -989,6 +1003,7 @@ NTSTATUS DispTdiReceive(
 	  ReceiveInfo->ReceiveFlags,
 	  DispDataRequestComplete,
 	  Irp);
+      DispFinishCancelledQueuedIrp(TranContext->Handle.ConnectionContext, Irp, Status);
     }
 
 done:
@@ -1137,6 +1152,7 @@ NTSTATUS DispTdiSend(
 	    SendInfo->SendFlags,
 	    DispDataRequestComplete,
 	    Irp);
+	DispFinishCancelledQueuedIrp(TranContext->Handle.ConnectionContext, Irp, Status);
     }
 
 done:
