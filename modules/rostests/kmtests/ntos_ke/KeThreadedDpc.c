@@ -322,7 +322,7 @@ SpinThread(
     KeSetSystemAffinityThread((KAFFINITY)1 << SpinCpu);
     KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY + 14);
     Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart;
-    Deadline += Frequency.QuadPart / 2;
+    Deadline += Frequency.QuadPart * 2;
     KeSetEvent(&SpinReady, IO_NO_INCREMENT, FALSE);
     while (KeQueryPerformanceCounter(NULL).QuadPart < Deadline)
     {

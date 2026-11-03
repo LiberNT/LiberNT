@@ -66,6 +66,7 @@ typedef struct _KMT_ISR_DISCONNECT
     KIRQL Irql;
     LONGLONG HoldTicks;
     volatile LONG Entered;
+    volatile LONG Observed;
     volatile LONG Finished;
     BOOLEAN Dispatched;
 } KMT_ISR_DISCONNECT;
@@ -79,6 +80,10 @@ HoldIsr(PKINTERRUPT Interrupt, PVOID Context)
     UNREFERENCED_PARAMETER(Interrupt);
     InterlockedExchange(&State->Entered, 1);
     if (State->NestedVector) State->Dispatch(State->NestedVector, 0, NULL);
+    while (State->HoldTicks && !ReadAcquire(&State->Observed) &&
+           KeQueryPerformanceCounter(NULL).QuadPart - Start < State->HoldTicks * 40)
+        YieldProcessor();
+    Start = KeQueryPerformanceCounter(NULL).QuadPart;
     while (KeQueryPerformanceCounter(NULL).QuadPart - Start < State->HoldTicks)
         YieldProcessor();
     InterlockedExchange(&State->Finished, 1);
@@ -177,6 +182,7 @@ TestDisconnect(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql, ULONG
 
         ok_eq_long(WaitState->Entered, 1);
         ok_eq_long(State.Finished, 0);
+        InterlockedExchange(&WaitState->Observed, 1);
         Result = KeDisconnectInterrupt(&Interrupt);
         ok_eq_bool(Result, TRUE);
         ok(State.Finished == 1, "Disconnect returned while the ISR was still running\n");
