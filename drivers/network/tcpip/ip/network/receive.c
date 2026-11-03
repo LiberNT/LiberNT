@@ -320,6 +320,7 @@ VOID ProcessFragment(
   ULONG FragSize;
   BOOLEAN MoreFragments;
   BOOLEAN Overlap;
+  BOOLEAN Contained;
   PIPv4_HEADER IPv4Header;
   IP_PACKET Datagram;
   PIP_FRAGMENT Fragment;
@@ -411,6 +412,22 @@ VOID ProcessFragment(
 
     IPDR->DataSize = FragEnd;
   }
+
+  Overlap = FALSE;
+  Contained = FALSE;
+  for (CurrentEntry = IPDR->HoleListHead.Flink;
+       CurrentEntry != &IPDR->HoleListHead;
+       CurrentEntry = CurrentEntry->Flink) {
+    Hole = CONTAINING_RECORD(CurrentEntry, IPDATAGRAM_HOLE, ListEntry);
+    if (FragFirst <= Hole->Last && FragEnd > Hole->First) {
+      Overlap = TRUE;
+      if (FragFirst >= Hole->First && FragEnd <= Hole->Last + 1)
+        Contained = TRUE;
+    }
+  }
+
+  if (Overlap && !Contained)
+    goto Discard;
 
   Overlap = FALSE;
   CurrentEntry = IPDR->HoleListHead.Flink;
