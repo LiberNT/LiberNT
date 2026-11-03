@@ -70,6 +70,8 @@
 #define ARCH "amd64"
 #elif defined __arm__
 #define ARCH "arm"
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+#define ARCH "riscv64"
 #else
 #define ARCH "none"
 #endif

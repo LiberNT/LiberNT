@@ -71,6 +71,8 @@
 #define ARCH "arm"
 #elif defined __aarch64__
 #define ARCH "arm64"
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+#define ARCH "riscv64"
 #else
 #define ARCH "none"
 #endif
