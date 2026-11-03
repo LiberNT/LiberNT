@@ -1,5 +1,6 @@
 add_executable(dcomp_apitest
     composition_present.c
+    target_lifetime.c
     visual.c
     testlist.c)
 

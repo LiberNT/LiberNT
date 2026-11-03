@@ -8140,8 +8140,10 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
             || !fullscreen_desc.Windowed)) return DXGI_ERROR_INVALID_CALL;
     HRESULT device_status = device->GetDeviceRemovedReason();
     if (FAILED(device_status)) return device_status;
-    if (!(composition && !window) && !IsWindow(window)) return DXGI_ERROR_INVALID_CALL;
-    if (IsIconic(window)) return DXGI_STATUS_OCCLUDED;
+    /* Window destruction retired the publication of a bound composition chain. */
+    if (composition && window && !IsWindow(window)) window = NULL;
+    if (!composition && !IsWindow(window)) return DXGI_ERROR_INVALID_CALL;
+    if (!composition && IsIconic(window)) return DXGI_STATUS_OCCLUDED;
     if (flags & DXGI_PRESENT_TEST)
     {
         if (!primary) return S_OK;
