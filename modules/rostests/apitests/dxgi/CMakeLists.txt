@@ -15,6 +15,7 @@ add_executable(dxgi_apitest
     gpu_priority.cpp
     kmt_outputdupl.cpp
     offer_resources.cpp
+    subresource_surface.cpp
     counters.cpp
     query_order.cpp
     buffer_copy.cpp
