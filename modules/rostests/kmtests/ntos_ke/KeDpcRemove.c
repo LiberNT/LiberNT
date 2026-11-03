@@ -52,6 +52,7 @@ static VOID NTAPI RemoveDpcRoutine(
     _In_opt_ PVOID SystemArgument2)
 {
     PDPC_REMOVE_CONTEXT Context = DeferredContext;
+    ULONGLONG Deadline;
     ULONG Spins;
 
     UNREFERENCED_PARAMETER(SystemArgument1);
@@ -65,8 +66,13 @@ static VOID NTAPI RemoveDpcRoutine(
     Context->CallbackHistory = Dpc->ProcessorHistory;
     InterlockedExchange(&Context->CallbackStarted, 1);
 
-    for (Spins = 0; Spins < 500000 && !Context->CallbackRelease; Spins++)
+    Deadline = KeQueryInterruptTime() + 10ULL * 10 * 1000 * 1000;
+    for (Spins = 0; Spins < 50000000 && !Context->CallbackRelease; Spins++)
+    {
+        if (Spins >= 500000 && KeQueryInterruptTime() >= Deadline)
+            break;
         KeStallExecutionProcessor(10);
+    }
     if (!Context->CallbackRelease)
         InterlockedExchange(&Context->CallbackTimedOut, 1);
     InterlockedExchange(&Context->CallbackFinished, 1);
@@ -106,16 +112,19 @@ static VOID DpcInitializationCheck(VOID)
 
 static BOOLEAN WaitForValue(_In_ volatile LONG *Value, _In_ LONG Expected)
 {
+    ULONGLONG Deadline = KeQueryInterruptTime() + 5ULL * 10 * 1000 * 1000;
     ULONG Spins;
 
-    for (Spins = 0; Spins < 1000000; Spins++)
+    for (Spins = 0; Spins < 50000000; Spins++)
     {
         if (*Value == Expected)
             return TRUE;
+        if (Spins >= 1000000 && KeQueryInterruptTime() >= Deadline)
+            break;
         KeStallExecutionProcessor(1);
     }
 
-    return FALSE;
+    return *Value == Expected;
 }
 
 static VOID NTAPI RemoveDpcWaitThread(_In_ PVOID Parameter)
