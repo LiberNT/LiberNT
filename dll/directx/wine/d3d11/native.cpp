@@ -1956,7 +1956,6 @@ public:
     UINT data_size = 0;
     bool created = false;
     bool ended = false;
-    bool begun = false;
     UINT8 pending_polls = 0;
     bool is_predicate = false;
     bool is_counter = false;
@@ -5811,8 +5810,6 @@ void STDMETHODCALLTYPE NativeContext::Begin(ID3D11Asynchronous *async)
     NativeQuery *query = static_cast<NativeQuery *>(static_cast<ID3D11Query *>(async));
     if (query->device != device || query->desc.Query == D3D11_QUERY_EVENT || query->desc.Query == D3D11_QUERY_TIMESTAMP) return;
     NativeLock guard(device);
-    if (query->begun || query == NativeQuery::FromPredicate(predicate)) return;
-    query->begun = true;
     query->ended = false;
     device->functions.pfnQueryBegin(device->driver_device, query->handle);
 }
@@ -5830,10 +5827,7 @@ void STDMETHODCALLTYPE NativeContext::End(ID3D11Asynchronous *async)
     NativeQuery *query = static_cast<NativeQuery *>(static_cast<ID3D11Query *>(async));
     if (query->device != device) return;
     NativeLock guard(device);
-    if (query == NativeQuery::FromPredicate(predicate)) return;
-    if (!query->begun && query->desc.Query != D3D11_QUERY_EVENT && query->desc.Query != D3D11_QUERY_TIMESTAMP) return;
     device->functions.pfnQueryEnd(device->driver_device, query->handle);
-    query->begun = false;
     query->ended = true;
     query->pending_polls = 0;
 }

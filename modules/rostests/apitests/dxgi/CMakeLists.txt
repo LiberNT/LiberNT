@@ -9,6 +9,7 @@ add_executable(dxgi_apitest
     composition_lifetime.cpp
     completion_event.cpp
     counters.cpp
+    query_order.cpp
     buffer_copy.cpp
     copy_depth_stencil.cpp
     volume_readback.cpp
