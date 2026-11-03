@@ -1922,6 +1922,10 @@ static inline unsigned long get_fpu_cw(void)
     ULONG_PTR cw;
     __asm__ __volatile__( "mrs %0, fpcr" : "=r" (cw) );
     return cw;
+#elif defined(__REACTOS__) && defined(__riscv)
+    ULONG_PTR cw;
+    __asm__ __volatile__( "frrm %0" : "=r" (cw) );
+    return cw;
 #else
     return 0;
 #endif
@@ -2019,6 +2023,9 @@ static void test_thread_fpu_cw(void)
         { _MCW_EM | _PC_64, 0 },
         { _MCW_EM | _PC_64, 0 },
         { _MCW_EM | _PC_64, 0 }
+#elif defined(__REACTOS__) && defined(__riscv)
+        { _MCW_EM | _PC_64, 0 },
+        { _MCW_EM | _PC_64, 0 }
 #else
         { 0xdeadbeef, 0xdeadbeef }
 #endif
@@ -2046,6 +2053,11 @@ static void test_thread_fpu_cw(void)
         _clearfp();
         return;
     }
+#elif defined(__REACTOS__) && defined(__riscv)
+    skip("RISC-V floating point has no exception trap enables\n");
+    _control87( initial_cw, _MCW_EM | _MCW_RC | _MCW_PC );
+    _clearfp();
+    return;
 #endif
     ok(cw == expected_cw[2].cw, "expected %#x got %#x\n", expected_cw[2].cw, cw);
     ok(fpu_cw == expected_cw[2].fpu_cw ||
