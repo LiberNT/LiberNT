@@ -154,7 +154,7 @@ KiExitTrapDebugChecks(IN PKTRAP_FRAME TrapFrame,
     if (KiUserTrap(TrapFrame))
     {
         /* Check for active debugging */
-        if (KeGetCurrentThread()->Header.DebugActive)
+        if (KeGetCurrentThread()->Header.ActiveDR7)
         {
             if ((TrapFrame->Dr7 & ~DR7_RESERVED_MASK) == 0) __debugbreak();
 
@@ -383,7 +383,7 @@ KiEnterInterruptTrap(IN PKTRAP_FRAME TrapFrame)
         (TrapFrame->EFlags & EFLAGS_V86_MASK))
     {
         /* Check for active debugging */
-        if (KeGetCurrentThread()->Header.DebugActive & 0xFF)
+        if (KeGetCurrentThread()->Header.ActiveDR7)
         {
             /* Handle debug registers */
             KiHandleDebugRegistersOnTrapEntry(TrapFrame);
@@ -416,7 +416,7 @@ KiEnterTrap(IN PKTRAP_FRAME TrapFrame)
         (TrapFrame->EFlags & EFLAGS_V86_MASK))
     {
         /* Check for active debugging */
-        if (KeGetCurrentThread()->Header.DebugActive & 0xFF)
+        if (KeGetCurrentThread()->Header.ActiveDR7)
         {
             /* Handle debug registers */
             KiHandleDebugRegistersOnTrapEntry(TrapFrame);

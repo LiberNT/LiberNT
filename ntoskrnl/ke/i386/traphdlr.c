@@ -1770,7 +1770,7 @@ KiSystemServiceHandler(IN PKTRAP_FRAME TrapFrame,
     if (KiUserTrap(TrapFrame))
     {
         /* Check for active debugging */
-        if (KeGetCurrentThread()->Header.DebugActive & 0xFF)
+        if (KeGetCurrentThread()->Header.ActiveDR7)
         {
             /* Handle debug registers */
             KiHandleDebugRegistersOnTrapEntry(TrapFrame);

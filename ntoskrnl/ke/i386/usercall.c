@@ -458,7 +458,7 @@ NtCallbackReturn(
     TrapFrame->Dr7 = 0;
 
     /* Check if debugging was active */
-    if (CurrentThread->Header.DebugActive & 0xFF)
+    if (CurrentThread->Header.ActiveDR7)
     {
         /* Copy debug registers data from it */
         TrapFrame->Dr0 = CallbackTrapFrame->Dr0;
