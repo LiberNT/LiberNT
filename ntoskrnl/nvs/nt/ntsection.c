@@ -1017,6 +1017,12 @@ MiBuildImageControlArea(
 
     RtlZeroMemory(Information, sizeof(*Information));
 
+    if (NtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC && sizeof(ULONG_PTR) < sizeof(ULONG64))
+    {
+        Status = STATUS_INVALID_IMAGE_WIN_64;
+        goto Done;
+    }
+
     if ((NtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC &&
          MiIsImageMachine32Bit(NtHeaders->FileHeader.Machine)) ||
         (NtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC &&
