@@ -3409,6 +3409,10 @@ static void test_device_install_params(void)
 #define MYEXT "ARM64"
 #define WOWEXT "ARM"
 #define WRONGEXT "AMD64"
+#elif defined(__REACTOS__) && defined(__riscv)
+#define MYEXT "RISCV64"
+#define WOWEXT "x86"
+#define WRONGEXT "AMD64"
 #else
 #define MYEXT
 #define WOWEXT
