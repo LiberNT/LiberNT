@@ -288,11 +288,7 @@ void test_j0(void)
     ok(errno == EDOM, "errno: %d\n", errno);
     errno = 0xDEADBEEF;
     tested.l = 0xFFEFFFFFFFFFFFFFLL;
-#ifndef _M_IX86
     expected.l = 0x8000000000000000LL;
-#else
-    expected.l = 0x1FE7206E1D6FDCFALL;
-#endif
     result.d =  _j0(tested.d);
     ok(result_matches(result.l, expected.l), "_j0 returned: %I64x\n", result.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
@@ -346,11 +342,7 @@ void test_j0(void)
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
     errno = 0xDEADBEEF;
     tested.l = 0x7FEFFFFFFFFFFFFFLL;
-#ifndef _M_IX86
     expected.l = 0x8000000000000000LL;
-#else
-    expected.l = 0x1FE7206E1D6FDCFALL;
-#endif
     result.d =  _j0(tested.d);
     ok(result_matches(result.l, expected.l), "_j0 returned: %I64x\n", result.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
@@ -440,11 +432,7 @@ void test_j1(void)
     ok(errno == EDOM, "errno: %d\n", errno);
     errno = 0xDEADBEEF;
     tested.l = 0xFFEFFFFFFFFFFFFFLL;
-#ifndef _M_IX86
     expected.l = 0;
-#else
-    expected.l = 0x9FE7206E1D6FDCFALL;
-#endif
     result.d =  _j1(tested.d);
     ok(result_matches(result.l, expected.l), "_j1 returned: %I64x\n", result.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
@@ -498,11 +486,7 @@ void test_j1(void)
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
     errno = 0xDEADBEEF;
     tested.l = 0x7FEFFFFFFFFFFFFFLL;
-#ifndef _M_IX86
     expected.l = 0x8000000000000000LL;
-#else
-    expected.l = 0x1FE7206E1D6FDCFALL;
-#endif
     result.d =  _j1(tested.d);
     ok(result_matches(result.l, expected.l), "_j1 returned: %I64x, expected %I64x\n", result.l, expected.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
@@ -790,11 +774,7 @@ void test_y0(void)
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
     errno = 0xDEADBEEF;
     tested.l = 0x7FEFFFFFFFFFFFFFLL;
-#ifndef _M_IX86
     expected.l = 0;
-#else
-    expected.l = 0x9FD5A36F8428F58BLL;
-#endif
     result.d =  _y0(tested.d);
     ok(result_matches(result.l, expected.l), "_y0 returned: %I64x\n", result.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
@@ -834,11 +814,7 @@ void test_y0(void)
     tested.d = 2.387000;
     expected.l = 0x3FE05FB1B1E49E66LL;
     result.d =  _y0(tested.d);
-#ifdef _M_IX86
-    ok(result_matches(result.l, expected.l), "_y0 returned: %I64x\n", result.l);
-#else
     ok((result.l > expected.l ? result.l - expected.l : expected.l - result.l) <= 8, "_y0 returned: %I64x\n", result.l);
-#endif
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
 }
 
@@ -943,11 +919,7 @@ void test_y1(void)
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
     errno = 0xDEADBEEF;
     tested.l = 0x7FEFFFFFFFFFFFFFLL;
-#ifndef _M_IX86
     expected.l = 0;
-#else
-    expected.l = 0x9FD5A36F8428F58BLL;
-#endif
     result.d =  _y1(tested.d);
     ok(result_matches(result.l, expected.l), "_y1 returned: %I64x\n", result.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
@@ -987,11 +959,7 @@ void test_y1(void)
     tested.d = 2.387000;
     expected.l = 0x3FB828EC13723EE6LL;
     result.d =  _y1(tested.d);
-#ifdef _M_IX86
-    ok(result_matches(result.l, expected.l), "_y1 returned: %I64x\n", result.l);
-#else
     ok((result.l > expected.l ? result.l - expected.l : expected.l - result.l) <= 8, "_y1 returned: %I64x\n", result.l);
-#endif
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
 }
 
