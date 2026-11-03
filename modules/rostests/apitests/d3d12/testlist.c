@@ -29,6 +29,7 @@ extern void func_renderpass(void);
 extern void func_rootsig(void);
 extern void func_rootstate(void);
 extern void func_sampler(void);
+extern void func_stablepower(void);
 extern void func_swizzle(void);
 extern void func_topology(void);
 extern void func_uav(void);
@@ -60,6 +61,7 @@ const struct test winetest_testlist[] =
     { "rootsig", func_rootsig },
     { "rootstate", func_rootstate },
     { "sampler", func_sampler },
+    { "stablepower", func_stablepower },
     { "swizzle", func_swizzle },
     { "topology", func_topology },
     { "uav", func_uav },

@@ -17171,6 +17171,7 @@ DxgkpAddDeviceRegistered(
     KeInitializeSpinLock(&Adapter->DmaBufferCacheLock);
     KeInitializeSpinLock(&Adapter->TdrHistoryLock);
     KeInitializeMutex(&Adapter->AdapterMutex, 0);
+    KeInitializeMutex(&Adapter->StablePowerMutex, 0);
     KeInitializeMutex(&Adapter->VidPnMutex, 0);
     KeInitializeMutex(&Adapter->OverlayMutex, 0);
     KeInitializeEvent(&Adapter->AdapterStartCompletedEvent, NotificationEvent, TRUE);

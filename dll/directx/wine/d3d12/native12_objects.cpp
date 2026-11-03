@@ -1410,9 +1410,27 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateQueryHeap(const D3D12_QUERY_HEAP
     return hr;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::SetStablePowerState(BOOL)
+static BOOL Native12DeveloperModeEnabled(void)
 {
-    return S_OK;
+    DWORD value = 0, size = sizeof(value);
+
+    return RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock",
+            L"AllowDevelopmentWithoutDevLicense", RRF_RT_REG_DWORD, NULL, &value, &size) == ERROR_SUCCESS && value;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::SetStablePowerState(BOOL enable)
+{
+    D3DKMT_SETSTABLEPOWERSTATE stable = {};
+
+    /* FIXME: Windows 11 keeps refusing a process it refused once developer mode is turned on; this reads it on every call */
+    if (!Native12DeveloperModeEnabled())
+    {
+        InterlockedCompareExchange(reinterpret_cast<LONG *>(&removed_reason), DXGI_ERROR_INVALID_CALL, S_OK);
+        return E_FAIL;
+    }
+    stable.hAdapter = km_adapter;
+    stable.Enabled = enable;
+    return Native12StatusToHresult(D3DKMTSetStablePowerState(&stable));
 }
 
 static_assert(sizeof(D3D12DDI_INDIRECT_ARGUMENT_DESC) == sizeof(D3D12_INDIRECT_ARGUMENT_DESC),

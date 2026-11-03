@@ -243,6 +243,40 @@ DxgkCapsCorePhysicalAdapterCapsSize(
     return 0x14;
 }
 
+/* Windows 11 counts requests per process and processes per adapter; the
+ * miniport hears only the adapter's first and last reference, which is what
+ * TRUE reports. */
+BOOLEAN
+DxgkCapsCoreStablePowerSet(
+    _Inout_ PLONG ProcessReferences,
+    _Inout_ PLONG AdapterReferences,
+    _In_ BOOLEAN Enabled)
+{
+    if (Enabled)
+    {
+        BOOLEAN First = FALSE;
+
+        if (*ProcessReferences == 0)
+            First = (*AdapterReferences)++ == 0;
+        ++*ProcessReferences;
+        return First;
+    }
+    if (*ProcessReferences == 0 || --*ProcessReferences != 0)
+        return FALSE;
+    return --*AdapterReferences == 0;
+}
+
+BOOLEAN
+DxgkCapsCoreStablePowerRelease(
+    _Inout_ PLONG ProcessReferences,
+    _Inout_ PLONG AdapterReferences)
+{
+    if (*ProcessReferences == 0)
+        return FALSE;
+    *ProcessReferences = 0;
+    return --*AdapterReferences == 0;
+}
+
 BOOLEAN
 DxgkCapsCoreInterfaceVersionAtLeast(
     _In_ ULONG InterfaceVersion,

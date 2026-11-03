@@ -233,6 +233,7 @@ D3DKMTEnumAdapters3(
 NTSTATUS APIENTRY D3DKMTCreateKeyedMutex(_Inout_ D3DKMT_CREATEKEYEDMUTEX *pData);
 NTSTATUS APIENTRY D3DKMTQueryClockCalibration(_Inout_ struct _D3DKMT_QUERYCLOCKCALIBRATION *pData);
 NTSTATUS APIENTRY D3DKMTChangeVideoMemoryReservation(_In_ CONST struct _D3DKMT_CHANGEVIDEOMMEMORYRESERVATION *pData);
+NTSTATUS APIENTRY D3DKMTSetStablePowerState(_In_ CONST struct _D3DKMT_SETSTABLEPOWERSTATE *pData);
 NTSTATUS APIENTRY D3DKMTSetProcessSchedulingPriorityClass(_In_ HANDLE hProcess, _In_ D3DKMT_SCHEDULINGPRIORITYCLASS Class);
 NTSTATUS APIENTRY D3DKMTGetProcessSchedulingPriorityClass(_In_ HANDLE hProcess, _Out_ D3DKMT_SCHEDULINGPRIORITYCLASS *pClass);
 #if (REACTOS_WDDM_TARGET_LEVEL >= 1300)
@@ -1723,9 +1724,11 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDISetStablePowerState(_In_ const struct _D3DKMT_SETSTABLEPOWERSTATE* unnamedParam1)
 {
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* Win11 refuses this without developer mode; not implementing it is honest, answering NOT_IMPLEMENTED is not. */
-    return STATUS_INVALID_PARAMETER;
+    NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return D3DKMTSetStablePowerState(unnamedParam1);
 }
 
 NTSTATUS

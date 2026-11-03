@@ -644,6 +644,7 @@ DxgkpKmtIoctlMinimumConfiguredLevel(
         case IOCTL_D3DKMT_EVICT:
         case IOCTL_D3DKMT_QUERYCLOCKCALIBRATION:
         case IOCTL_D3DKMT_CHANGEVIDEOMEMORYRESERVATION:
+        case IOCTL_D3DKMT_SETSTABLEPOWERSTATE:
         case IOCTL_D3DKMT_REGISTERTRIMNOTIFICATION:
         case IOCTL_D3DKMT_UNREGISTERTRIMNOTIFICATION:
         case IOCTL_D3DKMT_CREATEPAGINGQUEUE:
@@ -10803,6 +10804,48 @@ DxgkpAdapterSchedulesInHardware(
     return FALSE;
 }
 
+VOID
+DxgkStablePowerNotify(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN Enabled)
+{
+    DXGKARG_SETSTABLEPOWERSTATE Args;
+
+    if (DXGK_CB_FULL(Adapter, DxgkDdiSetStablePowerState) == NULL || !DxgkAcquireKmdCall(Adapter))
+        return;
+    Args.Enabled = Enabled;
+    DXGK_CB_FULL(Adapter, DxgkDdiSetStablePowerState)(Adapter->MiniportDeviceContext, &Args);
+    DxgkReleaseKmdCall(Adapter);
+}
+
+static NTSTATUS
+NTAPI
+DxgkSetStablePowerState(
+    _In_ CONST D3DKMT_SETSTABLEPOWERSTATE *pData)
+{
+    PDXGKRNL_ADAPTER Adapter;
+    PDXGKRNL_PROCESS Process = NULL;
+    NTSTATUS Status = STATUS_INVALID_PARAMETER;
+
+    PAGED_CODE();
+
+    Adapter = DxgkpValidateAdapterHandle(pData->hAdapter);
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (NT_SUCCESS(DxgkReferenceProcessRecordByAdapter(Adapter, PsGetCurrentProcess(), &Process)))
+    {
+        /* TODO: a display-only adapter resolves to its render pair, refused until the process opened that one */
+        (VOID)KeWaitForSingleObject(&Adapter->StablePowerMutex, Executive, KernelMode, FALSE, NULL);
+        if (DxgkCapsCoreStablePowerSet(&Process->StablePowerReferences, &Adapter->StablePowerReferences, pData->Enabled != FALSE))
+            DxgkStablePowerNotify(Adapter, pData->Enabled != FALSE);
+        KeReleaseMutex(&Adapter->StablePowerMutex, FALSE);
+        DxgkDereferenceProcessRecord(Process);
+        Status = STATUS_SUCCESS;
+    }
+    DxgkDereferenceAdapter(Adapter);
+    return Status;
+}
+
 static NTSTATUS
 NTAPI
 DxgkCreateHwQueue(
@@ -14099,6 +14142,13 @@ DxgkpDispatchBufferedIoctlWorker(
             return DxgkChangeVideoMemoryReservation((CONST D3DKMT_CHANGEVIDEOMEMORYRESERVATION *)SystemBuffer);
         }
 
+        case IOCTL_D3DKMT_SETSTABLEPOWERSTATE:
+        {
+            if (InputLength < sizeof(D3DKMT_SETSTABLEPOWERSTATE) || SystemBuffer == NULL)
+                return STATUS_BUFFER_TOO_SMALL;
+            return DxgkSetStablePowerState((CONST D3DKMT_SETSTABLEPOWERSTATE *)SystemBuffer);
+        }
+
         case IOCTL_D3DKMT_CREATEHWQUEUE:
         {
             if (InputLength < sizeof(D3DKMT_CREATEHWQUEUE) || SystemBuffer == NULL)
@@ -15162,6 +15212,7 @@ DxgkpIsBufferedKmtIoctl(
         case IOCTL_D3DKMT_RELEASEKEYEDMUTEX:
         case IOCTL_D3DKMT_QUERYCLOCKCALIBRATION:
         case IOCTL_D3DKMT_CHANGEVIDEOMEMORYRESERVATION:
+        case IOCTL_D3DKMT_SETSTABLEPOWERSTATE:
         case IOCTL_D3DKMT_CREATEHWQUEUE:
         case IOCTL_D3DKMT_DESTROYHWQUEUE:
         case IOCTL_D3DKMT_SUBMITCOMMANDTOHWQUEUE:

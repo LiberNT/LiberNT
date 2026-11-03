@@ -364,9 +364,8 @@ static void Test_SetStablePowerState_RealAdapter(void)
     hAdapter = OpenAdapterFromDisplay1();
     if (!hAdapter) { skip("No adapter on \\\\.\\DISPLAY1\n"); return; }
 
-    /* Stable power state requires the machine to be in developer / debug mode
-     * and a real GPU; on a normal Win11 box this is refused. Attempt, never
-     * assert success, and try to restore the state on the way out. */
+    /* Windows 11 refused the adapter behind \\\\.\\DISPLAY1 on a machine with a
+     * display-only primary, so this is not asserted; ctxvalidate pins enumerated adapters. */
     memset(&sps, 0, sizeof(sps));
     sps.hAdapter = hAdapter;
     sps.Enabled = TRUE;

@@ -1067,6 +1067,9 @@ struct _DXGKRNL_ADAPTER
      * (device-list modifications, resource assignments, etc.).
      */
     KMUTEX                     AdapterMutex;
+    /* Processes holding a stable power request; a leaf lock so process teardown can take it. */
+    KMUTEX                     StablePowerMutex;
+    LONG                       StablePowerReferences;
 
     /* Serializes replacement of the active VidPn and every adapter-level
      * reader that does not already hold an explicit VidPn reference.  The
@@ -2048,6 +2051,9 @@ struct _DXGKRNL_PROCESS
      * this process on this adapter, including detached devices still retained
      * by queued or committed tracker entries. */
     volatile LONG               InFlightSubmissions;
+
+    /* D3DKMTSetStablePowerState requests of this process, under the adapter StablePowerMutex. */
+    LONG                        StablePowerReferences;
 
     /*
      * This process's share of each node's execution clock.  Indexed by node
@@ -3240,6 +3246,11 @@ DxgkContextOrderAdmitCompletion(
 VOID
 DxgkContextOrderWakeDevice(
     _Inout_ PDXGKRNL_DEVICE Device);
+
+VOID
+DxgkStablePowerNotify(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN Enabled);
 
 NTSTATUS
 DxgkAcquireProcessRecord(
