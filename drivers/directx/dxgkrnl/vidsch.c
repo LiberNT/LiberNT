@@ -3959,7 +3959,7 @@ VidSchSubmitCommandTrackedMeasured(
         }
         Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_CONTEXT_ADMIT);
         Status = DxgkContextOrderAdmitPacket(OrderedContext, Packet);
-        DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
+        DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status) || Status == STATUS_RETRY, 0);
         if (!NT_SUCCESS(Status))
         {
             ExReleaseRundownProtection(&OrderedContext->StreamAdmissionRundown);
@@ -4039,7 +4039,7 @@ VidSchSubmitCommandTracked(
 {
     DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_TRACK);
     NTSTATUS Result = VidSchSubmitCommandTrackedMeasured(Adapter, NodeOrdinal, EngineOrdinal, DmaBuffer, DriverPrivateData, DriverPrivateDataSize, AllocationList, AllocationListCount, PatchLocationList, PatchLocationListCount, MiniportDeviceHandle, MiniportContextHandle, Priority, TrackArgs, SubmitFlags, VidPnSourceId, OutFenceId);
-    DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Result), 0);
+    DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Result) || Result == STATUS_RETRY, 0);
     return Result;
 }
 
