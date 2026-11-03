@@ -1,0 +1,18 @@
+/*
+ * PROJECT:     LiberNT API tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Test list for HTTP Server API test suite
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
+ */
+
+#define __ROS_LONG64__
+#define STANDALONE
+#include <apitest.h>
+
+extern void func_httpapi(void);
+
+const struct test winetest_testlist[] =
+{
+    { "httpapi", func_httpapi },
+    { 0, 0 }
+};

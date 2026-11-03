@@ -6,6 +6,7 @@ LiberNT is available thanks to the work of:
 
 - Ahmed ARIF (arif.ing@outlook.com)
 - Alula (git@alula.me)
+- Ostap Brehin (osbre@protonmail.com)
 
 To be listed here, add your name to this section in your pull request.
 

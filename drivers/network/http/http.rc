@@ -1,0 +1,5 @@
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "HTTP Protocol Stack Driver"
+#define REACTOS_STR_INTERNAL_NAME     "http"
+#define REACTOS_STR_ORIGINAL_FILENAME "http.sys"
+#include <reactos/version.rc>

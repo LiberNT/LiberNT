@@ -772,14 +772,23 @@ NTSTATUS TdiQueryInformation(
     KEVENT Event;
     PIRP Irp;
 
+    if (!MdlBuffer)
+        return STATUS_INVALID_PARAMETER;
+
     if (!FileObject) {
         DPRINT("Bad file object.\n");
+        if (MdlBuffer->MdlFlags & MDL_PAGES_LOCKED)
+            MmUnlockPages(MdlBuffer);
+        IoFreeMdl(MdlBuffer);
         return STATUS_INVALID_PARAMETER;
     }
 
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
     if (!DeviceObject) {
         DPRINT("Bad device object.\n");
+        if (MdlBuffer->MdlFlags & MDL_PAGES_LOCKED)
+            MmUnlockPages(MdlBuffer);
+        IoFreeMdl(MdlBuffer);
         return STATUS_INVALID_PARAMETER;
     }
 
@@ -791,6 +800,9 @@ NTSTATUS TdiQueryInformation(
                                            &Event,
                                            &Iosb);
     if (!Irp) {
+        if (MdlBuffer->MdlFlags & MDL_PAGES_LOCKED)
+            MmUnlockPages(MdlBuffer);
+        IoFreeMdl(MdlBuffer);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
