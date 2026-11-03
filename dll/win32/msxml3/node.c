@@ -4553,6 +4553,20 @@ static HRESULT WINAPI parse_decl_handler_attributeDecl(ISAXDeclHandler *iface, c
         const WCHAR *type, int type_len, const WCHAR *value_default, int value_default_len,
         const WCHAR *value, int value_len)
 {
+#ifdef __REACTOS__
+    struct parse_context *c = impl_from_ISAXDeclHandler(iface);
+    struct domnode *attr;
+
+    if (value && c->node->type == NODE_DOCUMENT_TYPE && c->node->name &&
+            !wcsncmp(c->node->name, element_name, element_name_len) &&
+            !c->node->name[element_name_len])
+    {
+        parse_context_node_create(c, NODE_ATTRIBUTE, attribute_name, attribute_name_len, NULL, 0, c->root, &attr);
+        parse_context_append_attribute(c, c->node, attr);
+        parse_context_node_put_data(c, attr, value, value_len);
+        return c->status;
+    }
+#endif
     return S_OK;
 }
 
