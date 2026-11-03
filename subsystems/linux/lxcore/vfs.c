@@ -3533,7 +3533,7 @@ LxLookupSearchKey(
     _In_ PCSTR Path)
 {
     static const CHAR Digits[] = "0123456789abcdef";
-    ULONG64 Values[6 + RTL_NUMBER_OF(Process->Groups)];
+    ULONG64 Values[7 + RTL_NUMBER_OF(Process->Groups)];
     SIZE_T DirLength = strlen(Dir), PathLength = strlen(Path), Size, Used;
     ULONG Count = 0, Index;
     PSTR Key;
