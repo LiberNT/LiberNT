@@ -1243,7 +1243,16 @@ static void handleExpansion(WCHAR *cmd, BOOL atExecute) {
       if (startOfParms != NULL) {
         startOfParms += lstrlenW(thisParm);
         while (*startOfParms==' ' || *startOfParms == '\t') startOfParms++;
+#ifdef __REACTOS__
+        {
+            int len = lstrlenW(startOfParms);
+
+            while (len && (startOfParms[len - 1] == L' ' || startOfParms[len - 1] == L'\t')) len--;
+            p = WCMD_strsubstW(p, p+2, startOfParms, len);
+        }
+#else
         p = WCMD_strsubstW(p, p+2, startOfParms, -1);
+#endif
       } else
         p = WCMD_strsubstW(p, p+2, NULL, 0);
 
