@@ -267,6 +267,10 @@ void Test_SingleInstruction(
     {
         ExpectedStatus = STATUS_ILLEGAL_INSTRUCTION;
     }
+    else if ((Flags & FL_HV) && (g_CpuFeatures & CPU_FEATURE_TCG))
+    {
+        ExpectedStatus = STATUS_ILLEGAL_INSTRUCTION;
+    }
     else if ((Flags & FL_HV) && (Flags & FL_ACC) && (g_CpuFeatures & CPU_FEATURE_KVM))
     {
         ExpectedStatus = STATUS_ILLEGAL_INSTRUCTION;
