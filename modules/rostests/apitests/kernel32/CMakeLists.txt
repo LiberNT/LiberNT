@@ -22,6 +22,7 @@ list(APPEND SOURCE
     dosdev.c
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
+    FileStorageInfo.c
     FindFiles.c
     FindPackagesByPackageFamily.c
     FLS.c

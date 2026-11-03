@@ -110,6 +110,27 @@ NtfsGetVolumeInformation(PDEVICE_OBJECT DeviceObject,
 
 static
 NTSTATUS
+NtfsGetSectorSizeInfo(PVolumeContextBlock VolCB,
+                      PFILE_FS_SECTOR_SIZE_INFORMATION Buffer,
+                      PULONG Length)
+{
+    NTSTATUS Status;
+
+    if (*Length < sizeof(FILE_FS_SECTOR_SIZE_INFORMATION))
+        return STATUS_BUFFER_OVERFLOW;
+
+    if (!VolCB->StorageDevice)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    Status = FsRtlGetSectorSizeInformation(VolCB->StorageDevice, Buffer);
+    if (NT_SUCCESS(Status))
+        *Length -= sizeof(FILE_FS_SECTOR_SIZE_INFORMATION);
+
+    return Status;
+}
+
+static
+NTSTATUS
 NtfsGetSizeInfo(PDEVICE_OBJECT DeviceObject,
                 PFILE_FS_SIZE_INFORMATION Buffer,
                 PULONG Length)
@@ -325,10 +346,12 @@ NtfsFsdQueryVolumeInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         case FileFsDriverPathInformation:
             Status = STATUS_NOT_IMPLEMENTED;
             break;
+        case FileFsSectorSizeInformation:
+            Status = NtfsGetSectorSizeInfo(VolCB,
+                                           (PFILE_FS_SECTOR_SIZE_INFORMATION)SystemBuffer,
+                                           &BufferLength);
+            break;
         case FileFsObjectIdInformation:
-        /* Used in Windows 7+
-         * case FileFsSectorSizeInformation:
-         */
         default:
             Status = STATUS_NOT_IMPLEMENTED;
             break;

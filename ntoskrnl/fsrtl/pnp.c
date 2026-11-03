@@ -133,6 +133,7 @@ FsRtlGetSectorSizeInformation(IN PDEVICE_OBJECT DeviceObject,
 {
     ULONG SectorSize;
 
+    /* TODO: query the device for its physical sector size, seek penalty and trim support */
     SectorSize = DeviceObject->SectorSize;
     if (SectorSize == 0)
     {
