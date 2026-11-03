@@ -2657,7 +2657,7 @@ NtMapViewOfSection(
     if ((ULONG_PTR)MM_HIGHEST_VAD_ADDRESS - (ULONG_PTR)SafeBase < SafeSize)
         return STATUS_INVALID_PARAMETER;
 
-    if (ZeroBits > 21 && ZeroBits < 32)
+    if ((ZeroBits > 21 && ZeroBits < 32) || (ZeroBits >= 32 && sizeof(ZeroBits) < sizeof(ULONG64)))
         return STATUS_INVALID_PARAMETER_4;
 
     if (SafeBase != NULL && ZeroBits != 0 &&
