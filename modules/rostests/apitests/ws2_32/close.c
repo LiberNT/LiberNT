@@ -274,6 +274,76 @@ void Test_RebindAfterCloseWithPendingReceive(void)
     WSACloseEvent(overlapped.hEvent);
 }
 
+typedef struct _CLOSE_RACE_CONTEXT
+{
+    SOCKET Listener;
+    int Iterations;
+} CLOSE_RACE_CONTEXT;
+
+static DWORD WINAPI CloseRaceServer(PVOID Parameter)
+{
+    CLOSE_RACE_CONTEXT *Context = Parameter;
+    char Data[64] = { 0 };
+    int i;
+
+    for (i = 0; i < Context->Iterations; i++)
+    {
+        SOCKET Client = accept(Context->Listener, NULL, NULL);
+
+        if (Client == INVALID_SOCKET)
+            return 1;
+        send(Client, Data, sizeof(Data), 0);
+        closesocket(Client);
+    }
+    return 0;
+}
+
+/* The end of the stream must wake a read that is being queued while it arrives */
+static void Test_ReadRacesClose(void)
+{
+    enum { ITERATIONS = 500, TIMEOUT_MS = 5000 };
+    CLOSE_RACE_CONTEXT Context;
+    struct sockaddr_in Address = { 0 };
+    int Length = sizeof(Address), Hung = 0, i;
+    HANDLE Thread;
+    DWORD Timeout = TIMEOUT_MS;
+
+    Context.Iterations = ITERATIONS;
+    Context.Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Context.Listener != INVALID_SOCKET, "socket failed with %d\n", WSAGetLastError());
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ok(bind(Context.Listener, (struct sockaddr *)&Address, sizeof(Address)) == 0, "bind failed with %d\n", WSAGetLastError());
+    ok(listen(Context.Listener, 5) == 0, "listen failed with %d\n", WSAGetLastError());
+    ok(getsockname(Context.Listener, (struct sockaddr *)&Address, &Length) == 0, "getsockname failed with %d\n", WSAGetLastError());
+
+    Thread = CreateThread(NULL, 0, CloseRaceServer, &Context, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+
+    for (i = 0; i < ITERATIONS && !Hung; i++)
+    {
+        SOCKET Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        char Buffer[64];
+        int Received;
+
+        setsockopt(Client, SOL_SOCKET, SO_RCVTIMEO, (const char *)&Timeout, sizeof(Timeout));
+        ok(connect(Client, (struct sockaddr *)&Address, sizeof(Address)) == 0, "connect failed with %d\n", WSAGetLastError());
+        while ((Received = recv(Client, Buffer, sizeof(Buffer), 0)) > 0)
+            ;
+        if (Received != 0)
+            Hung = 1;
+        ok(Received == 0, "Iteration %d: recv returned %d, error %d\n", i, Received, WSAGetLastError());
+        closesocket(Client);
+    }
+
+    closesocket(Context.Listener);
+    if (Thread)
+    {
+        ok(WaitForSingleObject(Thread, 10000) == WAIT_OBJECT_0 || Hung, "The server thread did not finish\n");
+        CloseHandle(Thread);
+    }
+}
+
 START_TEST(close)
 {
     int err;
@@ -288,6 +358,7 @@ START_TEST(close)
     Test_CloseWhileSelectDuplicatedSocket();
     Test_CloseWithPendingAsyncSelect();
     Test_RebindAfterCloseWithPendingReceive();
+    Test_ReadRacesClose();
 
     WSACleanup();
 }

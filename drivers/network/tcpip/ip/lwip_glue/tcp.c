@@ -136,6 +136,14 @@ LibTCPRecved(PCONNECTION_ENDPOINT Connection, u32_t Length, const int safe)
     UNLOCK_TCPIP_CORE();
 }
 
+VOID
+LibTCPRecheckReceive(PCONNECTION_ENDPOINT Connection)
+{
+    LOCK_TCPIP_CORE();
+    TCPRecvEventHandler(Connection);
+    UNLOCK_TCPIP_CORE();
+}
+
 NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PMDL RecvMdl, UINT *Received, const int safe)
 {
     PQUEUE_ENTRY qp;
