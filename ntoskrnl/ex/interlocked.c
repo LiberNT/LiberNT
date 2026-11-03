@@ -405,8 +405,8 @@ ExfInterlockedRemoveHeadList(
         /* Remove the first entry from the list head */
         ListEntry = RemoveHeadList(ListHead);
 #if DBG
-        ListEntry->Flink = (PLIST_ENTRY)0x0BADD0FF;
-        ListEntry->Blink = (PLIST_ENTRY)0x0BADD0FF;
+        ListEntry->Flink = (PLIST_ENTRY)(ULONG_PTR)0xBADDD0FFBADDD0FFULL;
+        ListEntry->Blink = (PLIST_ENTRY)(ULONG_PTR)0xBADDD0FFBADDD0FFULL;
 #endif
     }
 
