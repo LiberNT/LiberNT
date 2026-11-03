@@ -1328,15 +1328,32 @@ HRESULT Native12Device::CreateReservedResourceRegion(const D3D12_RESOURCE_DESC *
     return hr;
 }
 
+/* Named objects live in the session's BaseNamedObjects directory, as kernel32's do. */
+static void Native12SharedObjectAttributes(OBJECT_ATTRIBUTES *object, UNICODE_STRING *string,
+        const SECURITY_ATTRIBUTES *attributes, const WCHAR *name)
+{
+    typedef NTSTATUS (WINAPI *GET_DIRECTORY)(HANDLE *);
+    static GET_DIRECTORY get_directory;
+    HANDLE directory = NULL;
+
+    memset(object, 0, sizeof(*object));
+    object->Length = sizeof(*object);
+    object->Attributes = attributes && attributes->bInheritHandle ? OBJ_INHERIT : 0;
+    object->SecurityDescriptor = attributes ? attributes->lpSecurityDescriptor : NULL;
+    if (!name) return;
+    if (!get_directory)
+        get_directory = reinterpret_cast<GET_DIRECTORY>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                "BaseGetNamedObjectDirectory"));
+    if (get_directory) get_directory(&directory);
+    RtlInitUnicodeString(string, name);
+    object->ObjectName = string;
+    object->RootDirectory = directory;
+}
+
 HRESULT STDMETHODCALLTYPE Native12Device::CreateSharedHandle(ID3D12DeviceChild *object,
         const SECURITY_ATTRIBUTES *attributes, DWORD access, const WCHAR *name, HANDLE *out)
 {
     if (!object || !out) return E_INVALIDARG;
-    if (name)
-    {
-        FIXME("Named shared handles are not supported.\n");
-        return E_NOTIMPL;
-    }
     ID3D12Resource *resource = NULL;
     ID3D12Fence *fence = NULL;
     D3DKMT_HANDLE km_resource = 0;
@@ -1364,12 +1381,13 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateSharedHandle(ID3D12DeviceChild *
         return E_NOTIMPL;
     }
     if (FAILED(hr)) return hr;
-    OBJECT_ATTRIBUTES attributes_nt = {};
-    attributes_nt.Length = sizeof(attributes_nt);
-    attributes_nt.Attributes = attributes && attributes->bInheritHandle ? OBJ_INHERIT : 0;
-    attributes_nt.SecurityDescriptor = attributes ? attributes->lpSecurityDescriptor : NULL;
+    OBJECT_ATTRIBUTES attributes_nt;
+    UNICODE_STRING name_nt;
+    Native12SharedObjectAttributes(&attributes_nt, &name_nt, attributes, name);
     HANDLE handle = NULL;
-    hr = Native12StatusToHresult(D3DKMTShareObjects(1, &km_resource, &attributes_nt, access, &handle));
+    NTSTATUS status = D3DKMTShareObjects(1, &km_resource, &attributes_nt, access, &handle);
+    if (status == STATUS_OBJECT_NAME_COLLISION) return DXGI_ERROR_NAME_ALREADY_EXISTS;
+    hr = Native12StatusToHresult(status);
     if (SUCCEEDED(hr)) *out = handle;
     return hr;
 }
@@ -1491,10 +1509,27 @@ HRESULT STDMETHODCALLTYPE Native12Device::OpenSharedHandle(HANDLE handle, REFIID
     return hr;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::OpenSharedHandleByName(const WCHAR *, DWORD, HANDLE *)
+HRESULT STDMETHODCALLTYPE Native12Device::OpenSharedHandleByName(const WCHAR *name, DWORD access, HANDLE *out)
 {
-    FIXME("OpenSharedHandleByName is not implemented.\n");
-    return E_NOTIMPL;
+    OBJECT_ATTRIBUTES attributes_nt;
+    UNICODE_STRING name_nt;
+    if (!name || !out) return E_INVALIDARG;
+    Native12SharedObjectAttributes(&attributes_nt, &name_nt, NULL, name);
+    D3DKMT_OPENNTHANDLEFROMNAME open = {};
+    open.dwDesiredAccess = access;
+    open.pObjAttrib = &attributes_nt;
+    NTSTATUS status = D3DKMTOpenNtHandleFromName(&open);
+    if (status == STATUS_OBJECT_TYPE_MISMATCH)
+    {
+        D3DKMT_OPENSYNCOBJECTNTHANDLEFROMNAME sync = {};
+        sync.dwDesiredAccess = access;
+        sync.pObjAttrib = &attributes_nt;
+        status = D3DKMTOpenSyncObjectNtHandleFromName(&sync);
+        open.hNtHandle = sync.hNtHandle;
+    }
+    *out = status >= 0 ? open.hNtHandle : NULL;
+    if (status == STATUS_OBJECT_NAME_NOT_FOUND) return E_HANDLE;
+    return Native12StatusToHresult(status);
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::MakeResident(UINT, ID3D12Pageable *const *)

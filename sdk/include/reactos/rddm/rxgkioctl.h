@@ -104,8 +104,8 @@
 #endif
 #define RXGK_CONTEXTINPROCESSPRIORITY_PACKET_V1_SIZE 16U
 #define RXGK_GETSHAREDRESOURCEADAPTERLUID_PACKET_V1_SIZE 32U
-#define RXGK_SHAREOBJECTS_PACKET_V2_SIZE       56U
-#define RXGK_SHAREOBJECTS_PACKET_VERSION_2     2U
+#define RXGK_SHAREOBJECTS_PACKET_V3_SIZE       72U
+#define RXGK_SHAREOBJECTS_PACKET_VERSION_3     3U
 #define RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET_V1_SIZE 24U
 #define RXGK_VALIDATESHAREDRESOURCEOWNER_PACKET_V1_SIZE 24U
 #define RXGK_SETCOMPOSITORSOURCEOWNER_PACKET_V1_SIZE 56U
@@ -145,7 +145,9 @@ typedef enum _RXGK_PUBLIC_OPERATION
     RxgkPublicOutputDuplPresentToHwQueue,
     RxgkPublicRegisterVailProcess,
     RxgkPublicOpenSyncObjectFromNtHandle,
-    RxgkPublicOpenSyncObjectFromNtHandle2
+    RxgkPublicOpenSyncObjectFromNtHandle2,
+    RxgkPublicOpenNtHandleFromName,
+    RxgkPublicOpenSyncObjectNtHandleFromName
 } RXGK_PUBLIC_OPERATION;
 
 typedef struct _RXGK_PUBLIC_OPERATION_PACKET
@@ -452,10 +454,13 @@ typedef struct _RXGK_SHAREOBJECTS_PACKET
     ULONG       ObjectHandles[D3DKMT_MAX_OBJECTS_PER_HANDLE];
     ULONG       ObjectAttributesPresent;
     ULONGLONG   SharedNtHandle;
-    /* OBJ_INHERIT, and a security descriptor win32k captured for this call. */
+    /* The caller's object attributes: the name and security descriptor are
+     * win32k's captured copies, the root directory is the caller's handle. */
     ULONG       Attributes;
     ULONG       Reserved;
     ULONGLONG   SecurityDescriptor;
+    ULONGLONG   RootDirectory;
+    ULONGLONG   ObjectName;
 } RXGK_SHAREOBJECTS_PACKET, *PRXGK_SHAREOBJECTS_PACKET;
 
 /*

@@ -2004,7 +2004,7 @@ APIENTRY
 NtGdiDdDDIOpenSyncObjectNtHandleFromName(_Inout_ struct _D3DKMT_OPENSYNCOBJECTNTHANDLEFROMNAME* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenSyncObjectNtHandleFromName(unnamedParam1);
 }
 
 NTSTATUS
@@ -2012,7 +2012,7 @@ APIENTRY
 NtGdiDdDDIOpenNtHandleFromName(_Inout_ struct _D3DKMT_OPENNTHANDLEFROMNAME* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenNtHandleFromName(unnamedParam1);
 }
 
 NTSTATUS
@@ -3380,6 +3380,7 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
     RXGK_SHAREOBJECTS_PACKET Packet;
     OBJECT_ATTRIBUTES ObjectAttributes;
     PSECURITY_DESCRIPTOR SecurityDescriptor = NULL;
+    UNICODE_STRING ObjectName = {0};
     ULONG_PTR Information = 0;
     NTSTATUS Status;
     UINT Index;
@@ -3410,13 +3411,13 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
 
     if (ObjectAttributes.Length != sizeof(ObjectAttributes))
         return STATUS_INVALID_PARAMETER;
-    /* TODO: named shared objects (ObjectName, RootDirectory) */
-    if (ObjectAttributes.RootDirectory != NULL ||
-        ObjectAttributes.ObjectName != NULL ||
-        (ObjectAttributes.Attributes & ~OBJ_INHERIT) != 0 ||
-        ObjectAttributes.SecurityQualityOfService != NULL)
+    if ((ObjectAttributes.Attributes & ~(OBJ_INHERIT | OBJ_EXCLUSIVE | OBJ_CASE_INSENSITIVE | OBJ_OPENIF)) != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (ObjectAttributes.ObjectName != NULL)
     {
-        return STATUS_NOT_SUPPORTED;
+        Status = ProbeAndCaptureUnicodeString(&ObjectName, ExGetPreviousMode(), ObjectAttributes.ObjectName);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
     if (ObjectAttributes.SecurityDescriptor != NULL)
     {
@@ -3426,16 +3427,21 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
                                              TRUE,
                                              &SecurityDescriptor);
         if (!NT_SUCCESS(Status))
+        {
+            ReleaseCapturedUnicodeString(&ObjectName, ExGetPreviousMode());
             return Status;
+        }
     }
 
-    Packet.Size = RXGK_SHAREOBJECTS_PACKET_V2_SIZE;
-    Packet.Version = RXGK_SHAREOBJECTS_PACKET_VERSION_2;
+    Packet.Size = RXGK_SHAREOBJECTS_PACKET_V3_SIZE;
+    Packet.Version = RXGK_SHAREOBJECTS_PACKET_VERSION_3;
     Packet.ObjectCount = cObjects;
     Packet.DesiredAccess = dwDesiredAccess;
     Packet.ObjectAttributesPresent = 1;
     Packet.Attributes = ObjectAttributes.Attributes;
     Packet.SecurityDescriptor = (ULONGLONG)(ULONG_PTR)SecurityDescriptor;
+    Packet.RootDirectory = (ULONGLONG)(ULONG_PTR)ObjectAttributes.RootDirectory;
+    Packet.ObjectName = ObjectAttributes.ObjectName != NULL ? (ULONGLONG)(ULONG_PTR)&ObjectName : 0;
 
     Status = WddmBridgeSendIoctlWithInformation(
                  IOCTL_D3DKMT_SHAREOBJECTS,
@@ -3446,9 +3452,10 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
                  &Information);
     if (SecurityDescriptor != NULL)
         SeReleaseSecurityDescriptor(SecurityDescriptor, ExGetPreviousMode(), TRUE);
+    ReleaseCapturedUnicodeString(&ObjectName, ExGetPreviousMode());
     if (!NT_SUCCESS(Status))
         return Status;
-    if (Information != RXGK_SHAREOBJECTS_PACKET_V2_SIZE ||
+    if (Information != RXGK_SHAREOBJECTS_PACKET_V3_SIZE ||
         Packet.SharedNtHandle == 0 ||
         Packet.SharedNtHandle > (ULONGLONG)(ULONG_PTR)-1)
     {

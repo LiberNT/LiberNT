@@ -783,16 +783,14 @@ public:
     {
         if (!handle) return E_INVALIDARG;
         if (!(flags & (D3D11_FENCE_FLAG_SHARED | D3D11_FENCE_FLAG_SHARED_CROSS_ADAPTER))) return E_INVALIDARG;
-        if (name)
-        {
-            FIXME("Named shared handles are not supported.\n");
-            return E_NOTIMPL;
-        }
-        OBJECT_ATTRIBUTES object = {};
-        object.Length = sizeof(object);
-        object.Attributes = attributes && attributes->bInheritHandle ? OBJ_INHERIT : 0;
-        object.SecurityDescriptor = attributes ? attributes->lpSecurityDescriptor : NULL;
-        return StatusToHresult(D3DKMTShareObjects(1, &sync, &object, access, handle));
+        OBJECT_ATTRIBUTES object;
+        UNICODE_STRING object_name;
+        NativeSharedObjectAttributes(&object, &object_name, attributes, name);
+        HANDLE shared = NULL;
+        NTSTATUS status = D3DKMTShareObjects(1, &sync, &object, access, &shared);
+        if (status == STATUS_OBJECT_NAME_COLLISION) return DXGI_ERROR_NAME_ALREADY_EXISTS;
+        if (status >= 0) *handle = shared;
+        return StatusToHresult(status);
     }
     UINT64 STDMETHODCALLTYPE GetCompletedValue() override { return *value; }
     HRESULT STDMETHODCALLTYPE SetEventOnCompletion(UINT64 fence_value, HANDLE event) override

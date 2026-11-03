@@ -2336,6 +2336,12 @@ DxgkpDeleteSharedSyncObject(
     }
 }
 
+POBJECT_TYPE
+DxgkSyncSharedObjectType(VOID)
+{
+    return DxgkSharedSyncObjectType;
+}
+
 NTSTATUS
 DxgkSyncSharedObjectsInitialize(VOID)
 {

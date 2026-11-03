@@ -3464,6 +3464,9 @@ DxgkSyncWakeViews(
 NTSTATUS
 DxgkSyncSharedObjectsInitialize(VOID);
 
+POBJECT_TYPE
+DxgkSyncSharedObjectType(VOID);
+
 NTSTATUS
 DxgkSyncShareNtObject(
     _In_ D3DKMT_HANDLE hSyncObject,

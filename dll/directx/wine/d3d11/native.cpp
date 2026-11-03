@@ -41,6 +41,28 @@ static HRESULT StatusToHresult(NTSTATUS status)
     return status >= 0 ? S_OK : HRESULT_FROM_NT(status);
 }
 
+/* Named objects live in the session's BaseNamedObjects directory, as kernel32's do. */
+static void NativeSharedObjectAttributes(OBJECT_ATTRIBUTES *object, UNICODE_STRING *string,
+        const SECURITY_ATTRIBUTES *attributes, const WCHAR *name)
+{
+    typedef NTSTATUS (WINAPI *GET_DIRECTORY)(HANDLE *);
+    static GET_DIRECTORY get_directory;
+    HANDLE directory = NULL;
+
+    memset(object, 0, sizeof(*object));
+    object->Length = sizeof(*object);
+    object->Attributes = attributes && attributes->bInheritHandle ? OBJ_INHERIT : 0;
+    object->SecurityDescriptor = attributes ? attributes->lpSecurityDescriptor : NULL;
+    if (!name) return;
+    if (!get_directory)
+        get_directory = reinterpret_cast<GET_DIRECTORY>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                "BaseGetNamedObjectDirectory"));
+    if (get_directory) get_directory(&directory);
+    RtlInitUnicodeString(string, name);
+    object->ObjectName = string;
+    object->RootDirectory = directory;
+}
+
 class NativeAllocation
 {
 public:
@@ -1120,21 +1142,16 @@ public:
         if (!out) return E_INVALIDARG;
         *out = NULL;
         if (!(desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE)) return E_INVALIDARG;
-        if (name)
-        {
-            FIXME("Named shared handles are not supported.\n");
-            return E_NOTIMPL;
-        }
         NativeLock guard(device);
         D3DKMT_HANDLE resource = 0;
         HRESULT hr = device->get_resource_handles(device->runtime_device, runtime_handle.handle, &resource, NULL);
         if (FAILED(hr)) return hr;
-        OBJECT_ATTRIBUTES object = {};
-        object.Length = sizeof(object);
-        object.Attributes = attributes && attributes->bInheritHandle ? OBJ_INHERIT : 0;
-        object.SecurityDescriptor = attributes ? attributes->lpSecurityDescriptor : NULL;
+        OBJECT_ATTRIBUTES object;
+        UNICODE_STRING object_name;
+        NativeSharedObjectAttributes(&object, &object_name, attributes, name);
         HANDLE handle = NULL;
-        hr = StatusToHresult(D3DKMTShareObjects(1, &resource, &object, access, &handle));
+        NTSTATUS status = D3DKMTShareObjects(1, &resource, &object, access, &handle);
+        hr = status == STATUS_OBJECT_NAME_COLLISION ? DXGI_ERROR_NAME_ALREADY_EXISTS : StatusToHresult(status);
         if (SUCCEEDED(hr)) *out = handle;
         return hr;
     }
@@ -2603,10 +2620,24 @@ HRESULT STDMETHODCALLTYPE NativeDevice::OpenSharedResource1(HANDLE shared, REFII
     return OpenSharedTexture(shared, 0, iid, out);
 }
 
-HRESULT STDMETHODCALLTYPE NativeDevice::OpenSharedResourceByName(LPCWSTR, DWORD, REFIID, void **out)
+HRESULT STDMETHODCALLTYPE NativeDevice::OpenSharedResourceByName(LPCWSTR name, DWORD access, REFIID iid, void **out)
 {
-    if (out) *out = NULL;
-    return E_NOTIMPL;
+    OBJECT_ATTRIBUTES object;
+    UNICODE_STRING object_name;
+    if (!out) return E_INVALIDARG;
+    *out = NULL;
+    if (!name) return E_INVALIDARG;
+    NativeSharedObjectAttributes(&object, &object_name, NULL, name);
+    D3DKMT_OPENNTHANDLEFROMNAME open = {};
+    open.dwDesiredAccess = access;
+    open.pObjAttrib = &object;
+    NTSTATUS status = D3DKMTOpenNtHandleFromName(&open);
+    if (status == STATUS_OBJECT_NAME_NOT_FOUND) return E_INVALIDARG;
+    HRESULT hr = StatusToHresult(status);
+    if (FAILED(hr)) return hr;
+    hr = OpenSharedTexture(open.hNtHandle, 0, iid, out);
+    CloseHandle(open.hNtHandle);
+    return hr;
 }
 HRESULT STDMETHODCALLTYPE NativeDevice::SetExceptionMode(UINT mode) { if (mode & ~D3D11_RAISE_FLAG_DRIVER_INTERNAL_ERROR) return E_INVALIDARG; exception_mode = mode; return S_OK; }
 UINT STDMETHODCALLTYPE NativeDevice::GetExceptionMode() { return exception_mode; }

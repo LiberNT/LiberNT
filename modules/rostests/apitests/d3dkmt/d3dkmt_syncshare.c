@@ -16,6 +16,12 @@
 #ifndef STATUS_INVALID_HANDLE
 #define STATUS_INVALID_HANDLE ((NTSTATUS)0xC0000008L)
 #endif
+#ifndef STATUS_OBJECT_NAME_COLLISION
+#define STATUS_OBJECT_NAME_COLLISION ((NTSTATUS)0xC0000035L)
+#endif
+#ifndef STATUS_OBJECT_NAME_NOT_FOUND
+#define STATUS_OBJECT_NAME_NOT_FOUND ((NTSTATUS)0xC0000034L)
+#endif
 
 typedef struct _TEST_OBJECT_ATTRIBUTES
 {
@@ -451,6 +457,103 @@ Test_GpuWaitThroughOpenedView(
     DestroySync(hMarker);
 }
 
+typedef struct _TEST_UNICODE_STRING
+{
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR Buffer;
+} TEST_UNICODE_STRING;
+
+typedef struct _TEST_OPEN_FROM_NAME
+{
+    DWORD dwDesiredAccess;
+    TEST_OBJECT_ATTRIBUTES *pObjAttrib;
+    HANDLE hNtHandle;
+} TEST_OPEN_FROM_NAME;
+
+typedef NTSTATUS (APIENTRY *PTEST_OPEN_FROM_NAME)(TEST_OPEN_FROM_NAME *);
+
+static VOID
+InitName(_Out_ TEST_OBJECT_ATTRIBUTES *Attributes, _Out_ TEST_UNICODE_STRING *String, _In_ PWSTR Buffer)
+{
+    String->Buffer = Buffer;
+    String->Length = (USHORT)(wcslen(Buffer) * sizeof(WCHAR));
+    String->MaximumLength = String->Length + sizeof(WCHAR);
+    memset(Attributes, 0, sizeof(*Attributes));
+    Attributes->Length = sizeof(*Attributes);
+    Attributes->ObjectName = String;
+}
+
+/* A shared fence exported under a name is found by that name, and only as a sync object. */
+static VOID
+Test_NamedShare(_In_ D3DKMT_HANDLE hFenceA, _In_ D3DKMT_HANDLE hDeviceB)
+{
+    PTEST_OPEN_FROM_NAME pOpenSyncByName, pOpenResourceByName;
+    TEST_OBJECT_ATTRIBUTES Attributes;
+    TEST_UNICODE_STRING String;
+    TEST_OPEN_FROM_NAME OpenByName;
+    D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 Open;
+    WCHAR Name[128], Missing[128];
+    HANDLE NtHandle = NULL, Second = NULL;
+    DWORD Session = 0;
+    NTSTATUS Status;
+
+    pOpenSyncByName = (PTEST_OPEN_FROM_NAME)LoadD3DKMTProc("D3DKMTOpenSyncObjectNtHandleFromName");
+    pOpenResourceByName = (PTEST_OPEN_FROM_NAME)LoadD3DKMTProc("D3DKMTOpenNtHandleFromName");
+    if (pOpenSyncByName == NULL || pOpenResourceByName == NULL)
+    {
+        skip("named NT-handle opens are not exported\n");
+        return;
+    }
+    ProcessIdToSessionId(GetCurrentProcessId(), &Session);
+    _snwprintf(Name, RTL_NUMBER_OF(Name), L"\\Sessions\\%lu\\BaseNamedObjects\\lnt-syncshare-%lu", Session, GetCurrentProcessId());
+    _snwprintf(Missing, RTL_NUMBER_OF(Missing), L"\\Sessions\\%lu\\BaseNamedObjects\\lnt-syncshare-missing-%lu", Session, GetCurrentProcessId());
+
+    InitName(&Attributes, &String, Name);
+    Status = pShareObjects(1, &hFenceA, (POBJECT_ATTRIBUTES)&Attributes, D3DDDI_SYNC_OBJECT_ALL_ACCESS, &NtHandle);
+    ok(Status == STATUS_SUCCESS, "ShareObjects(named) 0x%lx\n", Status);
+    if (!NT_SUCCESS(Status))
+        return;
+    Status = pShareObjects(1, &hFenceA, (POBJECT_ATTRIBUTES)&Attributes, D3DDDI_SYNC_OBJECT_ALL_ACCESS, &Second);
+    ok(Status == STATUS_OBJECT_NAME_COLLISION, "ShareObjects(same name) 0x%lx\n", Status);
+    if (NT_SUCCESS(Status) && Second != NULL)
+        CloseHandle(Second);
+
+    memset(&OpenByName, 0, sizeof(OpenByName));
+    OpenByName.dwDesiredAccess = D3DDDI_SYNC_OBJECT_ALL_ACCESS;
+    OpenByName.pObjAttrib = &Attributes;
+    Status = pOpenSyncByName(&OpenByName);
+    ok(Status == STATUS_SUCCESS, "OpenSyncObjectNtHandleFromName 0x%lx\n", Status);
+    if (NT_SUCCESS(Status))
+    {
+        Status = OpenSync2(OpenByName.hNtHandle, hDeviceB, 0, &Open);
+        ok(Status == STATUS_SUCCESS, "OpenSyncObjectFromNtHandle2(handle opened by name) 0x%lx\n", Status);
+        if (NT_SUCCESS(Status))
+            DestroySync(Open.hSyncObject);
+        CloseHandle(OpenByName.hNtHandle);
+    }
+
+    OpenByName.hNtHandle = NULL;
+    Status = pOpenResourceByName(&OpenByName);
+    ok(Status == STATUS_OBJECT_TYPE_MISMATCH, "OpenNtHandleFromName(sync object name) 0x%lx\n", Status);
+    if (NT_SUCCESS(Status))
+        CloseHandle(OpenByName.hNtHandle);
+
+    InitName(&Attributes, &String, Missing);
+    OpenByName.hNtHandle = NULL;
+    OpenByName.pObjAttrib = &Attributes;
+    Status = pOpenSyncByName(&OpenByName);
+    ok(Status == STATUS_OBJECT_NAME_NOT_FOUND, "OpenSyncObjectNtHandleFromName(missing) 0x%lx\n", Status);
+
+    CloseHandle(NtHandle);
+    InitName(&Attributes, &String, Name);
+    OpenByName.hNtHandle = NULL;
+    Status = pOpenSyncByName(&OpenByName);
+    ok(Status == STATUS_OBJECT_NAME_NOT_FOUND, "OpenSyncObjectNtHandleFromName after the last handle closed 0x%lx\n", Status);
+    if (NT_SUCCESS(Status))
+        CloseHandle(OpenByName.hNtHandle);
+}
+
 START_TEST(syncshare)
 {
     D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 Open;
@@ -522,6 +625,7 @@ START_TEST(syncshare)
         }
         Test_AccessBecomesViewFlags(hDeviceA, hFenceA, hDeviceB);
         Test_GenericAccessMapping(hFenceA, hDeviceB);
+        Test_NamedShare(hFenceA, hDeviceB);
         DestroySync(hFenceA);
     }
 

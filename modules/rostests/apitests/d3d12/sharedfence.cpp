@@ -212,6 +212,99 @@ static void TestOtherProcess(ID3D12Device *device)
     fence->Release();
 }
 
+typedef struct _TEST_UNICODE_STRING
+{
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR Buffer;
+} TEST_UNICODE_STRING;
+
+typedef LONG (WINAPI *PNT_QUERY_OBJECT)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+
+static BOOL QueryObjectName(HANDLE handle, WCHAR *name, ULONG count)
+{
+    PNT_QUERY_OBJECT query = reinterpret_cast<PNT_QUERY_OBJECT>(
+            GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryObject"));
+    union { TEST_UNICODE_STRING name; BYTE bytes[1024]; } buffer;
+    ULONG length = 0;
+
+    name[0] = 0;
+    if (!query || query(handle, 1, &buffer, sizeof(buffer), &length) < 0 || !buffer.name.Buffer)
+        return FALSE;
+    lstrcpynW(name, buffer.name.Buffer, min(count, (ULONG)buffer.name.Length / sizeof(WCHAR) + 1));
+    return TRUE;
+}
+
+static void TestNamedSharing(ID3D12Device *device)
+{
+    ID3D12Fence *fence = NULL, *second = NULL, *opened = NULL;
+    HANDLE handle = NULL, by_name = NULL, collision = (HANDLE)0xdeadbeef, missing = (HANDLE)0xdeadbeef;
+    WCHAR name[64], global_name[80], object_name[260];
+    DWORD session = 0;
+    HRESULT hr;
+
+    wsprintfW(name, L"lnt-sharedfence-%lu", GetCurrentProcessId());
+    wsprintfW(global_name, L"Global\\lnt-sharedfence-g-%lu", GetCurrentProcessId());
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    hr = device->CreateFence(4, D3D12_FENCE_FLAG_SHARED, __uuidof(ID3D12Fence), reinterpret_cast<void **>(&fence));
+    ok(hr == S_OK, "CreateFence(SHARED): %#lx\n", hr);
+    if (!fence) return;
+    hr = device->CreateSharedHandle(fence, NULL, GENERIC_ALL, name, &handle);
+    ok(hr == S_OK, "CreateSharedHandle(named): %#lx\n", hr);
+    if (handle)
+    {
+        WCHAR expected[128];
+
+        wsprintfW(expected, L"\\Sessions\\%lu\\BaseNamedObjects\\%s", session, name);
+        ok(QueryObjectName(handle, object_name, ARRAYSIZE(object_name)), "NtQueryObject failed\n");
+        ok(!lstrcmpW(object_name, expected), "named fence object %ls, expected %ls\n", object_name, expected);
+    }
+    hr = device->CreateSharedHandle(fence, NULL, GENERIC_ALL, name, &collision);
+    ok(hr == DXGI_ERROR_NAME_ALREADY_EXISTS, "CreateSharedHandle(same name): %#lx\n", hr);
+    ok(collision == (HANDLE)0xdeadbeef, "CreateSharedHandle(same name) wrote handle %p\n", collision);
+    if (SUCCEEDED(hr) && collision && collision != (HANDLE)0xdeadbeef) CloseHandle(collision);
+
+    hr = device->OpenSharedHandleByName(name, GENERIC_ALL, &by_name);
+    ok(hr == S_OK, "OpenSharedHandleByName: %#lx\n", hr);
+    if (by_name)
+    {
+        hr = device->OpenSharedHandle(by_name, __uuidof(ID3D12Fence), reinterpret_cast<void **>(&opened));
+        ok(hr == S_OK, "OpenSharedHandle(by name): %#lx\n", hr);
+        if (opened)
+        {
+            ok(opened->GetCompletedValue() == 4, "fence opened by name reads %I64u\n", opened->GetCompletedValue());
+            opened->Release();
+        }
+        CloseHandle(by_name);
+    }
+    hr = device->OpenSharedHandleByName(L"lnt-sharedfence-missing", GENERIC_ALL, &missing);
+    ok(hr == E_HANDLE, "OpenSharedHandleByName(missing): %#lx\n", hr);
+    ok(missing == NULL, "OpenSharedHandleByName(missing) left handle %p\n", missing);
+
+    hr = device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, __uuidof(ID3D12Fence), reinterpret_cast<void **>(&second));
+    if (second)
+    {
+        HANDLE global_handle = NULL;
+
+        hr = second->QueryInterface(__uuidof(ID3D12Fence), reinterpret_cast<void **>(&opened));
+        if (opened) opened->Release();
+        hr = device->CreateSharedHandle(second, NULL, GENERIC_ALL, global_name, &global_handle);
+        ok(hr == S_OK, "CreateSharedHandle(Global\\ name): %#lx\n", hr);
+        if (global_handle)
+        {
+            WCHAR expected[128];
+
+            wsprintfW(expected, L"\\BaseNamedObjects\\lnt-sharedfence-g-%lu", GetCurrentProcessId());
+            QueryObjectName(global_handle, object_name, ARRAYSIZE(object_name));
+            ok(!lstrcmpW(object_name, expected), "global named fence object %ls, expected %ls\n", object_name, expected);
+            CloseHandle(global_handle);
+        }
+        second->Release();
+    }
+    if (handle) CloseHandle(handle);
+    fence->Release();
+}
+
 START_TEST(sharedfence)
 {
     ID3D12Device *device;
@@ -229,5 +322,6 @@ START_TEST(sharedfence)
     TestShareRules(device);
     TestSameProcess(device);
     TestOtherProcess(device);
+    TestNamedSharing(device);
     device->Release();
 }

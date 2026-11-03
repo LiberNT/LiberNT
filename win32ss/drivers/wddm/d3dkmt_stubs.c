@@ -5864,6 +5864,42 @@ D3DKMTCreateNativeFence(_Inout_ D3DKMT_CREATENATIVEFENCE *pData)
     return D3dkmtSendPublicOperation(RxgkPublicCreateNativeFence, Captured.hDevice, 0, Captured.Flags.Value, 0, 0, 0, NULL);
 }
 
+static NTSTATUS
+D3dkmtOpenNtHandleByName(_In_ RXGK_PUBLIC_OPERATION Operation, _Inout_ D3DKMT_OPENNTHANDLEFROMNAME *pData)
+{
+    D3DKMT_OPENNTHANDLEFROMNAME Captured;
+    RXGK_PUBLIC_OPERATION_PACKET Result;
+    NTSTATUS Status;
+
+    C_ASSERT(sizeof(D3DKMT_OPENNTHANDLEFROMNAME) == sizeof(D3DKMT_OPENSYNCOBJECTNTHANDLEFROMNAME));
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    Status = D3dkmtSendPublicOperation(Operation, 0, 0, Captured.dwDesiredAccess, 0,
+                                       (ULONGLONG)(ULONG_PTR)Captured.pObjAttrib, 0, &Result);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Captured.hNtHandle = (HANDLE)(ULONG_PTR)Result.Pointer0;
+    Status = WddmBridgeSafeCopyTo(pData, &Captured, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        ZwClose(Captured.hNtHandle);
+    return WddmBridgeRejectBadBuffer(Status);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTOpenNtHandleFromName(_Inout_ D3DKMT_OPENNTHANDLEFROMNAME *pData)
+{
+    return D3dkmtOpenNtHandleByName(RxgkPublicOpenNtHandleFromName, pData);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTOpenSyncObjectNtHandleFromName(_Inout_ D3DKMT_OPENSYNCOBJECTNTHANDLEFROMNAME *pData)
+{
+    return D3dkmtOpenNtHandleByName(RxgkPublicOpenSyncObjectNtHandleFromName, (D3DKMT_OPENNTHANDLEFROMNAME *)pData);
+}
+
 NTSTATUS
 APIENTRY
 D3DKMTOpenSyncObjectFromNtHandle(_Inout_ D3DKMT_OPENSYNCOBJECTFROMNTHANDLE *pData)

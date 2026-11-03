@@ -11,6 +11,7 @@ add_executable(dxgi_apitest
     composition_lifetime.cpp
     completion_event.cpp
     shared_fence.cpp
+    shared_name.cpp
     counters.cpp
     query_order.cpp
     buffer_copy.cpp
