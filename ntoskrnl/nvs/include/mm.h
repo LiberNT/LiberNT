@@ -323,6 +323,7 @@ typedef struct _MI_PAGEFILE
 BOOLEAN MiSpaceFindEmptyRange(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 PageCount, _In_ ULONG64 Alignment,
                               _In_ ULONG64 LowestVpn, _In_ ULONG64 HighestVpn, _In_ BOOLEAN TopDown,
                               _Out_ PULONG64 StartingVpn);
+ULONG64 MiSpaceFreeBytes(_Inout_ PMI_ADDRESS_SPACE Space);
 NTSTATUS MiAllocateVirtualMemory(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PULONG64 BaseAddress,
                                  _Inout_ PULONG64 RegionSize, _In_ ULONG AllocationType, _In_ ULONG Protection);
 NTSTATUS MiAllocateVirtualMemoryEx(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PULONG64 BaseAddress,
