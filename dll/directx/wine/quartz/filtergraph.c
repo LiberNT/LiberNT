@@ -1099,7 +1099,7 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
     IEnumPins *source_enum;
     PIN_DIRECTION dir;
     PIN_INFO info;
-    HRESULT hr;
+    HRESULT hr, sink_hr = S_OK;
 
     TRACE("Trying to autoplug %p to %p through %p.\n", source, sink, middle_sink);
 
@@ -1141,12 +1141,20 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
             continue;
         }
 
+        if (sink && any)
+        {
+            all = FALSE;
+            IPin_Release(middle_source);
+            continue;
+        }
+
         hr = autoplug(graph, middle_source, sink, render_to_existing, recursion_depth + 1);
         IPin_Release(middle_source);
         if (SUCCEEDED(hr) && sink)
         {
-            IEnumPins_Release(source_enum);
-            return hr;
+            any = TRUE;
+            sink_hr = hr;
+            continue;
         }
         if (SUCCEEDED(hr))
             any = TRUE;
@@ -1154,6 +1162,9 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
             all = FALSE;
     }
     IEnumPins_Release(source_enum);
+
+    if (sink && any)
+        return all ? sink_hr : VFW_S_PARTIAL_RENDER;
 
     if (!sink)
     {
