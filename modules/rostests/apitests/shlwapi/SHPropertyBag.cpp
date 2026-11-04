@@ -525,6 +525,14 @@ static void SHPropertyBag_OnRegKey(void)
     ok_long(V_UI4(&vari), 0xDEADFACE);
     VariantClear(&vari);
 
+    // Read a value that does not exist
+    VariantInit(&vari);
+    V_VT(&vari) = VT_BSTR;
+    hr = pPropBag->Read(L"NoSuchName", &vari, NULL);
+    ok_long(hr, HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
+    ok_long(V_VT(&vari), VT_EMPTY);
+    VariantClear(&vari);
+
     // Write BSTR
     VariantInit(&vari);
     V_VT(&vari) = VT_BSTR;
