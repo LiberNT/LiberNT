@@ -703,19 +703,23 @@ _LocalGetPrinterLevel2(PLOCAL_PRINTER pPrinter, PPRINTER_INFO_2W* ppPrinterInfo,
 static void
 _LocalGetPrinterLevel3(PLOCAL_PRINTER pPrinter, PPRINTER_INFO_3* ppPrinterInfo, PBYTE* ppPrinterInfoEnd, PDWORD pcbNeeded, DWORD cchComputerName, PCWSTR wszComputerName)
 {
-    SECURITY_DESCRIPTOR SecurityDescriptor = { 0 };
+    SECURITY_DESCRIPTOR SecurityDescriptor;
+    DWORD cbSecurityDescriptor = 0;
+
+    InitializeSecurityDescriptor(&SecurityDescriptor, SECURITY_DESCRIPTOR_REVISION);
+    MakeSelfRelativeSD(&SecurityDescriptor, NULL, &cbSecurityDescriptor);
 
     if (!ppPrinterInfo)
     {
-        *pcbNeeded += sizeof(PRINTER_INFO_3) + sizeof(SECURITY_DESCRIPTOR);
+        *pcbNeeded += sizeof(PRINTER_INFO_3) + cbSecurityDescriptor;
         return;
     }
 
     FIXME("Return a valid security descriptor for PRINTER_INFO_3\n");
 
     // Set the pSecurityDescriptor field (and copy the Security Descriptor).
-    *ppPrinterInfoEnd -= sizeof(SECURITY_DESCRIPTOR);
-    CopyMemory(*ppPrinterInfoEnd, &SecurityDescriptor, sizeof(SECURITY_DESCRIPTOR));
+    *ppPrinterInfoEnd -= cbSecurityDescriptor;
+    MakeSelfRelativeSD(&SecurityDescriptor, *ppPrinterInfoEnd, &cbSecurityDescriptor);
     (*ppPrinterInfo)->pSecurityDescriptor = (PSECURITY_DESCRIPTOR)(*ppPrinterInfoEnd);
 
     // Advance to the next structure.
@@ -916,11 +920,11 @@ LocalEnumPrinters(DWORD Flags, LPWSTR Name, DWORD Level, LPBYTE pPrinterEnum, DW
         goto Cleanup;
     }
 
-    if (Level == 3 || Level > 5)
+    if (Level > 7)
     {
         // The caller supplied an invalid level for EnumPrinters.
-        dwErrorCode = ERROR_INVALID_LEVEL;
-        goto Cleanup;
+        SetLastError(ERROR_SUCCESS);
+        return FALSE;
     }
 
     if (Level == 1 && Flags & PRINTER_ENUM_NAME && !Name)
@@ -961,6 +965,7 @@ LocalEnumPrinters(DWORD Flags, LPWSTR Name, DWORD Level, LPBYTE pPrinterEnum, DW
 
     // Copy over the Printer information.
     pPrinterInfoEnd = &pPrinterEnum[*pcbNeeded];
+    SetLastError(ERROR_SUCCESS);
 
     for (pNode = PrinterList.Head.Next[0]; pNode; pNode = pNode->Next[0])
     {
@@ -974,7 +979,7 @@ LocalEnumPrinters(DWORD Flags, LPWSTR Name, DWORD Level, LPBYTE pPrinterEnum, DW
         (*pcReturned)++;
     }
 
-    dwErrorCode = ERROR_SUCCESS;
+    return TRUE;
 
 Cleanup:
     SetLastError(dwErrorCode);
