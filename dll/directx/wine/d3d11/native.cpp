@@ -5468,7 +5468,7 @@ static HRESULT CreateNativeShader(NativeDevice *device, const void *code, SIZE_T
                 && !(device->shader_caps & D3D11DDICAPS_SHADER_COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X))
             || !NativeShaderFeaturesSupported(device, bytecode.tokens, model))
         return E_INVALIDARG;
-    if (type == 1 || type == 4)
+    if ((type == 1 || type == 4) && !device->options3_caps.VPAndRTArrayIndexFromAnyShaderFeedingRasterizer)
     {
         for (UINT i = 0; i < bytecode.signatures.NumOutputSignatureEntries; ++i)
         {
