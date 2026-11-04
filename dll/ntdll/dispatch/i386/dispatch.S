@@ -276,8 +276,17 @@ PUBLIC _KiFastSystemCallRet@0
 
 .ENDP
 
+_RtlpFinalExceptionHandler:
+    mov eax, ExceptionContinueSearch
+    ret 16
+
 PUBLIC _RtlUserThreadStart@8
 _RtlUserThreadStart@8:
+    mov dword ptr [esp + 4], offset _RtlpFinalExceptionHandler
+    mov ecx, fs:[TEB_EXCEPTION_LIST]
+    mov [esp], ecx
+    mov fs:[TEB_EXCEPTION_LIST], esp
+    sub esp, 16
     mov [esp + 8], ebx
     mov [esp + 4], eax
     jmp _RtlpUserThreadStart@8
