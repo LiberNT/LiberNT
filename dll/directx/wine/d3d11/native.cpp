@@ -4658,6 +4658,15 @@ void STDMETHODCALLTYPE NativeContext::CopyResource(ID3D11Resource *dst, ID3D11Re
     device->functions.pfnResourceCopy(device->driver_device, d->handle, s->handle);
 }
 
+/* Copies into 4:2:0 planar textures are ignored unless every box edge and the destination are even. */
+static bool NativeChromaRegionAligned(DXGI_FORMAT format, const D3D11_BOX *box, UINT x, UINT y)
+{
+    /* TODO: the alignment rule for P010, P016 and the other subsampled formats */
+    if (format != DXGI_FORMAT_NV12) return true;
+    if ((x | y) & 1) return false;
+    return !box || !((box->left | box->right | box->top | box->bottom) & 1);
+}
+
 void STDMETHODCALLTYPE NativeContext::CopySubresourceRegion(ID3D11Resource *dst, UINT dst_subresource,
         UINT x, UINT y, UINT z, ID3D11Resource *src, UINT src_subresource, const D3D11_BOX *box)
 {
@@ -4696,6 +4705,7 @@ void STDMETHODCALLTYPE NativeContext::CopySubresourceRegion(ID3D11Resource *dst,
     if (!d || !s || dst_subresource >= d->desc.MipLevels * d->desc.ArraySize
             || src_subresource >= s->desc.MipLevels * s->desc.ArraySize || !device->functions.pfnResourceCopyRegion) return;
     if (!NativeCopyCompatible(d->desc.Format, s->desc.Format, device->feature_level)) return;
+    if (!NativeChromaRegionAligned(d->desc.Format, box, x, y)) return;
     if ((d->desc.BindFlags & D3D11_BIND_DEPTH_STENCIL) || (s->desc.BindFlags & D3D11_BIND_DEPTH_STENCIL)
             || d->desc.SampleDesc.Count > 1 || s->desc.SampleDesc.Count > 1)
     {
@@ -4776,6 +4786,7 @@ void STDMETHODCALLTYPE NativeContext::UpdateSubresource(ID3D11Resource *resource
     NativeTextureInfo *texture = GetNativeTexture(resource, device, &info);
     if (!texture || !data || texture->desc.Usage != D3D11_USAGE_DEFAULT
             || subresource >= texture->desc.MipLevels * texture->desc.ArraySize) return;
+    if (!NativeChromaRegionAligned(texture->desc.Format, box, 0, 0)) return;
     NativeLock guard(device);
     NativeWaitPendingRelease(resource, device);
     device->functions.pfnResourceUpdateSubresourceUP(device->driver_device, texture->handle,
