@@ -3355,7 +3355,8 @@ BOOL WINAPI SetupDiEnumDeviceInterfaces(
         return FALSE;
     }
     if (!DeviceInterfaceData ||
-            DeviceInterfaceData->cbSize != sizeof(SP_DEVICE_INTERFACE_DATA))
+            DeviceInterfaceData->cbSize != sizeof(SP_DEVICE_INTERFACE_DATA) ||
+            !InterfaceClassGuid)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;

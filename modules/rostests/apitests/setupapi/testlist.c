@@ -11,6 +11,7 @@ extern void func_InvalidDeviceInfoSet(void);
 extern void func_SetupInstallServicesFromInfSectionEx(void);
 extern void func_SetupCommitFileQueue(void);
 extern void func_SetupDiInstallClassExA(void);
+extern void func_SetupDiOpenDeviceInterface(void);
 extern void func_SetupInstallFile(void);
 extern void func_UsbInterfaceIds(void);
 
@@ -25,6 +26,7 @@ const struct test winetest_testlist[] =
     { "SetupInstallServicesFromInfSectionEx", func_SetupInstallServicesFromInfSectionEx},
     { "SetupCommitFileQueue", func_SetupCommitFileQueue },
     { "SetupDiInstallClassExA", func_SetupDiInstallClassExA},
+    { "SetupDiOpenDeviceInterface", func_SetupDiOpenDeviceInterface },
     { "SetupInstallFile", func_SetupInstallFile },
     { "UsbInterfaceIds", func_UsbInterfaceIds },
     { 0, 0 }
