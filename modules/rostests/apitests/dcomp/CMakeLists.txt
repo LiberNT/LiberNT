@@ -1,4 +1,5 @@
 add_executable(dcomp_apitest
+    composition_modechange.c
     composition_present.c
     target_lifetime.c
     visual.c
