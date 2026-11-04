@@ -600,7 +600,9 @@ static BOOLEAN pe_symz_symbol(PVOID context, ULONG rva, const char* name)
     {
         const char *at = strrchr(name + 1, '@');
 
-        if (at && at != name + 1 && at[1] && strspn(at + 1, "0123456789") == strlen(at + 1))
+        /* FIXME: SYMOPT_UNDNAME is applied when the module loads, not when a symbol is queried */
+        if ((dbghelp_options & SYMOPT_UNDNAME) &&
+            at && at != name + 1 && at[1] && strspn(at + 1, "0123456789") == strlen(at + 1))
         {
             size_t length = at - (name + 1);
             char *undecorated = pool_alloc(&load->module->pool, length + 1);
