@@ -696,7 +696,7 @@ CAssocElement::_QuerySourceAny(
     PVOID pValue)
 {
     if (!pSource)
-        return E_INVALIDARG;
+        return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
 
     if (query == (ASSOCQUERY_SDED | ASSOCQUERY_EXTRA_NON_VERB) ||
         query == ASSOCQUERY_LOCALIZEDSTRING)
@@ -909,6 +909,13 @@ HRESULT CAssocShellElement::_GetVerbDelegate(PCWSTR pszSrc, IAssociationElementO
 
 STDMETHODIMP CAssocShellElement::QueryString(ASSOCQUERY query, PCWSTR key, PWSTR* ppszValue)
 {
+    if (!m_pszName && (query & ASSOCQUERY_INDIRECT))
+    {
+        /* An element that was never set resolves a NULL indirect string and faults, as on Windows 11 */
+        *ppszValue = NULL;
+        return SHAllocMUI(ppszValue);
+    }
+
     if (!(query & ASSOCQUERY_EXTRA_VERB))
         return CAssocElement::QueryString(query, key, ppszValue);
 

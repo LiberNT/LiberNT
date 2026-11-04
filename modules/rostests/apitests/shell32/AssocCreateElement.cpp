@@ -3,6 +3,7 @@
  * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
  * PURPOSE:     Tests for AssocCreateElement
  * COPYRIGHT:   Copyright 2026 Katayama Hirofumi MZ <katayama.hirofumi.mz@gmail.com>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <apitest.h>
@@ -187,6 +188,53 @@ static void Test_QueryBeforeInit(void)
         _SEH2_END;
 
         ok(hr == 0xDEAD, "hr was 0x%08lX\n", hr);
+
+        for (int Method = 0; Method < 5; Method++)
+        {
+            IAssociationElement *pFresh = NULL;
+            FLAGGED_BYTE_BLOB *pBlob = NULL;
+            PWSTR pszAgain = NULL;
+            DWORD dwValue = 0;
+            GUID guid;
+
+            hr = MyAssocCreateElement(CLSID_AssocShellElement, IID_PPV_ARG(IAssociationElement, &pFresh));
+            ok(hr == S_OK, "AssocCreateElement failed: 0x%08lX\n", hr);
+            if (!pFresh)
+                continue;
+
+            _SEH2_TRY
+            {
+                if (Method == 0)
+                    hr = pFresh->QueryString(ASSOCQUERY_SDEI, NULL, &psz);
+                else if (Method == 1)
+                    hr = pFresh->QueryDword(ASSOCQUERY_SDED, NULL, &dwValue);
+                else if (Method == 2)
+                    hr = pFresh->QueryExists(ASSOCQUERY_SDE, NULL);
+                else if (Method == 3)
+                    hr = pFresh->QueryDirect(ASSOCQUERY_SDE, NULL, &pBlob);
+                else
+                    hr = pFresh->QueryGuid(ASSOCQUERY_SDE, NULL, &guid);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                hr = 0xDEAD;
+            }
+            _SEH2_END;
+            ok(hr == (Method ? HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION) : 0xDEAD), "Method %d: hr was 0x%08lX\n", Method, hr);
+
+            _SEH2_TRY
+            {
+                hr = pFresh->QueryString(ASSOCQUERY_SDEI, NULL, &pszAgain);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                hr = 0xDEAD;
+            }
+            _SEH2_END;
+            ok(hr == 0xDEAD, "Method %d, then QueryString: hr was 0x%08lX\n", Method, hr);
+
+            pFresh->Release();
+        }
 
         pElement->Release();
     }
