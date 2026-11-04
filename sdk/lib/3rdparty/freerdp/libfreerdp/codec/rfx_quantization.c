@@ -1,0 +1,129 @@
+/**
+ * FreeRDP: A Remote Desktop Protocol Implementation
+ * RemoteFX Codec Library - Quantization
+ *
+ * Copyright 2011 Vic Lee
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <winpr/assert.h>
+#include <winpr/cast.h>
+
+#include <freerdp/config.h>
+
+#include <freerdp/primitives.h>
+
+#include "rfx_quantization.h"
+
+/*
+ * Band		Offset		Dimensions	Size
+ *
+ * HL1		0		32x32		1024
+ * LH1		1024		32x32		1024
+ * HH1		2048		32x32		1024
+ *
+ * HL2		3072		16x16		256
+ * LH2		3328		16x16		256
+ * HH2		3584		16x16		256
+ *
+ * HL3		3840		8x8		64
+ * LH3		3904		8x8		64
+ * HH3		3968		8x8		64
+ *
+ * LL3		4032		8x8		64
+ */
+
+static inline BOOL rfx_quantization_decode_block(const primitives_t* WINPR_RESTRICT prims,
+                                                 INT16* WINPR_RESTRICT buffer, UINT32 buffer_size,
+                                                 UINT32 factor)
+{
+	if (factor == 0)
+		return TRUE;
+
+	return prims->lShiftC_16s_inplace(buffer, factor, buffer_size) == PRIMITIVES_SUCCESS;
+}
+
+BOOL rfx_quantization_decode(INT16* WINPR_RESTRICT buffer,
+                             const UINT32* WINPR_RESTRICT quantization_values, size_t nrQuantValues)
+{
+	const primitives_t* prims = primitives_get();
+	WINPR_ASSERT(buffer);
+	WINPR_ASSERT(quantization_values);
+	WINPR_ASSERT(NR_QUANT_VALUES == nrQuantValues);
+
+	for (size_t x = 0; x < nrQuantValues; x++)
+	{
+		const UINT32 val = quantization_values[x];
+
+		if (val < 1)
+			return FALSE;
+	}
+
+	rfx_quantization_decode_block(prims, &buffer[0], 1024, quantization_values[8] - 1);    /* HL1 */
+	rfx_quantization_decode_block(prims, &buffer[1024], 1024, quantization_values[7] - 1); /* LH1 */
+	rfx_quantization_decode_block(prims, &buffer[2048], 1024, quantization_values[9] - 1); /* HH1 */
+	rfx_quantization_decode_block(prims, &buffer[3072], 256, quantization_values[5] - 1);  /* HL2 */
+	rfx_quantization_decode_block(prims, &buffer[3328], 256, quantization_values[4] - 1);  /* LH2 */
+	rfx_quantization_decode_block(prims, &buffer[3584], 256, quantization_values[6] - 1);  /* HH2 */
+	rfx_quantization_decode_block(prims, &buffer[3840], 64, quantization_values[2] - 1);   /* HL3 */
+	rfx_quantization_decode_block(prims, &buffer[3904], 64, quantization_values[1] - 1);   /* LH3 */
+	rfx_quantization_decode_block(prims, &buffer[3968], 64, quantization_values[3] - 1);   /* HH3 */
+	rfx_quantization_decode_block(prims, &buffer[4032], 64, quantization_values[0] - 1);   /* LL3 */
+	return TRUE;
+}
+
+static inline void rfx_quantization_encode_block(INT16* WINPR_RESTRICT buffer, size_t buffer_size,
+                                                 UINT32 factor)
+{
+	if (factor == 0)
+		return;
+
+	const INT16 half = WINPR_ASSERTING_INT_CAST(INT16, 1u << (factor - 1));
+	/* Could probably use prims->rShiftC_16s(dst+half, factor, dst, buffer_size); */
+	for (INT16* dst = buffer; buffer_size > 0; dst++, buffer_size--)
+	{
+		*dst = WINPR_ASSERTING_INT_CAST(INT16, (*dst + half) >> factor);
+	}
+}
+
+WINPR_ATTR_NODISCARD
+BOOL rfx_quantization_encode(INT16* WINPR_RESTRICT buffer,
+                             const UINT32* WINPR_RESTRICT quantization_values, size_t nrQuantValues)
+{
+	WINPR_ASSERT(buffer);
+	WINPR_ASSERT(quantization_values);
+	WINPR_ASSERT(nrQuantValues == NR_QUANT_VALUES);
+
+	for (size_t x = 0; x < nrQuantValues; x++)
+	{
+		const UINT32 val = quantization_values[x];
+		if (val < 6)
+			return FALSE;
+	}
+
+	rfx_quantization_encode_block(buffer, 1024, quantization_values[8] - 6);        /* HL1 */
+	rfx_quantization_encode_block(buffer + 1024, 1024, quantization_values[7] - 6); /* LH1 */
+	rfx_quantization_encode_block(buffer + 2048, 1024, quantization_values[9] - 6); /* HH1 */
+	rfx_quantization_encode_block(buffer + 3072, 256, quantization_values[5] - 6);  /* HL2 */
+	rfx_quantization_encode_block(buffer + 3328, 256, quantization_values[4] - 6);  /* LH2 */
+	rfx_quantization_encode_block(buffer + 3584, 256, quantization_values[6] - 6);  /* HH2 */
+	rfx_quantization_encode_block(buffer + 3840, 64, quantization_values[2] - 6);   /* HL3 */
+	rfx_quantization_encode_block(buffer + 3904, 64, quantization_values[1] - 6);   /* LH3 */
+	rfx_quantization_encode_block(buffer + 3968, 64, quantization_values[3] - 6);   /* HH3 */
+	rfx_quantization_encode_block(buffer + 4032, 64, quantization_values[0] - 6);   /* LL3 */
+
+	/* The coefficients are scaled by << 5 at RGB->YCbCr phase, so we round it back here */
+	rfx_quantization_encode_block(buffer, 4096, 5);
+	return TRUE;
+}

@@ -1,0 +1,94 @@
+/**
+ * WinPR: Windows Portable Runtime
+ * WinPR Logger
+ *
+ * Copyright 2013 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef WINPR_WLOG_PRIVATE_H
+#define WINPR_WLOG_PRIVATE_H
+
+#include <winpr/wlog.h>
+
+#define WLOG_MAX_PREFIX_SIZE 512
+
+typedef BOOL (*WLOG_APPENDER_OPEN_FN)(wLog* log, wLogAppender* appender);
+typedef BOOL (*WLOG_APPENDER_CLOSE_FN)(wLog* log, wLogAppender* appender);
+typedef BOOL (*WLOG_APPENDER_WRITE_MESSAGE_FN)(wLog* log, wLogAppender* appender,
+                                               const wLogMessage* message);
+typedef BOOL (*WLOG_APPENDER_WRITE_DATA_MESSAGE_FN)(wLog* log, wLogAppender* appender,
+                                                    const wLogMessage* message);
+typedef BOOL (*WLOG_APPENDER_WRITE_IMAGE_MESSAGE_FN)(wLog* log, wLogAppender* appender,
+                                                     const wLogMessage* message);
+typedef BOOL (*WLOG_APPENDER_WRITE_PACKET_MESSAGE_FN)(wLog* log, wLogAppender* appender,
+                                                      const wLogMessage* message);
+typedef BOOL (*WLOG_APPENDER_SET)(wLogAppender* appender, const char* setting, void* value);
+typedef void (*WLOG_APPENDER_FREE)(wLogAppender* appender);
+
+struct s_wLogAppender
+{
+	DWORD Type;
+	BOOL active;
+	wLogLayout* Layout;
+	CRITICAL_SECTION lock;
+	BOOL recursive;
+	void* TextMessageContext;
+	void* DataMessageContext;
+	void* ImageMessageContext;
+	void* PacketMessageContext;
+	WINPR_ATTR_NODISCARD WLOG_APPENDER_OPEN_FN Open;
+	WINPR_ATTR_NODISCARD WLOG_APPENDER_CLOSE_FN Close;
+	WINPR_ATTR_NODISCARD WLOG_APPENDER_WRITE_MESSAGE_FN WriteMessage;
+	WINPR_ATTR_NODISCARD WLOG_APPENDER_WRITE_DATA_MESSAGE_FN WriteDataMessage;
+	WINPR_ATTR_NODISCARD WLOG_APPENDER_WRITE_IMAGE_MESSAGE_FN WriteImageMessage;
+	WINPR_ATTR_NODISCARD WLOG_APPENDER_WRITE_PACKET_MESSAGE_FN WritePacketMessage;
+	WLOG_APPENDER_FREE Free;
+	WLOG_APPENDER_SET Set;
+};
+
+struct s_wLog
+{
+	LPSTR Name;
+	LONG FilterLevel;
+	DWORD Level;
+
+	BOOL IsRoot;
+	BOOL inherit;
+	LPSTR* Names;
+	size_t NameCount;
+	wLogAppender* Appender;
+
+	wLog* Parent;
+	wLog** Children;
+	DWORD ChildrenCount;
+	DWORD ChildrenSize;
+	CRITICAL_SECTION lock;
+	WINPR_ATTR_NODISCARD const char* (*custom)(void*);
+	void* context;
+	BOOL independent;
+};
+
+WINPR_LOCAL extern const char* WLOG_LEVELS[7];
+WINPR_LOCAL BOOL WLog_Layout_GetMessagePrefix(wLog* log, wLogLayout* layout,
+                                              const wLogMessage* message, char* prefix,
+                                              size_t prefixlen);
+
+WINPR_ATTR_NODISCARD
+WINPR_LOCAL const char* WLog_GetGlobalPrefix(void);
+
+#include "Layout.h"
+#include "Appender.h"
+
+#endif /* WINPR_WLOG_PRIVATE_H */

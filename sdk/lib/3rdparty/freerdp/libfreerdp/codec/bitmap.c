@@ -1,0 +1,1115 @@
+/**
+ * FreeRDP: A Remote Desktop Protocol Implementation
+ * Bitmap Compression
+ *
+ * Copyright 2004-2012 Jay Sorg <jay.sorg@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <winpr/assert.h>
+#include <winpr/cast.h>
+
+#include <freerdp/config.h>
+
+#include <freerdp/codec/bitmap.h>
+#include <freerdp/codec/planar.h>
+
+struct count
+{
+	ALIGN64 UINT16 bicolor_count;
+	ALIGN64 UINT16 fill_count;
+	ALIGN64 UINT16 color_count;
+	ALIGN64 UINT16 mix_count;
+	ALIGN64 UINT16 fom_count;
+	ALIGN64 size_t fom_mask_len;
+	ALIGN64 BOOL bicolor_spin;
+};
+
+static inline void reset_counts(struct count* counts)
+{
+	const struct count empty = WINPR_C_ARRAY_INIT;
+	WINPR_ASSERT(counts);
+	*counts = empty;
+}
+
+static inline UINT16 GETPIXEL16(const void* WINPR_RESTRICT d, UINT32 x, UINT32 y, UINT32 w)
+{
+	const BYTE* WINPR_RESTRICT src = (const BYTE*)d + ((y * w + x) * sizeof(UINT16));
+	return WINPR_ASSERTING_INT_CAST(UINT16, ((UINT16)src[1] << 8) | (UINT16)src[0]);
+}
+
+static inline UINT32 GETPIXEL32(const void* WINPR_RESTRICT d, UINT32 x, UINT32 y, UINT32 w)
+{
+	const BYTE* WINPR_RESTRICT src = (const BYTE*)d + ((y * w + x) * sizeof(UINT32));
+	return (((UINT32)src[3]) << 24) | (((UINT32)src[2]) << 16) | (((UINT32)src[1]) << 8) |
+	       (src[0] & 0xFF);
+}
+
+/*****************************************************************************/
+static inline UINT16 IN_PIXEL16(const void* WINPR_RESTRICT in_ptr, UINT32 in_x, UINT32 in_y,
+                                UINT32 in_w, UINT16 in_last_pixel)
+{
+	if (in_ptr == nullptr)
+		return 0;
+	else if (in_x < in_w)
+		return GETPIXEL16(in_ptr, in_x, in_y, in_w);
+	else
+		return in_last_pixel;
+}
+
+/*****************************************************************************/
+static inline UINT32 IN_PIXEL32(const void* WINPR_RESTRICT in_ptr, UINT32 in_x, UINT32 in_y,
+                                UINT32 in_w, UINT32 in_last_pixel)
+{
+	if (in_ptr == nullptr)
+		return 0;
+	else if (in_x < in_w)
+		return GETPIXEL32(in_ptr, in_x, in_y, in_w);
+	else
+		return in_last_pixel;
+}
+
+/*****************************************************************************/
+/* color */
+static inline UINT16 out_color_count_2(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                       UINT16 in_data)
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			const BYTE temp = ((0x3u << 5) | in_count) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x60);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf3);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+
+		Stream_Write_UINT16(in_s, in_data);
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* color */
+static inline UINT16 out_color_count_3(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                       UINT32 in_data)
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			const BYTE temp = ((0x3u << 5) | in_count) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x60);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf3);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+
+		Stream_Write_UINT8(in_s, in_data & 0xFF);
+
+		Stream_Write_UINT8(in_s, (in_data >> 8) & 0xFF);
+		Stream_Write_UINT8(in_s, (in_data >> 16) & 0xFF);
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* copy */
+static inline UINT16 out_copy_count_2(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                      wStream* WINPR_RESTRICT in_data)
+
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			const BYTE temp = ((0x4u << 5) | in_count) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x80);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf4);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+
+		Stream_Write(in_s, Stream_Buffer(in_data), 2ULL * in_count);
+	}
+
+	Stream_ResetPosition(in_data);
+	return 0;
+}
+
+/*****************************************************************************/
+/* copy */
+static inline UINT16 out_copy_count_3(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                      wStream* WINPR_RESTRICT in_data)
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			const BYTE temp = ((0x4u << 5) | in_count) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x80);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf4);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+
+		Stream_Write(in_s, Stream_Pointer(in_data), 3ULL * in_count);
+	}
+
+	Stream_ResetPosition(in_data);
+	return 0;
+}
+
+/*****************************************************************************/
+/* bicolor */
+static inline UINT16 out_bicolor_count_2(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                         UINT16 in_color1, UINT16 in_color2)
+{
+	if (in_count > 0)
+	{
+		if (in_count / 2 < 16)
+		{
+			const BYTE temp = ((0xe << 4) | (in_count / 2)) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count / 2 < 256 + 16)
+		{
+			const BYTE temp = (in_count / 2 - 16) & 0xFF;
+			Stream_Write_UINT8(in_s, 0xe0);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf8);
+			Stream_Write_UINT16(in_s, in_count / 2);
+		}
+
+		Stream_Write_UINT16(in_s, in_color1);
+		Stream_Write_UINT16(in_s, in_color2);
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* bicolor */
+static inline UINT16 out_bicolor_count_3(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                         UINT32 in_color1, UINT32 in_color2)
+{
+	if (in_count > 0)
+	{
+		if (in_count / 2 < 16)
+		{
+			const BYTE temp = ((0xe << 4) | (in_count / 2)) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count / 2 < 256 + 16)
+		{
+			const BYTE temp = (in_count / 2 - 16) & 0xFF;
+			Stream_Write_UINT8(in_s, 0xe0);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf8);
+			Stream_Write_UINT16(in_s, in_count / 2);
+		}
+
+		Stream_Write_UINT8(in_s, in_color1 & 0xFF);
+		Stream_Write_UINT8(in_s, (in_color1 >> 8) & 0xFF);
+		Stream_Write_UINT8(in_s, (in_color1 >> 16) & 0xFF);
+		Stream_Write_UINT8(in_s, in_color2 & 0xFF);
+		Stream_Write_UINT8(in_s, (in_color2 >> 8) & 0xFF);
+		Stream_Write_UINT8(in_s, (in_color2 >> 16) & 0xFF);
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* fill */
+static inline UINT16 out_fill_count_2(UINT16 in_count, wStream* WINPR_RESTRICT in_s)
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			Stream_Write_UINT8(in_s, in_count & 0xFF);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x0);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf0);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* fill */
+static inline UINT16 out_fill_count_3(UINT16 in_count, wStream* WINPR_RESTRICT in_s)
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			Stream_Write_UINT8(in_s, in_count & 0xFF);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x0);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf0);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* mix */
+static inline UINT16 out_counts_mix_count_2(UINT16 in_count, wStream* WINPR_RESTRICT in_s)
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			const BYTE temp = ((0x1u << 5) | in_count) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x20);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf1);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* mix */
+static inline UINT16 out_counts_mix_count_3(UINT16 in_count, wStream* WINPR_RESTRICT in_s)
+{
+	if (in_count > 0)
+	{
+		if (in_count < 32)
+		{
+			const BYTE temp = ((0x1u << 5) | in_count) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256 + 32)
+		{
+			const BYTE temp = (in_count - 32) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x20);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf1);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* fom */
+static inline UINT16 out_from_count_2(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                      const uint8_t* WINPR_RESTRICT in_mask, size_t in_mask_len)
+{
+	if (in_count > 0)
+	{
+		if ((in_count % 8) == 0 && in_count < 249)
+		{
+			const BYTE temp = ((0x2u << 5) | (in_count / 8)) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256)
+		{
+			const BYTE temp = (in_count - 1) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x40);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf2);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+
+		Stream_Write(in_s, in_mask, in_mask_len);
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+/* fill or mix (fom) */
+static inline UINT16 out_from_count_3(UINT16 in_count, wStream* WINPR_RESTRICT in_s,
+                                      const uint8_t* WINPR_RESTRICT in_mask, size_t in_mask_len)
+{
+	if (in_count > 0)
+	{
+		if ((in_count % 8) == 0 && in_count < 249)
+		{
+			const BYTE temp = ((0x2u << 5) | (in_count / 8)) & 0xFF;
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else if (in_count < 256)
+		{
+			const BYTE temp = (in_count - 1) & 0xFF;
+			Stream_Write_UINT8(in_s, 0x40);
+			Stream_Write_UINT8(in_s, temp);
+		}
+		else
+		{
+			Stream_Write_UINT8(in_s, 0xf2);
+			Stream_Write_UINT16(in_s, in_count);
+		}
+
+		Stream_Write(in_s, in_mask, in_mask_len);
+	}
+
+	return 0;
+}
+
+#define TEST_FILL ((last_line == 0 && pixel == 0) || (last_line != 0 && pixel == ypixel))
+#define TEST_MIX ((last_line == 0 && pixel == mix) || (last_line != 0 && pixel == (ypixel ^ mix)))
+#define TEST_FOM TEST_FILL || TEST_MIX
+#define TEST_COLOR pixel == last_pixel
+
+#define test_bicolor(counts)                                                          \
+	((pixel != last_pixel) &&                                                         \
+	 ((!(counts)->bicolor_spin && (pixel == bicolor1) && (last_pixel == bicolor2)) || \
+	  ((counts)->bicolor_spin && (pixel == bicolor2) && (last_pixel == bicolor1))))
+
+static inline SSIZE_T freerdp_bitmap_compress_24(const void* WINPR_RESTRICT srcData, UINT32 width,
+                                                 WINPR_ATTR_UNUSED UINT32 height,
+                                                 wStream* WINPR_RESTRICT s, UINT32 byte_limit,
+                                                 UINT32 start_line, wStream* WINPR_RESTRICT temp_s,
+                                                 UINT32 e)
+{
+	uint8_t fom_mask[8192] = WINPR_C_ARRAY_INIT; /* good for up to 64K bitmap */
+	SSIZE_T lines_sent = 0;
+	UINT16 count = 0;
+	UINT32 last_pixel = 0;
+	UINT32 last_ypixel = 0;
+	struct count counts = WINPR_C_ARRAY_INIT;
+	UINT32 bicolor1 = 0;
+	UINT32 bicolor2 = 0;
+	UINT32 end = width + e;
+	UINT32 out_count = end * 3;
+	const UINT32 mix = 0xFFFFFF;
+	const char* start = (const char*)srcData;
+	const char* line = start + 4ULL * width * start_line;
+	const char* last_line = nullptr;
+
+	while ((line >= start) && (out_count < 32768))
+	{
+		size_t i = Stream_GetPosition(s) + 3ULL * count;
+
+		if ((i - (3ULL * counts.color_count) >= byte_limit) &&
+		    (i - (3ULL * counts.bicolor_count) >= byte_limit) &&
+		    (i - (3ULL * counts.fill_count) >= byte_limit) &&
+		    (i - (3ULL * counts.mix_count) >= byte_limit) &&
+		    (i - (3ULL * counts.fom_count) >= byte_limit))
+		{
+			break;
+		}
+
+		out_count += end * 3;
+
+		for (UINT32 j = 0; j < end; j++)
+		{
+			/* read next pixel */
+			const UINT32 pixel = IN_PIXEL32(line, j, 0, width, last_pixel);
+			const UINT32 ypixel = IN_PIXEL32(last_line, j, 0, width, last_ypixel);
+
+			if (!TEST_FILL)
+			{
+				if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
+				    counts.fill_count >= counts.bicolor_count &&
+				    counts.fill_count >= counts.mix_count && counts.fill_count >= counts.fom_count)
+				{
+					if (counts.fill_count > count)
+						return -1;
+
+					count -= counts.fill_count;
+					count = out_copy_count_3(count, s, temp_s);
+					counts.fill_count = out_fill_count_3(counts.fill_count, s);
+					reset_counts(&counts);
+				}
+
+				counts.fill_count = 0;
+			}
+
+			if (!TEST_MIX)
+			{
+				if (counts.mix_count > 3 && counts.mix_count >= counts.fill_count &&
+				    counts.mix_count >= counts.bicolor_count &&
+				    counts.mix_count >= counts.color_count && counts.mix_count >= counts.fom_count)
+				{
+					if (counts.mix_count > count)
+						return -1;
+
+					count -= counts.mix_count;
+					count = out_copy_count_3(count, s, temp_s);
+					counts.mix_count = out_counts_mix_count_3(counts.mix_count, s);
+					reset_counts(&counts);
+				}
+
+				counts.mix_count = 0;
+			}
+
+			if (!(TEST_COLOR))
+			{
+				if (counts.color_count > 3 && counts.color_count >= counts.fill_count &&
+				    counts.color_count >= counts.bicolor_count &&
+				    counts.color_count >= counts.mix_count &&
+				    counts.color_count >= counts.fom_count)
+				{
+					if (counts.color_count > count)
+						return -1;
+
+					count -= counts.color_count;
+					count = out_copy_count_3(count, s, temp_s);
+					counts.color_count = out_color_count_3(counts.color_count, s, last_pixel);
+					reset_counts(&counts);
+				}
+
+				counts.color_count = 0;
+			}
+
+			if (!test_bicolor(&counts))
+			{
+				if (counts.bicolor_count > 3 && counts.bicolor_count >= counts.fill_count &&
+				    counts.bicolor_count >= counts.color_count &&
+				    counts.bicolor_count >= counts.mix_count &&
+				    counts.bicolor_count >= counts.fom_count)
+				{
+					if ((counts.bicolor_count % 2) != 0)
+						counts.bicolor_count--;
+
+					if (counts.bicolor_count > count)
+						return -1;
+
+					count -= counts.bicolor_count;
+					count = out_copy_count_3(count, s, temp_s);
+					counts.bicolor_count =
+					    out_bicolor_count_3(counts.bicolor_count, s, bicolor2, bicolor1);
+					reset_counts(&counts);
+				}
+
+				counts.bicolor_count = 0;
+				bicolor1 = last_pixel;
+				bicolor2 = pixel;
+				counts.bicolor_spin = FALSE;
+			}
+
+			if (!(TEST_FOM))
+			{
+				if (counts.fom_count > 3 && counts.fom_count >= counts.fill_count &&
+				    counts.fom_count >= counts.color_count &&
+				    counts.fom_count >= counts.mix_count &&
+				    counts.fom_count >= counts.bicolor_count)
+				{
+					if (counts.fom_count > count)
+						return -1;
+
+					count -= counts.fom_count;
+					count = out_copy_count_3(count, s, temp_s);
+					counts.fom_count =
+					    out_from_count_3(counts.fom_count, s, fom_mask, counts.fom_mask_len);
+					reset_counts(&counts);
+				}
+
+				counts.fom_count = 0;
+				counts.fom_mask_len = 0;
+			}
+
+			if (TEST_FILL)
+			{
+				counts.fill_count++;
+			}
+
+			if (TEST_MIX)
+			{
+				counts.mix_count++;
+			}
+
+			if (TEST_COLOR)
+			{
+				counts.color_count++;
+			}
+
+			if (test_bicolor(&counts))
+			{
+				counts.bicolor_spin = !counts.bicolor_spin;
+				counts.bicolor_count++;
+			}
+
+			if (TEST_FOM)
+			{
+				if ((counts.fom_count % 8) == 0)
+				{
+					fom_mask[counts.fom_mask_len] = 0;
+					counts.fom_mask_len++;
+				}
+
+				if (pixel == (ypixel ^ mix))
+				{
+					const uint8_t tmp = (1u << (counts.fom_count % 8)) & 0xFF;
+					const uint8_t val = fom_mask[counts.fom_mask_len - 1] | tmp;
+					fom_mask[counts.fom_mask_len - 1] = val;
+				}
+
+				counts.fom_count++;
+			}
+
+			Stream_Write_UINT8(temp_s, pixel & 0xff);
+			Stream_Write_UINT8(temp_s, (pixel >> 8) & 0xff);
+			Stream_Write_UINT8(temp_s, (pixel >> 16) & 0xff);
+			count++;
+			last_pixel = pixel;
+			last_ypixel = ypixel;
+		}
+
+		/* can't take fix, mix, or fom past first line */
+		if (last_line == nullptr)
+		{
+			if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
+			    counts.fill_count >= counts.bicolor_count &&
+			    counts.fill_count >= counts.mix_count && counts.fill_count >= counts.fom_count)
+			{
+				if (counts.fill_count > count)
+					return -1;
+
+				count -= counts.fill_count;
+				count = out_copy_count_3(count, s, temp_s);
+				counts.fill_count = out_fill_count_3(counts.fill_count, s);
+				reset_counts(&counts);
+			}
+
+			counts.fill_count = 0;
+
+			if (counts.mix_count > 3 && counts.mix_count >= counts.fill_count &&
+			    counts.mix_count >= counts.bicolor_count &&
+			    counts.mix_count >= counts.color_count && counts.mix_count >= counts.fom_count)
+			{
+				if (counts.mix_count > count)
+					return -1;
+
+				count -= counts.mix_count;
+				count = out_copy_count_3(count, s, temp_s);
+				counts.mix_count = out_counts_mix_count_3(counts.mix_count, s);
+				reset_counts(&counts);
+			}
+
+			counts.mix_count = 0;
+
+			if (counts.fom_count > 3 && counts.fom_count >= counts.fill_count &&
+			    counts.fom_count >= counts.color_count && counts.fom_count >= counts.mix_count &&
+			    counts.fom_count >= counts.bicolor_count)
+			{
+				if (counts.fom_count > count)
+					return -1;
+
+				count -= counts.fom_count;
+				count = out_copy_count_3(count, s, temp_s);
+				counts.fom_count =
+				    out_from_count_3(counts.fom_count, s, fom_mask, counts.fom_mask_len);
+				reset_counts(&counts);
+			}
+
+			counts.fom_count = 0;
+			counts.fom_mask_len = 0;
+		}
+
+		last_line = line;
+		line = line - 4ULL * width;
+		start_line--;
+		lines_sent++;
+	}
+
+	Stream_ResetPosition(temp_s);
+
+	if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
+	    counts.fill_count >= counts.bicolor_count && counts.fill_count >= counts.mix_count &&
+	    counts.fill_count >= counts.fom_count)
+	{
+		if (counts.fill_count > count)
+			return -1;
+
+		count -= counts.fill_count;
+		(void)out_copy_count_3(count, s, temp_s);
+		counts.fill_count = out_fill_count_3(counts.fill_count, s);
+	}
+	else if (counts.mix_count > 3 && counts.mix_count >= counts.color_count &&
+	         counts.mix_count >= counts.bicolor_count && counts.mix_count >= counts.fill_count &&
+	         counts.mix_count >= counts.fom_count)
+	{
+		if (counts.mix_count > count)
+			return -1;
+
+		count -= counts.mix_count;
+		(void)out_copy_count_3(count, s, temp_s);
+		counts.mix_count = out_counts_mix_count_3(counts.mix_count, s);
+	}
+	else if (counts.color_count > 3 && counts.color_count >= counts.mix_count &&
+	         counts.color_count >= counts.bicolor_count &&
+	         counts.color_count >= counts.fill_count && counts.color_count >= counts.fom_count)
+	{
+		if (counts.color_count > count)
+			return -1;
+
+		count -= counts.color_count;
+		(void)out_copy_count_3(count, s, temp_s);
+		counts.color_count = out_color_count_3(counts.color_count, s, last_pixel);
+	}
+	else if (counts.bicolor_count > 3 && counts.bicolor_count >= counts.mix_count &&
+	         counts.bicolor_count >= counts.color_count &&
+	         counts.bicolor_count >= counts.fill_count && counts.bicolor_count >= counts.fom_count)
+	{
+		if ((counts.bicolor_count % 2) != 0)
+			counts.bicolor_count--;
+
+		if (counts.bicolor_count > count)
+			return -1;
+
+		count -= counts.bicolor_count;
+		count = out_copy_count_3(count, s, temp_s);
+		counts.bicolor_count = out_bicolor_count_3(counts.bicolor_count, s, bicolor2, bicolor1);
+
+		if (counts.bicolor_count > count)
+			return -1;
+
+		count -= counts.bicolor_count;
+		(void)out_copy_count_3(count, s, temp_s);
+		counts.bicolor_count = out_bicolor_count_3(counts.bicolor_count, s, bicolor1, bicolor2);
+	}
+	else if (counts.fom_count > 3 && counts.fom_count >= counts.mix_count &&
+	         counts.fom_count >= counts.color_count && counts.fom_count >= counts.fill_count &&
+	         counts.fom_count >= counts.bicolor_count)
+	{
+		if (counts.fom_count > count)
+			return -1;
+
+		count -= counts.fom_count;
+		(void)out_copy_count_3(count, s, temp_s);
+		counts.fom_count = out_from_count_3(counts.fom_count, s, fom_mask, counts.fom_mask_len);
+	}
+	else
+	{
+		(void)out_copy_count_3(count, s, temp_s);
+	}
+
+	return lines_sent;
+}
+
+static inline SSIZE_T freerdp_bitmap_compress_16(const void* WINPR_RESTRICT srcData, UINT32 width,
+                                                 WINPR_ATTR_UNUSED UINT32 height,
+                                                 wStream* WINPR_RESTRICT s, UINT32 bpp,
+                                                 UINT32 byte_limit, UINT32 start_line,
+                                                 wStream* WINPR_RESTRICT temp_s, UINT32 e)
+{
+	uint8_t fom_mask[8192] = WINPR_C_ARRAY_INIT; /* good for up to 64K bitmap */
+	SSIZE_T lines_sent = 0;
+	UINT16 count = 0;
+	UINT16 last_pixel = 0;
+	UINT16 last_ypixel = 0;
+	struct count counts = WINPR_C_ARRAY_INIT;
+	UINT16 bicolor1 = 0;
+	UINT16 bicolor2 = 0;
+	UINT32 end = width + e;
+	UINT32 out_count = end * 2;
+	const UINT32 mix = (bpp == 15) ? 0xBA1F : 0xFFFF;
+	const char* start = (const char*)srcData;
+	const char* line = start + 2ULL * width * start_line;
+	const char* last_line = nullptr;
+
+	while ((line >= start) && (out_count < 32768))
+	{
+		size_t i = Stream_GetPosition(s) + 2ULL * count;
+
+		if ((i - (2ULL * counts.color_count) >= byte_limit) &&
+		    (i - (2ULL * counts.bicolor_count) >= byte_limit) &&
+		    (i - (2ULL * counts.fill_count) >= byte_limit) &&
+		    (i - (2ULL * counts.mix_count) >= byte_limit) &&
+		    (i - (2ULL * counts.fom_count) >= byte_limit))
+		{
+			break;
+		}
+
+		out_count += end * 2;
+
+		for (UINT32 j = 0; j < end; j++)
+		{
+			/* read next pixel */
+			const UINT16 pixel = IN_PIXEL16(line, j, 0, width, last_pixel);
+			const UINT16 ypixel = IN_PIXEL16(last_line, j, 0, width, last_ypixel);
+
+			if (!TEST_FILL)
+			{
+				if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
+				    counts.fill_count >= counts.bicolor_count &&
+				    counts.fill_count >= counts.mix_count && counts.fill_count >= counts.fom_count)
+				{
+					if (counts.fill_count > count)
+						return -1;
+
+					count -= counts.fill_count;
+					count = out_copy_count_2(count, s, temp_s);
+					counts.fill_count = out_fill_count_2(counts.fill_count, s);
+					reset_counts(&counts);
+				}
+
+				counts.fill_count = 0;
+			}
+
+			if (!TEST_MIX)
+			{
+				if (counts.mix_count > 3 && counts.mix_count >= counts.fill_count &&
+				    counts.mix_count >= counts.bicolor_count &&
+				    counts.mix_count >= counts.color_count && counts.mix_count >= counts.fom_count)
+				{
+					if (counts.mix_count > count)
+						return -1;
+
+					count -= counts.mix_count;
+					count = out_copy_count_2(count, s, temp_s);
+					counts.mix_count = out_counts_mix_count_2(counts.mix_count, s);
+					reset_counts(&counts);
+				}
+
+				counts.mix_count = 0;
+			}
+
+			if (!(TEST_COLOR))
+			{
+				if (counts.color_count > 3 && counts.color_count >= counts.fill_count &&
+				    counts.color_count >= counts.bicolor_count &&
+				    counts.color_count >= counts.mix_count &&
+				    counts.color_count >= counts.fom_count)
+				{
+					if (counts.color_count > count)
+						return -1;
+
+					count -= counts.color_count;
+					count = out_copy_count_2(count, s, temp_s);
+					counts.color_count = out_color_count_2(counts.color_count, s, last_pixel);
+					reset_counts(&counts);
+				}
+
+				counts.color_count = 0;
+			}
+
+			if (!test_bicolor(&counts))
+			{
+				if ((counts.bicolor_count > 3) && (counts.bicolor_count >= counts.fill_count) &&
+				    (counts.bicolor_count >= counts.color_count) &&
+				    (counts.bicolor_count >= counts.mix_count) &&
+				    (counts.bicolor_count >= counts.fom_count))
+				{
+					if ((counts.bicolor_count % 2) != 0)
+						counts.bicolor_count--;
+
+					if (counts.bicolor_count > count)
+						return -1;
+
+					count -= counts.bicolor_count;
+					count = out_copy_count_2(count, s, temp_s);
+					counts.bicolor_count =
+					    out_bicolor_count_2(counts.bicolor_count, s, bicolor2, bicolor1);
+					reset_counts(&counts);
+				}
+
+				counts.bicolor_count = 0;
+				bicolor1 = last_pixel;
+				bicolor2 = pixel;
+				counts.bicolor_spin = FALSE;
+			}
+
+			if (!(TEST_FOM))
+			{
+				if (counts.fom_count > 3 && counts.fom_count >= counts.fill_count &&
+				    counts.fom_count >= counts.color_count &&
+				    counts.fom_count >= counts.mix_count &&
+				    counts.fom_count >= counts.bicolor_count)
+				{
+					if (counts.fom_count > count)
+						return -1;
+
+					count -= counts.fom_count;
+					count = out_copy_count_2(count, s, temp_s);
+					counts.fom_count =
+					    out_from_count_2(counts.fom_count, s, fom_mask, counts.fom_mask_len);
+					reset_counts(&counts);
+				}
+
+				counts.fom_count = 0;
+				counts.fom_mask_len = 0;
+			}
+
+			if (TEST_FILL)
+			{
+				counts.fill_count++;
+			}
+
+			if (TEST_MIX)
+			{
+				counts.mix_count++;
+			}
+
+			if (TEST_COLOR)
+			{
+				counts.color_count++;
+			}
+
+			if (test_bicolor(&counts))
+			{
+				counts.bicolor_spin = !counts.bicolor_spin;
+				counts.bicolor_count++;
+			}
+
+			if (TEST_FOM)
+			{
+				if ((counts.fom_count % 8) == 0)
+				{
+					fom_mask[counts.fom_mask_len] = 0;
+					counts.fom_mask_len++;
+				}
+
+				if (pixel == (ypixel ^ mix))
+				{
+					const uint8_t tmp = (1u << (counts.fom_count % 8)) & 0xFF;
+					const uint8_t val = fom_mask[counts.fom_mask_len - 1] | tmp;
+					fom_mask[counts.fom_mask_len - 1] = val;
+				}
+
+				counts.fom_count++;
+			}
+
+			Stream_Write_UINT16(temp_s, pixel);
+			count++;
+			last_pixel = pixel;
+			last_ypixel = ypixel;
+		}
+
+		/* can't take fix, mix, or fom past first line */
+		if (last_line == nullptr)
+		{
+			if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
+			    counts.fill_count >= counts.bicolor_count &&
+			    counts.fill_count >= counts.mix_count && counts.fill_count >= counts.fom_count)
+			{
+				if (counts.fill_count > count)
+					return -1;
+
+				count -= counts.fill_count;
+				count = out_copy_count_2(count, s, temp_s);
+				counts.fill_count = out_fill_count_2(counts.fill_count, s);
+				reset_counts(&counts);
+			}
+
+			counts.fill_count = 0;
+
+			if (counts.mix_count > 3 && counts.mix_count >= counts.fill_count &&
+			    counts.mix_count >= counts.bicolor_count &&
+			    counts.mix_count >= counts.color_count && counts.mix_count >= counts.fom_count)
+			{
+				if (counts.mix_count > count)
+					return -1;
+
+				count -= counts.mix_count;
+				count = out_copy_count_2(count, s, temp_s);
+				counts.mix_count = out_counts_mix_count_2(counts.mix_count, s);
+				reset_counts(&counts);
+			}
+
+			counts.mix_count = 0;
+
+			if (counts.fom_count > 3 && counts.fom_count >= counts.fill_count &&
+			    counts.fom_count >= counts.color_count && counts.fom_count >= counts.mix_count &&
+			    counts.fom_count >= counts.bicolor_count)
+			{
+				if (counts.fom_count > count)
+					return -1;
+
+				count -= counts.fom_count;
+				count = out_copy_count_2(count, s, temp_s);
+				counts.fom_count =
+				    out_from_count_2(counts.fom_count, s, fom_mask, counts.fom_mask_len);
+				reset_counts(&counts);
+			}
+
+			counts.fom_count = 0;
+			counts.fom_mask_len = 0;
+		}
+
+		last_line = line;
+		line = line - 2ULL * width;
+		start_line--;
+		lines_sent++;
+	}
+
+	Stream_ResetPosition(temp_s);
+
+	if (counts.fill_count > 3 && counts.fill_count >= counts.color_count &&
+	    counts.fill_count >= counts.bicolor_count && counts.fill_count >= counts.mix_count &&
+	    counts.fill_count >= counts.fom_count)
+	{
+		if (counts.fill_count > count)
+			return -1;
+
+		count -= counts.fill_count;
+		(void)out_copy_count_2(count, s, temp_s);
+		counts.fill_count = out_fill_count_2(counts.fill_count, s);
+	}
+	else if (counts.mix_count > 3 && counts.mix_count >= counts.color_count &&
+	         counts.mix_count >= counts.bicolor_count && counts.mix_count >= counts.fill_count &&
+	         counts.mix_count >= counts.fom_count)
+	{
+		if (counts.mix_count > count)
+			return -1;
+
+		count -= counts.mix_count;
+		(void)out_copy_count_2(count, s, temp_s);
+		counts.mix_count = out_counts_mix_count_2(counts.mix_count, s);
+	}
+	else if (counts.color_count > 3 && counts.color_count >= counts.mix_count &&
+	         counts.color_count >= counts.bicolor_count &&
+	         counts.color_count >= counts.fill_count && counts.color_count >= counts.fom_count)
+	{
+		if (counts.color_count > count)
+			return -1;
+
+		count -= counts.color_count;
+		(void)out_copy_count_2(count, s, temp_s);
+		counts.color_count = out_color_count_2(counts.color_count, s, last_pixel);
+	}
+	else if (counts.bicolor_count > 3 && counts.bicolor_count >= counts.mix_count &&
+	         counts.bicolor_count >= counts.color_count &&
+	         counts.bicolor_count >= counts.fill_count && counts.bicolor_count >= counts.fom_count)
+	{
+		if ((counts.bicolor_count % 2) != 0)
+			counts.bicolor_count--;
+
+		if (counts.bicolor_count > count)
+			return -1;
+
+		count -= counts.bicolor_count;
+		count = out_copy_count_2(count, s, temp_s);
+		counts.bicolor_count = out_bicolor_count_2(counts.bicolor_count, s, bicolor2, bicolor1);
+
+		if (counts.bicolor_count > count)
+			return -1;
+
+		count -= counts.bicolor_count;
+		(void)out_copy_count_2(count, s, temp_s);
+		counts.bicolor_count = out_bicolor_count_2(counts.bicolor_count, s, bicolor1, bicolor2);
+	}
+	else if (counts.fom_count > 3 && counts.fom_count >= counts.mix_count &&
+	         counts.fom_count >= counts.color_count && counts.fom_count >= counts.fill_count &&
+	         counts.fom_count >= counts.bicolor_count)
+	{
+		if (counts.fom_count > count)
+			return -1;
+
+		count -= counts.fom_count;
+		(void)out_copy_count_2(count, s, temp_s);
+		counts.fom_count = out_from_count_2(counts.fom_count, s, fom_mask, counts.fom_mask_len);
+	}
+	else
+	{
+		(void)out_copy_count_2(count, s, temp_s);
+	}
+
+	return lines_sent;
+}
+
+SSIZE_T freerdp_bitmap_compress(const void* WINPR_RESTRICT srcData, UINT32 width, UINT32 height,
+                                wStream* WINPR_RESTRICT s, UINT32 bpp, UINT32 byte_limit,
+                                UINT32 start_line, wStream* WINPR_RESTRICT temp_s, UINT32 e)
+{
+	Stream_ResetPosition(temp_s);
+
+	switch (bpp)
+	{
+		case 15:
+		case 16:
+			return freerdp_bitmap_compress_16(srcData, width, height, s, bpp, byte_limit,
+			                                  start_line, temp_s, e);
+
+		case 24:
+			return freerdp_bitmap_compress_24(srcData, width, height, s, byte_limit, start_line,
+			                                  temp_s, e);
+
+		default:
+			return -1;
+	}
+}

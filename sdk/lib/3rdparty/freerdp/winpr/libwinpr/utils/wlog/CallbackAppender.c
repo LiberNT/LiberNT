@@ -1,0 +1,196 @@
+/**
+ * WinPR: Windows Portable Runtime
+ * WinPR Logger
+ *
+ * Copyright 2014 Armin Novak <armin.novak@thincast.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <winpr/config.h>
+
+#include "CallbackAppender.h"
+
+typedef struct
+{
+	wLogAppender common;
+
+	wLogCallbacks callbacks;
+	wLogCallbacksEx callbacksEx;
+} wLogCallbackAppender;
+
+static BOOL WLog_CallbackAppender_Open(WINPR_ATTR_UNUSED wLog* log,
+                                       WINPR_ATTR_UNUSED wLogAppender* appender)
+{
+	return TRUE;
+}
+
+static BOOL WLog_CallbackAppender_Close(WINPR_ATTR_UNUSED wLog* log,
+                                        WINPR_ATTR_UNUSED wLogAppender* appender)
+{
+	return TRUE;
+}
+
+static BOOL WLog_CallbackAppender_WriteMessage(wLog* log, wLogAppender* appender,
+                                               const wLogMessage* cmessage)
+{
+	WINPR_ASSERT(cmessage);
+	if (!appender)
+		return FALSE;
+
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
+	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
+
+	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
+
+	if (callbackAppender->callbacksEx.message)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacksEx.message(appender, &message);
+	}
+	else if (callbackAppender->callbacks.message)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacks.message(&message);
+	}
+	else
+		return FALSE;
+}
+
+static BOOL WLog_CallbackAppender_WriteDataMessage(wLog* log, wLogAppender* appender,
+                                                   const wLogMessage* cmessage)
+{
+	if (!appender)
+		return FALSE;
+
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
+	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
+
+	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
+	if (callbackAppender->callbacksEx.data)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacksEx.data(appender, &message);
+	}
+	else if (callbackAppender->callbacks.data)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacks.data(&message);
+	}
+	else
+		return FALSE;
+}
+
+static BOOL WLog_CallbackAppender_WriteImageMessage(wLog* log, wLogAppender* appender,
+                                                    const wLogMessage* cmessage)
+{
+	WINPR_ASSERT(cmessage);
+	if (!appender)
+		return FALSE;
+
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
+	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
+
+	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
+	if (callbackAppender->callbacksEx.image)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacksEx.image(appender, &message);
+	}
+	else if (callbackAppender->callbacks.image)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacks.image(&message);
+	}
+	else
+		return FALSE;
+}
+
+static BOOL WLog_CallbackAppender_WritePacketMessage(wLog* log, wLogAppender* appender,
+                                                     const wLogMessage* cmessage)
+{
+	WINPR_ASSERT(cmessage);
+	if (!appender)
+		return FALSE;
+
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
+	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
+
+	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
+	if (callbackAppender->callbacksEx.package)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacksEx.package(appender, &message);
+	}
+	else if (callbackAppender->callbacks.package)
+	{
+		wLogMessage message = *cmessage;
+		message.PrefixString = prefix;
+		return callbackAppender->callbacks.package(&message);
+	}
+	else
+		return FALSE;
+}
+
+static BOOL WLog_CallbackAppender_Set(wLogAppender* appender, const char* setting, void* value)
+{
+	wLogCallbackAppender* callbackAppender = (wLogCallbackAppender*)appender;
+
+	if (!value)
+		return FALSE;
+
+	if (strcmp(setting, "callbacks") == 0)
+	{
+		callbackAppender->callbacks = *(wLogCallbacks*)value;
+		return TRUE;
+	}
+
+	if (strcmp(setting, "callbacksEx") == 0)
+	{
+		callbackAppender->callbacksEx = *(wLogCallbacksEx*)value;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static void WLog_CallbackAppender_Free(wLogAppender* appender)
+{
+	free(appender);
+}
+
+wLogAppender* WLog_CallbackAppender_New(WINPR_ATTR_UNUSED wLog* log)
+{
+	wLogCallbackAppender* CallbackAppender =
+	    (wLogCallbackAppender*)calloc(1, sizeof(wLogCallbackAppender));
+	if (!CallbackAppender)
+		return nullptr;
+
+	CallbackAppender->common.Type = WLOG_APPENDER_CALLBACK;
+	CallbackAppender->common.Open = WLog_CallbackAppender_Open;
+	CallbackAppender->common.Close = WLog_CallbackAppender_Close;
+	CallbackAppender->common.WriteMessage = WLog_CallbackAppender_WriteMessage;
+	CallbackAppender->common.WriteDataMessage = WLog_CallbackAppender_WriteDataMessage;
+	CallbackAppender->common.WriteImageMessage = WLog_CallbackAppender_WriteImageMessage;
+	CallbackAppender->common.WritePacketMessage = WLog_CallbackAppender_WritePacketMessage;
+	CallbackAppender->common.Free = WLog_CallbackAppender_Free;
+	CallbackAppender->common.Set = WLog_CallbackAppender_Set;
+
+	return &CallbackAppender->common;
+}

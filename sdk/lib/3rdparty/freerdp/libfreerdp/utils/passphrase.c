@@ -1,0 +1,589 @@
+/**
+ * FreeRDP: A Remote Desktop Protocol Implementation
+ * Passphrase Handling Utils
+ *
+ * Copyright 2011 Shea Levy <shea@shealevy.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <winpr/atexit.h>
+#include <winpr/environment.h>
+
+#include <freerdp/config.h>
+#include <freerdp/freerdp.h>
+
+#include <errno.h>
+#include <freerdp/utils/passphrase.h>
+
+#ifdef _WIN32
+
+#include <stdio.h>
+#include <string.h>
+#include <io.h>
+#include <conio.h>
+#include <wincred.h>
+
+static char read_chr(FILE* f)
+{
+	char chr;
+	const BOOL isTty = _isatty(_fileno(f));
+	if (isTty)
+		return fgetc(f);
+	if (fscanf_s(f, "%c", &chr, (UINT32)sizeof(char)) && !feof(f))
+		return chr;
+	return 0;
+}
+
+int freerdp_interruptible_getc(rdpContext* context, FILE* f)
+{
+	return read_chr(f);
+}
+
+const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, char* buf,
+                                    size_t bufsiz, int from_stdin)
+{
+	if (bufsiz == 0)
+	{
+		errno = EINVAL;
+		return nullptr;
+	}
+
+	/* When /from-stdin is requested, read the password from stdin. The Unix
+	 * counterpart (freerdp_passphrase_read_tty) does the same, suppressing
+	 * terminal echo via tcsetattr; suppress console echo here via SetConsoleMode
+	 * when stdin is an interactive console. On a pipe the echo bit is moot. */
+	if (from_stdin)
+	{
+		HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+		const BOOL isTty = _isatty(_fileno(stdin)) != 0;
+		DWORD origMode = 0;
+		BOOL echoSuppressed = FALSE;
+
+		if (isTty && hStdin && hStdin != INVALID_HANDLE_VALUE && GetConsoleMode(hStdin, &origMode))
+		{
+			if (SetConsoleMode(hStdin, origMode & ~(DWORD)ENABLE_ECHO_INPUT))
+				echoSuppressed = TRUE;
+		}
+
+		if (prompt)
+		{
+			(void)fputs(prompt, stdout);
+			(void)fflush(stdout);
+		}
+
+		WINPR_ASSERT(bufsiz <= INT32_MAX);
+		const char* rc = fgets(buf, (int)bufsiz, stdin);
+
+		if (echoSuppressed)
+		{
+			(void)SetConsoleMode(hStdin, origMode);
+			(void)fputc('\n', stdout);
+			(void)fflush(stdout);
+		}
+
+		if (!rc)
+			return nullptr;
+
+		buf[strcspn(buf, "\r\n")] = '\0';
+		return buf;
+	}
+
+	WCHAR UserNameW[CREDUI_MAX_USERNAME_LENGTH + 1] = { 'p', 'r', 'e', 'f', 'i',
+		                                                'l', 'l', 'e', 'd', '\0' };
+	WCHAR PasswordW[CREDUI_MAX_PASSWORD_LENGTH + 1] = WINPR_C_ARRAY_INIT;
+	BOOL fSave = FALSE;
+	DWORD dwFlags = 0;
+	WCHAR* promptW = ConvertUtf8ToWCharAlloc(prompt, nullptr);
+	const DWORD status =
+	    CredUICmdLinePromptForCredentialsW(promptW, nullptr, 0, UserNameW, ARRAYSIZE(UserNameW),
+	                                       PasswordW, ARRAYSIZE(PasswordW), &fSave, dwFlags);
+	free(promptW);
+	if (ConvertWCharNToUtf8(PasswordW, ARRAYSIZE(PasswordW), buf, bufsiz) < 0)
+		return nullptr;
+	return buf;
+}
+
+const char* freerdp_passphrase_from_env(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz)
+{
+	return nullptr;
+}
+
+const char* freerdp_passphrase_read_tty(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz,
+                                        WINPR_ATTR_UNUSED int from_stdin)
+{
+	return nullptr;
+}
+
+#elif !defined(ANDROID)
+
+#include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <unistd.h>
+#include <freerdp/utils/signal.h>
+#include <freerdp/log.h>
+#if defined(WINPR_HAVE_POLL_H) && !defined(__APPLE__)
+#include <poll.h>
+#else
+#include <time.h>
+#include <sys/select.h>
+#endif
+
+#define TAG FREERDP_TAG("utils.passphrase")
+
+static int wait_for_fd(int fd, int timeout)
+{
+	int status = 0;
+#if defined(WINPR_HAVE_POLL_H) && !defined(__APPLE__)
+	struct pollfd pollset = WINPR_C_ARRAY_INIT;
+	pollset.fd = fd;
+	pollset.events = POLLIN;
+	pollset.revents = 0;
+
+	do
+	{
+		status = poll(&pollset, 1, timeout);
+	} while ((status < 0) && (errno == EINTR));
+
+#else
+	fd_set rset = WINPR_C_ARRAY_INIT;
+	struct timeval tv = WINPR_C_ARRAY_INIT;
+	FD_ZERO(&rset);
+	FD_SET(fd, &rset);
+
+	if (timeout)
+	{
+		tv.tv_sec = timeout / 1000;
+		tv.tv_usec = (timeout % 1000) * 1000;
+	}
+
+	do
+	{
+		status = select(fd + 1, &rset, nullptr, nullptr, timeout ? &tv : nullptr);
+	} while ((status < 0) && (errno == EINTR));
+
+#endif
+	return status;
+}
+
+static void replace_char(char* buffer, WINPR_ATTR_UNUSED size_t buffer_len, const char* toreplace)
+{
+	while (*toreplace != '\0')
+	{
+		char* ptr = nullptr;
+		while ((ptr = strrchr(buffer, *toreplace)) != nullptr)
+			*ptr = '\0';
+		toreplace++;
+	}
+}
+
+const char* freerdp_passphrase_read_tty(rdpContext* context, const char* prompt, char* buf,
+                                        size_t bufsiz, int from_stdin)
+{
+	BOOL terminal_needs_reset = FALSE;
+	char term_name[L_ctermid] = WINPR_C_ARRAY_INIT;
+
+	FILE* fout = nullptr;
+
+	if (bufsiz == 0)
+	{
+		errno = EINVAL;
+		return nullptr;
+	}
+
+	ctermid(term_name);
+	int terminal_fildes = 0;
+	if (from_stdin || (strcmp(term_name, "") == 0))
+	{
+		fout = stdout;
+		terminal_fildes = STDIN_FILENO;
+	}
+	else
+	{
+		const int term_file = open(term_name, O_RDWR);
+		if (term_file < 0)
+		{
+			fout = stdout;
+			terminal_fildes = STDIN_FILENO;
+		}
+		else
+		{
+			fout = fdopen(term_file, "w");
+			if (!fout)
+			{
+				close(term_file);
+				return nullptr;
+			}
+			terminal_fildes = term_file;
+		}
+	}
+
+	struct termios orig_flags = WINPR_C_ARRAY_INIT;
+	if (tcgetattr(terminal_fildes, &orig_flags) != -1)
+	{
+		struct termios new_flags = WINPR_C_ARRAY_INIT;
+		new_flags = orig_flags;
+		new_flags.c_lflag &= (uint32_t)~ECHO;
+		new_flags.c_lflag |= ECHONL;
+		terminal_needs_reset = TRUE;
+		if (tcsetattr(terminal_fildes, TCSAFLUSH, &new_flags) == -1)
+			terminal_needs_reset = FALSE;
+	}
+
+	FILE* fp = fdopen(terminal_fildes, "r");
+	if (!fp)
+		goto error;
+
+	if (isatty(fileno(fp)))
+	{
+		(void)fprintf(fout, "%s", prompt);
+		(void)fflush(fout);
+	}
+
+	{
+		char* ptr = nullptr;
+		size_t ptr_len = 0;
+		const SSIZE_T res = freerdp_interruptible_get_line(context, &ptr, &ptr_len, fp);
+		if (res < 0)
+			goto error;
+
+		replace_char(ptr, ptr_len, "\r\n");
+
+		strncpy(buf, ptr, MIN(bufsiz, ptr_len));
+		free(ptr);
+	}
+
+	if (terminal_needs_reset)
+	{
+		if (tcsetattr(terminal_fildes, TCSAFLUSH, &orig_flags) == -1)
+			goto error;
+	}
+
+	if (terminal_fildes != STDIN_FILENO)
+		(void)fclose(fp);
+
+	return buf;
+
+error:
+{
+	// NOLINTNEXTLINE(clang-analyzer-unix.Stream)
+	int saved_errno = errno;
+	if (terminal_needs_reset)
+		(void)tcsetattr(terminal_fildes, TCSAFLUSH, &orig_flags);
+
+	if (terminal_fildes != STDIN_FILENO)
+	{
+		if (fp)
+			(void)fclose(fp);
+	}
+	// NOLINTNEXTLINE(clang-analyzer-unix.Stream)
+	errno = saved_errno;
+}
+
+	return nullptr;
+}
+
+static const char* freerdp_passphrase_read_askpass(const char* prompt, char* buf, size_t bufsiz,
+                                                   char const* askpass_env)
+{
+	char command[4096] = WINPR_C_ARRAY_INIT;
+
+	(void)sprintf_s(command, sizeof(command), "%s 'FreeRDP authentication\n%s'", askpass_env,
+	                prompt);
+	// NOLINTNEXTLINE(clang-analyzer-optin.taint.GenericTaint,bugprone-command-processor)
+	FILE* askproc = popen(command, "r");
+	if (!askproc)
+		return nullptr;
+	WINPR_ASSERT(bufsiz <= INT32_MAX);
+	if (fgets(buf, (int)bufsiz, askproc) != nullptr)
+		buf[strcspn(buf, "\r\n")] = '\0';
+	else
+		buf = nullptr;
+	const int status = pclose(askproc);
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+		buf = nullptr;
+
+	return buf;
+}
+
+const char* freerdp_passphrase_from_env(WINPR_ATTR_UNUSED rdpContext* context, const char* prompt,
+                                        char* buf, size_t bufsiz)
+{
+	// NOLINTNEXTLINE(concurrency-mt-unsafe)
+	const char* askpass_env = getenv("FREERDP_ASKPASS");
+	if (!askpass_env)
+		return nullptr;
+	return freerdp_passphrase_read_askpass(prompt, buf, bufsiz, askpass_env);
+}
+
+const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, char* buf,
+                                    size_t bufsiz, int from_stdin)
+{
+	const char* askpass_env = freerdp_passphrase_from_env(context, prompt, buf, bufsiz);
+	if (askpass_env)
+		return askpass_env;
+
+	return freerdp_passphrase_read_tty(context, prompt, buf, bufsiz, from_stdin);
+}
+
+static BOOL set_terminal_nonblock(int ifd, BOOL nonblock);
+
+static void restore_terminal(void)
+{
+	(void)set_terminal_nonblock(-1, FALSE);
+}
+
+BOOL set_terminal_nonblock(int ifd, BOOL nonblock)
+{
+	static int fd = -1;
+	static bool registered = false;
+	static int orig = 0;
+	static struct termios termios = WINPR_C_ARRAY_INIT;
+
+	if (ifd >= 0)
+		fd = ifd;
+
+	if (fd < 0)
+		return FALSE;
+
+	if (!isatty(fd))
+		return TRUE;
+
+	if (nonblock)
+	{
+		if (!registered)
+		{
+			(void)winpr_atexit(restore_terminal);
+			registered = true;
+		}
+
+		const int rc1 = fcntl(fd, F_SETFL, orig | O_NONBLOCK);
+		if (rc1 != 0)
+		{
+			char buffer[128] = WINPR_C_ARRAY_INIT;
+			WLog_ERR(TAG, "fcntl(F_SETFL) failed with %s",
+			         winpr_strerror(errno, buffer, sizeof(buffer)));
+			return FALSE;
+		}
+		const int rc2 = tcgetattr(fd, &termios);
+		if (rc2 != 0)
+		{
+			char buffer[128] = WINPR_C_ARRAY_INIT;
+			WLog_ERR(TAG, "tcgetattr() failed with %s",
+			         winpr_strerror(errno, buffer, sizeof(buffer)));
+			return FALSE;
+		}
+
+		struct termios now = termios;
+		cfmakeraw(&now);
+		const int rc3 = tcsetattr(fd, TCSANOW, &now);
+		if (rc3 != 0)
+		{
+			char buffer[128] = WINPR_C_ARRAY_INIT;
+			WLog_ERR(TAG, "tcsetattr(TCSANOW) failed with %s",
+			         winpr_strerror(errno, buffer, sizeof(buffer)));
+			return FALSE;
+		}
+	}
+	else
+	{
+		const int rc1 = tcsetattr(fd, TCSANOW, &termios);
+		if (rc1 != 0)
+		{
+			char buffer[128] = WINPR_C_ARRAY_INIT;
+			WLog_ERR(TAG, "tcsetattr(TCSANOW) failed with %s",
+			         winpr_strerror(errno, buffer, sizeof(buffer)));
+			return FALSE;
+		}
+		const int rc2 = fcntl(fd, F_SETFL, orig);
+		if (rc2 != 0)
+		{
+			char buffer[128] = WINPR_C_ARRAY_INIT;
+			WLog_ERR(TAG, "fcntl(F_SETFL) failed with %s",
+			         winpr_strerror(errno, buffer, sizeof(buffer)));
+			return FALSE;
+		}
+		fd = -1;
+	}
+	return TRUE;
+}
+
+int freerdp_interruptible_getc(rdpContext* context, FILE* stream)
+{
+	int rc = EOF;
+	const int fd = fileno(stream);
+
+	(void)set_terminal_nonblock(fd, TRUE);
+
+	do
+	{
+		const int res = wait_for_fd(fd, 10);
+		if (res != 0)
+		{
+			char c = 0;
+			const ssize_t rd = read(fd, &c, 1);
+			if (rd == 1)
+			{
+				if (c == 3) /* ctrl + c */
+					return EOF;
+				if (c == 4) /* ctrl + d */
+					return EOF;
+				if (c == 26) /* ctrl + z */
+					return EOF;
+				rc = (int)c;
+			}
+			break;
+		}
+	} while (!freerdp_shall_disconnect_context(context));
+
+	(void)set_terminal_nonblock(fd, FALSE);
+
+	return rc;
+}
+
+#else
+
+const char* freerdp_passphrase_read(rdpContext* context, const char* prompt, char* buf,
+                                    size_t bufsiz, int from_stdin)
+{
+	return nullptr;
+}
+
+int freerdp_interruptible_getc(rdpContext* context, FILE* f)
+{
+	return EOF;
+}
+
+const char* freerdp_passphrase_from_env(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz)
+{
+	return nullptr;
+}
+
+const char* freerdp_passphrase_read_tty(WINPR_ATTR_UNUSED rdpContext* context,
+                                        WINPR_ATTR_UNUSED const char* prompt,
+                                        WINPR_ATTR_UNUSED char* buf,
+                                        WINPR_ATTR_UNUSED size_t bufsiz,
+                                        WINPR_ATTR_UNUSED int from_stdin)
+{
+	return nullptr;
+}
+#endif
+
+SSIZE_T freerdp_interruptible_get_line(rdpContext* context, char** plineptr, size_t* psize,
+                                       FILE* stream)
+{
+	int c = 0;
+	char* n = nullptr;
+	size_t step = 32;
+	size_t used = 0;
+	char* ptr = nullptr;
+	size_t len = 0;
+
+	if (!plineptr || !psize)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
+	bool echo = true;
+#if !defined(_WIN32) && !defined(ANDROID)
+	{
+		const int fd = fileno(stream);
+
+		struct termios termios = WINPR_C_ARRAY_INIT;
+		/* This might fail if /from-stdin is used. */
+		if (tcgetattr(fd, &termios) == 0)
+			echo = (termios.c_lflag & ECHO) != 0;
+		else
+			echo = false;
+	}
+#endif
+
+	if (*plineptr && (*psize > 0))
+	{
+		ptr = *plineptr;
+		used = *psize;
+		if (echo)
+		{
+			printf("%s", ptr);
+			(void)fflush(stdout);
+		}
+	}
+
+	do
+	{
+		if (used + 2 >= len)
+		{
+			len = used + step;
+			n = realloc(ptr, len);
+
+			if (!n)
+			{
+				free(ptr);
+				*plineptr = nullptr;
+				return -1;
+			}
+
+			ptr = n;
+		}
+
+		c = freerdp_interruptible_getc(context, stream);
+		if (c == 127)
+		{
+			if (used > 0)
+			{
+				ptr[used--] = '\0';
+				if (echo)
+				{
+					printf("\b");
+					printf(" ");
+					printf("\b");
+					(void)fflush(stdout);
+				}
+			}
+			continue;
+		}
+		if (echo)
+		{
+			printf("%c", c);
+			(void)fflush(stdout);
+		}
+		if (c != EOF)
+			ptr[used++] = (char)c;
+	} while ((c != '\n') && (c != '\r') && (c != EOF));
+
+	printf("\n");
+	ptr[used] = '\0';
+	if (c == EOF)
+	{
+		free(ptr);
+		*plineptr = nullptr;
+		return EOF;
+	}
+	*plineptr = ptr;
+	*psize = used;
+	return WINPR_ASSERTING_INT_CAST(SSIZE_T, used);
+}

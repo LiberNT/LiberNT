@@ -1,0 +1,11 @@
+#ifndef WINPR_BUILD_FLAGS_H
+#define WINPR_BUILD_FLAGS_H
+
+#define WINPR_CFLAGS ""
+#define WINPR_COMPILER_ID ""
+#define WINPR_COMPILER_VERSION ""
+#define WINPR_TARGET_ARCH ""
+#define WINPR_BUILD_CONFIG ""
+#define WINPR_BUILD_TYPE "Release"
+
+#endif /* WINPR_BUILD_FLAGS_H */
