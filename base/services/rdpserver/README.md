@@ -32,7 +32,7 @@ compiler, against FreeRDP 3.32.0 and OpenSSL 3:
    licenses/FreeRDP-LICENSE  licenses/OpenSSL-LICENSE
    ```
 
-Point an amd64 build directory at it (or set *System > RDP console server
+Point a 64-bit build directory at it (arm64 and riscv64 run the server as x64 code) (or set *System > RDP console server
 build directory* in rosconfig):
 
 ```sh
