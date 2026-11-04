@@ -6776,6 +6776,14 @@ public:
     UINT max_latency = 1;
     bool transport_valid = false;
     bool fullscreen_layout = false;
+    bool fullscreen_focused = false;
+    bool FocusLost()
+    {
+        if (fullscreen_desc.Windowed) return false;
+        HWND foreground = GetForegroundWindow();
+        if (foreground == window) fullscreen_focused = true;
+        return fullscreen_focused && foreground && foreground != window;
+    }
     bool fullscreen_mode = false;
     RECT windowed_rect = {};
     LONG windowed_style = 0, windowed_exstyle = 0;
@@ -6947,6 +6955,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetFullscreenState(BOOL *fullscreen, IDXGIOutput **output) override
     {
         if (composition) return DXGI_ERROR_INVALID_CALL;
+        if (!primary && FocusLost()) SetFullscreenState(FALSE, NULL);
         if (fullscreen) *fullscreen = !fullscreen_desc.Windowed;
         if (output)
         {
@@ -8322,6 +8331,7 @@ HRESULT NativeSwapChain::ApplyFullscreen(BOOL fullscreen, IDXGIOutput *output)
         {
             if (FAILED(hr = SetupFullscreenWindow(area.left, area.top, area.right - area.left, area.bottom - area.top)))
                 return hr;
+            fullscreen_focused = GetForegroundWindow() == window;
         }
         else
         {
@@ -8510,6 +8520,11 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
     if (composition && window && !IsWindow(window)) window = NULL;
     if (!composition && !IsWindow(window)) return DXGI_ERROR_INVALID_CALL;
     if (!composition && IsIconic(window)) return DXGI_STATUS_OCCLUDED;
+    if (!composition && !primary && FocusLost())
+    {
+        if (!(flags & DXGI_PRESENT_TEST)) SetFullscreenState(FALSE, NULL);
+        return DXGI_STATUS_OCCLUDED;
+    }
     if (flags & DXGI_PRESENT_TEST)
     {
         if (!primary) return S_OK;

@@ -130,6 +130,14 @@ public:
     LONG windowed_exstyle = 0;
     RECT windowed_rect = {};
     bool fullscreen_layout = false;
+    bool fullscreen_focused = false;
+    bool FocusLost()
+    {
+        if (fullscreen_desc.Windowed) return false;
+        HWND foreground = GetForegroundWindow();
+        if (foreground == window) fullscreen_focused = true;
+        return fullscreen_focused && foreground && foreground != window;
+    }
     WCHAR fullscreen_device[32] = {};
     bool fullscreen_mode = false;
     bool foreign = false;
@@ -318,6 +326,7 @@ public:
             {
                 if (FAILED(hr = SetupFullscreenWindow(area.left, area.top, area.right - area.left, area.bottom - area.top)))
                     return hr;
+                fullscreen_focused = GetForegroundWindow() == window;
             }
             else
             {
@@ -1241,13 +1250,13 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         const DXGI_PRESENT_PARAMETERS *)
 {
     if (interval > 4) return DXGI_ERROR_INVALID_CALL;
-    if (flags & DXGI_PRESENT_TEST) return S_OK;
-    if (FAILED(device->removed_reason)) return DXGI_ERROR_DEVICE_REMOVED;
-    if (IsIconic(window))
+    if (FocusLost())
     {
-        if (latency) ReleaseSemaphore(latency, 1, NULL);
+        if (!(flags & DXGI_PRESENT_TEST)) SetFullscreenState(FALSE, NULL);
         return DXGI_STATUS_OCCLUDED;
     }
+    if (flags & DXGI_PRESENT_TEST) return S_OK;
+    if (FAILED(device->removed_reason)) return DXGI_ERROR_DEVICE_REMOVED;
 
     AcquireSRWLockExclusive(&lock);
     UINT slot = 0;
