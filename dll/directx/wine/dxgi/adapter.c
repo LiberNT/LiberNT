@@ -147,7 +147,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_EnumOutputs(IWineDXGIAdapter *ifac
 #endif
 
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
-    if (!adapter->factory->software && FAILED(hr = dxgi_get_wddm_output_index(adapter->factory->wined3d,
+    if (!adapter->factory->software && FAILED(hr = dxgi_get_wddm_output_index(adapter->factory,
             adapter->wined3d_adapter, adapter->wddm_foreign ? &adapter->wddm_luid : NULL, output_idx, &output_idx)))
     {
         *output = NULL;

@@ -35,7 +35,7 @@ static BOOL dxgi_get_wddm_display_owner(const WCHAR *device_name, LUID *owner)
 
 /* The first adapter of the process enumerates the outputs of the adapter that
  * scans out the primary display; that adapter then enumerates none of them. */
-static BOOL dxgi_get_wddm_primary_move(struct wined3d *wined3d, LUID *owner, LUID *first)
+static BOOL dxgi_get_wddm_primary_move(struct dxgi_factory *factory, LUID *owner, LUID *first)
 {
     DISPLAY_DEVICEW device;
     UINT wined3d_idx;
@@ -51,12 +51,18 @@ static BOOL dxgi_get_wddm_primary_move(struct wined3d *wined3d, LUID *owner, LUI
     }
     if (!(device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) || !dxgi_get_wddm_display_owner(device.DeviceName, owner))
         return FALSE;
-    if (FAILED(dxgi_get_wddm_adapter(wined3d, 0, dxgi_get_user_gpu_preference(), &wined3d_idx, first, &foreign)))
-        return FALSE;
+    if (!factory->first_adapter_known)
+    {
+        if (FAILED(dxgi_get_wddm_adapter(factory->wined3d, 0, dxgi_get_user_gpu_preference(), &wined3d_idx,
+                &factory->first_adapter_luid, &foreign)))
+            return FALSE;
+        factory->first_adapter_known = TRUE;
+    }
+    *first = factory->first_adapter_luid;
     return !dxgi_luid_equal(owner, first);
 }
 
-HRESULT dxgi_get_wddm_output_index(struct wined3d *wined3d, struct wined3d_adapter *adapter, const LUID *luid,
+HRESULT dxgi_get_wddm_output_index(struct dxgi_factory *factory, struct wined3d_adapter *adapter, const LUID *luid,
         UINT output_idx, UINT *wined3d_output_idx)
 {
     struct wined3d_adapter_identifier identifier = {0};
@@ -74,7 +80,7 @@ HRESULT dxgi_get_wddm_output_index(struct wined3d *wined3d, struct wined3d_adapt
         return hr;
     if (luid)
         identifier.adapter_luid = *luid;
-    move = dxgi_get_wddm_primary_move(wined3d, &primary_owner, &first);
+    move = dxgi_get_wddm_primary_move(factory, &primary_owner, &first);
 
     /* WineD3D uses desktop outputs to host its GL contexts, including when
      * the ICD renders on a different adapter. DXGI must enumerate only the
