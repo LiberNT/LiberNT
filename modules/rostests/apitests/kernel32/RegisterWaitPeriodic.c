@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test that a periodic registered wait restarts its timer after each callback
+ * PURPOSE:     Test the timer of a registered wait
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -134,10 +134,84 @@ TestZeroTimeout(
     StopPeriodicWait(Wait, Event, &Context);
 }
 
+static BOOL
+EnableSystemTimePrivilege(VOID)
+{
+    TOKEN_PRIVILEGES Privileges;
+    HANDLE Token;
+    BOOL Result;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &Token))
+        return FALSE;
+    Privileges.PrivilegeCount = 1;
+    Privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    Result = LookupPrivilegeValue(NULL, SE_SYSTEMTIME_NAME, &Privileges.Privileges[0].Luid) &&
+             AdjustTokenPrivileges(Token, FALSE, &Privileges, 0, NULL, NULL) &&
+             GetLastError() == ERROR_SUCCESS;
+    CloseHandle(Token);
+    return Result;
+}
+
+static BOOL
+ShiftSystemTime(
+    _In_ LONGLONG Delta)
+{
+    FILETIME FileTime;
+    SYSTEMTIME SystemTime;
+    ULARGE_INTEGER Time;
+
+    GetSystemTimeAsFileTime(&FileTime);
+    Time.LowPart = FileTime.dwLowDateTime;
+    Time.HighPart = FileTime.dwHighDateTime;
+    Time.QuadPart += Delta;
+    FileTime.dwLowDateTime = Time.LowPart;
+    FileTime.dwHighDateTime = Time.HighPart;
+    return FileTimeToSystemTime(&FileTime, &SystemTime) && SetSystemTime(&SystemTime);
+}
+
+static VOID
+TestSystemTimeChange(
+    _In_ ULONG Flags)
+{
+    static const LONGLONG Hour = 36000000000LL;
+    PERIODIC_WAIT_CONTEXT Context, OtherContext;
+    HANDLE Wait, Event, OtherWait, OtherEvent;
+
+    if (!EnableSystemTimePrivilege())
+    {
+        skip("SeSystemtimePrivilege is not available\n");
+        return;
+    }
+
+    if (StartPeriodicWait(&Wait, &Event, &Context, 1500, Flags))
+    {
+        Sleep(100);
+        if (ShiftSystemTime(Hour))
+        {
+            Sleep(200);
+            if (StartPeriodicWait(&OtherWait, &OtherEvent, &OtherContext, INFINITE, WT_EXECUTEDEFAULT))
+                Sleep(200);
+            StopPeriodicWait(OtherWait, OtherEvent, &OtherContext);
+            ok(Context.Timeouts == 0,
+               "Flags 0x%lx: the timeout ran %ld times after the system time moved forward\n", Flags, Context.Timeouts);
+            ok(ShiftSystemTime(-Hour), "Restoring the system time failed, error %lu\n", GetLastError());
+            ok(WaitForSingleObject(Context.TimeoutSemaphore, 5000) == WAIT_OBJECT_0,
+               "Flags 0x%lx: the timeout did not run\n", Flags);
+        }
+        else
+        {
+            skip("SetSystemTime failed, error %lu\n", GetLastError());
+        }
+    }
+    StopPeriodicWait(Wait, Event, &Context);
+}
+
 START_TEST(RegisterWaitPeriodic)
 {
     TestTimeoutRestartsTimer(WT_EXECUTEDEFAULT);
     TestTimeoutRestartsTimer(WT_EXECUTEINWAITTHREAD);
     TestSignalRestartsTimer(WT_EXECUTEDEFAULT);
     TestZeroTimeout(WT_EXECUTEINWAITTHREAD);
+    TestSystemTimeChange(WT_EXECUTEDEFAULT);
+    TestSystemTimeChange(WT_EXECUTEONLYONCE | WT_EXECUTEINWAITTHREAD);
 }
