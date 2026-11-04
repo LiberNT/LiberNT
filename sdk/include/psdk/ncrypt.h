@@ -58,6 +58,11 @@ typedef struct NCryptKeyName {
     DWORD dwFlags;
 } NCryptKeyName;
 
+typedef struct NCryptProviderName {
+    LPWSTR pszName;
+    LPWSTR pszComment;
+} NCryptProviderName;
+
 typedef struct __NCRYPT_SUPPORTED_LENGTHS {
     DWORD dwMinLength;
     DWORD dwMaxLength;
@@ -213,6 +218,7 @@ SECURITY_STATUS WINAPI NCryptVerifySignature(NCRYPT_KEY_HANDLE, void *, BYTE *, 
 SECURITY_STATUS WINAPI NCryptDeleteKey(NCRYPT_KEY_HANDLE, DWORD);
 SECURITY_STATUS WINAPI NCryptEnumAlgorithms(NCRYPT_PROV_HANDLE, DWORD, DWORD *, NCryptAlgorithmName **, DWORD);
 SECURITY_STATUS WINAPI NCryptEnumKeys(NCRYPT_PROV_HANDLE, const WCHAR *, NCryptKeyName **, PVOID *, DWORD);
+SECURITY_STATUS WINAPI NCryptEnumStorageProviders(DWORD *, NCryptProviderName **, DWORD);
 SECURITY_STATUS WINAPI NCryptFreeBuffer(PVOID);
 BOOL WINAPI NCryptIsKeyHandle(NCRYPT_KEY_HANDLE);
 #endif

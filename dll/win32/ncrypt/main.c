@@ -593,6 +593,39 @@ SECURITY_STATUS WINAPI NCryptEnumAlgorithms(NCRYPT_PROV_HANDLE provider, DWORD a
 #endif
 }
 
+SECURITY_STATUS WINAPI NCryptEnumStorageProviders(DWORD *count, NCryptProviderName **list, DWORD flags)
+{
+    static const WCHAR *const providers[] =
+    {
+        MS_KEY_STORAGE_PROVIDER,
+        MS_PLATFORM_KEY_STORAGE_PROVIDER,
+        MS_SMART_CARD_KEY_STORAGE_PROVIDER,
+    };
+    const DWORD total = sizeof(providers) / sizeof(providers[0]);
+    NCryptProviderName *names;
+    DWORD size = 0, i;
+    WCHAR *strings;
+
+    TRACE("(%p, %p, %#lx)\n", count, list, flags);
+
+    if (!count || !list) return NTE_INVALID_PARAMETER;
+    if (flags & ~NCRYPT_SILENT_FLAG) return NTE_BAD_FLAGS;
+    for (i = 0; i < total; i++)
+        size += (lstrlenW(providers[i]) + 1) * sizeof(WCHAR);
+    if (!(names = malloc(total * sizeof(*names) + size))) return NTE_NO_MEMORY;
+    strings = (WCHAR *)(names + total);
+    for (i = 0; i < total; i++)
+    {
+        names[i].pszName = strings;
+        names[i].pszComment = NULL;
+        lstrcpyW(strings, providers[i]);
+        strings += lstrlenW(providers[i]) + 1;
+    }
+    *count = total;
+    *list = names;
+    return ERROR_SUCCESS;
+}
+
 SECURITY_STATUS WINAPI NCryptEnumKeys(NCRYPT_PROV_HANDLE provider, const WCHAR *scope,
                                       NCryptKeyName **key_name, PVOID *enum_state, DWORD flags)
 {
