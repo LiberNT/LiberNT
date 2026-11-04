@@ -9,6 +9,7 @@ extern void func_AttachThreadInput(void);
 extern void func_BoolReturnValues(void);
 extern void func_CalculatePopupWindowPosition(void);
 extern void func_CallbackNesting(void);
+extern void func_ChangeDisplaySettingsReset(void);
 extern void func_CharFuncs(void);
 extern void func_CloseWindow(void);
 extern void func_ComboBox(void);
@@ -178,6 +179,7 @@ const struct test winetest_testlist[] =
     { "BoolReturnValues", func_BoolReturnValues },
     { "CalculatePopupWindowPosition", func_CalculatePopupWindowPosition },
     { "CallbackNesting", func_CallbackNesting },
+    { "ChangeDisplaySettingsReset", func_ChangeDisplaySettingsReset },
     { "CharFuncs", func_CharFuncs },
     { "CloseWindow", func_CloseWindow },
     { "ComboBox", func_ComboBox },
