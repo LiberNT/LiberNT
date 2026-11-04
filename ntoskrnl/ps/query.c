@@ -3750,7 +3750,7 @@ NtSetInformationProcess(
                     PspClearProcessFlag(Process, PSF_MANAGE_EXECUTABLE_MEMORY_WRITES_BIT);
             }
 #else
-            Status = STATUS_NOT_SUPPORTED;
+            Status = sizeof(PVOID) == sizeof(ULONG) ? STATUS_INVALID_INFO_CLASS : STATUS_NOT_SUPPORTED;
 #endif
             break;
 
@@ -4693,7 +4693,7 @@ NtSetInformationThread(
             ObDereferenceObject(Thread);
             Status = STATUS_SUCCESS;
 #else
-            Status = STATUS_NOT_SUPPORTED;
+            Status = sizeof(PVOID) == sizeof(ULONG) ? STATUS_INVALID_INFO_CLASS : STATUS_NOT_SUPPORTED;
 #endif
             break;
 
@@ -5003,7 +5003,7 @@ NtSetInformationThread(
                 Status = PspCopyThreadWow64Context(Thread, &Wow64Context, TRUE);
             ObDereferenceObject(Thread);
 #else
-            Status = STATUS_NOT_SUPPORTED;
+            Status = STATUS_INVALID_INFO_CLASS;
 #endif
             break;
         }
@@ -6159,7 +6159,7 @@ NtQueryInformationThread(
             }
             _SEH2_END;
 #else
-            Status = STATUS_NOT_SUPPORTED;
+            Status = STATUS_INVALID_INFO_CLASS;
 #endif
             break;
         }
