@@ -10097,8 +10097,8 @@ KdbpPrintFrozenProcessors(VOID)
 static VOID
 KdbpPersistSessionLog(VOID)
 {
-    /* Writing through the crash storage path resets the boot disk, so only a bugcheck session may do it. */
-    if (KiBugCheckData[0])
+    /* Writing through the crash storage path resets the boot disk, so only a bugcheck session or an unattended stop may do it. */
+    if (KiBugCheckData[0] || KdTermCrashMode)
         (VOID)KdpWriteBootLogAtCrash(NULL, NULL);
 }
 
