@@ -7015,4 +7015,14 @@ RtlpInitializeActCtx(PVOID* pOldShimData)
     return Status;
 }
 
+NTSTATUS
+NTAPI
+RtlpFindSystemDefaultActivationContextSectionString(IN ULONG Flags,
+                                                    IN ULONG SectionKind,
+                                                    IN PCUNICODE_STRING SectionName,
+                                                    IN OUT PACTCTX_SECTION_KEYED_DATA Data)
+{
+    return find_string(implicit_actctx, SectionKind, SectionName, Flags, Data);
+}
+
 #endif // __REACTOS__
