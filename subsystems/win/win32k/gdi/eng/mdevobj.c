@@ -97,6 +97,14 @@ MDEVOBJ_Create(
             break;
         }
 
+        if (!pustrDeviceName &&
+            !(pGraphicsDevice->StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) &&
+            !EngpGetDisplayDriverAttachToDesktop(pGraphicsDevice))
+        {
+            TRACE("Leaving '%S' detached from the desktop\n", pGraphicsDevice->szWinDeviceName);
+            continue;
+        }
+
         if (!pdm)
         {
             /* No settings requested. Provide nothing and LDEVOBJ_bProbeAndCaptureDevmode

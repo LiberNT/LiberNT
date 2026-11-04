@@ -247,4 +247,8 @@ PDEVOBJ_lChangeDisplaySettings(
     _Out_ PMDEVOBJ *ppmdevNew,
     _In_ BOOL bSearchClosestMode);
 
+BOOL
+PDEVOBJ_bRefreshGraphicsDeviceModes(
+    _Inout_ PGRAPHICS_DEVICE pGraphicsDevice);
+
 #endif /* !__WIN32K_PDEVOBJ_H */

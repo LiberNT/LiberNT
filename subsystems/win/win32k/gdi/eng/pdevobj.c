@@ -480,18 +480,14 @@ PDEVOBJ_bDisableDisplay(
     return assertVal;
 }
 
-VOID
-NTAPI
-PDEVOBJ_vRefreshModeList(
-    PPDEVOBJ ppdev)
+BOOL
+PDEVOBJ_bRefreshGraphicsDeviceModes(
+    _Inout_ PGRAPHICS_DEVICE pGraphicsDevice)
 {
-    PGRAPHICS_DEVICE pGraphicsDevice;
     PDEVMODEINFO pdminfo, pdmiNext;
+    BOOL bRet;
 
-    /* Lock the PDEV */
-    EngAcquireSemaphore(ppdev->hsemDevLock);
-
-    pGraphicsDevice = ppdev->pGraphicsDevice;
+    EngAcquireSemaphore(ghsemPDEV);
 
     /* Clear out the modes */
     for (pdminfo = pGraphicsDevice->pdevmodeInfo;
@@ -502,11 +498,27 @@ PDEVOBJ_vRefreshModeList(
         ExFreePoolWithTag(pdminfo, GDITAG_DEVMODE);
     }
     pGraphicsDevice->pdevmodeInfo = NULL;
-    ExFreePoolWithTag(pGraphicsDevice->pDevModeList, GDITAG_GDEVICE);
+    if (pGraphicsDevice->pDevModeList)
+        ExFreePoolWithTag(pGraphicsDevice->pDevModeList, GDITAG_GDEVICE);
     pGraphicsDevice->pDevModeList = NULL;
+    pGraphicsDevice->cDevModes = 0;
 
     /* Update available display mode list */
-    LDEVOBJ_bBuildDevmodeList(pGraphicsDevice);
+    bRet = LDEVOBJ_bBuildDevmodeList(pGraphicsDevice);
+
+    EngReleaseSemaphore(ghsemPDEV);
+    return bRet;
+}
+
+VOID
+NTAPI
+PDEVOBJ_vRefreshModeList(
+    PPDEVOBJ ppdev)
+{
+    /* Lock the PDEV */
+    EngAcquireSemaphore(ppdev->hsemDevLock);
+
+    PDEVOBJ_bRefreshGraphicsDeviceModes(ppdev->pGraphicsDevice);
 
     /* Unlock PDEV */
     EngReleaseSemaphore(ppdev->hsemDevLock);
