@@ -759,8 +759,17 @@ ExQueueWorkItem(IN PWORK_QUEUE_ITEM WorkItem,
                 IN WORK_QUEUE_TYPE QueueType)
 {
     PEX_WORK_QUEUE WorkQueue = &ExWorkerQueue[QueueType];
+
     ASSERT(QueueType < MaximumWorkQueue);
     ASSERT(WorkItem->List.Flink == NULL);
+
+    /* APs can queue before phase 1 initialises ExWorkerQueue[]: drop the item */
+    if (WorkQueue->WorkerQueue.Header.Type != QueueObject)
+    {
+        DPRINT1("EX: queue %lu not initialized yet, dropping work item\n",
+                QueueType);
+        return;
+    }
 
     /* Don't try to trick us */
     if ((ULONG_PTR)WorkItem->WorkerRoutine < MmUserProbeAddress)
