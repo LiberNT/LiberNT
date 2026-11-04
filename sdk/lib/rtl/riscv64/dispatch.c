@@ -352,6 +352,12 @@ VOID NTAPI RtlpStepContextToCaller(PCONTEXT Context)
     *Context = Next;
 }
 
+static BOOLEAN SameExceptScope(const RISCV64_SCOPE_RECORD *Left, const RISCV64_SCOPE_RECORD *Right)
+{
+    return Left->JumpTarget && Left->JumpTarget == Right->JumpTarget &&
+           Left->HandlerAddress == Right->HandlerAddress;
+}
+
 static BOOLEAN TargetInScope(PDISPATCHER_CONTEXT Dc, ULONG Count,
                              const RISCV64_SCOPE_RECORD *Scope, ULONG64 Target)
 {
@@ -395,7 +401,8 @@ __C_specific_handler(PEXCEPTION_RECORD Record, PVOID Frame,
                 Corruption(STATUS_BAD_FUNCTION_TABLE);
             if (Earlier.BeginAddress < Earlier.EndAddress && Scope.BeginAddress < Scope.EndAddress &&
                 Earlier.BeginAddress < Scope.EndAddress && Scope.BeginAddress < Earlier.EndAddress &&
-                (Earlier.BeginAddress < Scope.BeginAddress || Earlier.EndAddress > Scope.EndAddress))
+                (Earlier.BeginAddress < Scope.BeginAddress || Earlier.EndAddress > Scope.EndAddress) &&
+                !SameExceptScope(&Earlier, &Scope))
                 Corruption(STATUS_BAD_FUNCTION_TABLE);
         }
     }
