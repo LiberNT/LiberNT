@@ -2788,10 +2788,6 @@ int CDECL I10_OUTPUT(_LDOUBLE ld80, int prec, int flag, struct _I10_OUTPUT_DATA 
         prec = 0;
     }
 
-    sprintf(format, "%%.%dle", prec);
-    sprintf(buf, format, d);
-    buf[1] = buf[0];
-
 #ifdef __REACTOS__
     if(d) {
         char digits[I10_OUTPUT_MAX_PREC+1];
@@ -2815,6 +2811,10 @@ int CDECL I10_OUTPUT(_LDOUBLE ld80, int prec, int flag, struct _I10_OUTPUT_DATA 
         memcpy(data->str, digits, data->len);
         data->str[data->len] = '\0';
 
+        sprintf(format, "%%.%dle", prec);
+        sprintf(buf, format, d);
+        buf[1] = buf[0];
+        /* FIXME: native sets the final trailing byte to '0' or '9'; we keep the sprintf digit, so the trailing-'9' cases stay todo_wine */
         if(prec+1 > data->len)
             memcpy(data->str+data->len+1, buf+data->len+1, prec+1-data->len);
 
@@ -2822,6 +2822,10 @@ int CDECL I10_OUTPUT(_LDOUBLE ld80, int prec, int flag, struct _I10_OUTPUT_DATA 
     }
 #endif
 
+    sprintf(format, "%%.%dle", prec);
+    sprintf(buf, format, d);
+
+    buf[1] = buf[0];
     data->pos = atoi(buf+prec+3);
     if(buf[1] != '0')
         data->pos++;
