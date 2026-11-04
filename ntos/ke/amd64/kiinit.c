@@ -530,28 +530,40 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* Boot cycles timestamp */
     BootCycles = __rdtsc();
 
+    /* Take over the loader's framebuffer so this CPU's progress is visible */
+    KdpFbEarlyInit(LoaderBlock);
+
     /* HACK */
     FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
     //FrLdrDbgPrint("Hello from KiSystemStartup!!!\n");
 
-    /* Get the current CPU number */
-    Cpu = KeNumberProcessors++; // FIXME
-
-    /* LoaderBlock initialization for Cpu 0 */
-    if (Cpu == 0)
+    if (KeNumberProcessors == 0)
     {
+        /* Boot processor: it prepares the loader block for itself */
+        Cpu = 0;
+        KdpFbPrintString("LiberNT kernel: KiSystemStartup entered\r\n");
+
         /* Save the loader block */
         KeLoaderBlock = LoaderBlock;
 
         /* Prepare LoaderBlock, PCR, TSS with the P0 boot data */
         KiInitializeP0BootStructures(LoaderBlock);
     }
+    else
+    {
+        /* The number comes from the PRCB: KeNumberProcessors++ is not atomic */
+        Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
+        Cpu = Pcr->Prcb.Number;
+    }
 
     /* Get Pcr from loader block */
     Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
 
-    /* Set the PRCB for this Processor */
+    /* Publish the PRCB before counting: [0, KeNumberProcessors) must be valid */
     KiProcessorBlock[Cpu] = &Pcr->Prcb;
+    KeMemoryBarrier();
+    if ((CCHAR)(Cpu + 1) > KeNumberProcessors)
+        KeNumberProcessors = (CCHAR)(Cpu + 1);
 
     /* Save the initial thread */
     InitialThread = (PKTHREAD)LoaderBlock->Thread;
@@ -561,6 +573,9 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     /* Initialize the CPU features */
     KiInitializeCpu(Pcr);
+
+    if (Cpu == 0)
+        KdpFbPrintString("LiberNT kernel: CPU features initialized\r\n");
 
     /* Initial setup for the boot CPU */
     if (Cpu == 0)
@@ -578,6 +593,8 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
         /* Initialize the kernel VA layout */
         MiInitializeKernelVaLayout(LoaderBlock);
+
+        KdpFbPrintString("LiberNT kernel: kernel VA layout done\r\n");
     }
 
     KiCpuId(&CpuInfo, 1);
@@ -591,8 +608,31 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         while ((*(volatile KSPIN_LOCK*)&KiFreezeExecutionLock) & 1);
     }
 
-    /* Initialize the Processor with HAL */
+    /* Bit 10 of the LAPIC base MSR says the firmware handed over in x2APIC mode */
+    if (Cpu == 0)
+    {
+        CHAR Line[96];
+
+        RtlStringCbPrintfA(Line, sizeof(Line),
+                           "LiberNT: APICBASE from firmware = %08I64lx\r\n",
+                           (ULONG64)__readmsr(0x1B));
+        KdpFbPrintString(Line);
+    }
+
     HalInitializeProcessor(Cpu, KeLoaderBlock);
+
+    if (Cpu == 0)
+    {
+        CHAR Line[96];
+
+        RtlStringCbPrintfA(Line, sizeof(Line),
+                           "LiberNT: APICBASE after HAL init = %08I64lx\r\n",
+                           (ULONG64)__readmsr(0x1B));
+        KdpFbPrintString(Line);
+    }
+
+    if (Cpu == 0)
+        KdpFbPrintString("LiberNT kernel: HAL processor initialized\r\n");
 
     /* Set processor as active */
     if (Cpu == 0)
@@ -606,6 +646,8 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         /* Initialize debugging system */
         KdInitSystem(0, KeLoaderBlock);
 
+        KdpFbPrintString("LiberNT kernel: KD initialized\r\n");
+
         /* Check for break-in */
         if (KdPollBreakIn()) DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
     }
@@ -617,10 +659,17 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     KfRaiseIrql(HIGH_LEVEL);
 
     /* Machine specific kernel initialization */
-    if (Cpu == 0) KiInitializeKernelMachineDependent(&Pcr->Prcb, LoaderBlock);
+    if (Cpu == 0)
+    {
+        KiInitializeKernelMachineDependent(&Pcr->Prcb, LoaderBlock);
+        KdpFbPrintString("LiberNT kernel: machine dependent init done\r\n");
+    }
 
     /* Initialize extended state management */
     KiInitializeXStateConfiguration(Cpu);
+
+    if (Cpu == 0)
+        KdpFbPrintString("LiberNT kernel: xstate configured\r\n");
 
     /* Calculate the initial stack pointer */
     InitialStack = ALIGN_DOWN_BY(LoaderBlock->KernelStack - KeXStateLength, 64);
