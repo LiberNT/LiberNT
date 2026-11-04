@@ -2343,6 +2343,23 @@ Error:
    return NULL;
 }
 
+/* An IME-like window is created directly below the first owner that is not IME-like. */
+/* FIXME: an IME UI window created after its owner was shown lands below the default IME window on Windows */
+static HWND FASTCALL
+IntImeLikeInsertAfter(PWND Window, HWND hwndInsertAfter)
+{
+   PWND Owner = Window->spwndOwner;
+   UINT Depth = 0;
+
+   if (hwndInsertAfter != HWND_TOP || !IS_WND_IMELIKE(Window))
+      return hwndInsertAfter;
+   while (Owner && IS_WND_IMELIKE(Owner) && Depth++ < 64)
+      Owner = Owner->spwndOwner;
+   if (!Owner || IS_WND_IMELIKE(Owner) || Owner->spwndParent != Window->spwndParent)
+      return hwndInsertAfter;
+   return UserHMGetHandle(Owner);
+}
+
 /*
  * @implemented
  */
@@ -2658,7 +2675,7 @@ co_UserCreateWindowEx(CREATESTRUCTW* Cs,
       if ((Cs->style & WS_CHILD) && !UserIsDesktopWindow(ParentWindow))
           IntLinkHwnd(Window, HWND_BOTTOM);
       else
-          IntLinkHwnd(Window, hwndInsertAfter);
+          IntLinkHwnd(Window, IntImeLikeInsertAfter(Window, hwndInsertAfter));
    }
 
    /* Create the IME window for pWnd */
