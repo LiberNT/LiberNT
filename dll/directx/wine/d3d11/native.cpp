@@ -22,6 +22,7 @@
 #include <dxgi_dcomp.h>
 #include <vkd3d_shader.h>
 #include <wine/debug.h>
+#include <float.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -237,6 +238,7 @@ public:
     LONG children = 0;
     LONG multithread_protected = FALSE;
     bool clearing = false;
+    ID3D11SamplerState *default_sampler = NULL;
     IDXGIAdapter *adapter = NULL;
     D3DKMT_HANDLE km_adapter = 0;
     D3DKMT_HANDLE km_device = 0;
@@ -348,6 +350,7 @@ public:
     void ChildAddRef() { Retain(); InterlockedIncrement(&children); }
     void ChildRelease() { InterlockedDecrement(&children); MaybeDestroy(); Drop(); }
     void MaybeDestroy();
+    D3D10DDI_HSAMPLER DefaultSamplerHandle();
     void Unimplemented(const char *method) { FIXME("Native D3D11 %s is not implemented.\n", method); operation_error = E_NOTIMPL; }
     void BeginCall() { operation_error = S_OK; }
     D3D11_CONSERVATIVE_RASTERIZATION_TIER ConservativeRasterizationTier() const
@@ -2542,6 +2545,12 @@ void NativeDevice::MaybeDestroy()
         context->ReleaseContextState();
     }
     clearing = false;
+    if (default_sampler)
+    {
+        NativeSampler *state = static_cast<NativeSampler *>(default_sampler);
+        default_sampler = NULL;
+        state->Drop();
+    }
 }
 
 ULONG STDMETHODCALLTYPE NativeDevice::Release()
@@ -5026,6 +5035,24 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateSamplerState(const D3D11_SAMPLER_D
     return S_OK;
 }
 
+D3D10DDI_HSAMPLER NativeDevice::DefaultSamplerHandle()
+{
+    static const D3D11_SAMPLER_DESC desc = {D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP,
+            D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_TEXTURE_ADDRESS_CLAMP, 0.0f, 1, D3D11_COMPARISON_NEVER,
+            {1.0f, 1.0f, 1.0f, 1.0f}, -FLT_MAX, FLT_MAX};
+    D3D10DDI_HSAMPLER handle = {};
+    ID3D11SamplerState *state = NULL;
+
+    if (!default_sampler && !clearing && SUCCEEDED(CreateSamplerState(&desc, &state)))
+    {
+        static_cast<NativeSampler *>(state)->Retain();
+        default_sampler = state;
+        state->Release();
+    }
+    if (default_sampler) handle = static_cast<NativeSampler *>(default_sampler)->handle;
+    return handle;
+}
+
 HRESULT STDMETHODCALLTYPE NativeDevice::CreateBlendState(const D3D11_BLEND_DESC *input, ID3D11BlendState **out)
 {
     if (out) *out = NULL;
@@ -6073,7 +6100,11 @@ void NativeContext::SetSamplers(UINT stage, UINT start, UINT count, ID3D11Sample
         NativeCommandArray<ID3D11SamplerState *> values(count, states);
         if (Captured(values)) Record([=](NativeContext *context) { context->SetSamplers(stage, start, count, values.Data()); });
     }
-    if (!deferred) set(device->driver_device, start, count, handles);
+    if (!deferred)
+    {
+        for (UINT i = 0; i < count; ++i) if (!states[i]) handles[i] = device->DefaultSamplerHandle();
+        set(device->driver_device, start, count, handles);
+    }
     for (UINT i = 0; i < count; ++i) ReplaceObject(samplers[stage][start + i], states[i]);
 }
 void STDMETHODCALLTYPE NativeContext::VSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { if (StateCallIgnored()) return; SetSamplers(0, start, count, states); }
