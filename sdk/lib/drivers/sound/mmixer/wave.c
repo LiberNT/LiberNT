@@ -162,7 +162,7 @@ MMixerGetAudioPinDataRanges(
     Status = MixerContext->Control(hDevice, IOCTL_KS_PROPERTY, (PVOID)&PinProperty, sizeof(KSP_PIN), (PVOID)NULL, 0, &BytesReturned);
     if (Status != MM_STATUS_MORE_ENTRIES)
     {
-        return Status;
+        return (Status == MM_STATUS_SUCCESS) ? MM_STATUS_UNSUCCESSFUL : Status;
     }
 
     MultipleItem = MixerContext->Alloc(BytesReturned);

@@ -150,7 +150,8 @@ MMixerAddMixerControl(
 
     if (Status == MM_STATUS_MORE_ENTRIES)
     {
-        ASSERT(BytesReturned != 0);
+        if (BytesReturned < sizeof(WCHAR))
+            return MM_STATUS_UNSUCCESSFUL;
         Name = (LPWSTR)MixerContext->Alloc(BytesReturned);
         if (!Name)
         {
@@ -400,9 +401,16 @@ MMixerGetPinName(
     /* try get pin name size */
     Status = MixerContext->Control(hMixer, IOCTL_KS_PROPERTY, (PVOID)&Pin, sizeof(KSP_PIN), NULL, 0, &BytesReturned);
 
+    /* A probe that answers SUCCESS leaves no buffer behind: the caller would use an uninitialized name */
+    if (Status == MM_STATUS_SUCCESS)
+        return MM_STATUS_UNSUCCESSFUL;
+
     /* check if buffer overflowed */
     if (Status == MM_STATUS_MORE_ENTRIES)
     {
+        if (BytesReturned < sizeof(WCHAR))
+            return MM_STATUS_UNSUCCESSFUL;
+
         /* allocate buffer */
         Buffer = (LPWSTR)MixerContext->Alloc(BytesReturned);
         if (!Buffer)
@@ -490,19 +498,19 @@ MMixerBuildTopology(
 
     /* get topology node types */
     Status = MMixerGetFilterTopologyProperty(MixerContext, MixerData->hDevice, KSPROPERTY_TOPOLOGY_NODES, &NodeTypes);
-    if (Status != MM_STATUS_SUCCESS)
+    if (Status != MM_STATUS_SUCCESS || NodeTypes == NULL)
     {
         /* failed to get topology node types */
-        return Status;
+        return MM_STATUS_UNSUCCESSFUL;
     }
 
     /* get topology connections */
     Status = MMixerGetFilterTopologyProperty(MixerContext, MixerData->hDevice, KSPROPERTY_TOPOLOGY_CONNECTIONS, &NodeConnections);
-    if (Status != MM_STATUS_SUCCESS)
+    if (Status != MM_STATUS_SUCCESS || NodeConnections == NULL)
     {
         /* failed to get topology connections */
         MixerContext->Free(NodeTypes);
-        return Status;
+        return MM_STATUS_UNSUCCESSFUL;
     }
 
     /* create a topology */

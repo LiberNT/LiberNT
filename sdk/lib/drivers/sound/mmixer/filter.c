@@ -18,7 +18,7 @@ MMixerGetFilterPinCount(
 {
     KSPROPERTY Pin;
     MIXER_STATUS Status;
-    ULONG NumPins, BytesReturned;
+    ULONG NumPins = 0, BytesReturned;
 
     /* setup property request */
     Pin.Flags = KSPROPERTY_TYPE_GET;
@@ -55,11 +55,16 @@ MMixerGetFilterTopologyProperty(
     /* query for the size */
     Status = MixerContext->Control(hMixer, IOCTL_KS_PROPERTY, (PVOID)&Property, sizeof(KSPROPERTY), NULL, 0, &BytesReturned);
 
+    /* A filter may answer the size probe with SUCCESS and leave the buffer NULL */
+    if (Status == MM_STATUS_SUCCESS)
+        return MM_STATUS_UNSUCCESSFUL;
+
     if (Status != MM_STATUS_MORE_ENTRIES)
         return Status;
 
     /* sanity check */
-    ASSERT(BytesReturned);
+    if (BytesReturned < sizeof(KSMULTIPLE_ITEM))
+        return MM_STATUS_UNSUCCESSFUL;
 
     /* allocate an result buffer */
     MultipleItem = (PKSMULTIPLE_ITEM)MixerContext->Alloc(BytesReturned);
@@ -114,6 +119,8 @@ MMixerGetPhysicalConnection(
         return Status;
     }
     DPRINT("Status %u BytesReturned %lu\n", Status, BytesReturned);
+    if (Status != MM_STATUS_MORE_ENTRIES)
+        return (Status == MM_STATUS_SUCCESS) ? MM_STATUS_UNSUCCESSFUL : Status;
     Connection = (PKSPIN_PHYSICALCONNECTION)MixerContext->Alloc(BytesReturned);
     if (!Connection)
     {
