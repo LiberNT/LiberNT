@@ -869,7 +869,11 @@ TRACKBAR_ActivateToolTip (const TRACKBAR_INFO *infoPtr, BOOL fShow)
     if (!infoPtr->hwndToolTip) return;
 
     ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+    ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
     ti.cbSize = sizeof(ti);
+#endif
     ti.hwnd   = infoPtr->hwndSelf;
 
     SendMessageW (infoPtr->hwndToolTip, TTM_TRACKACTIVATE, fShow, (LPARAM)&ti);
@@ -888,7 +892,11 @@ TRACKBAR_UpdateToolTip (const TRACKBAR_INFO *infoPtr)
     if (!infoPtr->hwndToolTip) return;
 
     ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+    ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
     ti.cbSize = sizeof(ti);
+#endif
     ti.hwnd   = infoPtr->hwndSelf;
     ti.uFlags = TTF_IDISHWND | TTF_TRACK | TTF_ABSOLUTE;
 
@@ -1638,7 +1646,11 @@ TRACKBAR_Create (HWND hwnd, const CREATESTRUCTW *lpcs)
             TTTOOLINFOW ti;
             WCHAR wEmpty[] = L"";
             ZeroMemory (&ti, sizeof(ti));
+#ifdef __REACTOS__
+            ti.cbSize   = COMCTL32_TTTOOLINFOW_SIZE;
+#else
             ti.cbSize   = sizeof(ti);
+#endif
      	    ti.uFlags   = TTF_IDISHWND | TTF_TRACK | TTF_ABSOLUTE;
 	    ti.hwnd     = hwnd;
             ti.lpszText = wEmpty;

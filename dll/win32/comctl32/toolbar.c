@@ -2350,7 +2350,11 @@ TOOLBAR_TooltipAddTool(const TOOLBAR_INFO *infoPtr, const TBUTTON_INFO *button)
         TTTOOLINFOW ti;
 
         ZeroMemory(&ti, sizeof(TTTOOLINFOW));
+#ifdef __REACTOS__
+        ti.cbSize   = COMCTL32_TTTOOLINFOW_SIZE;
+#else
         ti.cbSize   = sizeof (TTTOOLINFOW);
+#endif
         ti.hwnd     = infoPtr->hwndSelf;
         ti.uId      = button->idCommand;
         ti.hinst    = 0;
@@ -2369,7 +2373,11 @@ TOOLBAR_TooltipDelTool(const TOOLBAR_INFO *infoPtr, const TBUTTON_INFO *button)
         TTTOOLINFOW ti;
 
         ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+        ti.cbSize   = COMCTL32_TTTOOLINFOW_SIZE;
+#else
         ti.cbSize   = sizeof(ti);
+#endif
         ti.hwnd     = infoPtr->hwndSelf;
         ti.uId      = button->idCommand;
 
@@ -2385,7 +2393,11 @@ static void TOOLBAR_TooltipSetRect(const TOOLBAR_INFO *infoPtr, const TBUTTON_IN
         TTTOOLINFOW ti;
 
         ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+        ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
         ti.cbSize = sizeof(ti);
+#endif
         ti.hwnd = infoPtr->hwndSelf;
         ti.uId = button->idCommand;
         ti.rect = button->rect;
