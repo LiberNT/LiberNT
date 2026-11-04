@@ -9,6 +9,7 @@
 
 #pragma once
 
+#ifndef _WINSOCKAPI_
 #define _WINSOCKAPI_
 
 #ifndef _INC_WINDOWS
@@ -902,3 +903,5 @@ GetAcceptExSockaddrs(
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* _WINSOCKAPI_ */
