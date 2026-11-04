@@ -10,6 +10,7 @@ add_rpcproxy_files(quartz_strmif.idl)
 list(APPEND SOURCE
     acmwrapper.c
     avidec.c
+    avisplit.c
     decoder.c
     dsoundrender.c
     filesource.c
@@ -17,13 +18,15 @@ list(APPEND SOURCE
     filtermapper.c
     main.c
     memallocator.c
-    parser.c
+    mpegsplit.c
     passthrough.c
+    splitter.c
     systemclock.c
     videorenderer.c
     vmr7.c
     vmr7_presenter.c
     vmr9.c
+    waveparser.c
     window.c)
 
 list(APPEND PCH_SKIP_SOURCE
