@@ -1066,11 +1066,21 @@ static HRESULT WINAPI MemInputPin_GetAllocator(IMemInputPin * iface, IMemAllocat
     TRACE("pin %p %s:%s, allocator %p.\n", This, debugstr_w(This->pin.filter->name),
             debugstr_w(This->pin.name), ppAllocator);
 
-    *ppAllocator = This->pAllocator;
-    if (*ppAllocator)
-        IMemAllocator_AddRef(*ppAllocator);
+    if (!This->pAllocator)
+    {
+        HRESULT hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER,
+                &IID_IMemAllocator, (void **)&This->pAllocator);
 
-    return *ppAllocator ? S_OK : VFW_E_NO_ALLOCATOR;
+        if (FAILED(hr))
+        {
+            *ppAllocator = NULL;
+            return hr;
+        }
+    }
+
+    *ppAllocator = This->pAllocator;
+    IMemAllocator_AddRef(*ppAllocator);
+    return S_OK;
 }
 
 static HRESULT WINAPI MemInputPin_NotifyAllocator(IMemInputPin * iface, IMemAllocator * pAllocator, BOOL bReadOnly)
