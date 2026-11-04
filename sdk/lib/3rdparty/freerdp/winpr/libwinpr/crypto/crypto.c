@@ -1,0 +1,324 @@
+/**
+ * WinPR: Windows Portable Runtime
+ * Cryptography API (CryptoAPI)
+ *
+ * Copyright 2012-2013 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <winpr/config.h>
+#include <winpr/wlog.h>
+#include <winpr/crypto.h>
+
+/**
+ * CryptAcquireCertificatePrivateKey
+ * CryptBinaryToStringA
+ * CryptBinaryToStringW
+ * CryptCloseAsyncHandle
+ * CryptCreateAsyncHandle
+ * CryptCreateKeyIdentifierFromCSP
+ * CryptDecodeMessage
+ * CryptDecodeObject
+ * CryptDecodeObjectEx
+ * CryptDecryptAndVerifyMessageSignature
+ * CryptDecryptMessage
+ * CryptEncodeObject
+ * CryptEncodeObjectEx
+ * CryptEncryptMessage
+ * CryptEnumKeyIdentifierProperties
+ * CryptEnumOIDFunction
+ * CryptEnumOIDInfo
+ * CryptExportPKCS8
+ * CryptExportPublicKeyInfo
+ * CryptExportPublicKeyInfoEx
+ * CryptExportPublicKeyInfoFromBCryptKeyHandle
+ * CryptFindCertificateKeyProvInfo
+ * CryptFindLocalizedName
+ * CryptFindOIDInfo
+ * CryptFormatObject
+ * CryptFreeOIDFunctionAddress
+ * CryptGetAsyncParam
+ * CryptGetDefaultOIDDllList
+ * CryptGetDefaultOIDFunctionAddress
+ * CryptGetKeyIdentifierProperty
+ * CryptGetMessageCertificates
+ * CryptGetMessageSignerCount
+ * CryptGetOIDFunctionAddress
+ * CryptGetOIDFunctionValue
+ * CryptHashCertificate
+ * CryptHashCertificate2
+ * CryptHashMessage
+ * CryptHashPublicKeyInfo
+ * CryptHashToBeSigned
+ * CryptImportPKCS8
+ * CryptImportPublicKeyInfo
+ * CryptImportPublicKeyInfoEx
+ * CryptImportPublicKeyInfoEx2
+ * CryptInitOIDFunctionSet
+ * CryptInstallDefaultContext
+ * CryptInstallOIDFunctionAddress
+ * CryptLoadSip
+ * CryptMemAlloc
+ * CryptMemFree
+ * CryptMemRealloc
+ * CryptMsgCalculateEncodedLength
+ * CryptMsgClose
+ * CryptMsgControl
+ * CryptMsgCountersign
+ * CryptMsgCountersignEncoded
+ * CryptMsgDuplicate
+ * CryptMsgEncodeAndSignCTL
+ * CryptMsgGetAndVerifySigner
+ * CryptMsgGetParam
+ * CryptMsgOpenToDecode
+ * CryptMsgOpenToEncode
+ * CryptMsgSignCTL
+ * CryptMsgUpdate
+ * CryptMsgVerifyCountersignatureEncoded
+ * CryptMsgVerifyCountersignatureEncodedEx
+ * CryptQueryObject
+ * CryptRegisterDefaultOIDFunction
+ * CryptRegisterOIDFunction
+ * CryptRegisterOIDInfo
+ * CryptRetrieveTimeStamp
+ * CryptSetAsyncParam
+ * CryptSetKeyIdentifierProperty
+ * CryptSetOIDFunctionValue
+ * CryptSignAndEncodeCertificate
+ * CryptSignAndEncryptMessage
+ * CryptSignCertificate
+ * CryptSignMessage
+ * CryptSignMessageWithKey
+ * CryptSIPAddProvider
+ * CryptSIPCreateIndirectData
+ * CryptSIPGetCaps
+ * CryptSIPGetSignedDataMsg
+ * CryptSIPLoad
+ * CryptSIPPutSignedDataMsg
+ * CryptSIPRemoveProvider
+ * CryptSIPRemoveSignedDataMsg
+ * CryptSIPRetrieveSubjectGuid
+ * CryptSIPRetrieveSubjectGuidForCatalogFile
+ * CryptSIPVerifyIndirectData
+ * CryptUninstallDefaultContext
+ * CryptUnregisterDefaultOIDFunction
+ * CryptUnregisterOIDFunction
+ * CryptUnregisterOIDInfo
+ * CryptUpdateProtectedState
+ * CryptVerifyCertificateSignature
+ * CryptVerifyCertificateSignatureEx
+ * CryptVerifyDetachedMessageHash
+ * CryptVerifyDetachedMessageSignature
+ * CryptVerifyMessageHash
+ * CryptVerifyMessageSignature
+ * CryptVerifyMessageSignatureWithKey
+ * CryptVerifyTimeStampSignature
+ * DbgInitOSS
+ * DbgPrintf
+ * PFXExportCertStore
+ * PFXExportCertStore2
+ * PFXExportCertStoreEx
+ * PFXImportCertStore
+ * PFXIsPFXBlob
+ * PFXVerifyPassword
+ */
+
+#ifndef _WIN32
+
+#include "crypto.h"
+
+#include <winpr/crt.h>
+#include <winpr/collections.h>
+
+static wListDictionary* g_ProtectedMemoryBlocks = nullptr;
+
+BOOL CryptProtectMemory(LPVOID pData, DWORD cbData, DWORD dwFlags)
+{
+	BYTE* pCipherText = nullptr;
+	size_t cbOut = 0;
+	size_t cbFinal = 0;
+	WINPR_CIPHER_CTX* enc = nullptr;
+	BYTE randomKey[256] = WINPR_C_ARRAY_INIT;
+	WINPR_PROTECTED_MEMORY_BLOCK* pMemBlock = nullptr;
+
+	if (dwFlags != CRYPTPROTECTMEMORY_SAME_PROCESS)
+		return FALSE;
+
+	if (winpr_RAND(randomKey, sizeof(randomKey)) < 0)
+		return FALSE;
+
+	if (!g_ProtectedMemoryBlocks)
+	{
+		g_ProtectedMemoryBlocks = ListDictionary_New(TRUE);
+
+		if (!g_ProtectedMemoryBlocks)
+			return FALSE;
+	}
+
+	pMemBlock = (WINPR_PROTECTED_MEMORY_BLOCK*)calloc(1, sizeof(WINPR_PROTECTED_MEMORY_BLOCK));
+
+	if (!pMemBlock)
+		return FALSE;
+
+	pMemBlock->pData = pData;
+	pMemBlock->cbData = cbData;
+	pMemBlock->dwFlags = dwFlags;
+
+	if (winpr_RAND(pMemBlock->salt, 8) < 0)
+		goto out;
+
+	if (winpr_Cipher_BytesToKey(WINPR_CIPHER_AES_256_CBC, WINPR_MD_SHA1, pMemBlock->salt, randomKey,
+	                            sizeof(randomKey), 4, pMemBlock->key, pMemBlock->iv) <= 0)
+		goto out;
+
+	SecureZeroMemory(randomKey, sizeof(randomKey));
+
+	cbOut = pMemBlock->cbData + 16 - 1;
+	pCipherText = (BYTE*)calloc(1, cbOut);
+
+	if (!pCipherText)
+		goto out;
+
+	if ((enc = winpr_Cipher_NewEx(WINPR_CIPHER_AES_256_CBC, WINPR_ENCRYPT, pMemBlock->key,
+	                              sizeof(pMemBlock->key), pMemBlock->iv, sizeof(pMemBlock->iv))) ==
+	    nullptr)
+		goto out;
+	if (!winpr_Cipher_Update(enc, pMemBlock->pData, pMemBlock->cbData, pCipherText, &cbOut))
+		goto out;
+	if (!winpr_Cipher_Final(enc, pCipherText + cbOut, &cbFinal))
+		goto out;
+	winpr_Cipher_Free(enc);
+
+	CopyMemory(pMemBlock->pData, pCipherText, pMemBlock->cbData);
+	free(pCipherText);
+
+	return ListDictionary_Add(g_ProtectedMemoryBlocks, pData, pMemBlock);
+out:
+	free(pMemBlock);
+	free(pCipherText);
+	winpr_Cipher_Free(enc);
+
+	return FALSE;
+}
+
+BOOL CryptUnprotectMemory(LPVOID pData, WINPR_ATTR_UNUSED DWORD cbData, DWORD dwFlags)
+{
+	BYTE* pPlainText = nullptr;
+	size_t cbOut = 0;
+	size_t cbFinal = 0;
+	WINPR_CIPHER_CTX* dec = nullptr;
+	WINPR_PROTECTED_MEMORY_BLOCK* pMemBlock = nullptr;
+
+	if (dwFlags != CRYPTPROTECTMEMORY_SAME_PROCESS)
+		return FALSE;
+
+	if (!g_ProtectedMemoryBlocks)
+		return FALSE;
+
+	pMemBlock =
+	    (WINPR_PROTECTED_MEMORY_BLOCK*)ListDictionary_GetItemValue(g_ProtectedMemoryBlocks, pData);
+
+	if (!pMemBlock)
+		goto out;
+
+	cbOut = pMemBlock->cbData + 16 - 1;
+
+	pPlainText = (BYTE*)malloc(cbOut);
+
+	if (!pPlainText)
+		goto out;
+
+	if ((dec = winpr_Cipher_NewEx(WINPR_CIPHER_AES_256_CBC, WINPR_DECRYPT, pMemBlock->key,
+	                              sizeof(pMemBlock->key), pMemBlock->iv, sizeof(pMemBlock->iv))) ==
+	    nullptr)
+		goto out;
+	if (!winpr_Cipher_Update(dec, pMemBlock->pData, pMemBlock->cbData, pPlainText, &cbOut))
+		goto out;
+	if (!winpr_Cipher_Final(dec, pPlainText + cbOut, &cbFinal))
+		goto out;
+	winpr_Cipher_Free(dec);
+
+	CopyMemory(pMemBlock->pData, pPlainText, pMemBlock->cbData);
+	SecureZeroMemory(pPlainText, pMemBlock->cbData);
+	free(pPlainText);
+
+	ListDictionary_Remove(g_ProtectedMemoryBlocks, pData);
+
+	free(pMemBlock);
+
+	return TRUE;
+
+out:
+	free(pPlainText);
+	free(pMemBlock);
+	winpr_Cipher_Free(dec);
+	return FALSE;
+}
+
+BOOL CryptProtectData(WINPR_ATTR_UNUSED DATA_BLOB* pDataIn, WINPR_ATTR_UNUSED LPCWSTR szDataDescr,
+                      WINPR_ATTR_UNUSED DATA_BLOB* pOptionalEntropy,
+                      WINPR_ATTR_UNUSED PVOID pvReserved,
+                      WINPR_ATTR_UNUSED CRYPTPROTECT_PROMPTSTRUCT* pPromptStruct,
+                      WINPR_ATTR_UNUSED DWORD dwFlags, WINPR_ATTR_UNUSED DATA_BLOB* pDataOut)
+{
+	WLog_ERR("TODO", "TODO: Implement");
+	return TRUE;
+}
+
+BOOL CryptUnprotectData(WINPR_ATTR_UNUSED DATA_BLOB* pDataIn,
+                        WINPR_ATTR_UNUSED LPWSTR* ppszDataDescr,
+                        WINPR_ATTR_UNUSED DATA_BLOB* pOptionalEntropy,
+                        WINPR_ATTR_UNUSED PVOID pvReserved,
+                        WINPR_ATTR_UNUSED CRYPTPROTECT_PROMPTSTRUCT* pPromptStruct,
+                        WINPR_ATTR_UNUSED DWORD dwFlags, WINPR_ATTR_UNUSED DATA_BLOB* pDataOut)
+{
+	WLog_ERR("TODO", "TODO: Implement");
+	return TRUE;
+}
+
+BOOL CryptStringToBinaryW(WINPR_ATTR_UNUSED LPCWSTR pszString, WINPR_ATTR_UNUSED DWORD cchString,
+                          WINPR_ATTR_UNUSED DWORD dwFlags, WINPR_ATTR_UNUSED BYTE* pbBinary,
+                          WINPR_ATTR_UNUSED DWORD* pcbBinary, WINPR_ATTR_UNUSED DWORD* pdwSkip,
+                          WINPR_ATTR_UNUSED DWORD* pdwFlags)
+{
+	WLog_ERR("TODO", "TODO: Implement");
+	return TRUE;
+}
+
+BOOL CryptStringToBinaryA(WINPR_ATTR_UNUSED LPCSTR pszString, WINPR_ATTR_UNUSED DWORD cchString,
+                          WINPR_ATTR_UNUSED DWORD dwFlags, WINPR_ATTR_UNUSED BYTE* pbBinary,
+                          WINPR_ATTR_UNUSED DWORD* pcbBinary, WINPR_ATTR_UNUSED DWORD* pdwSkip,
+                          WINPR_ATTR_UNUSED DWORD* pdwFlags)
+{
+	WLog_ERR("TODO", "TODO: Implement");
+	return TRUE;
+}
+
+BOOL CryptBinaryToStringW(WINPR_ATTR_UNUSED CONST BYTE* pbBinary, WINPR_ATTR_UNUSED DWORD cbBinary,
+                          WINPR_ATTR_UNUSED DWORD dwFlags, WINPR_ATTR_UNUSED LPWSTR pszString,
+                          WINPR_ATTR_UNUSED DWORD* pcchString)
+{
+	WLog_ERR("TODO", "TODO: Implement");
+	return TRUE;
+}
+
+BOOL CryptBinaryToStringA(WINPR_ATTR_UNUSED CONST BYTE* pbBinary, WINPR_ATTR_UNUSED DWORD cbBinary,
+                          WINPR_ATTR_UNUSED DWORD dwFlags, WINPR_ATTR_UNUSED LPSTR pszString,
+                          WINPR_ATTR_UNUSED DWORD* pcchString)
+{
+	WLog_ERR("TODO", "TODO: Implement");
+	return TRUE;
+}
+
+#endif
