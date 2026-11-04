@@ -8054,6 +8054,20 @@ static INT LISTVIEW_HitTest(const LISTVIEW_INFO *infoPtr, LPLVHITTESTINFO lpht, 
     TRACE("lpht->flags=0x%x\n", lpht->flags);
     if (lpht->flags) return -1;
 
+#ifdef __REACTOS__
+    if (subitem && infoPtr->uView == LV_VIEW_DETAILS && infoPtr->nItemHeight)
+    {
+        INT row = (lpht->pt.y - Origin.y) / infoPtr->nItemHeight;
+
+        if (row < -1)
+        {
+            lpht->iItem = row;
+            lpht->flags = LVHT_ONITEMLABEL;
+            return row;
+        }
+    }
+
+#endif
     lpht->flags |= LVHT_NOWHERE;
 
     /* first deal with the large items */
