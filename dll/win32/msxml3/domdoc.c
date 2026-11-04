@@ -812,6 +812,14 @@ static HRESULT WINAPI domdoc_selectNodes(IXMLDOMDocument3 *iface, BSTR p, IXMLDO
 
     TRACE("%p, %s, %p.\n", iface, debugstr_w(p), list);
 
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+    {
+        if (list) *list = NULL;
+        return E_PENDING;
+    }
+#endif
+
     return node_select_nodes(doc->node, p, list);
 }
 
@@ -820,6 +828,14 @@ static HRESULT WINAPI domdoc_selectSingleNode(IXMLDOMDocument3 *iface, BSTR p, I
     domdoc *doc = impl_from_IXMLDOMDocument3(iface);
 
     TRACE("%p, %s, %p.\n", iface, debugstr_w(p), node);
+
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+    {
+        if (node) *node = NULL;
+        return E_PENDING;
+    }
+#endif
 
     return node_select_singlenode(doc->node, p, node);
 }
@@ -1168,6 +1184,11 @@ static HRESULT WINAPI domdoc_createProcessingInstruction(IXMLDOMDocument3 *iface
 
     TRACE("%p, %s, %s, %p.\n", iface, debugstr_w(target), debugstr_w(data), pi);
 
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+        return E_FAIL;
+#endif
+
     return create_pi_node(doc->node, target, data, pi);
 }
 
@@ -1233,6 +1254,14 @@ static HRESULT WINAPI domdoc_getElementsByTagName(IXMLDOMDocument3 *iface, BSTR 
 
     TRACE("%p, %s, %p.\n", iface, debugstr_w(name), list);
 
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+    {
+        if (list) *list = NULL;
+        return E_PENDING;
+    }
+#endif
+
     return node_get_elements_by_tagname(doc->node, name, list);
 }
 
@@ -1293,6 +1322,12 @@ static HRESULT WINAPI domdoc_createNode(IXMLDOMDocument3 *iface, VARIANT type, B
 
     if (FAILED(hr = get_node_type(&type, &node_type)))
         return hr;
+
+#ifdef __REACTOS__
+    if ((doc->node->flags & DOMNODE_SAX_BUILD) && (node_type == NODE_ELEMENT || node_type == NODE_ATTRIBUTE ||
+            node_type == NODE_PROCESSING_INSTRUCTION || node_type == NODE_ENTITY_REFERENCE))
+        return E_FAIL;
+#endif
 
     switch (node_type)
     {
@@ -1572,12 +1607,20 @@ static HRESULT WINAPI domdoc_load(IXMLDOMDocument3 *iface, VARIANT source, VARIA
 
 static HRESULT WINAPI domdoc_get_readyState(IXMLDOMDocument3 *iface, LONG *value)
 {
+#ifdef __REACTOS__
+    domdoc *doc = impl_from_IXMLDOMDocument3(iface);
+#endif
+
     FIXME("%p, %p.\n", iface, value);
 
     if (!value)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    *value = (doc->node->flags & DOMNODE_SAX_BUILD) ? READYSTATE_INTERACTIVE : READYSTATE_COMPLETE;
+#else
     *value = READYSTATE_COMPLETE;
+#endif
     return S_OK;
 }
 
@@ -1821,6 +1864,11 @@ static HRESULT WINAPI domdoc_put_preserveWhiteSpace(IXMLDOMDocument3 *iface, VAR
     struct domnode *node = doc->node;
 
     TRACE("%p, %d.\n", iface, v);
+
+#ifdef __REACTOS__
+    if (node->flags & DOMNODE_SAX_BUILD)
+        return E_FAIL;
+#endif
 
     node->properties->preserving = v;
     return S_OK;

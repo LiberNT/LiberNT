@@ -2499,6 +2499,294 @@ todo_wine {
     free_bstrs();
 }
 
+#ifdef __REACTOS__
+#define check_domdoc_xml(a,b) _check_domdoc_xml(__LINE__,a,b)
+static void _check_domdoc_xml(unsigned line, IXMLDOMDocument *doc, const WCHAR *expected)
+{
+    BSTR str = NULL;
+    HRESULT hr;
+
+    hr = IXMLDOMDocument_get_xml(doc, &str);
+    ok_(__FILE__,line)(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok_(__FILE__,line)(str && !lstrcmpW(str, expected), "got %s, expected %s\n", wine_dbgstr_w(str), wine_dbgstr_w(expected));
+    SysFreeString(str);
+}
+
+#define check_domdoc_ready_state(a,b) _check_domdoc_ready_state(__LINE__,a,b)
+static void _check_domdoc_ready_state(unsigned line, IXMLDOMDocument *doc, LONG expected)
+{
+    LONG state = -1;
+    HRESULT hr;
+
+    hr = IXMLDOMDocument_get_readyState(doc, &state);
+    ok_(__FILE__,line)(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok_(__FILE__,line)(state == expected, "Unexpected ready state %ld, expected %ld.\n", state, expected);
+}
+
+static void test_mxwriter_domdoc_build(void)
+{
+    static const WCHAR built_xml[] =
+        L"<?pi data?>\r\n<!--top-->\r\n"
+        L"<r:Root xmlns:r=\"urn:r\" id=\"7\" xmlns:x=\"urn:x\" x:a=\"v&amp;\" xmlns:y=\"urn:y\">"
+        L"t1+t1b<!--note--><![CDATA[<cd>]]>    \r\n<x:Leaf>a&amp;b</x:Leaf><Empty></Empty>&e;t2</r:Root>\r\n";
+    ISAXContentHandler *content;
+    ISAXLexicalHandler *lexical;
+    ISAXDeclHandler *decl;
+    IMXAttributes *mxattr;
+    ISAXAttributes *attr;
+    IXMLDOMDocument *doc;
+    IXMLDOMElement *element, *pre, *root;
+    IXMLDOMProcessingInstruction *pi;
+    IXMLDOMAttribute *attribute;
+    IXMLDOMComment *comment;
+    IXMLDOMNodeList *list;
+    IXMLDOMText *text;
+    IXMLDOMNode *node;
+    IUnknown *unk;
+    IMXWriter *writer;
+    VARIANT dest, v;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter60, NULL, CLSCTX_INPROC_SERVER, &IID_IMXWriter, (void **)&writer);
+    ok(hr == S_OK, "Failed to create a writer, hr %#lx.\n", hr);
+    hr = CoCreateInstance(&CLSID_DOMDocument60, NULL, CLSCTX_INPROC_SERVER, &IID_IXMLDOMDocument, (void **)&doc);
+    ok(hr == S_OK, "Failed to create a document, hr %#lx.\n", hr);
+    hr = CoCreateInstance(&CLSID_SAXAttributes60, NULL, CLSCTX_INPROC_SERVER, &IID_IMXAttributes, (void **)&mxattr);
+    ok(hr == S_OK, "Failed to create attributes, hr %#lx.\n", hr);
+    IMXAttributes_QueryInterface(mxattr, &IID_ISAXAttributes, (void **)&attr);
+    IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void **)&content);
+    IMXWriter_QueryInterface(writer, &IID_ISAXLexicalHandler, (void **)&lexical);
+    IMXWriter_QueryInterface(writer, &IID_ISAXDeclHandler, (void **)&decl);
+    IXMLDOMDocument_QueryInterface(doc, &IID_IUnknown, (void **)&unk);
+
+    hr = IXMLDOMDocument_createElement(doc, _bstr_("Pre"), &pre);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    V_VT(&dest) = VT_DISPATCH;
+    V_DISPATCH(&dest) = (IDispatch *)pre;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+
+    V_VT(&dest) = VT_DISPATCH;
+    V_DISPATCH(&dest) = NULL;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    V_VT(&dest) = VT_DISPATCH;
+    V_DISPATCH(&dest) = (IDispatch *)doc;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    V_VT(&v) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &v);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(V_VT(&v) == VT_UNKNOWN, "Unexpected type %d.\n", V_VT(&v));
+    ok(V_UNKNOWN(&v) == unk, "Unexpected output %p.\n", V_UNKNOWN(&v));
+    VariantClear(&v);
+
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"Early", 5, NULL);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_ready_state(doc, READYSTATE_INTERACTIVE);
+    check_domdoc_xml(doc, L"");
+
+    hr = ISAXContentHandler_processingInstruction(content, L"pi", 2, L"data", 4);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_xml(doc, L"<?pi data?>\r\n");
+    hr = ISAXLexicalHandler_comment(lexical, L"top", 3);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startPrefixMapping(content, L"x", 1, L"urn:x", 5);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    IMXAttributes_addAttribute(mxattr, _bstr_(""), _bstr_("id"), _bstr_("id"), _bstr_("CDATA"), _bstr_("7"));
+    IMXAttributes_addAttribute(mxattr, _bstr_("urn:x"), _bstr_("a"), _bstr_("x:a"), _bstr_("CDATA"), _bstr_("v&"));
+    IMXAttributes_addAttribute(mxattr, _bstr_(""), _bstr_(""), _bstr_("xmlns:y"), _bstr_("CDATA"), _bstr_("urn:y"));
+    hr = ISAXContentHandler_startElement(content, L"urn:r", 5, L"Root", 4, L"r:Root", 6, attr);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"t1", 2);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"+t1b", 4);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_xml(doc, L"<?pi data?>\r\n<!--top-->\r\n"
+            L"<r:Root xmlns:r=\"urn:r\" id=\"7\" xmlns:x=\"urn:x\" x:a=\"v&amp;\" xmlns:y=\"urn:y\"/>\r\n");
+
+    hr = IXMLDOMDocument_createElement(doc, _bstr_("Locked"), &element);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMDocument_createAttribute(doc, _bstr_("a"), &attribute);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMDocument_createProcessingInstruction(doc, _bstr_("p"), _bstr_("d"), &pi);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMDocument_createTextNode(doc, _bstr_("t"), &text);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMDocument_createComment(doc, _bstr_("c"), &comment);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    IXMLDOMComment_Release(comment);
+    hr = IXMLDOMDocument_appendChild(doc, (IXMLDOMNode *)text, NULL);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    IXMLDOMText_Release(text);
+    node = (void *)0xdeadbeef;
+    hr = IXMLDOMDocument_selectSingleNode(doc, _bstr_("/*"), &node);
+    ok(hr == E_PENDING, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMDocument_selectNodes(doc, _bstr_("//*"), &list);
+    ok(hr == E_PENDING, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMDocument_getElementsByTagName(doc, _bstr_("*"), &list);
+    ok(hr == E_PENDING, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMDocument_put_preserveWhiteSpace(doc, VARIANT_TRUE);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+
+    hr = IXMLDOMDocument_get_documentElement(doc, &root);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = _bstr_("1");
+    hr = IXMLDOMElement_setAttribute(root, _bstr_("set"), v);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = IXMLDOMElement_appendChild(root, (IXMLDOMNode *)pre, NULL);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    IXMLDOMElement_Release(root);
+
+    hr = ISAXLexicalHandler_comment(lexical, L"note", 4);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXLexicalHandler_startCDATA(lexical);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"<cd>", 4);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXLexicalHandler_endCDATA(lexical);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXLexicalHandler_endCDATA(lexical);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXDeclHandler_elementDecl(decl, L"R", 1, L"ANY", 3);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_ignorableWhitespace(content, L"  ", 2);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"  \n", 3);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"urn:x", 5, L"Leaf", 4, L"x:Leaf", 6, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"a&b", 3);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endElement(content, L"urn:x", 5, L"Leaf", 4, L"x:Leaf", 6);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"Empty", 5, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endElement(content, L"", 0, L"", 0, L"Empty", 5);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_skippedEntity(content, L"e", 1);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"t2", 2);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endElement(content, L"urn:r", 5, L"Root", 4, L"r:Root", 6);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endPrefixMapping(content, L"x", 1);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_ready_state(doc, READYSTATE_COMPLETE);
+    check_domdoc_xml(doc, built_xml);
+
+    hr = IXMLDOMDocument_createElement(doc, _bstr_("Unlocked"), &element);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    IXMLDOMElement_Release(element);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"After", 5, NULL);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_xml(doc, built_xml);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"A", 1, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endElement(content, L"", 0, L"", 0, L"A", 1);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"B", 1, NULL);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_ready_state(doc, READYSTATE_COMPLETE);
+    hr = ISAXContentHandler_endElement(content, L"", 0, L"", 0, L"B", 1);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_xml(doc, L"");
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"  ", 2);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"C", 1, NULL);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_xml(doc, L"");
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXLexicalHandler_startDTD(lexical, L"D", 1, NULL, 0, L"d.dtd", 5);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"D", 1, NULL);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"G", 1, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endElement(content, L"", 0, L"", 0, L"Other", 5);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_xml(doc, L"<G></G>\r\n");
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"", 0, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_endDocument(content);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_ready_state(doc, READYSTATE_COMPLETE);
+    check_domdoc_xml(doc, L"</>\r\n");
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"Unended", 7, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"Inner", 5, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"pending", 7);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == E_FAIL, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_ready_state(doc, READYSTATE_COMPLETE);
+    check_domdoc_xml(doc, L"");
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"Unended", 7, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_startElement(content, L"", 0, L"", 0, L"Inner", 5, NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = ISAXContentHandler_characters(content, L"pending", 7);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_domdoc_ready_state(doc, READYSTATE_COMPLETE);
+    check_domdoc_xml(doc, L"<Unended><Inner>pending</Inner></Unended>\r\n");
+
+    IXMLDOMElement_Release(pre);
+    IUnknown_Release(unk);
+    ISAXDeclHandler_Release(decl);
+    ISAXLexicalHandler_Release(lexical);
+    ISAXContentHandler_Release(content);
+    ISAXAttributes_Release(attr);
+    IMXAttributes_Release(mxattr);
+    IMXWriter_Release(writer);
+    IXMLDOMDocument_Release(doc);
+    free_bstrs();
+}
+#endif
+
 static const char *encoding_names[] = {
     "iso-8859-1",
     "iso-8859-2",
@@ -5414,6 +5702,9 @@ START_TEST(saxreader)
         test_mxwriter_properties();
         test_mxwriter_flush();
         test_mxwriter_domdoc();
+#ifdef __REACTOS__
+        test_mxwriter_domdoc_build();
+#endif
         test_mxwriter_encoding();
         test_mxwriter_dispex();
         test_mxwriter_indent();

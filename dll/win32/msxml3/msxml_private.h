@@ -215,6 +215,7 @@ enum domnode_flags
     DOMNODE_NO_PARENT = 0x20,
 #ifdef __REACTOS__
     DOMNODE_EXPLICIT_END_TAG = 0x40,
+    DOMNODE_SAX_BUILD = 0x80,
 #endif
 };
 
@@ -295,6 +296,9 @@ extern bool domnode_is_namespace_declaration(const struct domnode *node);
 extern HRESULT node_clone_domnode(struct domnode *, bool, struct domnode **);
 extern HRESULT parse_stream(ISequentialStream *stream, bool utf16, const struct domdoc_properties *properties,
         struct domnode **tree);
+#ifdef __REACTOS__
+extern bool domnode_is_sax_building(const struct domnode *node);
+#endif
 extern void dump_doc_refcounts(struct domnode *node);
 
 struct parsed_name
