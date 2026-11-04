@@ -202,8 +202,43 @@ static inline void imagelist_copy_images( HIMAGELIST himl, HDC hdcSrc, HDC hdcDe
     }
 }
 
+static inline BOOL imagelist_premultiplies_alpha(void)
+{
+    return __WINE_COMCTL32_VERSION == 6;
+}
+
+static inline DWORD premultiply_alpha( DWORD pixel )
+{
+    DWORD alpha = pixel >> 24;
+
+    return ((pixel & 0xff000000) |
+            (((((pixel >> 16) & 0xff) * alpha + 127) / 255) << 16) |
+            (((((pixel >> 8) & 0xff) * alpha + 127) / 255) << 8) |
+            ((((pixel & 0xff) * alpha + 127) / 255)));
+}
+
+static inline DWORD unpremultiply_alpha( DWORD pixel )
+{
+    DWORD alpha = pixel >> 24;
+
+    if (!alpha) return 0;
+    return ((pixel & 0xff000000) |
+            (min( ((pixel >> 16) & 0xff) * 255 / alpha, 255 ) << 16) |
+            (min( ((pixel >> 8) & 0xff) * 255 / alpha, 255 ) << 8) |
+            min( (pixel & 0xff) * 255 / alpha, 255 ));
+}
+
+static inline DWORD blend_alpha_on_white( DWORD pixel )
+{
+    DWORD opaque = premultiply_alpha( pixel ) & 0x00ffffff;
+    DWORD white = 255 - (pixel >> 24);
+
+    return opaque + (white << 16) + (white << 8) + white;
+}
+
 static void add_dib_bits( HIMAGELIST himl, int pos, int count, int width, int height,
-                          BITMAPINFO *info, BITMAPINFO *mask_info, DWORD *bits, BYTE *mask_bits )
+                          BITMAPINFO *info, BITMAPINFO *mask_info, DWORD *bits, BYTE *mask_bits,
+                          BOOL premultiply )
 {
     int i, j, n;
     POINT pt;
@@ -221,9 +256,20 @@ static void add_dib_bits( HIMAGELIST himl, int pos, int count, int width, int he
             for (j = n * width; j < (n + 1) * width; j++)
                 if ((has_alpha = ((bits[i * stride + j] & 0xff000000) != 0))) break;
 
-        if (has_alpha)
+        if (has_alpha && (himl->flags & 0xfe) != ILC_COLOR32)
+        {
+            for (i = 0; i < height; i++)
+                for (j = n * width; j < (n + 1) * width; j++)
+                    bits[i * stride + j] = blend_alpha_on_white( bits[i * stride + j] );
+        }
+        else if (has_alpha)
         {
             himl->item_flags[pos + n] = ILIF_ALPHA;
+
+            if (premultiply && imagelist_premultiplies_alpha())
+                for (i = 0; i < height; i++)
+                    for (j = n * width; j < (n + 1) * width; j++)
+                        bits[i * stride + j] = premultiply_alpha( bits[i * stride + j] );
 
             if (mask_info && himl->hbmMask)  /* generate the mask from the alpha channel */
             {
@@ -264,7 +310,7 @@ static BOOL add_with_alpha( HIMAGELIST himl, HDC hdc, int pos, int count,
     if (!GetObjectW( hbmImage, sizeof(bm), &bm )) return FALSE;
 
     /* if either the imagelist or the source bitmap don't have an alpha channel, bail out now */
-    if ((himl->flags & 0xfe) != ILC_COLOR32) return FALSE;
+    if ((himl->flags & 0xfe) != ILC_COLOR32 && !imagelist_premultiplies_alpha()) return FALSE;
     if (bm.bmBitsPixel != 32) return FALSE;
 
     SelectObject( hdc, hbmImage );
@@ -297,7 +343,16 @@ static BOOL add_with_alpha( HIMAGELIST himl, HDC hdc, int pos, int count,
         if (!GetDIBits( hdc, hbmMask, 0, height, mask_bits, mask_info, DIB_RGB_COLORS )) goto done;
     }
 
-    add_dib_bits( himl, pos, count, width, height, info, mask_info, bits, mask_bits );
+    if ((himl->flags & 0xfe) != ILC_COLOR32)
+    {
+        DWORD i;
+
+        for (i = 0; i < info->bmiHeader.biSizeImage / 4; i++)
+            if (bits[i] & 0xff000000) break;
+        if (i == info->bmiHeader.biSizeImage / 4) goto done;
+    }
+
+    add_dib_bits( himl, pos, count, width, height, info, mask_info, bits, mask_bits, TRUE );
     ret = TRUE;
 
 done:
@@ -433,7 +488,8 @@ ImageList_Add (HIMAGELIST himl,	HBITMAP hbmImage, HBITMAP hbmMask)
 
     SelectObject(hdcBitmap, hbmImage);
 
-    if (add_with_alpha( himl, hdcBitmap, himl->cCurImage, nImageCount,
+    if (imagelist_premultiplies_alpha() &&
+        add_with_alpha( himl, hdcBitmap, himl->cCurImage, nImageCount,
                         himl->cx, min( himl->cy, bmp.bmHeight), hbmImage, hbmMask ))
         goto done;
 
@@ -1170,6 +1226,7 @@ static BOOL alpha_blend_image( HIMAGELIST himl, HDC dest_dc, int dest_x, int des
     void *bits, *mask_bits;
     unsigned int *ptr;
     int i, j;
+    BOOL premultiplied = has_alpha && imagelist_premultiplies_alpha();
 
     func.BlendOp = AC_SRC_OVER;
     func.BlendFlags = 0;
@@ -1199,7 +1256,12 @@ static BOOL alpha_blend_image( HIMAGELIST himl, HDC dest_dc, int dest_x, int des
         BYTE g = GetGValue( blend_col );
         BYTE b = GetBValue( blend_col );
 
-        if (style & ILD_BLEND25)
+        if (premultiplied)
+        {
+            for (i = 0, ptr = bits; i < cx * cy; i++, ptr++)
+                *ptr = (*ptr >> 1) & 0x7f7f7f7f;
+        }
+        else if (style & ILD_BLEND25)
         {
             for (i = 0, ptr = bits; i < cx * cy; i++, ptr++)
                 *ptr = ((*ptr & 0xff000000) |
@@ -1243,7 +1305,7 @@ static BOOL alpha_blend_image( HIMAGELIST himl, HDC dest_dc, int dest_x, int des
     if (has_alpha)  /* we already have an alpha channel in this case */
     {
         /* pre-multiply by the alpha channel */
-        for (i = 0, ptr = bits; i < cx * cy; i++, ptr++)
+        for (i = 0, ptr = bits; i < cx * cy && !premultiplied; i++, ptr++)
         {
             DWORD alpha = *ptr >> 24;
             *ptr = ((*ptr & 0xff000000) |
@@ -1730,6 +1792,21 @@ ImageList_GetIcon (HIMAGELIST himl, INT i, UINT fStyle)
     BitBlt (hdcDst, 0, 0, himl->cx, himl->cy,
             himl->hdcImage, pt.x, pt.y, SRCCOPY);
 
+    if (imagelist_premultiplies_alpha() && (himl->item_flags[i] & ILIF_ALPHA))
+    {
+        BITMAPINFO info = {{ sizeof(BITMAPINFOHEADER), himl->cx, -himl->cy, 1, 32, BI_RGB }};
+        DWORD *bits = Alloc( himl->cx * himl->cy * sizeof(DWORD) ), n;
+
+        SelectObject(hdcDst, hOldDstBitmap);
+        if (bits && GetDIBits( hdcDst, ii.hbmColor, 0, himl->cy, bits, &info, DIB_RGB_COLORS ))
+        {
+            for (n = 0; n < himl->cx * himl->cy; n++)
+                bits[n] = unpremultiply_alpha( bits[n] );
+            SetDIBits( hdcDst, ii.hbmColor, 0, himl->cy, bits, &info, DIB_RGB_COLORS );
+        }
+        Free( bits );
+    }
+
     /*
      * CreateIconIndirect requires us to deselect the bitmaps from
      * the DCs before calling
@@ -2085,7 +2162,14 @@ ImageList_Merge (HIMAGELIST himl1, INT i1, HIMAGELIST himl2, INT i2,
             BitBlt (himlDst->hdcImage, xOff1, yOff1, himl1->cx, himl1->cy, himl1->hdcImage, pt1.x, pt1.y, SRCCOPY);
         if (i2 >= 0 && i2 < himl2->cCurImage)
         {
-            if (himl2->flags & ILC_MASK)
+            if (imagelist_premultiplies_alpha() && (himl2->item_flags[i2] & ILIF_ALPHA))
+            {
+                BLENDFUNCTION func = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+
+                GdiAlphaBlend( himlDst->hdcImage, xOff2, yOff2, himl2->cx, himl2->cy,
+                               himl2->hdcImage, pt2.x, pt2.y, himl2->cx, himl2->cy, func );
+            }
+            else if (himl2->flags & ILC_MASK)
             {
                 BitBlt (himlDst->hdcImage, xOff2, yOff2, himl2->cx, himl2->cy, himl2->hdcMask , pt2.x, pt2.y, SRCAND);
                 BitBlt (himlDst->hdcImage, xOff2, yOff2, himl2->cx, himl2->cy, himl2->hdcImage, pt2.x, pt2.y, SRCPAINT);
@@ -2100,6 +2184,11 @@ ImageList_Merge (HIMAGELIST himl1, INT i1, HIMAGELIST himl2, INT i2,
             BitBlt (himlDst->hdcMask,  xOff1, yOff1, himl1->cx, himl1->cy, himl1->hdcMask,  pt1.x, pt1.y, SRCCOPY);
         if (i2 >= 0 && i2 < himl2->cCurImage)
             BitBlt (himlDst->hdcMask,  xOff2, yOff2, himl2->cx, himl2->cy, himl2->hdcMask,  pt2.x, pt2.y, SRCAND);
+
+        if (imagelist_premultiplies_alpha() &&
+            ((i1 >= 0 && i1 < himl1->cCurImage && (himl1->item_flags[i1] & ILIF_ALPHA)) ||
+             (i2 >= 0 && i2 < himl2->cCurImage && (himl2->item_flags[i2] & ILIF_ALPHA))))
+            himlDst->item_flags[0] = ILIF_ALPHA;
 
 	himlDst->cCurImage = 1;
     }
@@ -2245,7 +2334,7 @@ HIMAGELIST WINAPI ImageList_Read(IStream *pstm)
         for (i = 0; i < ilHead.cCurImage; i += TILE_COUNT)
         {
             add_dib_bits( himl, i, min( ilHead.cCurImage - i, TILE_COUNT ),
-                          himl->cx, himl->cy, image_info, mask_info, ptr, mask_ptr );
+                          himl->cx, himl->cy, image_info, mask_info, ptr, mask_ptr, FALSE );
             ptr += stride;
             mask_ptr += stride / 8;
         }
