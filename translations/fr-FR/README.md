@@ -306,7 +306,7 @@ LiberNT est un projet indépendant. Il n'est ni affilié à Microsoft, ni approu
 
 ## À propos
 
-LiberNT est développé par les **contributeurs de LiberNT** ; il a été lancé et est maintenu par [Ahmed Arif](https://github.com/ahmedarif193).
+LiberNT est développé par les **contributeurs de LiberNT** ; il a été lancé par [Ahmed Arif](https://github.com/ahmedarif193) et est maintenu par [Ahmed Arif](https://github.com/ahmedarif193), [Ostap Brehin](https://github.com/osbre) et [Vivyy](https://github.com/enginelesscc).
 
 - [Visiter l'organisation LiberNT](https://github.com/LiberNT)
 - [Site web](https://libernt.com)

@@ -306,7 +306,7 @@ LiberNT は独立したプロジェクトです。Microsoft との提携はな�
 
 ## このプロジェクトについて
 
-LiberNT は **LiberNT コントリビューター**によって開発されており、[Ahmed Arif](https://github.com/ahmedarif193) が立ち上げ、メンテナンスしています。
+LiberNT は **LiberNT コントリビューター**によって開発されており、[Ahmed Arif](https://github.com/ahmedarif193) が立ち上げ、[Ahmed Arif](https://github.com/ahmedarif193)、[Ostap Brehin](https://github.com/osbre)、[Vivyy](https://github.com/enginelesscc) がメンテナンスしています。
 
 - [LiberNT オーガニゼーションを見る](https://github.com/LiberNT)
 - [ウェブサイト](https://libernt.com)

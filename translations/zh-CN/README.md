@@ -308,7 +308,7 @@ LiberNT 是独立项目，与 Microsoft 没有隶属、认可或赞助关系。W
 
 ## 关于
 
-LiberNT 由 **LiberNT 贡献者**共同构建，由 [Ahmed Arif](https://github.com/ahmedarif193) 发起并维护。
+LiberNT 由 **LiberNT 贡献者**共同构建，由 [Ahmed Arif](https://github.com/ahmedarif193) 发起，由 [Ahmed Arif](https://github.com/ahmedarif193)、[Ostap Brehin](https://github.com/osbre) 和 [Vivyy](https://github.com/enginelesscc) 维护。
 
 - [访问 LiberNT 组织](https://github.com/LiberNT)
 - [官网](https://libernt.com)
