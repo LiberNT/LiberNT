@@ -358,6 +358,10 @@ static void thread_detach(void)
 
     if(thread_data->thread_hwnd)
         DestroyWindow(thread_data->thread_hwnd);
+#ifdef __REACTOS__
+    if(thread_data->visibility_hook)
+        UnhookWinEvent(thread_data->visibility_hook);
+#endif
 
     destroy_session_storage(thread_data);
     free(thread_data);

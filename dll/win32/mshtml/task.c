@@ -494,6 +494,9 @@ thread_data_t *get_thread_data(BOOL create)
         list_init(&thread_data->task_list);
         list_init(&thread_data->event_task_list);
         list_init(&thread_data->timer_list);
+#ifdef __REACTOS__
+        list_init(&thread_data->visibility_docs);
+#endif
         thread_data->pending_xhr_events_tail = &thread_data->event_task_list;
         wine_rb_init(&thread_data->session_storage_map, session_storage_map_cmp);
     }

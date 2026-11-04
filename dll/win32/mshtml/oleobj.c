@@ -1604,6 +1604,9 @@ static HRESULT WINAPI DocObjOleInPlaceObjectWindowless_InPlaceDeactivate(IOleInP
     notif_focus(This);
 
     This->in_place_active = FALSE;
+#ifdef __REACTOS__
+    unregister_visibility_doc(This);
+#endif
     if(This->ipsite) {
         IOleInPlaceSiteEx *ipsiteex;
         HRESULT hres;

@@ -981,6 +981,10 @@ struct HTMLDocumentObj {
     BOOL in_place_active;
     BOOL ui_active;
     BOOL window_active;
+#ifdef __REACTOS__
+    BOOL visibility_listed;
+    struct list visibility_entry;
+#endif
     BOOL hostui_setup;
     BOOL container_locked;
     BOOL focus;
@@ -1549,10 +1553,18 @@ typedef struct {
     void *blocking_xhr;
     unsigned tasks_locked;
     BOOL timer_blocked;
+#ifdef __REACTOS__
+    struct list visibility_docs;
+    HWINEVENTHOOK visibility_hook;
+#endif
 } thread_data_t;
 
 thread_data_t *get_thread_data(BOOL);
 HWND get_thread_hwnd(void);
+#ifdef __REACTOS__
+void register_visibility_doc(HTMLDocumentObj*);
+void unregister_visibility_doc(HTMLDocumentObj*);
+#endif
 void unblock_tasks_and_timers(thread_data_t*);
 int session_storage_map_cmp(const void*,const struct wine_rb_entry*);
 void destroy_session_storage(thread_data_t*);

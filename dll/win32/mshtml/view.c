@@ -39,6 +39,80 @@ WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
 static ATOM serverwnd_class = 0;
 
+#ifdef __REACTOS__
+static void fire_visibilitychange_proc(task_t *_task)
+{
+    docobj_task_t *task = (docobj_task_t*)_task;
+    HTMLDocumentNode *doc = task->doc->doc_node;
+    DOMEvent *event;
+
+    if(!doc || doc->document_mode < COMPAT_MODE_IE10)
+        return;
+
+    if(SUCCEEDED(create_document_event(doc, EVENTID_VISIBILITYCHANGE, &event))) {
+        dispatch_event(&doc->node.event_target, event);
+        IDOMEvent_Release(&event->IDOMEvent_iface);
+    }
+}
+
+static void fire_visibilitychange_destr(task_t *task)
+{
+    free(task);
+}
+
+static void CALLBACK visibility_winevent_proc(HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG object,
+        LONG child, DWORD thread, DWORD time)
+{
+    thread_data_t *thread_data = get_thread_data(FALSE);
+    HTMLDocumentObj *doc;
+
+    if(!thread_data || object != OBJID_WINDOW || !hwnd)
+        return;
+
+    LIST_FOR_EACH_ENTRY(doc, &thread_data->visibility_docs, HTMLDocumentObj, visibility_entry) {
+        docobj_task_t *task;
+
+        if(!doc->hwnd || GetAncestor(doc->hwnd, GA_ROOT) != hwnd)
+            continue;
+        if(!(task = malloc(sizeof(*task))))
+            continue;
+        task->doc = doc;
+        push_task(&task->header, fire_visibilitychange_proc, fire_visibilitychange_destr, doc->task_magic);
+    }
+}
+
+void register_visibility_doc(HTMLDocumentObj *doc)
+{
+    thread_data_t *thread_data;
+
+    if(doc->visibility_listed || !(thread_data = get_thread_data(TRUE)))
+        return;
+
+    if(!thread_data->visibility_hook)
+        thread_data->visibility_hook = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, NULL,
+                visibility_winevent_proc, GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
+    list_add_tail(&thread_data->visibility_docs, &doc->visibility_entry);
+    doc->visibility_listed = TRUE;
+}
+
+void unregister_visibility_doc(HTMLDocumentObj *doc)
+{
+    thread_data_t *thread_data;
+
+    if(!doc->visibility_listed)
+        return;
+
+    list_remove(&doc->visibility_entry);
+    doc->visibility_listed = FALSE;
+
+    thread_data = get_thread_data(FALSE);
+    if(thread_data && thread_data->visibility_hook && list_empty(&thread_data->visibility_docs)) {
+        UnhookWinEvent(thread_data->visibility_hook);
+        thread_data->visibility_hook = NULL;
+    }
+}
+#endif
+
 typedef struct {
     HTMLDocumentObj *doc;
     WNDPROC proc;
@@ -283,6 +357,9 @@ static HRESULT activate_window(HTMLDocumentObj *This)
         activate_gecko(This->nscontainer);
 
     This->in_place_active = TRUE;
+#ifdef __REACTOS__
+    register_visibility_doc(This);
+#endif
     hres = IOleInPlaceSite_QueryInterface(This->ipsite, &IID_IOleInPlaceSiteEx, (void**)&ipsiteex);
     if(SUCCEEDED(hres)) {
         BOOL redraw = FALSE;
@@ -297,6 +374,9 @@ static HRESULT activate_window(HTMLDocumentObj *This)
     if(FAILED(hres)) {
         WARN("OnInPlaceActivate failed: %08lx\n", hres);
         This->in_place_active = FALSE;
+#ifdef __REACTOS__
+        unregister_visibility_doc(This);
+#endif
         return hres;
     }
 
