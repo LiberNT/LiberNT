@@ -81,8 +81,12 @@ HRESULT __cdecl irpcss_server_register(handle_t h, const GUID *clsid, unsigned i
     {
         ULONG pid;
 
-        if (I_RpcBindingInqLocalClientPID(h, &pid) == RPC_S_OK)
+        /* RpcSs runs as Network Service, so open the server process with its own token */
+        if (I_RpcBindingInqLocalClientPID(h, &pid) == RPC_S_OK && RpcImpersonateClient(h) == RPC_S_OK)
+        {
             entry->process = OpenProcess(SYNCHRONIZE, FALSE, pid);
+            RpcRevertToSelf();
+        }
     }
 #endif
 
