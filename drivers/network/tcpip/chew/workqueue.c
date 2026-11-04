@@ -66,6 +66,8 @@ VOID NTAPI ChewWorkerThread(PVOID Context)
 
     UNREFERENCED_PARAMETER(Context);
 
+    KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY);
+
     for (;;)
     {
         KeWaitForSingleObject(&WorkQueueEvent, Executive, KernelMode, FALSE, NULL);

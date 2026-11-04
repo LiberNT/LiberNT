@@ -87,7 +87,22 @@ EchoWorker(PVOID Parameter)
     return 0;
 }
 
-START_TEST(icmp_echo)
+static volatile LONG StopSpinning;
+
+static DWORD WINAPI
+SpinThread(PVOID Parameter)
+{
+    volatile ULONG Count = 0;
+
+    UNREFERENCED_PARAMETER(Parameter);
+
+    while (!StopSpinning)
+        ++Count;
+    return 0;
+}
+
+static void
+RunEchoWorkers(PCSTR Load)
 {
     ECHO_WORKER Workers[ECHO_WORKERS] = {{0}};
     HANDLE Threads[ECHO_WORKERS], Gate;
@@ -112,17 +127,47 @@ START_TEST(icmp_echo)
     for (Index = 0; Index < Created; ++Index)
     {
         Result = WaitForSingleObject(Threads[Index], INFINITE);
-        ok(Result == WAIT_OBJECT_0, "Worker %lu wait returned %lu\n", Index, Result);
+        ok(Result == WAIT_OBJECT_0, "%s: worker %lu wait returned %lu\n", Load, Index, Result);
         ok(Workers[Index].Completed == ECHO_ROUNDS,
-           "Worker %lu completed %lu requests, error %lu\n",
-           Index, Workers[Index].Completed, Workers[Index].Error);
+           "%s: worker %lu completed %lu requests, error %lu\n",
+           Load, Index, Workers[Index].Completed, Workers[Index].Error);
         ok(!Workers[Index].WrongCount,
-           "Worker %lu: %lu requests returned other than one reply, last error %lu\n",
-           Index, Workers[Index].WrongCount, Workers[Index].Error);
+           "%s: worker %lu: %lu requests returned other than one reply, last error %lu\n",
+           Load, Index, Workers[Index].WrongCount, Workers[Index].Error);
         ok(!Workers[Index].WrongReply,
-           "Worker %lu: %lu replies had the wrong address, status or payload\n",
-           Index, Workers[Index].WrongReply);
+           "%s: worker %lu: %lu replies had the wrong address, status or payload\n",
+           Load, Index, Workers[Index].WrongReply);
         CloseHandle(Threads[Index]);
     }
     CloseHandle(Gate);
+}
+
+START_TEST(icmp_echo)
+{
+    HANDLE Spinners[MAXIMUM_WAIT_OBJECTS];
+    SYSTEM_INFO Info;
+    ULONG Count, Index;
+
+    RunEchoWorkers("idle");
+
+    GetSystemInfo(&Info);
+    Count = min(Info.dwNumberOfProcessors, MAXIMUM_WAIT_OBJECTS);
+    StopSpinning = 0;
+    for (Index = 0; Index < Count; ++Index)
+    {
+        Spinners[Index] = CreateThread(NULL, 0, SpinThread, NULL, 0, NULL);
+        ok(Spinners[Index] != NULL, "CreateThread failed: %lu\n", GetLastError());
+        if (!Spinners[Index])
+            break;
+    }
+    Count = Index;
+
+    RunEchoWorkers("busy");
+
+    InterlockedExchange(&StopSpinning, 1);
+    for (Index = 0; Index < Count; ++Index)
+    {
+        ok(WaitForSingleObject(Spinners[Index], 10000) == WAIT_OBJECT_0, "Spinner %lu did not exit\n", Index);
+        CloseHandle(Spinners[Index]);
+    }
 }
