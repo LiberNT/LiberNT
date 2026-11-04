@@ -8519,7 +8519,8 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
     /* Window destruction retired the publication of a bound composition chain. */
     if (composition && window && !IsWindow(window)) window = NULL;
     if (!composition && !IsWindow(window)) return DXGI_ERROR_INVALID_CALL;
-    if (!composition && IsIconic(window)) return DXGI_STATUS_OCCLUDED;
+    if (!composition && IsIconic(window) && desc.SwapEffect != DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL
+            && desc.SwapEffect != DXGI_SWAP_EFFECT_FLIP_DISCARD) return DXGI_STATUS_OCCLUDED;
     if (!composition && !primary && FocusLost())
     {
         if (!(flags & DXGI_PRESENT_TEST)) SetFullscreenState(FALSE, NULL);
