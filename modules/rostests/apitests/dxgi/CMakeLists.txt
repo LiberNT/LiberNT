@@ -19,6 +19,7 @@ add_executable(dxgi_apitest
     subresource_surface.cpp
     feature_support.cpp
     shared_dimensions.cpp
+    d3d10_bindings.cpp
     counters.cpp
     query_order.cpp
     buffer_copy.cpp

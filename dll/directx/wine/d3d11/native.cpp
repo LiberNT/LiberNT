@@ -257,6 +257,10 @@ public:
     LONG multithread_protected = FALSE;
     bool clearing = false;
     ID3D11SamplerState *default_sampler = NULL;
+    ID3D11BlendState *default_blend_state = NULL;
+    ID3D11DepthStencilState *default_depth_stencil_state = NULL;
+    ID3D11RasterizerState *default_rasterizer_state = NULL;
+    void HoldDefaultStates();
     IDXGIAdapter *adapter = NULL;
     D3DKMT_HANDLE km_adapter = 0;
     D3DKMT_HANDLE km_device = 0;
@@ -697,6 +701,8 @@ public:
     void SetConstantBuffers(UINT stage, UINT start, UINT count, ID3D11Buffer *const *buffers);
     void SetSamplers(UINT stage, UINT start, UINT count, ID3D11SamplerState *const *states);
     void SetShaderResources(UINT stage, UINT start, UINT count, ID3D11ShaderResourceView *const *views);
+    UINT CountBindings(const void *object) const;
+    void UnbindObject(const void *object);
     explicit NativeContext(NativeDevice *d, bool recording = false) : device(d), deferred(recording)
     {
         annotation.context = this;
@@ -920,6 +926,8 @@ public:
     virtual ~NativeD3D10Facet() {}
 };
 
+static void NativeDropWeakBindings(NativeDevice *device, const void *object, const LONG *private_references);
+
 template<class Interface, const GUID *iid>
 class NativeChild : public Interface, public NativeAllocation
 {
@@ -988,6 +996,7 @@ public:
         if (!count)
         {
             NativeDevice *d = device;
+            NativeDropWeakBindings(d, static_cast<Interface *>(this), &private_references);
             Drop();
             d->Release();
         }
@@ -2427,6 +2436,7 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     context->RSSetState(NULL);
     ID3D11SamplerState *default_samplers[16] = {};
     for (UINT stage = 0; stage < 6; ++stage) context->SetSamplers(stage, 0, ARRAYSIZE(default_samplers), default_samplers);
+    HoldDefaultStates();
     adapter = selected_adapter;
     adapter->AddRef();
     flags = creation_flags;
@@ -2588,6 +2598,8 @@ extern "C" HRESULT d3d11_native_device_attach_on12(ID3D11Device *device, IUnknow
     return hr;
 }
 
+template<class Interface> static void NativeDropDefault(Interface *&state);
+
 void NativeDevice::MaybeDestroy()
 {
     NativeLock guard(this);
@@ -2605,6 +2617,9 @@ void NativeDevice::MaybeDestroy()
         default_sampler = NULL;
         state->Drop();
     }
+    NativeDropDefault(default_blend_state);
+    NativeDropDefault(default_depth_stencil_state);
+    NativeDropDefault(default_rasterizer_state);
 }
 
 ULONG STDMETHODCALLTYPE NativeDevice::Release()

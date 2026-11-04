@@ -15,6 +15,7 @@ extern void func_offer_resources(void);
 extern void func_subresource_surface(void);
 extern void func_feature_support(void);
 extern void func_shared_dimensions(void);
+extern void func_d3d10_bindings(void);
 extern void func_counters(void);
 extern void func_query_order(void);
 extern void func_composition(void);
@@ -48,6 +49,7 @@ const struct test winetest_testlist[] =
     { "subresource_surface", func_subresource_surface },
     { "feature_support", func_feature_support },
     { "shared_dimensions", func_shared_dimensions },
+    { "d3d10_bindings", func_d3d10_bindings },
     { "counters", func_counters },
     { "query_order", func_query_order },
     { "composition", func_composition },

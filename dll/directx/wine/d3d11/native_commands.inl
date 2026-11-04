@@ -490,3 +490,123 @@ void NativeContext::UpdateDeferred(ID3D11Resource *resource, UINT subresource,
         context->UpdateSubresource(retained.Get(), subresource, region.Data(), bytes.Data(), row_bytes, row_bytes * rows);
     });
 }
+
+template<class Interface> static void NativeDropDefault(Interface *&state)
+{
+    Interface *held = state;
+    state = NULL;
+    if (held) NativeBindingObject(held)->Drop();
+}
+
+template<class Interface> static void NativeHoldDefault(Interface *&slot, Interface *created)
+{
+    NativeBindingObject(created)->Retain();
+    slot = created;
+    created->Release();
+}
+
+void NativeDevice::HoldDefaultStates()
+{
+    static const D3D11_RENDER_TARGET_BLEND_DESC target = {FALSE, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_OP_ADD,
+            D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_OP_ADD, D3D11_COLOR_WRITE_ENABLE_ALL};
+    static const D3D11_DEPTH_STENCILOP_DESC face = {D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP,
+            D3D11_COMPARISON_ALWAYS};
+    static const D3D11_DEPTH_STENCIL_DESC depth = {TRUE, D3D11_DEPTH_WRITE_MASK_ALL, D3D11_COMPARISON_LESS, FALSE,
+            D3D11_DEFAULT_STENCIL_READ_MASK, D3D11_DEFAULT_STENCIL_WRITE_MASK, face, face};
+    static const D3D11_RASTERIZER_DESC rasterizer = {D3D11_FILL_SOLID, D3D11_CULL_BACK, FALSE, 0, 0.0f, 0.0f, TRUE,
+            FALSE, FALSE, FALSE};
+    D3D11_BLEND_DESC blend = {FALSE, FALSE, {target}};
+    ID3D11BlendState *blend_state = NULL;
+    ID3D11DepthStencilState *depth_state = NULL;
+    ID3D11RasterizerState *rasterizer_state = NULL;
+
+    if (!default_blend_state && SUCCEEDED(CreateBlendState(&blend, &blend_state)))
+        NativeHoldDefault(default_blend_state, blend_state);
+    if (!default_depth_stencil_state && SUCCEEDED(CreateDepthStencilState(&depth, &depth_state)))
+        NativeHoldDefault(default_depth_stencil_state, depth_state);
+    if (!default_rasterizer_state && SUCCEEDED(CreateRasterizerState(&rasterizer, &rasterizer_state)))
+        NativeHoldDefault(default_rasterizer_state, rasterizer_state);
+}
+
+UINT NativeContext::CountBindings(const void *object) const
+{
+    const void *const singles[] = {vertex_shader, pixel_shader, geometry_shader, hull_shader, domain_shader,
+            compute_shader, depth_view, input_layout, index_buffer, blend_state, rasterizer_state,
+            depth_stencil_state, predicate};
+    UINT count = 0;
+
+    for (UINT stage = 0; stage < 6; ++stage)
+    {
+        for (UINT slot = 0; slot < ARRAYSIZE(shader_resources[stage]); ++slot) count += shader_resources[stage][slot] == object;
+        for (UINT slot = 0; slot < ARRAYSIZE(samplers[stage]); ++slot) count += samplers[stage][slot] == object;
+        for (UINT slot = 0; slot < ARRAYSIZE(constant_buffers[stage]); ++slot) count += constant_buffers[stage][slot] == object;
+    }
+    for (UINT slot = 0; slot < ARRAYSIZE(vertex_buffers); ++slot) count += vertex_buffers[slot] == object;
+    for (UINT slot = 0; slot < ARRAYSIZE(render_targets); ++slot) count += render_targets[slot] == object;
+    for (UINT slot = 0; slot < ARRAYSIZE(stream_outputs); ++slot) count += stream_outputs[slot] == object;
+    for (UINT i = 0; i < ARRAYSIZE(singles); ++i) count += singles[i] == object;
+    return count;
+}
+
+void NativeContext::UnbindObject(const void *object)
+{
+    NativeStateBypass bypass(this);
+    ID3D11ShaderResourceView *no_view = NULL;
+    ID3D11SamplerState *no_sampler = NULL;
+    ID3D11Buffer *no_buffer = NULL;
+
+    for (UINT stage = 0; stage < 6; ++stage)
+    {
+        for (UINT slot = 0; slot < ARRAYSIZE(shader_resources[stage]); ++slot)
+            if (shader_resources[stage][slot] == object) SetShaderResources(stage, slot, 1, &no_view);
+        for (UINT slot = 0; slot < ARRAYSIZE(samplers[stage]); ++slot)
+            if (samplers[stage][slot] == object) SetSamplers(stage, slot, 1, &no_sampler);
+        for (UINT slot = 0; slot < ARRAYSIZE(constant_buffers[stage]); ++slot)
+            if (constant_buffers[stage][slot] == object) SetConstantBuffers(stage, slot, 1, &no_buffer);
+    }
+    if (vertex_shader == object) VSSetShader(NULL, NULL, 0);
+    if (pixel_shader == object) PSSetShader(NULL, NULL, 0);
+    if (geometry_shader == object) GSSetShader(NULL, NULL, 0);
+    if (hull_shader == object) HSSetShader(NULL, NULL, 0);
+    if (domain_shader == object) DSSetShader(NULL, NULL, 0);
+    if (compute_shader == object) CSSetShader(NULL, NULL, 0);
+    if (input_layout == object) IASetInputLayout(NULL);
+    for (UINT slot = 0; slot < ARRAYSIZE(vertex_buffers); ++slot)
+        if (vertex_buffers[slot] == object) IASetVertexBuffers(slot, 1, &no_buffer, &vertex_strides[slot], &vertex_offsets[slot]);
+    if (index_buffer == object) IASetIndexBuffer(NULL, index_format, index_offset);
+    if (blend_state == object) OMSetBlendState(NULL, blend_factor, sample_mask);
+    if (depth_stencil_state == object) OMSetDepthStencilState(NULL, stencil_ref);
+    if (rasterizer_state == object) RSSetState(NULL);
+    if (predicate == object) SetPredication(NULL, FALSE);
+
+    bool targets_changed = depth_view == object;
+    ID3D11RenderTargetView *targets[ARRAYSIZE(render_targets)];
+    for (UINT slot = 0; slot < ARRAYSIZE(render_targets); ++slot)
+    {
+        targets[slot] = render_targets[slot] == object ? NULL : render_targets[slot];
+        targets_changed |= render_targets[slot] == object;
+    }
+    if (targets_changed) OMSetRenderTargets(render_target_count, targets, depth_view == object ? NULL : depth_view);
+
+    bool outputs_changed = false;
+    ID3D11Buffer *outputs[ARRAYSIZE(stream_outputs)];
+    UINT offsets[ARRAYSIZE(stream_outputs)];
+    for (UINT slot = 0; slot < ARRAYSIZE(stream_outputs); ++slot)
+    {
+        outputs[slot] = stream_outputs[slot] == object ? NULL : stream_outputs[slot];
+        offsets[slot] = ~0u;
+        outputs_changed |= stream_outputs[slot] == object;
+    }
+    if (outputs_changed) SOSetTargets(ARRAYSIZE(outputs), outputs, offsets);
+}
+
+static void NativeDropWeakBindings(NativeDevice *device, const void *object, const LONG *private_references)
+{
+    NativeContext *context = device->context;
+    if (!context) return;
+    NativeLock guard(device);
+    if (!context->d3d10_state) return;
+    UINT bindings = context->CountBindings(object);
+    /* Direct3D 10 bindings hold no reference: an object only they still hold is destroyed and leaves the pipeline. */
+    if (bindings && *private_references == static_cast<LONG>(bindings) + 1) context->UnbindObject(object);
+}
