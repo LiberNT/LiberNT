@@ -2827,6 +2827,10 @@ static void create_cache_entry(http_request_t *req)
         CloseHandle(req->hCacheFile);
         req->hCacheFile = NULL;
     }
+#ifdef __REACTOS__
+    if(req->verb && !wcscmp(req->verb, L"HEAD"))
+        return;
+#endif
 
     if(req->hdr.dwFlags & INTERNET_FLAG_NO_CACHE_WRITE)
         b = FALSE;
