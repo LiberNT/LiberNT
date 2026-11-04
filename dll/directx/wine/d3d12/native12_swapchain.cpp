@@ -43,6 +43,7 @@ public:
     HANDLE latency = NULL;
     UINT latency_max = 1;
     IDXGIOutput *fullscreen_output = NULL;
+    LONG in_set_fullscreen_state = 0;
     LONG_PTR saved_style = 0;
     LONG_PTR saved_ex_style = 0;
     RECT saved_rect = {};
@@ -145,6 +146,17 @@ public:
         return buffers[index]->QueryInterface(iid, out);
     }
     HRESULT STDMETHODCALLTYPE SetFullscreenState(BOOL fullscreen, IDXGIOutput *output) override
+    {
+        if (!fullscreen && output) return DXGI_ERROR_INVALID_CALL;
+        if (fullscreen && (static_cast<UINT>(fullscreen_desc.ScanlineOrdering) > DXGI_MODE_SCANLINE_ORDER_LOWER_FIELD_FIRST
+                || static_cast<UINT>(fullscreen_desc.Scaling) > DXGI_MODE_SCALING_STRETCHED)) return DXGI_ERROR_INVALID_CALL;
+        if (InterlockedExchange(&in_set_fullscreen_state, 1))
+            return !fullscreen_output == !fullscreen ? S_OK : DXGI_STATUS_MODE_CHANGE_IN_PROGRESS;
+        HRESULT hr = ApplyFullscreen(fullscreen, output);
+        InterlockedExchange(&in_set_fullscreen_state, 0);
+        return hr;
+    }
+    HRESULT ApplyFullscreen(BOOL fullscreen, IDXGIOutput *output)
     {
         if (!fullscreen)
         {
