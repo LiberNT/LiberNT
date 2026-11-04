@@ -305,6 +305,14 @@ OslLoadCoreImage(
 
 static
 VOID
+OslTrace(
+    _In_ PCSTR Stage)
+{
+    FwPrint(L"LiberNT: %hs\r\n", Stage);
+}
+
+static
+VOID
 OslMain(VOID)
 {
     CHAR SystemRoot[OSL_PATH_CHARS], Directory[OSL_PATH_CHARS], Options[OSL_OPTIONS_CHARS];
@@ -321,6 +329,8 @@ OslMain(VOID)
     if (!Entry)
         return;
 
+    OslTrace("boot entry selected");
+
     if (!OslGetParameters(Entry, &OslParameters) ||
         !OslNarrow(SystemRoot, sizeof(SystemRoot) - 1, OslParameters.SystemRoot) ||
         !OslNarrow(Options, sizeof(Options), OslParameters.LoadOptions))
@@ -334,6 +344,33 @@ OslMain(VOID)
     Length = strlen(SystemRoot);
     if (Length == 0 || SystemRoot[Length - 1] != '\\')
         RtlStringCbCatA(SystemRoot, sizeof(SystemRoot), "\\");
+
+    OslTrace("load options and system root resolved");
+
+    /* No debug port selected: report on the framebuffer instead */
+    if (FrameBufferData &&
+        !OslHasDebugPort(Options, "SCREEN") &&
+        !OslHasDebugPort(Options, "COM") &&
+        !OslHasDebugPort(Options, "FILE") &&
+        !OslHasDebugPort(Options, "NET"))
+    {
+        RtlStringCbCatA(Options, sizeof(Options), " DEBUGPORT=SCREEN");
+    }
+
+    /* \EFI\LiberNT\ONECPU: start one processor to isolate SMP-only stops */
+    {
+        ULONG MarkerSize = 0;
+        PVOID Marker = FwReadBootFile(L"\\EFI\\LiberNT\\ONECPU", &MarkerSize);
+
+        if (Marker != NULL)
+        {
+            RtlStringCbCatA(Options, sizeof(Options), " NUMPROC=1");
+            FwPrint(L"LiberNT: ONECPU marker found, forcing one processor\r\n");
+            FwFree(Marker);
+        }
+    }
+
+    FwPrint(L"LiberNT: kernel options '%hs'\r\n", Options);
 
     if (OslParameters.OsDevice.Ramdisk)
     {
@@ -382,6 +419,8 @@ OslMain(VOID)
         }
     }
 
+    OslTrace("operating system device opened");
+
     PeSetSystemRoot(SystemRoot);
     RtlStringCbPrintfA(Directory, sizeof(Directory), "%ssystem32\\", SystemRoot);
 
@@ -392,13 +431,19 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("loader block allocated");
+
     LoaderBlock->ConfigurationRoot = OslBuildConfigurationTree(LoaderBlock);
+
+    OslTrace("configuration tree built");
 
     if (!OslLoadSystemHive(LoaderBlock, &OsDevice, SystemRoot))
     {
         FwPrint(L"The SYSTEM registry hive is missing or corrupt.\r\n");
         return;
     }
+
+    OslTrace("SYSTEM hive loaded");
 
     Kernel = OslLoadCoreImage(LoaderBlock,
                               &OsDevice,
@@ -413,6 +458,9 @@ OslMain(VOID)
                                     OSL_HAL_MODULE,
                                     LoaderHalCode)
                  : NULL;
+
+    OslTrace("kernel and HAL images loaded");
+
     if (Hal && OslHasDebugPort(Options, "NET"))
         OslLoadNetworkDebugger(LoaderBlock, &OsDevice, Directory);
 
@@ -433,11 +481,15 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("imports resolved");
+
     if (!OslLoadNlsData(LoaderBlock, &OsDevice, SystemRoot))
     {
         FwPrint(L"The national language support files could not be loaded.\r\n");
         return;
     }
+
+    OslTrace("national language data loaded");
 
     if (!OslLoadBootDrivers(LoaderBlock, &OsDevice, SystemRoot))
     {
@@ -445,7 +497,11 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("boot driver list built");
+
     OslLoadDriverDatabase(LoaderBlock, &OsDevice, SystemRoot);
+
+    OslTrace("driver database loaded");
 
     if (!OslFinalizeLoaderBlock(LoaderBlock, &OsDevice, SystemRoot, Options))
     {
@@ -453,11 +509,15 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("loader block finalized");
+
     if (!OslArchPrepareHandoff(LoaderBlock))
     {
         FwPrint(L"The kernel address space could not be prepared.\r\n");
         return;
     }
+
+    OslTrace("handoff prepared");
 
     OslArchStartKernel(Kernel->EntryPoint, PaToVa(LoaderBlock));
 }
