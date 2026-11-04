@@ -1415,9 +1415,11 @@ static BOOL CB_GetIdealSize(BUTTON_INFO *infoPtr, SIZE *size)
 static BOOL PB_GetIdealSizeReactOS(BUTTON_INFO *infoPtr, SIZE *size)
 {
     const RECT *textMargin = BUTTON_GetTextMargin(infoPtr);
+    LONG style = GetWindowLongW(infoPtr->hwnd, GWL_STYLE);
     LOGFONTW themeFontInfo = {0};
     SIZE textSize;
     SIZE imageSize;
+    SIZE contentSize;
     SIZE buttonSize;
     int imageWidth;
     int imageHeight;
@@ -1461,15 +1463,31 @@ static BOOL PB_GetIdealSizeReactOS(BUTTON_INFO *infoPtr, SIZE *size)
         imageSize.cx = imageWidth + infoPtr->imagelist.margin.left + infoPtr->imagelist.margin.right;
         imageSize.cy = imageHeight + infoPtr->imagelist.margin.top + infoPtr->imagelist.margin.bottom;
     }
+    else if (show_image(infoPtr))
+    {
+        imageSize = BUTTON_GetImageSize(infoPtr);
+    }
     else
     {
         imageSize.cx = 0;
         imageSize.cy = 0;
     }
 
+    if (!infoPtr->imagelist.himl && (!(style & BS_CENTER) || (style & BS_CENTER) == BS_CENTER)
+            && (style & BS_VCENTER) && (style & BS_VCENTER) != BS_VCENTER)
+    {
+        contentSize.cx = max(imageSize.cx, textSize.cx);
+        contentSize.cy = imageSize.cy + textSize.cy;
+    }
+    else
+    {
+        contentSize.cx = imageSize.cx + textSize.cx;
+        contentSize.cy = max(imageSize.cy, textSize.cy);
+    }
+
     if (theme)
     {
-        RECT contentRect = {0, 0, imageSize.cx + textSize.cx, max(imageSize.cy, textSize.cy)};
+        RECT contentRect = {0, 0, contentSize.cx, contentSize.cy};
         RECT extentRect;
 
         if (FAILED(GetThemeBackgroundExtent(theme, hdc, BP_PUSHBUTTON, PBS_NORMAL, &contentRect, &extentRect)))
@@ -1479,8 +1497,8 @@ static BOOL PB_GetIdealSizeReactOS(BUTTON_INFO *infoPtr, SIZE *size)
     }
     else
     {
-        buttonSize.cx = imageSize.cx + textSize.cx + 5;
-        buttonSize.cy = max(imageSize.cy, textSize.cy + 7);
+        buttonSize.cx = contentSize.cx + 5;
+        buttonSize.cy = max(contentSize.cy, textSize.cy + 7);
     }
 
     *size = buttonSize;
