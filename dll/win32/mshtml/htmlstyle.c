@@ -736,8 +736,29 @@ static const style_tbl_entry_t style_tbl[] = {
 
 C_ASSERT(ARRAY_SIZE(style_tbl) == STYLEID_MAX_VALUE);
 
+#ifdef __REACTOS__
+static const WCHAR *gecko_column_names[] = {
+    L"-moz-column-count",
+    L"-moz-column-fill",
+    L"-moz-column-gap",
+    L"-moz-column-rule",
+    L"-moz-column-rule-color",
+    L"-moz-column-rule-style",
+    L"-moz-column-rule-width",
+    NULL,
+    L"-moz-column-width"
+};
+
+C_ASSERT(ARRAY_SIZE(gecko_column_names) == STYLEID_COLUMN_WIDTH - STYLEID_COLUMN_COUNT + 1);
+#endif
+
 static const WCHAR *get_style_nsname(const style_tbl_entry_t *style_entry)
 {
+#ifdef __REACTOS__
+    if(style_entry >= style_tbl + STYLEID_COLUMN_COUNT && style_entry <= style_tbl + STYLEID_COLUMN_WIDTH &&
+       gecko_column_names[style_entry - (style_tbl + STYLEID_COLUMN_COUNT)])
+        return gecko_column_names[style_entry - (style_tbl + STYLEID_COLUMN_COUNT)];
+#endif
     if(style_entry->name[0] == '-')
         return style_entry->name + sizeof("-ms-")-1;
     return style_entry->name;
