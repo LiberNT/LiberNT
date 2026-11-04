@@ -998,6 +998,9 @@ static LRESULT WINAPI UpDownWindowProc(HWND hwnd, UINT message, WPARAM wParam, L
 	    /* initialize the info struct */
 	    infoPtr->Self = hwnd;
 	    infoPtr->Notify  = pcs->hwndParent;
+#ifdef __REACTOS__
+            SendMessageW (infoPtr->Notify, WM_NOTIFYFORMAT, (WPARAM)hwnd, NF_QUERY);
+#endif
 	    infoPtr->dwStyle = pcs->style;
 	    infoPtr->CurVal = 0;
 	    infoPtr->MinVal = 100;
