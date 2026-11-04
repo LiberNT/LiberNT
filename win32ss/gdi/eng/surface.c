@@ -121,6 +121,10 @@ SURFACE_vCleanup(PVOID ObjectBody)
             /* Free a pool allocation */
             EngFreeMem(pvBits);
         }
+        else if (psurf->hSecure)
+        {
+            EngUnsecureMem(psurf->hSecure);
+        }
     }
 
     /* Free palette */

@@ -859,7 +859,9 @@ BITMAP_GetObject(SURFACE *psurf, INT Count, LPVOID buffer)
                     ASSERT(FALSE); /* This shouldn't happen */
             }
 
-            pds->dsBmih.biSizeImage = psurf->SurfObj.cjBits;
+            /* A DIB over caller memory (D3DKMTCreateDCFromMemory) reports no image size. */
+            pds->dsBmih.biSizeImage = (psurf->hDIBSection || (psurf->SurfObj.fjBitmap & BMF_USERMEM)) ?
+                                      psurf->SurfObj.cjBits : 0;
             pds->dsBmih.biXPelsPerMeter = 0;
             pds->dsBmih.biYPelsPerMeter = 0;
             if (pds->dsBmih.biBitCount <= 8)
