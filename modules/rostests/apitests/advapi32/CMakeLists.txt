@@ -5,6 +5,7 @@ list(APPEND SOURCE
     CopySid.c
     CreateService.c
     DuplicateTokenEx.c
+    EnableTraceEx.c
     EnumerateTraceGuidsEx.c
     eventlog.c
     Hash.c
