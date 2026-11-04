@@ -408,10 +408,16 @@ static const IScheduledToastNotificationShowingEventArgsVtbl showing_args_vtbl =
     showing_args_GetDeferral,
 };
 
+static HRESULT invoke_scheduled_showing(IUnknown *handler, void *sender, void *args)
+{
+    return ITypedEventHandler_ToastNotifier_ScheduledToastNotificationShowingEventArgs_Invoke(
+        (ITypedEventHandler_ToastNotifier_ScheduledToastNotificationShowingEventArgs *)handler, sender, args);
+}
+
 static BOOL raise_scheduled_showing(struct notifier *notifier, IScheduledToastNotification *scheduled)
 {
     struct showing_args *args;
-    IUnknown **handlers;
+    struct event_handler **handlers;
     UINT32 count, i;
     BOOL cancel;
 
@@ -435,9 +441,8 @@ static BOOL raise_scheduled_showing(struct notifier *notifier, IScheduledToastNo
     IScheduledToastNotification_AddRef(args->scheduled);
     for (i = 0; i < count; i++)
     {
-        ITypedEventHandler_ToastNotifier_ScheduledToastNotificationShowingEventArgs_Invoke(
-            (ITypedEventHandler_ToastNotifier_ScheduledToastNotificationShowingEventArgs *)handlers[i],
-            &notifier->IToastNotifier_iface, &args->IScheduledToastNotificationShowingEventArgs_iface);
+        event_handler_invoke(handlers[i], invoke_scheduled_showing, &notifier->IToastNotifier_iface,
+                             &args->IScheduledToastNotificationShowingEventArgs_iface);
     }
     event_list_release_snapshot(handlers, count);
     for (i = InterlockedCompareExchange(&args->pending, 0, 0); i; i--)
@@ -459,6 +464,7 @@ static void CALLBACK schedule_timer_callback(PTP_CALLBACK_INSTANCE instance, voi
 {
     struct schedule_entry *entry = context, *current;
     BOOL found = FALSE;
+    HRESULT init;
 
     AcquireSRWLockExclusive(&schedule_lock);
     LIST_FOR_EACH_ENTRY(current, &schedule_entries, struct schedule_entry, entry)
@@ -474,14 +480,16 @@ static void CALLBACK schedule_timer_callback(PTP_CALLBACK_INSTANCE instance, voi
     if (!found)
         return;
 
-    CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    if (schedule_store_claim(entry->app_id, entry->key, FALSE) &&
+    init = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    if ((SUCCEEDED(init) || init == RPC_E_CHANGED_MODE) &&
+        schedule_store_claim(entry->app_id, entry->key, FALSE) &&
         !raise_scheduled_showing(entry->notifier, entry->scheduled))
         schedule_deliver(entry->app_id, entry->scheduled);
-    CoUninitialize();
     CloseThreadpoolTimer(timer);
     entry->timer = NULL;
     schedule_free_entry(entry);
+    if (SUCCEEDED(init))
+        CoUninitialize();
 }
 
 static inline struct notifier *impl_from_IToastNotifier(IToastNotifier *iface)

@@ -54,8 +54,11 @@ void event_list_init(struct event_list *list);
 void event_list_clear(struct event_list *list);
 HRESULT event_list_add(struct event_list *list, void *handler, REFIID iid, EventRegistrationToken *token);
 HRESULT event_list_remove(struct event_list *list, EventRegistrationToken token);
-UINT32 event_list_snapshot(struct event_list *list, IUnknown ***handlers);
-void event_list_release_snapshot(IUnknown **handlers, UINT32 count);
+struct event_handler;
+typedef HRESULT (*event_invoke_func)(IUnknown *handler, void *sender, void *args);
+UINT32 event_list_snapshot(struct event_list *list, struct event_handler ***handlers);
+void event_handler_invoke(struct event_handler *handler, event_invoke_func invoke, void *sender, void *args);
+void event_list_release_snapshot(struct event_handler **handlers, UINT32 count);
 
 HRESULT get_iids(REFIID iid, ULONG *count, IID **iids);
 HRESULT hstring_to_wide(HSTRING value, WCHAR **out);
