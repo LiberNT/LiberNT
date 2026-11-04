@@ -1826,8 +1826,15 @@ MONTHCAL_HitTest(const MONTHCAL_INFO *infoPtr, MCHITTESTINFO *lpht)
       htinfo.rc = infoPtr->todayrect;
     }
     else
+#ifdef __REACTOS__
+    {
+      htinfo.uHit = MCHT_NOWHERE;
+      GetClientRect(infoPtr->hwndSelf, &htinfo.rc);
+    }
+#else
       /* outside of calendar area? What's left must be background :-) */
       htinfo.uHit = MCHT_CALENDARBK;
+#endif
 
     return fill_hittest_info(&htinfo, lpht);
   }
