@@ -124,6 +124,9 @@ typedef struct _SEC_WINNT_AUTH_IDENTITY_EXA
     ULONG  PackageListLength;
 } SEC_WINNT_AUTH_IDENTITY_EXA, *PSEC_WINNT_AUTH_IDENTITY_EXA;
 
+#define SEC_WINNT_AUTH_IDENTITY_EX WINELIB_NAME_AW(SEC_WINNT_AUTH_IDENTITY_EX)
+#define PSEC_WINNT_AUTH_IDENTITY_EX WINELIB_NAME_AW(PSEC_WINNT_AUTH_IDENTITY_EX)
+
 #define SSPIPFC_CREDPROV_DO_NOT_SAVE 0x00000001
 #define SSPIPFC_NO_CHECKBOX          0x00000002
 
@@ -331,6 +334,10 @@ typedef struct _SEC_CHANNEL_BINDINGS {
 
 /* values for QueryCredentialsAttributes ulAttribute */
 #define SECPKG_CRED_ATTR_NAMES 1
+#define SECPKG_CRED_ATTR_SSI_PROVIDER 2
+#define SECPKG_CRED_ATTR_KDC_PROXY_SETTINGS 3
+#define SECPKG_CRED_ATTR_CERT 4
+#define SECPKG_CRED_ATTR_PAC_BYPASS 5
 
 /* types for QueryCredentialsAttributes */
 typedef struct _SecPkgCredentials_NamesA
@@ -342,6 +349,19 @@ typedef struct _SecPkgCredentials_NamesW
 {
     SEC_WCHAR *sUserName;
 } SecPkgCredentials_NamesW, *PSecPkgCredentials_NamesW;
+
+#define KDC_PROXY_SETTINGS_V1 1
+#define KDC_PROXY_SETTINGS_FLAGS_FORCEPROXY 0x1
+
+typedef struct _SecPkgCredentials_KdcProxySettingsW
+{
+    ULONG Version;
+    ULONG Flags;
+    USHORT ProxyServerOffset;
+    USHORT ProxyServerLength;
+    USHORT ClientTlsCredOffset;
+    USHORT ClientTlsCredLength;
+} SecPkgCredentials_KdcProxySettingsW, *PSecPkgCredentials_KdcProxySettingsW;
 
 #define SecPkgCredentials_Names WINELIB_NAME_AW(SecPkgCredentials_Names)
 
