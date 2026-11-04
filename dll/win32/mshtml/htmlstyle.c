@@ -2178,6 +2178,11 @@ static HRESULT WINAPI HTMLStyle_put_borderStyle(IHTMLStyle *iface, BSTR v)
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(v));
 
+#ifdef __REACTOS__
+    if(dispex_compat_mode(&This->css_style.dispex) >= COMPAT_MODE_IE9)
+        return set_style_property(&This->css_style, STYLEID_BORDER_STYLE, v);
+#endif
+
     while(v[i] && hres == S_OK)
     {
         if(v[i] == (WCHAR)' ')
