@@ -29,7 +29,12 @@ extern "C" {
 #define MSV1_0_CLEARTEXT_PASSWORD_ALLOWED 2
 #define MSV1_0_CRED_LM_PRESENT 1
 #define MSV1_0_CRED_NT_PRESENT 2
+#define MSV1_0_CRED_REMOVED 0x0004
+#define MSV1_0_CRED_CREDKEY_PRESENT 0x0008
+#define MSV1_0_CRED_SHA_PRESENT 0x0010
 #define MSV1_0_CRED_VERSION 0
+#define MSV1_0_CRED_VERSION_REMOTE 0xffff0002
+#define MSV1_0_CREDENTIAL_KEY_LENGTH 20
 #define MSV1_0_DONT_TRY_GUEST_ACCOUNT 16
 #define MSV1_0_LANMAN_SESSION_KEY_LENGTH 8
 #define MSV1_0_MAX_NTLM3_LIFE 1800
@@ -194,9 +199,18 @@ typedef LSA_STRING STRING, *PSTRING ;
 typedef enum _KERB_LOGON_SUBMIT_TYPE
 {
   KerbInteractiveLogon = 2,
-  KerbS4ULogon = 12,
+  KerbSmartCardLogon = 6,
+  KerbWorkstationUnlockLogon = 7,
+  KerbSmartCardUnlockLogon = 8,
+  KerbProxyLogon = 9,
   KerbTicketLogon = 10,
-  KerbTicketUnlockLogon = 11
+  KerbTicketUnlockLogon = 11,
+  KerbS4ULogon = 12,
+  KerbCertificateLogon = 13,
+  KerbCertificateS4ULogon = 14,
+  KerbCertificateUnlockLogon = 15,
+  KerbNoElevationLogon = 83,
+  KerbLuidLogon = 84
 } KERB_LOGON_SUBMIT_TYPE, *PKERB_LOGON_SUBMIT_TYPE;
 typedef enum _MSV1_0_LOGON_SUBMIT_TYPE {
   MsV1_0InteractiveLogon = 2,
@@ -440,6 +454,16 @@ typedef struct _KERB_INTERACTIVE_LOGON {
   UNICODE_STRING UserName;
   UNICODE_STRING Password;
 } KERB_INTERACTIVE_LOGON, *PKERB_INTERACTIVE_LOGON;
+typedef struct _KERB_TICKET_LOGON {
+  KERB_LOGON_SUBMIT_TYPE MessageType;
+  ULONG Flags;
+  ULONG ServiceTicketLength;
+  ULONG TicketGrantingTicketLength;
+  PUCHAR ServiceTicket;
+  PUCHAR TicketGrantingTicket;
+} KERB_TICKET_LOGON, *PKERB_TICKET_LOGON;
+#define KERB_LOGON_FLAG_ALLOW_EXPIRED_TICKET 0x1
+#define KERB_LOGON_FLAG_REDIRECTED 0x2
 typedef struct _MSV1_0_INTERACTIVE_LOGON {
   MSV1_0_LOGON_SUBMIT_TYPE MessageType;
   UNICODE_STRING LogonDomainName;
@@ -502,6 +526,26 @@ typedef struct _MSV1_0_SUPPLEMENTAL_CREDENTIAL {
   UCHAR LmPassword[MSV1_0_OWF_PASSWORD_LENGTH];
   UCHAR NtPassword[MSV1_0_OWF_PASSWORD_LENGTH];
 } MSV1_0_SUPPLEMENTAL_CREDENTIAL, *PMSV1_0_SUPPLEMENTAL_CREDENTIAL;
+typedef enum _MSV1_0_CREDENTIAL_KEY_TYPE {
+  InvalidCredKey,
+  DeprecatedIUMCredKey,
+  DomainUserCredKey,
+  LocalUserCredKey,
+  ExternallySuppliedCredKey
+} MSV1_0_CREDENTIAL_KEY_TYPE;
+typedef struct _MSV1_0_CREDENTIAL_KEY {
+  UCHAR Data[MSV1_0_CREDENTIAL_KEY_LENGTH];
+} MSV1_0_CREDENTIAL_KEY, *PMSV1_0_CREDENTIAL_KEY;
+#pragma pack(push, 1)
+typedef struct _MSV1_0_REMOTE_SUPPLEMENTAL_CREDENTIAL {
+  ULONG Version;
+  ULONG Flags;
+  MSV1_0_CREDENTIAL_KEY CredentialKey;
+  MSV1_0_CREDENTIAL_KEY_TYPE CredentialKeyType;
+  ULONG EncryptedCredsSize;
+  UCHAR EncryptedCreds[ANYSIZE_ARRAY];
+} MSV1_0_REMOTE_SUPPLEMENTAL_CREDENTIAL, *PMSV1_0_REMOTE_SUPPLEMENTAL_CREDENTIAL;
+#pragma pack(pop)
 typedef struct _MSV1_0_NTLM3_RESPONSE {
   UCHAR Response[MSV1_0_NTLM3_RESPONSE_LENGTH];
   UCHAR RespType;
