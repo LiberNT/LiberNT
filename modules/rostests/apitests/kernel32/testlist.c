@@ -60,6 +60,7 @@ extern void func_SystemImageCatalog(void);
 extern void func_TebSegmentAfterWait(void);
 extern void func_SharedMemorySecurity(void);
 extern void func_SharedMemoryTransfer(void);
+extern void func_StarvationBoost(void);
 extern void func_StdHandleInheritance(void);
 extern void func_LocaleNameToLCID(void);
 extern void func_lstrcpynW(void);
@@ -165,6 +166,7 @@ const struct test winetest_testlist[] =
     { "SandboxLaunch",               func_SandboxLaunch },
     { "SharedMemorySecurity",        func_SharedMemorySecurity },
     { "SharedMemoryTransfer",        func_SharedMemoryTransfer },
+    { "StarvationBoost",             func_StarvationBoost },
     { "StdHandleInheritance",        func_StdHandleInheritance },
     { "LocaleNameToLCID",            func_LocaleNameToLCID },
     { "lstrcpynW",                   func_lstrcpynW },

@@ -65,6 +65,7 @@ list(APPEND SOURCE
     TebSegmentAfterWait.c
     SharedMemorySecurity.c
     SharedMemoryTransfer.c
+    StarvationBoost.c
     StdHandleInheritance.c
     LocaleNameToLCID.c
     lstrcpynW.c
