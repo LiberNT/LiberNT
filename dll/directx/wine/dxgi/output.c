@@ -405,6 +405,15 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_TakeOwnership(IDXGIOutput6 *iface, 
 
     if (!device)
         return DXGI_ERROR_INVALID_CALL;
+#ifdef __REACTOS__
+    {
+        IDXGIDevice *dxgi_device;
+
+        if (FAILED(IUnknown_QueryInterface(device, &IID_IDXGIDevice, (void **)&dxgi_device)))
+            return E_NOINTERFACE;
+        IDXGIDevice_Release(dxgi_device);
+    }
+#endif
 
     wined3d_mutex_lock();
     hr = wined3d_output_take_ownership(output->wined3d_output, exclusive);
