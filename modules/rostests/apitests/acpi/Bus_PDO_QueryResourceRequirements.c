@@ -82,8 +82,6 @@ typedef struct _PDO_DEVICE_DATA
 #define ACPI_PCI_MAX_WINDOWS 8
     ULONG PciRootIoWindowCount;
     struct { ULONGLONG Start; ULONGLONG End; } PciRootIoWindows[ACPI_PCI_MAX_WINDOWS];
-    ULONG PciRootMemWindowCount;
-    struct { ULONGLONG Start; ULONGLONG End; BOOLEAN Prefetchable; } PciRootMemWindows[ACPI_PCI_MAX_WINDOWS];
     BOOLEAN PciRootLogged;
 } PDO_DEVICE_DATA, *PPDO_DEVICE_DATA;
 
