@@ -8135,6 +8135,9 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
     if (parameters && ((parameters->DirtyRectsCount && !parameters->pDirtyRects)
             || (!!parameters->pScrollRect != !!parameters->pScrollOffset))) return DXGI_ERROR_INVALID_CALL;
     if (parameters && parameters->pScrollRect) return E_NOTIMPL;
+    if (!primary && parameters && parameters->DirtyRectsCount
+            && (desc.SwapEffect == DXGI_SWAP_EFFECT_DISCARD || desc.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD))
+        return DXGI_ERROR_INVALID_CALL;
     NativeLock guard(device);
     if ((flags & DXGI_PRESENT_ALLOW_TEARING) && (interval || !(desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)
             || !fullscreen_desc.Windowed)) return DXGI_ERROR_INVALID_CALL;
@@ -8168,7 +8171,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
                     || static_cast<UINT>(rect.right) > desc.Width || static_cast<UINT>(rect.bottom) > desc.Height)
                 return DXGI_ERROR_INVALID_CALL;
         }
-        if (!primary && !transports[0] && parameters->DirtyRectsCount)
+        if (!primary && !transports[0] && parameters->DirtyRectsCount && desc.SwapEffect != DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL)
         {
             const RECT &rect = parameters->pDirtyRects[0];
             /* The current compositor publication carries one complete client

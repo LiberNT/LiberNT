@@ -8,6 +8,7 @@ add_executable(dxgi_apitest
     composition_damage.cpp
     composition_source.cpp
     hwnd_source.cpp
+    hwnd_damage.cpp
     composition_lifetime.cpp
     completion_event.cpp
     shared_fence.cpp
