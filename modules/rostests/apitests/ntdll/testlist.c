@@ -144,6 +144,7 @@ extern void func_RtlGetProcessHeaps(void);
 extern void func_RtlGetProductInfo(void);
 extern void func_RtlGetUnloadEventTrace(void);
 extern void func_RtlHandle(void);
+extern void func_RtlHeapDecommit(void);
 extern void func_RtlHeapFreeCoalesce(void);
 extern void func_RtlImageDirectoryEntryToData(void);
 extern void func_RtlImageRvaToVa(void);
@@ -335,6 +336,7 @@ const struct test winetest_testlist[] =
     { "RtlGetProductInfo",              func_RtlGetProductInfo },
     { "RtlGetUnloadEventTrace",         func_RtlGetUnloadEventTrace },
     { "RtlHandle",                      func_RtlHandle },
+    { "RtlHeapDecommit",                func_RtlHeapDecommit },
     { "RtlHeapFreeCoalesce",            func_RtlHeapFreeCoalesce },
     { "RtlImageDirectoryEntryToData",   func_RtlImageDirectoryEntryToData },
     { "RtlImageRvaToVa",                func_RtlImageRvaToVa },

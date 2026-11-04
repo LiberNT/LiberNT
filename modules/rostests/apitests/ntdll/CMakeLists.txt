@@ -162,6 +162,7 @@ list(APPEND SOURCE
     RtlGetProductInfo.c
     RtlGetUnloadEventTrace.c
     RtlHandle.c
+    RtlHeapDecommit.c
     RtlHeapFreeCoalesce.c
     RtlImageDirectoryEntryToData.c
     RtlImageRvaToVa.c

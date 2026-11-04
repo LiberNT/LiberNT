@@ -26,7 +26,8 @@
 #include <debug.h>
 
 #define HEAP_DECOMMIT_MINIMUM_BLOCK 0x8000
-#define HEAP_DECOMMIT_COMMITTED_DIVISOR 8
+#define HEAP_DECOMMIT_MINIMUM_TOTAL_FREE 0x10000
+#define HEAP_DECOMMIT_COMMITTED_DIVISOR 16
 #define HEAP_INITIAL_REGION 0x10000
 #define HEAP_INITIAL_COMMIT_ALIGN (0x400 * sizeof(PVOID))
 #define HEAP_MAX_GROW_SIZE 0xFD0000
@@ -1087,13 +1088,14 @@ BOOLEAN
 RtlpShouldDeCommitFreeBlock(PHEAP Heap,
                             SIZE_T BlockSize)
 {
-    SIZE_T CommittedPages = 0;
+    SIZE_T CommittedPages = 0, TotalFree = Heap->TotalFreeSize + BlockSize;
     PLIST_ENTRY Link;
     PHEAP_SEGMENT Segment;
 
     if (BlockSize < Heap->DeCommitFreeBlockThreshold ||
         BlockSize < (HEAP_DECOMMIT_MINIMUM_BLOCK >> HEAP_ENTRY_SHIFT) ||
-        Heap->TotalFreeSize + BlockSize < Heap->DeCommitTotalFreeThreshold)
+        TotalFree < Heap->DeCommitTotalFreeThreshold ||
+        TotalFree < HEAP_DECOMMIT_MINIMUM_TOTAL_FREE)
     {
         return FALSE;
     }
@@ -1104,7 +1106,7 @@ RtlpShouldDeCommitFreeBlock(PHEAP Heap,
         CommittedPages += Segment->NumberOfPages - Segment->NumberOfUnCommittedPages;
     }
 
-    return BlockSize >= (CommittedPages << (PAGE_SHIFT - HEAP_ENTRY_SHIFT)) / HEAP_DECOMMIT_COMMITTED_DIVISOR;
+    return TotalFree >= (CommittedPages << (PAGE_SHIFT - HEAP_ENTRY_SHIFT)) / HEAP_DECOMMIT_COMMITTED_DIVISOR;
 }
 
 PHEAP_FREE_ENTRY NTAPI
