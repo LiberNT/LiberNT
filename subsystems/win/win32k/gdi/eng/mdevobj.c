@@ -46,7 +46,7 @@ MDEVOBJ_bDisable(
         /* Failed to disable all PDEVs. Reenable those we have disabled */
         for (j = 0; j < i; j++)
         {
-            PDEVOBJ_vEnableDisplay(pmdev->dev[i].ppdev);
+            PDEVOBJ_vEnableDisplay(pmdev->dev[j].ppdev);
         }
     }
 
@@ -114,6 +114,7 @@ MDEVOBJ_Create(
         if (LDEVOBJ_bProbeAndCaptureDevmode(pGraphicsDevice, pdm ? pdm : &dmDefault, &localPdm, !pdm))
         {
             ppdev = PDEVOBJ_Create(pGraphicsDevice, localPdm, dwAccelerationLevel, LDEV_DEVICE_DISPLAY);
+            ExFreePoolWithTag(localPdm, GDITAG_DEVMODE);
         }
         else
         {
@@ -130,6 +131,7 @@ MDEVOBJ_Create(
                 if (!pmdevBigger)
                 {
                     WARN("Failed to allocate memory for MDEV. Skipping display '%S'\n", pGraphicsDevice->szWinDeviceName);
+                    PDEVOBJ_vRelease(ppdev);
                     continue;
                 }
                 else
