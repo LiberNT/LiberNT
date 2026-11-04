@@ -3223,7 +3223,10 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateBuffer(const D3D11_BUFFER_DESC *de
     if (desc->Usage == D3D11_USAGE_IMMUTABLE && !initial) return E_INVALIDARG;
     if (!NativeUsageValid(desc->Usage, desc->BindFlags, desc->CPUAccessFlags)) return E_INVALIDARG;
     if (desc->Usage == D3D11_USAGE_IMMUTABLE && desc->CPUAccessFlags) return E_INVALIDARG;
-    if (desc->Usage == D3D11_USAGE_DEFAULT && desc->CPUAccessFlags && !MapOnDefaultBuffers()) return E_INVALIDARG;
+    if (desc->Usage == D3D11_USAGE_DEFAULT && desc->CPUAccessFlags && (!MapOnDefaultBuffers() || !desc->BindFlags
+            || (desc->BindFlags & ~(D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS))
+            || (desc->MiscFlags & ~(D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS | D3D11_RESOURCE_MISC_BUFFER_STRUCTURED))))
+        return E_INVALIDARG;
     if (desc->Usage == D3D11_USAGE_DYNAMIC && desc->CPUAccessFlags != D3D11_CPU_ACCESS_WRITE) return E_INVALIDARG;
     if (desc->Usage == D3D11_USAGE_STAGING && (desc->BindFlags || desc->MiscFlags)) return E_INVALIDARG;
     D3D11_BUFFER_DESC normalized = *desc;
