@@ -7602,6 +7602,7 @@ HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
         update_surface = reinterpret_cast<UpdateSurface>(GetProcAddress(dwmapi, reinterpret_cast<LPCSTR>(static_cast<ULONG_PTR>(101))));
         if (!get_surface || !update_surface) return DXGI_ERROR_UNSUPPORTED;
     }
+    if (IsIconic(window)) return S_OK;
     DXGI_ADAPTER_DESC adapter_desc;
     HRESULT hr = device->adapter->GetDesc(&adapter_desc);
     if (FAILED(hr)) return hr;

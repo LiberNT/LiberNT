@@ -1027,6 +1027,7 @@ HRESULT Native12SwapChain::PublishForeign(UINT slot)
     }
     if (desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM && desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
         return DXGI_ERROR_UNSUPPORTED;
+    if (IsIconic(window)) return S_OK;
     DXGI_ADAPTER_DESC adapter_desc;
     HRESULT hr = device->adapter->GetDesc(&adapter_desc);
     if (FAILED(hr)) return hr;
