@@ -256,6 +256,9 @@ NTAPI
 FinalizeBootLogo(VOID)
 {
     InbvGopLogoComplete();
+
+    /* The logo animation painted the whole screen; put the boot log back. */
+    KdpFbRedraw();
 }
 
 VOID

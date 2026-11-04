@@ -71,6 +71,61 @@ BOOLEAN
 //
 // Initialization Routines
 //
+VOID
+NTAPI
+KdpFbEarlyInit(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+VOID
+NTAPI
+KdpFbPrintString(
+    _In_ PCSTR Text);
+
+VOID
+NTAPI
+KdpFbCheckpoint(
+    _In_ PCSTR Text);
+
+VOID
+NTAPI
+KdpFbRedraw(
+    VOID);
+
+VOID
+NTAPI
+KdpFbStreamStop(
+    VOID);
+
+/* Plain RAM per CPU: no allocation, no KD call, no lock, valid when wedged */
+#define KDP_STAGE_NONE              0
+#define KDP_STAGE_ALLOC_BEGIN       1
+#define KDP_STAGE_ALLOC_END         2
+#define KDP_STAGE_HAL_CALL          3
+#define KDP_STAGE_HAL_RETURN        4
+#define KDP_STAGE_WAIT_ENTER        5
+#define KDP_STAGE_ACK               6
+#define KDP_STAGE_TIMEOUT           7
+#define KDP_STAGE_AP_ENTRY          8
+#define KDP_STAGE_AP_ACTIVE         9
+#define KDP_STAGE_AP_MAILBOX_RELEASE 10
+#define KDP_STAGE_AP_IRQ_READY      11
+
+VOID
+NTAPI
+KdpStageSet(
+    _In_ ULONG Cpu,
+    _In_ ULONG Stage);
+
+VOID
+NTAPI
+KdpStageDump(
+    _In_ PCSTR Why);
+
+ULONG
+NTAPI
+KdpStageQuery(
+    _In_ ULONG Cpu);
+
 BOOLEAN
 NTAPI
 KdInitSystem(

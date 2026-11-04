@@ -53,7 +53,8 @@ PKDP_INIT_ROUTINE InitRoutines[KdMax] =
 #ifdef KDBG // See kdb_cli.c
     KdpKdbgInit,
 #endif
-    KdpNetInit
+    KdpNetInit,
+    KdpFbInit
 };
 
 /* LOCKING FUNCTIONS *********************************************************/
