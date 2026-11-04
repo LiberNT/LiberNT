@@ -2373,6 +2373,8 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     context->OMSetBlendState(NULL, NULL, ~0u);
     context->OMSetDepthStencilState(NULL, 0);
     context->RSSetState(NULL);
+    ID3D11SamplerState *default_samplers[16] = {};
+    for (UINT stage = 0; stage < 6; ++stage) context->SetSamplers(stage, 0, ARRAYSIZE(default_samplers), default_samplers);
     adapter = selected_adapter;
     adapter->AddRef();
     flags = creation_flags;
