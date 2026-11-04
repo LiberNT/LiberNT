@@ -112,7 +112,7 @@ typedef struct STRUCT(_PEB)
 #endif
     ULONG SystemReserved[1];
     ULONG SpareUlong; // AtlThunkSListPtr32
-    PTR(PPEB_FREE_BLOCK) FreeList;
+    PTR(PVOID) ApiSetMap;
     ULONG TlsExpansionCounter;
     PTR(PVOID) TlsBitmap;
     ULONG TlsBitmapBits[2];
@@ -229,6 +229,7 @@ typedef struct STRUCT(_PEB)
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), Mutant) == 0x08);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), Ldr) == 0x18);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), FastPebLock) == 0x038);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), ApiSetMap) == 0x068);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), TlsExpansionCounter) == 0x070);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), NtGlobalFlag) == 0x0BC);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), GdiSharedHandleTable) == 0x0F8);
@@ -254,6 +255,7 @@ C_ASSERT(sizeof(STRUCT(PEB)) == 0x7D0);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), Mutant) == 0x04);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), Ldr) == 0x0C);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), FastPebLock) == 0x01C);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), ApiSetMap) == 0x038);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), TlsExpansionCounter) == 0x03C);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), NtGlobalFlag) == 0x068);
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), GdiSharedHandleTable) == 0x094);
