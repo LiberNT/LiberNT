@@ -1648,7 +1648,13 @@ typedef struct _xmldoc
     IPersistStreamInit IPersistStreamInit_iface;
 #ifdef __REACTOS__
     IPersistMoniker IPersistMoniker_iface;
+    IXMLError IXMLError_iface;
     IMoniker *moniker;
+    struct
+    {
+        UINT ich;
+        BSTR reason;
+    } error;
 #endif
     LONG ref;
 
@@ -1695,6 +1701,10 @@ static HRESULT WINAPI xmldoc_QueryInterface(IXMLDocument2 *iface, REFIID riid, v
     {
         *ppvObject = &This->IPersistMoniker_iface;
     }
+    else if (IsEqualGUID(&IID_IXMLError, riid))
+    {
+        *ppvObject = &This->IXMLError_iface;
+    }
 #endif
     else
     {
@@ -1729,6 +1739,7 @@ static ULONG WINAPI xmldoc_Release(IXMLDocument2 *iface)
         SysFreeString(doc->dtd.name);
 #ifdef __REACTOS__
         SysFreeString(doc->charset);
+        SysFreeString(doc->error.reason);
         if (doc->moniker)
             IMoniker_Release(doc->moniker);
 #endif
@@ -1882,6 +1893,76 @@ static BSTR xmldoc_sniff_charset(IStream *stream)
 }
 #endif
 
+#ifdef __REACTOS__
+static BSTR xmldoc_unclosed_tags_reason(const struct node *node)
+{
+    static const WCHAR prefix[] = L"The following tags were not closed: ";
+    const struct node *cur, **chain;
+    UINT depth = 0, len = ARRAY_SIZE(prefix) - 1 + 3, i;
+    WCHAR *ptr;
+    BSTR ret;
+
+    for (cur = node; cur; cur = cur->parent)
+    {
+        len += SysStringLen(cur->name) + 2;
+        depth++;
+    }
+    len -= 2;
+    if (!(chain = malloc(depth * sizeof(*chain))))
+        return NULL;
+    for (cur = node, i = depth; cur; cur = cur->parent)
+        chain[--i] = cur;
+
+    if ((ret = SysAllocStringLen(NULL, len)))
+    {
+        ptr = ret;
+        memcpy(ptr, prefix, (ARRAY_SIZE(prefix) - 1) * sizeof(WCHAR));
+        ptr += ARRAY_SIZE(prefix) - 1;
+        for (i = 0; i < depth; i++)
+        {
+            if (i)
+            {
+                *ptr++ = ',';
+                *ptr++ = ' ';
+            }
+            memcpy(ptr, chain[i]->name, SysStringLen(chain[i]->name) * sizeof(WCHAR));
+            CharUpperBuffW(ptr, SysStringLen(chain[i]->name));
+            ptr += SysStringLen(chain[i]->name);
+        }
+        *ptr++ = '.';
+        *ptr++ = '\r';
+        *ptr++ = '\n';
+    }
+
+    free(chain);
+    return ret;
+}
+
+static void xmldoc_set_error(xmldoc *doc, HRESULT hr, const struct parse_context *c)
+{
+    WCHAR msg[1024];
+
+    SysFreeString(doc->error.reason);
+    doc->error.reason = NULL;
+    doc->error.ich = 0;
+
+    if (SUCCEEDED(hr))
+        return;
+
+    /* FIXME: the SAX reader does not report where the error is, so line and buffer stay empty. */
+    doc->error.ich = ~0u;
+    if (hr == E_SAX_UNCLOSEDTAG && c && c->node)
+    {
+        doc->error.reason = xmldoc_unclosed_tags_reason(c->node);
+    }
+    else if (FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_FROM_HMODULE, MSXML_hInstance, hr, 0,
+                            msg, ARRAY_SIZE(msg), NULL))
+    {
+        doc->error.reason = SysAllocString(msg);
+    }
+}
+#endif
+
 static HRESULT xmldoc_parse(xmldoc *doc, IStream *stream, const WCHAR *url)
 {
     struct parse_context c;
@@ -1910,6 +1991,9 @@ static HRESULT xmldoc_parse(xmldoc *doc, IStream *stream, const WCHAR *url)
     if (FAILED(hr))
     {
         WARN("Failed to parse %#lx.\n", hr);
+#ifdef __REACTOS__
+        xmldoc_set_error(doc, hr, &c);
+#endif
         parse_context_cleanup(&c);
 #ifdef __REACTOS__
         SysFreeString(charset);
@@ -1918,6 +2002,7 @@ static HRESULT xmldoc_parse(xmldoc *doc, IStream *stream, const WCHAR *url)
     }
 
 #ifdef __REACTOS__
+    xmldoc_set_error(doc, S_OK, NULL);
     SysFreeString(doc->charset);
     doc->charset = charset;
 #endif
@@ -2482,6 +2567,58 @@ static const IPersistMonikerVtbl xmldoc_IPersistMoniker_VTable =
 };
 #endif
 
+#ifdef __REACTOS__
+static inline xmldoc *impl_from_IXMLError(IXMLError *iface)
+{
+    return CONTAINING_RECORD(iface, xmldoc, IXMLError_iface);
+}
+
+static HRESULT WINAPI xmldoc_IXMLError_QueryInterface(IXMLError *iface, REFIID riid, void **obj)
+{
+    xmldoc *doc = impl_from_IXMLError(iface);
+    return IXMLDocument2_QueryInterface(&doc->IXMLDocument2_iface, riid, obj);
+}
+
+static ULONG WINAPI xmldoc_IXMLError_AddRef(IXMLError *iface)
+{
+    xmldoc *doc = impl_from_IXMLError(iface);
+    return IXMLDocument2_AddRef(&doc->IXMLDocument2_iface);
+}
+
+static ULONG WINAPI xmldoc_IXMLError_Release(IXMLError *iface)
+{
+    xmldoc *doc = impl_from_IXMLError(iface);
+    return IXMLDocument2_Release(&doc->IXMLDocument2_iface);
+}
+
+static HRESULT WINAPI xmldoc_IXMLError_GetErrorInfo(IXMLError *iface, XML_ERROR *error)
+{
+    xmldoc *doc = impl_from_IXMLError(iface);
+
+    TRACE("%p, %p.\n", iface, error);
+
+    if (!error)
+        return E_INVALIDARG;
+
+    error->_nLine = 0;
+    error->_pchBuf = SysAllocString(L"");
+    error->_cchBuf = SysStringLen(error->_pchBuf);
+    error->_ich = doc->error.ich;
+    error->_pszFound = SysAllocString(doc->error.reason ? doc->error.reason : L"");
+    error->_pszExpected = SysAllocString(L"");
+
+    return S_OK;
+}
+
+static const IXMLErrorVtbl xmldoc_IXMLError_VTable =
+{
+    xmldoc_IXMLError_QueryInterface,
+    xmldoc_IXMLError_AddRef,
+    xmldoc_IXMLError_Release,
+    xmldoc_IXMLError_GetErrorInfo
+};
+#endif
+
 HRESULT XMLDocument_create(LPVOID *ppObj)
 {
     xmldoc *doc;
@@ -2495,6 +2632,7 @@ HRESULT XMLDocument_create(LPVOID *ppObj)
     doc->IPersistStreamInit_iface.lpVtbl = &xmldoc_IPersistStreamInit_VTable;
 #ifdef __REACTOS__
     doc->IPersistMoniker_iface.lpVtbl = &xmldoc_IPersistMoniker_VTable;
+    doc->IXMLError_iface.lpVtbl = &xmldoc_IXMLError_VTable;
 #endif
     doc->ref = 1;
 
