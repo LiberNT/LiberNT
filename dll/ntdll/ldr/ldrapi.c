@@ -484,7 +484,6 @@ LdrLoadDll(
 
     /* Check if there's a TLD DLL being loaded */
     OldTldDll = LdrpTopLevelDllBeingLoaded;
-    _SEH2_TRY
     {
 
         if (OldTldDll)
@@ -549,15 +548,12 @@ LdrLoadDll(
                        Status);
         }
     }
-    _SEH2_FINALLY
-    {
-        /* Restore the old TLD DLL */
-        LdrpTopLevelDllBeingLoaded = OldTldDll;
 
-        /* Release the lock */
-        LdrUnlockLoaderLock(LDR_UNLOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, Cookie);
-    }
-    _SEH2_END;
+    /* Restore the old TLD DLL */
+    LdrpTopLevelDllBeingLoaded = OldTldDll;
+
+    /* Release the lock */
+    LdrUnlockLoaderLock(LDR_UNLOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, Cookie);
 
 Cleanup:
     /* Do we have a redirect string? */
@@ -1723,10 +1719,11 @@ LdrUnloadDll(
             RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                    LdrEntry->EntryPointActivationContext);
 
+            if (LdrEntry->TlsIndex) LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_DETACH);
+
             /* Call the entrypoint */
             _SEH2_TRY
             {
-                if (LdrEntry->TlsIndex) LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_DETACH);
                 if (EntryPoint) LdrpCallInitRoutine(LdrEntry->EntryPoint, LdrEntry->DllBase, DLL_PROCESS_DETACH, NULL);
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)

@@ -1045,16 +1045,16 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
             RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                    LdrEntry->EntryPointActivationContext);
 
+            /* Check if it has TLS */
+            if (LdrEntry->TlsIndex)
+            {
+                /* Call TLS */
+                LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_ATTACH);
+            }
+
             DllInitCompleted = FALSE;
             _SEH2_TRY
             {
-                /* Check if it has TLS */
-                if (LdrEntry->TlsIndex)
-                {
-                    /* Call TLS */
-                    LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_ATTACH);
-                }
-
                 /* Call the Entrypoint */
                 if (ShowSnaps)
                 {

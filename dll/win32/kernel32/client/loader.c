@@ -534,9 +534,9 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
         return NULL;
     }
 
-    _SEH2_TRY
+    if (dwFlags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE))
     {
-        if (dwFlags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE))
+        _SEH2_TRY
         {
             /* If the image is loaded as a datafile, try to get its handle */
             Status = LdrGetDllHandleEx(0, SearchPath, NULL, &DllName, (PVOID*)&hInst);
@@ -545,19 +545,19 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
                 /* It's not loaded yet - so load it up */
                 Status = BasepLoadLibraryAsDatafile(SearchPath, DllName.Buffer, dwFlags, &hInst);
             }
-            _SEH2_YIELD(goto done;)
         }
-
-        /* Call the API Properly */
-        Status = LdrLoadDll(SearchPath,
-                            &DllCharacteristics,
-                            &DllName,
-                            (PVOID*)&hInst);
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        } _SEH2_END;
+        goto done;
     }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    } _SEH2_END;
+
+    /* Call the API Properly */
+    Status = LdrLoadDll(SearchPath,
+                        &DllCharacteristics,
+                        &DllName,
+                        (PVOID*)&hInst);
 
 
 done:
