@@ -1385,6 +1385,7 @@ HEADER_GetOrderArray(const HEADER_INFO *infoPtr, INT size, LPINT order)
     return TRUE;
 }
 
+#ifndef __REACTOS__
 /* Returns index of first duplicate 'value' from [0,to) range,
    or -1 if there isn't any */
 static INT has_duplicate(const INT *array, INT to, INT value)
@@ -1403,6 +1404,7 @@ static INT get_nextvalue(const INT *array, INT to, INT max)
         if (has_duplicate(array, to, i) == -1) return i;
     return 0;
 }
+#endif
 
 static LRESULT
 HEADER_SetOrderArray(HEADER_INFO *infoPtr, INT size, const INT *order)
@@ -1421,6 +1423,13 @@ HEADER_SetOrderArray(HEADER_INFO *infoPtr, INT size, const INT *order)
         TRACE("\n");
     }
 
+#ifdef __REACTOS__
+    for (i = 0; i < size; i++)
+    {
+        if (order[i] >= 0 && order[i] < size)
+            HEADER_ChangeItemOrder(infoPtr, order[i], i);
+    }
+#else
     for (i=0; i<size; i++)
     {
         if (order[i] >= size || order[i] < 0)
@@ -1445,6 +1454,7 @@ HEADER_SetOrderArray(HEADER_INFO *infoPtr, INT size, const INT *order)
            }
         }
     }
+#endif
     /* sync with item data */
     for (i=0; i<size; i++)
     {
