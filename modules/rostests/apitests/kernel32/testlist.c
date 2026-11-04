@@ -59,6 +59,7 @@ extern void func_QuantumRoundRobin(void);
 extern void func_RegisterWaitPeriodic(void);
 extern void func_SandboxLaunch(void);
 extern void func_SystemImageCatalog(void);
+extern void func_SystemTimeChangeTimers(void);
 extern void func_TebSegmentAfterWait(void);
 extern void func_SharedMemorySecurity(void);
 extern void func_SharedMemoryTransfer(void);
@@ -164,6 +165,7 @@ const struct test winetest_testlist[] =
     { "LoadLibraryExW",              func_LoadLibraryExW },
     { "LockFileEx",                  func_LockFileEx },
     { "SystemImageCatalog",            func_SystemImageCatalog },
+    { "SystemTimeChangeTimers",      func_SystemTimeChangeTimers },
     { "TebSegmentAfterWait",           func_TebSegmentAfterWait },
     { "QuantumRoundRobin",           func_QuantumRoundRobin },
     { "RegisterWaitPeriodic",        func_RegisterWaitPeriodic },
