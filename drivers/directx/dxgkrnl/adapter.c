@@ -727,13 +727,6 @@ DxgkpRetainAndStopBasicDisplayFallback(
     return STATUS_SUCCESS;
 }
 
-/*
- * ReactOS exposes one XPDM-style win32ss display bridge.  A miniport owns that
- * bridge only after it has claimed POST display ownership through the public
- * callback.  A full WDDM adapter that deliberately starts without claiming
- * POST remains available through its adapter interface, while BasicDisplay (or
- * another real owner) keeps the desktop bridge.
- */
 /* Defined below; the fallback handover is driven from adapter start. */
 static NTSTATUS
 DxgkpAcquirePostDisplayOwnership(
@@ -742,20 +735,25 @@ DxgkpAcquirePostDisplayOwnership(
     _Out_opt_ PDXGK_DISPLAY_OWNERSHIP_FLAGS Flags);
 
 static BOOLEAN
-DxgkpShouldRegisterDisplayBridge(
+DxgkpIsPostDisplayDevice(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+static VOID
+DxgkpTakeOverPostDisplayFromFallback(
     _In_ PDXGKRNL_ADAPTER Claimant)
 {
     PDEVICE_OBJECT OwnerDeviceObject;
     PDXGKRNL_ADAPTER Owner;
-    BOOLEAN RegisterDisplayBridge;
     BOOLEAN TakeOverFromFallback;
+    DXGK_DISPLAY_INFORMATION DisplayInformation;
+    NTSTATUS OwnershipStatus;
 
     PAGED_CODE();
 
     if (Claimant->MiniportContext == NULL ||
         Claimant->IsBasicDisplayFallback)
     {
-        return TRUE;
+        return;
     }
 
     (VOID)KeWaitForSingleObject(&g_PostDisplayOwnershipMutex,
@@ -765,7 +763,6 @@ DxgkpShouldRegisterDisplayBridge(
                                 NULL);
 
     Owner = DxgkpReferencePostDisplayOwner(&OwnerDeviceObject);
-    RegisterDisplayBridge = (Owner == NULL || Owner == Claimant);
     /*
      * The basic-display fallback is root-enumerated and starts before any PCI
      * display adapter, so it claims the POST framebuffer first every time.  It
@@ -777,56 +774,34 @@ DxgkpShouldRegisterDisplayBridge(
      * GPU stays permanently headless behind the fallback.  Claim on its
      * behalf.
      */
-    TakeOverFromFallback = !RegisterDisplayBridge &&
-                           Owner != NULL &&
+    TakeOverFromFallback = Owner != NULL &&
+                           Owner != Claimant &&
                            Owner->MiniportContext != NULL &&
-                           Owner->IsBasicDisplayFallback;
+                           Owner->IsBasicDisplayFallback &&
+                           DxgkAdapterHasMemoryResources(Claimant->TranslatedResources) &&
+                           DxgkpIsPostDisplayDevice(Claimant);
 
     if (OwnerDeviceObject != NULL)
         ObDereferenceObject(OwnerDeviceObject);
     KeReleaseMutex(&g_PostDisplayOwnershipMutex, FALSE);
 
-    if (TakeOverFromFallback)
-    {
-        DXGK_DISPLAY_INFORMATION DisplayInformation;
-        NTSTATUS OwnershipStatus;
+    if (!TakeOverFromFallback)
+        return;
 
-        /* Display ownership follows the working adapter, not HDMI presence.
-         * The bridge establishes a detached desktop when no target is lit.
-         * Keep the fallback transaction armed until its mode and surfaces
-         * have been validated by DxgkDisplayRegister. */
-        RtlZeroMemory(&DisplayInformation, sizeof(DisplayInformation));
-        OwnershipStatus = DxgkpAcquirePostDisplayOwnership((HANDLE)Claimant,
-                                                           &DisplayInformation,
-                                                           NULL);
-        DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p claiming POST ownership from the "
-                    "basic-display fallback -> 0x%08lX (%ux%u)\n",
-                    Claimant,
-                    OwnershipStatus,
-                    DisplayInformation.Width,
-                    DisplayInformation.Height);
-
-        (VOID)KeWaitForSingleObject(&g_PostDisplayOwnershipMutex,
-                                    Executive,
-                                    KernelMode,
-                                    FALSE,
-                                    NULL);
-        OwnerDeviceObject = NULL;
-        Owner = DxgkpReferencePostDisplayOwner(&OwnerDeviceObject);
-        RegisterDisplayBridge = (Owner == NULL || Owner == Claimant);
-        if (OwnerDeviceObject != NULL)
-            ObDereferenceObject(OwnerDeviceObject);
-        KeReleaseMutex(&g_PostDisplayOwnershipMutex, FALSE);
-    }
-
-    if (!RegisterDisplayBridge)
-    {
-        DXGKRNL_WARN("DISPLAY_BRIDGE: adapter %p did not claim POST ownership; "
-                     "owner %p retains the win32ss desktop bridge\n",
-                     Claimant,
-                     Owner);
-    }
-    return RegisterDisplayBridge;
+    /* Display ownership follows the working adapter, not HDMI presence.
+     * The bridge establishes a detached desktop when no target is lit.
+     * Keep the fallback transaction armed until its mode and surfaces
+     * have been validated by DxgkDisplayRegister. */
+    RtlZeroMemory(&DisplayInformation, sizeof(DisplayInformation));
+    OwnershipStatus = DxgkpAcquirePostDisplayOwnership((HANDLE)Claimant,
+                                                       &DisplayInformation,
+                                                       NULL);
+    DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p claiming POST ownership from the "
+                "basic-display fallback -> 0x%08lX (%ux%u)\n",
+                Claimant,
+                OwnershipStatus,
+                DisplayInformation.Width,
+                DisplayInformation.Height);
 }
 
 /* A Basic Display fallback that starts after another adapter took the boot
@@ -15289,22 +15264,17 @@ DxgkAdapterStart(
      */
     if (DxgkAdapterStartRoleRequiresDisplayPipeline(Role))
     {
-        BOOLEAN RegisterDisplayBridge;
-
         StepStart100ns = DxgkpTraceNow100ns();
-        RegisterDisplayBridge = DxgkpShouldRegisterDisplayBridge(Adapter);
-        if (RegisterDisplayBridge)
+        DxgkpTakeOverPostDisplayFromFallback(Adapter);
+        Status = DxgkDisplayRegister(Adapter);
+        if (!NT_SUCCESS(Status))
         {
-            Status = DxgkDisplayRegister(Adapter);
-            if (!NT_SUCCESS(Status))
-            {
-                DXGKRNL_ERR("DxgkAdapterStart: mandatory DxgkDisplayRegister "
-                            "failed 0x%08lX\n",
-                            Status);
-                goto StartRollback;
-            }
-            Progress.DisplayRegistered = TRUE;
+            DXGKRNL_ERR("DxgkAdapterStart: mandatory DxgkDisplayRegister "
+                        "failed 0x%08lX\n",
+                        Status);
+            goto StartRollback;
         }
+        Progress.DisplayRegistered = TRUE;
         DisplayUs = DxgkpTraceElapsedUs(StepStart100ns);
     }
 
