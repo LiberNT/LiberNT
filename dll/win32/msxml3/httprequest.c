@@ -42,6 +42,12 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(msxml);
 
+#ifdef __REACTOS__
+#define IServerXMLHTTPRequest IServerXMLHTTPRequest2
+#define IServerXMLHTTPRequestVtbl IServerXMLHTTPRequest2Vtbl
+#define ERROR_WINHTTP_CANNOT_CALL_BEFORE_OPEN 12100
+#endif
+
 static const DWORD safety_supported_options =
     INTERFACESAFE_FOR_UNTRUSTED_CALLER |
     INTERFACESAFE_FOR_UNTRUSTED_DATA   |
@@ -119,6 +125,11 @@ typedef struct
     IServerXMLHTTPRequest IServerXMLHTTPRequest_iface;
 #ifdef __REACTOS__
     DispatchEx dispex;
+    SXH_PROXY_SETTING proxy_setting;
+    BSTR proxy_server;
+    BSTR proxy_bypass;
+    BSTR proxy_user;
+    BSTR proxy_password;
 #endif
 } serverhttp;
 
@@ -1894,6 +1905,9 @@ static HRESULT WINAPI ServerXMLHTTPRequest_QueryInterface(IServerXMLHTTPRequest 
     TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), obj);
 
     if ( IsEqualGUID( riid, &IID_IServerXMLHTTPRequest) ||
+#ifdef __REACTOS__
+         IsEqualGUID( riid, &IID_IServerXMLHTTPRequest2) ||
+#endif
          IsEqualGUID( riid, &IID_IXMLHTTPRequest) ||
          IsEqualGUID( riid, &IID_IDispatch) ||
          IsEqualGUID( riid, &IID_IUnknown) )
@@ -1940,6 +1954,12 @@ static ULONG WINAPI ServerXMLHTTPRequest_Release(IServerXMLHTTPRequest *iface)
     if (!ref)
     {
         httprequest_release(&request->req);
+#ifdef __REACTOS__
+        SysFreeString(request->proxy_server);
+        SysFreeString(request->proxy_bypass);
+        SysFreeString(request->proxy_user);
+        SysFreeString(request->proxy_password);
+#endif
         free(request);
     }
 
@@ -1961,7 +1981,11 @@ static HRESULT WINAPI ServerXMLHTTPRequest_GetTypeInfo(IServerXMLHTTPRequest *if
 {
     TRACE("%p, %u, %lx, %p.\n", iface, iTInfo, lcid, ppTInfo);
 
+#ifdef __REACTOS__
+    return get_typeinfo(IServerXMLHTTPRequest2_tid, ppTInfo);
+#else
     return get_typeinfo(IServerXMLHTTPRequest_tid, ppTInfo);
+#endif
 }
 
 static HRESULT WINAPI ServerXMLHTTPRequest_GetIDsOfNames(IServerXMLHTTPRequest *iface, REFIID riid,
@@ -1976,7 +2000,11 @@ static HRESULT WINAPI ServerXMLHTTPRequest_GetIDsOfNames(IServerXMLHTTPRequest *
     if(!rgszNames || cNames == 0 || !rgDispId)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    hr = get_typeinfo(IServerXMLHTTPRequest2_tid, &typeinfo);
+#else
     hr = get_typeinfo(IServerXMLHTTPRequest_tid, &typeinfo);
+#endif
     if(SUCCEEDED(hr))
     {
         hr = ITypeInfo_GetIDsOfNames(typeinfo, rgszNames, cNames, rgDispId);
@@ -1996,7 +2024,11 @@ static HRESULT WINAPI ServerXMLHTTPRequest_Invoke(IServerXMLHTTPRequest *iface, 
     TRACE("%p, %ld, %s %lx, %d, %p, %p, %p, %p.\n", iface, dispIdMember, debugstr_guid(riid),
           lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 
+#ifdef __REACTOS__
+    hr = get_typeinfo(IServerXMLHTTPRequest2_tid, &typeinfo);
+#else
     hr = get_typeinfo(IServerXMLHTTPRequest_tid, &typeinfo);
+#endif
     if(SUCCEEDED(hr))
     {
         hr = ITypeInfo_Invoke(typeinfo, iface, dispIdMember, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
@@ -2134,6 +2166,51 @@ static HRESULT WINAPI ServerXMLHTTPRequest_setOption(IServerXMLHTTPRequest *ifac
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static BSTR serverhttp_variant_string(const VARIANT *value)
+{
+    return V_VT(value) == VT_BSTR ? SysAllocString(V_BSTR(value)) : NULL;
+}
+
+static HRESULT WINAPI ServerXMLHTTPRequest_setProxy(IServerXMLHTTPRequest *iface, SXH_PROXY_SETTING setting,
+        VARIANT server, VARIANT bypass)
+{
+    serverhttp *This = impl_from_IServerXMLHTTPRequest( iface );
+
+    TRACE("(%p)->(%d %s %s)\n", This, setting, debugstr_variant(&server), debugstr_variant(&bypass));
+
+    if ((UINT)setting > SXH_PROXY_SET_PROXY)
+        return E_INVALIDARG;
+
+    /* FIXME: the proxy is recorded but the urlmon binding still uses the session proxy. */
+    SysFreeString(This->proxy_server);
+    SysFreeString(This->proxy_bypass);
+    This->proxy_setting = setting;
+    This->proxy_server = serverhttp_variant_string(&server);
+    This->proxy_bypass = serverhttp_variant_string(&bypass);
+    return S_OK;
+}
+
+static HRESULT WINAPI ServerXMLHTTPRequest_setProxyCredentials(IServerXMLHTTPRequest *iface, BSTR user, BSTR password)
+{
+    serverhttp *This = impl_from_IServerXMLHTTPRequest( iface );
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_w(user), password);
+
+    if (This->req.state == READYSTATE_UNINITIALIZED)
+        return HRESULT_FROM_WIN32(ERROR_WINHTTP_CANNOT_CALL_BEFORE_OPEN);
+    if (!user || !*user || !password)
+        return E_INVALIDARG;
+
+    /* FIXME: the credentials are recorded but not offered to a proxy. */
+    SysFreeString(This->proxy_user);
+    SysFreeString(This->proxy_password);
+    This->proxy_user = SysAllocString(user);
+    This->proxy_password = SysAllocString(password);
+    return S_OK;
+}
+#endif
+
 static const struct IServerXMLHTTPRequestVtbl ServerXMLHTTPRequestVtbl =
 {
     ServerXMLHTTPRequest_QueryInterface,
@@ -2161,6 +2238,10 @@ static const struct IServerXMLHTTPRequestVtbl ServerXMLHTTPRequestVtbl =
     ServerXMLHTTPRequest_waitForResponse,
     ServerXMLHTTPRequest_getOption,
     ServerXMLHTTPRequest_setOption
+#ifdef __REACTOS__
+    , ServerXMLHTTPRequest_setProxy,
+    ServerXMLHTTPRequest_setProxyCredentials
+#endif
 };
 
 static void init_httprequest(httprequest *req)
@@ -2227,6 +2308,13 @@ HRESULT ServerXMLHTTP_create(void **obj)
 
     init_httprequest(&req->req);
     req->IServerXMLHTTPRequest_iface.lpVtbl = &ServerXMLHTTPRequestVtbl;
+#ifdef __REACTOS__
+    req->proxy_setting = SXH_PROXY_SET_DEFAULT;
+    req->proxy_server = NULL;
+    req->proxy_bypass = NULL;
+    req->proxy_user = NULL;
+    req->proxy_password = NULL;
+#endif
 
     *obj = &req->IServerXMLHTTPRequest_iface;
 
@@ -2238,14 +2326,14 @@ HRESULT ServerXMLHTTP_create(void **obj)
 #ifdef __REACTOS__
 static const tid_t serverhttp_iface_tids[] =
 {
-    IServerXMLHTTPRequest_tid,
+    IServerXMLHTTPRequest2_tid,
     0
 };
 
 static dispex_static_data_t serverhttp_dispex =
 {
     NULL,
-    IServerXMLHTTPRequest_tid,
+    IServerXMLHTTPRequest2_tid,
     NULL,
     serverhttp_iface_tids
 };

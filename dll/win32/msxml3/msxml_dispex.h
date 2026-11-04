@@ -85,6 +85,7 @@ typedef enum tid_t
     IServerXMLHTTPRequest_tid,
 #ifdef __REACTOS__
     IMXNamespacePrefixes_tid,
+    IServerXMLHTTPRequest2_tid,
 #endif
     LAST_tid
 } tid_t;
