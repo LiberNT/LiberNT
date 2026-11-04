@@ -55,6 +55,11 @@ static DWORD FrameInterval;
 #define TERMINAL_SERVER_KEY "SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
 #define WINSTATIONS_KEY TERMINAL_SERVER_KEY "\\WinStations"
 #define CERTIFICATE_DAYS 183
+#define TILE_BATCH 64
+#define TILE_BYTES (64 * 32 * 4 + 2)
+/* TS_UPDATE_BITMAP_DATA header, and TS_BITMAP_DATA fields with its TS_CD_HEADER */
+#define UPDATE_HEADER_BYTES 4
+#define TILE_HEADER_BYTES 26
 
 typedef struct DESKTOP_CONTEXT
 {
@@ -67,7 +72,8 @@ typedef struct DESKTOP_CONTEXT
     HGDIOBJ OldBitmap;
     HDESK Desktop, HomeDesktop;
     BYTE *Pixels, *Previous;
-    BYTE Tile[64 * 32 * 4 + 2];
+    BITMAP_DATA Batch[TILE_BATCH];
+    BYTE Tiles[TILE_BATCH][TILE_BYTES];
     BITMAP_PLANAR_CONTEXT *Planar;
     BOOL Keys[512];
     DWORD MouseButtons;
@@ -378,12 +384,24 @@ static BOOL Suppress(rdpContext *rdp, BYTE allow, const RECTANGLE_16 *area)
     return TRUE;
 }
 
+static BOOL SendTiles(DESKTOP_CONTEXT *ctx, UINT32 *count, size_t *length)
+{
+    BITMAP_UPDATE update = {0};
+    if (!*count) return TRUE;
+    update.number = *count; update.rectangles = ctx->Batch; update.skipCompression = TRUE;
+    if (!ctx->rdp.update->BitmapUpdate(&ctx->rdp, &update)) return FALSE;
+    ctx->Updates += *count;
+    *count = 0; *length = 0;
+    return TRUE;
+}
+
 static BOOL Capture(DESKTOP_CONTEXT *ctx)
 {
     int x, y, row;
     CURSORINFO cursor = {0};
-    BITMAP_DATA rectangle = {0};
-    BITMAP_UPDATE update = {0};
+    BITMAP_DATA *rectangle;
+    UINT32 count = 0;
+    size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
     if (!ctx->Authorized || !ctx->Active || ctx->Suppressed) return TRUE;
     if (!FollowInputDesktop(ctx)) return FALSE;
     if (ctx->Width != GetSystemMetrics(SM_CXSCREEN) || ctx->Height != GetSystemMetrics(SM_CYSCREEN))
@@ -412,8 +430,6 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
         }
     }
     GdiFlush();
-    update.number = 1; update.rectangles = &rectangle; update.skipCompression = TRUE;
-    rectangle.bitsPerPixel = 32; rectangle.compressed = TRUE;
     for (y = 0; y < ctx->Height; y += 32)
         for (x = 0; x < ctx->Width; x += 64)
         {
@@ -425,20 +441,25 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
                 changed = memcmp(ctx->Pixels + offset, ctx->Previous + offset, width * 4) != 0;
             }
             if (!changed) continue;
-            rectangle.bitmapLength = 0;
-            rectangle.bitmapDataStream = freerdp_bitmap_compress_planar(ctx->Planar,
+            if ((count == TILE_BATCH || UPDATE_HEADER_BYTES + length + TILE_HEADER_BYTES + TILE_BYTES > limit) &&
+                !SendTiles(ctx, &count, &length)) return FALSE;
+            rectangle = &ctx->Batch[count];
+            memset(rectangle, 0, sizeof(*rectangle));
+            rectangle->bitsPerPixel = 32; rectangle->compressed = TRUE;
+            rectangle->bitmapDataStream = freerdp_bitmap_compress_planar(ctx->Planar,
                 ctx->Pixels + ((size_t)y * ctx->Width + x) * 4, PIXEL_FORMAT_BGRX32, width, height,
-                ctx->Width * 4, ctx->Tile, &rectangle.bitmapLength);
-            if (!rectangle.bitmapDataStream) return FALSE;
-            rectangle.destLeft = x; rectangle.destTop = y;
-            rectangle.destRight = x + width - 1; rectangle.destBottom = y + height - 1;
-            rectangle.width = width; rectangle.height = height;
-            rectangle.cbScanWidth = width * 4;
-            rectangle.cbUncompressedSize = width * height * 4;
-            rectangle.cbCompMainBodySize = rectangle.bitmapLength;
-            if (!ctx->rdp.update->BitmapUpdate(&ctx->rdp, &update)) return FALSE;
-            ++ctx->Updates;
+                ctx->Width * 4, ctx->Tiles[count], &rectangle->bitmapLength);
+            if (!rectangle->bitmapDataStream) return FALSE;
+            rectangle->destLeft = x; rectangle->destTop = y;
+            rectangle->destRight = x + width - 1; rectangle->destBottom = y + height - 1;
+            rectangle->width = width; rectangle->height = height;
+            rectangle->cbScanWidth = width * 4;
+            rectangle->cbUncompressedSize = width * height * 4;
+            rectangle->cbCompMainBodySize = rectangle->bitmapLength;
+            length += TILE_HEADER_BYTES + rectangle->bitmapLength;
+            ++count;
         }
+    if (!SendTiles(ctx, &count, &length)) return FALSE;
     memcpy(ctx->Previous, ctx->Pixels, (size_t)ctx->Width * ctx->Height * 4);
     ctx->Refresh = FALSE;
     if (++ctx->Frames == 1) Log("First desktop frame sent, bitmap updates=%llu", ctx->Updates);

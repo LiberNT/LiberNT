@@ -62,7 +62,8 @@ Authentication, the first frame and disconnects are logged as `RDPTEST`
 lines on the kernel debugger and on stdout. An idle server captures nothing;
 a connected session captures 30 frames per second, or the rate
 `DWMFRAMEINTERVAL` under `...\Terminal Server\WinStations` sets (four frames
-per second each, up to 60), and sends the changed 64x32 tiles.
+per second each, up to 60), and sends the changed 64x32 tiles in batched
+bitmap updates.
 
 ## Client and file transfer
 
