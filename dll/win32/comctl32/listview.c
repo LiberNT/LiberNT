@@ -3880,7 +3880,11 @@ static void LISTVIEW_SetGroupSelection(LISTVIEW_INFO *infoPtr, INT nItem)
 
     /* Disable per item notifications on LVS_OWNERDATA style */
     old_mask = infoPtr->notify_mask & NOTIFY_MASK_ITEM_CHANGE;
+#ifdef __REACTOS__
+    if ((infoPtr->dwStyle & LVS_OWNERDATA) && ranges_itemcount(selection) > 1)
+#else
     if (infoPtr->dwStyle & LVS_OWNERDATA)
+#endif
         infoPtr->notify_mask &= ~NOTIFY_MASK_ITEM_CHANGE;
 
     LISTVIEW_DeselectAllSkipItems(infoPtr, selection);
