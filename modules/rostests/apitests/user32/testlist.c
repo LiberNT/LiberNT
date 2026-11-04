@@ -18,6 +18,7 @@ extern void func_CopyImage_Icon(void);
 extern void func_CursorPresentation(void);
 extern void func_CreateDialog(void);
 extern void func_CreateStructHook(void);
+extern void func_DisplayChangeBroadcast(void);
 extern void func_CreateIconFromResourceEx(void);
 extern void func_CoveredWindow(void);
 extern void func_CreateWindowEx(void);
@@ -186,6 +187,7 @@ const struct test winetest_testlist[] =
     { "CursorPresentation", func_CursorPresentation },
     { "CreateDialog", func_CreateDialog },
     { "CreateStructHook", func_CreateStructHook },
+    { "DisplayChangeBroadcast", func_DisplayChangeBroadcast },
     { "CreateIconFromResourceEx", func_CreateIconFromResourceEx },
     { "CoveredWindow", func_CoveredWindow },
     { "CreateWindowEx", func_CreateWindowEx },
