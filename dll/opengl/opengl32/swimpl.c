@@ -1248,7 +1248,7 @@ static void read_color_span_##__bpp(GLcontext* ctx,                             
         {                                                                       \
             Color = GetPixel(fb->Hdc, x + n, fb->height - y);                   \
             UNPACK_COLORREF_##__bpp(Color, &red[n], &green[n], &blue[n]);       \
-            alpha[n] = 0;                                                       \
+            alpha[n] = (GLubyte)ctx->Visual->AlphaScale;                        \
         }                                                                       \
                                                                                 \
         return;                                                                 \
@@ -1261,7 +1261,7 @@ static void read_color_span_##__bpp(GLcontext* ctx,                             
         Buffer -= __pixel_size;                                                 \
         UNPACK_COLOR_##__bpp(GET_PIXEL_##__bpp((__type*)Buffer),                \
                 &red[n], &green[n], &blue[n]);                                  \
-        alpha[n] = 0;                                                           \
+        alpha[n] = (GLubyte)ctx->Visual->AlphaScale;                            \
     }                                                                           \
 }
 READ_COLOR_SPAN(8, BYTE, 1)
@@ -1299,7 +1299,7 @@ static void read_color_pixels_##__bpp(GLcontext* ctx,                           
             {                                                                               \
                 Color = GetPixel(fb->Hdc, x[n], fb->height - y[n]);                         \
                 UNPACK_COLORREF_##__bpp(Color, &red[n], &green[n], &blue[n]);               \
-                alpha[n] = 0;                                                               \
+                alpha[n] = (GLubyte)ctx->Visual->AlphaScale;                                \
             }                                                                               \
         }                                                                                   \
                                                                                             \
@@ -1314,7 +1314,7 @@ static void read_color_pixels_##__bpp(GLcontext* ctx,                           
                     + x[n] * __pixel_size;                                                  \
             UNPACK_COLOR_##__bpp(GET_PIXEL_##__bpp((__type*)Buffer),                        \
                     &red[n], &green[n], &blue[n]);                                          \
-            alpha[n] = 0;                                                                   \
+            alpha[n] = (GLubyte)ctx->Visual->AlphaScale;                                    \
         }                                                                                   \
     }                                                                                       \
 }
