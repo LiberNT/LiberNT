@@ -1501,11 +1501,15 @@ MiSectionInitialize(VOID)
     Initializer.ValidAccessMask = SECTION_ALL_ACCESS;
     Initializer.InvalidAttributes = OBJ_OPENLINK;
 
+
+
     Status = ObCreateObjectType(&Name, &Initializer, NULL, &MmSectionObjectType);
     if (!NT_SUCCESS(Status))
         return Status;
 
+
     MiCreatePhysicalMemorySection();
+
     return STATUS_SUCCESS;
 }
 
