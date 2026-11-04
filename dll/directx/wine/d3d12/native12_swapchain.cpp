@@ -163,7 +163,7 @@ public:
         if (fullscreen_desc.Windowed) return false;
         HWND foreground = GetForegroundWindow();
         if (foreground == window) fullscreen_focused = true;
-        return fullscreen_focused && foreground && foreground != window;
+        return fullscreen_focused && foreground && foreground != window && IsWindowVisible(foreground);
     }
     WCHAR fullscreen_device[32] = {};
     bool fullscreen_mode = false;
