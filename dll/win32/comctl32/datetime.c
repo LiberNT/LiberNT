@@ -161,6 +161,10 @@ static BOOL DATETIME_IsDateInValidRange(const DATETIME_INFO *infoPtr, const SYST
     SYSTEMTIME range[2];
     DWORD limits;
 
+#ifdef __REACTOS__
+    if (date->wYear < min_allowed_date.wYear)
+        return FALSE;
+#endif
     if ((MONTHCAL_CompareSystemTime(date, &max_allowed_date) == 1) ||
         (MONTHCAL_CompareSystemTime(date, &min_allowed_date) == -1))
         return FALSE;
@@ -192,8 +196,12 @@ DATETIME_SetSystemTime (DATETIME_INFO *infoPtr, DWORD flag, const SYSTEMTIME *sy
           systime->wHour, systime->wMinute, systime->wSecond);
 
     if (flag == GDT_VALID) {
+#ifdef __REACTOS__
+        if (systime->wMonth < 1 || systime->wMonth > 12 ||
+#else
         if (systime->wYear == 0 ||
             systime->wMonth < 1 || systime->wMonth > 12 ||
+#endif
             systime->wDay < 1 ||
             systime->wDay > MONTHCAL_MonthLength(systime->wMonth, systime->wYear) ||
             systime->wHour > 23 ||
