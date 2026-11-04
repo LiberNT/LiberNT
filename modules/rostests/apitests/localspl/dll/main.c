@@ -195,7 +195,10 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     setbuf(stdout, NULL);
 
     // Run the test.
+    /* The router calls the print providers while it impersonates the client */
+    ImpersonateSelf(SecurityImpersonation);
     run_test(szTestName);
+    RevertToSelf();
 
     // Restore stdout to the previous value.
     fclose(fpStdout);
