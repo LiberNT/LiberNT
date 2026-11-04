@@ -159,8 +159,10 @@ KiDecrementThreadQuantum(
     _Inout_ PKTHREAD Thread,
     _In_ ULONG Decrement)
 {
-    Thread->Quantum -= (SCHAR)Decrement;
-    return Thread->Quantum <= 0;
+    LONG Quantum = (LONG)Thread->Quantum - (LONG)Decrement;
+
+    Thread->Quantum = (SCHAR)max(Quantum, 0);
+    return Quantum <= 0;
 }
 
 /* Quantum is counted in clock units, not counter cycles. */

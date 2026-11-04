@@ -60,6 +60,7 @@ list(APPEND SOURCE
     OpenFileByIdRename.c
     LoaderLock.c
     PagingFileOpen.c
+    QuantumRoundRobin.c
     SandboxLaunch.c
     SystemImageCatalog.c
     TebSegmentAfterWait.c
