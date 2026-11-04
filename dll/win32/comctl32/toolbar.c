@@ -169,6 +169,9 @@ typedef struct
     DWORD      dwStyle;       /* regular toolbar style */
     DWORD      dwExStyle;     /* extended toolbar style */
     DWORD      dwDTFlags;     /* DrawText flags */
+#ifdef __REACTOS__
+    DWORD      dwDTSetFlags;
+#endif
 
     COLORREF   clrInsertMark;   /* insert mark color */
     COLORREF   clrBtnHighlight; /* color for Flat Separator */
@@ -2230,6 +2233,10 @@ TOOLBAR_InternalInsertButtonsT(TOOLBAR_INFO *infoPtr, INT iIndex, UINT nAddButto
         ZeroMemory(btnPtr, sizeof(*btnPtr));
 
         btnPtr->iBitmap   = lpTbb[iButton].iBitmap;
+#ifdef __REACTOS__
+        if ((lpTbb[iButton].fsStyle & BTNS_SEP) && btnPtr->iBitmap <= 0)
+            btnPtr->iBitmap = SEPARATOR_WIDTH;
+#endif
         btnPtr->idCommand = lpTbb[iButton].idCommand;
         btnPtr->fsState   = lpTbb[iButton].fsState;
         btnPtr->fsStyle   = lpTbb[iButton].fsStyle;
@@ -4975,8 +4982,14 @@ TOOLBAR_SetDrawTextFlags (TOOLBAR_INFO *infoPtr, DWORD mask, DWORD flags)
 
     TRACE("hwnd = %p, mask = %#lx, flags %#lx\n", infoPtr->hwndSelf, mask, flags);
 
+#ifdef __REACTOS__
+    old_flags = infoPtr->dwDTSetFlags;
+    infoPtr->dwDTSetFlags = (old_flags & ~mask) | (flags & mask);
+    infoPtr->dwDTFlags = (infoPtr->dwDTFlags & ~mask) | (flags & mask);
+#else
     old_flags = infoPtr->dwDTFlags;
     infoPtr->dwDTFlags = (old_flags & ~mask) | (flags & mask);
+#endif
 
     return (LRESULT)old_flags;
 }
