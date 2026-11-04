@@ -21,6 +21,7 @@ list(APPEND SOURCE
     CursorPresentation.c
     CreateDialog.c
     CreateStructHook.c
+    DisplayChangeBroadcast.c
     CreateIconFromResourceEx.c
     CoveredWindow.c
     CreateWindowEx.c
