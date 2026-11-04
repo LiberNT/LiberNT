@@ -409,11 +409,33 @@ HRESULT WINAPI Parser_EnumPins(IBaseFilter * iface, IEnumPins **ppEnum)
 HRESULT WINAPI Parser_FindPin(IBaseFilter * iface, LPCWSTR Id, IPin **ppPin)
 {
     ParserImpl *This = impl_from_IBaseFilter(iface);
-    FIXME("(%p)->(%s,%p)\n", This, debugstr_w(Id), ppPin);
+    ULONG i;
 
-    /* FIXME: critical section */
+    TRACE("(%p)->(%s,%p)\n", This, debugstr_w(Id), ppPin);
 
-    return E_NOTIMPL;
+    if (!ppPin)
+        return E_POINTER;
+    *ppPin = NULL;
+
+    EnterCriticalSection(&This->filter.csFilter);
+    for (i = 0; i <= This->cStreams; i++)
+    {
+        LPWSTR PinId;
+
+        if (FAILED(IPin_QueryId(This->ppPins[i], &PinId)))
+            continue;
+        if (!lstrcmpW(PinId, Id))
+        {
+            IPin_AddRef(This->ppPins[i]);
+            *ppPin = This->ppPins[i];
+        }
+        CoTaskMemFree(PinId);
+        if (*ppPin)
+            break;
+    }
+    LeaveCriticalSection(&This->filter.csFilter);
+
+    return *ppPin ? S_OK : VFW_E_NOT_FOUND;
 }
 
 HRESULT WINAPI Parser_QueryFilterInfo(IBaseFilter * iface, FILTER_INFO *pInfo)
