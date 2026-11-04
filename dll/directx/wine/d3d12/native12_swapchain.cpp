@@ -21,6 +21,30 @@ extern "C" DWORD_PTR NTAPI NtUserCallOneParam(DWORD_PTR, DWORD);
 
 #define NATIVE12_SWAPCHAIN_BUFFERS 16
 #define NATIVE12_SWAPCHAIN_WAIT 5000
+#define NATIVE12_SWAPCHAIN_RECORDS 16
+
+struct Native12PresentRecord
+{
+    UINT buffer;
+    bool foreign;
+    UINT64 copy_value;
+    UINT64 release_value;
+    UINT source_width, source_height;
+    DWM_DX_SURFACE_EXCHANGE exchange;
+};
+
+struct Native12ReleaseWait
+{
+    ID3D12Fence *fence;
+    UINT64 value;
+    HANDLE wait;
+};
+
+static VOID CALLBACK Native12ReleaseCallback(PVOID context, BOOLEAN)
+{
+    Native12ReleaseWait *wait = static_cast<Native12ReleaseWait *>(context);
+    wait->fence->Signal(wait->value);
+}
 
 static LONG Native12FullscreenStyle(LONG style)
 {
@@ -116,14 +140,24 @@ public:
     UINT foreign_width = 0;
     UINT foreign_height = 0;
     UINT foreign_pitch = 0;
-    ID3D12Resource *readback = NULL;
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT readback_layout = {};
     UINT64 readback_size = 0;
-    ID3D12CommandAllocator *copy_allocator = NULL;
-    ID3D12GraphicsCommandList *copy_list = NULL;
     ID3D12Fence *copy_fence = NULL;
     UINT64 copy_value = 0;
-    HANDLE copy_event = NULL;
+    Native12PresentRecord records[NATIVE12_SWAPCHAIN_RECORDS] = {};
+    HANDLE record_events[NATIVE12_SWAPCHAIN_RECORDS] = {};
+    ID3D12Resource *record_readback[NATIVE12_SWAPCHAIN_RECORDS] = {};
+    ID3D12CommandAllocator *record_allocator[NATIVE12_SWAPCHAIN_RECORDS] = {};
+    ID3D12GraphicsCommandList *record_list[NATIVE12_SWAPCHAIN_RECORDS] = {};
+    UINT record_order[NATIVE12_SWAPCHAIN_RECORDS] = {};
+    bool record_busy[NATIVE12_SWAPCHAIN_RECORDS] = {};
+    UINT record_head = 0, record_count = 0;
+    SRWLOCK record_lock = SRWLOCK_INIT;
+    HANDLE worker = NULL, worker_wake = NULL, worker_space = NULL, worker_idle = NULL, worker_stop = NULL;
+    HANDLE worker_copy = NULL;
+    ID3D12Fence *release_fences[NATIVE12_SWAPCHAIN_BUFFERS] = {};
+    UINT64 release_values[NATIVE12_SWAPCHAIN_BUFFERS] = {};
+    Native12ReleaseWait release_waits[NATIVE12_SWAPCHAIN_BUFFERS] = {};
     SRWLOCK lock = SRWLOCK_INIT;
     UINT current = 0;
     UINT present_count = 0;
@@ -136,11 +170,18 @@ public:
     }
     ~Native12SwapChain()
     {
+        StopWorker();
         if (!fullscreen_desc.Windowed) SetFullscreenState(FALSE, NULL);
         if (fullscreen_output) fullscreen_output->Release();
         RetirePublication();
+        WaitForQueue();
         ReleaseForeign();
         ReleaseBuffers();
+        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS; ++i)
+            if (release_fences[i]) release_fences[i]->Release();
+        HANDLE handles[] = {worker_wake, worker_space, worker_idle, worker_stop, worker_copy};
+        for (UINT i = 0; i < ARRAYSIZE(handles); ++i)
+            if (handles[i]) CloseHandle(handles[i]);
         if (completion) CloseHandle(completion);
         if (latency) CloseHandle(latency);
         factory->Release();
@@ -156,9 +197,23 @@ public:
     bool ForeignAdapter();
     HRESULT OpenForeignSurface(D3DKMT_HANDLE share);
     void CloseForeignSurface();
-    HRESULT ReadBack();
-    HRESULT WriteForeign(RECT *rect);
-    HRESULT PublishForeign();
+    HRESULT RecordReadBack(UINT slot, UINT buffer);
+    HRESULT WriteForeign(RECT *rect, ID3D12Resource *readback, UINT width_limit, UINT height_limit);
+    HRESULT PrepareExchange(UINT slot, UINT buffer);
+    HRESULT StartWorker();
+    void StopWorker();
+    HRESULT AcquireRecord(UINT *slot);
+    void QueueRecord(UINT slot);
+    void FreeRecord(UINT slot);
+    void CompleteRecord(UINT slot);
+    void ArmRelease(UINT buffer, UINT64 value, bool published);
+    void WorkerLoop();
+    static DWORD WINAPI WorkerMain(void *context)
+    {
+        static_cast<Native12SwapChain *>(context)->WorkerLoop();
+        return 0;
+    }
+    HRESULT PublishForeign(UINT slot);
     void ReleaseForeign();
     HRESULT RetirePublication();
     HRESULT WaitForQueue();
@@ -706,69 +761,75 @@ void Native12SwapChain::CloseForeignSurface()
     foreign_allocation = 0;
 }
 
-HRESULT Native12SwapChain::ReadBack()
+HRESULT Native12SwapChain::RecordReadBack(UINT slot, UINT buffer)
 {
-    ID3D12Resource *source = buffers[current];
+    ID3D12Resource *source = buffers[buffer];
     if (!source) return DXGI_ERROR_INVALID_CALL;
     D3D12_RESOURCE_DESC source_desc = source->GetDesc();
     HRESULT hr;
-    if (!readback || readback_layout.Footprint.Width != source_desc.Width
-            || readback_layout.Footprint.Height != source_desc.Height || readback_layout.Footprint.Format != source_desc.Format)
-    {
-        if (readback) readback->Release();
-        readback = NULL;
+    if (readback_layout.Footprint.Width != source_desc.Width || readback_layout.Footprint.Height != source_desc.Height
+            || readback_layout.Footprint.Format != source_desc.Format)
         device->GetCopyableFootprints(&source_desc, 0, 1, 0, &readback_layout, NULL, NULL, &readback_size);
+    ID3D12Resource *&readback = record_readback[slot];
+    if (readback && readback->GetDesc().Width != readback_size)
+    {
+        readback->Release();
+        readback = NULL;
+    }
+    if (!readback)
+    {
         D3D12_HEAP_PROPERTIES heap = {};
         heap.Type = D3D12_HEAP_TYPE_READBACK;
-        D3D12_RESOURCE_DESC buffer = {};
-        buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        buffer.Width = readback_size;
-        buffer.Height = 1;
-        buffer.DepthOrArraySize = 1;
-        buffer.MipLevels = 1;
-        buffer.SampleDesc.Count = 1;
-        buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        if (FAILED(hr = device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &buffer,
+        D3D12_RESOURCE_DESC buffer_desc = {};
+        buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        buffer_desc.Width = readback_size;
+        buffer_desc.Height = 1;
+        buffer_desc.DepthOrArraySize = 1;
+        buffer_desc.MipLevels = 1;
+        buffer_desc.SampleDesc.Count = 1;
+        buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        if (FAILED(hr = device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
                 D3D12_RESOURCE_STATE_COPY_DEST, NULL, __uuidof(ID3D12Resource), reinterpret_cast<void **>(&readback))))
             return hr;
     }
-    if (!copy_allocator && FAILED(hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-            __uuidof(ID3D12CommandAllocator), reinterpret_cast<void **>(&copy_allocator)))) return hr;
-    if (!copy_list)
+    ID3D12CommandAllocator *&allocator = record_allocator[slot];
+    ID3D12GraphicsCommandList *&list = record_list[slot];
+    if (!allocator && FAILED(hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+            __uuidof(ID3D12CommandAllocator), reinterpret_cast<void **>(&allocator)))) return hr;
+    if (!list)
     {
-        if (FAILED(hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, copy_allocator, NULL,
-                __uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void **>(&copy_list)))) return hr;
+        if (FAILED(hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                __uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void **>(&list)))) return hr;
     }
-    else if (FAILED(hr = copy_allocator->Reset()) || FAILED(hr = copy_list->Reset(copy_allocator, NULL))) return hr;
+    else if (FAILED(hr = allocator->Reset()) || FAILED(hr = list->Reset(allocator, NULL))) return hr;
     if (!copy_fence && FAILED(hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
             reinterpret_cast<void **>(&copy_fence)))) return hr;
-    if (!copy_event && !(copy_event = CreateEventW(NULL, FALSE, FALSE, NULL))) return HRESULT_FROM_WIN32(GetLastError());
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Transition.pResource = source;
     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-    copy_list->ResourceBarrier(1, &barrier);
+    list->ResourceBarrier(1, &barrier);
     D3D12_TEXTURE_COPY_LOCATION destination = {}, origin = {};
     destination.pResource = readback;
     destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     destination.PlacedFootprint = readback_layout;
     origin.pResource = source;
     origin.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    copy_list->CopyTextureRegion(&destination, 0, 0, 0, &origin, NULL);
+    list->CopyTextureRegion(&destination, 0, 0, 0, &origin, NULL);
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-    copy_list->ResourceBarrier(1, &barrier);
-    if (FAILED(hr = copy_list->Close())) return hr;
-    ID3D12CommandList *lists[] = {copy_list};
+    list->ResourceBarrier(1, &barrier);
+    if (FAILED(hr = list->Close())) return hr;
+    ID3D12CommandList *lists[] = {list};
     queue->ExecuteCommandLists(1, lists);
     if (FAILED(hr = queue->Signal(copy_fence, ++copy_value))) return hr;
-    if (FAILED(hr = copy_fence->SetEventOnCompletion(copy_value, copy_event))) return hr;
-    return WaitForSingleObject(copy_event, NATIVE12_SWAPCHAIN_WAIT) == WAIT_OBJECT_0 ? S_OK : DXGI_ERROR_WAS_STILL_DRAWING;
+    records[slot].copy_value = copy_value;
+    return S_OK;
 }
 
-HRESULT Native12SwapChain::WriteForeign(RECT *rect)
+HRESULT Native12SwapChain::WriteForeign(RECT *rect, ID3D12Resource *readback, UINT width_limit, UINT height_limit)
 {
     D3DKMT_LOCK lock_args = {};
     lock_args.hDevice = device->km_device;
@@ -786,10 +847,10 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect)
         UINT width = readback_layout.Footprint.Width, height = readback_layout.Footprint.Height;
         bool swap = readback_layout.Footprint.Format == DXGI_FORMAT_R8G8B8A8_UNORM;
         /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
-        if (source_width && source_height && (source_width < width || source_height < height))
+        if (width_limit && height_limit && (width_limit < width || height_limit < height))
         {
-            width = source_width;
-            height = source_height;
+            width = width_limit;
+            height = height_limit;
         }
         for (UINT y = 0; y < foreign_height; ++y)
         {
@@ -814,7 +875,7 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect)
     return hr;
 }
 
-HRESULT Native12SwapChain::PublishForeign()
+HRESULT Native12SwapChain::PublishForeign(UINT slot)
 {
     typedef HRESULT (WINAPI *GetSurface)(HWND, LUID, HMONITOR, DWORD, UINT *, HANDLE *, ULONGLONG *);
     typedef HRESULT (WINAPI *UpdateSurface)(HWND, ULONGLONG, DWORD, HMONITOR, const RECT *);
@@ -848,8 +909,7 @@ HRESULT Native12SwapChain::PublishForeign()
         hr = OpenForeignSurface(share);
     }
     RECT rect = {};
-    if (SUCCEEDED(hr)) hr = ReadBack();
-    if (SUCCEEDED(hr)) hr = WriteForeign(&rect);
+    if (SUCCEEDED(hr)) hr = WriteForeign(&rect, record_readback[slot], records[slot].source_width, records[slot].source_height);
     HRESULT update_hr = update_surface(window, update, FAILED(hr) ? DWM_DX_UPDATE_CANCEL : 0, NULL, FAILED(hr) ? NULL : &rect);
     return FAILED(hr) ? hr : update_hr;
 }
@@ -857,16 +917,19 @@ HRESULT Native12SwapChain::PublishForeign()
 void Native12SwapChain::ReleaseForeign()
 {
     CloseForeignSurface();
-    if (readback) readback->Release();
-    if (copy_list) copy_list->Release();
-    if (copy_allocator) copy_allocator->Release();
+    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_RECORDS; ++i)
+    {
+        if (record_readback[i]) record_readback[i]->Release();
+        if (record_list[i]) record_list[i]->Release();
+        if (record_allocator[i]) record_allocator[i]->Release();
+        if (record_events[i]) CloseHandle(record_events[i]);
+        record_readback[i] = NULL;
+        record_list[i] = NULL;
+        record_allocator[i] = NULL;
+        record_events[i] = NULL;
+    }
     if (copy_fence) copy_fence->Release();
-    if (copy_event) CloseHandle(copy_event);
-    readback = NULL;
-    copy_list = NULL;
-    copy_allocator = NULL;
     copy_fence = NULL;
-    copy_event = NULL;
 }
 
 HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
@@ -990,6 +1053,190 @@ HRESULT Native12SwapChain::WaitForQueue()
             ? S_OK : DXGI_ERROR_WAS_STILL_DRAWING;
 }
 
+HRESULT Native12SwapChain::PrepareExchange(UINT slot, UINT buffer)
+{
+    Native12PresentRecord &record = records[slot];
+    DXGI_ADAPTER_DESC adapter_desc;
+    HRESULT hr = device->adapter->GetDesc(&adapter_desc);
+    if (FAILED(hr)) return hr;
+    DWM_DX_SURFACE_EXCHANGE &exchange = record.exchange;
+    exchange.StructSize = sizeof(exchange);
+    exchange.Action = DWM_DX_SURFACE_PUBLISH;
+    exchange.Window = reinterpret_cast<ULONG_PTR>(window);
+    exchange.AdapterLuid = adapter_desc.AdapterLuid;
+    exchange.GlobalShare = shares[buffer];
+    exchange.Info.Magic = DWM_DX_SURFACE_INFO_MAGIC;
+    exchange.Info.Version = DWM_DX_SURFACE_INFO_VERSION_GPU;
+    exchange.Info.Width = desc.Width;
+    exchange.Info.Height = desc.Height;
+    exchange.Info.Format = desc.Format;
+    exchange.Flags = DWM_DX_PUBLISH_RETAINED;
+    if (desc.AlphaMode == DXGI_ALPHA_MODE_PREMULTIPLIED) exchange.Flags |= DWM_DX_PUBLISH_PREMULTIPLIED;
+    /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
+    if (source_width && source_height && (source_width < desc.Width || source_height < desc.Height))
+    {
+        exchange.Flags |= DWM_DX_PUBLISH_SOURCE_REGION;
+        exchange.SourceWidth = source_width;
+        exchange.SourceHeight = source_height;
+    }
+    exchange.ReadyEvent = reinterpret_cast<ULONG_PTR>(release_events[buffer]);
+    exchange.UpdateRect.right = desc.Width;
+    exchange.UpdateRect.bottom = desc.Height;
+    if (!release_fences[buffer] && FAILED(hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
+            reinterpret_cast<void **>(&release_fences[buffer])))) return hr;
+    if (!record_events[slot] && !(record_events[slot] = CreateEventW(NULL, FALSE, FALSE, NULL)))
+        return HRESULT_FROM_WIN32(GetLastError());
+    if (FAILED(hr = device->enqueue_set_event(device->runtime_device, record_events[slot]))) return hr;
+    record.release_value = ++release_values[buffer];
+    return S_OK;
+}
+
+HRESULT Native12SwapChain::StartWorker()
+{
+    if (worker) return S_OK;
+    if (!worker_wake) worker_wake = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!worker_space) worker_space = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!worker_idle) worker_idle = CreateEventW(NULL, TRUE, TRUE, NULL);
+    if (!worker_stop) worker_stop = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!worker_copy) worker_copy = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!worker_wake || !worker_space || !worker_idle || !worker_stop || !worker_copy)
+        return HRESULT_FROM_WIN32(GetLastError());
+    if (!(worker = CreateThread(NULL, 0, WorkerMain, this, 0, NULL))) return HRESULT_FROM_WIN32(GetLastError());
+    return S_OK;
+}
+
+/* Lets the queued frames retire, or drops those whose GPU work does not retire in time. */
+void Native12SwapChain::StopWorker()
+{
+    if (!worker) return;
+    if (WaitForSingleObject(worker_idle, NATIVE12_SWAPCHAIN_WAIT) != WAIT_OBJECT_0)
+        WARN("Dropping %u queued frames.\n", record_count);
+    SetEvent(worker_stop);
+    WaitForSingleObject(worker, INFINITE);
+    CloseHandle(worker);
+    worker = NULL;
+    ResetEvent(worker_stop);
+    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS; ++i)
+    {
+        if (release_waits[i].wait) UnregisterWaitEx(release_waits[i].wait, INVALID_HANDLE_VALUE);
+        release_waits[i].wait = NULL;
+        if (release_fences[i]) release_fences[i]->Signal(release_values[i]);
+    }
+}
+
+HRESULT Native12SwapChain::AcquireRecord(UINT *slot)
+{
+    for (;;)
+    {
+        AcquireSRWLockExclusive(&record_lock);
+        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_RECORDS; ++i)
+        {
+            if (record_busy[i]) continue;
+            record_busy[i] = true;
+            ReleaseSRWLockExclusive(&record_lock);
+            ZeroMemory(&records[i], sizeof(records[i]));
+            *slot = i;
+            return S_OK;
+        }
+        ReleaseSRWLockExclusive(&record_lock);
+        if (WaitForSingleObject(worker_space, NATIVE12_SWAPCHAIN_WAIT) != WAIT_OBJECT_0)
+            return DXGI_ERROR_WAS_STILL_DRAWING;
+    }
+}
+
+void Native12SwapChain::QueueRecord(UINT slot)
+{
+    AcquireSRWLockExclusive(&record_lock);
+    record_order[(record_head + record_count) % NATIVE12_SWAPCHAIN_RECORDS] = slot;
+    ++record_count;
+    ResetEvent(worker_idle);
+    ReleaseSRWLockExclusive(&record_lock);
+    SetEvent(worker_wake);
+}
+
+void Native12SwapChain::FreeRecord(UINT slot)
+{
+    AcquireSRWLockExclusive(&record_lock);
+    record_busy[slot] = false;
+    ReleaseSRWLockExclusive(&record_lock);
+    SetEvent(worker_space);
+}
+
+/* A queue that renders into a buffer again first waits until DWM no longer reads its last publication. */
+void Native12SwapChain::ArmRelease(UINT buffer, UINT64 value, bool published)
+{
+    Native12ReleaseWait &wait = release_waits[buffer];
+    if (wait.wait) UnregisterWaitEx(wait.wait, INVALID_HANDLE_VALUE);
+    wait.wait = NULL;
+    wait.fence = release_fences[buffer];
+    wait.value = value;
+    if (published && RegisterWaitForSingleObject(&wait.wait, release_events[buffer], Native12ReleaseCallback, &wait,
+            INFINITE, WT_EXECUTEONLYONCE))
+        return;
+    wait.wait = NULL;
+    wait.fence->Signal(value);
+}
+
+/* Runs on the worker thread, which never takes the swap chain lock. */
+void Native12SwapChain::CompleteRecord(UINT slot)
+{
+    Native12PresentRecord &record = records[slot];
+    HANDLE done = record.foreign ? worker_copy : record_events[slot];
+    if (record.foreign && FAILED(copy_fence->SetEventOnCompletion(record.copy_value, worker_copy))) done = NULL;
+    HANDLE handles[2] = {worker_stop, done};
+    bool completed = done && WaitForMultipleObjects(2, handles, FALSE, INFINITE) == WAIT_OBJECT_0 + 1;
+    if (record.foreign)
+    {
+        HRESULT hr = completed ? PublishForeign(slot) : S_OK;
+        if (FAILED(hr)) WARN("Cross-adapter frame was not published, hr %#lx.\n", hr);
+    }
+    else
+    {
+        HANDLE release = release_events[record.buffer];
+        NTSTATUS status = STATUS_CANCELLED;
+        if (completed)
+        {
+            ResetEvent(release);
+            status = static_cast<NTSTATUS>(NtUserCallOneParam(reinterpret_cast<DWORD_PTR>(&record.exchange),
+                    DWM_ROUTINE_DXSURFACE));
+            if (status >= 0) publication = record.exchange;
+            else
+            {
+                SetEvent(release);
+                WARN("Frame was not published, status %#lx.\n", status);
+            }
+        }
+        ArmRelease(record.buffer, record.release_value, completed && status >= 0);
+    }
+    if (latency) ReleaseSemaphore(latency, 1, NULL);
+}
+
+void Native12SwapChain::WorkerLoop()
+{
+    HANDLE wake[2] = {worker_stop, worker_wake};
+    for (;;)
+    {
+        UINT slot = 0;
+        AcquireSRWLockExclusive(&record_lock);
+        bool queued = record_count != 0;
+        if (queued) slot = record_order[record_head];
+        else SetEvent(worker_idle);
+        ReleaseSRWLockExclusive(&record_lock);
+        if (!queued)
+        {
+            if (WaitForMultipleObjects(2, wake, FALSE, INFINITE) != WAIT_OBJECT_0 + 1) return;
+            continue;
+        }
+        CompleteRecord(slot);
+        AcquireSRWLockExclusive(&record_lock);
+        record_head = (record_head + 1) % NATIVE12_SWAPCHAIN_RECORDS;
+        --record_count;
+        record_busy[slot] = false;
+        ReleaseSRWLockExclusive(&record_lock);
+        SetEvent(worker_space);
+    }
+}
+
 HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         const DXGI_PRESENT_PARAMETERS *)
 {
@@ -1003,56 +1250,25 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
     }
 
     AcquireSRWLockExclusive(&lock);
-    HRESULT hr = WaitForQueue();
-    if (SUCCEEDED(hr) && ForeignAdapter())
-        hr = PublishForeign();
-    else if (SUCCEEDED(hr))
+    UINT slot = 0;
+    HRESULT hr = StartWorker();
+    if (SUCCEEDED(hr)) hr = AcquireRecord(&slot);
+    if (SUCCEEDED(hr))
     {
-        DXGI_ADAPTER_DESC adapter_desc;
-        DWM_DX_SURFACE_EXCHANGE exchange = {};
-        exchange.StructSize = sizeof(exchange);
-        exchange.Action = DWM_DX_SURFACE_PUBLISH;
-        exchange.Window = reinterpret_cast<ULONG_PTR>(window);
-        hr = device->adapter->GetDesc(&adapter_desc);
-        exchange.AdapterLuid = adapter_desc.AdapterLuid;
-        exchange.GlobalShare = shares[current];
-        exchange.Info.Magic = DWM_DX_SURFACE_INFO_MAGIC;
-        exchange.Info.Version = DWM_DX_SURFACE_INFO_VERSION_GPU;
-        exchange.Info.Width = desc.Width;
-        exchange.Info.Height = desc.Height;
-        exchange.Info.Format = desc.Format;
-        exchange.Flags = DWM_DX_PUBLISH_RETAINED;
-        if (desc.AlphaMode == DXGI_ALPHA_MODE_PREMULTIPLIED) exchange.Flags |= DWM_DX_PUBLISH_PREMULTIPLIED;
-        /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
-        if (source_width && source_height && (source_width < desc.Width || source_height < desc.Height))
-        {
-            exchange.Flags |= DWM_DX_PUBLISH_SOURCE_REGION;
-            exchange.SourceWidth = source_width;
-            exchange.SourceHeight = source_height;
-        }
-        exchange.ReadyEvent = reinterpret_cast<ULONG_PTR>(release_events[current]);
-        exchange.UpdateRect.right = desc.Width;
-        exchange.UpdateRect.bottom = desc.Height;
-        if (SUCCEEDED(hr))
-        {
-            ResetEvent(release_events[current]);
-            NTSTATUS status = static_cast<NTSTATUS>(NtUserCallOneParam(reinterpret_cast<DWORD_PTR>(&exchange),
-                    DWM_ROUTINE_DXSURFACE));
-            if (status >= 0) publication = exchange;
-            else
-            {
-                SetEvent(release_events[current]);
-                WARN("Frame %u was not published, status %#lx.\n", present_count, status);
-            }
-        }
+        Native12PresentRecord &record = records[slot];
+        record.buffer = current;
+        record.source_width = source_width;
+        record.source_height = source_height;
+        record.foreign = ForeignAdapter();
+        hr = record.foreign ? RecordReadBack(slot, current) : PrepareExchange(slot, current);
+        if (SUCCEEDED(hr)) QueueRecord(slot);
+        else FreeRecord(slot);
     }
     if (SUCCEEDED(hr))
     {
         ++present_count;
         current = (current + 1) % desc.BufferCount;
-        if (WaitForSingleObject(release_events[current], NATIVE12_SWAPCHAIN_WAIT) != WAIT_OBJECT_0)
-            hr = DXGI_ERROR_WAS_STILL_DRAWING;
-        if (latency) ReleaseSemaphore(latency, 1, NULL);
+        if (release_values[current]) hr = queue->Wait(release_fences[current], release_values[current]);
     }
     ReleaseSRWLockExclusive(&lock);
     return hr;
@@ -1062,6 +1278,7 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::ResizeBuffers(UINT count, UINT widt
         DXGI_FORMAT format, UINT flags)
 {
     AcquireSRWLockExclusive(&lock);
+    StopWorker();
     for (UINT i = 0; i < desc.BufferCount; ++i)
     {
         if (buffers[i] && buffers[i]->references != 1)
