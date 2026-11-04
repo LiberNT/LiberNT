@@ -4637,10 +4637,24 @@ static HRESULT WINAPI d3d9_device_CreateOffscreenPlainSurfaceEx(IDirect3DDevice9
         UINT width, UINT height, D3DFORMAT format, D3DPOOL pool, IDirect3DSurface9 **surface,
         HANDLE *shared_handle, DWORD usage)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, width %u, height %u, format %#x, pool %#x, surface %p, shared_handle %p, usage %#lx.\n",
+            iface, width, height, format, pool, surface, shared_handle, usage);
+
+    *surface = NULL;
+    if (usage)
+    {
+        WARN("Invalid usage %#lx.\n", usage);
+        return D3DERR_INVALIDCALL;
+    }
+
+    return d3d9_device_CreateOffscreenPlainSurface(iface, width, height, format, pool, surface, shared_handle);
+#else
     FIXME("iface %p, width %u, height %u, format %#x, pool %#x, surface %p, shared_handle %p, usage %#lx stub!\n",
             iface, width, height, format, pool, surface, shared_handle, usage);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI d3d9_device_CreateDepthStencilSurfaceEx(IDirect3DDevice9Ex *iface,
