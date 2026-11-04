@@ -909,9 +909,9 @@ HRESULT CAssocShellElement::_GetVerbDelegate(PCWSTR pszSrc, IAssociationElementO
 
 STDMETHODIMP CAssocShellElement::QueryString(ASSOCQUERY query, PCWSTR key, PWSTR* ppszValue)
 {
-    if (!m_pszName && (query & ASSOCQUERY_INDIRECT))
+    if (!m_pszName && !m_pSource && (query & ASSOCQUERY_INDIRECT))
     {
-        /* An element that was never set resolves a NULL indirect string and faults, as on Windows 11 */
+        /* An element with neither a name nor a source resolves a NULL indirect string and faults, as on Windows 11 */
         *ppszValue = NULL;
         return SHAllocMUI(ppszValue);
     }
