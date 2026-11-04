@@ -196,7 +196,12 @@ static void test_HolographicSpaceStatics(void)
     value = 2;
     hr = IHolographicSpaceStatics2_get_IsSupported( holographicspace_statics2, &value );
     ok( hr == S_OK, "got hr %#lx.\n", hr );
+#ifdef __REACTOS__
+    /* Windows 11 without a holographic display, as in a virtual machine, reports FALSE */
+    ok( value == TRUE || broken( value == FALSE ), "got %d.\n", value );
+#else
     todo_wine ok( value == TRUE, "got %d.\n", value );
+#endif
 
     value = 2;
     hr = IHolographicSpaceStatics2_get_IsAvailable( holographicspace_statics2, &value );
