@@ -804,11 +804,18 @@ HalpAcpiPcieInitializeExtendedConfig(VOID)
 
     /* Print banner */
     DbgPrint("\n====== PCIe EXTENDED CONFIG INIT (ACPI HAL, amd64) =======\n\n");
+    DbgPrint("HAL: PCIe scan: buses %lu..%lu, ECAM base 0x%I64x, MCFG %s\n",
+             HalpMinPciBus, HalpMaxPciBus, EcamPhysBase,
+             McfgHeader ? "found" : "absent");
 
     /* Enumerate all buses, devices, and functions */
     PciSlot.u.AsULONG = 0;
     for (Bus = HalpMinPciBus; Bus <= HalpMaxPciBus; Bus++)
     {
+        /* A frozen screen otherwise says nothing about where the bus scan stopped */
+        if ((Bus & 7) == 0)
+            DbgPrint("HAL: PCIe scan bus %lu\n", Bus);
+
         /* Setup a temporary bus handler for this bus */
         RtlCopyMemory(&TempHandler, &HalpFakePciBusHandler, sizeof(BUS_HANDLER));
         TempHandler.BusNumber = Bus;
