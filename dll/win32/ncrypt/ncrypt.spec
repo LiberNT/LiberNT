@@ -69,7 +69,7 @@
 @ stdcall NCryptEncrypt(long ptr long ptr ptr long ptr long)
 @ stdcall NCryptEnumAlgorithms(long long ptr ptr long)
 @ stdcall NCryptEnumKeys(long wstr ptr ptr long)
-@ stub NCryptEnumStorageProviders
+@ stdcall NCryptEnumStorageProviders(ptr ptr long)
 @ stdcall NCryptExportKey(long long wstr ptr ptr long ptr long)
 @ stdcall NCryptFinalizeKey(long long)
 @ stdcall NCryptFreeBuffer(ptr)
