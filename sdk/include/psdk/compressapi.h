@@ -32,8 +32,8 @@ DECLARE_HANDLE(DECOMPRESSOR_HANDLE);
 
 /**********************************************************************/
 
-typedef void* (CALLBACK *PFN_COMPRESS_ALLOCATE)(void *, SIZE_T);
-typedef void (CALLBACK *PFN_COMPRESS_FREE)(void *, void *);
+typedef void* (CDECL *PFN_COMPRESS_ALLOCATE)(void *, SIZE_T);
+typedef void (CDECL *PFN_COMPRESS_FREE)(void *, void *);
 
 typedef struct
 {

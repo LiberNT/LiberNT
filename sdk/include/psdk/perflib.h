@@ -23,8 +23,8 @@
 extern "C" {
 #endif
 
-typedef void * (__WINE_ALLOC_SIZE(1) CDECL * PERF_MEM_ALLOC)(SIZE_T,void*);
-typedef void (CDECL * PERF_MEM_FREE)(LPVOID,LPVOID);
+typedef void * (__WINE_ALLOC_SIZE(1) CALLBACK * PERF_MEM_ALLOC)(SIZE_T,void*);
+typedef void (CALLBACK * PERF_MEM_FREE)(LPVOID,LPVOID);
 typedef ULONG (WINAPI * PERFLIBREQUEST)(ULONG,PVOID,ULONG);
 
 typedef struct _PERF_COUNTERSET_INFO {

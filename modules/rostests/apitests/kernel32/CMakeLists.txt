@@ -8,6 +8,8 @@ list(APPEND SOURCE
     ConsoleAlias.c
     ApiSetCoreSynch.c
     BaseSetLastNTError.c
+    BaseThreadInitThunk.c
+    CallbackCallingConventions.c
     Arm64ThreadContext.c
     ConsoleCP.c
     ConsoleDbcsCells.c

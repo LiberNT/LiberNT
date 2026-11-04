@@ -2523,7 +2523,7 @@ ChpeRtlUserThreadStart(PVOID StartAddress, PVOID Parameter)
         }
         else if (!ChpeIsChpeProcess() && (Kernel32ThreadInitThunkFunction != NULL))
         {
-            ((VOID (NTAPI *)(ULONG, PVOID, PVOID))Kernel32ThreadInitThunkFunction)(0,
+            ((VOID (FASTCALL *)(ULONG, PVOID, PVOID))Kernel32ThreadInitThunkFunction)(0,
                                                                                 StartAddress,
                                                                                 Parameter);
         }
