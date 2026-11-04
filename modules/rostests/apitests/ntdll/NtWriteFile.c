@@ -176,7 +176,7 @@ START_TEST(NtWriteFile)
                          2 * LargeMdlMaxDataSize,
                          &ByteOffset,
                          NULL);
-    ok_hex(Status, Is64BitSystem() ? STATUS_INVALID_USER_BUFFER: STATUS_INSUFFICIENT_RESOURCES); // Different to NtReadFile
+    ok_hex(Status, (Is64BitSystem() || GetNTVersion() >= _WIN32_WINNT_WIN7) ? STATUS_INVALID_USER_BUFFER: STATUS_INSUFFICIENT_RESOURCES); // Different to NtReadFile
 
     /* non-cached, unaligned -- fails with invalid parameter */
     Status = NtWriteFile(FileHandle,
