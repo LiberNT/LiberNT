@@ -1366,7 +1366,7 @@ DxgkpPopulateDefaultPath(
     Path->GammaRamp.Type = D3DDDI_GAMMARAMP_DEFAULT;
     Path->GammaRamp.DataSize = 0;
 
-    Path->VidPnTargetColorBasis = D3DKMDT_CB_SRGB;
+    Path->VidPnTargetColorBasis = D3DKMDT_CB_UNINITIALIZED;
     Path->VidPnTargetColorCoeffDynamicRanges.FirstChannel  = 8;
     Path->VidPnTargetColorCoeffDynamicRanges.SecondChannel = 8;
     Path->VidPnTargetColorCoeffDynamicRanges.ThirdChannel  = 8;
