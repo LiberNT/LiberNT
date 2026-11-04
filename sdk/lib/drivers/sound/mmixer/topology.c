@@ -1252,6 +1252,10 @@ MMixerCreateTopology(
     MIXER_STATUS Status;
     PTOPOLOGY Topology;
 
+    /* both lists are required: a NULL here is a failed property query */
+    if (NodeTypes == NULL || NodeConnections == NULL || PinCount == 0)
+        return MM_STATUS_UNSUCCESSFUL;
+
     /* allocate topology */
     Status = MMixerAllocateTopology(MixerContext, NodeTypes->Count, PinCount, &Topology);
 
