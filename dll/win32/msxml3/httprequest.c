@@ -1699,6 +1699,63 @@ IUri *get_base_uri(IUnknown *site)
     return uri;
 }
 
+#ifdef __REACTOS__
+static IUri *httprequest_get_site_uri(httprequest *This)
+{
+    IHTMLElementCollection *elements;
+    IServiceProvider *provider;
+    IOleClientSite *client_site;
+    IXMLDOMDocument *xmldoc;
+    IHTMLDocument2 *doc;
+    IBindHost *bind_host;
+    IUri *uri = NULL;
+    LONG length;
+    BSTR url;
+    HRESULT hr;
+
+    if (FAILED(IUnknown_QueryInterface(This->site, &IID_IServiceProvider, (void **)&provider)))
+        return NULL;
+
+    /* TODO: bind through the host's IBindHost and take the base URL from a hosting XML document. */
+    if (SUCCEEDED(IServiceProvider_QueryService(provider, &SID_SBindHost, &IID_IBindHost, (void **)&bind_host)))
+        IBindHost_Release(bind_host);
+
+    hr = IServiceProvider_QueryService(provider, &SID_SContainerDispatch, &IID_IHTMLDocument2, (void **)&doc);
+    if (FAILED(hr))
+        hr = IServiceProvider_QueryService(provider, &SID_SInternetHostSecurityManager, &IID_IHTMLDocument2, (void **)&doc);
+    if (SUCCEEDED(hr))
+    {
+        if (SUCCEEDED(IHTMLDocument2_get_all(doc, &elements)))
+        {
+            IHTMLElementCollection_get_length(elements, &length);
+            IHTMLElementCollection_Release(elements);
+        }
+        url = NULL;
+        if (SUCCEEDED(IHTMLDocument2_get_URL(doc, &url)) && url && *url && FAILED(CreateUri(url, 0, 0, &uri)))
+            uri = NULL;
+        SysFreeString(url);
+        IHTMLDocument2_Release(doc);
+    }
+
+    if (SUCCEEDED(IUnknown_QueryInterface(This->site, &IID_IXMLDOMDocument, (void **)&xmldoc)))
+        IXMLDOMDocument_Release(xmldoc);
+
+    if (This->version < MSXML6 || (This->safeopt & INTERFACESAFE_FOR_UNTRUSTED_DATA))
+    {
+        if (SUCCEEDED(IUnknown_QueryInterface(This->site, &IID_IOleClientSite, (void **)&client_site)))
+            IOleClientSite_Release(client_site);
+        if (SUCCEEDED(IServiceProvider_QueryService(provider, &SID_SInternetHostSecurityManager, &IID_IXMLDOMDocument,
+                                                    (void **)&xmldoc)))
+        {
+            IXMLDOMDocument_Release(xmldoc);
+        }
+    }
+
+    IServiceProvider_Release(provider);
+    return uri;
+}
+#endif
+
 static HRESULT WINAPI httprequest_ObjectWithSite_SetSite( IObjectWithSite *iface, IUnknown *punk )
 {
     httprequest *This = impl_from_IObjectWithSite(iface);
@@ -1718,7 +1775,11 @@ static HRESULT WINAPI httprequest_ObjectWithSite_SetSite( IObjectWithSite *iface
     if (punk)
     {
         IUnknown_AddRef( punk );
+#ifdef __REACTOS__
+        This->base_uri = httprequest_get_site_uri(This);
+#else
         This->base_uri = get_base_uri(This->site);
+#endif
     }
 
     return S_OK;
