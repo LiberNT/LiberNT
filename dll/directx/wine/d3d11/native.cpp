@@ -4768,14 +4768,15 @@ void STDMETHODCALLTYPE NativeContext::CopySubresourceRegion1(ID3D11Resource *dst
         UINT x, UINT y, UINT z, ID3D11Resource *src, UINT src_subresource,
         const D3D11_BOX *box, UINT flags)
 {
-    if (flags) return;
+    /* The 11.0 DDI takes no copy flags; the runtime drops them for such drivers and still copies. */
+    if (flags & ~(D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD)) return;
     CopySubresourceRegion(dst, dst_subresource, x, y, z, src, src_subresource, box);
 }
 
 void STDMETHODCALLTYPE NativeContext::UpdateSubresource1(ID3D11Resource *resource, UINT subresource,
         const D3D11_BOX *box, const void *data, UINT row_pitch, UINT depth_pitch, UINT flags)
 {
-    if (flags) return;
+    if (flags & ~(D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD)) return;
     UpdateSubresource(resource, subresource, box, data, row_pitch, depth_pitch);
 }
 
