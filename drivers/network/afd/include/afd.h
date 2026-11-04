@@ -371,6 +371,9 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 BOOLEAN
 AfdTryApplyPendingReceiveWindow(PAFD_FCB FCB);
 
+NTSTATUS
+AfdRearmDatagram(PAFD_FCB FCB);
+
 NTSTATUS NTAPI
 AfdGetSockName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 PIO_STACK_LOCATION IrpSp );
