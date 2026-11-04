@@ -2815,6 +2815,7 @@ int CDECL I10_OUTPUT(_LDOUBLE ld80, int prec, int flag, struct _I10_OUTPUT_DATA 
         memcpy(data->str, digits, data->len);
         data->str[data->len] = '\0';
 
+        /* FIXME: native sets the final trailing byte to '0' or '9'; we keep the sprintf digit, so the trailing-'9' cases stay todo_wine */
         if(prec+1 > data->len)
             memcpy(data->str+data->len+1, buf+data->len+1, prec+1-data->len);
 
