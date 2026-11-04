@@ -522,6 +522,77 @@ static INT COMBOEX_DeleteItem (COMBOEX_INFO *infoPtr, INT_PTR index)
 }
 
 
+#ifdef __REACTOS__
+static void COMBOEX_GetItemDispInfo (const COMBOEX_INFO *infoPtr, CBE_ITEMDATA *item, COMBOBOXEXITEMW *cit)
+{
+    WCHAR empty[1] = { 0 };
+    NMCOMBOBOXEXW nmce;
+    UINT mask = 0;
+
+    if ((cit->mask & CBEIF_TEXT) && item->pszText == LPSTR_TEXTCALLBACKW) mask |= CBEIF_TEXT;
+    if ((cit->mask & CBEIF_IMAGE) && item->iImage == I_IMAGECALLBACK) mask |= CBEIF_IMAGE;
+    if ((cit->mask & CBEIF_SELECTEDIMAGE) && item->iSelectedImage == I_IMAGECALLBACK) mask |= CBEIF_SELECTEDIMAGE;
+    if ((cit->mask & CBEIF_OVERLAY) && item->iOverlay == I_IMAGECALLBACK) mask |= CBEIF_OVERLAY;
+    if ((cit->mask & CBEIF_INDENT) && item->iIndent == I_INDENTCALLBACK) mask |= CBEIF_INDENT;
+    if (!mask) return;
+
+    ZeroMemory(&nmce, sizeof(nmce));
+    nmce.ceItem.mask = mask;
+    nmce.ceItem.iItem = cit->iItem;
+    nmce.ceItem.lParam = item->lParam;
+    nmce.ceItem.pszText = empty;
+    nmce.ceItem.iImage = item->iImage;
+    nmce.ceItem.iSelectedImage = item->iSelectedImage;
+    nmce.ceItem.iOverlay = item->iOverlay;
+    COMBOEX_NotifyItem(infoPtr, CBEN_GETDISPINFOW, &nmce);
+
+    if (mask & CBEIF_IMAGE)
+    {
+        cit->iImage = nmce.ceItem.iImage;
+        if (nmce.ceItem.mask & CBEIF_DI_SETITEM) item->iImage = nmce.ceItem.iImage;
+    }
+    if (mask & CBEIF_SELECTEDIMAGE)
+    {
+        cit->iSelectedImage = nmce.ceItem.iSelectedImage;
+        if (nmce.ceItem.mask & CBEIF_DI_SETITEM) item->iSelectedImage = nmce.ceItem.iSelectedImage;
+    }
+    if (mask & CBEIF_OVERLAY)
+    {
+        cit->iOverlay = nmce.ceItem.iOverlay;
+        if (nmce.ceItem.mask & CBEIF_DI_SETITEM) item->iOverlay = nmce.ceItem.iOverlay;
+    }
+    if (mask & CBEIF_INDENT)
+    {
+        cit->iIndent = nmce.ceItem.iIndent;
+        if (nmce.ceItem.mask & CBEIF_DI_SETITEM) item->iIndent = nmce.ceItem.iIndent;
+    }
+    if (mask & CBEIF_TEXT)
+    {
+        LPWSTR text = NULL;
+
+        if (nmce.ceItem.pszText != empty && is_textW(nmce.ceItem.pszText))
+        {
+            if (infoPtr->NtfUnicode) Str_SetPtrW(&text, nmce.ceItem.pszText);
+            else Str_SetPtrAtoW(&text, (LPCSTR)nmce.ceItem.pszText);
+        }
+        if (nmce.ceItem.mask & CBEIF_DI_SETITEM)
+        {
+            COMBOEX_FreeText(item);
+            item->pszText = text;
+        }
+        else
+        {
+            Free(item->pszTemp);
+            item->pszTemp = text;
+        }
+        if (cit->pszText != LPSTR_TEXTCALLBACKW && cit->pszText)
+            lstrcpynW(cit->pszText, text ? text : L"", cit->cchTextMax);
+        else
+            cit->pszText = text;
+    }
+}
+#endif
+
 static BOOL COMBOEX_GetItemW (COMBOEX_INFO *infoPtr, COMBOBOXEXITEMW *cit)
 {
     INT_PTR index = cit->iItem;
@@ -538,6 +609,9 @@ static BOOL COMBOEX_GetItemW (COMBOEX_INFO *infoPtr, COMBOBOXEXITEMW *cit)
     if (!(item = COMBOEX_FindItem(infoPtr, index))) return FALSE;
 
     COMBOEX_CopyItem (item, cit);
+#ifdef __REACTOS__
+    COMBOEX_GetItemDispInfo (infoPtr, item, cit);
+#endif
 
     return TRUE;
 }
