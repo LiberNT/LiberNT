@@ -4333,10 +4333,13 @@ GetFontFamilyInfoForSubstitutes(const LOGFONTW *LogFont,
         }
 
         /* substitute and get the real name */
-        IntUnicodeStringToBuffer(lf.lfFaceName, sizeof(lf.lfFaceName), pFromW);
+        IntUnicodeStringToBuffer(lf.lfFaceName, sizeof(lf.lfFaceName), pToW);
+        if (pCurrentEntry->CharSets[FONTSUBST_TO] != DEFAULT_CHARSET)
+            lf.lfCharSet = pCurrentEntry->CharSets[FONTSUBST_TO];
         SubstituteFontRecurse(&lf);
         if (LogFont->lfCharSet != DEFAULT_CHARSET && LogFont->lfCharSet != lf.lfCharSet)
             continue;
+        lf.lfCharSet = LogFont->lfCharSet;
 
         /* search in global fonts */
         IntLockFreeType();
