@@ -13,15 +13,16 @@ list(APPEND SOURCE
     acmwrapper.c
     avidec.c
     avisplit.c
-    decoder.c
     dsoundrender.c
     filesource.c
     filtergraph.c
     filtermapper.c
     main.c
     memallocator.c
+    mpeg1video.c
     mpegaudio.c
     mpegsplit.c
+    mpegvideo.c
     passthrough.c
     splitter.c
     systemclock.c
