@@ -573,6 +573,75 @@ HRESULT WINAPI SHCreateLinks( HWND hWnd, LPCSTR lpszDir, IDataObject * lpDataObj
     return E_NOTIMPL;
 }
 
+struct FOLDER_WINDOW_SEARCH
+{
+    DWORD ProcessId;
+    BOOL Snapshot;
+    CSimpleArray<HWND> Known;
+    HWND Found;
+};
+
+static BOOL CALLBACK
+FindNewFolderWindow(HWND hwnd, LPARAM lParam)
+{
+    FOLDER_WINDOW_SEARCH *Search = reinterpret_cast<FOLDER_WINDOW_SEARCH *>(lParam);
+    WCHAR szClass[32];
+    DWORD dwProcessId = 0;
+
+    GetWindowThreadProcessId(hwnd, &dwProcessId);
+    if (dwProcessId != Search->ProcessId ||
+        !GetClassNameW(hwnd, szClass, _countof(szClass)) || wcscmp(szClass, L"CabinetWClass"))
+    {
+        return TRUE;
+    }
+    if (Search->Snapshot)
+    {
+        Search->Known.Add(hwnd);
+        return TRUE;
+    }
+    if (Search->Known.Find(hwnd) >= 0 || !IsWindowVisible(hwnd))
+        return TRUE;
+    Search->Found = hwnd;
+    return FALSE;
+}
+
+static BOOL
+OpenFolderWindowInShell(PCIDLIST_ABSOLUTE pidlItem)
+{
+    EXPLORER_CMDLINE_PARSE_RESULTS Results = { 0 };
+    FOLDER_WINDOW_SEARCH Search;
+    HWND hwndShell = GetShellWindow();
+    DWORD dwShellThread, dwStart;
+
+    if (!hwndShell)
+        return FALSE;
+    Search.ProcessId = 0;
+    dwShellThread = GetWindowThreadProcessId(hwndShell, &Search.ProcessId);
+    Search.Snapshot = TRUE;
+    Search.Found = NULL;
+    EnumWindows(FindNewFolderWindow, reinterpret_cast<LPARAM>(&Search));
+    Search.Snapshot = FALSE;
+
+    Results.dwFlags = SH_EXPLORER_CMDLINE_FLAG_IDLIST | SH_EXPLORER_CMDLINE_FLAG_SELECT;
+    Results.nCmdShow = SW_SHOWNORMAL;
+    Results.pidlPath = const_cast<LPITEMIDLIST>(pidlItem);
+    if (!SHCreateFromDesktop(&Results))
+        return FALSE;
+    if (dwShellThread == GetCurrentThreadId())
+        return TRUE;
+
+    dwStart = GetTickCount();
+    while (!Search.Found && GetTickCount() - dwStart < 10000)
+    {
+        EnumWindows(FindNewFolderWindow, reinterpret_cast<LPARAM>(&Search));
+        if (!Search.Found)
+            Sleep(50);
+    }
+    if (Search.Found)
+        SendMessageTimeoutW(Search.Found, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 10000, NULL);
+    return TRUE;
+}
+
 /***********************************************************************
  *  SHOpenFolderAndSelectItems
  *
@@ -588,6 +657,11 @@ SHOpenFolderAndSelectItems(PCIDLIST_ABSOLUTE pidlFolder,
     ERR("SHOpenFolderAndSelectItems() is hackplemented\n");
     if (!pidlFolder || (cidl && !apidl))
         return E_INVALIDARG;
+    APTTYPE AptType;
+    APTTYPEQUALIFIER AptQualifier;
+    HRESULT hrApartment = CoGetApartmentType(&AptType, &AptQualifier);
+    if (FAILED(hrApartment))
+        return hrApartment;
     CComHeapPtr<ITEMIDLIST> freeItem;
     PCIDLIST_ABSOLUTE pidlItem;
     if (cidl)
@@ -609,6 +683,10 @@ SHOpenFolderAndSelectItems(PCIDLIST_ABSOLUTE pidlFolder,
     {
         pidlItem = pidlFolder;
     }
+
+    /* TODO: reuse a window already showing the folder, select every item in apidl and honor OFASI_EDIT and OFASI_OPENDESKTOP */
+    if (OpenFolderWindowInShell(pidlItem))
+        return S_OK;
 
     CComPtr<IShellFolder> psfDesktop;
 
