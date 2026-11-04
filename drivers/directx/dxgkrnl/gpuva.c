@@ -2418,8 +2418,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             {
                 PDXGKRNL_GPUVA_RANGE Range = CONTAINING_RECORD(Entry, DXGKRNL_GPUVA_RANGE, RangeListEntry);
 
-                if ((Range->State == GpuVaStateMapped && Range->Binding != NULL) ||
-                    Range->State == GpuVaStateReserved)
+                if (DxgkGpuVaCoreRangeIsUpdateSpan(Range->State == GpuVaStateMapped, Range->State == GpuVaStateReserved))
                     MappedCount++;
             }
             if (MappedCount != 0)
@@ -2442,8 +2441,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
                     PDXGKRNL_GPUVA_RANGE Range = CONTAINING_RECORD(Entry, DXGKRNL_GPUVA_RANGE, RangeListEntry);
                     PDXGKVMM_ALLOCATION MapAllocation = NULL;
 
-                    if (Range->State != GpuVaStateReserved &&
-                        (Range->State != GpuVaStateMapped || Range->Binding == NULL))
+                    if (!DxgkGpuVaCoreRangeIsUpdateSpan(Range->State == GpuVaStateMapped, Range->State == GpuVaStateReserved))
                         continue;
                     if (Range->Binding != NULL && !GpuVaReferenceBinding(Range->Binding))
                     {
