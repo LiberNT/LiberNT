@@ -309,7 +309,7 @@ void test_CShellMenu_callbacks(IShellFolder *shellFolder, HMENU hmenu)
 
     if (GetNTVersion() <= _WIN32_WINNT_WS03)
     {
-        struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
+        static struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
                                              {2, SMC_GETSFOBJECT},
                                              {3, SMC_SFEXEC_MIDDLE},
                                              {4, SMC_INITMENU},
@@ -332,7 +332,7 @@ void test_CShellMenu_callbacks(IShellFolder *shellFolder, HMENU hmenu)
 
     else
     {
-        struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
+        static struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
                                              {2, SMC_GETSFOBJECT},
                                              {3, SMC_SFEXEC_MIDDLE},
                                              {4, SMC_INITMENU},
