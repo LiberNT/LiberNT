@@ -193,6 +193,7 @@ HalpInitializeClock(VOID)
     if (HalpCanUseApicTimerClock())
     {
         HalpApicTimerClock = TRUE;
+        KeSetProfileIrql(max(PROFILE_LEVEL, CLOCK_LEVEL));
         HalpCalibrateApicTimer();
 
         RtcSetClockRate(HalpCurrentClockRate);

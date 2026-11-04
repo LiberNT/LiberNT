@@ -122,6 +122,58 @@ ProfileLoopFunction(
     ok_hex(Status, STATUS_SUCCESS);
 }
 
+static
+void
+TestRepeatedStartStop(void)
+{
+    static ULONG Buffer[3];
+    NTSTATUS Status;
+    HANDLE ProfileHandle;
+    ULONG Iteration, StartFailures = 0, StopFailures = 0;
+    DWORD StartTime;
+
+    Status = NtCreateProfile(&ProfileHandle,
+                             NtCurrentProcess(),
+                             (PVOID)((ULONG_PTR)LoopFunction - LOOP_FUNCTION_SIZE),
+                             3 * LOOP_FUNCTION_SIZE,
+                             LOOP_FUNCTION_SIZE_SHIFT,
+                             Buffer,
+                             sizeof(Buffer),
+                             ProfileTime,
+                             SystemAffinityMask);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        skip("Failed to create profile\n");
+        return;
+    }
+
+    Status = NtStartProfile(ProfileHandle);
+    if (Status == STATUS_NOT_SUPPORTED)
+    {
+        skip("Time profiling is not supported\n");
+        NtClose(ProfileHandle);
+        return;
+    }
+    ok_hex(Status, STATUS_SUCCESS);
+    Status = NtStopProfile(ProfileHandle);
+    ok_hex(Status, STATUS_SUCCESS);
+
+    StartTime = GetTickCount();
+    for (Iteration = 0; Iteration < 20000 && GetTickCount() - StartTime < 2000; Iteration++)
+    {
+        if (!NT_SUCCESS(NtStartProfile(ProfileHandle)))
+            StartFailures++;
+        if (!NT_SUCCESS(NtStopProfile(ProfileHandle)))
+            StopFailures++;
+    }
+    ok(StartFailures == 0, "NtStartProfile failed %lu of %lu times\n", StartFailures, Iteration);
+    ok(StopFailures == 0, "NtStopProfile failed %lu of %lu times\n", StopFailures, Iteration);
+
+    Status = NtClose(ProfileHandle);
+    ok_hex(Status, STATUS_SUCCESS);
+}
+
 START_TEST(NtStartProfile)
 {
     NTSTATUS Status;
@@ -135,6 +187,8 @@ START_TEST(NtStartProfile)
     /* Parameter validation is pretty simple... */
     Status = NtStartProfile(NULL);
     ok_hex(Status, STATUS_INVALID_HANDLE);
+
+    TestRepeatedStartStop();
 
     /* Do an actual simple profile */
     ProfileLoopFunction(LoopFunction,
