@@ -61,6 +61,7 @@ list(APPEND SOURCE
     LoaderLock.c
     PagingFileOpen.c
     QuantumRoundRobin.c
+    RegisterWaitPeriodic.c
     SandboxLaunch.c
     SystemImageCatalog.c
     TebSegmentAfterWait.c

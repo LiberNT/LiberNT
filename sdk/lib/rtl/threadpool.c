@@ -331,6 +331,7 @@ struct threadpool_object
             RTL_WAITORTIMERCALLBACKFUNC rtl_callback;
 #ifdef __REACTOS__
             struct list     rtl_callers;
+            ULONGLONG       rtl_period;
 #endif
         } wait;
         struct
@@ -1585,6 +1586,21 @@ static void tp_timerqueue_unlock( struct threadpool_object *timer )
     RtlLeaveCriticalSection( &timerqueue.cs );
 }
 
+#ifdef __REACTOS__
+static BOOL tp_wait_rearm( struct threadpool_object *wait )
+{
+    ULONGLONG period = wait->u.wait.rtl_period;
+    ULONG maximum, minimum, current;
+    LARGE_INTEGER now;
+
+    if (wait->u.wait.timeout == MAXLONGLONG) return FALSE;
+    if (!period && NT_SUCCESS(NtQueryTimerResolution( &maximum, &minimum, &current ))) period = current;
+    NtQuerySystemTime( &now );
+    wait->u.wait.timeout = now.QuadPart + period;
+    return TRUE;
+}
+#endif
+
 /***********************************************************************
  *           waitqueue_thread_proc    (internal)
  */
@@ -1632,6 +1648,10 @@ static void CALLBACK waitqueue_thread_proc( void *param )
                     list_add_tail( &bucket->reserved, &wait->u.wait.wait_entry );
                     wait->u.wait.wait_pending = FALSE;
                 }
+#ifdef __REACTOS__
+                else if (tp_wait_rearm( wait ))
+                    timeout.QuadPart = 0;
+#endif
                 if ((wait->u.wait.flags & (WT_EXECUTEINWAITTHREAD | WT_EXECUTEINIOTHREAD)))
                 {
                     InterlockedIncrement( &wait->refcount );
@@ -1704,6 +1724,9 @@ static void CALLBACK waitqueue_thread_proc( void *param )
                         list_add_tail( &bucket->reserved, &wait->u.wait.wait_entry );
                         wait->u.wait.wait_pending = FALSE;
                     }
+#ifdef __REACTOS__
+                    else tp_wait_rearm( wait );
+#endif
                     if ((wait->u.wait.flags & (WT_EXECUTEINWAITTHREAD | WT_EXECUTEINIOTHREAD)))
                     {
                         wait->u.wait.signaled++;
@@ -4087,6 +4110,7 @@ NTSTATUS WINAPI RtlRegisterWait( HANDLE *out, HANDLE handle, RTL_WAITORTIMERCALL
     object->u.wait.rtl_callback = callback;
 #ifdef __REACTOS__
     list_init( &object->u.wait.rtl_callers );
+    object->u.wait.rtl_period = (ULONGLONG)milliseconds * 10000;
 #endif
 
     RtlEnterCriticalSection( &waitqueue.cs );

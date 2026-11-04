@@ -140,6 +140,7 @@ static const CATEGORY_RULE Rules[] =
     { "kernel32_apitest", "QueueUserAPC", "core:threads" },
     { "kernel32_apitest", "SuspendThread", "core:threads" },
     { "kernel32_apitest", "SetWaitableTimerEx", "core:threads" },
+    { "kernel32_apitest", "RegisterWaitPeriodic", "core:threads" },
     { "kernel32_apitest", "interlck", "core:threads" },
     { "kernel32_apitest", "IoCompletion", "core:threads" },
     { "kernel32_apitest", "ThreadPowerThrottling", "core:threads" },
