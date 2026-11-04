@@ -89,6 +89,11 @@ bool IsOfflineError(DWORD error)
            error == ERROR_INTERNET_DISCONNECTED;
 }
 
+bool StopsCatalogScan(DWORD error)
+{
+    return IsOfflineError(error) || error == ERROR_LNTDRV_CATALOG_THROTTLED;
+}
+
 std::wstring ErrorText(DWORD error)
 {
     WCHAR *text = NULL;
@@ -110,6 +115,8 @@ std::wstring ErrorText(DWORD error)
             return LoadText(IDS_ERROR_NO_COMPAT);
         case ERROR_LNTDRV_CATALOG_FORMAT:
             return LoadText(IDS_ERROR_FORMAT);
+        case ERROR_LNTDRV_CATALOG_THROTTLED:
+            return LoadText(IDS_ERROR_THROTTLED);
         case ERROR_LNTDRV_PROGRAM_PACKAGE:
             return LoadText(IDS_ERROR_PROGRAM);
         case ERROR_LNTDRV_ALREADY_INSTALLED:

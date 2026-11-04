@@ -26,6 +26,7 @@ const DWORD ERROR_LNTDRV_NOT_IN_USE = 0x20000006;
 const DWORD ERROR_LNTDRV_NO_SIGNATURE = 0x20000007;
 const DWORD ERROR_LNTDRV_OTHER_ARCH = 0x20000008;
 const DWORD ERROR_LNTDRV_OTHER_WINDOWS = 0x20000009;
+const DWORD ERROR_LNTDRV_CATALOG_THROTTLED = 0x2000000A;
 
 std::wstring LoadText(UINT id);
 std::wstring FormatText(UINT id, const std::wstring &first);
@@ -36,5 +37,6 @@ std::wstring FormatText(UINT id, const std::wstring &first, const std::wstring &
 std::wstring NumberText(ULONGLONG value);
 std::wstring ErrorText(DWORD error);
 bool IsOfflineError(DWORD error);
+bool StopsCatalogScan(DWORD error);
 
 }

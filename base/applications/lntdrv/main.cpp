@@ -581,7 +581,7 @@ public:
                                 L"): " + CatalogNote(device, found->Updates, error, catalog.OtherArchitectures()) +
                                 L"\n").c_str());
             Post(m_hwnd, WM_APP_FOUND, m_Scan, found);
-            if (IsOfflineError(error) || error == ERROR_CANCELLED)
+            if (StopsCatalogScan(error) || error == ERROR_CANCELLED)
             {
                 failure = error == ERROR_CANCELLED ? ERROR_SUCCESS : error;
                 break;
@@ -1801,11 +1801,11 @@ int RunCommand(int argc, LPWSTR *argv)
             Print(GroupName(group) + L": " + CatalogNote(group.front(), updates, error, catalog.OtherArchitectures()));
             if (!updates.empty())
                 PrintUpdate(updates.front());
-            if (IsOfflineError(error))
+            if (StopsCatalogScan(error))
                 break;
         }
         Print(FormatText(IDS_CLI_MISSING_TOTAL, NumberText(missing)));
-        return IsOfflineError(error) ? (int)error : 0;
+        return StopsCatalogScan(error) ? (int)error : 0;
     }
     if (installAll)
     {
@@ -1842,7 +1842,7 @@ int RunCommand(int argc, LPWSTR *argv)
                 {
                     absent++;
                 }
-                if (IsOfflineError(error))
+                if (StopsCatalogScan(error))
                     break;
                 continue;
             }
@@ -1860,12 +1860,12 @@ int RunCommand(int argc, LPWSTR *argv)
                     break;
                 }
                 Print(FormatText(IDS_CLI_FAILED, target.Name, ErrorWithDetail(error, detail)));
-                if (IsOfflineError(error))
+                if (StopsCatalogScan(error))
                     break;
             }
             if (error)
                 failed++;
-            if (IsOfflineError(error))
+            if (StopsCatalogScan(error))
                 break;
         }
         Print(FormatText(IDS_CLI_SUMMARY, NumberText(installed), NumberText(absent), NumberText(failed)) +

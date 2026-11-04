@@ -127,6 +127,7 @@ BEGIN
     IDS_ERROR_NOT_IN_USE "The device no longer uses this catalog driver."
     IDS_ERROR_NO_SIGNATURE "The package has no signature."
     IDS_ERROR_OFFLINE "Cannot reach the Microsoft Update Catalog. Check that this PC is connected to the internet."
+    IDS_ERROR_THROTTLED "The Microsoft Update Catalog is limiting searches from this PC. Try again in a few minutes."
     IDS_ERROR_SIGNATURE "The package signature is not trusted: %1"
     IDS_ERROR_CODE "Error %1"
     IDS_STATUS_MISSING "Driver missing"
