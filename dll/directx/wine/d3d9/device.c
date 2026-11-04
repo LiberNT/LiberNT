@@ -2228,6 +2228,15 @@ static HRESULT WINAPI d3d9_device_StretchRect(IDirect3DDevice9Ex *iface, IDirect
         goto done;
     }
 
+#ifdef __REACTOS__
+    if (!dst->texture && !(dst_desc.bind_flags & (WINED3D_BIND_RENDER_TARGET | WINED3D_BIND_DEPTH_STENCIL))
+            && (src->texture || (src_desc.bind_flags & (WINED3D_BIND_RENDER_TARGET | WINED3D_BIND_DEPTH_STENCIL))))
+    {
+        WARN("Destination is an offscreen plain surface and the source is not.\n");
+        goto done;
+    }
+#endif
+
     if (src_desc.bind_flags & WINED3D_BIND_DEPTH_STENCIL)
     {
         if (device->in_scene)
