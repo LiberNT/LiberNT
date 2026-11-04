@@ -1366,7 +1366,7 @@ RunConflict(
     NTSTATUS Status, OpStatus;
 
     Status = OpenTestFile(&TestFileName, TEST_FILE_SIZE, &Section);
-    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Status == STATUS_SUCCESS, "%s/%s: OpenTestFile returned 0x%08lx\n", Op->Name, ModeName, Status);
     if (!NT_SUCCESS(Status))
     {
         return;
