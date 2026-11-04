@@ -1399,6 +1399,9 @@ static HRESULT WINAPI AviMuxIn_Receive(struct strmbase_sink *base, IMediaSample 
 
     TRACE("pin %p, pSample %p.\n", avimuxin, pSample);
 
+    if (avimux->filter.state == State_Stopped)
+        return VFW_E_WRONG_STATE;
+
     hr = IMediaSample_QueryInterface(pSample, &IID_IMediaSample2, (void**)&ms2);
     if(SUCCEEDED(hr)) {
         AM_SAMPLE2_PROPERTIES props;
