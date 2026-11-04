@@ -12,6 +12,7 @@
 EFI_HANDLE GlobalImageHandle;
 EFI_SYSTEM_TABLE* GlobalSystemTable;
 volatile BOOLEAN BootServicesExitedFlag;
+PFW_LATE_SCREEN_WRITE FwLateScreenWriter;
 
 static EFI_GUID FwLoadedImageGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 static EFI_GUID FwFileSystemGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
@@ -61,7 +62,11 @@ FwPrint(
     if (BootServicesExitedFlag || !GlobalSystemTable->ConOut)
     {
         for (i = 0; Text[i] != UNICODE_NULL; i++)
+        {
             UefiSerialPutChar(Text[i] <= 0x7F ? (UCHAR)Text[i] : '?');
+            if (FwLateScreenWriter)
+                FwLateScreenWriter(Text[i] <= 0x7F ? (UCHAR)Text[i] : '?');
+        }
         return;
     }
 
@@ -413,7 +418,15 @@ VOID
 FwHalt(VOID)
 {
     if (!BootServicesExitedFlag)
+    {
+        /* The firmware kept changing the memory map under ExitBootServices() */
+        FwPrint(L"LiberNT: the firmware refused to leave boot services\r\n");
         GlobalSystemTable->BootServices->Exit(GlobalImageHandle, EFI_ABORTED, 0, NULL);
+    }
+    else
+    {
+        FwPrint(L"LiberNT: halted by the boot loader\r\n");
+    }
 
     for (;;)
         ;

@@ -284,6 +284,7 @@ if(WINLOAD_ASM_SOURCE)
         lib/mm.c
         lib/pe.c
         winload/hw.c
+        winload/latefb.c
         winload/lpb.c
         winload/main.c
         winload/memory.c

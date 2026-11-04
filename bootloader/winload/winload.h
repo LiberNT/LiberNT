@@ -207,6 +207,14 @@ VOID
 WinLdrSetProcessorContext(
     _In_ USHORT OperatingSystemVersion);
 
+VOID
+FwLateScreenInitialize(
+    _Inout_ struct _LOADER_PARAMETER_EXTENSION* Extension);
+
+VOID
+FwLateScreenPutChar(
+    _In_ UCHAR Character);
+
 BOOLEAN
 MempSetupPaging(
     _In_ PFN_NUMBER StartPage,
