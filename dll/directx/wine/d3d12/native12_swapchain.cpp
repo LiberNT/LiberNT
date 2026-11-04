@@ -953,7 +953,12 @@ HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requeste
     if (requested.SampleDesc.Count != 1 || requested.Stereo) return DXGI_ERROR_INVALID_CALL;
     if (requested.SwapEffect != DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL && requested.SwapEffect != DXGI_SWAP_EFFECT_FLIP_DISCARD)
         return DXGI_ERROR_INVALID_CALL;
-    if (!Native12PublishableFormat(requested.Format)) return DXGI_ERROR_UNSUPPORTED;
+    if (!Native12PublishableFormat(requested.Format))
+    {
+        /* TODO: R10G10B10A2_UNORM and R16G16B16A16_FLOAT flip chains need composition of those formats */
+        return requested.Format == DXGI_FORMAT_R10G10B10A2_UNORM || requested.Format == DXGI_FORMAT_R16G16B16A16_FLOAT
+                ? DXGI_ERROR_UNSUPPORTED : DXGI_ERROR_INVALID_CALL;
+    }
     if (!device->register_resource || !device->get_resource_handles || !device->enqueue_set_event)
         return DXGI_ERROR_UNSUPPORTED;
 
