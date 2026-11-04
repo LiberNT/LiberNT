@@ -3590,7 +3590,10 @@ HRESULT NativeDevice::CreateTexture(const D3D11_TEXTURE2D_DESC *input,
         default:
             break;
     }
-    HRESULT validation = ValidateTextureBindings(input->Format, input->BindFlags, D3D10DDIRESOURCE_TEXTURE2D);
+    UINT validated_bind = input->BindFlags;
+    /* An XR_BIAS swap chain buffer is a render target only through its back-buffer cast. */
+    if (present && input->Format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) validated_bind &= ~D3D11_BIND_RENDER_TARGET;
+    HRESULT validation = ValidateTextureBindings(input->Format, validated_bind, D3D10DDIRESOURCE_TEXTURE2D);
     if (FAILED(validation)) return validation;
     if (input->Usage > D3D11_USAGE_STAGING) return E_INVALIDARG;
     if (input->Usage == D3D11_USAGE_STAGING && (input->BindFlags || input->MiscFlags || input->SampleDesc.Count != 1)) return E_INVALIDARG;
