@@ -327,6 +327,14 @@ public:
             const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *, IDXGIOutput *, IDXGISwapChain1 **) override;
     D3D11_TILED_RESOURCES_TIER TiledResourcesTier() const
     {
+        /* Windows 11 grants tier 1 at most on feature level 11_0 and none below it. */
+        D3D11_TILED_RESOURCES_TIER tier = DriverTiledResourcesTier();
+        if (feature_level < D3D_FEATURE_LEVEL_11_0) return D3D11_TILED_RESOURCES_NOT_SUPPORTED;
+        if (feature_level < D3D_FEATURE_LEVEL_11_1 && tier > D3D11_TILED_RESOURCES_TIER_1) return D3D11_TILED_RESOURCES_TIER_1;
+        return tier;
+    }
+    D3D11_TILED_RESOURCES_TIER DriverTiledResourcesTier() const
+    {
         if (options1_caps.TiledResourcesSupportFlags & D3DWDDM2_0DDI_TILED_RESOURCES_TIER_3_SUPPORTED)
             return D3D11_TILED_RESOURCES_TIER_3;
         if (options1_caps.TiledResourcesSupportFlags & D3DWDDM1_3DDI_TILED_RESOURCES_TIER_2_SUPPORTED)
@@ -342,6 +350,11 @@ public:
     void MaybeDestroy();
     void Unimplemented(const char *method) { FIXME("Native D3D11 %s is not implemented.\n", method); operation_error = E_NOTIMPL; }
     void BeginCall() { operation_error = S_OK; }
+    D3D11_CONSERVATIVE_RASTERIZATION_TIER ConservativeRasterizationTier() const
+    {
+        if (feature_level < D3D_FEATURE_LEVEL_11_1) return D3D11_CONSERVATIVE_RASTERIZATION_NOT_SUPPORTED;
+        return static_cast<D3D11_CONSERVATIVE_RASTERIZATION_TIER>(options2_caps.ConservativeRasterizationTier);
+    }
     bool MapOnDefaultBuffers() const
     {
         return wddm20 && !ddi11_1 && feature_level >= D3D_FEATURE_LEVEL_11_0
@@ -4302,7 +4315,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
         {
             if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_DOUBLES))) return E_INVALIDARG;
             static_cast<D3D11_FEATURE_DATA_DOUBLES *>(data)->DoublePrecisionFloatShaderOps =
-                    !!(shader_caps & D3D11DDICAPS_SHADER_DOUBLES);
+                    feature_level >= D3D_FEATURE_LEVEL_11_0 && (shader_caps & D3D11DDICAPS_SHADER_DOUBLES);
             return S_OK;
         }
         case D3D11_FEATURE_FORMAT_SUPPORT:
@@ -4371,14 +4384,17 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
         }
         case D3D11_FEATURE_D3D9_SHADOW_SUPPORT:
             if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_D3D9_SHADOW_SUPPORT))) return E_INVALIDARG;
-            ZeroMemory(data, size);
+            static_cast<D3D11_FEATURE_DATA_D3D9_SHADOW_SUPPORT *>(data)->SupportsDepthAsTextureWithLessEqualComparisonFilter = TRUE;
             return S_OK;
         case D3D11_FEATURE_D3D11_OPTIONS1:
         {
             if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_D3D11_OPTIONS1))) return E_INVALIDARG;
             D3D11_FEATURE_DATA_D3D11_OPTIONS1 *caps = static_cast<D3D11_FEATURE_DATA_D3D11_OPTIONS1 *>(data);
             ZeroMemory(caps, sizeof(*caps));
-            caps->TiledResourcesTier = TiledResourcesTier();
+            caps->TiledResourcesTier = TiledResourcesTier() > D3D11_TILED_RESOURCES_TIER_2
+                    ? D3D11_TILED_RESOURCES_TIER_2 : TiledResourcesTier();
+            caps->MinMaxFiltering = DriverTiledResourcesTier() >= D3D11_TILED_RESOURCES_TIER_2;
+            /* FIXME: Windows 11 reports ClearViewAlsoSupportsDepthOnlyFormats; ClearView handles render targets only */
             caps->MapOnDefaultBuffers = MapOnDefaultBuffers();
             return S_OK;
         }
@@ -4398,7 +4414,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
             D3D11_FEATURE_DATA_D3D9_OPTIONS1 *caps = static_cast<D3D11_FEATURE_DATA_D3D9_OPTIONS1 *>(data);
             ZeroMemory(caps, sizeof(*caps));
             caps->FullNonPow2TextureSupported = TRUE;
+            caps->DepthAsTextureWithLessEqualComparisonFilterSupported = TRUE;
             caps->SimpleInstancingSupported = TRUE;
+            caps->TextureCubeFaceRenderTargetWithNonCubeDepthStencilSupported = TRUE;
             return S_OK;
         }
         case D3D11_FEATURE_D3D11_OPTIONS2:
@@ -4406,12 +4424,14 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
             if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_D3D11_OPTIONS2))) return E_INVALIDARG;
             D3D11_FEATURE_DATA_D3D11_OPTIONS2 *caps = static_cast<D3D11_FEATURE_DATA_D3D11_OPTIONS2 *>(data);
             ZeroMemory(caps, sizeof(*caps));
-            caps->PSSpecifiedStencilRefSupported = !!(shader_caps & D3D11DDICAPS_SHADER_SPECIFIED_STENCIL_REF);
-            caps->TypedUAVLoadAdditionalFormats = !!(shader_caps & D3D11DDICAPS_SHADER_TYPED_UAV_LOAD_ADDITIONAL_FORMATS);
-            caps->ROVsSupported = !!(shader_caps & D3D11DDICAPS_SHADER_ROVS);
-            caps->ConservativeRasterizationTier =
-                    static_cast<D3D11_CONSERVATIVE_RASTERIZATION_TIER>(options2_caps.ConservativeRasterizationTier);
+            caps->PSSpecifiedStencilRefSupported = feature_level >= D3D_FEATURE_LEVEL_11_1
+                    && (shader_caps & D3D11DDICAPS_SHADER_SPECIFIED_STENCIL_REF);
+            caps->TypedUAVLoadAdditionalFormats = feature_level >= D3D_FEATURE_LEVEL_11_0
+                    && (shader_caps & D3D11DDICAPS_SHADER_TYPED_UAV_LOAD_ADDITIONAL_FORMATS);
+            caps->ROVsSupported = feature_level >= D3D_FEATURE_LEVEL_11_1 && (shader_caps & D3D11DDICAPS_SHADER_ROVS);
+            caps->ConservativeRasterizationTier = ConservativeRasterizationTier();
             caps->TiledResourcesTier = TiledResourcesTier();
+            /* FIXME: Windows 11 reports MapOnDefaultTextures; CPU-accessible default textures are not supported here */
             caps->UnifiedMemoryArchitecture = !!memory_caps.UMA;
             return S_OK;
         }
@@ -4435,10 +4455,21 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
             return S_OK;
         case D3D11_FEATURE_D3D11_OPTIONS5:
             if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_D3D11_OPTIONS5))) return E_INVALIDARG;
+            /* FIXME: Windows 11 reports shared resource tier 3 */
+            ZeroMemory(data, size);
+            return S_OK;
+        case D3D11_FEATURE_D3D11_OPTIONS4:
+            if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_D3D11_OPTIONS4))) return E_INVALIDARG;
+            /* FIXME: Windows 11 reports ExtendedNV12SharedTextureSupported */
+            ZeroMemory(data, size);
+            return S_OK;
+        case D3D11_FEATURE_DISPLAYABLE:
+            if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_DISPLAYABLE))) return E_INVALIDARG;
+            /* FIXME: Windows 11 reports displayable textures on display adapters and shared resource tier 3 */
             ZeroMemory(data, size);
             return S_OK;
         default:
-            return E_NOTIMPL;
+            return E_INVALIDARG;
     }
 }
 
@@ -5147,7 +5178,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateRasterizerState2(const D3D11_RASTE
     bool extended = wddm20 && wddm20_functions.pfnCalcPrivateRasterizerStateSize
             && wddm20_functions.pfnCreateRasterizerState;
     if (input->ConservativeRaster > D3D11_CONSERVATIVE_RASTERIZATION_MODE_ON) return E_INVALIDARG;
-    if (input->ConservativeRaster && (!extended || !options2_caps.ConservativeRasterizationTier))
+    if (input->ConservativeRaster && (!extended || !ConservativeRasterizationTier()))
         return E_INVALIDARG;
     switch (input->ForcedSampleCount)
     {
