@@ -3,6 +3,7 @@
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     Tests for QuerySourceCreateFromKey
  * COPYRIGHT:   Copyright 2026 Katayama Hirofumi MZ <katayama.hirofumi.mz@gmail.com>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <apitest.h>
@@ -227,11 +228,127 @@ static void Test_CheckValues(void)
         pSrc->Release();
 }
 
+static ULONG CountEnum(IEnumString *pEnum, PCWSTR Expected1, PCWSTR Expected2, PCWSTR Expected3, PULONG pFound)
+{
+    PWSTR psz;
+    ULONG cFetched, cItems = 0;
+
+    *pFound = 0;
+    while (pEnum->Next(1, &psz, &cFetched) == S_OK)
+    {
+        cItems++;
+        if (!lstrcmpW(psz, Expected1) || !lstrcmpW(psz, Expected2) || (Expected3 && !lstrcmpW(psz, Expected3)))
+            (*pFound)++;
+        CoTaskMemFree(psz);
+    }
+    return cItems;
+}
+
+static void Test_VistaSource(void)
+{
+    static const WCHAR valG[] = L"{00021401-0000-0000-C000-000000000046}";
+    static const GUID guidG = { 0x00021401, 0x0000, 0x0000, { 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+    FLAGGED_BYTE_BLOB *pBlob = NULL;
+    IQuerySource *pSrc = NULL, *pSub = NULL;
+    IEnumString *pEnum = NULL;
+    IUnknown *pOld = NULL;
+    PWSTR psz = NULL;
+    DWORD dwValue = 0;
+    ULONG cItems, cFound;
+    GUID guid;
+    HKEY hRoot;
+    HRESULT hr;
+
+    RegCreateKeyExW(HKEY_CURRENT_USER, k_Root, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hRoot, NULL);
+    RegSetValueExW(hRoot, L"ValueG", 0, REG_SZ, (const BYTE*)valG, (DWORD)sizeof(valG));
+    RegCloseKey(hRoot);
+
+    hr = g_pQuerySourceCreateFromKey(HKEY_CURRENT_USER, k_Root, FALSE, IID_IQuerySourceOld, (PVOID*)&pOld);
+    ok_hex(hr, E_NOINTERFACE);
+    ok(pOld == NULL, "pOld was %p\n", pOld);
+
+    hr = g_pQuerySourceCreateFromKey(HKEY_CURRENT_USER, k_Root, FALSE, IID_IQuerySource, (PVOID*)&pSrc);
+    ok_hex(hr, S_OK);
+    if (!pSrc)
+        return;
+
+    hr = pSrc->QueryInterface(IID_IQuerySourceOld, (PVOID*)&pOld);
+    ok_hex(hr, E_NOINTERFACE);
+
+    hr = pSrc->QueryValueString(NULL, L"ValueA", &psz);
+    ok_hex(hr, S_OK);
+    ok(psz && !lstrcmpW(psz, L"hello"), "psz was %s\n", wine_dbgstr_w(psz));
+    CoTaskMemFree(psz);
+
+    hr = pSrc->QueryValueDword(NULL, L"ValueB", &dwValue);
+    ok_hex(hr, S_OK);
+    ok_hex(dwValue, 0xBEEFCAFE);
+
+    memset(&guid, 0, sizeof(guid));
+    hr = pSrc->QueryValueGuid(NULL, L"ValueG", &guid);
+    ok_hex(hr, S_OK);
+    ok(IsEqualGUID(guid, guidG), "guid was %s\n", wine_dbgstr_guid(&guid));
+
+    hr = pSrc->QueryValueGuid(NULL, L"ValueB", &guid);
+    ok_hex(hr, HRESULT_FROM_WIN32(ERROR_UNSUPPORTED_TYPE));
+
+    hr = pSrc->QueryValueExists(NULL, L"ValueA");
+    ok_hex(hr, S_OK);
+    hr = pSrc->QueryValueExists(NULL, L"Nope");
+    ok_hex(hr, HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
+
+    hr = pSrc->QueryValueDirect(NULL, L"ValueB", &pBlob);
+    ok_hex(hr, S_OK);
+    ok(pBlob && pBlob->clSize == sizeof(DWORD), "pBlob->clSize was %ld\n", pBlob ? pBlob->clSize : 0);
+    CoTaskMemFree(pBlob);
+
+    hr = pSrc->EnumValues(&pEnum);
+    ok_hex(hr, S_OK);
+    if (pEnum)
+    {
+        cItems = CountEnum(pEnum, L"ValueA", L"ValueB", L"ValueG", &cFound);
+        ok(cItems == 3 && cFound == 3, "values: %lu items, %lu expected ones\n", cItems, cFound);
+        pEnum->Release();
+        pEnum = NULL;
+    }
+
+    hr = pSrc->EnumSources(&pEnum);
+    ok_hex(hr, S_OK);
+    if (pEnum)
+    {
+        cItems = CountEnum(pEnum, k_SubKeyA, k_SubKeyB, NULL, &cFound);
+        ok(cItems == 2 && cFound == 2, "sources: %lu items, %lu expected ones\n", cItems, cFound);
+        pEnum->Release();
+    }
+
+    hr = pSrc->OpenSource(k_SubKeyA, &pSub);
+    ok_hex(hr, S_OK);
+    ok(pSub != NULL, "pSub was NULL\n");
+    if (pSub)
+        pSub->Release();
+
+    pSub = NULL;
+    hr = pSrc->OpenSource(L"Nope", &pSub);
+    ok_hex(hr, HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
+
+    pSrc->Release();
+}
+
 START_TEST(QuerySourceCreateFromKey)
 {
     if (IsWindowsVistaOrGreater())
     {
-        skip("Vista+ is not tested well\n");
+        g_pQuerySourceCreateFromKey = (FN_QuerySourceCreateFromKey)
+            GetProcAddress(GetModuleHandleA("shlwapi"), MAKEINTRESOURCEA(544));
+        ok(g_pQuerySourceCreateFromKey != NULL, "QuerySourceCreateFromKey not found\n");
+        if (!g_pQuerySourceCreateFromKey)
+            return;
+        HRESULT hrCo = CoInitialize(NULL);
+        SetupRegistry();
+        Test_VistaSource();
+        CleanupRegistry();
+        if (SUCCEEDED(hrCo))
+            CoUninitialize();
         return;
     }
 
