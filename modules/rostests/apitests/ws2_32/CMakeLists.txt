@@ -4,6 +4,7 @@ list(APPEND SOURCE
     BusyLoopback.c
     CloseCompletion.c
     MulticastInterface.c
+    ReuseDelivery.c
     addresslistsort.c
     bind.c
     broadcast.c
