@@ -86,8 +86,7 @@ std::wstring NumberText(ULONGLONG value)
 bool IsOfflineError(DWORD error)
 {
     return error == ERROR_INTERNET_NAME_NOT_RESOLVED || error == ERROR_INTERNET_CANNOT_CONNECT ||
-           error == ERROR_INTERNET_TIMEOUT || error == ERROR_INTERNET_CONNECTION_ABORTED ||
-           error == ERROR_INTERNET_CONNECTION_RESET || error == ERROR_INTERNET_DISCONNECTED;
+           error == ERROR_INTERNET_DISCONNECTED;
 }
 
 std::wstring ErrorText(DWORD error)

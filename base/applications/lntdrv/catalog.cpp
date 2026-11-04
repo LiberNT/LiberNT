@@ -710,6 +710,7 @@ DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector
     SystemTarget system = CurrentSystem();
     std::vector<std::wstring> others;
     bool rows = false, fits = false, supported = false;
+    DWORD failure = ERROR_SUCCESS;
 
     updates.clear();
     m_OtherArchitectures.clear();
@@ -725,8 +726,13 @@ DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector
             bool last = true;
             DWORD status = SearchPage(query, page, found, last);
 
-            if (status)
+            if (status == ERROR_CANCELLED || IsOfflineError(status))
                 return status;
+            if (status)
+            {
+                failure = status;
+                break;
+            }
             rows = rows || !found.empty();
             for (CatalogUpdate &row : found)
             {
@@ -779,7 +785,7 @@ DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector
         }
     }
     if (!rows)
-        return ERROR_NOT_FOUND;
+        return failure ? failure : ERROR_NOT_FOUND;
     if (!fits)
         return ERROR_LNTDRV_OTHER_WINDOWS;
     if (!supported)
