@@ -1298,6 +1298,11 @@ public:
         {
             *out = static_cast<IDXGIResource1 *>(&dxgi_resource); AddRef(); return S_OK;
         }
+        if ((IsEqualGUID(iid, IID_IDXGISurface) || IsEqualGUID(iid, IID_IDXGISurface1) || IsEqualGUID(iid, IID_IDXGISurface2))
+                && desc.MipLevels == 1 && desc.Depth == 1)
+        {
+            *out = static_cast<IDXGISurface2 *>(&dxgi_resource); AddRef(); return S_OK;
+        }
         return NativeChild::QueryInterface(iid, out);
     }
     void STDMETHODCALLTYPE GetType(D3D11_RESOURCE_DIMENSION *out) override { if (out) *out = D3D11_RESOURCE_DIMENSION_TEXTURE3D; }
@@ -1383,15 +1388,17 @@ static NativeTextureInfo *GetNativeTexture(ID3D11Resource *resource, NativeDevic
     return info;
 }
 
+static bool NativeSubresourceLayout(ID3D11Resource *resource, NativeDevice *device, UINT index,
+        DXGI_SURFACE_DESC *desc, bool *buffer, bool *whole);
+static bool NativeBufferMapped(ID3D11Resource *resource, NativeDevice *device, bool *mapped);
+
 HRESULT STDMETHODCALLTYPE NativeTextureResource::GetDesc(DXGI_SURFACE_DESC *out)
 {
+    bool buffer, whole;
     if (!out) return E_INVALIDARG;
-    NativeTextureInfo info;
-    if (!GetNativeTexture(texture, device, &info)) return E_INVALIDARG;
-    out->Width = info.desc.Width;
-    out->Height = info.desc.Height;
-    out->Format = info.desc.Format;
-    out->SampleDesc = info.desc.SampleDesc;
+    DXGI_SURFACE_DESC layout = {};
+    if (!NativeSubresourceLayout(texture, device, 0, &layout, &buffer, &whole)) return E_INVALIDARG;
+    *out = layout;
     return S_OK;
 }
 
@@ -1415,7 +1422,10 @@ HRESULT STDMETHODCALLTYPE NativeTextureResource::Map(DXGI_MAPPED_RECT *out, UINT
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     HRESULT hr = device->context->Map(texture, 0, map, 0, &mapped);
     if (FAILED(hr)) return hr;
-    out->Pitch = mapped.RowPitch;
+    DXGI_SURFACE_DESC layout = {};
+    bool buffer = false, whole;
+    NativeSubresourceLayout(texture, device, 0, &layout, &buffer, &whole);
+    out->Pitch = static_cast<INT>(buffer ? layout.Width : mapped.RowPitch);
     out->pBits = static_cast<BYTE *>(mapped.pData);
     return S_OK;
 }
@@ -1423,7 +1433,12 @@ HRESULT STDMETHODCALLTYPE NativeTextureResource::Map(DXGI_MAPPED_RECT *out, UINT
 HRESULT STDMETHODCALLTYPE NativeTextureResource::Unmap()
 {
     NativeTextureInfo info;
-    if (!GetNativeTexture(texture, device, &info) || !info.mapped[0]) return DXGI_ERROR_INVALID_CALL;
+    bool buffer_mapped;
+    if (NativeBufferMapped(texture, device, &buffer_mapped))
+    {
+        if (!buffer_mapped) return DXGI_ERROR_INVALID_CALL;
+    }
+    else if (!GetNativeTexture(texture, device, &info) || !info.mapped[0]) return DXGI_ERROR_INVALID_CALL;
     device->context->Unmap(texture, 0);
     return S_OK;
 }
@@ -2761,6 +2776,11 @@ public:
             if (!out) return E_INVALIDARG;
             *out = static_cast<IDXGIResource1 *>(&dxgi_resource); AddRef(); return S_OK;
         }
+        if (IsEqualGUID(iid, IID_IDXGISurface) || IsEqualGUID(iid, IID_IDXGISurface1) || IsEqualGUID(iid, IID_IDXGISurface2))
+        {
+            if (!out) return E_INVALIDARG;
+            *out = static_cast<IDXGISurface2 *>(&dxgi_resource); AddRef(); return S_OK;
+        }
         return NativeChild::QueryInterface(iid, out);
     }
     void STDMETHODCALLTYPE GetType(D3D11_RESOURCE_DIMENSION *out) override { if (out) *out = D3D11_RESOURCE_DIMENSION_BUFFER; }
@@ -2780,6 +2800,14 @@ static NativeBuffer *GetNativeBuffer(ID3D11Resource *resource, NativeDevice *dev
     bool same = owner == static_cast<ID3D11Device *>(device);
     if (owner) owner->Release();
     return same ? static_cast<NativeBuffer *>(static_cast<ID3D11Buffer *>(resource)) : NULL;
+}
+
+static bool NativeBufferMapped(ID3D11Resource *resource, NativeDevice *device, bool *mapped)
+{
+    NativeBuffer *buffer = GetNativeBuffer(resource, device);
+    if (!buffer) return false;
+    *mapped = buffer->mapped;
+    return true;
 }
 
 /* One mip of one array slice; a volume deeper than one slice has no subresource surfaces. */
