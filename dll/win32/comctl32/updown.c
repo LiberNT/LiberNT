@@ -758,6 +758,11 @@ static HWND UPDOWN_SetBuddy (UPDOWN_INFO* infoPtr, HWND bud)
             return old_buddy;
         }
 
+#ifdef __REACTOS__
+        SetWindowLongW(infoPtr->Self, GWL_STYLE, infoPtr->dwStyle & ~WS_BORDER);
+        SetWindowLongW(infoPtr->Self, GWL_EXSTYLE, GetWindowLongW(infoPtr->Self, GWL_EXSTYLE));
+#endif
+
         /* first adjust the buddy to accommodate the up/down */
         SetWindowPos(infoPtr->Buddy, 0, budRect.left, budRect.top,
                      budRect.right  - budRect.left, budRect.bottom - budRect.top,
@@ -1020,7 +1025,9 @@ static LRESULT WINAPI UpDownWindowProc(HWND hwnd, UINT message, WPARAM wParam, L
             infoPtr->AccelVect[2].nSec = 5;
             infoPtr->AccelVect[2].nInc = 20;
 
+#ifndef __REACTOS__
             SetWindowLongW (hwnd, GWL_STYLE, infoPtr->dwStyle & ~WS_BORDER);
+#endif
 	    if (!(infoPtr->dwStyle & UDS_HORZ))
 	        SetWindowPos (hwnd, NULL, 0, 0, DEFAULT_WIDTH, pcs->cy,
 	                      SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_NOMOVE);
