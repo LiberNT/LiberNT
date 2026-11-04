@@ -93,6 +93,21 @@ static void Native12SetWindowState(Native12WindowState *state)
     else delete state;
 }
 
+class Native12SwapChain;
+
+struct Native12AltEnterHook : public Native12Allocation
+{
+    Native12AltEnterHook *next;
+    DWORD thread;
+    HHOOK hook;
+    UINT users;
+};
+
+static SRWLOCK native12_alt_enter_lock = SRWLOCK_INIT;
+static Native12SwapChain *native12_alt_enter_chains;
+static Native12AltEnterHook *native12_alt_enter_hooks;
+static LRESULT CALLBACK Native12AltEnterProc(int code, WPARAM wparam, LPARAM lparam);
+
 static HRESULT Native12ResizeFlags(UINT current, UINT flags)
 {
     static const UINT creation_only = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
@@ -131,6 +146,18 @@ public:
     RECT windowed_rect = {};
     bool fullscreen_layout = false;
     bool fullscreen_focused = false;
+    Native12SwapChain *alt_enter_next = NULL;
+    DWORD alt_enter_thread = 0;
+    bool alt_enter_registered = false;
+    void RegisterAltEnter();
+    void UnregisterAltEnter();
+    void ToggleFullscreen();
+    bool TryAddRef()
+    {
+        for (LONG count = references; count > 0; count = references)
+            if (InterlockedCompareExchange(&references, count + 1, count) == count) return true;
+        return false;
+    }
     bool FocusLost()
     {
         if (fullscreen_desc.Windowed) return false;
@@ -178,6 +205,7 @@ public:
     }
     ~Native12SwapChain()
     {
+        UnregisterAltEnter();
         StopWorker();
         if (!fullscreen_desc.Windowed) SetFullscreenState(FALSE, NULL);
         if (fullscreen_output) fullscreen_output->Release();
@@ -677,6 +705,104 @@ void Native12SwapChain::RestoreWindow(const RECT *rect)
         state->flags |= SWP_NOMOVE | SWP_NOSIZE;
     }
     Native12SetWindowState(state);
+}
+
+static LRESULT CALLBACK Native12AltEnterProc(int code, WPARAM wparam, LPARAM lparam)
+{
+    const MSG *msg = reinterpret_cast<const MSG *>(lparam);
+    if (code == HC_ACTION && wparam == PM_REMOVE && msg->message == WM_SYSKEYDOWN
+            && msg->wParam == VK_RETURN && (msg->lParam & (KF_ALTDOWN << 16)))
+    {
+        Native12SwapChain *chain;
+        AcquireSRWLockShared(&native12_alt_enter_lock);
+        for (chain = native12_alt_enter_chains; chain; chain = chain->alt_enter_next)
+            if (chain->window == msg->hwnd && chain->TryAddRef()) break;
+        ReleaseSRWLockShared(&native12_alt_enter_lock);
+        if (chain)
+        {
+            chain->ToggleFullscreen();
+            chain->Release();
+        }
+    }
+    return CallNextHookEx(NULL, code, wparam, lparam);
+}
+
+void Native12SwapChain::RegisterAltEnter()
+{
+    DWORD process = 0;
+    DWORD thread = GetWindowThreadProcessId(window, &process);
+    if (!thread || process != GetCurrentProcessId()) return;
+    AcquireSRWLockExclusive(&native12_alt_enter_lock);
+    Native12AltEnterHook *hook;
+    for (hook = native12_alt_enter_hooks; hook; hook = hook->next)
+        if (hook->thread == thread) break;
+    if (!hook && (hook = new Native12AltEnterHook))
+    {
+        hook->thread = thread;
+        hook->users = 0;
+        if ((hook->hook = SetWindowsHookExW(WH_GETMESSAGE, Native12AltEnterProc, NULL, thread)))
+        {
+            hook->next = native12_alt_enter_hooks;
+            native12_alt_enter_hooks = hook;
+        }
+        else
+        {
+            delete hook;
+            hook = NULL;
+        }
+    }
+    if (hook)
+    {
+        ++hook->users;
+        alt_enter_thread = thread;
+        alt_enter_next = native12_alt_enter_chains;
+        native12_alt_enter_chains = this;
+        alt_enter_registered = true;
+    }
+    ReleaseSRWLockExclusive(&native12_alt_enter_lock);
+}
+
+void Native12SwapChain::UnregisterAltEnter()
+{
+    if (!alt_enter_registered) return;
+    HHOOK unhook = NULL;
+    AcquireSRWLockExclusive(&native12_alt_enter_lock);
+    for (Native12SwapChain **link = &native12_alt_enter_chains; *link; link = &(*link)->alt_enter_next)
+    {
+        if (*link != this) continue;
+        *link = alt_enter_next;
+        break;
+    }
+    for (Native12AltEnterHook **link = &native12_alt_enter_hooks; *link; link = &(*link)->next)
+    {
+        Native12AltEnterHook *hook = *link;
+        if (hook->thread != alt_enter_thread) continue;
+        if (!--hook->users)
+        {
+            *link = hook->next;
+            unhook = hook->hook;
+            delete hook;
+        }
+        break;
+    }
+    alt_enter_registered = false;
+    ReleaseSRWLockExclusive(&native12_alt_enter_lock);
+    if (unhook) UnhookWindowsHookEx(unhook);
+}
+
+void Native12SwapChain::ToggleFullscreen()
+{
+    typedef BOOL (WINAPI *PFN_ASSOCIATION)(IDXGIFactory *, HWND, UINT *);
+    static PFN_ASSOCIATION association;
+    if (!association)
+    {
+        HMODULE dxgi = GetModuleHandleW(L"dxgi.dll");
+        if (dxgi) association = reinterpret_cast<PFN_ASSOCIATION>(GetProcAddress(dxgi, "RosDxgiGetWindowAssociation"));
+    }
+    UINT flags = 0;
+    if (association && association(factory, window, &flags)
+            && (flags & (DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES))) return;
+    SetFullscreenState(fullscreen_desc.Windowed, NULL);
 }
 
 void Native12SwapChain::RestoreMode()
@@ -1358,6 +1484,7 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::create_swapchain(IDXGIFactory *f
         swapchain->Release();
         return hr;
     }
+    swapchain->RegisterAltEnter();
     *out = swapchain;
     return S_OK;
 }
