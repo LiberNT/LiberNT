@@ -181,6 +181,33 @@ KiFreezeIfRequested(
     KeRestoreInterrupts(Enable);
 }
 
+/* Mark, send to and wait for one snapshot of the published, active processors */
+static
+KAFFINITY
+KiFreezeTargetSet(
+    _In_ PKPRCB CurrentPrcb)
+{
+    KAFFINITY Targets = 0;
+    ULONG Index;
+    PKPRCB TargetPrcb;
+
+    for (Index = 0; Index < KeNumberProcessors && Index < MAXIMUM_PROCESSORS; Index++)
+    {
+        TargetPrcb = KiProcessorBlock[Index];
+        if (TargetPrcb == NULL || TargetPrcb == CurrentPrcb)
+            continue;
+
+        if ((KeActiveProcessors & TargetPrcb->SetMember) == 0)
+            continue;
+
+        Targets |= TargetPrcb->SetMember;
+    }
+
+    return Targets;
+}
+
+#define KI_FREEZE_WAIT_SPINS 0x40000000
+
 VOID
 NTAPI
 KxFreezeExecution(
@@ -211,42 +238,58 @@ KxFreezeExecution(
     /* We are the owner now and active */
     CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
 
-    /* Loop all processors */
-    for (ULONG i = 0; i < KeNumberProcessors; i++)
+    {
+    KAFFINITY Targets = KiFreezeTargetSet(CurrentPrcb);
+
+    /* Mark exactly the snapshot */
+    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb != CurrentPrcb)
-        {
-            /* Only the active processor is allowed to change IpiFrozen */
-            ASSERT(TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_RUNNING);
+        if (TargetPrcb == NULL || (Targets & TargetPrcb->SetMember) == 0)
+            continue;
 
-            RtlZeroMemory(&TargetPrcb->ProcessorState.ContextFrame, sizeof(TargetPrcb->ProcessorState.ContextFrame));
-            KeMemoryBarrier();
+        /* Only the active processor is allowed to change IpiFrozen */
+        ASSERT(TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_RUNNING);
 
-            /* Request target to freeze */
-            TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_TARGET_FREEZE;
-        }
+        RtlZeroMemory(&TargetPrcb->ProcessorState.ContextFrame, sizeof(TargetPrcb->ProcessorState.ContextFrame));
+        KeMemoryBarrier();
+
+        /* Request target to freeze */
+        TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_TARGET_FREEZE;
     }
 
-    /* Send the freeze IPI */
-    KiIpiSend(KeActiveProcessors & ~CurrentPrcb->SetMember, IPI_FREEZE);
+    /* Send the freeze IPI to exactly the same set */
+    if (Targets != 0)
+        KiIpiSend(Targets, IPI_FREEZE);
 
-    /* Wait for all targets to be frozen */
-    for (ULONG i = 0; i < KeNumberProcessors; i++)
+    /* Bounded: a target that did not take the request must not hang the machine */
+    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb != CurrentPrcb)
+        ULONG Spins = 0;
+
+        if (TargetPrcb == NULL || (Targets & TargetPrcb->SetMember) == 0)
+            continue;
+
+        while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN)
         {
-            /* Wait for the target to be frozen */
-            while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN)
+            if (++Spins >= KI_FREEZE_WAIT_SPINS)
             {
-                YieldProcessor();
-                KeMemoryBarrier();
+                DPRINT1("KxFreezeExecution: CPU %lu never froze, continuing\n",
+                        (ULONG)TargetPrcb->Number);
+
+                /* Clear the mark so the next freeze does not wait for it */
+                TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_RUNNING;
+                break;
             }
+
+            YieldProcessor();
+            KeMemoryBarrier();
         }
     }
+    }
 
-    /* All targets are frozen, we can continue */
+    /* All targets are frozen (or reported), we can continue */
 }
 
 VOID
@@ -257,32 +300,43 @@ KxThawExecution(
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     ASSERT(CurrentPrcb->IpiFrozen & IPI_FROZEN_FLAG_ACTIVE);
 
-    /* Loop all processors */
-    for (ULONG i = 0; i < KeNumberProcessors; i++)
+    /* Thaw the marked set, not whatever KeNumberProcessors says now */
+    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb != CurrentPrcb)
-        {
-            /* Make sure they are still frozen */
-            ASSERT(TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_FROZEN);
+        if (TargetPrcb == NULL || TargetPrcb == CurrentPrcb)
+            continue;
 
-            /* Request target to thaw */
-            TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_THAW;
-        }
+        if (TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_RUNNING)
+            continue;
+
+        /* Make sure they are still frozen */
+        ASSERT(TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_FROZEN);
+
+        /* Request target to thaw */
+        TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_THAW;
     }
 
-    /* Wait for all targets to be running */
-    for (ULONG i = 0; i < KeNumberProcessors; i++)
+    /* Wait for those to be running, bounded */
+    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb != CurrentPrcb)
+        ULONG Spins = 0;
+
+        if (TargetPrcb == NULL || TargetPrcb == CurrentPrcb)
+            continue;
+
+        while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_RUNNING)
         {
-            /* Wait for the target to be running again */
-            while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_RUNNING)
+            if (++Spins >= KI_FREEZE_WAIT_SPINS)
             {
-                YieldProcessor();
-                KeMemoryBarrier();
+                DPRINT1("KxThawExecution: CPU %lu never thawed, continuing\n",
+                        (ULONG)TargetPrcb->Number);
+                break;
             }
+
+            YieldProcessor();
+            KeMemoryBarrier();
         }
     }
 
