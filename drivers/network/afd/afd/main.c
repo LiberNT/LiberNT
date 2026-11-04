@@ -1566,6 +1566,32 @@ AfdCancelHandler(PDEVICE_OBJECT DeviceObject,
     ObDereferenceObject(FileObject);
 }
 
+static FAST_IO_DEVICE_CONTROL AfdFastIoDeviceControl;
+static BOOLEAN NTAPI
+AfdFastIoDeviceControl(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ BOOLEAN Wait,
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength,
+    _In_ ULONG IoControlCode,
+    _Out_ PIO_STATUS_BLOCK IoStatus,
+    _In_ PDEVICE_OBJECT DeviceObject)
+{
+    UNREFERENCED_PARAMETER(Wait);
+    UNREFERENCED_PARAMETER(OutputBuffer);
+    UNREFERENCED_PARAMETER(OutputBufferLength);
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (IoControlCode == IOCTL_AFD_RECV)
+        return AfdFastConnectedSocketReadData(FileObject, InputBuffer, InputBufferLength, IoStatus);
+
+    return FALSE;
+}
+
+static FAST_IO_DISPATCH AfdFastIoDispatch;
+
 static DRIVER_UNLOAD AfdUnload;
 static VOID NTAPI
 AfdUnload(PDRIVER_OBJECT DriverObject)
@@ -1595,6 +1621,9 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = AfdDispatch;
     DriverObject->MajorFunction[IRP_MJ_QUERY_VOLUME_INFORMATION] = AfdDispatch;
     DriverObject->DriverUnload = AfdUnload;
+    AfdFastIoDispatch.SizeOfFastIoDispatch = sizeof(AfdFastIoDispatch);
+    AfdFastIoDispatch.FastIoDeviceControl = AfdFastIoDeviceControl;
+    DriverObject->FastIoDispatch = &AfdFastIoDispatch;
 
     Status = IoCreateDevice(DriverObject,
                             sizeof(AFD_DEVICE_EXTENSION),

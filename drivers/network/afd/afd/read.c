@@ -772,6 +772,109 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     return Status;
 }
 
+BOOLEAN
+AfdFastConnectedSocketReadData(
+    _In_ PFILE_OBJECT FileObject,
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_ PIO_STATUS_BLOCK IoStatus)
+{
+    PAFD_FCB FCB = FileObject->FsContext;
+    KPROCESSOR_MODE Mode = ExGetPreviousMode();
+    BOOLEAN Is32Bit = AfdIs32bitCaller(Mode);
+    BOOLEAN CopyFailed = FALSE;
+    AFD_RECV_INFO RecvReq;
+    AFD_WSABUF Buffers[8];
+    UINT BytesAvailable, BytesCopied = 0, BytesToCopy, i;
+
+    if (!AfdCaptureRecvRequest(InputBuffer, InputBufferLength, Mode, Is32Bit, &RecvReq) ||
+        (RecvReq.AfdFlags & (AFD_OVERLAPPED | AFD_SKIP_FIO)) ||
+        RecvReq.TdiFlags != TDI_RECEIVE_NORMAL ||
+        !RecvReq.BufferArray || !RecvReq.BufferCount ||
+        RecvReq.BufferCount > ARRAYSIZE(Buffers))
+    {
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        for (i = 0; i < RecvReq.BufferCount; i++)
+        {
+            AfdReadUserWsaBuf(RecvReq.BufferArray, i, Mode, Is32Bit, &Buffers[i]);
+            if (Mode != KernelMode)
+                ProbeForWrite(Buffers[i].buf, Buffers[i].len, sizeof(UCHAR));
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        CopyFailed = TRUE;
+    }
+    _SEH2_END;
+
+    if (CopyFailed)
+        return FALSE;
+
+    if (!SocketAcquireStateLock(FCB))
+        return FALSE;
+
+    BytesAvailable = FCB->Recv.Content - FCB->Recv.BytesUsed;
+    if ((FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) ||
+        FCB->SharedData.State != SOCKET_STATE_CONNECTED ||
+        FCB->TdiReceiveClosed || !BytesAvailable ||
+        !IsListEmpty(&FCB->PendingIrpList[FUNCTION_RECV]) ||
+        !IsListEmpty(&FCB->PendingIrpList[FUNCTION_RECV_OOB]) ||
+        !IsListEmpty(&FCB->PendingIrpList[FUNCTION_ACCEPT]))
+    {
+        SocketStateUnlock(FCB);
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        for (i = 0; i < RecvReq.BufferCount && BytesCopied < BytesAvailable; i++)
+        {
+            BytesToCopy = MIN(Buffers[i].len, BytesAvailable - BytesCopied);
+            if (!BytesToCopy || !Buffers[i].buf)
+                continue;
+
+            RtlCopyMemory(Buffers[i].buf, FCB->Recv.Window + FCB->Recv.BytesUsed + BytesCopied, BytesToCopy);
+            BytesCopied += BytesToCopy;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        CopyFailed = TRUE;
+    }
+    _SEH2_END;
+
+    if (CopyFailed || !BytesCopied)
+    {
+        SocketStateUnlock(FCB);
+        return FALSE;
+    }
+
+    FCB->EventSelectDisabled &= ~AFD_EVENT_RECEIVE;
+    FCB->Recv.BytesUsed += BytesCopied;
+    RefillSocketBuffer(FCB);
+
+    if (FCB->Recv.Content - FCB->Recv.BytesUsed)
+    {
+        FCB->PollState |= AFD_EVENT_RECEIVE;
+        FCB->PollStatus[FD_READ_BIT] = STATUS_SUCCESS;
+        PollReeval(FCB->DeviceExt, FCB->FileObject);
+    }
+    else
+    {
+        FCB->PollState &= ~AFD_EVENT_RECEIVE;
+    }
+
+    SocketStateUnlock(FCB);
+
+    IoStatus->Status = STATUS_SUCCESS;
+    IoStatus->Information = BytesCopied;
+    return TRUE;
+}
+
 static
 BOOLEAN
 AfdIsFromConnectedPeer(
