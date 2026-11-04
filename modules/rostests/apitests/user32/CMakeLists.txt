@@ -23,6 +23,7 @@ list(APPEND SOURCE
     CreateDialog.c
     CreateStructHook.c
     DisplayChangeBroadcast.c
+    DisplayDeviceAttach.c
     CreateIconFromResourceEx.c
     CoveredWindow.c
     CreateWindowEx.c
