@@ -281,6 +281,26 @@ UserMonitorDeviceKey(
     RtlStringCchCatW(Buffer, Capacity, DriverKey);
 }
 
+static
+PGRAPHICS_DEVICE
+UserFindDisplaySettingsDevice(
+    _In_opt_ PUNICODE_STRING pustrDevice)
+{
+    PGRAPHICS_DEVICE pGraphicsDevice = NULL;
+    PPDEVOBJ ppdev;
+
+    if (pustrDevice)
+        return EngpFindGraphicsDevice(pustrDevice, 0);
+
+    ppdev = EngpGetPDEV(NULL);
+    if (ppdev)
+    {
+        pGraphicsDevice = ppdev->pGraphicsDevice;
+        PDEVOBJ_vRelease(ppdev);
+    }
+    return pGraphicsDevice ? pGraphicsDevice : EngpFindGraphicsDevice(NULL, 0);
+}
+
 NTSTATUS
 NTAPI
 UserEnumDisplayDevices(
@@ -589,10 +609,8 @@ UserEnumDisplaySettings(
           pustrDevice, iModeNum);
 
     /* Ask GDI for the GRAPHICS_DEVICE */
-    pGraphicsDevice = EngpFindGraphicsDevice(pustrDevice, 0);
-    ppdev = EngpGetPDEV(pustrDevice);
-
-    if (!pGraphicsDevice || !ppdev)
+    pGraphicsDevice = UserFindDisplaySettingsDevice(pustrDevice);
+    if (!pGraphicsDevice)
     {
         /* No device found */
         ERR("No device found!\n");
@@ -602,9 +620,18 @@ UserEnumDisplaySettings(
     /* let's politely ask the driver for an updated mode list,
        just in case there's something new in there (vbox) */
 
-    if (iModeNum == 0)
-        PDEVOBJ_vRefreshModeList(ppdev);
-    PDEVOBJ_vRelease(ppdev);
+    ppdev = EngpGetPDEV(pustrDevice);
+    if (ppdev)
+    {
+        if (iModeNum == 0)
+            PDEVOBJ_vRefreshModeList(ppdev);
+        PDEVOBJ_vRelease(ppdev);
+    }
+    else if (!(iModeNum == 0 ? PDEVOBJ_bRefreshGraphicsDeviceModes(pGraphicsDevice) :
+                                LDEVOBJ_bBuildDevmodeList(pGraphicsDevice)))
+    {
+        return STATUS_INVALID_PARAMETER_2;
+    }
 
     iFoundMode = 0;
     for (i = 0; i < pGraphicsDevice->cDevModes; i++)
@@ -651,7 +678,7 @@ UserOpenDisplaySettingsKey(
     if (!pustrDevice)
         EngpUpdateGraphicsDeviceList();
 
-    pGraphicsDevice = EngpFindGraphicsDevice(pustrDevice, 0);
+    pGraphicsDevice = UserFindDisplaySettingsDevice(pustrDevice);
     if (!pGraphicsDevice)
         return STATUS_UNSUCCESSFUL;
 
@@ -897,8 +924,20 @@ UserChangeDisplaySettings(
     ppdev = EngpGetPDEV(pustrDevice);
     if (!ppdev)
     {
-        ERR("Failed to get PDEV\n");
-        return DISP_CHANGE_BADPARAM;
+        if (!pustrDevice || !EngpFindGraphicsDevice(pustrDevice, 0))
+        {
+            ERR("Failed to get PDEV\n");
+            return DISP_CHANGE_BADPARAM;
+        }
+
+        /* A device off the desktop has no source to change, only a staged detach succeeds */
+        if ((flags & (CDS_UPDATEREGISTRY | CDS_NORESET)) == (CDS_UPDATEREGISTRY | CDS_NORESET) &&
+            (dm.dmFields & DM_POSITION) && dm.dmPelsWidth == 0 && dm.dmPelsHeight == 0)
+        {
+            return DISP_CHANGE_SUCCESSFUL;
+        }
+        /* TODO: attach a detached device to an extended desktop */
+        return DISP_CHANGE_FAILED;
     }
 
     /* Fixup values */

@@ -346,6 +346,17 @@ EngpUpdateGraphicsDeviceList(VOID)
              pGraphicsDevice;
              pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice)
         {
+            if (!EngpHasVgaDriver(pGraphicsDevice) &&
+                EngpGetDisplayDriverAttachToDesktop(pGraphicsDevice))
+            {
+                pNewPrimaryGraphicsDevice = pGraphicsDevice;
+                break;
+            }
+        }
+        for (pGraphicsDevice = gpGraphicsDeviceFirst;
+             pGraphicsDevice && !pNewPrimaryGraphicsDevice;
+             pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice)
+        {
             if (!EngpHasVgaDriver(pGraphicsDevice))
             {
                 pNewPrimaryGraphicsDevice = pGraphicsDevice;
@@ -494,6 +505,38 @@ EngpGetDisplayDriverAccelerationLevel(
     ZwClose(hKey);
 
     return dwAccelerationLevel;
+}
+
+DWORD
+EngpGetDisplayDriverAttachToDesktop(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice)
+{
+    HKEY hKey;
+    DWORD dwAttachToDesktop = 0;
+    RTL_QUERY_REGISTRY_TABLE DisplaySettingsTable[] =
+    {
+        {
+            NULL,
+            RTL_QUERY_REGISTRY_DIRECT,
+            L"Attach.ToDesktop",
+            &dwAttachToDesktop,
+            REG_NONE, NULL, 0
+        },
+        {0}
+    };
+
+    hKey = EngpGetRegistryHandleFromDeviceMap(pGraphicsDevice);
+    if (!hKey)
+        return 0;
+
+    RtlQueryRegistryValues(RTL_REGISTRY_HANDLE,
+                           (PWSTR)hKey,
+                           DisplaySettingsTable,
+                           NULL,
+                           NULL);
+    ZwClose(hKey);
+
+    return dwAttachToDesktop;
 }
 
 extern VOID
