@@ -106,137 +106,6 @@ SdBusIsSdioFunctionPdo(
     return (PdoExtension->FunctionNumber != 0);
 }
 
-static PCWSTR
-SdBusEmmcPartitionSuffix(
-    _In_ UCHAR PartitionId)
-{
-    switch (PartitionId)
-    {
-        case EMMC_PARTITION_BOOT0: return L"EMMC_BOOT0";
-        case EMMC_PARTITION_BOOT1: return L"EMMC_BOOT1";
-        case EMMC_PARTITION_RPMB:  return L"EMMC_RPMB";
-        case EMMC_PARTITION_GPP1:  return L"EMMC_GPP1";
-        case EMMC_PARTITION_GPP2:  return L"EMMC_GPP2";
-        case EMMC_PARTITION_GPP3:  return L"EMMC_GPP3";
-        case EMMC_PARTITION_GPP4:  return L"EMMC_GPP4";
-        default:                   return L"EMMC_UNKNOWN";
-    }
-}
-
-static NTSTATUS
-SdBusFormatEmmcPartitionHardwareIds(
-    _In_ PPDO_EXTENSION PdoExtension,
-    _Out_writes_(BufSize) PWCHAR Buffer,
-    _In_ SIZE_T BufSize,
-    _Out_ PULONG OutLengthWchars)
-{
-    PWCHAR Cursor = Buffer;
-    SIZE_T Remaining = BufSize;
-    NTSTATUS Status;
-    SIZE_T Written;
-    PCWSTR ClassSuffix = SdBusEmmcPartitionSuffix(PdoExtension->EmmcPartitionId);
-
-    *OutLengthWchars = 0;
-
-    Status = RtlStringCchPrintfW(
-        Cursor, Remaining,
-        L"SD\\VID_%02X&OID_%04X&CLASS_%s",
-        (ULONG)PdoExtension->Cid.ManufacturerId,
-        (ULONG)PdoExtension->Cid.OemId,
-        ClassSuffix);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-    Written = wcslen(Cursor) + 1;
-    Cursor += Written;
-    Remaining -= Written;
-
-    Status = RtlStringCchPrintfW(
-        Cursor, Remaining,
-        L"SD\\CLASS_%s",
-        ClassSuffix);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-    Written = wcslen(Cursor) + 1;
-    Cursor += Written;
-    Remaining -= Written;
-
-    Status = RtlStringCchPrintfW(
-        Cursor, Remaining,
-        L"SD\\GenericEmmcPartition");
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-    Written = wcslen(Cursor) + 1;
-    Cursor += Written;
-    Remaining -= Written;
-
-    if (Remaining < 1)
-    {
-        return STATUS_BUFFER_TOO_SMALL;
-    }
-    *Cursor = UNICODE_NULL;
-    Cursor++;
-
-    *OutLengthWchars = (ULONG)(Cursor - Buffer);
-
-    return STATUS_SUCCESS;
-}
-
-static NTSTATUS
-SdBusFormatEmmcPartitionCompatibleIds(
-    _In_ PPDO_EXTENSION PdoExtension,
-    _Out_writes_(BufSize) PWCHAR Buffer,
-    _In_ SIZE_T BufSize,
-    _Out_ PULONG OutLengthWchars)
-{
-    PWCHAR Cursor = Buffer;
-    SIZE_T Remaining = BufSize;
-    NTSTATUS Status;
-    SIZE_T Written;
-    PCWSTR ClassSuffix = SdBusEmmcPartitionSuffix(PdoExtension->EmmcPartitionId);
-
-    *OutLengthWchars = 0;
-
-    Status = RtlStringCchPrintfW(
-        Cursor, Remaining,
-        L"SD\\CLASS_%s",
-        ClassSuffix);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-    Written = wcslen(Cursor) + 1;
-    Cursor += Written;
-    Remaining -= Written;
-
-    Status = RtlStringCchPrintfW(
-        Cursor, Remaining,
-        L"SD\\GenericEmmcPartition");
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-    Written = wcslen(Cursor) + 1;
-    Cursor += Written;
-    Remaining -= Written;
-
-    if (Remaining < 1)
-    {
-        return STATUS_BUFFER_TOO_SMALL;
-    }
-    *Cursor = UNICODE_NULL;
-    Cursor++;
-
-    *OutLengthWchars = (ULONG)(Cursor - Buffer);
-
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 SdBusFormatSdioHardwareIds(
     _In_ PPDO_EXTENSION PdoExtension,
@@ -419,17 +288,7 @@ SdBusPdoQueryId(
             /*
              * Hardware ID format:
              */
-            if (PdoExtension->IsEmmcPartition)
-            {
-                Status = RtlStringCchPrintfW(
-                    TempBuffer,
-                    RTL_NUMBER_OF(TempBuffer),
-                    L"SD\\VID_%02X&OID_%04X&CLASS_%s",
-                    (ULONG)PdoExtension->Cid.ManufacturerId,
-                    (ULONG)PdoExtension->Cid.OemId,
-                    SdBusEmmcPartitionSuffix(PdoExtension->EmmcPartitionId));
-            }
-            else if (IsSdioFunction)
+            if (IsSdioFunction)
             {
                 Status = RtlStringCchPrintfW(
                     TempBuffer,
@@ -478,36 +337,6 @@ SdBusPdoQueryId(
              * Primary: same as DeviceID
              * Secondary: generic class ID
              */
-            if (PdoExtension->IsEmmcPartition)
-            {
-                Status = SdBusFormatEmmcPartitionHardwareIds(PdoExtension,
-                                                             TempBuffer,
-                                                             RTL_NUMBER_OF(TempBuffer),
-                                                             &Length);
-                if (!NT_SUCCESS(Status))
-                {
-                    Irp->IoStatus.Status = Status;
-                    SdBusCompletePdoIrp(PdoExtension, Irp, IO_NO_INCREMENT);
-                    return Status;
-                }
-
-                Buffer = (PWCHAR)ExAllocatePoolWithTag(PagedPool,
-                                                        Length * sizeof(WCHAR),
-                                                        TAG_SDBUS);
-                if (Buffer == NULL)
-                {
-                    Irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
-                    SdBusCompletePdoIrp(PdoExtension, Irp, IO_NO_INCREMENT);
-                    return STATUS_INSUFFICIENT_RESOURCES;
-                }
-
-                RtlCopyMemory(Buffer, TempBuffer, Length * sizeof(WCHAR));
-                Irp->IoStatus.Information = (ULONG_PTR)Buffer;
-                Irp->IoStatus.Status = STATUS_SUCCESS;
-                SdBusCompletePdoIrp(PdoExtension, Irp, IO_NO_INCREMENT);
-                return STATUS_SUCCESS;
-            }
-
             if (IsSdioFunction)
             {
                 Status = SdBusFormatSdioHardwareIds(PdoExtension,
@@ -641,31 +470,7 @@ SdBusPdoQueryId(
                 ParentAddress = MAXULONG;
             }
 
-            if (PdoExtension->IsEmmcPartition)
-            {
-                if (ParentBusNumber != MAXULONG && ParentAddress != MAXULONG)
-                {
-                    Status = RtlStringCchPrintfW(
-                        TempBuffer,
-                        RTL_NUMBER_OF(TempBuffer),
-                        L"%08lX_%08lX_%08lX_EMMC_PART_%u",
-                        ParentBusNumber,
-                        ParentAddress,
-                        PdoExtension->Cid.ProductSerialNumber,
-                        PdoExtension->EmmcPartitionId);
-                }
-                else
-                {
-                    Status = RtlStringCchPrintfW(
-                        TempBuffer,
-                        RTL_NUMBER_OF(TempBuffer),
-                        L"%08lX_%04lX_EMMC_PART_%u",
-                        PdoExtension->Cid.ProductSerialNumber,
-                        PdoExtension->RelativeAddress & 0xFFFF,
-                        PdoExtension->EmmcPartitionId);
-                }
-            }
-            else if (IsSdioFunction)
+            if (IsSdioFunction)
             {
                 if (ParentBusNumber != MAXULONG && ParentAddress != MAXULONG)
                 {
@@ -726,36 +531,6 @@ SdBusPdoQueryId(
         case BusQueryCompatibleIDs:
         {
             PCWSTR CompatId;
-
-            if (PdoExtension->IsEmmcPartition)
-            {
-                Status = SdBusFormatEmmcPartitionCompatibleIds(PdoExtension,
-                                                               TempBuffer,
-                                                               RTL_NUMBER_OF(TempBuffer),
-                                                               &Length);
-                if (!NT_SUCCESS(Status))
-                {
-                    Irp->IoStatus.Status = Status;
-                    SdBusCompletePdoIrp(PdoExtension, Irp, IO_NO_INCREMENT);
-                    return Status;
-                }
-
-                Buffer = (PWCHAR)ExAllocatePoolWithTag(PagedPool,
-                                                        Length * sizeof(WCHAR),
-                                                        TAG_SDBUS);
-                if (Buffer == NULL)
-                {
-                    Irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
-                    SdBusCompletePdoIrp(PdoExtension, Irp, IO_NO_INCREMENT);
-                    return STATUS_INSUFFICIENT_RESOURCES;
-                }
-
-                RtlCopyMemory(Buffer, TempBuffer, Length * sizeof(WCHAR));
-                Irp->IoStatus.Information = (ULONG_PTR)Buffer;
-                Irp->IoStatus.Status = STATUS_SUCCESS;
-                SdBusCompletePdoIrp(PdoExtension, Irp, IO_NO_INCREMENT);
-                return STATUS_SUCCESS;
-            }
 
             if (IsSdioFunction)
             {
@@ -957,21 +732,7 @@ SdBusPdoQueryDeviceText(
         return STATUS_NOT_SUPPORTED;
     }
 
-    if (PdoExtension->IsEmmcPartition)
-    {
-        switch (PdoExtension->EmmcPartitionId)
-        {
-            case EMMC_PARTITION_BOOT0: Description = L"eMMC Boot Partition 0"; break;
-            case EMMC_PARTITION_BOOT1: Description = L"eMMC Boot Partition 1"; break;
-            case EMMC_PARTITION_RPMB:  Description = L"eMMC RPMB Partition";   break;
-            case EMMC_PARTITION_GPP1:  Description = L"eMMC General Purpose Partition 1"; break;
-            case EMMC_PARTITION_GPP2:  Description = L"eMMC General Purpose Partition 2"; break;
-            case EMMC_PARTITION_GPP3:  Description = L"eMMC General Purpose Partition 3"; break;
-            case EMMC_PARTITION_GPP4:  Description = L"eMMC General Purpose Partition 4"; break;
-            default:                   Description = L"eMMC Partition";        break;
-        }
-    }
-    else if (SdBusIsSdioFunctionPdo(PdoExtension))
+    if (SdBusIsSdioFunctionPdo(PdoExtension))
     {
         Description = L"SDIO Function";
     }

@@ -2976,8 +2976,7 @@ SdBusHandleDeviceCommand(
     {
         UCHAR PartitionId;
 
-        PartitionId = PdoExtension->IsEmmcPartition ?
-            PdoExtension->EmmcPartitionId : EMMC_PARTITION_USER;
+        PartitionId = EMMC_PARTITION_USER;
 
         Status = SdBusEmmcSelectPartition(FdoExtension,
                                           PdoExtension,
@@ -3135,8 +3134,7 @@ SdBusHandleEraseCommand(
     }
 
     FdoExtension = PdoExtension->FdoExtension;
-    PartitionId = PdoExtension->IsEmmcPartition ?
-        PdoExtension->EmmcPartitionId : EMMC_PARTITION_USER;
+    PartitionId = EMMC_PARTITION_USER;
     Status = SdBusEmmcSelectPartition(FdoExtension, PdoExtension,
                                       PartitionId);
     if (!NT_SUCCESS(Status))

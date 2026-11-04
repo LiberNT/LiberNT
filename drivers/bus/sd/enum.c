@@ -2039,16 +2039,6 @@ SdBusEnumerateCard(
                 }
             }
         }
-
-        PdoExtension->CardType = CardType;
-        PdoExtension->HighCapacity = IsHighCapacity;
-        Status = SdBusEmmcEnumeratePartitions(FdoExtension, PdoExtension);
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("SdBusEnumerateCard: eMMC partition enumeration failed "
-                    "(0x%08lx)\n", Status);
-            return Status;
-        }
     }
 
     /* Store the determined card type */

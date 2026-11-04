@@ -225,10 +225,7 @@ typedef struct _PDO_EXTENSION {
     UCHAR SdioNumFunctions;
     ULONG SdioCommonCisPointer;
 
-    BOOLEAN IsEmmcPartition;
     BOOLEAN IsInternalSdioHost;
-    UCHAR EmmcPartitionId;
-    ULONGLONG EmmcPartitionSizeBytes;
 
     /* Remove lock */
     IO_REMOVE_LOCK RemoveLock;
@@ -810,11 +807,6 @@ NTSTATUS
 SdBusEmmcEnableCache(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ PPDO_EXTENSION PdoExtension);
-
-NTSTATUS
-SdBusEmmcEnumeratePartitions(
-    _In_ PFDO_EXTENSION FdoExtension,
-    _In_ PPDO_EXTENSION MainPdo);
 
 NTSTATUS
 SdhcRegisterBusCallbacks(
