@@ -435,6 +435,8 @@ static ULONG WINAPI FilterGraphInner_AddRef(IUnknown *iface)
     return refcount;
 }
 
+static HRESULT graph_stop(struct filter_graph *graph, BOOL pause_first);
+
 static ULONG WINAPI FilterGraphInner_Release(IUnknown *iface)
 {
     struct filter_graph *This = impl_from_IUnknown(iface);
@@ -449,7 +451,7 @@ static ULONG WINAPI FilterGraphInner_Release(IUnknown *iface)
 
         This->ref = 1; /* guard against reentrancy (aggregation). */
 
-        IMediaControl_Stop(&This->IMediaControl_iface);
+        graph_stop(This, FALSE);
 
         while ((cursor = list_head(&This->filters)))
         {
@@ -5108,14 +5110,11 @@ static void graph_update_positions(struct filter_graph *graph)
     }
 }
 
-static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
+static HRESULT graph_stop(struct filter_graph *graph, BOOL pause_first)
 {
-    struct filter_graph *graph = impl_from_IMediaFilter(iface);
     HRESULT hr = S_OK, filter_hr;
     struct filter *filter;
     TP_WORK *work;
-
-    TRACE("graph %p.\n", graph);
 
     EnterCriticalSection(&graph->cs);
 
@@ -5129,7 +5128,7 @@ static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
 
     graph_update_positions(graph);
 
-    if (graph->state == State_Running)
+    if (pause_first && graph->state == State_Running)
     {
         LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
         {
@@ -5160,6 +5159,15 @@ static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
         WaitForThreadpoolWorkCallbacks(work, TRUE);
 
     return hr;
+}
+
+static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
+{
+    struct filter_graph *graph = impl_from_IMediaFilter(iface);
+
+    TRACE("graph %p.\n", graph);
+
+    return graph_stop(graph, TRUE);
 }
 
 static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
