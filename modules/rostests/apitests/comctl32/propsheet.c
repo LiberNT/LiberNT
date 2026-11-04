@@ -79,13 +79,13 @@ Page1DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 #else
 // Can't do this compile time, thanks gcc
 // 'error: non-nested function with variably modified type'
-#define CHECK_STRUCT_SIZE(x, y) ok((x) == (y), "Wrong size for %s, got %Iu, expected %Iu\n", #x, (SIZE_T)(y), (SIZE_T)(x))
+#define CHECK_STRUCT_SIZE(x, y) ok((x) == (y), "Wrong size for %s, got %Iu, expected %Iu\n", #x, (size_t)(x), (size_t)(y))
 #endif
 
 // Validate struct sizes
 static void test_StructSizes()
 {
-#ifdef _M_X64
+#ifdef _WIN64
     CHECK_STRUCT_SIZE(PROPSHEETPAGEA_V1_SIZE, 72);
     CHECK_STRUCT_SIZE(PROPSHEETPAGEA_V2_SIZE, 88);
     CHECK_STRUCT_SIZE(PROPSHEETPAGEA_V3_SIZE, 96);
