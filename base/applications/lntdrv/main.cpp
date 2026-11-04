@@ -224,7 +224,7 @@ bool Updatable(const DeviceInfo &device)
 {
     if (CatalogQueries(device).empty())
         return false;
-    return NeedsDriver(device) || _wcsnicmp(device.Inf.c_str(), L"oem", 3) == 0;
+    return NeedsDriver(device) || GenericDriver(device) || _wcsnicmp(device.Inf.c_str(), L"oem", 3) == 0;
 }
 
 bool Selectable(ChoiceState state)

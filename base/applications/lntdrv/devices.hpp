@@ -29,6 +29,7 @@ struct DeviceInfo
     std::wstring Provider;
     std::wstring Inf;
     std::wstring Service;
+    std::wstring MatchingId;
     std::vector<std::wstring> HardwareIds;
     std::vector<std::wstring> CompatibleIds;
     ULONG Problem = 0;
@@ -75,6 +76,8 @@ enum class DriverOrder
 DWORD EnumerateDevices(std::vector<DeviceInfo> &devices);
 bool FindDevice(const std::wstring &instanceId, DeviceInfo &device);
 bool HasDriver(const DeviceInfo &device);
+DWORD InstalledRank(const DeviceInfo &device);
+bool GenericDriver(const DeviceInfo &device);
 bool NeedsDriver(const DeviceInfo &device);
 std::wstring DeviceStatus(const DeviceInfo &device);
 std::wstring DeviceDetails(const DeviceInfo &device, const std::vector<HistoryEntry> &history);
