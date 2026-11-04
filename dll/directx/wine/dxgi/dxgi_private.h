@@ -242,7 +242,7 @@ BOOL dxgi_wddm_adapter_supports_mpo(LUID luid);
 HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
         UINT *wined3d_adapter_idx, LUID *luid, BOOL *foreign);
 DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void);
-HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,
+HRESULT dxgi_get_wddm_output_index(struct wined3d *wined3d, struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,
         UINT *wined3d_output_idx);
 void dxgi_get_wddm_output_color(const WCHAR *device_name, DXGI_OUTPUT_DESC1 *desc);
 #endif
