@@ -53,6 +53,15 @@ extern "C" {
     ...);
 
   _Check_return_opt_
+  _CRTIMP
+  int
+  __cdecl
+  fscanf_s(
+    _Inout_ FILE *_File,
+    _In_z_ _Scanf_s_format_string_ const char *_Format,
+    ...);
+
+  _Check_return_opt_
   int
   __cdecl
   printf_s(
