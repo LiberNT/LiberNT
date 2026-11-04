@@ -250,7 +250,7 @@ static HRESULT flush_queue(AviMux *avimux, AviMuxIn *avimuxin, BOOL closing)
     DWORD flags;
     HRESULT hr;
 
-    if (avimux->cur_stream != avimuxin->stream_id)
+    if (avimux->mode == INTERLEAVE_FULL && avimux->cur_stream != avimuxin->stream_id)
         return S_OK;
 
     while(avimuxin->samples_head) {
@@ -273,7 +273,8 @@ static HRESULT flush_queue(AviMux *avimux, AviMuxIn *avimuxin, BOOL closing)
         if(IMediaSample_IsSyncPoint(sample) == S_OK)
             flags |= AM_SAMPLE_SPLICEPOINT;
 
-        if (avimuxin->stream_time + (closing ? 0 : avimuxin->strh.dwScale) > avimux->cur_time
+        if (avimux->mode == INTERLEAVE_FULL
+                && avimuxin->stream_time + (closing ? 0 : avimuxin->strh.dwScale) > avimux->cur_time
                 && !(flags & AM_SAMPLE_TIMEDISCONTINUITY))
         {
             if(closing)
@@ -537,10 +538,8 @@ static HRESULT avi_mux_init_stream(struct strmbase_filter *iface)
     HRESULT hr;
     int i, stream_id;
 
-    if(This->mode != INTERLEAVE_FULL) {
-        FIXME("mode not supported (%d)\n", This->mode);
-        return E_NOTIMPL;
-    }
+    if (This->mode == INTERLEAVE_CAPTURE)
+        FIXME("Approximate interleaving is not implemented; writing samples in arrival order.\n");
 
     for(i=0; i<This->input_pin_no; i++) {
         IMediaSeeking *ms;
@@ -643,8 +642,11 @@ static HRESULT avi_mux_init_stream(struct strmbase_filter *iface)
     This->avih.dwMicroSecPerFrame = This->in[0]->avg_time_per_frame/10;
     This->avih.dwPaddingGranularity = 1;
     This->avih.dwFlags = AVIF_TRUSTCKTYPE | AVIF_HASINDEX;
-    This->avih.dwWidth = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biWidth;
-    This->avih.dwHeight = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biHeight;
+    if (This->in[0]->strf)
+    {
+        This->avih.dwWidth = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biWidth;
+        This->avih.dwHeight = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biHeight;
+    }
 
     return S_OK;
 }
