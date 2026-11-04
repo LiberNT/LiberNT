@@ -22,6 +22,17 @@ extern "C" DWORD_PTR NTAPI NtUserCallOneParam(DWORD_PTR, DWORD);
 #define NATIVE12_SWAPCHAIN_BUFFERS 16
 #define NATIVE12_SWAPCHAIN_WAIT 5000
 
+static HRESULT Native12ResizeFlags(UINT current, UINT flags)
+{
+    static const UINT creation_only = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
+            | DXGI_SWAP_CHAIN_FLAG_FOREGROUND_LAYER | DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    if (flags & (DXGI_SWAP_CHAIN_FLAG_NONPREROTATED | DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY
+            | DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO)) return DXGI_ERROR_INVALID_CALL;
+    if ((flags ^ current) & creation_only) return E_INVALIDARG;
+    if ((current & DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED) && !(flags & DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED)) return E_INVALIDARG;
+    return S_OK;
+}
+
 class Native12SwapChain final : public IDXGISwapChain4, public Native12Allocation
 {
 public:
@@ -409,8 +420,17 @@ public:
         return color_space == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709 ? S_OK : E_INVALIDARG;
     }
     HRESULT STDMETHODCALLTYPE ResizeBuffers1(UINT count, UINT width, UINT height, DXGI_FORMAT format, UINT flags,
-            const UINT *, IUnknown *const *) override
+            const UINT *node_masks, IUnknown *const *queues) override
     {
+        UINT nodes = device->GetNodeCount();
+        UINT used = count ? count : desc.BufferCount;
+        if (!node_masks || !queues) return DXGI_ERROR_INVALID_CALL;
+        for (UINT i = 0; i < used; ++i)
+        {
+            UINT mask = node_masks[i];
+            if (!queues[i] || !mask || (mask & (mask - 1)) || (nodes < 32 && mask >= (1u << nodes)))
+                return DXGI_ERROR_INVALID_CALL;
+        }
         return ResizeBuffers(count, width, height, format, flags);
     }
     HRESULT STDMETHODCALLTYPE SetHDRMetaData(DXGI_HDR_METADATA_TYPE type, UINT, void *) override
@@ -919,6 +939,12 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::ResizeBuffers(UINT count, UINT widt
             return DXGI_ERROR_INVALID_CALL;
         }
     }
+    HRESULT hr = Native12ResizeFlags(desc.Flags, flags);
+    if (FAILED(hr))
+    {
+        ReleaseSRWLockExclusive(&lock);
+        return hr;
+    }
     DXGI_SWAP_CHAIN_DESC1 requested = desc;
     if (count) requested.BufferCount = count;
     if (format != DXGI_FORMAT_UNKNOWN) requested.Format = format;
@@ -927,7 +953,7 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::ResizeBuffers(UINT count, UINT widt
     GetClientRect(window, &client);
     requested.Width = width ? width : max(1, client.right - client.left);
     requested.Height = height ? height : max(1, client.bottom - client.top);
-    HRESULT hr = AllocateBuffers(requested);
+    hr = AllocateBuffers(requested);
     ReleaseSRWLockExclusive(&lock);
     return hr;
 }
@@ -942,6 +968,10 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::create_swapchain(IDXGIFactory *f
     if (!window) return DXGI_ERROR_UNSUPPORTED;
     if (output) FIXME("Restricting presentation to output %p is not supported.\n", output);
     if (this->desc.Type != D3D12_COMMAND_LIST_TYPE_DIRECT) return DXGI_ERROR_INVALID_CALL;
+    if (desc->Flags & (DXGI_SWAP_CHAIN_FLAG_NONPREROTATED | DXGI_SWAP_CHAIN_FLAG_GDI_COMPATIBLE
+            | DXGI_SWAP_CHAIN_FLAG_RESTRICTED_CONTENT | DXGI_SWAP_CHAIN_FLAG_RESTRICT_SHARED_RESOURCE_DRIVER
+            | DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY | DXGI_SWAP_CHAIN_FLAG_FOREGROUND_LAYER
+            | DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO | DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO)) return DXGI_ERROR_INVALID_CALL;
 
     Native12SwapChain *swapchain = new Native12SwapChain(this, factory, window);
     if (!swapchain) return E_OUTOFMEMORY;
@@ -950,8 +980,8 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::create_swapchain(IDXGIFactory *f
     DXGI_SWAP_CHAIN_DESC1 requested = *desc;
     RECT client = {};
     GetClientRect(window, &client);
-    if (!requested.Width) requested.Width = max(1, client.right - client.left);
-    if (!requested.Height) requested.Height = max(1, client.bottom - client.top);
+    if (!requested.Width) requested.Width = client.right - client.left > 0 ? client.right - client.left : 8;
+    if (!requested.Height) requested.Height = client.bottom - client.top > 0 ? client.bottom - client.top : 8;
     HRESULT hr = swapchain->AllocateBuffers(requested);
     if (SUCCEEDED(hr) && (requested.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT))
     {
