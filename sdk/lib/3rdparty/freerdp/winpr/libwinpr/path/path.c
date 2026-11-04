@@ -948,7 +948,12 @@ HRESULT PathCchStripPrefixW(PWSTR pszPath, size_t cchPath)
 
 		if (IsCharAlphaW(pszPath[4]) && (pszPath[5] == L':')) /* like C: */
 		{
+#ifdef __REACTOS__
+			if (memmove_s(pszPath, cchPath * sizeof(WCHAR), &pszPath[4],
+			              (cchPath - 4) * sizeof(WCHAR)) != 0)
+#else
 			if (wmemmove_s(pszPath, cchPath, &pszPath[4], cchPath - 4) < 0)
+#endif
 				return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
 			/* since the passed pszPath must not necessarily be null terminated
 			 * and we always have enough space after the strip we can always

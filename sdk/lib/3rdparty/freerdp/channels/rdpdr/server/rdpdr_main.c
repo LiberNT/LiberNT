@@ -2397,7 +2397,7 @@ static UINT rdpdr_server_read_file_directory_information(wLog* log, wStream* s,
 	if (fileNameLength / sizeof(WCHAR) > ARRAYSIZE(fdi->FileName))
 		return ERROR_INVALID_DATA;
 
-#if defined(__MINGW32__) || defined(WITH_WCHAR_FILE_DIRECTORY_INFORMATION)
+#if (defined(__MINGW32__) && !defined(__REACTOS__)) || defined(WITH_WCHAR_FILE_DIRECTORY_INFORMATION)
 	if (Stream_Read_UTF16_String(s, fdi->FileName, fileNameLength / sizeof(WCHAR)))
 		return ERROR_INVALID_DATA;
 #else
@@ -2563,7 +2563,7 @@ static UINT rdpdr_server_send_device_close_request(RdpdrServerContext* context, 
  */
 static UINT rdpdr_server_send_device_read_request(RdpdrServerContext* context, UINT32 deviceId,
                                                   UINT32 fileId, UINT32 completionId, UINT32 length,
-                                                  UINT32 offset)
+                                                  UINT64 offset)
 {
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(context->priv);
@@ -2572,7 +2572,7 @@ static UINT rdpdr_server_send_device_read_request(RdpdrServerContext* context, U
 
 	WLog_Print(priv->log, WLOG_DEBUG,
 	           "RdpdrServerSendDeviceReadRequest: deviceId=%" PRIu32 ", fileId=%" PRIu32
-	           ", length=%" PRIu32 ", offset=%" PRIu32 "",
+	           ", length=%" PRIu32 ", offset=%" PRIu64 "",
 	           deviceId, fileId, length, offset);
 	wStream* s = Stream_New(nullptr, 128);
 
@@ -2584,8 +2584,7 @@ static UINT rdpdr_server_send_device_read_request(RdpdrServerContext* context, U
 
 	rdpdr_server_write_device_iorequest(s, deviceId, fileId, completionId, IRP_MJ_READ, 0);
 	Stream_Write_UINT32(s, length); /* Length (4 bytes) */
-	Stream_Write_UINT32(s, offset); /* Offset (8 bytes) */
-	Stream_Write_UINT32(s, 0);
+	Stream_Write_UINT64(s, offset); /* Offset (8 bytes) */
 	Stream_Zero(s, 20); /* Padding (20 bytes) */
 	return rdpdr_seal_send_free_request(context, s);
 }
@@ -2597,7 +2596,7 @@ static UINT rdpdr_server_send_device_read_request(RdpdrServerContext* context, U
  */
 static UINT rdpdr_server_send_device_write_request(RdpdrServerContext* context, UINT32 deviceId,
                                                    UINT32 fileId, UINT32 completionId,
-                                                   const char* data, UINT32 length, UINT32 offset)
+                                                   const char* data, UINT32 length, UINT64 offset)
 {
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(context->priv);
@@ -2606,7 +2605,7 @@ static UINT rdpdr_server_send_device_write_request(RdpdrServerContext* context, 
 
 	WLog_Print(priv->log, WLOG_DEBUG,
 	           "RdpdrServerSendDeviceWriteRequest: deviceId=%" PRIu32 ", fileId=%" PRIu32
-	           ", length=%" PRIu32 ", offset=%" PRIu32 "",
+	           ", length=%" PRIu32 ", offset=%" PRIu64 "",
 	           deviceId, fileId, length, offset);
 	wStream* s = Stream_New(nullptr, 64 + length);
 
@@ -2618,8 +2617,7 @@ static UINT rdpdr_server_send_device_write_request(RdpdrServerContext* context, 
 
 	rdpdr_server_write_device_iorequest(s, deviceId, fileId, completionId, IRP_MJ_WRITE, 0);
 	Stream_Write_UINT32(s, length); /* Length (4 bytes) */
-	Stream_Write_UINT32(s, offset); /* Offset (8 bytes) */
-	Stream_Write_UINT32(s, 0);
+	Stream_Write_UINT64(s, offset); /* Offset (8 bytes) */
 	Stream_Zero(s, 20);            /* Padding (20 bytes) */
 	Stream_Write(s, data, length); /* WriteData (variable) */
 	return rdpdr_seal_send_free_request(context, s);
@@ -3302,7 +3300,7 @@ static UINT rdpdr_server_drive_read_file_callback(RdpdrServerContext* context, w
  */
 static UINT rdpdr_server_drive_read_file(RdpdrServerContext* context, void* callbackData,
                                          UINT32 deviceId, UINT32 fileId, UINT32 length,
-                                         UINT32 offset)
+                                         UINT64 offset)
 {
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(context->priv);
@@ -3349,8 +3347,7 @@ static UINT rdpdr_server_drive_write_file_callback(RdpdrServerContext* context, 
 	const UINT32 length = Stream_Get_UINT32(s); /* Length (4 bytes) */
 	Stream_Seek(s, 1);                          /* Padding (1 byte) */
 
-	if (!Stream_CheckAndLogRequiredLengthWLog(priv->log, s, length))
-		return ERROR_INVALID_DATA;
+	/* MS-RDPEFS: Length counts written bytes, not a response payload. */
 
 	/* Invoke the write file completion routine. */
 	context->OnDriveWriteFileComplete(context, irp->CallbackData, ioStatus, length);
@@ -3366,7 +3363,7 @@ static UINT rdpdr_server_drive_write_file_callback(RdpdrServerContext* context, 
  */
 static UINT rdpdr_server_drive_write_file(RdpdrServerContext* context, void* callbackData,
                                           UINT32 deviceId, UINT32 fileId, const char* buffer,
-                                          UINT32 length, UINT32 offset)
+                                          UINT32 length, UINT64 offset)
 {
 	WINPR_ASSERT(context);
 	WINPR_ASSERT(context->priv);

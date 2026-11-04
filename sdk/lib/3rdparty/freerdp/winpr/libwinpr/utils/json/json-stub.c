@@ -96,7 +96,11 @@ const char* WINPR_JSON_GetStringValue(WINPR_JSON* item)
 double WINPR_JSON_GetNumberValue(const WINPR_JSON* item)
 {
 	WINPR_UNUSED(item);
+#ifdef __REACTOS__
+	return NAN;
+#else
 	return nan("");
+#endif
 }
 
 BOOL WINPR_JSON_IsInvalid(const WINPR_JSON* item)

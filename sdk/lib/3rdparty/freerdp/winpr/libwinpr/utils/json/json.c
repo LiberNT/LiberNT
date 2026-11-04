@@ -21,6 +21,9 @@
 #include <errno.h>
 
 #include <winpr/file.h>
+#ifdef __REACTOS__
+#include <winpr/crt.h>
+#endif
 #include <winpr/json.h>
 #include <winpr/assert.h>
 

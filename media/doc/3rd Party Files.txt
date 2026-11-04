@@ -318,6 +318,13 @@ Used Version: 2.2.0
 License: Modified BSD License (drivers/network/tcpip/lwip/COPYING)
 URL: https://savannah.nongnu.org/projects/lwip/
 
+Title: FreeRDP
+Path: sdk/lib/3rdparty/freerdp
+Used Version: 3.32.0
+License: Apache-2.0 (https://spdx.org/licenses/Apache-2.0.html)
+URL: https://www.freerdp.com/
+Modifications: only the WinPR, core library and server sources the RDP console server builds, with the headers CMake generates for LiberNT; RDPDR read and write requests keep 64-bit offsets and a write acknowledgement is read as a length; Windows SDK paths instead of the MinGW-w64 ones, an fgetpos _ftelli64, NAN for nan(""), memmove_s for wmemmove_s and an empty FREERDP_API under __REACTOS__
+
 Title: FreeType
 Path: sdk/lib/3rdparty/freetype
 Used Version: 2.15.0

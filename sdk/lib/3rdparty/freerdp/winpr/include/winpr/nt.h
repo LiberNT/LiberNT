@@ -1271,7 +1271,7 @@ static inline NTSTATUS NTSTATUS_FROM_WIN32(long x)
 }
 #endif
 
-#if defined(_WIN32) && !defined(__MINGW32__)
+#if defined(_WIN32) && (!defined(__MINGW32__) || defined(__REACTOS__))
 
 /**
  * winternl.h contains an incomplete definition of enum FILE_INFORMATION_CLASS
@@ -1296,7 +1296,7 @@ static inline NTSTATUS NTSTATUS_FROM_WIN32(long x)
 #include <winternl.h>
 #endif
 
-#ifndef __MINGW32__
+#if !defined(__MINGW32__) || defined(__REACTOS__)
 typedef enum
 {
 	FileDirectoryInformation = 1,
@@ -1342,7 +1342,7 @@ typedef enum
 } FILE_INFORMATION_CLASS;
 #endif /* !__MINGW32__ */
 
-#if !defined(_WIN32) || defined(__MINGW32__)
+#if !defined(_WIN32) || (defined(__MINGW32__) && !defined(__REACTOS__))
 /* defined in <winternl.h> */
 #define FILE_SUPERSEDED 0x00000000
 #define FILE_OPENED 0x00000001

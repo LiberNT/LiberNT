@@ -675,7 +675,7 @@ static BOOL Win32_WTSVirtualChannelPurge_Internal(HANDLE hChannelHandle, ULONG I
 
 		if (ntstatus >= 0)
 		{
-#if defined(NONAMELESSUNION) && !defined(__MINGW32__)
+#if defined(NONAMELESSUNION) && (!defined(__MINGW32__) || defined(__REACTOS__))
 			ntstatus = ioStatusBlock.DUMMYUNIONNAME.Status;
 #else
 			ntstatus = ioStatusBlock.Status;

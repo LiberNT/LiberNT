@@ -75,7 +75,7 @@ typedef enum
 	NTLM_STATE_FINAL
 } NTLM_STATE;
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) && !defined(__REACTOS__)
 typedef MSV1_0_AVID NTLM_AV_ID;
 
 #if __MINGW64_VERSION_MAJOR < 9

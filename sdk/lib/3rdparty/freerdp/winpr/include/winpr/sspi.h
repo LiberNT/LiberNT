@@ -537,7 +537,7 @@ typedef struct
 
 #endif /* !defined(_WIN32) || defined(_UWP) */
 
-#if !defined(_WIN32) || defined(_UWP) || (defined(__MINGW32__) && (__MINGW64_VERSION_MAJOR <= 8))
+#if !defined(_WIN32) || defined(_UWP) || (defined(__MINGW32__) && !defined(__REACTOS__) && (__MINGW64_VERSION_MAJOR <= 8))
 
 #define SECPKG_CRED_ATTR_KDC_PROXY_SETTINGS 3
 

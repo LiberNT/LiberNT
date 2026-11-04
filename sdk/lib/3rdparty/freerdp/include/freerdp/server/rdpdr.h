@@ -50,7 +50,7 @@ extern "C"
 		UINT16 PacketId;  /**< Packet identifier */
 	} RDPDR_HEADER;
 
-#ifndef __MINGW32__
+#if !defined(__MINGW32__) || defined(__REACTOS__)
 	/** File directory information structure */
 	typedef struct
 	{
@@ -100,10 +100,10 @@ extern "C"
 	                                     UINT32 createDisposition);
 	typedef UINT (*psRdpdrDriveReadFile)(RdpdrServerContext* context, void* callbackData,
 	                                     UINT32 deviceId, UINT32 fileId, UINT32 length,
-	                                     UINT32 offset);
+	                                     UINT64 offset);
 	typedef UINT (*psRdpdrDriveWriteFile)(RdpdrServerContext* context, void* callbackData,
 	                                      UINT32 deviceId, UINT32 fileId, const char* buffer,
-	                                      UINT32 length, UINT32 offset);
+	                                      UINT32 length, UINT64 offset);
 	typedef UINT (*psRdpdrDriveCloseFile)(RdpdrServerContext* context, void* callbackData,
 	                                      UINT32 deviceId, UINT32 fileId);
 	typedef UINT (*psRdpdrDriveDeleteFile)(RdpdrServerContext* context, void* callbackData,

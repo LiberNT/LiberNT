@@ -110,7 +110,7 @@ typedef VOID (*PTP_WIN32_IO_CALLBACK)(PTP_CALLBACK_INSTANCE Instance, PVOID Cont
 #define WINPR_THREAD_POOL 1
 #elif defined(_WIN32) && (_WIN32_WINNT < 0x0600)
 #define WINPR_THREAD_POOL 1
-#elif defined(__MINGW32__) && (__MINGW64_VERSION_MAJOR < 7)
+#elif defined(__MINGW32__) && !defined(__REACTOS__) && (__MINGW64_VERSION_MAJOR < 7)
 #define WINPR_THREAD_POOL 1
 #endif
 
@@ -258,7 +258,7 @@ extern "C"
 #define WINPR_CALLBACK_ENVIRON 1
 #elif defined(_WIN32) && (_WIN32_WINNT < 0x0600)
 #define WINPR_CALLBACK_ENVIRON 1
-#elif defined(__MINGW32__) && (__MINGW64_VERSION_MAJOR < 9)
+#elif defined(__MINGW32__) && !defined(__REACTOS__) && (__MINGW64_VERSION_MAJOR < 9)
 #define WINPR_CALLBACK_ENVIRON 1
 #endif
 

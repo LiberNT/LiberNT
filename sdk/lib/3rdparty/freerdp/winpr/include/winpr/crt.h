@@ -35,6 +35,18 @@ WINPR_PRAGMA_DIAG_PUSH
 WINPR_PRAGMA_DIAG_IGNORED_RESERVED_IDENTIFIER
 // NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 
+#ifdef __REACTOS__
+/* msvcrt.dll has no _ftelli64 */
+static inline INT64 winpr_ftelli64(FILE* fp)
+{
+	fpos_t pos;
+	if (fgetpos(fp, &pos) != 0)
+		return -1;
+	return (INT64)pos;
+}
+#define _ftelli64 winpr_ftelli64
+#endif
+
 #ifndef _WIN32
 
 #include <unistd.h>
