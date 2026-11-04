@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <mmsystem.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/peer.h>
 #include <freerdp/listener.h>
@@ -47,10 +48,12 @@ static SERVICE_STATUS_HANDLE ServiceHandle;
 static SERVICE_STATUS ServiceState;
 static HANDLE ServiceStopEvent, SessionStopEvent;
 static char ServiceConfig[MAX_PATH];
+static DWORD FrameInterval;
 
 #define SERVICE_NAME "LiberNTRDPServer"
 #define SERVICE_STOP_EVENT "Global\\LiberNT-RDPServer-Stop"
 #define TERMINAL_SERVER_KEY "SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
+#define WINSTATIONS_KEY TERMINAL_SERVER_KEY "\\WinStations"
 #define CERTIFICATE_DAYS 183
 
 typedef struct DESKTOP_CONTEXT
@@ -87,6 +90,14 @@ static void Log(const char *fmt, ...)
 }
 
 static BOOL FollowInputDesktop(DESKTOP_CONTEXT *ctx);
+
+static ULONGLONG Milliseconds(void)
+{
+    LARGE_INTEGER counter, frequency;
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&frequency);
+    return (ULONGLONG)(counter.QuadPart / (frequency.QuadPart / 1000));
+}
 
 static BOOL Superseded(DESKTOP_CONTEXT *ctx)
 {
@@ -470,7 +481,8 @@ static DWORD WINAPI ClientThread(void *arg)
     rdpSettings *settings;
     rdpPrivateKey *key;
     rdpCertificate *cert;
-    DWORD count, status, started = GetTickCount(), lastFrame = 0;
+    DWORD count, status, started = GetTickCount(), wait;
+    ULONGLONG lastFrame = 0, elapsed;
     HANDLE events[32];
     DESKTOP_CONTEXT *ctx;
     peer->ContextSize = sizeof(DESKTOP_CONTEXT);
@@ -506,13 +518,20 @@ static DWORD WINAPI ClientThread(void *arg)
     ctx->rdp.update->RefreshRect = Refresh;
     ctx->rdp.update->SuppressOutput = Suppress;
     if (!peer->Initialize(peer)) goto cleanup;
+    timeBeginPeriod(1);
     for (;;)
     {
         events[0] = StopEvent;
         count = peer->GetEventHandles(peer, events + 1, 30);
         if (!count) break;
         events[++count] = WTSVirtualChannelManagerGetEventHandle(ctx->Vcm);
-        status = WaitForMultipleObjects(count + 1, events, FALSE, 100);
+        wait = 100;
+        if (ctx->Active && peer->activated)
+        {
+            elapsed = Milliseconds() - lastFrame;
+            wait = elapsed >= FrameInterval ? 0 : (DWORD)(FrameInterval - elapsed);
+        }
+        status = WaitForMultipleObjects(count + 1, events, FALSE, wait);
         if (status == WAIT_OBJECT_0 || status == WAIT_FAILED) break;
         if (!peer->CheckFileDescriptor(peer)) break;
         if (!WTSVirtualChannelManagerCheckFileDescriptor(ctx->Vcm)) break;
@@ -524,12 +543,13 @@ static DWORD WINAPI ClientThread(void *arg)
             if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", peer->hostname);
             break;
         }
-        if (ctx->Active && peer->activated && GetTickCount() - lastFrame >= 100)
+        if (ctx->Active && peer->activated && Milliseconds() - lastFrame >= FrameInterval)
         {
+            lastFrame = Milliseconds();
             if (!Capture(ctx)) break;
-            lastFrame = GetTickCount();
         }
     }
+    timeEndPeriod(1);
     peer->Disconnect(peer);
 cleanup:
     freerdp_peer_context_free(peer);
@@ -700,6 +720,21 @@ static void StopSessionServer(HANDLE *server)
     ResetEvent(SessionStopEvent);
 }
 
+/* DWMFRAMEINTERVAL counts 4 frames per second each and defaults to 30 frames per second. */
+static DWORD ReadFrameInterval(void)
+{
+    DWORD value = 0, size = sizeof(value), type;
+    HKEY key;
+    if (!RegOpenKeyExA(HKEY_LOCAL_MACHINE, WINSTATIONS_KEY, 0, KEY_QUERY_VALUE, &key))
+    {
+        if (RegQueryValueExA(key, "DWMFRAMEINTERVAL", NULL, &type, (BYTE *)&value, &size) || type != REG_DWORD)
+            value = 0;
+        RegCloseKey(key);
+    }
+    if (!value) return 1000 / 30;
+    return 1000 / (min(value, 15) * 4);
+}
+
 static BOOL RemoteDesktopAllowed(HKEY key)
 {
     DWORD deny = 1, size = sizeof(deny), type;
@@ -809,6 +844,7 @@ int main(int argc, char **argv)
     if (!EnsureCertificate()) return 2;
     StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!StopEvent) return 1;
+    FrameInterval = ReadFrameInterval();
     if (sessionMode)
     {
         serviceStop = OpenEventA(SYNCHRONIZE, FALSE, SERVICE_STOP_EVENT);

@@ -60,8 +60,9 @@ authentication. Leave it out to disable transfers.
 
 Authentication, the first frame and disconnects are logged as `RDPTEST`
 lines on the kernel debugger and on stdout. An idle server captures nothing;
-a connected session captures at most ten frames per second and sends the
-changed 64x32 tiles.
+a connected session captures 30 frames per second, or the rate
+`DWMFRAMEINTERVAL` under `...\Terminal Server\WinStations` sets (four frames
+per second each, up to 60), and sends the changed 64x32 tiles.
 
 ## Client and file transfer
 
