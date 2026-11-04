@@ -19,6 +19,7 @@ list(APPEND SOURCE
     CopyImage_Icon.c
     CursorPresentation.c
     CreateDialog.c
+    DisplayChangeBroadcast.c
     CreateIconFromResourceEx.c
     CoveredWindow.c
     CreateWindowEx.c
