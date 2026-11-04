@@ -782,12 +782,14 @@ PiAttachFilterDriversCallback(
     Status = IopReferenceDriverObject(&driverName, &DriverObject);
     RtlFreeUnicodeString(&driverName);
 
+    if (NT_SUCCESS(Status)) IopAcquirePnpUnloadBarrier(DriverObject);
+
     // the driver was not probably loaded, try to load
     if (!NT_SUCCESS(Status))
     {
         if (loadDrivers)
         {
-            Status = IopLoadDriver(serviceHandle, &DriverObject);
+            Status = IopLoadDriverForPnp(serviceHandle, &DriverObject);
         }
         else
         {
@@ -1205,6 +1207,7 @@ Cleanup:
         // drivers which don't have any devices (in case of failure) will be cleaned up
         if (driverEntry->DriverObject)
         {
+            IopReleasePnpUnloadBarrier(driverEntry->DriverObject);
             ObDereferenceObject(driverEntry->DriverObject);
         }
         ExFreePoolWithTag(driverEntry, TAG_PNP_DEVACTION);

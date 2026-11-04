@@ -1440,7 +1440,7 @@ IopReferenceDriverObject(
     _Out_ PDRIVER_OBJECT *DriverObject);
 
 NTSTATUS
-IopLoadDriver(
+IopLoadDriverForPnp(
     _In_ HANDLE ServiceHandle,
     _Out_ PDRIVER_OBJECT *DriverObject);
 
@@ -1464,7 +1464,8 @@ IopInitializeDriverModule(
     _In_ PLDR_DATA_TABLE_ENTRY ModuleObject,
     _In_ HANDLE ServiceHandle,
     _Out_ PDRIVER_OBJECT *DriverObject,
-    _Out_ NTSTATUS *DriverEntryStatus);
+    _Out_ NTSTATUS *DriverEntryStatus,
+    _In_ BOOLEAN HoldPnpUnloadBarrier);
 
 NTSTATUS
 FASTCALL
