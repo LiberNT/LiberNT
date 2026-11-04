@@ -153,19 +153,37 @@ MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
     if (Targets & (1ULL << Cpu))
         MiAmd64FlushLocal(Address, Pages);
     Remaining = Remote;
-    while (Remaining != 0)
     {
-        for (Remote = Remaining; Remote != 0; Remote &= Remote - 1)
+        /* Bound the wait and name the processors that did not answer */
+        ULONG64 Spins = 0;
+
+        while (Remaining != 0)
         {
-            MI_AMD64_TLB_MESSAGE *Message;
-            Target = MI_AMD64_CTZ64(Remote);
-            Message = &MiAmd64TlbMessages[Target][Cpu];
-            if (MI_AMD64_READ_ACQUIRE64(&Message->Completed) ==
-                MI_AMD64_READ_NOFENCE64(&Message->Published))
-                Remaining &= ~(1ULL << Target);
-        }
-        if (Remaining != 0)
-        {
+            for (Remote = Remaining; Remote != 0; Remote &= Remote - 1)
+            {
+                MI_AMD64_TLB_MESSAGE *Message;
+                Target = MI_AMD64_CTZ64(Remote);
+                Message = &MiAmd64TlbMessages[Target][Cpu];
+                if (MI_AMD64_READ_ACQUIRE64(&Message->Completed) ==
+                    MI_AMD64_READ_NOFENCE64(&Message->Published))
+                    Remaining &= ~(1ULL << Target);
+            }
+
+            if (Remaining == 0)
+                break;
+
+            if (++Spins >= 0x40000000ULL)
+            {
+                CHAR Text[96];
+
+                RtlStringCbPrintfA(Text,
+                                   sizeof(Text),
+                                   "LiberNT: TLB shootdown unanswered %08I64lx\r\n",
+                                   Remaining);
+                KdpFbCheckpoint(Text);
+                break;
+            }
+
             MiAmd64TlbPoll();
             MiAmd64TlbPause();
         }
