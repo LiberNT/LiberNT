@@ -1,0 +1,222 @@
+/**
+ * WinPR: Windows Portable Runtime
+ * WinPR Logger
+ *
+ * Copyright 2013 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <winpr/config.h>
+
+#include "Appender.h"
+
+void WLog_Appender_Free(wLog* log, wLogAppender* appender)
+{
+	if (!appender)
+		return;
+
+	if (appender->Layout)
+	{
+		WLog_Layout_Free(log, appender->Layout);
+		appender->Layout = nullptr;
+	}
+
+	DeleteCriticalSection(&appender->lock);
+	appender->Free(appender);
+}
+
+wLogAppender* WLog_GetLogAppender(wLog* log)
+{
+	if (!log)
+		return nullptr;
+
+	if (!log->Appender)
+		return WLog_GetLogAppender(log->Parent);
+
+	return log->Appender;
+}
+
+BOOL WLog_OpenAppender(wLog* log)
+{
+	int status = 0;
+	wLogAppender* appender = nullptr;
+
+	appender = WLog_GetLogAppender(log);
+
+	if (!appender)
+		return FALSE;
+
+	if (!appender->Open)
+		return TRUE;
+
+	if (!appender->active)
+	{
+		status = appender->Open(log, appender);
+		appender->active = TRUE;
+	}
+
+	return status;
+}
+
+BOOL WLog_CloseAppender(wLog* log)
+{
+	int status = 0;
+	wLogAppender* appender = nullptr;
+
+	appender = WLog_GetLogAppender(log);
+
+	if (!appender)
+		return FALSE;
+
+	if (!appender->Close)
+		return TRUE;
+
+	if (appender->active)
+	{
+		status = appender->Close(log, appender);
+		appender->active = FALSE;
+	}
+
+	return status;
+}
+
+static wLogAppender* WLog_Appender_New(wLog* log, DWORD logAppenderType)
+{
+	wLogAppender* appender = nullptr;
+
+	if (!log)
+		return nullptr;
+
+	switch (logAppenderType)
+	{
+		case WLOG_APPENDER_CONSOLE:
+			appender = WLog_ConsoleAppender_New(log);
+			break;
+		case WLOG_APPENDER_FILE:
+			appender = WLog_FileAppender_New(log);
+			break;
+		case WLOG_APPENDER_BINARY:
+			appender = WLog_BinaryAppender_New(log);
+			break;
+		case WLOG_APPENDER_CALLBACK:
+			appender = WLog_CallbackAppender_New(log);
+			break;
+#ifdef WINPR_HAVE_SYSLOG_H
+		case WLOG_APPENDER_SYSLOG:
+			appender = WLog_SyslogAppender_New(log);
+			break;
+#endif
+#ifdef WINPR_HAVE_JOURNALD_H
+		case WLOG_APPENDER_JOURNALD:
+			appender = WLog_JournaldAppender_New(log);
+			break;
+#endif
+		case WLOG_APPENDER_UDP:
+			appender = WLog_UdpAppender_New(log);
+			break;
+		default:
+			(void)fprintf(stderr, "%s: unknown handler type %" PRIu32 "\n", __func__,
+			              logAppenderType);
+			appender = nullptr;
+			break;
+	}
+
+	if (!appender)
+		appender = WLog_ConsoleAppender_New(log);
+
+	if (!appender)
+		return nullptr;
+
+	if (!(appender->Layout = WLog_Layout_New(log)))
+	{
+		WLog_Appender_Free(log, appender);
+		return nullptr;
+	}
+
+	if (!InitializeCriticalSectionAndSpinCount(&appender->lock, 4000))
+	{
+		WLog_Appender_Free(log, appender);
+		return nullptr;
+	}
+
+	return appender;
+}
+
+BOOL WLog_SetLogAppenderType(wLog* log, DWORD logAppenderType)
+{
+	if (!log)
+		return FALSE;
+
+	if (log->Appender)
+	{
+		WLog_Appender_Free(log, log->Appender);
+		log->Appender = nullptr;
+	}
+
+	log->Appender = WLog_Appender_New(log, logAppenderType);
+	return log->Appender != nullptr;
+}
+
+BOOL WLog_ConfigureAppender(wLogAppender* appender, const char* setting, void* value)
+{
+	/* Just check the settings string is not empty */
+	if (!appender || !setting || (strnlen(setting, 2) == 0))
+		return FALSE;
+
+	if (appender->Set)
+		return appender->Set(appender, setting, value);
+	else
+		return FALSE;
+}
+
+BOOL WLog_SetAppenderContext(wLogAppender* appender, wLogMessageType type, void* context)
+{
+	if (!appender)
+		return FALSE;
+	switch (type)
+	{
+		case WLOG_MESSAGE_TEXT:
+			appender->TextMessageContext = context;
+			return TRUE;
+		case WLOG_MESSAGE_DATA:
+			appender->DataMessageContext = context;
+			return TRUE;
+		case WLOG_MESSAGE_IMAGE:
+			appender->ImageMessageContext = context;
+			return TRUE;
+		case WLOG_MESSAGE_PACKET:
+			appender->PacketMessageContext = context;
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+void* WLog_GetAppenderContext(wLogAppender* appender, wLogMessageType type)
+{
+	WINPR_ASSERT(appender);
+	switch (type)
+	{
+		case WLOG_MESSAGE_TEXT:
+			return appender->TextMessageContext;
+		case WLOG_MESSAGE_DATA:
+			return appender->DataMessageContext;
+		case WLOG_MESSAGE_IMAGE:
+			return appender->ImageMessageContext;
+		case WLOG_MESSAGE_PACKET:
+			return appender->PacketMessageContext;
+		default:
+			return nullptr;
+	}
+}

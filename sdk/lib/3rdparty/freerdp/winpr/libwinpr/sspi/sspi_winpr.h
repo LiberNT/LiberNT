@@ -1,0 +1,36 @@
+/**
+ * WinPR: Windows Portable Runtime
+ * Security Support Provider Interface (SSPI)
+ *
+ * Copyright 2012-2014 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef WINPR_SSPI_WINPR_H
+#define WINPR_SSPI_WINPR_H
+
+#include <winpr/sspi.h>
+
+SecurityFunctionTableW* SEC_ENTRY winpr_InitSecurityInterfaceW(void);
+SecurityFunctionTableA* SEC_ENTRY winpr_InitSecurityInterfaceA(void);
+
+void sspi_ContextBufferFree(void* contextBuffer);
+
+WINPR_ATTR_MALLOC(sspi_ContextBufferFree, 1)
+void* sspi_ContextBufferAlloc(UINT32 allocatorIndex, size_t size);
+
+WINPR_ATTR_MALLOC(sspi_FreeSecNtlmSettings, 1)
+SEC_WINPR_NTLM_SETTINGS_V2* sspi_CloneSecNtlmSettings(const SEC_WINPR_NTLM_SETTINGS_V2* other);
+
+#endif /* WINPR_SSPI_WINPR_H */

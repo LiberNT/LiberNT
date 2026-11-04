@@ -1,0 +1,1675 @@
+/**
+ * WinPR: Windows Portable Runtime
+ * Security Support Provider Interface (SSPI)
+ *
+ * Copyright 2012-2014 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef WINPR_SSPI_H
+#define WINPR_SSPI_H
+
+#include <winpr/platform.h>
+#include <winpr/winpr.h>
+#include <winpr/cast.h>
+#include <winpr/wtypes.h>
+#include <winpr/windows.h>
+#include <winpr/security.h>
+
+#ifdef _WIN32
+
+#include <tchar.h>
+#include <winerror.h>
+
+#define SECURITY_WIN32
+#include <sspi.h>
+#include <security.h>
+
+#endif /* _WIN32 */
+
+#if !defined(_WIN32) || defined(_UWP)
+
+#ifndef SEC_ENTRY
+#define SEC_ENTRY
+#endif /* SEC_ENTRY */
+
+typedef CHAR SEC_CHAR;
+typedef WCHAR SEC_WCHAR;
+
+typedef struct
+{
+	UINT32 LowPart;
+	INT32 HighPart;
+} SECURITY_INTEGER;
+
+typedef SECURITY_INTEGER TimeStamp;
+typedef SECURITY_INTEGER* PTimeStamp;
+
+WINPR_PRAGMA_DIAG_PUSH
+WINPR_PRAGMA_DIAG_IGNORED_RESERVED_ID_MACRO
+
+#ifndef __SECSTATUS_DEFINED__
+typedef LONG SECURITY_STATUS;
+// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+#define __SECSTATUS_DEFINED__
+#endif /* __SECSTATUS_DEFINED__ */
+
+WINPR_PRAGMA_DIAG_POP
+
+typedef struct
+{
+	UINT32 fCapabilities;
+	UINT16 wVersion;
+	UINT16 wRPCID;
+	UINT32 cbMaxToken;
+	SEC_CHAR* Name;
+	SEC_CHAR* Comment;
+} SecPkgInfoA;
+typedef SecPkgInfoA* PSecPkgInfoA;
+
+typedef struct
+{
+	UINT32 fCapabilities;
+	UINT16 wVersion;
+	UINT16 wRPCID;
+	UINT32 cbMaxToken;
+	SEC_WCHAR* Name;
+	SEC_WCHAR* Comment;
+} SecPkgInfoW;
+typedef SecPkgInfoW* PSecPkgInfoW;
+
+#ifdef UNICODE
+#define SecPkgInfo SecPkgInfoW
+#define PSecPkgInfo PSecPkgInfoW
+#else
+#define SecPkgInfo SecPkgInfoA
+#define PSecPkgInfo PSecPkgInfoA
+#endif /* UNICODE */
+
+#endif /* !defined(_WIN32) || defined(_UWP) */
+
+#define NTLM_SSP_NAME _T("NTLM")
+#define KERBEROS_SSP_NAME _T("Kerberos")
+#define NEGO_SSP_NAME _T("Negotiate")
+
+#define SECPKG_ID_NONE 0xFFFF
+
+#define SECPKG_FLAG_INTEGRITY 0x00000001
+#define SECPKG_FLAG_PRIVACY 0x00000002
+#define SECPKG_FLAG_TOKEN_ONLY 0x00000004
+#define SECPKG_FLAG_DATAGRAM 0x00000008
+#define SECPKG_FLAG_CONNECTION 0x00000010
+#define SECPKG_FLAG_MULTI_REQUIRED 0x00000020
+#define SECPKG_FLAG_CLIENT_ONLY 0x00000040
+#define SECPKG_FLAG_EXTENDED_ERROR 0x00000080
+#define SECPKG_FLAG_IMPERSONATION 0x00000100
+#define SECPKG_FLAG_ACCEPT_WIN32_NAME 0x00000200
+#define SECPKG_FLAG_STREAM 0x00000400
+#define SECPKG_FLAG_NEGOTIABLE 0x00000800
+#define SECPKG_FLAG_GSS_COMPATIBLE 0x00001000
+#define SECPKG_FLAG_LOGON 0x00002000
+#define SECPKG_FLAG_ASCII_BUFFERS 0x00004000
+#define SECPKG_FLAG_FRAGMENT 0x00008000
+#define SECPKG_FLAG_MUTUAL_AUTH 0x00010000
+#define SECPKG_FLAG_DELEGATION 0x00020000
+#define SECPKG_FLAG_READONLY_WITH_CHECKSUM 0x00040000
+#define SECPKG_FLAG_RESTRICTED_TOKENS 0x00080000
+#define SECPKG_FLAG_NEGO_EXTENDER 0x00100000
+#define SECPKG_FLAG_NEGOTIABLE2 0x00200000
+
+#ifndef _WINERROR_
+
+#define SEC_E_OK WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00000000)
+#define SEC_E_INSUFFICIENT_MEMORY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090300)
+#define SEC_E_INVALID_HANDLE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090301)
+#define SEC_E_UNSUPPORTED_FUNCTION WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090302)
+#define SEC_E_TARGET_UNKNOWN WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090303)
+#define SEC_E_INTERNAL_ERROR WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090304)
+#define SEC_E_SECPKG_NOT_FOUND WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090305)
+#define SEC_E_NOT_OWNER WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090306)
+#define SEC_E_CANNOT_INSTALL WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090307)
+#define SEC_E_INVALID_TOKEN WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090308)
+#define SEC_E_CANNOT_PACK WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090309)
+#define SEC_E_QOP_NOT_SUPPORTED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009030A)
+#define SEC_E_NO_IMPERSONATION WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009030B)
+#define SEC_E_LOGON_DENIED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009030C)
+#define SEC_E_UNKNOWN_CREDENTIALS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009030D)
+#define SEC_E_NO_CREDENTIALS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009030E)
+#define SEC_E_MESSAGE_ALTERED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009030F)
+#define SEC_E_OUT_OF_SEQUENCE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090310)
+#define SEC_E_NO_AUTHENTICATING_AUTHORITY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090311)
+#define SEC_E_BAD_PKGID WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090316)
+#define SEC_E_CONTEXT_EXPIRED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090317)
+#define SEC_E_INCOMPLETE_MESSAGE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090318)
+#define SEC_E_INCOMPLETE_CREDENTIALS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090320)
+#define SEC_E_BUFFER_TOO_SMALL WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090321)
+#define SEC_E_WRONG_PRINCIPAL WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090322)
+#define SEC_E_TIME_SKEW WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090324)
+#define SEC_E_UNTRUSTED_ROOT WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090325)
+#define SEC_E_ILLEGAL_MESSAGE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090326)
+#define SEC_E_CERT_UNKNOWN WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090327)
+#define SEC_E_CERT_EXPIRED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090328)
+#define SEC_E_ENCRYPT_FAILURE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090329)
+#define SEC_E_DECRYPT_FAILURE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090330)
+#define SEC_E_ALGORITHM_MISMATCH WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090331)
+#define SEC_E_SECURITY_QOS_FAILED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090332)
+#define SEC_E_UNFINISHED_CONTEXT_DELETED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090333)
+#define SEC_E_NO_TGT_REPLY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090334)
+#define SEC_E_NO_IP_ADDRESSES WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090335)
+#define SEC_E_WRONG_CREDENTIAL_HANDLE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090336)
+#define SEC_E_CRYPTO_SYSTEM_INVALID WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090337)
+#define SEC_E_MAX_REFERRALS_EXCEEDED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090338)
+#define SEC_E_MUST_BE_KDC WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090339)
+#define SEC_E_STRONG_CRYPTO_NOT_SUPPORTED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009033A)
+#define SEC_E_TOO_MANY_PRINCIPALS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009033B)
+#define SEC_E_NO_PA_DATA WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009033C)
+#define SEC_E_PKINIT_NAME_MISMATCH WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009033D)
+#define SEC_E_SMARTCARD_LOGON_REQUIRED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009033E)
+#define SEC_E_SHUTDOWN_IN_PROGRESS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009033F)
+#define SEC_E_KDC_INVALID_REQUEST WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090340)
+#define SEC_E_KDC_UNABLE_TO_REFER WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090341)
+#define SEC_E_KDC_UNKNOWN_ETYPE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090342)
+#define SEC_E_UNSUPPORTED_PREAUTH WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090343)
+#define SEC_E_DELEGATION_REQUIRED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090345)
+#define SEC_E_BAD_BINDINGS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090346)
+#define SEC_E_MULTIPLE_ACCOUNTS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090347)
+#define SEC_E_NO_KERB_KEY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090348)
+#define SEC_E_CERT_WRONG_USAGE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090349)
+#define SEC_E_DOWNGRADE_DETECTED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090350)
+#define SEC_E_SMARTCARD_CERT_REVOKED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090351)
+#define SEC_E_ISSUING_CA_UNTRUSTED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090352)
+#define SEC_E_REVOCATION_OFFLINE_C WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090353)
+#define SEC_E_PKINIT_CLIENT_FAILURE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090354)
+#define SEC_E_SMARTCARD_CERT_EXPIRED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090355)
+#define SEC_E_NO_S4U_PROT_SUPPORT WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090356)
+#define SEC_E_CROSSREALM_DELEGATION_FAILURE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090357)
+#define SEC_E_REVOCATION_OFFLINE_KDC WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090358)
+#define SEC_E_ISSUING_CA_UNTRUSTED_KDC WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090359)
+#define SEC_E_KDC_CERT_EXPIRED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035A)
+#define SEC_E_KDC_CERT_REVOKED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035B)
+#define SEC_E_INVALID_PARAMETER WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035D)
+#define SEC_E_DELEGATION_POLICY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035E)
+#define SEC_E_POLICY_NLTM_ONLY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035F)
+#define SEC_E_NO_CONTEXT WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090361)
+#define SEC_E_PKU2U_CERT_FAILURE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090362)
+#define SEC_E_MUTUAL_AUTH_FAILED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090363)
+
+#define SEC_I_CONTINUE_NEEDED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090312)
+#define SEC_I_COMPLETE_NEEDED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090313)
+#define SEC_I_COMPLETE_AND_CONTINUE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090314)
+#define SEC_I_LOCAL_LOGON WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090315)
+#define SEC_I_CONTEXT_EXPIRED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090317)
+#define SEC_I_INCOMPLETE_CREDENTIALS WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090320)
+#define SEC_I_RENEGOTIATE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090321)
+#define SEC_I_NO_LSA_CONTEXT WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090323)
+#define SEC_I_SIGNATURE_NEEDED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x0009035C)
+#define SEC_I_NO_RENEGOTIATION WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090360)
+
+#endif /* _WINERROR_ */
+
+/* ============== some definitions missing in mingw ========================*/
+#ifndef SEC_E_INVALID_PARAMETER
+#define SEC_E_INVALID_PARAMETER WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035D)
+#endif
+
+#ifndef SEC_E_DELEGATION_POLICY
+#define SEC_E_DELEGATION_POLICY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035E)
+#endif
+
+#ifndef SEC_E_POLICY_NLTM_ONLY
+#define SEC_E_POLICY_NLTM_ONLY WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x8009035F)
+#endif
+
+#ifndef SEC_E_NO_CONTEXT
+#define SEC_E_NO_CONTEXT WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090361)
+#endif
+
+#ifndef SEC_E_PKU2U_CERT_FAILURE
+#define SEC_E_PKU2U_CERT_FAILURE WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090362)
+#endif
+
+#ifndef SEC_E_MUTUAL_AUTH_FAILED
+#define SEC_E_MUTUAL_AUTH_FAILED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x80090363)
+#endif
+
+#ifndef SEC_I_SIGNATURE_NEEDED
+#define SEC_I_SIGNATURE_NEEDED WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x0009035C)
+#endif
+
+#ifndef SEC_I_NO_RENEGOTIATION
+#define SEC_I_NO_RENEGOTIATION WINPR_CXX_COMPAT_CAST(SECURITY_STATUS, 0x00090360)
+#endif
+
+/* ==================================================================================== */
+
+#define SECURITY_NATIVE_DREP 0x00000010
+#define SECURITY_NETWORK_DREP 0x00000000
+
+#define SECPKG_CRED_INBOUND 0x00000001
+#define SECPKG_CRED_OUTBOUND 0x00000002
+#define SECPKG_CRED_BOTH 0x00000003
+#define SECPKG_CRED_AUTOLOGON_RESTRICTED 0x00000010
+#define SECPKG_CRED_PROCESS_POLICY_ONLY 0x00000020
+
+/* Security Context Attributes */
+
+#define SECPKG_ATTR_SIZES 0
+#define SECPKG_ATTR_NAMES 1
+#define SECPKG_ATTR_LIFESPAN 2
+#define SECPKG_ATTR_DCE_INFO 3
+#define SECPKG_ATTR_STREAM_SIZES 4
+#define SECPKG_ATTR_KEY_INFO 5
+#define SECPKG_ATTR_AUTHORITY 6
+#define SECPKG_ATTR_PROTO_INFO 7
+#define SECPKG_ATTR_PASSWORD_EXPIRY 8
+#define SECPKG_ATTR_SESSION_KEY 9
+#define SECPKG_ATTR_PACKAGE_INFO 10
+#define SECPKG_ATTR_USER_FLAGS 11
+#define SECPKG_ATTR_NEGOTIATION_INFO 12
+#define SECPKG_ATTR_NATIVE_NAMES 13
+#define SECPKG_ATTR_FLAGS 14
+#define SECPKG_ATTR_USE_VALIDATED 15
+#define SECPKG_ATTR_CREDENTIAL_NAME 16
+#define SECPKG_ATTR_TARGET_INFORMATION 17
+#define SECPKG_ATTR_ACCESS_TOKEN 18
+#define SECPKG_ATTR_TARGET 19
+#define SECPKG_ATTR_AUTHENTICATION_ID 20
+#define SECPKG_ATTR_LOGOFF_TIME 21
+#define SECPKG_ATTR_NEGO_KEYS 22
+#define SECPKG_ATTR_PROMPTING_NEEDED 24
+#define SECPKG_ATTR_UNIQUE_BINDINGS 25
+#define SECPKG_ATTR_ENDPOINT_BINDINGS 26
+#define SECPKG_ATTR_CLIENT_SPECIFIED_TARGET 27
+#define SECPKG_ATTR_LAST_CLIENT_TOKEN_STATUS 30
+#define SECPKG_ATTR_NEGO_PKG_INFO 31
+#define SECPKG_ATTR_NEGO_STATUS 32
+#define SECPKG_ATTR_CONTEXT_DELETED 33
+
+#if !defined(_WIN32) || defined(_UWP)
+
+typedef struct
+{
+	void* AccessToken;
+} SecPkgContext_AccessToken;
+
+typedef struct
+{
+	UINT32 dwFlags;
+	UINT32 cbAppData;
+	BYTE* pbAppData;
+} SecPkgContext_SessionAppData;
+
+typedef struct
+{
+	char* sAuthorityName;
+} SecPkgContext_Authority;
+
+typedef struct
+{
+	char* sTargetName;
+} SecPkgContext_ClientSpecifiedTarget;
+
+typedef UINT32 ALG_ID;
+
+typedef struct
+{
+	UINT32 dwProtocol;
+	ALG_ID aiCipher;
+	UINT32 dwCipherStrength;
+	ALG_ID aiHash;
+	UINT32 dwHashStrength;
+	ALG_ID aiExch;
+	UINT32 dwExchStrength;
+} SecPkgContext_ConnectionInfo;
+
+typedef struct
+{
+	UINT32 AuthBufferLen;
+	BYTE* AuthBuffer;
+} SecPkgContext_ClientCreds;
+
+typedef struct
+{
+	UINT32 AuthzSvc;
+	void* pPac;
+} SecPkgContex_DceInfo;
+
+typedef struct
+{
+	UINT32 dwInitiatorAddrType;
+	UINT32 cbInitiatorLength;
+	UINT32 dwInitiatorOffset;
+	UINT32 dwAcceptorAddrType;
+	UINT32 cbAcceptorLength;
+	UINT32 dwAcceptorOffset;
+	UINT32 cbApplicationDataLength;
+	UINT32 dwApplicationDataOffset;
+} SEC_CHANNEL_BINDINGS;
+
+typedef struct
+{
+	BYTE rgbKeys[128];
+	BYTE rgbIVs[64];
+} SecPkgContext_EapKeyBlock;
+
+typedef struct
+{
+	UINT32 Flags;
+} SecPkgContext_Flags;
+
+typedef struct
+{
+	char* sSignatureAlgorithmName;
+	char* sEncryptAlgorithmName;
+	UINT32 KeySize;
+	UINT32 SignatureAlgorithm;
+	UINT32 EncryptAlgorithm;
+} SecPkgContext_KeyInfo;
+
+typedef struct
+{
+	TimeStamp tsStart;
+	TimeStamp tsExpiry;
+} SecPkgContext_Lifespan;
+
+typedef struct
+{
+	char* sUserName;
+} SecPkgContext_Names;
+
+typedef struct
+{
+	char* sClientName;
+	char* sServerName;
+} SecPkgContext_NativeNames;
+
+typedef struct
+{
+	SecPkgInfoA* PackageInfo;
+	UINT32 NegotiationState;
+} SecPkgContext_NegotiationInfoA;
+
+typedef struct
+{
+	SecPkgInfoW* PackageInfo;
+	UINT32 NegotiationState;
+} SecPkgContext_NegotiationInfoW;
+
+#ifdef UNICODE
+#define SecPkgContext_NegotiationInfo SecPkgContext_NegotiationInfoW
+#else
+#define SecPkgContext_NegotiationInfo SecPkgContext_NegotiationInfoA
+#endif /* UNICODE */
+
+typedef struct
+{
+	SecPkgInfoA* PackageInfo;
+} SecPkgContext_PackageInfoA;
+
+typedef struct
+{
+	SecPkgInfoW* PackageInfo;
+} SecPkgContext_PackageInfoW;
+
+#ifdef UNICODE
+#define SecPkgContext_PackageInfo SecPkgContext_PackageInfoW
+#else
+#define SecPkgContext_PackageInfo SecPkgContext_PackageInfoA
+#endif /* UNICODE */
+
+typedef struct
+{
+	TimeStamp tsPasswordExpires;
+} SecPkgContext_PasswordExpiry;
+
+typedef struct
+{
+	UINT32 SessionKeyLength;
+	BYTE* SessionKey;
+} SecPkgContext_SessionKey;
+
+typedef struct
+{
+	UINT32 dwFlags;
+	UINT32 cbSessionId;
+	BYTE rgbSessionId[32];
+} SecPkgContext_SessionInfo;
+
+typedef struct
+{
+	UINT32 cbMaxToken;
+	UINT32 cbMaxSignature;
+	UINT32 cbBlockSize;
+	UINT32 cbSecurityTrailer;
+} SecPkgContext_Sizes;
+
+typedef struct
+{
+	UINT32 cbHeader;
+	UINT32 cbTrailer;
+	UINT32 cbMaximumMessage;
+	UINT32 cBuffers;
+	UINT32 cbBlockSize;
+} SecPkgContext_StreamSizes;
+
+typedef struct
+{
+	void* AttributeInfo;
+} SecPkgContext_SubjectAttributes;
+
+typedef struct
+{
+	UINT16 cSignatureAndHashAlgorithms;
+	UINT16* pSignatureAndHashAlgorithms;
+} SecPkgContext_SupportedSignatures;
+
+typedef struct
+{
+	UINT32 MarshalledTargetInfoLength;
+	BYTE* MarshalledTargetInfo;
+} SecPkgContext_TargetInformation;
+
+/* Security Credentials Attributes */
+
+#define SECPKG_CRED_ATTR_NAMES 1
+#define SECPKG_CRED_ATTR_SSI_PROVIDER 2
+#define SECPKG_CRED_ATTR_CERT 4
+#define SECPKG_CRED_ATTR_PAC_BYPASS 5
+
+typedef struct
+{
+	SEC_CHAR* sUserName;
+} SecPkgCredentials_NamesA;
+typedef SecPkgCredentials_NamesA* PSecPkgCredentials_NamesA;
+
+typedef struct
+{
+	SEC_WCHAR* sUserName;
+} SecPkgCredentials_NamesW;
+typedef SecPkgCredentials_NamesW* PSecPkgCredentials_NamesW;
+
+#ifdef UNICODE
+#define SecPkgCredentials_Names SecPkgCredentials_NamesW
+#define PSecPkgCredentials_Names PSecPkgCredentials_NamesW
+#else
+#define SecPkgCredentials_Names SecPkgCredentials_NamesA
+#define PSecPkgCredentials_Names PSecPkgCredentials_NamesA
+#endif
+
+typedef struct
+{
+	SEC_WCHAR* sProviderName;
+	unsigned long ProviderInfoLength;
+	char* ProviderInfo;
+} SecPkgCredentials_SSIProviderW, *PSecPkgCredentials_SSIProviderW;
+
+typedef struct
+{
+	SEC_CHAR* sProviderName;
+	unsigned long ProviderInfoLength;
+	char* ProviderInfo;
+} SecPkgCredentials_SSIProviderA, *PSecPkgCredentials_SSIProviderA;
+
+#ifdef UNICODE
+#define SecPkgCredentials_SSIProvider SecPkgCredentials_SSIProviderW
+#define PSecPkgCredentials_SSIProvider PSecPkgCredentials_SSIProviderW
+#else
+#define SecPkgCredentials_SSIProvider SecPkgCredentials_SSIProviderA
+#define PSecPkgCredentials_SSIProvider PSecPkgCredentials_SSIProviderA
+#endif
+
+typedef struct
+{
+	unsigned long EncodedCertSize;
+	unsigned char* EncodedCert;
+} SecPkgCredentials_Cert, *PSecPkgCredentials_Cert;
+
+#endif /* !defined(_WIN32) || defined(_UWP) */
+
+#if !defined(_WIN32) || defined(_UWP) || (defined(__MINGW32__) && (__MINGW64_VERSION_MAJOR <= 8))
+
+#define SECPKG_CRED_ATTR_KDC_PROXY_SETTINGS 3
+
+#define KDC_PROXY_SETTINGS_V1 1
+#define KDC_PROXY_SETTINGS_FLAGS_FORCEPROXY 0x1
+
+typedef struct
+{
+	ULONG Version;
+	ULONG Flags;
+	USHORT ProxyServerOffset;
+	USHORT ProxyServerLength;
+	USHORT ClientTlsCredOffset;
+	USHORT ClientTlsCredLength;
+} SecPkgCredentials_KdcProxySettingsW, *PSecPkgCredentials_KdcProxySettingsW;
+
+typedef struct
+{
+	ULONG Version;
+	ULONG Flags;
+	USHORT ProxyServerOffset;
+	USHORT ProxyServerLength;
+	USHORT ClientTlsCredOffset;
+	USHORT ClientTlsCredLength;
+} SecPkgCredentials_KdcProxySettingsA, *PSecPkgCredentials_KdcProxySettingsA;
+
+#ifdef UNICODE
+#define SecPkgCredentials_KdcProxySettings SecPkgCredentials_KdcProxySettingsW
+#define PSecPkgCredentials_KdcProxySettings PSecPkgCredentials_KdcProxySettingsW
+#else
+#define SecPkgCredentials_KdcProxySettings SecPkgCredentials_KdcProxySettingsA
+#define PSecPkgCredentials_KdcProxySettings SecPkgCredentials_KdcProxySettingsA
+#endif
+
+typedef struct
+{
+	UINT32 BindingsLength;
+	SEC_CHANNEL_BINDINGS* Bindings;
+} SecPkgContext_Bindings;
+#endif
+
+/* InitializeSecurityContext Flags */
+
+#define ISC_REQ_DELEGATE 0x00000001
+#define ISC_REQ_MUTUAL_AUTH 0x00000002
+#define ISC_REQ_REPLAY_DETECT 0x00000004
+#define ISC_REQ_SEQUENCE_DETECT 0x00000008
+#define ISC_REQ_CONFIDENTIALITY 0x00000010
+#define ISC_REQ_USE_SESSION_KEY 0x00000020
+#define ISC_REQ_PROMPT_FOR_CREDS 0x00000040
+#define ISC_REQ_USE_SUPPLIED_CREDS 0x00000080
+#define ISC_REQ_ALLOCATE_MEMORY 0x00000100
+#define ISC_REQ_USE_DCE_STYLE 0x00000200
+#define ISC_REQ_DATAGRAM 0x00000400
+#define ISC_REQ_CONNECTION 0x00000800
+#define ISC_REQ_CALL_LEVEL 0x00001000
+#define ISC_REQ_FRAGMENT_SUPPLIED 0x00002000
+#define ISC_REQ_EXTENDED_ERROR 0x00004000
+#define ISC_REQ_STREAM 0x00008000
+#define ISC_REQ_INTEGRITY 0x00010000
+#define ISC_REQ_IDENTIFY 0x00020000
+#define ISC_REQ_NULL_SESSION 0x00040000
+#define ISC_REQ_MANUAL_CRED_VALIDATION 0x00080000
+#define ISC_REQ_RESERVED1 0x00100000
+#define ISC_REQ_FRAGMENT_TO_FIT 0x00200000
+#define ISC_REQ_FORWARD_CREDENTIALS 0x00400000
+#define ISC_REQ_NO_INTEGRITY 0x00800000
+#define ISC_REQ_USE_HTTP_STYLE 0x01000000
+
+#define ISC_RET_DELEGATE 0x00000001
+#define ISC_RET_MUTUAL_AUTH 0x00000002
+#define ISC_RET_REPLAY_DETECT 0x00000004
+#define ISC_RET_SEQUENCE_DETECT 0x00000008
+#define ISC_RET_CONFIDENTIALITY 0x00000010
+#define ISC_RET_USE_SESSION_KEY 0x00000020
+#define ISC_RET_USED_COLLECTED_CREDS 0x00000040
+#define ISC_RET_USED_SUPPLIED_CREDS 0x00000080
+#define ISC_RET_ALLOCATED_MEMORY 0x00000100
+#define ISC_RET_USED_DCE_STYLE 0x00000200
+#define ISC_RET_DATAGRAM 0x00000400
+#define ISC_RET_CONNECTION 0x00000800
+#define ISC_RET_INTERMEDIATE_RETURN 0x00001000
+#define ISC_RET_CALL_LEVEL 0x00002000
+#define ISC_RET_EXTENDED_ERROR 0x00004000
+#define ISC_RET_STREAM 0x00008000
+#define ISC_RET_INTEGRITY 0x00010000
+#define ISC_RET_IDENTIFY 0x00020000
+#define ISC_RET_NULL_SESSION 0x00040000
+#define ISC_RET_MANUAL_CRED_VALIDATION 0x00080000
+#define ISC_RET_RESERVED1 0x00100000
+#define ISC_RET_FRAGMENT_ONLY 0x00200000
+#define ISC_RET_FORWARD_CREDENTIALS 0x00400000
+#define ISC_RET_USED_HTTP_STYLE 0x01000000
+
+/* AcceptSecurityContext Flags */
+
+#define ASC_REQ_DELEGATE 0x00000001
+#define ASC_REQ_MUTUAL_AUTH 0x00000002
+#define ASC_REQ_REPLAY_DETECT 0x00000004
+#define ASC_REQ_SEQUENCE_DETECT 0x00000008
+#define ASC_REQ_CONFIDENTIALITY 0x00000010
+#define ASC_REQ_USE_SESSION_KEY 0x00000020
+#define ASC_REQ_ALLOCATE_MEMORY 0x00000100
+#define ASC_REQ_USE_DCE_STYLE 0x00000200
+#define ASC_REQ_DATAGRAM 0x00000400
+#define ASC_REQ_CONNECTION 0x00000800
+#define ASC_REQ_CALL_LEVEL 0x00001000
+#define ASC_REQ_EXTENDED_ERROR 0x00008000
+#define ASC_REQ_STREAM 0x00010000
+#define ASC_REQ_INTEGRITY 0x00020000
+#define ASC_REQ_LICENSING 0x00040000
+#define ASC_REQ_IDENTIFY 0x00080000
+#define ASC_REQ_ALLOW_NULL_SESSION 0x00100000
+#define ASC_REQ_ALLOW_NON_USER_LOGONS 0x00200000
+#define ASC_REQ_ALLOW_CONTEXT_REPLAY 0x00400000
+#define ASC_REQ_FRAGMENT_TO_FIT 0x00800000
+#define ASC_REQ_FRAGMENT_SUPPLIED 0x00002000
+#define ASC_REQ_NO_TOKEN 0x01000000
+#define ASC_REQ_PROXY_BINDINGS 0x04000000
+#define ASC_REQ_ALLOW_MISSING_BINDINGS 0x10000000
+
+#define ASC_RET_DELEGATE 0x00000001
+#define ASC_RET_MUTUAL_AUTH 0x00000002
+#define ASC_RET_REPLAY_DETECT 0x00000004
+#define ASC_RET_SEQUENCE_DETECT 0x00000008
+#define ASC_RET_CONFIDENTIALITY 0x00000010
+#define ASC_RET_USE_SESSION_KEY 0x00000020
+#define ASC_RET_ALLOCATED_MEMORY 0x00000100
+#define ASC_RET_USED_DCE_STYLE 0x00000200
+#define ASC_RET_DATAGRAM 0x00000400
+#define ASC_RET_CONNECTION 0x00000800
+#define ASC_RET_CALL_LEVEL 0x00002000
+#define ASC_RET_THIRD_LEG_FAILED 0x00004000
+#define ASC_RET_EXTENDED_ERROR 0x00008000
+#define ASC_RET_STREAM 0x00010000
+#define ASC_RET_INTEGRITY 0x00020000
+#define ASC_RET_LICENSING 0x00040000
+#define ASC_RET_IDENTIFY 0x00080000
+#define ASC_RET_NULL_SESSION 0x00100000
+#define ASC_RET_ALLOW_NON_USER_LOGONS 0x00200000
+#define ASC_RET_FRAGMENT_ONLY 0x00800000
+#define ASC_RET_NO_TOKEN 0x01000000
+#define ASC_RET_NO_PROXY_BINDINGS 0x04000000
+#define ASC_RET_MISSING_BINDINGS 0x10000000
+
+#define SEC_WINNT_AUTH_IDENTITY_ANSI 0x1
+#define SEC_WINNT_AUTH_IDENTITY_UNICODE 0x2
+#define SEC_WINNT_AUTH_IDENTITY_MARSHALLED 0x4
+#define SEC_WINNT_AUTH_IDENTITY_ONLY 0x8
+
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
+/**< @deprecated use SEC_WINNT_AUTH_IDENTITY_EXTENDED_v2
+ * @since [version 3.31.0]
+ */
+#define SEC_WINNT_AUTH_IDENTITY_EXTENDED 0x100
+#endif
+
+#define SEC_WINNT_AUTH_IDENTITY_EXTENDED_v2 0x200 /**< @since 3.31.0 */
+
+#define SEC_WINPR_AUTH_IDENTITY_PASSWORD_HASH 0x00800000
+
+#if !defined(_WIN32) || defined(_UWP) || defined(__MINGW32__)
+
+WINPR_PRAGMA_DIAG_PUSH
+WINPR_PRAGMA_DIAG_IGNORED_RESERVED_ID_MACRO
+
+#ifndef _AUTH_IDENTITY_DEFINED
+// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+#define _AUTH_IDENTITY_DEFINED
+
+typedef struct
+{
+	UINT16* User;
+	ULONG UserLength;
+	UINT16* Domain;
+	ULONG DomainLength;
+	UINT16* Password;
+	ULONG PasswordLength;
+	UINT32 Flags;
+} SEC_WINNT_AUTH_IDENTITY_W, *PSEC_WINNT_AUTH_IDENTITY_W;
+
+typedef struct
+{
+	BYTE* User;
+	ULONG UserLength;
+	BYTE* Domain;
+	ULONG DomainLength;
+	BYTE* Password;
+	ULONG PasswordLength;
+	UINT32 Flags;
+} SEC_WINNT_AUTH_IDENTITY_A, *PSEC_WINNT_AUTH_IDENTITY_A;
+
+// Always define SEC_WINNT_AUTH_IDENTITY to SEC_WINNT_AUTH_IDENTITY_W
+
+#ifdef UNICODE
+#define SEC_WINNT_AUTH_IDENTITY SEC_WINNT_AUTH_IDENTITY_W
+#define PSEC_WINNT_AUTH_IDENTITY PSEC_WINNT_AUTH_IDENTITY_W
+#else
+#define SEC_WINNT_AUTH_IDENTITY SEC_WINNT_AUTH_IDENTITY_W
+#define PSEC_WINNT_AUTH_IDENTITY PSEC_WINNT_AUTH_IDENTITY_W
+#endif
+
+#endif /* _AUTH_IDENTITY_DEFINED */
+
+#ifndef SEC_WINNT_AUTH_IDENTITY_VERSION
+#define SEC_WINNT_AUTH_IDENTITY_VERSION 0x200
+
+typedef struct
+{
+	UINT32 Version;
+	UINT32 Length;
+	UINT16* User;
+	UINT32 UserLength;
+	UINT16* Domain;
+	UINT32 DomainLength;
+	UINT16* Password;
+	UINT32 PasswordLength;
+	UINT32 Flags;
+	UINT16* PackageList;
+	UINT32 PackageListLength;
+} SEC_WINNT_AUTH_IDENTITY_EXW, *PSEC_WINNT_AUTH_IDENTITY_EXW;
+
+typedef struct
+{
+	UINT32 Version;
+	UINT32 Length;
+	BYTE* User;
+	UINT32 UserLength;
+	BYTE* Domain;
+	UINT32 DomainLength;
+	BYTE* Password;
+	UINT32 PasswordLength;
+	UINT32 Flags;
+	BYTE* PackageList;
+	UINT32 PackageListLength;
+} SEC_WINNT_AUTH_IDENTITY_EXA, *PSEC_WINNT_AUTH_IDENTITY_EXA;
+
+#ifdef UNICODE
+#define SEC_WINNT_AUTH_IDENTITY_EX SEC_WINNT_AUTH_IDENTITY_EXW
+#define PSEC_WINNT_AUTH_IDENTITY_EX PSEC_WINNT_AUTH_IDENTITY_EXW
+#else
+#define SEC_WINNT_AUTH_IDENTITY_EX SEC_WINNT_AUTH_IDENTITY_EXA
+#define PSEC_WINNT_AUTH_IDENTITY_EX PSEC_WINNT_AUTH_IDENTITY_EXA
+#endif
+
+#endif /* SEC_WINNT_AUTH_IDENTITY_VERSION */
+
+#ifndef SEC_WINNT_AUTH_IDENTITY_VERSION_2
+#define SEC_WINNT_AUTH_IDENTITY_VERSION_2 0x201
+
+typedef struct
+{
+	UINT32 Version;
+	UINT16 cbHeaderLength;
+	UINT32 cbStructureLength;
+	UINT32 UserOffset;
+	UINT16 UserLength;
+	UINT32 DomainOffset;
+	UINT16 DomainLength;
+	UINT32 PackedCredentialsOffset;
+	UINT16 PackedCredentialsLength;
+	UINT32 Flags;
+	UINT32 PackageListOffset;
+	UINT16 PackageListLength;
+} SEC_WINNT_AUTH_IDENTITY_EX2, *PSEC_WINNT_AUTH_IDENTITY_EX2;
+
+#endif /* SEC_WINNT_AUTH_IDENTITY_VERSION_2 */
+
+#ifndef _AUTH_IDENTITY_INFO_DEFINED
+// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+#define _AUTH_IDENTITY_INFO_DEFINED
+
+// https://docs.microsoft.com/en-us/windows/win32/api/sspi/ns-sspi-sec_winnt_auth_identity_info
+
+typedef union
+{
+	SEC_WINNT_AUTH_IDENTITY_EXW AuthIdExw;
+	SEC_WINNT_AUTH_IDENTITY_EXA AuthIdExa;
+	SEC_WINNT_AUTH_IDENTITY_A AuthId_a;
+	SEC_WINNT_AUTH_IDENTITY_W AuthId_w;
+	SEC_WINNT_AUTH_IDENTITY_EX2 AuthIdEx2;
+} SEC_WINNT_AUTH_IDENTITY_INFO, *PSEC_WINNT_AUTH_IDENTITY_INFO;
+
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_PROCESS_ENCRYPTED 0x10
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SYSTEM_PROTECTED 0x20
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_USER_PROTECTED 0x40
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SYSTEM_ENCRYPTED 0x80
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_RESERVED 0x10000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_NULL_USER 0x20000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_NULL_DOMAIN 0x40000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_ID_PROVIDER 0x80000
+
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_USE_MASK 0xFF000000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_CREDPROV_DO_NOT_SAVE 0x80000000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_SAVE_CRED_CHECKED 0x40000000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_NO_CHECKBOX 0x20000000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_CREDPROV_DO_NOT_LOAD 0x10000000
+
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_VALID_SSPIPFC_FLAGS         \
+	(SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_CREDPROV_DO_NOT_SAVE | \
+	 SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_SAVE_CRED_CHECKED |    \
+	 SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_NO_CHECKBOX |          \
+	 SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_CREDPROV_DO_NOT_LOAD)
+
+#endif /* _AUTH_IDENTITY_INFO_DEFINED */
+
+WINPR_PRAGMA_DIAG_POP
+
+#if !defined(__MINGW32__)
+typedef struct
+{
+	ULONG_PTR dwLower;
+	ULONG_PTR dwUpper;
+} SecHandle;
+typedef SecHandle* PSecHandle;
+
+typedef SecHandle CredHandle;
+typedef CredHandle* PCredHandle;
+typedef SecHandle CtxtHandle;
+typedef CtxtHandle* PCtxtHandle;
+
+#define SecInvalidateHandle(x) \
+	((PSecHandle)(x))->dwLower = ((PSecHandle)(x))->dwUpper = ((ULONG_PTR)((INT_PTR)-1))
+
+#define SecIsValidHandle(x)                                        \
+	((((PSecHandle)(x))->dwLower != ((ULONG_PTR)((INT_PTR)-1))) && \
+	 (((PSecHandle)(x))->dwUpper != ((ULONG_PTR)((INT_PTR)-1))))
+
+typedef struct
+{
+	ULONG cbBuffer;
+	ULONG BufferType;
+	void* pvBuffer;
+} SecBuffer;
+typedef SecBuffer* PSecBuffer;
+
+typedef struct
+{
+	ULONG ulVersion;
+	ULONG cBuffers;
+	PSecBuffer pBuffers;
+} SecBufferDesc;
+typedef SecBufferDesc* PSecBufferDesc;
+
+#endif /* __MINGW32__ */
+
+#endif /* !defined(_WIN32) || defined(_UWP) || defined(__MINGW32__) */
+
+/** @brief Function pointer type for NTLM callback implementations
+ *
+ *  @param client An opaque pointer passed as context
+ *  @param authIdentity A pointer to the identity to generate the hash for. Must not be \b nullptr
+ *  @param ntproofvalue A buffer containing the proof value. Must not be \b nullptr. Must be able to
+ * hold 16 bytes.
+ *  @param randkey A pointer to a buffer containing random data. Must not be \b nullptr. Must be
+ * able to hold 16 bytes.
+ *  @param mic A pointer to a buffer containing the message integrity code. Must not be \b nullptr.
+ * Must be able to hold 16 bytes.
+ *  @param micvalue . Must not be \b nullptr. Must be able to hold 16 bytes.
+ *  @param ntlmhash A pointer to a buffer to write the resulting hash. Must not be \b nullptr. Must
+ * be able to hold 16 bytes.
+ *
+ *  @return \ref SEC_E_OK for success, a fitting SEC_E_* failure otherwise.
+ *
+ *  @bug Before 3.24.0 the return value was incorrectly checked. 1 was accepted for success, 0 for
+ * failure.
+ */
+typedef SECURITY_STATUS (*psSspiNtlmHashCallback)(void* client,
+                                                  const SEC_WINNT_AUTH_IDENTITY* authIdentity,
+                                                  const SecBuffer* ntproofvalue,
+                                                  const BYTE* randkey, const BYTE* mic,
+                                                  const SecBuffer* micvalue, BYTE* ntlmhash);
+
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
+
+WINPR_DEPRECATED_VAR(
+    "[since 3.31.0] use SEC_WINPR_NTLM_SETTINGS_V2", typedef struct {
+	    char* samFile; /**< File name (with path) of a SAM file */
+	    WINPR_ATTR_NODISCARD psSspiNtlmHashCallback
+	        hashCallback;      /**< Callback to be called to generate a NTLM hash. */
+	    void* hashCallbackArg; /**< A pointer passed to \ref hashCallback */
+    } SEC_WINPR_NTLM_SETTINGS);
+
+WINPR_DEPRECATED_VAR(
+    "[since 3.31.0] use SEC_WINPR_KERBEROS_SETTINGS_V2", typedef struct {
+	    char* kdcUrl;
+	    char* keytab;
+	    char* cache;
+	    char* armorCache;
+	    char* pkinitX509Anchors;
+	    char* pkinitX509Identity;
+	    BOOL withPac;
+	    INT32 startTime;
+	    INT32 renewLifeTime;
+	    INT32 lifeTime;
+	    BYTE certSha1[20];
+    } SEC_WINPR_KERBEROS_SETTINGS);
+
+WINPR_DEPRECATED_VAR(
+    "[since 3.31.0] use SEC_WINNT_AUTH_IDENTITY_WINPR_V2", typedef struct {
+	    SEC_WINNT_AUTH_IDENTITY_EXW identity;
+	    SEC_WINPR_NTLM_SETTINGS* ntlmSettings;
+	    SEC_WINPR_KERBEROS_SETTINGS* kerberosSettings;
+    } SEC_WINNT_AUTH_IDENTITY_WINPR);
+
+#endif
+
+typedef struct DECLSPEC_ALIGN(8) /**< @since version 3.31.0 */
+{
+	DECLSPEC_ALIGN(8)
+	UINT32 size;                     /**< size of this struct. */
+	DECLSPEC_ALIGN(8) char* samFile; /**< File name (with path) of a SAM file */
+	DECLSPEC_ALIGN(8)
+	WINPR_ATTR_NODISCARD psSspiNtlmHashCallback
+	    hashCallback;                        /**< Callback to be called to generate a NTLM hash. */
+	DECLSPEC_ALIGN(8) void* hashCallbackArg; /**< A pointer passed to \ref hashCallback */
+	DECLSPEC_ALIGN(8) char* targetName;      /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* netBiosComputerName; /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* netBiosDomainName;   /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* dnsComputerName;     /**< @since version 3.31.0 */
+	DECLSPEC_ALIGN(8) char* dnsDomainName;       /**< @since version 3.31.0 */
+} SEC_WINPR_NTLM_SETTINGS_V2;
+
+typedef struct DECLSPEC_ALIGN(8) /**< @since version 3.31.0 */
+{
+	DECLSPEC_ALIGN(8) UINT32 size;
+	DECLSPEC_ALIGN(8) char* kdcUrl;
+	DECLSPEC_ALIGN(8) char* keytab;
+	DECLSPEC_ALIGN(8) char* cache;
+	DECLSPEC_ALIGN(8) char* armorCache;
+	DECLSPEC_ALIGN(8) char* pkinitX509Anchors;
+	DECLSPEC_ALIGN(8) char* pkinitX509Identity;
+	DECLSPEC_ALIGN(8) BOOL withPac;
+	DECLSPEC_ALIGN(8) INT32 startTime;
+	DECLSPEC_ALIGN(8) INT32 renewLifeTime;
+	DECLSPEC_ALIGN(8) INT32 lifeTime;
+	DECLSPEC_ALIGN(8) BYTE certSha1[20];
+} SEC_WINPR_KERBEROS_SETTINGS_V2;
+
+typedef enum WINPR_C23_ENUM_TYPE(uint32_t)
+{
+	SEC_WINNT_AUTH_IDENTITY_WINPR_V2_REVISION_1 = 1 /**< @since version 3.31.0 */
+} SEC_WINNT_AUTH_IDENTITY_WINPR_V2_VERSION;         /**< @since version 3.31.0 */
+
+typedef struct DECLSPEC_ALIGN(8) /**< @since version 3.31.0 */
+{
+	DECLSPEC_ALIGN(8) SEC_WINNT_AUTH_IDENTITY_EXW identity;
+	DECLSPEC_ALIGN(8) UINT32 version;
+	DECLSPEC_ALIGN(8) SEC_WINPR_NTLM_SETTINGS_V2* ntlmSettingsV2;
+	DECLSPEC_ALIGN(8) SEC_WINPR_KERBEROS_SETTINGS_V2* kerberosSettingsV2;
+} SEC_WINNT_AUTH_IDENTITY_WINPR_V2;
+
+#define SECBUFFER_VERSION 0
+
+/* Buffer Types */
+#define SECBUFFER_EMPTY 0
+#define SECBUFFER_DATA 1
+#define SECBUFFER_TOKEN 2
+#define SECBUFFER_PKG_PARAMS 3
+#define SECBUFFER_MISSING 4
+#define SECBUFFER_EXTRA 5
+#define SECBUFFER_STREAM_TRAILER 6
+#define SECBUFFER_STREAM_HEADER 7
+#define SECBUFFER_NEGOTIATION_INFO 8
+#define SECBUFFER_PADDING 9
+#define SECBUFFER_STREAM 10
+#define SECBUFFER_MECHLIST 11
+#define SECBUFFER_MECHLIST_SIGNATURE 12
+#define SECBUFFER_TARGET 13
+#define SECBUFFER_CHANNEL_BINDINGS 14
+#define SECBUFFER_CHANGE_PASS_RESPONSE 15
+#define SECBUFFER_TARGET_HOST 16
+#define SECBUFFER_ALERT 17
+
+/* Security Buffer Flags */
+#define SECBUFFER_ATTRMASK 0xF0000000
+#define SECBUFFER_READONLY 0x80000000
+#define SECBUFFER_READONLY_WITH_CHECKSUM 0x10000000
+#define SECBUFFER_RESERVED 0x60000000
+
+#if !defined(_WIN32) || defined(_UWP)
+
+typedef void(SEC_ENTRY* SEC_GET_KEY_FN)(void* Arg, void* Principal, UINT32 KeyVer, void** Key,
+                                        SECURITY_STATUS* pStatus);
+
+typedef SECURITY_STATUS(SEC_ENTRY* ENUMERATE_SECURITY_PACKAGES_FN_A)(ULONG* pcPackages,
+                                                                     PSecPkgInfoA* ppPackageInfo);
+typedef SECURITY_STATUS(SEC_ENTRY* ENUMERATE_SECURITY_PACKAGES_FN_W)(ULONG* pcPackages,
+                                                                     PSecPkgInfoW* ppPackageInfo);
+
+#ifdef UNICODE
+#define EnumerateSecurityPackages EnumerateSecurityPackagesW
+#define ENUMERATE_SECURITY_PACKAGES_FN ENUMERATE_SECURITY_PACKAGES_FN_W
+#else
+#define EnumerateSecurityPackages EnumerateSecurityPackagesA
+#define ENUMERATE_SECURITY_PACKAGES_FN ENUMERATE_SECURITY_PACKAGES_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* QUERY_CREDENTIALS_ATTRIBUTES_FN_A)(PCredHandle phCredential,
+                                                                      ULONG ulAttribute,
+                                                                      void* pBuffer);
+typedef SECURITY_STATUS(SEC_ENTRY* QUERY_CREDENTIALS_ATTRIBUTES_FN_W)(PCredHandle phCredential,
+                                                                      ULONG ulAttribute,
+                                                                      void* pBuffer);
+
+#ifdef UNICODE
+#define QueryCredentialsAttributes QueryCredentialsAttributesW
+#define QUERY_CREDENTIALS_ATTRIBUTES_FN QUERY_CREDENTIALS_ATTRIBUTES_FN_W
+#else
+#define QueryCredentialsAttributes QueryCredentialsAttributesA
+#define QUERY_CREDENTIALS_ATTRIBUTES_FN QUERY_CREDENTIALS_ATTRIBUTES_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* ACQUIRE_CREDENTIALS_HANDLE_FN_A)(
+    LPSTR pszPrincipal, LPSTR pszPackage, ULONG fCredentialUse, void* pvLogonID, void* pAuthData,
+    SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PCredHandle phCredential,
+    PTimeStamp ptsExpiry);
+typedef SECURITY_STATUS(SEC_ENTRY* ACQUIRE_CREDENTIALS_HANDLE_FN_W)(
+    LPWSTR pszPrincipal, LPWSTR pszPackage, ULONG fCredentialUse, void* pvLogonID, void* pAuthData,
+    SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PCredHandle phCredential,
+    PTimeStamp ptsExpiry);
+
+#ifdef UNICODE
+#define AcquireCredentialsHandle AcquireCredentialsHandleW
+#define ACQUIRE_CREDENTIALS_HANDLE_FN ACQUIRE_CREDENTIALS_HANDLE_FN_W
+#else
+#define AcquireCredentialsHandle AcquireCredentialsHandleA
+#define ACQUIRE_CREDENTIALS_HANDLE_FN ACQUIRE_CREDENTIALS_HANDLE_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* FREE_CREDENTIALS_HANDLE_FN)(PCredHandle phCredential);
+
+typedef SECURITY_STATUS(SEC_ENTRY* INITIALIZE_SECURITY_CONTEXT_FN_A)(
+    PCredHandle phCredential, PCtxtHandle phContext, SEC_CHAR* pszTargetName, ULONG fContextReq,
+    ULONG Reserved1, ULONG TargetDataRep, PSecBufferDesc pInput, ULONG Reserved2,
+    PCtxtHandle phNewContext, PSecBufferDesc pOutput, PULONG pfContextAttr, PTimeStamp ptsExpiry);
+typedef SECURITY_STATUS(SEC_ENTRY* INITIALIZE_SECURITY_CONTEXT_FN_W)(
+    PCredHandle phCredential, PCtxtHandle phContext, SEC_WCHAR* pszTargetName, ULONG fContextReq,
+    ULONG Reserved1, ULONG TargetDataRep, PSecBufferDesc pInput, ULONG Reserved2,
+    PCtxtHandle phNewContext, PSecBufferDesc pOutput, PULONG pfContextAttr, PTimeStamp ptsExpiry);
+
+#ifdef UNICODE
+#define InitializeSecurityContext InitializeSecurityContextW
+#define INITIALIZE_SECURITY_CONTEXT_FN INITIALIZE_SECURITY_CONTEXT_FN_W
+#else
+#define InitializeSecurityContext InitializeSecurityContextA
+#define INITIALIZE_SECURITY_CONTEXT_FN INITIALIZE_SECURITY_CONTEXT_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* ACCEPT_SECURITY_CONTEXT_FN)(
+    PCredHandle phCredential, PCtxtHandle phContext, PSecBufferDesc pInput, ULONG fContextReq,
+    ULONG TargetDataRep, PCtxtHandle phNewContext, PSecBufferDesc pOutput, PULONG pfContextAttr,
+    PTimeStamp ptsTimeStamp);
+
+typedef SECURITY_STATUS(SEC_ENTRY* COMPLETE_AUTH_TOKEN_FN)(PCtxtHandle phContext,
+                                                           PSecBufferDesc pToken);
+
+typedef SECURITY_STATUS(SEC_ENTRY* DELETE_SECURITY_CONTEXT_FN)(PCtxtHandle phContext);
+
+typedef SECURITY_STATUS(SEC_ENTRY* APPLY_CONTROL_TOKEN_FN)(PCtxtHandle phContext,
+                                                           PSecBufferDesc pInput);
+
+typedef SECURITY_STATUS(SEC_ENTRY* QUERY_CONTEXT_ATTRIBUTES_FN_A)(PCtxtHandle phContext,
+                                                                  ULONG ulAttribute, void* pBuffer);
+typedef SECURITY_STATUS(SEC_ENTRY* QUERY_CONTEXT_ATTRIBUTES_FN_W)(PCtxtHandle phContext,
+                                                                  ULONG ulAttribute, void* pBuffer);
+
+#ifdef UNICODE
+#define QueryContextAttributes QueryContextAttributesW
+#define QUERY_CONTEXT_ATTRIBUTES_FN QUERY_CONTEXT_ATTRIBUTES_FN_W
+#else
+#define QueryContextAttributes QueryContextAttributesA
+#define QUERY_CONTEXT_ATTRIBUTES_FN QUERY_CONTEXT_ATTRIBUTES_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* IMPERSONATE_SECURITY_CONTEXT_FN)(PCtxtHandle phContext);
+
+typedef SECURITY_STATUS(SEC_ENTRY* REVERT_SECURITY_CONTEXT_FN)(PCtxtHandle phContext);
+
+typedef SECURITY_STATUS(SEC_ENTRY* MAKE_SIGNATURE_FN)(PCtxtHandle phContext, ULONG fQOP,
+                                                      PSecBufferDesc pMessage, ULONG MessageSeqNo);
+
+typedef SECURITY_STATUS(SEC_ENTRY* VERIFY_SIGNATURE_FN)(PCtxtHandle phContext,
+                                                        PSecBufferDesc pMessage, ULONG MessageSeqNo,
+                                                        PULONG pfQOP);
+
+typedef SECURITY_STATUS(SEC_ENTRY* FREE_CONTEXT_BUFFER_FN)(void* pvContextBuffer);
+
+typedef SECURITY_STATUS(SEC_ENTRY* QUERY_SECURITY_PACKAGE_INFO_FN_A)(SEC_CHAR* pszPackageName,
+                                                                     PSecPkgInfoA* ppPackageInfo);
+typedef SECURITY_STATUS(SEC_ENTRY* QUERY_SECURITY_PACKAGE_INFO_FN_W)(SEC_WCHAR* pszPackageName,
+                                                                     PSecPkgInfoW* ppPackageInfo);
+
+#ifdef UNICODE
+#define QuerySecurityPackageInfo QuerySecurityPackageInfoW
+#define QUERY_SECURITY_PACKAGE_INFO_FN QUERY_SECURITY_PACKAGE_INFO_FN_W
+#else
+#define QuerySecurityPackageInfo QuerySecurityPackageInfoA
+#define QUERY_SECURITY_PACKAGE_INFO_FN QUERY_SECURITY_PACKAGE_INFO_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* EXPORT_SECURITY_CONTEXT_FN)(PCtxtHandle phContext, ULONG fFlags,
+                                                               PSecBuffer pPackedContext,
+                                                               HANDLE* pToken);
+
+typedef SECURITY_STATUS(SEC_ENTRY* IMPORT_SECURITY_CONTEXT_FN_A)(SEC_CHAR* pszPackage,
+                                                                 PSecBuffer pPackedContext,
+                                                                 HANDLE pToken,
+                                                                 PCtxtHandle phContext);
+typedef SECURITY_STATUS(SEC_ENTRY* IMPORT_SECURITY_CONTEXT_FN_W)(SEC_WCHAR* pszPackage,
+                                                                 PSecBuffer pPackedContext,
+                                                                 HANDLE pToken,
+                                                                 PCtxtHandle phContext);
+
+#ifdef UNICODE
+#define ImportSecurityContext ImportSecurityContextW
+#define IMPORT_SECURITY_CONTEXT_FN IMPORT_SECURITY_CONTEXT_FN_W
+#else
+#define ImportSecurityContext ImportSecurityContextA
+#define IMPORT_SECURITY_CONTEXT_FN IMPORT_SECURITY_CONTEXT_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* ADD_CREDENTIALS_FN_A)(
+    PCredHandle hCredentials, SEC_CHAR* pszPrincipal, SEC_CHAR* pszPackage, UINT32 fCredentialUse,
+    void* pAuthData, SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PTimeStamp ptsExpiry);
+typedef SECURITY_STATUS(SEC_ENTRY* ADD_CREDENTIALS_FN_W)(
+    PCredHandle hCredentials, SEC_WCHAR* pszPrincipal, SEC_WCHAR* pszPackage, UINT32 fCredentialUse,
+    void* pAuthData, SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PTimeStamp ptsExpiry);
+
+#ifdef UNICODE
+#define AddCredentials AddCredentialsW
+#define ADD_CREDENTIALS_FN ADD_CREDENTIALS_FN_W
+#else
+#define AddCredentials AddCredentialsA
+#define ADD_CREDENTIALS_FN ADD_CREDENTIALS_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* QUERY_SECURITY_CONTEXT_TOKEN_FN)(PCtxtHandle phContext,
+                                                                    HANDLE* phToken);
+
+typedef SECURITY_STATUS(SEC_ENTRY* ENCRYPT_MESSAGE_FN)(PCtxtHandle phContext, ULONG fQOP,
+                                                       PSecBufferDesc pMessage, ULONG MessageSeqNo);
+
+typedef SECURITY_STATUS(SEC_ENTRY* DECRYPT_MESSAGE_FN)(PCtxtHandle phContext,
+                                                       PSecBufferDesc pMessage, ULONG MessageSeqNo,
+                                                       PULONG pfQOP);
+
+typedef SECURITY_STATUS(SEC_ENTRY* SET_CONTEXT_ATTRIBUTES_FN_A)(PCtxtHandle phContext,
+                                                                ULONG ulAttribute, void* pBuffer,
+                                                                ULONG cbBuffer);
+typedef SECURITY_STATUS(SEC_ENTRY* SET_CONTEXT_ATTRIBUTES_FN_W)(PCtxtHandle phContext,
+                                                                ULONG ulAttribute, void* pBuffer,
+                                                                ULONG cbBuffer);
+
+#ifdef UNICODE
+#define SetContextAttributes SetContextAttributesW
+#define SET_CONTEXT_ATTRIBUTES_FN SET_CONTEXT_ATTRIBUTES_FN_W
+#else
+#define SetContextAttributes SetContextAttributesA
+#define SET_CONTEXT_ATTRIBUTES_FN SET_CONTEXT_ATTRIBUTES_FN_A
+#endif
+
+typedef SECURITY_STATUS(SEC_ENTRY* SET_CREDENTIALS_ATTRIBUTES_FN_A)(PCredHandle phCredential,
+                                                                    ULONG ulAttribute,
+                                                                    void* pBuffer, ULONG cbBuffer);
+
+typedef SECURITY_STATUS(SEC_ENTRY* SET_CREDENTIALS_ATTRIBUTES_FN_W)(PCredHandle phCredential,
+                                                                    ULONG ulAttribute,
+                                                                    void* pBuffer, ULONG cbBuffer);
+
+#ifdef UNICODE
+#define SetCredentialsAttributes SetCredentialsAttributesW
+#define SET_CREDENTIALS_ATTRIBUTES_FN SET_CREDENTIALS_ATTRIBUTES_FN_W
+#else
+#define SetCredentialsAttributes SetCredentialsAttributesA
+#define SET_CREDENTIALS_ATTRIBUTES_FN SET_CREDENTIALS_ATTRIBUTES_FN_A
+#endif
+
+#define SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION \
+	1 /* Interface has all routines through DecryptMessage */
+#define SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION_2 \
+	2 /* Interface has all routines through SetContextAttributes */
+#define SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION_3 \
+	3 /* Interface has all routines through SetCredentialsAttributes */
+#define SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION_4 \
+	4 /* Interface has all routines through ChangeAccountPassword */
+
+typedef struct
+{
+	UINT32 dwVersion;
+	WINPR_ATTR_NODISCARD ENUMERATE_SECURITY_PACKAGES_FN_A EnumerateSecurityPackagesA;
+	WINPR_ATTR_NODISCARD QUERY_CREDENTIALS_ATTRIBUTES_FN_A QueryCredentialsAttributesA;
+	WINPR_ATTR_NODISCARD ACQUIRE_CREDENTIALS_HANDLE_FN_A AcquireCredentialsHandleA;
+	FREE_CREDENTIALS_HANDLE_FN FreeCredentialsHandle;
+	void* Reserved2;
+	WINPR_ATTR_NODISCARD INITIALIZE_SECURITY_CONTEXT_FN_A InitializeSecurityContextA;
+	WINPR_ATTR_NODISCARD ACCEPT_SECURITY_CONTEXT_FN AcceptSecurityContext;
+	WINPR_ATTR_NODISCARD COMPLETE_AUTH_TOKEN_FN CompleteAuthToken;
+	DELETE_SECURITY_CONTEXT_FN DeleteSecurityContext;
+	WINPR_ATTR_NODISCARD APPLY_CONTROL_TOKEN_FN ApplyControlToken;
+	WINPR_ATTR_NODISCARD QUERY_CONTEXT_ATTRIBUTES_FN_A QueryContextAttributesA;
+	WINPR_ATTR_NODISCARD IMPERSONATE_SECURITY_CONTEXT_FN ImpersonateSecurityContext;
+	WINPR_ATTR_NODISCARD REVERT_SECURITY_CONTEXT_FN RevertSecurityContext;
+	WINPR_ATTR_NODISCARD MAKE_SIGNATURE_FN MakeSignature;
+	WINPR_ATTR_NODISCARD VERIFY_SIGNATURE_FN VerifySignature;
+	FREE_CONTEXT_BUFFER_FN FreeContextBuffer;
+	WINPR_ATTR_NODISCARD QUERY_SECURITY_PACKAGE_INFO_FN_A QuerySecurityPackageInfoA;
+	void* Reserved3;
+	void* Reserved4;
+	WINPR_ATTR_NODISCARD EXPORT_SECURITY_CONTEXT_FN ExportSecurityContext;
+	WINPR_ATTR_NODISCARD IMPORT_SECURITY_CONTEXT_FN_A ImportSecurityContextA;
+	WINPR_ATTR_NODISCARD ADD_CREDENTIALS_FN_A AddCredentialsA;
+	void* Reserved8;
+	WINPR_ATTR_NODISCARD QUERY_SECURITY_CONTEXT_TOKEN_FN QuerySecurityContextToken;
+	WINPR_ATTR_NODISCARD ENCRYPT_MESSAGE_FN EncryptMessage;
+	WINPR_ATTR_NODISCARD DECRYPT_MESSAGE_FN DecryptMessage;
+	WINPR_ATTR_NODISCARD SET_CONTEXT_ATTRIBUTES_FN_A SetContextAttributesA;
+	WINPR_ATTR_NODISCARD SET_CREDENTIALS_ATTRIBUTES_FN_A SetCredentialsAttributesA;
+} SecurityFunctionTableA;
+typedef SecurityFunctionTableA* PSecurityFunctionTableA;
+
+typedef struct
+{
+	UINT32 dwVersion;
+	WINPR_ATTR_NODISCARD ENUMERATE_SECURITY_PACKAGES_FN_W EnumerateSecurityPackagesW;
+	WINPR_ATTR_NODISCARD QUERY_CREDENTIALS_ATTRIBUTES_FN_W QueryCredentialsAttributesW;
+	WINPR_ATTR_NODISCARD ACQUIRE_CREDENTIALS_HANDLE_FN_W AcquireCredentialsHandleW;
+	FREE_CREDENTIALS_HANDLE_FN FreeCredentialsHandle;
+	void* Reserved2;
+	WINPR_ATTR_NODISCARD INITIALIZE_SECURITY_CONTEXT_FN_W InitializeSecurityContextW;
+	WINPR_ATTR_NODISCARD ACCEPT_SECURITY_CONTEXT_FN AcceptSecurityContext;
+	WINPR_ATTR_NODISCARD COMPLETE_AUTH_TOKEN_FN CompleteAuthToken;
+	DELETE_SECURITY_CONTEXT_FN DeleteSecurityContext;
+	WINPR_ATTR_NODISCARD APPLY_CONTROL_TOKEN_FN ApplyControlToken;
+	WINPR_ATTR_NODISCARD QUERY_CONTEXT_ATTRIBUTES_FN_W QueryContextAttributesW;
+	WINPR_ATTR_NODISCARD IMPERSONATE_SECURITY_CONTEXT_FN ImpersonateSecurityContext;
+	WINPR_ATTR_NODISCARD REVERT_SECURITY_CONTEXT_FN RevertSecurityContext;
+	WINPR_ATTR_NODISCARD MAKE_SIGNATURE_FN MakeSignature;
+	WINPR_ATTR_NODISCARD VERIFY_SIGNATURE_FN VerifySignature;
+	FREE_CONTEXT_BUFFER_FN FreeContextBuffer;
+	WINPR_ATTR_NODISCARD QUERY_SECURITY_PACKAGE_INFO_FN_W QuerySecurityPackageInfoW;
+	void* Reserved3;
+	void* Reserved4;
+	WINPR_ATTR_NODISCARD EXPORT_SECURITY_CONTEXT_FN ExportSecurityContext;
+	WINPR_ATTR_NODISCARD IMPORT_SECURITY_CONTEXT_FN_W ImportSecurityContextW;
+	WINPR_ATTR_NODISCARD ADD_CREDENTIALS_FN_W AddCredentialsW;
+	void* Reserved8;
+	WINPR_ATTR_NODISCARD QUERY_SECURITY_CONTEXT_TOKEN_FN QuerySecurityContextToken;
+	WINPR_ATTR_NODISCARD ENCRYPT_MESSAGE_FN EncryptMessage;
+	WINPR_ATTR_NODISCARD DECRYPT_MESSAGE_FN DecryptMessage;
+	WINPR_ATTR_NODISCARD SET_CONTEXT_ATTRIBUTES_FN_W SetContextAttributesW;
+	WINPR_ATTR_NODISCARD SET_CREDENTIALS_ATTRIBUTES_FN_W SetCredentialsAttributesW;
+} SecurityFunctionTableW;
+typedef SecurityFunctionTableW* PSecurityFunctionTableW;
+
+typedef PSecurityFunctionTableA(SEC_ENTRY* INIT_SECURITY_INTERFACE_A)(void);
+typedef PSecurityFunctionTableW(SEC_ENTRY* INIT_SECURITY_INTERFACE_W)(void);
+
+#ifdef UNICODE
+#define InitSecurityInterface InitSecurityInterfaceW
+#define SecurityFunctionTable SecurityFunctionTableW
+#define PSecurityFunctionTable PSecurityFunctionTableW
+#define INIT_SECURITY_INTERFACE INIT_SECURITY_INTERFACE_W
+#else
+#define InitSecurityInterface InitSecurityInterfaceA
+#define SecurityFunctionTable SecurityFunctionTableA
+#define PSecurityFunctionTable PSecurityFunctionTableA
+#define INIT_SECURITY_INTERFACE INIT_SECURITY_INTERFACE_A
+#endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#ifdef SSPI_DLL
+
+	/* Package Management */
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY EnumerateSecurityPackagesA(ULONG* pcPackages,
+	                                                               PSecPkgInfoA* ppPackageInfo);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY EnumerateSecurityPackagesW(ULONG* pcPackages,
+	                                                               PSecPkgInfoW* ppPackageInfo);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API PSecurityFunctionTableA SEC_ENTRY InitSecurityInterfaceA(void);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API PSecurityFunctionTableW SEC_ENTRY InitSecurityInterfaceW(void);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY QuerySecurityPackageInfoA(SEC_CHAR* pszPackageName,
+	                                                              PSecPkgInfoA* ppPackageInfo);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY QuerySecurityPackageInfoW(SEC_WCHAR* pszPackageName,
+	                                                              PSecPkgInfoW* ppPackageInfo);
+
+	/* Credential Management */
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY AcquireCredentialsHandleA(
+	    SEC_CHAR* pszPrincipal, SEC_CHAR* pszPackage, ULONG fCredentialUse, void* pvLogonID,
+	    void* pAuthData, SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PCredHandle phCredential,
+	    PTimeStamp ptsExpiry);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY AcquireCredentialsHandleW(
+	    SEC_WCHAR* pszPrincipal, SEC_WCHAR* pszPackage, ULONG fCredentialUse, void* pvLogonID,
+	    void* pAuthData, SEC_GET_KEY_FN pGetKeyFn, void* pvGetKeyArgument, PCredHandle phCredential,
+	    PTimeStamp ptsExpiry);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY ExportSecurityContext(PCtxtHandle phContext, ULONG fFlags,
+	                                                          PSecBuffer pPackedContext,
+	                                                          HANDLE* pToken);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY FreeCredentialsHandle(PCredHandle phCredential);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY ImportSecurityContextA(SEC_CHAR* pszPackage,
+	                                                           PSecBuffer pPackedContext,
+	                                                           HANDLE pToken,
+	                                                           PCtxtHandle phContext);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY ImportSecurityContextW(SEC_WCHAR* pszPackage,
+	                                                           PSecBuffer pPackedContext,
+	                                                           HANDLE pToken,
+	                                                           PCtxtHandle phContext);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY QueryCredentialsAttributesA(PCredHandle phCredential,
+	                                                                ULONG ulAttribute,
+	                                                                void* pBuffer);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY QueryCredentialsAttributesW(PCredHandle phCredential,
+	                                                                ULONG ulAttribute,
+	                                                                void* pBuffer);
+
+	/* Context Management */
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY
+	AcceptSecurityContext(PCredHandle phCredential, PCtxtHandle phContext, PSecBufferDesc pInput,
+	                      ULONG fContextReq, ULONG TargetDataRep, PCtxtHandle phNewContext,
+	                      PSecBufferDesc pOutput, PULONG pfContextAttr, PTimeStamp ptsTimeStamp);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY ApplyControlToken(PCtxtHandle phContext,
+	                                                      PSecBufferDesc pInput);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY CompleteAuthToken(PCtxtHandle phContext,
+	                                                      PSecBufferDesc pToken);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY DeleteSecurityContext(PCtxtHandle phContext);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY FreeContextBuffer(void* pvContextBuffer);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY ImpersonateSecurityContext(PCtxtHandle phContext);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY InitializeSecurityContextA(
+	    PCredHandle phCredential, PCtxtHandle phContext, SEC_CHAR* pszTargetName, ULONG fContextReq,
+	    ULONG Reserved1, ULONG TargetDataRep, PSecBufferDesc pInput, ULONG Reserved2,
+	    PCtxtHandle phNewContext, PSecBufferDesc pOutput, PULONG pfContextAttr,
+	    PTimeStamp ptsExpiry);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY InitializeSecurityContextW(
+	    PCredHandle phCredential, PCtxtHandle phContext, SEC_WCHAR* pszTargetName,
+	    ULONG fContextReq, ULONG Reserved1, ULONG TargetDataRep, PSecBufferDesc pInput,
+	    ULONG Reserved2, PCtxtHandle phNewContext, PSecBufferDesc pOutput, PULONG pfContextAttr,
+	    PTimeStamp ptsExpiry);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY QueryContextAttributes(PCtxtHandle phContext,
+	                                                           ULONG ulAttribute, void* pBuffer);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY QuerySecurityContextToken(PCtxtHandle phContext,
+	                                                              HANDLE* phToken);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY SetContextAttributes(PCtxtHandle phContext,
+	                                                         ULONG ulAttribute, void* pBuffer,
+	                                                         ULONG cbBuffer);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY RevertSecurityContext(PCtxtHandle phContext);
+
+	/* Message Support */
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY DecryptMessage(PCtxtHandle phContext,
+	                                                   PSecBufferDesc pMessage, ULONG MessageSeqNo,
+	                                                   PULONG pfQOP);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY EncryptMessage(PCtxtHandle phContext, ULONG fQOP,
+	                                                   PSecBufferDesc pMessage, ULONG MessageSeqNo);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY MakeSignature(PCtxtHandle phContext, ULONG fQOP,
+	                                                  PSecBufferDesc pMessage, ULONG MessageSeqNo);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SECURITY_STATUS SEC_ENTRY VerifySignature(PCtxtHandle phContext,
+	                                                    PSecBufferDesc pMessage, ULONG MessageSeqNo,
+	                                                    PULONG pfQOP);
+
+#endif /* SSPI_DLL */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+	/* Custom API */
+
+/* Extended SECPKG_ATTR IDs begin at 1000 */
+	enum WINPR_C23_ENUM_TYPE(uint32_t)
+	{
+		SECPKG_ATTR_AUTH_IDENTITY = 1001,
+		SECPKG_ATTR_AUTH_PASSWORD = 1002,
+		SECPKG_ATTR_AUTH_NTLM_HASH = 1003,
+		SECPKG_ATTR_AUTH_NTLM_MESSAGE = 1100,
+		SECPKG_ATTR_AUTH_NTLM_TIMESTAMP = 1101,
+		SECPKG_ATTR_AUTH_NTLM_CLIENT_CHALLENGE = 1102,
+		SECPKG_ATTR_AUTH_NTLM_SERVER_CHALLENGE = 1103,
+		SECPKG_ATTR_AUTH_NTLM_NTPROOF_VALUE = 1104,
+		SECPKG_ATTR_AUTH_NTLM_RANDKEY = 1105,
+		SECPKG_ATTR_AUTH_NTLM_MIC = 1106,
+		SECPKG_ATTR_AUTH_NTLM_MIC_VALUE = 1107,
+		SECPKG_ATTR_AUTH_NTLM_HOSTNAME = 1108,              /**< @since version 3.27.0 */
+		SECPKG_ATTR_AUTH_NTLM_HOSTNAME_LEN = 1110,          /**< @since version 3.27.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_COMPUTER_NAME = 1111,      /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_COMPUTER_NAME_LEN = 1112,  /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_DOMAIN_NAME = 1113,        /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_NB_DOMAIN_NAME_LEN = 1114,    /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_COMPUTER_NAME = 1115,     /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_COMPUTER_NAME_LEN = 1116, /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_DOMAIN_NAME = 1117,       /**< @since version 3.31.0 */
+		SECPKG_ATTR_AUTH_NTLM_DNS_DOMAIN_NAME_LEN = 1118    /**< @since version 3.31.0 */
+	};
+
+#define SECPKG_CRED_ATTR_TICKET_LOGON 1200
+
+	typedef struct
+	{
+		char User[256 + 1];
+		char Domain[256 + 1];
+	} SecPkgContext_AuthIdentity;
+
+	typedef struct
+	{
+		char Password[256 + 1];
+	} SecPkgContext_AuthPassword;
+
+	typedef struct
+	{
+		int Version;
+		BYTE NtlmHash[16];
+	} SecPkgContext_AuthNtlmHash;
+
+	typedef struct
+	{
+		BYTE Timestamp[8];
+		BOOL ChallengeOrResponse;
+	} SecPkgContext_AuthNtlmTimestamp;
+
+	typedef struct
+	{
+		BYTE ClientChallenge[8];
+	} SecPkgContext_AuthNtlmClientChallenge;
+
+	typedef struct
+	{
+		BYTE ServerChallenge[8];
+	} SecPkgContext_AuthNtlmServerChallenge;
+
+	typedef struct
+	{
+		UINT32 type;
+		UINT32 length;
+		BYTE* buffer;
+	} SecPkgContext_AuthNtlmMessage;
+
+#define SSPI_INTERFACE_WINPR 0x00000001
+#define SSPI_INTERFACE_NATIVE 0x00000002
+
+	typedef PSecurityFunctionTableA(SEC_ENTRY* INIT_SECURITY_INTERFACE_EX_A)(DWORD flags);
+	typedef PSecurityFunctionTableW(SEC_ENTRY* INIT_SECURITY_INTERFACE_EX_W)(DWORD flags);
+
+	WINPR_API void sspi_GlobalInit(void);
+	WINPR_API void sspi_GlobalFinish(void);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API void* sspi_SecBufferAlloc(PSecBuffer SecBuffer, ULONG size);
+	WINPR_API void sspi_SecBufferFree(PSecBuffer SecBuffer);
+
+#define sspi_SetAuthIdentity sspi_SetAuthIdentityA
+	WINPR_ATTR_NODISCARD
+	WINPR_API int sspi_SetAuthIdentityA(SEC_WINNT_AUTH_IDENTITY* identity, const char* user,
+	                                    const char* domain, const char* password);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API int sspi_SetAuthIdentityW(SEC_WINNT_AUTH_IDENTITY* identity, const WCHAR* user,
+	                                    const WCHAR* domain, const WCHAR* password);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API int sspi_SetAuthIdentityWithLengthW(SEC_WINNT_AUTH_IDENTITY* identity,
+	                                              const WCHAR* user, size_t userLen,
+	                                              const WCHAR* domain, size_t domainLen,
+	                                              const WCHAR* password, size_t passwordLen);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API UINT32 sspi_GetAuthIdentityVersion(const void* identity);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API UINT32 sspi_GetAuthIdentityFlags(const void* identity);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_GetAuthIdentityUserDomainW(const void* identity, const WCHAR** pUser,
+	                                               UINT32* pUserLength, const WCHAR** pDomain,
+	                                               UINT32* pDomainLength);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_GetAuthIdentityUserDomainA(const void* identity, const char** pUser,
+	                                               UINT32* pUserLength, const char** pDomain,
+	                                               UINT32* pDomainLength);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_GetAuthIdentityPasswordW(const void* identity, const WCHAR** pPassword,
+	                                             UINT32* pPasswordLength);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_GetAuthIdentityPasswordA(const void* identity, const char** pPassword,
+	                                             UINT32* pPasswordLength);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_CopyAuthIdentityFieldsA(const SEC_WINNT_AUTH_IDENTITY_INFO* identity,
+	                                            char** pUser, char** pDomain, char** pPassword);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_CopyAuthIdentityFieldsW(const SEC_WINNT_AUTH_IDENTITY_INFO* identity,
+	                                            WCHAR** pUser, WCHAR** pDomain, WCHAR** pPassword);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_CopyAuthPackageListA(const SEC_WINNT_AUTH_IDENTITY_INFO* identity,
+	                                         char** pPackageList);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API int sspi_CopyAuthIdentity(SEC_WINNT_AUTH_IDENTITY* identity,
+	                                    const SEC_WINNT_AUTH_IDENTITY_INFO* srcIdentity);
+
+	WINPR_API void sspi_FreeAuthIdentity(SEC_WINNT_AUTH_IDENTITY* identity);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API const char* GetSecurityStatusString(SECURITY_STATUS status);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SecurityFunctionTableW* SEC_ENTRY InitSecurityInterfaceExW(DWORD flags);
+
+	WINPR_ATTR_NODISCARD
+	WINPR_API SecurityFunctionTableA* SEC_ENTRY InitSecurityInterfaceExA(DWORD flags);
+
+	/** @brief free an allocated \ref SEC_WINPR_NTLM_SETTINGS_V2
+	 *  @param settings A pointer to the settings to free
+	 *  @since version 3.31.0
+	 */
+	WINPR_API void sspi_FreeSecNtlmSettings(SEC_WINPR_NTLM_SETTINGS_V2* settings);
+
+	/** @brief allocate a \ref SEC_WINPR_NTLM_SETTINGS_V2
+	 *  @return An allocated settings struct or nullptr.
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_MALLOC(sspi_FreeSecNtlmSettings, 1)
+	WINPR_API SEC_WINPR_NTLM_SETTINGS_V2* sspi_AllocSecNtlmSettings(void);
+
+	/** @brief free an allocated \ref SEC_WINPR_KERBEROS_SETTINGS_V2
+	 *  @param settings A pointer to the settings to free
+	 *  @since version 3.31.0
+	 */
+	WINPR_API void sspi_FreeSecKerberosSettings(SEC_WINPR_KERBEROS_SETTINGS_V2* settings);
+
+	/** @brief allocate a \ref SEC_WINPR_KERBEROS_SETTINGS_V2
+	 *  @return An allocated settings struct or nullptr.
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_MALLOC(sspi_FreeSecKerberosSettings, 1)
+	WINPR_API SEC_WINPR_KERBEROS_SETTINGS_V2* sspi_AllocSecKerberosSettings(void);
+
+	/** @brief create a copy of a string. Frees up any previously allocated string at \ref dest
+	 *  This function was introduced to have an easy way to clone a string and keep clear of
+	 * allocator mismatches.
+	 *
+	 *  @param dest A pointer to a char* which will hold the allocated string result. Must not be
+	 * NULL
+	 *  @param src A pointer to the string to clone
+	 *
+	 *  @return TRUE for success, FALSE otherwise.
+	 *  @since version 3.31.0
+	 */
+	WINPR_ATTR_NODISCARD
+	WINPR_API BOOL sspi_CloneSecSettingsString(char** dest, const char* src);
+
+#ifdef UNICODE
+#define InitSecurityInterfaceEx InitSecurityInterfaceExW
+#define INIT_SECURITY_INTERFACE_EX INIT_SECURITY_INTERFACE_EX_W
+#else
+#define InitSecurityInterfaceEx InitSecurityInterfaceExA
+#define INIT_SECURITY_INTERFACE_EX INIT_SECURITY_INTERFACE_EX_A
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* WINPR_SSPI_H */
