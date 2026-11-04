@@ -119,8 +119,10 @@ bool IsSpecificId(const std::wstring &id)
         return false;
     if (StartsWith(upper, L"ACPI\\"))
         return !StartsWith(upper, L"ACPI\\PNP");
-    return upper.find(L"VEN_") != std::wstring::npos || upper.find(L"VID_") != std::wstring::npos ||
-           upper.find(L"DEV_") != std::wstring::npos || upper.find(L"PID_") != std::wstring::npos;
+    if (upper.find(L"DEV_") != std::wstring::npos || upper.find(L"PID_") != std::wstring::npos)
+        return true;
+    return (upper.find(L"VEN_") != std::wstring::npos || upper.find(L"VID_") != std::wstring::npos) &&
+           upper.find(L"CC_") != std::wstring::npos;
 }
 
 DWORDLONG ParseVersion(const std::wstring &text)
