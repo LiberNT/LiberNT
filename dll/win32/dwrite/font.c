@@ -7578,12 +7578,33 @@ static IDWriteLocalizedStrings * fontset_entry_get_property(struct dwrite_fontse
     else if (property == DWRITE_FONT_PROPERTY_ID_WEIGHT || property == DWRITE_FONT_PROPERTY_ID_STRETCH
             || property == DWRITE_FONT_PROPERTY_ID_STYLE)
     {
+        IDWriteLocalizedStrings *family_names = NULL, *face_names = NULL;
+        struct dwrite_font_data data = { 0 };
         struct dwrite_font_props props;
-        WCHAR buffW[16];
+        WCHAR buffW[16], familyW[255], faceW[255];
 
         opentype_get_font_properties(&stream_desc, &props);
-        swprintf(buffW, ARRAY_SIZE(buffW), L"%u", property == DWRITE_FONT_PROPERTY_ID_WEIGHT ? props.weight :
-                property == DWRITE_FONT_PROPERTY_ID_STRETCH ? props.stretch : props.style);
+        data.weight = props.weight;
+        data.stretch = props.stretch;
+        data.style = props.style;
+        opentype_get_font_facename(&stream_desc, props.lf.lfFaceName, &face_names);
+        if (face_names && SUCCEEDED(opentype_get_font_familyname(&stream_desc, DWRITE_FONT_FAMILY_MODEL_WEIGHT_STRETCH_STYLE,
+                &family_names)))
+        {
+            fontstrings_get_en_string(family_names, familyW, ARRAY_SIZE(familyW));
+            fontstrings_get_en_string(face_names, faceW, ARRAY_SIZE(faceW));
+            font_apply_differentiation_rules(&data, familyW, faceW);
+        }
+        if (family_names)
+            IDWriteLocalizedStrings_Release(family_names);
+        if (face_names)
+            IDWriteLocalizedStrings_Release(face_names);
+        if (entry->simulations & DWRITE_FONT_SIMULATIONS_BOLD)
+            data.weight = DWRITE_FONT_WEIGHT_BOLD;
+        if (entry->simulations & DWRITE_FONT_SIMULATIONS_OBLIQUE)
+            data.style = DWRITE_FONT_STYLE_OBLIQUE;
+        swprintf(buffW, ARRAY_SIZE(buffW), L"%u", property == DWRITE_FONT_PROPERTY_ID_WEIGHT ? data.weight :
+                property == DWRITE_FONT_PROPERTY_ID_STRETCH ? data.stretch : data.style);
         if (SUCCEEDED(create_localizedstrings(&value)) && FAILED(add_localizedstring(value, L"", buffW)))
         {
             IDWriteLocalizedStrings_Release(value);
