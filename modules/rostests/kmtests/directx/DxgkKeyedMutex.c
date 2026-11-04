@@ -147,6 +147,21 @@ static VOID TestWaiterAccounting(VOID)
     ok_eq_ulong(State.WaiterCount, 0UL);
 }
 
+static VOID TestAbandonedByHolder(VOID)
+{
+    DXGK_KEYED_MUTEX_STATE State;
+
+    DxgkKeyedMutexCoreInitialize(&State, 0);
+    ok_bool_false(DxgkKeyedMutexCoreAbandon(&State), "an unowned mutex was abandoned");
+    ok_bool_false(State.Abandoned, "an unowned mutex reports abandoned");
+    ok_bool_true(DxgkKeyedMutexCoreAcquire(&State, 0), "initial acquire refused");
+    ok_bool_true(DxgkKeyedMutexCoreAbandon(&State), "the holder's teardown did not abandon the mutex");
+    ok_bool_true(State.Abandoned, "abandoned state not recorded");
+    ok_bool_false(State.Owned, "an abandoned mutex is still owned");
+    ok_bool_false(DxgkKeyedMutexCoreAcquire(&State, 0), "an abandoned mutex was acquired");
+    ok_bool_false(DxgkKeyedMutexCoreRelease(&State, 0, 1), "an abandoned mutex was released");
+}
+
 static VOID TestPrivateDataSizeContract(VOID)
 {
     /* Zero is always fine and needs no buffer. */
@@ -174,6 +189,7 @@ START_TEST(DxgkKeyedMutex)
     TestHandOffSequence();
     TestKeysAreFull64Bit();
     TestWaiterAccounting();
+    TestAbandonedByHolder();
     TestPrivateDataSizeContract();
 }
 
