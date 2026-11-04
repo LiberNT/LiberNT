@@ -3291,6 +3291,59 @@ MiImageWindowFindRun(
     return FALSE;
 }
 
+static
+BOOLEAN
+MiImageWindowFindRunDown(
+    _In_ PMI_IMAGE_WINDOW Window,
+    _In_ ULONG64 End,
+    _In_ ULONG64 Needed,
+    _Out_ PULONG64 Index)
+{
+    ULONG64 Slot = End;
+    ULONG64 Run = 0;
+
+    while (Slot > 0)
+    {
+        Slot--;
+        if (Run == 0 && (Slot & 63) == 63 && Window->Bits[Slot / 64] == ~0ULL)
+        {
+            Slot -= 63;
+            continue;
+        }
+
+        if (Window->Bits[Slot / 64] & (1ULL << (Slot & 63)))
+        {
+            Run = 0;
+        }
+        else if (++Run == Needed)
+        {
+            *Index = Slot;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
+MiImageWindowEnsureBits(
+    _Inout_ PMI_IMAGE_WINDOW Window)
+{
+    ULONG64 Words = (Window->SlotCount + 63) / 64;
+
+    if (Window->Bits != NULL)
+        return TRUE;
+
+    Window->Bits = MI_ALLOCATE((SIZE_T)(Words * sizeof(ULONG64)));
+    if (Window->Bits == NULL)
+        return FALSE;
+    RtlZeroMemory(Window->Bits, (SIZE_T)(Words * sizeof(ULONG64)));
+    if (Window->SlotCount & 63)
+        Window->Bits[Words - 1] = ~0ULL << (Window->SlotCount & 63);
+    return TRUE;
+}
+
 BOOLEAN
 MiImageWindowReserve(
     _Inout_ PMI_IMAGE_WINDOW Window,
@@ -3299,7 +3352,6 @@ MiImageWindowReserve(
     _Out_ PULONG64 Base)
 {
     ULONG64 Needed = (Size + MI_ALLOCATION_GRANULARITY - 1) / MI_ALLOCATION_GRANULARITY;
-    ULONG64 Words = (Window->SlotCount + 63) / 64;
     ULONG64 Index, Slot;
     BOOLEAN Found;
 
@@ -3310,17 +3362,10 @@ MiImageWindowReserve(
 
     MI_MUTEX_ACQUIRE(&Window->Lock);
 
-    if (Window->Bits == NULL)
+    if (!MiImageWindowEnsureBits(Window))
     {
-        Window->Bits = MI_ALLOCATE((SIZE_T)(Words * sizeof(ULONG64)));
-        if (Window->Bits == NULL)
-        {
-            MI_MUTEX_RELEASE(&Window->Lock);
-            return FALSE;
-        }
-        RtlZeroMemory(Window->Bits, (SIZE_T)(Words * sizeof(ULONG64)));
-        if (Window->SlotCount & 63)
-            Window->Bits[Words - 1] = ~0ULL << (Window->SlotCount & 63);
+        MI_MUTEX_RELEASE(&Window->Lock);
+        return FALSE;
     }
 
     Found = MiImageWindowFindRun(Window, HintSlot, Window->SlotCount, Needed, &Index);
@@ -3335,6 +3380,43 @@ MiImageWindowReserve(
         for (Slot = Index; Slot < Index + Needed; Slot++)
             Window->Bits[Slot / 64] |= 1ULL << (Slot & 63);
         *Base = Window->Lowest + Index * MI_ALLOCATION_GRANULARITY;
+    }
+
+    MI_MUTEX_RELEASE(&Window->Lock);
+    return Found;
+}
+
+BOOLEAN
+MiImageWindowReserveTopDown(
+    _Inout_ PMI_IMAGE_WINDOW Window,
+    _In_ ULONG64 Size,
+    _In_ ULONG64 TopSlot,
+    _Out_ PULONG64 Base)
+{
+    ULONG64 Needed = (Size + MI_ALLOCATION_GRANULARITY - 1) / MI_ALLOCATION_GRANULARITY;
+    ULONG64 Index, Slot;
+    BOOLEAN Found = FALSE;
+
+    if (Needed == 0 || Needed > Window->SlotCount || Window->SlotCount > MI_IMAGE_WINDOW_MAXIMUM_SLOTS)
+        return FALSE;
+
+    if (TopSlot > Window->SlotCount)
+        TopSlot = Window->SlotCount;
+
+    MI_MUTEX_ACQUIRE(&Window->Lock);
+
+    if (MiImageWindowEnsureBits(Window))
+    {
+        Found = MiImageWindowFindRunDown(Window, TopSlot, Needed, &Index);
+        if (!Found && TopSlot < Window->SlotCount)
+            Found = MiImageWindowFindRunDown(Window, Window->SlotCount, Needed, &Index);
+
+        if (Found)
+        {
+            for (Slot = Index; Slot < Index + Needed; Slot++)
+                Window->Bits[Slot / 64] |= 1ULL << (Slot & 63);
+            *Base = Window->Lowest + Index * MI_ALLOCATION_GRANULARITY;
+        }
     }
 
     MI_MUTEX_RELEASE(&Window->Lock);
