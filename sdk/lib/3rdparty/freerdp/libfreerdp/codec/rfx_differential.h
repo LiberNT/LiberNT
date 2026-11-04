@@ -1,0 +1,52 @@
+/**
+ * FreeRDP: A Remote Desktop Protocol Implementation
+ * RemoteFX Codec Library - Differential Encoding
+ *
+ * Copyright 2011 Vic Lee
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef FREERDP_LIB_CODEC_RFX_DIFFERENTIAL_H
+#define FREERDP_LIB_CODEC_RFX_DIFFERENTIAL_H
+
+#include <freerdp/codec/rfx.h>
+#include <freerdp/api.h>
+
+static inline void rfx_differential_decode(INT16* WINPR_RESTRICT buffer, size_t size)
+{
+	INT16* ptr = buffer;
+	INT16* end = &buffer[size - 1];
+
+	while (ptr != end)
+	{
+		const int tmp = ptr[0] + ptr[1];
+		ptr[1] = WINPR_ASSERTING_INT_CAST(INT16, tmp);
+		ptr++;
+	}
+}
+
+static inline void rfx_differential_encode(INT16* WINPR_RESTRICT buffer, size_t size)
+{
+	INT16 n1 = buffer[0];
+	for (size_t x = 0; x < size - 1; x++)
+	{
+		INT16* dst = &buffer[x + 1];
+		const INT16 n2 = *dst;
+		const int tmp = n2 - n1;
+		*dst = WINPR_ASSERTING_INT_CAST(INT16, tmp);
+		n1 = n2;
+	}
+}
+
+#endif /* FREERDP_LIB_CODEC_RFX_DIFFERENTIAL_H */

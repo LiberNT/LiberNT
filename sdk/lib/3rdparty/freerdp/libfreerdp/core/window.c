@@ -1,0 +1,1228 @@
+/**
+ * FreeRDP: A Remote Desktop Protocol Implementation
+ * Windowing Alternate Secondary Orders
+ *
+ * Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ * Copyright 2011 Roman Barabanov <romanbarabanov@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <freerdp/config.h>
+
+#include "settings.h"
+
+#include <winpr/crt.h>
+#include <winpr/assert.h>
+
+#include <freerdp/log.h>
+
+#include "window.h"
+
+#define TAG FREERDP_TAG("core.window")
+
+static void update_free_window_icon_info(ICON_INFO* iconInfo);
+
+BOOL rail_read_unicode_string(wStream* s, RAIL_UNICODE_STRING* unicode_string)
+{
+	WINPR_ASSERT(unicode_string);
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 2))
+		return FALSE;
+
+	const UINT16 new_len = Stream_Get_UINT16(s); /* cbString (2 bytes) */
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, new_len))
+		return FALSE;
+
+	if ((new_len == 0) || ((new_len % sizeof(WCHAR)) != 0))
+	{
+		rail_unicode_string_free(unicode_string);
+		return TRUE;
+	}
+
+	WCHAR* new_str = realloc(unicode_string->string, new_len);
+	if (!new_str)
+	{
+		rail_unicode_string_free(unicode_string);
+		return FALSE;
+	}
+
+	unicode_string->string = new_str;
+	unicode_string->length = new_len;
+	Stream_Read(s, unicode_string->string, unicode_string->length);
+
+	const size_t charlen = unicode_string->length / sizeof(WCHAR);
+	if (_wcsnlen(unicode_string->string, charlen) != charlen)
+	{
+		WLog_ERR(TAG, "Failed to read UNICODE_STRING, data contains \\0 characters!");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+UINT rail_write_unicode_string_value(wStream* s, const RAIL_UNICODE_STRING* unicode_string)
+{
+	if (!s || !unicode_string)
+		return ERROR_INVALID_PARAMETER;
+
+	const size_t length = unicode_string->length;
+	WINPR_ASSERT((length % sizeof(WCHAR)) == 0);
+	if (length > 0)
+	{
+		if (!Stream_EnsureRemainingCapacity(s, length))
+		{
+			WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+			return CHANNEL_RC_NO_MEMORY;
+		}
+
+		Stream_Write(s, unicode_string->string, length); /* string */
+	}
+
+	return CHANNEL_RC_OK;
+}
+
+UINT rail_write_unicode_string(wStream* s, const RAIL_UNICODE_STRING* unicode_string)
+{
+	if (!s || !unicode_string)
+		return ERROR_INVALID_PARAMETER;
+
+	if (!Stream_EnsureRemainingCapacity(s, 2ull + unicode_string->length))
+	{
+		WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+		return CHANNEL_RC_NO_MEMORY;
+	}
+
+	Stream_Write_UINT16(s, unicode_string->length); /* cbString (2 bytes) */
+	return rail_write_unicode_string_value(s, unicode_string);
+}
+
+void rail_unicode_string_free(RAIL_UNICODE_STRING* unicode_string)
+{
+	WINPR_ASSERT(unicode_string);
+	free(unicode_string->string);
+	unicode_string->string = nullptr;
+	unicode_string->length = 0;
+}
+
+BOOL utf8_string_to_rail_string(const char* string, RAIL_UNICODE_STRING* unicode_string)
+{
+	WINPR_ASSERT(unicode_string);
+
+	rail_unicode_string_free(unicode_string);
+
+	if (!string || strlen(string) < 1)
+		return TRUE;
+
+	size_t len = 0;
+	WCHAR* buffer = ConvertUtf8ToWCharAlloc(string, &len);
+
+	const size_t wlen = len * sizeof(WCHAR);
+	if (!buffer || (wlen > UINT16_MAX))
+	{
+		free(buffer);
+		return FALSE;
+	}
+
+	unicode_string->string = buffer;
+	unicode_string->length = WINPR_ASSERTING_INT_CAST(UINT16, len * sizeof(WCHAR));
+	return TRUE;
+}
+
+char* rail_string_to_utf8_string(const RAIL_UNICODE_STRING* unicode_string)
+{
+	WINPR_ASSERT(unicode_string);
+	WINPR_ASSERT((unicode_string->length % sizeof(WCHAR)) == 0);
+	WINPR_ASSERT(((unicode_string->length > 0) && (unicode_string->string)) ||
+	             (unicode_string->length == 0));
+
+	size_t outLen = 0;
+	size_t inLen = unicode_string->length / sizeof(WCHAR);
+	return ConvertWCharNToUtf8Alloc(unicode_string->string, inLen, &outLen);
+}
+
+/* See [MS-RDPERP] 2.2.1.2.3 Icon Info (TS_ICON_INFO) */
+static BOOL update_read_icon_info(wStream* s, ICON_INFO* iconInfo)
+{
+	BYTE* newBitMask = nullptr;
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+		return FALSE;
+
+	Stream_Read_UINT16(s, iconInfo->cacheEntry); /* cacheEntry (2 bytes) */
+	Stream_Read_UINT8(s, iconInfo->cacheId);     /* cacheId (1 byte) */
+	Stream_Read_UINT8(s, iconInfo->bpp);         /* bpp (1 byte) */
+
+	if ((iconInfo->bpp < 1) || (iconInfo->bpp > 32))
+	{
+		WLog_ERR(TAG, "invalid bpp value %" PRIu32 "", iconInfo->bpp);
+		return FALSE;
+	}
+
+	Stream_Read_UINT16(s, iconInfo->width);  /* width (2 bytes) */
+	Stream_Read_UINT16(s, iconInfo->height); /* height (2 bytes) */
+
+	/* cbColorTable is only present when bpp is 1, 4 or 8 */
+	switch (iconInfo->bpp)
+	{
+		case 1:
+		case 4:
+		case 8:
+			if (!Stream_CheckAndLogRequiredLength(TAG, s, 2))
+				return FALSE;
+
+			Stream_Read_UINT16(s, iconInfo->cbColorTable); /* cbColorTable (2 bytes) */
+			break;
+
+		default:
+			iconInfo->cbColorTable = 0;
+			break;
+	}
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 4))
+		return FALSE;
+
+	Stream_Read_UINT16(s, iconInfo->cbBitsMask);  /* cbBitsMask (2 bytes) */
+	Stream_Read_UINT16(s, iconInfo->cbBitsColor); /* cbBitsColor (2 bytes) */
+
+	/* bitsMask */
+	if (iconInfo->cbBitsMask > 0)
+	{
+		newBitMask = (BYTE*)realloc(iconInfo->bitsMask, iconInfo->cbBitsMask);
+
+		if (!newBitMask)
+		{
+			free(iconInfo->bitsMask);
+			iconInfo->bitsMask = nullptr;
+			return FALSE;
+		}
+
+		iconInfo->bitsMask = newBitMask;
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, iconInfo->cbBitsMask))
+			return FALSE;
+		Stream_Read(s, iconInfo->bitsMask, iconInfo->cbBitsMask);
+	}
+	else
+	{
+		free(iconInfo->bitsMask);
+		iconInfo->bitsMask = nullptr;
+		iconInfo->cbBitsMask = 0;
+	}
+
+	/* colorTable */
+	if (iconInfo->cbColorTable > 0)
+	{
+		BYTE* new_tab = nullptr;
+		new_tab = (BYTE*)realloc(iconInfo->colorTable, iconInfo->cbColorTable);
+
+		if (!new_tab)
+		{
+			free(iconInfo->colorTable);
+			iconInfo->colorTable = nullptr;
+			return FALSE;
+		}
+
+		iconInfo->colorTable = new_tab;
+	}
+	else
+	{
+		free(iconInfo->colorTable);
+		iconInfo->colorTable = nullptr;
+	}
+
+	if (iconInfo->colorTable)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, iconInfo->cbColorTable))
+			return FALSE;
+		Stream_Read(s, iconInfo->colorTable, iconInfo->cbColorTable);
+	}
+
+	/* bitsColor */
+	if (iconInfo->cbBitsColor > 0)
+	{
+		newBitMask = (BYTE*)realloc(iconInfo->bitsColor, iconInfo->cbBitsColor);
+
+		if (!newBitMask)
+		{
+			free(iconInfo->bitsColor);
+			iconInfo->bitsColor = nullptr;
+			return FALSE;
+		}
+
+		iconInfo->bitsColor = newBitMask;
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, iconInfo->cbBitsColor))
+			return FALSE;
+		Stream_Read(s, iconInfo->bitsColor, iconInfo->cbBitsColor);
+	}
+	else
+	{
+		free(iconInfo->bitsColor);
+		iconInfo->bitsColor = nullptr;
+		iconInfo->cbBitsColor = 0;
+	}
+	return TRUE;
+}
+
+static BOOL update_read_cached_icon_info(wStream* s, CACHED_ICON_INFO* cachedIconInfo)
+{
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 3))
+		return FALSE;
+
+	Stream_Read_UINT16(s, cachedIconInfo->cacheEntry); /* cacheEntry (2 bytes) */
+	Stream_Read_UINT8(s, cachedIconInfo->cacheId);     /* cacheId (1 byte) */
+	return TRUE;
+}
+
+static BOOL update_read_notify_icon_infotip(wStream* s, NOTIFY_ICON_INFOTIP* notifyIconInfoTip)
+{
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+		return FALSE;
+
+	Stream_Read_UINT32(s, notifyIconInfoTip->timeout);              /* timeout (4 bytes) */
+	Stream_Read_UINT32(s, notifyIconInfoTip->flags);                /* infoFlags (4 bytes) */
+	return rail_read_unicode_string(s, &notifyIconInfoTip->text) && /* infoTipText */
+	       rail_read_unicode_string(s, &notifyIconInfoTip->title);  /* title */
+}
+
+static BOOL update_read_window_state_order(wStream* s, WINDOW_ORDER_INFO* orderInfo,
+                                           WINDOW_STATE_ORDER* windowState)
+{
+	size_t size = 0;
+	RECTANGLE_16* newRect = nullptr;
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_OWNER)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 4))
+			return FALSE;
+
+		Stream_Read_UINT32(s, windowState->ownerWindowId); /* ownerWindowId (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_STYLE)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_UINT32(s, windowState->style);         /* style (4 bytes) */
+		Stream_Read_UINT32(s, windowState->extendedStyle); /* extendedStyle (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_SHOW)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
+			return FALSE;
+
+		Stream_Read_UINT8(s, windowState->showState); /* showState (1 byte) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_TITLE)
+	{
+		if (!rail_read_unicode_string(s, &windowState->titleInfo)) /* titleInfo */
+			return FALSE;
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_CLIENT_AREA_OFFSET)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_INT32(s, windowState->clientOffsetX); /* clientOffsetX (4 bytes) */
+		Stream_Read_INT32(s, windowState->clientOffsetY); /* clientOffsetY (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_CLIENT_AREA_SIZE)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_UINT32(s, windowState->clientAreaWidth);  /* clientAreaWidth (4 bytes) */
+		Stream_Read_UINT32(s, windowState->clientAreaHeight); /* clientAreaHeight (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_RESIZE_MARGIN_X)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_UINT32(s, windowState->resizeMarginLeft);
+		Stream_Read_UINT32(s, windowState->resizeMarginRight);
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_RESIZE_MARGIN_Y)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_UINT32(s, windowState->resizeMarginTop);
+		Stream_Read_UINT32(s, windowState->resizeMarginBottom);
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_RP_CONTENT)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
+			return FALSE;
+
+		Stream_Read_UINT8(s, windowState->RPContent); /* RPContent (1 byte) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_ROOT_PARENT)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 4))
+			return FALSE;
+
+		Stream_Read_UINT32(s, windowState->rootParentHandle); /* rootParentHandle (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_WND_OFFSET)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_INT32(s, windowState->windowOffsetX); /* windowOffsetX (4 bytes) */
+		Stream_Read_INT32(s, windowState->windowOffsetY); /* windowOffsetY (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_WND_CLIENT_DELTA)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_INT32(s, windowState->windowClientDeltaX); /* windowClientDeltaX (4 bytes) */
+		Stream_Read_INT32(s, windowState->windowClientDeltaY); /* windowClientDeltaY (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_WND_SIZE)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_UINT32(s, windowState->windowWidth);  /* windowWidth (4 bytes) */
+		Stream_Read_UINT32(s, windowState->windowHeight); /* windowHeight (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_WND_RECTS)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 2))
+			return FALSE;
+
+		Stream_Read_UINT16(s, windowState->numWindowRects); /* numWindowRects (2 bytes) */
+
+		if (windowState->numWindowRects > 0)
+		{
+			size = sizeof(RECTANGLE_16) * windowState->numWindowRects;
+			newRect = (RECTANGLE_16*)realloc(windowState->windowRects, size);
+
+			if (!newRect)
+			{
+				free(windowState->windowRects);
+				windowState->windowRects = nullptr;
+				return FALSE;
+			}
+
+			windowState->windowRects = newRect;
+
+			if (!Stream_CheckAndLogRequiredLengthOfSize(TAG, s, windowState->numWindowRects, 8ull))
+				return FALSE;
+
+			/* windowRects */
+			for (UINT32 i = 0; i < windowState->numWindowRects; i++)
+			{
+				Stream_Read_UINT16(s, windowState->windowRects[i].left);   /* left (2 bytes) */
+				Stream_Read_UINT16(s, windowState->windowRects[i].top);    /* top (2 bytes) */
+				Stream_Read_UINT16(s, windowState->windowRects[i].right);  /* right (2 bytes) */
+				Stream_Read_UINT16(s, windowState->windowRects[i].bottom); /* bottom (2 bytes) */
+			}
+		}
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_VIS_OFFSET)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+			return FALSE;
+
+		Stream_Read_INT32(s, windowState->visibleOffsetX); /* visibleOffsetX (4 bytes) */
+		Stream_Read_INT32(s, windowState->visibleOffsetY); /* visibleOffsetY (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_VISIBILITY)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 2))
+			return FALSE;
+
+		Stream_Read_UINT16(s, windowState->numVisibilityRects); /* numVisibilityRects (2 bytes) */
+
+		if (windowState->numVisibilityRects != 0)
+		{
+			size = sizeof(RECTANGLE_16) * windowState->numVisibilityRects;
+			newRect = (RECTANGLE_16*)realloc(windowState->visibilityRects, size);
+
+			if (!newRect)
+			{
+				free(windowState->visibilityRects);
+				windowState->visibilityRects = nullptr;
+				return FALSE;
+			}
+
+			windowState->visibilityRects = newRect;
+
+			if (!Stream_CheckAndLogRequiredLengthOfSize(TAG, s, windowState->numVisibilityRects,
+			                                            8ull))
+				return FALSE;
+
+			/* visibilityRects */
+			for (UINT32 i = 0; i < windowState->numVisibilityRects; i++)
+			{
+				Stream_Read_UINT16(s, windowState->visibilityRects[i].left);  /* left (2 bytes) */
+				Stream_Read_UINT16(s, windowState->visibilityRects[i].top);   /* top (2 bytes) */
+				Stream_Read_UINT16(s, windowState->visibilityRects[i].right); /* right (2 bytes) */
+				Stream_Read_UINT16(s,
+				                   windowState->visibilityRects[i].bottom); /* bottom (2 bytes) */
+			}
+		}
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_OVERLAY_DESCRIPTION)
+	{
+		if (!rail_read_unicode_string(s, &windowState->OverlayDescription))
+			return FALSE;
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_ICON_OVERLAY_NULL)
+	{
+		/* no data to be read here */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_TASKBAR_BUTTON)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
+			return FALSE;
+
+		Stream_Read_UINT8(s, windowState->TaskbarButton);
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_ENFORCE_SERVER_ZORDER)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
+			return FALSE;
+
+		Stream_Read_UINT8(s, windowState->EnforceServerZOrder);
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_APPBAR_STATE)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
+			return FALSE;
+
+		Stream_Read_UINT8(s, windowState->AppBarState);
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_APPBAR_EDGE)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
+			return FALSE;
+
+		Stream_Read_UINT8(s, windowState->AppBarEdge);
+	}
+
+	return TRUE;
+}
+
+static BOOL update_read_window_icon_order(wStream* s, WINDOW_ORDER_INFO* orderInfo,
+                                          WINDOW_ICON_ORDER* window_icon)
+{
+	WINPR_UNUSED(orderInfo);
+	window_icon->iconInfo = (ICON_INFO*)calloc(1, sizeof(ICON_INFO));
+
+	if (!window_icon->iconInfo)
+		return FALSE;
+
+	return update_read_icon_info(s, window_icon->iconInfo); /* iconInfo (ICON_INFO) */
+}
+
+static BOOL update_read_window_cached_icon_order(wStream* s, WINDOW_ORDER_INFO* orderInfo,
+                                                 WINDOW_CACHED_ICON_ORDER* window_cached_icon)
+{
+	WINPR_UNUSED(orderInfo);
+	return update_read_cached_icon_info(
+	    s, &window_cached_icon->cachedIcon); /* cachedIcon (CACHED_ICON_INFO) */
+}
+
+static void update_read_window_delete_order(WINPR_ATTR_UNUSED wStream* s,
+                                            WINPR_ATTR_UNUSED WINDOW_ORDER_INFO* orderInfo)
+{
+	/* window deletion event */
+}
+
+static BOOL window_order_supported(const rdpSettings* settings, UINT32 fieldFlags)
+{
+	const UINT32 mask = (WINDOW_ORDER_FIELD_CLIENT_AREA_SIZE | WINDOW_ORDER_FIELD_RP_CONTENT |
+	                     WINDOW_ORDER_FIELD_ROOT_PARENT);
+
+	if (!settings)
+		return FALSE;
+
+	/* See [MS-RDPERP] 2.2.1.1.2 Window List Capability Set */
+	const BOOL dresult =
+	    freerdp_settings_get_bool(settings, FreeRDP_AllowUnanouncedOrdersFromServer);
+
+	switch (freerdp_settings_get_uint32(settings, FreeRDP_RemoteWndSupportLevel))
+	{
+		case WINDOW_LEVEL_SUPPORTED_EX:
+			return TRUE;
+
+		case WINDOW_LEVEL_SUPPORTED:
+			return ((fieldFlags & mask) == 0) || dresult;
+
+		case WINDOW_LEVEL_NOT_SUPPORTED:
+			return dresult;
+
+		default:
+			return dresult;
+	}
+}
+
+#define DUMP_APPEND(buffer, size, ...)                  \
+	do                                                  \
+	{                                                   \
+		char* b = (buffer);                             \
+		size_t s = (size);                              \
+		size_t pos = strnlen(b, s);                     \
+		(void)_snprintf(&b[pos], s - pos, __VA_ARGS__); \
+	} while (0)
+
+static void dump_window_style(char* buffer, size_t bufferSize, UINT32 style)
+{
+	DUMP_APPEND(buffer, bufferSize, " style=<0x%" PRIx32 ": ", style);
+	if (style & WS_BORDER)
+		DUMP_APPEND(buffer, bufferSize, " border");
+	if (style & WS_CAPTION)
+		DUMP_APPEND(buffer, bufferSize, " caption");
+	if (style & WS_CHILD)
+		DUMP_APPEND(buffer, bufferSize, " child");
+	if (style & WS_CHILDWINDOW)
+		DUMP_APPEND(buffer, bufferSize, " childwindow");
+	if (style & WS_CLIPCHILDREN)
+		DUMP_APPEND(buffer, bufferSize, " clipchildren");
+	if (style & WS_CLIPSIBLINGS)
+		DUMP_APPEND(buffer, bufferSize, " clipsiblings");
+	if (style & WS_DISABLED)
+		DUMP_APPEND(buffer, bufferSize, " disabled");
+	if (style & WS_DLGFRAME)
+		DUMP_APPEND(buffer, bufferSize, " dlgframe");
+	if (style & WS_GROUP)
+		DUMP_APPEND(buffer, bufferSize, " group");
+	if (style & WS_HSCROLL)
+		DUMP_APPEND(buffer, bufferSize, " hscroll");
+	if (style & WS_ICONIC)
+		DUMP_APPEND(buffer, bufferSize, " iconic");
+	if (style & WS_MAXIMIZE)
+		DUMP_APPEND(buffer, bufferSize, " maximize");
+	if (style & WS_MAXIMIZEBOX)
+		DUMP_APPEND(buffer, bufferSize, " maximizebox");
+	if (style & WS_MINIMIZE)
+		DUMP_APPEND(buffer, bufferSize, " minimize");
+	if (style & WS_MINIMIZEBOX)
+		DUMP_APPEND(buffer, bufferSize, " minimizebox");
+	if (style & WS_POPUP)
+		DUMP_APPEND(buffer, bufferSize, " popup");
+	if (style & WS_SIZEBOX)
+		DUMP_APPEND(buffer, bufferSize, " sizebox");
+	if (style & WS_SYSMENU)
+		DUMP_APPEND(buffer, bufferSize, " sysmenu");
+	if (style & WS_TABSTOP)
+		DUMP_APPEND(buffer, bufferSize, " tabstop");
+	if (style & WS_THICKFRAME)
+		DUMP_APPEND(buffer, bufferSize, " thickframe");
+	if (style & WS_VISIBLE)
+		DUMP_APPEND(buffer, bufferSize, " visible");
+	if (style & WS_VSCROLL)
+		DUMP_APPEND(buffer, bufferSize, " vscroll");
+	DUMP_APPEND(buffer, bufferSize, ">");
+}
+
+static void dump_window_style_ex(char* buffer, size_t bufferSize, UINT32 extendedStyle)
+{
+	DUMP_APPEND(buffer, bufferSize, " styleEx=<0x%" PRIx32 ": ", extendedStyle);
+	if (extendedStyle & WS_EX_ACCEPTFILES)
+		DUMP_APPEND(buffer, bufferSize, " acceptfiles");
+	if (extendedStyle & WS_EX_APPWINDOW)
+		DUMP_APPEND(buffer, bufferSize, " appwindow");
+	if (extendedStyle & WS_EX_CLIENTEDGE)
+		DUMP_APPEND(buffer, bufferSize, " clientedge");
+	if (extendedStyle & WS_EX_COMPOSITED)
+		DUMP_APPEND(buffer, bufferSize, " composited");
+	if (extendedStyle & WS_EX_CONTEXTHELP)
+		DUMP_APPEND(buffer, bufferSize, " contexthelp");
+	if (extendedStyle & WS_EX_CONTROLPARENT)
+		DUMP_APPEND(buffer, bufferSize, " controlparent");
+	if (extendedStyle & WS_EX_DLGMODALFRAME)
+		DUMP_APPEND(buffer, bufferSize, " dlgmodalframe");
+	if (extendedStyle & WS_EX_LAYERED)
+		DUMP_APPEND(buffer, bufferSize, " layered");
+	if (extendedStyle & WS_EX_LAYOUTRTL)
+		DUMP_APPEND(buffer, bufferSize, " layoutrtl");
+	if (extendedStyle & WS_EX_LEFT)
+		DUMP_APPEND(buffer, bufferSize, " left");
+	if (extendedStyle & WS_EX_LEFTSCROLLBAR)
+		DUMP_APPEND(buffer, bufferSize, " leftscrollbar");
+	if (extendedStyle & WS_EX_LTRREADING)
+		DUMP_APPEND(buffer, bufferSize, " ltrreading");
+	if (extendedStyle & WS_EX_MDICHILD)
+		DUMP_APPEND(buffer, bufferSize, " mdichild");
+	if (extendedStyle & WS_EX_NOACTIVATE)
+		DUMP_APPEND(buffer, bufferSize, " noactivate");
+	if (extendedStyle & WS_EX_NOINHERITLAYOUT)
+		DUMP_APPEND(buffer, bufferSize, " noinheritlayout");
+#if defined(WS_EX_NOREDIRECTIONBITMAP)
+	if (extendedStyle & WS_EX_NOREDIRECTIONBITMAP)
+		DUMP_APPEND(buffer, bufferSize, " noredirectionbitmap");
+#endif
+	if (extendedStyle & WS_EX_RIGHT)
+		DUMP_APPEND(buffer, bufferSize, " right");
+	if (extendedStyle & WS_EX_RIGHTSCROLLBAR)
+		DUMP_APPEND(buffer, bufferSize, " rightscrollbar");
+	if (extendedStyle & WS_EX_RTLREADING)
+		DUMP_APPEND(buffer, bufferSize, " rtlreading");
+	if (extendedStyle & WS_EX_STATICEDGE)
+		DUMP_APPEND(buffer, bufferSize, " staticedge");
+	if (extendedStyle & WS_EX_TOOLWINDOW)
+		DUMP_APPEND(buffer, bufferSize, " toolWindow");
+	if (extendedStyle & WS_EX_TOPMOST)
+		DUMP_APPEND(buffer, bufferSize, " topMost");
+	if (extendedStyle & WS_EX_TRANSPARENT)
+		DUMP_APPEND(buffer, bufferSize, " transparent");
+	if (extendedStyle & WS_EX_WINDOWEDGE)
+		DUMP_APPEND(buffer, bufferSize, " windowedge");
+	DUMP_APPEND(buffer, bufferSize, ">");
+}
+
+static void dump_window_state_order(wLog* log, const char* msg, const WINDOW_ORDER_INFO* order,
+                                    const WINDOW_STATE_ORDER* state)
+{
+	char buffer[3000] = WINPR_C_ARRAY_INIT;
+	const size_t bufferSize = sizeof(buffer) - 1;
+
+	(void)_snprintf(buffer, bufferSize, "%s windowId=%" PRIu32 "", msg, order->windowId);
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_OWNER)
+		DUMP_APPEND(buffer, bufferSize, " owner=%" PRIu32 "", state->ownerWindowId);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_STYLE)
+	{
+		dump_window_style(buffer, bufferSize, state->style);
+		dump_window_style_ex(buffer, bufferSize, state->extendedStyle);
+	}
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_SHOW)
+	{
+		const char* showStr = nullptr;
+		switch (state->showState)
+		{
+			case 0:
+				showStr = "hidden";
+				break;
+			case 2:
+				showStr = "minimized";
+				break;
+			case 3:
+				showStr = "maximized";
+				break;
+			case 5:
+				showStr = "show";
+				break;
+			default:
+				showStr = "<unknown>";
+				break;
+		}
+		DUMP_APPEND(buffer, bufferSize, " show=%s", showStr);
+	}
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_TITLE)
+	{
+		char* title = rail_string_to_utf8_string(&state->titleInfo);
+		if (title)
+		{
+			DUMP_APPEND(buffer, bufferSize, " title=\"%s\"", title);
+			free(title);
+		}
+		else
+			DUMP_APPEND(buffer, bufferSize, " title=<decode failed>");
+	}
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_CLIENT_AREA_OFFSET)
+		DUMP_APPEND(buffer, bufferSize, " clientOffset=(%" PRId32 ",%" PRId32 ")",
+		            state->clientOffsetX, state->clientOffsetY);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_CLIENT_AREA_SIZE)
+		DUMP_APPEND(buffer, bufferSize, " clientAreaWidth=%" PRIu32 " clientAreaHeight=%" PRIu32 "",
+		            state->clientAreaWidth, state->clientAreaHeight);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_RESIZE_MARGIN_X)
+		DUMP_APPEND(buffer, bufferSize,
+		            " resizeMarginLeft=%" PRIu32 " resizeMarginRight=%" PRIu32 "",
+		            state->resizeMarginLeft, state->resizeMarginRight);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_RESIZE_MARGIN_Y)
+		DUMP_APPEND(buffer, bufferSize,
+		            " resizeMarginTop=%" PRIu32 " resizeMarginBottom=%" PRIu32 "",
+		            state->resizeMarginTop, state->resizeMarginBottom);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_RP_CONTENT)
+		DUMP_APPEND(buffer, bufferSize, " rpContent=0x%" PRIx32 "", state->RPContent);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_ROOT_PARENT)
+		DUMP_APPEND(buffer, bufferSize, " rootParent=0x%" PRIx32 "", state->rootParentHandle);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_WND_OFFSET)
+		DUMP_APPEND(buffer, bufferSize, " windowOffset=(%" PRId32 ",%" PRId32 ")",
+		            state->windowOffsetX, state->windowOffsetY);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_WND_CLIENT_DELTA)
+		DUMP_APPEND(buffer, bufferSize, " windowClientDelta=(%" PRId32 ",%" PRId32 ")",
+		            state->windowClientDeltaX, state->windowClientDeltaY);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_WND_SIZE)
+		DUMP_APPEND(buffer, bufferSize, " windowWidth=%" PRIu32 " windowHeight=%" PRIu32 "",
+		            state->windowWidth, state->windowHeight);
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_WND_RECTS)
+	{
+		DUMP_APPEND(buffer, bufferSize, " windowRects=(");
+		for (UINT32 i = 0; i < state->numWindowRects; i++)
+		{
+			DUMP_APPEND(buffer, bufferSize, "(%" PRIu16 ",%" PRIu16 ",%" PRIu16 ",%" PRIu16 ")",
+			            state->windowRects[i].left, state->windowRects[i].top,
+			            state->windowRects[i].right, state->windowRects[i].bottom);
+		}
+		DUMP_APPEND(buffer, bufferSize, ")");
+	}
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_VIS_OFFSET)
+		DUMP_APPEND(buffer, bufferSize, " visibleOffset=(%" PRId32 ",%" PRId32 ")",
+		            state->visibleOffsetX, state->visibleOffsetY);
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_VISIBILITY)
+	{
+		DUMP_APPEND(buffer, bufferSize, " visibilityRects=(");
+		for (UINT32 i = 0; i < state->numVisibilityRects; i++)
+		{
+			DUMP_APPEND(buffer, bufferSize, "(%" PRIu16 ",%" PRIu16 ",%" PRIu16 ",%" PRIu16 ")",
+			            state->visibilityRects[i].left, state->visibilityRects[i].top,
+			            state->visibilityRects[i].right, state->visibilityRects[i].bottom);
+		}
+		DUMP_APPEND(buffer, bufferSize, ")");
+	}
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_OVERLAY_DESCRIPTION)
+		DUMP_APPEND(buffer, bufferSize, " overlayDescr");
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_ICON_OVERLAY_NULL)
+		DUMP_APPEND(buffer, bufferSize, " iconOverlayNull");
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_TASKBAR_BUTTON)
+		DUMP_APPEND(buffer, bufferSize, " taskBarButton=0x%" PRIx8 "", state->TaskbarButton);
+
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_ENFORCE_SERVER_ZORDER)
+		DUMP_APPEND(buffer, bufferSize, " enforceServerZOrder=0x%" PRIx8 "",
+		            state->EnforceServerZOrder);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_APPBAR_STATE)
+		DUMP_APPEND(buffer, bufferSize, " appBarState=0x%" PRIx8 "", state->AppBarState);
+	if (order->fieldFlags & WINDOW_ORDER_FIELD_APPBAR_EDGE)
+	{
+		const char* appBarEdgeStr = nullptr;
+		switch (state->AppBarEdge)
+		{
+			case 0:
+				appBarEdgeStr = "left";
+				break;
+			case 1:
+				appBarEdgeStr = "top";
+				break;
+			case 2:
+				appBarEdgeStr = "right";
+				break;
+			case 3:
+				appBarEdgeStr = "bottom";
+				break;
+			default:
+				appBarEdgeStr = "<unknown>";
+				break;
+		}
+		DUMP_APPEND(buffer, bufferSize, " appBarEdge=%s", appBarEdgeStr);
+	}
+
+	WLog_Print(log, WLOG_DEBUG, "%s", buffer);
+}
+
+static BOOL update_recv_window_info_order(rdpUpdate* update, wStream* s,
+                                          WINDOW_ORDER_INFO* orderInfo)
+{
+	rdp_update_internal* up = update_cast(update);
+	rdpContext* context = update->context;
+	rdpWindowUpdate* window = update->window;
+
+	BOOL result = TRUE;
+
+	WINPR_ASSERT(s);
+	WINPR_ASSERT(context);
+	WINPR_ASSERT(window);
+	WINPR_ASSERT(orderInfo);
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 4))
+		return FALSE;
+
+	Stream_Read_UINT32(s, orderInfo->windowId); /* windowId (4 bytes) */
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_ICON)
+	{
+		WINDOW_ICON_ORDER window_icon = WINPR_C_ARRAY_INIT;
+		result = update_read_window_icon_order(s, orderInfo, &window_icon);
+
+		if (result)
+		{
+			WLog_Print(up->log, WLOG_DEBUG, "WindowIcon windowId=0x%" PRIx32 "",
+			           orderInfo->windowId);
+			IFCALLRET(window->WindowIcon, result, context, orderInfo, &window_icon);
+		}
+
+		update_free_window_icon_info(window_icon.iconInfo);
+		free(window_icon.iconInfo);
+	}
+	else if (orderInfo->fieldFlags & WINDOW_ORDER_CACHED_ICON)
+	{
+		WINDOW_CACHED_ICON_ORDER window_cached_icon = WINPR_C_ARRAY_INIT;
+		result = update_read_window_cached_icon_order(s, orderInfo, &window_cached_icon);
+
+		if (result)
+		{
+			WLog_Print(up->log, WLOG_DEBUG, "WindowCachedIcon windowId=0x%" PRIx32 "",
+			           orderInfo->windowId);
+			IFCALLRET(window->WindowCachedIcon, result, context, orderInfo, &window_cached_icon);
+		}
+	}
+	else if (orderInfo->fieldFlags & WINDOW_ORDER_STATE_DELETED)
+	{
+		update_read_window_delete_order(s, orderInfo);
+		WLog_Print(up->log, WLOG_DEBUG, "WindowDelete windowId=0x%" PRIx32 "", orderInfo->windowId);
+		IFCALLRET(window->WindowDelete, result, context, orderInfo);
+	}
+	else
+	{
+		WINDOW_STATE_ORDER windowState = WINPR_C_ARRAY_INIT;
+		result = update_read_window_state_order(s, orderInfo, &windowState);
+
+		if (result)
+		{
+			if (orderInfo->fieldFlags & WINDOW_ORDER_STATE_NEW)
+			{
+				dump_window_state_order(up->log, "WindowCreate", orderInfo, &windowState);
+				IFCALLRET(window->WindowCreate, result, context, orderInfo, &windowState);
+			}
+			else
+			{
+				dump_window_state_order(up->log, "WindowUpdate", orderInfo, &windowState);
+				IFCALLRET(window->WindowUpdate, result, context, orderInfo, &windowState);
+			}
+
+			update_free_window_state(&windowState);
+		}
+	}
+
+	return result;
+}
+
+static void update_notify_icon_state_order_free(NOTIFY_ICON_STATE_ORDER* notify)
+{
+	WINPR_ASSERT(notify);
+	rail_unicode_string_free(&notify->toolTip);
+	rail_unicode_string_free(&notify->infoTip.text);
+	rail_unicode_string_free(&notify->infoTip.title);
+	update_free_window_icon_info(&notify->icon);
+	memset(notify, 0, sizeof(NOTIFY_ICON_STATE_ORDER));
+}
+
+static BOOL update_read_notification_icon_state_order(wStream* s, WINDOW_ORDER_INFO* orderInfo,
+                                                      NOTIFY_ICON_STATE_ORDER* notify_icon_state)
+{
+	WINPR_ASSERT(orderInfo);
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_NOTIFY_VERSION)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 4))
+			return FALSE;
+
+		Stream_Read_UINT32(s, notify_icon_state->version); /* version (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_NOTIFY_TIP)
+	{
+		if (!rail_read_unicode_string(s,
+		                              &notify_icon_state->toolTip)) /* toolTip (UNICODE_STRING) */
+			return FALSE;
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_NOTIFY_INFO_TIP)
+	{
+		if (!update_read_notify_icon_infotip(
+		        s, &notify_icon_state->infoTip)) /* infoTip (NOTIFY_ICON_INFOTIP) */
+			return FALSE;
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_NOTIFY_STATE)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 4))
+			return FALSE;
+
+		Stream_Read_UINT32(s, notify_icon_state->state); /* state (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_ICON)
+	{
+		if (!update_read_icon_info(s, &notify_icon_state->icon)) /* icon (ICON_INFO) */
+			return FALSE;
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_CACHED_ICON)
+	{
+		if (!update_read_cached_icon_info(
+		        s, &notify_icon_state->cachedIcon)) /* cachedIcon (CACHED_ICON_INFO) */
+			return FALSE;
+	}
+
+	return TRUE;
+}
+
+static void
+update_read_notification_icon_delete_order(WINPR_ATTR_UNUSED wStream* s,
+                                           WINPR_ATTR_UNUSED WINDOW_ORDER_INFO* orderInfo)
+{
+	/* notification icon deletion event */
+}
+
+static BOOL update_recv_notification_icon_info_order(rdpUpdate* update, wStream* s,
+                                                     WINDOW_ORDER_INFO* orderInfo)
+{
+	rdp_update_internal* up = update_cast(update);
+	rdpContext* context = update->context;
+	rdpWindowUpdate* window = update->window;
+	BOOL result = TRUE;
+
+	WINPR_ASSERT(s);
+	WINPR_ASSERT(orderInfo);
+	WINPR_ASSERT(context);
+	WINPR_ASSERT(window);
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 8))
+		return FALSE;
+
+	Stream_Read_UINT32(s, orderInfo->windowId);     /* windowId (4 bytes) */
+	Stream_Read_UINT32(s, orderInfo->notifyIconId); /* notifyIconId (4 bytes) */
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_STATE_DELETED)
+	{
+		update_read_notification_icon_delete_order(s, orderInfo);
+		WLog_Print(up->log, WLOG_DEBUG, "NotifyIconDelete");
+		IFCALLRET(window->NotifyIconDelete, result, context, orderInfo);
+	}
+	else
+	{
+		NOTIFY_ICON_STATE_ORDER notify_icon_state = WINPR_C_ARRAY_INIT;
+		result = update_read_notification_icon_state_order(s, orderInfo, &notify_icon_state);
+
+		if (!result)
+			goto fail;
+
+		if (orderInfo->fieldFlags & WINDOW_ORDER_STATE_NEW)
+		{
+			WLog_Print(up->log, WLOG_DEBUG, "NotifyIconCreate");
+			IFCALLRET(window->NotifyIconCreate, result, context, orderInfo, &notify_icon_state);
+		}
+		else
+		{
+			WLog_Print(up->log, WLOG_DEBUG, "NotifyIconUpdate");
+			IFCALLRET(window->NotifyIconUpdate, result, context, orderInfo, &notify_icon_state);
+		}
+	fail:
+		update_notify_icon_state_order_free(&notify_icon_state);
+	}
+
+	return result;
+}
+
+static BOOL update_read_desktop_actively_monitored_order(wStream* s,
+                                                         const WINDOW_ORDER_INFO* orderInfo,
+                                                         MONITORED_DESKTOP_ORDER* monitored_desktop)
+{
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_DESKTOP_ACTIVE_WND)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 4))
+			return FALSE;
+
+		Stream_Read_UINT32(s, monitored_desktop->activeWindowId); /* activeWindowId (4 bytes) */
+	}
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_DESKTOP_ZORDER)
+	{
+		if (!Stream_CheckAndLogRequiredLength(TAG, s, 1))
+			return FALSE;
+
+		Stream_Read_UINT8(s, monitored_desktop->numWindowIds); /* numWindowIds (1 byte) */
+
+		if (!Stream_CheckAndLogRequiredLengthOfSize(TAG, s, monitored_desktop->numWindowIds, 4ull))
+		{
+			monitored_desktop->numWindowIds = 0;
+			return FALSE;
+		}
+
+		if (monitored_desktop->numWindowIds > 0)
+		{
+			const size_t size = sizeof(UINT32) * monitored_desktop->numWindowIds;
+			UINT32* newid = (UINT32*)realloc(monitored_desktop->windowIds, size);
+
+			if (!newid)
+			{
+				free(monitored_desktop->windowIds);
+				monitored_desktop->windowIds = nullptr;
+				monitored_desktop->numWindowIds = 0;
+				return FALSE;
+			}
+
+			monitored_desktop->windowIds = newid;
+
+			/* windowIds */
+			for (UINT32 i = 0; i < monitored_desktop->numWindowIds; i++)
+			{
+				Stream_Read_UINT32(s, monitored_desktop->windowIds[i]);
+			}
+		}
+		else
+		{
+			free(monitored_desktop->windowIds);
+			monitored_desktop->windowIds = nullptr;
+		}
+	}
+
+	return TRUE;
+}
+
+static void update_read_desktop_non_monitored_order(WINPR_ATTR_UNUSED wStream* s,
+                                                    WINPR_ATTR_UNUSED WINDOW_ORDER_INFO* orderInfo)
+{
+	/* non-monitored desktop notification event */
+}
+
+static void dump_monitored_desktop(wLog* log, const char* msg, const WINDOW_ORDER_INFO* orderInfo,
+                                   const MONITORED_DESKTOP_ORDER* monitored)
+{
+	char buffer[1000] = WINPR_C_ARRAY_INIT;
+	const size_t bufferSize = sizeof(buffer) - 1;
+
+	DUMP_APPEND(buffer, bufferSize, "%s", msg);
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_DESKTOP_ACTIVE_WND)
+		DUMP_APPEND(buffer, bufferSize, " activeWindowId=0x%" PRIx32 "", monitored->activeWindowId);
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_DESKTOP_ZORDER)
+	{
+		DUMP_APPEND(buffer, bufferSize, " windows=(");
+		for (UINT32 i = 0; i < monitored->numWindowIds; i++)
+		{
+			WINPR_ASSERT(monitored->windowIds);
+			DUMP_APPEND(buffer, bufferSize, "0x%" PRIx32 ",", monitored->windowIds[i]);
+		}
+		DUMP_APPEND(buffer, bufferSize, ")");
+	}
+	WLog_Print(log, WLOG_DEBUG, "%s", buffer);
+}
+
+static BOOL update_recv_desktop_info_order(rdpUpdate* update, wStream* s,
+                                           WINDOW_ORDER_INFO* orderInfo)
+{
+	rdp_update_internal* up = update_cast(update);
+	rdpContext* context = update->context;
+	rdpWindowUpdate* window = update->window;
+	BOOL result = TRUE;
+
+	WINPR_ASSERT(s);
+	WINPR_ASSERT(orderInfo);
+	WINPR_ASSERT(context);
+	WINPR_ASSERT(window);
+
+	if (orderInfo->fieldFlags & WINDOW_ORDER_FIELD_DESKTOP_NONE)
+	{
+		update_read_desktop_non_monitored_order(s, orderInfo);
+		WLog_Print(up->log, WLOG_DEBUG, "NonMonitoredDesktop, windowId=0x%" PRIx32 "",
+		           orderInfo->windowId);
+		IFCALLRET(window->NonMonitoredDesktop, result, context, orderInfo);
+	}
+	else
+	{
+		MONITORED_DESKTOP_ORDER monitored_desktop = WINPR_C_ARRAY_INIT;
+		result = update_read_desktop_actively_monitored_order(s, orderInfo, &monitored_desktop);
+
+		if (result)
+		{
+			dump_monitored_desktop(up->log, "ActivelyMonitoredDesktop", orderInfo,
+			                       &monitored_desktop);
+			IFCALLRET(window->MonitoredDesktop, result, context, orderInfo, &monitored_desktop);
+		}
+
+		free(monitored_desktop.windowIds);
+	}
+
+	return result;
+}
+
+void update_free_window_icon_info(ICON_INFO* iconInfo)
+{
+	if (!iconInfo)
+		return;
+
+	free(iconInfo->bitsColor);
+	iconInfo->bitsColor = nullptr;
+	free(iconInfo->bitsMask);
+	iconInfo->bitsMask = nullptr;
+	free(iconInfo->colorTable);
+	iconInfo->colorTable = nullptr;
+}
+
+BOOL update_recv_altsec_window_order(rdpUpdate* update, wStream* s)
+{
+	BOOL rc = TRUE;
+	size_t remaining = 0;
+	UINT16 orderSize = 0;
+	WINDOW_ORDER_INFO orderInfo = WINPR_C_ARRAY_INIT;
+	rdp_update_internal* up = update_cast(update);
+
+	remaining = Stream_GetRemainingLength(s);
+
+	if (!Stream_CheckAndLogRequiredLength(TAG, s, 6))
+		return FALSE;
+
+	Stream_Read_UINT16(s, orderSize);            /* orderSize (2 bytes) */
+	Stream_Read_UINT32(s, orderInfo.fieldFlags); /* FieldsPresentFlags (4 bytes) */
+
+	if (remaining + 1 < orderSize)
+	{
+		WLog_Print(up->log, WLOG_ERROR, "Stream short orderSize");
+		return FALSE;
+	}
+
+	if (!window_order_supported(update->context->settings, orderInfo.fieldFlags))
+	{
+		WLog_INFO(TAG, "Window order %08" PRIx32 " not supported!", orderInfo.fieldFlags);
+		return FALSE;
+	}
+
+	if (orderInfo.fieldFlags & WINDOW_ORDER_TYPE_WINDOW)
+		rc = update_recv_window_info_order(update, s, &orderInfo);
+	else if (orderInfo.fieldFlags & WINDOW_ORDER_TYPE_NOTIFY)
+		rc = update_recv_notification_icon_info_order(update, s, &orderInfo);
+	else if (orderInfo.fieldFlags & WINDOW_ORDER_TYPE_DESKTOP)
+		rc = update_recv_desktop_info_order(update, s, &orderInfo);
+
+	if (!rc)
+		WLog_Print(up->log, WLOG_ERROR, "windoworder flags %08" PRIx32 " failed",
+		           orderInfo.fieldFlags);
+
+	return rc;
+}

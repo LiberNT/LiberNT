@@ -1,0 +1,272 @@
+/**
+ * WinPR: Windows Portable Runtime
+ * WinPR Logger
+ *
+ * Copyright 2013 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <winpr/config.h>
+
+#include "FileAppender.h"
+#include "Message.h"
+
+#include <winpr/crt.h>
+#include <winpr/environment.h>
+#include <winpr/file.h>
+#include <winpr/path.h>
+
+typedef struct
+{
+	wLogAppender common;
+
+	char* FileName;
+	char* FilePath;
+	char* FullFileName;
+	FILE* FileDescriptor;
+} wLogFileAppender;
+
+static BOOL WLog_FileAppender_SetOutputFileName(wLogFileAppender* appender, const char* filename)
+{
+	WINPR_ASSERT(appender);
+	WINPR_ASSERT(filename);
+
+	appender->FileName = _strdup(filename);
+
+	return appender->FileName != nullptr;
+}
+
+static BOOL WLog_FileAppender_SetOutputFilePath(wLogFileAppender* appender, const char* filepath)
+{
+	appender->FilePath = _strdup(filepath);
+
+	return appender->FilePath != nullptr;
+}
+
+static BOOL WLog_FileAppender_Open(wLog* log, wLogAppender* appender)
+{
+	wLogFileAppender* fileAppender = nullptr;
+
+	if (!log || !appender)
+		return FALSE;
+
+	fileAppender = (wLogFileAppender*)appender;
+
+	if (!fileAppender->FilePath)
+	{
+		fileAppender->FilePath = GetKnownSubPath(KNOWN_PATH_TEMP, "wlog");
+
+		if (!fileAppender->FilePath)
+			return FALSE;
+	}
+
+	if (!fileAppender->FileName)
+	{
+		fileAppender->FileName = (char*)malloc(MAX_PATH);
+
+		if (!fileAppender->FileName)
+			return FALSE;
+
+		(void)sprintf_s(fileAppender->FileName, MAX_PATH, "%" PRIu32 ".log", GetCurrentProcessId());
+	}
+
+	if (!fileAppender->FullFileName)
+	{
+		fileAppender->FullFileName =
+		    GetCombinedPath(fileAppender->FilePath, fileAppender->FileName);
+
+		if (!fileAppender->FullFileName)
+			return FALSE;
+	}
+
+	if (!winpr_PathFileExists(fileAppender->FilePath))
+	{
+		if (!winpr_PathMakePath(fileAppender->FilePath, nullptr))
+			return FALSE;
+
+		UnixChangeFileMode(fileAppender->FilePath, 0xFFFF);
+	}
+
+	fileAppender->FileDescriptor = winpr_fopen(fileAppender->FullFileName, "a+");
+
+	return fileAppender->FileDescriptor != nullptr;
+}
+
+static BOOL WLog_FileAppender_Close(wLog* log, wLogAppender* appender)
+{
+	wLogFileAppender* fileAppender = nullptr;
+
+	if (!log || !appender)
+		return FALSE;
+
+	fileAppender = (wLogFileAppender*)appender;
+
+	if (!fileAppender->FileDescriptor)
+		return TRUE;
+
+	(void)fclose(fileAppender->FileDescriptor);
+	fileAppender->FileDescriptor = nullptr;
+	return TRUE;
+}
+
+static BOOL WLog_FileAppender_WriteMessage(wLog* log, wLogAppender* appender,
+                                           const wLogMessage* cmessage)
+{
+	if (!log || !appender || !cmessage)
+		return FALSE;
+
+	wLogFileAppender* fileAppender = (wLogFileAppender*)appender;
+	FILE* fp = fileAppender->FileDescriptor;
+
+	if (!fp)
+		return FALSE;
+
+	char prefix[WLOG_MAX_PREFIX_SIZE] = WINPR_C_ARRAY_INIT;
+	WLog_Layout_GetMessagePrefix(log, appender->Layout, cmessage, prefix, sizeof(prefix));
+	(void)fprintf(fp, "%s%s\n", prefix, cmessage->TextString);
+	(void)fflush(fp); /* slow! */
+	return TRUE;
+}
+
+static int g_DataId = 0;
+
+static BOOL WLog_FileAppender_WriteDataMessage(wLog* log, wLogAppender* appender,
+                                               const wLogMessage* message)
+{
+	if (!log || !appender || !message)
+		return FALSE;
+
+	const int DataId = g_DataId++;
+	char* FullFileName = WLog_Message_GetOutputFileName(DataId, "dat");
+	WLog_DataMessage_Write(FullFileName, message->Data, message->Length);
+	free(FullFileName);
+	return TRUE;
+}
+
+static int g_ImageId = 0;
+
+static BOOL WLog_FileAppender_WriteImageMessage(wLog* log, wLogAppender* appender,
+                                                const wLogMessage* message)
+{
+	if (!log || !appender || !message)
+		return FALSE;
+
+	const int ImageId = g_ImageId++;
+	char* FullFileName = WLog_Message_GetOutputFileName(ImageId, "bmp");
+	WLog_ImageMessage_Write(FullFileName, message->ImageData, message->ImageWidth,
+	                        message->ImageHeight, message->ImageBpp);
+	free(FullFileName);
+	return TRUE;
+}
+
+static BOOL WLog_FileAppender_Set(wLogAppender* appender, const char* setting, void* value)
+{
+	wLogFileAppender* fileAppender = (wLogFileAppender*)appender;
+
+	/* Just check the value string is not empty */
+	if (!value || (strnlen(value, 2) == 0))
+		return FALSE;
+
+	if (!strcmp("outputfilename", setting))
+		return WLog_FileAppender_SetOutputFileName(fileAppender, (const char*)value);
+
+	if (!strcmp("outputfilepath", setting))
+		return WLog_FileAppender_SetOutputFilePath(fileAppender, (const char*)value);
+
+	return FALSE;
+}
+
+static void WLog_FileAppender_Free(wLogAppender* appender)
+{
+	wLogFileAppender* fileAppender = nullptr;
+
+	if (appender)
+	{
+		fileAppender = (wLogFileAppender*)appender;
+		free(fileAppender->FileName);
+		free(fileAppender->FilePath);
+		free(fileAppender->FullFileName);
+		free(fileAppender);
+	}
+}
+
+wLogAppender* WLog_FileAppender_New(WINPR_ATTR_UNUSED wLog* log)
+{
+	LPSTR env = nullptr;
+	LPCSTR name = nullptr;
+	DWORD nSize = 0;
+	wLogFileAppender* FileAppender = nullptr;
+	FileAppender = (wLogFileAppender*)calloc(1, sizeof(wLogFileAppender));
+
+	if (!FileAppender)
+		return nullptr;
+
+	FileAppender->common.Type = WLOG_APPENDER_FILE;
+	FileAppender->common.Open = WLog_FileAppender_Open;
+	FileAppender->common.Close = WLog_FileAppender_Close;
+	FileAppender->common.WriteMessage = WLog_FileAppender_WriteMessage;
+	FileAppender->common.WriteDataMessage = WLog_FileAppender_WriteDataMessage;
+	FileAppender->common.WriteImageMessage = WLog_FileAppender_WriteImageMessage;
+	FileAppender->common.Free = WLog_FileAppender_Free;
+	FileAppender->common.Set = WLog_FileAppender_Set;
+	name = "WLOG_FILEAPPENDER_OUTPUT_FILE_PATH";
+	nSize = GetEnvironmentVariableA(name, nullptr, 0);
+
+	if (nSize)
+	{
+		BOOL status = 0;
+		env = (LPSTR)malloc(nSize);
+
+		if (!env)
+			goto error_free;
+
+		if (GetEnvironmentVariableA(name, env, nSize) != nSize - 1)
+		{
+			free(env);
+			goto error_free;
+		}
+
+		status = WLog_FileAppender_SetOutputFilePath(FileAppender, env);
+		free(env);
+
+		if (!status)
+			goto error_free;
+	}
+
+	name = "WLOG_FILEAPPENDER_OUTPUT_FILE_NAME";
+	nSize = GetEnvironmentVariableA(name, nullptr, 0);
+
+	if (nSize)
+	{
+		BOOL status = FALSE;
+		env = (LPSTR)malloc(nSize);
+
+		if (!env)
+			goto error_output_file_name;
+
+		if (GetEnvironmentVariableA(name, env, nSize) == nSize - 1)
+			status = WLog_FileAppender_SetOutputFileName(FileAppender, env);
+		free(env);
+
+		if (!status)
+			goto error_output_file_name;
+	}
+
+	return (wLogAppender*)FileAppender;
+error_output_file_name:
+	free(FileAppender->FilePath);
+error_free:
+	free(FileAppender);
+	return nullptr;
+}

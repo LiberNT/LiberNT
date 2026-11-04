@@ -1,0 +1,305 @@
+/**
+ * FreeRDP: A Remote Desktop Protocol Implementation
+ * GDI Shape Functions
+ *
+ * Copyright 2010-2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ * Copyright 2016 Armin Novak <armin.novak@thincast.com>
+ * Copyright 2016 Thincast Technologies GmbH
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <freerdp/config.h>
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include <freerdp/freerdp.h>
+#include <freerdp/gdi/gdi.h>
+
+#include <freerdp/gdi/bitmap.h>
+#include <freerdp/gdi/region.h>
+#include <freerdp/gdi/shape.h>
+
+#include <freerdp/log.h>
+
+#include "clipping.h"
+#include "../gdi/gdi.h"
+
+#define TAG FREERDP_TAG("gdi.shape")
+
+WINPR_ATTR_NODISCARD
+static BOOL Ellipse_Bresenham(HGDI_DC hdc, int x1, int y1, int x2, int y2)
+{
+	INT32 a = (x1 < x2) ? x2 - x1 : x1 - x2;
+	const INT32 b = (y1 < y2) ? y2 - y1 : y1 - y2;
+	INT32 c = b & 1;
+	INT32 dx = 4 * (1 - a) * b * b;
+	INT32 dy = 4 * (c + 1) * a * a;
+	INT32 e = dx + dy + c * a * a;
+
+	if (x1 > x2)
+	{
+		x1 = x2;
+		x2 += a;
+	}
+
+	if (y1 > y2)
+		y1 = y2;
+
+	y1 += (b + 1) / 2;
+	y2 = y1 - c;
+	a *= 8 * a;
+	c = 8 * b * b;
+
+	do
+	{
+		gdi_SetPixel(hdc, WINPR_ASSERTING_INT_CAST(UINT32, x2),
+		             WINPR_ASSERTING_INT_CAST(UINT32, y1), 0);
+		gdi_SetPixel(hdc, WINPR_ASSERTING_INT_CAST(UINT32, x1),
+		             WINPR_ASSERTING_INT_CAST(UINT32, y1), 0);
+		gdi_SetPixel(hdc, WINPR_ASSERTING_INT_CAST(UINT32, x1),
+		             WINPR_ASSERTING_INT_CAST(UINT32, y2), 0);
+		gdi_SetPixel(hdc, WINPR_ASSERTING_INT_CAST(UINT32, x2),
+		             WINPR_ASSERTING_INT_CAST(UINT32, y2), 0);
+
+		const INT32 e2 = 2 * e;
+
+		if (e2 >= dx)
+		{
+			x1++;
+			x2--;
+			e += dx += c;
+		}
+
+		if (e2 <= dy)
+		{
+			y1++;
+			y2--;
+			e += dy += a;
+		}
+	} while (x1 <= x2);
+
+	while (y1 - y2 < b)
+	{
+		y1++;
+		y2--;
+
+		gdi_SetPixel(hdc, WINPR_ASSERTING_INT_CAST(uint32_t, x1 - 1),
+		             WINPR_ASSERTING_INT_CAST(uint32_t, y1), 0);
+		gdi_SetPixel(hdc, WINPR_ASSERTING_INT_CAST(uint32_t, x1 - 1),
+		             WINPR_ASSERTING_INT_CAST(uint32_t, y2), 0);
+	}
+	return TRUE;
+}
+
+/**
+ * Draw an ellipse
+ * msdn{dd162510}
+ *
+ * @param hdc device context
+ * @param nLeftRect x1
+ * @param nTopRect y1
+ * @param nRightRect x2
+ * @param nBottomRect y2
+ *
+ * @return nonzero if successful, 0 otherwise
+ */
+BOOL gdi_Ellipse(HGDI_DC hdc, int nLeftRect, int nTopRect, int nRightRect, int nBottomRect)
+{
+	return Ellipse_Bresenham(hdc, nLeftRect, nTopRect, nRightRect, nBottomRect);
+}
+
+/**
+ * Fill a rectangle with the given brush.
+ * msdn{dd162719}
+ *
+ * @param hdc device context
+ * @param rect rectangle
+ * @param hbr brush
+ *
+ * @return nonzero if successful, 0 otherwise
+ */
+
+BOOL gdi_FillRect(HGDI_DC hdc, const GDI_RECT* rect, HGDI_BRUSH hbr)
+{
+	INT32 nXDest = 0;
+	INT32 nYDest = 0;
+	INT32 nWidth = 0;
+	INT32 nHeight = 0;
+
+	if (!gdi_RectToCRgn(rect, &nXDest, &nYDest, &nWidth, &nHeight))
+		return FALSE;
+
+	if (!hdc || !hbr)
+		return FALSE;
+
+	if (!gdi_ClipCoords(hdc, &nXDest, &nYDest, &nWidth, &nHeight, nullptr, nullptr))
+		return TRUE;
+
+	switch (hbr->style)
+	{
+		case GDI_BS_SOLID:
+		{
+			const UINT32 color = hbr->color;
+
+			for (INT32 x = 0; x < nWidth; x++)
+			{
+				BYTE* dstp = gdi_get_bitmap_pointer(hdc, nXDest + x, nYDest);
+
+				if (dstp)
+					FreeRDPWriteColor(dstp, hdc->format, color);
+			}
+
+			const BYTE* srcp = gdi_get_bitmap_pointer(hdc, nXDest, nYDest);
+			if (!srcp)
+				return FALSE;
+			const UINT32 formatSize = FreeRDPGetBytesPerPixel(hdc->format);
+			if (formatSize == 0)
+				return FALSE;
+
+			for (INT32 y = 1; y < nHeight; y++)
+			{
+				BYTE* dstp = gdi_get_bitmap_pointer(hdc, nXDest, nYDest + y);
+				if (!dstp)
+					return FALSE;
+				memcpy(dstp, srcp, 1ull * WINPR_ASSERTING_INT_CAST(size_t, nWidth) * formatSize);
+			}
+		}
+		break;
+
+		case GDI_BS_HATCHED:
+		case GDI_BS_PATTERN:
+		{
+			const BOOL monochrome = (hbr->pattern->format == PIXEL_FORMAT_MONO);
+			const UINT32 formatSize = FreeRDPGetBytesPerPixel(hbr->pattern->format);
+			if (formatSize == 0)
+				return FALSE;
+			if (hbr->pattern->width <= 0)
+				return FALSE;
+			if (hbr->pattern->height <= 0)
+				return FALSE;
+
+			for (INT32 y = 0; y < nHeight; y++)
+			{
+				for (INT32 x = 0; x < nWidth; x++)
+				{
+					const size_t yOffset =
+					    ((1ULL * WINPR_ASSERTING_INT_CAST(size_t, nYDest) +
+					      WINPR_ASSERTING_INT_CAST(size_t, y)) *
+					     WINPR_ASSERTING_INT_CAST(size_t, hbr->pattern->width) %
+					     WINPR_ASSERTING_INT_CAST(size_t, hbr->pattern->height)) *
+					    formatSize;
+					const size_t xOffset = ((1ULL * WINPR_ASSERTING_INT_CAST(size_t, nXDest) +
+					                         WINPR_ASSERTING_INT_CAST(size_t, x)) %
+					                        WINPR_ASSERTING_INT_CAST(size_t, hbr->pattern->width)) *
+					                       formatSize;
+					const BYTE* patp = &hbr->pattern->data[yOffset + xOffset];
+
+					UINT32 dstColor = 0;
+					if (monochrome)
+					{
+						if (*patp == 0)
+							dstColor = hdc->bkColor;
+						else
+							dstColor = hdc->textColor;
+					}
+					else
+					{
+						const UINT32 tmp = FreeRDPReadColor(patp, hbr->pattern->format);
+						dstColor =
+						    FreeRDPConvertColor(tmp, hbr->pattern->format, hdc->format, nullptr);
+					}
+
+					BYTE* dstp = gdi_get_bitmap_pointer(hdc, nXDest + x, nYDest + y);
+					if (dstp)
+						FreeRDPWriteColor(dstp, hdc->format, dstColor);
+				}
+			}
+		}
+		break;
+
+		default:
+			break;
+	}
+
+	return gdi_InvalidateRegion(hdc, nXDest, nYDest, nWidth, nHeight);
+}
+
+/**
+ * Draw a polygon
+ * msdn{dd162814}
+ * @param hdc device context
+ * @param lpPoints array of points
+ * @param nCount number of points
+ * @return nonzero if successful, 0 otherwise
+ */
+BOOL gdi_Polygon(WINPR_ATTR_UNUSED HGDI_DC hdc, WINPR_ATTR_UNUSED GDI_POINT* lpPoints,
+                 WINPR_ATTR_UNUSED int nCount)
+{
+	WLog_ERR(TAG, "Not implemented!");
+	return FALSE;
+}
+
+/**
+ * Draw a series of closed polygons
+ * msdn{dd162818}
+ * @param hdc device context
+ * @param lpPoints array of series of points
+ * @param lpPolyCounts array of number of points in each series
+ * @param nCount count of number of points in lpPolyCounts
+ * @return nonzero if successful, 0 otherwise
+ */
+BOOL gdi_PolyPolygon(WINPR_ATTR_UNUSED HGDI_DC hdc, WINPR_ATTR_UNUSED GDI_POINT* lpPoints,
+                     WINPR_ATTR_UNUSED int* lpPolyCounts, WINPR_ATTR_UNUSED int nCount)
+{
+	WLog_ERR(TAG, "Not implemented!");
+	return FALSE;
+}
+
+BOOL gdi_Rectangle(HGDI_DC hdc, INT32 nXDst, INT32 nYDst, INT32 nWidth, INT32 nHeight)
+{
+	UINT32 color = 0;
+
+	if (!gdi_ClipCoords(hdc, &nXDst, &nYDst, &nWidth, &nHeight, nullptr, nullptr))
+		return TRUE;
+
+	color = hdc->textColor;
+
+	for (INT32 y = 0; y < nHeight; y++)
+	{
+		BYTE* dstLeft = gdi_get_bitmap_pointer(hdc, nXDst, nYDst + y);
+		BYTE* dstRight = gdi_get_bitmap_pointer(hdc, nXDst + nWidth - 1, nYDst + y);
+
+		if (dstLeft)
+			FreeRDPWriteColor(dstLeft, hdc->format, color);
+
+		if (dstRight)
+			FreeRDPWriteColor(dstRight, hdc->format, color);
+	}
+
+	for (INT32 x = 0; x < nWidth; x++)
+	{
+		BYTE* dstTop = gdi_get_bitmap_pointer(hdc, nXDst + x, nYDst);
+		BYTE* dstBottom = gdi_get_bitmap_pointer(hdc, nXDst + x, nYDst + nHeight - 1);
+
+		if (dstTop)
+			FreeRDPWriteColor(dstTop, hdc->format, color);
+
+		if (dstBottom)
+			FreeRDPWriteColor(dstBottom, hdc->format, color);
+	}
+
+	return FALSE;
+}

@@ -1,0 +1,101 @@
+
+/*
+#define DEFINE_UNICODE		FALSE
+#define CUR_PATH_SEPARATOR_CHR	'\\'
+#define PATH_CCH_ADD_EXTENSION	PathCchAddExtensionA
+*/
+
+#if DEFINE_UNICODE
+
+HRESULT PATH_CCH_ADD_EXTENSION(PWSTR pszPath, size_t cchPath, PCWSTR pszExt)
+{
+	LPWSTR pDot;
+	BOOL bExtDot;
+	LPWSTR pBackslash;
+	size_t pszExtLength;
+	size_t pszPathLength;
+
+	if (!pszPath)
+		return E_INVALIDARG;
+
+	if (!pszExt)
+		return E_INVALIDARG;
+
+	pszExtLength = _wcslen(pszExt);
+	pszPathLength = _wcslen(pszPath);
+	bExtDot = (pszExt[0] == '.') ? TRUE : FALSE;
+
+	pDot = winpr_wcsnrchr(pszPath, pszPathLength, '.');
+	pBackslash = winpr_wcsnrchr(pszPath, pszPathLength, CUR_PATH_SEPARATOR_CHR);
+
+	if (pDot && pBackslash)
+	{
+		if (pDot > pBackslash)
+			return S_FALSE;
+	}
+
+	if (cchPath > pszPathLength + pszExtLength + ((bExtDot) ? 0 : 1))
+	{
+		const WCHAR dot[] = { '.', '\0' };
+		WCHAR* ptr = &pszPath[pszPathLength];
+		*ptr = '\0';
+
+		if (!bExtDot)
+			_wcsncat(ptr, dot, _wcslen(dot));
+		_wcsncat(ptr, pszExt, pszExtLength);
+
+		return S_OK;
+	}
+
+	return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+}
+
+#else
+
+HRESULT PATH_CCH_ADD_EXTENSION(PSTR pszPath, size_t cchPath, PCSTR pszExt)
+{
+	if (!pszPath)
+		return E_INVALIDARG;
+
+	if (!pszExt)
+		return E_INVALIDARG;
+
+	const size_t pszExtLength = strlen(pszExt);
+	const size_t pszPathLength = strlen(pszPath);
+	const BOOL bExtDot = (pszExt[0] == '.') ? TRUE : FALSE;
+
+	const char* pDot = strrchr(pszPath, '.');
+	const char* pBackslash = strrchr(pszPath, CUR_PATH_SEPARATOR_CHR);
+
+	if (pDot && pBackslash)
+	{
+		if (pDot > pBackslash)
+			return S_FALSE;
+	}
+
+	if (cchPath > pszPathLength + pszExtLength + ((bExtDot) ? 0 : 1))
+	{
+		if (bExtDot)
+		{
+			if (sprintf_s(&pszPath[pszPathLength], cchPath - pszPathLength, "%s", pszExt) < 0)
+				return S_FALSE;
+		}
+		else
+		{
+			if (sprintf_s(&pszPath[pszPathLength], cchPath - pszPathLength, ".%s", pszExt) < 0)
+				return S_FALSE;
+		}
+
+		return S_OK;
+	}
+
+	return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+}
+
+#endif
+
+/*
+#undef DEFINE_UNICODE
+#undef CUR_PATH_SEPARATOR_CHR
+#undef PATH_CCH_ADD_EXTENSION
+*/
