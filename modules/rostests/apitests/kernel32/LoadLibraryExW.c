@@ -39,8 +39,9 @@ VOID _TestVesion(HANDLE dll, DWORD ExpectedVersion, int line)
 
 VOID TestDllRedirection()
 {
-    HANDLE dll1, dll2, h;
+    HANDLE dll1, dll2, dll3, h;
     ULONG_PTR cookie;
+    WCHAR path[MAX_PATH];
 
     /* Try to load the libraries without sxs */
     dll1 = LoadLibraryExW(L"kernel32test_versioned.dll",0 , 0);
@@ -86,6 +87,12 @@ VOID TestDllRedirection()
 
     ok (dll1 != dll2, "\n");
 
+    GetSystemDirectoryW(path, MAX_PATH);
+    wcscat(path, L"\\comctl32.dll");
+    _ActivateCtx(h, &cookie, __LINE__);
+    dll3 = LoadLibraryExW(path, 0, 0);
+    _DeactivateCtx(cookie, __LINE__);
+    ok(dll3 == dll1, "Expected %p for %S, got %p\n", dll1, path, dll3);
 }
 
 START_TEST(LoadLibraryExW)
