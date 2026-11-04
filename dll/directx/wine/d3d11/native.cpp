@@ -7010,9 +7010,9 @@ public:
         DXGI_OUTPUT_DESC output_desc;
         HRESULT hr = GetContainingOutput(&output);
         if (SUCCEEDED(hr)) hr = output->GetDesc(&output_desc);
-        if (SUCCEEDED(hr) && (output_desc.DesktopCoordinates.right - output_desc.DesktopCoordinates.left != current.right - current.left
-                || output_desc.DesktopCoordinates.bottom - output_desc.DesktopCoordinates.top != current.bottom - current.top))
-            windowed_rect = current;
+        bool moved = SUCCEEDED(hr) && (output_desc.DesktopCoordinates.right - output_desc.DesktopCoordinates.left != current.right - current.left
+                || output_desc.DesktopCoordinates.bottom - output_desc.DesktopCoordinates.top != current.bottom - current.top);
+        if (moved) windowed_rect = current;
         if (SUCCEEDED(hr) && (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH))
         {
             hr = ChangeMode(output, *mode);
@@ -7021,6 +7021,7 @@ public:
         if (output) output->Release();
         if (FAILED(hr)) return hr;
         const RECT &area = output_desc.DesktopCoordinates;
+        if (moved) return SetupFullscreenWindow(area.left, area.top, area.right - area.left, area.bottom - area.top);
         MoveWindow(window, area.left, area.top, area.right - area.left, area.bottom - area.top, TRUE);
         return S_OK;
     }
