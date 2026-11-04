@@ -5014,6 +5014,10 @@ TOOLBAR_SetExtendedStyle (TOOLBAR_INFO *infoPtr, DWORD mask, DWORD style)
 
     if (infoPtr->dwExStyle & ~TBSTYLE_EX_ALL)
         FIXME("Unknown Toolbar Extended Style %#lx. Please report.\n", (infoPtr->dwExStyle & ~TBSTYLE_EX_ALL));
+#ifdef __REACTOS__
+    if ((infoPtr->dwExStyle & ~old_style) & TBSTYLE_EX_VERTICAL)
+        infoPtr->dwStyle = CCS_VERT;
+#endif
 
     if ((old_style ^ infoPtr->dwExStyle) & TBSTYLE_EX_MIXEDBUTTONS)
         TOOLBAR_CalcToolbar(infoPtr);
