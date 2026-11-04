@@ -145,6 +145,7 @@ static HRESULT wave_parser_next_sample(struct splitter_source *source, struct sp
     sample->size = min(parser->chunk_size, parser->data_size - parser->position);
     sample->start = bytes_to_time(parser, parser->position);
     sample->stop = bytes_to_time(parser, parser->position + sample->size);
+    sample->has_time = TRUE;
     sample->sync_point = TRUE;
     parser->position += sample->size;
     return S_OK;
@@ -164,7 +165,7 @@ HRESULT wave_parser_create(IUnknown *outer, IUnknown **out)
     struct splitter *object;
     HRESULT hr;
 
-    if (FAILED(hr = splitter_create(outer, &CLSID_WAVEParser, &wave_parser_ops, FALSE, &object)))
+    if (FAILED(hr = splitter_create(outer, &CLSID_WAVEParser, &wave_parser_ops, L"input pin", FALSE, &object)))
         return hr;
 
     TRACE("Created WAVE parser %p.\n", object);
