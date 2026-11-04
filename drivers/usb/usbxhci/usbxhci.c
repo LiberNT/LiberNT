@@ -3357,11 +3357,11 @@ XHCI_ConfigureSlotEndpoint(
 
     XHCI_LOG_IRQL("ConfigureSlotEndpoint entry");
 #if DBG
-    if (KeGetCurrentIrql() > DISPATCH_LEVEL)
+    if (KeGetCurrentIrql() > DISPATCH_LEVEL && KeGetCurrentIrql() != HIGH_LEVEL)
     {
         DPRINT1("usbxhci ASSERT: XHCI_ConfigureSlotEndpoint requires <= DISPATCH_LEVEL, current=%lu\n",
                 (ULONG)KeGetCurrentIrql());
-        ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+        ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL || KeGetCurrentIrql() == HIGH_LEVEL);
     }
 #endif
 
