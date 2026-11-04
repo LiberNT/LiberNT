@@ -829,6 +829,13 @@ static void test_prot_fault(void)
             skip( "Exception %u broken on Wow64\n", i );
             continue;
         }
+#ifdef __REACTOS__
+        if (is_qemu_tcg() && (i == 17 || i == 18))
+        {
+            skip("%u: QEMU TCG does not fault data accesses through a null selector\n", i);
+            continue;
+        }
+#endif
         got_exception = 0;
         run_exception_test(prot_fault_handler, &exceptions[i], &exceptions[i].code,
                            sizeof(exceptions[i].code), 0);
@@ -1523,6 +1530,13 @@ static void test_simd_exceptions(void)
         skip("system doesn't support SSE\n");
         return;
     }
+#ifdef __REACTOS__
+    if (is_qemu_tcg())
+    {
+        skip("QEMU TCG does not raise SIMD floating-point exceptions\n");
+        return;
+    }
+#endif
 
     /* generate a SIMD exception */
     stage = 2;
@@ -1600,6 +1614,10 @@ static void test_fpu_exceptions(void)
 
     struct fpu_exception_info info;
 
+#ifdef __REACTOS__
+    if (!is_qemu_tcg())
+    {
+#endif
     memset(&info, 0, sizeof(info));
     run_exception_test(fpu_exception_handler, &info, fpu_exception_test_ie, sizeof(fpu_exception_test_ie), 0);
     ok(info.exception_code == EXCEPTION_FLT_STACK_CHECK,
@@ -1607,11 +1625,21 @@ static void test_fpu_exceptions(void)
     ok(info.exception_offset == 0x19 || info.exception_offset == info.eip_offset,
        "Got exception offset %#lx, expected 0x19\n", info.exception_offset);
     ok(info.eip_offset == 0x1b, "Got EIP offset %#lx, expected 0x1b\n", info.eip_offset);
+#ifdef __REACTOS__
+    }
+    else
+        skip("QEMU TCG does not raise x87 stack faults\n");
+#endif
 
     memset(&info, 0, sizeof(info));
     run_exception_test(fpu_exception_handler, &info, fpu_exception_test_de, sizeof(fpu_exception_test_de), 0);
     ok(info.exception_code == EXCEPTION_FLT_DIVIDE_BY_ZERO,
             "Got exception code %#lx, expected EXCEPTION_FLT_DIVIDE_BY_ZERO\n", info.exception_code);
+#ifdef __REACTOS__
+    if (is_qemu_tcg())
+        skip("QEMU TCG saves no x87 instruction pointer with FXSAVE\n");
+    else
+#endif
     ok(info.exception_offset == 0x17 || info.exception_offset == info.eip_offset,
        "Got exception offset %#lx, expected 0x17\n", info.exception_offset);
     ok(info.eip_offset == 0x19, "Got EIP offset %#lx, expected 0x19\n", info.eip_offset);
