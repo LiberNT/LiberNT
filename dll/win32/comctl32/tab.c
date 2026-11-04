@@ -176,6 +176,23 @@ TAB_SendSimpleNotify (const TAB_INFO *infoPtr, UINT code)
             nmhdr.idFrom, (LPARAM) &nmhdr);
 }
 
+#ifdef __REACTOS__
+static BOOL
+TAB_SendParentNotify (const TAB_INFO *infoPtr, UINT code)
+{
+    HWND parent = GetParent(infoPtr->hwnd);
+    NMHDR nmhdr;
+
+    if (!parent) return FALSE;
+
+    nmhdr.hwndFrom = infoPtr->hwnd;
+    nmhdr.idFrom = GetWindowLongPtrW(infoPtr->hwnd, GWLP_ID);
+    nmhdr.code = code;
+
+    return (BOOL) SendMessageW (parent, WM_NOTIFY, nmhdr.idFrom, (LPARAM) &nmhdr);
+}
+#endif
+
 static void
 TAB_RelayEvent (HWND hwndTip, HWND hwndMsg, UINT uMsg,
             WPARAM wParam, LPARAM lParam)
@@ -255,6 +272,9 @@ static inline LRESULT TAB_SetCurSel (TAB_INFO *infoPtr, INT iItem)
       {
           TAB_GetItem(infoPtr, iItem)->dwState |= TCIS_BUTTONPRESSED;
           infoPtr->iSelected = iItem;
+#ifdef __REACTOS__
+          if (!(infoPtr->dwStyle & TCS_BUTTONS))
+#endif
           infoPtr->uFocus = iItem;
       }
       else
@@ -275,6 +295,10 @@ static LRESULT TAB_SetCurFocus (TAB_INFO *infoPtr, INT iItem)
 {
   TRACE("(%p %d)\n", infoPtr, iItem);
 
+#ifdef __REACTOS__
+  if (iItem < 0 && (infoPtr->dwStyle & TCS_BUTTONS))
+      return 0;
+#endif
   if (iItem < 0) {
       infoPtr->uFocus = -1;
       if (infoPtr->iSelected != -1) {
@@ -282,7 +306,11 @@ static LRESULT TAB_SetCurFocus (TAB_INFO *infoPtr, INT iItem)
           TAB_GetItem(infoPtr, infoPtr->iSelected)->dwState &= ~TCIS_BUTTONPRESSED;
 #endif
           infoPtr->iSelected = -1;
+#ifdef __REACTOS__
+          TAB_SendParentNotify(infoPtr, TCN_SELCHANGE);
+#else
           TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGE);
+#endif
           TAB_InvalidateTabArea(infoPtr);
           if (!(infoPtr->dwStyle & TCS_BUTTONS))
             NotifyWinEvent(EVENT_OBJECT_SELECTION, infoPtr->hwnd, OBJID_CLIENT, 0);
@@ -311,20 +339,26 @@ static LRESULT TAB_SetCurFocus (TAB_INFO *infoPtr, INT iItem)
     } else {
 #ifdef __REACTOS__
       INT oldItem = infoPtr->iSelected;
-#endif
+      if (infoPtr->iSelected != iItem || infoPtr->uFocus == -1) {
+        if (TAB_SendParentNotify(infoPtr, TCN_SELCHANGING))
+          return 0;
+        if (oldItem != -1)
+          TAB_GetItem(infoPtr, oldItem)->dwState &= ~TCIS_BUTTONPRESSED;
+        infoPtr->uFocus = iItem;
+        infoPtr->iSelected = iItem;
+        TAB_GetItem(infoPtr, iItem)->dwState |= TCIS_BUTTONPRESSED;
+        TAB_SendParentNotify(infoPtr, TCN_SELCHANGE);
+        TAB_EnsureSelectionVisible(infoPtr);
+        TAB_InvalidateTabArea(infoPtr);
+        NotifyWinEvent(EVENT_OBJECT_SELECTION, infoPtr->hwnd, OBJID_CLIENT, iItem + 1);
+      }
+#else
       INT oldFocus = infoPtr->uFocus;
       if (infoPtr->iSelected != iItem || oldFocus == -1 ) {
         infoPtr->uFocus = iItem;
         if (oldFocus != -1) {
           if (!TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGING))  {
-#ifdef __REACTOS__
-            if (oldItem != -1)
-              TAB_GetItem(infoPtr, oldItem)->dwState &= ~TCIS_BUTTONPRESSED;
-#endif
             infoPtr->iSelected = iItem;
-#ifdef __REACTOS__
-            TAB_GetItem(infoPtr, iItem)->dwState |= TCIS_BUTTONPRESSED;
-#endif
             TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGE);
           }
           else
@@ -334,6 +368,7 @@ static LRESULT TAB_SetCurFocus (TAB_INFO *infoPtr, INT iItem)
           NotifyWinEvent(EVENT_OBJECT_SELECTION, infoPtr->hwnd, OBJID_CLIENT, iItem + 1);
         }
       }
+#endif
     }
   }
   return 0;
@@ -2769,7 +2804,11 @@ TAB_InsertItemT (TAB_INFO *infoPtr, INT iItem, const TCITEMW *pti, BOOL bUnicode
 
   /* If we haven't set the current focus yet, set it now. */
   if (infoPtr->uFocus == -1)
+#ifdef __REACTOS__
+    infoPtr->uFocus = iItem;
+#else
     TAB_SetCurFocus(infoPtr, iItem);
+#endif
 
   return iItem;
 }
@@ -2984,6 +3023,10 @@ static LRESULT TAB_DeleteItem (TAB_INFO *infoPtr, INT iItem)
     }
 
     /* adjust the selected index */
+#ifdef __REACTOS__
+    if (iItem == infoPtr->uFocus && !(infoPtr->dwStyle & TCS_BUTTONS))
+        infoPtr->uFocus = -1;
+#endif
     if (iItem == infoPtr->iSelected)
         infoPtr->iSelected = -1;
     else if (iItem < infoPtr->iSelected)
@@ -3127,7 +3170,11 @@ static LRESULT TAB_Create (HWND hwnd, LPARAM lParam)
   infoPtr->hwndUpDown      = 0;
   infoPtr->leftmostVisible = 0;
   infoPtr->fHeightSet      = FALSE;
+#ifdef __REACTOS__
+  infoPtr->bUnicode        = SendMessageW (infoPtr->hwndNotify, WM_NOTIFYFORMAT, (WPARAM)hwnd, NF_QUERY) == NFR_UNICODE;
+#else
   infoPtr->bUnicode        = IsWindowUnicode (hwnd);
+#endif
   infoPtr->cbInfo          = sizeof(LPARAM);
 
   TRACE("Created tab control, hwnd [%p]\n", hwnd);
@@ -3292,8 +3339,12 @@ TAB_SetExtendedStyle (TAB_INFO *infoPtr, DWORD exMask, DWORD exStyle)
   if (exMask & TCS_EX_REGISTERDROP)
   {
     FIXME("TCS_EX_REGISTERDROP style unimplemented\n");
+#ifdef __REACTOS__
+    infoPtr->exStyle = (infoPtr->exStyle & ~TCS_EX_REGISTERDROP) | (exStyle & TCS_EX_REGISTERDROP);
+#else
     exMask  &= ~TCS_EX_REGISTERDROP;
     exStyle &= ~TCS_EX_REGISTERDROP;
+#endif
   }
 
   if (exMask & TCS_EX_FLATSEPARATORS)
