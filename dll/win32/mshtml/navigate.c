@@ -376,6 +376,28 @@ static HRESULT WINAPI BindStatusCallback_GetBindInfo(IBindStatusCallback *iface,
     if(This->request_data.post_data_len) {
         pbindinfo->dwBindVerb = BINDVERB_POST;
 
+#ifdef __REACTOS__
+        if(This->post_data_as_stream) {
+            IStream *stream;
+            LARGE_INTEGER zero;
+            HRESULT hres;
+
+            hres = CreateStreamOnHGlobal(NULL, TRUE, &stream);
+            if(FAILED(hres))
+                return hres;
+            hres = IStream_Write(stream, This->request_data.post_data, This->request_data.post_data_len, NULL);
+            zero.QuadPart = 0;
+            if(SUCCEEDED(hres))
+                hres = IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+            if(FAILED(hres)) {
+                IStream_Release(stream);
+                return hres;
+            }
+            pbindinfo->stgmedData.tymed = TYMED_ISTREAM;
+            pbindinfo->stgmedData.pstm = stream;
+            return S_OK;
+        }
+#endif
         pbindinfo->stgmedData.tymed = TYMED_HGLOBAL;
         pbindinfo->stgmedData.hGlobal = This->request_data.post_data;
         pbindinfo->stgmedData.pUnkForRelease = (IUnknown*)&This->IBindStatusCallback_iface;
@@ -1086,8 +1108,16 @@ static void notify_progress(nsChannelBSC *This)
     }
 
     if(sink) {
+#ifdef __REACTOS__
+        ULONG progress = max(This->progress, This->bsc.read);
+        ULONG total = (This->total == ~0) ? ~0 : max(This->total, progress);
+
+        nsIProgressEventSink_OnProgress(sink, (nsIRequest*)&nschannel->nsIHttpChannel_iface, This->nscontext,
+                                        progress, (total == ~0) ? -1 : total);
+#else
         nsIProgressEventSink_OnProgress(sink, (nsIRequest*)&nschannel->nsIHttpChannel_iface, This->nscontext,
                                         This->progress, (This->total == ~0) ? -1 : This->total);
+#endif
         nsIProgressEventSink_Release(sink);
     }
 }
@@ -1388,6 +1418,9 @@ static HRESULT nsChannelBSC_init_bindinfo(BSCallback *bsc)
                 &nschannel->request_headers, &This->bsc.request_data);
         if(FAILED(hres))
             return hres;
+#ifdef __REACTOS__
+        This->bsc.post_data_as_stream = !This->is_doc_channel;
+#endif
     }
 
     return S_OK;
