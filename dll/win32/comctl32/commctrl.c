@@ -2530,6 +2530,10 @@ INT WINAPI AddMRUStringA(HANDLE hList, const char *str)
     if (!hList)
         return -1;
 
+#ifdef __REACTOS__
+    if (!str)
+        return 0;
+#endif
     if (IsBadStringPtrA(str, -1))
     {
         SetLastError(ERROR_INVALID_PARAMETER);
