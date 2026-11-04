@@ -494,6 +494,7 @@ static HRESULT avi_splitter_next_sample(struct splitter_source *source, struct s
     sample->size = stream->entries[index].size;
     sample->start = entry_start(stream, index);
     sample->stop = entry_stop(stream, index);
+    sample->has_time = TRUE;
     sample->sync_point = stream->entries[index].key;
     return S_OK;
 }
@@ -512,7 +513,7 @@ HRESULT avi_splitter_create(IUnknown *outer, IUnknown **out)
     struct splitter *object;
     HRESULT hr;
 
-    if (FAILED(hr = splitter_create(outer, &CLSID_AviSplitter, &avi_splitter_ops, FALSE, &object)))
+    if (FAILED(hr = splitter_create(outer, &CLSID_AviSplitter, &avi_splitter_ops, L"input pin", FALSE, &object)))
         return hr;
 
     TRACE("Created AVI splitter %p.\n", object);

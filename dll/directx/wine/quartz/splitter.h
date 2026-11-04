@@ -20,6 +20,7 @@ struct splitter_sample
     LONGLONG offset;
     DWORD size;
     REFERENCE_TIME start, stop;
+    BOOL has_time;
     BOOL sync_point;
 };
 
@@ -51,8 +52,11 @@ struct splitter_source
 struct splitter_ops
 {
     HRESULT (*sink_query_accept)(const AM_MEDIA_TYPE *mt);
+    HRESULT (*sink_get_media_type)(unsigned int index, AM_MEDIA_TYPE *mt);
+    HRESULT (*sink_query_interface)(struct splitter *filter, REFIID iid, void **out);
     HRESULT (*parse)(struct splitter *filter);
     void (*cleanup)(struct splitter *filter);
+    void (*destroy)(struct splitter *filter);
     void (*seek)(struct splitter_source *source, REFERENCE_TIME time);
     HRESULT (*next_sample)(struct splitter_source *source, struct splitter_sample *sample);
     HRESULT (*query_interface)(struct splitter *filter, REFIID iid, void **out);
@@ -70,6 +74,7 @@ struct splitter
     struct splitter_source **sources;
     unsigned int source_count;
     BOOL enum_sink_first;
+    BOOL no_source_position;
 
     CRITICAL_SECTION streaming_cs;
     CONDITION_VARIABLE flushing_cv;
@@ -79,7 +84,7 @@ struct splitter
 };
 
 HRESULT splitter_create(IUnknown *outer, const CLSID *clsid, const struct splitter_ops *ops,
-        BOOL enum_sink_first, struct splitter **out);
+        const WCHAR *sink_name, BOOL enum_sink_first, struct splitter **out);
 struct splitter_source *splitter_add_source(struct splitter *filter, const WCHAR *name,
         const AM_MEDIA_TYPE *media_types, unsigned int media_type_count, REFERENCE_TIME duration);
 HRESULT splitter_read(struct splitter *filter, LONGLONG offset, LONG size, void *data);

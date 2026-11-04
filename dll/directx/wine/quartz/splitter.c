@@ -100,14 +100,14 @@ static HRESULT send_sample(struct splitter_source *pin, const struct splitter_sa
 
         start = s->start;
         stop = s->stop;
-        if (size < s->size)
+        if (s->has_time && size < s->size)
         {
             start = s->start + (s->stop - s->start) * offset / s->size;
             stop = s->start + (s->stop - s->start) * (offset + size) / s->size;
         }
         start = (REFERENCE_TIME)((start - pin->seek.llCurrent) / pin->seek.dRate);
         stop = (REFERENCE_TIME)((stop - pin->seek.llCurrent) / pin->seek.dRate);
-        IMediaSample_SetTime(sample, &start, &stop);
+        IMediaSample_SetTime(sample, s->has_time ? &start : NULL, s->has_time ? &stop : NULL);
         IMediaSample_SetMediaTime(sample, NULL, NULL);
         IMediaSample_SetSyncPoint(sample, s->sync_point && !offset);
         IMediaSample_SetDiscontinuity(sample, pin->discontinuity && !offset);
@@ -164,7 +164,7 @@ static DWORD CALLBACK stream_thread(void *arg)
         }
 
         hr = filter->ops->next_sample(pin, &sample);
-        if (hr == S_OK && sample.start >= pin->seek.llStop)
+        if (hr == S_OK && sample.has_time && sample.start >= pin->seek.llStop)
             hr = S_FALSE;
 
         if (hr == S_OK)
@@ -255,6 +255,9 @@ static void splitter_destroy(struct strmbase_filter *iface)
         IPin_Disconnect(filter->sink.pin.peer);
         IPin_Disconnect(&filter->sink.pin.IPin_iface);
     }
+
+    if (filter->ops->destroy)
+        filter->ops->destroy(filter);
 
     filter->streaming_cs.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&filter->streaming_cs);
@@ -387,9 +390,29 @@ static void splitter_sink_disconnect(struct strmbase_sink *iface)
     filter->reader = NULL;
 }
 
+static HRESULT splitter_sink_get_media_type(struct strmbase_pin *iface, unsigned int index, AM_MEDIA_TYPE *mt)
+{
+    struct splitter *filter = impl_from_strmbase_filter(iface->filter);
+
+    if (filter->ops->sink_get_media_type)
+        return filter->ops->sink_get_media_type(index, mt);
+    return VFW_S_NO_MORE_ITEMS;
+}
+
+static HRESULT splitter_sink_query_interface(struct strmbase_pin *iface, REFIID iid, void **out)
+{
+    struct splitter *filter = impl_from_strmbase_filter(iface->filter);
+
+    if (filter->ops->sink_query_interface)
+        return filter->ops->sink_query_interface(filter, iid, out);
+    return E_NOINTERFACE;
+}
+
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_accept = splitter_sink_query_accept,
+    .base.pin_get_media_type = splitter_sink_get_media_type,
+    .base.pin_query_interface = splitter_sink_query_interface,
     .sink_connect = splitter_sink_connect,
     .sink_disconnect = splitter_sink_disconnect,
 };
@@ -963,7 +986,8 @@ static HRESULT source_query_interface(struct strmbase_pin *iface, REFIID iid, vo
         *out = &pin->seek.IMediaSeeking_iface;
     else if (IsEqualGUID(iid, &IID_IQualityControl))
         *out = &pin->IQualityControl_iface;
-    else if (IsEqualGUID(iid, &IID_IMediaPosition))
+    else if (IsEqualGUID(iid, &IID_IMediaPosition)
+            && !impl_from_strmbase_filter(iface->filter)->no_source_position)
         *out = &pin->IMediaPosition_iface;
     else
         return E_NOINTERFACE;
@@ -1066,7 +1090,7 @@ struct splitter_source *splitter_add_source(struct splitter *filter, const WCHAR
 }
 
 HRESULT splitter_create(IUnknown *outer, const CLSID *clsid, const struct splitter_ops *ops,
-        BOOL enum_sink_first, struct splitter **out)
+        const WCHAR *sink_name, BOOL enum_sink_first, struct splitter **out)
 {
     struct splitter *object;
 
@@ -1074,7 +1098,7 @@ HRESULT splitter_create(IUnknown *outer, const CLSID *clsid, const struct splitt
         return E_OUTOFMEMORY;
 
     strmbase_filter_init(&object->filter, outer, clsid, &filter_ops);
-    strmbase_sink_init(&object->sink, &object->filter, L"input pin", &sink_ops, NULL);
+    strmbase_sink_init(&object->sink, &object->filter, sink_name, &sink_ops, NULL);
     object->ops = ops;
     object->enum_sink_first = enum_sink_first;
 
