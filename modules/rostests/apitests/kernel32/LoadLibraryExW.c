@@ -95,7 +95,62 @@ VOID TestDllRedirection()
     ok(dll3 == dll1, "Expected %p for %S, got %p\n", dll1, path, dll3);
 }
 
+static VOID TestRenamedModulePath(VOID)
+{
+    WCHAR SystemDir[MAX_PATH], TempDir[MAX_PATH], Source[MAX_PATH], Original[MAX_PATH], Moved[MAX_PATH];
+    HMODULE Module, Found;
+
+    GetSystemDirectoryW(SystemDir, ARRAYSIZE(SystemDir));
+    GetTempPathW(ARRAYSIZE(TempDir), TempDir);
+    StringCchPrintfW(Source, ARRAYSIZE(Source), L"%s\\version.dll", SystemDir);
+    StringCchPrintfW(Original, ARRAYSIZE(Original), L"%sldrrename_test.dll", TempDir);
+    StringCchPrintfW(Moved, ARRAYSIZE(Moved), L"%sldrrename_moved.dll", TempDir);
+    DeleteFileW(Original);
+    DeleteFileW(Moved);
+
+    if (!CopyFileW(Source, Original, FALSE))
+    {
+        skip("CopyFileW failed with error %lu\n", GetLastError());
+        return;
+    }
+
+    Module = LoadLibraryW(Original);
+    ok(Module != NULL, "LoadLibraryW failed with error %lu\n", GetLastError());
+    if (!Module)
+    {
+        DeleteFileW(Original);
+        return;
+    }
+    ok(GetModuleHandleW(Original) == Module, "GetModuleHandleW did not find the module by its path\n");
+
+    if (!MoveFileW(Original, Moved))
+    {
+        skip("MoveFileW failed with error %lu\n", GetLastError());
+        FreeLibrary(Module);
+        DeleteFileW(Original);
+        return;
+    }
+    ok(GetFileAttributesW(Original) == INVALID_FILE_ATTRIBUTES, "The original file still exists\n");
+
+    SetLastError(0xdeadbeef);
+    Found = GetModuleHandleW(Original);
+    ok(Found == Module, "GetModuleHandleW returned %p, expected %p, error %lu\n", Found, Module, GetLastError());
+
+    SetLastError(0xdeadbeef);
+    Found = LoadLibraryW(Original);
+    ok(Found == Module, "LoadLibraryW returned %p, expected %p, error %lu\n", Found, Module, GetLastError());
+    if (Found)
+        FreeLibrary(Found);
+
+    ok(GetModuleHandleW(Moved) == Module, "GetModuleHandleW did not find the module by its new path\n");
+
+    FreeLibrary(Module);
+    ok(GetModuleHandleW(Original) == NULL, "The module is still loaded\n");
+    DeleteFileW(Moved);
+}
+
 START_TEST(LoadLibraryExW)
 {
+    TestRenamedModulePath();
     TestDllRedirection();
 }
