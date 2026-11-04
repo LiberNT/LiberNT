@@ -44,6 +44,7 @@ typedef void (*PFUNC)(void);
 #define FL_ACC 0x200
 #define FL_INVLS 0x400
 #define FL_NONCANONICAL 0x800
+#define FL_TCGNOP 0x1000
 
 typedef struct _TEST_ENTRY
 {
@@ -142,8 +143,8 @@ TEST_ENTRY TestEntries[] =
 #ifdef _M_AMD64
     { __LINE__, { 0x0F, 0x07, 0xC3 }, 0, FL_ANY | FL_PRIV }, // SYSRET
 #endif
-    { __LINE__, { 0x0F, 0x08, 0xC3 }, 0, FL_ANY | FL_PRIV }, // INVD
-    { __LINE__, { 0x0F, 0x09, 0xC3 }, 0, FL_ANY | FL_PRIV }, // WBINVD
+    { __LINE__, { 0x0F, 0x08, 0xC3 }, 0, FL_ANY | FL_PRIV | FL_TCGNOP }, // INVD
+    { __LINE__, { 0x0F, 0x09, 0xC3 }, 0, FL_ANY | FL_PRIV | FL_TCGNOP }, // WBINVD
     { __LINE__, { 0x0F, 0x20, 0xC3 }, 0, FL_ANY | FL_PRIV }, // MOV CR, XXX
     { __LINE__, { 0x0F, 0x21, 0xC3 }, 0, FL_ANY | FL_PRIV }, // MOV DR, XXX
     { __LINE__, { 0x0F, 0x22, 0xC3 }, 0, FL_ANY | FL_PRIV }, // MOV XXX, CR
@@ -274,6 +275,11 @@ void Test_SingleInstruction(
     else if ((Flags & FL_HV) && (Flags & FL_ACC) && (g_CpuFeatures & CPU_FEATURE_KVM))
     {
         ExpectedStatus = STATUS_ILLEGAL_INSTRUCTION;
+    }
+    else if ((Flags & FL_TCGNOP) && (g_CpuFeatures & CPU_FEATURE_TCG))
+    {
+        /* QEMU TCG executes INVD and WBINVD as no-ops at any privilege level */
+        ExpectedStatus = STATUS_SUCCESS;
     }
     else if (Flags & FL_PRIV)
     {
