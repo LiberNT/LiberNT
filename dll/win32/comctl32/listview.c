@@ -363,6 +363,7 @@ typedef struct tagLISTVIEW_INFO
   INT groupViewWidth;
   DWORD groupLayoutView;
   INT groupLayoutItemHeight;
+  INT nestedStateChange;
 #endif
 } LISTVIEW_INFO;
 
@@ -4545,8 +4546,13 @@ static BOOL set_main_item(LISTVIEW_INFO *infoPtr, const LVITEMW *lpLVItem, BOOL 
     nmlv.iItem = lpLVItem->iItem;
     if (lpLVItem->mask & LVIF_STATE)
     {
+#ifdef __REACTOS__
+        nmlv.uNewState = lpLVItem->state & stateMask;
+        nmlv.uOldState = item.state & stateMask;
+#else
         nmlv.uNewState = (item.state & ~stateMask) | (lpLVItem->state & stateMask);
         nmlv.uOldState = item.state;
+#endif
     }
     nmlv.uChanged = isNew ? LVIF_STATE : (uChanged ? uChanged : lpLVItem->mask);
     nmlv.lParam = item.lParam;
@@ -4650,10 +4656,19 @@ static BOOL set_main_item(LISTVIEW_INFO *infoPtr, const LVITEMW *lpLVItem, BOOL 
 		    item.stateMask = LVIS_FOCUSED;
 
 		    /* recurse with redrawing an item */
+#ifdef __REACTOS__
+		    infoPtr->nestedStateChange++;
 		    LISTVIEW_SetItemState(infoPtr, infoPtr->nFocusedItem, &item);
+		    infoPtr->nestedStateChange--;
+#else
+		    LISTVIEW_SetItemState(infoPtr, infoPtr->nFocusedItem, &item);
+#endif
 		}
 
 		infoPtr->nFocusedItem = lpLVItem->iItem;
+#ifdef __REACTOS__
+		if (!(infoPtr->dwStyle & LVS_OWNERDATA))
+#endif
 	        LISTVIEW_EnsureVisible(infoPtr, lpLVItem->iItem, infoPtr->uView == LV_VIEW_LIST);
 	    }
 	    else if (infoPtr->nFocusedItem == lpLVItem->iItem)
@@ -4807,6 +4822,18 @@ static BOOL LISTVIEW_SetItemT(LISTVIEW_INFO *infoPtr, LVITEMW *lpLVItem, BOOL is
 	    LISTVIEW_InvalidateItem(infoPtr, lpLVItem->iItem);
         }
     }
+#ifdef __REACTOS__
+    /* Windows 11 reads the item indent after the change notification of the item the caller changed */
+    if (bChanged && !lpLVItem->iSubItem && !infoPtr->nestedStateChange && infoPtr->uView == LV_VIEW_DETAILS && IsWindowVisible(hwndSelf))
+    {
+        LVITEMW indent;
+
+        indent.mask = LVIF_INDENT;
+        indent.iItem = lpLVItem->iItem;
+        indent.iSubItem = 0;
+        LISTVIEW_GetItemW(infoPtr, &indent);
+    }
+#endif
     /* restore text */
     if (pszText)
     {
@@ -7426,7 +7453,11 @@ static BOOL LISTVIEW_GetItemRect(const LISTVIEW_INFO *infoPtr, INT nItem, LPRECT
      * only one request. This can speed up things, if data
      * is stored on the app side */
     lvItem.mask = 0;
+#ifdef __REACTOS__
+    if (infoPtr->uView == LV_VIEW_DETAILS && lprc->left != LVIR_BOUNDS) lvItem.mask |= LVIF_INDENT;
+#else
     if (infoPtr->uView == LV_VIEW_DETAILS) lvItem.mask |= LVIF_INDENT;
+#endif
     if (doLabel) lvItem.mask |= LVIF_TEXT;
     lvItem.iItem = nItem;
     lvItem.iSubItem = 0;
@@ -9516,15 +9547,75 @@ static BOOL LISTVIEW_SetItemState(LISTVIEW_INFO *infoPtr, INT nItem, const LVITE
         old_mask = infoPtr->notify_mask & NOTIFY_MASK_ITEM_CHANGE;
         if (infoPtr->dwStyle & LVS_OWNERDATA)
         {
+#ifdef __REACTOS__
+            static const UINT cleared_hint[] = { LVIS_SELECTED, LVIS_CUT };
+            UINT bit;
+#endif
             infoPtr->notify_mask &= ~NOTIFY_MASK_ITEM_CHANGE;
             if (!(lvItem.state & LVIS_SELECTED) && LISTVIEW_GetSelectedCount(infoPtr))
                 oldstate |= LVIS_SELECTED;
             if (infoPtr->nFocusedItem != -1) oldstate |= LVIS_FOCUSED;
+#ifdef __REACTOS__
+            for (bit = 0; bit < ARRAY_SIZE(cleared_hint); bit++)
+            {
+                if ((lvItem.stateMask & cleared_hint[bit]) && !(lvItem.state & cleared_hint[bit]) && infoPtr->nItemCount)
+                {
+                    NMLVCACHEHINT nmlv;
+                    ITERATOR i;
+                    RANGE range;
+
+                    iterator_frameditems(&i, infoPtr, &infoPtr->rcList);
+                    range = iterator_range(&i);
+                    iterator_destroy(&i);
+                    ZeroMemory(&nmlv, sizeof(nmlv));
+                    nmlv.iFrom = range.lower;
+                    nmlv.iTo = range.upper - 1;
+                    notify_hdr(infoPtr, LVN_ODCACHEHINT, &nmlv.hdr);
+                }
+            }
+            if ((lvItem.stateMask & LVIS_FOCUSED) && infoPtr->nFocusedItem != -1)
+            {
+                LVITEMW focus;
+
+                focus.mask = LVIF_STATE;
+                focus.iItem = infoPtr->nFocusedItem;
+                focus.iSubItem = 0;
+                focus.state = 0;
+                focus.stateMask = LVIS_FOCUSED;
+                infoPtr->notify_mask |= old_mask;
+                if (!LISTVIEW_SetItemT(infoPtr, &focus, TRUE)) ret = FALSE;
+                infoPtr->notify_mask &= ~NOTIFY_MASK_ITEM_CHANGE;
+            }
+#endif
         }
 
     	/* apply to all items */
+#ifdef __REACTOS__
+        infoPtr->nestedStateChange++;
+        if (!(infoPtr->dwStyle & LVS_OWNERDATA) && lvItem.stateMask == LVIS_SELECTED && !lvItem.state)
+        {
+            RANGES selection = ranges_clone(infoPtr->selectionRanges);
+            ITERATOR i;
+
+            if (!selection) ret = FALSE;
+            else
+            {
+                iterator_rangesitems(&i, selection);
+                while (iterator_next(&i))
+                {
+                    lvItem.iItem = i.nItem;
+                    if (!LISTVIEW_SetItemT(infoPtr, &lvItem, TRUE)) ret = FALSE;
+                }
+                iterator_destroy(&i);
+            }
+        }
+        else
+#endif
     	for (lvItem.iItem = 0; lvItem.iItem < infoPtr->nItemCount; lvItem.iItem++)
 	    if (!LISTVIEW_SetItemT(infoPtr, &lvItem, TRUE)) ret = FALSE;
+#ifdef __REACTOS__
+        infoPtr->nestedStateChange--;
+#endif
 
         if (infoPtr->dwStyle & LVS_OWNERDATA)
         {
