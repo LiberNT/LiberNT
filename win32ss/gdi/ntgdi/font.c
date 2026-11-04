@@ -1618,13 +1618,6 @@ HfontCreate(
   RtlCopyMemory (&plfont->logfont, pelfw, sizeof(ENUMLOGFONTEXDVW));
   ExInitializePushLock(&plfont->lock);
 
-  if (pelfw->elfEnumLogfontEx.elfLogFont.lfEscapement !=
-      pelfw->elfEnumLogfontEx.elfLogFont.lfOrientation)
-  {
-    /* This should really depend on whether GM_ADVANCED is set */
-    plfont->logfont.elfEnumLogfontEx.elfLogFont.lfOrientation =
-    plfont->logfont.elfEnumLogfontEx.elfLogFont.lfEscapement;
-  }
   LFONT_UnlockFont(plfont);
 
   if (pvCliData && hNewFont)

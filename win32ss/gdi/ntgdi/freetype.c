@@ -1134,6 +1134,13 @@ static VOID FASTCALL IntEscapeMatrix(FT_Matrix *pmat, LONG lfEscapement)
     pmat->yy = pmat->xx;
 }
 
+static LONG FASTCALL
+IntGetFontOrientation(const LOGFONTW *plf)
+{
+    /* FIXME: GM_ADVANCED draws the glyphs at lfOrientation and lays them out along lfEscapement */
+    return plf->lfEscapement;
+}
+
 static VOID FASTCALL
 IntMatrixFromMx(FT_Matrix *pmat, const MATRIX *pmx)
 {
@@ -3187,11 +3194,6 @@ TextIntCreateFontIndirect(CONST LPLOGFONTW lf, HFONT *NewFont)
     *NewFont = plfont->BaseObject.hHmgr;
     plf = &plfont->logfont.elfEnumLogfontEx.elfLogFont;
     RtlCopyMemory(plf, lf, sizeof(LOGFONTW));
-    if (lf->lfEscapement != lf->lfOrientation)
-    {
-        /* This should really depend on whether GM_ADVANCED is set */
-        plf->lfOrientation = plf->lfEscapement;
-    }
     LFONT_UnlockFont(plfont);
 
     return STATUS_SUCCESS;
@@ -5646,7 +5648,7 @@ ftGdiGetGlyphOutline(
 
     plf = &TextObj->logfont.elfEnumLogfontEx.elfLogFont;
     aveWidth = FT_IS_SCALABLE(ft_face) ? abs(plf->lfWidth) : 0;
-    orientation = FT_IS_SCALABLE(ft_face) ? plf->lfOrientation : 0;
+    orientation = FT_IS_SCALABLE(ft_face) ? IntGetFontOrientation(plf) : 0;
     bEmuBold = EMUBOLD_NEEDED(FontGDI->OriginalWeight, plf->lfWeight);
 
     ASSERT_FREETYPE_LOCK_NOT_HELD();
@@ -6262,7 +6264,7 @@ TextIntGetTextExtentPoint(
     Cache.Hashed.Aspect.Emu.Italic = (plf->lfItalic && !FontGDI->OriginalItalic);
 
     // Check vertical writing (tategaki)
-    nTenthsOfDegrees = IntNormalizeAngle(plf->lfEscapement - plf->lfOrientation);
+    nTenthsOfDegrees = IntNormalizeAngle(plf->lfEscapement - IntGetFontOrientation(plf));
     bVerticalWriting = ((nTenthsOfDegrees == 90 * 10) || (nTenthsOfDegrees == 270 * 10));
 
     /* The transform stays identity below, so pass no matrix */
@@ -9115,7 +9117,7 @@ GreGetCharABCWidthsW(
     plf = &TextObj->logfont.elfEnumLogfontEx.elfLogFont;
 
     IntMatrixFromMx(&WorldMatrix, DC_pmxWorldToDevice(dc));
-    if (FT_IS_SCALABLE(face) && !plf->lfOrientation &&
+    if (FT_IS_SCALABLE(face) && !IntGetFontOrientation(plf) &&
         !memcmp(&WorldMatrix, &identityMat, sizeof(identityMat)))
     {
         static const MAT2 Identity = { {0, 1}, {0, 0}, {0, 0}, {0, 1} };
