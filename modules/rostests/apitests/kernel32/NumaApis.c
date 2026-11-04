@@ -250,7 +250,7 @@ Test_NodeNumberFromHandle(void)
         Status = pNtQueryInformationFile(File, &IoStatus, Info, sizeof(Info), FileNumaNodeInformation);
         ok(Status == STATUS_SUCCESS, "FileNumaNodeInformation: status %lx\n", Status);
         ok(IoStatus.Status == STATUS_SUCCESS && IoStatus.Information == sizeof(USHORT),
-           "FileNumaNodeInformation: iosb %lx/%Iu\n", IoStatus.Status, IoStatus.Information);
+           "FileNumaNodeInformation: iosb %lx/%Iu\n", IoStatus.Status, (size_t)IoStatus.Information);
         ok(Info[0] == 0xCCCC0000 && Info[1] == 0xCCCCCCCC,
            "FileNumaNodeInformation: data %08lx %08lx\n", Info[0], Info[1]);
 
