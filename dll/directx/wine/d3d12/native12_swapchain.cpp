@@ -837,7 +837,9 @@ HRESULT Native12SwapChain::PublishForeign()
     HANDLE shared = NULL;
     ULONGLONG update = 0;
     hr = get_surface(window, adapter_desc.AdapterLuid, NULL, 0, &format, &shared, &update);
-    if (hr == S_FALSE) return S_OK;
+    /* FIXME: DWM composes only visible windows of the presenting process; it drops frames for the others */
+    if (hr == S_FALSE || hr == E_ACCESSDENIED || hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)
+            || hr == HRESULT_FROM_WIN32(ERROR_NOT_READY)) return S_OK;
     if (FAILED(hr)) return hr;
     D3DKMT_HANDLE share = static_cast<D3DKMT_HANDLE>(reinterpret_cast<ULONG_PTR>(shared));
     if (share != foreign_share)

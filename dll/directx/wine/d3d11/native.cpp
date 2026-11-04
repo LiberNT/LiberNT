@@ -7599,8 +7599,9 @@ HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
     HANDLE shared = NULL;
     ULONGLONG update = 0;
     hr = get_surface(window, adapter_desc.AdapterLuid, NULL, 0, &format, &shared, &update);
-    /* FIXME: DWM publishes only windows of the presenting process; other windows (the desktop window) drop the frame */
-    if (hr == S_FALSE || hr == E_ACCESSDENIED) return S_OK;
+    /* FIXME: DWM composes only visible windows of the presenting process; it drops frames for the others */
+    if (hr == S_FALSE || hr == E_ACCESSDENIED || hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)
+            || hr == HRESULT_FROM_WIN32(ERROR_NOT_READY)) return S_OK;
     if (FAILED(hr)) return hr;
     D3DKMT_HANDLE share = static_cast<D3DKMT_HANDLE>(reinterpret_cast<ULONG_PTR>(shared));
     if (!foreign_target || share != foreign_share)
