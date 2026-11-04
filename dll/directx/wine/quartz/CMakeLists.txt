@@ -4,6 +4,8 @@ add_definitions(
     -DWINE_REGISTER_DLL
     -DPROXY_DELEGATION)
 
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libmpg123)
+
 spec2def(quartz.dll quartz.spec)
 add_rpcproxy_files(quartz_strmif.idl)
 
@@ -18,6 +20,7 @@ list(APPEND SOURCE
     filtermapper.c
     main.c
     memallocator.c
+    mpegaudio.c
     mpegsplit.c
     passthrough.c
     splitter.c
@@ -51,8 +54,9 @@ list(APPEND quartz_rc_deps
 set_source_files_properties(version.rc PROPERTIES OBJECT_DEPENDS "${quartz_rc_deps}")
 set_source_files_properties(quartz.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/quartz.rgs")
 set_module_type(quartz win32dll)
-target_link_libraries(quartz strmbase strmiids dxguid uuid wine wine_dll_register wine_dll_canunload ${PSEH_LIB})
-add_importlibs(quartz dsound msacm32 msvfw32 ole32 oleaut32 rpcrt4 user32 gdi32 advapi32 winmm msvcrt kernel32_vista kernel32 ntdll)
+target_compile_definitions(quartz PRIVATE MPG123_NO_LARGENAME)
+target_link_libraries(quartz libmpg123 oldnames strmbase strmiids dxguid uuid wine wine_dll_register wine_dll_canunload ${PSEH_LIB})
+add_importlibs(quartz dsound msacm32 msvfw32 ole32 oleaut32 rpcrt4 user32 gdi32 advapi32 winmm kernelbase msvcrt kernel32_vista kernel32 ntdll)
 add_delay_importlibs(quartz ddraw)
 add_dependencies(quartz dxsdk stdole2 wineheaders)
 add_cd_file(TARGET quartz DESTINATION reactos/system32 FOR all)

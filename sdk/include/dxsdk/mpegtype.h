@@ -23,8 +23,14 @@ typedef struct tagAM_MPEGSYSTEMTYPE
   AM_MPEGSTREAMTYPE Streams[1];
 } AM_MPEGSYSTEMTYPE;
 
+#undef INTERFACE
+#define INTERFACE IMpegAudioDecoder
+
 DECLARE_INTERFACE_(IMpegAudioDecoder, IUnknown)
 {
+  STDMETHOD(QueryInterface) (THIS_ REFIID riid, void **ppv) PURE;
+  STDMETHOD_(ULONG, AddRef) (THIS) PURE;
+  STDMETHOD_(ULONG, Release) (THIS) PURE;
   STDMETHOD(get_FrequencyDivider) (THIS_ unsigned long *pDivider) PURE;
   STDMETHOD(put_FrequencyDivider) (THIS_ unsigned long Divider) PURE;
   STDMETHOD(get_DecoderAccuracy) (THIS_ unsigned long *pAccuracy) PURE;
@@ -40,7 +46,9 @@ DECLARE_INTERFACE_(IMpegAudioDecoder, IUnknown)
   STDMETHOD(get_AudioFormat) (THIS_ MPEG1WAVEFORMAT *lpFmt) PURE;
 };
 
-#ifdef
+#undef INTERFACE
+
+#ifdef __cplusplus
 }
 #endif
 #endif
