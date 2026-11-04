@@ -2380,6 +2380,7 @@ static void node_dump_element_attributes(struct node_dump_context *context, stru
     if (!is_namespace_defined(context, node))
         node_dump_namespace_for_node(context, node);
 
+#ifndef __REACTOS__
     LIST_FOR_EACH_ENTRY(attr, &node->attributes, struct domnode, entry)
     {
         if (domnode_is_namespace_declaration(attr))
@@ -2388,9 +2389,14 @@ static void node_dump_element_attributes(struct node_dump_context *context, stru
         if (!is_namespace_defined(context, attr))
             node_dump_namespace_for_node(context, attr);
     }
+#endif
 
     LIST_FOR_EACH_ENTRY(attr, &node->attributes, struct domnode, entry)
     {
+#ifdef __REACTOS__
+        if (!domnode_is_namespace_declaration(attr) && !is_namespace_defined(context, attr))
+            node_dump_namespace_for_node(context, attr);
+#endif
         node_dump_append(context, L" ", 1);
         node_dump(attr, context);
     }
