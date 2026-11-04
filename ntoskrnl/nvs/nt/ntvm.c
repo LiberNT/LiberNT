@@ -236,7 +236,7 @@ MiDynamicCodeBlocked(
 }
 
 static
-BOOLEAN
+NTSTATUS
 MiHighestAddressFromZeroBits(
     _In_ ULONG_PTR ZeroBits,
     _Out_ PULONG64 HighestAddress)
@@ -246,7 +246,7 @@ MiHighestAddressFromZeroBits(
     if (ZeroBits != 0 && ZeroBits < 32)
     {
         if (ZeroBits > 21)
-            return FALSE;
+            return STATUS_INVALID_PARAMETER;
 
         Highest = min(Highest, ~0ULL >> (ZeroBits + 32));
     }
@@ -255,19 +255,19 @@ MiHighestAddressFromZeroBits(
         ULONG Shift;
 
         if (sizeof(ZeroBits) < sizeof(ULONG64))
-            return FALSE;
+            return STATUS_INVALID_PARAMETER_3;
 
         for (Shift = 1; Shift < sizeof(ZeroBits) * 8; Shift <<= 1)
             ZeroBits |= ZeroBits >> Shift;
 
         if (ZeroBits < (MAXULONG_PTR >> MI_MAX_ZERO_BITS))
-            return FALSE;
+            return STATUS_INVALID_PARAMETER;
 
         Highest = min(Highest, (ULONG64)ZeroBits);
     }
 
     *HighestAddress = Highest;
-    return TRUE;
+    return STATUS_SUCCESS;
 }
 
 static
@@ -300,8 +300,9 @@ MiAllocateVirtualMemoryNt(
 
     PAGED_CODE();
 
-    if (!MiHighestAddressFromZeroBits(ZeroBits, &Highest))
-        return STATUS_INVALID_PARAMETER;
+    Status = MiHighestAddressFromZeroBits(ZeroBits, &Highest);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     if (HighestEndingAddress != 0 && HighestEndingAddress < Highest)
         Highest = HighestEndingAddress;
