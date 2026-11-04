@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     SessionInformation.c
+    TermSrvReady.c
     testlist.c)
 
 add_executable(wtsapi32_apitest ${SOURCE})
