@@ -4257,6 +4257,8 @@ GetFontFamilyInfoForList(const LOGFONTW *LogFont,
 
         if (LogFont->lfFaceName[0] != UNICODE_NULL)
         {
+            BOOL Vertical = (InfoEntry.EnumLogFontEx.elfLogFont.lfFaceName[0] == L'@');
+
             /* check name */
             if (_wcsnicmp(LogFont->lfFaceName,
                           InfoEntry.EnumLogFontEx.elfLogFont.lfFaceName,
@@ -4264,9 +4266,10 @@ GetFontFamilyInfoForList(const LOGFONTW *LogFont,
                 _wcsnicmp(LogFont->lfFaceName,
                           InfoEntry.EnumLogFontEx.elfFullName,
                           RTL_NUMBER_OF(LogFont->lfFaceName) - 1) != 0 &&
-                !IntFontMatchesSecondFamilyName(FontGDI->SharedFace,
-                                                LogFont->lfFaceName,
-                                                InfoEntry.EnumLogFontEx.elfLogFont.lfFaceName))
+                ((LogFont->lfFaceName[0] == L'@') != Vertical ||
+                 !IntFontMatchesSecondFamilyName(FontGDI->SharedFace,
+                                                 LogFont->lfFaceName + Vertical,
+                                                 InfoEntry.EnumLogFontEx.elfLogFont.lfFaceName + Vertical)))
             {
                 continue;
             }
