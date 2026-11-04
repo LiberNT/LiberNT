@@ -1764,10 +1764,17 @@ static BOOL init(void)
     SelectObject(hdc, hOldFont);
     ReleaseDC(0, hdc);
 
+#ifdef __REACTOS__
+    hHeaderParentWnd = CreateWindowExA(0, "HeaderTestClass", "Header test", WS_OVERLAPPEDWINDOW,
+      CW_USEDEFAULT, CW_USEDEFAULT, 672+2*(GetSystemMetrics(SM_CXSIZEFRAME)+GetSystemMetrics(SM_CXPADDEDBORDER)),
+      226+GetSystemMetrics(SM_CYCAPTION)+2*(GetSystemMetrics(SM_CYSIZEFRAME)+GetSystemMetrics(SM_CXPADDEDBORDER)),
+      NULL, NULL, GetModuleHandleA(NULL), 0);
+#else
     hHeaderParentWnd = CreateWindowExA(0, "HeaderTestClass", "Header test", WS_OVERLAPPEDWINDOW, 
       CW_USEDEFAULT, CW_USEDEFAULT, 672+2*GetSystemMetrics(SM_CXSIZEFRAME),
       226+GetSystemMetrics(SM_CYCAPTION)+2*GetSystemMetrics(SM_CYSIZEFRAME),
       NULL, NULL, GetModuleHandleA(NULL), 0);
+#endif
     ok(hHeaderParentWnd != NULL, "failed to create parent wnd\n");
 
     ShowWindow(hHeaderParentWnd, SW_SHOW);
