@@ -27,6 +27,9 @@ typedef struct _LX_PIPE
     BOOLEAN HadWriter;
     LX_POLL_HEAD Poll;
     ULONG64 Ino;
+    ULONG Mode;
+    ULONG Uid;
+    ULONG Gid;
     LIST_ENTRY FifoLink;
     PLX_MOUNT FifoMount;
     LONG64 FifoId;
@@ -68,6 +71,7 @@ LxPipeCreate(VOID)
     }
     Pipe->RefCount = 1;
     Pipe->Size = LX_PIPE_DEFAULT_SIZE;
+    Pipe->Mode = 0600;
     KeInitializeEvent(&Pipe->Lock, SynchronizationEvent, TRUE);
     LxPollHeadInit(&Pipe->Poll);
     InitializeListHead(&Pipe->FifoLink);
@@ -256,8 +260,13 @@ LxPipeStat(
     LX_TIMESPEC Now;
     LARGE_INTEGER System;
 
+    /* TODO: fstat of a FIFO reports the pipe, not the node it was opened from */
     RtlZeroMemory(Stat, sizeof(*Stat));
-    Stat->Mode = LX_S_IFIFO | 0600;
+    LxPipeLock(Pipe);
+    Stat->Mode = LX_S_IFIFO | Pipe->Mode;
+    Stat->Uid = Pipe->Uid;
+    Stat->Gid = Pipe->Gid;
+    LxPipeUnlock(Pipe);
     Stat->Nlink = 1;
     Stat->Ino = Pipe->Ino;
     Stat->Dev = 0xC;
@@ -463,7 +472,35 @@ LxPipeOpenEnd(
 }
 
 LONG
+LxPipeSetAttributes(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_FILE File,
+    _In_ ULONG Mode,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid)
+{
+    PLX_PIPE Pipe = File->Object;
+    ULONG NewMode, NewUid, NewGid;
+    LONG Error;
+
+    LxPipeLock(Pipe);
+    NewMode = LX_S_IFIFO | Pipe->Mode;
+    NewUid = Pipe->Uid;
+    NewGid = Pipe->Gid;
+    Error = LxApplyAttributes(Process, Mode, Uid, Gid, &NewMode, &NewUid, &NewGid);
+    if (Error == 0)
+    {
+        Pipe->Mode = NewMode & 07777;
+        Pipe->Uid = NewUid;
+        Pipe->Gid = NewGid;
+    }
+    LxPipeUnlock(Pipe);
+    return Error;
+}
+
+LONG
 LxPipeCreatePair(
+    _In_opt_ PLX_PROCESS Process,
     _In_ ULONG Flags,
     _Out_ PLX_FILE *ReadEnd,
     _Out_ PLX_FILE *WriteEnd)
@@ -474,6 +511,11 @@ LxPipeCreatePair(
     *ReadEnd = *WriteEnd = NULL;
     if (Pipe == NULL)
         return -LX_ENOMEM;
+    if (Process != NULL)
+    {
+        Pipe->Uid = Process->Fsuid;
+        Pipe->Gid = Process->Fsgid;
+    }
 
     *ReadEnd = LxPipeOpenEnd(Pipe, LX_O_RDONLY | (Flags & LX_O_NONBLOCK));
     *WriteEnd = LxPipeOpenEnd(Pipe, LX_O_WRONLY | (Flags & LX_O_NONBLOCK));
@@ -505,7 +547,7 @@ LX_SYSCALL(LxSysPipe2)
     if (Flags & ~(LX_O_CLOEXEC | LX_O_NONBLOCK | LX_O_DIRECT))
         return -LX_EINVAL;
 
-    Error = LxPipeCreatePair(Flags, &ReadEnd, &WriteEnd);
+    Error = LxPipeCreatePair(Call->Process, Flags, &ReadEnd, &WriteEnd);
     if (Error != 0)
         return Error;
 

@@ -1238,16 +1238,19 @@ LONG LxVfsSymlink(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ PCSTR Targe
 LONG LxVfsUnlink(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ BOOLEAN Directory);
 LONG LxVfsRename(_In_ PLX_PROCESS Process, _In_ PLX_NODE From, _In_ PLX_NODE To, _In_ ULONG Flags);
 LONG LxVfsLink(_In_ PLX_PROCESS Process, _In_ PLX_NODE From, _In_ PLX_NODE To);
+LONG LxApplyAttributes(_In_ PLX_PROCESS Process, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid, _Inout_ PULONG OldMode,
+                        _Inout_ PULONG OldUid, _Inout_ PULONG OldGid);
 LONG LxVfsSetAttributes(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_opt_ PLX_FILE File, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid);
 LONG LxVfsSetTimes(_In_opt_ PLX_NODE Node, _In_opt_ PLX_FILE File, _In_ PLX_TIMESPEC Times);
 LONG LxVfsTruncate(_In_ PLX_NODE Node, _In_ LONG64 Length);
 LONG LxVfsReadlink(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _Out_ PSTR *Target);
 LONG LxNtStatHandleType(_In_ HANDLE Handle, _Out_ PLX_STAT Stat);
 LONG LxFifoOpen(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Flags, _Out_ PLX_FILE *Result);
-LONG LxPipeCreatePair(_In_ ULONG Flags, _Out_ PLX_FILE *ReadEnd, _Out_ PLX_FILE *WriteEnd);
+LONG LxPipeCreatePair(_In_opt_ PLX_PROCESS Process, _In_ ULONG Flags, _Out_ PLX_FILE *ReadEnd, _Out_ PLX_FILE *WriteEnd);
 LONG LxPipeSetSize(_In_ PLX_FILE File, _In_ ULONG Size);
 LONG LxPipeGetSize(_In_ PLX_FILE File);
 BOOLEAN LxFileIsPipe(_In_ PLX_FILE File);
+LONG LxPipeSetAttributes(_In_ PLX_PROCESS Process, _In_ PLX_FILE File, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid);
 LONG64 LxPipeTee(_In_ PLX_FILE In, _In_ PLX_FILE Out, _In_ ULONG64 Length, _In_ BOOLEAN NonBlocking);
 PLX_FILE LxEpollTarget(_In_ PLX_FILE EpollFile, _In_ LONG Fd, _In_ ULONG Offset, _Out_ PLONG Error);
 VOID LxPipeInitialize(VOID);

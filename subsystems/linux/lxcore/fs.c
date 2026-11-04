@@ -1543,6 +1543,9 @@ LxSetAttributesFile(
         LxNodeFree(&Node);
         return Error;
     }
+    if (LxFileIsPipe(File) && (File->Mount == NULL))
+        return LxPipeSetAttributes(Process, File, Mode, Uid, Gid);
+    /* TODO: fchown and fchmod of a FIFO do not reach the node it was opened from */
     if (((File->Handle == NULL) && (LxTmpfsFileInode(File) == NULL) && (LxFileGetTty(File) == NULL)) || File->NtPipe)
         return 0;
     Error = LxVfsSetAttributes(Process, NULL, File, Mode, Uid, Gid);
