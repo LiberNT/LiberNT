@@ -533,6 +533,30 @@ static unsigned int get_rpc_flags( const attr_list_t *attrs )
     return flags;
 }
 
+#ifdef __REACTOS__
+static int struct_has_correlated_pointer(const type_t *type)
+{
+    const var_list_t *fields = type_struct_get_fields(type);
+    const var_t *field;
+
+    if (fields) LIST_FOR_EACH_ENTRY( field, fields, const var_t, entry )
+    {
+        const type_t *t = field->declspec.type;
+        const expr_t *expr;
+
+        if (!is_array(t) || !type_array_is_decl_as_ptr(t))
+            continue;
+        expr = type_array_get_conformance(t);
+        if (expr && !expr->is_const)
+            return 1;
+        expr = type_array_get_variance(t);
+        if (expr && !expr->is_const)
+            return 1;
+    }
+    return 0;
+}
+#endif
+
 unsigned char get_struct_fc(const type_t *type)
 {
   int has_pointer = 0;
@@ -633,6 +657,10 @@ unsigned char get_struct_fc(const type_t *type)
             break;
 
         case FC_PSTRUCT:
+#ifdef __REACTOS__
+            if (struct_has_correlated_pointer(t))
+                return FC_BOGUS_STRUCT;
+#endif
             has_pointer = 1;
             break;
 
