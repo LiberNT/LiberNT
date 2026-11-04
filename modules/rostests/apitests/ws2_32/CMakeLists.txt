@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     BufferedRecv.c
+    CloseCompletion.c
     MulticastInterface.c
     addresslistsort.c
     bind.c

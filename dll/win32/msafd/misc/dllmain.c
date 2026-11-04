@@ -843,9 +843,6 @@ WSPCloseSocket(IN SOCKET Handle,
        return SOCKET_ERROR;
     }
 
-    /* HACK: Allow APC to be processed */
-    SleepEx(0, TRUE);
-
     if (Socket->HelperEvents & WSH_NOTIFY_CLOSE)
     {
         Status = Socket->HelperData->WSHNotify(Socket->HelperContext,
@@ -993,7 +990,7 @@ WSPCloseSocket(IN SOCKET Handle,
                 /* Wait for return */
                 if (Status == STATUS_PENDING)
                 {
-                    MsafdWaitForAlert(SockEvent);
+                    WaitForSingleObject(SockEvent, INFINITE);
                     Status = IoStatusBlock.Status;
                 }
             }
