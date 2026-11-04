@@ -104,6 +104,44 @@ static HANDLE OpenPath(PCWSTR Path, ACCESS_MASK Access, ULONG Options)
     return NT_SUCCESS(Status) ? Handle : NULL;
 }
 
+static VOID TestEffectiveAccessWithoutMode(PCWSTR Directory)
+{
+    static const PCSTR Names[] = { "$LXUID", "$LXGID", "$LXDEV" };
+    static const ULONG Flags[] = { TEST_LX_HAS_UID, TEST_LX_HAS_GID, TEST_LX_HAS_DEVICE_ID };
+    TEST_FILE_STAT_LX_INFORMATION Stat;
+    PFILE_FULL_EA_INFORMATION Previous;
+    ULONG Value[2] = { 5, 7 }, EaLength, Index;
+    UCHAR EaBuffer[64];
+    WCHAR Path[MAX_PATH];
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+    HANDLE File;
+
+    for (Index = 0; Index < ARRAYSIZE(Names); Index++)
+    {
+        GetTempFileNameW(Directory, L"fsa", 0, Path);
+        File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE | FILE_READ_EA | FILE_WRITE_EA,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+        ok(File != INVALID_HANDLE_VALUE, "%s: CreateFileW failed with %lu\n", Names[Index], GetLastError());
+        if (File == INVALID_HANDLE_VALUE)
+            continue;
+
+        Previous = NULL;
+        EaLength = AppendEa(EaBuffer, 0, &Previous, Names[Index], Value,
+                            (Flags[Index] == TEST_LX_HAS_DEVICE_ID) ? sizeof(Value) : sizeof(Value[0]));
+        ok_ntstatus(NtSetEaFile(File, &Iosb, EaBuffer, EaLength), STATUS_SUCCESS);
+        memset(&Stat, 0xcc, sizeof(Stat));
+        Status = NtQueryInformationFile(File, &Iosb, &Stat, sizeof(Stat), TestFileStatLxInformation);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        ok(Stat.LxFlags == Flags[Index], "%s: LxFlags %lx\n", Names[Index], Stat.LxFlags);
+        ok(Stat.EffectiveAccess == FILE_ALL_ACCESS, "%s: EffectiveAccess %lx\n", Names[Index], Stat.EffectiveAccess);
+
+        CloseHandle(File);
+        DeleteFileW(Path);
+    }
+}
+
 START_TEST(FileStatInformation)
 {
     PNT_QUERY_INFORMATION_BY_NAME QueryByName =
@@ -164,6 +202,7 @@ START_TEST(FileStatInformation)
     ok_hex(Stat.LxFlags, TEST_LX_HAS_MODE);
     ok_hex(Stat.LxMode, Mode);
     ok_hex(Stat.LxUid, 0);
+    ok_hex(Stat.EffectiveAccess, 0);
 
     EaLength = 0;
     Previous = NULL;
@@ -240,4 +279,6 @@ START_TEST(FileStatInformation)
 
     CloseHandle(File);
     DeleteFileW(Path);
+
+    TestEffectiveAccessWithoutMode(Directory);
 }
