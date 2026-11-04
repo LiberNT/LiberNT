@@ -4229,6 +4229,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFormatSupport(DXGI_FORMAT format, U
 {
     if (!support) return E_INVALIDARG;
     *support = 0;
+    if (static_cast<UINT>(format) > DXGI_FORMAT_A4B4G4R4_UNORM) return E_FAIL;
     if (!functions.pfnCheckFormatSupport) return E_NOTIMPL;
     NativeLock guard(this);
     BeginCall();
