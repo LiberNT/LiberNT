@@ -1294,7 +1294,21 @@ static void DocHostContainer_get_docobj_rect(DocHost *This, RECT *rc)
 
 static HRESULT DocHostContainer_set_status_text(DocHost *This, const WCHAR *text)
 {
+#ifdef __REACTOS__
+    VARIANTARG arg;
+    DISPPARAMS dispparams = {&arg, NULL, 1, 0};
+
+    V_VT(&arg) = VT_BSTR;
+    V_BSTR(&arg) = SysAllocString(text ? text : L"");
+    call_sink(This->cps.wbe2, DISPID_STATUSTEXTCHANGE, &dispparams);
+    SysFreeString(V_BSTR(&arg));
+
+    if(This->frame)
+        return IOleInPlaceFrame_SetStatusText(This->frame, text);
+    return S_OK;
+#else
     return E_NOTIMPL;
+#endif
 }
 
 static void DocHostContainer_on_command_state_change(DocHost *This, LONG command, BOOL enable)

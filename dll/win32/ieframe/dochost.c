@@ -755,6 +755,32 @@ static HRESULT WINAPI ClOleCommandTarget_Exec(IOleCommandTarget *iface,
             if(fire_titlechange(This) && This->olecmd)
                 return IOleCommandTarget_Exec(This->olecmd, pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut);
             return S_OK;
+#ifdef __REACTOS__
+        case OLECMDID_SETPROGRESSMAX:
+        case OLECMDID_SETPROGRESSPOS: {
+            VARIANTARG args[2];
+            DISPPARAMS dispparams = {args, NULL, 2, 0};
+
+            if(!pvaIn || V_VT(pvaIn) != VT_I4)
+                return E_INVALIDARG;
+            if(nCmdID == OLECMDID_SETPROGRESSMAX)
+                This->progress_max = V_I4(pvaIn);
+            else
+                This->progress = V_I4(pvaIn);
+
+            if(This->busy) {
+                V_VT(args) = VT_I4;
+                V_I4(args) = This->progress_max;
+                V_VT(args+1) = VT_I4;
+                V_I4(args+1) = This->progress;
+                call_sink(This->cps.wbe2, DISPID_PROGRESSCHANGE, &dispparams);
+            }
+
+            if(This->olecmd)
+                return IOleCommandTarget_Exec(This->olecmd, pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut);
+            return S_OK;
+        }
+#endif
         case OLECMDID_SETDOWNLOADSTATE:
             if(pvaIn && V_VT(pvaIn) == VT_I4)
                 This->busy = V_I4(pvaIn) ? VARIANT_TRUE : VARIANT_FALSE;
