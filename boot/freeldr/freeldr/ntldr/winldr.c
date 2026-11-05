@@ -1593,7 +1593,6 @@ LoadAndBootWindows(
     TRACE("BootOptions(2): '%s'\n", BootOptions);
     if (NtLdrGetOption(BootOptions, "DEBUGPORT=NET"))
     {
-        CHAR AssistanceText[48] = "Network assistance";
         CHAR AssistanceOption[32];
         ULONG AssistanceKey, AssistanceRound;
         TIMEINFO* AssistanceTime;
@@ -1624,10 +1623,7 @@ LoadAndBootWindows(
             RtlStringCbPrintfA(AssistanceOption, sizeof(AssistanceOption), "ASSISTANCE_KEY=%04lu-%04lu",
                                AssistanceKey / 10000, AssistanceKey % 10000);
             NtLdrAddOptions(BootOptions, sizeof(BootOptions), TRUE, AssistanceOption);
-            RtlStringCbPrintfA(AssistanceText, sizeof(AssistanceText), "Network assistance key %04lu-%04lu",
-                               AssistanceKey / 10000, AssistanceKey % 10000);
         }
-        UiDrawText(0, 0, AssistanceText, ATTR(COLOR_WHITE, COLOR_BLACK));
     }
 
 #if defined(UEFIBOOT) && defined(FREELDR_HTTP_BOOT)

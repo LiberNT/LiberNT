@@ -54,6 +54,27 @@ KdNetTime(VOID)
 }
 
 static
+BOOLEAN
+KdpIsConnected(VOID)
+{
+    /* TODO: the relay acknowledges nothing, so reaching it means having an address and the relay's resolved name */
+    return KdNetReady && KdIpAddress && (KdNetOptions.HostIp || !KdNetOptions.HostName[0]);
+}
+
+static
+PCSTR
+KdpVisibleKey(VOID)
+{
+    if (!KdpIsConnected())
+        return NULL;
+
+    if (KdNetOptions.ShowKey)
+        return KdNetOptions.Key;
+
+    return KdNetOptions.HaveKey ? NULL : KdSessionKeyText;
+}
+
+static
 VOID
 KdpShowHost(VOID)
 {
@@ -61,10 +82,18 @@ KdpShowHost(VOID)
     ULONG Host = KdNetOptions.HostIp;
     int Length;
 
-    if (KdpHostShown || !KdIpAddress || !Host || !KdNetHost.ShowPrompt)
+    if (KdpHostShown || !KdpIsConnected() || !KdNetHost.ShowPrompt)
         return;
 
     KdpHostShown = TRUE;
+
+    /* The host draws the key with every prompt, and the key is all a person needs to see */
+    if (KdpVisibleKey() || !Host)
+    {
+        KdNetHost.ShowPrompt(NULL);
+        return;
+    }
+
     if (KdNetOptions.HostName[0])
     {
         Length = _snprintf(Text, sizeof(Text), "Connected to %s", KdNetOptions.HostName);
@@ -435,18 +464,18 @@ KdpTerminalQueryKey(
     _Out_writes_z_(Size) PCHAR Buffer,
     _In_ ULONG Size)
 {
+    PCSTR Key;
     int Length;
 
     if (!Size)
         return 0;
 
     *Buffer = ANSI_NULL;
-    if (KdNetOptions.ShowKey)
-        Length = _snprintf(Buffer, Size, "%s", KdNetOptions.Key);
-    else if (!KdNetReady || KdNetOptions.HaveKey)
+    Key = KdpVisibleKey();
+    if (!Key)
         return 0;
-    else
-        Length = _snprintf(Buffer, Size, "%s", KdSessionKeyText);
+
+    Length = _snprintf(Buffer, Size, "%s", Key);
     if (Length < 0 || (ULONG)Length >= Size)
         Length = Size - 1;
 

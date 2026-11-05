@@ -153,7 +153,11 @@ The debugger NIC is chosen in this order, whatever the mode:
 | `LOCAL_BROADCAST=1` | plain broadcast, as above | `kdnet.py --local <interface>` |
 | none | DHCP, encrypted session | `kdnet.py --key <key>` on the same network |
 | `HOST_IP=<host>` | DHCP, sends to that host | `kdnet.py --key <key>` on that host |
-| `HOST_NAME=libernt.com HOST_PORT=50000` ("Remote assistance") | DHCP, relay | `kdnet.py --relay libernt.com:50000 --key <key>` |
+| `HOST_NAME=libernt.com HOST_PORT=50000` (with `DEBUGPORT=FILE`, the boot menu's "Debugging") | DHCP, relay | `kdnet.py --relay libernt.com:50000 --key <key>` |
+
+The boot menu's "Debugging" also serves as remote assistance for a normal user: the debugger, the log file and the relay are all on, and the only thing it adds to the screen is the key. The boot screen and the desktop show the key once the machine has an address and has resolved the relay's name; the relay acknowledges nothing, so that is as close to "connected" as the target can tell. Add `DEBUGPORT=SCREEN` to the BCD's load options for the log on screen as well.
+
+Test VMs must not reach the production relay, which records every machine that announces itself for 30 days. Boot "Debugging" in a VM only on a private network: `pc-bt/src/kdnet-pt/fakenet.py` on the development host is one that answers DHCP and DNS and carries the announcements to a local `kdrelay.py`. Otherwise use `HOST_IP`.
 
 To develop this without a second machine, `~/reactos-scripts/kdnet_bench.sh` (see its header) boots a private image through `vm_monitor.py` with a host USB-Ethernet adapter passed through; cable that adapter to another NIC of the host and run `kdnet.py` there. It is a development aid only, and QEMU differs from hardware: after the OS took the xHCI controller over, the interrupt endpoint completed about 9 s late in the runs measured, so a late link can be noticed that much later. Real hardware was not measured.
 
