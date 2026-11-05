@@ -1,0 +1,42 @@
+; LiberNT Remote Display Adapter
+
+[Version]
+Signature="$Windows NT$"
+LayoutFile=layout.inf
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%LiberNT%
+DriverVer=11/05/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%StdMfg%=StdMfg
+
+[StdMfg]
+%RdpVdd.DeviceDesc%=RdpVdd_Install,RdpVdd_RemoteDisplay
+
+[RdpVdd_Install]
+AddReg=RdpVdd_SoftwareSettings
+
+[RdpVdd_SoftwareSettings]
+HKR,,"Device Description",%REG_SZ%,"%RdpVdd.DeviceDesc%"
+
+[RdpVdd_Install.Services]
+AddService=rdpvdd,0x00000002,RdpVdd_Service
+
+[RdpVdd_Service]
+DisplayName=%RdpVdd.ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=0
+ServiceBinary=%12%\rdpvdd.sys
+LoadOrderGroup=Video
+
+[Strings]
+LiberNT="LiberNT"
+StdMfg="(Standard display types)"
+RdpVdd.DeviceDesc="LiberNT Remote Display Adapter"
+RdpVdd.ServiceDesc="LiberNT Remote Display Driver"
+REG_SZ=0x00000000
