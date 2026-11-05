@@ -2470,6 +2470,9 @@ LxMountPivotRoot(
 
     if ((NewMount == NULL) || (OldMount == NULL))
         return -LX_EINVAL;
+    OldMount = LxMountFind(Ns, PutOld->Path, NULL);
+    if (OldMount == NULL)
+        return -LX_EINVAL;
     Root = LxProcessRoot(Process);
     if (Root == NULL)
         return -LX_ENOMEM;
@@ -2519,8 +2522,8 @@ LxMountPivotRoot(
     }
     NewMount->Parent = RootMount->Parent;
     NewMount->ParentId = (NewMount->Parent != NULL) ? NewMount->Parent->Id : 1;
-    RootMount->Parent = NewMount;
-    RootMount->ParentId = NewMount->Id;
+    RootMount->Parent = OldMount;
+    RootMount->ParentId = OldMount->Id;
     for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts;)
     {
         PLX_MOUNT Mount = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
