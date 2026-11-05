@@ -330,22 +330,11 @@ config ENABLE_RTW8852BS
       Build the rtw8852bs Native 802.11 miniport for the Realtek RTL8852BS
       SDIO Wi-Fi chip, with its firmware.
 
-config RDPSERVER_DIR
-    prompt "RDP console server build directory"
-    type string
-    default ""
-    depends ARCH=amd64
-    help
-      Install directory of a MinGW build of base/services/rdpserver
-      (bin/ and licenses/). The live and preinstalled images then carry the
-      server and start it with the interactive desktop; its in-tree
-      rdpserver.ini keeps it disabled. Empty leaves the server out.
-
 config RDPSERVER_CONFIG_DIR
     prompt "RDP console server private configuration directory"
     type string
     default ""
-    depends ARCH=amd64
+    depends ENABLE_RDPSERVER=y
     help
       Directory outside the source tree with an rdpserver.ini that enables
       the server, and its TLS certificate and key. Empty keeps the
