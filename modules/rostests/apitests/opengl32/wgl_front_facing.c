@@ -27,6 +27,8 @@ typedef void (APIENTRY *PFN_ATTACH_SHADER)(GLuint, GLuint);
 typedef void (APIENTRY *PFN_LINK_PROGRAM)(GLuint);
 typedef void (APIENTRY *PFN_GET_PROGRAMIV)(GLuint, GLenum, GLint *);
 typedef void (APIENTRY *PFN_USE_PROGRAM)(GLuint);
+typedef void (APIENTRY *PFN_ENABLE_ATTRIB)(GLuint);
+typedef void (APIENTRY *PFN_ATTRIB_POINTER)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void *);
 
 static const char VertexSource[] =
     "#version 120\n"
@@ -34,9 +36,21 @@ static const char VertexSource[] =
 static const char FragmentSource[] =
     "#version 120\n"
     "void main() { gl_FragColor = gl_FrontFacing ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(0.0, 1.0, 0.0, 1.0); }\n";
+static const char Vertex150Source[] =
+    "#version 150\n"
+    "#extension GL_ARB_explicit_attrib_location : enable\n"
+    "invariant gl_Position;\n"
+    "layout(location = 0) in vec4 vs_in0;\n"
+    "out shader_in_out { vec4 reg[10]; } shader_out;\n"
+    "void main() { gl_Position = vs_in0; }\n";
+static const char Fragment150Source[] =
+    "#version 150\n"
+    "#extension GL_ARB_explicit_attrib_location : enable\n"
+    "layout(location = 0) out vec4 color_out0;\n"
+    "void main() { color_out0 = (gl_FrontFacing ? 1.0 : -1.0) >= 0.0 ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(0.0, 1.0, 0.0, 1.0); }\n";
 
 static BOOL
-BuildProgram(void)
+BuildProgram(const char *VertexText, const char *FragmentText)
 {
     PFN_CREATE_SHADER CreateShader = (PFN_CREATE_SHADER)wglGetProcAddress("glCreateShader");
     PFN_SHADER_SOURCE ShaderSource = (PFN_SHADER_SOURCE)wglGetProcAddress("glShaderSource");
@@ -57,13 +71,13 @@ BuildProgram(void)
         return FALSE;
     }
     Vertex = CreateShader(GL_VERTEX_SHADER_);
-    Source = VertexSource;
+    Source = VertexText;
     ShaderSource(Vertex, 1, &Source, NULL);
     CompileShader(Vertex);
     GetShaderiv(Vertex, GL_COMPILE_STATUS_, &Status);
     ok(Status != 0, "The vertex shader did not compile\n");
     Fragment = CreateShader(GL_FRAGMENT_SHADER_);
-    Source = FragmentSource;
+    Source = FragmentText;
     ShaderSource(Fragment, 1, &Source, NULL);
     CompileShader(Fragment);
     GetShaderiv(Fragment, GL_COMPILE_STATUS_, &Status);
@@ -113,6 +127,28 @@ DrawQuad(BOOL CounterClockwise)
     glEnd();
 }
 
+static void
+DrawAttributeQuad(void)
+{
+    static const float Positions[] =
+    {
+        -1.0f, -1.0f, 0.1f,  1.0f, -1.0f, 0.1f,  -1.0f, 1.0f, 0.1f,
+         1.0f, -1.0f, 0.1f,  1.0f,  1.0f, 0.1f,  -1.0f, 1.0f, 0.1f,
+    };
+    PFN_ENABLE_ATTRIB EnableAttrib = (PFN_ENABLE_ATTRIB)wglGetProcAddress("glEnableVertexAttribArray");
+    PFN_ATTRIB_POINTER AttribPointer = (PFN_ATTRIB_POINTER)wglGetProcAddress("glVertexAttribPointer");
+
+    ok(EnableAttrib != NULL && AttribPointer != NULL, "Vertex attribute functions are missing\n");
+    if (EnableAttrib == NULL || AttribPointer == NULL)
+        return;
+    glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    EnableAttrib(0);
+    AttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, Positions);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    CheckCenter("A GLSL 150 quad from a three component attribute", 255, 0);
+}
+
 START_TEST(wgl_front_facing)
 {
     PIXELFORMATDESCRIPTOR Pfd = { sizeof(Pfd), 1 };
@@ -138,13 +174,15 @@ START_TEST(wgl_front_facing)
         if (Context != NULL && wglMakeCurrent(Dc, Context))
         {
             trace("renderer '%s'\n", glGetString(GL_RENDERER));
-            if (BuildProgram())
+            if (BuildProgram(VertexSource, FragmentSource))
             {
                 glViewport(0, 0, SIZE, SIZE);
                 DrawQuad(TRUE);
                 CheckCenter("A counter-clockwise quad", 255, 0);
                 DrawQuad(FALSE);
                 CheckCenter("A clockwise quad", 0, 255);
+                if (BuildProgram(Vertex150Source, Fragment150Source))
+                    DrawAttributeQuad();
             }
             else
             {
