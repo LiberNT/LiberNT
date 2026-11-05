@@ -224,9 +224,166 @@ TestSelfSpecialApc(VOID)
     }
 }
 
+#define GUARDED_APC_ITERATIONS 128
+
+typedef struct _GUARDED_APC_CONTEXT
+{
+    KEVENT Ready;
+    KEVENT Proceed;
+    KEVENT Fired;
+    KEVENT Acknowledged;
+    KAPC Apc;
+    PKTHREAD Target;
+    KAFFINITY TargetAffinity;
+    volatile LONG Delivered;
+    volatile LONG Failed;
+    volatile LONG Stop;
+} GUARDED_APC_CONTEXT;
+
+static GUARDED_APC_CONTEXT GuardedApcContext;
+
+static VOID NTAPI
+GuardedSpecialApcRoutine(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2)
+{
+    GUARDED_APC_CONTEXT *Context = *SystemArgument1;
+    UNREFERENCED_PARAMETER(Apc);
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+    InterlockedIncrement(&Context->Delivered);
+    KeSetEvent(&Context->Fired, IO_NO_INCREMENT, FALSE);
+}
+
+static VOID NTAPI
+GuardedApcRundown(_In_ PKAPC Apc)
+{
+    GUARDED_APC_CONTEXT *Context = CONTAINING_RECORD(Apc, GUARDED_APC_CONTEXT, Apc);
+    InterlockedExchange(&Context->Failed, 1);
+    KeSetEvent(&Context->Fired, IO_NO_INCREMENT, FALSE);
+}
+
+static VOID NTAPI
+GuardedApcThread(_In_ PVOID Parameter)
+{
+    GUARDED_APC_CONTEXT *Context = Parameter;
+    LARGE_INTEGER Timeout;
+    KAFFINITY PreviousAffinity;
+    NTSTATUS Status;
+    ULONG Index;
+
+    Timeout.QuadPart = -3LL * 1000 * 1000 * 10;
+    PreviousAffinity = KeSetSystemAffinityThreadEx(Context->TargetAffinity);
+    Context->Target = KeGetCurrentThread();
+    for (Index = 0; Index < GUARDED_APC_ITERATIONS; ++Index)
+    {
+        KeEnterGuardedRegion();
+        KeSetEvent(&Context->Ready, IO_NO_INCREMENT, FALSE);
+        Status = KeWaitForSingleObject(&Context->Proceed, Executive, KernelMode, FALSE, &Timeout);
+        KeLeaveGuardedRegion();
+        if (Status != STATUS_SUCCESS || Context->Stop) break;
+
+        Status = KeWaitForSingleObject(&Context->Fired, Executive, KernelMode, FALSE, &Timeout);
+        if (Status != STATUS_SUCCESS || Context->Delivered != (LONG)Index + 1)
+        {
+            InterlockedExchange(&Context->Failed, 1);
+            KeSetEvent(&Context->Acknowledged, IO_NO_INCREMENT, FALSE);
+            break;
+        }
+        KeSetEvent(&Context->Acknowledged, IO_NO_INCREMENT, FALSE);
+    }
+    if (Index != GUARDED_APC_ITERATIONS && !Context->Stop)
+        InterlockedExchange(&Context->Failed, 1);
+    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+static VOID
+TestGuardedApcRace(VOID)
+{
+    GUARDED_APC_CONTEXT *Context = &GuardedApcContext;
+    KAFFINITY Active, First, Second, PreviousAffinity;
+    HANDLE ThreadHandle;
+    PVOID ThreadObject;
+    LARGE_INTEGER Timeout;
+    NTSTATUS Status;
+    BOOLEAN Inserted = FALSE;
+    ULONG Index;
+
+    Active = KeQueryActiveProcessors();
+    First = Active & (0 - Active);
+    Active &= ~First;
+    Second = Active & (0 - Active);
+    if (!First || !Second)
+    {
+        skip(FALSE, "Two processors are required for the guarded APC race\n");
+        return;
+    }
+
+    RtlZeroMemory(Context, sizeof(*Context));
+    KeInitializeEvent(&Context->Ready, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&Context->Proceed, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&Context->Fired, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&Context->Acknowledged, SynchronizationEvent, FALSE);
+    Context->TargetAffinity = Second;
+    Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
+    PreviousAffinity = KeSetSystemAffinityThreadEx(First);
+
+    Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, NULL, NULL, NULL,
+                                  GuardedApcThread, Context);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        KeRevertToUserAffinityThreadEx(PreviousAffinity);
+        return;
+    }
+    Status = ObReferenceObjectByHandle(ThreadHandle, THREAD_ALL_ACCESS, *PsThreadType,
+                                       KernelMode, &ThreadObject, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        InterlockedExchange(&Context->Stop, 1);
+        KeSetEvent(&Context->Proceed, IO_NO_INCREMENT, FALSE);
+        ZwWaitForSingleObject(ThreadHandle, FALSE, NULL);
+        ObCloseHandle(ThreadHandle, KernelMode);
+        KeRevertToUserAffinityThreadEx(PreviousAffinity);
+        return;
+    }
+    ObCloseHandle(ThreadHandle, KernelMode);
+
+    for (Index = 0; Index < GUARDED_APC_ITERATIONS; ++Index)
+    {
+        Status = KeWaitForSingleObject(&Context->Ready, Executive, KernelMode, FALSE, &Timeout);
+        if (Status != STATUS_SUCCESS) break;
+        KeInitializeApc(&Context->Apc, Context->Target, OriginalApcEnvironment,
+                        GuardedSpecialApcRoutine, GuardedApcRundown, NULL, KernelMode, NULL);
+        if (Index & 1) KeSetEvent(&Context->Proceed, IO_NO_INCREMENT, FALSE);
+        Inserted = KeInsertQueueApc(&Context->Apc, Context, NULL, IO_NO_INCREMENT);
+        if (!(Index & 1)) KeSetEvent(&Context->Proceed, IO_NO_INCREMENT, FALSE);
+        if (!Inserted) break;
+        Status = KeWaitForSingleObject(&Context->Acknowledged, Executive, KernelMode, FALSE, &Timeout);
+        if (Status != STATUS_SUCCESS || Context->Failed) break;
+    }
+    ok(Index == GUARDED_APC_ITERATIONS, "Guarded APC race stopped at %lu, status 0x%08lx\n", Index, Status);
+    InterlockedExchange(&Context->Stop, 1);
+    KeSetEvent(&Context->Proceed, IO_NO_INCREMENT, FALSE);
+    Status = KeWaitForSingleObject(ThreadObject, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (Status != STATUS_SUCCESS)
+        KeWaitForSingleObject(ThreadObject, Executive, KernelMode, FALSE, NULL);
+    ok_eq_long(Context->Delivered, GUARDED_APC_ITERATIONS);
+    ObDereferenceObject(ThreadObject);
+    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+}
+
 START_TEST(KeApcInject)
 {
     TestSelfSpecialApc();
     TestNormalApcInjection();
     TestApcRundown();
+    TestGuardedApcRace();
 }
