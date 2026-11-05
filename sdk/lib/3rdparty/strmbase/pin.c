@@ -686,7 +686,7 @@ HRESULT WINAPI BaseOutputPinImpl_DecideAllocator(struct strmbase_source *This,
 
     hr = IMemInputPin_GetAllocator(pPin, pAlloc);
 
-    if (hr == VFW_E_NO_ALLOCATOR)
+    if (FAILED(hr))
         hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL,
                 CLSCTX_INPROC_SERVER, &IID_IMemAllocator, (void **)pAlloc);
 

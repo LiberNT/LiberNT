@@ -835,6 +835,65 @@ static void test_connect_pin(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static HRESULT WINAPI testsource_DecideBufferSize(struct strmbase_source *iface,
+        IMemAllocator *allocator, ALLOCATOR_PROPERTIES *props)
+{
+    ALLOCATOR_PROPERTIES ret_props;
+
+    props->cBuffers = 1;
+    props->cbBuffer = 512;
+    if (!props->cbAlign)
+        props->cbAlign = 1;
+    return IMemAllocator_SetProperties(allocator, props, &ret_props);
+}
+
+static const struct strmbase_source_ops default_allocator_source_ops =
+{
+    .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
+    .pfnDecideBufferSize = testsource_DecideBufferSize,
+    .pfnDecideAllocator = BaseOutputPinImpl_DecideAllocator,
+};
+
+static void test_default_allocator(void)
+{
+    static const GUID clsid = {0xabacab};
+    AM_MEDIA_TYPE req_mt =
+    {
+        .majortype = MEDIATYPE_Stream,
+        .subtype = {0x2222},
+        .formattype = {0x3333},
+    };
+    IBaseFilter *filter = create_file_writer();
+    WCHAR *filename = set_filename(filter);
+    struct testfilter source;
+    IFilterGraph2 *graph;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    strmbase_filter_init(&source.filter, NULL, &clsid, &testfilter_ops);
+    strmbase_source_init(&source.source, &source.filter, L"", &default_allocator_source_ops);
+    CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER, &IID_IFilterGraph2, (void **)&graph);
+    IFilterGraph2_AddFilter(graph, filter, L"filewriter");
+    IFilterGraph2_AddFilter(graph, &source.filter.IBaseFilter_iface, L"source");
+    IBaseFilter_FindPin(filter, L"in", &pin);
+
+    hr = IFilterGraph2_ConnectDirect(graph, &source.source.pin.IPin_iface, pin, &req_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!!source.source.pAllocator, "Got no allocator.\n");
+
+    IFilterGraph2_Disconnect(graph, pin);
+    IFilterGraph2_Disconnect(graph, &source.source.pin.IPin_iface);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    IPin_Release(pin);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(&source.filter.IBaseFilter_iface);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    DeleteFileW(filename);
+}
+
 static void test_misc_flags(void)
 {
     IBaseFilter *filter = create_file_writer();
@@ -953,6 +1012,7 @@ START_TEST(filewriter)
     test_media_types();
     test_enum_media_types();
     test_connect_pin();
+    test_default_allocator();
     test_misc_flags();
     test_file_sink();
 
