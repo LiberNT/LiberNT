@@ -326,6 +326,7 @@ static HRESULT renderer_init_stream(struct strmbase_filter *iface)
     if (filter->sink.pin.peer)
         ResetEvent(filter->state_event);
     filter->eos = FALSE;
+    filter->abort = FALSE;
     filter->have_last_stop = FALSE;
     ResetEvent(filter->flush_event);
     if (filter->ops->renderer_init_stream)
@@ -446,6 +447,12 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
     state = filter->filter.state;
     if (state == State_Stopped)
         return filter->fail_inactive_receive ? E_FAIL : VFW_E_WRONG_STATE;
+
+    if (filter->abort)
+    {
+        SetEvent(filter->state_event);
+        return E_UNEXPECTED;
+    }
 
     if (filter->eos)
         return E_UNEXPECTED;

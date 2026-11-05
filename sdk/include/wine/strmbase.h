@@ -298,6 +298,7 @@ struct strmbase_renderer
     const struct strmbase_renderer_ops *ops;
 
     BOOL eos;
+    BOOL abort;
     BOOL fail_inactive_receive;
     BOOL no_filter_quality_control;
 };
