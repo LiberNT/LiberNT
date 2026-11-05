@@ -443,6 +443,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetGammaControlCapabilities(IDXGIOu
     if (!gamma_caps)
         return E_INVALIDARG;
 #ifdef __REACTOS__
+    /* FIXME: a native D3D11 fullscreen swap chain composites through DWM and takes no ownership, so this fails there */
     if (!wined3d_output_is_exclusively_owned(impl_from_IDXGIOutput6(iface)->wined3d_output))
         return DXGI_ERROR_INVALID_CALL;
 #endif
