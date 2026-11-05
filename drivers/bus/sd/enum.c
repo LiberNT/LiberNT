@@ -163,7 +163,11 @@ SdBusSendCommand(
 
     if (WaitStatus == STATUS_IO_TIMEOUT)
     {
-        DPRINT1("SdBusSendCommand: CMD%u completion timed out\n", CommandIndex);
+        DPRINT1("SdBusSendCommand: CMD%u completion timed out, status 0x%08lx, present 0x%08lx, clock 0x%04x\n",
+                CommandIndex,
+                SdBusReadReg32(FdoExtension, SDHCI_INT_STATUS),
+                SdBusReadReg32(FdoExtension, SDHCI_PRESENT_STATE),
+                SdBusReadReg16(FdoExtension, SDHCI_CLOCK_CONTROL));
         (void)SdBusResetHost(FdoExtension, SDHCI_RESET_CMD);
         return STATUS_IO_TIMEOUT;
     }
