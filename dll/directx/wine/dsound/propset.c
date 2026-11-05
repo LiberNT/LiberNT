@@ -223,13 +223,15 @@ static HRESULT DSPROPERTY_DescriptionW(
 
     setup_dsound_options();
 
-    GetDeviceID(&ppd->DeviceId, &dev_guid);
+    hr = GetDeviceID(&ppd->DeviceId, &dev_guid);
+    if (FAILED(hr))
+        return hr;
 
     hr = get_mmdevice(eRender, &dev_guid, &mmdevice);
     if(FAILED(hr)){
         hr = get_mmdevice(eCapture, &dev_guid, &mmdevice);
         if(FAILED(hr))
-            return hr;
+            return hr == DSERR_INVALIDPARAM ? DSERR_NODRIVER : hr;
     }
 
     hr = IMMDevice_OpenPropertyStore(mmdevice, STGM_READ, &ps);
