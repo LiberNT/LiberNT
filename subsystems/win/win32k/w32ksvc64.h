@@ -899,3 +899,4 @@
     SVC_(UserGetWindowDpiHostingBehavior, 1)
     SVC_(UserInitializeTouchInjection, 2)
     SVC_(UserInjectTouchInput, 2)
+    SVC_(UserSetDisplayConfig, 5)

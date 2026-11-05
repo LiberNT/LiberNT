@@ -13,6 +13,7 @@
 DBG_DEFAULT_CHANNEL(EngPDev);
 
 static PPDEVOBJ gppdevList = NULL;
+PPDEVOBJ gppdevDetached = NULL;
 static HSEMAPHORE ghsemPDEV;
 
 BOOL
@@ -739,7 +740,6 @@ PDEVOBJ_bDynamicModeChange(
         DRIVER_FUNCTIONS pfn;
         GDIINFO gdiinfo;
         DEVINFO devinfo;
-        DWORD StateFlags;
     } temp;
 
     EngAcquireSemaphore(ppdevFirst->hsemPointer);
@@ -780,10 +780,9 @@ PDEVOBJ_bDynamicModeChange(
     /* Exchange DEVMODE */
     SwitchPointer(&ppdev->pdmwDev, &ppdev2->pdmwDev);
 
-    /* Exchange state flags */
-    temp.StateFlags = ppdev->pGraphicsDevice->StateFlags;
-    ppdev->pGraphicsDevice->StateFlags = ppdev2->pGraphicsDevice->StateFlags;
-    ppdev2->pGraphicsDevice->StateFlags = temp.StateFlags;
+    /* Exchange the graphics devices, which differ when the desktop moves to another display */
+    SwitchPointer(&ppdev->pGraphicsDevice, &ppdev2->pGraphicsDevice);
+    SwitchPointer(&ppdev->hSpooler, &ppdev2->hSpooler);
 
     /* Notify each driver instance of its new HDEV association */
     ppdev->pfn.CompletePDEV(ppdev->dhpdev, (HDEV)ppdev);
@@ -892,6 +891,118 @@ leave:
     return retval;
 }
 
+static
+BOOL
+PDEVOBJ_bExchangeDisplay(
+    _Inout_ PPDEVOBJ ppdev,
+    _Inout_ PPDEVOBJ ppdev2)
+{
+    PGRAPHICS_DEVICE pGraphicsDevice;
+
+    PDEVOBJ_vSuspendDirectDraw(ppdev);
+    PDEVOBJ_vSuspendDirectDraw(ppdev2);
+    if (!PDEVOBJ_bDynamicModeChange(ppdev, ppdev2))
+    {
+        PDEVOBJ_vResumeDirectDraw(ppdev);
+        PDEVOBJ_vResumeDirectDraw(ppdev2);
+        return FALSE;
+    }
+    PDEVOBJ_vResumeDirectDraw(ppdev);
+    PDEVOBJ_vResumeDirectDraw(ppdev2);
+
+    if (ppdev->pEDDgpl)
+    {
+        ppdev->pEDDgpl->hDev = (HDEV)ppdev;
+        ppdev->pEDDgpl->dhpdev = ppdev->dhpdev;
+    }
+    if (ppdev2->pEDDgpl)
+    {
+        ppdev2->pEDDgpl->hDev = (HDEV)ppdev2;
+        ppdev2->pEDDgpl->dhpdev = ppdev2->dhpdev;
+    }
+
+    pGraphicsDevice = ppdev2->pGraphicsDevice;
+    pGraphicsDevice->StateFlags &= ~(DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE);
+    pGraphicsDevice = ppdev->pGraphicsDevice;
+    pGraphicsDevice->StateFlags |= DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE;
+    PDEVOBJ_vGetDeviceCaps(ppdev, &GdiHandleTable->DevCaps);
+    return TRUE;
+}
+
+BOOL
+NTAPI
+PDEVOBJ_bMoveToDisplay(
+    _Inout_ PPDEVOBJ ppdev,
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ PDEVMODEW pdm)
+{
+    PPDEVOBJ ppdevNew;
+    DWORD StateFlags;
+    BOOL bRet = FALSE;
+
+    EngAcquireSemaphore(ppdev->hsemDevLock);
+    EngAcquireSemaphore(ghsemPDEV);
+
+    if (!gppdevDetached)
+    {
+        StateFlags = pGraphicsDevice->StateFlags;
+        ppdevNew = PDEVOBJ_Create(pGraphicsDevice, pdm, 0, LDEV_DEVICE_DISPLAY);
+        pGraphicsDevice->StateFlags = StateFlags;
+        if (ppdevNew && PDEVOBJ_pSurface(ppdevNew) && PDEVOBJ_bExchangeDisplay(ppdev, ppdevNew))
+        {
+            gppdevDetached = ppdevNew;
+            bRet = TRUE;
+        }
+        else if (ppdevNew)
+        {
+            PDEVOBJ_vRelease(ppdevNew);
+        }
+    }
+
+    EngReleaseSemaphore(ghsemPDEV);
+    EngReleaseSemaphore(ppdev->hsemDevLock);
+    return bRet;
+}
+
+BOOL
+NTAPI
+PDEVOBJ_bReturnToDetachedDisplay(
+    _Inout_ PPDEVOBJ ppdev)
+{
+    PPDEVOBJ ppdevOld = NULL;
+    BOOL bRet = FALSE;
+
+    EngAcquireSemaphore(ppdev->hsemDevLock);
+    EngAcquireSemaphore(ghsemPDEV);
+
+    if (gppdevDetached && PDEVOBJ_bExchangeDisplay(ppdev, gppdevDetached))
+    {
+        ppdevOld = gppdevDetached;
+        gppdevDetached = NULL;
+        bRet = TRUE;
+    }
+
+    EngReleaseSemaphore(ghsemPDEV);
+    EngReleaseSemaphore(ppdev->hsemDevLock);
+
+    if (ppdevOld)
+        PDEVOBJ_vRelease(ppdevOld);
+    return bRet;
+}
+
+PPDEVOBJ
+NTAPI
+EngpGetDetachedPDEV(VOID)
+{
+    PPDEVOBJ ppdev;
+
+    EngAcquireSemaphoreShared(ghsemPDEV);
+    ppdev = gppdevDetached;
+    if (ppdev)
+        PDEVOBJ_vReference(ppdev);
+    EngReleaseSemaphore(ghsemPDEV);
+    return ppdev;
+}
 
 PPDEVOBJ
 NTAPI
@@ -923,6 +1034,13 @@ EngpGetPDEV(
                 ppdev = gpmdev->dev[i].ppdev;
                 break;
             }
+        }
+
+        if (!ppdev && gppdevDetached && UserIsLogonProcess(PsGetCurrentProcessId()))
+        {
+            RtlInitUnicodeString(&ustrCurrent, gppdevDetached->pGraphicsDevice->szWinDeviceName);
+            if (RtlEqualUnicodeString(pustrDeviceName, &ustrCurrent, TRUE))
+                ppdev = gppdevDetached;
         }
     }
     else if (gpmdev)

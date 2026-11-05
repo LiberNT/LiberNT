@@ -1004,6 +1004,8 @@ W32KAPI HCURSOR WINAPI NtUserSetCursor( HCURSOR cursor );
 W32KAPI BOOL    WINAPI NtUserSetCursorIconData( HCURSOR cursor, UNICODE_STRING *module, UNICODE_STRING *res_name,
                                                 struct cursoricon_desc *desc );
 W32KAPI BOOL    WINAPI NtUserSetCursorPos( INT x, INT y );
+W32KAPI LONG    WINAPI NtUserSetDisplayConfig( UINT32 path_count, DISPLAYCONFIG_PATH_INFO *paths, UINT32 mode_count,
+                                               DISPLAYCONFIG_MODE_INFO *modes, UINT32 flags );
 W32KAPI HWND    WINAPI NtUserSetFocus( HWND hwnd );
 W32KAPI BOOL    WINAPI NtUserSetForegroundWindow( HWND hwnd );
 W32KAPI void    WINAPI NtUserSetInternalWindowPos( HWND hwnd, UINT cmd, RECT *rect, POINT *pt );
