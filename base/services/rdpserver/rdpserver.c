@@ -36,6 +36,7 @@
 #include <freerdp/channels/wtsvc.h>
 #include <freerdp/channels/channels.h>
 #include <ntsecapi.h>
+#include <swdevice.h>
 #include "transfer.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
@@ -49,6 +50,9 @@ static SERVICE_STATUS ServiceState;
 static HANDLE ServiceStopEvent, SessionStopEvent;
 static char ServiceConfig[MAX_PATH];
 static DWORD FrameInterval;
+static CRITICAL_SECTION RemoteDisplayLock;
+static HSWDEVICE RemoteDisplay;
+static LONG RemoteDisplayUsers;
 
 #define SERVICE_NAME "LiberNTRDPServer"
 #define SERVICE_STOP_EVENT "Global\\LiberNT-RDPServer-Stop"
@@ -64,7 +68,7 @@ static DWORD FrameInterval;
 typedef struct DESKTOP_CONTEXT
 {
     rdpContext rdp;
-    BOOL Authorized, Active, Suppressed, Refresh, NlaLogon;
+    BOOL Authorized, Active, Suppressed, Refresh, NlaLogon, RemoteDisplay;
     LONG Generation;
     int Width, Height;
     HDC ScreenDC, MemoryDC;
@@ -333,6 +337,63 @@ static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, B
     return ctx->NlaLogon;
 }
 
+static VOID WINAPI RemoteDisplayCreated(HSWDEVICE device, HRESULT result, PVOID context, PCWSTR instance)
+{
+    (void)device; (void)context;
+    Log("Remote display adapter %ls: 0x%08lx", instance ? instance : L"", result);
+}
+
+static void AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
+{
+    static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
+    SW_DEVICE_CREATE_INFO info = {0};
+    WCHAR instance[64];
+    DWORD session = 0;
+    HRESULT hr;
+
+    EnterCriticalSection(&RemoteDisplayLock);
+    if (!RemoteDisplayUsers)
+    {
+        ProcessIdToSessionId(GetCurrentProcessId(), &session);
+        _snwprintf(instance, ARRAYSIZE(instance), L"RdpVdd_RemoteDisplay&SessionId_%04lu", session);
+        instance[ARRAYSIZE(instance) - 1] = 0;
+        info.cbSize = sizeof(info);
+        info.pszInstanceId = instance;
+        info.pszzHardwareIds = hardwareIds;
+        info.pszzCompatibleIds = hardwareIds;
+        info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
+                               SWDeviceCapabilitiesDriverRequired;
+        info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
+        hr = SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL,
+                            RemoteDisplayCreated, NULL, &RemoteDisplay);
+        if (FAILED(hr))
+        {
+            Log("Cannot create the remote display adapter: 0x%08lx", hr);
+            RemoteDisplay = NULL;
+        }
+    }
+    if (RemoteDisplay)
+    {
+        RemoteDisplayUsers++;
+        ctx->RemoteDisplay = TRUE;
+    }
+    LeaveCriticalSection(&RemoteDisplayLock);
+}
+
+static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
+{
+    if (!ctx->RemoteDisplay) return;
+    ctx->RemoteDisplay = FALSE;
+    EnterCriticalSection(&RemoteDisplayLock);
+    if (!--RemoteDisplayUsers)
+    {
+        SwDeviceClose(RemoteDisplay);
+        RemoteDisplay = NULL;
+        Log("Remote display adapter closed");
+    }
+    LeaveCriticalSection(&RemoteDisplayLock);
+}
+
 static BOOL PostConnect(freerdp_peer *peer)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
@@ -349,6 +410,7 @@ static BOOL PostConnect(freerdp_peer *peer)
         ctx->Transfer = TransferStart(ctx->Vcm, &ctx->rdp, TransferRoot, Log);
         if (!ctx->Transfer) { Log("File transfer channel failed to start"); return FALSE; }
     }
+    AcquireRemoteDisplay(ctx);
     Log("Authenticated peer %s; console desktop %dx%d", peer->hostname, ctx->Width, ctx->Height);
     return TRUE;
 }
@@ -494,6 +556,7 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     Log("Session closed: frames=%llu updates=%llu input events=%llu", ctx->Frames, ctx->Updates, ctx->Inputs);
     FreeDesktopCapture(ctx);
     if (ctx->Desktop && SetThreadDesktop(ctx->HomeDesktop)) CloseDesktop(ctx->Desktop);
+    ReleaseRemoteDisplay(ctx);
 }
 
 static DWORD WINAPI ClientThread(void *arg)
@@ -863,6 +926,7 @@ int main(int argc, char **argv)
     if (WSAStartup(MAKEWORD(2, 2), &winsock)) return 1;
     if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT)) return 1;
     if (!EnsureCertificate()) return 2;
+    InitializeCriticalSection(&RemoteDisplayLock);
     StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!StopEvent) return 1;
     FrameInterval = ReadFrameInterval();
