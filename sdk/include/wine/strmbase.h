@@ -55,6 +55,7 @@ static inline const char *debugstr_time(REFERENCE_TIME time)
 struct strmbase_pin
 {
     IPin IPin_iface;
+    IQualityControl IQualityControl_iface;
     struct strmbase_filter *filter;
     PIN_DIRECTION dir;
     WCHAR name[128];
@@ -106,6 +107,7 @@ struct strmbase_sink
     struct strmbase_pin pin;
 
     IMemInputPin IMemInputPin_iface;
+    IQualityControl IQualityControl_iface;
     IMemAllocator *pAllocator;
     BOOL flushing;
     IMemAllocator *preferred_allocator;
@@ -265,7 +267,6 @@ struct strmbase_renderer
     IQualityControl IQualityControl_iface;
 
     struct strmbase_sink sink;
-    IQualityControl sink_IQualityControl_iface;
 
     /* Signaled when the filter has completed a state change. The filter waits
      * for this event in IBaseFilter::GetState(). */

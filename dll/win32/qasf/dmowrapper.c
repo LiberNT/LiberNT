@@ -32,6 +32,8 @@ struct buffer
 struct dmo_wrapper_source
 {
     struct strmbase_source pin;
+    IQualityControl IQualityControl_iface;
+    IQualityControl *qc_sink;
     struct buffer buffer;
     struct strmbase_passthrough passthrough;
 };
@@ -141,6 +143,8 @@ static HRESULT dmo_wrapper_sink_query_interface(struct strmbase_pin *iface, REFI
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &sink->IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &sink->pin.IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -458,6 +462,61 @@ static inline struct dmo_wrapper_source *impl_source_from_strmbase_pin(struct st
     return CONTAINING_RECORD(iface, struct dmo_wrapper_source, pin.pin);
 }
 
+static struct dmo_wrapper_source *impl_source_from_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct dmo_wrapper_source, IQualityControl_iface);
+}
+
+static HRESULT WINAPI source_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct dmo_wrapper_source *pin = impl_source_from_IQualityControl(iface);
+    return IPin_QueryInterface(&pin->pin.pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI source_quality_control_AddRef(IQualityControl *iface)
+{
+    struct dmo_wrapper_source *pin = impl_source_from_IQualityControl(iface);
+    return IPin_AddRef(&pin->pin.pin.IPin_iface);
+}
+
+static ULONG WINAPI source_quality_control_Release(IQualityControl *iface)
+{
+    struct dmo_wrapper_source *pin = impl_source_from_IQualityControl(iface);
+    return IPin_Release(&pin->pin.pin.IPin_iface);
+}
+
+static HRESULT WINAPI source_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct dmo_wrapper_source *pin = impl_source_from_IQualityControl(iface);
+
+    TRACE("pin %p, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            pin, sender, q.Type, q.Proportion, debugstr_time(q.Late), debugstr_time(q.TimeStamp));
+
+    if (pin->qc_sink)
+        return IQualityControl_Notify(pin->qc_sink, &pin->pin.pin.filter->IBaseFilter_iface, q);
+    /* FIXME: Windows behaviour with a connected input pin and no sink is unverified */
+    return E_FAIL;
+}
+
+static HRESULT WINAPI source_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct dmo_wrapper_source *pin = impl_source_from_IQualityControl(iface);
+
+    TRACE("pin %p, sink %p.\n", pin, sink);
+
+    pin->qc_sink = sink;
+    return S_OK;
+}
+
+static const IQualityControlVtbl source_quality_control_vtbl =
+{
+    source_quality_control_QueryInterface,
+    source_quality_control_AddRef,
+    source_quality_control_Release,
+    source_quality_control_Notify,
+    source_quality_control_SetSink,
+};
+
 static HRESULT dmo_wrapper_source_query_interface(struct strmbase_pin *iface, REFIID iid, void **out)
 {
     struct dmo_wrapper_source *pin = impl_source_from_strmbase_pin(iface);
@@ -466,6 +525,8 @@ static HRESULT dmo_wrapper_source_query_interface(struct strmbase_pin *iface, RE
         *out = &pin->passthrough.IMediaPosition_iface;
     else if (IsEqualGUID(iid, &IID_IMediaSeeking))
         *out = &pin->passthrough.IMediaSeeking_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &pin->IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -633,6 +694,7 @@ static HRESULT WINAPI dmo_wrapper_filter_Init(IDMOWrapperFilter *iface, REFCLSID
         swprintf(id, ARRAY_SIZE(id), L"out%u", i);
         strmbase_source_init(&sources[i].pin, &filter->filter, id, &source_ops);
         sources[i].buffer.IMediaBuffer_iface.lpVtbl = &buffer_vtbl;
+        sources[i].IQualityControl_iface.lpVtbl = &source_quality_control_vtbl;
 
         strmbase_passthrough_init(&sources[i].passthrough, (IUnknown *)&sources[i].pin.pin.IPin_iface);
         ISeekingPassThru_Init(&sources[i].passthrough.ISeekingPassThru_iface,
