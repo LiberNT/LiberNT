@@ -67,10 +67,35 @@ static HRESULT smart_tee_wait_state(struct strmbase_filter *iface, DWORD timeout
     return iface->state == State_Paused ? VFW_S_CANT_CUE : S_OK;
 }
 
+static HRESULT smart_tee_init_stream(struct strmbase_filter *iface)
+{
+    SmartTeeFilter *filter = impl_from_strmbase_filter(iface);
+    HRESULT hr;
+
+    if (filter->capture.pin.peer && FAILED(hr = IMemAllocator_Commit(filter->capture.pAllocator)))
+        return hr;
+    if (filter->preview.pin.peer && FAILED(hr = IMemAllocator_Commit(filter->preview.pAllocator)))
+        return hr;
+    return S_OK;
+}
+
+static HRESULT smart_tee_cleanup_stream(struct strmbase_filter *iface)
+{
+    SmartTeeFilter *filter = impl_from_strmbase_filter(iface);
+
+    if (filter->capture.pin.peer)
+        IMemAllocator_Decommit(filter->capture.pAllocator);
+    if (filter->preview.pin.peer)
+        IMemAllocator_Decommit(filter->preview.pAllocator);
+    return S_OK;
+}
+
 static const struct strmbase_filter_ops filter_ops =
 {
     .filter_get_pin = smart_tee_get_pin,
     .filter_destroy = smart_tee_destroy,
+    .filter_init_stream = smart_tee_init_stream,
+    .filter_cleanup_stream = smart_tee_cleanup_stream,
     .filter_wait_state = smart_tee_wait_state,
 };
 
@@ -98,7 +123,7 @@ static HRESULT sink_query_interface(struct strmbase_pin *iface, REFIID iid, void
     return S_OK;
 }
 
-static HRESULT copy_sample(IMediaSample *inputSample, IMemAllocator *allocator, IMediaSample **pOutputSample)
+static HRESULT copy_sample(IMediaSample *inputSample, IMemAllocator *allocator, BOOL preview, IMediaSample **pOutputSample)
 {
     REFERENCE_TIME startTime, endTime;
     BOOL haveStartTime = TRUE, haveEndTime = TRUE;
@@ -136,21 +161,24 @@ static HRESULT copy_sample(IMediaSample *inputSample, IMemAllocator *allocator, 
     memcpy(ptrOut, ptrIn, IMediaSample_GetActualDataLength(inputSample));
     IMediaSample_SetActualDataLength(outputSample, IMediaSample_GetActualDataLength(inputSample));
 
-    hr = IMediaSample_SetDiscontinuity(outputSample, IMediaSample_IsDiscontinuity(inputSample) == S_OK);
+    hr = IMediaSample_SetDiscontinuity(outputSample, !preview && IMediaSample_IsDiscontinuity(inputSample) == S_OK);
     if (FAILED(hr)) goto end;
 
-    haveStartTime = haveEndTime = TRUE;
-    hr = IMediaSample_GetMediaTime(inputSample, &startTime, &endTime);
-    if (hr == S_OK)
-        ;
-    else if (hr == VFW_S_NO_STOP_TIME)
-        haveEndTime = FALSE;
-    else if (hr == VFW_E_MEDIA_TIME_NOT_SET)
-        haveStartTime = haveEndTime = FALSE;
-    else
-        goto end;
-    hr = IMediaSample_SetMediaTime(outputSample, haveStartTime ? &startTime : NULL, haveEndTime ? &endTime : NULL);
-    if (FAILED(hr)) goto end;
+    if (!preview)
+    {
+        haveStartTime = haveEndTime = TRUE;
+        hr = IMediaSample_GetMediaTime(inputSample, &startTime, &endTime);
+        if (hr == S_OK)
+            ;
+        else if (hr == VFW_S_NO_STOP_TIME)
+            haveEndTime = FALSE;
+        else if (hr == VFW_E_MEDIA_TIME_NOT_SET)
+            haveStartTime = haveEndTime = FALSE;
+        else
+            goto end;
+        hr = IMediaSample_SetMediaTime(outputSample, haveStartTime ? &startTime : NULL, haveEndTime ? &endTime : NULL);
+        if (FAILED(hr)) goto end;
+    }
 
     hr = IMediaSample_GetMediaType(inputSample, &mediaType);
     if (FAILED(hr)) goto end;
@@ -185,6 +213,11 @@ static HRESULT WINAPI SmartTeeFilterInput_Receive(struct strmbase_sink *base, IM
 
     TRACE("(%p)->(%p)\n", This, inputSample);
 
+    if (This->filter.state == State_Stopped)
+        return VFW_E_WRONG_STATE;
+    if (This->sink.flushing)
+        return S_FALSE;
+
     /* Modifying the image coming out of one pin doesn't modify the image
      * coming out of the other. MSDN claims the filter doesn't copy,
      * but unless it somehow uses copy-on-write, I just don't see how
@@ -193,7 +226,7 @@ static HRESULT WINAPI SmartTeeFilterInput_Receive(struct strmbase_sink *base, IM
     /* FIXME: we should ideally do each of these in a separate thread */
     EnterCriticalSection(&This->filter.filter_cs);
     if (This->capture.pin.peer)
-        hrCapture = copy_sample(inputSample, This->capture.pAllocator, &captureSample);
+        hrCapture = copy_sample(inputSample, This->capture.pAllocator, FALSE, &captureSample);
     LeaveCriticalSection(&This->filter.filter_cs);
     if (SUCCEEDED(hrCapture) && This->capture.pMemInputPin)
         hrCapture = IMemInputPin_Receive(This->capture.pMemInputPin, captureSample);
@@ -202,7 +235,7 @@ static HRESULT WINAPI SmartTeeFilterInput_Receive(struct strmbase_sink *base, IM
 
     EnterCriticalSection(&This->filter.filter_cs);
     if (This->preview.pin.peer)
-        hrPreview = copy_sample(inputSample, This->preview.pAllocator, &previewSample);
+        hrPreview = copy_sample(inputSample, This->preview.pAllocator, TRUE, &previewSample);
     LeaveCriticalSection(&This->filter.filter_cs);
     /* No timestamps on preview stream: */
     if (SUCCEEDED(hrPreview))
@@ -212,6 +245,9 @@ static HRESULT WINAPI SmartTeeFilterInput_Receive(struct strmbase_sink *base, IM
     if (previewSample)
         IMediaSample_Release(previewSample);
 
+    if (hrCapture == VFW_E_NOT_CONNECTED && hrPreview == VFW_E_NOT_CONNECTED)
+        return S_OK;
+
     /* FIXME: how to merge the HRESULTs from the 2 pins? */
     if (SUCCEEDED(hrCapture))
         return hrCapture;
@@ -219,11 +255,30 @@ static HRESULT WINAPI SmartTeeFilterInput_Receive(struct strmbase_sink *base, IM
         return hrPreview;
 }
 
+static HRESULT sink_eos(struct strmbase_sink *iface)
+{
+    SmartTeeFilter *filter = impl_from_strmbase_pin(&iface->pin);
+    HRESULT hr = S_OK;
+
+    if (filter->sink.flushing || filter->filter.state == State_Stopped)
+        return S_OK;
+    if (filter->capture.pin.peer)
+        hr = IPin_EndOfStream(filter->capture.pin.peer);
+    if (filter->preview.pin.peer)
+    {
+        HRESULT preview_hr = IPin_EndOfStream(filter->preview.pin.peer);
+        if (SUCCEEDED(hr))
+            hr = preview_hr;
+    }
+    return hr;
+}
+
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_accept = sink_query_accept,
     .base.pin_query_interface = sink_query_interface,
     .pfnReceive = SmartTeeFilterInput_Receive,
+    .sink_eos = sink_eos,
 };
 
 static HRESULT source_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
