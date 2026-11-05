@@ -528,7 +528,7 @@ LxInstallTty(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if (Boot || (Process->Instance->Console == NULL))
+    if (Boot || ((Process->Instance->Console == NULL) && !Process->Instance->Booted))
     {
         LxTtyReference(Tty);
         Process->Instance->Console = Tty;

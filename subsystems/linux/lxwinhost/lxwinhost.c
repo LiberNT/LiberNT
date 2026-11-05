@@ -822,6 +822,7 @@ LxStartCompositor(
 {
     LX_LAUNCH Launch;
 
+    LxBootRoot(L"lxwinhost", Root);
     if (!LxRootHasFile(Root, L"\\usr\\local\\lib\\libernt\\lxwayland\\lxwayland"))
         return;
     ZeroMemory(&Launch, sizeof(Launch));
