@@ -96,52 +96,7 @@ FdoEnumerateDevices(
         return STATUS_INVALID_PARAMETER;
     }
 
-    /*
-     * Early Bus Termination Optimization:
-     *
-     * Per PCI specification, if device 0 function 0 does not exist on a bus,
-     * the entire bus is empty. This is because PCI-to-PCI bridges that create
-     * subordinate buses must be enumerated starting from device 0.
-     *
-     * By checking device 0 function 0 first and skipping empty buses, we
-     * reduce the scan to only populated buses, typically around 64 reads total.
-     */
     SlotNumber.u.AsULONG = 0;
-    RtlZeroMemory(&PciConfig, sizeof(PCI_COMMON_CONFIG));
-
-    Size = PciHalReadConfig(DeviceExtension->BusSegment,
-                            Bus,
-                            SlotNumber.u.AsULONG,
-                            &PciConfig,
-                            0,
-                            PCI_COMMON_HDR_LENGTH);
-
-    if (Size != PCI_COMMON_HDR_LENGTH ||
-        PciConfig.VendorID == PCI_INVALID_VENDORID ||
-        PciConfig.VendorID == 0)
-    {
-        /*
-         * No device at slot 0 function 0.
-         *
-         * NOTE: The PCI specification states that if device 0 does not exist,
-         * the entire bus is empty. However, some hypervisors (like VirtualBox)
-         * do NOT follow this convention and may have devices starting at
-         * non-zero device numbers. We cannot use the early bus termination
-         * optimization in these cases.
-         *
-         * For compatibility, we only skip the bus if we're scanning a
-         * secondary/subordinate bus (bus > 0). For bus 0 (root bus), we
-         * must scan all device numbers because the root complex may have
-         * integrated devices at any slot.
-         */
-        if (Bus > 0)
-        {
-            DPRINT("Bus %lu: No device at slot 0, skipping entire bus\n", Bus);
-            return STATUS_SUCCESS;
-        }
-        DPRINT1("PCI: Bus %lu slot 0 empty (Size=%lu VendorID=0x%04hx), but scanning root bus anyway\n",
-               Bus, Size, PciConfig.VendorID);
-    }
 
     /* Enumerate devices on this bus */
     for (DeviceNumber = 0; DeviceNumber < PCI_MAX_DEVICES; DeviceNumber++)
@@ -151,27 +106,15 @@ FdoEnumerateDevices(
         {
             SlotNumber.u.bits.FunctionNumber = FunctionNumber;
 
-            /*
-             * For device 0 function 0, we already have the config data from
-             * the early bus termination check above. Reuse it to avoid a
-             * redundant config space read.
-             */
-            if (DeviceNumber == 0 && FunctionNumber == 0)
-            {
-                /* PciConfig already populated from the bus check above */
-            }
-            else
-            {
-                RtlZeroMemory(&PciConfig,
-                              sizeof(PCI_COMMON_CONFIG));
+            RtlZeroMemory(&PciConfig,
+                          sizeof(PCI_COMMON_CONFIG));
 
-                Size = PciHalReadConfig(DeviceExtension->BusSegment,
-                                        Bus,
-                                        SlotNumber.u.AsULONG,
-                                        &PciConfig,
-                                        0,
-                                        PCI_COMMON_HDR_LENGTH);
-            }
+            Size = PciHalReadConfig(DeviceExtension->BusSegment,
+                                    Bus,
+                                    SlotNumber.u.AsULONG,
+                                    &PciConfig,
+                                    0,
+                                    PCI_COMMON_HDR_LENGTH);
 
             if (Size != PCI_COMMON_HDR_LENGTH ||
                 PciConfig.VendorID == PCI_INVALID_VENDORID ||
