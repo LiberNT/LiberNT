@@ -91,6 +91,8 @@ static HRESULT avi_decompressor_sink_query_interface(struct strmbase_pin *iface,
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->sink.IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->sink.IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
