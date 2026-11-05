@@ -122,11 +122,31 @@ static HRESULT sample_grabber_query_interface(struct strmbase_filter *iface, REF
     return S_OK;
 }
 
+static HRESULT sample_grabber_init_stream(struct strmbase_filter *iface)
+{
+    struct sample_grabber *filter = impl_from_strmbase_filter(iface);
+
+    if (filter->sink.pin.peer && filter->allocator)
+        return IMemAllocator_Commit(filter->allocator);
+    return S_OK;
+}
+
+static HRESULT sample_grabber_cleanup_stream(struct strmbase_filter *iface)
+{
+    struct sample_grabber *filter = impl_from_strmbase_filter(iface);
+
+    if (filter->sink.pin.peer && filter->allocator)
+        IMemAllocator_Decommit(filter->allocator);
+    return S_OK;
+}
+
 static const struct strmbase_filter_ops filter_ops =
 {
     .filter_get_pin = sample_grabber_get_pin,
     .filter_destroy = sample_grabber_destroy,
     .filter_query_interface = sample_grabber_query_interface,
+    .filter_init_stream = sample_grabber_init_stream,
+    .filter_cleanup_stream = sample_grabber_cleanup_stream,
 };
 
 /* Helper that buffers data and/or calls installed sample callbacks */
@@ -347,13 +367,17 @@ static HRESULT WINAPI
 SampleGrabber_IMemInputPin_GetAllocator(IMemInputPin *iface, IMemAllocator **allocator)
 {
     struct sample_grabber *This = impl_from_IMemInputPin(iface);
+    HRESULT hr;
+
     TRACE("(%p)->(%p) allocator = %p\n", This, allocator, This->allocator);
     if (!allocator)
         return E_POINTER;
-    *allocator = This->allocator;
-    if (!*allocator)
-        return VFW_E_NO_ALLOCATOR;
-    IMemAllocator_AddRef(*allocator);
+    if (!This->allocator && This->source.pMemInputPin)
+        return IMemInputPin_GetAllocator(This->source.pMemInputPin, allocator);
+    if (!This->allocator && FAILED(hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL,
+            CLSCTX_INPROC_SERVER, &IID_IMemAllocator, (void **)&This->allocator)))
+        return hr;
+    IMemAllocator_AddRef(*allocator = This->allocator);
     return S_OK;
 }
 
@@ -363,6 +387,8 @@ SampleGrabber_IMemInputPin_NotifyAllocator(IMemInputPin *iface, IMemAllocator *a
 {
     struct sample_grabber *This = impl_from_IMemInputPin(iface);
     TRACE("(%p)->(%p, %u) allocator = %p\n", This, allocator, readOnly, This->allocator);
+    if (!allocator)
+        return E_POINTER;
     if (This->allocator == allocator)
         return S_OK;
     if (This->allocator)
@@ -393,6 +419,8 @@ SampleGrabber_IMemInputPin_Receive(IMemInputPin *iface, IMediaSample *sample)
     TRACE("(%p)->(%p) output = %p, grabber = %p\n", This, sample, This->source.pMemInputPin, This->grabberIface);
     if (!sample)
         return E_POINTER;
+    if (This->filter.state == State_Stopped)
+        return VFW_E_WRONG_STATE;
     if (This->oneShot == OneShot_Past)
         return S_FALSE;
     SampleGrabber_callback(This, sample);
@@ -532,11 +560,19 @@ static HRESULT sample_grabber_sink_get_media_type(struct strmbase_pin *iface,
     return VFW_S_NO_MORE_ITEMS;
 }
 
+static HRESULT sample_grabber_sink_eos(struct strmbase_sink *iface)
+{
+    struct sample_grabber *filter = impl_from_sink_pin(&iface->pin);
+
+    return filter->source.pin.peer ? IPin_EndOfStream(filter->source.pin.peer) : S_OK;
+}
+
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_interface = sample_grabber_sink_query_interface,
     .base.pin_query_accept = sample_grabber_sink_query_accept,
     .base.pin_get_media_type = sample_grabber_sink_get_media_type,
+    .sink_eos = sample_grabber_sink_eos,
 };
 
 static struct sample_grabber *impl_from_source_pin(struct strmbase_pin *iface)
