@@ -3,6 +3,7 @@ list(APPEND SOURCE
     ClassInstallParams.c
     devclass.c
     DevicePowerOnDisable.c
+    DeviceRemoveVeto.c
     InterruptAffinityPolicy.c
     InvalidDeviceInfoSet.c
     SetupCommitFileQueue.c
