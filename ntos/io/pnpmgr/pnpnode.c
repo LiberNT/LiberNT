@@ -711,6 +711,7 @@ IopFindDeviceInstanceTraverse(
     PIOP_FIND_INSTANCE_CONTEXT Find = Context;
 
     if (DeviceNode->InstancePath.Length == 0) return STATUS_SUCCESS;
+    if ((DeviceNode->Flags & DNF_DEVICE_GONE) && DeviceNode->State == DeviceNodeRemoved) return STATUS_SUCCESS;
 
     if (PiCompareInstancePath(&DeviceNode->InstancePath,
                               Find->InstancePath) != 0)
