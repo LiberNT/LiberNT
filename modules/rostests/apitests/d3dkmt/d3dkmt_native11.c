@@ -44,6 +44,9 @@ static BOOL NativeSameObject(IUnknown *identity, IUnknown *object)
     return same;
 }
 
+/* The virtio 3D GPU forwards to a host with measured limits, on Windows 11 too. */
+static BOOL g_Virtio3d;
+
 static void TestImmediateContext(ID3D11Device *device, ID3D11DeviceContext **context)
 {
     ID3D11DeviceContext *previous = *context, *second;
@@ -542,7 +545,9 @@ static void TestBufferViews(ID3D11Device *device, ID3D11DeviceContext *context,
     UINT phase, stride, i, j, x, y, bad;
     HRESULT hr;
 
-    for (phase = 0; phase < 3; ++phase)
+    /* D3DMetal segfaults creating a render target view of a buffer, and Windows 11 then loses the device too. */
+    if (g_Virtio3d) skip("The host cannot render to a buffer\n");
+    for (phase = g_Virtio3d ? 1 : 0; phase < 3; ++phase)
     {
         stride = phase == 1 ? 8 : 4;
         for (i = 0; i < 16; ++i)
@@ -798,6 +803,7 @@ static void TestPredication(ID3D11Device *device, ID3D11DeviceContext *context,
             for (expected = 0; expected < 2; ++expected)
                 for (operation = 0; operation < 2; ++operation)
                 {
+                    if (operation && g_Virtio3d) continue;
                     commands = mode ? deferred : context;
                     ID3D11DeviceContext_ClearState(commands);
                     ID3D11DeviceContext_ClearRenderTargetView(commands, target, clear);
@@ -867,6 +873,11 @@ static void TestPredication(ID3D11Device *device, ID3D11DeviceContext *context,
     {
         desc.Query = type;
         hr = ID3D11Device_CreateQuery(device, &desc, &query);
+        if (g_Virtio3d && hr == E_OUTOFMEMORY)
+        {
+            skip("The host refuses stream query %u\n", type);
+            break;
+        }
         ok(hr == S_OK, "Create stream query %u returned %#lx\n", type, hr);
         if (FAILED(hr)) goto done;
         ID3D11DeviceContext_Begin(context, (ID3D11Asynchronous *)query);
@@ -1416,6 +1427,7 @@ START_TEST(native11)
     }
     ok(adapter != NULL, "DXGI did not enumerate the selected WDDM renderer\n");
     if (!adapter) goto done;
+    g_Virtio3d = adapter_desc.VendorId == 0x1af4 && adapter_desc.DeviceId == 0x1050;
     trace("Native11 renderer %S, PCI %04x:%04x\n", adapter_desc.Description,
             adapter_desc.VendorId, adapter_desc.DeviceId);
     TestOutputOwnership(adapter, &adapter_desc.AdapterLuid);

@@ -71,6 +71,23 @@ ID3D12Device *d3d12_test_create_device(void)
     return device;
 }
 
+BOOL d3d12_test_on_virtio3d(ID3D12Device *device)
+{
+    IDXGIFactory4 *factory = NULL;
+    IDXGIAdapter1 *adapter = NULL;
+    DXGI_ADAPTER_DESC1 desc = {};
+
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory4), reinterpret_cast<void **>(&factory)))) return FALSE;
+    if (SUCCEEDED(factory->EnumAdapterByLuid(device->GetAdapterLuid(), __uuidof(IDXGIAdapter1),
+            reinterpret_cast<void **>(&adapter))))
+    {
+        adapter->GetDesc1(&desc);
+        adapter->Release();
+    }
+    factory->Release();
+    return desc.VendorId == 0x1af4 && desc.DeviceId == 0x1050;
+}
+
 BOOL d3d12_test_init(struct d3d12_test_context *context)
 {
     D3D12_COMMAND_QUEUE_DESC queue_desc = {};

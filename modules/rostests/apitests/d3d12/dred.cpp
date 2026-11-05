@@ -30,6 +30,8 @@ static ID3D12Resource *CreateBuffer(ID3D12Device *device, UINT64 size)
     return resource;
 }
 
+static BOOL Virtio3d;
+
 static void CheckBreadcrumbs(const D3D12_AUTO_BREADCRUMB_NODE1 *head, ID3D12GraphicsCommandList *list,
         ID3D12GraphicsCommandList *completed, ID3D12GraphicsCommandList *copy, ID3D12CommandQueue *queue)
 {
@@ -77,6 +79,8 @@ static void CheckBreadcrumbs(const D3D12_AUTO_BREADCRUMB_NODE1 *head, ID3D12Grap
             found->pCommandListDebugNameA ? found->pCommandListDebugNameA : "(null)");
     ok(found->pCommandQueueDebugNameW && !wcscmp(found->pCommandQueueDebugNameW, L"dred queue"), "queue name W %s\n",
             wine_dbgstr_w(found->pCommandQueueDebugNameW));
+    /* The virtio 3D GPU runs work on the host without holding it behind ID3D12CommandQueue::Wait. */
+    if (!Virtio3d)
     ok(found->pLastBreadcrumbValue && !*found->pLastBreadcrumbValue, "completed %u of %u breadcrumbs\n",
             found->pLastBreadcrumbValue ? *found->pLastBreadcrumbValue : ~0u, found->BreadcrumbCount);
     ok(found->pCommandHistory != NULL, "no command history\n");
@@ -117,6 +121,7 @@ static void RunDred(void *)
         return;
     }
 
+    Virtio3d = d3d12_test_on_virtio3d(context.device);
     hr = context.list->SetName(L"dred list");
     ok(hr == S_OK, "SetName: %#lx\n", hr);
     size = sizeof(name);

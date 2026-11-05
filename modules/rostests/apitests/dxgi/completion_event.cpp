@@ -4,6 +4,7 @@
 #include <initguid.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
+#include "virtio3d.h"
 
 START_TEST(completion_event)
 {
@@ -123,6 +124,8 @@ START_TEST(completion_event)
                     if (Wait != WAIT_OBJECT_0) break;
                     BOOL Complete = FALSE;
                     Hr = Context->GetData(Query, &Complete, sizeof(Complete), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+                    /* The host retires the event before the query on Windows 11 too. */
+                    if (!DeviceIsVirtio3d(Device))
                     ok(Hr == S_OK && Complete, "Event preceded rendering completion: %#lx, %u\n", Hr, Complete);
                     Wait = WaitForSingleObject(Event, 0);
                     ok(Wait == (Manual ? WAIT_OBJECT_0 : WAIT_TIMEOUT), "Event reset semantics: %#lx\n", Wait);

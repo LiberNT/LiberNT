@@ -76,7 +76,8 @@ static void RunBudget(void *)
             desc.Description, architecture.UMA, local.Budget, local.CurrentUsage, nonlocal.Budget,
             nonlocal.CurrentUsage);
 
-    if (!(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE))
+    /* The virtio 3D GPU keeps buffers on the host, so Windows 11 counts no usage for them either. */
+    if (!(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) && !d3d12_test_on_virtio3d(device))
     {
         buffer = CreateBuffer(device, BUDGET_BUFFER_SIZE);
         ok(buffer != NULL, "buffer creation failed\n");

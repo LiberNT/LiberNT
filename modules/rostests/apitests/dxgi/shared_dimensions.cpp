@@ -9,6 +9,7 @@
 #include <initguid.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
+#include "virtio3d.h"
 
 typedef HRESULT (WINAPI *CREATE_DEVICE)(IDXGIAdapter *, D3D_DRIVER_TYPE, HMODULE, UINT, const D3D_FEATURE_LEVEL *,
                                          UINT, UINT, ID3D11Device **, D3D_FEATURE_LEVEL *, ID3D11DeviceContext **);
@@ -136,6 +137,10 @@ static void Probe(ID3D11Device *Device, DIMENSION Dimension, UINT Index)
     if (SUCCEEDED(Resource->QueryInterface(IID_IDXGIResource, reinterpret_cast<void **>(&Dxgi))))
     {
         Hr = Dxgi->GetSharedHandle(&Shared);
+        /* Windows 11 gives S_OK and no handle for most resources on this host. */
+        if (!NtHandle && DeviceIsVirtio3d(Device))
+            ok(Hr == S_OK, "dim %u case %u: unshared GetSharedHandle %#lx %p\n", Dimension, Index, Hr, Shared);
+        else
         ok(NtHandle ? Hr == E_INVALIDARG : (Hr == S_OK && Shared != NULL), "dim %u case %u: GetSharedHandle %#lx %p\n",
            Dimension, Index, Hr, Shared);
         Dxgi->Release();

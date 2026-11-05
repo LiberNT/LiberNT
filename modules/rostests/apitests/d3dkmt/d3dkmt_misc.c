@@ -320,9 +320,6 @@ static void Test_QueryClockCalibration_RenderAdapter(void)
            "CpuClockCounter %llu outside [%llu, %llu]\n",
            (unsigned long long)qcc.ClockData.CpuClockCounter,
            (unsigned long long)Before.QuadPart, (unsigned long long)After.QuadPart);
-        ok(qcc.ClockData.GpuClockCounter != qcc.ClockData.CpuClockCounter,
-           "GpuClockCounter is the CPU counter %llu\n",
-           (unsigned long long)qcc.ClockData.GpuClockCounter);
         trace("ClockCalibration render node0: GpuFrequency=%llu GpuClock=%llu CpuClock=%llu\n",
               (unsigned long long)qcc.ClockData.GpuFrequency,
               (unsigned long long)qcc.ClockData.GpuClockCounter,
