@@ -11,7 +11,7 @@ add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 
 add_library(rdpvdd MODULE rdpvdd.c rdpvdd.rc)
 set_module_type(rdpvdd kernelmodedriver)
-target_link_libraries(rdpvdd displib)
+target_link_libraries(rdpvdd displib ${PSEH_LIB})
 add_importlibs(rdpvdd ntoskrnl hal)
 add_cd_file(TARGET rdpvdd DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(rdpvdd rdpvdd.inf)

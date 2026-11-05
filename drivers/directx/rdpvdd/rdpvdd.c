@@ -5,7 +5,7 @@
  * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
  */
 
-#include <ntddk.h>
+#include <ntifs.h>
 #include <windef.h>
 #include <dispmprt.h>
 #include <drivers/directx/rdpvdd.h>
@@ -39,6 +39,10 @@ typedef struct _RDPVDD_ADAPTER
     ULONG PreferredHeight;
     PUCHAR Scanout;
     SIZE_T ScanoutSize;
+    KMUTEX FrameLock;
+    PKEVENT FrameEvent;
+    ULONG DirtyCount;
+    RECT Dirty[RDPVDD_FRAME_MAX_RECTS];
 } RDPVDD_ADAPTER, *PRDPVDD_ADAPTER;
 
 static
@@ -99,6 +103,106 @@ RdpVddBlackOut(
 
 static
 VOID
+RdpVddLockFrame(
+    _In_ PRDPVDD_ADAPTER Adapter)
+{
+    (VOID)KeWaitForSingleObject(&Adapter->FrameLock, Executive, KernelMode, FALSE, NULL);
+}
+
+static
+VOID
+RdpVddUnlockFrame(
+    _In_ PRDPVDD_ADAPTER Adapter)
+{
+    KeReleaseMutex(&Adapter->FrameLock, FALSE);
+}
+
+static
+VOID
+RdpVddAddDirty(
+    _In_ PRDPVDD_ADAPTER Adapter,
+    _In_opt_ const RECT *Rect)
+{
+    RECT Clipped;
+    ULONG Index;
+
+    if (Rect == NULL)
+    {
+        Clipped.left = Clipped.top = 0;
+        Clipped.right = (LONG)Adapter->Width;
+        Clipped.bottom = (LONG)Adapter->Height;
+        Adapter->DirtyCount = 0;
+    }
+    else
+    {
+        Clipped.left = max(Rect->left, 0);
+        Clipped.top = max(Rect->top, 0);
+        Clipped.right = min(Rect->right, (LONG)Adapter->Width);
+        Clipped.bottom = min(Rect->bottom, (LONG)Adapter->Height);
+    }
+    if (Clipped.left >= Clipped.right || Clipped.top >= Clipped.bottom)
+        return;
+
+    for (Index = 0; Index < Adapter->DirtyCount; Index++)
+    {
+        RECT *Dirty = &Adapter->Dirty[Index];
+
+        if (Clipped.left >= Dirty->left && Clipped.top >= Dirty->top &&
+            Clipped.right <= Dirty->right && Clipped.bottom <= Dirty->bottom)
+            return;
+    }
+    if (Adapter->DirtyCount == RDPVDD_FRAME_MAX_RECTS)
+    {
+        RECT *Dirty = &Adapter->Dirty[0];
+
+        for (Index = 1; Index < Adapter->DirtyCount; Index++)
+        {
+            Dirty->left = min(Dirty->left, Adapter->Dirty[Index].left);
+            Dirty->top = min(Dirty->top, Adapter->Dirty[Index].top);
+            Dirty->right = max(Dirty->right, Adapter->Dirty[Index].right);
+            Dirty->bottom = max(Dirty->bottom, Adapter->Dirty[Index].bottom);
+        }
+        Adapter->DirtyCount = 1;
+        Clipped.left = min(Dirty->left, Clipped.left);
+        Clipped.top = min(Dirty->top, Clipped.top);
+        Clipped.right = max(Dirty->right, Clipped.right);
+        Clipped.bottom = max(Dirty->bottom, Clipped.bottom);
+        *Dirty = Clipped;
+        return;
+    }
+    Adapter->Dirty[Adapter->DirtyCount++] = Clipped;
+}
+
+static
+VOID
+RdpVddSignalFrame(
+    _In_ PRDPVDD_ADAPTER Adapter)
+{
+    if (Adapter->FrameEvent != NULL && Adapter->DirtyCount != 0)
+        KeSetEvent(Adapter->FrameEvent, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+RdpVddCloseFrame(
+    _In_ PRDPVDD_ADAPTER Adapter)
+{
+    PKEVENT Event;
+
+    RdpVddLockFrame(Adapter);
+    Event = Adapter->FrameEvent;
+    Adapter->FrameEvent = NULL;
+    Adapter->DirtyCount = 0;
+    RdpVddUnlockFrame(Adapter);
+    if (Event != NULL)
+    {
+        KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
+        ObDereferenceObject(Event);
+    }
+}
+
+static
+VOID
 RdpVddCopyRect(
     _In_ PRDPVDD_ADAPTER Adapter,
     _In_ const UCHAR *Source,
@@ -144,6 +248,7 @@ RdpVddDdiAddDevice(
         return STATUS_NO_MEMORY;
     RtlZeroMemory(Adapter, sizeof(*Adapter));
     Adapter->PhysicalDeviceObject = PhysicalDeviceObject;
+    KeInitializeMutex(&Adapter->FrameLock, 0);
     Adapter->AdapterPowerState = PowerDeviceD0;
     Adapter->MonitorPowerState = PowerDeviceD0;
     *MiniportDeviceContext = Adapter;
@@ -201,6 +306,8 @@ RdpVddDdiStopDevice(
 {
     PRDPVDD_ADAPTER Adapter = MiniportDeviceContext;
 
+    RdpVddCloseFrame(Adapter);
+    RdpVddLockFrame(Adapter);
     Adapter->Started = FALSE;
     Adapter->SourceActive = FALSE;
     if (Adapter->Scanout != NULL)
@@ -209,6 +316,7 @@ RdpVddDdiStopDevice(
         Adapter->Scanout = NULL;
         Adapter->ScanoutSize = 0;
     }
+    RdpVddUnlockFrame(Adapter);
     return STATUS_SUCCESS;
 }
 
@@ -222,6 +330,7 @@ RdpVddDdiRemoveDevice(
 
     if (Adapter != NULL)
     {
+        RdpVddCloseFrame(Adapter);
         if (Adapter->Scanout != NULL)
             ExFreePoolWithTag(Adapter->Scanout, RDPVDD_POOL_TAG);
         ExFreePoolWithTag(Adapter, RDPVDD_POOL_TAG);
@@ -241,8 +350,11 @@ RdpVddDdiNotifySurpriseRemoval(
 
     UNREFERENCED_PARAMETER(RemovalType);
 
+    RdpVddCloseFrame(Adapter);
+    RdpVddLockFrame(Adapter);
     Adapter->Started = FALSE;
     Adapter->SourceActive = FALSE;
+    RdpVddUnlockFrame(Adapter);
     return STATUS_SUCCESS;
 }
 
@@ -464,26 +576,18 @@ RdpVddIndicateConnection(
 
 static
 NTSTATUS
-APIENTRY
-RdpVddDdiEscape(
-    IN_CONST_HANDLE hAdapter,
-    IN_CONST_PDXGKARG_ESCAPE pEscape)
+RdpVddSetMode(
+    _In_ PRDPVDD_ADAPTER Adapter,
+    _In_ const RDPVDD_ESCAPE *Request)
 {
-    PRDPVDD_ADAPTER Adapter = (PRDPVDD_ADAPTER)hAdapter;
-    RDPVDD_ESCAPE Request;
     NTSTATUS Status;
 
-    if (pEscape->pPrivateDriverData == NULL || pEscape->PrivateDriverDataSize != sizeof(Request))
-        return STATUS_INVALID_PARAMETER;
-    RtlCopyMemory(&Request, pEscape->pPrivateDriverData, sizeof(Request));
-    if (Request.Code != RDPVDD_ESCAPE_SET_MODE)
-        return STATUS_NOT_SUPPORTED;
-    if (Request.Width < RDPVDD_MIN_WIDTH || Request.Width > RDPVDD_MAX_WIDTH ||
-        Request.Height < RDPVDD_MIN_HEIGHT || Request.Height > RDPVDD_MAX_HEIGHT)
+    if (Request->Width < RDPVDD_MIN_WIDTH || Request->Width > RDPVDD_MAX_WIDTH ||
+        Request->Height < RDPVDD_MIN_HEIGHT || Request->Height > RDPVDD_MAX_HEIGHT)
         return STATUS_INVALID_PARAMETER;
     if (!Adapter->Started)
         return STATUS_DEVICE_NOT_READY;
-    if (Request.Width == Adapter->PreferredWidth && Request.Height == Adapter->PreferredHeight)
+    if (Request->Width == Adapter->PreferredWidth && Request->Height == Adapter->PreferredHeight)
         return STATUS_SUCCESS;
 
     Status = RdpVddIndicateConnection(Adapter, FALSE);
@@ -492,9 +596,149 @@ RdpVddDdiEscape(
         Adapter->Connected = TRUE;
         return Status;
     }
-    Adapter->PreferredWidth = Request.Width;
-    Adapter->PreferredHeight = Request.Height;
+    Adapter->PreferredWidth = Request->Width;
+    Adapter->PreferredHeight = Request->Height;
     return RdpVddIndicateConnection(Adapter, TRUE);
+}
+
+static
+BOOLEAN
+RdpVddCanReadFrame(VOID)
+{
+    SECURITY_SUBJECT_CONTEXT Subject;
+    BOOLEAN Allowed;
+
+    if (ExGetPreviousMode() != UserMode)
+        return FALSE;
+    if (SeSinglePrivilegeCheck(RtlConvertLongToLuid(SE_TCB_PRIVILEGE), UserMode))
+        return TRUE;
+    SeCaptureSubjectContext(&Subject);
+    Allowed = SeTokenIsAdmin(SeQuerySubjectContextToken(&Subject));
+    SeReleaseSubjectContext(&Subject);
+    return Allowed;
+}
+
+static
+NTSTATUS
+RdpVddOpenFrame(
+    _In_ PRDPVDD_ADAPTER Adapter,
+    _In_ const RDPVDD_FRAME_ESCAPE *Request)
+{
+    PKEVENT Event, OldEvent;
+    NTSTATUS Status;
+
+    Status = ObReferenceObjectByHandle((HANDLE)(ULONG_PTR)Request->Event, EVENT_MODIFY_STATE, *ExEventObjectType,
+                                       UserMode, (PVOID *)&Event, NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RdpVddLockFrame(Adapter);
+    OldEvent = Adapter->FrameEvent;
+    Adapter->FrameEvent = Event;
+    RdpVddAddDirty(Adapter, NULL);
+    RdpVddSignalFrame(Adapter);
+    RdpVddUnlockFrame(Adapter);
+    if (OldEvent != NULL)
+        ObDereferenceObject(OldEvent);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+RdpVddReadFrame(
+    _In_ PRDPVDD_ADAPTER Adapter,
+    _Inout_ PRDPVDD_FRAME_ESCAPE Request)
+{
+    PUCHAR Buffer = (PUCHAR)(ULONG_PTR)Request->Buffer;
+    SIZE_T Pitch, Size;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Index;
+    LONG Y;
+
+    if ((ULONG64)(ULONG_PTR)Buffer != Request->Buffer)
+        return STATUS_INVALID_PARAMETER;
+
+    RdpVddLockFrame(Adapter);
+    Request->RectCount = 0;
+    if (!Adapter->SourceActive || Adapter->Scanout == NULL)
+    {
+        Request->Width = Request->Height = 0;
+        RdpVddUnlockFrame(Adapter);
+        return STATUS_SUCCESS;
+    }
+    Request->Width = Adapter->Width;
+    Request->Height = Adapter->Height;
+    if (Buffer == NULL || Request->BufferWidth != Adapter->Width || Request->BufferHeight != Adapter->Height ||
+        Adapter->DirtyCount == 0)
+    {
+        RdpVddUnlockFrame(Adapter);
+        return STATUS_SUCCESS;
+    }
+
+    Pitch = (SIZE_T)Adapter->Width * RDPVDD_BYTES_PER_PIXEL;
+    Size = Pitch * Adapter->Height;
+    _SEH2_TRY
+    {
+        ProbeForWrite(Buffer, Size, sizeof(ULONG));
+        for (Index = 0; Index < Adapter->DirtyCount; Index++)
+        {
+            const RECT *Rect = &Adapter->Dirty[Index];
+
+            for (Y = Rect->top; Y < Rect->bottom; Y++)
+            {
+                RtlCopyMemory(Buffer + (SIZE_T)Y * Pitch + (SIZE_T)Rect->left * RDPVDD_BYTES_PER_PIXEL,
+                              Adapter->Scanout + (SIZE_T)Y * Adapter->Pitch + (SIZE_T)Rect->left * RDPVDD_BYTES_PER_PIXEL,
+                              (SIZE_T)(Rect->right - Rect->left) * RDPVDD_BYTES_PER_PIXEL);
+            }
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    if (NT_SUCCESS(Status))
+    {
+        Request->RectCount = Adapter->DirtyCount;
+        RtlCopyMemory(Request->Rects, Adapter->Dirty, Adapter->DirtyCount * sizeof(Adapter->Dirty[0]));
+        Adapter->DirtyCount = 0;
+    }
+    RdpVddUnlockFrame(Adapter);
+    return Status;
+}
+
+static
+NTSTATUS
+APIENTRY
+RdpVddDdiEscape(
+    IN_CONST_HANDLE hAdapter,
+    IN_CONST_PDXGKARG_ESCAPE pEscape)
+{
+    PRDPVDD_ADAPTER Adapter = (PRDPVDD_ADAPTER)hAdapter;
+    RDPVDD_ESCAPE Request;
+    PRDPVDD_FRAME_ESCAPE Frame;
+    ULONG Code;
+
+    if (pEscape->pPrivateDriverData == NULL || pEscape->PrivateDriverDataSize < sizeof(Code))
+        return STATUS_INVALID_PARAMETER;
+    Code = *(const ULONG *)pEscape->pPrivateDriverData;
+    if (Code == RDPVDD_ESCAPE_SET_MODE)
+    {
+        if (pEscape->PrivateDriverDataSize != sizeof(Request))
+            return STATUS_INVALID_PARAMETER;
+        RtlCopyMemory(&Request, pEscape->pPrivateDriverData, sizeof(Request));
+        return RdpVddSetMode(Adapter, &Request);
+    }
+    if (Code != RDPVDD_ESCAPE_OPEN_FRAME && Code != RDPVDD_ESCAPE_READ_FRAME)
+        return STATUS_NOT_SUPPORTED;
+    if (pEscape->PrivateDriverDataSize != sizeof(*Frame))
+        return STATUS_INVALID_PARAMETER;
+    if (!RdpVddCanReadFrame())
+        return STATUS_ACCESS_DENIED;
+    if (!Adapter->Started)
+        return STATUS_DEVICE_NOT_READY;
+    Frame = pEscape->pPrivateDriverData;
+    return Code == RDPVDD_ESCAPE_OPEN_FRAME ? RdpVddOpenFrame(Adapter, Frame) : RdpVddReadFrame(Adapter, Frame);
 }
 
 static
@@ -838,9 +1082,15 @@ RdpVddDdiSetVidPnSourceVisibility(
         pSetVidPnSourceVisibility->VidPnSourceId != D3DDDI_ID_ALL)
         return STATUS_INVALID_PARAMETER;
 
+    RdpVddLockFrame(Adapter);
     if (!pSetVidPnSourceVisibility->Visible)
+    {
         RdpVddBlackOut(Adapter);
+        RdpVddAddDirty(Adapter, NULL);
+        RdpVddSignalFrame(Adapter);
+    }
     Adapter->SourceVisible = pSetVidPnSourceVisibility->Visible;
+    RdpVddUnlockFrame(Adapter);
     return STATUS_SUCCESS;
 }
 
@@ -942,6 +1192,7 @@ RdpVddDdiCommitVidPn(
     if (!NT_SUCCESS(Status))
         return Status;
 
+    RdpVddLockFrame(Adapter);
     if (Width != Adapter->Width || Height != Adapter->Height)
     {
         PUCHAR Scanout, OldScanout;
@@ -949,7 +1200,10 @@ RdpVddDdiCommitVidPn(
 
         Scanout = ExAllocatePoolWithTag(NonPagedPool, ScanoutSize, RDPVDD_POOL_TAG);
         if (Scanout == NULL)
+        {
+            RdpVddUnlockFrame(Adapter);
             return STATUS_NO_MEMORY;
+        }
         OldScanout = Adapter->Scanout;
         Adapter->Scanout = Scanout;
         Adapter->ScanoutSize = ScanoutSize;
@@ -962,6 +1216,9 @@ RdpVddDdiCommitVidPn(
 
     RdpVddBlackOut(Adapter);
     Adapter->SourceActive = TRUE;
+    RdpVddAddDirty(Adapter, NULL);
+    RdpVddSignalFrame(Adapter);
+    RdpVddUnlockFrame(Adapter);
     return STATUS_SUCCESS;
 }
 
@@ -1049,20 +1306,28 @@ RdpVddDdiPresentDisplayOnly(
         return STATUS_INVALID_PARAMETER;
     if (pPresentDisplayOnly->BytesPerPixel != RDPVDD_BYTES_PER_PIXEL || pPresentDisplayOnly->pSource == NULL)
         return STATUS_INVALID_PARAMETER;
+    RdpVddLockFrame(Adapter);
     if (!Adapter->SourceActive || !Adapter->SourceVisible ||
         Adapter->MonitorPowerState > PowerDeviceD0 || Adapter->Scanout == NULL)
+    {
+        RdpVddUnlockFrame(Adapter);
         return STATUS_SUCCESS;
+    }
 
     for (Index = 0; Index < pPresentDisplayOnly->NumMoves; Index++)
     {
         RdpVddCopyRect(Adapter, pPresentDisplayOnly->pSource, pPresentDisplayOnly->Pitch, 0, 0,
                        &pPresentDisplayOnly->pMoves[Index].DestRect);
+        RdpVddAddDirty(Adapter, &pPresentDisplayOnly->pMoves[Index].DestRect);
     }
     for (Index = 0; Index < pPresentDisplayOnly->NumDirtyRects; Index++)
     {
         RdpVddCopyRect(Adapter, pPresentDisplayOnly->pSource, pPresentDisplayOnly->Pitch, 0, 0,
                        &pPresentDisplayOnly->pDirtyRect[Index]);
+        RdpVddAddDirty(Adapter, &pPresentDisplayOnly->pDirtyRect[Index]);
     }
+    RdpVddSignalFrame(Adapter);
+    RdpVddUnlockFrame(Adapter);
     return STATUS_SUCCESS;
 }
 
