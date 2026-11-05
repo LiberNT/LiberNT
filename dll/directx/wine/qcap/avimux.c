@@ -1418,11 +1418,25 @@ static HRESULT WINAPI AviMuxIn_Receive(struct strmbase_sink *base, IMediaSample 
         frame = props.pbBuffer;
         size = props.lActual;
     }else {
+        LONGLONG media_start, media_stop;
+        AM_MEDIA_TYPE *mt;
+
         flags = IMediaSample_IsSyncPoint(pSample) == S_OK ? AM_SAMPLE_SPLICEPOINT : 0;
+        if(IMediaSample_IsDiscontinuity(pSample) == S_OK)
+            flags |= AM_SAMPLE_DATADISCONTINUITY;
+        if(IMediaSample_IsPreroll(pSample) == S_OK)
+            flags |= AM_SAMPLE_PREROLL;
+        if(IMediaSample_GetMediaType(pSample, &mt) == S_OK && mt) {
+            /* TODO: reject a format change the pin does not accept */
+            flags |= AM_SAMPLE_TYPECHANGED;
+            DeleteMediaType(mt);
+        }
         hr = IMediaSample_GetPointer(pSample, &frame);
         if(FAILED(hr))
             return hr;
         size = IMediaSample_GetActualDataLength(pSample);
+        IMediaSample_GetSize(pSample);
+        IMediaSample_GetMediaTime(pSample, &media_start, &media_stop);
     }
 
     if(!avimuxin->pin.pin.mt.bTemporalCompression)
