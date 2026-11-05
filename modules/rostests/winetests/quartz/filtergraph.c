@@ -6035,6 +6035,36 @@ static void test_events(void)
     hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
     todo_wine ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
 
+    hr = IMediaEventSink_Notify(media_event_sink, EC_USER + 1, 0, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaEventSink_Notify(media_event_sink, EC_COMPLETE, S_OK,
+            (LONG_PTR)&filter.IBaseFilter_iface);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == E_ABORT, "Got hr %#lx.\n", hr);
+    ok(!code, "Got code %#lx.\n", code);
+
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(code == EC_COMPLETE, "Got code %#lx.\n", code);
+
+    check_events(media_event, 0, 0);
+
+    hr = IMediaEventSink_Notify(media_event_sink, EC_ERRORABORT, E_FAIL, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(code == EC_ERRORABORT, "Got code %#lx.\n", code);
+
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    ok(!code, "Got code %#lx.\n", code);
+
     hr = IMediaEventEx_SetNotifyFlags(media_event, AM_MEDIAEVENT_NONOTIFY);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
 

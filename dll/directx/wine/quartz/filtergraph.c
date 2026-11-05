@@ -5036,6 +5036,8 @@ static HRESULT WINAPI MediaEvent_GetEvent(IMediaEventEx *iface, LONG *code,
     TRACE("graph %p, code %p, param1 %p, param2 %p, timeout %ld.\n", graph, code, param1, param2, timeout);
 
     *code = 0;
+    *param1 = 0;
+    *param2 = 0;
 
     if (WaitForSingleObject(graph->media_event_handle, timeout))
         return E_ABORT;
@@ -5063,20 +5065,62 @@ static HRESULT WINAPI MediaEvent_WaitForCompletion(IMediaEventEx *iface, LONG ms
         LONG *pEvCode)
 {
     struct filter_graph *This = impl_from_IMediaEventEx(iface);
+    DWORD start = GetTickCount(), elapsed, timeout = msTimeout;
+    LONG_PTR param1, param2;
+    BOOL completed;
+    HRESULT hr;
+    LONG code;
 
     TRACE("graph %p, timeout %ld, code %p.\n", This, msTimeout, pEvCode);
 
     if (This->state != State_Running)
         return VFW_E_WRONG_STATE;
 
-    if (WaitForSingleObject(This->hEventCompletion, msTimeout) == WAIT_OBJECT_0)
+    if (This->media_events_disabled)
     {
-	*pEvCode = This->CompletionStatus;
-	return S_OK;
+        if (WaitForSingleObject(This->hEventCompletion, msTimeout) == WAIT_OBJECT_0)
+        {
+            *pEvCode = This->CompletionStatus;
+            return S_OK;
+        }
+
+        *pEvCode = 0;
+        return E_ABORT;
     }
 
-    *pEvCode = 0;
-    return E_ABORT;
+    for (;;)
+    {
+        EnterCriticalSection(&This->event_cs);
+        completed = list_empty(&This->media_events) && !WaitForSingleObject(This->hEventCompletion, 0);
+        LeaveCriticalSection(&This->event_cs);
+        if (completed)
+        {
+            *pEvCode = 0;
+            return VFW_E_WRONG_STATE;
+        }
+
+        elapsed = GetTickCount() - start;
+        hr = IMediaEventEx_GetEvent(iface, &code, &param1, &param2,
+                timeout == INFINITE ? INFINITE : (elapsed < timeout ? timeout - elapsed : 0));
+        if (hr != S_OK)
+        {
+            *pEvCode = 0;
+            return E_ABORT;
+        }
+        IMediaEventEx_FreeEventParams(iface, code, param1, param2);
+
+        if (code == EC_COMPLETE || code == EC_ERRORABORT || code == EC_USERABORT)
+        {
+            *pEvCode = code;
+            return S_OK;
+        }
+
+        if (timeout != INFINITE && GetTickCount() - start >= timeout)
+        {
+            *pEvCode = 0;
+            return E_ABORT;
+        }
+    }
 }
 
 static BOOL is_default_handled_event(LONG code)
