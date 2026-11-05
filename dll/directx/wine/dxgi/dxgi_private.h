@@ -192,6 +192,7 @@ struct dxgi_adapter
 #ifdef __REACTOS__
     LUID wddm_luid;
     BOOL wddm_foreign;
+    LONG wddm_memory_adapter;
 #endif
 };
 
@@ -237,9 +238,12 @@ HRESULT d3d12_swapchain_create(IWineDXGIFactory *factory, ID3D12CommandQueue *qu
 
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
 HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc);
-HRESULT dxgi_query_wddm_video_memory_info(LUID luid, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
+LONG dxgi_open_wddm_adapter(LUID luid);
+void dxgi_close_wddm_adapter(LONG kmt_adapter);
+HRESULT dxgi_query_wddm_video_memory_info(LONG kmt_adapter, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
         DXGI_QUERY_VIDEO_MEMORY_INFO *info);
 BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid);
+BOOL dxgi_wddm_adapters_have_d3d11_umd(void);
 BOOL dxgi_wddm_adapter_supports_mpo(LUID luid);
 HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
         UINT *wined3d_adapter_idx, LUID *luid, BOOL *foreign);

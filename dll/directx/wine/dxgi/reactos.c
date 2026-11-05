@@ -106,23 +106,32 @@ HRESULT dxgi_get_wddm_output_index(struct dxgi_factory *factory, struct wined3d_
     return DXGI_ERROR_NOT_FOUND;
 }
 
-HRESULT dxgi_query_wddm_video_memory_info(LUID luid, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
-        DXGI_QUERY_VIDEO_MEMORY_INFO *info)
+LONG dxgi_open_wddm_adapter(LUID luid)
 {
     D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};
-    D3DKMT_QUERYVIDEOMEMORYINFO query = {0};
-    D3DKMT_CLOSEADAPTER close_adapter;
-    NTSTATUS status;
 
     open_adapter.AdapterLuid = luid;
-    if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)))
-        return E_FAIL;
-    query.hAdapter = open_adapter.hAdapter;
+    return NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)) ? (LONG)open_adapter.hAdapter : 0;
+}
+
+void dxgi_close_wddm_adapter(LONG kmt_adapter)
+{
+    D3DKMT_CLOSEADAPTER close_adapter;
+
+    close_adapter.hAdapter = (D3DKMT_HANDLE)kmt_adapter;
+    D3DKMTCloseAdapter(&close_adapter);
+}
+
+HRESULT dxgi_query_wddm_video_memory_info(LONG kmt_adapter, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
+        DXGI_QUERY_VIDEO_MEMORY_INFO *info)
+{
+    D3DKMT_QUERYVIDEOMEMORYINFO query = {0};
+    NTSTATUS status;
+
+    query.hAdapter = (D3DKMT_HANDLE)kmt_adapter;
     query.PhysicalAdapterIndex = node_index;
     query.MemorySegmentGroup = (D3DKMT_MEMORY_SEGMENT_GROUP)segment_group;
     status = D3DKMTQueryVideoMemoryInfo(&query);
-    close_adapter.hAdapter = open_adapter.hAdapter;
-    D3DKMTCloseAdapter(&close_adapter);
     if (!NT_SUCCESS(status))
     {
         WARN("Failed to query video memory info, status %#lx.\n", status);
@@ -251,6 +260,35 @@ BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid)
     close_adapter.hAdapter = open_adapter.hAdapter;
     D3DKMTCloseAdapter(&close_adapter);
     return found;
+}
+
+BOOL dxgi_wddm_adapters_have_d3d11_umd(void)
+{
+    D3DKMT_ENUMADAPTERS2 enum_adapters = {0};
+    D3DKMT_ADAPTERINFO *adapters;
+    D3DKMT_CLOSEADAPTER close_adapter;
+    unsigned int capacity, i;
+    BOOL result = FALSE;
+
+    if (!NT_SUCCESS(D3DKMTEnumAdapters2(&enum_adapters)) || !enum_adapters.NumAdapters)
+        return FALSE;
+    capacity = enum_adapters.NumAdapters;
+    if (!(adapters = calloc(capacity, sizeof(*adapters))))
+        return FALSE;
+    enum_adapters.pAdapters = adapters;
+    if (NT_SUCCESS(D3DKMTEnumAdapters2(&enum_adapters)) && enum_adapters.NumAdapters <= capacity)
+    {
+        result = enum_adapters.NumAdapters != 0;
+        for (i = 0; i < enum_adapters.NumAdapters; ++i)
+        {
+            if (!dxgi_wddm_adapter_has_d3d11_umd(adapters[i].AdapterLuid))
+                result = FALSE;
+            close_adapter.hAdapter = adapters[i].hAdapter;
+            D3DKMTCloseAdapter(&close_adapter);
+        }
+    }
+    free(adapters);
+    return result;
 }
 
 static unsigned int dxgi_get_wddm_adapter_priority(const D3DKMT_ADAPTERINFO *adapter)

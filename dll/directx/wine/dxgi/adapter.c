@@ -78,6 +78,10 @@ static ULONG STDMETHODCALLTYPE dxgi_adapter_Release(IWineDXGIAdapter *iface)
 
     if (!refcount)
     {
+#if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
+        if (adapter->wddm_memory_adapter)
+            dxgi_close_wddm_adapter(adapter->wddm_memory_adapter);
+#endif
         wined3d_private_store_cleanup(&adapter->private_store);
         IWineDXGIFactory_Release(&adapter->factory->IWineDXGIFactory_iface);
         free(adapter);
@@ -364,13 +368,28 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_QueryVideoMemoryInfo(IWineDXGIAdap
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
     if (!adapter->factory->software && segment_group <= DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL)
     {
-        struct wined3d_adapter_identifier adapter_id = {0};
+        LONG kmt_adapter = InterlockedCompareExchange(&adapter->wddm_memory_adapter, 0, 0);
 
-        wined3d_mutex_lock();
-        hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
-        wined3d_mutex_unlock();
-        if (SUCCEEDED(hr) && (hr = dxgi_query_wddm_video_memory_info(
-                adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid,
+        if (!kmt_adapter)
+        {
+            struct wined3d_adapter_identifier adapter_id = {0};
+
+            wined3d_mutex_lock();
+            hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
+            wined3d_mutex_unlock();
+            if (SUCCEEDED(hr) && (kmt_adapter = dxgi_open_wddm_adapter(
+                    adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid)))
+            {
+                LONG published = InterlockedCompareExchange(&adapter->wddm_memory_adapter, kmt_adapter, 0);
+
+                if (published)
+                {
+                    dxgi_close_wddm_adapter(kmt_adapter);
+                    kmt_adapter = published;
+                }
+            }
+        }
+        if (kmt_adapter && (hr = dxgi_query_wddm_video_memory_info(kmt_adapter,
                 node_index, segment_group, info)) != E_FAIL)
             return hr;
     }
@@ -527,6 +546,7 @@ static void dxgi_adapter_init(struct dxgi_adapter *adapter, struct dxgi_factory 
 #ifdef __REACTOS__
     memset(&adapter->wddm_luid, 0, sizeof(adapter->wddm_luid));
     adapter->wddm_foreign = FALSE;
+    adapter->wddm_memory_adapter = 0;
 #endif
     IWineDXGIFactory_AddRef(&adapter->factory->IWineDXGIFactory_iface);
 }

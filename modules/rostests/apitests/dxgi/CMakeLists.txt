@@ -12,6 +12,8 @@ add_executable(dxgi_apitest
     composition_lifetime.cpp
     completion_event.cpp
     driver_error.cpp
+    memory_query_cost.cpp
+    factory_opengl.cpp
     shared_fence.cpp
     fence_neighbors.cpp
     shared_name.cpp
