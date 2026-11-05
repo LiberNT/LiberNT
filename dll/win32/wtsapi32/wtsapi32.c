@@ -34,6 +34,8 @@
 #include <reactos/wtssession.h>
 #ifdef __REACTOS__
 #include <ntsecapi.h>
+#include "winreg.h"
+#include <remoteconsole.h>
 #endif
 #include "wine/debug.h"
 
@@ -530,8 +532,41 @@ static BOOL wts_get_session_user(DWORD session_id, WTS_SESSION_USER *user)
     return found;
 }
 
+typedef struct
+{
+    WCHAR station[32];
+    DWORD protocol;
+    DWORD state;
+} WTS_REMOTE_RECORD;
+
+/* FIXME: Windows keeps the state of a remote connection in the local session manager; here Winlogon records it */
+static BOOL wts_get_remote_record(DWORD session_id, WTS_REMOTE_RECORD *record)
+{
+    WCHAR key_name[MAX_PATH];
+    DWORD size;
+    HKEY key;
+    BOOL found;
+
+    swprintf(key_name, ARRAY_SIZE(key_name), L"%s\\%lu", REMOTE_CONSOLE_KEY, session_id);
+    if (!session_id || RegOpenKeyExW(HKEY_LOCAL_MACHINE, key_name, 0, KEY_QUERY_VALUE, &key))
+        return FALSE;
+    memset(record, 0, sizeof(*record));
+    size = sizeof(record->station) - sizeof(WCHAR);
+    found = !RegQueryValueExW(key, L"WinStationName", NULL, NULL, (BYTE *)record->station, &size);
+    size = sizeof(record->protocol);
+    found = found && !RegQueryValueExW(key, L"ProtocolType", NULL, NULL, (BYTE *)&record->protocol, &size);
+    size = sizeof(record->state);
+    found = found && !RegQueryValueExW(key, L"ConnectState", NULL, NULL, (BYTE *)&record->state, &size);
+    RegCloseKey(key);
+    return found;
+}
+
 static WTS_CONNECTSTATE_CLASS wts_session_state(DWORD session_id, BOOL has_user)
 {
+    WTS_REMOTE_RECORD record;
+
+    if (wts_get_remote_record(session_id, &record))
+        return record.state;
     if (session_id && session_id == WTSGetActiveConsoleSessionId())
         return has_user ? WTSActive : WTSConnected;
     return (session_id && has_user) ? WTSActive : WTSDisconnected;
@@ -539,8 +574,16 @@ static WTS_CONNECTSTATE_CLASS wts_session_state(DWORD session_id, BOOL has_user)
 
 static const WCHAR *wts_session_station(DWORD session_id)
 {
+    static WCHAR remote_station[32];
+    WTS_REMOTE_RECORD record;
+
     if (!session_id)
         return wts_services_name;
+    if (wts_get_remote_record(session_id, &record))
+    {
+        lstrcpynW(remote_station, record.station, ARRAY_SIZE(remote_station));
+        return remote_station;
+    }
     if (session_id == WTSGetActiveConsoleSessionId())
         return wts_console_name;
     return L"";
@@ -861,14 +904,16 @@ BOOL WINAPI WTSQuerySessionInformationW(HANDLE server, DWORD session_id, WTS_INF
         }
         case WTSClientProtocolType:
         {
-            USHORT protocol = 0;
+            WTS_REMOTE_RECORD record;
+            USHORT protocol = wts_get_remote_record(session_id, &record) ? (USHORT)record.protocol : 0;
             return wts_return_data(buffer, count, &protocol, sizeof(protocol));
         }
         case WTSSessionId:
             return wts_return_data(buffer, count, &session_id, sizeof(session_id));
         case WTSIsRemoteSession:
         {
-            BYTE remote = FALSE;
+            WTS_REMOTE_RECORD record;
+            BYTE remote = wts_get_remote_record(session_id, &record);
             return wts_return_data(buffer, count, &remote, sizeof(remote));
         }
         case WTSUserName:
