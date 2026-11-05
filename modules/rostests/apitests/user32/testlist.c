@@ -20,6 +20,7 @@ extern void func_CreateDialog(void);
 extern void func_DisplayChangeBroadcast(void);
 extern void func_DisplayDeviceAttach(void);
 extern void func_DisplayDeviceRemoval(void);
+extern void func_RemoteDisplayAdapter(void);
 extern void func_CreateIconFromResourceEx(void);
 extern void func_CoveredWindow(void);
 extern void func_CreateWindowEx(void);
@@ -184,6 +185,7 @@ const struct test winetest_testlist[] =
     { "DisplayChangeBroadcast", func_DisplayChangeBroadcast },
     { "DisplayDeviceAttach", func_DisplayDeviceAttach },
     { "DisplayDeviceRemoval", func_DisplayDeviceRemoval },
+    { "RemoteDisplayAdapter", func_RemoteDisplayAdapter },
     { "CreateIconFromResourceEx", func_CreateIconFromResourceEx },
     { "CoveredWindow", func_CoveredWindow },
     { "CreateWindowEx", func_CreateWindowEx },
