@@ -1604,7 +1604,7 @@ static HRESULT WINAPI FilterGraph2_AddSourceFilter(IFilterGraph2 *iface,
         return hr;
     }
 
-    if (FAILED(hr = IFilterGraph2_AddFilter(iface, filter, filter_name)))
+    if (FAILED(hr = IFilterGraph2_AddFilter(iface, filter, filter_name ? filter_name : filename)))
     {
         IBaseFilter_Release(filter);
         return hr;
