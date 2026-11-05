@@ -557,9 +557,9 @@ static HRESULT vmr_query_interface(struct strmbase_renderer *iface, REFIID iid, 
 {
     struct quartz_vmr *filter = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
-    if (IsEqualGUID(iid, &IID_IVideoWindow))
+    if (IsEqualGUID(iid, &IID_IVideoWindow) && filter->mode != VMR9Mode_Windowless && filter->mode != VMR9Mode_Renderless)
         *out = &filter->window.IVideoWindow_iface;
-    else if (IsEqualGUID(iid, &IID_IBasicVideo))
+    else if (IsEqualGUID(iid, &IID_IBasicVideo) && filter->mode != VMR9Mode_Windowless && filter->mode != VMR9Mode_Renderless)
         *out = &filter->window.IBasicVideo_iface;
     else if (IsEqualGUID(iid, &IID_IAMCertifiedOutputProtection))
         *out = &filter->IAMCertifiedOutputProtection_iface;

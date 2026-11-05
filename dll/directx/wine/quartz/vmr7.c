@@ -508,9 +508,9 @@ static HRESULT vmr_query_interface(struct strmbase_renderer *iface, REFIID iid, 
 {
     struct vmr7 *filter = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
-    if (IsEqualGUID(iid, &IID_IVideoWindow))
+    if (IsEqualGUID(iid, &IID_IVideoWindow) && filter->mode != VMRMode_Windowless && filter->mode != VMRMode_Renderless)
         *out = &filter->window.IVideoWindow_iface;
-    else if (IsEqualGUID(iid, &IID_IBasicVideo))
+    else if (IsEqualGUID(iid, &IID_IBasicVideo) && filter->mode != VMRMode_Windowless && filter->mode != VMRMode_Renderless)
         *out = &filter->window.IBasicVideo_iface;
     else if (IsEqualGUID(iid, &IID_IAMCertifiedOutputProtection))
         *out = &filter->IAMCertifiedOutputProtection_iface;
@@ -518,7 +518,7 @@ static HRESULT vmr_query_interface(struct strmbase_renderer *iface, REFIID iid, 
         *out = &filter->IAMFilterMiscFlags_iface;
     else if (IsEqualGUID(iid, &IID_IVMRFilterConfig))
         *out = &filter->IVMRFilterConfig_iface;
-    else if (IsEqualGUID(iid, &IID_IVMRMonitorConfig))
+    else if (IsEqualGUID(iid, &IID_IVMRMonitorConfig) && filter->mode != VMRMode_Renderless)
         *out = &filter->IVMRMonitorConfig_iface;
     else if (IsEqualGUID(iid, &IID_IVMRSurfaceAllocatorNotify) && filter->mode == VMRMode_Renderless)
         *out = &filter->IVMRSurfaceAllocatorNotify_iface;
@@ -782,8 +782,22 @@ static HRESULT WINAPI filter_config_SetNumberOfStreams(IVMRFilterConfig *iface, 
 
 static HRESULT WINAPI filter_config_GetNumberOfStreams(IVMRFilterConfig *iface, DWORD *count)
 {
-    FIXME("iface %p, count %p, stub!\n", iface, count);
-    return E_NOTIMPL;
+    struct vmr7 *filter = impl_from_IVMRFilterConfig(iface);
+
+    TRACE("filter %p, count %p.\n", filter, count);
+
+    EnterCriticalSection(&filter->renderer.filter.filter_cs);
+
+    if (!filter->stream_count)
+    {
+        LeaveCriticalSection(&filter->renderer.filter.filter_cs);
+        return VFW_E_VMR_NOT_IN_MIXER_MODE;
+    }
+
+    *count = filter->stream_count;
+
+    LeaveCriticalSection(&filter->renderer.filter.filter_cs);
+    return S_OK;
 }
 
 static HRESULT WINAPI filter_config_SetRenderingPrefs(IVMRFilterConfig *iface, DWORD flags)
