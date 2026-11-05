@@ -854,6 +854,10 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     if (input->Flags & ~(D3D12_PIPELINE_STATE_FLAG_TOOL_DEBUG | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS
             | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT))
         return E_INVALIDARG;
+    if ((input->Flags & (D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS
+            | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT))
+            && device->ddi_build < D3D12DDI_BUILD_VERSION_0099)
+        return E_INVALIDARG;
     flags = input->Flags;
     if (!input->VS.pShaderBytecode || !input->VS.BytecodeLength) return E_INVALIDARG;
     if ((input->HS.pShaderBytecode || input->DS.pShaderBytecode)

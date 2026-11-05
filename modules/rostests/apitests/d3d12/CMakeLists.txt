@@ -6,12 +6,14 @@ list(APPEND SOURCE
     bgwork.cpp
     blend.cpp
     bundle.cpp
+    capsuse.cpp
     ddibuild.cpp
     device.cpp
     dred.cpp
     factory.cpp
     feedback.cpp
     features.cpp
+    formatsupport.cpp
     heaps.cpp
     interfaces.cpp
     pipeline.cpp

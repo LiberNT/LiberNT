@@ -132,12 +132,84 @@ static bool Native12DisplayFormat(DXGI_FORMAT format)
             || format == DXGI_FORMAT_R10G10B10A2_UNORM || format == DXGI_FORMAT_R16G16B16A16_FLOAT;
 }
 
-void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, D3D12_FORMAT_SUPPORT1 *support1,
-        D3D12_FORMAT_SUPPORT2 *support2)
+struct NATIVE_FORMAT_REQUIREMENT
+{
+    DXGI_FORMAT Format;
+    UINT Support[3];
+    UINT Allowed[3];
+    UINT RequiredLevels;
+};
+
+struct NATIVE_LEVEL9_FORMAT
+{
+    DXGI_FORMAT Format;
+    UINT Required[3];
+    UINT Allowed[3];
+};
+
+#include "../d3d11/native_formats.inl"
+
+static const UINT Native12VideoSupport = D3D12_FORMAT_SUPPORT1_DECODER_OUTPUT
+        | D3D12_FORMAT_SUPPORT1_VIDEO_PROCESSOR_OUTPUT | D3D12_FORMAT_SUPPORT1_VIDEO_PROCESSOR_INPUT
+        | D3D12_FORMAT_SUPPORT1_VIDEO_ENCODER;
+static const UINT Native12UnlistedSupport = Native12VideoSupport | D3D12_FORMAT_SUPPORT1_BACK_BUFFER_CAST
+        | D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW;
+static const UINT Native12D3D11OnlySupport = D3D11_FORMAT_SUPPORT_MIP_AUTOGEN | D3D11_FORMAT_SUPPORT_CPU_LOCKABLE;
+static const UINT Native12Level11Column = 2;
+
+static UINT Native12ListedSupport(DXGI_FORMAT format, UINT support)
+{
+    const NATIVE_FORMAT_REQUIREMENT *found = NULL;
+
+    for (const NATIVE_FORMAT_REQUIREMENT &entry : NativeFormatRequirements)
+    {
+        if (entry.Format == format) found = &entry;
+    }
+    if (format <= DXGI_FORMAT_B4G4R4A4_UNORM)
+        support &= Native12UnlistedSupport | (found ? found->Allowed[Native12Level11Column] : 0);
+    if (found) support |= found->Support[Native12Level11Column] & ~Native12VideoSupport;
+    return support & ~Native12D3D11OnlySupport;
+}
+
+static bool Native12LogicOpFormat(DXGI_FORMAT format)
+{
+    switch (format)
+    {
+        case DXGI_FORMAT_R32G32B32A32_UINT: case DXGI_FORMAT_R32G32B32_UINT:
+        case DXGI_FORMAT_R16G16B16A16_UINT: case DXGI_FORMAT_R32G32_UINT:
+        case DXGI_FORMAT_R10G10B10A2_UINT: case DXGI_FORMAT_R8G8B8A8_UINT:
+        case DXGI_FORMAT_R16G16_UINT: case DXGI_FORMAT_R32_UINT:
+        case DXGI_FORMAT_R8G8_UINT: case DXGI_FORMAT_R16_UINT: case DXGI_FORMAT_R8_UINT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool Native12TiledFormat(DXGI_FORMAT format)
+{
+    if (format > DXGI_FORMAT_B4G4R4A4_UNORM || (format >= DXGI_FORMAT_AYUV && format <= DXGI_FORMAT_A8P8)) return false;
+    switch (format)
+    {
+        case DXGI_FORMAT_R32G32B32_TYPELESS: case DXGI_FORMAT_R32G32B32_FLOAT:
+        case DXGI_FORMAT_R32G32B32_UINT: case DXGI_FORMAT_R32G32B32_SINT:
+        case DXGI_FORMAT_R32G8X24_TYPELESS: case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+        case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS: case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+        case DXGI_FORMAT_R24G8_TYPELESS: case DXGI_FORMAT_D24_UNORM_S8_UINT:
+        case DXGI_FORMAT_R24_UNORM_X8_TYPELESS: case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+        case DXGI_FORMAT_R1_UNORM: case DXGI_FORMAT_R8G8_B8G8_UNORM: case DXGI_FORMAT_G8R8_G8B8_UNORM:
+            return false;
+        default:
+            return true;
+    }
+}
+
+void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, bool logic_op, bool tiled,
+        D3D12_FORMAT_SUPPORT1 *support1, D3D12_FORMAT_SUPPORT2 *support2)
 {
     UINT first = 0, second = 0;
     Native12FormatInfo info = {};
-    bool known = Native12GetFormatInfo(format, &info);
+    Native12GetFormatInfo(format, &info);
     bool integer = Native12IntegerFormat(format);
     bool depth = Native12DepthFormat(format);
     bool block_compressed = info.block_width == 4 && info.block_height == 4;
@@ -162,7 +234,7 @@ void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, D3D12_FORMAT_SU
         if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_VIDEO_PROCESSOR_INPUT)
             first |= D3D12_FORMAT_SUPPORT1_VIDEO_PROCESSOR_INPUT;
         if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_VIDEO_ENCODER) first |= D3D12_FORMAT_SUPPORT1_VIDEO_ENCODER;
-        if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES)
+        if (ddi_support & (D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES | D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS))
         {
             first |= D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW;
             second |= D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE;
@@ -172,6 +244,7 @@ void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, D3D12_FORMAT_SU
             second |= D3D12_FORMAT_SUPPORT2_OUTPUT_MERGER_LOGIC_OP;
         if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_MULTIPLANE_OVERLAY)
             second |= D3D12_FORMAT_SUPPORT2_MULTIPLANE_OVERLAY;
+        if (ddi_support & D3DWDDM1_3DDI_FORMAT_SUPPORT_TILED) second |= D3D12_FORMAT_SUPPORT2_TILED;
 
         if (ddi_support & (D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE | D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET
                 | D3D10_DDI_FORMAT_SUPPORT_BLENDABLE))
@@ -196,8 +269,18 @@ void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, D3D12_FORMAT_SU
     }
     if (format == DXGI_FORMAT_R16_UINT || format == DXGI_FORMAT_R32_UINT)
         first |= D3D12_FORMAT_SUPPORT1_IA_INDEX_BUFFER;
-    if (known && info.block_bytes && !block_compressed && !depth && info.planes == 1)
-        first |= D3D12_FORMAT_SUPPORT1_BUFFER | D3D12_FORMAT_SUPPORT1_IA_VERTEX_BUFFER;
+    first = Native12ListedSupport(format, first);
+    if (first & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) second |= D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE;
+    if (format == DXGI_FORMAT_R32_FLOAT && (second & D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE))
+        second |= D3D12_FORMAT_SUPPORT2_UAV_ATOMIC_EXCHANGE;
+    if (logic_op && (first & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) && Native12LogicOpFormat(format))
+        second |= D3D12_FORMAT_SUPPORT2_OUTPUT_MERGER_LOGIC_OP;
+    if (tiled && Native12TiledFormat(format)) second |= D3D12_FORMAT_SUPPORT2_TILED;
+    if ((first & D3D12_FORMAT_SUPPORT1_DISPLAY) && (format == DXGI_FORMAT_R8G8B8A8_UNORM
+            || format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB || format == DXGI_FORMAT_R10G10B10A2_UNORM
+            || format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM || format == DXGI_FORMAT_B8G8R8A8_UNORM
+            || format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB))
+        first |= D3D12_FORMAT_SUPPORT1_BACK_BUFFER_CAST;
     *support1 = static_cast<D3D12_FORMAT_SUPPORT1>(first);
     *support2 = static_cast<D3D12_FORMAT_SUPPORT2>(second);
 }

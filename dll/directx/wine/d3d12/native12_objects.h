@@ -922,8 +922,8 @@ bool Native12GetFormatInfo(DXGI_FORMAT format, Native12FormatInfo *info);
 HRESULT Native12ValidateResourceDesc(const D3D12_RESOURCE_DESC *desc);
 HRESULT Native12ValidateResource(D3D12_HEAP_TYPE heap_type, const D3D12_RESOURCE_DESC *desc,
         D3D12_RESOURCE_STATES state, const D3D12_CLEAR_VALUE *clear_value);
-void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, D3D12_FORMAT_SUPPORT1 *support1,
-        D3D12_FORMAT_SUPPORT2 *support2);
+void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, bool logic_op, bool tiled,
+        D3D12_FORMAT_SUPPORT1 *support1, D3D12_FORMAT_SUPPORT2 *support2);
 D3D12DDI_COMMAND_QUEUE_FLAGS Native12QueueFlags(D3D12_COMMAND_LIST_TYPE type);
 bool Native12VideoListError(HANDLE handle, HRESULT hr);
 UINT Native12ConvertResourceBarriers(UINT count, const D3D12_RESOURCE_BARRIER *barriers,

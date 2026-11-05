@@ -167,6 +167,8 @@ static void TestDynamicState(struct d3d12_test_context *context, ID3D12Device2 *
 static void RunPipeline(void *)
 {
     D3D12_FEATURE_DATA_D3D12_OPTIONS14 options14 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS15 options15 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16 = {};
     D3D12_FEATURE_DATA_D3D12_OPTIONS19 options19 = {};
     struct d3d12_test_context context;
     struct pipeline_stream stream;
@@ -182,6 +184,8 @@ static void RunPipeline(void *)
         return;
     }
     context.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS14, &options14, sizeof(options14));
+    context.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS15, &options15, sizeof(options15));
+    context.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options16, sizeof(options16));
     context.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS19, &options19, sizeof(options19));
     ok(options19.RasterizerDesc2Supported, "D3D12_RASTERIZER_DESC2 is not supported\n");
 
@@ -259,11 +263,11 @@ static void RunPipeline(void *)
     BaseStream(&stream, context.root_signature, FALSE);
     stream.Add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS, D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS);
     hr = CreateFromStream(device, &stream);
-    ok(hr == S_OK, "dynamic depth bias flag: %#lx\n", hr);
+    ok(hr == (options16.DynamicDepthBiasSupported ? S_OK : E_INVALIDARG), "dynamic depth bias flag: %#lx\n", hr);
     BaseStream(&stream, context.root_signature, FALSE);
     stream.Add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS, D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT);
     hr = CreateFromStream(device, &stream);
-    ok(hr == S_OK, "dynamic strip cut flag: %#lx\n", hr);
+    ok(hr == (options15.DynamicIndexBufferStripCutSupported ? S_OK : E_INVALIDARG), "dynamic strip cut flag: %#lx\n", hr);
     BaseStream(&stream, context.root_signature, FALSE);
     stream.Add(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS, static_cast<D3D12_PIPELINE_STATE_FLAGS>(0x10));
     hr = CreateFromStream(device, &stream);

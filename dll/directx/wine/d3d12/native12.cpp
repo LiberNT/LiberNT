@@ -1384,7 +1384,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             caps->MaxGPUVirtualAddressBitsPerResource = gpuva.MaxGPUVirtualAddressBitsPerResource;
             caps->StandardSwizzle64KBSupported = FALSE;
             caps->CrossNodeSharingTier = D3D12_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
-            caps->CrossAdapterRowMajorTextureSupported = FALSE;
+            caps->CrossAdapterRowMajorTextureSupported = TRUE;
             caps->VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation =
                     !!options.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation;
             caps->ResourceHeapTier = static_cast<D3D12_RESOURCE_HEAP_TIER>(options.ResourceHeapTier);
@@ -1408,7 +1408,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             caps->TileBasedRenderer = !!architecture.TileBasedDeferredRenderer;
             caps->UMA = !!memory.UMA;
             caps->CacheCoherentUMA = !!memory.CacheCoherent;
-            caps->IsolatedMMU = FALSE;
+            caps->IsolatedMMU = TRUE;
             return S_OK;
         }
         case D3D12_FEATURE_FEATURE_LEVELS:
@@ -1453,6 +1453,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             caps->WaveLaneCountMin = shader_caps.WaveLaneCountMin;
             caps->WaveLaneCountMax = shader_caps.WaveLaneCountMax;
             caps->TotalLaneCount = shader_caps.TotalLaneCount;
+            caps->ExpandedComputeResourceStates = TRUE;
             caps->Int64ShaderOps = !!shader_caps.Int64Ops;
             return S_OK;
         }
@@ -1468,8 +1469,9 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             }
             UINT ddi_support = 0;
             functions.pfnCheckFormatSupport(driver_device, caps->Format, &ddi_support);
-            Native12FormatSupport(caps->Format, ddi_support, &caps->Support1, &caps->Support2);
-            return S_OK;
+            Native12FormatSupport(caps->Format, ddi_support, !!options.OutputMergerLogicOp,
+                    options.TiledResourcesTier != 0, &caps->Support1, &caps->Support2);
+            return caps->Support1 || caps->Support2 ? S_OK : E_FAIL;
         }
         case D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS:
         {
@@ -1531,10 +1533,12 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
             caps->CopyQueueTimestampQueriesSupported = !!options.CopyQueueTimestampQueriesSupported;
+            caps->CastingFullyTypedFormatSupported = TRUE;
             caps->BarycentricsSupported = !!options.BarycentricsSupported;
             caps->ViewInstancingTier = static_cast<D3D12_VIEW_INSTANCING_TIER>(options.ViewInstancingTier);
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_3D)
-                caps->WriteBufferImmediateSupportFlags |= D3D12_COMMAND_LIST_SUPPORT_FLAG_DIRECT;
+                caps->WriteBufferImmediateSupportFlags |= D3D12_COMMAND_LIST_SUPPORT_FLAG_DIRECT
+                        | D3D12_COMMAND_LIST_SUPPORT_FLAG_BUNDLE;
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE)
                 caps->WriteBufferImmediateSupportFlags |= D3D12_COMMAND_LIST_SUPPORT_FLAG_COMPUTE;
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_COPY)
@@ -1546,6 +1550,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS4 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->MSAA64KBAlignedTextureSupported = TRUE;
+            caps->SharedResourceCompatibilityTier = D3D12_SHARED_RESOURCE_COMPATIBILITY_TIER_2;
             caps->Native16BitShaderOpsSupported = !!shader_caps.Native16BitOps;
             return S_OK;
         }
