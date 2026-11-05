@@ -851,6 +851,96 @@ static void test_misc_flags(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_file_sink(void)
+{
+    IBaseFilter *filter = create_file_writer();
+    AM_MEDIA_TYPE mt, set_mt = {{0}};
+    IFileSinkFilter *filesink;
+    WCHAR *filename;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    IBaseFilter_QueryInterface(filter, &IID_IFileSinkFilter, (void **)&filesink);
+    IBaseFilter_FindPin(filter, L"in", &pin);
+
+    hr = IFileSinkFilter_GetCurFile(filesink, NULL, &mt);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+
+    memset(&mt, 0xcc, sizeof(mt));
+    filename = (WCHAR *)0xdeadbeef;
+    hr = IFileSinkFilter_GetCurFile(filesink, &filename, &mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!filename, "Got filename %s.\n", wine_dbgstr_w(filename));
+    ok(IsEqualGUID(&mt.majortype, &GUID_NULL), "Got major type %s.\n", wine_dbgstr_guid(&mt.majortype));
+    ok(IsEqualGUID(&mt.subtype, &GUID_NULL), "Got subtype %s.\n", wine_dbgstr_guid(&mt.subtype));
+    ok(mt.cbFormat == 0xcccccccc, "Got format size %lu.\n", mt.cbFormat);
+
+    hr = IFileSinkFilter_SetFileName(filesink, NULL, NULL);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+
+    hr = IFileSinkFilter_SetFileName(filesink, L"qfwtest.avi", NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    memset(&mt, 0xcc, sizeof(mt));
+    hr = IFileSinkFilter_GetCurFile(filesink, &filename, &mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!wcscmp(filename, L"qfwtest.avi"), "Got filename %s.\n", wine_dbgstr_w(filename));
+    CoTaskMemFree(filename);
+    ok(IsEqualGUID(&mt.majortype, &MEDIATYPE_Stream), "Got major type %s.\n", wine_dbgstr_guid(&mt.majortype));
+    ok(IsEqualGUID(&mt.subtype, &GUID_NULL), "Got subtype %s.\n", wine_dbgstr_guid(&mt.subtype));
+    ok(mt.cbFormat == 0xcccccccc, "Got format size %lu.\n", mt.cbFormat);
+
+    hr = IFileSinkFilter_GetCurFile(filesink, &filename, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!wcscmp(filename, L"qfwtest.avi"), "Got filename %s.\n", wine_dbgstr_w(filename));
+    CoTaskMemFree(filename);
+
+    set_mt.majortype = MEDIATYPE_Video;
+    set_mt.subtype = MEDIASUBTYPE_RGB24;
+    set_mt.formattype = FORMAT_VideoInfo;
+    hr = IFileSinkFilter_SetFileName(filesink, L"qfwtest2.avi", &set_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    memset(&mt, 0xcc, sizeof(mt));
+    hr = IFileSinkFilter_GetCurFile(filesink, &filename, &mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!wcscmp(filename, L"qfwtest2.avi"), "Got filename %s.\n", wine_dbgstr_w(filename));
+    CoTaskMemFree(filename);
+    ok(IsEqualGUID(&mt.majortype, &MEDIATYPE_Video), "Got major type %s.\n", wine_dbgstr_guid(&mt.majortype));
+    ok(IsEqualGUID(&mt.subtype, &MEDIASUBTYPE_RGB24), "Got subtype %s.\n", wine_dbgstr_guid(&mt.subtype));
+    ok(mt.formattype.Data1 == 0xcccccccc, "Got format type %s.\n", wine_dbgstr_guid(&mt.formattype));
+
+    hr = IPin_QueryAccept(pin, &set_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    memset(&mt, 0, sizeof(mt));
+    mt.majortype = MEDIATYPE_Stream;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    mt.majortype = MEDIATYPE_Video;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    mt.subtype = MEDIASUBTYPE_RGB32;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+
+    memset(&set_mt, 0, sizeof(set_mt));
+    set_mt.subtype = MEDIASUBTYPE_RGB24;
+    hr = IFileSinkFilter_SetFileName(filesink, L"qfwtest3.avi", &set_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    mt.majortype = MEDIATYPE_Audio;
+    mt.subtype = MEDIASUBTYPE_RGB24;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    mt.subtype = MEDIASUBTYPE_PCM;
+    hr = IPin_QueryAccept(pin, &mt);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+
+    IPin_Release(pin);
+    IFileSinkFilter_Release(filesink);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ok(GetFileAttributesW(L"qfwtest.avi") == INVALID_FILE_ATTRIBUTES, "File should not exist.\n");
+}
+
 START_TEST(filewriter)
 {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -864,6 +954,7 @@ START_TEST(filewriter)
     test_enum_media_types();
     test_connect_pin();
     test_misc_flags();
+    test_file_sink();
 
     CoUninitialize();
 }
