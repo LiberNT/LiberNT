@@ -1120,6 +1120,17 @@ static HRESULT source_reader_media_stream_state_handler(struct source_reader *re
                     source_reader_queue_response(reader, stream, hr, MF_SOURCE_READERF_STREAMTICK, timestamp, NULL);
 
                     break;
+#ifdef __REACTOS__
+                case MEError:
+                {
+                    HRESULT status = E_FAIL;
+
+                    IMFMediaEvent_GetStatus(event, &status);
+                    stream->flags &= ~STREAM_FLAG_SAMPLE_REQUESTED;
+                    source_reader_queue_response(reader, stream, status, MF_SOURCE_READERF_ERROR, 0, NULL);
+                    break;
+                }
+#endif
                 default:
                     ;
             }
@@ -1165,6 +1176,9 @@ static HRESULT WINAPI source_reader_stream_events_callback_Invoke(IMFAsyncCallba
         case MEStreamStopped:
         case MEStreamTick:
         case MEEndOfStream:
+#ifdef __REACTOS__
+        case MEError:
+#endif
             hr = source_reader_media_stream_state_handler(reader, stream, event);
             break;
         default:
