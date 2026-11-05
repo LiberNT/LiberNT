@@ -289,6 +289,7 @@ struct strmbase_renderer
     const struct strmbase_renderer_ops *ops;
 
     BOOL eos;
+    BOOL fail_inactive_receive;
 };
 
 struct strmbase_renderer_ops
