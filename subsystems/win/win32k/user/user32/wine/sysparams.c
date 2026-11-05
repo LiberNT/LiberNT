@@ -17,6 +17,14 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(win);
 
+LONG APIENTRY
+NtUserSetDisplayConfig(
+    UINT32 numPathArrayElements,
+    DISPLAYCONFIG_PATH_INFO *pathArray,
+    UINT32 numModeInfoArrayElements,
+    DISPLAYCONFIG_MODE_INFO *modeInfoArray,
+    UINT32 flags);
+
 /* Only define DISPLAYCONFIG types locally when system headers do not provide them. */
 
 
@@ -733,9 +741,13 @@ LONG WINAPI SetDisplayConfig(UINT32 path_info_count, DISPLAYCONFIG_PATH_INFO *pa
 
     if (!(flags & SDC_USE_SUPPLIED_DISPLAY_CONFIG))
     {
+        UINT32 Topology = flags & SDC_USE_DATABASE_CURRENT;
+
         if (!(flags & SDC_TOPOLOGY_SUPPLIED) && (path_info_count || path_info || mode_info_count || mode_info))
             return ERROR_INVALID_PARAMETER;
-        return ERROR_SUCCESS;
+        if (!Topology || (Topology & (Topology - 1)) || (flags & SDC_TOPOLOGY_SUPPLIED))
+            return ERROR_SUCCESS;
+        return NtUserSetDisplayConfig(0, NULL, 0, NULL, Topology | (flags & (SDC_APPLY | SDC_VALIDATE)));
     }
 
     if (!path_info_count || !path_info || (mode_info_count && !mode_info))

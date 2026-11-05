@@ -226,6 +226,24 @@ PDEVOBJ_bDisableDisplay(
     _Inout_ PPDEVOBJ ppdev);
 
 BOOL
+NTAPI
+PDEVOBJ_bMoveToDisplay(
+    _Inout_ PPDEVOBJ ppdev,
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ PDEVMODEW pdm);
+
+BOOL
+NTAPI
+PDEVOBJ_bReturnToDetachedDisplay(
+    _Inout_ PPDEVOBJ ppdev);
+
+extern PPDEVOBJ gppdevDetached;
+
+PPDEVOBJ
+NTAPI
+EngpGetDetachedPDEV(VOID);
+
+BOOL
 PDEVOBJ_bGraphicsDeviceInUse(
     _In_ PGRAPHICS_DEVICE pGraphicsDevice);
 

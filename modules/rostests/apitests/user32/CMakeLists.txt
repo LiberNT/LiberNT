@@ -23,6 +23,7 @@ list(APPEND SOURCE
     DisplayChangeBroadcast.c
     DisplayDeviceAttach.c
     DisplayDeviceRemoval.c
+    DisplayTopology.c
     RemoteDisplayAdapter.c
     CreateIconFromResourceEx.c
     CoveredWindow.c
