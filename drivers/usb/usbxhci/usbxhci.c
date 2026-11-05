@@ -6541,6 +6541,16 @@ XHCI_GetCommandTrbType(
     return (Extension->CommandRing[Index].Control & XHCI_TRB_TYPE_MASK) >> XHCI_TRB_TYPE_SHIFT;
 }
 
+/* The frozen bugcheck owner services the event ring at HIGH_LEVEL, where no waiter can run. */
+static
+VOID
+XHCI_SignalEp0StallReset(
+    _Inout_ PXHCI_DEVICE_SLOT Slot)
+{
+    if (KeGetCurrentIrql() <= DISPATCH_LEVEL)
+        KeSetEvent(&Slot->Ep0StallResetEvent, IO_NO_INCREMENT, FALSE);
+}
+
 static
 VOID
 XHCI_FinalizeDisableSlot(
@@ -6586,7 +6596,7 @@ XHCI_FinalizeDisableSlot(
     RtlZeroMemory(Slot->DeferredEndpointTable, sizeof(Slot->DeferredEndpointTable));
     InterlockedExchange(&Slot->Ep0NeedsStallReset, 0);
     InterlockedExchange(&Slot->Ep0StallResetQueued, 0);
-    KeSetEvent(&Slot->Ep0StallResetEvent, IO_NO_INCREMENT, FALSE);
+    XHCI_SignalEp0StallReset(Slot);
 }
 
 static
@@ -6788,7 +6798,7 @@ XHCI_HandleCommandCompletion(
 
         InterlockedExchange(&Slot->Ep0NeedsStallReset, 0);
         InterlockedExchange(&Slot->Ep0StallResetQueued, 0);
-        KeSetEvent(&Slot->Ep0StallResetEvent, IO_NO_INCREMENT, FALSE);
+        XHCI_SignalEp0StallReset(Slot);
 
         DPRINT("usbxhci: slot %u reset (EP0 ring reset to index 0)\n", SlotId);
     }
@@ -7923,9 +7933,7 @@ XHCI_HandleTransferEvent(
         XHCI_PerformEndpointResetSequence(Extension, Endpoint, FALSE);
         InterlockedExchange(&Endpoint->Slot->Ep0NeedsStallReset, 0);
         InterlockedExchange(&Endpoint->Slot->Ep0StallResetQueued, 0);
-        KeSetEvent(&Endpoint->Slot->Ep0StallResetEvent,
-                   IO_NO_INCREMENT,
-                   FALSE);
+        XHCI_SignalEp0StallReset(Endpoint->Slot);
     }
 
     Transfer->CompletionTrbPointer = TrbPointer;
@@ -11344,9 +11352,7 @@ XHCI_SubmitControlTransfer(
                 XHCI_PerformEndpointResetSequence(Extension, Endpoint, FALSE);
                 InterlockedExchange(&Endpoint->Slot->Ep0NeedsStallReset, 0);
                 InterlockedExchange(&Endpoint->Slot->Ep0StallResetQueued, 0);
-                KeSetEvent(&Endpoint->Slot->Ep0StallResetEvent,
-                           IO_NO_INCREMENT,
-                           FALSE);
+                XHCI_SignalEp0StallReset(Endpoint->Slot);
             }
             else
             {
