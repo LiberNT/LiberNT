@@ -38,7 +38,46 @@ static const INFORMATION_CLASS_INFO ExTimerInfoClass[] =
     IQS_SAME(TIMER_BASIC_INFORMATION, ULONG, ICIF_QUERY),
 };
 
+static LIST_ENTRY ExpHighResolutionTimerList = { &ExpHighResolutionTimerList, &ExpHighResolutionTimerList };
+static LIST_ENTRY ExpHighResolutionUserTimerList = { &ExpHighResolutionUserTimerList, &ExpHighResolutionUserTimerList };
+static KSPIN_LOCK ExpHighResolutionTimerLock;
+
+static VOID ExpUpdateHighResolutionDeadline(VOID);
+
 /* PRIVATE FUNCTIONS *********************************************************/
+
+static
+VOID
+ExpArmUserHighResolutionTimer(IN PETIMER Timer)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&ExpHighResolutionTimerLock, &OldIrql);
+    if (!Timer->HighResolutionArmed)
+    {
+        InsertTailList(&ExpHighResolutionUserTimerList, &Timer->HighResolutionLink);
+        Timer->HighResolutionArmed = TRUE;
+    }
+    ExpUpdateHighResolutionDeadline();
+    KeReleaseSpinLock(&ExpHighResolutionTimerLock, OldIrql);
+}
+
+static
+VOID
+ExpDisarmUserHighResolutionTimer(IN PETIMER Timer,
+                                 IN BOOLEAN OnlyIfExpired)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&ExpHighResolutionTimerLock, &OldIrql);
+    if (Timer->HighResolutionArmed && (!OnlyIfExpired || !Timer->KeTimer.Header.Inserted))
+    {
+        RemoveEntryList(&Timer->HighResolutionLink);
+        Timer->HighResolutionArmed = FALSE;
+    }
+    ExpUpdateHighResolutionDeadline();
+    KeReleaseSpinLock(&ExpHighResolutionTimerLock, OldIrql);
+}
 
 VOID
 NTAPI
@@ -80,6 +119,7 @@ ExTimerRundown(VOID)
 
             /* Cancel the timer and remove its DPC and APC */
             KeCancelTimer(&Timer->KeTimer);
+            if (Timer->HighResolution) ExpDisarmUserHighResolutionTimer(Timer, FALSE);
             KeRemoveQueueDpc(&Timer->TimerDpc);
             if (KeRemoveQueueApc(&Timer->TimerApc)) DerefsToDo++;
 
@@ -132,6 +172,7 @@ ExpDeleteTimer(IN PVOID ObjectBody)
 
     /* Tell the Kernel to cancel the Timer and flush all queued DPCs */
     KeCancelTimer(&Timer->KeTimer);
+    if (Timer->HighResolution) ExpDisarmUserHighResolutionTimer(Timer, FALSE);
     KeFlushQueuedDpcs();
 }
 
@@ -151,6 +192,8 @@ ExpTimerDpcRoutine(IN PKDPC Dpc,
 
     /* Lock the Timer */
     KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
+
+    if (Timer->HighResolution) ExpDisarmUserHighResolutionTimer(Timer, TRUE);
 
     /* Check if the timer is associated */
     if (Timer->ApcAssociated)
@@ -349,6 +392,8 @@ NtCancelTimer(IN HANDLE TimerHandle,
             KeCancelTimer(&Timer->KeTimer);
         }
 
+        if (Timer->HighResolution) ExpDisarmUserHighResolutionTimer(Timer, FALSE);
+
         /* Handle a Wake Timer */
         if (Timer->WakeTimerListEntry.Flink)
         {
@@ -397,12 +442,13 @@ NtCancelTimer(IN HANDLE TimerHandle,
     return Status;
 }
 
+static
 NTSTATUS
-NTAPI
-NtCreateTimer(OUT PHANDLE TimerHandle,
-              IN ACCESS_MASK DesiredAccess,
-              IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
-              IN TIMER_TYPE TimerType)
+ExpCreateTimerObject(OUT PHANDLE TimerHandle,
+                     IN ACCESS_MASK DesiredAccess,
+                     IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
+                     IN TIMER_TYPE TimerType,
+                     IN BOOLEAN HighResolution)
 {
     PETIMER Timer;
     HANDLE hTimer;
@@ -460,6 +506,8 @@ NtCreateTimer(OUT PHANDLE TimerHandle,
         Timer->SetSequence = 0;
         Timer->ApcQueuedSequence = MAXULONG;
         Timer->ApcQueuedDueTime = 0;
+        Timer->HighResolution = HighResolution;
+        Timer->HighResolutionArmed = FALSE;
 
         /* Insert the Timer */
         Status = ObInsertObject((PVOID)Timer,
@@ -489,6 +537,36 @@ NtCreateTimer(OUT PHANDLE TimerHandle,
 
     /* Return to Caller */
     return Status;
+}
+
+NTSTATUS
+NTAPI
+NtCreateTimer(OUT PHANDLE TimerHandle,
+              IN ACCESS_MASK DesiredAccess,
+              IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
+              IN TIMER_TYPE TimerType)
+{
+    return ExpCreateTimerObject(TimerHandle, DesiredAccess, ObjectAttributes, TimerType, FALSE);
+}
+
+/* TODO: NtSetTimer2 and NtCancelTimer2; NtSetTimer and NtCancelTimer serve these objects meanwhile */
+NTSTATUS
+NTAPI
+NtCreateTimer2(OUT PHANDLE TimerHandle,
+               IN PVOID Reserved1 OPTIONAL,
+               IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
+               IN ULONG Attributes,
+               IN ACCESS_MASK DesiredAccess)
+{
+    UNREFERENCED_PARAMETER(Reserved1);
+
+    if (Attributes & ~(EX_TIMER_HIGH_RESOLUTION | EX_TIMER_NO_WAKE | EX_TIMER_NOTIFICATION))
+        return STATUS_INVALID_PARAMETER;
+    return ExpCreateTimerObject(TimerHandle,
+                                DesiredAccess,
+                                ObjectAttributes,
+                                (Attributes & EX_TIMER_NOTIFICATION) ? NotificationTimer : SynchronizationTimer,
+                                (Attributes & EX_TIMER_HIGH_RESOLUTION) != 0);
 }
 
 NTSTATUS
@@ -760,6 +838,7 @@ NtSetTimer(IN HANDLE TimerHandle,
          }
 
         if ((PreviousMode == UserMode) && (TimerDueTime.QuadPart < 0) &&
+            !Timer->HighResolution &&
             !PsGetCurrentProcess()->SetTimerResolution)
         {
             ULONGLONG Now = KiQueryInterruptTimePrecise(NULL, FALSE);
@@ -772,7 +851,8 @@ NtSetTimer(IN HANDLE TimerHandle,
         KeSetTimerEx(&Timer->KeTimer,
                      TimerDueTime,
                      Period,
-                     TimerApcRoutine ? &Timer->TimerDpc : NULL);
+                     (TimerApcRoutine || Timer->HighResolution) ? &Timer->TimerDpc : NULL);
+        if (Timer->HighResolution) ExpArmUserHighResolutionTimer(Timer);
 
         /* Unlock the Timer */
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
@@ -821,8 +901,6 @@ typedef struct _EX_TIMER
     BOOLEAN Armed;
 } EX_TIMER;
 
-static LIST_ENTRY ExpHighResolutionTimerList = { &ExpHighResolutionTimerList, &ExpHighResolutionTimerList };
-static KSPIN_LOCK ExpHighResolutionTimerLock;
 
 static
 VOID
@@ -830,6 +908,7 @@ ExpUpdateHighResolutionDeadline(VOID)
 {
     PLIST_ENTRY ListEntry;
     PEX_TIMER Timer;
+    PETIMER UserTimer;
     ULONGLONG Deadline = 0;
 
     for (ListEntry = ExpHighResolutionTimerList.Flink;
@@ -844,8 +923,21 @@ ExpUpdateHighResolutionDeadline(VOID)
         }
     }
 
+    for (ListEntry = ExpHighResolutionUserTimerList.Flink;
+         ListEntry != &ExpHighResolutionUserTimerList;
+         ListEntry = ListEntry->Flink)
+    {
+        UserTimer = CONTAINING_RECORD(ListEntry, ETIMER, HighResolutionLink);
+        if (UserTimer->KeTimer.Header.Inserted &&
+            (!Deadline || (ULONGLONG)UserTimer->KeTimer.DueTime.QuadPart < Deadline))
+        {
+            Deadline = UserTimer->KeTimer.DueTime.QuadPart;
+        }
+    }
+
     if (!KiSetClockDeadline(Deadline))
-        ExpSetHighResolutionClock(!IsListEmpty(&ExpHighResolutionTimerList));
+        ExpSetHighResolutionClock(!IsListEmpty(&ExpHighResolutionTimerList) ||
+                                  !IsListEmpty(&ExpHighResolutionUserTimerList));
 }
 
 static

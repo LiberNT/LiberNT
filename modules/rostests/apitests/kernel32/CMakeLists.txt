@@ -98,6 +98,7 @@ list(APPEND SOURCE
     SetThreadStackGuarantee.c
     SetUnhandledExceptionFilter.c
     SetWaitableTimerEx.c
+    WaitableTimerHighResolution.c
     SuspendThread.c
     SystemFirmware.c
     TerminateProcess.c

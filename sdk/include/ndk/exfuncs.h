@@ -242,6 +242,17 @@ NtCreateTimer(
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
+NtCreateTimer2(
+    _Out_ PHANDLE TimerHandle,
+    _In_opt_ PVOID Reserved1,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ ULONG Attributes,
+    _In_ ACCESS_MASK DesiredAccess
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
 NtDeleteAtom(
     _In_ RTL_ATOM Atom
 );

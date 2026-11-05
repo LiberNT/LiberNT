@@ -323,6 +323,7 @@
 @ stdcall NtCreateThread(ptr long ptr ptr ptr ptr ptr long)
 @ stdcall -version=0x600+ NtCreateThreadEx(ptr long ptr ptr ptr ptr long long long long ptr)
 @ stdcall NtCreateTimer(ptr long ptr long)
+@ stdcall NtCreateTimer2(ptr ptr ptr long long)
 @ stdcall NtCreateToken(ptr long ptr long ptr ptr ptr ptr ptr ptr ptr ptr ptr)
 @ stdcall -version=0x600+ NtCreateTransaction(ptr long ptr ptr ptr long long long ptr ptr)
 @ stdcall -version=0x600+ NtCreateTransactionManager(ptr long ptr ptr long long)
@@ -1627,6 +1628,7 @@
 @ stdcall ZwCreateThread(ptr long ptr ptr ptr ptr ptr long)
 @ stdcall -version=0x600+ ZwCreateThreadEx(ptr long ptr ptr ptr ptr long long long long ptr) NtCreateThreadEx
 @ stdcall ZwCreateTimer(ptr long ptr long)
+@ stdcall ZwCreateTimer2(ptr ptr ptr long long)
 @ stdcall ZwCreateToken(ptr long ptr long ptr ptr ptr ptr ptr ptr ptr ptr ptr)
 @ stdcall -version=0x600+ ZwCreateTransaction(ptr long ptr ptr ptr long long long ptr ptr) NtCreateTransaction
 @ stdcall -version=0x600+ ZwCreateTransactionManager(ptr long ptr ptr long long) NtCreateTransactionManager
