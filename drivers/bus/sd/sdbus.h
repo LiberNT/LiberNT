@@ -481,6 +481,7 @@ SdBusParseCid(
 VOID
 SdBusParseCsd(
     _In_ PULONG RawResponse,
+    _In_ BOOLEAN IsMmc,
     _Out_ PSD_CSD Csd);
 
 /**
