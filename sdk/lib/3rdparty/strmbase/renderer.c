@@ -356,19 +356,28 @@ static HRESULT renderer_start_stream(struct strmbase_filter *iface, REFERENCE_TI
 static HRESULT renderer_stop_stream(struct strmbase_filter *iface)
 {
     struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
+    BOOL complete;
 
+    EnterCriticalSection(&filter->eos_cs);
     ResetEvent(filter->run_event);
+    complete = !filter->sink.pin.peer || filter->eos || filter->sample_waiting;
+    if (filter->sample_waiting)
+    {
+        filter->sample_waiting = FALSE;
+        SetEvent(filter->advise_event);
+    }
+    else if (!complete)
+    {
+        ResetEvent(filter->state_event);
+    }
+    LeaveCriticalSection(&filter->eos_cs);
+
     renderer_reset_eos(filter);
 
     if (filter->sink.pin.peer && filter->ops->renderer_stop_stream)
         filter->ops->renderer_stop_stream(filter);
 
-    if (filter->sink.pin.peer && !filter->eos)
-    {
-        ResetEvent(filter->state_event);
-        return S_FALSE;
-    }
-    return S_OK;
+    return complete ? S_OK : S_FALSE;
 }
 
 static HRESULT renderer_cleanup_stream(struct strmbase_filter *iface)
@@ -496,10 +505,15 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
         filter->current_sample = NULL;
     }
 
+wait:
     if (need_wait)
     {
         REFERENCE_TIME now, jitter;
         DWORD_PTR cookie;
+        BOOL running;
+
+        if (!WaitForSingleObject(filter->flush_event, 0))
+            return S_OK;
 
         IReferenceClock_GetTime(filter->filter.clock, &now);
 
@@ -507,9 +521,29 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
          * buffer arrived, relative to its PTS. */
         jitter = (now - filter->stream_start) - start;
 
+        ResetEvent(filter->advise_event);
+        EnterCriticalSection(&filter->eos_cs);
+        running = !WaitForSingleObject(filter->run_event, 0);
+        filter->sample_waiting = running && jitter <= -10000;
+        LeaveCriticalSection(&filter->eos_cs);
+
+        if (!running)
+        {
+            HANDLE events[2] = {filter->run_event, filter->flush_event};
+
+            filter->current_sample = sample;
+            SetEvent(filter->state_event);
+            LeaveCriticalSection(&filter->filter.stream_cs);
+            WaitForMultipleObjects(2, events, FALSE, INFINITE);
+            EnterCriticalSection(&filter->filter.stream_cs);
+            filter->current_sample = NULL;
+            goto wait;
+        }
+
         if (jitter <= -10000) /* if we are early by at least 1 ms */
         {
             HANDLE handles[2] = {filter->advise_event, filter->flush_event};
+            BOOL woken;
             DWORD ret;
 
             IReferenceClock_AdviseTime(filter->filter.clock, filter->stream_start,
@@ -518,11 +552,19 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
             ret = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
             IReferenceClock_Unadvise(filter->filter.clock, cookie);
 
+            EnterCriticalSection(&filter->eos_cs);
+            woken = !filter->sample_waiting;
+            filter->sample_waiting = FALSE;
+            LeaveCriticalSection(&filter->eos_cs);
+
             if (ret == 1)
             {
                 TRACE("Flush signaled; discarding current sample.\n");
                 return S_OK;
             }
+
+            if (woken)
+                goto wait;
         }
 
         if (state == State_Running)
