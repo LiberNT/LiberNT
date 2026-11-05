@@ -139,6 +139,8 @@ struct filter_graph
     int nItfCacheEntries;
     BOOL defaultclock;
     GUID timeformatseek;
+    struct filter *time_format_filter;
+    double rate;
     IUnknown *pSite;
     LONG version;
 
@@ -740,6 +742,8 @@ static HRESULT WINAPI FilterGraph2_RemoveFilter(IFilterGraph2 *iface, IBaseFilte
                 IBaseFilter_Release(pFilter);
                 if (entry->seeking)
                     IMediaSeeking_Release(entry->seeking);
+                if (This->time_format_filter == entry)
+                    This->time_format_filter = NULL;
                 list_remove(&entry->entry);
                 CoTaskMemFree(entry->name);
                 free(entry);
@@ -2202,11 +2206,25 @@ static HRESULT WINAPI FoundCapabilities(struct filter_graph *This, IMediaSeeking
     return hr;
 }
 
+static BOOL any_seeking_filter(struct filter_graph *graph)
+{
+    struct filter *filter;
+    BOOL ret = FALSE;
+
+    LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+    {
+        update_seeking(filter);
+        if (filter->seeking)
+            ret = TRUE;
+    }
+    return ret;
+}
+
 /*** IMediaSeeking methods ***/
 static HRESULT WINAPI MediaSeeking_GetCapabilities(IMediaSeeking *iface, DWORD *pCapabilities)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
-    HRESULT hr;
+    HRESULT hr = S_OK;
 
     TRACE("(%p/%p)->(%p)\n", This, iface, pCapabilities);
 
@@ -2214,9 +2232,15 @@ static HRESULT WINAPI MediaSeeking_GetCapabilities(IMediaSeeking *iface, DWORD *
         return E_POINTER;
 
     EnterCriticalSection(&This->cs);
-    *pCapabilities = 0xffffffff;
-
-    hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    if (any_seeking_filter(This))
+    {
+        *pCapabilities = 0xffffffff;
+        hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    }
+    else
+    {
+        *pCapabilities = 0;
+    }
     LeaveCriticalSection(&This->cs);
 
     return hr;
@@ -2235,7 +2259,15 @@ static HRESULT WINAPI MediaSeeking_CheckCapabilities(IMediaSeeking *iface, DWORD
 
     EnterCriticalSection(&This->cs);
     originalcaps = *pCapabilities;
-    hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    if (any_seeking_filter(This))
+    {
+        hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    }
+    else
+    {
+        *pCapabilities = 0;
+        hr = S_OK;
+    }
     LeaveCriticalSection(&This->cs);
 
     if (FAILED(hr))
@@ -2251,19 +2283,32 @@ static HRESULT WINAPI MediaSeeking_CheckCapabilities(IMediaSeeking *iface, DWORD
 static HRESULT WINAPI MediaSeeking_IsFormatSupported(IMediaSeeking *iface, const GUID *pFormat)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
-
-    if (!pFormat)
-        return E_POINTER;
+    struct filter *filter;
+    HRESULT hr;
 
     TRACE("(%p/%p)->(%s)\n", This, iface, debugstr_guid(pFormat));
 
-    if (!IsEqualGUID(&TIME_FORMAT_MEDIA_TIME, pFormat))
+    EnterCriticalSection(&This->cs);
+
+    if (!any_seeking_filter(This))
+        hr = E_NOTIMPL;
+    else if (!pFormat)
+        hr = E_POINTER;
+    else
     {
-        WARN("Unhandled time format %s\n", debugstr_guid(pFormat));
-        return S_FALSE;
+        hr = S_FALSE;
+        LIST_FOR_EACH_ENTRY(filter, &This->filters, struct filter, entry)
+        {
+            if (filter->seeking && IMediaSeeking_IsFormatSupported(filter->seeking, pFormat) == S_OK)
+            {
+                hr = S_OK;
+                break;
+            }
+        }
     }
 
-    return S_OK;
+    LeaveCriticalSection(&This->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_QueryPreferredFormat(IMediaSeeking *iface, GUID *pFormat)
@@ -2309,19 +2354,46 @@ static HRESULT WINAPI MediaSeeking_IsUsingTimeFormat(IMediaSeeking *iface, const
 static HRESULT WINAPI MediaSeeking_SetTimeFormat(IMediaSeeking *iface, const GUID *pFormat)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
+    struct filter *filter;
+    HRESULT hr = E_FAIL;
 
     if (!pFormat)
         return E_POINTER;
 
     TRACE("(%p/%p)->(%s)\n", This, iface, debugstr_guid(pFormat));
 
-    if (!IsEqualGUID(&TIME_FORMAT_MEDIA_TIME, pFormat))
+    EnterCriticalSection(&This->cs);
+
+    if (IsEqualGUID(pFormat, &TIME_FORMAT_MEDIA_TIME) || IsEqualGUID(pFormat, &TIME_FORMAT_NONE))
     {
-        FIXME("Unhandled time format %s\n", debugstr_guid(pFormat));
-        return E_INVALIDARG;
+        if (This->time_format_filter)
+            IMediaSeeking_SetTimeFormat(This->time_format_filter->seeking, &TIME_FORMAT_MEDIA_TIME);
+        This->time_format_filter = NULL;
+        This->timeformatseek = TIME_FORMAT_MEDIA_TIME;
+        hr = S_OK;
+    }
+    else if (!any_seeking_filter(This))
+    {
+        hr = E_NOTIMPL;
+    }
+    else
+    {
+        LIST_FOR_EACH_ENTRY(filter, &This->filters, struct filter, entry)
+        {
+            if (!filter->seeking || FAILED(IMediaSeeking_SetTimeFormat(filter->seeking, pFormat)))
+                continue;
+
+            if (This->time_format_filter && This->time_format_filter != filter)
+                IMediaSeeking_SetTimeFormat(This->time_format_filter->seeking, &TIME_FORMAT_MEDIA_TIME);
+            This->time_format_filter = filter;
+            This->timeformatseek = *pFormat;
+            hr = S_OK;
+            break;
+        }
     }
 
-    return S_OK;
+    LeaveCriticalSection(&This->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_GetDuration(IMediaSeeking *iface, LONGLONG *duration)
@@ -2410,6 +2482,8 @@ static HRESULT WINAPI MediaSeeking_GetCurrentPosition(IMediaSeeking *iface, LONG
 {
     struct filter_graph *graph = impl_from_IMediaSeeking(iface);
     LONGLONG ret = graph->current_pos;
+    LONGLONG filter_current, offset;
+    struct filter *filter;
 
     TRACE("graph %p, current %p.\n", graph, current);
 
@@ -2429,6 +2503,19 @@ static HRESULT WINAPI MediaSeeking_GetCurrentPosition(IMediaSeeking *iface, LONG
                 ret = graph->stream_stop;
         }
     }
+    else if (graph->state == State_Running && !graph->needs_async_run)
+    {
+        offset = 0;
+        LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+        {
+            update_seeking(filter);
+            if (filter->seeking && SUCCEEDED(IMediaSeeking_GetCurrentPosition(filter->seeking, &filter_current)))
+                offset = max(offset, filter_current);
+        }
+        ret += offset;
+        if (ret > graph->stream_stop)
+            ret = graph->stream_stop;
+    }
 
     LeaveCriticalSection(&graph->cs);
 
@@ -2442,9 +2529,12 @@ static HRESULT WINAPI MediaSeeking_ConvertTimeFormat(IMediaSeeking *iface, LONGL
         const GUID *pTargetFormat, LONGLONG Source, const GUID *pSourceFormat)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
+    HRESULT hr = E_NOTIMPL;
 
     TRACE("graph %p, target %p, target_format %s, source %I64d, source_format %s.\n",
             This, pTarget, debugstr_guid(pTargetFormat), Source, debugstr_guid(pSourceFormat));
+
+    EnterCriticalSection(&This->cs);
 
     if (!pSourceFormat)
         pSourceFormat = &This->timeformatseek;
@@ -2453,11 +2543,18 @@ static HRESULT WINAPI MediaSeeking_ConvertTimeFormat(IMediaSeeking *iface, LONGL
         pTargetFormat = &This->timeformatseek;
 
     if (IsEqualGUID(pTargetFormat, pSourceFormat))
+    {
         *pTarget = Source;
-    else
-        FIXME("conversion %s->%s not supported\n", debugstr_guid(pSourceFormat), debugstr_guid(pTargetFormat));
+        hr = S_OK;
+    }
+    else if (This->time_format_filter)
+    {
+        hr = IMediaSeeking_ConvertTimeFormat(This->time_format_filter->seeking,
+                pTarget, pTargetFormat, Source, pSourceFormat);
+    }
 
-    return S_OK;
+    LeaveCriticalSection(&This->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *current_ptr,
@@ -2550,30 +2647,89 @@ static HRESULT WINAPI MediaSeeking_GetAvailable(IMediaSeeking *iface, LONGLONG *
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
 
-    FIXME("(%p/%p)->(%p, %p): stub !!!\n", This, iface, pEarliest, pLatest);
+    TRACE("(%p/%p)->(%p, %p)\n", This, iface, pEarliest, pLatest);
 
-    return S_OK;
+    return E_NOTIMPL;
 }
 
 static HRESULT WINAPI MediaSeeking_SetRate(IMediaSeeking *iface, double dRate)
 {
-    struct filter_graph *This = impl_from_IMediaSeeking(iface);
+    struct filter_graph *graph = impl_from_IMediaSeeking(iface);
+    HRESULT hr = E_NOTIMPL, filter_hr;
+    struct filter *filter;
+    LONGLONG current;
 
-    FIXME("(%p/%p)->(%f): stub !!!\n", This, iface, dRate);
+    TRACE("graph %p, rate %.16e.\n", graph, dRate);
 
-    return S_OK;
+    if (!dRate)
+        return E_INVALIDARG;
+
+    EnterCriticalSection(&graph->cs);
+
+    if (dRate == graph->rate)
+    {
+        LeaveCriticalSection(&graph->cs);
+        return S_OK;
+    }
+
+    if (!any_seeking_filter(graph))
+    {
+        LeaveCriticalSection(&graph->cs);
+        return E_NOTIMPL;
+    }
+
+    if (graph->state != State_Stopped)
+    {
+        IMediaSeeking_GetCurrentPosition(iface, &current);
+        IMediaSeeking_SetPositions(iface, &current, AM_SEEKING_AbsolutePositioning, NULL, AM_SEEKING_NoPositioning);
+    }
+
+    LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+    {
+        if (!filter->seeking)
+            continue;
+
+        filter_hr = IMediaSeeking_SetRate(filter->seeking, dRate);
+        if (SUCCEEDED(filter_hr))
+        {
+            hr = S_OK;
+        }
+        else if (filter_hr != E_NOTIMPL)
+        {
+            hr = filter_hr;
+            break;
+        }
+    }
+
+    if (SUCCEEDED(hr))
+    {
+        graph->rate = dRate;
+    }
+    else if (hr != E_NOTIMPL)
+    {
+        LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+        {
+            if (filter->seeking)
+                IMediaSeeking_SetRate(filter->seeking, graph->rate);
+        }
+    }
+
+    LeaveCriticalSection(&graph->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_GetRate(IMediaSeeking *iface, double *pdRate)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
 
-    FIXME("(%p/%p)->(%p): stub !!!\n", This, iface, pdRate);
+    TRACE("(%p/%p)->(%p)\n", This, iface, pdRate);
 
     if (!pdRate)
         return E_POINTER;
 
-    *pdRate = 1.0;
+    EnterCriticalSection(&This->cs);
+    *pdRate = This->rate;
+    LeaveCriticalSection(&This->cs);
 
     return S_OK;
 }
@@ -2582,9 +2738,14 @@ static HRESULT WINAPI MediaSeeking_GetPreroll(IMediaSeeking *iface, LONGLONG *pl
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
 
-    FIXME("(%p/%p)->(%p): stub !!!\n", This, iface, pllPreroll);
+    TRACE("(%p/%p)->(%p)\n", This, iface, pllPreroll);
 
-    return S_OK;
+    if (!pllPreroll)
+        return E_POINTER;
+
+    *pllPreroll = 0;
+
+    return E_NOTIMPL;
 }
 
 
@@ -5787,6 +5948,7 @@ static HRESULT filter_graph_common_create(IUnknown *outer, IUnknown **out, BOOL 
 
     object->name_index = 1;
     object->timeformatseek = TIME_FORMAT_MEDIA_TIME;
+    object->rate = 1.0;
 
     object->threaded = !!threaded;
 
