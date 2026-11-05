@@ -313,10 +313,12 @@ static HRESULT WINAPI filter_Stop(IBaseFilter *iface)
 
     if (filter->state == State_Running && filter->ops->filter_stop_stream)
         hr = filter->ops->filter_stop_stream(filter);
-    if (SUCCEEDED(hr) && filter->ops->filter_cleanup_stream)
-        hr = filter->ops->filter_cleanup_stream(filter);
     if (SUCCEEDED(hr))
+    {
+        if (filter->ops->filter_cleanup_stream)
+            hr = filter->ops->filter_cleanup_stream(filter);
         filter->state = State_Stopped;
+    }
 
     LeaveCriticalSection(&filter->filter_cs);
 
