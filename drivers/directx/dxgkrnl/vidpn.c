@@ -36,6 +36,7 @@
 #include "dxgkrnl_private.h"
 #include "vidmm.h"
 #include "vidpn.h"
+#include "display_core.h"
 #include "present.h"
 #include "pnp.h"
 #include "hotplug_work_core.h"
@@ -6466,6 +6467,35 @@ DxgkDestroyRedirectionSurface(
     return Status;
 }
 
+static D3DDDIFORMAT
+DxgkpDesktopSurfaceFormat(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
+{
+    D3DDDIFORMAT PinnedFormat = D3DDDIFMT_UNKNOWN;
+    PDXGKP_VIDPN VidPn;
+    PDXGKP_VIDPN_SOURCE_MODESET SourceSet;
+    ULONG Index;
+
+    (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
+    VidPn = (PDXGKP_VIDPN)Adapter->VidPn;
+    if (VidPn != NULL && VidPn->Signature == DXGKP_VIDPN_SIGNATURE && VidPnSourceId < VidPn->NumSources)
+    {
+        SourceSet = VidPn->SourceModeSets[VidPnSourceId];
+        for (Index = 0; SourceSet != NULL && Index < SourceSet->NumModes; ++Index)
+        {
+            if (SourceSet->Modes[Index].Id == SourceSet->PinnedModeId &&
+                SourceSet->Modes[Index].Type == D3DKMDT_RMT_GRAPHICS)
+            {
+                PinnedFormat = SourceSet->Modes[Index].Format.Graphics.PixelFormat;
+                break;
+            }
+        }
+    }
+    KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+    return DxgkVidPnCoreDesktopSurfaceFormat(PinnedFormat);
+}
+
 static NTSTATUS
 DxgkpEnsureSharedShadowSurfaceLocked(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -6503,7 +6533,7 @@ DxgkpEnsureSharedShadowSurfaceLocked(
     RtlZeroMemory(&SurfaceData, sizeof(SurfaceData));
     SurfaceData.Width = Adapter->CommittedWidth;
     SurfaceData.Height = Adapter->CommittedHeight;
-    SurfaceData.Format = D3DDDIFMT_X8R8G8B8;
+    SurfaceData.Format = DxgkpDesktopSurfaceFormat(Adapter, VidPnSourceId);
     SurfaceData.Pitch = Adapter->CommittedWidth * 4;
 
     RtlZeroMemory(&QueryArgs, sizeof(QueryArgs));
@@ -6821,7 +6851,7 @@ DxgkpEnsureSharedPrimarySizeLocked(
     RtlZeroMemory(&SurfaceData, sizeof(SurfaceData));
     SurfaceData.Width = Width;
     SurfaceData.Height = Height;
-    SurfaceData.Format = D3DDDIFMT_X8R8G8B8;
+    SurfaceData.Format = DxgkpDesktopSurfaceFormat(Adapter, VidPnSourceId);
     SurfaceData.RefreshRate.Numerator = 60;
     SurfaceData.RefreshRate.Denominator = 1;
     SurfaceData.VidPnSourceId = VidPnSourceId;

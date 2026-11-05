@@ -126,11 +126,20 @@ static VOID TestPinning(VOID)
     { NTSTATUS Observed = DxgkVidPnCorePinMode(&ModeSet, 0xFFFFFFFFUL); ok_eq_hex(Observed, STATUS_INVALID_PARAMETER); }
 }
 
+static VOID TestDesktopSurfaceFormat(VOID)
+{
+    ok_eq_int(DxgkVidPnCoreDesktopSurfaceFormat(D3DDDIFMT_A8R8G8B8), D3DDDIFMT_A8R8G8B8);
+    ok_eq_int(DxgkVidPnCoreDesktopSurfaceFormat(D3DDDIFMT_X8R8G8B8), D3DDDIFMT_X8R8G8B8);
+    ok_eq_int(DxgkVidPnCoreDesktopSurfaceFormat(D3DDDIFMT_A8B8G8R8), D3DDDIFMT_A8R8G8B8);
+    ok_eq_int(DxgkVidPnCoreDesktopSurfaceFormat(D3DDDIFMT_UNKNOWN), D3DDDIFMT_A8R8G8B8);
+}
+
 START_TEST(DxgkVidPnModeSet)
 {
     TestModeValidation();
     TestModeSet();
     TestPinning();
+    TestDesktopSurfaceFormat();
 }
 
 /* EOF */
