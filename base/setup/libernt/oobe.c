@@ -600,6 +600,7 @@ InstallMissingDrivers(
 
     SetResText(Progress->hwndActivity, IDS_OOBE_INSTALL_DRIVERS);
     SetWindowTextW(Progress->hwndItem, L"");
+    WaitForInternet();
     ZeroMemory(&StartupInfo, sizeof(StartupInfo));
     StartupInfo.cb = sizeof(StartupInfo);
     if (!CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &StartupInfo, &ProcessInfo))
@@ -673,9 +674,9 @@ Components:
         if (OobeApps[Index].Selected)
             InstallOobeApp(&OobeApps[Index], &Context->Progress);
     }
+    InstallMissingDrivers(&Context->Progress);
     if (SUCCEEDED(hrCom))
         CoUninitialize();
-    InstallMissingDrivers(&Context->Progress);
 
     PostMessageW(Context->hwndDlg, PM_INSTALL_DONE, ERROR_SUCCESS, 0);
     return ERROR_SUCCESS;

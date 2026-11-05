@@ -27,6 +27,8 @@
 #define APP_NO_PROGRESS_TIMEOUT 120000
 #define APP_POLL_INTERVAL       250
 #define APP_RETRY_DELAY         60
+#define INTERNET_WAIT_LIMIT     30000
+#define INTERNET_WAIT_POLL      1000
 
 POOBE_APP OobeApps;
 ULONG OobeAppCount;
@@ -387,6 +389,36 @@ IsInternetConnected(VOID)
     return (Connectivity & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
 }
 
+BOOL
+WaitForInternet(VOID)
+{
+    static BOOL GaveUp;
+    DWORD Start;
+
+    if (IsInternetConnected())
+    {
+        GaveUp = FALSE;
+        return TRUE;
+    }
+    if (GaveUp)
+        return FALSE;
+
+    Start = GetTickCount();
+    while (GetTickCount() - Start < INTERNET_WAIT_LIMIT)
+    {
+        Sleep(INTERNET_WAIT_POLL);
+        if (IsInternetConnected())
+        {
+            DPRINT1("Internet connection came up after %lu ms\n", GetTickCount() - Start);
+            return TRUE;
+        }
+    }
+
+    /* A machine with no network waits once, not once per component. */
+    GaveUp = TRUE;
+    return FALSE;
+}
+
 static HRESULT
 GetJobError(
     _In_ IBackgroundCopyJob* Job,
@@ -702,15 +734,15 @@ InstallOobeApp(
     CreateDirectoryW(Folder, NULL);
     DeleteFileW(Path);
 
-    if (!IsInternetConnected())
+    SetProgressText(Progress->hwndActivity, IDS_OOBE_DOWNLOADING, App->Name);
+    SetWindowTextW(Progress->hwndItem, App->Url);
+    if (!WaitForInternet())
     {
         DPRINT1("No Internet connection, %S is not downloaded\n", App->Name);
         App->Result = ERROR_NETWORK_UNREACHABLE;
         return App->Result;
     }
 
-    SetProgressText(Progress->hwndActivity, IDS_OOBE_DOWNLOADING, App->Name);
-    SetWindowTextW(Progress->hwndItem, App->Url);
     hr = DownloadFile(App, Path, Progress);
     if (FAILED(hr))
     {
