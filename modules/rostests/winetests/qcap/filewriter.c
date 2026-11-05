@@ -1017,6 +1017,139 @@ static void test_file_mode(void)
     DeleteFileW(filename);
 }
 
+static HRESULT load_persist_data(IPersistStream *persist, const void *data, ULONG size, ULONG *pos)
+{
+    LARGE_INTEGER zero = {{0}};
+    ULARGE_INTEGER ret_pos;
+    IStream *stream;
+    HRESULT hr;
+
+    CreateStreamOnHGlobal(NULL, TRUE, &stream);
+    IStream_Write(stream, data, size, NULL);
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    hr = IPersistStream_Load(persist, stream);
+    IStream_Seek(stream, zero, STREAM_SEEK_CUR, &ret_pos);
+    *pos = ret_pos.LowPart;
+    IStream_Release(stream);
+    return hr;
+}
+
+static void test_persist_stream(void)
+{
+    static const BYTE expect[32] =
+    {
+        '0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,' ',0,
+        8,0,0,0,1,0,0,0,
+    };
+    IBaseFilter *filter = create_file_writer();
+    LARGE_INTEGER zero = {{0}};
+    IFileSinkFilter2 *filesink;
+    IPersistStream *persist;
+    BYTE data[40], buffer[40];
+    ULARGE_INTEGER size;
+    STATSTG stat;
+    IStream *stream;
+    ULONG pos, ret_size;
+    CLSID clsid;
+    DWORD mode;
+    HRESULT hr;
+    ULONG ref;
+
+    IBaseFilter_QueryInterface(filter, &IID_IFileSinkFilter2, (void **)&filesink);
+    hr = IBaseFilter_QueryInterface(filter, &IID_IPersistStream, (void **)&persist);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (hr != S_OK)
+    {
+        IFileSinkFilter2_Release(filesink);
+        IBaseFilter_Release(filter);
+        return;
+    }
+
+    hr = IPersistStream_GetClassID(persist, &clsid);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&clsid, &CLSID_FileWriter), "Got CLSID %s.\n", wine_dbgstr_guid(&clsid));
+
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    IFileSinkFilter2_SetFileName(filesink, L"qfwtest.avi", NULL);
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    IFileSinkFilter2_SetMode(filesink, AM_FILE_OVERWRITE);
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    size.QuadPart = 0xdeadbeef;
+    hr = IPersistStream_GetSizeMax(persist, &size);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(size.QuadPart == sizeof(expect), "Got size %s.\n", wine_dbgstr_longlong(size.QuadPart));
+
+    CreateStreamOnHGlobal(NULL, TRUE, &stream);
+    hr = IPersistStream_Save(persist, stream, FALSE);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPersistStream_Save(persist, stream, TRUE);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    IStream_Stat(stream, &stat, STATFLAG_NONAME);
+    ok(stat.cbSize.QuadPart == 2 * sizeof(expect), "Got size %s.\n", wine_dbgstr_longlong(stat.cbSize.QuadPart));
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    memset(buffer, 0xcc, sizeof(buffer));
+    IStream_Read(stream, buffer, sizeof(expect), &ret_size);
+    ok(ret_size == sizeof(expect), "Got size %lu.\n", ret_size);
+    ok(!memcmp(buffer, expect, sizeof(expect)), "Got unexpected data.\n");
+    IStream_Release(stream);
+
+    hr = IFileSinkFilter2_SetMode(filesink, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    memcpy(data, expect, sizeof(expect));
+    memset(data + sizeof(expect), 0x55, sizeof(data) - sizeof(expect));
+    hr = load_persist_data(persist, data, sizeof(data), &pos);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(pos == sizeof(expect), "Got position %lu.\n", pos);
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(mode == AM_FILE_OVERWRITE, "Got mode %#lx.\n", mode);
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    data[20] = '2';
+    data[28] = 2;
+    hr = load_persist_data(persist, data, sizeof(expect), &pos);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(mode == 2, "Got mode %#lx.\n", mode);
+
+    data[28] = 1;
+    hr = load_persist_data(persist, data, 28, &pos);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(pos == 28, "Got position %lu.\n", pos);
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(!mode, "Got mode %#lx.\n", mode);
+
+    IFileSinkFilter2_SetMode(filesink, AM_FILE_OVERWRITE);
+    hr = load_persist_data(persist, data, 24, &pos);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_INVALID_DATA), "Got hr %#lx.\n", hr);
+    data[24] = 4;
+    hr = load_persist_data(persist, data, sizeof(expect), &pos);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_INVALID_DATA), "Got hr %#lx.\n", hr);
+    ok(pos == sizeof(expect), "Got position %lu.\n", pos);
+    data[24] = 8;
+    data[2] = 'z';
+    hr = load_persist_data(persist, data, sizeof(expect), &pos);
+    ok(hr == VFW_E_INVALID_FILE_FORMAT, "Got hr %#lx.\n", hr);
+    ok(pos == 4, "Got position %lu.\n", pos);
+    hr = load_persist_data(persist, data, 0, &pos);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_INVALID_DATA), "Got hr %#lx.\n", hr);
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(mode == AM_FILE_OVERWRITE, "Got mode %#lx.\n", mode);
+
+    IPersistStream_Release(persist);
+    IFileSinkFilter2_Release(filesink);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 static void test_quality_control(void)
 {
     IBaseFilter *filter = create_file_writer();
@@ -1169,6 +1302,7 @@ START_TEST(filewriter)
     test_misc_flags();
     test_file_sink();
     test_file_mode();
+    test_persist_stream();
     test_quality_control();
 
     CoUninitialize();
