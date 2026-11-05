@@ -510,6 +510,7 @@ typedef struct _USBPORT_DEVICE_EXTENSION {
   KDPC MapTransferDpc;
   LIST_ENTRY DoneTransferList;
   KSPIN_LOCK DoneTransferSpinLock;
+  BOOLEAN DoneTransferFlushActive;
   KDPC TransferFlushDpc;
   KSPIN_LOCK FlushTransferSpinLock;
   KSPIN_LOCK FlushPendingTransferSpinLock;
@@ -1326,6 +1327,12 @@ VOID
 NTAPI
 USBPORT_FlushClosedEndpointList(
   IN PDEVICE_OBJECT FdoDevice);
+
+VOID
+NTAPI
+USBPORT_QueueEndpointStateChange(
+  IN PUSBPORT_ENDPOINT Endpoint,
+  IN BOOLEAN AtHead);
 
 VOID
 NTAPI

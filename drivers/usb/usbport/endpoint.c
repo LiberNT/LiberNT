@@ -485,6 +485,39 @@ USBPORT_PurgeEndpointStateChange(IN PUSBPORT_ENDPOINT Endpoint)
     KeReleaseSpinLock(&FdoExtension->EpStateChangeSpinLock, OldIrql);
 }
 
+/* The link can still be queued from an earlier state change; the DPC reads the latest StateNext. */
+VOID
+NTAPI
+USBPORT_QueueEndpointStateChange(IN PUSBPORT_ENDPOINT Endpoint,
+                                 IN BOOLEAN AtHead)
+{
+    PUSBPORT_DEVICE_EXTENSION FdoExtension;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    FdoExtension = Endpoint->FdoDevice->DeviceExtension;
+
+    KeAcquireSpinLock(&FdoExtension->EpStateChangeSpinLock, &OldIrql);
+
+    for (Entry = FdoExtension->EpStateChangeList.Flink;
+         Entry != &FdoExtension->EpStateChangeList;
+         Entry = Entry->Flink)
+    {
+        if (Entry == &Endpoint->StateChangeLink)
+        {
+            KeReleaseSpinLock(&FdoExtension->EpStateChangeSpinLock, OldIrql);
+            return;
+        }
+    }
+
+    if (AtHead)
+        InsertHeadList(&FdoExtension->EpStateChangeList, &Endpoint->StateChangeLink);
+    else
+        InsertTailList(&FdoExtension->EpStateChangeList, &Endpoint->StateChangeLink);
+
+    KeReleaseSpinLock(&FdoExtension->EpStateChangeSpinLock, OldIrql);
+}
+
 VOID
 NTAPI
 USBPORT_SetEndpointState(IN PUSBPORT_ENDPOINT Endpoint,
@@ -593,9 +626,7 @@ USBPORT_SetEndpointState(IN PUSBPORT_ENDPOINT Endpoint,
         Endpoint->FrameNumber = Packet->Get32BitFrameNumber(FdoExtension->MiniPortExt);
         KeReleaseSpinLock(&FdoExtension->MiniportSpinLock, OldIrql);
 
-        ExInterlockedInsertTailList(&FdoExtension->EpStateChangeList,
-                                    &Endpoint->StateChangeLink,
-                                    &FdoExtension->EpStateChangeSpinLock);
+        USBPORT_QueueEndpointStateChange(Endpoint, FALSE);
 
         KeAcquireSpinLock(&FdoExtension->MiniportSpinLock, &OldIrql);
         Packet->InterruptNextSOF(FdoExtension->MiniPortExt);
@@ -2107,11 +2138,11 @@ USBPORT_DmaEndpointPaused(IN PDEVICE_OBJECT FdoDevice,
                 if (Transfer->Flags & TRANSFER_FLAG_ISO)
                 {
                     USBPORT_FlushIsoTransfer(Transfer);
+                    Entry = Transfer->TransferLink.Flink;
+                    continue;
                 }
-                else
-                {
-                    Transfer->CompletedTransferLen = CompletedLen;
-                }
+
+                Transfer->CompletedTransferLen = CompletedLen;
             }
 
             DPRINT1("USBPORT_DmaEndpointPaused: moving ABORTED transfer %p to CancelList (Flags=0x%lx NUKE=%u)\n",
