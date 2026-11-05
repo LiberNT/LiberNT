@@ -678,6 +678,11 @@ static void test_sample_processing(IMediaControl *control, IMemInputPin *input,
     hr = IMediaControl_Stop(control);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     IMediaSample_Release(sample);
+
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, AM_GBF_NOWAIT);
+    ok(hr == VFW_E_NOT_COMMITTED, "Got hr %#lx.\n", hr);
+    if (hr == S_OK)
+        IMediaSample_Release(sample);
 }
 
 static unsigned int check_ec_complete(IMediaEvent *eventsrc, DWORD timeout)

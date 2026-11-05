@@ -229,6 +229,17 @@ static HRESULT file_writer_start_stream(struct strmbase_filter *iface, REFERENCE
     return S_OK;
 }
 
+static HRESULT file_writer_cleanup_stream(struct strmbase_filter *iface)
+{
+    struct file_writer *filter = impl_from_strmbase_filter(iface);
+
+    if (!filter->sink.pin.peer)
+        return S_OK;
+    if (!filter->sink.pAllocator)
+        return VFW_E_NO_ALLOCATOR;
+    return IMemAllocator_Decommit(filter->sink.pAllocator);
+}
+
 static struct strmbase_filter_ops filter_ops =
 {
     .filter_query_interface = file_writer_query_interface,
@@ -236,6 +247,7 @@ static struct strmbase_filter_ops filter_ops =
     .filter_destroy = file_writer_destroy,
     .filter_init_stream = file_writer_init_stream,
     .filter_start_stream = file_writer_start_stream,
+    .filter_cleanup_stream = file_writer_cleanup_stream,
 };
 
 static inline struct file_writer *impl_from_IFileSinkFilter(IFileSinkFilter *iface)
