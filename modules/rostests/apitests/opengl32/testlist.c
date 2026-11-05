@@ -11,6 +11,7 @@ extern void func_wgl_fence_readback(void);
 extern void func_wgl_hidden_present(void);
 extern void func_wgl_context_rebind(void);
 extern void func_wgl_icd_adapter(void);
+extern void func_wgl_flat_shading(void);
 
 const struct test winetest_testlist[] =
 {
@@ -23,6 +24,7 @@ const struct test winetest_testlist[] =
     { "wgl_hidden_present", func_wgl_hidden_present },
     { "wgl_context_rebind", func_wgl_context_rebind },
     { "wgl_icd_adapter", func_wgl_icd_adapter },
+    { "wgl_flat_shading", func_wgl_flat_shading },
 
     { 0, 0 }
 };

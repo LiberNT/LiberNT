@@ -13,6 +13,7 @@ the target architecture:
 | `vc4` | Raspberry Pi 3 GPU | ARM64 |
 | `v3d` | Raspberry Pi 4/5 GPU | ARM64 |
 | `llvmpipe` | LLVM-accelerated CPU rendering | AMD64 and ARM64 when `MESA_LLVMPIPE_FROM_SOURCE=ON` |
+| `d3d12` | OpenGL through a native D3D12 driver | AMD64, ARM64 and RISC-V64 |
 | `softpipe` | CPU rendering without LLVM | i386; AMD64 and ARM64 when `MESA_LLVMPIPE_FROM_SOURCE=OFF` |
 
 Native i386, AMD64 and ARM64 builds using Clang enable
