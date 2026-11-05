@@ -1075,7 +1075,12 @@ void STDMETHODCALLTYPE Native12CommandList::RSSetShadingRateImage(ID3D12Resource
     if (SUCCEEDED(error)) error = E_FAIL;
 }
 
-void STDMETHODCALLTYPE Native12CommandList::DispatchMesh(UINT, UINT, UINT) {}
+void STDMETHODCALLTYPE Native12CommandList::DispatchMesh(UINT x, UINT y, UINT z)
+{
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_DISPATCHMESH);
+    if (type != D3D12_COMMAND_LIST_TYPE_BUNDLE && !graphics_bound) return;
+    table->pfnDispatchMesh(driver, x, y, z);
+}
 
 #define NATIVE12_SAME_LAYOUT(name) static_assert(static_cast<UINT>(D3D12_BARRIER_LAYOUT_##name) \
         == static_cast<UINT>(D3D12DDI_BARRIER_LAYOUT_##name), "barrier layout " #name)
@@ -1597,7 +1602,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateQueryHeap(const D3D12_QUERY_HEAP
     return hr;
 }
 
-static BOOL Native12DeveloperModeEnabled(void)
+BOOL Native12DeveloperModeEnabled(void)
 {
     DWORD value = 0, size = sizeof(value);
 
@@ -1630,7 +1635,8 @@ HRESULT Native12CommandSignature::Initialize(const D3D12_COMMAND_SIGNATURE_DESC 
     {
         D3D12_INDIRECT_ARGUMENT_TYPE type = input->pArgumentDescs[i].Type;
         if ((type == D3D12_INDIRECT_ARGUMENT_TYPE_DRAW || type == D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED
-                || type == D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH) && i != input->NumArgumentDescs - 1)
+                || type == D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH || type == D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH)
+                && i != input->NumArgumentDescs - 1)
             return E_INVALIDARG;
     }
     D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 args = {};

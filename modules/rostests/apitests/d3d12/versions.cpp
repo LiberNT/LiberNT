@@ -598,6 +598,62 @@ static void TestDiskCache(ID3D12Device9 *device9)
     RemoveDirectoryA(directory);
 }
 
+static const WCHAR developer_mode_key[] = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock";
+
+static void TestShaderCacheControl(ID3D12Device9 *device9)
+{
+    static const GUID cache_control = {0x7f3a91c4, 0x52de, 0x4b08, {0x9e, 0x31, 0x6a, 0xd2, 0x0c, 0x58, 0xe7, 0x14}};
+    static const char key[] = "control";
+    static const BYTE value[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    ID3D12ShaderCacheSession *session;
+    DWORD enabled = 1, previous = 0, size = sizeof(previous);
+    BOOL had_value;
+    BYTE out[8];
+    UINT out_size;
+    HRESULT hr;
+
+    had_value = !RegGetValueW(HKEY_LOCAL_MACHINE, developer_mode_key, L"AllowDevelopmentWithoutDevLicense", RRF_RT_REG_DWORD, NULL,
+            &previous, &size);
+    if (RegSetKeyValueW(HKEY_LOCAL_MACHINE, developer_mode_key, L"AllowDevelopmentWithoutDevLicense", REG_DWORD, &enabled, sizeof(enabled)))
+    {
+        skip("Developer mode cannot be turned on here\n");
+        return;
+    }
+
+    session = CreateSession(device9, cache_control, D3D12_SHADER_CACHE_MODE_MEMORY, D3D12_SHADER_CACHE_FLAG_NONE, 0, 0, 0, &hr);
+    ok(hr == S_OK, "control session: %#lx\n", hr);
+    if (session)
+    {
+        hr = session->StoreValue(key, sizeof(key), value, sizeof(value));
+        ok(hr == S_OK, "StoreValue in developer mode: %#lx\n", hr);
+        hr = device9->ShaderCacheControl(D3D12_SHADER_CACHE_KIND_FLAG_APPLICATION_MANAGED, D3D12_SHADER_CACHE_CONTROL_FLAG_ENABLE);
+        ok(hr == E_INVALIDARG, "ENABLE of a cache that is not disabled: %#lx\n", hr);
+        hr = device9->ShaderCacheControl(D3D12_SHADER_CACHE_KIND_FLAG_APPLICATION_MANAGED, D3D12_SHADER_CACHE_CONTROL_FLAG_CLEAR);
+        ok(DeveloperModeResult(hr), "CLEAR in developer mode: %#lx\n", hr);
+        if (hr == S_OK)
+        {
+            out_size = sizeof(out);
+            hr = session->FindValue(key, sizeof(key), out, &out_size);
+            ok(hr == DXGI_ERROR_NOT_FOUND, "FindValue after CLEAR: %#lx\n", hr);
+            hr = device9->ShaderCacheControl(D3D12_SHADER_CACHE_KIND_FLAG_APPLICATION_MANAGED, D3D12_SHADER_CACHE_CONTROL_FLAG_DISABLE);
+            ok(hr == S_OK, "DISABLE in developer mode: %#lx\n", hr);
+            hr = session->StoreValue(key, sizeof(key), value, sizeof(value));
+            ok(hr == S_OK, "StoreValue while disabled: %#lx\n", hr);
+            out_size = sizeof(out);
+            hr = session->FindValue(key, sizeof(key), out, &out_size);
+            ok(hr == DXGI_ERROR_NOT_FOUND, "FindValue while disabled: %#lx\n", hr);
+            hr = device9->ShaderCacheControl(D3D12_SHADER_CACHE_KIND_FLAG_APPLICATION_MANAGED, D3D12_SHADER_CACHE_CONTROL_FLAG_ENABLE);
+            ok(hr == S_OK, "ENABLE in developer mode: %#lx\n", hr);
+        }
+        session->Release();
+    }
+
+    if (had_value)
+        RegSetKeyValueW(HKEY_LOCAL_MACHINE, developer_mode_key, L"AllowDevelopmentWithoutDevLicense", REG_DWORD, &previous, sizeof(previous));
+    else
+        RegDeleteKeyValueW(HKEY_LOCAL_MACHINE, developer_mode_key, L"AllowDevelopmentWithoutDevLicense");
+}
+
 static void TestShaderCache(ID3D12Device *device)
 {
     ID3D12Device9 *device9 = NULL;
@@ -606,6 +662,7 @@ static void TestShaderCache(ID3D12Device *device)
     if (FAILED(device->QueryInterface(__uuidof(ID3D12Device9), reinterpret_cast<void **>(&device9)))) return;
     TestMemoryCache(device, device9);
     TestDiskCache(device9);
+    TestShaderCacheControl(device9);
 
     hr = device9->ShaderCacheControl(D3D12_SHADER_CACHE_KIND_FLAG_APPLICATION_MANAGED, D3D12_SHADER_CACHE_CONTROL_FLAG_CLEAR);
     ok(DeveloperModeResult(hr), "ShaderCacheControl CLEAR: %#lx\n", hr);

@@ -205,6 +205,9 @@ static void RunPipelineLibrary(void *)
     hr = context.device->CheckFeatureSupport(D3D12_FEATURE_SHADER_CACHE, &caps, sizeof(caps));
     ok(hr == S_OK, "SHADER_CACHE: %#lx\n", hr);
     trace("shader cache support %#x\n", caps.SupportFlags);
+    ok((caps.SupportFlags & (D3D12_SHADER_CACHE_SUPPORT_SHADER_CONTROL_CLEAR | D3D12_SHADER_CACHE_SUPPORT_SHADER_SESSION_DELETE))
+            == (D3D12_SHADER_CACHE_SUPPORT_SHADER_CONTROL_CLEAR | D3D12_SHADER_CACHE_SUPPORT_SHADER_SESSION_DELETE),
+            "shader cache flags %#x\n", caps.SupportFlags);
     ok(caps.SupportFlags & D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO, "no single pipeline state cache\n");
     hr = context.device->CheckFeatureSupport(D3D12_FEATURE_SHADER_CACHE, &large, sizeof(large));
     ok(hr == E_INVALIDARG, "SHADER_CACHE with a wrong size: %#lx\n", hr);

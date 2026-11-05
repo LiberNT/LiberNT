@@ -11,6 +11,7 @@ list(APPEND SOURCE
     device.cpp
     dred.cpp
     factory.cpp
+    mesh.cpp
     feedback.cpp
     features.cpp
     formatsupport.cpp

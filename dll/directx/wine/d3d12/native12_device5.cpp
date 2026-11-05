@@ -246,7 +246,9 @@ HRESULT Native12Device::InitializePipelineState(Native12PipelineState *pipeline,
         }
     }
 
-    if (amplification.BytecodeLength || mesh.BytecodeLength) return E_INVALIDARG;
+    if ((amplification.BytecodeLength || mesh.BytecodeLength) && compute_shader.BytecodeLength) return E_INVALIDARG;
+    pipeline->mesh_bytecode = mesh;
+    pipeline->amplification_bytecode = amplification;
     if (!compute_shader.BytecodeLength
             && !Native12ViewInstancingValid(view_instancing, highest_shader_model, options.ViewInstancingTier))
         return E_INVALIDARG;

@@ -470,6 +470,7 @@ struct vkd3d_device_configuration_info
     UINT configuration_flags;
 };
 
+VKD3D_API void vkd3d_shader_cache_control(UINT control);
 VKD3D_API HRESULT vkd3d_create_shader_cache_session(ID3D12Device *device,
         const D3D12_SHADER_CACHE_SESSION_DESC *desc, REFIID iid, void **session);
 

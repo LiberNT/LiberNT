@@ -55,7 +55,7 @@ static void RunFactory(void *)
     const UINT dred_flags = D3D12_DEVICE_FLAG_DRED_AUTO_BREADCRUMBS_ENABLED
             | D3D12_DEVICE_FLAG_DRED_PAGE_FAULT_REPORTING_ENABLED;
     ID3D12DeviceRemovedExtendedDataSettings *settings = NULL;
-    ID3D12Device *global = NULL, *independent = NULL, *again = NULL;
+    ID3D12Device *global = NULL, *independent = NULL;
     PFN_D3D12_GET_INTERFACE_FACTORY get_interface;
     IDXGIFactory4 *dxgi = NULL;
     IUnknown *adapter = NULL;
@@ -107,18 +107,59 @@ static void RunFactory(void *)
         ok((DeviceFlags(factory) & dred_flags) == dred_flags, "factory flags %#x\n", DeviceFlags(factory));
         hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
                 reinterpret_cast<void **>(&independent));
-        ok(hr == S_OK && independent && independent != global, "CreateDevice: %#lx, %p, global %p\n", hr,
-                independent, global);
+        ok(hr == DXGI_ERROR_ALREADY_EXISTS && !independent, "CreateDevice beside the global device: %#lx, %p\n", hr,
+                independent);
         if (independent)
         {
-            ok((DeviceFlags(independent) & dred_flags) == dred_flags, "independent device flags %#x\n",
-                    DeviceFlags(independent));
-            ok(!(DeviceFlags(global) & dred_flags), "global device flags %#x\n", DeviceFlags(global));
-            hr = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
-                    reinterpret_cast<void **>(&again));
-            ok(hr == S_OK && again == global, "global device after an independent one: %#lx, %p, %p\n", hr, again,
-                    global);
-            if (again) again->Release();
+            independent->Release();
+            independent = NULL;
+        }
+
+        hr = factory->SetFlags(D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE);
+        ok(hr == S_OK, "existing: %#lx\n", hr);
+        hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
+                reinterpret_cast<void **>(&independent));
+        ok(hr == DXGI_ERROR_ALREADY_EXISTS && !independent, "CreateDevice with the existing flag and another configuration: %#lx\n", hr);
+        if (independent)
+        {
+            independent->Release();
+            independent = NULL;
+        }
+        hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), NULL);
+        ok(hr == DXGI_ERROR_ALREADY_EXISTS, "CreateDevice without an output: %#lx\n", hr);
+
+        hr = factory->SetFlags(D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE
+                | D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_INCOMPATIBLE_EXISTING_DEVICE);
+        ok(hr == S_OK, "existing and incompatible: %#lx\n", hr);
+        hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
+                reinterpret_cast<void **>(&independent));
+        ok(hr == S_OK && independent == global, "existing and incompatible flags: %#lx, %p, global %p\n", hr, independent, global);
+        if (independent)
+        {
+            independent->Release();
+            independent = NULL;
+        }
+
+        hr = factory->SetFlags(D3D12_DEVICE_FACTORY_FLAG_DISALLOW_STORING_NEW_DEVICE_AS_SINGLETON);
+        ok(hr == S_OK, "not a singleton: %#lx\n", hr);
+        hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
+                reinterpret_cast<void **>(&independent));
+        ok(hr == DXGI_ERROR_ALREADY_EXISTS && !independent, "not a singleton beside the global device: %#lx, %p\n", hr, independent);
+        if (independent)
+        {
+            independent->Release();
+            independent = NULL;
+        }
+
+        settings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED);
+        settings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED);
+        hr = factory->SetFlags(D3D12_DEVICE_FACTORY_FLAG_NONE);
+        ok(hr == S_OK, "no flags: %#lx\n", hr);
+        hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
+                reinterpret_cast<void **>(&independent));
+        ok(hr == DXGI_ERROR_ALREADY_EXISTS && !independent, "same configuration, no flags: %#lx, %p\n", hr, independent);
+        if (independent)
+        {
             independent->Release();
             independent = NULL;
         }
@@ -126,11 +167,14 @@ static void RunFactory(void *)
         ok(hr == S_OK, "existing: %#lx\n", hr);
         hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
                 reinterpret_cast<void **>(&independent));
-        ok(hr == S_OK && independent && independent != global,
-                "CreateDevice with the existing flag and another configuration: %#lx\n", hr);
-        if (independent) independent->Release();
+        ok(hr == S_OK && independent == global, "same configuration, existing flag: %#lx, %p, global %p\n", hr, independent, global);
+        if (independent)
+        {
+            independent->Release();
+            independent = NULL;
+        }
         hr = factory->CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), NULL);
-        ok(hr == S_FALSE, "CreateDevice without an output: %#lx\n", hr);
+        ok(hr == S_FALSE, "same configuration, existing flag, no output: %#lx\n", hr);
     }
     if (settings) settings->Release();
     if (adapter) adapter->Release();

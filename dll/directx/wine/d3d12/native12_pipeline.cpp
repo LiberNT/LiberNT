@@ -270,6 +270,11 @@ HRESULT Native12RootSignature::CreateDriver0013(const D3D12DDI_ROOT_SIGNATURE_01
                 HeapFree(GetProcessHeap(), 0, samplers);
                 return E_INVALIDARG;
             }
+            if (signature.pStaticSamplers[i].Flags & D3D12DDI_SAMPLER_FLAG_UINT_BORDER_COLOR)
+            {
+                HeapFree(GetProcessHeap(), 0, samplers);
+                return E_FAIL;
+            }
             samplers[i] = Native12StaticSampler0013(signature.pStaticSamplers[i]);
         }
     }
@@ -619,6 +624,8 @@ enum Native12Stage
     Native12StageHull,
     Native12StageDomain,
     Native12StageCompute,
+    Native12StageMesh,
+    Native12StageAmplification,
 };
 
 static HRESULT Native12CreateShader(Native12PipelineState *pipeline, Native12Stage stage,
@@ -627,6 +634,7 @@ static HRESULT Native12CreateShader(Native12PipelineState *pipeline, Native12Sta
     Native12Device *device = pipeline->device;
     D3D12DDIARG_STAGE_IO_SIGNATURES standard = {};
     D3D12DDIARG_TESSELLATION_IO_SIGNATURES tessellation = {};
+    D3D12DDIARG_MESH_IO_SIGNATURES mesh = {};
     D3D12DDIARG_CREATE_SHADER_0026 args = {};
     bool tess = stage == Native12StageHull || stage == Native12StageDomain;
 
@@ -644,6 +652,14 @@ static HRESULT Native12CreateShader(Native12PipelineState *pipeline, Native12Sta
         tessellation.NumPatchConstantSignatureEntries = shader.patch.count;
         args.IOSignatures.Tessellation = &tessellation;
     }
+    else if (stage == Native12StageMesh)
+    {
+        mesh.pPrimitiveOutputSignature = shader.patch.entries;
+        mesh.NumPrimitiveOutputSignatureEntries = shader.patch.count;
+        mesh.pVertexOutputSignature = shader.output.entries;
+        mesh.NumVertexOutputSignatureEntries = shader.output.count;
+        args.IOSignatures.Mesh = &mesh;
+    }
     else
     {
         standard.pInputSignature = shader.input.entries;
@@ -654,6 +670,7 @@ static HRESULT Native12CreateShader(Native12PipelineState *pipeline, Native12Sta
     }
 
     SIZE_T size = tess ? device->functions.pfnCalcPrivateTessellationShaderSize(device->driver_device, &args)
+            : stage == Native12StageMesh ? device->functions.pfnCalcPrivateMeshShaderSize(device->driver_device, &args)
             : device->functions.pfnCalcPrivateShaderSize(device->driver_device, &args);
     pipeline->shaders[stage].pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1);
     if (!pipeline->shaders[stage].pDrvPrivate) return E_OUTOFMEMORY;
@@ -673,6 +690,12 @@ static HRESULT Native12CreateShader(Native12PipelineState *pipeline, Native12Sta
             break;
         case Native12StageDomain:
             device->functions.pfnCreateDomainShader(device->driver_device, &args, pipeline->shaders[stage]);
+            break;
+        case Native12StageMesh:
+            device->functions.pfnCreateMeshShader(device->driver_device, &args, pipeline->shaders[stage]);
+            break;
+        case Native12StageAmplification:
+            device->functions.pfnCreateAmplificationShader(device->driver_device, &args, pipeline->shaders[stage]);
             break;
         default:
             device->functions.pfnCreateComputeShader(device->driver_device, &args, pipeline->shaders[stage]);
@@ -846,6 +869,8 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     };
     Native12ShaderCode parsed[ARRAYSIZE(stages)];
     Native12ShaderCode &vertex = parsed[0];
+    Native12ShaderCode mesh_code, amplification_code;
+    bool mesh_pipeline = mesh_bytecode.pShaderBytecode && mesh_bytecode.BytecodeLength;
     bool stream_output = input->StreamOutput.NumEntries != 0;
     const D3D12_BLEND_DESC &blend_input = input->BlendState;
     HRESULT hr;
@@ -859,7 +884,17 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
             && device->ddi_build < D3D12DDI_BUILD_VERSION_0099)
         return E_INVALIDARG;
     flags = input->Flags;
-    if (!input->VS.pShaderBytecode || !input->VS.BytecodeLength) return E_INVALIDARG;
+    if (mesh_pipeline)
+    {
+        if (!device->options.MeshShaderTier || input->VS.BytecodeLength || input->HS.BytecodeLength
+                || input->DS.BytecodeLength || input->GS.BytecodeLength || stream_output
+                || input->InputLayout.NumElements)
+            return E_INVALIDARG;
+    }
+    else if (amplification_bytecode.BytecodeLength || !input->VS.pShaderBytecode || !input->VS.BytecodeLength)
+    {
+        return E_INVALIDARG;
+    }
     if ((input->HS.pShaderBytecode || input->DS.pShaderBytecode)
             && input->PrimitiveTopologyType != D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH)
         return E_INVALIDARG;
@@ -891,6 +926,9 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
             root_signature = Native12EmbeddedRootSignature(device,
                     *reinterpret_cast<const D3D12_SHADER_BYTECODE *>(reinterpret_cast<const BYTE *>(input)
                     + stages[i].offset));
+        if (!root_signature && mesh_pipeline) root_signature = Native12EmbeddedRootSignature(device, mesh_bytecode);
+        if (!root_signature && amplification_bytecode.BytecodeLength)
+            root_signature = Native12EmbeddedRootSignature(device, amplification_bytecode);
         if (!root_signature) return E_INVALIDARG;
     }
     if (stream_output && !(root_signature->flags & D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT)) return E_INVALIDARG;
@@ -939,6 +977,18 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
         else
             hr = Native12CreateShader(this, stages[i].stage, shader);
         if (FAILED(hr)) return hr;
+    }
+    if (mesh_pipeline)
+    {
+        if (FAILED(hr = mesh_code.Parse(mesh_bytecode))) return hr;
+        if (!mesh_code.dxil) return E_INVALIDARG;
+        if (FAILED(hr = Native12CreateShader(this, Native12StageMesh, mesh_code))) return hr;
+        if (amplification_bytecode.BytecodeLength)
+        {
+            if (FAILED(hr = amplification_code.Parse(amplification_bytecode))) return hr;
+            if (!amplification_code.dxil) return E_INVALIDARG;
+            if (FAILED(hr = Native12CreateShader(this, Native12StageAmplification, amplification_code))) return hr;
+        }
     }
     if (stream_output && !shader_created[Native12StageGeometry])
     {
@@ -1094,6 +1144,8 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     args.hDomainShader = shaders[Native12StageDomain];
     args.hHullShader = shaders[Native12StageHull];
     args.hGeometryShader = shaders[Native12StageGeometry];
+    args.hMeshShader = shaders[Native12StageMesh];
+    args.hAmplificationShader = shaders[Native12StageAmplification];
     if (root_signature) args.hRootSignature = root_signature->driver;
     args.hBlendState = blend;
     args.SampleMask = input->SampleMask;

@@ -84,6 +84,7 @@ public:
     D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_11_0;
     UINT ddi_build = NATIVE12_DDI_BUILD;
     D3D12DDI_D3D12_OPTIONS_DATA_0089 options = {};
+    UINT shader_cache_disabled_kinds = 0;
     D3D12DDI_OPTIONS_DATA_0090 relaxed_casting = {};
     D3D12DDI_SHADER_CAPS_0084 shader_caps = {};
     D3D12DDI_ARCHITECTURE_INFO_DATA architecture = {};

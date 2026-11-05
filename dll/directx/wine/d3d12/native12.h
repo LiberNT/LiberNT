@@ -69,10 +69,12 @@ public:
 
 class Native12Device;
 
-HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL independent,
+HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL factory_device, UINT factory_flags,
         D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
         void **out);
 extern "C" void d3d12_dred_enablement(D3D12_DRED_ENABLEMENT *auto_breadcrumbs, D3D12_DRED_ENABLEMENT *page_fault);
 extern "C" UINT d3d12_device_configuration_flags(void);
+extern "C" void vkd3d_shader_cache_control(UINT control);
+BOOL Native12DeveloperModeEnabled(void);
 extern "C" HRESULT vkd3d_create_shader_cache_session(ID3D12Device *device,
         const D3D12_SHADER_CACHE_SESSION_DESC *desc, const IID *iid, void **session);

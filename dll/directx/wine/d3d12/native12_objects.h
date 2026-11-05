@@ -603,7 +603,9 @@ class Native12PipelineLibrary;
 class Native12PipelineState final : public Native12Child<ID3D12PipelineState>
 {
 public:
-    enum { ShaderCount = 6 };
+    enum { ShaderCount = 8 };
+    D3D12_SHADER_BYTECODE mesh_bytecode = {};
+    D3D12_SHADER_BYTECODE amplification_bytecode = {};
     D3D12DDI_HPIPELINESTATE driver = {};
     bool driver_created = false;
     Native12RootSignature *root_signature = NULL;

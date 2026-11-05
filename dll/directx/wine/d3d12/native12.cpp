@@ -1583,6 +1583,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS7 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->MeshShaderTier = static_cast<D3D12_MESH_SHADER_TIER>(options.MeshShaderTier);
             caps->SamplerFeedbackTier = SamplerFeedbackTier();
             return S_OK;
         }
@@ -1613,7 +1614,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         {
             D3D12_FEATURE_DATA_SHADER_CACHE *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            caps->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO;
+            caps->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO | D3D12_SHADER_CACHE_SUPPORT_SHADER_CONTROL_CLEAR
+                    | D3D12_SHADER_CACHE_SUPPORT_SHADER_SESSION_DELETE;
             if (functions.pfnCreatePipelineLibrary && functions.pfnAddPipelineStateToLibrary
                     && functions.pfnSerializeLibrary)
                 caps->SupportFlags |= D3D12_SHADER_CACHE_SUPPORT_LIBRARY;
@@ -1681,6 +1683,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS9 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->MeshShaderPipelineStatsSupported = options.MeshShaderTier != D3D12DDI_MESH_SHADER_TIER_NOT_SUPPORTED;
+            caps->MeshShaderSupportsFullRangeRenderTargetArrayIndex = options.MeshShaderSupportsFullRangeRenderTargetArrayIndex;
             caps->AtomicInt64OnTypedResourceSupported = !!shader_caps.AtomicInt64OnTypedResource;
             caps->AtomicInt64OnGroupSharedSupported = !!shader_caps.AtomicInt64OnGroupShared;
             return S_OK;
@@ -1853,10 +1857,11 @@ LUID *STDMETHODCALLTYPE Native12Device::GetAdapterLuid(LUID *out)
 
 HRESULT STDMETHODCALLTYPE Native12Device::GetDeviceRemovedReason() { return RefreshRemovedReason(); }
 
-HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL independent,
+HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL factory_device, UINT factory_flags,
         D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
         void **out)
 {
+    BOOL independent = factory_device;
     IDXGIAdapter *selected = NULL;
     HRESULT hr;
 
@@ -1882,11 +1887,16 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
         return hr;
     }
     Native12Device *device = NULL;
-    if (!independent)
+    AcquireSRWLockExclusive(&Native12SingletonLock);
+    device = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level);
+    ReleaseSRWLockExclusive(&Native12SingletonLock);
+    if (device && factory_device && (!(factory_flags & D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE)
+            || (device->configuration_flags != configuration
+            && !(factory_flags & D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_INCOMPATIBLE_EXISTING_DEVICE))))
     {
-        AcquireSRWLockExclusive(&Native12SingletonLock);
-        device = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level);
-        ReleaseSRWLockExclusive(&Native12SingletonLock);
+        device->Release();
+        selected->Release();
+        return DXGI_ERROR_ALREADY_EXISTS;
     }
     if (device) hr = S_OK;
     else
@@ -1904,7 +1914,7 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
             device->dred_page_fault = page_fault;
             device->configuration_flags = configuration;
         }
-        else if (SUCCEEDED(hr))
+        if (SUCCEEDED(hr) && !(factory_flags & D3D12_DEVICE_FACTORY_FLAG_DISALLOW_STORING_NEW_DEVICE_AS_SINGLETON))
         {
             Native12Device *existing;
             AcquireSRWLockExclusive(&Native12SingletonLock);
@@ -1937,10 +1947,10 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
     return hr;
 }
 
-extern "C" HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL independent,
-        D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
-        void **out)
+extern "C" HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL factory_device,
+        UINT factory_flags, D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration,
+        REFIID iid, void **out)
 {
-    return Native12CreateDevice(adapter, minimum_level, independent, auto_breadcrumbs, page_fault, configuration, iid,
-            out);
+    return Native12CreateDevice(adapter, minimum_level, factory_device, factory_flags, auto_breadcrumbs, page_fault,
+            configuration, iid, out);
 }

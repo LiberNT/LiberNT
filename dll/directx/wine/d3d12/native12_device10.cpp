@@ -242,7 +242,14 @@ HRESULT STDMETHODCALLTYPE Native12Device::ShaderCacheControl(D3D12_SHADER_CACHE_
     if (!kinds || (kinds & ~all_kinds) || !control || (control & ~all_controls)
             || ((control & D3D12_SHADER_CACHE_CONTROL_FLAG_DISABLE) && (control & D3D12_SHADER_CACHE_CONTROL_FLAG_ENABLE)))
         return E_INVALIDARG;
-    return DXGI_ERROR_SDK_COMPONENT_MISSING;
+    if ((control & D3D12_SHADER_CACHE_CONTROL_FLAG_ENABLE) && (kinds & ~shader_cache_disabled_kinds)) return E_INVALIDARG;
+    if (!Native12DeveloperModeEnabled()) return DXGI_ERROR_SDK_COMPONENT_MISSING;
+    if (control & D3D12_SHADER_CACHE_CONTROL_FLAG_DISABLE) shader_cache_disabled_kinds |= kinds;
+    if (control & D3D12_SHADER_CACHE_CONTROL_FLAG_ENABLE) shader_cache_disabled_kinds &= ~kinds;
+    if ((kinds & D3D12_SHADER_CACHE_KIND_FLAG_IMPLICIT_DRIVER_MANAGED) && functions.pfnImplicitShaderCacheControl)
+        functions.pfnImplicitShaderCacheControl(driver_device, static_cast<D3D12DDI_IMPLICIT_SHADER_CACHE_CONTROL_FLAGS_0080>(control));
+    if (kinds & D3D12_SHADER_CACHE_KIND_FLAG_APPLICATION_MANAGED) vkd3d_shader_cache_control(control);
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandQueue1(const D3D12_COMMAND_QUEUE_DESC *desc, REFIID,
