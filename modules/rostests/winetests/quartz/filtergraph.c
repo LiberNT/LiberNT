@@ -2373,6 +2373,109 @@ out:
     ok(parser_pins[1].ref == 1, "Got outstanding refcount %ld.\n", parser_pins[1].ref);
 }
 
+static HRESULT render_parser_outputs(const HRESULT *connect_hr, unsigned int count, BOOL *connected)
+{
+    AM_MEDIA_TYPE source_type = {{0}}, parser_type = {{0}};
+    struct testpin source_pin, parser_pins[4], sink_pins[3];
+    struct testfilter source, parser, sink;
+    IFilterGraph2 *graph = create_graph();
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+
+    memset(&source_type.majortype, 0xcc, sizeof(GUID));
+    memset(&parser_type.majortype, 0xdd, sizeof(GUID));
+    testsource_init(&source_pin, &source_type, 1);
+    source_pin.request_mt = &source_type;
+    testfilter_init(&source, &source_pin, 1);
+    testsink_init(&parser_pins[0]);
+    for (i = 0; i < count; ++i)
+    {
+        testsource_init(&parser_pins[1 + i], &parser_type, 1);
+        parser_pins[1 + i].request_mt = &parser_type;
+        parser_pins[1 + i].Connect_hr = connect_hr[i];
+        testsink_init(&sink_pins[i]);
+        sink_pins[i].accept_mt = &parser_type;
+    }
+    testfilter_init(&parser, parser_pins, 1 + count);
+    testfilter_init(&sink, sink_pins, count);
+
+    IFilterGraph2_AddFilter(graph, &source.IBaseFilter_iface, NULL);
+    IFilterGraph2_AddFilter(graph, &parser.IBaseFilter_iface, NULL);
+    IFilterGraph2_AddFilter(graph, &sink.IBaseFilter_iface, NULL);
+
+    hr = IFilterGraph2_Render(graph, &source_pin.IPin_iface);
+    for (i = 0; i < count; ++i)
+        connected[i] = !!parser_pins[1 + i].peer;
+
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    return hr;
+}
+
+static void test_graph_builder_render_errors(void)
+{
+    static const HRESULT ok_nah_ok[] = {S_OK, VFW_E_NO_AUDIO_HARDWARE, S_OK};
+    static const HRESULT fail_nah_ok[] = {E_FAIL, VFW_E_NO_AUDIO_HARDWARE, S_OK};
+    static const HRESULT ok_nah_fail[] = {S_OK, VFW_E_NO_AUDIO_HARDWARE, E_FAIL};
+    static const HRESULT ok_fail[] = {S_OK, E_FAIL};
+    static const HRESULT errors[] = {E_FAIL, VFW_E_UNSUPPORTED_VIDEO, VFW_E_NO_TRANSPORT, VFW_E_NO_AUDIO_HARDWARE};
+    static const HRESULT expect[] = {VFW_E_CANNOT_RENDER, VFW_E_UNSUPPORTED_VIDEO, VFW_E_NO_TRANSPORT, VFW_E_NO_AUDIO_HARDWARE};
+    AM_MEDIA_TYPE source_type = {{0}}, sink_type = {{0}};
+    struct testpin source_pin, sink_pin;
+    struct testfilter source, sink;
+    IFilterGraph2 *graph;
+    BOOL connected[3];
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+
+    hr = render_parser_outputs(ok_nah_ok, 3, connected);
+    ok(hr == VFW_S_AUDIO_NOT_RENDERED, "Got hr %#lx.\n", hr);
+    ok(connected[0] && !connected[1] && connected[2], "Got connections %d %d %d.\n",
+            connected[0], connected[1], connected[2]);
+
+    hr = render_parser_outputs(fail_nah_ok, 3, connected);
+    ok(hr == VFW_S_AUDIO_NOT_RENDERED, "Got hr %#lx.\n", hr);
+    ok(!connected[0] && !connected[1] && connected[2], "Got connections %d %d %d.\n",
+            connected[0], connected[1], connected[2]);
+
+    hr = render_parser_outputs(ok_nah_fail, 3, connected);
+    ok(hr == VFW_S_AUDIO_NOT_RENDERED, "Got hr %#lx.\n", hr);
+    ok(connected[0] && !connected[1] && !connected[2], "Got connections %d %d %d.\n",
+            connected[0], connected[1], connected[2]);
+
+    hr = render_parser_outputs(ok_fail, 2, connected);
+    ok(hr == VFW_S_PARTIAL_RENDER, "Got hr %#lx.\n", hr);
+    ok(connected[0] && !connected[1], "Got connections %d %d.\n", connected[0], connected[1]);
+
+    for (i = 0; i < ARRAY_SIZE(errors); ++i)
+    {
+        winetest_push_context("Error %#lx", errors[i]);
+
+        graph = create_graph();
+        memset(&source_type.majortype, 0xcc, sizeof(GUID));
+        memset(&sink_type.majortype, 0xdd, sizeof(GUID));
+        testsource_init(&source_pin, &source_type, 1);
+        source_pin.Connect_hr = errors[i];
+        testfilter_init(&source, &source_pin, 1);
+        testsink_init(&sink_pin);
+        sink_pin.accept_mt = &sink_type;
+        testfilter_init(&sink, &sink_pin, 1);
+        IFilterGraph2_AddFilter(graph, &source.IBaseFilter_iface, NULL);
+        IFilterGraph2_AddFilter(graph, &sink.IBaseFilter_iface, NULL);
+
+        hr = IFilterGraph2_Render(graph, &source_pin.IPin_iface);
+        ok(hr == expect[i], "Got hr %#lx.\n", hr);
+        ok(!source_pin.peer, "Got peer %p.\n", source_pin.peer);
+
+        ref = IFilterGraph2_Release(graph);
+        ok(!ref, "Got outstanding refcount %ld.\n", ref);
+
+        winetest_pop_context();
+    }
+}
+
 static void test_graph_builder_connect(void)
 {
     static const GUID parser1_clsid = {0x12345678};
@@ -6232,6 +6335,7 @@ START_TEST(filtergraph)
     test_render_run(L"test.wav", TRUE, FALSE);
     test_enum_filters();
     test_graph_builder_render();
+    test_graph_builder_render_errors();
     test_graph_builder_connect();
     test_aggregation();
     test_control_delegation();

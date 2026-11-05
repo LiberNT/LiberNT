@@ -1124,6 +1124,12 @@ static HRESULT create_filter(struct filter_graph *graph, IMoniker *moniker, IBas
 static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
         BOOL render_to_existing, unsigned int recursion_depth);
 
+static void set_render_error(HRESULT *error, HRESULT hr)
+{
+    if (hr != E_FAIL && hr != VFW_E_CANNOT_CONNECT)
+        *error = hr;
+}
+
 static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
         IBaseFilter *filter, IPin *middle_sink, IPin *sink,
         BOOL render_to_existing, unsigned int recursion_depth)
@@ -1133,7 +1139,7 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
     IEnumPins *source_enum;
     PIN_DIRECTION dir;
     PIN_INFO info;
-    HRESULT hr, sink_hr = S_OK;
+    HRESULT hr, sink_hr = S_OK, render_hr = S_OK, fail_hr = VFW_E_CANNOT_CONNECT;
 
     TRACE("Trying to autoplug %p to %p through %p.\n", source, sink, middle_sink);
 
@@ -1148,7 +1154,7 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
     }
 
     if (FAILED(hr = IFilterGraph2_ConnectDirect(&graph->IFilterGraph2_iface, source, middle_sink, NULL)))
-        return E_FAIL;
+        return sink ? E_FAIL : hr;
 
     if (FAILED(hr = IBaseFilter_EnumPins(filter, &source_enum)))
         goto err;
@@ -1190,10 +1196,24 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
             sink_hr = hr;
             continue;
         }
-        if (SUCCEEDED(hr))
+        if (sink)
+        {
+            if (SUCCEEDED(hr))
+                any = TRUE;
+            if (hr != S_OK)
+                all = FALSE;
+        }
+        else if (SUCCEEDED(hr))
+        {
             any = TRUE;
-        if (hr != S_OK)
+            if (hr != S_OK)
+                render_hr = hr;
+        }
+        else
+        {
             all = FALSE;
+            set_render_error(&fail_hr, hr);
+        }
     }
     IEnumPins_Release(source_enum);
 
@@ -1203,24 +1223,24 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
     if (!sink)
     {
         if (all)
-            return S_OK;
+            return render_hr;
         if (any)
-            return VFW_S_PARTIAL_RENDER;
+            return fail_hr == VFW_E_NO_AUDIO_HARDWARE ? VFW_S_AUDIO_NOT_RENDERED : VFW_S_PARTIAL_RENDER;
     }
 
 err:
     IFilterGraph2_Disconnect(&graph->IFilterGraph2_iface, source);
     IFilterGraph2_Disconnect(&graph->IFilterGraph2_iface, middle_sink);
-    return E_FAIL;
+    return sink ? E_FAIL : fail_hr;
 }
 
 static HRESULT autoplug_through_filter(struct filter_graph *graph, IPin *source,
         IBaseFilter *filter, IPin *sink, BOOL render_to_existing,
         unsigned int recursion_depth)
 {
+    HRESULT hr, error = VFW_E_CANNOT_CONNECT;
     IEnumPins *sink_enum;
     IPin *filter_sink;
-    HRESULT hr;
 
     TRACE("Trying to autoplug %p to %p through %p.\n", source, sink, filter);
 
@@ -1232,14 +1252,15 @@ static HRESULT autoplug_through_filter(struct filter_graph *graph, IPin *source,
         hr = autoplug_through_sink(graph, source, filter, filter_sink, sink,
                 render_to_existing, recursion_depth);
         IPin_Release(filter_sink);
-        if (SUCCEEDED(hr))
+        if (SUCCEEDED(hr) || (!sink && hr == VFW_E_NO_AUDIO_HARDWARE))
         {
             IEnumPins_Release(sink_enum);
             return hr;
         }
+        set_render_error(&error, hr);
     }
     IEnumPins_Release(sink_enum);
-    return VFW_E_CANNOT_CONNECT;
+    return error;
 }
 
 static HRESULT get_autoplug_types(IPin *source, unsigned int *ret_count, GUID **ret_types)
@@ -1342,9 +1363,9 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
     unsigned int type_count = 0;
     IFilterMapper2 *mapper;
     IBaseFilter *filter;
+    HRESULT hr, error = VFW_E_CANNOT_CONNECT;
     GUID *types = NULL;
     IMoniker *moniker;
-    HRESULT hr;
 
     TRACE("Trying to autoplug %p to %p, recursion depth %u.\n", source, sink, recursion_depth);
 
@@ -1372,6 +1393,9 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
         if (SUCCEEDED(hr = autoplug_through_filter(graph, source, graph_filter->filter,
                 sink, render_to_existing, recursion_depth)))
             return hr;
+        if (!sink && hr == VFW_E_NO_AUDIO_HARDWARE)
+            return hr;
+        set_render_error(&error, hr);
     }
 
     IUnknown_QueryInterface(graph->punkFilterMapper2, &IID_IFilterMapper2, (void **)&mapper);
@@ -1418,6 +1442,11 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
         {
             ERR("Failed to create filter for %s, hr %#lx.\n", debugstr_w(V_BSTR(&var)), hr);
             VariantClear(&var);
+            if (!sink && hr == VFW_E_NO_AUDIO_HARDWARE)
+            {
+                IEnumMoniker_Release(enummoniker);
+                goto out;
+            }
             continue;
         }
 
@@ -1446,10 +1475,16 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
 
         IFilterGraph2_RemoveFilter(&graph->IFilterGraph2_iface, filter);
         IBaseFilter_Release(filter);
+        if (!sink && hr == VFW_E_NO_AUDIO_HARDWARE)
+        {
+            IEnumMoniker_Release(enummoniker);
+            goto out;
+        }
+        set_render_error(&error, hr);
     }
     IEnumMoniker_Release(enummoniker);
 
-    hr = VFW_E_CANNOT_CONNECT;
+    hr = sink ? VFW_E_CANNOT_CONNECT : error;
 
 out:
     free(types);
@@ -1495,16 +1530,36 @@ static HRESULT WINAPI FilterGraph2_Render(IFilterGraph2 *iface, IPin *source)
     return hr;
 }
 
+static BOOL is_unknown_stream(IPin *pin)
+{
+    IEnumMediaTypes *enummt;
+    AM_MEDIA_TYPE *mt;
+    BOOL ret = FALSE;
+
+    if (FAILED(IPin_EnumMediaTypes(pin, &enummt)))
+        return FALSE;
+
+    if (IEnumMediaTypes_Next(enummt, 1, &mt, NULL) == S_OK)
+    {
+        ret = IsEqualGUID(&mt->majortype, &MEDIATYPE_Stream) && IsEqualGUID(&mt->subtype, &GUID_NULL);
+        DeleteMediaType(mt);
+    }
+    IEnumMediaTypes_Release(enummt);
+
+    return ret;
+}
+
 static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcwstrFile,
         LPCWSTR lpcwstrPlayList)
 {
     struct filter_graph *This = impl_from_IFilterGraph2(iface);
+    HRESULT hr, render_hr = S_OK, fail_hr = VFW_E_CANNOT_RENDER;
     IBaseFilter* preader = NULL;
     IPin* ppinreader = NULL;
     IEnumPins* penumpins = NULL;
     struct filter *filter;
-    HRESULT hr;
     BOOL partial = FALSE;
+    BOOL unknown = FALSE;
     BOOL any = FALSE;
 
     TRACE("(%p/%p)->(%s, %s)\n", This, iface, debugstr_w(lpcwstrFile), debugstr_w(lpcwstrPlayList));
@@ -1533,9 +1588,17 @@ static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcw
                     TRACE("- %s.\n", debugstr_w(filter->name));
 
                 if (SUCCEEDED(hr))
+                {
                     any = TRUE;
-                if (hr != S_OK)
+                    if (hr != S_OK)
+                        render_hr = hr;
+                }
+                else
+                {
                     partial = TRUE;
+                    fail_hr = hr;
+                    unknown = is_unknown_stream(ppinreader);
+                }
             }
             IPin_Release(ppinreader);
         }
@@ -1545,7 +1608,7 @@ static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcw
         {
             if (FAILED(hr = IFilterGraph2_RemoveFilter(iface, preader)))
                 ERR("Failed to remove source filter, hr %#lx.\n", hr);
-            hr = VFW_E_CANNOT_RENDER;
+            hr = unknown ? VFW_E_UNSUPPORTED_STREAM : fail_hr;
         }
         else if (partial)
         {
@@ -1553,7 +1616,7 @@ static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcw
         }
         else
         {
-            hr = S_OK;
+            hr = render_hr;
         }
     }
     IBaseFilter_Release(preader);
