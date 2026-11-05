@@ -623,6 +623,7 @@ struct testfilter
     struct strmbase_sink sink;
     const AM_MEDIA_TYPE *sink_mt;
     AM_MEDIA_TYPE source_mt;
+    const AM_MEDIA_TYPE *source_mt2;
     HANDLE sample_event, eos_event, segment_event;
     BOOL preview;
     unsigned int got_begin_flush, got_end_flush;
@@ -671,6 +672,11 @@ static HRESULT testsource_get_media_type(struct strmbase_pin *iface, unsigned in
     if (!index)
     {
         CopyMediaType(mt, &filter->source_mt);
+        return S_OK;
+    }
+    if (index == 1 && filter->source_mt2)
+    {
+        CopyMediaType(mt, filter->source_mt2);
         return S_OK;
     }
     return VFW_S_NO_MORE_ITEMS;
@@ -1111,10 +1117,17 @@ static void test_connect_pin(void)
         .formattype = FORMAT_None,
         .lSampleSize = 1,
     };
+    static const AM_MEDIA_TYPE source_mt2 =
+    {
+        .majortype = {0x444},
+        .subtype = {0x555},
+        .formattype = {0x666},
+    };
     IBaseFilter *filter = create_smart_tee();
     struct testfilter testsource, testsink;
     IPin *sink, *capture, *preview, *peer;
     AM_MEDIA_TYPE mt, *mts[3];
+    ULONG count, i;
     IEnumMediaTypes *enummt;
     IMediaControl *control;
     IFilterGraph2 *graph;
@@ -1192,6 +1205,28 @@ static void test_connect_pin(void)
 
     test_source_media_types(req_mt, &testsource.source_mt, capture);
     test_source_media_types(req_mt, &testsource.source_mt, preview);
+
+    testsource.source_mt2 = &source_mt2;
+    hr = IPin_EnumMediaTypes(capture, &enummt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IEnumMediaTypes_Next(enummt, 3, mts, &count);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(count == 3, "Got %lu types.\n", count);
+    ok(compare_media_types(mts[0], &req_mt), "Media types didn't match.\n");
+    if (count > 2)
+    {
+        ok(compare_media_types(mts[1], &testsource.source_mt), "Media types didn't match.\n");
+        ok(compare_media_types(mts[2], &source_mt2), "Media types didn't match.\n");
+    }
+    for (i = 0; i < count; ++i)
+        CoTaskMemFree(mts[i]);
+    hr = IEnumMediaTypes_Next(enummt, 1, mts, NULL);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    IEnumMediaTypes_Release(enummt);
+    hr = IPin_QueryAccept(capture, &source_mt2);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    testsource.source_mt2 = NULL;
+
     test_source_connection(req_mt, graph, control, &testsink, capture);
     test_source_connection(req_mt, graph, control, &testsink, preview);
 

@@ -85,26 +85,6 @@ static HRESULT sink_query_accept(struct strmbase_pin *base, const AM_MEDIA_TYPE 
     return S_OK;
 }
 
-static HRESULT sink_get_media_type(struct strmbase_pin *base,
-        unsigned int iPosition, AM_MEDIA_TYPE *amt)
-{
-    SmartTeeFilter *This = impl_from_strmbase_pin(base);
-    HRESULT hr;
-    TRACE("(%p)->(%d, %p)\n", This, iPosition, amt);
-    if (iPosition)
-        return S_FALSE;
-    EnterCriticalSection(&This->filter.filter_cs);
-    if (This->sink.pin.peer)
-    {
-        CopyMediaType(amt, &This->sink.pin.mt);
-        hr = S_OK;
-    }
-    else
-        hr = S_FALSE;
-    LeaveCriticalSection(&This->filter.filter_cs);
-    return hr;
-}
-
 static HRESULT sink_query_interface(struct strmbase_pin *iface, REFIID iid, void **out)
 {
     SmartTeeFilter *filter = impl_from_strmbase_pin(iface);
@@ -242,33 +222,78 @@ static HRESULT WINAPI SmartTeeFilterInput_Receive(struct strmbase_sink *base, IM
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_accept = sink_query_accept,
-    .base.pin_get_media_type = sink_get_media_type,
     .base.pin_query_interface = sink_query_interface,
     .pfnReceive = SmartTeeFilterInput_Receive,
 };
 
-static HRESULT capture_query_accept(struct strmbase_pin *base, const AM_MEDIA_TYPE *amt)
+static HRESULT source_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
 {
-    FIXME("(%p) stub\n", base);
-    return S_OK;
+    SmartTeeFilter *filter = impl_from_strmbase_pin(iface);
+    const AM_MEDIA_TYPE *input_mt = &filter->sink.pin.mt;
+    IPin *peer;
+    HRESULT hr;
+
+    EnterCriticalSection(&filter->filter.filter_cs);
+    if ((peer = filter->sink.pin.peer))
+        IPin_AddRef(peer);
+    if (peer && IsEqualGUID(&mt->majortype, &input_mt->majortype)
+            && IsEqualGUID(&mt->subtype, &input_mt->subtype)
+            && IsEqualGUID(&mt->formattype, &input_mt->formattype)
+            && mt->cbFormat == input_mt->cbFormat
+            && (!mt->cbFormat || !memcmp(mt->pbFormat, input_mt->pbFormat, mt->cbFormat)))
+    {
+        LeaveCriticalSection(&filter->filter.filter_cs);
+        IPin_Release(peer);
+        return S_OK;
+    }
+    LeaveCriticalSection(&filter->filter.filter_cs);
+
+    if (!peer)
+        return S_FALSE;
+    hr = IPin_QueryAccept(peer, mt) == S_OK ? S_OK : S_FALSE;
+    IPin_Release(peer);
+    return hr;
 }
 
 static HRESULT source_get_media_type(struct strmbase_pin *iface,
         unsigned int index, AM_MEDIA_TYPE *mt)
 {
     SmartTeeFilter *filter = impl_from_strmbase_pin(iface);
-    HRESULT hr = S_OK;
+    IEnumMediaTypes *enummt;
+    AM_MEDIA_TYPE *peer_mt;
+    IPin *peer;
+    HRESULT hr;
 
     EnterCriticalSection(&filter->filter.filter_cs);
-
-    if (!filter->sink.pin.peer)
-        hr = VFW_E_NOT_CONNECTED;
-    else if (!index)
+    if (!(peer = filter->sink.pin.peer))
+    {
+        LeaveCriticalSection(&filter->filter.filter_cs);
+        return VFW_E_NOT_CONNECTED;
+    }
+    if (!index)
+    {
         CopyMediaType(mt, &filter->sink.pin.mt);
+        LeaveCriticalSection(&filter->filter.filter_cs);
+        return S_OK;
+    }
+    IPin_AddRef(peer);
+    LeaveCriticalSection(&filter->filter.filter_cs);
+
+    hr = IPin_EnumMediaTypes(peer, &enummt);
+    IPin_Release(peer);
+    if (FAILED(hr))
+        return VFW_S_NO_MORE_ITEMS;
+    if (index > 1)
+        hr = IEnumMediaTypes_Skip(enummt, index - 1);
+    if (hr == S_OK && IEnumMediaTypes_Next(enummt, 1, &peer_mt, NULL) == S_OK)
+    {
+        *mt = *peer_mt;
+        CoTaskMemFree(peer_mt);
+        hr = S_OK;
+    }
     else
         hr = VFW_S_NO_MORE_ITEMS;
-
-    LeaveCriticalSection(&filter->filter.filter_cs);
+    IEnumMediaTypes_Release(enummt);
     return hr;
 }
 
@@ -284,17 +309,11 @@ static HRESULT WINAPI SmartTeeFilterCapture_DecideAllocator(struct strmbase_sour
 
 static const struct strmbase_source_ops capture_ops =
 {
-    .base.pin_query_accept = capture_query_accept,
+    .base.pin_query_accept = source_query_accept,
     .base.pin_get_media_type = source_get_media_type,
     .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
     .pfnDecideAllocator = SmartTeeFilterCapture_DecideAllocator,
 };
-
-static HRESULT preview_query_accept(struct strmbase_pin *base, const AM_MEDIA_TYPE *amt)
-{
-    FIXME("(%p) stub\n", base);
-    return S_OK;
-}
 
 static HRESULT WINAPI SmartTeeFilterPreview_DecideAllocator(struct strmbase_source *base,
         IMemInputPin *pPin, IMemAllocator **pAlloc)
@@ -308,7 +327,7 @@ static HRESULT WINAPI SmartTeeFilterPreview_DecideAllocator(struct strmbase_sour
 
 static const struct strmbase_source_ops preview_ops =
 {
-    .base.pin_query_accept = preview_query_accept,
+    .base.pin_query_accept = source_query_accept,
     .base.pin_get_media_type = source_get_media_type,
     .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
     .pfnDecideAllocator = SmartTeeFilterPreview_DecideAllocator,
