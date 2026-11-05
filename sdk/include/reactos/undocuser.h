@@ -126,6 +126,7 @@ extern "C" {
 #define LN_MESSAGE_BEEP       0x9
 #define LN_START_SCREENSAVE   0xA
 #define LN_LOGOFF_CANCELED    0xB
+#define LN_CONSOLE_KEY        0x100
 
 //
 // Undocumented flags for ExitWindowsEx
