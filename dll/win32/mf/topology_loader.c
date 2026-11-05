@@ -487,6 +487,10 @@ static HRESULT topology_branch_connect_with_type(IMFTopology *topology, struct t
         return hr;
     }
 
+    if (topology_node_get_type(branch->down.node) == MF_TOPOLOGY_OUTPUT_NODE
+            && FAILED(hr = IMFTopologyNode_SetInputPrefType(branch->down.node, branch->down.stream, type)))
+        return hr;
+
     TRACE("Connecting branch %s with type %s.\n", debugstr_topology_branch(branch), debugstr_media_type(type));
     return IMFTopologyNode_ConnectOutput(branch->up.node, branch->up.stream, branch->down.node, branch->down.stream);
 }
@@ -502,6 +506,7 @@ static HRESULT topology_branch_connect_indirect(IMFTopology *topology, BOOL deco
     IMFActivate **activates;
     IMFTopologyNode *node;
     unsigned int i, count;
+    BOOL input_accepted = FALSE;
     GUID category, guid;
     UINT32 enable_xvp;
     HRESULT hr;
@@ -557,6 +562,7 @@ static HRESULT topology_branch_connect_indirect(IMFTopology *topology, BOOL deco
         {
             if (SUCCEEDED(hr = topology_branch_connect_with_type(topology, up_branch, upstream)))
             {
+                input_accepted = TRUE;
                 if (FAILED(hr = topology_branch_find_best_type(down_branch, upstream, &media_type)))
                     hr = topology_branch_connect(topology, method_mask, down_branch, upstream, FALSE);
                 else
@@ -583,7 +589,7 @@ static HRESULT topology_branch_connect_indirect(IMFTopology *topology, BOOL deco
 
     if (!count || FAILED(hr))
         hr = decoder ? MF_E_TOPO_CODEC_NOT_FOUND
-                : MF_E_TRANSFORM_NOT_POSSIBLE_FOR_CURRENT_MEDIATYPE_COMBINATION;
+                : input_accepted ? MF_E_INVALIDMEDIATYPE : MF_E_TRANSFORM_NOT_POSSIBLE_FOR_CURRENT_MEDIATYPE_COMBINATION;
     TRACE("returning %#lx\n", hr);
     return hr;
 }
@@ -831,6 +837,7 @@ static HRESULT topology_branch_connect_optional_chain(IMFTopology *topology, str
                 if (FAILED(hr = topology_branch_connect_with_type(topology, current, orig)))
                     WARN("Failed to restore previous branch %s\n", debugstr_topology_branch(current));
                 IMFTopology_RemoveNode(topology, down_branch->up.node);
+                IMFTopology_SetUINT32(topology, &MF_TOPOLOGY_RESOLUTION_STATUS, MF_OPTIONAL_NODE_REJECTED_MEDIA_TYPE);
             }
             topology_branch_destroy(down_branch);
             topology_branch_destroy(up_branch);
@@ -896,7 +903,7 @@ static BOOL topology_node_get_object_attributes(IMFTopologyNode *node, IMFAttrib
         return hr;
     }
 
-    return topology_node_get_object(node, &IID_IMFAttributes, (void **)&attributes);
+    return topology_node_get_object(node, &IID_IMFAttributes, (void **)attributes);
 }
 
 BOOL topology_node_is_d3d_aware(IMFTopologyNode *node)
@@ -1003,7 +1010,7 @@ HRESULT topology_node_set_device_manager(IMFTopologyNode *node, IUnknown *device
 
         for (i = 0; SUCCEEDED(hr) && i < count; i++)
         {
-            if (FAILED(IMFTopologyNode_GetInput(node, 0, &upstream, &output)))
+            if (FAILED(IMFTopologyNode_GetInput(node, i, &upstream, &output)))
                 continue;
 
             if (topology_node_is_d3d_aware(upstream))
@@ -1048,7 +1055,8 @@ static HRESULT topology_loader_connect_d3d_aware_sink(IMFTopology *topology,
     {
         if (SUCCEEDED(IMFTopologyNode_GetInput(node, 0, &upstream_node, &upstream_output)))
         {
-            BOOL needs_copier = dxva_mode == MFTOPOLOGY_DXVA_DEFAULT;
+            BOOL set_device_manager = dxva_mode == MFTOPOLOGY_DXVA_FULL && topology_node_is_d3d_aware(upstream_node);
+            BOOL needs_copier = dxva_mode != MFTOPOLOGY_DXVA_NONE && !set_device_manager;
             IMFTransform *transform;
 
             if (needs_copier && SUCCEEDED(topology_node_get_object(upstream_node, &IID_IMFTransform, (void **)&transform)))
@@ -1068,7 +1076,7 @@ static HRESULT topology_loader_connect_d3d_aware_sink(IMFTopology *topology,
                 IMFTransform_Release(copier);
             }
 
-            if (dxva_mode == MFTOPOLOGY_DXVA_FULL && topology_node_is_d3d_aware(upstream_node))
+            if (set_device_manager)
                 topology_node_set_device_manager(upstream_node, device_manager);
 
             IMFTopologyNode_Release(upstream_node);
@@ -1125,10 +1133,11 @@ static void topology_loader_resolve_complete(IMFTopology *topology)
 static HRESULT clone_topology(IMFTopology *input_topology, IMFCollection *sources,
         IMFTopology **output_topology)
 {
+    HRESULT hr = S_OK, sink_hr = S_OK;
     BOOL has_source = FALSE;
     IMFTopologyNode *node;
     IMFStreamSink *sink;
-    HRESULT hr = S_OK;
+    DWORD output_count;
     IUnknown *object;
     TOPOID topoid;
     UINT32 method;
@@ -1149,15 +1158,16 @@ static HRESULT clone_topology(IMFTopology *input_topology, IMFCollection *source
                 else if (SUCCEEDED(hr = IMFTopologyNode_GetObject(node, &object)))
                 {
                     if (FAILED(IUnknown_QueryInterface(object, &IID_IMFStreamSink, (void **)&sink)))
-                        hr = MF_E_TOPO_SINK_ACTIVATES_UNSUPPORTED;
+                        sink_hr = MF_E_TOPO_SINK_ACTIVATES_UNSUPPORTED;
                     else
                         IMFStreamSink_Release(sink);
                     IUnknown_Release(object);
                 }
                 break;
             case MF_TOPOLOGY_SOURCESTREAM_NODE:
-                if (SUCCEEDED(hr = IMFTopologyNode_GetItem(node, &MF_TOPONODE_STREAM_DESCRIPTOR, NULL)))
-                    hr = IMFCollection_AddElement(sources, (IUnknown *)node);
+                if (SUCCEEDED(hr = IMFTopologyNode_GetItem(node, &MF_TOPONODE_STREAM_DESCRIPTOR, NULL))
+                        && SUCCEEDED(hr = IMFTopologyNode_GetOutputCount(node, &output_count)))
+                    hr = output_count ? IMFCollection_AddElement(sources, (IUnknown *)node) : MF_E_TOPO_UNSUPPORTED;
                 has_source = TRUE;
                 break;
             default:
@@ -1169,6 +1179,10 @@ static HRESULT clone_topology(IMFTopology *input_topology, IMFCollection *source
 
     if (SUCCEEDED(hr) && !has_source)
         hr = MF_E_TOPO_UNSUPPORTED;
+    if (SUCCEEDED(hr))
+        hr = sink_hr;
+    if (SUCCEEDED(hr))
+        hr = IMFTopology_SetUINT32(*output_topology, &MF_TOPOLOGY_RESOLUTION_STATUS, MF_TOPOLOGY_RESOLUTION_SUCCEEDED);
     if (SUCCEEDED(hr))
         return hr;
 
