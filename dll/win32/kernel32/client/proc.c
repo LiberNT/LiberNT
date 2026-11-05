@@ -1462,6 +1462,27 @@ FlushInstructionCache(IN HANDLE hProcess,
     return TRUE;
 }
 
+static VOID
+BasepWaitForOtherThreads(VOID)
+{
+    THREAD_BASIC_INFORMATION Information;
+    HANDLE Thread = NULL, Next;
+
+    while (NT_SUCCESS(NtGetNextThread(NtCurrentProcess(), Thread, SYNCHRONIZE | THREAD_QUERY_INFORMATION, 0, 0, &Next)))
+    {
+        if (Thread != NULL)
+            NtClose(Thread);
+        Thread = Next;
+        if (NT_SUCCESS(NtQueryInformationThread(Thread, ThreadBasicInformation, &Information, sizeof(Information), NULL)) &&
+            Information.ClientId.UniqueThread != NtCurrentTeb()->ClientId.UniqueThread)
+        {
+            NtWaitForSingleObject(Thread, FALSE, NULL);
+        }
+    }
+    if (Thread != NULL)
+        NtClose(Thread);
+}
+
 /*
  * @implemented
  */
@@ -1481,6 +1502,7 @@ ExitProcess(IN UINT uExitCode)
 
         /* Kill all the threads */
         NtTerminateProcess(NULL, uExitCode);
+        BasepWaitForOtherThreads();
 
         /* Unload all DLLs */
         LdrShutdownProcess();
