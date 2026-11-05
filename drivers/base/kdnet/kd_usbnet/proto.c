@@ -391,6 +391,52 @@ UsbNetStartFunction(
     }
 }
 
+VOID
+UsbNetStartStatus(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    if (!Adapter->Status.Dci)
+        return;
+
+    XhciQueueBulk(Adapter, &Adapter->Status, Adapter->StatusBuffer, USBNET_STATUS_SIZE, FALSE);
+    Adapter->StatusActive = TRUE;
+}
+
+VOID
+UsbNetPollStatus(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    PUSBNET_ENDPOINT Endpoint = &Adapter->Status;
+    ULONG Got;
+    UCHAR Completion;
+    BOOLEAN Connected;
+
+    if (!Adapter->StatusActive || !XhciPollEndpoint(Adapter, Endpoint))
+        return;
+
+    Completion = Endpoint->Completion;
+    if (Completion == XHCI_CC_SUCCESS || Completion == XHCI_CC_SHORT_PACKET)
+    {
+        Got = Endpoint->Residual <= USBNET_STATUS_SIZE ? USBNET_STATUS_SIZE - Endpoint->Residual : 0;
+        if (KdUsbParseNotifications(Adapter->StatusBuffer, Got, &Connected))
+        {
+            Adapter->StatusSeen = TRUE;
+            Adapter->Carrier = Connected;
+            *Adapter->KdNet->LinkState = Adapter->LinkUp && Adapter->Carrier;
+        }
+    }
+    else if (Completion < XHCI_CC_STOPPED || Completion > XHCI_CC_STOPPED_SHORT)
+    {
+        /* The state of the cable is now unknown and bulk transfers may still work */
+        Adapter->StatusActive = FALSE;
+        Adapter->Carrier = TRUE;
+        *Adapter->KdNet->LinkState = Adapter->LinkUp;
+        return;
+    }
+
+    UsbNetStartStatus(Adapter);
+}
+
 static
 BOOLEAN
 UsbNetSetFrame(
@@ -465,52 +511,6 @@ UsbNetSelectNdp(
     Adapter->RxNdp = Ndp;
     Adapter->RxOffset = Ndp + 8;
     return TRUE;
-}
-
-VOID
-UsbNetStartStatus(
-    _In_ PUSBNET_ADAPTER Adapter)
-{
-    if (!Adapter->Status.Dci)
-        return;
-
-    XhciQueueBulk(Adapter, &Adapter->Status, Adapter->StatusBuffer, USBNET_STATUS_SIZE, FALSE);
-    Adapter->StatusActive = TRUE;
-}
-
-VOID
-UsbNetPollStatus(
-    _In_ PUSBNET_ADAPTER Adapter)
-{
-    PUSBNET_ENDPOINT Endpoint = &Adapter->Status;
-    ULONG Got;
-    UCHAR Completion;
-    BOOLEAN Connected;
-
-    if (!Adapter->StatusActive || !XhciPollEndpoint(Adapter, Endpoint))
-        return;
-
-    Completion = Endpoint->Completion;
-    if (Completion == XHCI_CC_SUCCESS || Completion == XHCI_CC_SHORT_PACKET)
-    {
-        Got = Endpoint->Residual <= USBNET_STATUS_SIZE ? USBNET_STATUS_SIZE - Endpoint->Residual : 0;
-        if (KdUsbParseNotifications(Adapter->StatusBuffer, Got, &Connected))
-        {
-            Adapter->StatusSeen = TRUE;
-            Adapter->Carrier = Connected;
-            *Adapter->KdNet->LinkState = Adapter->LinkUp && Adapter->Carrier;
-        }
-    }
-    else if (Completion < XHCI_CC_STOPPED || Completion > XHCI_CC_STOPPED_SHORT)
-    {
-        /* The state of the cable is now unknown and bulk transfers may still work */
-        Adapter->StatusActive = FALSE;
-        Adapter->Carrier = TRUE;
-        *Adapter->KdNet->LinkState = Adapter->LinkUp;
-        return;
-    }
-
-    UsbNetStartStatus(Adapter);
 }
 
 static

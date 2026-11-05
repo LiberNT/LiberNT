@@ -617,6 +617,10 @@ NTSTATUS
 UsbWaitForTethering(
     _In_ PUSBNET_ADAPTER Adapter);
 
+NTSTATUS
+UsbStartEthernet(
+    _In_ PUSBNET_ADAPTER Adapter);
+
 VOID
 UsbReleaseDevices(
     _In_ PUSBNET_ADAPTER Adapter);
@@ -660,10 +664,6 @@ NTSTATUS
 NTAPI
 UsbNetInitializeController(
     _In_ PKDNET_SHARED_DATA KdNet);
-
-NTSTATUS
-UsbStartEthernet(
-    _In_ PUSBNET_ADAPTER Adapter);
 
 VOID
 NTAPI
