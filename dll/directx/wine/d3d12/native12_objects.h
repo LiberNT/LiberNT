@@ -271,6 +271,7 @@ public:
 
     using Native12Child::Native12Child;
     ~Native12RootSignature();
+    HRESULT CreateDriver0013(const D3D12DDI_ROOT_SIGNATURE_0100 &signature);
     HRESULT Initialize(const void *bytecode, SIZE_T length);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
 };

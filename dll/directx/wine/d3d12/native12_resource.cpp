@@ -316,8 +316,8 @@ static UINT16 Native12MipLevels(const D3D12_RESOURCE_DESC *desc)
     return levels;
 }
 
-static void Native12ResourceArguments(const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state,
-        D3D12DDIARG_CREATERESOURCE_0109 *args)
+static void Native12ResourceArguments(UINT ddi_build, const D3D12_RESOURCE_DESC *desc,
+        D3D12_RESOURCE_STATES initial_state, D3D12DDIARG_CREATERESOURCE_0109 *args)
 {
     ZeroMemory(args, sizeof(*args));
     args->ResourceType = static_cast<D3D12DDI_RESOURCE_TYPE>(desc->Dimension);
@@ -329,7 +329,8 @@ static void Native12ResourceArguments(const D3D12_RESOURCE_DESC *desc, D3D12_RES
     args->SampleDesc = desc->SampleDesc;
     args->Layout = static_cast<D3D12DDI_TEXTURE_LAYOUT>(desc->Layout);
     args->Flags = Native12ResourceFlags(desc);
-    args->InitialBarrierLayout = Native12InitialLayout(desc, initial_state);
+    args->InitialBarrierLayout = Native12InitialSlot(ddi_build, Native12InitialLayout(desc, initial_state),
+            desc->Dimension, initial_state);
 }
 
 static void Native12ApplyCreationLayout(const Native12CreationLayout *layout, D3D12DDIARG_CREATERESOURCE_0109 *args)
@@ -368,7 +369,7 @@ HRESULT Native12Resource::Initialize(const D3D12_HEAP_PROPERTIES *properties, D3
     identity = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(InterlockedIncrement64(&device->resource_sequence)));
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
-    Native12ResourceArguments(&desc, initial_state, &resource_args);
+    Native12ResourceArguments(device->ddi_build, &desc, initial_state, &resource_args);
     Native12ApplyCreationLayout(creation_layout, &resource_args);
     memcpy(&resource_args.SamplerFeedbackMipRegion, &mip_region, sizeof(resource_args.SamplerFeedbackMipRegion));
 
@@ -603,7 +604,7 @@ HRESULT Native12Heap::Initialize(const D3D12_HEAP_DESC *input)
     whole.SampleDesc.Count = 1;
     whole.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
-    Native12ResourceArguments(&whole, D3D12_RESOURCE_STATE_COMMON, &resource_args);
+    Native12ResourceArguments(device->ddi_build, &whole, D3D12_RESOURCE_STATE_COMMON, &resource_args);
 
     D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session = {};
     D3D12DDI_HEAP_AND_RESOURCE_SIZES sizes = device->functions.pfnCalcPrivateHeapAndResourceSizes(
@@ -691,7 +692,7 @@ HRESULT Native12Resource::InitializeReserved(const D3D12_RESOURCE_DESC *input, D
     identity = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(InterlockedIncrement64(&device->resource_sequence)));
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
-    Native12ResourceArguments(&desc, initial_state, &resource_args);
+    Native12ResourceArguments(device->ddi_build, &desc, initial_state, &resource_args);
     Native12ApplyCreationLayout(creation_layout, &resource_args);
     D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session = {};
     D3D12DDI_HEAP_AND_RESOURCE_SIZES sizes = device->functions.pfnCalcPrivateHeapAndResourceSizes(
@@ -742,7 +743,7 @@ HRESULT Native12Resource::InitializePlaced(Native12Heap *parent, UINT64 offset, 
     identity = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(InterlockedIncrement64(&device->resource_sequence)));
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
-    Native12ResourceArguments(&desc, initial_state, &resource_args);
+    Native12ResourceArguments(device->ddi_build, &desc, initial_state, &resource_args);
     Native12ApplyCreationLayout(creation_layout, &resource_args);
     memcpy(&resource_args.SamplerFeedbackMipRegion, &mip_region, sizeof(resource_args.SamplerFeedbackMipRegion));
     D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 allocation = {};
@@ -1283,7 +1284,7 @@ D3D12_RESOURCE_ALLOCATION_INFO *Native12Device::GetResourceAllocationInfoRegion(
             out->Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
             return out;
         }
-        Native12ResourceArguments(&desc, D3D12_RESOURCE_STATE_COMMON, &args);
+        Native12ResourceArguments(ddi_build, &desc, D3D12_RESOURCE_STATE_COMMON, &args);
         if (mip_region) memcpy(&args.SamplerFeedbackMipRegion, mip_region, sizeof(args.SamplerFeedbackMipRegion));
         D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 info = {};
         functions.pfnCheckResourceAllocationInfo(driver_device, &args, D3D12DDI_RESOURCE_OPTIMIZATION_FLAG_NONE,

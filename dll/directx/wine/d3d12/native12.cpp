@@ -654,20 +654,14 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     UINT64 *versions = static_cast<UINT64 *>(HeapAlloc(GetProcessHeap(), 0, version_count * sizeof(*versions)));
     if (!versions) return E_OUTOFMEMORY;
     UINT32 capacity = version_count;
-    bool offers_0110 = false, offers_0102 = false;
+    ddi_build = 0;
     if (SUCCEEDED(adapter_functions.pfnGetSupportedVersions(driver_adapter, &version_count, versions)))
-        for (UINT32 i = 0; i < version_count && i < capacity; ++i)
-        {
-            if (versions[i] == D3D12DDI_SUPPORTED_0110) offers_0110 = true;
-            if (versions[i] == D3D12DDI_SUPPORTED_0102) offers_0102 = true;
-        }
+        ddi_build = Native12SelectDdiBuild(versions, version_count < capacity ? version_count : capacity);
     HeapFree(GetProcessHeap(), 0, versions);
-    if (offers_0110) ddi_build = D3D12DDI_BUILD_VERSION_0110;
-    else if (offers_0102) ddi_build = D3D12DDI_BUILD_VERSION_0102;
-    else
+    if (!ddi_build)
     {
-        WARN("The driver offers neither D3D12 DDI build %u nor %u.\n", D3D12DDI_BUILD_VERSION_0110,
-                D3D12DDI_BUILD_VERSION_0102);
+        WARN("The driver offers none of the D3D12 DDI builds %u, %u and %u.\n", D3D12DDI_BUILD_VERSION_0110,
+                D3D12DDI_BUILD_VERSION_0102, D3D12DDI_BUILD_VERSION_0082);
         return DXGI_ERROR_UNSUPPORTED;
     }
 
@@ -787,8 +781,11 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
         WARN("The driver failed to fill the command queue table, hr %#lx.\n", hr);
         return hr;
     }
+    C_ASSERT(FIELD_OFFSET(NATIVE12_DEVICE_FUNCS, pfnGetProgramIdentifier) == 122 * sizeof(void *));
+    C_ASSERT(FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnBarrier) == 68 * sizeof(void *));
     SIZE_T list_table_size = ddi_build >= D3D12DDI_BUILD_VERSION_0110 ? sizeof(list_functions)
-            : FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnSetProgram);
+            : ddi_build >= D3D12DDI_BUILD_VERSION_0102 ? FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnSetProgram)
+            : FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnBarrier);
     table.handle = &list_functions;
     if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D,
             &list_functions, list_table_size, 0, table)))

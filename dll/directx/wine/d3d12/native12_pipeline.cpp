@@ -232,15 +232,62 @@ HRESULT Native12RootSignature::Initialize(const void *bytecode, SIZE_T length)
     args.Version = D3D12DDI_ROOT_SIGNATURE_VERSION_1_2;
     args.pRootSignature_1_2 = &signature;
     args.NodeMask = 1;
-    SIZE_T size = device->functions.pfnCalcPrivateRootSignatureSize(device->driver_device, &args);
-    driver.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1);
-    if (!driver.pDrvPrivate) hr = E_OUTOFMEMORY;
-    else hr = device->functions.pfnCreateRootSignature(device->driver_device, &args, driver);
+    if (device->ddi_build < D3D12DDI_BUILD_VERSION_0100)
+    {
+        hr = CreateDriver0013(signature);
+    }
+    else
+    {
+        SIZE_T size = device->functions.pfnCalcPrivateRootSignatureSize(device->driver_device, &args);
+        driver.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1);
+        if (!driver.pDrvPrivate) hr = E_OUTOFMEMORY;
+        else hr = device->functions.pfnCreateRootSignature(device->driver_device, &args, driver);
+    }
     if (SUCCEEDED(hr)) driver_created = true;
     else WARN("The driver failed to create a root signature with %u parameters, hr %#lx.\n",
             source->NumParameters, hr);
     if (samplers) HeapFree(GetProcessHeap(), 0, samplers);
     deserializer->Release();
+    return hr;
+}
+
+HRESULT Native12RootSignature::CreateDriver0013(const D3D12DDI_ROOT_SIGNATURE_0100 &signature)
+{
+    D3D12DDI_STATIC_SAMPLER *samplers = NULL;
+    D3D12DDI_ROOT_SIGNATURE_0013 old_signature = {};
+    D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 args = {};
+    HRESULT hr = E_OUTOFMEMORY;
+
+    if (signature.NumStaticSamplers)
+    {
+        samplers = static_cast<D3D12DDI_STATIC_SAMPLER *>(HeapAlloc(GetProcessHeap(), 0,
+                signature.NumStaticSamplers * sizeof(*samplers)));
+        if (!samplers) return E_OUTOFMEMORY;
+        for (UINT i = 0; i < signature.NumStaticSamplers; ++i)
+        {
+            if (signature.pStaticSamplers[i].Flags & ~D3D12DDI_SAMPLER_FLAG_UINT_BORDER_COLOR)
+            {
+                HeapFree(GetProcessHeap(), 0, samplers);
+                return E_INVALIDARG;
+            }
+            samplers[i] = Native12StaticSampler0013(signature.pStaticSamplers[i]);
+        }
+    }
+    old_signature.NumParameters = signature.NumParameters;
+    old_signature.pRootParameters = signature.pRootParameters;
+    old_signature.NumStaticSamplers = signature.NumStaticSamplers;
+    old_signature.pStaticSamplers = samplers;
+    old_signature.Flags = signature.Flags;
+    args.Version = D3D12DDI_ROOT_SIGNATURE_VERSION_1_1;
+    args.pRootSignature_1_1 = &old_signature;
+    args.NodeMask = 1;
+    SIZE_T size = reinterpret_cast<PFND3D12DDI_CALC_PRIVATE_ROOT_SIGNATURE_SIZE_0013>(
+            device->functions.pfnCalcPrivateRootSignatureSize)(device->driver_device, &args);
+    driver.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1);
+    if (driver.pDrvPrivate)
+        hr = reinterpret_cast<PFND3D12DDI_CREATE_ROOT_SIGNATURE_0013>(
+                device->functions.pfnCreateRootSignature)(device->driver_device, &args, driver);
+    if (samplers) HeapFree(GetProcessHeap(), 0, samplers);
     return hr;
 }
 
@@ -939,10 +986,18 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     raster_desc.ForcedSampleCount = input->RasterizerState.ForcedSampleCount;
     raster_desc.ConservativeRasterizationMode =
             static_cast<D3D12DDI_CONSERVATIVE_RASTERIZATION_MODE>(input->RasterizerState.ConservativeRaster);
-    size = device->functions.pfnCalcPrivateRasterizerStateSize(device->driver_device, &raster_desc);
+    D3D12DDI_RASTERIZER_DESC_0010 old_raster_desc = Native12RasterizerDesc0010(raster_desc);
+    bool old_raster = device->ddi_build < D3D12DDI_BUILD_VERSION_0102;
+    size = old_raster ? reinterpret_cast<PFND3D12DDI_CALCPRIVATERASTERIZERSTATESIZE_0010>(
+            device->functions.pfnCalcPrivateRasterizerStateSize)(device->driver_device, &old_raster_desc)
+            : device->functions.pfnCalcPrivateRasterizerStateSize(device->driver_device, &raster_desc);
     rasterizer.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1);
     if (!rasterizer.pDrvPrivate) return E_OUTOFMEMORY;
-    device->functions.pfnCreateRasterizerState(device->driver_device, &raster_desc, rasterizer);
+    if (old_raster)
+        reinterpret_cast<PFND3D12DDI_CREATERASTERIZERSTATE_0010>(device->functions.pfnCreateRasterizerState)(
+                device->driver_device, &old_raster_desc, rasterizer);
+    else
+        device->functions.pfnCreateRasterizerState(device->driver_device, &raster_desc, rasterizer);
     rasterizer_created = true;
 
     const D3D12_DEPTH_STENCIL_DESC &depth_source = input->DepthStencilState;
