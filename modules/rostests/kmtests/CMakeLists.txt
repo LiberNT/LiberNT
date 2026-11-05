@@ -349,6 +349,10 @@ if(REACTOS_USE_WDDM AND (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000))
     set(KMTEST_SOFTGPU_GPUVA_ISOLATION TRUE)
 endif()
 
+if(ARCH STREQUAL "amd64")
+    list(APPEND KMTEST_DRV_SOURCE ntos_ke/amd64/KeSwitchHandoff.c)
+endif()
+
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
     add_asm_files(KMTEST_DRV_ASM
         kmtest_drv/vm_detect.S)
