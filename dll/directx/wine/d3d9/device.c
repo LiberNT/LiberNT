@@ -2235,6 +2235,14 @@ static HRESULT WINAPI d3d9_device_StretchRect(IDirect3DDevice9Ex *iface, IDirect
         WARN("Destination is an offscreen plain surface and the source is not.\n");
         goto done;
     }
+
+    if (!dst->texture && !(dst_desc.bind_flags & (WINED3D_BIND_RENDER_TARGET | WINED3D_BIND_DEPTH_STENCIL))
+            && (src_rect->right - src_rect->left != dst_rect->right - dst_rect->left
+            || src_rect->bottom - src_rect->top != dst_rect->bottom - dst_rect->top))
+    {
+        WARN("Rejecting a stretch between offscreen plain surfaces.\n");
+        goto done;
+    }
 #endif
 
     if (src_desc.bind_flags & WINED3D_BIND_DEPTH_STENCIL)
@@ -3533,7 +3541,11 @@ static HRESULT WINAPI d3d9_device_DrawIndexedPrimitive(IDirect3DDevice9Ex *iface
     {
         wined3d_mutex_unlock();
         WARN("Called without a valid index buffer set.\n");
+#ifdef __REACTOS__
+        return D3D_OK;
+#else
         return D3DERR_INVALIDCALL;
+#endif
     }
     index_count = vertex_count_from_primitive_count(primitive_type, primitive_count);
     d3d9_device_upload_managed_textures(device);
@@ -3580,6 +3592,9 @@ static HRESULT WINAPI d3d9_device_DrawPrimitiveUP(IDirect3DDevice9Ex *iface,
 
     if (!device->stateblock_state->vertex_declaration)
     {
+#ifdef __REACTOS__
+        wined3d_stateblock_set_stream_source(device->state, 0, NULL, 0, device->stateblock_state->streams[0].stride);
+#endif
         wined3d_mutex_unlock();
         WARN("Called without a valid vertex declaration set.\n");
         return D3DERR_INVALIDCALL;
@@ -3643,6 +3658,10 @@ static HRESULT WINAPI d3d9_device_DrawIndexedPrimitiveUP(IDirect3DDevice9Ex *ifa
 
     if (!device->stateblock_state->vertex_declaration)
     {
+#ifdef __REACTOS__
+        wined3d_stateblock_set_stream_source(device->state, 0, NULL, 0, device->stateblock_state->streams[0].stride);
+        wined3d_stateblock_set_index_buffer(device->state, NULL, WINED3DFMT_UNKNOWN);
+#endif
         wined3d_mutex_unlock();
         WARN("Called without a valid vertex declaration set.\n");
         return D3DERR_INVALIDCALL;

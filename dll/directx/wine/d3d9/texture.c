@@ -825,7 +825,14 @@ static HRESULT WINAPI d3d9_texture_cube_UnlockRect(IDirect3DCubeTexture9 *iface,
     if (!(surface_impl = wined3d_texture_get_sub_resource_parent(texture->wined3d_texture, sub_resource_idx)))
         hr = D3DERR_INVALIDCALL;
     else
+#ifdef __REACTOS__
+    {
+        IDirect3DSurface9_UnlockRect(&surface_impl->IDirect3DSurface9_iface);
+        hr = D3D_OK;
+    }
+#else
         hr = IDirect3DSurface9_UnlockRect(&surface_impl->IDirect3DSurface9_iface);
+#endif
     wined3d_mutex_unlock();
 
     return hr;

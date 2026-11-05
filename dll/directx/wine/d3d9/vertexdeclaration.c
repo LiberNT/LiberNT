@@ -392,6 +392,15 @@ static HRESULT vertexdeclaration_init(struct d3d9_vertex_declaration *declaratio
     }
     memcpy(declaration->elements, elements, element_count * sizeof(*elements));
     declaration->element_count = element_count;
+#ifdef __REACTOS__
+    if (wined3d_element_count == 1 && !elements[0].Stream && !elements[0].Offset && !elements[0].UsageIndex)
+    {
+        if (elements[0].Type == D3DDECLTYPE_FLOAT3 && elements[0].Usage == D3DDECLUSAGE_POSITION)
+            declaration->fvf = D3DFVF_XYZ;
+        else if (elements[0].Type == D3DDECLTYPE_FLOAT4 && elements[0].Usage == D3DDECLUSAGE_POSITIONT)
+            declaration->fvf = D3DFVF_XYZRHW;
+    }
+#endif
 
     wined3d_mutex_lock();
     hr = wined3d_vertex_declaration_create(device->wined3d_device, wined3d_elements, wined3d_element_count,
