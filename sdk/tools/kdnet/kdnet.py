@@ -259,8 +259,6 @@ def parse_args():
 
 def file_server(args, target, emit, report):
     '''Return a feed for target output that answers .kdfiles requests made after the attach.'''
-    if not args.kdfiles and not args.m:
-        return emit
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kdfiles'))
     import kdfiles
     entries = (kdfiles.read_map(args.kdfiles) if args.kdfiles else []) + [tuple(m) for m in args.m]
