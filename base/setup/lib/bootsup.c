@@ -1172,10 +1172,41 @@ GetScsiArcPathPartition(
 }
 
 static
+BOOLEAN
+FindPartitionByTablePosition(
+    _In_ const DRIVE_LAYOUT_INFORMATION_EX* Layout,
+    _In_ ULONG Position,
+    _Out_ PPARTITION_INFORMATION_EX Partition)
+{
+    ULONG Index, Count = 0;
+
+    for (Index = 0; Index < Layout->PartitionCount; Index++)
+    {
+        const PARTITION_INFORMATION_EX* Entry = &Layout->PartitionEntry[Index];
+
+        if (Entry->PartitionStyle == PARTITION_STYLE_MBR &&
+            (Entry->Mbr.PartitionType == PARTITION_ENTRY_UNUSED ||
+             IsContainerPartition(Entry->Mbr.PartitionType)))
+        {
+            continue;
+        }
+
+        if (++Count == Position)
+        {
+            *Partition = *Entry;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
 NTSTATUS
 GetBcdPartitionElement(
     _In_ ULONG DiskNumber,
     _In_ ULONG PartitionNumber,
+    _In_ BOOLEAN TablePosition,
     _Out_writes_bytes_(BCD_DEVICE_ELEMENT_SIZE) PUCHAR Element)
 {
     union
@@ -1189,17 +1220,20 @@ GetBcdPartitionElement(
     HANDLE Handle;
     NTSTATUS Status;
 
-    RtlStringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Device\\Harddisk%lu\\Partition%lu", DiskNumber, PartitionNumber);
-    Status = pOpenDevice(Path, &Handle);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (!TablePosition)
+    {
+        RtlStringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Device\\Harddisk%lu\\Partition%lu", DiskNumber, PartitionNumber);
+        Status = pOpenDevice(Path, &Handle);
+        if (!NT_SUCCESS(Status))
+            return Status;
 
-    Status = NtDeviceIoControlFile(Handle, NULL, NULL, NULL, &IoStatusBlock,
-                                   IOCTL_DISK_GET_PARTITION_INFO_EX,
-                                   NULL, 0, &Partition, sizeof(Partition));
-    NtClose(Handle);
-    if (!NT_SUCCESS(Status))
-        return Status;
+        Status = NtDeviceIoControlFile(Handle, NULL, NULL, NULL, &IoStatusBlock,
+                                       IOCTL_DISK_GET_PARTITION_INFO_EX,
+                                       NULL, 0, &Partition, sizeof(Partition));
+        NtClose(Handle);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
 
     RtlStringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Device\\Harddisk%lu\\Partition0", DiskNumber);
     Status = pOpenDevice(Path, &Handle);
@@ -1212,6 +1246,9 @@ GetBcdPartitionElement(
     NtClose(Handle);
     if (!NT_SUCCESS(Status))
         return Status;
+
+    if (TablePosition && !FindPartitionByTablePosition(&Drive.Layout, PartitionNumber, &Partition))
+        return STATUS_OBJECT_PATH_NOT_FOUND;
 
     RtlZeroMemory(Element, BCD_DEVICE_ELEMENT_SIZE);
     *(PULONG)(Element + BCD_DEVICE_TYPE_OFFSET) = BCD_DEVICE_PARTITION;
@@ -1310,7 +1347,7 @@ InstallBcdStore(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = GetBcdPartitionElement(DeviceNumber.DeviceNumber, DeviceNumber.PartitionNumber, SystemElement);
+    Status = GetBcdPartitionElement(DeviceNumber.DeviceNumber, DeviceNumber.PartitionNumber, FALSE, SystemElement);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1345,7 +1382,7 @@ InstallBcdStore(
         Number = wcstoul(Text + ARRAYSIZE(BCD_PARTITION_PREFIX) - 1, NULL, 10);
     }
 
-    Status = GetBcdPartitionElement(Disk, Number, OsElement);
+    Status = GetBcdPartitionElement(Disk, Number, *DestinationArcPath->Buffer != UNICODE_NULL && *DestinationArcPath->Buffer != OBJ_NAME_PATH_SEPARATOR, OsElement);
     if (!NT_SUCCESS(Status))
         return Status;
 

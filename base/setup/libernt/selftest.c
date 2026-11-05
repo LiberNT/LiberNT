@@ -893,6 +893,81 @@ SelfTestPartitionOffset(
     return TRUE;
 }
 
+static BOOLEAN
+SelfTestReadBcdOsPartition(
+    _In_ PCWSTR SystemDevice,
+    _Out_ GUID *PartitionId)
+{
+    static const WCHAR MountName[] = L"\\Registry\\Machine\\SelfTestBcd";
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 0x58];
+    PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    OBJECT_ATTRIBUTES KeyAttributes, FileAttributes;
+    UNICODE_STRING MountPoint, FileName, KeyName;
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"Element");
+    WCHAR StorePath[MAX_PATH];
+    WCHAR ElementPath[MAX_PATH];
+    BOOLEAN Enabled, Found = FALSE;
+    HANDLE Key;
+    ULONG Length;
+
+    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &Enabled);
+    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &Enabled);
+    StringCchPrintfW(StorePath, ARRAYSIZE(StorePath), L"%s\\EFI\\LiberNT\\Boot\\BCD", SystemDevice);
+    StringCchPrintfW(ElementPath, ARRAYSIZE(ElementPath),
+                     L"%s\\Objects\\{354fa6e5-5e45-49af-91bf-1fd2754e470a}\\Elements\\21000001", MountName);
+    RtlInitUnicodeString(&MountPoint, MountName);
+    RtlInitUnicodeString(&FileName, StorePath);
+    RtlInitUnicodeString(&KeyName, ElementPath);
+    InitializeObjectAttributes(&KeyAttributes, &MountPoint, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    InitializeObjectAttributes(&FileAttributes, &FileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (!NT_SUCCESS(NtLoadKey(&KeyAttributes, &FileAttributes)))
+        return FALSE;
+
+    InitializeObjectAttributes(&FileAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (NT_SUCCESS(NtOpenKey(&Key, KEY_READ, &FileAttributes)))
+    {
+        if (NT_SUCCESS(NtQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Value, sizeof(Buffer), &Length)) &&
+            Value->DataLength >= 0x20 + sizeof(GUID))
+        {
+            RtlCopyMemory(PartitionId, Value->Data + 0x20, sizeof(GUID));
+            Found = TRUE;
+        }
+        NtClose(Key);
+    }
+    NtUnloadKey(&KeyAttributes);
+    return Found;
+}
+
+static VOID
+SelfTestAlongsideBootDevice(
+    _In_ PSELFTEST_CONTEXT Context,
+    _In_ ULONG DiskNumber,
+    _In_ ULONGLONG InstallOffset)
+{
+    WCHAR SystemDevice[MAX_PATH];
+    PDRIVE_LAYOUT_INFORMATION_EX Layout;
+    GUID Expected = GUID_NULL, Actual = GUID_NULL;
+    ULONG Index;
+
+    StringCchCopyW(SystemDevice, ARRAYSIZE(SystemDevice), Context->SystemVolume->Info.DeviceName);
+    SelfTestBoot(Context, SystemDevice);
+
+    Layout = SelfTestReadLayout(DiskNumber);
+    if (!SelfTestCheck(Context, Layout != NULL, L"W.bcd", L"IOCTL_DISK_GET_DRIVE_LAYOUT_EX"))
+        return;
+    for (Index = 0; Index < Layout->PartitionCount; Index++)
+    {
+        if ((ULONGLONG)Layout->PartitionEntry[Index].StartingOffset.QuadPart == InstallOffset)
+            Expected = Layout->PartitionEntry[Index].Gpt.PartitionId;
+    }
+    HeapFree(GetProcessHeap(), 0, Layout);
+
+    SelfTestCheck(Context,
+                  SelfTestReadBcdOsPartition(SystemDevice, &Actual) && !IsEqualGUID(&Expected, &GUID_NULL) &&
+                  IsEqualGUID(&Expected, &Actual),
+                  L"W.bcd", L"OS device is the install partition at %I64u", InstallOffset);
+}
+
 static VOID
 SelfTestAlongside(
     _In_ PSELFTEST_CONTEXT Context,
@@ -1076,6 +1151,7 @@ SelfTestAlongside(
                   L"W.untouched", L"Windows partition boot sector");
     SelfTestCheck(Context, SelfTestSectorIsZero(DiskNumber, Plan[3].Start * SELFTEST_MEGABYTE, DiskEntry->BytesPerSector, FALSE),
                   L"W.untouched", L"Recovery partition boot sector");
+    SelfTestAlongsideBootDevice(Context, DiskNumber, Region->StartSector.QuadPart * DiskEntry->BytesPerSector);
 }
 
 ULONG
