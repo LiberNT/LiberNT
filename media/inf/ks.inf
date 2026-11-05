@@ -27,7 +27,7 @@ StreamDriver.Files=10,system32\drivers
 
 [ProxyRegistration]
 HKCR,%Proxy.FilterId%,,,%Proxy.FilterDesc%
-HKCR,%Proxy.FilterId%\InprocServer32,,,ksproxy.ax
+HKCR,%Proxy.FilterId%\InprocServer32,,,qcap.dll
 HKCR,%Proxy.FilterId%\InprocServer32,ThreadingModel,,Both
 
 [KSDriver.Files]

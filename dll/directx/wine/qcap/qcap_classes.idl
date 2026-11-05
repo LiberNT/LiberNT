@@ -74,3 +74,12 @@ coclass SmartTee {}
     uuid(1b544c22-fd0b-11ce-8c63-00aa0044b51e)
 ]
 coclass VfwCapture {}
+
+#ifdef __REACTOS__
+[
+    helpstring("Generic WDM Filter Proxy"),
+    threading(both),
+    uuid(17cca71b-ecd7-11d0-b908-00a0c9223196)
+]
+coclass Proxy {}
+#endif

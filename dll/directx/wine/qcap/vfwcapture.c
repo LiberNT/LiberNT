@@ -29,12 +29,24 @@ WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 #define V4L_CALL( func, params ) WINE_UNIX_CALL( unix_ ## func, params )
 #endif
 
+#ifdef __REACTOS__
+struct pin_property_set
+{
+    IKsPropertySet IKsPropertySet_iface;
+    struct strmbase_pin *pin;
+    const GUID *category;
+};
+#endif
+
 struct vfw_capture
 {
     struct strmbase_filter filter;
     IAMStreamConfig IAMStreamConfig_iface;
     IAMVideoControl IAMVideoControl_iface;
     IAMVideoProcAmp IAMVideoProcAmp_iface;
+#ifdef __REACTOS__
+    IAMCameraControl IAMCameraControl_iface;
+#endif
     IAMFilterMiscFlags IAMFilterMiscFlags_iface;
     IPersistPropertyBag IPersistPropertyBag_iface;
     BOOL init;
@@ -43,6 +55,18 @@ struct vfw_capture
     IKsPropertySet IKsPropertySet_iface;
 
     video_capture_device_t device;
+
+#ifdef __REACTOS__
+    struct strmbase_sink bridge;
+    struct strmbase_source still;
+    IAMStreamConfig StillStreamConfig_iface;
+    struct pin_property_set bridge_properties;
+    struct pin_property_set still_properties;
+    int still_index;
+    BOOL has_still;
+    HANDLE still_thread;
+    HANDLE still_stop;
+#endif
 
     /* FIXME: It would be nice to avoid duplicating this variable with strmbase.
      * However, synchronization is tricky; we need access to be protected by a
@@ -88,6 +112,12 @@ static struct strmbase_pin *vfw_capture_get_pin(struct strmbase_filter *iface, u
 {
     struct vfw_capture *filter = impl_from_strmbase_filter(iface);
 
+#ifdef __REACTOS__
+    if (index == 1)
+        return &filter->bridge.pin;
+    if (index == 2 && filter->has_still)
+        return &filter->still.pin;
+#endif
     if (index >= 1)
         return NULL;
 
@@ -109,6 +139,16 @@ static void vfw_capture_destroy(struct strmbase_filter *iface)
         IPin_Disconnect(filter->source.pin.peer);
         IPin_Disconnect(&filter->source.pin.IPin_iface);
     }
+#ifdef __REACTOS__
+    if (filter->still.pin.peer)
+    {
+        IPin_Disconnect(filter->still.pin.peer);
+        IPin_Disconnect(&filter->still.pin.IPin_iface);
+    }
+    strmbase_source_cleanup(&filter->still);
+    strmbase_sink_cleanup(&filter->bridge);
+    CloseHandle(filter->still_stop);
+#endif
     filter->state_cs.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&filter->state_cs);
     strmbase_source_cleanup(&filter->source);
@@ -126,6 +166,10 @@ static HRESULT vfw_capture_query_interface(struct strmbase_filter *iface, REFIID
         *out = &filter->IAMVideoControl_iface;
     else if (IsEqualGUID(iid, &IID_IAMVideoProcAmp))
         *out = &filter->IAMVideoProcAmp_iface;
+#ifdef __REACTOS__
+    else if (IsEqualGUID(iid, &IID_IAMCameraControl))
+        *out = &filter->IAMCameraControl_iface;
+#endif
     else if (IsEqualGUID(iid, &IID_IAMFilterMiscFlags))
         *out = &filter->IAMFilterMiscFlags_iface;
     else
@@ -137,9 +181,15 @@ static HRESULT vfw_capture_query_interface(struct strmbase_filter *iface, REFIID
 
 static unsigned int get_image_size(struct vfw_capture *filter)
 {
+#ifdef __REACTOS__
+    const BITMAPINFOHEADER *bmi = qcap_backend_format_bmi(&filter->source.pin.mt);
+
+    return bmi->biWidth * bmi->biHeight * bmi->biBitCount / 8;
+#else
     const VIDEOINFOHEADER *format = (const VIDEOINFOHEADER *)filter->source.pin.mt.pbFormat;
 
     return format->bmiHeader.biWidth * format->bmiHeader.biHeight * format->bmiHeader.biBitCount / 8;
+#endif
 }
 
 static DWORD WINAPI stream_thread(void *arg)
@@ -184,6 +234,9 @@ static DWORD WINAPI stream_thread(void *arg)
             break;
         }
 
+#ifdef __REACTOS__
+        IMediaSample_SetActualDataLength(sample, params.size);
+#endif
         hr = IMemInputPin_Receive(filter->source.pMemInputPin, sample);
         IMediaSample_Release(sample);
         if (FAILED(hr))
@@ -195,6 +248,39 @@ static DWORD WINAPI stream_thread(void *arg)
 
     return 0;
 }
+
+#ifdef __REACTOS__
+static DWORD WINAPI still_thread(void *arg)
+{
+    struct vfw_capture *filter = arg;
+
+    for (;;)
+    {
+        IMediaSample *sample;
+        DWORD used = 0;
+        HRESULT hr;
+        BYTE *data;
+
+        if (FAILED(hr = IMemAllocator_GetBuffer(filter->still.pAllocator, &sample, NULL, NULL, 0)))
+            break;
+
+        IMediaSample_GetPointer(sample, &data);
+        hr = qcap_backend_still_read(filter->device, data, IMediaSample_GetSize(sample), &used, filter->still_stop);
+        if (hr != S_OK)
+        {
+            IMediaSample_Release(sample);
+            break;
+        }
+
+        IMediaSample_SetActualDataLength(sample, used);
+        hr = IMemInputPin_Receive(filter->still.pMemInputPin, sample);
+        IMediaSample_Release(sample);
+        if (FAILED(hr))
+            break;
+    }
+    return 0;
+}
+#endif
 
 static HRESULT vfw_capture_init_stream(struct strmbase_filter *iface)
 {
@@ -212,6 +298,11 @@ static HRESULT vfw_capture_init_stream(struct strmbase_filter *iface)
     LeaveCriticalSection(&filter->state_cs);
 
     filter->thread = CreateThread(NULL, 0, stream_thread, filter, 0, NULL);
+
+#ifdef __REACTOS__
+    if (filter->still.pin.peer && FAILED(hr = IMemAllocator_Commit(filter->still.pAllocator)))
+        ERR("Failed to commit the still allocator, hr %#lx.\n", hr);
+#endif
 
     return S_OK;
 }
@@ -231,6 +322,19 @@ static HRESULT vfw_capture_start_stream(struct strmbase_filter *iface, REFERENCE
         ERR("start stream failed.\n");
         return hr;
     }
+
+#ifdef __REACTOS__
+    if (filter->still.pin.peer && !filter->still_thread)
+    {
+        if (FAILED(hr = qcap_backend_still_start(filter->device, filter->still_index)))
+        {
+            ERR("Starting the still pin failed, hr %#lx.\n", hr);
+            return hr;
+        }
+        ResetEvent(filter->still_stop);
+        filter->still_thread = CreateThread(NULL, 0, still_thread, filter, 0, NULL);
+    }
+#endif
 
     EnterCriticalSection(&filter->state_cs);
     filter->state = State_Running;
@@ -260,6 +364,23 @@ static HRESULT vfw_capture_cleanup_stream(struct strmbase_filter *iface)
     if (!filter->source.pin.peer)
         return S_OK;
 
+#ifdef __REACTOS__
+    if (filter->still_thread)
+    {
+        SetEvent(filter->still_stop);
+        WaitForSingleObject(filter->still_thread, INFINITE);
+        CloseHandle(filter->still_thread);
+        filter->still_thread = NULL;
+        qcap_backend_still_stop(filter->device);
+    }
+    if (filter->still.pin.peer)
+    {
+        hr = IMemAllocator_Decommit(filter->still.pAllocator);
+        if (hr != S_OK && hr != VFW_E_NOT_COMMITTED)
+            ERR("Failed to decommit the still allocator, hr %#lx.\n", hr);
+    }
+#endif
+
     EnterCriticalSection(&filter->state_cs);
     filter->state = State_Stopped;
     LeaveCriticalSection(&filter->state_cs);
@@ -268,6 +389,10 @@ static HRESULT vfw_capture_cleanup_stream(struct strmbase_filter *iface)
     WaitForSingleObject(filter->thread, INFINITE);
     CloseHandle(filter->thread);
     filter->thread = NULL;
+
+#ifdef __REACTOS__
+    qcap_backend_stop(filter->device);
+#endif
 
     hr = IMemAllocator_Decommit(filter->source.pAllocator);
     if (hr != S_OK && hr != VFW_E_NOT_COMMITTED)
@@ -380,12 +505,20 @@ static HRESULT WINAPI AMStreamConfig_GetFormat(IAMStreamConfig *iface, AM_MEDIA_
     }
     else
     {
+#ifdef __REACTOS__
+        if ((format = CoTaskMemAlloc(QCAP_MAX_FORMAT_SIZE)))
+        {
+            struct get_format_params params = { filter->device, *mt, format };
+            V4L_CALL( get_format, &params );
+            (*mt)->pbFormat = (BYTE *)format;
+#else
         if ((format = CoTaskMemAlloc(sizeof(VIDEOINFOHEADER))))
         {
             struct get_format_params params = { filter->device, *mt, format };
             V4L_CALL( get_format, &params );
             (*mt)->cbFormat = sizeof(VIDEOINFOHEADER);
             (*mt)->pbFormat = (BYTE *)format;
+#endif
             hr = S_OK;
         }
         else
@@ -439,7 +572,11 @@ static HRESULT WINAPI AMStreamConfig_GetStreamCaps(IAMStreamConfig *iface,
     if (!(mt = CoTaskMemAlloc(sizeof(AM_MEDIA_TYPE))))
         return E_OUTOFMEMORY;
 
+#ifdef __REACTOS__
+    if (!(format = CoTaskMemAlloc(QCAP_MAX_FORMAT_SIZE)))
+#else
     if (!(format = CoTaskMemAlloc(sizeof(VIDEOINFOHEADER))))
+#endif
     {
         CoTaskMemFree(mt);
         return E_OUTOFMEMORY;
@@ -451,7 +588,9 @@ static HRESULT WINAPI AMStreamConfig_GetStreamCaps(IAMStreamConfig *iface,
     caps_params.format = format;
     caps_params.caps   = (VIDEO_STREAM_CONFIG_CAPS *)vscc;
     V4L_CALL( get_caps, &caps_params );
+#ifndef __REACTOS__
     mt->cbFormat = sizeof(VIDEOINFOHEADER);
+#endif
     mt->pbFormat = (BYTE *)format;
     *pmt = mt;
     return S_OK;
@@ -576,6 +715,18 @@ static HRESULT WINAPI PPB_Load(IPersistPropertyBag *iface, IPropertyBag *bag, IE
 
     TRACE("filter %p, bag %p, error_log %p.\n", filter, bag, error_log);
 
+#ifdef __REACTOS__
+    V_VT(&var) = VT_BSTR;
+    if (FAILED(hr = IPropertyBag_Read(bag, L"DevicePath", &var, error_log)))
+        return hr;
+
+    params.path = V_BSTR(&var);
+    params.device = &filter->device;
+    hr = V4L_CALL( create, &params );
+    VariantClear(&var);
+    if (SUCCEEDED(hr) && qcap_backend_still_count(filter->device) > 0)
+        filter->has_still = TRUE;
+#else
     V_VT(&var) = VT_I4;
     if (FAILED(hr = IPropertyBag_Read(bag, L"VFWIndex", &var, error_log)))
         return hr;
@@ -583,6 +734,7 @@ static HRESULT WINAPI PPB_Load(IPersistPropertyBag *iface, IPropertyBag *bag, IE
     params.index = V_I4(&var);
     params.device = &filter->device;
     hr = V4L_CALL( create, &params );
+#endif
 
     if (SUCCEEDED(hr)) filter->init = TRUE;
     return hr;
@@ -706,7 +858,11 @@ static HRESULT source_get_media_type(struct strmbase_pin *pin,
     VIDEOINFOHEADER *format;
     HRESULT hr;
 
+#ifdef __REACTOS__
+    if (!(format = CoTaskMemAlloc(QCAP_MAX_FORMAT_SIZE)))
+#else
     if (!(format = CoTaskMemAlloc(sizeof(*format))))
+#endif
         return E_OUTOFMEMORY;
 
     params.device = filter->device;
@@ -718,7 +874,9 @@ static HRESULT source_get_media_type(struct strmbase_pin *pin,
         CoTaskMemFree(format);
         return hr;
     }
+#ifndef __REACTOS__
     mt->cbFormat = sizeof(VIDEOINFOHEADER);
+#endif
     mt->pbFormat = (BYTE *)format;
     return S_OK;
 }
@@ -813,6 +971,107 @@ static ULONG WINAPI video_control_Release(IAMVideoControl *iface)
     return IUnknown_Release(filter->filter.outer_unk);
 }
 
+#ifdef __REACTOS__
+static int video_control_stream(struct vfw_capture *filter, IPin *pin)
+{
+    if (pin == &filter->source.pin.IPin_iface)
+        return 0;
+    if (pin == &filter->bridge.pin.IPin_iface)
+        return 1;
+    if (filter->has_still && pin == &filter->still.pin.IPin_iface)
+        return 2;
+    return -1;
+}
+
+static HRESULT WINAPI video_control_GetCaps(IAMVideoControl *iface, IPin *pin, LONG *flags)
+{
+    struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
+    int stream = video_control_stream(filter, pin);
+
+    TRACE("filter %p, pin %p, flags %p.\n", filter, pin, flags);
+
+    if (stream < 0)
+        return E_INVALIDARG;
+    return qcap_backend_control_get(filter->device, stream, FALSE, flags);
+}
+
+static HRESULT WINAPI video_control_SetMode(IAMVideoControl *iface, IPin *pin, LONG mode)
+{
+    struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
+    int stream = video_control_stream(filter, pin);
+
+    TRACE("filter %p, pin %p, mode %ld.\n", filter, pin, mode);
+
+    if (stream < 0)
+        return E_INVALIDARG;
+    return qcap_backend_control_set_mode(filter->device, stream, mode);
+}
+
+static HRESULT WINAPI video_control_GetMode(IAMVideoControl *iface, IPin *pin, LONG *mode)
+{
+    struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
+    int stream = video_control_stream(filter, pin);
+
+    TRACE("filter %p, pin %p, mode %p.\n", filter, pin, mode);
+
+    if (stream < 0)
+        return E_INVALIDARG;
+    return qcap_backend_control_get(filter->device, stream, TRUE, mode);
+}
+
+static HRESULT WINAPI video_control_GetCurrentActualFrameRate(IAMVideoControl *iface, IPin *pin,
+        LONGLONG *frame_rate)
+{
+    struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
+    int stream = video_control_stream(filter, pin);
+
+    TRACE("filter %p, pin %p, frame rate %p.\n", filter, pin, frame_rate);
+
+    if (stream < 0 || stream == 1)
+        return E_INVALIDARG;
+    *frame_rate = 0;
+    return S_OK;
+}
+
+static HRESULT WINAPI video_control_GetMaxAvailableFrameRate(IAMVideoControl *iface, IPin *pin,
+        LONG index, SIZE dimensions, LONGLONG *frame_rate)
+{
+    struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
+    int stream = video_control_stream(filter, pin);
+
+    TRACE("filter %p, pin %p, index %ld, dimensions (%ldx%ld), frame rate %p.\n",
+            filter, pin, index, dimensions.cx, dimensions.cy, frame_rate);
+
+    if (stream < 0 || stream == 1)
+        return E_INVALIDARG;
+    if (stream == 2)
+    {
+        *frame_rate = 0;
+        return S_OK;
+    }
+    return qcap_backend_max_frame_rate(filter->device, stream, index, dimensions, frame_rate);
+}
+
+static HRESULT WINAPI video_control_GetFrameRateList(IAMVideoControl *iface, IPin *pin,
+        LONG index, SIZE dimensions, LONG *ret_count, LONGLONG **ret_intervals)
+{
+    struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
+    int stream = video_control_stream(filter, pin);
+
+    TRACE("filter %p, pin %p, index %ld, dimensions (%ldx%ld), ret_count %p, ret_intervals %p.\n",
+            filter, pin, index, dimensions.cx, dimensions.cy, ret_count, ret_intervals);
+
+    if (stream < 0 || stream == 1)
+        return E_INVALIDARG;
+    if (stream == 2)
+    {
+        *ret_count = 0;
+        *ret_intervals = NULL;
+        return S_OK;
+    }
+    return qcap_backend_frame_rates(filter->device, stream, index, dimensions, ret_count, ret_intervals);
+}
+#else
 static HRESULT WINAPI video_control_GetCaps(IAMVideoControl *iface, IPin *pin, LONG *flags)
 {
     struct vfw_capture *filter = impl_from_IAMVideoControl(iface);
@@ -889,6 +1148,7 @@ static HRESULT WINAPI video_control_GetFrameRateList(IAMVideoControl *iface, IPi
     *ret_count = count;
     return S_OK;
 }
+#endif
 
 static const IAMVideoControlVtbl IAMVideoControl_VTable =
 {
@@ -902,6 +1162,299 @@ static const IAMVideoControlVtbl IAMVideoControl_VTable =
     video_control_GetMaxAvailableFrameRate,
     video_control_GetFrameRateList
 };
+
+#ifdef __REACTOS__
+static inline struct vfw_capture *impl_from_IAMCameraControl(IAMCameraControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct vfw_capture, IAMCameraControl_iface);
+}
+
+static HRESULT WINAPI camera_control_QueryInterface(IAMCameraControl *iface, REFIID iid, void **out)
+{
+    return IUnknown_QueryInterface(impl_from_IAMCameraControl(iface)->filter.outer_unk, iid, out);
+}
+
+static ULONG WINAPI camera_control_AddRef(IAMCameraControl *iface)
+{
+    return IUnknown_AddRef(impl_from_IAMCameraControl(iface)->filter.outer_unk);
+}
+
+static ULONG WINAPI camera_control_Release(IAMCameraControl *iface)
+{
+    return IUnknown_Release(impl_from_IAMCameraControl(iface)->filter.outer_unk);
+}
+
+static HRESULT WINAPI camera_control_GetRange(IAMCameraControl *iface, LONG property, LONG *min, LONG *max, LONG *step, LONG *default_value, LONG *flags)
+{
+    return qcap_backend_camera_range(impl_from_IAMCameraControl(iface)->device, property, min, max, step, default_value, flags);
+}
+
+static HRESULT WINAPI camera_control_Set(IAMCameraControl *iface, LONG property, LONG value, LONG flags)
+{
+    return qcap_backend_camera_set(impl_from_IAMCameraControl(iface)->device, property, value, flags);
+}
+
+static HRESULT WINAPI camera_control_Get(IAMCameraControl *iface, LONG property, LONG *value, LONG *flags)
+{
+    return qcap_backend_camera_get(impl_from_IAMCameraControl(iface)->device, property, value, flags);
+}
+
+static const IAMCameraControlVtbl IAMCameraControl_VTable =
+{
+    camera_control_QueryInterface,
+    camera_control_AddRef,
+    camera_control_Release,
+    camera_control_GetRange,
+    camera_control_Set,
+    camera_control_Get,
+};
+#endif
+
+#ifdef __REACTOS__
+static inline struct pin_property_set *impl_from_pin_property_set(IKsPropertySet *iface)
+{
+    return CONTAINING_RECORD(iface, struct pin_property_set, IKsPropertySet_iface);
+}
+
+static HRESULT WINAPI pin_properties_QueryInterface(IKsPropertySet *iface, REFIID iid, void **out)
+{
+    return IPin_QueryInterface(&impl_from_pin_property_set(iface)->pin->IPin_iface, iid, out);
+}
+
+static ULONG WINAPI pin_properties_AddRef(IKsPropertySet *iface)
+{
+    return IPin_AddRef(&impl_from_pin_property_set(iface)->pin->IPin_iface);
+}
+
+static ULONG WINAPI pin_properties_Release(IKsPropertySet *iface)
+{
+    return IPin_Release(&impl_from_pin_property_set(iface)->pin->IPin_iface);
+}
+
+static HRESULT WINAPI pin_properties_Set(IKsPropertySet *iface, REFGUID set, DWORD id, void *instance,
+        DWORD instance_size, void *data, DWORD size)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI pin_properties_Get(IKsPropertySet *iface, REFGUID set, DWORD id, void *instance,
+        DWORD instance_size, void *data, DWORD size, DWORD *returned)
+{
+    struct pin_property_set *properties = impl_from_pin_property_set(iface);
+
+    if (!IsEqualIID(set, &AMPROPSETID_Pin))
+        return E_PROP_SET_UNSUPPORTED;
+    if (!data && !returned)
+        return E_POINTER;
+    if (returned)
+        *returned = sizeof(GUID);
+    if (!data)
+        return S_OK;
+    if (size < sizeof(GUID))
+        return E_UNEXPECTED;
+    *(GUID *)data = *properties->category;
+    return S_OK;
+}
+
+static HRESULT WINAPI pin_properties_QuerySupported(IKsPropertySet *iface, REFGUID set, DWORD id, DWORD *support)
+{
+    return E_NOTIMPL;
+}
+
+static const IKsPropertySetVtbl pin_properties_vtbl =
+{
+    pin_properties_QueryInterface,
+    pin_properties_AddRef,
+    pin_properties_Release,
+    pin_properties_Set,
+    pin_properties_Get,
+    pin_properties_QuerySupported
+};
+
+static HRESULT bridge_query_accept(struct strmbase_pin *pin, const AM_MEDIA_TYPE *mt)
+{
+    return S_FALSE;
+}
+
+static HRESULT bridge_get_media_type(struct strmbase_pin *pin, unsigned int index, AM_MEDIA_TYPE *mt)
+{
+    return VFW_S_NO_MORE_ITEMS;
+}
+
+static HRESULT bridge_query_interface(struct strmbase_pin *pin, REFIID iid, void **out)
+{
+    struct vfw_capture *filter = CONTAINING_RECORD(pin, struct vfw_capture, bridge.pin);
+
+    if (!IsEqualGUID(iid, &IID_IKsPropertySet))
+        return E_NOINTERFACE;
+
+    *out = &filter->bridge_properties.IKsPropertySet_iface;
+    IUnknown_AddRef((IUnknown *)*out);
+    return S_OK;
+}
+
+static const struct strmbase_sink_ops bridge_ops =
+{
+    .base.pin_query_accept = bridge_query_accept,
+    .base.pin_get_media_type = bridge_get_media_type,
+    .base.pin_query_interface = bridge_query_interface,
+};
+
+static inline struct vfw_capture *impl_from_still_pin(struct strmbase_pin *pin)
+{
+    return CONTAINING_RECORD(pin, struct vfw_capture, still.pin);
+}
+
+static HRESULT still_query_accept(struct strmbase_pin *pin, const AM_MEDIA_TYPE *mt)
+{
+    struct vfw_capture *filter = impl_from_still_pin(pin);
+
+    if (!mt)
+        return E_POINTER;
+    return qcap_backend_still_find(filter->device, mt) >= 0 ? S_OK : S_FALSE;
+}
+
+static HRESULT still_get_media_type(struct strmbase_pin *pin, unsigned int index, AM_MEDIA_TYPE *mt)
+{
+    struct vfw_capture *filter = impl_from_still_pin(pin);
+
+    return qcap_backend_still_media_type(filter->device, index, mt, NULL);
+}
+
+static HRESULT still_query_interface(struct strmbase_pin *pin, REFIID iid, void **out)
+{
+    struct vfw_capture *filter = impl_from_still_pin(pin);
+
+    if (IsEqualGUID(iid, &IID_IKsPropertySet))
+        *out = &filter->still_properties.IKsPropertySet_iface;
+    else if (IsEqualGUID(iid, &IID_IAMStreamConfig))
+        *out = &filter->StillStreamConfig_iface;
+    else
+        return E_NOINTERFACE;
+
+    IUnknown_AddRef((IUnknown *)*out);
+    return S_OK;
+}
+
+static HRESULT WINAPI still_DecideBufferSize(struct strmbase_source *iface,
+        IMemAllocator *allocator, ALLOCATOR_PROPERTIES *req_props)
+{
+    ALLOCATOR_PROPERTIES ret_props;
+
+    if (!req_props->cBuffers)
+        req_props->cBuffers = 1;
+    if (!req_props->cbBuffer)
+        req_props->cbBuffer = iface->pin.mt.lSampleSize;
+    if (!req_props->cbAlign)
+        req_props->cbAlign = 1;
+
+    return IMemAllocator_SetProperties(allocator, req_props, &ret_props);
+}
+
+static const struct strmbase_source_ops still_ops =
+{
+    .base.pin_query_accept = still_query_accept,
+    .base.pin_get_media_type = still_get_media_type,
+    .base.pin_query_interface = still_query_interface,
+    .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
+    .pfnDecideBufferSize = still_DecideBufferSize,
+    .pfnDecideAllocator = BaseOutputPinImpl_DecideAllocator,
+};
+
+static inline struct vfw_capture *impl_from_still_config(IAMStreamConfig *iface)
+{
+    return CONTAINING_RECORD(iface, struct vfw_capture, StillStreamConfig_iface);
+}
+
+static HRESULT WINAPI still_config_QueryInterface(IAMStreamConfig *iface, REFIID iid, void **out)
+{
+    return IPin_QueryInterface(&impl_from_still_config(iface)->still.pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI still_config_AddRef(IAMStreamConfig *iface)
+{
+    return IPin_AddRef(&impl_from_still_config(iface)->still.pin.IPin_iface);
+}
+
+static ULONG WINAPI still_config_Release(IAMStreamConfig *iface)
+{
+    return IPin_Release(&impl_from_still_config(iface)->still.pin.IPin_iface);
+}
+
+static HRESULT WINAPI still_config_SetFormat(IAMStreamConfig *iface, AM_MEDIA_TYPE *mt)
+{
+    struct vfw_capture *filter = impl_from_still_config(iface);
+    int index;
+
+    if (!mt)
+        return E_POINTER;
+    if (filter->filter.state != State_Stopped)
+        return VFW_E_NOT_STOPPED;
+    if ((index = qcap_backend_still_find(filter->device, mt)) < 0)
+        return VFW_E_INVALIDMEDIATYPE;
+
+    filter->still_index = index;
+    if (filter->filter.graph && filter->still.pin.peer)
+        return IFilterGraph_Reconnect(filter->filter.graph, &filter->still.pin.IPin_iface);
+    return S_OK;
+}
+
+static HRESULT WINAPI still_config_GetFormat(IAMStreamConfig *iface, AM_MEDIA_TYPE **mt)
+{
+    struct vfw_capture *filter = impl_from_still_config(iface);
+    HRESULT hr;
+
+    if (!(*mt = CoTaskMemAlloc(sizeof(**mt))))
+        return E_OUTOFMEMORY;
+    if ((hr = qcap_backend_still_media_type(filter->device, filter->still_index, *mt, NULL)) != S_OK)
+    {
+        CoTaskMemFree(*mt);
+        *mt = NULL;
+    }
+    return hr;
+}
+
+static HRESULT WINAPI still_config_GetNumberOfCapabilities(IAMStreamConfig *iface, int *count, int *size)
+{
+    struct vfw_capture *filter = impl_from_still_config(iface);
+
+    if (!count || !size)
+        return E_POINTER;
+    *count = qcap_backend_still_count(filter->device);
+    *size = sizeof(VIDEO_STREAM_CONFIG_CAPS);
+    return S_OK;
+}
+
+static HRESULT WINAPI still_config_GetStreamCaps(IAMStreamConfig *iface, int index, AM_MEDIA_TYPE **mt, BYTE *caps)
+{
+    struct vfw_capture *filter = impl_from_still_config(iface);
+    HRESULT hr;
+
+    if (index < 0 || index >= qcap_backend_still_count(filter->device))
+        return S_FALSE;
+    if (!(*mt = CoTaskMemAlloc(sizeof(**mt))))
+        return E_OUTOFMEMORY;
+    if ((hr = qcap_backend_still_media_type(filter->device, index, *mt, (VIDEO_STREAM_CONFIG_CAPS *)caps)) != S_OK)
+    {
+        CoTaskMemFree(*mt);
+        *mt = NULL;
+    }
+    return hr;
+}
+
+static const IAMStreamConfigVtbl still_config_vtbl =
+{
+    still_config_QueryInterface,
+    still_config_AddRef,
+    still_config_Release,
+    still_config_SetFormat,
+    still_config_GetFormat,
+    still_config_GetNumberOfCapabilities,
+    still_config_GetStreamCaps,
+};
+
+static const GUID bridge_pin_category = { 0x3ebc7959, 0x3310, 0x493b, { 0xaa, 0x81, 0xc7, 0xe1, 0x32, 0xd5, 0x6f, 0x71 } };
+#endif
 
 #ifndef __REACTOS__
 static BOOL WINAPI load_capture_funcs(INIT_ONCE *once, void *param, void **context)
@@ -930,12 +1483,32 @@ HRESULT vfw_capture_create(IUnknown *outer, IUnknown **out)
     object->IAMStreamConfig_iface.lpVtbl = &IAMStreamConfig_VTable;
     object->IAMVideoControl_iface.lpVtbl = &IAMVideoControl_VTable;
     object->IAMVideoProcAmp_iface.lpVtbl = &IAMVideoProcAmp_VTable;
+#ifdef __REACTOS__
+    object->IAMCameraControl_iface.lpVtbl = &IAMCameraControl_VTable;
+#endif
     object->IAMFilterMiscFlags_iface.lpVtbl = &IAMFilterMiscFlags_VTable;
     object->IPersistPropertyBag_iface.lpVtbl = &IPersistPropertyBag_VTable;
 
+#ifdef __REACTOS__
+    strmbase_source_init(&object->source, &object->filter, L"Capture", &source_ops);
+#else
     strmbase_source_init(&object->source, &object->filter, L"Output", &source_ops);
+#endif
 
     object->IKsPropertySet_iface.lpVtbl = &IKsPropertySet_VTable;
+
+#ifdef __REACTOS__
+    strmbase_sink_init(&object->bridge, &object->filter, L"Video Camera Terminal", &bridge_ops, NULL);
+    strmbase_source_init(&object->still, &object->filter, L"Still", &still_ops);
+    object->StillStreamConfig_iface.lpVtbl = &still_config_vtbl;
+    object->bridge_properties.IKsPropertySet_iface.lpVtbl = &pin_properties_vtbl;
+    object->bridge_properties.pin = &object->bridge.pin;
+    object->bridge_properties.category = &bridge_pin_category;
+    object->still_properties.IKsPropertySet_iface.lpVtbl = &pin_properties_vtbl;
+    object->still_properties.pin = &object->still.pin;
+    object->still_properties.category = &PIN_CATEGORY_STILL;
+    object->still_stop = CreateEventW(NULL, TRUE, FALSE, NULL);
+#endif
 
     object->state = State_Stopped;
     InitializeConditionVariable(&object->state_cv);
@@ -946,3 +1519,15 @@ HRESULT vfw_capture_create(IUnknown *outer, IUnknown **out)
     *out = &object->filter.IUnknown_inner;
     return S_OK;
 }
+
+#ifdef __REACTOS__
+HRESULT ks_proxy_create(IUnknown *outer, IUnknown **out)
+{
+    static const GUID clsid_proxy = {0x17cca71b, 0xecd7, 0x11d0, {0xb9, 0x08, 0x00, 0xa0, 0xc9, 0x22, 0x31, 0x96}};
+    HRESULT hr = vfw_capture_create(outer, out);
+
+    if (SUCCEEDED(hr))
+        CONTAINING_RECORD(*out, struct strmbase_filter, IUnknown_inner)->clsid = clsid_proxy;
+    return hr;
+}
+#endif
