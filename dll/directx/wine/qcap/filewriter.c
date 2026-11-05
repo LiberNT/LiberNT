@@ -28,6 +28,7 @@ struct file_writer
     IAMFilterMiscFlags IAMFilterMiscFlags_iface;
     IFileSinkFilter IFileSinkFilter_iface;
     IStream IStream_iface;
+    IQualityControl IQualityControl_iface;
 
     struct strmbase_sink sink;
 
@@ -51,6 +52,8 @@ static HRESULT file_writer_sink_query_interface(struct strmbase_pin *iface, REFI
         *out = &filter->sink.IMemInputPin_iface;
     else if (IsEqualGUID(iid, &IID_IStream))
         *out = &filter->IStream_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -530,6 +533,60 @@ static const IStreamVtbl stream_vtbl =
     stream_Clone,
 };
 
+static inline struct file_writer *impl_from_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct file_writer, IQualityControl_iface);
+}
+
+static HRESULT WINAPI quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct file_writer *filter = impl_from_IQualityControl(iface);
+    return IPin_QueryInterface(&filter->sink.pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI quality_control_AddRef(IQualityControl *iface)
+{
+    struct file_writer *filter = impl_from_IQualityControl(iface);
+    return IPin_AddRef(&filter->sink.pin.IPin_iface);
+}
+
+static ULONG WINAPI quality_control_Release(IQualityControl *iface)
+{
+    struct file_writer *filter = impl_from_IQualityControl(iface);
+    return IPin_Release(&filter->sink.pin.IPin_iface);
+}
+
+static HRESULT WINAPI quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct file_writer *filter = impl_from_IQualityControl(iface);
+
+    TRACE("filter %p, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            filter, sender, q.Type, q.Proportion,
+            wine_dbgstr_longlong(q.Late), wine_dbgstr_longlong(q.TimeStamp));
+
+    if (!sender)
+        return E_POINTER;
+    return S_OK;
+}
+
+static HRESULT WINAPI quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct file_writer *filter = impl_from_IQualityControl(iface);
+
+    TRACE("filter %p, sink %p.\n", filter, sink);
+
+    return S_OK;
+}
+
+static const IQualityControlVtbl quality_control_vtbl =
+{
+    quality_control_QueryInterface,
+    quality_control_AddRef,
+    quality_control_Release,
+    quality_control_Notify,
+    quality_control_SetSink,
+};
+
 HRESULT file_writer_create(IUnknown *outer, IUnknown **out)
 {
     struct file_writer *object;
@@ -541,6 +598,7 @@ HRESULT file_writer_create(IUnknown *outer, IUnknown **out)
     object->IFileSinkFilter_iface.lpVtbl = &filesinkfilter_vtbl;
     object->IAMFilterMiscFlags_iface.lpVtbl = &misc_flags_vtbl;
     object->IStream_iface.lpVtbl = &stream_vtbl;
+    object->IQualityControl_iface.lpVtbl = &quality_control_vtbl;
 
     strmbase_sink_init(&object->sink, &object->filter, L"in", &sink_ops, NULL);
 
