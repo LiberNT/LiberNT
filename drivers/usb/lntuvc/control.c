@@ -320,7 +320,7 @@ UvcControlGet(
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     const UVC_CONTROL_MAP *Map;
-    PUVC_CONTROL_DATA Reply = UvcControlData(Request, Data);
+    PUVC_CONTROL_DATA Reply;
     ULONG Size = UvcControlSize(Request);
     PUVC_DEVICE Device;
     PUVC_ENTITY Entity;
@@ -344,6 +344,7 @@ UvcControlGet(
         return Status;
 
     RtlZeroMemory(Data, Size);
+    Reply = UvcControlData(Request, Data);
     Reply->Value = UvcToProperty(Map, UvcFromBytes(Raw, Map));
     if (Map->SignedRead && Raw[Map->Direction] == UVC_RELATIVE_BACKWARD)
         Reply->Value = -Reply->Value;
@@ -400,7 +401,7 @@ UvcControlSet(
     PVOID Data)
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
-    PUVC_CONTROL_DATA Input = UvcControlData(Request, Data);
+    PUVC_CONTROL_DATA Input;
     const UVC_CONTROL_MAP *Map;
     PUVC_DEVICE Device;
     PUVC_ENTITY Entity;
@@ -414,6 +415,8 @@ UvcControlSet(
 
     if (Stack->Parameters.DeviceIoControl.OutputBufferLength < UvcControlSize(Request) || !Data)
         return STATUS_BUFFER_TOO_SMALL;
+
+    Input = UvcControlData(Request, Data);
 
     Status = UvcSetAuto(Device, Entity, Map, (Input->Flags & KSPROPERTY_VIDEOPROCAMP_FLAGS_AUTO) != 0);
     if (!NT_SUCCESS(Status))
