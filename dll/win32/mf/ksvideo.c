@@ -30,6 +30,7 @@ static const GUID ks_interface_standard = {STATIC_KSINTERFACESETID_Standard};
 static const GUID ks_medium_standard = {STATIC_KSMEDIUMSETID_Standard};
 static const GUID ks_propset_procamp = {0xc6e13360, 0x30ac, 0x11d0, {0xa1, 0x8c, 0x00, 0xa0, 0xc9, 0x11, 0x89, 0x56}};
 static const GUID ks_propset_camera = {0xc6e13370, 0x30ac, 0x11d0, {0xa1, 0x8c, 0x00, 0xa0, 0xc9, 0x11, 0x89, 0x56}};
+static const GUID ks_propset_videocontrol = {0x6a2e0670, 0x28e4, 0x11d0, {0xa1, 0x8c, 0x00, 0xa0, 0xc9, 0x11, 0x89, 0x56}};
 static const GUID ks_pin_capture = {0xfb6c4281, 0x0353, 0x11d1, {0x90, 0x5f, 0x00, 0x00, 0xc0, 0xcc, 0x16, 0xba}};
 static const GUID ks_pin_still = {0xfb6c428a, 0x0353, 0x11d1, {0x90, 0x5f, 0x00, 0x00, 0xc0, 0xcc, 0x16, 0xba}};
 static const GUID ks_stream_category = {0x2939e7b8, 0xa62e, 0x4579, {0xb6, 0x74, 0xd4, 0x07, 0x3d, 0xfa, 0xbb, 0xba}};
@@ -543,7 +544,7 @@ static void ks_deliver_sample(struct ks_pump *pump, IMFMediaBuffer *buffer)
     {
         IMFSample_AddBuffer(sample, buffer);
         IMFSample_SetSampleTime(sample, MFGetSystemTime());
-        IMFSample_SetSampleDuration(sample, interval);
+        IMFSample_SetSampleDuration(sample, pump->format->still ? 0 : interval);
         IMFSample_SetUINT32(sample, &MFSampleExtension_CleanPoint, 1);
         if (token->token)
             IMFSample_SetUnknown(sample, &MFSampleExtension_Token, token->token);
@@ -1313,7 +1314,41 @@ static HRESULT ks_control_call(struct ks_control *iface, DWORD code, void *in, U
 
 static HRESULT STDMETHODCALLTYPE ks_control_KsProperty(struct ks_control *iface, KSPROPERTY *property, ULONG property_size, void *data, ULONG data_size, ULONG *returned)
 {
-    return ks_control_call(iface, IOCTL_KS_PROPERTY, property, property_size, data, data_size, returned);
+    struct ks_source *source = impl_from_ks_control(iface);
+    KSPROPERTY_VIDEOCONTROL_MODE_S *request, *value = NULL;
+    ULONG stream, pin;
+    HRESULT hr;
+
+    if (!property || property_size < sizeof(KSPROPERTY_VIDEOCONTROL_MODE_S) ||
+            !IsEqualGUID(&property->Set, &ks_propset_videocontrol))
+        return ks_control_call(iface, IOCTL_KS_PROPERTY, property, property_size, data, data_size, returned);
+
+    stream = ((KSPROPERTY_VIDEOCONTROL_MODE_S *)property)->StreamIndex;
+    if (stream == 0)
+        pin = 0;
+    else if (stream == 1 && source->still)
+        pin = source->still->pin_id;
+    else
+        return E_INVALIDARG;
+
+    if (!(request = malloc(property_size)))
+        return E_OUTOFMEMORY;
+    memcpy(request, property, property_size);
+    request->StreamIndex = pin;
+    if ((property->Flags & KSPROPERTY_TYPE_SET) && data && data_size >= sizeof(*value))
+    {
+        if (!(value = malloc(data_size)))
+        {
+            free(request);
+            return E_OUTOFMEMORY;
+        }
+        memcpy(value, data, data_size);
+        value->StreamIndex = pin;
+    }
+    hr = ks_control_call(iface, IOCTL_KS_PROPERTY, request, property_size, value ? value : data, data_size, returned);
+    free(value);
+    free(request);
+    return hr;
 }
 
 static HRESULT STDMETHODCALLTYPE ks_control_KsMethod(struct ks_control *iface, KSMETHOD *method, ULONG method_size, void *data, ULONG data_size, ULONG *returned)
