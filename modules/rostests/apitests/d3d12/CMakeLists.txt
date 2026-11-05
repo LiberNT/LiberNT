@@ -26,6 +26,7 @@ list(APPEND SOURCE
     shaders.cpp
     stablepower.cpp
     swapchain.cpp
+    swapformat.cpp
     swizzle.cpp
     topology.cpp
     uav.cpp

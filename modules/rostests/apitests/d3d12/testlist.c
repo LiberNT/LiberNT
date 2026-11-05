@@ -33,6 +33,7 @@ extern void func_sampler(void);
 extern void func_sharedfence(void);
 extern void func_stablepower(void);
 extern void func_swapchain(void);
+extern void func_swapformat(void);
 extern void func_swizzle(void);
 extern void func_topology(void);
 extern void func_uav(void);
@@ -68,6 +69,7 @@ const struct test winetest_testlist[] =
     { "sharedfence", func_sharedfence },
     { "stablepower", func_stablepower },
     { "swapchain", func_swapchain },
+    { "swapformat", func_swapformat },
     { "swizzle", func_swizzle },
     { "topology", func_topology },
     { "uav", func_uav },

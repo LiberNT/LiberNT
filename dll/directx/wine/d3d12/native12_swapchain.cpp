@@ -11,6 +11,7 @@
 #include "native12_objects.h"
 #include <d3d11.h>
 #include <dwmframe.h>
+#include <math.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d12);
 
@@ -611,6 +612,91 @@ static bool Native12PublishableFormat(DXGI_FORMAT format)
     return format == DXGI_FORMAT_B8G8R8A8_UNORM || format == DXGI_FORMAT_R8G8B8A8_UNORM;
 }
 
+static bool Native12FlipFormat(DXGI_FORMAT format)
+{
+    return Native12PublishableFormat(format) || format == DXGI_FORMAT_R10G10B10A2_UNORM
+            || format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+}
+
+static UINT32 Native12Unorm8(UINT32 value, UINT32 max)
+{
+    return (value * 255 + max / 2) / max;
+}
+
+static float Native12HalfToFloat(USHORT half)
+{
+    UINT32 sign = static_cast<UINT32>(half & 0x8000) << 16, exponent = (half >> 10) & 0x1f, mantissa = half & 0x3ff;
+    UINT32 bits;
+    if (exponent == 0x1f) bits = sign | 0x7f800000 | (mantissa << 13);
+    else if (exponent) bits = sign | ((exponent + 112) << 23) | (mantissa << 13);
+    else if (!mantissa) bits = sign;
+    else
+    {
+        exponent = 113;
+        while (!(mantissa & 0x400))
+        {
+            mantissa <<= 1;
+            --exponent;
+        }
+        bits = sign | (exponent << 23) | ((mantissa & 0x3ff) << 13);
+    }
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static INIT_ONCE native12_srgb_once = INIT_ONCE_STATIC_INIT;
+static BYTE native12_srgb_table[4096];
+
+static BOOL CALLBACK Native12InitSrgbTable(INIT_ONCE *, void *, void **)
+{
+    for (UINT i = 0; i < ARRAYSIZE(native12_srgb_table); ++i)
+    {
+        double linear = i / 4095.0;
+        double encoded = linear <= 0.0031308 ? linear * 12.92 : 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+        native12_srgb_table[i] = static_cast<BYTE>(encoded * 255.0 + 0.5);
+    }
+    return TRUE;
+}
+
+static UINT32 Native12LinearToSrgb8(float value)
+{
+    if (!(value > 0.0f)) return 0;
+    if (value >= 1.0f) return 255;
+    return native12_srgb_table[static_cast<UINT>(value * 4095.0f + 0.5f)];
+}
+
+static UINT32 Native12FloatToUnorm8(float value)
+{
+    if (!(value > 0.0f)) return 0;
+    if (value >= 1.0f) return 255;
+    return static_cast<UINT32>(value * 255.0f + 0.5f);
+}
+
+/* TODO: color spaces other than the format default (SetColorSpace1) are not converted */
+static UINT32 Native12ToBgra8(DXGI_FORMAT format, const BYTE *texel)
+{
+    UINT32 pixel;
+    memcpy(&pixel, texel, sizeof(pixel));
+    switch (format)
+    {
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+            return (pixel & 0xff00ff00) | ((pixel >> 16) & 0xff) | ((pixel & 0xff) << 16);
+        case DXGI_FORMAT_R10G10B10A2_UNORM:
+            return Native12Unorm8((pixel >> 20) & 0x3ff, 0x3ff) | Native12Unorm8((pixel >> 10) & 0x3ff, 0x3ff) << 8
+                    | Native12Unorm8(pixel & 0x3ff, 0x3ff) << 16 | Native12Unorm8(pixel >> 30, 3) << 24;
+        case DXGI_FORMAT_R16G16B16A16_FLOAT:
+        {
+            USHORT channels[4];
+            memcpy(channels, texel, sizeof(channels));
+            return Native12LinearToSrgb8(Native12HalfToFloat(channels[2])) | Native12LinearToSrgb8(Native12HalfToFloat(channels[1])) << 8
+                    | Native12LinearToSrgb8(Native12HalfToFloat(channels[0])) << 16 | Native12FloatToUnorm8(Native12HalfToFloat(channels[3])) << 24;
+        }
+        default:
+            return pixel;
+    }
+}
+
 void Native12SwapChain::ReleaseBuffers()
 {
     for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS; ++i)
@@ -981,7 +1067,9 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect, ID3D12Resource *readback, UI
         const BYTE *source = static_cast<const BYTE *>(mapped) + readback_layout.Offset;
         BYTE *target = static_cast<BYTE *>(lock_args.pData);
         UINT width = readback_layout.Footprint.Width, height = readback_layout.Footprint.Height;
-        bool swap = readback_layout.Footprint.Format == DXGI_FORMAT_R8G8B8A8_UNORM;
+        DXGI_FORMAT format = readback_layout.Footprint.Format;
+        UINT texel_size = format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
+        if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) InitOnceExecuteOnce(&native12_srgb_once, Native12InitSrgbTable, NULL, NULL);
         /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
         if (width_limit && height_limit && (width_limit < width || height_limit < height))
         {
@@ -990,14 +1078,10 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect, ID3D12Resource *readback, UI
         }
         for (UINT y = 0; y < foreign_height; ++y)
         {
-            const UINT32 *row = reinterpret_cast<const UINT32 *>(source
-                    + static_cast<UINT64>(y) * height / foreign_height * readback_layout.Footprint.RowPitch);
+            const BYTE *row = source + static_cast<UINT64>(y) * height / foreign_height * readback_layout.Footprint.RowPitch;
             UINT32 *out = reinterpret_cast<UINT32 *>(target + static_cast<SIZE_T>(y) * foreign_pitch);
             for (UINT x = 0; x < foreign_width; ++x)
-            {
-                UINT32 pixel = row[static_cast<UINT64>(x) * width / foreign_width];
-                out[x] = swap ? (pixel & 0xff00ff00) | ((pixel >> 16) & 0xff) | ((pixel & 0xff) << 16) : pixel;
-            }
+                out[x] = Native12ToBgra8(format, row + static_cast<UINT64>(x) * width / foreign_width * texel_size);
         }
         D3D12_RANGE written = {0, 0};
         readback->Unmap(0, &written);
@@ -1025,8 +1109,7 @@ HRESULT Native12SwapChain::PublishForeign(UINT slot)
         update_surface = reinterpret_cast<UpdateSurface>(GetProcAddress(dwmapi, reinterpret_cast<LPCSTR>(static_cast<ULONG_PTR>(101))));
         if (!get_surface || !update_surface) return DXGI_ERROR_UNSUPPORTED;
     }
-    if (desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM && desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
-        return DXGI_ERROR_UNSUPPORTED;
+    if (!Native12FlipFormat(desc.Format)) return DXGI_ERROR_UNSUPPORTED;
     if (IsIconic(window)) return S_OK;
     DXGI_ADAPTER_DESC adapter_desc;
     HRESULT hr = device->adapter->GetDesc(&adapter_desc);
@@ -1081,12 +1164,7 @@ HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requeste
     if (requested.SampleDesc.Count != 1 || requested.Stereo) return DXGI_ERROR_INVALID_CALL;
     if (requested.SwapEffect != DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL && requested.SwapEffect != DXGI_SWAP_EFFECT_FLIP_DISCARD)
         return DXGI_ERROR_INVALID_CALL;
-    if (!Native12PublishableFormat(requested.Format))
-    {
-        /* TODO: R10G10B10A2_UNORM and R16G16B16A16_FLOAT flip chains need composition of those formats */
-        return requested.Format == DXGI_FORMAT_R10G10B10A2_UNORM || requested.Format == DXGI_FORMAT_R16G16B16A16_FLOAT
-                ? DXGI_ERROR_UNSUPPORTED : DXGI_ERROR_INVALID_CALL;
-    }
+    if (!Native12FlipFormat(requested.Format)) return DXGI_ERROR_INVALID_CALL;
     if (!device->register_resource || !device->get_resource_handles || !device->enqueue_set_event)
         return DXGI_ERROR_UNSUPPORTED;
 
@@ -1401,7 +1479,7 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         record.buffer = current;
         record.source_width = source_width;
         record.source_height = source_height;
-        record.foreign = ForeignAdapter();
+        record.foreign = ForeignAdapter() || !Native12PublishableFormat(desc.Format);
         hr = record.foreign ? RecordReadBack(slot, current) : PrepareExchange(slot, current);
         if (SUCCEEDED(hr)) QueueRecord(slot);
         else FreeRecord(slot);
