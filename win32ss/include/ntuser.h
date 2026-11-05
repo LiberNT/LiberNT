@@ -3929,6 +3929,25 @@ NtUserSetScrollBarInfo(
 ULONG
 RtlGetExpWinVer(_In_ PVOID BaseAddress);
 
+/* Images older than Windows Vista see the padded border folded into the sizing frame. */
+FORCEINLINE
+INT
+UserGetImageMetric(_In_ const INT *Metrics, _In_ ULONG Index, _In_ BOOL LegacyImage)
+{
+    if (LegacyImage)
+    {
+        switch (Index)
+        {
+            case SM_CXFRAME:
+            case SM_CYFRAME:
+                return Metrics[Index] + Metrics[SM_CXPADDEDBORDER];
+            case SM_CXPADDEDBORDER:
+                return 0;
+        }
+    }
+    return Metrics[Index];
+}
+
 #endif /* __WIN32K_NTUSER_H */
 
 /* EOF */

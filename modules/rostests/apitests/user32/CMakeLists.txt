@@ -10,6 +10,7 @@ list(APPEND SOURCE
     CloseWindow.c
     ClipboardAccess.c
     ClipboardData.c
+    FrameMetrics.c
     ComboBox.c
     CopyImage.c
     CopyImage_Icon.c

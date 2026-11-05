@@ -243,7 +243,10 @@ UserGetSystemMetrics(ULONG Index)
     /* Get metrics from array */
     if (Index < SM_CMETRICS)
     {
-        return gpsi->aiSysMet[Index];
+        PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
+
+        /* FIXME: a thread asking about a window of another process gets the frame metrics of its own image */
+        return UserGetImageMetric(gpsi->aiSysMet, Index, pti && LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA);
     }
 
     /* Handle special values */

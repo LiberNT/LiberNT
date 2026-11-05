@@ -134,7 +134,7 @@ RealGetSystemMetrics(int nIndex)
   return (int)NtUserCallOneParam(nIndex, ONEPARAM_ROUTINE_ROS_GETSYSTEMMETRICS);
 #else
   if (!gpsi) return 0;
-  return gpsi->aiSysMet[nIndex];
+  return UserGetImageMetric(gpsi->aiSysMet, nIndex, NtCurrentPeb()->ImageSubsystemMajorVersion < 6);
 #endif
 }
 

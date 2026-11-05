@@ -37,6 +37,7 @@ extern void func_EnumDisplaySettings(void);
 extern void func_ForegroundRetake(void);
 extern void func_ForegroundRight(void);
 extern void func_ForegroundStartup(void);
+extern void func_FrameMetrics(void);
 extern void func_GetClassInfo(void);
 extern void func_GetDCEx(void);
 extern void func_GetProp(void);
@@ -161,6 +162,7 @@ const struct test winetest_testlist[] =
     { "ForegroundRetake", func_ForegroundRetake },
     { "ForegroundRight", func_ForegroundRight },
     { "ForegroundStartup", func_ForegroundStartup },
+    { "FrameMetrics", func_FrameMetrics },
     { "GetClassInfo", func_GetClassInfo },
     { "GetDCEx", func_GetDCEx },
     { "GetProp", func_GetProp },
