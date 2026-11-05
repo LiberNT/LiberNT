@@ -116,8 +116,9 @@ ULONG
 UvcColorFlags(
     PUVC_FORMAT Format)
 {
-    UCHAR Chroma = Format->FixedSize ? 6 : 1;
-    UCHAR Nominal = Format->FixedSize ? 2 : 1;
+    BOOLEAN Jpeg = Format->Subtype == UVC_VS_FORMAT_MJPEG;
+    UCHAR Chroma = Jpeg ? 1 : 6;
+    UCHAR Nominal = Jpeg ? 1 : 2;
     UCHAR Matrix = 2;
     UCHAR Primaries = 2;
 

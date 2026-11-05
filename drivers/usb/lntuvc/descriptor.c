@@ -211,7 +211,7 @@ UvcParseFormat(
             if (P[0] < 28)
                 return STATUS_DEVICE_DATA_ERROR;
             RtlCopyMemory(&Format->SubFormat, P + 5, sizeof(GUID));
-            /* FIXME: range values for frame-based formats are not yet checked against Windows 11 */
+            /* FIXME: the 24-bit fallback for bBitsPerPixel 0 is not checked against Windows 11 */
             Format->BitCount = P[21] ? P[21] : 24;
             Format->Compression = Format->SubFormat.Data1;
             Format->FixedSize = FALSE;

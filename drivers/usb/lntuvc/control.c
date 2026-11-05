@@ -582,11 +582,11 @@ UvcControlSupport(
         return STATUS_SUCCESS;
     }
 
-    if (Output < sizeof(KSPROPERTY_DESCRIPTION))
-        return STATUS_BUFFER_TOO_SMALL;
-
     Size = sizeof(KSPROPERTY_DESCRIPTION) + sizeof(KSPROPERTY_MEMBERSHEADER) +
            (Defaults ? sizeof(LONG) : sizeof(KSPROPERTY_STEPPING_LONG));
+
+    if (Output < Size && Output != sizeof(KSPROPERTY_DESCRIPTION))
+        return STATUS_BUFFER_TOO_SMALL;
 
     Description->AccessFlags = KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET;
     Description->DescriptionSize = Size;
@@ -1142,19 +1142,168 @@ UvcBuildVideoControlSet(
     return STATUS_SUCCESS;
 }
 
+static
+VOID
+UvcFillDroppedFrames(
+    PIRP Irp,
+    PUVC_PIN Context,
+    PKSPROPERTY_DROPPEDFRAMES_CURRENT_S Reply)
+{
+    Reply->PictureNumber = 0;
+    Reply->DropCount = 0;
+    Reply->AverageFrameSize = Context->ImageSize;
+    Irp->IoStatus.Information = sizeof(*Reply);
+}
+
+static
+NTSTATUS
+NTAPI
+UvcPinDroppedFramesGet(
+    PIRP Irp,
+    PKSIDENTIFIER Request,
+    PVOID Data)
+{
+    PKSPIN Pin = KsGetPinFromIrp(Irp);
+
+    UNREFERENCED_PARAMETER(Request);
+
+    if (!Pin || !Pin->Context)
+        return STATUS_INVALID_PARAMETER;
+
+    UvcFillDroppedFrames(Irp, Pin->Context, Data);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+UvcFilterDroppedFramesGet(
+    PIRP Irp,
+    PKSIDENTIFIER Request,
+    PVOID Data)
+{
+    PKSFILTER Filter = KsGetFilterFromIrp(Irp);
+    NTSTATUS Status = STATUS_INVALID_PARAMETER;
+    PKSPIN Pin;
+
+    UNREFERENCED_PARAMETER(Request);
+
+    KsFilterAcquireControl(Filter);
+    Pin = KsFilterGetFirstChildPin(Filter, UVC_PIN_CAPTURE);
+    if (Pin && Pin->Context)
+    {
+        UvcFillDroppedFrames(Irp, Pin->Context, Data);
+        Status = STATUS_SUCCESS;
+    }
+    KsFilterReleaseControl(Filter);
+    return Status;
+}
+
+static
+NTSTATUS
+NTAPI
+UvcHeaderSizeGet(
+    PIRP Irp,
+    PKSIDENTIFIER Request,
+    PVOID Data)
+{
+    UNREFERENCED_PARAMETER(Request);
+
+    *(PULONG)Data = sizeof(KS_FRAME_INFO);
+    Irp->IoStatus.Information = sizeof(ULONG);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+UvcSecureModeRequest(
+    PIRP Irp,
+    PKSIDENTIFIER Request,
+    PVOID Data)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG Output = Stack->Parameters.DeviceIoControl.OutputBufferLength;
+    ULONG Size = sizeof(KSCAMERA_EXTENDEDPROP_HEADER) + sizeof(KSCAMERA_EXTENDEDPROP_VALUE);
+
+    UNREFERENCED_PARAMETER(Data);
+
+    if (!Output && (Request->Flags & KSPROPERTY_TYPE_GET))
+    {
+        Irp->IoStatus.Information = Size;
+        return STATUS_BUFFER_OVERFLOW;
+    }
+    if (Output < Size)
+        return STATUS_BUFFER_TOO_SMALL;
+
+    /* TODO: secure mode needs a camera that exposes the Microsoft UVC secure-mode extension control */
+    return STATUS_INVALID_PARAMETER;
+}
+
+static
+NTSTATUS
+UvcBuildDroppedFramesSet(
+    PUVC_DEVICE Device,
+    PFNKSHANDLER Handler,
+    PKSPROPERTY_SET Output)
+{
+    PKSPROPERTY_ITEM Item = UvcAllocate(Device, sizeof(*Item));
+
+    if (!Item)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    UvcFillItem(Item, KSPROPERTY_DROPPEDFRAMES_CURRENT, Handler, NULL, NULL);
+    Item->MinProperty = sizeof(KSPROPERTY);
+    Item->MinData = sizeof(KSPROPERTY_DROPPEDFRAMES_CURRENT_S);
+    Output->Set = &UVC_PROPSETID_VIDCAP_DROPPEDFRAMES;
+    Output->PropertiesCount = 1;
+    Output->PropertyItem = Item;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+UvcBuildSecureModeSet(
+    PUVC_DEVICE Device,
+    PKSPROPERTY_SET Output)
+{
+    PKSPROPERTY_ITEM Item = UvcAllocate(Device, sizeof(*Item));
+
+    if (!Item)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    UvcFillItem(Item, KSPROPERTY_CAMERACONTROL_EXTENDED_SECURE_MODE, UvcSecureModeRequest, UvcSecureModeRequest, NULL);
+    Output->Set = &UVC_KSPROPERTYSETID_ExtendedCameraControl;
+    Output->PropertiesCount = 1;
+    Output->PropertyItem = Item;
+    return STATUS_SUCCESS;
+}
+
 const KSAUTOMATION_TABLE *
 UvcPinAutomationTable(
     PUVC_DEVICE Device)
 {
     PKSAUTOMATION_TABLE Table = UvcAllocate(Device, sizeof(*Table));
-    PKSPROPERTY_SET Set = UvcAllocate(Device, sizeof(*Set));
+    PKSPROPERTY_SET Sets = UvcAllocate(Device, 3 * sizeof(*Sets));
+    PKSPROPERTY_ITEM HeaderSize = UvcAllocate(Device, sizeof(*HeaderSize));
 
-    if (!Table || !Set || !NT_SUCCESS(UvcBuildVideoControlSet(Device, Set)))
+    if (!Table || !Sets || !HeaderSize ||
+        !NT_SUCCESS(UvcBuildVideoControlSet(Device, &Sets[0])) ||
+        !NT_SUCCESS(UvcBuildDroppedFramesSet(Device, UvcPinDroppedFramesGet, &Sets[1])))
+    {
         return NULL;
+    }
 
-    Table->PropertySetsCount = 1;
+    UvcFillItem(HeaderSize, KSPROPERTY_STREAMINTERFACE_HEADERSIZE, UvcHeaderSizeGet, NULL, NULL);
+    HeaderSize->MinProperty = sizeof(KSPROPERTY);
+    HeaderSize->MinData = sizeof(ULONG);
+    Sets[2].Set = &UVC_KSPROPSETID_StreamInterface;
+    Sets[2].PropertiesCount = 1;
+    Sets[2].PropertyItem = HeaderSize;
+
+    Table->PropertySetsCount = 3;
     Table->PropertyItemSize = sizeof(KSPROPERTY_ITEM);
-    Table->PropertySets = Set;
+    Table->PropertySets = Sets;
     return Table;
 }
 
@@ -1164,19 +1313,21 @@ UvcBuildControlTables(
     PKSFILTER_DESCRIPTOR Descriptor,
     PKSNODE_DESCRIPTOR Nodes)
 {
+    static const ULONG StiEvents[] = { KSEVENT_VIDCAPTOSTI_EXT_TRIGGER, KSEVENT_VIDCAP_AUTO_UPDATE, KSEVENT_VIDCAP_SEARCH };
+    static const ULONG DeviceEvents[] = { KSEVENT_DEVICE_LOST, KSEVENT_DEVICE_PREEMPTED, KSEVENT_DEVICE_THERMAL_HIGH, KSEVENT_DEVICE_THERMAL_LOW };
     PKSAUTOMATION_TABLE Table;
     PKSPROPERTY_SET Sets;
     PKSEVENT_SET Events;
-    PKSEVENT_ITEM EventItem;
+    PKSEVENT_ITEM EventItems;
     BOOLEAN Added;
     ULONG Used = 0, Index;
     NTSTATUS Status;
 
     Table = UvcAllocate(Device, sizeof(*Table));
-    Sets = UvcAllocate(Device, 3 * sizeof(*Sets));
-    Events = UvcAllocate(Device, sizeof(*Events));
-    EventItem = UvcAllocate(Device, sizeof(*EventItem));
-    if (!Table || !Sets || !Events || !EventItem)
+    Sets = UvcAllocate(Device, 5 * sizeof(*Sets));
+    Events = UvcAllocate(Device, 2 * sizeof(*Events));
+    EventItems = UvcAllocate(Device, (RTL_NUMBER_OF(StiEvents) + RTL_NUMBER_OF(DeviceEvents)) * sizeof(*EventItems));
+    if (!Table || !Sets || !Events || !EventItems)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     Status = UvcBuildSet(Device,
@@ -1212,16 +1363,32 @@ UvcBuildControlTables(
         return Status;
     Used++;
 
-    EventItem->EventId = KSEVENT_VIDCAPTOSTI_EXT_TRIGGER;
-    EventItem->DataInput = sizeof(KSEVENTDATA);
-    Events->Set = &UVC_KSEVENTSETID_VIDCAPTOSTI;
-    Events->EventsCount = 1;
-    Events->EventItem = EventItem;
+    Status = UvcBuildDroppedFramesSet(Device, UvcFilterDroppedFramesGet, &Sets[Used]);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Used++;
+
+    Status = UvcBuildSecureModeSet(Device, &Sets[Used]);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Used++;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(StiEvents) + RTL_NUMBER_OF(DeviceEvents); Index++)
+    {
+        EventItems[Index].EventId = Index < RTL_NUMBER_OF(StiEvents) ? StiEvents[Index] : DeviceEvents[Index - RTL_NUMBER_OF(StiEvents)];
+        EventItems[Index].DataInput = sizeof(KSEVENTDATA);
+    }
+    Events[0].Set = &UVC_KSEVENTSETID_VIDCAPTOSTI;
+    Events[0].EventsCount = RTL_NUMBER_OF(StiEvents);
+    Events[0].EventItem = EventItems;
+    Events[1].Set = &UVC_KSEVENTSETID_Device;
+    Events[1].EventsCount = RTL_NUMBER_OF(DeviceEvents);
+    Events[1].EventItem = EventItems + RTL_NUMBER_OF(StiEvents);
 
     Table->PropertySetsCount = Used;
     Table->PropertyItemSize = sizeof(KSPROPERTY_ITEM);
     Table->PropertySets = Sets;
-    Table->EventSetsCount = 1;
+    Table->EventSetsCount = 2;
     Table->EventItemSize = sizeof(KSEVENT_ITEM);
     Table->EventSets = Events;
     Descriptor->AutomationTable = Table;

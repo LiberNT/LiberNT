@@ -461,6 +461,23 @@ UvcPnpStart(
 
 static
 VOID
+UvcSignalDeviceLost(
+    PKSDEVICE KsDevice)
+{
+    PKSFILTERFACTORY Factory;
+    PKSFILTER Filter;
+
+    KsAcquireDevice(KsDevice);
+    for (Factory = KsGetFirstChild(KsDevice); Factory; Factory = KsGetNextSibling(Factory))
+    {
+        for (Filter = KsGetFirstChild(Factory); Filter; Filter = KsGetNextSibling(Filter))
+            KsGenerateEvents(Filter, &UVC_KSEVENTSETID_Device, KSEVENT_DEVICE_LOST, 0, NULL, NULL, NULL);
+    }
+    KsReleaseDevice(KsDevice);
+}
+
+static
+VOID
 NTAPI
 UvcPnpGone(
     PKSDEVICE KsDevice,
@@ -475,6 +492,7 @@ UvcPnpGone(
         InterlockedExchange(&Device->Gone, 1);
         UvcStatusStop(Device);
     }
+    UvcSignalDeviceLost(KsDevice);
 }
 
 static
