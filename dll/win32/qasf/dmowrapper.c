@@ -42,8 +42,10 @@ struct dmo_wrapper
 {
     struct strmbase_filter filter;
     IDMOWrapperFilter IDMOWrapperFilter_iface;
+    IPersistStream IPersistStream_iface;
 
     IUnknown *dmo;
+    CLSID clsid, category;
 
     DWORD sink_count, source_count;
     struct strmbase_sink *sinks;
@@ -771,6 +773,8 @@ static HRESULT WINAPI dmo_wrapper_filter_Init(IDMOWrapperFilter *iface, REFCLSID
     EnterCriticalSection(&filter->filter.filter_cs);
 
     filter->dmo = unk;
+    filter->clsid = *clsid;
+    filter->category = *category;
     filter->sink_count = input_count;
     filter->source_count = output_count;
     filter->sinks = sinks;
@@ -791,6 +795,100 @@ static const IDMOWrapperFilterVtbl dmo_wrapper_filter_vtbl =
     dmo_wrapper_filter_AddRef,
     dmo_wrapper_filter_Release,
     dmo_wrapper_filter_Init,
+};
+
+static inline struct dmo_wrapper *impl_from_IPersistStream(IPersistStream *iface)
+{
+    return CONTAINING_RECORD(iface, struct dmo_wrapper, IPersistStream_iface);
+}
+
+static HRESULT WINAPI dmo_wrapper_persist_QueryInterface(IPersistStream *iface, REFIID iid, void **out)
+{
+    struct dmo_wrapper *filter = impl_from_IPersistStream(iface);
+    return IUnknown_QueryInterface(filter->filter.outer_unk, iid, out);
+}
+
+static ULONG WINAPI dmo_wrapper_persist_AddRef(IPersistStream *iface)
+{
+    struct dmo_wrapper *filter = impl_from_IPersistStream(iface);
+    return IUnknown_AddRef(filter->filter.outer_unk);
+}
+
+static ULONG WINAPI dmo_wrapper_persist_Release(IPersistStream *iface)
+{
+    struct dmo_wrapper *filter = impl_from_IPersistStream(iface);
+    return IUnknown_Release(filter->filter.outer_unk);
+}
+
+static HRESULT WINAPI dmo_wrapper_persist_GetClassID(IPersistStream *iface, CLSID *clsid)
+{
+    TRACE("iface %p, clsid %p.\n", iface, clsid);
+
+    if (!clsid)
+        return E_POINTER;
+    *clsid = CLSID_DMOWrapperFilter;
+    return S_OK;
+}
+
+static HRESULT WINAPI dmo_wrapper_persist_IsDirty(IPersistStream *iface)
+{
+    TRACE("iface %p.\n", iface);
+
+    return S_OK;
+}
+
+static HRESULT WINAPI dmo_wrapper_persist_Load(IPersistStream *iface, IStream *stream)
+{
+    struct dmo_wrapper *filter = impl_from_IPersistStream(iface);
+    GUID ids[2] = {{0}};
+    HRESULT hr;
+
+    TRACE("filter %p, stream %p.\n", filter, stream);
+
+    if (FAILED(hr = IStream_Read(stream, ids, sizeof(ids), NULL)))
+        return hr;
+
+    if (filter->dmo)
+        return IsEqualGUID(&ids[0], &filter->clsid) && IsEqualGUID(&ids[1], &filter->category) ? S_OK : E_UNEXPECTED;
+
+    return IDMOWrapperFilter_Init(&filter->IDMOWrapperFilter_iface, &ids[0], &ids[1]);
+}
+
+static HRESULT WINAPI dmo_wrapper_persist_Save(IPersistStream *iface, IStream *stream, BOOL clear_dirty)
+{
+    struct dmo_wrapper *filter = impl_from_IPersistStream(iface);
+    GUID ids[2];
+
+    TRACE("filter %p, stream %p, clear_dirty %d.\n", filter, stream, clear_dirty);
+
+    EnterCriticalSection(&filter->filter.filter_cs);
+    ids[0] = filter->clsid;
+    ids[1] = filter->category;
+    LeaveCriticalSection(&filter->filter.filter_cs);
+
+    return IStream_Write(stream, ids, sizeof(ids), NULL);
+}
+
+static HRESULT WINAPI dmo_wrapper_persist_GetSizeMax(IPersistStream *iface, ULARGE_INTEGER *size)
+{
+    TRACE("iface %p, size %p.\n", iface, size);
+
+    if (!size)
+        return E_POINTER;
+    size->QuadPart = 2 * sizeof(GUID);
+    return S_OK;
+}
+
+static const IPersistStreamVtbl dmo_wrapper_persist_vtbl =
+{
+    dmo_wrapper_persist_QueryInterface,
+    dmo_wrapper_persist_AddRef,
+    dmo_wrapper_persist_Release,
+    dmo_wrapper_persist_GetClassID,
+    dmo_wrapper_persist_IsDirty,
+    dmo_wrapper_persist_Load,
+    dmo_wrapper_persist_Save,
+    dmo_wrapper_persist_GetSizeMax,
 };
 
 static struct strmbase_pin *dmo_wrapper_get_pin(struct strmbase_filter *iface, unsigned int index)
@@ -833,6 +931,13 @@ static HRESULT dmo_wrapper_query_interface(struct strmbase_filter *iface, REFIID
     if (IsEqualGUID(iid, &IID_IDMOWrapperFilter))
     {
         *out = &filter->IDMOWrapperFilter_iface;
+        IUnknown_AddRef((IUnknown *)*out);
+        return S_OK;
+    }
+
+    if (IsEqualGUID(iid, &IID_IPersistStream))
+    {
+        *out = &filter->IPersistStream_iface;
         IUnknown_AddRef((IUnknown *)*out);
         return S_OK;
     }
@@ -920,6 +1025,7 @@ HRESULT dmo_wrapper_create(IUnknown *outer, IUnknown **out)
     strmbase_filter_init(&object->filter, NULL, &CLSID_DMOWrapperFilter, &filter_ops);
 
     object->IDMOWrapperFilter_iface.lpVtbl = &dmo_wrapper_filter_vtbl;
+    object->IPersistStream_iface.lpVtbl = &dmo_wrapper_persist_vtbl;
 
     object->input_buffer.IMediaBuffer_iface.lpVtbl = &buffer_vtbl;
 
