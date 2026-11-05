@@ -937,6 +937,11 @@ DxgkpReleasePresentEntry(
             DxgkPresentLimitCoreRelease(&Entry->Device->PresentLimit);
         Entry->PresentLimitReservationOwned = FALSE;
     }
+    if (Entry->MmioFlipBinding != NULL)
+    {
+        (VOID)DxgkVidMmDestroyPresentBinding(Entry->Device, Entry->MmioFlipBinding);
+        Entry->MmioFlipBinding = NULL;
+    }
     if (Entry->DestinationOpenBindingReference != NULL)
         DxgkVidMmDereferenceLogicalAllocation(Entry->DestinationOpenBindingReference);
     if (Entry->SourceOpenBindingReference != NULL)
@@ -5391,15 +5396,118 @@ DxgkpDeliverMpoPostPresent(
 #endif
 }
 
+/* Runs on the presenting thread, like DXGCONTEXT::SubmitPresent: a miniport pairs Present with what that thread armed just before it. */
+static NTSTATUS
+DxgkpBuildMmioFlip(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ PDXGKRNL_PRESENT_ENTRY Entry)
+{
+    DXGKARG_PRESENT PresentArgs;
+    DXGK_ALLOCATIONLIST AllocationList[DXGK_PRESENT_MAX_INDEX + 1];
+    DXGK_PRESENTALLOCATIONINFO AllocationInfo[DXGK_PRESENT_MAX_INDEX + 1];
+    PDXGKVMM_ALLOCATION Allocation = Entry->SourceAllocation;
+    HANDLE OpenHandle = Entry->SourceOpenBindingHandle;
+    HANDLE PresentContext;
+    BOOLEAN ScanoutLease = FALSE;
+    BOOLEAN PinOwned = FALSE;
+    BOOLEAN KmdTransaction = FALSE;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    if (Allocation == NULL || Entry->hDestination != 0 ||
+        Allocation->MiniportHandle == NULL ||
+        Allocation->PrimaryVidPnSourceId != Entry->VidPnSourceId ||
+        DXGK_CB_FULL(Adapter, DxgkDdiPresent) == NULL)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    PresentContext = Entry->Context != NULL ? Entry->Context->hMiniportContext : Entry->Device->hMiniportDevice;
+    if (PresentContext == NULL || (Entry->Context == NULL && Adapter->SchedulingCaps.MultiEngineAware))
+        return STATUS_INVALID_HANDLE;
+
+    Status = DxgkVidPnAcquireScanoutLease(Adapter, Entry->Device, Entry->VidPnSourceId,
+                 Entry->Window, Entry->CompositorGeneration, &ScanoutLease);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    ASSERT(ScanoutLease);
+
+    if (Entry->SourceOpenBindingReference == NULL)
+    {
+        Status = DxgkVidMmCreatePresentBinding(Entry->Device, Allocation, TRUE, &OpenHandle, &Entry->MmioFlipBinding);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+    }
+    if (OpenHandle == NULL)
+    {
+        Status = STATUS_INVALID_HANDLE;
+        goto Cleanup;
+    }
+
+    Status = DxgkVidMmEnsureAllocationApertureMapped(Allocation);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+    RtlZeroMemory(AllocationList, sizeof(AllocationList));
+    Status = DxgkVidMmAcquireSubmissionResidencyPinEx(Allocation, Adapter, &AllocationList[DXGK_PRESENT_SOURCE_INDEX], TRUE);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+    PinOwned = TRUE;
+    AllocationList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = OpenHandle;
+
+    /* FlipOnVSyncMmIo explicitly requests Present(NULL DMA). A GPUVA
+     * context still uses PRESENTALLOCATIONINFO, but a flip needs the resident
+     * segment/address, not an invented command-buffer GPU mapping. */
+    RtlZeroMemory(&PresentArgs, sizeof(PresentArgs));
+    PresentArgs.pAllocationList = AllocationList;
+    if (Entry->Context != NULL && Entry->Context->VirtualAddressing)
+    {
+        RtlZeroMemory(AllocationInfo, sizeof(AllocationInfo));
+        AllocationInfo[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = OpenHandle;
+        AllocationInfo[DXGK_PRESENT_SOURCE_INDEX].SegmentId = Allocation->SegmentId;
+        AllocationInfo[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress = DxgkVidMmGetAllocationPrimaryAddress(Allocation);
+        PresentArgs.pAllocationInfo = AllocationInfo;
+    }
+    PresentArgs.NumSrcAllocations = 1;
+    PresentArgs.SrcRect = Entry->SrcRect;
+    PresentArgs.DstRect = Entry->DstRect;
+    PresentArgs.FlipInterval = Entry->FlipInterval;
+    PresentArgs.Flags.Flip = 1;
+
+    if (!DxgkBeginKmdTransaction(Adapter))
+    {
+        Status = STATUS_DELETE_PENDING;
+        goto Cleanup;
+    }
+    KmdTransaction = TRUE;
+    if (InterlockedCompareExchange(&Adapter->PresentQueueStopping, 0, 0) != 0 ||
+        InterlockedCompareExchange(&Adapter->VBlankResetActive, 0, 0) != 0 ||
+        InterlockedCompareExchange(&Entry->Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE ||
+        InterlockedCompareExchange(&Entry->Device->Destroying, 0, 0) != 0 ||
+        (Entry->Context != NULL && InterlockedCompareExchange(&Entry->Context->Destroying, 0, 0) != 0))
+    {
+        Status = STATUS_DEVICE_REMOVED;
+        goto Cleanup;
+    }
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(PresentContext, &PresentArgs);
+    if (NT_SUCCESS(Status) && PresentArgs.pDmaBuffer != NULL)
+        Status = STATUS_INVALID_DEVICE_STATE;
+
+Cleanup:
+    if (KmdTransaction)
+        DxgkEndKmdTransaction(Adapter);
+    if (PinOwned)
+        DxgkVidMmReleaseSubmissionResidencyPin(Allocation);
+    if (ScanoutLease)
+        DxgkVidPnReleaseScanoutLease();
+    return Status;
+}
+
 static NTSTATUS
 DxgkpExecuteMmioFlip(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _Inout_ PDXGKRNL_PRESENT_QUEUE Queue,
     _Inout_ PDXGKRNL_PRESENT_ENTRY Entry)
 {
-    DXGKARG_PRESENT PresentArgs;
-    DXGK_ALLOCATIONLIST AllocationList[DXGK_PRESENT_MAX_INDEX + 1];
-    DXGK_PRESENTALLOCATIONINFO AllocationInfo[DXGK_PRESENT_MAX_INDEX + 1];
+    DXGK_ALLOCATIONLIST SourcePin;
     DXGKP_MMIO_FLIP_CALL FlipCall;
     DXGKP_MMIO_OVERLAY_CALL OverlayCall;
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
@@ -5418,7 +5526,6 @@ DxgkpExecuteMmioFlip(
     ULONG OverlayIndex, Other;
     PDXGKVMM_ALLOCATION Allocation = Entry->SourceAllocation;
     PDXGKVMM_ALLOCATION Binding = NULL;
-    HANDLE OpenHandle = Entry->SourceOpenBindingHandle;
     HANDLE PresentContext;
     LONG64 ResetGeneration;
     LONG64 ObservedSequence;
@@ -5427,7 +5534,6 @@ DxgkpExecuteMmioFlip(
     BOOLEAN PinOwned = FALSE;
     BOOLEAN KmdTransaction = FALSE;
     BOOLEAN DriverCalled = FALSE;
-    BOOLEAN PresentRefused = FALSE;
     BOOLEAN ScanoutLease = FALSE;
     BOOLEAN Synchronized;
     ULONG FlipRetry;
@@ -5438,7 +5544,6 @@ DxgkpExecuteMmioFlip(
         Allocation == NULL || Entry->hDestination != 0 ||
         Allocation->MiniportHandle == NULL ||
         Allocation->PrimaryVidPnSourceId != Entry->VidPnSourceId ||
-        DXGK_CB_FULL(Adapter, DxgkDdiPresent) == NULL ||
         (DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress) == NULL && !DxgkpMmioFlipUsesMpo3(Adapter)))
     {
         return STATUS_NOT_SUPPORTED;
@@ -5452,6 +5557,8 @@ DxgkpExecuteMmioFlip(
         return Status;
 
     KeWaitForSingleObject(&Queue->MmioPresentMutex, Executive, KernelMode, FALSE, NULL);
+    Binding = Entry->MmioFlipBinding;
+    Entry->MmioFlipBinding = NULL;
     Status = Queue->MmioFailureStatus;
     if (!NT_SUCCESS(Status))
         goto Cleanup;
@@ -5470,28 +5577,15 @@ DxgkpExecuteMmioFlip(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
-    if (Entry->SourceOpenBindingReference == NULL)
-    {
-        Status = DxgkVidMmCreatePresentBinding(Entry->Device, Allocation, TRUE, &OpenHandle, &Binding);
-        if (!NT_SUCCESS(Status))
-            goto Cleanup;
-    }
-    if (OpenHandle == NULL)
-    {
-        Status = STATUS_INVALID_HANDLE;
-        goto Cleanup;
-    }
-
     Status = DxgkVidMmEnsureAllocationApertureMapped(Allocation);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
-    RtlZeroMemory(AllocationList, sizeof(AllocationList));
-    Status = DxgkVidMmAcquireSubmissionResidencyPinEx(Allocation, Adapter, &AllocationList[DXGK_PRESENT_SOURCE_INDEX], TRUE);
+    RtlZeroMemory(&SourcePin, sizeof(SourcePin));
+    Status = DxgkVidMmAcquireSubmissionResidencyPinEx(Allocation, Adapter, &SourcePin, TRUE);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     PinOwned = TRUE;
     Address = DxgkVidMmGetAllocationPrimaryAddress(Allocation);
-    AllocationList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = OpenHandle;
 
     /* Overlays stay resident while they are armed or scanned out. */
     for (OverlayIndex = 0; OverlayIndex < Entry->OverlayCount; ++OverlayIndex)
@@ -5511,25 +5605,6 @@ DxgkpExecuteMmioFlip(
         OverlayPinned[OverlayIndex] = TRUE;
         OverlayAddress[OverlayIndex] = DxgkVidMmGetAllocationPrimaryAddress(Overlay);
     }
-
-    /* FlipOnVSyncMmIo explicitly requests Present(NULL DMA). A GPUVA
-     * context still uses PRESENTALLOCATIONINFO, but a flip needs the resident
-     * segment/address, not an invented command-buffer GPU mapping. */
-    RtlZeroMemory(&PresentArgs, sizeof(PresentArgs));
-    PresentArgs.pAllocationList = AllocationList;
-    if (Entry->Context != NULL && Entry->Context->VirtualAddressing)
-    {
-        RtlZeroMemory(AllocationInfo, sizeof(AllocationInfo));
-        AllocationInfo[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = OpenHandle;
-        AllocationInfo[DXGK_PRESENT_SOURCE_INDEX].SegmentId = Allocation->SegmentId;
-        AllocationInfo[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress = Address;
-        PresentArgs.pAllocationInfo = AllocationInfo;
-    }
-    PresentArgs.NumSrcAllocations = 1;
-    PresentArgs.SrcRect = Entry->SrcRect;
-    PresentArgs.DstRect = Entry->DstRect;
-    PresentArgs.FlipInterval = Entry->FlipInterval;
-    PresentArgs.Flags.Flip = 1;
 
     RtlZeroMemory(&FlipCall, sizeof(FlipCall));
     FlipCall.Adapter = Adapter;
@@ -5561,8 +5636,6 @@ DxgkpExecuteMmioFlip(
         Status = STATUS_DEVICE_REMOVED;
         goto Cleanup;
     }
-    /* Keep the producer thread across Present and SetSourceAddress. Drivers
-     * can associate a preceding UMD escape/render dependency with this call. */
     Queue->MmioPendingAllocation = Allocation;
     Queue->MmioPendingHandle = Entry->hSource;
     DxgkpAssignScanoutOwner(&Queue->MmioPendingOwner, Entry->Context);
@@ -5575,15 +5648,6 @@ DxgkpExecuteMmioFlip(
         OverlayPinned[OverlayIndex] = FALSE;
     }
     DriverCalled = TRUE;
-    Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(PresentContext, &PresentArgs);
-    PresentRefused = !NT_SUCCESS(Status);
-    if (!NT_SUCCESS(Status))
-        goto Cleanup;
-    if (PresentArgs.pDmaBuffer != NULL)
-    {
-        Status = STATUS_INVALID_DEVICE_STATE;
-        goto Cleanup;
-    }
     /*
      * Layers the scanned-out flip shows and this one does not are switched
      * off in the same call, still naming their allocation, so the miniport
@@ -5813,21 +5877,7 @@ DxgkpExecuteMmioFlip(
 Cleanup:
     if (KmdTransaction)
         DxgkEndKmdTransaction(Adapter);
-    if (PresentRefused)
-    {
-        Entry->SourceAllocation = Queue->MmioPendingAllocation;
-        PinOwned = TRUE;
-        for (OverlayIndex = 0; OverlayIndex < Entry->OverlayCount; ++OverlayIndex)
-        {
-            Entry->Overlays[OverlayIndex] = Queue->MmioPendingOverlays[OverlayIndex];
-            OverlayPinned[OverlayIndex] = TRUE;
-        }
-        RtlZeroMemory(Queue->MmioPendingOverlays, sizeof(Queue->MmioPendingOverlays));
-        Queue->MmioPendingAllocation = NULL;
-        Queue->MmioPendingHandle = 0;
-        DxgkpReleaseScanoutOwner(&Queue->MmioPendingOwner);
-    }
-    else if (!NT_SUCCESS(Status) && DriverCalled)
+    if (!NT_SUCCESS(Status) && DriverCalled)
     {
         /* STATUS_RETRY is the driver saying "not now"; this present fails,
          * but the queue stays open for the next one. */
@@ -6223,6 +6273,8 @@ DxgkpQueuePresent(
         PDXGKRNL_PRESENT_ENTRY OrderedEntry = NULL;
 
         Status = DxgkDeviceWorkActivate(DeviceWork);
+        if (NT_SUCCESS(Status))
+            Status = DxgkpBuildMmioFlip(Adapter, Entry);
         if (NT_SUCCESS(Status))
         {
             Entry->PresentId = InterlockedIncrement64(&Queue->NextPresentId);

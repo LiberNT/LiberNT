@@ -276,6 +276,7 @@ typedef struct _DXGKRNL_PRESENT_ENTRY
      * reference; the last one releases the entry. */
     LIST_ENTRY                      MmioFlipEntry;
     volatile LONG                   MmioFlipReferences;
+    PDXGKVMM_ALLOCATION             MmioFlipBinding;
 
     /* Overlay planes a compositor flip shows above its primary. */
     UINT                            OverlayCount;
