@@ -132,7 +132,6 @@ struct filter_graph
     int EcCompleteCount;
     int HandleEcComplete;
     int HandleEcRepaint;
-    int HandleEcClockChanged;
     unsigned int media_events_disabled : 1;
 
     CRITICAL_SECTION cs;
@@ -4946,6 +4945,14 @@ static HRESULT WINAPI MediaEvent_WaitForCompletion(IMediaEventEx *iface, LONG ms
     return E_ABORT;
 }
 
+static BOOL is_default_handled_event(LONG code)
+{
+    /* TODO: default handling of EC_ACTIVATE, EC_NEED_RESTART, EC_WINDOW_DESTROYED, EC_DISPLAY_CHANGED, EC_STARVATION and EC_STATE_CHANGE; they reach the application either way */
+    return code == EC_COMPLETE || code == EC_REPAINT || code == EC_ACTIVATE || code == EC_NEED_RESTART
+            || code == EC_WINDOW_DESTROYED || code == EC_DISPLAY_CHANGED || code == EC_STARVATION
+            || code == EC_STATE_CHANGE;
+}
+
 static HRESULT WINAPI MediaEvent_CancelDefaultHandling(IMediaEventEx *iface, LONG lEvCode)
 {
     struct filter_graph *This = impl_from_IMediaEventEx(iface);
@@ -4956,10 +4963,8 @@ static HRESULT WINAPI MediaEvent_CancelDefaultHandling(IMediaEventEx *iface, LON
 	This->HandleEcComplete = FALSE;
     else if (lEvCode == EC_REPAINT)
 	This->HandleEcRepaint = FALSE;
-    else if (lEvCode == EC_CLOCK_CHANGED)
-        This->HandleEcClockChanged = FALSE;
-    else
-	return S_FALSE;
+    else if (!is_default_handled_event(lEvCode))
+        return E_INVALIDARG;
 
     return S_OK;
 }
@@ -4974,10 +4979,8 @@ static HRESULT WINAPI MediaEvent_RestoreDefaultHandling(IMediaEventEx *iface, LO
 	This->HandleEcComplete = TRUE;
     else if (lEvCode == EC_REPAINT)
 	This->HandleEcRepaint = TRUE;
-    else if (lEvCode == EC_CLOCK_CHANGED)
-        This->HandleEcClockChanged = TRUE;
-    else
-	return S_FALSE;
+    else if (!is_default_handled_event(lEvCode))
+        return E_INVALIDARG;
 
     return S_OK;
 }
@@ -5352,18 +5355,7 @@ static HRESULT WINAPI MediaFilter_SetSyncSource(IMediaFilter *iface, IReferenceC
                 IReferenceClock_AddRef(This->refClock);
             This->defaultclock = FALSE;
 
-            if (This->HandleEcClockChanged)
-            {
-                IMediaEventSink *pEventSink;
-                HRESULT eshr;
-
-                eshr = IMediaFilter_QueryInterface(iface, &IID_IMediaEventSink, (void **)&pEventSink);
-                if (SUCCEEDED(eshr))
-                {
-                    IMediaEventSink_Notify(pEventSink, EC_CLOCK_CHANGED, 0, 0);
-                    IMediaEventSink_Release(pEventSink);
-                }
-            }
+            IMediaEventSink_Notify(&This->IMediaEventSink_iface, EC_CLOCK_CHANGED, 0, 0);
         }
     }
     LeaveCriticalSection(&This->cs);
@@ -5786,7 +5778,6 @@ static HRESULT filter_graph_common_create(IUnknown *outer, IUnknown **out, BOOL 
     object->media_event_handle = CreateEventW(NULL, TRUE, FALSE, NULL);
     list_init(&object->media_events);
     list_init(&object->filters);
-    object->HandleEcClockChanged = TRUE;
     object->HandleEcComplete = TRUE;
     object->HandleEcRepaint = TRUE;
     object->hEventCompletion = CreateEventW(0, TRUE, FALSE, 0);
