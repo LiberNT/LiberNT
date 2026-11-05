@@ -354,12 +354,15 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
     HRESULT hr = S_OK;
     AM_MEDIA_TYPE *mt;
 
-    if (filter->eos || filter->sink.flushing)
+    if (filter->sink.flushing)
         return S_FALSE;
 
     state = filter->filter.state;
     if (state == State_Stopped)
         return VFW_E_WRONG_STATE;
+
+    if (filter->eos)
+        return E_UNEXPECTED;
 
     if (IMediaSample_GetMediaType(sample, &mt) == S_OK)
     {
@@ -461,6 +464,9 @@ static HRESULT sink_eos(struct strmbase_sink *iface)
     struct strmbase_renderer *filter = impl_from_IPin(&iface->pin.IPin_iface);
     IFilterGraph *graph = filter->filter.graph;
     IMediaEventSink *event_sink;
+
+    if (filter->sink.flushing)
+        return S_FALSE;
 
     filter->eos = TRUE;
 
