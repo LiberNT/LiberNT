@@ -62,12 +62,17 @@ static PACTIVE_SERVICE lpActiveServices = NULL;
 static handle_t hStatusBinding = NULL;
 static BOOL bSecurityServiceProcess = FALSE;
 
+static RPC_STATUS
+ScCreateStatusBinding(VOID);
+
 
 /* FUNCTIONS *****************************************************************/
 
 handle_t __RPC_USER
 RPC_SERVICE_STATUS_HANDLE_bind(RPC_SERVICE_STATUS_HANDLE hServiceStatus)
 {
+    if (hStatusBinding == NULL)
+        ScCreateStatusBinding();
     return hStatusBinding;
 }
 
