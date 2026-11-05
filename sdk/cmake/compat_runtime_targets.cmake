@@ -251,6 +251,7 @@ set(COMPAT_RUNTIME_MODULES
     rasdlg
     rasman
     regapi
+    resampledmo
     resutils
     riched20
     riched32

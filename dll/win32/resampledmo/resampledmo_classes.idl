@@ -1,0 +1,14 @@
+/*
+ * PROJECT:     LiberNT Audio Resampler DSP
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     COM class of the Audio Resampler DSP
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
+ */
+
+#pragma makedep register
+
+[
+    threading(both),
+    uuid(f447b69e-1884-4a7e-8055-346f74d6edb3)
+]
+coclass CResamplerMediaObject {}
