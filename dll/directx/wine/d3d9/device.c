@@ -2003,6 +2003,7 @@ static HRESULT WINAPI d3d9_device_GetFrontBufferData(IDirect3DDevice9Ex *iface,
 #ifdef __REACTOS__
     if (FAILED(hr = d3d9_surface_prepare_dxva_fallback(dst_impl, 0)))
         return hr;
+    hr = D3DERR_INVALIDCALL;
 #endif
 
     wined3d_mutex_lock();
@@ -2192,6 +2193,7 @@ static HRESULT WINAPI d3d9_device_StretchRect(IDirect3DDevice9Ex *iface, IDirect
 #ifdef __REACTOS__
     if (FAILED(hr = d3d9_surface_prepare_dxva_fallback(dst, 0)))
         return hr;
+    hr = D3DERR_INVALIDCALL;
 #endif
 
     wined3d_mutex_lock();
@@ -2225,6 +2227,15 @@ static HRESULT WINAPI d3d9_device_StretchRect(IDirect3DDevice9Ex *iface, IDirect
         WARN("Destination is a regular texture.\n");
         goto done;
     }
+
+#ifdef __REACTOS__
+    if (!dst->texture && !(dst_desc.bind_flags & (WINED3D_BIND_RENDER_TARGET | WINED3D_BIND_DEPTH_STENCIL))
+            && (src->texture || (src_desc.bind_flags & (WINED3D_BIND_RENDER_TARGET | WINED3D_BIND_DEPTH_STENCIL))))
+    {
+        WARN("Destination is an offscreen plain surface and the source is not.\n");
+        goto done;
+    }
+#endif
 
     if (src_desc.bind_flags & WINED3D_BIND_DEPTH_STENCIL)
     {

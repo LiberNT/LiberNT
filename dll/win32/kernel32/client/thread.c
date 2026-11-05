@@ -51,7 +51,7 @@ BasepNotifyCsrOfThread(IN HANDLE ThreadHandle,
 }
 
 VOID
-WINAPI
+FASTCALL
 BaseThreadInitThunk(
     _In_ DWORD Unknown,
     _In_ LPTHREAD_START_ROUTINE lpStartAddress,

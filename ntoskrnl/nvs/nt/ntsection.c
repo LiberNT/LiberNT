@@ -15,6 +15,7 @@
 #define MI_IMAGE32_RELOCATION_LOWEST 0x50000000ULL
 #define MI_IMAGE32_RELOCATION_HIGHEST 0x77FFFFFFULL
 #define MI_IMAGE32_EXECUTABLE_RANGE 0x1000000ULL
+#define MI_IMAGE32_BIAS_SLOTS 256
 
 POBJECT_TYPE MmSectionObjectType;
 
@@ -33,6 +34,7 @@ static LIST_ENTRY MiImageBuilds[MI_CONTROL_LOCKS];
 static MI_MUTEX MiImageWindowLock;
 static MI_IMAGE_WINDOW MiImageWindows[8];
 static ULONG MiImageWindowCount;
+static LONG MiImage32Bias = -1;
 static LONG64 MiBasedSectionCursor;
 
 static GENERIC_MAPPING MiSectionMapping =
@@ -661,8 +663,10 @@ MiRelocateImageControlArea(
     ULONG64 Slots, Base, Delta;
     PMI_IMAGE_WINDOW Window = NULL;
     BOOLEAN Executable = FALSE;
+    BOOLEAN TopDown = FALSE;
     BOOLEAN Reserved = FALSE;
     BOOLEAN Applied = FALSE;
+    LONG Bias, Previous;
     ULONG Seed, Page, Position = 0;
     PUCHAR Relocations = NULL;
     PUCHAR *Pages = NULL;
@@ -688,6 +692,7 @@ MiRelocateImageControlArea(
         {
             Highest = MI_IMAGE32_RELOCATION_HIGHEST;
             Lowest = MI_IMAGE32_RELOCATION_LOWEST;
+            TopDown = TRUE;
         }
         else
         {
@@ -713,7 +718,15 @@ MiRelocateImageControlArea(
         Base = Lowest + ((Base - Lowest) / MI_ALLOCATION_GRANULARITY % Slots + 1) * MI_ALLOCATION_GRANULARITY;
     if (!Executable)
         Window = MiImageWindowFor(Lowest, Highest);
-    if (Window != NULL)
+    if (Window != NULL && TopDown)
+    {
+        Bias = (LONG)(RtlRandomEx(&Seed) % MI_IMAGE32_BIAS_SLOTS);
+        Previous = InterlockedCompareExchange(&MiImage32Bias, Bias, -1);
+        if (Previous >= 0)
+            Bias = Previous;
+        Reserved = MiImageWindowReserveTopDown(Window, Control->ImageSize, Window->SlotCount - (ULONG64)Bias, &Base);
+    }
+    else if (Window != NULL)
         Reserved = MiImageWindowReserve(Window, Control->ImageSize, (Base - Lowest) / MI_ALLOCATION_GRANULARITY, &Base);
     Delta = Base - OldBase;
 

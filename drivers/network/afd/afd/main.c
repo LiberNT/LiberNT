@@ -465,6 +465,7 @@ AfdRundownTdi(PAFD_FCB FCB, PFILE_OBJECT FileObject)
     BOOLEAN WaitForCompletion = FALSE;
     KEVENT TdiRundownEvent;
     PAFD_TDI_OBJECT_QELT Qelt;
+    PAFD_STORED_DATAGRAM Datagram;
     PLIST_ENTRY QeltEntry;
 
     if( !SocketAcquireStateLock( FCB ) ) return;
@@ -524,6 +525,13 @@ AfdRundownTdi(PAFD_FCB FCB, PFILE_OBJECT FileObject)
 
     (void)SocketAcquireStateLock(FCB);
     for (i = 0; i < IN_FLIGHT_REQUESTS; i++) ASSERT(InFlightRequest[i]->InFlightRequest == NULL);
+    while (!IsListEmpty(&FCB->DatagramList))
+    {
+        QeltEntry = RemoveHeadList(&FCB->DatagramList);
+        Datagram = CONTAINING_RECORD(QeltEntry, AFD_STORED_DATAGRAM, ListEntry);
+        ExFreePoolWithTag(Datagram->Address, TAG_AFD_TRANSPORT_ADDRESS);
+        ExFreePoolWithTag(Datagram, TAG_AFD_STORED_DATAGRAM);
+    }
     FCB->TdiRundownEvent = NULL;
     SocketStateUnlock(FCB);
 

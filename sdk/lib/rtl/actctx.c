@@ -4733,7 +4733,11 @@ static NTSTATUS find_activatable_class(ACTIVATION_CONTEXT* actctx, const UNICODE
     ULONG hash;
     int i;
 
+#ifdef __REACTOS__
+    if (!(actctx->sections & ACTIVATABLE_CLASS_SECTION)) return STATUS_SXS_SECTION_NOT_FOUND;
+#else
     if (!(actctx->sections & ACTIVATABLE_CLASS_SECTION)) return STATUS_SXS_KEY_NOT_FOUND;
+#endif
 
     if (!actctx->activatable_class_section)
     {
@@ -5942,6 +5946,13 @@ static NTSTATUS find_string(ACTIVATION_CONTEXT* actctx, ULONG section_kind,
     case ACTIVATION_CONTEXT_SECTION_WINRT_ACTIVATABLE_CLASSES:
         status = find_activatable_class(actctx, section_name, data);
         break;
+#ifdef __REACTOS__
+    case ACTIVATION_CONTEXT_SECTION_COM_SERVER_REDIRECTION:
+    case ACTIVATION_CONTEXT_SECTION_COM_INTERFACE_REDIRECTION:
+    case ACTIVATION_CONTEXT_SECTION_COM_TYPE_LIBRARY_REDIRECTION:
+    case ACTIVATION_CONTEXT_SECTION_CLR_SURROGATES:
+        return STATUS_SXS_INVALID_ACTCTXDATA_FORMAT;
+#endif
     default:
         WARN("Unknown section_kind %lx\n", section_kind);
         return STATUS_SXS_SECTION_NOT_FOUND;
@@ -6784,6 +6795,9 @@ NTSTATUS WINAPI RtlFindActivationContextSectionString( ULONG flags, const GUID *
     PACTCTX_SECTION_KEYED_DATA data = ptr;
     NTSTATUS status = STATUS_SXS_KEY_NOT_FOUND;
     ACTIVATION_CONTEXT *actctx;
+#ifdef __REACTOS__
+    BOOLEAN key_not_found = FALSE;
+#endif
 
     TRACE("%08lx %s %lu %s %p\n", flags, debugstr_guid(guid), section_kind,
           debugstr_us(section_name), data);
@@ -6818,13 +6832,22 @@ NTSTATUS WINAPI RtlFindActivationContextSectionString( ULONG flags, const GUID *
 
     actctx = check_actctx( get_current_actctx_no_addref() );
     if (actctx) status = find_string( actctx, section_kind, section_name, flags, data );
+#ifdef __REACTOS__
+    if (status == STATUS_SXS_KEY_NOT_FOUND && actctx) key_not_found = TRUE;
+#endif
 
     DPRINT("status %x\n", status);
     if (status != STATUS_SUCCESS)
         status = find_string( process_actctx, section_kind, section_name, flags, data );
+#ifdef __REACTOS__
+    if (status == STATUS_SXS_KEY_NOT_FOUND) key_not_found = TRUE;
+#endif
 
     if (status != STATUS_SUCCESS)
         status = find_string( implicit_actctx, section_kind, section_name, flags, data );
+#ifdef __REACTOS__
+    if (status == STATUS_SXS_SECTION_NOT_FOUND && key_not_found) status = STATUS_SXS_KEY_NOT_FOUND;
+#endif
 
     DPRINT("RtlFindActivationContextSectionString() returns status %x\n", status);
     return status;
@@ -7013,6 +7036,16 @@ RtlpInitializeActCtx(PVOID* pOldShimData)
     }
 
     return Status;
+}
+
+NTSTATUS
+NTAPI
+RtlpFindSystemDefaultActivationContextSectionString(IN ULONG Flags,
+                                                    IN ULONG SectionKind,
+                                                    IN PCUNICODE_STRING SectionName,
+                                                    IN OUT PACTCTX_SECTION_KEYED_DATA Data)
+{
+    return find_string(implicit_actctx, SectionKind, SectionName, Flags, Data);
 }
 
 #endif // __REACTOS__

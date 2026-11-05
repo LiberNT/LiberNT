@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     The 64-bit rundll32 running an entry point of a 32-bit DLL
+ * PURPOSE:     rundll32 entry points of 32-bit DLLs and entry points named by ordinal
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arifing193@gmail.com>
  */
 
@@ -34,14 +34,14 @@ static BOOL write_inf(PCWSTR path, PCSTR value)
 }
 
 /* The exit code, or NOT_EXITED when rundll32 had to be stopped after the time limit. */
-static DWORD run_rundll32(PCWSTR rundll32, PCWSTR dll, PCWSTR inf)
+static DWORD run_rundll32_entry(PCWSTR rundll32, PCWSTR entry, PCWSTR inf)
 {
     WCHAR command[3 * MAX_PATH];
     PROCESS_INFORMATION info;
     STARTUPINFOW startup = { sizeof(startup) };
     DWORD code = NOT_EXITED;
 
-    StringCbPrintfW(command, sizeof(command), L"\"%ls\" %ls,InstallHinfSection DefaultInstall 128 %ls", rundll32, dll, inf);
+    StringCbPrintfW(command, sizeof(command), L"\"%ls\" %ls DefaultInstall 128 %ls", rundll32, entry, inf);
     if (!CreateProcessW(rundll32, command, NULL, NULL, FALSE, 0, NULL, NULL, &startup, &info))
     {
         ok(0, "CreateProcessW(%ls) failed: %lu\n", command, GetLastError());
@@ -56,6 +56,14 @@ static DWORD run_rundll32(PCWSTR rundll32, PCWSTR dll, PCWSTR inf)
     return code;
 }
 
+static DWORD run_rundll32(PCWSTR rundll32, PCWSTR dll, PCWSTR inf)
+{
+    WCHAR entry[MAX_PATH + 32];
+
+    StringCbPrintfW(entry, sizeof(entry), L"%ls,InstallHinfSection", dll);
+    return run_rundll32_entry(rundll32, entry, inf);
+}
+
 static BOOL value_written(PCWSTR value)
 {
     DWORD data = 0, size = sizeof(data);
@@ -67,6 +75,65 @@ static BOOL value_written(PCWSTR value)
     res = RegQueryValueExW(key, value, NULL, NULL, (BYTE *)&data, &size);
     RegCloseKey(key);
     return res == ERROR_SUCCESS && data == 1;
+}
+
+/* The ordinal of a named export, or 0. */
+static WORD export_ordinal(HMODULE module, PCSTR name)
+{
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)module + ((PIMAGE_DOS_HEADER)module)->e_lfanew);
+    IMAGE_DATA_DIRECTORY *dir = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    PIMAGE_EXPORT_DIRECTORY exports = (PIMAGE_EXPORT_DIRECTORY)((BYTE *)module + dir->VirtualAddress);
+    DWORD *names = (DWORD *)((BYTE *)module + exports->AddressOfNames);
+    WORD *ordinals = (WORD *)((BYTE *)module + exports->AddressOfNameOrdinals);
+    DWORD i;
+
+    for (i = 0; i < exports->NumberOfNames; i++)
+    {
+        if (!strcmp((PCSTR)module + names[i], name))
+            return (WORD)(ordinals[i] + exports->Base);
+    }
+    return 0;
+}
+
+/* rundll32 passes the Unicode command line to an entry point named by ordinal. */
+static void check_ordinal(PCWSTR system, PCWSTR rundll32, PCWSTR inf, PCSTR export, PCSTR value, PCWSTR value_name,
+                          BOOL runs)
+{
+    WCHAR dll[MAX_PATH];
+    HMODULE setupapi;
+    WORD ordinal;
+    DWORD code;
+
+    setupapi = LoadLibraryW(L"setupapi.dll");
+    ordinal = setupapi ? export_ordinal(setupapi, export) : 0;
+    if (setupapi)
+        FreeLibrary(setupapi);
+    if (!ordinal)
+    {
+        skip("no %s export\n", export);
+        return;
+    }
+    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
+    ok(write_inf(inf, value), "cannot write %ls\n", inf);
+    StringCbPrintfW(dll, sizeof(dll), L"%ls\\setupapi.dll,#%u", system, ordinal);
+    code = run_rundll32_entry(rundll32, dll, inf);
+    ok(code == 0, "%s entry #%u: exit code %lu\n", export, ordinal, code);
+    ok(value_written(value_name) == runs, "%s entry #%u: the section %s\n", export, ordinal,
+       runs ? "did not run" : "ran");
+    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
+}
+
+START_TEST(ordinal)
+{
+    WCHAR system[MAX_PATH], rundll32[MAX_PATH], temp[MAX_PATH], inf[MAX_PATH];
+
+    GetSystemDirectoryW(system, ARRAYSIZE(system));
+    GetTempPathW(ARRAYSIZE(temp), temp);
+    StringCbPrintfW(rundll32, sizeof(rundll32), L"%ls\\rundll32.exe", system);
+    StringCbPrintfW(inf, sizeof(inf), L"%lslntrundll32o.inf", temp);
+    check_ordinal(system, rundll32, inf, "InstallHinfSectionW", "OrdinalW", L"OrdinalW", TRUE);
+    check_ordinal(system, rundll32, inf, "InstallHinfSectionA", "OrdinalA", L"OrdinalA", FALSE);
+    DeleteFileW(inf);
 }
 
 START_TEST(wow64)

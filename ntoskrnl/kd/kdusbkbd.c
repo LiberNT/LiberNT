@@ -198,7 +198,7 @@ KdpUsbKeyboardTryGetChar(
     ULONG i;
     CHAR c;
 
-    if (!KeBugCheckActive)
+    if (!KeBugCheckActive && !KdTermCrashMode)
         return -1;
 
     c = KdpUsbKeyboardDequeue(ScanCode);

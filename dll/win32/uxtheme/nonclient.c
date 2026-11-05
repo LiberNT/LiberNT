@@ -1091,6 +1091,14 @@ ThemeDwmHasCaptionButtons(HWND hWnd, const WINDOWINFO *wi)
     return wi->rcClient.top - wi->rcWindow.top < pwndData->rcCaptionButtons[CLOSEBUTTON].bottom;
 }
 
+static BOOL
+ThemeHasCustomCaptionInset(HWND hWnd, const WINDOWINFO *wi)
+{
+    return !(wi->dwStyle & WS_MINIMIZE) &&
+           wi->rcClient.top - wi->rcWindow.top <= (LONG)wi->cyWindowBorders &&
+           !ThemeDwmHasCaptionButtons(hWnd, wi);
+}
+
 static VOID
 ThemeDwmSetCaptionProperty(HWND hWnd, PWND_DATA pwndData, UINT Slot, LPCWSTR Name, ULONG Value)
 {
@@ -1359,6 +1367,9 @@ ThemeDrawCaption(PDRAW_CONTEXT pcontext, RECT* prcCurrent, DWORD htHot, DWORD ht
         ThemeFillSolidRect(pcontext->hDC, &rcPart, ThemeDarkCaptionColor(pcontext));
     else
         DrawThemeBackground(pcontext->theme, pcontext->hDC, iPart, iState, &rcPart, NULL);
+
+    if (ThemeHasCustomCaptionInset(pcontext->hWnd, &pcontext->wi))
+        return;
 
     rcContent = rcPart;
     rcContent.top += ThemeGetMaximizedTopOverhang(&pcontext->wi);
@@ -1814,9 +1825,11 @@ DefWndNCHitTest(HWND hWnd, POINT Point)
     RECT WindowRect;
     POINT ClientPoint;
     WINDOWINFO wi;
+    BOOL CustomCaption;
 
     wi.cbSize = sizeof(wi);
     GetWindowInfo(hWnd, &wi);
+    CustomCaption = ThemeHasCustomCaptionInset(hWnd, &wi);
 
     if (!PtInRect(&wi.rcWindow, Point))
     {
@@ -1838,12 +1851,12 @@ DefWndNCHitTest(HWND hWnd, POINT Point)
             BOOL ThickFrame;
             LRESULT Button;
 
-            if (ThemeHasCompositedFrame() &&
+            if (!CustomCaption && ThemeHasCompositedFrame() &&
                 (Button = ThemeHitTestCaptionButtons(hWnd, &wi, Point)) != HTNOWHERE)
                 return Button;
             ThickFrame = (wi.dwStyle & WS_THICKFRAME);
             if (Point.y < WindowRect.top &&
-                !(ThickFrame && (wi.dwStyle & WS_CAPTION) == WS_CAPTION &&
+                !(!CustomCaption && ThickFrame && (wi.dwStyle & WS_CAPTION) == WS_CAPTION &&
                   Point.y >= WindowRect.top - GetSystemMetrics(SM_CXPADDEDBORDER)))
             {
                 if (wi.dwStyle & WS_MINIMIZE)
@@ -1903,7 +1916,7 @@ DefWndNCHitTest(HWND hWnd, POINT Point)
             return HTBORDER;
     }
 
-    if ((wi.dwStyle & WS_CAPTION) == WS_CAPTION)
+    if ((wi.dwStyle & WS_CAPTION) == WS_CAPTION && !CustomCaption)
     {
         if (wi.dwExStyle & WS_EX_TOOLWINDOW)
             WindowRect.top += GetSystemMetrics(SM_CYSMCAPTION);
@@ -2055,6 +2068,9 @@ ThemeWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC DefWndPr
     //
     case WM_NCUAHDRAWFRAME:
     case WM_NCACTIVATE:
+
+        if (Msg == WM_NCACTIVATE && lParam == -1)
+            return DefWndProc(hWnd, Msg, wParam, lParam);
 
         if ((GetWindowLongW(hWnd, GWL_STYLE) & WS_CAPTION) != WS_CAPTION)
             return TRUE;

@@ -5,6 +5,8 @@
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_BaseSetLastNTError(void);
+extern void func_BaseThreadInitThunk(void);
+extern void func_CallbackCallingConventions(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
 extern void func_ConsoleCP(void);
@@ -56,8 +58,10 @@ extern void func_LCMapString(void);
 extern void func_LoadLibraryExW(void);
 extern void func_LockFileEx(void);
 extern void func_QuantumRoundRobin(void);
+extern void func_RegisterWaitPeriodic(void);
 extern void func_SandboxLaunch(void);
 extern void func_SystemImageCatalog(void);
+extern void func_SystemTimeChangeTimers(void);
 extern void func_TebSegmentAfterWait(void);
 extern void func_SharedMemorySecurity(void);
 extern void func_SharedMemoryTransfer(void);
@@ -112,6 +116,8 @@ const struct test winetest_testlist[] =
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "BaseSetLastNTError",          func_BaseSetLastNTError },
+    { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
+    { "CallbackCallingConventions", func_CallbackCallingConventions },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
     { "ConsoleCP",                   func_ConsoleCP },
@@ -163,8 +169,10 @@ const struct test winetest_testlist[] =
     { "LoadLibraryExW",              func_LoadLibraryExW },
     { "LockFileEx",                  func_LockFileEx },
     { "SystemImageCatalog",            func_SystemImageCatalog },
+    { "SystemTimeChangeTimers",      func_SystemTimeChangeTimers },
     { "TebSegmentAfterWait",           func_TebSegmentAfterWait },
     { "QuantumRoundRobin",           func_QuantumRoundRobin },
+    { "RegisterWaitPeriodic",        func_RegisterWaitPeriodic },
     { "SandboxLaunch",               func_SandboxLaunch },
     { "SharedMemorySecurity",        func_SharedMemorySecurity },
     { "SharedMemoryTransfer",        func_SharedMemoryTransfer },

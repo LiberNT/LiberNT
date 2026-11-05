@@ -27,6 +27,7 @@ typedef struct _DXGKRNL_KEYED_MUTEX
     FAST_MUTEX Lock;
     KEVENT StateChanged;
     DXGK_KEYED_MUTEX_STATE State;
+    PVOID Owner;
     PVOID PrivateRuntimeData;
     ULONG PrivateRuntimeDataSize;
 } DXGKRNL_KEYED_MUTEX, *PDXGKRNL_KEYED_MUTEX;
@@ -155,9 +156,20 @@ static VOID
 DxgkpDereferenceKeyedMutexRef(
     _Inout_ PDXGKRNL_KEYED_MUTEX_REF Ref)
 {
+    PDXGKRNL_KEYED_MUTEX Mutex;
+
     if (InterlockedDecrement(&Ref->ReferenceCount) != 0)
         return;
-    DxgkpDereferenceKeyedMutex(Ref->Mutex);
+    Mutex = Ref->Mutex;
+    ExAcquireFastMutex(&Mutex->Lock);
+    if (Mutex->Owner == Ref)
+    {
+        Mutex->Owner = NULL;
+        if (DxgkKeyedMutexCoreAbandon(&Mutex->State))
+            KeSetEvent(&Mutex->StateChanged, IO_NO_INCREMENT, FALSE);
+    }
+    ExReleaseFastMutex(&Mutex->Lock);
+    DxgkpDereferenceKeyedMutex(Mutex);
     ExFreePoolWithTag(Ref, TAG_DXGK_KEYEDMUTEX);
 }
 
@@ -191,13 +203,16 @@ DxgkpPublishKeyedMutexHandle(
 static NTSTATUS
 DxgkpReferenceKeyedMutexByHandle(
     _In_ D3DKMT_HANDLE Handle,
-    _Out_ PDXGKRNL_KEYED_MUTEX *OutMutex)
+    _Out_ PDXGKRNL_KEYED_MUTEX *OutMutex,
+    _Out_opt_ PVOID *OutOwner)
 {
     PVOID Object = NULL;
     PDXGKRNL_KEYED_MUTEX_REF Ref;
     NTSTATUS Status;
 
     *OutMutex = NULL;
+    if (OutOwner != NULL)
+        *OutOwner = NULL;
     Status = DxgkReferenceOwnedHandle(Handle, DxgkHandleTypeKeyedMutex, PsGetCurrentProcess(), DxgkpReferenceKeyedMutexRef, &Object);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -210,6 +225,8 @@ DxgkpReferenceKeyedMutexByHandle(
         return STATUS_DEVICE_REMOVED;
     }
     *OutMutex = Ref->Mutex;
+    if (OutOwner != NULL)
+        *OutOwner = Ref;
     DxgkpDereferenceKeyedMutexRef(Ref);
     return STATUS_SUCCESS;
 }
@@ -495,6 +512,7 @@ DxgkpAcquireKeyedMutexCommon(
     _Out_opt_ ULONG *OutPrivateDataSize)
 {
     PDXGKRNL_KEYED_MUTEX Mutex;
+    PVOID Owner;
     LARGE_INTEGER Deadline;
     BOOLEAN HasDeadline = FALSE;
     NTSTATUS Status;
@@ -505,7 +523,7 @@ DxgkpAcquireKeyedMutexCommon(
     if (OutPrivateDataSize != NULL)
         *OutPrivateDataSize = 0;
 
-    Status = DxgkpReferenceKeyedMutexByHandle(hKeyedMutex, &Mutex);
+    Status = DxgkpReferenceKeyedMutexByHandle(hKeyedMutex, &Mutex, &Owner);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -529,9 +547,16 @@ DxgkpAcquireKeyedMutexCommon(
         BOOLEAN Acquired;
 
         ExAcquireFastMutex(&Mutex->Lock);
+        if (Mutex->State.Abandoned)
+        {
+            ExReleaseFastMutex(&Mutex->Lock);
+            Status = STATUS_ABANDONED;
+            break;
+        }
         Acquired = DxgkKeyedMutexCoreAcquire(&Mutex->State, Key);
         if (Acquired)
         {
+            Mutex->Owner = Owner;
             *OutFenceValue = Mutex->State.FenceValue;
             if (OutPrivateData != NULL)
             {
@@ -637,7 +662,7 @@ DxgkpReleaseKeyedMutexCommon(
     NTSTATUS Status;
     BOOLEAN Released;
 
-    Status = DxgkpReferenceKeyedMutexByHandle(hKeyedMutex, &Mutex);
+    Status = DxgkpReferenceKeyedMutexByHandle(hKeyedMutex, &Mutex, NULL);
     if (!NT_SUCCESS(Status))
     {
         if (PrivateData != NULL)
@@ -647,6 +672,8 @@ DxgkpReleaseKeyedMutexCommon(
 
     ExAcquireFastMutex(&Mutex->Lock);
     Released = DxgkKeyedMutexCoreRelease(&Mutex->State, Key, FenceValue);
+    if (Released)
+        Mutex->Owner = NULL;
     if (Released && PrivateData != NULL)
     {
         if (Mutex->PrivateRuntimeData != NULL)

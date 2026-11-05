@@ -324,7 +324,11 @@ STATUSBAR_SetPartBounds (STATUS_INFO *infoPtr)
 	if (infoPtr->hwndToolTip) {
 	    TTTOOLINFOW ti;
 
+#ifdef __REACTOS__
+	    ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
 	    ti.cbSize = sizeof(TTTOOLINFOW);
+#endif
 	    ti.hwnd = infoPtr->Self;
 	    ti.uId = i;
 	    ti.rect = *r;
@@ -536,7 +540,11 @@ STATUSBAR_GetTipTextW (const STATUS_INFO *infoPtr, INT id, LPWSTR tip, INT size)
 
 	if (infoPtr->hwndToolTip) {
 	    TTTOOLINFOW ti;
+#ifdef __REACTOS__
+	    ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
 	    ti.cbSize = sizeof(TTTOOLINFOW);
+#endif
 	    ti.hwnd = infoPtr->Self;
 	    ti.uId = id;
             ti.lpszText = buf;
@@ -645,7 +653,11 @@ STATUSBAR_SetParts (STATUS_INFO *infoPtr, INT count, LPINT parts)
         WCHAR wEmpty[] = L"";
 
 	ZeroMemory (&ti, sizeof(TTTOOLINFOW));
+#ifdef __REACTOS__
+	ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
 	ti.cbSize = sizeof(TTTOOLINFOW);
+#endif
 	ti.hwnd = infoPtr->Self;
         ti.lpszText = wEmpty;
 
@@ -781,7 +793,11 @@ STATUSBAR_SetTipTextW (const STATUS_INFO *infoPtr, INT id, LPWSTR text)
     TRACE("part %d: \"%s\"\n", id, debugstr_w(text));
     if (infoPtr->hwndToolTip) {
 	TTTOOLINFOW ti;
+#ifdef __REACTOS__
+	ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
 	ti.cbSize = sizeof(TTTOOLINFOW);
+#endif
 	ti.hwnd = infoPtr->Self;
 	ti.uId = id;
 	ti.hinst = 0;
@@ -1084,7 +1100,7 @@ STATUSBAR_WMSize (STATUS_INFO *infoPtr, WORD flags)
     width = parent_rect.right - parent_rect.left;
     x = parent_rect.left;
     y = parent_rect.bottom - infoPtr->height;
-    MoveWindow(infoPtr->Self, x, y, width, infoPtr->height, FALSE);
+    MoveWindow(infoPtr->Self, x, y, width, infoPtr->height, TRUE);
     STATUSBAR_SetPartBounds (infoPtr);
     InvalidateRect(infoPtr->Self, NULL, FALSE);
     return TRUE;

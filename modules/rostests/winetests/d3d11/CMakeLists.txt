@@ -13,7 +13,7 @@ target_include_directories(d3d11_winetest BEFORE PRIVATE ${REACTOS_SOURCE_DIR}/s
 target_link_libraries(d3d11_winetest dx10guid uuid)
 set_module_type(d3d11_winetest win32cui)
 add_dependencies(d3d11_winetest d3d_idl_headers)
-add_importlibs(d3d11_winetest d3d11 dxgi d3dcompiler_43 user32 gdi32 msvcrt kernel32 ntdll)
+add_importlibs(d3d11_winetest d3d11 dxgi d3dcompiler_47 user32 gdi32 msvcrt kernel32 ntdll)
 add_rostests_file(TARGET d3d11_winetest)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")

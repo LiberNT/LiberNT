@@ -43,13 +43,13 @@ extern HANDLE LdrpShutdownThreadId;
 /*++
  * RtlpCreateCriticalSectionSem
  *
- *     Checks if an Event has been created for the critical section.
+ *     Selects the global keyed event for the waits of the critical section.
  *
  * Params:
  *     None
  *
  * Returns:
- *     None. Raises an exception if the system call failed.
+ *     None.
  *
  * Remarks:
  *     None
@@ -60,47 +60,9 @@ VOID
 NTAPI
 RtlpCreateCriticalSectionSem(PRTL_CRITICAL_SECTION CriticalSection)
 {
-    HANDLE hEvent = CriticalSection->LockSemaphore;
-    HANDLE hNewEvent;
-    NTSTATUS Status;
-
-    /* Check if we have an event */
-    if (!hEvent)
-    {
-        /* No, so create it */
-        Status = NtCreateEvent(&hNewEvent,
-                               EVENT_ALL_ACCESS,
-                               NULL,
-                               SynchronizationEvent,
-                               FALSE);
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("Failed to Create Event!\n");
-
-            /*
-             * Use INVALID_HANDLE_VALUE (-1) to signal that
-             * the global keyed event must be used.
-             */
-            hNewEvent = INVALID_HANDLE_VALUE;
-        }
-
-        DPRINT("Created Event: %p\n", hNewEvent);
-
-        /* Exchange the LockSemaphore field with the new handle, if it is still 0 */
-        if (InterlockedCompareExchangePointer((PVOID*)&CriticalSection->LockSemaphore,
-                                              (PVOID)hNewEvent,
-                                               NULL) != NULL)
-        {
-            /* Someone else just created an event */
-            if (hNewEvent != INVALID_HANDLE_VALUE)
-            {
-                DPRINT("Closing already created event: %p\n", hNewEvent);
-                NtClose(hNewEvent);
-            }
-        }
-    }
-
-    return;
+    InterlockedCompareExchangePointer((PVOID*)&CriticalSection->LockSemaphore,
+                                      INVALID_HANDLE_VALUE,
+                                      NULL);
 }
 
 /*++
@@ -437,7 +399,8 @@ RtlDeleteCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
     DPRINT("Deleting Critical Section: %p\n", CriticalSection);
 
     /* Close the Event Object Handle if it exists */
-    if (CriticalSection->LockSemaphore)
+    if (CriticalSection->LockSemaphore &&
+        CriticalSection->LockSemaphore != INVALID_HANDLE_VALUE)
     {
         /* In case NtClose fails, return the status */
         Status = NtClose(CriticalSection->LockSemaphore);

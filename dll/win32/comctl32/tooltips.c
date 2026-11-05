@@ -1182,7 +1182,11 @@ TOOLTIPS_CopyInfoT (const TOOLTIPS_INFO *infoPtr, INT index, TTTOOLINFOW *ti, BO
                                 (LPSTR)ti->lpszText, MAX_TEXT_SIZE_A, NULL, NULL);
     }
 
+#if defined(__REACTOS__) && __WINE_COMCTL32_VERSION != 6
+    if (ti->cbSize > TTTOOLINFOW_V1_SIZE)
+#else
     if (ti->cbSize >= TTTOOLINFOW_V2_SIZE)
+#endif
         ti->lParam = toolPtr->lParam;
 
     /* lpReserved is intentionally not set. */
@@ -1261,8 +1265,13 @@ TOOLTIPS_AddToolT (TOOLTIPS_INFO *infoPtr, const TTTOOLINFOW *ti, BOOL isW)
     TRACE("add tool (%p) %p %Id%s\n", infoPtr->hwndSelf, ti->hwnd, ti->uId,
         (ti->uFlags & TTF_IDISHWND) ? " TTF_IDISHWND" : "");
 
+#if defined(__REACTOS__) && __WINE_COMCTL32_VERSION != 6
+    if (ti->cbSize > TTTOOLINFOW_V2_SIZE && isW)
+        return FALSE;
+#else
     if (ti->cbSize > TTTOOLINFOW_V3_SIZE && isW)
         return FALSE;
+#endif
 
     if (infoPtr->uNumTools == 0) {
 	infoPtr->tools = Alloc (sizeof(TTTOOL_INFO));
@@ -1398,9 +1407,14 @@ TOOLTIPS_DelToolT (TOOLTIPS_INFO *infoPtr, const TTTOOLINFOW *ti, BOOL isW)
     INT nTool;
 
     if (!ti) return 0;
+#if defined(__REACTOS__) && __WINE_COMCTL32_VERSION != 6
+    if (isW && ti->cbSize > TTTOOLINFOW_V2_SIZE)
+	return 0;
+#else
     if (isW && ti->cbSize > TTTOOLINFOW_V2_SIZE &&
                ti->cbSize != TTTOOLINFOW_V3_SIZE)
 	return 0;
+#endif
     if (infoPtr->uNumTools == 0)
 	return 0;
 
@@ -1633,6 +1647,10 @@ TOOLTIPS_GetToolInfoT (const TOOLTIPS_INFO *infoPtr, TTTOOLINFOW *ti, BOOL isW)
     if (!ti) return FALSE;
     if (ti->cbSize < TTTOOLINFOW_V1_SIZE)
 	return FALSE;
+#if defined(__REACTOS__) && __WINE_COMCTL32_VERSION != 6
+    if (isW && ti->cbSize > TTTOOLINFOW_V2_SIZE)
+	return FALSE;
+#endif
     if (infoPtr->uNumTools == 0)
 	return FALSE;
 
@@ -1646,7 +1664,11 @@ TOOLTIPS_GetToolInfoT (const TOOLTIPS_INFO *infoPtr, TTTOOLINFOW *ti, BOOL isW)
     TOOLTIPS_CopyInfoT (infoPtr, nTool, ti, isW);
     ti->hwnd = hwnd;
 
+#if defined(__REACTOS__) && __WINE_COMCTL32_VERSION != 6
+    return ti->cbSize <= TTTOOLINFOW_V2_SIZE;
+#else
     return TRUE;
+#endif
 }
 
 

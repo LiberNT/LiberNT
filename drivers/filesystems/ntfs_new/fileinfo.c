@@ -361,6 +361,9 @@ GetFileStatInformation(_In_ PVolumeContextBlock VolCB,
     Status = GetFileReparseTag(FileCB, Basic.FileAttributes, &Buffer->ReparseTag);
     if (NT_SUCCESS(Status) && Lx)
         Status = NtfsQueryLxMetadata(FileCB, Buffer);
+    /* Windows 11 reports no effective access for a file that carries a Linux mode */
+    if (NT_SUCCESS(Status) && Lx && (Buffer->LxFlags & LX_FILE_METADATA_HAS_MODE))
+        Buffer->EffectiveAccess = 0;
     if (NT_SUCCESS(Status))
         *Length -= Size;
     return Status;

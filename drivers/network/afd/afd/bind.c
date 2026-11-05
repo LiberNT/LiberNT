@@ -36,15 +36,9 @@ NTSTATUS WarmSocketForBind( PAFD_FCB FCB, ULONG ShareType ) {
 
     if (FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS)
     {
-        if (!FCB->Recv.Size)
-        {
-            Status = TdiQueryMaxDatagramLength(FCB->AddressFile.Object,
-                                               &FCB->Recv.Size);
-        }
-
         if (NT_SUCCESS(Status) && !FCB->Recv.Window)
         {
-            ReceiveWindowAllocationSize = max(FCB->Recv.Size, AfdReceiveWindowSize);
+            ReceiveWindowAllocationSize = AfdReceiveWindowSize;
 
             /* dev-nt6-1: NonPagedPool — tcpip's DGDeliverData runs from
              * the network RX DPC at DISPATCH_LEVEL and writes into this
@@ -71,24 +65,9 @@ NTSTATUS WarmSocketForBind( PAFD_FCB FCB, ULONG ShareType ) {
                 Status = STATUS_NO_MEMORY;
         }
 
-        if (NT_SUCCESS(Status) && FCB->Recv.Content < FCB->Recv.Size)
+        if (NT_SUCCESS(Status))
         {
-            if (FCB->AddressFrom)
-            {
-                FCB->AddressFrom->Options = FCB->RecvControl;
-                FCB->AddressFrom->OptionsLength = AFD_RECV_CONTROL_SIZE;
-            }
-            Status = TdiReceiveDatagram(&FCB->ReceiveIrp.InFlightRequest,
-                                        FCB->AddressFile.Object,
-                                        0,
-                                        FCB->Recv.Window,
-                                        FCB->Recv.Size,
-                                        FCB->AddressFrom,
-                                        PacketSocketRecvComplete,
-                                        FCB);
-
-            /* We don't want to wait for this read to complete. */
-            if( Status == STATUS_PENDING ) Status = STATUS_SUCCESS;
+            Status = AfdRearmDatagram(FCB);
         }
     }
 

@@ -186,7 +186,7 @@ static void check_crash(SC_HANDLE service, UINT round)
 static void test_crash(SC_HANDLE scm)
 {
     WCHAR name[64];
-    CRASH_EVENT event;
+    CRASH_EVENT events[2];
     SC_HANDLE service = create_test_service(scm, L"LntCrashTest", NULL, name, sizeof(name));
     UINT round;
 
@@ -195,10 +195,10 @@ static void test_crash(SC_HANDLE scm)
     for (round = 1; round <= 2; ++round)
     {
         check_crash(service, round);
-        ZeroMemory(&event, sizeof(event));
-        ok(collect_events(name, &event, 1) == 1, "round %u: no crash event\n", round);
-        ok(event.Id == 7034, "round %u: event %lu\n", round, event.Id);
-        ok(_wtoi(event.Count) == (int)round, "round %u: failure count %ls\n", round, event.Count);
+        ZeroMemory(events, sizeof(events));
+        ok(wait_events(name, events, round) == round, "round %u: no crash event\n", round);
+        ok(events[0].Id == 7034, "round %u: event %lu\n", round, events[0].Id);
+        ok(_wtoi(events[0].Count) == (int)round, "round %u: failure count %ls\n", round, events[0].Count);
     }
     delete_test_service(service);
 }
@@ -219,7 +219,7 @@ static void test_restart(SC_HANDLE scm)
         ok(wait_events(name, events, 2) == 2, "the restarted service did not fail again\n");
         ok(events[1].Id == 7031 && _wtoi(events[1].Count) == 1 && _wtoi(events[1].Type) == SC_ACTION_RESTART,
            "first failure: event %lu count %ls action %ls\n", events[1].Id, events[1].Count, events[1].Type);
-        ok(events[0].Id == 7031 && _wtoi(events[0].Count) == 2 && _wtoi(events[0].Type) == SC_ACTION_NONE,
+        ok(events[0].Id == 7034 && _wtoi(events[0].Count) == 2 && !events[0].Type[0],
            "second failure: event %lu count %ls action %ls\n", events[0].Id, events[0].Count, events[0].Type);
         ok(wait_stopped(service, &status) && status.dwWin32ExitCode == ERROR_PROCESS_ABORTED,
            "final state %lu exit code %lu\n", status.dwCurrentState, status.dwWin32ExitCode);

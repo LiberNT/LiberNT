@@ -2,7 +2,7 @@
  * Byte-addressed ID3D11DeviceContext::CopySubresourceRegion between buffers. */
 #include <apitest.h>
 #include <initguid.h>
-#include <d3d11.h>
+#include <d3d11_1.h>
 
 #define SOURCE_BYTES 256u
 #define FILL_BYTE 0xeeu
@@ -62,6 +62,57 @@ static void CheckBytes(const char *Case, const BYTE *Actual, UINT Bytes, UINT Of
         if (!Wrong++) { First = Index; FirstActual = Actual[Index]; FirstExpected = Expected; }
     }
     ok(!Wrong, "%s: %u wrong bytes, first at %u is %#x, expected %#x\n", Case, Wrong, First, FirstActual, FirstExpected);
+}
+
+/* Expects Source[SourceOffset, SourceOffset + Count) at Offset; other bytes are not checked. */
+static void CheckRange(const char *Case, const BYTE *Actual, UINT Offset, UINT Count, UINT SourceOffset)
+{
+    UINT Wrong = 0;
+
+    for (UINT Index = 0; Index != Count; ++Index)
+        if (Actual[Offset + Index] != static_cast<BYTE>(SourceOffset + Index)) ++Wrong;
+    ok(!Wrong, "%s: %u wrong bytes in the copied range\n", Case, Wrong);
+}
+
+/* Copy flags are hints: a driver that cannot use them gets the plain copy. DISCARD leaves the rest undefined. */
+static void TestCopyFlags(ID3D11Device *Device, ID3D11DeviceContext *Context, ID3D11Buffer *Source,
+                          const BYTE *Pattern, const BYTE *Fill)
+{
+    static const UINT Flags[] = { D3D11_COPY_NO_OVERWRITE, D3D11_COPY_DISCARD };
+    ID3D11DeviceContext1 *Context1 = NULL;
+    BYTE Actual[SOURCE_BYTES];
+
+    if (FAILED(Context->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&Context1))))
+    {
+        skip("no ID3D11DeviceContext1\n");
+        return;
+    }
+    for (UINT Index = 0; Index != ARRAYSIZE(Flags); ++Index)
+    {
+        BOOL Whole = Flags[Index] != D3D11_COPY_DISCARD;
+        D3D11_BOX Box = {16, 0, 0, 48, 1, 1}, Target = {100, 0, 0, 132, 1, 1};
+        ID3D11Buffer *Destination = CreateTestBuffer(Device, SOURCE_BYTES, D3D11_USAGE_DEFAULT, Fill);
+
+        if (!Destination) continue;
+        Context1->CopySubresourceRegion1(Destination, 0, 100, 0, 0, Source, 0, &Box, Flags[Index]);
+        if (ReadBuffer(Device, Context, Destination, Actual, SOURCE_BYTES))
+        {
+            if (Whole) CheckBytes("CopySubresourceRegion1 no overwrite", Actual, SOURCE_BYTES, 100, 32, 16);
+            else CheckRange("CopySubresourceRegion1 discard", Actual, 100, 32, 16);
+        }
+        Destination->Release();
+
+        Destination = CreateTestBuffer(Device, SOURCE_BYTES, D3D11_USAGE_DEFAULT, Fill);
+        if (!Destination) continue;
+        Context1->UpdateSubresource1(Destination, 0, &Target, Pattern + 16, 0, 0, Flags[Index]);
+        if (ReadBuffer(Device, Context, Destination, Actual, SOURCE_BYTES))
+        {
+            if (Whole) CheckBytes("UpdateSubresource1 no overwrite", Actual, SOURCE_BYTES, 100, 32, 16);
+            else CheckRange("UpdateSubresource1 discard", Actual, 100, 32, 16);
+        }
+        Destination->Release();
+    }
+    Context1->Release();
 }
 
 START_TEST(buffer_copy)
@@ -144,6 +195,8 @@ START_TEST(buffer_copy)
             CheckBytes("adjacent ranges", Actual, SOURCE_BYTES, 0, 32, 0);
         Destination->Release();
     }
+
+    if (Source) TestCopyFlags(Device, Context, Source, Pattern, Fill);
 
     if (Source) Source->Release();
     Context->Release();

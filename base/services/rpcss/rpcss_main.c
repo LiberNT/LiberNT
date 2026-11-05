@@ -50,6 +50,9 @@ struct registered_class
     unsigned int cookie;
     PMInterfacePointer object;
     unsigned int single_use : 1;
+#ifdef __REACTOS__
+    HANDLE process;
+#endif
 };
 
 static CRITICAL_SECTION registered_classes_cs = { NULL, -1, 0, 0, 0, 0 };
@@ -74,6 +77,18 @@ HRESULT __cdecl irpcss_server_register(handle_t h, const GUID *clsid, unsigned i
     entry->object->ulCntData = object->ulCntData;
     memcpy(&entry->object->abData, object->abData, object->ulCntData);
     *cookie = entry->cookie = InterlockedIncrement(&next_cookie);
+#ifdef __REACTOS__
+    {
+        ULONG pid;
+
+        /* RpcSs runs as Network Service, so open the server process with its own token */
+        if (I_RpcBindingInqLocalClientPID(h, &pid) == RPC_S_OK && RpcImpersonateClient(h) == RPC_S_OK)
+        {
+            entry->process = OpenProcess(SYNCHRONIZE, FALSE, pid);
+            RpcRevertToSelf();
+        }
+    }
+#endif
 
     EnterCriticalSection(&registered_classes_cs);
     list_add_tail(&registered_classes, &entry->entry);
@@ -85,6 +100,9 @@ HRESULT __cdecl irpcss_server_register(handle_t h, const GUID *clsid, unsigned i
 static void scm_revoke_class(struct registered_class *_class)
 {
     list_remove(&_class->entry);
+#ifdef __REACTOS__
+    if (_class->process) CloseHandle(_class->process);
+#endif
     free(_class->object);
     free(_class);
 }
@@ -113,10 +131,22 @@ HRESULT __cdecl irpcss_get_class_object(handle_t h, const GUID *clsid,
         PMInterfacePointer *object)
 {
     struct registered_class *cur;
+#ifdef __REACTOS__
+    struct registered_class *next;
+#endif
 
     *object = NULL;
 
     EnterCriticalSection(&registered_classes_cs);
+
+#ifdef __REACTOS__
+    LIST_FOR_EACH_ENTRY_SAFE(cur, next, &registered_classes, struct registered_class, entry)
+    {
+        if (!memcmp(clsid, &cur->clsid, sizeof(*clsid)) && cur->process &&
+            WaitForSingleObject(cur->process, 0) == WAIT_OBJECT_0)
+            scm_revoke_class(cur);
+    }
+#endif
 
     LIST_FOR_EACH_ENTRY(cur, &registered_classes, struct registered_class, entry)
     {

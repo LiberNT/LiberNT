@@ -729,6 +729,8 @@ IntGetClassLongA(PWND Wnd, PCLS Class, int nIndex, UINT Size)
 
             case GCL_MENUNAME:
                 Ret = (ULONG_PTR)Class->lpszClientAnsiMenuName;
+                if (Ret && Class->MenuNameIsString)
+                    Ret = (ULONG_PTR)SharedPtrToUser((PVOID)Ret);
                 break;
 
             case GCL_STYLE:
@@ -805,6 +807,8 @@ IntGetClassLongW(PWND Wnd, PCLS Class, int nIndex, UINT Size)
 
             case GCLP_MENUNAME:
                 Ret = (ULONG_PTR)Class->lpszClientUnicodeMenuName;
+                if (Ret && Class->MenuNameIsString)
+                    Ret = (ULONG_PTR)SharedPtrToUser((PVOID)Ret);
                 break;
 
             case GCL_STYLE:
@@ -1688,10 +1692,48 @@ SetClassLongPtrA(HWND hWnd,
                  INT nIndex,
                  LONG_PTR dwNewLong)
 {
-    return NtUserSetClassLongPtr(hWnd,
-                                 nIndex,
-                                 dwNewLong,
-                                 TRUE);
+    PSTR lpStr = (PSTR)dwNewLong;
+    UNICODE_STRING Value = {0};
+    BOOL Allocated = FALSE;
+    ULONG_PTR Ret;
+
+    if (nIndex == GCW_ATOM)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    if (nIndex == GCLP_MENUNAME && lpStr != NULL)
+    {
+        if (!IS_INTRESOURCE(lpStr))
+        {
+            if (!RtlCreateUnicodeStringFromAsciiz(&Value, lpStr))
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return 0;
+            }
+
+            Allocated = TRUE;
+        }
+        else
+        {
+            Value.Buffer = (PWSTR)lpStr;
+        }
+
+        dwNewLong = (LONG_PTR)&Value;
+    }
+
+    Ret = NtUserSetClassLongPtr(hWnd,
+                                nIndex,
+                                dwNewLong,
+                                TRUE);
+
+    if (Allocated)
+    {
+        RtlFreeUnicodeString(&Value);
+    }
+
+    return Ret;
 }
 
 /*
@@ -1703,6 +1745,25 @@ SetClassLongPtrW(HWND hWnd,
                  INT nIndex,
                  LONG_PTR dwNewLong)
 {
+    PWSTR lpStr = (PWSTR)dwNewLong;
+    UNICODE_STRING Value = {0};
+
+    if (nIndex == GCW_ATOM)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    if (nIndex == GCLP_MENUNAME && lpStr != NULL)
+    {
+        if (!IS_INTRESOURCE(lpStr))
+            RtlInitUnicodeString(&Value, lpStr);
+        else
+            Value.Buffer = lpStr;
+
+        dwNewLong = (LONG_PTR)&Value;
+    }
+
     return NtUserSetClassLongPtr(hWnd,
                                  nIndex,
                                  dwNewLong,
@@ -1723,7 +1784,13 @@ SetClassWord(
  * NOTE: Obsoleted in 32-bit windows
  */
 {
-    if ((nIndex < 0) && (nIndex != GCW_ATOM))
+    if (nIndex == GCW_ATOM)
+    {
+        SetLastError(ERROR_INVALID_INDEX);
+        return 0;
+    }
+
+    if (nIndex < 0)
         return 0;
 
     return (WORD) SetClassLongW ( hWnd, nIndex, wNewWord );

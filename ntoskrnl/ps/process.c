@@ -856,6 +856,8 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
             //
             Status = MmCreatePeb(Process, &InitialPeb, &Process->Peb);
             if (!NT_SUCCESS(Status)) goto CleanupWithRef;
+            Status = PspMapApiSetSchema(Process);
+            if (!NT_SUCCESS(Status)) goto CleanupWithRef;
         }
     }
 
@@ -1725,6 +1727,7 @@ PspInitializeWow64Process(IN PEPROCESS Process,
     PEWOW64PROCESS Wow64Process;
     struct _PEB32 *Peb32 = NULL;
     INITIAL_PEB InitialPeb;
+    KAPC_STATE ApcState;
     NTSTATUS Status;
 
     if (Process->WoW64Process) return STATUS_SUCCESS;
@@ -1737,6 +1740,23 @@ PspInitializeWow64Process(IN PEPROCESS Process,
     RtlZeroMemory(&InitialPeb, sizeof(InitialPeb));
     InitialPeb.Mutant = (HANDLE)-1;
     Status = MmCreatePeb32(Process, &InitialPeb, ImageInformation, &Peb32);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Wow64Process, TAG_WOW64_PROCESS);
+        return Status;
+    }
+
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        Peb32->ApiSetMap = PtrToUlong(Process->Peb->ApiSetMap);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
     if (!NT_SUCCESS(Status))
     {
         ExFreePoolWithTag(Wow64Process, TAG_WOW64_PROCESS);

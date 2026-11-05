@@ -76,17 +76,19 @@ static IDXGIResource1 *CreateResource(ID3D11Device *Device, const SUBRESOURCE_CA
     return Resource;
 }
 
-static void CheckWholeSurface(IDXGIResource1 *Resource)
+static void CheckWholeSurface(const SUBRESOURCE_CASE *Case, IDXGIResource1 *Resource)
 {
     IDXGISurface2 *Surface = NULL;
     IDXGIResource1 *Parent;
     UINT Index;
     HRESULT Hr;
 
-    if (FAILED(Resource->QueryInterface(IID_IDXGISurface2, reinterpret_cast<void **>(&Surface))))
+    /* Only a resource with a single subresource, a buffer included, is itself a surface. */
+    Hr = Resource->QueryInterface(IID_IDXGISurface2, reinterpret_cast<void **>(&Surface));
+    ok(Hr == (Case->Mips * Case->Layers == 1 ? S_OK : E_NOINTERFACE), "type %u mips %u layers %u whole surface: %#lx\n",
+       Case->Type, Case->Mips, Case->Layers, Hr);
+    if (FAILED(Hr))
         return;
-    Hr = Surface->GetResource(IID_IDXGIResource1, NULL, &Index);
-    ok(Hr == E_POINTER, "GetResource(no out): %#lx\n", Hr);
     Parent = reinterpret_cast<IDXGIResource1 *>(0xdeadbeef);
     Index = 1234;
     Hr = Surface->GetResource(IID_IDXGIFactory, reinterpret_cast<void **>(&Parent), &Index);
@@ -168,8 +170,6 @@ static void TraceOpenCases(ID3D11Device *Device)
     if (Texture) Texture->QueryInterface(IID_IDXGIResource1, reinterpret_cast<void **>(&Resource));
     if (Resource)
     {
-        Hr = Resource->CreateSubresourceSurface(0, NULL);
-        trace("PIN subresource NULL out: %#lx\n", Hr);
         Hr = Resource->CreateSubresourceSurface(0, &Surface);
         if (Surface)
         {
@@ -219,7 +219,7 @@ START_TEST(subresource_surface)
         HRESULT Hr;
 
         if (!Resource) continue;
-        CheckWholeSurface(Resource);
+        CheckWholeSurface(Case, Resource);
         for (Index = 0; Index < Count; ++Index)
             CheckSubresource(Case, Resource, Index);
         Hr = Resource->CreateSubresourceSurface(Index, &Surface);

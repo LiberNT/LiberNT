@@ -240,7 +240,7 @@ static void bidi_resolve_explicit(struct bidi_char *chars, unsigned int count, U
         /* X4 */
         case RLO:
             least_odd = get_greater_odd_level(stack[stack_top].level);
-            c->resolved = stack[stack_top].level;
+            c->resolved = valid_level(least_odd) ? least_odd : stack[stack_top].level;
             if (valid_level(least_odd))
                 push_stack(least_odd, R, FALSE);
             else if (overflow_isolate_count == 0)
@@ -250,7 +250,7 @@ static void bidi_resolve_explicit(struct bidi_char *chars, unsigned int count, U
         /* X5 */
         case LRO:
             least_even = get_greater_even_level(stack[stack_top].level);
-            c->resolved = stack[stack_top].level;
+            c->resolved = valid_level(least_even) ? least_even : stack[stack_top].level;
             if (valid_level(least_even))
                 push_stack(least_even, L, FALSE);
             else if (overflow_isolate_count == 0)
@@ -358,11 +358,14 @@ static void bidi_resolve_explicit(struct bidi_char *chars, unsigned int count, U
         case CS:
         case ES:
         case ET:
-        case S:
         case WS:
             c->resolved = stack[stack_top].level;
             if (stack[stack_top].override != NI)
-                c->resolved = stack[stack_top].override;
+                c->bidi_class = stack[stack_top].override;
+            break;
+
+        case BN:
+            c->resolved = stack[stack_top].level;
             break;
 
         /* X6a */
@@ -875,14 +878,9 @@ static void bidi_resolve_implicit(struct bidi_char *chars, unsigned int count)
     }
 }
 
-static inline BOOL is_rule_L1_reset_class(UINT8 class)
+static inline BOOL bidi_is_removed_class(UINT8 class)
 {
     switch (class) {
-    case WS:
-    case FSI:
-    case LRI:
-    case RLI:
-    case PDI:
     case LRE:
     case RLE:
     case LRO:
@@ -897,35 +895,34 @@ static inline BOOL is_rule_L1_reset_class(UINT8 class)
 
 static void bidi_resolve_resolved(struct bidi_char *chars, unsigned int count, UINT8 baselevel)
 {
-    int i, sos = 0, eos = count - 1;
+    int i, j;
 
     /* L1 */
-    for (i = sos; i <= eos; i++)
+    for (i = 0; i < count; i++)
     {
-        switch (chars[i].nominal_bidi_class)
-        {
-            case B:
-            case S:
-                {
-                    int j = i - 1;
-                    while (i > sos && j >= sos && is_rule_L1_reset_class(chars[j].nominal_bidi_class))
-                        chars[j--].resolved = baselevel;
-                    chars[i].resolved = baselevel;
-                }
-                break;
-            case LRE: case RLE: case LRO: case RLO: case PDF: case BN:
-                chars[i].resolved = i ? chars[i - 1].resolved : baselevel;
-                break;
-            default:
-                ;
-        }
+        UINT8 class = chars[i].nominal_bidi_class;
+        BOOL separator = class == B || class == S;
 
-        if (i == eos && is_rule_L1_reset_class(chars[i].nominal_bidi_class))
+        if (!separator && i != count - 1)
+            continue;
+
+        if (separator)
+            chars[i].resolved = baselevel;
+
+        for (j = separator ? i - 1 : i; j >= 0; j--)
         {
-            int j = i;
-            while (j >= sos && is_rule_L1_reset_class(chars[j].nominal_bidi_class))
-                chars[j--].resolved = baselevel;
+            if (bidi_is_removed_class(chars[j].nominal_bidi_class))
+                continue;
+            if (chars[j].nominal_bidi_class != WS)
+                break;
+            chars[j].resolved = baselevel;
         }
+    }
+
+    for (i = 0; i < count; i++)
+    {
+        if (bidi_is_removed_class(chars[i].nominal_bidi_class))
+            chars[i].resolved = i ? chars[i - 1].resolved : baselevel;
     }
 }
 
@@ -1071,7 +1068,15 @@ HRESULT bidi_computelevels(struct bidi_char *chars, unsigned int count, UINT8 ba
 {
     IsolatedRun *iso_run, *next;
     struct list IsolatingRuns;
+    unsigned int i;
     HRESULT hr;
+
+    /* Windows has no isolates: LRI, RLI, FSI and PDI are boundary neutrals. */
+    for (i = 0; i < count; ++i)
+    {
+        if (bidi_is_isolate(chars[i].bidi_class))
+            chars[i].nominal_bidi_class = chars[i].bidi_class = BN;
+    }
 
     if (TRACE_ON(bidi)) bidi_dump_types("start ", chars, 0, count);
 

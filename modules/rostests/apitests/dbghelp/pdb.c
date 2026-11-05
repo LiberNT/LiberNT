@@ -493,7 +493,6 @@ static struct _symregcallback_test_data {
 } symregcallback_test_data[] = {
     { CBA_DEFERRED_SYMBOL_LOAD_CANCEL },
     { CBA_DEFERRED_SYMBOL_LOAD_START },
-    { CBA_READ_MEMORY },
     { CBA_DEFERRED_SYMBOL_LOAD_PARTIAL },
     { CBA_DEFERRED_SYMBOL_LOAD_COMPLETE }
 };
@@ -507,7 +506,11 @@ static BOOL CALLBACK SymRegisterCallback64Proc(
     symregcallback_context *ctx;
     ctx = (symregcallback_context*)(ULONG_PTR)UserContext;
 
-    if (ctx->idx > sizeof(symregcallback_test_data))
+    /* Windows 11 also reports memory reads, XML log records and an engine option query, in varying numbers */
+    if (ActionCode == CBA_READ_MEMORY || ActionCode == CBA_XML_LOG || ActionCode == CBA_CHECK_ENGOPT_DISALLOW_NETWORK_PATHS)
+        return FALSE;
+
+    if (ctx->idx >= ARRAYSIZE(symregcallback_test_data))
     {
         ok(FALSE, "SymRegisterCallback64Proc: Too many calls.\n");
     }
@@ -526,8 +529,9 @@ static void test_SymRegCallback(HANDLE hProc, const char* szModuleName, BOOL tes
 {
     BOOL Ret;
     DWORD dwErr;
-    ULONG64 BaseAddress;
+    ULONG64 BaseAddress, LoadBase;
     symregcallback_context ctx;
+    PVOID Reserved;
 
     ctx.idx = 0;
     ctx.isANSI = testANSI;
@@ -553,17 +557,24 @@ static void test_SymRegCallback(HANDLE hProc, const char* szModuleName, BOOL tes
     if (!Ret)
         return;
 
+    /* A reserved range is never readable, so the image header read fails as for a module that is not loaded */
+    Reserved = VirtualAlloc(NULL, 0x100000, MEM_RESERVE, PAGE_NOACCESS);
+    ok(Reserved != NULL, "VirtualAlloc failed with %lu\n", GetLastError());
+    LoadBase = Reserved ? (ULONG64)(ULONG_PTR)Reserved : 0x600000;
+
     SetLastError(ERROR_SUCCESS);
-    BaseAddress = SymLoadModule64(hProc, NULL, szModuleName, NULL, 0x600000, 0);
+    BaseAddress = SymLoadModule64(hProc, NULL, szModuleName, NULL, LoadBase, 0);
     dwErr = GetLastError();
 
-    ok_ulonglong(BaseAddress, 0x600000);
+    ok_ulonglong(BaseAddress, LoadBase);
     ok_hex(dwErr, ERROR_SUCCESS);
 
-    /* this is what we want to test ... we expect 5 calls */
-    ok_int(ctx.idx, 5);
+    /* this is what we want to test ... we expect 4 calls */
+    ok_int(ctx.idx, ARRAYSIZE(symregcallback_test_data));
 
     deinit_sym();
+    if (Reserved)
+        VirtualFree(Reserved, 0, MEM_RELEASE);
 }
 
 START_TEST(pdb)

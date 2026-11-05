@@ -30,6 +30,16 @@ HANDLE SockAsyncHelperAfdHandle;
 HANDLE SockAsyncCompletionPort = NULL;
 BOOLEAN SockAsyncSelectCalled;
 
+static int
+SetSocketInformationEx(PSOCKET_INFORMATION Socket,
+                       ULONG AfdInformationClass,
+                       PBOOLEAN Boolean,
+                       PULONG Ulong,
+                       PLARGE_INTEGER LargeInteger,
+                       LPWSAOVERLAPPED Overlapped,
+                       LPWSAOVERLAPPED_COMPLETION_ROUTINE CompletionRoutine,
+                       LPINT Errno);
+
 
 
 /*
@@ -3816,16 +3826,18 @@ WSPSetSockOpt(
               {
                   ULONG RecvBufferSize = *(PULONG)optval;
 
-                  if (RecvBufferSize > 0x2000)
+                  if (Socket->SharedData->SocketType != SOCK_DGRAM && RecvBufferSize > 0x2000)
                       RecvBufferSize = 0x2000;
 
-                  SetSocketInformation(Socket,
-                                       AFD_INFO_RECEIVE_WINDOW_SIZE,
-                                       NULL,
-                                       &RecvBufferSize,
-                                       NULL,
-                                       NULL,
-                                       NULL);
+                  if (SetSocketInformationEx(Socket,
+                                             AFD_INFO_RECEIVE_WINDOW_SIZE,
+                                             NULL,
+                                             &RecvBufferSize,
+                                             NULL,
+                                             NULL,
+                                             NULL,
+                                             lpErrno) == SOCKET_ERROR)
+                      return SOCKET_ERROR;
               }
               Socket->SharedData->SizeOfRecvBuffer = *(PULONG)optval;
 
@@ -4562,14 +4574,15 @@ GetSocketInformation(PSOCKET_INFORMATION Socket,
 }
 
 
-int
-SetSocketInformation(PSOCKET_INFORMATION Socket,
-                     ULONG AfdInformationClass,
-                     PBOOLEAN Boolean OPTIONAL,
-                     PULONG Ulong OPTIONAL,
-                     PLARGE_INTEGER LargeInteger OPTIONAL,
-                     LPWSAOVERLAPPED Overlapped OPTIONAL,
-                     LPWSAOVERLAPPED_COMPLETION_ROUTINE CompletionRoutine OPTIONAL)
+static int
+SetSocketInformationEx(PSOCKET_INFORMATION Socket,
+                       ULONG AfdInformationClass,
+                       PBOOLEAN Boolean OPTIONAL,
+                       PULONG Ulong OPTIONAL,
+                       PLARGE_INTEGER LargeInteger OPTIONAL,
+                       LPWSAOVERLAPPED Overlapped OPTIONAL,
+                       LPWSAOVERLAPPED_COMPLETION_ROUTINE CompletionRoutine OPTIONAL,
+                       LPINT Errno OPTIONAL)
 {
     PIO_STATUS_BLOCK        IOSB;
     IO_STATUS_BLOCK         DummyIOSB;
@@ -4582,7 +4595,7 @@ SetSocketInformation(PSOCKET_INFORMATION Socket,
 
     InfoData = HeapAlloc(GlobalHeap, 0, sizeof(*InfoData));
     if (!InfoData)
-        return SOCKET_ERROR;
+        return MsafdReturnWithErrno(STATUS_INSUFFICIENT_RESOURCES, Errno, 0, NULL);
 
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
@@ -4592,7 +4605,7 @@ SetSocketInformation(PSOCKET_INFORMATION Socket,
     if (!NT_SUCCESS(Status))
     {
         HeapFree(GlobalHeap, 0, InfoData);
-        return SOCKET_ERROR;
+        return MsafdReturnWithErrno(Status, Errno, 0, NULL);
     }
 
     /* Set Info Class */
@@ -4629,7 +4642,7 @@ SetSocketInformation(PSOCKET_INFORMATION Socket,
             TRACE("Opened without flag WSA_FLAG_OVERLAPPED. Do nothing.\n");
             NtClose(SockEvent);
             HeapFree(GlobalHeap, 0, InfoData);
-            return MsafdReturnWithErrno(STATUS_SUCCESS, NULL, 0, NULL);
+            return MsafdReturnWithErrno(STATUS_SUCCESS, Errno, 0, NULL);
         }
 
         APCContext = HeapAlloc(GlobalHeap, 0, sizeof(*APCContext));
@@ -4638,7 +4651,7 @@ SetSocketInformation(PSOCKET_INFORMATION Socket,
             ERR("Not enough memory for APC Context\n");
             NtClose(SockEvent);
             HeapFree(GlobalHeap, 0, InfoData);
-            return MsafdReturnWithErrno(STATUS_INSUFFICIENT_RESOURCES, NULL, 0, NULL);
+            return MsafdReturnWithErrno(STATUS_INSUFFICIENT_RESOURCES, Errno, 0, NULL);
         }
         APCContext->lpCompletionRoutine = CompletionRoutine;
         APCContext->lpOverlapped = Overlapped;
@@ -4681,7 +4694,20 @@ SetSocketInformation(PSOCKET_INFORMATION Socket,
         HeapFree(GlobalHeap, 0, InfoData);
     }
 
-    return MsafdReturnWithErrno(Status, NULL, 0, NULL);
+    return MsafdReturnWithErrno(Status, Errno, 0, NULL);
+}
+
+int
+SetSocketInformation(PSOCKET_INFORMATION Socket,
+                     ULONG AfdInformationClass,
+                     PBOOLEAN Boolean OPTIONAL,
+                     PULONG Ulong OPTIONAL,
+                     PLARGE_INTEGER LargeInteger OPTIONAL,
+                     LPWSAOVERLAPPED Overlapped OPTIONAL,
+                     LPWSAOVERLAPPED_COMPLETION_ROUTINE CompletionRoutine OPTIONAL)
+{
+    return SetSocketInformationEx(Socket, AfdInformationClass, Boolean, Ulong,
+                                  LargeInteger, Overlapped, CompletionRoutine, NULL);
 }
 
 static PSOCKET_INFORMATION

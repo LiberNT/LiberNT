@@ -8,6 +8,8 @@ list(APPEND SOURCE
     ConsoleAlias.c
     ApiSetCoreSynch.c
     BaseSetLastNTError.c
+    BaseThreadInitThunk.c
+    CallbackCallingConventions.c
     Arm64ThreadContext.c
     ConsoleCP.c
     ConsoleDbcsCells.c
@@ -61,12 +63,14 @@ list(APPEND SOURCE
     LoaderLock.c
     PagingFileOpen.c
     QuantumRoundRobin.c
+    RegisterWaitPeriodic.c
     SandboxLaunch.c
     SystemImageCatalog.c
     TebSegmentAfterWait.c
     SharedMemorySecurity.c
     SharedMemoryTransfer.c
     StarvationBoost.c
+    SystemTimeChangeTimers.c
     StdHandleInheritance.c
     LocaleNameToLCID.c
     lstrcpynW.c

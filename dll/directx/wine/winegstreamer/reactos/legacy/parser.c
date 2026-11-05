@@ -35,7 +35,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
-static const WCHAR wcsInputPinName[] = {'i','n','p','u','t',' ','p','i','n',0};
 static const IMediaSeekingVtbl Parser_Seeking_Vtbl;
 static const IPinVtbl Parser_OutputPin_Vtbl;
 static const IPinVtbl Parser_InputPin_Vtbl;
@@ -93,7 +92,7 @@ static const BaseFilterFuncTable BaseFuncTable = {
     Parser_GetPinCount
 };
 
-HRESULT Parser_Create(ParserImpl* pParser, const IBaseFilterVtbl *Parser_Vtbl, const CLSID* pClsid, PFN_PROCESS_SAMPLE fnProcessSample, PFN_QUERY_ACCEPT fnQueryAccept, PFN_PRE_CONNECT fnPreConnect, PFN_CLEANUP fnCleanup, PFN_DISCONNECT fnDisconnect, REQUESTPROC fnRequest, STOPPROCESSPROC fnDone, SourceSeeking_ChangeStop stop, SourceSeeking_ChangeStart start, SourceSeeking_ChangeRate rate)
+HRESULT Parser_Create(ParserImpl* pParser, const IBaseFilterVtbl *Parser_Vtbl, const CLSID* pClsid, const WCHAR *input_name, PFN_PROCESS_SAMPLE fnProcessSample, PFN_QUERY_ACCEPT fnQueryAccept, PFN_PRE_CONNECT fnPreConnect, PFN_CLEANUP fnCleanup, PFN_DISCONNECT fnDisconnect, REQUESTPROC fnRequest, STOPPROCESSPROC fnDone, SourceSeeking_ChangeStop stop, SourceSeeking_ChangeStart start, SourceSeeking_ChangeRate rate)
 {
     HRESULT hr;
     PIN_INFO piInput;
@@ -109,7 +108,7 @@ HRESULT Parser_Create(ParserImpl* pParser, const IBaseFilterVtbl *Parser_Vtbl, c
     /* construct input pin */
     piInput.dir = PINDIR_INPUT;
     piInput.pFilter = &pParser->filter.IBaseFilter_iface;
-    lstrcpynW(piInput.achName, wcsInputPinName, sizeof(piInput.achName) / sizeof(piInput.achName[0]));
+    lstrcpynW(piInput.achName, input_name, sizeof(piInput.achName) / sizeof(piInput.achName[0]));
 
     if (!start)
         start = Parser_ChangeStart;
@@ -409,11 +408,33 @@ HRESULT WINAPI Parser_EnumPins(IBaseFilter * iface, IEnumPins **ppEnum)
 HRESULT WINAPI Parser_FindPin(IBaseFilter * iface, LPCWSTR Id, IPin **ppPin)
 {
     ParserImpl *This = impl_from_IBaseFilter(iface);
-    FIXME("(%p)->(%s,%p)\n", This, debugstr_w(Id), ppPin);
+    ULONG i;
 
-    /* FIXME: critical section */
+    TRACE("(%p)->(%s,%p)\n", This, debugstr_w(Id), ppPin);
 
-    return E_NOTIMPL;
+    if (!ppPin)
+        return E_POINTER;
+    *ppPin = NULL;
+
+    EnterCriticalSection(&This->filter.csFilter);
+    for (i = 0; i <= This->cStreams; i++)
+    {
+        LPWSTR PinId;
+
+        if (FAILED(IPin_QueryId(This->ppPins[i], &PinId)))
+            continue;
+        if (!lstrcmpW(PinId, Id))
+        {
+            IPin_AddRef(This->ppPins[i]);
+            *ppPin = This->ppPins[i];
+        }
+        CoTaskMemFree(PinId);
+        if (*ppPin)
+            break;
+    }
+    LeaveCriticalSection(&This->filter.csFilter);
+
+    return *ppPin ? S_OK : VFW_E_NOT_FOUND;
 }
 
 HRESULT WINAPI Parser_QueryFilterInfo(IBaseFilter * iface, FILTER_INFO *pInfo)

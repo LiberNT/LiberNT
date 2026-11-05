@@ -46,7 +46,7 @@
 @ stdcall BaseQueryModuleData(str str ptr ptr ptr) ;check
 @ stdcall -version=0x602+ BaseReadAppCompatDataForProcess(ptr ptr ptr)
 @ stdcall BaseSetLastNTError(long)
-@ stdcall -version=0x600+ BaseThreadInitThunk(long ptr ptr)
+@ fastcall -version=0x600+ BaseThreadInitThunk(long ptr ptr)
 ;@ stdcall -version=0x502 -arch=x86_64 BaseThreadStart()
 @ stdcall BaseUpdateAppcompatCache(long long long)
 @ stdcall BasepCheckBadapp(long ptr long long long long long long long)

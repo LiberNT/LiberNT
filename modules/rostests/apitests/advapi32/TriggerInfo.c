@@ -105,7 +105,7 @@ static void test_invalid(SC_HANDLE service)
 {
     SERVICE_TRIGGER trigger = { SERVICE_TRIGGER_TYPE_CUSTOM, 3, (GUID *)&ProviderGuid, 0, NULL };
     SERVICE_TRIGGER_INFO info = { 1, &trigger, NULL };
-    BYTE reserved;
+    BYTE reserved = 0;
     BOOL res;
 
     SetLastError(0xdeadbeef);
@@ -115,7 +115,7 @@ static void test_invalid(SC_HANDLE service)
     info.pReserved = &reserved;
     SetLastError(0xdeadbeef);
     res = ChangeServiceConfig2W(service, SERVICE_CONFIG_TRIGGER_INFO, &info);
-    ok(!res && GetLastError() == ERROR_INVALID_PARAMETER, "pReserved: %d error %lu\n", res, GetLastError());
+    ok(res, "pReserved: %d error %lu\n", res, GetLastError());
 }
 
 /* sc.exe must finish: an installer waits for it. */

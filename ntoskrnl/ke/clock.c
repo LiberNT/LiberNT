@@ -431,7 +431,10 @@ KeSetSystemTime(IN PLARGE_INTEGER NewTime,
         RemoveEntryList(&Timer->TimerListEntry);
 
         /* Update the due time and handle */
-        Timer->DueTime.QuadPart -= DeltaTime.QuadPart;
+        if (DeltaTime.QuadPart > 0 && (ULONGLONG)DeltaTime.QuadPart >= Timer->DueTime.QuadPart)
+            Timer->DueTime.QuadPart = 0;
+        else
+            Timer->DueTime.QuadPart -= DeltaTime.QuadPart;
         Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
         Timer->Header.Hand = (UCHAR)Hand;
 

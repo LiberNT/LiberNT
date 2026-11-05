@@ -306,7 +306,7 @@ struct dwrite_font_data
     struct dwrite_font_propvec propvec;
     struct dwrite_cmap cmap;
     /* Static axis for weight/width/italic. */
-    DWRITE_FONT_AXIS_VALUE axis[3];
+    DWRITE_FONT_AXIS_VALUE axis[4];
 
     DWRITE_FONT_METRICS1 metrics;
     IDWriteLocalizedStrings *info_strings[DWRITE_INFORMATIONAL_STRING_SUPPORTED_SCRIPT_LANGUAGE_TAG + 1];
@@ -4452,6 +4452,8 @@ static HRESULT init_font_data(const struct fontface_desc *desc, DWRITE_FONT_FAMI
     data->axis[1].value = width_axis_values[props.stretch];
     data->axis[2].axisTag = DWRITE_FONT_AXIS_TAG_ITALIC;
     data->axis[2].value = data->style == DWRITE_FONT_STYLE_ITALIC ? 1.0f : 0.0f;
+    data->axis[3].axisTag = DWRITE_FONT_AXIS_TAG_SLANT;
+    data->axis[3].value = props.slant_angle;
 
     *ret = data;
     return S_OK;
@@ -7546,7 +7548,7 @@ static IDWriteLocalizedStrings * fontset_entry_get_property(struct dwrite_fontse
         DWRITE_FONT_PROPERTY_ID property)
 {
     struct file_stream_desc stream_desc = { 0 };
-    IDWriteLocalizedStrings *value;
+    IDWriteLocalizedStrings *value = NULL;
 
     assert(property > DWRITE_FONT_PROPERTY_ID_NONE && property <= DWRITE_FONT_PROPERTY_ID_TYPOGRAPHIC_FACE_NAME);
 
@@ -7573,6 +7575,42 @@ static IDWriteLocalizedStrings * fontset_entry_get_property(struct dwrite_fontse
         opentype_get_font_info_strings(&stream_desc, DWRITE_INFORMATIONAL_STRING_SUPPORTED_SCRIPT_LANGUAGE_TAG, &value);
     else if (property == DWRITE_FONT_PROPERTY_ID_WIN32_FAMILY_NAME)
         opentype_get_font_info_strings(&stream_desc, DWRITE_INFORMATIONAL_STRING_WIN32_FAMILY_NAMES, &value);
+    else if (property == DWRITE_FONT_PROPERTY_ID_WEIGHT || property == DWRITE_FONT_PROPERTY_ID_STRETCH
+            || property == DWRITE_FONT_PROPERTY_ID_STYLE)
+    {
+        IDWriteLocalizedStrings *family_names = NULL, *face_names = NULL;
+        struct dwrite_font_data data = { 0 };
+        struct dwrite_font_props props;
+        WCHAR buffW[16], familyW[255], faceW[255];
+
+        opentype_get_font_properties(&stream_desc, &props);
+        data.weight = props.weight;
+        data.stretch = props.stretch;
+        data.style = props.style;
+        opentype_get_font_facename(&stream_desc, props.lf.lfFaceName, &face_names);
+        if (face_names && SUCCEEDED(opentype_get_font_familyname(&stream_desc, DWRITE_FONT_FAMILY_MODEL_WEIGHT_STRETCH_STYLE,
+                &family_names)))
+        {
+            fontstrings_get_en_string(family_names, familyW, ARRAY_SIZE(familyW));
+            fontstrings_get_en_string(face_names, faceW, ARRAY_SIZE(faceW));
+            font_apply_differentiation_rules(&data, familyW, faceW);
+        }
+        if (family_names)
+            IDWriteLocalizedStrings_Release(family_names);
+        if (face_names)
+            IDWriteLocalizedStrings_Release(face_names);
+        if (entry->simulations & DWRITE_FONT_SIMULATIONS_BOLD)
+            data.weight = DWRITE_FONT_WEIGHT_BOLD;
+        if (entry->simulations & DWRITE_FONT_SIMULATIONS_OBLIQUE)
+            data.style = DWRITE_FONT_STYLE_OBLIQUE;
+        swprintf(buffW, ARRAY_SIZE(buffW), L"%u", property == DWRITE_FONT_PROPERTY_ID_WEIGHT ? data.weight :
+                property == DWRITE_FONT_PROPERTY_ID_STRETCH ? data.stretch : data.style);
+        if (SUCCEEDED(create_localizedstrings(&value)) && FAILED(add_localizedstring(value, L"", buffW)))
+        {
+            IDWriteLocalizedStrings_Release(value);
+            value = NULL;
+        }
+    }
     else
         WARN("Unsupported property %u.\n", property);
 

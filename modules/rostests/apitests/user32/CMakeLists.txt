@@ -78,6 +78,7 @@ list(APPEND SOURCE
     NextDlgItem.c
     NonClientPaint.c
     NonClientUpdate.c
+    OwnedZOrder.c
     OwnerDestroy.c
     PersianLayout.c
     PhysicalPoint.c

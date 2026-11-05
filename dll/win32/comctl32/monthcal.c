@@ -1597,6 +1597,9 @@ MONTHCAL_SetCurSel(MONTHCAL_INFO *infoPtr, SYSTEMTIME *curSel)
   else
     InvalidateRect(infoPtr->hwndSelf, NULL, FALSE);
 
+#ifdef __REACTOS__
+  UpdateWindow(infoPtr->hwndSelf);
+#endif
   return TRUE;
 }
 
@@ -1752,7 +1755,15 @@ MONTHCAL_SetToday(MONTHCAL_INFO *infoPtr, const SYSTEMTIME *today)
   if (today)
   {
     /* remember if date was set successfully */
+#ifdef __REACTOS__
+    if (MONTHCAL_UpdateToday(infoPtr, today))
+    {
+      infoPtr->todaySet = TRUE;
+      UpdateWindow(infoPtr->hwndSelf);
+    }
+#else
     if (MONTHCAL_UpdateToday(infoPtr, today)) infoPtr->todaySet = TRUE;
+#endif
   }
 
   return 0;
@@ -1815,8 +1826,15 @@ MONTHCAL_HitTest(const MONTHCAL_INFO *infoPtr, MCHITTESTINFO *lpht)
       htinfo.rc = infoPtr->todayrect;
     }
     else
+#ifdef __REACTOS__
+    {
+      htinfo.uHit = MCHT_NOWHERE;
+      GetClientRect(infoPtr->hwndSelf, &htinfo.rc);
+    }
+#else
       /* outside of calendar area? What's left must be background :-) */
       htinfo.uHit = MCHT_CALENDARBK;
+#endif
 
     return fill_hittest_info(&htinfo, lpht);
   }
@@ -2660,6 +2678,9 @@ static LRESULT MONTHCAL_Size(MONTHCAL_INFO *infoPtr, int Width, int Height)
 
   MONTHCAL_UpdateSize(infoPtr);
   InvalidateRect(infoPtr->hwndSelf, NULL, TRUE);
+#ifdef __REACTOS__
+  UpdateWindow(infoPtr->hwndSelf);
+#endif
 
   return 0;
 }
@@ -2685,8 +2706,13 @@ static LRESULT MONTHCAL_SetFont(MONTHCAL_INFO *infoPtr, HFONT hFont, BOOL redraw
 
     MONTHCAL_UpdateSize(infoPtr);
 
+#ifdef __REACTOS__
+    InvalidateRect(infoPtr->hwndSelf, NULL, TRUE);
+    UpdateWindow(infoPtr->hwndSelf);
+#else
     if (redraw)
         InvalidateRect(infoPtr->hwndSelf, NULL, FALSE);
+#endif
 
     return (LRESULT)hOldFont;
 }
@@ -2750,6 +2776,9 @@ MONTHCAL_Create(HWND hwnd, LPCREATESTRUCTW lpcs)
 
   infoPtr->hwndSelf = hwnd;
   infoPtr->hwndNotify = lpcs->hwndParent;
+#ifdef __REACTOS__
+  SendMessageW(infoPtr->hwndNotify, WM_NOTIFYFORMAT, (WPARAM)hwnd, NF_QUERY);
+#endif
   infoPtr->dwStyle = GetWindowLongW(hwnd, GWL_STYLE);
   infoPtr->dim.cx = infoPtr->dim.cy = 1;
   infoPtr->calendars = Alloc(sizeof(*infoPtr->calendars));
@@ -2783,6 +2812,10 @@ MONTHCAL_Create(HWND hwnd, LPCREATESTRUCTW lpcs)
   infoPtr->maxSel = infoPtr->todaysDate;
   infoPtr->calendars[0].month = infoPtr->todaysDate;
   infoPtr->isUnicode = TRUE;
+
+#ifdef __REACTOS__
+  MONTHCAL_SetFont(infoPtr, (HFONT)SendMessageW(infoPtr->hwndNotify, WM_GETFONT, 0, 0), FALSE);
+#endif
 
   /* setup control layout and day state data */
   MONTHCAL_UpdateSize(infoPtr);

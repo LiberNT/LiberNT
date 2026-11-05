@@ -4024,7 +4024,7 @@ HRESULT WINAPI ScriptGetLogicalWidths(const SCRIPT_ANALYSIS *sa, int nbchars, in
                                       const int *advances, const WORD *log_clust,
                                       const SCRIPT_VISATTR *sva, int *widths)
 {
-    int i, next = 0, direction;
+    int i, j, glyph, advance, clust_size, direction;
 
     TRACE("(%p, %d, %d, %p, %p, %p, %p)\n",
           sa, nbchars, nbglyphs, advances, log_clust, sva, widths);
@@ -4034,18 +4034,17 @@ HRESULT WINAPI ScriptGetLogicalWidths(const SCRIPT_ANALYSIS *sa, int nbchars, in
     else
         direction = 1;
 
-    for (i = 0; i < nbchars; i++)
+    for (i = 0; i < nbchars; i += clust_size)
     {
-        int clust_size = get_cluster_size(log_clust, nbchars, i, direction, NULL, NULL);
-        int advance = get_glyph_cluster_advance(advances, sva, log_clust, nbglyphs, nbchars, log_clust[i], direction);
-        int j;
+        for (clust_size = 1; i + clust_size < nbchars && log_clust[i + clust_size] == log_clust[i]; clust_size++)
+            ;
+
+        advance = advances[log_clust[i]];
+        for (glyph = log_clust[i] + direction; glyph >= 0 && glyph < nbglyphs && !sva[glyph].fClusterStart; glyph += direction)
+            advance += advances[glyph];
 
         for (j = 0; j < clust_size; j++)
-        {
-            widths[next] = advance / clust_size;
-            next++;
-            if (j) i++;
-        }
+            widths[i + j] = advance / clust_size + (j >= clust_size - advance % clust_size);
     }
 
     return S_OK;

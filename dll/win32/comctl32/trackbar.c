@@ -375,6 +375,15 @@ TRACKBAR_InvalidateAll (const TRACKBAR_INFO *infoPtr)
     InvalidateRect(infoPtr->hwndSelf, NULL, FALSE);
 }
 
+#ifdef __REACTOS__
+static inline void
+TRACKBAR_RedrawAll (const TRACKBAR_INFO *infoPtr)
+{
+    InvalidateRect(infoPtr->hwndSelf, NULL, FALSE);
+    UpdateWindow(infoPtr->hwndSelf);
+}
+#endif
+
 static void
 TRACKBAR_InvalidateThumb (const TRACKBAR_INFO *infoPtr, LONG thumbPos)
 {
@@ -860,7 +869,11 @@ TRACKBAR_ActivateToolTip (const TRACKBAR_INFO *infoPtr, BOOL fShow)
     if (!infoPtr->hwndToolTip) return;
 
     ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+    ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
     ti.cbSize = sizeof(ti);
+#endif
     ti.hwnd   = infoPtr->hwndSelf;
 
     SendMessageW (infoPtr->hwndToolTip, TTM_TRACKACTIVATE, fShow, (LPARAM)&ti);
@@ -879,7 +892,11 @@ TRACKBAR_UpdateToolTip (const TRACKBAR_INFO *infoPtr)
     if (!infoPtr->hwndToolTip) return;
 
     ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+    ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
     ti.cbSize = sizeof(ti);
+#endif
     ti.hwnd   = infoPtr->hwndSelf;
     ti.uFlags = TTF_IDISHWND | TTF_TRACK | TTF_ABSOLUTE;
 
@@ -956,14 +973,20 @@ TRACKBAR_Refresh (TRACKBAR_INFO *infoPtr, HDC hdcDst)
 
     /* start the paint cycle */
     nmcd.rc = rcClient;
+#ifdef __REACTOS__
+    brush = (HBRUSH)SendMessageW(infoPtr->hwndNotify, WM_CTLCOLORSTATIC, (WPARAM)hdc,
+                                 (LPARAM)infoPtr->hwndSelf);
+#endif
     gcdrf = notify_customdraw(infoPtr, &nmcd, CDDS_PREPAINT);
     if (gcdrf & CDRF_SKIPDEFAULT) goto cleanup;
     
     /* Erase background */
     if (gcdrf == CDRF_DODEFAULT ||
         notify_customdraw(infoPtr, &nmcd, CDDS_PREERASE) != CDRF_SKIPDEFAULT) {
+#ifndef __REACTOS__
         brush = (HBRUSH)SendMessageW(infoPtr->hwndNotify, WM_CTLCOLORSTATIC, (WPARAM)hdc,
                                      (LPARAM)infoPtr->hwndSelf);
+#endif
         FillRect(hdc, &rcClient, brush ? brush : GetSysColorBrush(COLOR_BTNFACE));
         if (gcdrf != CDRF_DODEFAULT)
 	    notify_customdraw(infoPtr, &nmcd, CDDS_POSTERASE);
@@ -1060,7 +1083,11 @@ TRACKBAR_AlignBuddies (const TRACKBAR_INFO *infoPtr)
 	}
 
 	SetWindowPos (infoPtr->hwndBuddyLA, 0, x, y, 0, 0,
+#ifdef __REACTOS__
+                      SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+#else
                       SWP_NOZORDER | SWP_NOSIZE);
+#endif
     }
 
 
@@ -1080,7 +1107,11 @@ TRACKBAR_AlignBuddies (const TRACKBAR_INFO *infoPtr)
 		(rcBuddy.bottom - rcBuddy.top) / 2 + rcSelf.top;
 	}
 	SetWindowPos (infoPtr->hwndBuddyRB, 0, x, y, 0, 0,
+#ifdef __REACTOS__
+                      SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+#else
                       SWP_NOZORDER | SWP_NOSIZE);
+#endif
     }
 }
 
@@ -1195,6 +1226,9 @@ TRACKBAR_SetBuddy (TRACKBAR_INFO *infoPtr, BOOL fLocation, HWND hwndBuddy)
     }
 
     TRACKBAR_AlignBuddies (infoPtr);
+#ifdef __REACTOS__
+    TRACKBAR_RedrawAll(infoPtr);
+#endif
 
     return hwndTemp;
 }
@@ -1255,8 +1289,14 @@ TRACKBAR_SetPos (TRACKBAR_INFO *infoPtr, BOOL fPosition, LONG lPosition)
     {
         TRACKBAR_UpdateThumb(infoPtr);
         TRACKBAR_InvalidateThumbMove(infoPtr, oldPos, lPosition);
+#ifdef __REACTOS__
+        UpdateWindow(infoPtr->hwndSelf);
 
+        if (infoPtr->lPos != oldPos)
+            NotifyWinEvent( EVENT_OBJECT_VALUECHANGE, infoPtr->hwndSelf, OBJID_CLIENT, CHILDID_SELF );
+#else
         NotifyWinEvent( EVENT_OBJECT_VALUECHANGE, infoPtr->hwndSelf, OBJID_CLIENT, CHILDID_SELF );
+#endif
     }
 
     return 0;
@@ -1286,7 +1326,11 @@ TRACKBAR_SetRange (TRACKBAR_INFO *infoPtr, BOOL redraw, LONG range)
         infoPtr->flags |= TB_THUMBPOSCHANGED;
     }
 
+#ifdef __REACTOS__
+    if (redraw) TRACKBAR_RedrawAll(infoPtr);
+#else
     if (redraw) TRACKBAR_InvalidateAll(infoPtr);
+#endif
 
     return 0;
 }
@@ -1309,7 +1353,11 @@ TRACKBAR_SetRangeMax (TRACKBAR_INFO *infoPtr, BOOL redraw, LONG lMax)
     if (changed && (infoPtr->dwStyle & TBS_AUTOTICKS))
         TRACKBAR_RecalculateTics (infoPtr);
 
+#ifdef __REACTOS__
+    if (redraw) TRACKBAR_RedrawAll(infoPtr);
+#else
     if (redraw) TRACKBAR_InvalidateAll(infoPtr);
+#endif
 
     return 0;
 }
@@ -1331,7 +1379,11 @@ TRACKBAR_SetRangeMin (TRACKBAR_INFO *infoPtr, BOOL redraw, LONG lMin)
     if (changed && (infoPtr->dwStyle & TBS_AUTOTICKS))
         TRACKBAR_RecalculateTics (infoPtr);
 
+#ifdef __REACTOS__
+    if (redraw) TRACKBAR_RedrawAll(infoPtr);
+#else
     if (redraw) TRACKBAR_InvalidateAll(infoPtr);
+#endif
 
     return 0;
 }
@@ -1355,7 +1407,11 @@ TRACKBAR_SetSel (TRACKBAR_INFO *infoPtr, BOOL fRedraw, LONG lSel)
     if (infoPtr->lSelMax > infoPtr->lRangeMax)
         infoPtr->lSelMax = infoPtr->lRangeMax;
 
+#ifdef __REACTOS__
+    if (fRedraw) TRACKBAR_RedrawAll(infoPtr);
+#else
     if (fRedraw) TRACKBAR_InvalidateAll(infoPtr);
+#endif
 
     return 0;
 }
@@ -1375,7 +1431,11 @@ TRACKBAR_SetSelEnd (TRACKBAR_INFO *infoPtr, BOOL fRedraw, LONG lEnd)
     if (infoPtr->lSelMax > infoPtr->lRangeMax)
         infoPtr->lSelMax = infoPtr->lRangeMax;
 
+#ifdef __REACTOS__
+    if (fRedraw) TRACKBAR_RedrawAll(infoPtr);
+#else
     if (fRedraw) TRACKBAR_InvalidateAll(infoPtr);
+#endif
 
     return 0;
 }
@@ -1395,7 +1455,11 @@ TRACKBAR_SetSelStart (TRACKBAR_INFO *infoPtr, BOOL fRedraw, LONG lStart)
     if (infoPtr->lSelMin < infoPtr->lRangeMin)
         infoPtr->lSelMin = infoPtr->lRangeMin;
 
+#ifdef __REACTOS__
+    if (fRedraw) TRACKBAR_RedrawAll(infoPtr);
+#else
     if (fRedraw) TRACKBAR_InvalidateAll(infoPtr);
+#endif
 
     return 0;
 }
@@ -1409,7 +1473,11 @@ TRACKBAR_SetThumbLength (TRACKBAR_INFO *infoPtr, UINT iLength)
            just repaint in any case. */
         infoPtr->uThumbLen = iLength;
 	infoPtr->flags |= TB_THUMBSIZECHANGED;
+#ifdef __REACTOS__
+	TRACKBAR_RedrawAll(infoPtr);
+#else
 	TRACKBAR_InvalidateAll(infoPtr);
+#endif
     }
 
     return 0;
@@ -1446,7 +1514,11 @@ TRACKBAR_SetTicFreq (TRACKBAR_INFO *infoPtr, WORD wFreq)
     if (infoPtr->dwStyle & TBS_AUTOTICKS) {
         infoPtr->uTicFreq = wFreq;
 	TRACKBAR_RecalculateTics (infoPtr);
+#ifdef __REACTOS__
+	TRACKBAR_RedrawAll(infoPtr);
+#else
 	TRACKBAR_InvalidateAll(infoPtr);
+#endif
     }
 
     TRACKBAR_UpdateThumb (infoPtr);
@@ -1555,6 +1627,9 @@ TRACKBAR_Create (HWND hwnd, const CREATESTRUCTW *lpcs)
     infoPtr->uTicFreq  = 1;
     infoPtr->tics      = NULL;
     infoPtr->hwndNotify= lpcs->hwndParent;
+#ifdef __REACTOS__
+    SendMessageW (infoPtr->hwndNotify, WM_NOTIFYFORMAT, (WPARAM)hwnd, NF_QUERY);
+#endif
 
     TRACKBAR_InitializeThumb (infoPtr);
 
@@ -1571,7 +1646,11 @@ TRACKBAR_Create (HWND hwnd, const CREATESTRUCTW *lpcs)
             TTTOOLINFOW ti;
             WCHAR wEmpty[] = L"";
             ZeroMemory (&ti, sizeof(ti));
+#ifdef __REACTOS__
+            ti.cbSize   = COMCTL32_TTTOOLINFOW_SIZE;
+#else
             ti.cbSize   = sizeof(ti);
+#endif
      	    ti.uFlags   = TTF_IDISHWND | TTF_TRACK | TTF_ABSOLUTE;
 	    ti.hwnd     = hwnd;
             ti.lpszText = wEmpty;
@@ -1706,7 +1785,11 @@ static LRESULT
 TRACKBAR_Size (TRACKBAR_INFO *infoPtr)
 {
     TRACKBAR_RecalculateAll(infoPtr);
+#ifdef __REACTOS__
+    TRACKBAR_RedrawAll(infoPtr);
+#else
     TRACKBAR_InvalidateAll(infoPtr);
+#endif
 
     return 0;
 }

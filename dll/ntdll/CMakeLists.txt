@@ -142,7 +142,7 @@ endif()
 set_subsystem(ntdll console)
 ################# END  HACK #################
 
-target_link_libraries(ntdll ntdll_vista_static etwtrace csrlib rtl rtl_um rtl_vista ntdllsys ntdllsys_nt6 libcntpr setjmp uuid symcrypt ${PSEH_LIB})
+target_link_libraries(ntdll ntdllsys ntdllsys_nt6 ntdll_vista_static etwtrace csrlib rtl rtl_um rtl_vista libcntpr setjmp uuid symcrypt ${PSEH_LIB})
 if(MSVC AND ARCH STREQUAL "arm64")
     target_link_libraries(ntdll chkstk)
 endif()

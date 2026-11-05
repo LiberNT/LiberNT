@@ -550,6 +550,8 @@ VOID MiImageWindowInitialize(_Out_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Lowest,
 VOID MiImageWindowUninitialize(_Inout_ PMI_IMAGE_WINDOW Window);
 BOOLEAN MiImageWindowReserve(_Inout_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Size, _In_ ULONG64 HintSlot,
                              _Out_ PULONG64 Base);
+BOOLEAN MiImageWindowReserveTopDown(_Inout_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Size, _In_ ULONG64 TopSlot,
+                                    _Out_ PULONG64 Base);
 VOID MiImageWindowRelease(_Inout_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Base, _In_ ULONG64 Size);
 
 NTSTATUS MiSegmentCreate(_Inout_ struct _MI_SYSTEM *System, _In_ UCHAR Kind, _In_ ULONG64 SizeInBytes,

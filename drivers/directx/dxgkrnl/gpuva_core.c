@@ -130,6 +130,15 @@ DxgkGpuVaCoreAllocationMapChunk(
     return TRUE;
 }
 
+/* A range mapped without an allocation, such as a monitored-fence page, still gets its own page-table update. */
+BOOLEAN
+DxgkGpuVaCoreRangeIsUpdateSpan(
+    _In_ BOOLEAN Mapped,
+    _In_ BOOLEAN Reserved)
+{
+    return Mapped || Reserved;
+}
+
 BOOLEAN
 DxgkGpuVaCoreNextMapPiece(
     _In_reads_bytes_(SpanCount * SpanStride) const VOID *Spans,

@@ -8,7 +8,6 @@
 #include "precomp.h"
 
 #define CREATORS 16
-#define CPU_SLACK 320000ULL
 
 typedef struct _CREATOR
 {
@@ -24,13 +23,12 @@ static
 ULONG64
 ThreadCpu(VOID)
 {
-    FILETIME Creation, Exit, Kernel, User;
+    THREAD_CYCLE_TIME_INFORMATION Information;
 
-    if (!GetThreadTimes(GetCurrentThread(), &Creation, &Exit, &Kernel, &User))
+    if (!NT_SUCCESS(NtQueryInformationThread(NtCurrentThread(), ThreadCycleTime, &Information, sizeof(Information), NULL)))
         return 0;
 
-    return (((ULONG64)Kernel.dwHighDateTime << 32) | Kernel.dwLowDateTime) +
-           (((ULONG64)User.dwHighDateTime << 32) | User.dwLowDateTime);
+    return Information.AccumulatedCycles;
 }
 
 static
@@ -157,11 +155,12 @@ START_TEST(NtCreateSection_ConcurrentImage)
     }
 
     ok(Started == CREATORS, "Started %lu of %u creators\n", Started, CREATORS);
-    ok(TotalCpu <= 2 * SingleCpu + CPU_SLACK,
-       "%lu concurrent creators used %I64u us of CPU, one creation used %I64u us\n",
-       Started, TotalCpu / 10, SingleCpu / 10);
-    trace("%lu concurrent creators used %I64u us of CPU, one creation used %I64u us\n",
-          Started, TotalCpu / 10, SingleCpu / 10);
+    ok(SingleCpu != 0, "No cycles counted for one creation\n");
+    ok(TotalCpu <= 4 * SingleCpu,
+       "%lu concurrent creators used %I64u cycles, one creation used %I64u cycles\n",
+       Started, TotalCpu, SingleCpu);
+    trace("%lu concurrent creators used %I64u cycles, one creation used %I64u cycles\n",
+          Started, TotalCpu, SingleCpu);
 
     for (i = 0; i < Started; i++)
     {

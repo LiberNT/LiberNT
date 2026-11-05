@@ -374,6 +374,21 @@ BOOL RegisterBlankClass(HINSTANCE hInstance, HINSTANCE hPrevInstance)
     return (RegisterClassEx(&wcex) != (ATOM)0);
 }
 
+static BOOL
+IsOrdinalEntry(LPCWSTR lpFuncName)
+{
+    LPCWSTR p;
+
+    if (lpFuncName[0] != L'#' || lpFuncName[1] == UNICODE_NULL)
+        return FALSE;
+    for (p = lpFuncName + 1; *p != UNICODE_NULL; p++)
+    {
+        if (*p < L'0' || *p > L'9')
+            return FALSE;
+    }
+    return _wtoi(lpFuncName + 1) > 0 && _wtoi(lpFuncName + 1) <= 0xFFFF;
+}
+
 static LPCWSTR
 SkipProgramName(LPCWSTR p)
 {
@@ -550,6 +565,14 @@ int WINAPI _tWinMain(
         // since that is all GetProcAddress accepts
         lpFuncName = DuplicateToMultiByte(lptFuncName,nStrLen + 2);
 
+        if (IsOrdinalEntry(lptFuncName))
+        {
+            /* "#n" names the export with ordinal n, called with the Unicode command line */
+            fnDllWinMainA = 0;
+            fnDllWinMainW = (DllWinMainW)GetProcAddress(hDll, MAKEINTRESOURCEA(_wtoi(lptFuncName + 1)));
+        }
+        else
+        {
 #ifdef UNICODE
         lpFuncName[nStrLen] = 'W';
         lpFuncName[nStrLen+1] = 0;
@@ -584,6 +607,7 @@ int WINAPI _tWinMain(
             }
         }
 #endif
+        }
 
         free(lpFuncName);
 

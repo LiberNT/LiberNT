@@ -169,6 +169,9 @@ typedef struct
     DWORD      dwStyle;       /* regular toolbar style */
     DWORD      dwExStyle;     /* extended toolbar style */
     DWORD      dwDTFlags;     /* DrawText flags */
+#ifdef __REACTOS__
+    DWORD      dwDTSetFlags;
+#endif
 
     COLORREF   clrInsertMark;   /* insert mark color */
     COLORREF   clrBtnHighlight; /* color for Flat Separator */
@@ -2230,6 +2233,10 @@ TOOLBAR_InternalInsertButtonsT(TOOLBAR_INFO *infoPtr, INT iIndex, UINT nAddButto
         ZeroMemory(btnPtr, sizeof(*btnPtr));
 
         btnPtr->iBitmap   = lpTbb[iButton].iBitmap;
+#ifdef __REACTOS__
+        if ((lpTbb[iButton].fsStyle & BTNS_SEP) && btnPtr->iBitmap <= 0)
+            btnPtr->iBitmap = SEPARATOR_WIDTH;
+#endif
         btnPtr->idCommand = lpTbb[iButton].idCommand;
         btnPtr->fsState   = lpTbb[iButton].fsState;
         btnPtr->fsStyle   = lpTbb[iButton].fsStyle;
@@ -2350,7 +2357,11 @@ TOOLBAR_TooltipAddTool(const TOOLBAR_INFO *infoPtr, const TBUTTON_INFO *button)
         TTTOOLINFOW ti;
 
         ZeroMemory(&ti, sizeof(TTTOOLINFOW));
+#ifdef __REACTOS__
+        ti.cbSize   = COMCTL32_TTTOOLINFOW_SIZE;
+#else
         ti.cbSize   = sizeof (TTTOOLINFOW);
+#endif
         ti.hwnd     = infoPtr->hwndSelf;
         ti.uId      = button->idCommand;
         ti.hinst    = 0;
@@ -2369,7 +2380,11 @@ TOOLBAR_TooltipDelTool(const TOOLBAR_INFO *infoPtr, const TBUTTON_INFO *button)
         TTTOOLINFOW ti;
 
         ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+        ti.cbSize   = COMCTL32_TTTOOLINFOW_SIZE;
+#else
         ti.cbSize   = sizeof(ti);
+#endif
         ti.hwnd     = infoPtr->hwndSelf;
         ti.uId      = button->idCommand;
 
@@ -2385,7 +2400,11 @@ static void TOOLBAR_TooltipSetRect(const TOOLBAR_INFO *infoPtr, const TBUTTON_IN
         TTTOOLINFOW ti;
 
         ZeroMemory(&ti, sizeof(ti));
+#ifdef __REACTOS__
+        ti.cbSize = COMCTL32_TTTOOLINFOW_SIZE;
+#else
         ti.cbSize = sizeof(ti);
+#endif
         ti.hwnd = infoPtr->hwndSelf;
         ti.uId = button->idCommand;
         ti.rect = button->rect;
@@ -4963,8 +4982,14 @@ TOOLBAR_SetDrawTextFlags (TOOLBAR_INFO *infoPtr, DWORD mask, DWORD flags)
 
     TRACE("hwnd = %p, mask = %#lx, flags %#lx\n", infoPtr->hwndSelf, mask, flags);
 
+#ifdef __REACTOS__
+    old_flags = infoPtr->dwDTSetFlags;
+    infoPtr->dwDTSetFlags = (old_flags & ~mask) | (flags & mask);
+    infoPtr->dwDTFlags = (infoPtr->dwDTFlags & ~mask) | (flags & mask);
+#else
     old_flags = infoPtr->dwDTFlags;
     infoPtr->dwDTFlags = (old_flags & ~mask) | (flags & mask);
+#endif
 
     return (LRESULT)old_flags;
 }
@@ -4989,6 +5014,10 @@ TOOLBAR_SetExtendedStyle (TOOLBAR_INFO *infoPtr, DWORD mask, DWORD style)
 
     if (infoPtr->dwExStyle & ~TBSTYLE_EX_ALL)
         FIXME("Unknown Toolbar Extended Style %#lx. Please report.\n", (infoPtr->dwExStyle & ~TBSTYLE_EX_ALL));
+#ifdef __REACTOS__
+    if ((infoPtr->dwExStyle & ~old_style) & TBSTYLE_EX_VERTICAL)
+        infoPtr->dwStyle = CCS_VERT;
+#endif
 
     if ((old_style ^ infoPtr->dwExStyle) & TBSTYLE_EX_MIXEDBUTTONS)
         TOOLBAR_CalcToolbar(infoPtr);
@@ -5711,7 +5740,11 @@ TOOLBAR_Create (HWND hwnd, const CREATESTRUCTW *lpcs)
 
     TRACE("hwnd = %p, style = %#lx\n", hwnd, lpcs->style);
 
+#ifdef __REACTOS__
+    infoPtr->dwStyle = GetWindowLongW(hwnd, GWL_STYLE) | (lpcs->style & WS_VISIBLE);
+#else
     infoPtr->dwStyle = GetWindowLongW(hwnd, GWL_STYLE);
+#endif
     GetClientRect(hwnd, &infoPtr->client_rect);
     infoPtr->bUnicode = infoPtr->hwndNotify && 
         (NFR_UNICODE == SendMessageW(hwnd, WM_NOTIFYFORMAT, (WPARAM)hwnd, NF_REQUERY));

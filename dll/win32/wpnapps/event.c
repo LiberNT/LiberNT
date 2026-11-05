@@ -6,15 +6,62 @@
  */
 
 #include "private.h"
+#include <combaseapi.h>
+#include <ctxtcall.h>
 
 struct event_handler
 {
     struct list entry;
     INT64 token;
-    IUnknown *handler;
+    LONG refs;
+    IID iid;
+    IAgileReference *reference;
+    IContextCallback *context;
+};
+
+struct event_invocation
+{
+    struct event_handler *handler;
+    event_invoke_func invoke;
+    void *sender;
+    void *args;
 };
 
 static LONG64 next_event_token;
+
+static HRESULT WINAPI event_release_reference(ComCallData *data)
+{
+    IAgileReference *reference = InterlockedExchangePointer(&data->pUserDefined, NULL);
+
+    if (reference)
+        IAgileReference_Release(reference);
+    return S_OK;
+}
+
+static void event_handler_release(struct event_handler *handler)
+{
+    ComCallData data = {0};
+    HRESULT init = E_FAIL;
+
+    if (!InterlockedDecrement(&handler->refs))
+    {
+        data.pUserDefined = handler->reference;
+        if (handler->context)
+        {
+            init = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+            if (SUCCEEDED(init) || init == RPC_E_CHANGED_MODE)
+                IContextCallback_ContextCallback(handler->context, event_release_reference, &data,
+                                                 &IID_IContextCallback, 5, NULL);
+        }
+        if (data.pUserDefined)
+            IAgileReference_Release((IAgileReference *)data.pUserDefined);
+        if (SUCCEEDED(init))
+            CoUninitialize();
+        if (handler->context)
+            IContextCallback_Release(handler->context);
+        free(handler);
+    }
+}
 
 void event_list_init(struct event_list *list)
 {
@@ -24,22 +71,27 @@ void event_list_init(struct event_list *list)
 
 void event_list_clear(struct event_list *list)
 {
-    struct event_handler *handler, *next;
+    struct event_handler *handler;
 
-    AcquireSRWLockExclusive(&list->lock);
-    LIST_FOR_EACH_ENTRY_SAFE(handler, next, &list->handlers, struct event_handler, entry)
+    for (;;)
     {
+        AcquireSRWLockExclusive(&list->lock);
+        if (list_empty(&list->handlers))
+        {
+            ReleaseSRWLockExclusive(&list->lock);
+            break;
+        }
+        handler = LIST_ENTRY(list_head(&list->handlers), struct event_handler, entry);
         list_remove(&handler->entry);
-        IUnknown_Release(handler->handler);
-        free(handler);
+        ReleaseSRWLockExclusive(&list->lock);
+        event_handler_release(handler);
     }
-    ReleaseSRWLockExclusive(&list->lock);
 }
 
 HRESULT event_list_add(struct event_list *list, void *handler, REFIID iid, EventRegistrationToken *token)
 {
     struct event_handler *entry;
-    IUnknown *typed;
+    IUnknown *typed, *agile;
     HRESULT hr;
 
     if (!token)
@@ -54,12 +106,28 @@ HRESULT event_list_add(struct event_list *list, void *handler, REFIID iid, Event
         IUnknown_Release(typed);
         return E_OUTOFMEMORY;
     }
-    entry->handler = typed;
+    entry->refs = 1;
+    entry->iid = *iid;
+    hr = IUnknown_QueryInterface(typed, &IID_IAgileObject, (void **)&agile);
+    if (SUCCEEDED(hr))
+        IUnknown_Release(agile);
+    else
+        hr = CoGetObjectContext(&IID_IContextCallback, (void **)&entry->context);
+    if (SUCCEEDED(hr))
+        hr = RoGetAgileReference(AGILEREFERENCE_DEFAULT, &IID_IUnknown, typed, &entry->reference);
+    IUnknown_Release(typed);
+    if (FAILED(hr))
+    {
+        if (entry->context)
+            IContextCallback_Release(entry->context);
+        free(entry);
+        return hr;
+    }
     entry->token = InterlockedIncrement64(&next_event_token);
     AcquireSRWLockExclusive(&list->lock);
     list_add_tail(&list->handlers, &entry->entry);
-    ReleaseSRWLockExclusive(&list->lock);
     token->value = entry->token;
+    ReleaseSRWLockExclusive(&list->lock);
     return S_OK;
 }
 
@@ -79,14 +147,11 @@ HRESULT event_list_remove(struct event_list *list, EventRegistrationToken token)
     }
     ReleaseSRWLockExclusive(&list->lock);
     if (found)
-    {
-        IUnknown_Release(found->handler);
-        free(found);
-    }
+        event_handler_release(found);
     return S_OK;
 }
 
-UINT32 event_list_snapshot(struct event_list *list, IUnknown ***handlers)
+UINT32 event_list_snapshot(struct event_list *list, struct event_handler ***handlers)
 {
     struct event_handler *handler;
     UINT32 count = 0;
@@ -99,24 +164,54 @@ UINT32 event_list_snapshot(struct event_list *list, IUnknown ***handlers)
         count = 0;
         LIST_FOR_EACH_ENTRY(handler, &list->handlers, struct event_handler, entry)
         {
-            IUnknown_AddRef(handler->handler);
-            (*handlers)[count++] = handler->handler;
+            InterlockedIncrement(&handler->refs);
+            (*handlers)[count++] = handler;
         }
     }
     else
-    {
         count = 0;
-    }
     ReleaseSRWLockShared(&list->lock);
     return count;
 }
 
-void event_list_release_snapshot(IUnknown **handlers, UINT32 count)
+static HRESULT WINAPI event_invoke_in_context(ComCallData *data)
+{
+    struct event_invocation *invocation = data->pUserDefined;
+    struct event_handler *entry = invocation->handler;
+    IUnknown *identity, *typed;
+    HRESULT hr;
+
+    hr = IAgileReference_Resolve(entry->reference, &IID_IUnknown, (void **)&identity);
+    if (FAILED(hr))
+        return hr;
+    hr = IUnknown_QueryInterface(identity, &entry->iid, (void **)&typed);
+    IUnknown_Release(identity);
+    if (FAILED(hr))
+        return hr;
+    hr = invocation->invoke(typed, invocation->sender, invocation->args);
+    IUnknown_Release(typed);
+    return hr;
+}
+
+void event_handler_invoke(struct event_handler *handler, event_invoke_func invoke, void *sender, void *args)
+{
+    struct event_invocation invocation = {handler, invoke, sender, args};
+    ComCallData data = {0};
+
+    data.pUserDefined = &invocation;
+    if (handler->context)
+        IContextCallback_ContextCallback(handler->context, event_invoke_in_context, &data,
+                                         &IID_IContextCallback, 5, NULL);
+    else
+        event_invoke_in_context(&data);
+}
+
+void event_list_release_snapshot(struct event_handler **handlers, UINT32 count)
 {
     UINT32 i;
 
     for (i = 0; i < count; i++)
-        IUnknown_Release(handlers[i]);
+        event_handler_release(handlers[i]);
     free(handlers);
 }
 

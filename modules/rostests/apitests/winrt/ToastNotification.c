@@ -6,6 +6,7 @@
  */
 
 #include "winrt_apitest.h"
+#include <stdlib.h>
 
 #define WIDL_using_Windows_Data_Xml_Dom
 #include <windows.data.xml.dom.h>
@@ -32,6 +33,12 @@ struct dismissed_handler
     ITypedEventHandler_ToastNotification_ToastDismissedEventArgs ITypedEventHandler_iface;
     LONG Calls;
     ToastDismissalReason Reason;
+    DWORD ThreadId;
+    LONG RefCount;
+    DWORD OwnerThreadId;
+    DWORD WrongReleaseThreadId;
+    EventRegistrationToken Token;
+    HRESULT RemoveResult;
 };
 
 static HRESULT WINAPI
@@ -107,6 +114,7 @@ dismissed_Invoke(ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *i
     struct dismissed_handler *Handler = CONTAINING_RECORD(iface, struct dismissed_handler, ITypedEventHandler_iface);
 
     IToastDismissedEventArgs_get_Reason(args, &Handler->Reason);
+    Handler->ThreadId = GetCurrentThreadId();
     InterlockedIncrement(&Handler->Calls);
     return S_OK;
 }
@@ -114,6 +122,62 @@ dismissed_Invoke(ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *i
 static ITypedEventHandler_ToastNotification_ToastDismissedEventArgsVtbl dismissed_vtbl =
 {
     dismissed_QueryInterface, dismissed_AddRef, dismissed_Release, dismissed_Invoke
+};
+
+static HRESULT WINAPI
+apartment_dismissed_QueryInterface(ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *iface,
+                                    REFIID iid, void **out)
+{
+    if (IsEqualGUID(iid, &IID_IUnknown) ||
+        IsEqualGUID(iid, &IID_ITypedEventHandler_ToastNotification_ToastDismissedEventArgs))
+    {
+        *out = iface;
+        InterlockedIncrement(&CONTAINING_RECORD(iface, struct dismissed_handler, ITypedEventHandler_iface)->RefCount);
+        return S_OK;
+    }
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI
+apartment_dismissed_AddRef(ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *iface)
+{
+    return InterlockedIncrement(&CONTAINING_RECORD(iface, struct dismissed_handler, ITypedEventHandler_iface)->RefCount);
+}
+
+static ULONG WINAPI
+apartment_dismissed_Release(ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *iface)
+{
+    struct dismissed_handler *Handler = CONTAINING_RECORD(iface, struct dismissed_handler, ITypedEventHandler_iface);
+
+    ULONG refs;
+    DWORD thread = GetCurrentThreadId();
+
+    if (Handler->OwnerThreadId && thread != Handler->OwnerThreadId)
+        InterlockedCompareExchange((LONG *)&Handler->WrongReleaseThreadId, thread, 0);
+    refs = InterlockedDecrement(&Handler->RefCount);
+    if (!refs)
+        free(Handler);
+    return refs;
+}
+
+static HRESULT WINAPI
+apartment_dismissed_Invoke(ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *iface,
+                           IToastNotification *sender, IToastDismissedEventArgs *args)
+{
+    struct dismissed_handler *Handler = CONTAINING_RECORD(iface, struct dismissed_handler, ITypedEventHandler_iface);
+
+    IToastDismissedEventArgs_get_Reason(args, &Handler->Reason);
+    Handler->ThreadId = GetCurrentThreadId();
+    Handler->RemoveResult = IToastNotification_remove_Dismissed(sender, Handler->Token);
+    InterlockedIncrement(&Handler->Calls);
+    return S_OK;
+}
+
+static ITypedEventHandler_ToastNotification_ToastDismissedEventArgsVtbl apartment_dismissed_vtbl =
+{
+    apartment_dismissed_QueryInterface, apartment_dismissed_AddRef, apartment_dismissed_Release,
+    apartment_dismissed_Invoke
 };
 
 static void
@@ -492,5 +556,135 @@ START_TEST(ToastNotification)
     if (History)
         IToastNotificationHistory_Release(History);
     IToastNotificationManagerStatics_Release(Statics);
+    RoUninitialize();
+}
+
+START_TEST(ToastCallback)
+{
+    struct dismissed_handler *Handler;
+    static struct dismissed_handler Agile = {{&dismissed_vtbl}, 0, -1, 0};
+    IToastNotificationManagerStatics *Statics = NULL;
+    IToastNotificationFactory *Factory = NULL;
+    IToastNotification *Toast = NULL;
+    IToastNotifier *Notifier = NULL;
+    IXmlDocument *Document = NULL;
+    EventRegistrationToken Token, AgileToken;
+    WCHAR AppId[96], KeyName[160], ShortcutPath[MAX_PATH];
+    HSTRING Id;
+    DWORD Start, ThreadId = GetCurrentThreadId();
+    BOOL Registered = FALSE, Subscribed = FALSE, AgileSubscribed = FALSE, Shortcut = FALSE;
+    HKEY Key;
+    MSG Message;
+    HRESULT hr;
+
+    hr = RoInitialize(RO_INIT_SINGLETHREADED);
+    ok(SUCCEEDED(hr), "RoInitialize returned %#lx\n", hr);
+    if (FAILED(hr)) return;
+    Handler = calloc(1, sizeof(*Handler));
+    ok(Handler != NULL, "Cannot allocate the handler\n");
+    if (!Handler)
+    {
+        RoUninitialize();
+        return;
+    }
+    Handler->ITypedEventHandler_iface.lpVtbl = &apartment_dismissed_vtbl;
+    Handler->RefCount = 1;
+    Handler->OwnerThreadId = ThreadId;
+    Handler->Reason = -1;
+    Handler->RemoveResult = E_FAIL;
+
+    swprintf(AppId, ARRAYSIZE(AppId), L"LiberNT.ApiTest.ToastCallback.%lu", GetCurrentProcessId());
+    swprintf(KeyName, ARRAYSIZE(KeyName), L"Software\\Classes\\AppUserModelId\\%ls", AppId);
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, KeyName, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &Key, NULL))
+    {
+        ok(FALSE, "Cannot register the test application ID\n");
+        goto done;
+    }
+    RegSetValueExW(Key, L"DisplayName", 0, REG_SZ, (const BYTE *)L"LiberNT callback test",
+                   sizeof(L"LiberNT callback test"));
+    RegCloseKey(Key);
+    Registered = TRUE;
+    Shortcut = CreateAppShortcut(ShortcutPath, AppId);
+    ok(Shortcut, "Cannot create the test application shortcut\n");
+    if (!Shortcut) goto done;
+    Sleep(3000);
+
+    hr = GetFactory(RuntimeClass_Windows_UI_Notifications_ToastNotificationManager,
+                    &IID_IToastNotificationManagerStatics, (void **)&Statics);
+    ok(SUCCEEDED(hr), "Toast manager activation returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    Id = CreateHString(AppId);
+    hr = IToastNotificationManagerStatics_CreateToastNotifierWithId(Statics, Id, &Notifier);
+    WindowsDeleteString(Id);
+    ok(SUCCEEDED(hr), "CreateToastNotifierWithId returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    Document = LoadToastXml();
+    if (!Document) goto done;
+    hr = GetFactory(RuntimeClass_Windows_UI_Notifications_ToastNotification,
+                    &IID_IToastNotificationFactory, (void **)&Factory);
+    ok(SUCCEEDED(hr), "Toast factory activation returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    hr = IToastNotificationFactory_CreateToastNotification(Factory, Document, &Toast);
+    ok(SUCCEEDED(hr), "CreateToastNotification returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    hr = IToastNotification_add_Dismissed(Toast, &Handler->ITypedEventHandler_iface, &Token);
+    ok(SUCCEEDED(hr), "add_Dismissed returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    Subscribed = TRUE;
+    Handler->Token = Token;
+    hr = IToastNotification_add_Dismissed(Toast, &Agile.ITypedEventHandler_iface, &AgileToken);
+    ok(SUCCEEDED(hr), "add_Dismissed for agile handler returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    AgileSubscribed = TRUE;
+    hr = IToastNotifier_Show(Notifier, Toast);
+    ok(SUCCEEDED(hr), "Show returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+
+    Start = GetTickCount();
+    while ((!Handler->Calls || !Agile.Calls) && GetTickCount() - Start < 11000)
+    {
+        MsgWaitForMultipleObjects(0, NULL, FALSE, 50, QS_ALLINPUT);
+        while (PeekMessageW(&Message, NULL, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&Message);
+            DispatchMessageW(&Message);
+        }
+    }
+    ok(Handler->Calls == 1, "Dismissed called %ld times\n", Handler->Calls);
+    ok(Agile.Calls == 1, "Agile Dismissed called %ld times\n", Agile.Calls);
+    if (Agile.Calls)
+        ok(Agile.Reason == ToastDismissalReason_TimedOut, "Agile Dismissed reason %d\n", Agile.Reason);
+    if (Handler->Calls)
+    {
+        ok(Handler->ThreadId == ThreadId, "Dismissed ran on thread %lu instead of %lu\n", Handler->ThreadId, ThreadId);
+        ok(Handler->Reason == ToastDismissalReason_TimedOut, "Dismissed reason %d\n", Handler->Reason);
+        ok(Handler->RemoveResult == S_OK, "remove_Dismissed from callback returned %#lx\n", Handler->RemoveResult);
+        Start = GetTickCount();
+        while (InterlockedCompareExchange(&Handler->RefCount, 0, 0) != 1 && GetTickCount() - Start < 2000)
+        {
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 50, QS_ALLINPUT);
+            while (PeekMessageW(&Message, NULL, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&Message);
+                DispatchMessageW(&Message);
+            }
+        }
+        ok(Handler->RefCount == 1, "Handler retains %ld references after removal\n", Handler->RefCount - 1);
+        ok(!Handler->WrongReleaseThreadId, "Handler released on thread %lu instead of %lu\n",
+           Handler->WrongReleaseThreadId, ThreadId);
+    }
+
+done:
+    if (AgileSubscribed) IToastNotification_remove_Dismissed(Toast, AgileToken);
+    if (Subscribed) IToastNotification_remove_Dismissed(Toast, Token);
+    if (Notifier && Toast) IToastNotifier_Hide(Notifier, Toast);
+    if (Toast) IToastNotification_Release(Toast);
+    if (Factory) IToastNotificationFactory_Release(Factory);
+    if (Document) IXmlDocument_Release(Document);
+    if (Notifier) IToastNotifier_Release(Notifier);
+    if (Statics) IToastNotificationManagerStatics_Release(Statics);
+    if (Shortcut) DeleteFileW(ShortcutPath);
+    if (Registered) RegDeleteKeyW(HKEY_CURRENT_USER, KeyName);
+    apartment_dismissed_Release(&Handler->ITypedEventHandler_iface);
     RoUninitialize();
 }

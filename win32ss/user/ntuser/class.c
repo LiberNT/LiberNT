@@ -2248,13 +2248,16 @@ UserSetClassLongPtr(IN PCLS Class,
         {
             PUNICODE_STRING Value = (PUNICODE_STRING)NewLong;
 
+            Ret = Ansi ? (ULONG_PTR)Class->lpszClientAnsiMenuName : (ULONG_PTR)Class->lpszClientUnicodeMenuName;
+            if (Ret && Class->MenuNameIsString)
+                Ret = (ULONG_PTR)UserHeapAddressToUser((PVOID)Ret);
+
             if (!IntSetClassMenuName(Class,
                                      Value))
             {
                 ERR("Setting the class menu name failed!\n");
+                Ret = 0;
             }
-
-            /* FIXME: Really return NULL? Wine does so... */
             break;
         }
 

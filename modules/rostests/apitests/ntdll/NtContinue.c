@@ -18,6 +18,17 @@
 #define NTC_SEGMENT_BITS (0xFFFF)
 #define NTC_EFLAGS_BITS  (0x3C0CD5)
 static ULONG g_EFlagsBits = NTC_EFLAGS_BITS;
+
+static BOOLEAN IsQemuTcg(VOID)
+{
+    INT CpuInfo[4];
+
+    __cpuid(CpuInfo, 1);
+    if (!(CpuInfo[2] & (1u << 31)))
+        return FALSE;
+    __cpuid(CpuInfo, 0x40000000);
+    return memcmp(&CpuInfo[1], "TCGTCGTCGTCG", 12) == 0;
+}
 #endif
 
 void continuePoint(void);
@@ -187,6 +198,11 @@ START_TEST(NtContinue)
     if (QueryMachines && QueryMachines(GetCurrentProcess(), &ProcessMachine, &NativeMachine) &&
         NativeMachine == IMAGE_FILE_MACHINE_ARM64)
     {
+        g_EFlagsBits &= ~0x180000;
+    }
+    else if (IsQemuTcg())
+    {
+        /* QEMU TCG does not load VIF and VIP from the frame of a return to user mode */
         g_EFlagsBits &= ~0x180000;
     }
 #endif

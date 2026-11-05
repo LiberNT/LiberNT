@@ -950,11 +950,29 @@ BOOL toast_is_expired(IToastNotification *toast)
     return expired;
 }
 
+static HRESULT invoke_dismissed(IUnknown *handler, void *sender, void *args)
+{
+    return ITypedEventHandler_ToastNotification_ToastDismissedEventArgs_Invoke(
+        (ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *)handler, sender, args);
+}
+
+static HRESULT invoke_activated(IUnknown *handler, void *sender, void *args)
+{
+    return ITypedEventHandler_ToastNotification_IInspectable_Invoke(
+        (ITypedEventHandler_ToastNotification_IInspectable *)handler, sender, args);
+}
+
+static HRESULT invoke_failed(IUnknown *handler, void *sender, void *args)
+{
+    return ITypedEventHandler_ToastNotification_ToastFailedEventArgs_Invoke(
+        (ITypedEventHandler_ToastNotification_ToastFailedEventArgs *)handler, sender, args);
+}
+
 void toast_raise_dismissed(IToastNotification *toast, ToastDismissalReason reason)
 {
     struct toast *impl = impl_from_IToastNotification(toast);
     struct dismissed_args *args;
-    IUnknown **handlers;
+    struct event_handler **handlers;
     UINT32 count, i;
 
     if (!(count = event_list_snapshot(&impl->dismissed, &handlers)))
@@ -966,9 +984,7 @@ void toast_raise_dismissed(IToastNotification *toast, ToastDismissalReason reaso
         args->reason = reason;
         for (i = 0; i < count; i++)
         {
-            ITypedEventHandler_ToastNotification_ToastDismissedEventArgs_Invoke(
-                (ITypedEventHandler_ToastNotification_ToastDismissedEventArgs *)handlers[i], toast,
-                &args->IToastDismissedEventArgs_iface);
+            event_handler_invoke(handlers[i], invoke_dismissed, toast, &args->IToastDismissedEventArgs_iface);
         }
         IToastDismissedEventArgs_Release(&args->IToastDismissedEventArgs_iface);
     }
@@ -980,7 +996,7 @@ void toast_raise_activated(IToastNotification *toast, const WCHAR *arguments,
 {
     struct toast *impl = impl_from_IToastNotification(toast);
     struct activated_args *args;
-    IUnknown **handlers;
+    struct event_handler **handlers;
     UINT32 count, i;
 
     if (!(count = event_list_snapshot(&impl->activated, &handlers)))
@@ -995,9 +1011,7 @@ void toast_raise_activated(IToastNotification *toast, const WCHAR *arguments,
         create_user_input(inputs, input_count, &args->user_input);
         for (i = 0; i < count; i++)
         {
-            ITypedEventHandler_ToastNotification_IInspectable_Invoke(
-                (ITypedEventHandler_ToastNotification_IInspectable *)handlers[i], toast,
-                (IInspectable *)&args->IToastActivatedEventArgs_iface);
+            event_handler_invoke(handlers[i], invoke_activated, toast, &args->IToastActivatedEventArgs_iface);
         }
         IToastActivatedEventArgs_Release(&args->IToastActivatedEventArgs_iface);
     }
@@ -1008,7 +1022,7 @@ void toast_raise_failed(IToastNotification *toast, HRESULT error)
 {
     struct toast *impl = impl_from_IToastNotification(toast);
     struct failed_args *args;
-    IUnknown **handlers;
+    struct event_handler **handlers;
     UINT32 count, i;
 
     if (!(count = event_list_snapshot(&impl->failed, &handlers)))
@@ -1020,9 +1034,7 @@ void toast_raise_failed(IToastNotification *toast, HRESULT error)
         args->error = error;
         for (i = 0; i < count; i++)
         {
-            ITypedEventHandler_ToastNotification_ToastFailedEventArgs_Invoke(
-                (ITypedEventHandler_ToastNotification_ToastFailedEventArgs *)handlers[i], toast,
-                &args->IToastFailedEventArgs_iface);
+            event_handler_invoke(handlers[i], invoke_failed, toast, &args->IToastFailedEventArgs_iface);
         }
         IToastFailedEventArgs_Release(&args->IToastFailedEventArgs_iface);
     }

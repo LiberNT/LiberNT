@@ -13,12 +13,17 @@ extern void func_gpu_priority(void);
 extern void func_kmt_outputdupl(void);
 extern void func_offer_resources(void);
 extern void func_subresource_surface(void);
+extern void func_feature_support(void);
+extern void func_shared_dimensions(void);
+extern void func_d3d10_bindings(void);
+extern void func_adapter_outputs(void);
 extern void func_counters(void);
 extern void func_query_order(void);
 extern void func_composition(void);
 extern void func_composition_damage(void);
 extern void func_composition_source(void);
 extern void func_hwnd_source(void);
+extern void func_hwnd_damage(void);
 extern void func_composition_lifetime(void);
 extern void func_texture_dimensions(void);
 extern void func_multisample(void);
@@ -43,12 +48,17 @@ const struct test winetest_testlist[] =
     { "kmt_outputdupl", func_kmt_outputdupl },
     { "offer_resources", func_offer_resources },
     { "subresource_surface", func_subresource_surface },
+    { "feature_support", func_feature_support },
+    { "shared_dimensions", func_shared_dimensions },
+    { "d3d10_bindings", func_d3d10_bindings },
+    { "adapter_outputs", func_adapter_outputs },
     { "counters", func_counters },
     { "query_order", func_query_order },
     { "composition", func_composition },
     { "composition_damage", func_composition_damage },
     { "composition_source", func_composition_source },
     { "hwnd_source", func_hwnd_source },
+    { "hwnd_damage", func_hwnd_damage },
     { "composition_lifetime", func_composition_lifetime },
     { "texture_dimensions", func_texture_dimensions },
     { "multisample", func_multisample },

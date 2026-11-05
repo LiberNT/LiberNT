@@ -74,6 +74,11 @@ typedef struct _DXGK_GPUVA_CORE_SPAN
 } DXGK_GPUVA_CORE_SPAN;
 
 BOOLEAN
+DxgkGpuVaCoreRangeIsUpdateSpan(
+    _In_ BOOLEAN Mapped,
+    _In_ BOOLEAN Reserved);
+
+BOOLEAN
 DxgkGpuVaCoreNextMapPiece(
     _In_reads_bytes_(SpanCount * SpanStride) const VOID *Spans,
     _In_ ULONG SpanCount,

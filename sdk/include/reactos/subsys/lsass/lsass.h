@@ -133,12 +133,13 @@ typedef struct _LSA_ENUM_LOGON_SESSIONS_MSG
     {
         struct
         {
-            ULONG Dummy;
+            ULONG PointerSize;
         } Request;
         struct
         {
             ULONG LogonSessionCount;
-            PVOID LogonSessionBuffer;
+            ULONG Reserved;
+            ULONGLONG LogonSessionBuffer;
         } Reply;
     };
 } LSA_ENUM_LOGON_SESSIONS_MSG, *PLSA_ENUM_LOGON_SESSIONS_MSG;
@@ -151,6 +152,7 @@ typedef struct _LSA_GET_LOGON_SESSION_DATA_MSG
         struct
         {
             LUID LogonId;
+            ULONG PointerSize;
         } Request;
         struct
         {

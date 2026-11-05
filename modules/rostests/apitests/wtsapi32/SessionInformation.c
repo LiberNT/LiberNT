@@ -8,6 +8,7 @@
 #include <apitest.h>
 #include <wtsapi32.h>
 #include <tlhelp32.h>
+#include <ntsecapi.h>
 
 typedef struct _SHELL_USER
 {
@@ -187,6 +188,38 @@ static void TestUserToken(DWORD Console, const SHELL_USER *Shell)
     CloseHandle(Token);
 }
 
+static void TestLogonSessions(void)
+{
+    PSECURITY_LOGON_SESSION_DATA Data;
+    PLUID Ids = NULL;
+    ULONG Count = 0, i;
+    NTSTATUS Status;
+
+    Status = LsaEnumerateLogonSessions(&Count, &Ids);
+    ok(Status == 0, "LsaEnumerateLogonSessions returned %#lx\n", Status);
+    if (Status != 0)
+        return;
+    ok(!Count || Ids != NULL, "enumerated %lu sessions with no list\n", Count);
+    if (Ids)
+    {
+        for (i = 0; i < Count; i++)
+        {
+            Data = NULL;
+            Status = LsaGetLogonSessionData(&Ids[i], &Data);
+            ok(Status == 0 && Data != NULL, "session %lu: status %#lx, data %p\n", i, Status, Data);
+            if (Status == 0 && Data)
+            {
+                ok(Data->LogonId.LowPart == Ids[i].LowPart && Data->LogonId.HighPart == Ids[i].HighPart,
+                   "session %lu: unexpected logon ID\n", i);
+                ok(Data->Size >= FIELD_OFFSET(SECURITY_LOGON_SESSION_DATA, Upn) + sizeof(Data->Upn),
+                   "session %lu: data size %lu\n", i, Data->Size);
+                LsaFreeReturnBuffer(Data);
+            }
+        }
+        LsaFreeReturnBuffer(Ids);
+    }
+}
+
 START_TEST(SessionInformation)
 {
     SHELL_USER Shell;
@@ -198,6 +231,7 @@ START_TEST(SessionInformation)
     ok(Console != 0xffffffff, "no active console session\n");
     GetShellUser(Console, &Shell);
     ok(Shell.Found, "no explorer.exe in the console session %lu\n", Console);
+    TestLogonSessions();
 
     /* A session that does not exist fails without touching the size */
     Ok = QueryInfo(Console + 100, WTSConnectState, &Buffer, &Bytes);

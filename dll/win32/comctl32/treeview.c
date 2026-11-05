@@ -160,6 +160,9 @@ typedef struct _TREEITEM    /* HTREEITEM is a _TREEINFO *. */
                                Each item takes up "item.iIntegral" spots in the visible order.
                                0 is the root's first child. */
   const TREEVIEW_INFO *infoPtr; /* tree data this item belongs to */
+#ifdef __REACTOS__
+  BOOL      childrenSet;
+#endif
 } TREEVIEW_ITEM;
 
 /******** Defines that TREEVIEW_ProcessLetterKeys uses ****************/
@@ -1218,6 +1221,9 @@ TREEVIEW_DoSetItemT(const TREEVIEW_INFO *infoPtr, TREEVIEW_ITEM *item,
     if (tvItem->mask & TVIF_CHILDREN)
     {
 	item->cChildren = tvItem->cChildren;
+#ifdef __REACTOS__
+	item->childrenSet = TRUE;
+#endif
 
 	if (item->cChildren == I_CHILDRENCALLBACK)
 	    callbackSet |= TVIF_CHILDREN;
@@ -1507,7 +1513,11 @@ TREEVIEW_RemoveAllChildren(TREEVIEW_INFO *infoPtr, const TREEVIEW_ITEM *parentIt
 	kill = next;
     }
 
+#ifdef __REACTOS__
+    assert(parentItem->cChildren <= 0 || parentItem->childrenSet);
+#else
     assert(parentItem->cChildren <= 0); /* I_CHILDRENCALLBACK or 0 */
+#endif
     assert(parentItem->firstChild == NULL);
     assert(parentItem->lastChild == NULL);
 }
@@ -1529,6 +1539,9 @@ TREEVIEW_UnlinkItem(const TREEVIEW_ITEM *item)
 	parentItem->lastChild = item->prevSibling;
 
     if (parentItem->firstChild == NULL && parentItem->lastChild == NULL
+#ifdef __REACTOS__
+	&& !parentItem->childrenSet
+#endif
 	&& parentItem->cChildren > 0)
 	parentItem->cChildren = 0;
 
@@ -2832,7 +2845,7 @@ TREEVIEW_DrawItem(const TREEVIEW_INFO *infoPtr, HDC hdc, TREEVIEW_ITEM *item)
 	    /* Draw focus box around the selected item */
 #ifdef __REACTOS__
 	    if ((item == infoPtr->selectedItem) && inFocus &&
-	        !(SendMessageW(infoPtr->hwnd, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS))
+	        !(DefWindowProcW(infoPtr->hwnd, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS))
 #else
 	    if ((item == infoPtr->selectedItem) && inFocus)
 #endif
@@ -3491,6 +3504,10 @@ TREEVIEW_Sort(TREEVIEW_INFO *infoPtr, HTREEITEM parent,
 
 	return TRUE;
     }
+#ifdef __REACTOS__
+    if (cChildren == 1 && !pSort)
+        return TRUE;
+#endif
     return FALSE;
 }
 
@@ -3945,7 +3962,11 @@ TREEVIEW_HitTest(const TREEVIEW_INFO *infoPtr, LPTVHITTESTINFO lpht)
     {
 	lpht->flags = TVHT_ONITEMSTATEICON;
     }
+#ifdef __REACTOS__
+    else if (x >= item->linesOffset && infoPtr->dwStyle & TVS_HASBUTTONS && item->cChildren)
+#else
     else if (x >= item->linesOffset && infoPtr->dwStyle & TVS_HASBUTTONS)
+#endif
     {
 	lpht->flags = TVHT_ONITEMBUTTON;
     }
@@ -5519,7 +5540,15 @@ TREEVIEW_KeyDown(TREEVIEW_INFO *infoPtr, WPARAM wParam)
     TREEVIEW_SendRealNotify(infoPtr, TVN_KEYDOWN, &nmkeydown.hdr);
 
     if (prevItem == NULL)
+#ifdef __REACTOS__
+    {
+        if (wParam == VK_RETURN)
+            TREEVIEW_SendSimpleNotify(infoPtr, NM_RETURN, NULL);
+        return FALSE;
+    }
+#else
 	return FALSE;
+#endif
 
     if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
 	return TREEVIEW_ScrollKeyDown(infoPtr, wParam);

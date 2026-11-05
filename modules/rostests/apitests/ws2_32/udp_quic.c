@@ -292,6 +292,177 @@ TestIpv6DualStackSetup(void)
     closesocket(Socket);
 }
 
+
+static void
+TestReceiveBufferQueue(BOOL Connected, BOOL SmallBuffer, BOOL Grow, BOOL ZeroBuffer, BOOL BeforeBind)
+{
+    struct sockaddr_in ReceiverAddress, SenderAddress;
+    SOCKET Receiver = INVALID_SOCKET, Sender = INVALID_SOCKET;
+    CHAR Data[1200];
+    BOOL Seen[100] = { FALSE };
+    BOOL SawGrowthMarker = FALSE;
+    DWORD Size = ZeroBuffer ? 0 : SmallBuffer ? 8192 : 1024 * 1024;
+    DWORD Actual = 0;
+    u_long NonBlocking = 1;
+    int Length, Result, Count = 0, Bad = 0, i;
+    const char *Tag = Connected ? "connected" : "unconnected";
+
+    Receiver = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    Sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ok(Receiver != INVALID_SOCKET && Sender != INVALID_SOCKET,
+       "%s: socket failed with %d\n", Tag, WSAGetLastError());
+    if (Receiver == INVALID_SOCKET || Sender == INVALID_SOCKET)
+        goto Cleanup;
+
+    if (BeforeBind)
+    {
+        Result = setsockopt(Receiver, SOL_SOCKET, SO_RCVBUF, (const char *)&Size, sizeof(Size));
+        ok(Result == 0, "%s: pre-bind SO_RCVBUF failed with %d\n", Tag, WSAGetLastError());
+    }
+    ZeroMemory(&ReceiverAddress, sizeof(ReceiverAddress));
+    ReceiverAddress.sin_family = AF_INET;
+    ReceiverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    SenderAddress = ReceiverAddress;
+    Result = bind(Receiver, (const struct sockaddr *)&ReceiverAddress, sizeof(ReceiverAddress));
+    ok(Result == 0, "%s: receiver bind failed with %d\n", Tag, WSAGetLastError());
+    Result = bind(Sender, (const struct sockaddr *)&SenderAddress, sizeof(SenderAddress));
+    ok(Result == 0, "%s: sender bind failed with %d\n", Tag, WSAGetLastError());
+    Length = sizeof(ReceiverAddress);
+    Result = getsockname(Receiver, (struct sockaddr *)&ReceiverAddress, &Length);
+    ok(Result == 0, "%s: receiver getsockname failed with %d\n", Tag, WSAGetLastError());
+    Length = sizeof(SenderAddress);
+    Result = getsockname(Sender, (struct sockaddr *)&SenderAddress, &Length);
+    ok(Result == 0, "%s: sender getsockname failed with %d\n", Tag, WSAGetLastError());
+    if (Connected)
+    {
+        Result = connect(Receiver, (const struct sockaddr *)&SenderAddress, sizeof(SenderAddress));
+        ok(Result == 0, "%s: connect failed with %d\n", Tag, WSAGetLastError());
+    }
+
+    if (!BeforeBind)
+    {
+        Result = setsockopt(Receiver, SOL_SOCKET, SO_RCVBUF, (const char *)&Size, sizeof(Size));
+        ok(Result == 0, "%s: set SO_RCVBUF %lu failed with %d\n", Tag, Size, WSAGetLastError());
+    }
+    Length = sizeof(Actual);
+    Result = getsockopt(Receiver, SOL_SOCKET, SO_RCVBUF, (char *)&Actual, &Length);
+    ok(Result == 0 && Actual >= Size, "%s: SO_RCVBUF returned %lu, requested %lu\n", Tag, Actual, Size);
+
+    for (i = 0; i < (SmallBuffer ? 30 : 100); ++i)
+    {
+        memset(Data, i, sizeof(Data));
+        Result = sendto(Sender, Data, sizeof(Data), 0,
+                        (const struct sockaddr *)&ReceiverAddress, sizeof(ReceiverAddress));
+        if (Result != sizeof(Data))
+        {
+            ok(0, "%s: sendto %d returned %d error %d\n", Tag, i, Result, WSAGetLastError());
+            goto Cleanup;
+        }
+        Sleep(1);
+    }
+    Sleep(200);
+    if (Grow)
+    {
+        Size = 1024 * 1024;
+        Result = setsockopt(Receiver, SOL_SOCKET, SO_RCVBUF, (const char *)&Size, sizeof(Size));
+        ok(Result == 0, "%s: growing SO_RCVBUF failed with %d\n", Tag, WSAGetLastError());
+        memset(Data, 0x7f, sizeof(Data));
+        Result = sendto(Sender, Data, sizeof(Data), 0,
+                        (const struct sockaddr *)&ReceiverAddress, sizeof(ReceiverAddress));
+        ok(Result == sizeof(Data), "%s: growth send returned %d\n", Tag, Result);
+        Sleep(200);
+    }
+    Result = ioctlsocket(Receiver, FIONBIO, &NonBlocking);
+    ok(Result == 0, "%s: FIONBIO failed with %d\n", Tag, WSAGetLastError());
+    for (;;)
+    {
+        Result = Connected ? recv(Receiver, Data, sizeof(Data), 0) :
+                             recvfrom(Receiver, Data, sizeof(Data), 0, NULL, NULL);
+        if (Result == SOCKET_ERROR)
+        {
+            ok(WSAGetLastError() == WSAEWOULDBLOCK, "%s: recv failed with %d\n", Tag, WSAGetLastError());
+            break;
+        }
+        if (Grow && Result == sizeof(Data) && (UCHAR)Data[0] == 0x7f)
+            SawGrowthMarker = TRUE;
+        else if (Result != sizeof(Data) || (UCHAR)Data[0] >= 100 || Seen[(UCHAR)Data[0]])
+            ++Bad;
+        else
+            Seen[(UCHAR)Data[0]] = TRUE;
+        ++Count;
+    }
+    if (Grow)
+        ok(SawGrowthMarker, "%s: socket did not resume after growing its full queue\n", Tag);
+    if (ZeroBuffer)
+        ok(Count == 1 && Bad == 0, "%s: zero buffer returned %d datagrams, %d invalid\n", Tag, Count, Bad);
+    else if (SmallBuffer)
+        ok(Count > 0 && Bad == 0, "%s: small queue returned %d datagrams, %d invalid\n", Tag, Count, Bad);
+    else
+        ok(Count == 100 && Bad == 0, "%s: large queue returned %d of 100 datagrams, %d invalid\n", Tag, Count, Bad);
+
+    memset(Data, 0x7f, sizeof(Data));
+    Result = sendto(Sender, Data, sizeof(Data), 0,
+                    (const struct sockaddr *)&ReceiverAddress, sizeof(ReceiverAddress));
+    ok(Result == sizeof(Data), "%s: recovery send returned %d\n", Tag, Result);
+    if (WaitReadable(Receiver))
+    {
+        Result = Connected ? recv(Receiver, Data, sizeof(Data), 0) :
+                             recvfrom(Receiver, Data, sizeof(Data), 0, NULL, NULL);
+        ok(Result == sizeof(Data) && (UCHAR)Data[0] == 0x7f,
+           "%s: recovery recv returned %d error %d\n", Tag, Result, WSAGetLastError());
+    }
+    else
+    {
+        ok(0, "%s: socket did not resume receiving after draining its queue\n", Tag);
+    }
+
+Cleanup:
+    if (Receiver != INVALID_SOCKET)
+        closesocket(Receiver);
+    if (Sender != INVALID_SOCKET)
+        closesocket(Sender);
+}
+
+
+static void
+TestLargeDatagramSmallBuffer(void)
+{
+    struct sockaddr_in Address = { 0 };
+    SOCKET Receiver, Sender;
+    CHAR Data[12000];
+    DWORD Size = 8192;
+    int Length, Result;
+
+    Receiver = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    Sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ok(Receiver != INVALID_SOCKET && Sender != INVALID_SOCKET, "large datagram: socket failed\n");
+    if (Receiver == INVALID_SOCKET || Sender == INVALID_SOCKET)
+        goto Cleanup;
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    Result = bind(Receiver, (const struct sockaddr *)&Address, sizeof(Address));
+    ok(Result == 0, "large datagram: bind failed %d\n", WSAGetLastError());
+    Length = sizeof(Address);
+    Result = getsockname(Receiver, (struct sockaddr *)&Address, &Length);
+    ok(Result == 0, "large datagram: getsockname failed %d\n", WSAGetLastError());
+    Result = setsockopt(Receiver, SOL_SOCKET, SO_RCVBUF, (char *)&Size, sizeof(Size));
+    ok(Result == 0, "large datagram: setsockopt failed %d\n", WSAGetLastError());
+    memset(Data, 0x5a, sizeof(Data));
+    Result = sendto(Sender, Data, sizeof(Data), 0, (const struct sockaddr *)&Address, sizeof(Address));
+    ok(Result == sizeof(Data), "large datagram: sendto returned %d error %d\n", Result, WSAGetLastError());
+    if (WaitReadable(Receiver))
+    {
+        Result = recv(Receiver, Data, sizeof(Data), 0);
+        ok(Result == sizeof(Data) && Data[0] == 0x5a && Data[sizeof(Data)-1] == 0x5a,
+           "large datagram: recv returned %d error %d\n", Result, WSAGetLastError());
+    }
+    else
+        ok(0, "large datagram: receiver did not become readable\n");
+Cleanup:
+    if (Receiver != INVALID_SOCKET) closesocket(Receiver);
+    if (Sender != INVALID_SOCKET) closesocket(Sender);
+}
+
 START_TEST(udp_quic)
 {
     WSADATA WsaData;
@@ -306,6 +477,19 @@ START_TEST(udp_quic)
 
     TestIpv4MessageIo();
     TestIpv6DualStackSetup();
+    TestReceiveBufferQueue(FALSE, FALSE, FALSE, FALSE, FALSE);
+    TestReceiveBufferQueue(TRUE, FALSE, FALSE, FALSE, FALSE);
+    TestReceiveBufferQueue(FALSE, TRUE, FALSE, FALSE, FALSE);
+    TestReceiveBufferQueue(TRUE, TRUE, FALSE, FALSE, FALSE);
+    TestReceiveBufferQueue(FALSE, TRUE, TRUE, FALSE, FALSE);
+    TestReceiveBufferQueue(TRUE, TRUE, TRUE, FALSE, FALSE);
+    TestReceiveBufferQueue(FALSE, TRUE, FALSE, TRUE, FALSE);
+    TestReceiveBufferQueue(TRUE, TRUE, FALSE, TRUE, FALSE);
+    TestReceiveBufferQueue(FALSE, FALSE, FALSE, FALSE, TRUE);
+    TestReceiveBufferQueue(TRUE, FALSE, FALSE, FALSE, TRUE);
+    TestReceiveBufferQueue(FALSE, TRUE, FALSE, TRUE, TRUE);
+    TestReceiveBufferQueue(TRUE, TRUE, FALSE, TRUE, TRUE);
+    TestLargeDatagramSmallBuffer();
 
     WSACleanup();
 }
