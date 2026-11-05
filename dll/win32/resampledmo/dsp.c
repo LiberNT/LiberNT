@@ -208,6 +208,7 @@ static void init_matrix(struct resampler_dsp *dsp, DWORD in_mask, DWORD out_mask
             contained = FALSE;
     }
 
+    /* FIXME: Windows derives untabulated layouts and upmixes from speaker positions, not from the nearest documented table. */
     if (!contained && (out_mask == KSAUDIO_SPEAKER_STEREO || out_mask == KSAUDIO_SPEAKER_MONO) && out_channels <= 2)
     {
         const struct downmix_table *table = find_downmix_table(in_mask);
@@ -288,7 +289,7 @@ static UINT gcd(UINT a, UINT b)
 
 HRESULT resampler_dsp_init(struct resampler_dsp *dsp, const WAVEFORMATEX *input, const WAVEFORMATEX *output, LONG quality)
 {
-    UINT step, p;
+    UINT step, p, i;
     double ratio;
 
     memset(dsp, 0, sizeof(*dsp));
@@ -310,6 +311,9 @@ HRESULT resampler_dsp_init(struct resampler_dsp *dsp, const WAVEFORMATEX *input,
         return E_OUTOFMEMORY;
     }
     init_matrix(dsp, wave_format_channel_mask(input), wave_format_channel_mask(output));
+    /* Windows 11 rounds every default matrix weight to a multiple of 0.001. */
+    for (i = 0; i < dsp->in_channels * dsp->out_channels; i++)
+        dsp->matrix[i] = (float)(floor(dsp->matrix[i] * 1000.0 + 0.5) / 1000.0);
 
     if (dsp->bypass)
         return S_OK;
@@ -318,7 +322,7 @@ HRESULT resampler_dsp_init(struct resampler_dsp *dsp, const WAVEFORMATEX *input,
     /* Kaiser window, cutoff and look-ahead measured on Windows 11 at qualities 30 and 60. */
     dsp->cutoff = (1.0 - 1.044 / (quality + 1)) * min(1.0, 1.0 / ratio);
     dsp->half_length = (quality + 1) * max(1.0, ratio);
-    /* FIXME: Windows holds back one input frame less at quality 1. */
+    /* FIXME: Windows' cutoff, window and support vary with the quality: taps differ by up to 3e-5, and up to quality 20 one input frame less is held back. */
     dsp->lookahead = (UINT)floor(dsp->half_length) + 1;
     dsp->taps = 2 * (UINT)ceil(dsp->half_length) + 1;
 
