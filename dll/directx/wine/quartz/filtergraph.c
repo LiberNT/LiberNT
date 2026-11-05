@@ -1952,8 +1952,9 @@ static HRESULT WINAPI MediaControl_Run(IMediaControl *iface)
 
     if (graph->state == State_Running)
     {
+        hr = graph->needs_async_run ? S_FALSE : S_OK;
         LeaveCriticalSection(&graph->cs);
-        return S_OK;
+        return hr;
     }
 
     sort_filters(graph);
