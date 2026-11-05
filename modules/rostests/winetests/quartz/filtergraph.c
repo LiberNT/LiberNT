@@ -3838,6 +3838,26 @@ static void test_filter_state(void)
             "Got time %I64d.\n", source.start_time);
     ok(sink.start_time == source.start_time, "Expected time %I64d, got %I64d.\n",
             source.start_time, sink.start_time);
+    ok(source.start_time == 100 * 10000, "Got time %I64d.\n", source.start_time);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    Sleep(100);
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(source.start_time == 200 * 10000, "Got time %I64d.\n", source.start_time);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(source.start_time == 300 * 10000, "Got time %I64d.\n", source.start_time);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(source.start_time == 100 * 10000, "Got time %I64d.\n", source.start_time);
 
     hr = IMediaControl_Stop(control);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
