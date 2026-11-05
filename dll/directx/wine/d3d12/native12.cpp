@@ -6,6 +6,7 @@
  */
 
 #include "native12.h"
+#include "../d3d11/nativeerror.h"
 #include "native12_device.h"
 #include "native12_objects.h"
 
@@ -232,6 +233,7 @@ static void APIENTRY Native12SetError(D3D10DDI_HRTDEVICE handle, HRESULT hr)
 {
     Native12Device *device = Native12Device::FromRuntime(handle.handle);
     WARN("Driver reported device error %#lx.\n", hr);
+    hr = NativeDriverErrorToApi(hr);
     if (device && FAILED(hr) && hr != E_OUTOFMEMORY)
         InterlockedCompareExchange(reinterpret_cast<LONG *>(&device->removed_reason), hr, S_OK);
 }

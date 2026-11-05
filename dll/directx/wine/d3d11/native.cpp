@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "native_wddm20.h"
+#include "nativeerror.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d11);
 
@@ -375,7 +376,7 @@ public:
     D3D10DDI_HSAMPLER DefaultSamplerHandle();
     HRESULT OpenSharedResourceData(D3DKMT_OPENRESOURCE &open, const NativeSharedResourceData &data, REFIID iid, void **out);
     void Unimplemented(const char *method) { FIXME("Native D3D11 %s is not implemented.\n", method); operation_error = E_NOTIMPL; }
-    void BeginCall() { operation_error = S_OK; }
+    void BeginCall() { operation_error = removed_reason; }
     D3D11_CONSERVATIVE_RASTERIZATION_TIER ConservativeRasterizationTier() const
     {
         if (feature_level < D3D_FEATURE_LEVEL_11_1) return D3D11_CONSERVATIVE_RASTERIZATION_NOT_SUPPORTED;
@@ -1067,8 +1068,8 @@ static HRESULT NativeLegacySharedHandle(NativeDevice *device, D3D10DDI_HRTRESOUR
     NativeLock guard(device);
     D3DKMT_HANDLE share = 0;
     HRESULT hr = device->get_resource_handles(device->runtime_device, runtime_handle.handle, NULL, &share);
-    if (FAILED(hr)) return hr;
-    if (!share) return DXGI_ERROR_INVALID_CALL;
+    /* Windows 11 reports success and no handle for a resource the driver could not share. */
+    if (FAILED(hr) || !share) return S_OK;
     *out = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(share));
     return S_OK;
 }
@@ -1238,8 +1239,7 @@ public:
         NativeLock guard(device);
         D3DKMT_HANDLE share = 0;
         HRESULT hr = device->get_resource_handles(device->runtime_device, runtime_handle.handle, NULL, &share);
-        if (FAILED(hr)) return hr;
-        if (!share) return DXGI_ERROR_INVALID_CALL;
+        if (FAILED(hr) || !share) return S_OK;
         *out = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(share));
         return S_OK;
     }
@@ -2146,8 +2146,7 @@ static HRESULT APIENTRY NativeQueryAdapter(HANDLE handle, const D3DDDICB_QUERYAD
 static void APIENTRY NativeSetError(D3D10DDI_HRTCORELAYER layer, HRESULT error)
 {
     NativeDevice *device = static_cast<NativeDevice *>(layer.handle);
-    if (error == DXGI_DDI_ERR_WASSTILLDRAWING) error = DXGI_ERROR_WAS_STILL_DRAWING;
-    if (error == DXGI_DDI_ERR_UNSUPPORTED) error = DXGI_ERROR_UNSUPPORTED;
+    error = NativeDriverErrorToApi(error);
     device->operation_error = error;
     if (FAILED(error) && error != DXGI_ERROR_WAS_STILL_DRAWING)
         WARN("Native UMD reported error %#lx.\n", error);

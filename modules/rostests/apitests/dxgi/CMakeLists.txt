@@ -11,6 +11,7 @@ add_executable(dxgi_apitest
     hwnd_damage.cpp
     composition_lifetime.cpp
     completion_event.cpp
+    driver_error.cpp
     shared_fence.cpp
     fence_neighbors.cpp
     shared_name.cpp
