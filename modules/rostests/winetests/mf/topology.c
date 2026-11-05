@@ -3483,6 +3483,52 @@ todo_wine {
             hr = IMFTopologyNode_GetInputPrefType(sink_node2, 0, &media_type);
             todo_wine
             ok(hr == S_OK, "Failed to get sink pref type, hr %#lx.\n", hr);
+#ifdef __REACTOS__
+            if (hr == S_OK)
+            {
+                IMFMediaType *up_type = NULL;
+                IMFMediaTypeHandler *up_handler;
+                IMFStreamDescriptor *up_sd;
+                IMFTopologyNode *up_node;
+                IMFTransform *up_mft;
+                DWORD flags;
+
+                hr = IMFTopologyNode_GetInput(sink_node2, 0, &up_node, &index);
+                ok(hr == S_OK, "Failed to get sink input, hr %#lx.\n", hr);
+                if (SUCCEEDED(IMFTopologyNode_GetObject(up_node, &node_object)))
+                {
+                    hr = IUnknown_QueryInterface(node_object, &IID_IMFTransform, (void **)&up_mft);
+                    ok(hr == S_OK, "Failed to get sink input transform, hr %#lx.\n", hr);
+                    hr = IMFTransform_GetOutputCurrentType(up_mft, index, &up_type);
+                    IMFTransform_Release(up_mft);
+                    IUnknown_Release(node_object);
+                }
+                else
+                {
+                    hr = IMFTopologyNode_GetUnknown(up_node, &MF_TOPONODE_STREAM_DESCRIPTOR, &IID_IMFStreamDescriptor, (void **)&up_sd);
+                    ok(hr == S_OK, "Failed to get sink input stream descriptor, hr %#lx.\n", hr);
+                    hr = IMFStreamDescriptor_GetMediaTypeHandler(up_sd, &up_handler);
+                    ok(hr == S_OK, "Failed to get sink input handler, hr %#lx.\n", hr);
+                    hr = IMFMediaTypeHandler_GetCurrentMediaType(up_handler, &up_type);
+                    if (hr == MF_E_NOT_INITIALIZED)
+                    {
+                        ok(!test->current_input, "Source current type was cleared.\n");
+                        hr = IMFMediaTypeHandler_GetMediaTypeByIndex(up_handler, 0, &up_type);
+                    }
+                    IMFMediaTypeHandler_Release(up_handler);
+                    IMFStreamDescriptor_Release(up_sd);
+                }
+                ok(hr == S_OK, "Failed to get sink input type, hr %#lx.\n", hr);
+                if (hr == S_OK)
+                {
+                    hr = IMFMediaType_IsEqual(media_type, up_type, &flags);
+                    ok(hr == S_OK, "Sink pref type differs from its input type, hr %#lx, flags %#lx.\n", hr, flags);
+                    IMFMediaType_Release(up_type);
+                }
+                IMFTopologyNode_Release(up_node);
+                hr = S_OK;
+            }
+#endif
             if (hr == S_OK)
                 IMFMediaType_Release(media_type);
 
