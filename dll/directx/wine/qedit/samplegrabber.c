@@ -422,7 +422,7 @@ SampleGrabber_IMemInputPin_Receive(IMemInputPin *iface, IMediaSample *sample)
     TRACE("(%p)->(%p) output = %p, grabber = %p\n", This, sample, This->source.pMemInputPin, This->grabberIface);
     if (!sample)
         return E_POINTER;
-    if (This->filter.state == State_Stopped)
+    if (This->filter.state == State_Stopped && This->sink.pin.peer)
         return VFW_E_WRONG_STATE;
     if (This->oneShot == OneShot_Past)
         return S_FALSE;
