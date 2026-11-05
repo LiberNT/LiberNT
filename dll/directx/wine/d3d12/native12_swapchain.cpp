@@ -160,7 +160,7 @@ public:
     }
     bool FocusLost()
     {
-        if (fullscreen_desc.Windowed) return false;
+        if (fullscreen_desc.Windowed || !IsWindow(window)) return false;
         HWND foreground = GetForegroundWindow();
         if (foreground == window) fullscreen_focused = true;
         return fullscreen_focused && foreground && foreground != window && IsWindowVisible(foreground);
