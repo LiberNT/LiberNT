@@ -457,6 +457,8 @@ static HRESULT avi_decompressor_source_query_interface(struct strmbase_pin *ifac
 
     if (IsEqualGUID(iid, &IID_IQualityControl))
         *out = &filter->source_IQualityControl_iface;
+    else if (IsEqualGUID(iid, &IID_IMediaPosition))
+        *out = &filter->passthrough.IMediaPosition_iface;
     else if (IsEqualGUID(iid, &IID_IMediaSeeking))
         *out = &filter->passthrough.IMediaSeeking_iface;
     else
