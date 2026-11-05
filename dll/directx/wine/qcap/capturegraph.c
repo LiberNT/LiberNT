@@ -188,11 +188,123 @@ fnCaptureGraphBuilder2_SetOutputFileName(ICaptureGraphBuilder2 * iface,
                                          IFileSinkFilter **ppSink)
 {
     CaptureGraphImpl *This = impl_from_ICaptureGraphBuilder2(iface);
+    IBaseFilter *mux, *writer = NULL;
+    IPin *source = NULL, *sink = NULL;
+    IFileSinkFilter *file_sink;
+    IEnumPins *enum_pins;
+    const GUID *clsid;
+    HRESULT hr;
 
-    FIXME("(%p/%p)->(%s, %s, %p, %p) Stub!\n", This, iface,
+    TRACE("(%p/%p)->(%s, %s, %p, %p)\n", This, iface,
           debugstr_guid(pType), debugstr_w(lpstrFile), ppf, ppSink);
 
-    return E_NOTIMPL;
+    if (!pType || !lpstrFile || !*lpstrFile || !ppf)
+        return E_POINTER;
+
+    if (ppSink)
+        *ppSink = NULL;
+
+    if (IsEqualGUID(pType, &MEDIASUBTYPE_Avi))
+        clsid = &CLSID_AviDest;
+    else if (IsEqualGUID(pType, &MEDIASUBTYPE_Asf))
+        clsid = &CLSID_WMAsfWriter;
+    else
+        clsid = pType;
+
+    if (FAILED(hr = CoCreateInstance(clsid, NULL, CLSCTX_INPROC_SERVER, &IID_IBaseFilter, (void **)&mux)))
+        return hr;
+
+    if (!This->mygraph)
+    {
+        IGraphBuilder *graph;
+
+        if (FAILED(hr = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+                &IID_IGraphBuilder, (void **)&graph)))
+        {
+            IBaseFilter_Release(mux);
+            return hr;
+        }
+        hr = ICaptureGraphBuilder2_SetFiltergraph(iface, graph);
+        IGraphBuilder_Release(graph);
+        if (FAILED(hr))
+        {
+            IBaseFilter_Release(mux);
+            return hr;
+        }
+    }
+
+    if (FAILED(hr = IGraphBuilder_AddFilter(This->mygraph, mux, L"Mux")))
+    {
+        IBaseFilter_Release(mux);
+        return hr;
+    }
+
+    if (FAILED(IBaseFilter_QueryInterface(mux, &IID_IFileSinkFilter, (void **)&file_sink)))
+    {
+        if (FAILED(hr = CoCreateInstance(&CLSID_FileWriter, NULL, CLSCTX_INPROC_SERVER,
+                &IID_IBaseFilter, (void **)&writer)))
+            goto fail;
+        if (FAILED(hr = IGraphBuilder_AddFilter(This->mygraph, writer, L"File Writer")))
+            goto fail;
+        if (FAILED(hr = IBaseFilter_QueryInterface(writer, &IID_IFileSinkFilter, (void **)&file_sink)))
+            goto fail;
+    }
+
+    if (FAILED(hr = IFileSinkFilter_SetFileName(file_sink, lpstrFile, NULL)))
+    {
+        IFileSinkFilter_Release(file_sink);
+        goto fail;
+    }
+
+    if (writer)
+    {
+        if (SUCCEEDED(IBaseFilter_EnumPins(mux, &enum_pins)))
+        {
+            IPin *pin;
+            PIN_DIRECTION dir;
+
+            while (!source && IEnumPins_Next(enum_pins, 1, &pin, NULL) == S_OK)
+            {
+                if (SUCCEEDED(IPin_QueryDirection(pin, &dir)) && dir == PINDIR_OUTPUT)
+                    source = pin;
+                else
+                    IPin_Release(pin);
+            }
+            IEnumPins_Release(enum_pins);
+        }
+
+        hr = E_FAIL;
+        if (source && SUCCEEDED(hr = IBaseFilter_FindPin(writer, L"in", &sink)))
+        {
+            hr = IGraphBuilder_ConnectDirect(This->mygraph, source, sink, NULL);
+            IPin_Release(sink);
+        }
+        if (source)
+            IPin_Release(source);
+        if (FAILED(hr))
+        {
+            IFileSinkFilter_Release(file_sink);
+            goto fail;
+        }
+        IBaseFilter_Release(writer);
+    }
+
+    *ppf = mux;
+    if (ppSink)
+        *ppSink = file_sink;
+    else
+        IFileSinkFilter_Release(file_sink);
+    return S_OK;
+
+fail:
+    if (writer)
+    {
+        IGraphBuilder_RemoveFilter(This->mygraph, writer);
+        IBaseFilter_Release(writer);
+    }
+    IGraphBuilder_RemoveFilter(This->mygraph, mux);
+    IBaseFilter_Release(mux);
+    return hr;
 }
 
 static BOOL pin_has_majortype(IPin *pin, const GUID *majortype)
