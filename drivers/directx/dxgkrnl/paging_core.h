@@ -13,6 +13,7 @@
 #define _DXGK_PAGING_CORE_H_
 
 #include <ntddk.h>
+#include <dispmprt.h>
 
 #define DXGK_PAGING_CORE_MAX_PASSES 256
 
@@ -43,6 +44,10 @@ typedef struct _DXGK_PAGING_CORE_REQUEST
 } DXGK_PAGING_CORE_REQUEST, *PDXGK_PAGING_CORE_REQUEST;
 
 NTSTATUS DxgkPagingCoreValidate(_In_ const DXGK_PAGING_CORE_REQUEST *Request, _In_ ULONG PageTableLevelCount);
+
+DXGK_PAGING_CORE_OP
+DxgkPagingCorePlacementClearOperation(
+    _In_ DXGK_SEGMENTFLAGS SegmentFlags);
 
 /* The multipass build loop.  A pass is only allowed to carry the caller's
  * completion fence once no further pass is required. */
