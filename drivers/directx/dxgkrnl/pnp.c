@@ -829,9 +829,11 @@ DxgkDispatchPnp(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP           Irp)
 {
+    NTSTATUS DisplayStatus;
+
     /* Route \Device\Video0 PnP IRPs to the display handler */
-    if (DxgkDisplayDispatchPnp(DeviceObject, Irp))
-        return STATUS_SUCCESS;
+    if (DxgkDisplayDispatchPnp(DeviceObject, Irp, &DisplayStatus))
+        return DisplayStatus;
 
     DXGKRNL_TRACE("DxgkDispatchPnp: MinorFunction=%u\n",
                   IoGetCurrentIrpStackLocation(Irp)->MinorFunction);
