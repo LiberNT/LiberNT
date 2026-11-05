@@ -355,6 +355,8 @@ list(APPEND FREERDP_SOURCE
     libfreerdp/utils/warnings.c)
 
 list(APPEND SERVER_SOURCE
+    channels/disp/disp_common.c
+    channels/disp/server/disp_main.c
     channels/drdynvc/server/drdynvc_main.c
     channels/rdpdr/server/rdpdr_main.c
     channels/server/channels.c
