@@ -25,6 +25,7 @@ list(APPEND SOURCE
     DisplayChangeBroadcast.c
     DisplayDeviceAttach.c
     DisplayDeviceRemoval.c
+    RemoteDisplayAdapter.c
     CreateIconFromResourceEx.c
     CoveredWindow.c
     CreateWindowEx.c
