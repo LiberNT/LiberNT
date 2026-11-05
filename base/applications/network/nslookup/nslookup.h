@@ -90,6 +90,7 @@ typedef struct _STATE
     USHORT port;
     CHAR DefaultServer[256];
     CHAR DefaultServerAddress[SERVER_ADDRESS_LENGTH];
+    ULONG DefaultServerScope;
 } STATE, *PSTATE;
 
 /* nslookup.c */

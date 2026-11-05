@@ -47,6 +47,7 @@ BOOL SendRequest( PCHAR pInBuffer,
     if( RecAddr.si_family == AF_INET6 )
     {
         RecAddr.Ipv6.sin6_port = htons( State.port );
+        RecAddr.Ipv6.sin6_scope_id = State.DefaultServerScope;
         AddrLen = sizeof(SOCKADDR_IN6);
     }
     else
