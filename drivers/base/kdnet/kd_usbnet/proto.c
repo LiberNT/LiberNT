@@ -241,6 +241,81 @@ UsbNetStartNcm(
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+UsbNetRtlRead(
+    _In_ PUSBNET_ADAPTER Adapter,
+    _In_ USHORT Register,
+    _Out_ PULONG Value)
+{
+    ULONG Got;
+
+    if (!NT_SUCCESS(XhciControl(Adapter, RTL_REQUEST_IN, RTL_REQUEST_REGISTER, Register, RTL_INDEX_READ,
+                                RTL_REGISTER_SIZE, &Got)) || Got < RTL_REGISTER_SIZE)
+    {
+        return FALSE;
+    }
+
+    *Value = UsbNetGet32(Adapter->Control);
+    return TRUE;
+}
+
+static
+VOID
+UsbNetRtlWrite(
+    _In_ PUSBNET_ADAPTER Adapter,
+    _In_ USHORT Register,
+    _In_ ULONG Value)
+{
+    UsbNetPut32(Adapter->Control, Value);
+    XhciControl(Adapter, RTL_REQUEST_OUT, RTL_REQUEST_REGISTER, Register, RTL_INDEX_WRITE, RTL_REGISTER_SIZE, NULL);
+}
+
+static
+VOID
+UsbNetRtlWaitLinkList(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    ULONG Value, i;
+
+    for (i = 0; i < RTL_LIST_WAIT; i++)
+    {
+        if (!UsbNetRtlRead(Adapter, RTL_REG_OOB, &Value) || (Value & RTL_OOB_LIST_READY))
+            return;
+
+        XhciStall(RTL_LIST_STEP);
+    }
+}
+
+/* A warm reboot keeps the chip powered: the driver of the previous OS can leave its MAC off, which ECM cannot see */
+/* TODO: other products of the RTL8153 family (rebranded vendor and product IDs) */
+static
+VOID
+UsbNetRtlWake(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    ULONG Command, Oob, List;
+
+    if (Adapter->VendorId != RTL_VENDOR_ID || Adapter->ProductId != RTL_PRODUCT_8153 ||
+        !UsbNetRtlRead(Adapter, RTL_REG_COMMAND, &Command) || !UsbNetRtlRead(Adapter, RTL_REG_OOB, &Oob) ||
+        !(Oob & RTL_OOB_ACTIVE))
+    {
+        return;
+    }
+
+    UsbNetTrace("USB debugger: RTL8153 was left in standby (command %08lx, standby %08lx), enabling its MAC\n", Command, Oob);
+    UsbNetRtlWrite(Adapter, RTL_REG_OOB, Oob & ~RTL_OOB_ACTIVE);
+    if (UsbNetRtlRead(Adapter, RTL_REG_LINK_LIST, &List))
+        UsbNetRtlWrite(Adapter, RTL_REG_LINK_LIST, List & ~RTL_LIST_MCU_BORROW);
+
+    UsbNetRtlWaitLinkList(Adapter);
+    if (UsbNetRtlRead(Adapter, RTL_REG_LINK_LIST, &List))
+        UsbNetRtlWrite(Adapter, RTL_REG_LINK_LIST, List | RTL_LIST_REINIT);
+
+    UsbNetRtlWaitLinkList(Adapter);
+    UsbNetRtlWrite(Adapter, RTL_REG_COMMAND, Command | RTL_COMMAND_ENABLE);
+}
+
 NTSTATUS
 UsbNetStartFunction(
     _In_ PUSBNET_ADAPTER Adapter)
@@ -297,6 +372,7 @@ UsbNetStartFunction(
         case UsbNetEcm:
         case UsbNetNcm:
             UsbNetReadMacString(Adapter);
+            UsbNetRtlWake(Adapter);
             XhciControl(Adapter, USB_CLASS_OUT, CDC_SET_ETHERNET_PACKET_FILTER,
                         CDC_PACKET_TYPE_DIRECTED | CDC_PACKET_TYPE_BROADCAST,
                         Function->ControlInterface, 0, NULL);

@@ -218,6 +218,25 @@
 #define NCM_NDP16_SIZE              16
 #define NCM_MIN_INPUT_SIZE          2048
 
+#define RTL_VENDOR_ID               0x0BDA
+#define RTL_PRODUCT_8153            0x8153
+#define RTL_REQUEST_REGISTER        0x05
+#define RTL_REQUEST_IN              0xC0
+#define RTL_REQUEST_OUT             0x40
+#define RTL_INDEX_READ              0x0100
+#define RTL_INDEX_WRITE             0x01FF
+#define RTL_REGISTER_SIZE           4
+#define RTL_REG_COMMAND             0xE810
+#define RTL_REG_OOB                 0xE84C
+#define RTL_REG_LINK_LIST           0xE8DC
+#define RTL_COMMAND_ENABLE          0x0C000000
+#define RTL_OOB_ACTIVE              0x80000000
+#define RTL_OOB_LIST_READY          0x02000000
+#define RTL_LIST_MCU_BORROW         0x40000000
+#define RTL_LIST_REINIT             0x80000000
+#define RTL_LIST_WAIT               50
+#define RTL_LIST_STEP               10000
+
 #define EEM_HEADER_SIZE             2
 #define EEM_CRC_SIZE                4
 #define EEM_COMMAND                 0x8000
