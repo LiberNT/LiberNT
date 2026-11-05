@@ -3588,7 +3588,8 @@ DxgkSyncObjectCpuWaitBatch(
     _In_reads_(ObjectCount) CONST UINT64 *FenceValues,
     _In_ ULONG ObjectCount,
     _In_opt_ HANDLE AsyncEventHandle,
-    _In_ BOOLEAN WaitAny);
+    _In_ BOOLEAN WaitAny,
+    _In_ KPROCESSOR_MODE WaitMode);
 
 VOID
 NTAPI

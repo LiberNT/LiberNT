@@ -10462,7 +10462,8 @@ static NTSTATUS
 NTAPI
 DxgkWaitForSynchronizationObjectFromCpu(
     _In_ CONST D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU *pData,
-    _In_ KPROCESSOR_MODE AccessMode)
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_ KPROCESSOR_MODE WaitMode)
 {
     PDXGKRNL_ADAPTER Adapter;
     PDXGKRNL_DEVICE  Device;
@@ -10494,7 +10495,7 @@ DxgkWaitForSynchronizationObjectFromCpu(
         return Status;
     }
 
-    Status = DxgkSyncObjectCpuWaitBatch(Device, Handles, Fences, pData->ObjectCount, pData->hAsyncEvent, pData->Flags.WaitAny != 0);
+    Status = DxgkSyncObjectCpuWaitBatch(Device, Handles, Fences, pData->ObjectCount, pData->hAsyncEvent, pData->Flags.WaitAny != 0, WaitMode);
     DxgkDereferenceDevice(Device);
     return Status;
 }
@@ -13403,8 +13404,8 @@ DxgkpDispatchBufferedIoctlWorker(
                     Wait.ObjectCount = 1;
                     Wait.ObjectHandleArray = &WaitHandle;
                     Wait.FenceValueArray = &WaitValue;
-                    Status = DxgkWaitForSynchronizationObjectFromCpu(&Wait, KernelMode);
-                    if (!NT_SUCCESS(Status))
+                    Status = DxgkWaitForSynchronizationObjectFromCpu(&Wait, KernelMode, ExGetPreviousMode());
+                    if (!NT_SUCCESS(Status) || Status == STATUS_USER_APC)
                     {
                         DxgkDereferenceContext(VirtualContext);
                         return Status;
@@ -14793,7 +14794,7 @@ DxgkpDispatchBufferedIoctlWorker(
             if (InputLength < sizeof(D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU) || SystemBuffer == NULL)
                 return STATUS_BUFFER_TOO_SMALL;
 
-            return DxgkWaitForSynchronizationObjectFromCpu((CONST D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU *)SystemBuffer, EmbeddedBufferMode);
+            return DxgkWaitForSynchronizationObjectFromCpu((CONST D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU *)SystemBuffer, EmbeddedBufferMode, ExGetPreviousMode());
         }
 
         case IOCTL_DXGKRNL_REGISTER_WIN32K_CDD_INTERFACE:

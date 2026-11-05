@@ -19,6 +19,7 @@ extern void func_ddibuild(void);
 extern void func_device(void);
 extern void func_dred(void);
 extern void func_factory(void);
+extern void func_fencekill(void);
 extern void func_mesh(void);
 extern void func_feedback(void);
 extern void func_features(void);
@@ -59,6 +60,7 @@ const struct test winetest_testlist[] =
     { "device", func_device },
     { "dred", func_dred },
     { "factory", func_factory },
+    { "fencekill", func_fencekill },
     { "mesh", func_mesh },
     { "feedback", func_feedback },
     { "features", func_features },

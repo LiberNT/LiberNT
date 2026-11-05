@@ -3188,7 +3188,8 @@ DxgkSyncObjectCpuWaitBatch(
     _In_reads_(ObjectCount) CONST UINT64 *FenceValues,
     _In_ ULONG ObjectCount,
     _In_opt_ HANDLE AsyncEventHandle,
-    _In_ BOOLEAN WaitAny)
+    _In_ BOOLEAN WaitAny,
+    _In_ KPROCESSOR_MODE WaitMode)
 {
     PDXGKRNL_CPU_WAIT_REQUEST Request;
     NTSTATUS Status;
@@ -3282,7 +3283,7 @@ DxgkSyncObjectCpuWaitBatch(
         ULONG Slices = 0;
 
         Slice.QuadPart = -50000000LL; /* 5 s */
-        while (KeWaitForSingleObject(&Request->SynchronousEvent, Executive, KernelMode, FALSE, &Slice) == STATUS_TIMEOUT)
+        while ((Status = KeWaitForSingleObject(&Request->SynchronousEvent, UserRequest, WaitMode, FALSE, &Slice)) == STATUS_TIMEOUT)
         {
             Slices++;
             if (Slices == 1 || (Slices % 12) == 0)
@@ -3304,7 +3305,8 @@ DxgkSyncObjectCpuWaitBatch(
             }
         }
     }
-    Status = Request->CoreRequest.CompletionStatus;
+    if (Status == STATUS_SUCCESS)
+        Status = Request->CoreRequest.CompletionStatus;
     DxgkpCpuWaitRequestDereference(Request);
     return Status;
 }
@@ -3356,7 +3358,7 @@ DxgkSyncObjectCpuWait(
         DxgkpDereferenceSyncObject(SyncObj);
         return Reached ? STATUS_SUCCESS : (TdrAffected ? STATUS_DEVICE_REMOVED : STATUS_TIMEOUT);
     }
-    Status = DxgkSyncObjectCpuWaitBatch(SyncObj->Device, &hSyncObject, &FenceValue, 1, NULL, FALSE);
+    Status = DxgkSyncObjectCpuWaitBatch(SyncObj->Device, &hSyncObject, &FenceValue, 1, NULL, FALSE, KernelMode);
     DxgkpDereferenceSyncObject(SyncObj);
     return Status;
 }

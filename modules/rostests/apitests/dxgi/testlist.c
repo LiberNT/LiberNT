@@ -20,6 +20,7 @@ extern void func_offer_resources(void);
 extern void func_subresource_surface(void);
 extern void func_feature_support(void);
 extern void func_shared_dimensions(void);
+extern void func_keyedmutex_kill(void);
 extern void func_d3d10_bindings(void);
 extern void func_adapter_outputs(void);
 extern void func_counters(void);
@@ -61,6 +62,7 @@ const struct test winetest_testlist[] =
     { "subresource_surface", func_subresource_surface },
     { "feature_support", func_feature_support },
     { "shared_dimensions", func_shared_dimensions },
+    { "keyedmutex_kill", func_keyedmutex_kill },
     { "d3d10_bindings", func_d3d10_bindings },
     { "adapter_outputs", func_adapter_outputs },
     { "counters", func_counters },

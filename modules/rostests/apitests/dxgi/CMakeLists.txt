@@ -24,6 +24,7 @@ add_executable(dxgi_apitest
     subresource_surface.cpp
     feature_support.cpp
     shared_dimensions.cpp
+    keyedmutex_kill.cpp
     d3d10_bindings.cpp
     adapter_outputs.cpp
     counters.cpp

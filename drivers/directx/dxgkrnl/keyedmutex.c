@@ -587,12 +587,12 @@ DxgkpAcquireKeyedMutexCommon(
             }
         }
 
-        Status = KeWaitForSingleObject(&Mutex->StateChanged, Executive, KernelMode, FALSE,
+        Status = KeWaitForSingleObject(&Mutex->StateChanged, UserRequest, ExGetPreviousMode(), FALSE,
                                        HasDeadline ? &Deadline : NULL);
         ExAcquireFastMutex(&Mutex->Lock);
         DxgkKeyedMutexCoreRemoveWaiter(&Mutex->State);
         ExReleaseFastMutex(&Mutex->Lock);
-        if (Status == STATUS_TIMEOUT)
+        if (Status == STATUS_TIMEOUT || Status == STATUS_USER_APC)
             break;
     }
 
