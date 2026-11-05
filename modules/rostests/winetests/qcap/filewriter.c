@@ -905,6 +905,36 @@ static void test_default_allocator(void)
     DeleteFileW(filename);
 }
 
+static void test_quality_control(void)
+{
+    IBaseFilter *filter = create_file_writer();
+    Quality quality = {Famine, 500, 0, 0};
+    IQualityControl *qc;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    IBaseFilter_FindPin(filter, L"in", &pin);
+    hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (hr == S_OK)
+    {
+        hr = IQualityControl_Notify(qc, NULL, quality);
+        ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+        hr = IQualityControl_Notify(qc, filter, quality);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+        hr = IQualityControl_SetSink(qc, NULL);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+        hr = IQualityControl_SetSink(qc, qc);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+        IQualityControl_Release(qc);
+    }
+
+    IPin_Release(pin);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 static void test_misc_flags(void)
 {
     IBaseFilter *filter = create_file_writer();
@@ -1026,6 +1056,7 @@ START_TEST(filewriter)
     test_default_allocator();
     test_misc_flags();
     test_file_sink();
+    test_quality_control();
 
     CoUninitialize();
 }
