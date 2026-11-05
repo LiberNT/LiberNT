@@ -1170,6 +1170,14 @@ co_UserProcessDisplayConfigurationUpdate(VOID)
             continue;
         }
 
+        if (ModeInfo.VisScreenWidth == ppdev->pdmwDev->dmPelsWidth &&
+            ModeInfo.VisScreenHeight == ppdev->pdmwDev->dmPelsHeight &&
+            (ModeInfo.Frequency == 0 || ModeInfo.Frequency == ppdev->pdmwDev->dmDisplayFrequency))
+        {
+            PDEVOBJ_vRelease(ppdev);
+            continue;
+        }
+
         RtlZeroMemory(&dm, sizeof(dm));
         dm.dmSize = sizeof(dm);
         dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
