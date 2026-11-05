@@ -1388,20 +1388,13 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
         case SPI_SETNONCLIENTMETRICS:
         {
             LPNONCLIENTMETRICSW metrics = (LPNONCLIENTMETRICSW)pvParam;
-            INT PaddedBorder = gspv.ncm.iPaddedBorderWidth;
-            PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
 
             /* Fixup user's structure size */
             metrics->cbSize = sizeof(NONCLIENTMETRICSW);
 
+            /* FIXME: Windows 11 leaves a padded border of 0 after this call whatever the structure holds; uxtheme applies themes through it, so the value is kept here */
             if (!SpiSet(&gspv.ncm, metrics, sizeof(NONCLIENTMETRICSW), fl))
                 return 0;
-
-            if (pti && LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA)
-            {
-                gspv.ncm.iBorderWidth = max(gspv.ncm.iBorderWidth - PaddedBorder, 1);
-                gspv.ncm.iPaddedBorderWidth = PaddedBorder;
-            }
 
             if (fl & SPIF_UPDATEINIFILE)
             {

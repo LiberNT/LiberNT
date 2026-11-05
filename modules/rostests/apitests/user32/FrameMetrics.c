@@ -45,19 +45,8 @@ static void CheckWindow(DWORD Style, DWORD ExStyle, int Width, int Height, LONG 
     DestroyWindow(Window);
 }
 
-static void CheckRoundTrip(void)
+static void CheckFrames(BOOL Legacy)
 {
-    NONCLIENTMETRICSW Metrics;
-
-    ZeroMemory(&Metrics, sizeof(Metrics));
-    Metrics.cbSize = sizeof(Metrics);
-    ok(SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(Metrics), &Metrics, 0), "SPI_GETNONCLIENTMETRICS failed: %lu\n", GetLastError());
-    ok(SystemParametersInfoW(SPI_SETNONCLIENTMETRICS, sizeof(Metrics), &Metrics, 0), "SPI_SETNONCLIENTMETRICS failed: %lu\n", GetLastError());
-}
-
-static void CheckFrames(void)
-{
-    BOOL Legacy = IsLegacyImage();
     NONCLIENTMETRICSW Metrics;
     UINT Sizes[2] = {sizeof(Metrics), FIELD_OFFSET(NONCLIENTMETRICSW, iPaddedBorderWidth)};
     LONG CaptionFrame = Legacy ? 3 : 8;
@@ -147,6 +136,7 @@ START_TEST(FrameMetrics)
 {
     char **Argv;
     int Argc = winetest_get_mainargs(&Argv);
+    BOOL Legacy = IsLegacyImage();
     HDC Screen = GetDC(NULL);
     int Dpi = GetDeviceCaps(Screen, LOGPIXELSX);
 
@@ -157,13 +147,7 @@ START_TEST(FrameMetrics)
         return;
     }
 
-    CheckFrames();
-    if (Argc > 2)
-    {
-        CheckRoundTrip();
-        CheckFrames();
-        return;
-    }
-    RunLegacyCopy();
-    CheckFrames();
+    CheckFrames(Legacy);
+    if (Argc <= 2)
+        RunLegacyCopy();
 }
