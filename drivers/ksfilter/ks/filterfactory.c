@@ -32,7 +32,8 @@ IKsFilterFactory_ItemFreeCb(
     IN PKSOBJECT_CREATE_ITEM  CreateItem)
 {
     /* callback when create item is freed in the device header */
-    IKsFilterFactory * iface = (IKsFilterFactory*)CONTAINING_RECORD(CreateItem->Context, IKsFilterFactoryImpl, FilterFactory);
+    IKsFilterFactoryImpl * Factory = (IKsFilterFactoryImpl*)CONTAINING_RECORD(CreateItem->Context, IKsFilterFactoryImpl, FilterFactory);
+    IKsFilterFactory * iface = (IKsFilterFactory*)&Factory->Header.OuterUnknown;
 
     iface->lpVtbl->Release(iface);
 }
@@ -140,6 +141,11 @@ IKsFilterFactory_fnRelease(
             /* free device interface strings */
             KspFreeDeviceInterfaces(&This->SymbolicLinkList);
         }
+
+        if (This->FilterFactory.Bag)
+            KsFreeObjectBag(This->FilterFactory.Bag);
+        if (This->FilterFactory.FilterDescriptor)
+            FreeItem((PVOID)This->FilterFactory.FilterDescriptor);
 
         FreeItem(This);
         return 0;
@@ -750,4 +756,23 @@ KsFilterFactoryUpdateCacheData(
 
     /* done */
     return Status;
+}
+
+VOID
+KspForgetFilterFactoryInterfaces(
+    IN PKSIDEVICE_HEADER DeviceHeader)
+{
+    PCREATE_ITEM_ENTRY CreateEntry;
+    PLIST_ENTRY Entry;
+    IKsFilterFactoryImpl * Factory;
+
+    for (Entry = DeviceHeader->ItemList.Flink; Entry != &DeviceHeader->ItemList; Entry = Entry->Flink)
+    {
+        CreateEntry = CONTAINING_RECORD(Entry, CREATE_ITEM_ENTRY, Entry);
+        if (CreateEntry->CreateItem->Create == IKsFilterFactory_Create)
+        {
+            Factory = (IKsFilterFactoryImpl*)CONTAINING_RECORD(CreateEntry->CreateItem->Context, IKsFilterFactoryImpl, FilterFactory);
+            KspFreeDeviceInterfaces(&Factory->SymbolicLinkList);
+        }
+    }
 }

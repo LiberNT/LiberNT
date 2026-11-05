@@ -22,6 +22,7 @@ typedef struct
     LONG ref;
 
     PKSIOBJECT_HEADER ObjectHeader;
+    PKSOBJECT_CREATE_ITEM CreateItems;
     KSTOPOLOGY Topology;
     PKSFILTERFACTORY Factory;
     PFILE_OBJECT FileObject;
@@ -57,7 +58,22 @@ NTSTATUS NTAPI FilterPinPropertyHandler(IN PIRP Irp, IN PKSIDENTIFIER  Request, 
 NTSTATUS NTAPI FilterGeneralComponentIdHandler(IN PIRP Irp, IN PKSIDENTIFIER  Request, IN OUT PVOID  Data);
 
 DEFINE_KSPROPERTY_TOPOLOGYSET(IKsFilterTopologySet, FilterTopologyPropertyHandler);
-DEFINE_KSPROPERTY_PINPROPOSEDATAFORMAT(IKsFilterPinSet, FilterPinPropertyHandler, FilterPinPropertyHandler, FilterPinPropertyHandler);
+DEFINE_KSPROPERTY_TABLE(IKsFilterPinSet) {
+    DEFINE_KSPROPERTY_ITEM_PIN_CINSTANCES(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_CTYPES(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_DATAFLOW(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_DATARANGES(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_DATAINTERSECTION(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_INTERFACES(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_MEDIUMS(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_COMMUNICATION(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_GLOBALCINSTANCES(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_NECESSARYINSTANCES(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_CATEGORY(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_NAME(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_CONSTRAINEDDATARANGES(FilterPinPropertyHandler),
+    DEFINE_KSPROPERTY_ITEM_PIN_PROPOSEDATAFORMAT(FilterPinPropertyHandler)
+};
 DEFINE_KSPROPERTY_GENEREAL_COMPONENTID(IKsFilterGeneralSet, FilterGeneralComponentIdHandler);
 
 KSPROPERTY_SET FilterPropertySet[] =
@@ -557,7 +573,6 @@ IKsFilter_fnRemoveProcessPin(
 
     /* sanity check */
     ASSERT(ProcessPin->Pin);
-    ASSERT(ProcessPin->Pin->Id);
 
     Count = This->ProcessPinIndex[ProcessPin->Pin->Id].Count;
     Pins =  This->ProcessPinIndex[ProcessPin->Pin->Id].Pins;
@@ -705,6 +720,7 @@ IKsFilter_DispatchClose(
 {
     IKsFilter * Filter;
     IKsFilterImpl * This;
+    PKSOBJECT_CREATE_ITEM CreateItems;
     NTSTATUS Status;
 
     /* obtain filter from object header */
@@ -732,8 +748,14 @@ IKsFilter_DispatchClose(
         /* remove our instance from the filter factory */
         IKsFilter_RemoveFilterFromFilterFactory(This, This->Factory);
 
+        KsFreeObjectBag((KSOBJECT_BAG)This->Filter.Bag);
+        This->Filter.Bag = NULL;
+
+        CreateItems = This->CreateItems;
+
         /* free object header */
         KsFreeObjectHeader(This->ObjectHeader);
+        FreeItem(CreateItems);
     }
     else
     {
@@ -1109,6 +1131,11 @@ IKsFilter_DispatchDeviceIoControl(
         {
             ASSERT(IoStack->Parameters.DeviceIoControl.InputBufferLength >= sizeof(KSP_NODE));
             NodeProperty = (PKSP_NODE)Property;
+            if (NodeProperty->NodeId >= FilterInstance->Descriptor->NodeDescriptorsCount)
+            {
+                Status = STATUS_INVALID_DEVICE_REQUEST;
+                goto Done;
+            }
             NodeDescriptor = (PKSNODE_DESCRIPTOR)((ULONG_PTR)FilterInstance->Descriptor->NodeDescriptors + FilterInstance->Descriptor->NodeDescriptorSize * NodeProperty->NodeId);
             if (NodeDescriptor->AutomationTable != NULL)
             {
@@ -1158,6 +1185,7 @@ IKsFilter_DispatchDeviceIoControl(
         }
     }
 
+Done:
     if (!NT_SUCCESS(RtlStringFromGUID(&Property->Set, &GuidString)))
         RtlInitEmptyUnicodeString(&GuidString, NULL, 0);
     DPRINT("IKsFilter_DispatchDeviceIoControl property PinCount %x\n", FilterInstance->Descriptor->PinDescriptorsCount);
@@ -1454,9 +1482,9 @@ IKsFilter_RemovePin(
             break;
 
         LastPin = CurPin;
-        NextPin = CurPin;
+        CurPin = NextPin;
 
-    }while(NextPin != NULL);
+    }while(CurPin != NULL);
 
     /* pin not found */
     ASSERT(0);
@@ -1515,6 +1543,8 @@ IKsFilter_DispatchCreatePin(
             Status = STATUS_UNSUCCESSFUL;
             DPRINT("IKsFilter_DispatchCreatePin  MaxInstance %lu CurInstance %lu %lx\n", This->Filter.Descriptor->PinDescriptors[Connect->PinId].InstancesPossible, This->PinInstanceCount[Connect->PinId]);
         }
+
+        FreeItem(Connect);
     }
 
     /* release control mutex */
@@ -1846,9 +1876,12 @@ KspCreateFilter(
     {
         /* failed to allocate object header */
         DPRINT1("Failed to allocate object header %x\n", Status);
+        FreeItem(CreateItem);
 
         return Status;
     }
+
+    This->CreateItems = CreateItem;
 
     /* initialize object header extra fields */
     This->ObjectHeader->Type = KsObjectTypeFilter;

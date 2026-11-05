@@ -105,6 +105,7 @@ typedef struct
 
     LIST_ENTRY PowerDispatchList;
     LIST_ENTRY ObjectBags;
+    BOOLEAN SurpriseRemoved;
 
     PADAPTER_OBJECT AdapterObject;
     ULONG MaxMappingsByteCount;

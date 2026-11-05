@@ -32,6 +32,7 @@ FindPropertyHandler(
     ULONG Index, ItemIndex;
     PULONG Flags;
     PKSPROPERTY_DESCRIPTION Description;
+    BOOLEAN SetFound = FALSE;
 
     for(Index = 0; Index < PropertySetCount; Index++)
     {
@@ -39,6 +40,7 @@ FindPropertyHandler(
 
         if (IsEqualGUIDAligned(&Property->Set, PropertySet[Index].Set))
         {
+            SetFound = TRUE;
             for(ItemIndex = 0; ItemIndex < PropertySet[Index].PropertiesCount; ItemIndex++)
             {
 
@@ -49,7 +51,7 @@ FindPropertyHandler(
 
                 if (PropertySet[Index].PropertyItem[ItemIndex].PropertyId == Property->Id)
                 {
-                    if (Property->Flags & KSPROPERTY_TYPE_BASICSUPPORT)
+                    if (Property->Flags & (KSPROPERTY_TYPE_BASICSUPPORT | KSPROPERTY_TYPE_DEFAULTVALUES))
                     {
                         if (sizeof(ULONG) > OutputBufferLength)
                         {
@@ -107,7 +109,7 @@ FindPropertyHandler(
                     {
                         /* too small output buffer */
                         IoStatus->Information = PropertySet[Index].PropertyItem[ItemIndex].MinData;
-                        return STATUS_MORE_ENTRIES;
+                        return STATUS_BUFFER_TOO_SMALL;
                     }
 
 
@@ -130,7 +132,7 @@ FindPropertyHandler(
             }
         }
     }
-    return STATUS_NOT_FOUND;
+    return SetFound ? STATUS_NOT_FOUND : STATUS_PROPSET_NOT_FOUND;
 }
 
 
@@ -272,7 +274,7 @@ KspPropertyHandler(
     ASSERT(PropertyItemSize == 0 || PropertyItemSize == sizeof(KSPROPERTY_ITEM));
 
     /* find the property handler */
-    Status = FindPropertyHandler(&Irp->IoStatus, PropertySet, PropertySetsCount, Property, InputBufferLength, OutputBufferLength, Irp->AssociatedIrp.SystemBuffer, &PropertyHandler, &Set, &PropertyItem);
+    Status = FindPropertyHandler(&Irp->IoStatus, PropertySet, PropertySetsCount, Property, InputBufferLength, IoStack->Parameters.DeviceIoControl.OutputBufferLength, Irp->AssociatedIrp.SystemBuffer, &PropertyHandler, &Set, &PropertyItem);
 
     if (NT_SUCCESS(Status) && PropertyHandler)
     {

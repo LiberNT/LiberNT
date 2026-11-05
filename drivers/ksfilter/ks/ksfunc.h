@@ -142,6 +142,10 @@ IKsFilterFactory_Create(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp);
 
+VOID
+KspForgetFilterFactoryInterfaces(
+    IN PKSIDEVICE_HEADER DeviceHeader);
+
 NTSTATUS
 KspSetFilterFactoriesState(
     IN PKSIDEVICE_HEADER DeviceHeader,

@@ -466,8 +466,49 @@ IKsDevice_Pnp(
             return IoCallDriver(DeviceHeader->KsDevice.NextDeviceObject, Irp);
         }
 
+        case IRP_MN_QUERY_REMOVE_DEVICE:
+        {
+            Status = STATUS_SUCCESS;
+            if (Dispatch && Dispatch->QueryRemove)
+                Status = Dispatch->QueryRemove(&DeviceHeader->KsDevice, Irp);
+
+            if (!NT_SUCCESS(Status))
+            {
+                Irp->IoStatus.Status = Status;
+                CompleteRequest(Irp, IO_NO_INCREMENT);
+                return Status;
+            }
+
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoSkipCurrentIrpStackLocation(Irp);
+            return IoCallDriver(DeviceHeader->KsDevice.NextDeviceObject, Irp);
+        }
+
+        case IRP_MN_CANCEL_REMOVE_DEVICE:
+        {
+            if (Dispatch && Dispatch->CancelRemove)
+                Dispatch->CancelRemove(&DeviceHeader->KsDevice, Irp);
+
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoSkipCurrentIrpStackLocation(Irp);
+            return IoCallDriver(DeviceHeader->KsDevice.NextDeviceObject, Irp);
+        }
+
+        case IRP_MN_SURPRISE_REMOVAL:
+        {
+            DeviceHeader->SurpriseRemoved = TRUE;
+            if (Dispatch && Dispatch->SurpriseRemoval)
+                Dispatch->SurpriseRemoval(&DeviceHeader->KsDevice, Irp);
+
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoSkipCurrentIrpStackLocation(Irp);
+            return IoCallDriver(DeviceHeader->KsDevice.NextDeviceObject, Irp);
+        }
+
         case IRP_MN_REMOVE_DEVICE:
         {
+            PDEVICE_OBJECT NextDeviceObject = DeviceHeader->KsDevice.NextDeviceObject;
+
             /* Clean up */
             if (Dispatch)
             {
@@ -480,9 +521,16 @@ IKsDevice_Pnp(
             }
 
             /* pass the irp down the driver stack */
+            Irp->IoStatus.Status = STATUS_SUCCESS;
             IoSkipCurrentIrpStackLocation(Irp);
-            Status = IoCallDriver(DeviceHeader->KsDevice.NextDeviceObject, Irp);
-            /* FIXME delete device resources */
+            Status = IoCallDriver(NextDeviceObject, Irp);
+
+            IoDetachDevice(NextDeviceObject);
+            KspForgetFilterFactoryInterfaces(DeviceHeader);
+            KsFreeObjectBag(DeviceHeader->KsDevice.Bag);
+            KsFreeDeviceHeader((KSDEVICE_HEADER)DeviceHeader);
+            DeviceExtension->DeviceHeader = NULL;
+            IoDeleteDevice(DeviceObject);
             return Status;
         }
         case IRP_MN_QUERY_INTERFACE:
@@ -550,15 +598,12 @@ IKsDevice_Power(
     IN PDEVICE_OBJECT  DeviceObject,
     IN PIRP Irp)
 {
-    UNIMPLEMENTED;
+    PDEVICE_EXTENSION DeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+    PKSIDEVICE_HEADER DeviceHeader = DeviceExtension->DeviceHeader;
 
-    /* TODO */
-
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = 0;
-    CompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return STATUS_SUCCESS;
+    PoStartNextPowerIrp(Irp);
+    IoSkipCurrentIrpStackLocation(Irp);
+    return PoCallDriver(DeviceHeader->KsDevice.NextDeviceObject, Irp);
 }
 
 NTSTATUS
