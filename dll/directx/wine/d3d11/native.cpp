@@ -8387,6 +8387,12 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
         RECT client = {};
         hr = !window || GetClientRect(window, &client) ? S_OK : DXGI_ERROR_INVALID_CALL;
         if (!window && (!desc.Width || !desc.Height)) hr = DXGI_ERROR_INVALID_CALL;
+        if (window && !fullscreen->Windowed)
+        {
+            MONITORINFO monitor = {};
+            monitor.cbSize = sizeof(monitor);
+            if (GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY), &monitor)) client = monitor.rcMonitor;
+        }
         if (!desc.Width) desc.Width = client.right - client.left > 0 ? client.right - client.left : 8;
         if (!desc.Height) desc.Height = client.bottom - client.top > 0 ? client.bottom - client.top : 8;
         if (SUCCEEDED(hr)) hr = swapchain->AllocateBuffers(desc);

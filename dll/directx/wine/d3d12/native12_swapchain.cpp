@@ -1549,6 +1549,12 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::create_swapchain(IDXGIFactory *f
     DXGI_SWAP_CHAIN_DESC1 requested = *desc;
     RECT client = {};
     GetClientRect(window, &client);
+    if (fullscreen_desc && !fullscreen_desc->Windowed)
+    {
+        MONITORINFO monitor = {};
+        monitor.cbSize = sizeof(monitor);
+        if (GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY), &monitor)) client = monitor.rcMonitor;
+    }
     if (!requested.Width) requested.Width = client.right - client.left > 0 ? client.right - client.left : 8;
     if (!requested.Height) requested.Height = client.bottom - client.top > 0 ? client.bottom - client.top : 8;
     HRESULT hr = swapchain->AllocateBuffers(requested);
