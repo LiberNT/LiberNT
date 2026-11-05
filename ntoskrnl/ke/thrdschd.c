@@ -1100,6 +1100,8 @@ KiSwapThread(IN PKTHREAD CurrentThread,
     PKTHREAD NextThread;
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
+    KiCheckDeferredReadyList(Prcb);
+
     /* Acquire the PRCB lock */
     KiAcquirePrcbLock(Prcb);
 

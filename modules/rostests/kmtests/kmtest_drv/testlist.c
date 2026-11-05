@@ -197,6 +197,7 @@ KMT_TESTFUNC Test_KeWddmExports;
 KMT_TESTFUNC Test_KeApc;
 KMT_TESTFUNC Test_KeApcInject;
 KMT_TESTFUNC Test_KeApcScheduling;
+KMT_TESTFUNC Test_KeDeferredReady;
 KMT_TESTFUNC Test_KeCacheInvalidation;
 KMT_TESTFUNC Test_KeModern;
 #ifdef _M_ARM64
@@ -518,6 +519,7 @@ const KMT_TEST TestList[] =
     { "KeApc",                              Test_KeApc },
     { "KeApcInject",                        Test_KeApcInject },
     { "KeApcScheduling",                    Test_KeApcScheduling },
+    { "KeDeferredReady",                    Test_KeDeferredReady },
     { "KeCacheInvalidation",                Test_KeCacheInvalidation },
     { "KeModern",                           Test_KeModern },
 #ifdef _M_ARM64

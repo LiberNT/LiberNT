@@ -277,6 +277,10 @@ KiSwapContextResume(
     KiCompleteThreadSwitch(OldThread, NewThread);
 #endif
 
+    KiCheckDeferredReadyList(&Pcr->Prcb);
+    if (Pcr->Prcb.NextThread)
+        KiRequestDispatchInterrupt(&Pcr->Prcb);
+
     /* Kernel APCs may be pending */
     if (NewThread->ApcState.KernelApcPending)
     {
