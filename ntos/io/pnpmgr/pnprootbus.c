@@ -23,6 +23,10 @@ typedef struct _PNPROOT_DEVICE
     PWSTR CompatibleIds;
     ULONG CompatibleIdsSize;
     BOOLEAN FromRegistry;
+    BOOLEAN Software;
+    BOOLEAN Reported;
+    BOOLEAN Seen;
+    ULONG Capabilities;
 } PNPROOT_DEVICE, *PPNPROOT_DEVICE;
 
 typedef struct _PNPROOT_EXTENSION
@@ -54,6 +58,17 @@ static const UNICODE_STRING PnpRootEnumKeyName =
     RTL_CONSTANT_STRING(ENUM_ROOT L"\\ROOT");
 
 #define PNPROOT_KEY_NAME_CHARS 256
+
+static const UNICODE_STRING PnpRootSoftwareEnumerator =
+    RTL_CONSTANT_STRING(L"SWD");
+
+static const UNICODE_STRING PnpRootSoftwareEnumKeyName =
+    RTL_CONSTANT_STRING(ENUM_ROOT L"\\SWD");
+
+#define CM_DEVCAP_REMOVABLE         0x00000004
+#define CM_DEVCAP_SILENTINSTALL     0x00000020
+#define CM_DEVCAP_RAWDEVICEOK       0x00000040
+#define CM_DEVCAP_SURPRISEREMOVALOK 0x00000080
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -599,6 +614,231 @@ PnpRootScanRegistry(VOID)
     ZwClose(RootKey);
 }
 
+static
+NTSTATUS
+PnpRootOpenSoftwareInstanceKey(
+    _In_ PCUNICODE_STRING EnumeratorName,
+    _In_ PCUNICODE_STRING InstanceName,
+    _Out_ PHANDLE InstanceKey)
+{
+    NTSTATUS Status;
+    HANDLE SoftwareKey;
+    HANDLE EnumeratorKey;
+
+    PAGED_CODE();
+
+    *InstanceKey = NULL;
+    Status = IopOpenRegistryKeyEx(&SoftwareKey, NULL, (PUNICODE_STRING)&PnpRootSoftwareEnumKeyName, KEY_READ);
+    if (!NT_SUCCESS(Status)) return Status;
+    Status = IopOpenRegistryKeyEx(&EnumeratorKey, SoftwareKey, (PUNICODE_STRING)EnumeratorName, KEY_READ);
+    ZwClose(SoftwareKey);
+    if (!NT_SUCCESS(Status)) return Status;
+    Status = IopOpenRegistryKeyEx(InstanceKey, EnumeratorKey, (PUNICODE_STRING)InstanceName, KEY_READ);
+    ZwClose(EnumeratorKey);
+    return Status;
+}
+
+/* SwDeviceCreate marks the instances it reports with Control\DeviceReported; closing the device clears it */
+static
+BOOLEAN
+PnpRootIsSoftwareDeviceReported(
+    _In_ HANDLE InstanceKey)
+{
+    UNICODE_STRING ControlName = RTL_CONSTANT_STRING(L"Control");
+    HANDLE ControlKey;
+    BOOLEAN Reported;
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&ControlKey, InstanceKey, &ControlName, KEY_QUERY_VALUE)))
+        return FALSE;
+    Reported = PnpRootIsValueSet(ControlKey, L"DeviceReported");
+    ZwClose(ControlKey);
+    return Reported;
+}
+
+static
+PPNPROOT_DEVICE
+PnpRootFindSoftwareDevice(
+    _In_ PCUNICODE_STRING EnumeratorName,
+    _In_ PCUNICODE_STRING InstanceName)
+{
+    USHORT Prefix = PnpRootSoftwareEnumerator.Length + sizeof(WCHAR);
+    PPNPROOT_DEVICE Device;
+    UNICODE_STRING Tail;
+    PLIST_ENTRY Entry;
+
+    for (Entry = PnpRootExtension.DeviceListHead.Flink;
+         Entry != &PnpRootExtension.DeviceListHead;
+         Entry = Entry->Flink)
+    {
+        Device = CONTAINING_RECORD(Entry, PNPROOT_DEVICE, ListEntry);
+        if (!Device->Software || Device->DeviceId.Length != Prefix + EnumeratorName->Length) continue;
+
+        Tail.Buffer = Device->DeviceId.Buffer + Prefix / sizeof(WCHAR);
+        Tail.Length = Tail.MaximumLength = EnumeratorName->Length;
+        if (RtlEqualUnicodeString(&Tail, EnumeratorName, TRUE) &&
+            RtlEqualUnicodeString(&Device->InstanceId, InstanceName, TRUE))
+        {
+            return Device;
+        }
+    }
+
+    return NULL;
+}
+
+static
+NTSTATUS
+PnpRootCreateSoftwareDevice(
+    _In_ PCUNICODE_STRING EnumeratorName,
+    _In_ PCUNICODE_STRING InstanceName,
+    _In_ HANDLE InstanceKey)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    PPNPROOT_PDO_EXTENSION PdoExtension;
+    PPNPROOT_DEVICE Device;
+    PDEVICE_OBJECT Pdo = NULL;
+    NTSTATUS Status;
+    USHORT Length;
+    PWCHAR Buffer;
+
+    PAGED_CODE();
+
+    Device = ExAllocatePoolZero(PagedPool, sizeof(PNPROOT_DEVICE), TAG_PNP_ROOT);
+    if (Device == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Length = PnpRootSoftwareEnumerator.Length + sizeof(WCHAR) + EnumeratorName->Length + sizeof(WCHAR);
+    Buffer = ExAllocatePoolZero(PagedPool, Length, TAG_PNP_ROOT);
+    if (Buffer == NULL)
+    {
+        ExFreePoolWithTag(Device, TAG_PNP_ROOT);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlInitEmptyUnicodeString(&Device->DeviceId, Buffer, Length);
+    RtlAppendUnicodeStringToString(&Device->DeviceId, (PUNICODE_STRING)&PnpRootSoftwareEnumerator);
+    RtlAppendUnicodeToString(&Device->DeviceId, L"\\");
+    RtlAppendUnicodeStringToString(&Device->DeviceId, EnumeratorName);
+
+    Status = PnpRootDuplicateString(InstanceName, &Device->InstanceId);
+    if (!NT_SUCCESS(Status))
+    {
+        PnpRootFreeRecord(Device);
+        return Status;
+    }
+
+    if (NT_SUCCESS(IopGetRegistryValue(InstanceKey, L"Capabilities", &Information)))
+    {
+        if (Information->Type == REG_DWORD && Information->DataLength == sizeof(ULONG))
+            Device->Capabilities = *(PULONG)((PUCHAR)Information + Information->DataOffset);
+        ExFreePool(Information);
+    }
+
+    Device->Software = TRUE;
+    Device->Reported = TRUE;
+    Device->Seen = TRUE;
+
+    Status = IoCreateDevice(PnpRootDriverObject,
+                            sizeof(PNPROOT_PDO_EXTENSION),
+                            NULL,
+                            FILE_DEVICE_CONTROLLER,
+                            FILE_AUTOGENERATED_DEVICE_NAME,
+                            FALSE,
+                            &Pdo);
+    if (!NT_SUCCESS(Status))
+    {
+        PnpRootFreeRecord(Device);
+        return Status;
+    }
+
+    PdoExtension = Pdo->DeviceExtension;
+    PdoExtension->Device = Device;
+    Device->PhysicalDeviceObject = Pdo;
+    Pdo->Flags |= DO_BUS_ENUMERATED_DEVICE;
+    Pdo->Flags &= ~DO_DEVICE_INITIALIZING;
+
+    KeAcquireGuardedMutex(&PnpRootExtension.Lock);
+    InsertTailList(&PnpRootExtension.DeviceListHead, &Device->ListEntry);
+    PnpRootExtension.DeviceListCount++;
+    KeReleaseGuardedMutex(&PnpRootExtension.Lock);
+
+    return STATUS_SUCCESS;
+}
+
+/* A software device is present while its instance is marked reported and stops being a child once the mark goes */
+static
+VOID
+PnpRootScanSoftwareDevices(VOID)
+{
+    UCHAR EnumeratorBuffer[sizeof(KEY_BASIC_INFORMATION) + PNPROOT_KEY_NAME_CHARS * sizeof(WCHAR)];
+    UCHAR InstanceBuffer[sizeof(KEY_BASIC_INFORMATION) + PNPROOT_KEY_NAME_CHARS * sizeof(WCHAR)];
+    UNICODE_STRING EnumeratorName;
+    UNICODE_STRING InstanceName;
+    PPNPROOT_DEVICE Device;
+    PLIST_ENTRY Entry, Next;
+    HANDLE SoftwareKey, EnumeratorKey, InstanceKey;
+    ULONG EnumeratorIndex, InstanceIndex;
+    BOOLEAN Reported;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PnpRootExtension.Lock);
+    for (Entry = PnpRootExtension.DeviceListHead.Flink; Entry != &PnpRootExtension.DeviceListHead; Entry = Entry->Flink)
+        CONTAINING_RECORD(Entry, PNPROOT_DEVICE, ListEntry)->Seen = FALSE;
+    KeReleaseGuardedMutex(&PnpRootExtension.Lock);
+
+    Status = IopOpenRegistryKeyEx(&SoftwareKey, NULL, (PUNICODE_STRING)&PnpRootSoftwareEnumKeyName, KEY_READ);
+    if (NT_SUCCESS(Status))
+    {
+        for (EnumeratorIndex = 0; ; EnumeratorIndex++)
+        {
+            Status = PnpRootEnumerateKeyName(SoftwareKey, EnumeratorIndex, (PKEY_BASIC_INFORMATION)EnumeratorBuffer,
+                                             sizeof(EnumeratorBuffer), &EnumeratorName);
+            if (Status == STATUS_NO_MORE_ENTRIES) break;
+            if (!NT_SUCCESS(Status)) continue;
+            if (!NT_SUCCESS(IopOpenRegistryKeyEx(&EnumeratorKey, SoftwareKey, &EnumeratorName, KEY_READ))) continue;
+
+            for (InstanceIndex = 0; ; InstanceIndex++)
+            {
+                Status = PnpRootEnumerateKeyName(EnumeratorKey, InstanceIndex, (PKEY_BASIC_INFORMATION)InstanceBuffer,
+                                                 sizeof(InstanceBuffer), &InstanceName);
+                if (Status == STATUS_NO_MORE_ENTRIES) break;
+                if (!NT_SUCCESS(Status)) continue;
+                if (!NT_SUCCESS(IopOpenRegistryKeyEx(&InstanceKey, EnumeratorKey, &InstanceName, KEY_READ))) continue;
+
+                Reported = PnpRootIsSoftwareDeviceReported(InstanceKey);
+                if (Reported)
+                {
+                    KeAcquireGuardedMutex(&PnpRootExtension.Lock);
+                    Device = PnpRootFindSoftwareDevice(&EnumeratorName, &InstanceName);
+                    if (Device != NULL)
+                        Device->Seen = TRUE;
+                    KeReleaseGuardedMutex(&PnpRootExtension.Lock);
+                    if (Device == NULL)
+                        PnpRootCreateSoftwareDevice(&EnumeratorName, &InstanceName, InstanceKey);
+                }
+                ZwClose(InstanceKey);
+            }
+            ZwClose(EnumeratorKey);
+        }
+        ZwClose(SoftwareKey);
+    }
+
+    KeAcquireGuardedMutex(&PnpRootExtension.Lock);
+    for (Entry = PnpRootExtension.DeviceListHead.Flink; Entry != &PnpRootExtension.DeviceListHead; Entry = Next)
+    {
+        Next = Entry->Flink;
+        Device = CONTAINING_RECORD(Entry, PNPROOT_DEVICE, ListEntry);
+        if (!Device->Software || Device->Seen) continue;
+
+        ASSERT(Device->PhysicalDeviceObject != NULL);
+        Device->Reported = FALSE;
+        RemoveEntryList(&Device->ListEntry);
+        InitializeListHead(&Device->ListEntry);
+        ASSERT(PnpRootExtension.DeviceListCount != 0);
+        PnpRootExtension.DeviceListCount--;
+    }
+    KeReleaseGuardedMutex(&PnpRootExtension.Lock);
+}
+
 BOOLEAN
 PnpRootForgetDevice(
     _In_ PDEVICE_OBJECT DeviceObject)
@@ -696,13 +936,19 @@ PnpRootQueryRegistryIds(
 
     PAGED_CODE();
 
+    if (Device->Software)
+        Prefix = PnpRootSoftwareEnumerator.Length + sizeof(WCHAR);
+
     DeviceName.Buffer = Device->DeviceId.Buffer + Prefix / sizeof(WCHAR);
     DeviceName.Length = Device->DeviceId.Length - Prefix;
     DeviceName.MaximumLength = DeviceName.Length;
 
-    Status = PnpRootOpenInstanceKey(&DeviceName,
-                                    &Device->InstanceId,
-                                    &InstanceKey);
+    if (Device->Software)
+        Status = PnpRootOpenSoftwareInstanceKey(&DeviceName, &Device->InstanceId, &InstanceKey);
+    else
+        Status = PnpRootOpenInstanceKey(&DeviceName,
+                                        &Device->InstanceId,
+                                        &InstanceKey);
     if (!NT_SUCCESS(Status)) return STATUS_NOT_SUPPORTED;
 
     Status = IopGetRegistryValue(InstanceKey, (PWSTR)ValueName, &Information);
@@ -789,12 +1035,15 @@ PnpRootRetireDevice(
 
     KeAcquireGuardedMutex(&PnpRootExtension.Lock);
 
-    RemoveEntryList(&Device->ListEntry);
-    InitializeListHead(&Device->ListEntry);
-
-    if (PnpRootExtension.DeviceListCount != 0)
+    if (!IsListEmpty(&Device->ListEntry))
     {
-        PnpRootExtension.DeviceListCount--;
+        RemoveEntryList(&Device->ListEntry);
+        InitializeListHead(&Device->ListEntry);
+
+        if (PnpRootExtension.DeviceListCount != 0)
+        {
+            PnpRootExtension.DeviceListCount--;
+        }
     }
 
     KeReleaseGuardedMutex(&PnpRootExtension.Lock);
@@ -826,12 +1075,12 @@ PnpRootQueryId(
 
     *Id = NULL;
 
-    if (Device->FromRegistry && IdType == BusQueryHardwareIDs)
+    if ((Device->FromRegistry || Device->Software) && IdType == BusQueryHardwareIDs)
     {
         return PnpRootQueryRegistryIds(Device, L"HardwareID", Id);
     }
 
-    if (Device->FromRegistry && IdType == BusQueryCompatibleIDs)
+    if ((Device->FromRegistry || Device->Software) && IdType == BusQueryCompatibleIDs)
     {
         return PnpRootQueryRegistryIds(Device, L"CompatibleIDs", Id);
     }
@@ -902,6 +1151,7 @@ PnpRootQueryDeviceRelations(
     PAGED_CODE();
 
     PnpRootScanRegistry();
+    PnpRootScanSoftwareDevices();
 
     KeAcquireGuardedMutex(&PnpRootExtension.Lock);
 
@@ -1021,6 +1271,15 @@ PnpRootPnp(
             Capabilities->RawDeviceOK = FALSE;
             Capabilities->Address = (ULONG)-1;
             Capabilities->UINumber = (ULONG)-1;
+            if (PdoExtension != NULL && PdoExtension->Device != NULL && PdoExtension->Device->Software)
+            {
+                ULONG Flags = PdoExtension->Device->Capabilities;
+
+                Capabilities->Removable = !!(Flags & CM_DEVCAP_REMOVABLE);
+                Capabilities->SilentInstall = !!(Flags & CM_DEVCAP_SILENTINSTALL);
+                Capabilities->RawDeviceOK = !!(Flags & CM_DEVCAP_RAWDEVICEOK);
+                Capabilities->SurpriseRemovalOK = !!(Flags & CM_DEVCAP_SURPRISEREMOVALOK);
+            }
 
             Status = STATUS_SUCCESS;
             break;
@@ -1088,6 +1347,22 @@ PnpRootPnp(
             {
                 Status = STATUS_SUCCESS;
                 break;
+            }
+
+            if (PdoExtension != NULL &&
+                PdoExtension->Device != NULL &&
+                PdoExtension->Device->Software)
+            {
+                if (PdoExtension->Device->Reported)
+                {
+                    Status = STATUS_SUCCESS;
+                    break;
+                }
+                PnpRootRetireDevice(DeviceObject);
+                Irp->IoStatus.Status = STATUS_SUCCESS;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                IoDeleteDevice(DeviceObject);
+                return STATUS_SUCCESS;
             }
 
             PnpRootRetireDevice(DeviceObject);

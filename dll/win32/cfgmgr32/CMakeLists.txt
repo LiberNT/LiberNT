@@ -3,7 +3,7 @@ include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl
     ${CMAKE_CURRENT_BINARY_DIR})
 
-add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnp.idl)
+add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnp.idl ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnpsw.idl)
 spec2def(cfgmgr32.dll cfgmgr32.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
@@ -12,7 +12,9 @@ list(APPEND SOURCE
     devobject.c
     notification.c
     rpc.c
+    swdevice.c
     ${CMAKE_CURRENT_BINARY_DIR}/pnp_c.c
+    ${CMAKE_CURRENT_BINARY_DIR}/pnpsw_c.c
     cfgmgr32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/cfgmgr32_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/cfgmgr32.def)
