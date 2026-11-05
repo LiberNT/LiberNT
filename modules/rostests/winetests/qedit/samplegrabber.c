@@ -933,7 +933,8 @@ static void testfilter_init(struct testfilter *filter)
 static void test_sample_processing(IMediaControl *control, IMemInputPin *input, struct testfilter *sink)
 {
     REFERENCE_TIME start, stop;
-    IMemAllocator *allocator;
+    ALLOCATOR_PROPERTIES props = {1, 256, 1, 0}, ret_props;
+    IMemAllocator *allocator, *other_allocator;
     IMediaSample *sample;
     LONG size, i;
     HRESULT hr;
@@ -947,6 +948,23 @@ static void test_sample_processing(IMediaControl *control, IMemInputPin *input, 
 
     hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, 0);
     ok(hr == VFW_E_NOT_COMMITTED, "Got hr %#lx.\n", hr);
+
+    hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMemAllocator, (void **)&other_allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_SetProperties(other_allocator, &props, &ret_props);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_Commit(other_allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_GetBuffer(other_allocator, &sample, NULL, NULL, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
+    sink->got_sample = 0;
+    IMediaSample_Release(sample);
+    IMemAllocator_Decommit(other_allocator);
+    IMemAllocator_Release(other_allocator);
 
     hr = IMediaControl_Pause(control);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
@@ -992,6 +1010,7 @@ static void test_sample_processing(IMediaControl *control, IMemInputPin *input, 
 
     hr = IMemInputPin_Receive(input, sample);
     todo_wine ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
 
     IMediaSample_Release(sample);
     IMemAllocator_Release(allocator);
