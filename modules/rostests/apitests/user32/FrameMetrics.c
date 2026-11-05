@@ -18,7 +18,7 @@ static BOOL IsLegacyImage(void)
 static void CheckAdjust(DWORD Style, DWORD ExStyle, LONG Frame, BOOL Caption)
 {
     RECT Rect = {0, 0, 0, 0};
-    LONG Top = Frame + (Caption ? GetSystemMetrics(SM_CYCAPTION) : 0);
+    LONG Top = Frame + (Caption ? GetSystemMetrics((ExStyle & WS_EX_TOOLWINDOW) ? SM_CYSMCAPTION : SM_CYCAPTION) : 0);
 
     ok(AdjustWindowRectEx(&Rect, Style, FALSE, ExStyle), "AdjustWindowRectEx %#lx %#lx failed\n", Style, ExStyle);
     ok(Rect.left == -Frame && Rect.top == -Top && Rect.right == Frame && Rect.bottom == Frame,
@@ -118,6 +118,7 @@ static void RunLegacyCopy(void)
     GetTempPathW(ARRAYSIZE(Dir), Dir);
     wsprintfW(Copy, L"%sframemetrics%lu.exe", Dir, GetCurrentProcessId());
     ok(CopyFileW(Self, Copy, FALSE), "CopyFile failed: %lu\n", GetLastError());
+    SetFileAttributesW(Copy, FILE_ATTRIBUTE_NORMAL);
     File = CreateFileW(Copy, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     ok(File != INVALID_HANDLE_VALUE, "CreateFile failed: %lu\n", GetLastError());
     if (File == INVALID_HANDLE_VALUE)
