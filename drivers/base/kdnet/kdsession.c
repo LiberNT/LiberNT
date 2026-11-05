@@ -546,7 +546,7 @@ KdSessionTimer(
         return;
     }
 
-    if (!KdIpAddress)
+    if (!KdNetReady || !KdIpAddress)
         return;
 
     if (Now >= KdpHelloNext)
