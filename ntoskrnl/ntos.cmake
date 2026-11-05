@@ -579,6 +579,7 @@ endif()
     endif()
 
     list(APPEND SOURCE
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdfb.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdinfo.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdio.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdmain.c

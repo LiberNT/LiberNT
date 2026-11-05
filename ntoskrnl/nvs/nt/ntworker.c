@@ -168,25 +168,34 @@ MiWorkerThreadsInitialize(VOID)
 
     InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
 
+
+
     Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL, MiBalanceSetManager,
                                   NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
+
     ZwClose(Handle);
+
+
 
     Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL, MiModifiedPageWriter,
                                   NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
+
     ZwClose(Handle);
 
     KeInitializeEvent(&MiDereferenceSegmentEvent, SynchronizationEvent, FALSE);
+
+
     Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL,
                                   MiDereferenceSegmentThread, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
+
 
     ZwClose(Handle);
     MiSystem.UnusedSegmentsExceeded = MiUnusedSegmentsExceeded;

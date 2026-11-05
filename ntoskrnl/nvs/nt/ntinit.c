@@ -641,11 +641,14 @@ MmInitSystem(
         MiArchBootClearUserHalf(MiBootRootFrame);
     }
 
+
     if (!NT_SUCCESS(MiSectionInitialize()))
         return FALSE;
 
+
     if (!NT_SUCCESS(MiWorkerThreadsInitialize()))
         return FALSE;
+
 
     return TRUE;
 }
