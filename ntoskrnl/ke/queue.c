@@ -407,7 +407,7 @@ KiRemoveQueueExInternal(
                 /* Increment the count and unlock the queue */
                 KiIncrementQueueCurrentCount(Queue);
                 KiReleaseDispatcherObject(&Queue->Header);
-                KiExitDispatcher(Thread->WaitIrql);
+                KxExitDispatcherForRetry(Thread);
             }
             else
             {
@@ -452,7 +452,7 @@ KiRemoveQueueExInternal(
                     if (Timeout) KiReleaseDispatcherObject(&Timer->Header);
                     KiIncrementQueueCurrentCount(Queue);
                     KiReleaseDispatcherObject(&Queue->Header);
-                    KiExitDispatcher(Thread->WaitIrql);
+                    KxExitDispatcherForRetry(Thread);
                     goto WaitStart;
                 }
 

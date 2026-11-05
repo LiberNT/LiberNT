@@ -761,6 +761,8 @@ KeDetachProcess(VOID)
     /* Exit the dispatcher */
     KiExitDispatcher(ApcLock.OldIrql);
 
+    KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
+
     /* Check if we have pending APCs */
     if (!(IsListEmpty(&Thread->ApcState.ApcListHead[KernelMode])))
     {
@@ -768,6 +770,8 @@ KeDetachProcess(VOID)
         Thread->ApcState.KernelApcPending = TRUE;
         HalRequestSoftwareInterrupt(APC_LEVEL);
     }
+
+    KiReleaseApcLock(&ApcLock);
 }
 
 /*
@@ -928,6 +932,8 @@ KeUnstackDetachProcess(IN PRKAPC_STATE ApcState)
     /* Exit the dispatcher */
     KiExitDispatcher(ApcLock.OldIrql);
 
+    KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
+
     /* Check if we have pending APCs */
     if (!(IsListEmpty(&Thread->ApcState.ApcListHead[KernelMode])))
     {
@@ -935,6 +941,8 @@ KeUnstackDetachProcess(IN PRKAPC_STATE ApcState)
         Thread->ApcState.KernelApcPending = TRUE;
         HalRequestSoftwareInterrupt(APC_LEVEL);
     }
+
+    KiReleaseApcLock(&ApcLock);
 }
 
 /*
