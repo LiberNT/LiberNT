@@ -80,6 +80,7 @@ static LRESULT CALLBACK WndProcW(HWND hwnd, UINT message, WPARAM wparam, LPARAM 
     {
         IFilterGraph *graph = window->pFilter->graph;
         IMediaEventSink *event_sink;
+        CONTAINING_RECORD(window->pFilter, struct strmbase_renderer, filter)->abort = TRUE;
         IVideoWindow_put_Visible(&window->IVideoWindow_iface, OAFALSE);
         if (graph && SUCCEEDED(IFilterGraph_QueryInterface(graph,
                                                            &IID_IMediaEventSink,
