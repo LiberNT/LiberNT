@@ -1286,7 +1286,7 @@ NTAPI
 MouHid_Unload(
     IN PDRIVER_OBJECT DriverObject)
 {
-    UNIMPLEMENTED;
+    UNREFERENCED_PARAMETER(DriverObject);
 }
 
 
