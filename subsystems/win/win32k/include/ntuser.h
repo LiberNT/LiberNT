@@ -2843,6 +2843,15 @@ NTAPI
 NtUserDisplayConfigGetDeviceInfo(
     _Inout_ PVOID pPacket);
 
+LONG
+APIENTRY
+NtUserSetDisplayConfig(
+    _In_ UINT32 numPathArrayElements,
+    _In_reads_opt_(numPathArrayElements) DISPLAYCONFIG_PATH_INFO *pathArray,
+    _In_ UINT32 numModeInfoArrayElements,
+    _In_reads_opt_(numModeInfoArrayElements) DISPLAYCONFIG_MODE_INFO *modeInfoArray,
+    _In_ UINT32 flags);
+
 BOOL
 NTAPI
 NtUserEnableMouseInPointer(

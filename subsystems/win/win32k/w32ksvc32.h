@@ -907,3 +907,4 @@
     SVC_(UserInjectTouchInput, 2)
     SVC_(UserGetWindowDisplayAffinity, 2)
     SVC_(UserSetWindowDisplayAffinity, 2)
+    SVC_(UserSetDisplayConfig, 5)
