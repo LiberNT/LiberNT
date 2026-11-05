@@ -2033,11 +2033,29 @@ static BOOL WINAPI dsenum_callback(LPGUID lpGuid, LPCSTR lpcstrDescription,
     return TRUE;
 }
 
+static BOOL WINAPI dsenum_primary_callback(GUID *guid, const char *desc, const char *module, void *context)
+{
+    unsigned int *count = context;
+
+    if (!(*count)++)
+    {
+        ok(!guid, "Got GUID %s.\n", wine_dbgstr_guid(guid));
+        ok(!strcmp(desc, "Primary Sound Driver"), "Got description %s.\n", debugstr_a(desc));
+        ok(!module[0], "Got module %s.\n", debugstr_a(module));
+    }
+    return TRUE;
+}
+
 static void dsound_tests(void)
 {
+    unsigned int count = 0;
     HRESULT rc;
     rc = DirectSoundEnumerateA(&dsenum_callback, NULL);
     ok(rc==DS_OK,"DirectSoundEnumerateA() failed: %08lx\n",rc);
+
+    rc = DirectSoundEnumerateA(dsenum_primary_callback, &count);
+    ok(rc == DS_OK, "Got hr %#lx.\n", rc);
+    ok(count, "No device enumerated.\n");
 }
 
 static void test_hw_buffers(void)

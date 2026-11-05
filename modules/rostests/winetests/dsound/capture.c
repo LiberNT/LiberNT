@@ -724,11 +724,29 @@ EXIT:
     return TRUE;
 }
 
+static BOOL WINAPI dscenum_primary_callback(GUID *guid, const char *desc, const char *module, void *context)
+{
+    unsigned int *count = context;
+
+    if (!(*count)++)
+    {
+        ok(!guid, "Got GUID %s.\n", wine_dbgstr_guid(guid));
+        ok(!strcmp(desc, "Primary Sound Capture Driver"), "Got description %s.\n", debugstr_a(desc));
+        ok(!module[0], "Got module %s.\n", debugstr_a(module));
+    }
+    return TRUE;
+}
+
 static void test_enumerate(void)
 {
+    unsigned int count = 0;
     HRESULT rc;
     rc = DirectSoundCaptureEnumerateA(dscenum_callback, NULL);
     ok(rc==DS_OK,"DirectSoundCaptureEnumerateA() failed: %08lx\n", rc);
+
+    rc = DirectSoundCaptureEnumerateA(dscenum_primary_callback, &count);
+    ok(rc == DS_OK, "Got hr %#lx.\n", rc);
+    ok(count, "No device enumerated.\n");
 }
 
 static void test_COM(void)

@@ -438,6 +438,7 @@ static BOOL send_device(IMMDevice *device, GUID *guid,
 HRESULT enumerate_mmdevices(EDataFlow flow, GUID *guids,
         LPDSENUMCALLBACKW cb, void *user)
 {
+    const WCHAR *primary = flow == eCapture ? L"Primary Sound Capture Driver" : L"Primary Sound Driver";
     IMMDeviceEnumerator *devenum;
     IMMDeviceCollection *coll;
     IMMDevice *defdev = NULL;
@@ -470,6 +471,7 @@ HRESULT enumerate_mmdevices(EDataFlow flow, GUID *guids,
         IMMDeviceCollection_Release(coll);
         release_mmdevenum(devenum, init_hr);
         guids = NULL;
+        cb(NULL, primary, L"", user);
         return DS_OK;
     }
     guids = malloc((count + 1) * sizeof(GUID));
@@ -479,8 +481,8 @@ HRESULT enumerate_mmdevices(EDataFlow flow, GUID *guids,
         return E_OUTOFMEMORY;
     }
 
-    TRACE("Calling back with NULL (Primary Sound Driver)\n");
-    keep_going = cb(NULL, L"Primary Sound Driver", L"", user);
+    TRACE("Calling back with NULL (%s)\n", debugstr_w(primary));
+    keep_going = cb(NULL, primary, L"", user);
 
     /* always send the default device first */
     if(keep_going){
