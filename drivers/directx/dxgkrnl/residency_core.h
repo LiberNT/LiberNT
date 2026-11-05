@@ -24,6 +24,20 @@ typedef struct _DXGK_RESIDENCY_BUDGET
     BOOLEAN   Initialized;
 } DXGK_RESIDENCY_BUDGET, *PDXGK_RESIDENCY_BUDGET;
 
+typedef enum _DXGK_RESIDENCY_BUDGET_GROUP
+{
+    DxgkResidencyBudgetGroupNone = 0,
+    DxgkResidencyBudgetGroupLocal,
+    DxgkResidencyBudgetGroupNonLocal
+} DXGK_RESIDENCY_BUDGET_GROUP;
+
+DXGK_RESIDENCY_BUDGET_GROUP
+DxgkResidencyCoreSegmentBudgetGroup(
+    _In_ BOOLEAN LocalBudgetGroup,
+    _In_ BOOLEAN NonLocalBudgetGroup,
+    _In_ BOOLEAN Aperture,
+    _In_ BOOLEAN AdapterDeclaresGroups);
+
 NTSTATUS DxgkResidencyCoreBudgetInitialize(_Out_ PDXGK_RESIDENCY_BUDGET Budget, _In_ ULONGLONG BudgetBytes, _In_ ULONGLONG MaximumBytes, _In_ ULONGLONG ReservationBytes);
 NTSTATUS DxgkResidencyCoreBudgetSetLimits(_Inout_ PDXGK_RESIDENCY_BUDGET Budget, _In_ ULONGLONG BudgetBytes, _In_ ULONGLONG MaximumBytes);
 NTSTATUS DxgkResidencyCoreBudgetSetReservation(_Inout_ PDXGK_RESIDENCY_BUDGET Budget, _In_ ULONGLONG ReservationBytes);

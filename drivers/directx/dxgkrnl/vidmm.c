@@ -666,10 +666,26 @@ VidMmAllocationSizeForSegment(_In_ CONST PDXGKVMM_ALLOCATION Allocation, _In_ CO
 
 typedef enum _VIDMM_BUDGET_GROUP
 {
-    VidMmBudgetGroupNone = 0,
-    VidMmBudgetGroupLocal,
-    VidMmBudgetGroupNonLocal
+    VidMmBudgetGroupNone = DxgkResidencyBudgetGroupNone,
+    VidMmBudgetGroupLocal = DxgkResidencyBudgetGroupLocal,
+    VidMmBudgetGroupNonLocal = DxgkResidencyBudgetGroupNonLocal
 } VIDMM_BUDGET_GROUP;
+
+FORCEINLINE
+BOOLEAN
+VidMmAdapterDeclaresBudgetGroups(_In_ PDXGKRNL_ADAPTER Adapter)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Adapter->SegmentCount; ++Index)
+    {
+        CONST DXGKRNL_SEGMENT *Segment = &ADAPTER_SEGMENTS(Adapter)[Index];
+
+        if (Segment->Flags.LocalBudgetGroup || Segment->Flags.NonLocalBudgetGroup)
+            return TRUE;
+    }
+    return FALSE;
+}
 
 FORCEINLINE
 VIDMM_BUDGET_GROUP
@@ -679,11 +695,11 @@ VidMmSegmentBudgetGroup(_In_ PDXGKRNL_ADAPTER Adapter, _In_ CONST PDXGKRNL_SEGME
             Adapter->MiniportContext->InitData.s.Version,
             DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
     {
-        if (Segment->Flags.LocalBudgetGroup)
-            return VidMmBudgetGroupLocal;
-        if (Segment->Flags.NonLocalBudgetGroup)
-            return VidMmBudgetGroupNonLocal;
-        return VidMmBudgetGroupNone;
+        return (VIDMM_BUDGET_GROUP)DxgkResidencyCoreSegmentBudgetGroup(
+            Segment->Flags.LocalBudgetGroup,
+            Segment->Flags.NonLocalBudgetGroup,
+            VidMmSegmentIsAperture(Segment),
+            VidMmAdapterDeclaresBudgetGroups(Adapter));
     }
     return VidMmSegmentIsAperture(Segment) ? VidMmBudgetGroupNonLocal : VidMmBudgetGroupLocal;
 }

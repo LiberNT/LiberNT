@@ -6,6 +6,23 @@
 
 #include "residency_core.h"
 
+/* A driver naming no group on any segment leaves the split to the OS: Windows 11 never leaves such an adapter unbudgeted. */
+DXGK_RESIDENCY_BUDGET_GROUP
+DxgkResidencyCoreSegmentBudgetGroup(
+    _In_ BOOLEAN LocalBudgetGroup,
+    _In_ BOOLEAN NonLocalBudgetGroup,
+    _In_ BOOLEAN Aperture,
+    _In_ BOOLEAN AdapterDeclaresGroups)
+{
+    if (LocalBudgetGroup)
+        return DxgkResidencyBudgetGroupLocal;
+    if (NonLocalBudgetGroup)
+        return DxgkResidencyBudgetGroupNonLocal;
+    if (AdapterDeclaresGroups)
+        return DxgkResidencyBudgetGroupNone;
+    return Aperture ? DxgkResidencyBudgetGroupNonLocal : DxgkResidencyBudgetGroupLocal;
+}
+
 /* --- budgets --------------------------------------------------------- */
 
 NTSTATUS
