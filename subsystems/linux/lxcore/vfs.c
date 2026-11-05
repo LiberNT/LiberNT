@@ -1769,16 +1769,15 @@ LxMountReceiversLocked(
 
 static
 VOID
-LxMountPropagate(
-    _In_ PLX_MOUNT Mount)
+LxMountPropagateVia(
+    _In_ PLX_MOUNT Mount,
+    _In_opt_ PLX_MOUNT Parent)
 {
     PLX_INSTANCE Instance = Mount->Instance;
     PLX_MOUNT_RECEIVER Receivers = NULL;
-    PLX_MOUNT Parent;
     ULONG Count = 0, Index;
 
     ExAcquireFastMutex(&Instance->Lock);
-    Parent = Mount->Parent;
     if ((Parent != NULL) && (Parent->PeerGroup != 0) && LxMountLive(Parent) && LxMountLive(Mount))
     {
         if (Mount->PeerGroup == 0)
@@ -1786,6 +1785,14 @@ LxMountPropagate(
         Mount->Unbindable = FALSE;
         Count = LxMountReceiversLocked(Instance, Parent, Mount->Target, Mount->PeerGroup, Mount->MasterGroup,
                                        &Receivers);
+        for (Index = 0; Index < Count; Index++)
+        {
+            if ((Receivers[Index].Mount == Mount) || LxMountIsBelow(Receivers[Index].Mount, Mount))
+            {
+                LxFree(Receivers[Index].Target);
+                Receivers[Index].Target = NULL;
+            }
+        }
     }
     ExReleaseFastMutex(&Instance->Lock);
 
@@ -1805,6 +1812,37 @@ LxMountPropagate(
         LxFree(Receivers[Index].Target);
     }
     LxFree(Receivers);
+}
+
+static
+VOID
+LxMountPropagate(
+    _In_ PLX_MOUNT Mount)
+{
+    LxMountPropagateVia(Mount, Mount->Parent);
+}
+
+static
+BOOLEAN
+LxMountBindPrunedLocked(
+    _In_ PLX_NS Ns,
+    _In_ PCSTR SourcePath,
+    _In_ SIZE_T SourceLength,
+    _In_ PLX_MOUNT Mount)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts; Entry = Entry->Flink)
+    {
+        PLX_MOUNT Other = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
+
+        if (Other->Unbindable && !Other->Detached && (strncmp(Other->Target, SourcePath, SourceLength) == 0) &&
+            ((Other == Mount) || LxMountIsBelow(Mount, Other)))
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 static
@@ -1903,8 +1941,10 @@ LxMountSetPropagation(
             Other->PeerGroup = 0;
         }
         if (Type != LX_MS_SLAVE)
+        {
             Other->MasterGroup = 0;
-        Other->Unbindable = (Type == LX_MS_UNBINDABLE);
+            Other->Unbindable = (Type == LX_MS_UNBINDABLE);
+        }
     }
     ExReleaseFastMutex(&Instance->Lock);
     LxEventSourceSignal(&Ns->Mnt.Events);
@@ -2018,7 +2058,8 @@ LxMountBind(
 
                 if (!Mount->Detached && (strncmp(Mount->Target, Source->Path, SourceLength) == 0) &&
                     (Mount->Target[SourceLength] == '/' || (strcmp(Source->Path, "/") == 0)) &&
-                    (strcmp(Mount->Target, "/") != 0) && (strcmp(Mount->Target, Source->Path) != 0))
+                    (strcmp(Mount->Target, "/") != 0) && (strcmp(Mount->Target, Source->Path) != 0) &&
+                    !LxMountBindPrunedLocked(Ns, Source->Path, SourceLength, Mount))
                 {
                     PCSTR Rest = Mount->Target + ((strcmp(Source->Path, "/") == 0) ? 0 : SourceLength);
 
@@ -2042,7 +2083,7 @@ LxMountBind(
         if ((Error == 0) && (Targets[Index] != NULL) && (Below[Index]->Kind != LxFsNsfs) && !Below[Index]->Unbindable &&
             (LxMountClone(Ns, Below[Index], Targets[Index], NULL, Below[Index]->Flags, FALSE, &Copy) == 0))
         {
-            LxMountPropagate(Copy);
+            LxMountPropagateVia(Copy, Top->Parent);
         }
         LxFree(Targets[Index]);
     }
