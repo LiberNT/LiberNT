@@ -117,7 +117,9 @@ C_ASSERT(FIELD_OFFSET(RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET, GlobalShareHand
             return Status;                                               \
         if (DxgAdapterCallbacks.CallbackField == NULL)                   \
             return STATUS_PROCEDURE_NOT_FOUND;                           \
-        return DxgAdapterCallbacks.CallbackField(Argument);              \
+        return D3dkmtCallCaptured((PVOID)(Argument), sizeof(*(Argument)), \
+                                  (PD3DKMT_ARGUMENT_CALLBACK)DxgAdapterCallbacks.CallbackField, \
+                                  FALSE);                                \
     } while (0)
 
 #define D3DKMT_CALL_HANDLE_CALLBACK(CallbackField, HandleArgument)        \
@@ -141,6 +143,9 @@ C_ASSERT(FIELD_OFFSET(RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET, GlobalShareHand
 
 #define D3DKMT_PRESENT_MAX_SUBRECTS 64U
 #define TAG_D3DKMT_PRESENT_SUBRECTS 'rPmD'
+#define TAG_D3DKMT_CAPTURE 'aCmD'
+
+typedef NTSTATUS (APIENTRY *PD3DKMT_ARGUMENT_CALLBACK)(PVOID Argument);
 
 NTSTATUS
 APIENTRY
@@ -400,6 +405,52 @@ D3dkmtCaptureUserStructure(
         Status = _SEH2_GetExceptionCode();
     }
     _SEH2_END;
+    return Status;
+}
+
+static NTSTATUS
+D3dkmtCallCaptured(
+    _In_opt_ PVOID Argument,
+    _In_ SIZE_T Size,
+    _In_ PD3DKMT_ARGUMENT_CALLBACK Callback,
+    _In_ BOOLEAN ZeroOnBadArgument)
+{
+    UCHAR StackBuffer[2 * 512];
+    PUCHAR Captured = StackBuffer;
+    NTSTATUS Status;
+
+    if (ExGetPreviousMode() == KernelMode)
+        return Callback(Argument);
+    if (Size > sizeof(StackBuffer) / 2)
+    {
+        Captured = ExAllocatePoolWithTag(PagedPool, 2 * Size, TAG_D3DKMT_CAPTURE);
+        if (Captured == NULL)
+            return STATUS_NO_MEMORY;
+    }
+    if (Argument == NULL || !NT_SUCCESS(D3dkmtCaptureUserStructure(Argument, Size, Captured)))
+    {
+        RtlZeroMemory(Captured, Size);
+        Status = ZeroOnBadArgument ? Callback(Captured) : STATUS_INVALID_PARAMETER;
+        goto Done;
+    }
+    RtlCopyMemory(Captured + Size, Captured, Size);
+    Status = Callback(Captured);
+    if (RtlCompareMemory(Captured, Captured + Size, Size) != Size)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(Argument, Size, 1);
+            RtlCopyMemory(Argument, Captured, Size);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        _SEH2_END;
+    }
+Done:
+    if (Captured != StackBuffer)
+        ExFreePoolWithTag(Captured, TAG_D3DKMT_CAPTURE);
     return Status;
 }
 
@@ -877,9 +928,14 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDIGetPresentHistory(_Inout_ D3DKMT_GETPRESENTHISTORY* unnamedParam1)
 {
-    /* FIXME: Windows 11 refuses a non-DWM caller with STATUS_ACCESS_DENIED before looking at a NULL argument */
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnGetPresentHistory, unnamedParam1);
+    NTSTATUS Status = WddmBridgeRequireReady();
+
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (DxgAdapterCallbacks.RxgkIntPfnGetPresentHistory == NULL)
+        return STATUS_PROCEDURE_NOT_FOUND;
+    return D3dkmtCallCaptured(unnamedParam1, sizeof(*unnamedParam1),
+                              (PD3DKMT_ARGUMENT_CALLBACK)DxgAdapterCallbacks.RxgkIntPfnGetPresentHistory, TRUE);
 }
 
 NTSTATUS

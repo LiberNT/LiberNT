@@ -50,6 +50,7 @@ extern void func_gpuvareserve(void);
 extern void func_gpusync(void);
 extern void func_syncshare(void);
 extern void func_stubparity(void);
+extern void func_badptr(void);
 extern void func_ctxflags(void);
 extern void func_eventcancel(void);
 extern void func_scheduling(void);
@@ -142,6 +143,7 @@ const struct test winetest_testlist[] =
     { "gpusync",       func_gpusync },
     { "syncshare",     func_syncshare },
     { "stubparity",    func_stubparity },
+    { "badptr",        func_badptr },
     { "ctxflags",      func_ctxflags },
     { "eventcancel",   func_eventcancel },
     { "scheduling",    func_scheduling },
