@@ -19,6 +19,7 @@
 #include "framebuttons.h"
 #include "gpucomp.h"
 #include "gpupointer.h"
+#include "gpuretry.h"
 #include "material.h"
 #include "animation.h"
 #include "presenttrace.h"
@@ -4170,10 +4171,12 @@ DwmComposeLoop(HANDLE hStopEvent)
     BOOL forceFull = TRUE;
     BOOL pointerChanged;
     ULONG screenRead = 0;
-    BOOL screenCaptureProbed = FALSE;
+    ULONG screenCaptureProbes = 0;
     LONG screenMirrorNeeded = 0;
     BOOL gpuDeferred = FALSE;
     DWORD gpuLastOutputCheck = 0;
+    DWORD gpuRetryLast = GetTickCount();
+    ULONG gpuRetryFailures = 0;
     LONG vw, vh, primW, primH;
     ULONG ViewIndex;
 
@@ -4329,6 +4332,25 @@ DwmComposeLoop(HANDLE hStopEvent)
             }
         }
 
+        if (DwmGpuComposeIsActive())
+        {
+            gpuRetryFailures = 0;
+        }
+        else if (DwmGpuRetryDue(GetTickCount(), gpuRetryLast, gpuRetryFailures))
+        {
+            gpuRetryLast = GetTickCount();
+            if (DwmGpuComposeInitialize(g_W, g_H))
+            {
+                DwmLog("DWM: Direct3D compositor available again\n");
+                forceFull = TRUE;
+                g_lastFrameQpc = 0;
+            }
+            else if (gpuRetryFailures < DWM_GPU_RETRY_MAX_DOUBLINGS)
+            {
+                ++gpuRetryFailures;
+            }
+        }
+
         /* Budget from the start of the last frame. Waiting a full refresh
          * period after presentation adds rendering time to every interval. */
         if (g_refreshPeriodQpc != 0 && g_lastFrameQpc != 0)
@@ -4359,6 +4381,11 @@ DwmComposeLoop(HANDLE hStopEvent)
         hdr->BufBytes = g_bufSize;
         DwmPointerSelectPath(hdcScreen);
         hdr->PointerComposed = g_pointer.Composed;
+        if (g_pointer.GpuActive && screenMirrorNeeded == 0)
+        {
+            ExtEscape(hdcScreen, CDD_ESCAPE_MIRROR_NEEDED, 0, NULL,
+                      sizeof(screenMirrorNeeded), (LPSTR)&screenMirrorNeeded);
+        }
         hdr->ScreenMirror = g_pointer.GpuActive && screenMirrorNeeded != 0;
         hdr->ScreenReadServed = screenRead;
 
@@ -4421,7 +4448,7 @@ DwmComposeLoop(HANDLE hStopEvent)
             g_lastFrameQpc = 0;
             forceFull = TRUE;
             g_pointer.GpuActive = FALSE;
-            screenCaptureProbed = FALSE;
+            screenCaptureProbes = 0;
             screenMirrorNeeded = 0;
             continue;
         }
@@ -4669,13 +4696,12 @@ DwmComposeLoop(HANDLE hStopEvent)
                     if (gpuResult == DWM_GPU_COMPLETE)
                     {
                         NtUserCallOneParam(0, DWM_ROUTINE_PRESENTED);
-                        if (!screenCaptureProbed)
+                        /* A read tells CDD whether the driver can capture, before any client reads;
+                         * one issued before the compositor owns the output finds nothing yet. */
+                        if (screenMirrorNeeded == 0 && screenCaptureProbes < 16)
                         {
-                            /* A first read tells CDD whether the driver can capture, before any client reads. */
-                            screenCaptureProbed = TRUE;
+                            ++screenCaptureProbes;
                             GetPixel(hdcScreen, 0, 0);
-                            ExtEscape(hdcScreen, CDD_ESCAPE_MIRROR_NEEDED, 0, NULL,
-                                      sizeof(screenMirrorNeeded), (LPSTR)&screenMirrorNeeded);
                         }
                         g_lastFrameQpc = (ULONGLONG)statFrameStart.QuadPart;
                         /* On the GPU path these fields mean clear/context,
