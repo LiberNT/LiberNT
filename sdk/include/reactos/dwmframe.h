@@ -55,6 +55,8 @@
  * source form is kernel-only; NtGdiExtEscape resolves and pins the bitmap. */
 #define DWM_ESCAPE_PRESENT_BITMAP  0x44574D05
 #define CDD_ESCAPE_PRESENT_SOURCE  0x44574D06
+/* LONG out: non-zero when the display device has a hardware pointer. */
+#define CDD_ESCAPE_HW_POINTER      0x44574D08
 
 typedef struct _DWM_PRESENT_BITMAP
 {
@@ -416,6 +418,10 @@ typedef struct _DWM_FRAME_HEADER
     LONG  ContentL, ContentT; /* out: union of changed published     */
     LONG  ContentR, ContentB; /*      client pixels; no frame, shadow */
                               /*      or placement changed with them */
+    ULONG PointerComposed;    /* in : dwm draws the pointer: wake it on changes */
+    LONG  PointerX, PointerY; /* out: hot spot position, screen px   */
+    ULONG PointerStep;        /* out: frame of an animated cursor    */
+    ULONGLONG PointerHandle;  /* out: HCURSOR, 0 = hidden            */
 } DWM_FRAME_HEADER, *PDWM_FRAME_HEADER;
 
 /* DwmEnableBlurBehindWindow exchange. The HRGN is consumed synchronously in

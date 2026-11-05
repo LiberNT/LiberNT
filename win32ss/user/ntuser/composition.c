@@ -246,6 +246,7 @@ static LONGLONG        g_DwmWatchdogStart = 0;
 /* Damage wake event for dwm (referenced from dwm's handle), so dwm blocks
  * instead of polling when the desktop is idle. */
 static PKEVENT         g_DwmWakeEvent = NULL;
+static BOOL            g_DwmPointerComposed = FALSE;
 /* The attached compositor process: every DWM entry point is rejected for
  * anyone else (frame metadata + window surfaces are session-global state). */
 static PEPROCESS       g_DwmProcess = NULL;
@@ -442,6 +443,13 @@ IntCompositionDwmWake(VOID)
 {
     if (g_DwmWakeEvent != NULL)
         KeSetEvent(g_DwmWakeEvent, IO_NO_INCREMENT, FALSE);
+}
+
+VOID
+IntCompositionPointerChanged(VOID)
+{
+    if (g_DwmPointerComposed)
+        IntCompositionDwmWake();
 }
 
 /* Mark the composition dirty (bFull: the whole frame) and wake dwm. */
@@ -2931,6 +2939,20 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
 
     RtlZeroMemory(&Frame, sizeof(Frame));
     Frame.Magic = DWM_FRAME_MAGIC;
+    g_DwmPointerComposed = Input.PointerComposed != 0;
+    {
+        PSYSTEM_CURSORINFO CurInfo = IntGetSysCursorInfo();
+        PCURICON_OBJECT Cursor = CurInfo->CurrentCursorObject;
+
+        Frame.PointerX = gpsi->ptCursor.x;
+        Frame.PointerY = gpsi->ptCursor.y;
+        if (Cursor != NULL && CurInfo->ShowingCursor >= 0)
+        {
+            Frame.PointerHandle = (ULONGLONG)(ULONG_PTR)UserHMGetHandle(Cursor);
+            if (Cursor->CURSORF_flags & CURSORF_ACON)
+                Frame.PointerStep = ((PACON)Cursor)->iicur;
+        }
+    }
     Frame.BufBytes = Input.BufBytes;
     Frame.ScreenW = (ULONG)sizl.cx;
     Frame.ScreenH = (ULONG)sizl.cy;

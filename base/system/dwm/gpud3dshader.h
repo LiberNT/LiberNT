@@ -25,6 +25,7 @@ static const char DwmD3dShaderSource[] =
     "float4 SolidPS(Vertex v) : SV_Target { return brush; }\n"
     "float2 sourceUV(float2 uv) { return sourceScale.x > 0 ? uv * sourceScale.xy : uv; }\n"
     "float4 CopyPS(Vertex v) : SV_Target { return float4(source.Sample(linearClamp, sourceUV(v.uv)).rgb, sourceSize.z); }\n"
+    "float4 PointerPS(Vertex v) : SV_Target { return source.Sample(linearClamp, v.uv); }\n"
     "float2 extentUV(float2 uv) { return min(uv*sampleExtent.xy, sampleExtent.zw); }\n"
     "float4 BlurCopyPS(Vertex v) : SV_Target { return float4(source.Sample(linearClamp, extentUV(v.uv)).rgb, sourceSize.z); }\n"
     "float distanceRGB(float3 a, float3 b) { float3 d = abs(a-b); return max(d.r,max(d.g,d.b)); }\n"

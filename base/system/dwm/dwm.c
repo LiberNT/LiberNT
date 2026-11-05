@@ -18,6 +18,7 @@
 #include "dxsurface.h"
 #include "framebuttons.h"
 #include "gpucomp.h"
+#include "gpupointer.h"
 #include "material.h"
 #include "animation.h"
 #include "presenttrace.h"
@@ -772,6 +773,123 @@ DwmUnionDamage(LONG *Left, LONG *Top, LONG *Right, LONG *Bottom,
     *Right = max(*Right, (LONG)R);
     *Bottom = max(*Bottom, (LONG)B);
     SetRect(&Parts[(*PartCount)++], (LONG)L, (LONG)T, (LONG)R, (LONG)B);
+}
+
+typedef struct _DWM_POINTER
+{
+    BOOL GpuActive, Composed, Valid;
+    ULONGLONG Handle;
+    ULONG Step;
+    LONG HotX, HotY, Width, Height;
+    RECT Rect, Drawn;
+} DWM_POINTER;
+
+static DWM_POINTER g_pointer;
+
+static VOID
+DwmPointerSelectPath(HDC hdcScreen)
+{
+    BOOL Active = DwmGpuComposeSupportsPointer();
+    LONG Hardware = 1;
+
+    if (Active == g_pointer.GpuActive)
+        return;
+    g_pointer.GpuActive = Active;
+    g_pointer.Composed = Active &&
+        ExtEscape(hdcScreen, CDD_ESCAPE_HW_POINTER, 0, NULL, sizeof(Hardware), (LPSTR)&Hardware) > 0 && !Hardware;
+}
+
+static BOOL
+DwmPointerLoadImage(HDC hdcScreen, HCURSOR Cursor, ULONG Step)
+{
+    BITMAPINFO Info = {{sizeof(BITMAPINFOHEADER)}};
+    ICONINFO Icon;
+    BITMAP Bitmap;
+    HDC Dc = NULL;
+    HBITMAP Dib = NULL, OldDib = NULL;
+    ULONG *Bits = NULL, *Pixels = NULL;
+    LONG Width, Height;
+    ULONG Count;
+    BOOL Ok = FALSE;
+
+    if (!GetIconInfo(Cursor, &Icon))
+        return FALSE;
+    Ok = GetObjectW(Icon.hbmColor ? Icon.hbmColor : Icon.hbmMask, sizeof(Bitmap), &Bitmap) == sizeof(Bitmap);
+    if (Icon.hbmColor) DeleteObject(Icon.hbmColor);
+    if (Icon.hbmMask) DeleteObject(Icon.hbmMask);
+    if (!Ok)
+        return FALSE;
+    Ok = FALSE;
+    Width = Bitmap.bmWidth;
+    Height = Icon.hbmColor ? Bitmap.bmHeight : Bitmap.bmHeight / 2;
+    if (Width <= 0 || Height <= 0 || Width > DWM_POINTER_MAX_SIZE || Height > DWM_POINTER_MAX_SIZE)
+        return FALSE;
+    Count = (ULONG)Width * Height;
+
+    Info.bmiHeader.biWidth = Width;
+    Info.bmiHeader.biHeight = -Height;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+    Dc = CreateCompatibleDC(hdcScreen);
+    Dib = CreateDIBSection(hdcScreen, &Info, DIB_RGB_COLORS, (void **)&Bits, NULL, 0);
+    Pixels = (ULONG *)HeapAlloc(GetProcessHeap(), 0, Count * 3 * sizeof(ULONG));
+    if (Dc != NULL && Dib != NULL && Bits != NULL && Pixels != NULL)
+    {
+        ULONG *Image = Pixels + Count, *Invert = Image + Count;
+
+        OldDib = (HBITMAP)SelectObject(Dc, Dib);
+        memset(Bits, 0x00, Count * sizeof(ULONG));
+        if (DrawIconEx(Dc, 0, 0, Cursor, Width, Height, Step, NULL, DI_NORMAL))
+        {
+            GdiFlush();
+            memcpy(Pixels, Bits, Count * sizeof(ULONG));
+            memset(Bits, 0xFF, Count * sizeof(ULONG));
+            if (DrawIconEx(Dc, 0, 0, Cursor, Width, Height, Step, NULL, DI_NORMAL))
+            {
+                BOOL Inverts;
+
+                GdiFlush();
+                Inverts = DwmPointerConvert(Pixels, Bits, Count, Image, Invert);
+                Ok = DwmGpuComposeSetPointerImage(Width, Height, Image, Inverts ? Invert : NULL);
+            }
+        }
+        SelectObject(Dc, OldDib);
+    }
+    if (Pixels != NULL) HeapFree(GetProcessHeap(), 0, Pixels);
+    if (Dib != NULL) DeleteObject(Dib);
+    if (Dc != NULL) DeleteDC(Dc);
+    if (Ok)
+    {
+        g_pointer.Width = Width;
+        g_pointer.Height = Height;
+        g_pointer.HotX = (LONG)Icon.xHotspot;
+        g_pointer.HotY = (LONG)Icon.yHotspot;
+    }
+    return Ok;
+}
+
+/* TRUE when the pointer differs from what the last frame drew. */
+static BOOL
+DwmPointerUpdate(HDC hdcScreen, const DWM_FRAME_HEADER *Frame)
+{
+    BOOL ImageChanged = Frame->PointerHandle != g_pointer.Handle || Frame->PointerStep != g_pointer.Step ||
+                        (g_pointer.Valid && !DwmGpuComposeHasPointerImage());
+
+    if (!g_pointer.Composed)
+        return FALSE;
+    if (ImageChanged)
+    {
+        g_pointer.Handle = Frame->PointerHandle;
+        g_pointer.Step = Frame->PointerStep;
+        g_pointer.Valid = Frame->PointerHandle != 0 &&
+                          DwmPointerLoadImage(hdcScreen, (HCURSOR)(ULONG_PTR)Frame->PointerHandle, Frame->PointerStep);
+    }
+    SetRectEmpty(&g_pointer.Rect);
+    if (g_pointer.Valid)
+        DwmPointerRect(&g_pointer.Rect, Frame->PointerX, Frame->PointerY, g_pointer.HotX, g_pointer.HotY,
+                       g_pointer.Width, g_pointer.Height);
+    return ImageChanged || !EqualRect(&g_pointer.Rect, &g_pointer.Drawn);
 }
 
 static BOOL
@@ -4050,6 +4168,7 @@ DwmComposeLoop(HANDLE hStopEvent)
     HWND SettingsWindow;
     DWM_SETTINGS Settings = {DWM_EFFECT_ALL, FALSE, DwmGpuComposeIsActive};
     BOOL forceFull = TRUE;
+    BOOL pointerChanged;
     BOOL gpuDeferred = FALSE;
     DWORD gpuLastOutputCheck = 0;
     LONG vw, vh, primW, primH;
@@ -4235,6 +4354,8 @@ DwmComposeLoop(HANDLE hStopEvent)
 
         hdr->Magic = DWM_FRAME_MAGIC;
         hdr->BufBytes = g_bufSize;
+        DwmPointerSelectPath(hdcScreen);
+        hdr->PointerComposed = g_pointer.Composed;
 
         DwmStatCounter(&statFetchStart);
         FetchTrace = DptBegin(&g_DwmPresentTrace, DPT_FETCH);
@@ -4294,10 +4415,12 @@ DwmComposeLoop(HANDLE hStopEvent)
                 DwmLog("DWM: native Direct3D compositor available\n");
             g_lastFrameQpc = 0;
             forceFull = TRUE;
+            g_pointer.GpuActive = FALSE;
             continue;
         }
 
-        if (hdr->Dirty == 0 && !forceFull)
+        pointerChanged = DwmPointerUpdate(hdcScreen, hdr);
+        if (hdr->Dirty == 0 && !forceFull && !pointerChanged)
         {
             HANDLE WaitHandles[2] = {hStopEvent, hWake};
 
@@ -4314,10 +4437,10 @@ DwmComposeLoop(HANDLE hStopEvent)
             BOOL refreshBackdrop = forceFull || hdr->FullDamage;
             BOOL windowDamage = hdr->DmgR > hdr->DmgL && hdr->DmgB > hdr->DmgT;
             BOOL contentDamage = hdr->ContentR > hdr->ContentL && hdr->ContentB > hdr->ContentT;
-            RECT damageParts[2];
+            RECT damageParts[4];
             ULONG damagePartCount = 0;
 
-            if (forceFull || hdr->FullDamage || (!windowDamage && !contentDamage))
+            if (forceFull || hdr->FullDamage || (!windowDamage && !contentDamage && !pointerChanged))
             {
                 pl = 0; pt = 0; pr = g_W; pb = g_H;
             }
@@ -4340,6 +4463,20 @@ DwmComposeLoop(HANDLE hStopEvent)
                                    (LONGLONG)hdr->ContentT - g_originY,
                                    (LONGLONG)hdr->ContentR - g_originX,
                                    (LONGLONG)hdr->ContentB - g_originY);
+                }
+                if (g_pointer.Composed)
+                {
+                    /* The pointer must never straddle a repair edge and blend twice. */
+                    DwmUnionDamage(&pl, &pt, &pr, &pb, damageParts, &damagePartCount,
+                                   (LONGLONG)g_pointer.Drawn.left - g_originX,
+                                   (LONGLONG)g_pointer.Drawn.top - g_originY,
+                                   (LONGLONG)g_pointer.Drawn.right - g_originX,
+                                   (LONGLONG)g_pointer.Drawn.bottom - g_originY);
+                    DwmUnionDamage(&pl, &pt, &pr, &pb, damageParts, &damagePartCount,
+                                   (LONGLONG)g_pointer.Rect.left - g_originX,
+                                   (LONGLONG)g_pointer.Rect.top - g_originY,
+                                   (LONGLONG)g_pointer.Rect.right - g_originX,
+                                   (LONGLONG)g_pointer.Rect.bottom - g_originY);
                 }
                 if (pr <= pl || pb <= pt)
                 {
@@ -4423,7 +4560,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     ULONGLONG TraceDrawStart = 0, TraceDrawEnd = 0, TracePresentEnd = 0;
                     BOOL gpuFrame;
                     DWM_GPU_RESULT gpuResult;
-                    RECT gpuDamage[2] = {{pl, pt, pr, pb}};
+                    RECT gpuDamage[ARRAYSIZE(damageParts)] = {{pl, pt, pr, pb}};
                     ULONG gpuDamageCount = 1;
                     RECT gpuShadowMargins = {g_shadowMarginLeft, g_shadowMarginTop,
                                               g_shadowMarginRight, g_shadowMarginBottom};
@@ -4476,6 +4613,15 @@ DwmComposeLoop(HANDLE hStopEvent)
                             gpuFrame = FALSE;
                         }
                     }
+
+                    if (gpuFrame && g_pointer.Composed && g_pointer.Valid)
+                    {
+                        RECT PointerRect = g_pointer.Rect;
+
+                        OffsetRect(&PointerRect, -g_originX, -g_originY);
+                        gpuFrame = DwmGpuComposePointer(&PointerRect);
+                    }
+                    g_pointer.Drawn = g_pointer.Rect;
 
                     DwmStatThreadTime(&statDrawCpuEnd);
                     if (statDrawCpuStart.Valid && statDrawCpuEnd.Valid)

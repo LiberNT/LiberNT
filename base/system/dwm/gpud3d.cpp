@@ -140,7 +140,7 @@ struct ConstantBuffer
     ConstantBuffer *Next;
 };
 
-enum Shader { Solid, Copy, Window, Filter, Shadow, BlurCopy, ShaderCount };
+enum Shader { Solid, Copy, Window, Filter, Shadow, BlurCopy, PointerSprite, ShaderCount };
 
 /* Disjoint rectangles repaired separately, so distant damage does not
  * redraw everything between it. */
@@ -180,13 +180,13 @@ struct Compositor
     ID3D11PixelShader *PixelShaders[ShaderCount];
     ConstantBuffer *ConstantsHead, *ConstantsTail, *NextConstants;
     ID3D11SamplerState *Sampler;
-    ID3D11BlendState *Blend, *PremultipliedBlend;
+    ID3D11BlendState *Blend, *PremultipliedBlend, *InvertBlend;
     ID3D11RasterizerState *Rasterizer;
     ID3D11Query *Completion, *ClientCopies;
     /* ClientCopies fences the copies Begin makes of new client publications.
      * A copy made after that fence cannot be released early. */
     BOOL CopyingClients, ClientCopiesFenced, ClientCopiesUnfenced;
-    Texture Canvas, Backdrop;
+    Texture Canvas, Backdrop, PointerImage, PointerInvert;
     ID3D11Texture2D *BackBuffer;
     Surface Surfaces[DWM_MAX_WINDOWS * 2];
     ClientSource ClientSources[DWM_MAX_WINDOWS * 2];
@@ -340,7 +340,8 @@ BOOL Draw(Texture &Target,
           ID3D11ShaderResourceView *Backdrop = NULL,
           BOOL Blend = FALSE,
           BOOL Premultiplied = FALSE,
-          ID3D11ShaderResourceView *Buttons = NULL)
+          ID3D11ShaderResourceView *Buttons = NULL,
+          ID3D11BlendState *BlendOverride = NULL)
 {
     if (Clip.left >= Clip.right || Clip.top >= Clip.bottom)
         return TRUE;
@@ -394,7 +395,7 @@ BOOL Draw(Texture &Target,
     State.Context->RSSetViewports(1, &Viewport);
     State.Context->RSSetState(State.Rasterizer);
     State.Context->OMSetRenderTargets(1, &Target.Target, NULL);
-    State.Context->OMSetBlendState(Premultiplied ? State.PremultipliedBlend : Blend ? State.Blend : NULL, NULL, ~0u);
+    State.Context->OMSetBlendState(BlendOverride ? BlendOverride : Premultiplied ? State.PremultipliedBlend : Blend ? State.Blend : NULL, NULL, ~0u);
     State.Context->IASetInputLayout(NULL);
     State.Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     State.Context->VSSetShader(State.VertexShader, NULL, 0);
@@ -628,7 +629,7 @@ BOOL CreateShaders()
     CompileProc Compile = (CompileProc)GetProcAddress(State.Compiler, "D3DCompile");
     if (Compile == NULL)
         return FALSE;
-    const char *Entries[] = {"QuadVS", "SolidPS", "CopyPS", "WindowPS", "FilterPS", "ShadowPS", "BlurCopyPS"};
+    const char *Entries[] = {"QuadVS", "SolidPS", "CopyPS", "WindowPS", "FilterPS", "ShadowPS", "BlurCopyPS", "PointerPS"};
     for (ULONG Index = 0; Index < ARRAYSIZE(Entries); ++Index)
     {
         ID3DBlob *Bytecode = NULL, *Errors = NULL;
@@ -669,6 +670,12 @@ BOOL CreateShaders()
         return FALSE;
     Blend.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
     if (!Result(State.Device->CreateBlendState(&Blend, &State.PremultipliedBlend), "CreateBlendState(premultiplied)"))
+        return FALSE;
+    Blend.RenderTarget[0].SrcBlend = D3D11_BLEND_INV_DEST_COLOR;
+    Blend.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_COLOR;
+    Blend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
+    Blend.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+    if (!Result(State.Device->CreateBlendState(&Blend, &State.InvertBlend), "CreateBlendState(invert)"))
         return FALSE;
     D3D11_RASTERIZER_DESC Rasterizer = {};
     Rasterizer.FillMode = D3D11_FILL_SOLID;
@@ -1717,11 +1724,14 @@ DwmD3dShutdown(void)
         State.FrameAtlases[Index].Image.Reset();
     State.Backdrop.Reset();
     State.Canvas.Reset();
+    State.PointerImage.Reset();
+    State.PointerInvert.Reset();
     Release(State.BackBuffer);
     Release(State.ClientCopies);
     Release(State.Completion);
     Release(State.Rasterizer);
     Release(State.PremultipliedBlend);
+    Release(State.InvertBlend);
     Release(State.Blend);
     Release(State.Sampler);
     while (State.ConstantsHead != NULL)
@@ -2317,6 +2327,50 @@ DwmD3dClientCopiesRetired(void)
             return FALSE;
         SwitchToThread();
     }
+}
+
+BOOL
+DwmD3dHasPointerImage(void)
+{
+    return State.Active && State.PointerImage.Resource != NULL;
+}
+
+/* An animated cursor replaces its image many times a second: reuse the texture. */
+static BOOL
+FillPointerTexture(Texture &Image, LONG Width, LONG Height, const ULONG *Pixels)
+{
+    if (Image.Resource == NULL || Image.Width != Width || Image.Height != Height)
+        return CreateTexture(Image, Width, Height, FALSE, (const BYTE *)Pixels, Width * sizeof(ULONG));
+    State.Context->UpdateSubresource(Image.Resource, 0, NULL, Pixels, Width * sizeof(ULONG), 0);
+    return TRUE;
+}
+
+BOOL
+DwmD3dSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const ULONG *Invert)
+{
+    if (!State.Active)
+        return FALSE;
+    if (Invert == NULL)
+        State.PointerInvert.Reset();
+    return FillPointerTexture(State.PointerImage, Width, Height, Image) &&
+           (Invert == NULL || FillPointerTexture(State.PointerInvert, Width, Height, Invert));
+}
+
+/* TODO: a client on an overlay plane hides the pointer drawn here. */
+BOOL
+DwmD3dDrawPointer(const RECT *Rect)
+{
+    if (!State.Active || State.PointerImage.View == NULL)
+        return FALSE;
+    Constants Data = {};
+    RECT Clip = ClipDraw(*Rect);
+    SetRectangle(Data, Rect->left, Rect->top, Rect->right, Rect->bottom);
+    /* The pointer lies above every window, so also above the occluder. */
+    State.OccluderActive = FALSE;
+    return Draw(State.Canvas, PointerSprite, Clip, Data, State.PointerImage.View, NULL, FALSE, TRUE) &&
+           (State.PointerInvert.View == NULL ||
+            Draw(State.Canvas, PointerSprite, Clip, Data, State.PointerInvert.View, NULL, FALSE, FALSE, NULL,
+                 State.InvertBlend));
 }
 
 DWM_GPU_RESULT

@@ -11,12 +11,14 @@
 
 extern void func_dwmstack(void);
 extern void func_event_poll(void);
+extern void func_pointer_image(void);
 extern void func_scene_cache(void);
 
 const struct test winetest_testlist[] =
 {
     { "dwmstack", func_dwmstack },
     { "event_poll", func_event_poll },
+    { "pointer_image", func_pointer_image },
     { "scene_cache", func_scene_cache },
     { 0, 0 }
 };
