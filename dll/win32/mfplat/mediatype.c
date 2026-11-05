@@ -53,7 +53,7 @@ DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC4, MAKEFOURCC('I','M','C','4'));
 static const UINT32 default_channel_mask[7] =
 {
     0,
-    SPEAKER_FRONT_LEFT,
+    SPEAKER_FRONT_CENTER,
     SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT,
     SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER,
     KSAUDIO_SPEAKER_QUAD,
@@ -3023,6 +3023,9 @@ HRESULT WINAPI MFCreateWaveFormatExFromMFMediaType(IMFMediaType *mediatype, WAVE
             flags = MFWaveFormatExConvertFlag_ForceExtensible;
     }
 
+    if (media_type_get_uint32(mediatype, &MF_MT_AUDIO_BITS_PER_SAMPLE) > 16)
+        flags = MFWaveFormatExConvertFlag_ForceExtensible;
+
     basetype.Data1 = subtype.Data1;
     if (subtype.Data1 >> 16 || !IsEqualGUID(&subtype, &basetype))
         flags = MFWaveFormatExConvertFlag_ForceExtensible;
@@ -3053,8 +3056,12 @@ HRESULT WINAPI MFCreateWaveFormatExFromMFMediaType(IMFMediaType *mediatype, WAVE
         format_ext->SubFormat = subtype;
         user_data = format_ext + 1;
 
-        format_ext->Samples.wValidBitsPerSample = media_type_get_uint32(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE);
-        format_ext->Samples.wSamplesPerBlock = media_type_get_uint32(mediatype, &MF_MT_AUDIO_SAMPLES_PER_BLOCK);
+        if (SUCCEEDED(IMFMediaType_GetItem(mediatype, &MF_MT_AUDIO_SAMPLES_PER_BLOCK, NULL)))
+            format_ext->Samples.wSamplesPerBlock = media_type_get_uint32(mediatype, &MF_MT_AUDIO_SAMPLES_PER_BLOCK);
+        else if (SUCCEEDED(IMFMediaType_GetItem(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE, NULL)))
+            format_ext->Samples.wValidBitsPerSample = media_type_get_uint32(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE);
+        else
+            format_ext->Samples.wValidBitsPerSample = format->wBitsPerSample;
 
         if (SUCCEEDED(IMFMediaType_GetItem(mediatype, &MF_MT_AUDIO_CHANNEL_MASK, NULL)))
             format_ext->dwChannelMask = media_type_get_uint32(mediatype, &MF_MT_AUDIO_CHANNEL_MASK);
@@ -3124,7 +3131,8 @@ HRESULT WINAPI MFInitMediaTypeFromWaveFormatEx(IMFMediaType *mediatype, const WA
         if (wfex->dwChannelMask)
             mediatype_set_uint32(mediatype, &MF_MT_AUDIO_CHANNEL_MASK, wfex->dwChannelMask, &hr);
 
-        if (format->wBitsPerSample && wfex->Samples.wValidBitsPerSample)
+        if (format->wBitsPerSample && wfex->Samples.wValidBitsPerSample
+                && wfex->Samples.wValidBitsPerSample != format->wBitsPerSample)
             mediatype_set_uint32(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE, wfex->Samples.wValidBitsPerSample, &hr);
 
         user_data_size = format->cbSize - sizeof(WAVEFORMATEXTENSIBLE) + sizeof(WAVEFORMATEX);
