@@ -290,6 +290,7 @@ struct strmbase_renderer
     CRITICAL_SECTION eos_cs;
 
     IMediaSample *current_sample;
+    BOOL sample_waiting;
 
     IQualityControl *qc_sink;
     REFERENCE_TIME last_left, avg_duration, avg_pt;
