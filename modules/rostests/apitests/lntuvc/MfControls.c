@@ -378,11 +378,15 @@ ReadStill(IMFMediaSource *Source)
                 if (Value.vt == VT_UNKNOWN && SUCCEEDED(IUnknown_QueryInterface(Value.punkVal, &IID_IMFSample, (void **)&Sample)))
                 {
                     DWORD Length = 0;
-                    LONGLONG Duration = 0;
+                    LONGLONG Duration = -1, Time = -1;
+                    HRESULT DurationResult, TimeResult;
 
                     IMFSample_GetTotalLength(Sample, &Length);
-                    IMFSample_GetSampleDuration(Sample, &Duration);
-                    trace("MEASURE still sample length %lu duration %I64d\n", Length, Duration);
+                    DurationResult = IMFSample_GetSampleDuration(Sample, &Duration);
+                    TimeResult = IMFSample_GetSampleTime(Sample, &Time);
+                    trace("MEASURE still sample length %lu duration %#lx %I64d time %#lx\n", Length, DurationResult, Duration, TimeResult);
+                    ok(DurationResult == S_OK && Duration == 0 && TimeResult == S_OK, "Still sample duration %#lx %I64d time %#lx\n",
+                       DurationResult, Duration, TimeResult);
                     IMFSample_Release(Sample);
                 }
                 PropVariantClear(&Value);

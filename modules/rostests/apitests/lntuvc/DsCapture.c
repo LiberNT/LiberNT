@@ -203,6 +203,39 @@ DumpProcAmp(IBaseFilter *Filter)
     }
 }
 
+static LONG
+CheckDroppedFrames(IBaseFilter *Filter, IPin *Pin, const char *When)
+{
+    IAMDroppedFrames *Dropped = NULL;
+    long Value = -1, Frames[4] = { -1, -1, -1, -1 }, Count = -1, Delivered = -1;
+    HRESULT hr;
+
+    hr = IBaseFilter_QueryInterface(Filter, &IID_IAMDroppedFrames, (void **)&Dropped);
+    ok(hr == S_OK, "IAMDroppedFrames on the filter %s %#lx\n", When, hr);
+    if (SUCCEEDED(hr))
+        IAMDroppedFrames_Release(Dropped);
+    Dropped = NULL;
+    hr = IPin_QueryInterface(Pin, &IID_IAMDroppedFrames, (void **)&Dropped);
+    ok(hr == S_OK, "IAMDroppedFrames on the pin %s %#lx\n", When, hr);
+    if (FAILED(hr))
+        return -1;
+    hr = IAMDroppedFrames_GetNumDropped(Dropped, &Value);
+    ok(hr == S_OK && Value == 0, "GetNumDropped %s %#lx %ld\n", When, hr, Value);
+    hr = IAMDroppedFrames_GetNumNotDropped(Dropped, &Delivered);
+    trace("MEASURE ds dropped %s not dropped %#lx %ld\n", When, hr, Delivered);
+    ok(hr == S_OK, "GetNumNotDropped %s %#lx\n", When, hr);
+    Value = -1;
+    hr = IAMDroppedFrames_GetAverageFrameSize(Dropped, &Value);
+    ok(hr == S_OK && Value == 640 * 480 * 2, "GetAverageFrameSize %s %#lx %ld\n", When, hr, Value);
+    hr = IAMDroppedFrames_GetDroppedInfo(Dropped, 4, Frames, &Count);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND) && Count == -1 && Frames[0] == -1, "GetDroppedInfo %s %#lx count %ld frame %ld\n",
+       When, hr, Count, Frames[0]);
+    hr = IAMDroppedFrames_GetNumDropped(Dropped, NULL);
+    ok(hr == E_POINTER, "GetNumDropped without a pointer %s %#lx\n", When, hr);
+    IAMDroppedFrames_Release(Dropped);
+    return Delivered;
+}
+
 static void
 Capture(IBaseFilter *Source)
 {
@@ -218,6 +251,7 @@ Capture(IBaseFilter *Source)
     ULONG Tries, Good = 0;
     BYTE *Buffer = HeapAlloc(GetProcessHeap(), 0, 640 * 480 * 2);
     ULONG LastSequence = (ULONG)-1;
+    LONG Delivered, Stopped;
     HRESULT hr;
 
     hr = CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER, &IID_IGraphBuilder, (void **)&Graph);
@@ -287,6 +321,8 @@ Capture(IBaseFilter *Source)
     hr = IGraphBuilder_ConnectDirect(Graph, GrabOut, NullIn, NULL);
     ok(hr == S_OK, "Connect null returned %#lx\n", hr);
 
+    Delivered = CheckDroppedFrames(Source, Out, "connected");
+    ok(Delivered == 0, "Frames delivered before the run %ld\n", Delivered);
     hr = IGraphBuilder_QueryInterface(Graph, &IID_IMediaControl, (void **)&Control);
     ok(hr == S_OK, "IMediaControl returned %#lx\n", hr);
     hr = IMediaControl_Run(Control);
@@ -319,9 +355,13 @@ Capture(IBaseFilter *Source)
         }
     }
     ok(Good >= UVC_TEST_FRAMES, "Only %lu good samples\n", Good);
+    Delivered = CheckDroppedFrames(Source, Out, "running");
+    ok(Delivered > 0, "Frames delivered while running %ld\n", Delivered);
 
     hr = IMediaControl_Stop(Control);
     ok(SUCCEEDED(hr), "Stop returned %#lx\n", hr);
+    Stopped = CheckDroppedFrames(Source, Out, "stopped");
+    ok(Stopped >= Delivered, "Frames delivered after the stop %ld, while running %ld\n", Stopped, Delivered);
 
 done:
     HeapFree(GetProcessHeap(), 0, Buffer);

@@ -52,6 +52,26 @@ WaitForCamera(DWORD TimeoutMs, WCHAR *Path, DWORD PathChars, DWORD *Elapsed)
 }
 
 static HANDLE
+EnableDeviceLost(HANDLE Filter, KSEVENTDATA *Data)
+{
+    static const GUID Set = { 0x288296ec, 0x9f94, 0x41b4, { 0xa1, 0x53, 0xaa, 0x31, 0xae, 0xec, 0xb3, 0x3f } };
+    KSEVENT Event;
+    DWORD Returned = 0;
+    HANDLE Signal = CreateEventW(NULL, TRUE, FALSE, NULL);
+    BOOL Result;
+
+    Event.Set = Set;
+    Event.Id = 0;
+    Event.Flags = KSEVENT_TYPE_ENABLE;
+    ZeroMemory(Data, sizeof(*Data));
+    Data->NotificationType = KSEVENTF_EVENT_HANDLE;
+    Data->EventHandle.Event = Signal;
+    Result = UvcIoctl(Filter, IOCTL_KS_ENABLE_EVENT, &Event, sizeof(Event), Data, sizeof(*Data), &Returned);
+    ok(Result, "Enabling the device lost event failed %lu\n", GetLastError());
+    return Signal;
+}
+
+static HANDLE
 RunningPin(HANDLE Filter, DWORD *Size)
 {
     KS_DATAFORMAT_VIDEOINFOHEADER Format;
@@ -108,7 +128,8 @@ START_TEST(KsUnplug)
     WCHAR Path[512];
     UVC_FRAME_REQUEST *Request;
     PBYTE Buffer;
-    HANDLE Filter, Pin;
+    HANDLE Filter, Pin, Lost;
+    KSEVENTDATA LostData;
     DWORD Size = 0, Error, Returned, Elapsed, Start;
     ULONG Frames = 0;
     BOOL Found;
@@ -129,6 +150,9 @@ START_TEST(KsUnplug)
     ok(Filter != INVALID_HANDLE_VALUE, "Opening the filter failed %lu\n", GetLastError());
     if (Filter == INVALID_HANDLE_VALUE)
         return;
+    Lost = EnableDeviceLost(Filter, &LostData);
+    Error = WaitForSingleObject(Lost, 0);
+    ok(Error == WAIT_TIMEOUT, "Device lost before the unplug %lu\n", Error);
     Pin = RunningPin(Filter, &Size);
     if (!Pin)
         return;
@@ -148,6 +172,8 @@ START_TEST(KsUnplug)
     trace("First read failed after %lu frames, %lu ms, error %lu\n", Frames, GetTickCount() - Start, Error);
     ok(Frames > 0 && Frames < UNPLUG_MAX_FRAMES, "Frames before the unplug %lu\n", Frames);
     ok(Error == WAIT_TIMEOUT, "A read pending across the unplug ended with %lu\n", Error);
+    Error = WaitForSingleObject(Lost, 3000);
+    ok(Error == WAIT_OBJECT_0, "Device lost after the unplug %lu\n", Error);
 
     Start = GetTickCount();
     Error = ReadFrame(Pin, Request, Buffer, Size) ? ERROR_SUCCESS : GetLastError();
@@ -178,6 +204,8 @@ START_TEST(KsUnplug)
     if (Found)
         StreamGoodFrames(Path, "with the old handles open", Request, Buffer);
 
+    UvcIoctl(Filter, IOCTL_KS_DISABLE_EVENT, &LostData, sizeof(LostData), NULL, 0, &Returned);
+    CloseHandle(Lost);
     CloseHandle(Pin);
     CloseHandle(Filter);
 

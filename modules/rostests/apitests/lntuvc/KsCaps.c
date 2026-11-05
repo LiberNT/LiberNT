@@ -170,8 +170,10 @@ DumpSets(HANDLE Handle, const char *Where, DWORD Code, const char *What, BOOL Pr
     }
 }
 
+#define UVC_NO_CHECK MAXDWORD
+
 static void
-DumpDroppedFrames(HANDLE Handle, const char *Where)
+DumpDroppedFrames(HANDLE Handle, const char *Where, DWORD Expect)
 {
     static const GUID Set = { 0xc6e13344, 0x30ac, 0x11d0, { 0xa1, 0x8c, 0x00, 0xa0, 0xc9, 0x11, 0x89, 0x56 } };
     struct
@@ -181,7 +183,7 @@ DumpDroppedFrames(HANDLE Handle, const char *Where)
         LONGLONG DropCount;
         ULONG AverageFrameSize;
     } Request, Reply;
-    DWORD Returned = 0;
+    DWORD Returned = 0, Status;
     BOOL Result;
 
     ZeroMemory(&Request, sizeof(Request));
@@ -190,8 +192,322 @@ DumpDroppedFrames(HANDLE Handle, const char *Where)
     Request.Property.Id = 0;
     Request.Property.Flags = KSPROPERTY_TYPE_GET;
     Result = UvcIoctl(Handle, IOCTL_KS_PROPERTY, &Request, sizeof(Request), &Reply, sizeof(Reply), &Returned);
-    trace("MEASURE dropped %s status %lu returned %lu picture %I64d drop %I64d size %lu\n", Where, Result ? 0 : GetLastError(), Returned,
+    Status = Result ? 0 : GetLastError();
+    trace("MEASURE dropped %s status %lu returned %lu picture %I64d drop %I64d size %lu\n", Where, Status, Returned,
           Reply.PictureNumber, Reply.DropCount, Reply.AverageFrameSize);
+    if (Expect == UVC_NO_CHECK)
+        return;
+    if (Expect)
+        ok(Status == Expect && !Returned, "Dropped frames on the %s: status %lu returned %lu\n", Where, Status, Returned);
+    else
+        ok(!Status && Returned == sizeof(Reply) && !Reply.PictureNumber && !Reply.DropCount && Reply.AverageFrameSize == 614400,
+           "Dropped frames on the %s: status %lu returned %lu picture %I64d drop %I64d size %lu\n", Where, Status, Returned,
+           Reply.PictureNumber, Reply.DropCount, Reply.AverageFrameSize);
+}
+
+static const GUID UvcPropsetUnknownB = { 0xb03a874b, 0xd32b, 0x4213, { 0xac, 0x38, 0x25, 0xa7, 0x18, 0xe4, 0x45, 0x4f } };
+static const GUID UvcPropsetUnknownA = { 0xa60d8368, 0x5324, 0x4893, { 0xb0, 0x20, 0xc4, 0x31, 0xa5, 0x0b, 0xcb, 0xe3 } };
+static const GUID UvcPropsetExtendedCamera = { 0x1cb79112, 0xc0d2, 0x4213, { 0x9c, 0xa6, 0xcd, 0x4f, 0xdb, 0x92, 0x79, 0x72 } };
+static const GUID UvcPropsetMemoryTransport = { 0x0a3d1c5d, 0x5243, 0x4819, { 0x9e, 0xd0, 0xae, 0xe8, 0x04, 0x4c, 0xee, 0x2b } };
+static const GUID UvcPropsetMdlCacheClear = { 0xbd718a7b, 0x97fc, 0x40c7, { 0x88, 0xce, 0xd3, 0xff, 0x06, 0xf5, 0x5b, 0x16 } };
+static const GUID UvcPropsetStreamInterface = { 0x1fdd8ee1, 0x9cd3, 0x11d0, { 0x82, 0xaa, 0x00, 0x00, 0xf8, 0x22, 0xfe, 0x8a } };
+static const GUID UvcPropsetDroppedFrames = { 0xc6e13344, 0x30ac, 0x11d0, { 0xa1, 0x8c, 0x00, 0xa0, 0xc9, 0x11, 0x89, 0x56 } };
+static const GUID UvcEventsetDevice = { 0x288296ec, 0x9f94, 0x41b4, { 0xa1, 0x53, 0xaa, 0x31, 0xae, 0xec, 0xb3, 0x3f } };
+static const GUID UvcEventsetConnection = { 0x7f4bcbe0, 0x9ea5, 0x11cf, { 0xa5, 0xd6, 0x28, 0xdb, 0x04, 0xc1, 0x00, 0x00 } };
+
+#define UVC_SECURE_MODE 36
+
+typedef struct _UVC_GET_EXPECT
+{
+    const GUID *Set;
+    ULONG Id;
+    ULONG Flags;
+    ULONG OutSize;
+    DWORD Status;
+    DWORD Returned;
+    DWORD Value;
+} UVC_GET_EXPECT;
+
+static DWORD
+DumpGet(HANDLE Handle, const char *Where, const GUID *Set, ULONG Id, ULONG Flags, ULONG OutSize, BOOL Quiet, DWORD *Returned, DWORD *Value)
+{
+    KSPROPERTY Property;
+    BYTE Data[256];
+    DWORD Status;
+    BOOL Result;
+
+    ZeroMemory(Data, sizeof(Data));
+    *Returned = 0;
+    Property.Set = *Set;
+    Property.Id = Id;
+    Property.Flags = Flags;
+    Result = UvcIoctl(Handle, IOCTL_KS_PROPERTY, &Property, sizeof(Property), OutSize ? Data : NULL, OutSize, Returned);
+    Status = Result ? 0 : GetLastError();
+    memcpy(Value, Data, sizeof(*Value));
+    if (Quiet && Status == ERROR_NOT_FOUND)
+        return Status;
+    trace("MEASURE get %s %s id %lu flags %lx out %lu status %lu returned %lu data %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n",
+          Where, wine_dbgstr_guid(Set), Id, Flags, OutSize, Status, *Returned,
+          Data[0], Data[1], Data[2], Data[3], Data[4], Data[5], Data[6], Data[7],
+          Data[8], Data[9], Data[10], Data[11], Data[12], Data[13], Data[14], Data[15]);
+    return Status;
+}
+
+static void
+CheckGets(HANDLE Handle, const char *Where, const UVC_GET_EXPECT *Expect, ULONG Count)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        DWORD Returned, Value = 0, Status;
+
+        Status = DumpGet(Handle, Where, Expect[Index].Set, Expect[Index].Id, Expect[Index].Flags, Expect[Index].OutSize, FALSE, &Returned, &Value);
+        ok(Status == Expect[Index].Status && Returned == Expect[Index].Returned &&
+           (Expect[Index].Status || Returned < sizeof(DWORD) || Expect[Index].Value == UVC_NO_CHECK || Value == Expect[Index].Value),
+           "%s %s id %lu flags %lx out %lu: status %lu returned %lu value %lx\n", Where, wine_dbgstr_guid(Expect[Index].Set),
+           Expect[Index].Id, Expect[Index].Flags, Expect[Index].OutSize, Status, Returned, Value);
+    }
+}
+
+static DWORD
+DumpSet(HANDLE Handle, const char *Where, const GUID *Set, ULONG Id, const void *Value, ULONG Size)
+{
+    KSPROPERTY Property;
+    BYTE Data[64];
+    DWORD Returned = 0;
+    BOOL Result;
+
+    memcpy(Data, Value, Size);
+    Property.Set = *Set;
+    Property.Id = Id;
+    Property.Flags = KSPROPERTY_TYPE_SET;
+    Result = UvcIoctl(Handle, IOCTL_KS_PROPERTY, &Property, sizeof(Property), Data, Size, &Returned);
+    trace("MEASURE set %s %s id %lu size %lu status %lu returned %lu\n", Where, wine_dbgstr_guid(Set), Id, Size,
+          Result ? 0 : GetLastError(), Returned);
+    return Result ? 0 : GetLastError();
+}
+
+static void
+CheckEventSupport(HANDLE Handle, const char *Where, const GUID *Set, const DWORD *ExpectSupport, const DWORD *ExpectEnable)
+{
+    ULONG Id;
+
+    for (Id = 0; Id < 8; Id++)
+    {
+        KSEVENT Event;
+        KSEVENTDATA Data;
+        HANDLE Signal;
+        ULONG Support = 0;
+        DWORD Returned = 0, Ignored = 0, Status;
+        BOOL Result;
+
+        Event.Set = *Set;
+        Event.Id = Id;
+        Event.Flags = KSEVENT_TYPE_BASICSUPPORT;
+        Result = UvcIoctl(Handle, IOCTL_KS_ENABLE_EVENT, &Event, sizeof(Event), &Support, sizeof(Support), &Returned);
+        Status = Result ? 0 : GetLastError();
+        ok(Status == ExpectSupport[Id] && !Returned, "%s event %s id %lu support: status %lu returned %lu\n", Where, wine_dbgstr_guid(Set),
+           Id, Status, Returned);
+
+        Signal = CreateEventW(NULL, TRUE, FALSE, NULL);
+        ZeroMemory(&Data, sizeof(Data));
+        Data.NotificationType = KSEVENTF_EVENT_HANDLE;
+        Data.EventHandle.Event = Signal;
+        Event.Flags = KSEVENT_TYPE_ENABLE;
+        Returned = 0;
+        Result = UvcIoctl(Handle, IOCTL_KS_ENABLE_EVENT, &Event, sizeof(Event), &Data, sizeof(Data), &Returned);
+        Status = Result ? 0 : GetLastError();
+        ok(Status == ExpectEnable[Id] && !Returned, "%s event %s id %lu enable: status %lu returned %lu\n", Where, wine_dbgstr_guid(Set),
+           Id, Status, Returned);
+        if (Result)
+            UvcIoctl(Handle, IOCTL_KS_DISABLE_EVENT, &Data, sizeof(Data), NULL, 0, &Ignored);
+        CloseHandle(Signal);
+    }
+}
+
+static void
+ProbeFilterSets(HANDLE Filter, BOOL AllControls)
+{
+    static const DWORD StiEvents[8] = { 0, 0, 0, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND };
+    static const DWORD DeviceEvents[8] = { 0, 0, 0, 0, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND };
+    static const DWORD NoSet[8] = { ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND,
+                                    ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND };
+    static const UVC_GET_EXPECT Expect[] =
+    {
+        { &UvcPropsetDroppedFrames, 0, KSPROPERTY_TYPE_BASICSUPPORT, 4, 0, 4, KSPROPERTY_TYPE_GET },
+        { &UvcPropsetExtendedCamera, UVC_SECURE_MODE, KSPROPERTY_TYPE_GET, 256, ERROR_INVALID_PARAMETER, 0, 0 },
+        { &UvcPropsetExtendedCamera, UVC_SECURE_MODE, KSPROPERTY_TYPE_BASICSUPPORT, 256, 0, sizeof(KSPROPERTY_DESCRIPTION),
+          KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET },
+    };
+    static const UVC_GET_EXPECT Secure[] =
+    {
+        { &UvcPropsetExtendedCamera, UVC_SECURE_MODE, KSPROPERTY_TYPE_GET, 0, ERROR_MORE_DATA, 40, 0 },
+        { &UvcPropsetExtendedCamera, UVC_SECURE_MODE, KSPROPERTY_TYPE_GET, 32, ERROR_INSUFFICIENT_BUFFER, 0, 0 },
+        { &UvcPropsetExtendedCamera, UVC_SECURE_MODE, KSPROPERTY_TYPE_GET, 40, ERROR_INVALID_PARAMETER, 0, 0 },
+        { &UvcPropsetExtendedCamera, UVC_SECURE_MODE, KSPROPERTY_TYPE_GET, 48, ERROR_INVALID_PARAMETER, 0, 0 },
+    };
+    BYTE Zero[64] = { 0 };
+    DWORD Returned, Value;
+    ULONG Id;
+
+    DumpGet(Filter, "filter", &UvcPropsetUnknownB, 0, KSPROPERTY_TYPE_GET, 256, FALSE, &Returned, &Value);
+    DumpGet(Filter, "filter", &UvcPropsetUnknownA, 0, KSPROPERTY_TYPE_GET, 4, FALSE, &Returned, &Value);
+    DumpGet(Filter, "filter", &UvcEventsetVidcapToSti, 0, KSPROPERTY_TYPE_GET, 256, FALSE, &Returned, &Value);
+    CheckGets(Filter, "filter", Expect, ARRAYSIZE(Expect));
+    ok(DumpSet(Filter, "filter", &UvcPropsetExtendedCamera, UVC_SECURE_MODE, Zero, sizeof(Zero)) == ERROR_INVALID_PARAMETER,
+       "Secure mode set with 64 bytes\n");
+    ok(DumpSet(Filter, "filter", &UvcPropsetExtendedCamera, UVC_SECURE_MODE, Zero, 4) == ERROR_INSUFFICIENT_BUFFER,
+       "Secure mode set with 4 bytes\n");
+    CheckGets(Filter, "filter secure", Secure, ARRAYSIZE(Secure));
+    {
+        struct
+        {
+            ULONG Version;
+            ULONG PinId;
+            ULONG Size;
+            ULONG Result;
+            ULONGLONG Flags;
+            ULONGLONG Capability;
+            ULONGLONG Value;
+        } SecureValue = { 1, 0xFFFFFFFF, 40, 0, 0, 0, 0 };
+
+        ok(DumpSet(Filter, "filter secure valid", &UvcPropsetExtendedCamera, UVC_SECURE_MODE, &SecureValue, sizeof(SecureValue)) == ERROR_INVALID_PARAMETER,
+           "Secure mode set with a filter-scope header\n");
+        ok(DumpSet(Filter, "filter secure header", &UvcPropsetExtendedCamera, UVC_SECURE_MODE, &SecureValue, 32) == ERROR_INSUFFICIENT_BUFFER,
+           "Secure mode set with only a header\n");
+    }
+    for (Id = 0; Id < 64; Id++)
+    {
+        DWORD Get, Support;
+
+        if (Id == UVC_SECURE_MODE)
+            continue;
+        Get = DumpGet(Filter, "filter", &UvcPropsetExtendedCamera, Id, KSPROPERTY_TYPE_GET, 256, TRUE, &Returned, &Value);
+        Support = DumpGet(Filter, "filter", &UvcPropsetExtendedCamera, Id, KSPROPERTY_TYPE_BASICSUPPORT, 256, TRUE, &Returned, &Value);
+        ok(Get == ERROR_NOT_FOUND && Support == ERROR_NOT_FOUND, "Extended camera control %lu: get %lu support %lu\n", Id, Get, Support);
+    }
+    if (AllControls)
+    {
+        for (Id = KSPROPERTY_CAMERACONTROL_PAN_RELATIVE; Id <= KSPROPERTY_CAMERACONTROL_AUTO_EXPOSURE_PRIORITY; Id++)
+        {
+            UVC_GET_EXPECT Camera[3] =
+            {
+                { &UvcPropsetCamera, Id, KSPROPERTY_TYPE_BASICSUPPORT, 4, 0, 4, KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET },
+                { &UvcPropsetCamera, Id, KSPROPERTY_TYPE_BASICSUPPORT, 64, ERROR_INSUFFICIENT_BUFFER, 0, 0 },
+                { &UvcPropsetCamera, Id, KSPROPERTY_TYPE_GET, 256, 0, sizeof(KSPROPERTY_CAMERACONTROL_S), UVC_NO_CHECK },
+            };
+
+            if (Id == KSPROPERTY_CAMERACONTROL_PANTILT_RELATIVE)
+            {
+                Camera[0].Status = Camera[1].Status = Camera[2].Status = ERROR_NOT_FOUND;
+                Camera[0].Returned = Camera[2].Returned = 0;
+            }
+            else if (Id == KSPROPERTY_CAMERACONTROL_FOCAL_LENGTH)
+            {
+                Camera[0].Value = KSPROPERTY_TYPE_GET;
+                Camera[1].Status = 0;
+                Camera[1].Returned = sizeof(KSPROPERTY_DESCRIPTION);
+                Camera[1].Value = KSPROPERTY_TYPE_GET;
+            }
+            CheckGets(Filter, "filter camera", Camera, ARRAYSIZE(Camera));
+        }
+    }
+    for (Id = 0; Id < 16; Id++)
+    {
+        static const GUID PinSet = { 0x8c134960, 0x51ad, 0x11cf, { 0x87, 0x8a, 0x94, 0xf8, 0x01, 0xc1, 0x00, 0x00 } };
+        BOOL Listed = Id <= KSPROPERTY_PIN_COMMUNICATION || Id == KSPROPERTY_PIN_NECESSARYINSTANCES ||
+                      Id == KSPROPERTY_PIN_CATEGORY || Id == KSPROPERTY_PIN_NAME;
+        DWORD Status = DumpGet(Filter, "filter pin", &PinSet, Id, KSPROPERTY_TYPE_BASICSUPPORT, 4, TRUE, &Returned, &Value);
+
+        ok(Listed ? (!Status && Value == KSPROPERTY_TYPE_GET) : Status == ERROR_NOT_FOUND, "Pin property %lu: status %lu access %lx\n", Id, Status, Value);
+    }
+    CheckEventSupport(Filter, "filter", &UvcEventsetVidcapToSti, StiEvents, StiEvents);
+    CheckEventSupport(Filter, "filter", &UvcEventsetDevice, DeviceEvents, DeviceEvents);
+    CheckEventSupport(Filter, "filter", &UvcEventsetConnection, NoSet, NoSet);
+}
+
+static void
+ProbePinSets(HANDLE Pin, const char *Where)
+{
+    static const DWORD ConnectionSupport[8] = { 0, 0, 0, 0, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND };
+    static const DWORD ConnectionEnable[8] = { 0, 0, 0, 0, 0, ERROR_NOT_FOUND, ERROR_NOT_FOUND, ERROR_NOT_FOUND };
+    static const DWORD NoSet[8] = { ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND,
+                                    ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND, ERROR_SET_NOT_FOUND };
+    UVC_GET_EXPECT Expect[] =
+    {
+        { &UvcPropsetStreamInterface, 0, KSPROPERTY_TYPE_GET, 4, 0, 4, sizeof(void *) == 8 ? 72 : UVC_NO_CHECK },
+        { &UvcPropsetStreamInterface, 0, KSPROPERTY_TYPE_BASICSUPPORT, 4, 0, 4, KSPROPERTY_TYPE_GET },
+        { &UvcPropsetDroppedFrames, 0, KSPROPERTY_TYPE_BASICSUPPORT, 4, 0, 4, KSPROPERTY_TYPE_GET },
+        { &UvcPropsetMemoryTransport, 0, KSPROPERTY_TYPE_GET, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMemoryTransport, 0, KSPROPERTY_TYPE_BASICSUPPORT, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMemoryTransport, 1, KSPROPERTY_TYPE_GET, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMemoryTransport, 1, KSPROPERTY_TYPE_BASICSUPPORT, 4, 0, 4, KSPROPERTY_TYPE_SET },
+        { &UvcPropsetMemoryTransport, 2, KSPROPERTY_TYPE_GET, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMemoryTransport, 2, KSPROPERTY_TYPE_BASICSUPPORT, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMdlCacheClear, 0, KSPROPERTY_TYPE_GET, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMdlCacheClear, 0, KSPROPERTY_TYPE_BASICSUPPORT, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMdlCacheClear, 1, KSPROPERTY_TYPE_GET, 4, ERROR_INSUFFICIENT_BUFFER, 0, 0 },
+        { &UvcPropsetMdlCacheClear, 1, KSPROPERTY_TYPE_BASICSUPPORT, 4, 0, 4, KSPROPERTY_TYPE_SET },
+        { &UvcPropsetMdlCacheClear, 2, KSPROPERTY_TYPE_GET, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetMdlCacheClear, 2, KSPROPERTY_TYPE_BASICSUPPORT, 4, ERROR_NOT_FOUND, 0, 0 },
+        { &UvcPropsetConnection, KSPROPERTY_CONNECTION_ACQUIREORDERING, KSPROPERTY_TYPE_GET, 4, 0, 4, FALSE },
+        { &UvcPropsetConnection, KSPROPERTY_CONNECTION_ACQUIREORDERING, KSPROPERTY_TYPE_GET, 8, 0, 4, FALSE },
+        { &UvcPropsetConnection, KSPROPERTY_CONNECTION_ACQUIREORDERING, KSPROPERTY_TYPE_GET, 0, ERROR_INSUFFICIENT_BUFFER, 0, 0 },
+        { &UvcPropsetConnection, KSPROPERTY_CONNECTION_ACQUIREORDERING, KSPROPERTY_TYPE_BASICSUPPORT, 64, 0, sizeof(KSPROPERTY_DESCRIPTION),
+          KSPROPERTY_TYPE_GET },
+    };
+    struct
+    {
+        ULONG Event;
+        PVOID Buffer;
+    } Mdl;
+    BOOL Transport;
+
+    CheckGets(Pin, Where, Expect, ARRAYSIZE(Expect));
+    Transport = FALSE;
+    DumpSet(Pin, Where, &UvcPropsetMemoryTransport, 1, &Transport, sizeof(Transport));
+    Transport = TRUE;
+    DumpSet(Pin, Where, &UvcPropsetMemoryTransport, 1, &Transport, sizeof(Transport));
+    Transport = FALSE;
+    DumpSet(Pin, Where, &UvcPropsetMemoryTransport, 1, &Transport, sizeof(Transport));
+    Mdl.Event = 2;
+    Mdl.Buffer = NULL;
+    DumpSet(Pin, Where, &UvcPropsetMdlCacheClear, 1, &Mdl, sizeof(Mdl));
+    Mdl.Event = 0;
+    DumpSet(Pin, Where, &UvcPropsetMdlCacheClear, 1, &Mdl, sizeof(Mdl));
+    Mdl.Event = 7;
+    DumpSet(Pin, Where, &UvcPropsetMdlCacheClear, 1, &Mdl, sizeof(Mdl));
+    DumpSet(Pin, Where, &UvcPropsetMdlCacheClear, 1, &Mdl, 8);
+    CheckEventSupport(Pin, Where, &UvcEventsetConnection, ConnectionSupport, ConnectionEnable);
+    CheckEventSupport(Pin, Where, &UvcEventsetDevice, NoSet, NoSet);
+}
+
+static BOOL
+ReadFormatByCompression(HANDLE Filter, ULONG PinId, DWORD Compression, KS_DATAFORMAT_VIDEOINFOHEADER *Format)
+{
+    static BYTE Ranges[128 * 1024];
+    KSMULTIPLE_ITEM *Items = (PVOID)Ranges;
+    PBYTE Cursor = (PBYTE)(Items + 1);
+    DWORD Returned = 0;
+    ULONG Index;
+
+    ZeroMemory(Ranges, sizeof(Ranges));
+    if (UvcGetPinProperty(Filter, PinId, KSPROPERTY_PIN_DATARANGES, Ranges, sizeof(Ranges), &Returned))
+        return FALSE;
+    for (Index = 0; Index < Items->Count; Index++)
+    {
+        KS_DATARANGE_VIDEO *Range = (PVOID)Cursor;
+
+        if (Range->DataRange.FormatSize == sizeof(KS_DATARANGE_VIDEO) && Range->VideoInfoHeader.bmiHeader.biCompression == Compression)
+        {
+            UvcBuildFormat(Format, &Range->DataRange.SubFormat, Compression, Range->VideoInfoHeader.bmiHeader.biWidth,
+                           Range->VideoInfoHeader.bmiHeader.biHeight, (LONG)Range->VideoInfoHeader.AvgTimePerFrame);
+            return TRUE;
+        }
+        Cursor += (Range->DataRange.FormatSize + 7) & ~7;
+    }
+    return FALSE;
 }
 
 static void
@@ -937,6 +1253,9 @@ typedef struct _UVC_READER
     DWORD Size;
     volatile LONG Stop;
     LONG Frames;
+    LONGLONG FirstPicture;
+    LONGLONG LastPicture;
+    LONGLONG LastDrop;
 } UVC_READER;
 
 static DWORD WINAPI
@@ -955,7 +1274,13 @@ ReaderThread(PVOID Context)
         Request.Header.Data = Reader->Buffer;
         Request.FrameInfo.ExtendedHeaderSize = sizeof(KS_FRAME_INFO);
         if (UvcIoctl(Reader->Pin, IOCTL_KS_READ_STREAM, NULL, 0, &Request, sizeof(Request), &Returned))
+        {
+            if (!Reader->Frames)
+                Reader->FirstPicture = Request.FrameInfo.PictureNumber;
+            Reader->LastPicture = Request.FrameInfo.PictureNumber;
+            Reader->LastDrop = Request.FrameInfo.DropCount;
             InterlockedIncrement(&Reader->Frames);
+        }
     }
     return 0;
 }
@@ -992,7 +1317,8 @@ StreamAndWatch(HANDLE Filter, ULONG StillPin, ULONG Pins)
     DumpSets(Capture, "capture", IOCTL_KS_PROPERTY, "property", TRUE);
     DumpSets(Capture, "capture", IOCTL_KS_METHOD, "method", FALSE);
     DumpSets(Capture, "capture", IOCTL_KS_ENABLE_EVENT, "event", FALSE);
-    DumpDroppedFrames(Capture, "capture");
+    DumpDroppedFrames(Capture, "capture", 0);
+    ProbePinSets(Capture, "capture");
     SetVideoControlMode(Filter, "filter", 0, 0);
     SetVideoControlMode(Filter, "filter", 0, 1);
     SetVideoControlMode(Filter, "filter", 1, 0);
@@ -1022,6 +1348,10 @@ StreamAndWatch(HANDLE Filter, ULONG StillPin, ULONG Pins)
     UvcSetPinState(Capture, KSSTATE_RUN);
     ReadPending(Capture, &Request, Buffer, Size, &Overlapped);
     WaitRead(Capture, &Request, &Overlapped, 2000, "capture read");
+    trace("MEASURE first frame info picture %I64d drop %I64d flags %lx\n", Request.FrameInfo.PictureNumber, Request.FrameInfo.DropCount,
+          Request.FrameInfo.dwFrameFlags);
+    DumpDroppedFrames(Capture, "first read capture", 0);
+    DumpDroppedFrames(Filter, "first read filter", 0);
 
     Reader.Pin = Capture;
     Reader.Buffer = Buffer;
@@ -1053,18 +1383,45 @@ StreamAndWatch(HANDLE Filter, ULONG StillPin, ULONG Pins)
     DumpFrameRates(Capture, "running capture", 0, 0, Format.VideoInfoHeader.bmiHeader.biWidth, Format.VideoInfoHeader.bmiHeader.biHeight);
     trace("MEASURE button filter event wait %lu\n", WaitForSingleObject(FilterEvent, 3000));
     trace("MEASURE button pin event wait %lu\n", WaitForSingleObject(PinEvent, 500));
-    DumpDroppedFrames(Filter, "running filter");
-    DumpDroppedFrames(Capture, "running capture");
+    DumpDroppedFrames(Filter, "running filter", 0);
+    DumpDroppedFrames(Capture, "running capture", 0);
     InterlockedExchange(&Reader.Stop, 1);
     WaitForSingleObject(ReaderHandle, INFINITE);
     CloseHandle(ReaderHandle);
     trace("MEASURE capture frames while watching %ld\n", Reader.Frames);
+    trace("MEASURE reader frame info first %I64d last %I64d drop %I64d\n", Reader.FirstPicture, Reader.LastPicture, Reader.LastDrop);
+    DumpDroppedFrames(Capture, "after reading", 0);
+    Sleep(1000);
+    DumpDroppedFrames(Capture, "after starving", 0);
+    ReadPending(Capture, &Request, Buffer, Size, &Overlapped);
+    WaitRead(Capture, &Request, &Overlapped, 2000, "capture read after starving");
+    trace("MEASURE starved frame info picture %I64d drop %I64d flags %lx\n", Request.FrameInfo.PictureNumber, Request.FrameInfo.DropCount,
+          Request.FrameInfo.dwFrameFlags);
+    DumpDroppedFrames(Capture, "after one more read", 0);
 
     UvcIoctl(Filter, IOCTL_KS_DISABLE_EVENT, &FilterData, sizeof(FilterData), NULL, 0, &Error);
     UvcIoctl(Capture, IOCTL_KS_DISABLE_EVENT, &PinData, sizeof(PinData), NULL, 0, &Error);
     UvcSetPinState(Capture, KSSTATE_PAUSE);
+    DumpDroppedFrames(Capture, "paused", 0);
     UvcSetPinState(Capture, KSSTATE_STOP);
+    DumpDroppedFrames(Capture, "stopped", 0);
+    DumpDroppedFrames(Filter, "stopped filter", 0);
     CloseHandle(Capture);
+    DumpDroppedFrames(Filter, "closed filter", ERROR_INVALID_PARAMETER);
+    if (ReadFormatByCompression(Filter, 0, UVC_FOURCC('M', 'J', 'P', 'G'), &Format))
+    {
+        Error = UvcCreatePin(Filter, 0, &Format, &Capture);
+        trace("MEASURE mjpeg pin create %lu\n", Error);
+        if (!Error)
+        {
+            DumpDroppedFrames(Capture, "mjpeg capture", UVC_NO_CHECK);
+            CloseHandle(Capture);
+        }
+    }
+    else
+    {
+        trace("MEASURE mjpeg format not found\n");
+    }
     CloseHandle(FilterEvent);
     CloseHandle(PinEvent);
     VirtualFree(Buffer, 0, MEM_RELEASE);
@@ -1170,12 +1527,14 @@ START_TEST(KsCaps)
     if (Filter == INVALID_HANDLE_VALUE)
         return;
 
+    winetest_mute_threshold = 100000;
     DumpComponent(Filter, Path);
     DumpTopology(Filter);
     DumpSets(Filter, "filter", IOCTL_KS_PROPERTY, "property", TRUE);
     DumpSets(Filter, "filter", IOCTL_KS_METHOD, "method", FALSE);
     DumpSets(Filter, "filter", IOCTL_KS_ENABLE_EVENT, "event", FALSE);
-    DumpDroppedFrames(Filter, "filter");
+    DumpDroppedFrames(Filter, "filter", ERROR_INVALID_PARAMETER);
+    ProbeFilterSets(Filter, HasAllControls(Filter));
     Pins = DumpPins(Filter, &StillPin);
     if (!HasAllControls(Filter))
         DumpControls(Filter);
