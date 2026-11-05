@@ -32,6 +32,7 @@ struct file_writer
     struct strmbase_sink sink;
 
     WCHAR *filename;
+    GUID majortype, subtype;
     HANDLE file;
 
     BOOL eos;
@@ -61,7 +62,9 @@ static HRESULT file_writer_sink_query_accept(struct strmbase_pin *iface, const A
 {
     struct file_writer *filter = impl_from_strmbase_pin(iface);
 
-    if (filter->filename && !IsEqualGUID(&mt->majortype, &MEDIATYPE_Stream))
+    if (!IsEqualGUID(&filter->majortype, &GUID_NULL) && !IsEqualGUID(&mt->majortype, &filter->majortype))
+        return S_FALSE;
+    if (!IsEqualGUID(&filter->subtype, &GUID_NULL) && !IsEqualGUID(&mt->subtype, &filter->subtype))
         return S_FALSE;
     return S_OK;
 }
@@ -252,14 +255,16 @@ static HRESULT WINAPI filesinkfilter_SetFileName(IFileSinkFilter *iface,
     TRACE("filter %p, filename %s, mt %p.\n", filter, debugstr_w(filename), mt);
     strmbase_dump_media_type(mt);
 
-    if (mt)
-        FIXME("Ignoring media type %p.\n", mt);
+    if (!filename)
+        return E_POINTER;
 
     if (!(new_filename = wcsdup(filename)))
         return E_OUTOFMEMORY;
 
     free(filter->filename);
     filter->filename = new_filename;
+    filter->majortype = mt ? mt->majortype : MEDIATYPE_Stream;
+    filter->subtype = mt ? mt->subtype : GUID_NULL;
     return S_OK;
 }
 
@@ -268,9 +273,27 @@ static HRESULT WINAPI filesinkfilter_GetCurFile(IFileSinkFilter *iface,
 {
     struct file_writer *filter = impl_from_IFileSinkFilter(iface);
 
-    FIXME("filter %p, filename %p, mt %p, stub!\n", filter, filename, mt);
+    TRACE("filter %p, filename %p, mt %p.\n", filter, filename, mt);
 
-    return E_NOTIMPL;
+    if (!filename)
+        return E_POINTER;
+
+    *filename = NULL;
+    if (filter->filename)
+    {
+        size_t size = (wcslen(filter->filename) + 1) * sizeof(WCHAR);
+
+        if (!(*filename = CoTaskMemAlloc(size)))
+            return E_OUTOFMEMORY;
+        memcpy(*filename, filter->filename, size);
+    }
+
+    if (mt)
+    {
+        mt->majortype = filter->majortype;
+        mt->subtype = filter->subtype;
+    }
+    return S_OK;
 }
 
 static const IFileSinkFilterVtbl filesinkfilter_vtbl =
