@@ -432,6 +432,9 @@ BOOL FinishGpuReadsImpl(DWM_GPU_WAIT_TIMING *Timing)
         Timing->Ticks[DWM_WAIT_FLUSH] += DptNow() - Tick;
     DWORD Start = GetTickCount();
     BOOL Reported = FALSE;
+    LARGE_INTEGER Frequency, YieldStart, YieldNow;
+    QueryPerformanceFrequency(&Frequency);
+    QueryPerformanceCounter(&YieldStart);
     for (;;)
     {
         BOOL Complete = FALSE;
@@ -477,7 +480,12 @@ BOOL FinishGpuReadsImpl(DWM_GPU_WAIT_TIMING *Timing)
          * reuse published surfaces. A removed device has stopped executing
          * this command stream, so its resources are released and recreated. */
         if (Timing) Tick = DptNow();
-        Sleep(1);
+        /* A timer-granular Sleep would cost most of a frame, so yield first. */
+        QueryPerformanceCounter(&YieldNow);
+        if ((YieldNow.QuadPart - YieldStart.QuadPart) * 250 < Frequency.QuadPart)
+            SwitchToThread();
+        else
+            Sleep(1);
         if (Timing)
         {
             ULONGLONG Elapsed = DptNow() - Tick;
