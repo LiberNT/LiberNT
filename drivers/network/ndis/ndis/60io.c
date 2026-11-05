@@ -193,7 +193,10 @@ Ndis6IoInitDmaAdapter(
 
     dmaAdapter = IoGetDmaAdapter(Pdo, &desc, &numMapRegs);
     if (dmaAdapter == NULL)
+    {
+        DbgPrint("NDIS6: IoGetDmaAdapter failed for PDO %p\n", Pdo);
         return NDIS_STATUS_RESOURCES;
+    }
 
     Ext->DmaAdapter           = dmaAdapter;
     Ext->NumberOfMapRegisters = numMapRegs;
@@ -610,7 +613,10 @@ Ndis6MAllocateSharedMemory(
     va = Ext->DmaAdapter->DmaOperations->AllocateCommonBuffer(
         Ext->DmaAdapter, Length, &pa, FALSE);
     if (va == NULL)
+    {
+        DbgPrint("NDIS6: NdisMAllocateSharedMemory of %lu bytes failed\n", Length);
         return;
+    }
 
     *VirtualAddress = va;
     *PhysicalAddress = pa;

@@ -49,7 +49,10 @@ NdisAllocateIoWorkItem(
 
    DeviceObject = Ndis6GetIoWorkItemDeviceObject(NdisObjectHandle);
    if (DeviceObject == NULL)
+   {
+      DbgPrint("NDIS6: NdisAllocateIoWorkItem has no device object for handle %p\n", NdisObjectHandle);
       return NULL;
+   }
 
    IoWorkItem = IoAllocateWorkItem(DeviceObject);
    if (IoWorkItem == NULL)

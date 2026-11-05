@@ -268,7 +268,11 @@ NdisAllocateNetBufferListPool(
 
     if (Parameters == NULL ||
         Parameters->Header.Type != NDIS_OBJECT_TYPE_DEFAULT)
+    {
+        DbgPrint("NDIS6: NdisAllocateNetBufferListPool rejected header type %u\n",
+                 Parameters ? Parameters->Header.Type : 0);
         return NULL;
+    }
 
 #if NDIS_SUPPORT_NDIS687
     if (Parameters->Header.Revision == NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_2)
@@ -276,29 +280,39 @@ NdisAllocateNetBufferListPool(
         if (Parameters->Header.Size <
             NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_2)
         {
+            DbgPrint("NDIS6: NdisAllocateNetBufferListPool rejected size %u\n", Parameters->Header.Size);
             return NULL;
         }
         Flags = Parameters->Flags;
         if ((Flags & ~NET_BUFFER_LIST_POOL_FLAG_VERIFY) != 0)
+        {
+            DbgPrint("NDIS6: NdisAllocateNetBufferListPool rejected flags %#lx\n", Flags);
             return NULL;
+        }
     }
     else
 #endif
     if (Parameters->Header.Revision != NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1)
     {
+        DbgPrint("NDIS6: NdisAllocateNetBufferListPool rejected revision %u\n", Parameters->Header.Revision);
         return NULL;
     }
 
     if ((Parameters->ContextSize & (MEMORY_ALLOCATION_ALIGNMENT - 1)) != 0 ||
         (Parameters->DataSize != 0 && !Parameters->fAllocateNetBuffer))
     {
+        DbgPrint("NDIS6: NdisAllocateNetBufferListPool rejected ContextSize %u DataSize %lu fAllocateNetBuffer %u\n",
+                 Parameters->ContextSize, Parameters->DataSize, Parameters->fAllocateNetBuffer);
         return NULL;
     }
 
     Pool = (PNDIS6_NBL_POOL)ExAllocatePoolWithTag(
         NonPagedPool, sizeof(NDIS6_NBL_POOL), NBL_POOL_TAG);
     if (Pool == NULL)
+    {
+        DbgPrint("NDIS6: NdisAllocateNetBufferListPool out of pool\n");
         return NULL;
+    }
 
     RtlZeroMemory(Pool, sizeof(*Pool));
 
@@ -375,13 +389,18 @@ NdisAllocateNetBufferPool(
 
     if (Parameters == NULL ||
         Parameters->Header.Type != NDIS_OBJECT_TYPE_DEFAULT)
+    {
+        DbgPrint("NDIS6: NdisAllocateNetBufferPool rejected header type %u\n",
+                 Parameters ? Parameters->Header.Type : 0);
         return NULL;
+    }
 
     if (Parameters->Header.Revision == NET_BUFFER_POOL_PARAMETERS_REVISION_1)
     {
         if (Parameters->Header.Size <
             NDIS_SIZEOF_NET_BUFFER_POOL_PARAMETERS_REVISION_1)
         {
+            DbgPrint("NDIS6: NdisAllocateNetBufferPool rejected size %u\n", Parameters->Header.Size);
             return NULL;
         }
     }
@@ -391,22 +410,30 @@ NdisAllocateNetBufferPool(
         if (Parameters->Header.Size <
             NDIS_SIZEOF_NET_BUFFER_POOL_PARAMETERS_REVISION_2)
         {
+            DbgPrint("NDIS6: NdisAllocateNetBufferPool rejected size %u\n", Parameters->Header.Size);
             return NULL;
         }
         Flags = Parameters->Flags;
         if ((Flags & ~NET_BUFFER_POOL_FLAG_VERIFY) != 0)
+        {
+            DbgPrint("NDIS6: NdisAllocateNetBufferPool rejected flags %#lx\n", Flags);
             return NULL;
+        }
     }
 #endif
     else
     {
+        DbgPrint("NDIS6: NdisAllocateNetBufferPool rejected revision %u\n", Parameters->Header.Revision);
         return NULL;
     }
 
     Pool = (PNDIS6_NB_POOL)ExAllocatePoolWithTag(
         NonPagedPool, sizeof(NDIS6_NB_POOL), NBL_POOL_TAG);
     if (Pool == NULL)
+    {
+        DbgPrint("NDIS6: NdisAllocateNetBufferPool out of pool\n");
         return NULL;
+    }
 
     RtlZeroMemory(Pool, sizeof(*Pool));
 
