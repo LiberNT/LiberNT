@@ -2276,6 +2276,8 @@ LX_SYSCALL(LxSysMount)
     LONG64 Result;
     LONG Error;
 
+    if ((Flags & LX_MS_MGC_MSK) == LX_MS_MGC_VAL)
+        Flags &= ~LX_MS_MGC_MSK;
     Error = LxMountLookup(Process, LX_AT_FDCWD, Call->Args[1], LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;

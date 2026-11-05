@@ -350,6 +350,8 @@ struct _LX_MOUNT
 #define LX_MS_NODEV         0x00000004
 #define LX_MS_NOEXEC        0x00000008
 #define LX_MS_REMOUNT       0x00000020
+#define LX_MS_MGC_VAL       0xC0ED0000
+#define LX_MS_MGC_MSK       0xFFFF0000
 #define LX_MS_NOATIME       0x00000400
 #define LX_MS_BIND          0x00001000
 #define LX_MS_MOVE          0x00002000
