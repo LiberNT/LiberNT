@@ -633,15 +633,8 @@ USBAudioPnPSurpriseRemoval(
     _In_ PKSDEVICE Device,
     _In_ PIRP      Irp)
 {
-    PDEVICE_EXTENSION DeviceExtension = Device->Context;
-
+    UNREFERENCED_PARAMETER(Device);
     UNREFERENCED_PARAMETER(Irp);
-
-    if (DeviceExtension && DeviceExtension->InterfaceInfo)
-    {
-        FreeFunction(DeviceExtension->InterfaceInfo);
-        DeviceExtension->InterfaceInfo = NULL;
-    }
 }
 
 NTSTATUS
