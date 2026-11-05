@@ -77,6 +77,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,mydocs.dll,1
 11,,qcap.dll,1
 11,,qedit.dll,1
+11,,resampledmo.dll,1
 11,,sendmail.dll,1
 11,,shdocvw.dll,1
 11,,shell32.dll,3
@@ -180,6 +181,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,pstorec.dll,1
 11,,qcap.dll,1
 11,,qedit.dll,1
+11,,resampledmo.dll,1
 11,,qasf.dll,1
 11,,qmgr.dll,1
 11,,qmgrprxy.dll,1
@@ -228,6 +230,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,wpdshext.dll,1
 11,,qcap.dll,1
 11,,qedit.dll,1
+11,,resampledmo.dll,1
 11,,sendmail.dll,1
 11,,shdocvw.dll,1
 11,,shell32.dll,3
