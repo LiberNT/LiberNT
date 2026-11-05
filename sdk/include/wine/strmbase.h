@@ -265,6 +265,7 @@ struct strmbase_renderer
     IQualityControl IQualityControl_iface;
 
     struct strmbase_sink sink;
+    IQualityControl sink_IQualityControl_iface;
 
     /* Signaled when the filter has completed a state change. The filter waits
      * for this event in IBaseFilter::GetState(). */
@@ -290,6 +291,7 @@ struct strmbase_renderer
 
     BOOL eos;
     BOOL fail_inactive_receive;
+    BOOL no_filter_quality_control;
 };
 
 struct strmbase_renderer_ops

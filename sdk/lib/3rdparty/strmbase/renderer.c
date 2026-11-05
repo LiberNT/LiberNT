@@ -218,7 +218,7 @@ static HRESULT renderer_query_interface(struct strmbase_filter *iface, REFIID ii
         *out = &filter->passthrough.IMediaPosition_iface;
     else if (IsEqualGUID(iid, &IID_IMediaSeeking))
         *out = &filter->passthrough.IMediaSeeking_iface;
-    else if (IsEqualGUID(iid, &IID_IQualityControl))
+    else if (IsEqualGUID(iid, &IID_IQualityControl) && !filter->no_filter_quality_control)
         *out = &filter->IQualityControl_iface;
     else
         return E_NOINTERFACE;
@@ -338,6 +338,8 @@ static HRESULT sink_query_interface(struct strmbase_pin *iface, REFIID iid, void
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->sink.IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->sink_IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -589,6 +591,59 @@ static const IQualityControlVtbl quality_control_vtbl =
     quality_control_SetSink,
 };
 
+static struct strmbase_renderer *impl_from_sink_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct strmbase_renderer, sink_IQualityControl_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct strmbase_renderer *filter = impl_from_sink_IQualityControl(iface);
+    return IPin_QueryInterface(&filter->sink.pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI sink_quality_control_AddRef(IQualityControl *iface)
+{
+    struct strmbase_renderer *filter = impl_from_sink_IQualityControl(iface);
+    return IPin_AddRef(&filter->sink.pin.IPin_iface);
+}
+
+static ULONG WINAPI sink_quality_control_Release(IQualityControl *iface)
+{
+    struct strmbase_renderer *filter = impl_from_sink_IQualityControl(iface);
+    return IPin_Release(&filter->sink.pin.IPin_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct strmbase_renderer *filter = impl_from_sink_IQualityControl(iface);
+
+    TRACE("filter %p, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            filter, sender, q.Type, q.Proportion, debugstr_time(q.Late), debugstr_time(q.TimeStamp));
+
+    if (!sender)
+        return E_POINTER;
+    return S_OK;
+}
+
+static HRESULT WINAPI sink_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct strmbase_renderer *filter = impl_from_sink_IQualityControl(iface);
+
+    TRACE("filter %p, sink %p.\n", filter, sink);
+
+    return S_OK;
+}
+
+static const IQualityControlVtbl sink_quality_control_vtbl =
+{
+    sink_quality_control_QueryInterface,
+    sink_quality_control_AddRef,
+    sink_quality_control_Release,
+    sink_quality_control_Notify,
+    sink_quality_control_SetSink,
+};
+
 void strmbase_renderer_cleanup(struct strmbase_renderer *filter)
 {
     if (filter->sink.pin.peer)
@@ -613,6 +668,7 @@ void strmbase_renderer_init(struct strmbase_renderer *filter, IUnknown *outer,
     strmbase_passthrough_init(&filter->passthrough, (IUnknown *)&filter->filter.IBaseFilter_iface);
     ISeekingPassThru_Init(&filter->passthrough.ISeekingPassThru_iface, TRUE, &filter->sink.pin.IPin_iface);
     filter->IQualityControl_iface.lpVtbl = &quality_control_vtbl;
+    filter->sink_IQualityControl_iface.lpVtbl = &sink_quality_control_vtbl;
 
     filter->ops = ops;
 
