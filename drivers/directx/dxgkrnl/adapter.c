@@ -16817,8 +16817,8 @@ DxgkpMiniportPnpDispatch(
      */
 
     /* Route \Device\Video0 PnP IRPs to the display handler. */
-    if (DxgkDisplayDispatchPnp(DeviceObject, Irp))
-        return STATUS_SUCCESS;
+    if (DxgkDisplayDispatchPnp(DeviceObject, Irp, &Status))
+        return Status;
 
     /* Route \Device\DxgKrnl PnP IRPs — complete with success (no-op). */
     if (GDxgControlDeviceObject != NULL && DeviceObject == GDxgControlDeviceObject)
