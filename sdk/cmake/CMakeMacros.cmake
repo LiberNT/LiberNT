@@ -513,7 +513,7 @@ function(set_module_type MODULE TYPE)
         set_subsystem(${MODULE} native)
     elseif(${TYPE} STREQUAL win32cui)
         set_subsystem(${MODULE} console)
-    elseif(${TYPE} STREQUAL win32gui)
+    else()
         set_subsystem(${MODULE} windows)
     endif()
 
