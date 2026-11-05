@@ -65,6 +65,7 @@ static VOID XHCI_ReleaseSpinLock(_Inout_ PKSPIN_LOCK SpinLock, _In_ KIRQL OldIrq
 #endif
 
 #define XHCI_COMMAND_TIMEOUT_MS 100
+#define XHCI_COMMAND_EVENT_WAIT_MS 16
 #define XHCI_COMMAND_POLL_INTERVAL_US 50
 #define XHCI_ENDPOINT_INTERVAL_MAX 15
 #ifndef VERBOSE_SHARED_IRQ
@@ -840,6 +841,7 @@ static VOID XHCI_PerformEndpointResetSequence(PXHCI_EXTENSION Extension,
                                               PXHCI_ENDPOINT Endpoint,
                                               BOOLEAN RingDoorbell);
 static VOID NTAPI XHCI_EndpointResetWorker(PVOID Context);
+static VOID XHCI_PublishTrbControl(PXHCI_TRB Trb, ULONG Control);
 static MPSTATUS XHCI_DropSlotEndpoint(PXHCI_EXTENSION Extension,
                                       PXHCI_DEVICE_SLOT Slot,
                                       UCHAR EndpointId);
@@ -2017,6 +2019,12 @@ XHCI_AdvanceCommandRing(
     Extension->CommandRingEnqueueIndex++;
     if (Extension->CommandRingEnqueueIndex >= Extension->CommandRingTrbCount - 1)
     {
+        PXHCI_TRB Link = &Extension->CommandRing[Extension->CommandRingTrbCount - 1];
+
+        /* The controller follows the link only while its cycle bit matches this pass. */
+        XHCI_PublishTrbControl(Link,
+                               (Link->Control & ~XHCI_TRB_CYCLE) |
+                               (Extension->CommandRingCycleState & XHCI_TRB_CYCLE));
         Extension->CommandRingEnqueueIndex = 0;
         Extension->CommandRingCycleState ^= 1;
     }
@@ -2594,6 +2602,53 @@ XHCI_GetTdBytesThroughEvent(
         }
 
         if (Index == LastIndex || ++Visited >= Ring->TrbCount)
+            return FALSE;
+
+        Bytes += XHCI_GetTrbDataLength(&Ring->Base[Index]);
+        Index++;
+    }
+
+    TrbLength = XHCI_GetTrbDataLength(&Ring->Base[EventIndex]);
+    if (EventResidual > TrbLength)
+        EventResidual = TrbLength;
+
+    *BytesTransferred = Bytes + TrbLength - EventResidual;
+    return TRUE;
+}
+
+/* The event's residual covers only the TRB it points at; a packet can span several. */
+static
+BOOLEAN
+XHCI_GetIsoPacketBytesThroughEvent(
+    _In_opt_ const XHCI_RING *Ring,
+    _In_ const XHCI_ISO_PACKET_CONTEXT *PacketContext,
+    _In_ ULONGLONG EventTrbPointer,
+    _In_ ULONG EventResidual,
+    _Out_ PULONG BytesTransferred)
+{
+    ULONG Index;
+    ULONG EventIndex;
+    ULONG Visited = 0;
+    ULONG Bytes = 0;
+    ULONG TrbLength;
+
+    if (!Ring ||
+        !XHCI_RingPointerToIndex(Ring, PacketContext->FirstTrbPointer, &Index) ||
+        !XHCI_RingPointerToIndex(Ring, EventTrbPointer, &EventIndex) ||
+        EventIndex >= Ring->TrbCount - 1)
+    {
+        return FALSE;
+    }
+
+    while (Index != EventIndex)
+    {
+        if (Index >= Ring->TrbCount - 1)
+        {
+            Index = 0;
+            continue;
+        }
+
+        if (++Visited >= Ring->TrbCount)
             return FALSE;
 
         Bytes += XHCI_GetTrbDataLength(&Ring->Base[Index]);
@@ -7344,6 +7399,7 @@ static
 BOOLEAN
 XHCI_RecordIsoTransferEvent(
     _Inout_ PXHCI_TRANSFER Transfer,
+    _In_opt_ const XHCI_RING *Ring,
     _In_ ULONGLONG TrbPointer,
     _In_ ULONG CompletionCode,
     _In_ USBD_STATUS UsbdStatus,
@@ -7380,7 +7436,10 @@ XHCI_RecordIsoTransferEvent(
     if (Remaining > PacketLength)
         Remaining = PacketLength;
 
-    ActualLength = PacketLength - Remaining;
+    if (!XHCI_GetIsoPacketBytesThroughEvent(Ring, PacketContext, TrbPointer, Remaining, &ActualLength))
+        ActualLength = PacketLength - Remaining;
+    if (ActualLength > PacketLength)
+        ActualLength = PacketLength;
     Success = (CompletionCode == XHCI_COMPLETION_SUCCESS ||
                CompletionCode == XHCI_COMPLETION_SHORT_PACKET);
 
@@ -7539,6 +7598,7 @@ XHCI_HandleTransferEvent(
 
         UsbdStatus = XHCI_MapCompletionCodeToUsbdStatus(CompletionCode, Transfer);
         IsoEventRecorded = XHCI_RecordIsoTransferEvent(Transfer,
+                                                       Ring,
                                                        TrbPointer,
                                                        CompletionCode,
                                                        UsbdStatus,
@@ -10369,14 +10429,18 @@ XHCI_WaitForCommandCompletion(
     if (Irql <= APC_LEVEL)
     {
         UseEventWait = TRUE;
-        Interval.QuadPart = -(LONGLONG)XHCI_COMMAND_POLL_INTERVAL_US * 10;
+        Interval.QuadPart = -(LONGLONG)XHCI_COMMAND_EVENT_WAIT_MS * 10000;
     }
 
     /*
      * Calculate bounded iteration count for polling.
      * This ensures DISPATCH_LEVEL polling never exceeds the specified timeout.
+     * A kernel wait lasts at least a clock tick, so event waits count in ticks.
      */
-    Remaining = (TimeoutMs * 1000) / XHCI_COMMAND_POLL_INTERVAL_US;
+    if (UseEventWait)
+        Remaining = TimeoutMs / XHCI_COMMAND_EVENT_WAIT_MS + 1;
+    else
+        Remaining = (TimeoutMs * 1000) / XHCI_COMMAND_POLL_INTERVAL_US;
 
     /* Diagnostic: log CONFIG_EP waits for tracing mass storage enumeration hangs */
     if (CommandContext->CommandType == XHCI_TRB_TYPE_CONFIG_EP)
@@ -14465,6 +14529,8 @@ XHCI_SubmitIsochronousTransfer(
                                                  Chunk);
                 Control = (XHCI_TRB_TYPE_ISOCH << XHCI_TRB_TYPE_SHIFT) |
                           (Ring->CycleState & XHCI_TRB_CYCLE);
+                if (DataIn)
+                    Control |= XHCI_TRB_ISP;
                 if (!PacketProgrammed)
                     Control |= XHCI_TRB_SIA;
                 if (Endpoint->InterruptTarget < Extension->InterrupterCount)
@@ -14551,6 +14617,8 @@ XHCI_SubmitIsochronousTransfer(
                                                  Chunk);
                     Control = (XHCI_TRB_TYPE_ISOCH << XHCI_TRB_TYPE_SHIFT) |
                               (Ring->CycleState & XHCI_TRB_CYCLE);
+                    if (DataIn)
+                        Control |= XHCI_TRB_ISP;
                     if (!PacketProgrammed)
                         Control |= XHCI_TRB_SIA;
                     if (Endpoint->InterruptTarget < Extension->InterrupterCount)
@@ -14669,8 +14737,9 @@ XHCI_SubmitIsoTransfer(PVOID MiniPortExtension,
                                           IsoBlock);
 }
 
-static VOID NTAPI
-XHCI_AbortTransfer(PVOID MiniPortExtension,
+static
+VOID
+XHCI_AbortTransferOnEndpoint(PVOID MiniPortExtension,
                    PVOID EndpointHandle,
                    PVOID TransferHandle,
                    PULONG BytesTransferred)
@@ -14934,6 +15003,23 @@ XHCI_AbortTransfer(PVOID MiniPortExtension,
      * miniport is back in a callback-safe USBPORT entry point.
      */
     XHCI_DrainDeferredTransferCompletions(Extension);
+}
+
+static VOID NTAPI
+XHCI_AbortTransfer(PVOID MiniPortExtension,
+                   PVOID EndpointHandle,
+                   PVOID TransferHandle,
+                   PULONG BytesTransferred)
+{
+    PXHCI_TRANSFER Transfer = (PXHCI_TRANSFER)TransferHandle;
+
+    XHCI_AbortTransferOnEndpoint(MiniPortExtension, EndpointHandle, TransferHandle, BytesTransferred);
+
+    if (Transfer && !(Transfer->Flags & XHCI_TRANSFER_FLAG_SWENUM_PENDING))
+    {
+        XHCI_FreeIsoTransferContext(Transfer);
+        XHCI_ReleaseBounceBuffer(Transfer);
+    }
 }
 
 static VOID NTAPI
