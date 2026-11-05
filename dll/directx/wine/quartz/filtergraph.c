@@ -5217,6 +5217,9 @@ static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
     if (work)
         WaitForThreadpoolWorkCallbacks(work, TRUE);
 
+    if (FAILED(hr))
+        graph_stop(graph, FALSE);
+
     return hr;
 }
 
