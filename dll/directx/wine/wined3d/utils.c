@@ -6174,6 +6174,10 @@ void wined3d_ffp_get_fs_settings(const struct wined3d_state *state,
             else
                 settings->op[i].color_fixup = texture->resource.format->color_fixup;
             settings->op[i].tex_type = texture->resource.gl_type;
+#ifdef __REACTOS__
+            settings->op[i].shadow = texture->resource.gl_type == WINED3D_GL_RES_TYPE_TEX_2D
+                    && (texture->resource.format_attrs & WINED3D_FORMAT_ATTR_SHADOW);
+#endif
         } else {
             settings->op[i].color_fixup = COLOR_FIXUP_IDENTITY;
             settings->op[i].tex_type = WINED3D_GL_RES_TYPE_TEX_1D;
@@ -6382,7 +6386,13 @@ void wined3d_ffp_get_vs_settings(const struct wined3d_state *state, const struct
         if (!state->render_states[WINED3D_RS_FOGENABLE])
             settings->fog_mode = WINED3D_FFP_VS_FOG_OFF;
         else if (state->extra_vs_args.pixel_fog)
+        {
             settings->fog_mode = WINED3D_FFP_VS_FOG_DEPTH;
+#ifdef __REACTOS__
+            settings->ortho_fog = state->extra_vs_args.ortho_fog;
+            settings->pixel_fog = 1;
+#endif
+        }
         else
             settings->fog_mode = WINED3D_FFP_VS_FOG_FOGCOORD;
 
@@ -6477,6 +6487,9 @@ void wined3d_ffp_get_vs_settings(const struct wined3d_state *state, const struct
     {
         settings->fog_mode = WINED3D_FFP_VS_FOG_DEPTH;
         settings->ortho_fog = state->extra_vs_args.ortho_fog;
+#ifdef __REACTOS__
+        settings->pixel_fog = 1;
+#endif
     }
     else if (state->render_states[WINED3D_RS_FOGVERTEXMODE] == WINED3D_FOG_NONE)
         settings->fog_mode = WINED3D_FFP_VS_FOG_FOGCOORD;

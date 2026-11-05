@@ -9361,6 +9361,9 @@ static GLuint shader_glsl_generate_ffp_vertex_shader(struct shader_glsl_priv *pr
                 for (i = 0; i < gl_info->limits.user_clip_distances; ++i)
                     shader_addline(buffer, "gl_ClipDistance[%u] = dot(ec_pos, clip_planes[%u]);\n", i, i);
         }
+#ifdef __REACTOS__
+        shader_addline(buffer, "float ec_pos_fog_z = ec_pos.z;\n");
+#endif
         shader_addline(buffer, "ec_pos /= ec_pos.w;\n");
     }
 
@@ -9466,6 +9469,31 @@ static GLuint shader_glsl_generate_ffp_vertex_shader(struct shader_glsl_priv *pr
             break;
 
         case WINED3D_FFP_VS_FOG_DEPTH:
+#ifdef __REACTOS__
+            if (settings->transformed)
+            {
+                if (settings->ortho_fog)
+                    shader_addline(buffer, "ffp_varying_fogcoord = ec_pos.z;\n");
+                else
+                    shader_addline(buffer, "ffp_varying_fogcoord = ffp_attrib_position.w != 0.0 ? 1.0 / ffp_attrib_position.w : 0.0;\n");
+            }
+            else if (settings->ortho_fog)
+            {
+                if (gl_info->supported[ARB_CLIP_CONTROL])
+                    shader_addline(buffer, "ffp_varying_fogcoord = gl_Position.z;\n");
+                else
+                    shader_addline(buffer, "ffp_varying_fogcoord = (gl_Position.z + gl_Position.w) * 0.5;\n");
+            }
+            else if (settings->pixel_fog)
+            {
+                shader_addline(buffer, "ffp_varying_fogcoord = gl_Position.w;\n");
+            }
+            else
+            {
+                shader_addline(buffer, "ffp_varying_fogcoord = abs(ec_pos_fog_z);\n");
+            }
+            break;
+#endif
             if (settings->ortho_fog)
             {
                 if (gl_info->supported[ARB_CLIP_CONTROL])
@@ -9878,7 +9906,11 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct shader_glsl_priv *
         {
             if (shader_glsl_use_layout_binding_qualifier(gl_info))
                 shader_glsl_append_sampler_binding_qualifier(buffer, &context_gl->c, NULL, stage);
+#ifdef __REACTOS__
+            shader_addline(buffer, "uniform sampler%s%s ps_sampler%u;\n", sampler_type, settings->op[stage].shadow ? "Shadow" : "", stage);
+#else
             shader_addline(buffer, "uniform sampler%s ps_sampler%u;\n", sampler_type, stage);
+#endif
         }
 
         shader_addline(buffer, "vec4 tex%u;\n", stage);
@@ -10030,6 +10062,18 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct shader_glsl_priv *
         }
         else
         {
+#ifdef __REACTOS__
+            if (settings->op[stage].shadow)
+            {
+                if (legacy_syntax)
+                    shader_addline(buffer, "tex%u = vec4(shadow2D%s(ps_sampler%u, ffp_texcoord[%u].xyz%s).r);\n",
+                            stage, proj ? "Proj" : "", stage, stage, proj ? "w" : "");
+                else
+                    shader_addline(buffer, "tex%u = vec4(texture%s(ps_sampler%u, ffp_texcoord[%u].xyz%s));\n",
+                            stage, proj ? "Proj" : "", stage, stage, proj ? "w" : "");
+            }
+            else
+#endif
             shader_addline(buffer, "tex%u = %s%s(ps_sampler%u, ffp_texcoord[%u].%s%s);\n",
                     stage, texture_function, proj ? "Proj" : "", stage, stage, coord_mask, proj ? "w" : "");
         }

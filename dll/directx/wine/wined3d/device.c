@@ -3833,6 +3833,71 @@ void CDECL wined3d_device_context_get_primitive_type(const struct wined3d_device
     TRACE("Returning %s.\n", debug_d3dprimitivetype(*primitive_type));
 }
 
+#ifdef __REACTOS__
+static HRESULT wined3d_device_update_converted_volume(struct wined3d_device *device, struct wined3d_texture *src_texture,
+        unsigned int src_idx, struct wined3d_texture *dst_texture, unsigned int dst_idx, unsigned int dst_level,
+        unsigned int src_level)
+{
+    struct wined3d_map_desc map;
+    struct wined3d_box box;
+    HRESULT hr;
+
+    if (src_texture->resource.format->byte_count != dst_texture->resource.format->byte_count)
+    {
+        FIXME("Not converting volume data from %s to %s.\n", debug_d3dformat(src_texture->resource.format->id),
+                debug_d3dformat(dst_texture->resource.format->id));
+        return WINED3D_OK;
+    }
+    wined3d_box_set(&box, 0, 0, min(wined3d_texture_get_level_width(src_texture, src_level),
+            wined3d_texture_get_level_width(dst_texture, dst_level)),
+            min(wined3d_texture_get_level_height(src_texture, src_level),
+            wined3d_texture_get_level_height(dst_texture, dst_level)), 0,
+            min(wined3d_texture_get_level_depth(src_texture, src_level),
+            wined3d_texture_get_level_depth(dst_texture, dst_level)));
+    if (FAILED(hr = wined3d_device_context_map(&device->cs->c, &src_texture->resource, src_idx, &map, NULL, WINED3D_MAP_READ)))
+        return hr;
+    wined3d_device_context_update_sub_resource(&device->cs->c, &dst_texture->resource, dst_idx, &box, map.data,
+            map.row_pitch, map.slice_pitch, 0);
+    wined3d_device_context_unmap(&device->cs->c, &src_texture->resource, src_idx);
+    return WINED3D_OK;
+}
+
+static HRESULT wined3d_device_update_converted_texture(struct wined3d_device *device, struct wined3d_texture *src_texture,
+        struct wined3d_texture *dst_texture, unsigned int src_skip_levels, unsigned int layer_count)
+{
+    unsigned int level_count, i, j;
+    RECT src_rect, dst_rect;
+    HRESULT hr;
+
+    if (src_skip_levels >= src_texture->level_count)
+        return WINED3DERR_INVALIDCALL;
+    level_count = min(src_texture->level_count - src_skip_levels, dst_texture->level_count);
+    for (i = 0; i < level_count; ++i)
+    {
+        unsigned int src_level = i + src_skip_levels;
+
+        SetRect(&src_rect, 0, 0, wined3d_texture_get_level_width(src_texture, src_level),
+                wined3d_texture_get_level_height(src_texture, src_level));
+        SetRect(&dst_rect, 0, 0, wined3d_texture_get_level_width(dst_texture, i),
+                wined3d_texture_get_level_height(dst_texture, i));
+        for (j = 0; j < layer_count; ++j)
+        {
+            unsigned int src_idx = src_level + j * src_texture->level_count;
+            unsigned int dst_idx = i + j * dst_texture->level_count;
+
+            if (dst_texture->resource.type == WINED3D_RTYPE_TEXTURE_3D)
+                hr = wined3d_device_update_converted_volume(device, src_texture, src_idx, dst_texture, dst_idx, i, src_level);
+            else
+                hr = wined3d_device_context_blt(&device->cs->c, dst_texture, dst_idx, &dst_rect, src_texture, src_idx,
+                        &src_rect, 0, NULL, WINED3D_TEXF_POINT);
+            if (FAILED(hr))
+                return hr;
+        }
+    }
+    return WINED3D_OK;
+}
+#endif
+
 HRESULT CDECL wined3d_device_update_texture(struct wined3d_device *device,
         struct wined3d_texture *src_texture, struct wined3d_texture *dst_texture)
 {
@@ -3880,11 +3945,13 @@ HRESULT CDECL wined3d_device_update_texture(struct wined3d_device *device,
         return WINED3DERR_INVALIDCALL;
     }
 
+#ifndef __REACTOS__
     if (src_texture->resource.format != dst_texture->resource.format)
     {
         WARN("Source and destination formats do not match.\n");
         return WINED3DERR_INVALIDCALL;
     }
+#endif
 
     src_level_count = src_texture->level_count;
     dst_level_count = dst_texture->level_count;
@@ -3902,10 +3969,18 @@ HRESULT CDECL wined3d_device_update_texture(struct wined3d_device *device,
 
     if (wined3d_texture_get_level_width(src_texture, src_skip_levels) != dst_texture->resource.width
             || wined3d_texture_get_level_height(src_texture, src_skip_levels) != dst_texture->resource.height
-            || wined3d_texture_get_level_depth(src_texture, src_skip_levels) != dst_texture->resource.depth)
+            || wined3d_texture_get_level_depth(src_texture, src_skip_levels) != dst_texture->resource.depth
+#ifdef __REACTOS__
+            || src_texture->resource.format != dst_texture->resource.format
+#endif
+            )
     {
+#ifdef __REACTOS__
+        return wined3d_device_update_converted_texture(device, src_texture, dst_texture, src_skip_levels, layer_count);
+#else
         WARN("Source and destination dimensions do not match.\n");
         return WINED3DERR_INVALIDCALL;
+#endif
     }
 
     if ((regions = src_texture->dirty_regions))
