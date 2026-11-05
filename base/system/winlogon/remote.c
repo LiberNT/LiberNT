@@ -170,8 +170,7 @@ DrawConsoleLock(
 
     if (!ConsoleDevice[0])
         return;
-    /* FIXME: what is drawn once the console display is detached does not reach its scanout yet */
-    hdc = CreateDCW(L"DISPLAY", ConsoleDevice, NULL, NULL);
+    hdc = CreateDCW(ConsoleDevice, NULL, NULL, NULL);
     if (!hdc)
     {
         ERR("WL: Cannot draw on the console display %S: %lu\n", ConsoleDevice, GetLastError());
@@ -515,17 +514,14 @@ ConnectRemote(
     ConsolePasswordWrong = FALSE;
     ClearConsolePassword();
     RtlZeroMemory(ConsoleKeys, sizeof(ConsoleKeys));
-    SwitchDesktop(Session->WinlogonDesktop);
-    DrawConsoleLock(Session);
 
     lRet = SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_EXTERNAL);
     if (lRet != ERROR_SUCCESS)
         ERR("WL: Cannot move the desktop to the remote display: %ld\n", lRet);
 
     RemoteConnected = TRUE;
+    DrawConsoleLock(Session);
     SetTimer(Session->SASWindow, CONSOLE_CLOCK_TIMER, 15000, NULL);
-    if (!bLocked)
-        SwitchDesktop(Session->ApplicationDesktop);
 
     if (bLocked)
     {
