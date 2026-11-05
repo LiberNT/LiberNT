@@ -1947,6 +1947,12 @@ typedef struct {
 #define WTS_SESSION_CREATE 0xA
 #define WTS_SESSION_TERMINATE 0xB
 #define WM_WTSSESSION_CHANGE 0x02B1
+
+typedef struct tagWTSSESSION_NOTIFICATION
+{
+    DWORD cbSize;
+    DWORD dwSessionId;
+} WTSSESSION_NOTIFICATION, *PWTSSESSION_NOTIFICATION;
 #endif
 #if (WINVER >= 0x0601)
 #define WM_DPICHANGED          0x02e0
