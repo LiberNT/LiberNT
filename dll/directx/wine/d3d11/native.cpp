@@ -2328,6 +2328,10 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
         UINT level;
         switch (levels[i])
         {
+            /* The D3D10 DDI has no level 9 pipeline, so level 9 runs on the 10.0 one. */
+            case D3D_FEATURE_LEVEL_9_1:
+            case D3D_FEATURE_LEVEL_9_2:
+            case D3D_FEATURE_LEVEL_9_3:
             case D3D_FEATURE_LEVEL_10_0: level = D3D11DDI_3DPIPELINELEVEL_10_0; break;
             case D3D_FEATURE_LEVEL_10_1: level = D3D11DDI_3DPIPELINELEVEL_10_1; break;
             case D3D_FEATURE_LEVEL_11_0: level = D3D11DDI_3DPIPELINELEVEL_11_0; break;
@@ -4413,6 +4417,13 @@ struct NATIVE_FORMAT_REQUIREMENT
     UINT RequiredLevels;
 };
 
+struct NATIVE_LEVEL9_FORMAT
+{
+    DXGI_FORMAT Format;
+    UINT Required[3];
+    UINT Allowed[3];
+};
+
 #include "native_formats.inl"
 
 /* Drivers extend typed UAV support beyond the D3D11.3 lists; back-buffer cast and encoder have no list column. */
@@ -4421,8 +4432,16 @@ static const UINT NativeFormatListedSupport = ~(D3D11_FORMAT_SUPPORT_BACK_BUFFER
 
 static UINT NativeListedFormatSupport(DXGI_FORMAT format, D3D_FEATURE_LEVEL level, UINT support)
 {
-    /* TODO: feature level 9 requirements from the DirectX-Specs FL9_x format lists */
-    if (level < D3D_FEATURE_LEVEL_10_0) return support;
+    if (level < D3D_FEATURE_LEVEL_10_0)
+    {
+        UINT column = level >= D3D_FEATURE_LEVEL_9_3 ? 2 : level >= D3D_FEATURE_LEVEL_9_2 ? 1 : 0;
+
+        for (const NATIVE_LEVEL9_FORMAT &entry : NativeLevel9Formats)
+        {
+            if (entry.Format == format) return (support & entry.Allowed[column]) | entry.Required[column];
+        }
+        return 0;
+    }
     UINT index = level >= D3D_FEATURE_LEVEL_11_0 ? 2 : level >= D3D_FEATURE_LEVEL_10_1 ? 1 : 0;
     const NATIVE_FORMAT_REQUIREMENT *found = NULL;
     for (const NATIVE_FORMAT_REQUIREMENT &entry : NativeFormatRequirements)
@@ -5643,6 +5662,8 @@ public:
         }
         return S_OK;
     }
+    bool level9 = false;
+
     HRESULT Parse(const void *code, SIZE_T length, UINT shader_type)
     {
         if (!code || length < 32) return E_INVALIDARG;
@@ -5663,6 +5684,8 @@ public:
                         || ReadDword(chunk + 4) < 2 || ReadDword(chunk + 4) > chunk_size / 4) return E_INVALIDARG;
                 tokens = reinterpret_cast<const UINT *>(chunk);
             }
+            else if (tag == 0x396e6f41)
+                level9 = true;
             else if (tag == 0x45434649)
                 interfaces = true;
             else if (tag == 0x4e475349 || tag == 0x31475349 || tag == 0x4e47534f || tag == 0x3147534f
@@ -5726,6 +5749,7 @@ static HRESULT CreateNativeShader(NativeDevice *device, const void *code, SIZE_T
     NativeShaderBytecode bytecode;
     HRESULT hr = bytecode.Parse(code, length, type);
     if (FAILED(hr)) return hr;
+    if (device->feature_level < D3D_FEATURE_LEVEL_10_0 && !bytecode.level9) return E_INVALIDARG;
     UINT model = bytecode.tokens[0] & 0xff;
     UINT maximum = device->feature_level >= D3D_FEATURE_LEVEL_11_0 ? 0x50
             : device->feature_level >= D3D_FEATURE_LEVEL_10_1 ? 0x41 : 0x40;
@@ -8368,6 +8392,13 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
     if (!factory || (window && !IsWindow(window)) || !requested || !fullscreen) return DXGI_ERROR_INVALID_CALL;
     if (output || (!fullscreen->Windowed && !window)) return DXGI_ERROR_UNSUPPORTED;
     if (!dxgi_functions.pfnPresent) return DXGI_ERROR_UNSUPPORTED;
+    if (feature_level < D3D_FEATURE_LEVEL_10_0)
+    {
+        UINT support = 0;
+
+        if (FAILED(CheckFormatSupport(requested->Format, &support)) || !(support & D3D11_FORMAT_SUPPORT_DISPLAY))
+            return E_INVALIDARG;
+    }
     if (requested->Flags & (DXGI_SWAP_CHAIN_FLAG_NONPREROTATED | DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY
             | DXGI_SWAP_CHAIN_FLAG_FOREGROUND_LAYER | DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO
             | DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO)) return DXGI_ERROR_INVALID_CALL;

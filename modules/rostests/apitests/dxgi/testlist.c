@@ -9,6 +9,7 @@ extern void func_dwm_render(void);
 extern void func_completion_event(void);
 extern void func_driver_error(void);
 extern void func_memory_query_cost(void);
+extern void func_d3d11_level9(void);
 extern void func_factory_opengl(void);
 extern void func_shared_fence(void);
 extern void func_fence_neighbors(void);
@@ -49,6 +50,7 @@ const struct test winetest_testlist[] =
     { "completion_event", func_completion_event },
     { "driver_error", func_driver_error },
     { "memory_query_cost", func_memory_query_cost },
+    { "d3d11_level9", func_d3d11_level9 },
     { "factory_opengl", func_factory_opengl },
     { "shared_fence", func_shared_fence },
     { "fence_neighbors", func_fence_neighbors },
