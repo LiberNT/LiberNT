@@ -532,6 +532,7 @@ list(APPEND KMTEST_SOURCE
     ntos_mm/NtCreateSection_user.c
     ntos_mm/NtUserPhysicalPages.c
     ntos_mm/NtProcessClone.c
+    ntos_po/BatteryClassNotify_user.c
     ntos_po/PoIrp_user.c
     ntos_po/PoFxState_user.c
     tcpip/TcpIp_user.c
@@ -577,6 +578,7 @@ add_dependencies(kmtest_drivers
     kernel32_drv
     mmmaplockedpagesspecifycache_drv
     ntcreatesection_drv
+    batteryclassnotify_drv
     poirp_drv
     tcpip_drv
     cccopyread_drv

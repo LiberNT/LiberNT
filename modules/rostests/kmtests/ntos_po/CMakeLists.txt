@@ -2,6 +2,20 @@
 include_directories(../include)
 
 #
+# BatteryClassNotify
+#
+list(APPEND BATTERYCLASSNOTIFY_DRV_SOURCE
+    ../kmtest_drv/kmtest_standalone.c
+    BatteryClassNotify_drv.c)
+
+add_library(batteryclassnotify_drv MODULE ${BATTERYCLASSNOTIFY_DRV_SOURCE})
+set_module_type(batteryclassnotify_drv kernelmodedriver)
+target_link_libraries(batteryclassnotify_drv kmtest_printf ${PSEH_LIB})
+add_importlibs(batteryclassnotify_drv battc ntoskrnl hal)
+target_compile_definitions(batteryclassnotify_drv PRIVATE KMT_STANDALONE_DRIVER)
+add_rostests_file(TARGET batteryclassnotify_drv)
+
+#
 # PoIrp
 #
 list(APPEND POIRP_DRV_SOURCE
