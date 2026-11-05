@@ -916,12 +916,12 @@ KdNicGetTxBufferAddress(
     return KdpExports.KdGetPacketAddress(KdpShared.Hardware, Handle);
 }
 
-VOID
+BOOLEAN
 KdNicSend(
     _In_ ULONG Handle,
     _In_ ULONG Length)
 {
-    KdpExports.KdSendTxPacket(KdpShared.Hardware, Handle, Length);
+    return NT_SUCCESS(KdpExports.KdSendTxPacket(KdpShared.Hardware, Handle, Length));
 }
 
 BOOLEAN

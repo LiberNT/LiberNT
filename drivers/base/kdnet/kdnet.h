@@ -22,6 +22,8 @@
 #define KDNET_TAG               'tNdK'
 
 #define KDNET_DEFAULT_PORT      50000
+#define KDNET_BROADCAST_INPUT_PORT  6665
+#define KDNET_BROADCAST_OUTPUT_PORT 6666
 #define KDNET_DATAGRAM_SIZE     1200
 #define KDNET_OUTPUT_SIZE       0x400000
 #define KDNET_INPUT_SIZE        0x10000
@@ -44,6 +46,7 @@ typedef struct _KDNET_OPTIONS
     ULONG Function;
     BOOLEAN HaveKey;
     BOOLEAN ShowKey;
+    BOOLEAN Broadcast;
     CHAR Key[KDNET_KEY_TEXT_SIZE];
     CHAR HostName[KDNET_HOST_NAME_SIZE];
 } KDNET_OPTIONS, *PKDNET_OPTIONS;
@@ -207,7 +210,7 @@ PUCHAR
 KdNicGetTxBufferAddress(
     _In_ ULONG Handle);
 
-VOID
+BOOLEAN
 KdNicSend(
     _In_ ULONG Handle,
     _In_ ULONG Length);
@@ -245,7 +248,7 @@ KdUdpBegin(
     _In_ ULONG DestinationIp,
     _Out_ PULONG Handle);
 
-VOID
+BOOLEAN
 KdUdpEnd(
     _In_ ULONG Handle,
     _In_ ULONG DestinationIp,
@@ -339,6 +342,11 @@ extern CHAR KdSessionKeyText[KDNET_KEY_TEXT_SIZE];
 
 VOID
 KdSessionInitialize(VOID);
+
+VOID
+KdSessionBroadcastInput(
+    _In_reads_bytes_(Length) const UCHAR *Data,
+    _In_ ULONG Length);
 
 VOID
 KdSessionInput(

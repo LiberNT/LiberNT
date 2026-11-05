@@ -46,6 +46,8 @@
 #define KDS_KEEPALIVE           (10 * KDNET_SECOND)
 #define KDS_TIMEOUT             (60 * KDNET_SECOND)
 #define KDS_NO_OFFSET           (~0ULL)
+#define KDS_BROADCAST_BURST     8
+#define KDS_BROADCAST_RETRY     (100 * KDNET_MILLISECOND)
 
 typedef struct _KDNET_SESSION
 {
@@ -97,6 +99,8 @@ static ULONG64 KdpOutputHead;
 static UCHAR KdpInput[KDNET_INPUT_SIZE];
 static ULONG KdpInputHead;
 static ULONG KdpInputCount;
+static ULONG64 KdpBroadcastNext;
+static ULONG64 KdpBroadcastRetry;
 
 static KDNET_SESSION KdpSession;
 static UCHAR KdpPlain[KDS_RECEIVE_SIZE];
@@ -482,12 +486,65 @@ KdSessionInput(
         KdpHandleData(SourceIp, SourcePort, Data, Length, Now);
 }
 
+static
+VOID
+KdpSendBroadcastOutput(
+    _In_ ULONG64 Now)
+{
+    ULONG Frames, Length, Handle, i;
+    ULONG64 Tail = KdpOutputTail();
+    PUCHAR Data;
+
+    if (KdpBroadcastNext < Tail)
+        KdpBroadcastNext = Tail;
+
+    if (Now < KdpBroadcastRetry)
+        return;
+
+    for (Frames = 0; Frames < KDS_BROADCAST_BURST && KdpBroadcastNext < KdpOutputHead; Frames++)
+    {
+        Data = KdUdpBegin(KDNET_IP_BROADCAST, &Handle);
+        if (!Data)
+            return;
+
+        Length = (ULONG)min(KdpOutputHead - KdpBroadcastNext, KDNET_DATAGRAM_SIZE);
+        for (i = 0; i < Length; i++)
+            Data[i] = KdpOutput[(ULONG)((KdpBroadcastNext + i) & (KDNET_OUTPUT_SIZE - 1))];
+
+        if (!KdUdpEnd(Handle, KDNET_IP_BROADCAST, KDNET_BROADCAST_OUTPUT_PORT, KDNET_BROADCAST_INPUT_PORT, Length))
+        {
+            KdpBroadcastRetry = Now + KDS_BROADCAST_RETRY;
+            return;
+        }
+
+        KdpBroadcastNext += Length;
+    }
+}
+
+VOID
+KdSessionBroadcastInput(
+    _In_reads_bytes_(Length) const UCHAR *Data,
+    _In_ ULONG Length)
+{
+    while (Length-- && KdpInputCount < KDNET_INPUT_SIZE)
+    {
+        KdpInput[(KdpInputHead + KdpInputCount) % KDNET_INPUT_SIZE] = *Data++;
+        KdpInputCount++;
+    }
+}
+
 VOID
 KdSessionTimer(
     _In_ ULONG64 Now)
 {
     ULONG64 Tail, Pending;
     ULONG Length;
+
+    if (KdNetOptions.Broadcast)
+    {
+        KdpSendBroadcastOutput(Now);
+        return;
+    }
 
     if (!KdIpAddress)
         return;
@@ -605,6 +662,7 @@ KdSessionAttached(
     _Out_opt_ PULONG Columns,
     _Out_opt_ PULONG Rows)
 {
+    /* TODO: LOCAL_BROADCAST has no session, so .kdfiles driver replacement is not offered in that mode */
     if (!KdpSession.Active)
         return FALSE;
 
@@ -626,6 +684,9 @@ KdSessionInitialize(VOID)
     CHAR Normalized[KDNET_KEY_TEXT_SIZE];
     ULONG i, Length = 0, Value;
     CHAR Character;
+
+    if (KdNetOptions.Broadcast)
+        return;
 
     if (KdNetOptions.HaveKey)
     {

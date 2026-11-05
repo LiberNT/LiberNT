@@ -333,7 +333,7 @@ KdUdpBegin(
     return Frame + KDNET_UDP_HEADERS;
 }
 
-VOID
+BOOLEAN
 KdUdpEnd(
     _In_ ULONG Handle,
     _In_ ULONG DestinationIp,
@@ -358,7 +358,7 @@ KdUdpEnd(
                       Udp, UDP_HEADER_SIZE + Length);
     KdNetPut16(Udp + 6, Sum ? Sum : 0xFFFF);
 
-    KdNicSend(Handle, KDNET_UDP_HEADERS + Length);
+    return KdNicSend(Handle, KDNET_UDP_HEADERS + Length);
 }
 
 static
@@ -729,6 +729,14 @@ KdIpInput(
     }
 
     DestinationPort = KdNetGet16(Udp + 2);
+    if (KdNetOptions.Broadcast)
+    {
+        if (DestinationPort == KDNET_BROADCAST_INPUT_PORT)
+            KdSessionBroadcastInput(Udp + UDP_HEADER_SIZE, UdpLength - UDP_HEADER_SIZE);
+
+        return;
+    }
+
     if (DestinationPort == DHCP_CLIENT_PORT)
     {
         KdpDhcpInput(Udp + UDP_HEADER_SIZE, UdpLength - UDP_HEADER_SIZE);
@@ -755,7 +763,7 @@ VOID
 KdIpTimer(
     _In_ ULONG64 Now)
 {
-    if (!KdNicLinkState)
+    if (!KdNicLinkState || KdNetOptions.Broadcast)
         return;
 
     KdpDnsTimer(Now);

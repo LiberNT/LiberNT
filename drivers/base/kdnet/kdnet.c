@@ -9,6 +9,7 @@
 
 #define KDNET_ENTROPY_SAMPLES   1024
 #define KDNET_ADDRESS_WAIT      (8 * KDNET_SECOND)
+#define KDNET_ADDRESS_NOTICE    (2 * KDNET_SECOND)
 #define KDNET_RECEIVE_BURST     32
 #define KDNET_CLOCK_STALL_LIMIT 256
 #define KDNET_CLOCK_STEP        50
@@ -173,6 +174,9 @@ KdpParseOptions(
     if (!Options)
         return;
 
+    Text = KdpFindOption(Options, "LOCAL_BROADCAST");
+    KdNetOptions.Broadcast = Text && *Text == '1';
+
     Text = KdpFindOption(Options, "HOST_IP");
     if (Text && KdpParseNumbers(Text, '.', Values, 4) &&
         Values[0] < 256 && Values[1] < 256 && Values[2] < 256 && Values[3] < 256)
@@ -270,7 +274,7 @@ KdpTerminalInitialize(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     NTSTATUS Status;
-    ULONG64 Start;
+    ULONG64 Start, Notice;
 
     if (KdNetReady)
         return STATUS_SUCCESS;
@@ -288,9 +292,16 @@ KdpTerminalInitialize(
     KdIpInitialize();
 
     Start = KdNetTime();
-    while ((!KdIpAddress || (KdNetOptions.HostName[0] && !KdNetOptions.HostIp)) &&
+    Notice = Start;
+    while (!KdNetOptions.Broadcast && (!KdIpAddress || (KdNetOptions.HostName[0] && !KdNetOptions.HostIp)) &&
            KdNicLinkState && KdNetTime() - Start < KDNET_ADDRESS_WAIT)
     {
+        if (KdNetTime() >= Notice)
+        {
+            DbgPrint("Network debugger: waiting for an address\n");
+            Notice += KDNET_ADDRESS_NOTICE;
+        }
+
         KdNetService();
         KeStallExecutionProcessor(500);
     }
@@ -369,6 +380,14 @@ KdpTerminalQueryStatus(
     if (!KdNetReady)
     {
         Length = _snprintf(Buffer, Size, "Network debugger: no usable network card");
+    }
+    else if (KdNetOptions.Broadcast)
+    {
+        Length = _snprintf(Buffer, Size,
+                           "Network debugger: %02x-%02x-%02x-%02x-%02x-%02x broadcasts to UDP port %u%s",
+                           KdNicAddress[0], KdNicAddress[1], KdNicAddress[2],
+                           KdNicAddress[3], KdNicAddress[4], KdNicAddress[5], KDNET_BROADCAST_OUTPUT_PORT,
+                           KdNicLinkState ? "" : ", no link yet");
     }
     else if (!KdIpAddress)
     {
