@@ -282,6 +282,13 @@ struct strmbase_renderer
     HANDLE flush_event;
     REFERENCE_TIME stream_start;
 
+    HANDLE eos_event, eos_wait;
+    IReferenceClock *eos_clock;
+    DWORD_PTR eos_cookie;
+    REFERENCE_TIME last_stop;
+    BOOL have_last_stop;
+    CRITICAL_SECTION eos_cs;
+
     IMediaSample *current_sample;
 
     IQualityControl *qc_sink;

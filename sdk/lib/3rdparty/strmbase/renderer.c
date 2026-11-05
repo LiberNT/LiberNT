@@ -227,6 +227,93 @@ static HRESULT renderer_query_interface(struct strmbase_filter *iface, REFIID ii
     return S_OK;
 }
 
+static void renderer_notify_complete(struct strmbase_renderer *filter)
+{
+    IFilterGraph *graph = filter->filter.graph;
+    IMediaEventSink *event_sink;
+
+    if (graph && SUCCEEDED(IFilterGraph_QueryInterface(graph, &IID_IMediaEventSink, (void **)&event_sink)))
+    {
+        IMediaEventSink_Notify(event_sink, EC_COMPLETE, S_OK, (LONG_PTR)&filter->filter.IBaseFilter_iface);
+        IMediaEventSink_Release(event_sink);
+    }
+}
+
+static void renderer_cancel_eos(struct strmbase_renderer *filter)
+{
+    if (filter->eos_clock)
+    {
+        IReferenceClock_Unadvise(filter->eos_clock, filter->eos_cookie);
+        IReferenceClock_Release(filter->eos_clock);
+        filter->eos_clock = NULL;
+    }
+}
+
+static void CALLBACK renderer_eos_callback(void *context, BOOLEAN timeout);
+
+static BOOL renderer_schedule_eos(struct strmbase_renderer *filter, IReferenceClock *clock)
+{
+    REFERENCE_TIME now;
+
+    renderer_cancel_eos(filter);
+
+    if (!clock || !filter->have_last_stop || FAILED(IReferenceClock_GetTime(clock, &now))
+            || now - filter->stream_start >= filter->last_stop)
+        return TRUE;
+
+    if (!filter->eos_wait && !RegisterWaitForSingleObject(&filter->eos_wait, filter->eos_event,
+            renderer_eos_callback, filter, INFINITE, WT_EXECUTEDEFAULT))
+    {
+        filter->eos_wait = NULL;
+        return TRUE;
+    }
+
+    if (FAILED(IReferenceClock_AdviseTime(clock, filter->stream_start, filter->last_stop,
+            (HEVENT)filter->eos_event, &filter->eos_cookie)))
+        return TRUE;
+
+    IReferenceClock_AddRef(filter->eos_clock = clock);
+    return FALSE;
+}
+
+static void CALLBACK renderer_eos_callback(void *context, BOOLEAN timeout)
+{
+    struct strmbase_renderer *filter = context;
+    IReferenceClock *clock;
+    BOOL notify = FALSE;
+
+    EnterCriticalSection(&filter->eos_cs);
+    if ((clock = filter->eos_clock))
+    {
+        IReferenceClock_AddRef(clock);
+        notify = renderer_schedule_eos(filter, clock);
+        IReferenceClock_Release(clock);
+    }
+    LeaveCriticalSection(&filter->eos_cs);
+
+    if (notify)
+        renderer_notify_complete(filter);
+}
+
+static void renderer_send_eos(struct strmbase_renderer *filter)
+{
+    BOOL notify;
+
+    EnterCriticalSection(&filter->eos_cs);
+    notify = renderer_schedule_eos(filter, filter->filter.clock);
+    LeaveCriticalSection(&filter->eos_cs);
+
+    if (notify)
+        renderer_notify_complete(filter);
+}
+
+static void renderer_reset_eos(struct strmbase_renderer *filter)
+{
+    EnterCriticalSection(&filter->eos_cs);
+    renderer_cancel_eos(filter);
+    LeaveCriticalSection(&filter->eos_cs);
+}
+
 static HRESULT renderer_init_stream(struct strmbase_filter *iface)
 {
     struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
@@ -239,6 +326,7 @@ static HRESULT renderer_init_stream(struct strmbase_filter *iface)
     if (filter->sink.pin.peer)
         ResetEvent(filter->state_event);
     filter->eos = FALSE;
+    filter->have_last_stop = FALSE;
     ResetEvent(filter->flush_event);
     if (filter->ops->renderer_init_stream)
         filter->ops->renderer_init_stream(filter);
@@ -249,8 +337,6 @@ static HRESULT renderer_init_stream(struct strmbase_filter *iface)
 static HRESULT renderer_start_stream(struct strmbase_filter *iface, REFERENCE_TIME start)
 {
     struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
-    IFilterGraph *graph = filter->filter.graph;
-    IMediaEventSink *event_sink;
 
     filter->stream_start = start;
     SetEvent(filter->run_event);
@@ -258,14 +344,10 @@ static HRESULT renderer_start_stream(struct strmbase_filter *iface, REFERENCE_TI
     if (filter->sink.pin.peer && filter->ops->renderer_start_stream)
         filter->ops->renderer_start_stream(filter);
 
-    if ((filter->eos || !filter->sink.pin.peer) && graph
-            && SUCCEEDED(IFilterGraph_QueryInterface(graph,
-            &IID_IMediaEventSink, (void **)&event_sink)))
-    {
-        IMediaEventSink_Notify(event_sink, EC_COMPLETE, S_OK,
-                (LONG_PTR)&filter->filter.IBaseFilter_iface);
-        IMediaEventSink_Release(event_sink);
-    }
+    if (!filter->sink.pin.peer)
+        renderer_notify_complete(filter);
+    else if (filter->eos)
+        renderer_send_eos(filter);
 
     return WaitForSingleObject(filter->state_event, 0) ? S_FALSE : S_OK;
 }
@@ -275,6 +357,7 @@ static HRESULT renderer_stop_stream(struct strmbase_filter *iface)
     struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
 
     ResetEvent(filter->run_event);
+    renderer_reset_eos(filter);
 
     if (filter->sink.pin.peer && filter->ops->renderer_stop_stream)
         filter->ops->renderer_stop_stream(filter);
@@ -291,6 +374,7 @@ static HRESULT renderer_cleanup_stream(struct strmbase_filter *iface)
 {
     struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
 
+    renderer_reset_eos(filter);
     strmbase_passthrough_invalidate_time(&filter->passthrough);
     SetEvent(filter->state_event);
     SetEvent(filter->flush_event);
@@ -382,6 +466,10 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
     if (filter->filter.clock && SUCCEEDED(IMediaSample_GetTime(sample, &start, &stop)))
     {
         strmbase_passthrough_update_time(&filter->passthrough, start);
+        EnterCriticalSection(&filter->eos_cs);
+        filter->last_stop = stop;
+        filter->have_last_stop = TRUE;
+        LeaveCriticalSection(&filter->eos_cs);
         need_wait = TRUE;
     }
 
@@ -464,22 +552,14 @@ static void sink_disconnect(struct strmbase_sink *iface)
 static HRESULT sink_eos(struct strmbase_sink *iface)
 {
     struct strmbase_renderer *filter = impl_from_IPin(&iface->pin.IPin_iface);
-    IFilterGraph *graph = filter->filter.graph;
-    IMediaEventSink *event_sink;
 
     if (filter->sink.flushing)
         return S_FALSE;
 
     filter->eos = TRUE;
 
-    if (filter->filter.state == State_Running && graph
-            && SUCCEEDED(IFilterGraph_QueryInterface(graph,
-            &IID_IMediaEventSink, (void **)&event_sink)))
-    {
-        IMediaEventSink_Notify(event_sink, EC_COMPLETE, S_OK,
-                (LONG_PTR)&filter->filter.IBaseFilter_iface);
-        IMediaEventSink_Release(event_sink);
-    }
+    if (filter->filter.state == State_Running)
+        renderer_send_eos(filter);
     strmbase_passthrough_eos(&filter->passthrough);
     SetEvent(filter->state_event);
 
@@ -492,6 +572,7 @@ static HRESULT sink_begin_flush(struct strmbase_sink *iface)
 
     if (filter->filter.state == State_Paused)
         ResetEvent(filter->state_event);
+    renderer_reset_eos(filter);
     SetEvent(filter->flush_event);
 
     return S_OK;
@@ -504,6 +585,9 @@ static HRESULT sink_end_flush(struct strmbase_sink *iface)
     EnterCriticalSection(&filter->filter.stream_cs);
 
     filter->eos = FALSE;
+    EnterCriticalSection(&filter->eos_cs);
+    filter->have_last_stop = FALSE;
+    LeaveCriticalSection(&filter->eos_cs);
     reset_qos(filter);
     strmbase_passthrough_invalidate_time(&filter->passthrough);
     ResetEvent(filter->flush_event);
@@ -600,6 +684,14 @@ void strmbase_renderer_cleanup(struct strmbase_renderer *filter)
 
     strmbase_passthrough_cleanup(&filter->passthrough);
 
+    if (filter->eos_wait)
+        UnregisterWaitEx(filter->eos_wait, INVALID_HANDLE_VALUE);
+    renderer_cancel_eos(filter);
+    CloseHandle(filter->eos_event);
+    if (filter->eos_cs.DebugInfo != (RTL_CRITICAL_SECTION_DEBUG *)-1)
+        filter->eos_cs.DebugInfo->Spare[0] = 0;
+    DeleteCriticalSection(&filter->eos_cs);
+
     CloseHandle(filter->state_event);
     CloseHandle(filter->advise_event);
     CloseHandle(filter->run_event);
@@ -624,4 +716,9 @@ void strmbase_renderer_init(struct strmbase_renderer *filter, IUnknown *outer,
     filter->advise_event = CreateEventW(NULL, FALSE, FALSE, NULL);
     filter->run_event = CreateEventW(NULL, TRUE, FALSE, NULL);
     filter->flush_event = CreateEventW(NULL, TRUE, TRUE, NULL);
+    filter->eos_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!InitializeCriticalSectionEx(&filter->eos_cs, 0, RTL_CRITICAL_SECTION_FLAG_FORCE_DEBUG_INFO))
+        InitializeCriticalSectionEx(&filter->eos_cs, 0, RTL_CRITICAL_SECTION_FLAG_FORCE_DEBUG_INFO);
+    if (filter->eos_cs.DebugInfo != (RTL_CRITICAL_SECTION_DEBUG *)-1)
+        filter->eos_cs.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": strmbase_renderer.eos_cs");
 }
