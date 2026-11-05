@@ -102,6 +102,7 @@ KspEnableEvent(
     const KSEVENT_SET *FoundEventSet;
     PKSEVENT_ENTRY EventEntry;
     ULONG Index, SubIndex, Size, ItemSize, RequestType;
+    BOOLEAN SetFound = FALSE;
     PVOID Object = NULL;
     KSEVENT_CTX Ctx;
     LPGUID Guid;
@@ -204,6 +205,7 @@ KspEnableEvent(
     {
         if (IsEqualGUIDAligned(&Event.Set, EventSet[Index].Set))
         {
+            SetFound = TRUE;
             EventItem = (PKSEVENT_ITEM)EventSet[Index].EventItem;
 
             /* sanity check */
@@ -238,7 +240,7 @@ KspEnableEvent(
 
         DPRINT("Guid %S Id %u Flags %x not found\n", GuidString.Buffer, Event.Id, Event.Flags);
         RtlFreeUnicodeString(&GuidString);
-        return STATUS_PROPSET_NOT_FOUND;
+        return SetFound ? STATUS_NOT_FOUND : STATUS_PROPSET_NOT_FOUND;
 
 
     }

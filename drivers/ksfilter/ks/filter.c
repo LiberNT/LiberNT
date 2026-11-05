@@ -67,12 +67,9 @@ DEFINE_KSPROPERTY_TABLE(IKsFilterPinSet) {
     DEFINE_KSPROPERTY_ITEM_PIN_INTERFACES(FilterPinPropertyHandler),
     DEFINE_KSPROPERTY_ITEM_PIN_MEDIUMS(FilterPinPropertyHandler),
     DEFINE_KSPROPERTY_ITEM_PIN_COMMUNICATION(FilterPinPropertyHandler),
-    DEFINE_KSPROPERTY_ITEM_PIN_GLOBALCINSTANCES(FilterPinPropertyHandler),
     DEFINE_KSPROPERTY_ITEM_PIN_NECESSARYINSTANCES(FilterPinPropertyHandler),
     DEFINE_KSPROPERTY_ITEM_PIN_CATEGORY(FilterPinPropertyHandler),
-    DEFINE_KSPROPERTY_ITEM_PIN_NAME(FilterPinPropertyHandler),
-    DEFINE_KSPROPERTY_ITEM_PIN_CONSTRAINEDDATARANGES(FilterPinPropertyHandler),
-    DEFINE_KSPROPERTY_ITEM_PIN_PROPOSEDATAFORMAT(FilterPinPropertyHandler)
+    DEFINE_KSPROPERTY_ITEM_PIN_NAME(FilterPinPropertyHandler)
 };
 DEFINE_KSPROPERTY_GENEREAL_COMPONENTID(IKsFilterGeneralSet, FilterGeneralComponentIdHandler);
 
@@ -746,7 +743,9 @@ IKsFilter_DispatchClose(
         CompleteRequest(Irp, IO_NO_INCREMENT);
 
         /* remove our instance from the filter factory */
+        KsAcquireDevice(This->Header.KsDevice);
         IKsFilter_RemoveFilterFromFilterFactory(This, This->Factory);
+        KsReleaseDevice(This->Header.KsDevice);
 
         KsFreeObjectBag((KSOBJECT_BAG)This->Filter.Bag);
         This->Filter.Bag = NULL;

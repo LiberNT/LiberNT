@@ -74,10 +74,10 @@ FindPropertyHandler(
                             return STATUS_SUCCESS;
                         }
 
-                        if (PropertySet[Index].PropertyItem[ItemIndex].GetSupported)
+                        if (PropertySet[Index].PropertyItem[ItemIndex].GetPropertyHandler)
                             *Flags |= KSPROPERTY_TYPE_GET;
 
-                        if (PropertySet[Index].PropertyItem[ItemIndex].SetSupported)
+                        if (PropertySet[Index].PropertyItem[ItemIndex].SetPropertyHandler)
                             *Flags |= KSPROPERTY_TYPE_SET;
 
                         if (OutputBufferLength >= sizeof(KSPROPERTY_DESCRIPTION))
@@ -117,14 +117,14 @@ FindPropertyHandler(
                     {
                         /* store property handler */
                         *PropertyHandler = PropertySet[Index].PropertyItem[ItemIndex].SetPropertyHandler;
-                        return STATUS_SUCCESS;
+                        return *PropertyHandler ? STATUS_SUCCESS : STATUS_NOT_FOUND;
                     }
 
                     if (Property->Flags & KSPROPERTY_TYPE_GET)
                     {
                         /* store property handler */
                         *PropertyHandler = PropertySet[Index].PropertyItem[ItemIndex].GetPropertyHandler;
-                        return STATUS_SUCCESS;
+                        return *PropertyHandler ? STATUS_SUCCESS : STATUS_NOT_FOUND;
                     }
 
 
@@ -399,7 +399,7 @@ FindFastPropertyHandler(
         {
             if (PropertyId->Flags & KSPROPERTY_TYPE_SET)
             {
-                if (FastIoTable[Index].SetSupported)
+                if (FastIoTable[Index].SetPropertyHandler)
                 {
                     *FastPropertyHandler = FastIoTable[Index].SetPropertyHandler;
                     return STATUS_SUCCESS;
@@ -408,7 +408,7 @@ FindFastPropertyHandler(
 
             if (PropertyId->Flags & KSPROPERTY_TYPE_GET)
             {
-                if (FastIoTable[Index].GetSupported)
+                if (FastIoTable[Index].GetPropertyHandler)
                 {
                     *FastPropertyHandler = FastIoTable[Index].GetPropertyHandler;
                     return STATUS_SUCCESS;

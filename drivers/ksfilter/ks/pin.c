@@ -96,14 +96,97 @@ IKsPin_InitializeStreamPointer(
 
 
 
-DEFINE_KSPROPERTY_CONNECTIONSET(PinConnectionSet, IKsPin_PinStatePropertyHandler, IKsPin_PinDataFormatPropertyHandler, IKsPin_PinAllocatorFramingPropertyHandler);
+static
+NTSTATUS
+NTAPI
+IKsPin_PinAcquireOrdering(
+    IN PIRP Irp,
+    IN PKSIDENTIFIER Request,
+    IN OUT PVOID Data)
+{
+    UNREFERENCED_PARAMETER(Request);
+
+    *(int *)Data = FALSE;
+    Irp->IoStatus.Information = sizeof(int);
+    return STATUS_SUCCESS;
+}
+
+DEFINE_KSPROPERTY_CONNECTIONSET(PinConnectionSet, IKsPin_PinStatePropertyHandler, IKsPin_PinDataFormatPropertyHandler, IKsPin_PinAcquireOrdering, IKsPin_PinAllocatorFramingPropertyHandler);
 DEFINE_KSPROPERTY_STREAMSET(PinStreamSet, IKsPin_PinStreamAllocator, IKsPin_PinMasterClock, IKsPin_PinPipeId);
 
 //TODO
-// KSPROPSETID_Connection
-//    KSPROPERTY_CONNECTION_ACQUIREORDERING
 // KSPROPSETID_StreamInterface
 //     KSPROPERTY_STREAMINTERFACE_HEADERSIZE
+
+static
+NTSTATUS
+NTAPI
+IKsPin_EndOfStreamSupport(
+    IN PIRP Irp,
+    IN PKSIDENTIFIER Request,
+    IN OUT PVOID Data)
+{
+    UNREFERENCED_PARAMETER(Irp);
+    UNREFERENCED_PARAMETER(Request);
+    UNREFERENCED_PARAMETER(Data);
+    return STATUS_NOT_FOUND;
+}
+
+static const KSEVENT_ITEM PinConnectionEventItems[] =
+{
+    DEFINE_KSEVENT_ITEM(KSEVENT_CONNECTION_POSITIONUPDATE, sizeof(KSEVENTDATA), 0, NULL, NULL, NULL),
+    DEFINE_KSEVENT_ITEM(KSEVENT_CONNECTION_DATADISCONTINUITY, sizeof(KSEVENTDATA), 0, NULL, NULL, NULL),
+    DEFINE_KSEVENT_ITEM(KSEVENT_CONNECTION_TIMEDISCONTINUITY, sizeof(KSEVENTDATA), 0, NULL, NULL, NULL),
+    DEFINE_KSEVENT_ITEM(KSEVENT_CONNECTION_PRIORITY, sizeof(KSEVENTDATA), 0, NULL, NULL, NULL),
+    DEFINE_KSEVENT_ITEM(KSEVENT_CONNECTION_ENDOFSTREAM, sizeof(KSEVENTDATA), 0, NULL, NULL, IKsPin_EndOfStreamSupport)
+};
+
+static const KSEVENT_SET PinEventSet[] =
+{
+    {
+        &KSEVENTSETID_Connection,
+        RTL_NUMBER_OF(PinConnectionEventItems),
+        PinConnectionEventItems
+    }
+};
+
+static
+NTSTATUS
+NTAPI
+IKsPin_MemoryTransportSet(
+    IN PIRP Irp,
+    IN PKSIDENTIFIER Request,
+    IN OUT PVOID Data)
+{
+    UNREFERENCED_PARAMETER(Irp);
+    UNREFERENCED_PARAMETER(Request);
+    UNREFERENCED_PARAMETER(Data);
+    /* FIXME: no VRAM memory transport, the pin keeps system memory frames */
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+IKsPin_MdlCachingSet(
+    IN PIRP Irp,
+    IN PKSIDENTIFIER Request,
+    IN OUT PVOID Data)
+{
+    UNREFERENCED_PARAMETER(Irp);
+    UNREFERENCED_PARAMETER(Request);
+    UNREFERENCED_PARAMETER(Data);
+    return STATUS_INVALID_DEVICE_STATE;
+}
+
+DEFINE_KSPROPERTY_TABLE(PinMemoryTransportSet) {
+    DEFINE_KSPROPERTY_ITEM(KSPROPERTY_MEMORY_TRANSPORT, NULL, sizeof(KSPROPERTY), sizeof(BOOL), IKsPin_MemoryTransportSet, NULL, 0, NULL, NULL, 0)
+};
+
+DEFINE_KSPROPERTY_TABLE(PinMdlCachingSet) {
+    DEFINE_KSPROPERTY_ITEM(KSPROPERTY_ALLOCATOR_CLEANUP_CACHEDMDLPAGES, NULL, sizeof(KSPROPERTY), sizeof(KSPIN_MDL_CACHING_NOTIFICATION),
+                           IKsPin_MdlCachingSet, NULL, 0, NULL, NULL, 0)
+};
 
 KSPROPERTY_SET PinPropertySet[] =
 {
@@ -120,12 +203,29 @@ KSPROPERTY_SET PinPropertySet[] =
         (const KSPROPERTY_ITEM*)&PinStreamSet,
         0,
         NULL
+    },
+    {
+        &KSPROPSETID_MemoryTransport,
+        sizeof(PinMemoryTransportSet) / sizeof(KSPROPERTY_ITEM),
+        (const KSPROPERTY_ITEM*)&PinMemoryTransportSet,
+        0,
+        NULL
+    },
+    {
+        &KSPROPSETID_PinMDLCacheClearProp,
+        sizeof(PinMdlCachingSet) / sizeof(KSPROPERTY_ITEM),
+        (const KSPROPERTY_ITEM*)&PinMdlCachingSet,
+        0,
+        NULL
     }
 };
 
 const GUID KSPROPSETID_Connection              = {0x1D58C920L, 0xAC9B, 0x11CF, {0xA5, 0xD6, 0x28, 0xDB, 0x04, 0xC1, 0x00, 0x00}};
 const GUID KSPROPSETID_Stream                  = {0x65aaba60L, 0x98ae, 0x11cf, {0xa1, 0x0d, 0x00, 0x20, 0xaf, 0xd1, 0x56, 0xe4}};
 const GUID KSPROPSETID_Clock                   = {0xDF12A4C0L, 0xAC17, 0x11CF, {0xA5, 0xD6, 0x28, 0xDB, 0x04, 0xC1, 0x00, 0x00}};
+const GUID KSEVENTSETID_Connection             = {0x7f4bcbe0L, 0x9ea5, 0x11cf, {0xa5, 0xd6, 0x28, 0xdb, 0x04, 0xc1, 0x00, 0x00}};
+const GUID KSPROPSETID_MemoryTransport         = {0x0a3d1c5dL, 0x5243, 0x4819, {0x9e, 0xd0, 0xae, 0xe8, 0x04, 0x4c, 0xee, 0x2b}};
+const GUID KSPROPSETID_PinMDLCacheClearProp    = {0xbd718a7bL, 0x97fc, 0x40c7, {0x88, 0xce, 0xd3, 0xff, 0x06, 0xf5, 0x5b, 0x16}};
 
 NTSTATUS
 NTAPI
@@ -2942,6 +3042,9 @@ KspCreatePin(
     AutomationTable.PropertyItemSize = sizeof(KSPROPERTY_ITEM);
     AutomationTable.PropertySets = PinPropertySet;
     AutomationTable.PropertySetsCount = sizeof(PinPropertySet) / sizeof(KSPROPERTY_SET);
+    AutomationTable.EventItemSize = sizeof(KSEVENT_ITEM);
+    AutomationTable.EventSets = PinEventSet;
+    AutomationTable.EventSetsCount = RTL_NUMBER_OF(PinEventSet);
 
     /* merge in pin property sets */
     Status = KsMergeAutomationTables((PKSAUTOMATION_TABLE*)&This->Pin.Descriptor->AutomationTable, (PKSAUTOMATION_TABLE)Descriptor->AutomationTable, &AutomationTable, This->Pin.Bag);
