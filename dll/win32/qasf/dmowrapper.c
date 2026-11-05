@@ -47,6 +47,7 @@ struct dmo_wrapper
 
     DWORD sink_count, source_count;
     struct strmbase_sink *sinks;
+    BOOL *sink_eos;
     struct dmo_wrapper_source *sources;
     DMO_OUTPUT_DATA_BUFFER *buffers;
     struct buffer input_buffer;
@@ -351,6 +352,8 @@ static HRESULT WINAPI dmo_wrapper_sink_Receive(struct strmbase_sink *iface, IMed
         return VFW_E_WRONG_STATE;
     if (iface->flushing)
         return S_FALSE;
+    if (filter->sink_eos[index])
+        return VFW_E_SAMPLE_REJECTED_EOS;
 
     IUnknown_QueryInterface(filter->dmo, &IID_IMediaObject, (void **)&dmo);
 
@@ -403,6 +406,14 @@ static HRESULT dmo_wrapper_sink_eos(struct strmbase_sink *iface)
     IMediaObject *dmo;
     HRESULT hr;
 
+    if (filter->filter.state == State_Stopped)
+        return VFW_E_WRONG_STATE;
+    if (iface->flushing)
+        return S_FALSE;
+    if (filter->sink_eos[index])
+        return S_OK;
+    filter->sink_eos[index] = TRUE;
+
     IUnknown_QueryInterface(filter->dmo, &IID_IMediaObject, (void **)&dmo);
 
     if (FAILED(hr = IMediaObject_Discontinuity(dmo, index)))
@@ -423,12 +434,28 @@ static HRESULT dmo_wrapper_sink_eos(struct strmbase_sink *iface)
     return hr;
 }
 
+static HRESULT dmo_wrapper_begin_flush(struct strmbase_sink *iface)
+{
+    struct dmo_wrapper *filter = impl_from_strmbase_filter(iface->pin.filter);
+    DWORD i;
+
+    for (i = 0; i < filter->source_count; ++i)
+    {
+        if (filter->sources[i].pin.pin.peer)
+            IPin_BeginFlush(filter->sources[i].pin.pin.peer);
+    }
+
+    return S_OK;
+}
+
 static HRESULT dmo_wrapper_end_flush(struct strmbase_sink *iface)
 {
     struct dmo_wrapper *filter = impl_from_strmbase_filter(iface->pin.filter);
     IMediaObject *dmo;
     HRESULT hr;
     DWORD i;
+
+    filter->sink_eos[iface - filter->sinks] = FALSE;
 
     IUnknown_QueryInterface(filter->dmo, &IID_IMediaObject, (void **)&dmo);
 
@@ -445,6 +472,40 @@ static HRESULT dmo_wrapper_end_flush(struct strmbase_sink *iface)
     return hr;
 }
 
+static HRESULT dmo_wrapper_sink_new_segment(struct strmbase_sink *iface,
+        REFERENCE_TIME start, REFERENCE_TIME stop, double rate)
+{
+    struct dmo_wrapper *filter = impl_from_strmbase_filter(iface->pin.filter);
+    DWORD i;
+
+    for (i = 0; i < filter->source_count; ++i)
+    {
+        if (filter->sources[i].pin.pin.peer)
+            IPin_NewSegment(filter->sources[i].pin.pin.peer, start, stop, rate);
+    }
+
+    return S_OK;
+}
+
+static HRESULT dmo_wrapper_sink_get_allocator_requirements(struct strmbase_sink *iface, ALLOCATOR_PROPERTIES *props)
+{
+    struct dmo_wrapper *filter = impl_from_strmbase_filter(iface->pin.filter);
+    DWORD size, lookahead, alignment;
+    IMediaObject *dmo;
+    HRESULT hr;
+
+    IUnknown_QueryInterface(filter->dmo, &IID_IMediaObject, (void **)&dmo);
+    hr = IMediaObject_GetInputSizeInfo(dmo, iface - filter->sinks, &size, &lookahead, &alignment);
+    IMediaObject_Release(dmo);
+    if (FAILED(hr))
+        return hr;
+
+    props->cBuffers = 1;
+    props->cbBuffer = size;
+    props->cbAlign = alignment;
+    return S_OK;
+}
+
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_interface = dmo_wrapper_sink_query_interface,
@@ -453,7 +514,10 @@ static const struct strmbase_sink_ops sink_ops =
     .sink_connect = dmo_wrapper_sink_connect,
     .sink_disconnect = dmo_wrapper_sink_disconnect,
     .sink_eos = dmo_wrapper_sink_eos,
+    .sink_begin_flush = dmo_wrapper_begin_flush,
     .sink_end_flush = dmo_wrapper_end_flush,
+    .sink_new_segment = dmo_wrapper_sink_new_segment,
+    .sink_get_allocator_requirements = dmo_wrapper_sink_get_allocator_requirements,
     .pfnReceive = dmo_wrapper_sink_Receive,
 };
 
@@ -650,6 +714,7 @@ static HRESULT WINAPI dmo_wrapper_filter_Init(IDMOWrapperFilter *iface, REFCLSID
     DWORD input_count, output_count;
     struct strmbase_sink *sinks;
     IMediaObject *dmo;
+    BOOL *sink_eos;
     IUnknown *unk;
     WCHAR id[14];
     HRESULT hr;
@@ -671,16 +736,18 @@ static HRESULT WINAPI dmo_wrapper_filter_Init(IDMOWrapperFilter *iface, REFCLSID
         input_count = output_count = 0;
 
     sinks = calloc(sizeof(*sinks), input_count);
+    sink_eos = calloc(sizeof(*sink_eos), input_count);
     sources = calloc(sizeof(*sources), output_count);
     buffers = calloc(sizeof(*buffers), output_count);
-    if (!sinks || !sources || !buffers)
+    if (!sinks || !sink_eos || !sources || !buffers)
     {
         free(sinks);
+        free(sink_eos);
         free(sources);
         free(buffers);
         IMediaObject_Release(dmo);
         IUnknown_Release(unk);
-        return hr;
+        return E_OUTOFMEMORY;
     }
 
     for (i = 0; i < input_count; ++i)
@@ -707,6 +774,7 @@ static HRESULT WINAPI dmo_wrapper_filter_Init(IDMOWrapperFilter *iface, REFCLSID
     filter->sink_count = input_count;
     filter->source_count = output_count;
     filter->sinks = sinks;
+    filter->sink_eos = sink_eos;
     filter->sources = sources;
     filter->buffers = buffers;
 
@@ -751,7 +819,9 @@ static void dmo_wrapper_destroy(struct strmbase_filter *iface)
         strmbase_source_cleanup(&filter->sources[i].pin);
     }
     free(filter->sinks);
+    free(filter->sink_eos);
     free(filter->sources);
+    free(filter->buffers);
     strmbase_filter_cleanup(&filter->filter);
     free(filter);
 }
@@ -790,6 +860,9 @@ static HRESULT dmo_wrapper_init_stream(struct strmbase_filter *iface)
         IMediaObject_Release(dmo);
         return hr;
     }
+
+    for (i = 0; i < filter->sink_count; ++i)
+        filter->sink_eos[i] = FALSE;
 
     for (i = 0; i < filter->source_count; ++i)
     {

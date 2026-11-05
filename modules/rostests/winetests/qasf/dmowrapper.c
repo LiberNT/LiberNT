@@ -2373,6 +2373,27 @@ static void test_streaming_events(IMediaControl *control, IPin *sink, IMemInputP
 
     hr = IMediaControl_Stop(control);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_EndOfStream(sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == VFW_E_SAMPLE_REJECTED_EOS, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_EndOfStream(sink);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    got_ProcessInput = got_ProcessOutput = got_Receive = 0;
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(got_ProcessInput == 1, "Got %u calls to ProcessInput().\n", got_ProcessInput);
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    got_ProcessInput = got_ProcessOutput = got_Receive = 0;
     IMediaSample_Release(sample);
     IMemAllocator_Release(allocator);
 }
