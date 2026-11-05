@@ -608,6 +608,8 @@ extern const CSTRING KdbPromptStr;
 
 #define KDP_FILE_IO_TIMEOUT_POLLS 100000
 #define KDP_FILE_IO_NET_TIMEOUT_POLLS 400000
+#define KDP_FILE_IO_TIMEOUT_MS 1000
+#define KDP_FILE_IO_NET_TIMEOUT_MS 4000
 
 static BOOLEAN KdpFileIoHostAbsent = FALSE;
 static ULONG KdpFileIoPacketId = INITIAL_PACKET_ID;
@@ -636,13 +638,20 @@ KdpFileIoReceive(
 {
     PUCHAR Byte = Buffer;
     ULONG Polls;
+    LARGE_INTEGER Frequency;
+    LONGLONG Deadline;
 
     while (Length-- > 0)
     {
+        Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart +
+                   Frequency.QuadPart * (KdpDebugMode.Net ? KDP_FILE_IO_NET_TIMEOUT_MS : KDP_FILE_IO_TIMEOUT_MS) / 1000;
         for (Polls = 0; !(KdpDebugMode.Net ? KdpNetGetByte(Byte) : KdPortGetByteEx(&SerialPortInfo, Byte)); Polls++)
         {
-            if (Polls == (KdpDebugMode.Net ? KDP_FILE_IO_NET_TIMEOUT_POLLS : KDP_FILE_IO_TIMEOUT_POLLS))
+            if (Polls == (KdpDebugMode.Net ? KDP_FILE_IO_NET_TIMEOUT_POLLS : KDP_FILE_IO_TIMEOUT_POLLS) ||
+                KeQueryPerformanceCounter(NULL).QuadPart >= Deadline)
+            {
                 return FALSE;
+            }
             KeStallExecutionProcessor(10);
         }
         Byte++;
