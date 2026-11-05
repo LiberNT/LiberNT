@@ -1100,7 +1100,7 @@ STATUSBAR_WMSize (STATUS_INFO *infoPtr, WORD flags)
     width = parent_rect.right - parent_rect.left;
     x = parent_rect.left;
     y = parent_rect.bottom - infoPtr->height;
-    MoveWindow(infoPtr->Self, x, y, width, infoPtr->height, FALSE);
+    MoveWindow(infoPtr->Self, x, y, width, infoPtr->height, TRUE);
     STATUSBAR_SetPartBounds (infoPtr);
     InvalidateRect(infoPtr->Self, NULL, FALSE);
     return TRUE;
