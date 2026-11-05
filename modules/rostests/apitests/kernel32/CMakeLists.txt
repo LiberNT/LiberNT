@@ -99,6 +99,7 @@ list(APPEND SOURCE
     SetUnhandledExceptionFilter.c
     SetWaitableTimerEx.c
     WaitableTimerHighResolution.c
+    SwitchToThreadCost.c
     SuspendThread.c
     SystemFirmware.c
     TerminateProcess.c
