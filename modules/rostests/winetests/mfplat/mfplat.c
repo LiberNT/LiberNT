@@ -6206,6 +6206,89 @@ static void test_MFCreateWaveFormatExFromMFMediaType(void)
     }
 
     IMFMediaType_Release(mediatype);
+
+#ifdef __REACTOS__
+    {
+        static const struct
+        {
+            const GUID *subtype;
+            UINT32 channels, bits;
+            WORD format_tag;
+            DWORD mask;
+        }
+        sample_tests[] =
+        {
+            { &MFAudioFormat_PCM, 2, 16, WAVE_FORMAT_PCM },
+            { &MFAudioFormat_PCM, 1, 8, WAVE_FORMAT_PCM },
+            { &MFAudioFormat_PCM, 2, 24, WAVE_FORMAT_EXTENSIBLE, SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT },
+            { &MFAudioFormat_Float, 2, 32, WAVE_FORMAT_EXTENSIBLE, SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT },
+            { &MFAudioFormat_Float, 1, 32, WAVE_FORMAT_EXTENSIBLE, SPEAKER_FRONT_CENTER },
+        };
+        IMFMediaType *back;
+        AM_MEDIA_TYPE am;
+        UINT32 count;
+
+        for (i = 0; i < ARRAY_SIZE(sample_tests); ++i)
+        {
+            UINT32 align = sample_tests[i].channels * sample_tests[i].bits / 8;
+            BOOL ext = sample_tests[i].format_tag == WAVE_FORMAT_EXTENSIBLE;
+
+            winetest_push_context("sample test %u", i);
+            hr = MFCreateMediaType(&mediatype);
+            ok(hr == S_OK, "Failed to create media type, hr %#lx.\n", hr);
+            IMFMediaType_SetGUID(mediatype, &MF_MT_MAJOR_TYPE, &MFMediaType_Audio);
+            IMFMediaType_SetGUID(mediatype, &MF_MT_SUBTYPE, sample_tests[i].subtype);
+            IMFMediaType_SetUINT32(mediatype, &MF_MT_AUDIO_NUM_CHANNELS, sample_tests[i].channels);
+            IMFMediaType_SetUINT32(mediatype, &MF_MT_AUDIO_SAMPLES_PER_SECOND, 44100);
+            IMFMediaType_SetUINT32(mediatype, &MF_MT_AUDIO_BITS_PER_SAMPLE, sample_tests[i].bits);
+            IMFMediaType_SetUINT32(mediatype, &MF_MT_AUDIO_BLOCK_ALIGNMENT, align);
+            IMFMediaType_SetUINT32(mediatype, &MF_MT_AUDIO_AVG_BYTES_PER_SECOND, align * 44100);
+
+            hr = MFCreateWaveFormatExFromMFMediaType(mediatype, (WAVEFORMATEX **)&format_ext, &size,
+                    MFWaveFormatExConvertFlag_Normal);
+            ok(hr == S_OK, "Failed to create format, hr %#lx.\n", hr);
+            ok(size == (ext ? sizeof(*format_ext) : sizeof(WAVEFORMATEX)), "Unexpected size %u.\n", size);
+            ok(format_ext->Format.wFormatTag == sample_tests[i].format_tag, "Unexpected tag %#x.\n",
+                    format_ext->Format.wFormatTag);
+            if (ext)
+            {
+                ok(format_ext->Samples.wValidBitsPerSample == sample_tests[i].bits, "Unexpected valid bits %u.\n",
+                        format_ext->Samples.wValidBitsPerSample);
+                ok(format_ext->dwChannelMask == sample_tests[i].mask, "Unexpected mask %#lx.\n", format_ext->dwChannelMask);
+                ok(IsEqualGUID(&format_ext->SubFormat, sample_tests[i].subtype), "Unexpected subformat %s.\n",
+                        wine_dbgstr_guid(&format_ext->SubFormat));
+            }
+
+            hr = MFCreateMediaType(&back);
+            ok(hr == S_OK, "Failed to create media type, hr %#lx.\n", hr);
+            hr = MFInitMediaTypeFromWaveFormatEx(back, &format_ext->Format, size);
+            ok(hr == S_OK, "Failed to initialize media type, hr %#lx.\n", hr);
+            hr = IMFMediaType_GetCount(back, &count);
+            ok(hr == S_OK, "Failed to get count, hr %#lx.\n", hr);
+            ok(count == 9, "Unexpected count %u.\n", count);
+            hr = IMFMediaType_GetItem(back, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE, NULL);
+            ok(hr == MF_E_ATTRIBUTENOTFOUND, "Unexpected hr %#lx.\n", hr);
+            hr = IMFMediaType_GetUINT32(back, &MF_MT_AUDIO_CHANNEL_MASK, &count);
+            ok(hr == (ext ? S_OK : MF_E_ATTRIBUTENOTFOUND), "Unexpected hr %#lx.\n", hr);
+            if (ext)
+                ok(count == sample_tests[i].mask, "Unexpected mask %#x.\n", count);
+            hr = IMFMediaType_GetItem(back, &MF_MT_AUDIO_PREFER_WAVEFORMATEX, NULL);
+            ok(hr == (ext ? MF_E_ATTRIBUTENOTFOUND : S_OK), "Unexpected hr %#lx.\n", hr);
+            IMFMediaType_Release(back);
+            CoTaskMemFree(format_ext);
+
+            hr = MFInitAMMediaTypeFromMFMediaType(mediatype, GUID_NULL, &am);
+            ok(hr == S_OK, "Failed to create AM type, hr %#lx.\n", hr);
+            ok(am.cbFormat == size, "Unexpected format size %lu.\n", am.cbFormat);
+            ok(((WAVEFORMATEX *)am.pbFormat)->wFormatTag == sample_tests[i].format_tag, "Unexpected tag %#x.\n",
+                    ((WAVEFORMATEX *)am.pbFormat)->wFormatTag);
+            CoTaskMemFree(am.pbFormat);
+
+            IMFMediaType_Release(mediatype);
+            winetest_pop_context();
+        }
+    }
+#endif
 }
 
 static HRESULT WINAPI test_create_file_callback_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
