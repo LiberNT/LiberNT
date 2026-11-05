@@ -524,6 +524,21 @@ PDEVOBJ_vRefreshModeList(
     EngReleaseSemaphore(ppdev->hsemDevLock);
 }
 
+BOOL
+PDEVOBJ_bGraphicsDeviceInUse(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice)
+{
+    PPDEVOBJ ppdev;
+    BOOL bInUse = FALSE;
+
+    EngAcquireSemaphoreShared(ghsemPDEV);
+    for (ppdev = gppdevList; ppdev && !bInUse; ppdev = ppdev->ppdevNext)
+        bInUse = ppdev->pGraphicsDevice == pGraphicsDevice;
+    EngReleaseSemaphore(ghsemPDEV);
+
+    return bInUse;
+}
+
 PPDEVOBJ
 PDEVOBJ_Create(
     _In_opt_ PGRAPHICS_DEVICE pGraphicsDevice,
