@@ -77,6 +77,8 @@ typedef struct
 
 }IKsPinImpl;
 
+C_ASSERT(FIELD_OFFSET(IKsPinImpl, Pin) == sizeof(KSBASIC_HEADER));
+
 NTSTATUS NTAPI IKsPin_PinStatePropertyHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT PVOID Data);
 NTSTATUS NTAPI IKsPin_PinDataFormatPropertyHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT PVOID Data);
 NTSTATUS NTAPI IKsPin_PinAllocatorFramingPropertyHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT PVOID Data);

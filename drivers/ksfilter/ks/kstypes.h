@@ -51,7 +51,7 @@ typedef struct
     LIST_ENTRY ObjectItemList;
 }CREATE_ITEM_ENTRY, *PCREATE_ITEM_ENTRY;
 
-typedef struct
+typedef struct DECLSPEC_ALIGN(8)
 {
     KSOBJECTTYPE Type;
     PKSDEVICE KsDevice;
