@@ -65,6 +65,8 @@ WINE_DEFAULT_DEBUG_CHANNEL(winlogon);
 #include "resource.h"
 
 #define WL_WM_SETUP_DONE (WM_USER + 0x0100)
+#define WLX_WM_REMOTE_CONSOLE (WM_USER + 0x0101)
+#define WLX_WM_REMOTE_LOCKED (WM_USER + 0x0102)
 
 typedef BOOL (WINAPI * PFWLXNEGOTIATE)  (DWORD, DWORD *);
 typedef BOOL (WINAPI * PFWLXINITIALIZE) (LPWSTR, HANDLE, PVOID, PVOID, PVOID *);
@@ -435,6 +437,32 @@ InitDialogListHead(VOID);
 
 VOID
 CloseAllDialogWindows(VOID);
+
+/* remote.c */
+struct _REMOTE_CONSOLE_MESSAGE;
+
+BOOL
+StartRemoteConsole(
+    _In_ PWLSESSION Session);
+
+LRESULT
+HandleRemoteConsoleMessage(
+    _In_ PWLSESSION Session,
+    _Inout_ struct _REMOTE_CONSOLE_MESSAGE *Message);
+
+VOID
+HandleConsoleKey(
+    _In_ PWLSESSION Session,
+    _In_ USHORT MakeCode,
+    _In_ USHORT Flags);
+
+VOID
+HandleConsoleClock(
+    _In_ PWLSESSION Session);
+
+VOID
+HandleConsoleSignIn(
+    _In_ PWLSESSION Session);
 
 BOOL
 GinaInit(IN OUT PWLSESSION Session);

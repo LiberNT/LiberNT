@@ -1708,6 +1708,7 @@ DoGenericAction(
                 SwitchDesktop(Session->ApplicationDesktop);
                 RemoveStatusMessage(Session);
                 Session->LogonState = STATE_LOGGED_ON;
+                HandleConsoleSignIn(Session);
             }
             break;
         default:
@@ -1993,10 +1994,25 @@ SASWindowProc(
             }
             return TRUE;
         }
+        case WLX_WM_REMOTE_CONSOLE:
+        {
+            return HandleRemoteConsoleMessage(Session, (struct _REMOTE_CONSOLE_MESSAGE *)lParam);
+        }
+        case WLX_WM_REMOTE_LOCKED:
+        {
+            if (Session->LogonState == STATE_LOCKED)
+                Session->Gina.Functions.WlxDisplayLockedNotice(Session->Gina.Context);
+            return TRUE;
+        }
         case WM_LOGONNOTIFY:
         {
             switch(wParam)
             {
+                case LN_CONSOLE_KEY:
+                {
+                    HandleConsoleKey(Session, LOWORD(lParam), HIWORD(lParam));
+                    break;
+                }
                 case LN_MESSAGE_BEEP:
                 {
                     return HandleMessageBeep(Session, lParam);
@@ -2126,6 +2142,10 @@ SASWindowProc(
             {
                 KillTimer(hwndDlg, 1);
                 RestartUserShell(Session);
+            }
+            else
+            {
+                HandleConsoleClock(Session);
             }
             break;
         }

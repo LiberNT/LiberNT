@@ -59,3 +59,10 @@ STRINGTABLE
 BEGIN
     IDS_FAILEDACTIVATEUSERSHELL "Winlogon failed to activate user shell!"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_REMOTE_CONSOLE_INUSE "This PC is being used remotely"
+    IDS_REMOTE_CONSOLE_PASSWORD "Password"
+    IDS_REMOTE_CONSOLE_WRONG "The password is incorrect. Try again."
+END
