@@ -71,5 +71,6 @@ EngpGetDisplayDriverAttachToDesktop(
 CODE_SEG("INIT")
 NTSTATUS
 NTAPI
-InitDeviceImpl(VOID);
+InitDeviceImpl(
+    _In_ PDRIVER_OBJECT DriverObject);
 

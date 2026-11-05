@@ -224,6 +224,10 @@ BOOL
 PDEVOBJ_bDisableDisplay(
     _Inout_ PPDEVOBJ ppdev);
 
+BOOL
+PDEVOBJ_bGraphicsDeviceInUse(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice);
+
 PPDEVOBJ
 PDEVOBJ_Create(
     _In_opt_ PGRAPHICS_DEVICE pGraphicsDevice,
