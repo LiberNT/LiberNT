@@ -4236,6 +4236,12 @@ NTAPI
 DxgkAllocateSubmissionFenceId(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+VOID
+NTAPI
+DxgkReturnSubmissionFenceId(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG FenceId);
+
 BOOLEAN
 NTAPI
 DxgkReserveSubmissionFenceIdentity(

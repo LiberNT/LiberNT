@@ -26,6 +26,7 @@ typedef struct _DXGMMS2_SCHED_PACKET
     ULONGLONG  OwnerCookie;
     ULONGLONG  ClaimToken;
     ULONG      SubmissionFenceId;
+    ULONG      NodeOrdinal;
     ULONGLONG  DispatchSequence;
     ULONG      Flags;
     LONG       Priority;

@@ -8,7 +8,7 @@
 
 #ifdef _WIN64
 C_ASSERT(sizeof(DXGMMS2_FENCE_SNAPSHOT_V1) == 32);
-C_ASSERT(sizeof(DXGMMS2_SCHEDULER_TIMELINE_INTERFACE_V1) == 96);
+C_ASSERT(sizeof(DXGMMS2_SCHEDULER_TIMELINE_INTERFACE_V1) == 104);
 C_ASSERT((FIELD_OFFSET(DXGMMS2_TIMELINE_CONTEXT, Identities) & (sizeof(LONG64) - 1)) == 0);
 #endif
 
@@ -35,6 +35,11 @@ static NTSTATUS NTAPI Dxgmms2NotifyFenceCompletion(_In_ DXGMMS2_SCHEDULER_TIMELI
 static BOOLEAN NTAPI Dxgmms2IsFencePublished(_In_ DXGMMS2_SCHEDULER_TIMELINE_HANDLE Timeline, _In_ ULONG Generation, _In_ ULONG NodeOrdinal, _In_ ULONG FenceId)
 {
     return Dxgmms2TimelineIsFencePublished((PDXGMMS2_TIMELINE_CONTEXT)Timeline, Generation, NodeOrdinal, FenceId);
+}
+
+static BOOLEAN NTAPI Dxgmms2ReturnFence(_In_ DXGMMS2_SCHEDULER_TIMELINE_HANDLE Timeline, _In_ ULONG Generation, _In_ ULONG FenceId)
+{
+    return Dxgmms2TimelineReturnFence((PDXGMMS2_TIMELINE_CONTEXT)Timeline, Generation, FenceId);
 }
 
 static BOOLEAN NTAPI Dxgmms2ReleaseFence(_In_ DXGMMS2_SCHEDULER_TIMELINE_HANDLE Timeline, _In_ ULONG Generation, _In_ ULONG NodeOrdinal, _In_ ULONG FenceId)
@@ -95,6 +100,7 @@ NTSTATUS NTAPI Dxgmms2QuerySchedulerTimelineInterface(_In_ DXGMMS2_ADAPTER_HANDL
     TimelineInterface->NotifyFenceCompletion = Dxgmms2NotifyFenceCompletion;
     TimelineInterface->IsFencePublished = Dxgmms2IsFencePublished;
     TimelineInterface->ReleaseFence = Dxgmms2ReleaseFence;
+    TimelineInterface->ReturnFence = Dxgmms2ReturnFence;
     TimelineInterface->ResetFenceIdentities = Dxgmms2ResetFenceIdentities;
     TimelineInterface->QueryFenceSnapshot = Dxgmms2QueryFenceSnapshot;
     Dxgmms2DereferenceAdapterContext(Context);

@@ -1135,8 +1135,8 @@ TestReadyContextScheduling(PDXGMMS2_SCHED_TEST_STATE State)
     ok_eq_ulong(State->Core.TotalPackets, 2);
     Count = Dxgmms2SchedCoreCancelOwner(&State->Core, 1, Retired, RTL_NUMBER_OF(Retired));
     ok_eq_ulong(Count, 2);
-    ok_eq_ulong(Retired[0]->SubmissionFenceId, 101);
-    ok_eq_ulong(Retired[1]->SubmissionFenceId, 102);
+    ok_eq_ulong(Retired[0]->SubmissionFenceId, 102);
+    ok_eq_ulong(Retired[1]->SubmissionFenceId, 101);
     ok_bool_true(Dxgmms2SchedCoreIsIdle(&State->Core), "all reserved identities returned");
 
     A = AdmitReadyTestPacket(State, 103, 1, TRUE);
@@ -1462,6 +1462,73 @@ TestRejectedVirtualSubmission(PDXGMMS2_SCHED_TEST_STATE State)
     }
 }
 
+/* A miniport may track completion by contiguous ids, so a cancel must not leave a gap below later work. */
+static VOID
+TestCancelKeepsFenceIdsContiguous(PDXGMMS2_SCHED_TEST_STATE State)
+{
+    PDXGMMS2_SCHED_PACKET A, B, C, D, E, Fixed, Batch[4], Failed;
+    DXGMMS2_SCHEDULER_CLAIM_V1 Claim;
+    ULONG Expected;
+    ULONG Count;
+    NTSTATUS Status;
+
+    RtlZeroMemory(State, sizeof(*State));
+    Dxgmms2SchedCoreInitialize(&State->Core);
+    Status = Dxgmms2SchedCoreStart(&State->Core, 1);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    A = AdmitReadyTestPacket(State, 100, 1, TRUE);
+    B = AdmitReadyTestPacket(State, 101, 2, TRUE);
+    C = AdmitReadyTestPacket(State, 102, 1, TRUE);
+    D = AdmitReadyTestPacket(State, 103, 3, TRUE);
+    Count = Dxgmms2SchedCoreCancelOwner(&State->Core, 1, Batch, RTL_NUMBER_OF(Batch));
+    ok_eq_ulong(Count, 2UL);
+    ok_eq_pointer(Batch[0], A);
+    ok_eq_pointer(Batch[1], C);
+    ok_eq_ulong(A->SubmissionFenceId, 103UL);
+    ok_eq_ulong(C->SubmissionFenceId, 102UL);
+    ok_eq_ulong(B->SubmissionFenceId, 100UL);
+    ok_eq_ulong(D->SubmissionFenceId, 101UL);
+    ok_eq_ulong(State->Core.Engines[0].LastSubmittedFenceId, 101UL);
+
+    E = AdmitReadyTestPacket(State, 102, 4, TRUE);
+    ok(E != NULL, "admission after cancel failed\n");
+
+    (VOID)Dxgmms2SchedCoreMarkReady(&State->Core, 0, B->PacketCookie);
+    (VOID)Dxgmms2SchedCoreMarkReady(&State->Core, 0, D->PacketCookie);
+    (VOID)Dxgmms2SchedCoreMarkReady(&State->Core, 0, E->PacketCookie);
+    for (Expected = 100; Expected <= 102; ++Expected)
+    {
+        InitClaim(&Claim);
+        ok_bool_true(Dxgmms2SchedCoreClaim(&State->Core, 0, &Claim), "claim after cancel");
+        ok_eq_ulong(Claim.SubmissionFenceId, Expected);
+        Status = Dxgmms2SchedCorePublishDispatch(&State->Core, 0, Claim.ClaimToken);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        Status = Dxgmms2SchedCoreCompleteDispatch(&State->Core, 0, Claim.ClaimToken, STATUS_SUCCESS, &Failed);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        Count = Dxgmms2SchedCoreNotifyCompletion(&State->Core, 0, Expected, Batch, RTL_NUMBER_OF(Batch));
+        ok_eq_ulong(Count, 1UL);
+    }
+    ok_bool_true(Dxgmms2SchedCoreIsIdle(&State->Core), "queue drained after cancel");
+
+    A = AdmitReadyTestPacket(State, 103, 5, TRUE);
+    B = AdmitReadyTestPacket(State, 104, 5, TRUE);
+    Count = Dxgmms2SchedCoreCancelOwner(&State->Core, 5, Batch, RTL_NUMBER_OF(Batch));
+    ok_eq_ulong(Count, 2UL);
+    ok_eq_ulong(A->SubmissionFenceId, 104UL);
+    ok_eq_ulong(B->SubmissionFenceId, 103UL);
+    ok_eq_ulong(State->Core.Engines[0].LastSubmittedFenceId, 102UL);
+
+    A = AdmitReadyTestPacket(State, 103, 6, TRUE);
+    Fixed = AdmitReadyTestPacket(State, 104, 7, FALSE);
+    B = AdmitReadyTestPacket(State, 105, 8, TRUE);
+    Count = Dxgmms2SchedCoreCancelOwner(&State->Core, 6, Batch, RTL_NUMBER_OF(Batch));
+    ok_eq_ulong(Count, 1UL);
+    ok_eq_ulong(A->SubmissionFenceId, 103UL);
+    ok_eq_ulong(Fixed->SubmissionFenceId, 104UL);
+    ok_eq_ulong(B->SubmissionFenceId, 105UL);
+}
+
 START_TEST(Dxgmms2Scheduler)
 {
     PDXGMMS2_SCHED_TEST_STATE State;
@@ -1492,6 +1559,7 @@ START_TEST(Dxgmms2Scheduler)
     TestReadyContextFairness(State);
     TestDispatchWindow(State);
     TestRejectedVirtualSubmission(State);
+    TestCancelKeepsFenceIdsContiguous(State);
 
     ExFreePoolWithTag(State, TAG_DXGMMS2_SCHED_TEST);
 }

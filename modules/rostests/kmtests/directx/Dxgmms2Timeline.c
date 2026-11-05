@@ -542,6 +542,44 @@ Cleanup:
     ExFreePoolWithTag(Timeline, TAG_DXGMMS2_TIMELINE_TEST);
 }
 
+/* Only the newest id can go back: an older one would reorder fences already handed out. */
+static VOID
+TestReturnNewestFence(VOID)
+{
+    PDXGMMS2_TIMELINE_CONTEXT Timeline;
+    ULONG Generation;
+    ULONG First, Second, Third;
+    NTSTATUS Status;
+
+    Timeline = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Timeline), TAG_DXGMMS2_TIMELINE_TEST);
+    ok(Timeline != NULL, "fence return allocation failed\n");
+    if (Timeline == NULL)
+        return;
+    Dxgmms2TimelineInitialize(Timeline);
+    Status = Dxgmms2TimelineStart(Timeline, 1);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+    Generation = (ULONG)InterlockedCompareExchange(&Timeline->Generation, 0, 0);
+    First = Dxgmms2TimelineAllocateFence(Timeline, Generation);
+    Second = Dxgmms2TimelineAllocateFence(Timeline, Generation);
+    Third = Dxgmms2TimelineAllocateFence(Timeline, Generation);
+    ok_eq_ulong(Second, First + 1);
+    ok_eq_ulong(Third, First + 2);
+    ok_bool_false(Dxgmms2TimelineReturnFence(Timeline, Generation, Second), "older id stays out");
+    ok_bool_false(Dxgmms2TimelineReturnFence(Timeline, Generation, 0), "id zero is never allocated");
+    ok_bool_false(Dxgmms2TimelineReturnFence(Timeline, Generation + 1, Third), "stale generation");
+    ok_bool_true(Dxgmms2TimelineReturnFence(Timeline, Generation, Third), "newest id goes back");
+    ok_bool_true(Dxgmms2TimelineReturnFence(Timeline, Generation, Second), "next newest id goes back");
+    First = Dxgmms2TimelineAllocateFence(Timeline, Generation);
+    ok_eq_ulong(First, Second);
+    First = Dxgmms2TimelineAllocateFence(Timeline, Generation);
+    ok_eq_ulong(First, Third);
+
+Cleanup:
+    ExFreePoolWithTag(Timeline, TAG_DXGMMS2_TIMELINE_TEST);
+}
+
 START_TEST(Dxgmms2Timeline)
 {
     PDXGMMS2_TIMELINE_CONTEXT Timeline;
@@ -663,4 +701,5 @@ START_TEST(Dxgmms2Timeline)
     TestReserveReleaseStress();
     TestMaintenanceDrainStress();
     TestIdentityReuseAndCollisions();
+    TestReturnNewestFence();
 }

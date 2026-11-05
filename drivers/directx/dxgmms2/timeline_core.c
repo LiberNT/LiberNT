@@ -311,6 +311,20 @@ ULONG Dxgmms2TimelineAllocateFence(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _
     return NextFenceId;
 }
 
+/* A miniport may track completion by contiguous ids, so an unsubmitted id goes back while it is still the newest. */
+BOOLEAN Dxgmms2TimelineReturnFence(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _In_ ULONG Generation, _In_ ULONG FenceId)
+{
+    BOOLEAN Returned;
+    LONG State;
+
+    if (FenceId == 0 || !Dxgmms2TimelineAcquireFastCall(Timeline, Generation, &State))
+        return FALSE;
+    Returned = State == Dxgmms2TimelineActive &&
+               (ULONG)InterlockedCompareExchange(&Timeline->NextFenceId, (LONG)(FenceId - 1), (LONG)FenceId) == FenceId;
+    Dxgmms2TimelineReleaseFastCall(Timeline);
+    return Returned;
+}
+
 BOOLEAN Dxgmms2TimelineReserveFence(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _In_ ULONG Generation, _In_ ULONG NodeOrdinal, _In_ ULONG FenceId)
 {
     LONG64 Identity;

@@ -47,6 +47,7 @@ NTSTATUS Dxgmms2TimelineBeginStop(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline);
 NTSTATUS Dxgmms2TimelineCompleteStop(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline);
 NTSTATUS Dxgmms2TimelinePrepareDestroy(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline);
 ULONG Dxgmms2TimelineAllocateFence(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _In_ ULONG Generation);
+BOOLEAN Dxgmms2TimelineReturnFence(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _In_ ULONG Generation, _In_ ULONG FenceId);
 BOOLEAN Dxgmms2TimelineReserveFence(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _In_ ULONG Generation, _In_ ULONG NodeOrdinal, _In_ ULONG FenceId);
 BOOLEAN Dxgmms2TimelinePublishFence(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _In_ ULONG Generation, _In_ ULONG NodeOrdinal, _In_ ULONG FenceId);
 NTSTATUS Dxgmms2TimelineNotifyFenceCompletion(_Inout_ PDXGMMS2_TIMELINE_CONTEXT Timeline, _In_ ULONG Generation, _In_ ULONG NodeOrdinal, _In_ ULONG FenceId, _In_ ULONG Flags, _Inout_ DXGMMS2_FENCE_SNAPSHOT_V1 *Snapshot);

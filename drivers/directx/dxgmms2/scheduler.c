@@ -31,7 +31,8 @@ Dxgmms2SchedulerQueueRetirementLocked(
     _Inout_ PDXGMMS2_ADAPTER_CONTEXT Context,
     _In_ PDXGMMS2_SCHED_PACKET Packet,
     _In_ ULONG Reason,
-    _In_ NTSTATUS TerminalStatus)
+    _In_ NTSTATUS TerminalStatus,
+    _In_ ULONG Flags)
 {
     PDXGMMS2_SCHED_RETIREMENT Record;
 
@@ -49,6 +50,7 @@ Dxgmms2SchedulerQueueRetirementLocked(
     Record->Record.SubmissionFenceId = Packet->SubmissionFenceId;
     Record->Record.Reason = Reason;
     Record->Record.TerminalStatus = TerminalStatus;
+    Record->Record.Flags = Flags;
     InsertTailList(&Context->SchedulerRetirementList, &Record->Entry);
 
     RtlZeroMemory(Packet, sizeof(*Packet));
@@ -174,7 +176,7 @@ Dxgmms2SchedulerCompleteDispatch(
     KeAcquireSpinLock(&Context->SchedulerLock, &OldIrql);
     Status = Dxgmms2SchedCoreCompleteDispatch(&Context->SchedulerCore, EngineOrdinal, ClaimToken, DispatchStatus, &Failed);
     if (NT_SUCCESS(Status) && Failed != NULL)
-        Dxgmms2SchedulerQueueRetirementLocked(Context, Failed, Dxgmms2RetireAborted, DispatchStatus);
+        Dxgmms2SchedulerQueueRetirementLocked(Context, Failed, Dxgmms2RetireAborted, DispatchStatus, 0);
     KeReleaseSpinLock(&Context->SchedulerLock, OldIrql);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -192,7 +194,7 @@ Dxgmms2SchedulerCompleteDispatch(
         for (Index = 0; Index < Count; ++Index)
             Dxgmms2SchedulerQueueRetirementLocked(Context, Retired[Index],
                 NT_SUCCESS(Retired[Index]->DeferredStatus) ? Dxgmms2RetireCompleted : Dxgmms2RetireAborted,
-                Retired[Index]->DeferredStatus);
+                Retired[Index]->DeferredStatus, 0);
         KeReleaseSpinLock(&Context->SchedulerLock, OldIrql);
     } while (Count == RTL_NUMBER_OF(Retired));
     return Status;
@@ -222,7 +224,7 @@ Dxgmms2SchedulerNotifyCompletion(
         for (Index = 0; Index < Count; ++Index)
             Dxgmms2SchedulerQueueRetirementLocked(Context, Retired[Index],
                 NT_SUCCESS(Retired[Index]->DeferredStatus) ? Dxgmms2RetireCompleted : Dxgmms2RetireAborted,
-                Retired[Index]->DeferredStatus);
+                Retired[Index]->DeferredStatus, 0);
         KeReleaseSpinLock(&Context->SchedulerLock, OldIrql);
     } while (Count == RTL_NUMBER_OF(Retired));
     return STATUS_SUCCESS;
@@ -271,16 +273,28 @@ Dxgmms2SchedulerCancelOwnerPackets(
     PDXGMMS2_SCHED_PACKET Cancelled[DXGMMS2_SCHEDULER_MAX_RETIREMENTS];
     KIRQL OldIrql;
     ULONG Count;
+    ULONG Generation;
     ULONG Index;
 
     if (Context == NULL)
         return STATUS_INVALID_HANDLE;
+    Generation = (ULONG)InterlockedCompareExchange(&Context->Timeline.Generation, 0, 0);
     do
     {
         KeAcquireSpinLock(&Context->SchedulerLock, &OldIrql);
         Count = Dxgmms2SchedCoreCancelOwner(&Context->SchedulerCore, OwnerCookie, Cancelled, RTL_NUMBER_OF(Cancelled));
         for (Index = 0; Index < Count; ++Index)
-            Dxgmms2SchedulerQueueRetirementLocked(Context, Cancelled[Index], Dxgmms2RetireCancelled, CancelStatus);
+        {
+            ULONG Flags = 0;
+
+            if (!Cancelled[Index]->FenceBound &&
+                Dxgmms2TimelineReleaseFence(&Context->Timeline, Generation, Cancelled[Index]->NodeOrdinal, Cancelled[Index]->SubmissionFenceId))
+            {
+                Flags = DXGMMS2_SCHEDULER_RETIRE_FENCE_RELEASED;
+                (VOID)Dxgmms2TimelineReturnFence(&Context->Timeline, Generation, Cancelled[Index]->SubmissionFenceId);
+            }
+            Dxgmms2SchedulerQueueRetirementLocked(Context, Cancelled[Index], Dxgmms2RetireCancelled, CancelStatus, Flags);
+        }
         KeReleaseSpinLock(&Context->SchedulerLock, OldIrql);
     } while (Count == RTL_NUMBER_OF(Cancelled));
     /* Preempted predecessors can be cancelled without another interrupt.
@@ -310,7 +324,7 @@ Dxgmms2SchedulerAbortAllPackets(
         KeAcquireSpinLock(&Context->SchedulerLock, &OldIrql);
         Count = Dxgmms2SchedCoreAbortAll(&Context->SchedulerCore, (Flags & DXGMMS2_SCHEDULER_ABORT_INCLUDE_DISPATCHED) != 0, Aborted, RTL_NUMBER_OF(Aborted));
         for (Index = 0; Index < Count; ++Index)
-            Dxgmms2SchedulerQueueRetirementLocked(Context, Aborted[Index], Dxgmms2RetireAborted, AbortStatus);
+            Dxgmms2SchedulerQueueRetirementLocked(Context, Aborted[Index], Dxgmms2RetireAborted, AbortStatus, 0);
         KeReleaseSpinLock(&Context->SchedulerLock, OldIrql);
     } while (Count == RTL_NUMBER_OF(Aborted));
     for (Index = 0; Index < Context->SchedulerCore.EngineCount; ++Index)

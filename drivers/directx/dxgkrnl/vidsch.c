@@ -685,6 +685,8 @@ VidSchpDrainRetirements(_In_ PDXGKRNL_ADAPTER Adapter)
                 continue;
             if (Packet->UnboundFence)
                 Packet->SubmissionFenceId = Records[Index].SubmissionFenceId;
+            if ((Records[Index].Flags & DXGMMS2_SCHEDULER_RETIRE_FENCE_RELEASED) != 0)
+                Packet->FenceIdentityReserved = FALSE;
             if (Packet->PresentationRetireTrace.Epoch && Packet->Device != NULL &&
                 Packet->Device->ProcessRecord != NULL)
                 DxgPresentTracePacket(HandleToUlong(PsGetProcessId(Packet->Device->ProcessRecord->Process)),
@@ -1665,14 +1667,17 @@ VidSchpCancelOwnerPacketsActive(
     _In_ NTSTATUS CompletionStatus)
 {
     PDXGMMS2_SCHEDULER_INTERFACE_V1 Sched;
+    PVIDSCH_CONTEXT Ctx = (PVIDSCH_CONTEXT)Adapter->VidSchContext;
 
     Sched = VidSchpScheduler(Adapter);
-    if (Sched == NULL)
+    if (Sched == NULL || Ctx == NULL)
         return;
+    ExAcquireFastMutex(&Ctx->LifecycleMutex);
     (VOID)Sched->CancelOwnerPackets(
         Sched->SchedulerHandle,
         (ULONGLONG)(ULONG_PTR)Owner,
         CompletionStatus);
+    ExReleaseFastMutex(&Ctx->LifecycleMutex);
     (VOID)VidSchpDrainRetirements(Adapter);
 }
 
@@ -3086,7 +3091,9 @@ VOID VidSchCancelContextPackets(_In_ PDXGKRNL_ADAPTER Adapter, _In_ PDXGKRNL_CON
     Sched = VidSchpScheduler(Adapter);
     if (Sched != NULL)
     {
+        ExAcquireFastMutex(&Ctx->LifecycleMutex);
         (VOID)Sched->CancelOwnerPackets(Sched->SchedulerHandle, (ULONGLONG)(ULONG_PTR)Context, CompletionStatus);
+        ExReleaseFastMutex(&Ctx->LifecycleMutex);
         VidSchpDrainRetirements(Adapter);
     }
     for (i = 0; i < Ctx->EngineCount; ++i)
@@ -3598,6 +3605,7 @@ VidSchSubmitCommandVirtual(
     Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
     if (Packet->SubmissionFenceId == 0 || !DxgkReserveSubmissionFenceIdentity(Adapter, Context->NodeOrdinal, Packet->SubmissionFenceId, &Packet->FenceIdentityEpoch))
     {
+        DxgkReturnSubmissionFenceId(Adapter, Packet->SubmissionFenceId);
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
         DxgkContextOrderAbortPacket(Packet, STATUS_DEVICE_BUSY);
@@ -3616,6 +3624,9 @@ VidSchSubmitCommandVirtual(
     {
         /* The caller still owns its context reference on failed admission. */
         Packet->HoldsContextReference = FALSE;
+        DxgkReleaseSubmittedFenceIdentity(Adapter, Context->NodeOrdinal, Packet->SubmissionFenceId, Packet->FenceIdentityEpoch);
+        Packet->FenceIdentityReserved = FALSE;
+        DxgkReturnSubmissionFenceId(Adapter, Packet->SubmissionFenceId);
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
         DxgkContextOrderAbortPacket(Packet, Status);
