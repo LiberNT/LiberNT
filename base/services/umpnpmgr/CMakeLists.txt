@@ -1,6 +1,6 @@
 
 include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
-add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnp.idl ${REACTOS_SOURCE_DIR}/sdk/include/wine/plugplay.idl)
+add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnp.idl ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnpsw.idl ${REACTOS_SOURCE_DIR}/sdk/include/wine/plugplay.idl)
 spec2def(umpnpmgr.dll umpnpmgr.spec ADD_IMPORTLIB)
 
 add_library(umpnpmgr MODULE
@@ -8,9 +8,11 @@ add_library(umpnpmgr MODULE
     install.c
     listener.c
     rpcserver.c
+    swdevice.c
     umpnpmgr.c
     umpnpmgr.rc
     ${CMAKE_CURRENT_BINARY_DIR}/pnp_s.c
+    ${CMAKE_CURRENT_BINARY_DIR}/pnpsw_s.c
     ${CMAKE_CURRENT_BINARY_DIR}/plugplay_s.c
     ${CMAKE_CURRENT_BINARY_DIR}/umpnpmgr_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/umpnpmgr.def)
