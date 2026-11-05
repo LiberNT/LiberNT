@@ -41,6 +41,7 @@ list(APPEND SOURCE
     PathResolve.cpp
     PreviewHandler.cpp
     ProgramFilesDir.cpp
+    SHGetFolderPathToken.cpp
     RealShellExecuteEx.cpp
     RecentDocs.cpp
     RegItemParse.cpp
