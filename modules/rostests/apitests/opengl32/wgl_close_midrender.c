@@ -20,7 +20,11 @@
 #define FOLLOWUP_FRAMES 30
 #define FOLLOWUP_LIMIT_MS 30000
 #define ROUNDS 4
+#define EXIT_ROUNDS 2
+#define EXIT_CODE_FROM_THREAD 9
+#define PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE_VALUE 0x00020016
 #define BENCHMARK_RUN_MS 8000
+#define GEARS_RUN_MS 3000
 
 static LRESULT CALLBACK
 WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
@@ -103,6 +107,37 @@ RenderUntilClosed(const char *ReadyName)
             DispatchMessageA(&Message);
         }
         DrawFrame(Frame);
+        SwapBuffers(Dc);
+        if (++Frame == READY_FRAMES)
+            SetEvent(Ready);
+    }
+}
+
+static DWORD WINAPI
+ExitDuringRendering(LPVOID Param)
+{
+    WaitForSingleObject((HANDLE)Param, INFINITE);
+    Sleep(RENDER_BEFORE_CLOSE_MS);
+    ExitProcess(EXIT_CODE_FROM_THREAD);
+    return 0;
+}
+
+static void
+RenderUntilExitFromThread(const char *ReadyName)
+{
+    HANDLE Ready = OpenEventA(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, ReadyName);
+    HWND Window;
+    HDC Dc;
+    ULONG Frame = 0;
+
+    if (Ready == NULL || !CreateRenderWindow(&Window, &Dc))
+        ExitProcess(2);
+    if (CreateThread(NULL, 0, ExitDuringRendering, Ready, 0, NULL) == NULL)
+        ExitProcess(2);
+    for (;;)
+    {
+        DrawFrame(Frame);
+        glFinish();
         SwapBuffers(Dc);
         if (++Frame == READY_FRAMES)
             SetEvent(Ready);
@@ -219,6 +254,203 @@ RunRound(ULONG Round, BOOL Kill)
 }
 
 static void
+RunExitFromThreadRound(ULONG Round)
+{
+    PROCESS_INFORMATION Process = {0};
+    char Name[64], Arguments[96];
+    DWORD Wait, Start, Code = 0;
+
+    _snprintf(Name, sizeof(Name), "wgl_exit_midrender_%lu_%lu", GetCurrentProcessId(), Round);
+    Name[sizeof(Name) - 1] = 0;
+    _snprintf(Arguments, sizeof(Arguments), "exitthread %s", Name);
+    Arguments[sizeof(Arguments) - 1] = 0;
+    {
+        HANDLE Ready = CreateEventA(NULL, TRUE, FALSE, Name);
+
+        ok(StartChild(Arguments, &Process), "exit round %lu: child failed to start: %lu\n", Round, GetLastError());
+        if (Process.hProcess == NULL)
+        {
+            CloseHandle(Ready);
+            return;
+        }
+        Start = GetTickCount();
+        Wait = WaitForSingleObject(Process.hProcess, READY_LIMIT_MS + EXIT_LIMIT_MS);
+        trace("exit round %lu: took %lu ms\n", Round, GetTickCount() - Start);
+        ok(Wait == WAIT_OBJECT_0, "exit round %lu: process did not exit: %lu\n", Round, Wait);
+        CloseHandle(Ready);
+    }
+    if (Wait != WAIT_OBJECT_0)
+        TerminateProcess(Process.hProcess, 3);
+    else
+    {
+        GetExitCodeProcess(Process.hProcess, &Code);
+        ok(Code == EXIT_CODE_FROM_THREAD, "exit round %lu: exit code %lu\n", Round, Code);
+    }
+    CloseHandle(Process.hThread);
+    CloseHandle(Process.hProcess);
+    CheckGpuStillRenders(Round);
+}
+
+static void
+RunGearsExitRound(ULONG Round)
+{
+    PROCESS_INFORMATION Process = {0};
+    STARTUPINFOA Startup = { sizeof(Startup) };
+    char Path[MAX_PATH];
+    HANDLE Thread;
+    DWORD Wait, Start;
+
+    if (SearchPathA(NULL, "glgears.exe", NULL, sizeof(Path), Path, NULL) == 0)
+    {
+        skip("glgears is not installed\n");
+        return;
+    }
+    ok(CreateProcessA(Path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &Startup, &Process),
+       "glgears failed to start: %lu\n", GetLastError());
+    if (Process.hProcess == NULL)
+        return;
+    Sleep(GEARS_RUN_MS);
+    Start = GetTickCount();
+    Thread = CreateRemoteThread(Process.hProcess, NULL, 0,
+                                (LPTHREAD_START_ROUTINE)GetProcAddress(GetModuleHandleA("kernel32.dll"), "ExitProcess"),
+                                (LPVOID)EXIT_CODE_FROM_THREAD, 0, NULL);
+    ok(Thread != NULL, "gears round %lu: CreateRemoteThread failed: %lu\n", Round, GetLastError());
+    if (Thread != NULL)
+        CloseHandle(Thread);
+    Wait = WaitForSingleObject(Process.hProcess, EXIT_LIMIT_MS);
+    trace("gears round %lu: took %lu ms to exit\n", Round, GetTickCount() - Start);
+    ok(Wait == WAIT_OBJECT_0, "gears round %lu: process did not exit: %lu\n", Round, Wait);
+    if (Wait != WAIT_OBJECT_0)
+        TerminateProcess(Process.hProcess, 3);
+    CloseHandle(Process.hThread);
+    CloseHandle(Process.hProcess);
+    CheckGpuStillRenders(Round);
+}
+
+static void
+RunGearsCloseRound(ULONG Round)
+{
+    PROCESS_INFORMATION Process = {0};
+    STARTUPINFOA Startup = { sizeof(Startup) };
+    char Path[MAX_PATH];
+    DWORD Wait, Start;
+
+    if (SearchPathA(NULL, "glgears.exe", NULL, sizeof(Path), Path, NULL) == 0)
+    {
+        skip("glgears is not installed\n");
+        return;
+    }
+    ok(CreateProcessA(Path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &Startup, &Process),
+       "glgears failed to start: %lu\n", GetLastError());
+    if (Process.hProcess == NULL)
+        return;
+    Sleep(GEARS_RUN_MS);
+    Start = GetTickCount();
+    EnumThreadWindows(Process.dwThreadId, PostCloseToWindow, 0);
+    Wait = WaitForSingleObject(Process.hProcess, EXIT_LIMIT_MS);
+    trace("gears close round %lu: took %lu ms to exit\n", Round, GetTickCount() - Start);
+    ok(Wait == WAIT_OBJECT_0, "gears close round %lu: process did not exit: %lu\n", Round, Wait);
+    if (Wait != WAIT_OBJECT_0)
+        TerminateProcess(Process.hProcess, 3);
+    CloseHandle(Process.hThread);
+    CloseHandle(Process.hProcess);
+    CheckGpuStillRenders(Round);
+}
+
+typedef HRESULT (WINAPI *PFN_CREATE_PSEUDO_CONSOLE)(COORD, HANDLE, HANDLE, DWORD, void **);
+typedef void (WINAPI *PFN_CLOSE_PSEUDO_CONSOLE)(void *);
+
+static DWORD WINAPI
+DrainConsoleOutput(LPVOID Param)
+{
+    char Buffer[1024];
+    DWORD Read;
+
+    while (ReadFile((HANDLE)Param, Buffer, sizeof(Buffer), &Read, NULL) && Read != 0)
+        continue;
+    return 0;
+}
+
+static void
+RunGearsPseudoConsoleRound(ULONG Round, BOOL CtrlC)
+{
+    HMODULE Kernel32 = GetModuleHandleA("kernel32.dll");
+    PFN_CREATE_PSEUDO_CONSOLE Create = (PFN_CREATE_PSEUDO_CONSOLE)GetProcAddress(Kernel32, "CreatePseudoConsole");
+    PFN_CLOSE_PSEUDO_CONSOLE Close = (PFN_CLOSE_PSEUDO_CONSOLE)GetProcAddress(Kernel32, "ClosePseudoConsole");
+    PROCESS_INFORMATION Process = {0};
+    STARTUPINFOEXA Startup = {{ sizeof(Startup) }};
+    HANDLE InputRead = NULL, InputWrite = NULL, OutputRead = NULL, OutputWrite = NULL, Reader;
+    void *Console = NULL;
+    char Path[MAX_PATH];
+    SIZE_T Size = 0;
+    COORD ConsoleSize = { 80, 25 };
+    DWORD Wait, Start, Written, Code = 0;
+
+    if (Create == NULL || Close == NULL || SearchPathA(NULL, "glgears.exe", NULL, sizeof(Path), Path, NULL) == 0)
+    {
+        skip("glgears or the pseudo console is not available\n");
+        return;
+    }
+    ok(CreatePipe(&InputRead, &InputWrite, NULL, 0) && CreatePipe(&OutputRead, &OutputWrite, NULL, 0),
+       "pipes failed: %lu\n", GetLastError());
+    ok(Create(ConsoleSize, InputRead, OutputWrite, 0, &Console) == S_OK, "CreatePseudoConsole failed\n");
+    CloseHandle(InputRead);
+    CloseHandle(OutputWrite);
+    Reader = CreateThread(NULL, 0, DrainConsoleOutput, OutputRead, 0, NULL);
+    InitializeProcThreadAttributeList(NULL, 1, 0, &Size);
+    Startup.lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), 0, Size);
+    ok(InitializeProcThreadAttributeList(Startup.lpAttributeList, 1, 0, &Size), "attribute list failed: %lu\n", GetLastError());
+    ok(UpdateProcThreadAttribute(Startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE_VALUE, Console,
+                                 sizeof(Console), NULL, NULL), "attribute failed: %lu\n", GetLastError());
+    ok(CreateProcessA(Path, NULL, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &Startup.StartupInfo, &Process),
+       "glgears failed to start in the pseudo console: %lu\n", GetLastError());
+    if (Process.hProcess != NULL)
+    {
+        Sleep(GEARS_RUN_MS);
+        Start = GetTickCount();
+        if (CtrlC)
+        {
+            ok(WriteFile(InputWrite, "\x03", 1, &Written, NULL), "gears ctrl-c round %lu: write failed: %lu\n",
+               Round, GetLastError());
+        }
+        else
+        {
+            Close(Console);
+            Console = NULL;
+            CloseHandle(InputWrite);
+            InputWrite = NULL;
+        }
+        Wait = WaitForSingleObject(Process.hProcess, EXIT_LIMIT_MS);
+        trace("gears %s round %lu: took %lu ms to exit\n", CtrlC ? "ctrl-c" : "console", Round, GetTickCount() - Start);
+        ok(Wait == WAIT_OBJECT_0, "gears %s round %lu: process did not exit: %lu\n", CtrlC ? "ctrl-c" : "console",
+           Round, Wait);
+        if (Wait != WAIT_OBJECT_0)
+            TerminateProcess(Process.hProcess, 3);
+        else if (CtrlC)
+        {
+            GetExitCodeProcess(Process.hProcess, &Code);
+            ok(Code == (DWORD)STATUS_CONTROL_C_EXIT, "gears ctrl-c round %lu: exit code %#lx\n", Round, Code);
+        }
+        CloseHandle(Process.hThread);
+        CloseHandle(Process.hProcess);
+    }
+    if (Console != NULL)
+        Close(Console);
+    if (InputWrite != NULL)
+        CloseHandle(InputWrite);
+    if (Reader != NULL)
+    {
+        WaitForSingleObject(Reader, 2000);
+        CancelSynchronousIo(Reader);
+        CloseHandle(Reader);
+    }
+    CloseHandle(OutputRead);
+    DeleteProcThreadAttributeList(Startup.lpAttributeList);
+    HeapFree(GetProcessHeap(), 0, Startup.lpAttributeList);
+    CheckGpuStillRenders(Round);
+}
+
+static void
 RunBenchmarkRound(void)
 {
     PROCESS_INFORMATION Process = {0};
@@ -261,11 +493,26 @@ START_TEST(wgl_close_midrender)
         RenderUntilClosed(Argv[3]);
         return;
     }
+    if (Argc >= 4 && strcmp(Argv[2], "exitthread") == 0)
+    {
+        RenderUntilExitFromThread(Argv[3]);
+        return;
+    }
     if (Argc >= 3 && strcmp(Argv[2], "frames") == 0)
     {
         RenderFewFrames();
         return;
     }
+    for (Round = 0; Round < EXIT_ROUNDS; ++Round)
+        RunGearsPseudoConsoleRound(Round, TRUE);
+    for (Round = 0; Round < EXIT_ROUNDS; ++Round)
+        RunGearsPseudoConsoleRound(Round, FALSE);
+    for (Round = 0; Round < EXIT_ROUNDS; ++Round)
+        RunGearsCloseRound(Round);
+    for (Round = 0; Round < EXIT_ROUNDS; ++Round)
+        RunGearsExitRound(Round);
+    for (Round = 0; Round < EXIT_ROUNDS; ++Round)
+        RunExitFromThreadRound(Round);
     for (Round = 0; Round < ROUNDS; ++Round)
         RunRound(Round, (Round & 1) != 0);
     RunBenchmarkRound();
