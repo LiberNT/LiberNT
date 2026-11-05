@@ -184,7 +184,8 @@ UsbNetRecover(
 
     if (Adapter->Shared)
     {
-        if (Completion != XHCI_CC_TIMEOUT)
+        /* The OS stops the shared endpoints when it takes the controller over; the caller queues the transfer again. */
+        if (Completion != XHCI_CC_TIMEOUT && (Completion < XHCI_CC_STOPPED || Completion > XHCI_CC_STOPPED_SHORT))
             UsbNetSetLink(Adapter, FALSE);
 
         return;

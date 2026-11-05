@@ -224,7 +224,7 @@ XhciHandleEvent(
         return;
     }
 
-    if (Type != TRB_TRANSFER_EVENT || (Code >= XHCI_CC_STOPPED && Code <= XHCI_CC_STOPPED_SHORT))
+    if (Type != TRB_TRANSFER_EVENT)
         return;
 
     Endpoint = XhciFindEndpoint(Adapter, Event[3] >> TRB_SLOT_SHIFT, (Event[3] >> TRB_ENDPOINT_SHIFT) & 0x1F);
