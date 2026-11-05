@@ -1672,6 +1672,22 @@ PiRequeryDevNodeRequirements(
 }
 
 static volatile LONG PiDuplicateInstancePending;
+static PKTHREAD PiRenamedStackRemoveThread;
+
+BOOLEAN
+PiIsRemovingRenamedStack(VOID)
+{
+    return PiRenamedStackRemoveThread == KeGetCurrentThread();
+}
+
+static
+VOID
+PiRetryDuplicateInstances(VOID)
+{
+    KeMemoryBarrier();
+    if (InterlockedExchange(&PiDuplicateInstancePending, 0))
+        PiQueueDeviceAction(IopRootDeviceNode->PhysicalDeviceObject, PiActionEnumDeviceTree, NULL, NULL);
+}
 
 static
 VOID
@@ -1759,6 +1775,12 @@ PiInitializeDevNode(
             IsListEmpty(&OldDeviceNode->TargetDeviceNotify))
         {
             /* PDO deletion reclaims the devnode after its references drain. */
+            OldDeviceNode->InstancePath.Length = 0;
+            ObDereferenceObject(OldDeviceObject);
+        }
+        else if (OldDeviceNode->State == DeviceNodeRemovePendingCloses)
+        {
+            /* The old stack only waits for its last handle; the new device takes the name. */
             OldDeviceNode->InstancePath.Length = 0;
             ObDereferenceObject(OldDeviceObject);
         }
@@ -2376,8 +2398,13 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
 
     ASSERT(DeviceNode->State == DeviceNodeAwaitingQueuedRemoval);
 
+    /* A renamed stack's interfaces went with the surprise removal and the links are the new device's now. */
+    if (DeviceNode->InstancePath.Length == 0)
+        PiRenamedStackRemoveThread = KeGetCurrentThread();
+
     /* Drivers should never fail a IRP_MN_REMOVE_DEVICE request */
     PiIrpSendRemoveCheckVpb(DeviceObject, IRP_MN_REMOVE_DEVICE);
+    PiRenamedStackRemoveThread = NULL;
     PiSetDeviceStackRemovePending(DeviceObject, FALSE);
     IopDisableDeviceInterfaces(DeviceNode);
 
@@ -2395,9 +2422,7 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
     }
 
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
-    KeMemoryBarrier();
-    if (InterlockedExchange(&PiDuplicateInstancePending, 0))
-        PiQueueDeviceAction(IopRootDeviceNode->PhysicalDeviceObject, PiActionEnumDeviceTree, NULL, NULL);
+    PiRetryDuplicateInstances();
     if (!Notified)
         PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, DeviceObject, NULL);
     if (Undocked)
@@ -2735,6 +2760,7 @@ PiSurpriseRemoveChildDevices(PDEVICE_NODE ParentDeviceNode)
             PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
         InterlockedIncrement(&PiRemovePendingCloses);
         PiSetDevNodeState(ChildDeviceNode, DeviceNodeRemovePendingCloses);
+        PiRetryDuplicateInstances();
         PiQueueDeviceAction(ChildDeviceNode->PhysicalDeviceObject, PiActionCloseRemovedDevice, NULL, NULL);
 
         ChildDeviceNode = NextDeviceNode;
@@ -2819,7 +2845,8 @@ PiCloseRemovedDevice(
     PiSetDevNodeState(DeviceNode, DeviceNodeAwaitingQueuedRemoval);
     ObReferenceObject(DeviceObject);
     IopSendRemoveDevice(DeviceObject);
-    IopQueueTargetDeviceEvent(&GUID_DEVICE_SAFE_REMOVAL, &DeviceNode->InstancePath);
+    if (DeviceNode->InstancePath.Length != 0)
+        IopQueueTargetDeviceEvent(&GUID_DEVICE_SAFE_REMOVAL, &DeviceNode->InstancePath);
     ObDereferenceObject(DeviceObject);
 
     if (Parent != NULL)
@@ -2858,6 +2885,7 @@ IopRemoveDevice(PDEVICE_NODE DeviceNode)
                 PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
             InterlockedIncrement(&PiRemovePendingCloses);
             PiSetDevNodeState(DeviceNode, DeviceNodeRemovePendingCloses);
+            PiRetryDuplicateInstances();
             KeMemoryBarrier();
             if (PiDeviceStackIsOpen(DeviceNode->PhysicalDeviceObject))
                 return STATUS_SUCCESS;
@@ -3045,6 +3073,11 @@ PipQueryAndRemoveDevice(
         if (!NT_SUCCESS(Status))
         {
             Status = PipSetRemovalVeto(RemoveData, Node, PNP_VetoDevice);
+            goto Cancel;
+        }
+        if (PiDeviceStackIsOpen(Entry->DeviceObject))
+        {
+            Status = PipSetRemovalVeto(RemoveData, Node, PNP_VetoOutstandingOpen);
             goto Cancel;
         }
     }

@@ -931,6 +931,9 @@ IoPnPDeliverServicePowerSetting(
     _In_reads_bytes_(SettingSize) PVOID Setting,
     _In_ ULONG SettingSize);
 
+BOOLEAN
+PiIsRemovingRenamedStack(VOID);
+
 VOID
 IopDisableDeviceInterfaces(
     _In_ PDEVICE_NODE DeviceNode);
