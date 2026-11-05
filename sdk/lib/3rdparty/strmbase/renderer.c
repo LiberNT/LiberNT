@@ -253,7 +253,6 @@ static HRESULT renderer_start_stream(struct strmbase_filter *iface, REFERENCE_TI
     IMediaEventSink *event_sink;
 
     filter->stream_start = start;
-    SetEvent(filter->state_event);
     SetEvent(filter->run_event);
     reset_qos(filter);
     if (filter->sink.pin.peer && filter->ops->renderer_start_stream)
@@ -268,7 +267,7 @@ static HRESULT renderer_start_stream(struct strmbase_filter *iface, REFERENCE_TI
         IMediaEventSink_Release(event_sink);
     }
 
-    return S_OK;
+    return WaitForSingleObject(filter->state_event, 0) ? S_FALSE : S_OK;
 }
 
 static HRESULT renderer_stop_stream(struct strmbase_filter *iface)
@@ -280,6 +279,11 @@ static HRESULT renderer_stop_stream(struct strmbase_filter *iface)
     if (filter->sink.pin.peer && filter->ops->renderer_stop_stream)
         filter->ops->renderer_stop_stream(filter);
 
+    if (filter->sink.pin.peer && !filter->eos)
+    {
+        ResetEvent(filter->state_event);
+        return S_FALSE;
+    }
     return S_OK;
 }
 
@@ -366,6 +370,9 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
             return VFW_E_TYPE_NOT_ACCEPTED;
         DeleteMediaType(mt);
     }
+
+    if (state == State_Running)
+        SetEvent(filter->state_event);
 
     if (filter->filter.clock && SUCCEEDED(IMediaSample_GetTime(sample, &start, &stop)))
     {
@@ -475,6 +482,8 @@ static HRESULT sink_begin_flush(struct strmbase_sink *iface)
 {
     struct strmbase_renderer *filter = impl_from_IPin(&iface->pin.IPin_iface);
 
+    if (filter->filter.state == State_Paused)
+        ResetEvent(filter->state_event);
     SetEvent(filter->flush_event);
 
     return S_OK;
