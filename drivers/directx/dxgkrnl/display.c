@@ -77,6 +77,7 @@ typedef struct _DXGKP_DISPLAY_BRIDGE
     PDEVICE_OBJECT              DeviceObject;
     PDXGKRNL_ADAPTER            Adapter;
     EX_RUNDOWN_REF              Rundown;
+    volatile LONG               RemovePending;
     ULONG                       DeviceNumber;
     BOOLEAN                     InitialModePending;
     PVOID                       Win32kPhysDisp;
@@ -122,6 +123,40 @@ DxgkIsDisplayBridgeDevice(
     _In_opt_ PDEVICE_OBJECT DeviceObject)
 {
     return DxgkpDisplayBridgeFromDevice(DeviceObject) != NULL;
+}
+
+BOOLEAN
+DxgkDisplayBeginRemove(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKP_DISPLAY_BRIDGE Bridge;
+    BOOLEAN Removable = TRUE;
+
+    Bridge = DxgkpAcquireDisplayBridge(Adapter);
+    if (Bridge == NULL)
+        return TRUE;
+    InterlockedExchange(&Bridge->RemovePending, 1);
+    if (Bridge->DeviceObject->ReferenceCount != 0)
+    {
+        InterlockedExchange(&Bridge->RemovePending, 0);
+        Removable = FALSE;
+    }
+    ExReleaseRundownProtection(&Bridge->Rundown);
+    return Removable;
+}
+
+VOID
+DxgkDisplaySetRemovePending(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN RemovePending)
+{
+    PDXGKP_DISPLAY_BRIDGE Bridge;
+
+    Bridge = DxgkpAcquireDisplayBridge(Adapter);
+    if (Bridge == NULL)
+        return;
+    InterlockedExchange(&Bridge->RemovePending, RemovePending);
+    ExReleaseRundownProtection(&Bridge->Rundown);
 }
 
 static
@@ -5211,7 +5246,15 @@ DxgkpDisplayCreate(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP           Irp)
 {
-    UNREFERENCED_PARAMETER(DeviceObject);
+    PDXGKP_DISPLAY_BRIDGE Bridge = DxgkpDisplayBridgeFromDevice(DeviceObject);
+
+    if (Bridge != NULL && InterlockedCompareExchange(&Bridge->RemovePending, 0, 0) != 0)
+    {
+        Irp->IoStatus.Status = STATUS_DELETE_PENDING;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_DELETE_PENDING;
+    }
 
     DXGKRNL_TRACE("DxgkpDisplayCreate: opened\n");
     Irp->IoStatus.Status = STATUS_SUCCESS;

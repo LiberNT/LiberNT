@@ -16860,12 +16860,18 @@ DxgkpMiniportPnpDispatch(
 
         case IRP_MN_QUERY_REMOVE_DEVICE:
         {
-            if (DxgkIsDisplayAdapter(Adapter))
+            if (DxgkIsDisplayAdapter(Adapter) && !DxgkDisplayBeginRemove(Adapter))
             {
                 Irp->IoStatus.Status = STATUS_DEVICE_BUSY;
                 IoCompleteRequest(Irp, IO_NO_INCREMENT);
                 return STATUS_DEVICE_BUSY;
             }
+            return DxgkpForwardIrp(Adapter, Irp);
+        }
+
+        case IRP_MN_CANCEL_REMOVE_DEVICE:
+        {
+            DxgkDisplaySetRemovePending(Adapter, FALSE);
             return DxgkpForwardIrp(Adapter, Irp);
         }
 
@@ -17047,6 +17053,7 @@ DxgkpMiniportPnpDispatch(
             NTSTATUS NotifyStatus = STATUS_UNSUCCESSFUL;
             NTSTATUS StopStatus = STATUS_SUCCESS;
 
+            DxgkDisplaySetRemovePending(Adapter, TRUE);
             DxgkpAcquireAdapterMutexAfterStart(Adapter);
             PreviousState = Adapter->State;
             WaitForStop = (InterlockedCompareExchange(&Adapter->AdapterStopInProgress, 0, 0) != 0);
