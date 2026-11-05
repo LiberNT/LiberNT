@@ -282,7 +282,7 @@ UserGetSystemMetrics(ULONG Index)
     switch (Index)
     {
         case SM_REMOTESESSION:
-            return 0; // FIXME
+            return gulRemoteSessionId == PsGetCurrentProcessSessionId();
 
         case SM_SHUTTINGDOWN:
             return 0; // FIXME

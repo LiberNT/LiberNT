@@ -63,6 +63,8 @@ C_ASSERT(offsetof(WINSTATION_OBJECT, spwndClipOwner) == 0x28);
 #endif
 
 extern HWND hwndSAS;
+extern ULONG gulRemoteSessionId;
+extern BOOLEAN gbConsoleInputHeld;
 
 BOOL FASTCALL IntRegisterSessionNotification(PWND Window, ULONG Flags);
 BOOL FASTCALL IntUnregisterSessionNotification(PWND Window, BOOL Destroying);

@@ -21,6 +21,8 @@ DBG_DEFAULT_CHANNEL(UserWinsta);
 
 /* Winlogon SAS window */
 HWND hwndSAS = NULL;
+ULONG gulRemoteSessionId = MAXULONG;
+BOOLEAN gbConsoleInputHeld = FALSE;
 
 /* Full path to WindowStations directory */
 
@@ -125,6 +127,25 @@ IntNotifySessionChange(ULONG Event, ULONG SessionId)
         return FALSE;
     }
 
+    switch (Event)
+    {
+        case WTS_CONSOLE_CONNECT:
+            gulRemoteSessionId = MAXULONG;
+            RtlSetActiveConsoleId(SessionId);
+            break;
+        case WTS_CONSOLE_DISCONNECT:
+            if (RtlGetActiveConsoleId() == SessionId)
+                RtlSetActiveConsoleId(MAXULONG);
+            break;
+        case WTS_REMOTE_CONNECT:
+            gulRemoteSessionId = SessionId;
+            gbConsoleInputHeld = TRUE;
+            break;
+        case WTS_REMOTE_DISCONNECT:
+            gbConsoleInputHeld = FALSE;
+            break;
+    }
+
     for (Entry = SessionNotificationList.Flink; Entry != &SessionNotificationList; Entry = Entry->Flink)
     {
         PSESSION_NOTIFICATION Notification = CONTAINING_RECORD(Entry, SESSION_NOTIFICATION, Entry);
@@ -133,7 +154,7 @@ IntNotifySessionChange(ULONG Event, ULONG SessionId)
         if ((Window->state & WNDS_DESTROYED) || (Window->head.pti->TIF_flags & TIF_INCLEANUP))
             continue;
         if (Notification->Flags || PsGetProcessSessionId(Window->head.pti->ppi->peProcess) == SessionId)
-            UserPostMessage(UserHMGetHandle(Window), WM_WTSSESSION_CHANGE, Event, SessionId);
+            UserSendNotifyMessage(UserHMGetHandle(Window), WM_WTSSESSION_CHANGE, Event, SessionId);
     }
     return TRUE;
 }

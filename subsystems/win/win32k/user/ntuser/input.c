@@ -934,7 +934,8 @@ InputDevicesProcess(VOID)
         if (!Device->Keyboard)
         {
             TRACE("MouseEvent\n");
-            InputProcessMouse(Device);
+            if (!gbConsoleInputHeld)
+                InputProcessMouse(Device);
             continue;
         }
 
@@ -945,9 +946,18 @@ InputDevicesProcess(VOID)
         IntLastInputTick(TRUE);
 
         UserEnterExclusive();
-        RawInputSetSourceDevice(&Device->Path);
-        UserProcessKeyboardInput(&Device->Data.Keyboard);
-        RawInputSetSourceDevice(NULL);
+        if (gbConsoleInputHeld)
+        {
+            if (hwndSAS)
+                UserPostMessage(hwndSAS, WM_LOGONNOTIFY, LN_CONSOLE_KEY,
+                                MAKELPARAM(Device->Data.Keyboard.MakeCode, Device->Data.Keyboard.Flags));
+        }
+        else
+        {
+            RawInputSetSourceDevice(&Device->Path);
+            UserProcessKeyboardInput(&Device->Data.Keyboard);
+            RawInputSetSourceDevice(NULL);
+        }
         UserLeave();
     }
 }
