@@ -1,0 +1,75 @@
+; LNTUVC.INF
+
+; Installation of the LiberNT USB camera driver (lntuvc.sys).
+
+[Version]
+Signature  = "$Windows NT$"
+;Signature  = "$ReactOS$"
+LayoutFile = layout.inf
+Class      = Camera
+ClassGUID  = {ca3e7ab9-b4c3-4ae6-8251-579ef933890f}
+Provider   = %LiberNT%
+DriverVer  = 10/02/2005,1.00.0.0
+
+[ClassInstall32.NT]
+AddReg = lntuvc_ClassReg
+
+[lntuvc_ClassReg]
+HKR, , ,    0, %ClassName%
+HKR, , Icon, 0, "-1"
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%GenericMfg% = GenericMfg
+
+[GenericMfg]
+%USB\Class_0E&SubClass_03.DeviceDesc%    = lntuvc_Inst, USB\Class_0E&SubClass_03
+%USB\Class_0E&SubClass_01.DeviceDesc%    = lntuvc_Inst, USB\Class_0E&SubClass_01
+%USB\Class_0E.DeviceDesc%                = lntuvc_Inst, USB\Class_0E
+%USB\Vid_174f&Pid_181f&MI_00.DeviceDesc% = lntuvc_Inst, USB\Vid_174f&Pid_181f&MI_00
+
+;------------------------- USB VIDEO CLASS DRIVER -----------------------
+
+[lntuvc_Inst.NT]
+Include = ks.inf
+Needs = KS.Registration
+AddReg = lntuvc_MediaCategories
+CopyFiles = lntuvc_CopyFiles.NT
+
+[lntuvc_MediaCategories]
+HKLM,%MediaCategories%\{FB6C4281-0353-11d1-905F-0000C0CC16BA},Name,,%CapturePinName%
+HKLM,%MediaCategories%\{FB6C4281-0353-11d1-905F-0000C0CC16BA},Display,1,00,00,00,00
+HKLM,%MediaCategories%\{FB6C428A-0353-11d1-905F-0000C0CC16BA},Name,,%StillPinName%
+HKLM,%MediaCategories%\{FB6C428A-0353-11d1-905F-0000C0CC16BA},Display,1,00,00,00,00
+
+[lntuvc_CopyFiles.NT]
+lntuvc.sys
+
+[lntuvc_Inst.NT.Services]
+AddService = lntuvc, 0x00000002, lntuvc_Service_Inst
+
+[lntuvc_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\lntuvc.sys
+LoadOrderGroup = Base
+
+;-------------------------------- STRINGS -------------------------------
+
+[Strings]
+; Non-localizable
+LiberNT = "LiberNT Project"
+MediaCategories = "SYSTEM\CurrentControlSet\Control\MediaCategories"
+
+; Localizable
+ClassName                              = "Cameras"
+GenericMfg                             = "(Generic USB Video devices)"
+CapturePinName                         = "Capture"
+StillPinName                           = "Still"
+USB\Class_0E&SubClass_03.DeviceDesc    = "USB Video Device"
+USB\Class_0E&SubClass_01.DeviceDesc    = "USB Video Device"
+USB\Class_0E.DeviceDesc                = "USB Video Device"
+USB\Vid_174f&Pid_181f&MI_00.DeviceDesc = "USB Video Device (Integrated Camera)"
