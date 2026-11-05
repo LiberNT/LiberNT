@@ -2597,6 +2597,24 @@ todo_wine {
     ok(hr == MF_E_NO_MORE_QUALITY_LEVELS, "Unexpected hr %#lx.\n", hr);
 }
 
+    hr = IMFQualityAdvise_GetDropMode(advise, NULL);
+    ok(hr == E_POINTER, "Unexpected hr %#lx.\n", hr);
+
+    hr = IMFQualityAdvise_GetQualityLevel(advise, NULL);
+    ok(hr == E_POINTER, "Unexpected hr %#lx.\n", hr);
+
+    hr = IMFQualityAdvise_SetDropMode(advise, MF_DROP_MODE_NONE);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    hr = IMFQualityAdvise_SetDropMode(advise, MF_DROP_MODE_5);
+    ok(hr == MF_E_NO_MORE_DROP_MODES, "Unexpected hr %#lx.\n", hr);
+
+    hr = IMFQualityAdvise_SetQualityLevel(advise, MF_QUALITY_NORMAL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    hr = IMFQualityAdvise_SetQualityLevel(advise, MF_QUALITY_NORMAL_MINUS_4);
+    ok(hr == MF_E_NO_MORE_QUALITY_LEVELS, "Unexpected hr %#lx.\n", hr);
+
     IMFQualityAdvise_Release(advise);
 
     hr = IMFVideoPresenter_QueryInterface(presenter, &IID_IQualProp, (void **)&qual_prop);
@@ -3547,7 +3565,10 @@ static void test_mixer_video_aperture(void)
         .biSizeImage = 96 * 96 * 4,
     };
     const MFVideoArea aperture = {.Area = {.cx = 34, .cy = 56}};
+    const MFVideoArea offset_aperture = {.OffsetX = {.value = 2}, .OffsetY = {.value = 10}, .Area = {.cx = 34, .cy = 56}};
     IDirect3DDeviceManager9 *manager;
+    MFVideoArea area;
+    UINT64 frame_size;
     IMFVideoPresenter *presenter;
     IMFMediaType *video_type;
     struct test_host host;
@@ -3709,6 +3730,30 @@ static void test_mixer_video_aperture(void)
 
     hr = IMFVideoPresenter_ProcessMessage(presenter, MFVP_MESSAGE_ENDSTREAMING, 0);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+
+    video_type = create_video_type(&MFVideoFormat_RGB32);
+    hr = IMFMediaType_SetUINT64(video_type, &MF_MT_FRAME_SIZE, (UINT64)expect_header.biWidth << 32 | expect_header.biHeight);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFMediaType_SetUINT32(video_type, &MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFMediaType_SetBlob(video_type, &MF_MT_GEOMETRIC_APERTURE, (BYTE *)&offset_aperture, sizeof(offset_aperture));
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFTransform_SetInputType(mixer, 0, video_type, 0);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    IMFMediaType_Release(video_type);
+
+    hr = IMFTransform_GetOutputAvailableType(mixer, 0, 0, &video_type);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFMediaType_GetUINT64(video_type, &MF_MT_FRAME_SIZE, &frame_size);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(frame_size == ((UINT64)34 << 32 | 56), "Unexpected frame size %#I64x.\n", frame_size);
+    memset(&area, 0xcc, sizeof(area));
+    hr = IMFMediaType_GetBlob(video_type, &MF_MT_GEOMETRIC_APERTURE, (UINT8 *)&area, sizeof(area), NULL);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(!memcmp(&area, &aperture, sizeof(area)), "Unexpected aperture %u,%u %ldx%ld.\n",
+            area.OffsetX.value, area.OffsetY.value, area.Area.cx, area.Area.cy);
+    IMFMediaType_Release(video_type);
 
 
     hr = IMFVideoPresenter_QueryInterface(presenter, &IID_IMFTopologyServiceLookupClient, (void **)&lookup_client);

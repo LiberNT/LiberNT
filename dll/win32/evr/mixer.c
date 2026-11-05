@@ -728,6 +728,18 @@ static void mf_get_attribute_uint64(IMFMediaType *media_type, const GUID *key, U
         *value = default_value;
 }
 
+static HRESULT video_mixer_get_input_aperture(IMFMediaType *media_type, MFVideoArea *aperture)
+{
+    UINT32 pan_scan;
+
+    if (SUCCEEDED(IMFMediaType_GetUINT32(media_type, &MF_MT_PAN_SCAN_ENABLED, &pan_scan)) && pan_scan
+            && SUCCEEDED(IMFMediaType_GetBlob(media_type, &MF_MT_PAN_SCAN_APERTURE, (UINT8 *)aperture,
+            sizeof(*aperture), NULL)))
+        return S_OK;
+
+    return IMFMediaType_GetBlob(media_type, &MF_MT_GEOMETRIC_APERTURE, (UINT8 *)aperture, sizeof(*aperture), NULL);
+}
+
 static HRESULT video_mixer_collect_output_types(struct video_mixer *mixer, const DXVA2_VideoDesc *video_desc,
         IMFMediaType *media_type, IDirectXVideoProcessorService *service, unsigned int device_count,
         const GUID *devices, unsigned int flags)
@@ -773,18 +785,14 @@ static HRESULT video_mixer_collect_output_types(struct video_mixer *mixer, const
         }
 
         memcpy(&subtype, &MFVideoFormat_Base, sizeof(subtype));
+        if (SUCCEEDED(video_mixer_get_input_aperture(media_type, &aperture)))
+        {
+            width = aperture.Area.cx;
+            height = aperture.Area.cy;
+        }
         memset(&aperture, 0, sizeof(aperture));
-        if (SUCCEEDED(IMFMediaType_GetBlob(media_type, &MF_MT_GEOMETRIC_APERTURE, (UINT8 *)&aperture,
-                sizeof(aperture), NULL)))
-        {
-            width = aperture.OffsetX.value + aperture.Area.cx;
-            height = aperture.OffsetX.value + aperture.Area.cy;
-        }
-        else
-        {
-            aperture.Area.cx = width;
-            aperture.Area.cy = height;
-        }
+        aperture.Area.cx = width;
+        aperture.Area.cy = height;
 
         interlace_mode = video_mixer_get_interlace_mode_from_video_desc(video_desc);
         mf_get_attribute_uint64(media_type, &MF_MT_PIXEL_ASPECT_RATIO, &par, (UINT64)1 << 32 | 1);
@@ -890,8 +898,7 @@ static HRESULT WINAPI video_mixer_transform_SetInputType(IMFTransform *iface, DW
                                 IMFMediaType_Release(mixer->inputs[0].media_type);
                             mixer->inputs[0].media_type = media_type;
 
-                            if (FAILED(IMFMediaType_GetBlob(media_type, &MF_MT_GEOMETRIC_APERTURE,
-                                    (BYTE *)&mixer->inputs[0].aperture, sizeof(mixer->inputs[0].aperture), NULL)))
+                            if (FAILED(video_mixer_get_input_aperture(media_type, &mixer->inputs[0].aperture)))
                             {
                                 memset(&mixer->inputs[0].aperture, 0, sizeof(mixer->inputs[0].aperture));
                                 mixer->inputs[0].aperture.Area.cx = video_desc.SampleWidth;
@@ -1997,9 +2004,21 @@ static HRESULT WINAPI video_mixer_processor_GetVideoProcessorCaps(IMFVideoProces
 
 static HRESULT WINAPI video_mixer_processor_GetVideoProcessorMode(IMFVideoProcessor *iface, GUID *mode)
 {
-    FIXME("%p, %p.\n", iface, mode);
+    struct video_mixer *mixer = impl_from_IMFVideoProcessor(iface);
+    HRESULT hr;
 
-    return E_NOTIMPL;
+    TRACE("%p, %p.\n", iface, mode);
+
+    EnterCriticalSection(&mixer->cs);
+
+    if (!mixer->inputs[0].media_type || !mixer->output.media_type)
+        hr = MF_E_TRANSFORM_TYPE_NOT_SET;
+    else
+        hr = S_FALSE;
+
+    LeaveCriticalSection(&mixer->cs);
+
+    return hr;
 }
 
 static HRESULT WINAPI video_mixer_processor_SetVideoProcessorMode(IMFVideoProcessor *iface, GUID *mode)
@@ -2032,16 +2051,42 @@ static HRESULT WINAPI video_mixer_processor_SetProcAmpValues(IMFVideoProcessor *
 
 static HRESULT WINAPI video_mixer_processor_GetFilteringRange(IMFVideoProcessor *iface, DWORD prop, DXVA2_ValueRange *range)
 {
+    struct video_mixer *mixer = impl_from_IMFVideoProcessor(iface);
+    HRESULT hr;
+
     FIXME("%p, %#lx, %p.\n", iface, prop, range);
 
-    return E_NOTIMPL;
+    EnterCriticalSection(&mixer->cs);
+
+    if (!mixer->inputs[0].media_type || !mixer->output.media_type)
+        hr = MF_E_TRANSFORM_TYPE_NOT_SET;
+    else
+        /* TODO: report the filter settings of the selected video processor. */
+        hr = E_NOTIMPL;
+
+    LeaveCriticalSection(&mixer->cs);
+
+    return hr;
 }
 
 static HRESULT WINAPI video_mixer_processor_GetFilteringValue(IMFVideoProcessor *iface, DWORD prop, DXVA2_Fixed32 *value)
 {
+    struct video_mixer *mixer = impl_from_IMFVideoProcessor(iface);
+    HRESULT hr;
+
     FIXME("%p, %#lx, %p.\n", iface, prop, value);
 
-    return E_NOTIMPL;
+    EnterCriticalSection(&mixer->cs);
+
+    if (!mixer->inputs[0].media_type || !mixer->output.media_type)
+        hr = MF_E_TRANSFORM_TYPE_NOT_SET;
+    else
+        /* TODO: report the filter settings of the selected video processor. */
+        hr = E_NOTIMPL;
+
+    LeaveCriticalSection(&mixer->cs);
+
+    return hr;
 }
 
 static HRESULT WINAPI video_mixer_processor_SetFilteringValue(IMFVideoProcessor *iface, DWORD prop, DXVA2_Fixed32 *value)
