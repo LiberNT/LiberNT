@@ -37,6 +37,7 @@ list(APPEND SOURCE
     d3dkmt_softgpu_occlusion.c
     d3dkmt_hwqueue.c
     d3dkmt_sync2.c
+    d3dkmt_fencestorage.c
     d3dkmt_videomem.c
     d3dkmt_enum2.c
     d3dkmt_surface.c

@@ -12,6 +12,7 @@ add_executable(dxgi_apitest
     composition_lifetime.cpp
     completion_event.cpp
     shared_fence.cpp
+    fence_neighbors.cpp
     shared_name.cpp
     gpu_priority.cpp
     kmt_outputdupl.cpp

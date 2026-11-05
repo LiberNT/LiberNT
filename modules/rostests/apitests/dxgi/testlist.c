@@ -8,6 +8,7 @@ extern void func_d3d11_render_probe(void);
 extern void func_dwm_render(void);
 extern void func_completion_event(void);
 extern void func_shared_fence(void);
+extern void func_fence_neighbors(void);
 extern void func_shared_name(void);
 extern void func_gpu_priority(void);
 extern void func_kmt_outputdupl(void);
@@ -44,6 +45,7 @@ const struct test winetest_testlist[] =
     { "dwm_render", func_dwm_render },
     { "completion_event", func_completion_event },
     { "shared_fence", func_shared_fence },
+    { "fence_neighbors", func_fence_neighbors },
     { "shared_name", func_shared_name },
     { "gpu_priority", func_gpu_priority },
     { "kmt_outputdupl", func_kmt_outputdupl },
