@@ -1230,7 +1230,9 @@ Texture *Import(const DWM_WIN *Window, BOOL Client)
     ULONG Format = Client ? Window->DxFormat : Window->BaseFormat;
     if (Share == 0 || Generation == 0 || Width == 0 || Height == 0 ||
         Width > MAXLONG || Height > MAXLONG ||
-        (Format != DWM_DX_FORMAT_B8G8R8A8_UNORM && (!Client || Format != DWM_DX_FORMAT_R8G8B8A8_UNORM)))
+        (Format != DWM_DX_FORMAT_B8G8R8A8_UNORM &&
+         (!Client || (Format != DWM_DX_FORMAT_R8G8B8A8_UNORM && Format != DWM_DX_FORMAT_R10G10B10A2_UNORM &&
+                      Format != DWM_DX_FORMAT_R16G16B16A16_FLOAT))))
         return NULL;
     if (!Client && (Width != (ULONG)Window->cx || Height != (ULONG)Window->cy))
         return NULL;
@@ -1524,6 +1526,7 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     Data.SourceSize[1] = Client ? Window->DxHeight : Window->cy;
     Data.SourceSize[2] = Alpha;
     Data.SourceSize[3] = Client ? 0 : min(Window->CornerRadius, (ULONG)min(Window->cx / 2, Window->cy / 2));
+    Data.SourceScale[2] = Client && Window->DxFormat == DWM_DX_FORMAT_R16G16B16A16_FLOAT;
     if (Client && Window->DxWidth != 0 && Window->DxHeight != 0 &&
         (Window->DxSourceWidth < Window->DxWidth || Window->DxSourceHeight < Window->DxHeight))
     {

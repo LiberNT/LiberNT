@@ -4336,7 +4336,9 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                     ((Request.Flags & DWM_DX_PUBLISH_SCANOUT) &&
                      !(Request.Flags & DWM_DX_PUBLISH_RETAINED)) ||
                     (Request.Info.Format != DWM_DX_FORMAT_B8G8R8A8_UNORM &&
-                     Request.Info.Format != DWM_DX_FORMAT_R8G8B8A8_UNORM) ||
+                     Request.Info.Format != DWM_DX_FORMAT_R8G8B8A8_UNORM &&
+                     Request.Info.Format != DWM_DX_FORMAT_R10G10B10A2_UNORM &&
+                     Request.Info.Format != DWM_DX_FORMAT_R16G16B16A16_FLOAT) ||
                     Request.UpdateRect.left != 0 || Request.UpdateRect.top != 0 ||
                     (ULONG)Request.UpdateRect.right != Request.Info.Width ||
                     (ULONG)Request.UpdateRect.bottom != Request.Info.Height)

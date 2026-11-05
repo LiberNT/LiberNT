@@ -609,15 +609,10 @@ public:
     }
 };
 
-static bool Native12PublishableFormat(DXGI_FORMAT format)
-{
-    return format == DXGI_FORMAT_B8G8R8A8_UNORM || format == DXGI_FORMAT_R8G8B8A8_UNORM;
-}
-
 static bool Native12FlipFormat(DXGI_FORMAT format)
 {
-    return Native12PublishableFormat(format) || format == DXGI_FORMAT_R10G10B10A2_UNORM
-            || format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+    return format == DXGI_FORMAT_B8G8R8A8_UNORM || format == DXGI_FORMAT_R8G8B8A8_UNORM
+            || format == DXGI_FORMAT_R10G10B10A2_UNORM || format == DXGI_FORMAT_R16G16B16A16_FLOAT;
 }
 
 static UINT32 Native12Unorm8(UINT32 value, UINT32 max)
@@ -1515,7 +1510,7 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         record.buffer = current;
         record.source_width = source_width;
         record.source_height = source_height;
-        record.foreign = ForeignAdapter() || !Native12PublishableFormat(desc.Format);
+        record.foreign = ForeignAdapter();
         hr = record.foreign ? RecordReadBack(slot, current) : PresentToDriver(slot, current);
         if (SUCCEEDED(hr) && !record.foreign) hr = PrepareExchange(slot, current);
         if (SUCCEEDED(hr)) QueueRecord(slot);

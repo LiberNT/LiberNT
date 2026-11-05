@@ -12,6 +12,7 @@
 #include <reactos/dwmframe.h>
 
 #include "dxsurface.h"
+#include "dxformat.h"
 
 #define DWM_READBACK_MAX_DEVICES 8
 #define DWM_READBACK_MAX_DIMENSION 16384u
@@ -189,13 +190,7 @@ CopyReadbackSurface(ReadbackSurface *Surface)
             memcpy(Destination, Source, RowBytes);
             continue;
         }
-        for (ULONG X = 0; X < RowBytes; X += sizeof(ULONG))
-        {
-            Destination[X] = Source[X + 2];
-            Destination[X + 1] = Source[X + 1];
-            Destination[X + 2] = Source[X];
-            Destination[X + 3] = Source[X + 3];
-        }
+        DwmDxConvertRow(Surface->Format, Source, Destination, Surface->Width);
     }
     Context->Unmap(Surface->Staging, 0);
     return TRUE;
@@ -210,7 +205,8 @@ DwmDxReadbackSurface(const DWM_WIN *Window, ULONG *Pitch)
     if (Window->DxGlobalShare == 0 || Window->DxGeneration == 0 || Window->DxUpdateId == 0 ||
         Window->DxWidth == 0 || Window->DxHeight == 0 ||
         Window->DxWidth > DWM_READBACK_MAX_DIMENSION || Window->DxHeight > DWM_READBACK_MAX_DIMENSION ||
-        (Window->DxFormat != DWM_DX_FORMAT_B8G8R8A8_UNORM && Window->DxFormat != DWM_DX_FORMAT_R8G8B8A8_UNORM))
+        (Window->DxFormat != DWM_DX_FORMAT_B8G8R8A8_UNORM && Window->DxFormat != DWM_DX_FORMAT_R8G8B8A8_UNORM &&
+         Window->DxFormat != DWM_DX_FORMAT_R10G10B10A2_UNORM && Window->DxFormat != DWM_DX_FORMAT_R16G16B16A16_FLOAT))
         return NULL;
 
     Surface = &g_ReadbackSurfaces[Window->SurfaceId % DWM_MAX_WINDOWS];

@@ -33,9 +33,8 @@ static COLORREF WaitForFormatColor(HDC screen, POINT origin, COLORREF expected)
     return pixel;
 }
 
-static BOOL PresentClear(struct d3d12_test_context *context, IDXGISwapChain3 *chain)
+static BOOL PresentClear(struct d3d12_test_context *context, IDXGISwapChain3 *chain, const FLOAT *colour)
 {
-    static const FLOAT colour[4] = {0.5f, 0.25f, 1.0f, 1.0f};
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = d3d12_test_rtv(context, 0);
     ID3D12Resource *buffer = NULL;
     HRESULT hr;
@@ -66,14 +65,15 @@ START_TEST(swapformat)
     static const struct
     {
         DXGI_FORMAT format;
+        FLOAT colour[4];
         COLORREF expected;
     }
     tests[] =
     {
-        {DXGI_FORMAT_B8G8R8A8_UNORM, RGB(128, 64, 255)},
-        {DXGI_FORMAT_R8G8B8A8_UNORM, RGB(128, 64, 255)},
-        {DXGI_FORMAT_R10G10B10A2_UNORM, RGB(128, 64, 255)},
-        {DXGI_FORMAT_R16G16B16A16_FLOAT, RGB(188, 137, 255)},
+        {DXGI_FORMAT_B8G8R8A8_UNORM, {0.5f, 0.25f, 1.0f, 1.0f}, RGB(128, 64, 255)},
+        {DXGI_FORMAT_R8G8B8A8_UNORM, {1.0f, 0.5f, 0.25f, 1.0f}, RGB(255, 128, 64)},
+        {DXGI_FORMAT_R10G10B10A2_UNORM, {0.25f, 1.0f, 0.5f, 1.0f}, RGB(64, 255, 128)},
+        {DXGI_FORMAT_R16G16B16A16_FLOAT, {0.5f, 0.25f, 1.0f, 1.0f}, RGB(188, 137, 255)},
     };
     struct d3d12_test_context context;
     IDXGIFactory2 *factory = NULL;
@@ -113,7 +113,7 @@ START_TEST(swapformat)
         ok(hr == S_OK && chain1, "format %#x: CreateSwapChainForHwnd: %#lx\n", tests[i].format, hr);
         if (chain1)
             hr = chain1->QueryInterface(__uuidof(IDXGISwapChain3), reinterpret_cast<void **>(&chain));
-        if (chain && PresentClear(&context, chain))
+        if (chain && PresentClear(&context, chain, tests[i].colour))
         {
             COLORREF pixel = WaitForFormatColor(screen, origin, tests[i].expected);
             ok(FormatColorNear(pixel, tests[i].expected), "format %#x: screen colour %06lx, expected %06lx\n",
