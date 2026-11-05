@@ -29,6 +29,7 @@
 #include "gpugeometry.h"
 #include "gpublurdamage.h"
 #include "gpuscenecache.h"
+#include "gpuquery.h"
 
 extern "C" {
 #include "presenttrace.h"
@@ -456,10 +457,16 @@ BOOL FinishGpuReadsImpl(DWM_GPU_WAIT_TIMING *Timing)
             State.WorkPending = FALSE;
             return Result(Status, "GPU completion query");
         }
-        if (Status == S_OK && Complete)
+        DWM_GPU_EVENT_POLL Poll = DwmGpuEventPoll(Status, Complete);
+        if (Poll == DWM_GPU_EVENT_COMPLETE)
         {
             State.WorkPending = FALSE;
             return TRUE;
+        }
+        if (Poll == DWM_GPU_EVENT_REISSUE)
+        {
+            State.Context->End(State.Completion);
+            State.Context->Flush();
         }
         if (!Reported && GetTickCount() - Start >= 5000)
         {
@@ -2286,10 +2293,16 @@ DwmD3dClientCopiesRetired(void)
                                                 D3D11_ASYNC_GETDATA_DONOTFLUSH);
         if (FAILED(Status))
             return FALSE;
-        if (Status == S_OK && Complete)
+        DWM_GPU_EVENT_POLL Poll = DwmGpuEventPoll(Status, Complete);
+        if (Poll == DWM_GPU_EVENT_COMPLETE)
         {
             State.ClientCopiesFenced = FALSE;
             return TRUE;
+        }
+        if (Poll == DWM_GPU_EVENT_REISSUE)
+        {
+            State.Context->End(State.ClientCopies);
+            State.Context->Flush();
         }
         QueryPerformanceCounter(&Now);
         if ((Now.QuadPart - Start.QuadPart) * 250 >= Frequency.QuadPart)
