@@ -160,6 +160,32 @@ RunSmallTargetCases(GLuint DepthObject, GLuint DepthTexture, PFN_GEN_FRAMEBUFFER
     glClear(GL_COLOR_BUFFER_BIT);
     glFinish();
     CheckDepthDraw("A depth texture detached from a small target", LargeObject);
+
+    FramebufferTexture2D(GL_DRAW_FRAMEBUFFER_, GL_DEPTH_STENCIL_ATTACHMENT_, GL_TEXTURE_2D, DepthTexture, 0);
+    BindFramebuffer(GL_DRAW_FRAMEBUFFER_, LargeObject);
+    glClearDepth(1.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    BindFramebuffer(GL_DRAW_FRAMEBUFFER_, SmallObject);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(1, 1, 4, 4);
+    glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
+    glFinish();
+    CheckDepthDraw("A scissored color clear on a small target", LargeObject);
+
+    BindFramebuffer(GL_DRAW_FRAMEBUFFER_, LargeObject);
+    glClearDepth(1.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    BindFramebuffer(GL_DRAW_FRAMEBUFFER_, SmallObject);
+    glViewport(0, 0, SIZE / 4, SIZE / 4);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_DEPTH_TEST);
+    glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
+    DrawDepthQuad();
+    glDepthMask(GL_TRUE);
+    glFinish();
+    CheckDepthDraw("A draw without depth on a small target", LargeObject);
     ok(glGetError() == GL_NO_ERROR, "The small target cases raised a GL error\n");
 }
 
