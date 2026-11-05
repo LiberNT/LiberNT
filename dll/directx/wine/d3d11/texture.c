@@ -965,6 +965,15 @@ static BOOL validate_texture2d_desc(const D3D11_TEXTURE2D_DESC *desc, D3D_FEATUR
         return FALSE;
     }
 
+#ifdef __REACTOS__
+    if (feature_level < D3D_FEATURE_LEVEL_10_0 && (desc->MiscFlags & (D3D11_RESOURCE_MISC_SHARED
+            | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX | D3D11_RESOURCE_MISC_SHARED_NTHANDLE)))
+    {
+        WARN("Sharing is not available below feature level 10_0.\n");
+        return FALSE;
+    }
+#endif
+
     return TRUE;
 }
 
