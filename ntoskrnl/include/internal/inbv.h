@@ -30,6 +30,22 @@ InbvGetDisplayState(VOID);
 
 BOOLEAN
 NTAPI
+InbvDisplayNeedsDriverReset(VOID);
+
+VOID
+NTAPI
+InbvReserveDisplaySnapshot(VOID);
+
+VOID
+NTAPI
+InbvSaveDisplaySnapshot(VOID);
+
+VOID
+NTAPI
+InbvRestoreDisplaySnapshot(VOID);
+
+BOOLEAN
+NTAPI
 InbvQueryDisplayInfo(_Out_ PVID_DISPLAY_INFO DisplayInfo);
 
 VOID

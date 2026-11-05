@@ -338,8 +338,11 @@ KdpReadTermKey(
             if (Key != -1)
                 break;
 
-            if (KdTermCrashMode || KdTermConnected || KeBugCheckActive || (IdleUs == MAXULONG))
+            if (KdTermCrashMode || KdTermConnected || KeBugCheckActive || (IdleUs == MAXULONG) ||
+                KdpNetQueryAttached(NULL, NULL))
+            {
                 continue;
+            }
 
             KeStallExecutionProcessor(KD_TERM_IDLE_STALL_US);
             IdleUs += KD_TERM_IDLE_STALL_US;

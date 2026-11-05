@@ -638,6 +638,12 @@ KdpCopyPrintBufferFrom(
     _In_ ULONG BufferSize,
     _Out_ PULONG64 Lost);
 
+ULONG
+NTAPI
+KdpCopyPrintBufferTail(
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ ULONG BufferSize);
+
 //
 // Global KD Data
 //

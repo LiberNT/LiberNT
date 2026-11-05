@@ -752,6 +752,20 @@ ReleaseLock:
         KeReleaseSpinLock(&g_PostDisplayOwnerLock, OldIrql);
 }
 
+/* Marks the boot frame buffer as no longer scanned out; DxgkpBugCheckCallback brings it back. */
+static
+BOOLEAN
+NTAPI
+DxgkpInbvResetDisplay(
+    _In_ ULONG Cols,
+    _In_ ULONG Rows)
+{
+    UNREFERENCED_PARAMETER(Cols);
+    UNREFERENCED_PARAMETER(Rows);
+
+    return TRUE;
+}
+
 VOID
 DxgkpRegisterBugCheckCallback(VOID)
 {
@@ -14069,7 +14083,7 @@ DxgkAdapterStart(
     {
         /* TODO: keep boot output in a virtual frame buffer for the boot image relay instead of dropping it */
         DXGKRNL_TRACE("DxgkAdapterStart: POST display adapter %p takes the display from the boot screen\n", Adapter);
-        InbvNotifyDisplayOwnershipLost(NULL);
+        InbvNotifyDisplayOwnershipLost(Adapter->MiniportContext->IsBasicDisplayFallback ? NULL : DxgkpInbvResetDisplay);
     }
 
     /* Call miniport start. */

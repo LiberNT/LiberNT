@@ -427,6 +427,19 @@ KdpCopyPrintBufferFrom(
     return Length;
 }
 
+ULONG
+NTAPI
+KdpCopyPrintBufferTail(
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ ULONG BufferSize)
+{
+    ULONG64 Position;
+    ULONG64 Lost;
+
+    Position = (KdpPrintTotalBytes > BufferSize) ? (KdpPrintTotalBytes - BufferSize) : 0;
+    return KdpCopyPrintBufferFrom(&Position, Buffer, BufferSize, &Lost);
+}
+
 BOOLEAN
 NTAPI
 KdpPrintString(

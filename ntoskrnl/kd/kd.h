@@ -52,6 +52,10 @@ KdbpReleaseLock(
 BOOLEAN
 KdpScreenAcquire(VOID);
 
+BOOLEAN
+KdpScreenEnterStop(
+    _In_ BOOLEAN Requested);
+
 VOID
 KdpScreenRelease(
     _In_ BOOLEAN DisplayAcquired);
@@ -123,7 +127,7 @@ KdpInfoState(VOID);
 /* KD GLOBALS ****************************************************************/
 
 /* KD Native Modes */
-// #define KdScreen    0
+#define KdScreen    0
 // #define KdSerial    1
 #ifdef KDBG
 // #define KdKdbg      2

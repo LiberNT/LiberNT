@@ -399,6 +399,9 @@ KdDebuggerInitialize1(
 
     KdpUsbKeyboardInitialize();
 
+    if (KdDebuggerEnabled && InbvHasValidGopFrameBuffer())
+        InbvReserveDisplaySnapshot();
+
     /* Make space for the displayed providers' signons */
     HalDisplayString("\r\n");
 
