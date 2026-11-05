@@ -561,6 +561,9 @@ WinMain(
         ExitProcess(2);
     }
 
+    if (!GetSetupType() && !StartRemoteConsole(WLSession))
+        TRACE("WL: No remote console for this session\n");
+
     // DisplayStatusMessage(Session, Session->WinlogonDesktop, IDS_PREPARENETWORKCONNECTIONS);
     // DisplayStatusMessage(Session, Session->WinlogonDesktop, IDS_APPLYINGCOMPUTERSETTINGS);
 

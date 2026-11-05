@@ -59,3 +59,10 @@ STRINGTABLE
 BEGIN
     IDS_FAILEDACTIVATEUSERSHELL "Winlogon はユーザー シェルを実行できませんでした!"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_REMOTE_CONSOLE_INUSE "この PC はリモートで使用されています"
+    IDS_REMOTE_CONSOLE_PASSWORD "パスワード"
+    IDS_REMOTE_CONSOLE_WRONG "パスワードが正しくありません。もう一度入力してください。"
+END
