@@ -705,7 +705,7 @@
 @ stdcall -version=0xA00+ D3DKMTOpenKeyedMutexFromNtHandle(ptr) NtGdiDdDDIOpenKeyedMutexFromNtHandle
 @ stdcall -version=0xA00+ D3DKMTOpenNativeFenceFromNtHandle(ptr) NtGdiDdDDIOpenNativeFenceFromNtHandle
 @ stdcall -version=0xA00+ D3DKMTOpenProtectedSessionFromNtHandle(ptr) NtGdiDdDDIOpenProtectedSessionFromNtHandle
-@ stdcall -version=0x600+ D3DKMTOpenResource(ptr) NtGdiDdDDIOpenResource
+@ stdcall -version=0x600+ D3DKMTOpenResource(ptr)
 @ stdcall -version=0xA00+ D3DKMTOutputDuplPresentToHwQueue(ptr) NtGdiDdDDIOutputDuplPresentToHwQueue
 @ stdcall -version=0x600+ D3DKMTPollDisplayChildren(ptr) NtGdiDdDDIPollDisplayChildren
 @ stdcall -version=0x600+ D3DKMTPresent(ptr) NtGdiDdDDIPresent

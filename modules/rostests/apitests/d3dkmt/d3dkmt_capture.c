@@ -252,7 +252,7 @@ Test_EscapePrivateCapture(void)
     SIZE_T PageSize;
     DWORD OldProtect;
     BOOL Faulted;
-    NTSTATUS Status;
+    NTSTATUS Status, WritableStatus;
 
     pfn = (PFN_D3DKMTEscape)LoadD3DKMTProc("D3DKMTEscape");
     if (pfn == NULL)
@@ -297,6 +297,13 @@ Test_EscapePrivateCapture(void)
     }
 
     memset(ReadOnlyPage, 0x5A, sizeof(Expected));
+    memset(&Data, 0, sizeof(Data));
+    Data.hAdapter = hAdapter;
+    Data.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
+    Data.pPrivateDriverData = ReadOnlyPage;
+    Data.PrivateDriverDataSize = sizeof(Expected);
+    CAPTURE_CALL(WritableStatus, Faulted, pfn(&Data));
+    memset(ReadOnlyPage, 0x5A, sizeof(Expected));
     memcpy(Expected, ReadOnlyPage, sizeof(Expected));
     if (!VirtualProtect(ReadOnlyPage, PageSize, PAGE_READONLY, &OldProtect))
     {
@@ -314,7 +321,10 @@ Test_EscapePrivateCapture(void)
     Before = Data;
     ok(memcmp(ReadOnlyPage, Expected, sizeof(Expected)) == 0, "Protecting the Escape canary read-only changed its contents\n");
     CAPTURE_CALL(Status, Faulted, pfn(&Data));
-    ok(Status == STATUS_INVALID_PARAMETER, "Escape with read-only private data returned 0x%08lX%s, expected STATUS_INVALID_PARAMETER (Win11)\n", (long)Status, Faulted ? " (faulted)" : "");
+    if (!NT_SUCCESS(WritableStatus))
+        ok(Status == WritableStatus, "Escape with read-only private data returned 0x%08lX%s, the same data writable returned 0x%08lX (Win11)\n", (long)Status, Faulted ? " (faulted)" : "", (long)WritableStatus);
+    else
+        ok(!NT_SUCCESS(Status), "Escape with read-only private data returned 0x%08lX%s, expected a failure (Win11)\n", (long)Status, Faulted ? " (faulted)" : "");
     ok(memcmp(&Data, &Before, sizeof(Data)) == 0, "Escape changed its descriptor after rejecting read-only private data\n");
     ok(memcmp(ReadOnlyPage, Expected, sizeof(Expected)) == 0, "Escape changed the canary while it was read-only\n");
     if (VirtualProtect(ReadOnlyPage, PageSize, PAGE_READWRITE, &OldProtect))

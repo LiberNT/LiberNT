@@ -2472,7 +2472,7 @@ D3DKMTEscape(
         return Status;
 
     UserPrivateDriverData = Captured.pPrivateDriverData;
-    Status = WddmBridgeCaptureArray(UserPrivateDriverData, Captured.PrivateDriverDataSize, sizeof(UCHAR), D3DKMT_BRIDGE_MAX_PRIVATE_BYTES, TRUE, TRUE, &PrivateDriverData, &PrivateDriverDataSize);
+    Status = WddmBridgeCaptureArray(UserPrivateDriverData, Captured.PrivateDriverDataSize, sizeof(UCHAR), D3DKMT_BRIDGE_MAX_PRIVATE_BYTES, TRUE, FALSE, &PrivateDriverData, &PrivateDriverDataSize);
     Status = WddmBridgeRejectBadBuffer(Status);
     if (!NT_SUCCESS(Status))
         return Status;
