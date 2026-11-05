@@ -1927,6 +1927,12 @@ static HRESULT graph_start(struct filter_graph *graph, REFERENCE_TIME stream_sta
          * initialize. */
         stream_start += 200 * 10000;
     }
+    else if (!graph->refClock)
+    {
+        if (!stream_start)
+            stream_start = 100 * 10000 - graph->stream_elapsed;
+        graph->stream_start = stream_start;
+    }
 
     if (SUCCEEDED(IMediaSeeking_GetStopPosition(&graph->IMediaSeeking_iface, &stream_stop)))
         graph->stream_stop = stream_stop;
@@ -2030,6 +2036,9 @@ static HRESULT WINAPI MediaControl_Run(IMediaControl *iface)
     {
         if (graph->defaultclock && !graph->refClock)
             IFilterGraph2_SetDefaultSyncSource(&graph->IFilterGraph2_iface);
+
+        if (!graph->refClock)
+            graph->stream_elapsed = 0;
 
         LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
         {
@@ -5483,6 +5492,14 @@ static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
         IFilterGraph2_SetDefaultSyncSource(&graph->IFilterGraph2_iface);
 
     graph_update_positions(graph);
+
+    if (!graph->refClock)
+    {
+        if (graph->state == State_Stopped)
+            graph->stream_elapsed = 0;
+        else if (!graph->needs_async_run)
+            graph->stream_elapsed = -graph->stream_start;
+    }
 
     LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
     {
