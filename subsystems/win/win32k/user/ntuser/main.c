@@ -1327,7 +1327,7 @@ DriverEntry(
     NT_ROF(InitSafeSemaphoreImpl());
     NT_ROF(InitPDEVImpl());
     NT_ROF(InitLDEVImpl());
-    NT_ROF(InitDeviceImpl());
+    NT_ROF(InitDeviceImpl(DriverObject));
     NT_ROF(InitDcImpl());
     USERLOCK_AND_ROF(InitUserImpl());
     NT_ROF(InitWindowStationImpl());
