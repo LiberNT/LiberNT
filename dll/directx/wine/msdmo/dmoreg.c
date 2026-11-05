@@ -716,6 +716,27 @@ static const IEnumDMOVtbl edmovt =
 	IEnumDMO_fnClone,
 };
 
+static ULONG read_partial_types(HKEY key, const WCHAR *name, ULONG count, DMO_PARTIAL_MEDIATYPE *types)
+{
+    DMO_PARTIAL_MEDIATYPE *all;
+    DWORD size = count * sizeof(DMO_PARTIAL_MEDIATYPE);
+    LSTATUS ret;
+
+    ret = RegQueryValueExW(key, name, NULL, NULL, (BYTE *)types, &size);
+    if (!ret)
+        return min(count, size / sizeof(DMO_PARTIAL_MEDIATYPE));
+    if (ret != ERROR_MORE_DATA || !(all = malloc(size)))
+        return 0;
+
+    if (RegQueryValueExW(key, name, NULL, NULL, (BYTE *)all, &size))
+        count = 0;
+    else
+        count = min(count, size / sizeof(DMO_PARTIAL_MEDIATYPE));
+    memcpy(types, all, count * sizeof(DMO_PARTIAL_MEDIATYPE));
+    free(all);
+    return count;
+}
+
 /***************************************************************
  * DMOGetTypes (MSDMO.@)
  */
@@ -724,8 +745,6 @@ HRESULT WINAPI DMOGetTypes(REFCLSID clsid, ULONG input_count, ULONG *ret_input_c
 {
     WCHAR guidstr[64];
     HKEY root, key;
-    LSTATUS ret;
-    DWORD size;
 
     TRACE("clsid %s, input_count %lu, ret_input_count %p, input %p, output_count %lu, ret_output_count %p, output %p.\n",
             debugstr_guid(clsid), input_count, ret_input_count, input, output_count, ret_output_count, output);
@@ -739,17 +758,8 @@ HRESULT WINAPI DMOGetTypes(REFCLSID clsid, ULONG input_count, ULONG *ret_input_c
         return E_FAIL;
     }
 
-    *ret_input_count = 0;
-    size = input_count * sizeof(DMO_PARTIAL_MEDIATYPE);
-    ret = RegQueryValueExW(key, L"InputTypes", NULL, NULL, (BYTE *)input, &size);
-    if (!ret || ret == ERROR_MORE_DATA)
-        *ret_input_count = min(input_count, size / sizeof(DMO_PARTIAL_MEDIATYPE));
-
-    *ret_output_count = 0;
-    size = output_count * sizeof(DMO_PARTIAL_MEDIATYPE);
-    ret = RegQueryValueExW(key, L"OutputTypes", NULL, NULL, (BYTE *)output, &size);
-    if (!ret || ret == ERROR_MORE_DATA)
-        *ret_output_count = min(output_count, size / sizeof(DMO_PARTIAL_MEDIATYPE));
+    *ret_input_count = read_partial_types(key, L"InputTypes", input_count, input);
+    *ret_output_count = read_partial_types(key, L"OutputTypes", output_count, output);
 
     RegCloseKey(key);
     RegCloseKey(root);
