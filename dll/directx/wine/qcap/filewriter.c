@@ -139,6 +139,19 @@ static void file_writer_sink_disconnect(struct strmbase_sink *iface)
     close_file(impl_from_strmbase_pin(&iface->pin));
 }
 
+static HRESULT file_writer_sink_get_allocator(struct strmbase_sink *iface, IMemAllocator **allocator)
+{
+    *allocator = NULL;
+    return E_INVALIDARG;
+}
+
+static HRESULT file_writer_sink_get_allocator_requirements(struct strmbase_sink *iface, ALLOCATOR_PROPERTIES *props)
+{
+    memset(props, 0, sizeof(*props));
+    props->cbAlign = 512;
+    return S_OK;
+}
+
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_interface = file_writer_sink_query_interface,
@@ -146,6 +159,8 @@ static const struct strmbase_sink_ops sink_ops =
     .pfnReceive = file_writer_sink_receive,
     .sink_eos = file_writer_sink_eos,
     .sink_disconnect = file_writer_sink_disconnect,
+    .sink_get_allocator = file_writer_sink_get_allocator,
+    .sink_get_allocator_requirements = file_writer_sink_get_allocator_requirements,
 };
 
 static inline struct file_writer *impl_from_strmbase_filter(struct strmbase_filter *iface)
