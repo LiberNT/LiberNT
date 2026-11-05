@@ -41,6 +41,7 @@ list(APPEND SOURCE
     SoftwareComponent.c
     SysButtonDevices.c
     UsbHubInformation.c
+    SwDevice.c
     UsbInterfaceIds.c
     testlist.c)
 
