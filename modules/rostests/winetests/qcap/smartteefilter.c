@@ -1499,6 +1499,43 @@ static void test_streaming_unconnected_outputs(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_quality_control(void)
+{
+    static const WCHAR *const names[] = {L"Input", L"Capture", L"Preview"};
+    IBaseFilter *filter = create_smart_tee();
+    Quality quality = {Famine, 500, 0, 0};
+    IQualityControl *qc;
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    for (i = 0; i < ARRAY_SIZE(names); ++i)
+    {
+        winetest_push_context("%s", wine_dbgstr_w(names[i]));
+        IBaseFilter_FindPin(filter, names[i], &pin);
+        hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+        if (hr == S_OK)
+        {
+            hr = IQualityControl_Notify(qc, NULL, quality);
+            ok(hr == (i ? E_NOTIMPL : E_POINTER), "Got hr %#lx.\n", hr);
+            hr = IQualityControl_Notify(qc, filter, quality);
+            ok(hr == (i ? E_NOTIMPL : S_OK), "Got hr %#lx.\n", hr);
+            hr = IQualityControl_SetSink(qc, qc);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            hr = IQualityControl_SetSink(qc, NULL);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            IQualityControl_Release(qc);
+        }
+        IPin_Release(pin);
+        winetest_pop_context();
+    }
+
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(smartteefilter)
 {
     CoInitialize(NULL);
@@ -1515,6 +1552,7 @@ START_TEST(smartteefilter)
     test_connect_pin();
     test_streaming();
     test_streaming_unconnected_outputs();
+    test_quality_control();
 
     CloseHandle(event);
     CoUninitialize();

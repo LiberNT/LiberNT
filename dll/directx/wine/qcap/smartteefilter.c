@@ -22,10 +22,18 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
+struct output_control
+{
+    IQualityControl IQualityControl_iface;
+    struct strmbase_source *source;
+};
+
 typedef struct {
     struct strmbase_filter filter;
     struct strmbase_sink sink;
     struct strmbase_source capture, preview;
+    IQualityControl IQualityControl_iface;
+    struct output_control capture_control, preview_control;
 } SmartTeeFilter;
 
 static inline SmartTeeFilter *impl_from_strmbase_filter(struct strmbase_filter *filter)
@@ -116,12 +124,68 @@ static HRESULT sink_query_interface(struct strmbase_pin *iface, REFIID iid, void
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->sink.IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
     IUnknown_AddRef((IUnknown *)*out);
     return S_OK;
 }
+
+static inline SmartTeeFilter *impl_from_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, SmartTeeFilter, IQualityControl_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    SmartTeeFilter *filter = impl_from_IQualityControl(iface);
+    return IPin_QueryInterface(&filter->sink.pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI sink_quality_control_AddRef(IQualityControl *iface)
+{
+    SmartTeeFilter *filter = impl_from_IQualityControl(iface);
+    return IPin_AddRef(&filter->sink.pin.IPin_iface);
+}
+
+static ULONG WINAPI sink_quality_control_Release(IQualityControl *iface)
+{
+    SmartTeeFilter *filter = impl_from_IQualityControl(iface);
+    return IPin_Release(&filter->sink.pin.IPin_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    SmartTeeFilter *filter = impl_from_IQualityControl(iface);
+
+    TRACE("filter %p, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            filter, sender, q.Type, q.Proportion,
+            wine_dbgstr_longlong(q.Late), wine_dbgstr_longlong(q.TimeStamp));
+
+    if (!sender)
+        return E_POINTER;
+    return S_OK;
+}
+
+static HRESULT WINAPI sink_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    SmartTeeFilter *filter = impl_from_IQualityControl(iface);
+
+    TRACE("filter %p, sink %p.\n", filter, sink);
+
+    return S_OK;
+}
+
+static const IQualityControlVtbl sink_quality_control_vtbl =
+{
+    sink_quality_control_QueryInterface,
+    sink_quality_control_AddRef,
+    sink_quality_control_Release,
+    sink_quality_control_Notify,
+    sink_quality_control_SetSink,
+};
 
 static HRESULT copy_sample(IMediaSample *inputSample, IMemAllocator *allocator, BOOL preview, IMediaSample **pOutputSample)
 {
@@ -281,6 +345,80 @@ static const struct strmbase_sink_ops sink_ops =
     .sink_eos = sink_eos,
 };
 
+static inline struct output_control *impl_from_output_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct output_control, IQualityControl_iface);
+}
+
+static HRESULT WINAPI source_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct output_control *control = impl_from_output_IQualityControl(iface);
+    return IPin_QueryInterface(&control->source->pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI source_quality_control_AddRef(IQualityControl *iface)
+{
+    struct output_control *control = impl_from_output_IQualityControl(iface);
+    return IPin_AddRef(&control->source->pin.IPin_iface);
+}
+
+static ULONG WINAPI source_quality_control_Release(IQualityControl *iface)
+{
+    struct output_control *control = impl_from_output_IQualityControl(iface);
+    return IPin_Release(&control->source->pin.IPin_iface);
+}
+
+static HRESULT WINAPI source_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct output_control *control = impl_from_output_IQualityControl(iface);
+
+    TRACE("control %p, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            control, sender, q.Type, q.Proportion,
+            wine_dbgstr_longlong(q.Late), wine_dbgstr_longlong(q.TimeStamp));
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI source_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct output_control *control = impl_from_output_IQualityControl(iface);
+
+    TRACE("control %p, sink %p.\n", control, sink);
+
+    return S_OK;
+}
+
+static const IQualityControlVtbl source_quality_control_vtbl =
+{
+    source_quality_control_QueryInterface,
+    source_quality_control_AddRef,
+    source_quality_control_Release,
+    source_quality_control_Notify,
+    source_quality_control_SetSink,
+};
+
+static struct output_control *output_control_from_source(struct strmbase_pin *iface)
+{
+    SmartTeeFilter *filter = impl_from_strmbase_pin(iface);
+
+    if (iface == &filter->capture.pin)
+        return &filter->capture_control;
+    return &filter->preview_control;
+}
+
+static HRESULT source_query_interface(struct strmbase_pin *iface, REFIID iid, void **out)
+{
+    struct output_control *control = output_control_from_source(iface);
+
+    if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &control->IQualityControl_iface;
+    else
+        return E_NOINTERFACE;
+
+    IUnknown_AddRef((IUnknown *)*out);
+    return S_OK;
+}
+
 static HRESULT source_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
 {
     SmartTeeFilter *filter = impl_from_strmbase_pin(iface);
@@ -366,6 +504,7 @@ static const struct strmbase_source_ops capture_ops =
 {
     .base.pin_query_accept = source_query_accept,
     .base.pin_get_media_type = source_get_media_type,
+    .base.pin_query_interface = source_query_interface,
     .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
     .pfnDecideAllocator = SmartTeeFilterCapture_DecideAllocator,
 };
@@ -384,6 +523,7 @@ static const struct strmbase_source_ops preview_ops =
 {
     .base.pin_query_accept = source_query_accept,
     .base.pin_get_media_type = source_get_media_type,
+    .base.pin_query_interface = source_query_interface,
     .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
     .pfnDecideAllocator = SmartTeeFilterPreview_DecideAllocator,
 };
@@ -409,6 +549,11 @@ HRESULT smart_tee_create(IUnknown *outer, IUnknown **out)
 
     strmbase_source_init(&object->capture, &object->filter, L"Capture", &capture_ops);
     strmbase_source_init(&object->preview, &object->filter, L"Preview", &preview_ops);
+    object->IQualityControl_iface.lpVtbl = &sink_quality_control_vtbl;
+    object->capture_control.IQualityControl_iface.lpVtbl = &source_quality_control_vtbl;
+    object->capture_control.source = &object->capture;
+    object->preview_control.IQualityControl_iface.lpVtbl = &source_quality_control_vtbl;
+    object->preview_control.source = &object->preview;
 
     TRACE("Created smart tee %p.\n", object);
     *out = &object->filter.IUnknown_inner;
