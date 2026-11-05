@@ -508,6 +508,9 @@ static HRESULT stream_init(struct audio_client *client, const BOOLEAN force_def_
 
     wine_unix_call(create_stream, &params);
 
+#ifdef __REACTOS__
+    client->stream_flags = flags;
+#endif
     free(name);
 
     if (FAILED(params.result)) {
@@ -1080,6 +1083,12 @@ static HRESULT WINAPI client_GetService(IAudioClient3 *iface, REFIID riid, void 
         if (!new_session)
             IUnknown_AddRef((IUnknown *)*ppv);
     } else if (IsEqualIID(riid, &IID_IAudioClockAdjustment)) {
+#ifdef __REACTOS__
+        if (!(This->stream_flags & AUDCLNT_STREAMFLAGS_RATEADJUST)) {
+            hr = E_INVALIDARG;
+            goto exit;
+        }
+#endif
         IAudioClockAdjustment_AddRef(&This->IAudioClockAdjustment_iface);
         *ppv = &This->IAudioClockAdjustment_iface;
     } else {

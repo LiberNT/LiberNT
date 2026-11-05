@@ -121,6 +121,9 @@ struct audio_client {
     IMMDevice *parent;
     IUnknown *marshal;
 
+#ifdef __REACTOS__
+    DWORD stream_flags;
+#endif
     EDataFlow dataflow;
     float *vols;
     UINT32 channel_count;
