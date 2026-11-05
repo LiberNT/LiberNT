@@ -26,7 +26,7 @@ struct file_writer
 {
     struct strmbase_filter filter;
     IAMFilterMiscFlags IAMFilterMiscFlags_iface;
-    IFileSinkFilter IFileSinkFilter_iface;
+    IFileSinkFilter2 IFileSinkFilter2_iface;
     IStream IStream_iface;
     IQualityControl IQualityControl_iface;
 
@@ -34,6 +34,7 @@ struct file_writer
 
     WCHAR *filename;
     GUID majortype, subtype;
+    DWORD mode;
     HANDLE file;
 
     BOOL eos;
@@ -177,8 +178,8 @@ static HRESULT file_writer_query_interface(struct strmbase_filter *iface, REFIID
 
     if (IsEqualGUID(iid, &IID_IAMFilterMiscFlags))
         *out = &filter->IAMFilterMiscFlags_iface;
-    else if (IsEqualGUID(iid, &IID_IFileSinkFilter))
-        *out = &filter->IFileSinkFilter_iface;
+    else if (IsEqualGUID(iid, &IID_IFileSinkFilter) || IsEqualGUID(iid, &IID_IFileSinkFilter2))
+        *out = &filter->IFileSinkFilter2_iface;
     else
         return E_NOINTERFACE;
 
@@ -213,7 +214,7 @@ static HRESULT file_writer_init_stream(struct strmbase_filter *iface)
 
     close_file(filter);
     if ((file = CreateFileW(filter->filename, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-            NULL, CREATE_ALWAYS, 0, NULL)) == INVALID_HANDLE_VALUE)
+            NULL, (filter->mode & AM_FILE_OVERWRITE) ? CREATE_ALWAYS : OPEN_ALWAYS, 0, NULL)) == INVALID_HANDLE_VALUE)
     {
         ERR("Failed to create %s, error %lu.\n", debugstr_w(filter->filename), GetLastError());
         return HRESULT_FROM_WIN32(GetLastError());
@@ -253,33 +254,33 @@ static struct strmbase_filter_ops filter_ops =
     .filter_cleanup_stream = file_writer_cleanup_stream,
 };
 
-static inline struct file_writer *impl_from_IFileSinkFilter(IFileSinkFilter *iface)
+static inline struct file_writer *impl_from_IFileSinkFilter2(IFileSinkFilter2 *iface)
 {
-    return CONTAINING_RECORD(iface, struct file_writer, IFileSinkFilter_iface);
+    return CONTAINING_RECORD(iface, struct file_writer, IFileSinkFilter2_iface);
 }
 
-static HRESULT WINAPI filesinkfilter_QueryInterface(IFileSinkFilter *iface, REFIID iid, void **out)
+static HRESULT WINAPI filesinkfilter_QueryInterface(IFileSinkFilter2 *iface, REFIID iid, void **out)
 {
-    struct file_writer *filter = impl_from_IFileSinkFilter(iface);
+    struct file_writer *filter = impl_from_IFileSinkFilter2(iface);
     return IUnknown_QueryInterface(filter->filter.outer_unk, iid, out);
 }
 
-static ULONG WINAPI filesinkfilter_AddRef(IFileSinkFilter *iface)
+static ULONG WINAPI filesinkfilter_AddRef(IFileSinkFilter2 *iface)
 {
-    struct file_writer *filter = impl_from_IFileSinkFilter(iface);
+    struct file_writer *filter = impl_from_IFileSinkFilter2(iface);
     return IUnknown_AddRef(filter->filter.outer_unk);
 }
 
-static ULONG WINAPI filesinkfilter_Release(IFileSinkFilter *iface)
+static ULONG WINAPI filesinkfilter_Release(IFileSinkFilter2 *iface)
 {
-    struct file_writer *filter = impl_from_IFileSinkFilter(iface);
+    struct file_writer *filter = impl_from_IFileSinkFilter2(iface);
     return IUnknown_Release(filter->filter.outer_unk);
 }
 
-static HRESULT WINAPI filesinkfilter_SetFileName(IFileSinkFilter *iface,
+static HRESULT WINAPI filesinkfilter_SetFileName(IFileSinkFilter2 *iface,
         LPCOLESTR filename, const AM_MEDIA_TYPE *mt)
 {
-    struct file_writer *filter = impl_from_IFileSinkFilter(iface);
+    struct file_writer *filter = impl_from_IFileSinkFilter2(iface);
     WCHAR *new_filename;
 
     TRACE("filter %p, filename %s, mt %p.\n", filter, debugstr_w(filename), mt);
@@ -298,10 +299,10 @@ static HRESULT WINAPI filesinkfilter_SetFileName(IFileSinkFilter *iface,
     return S_OK;
 }
 
-static HRESULT WINAPI filesinkfilter_GetCurFile(IFileSinkFilter *iface,
+static HRESULT WINAPI filesinkfilter_GetCurFile(IFileSinkFilter2 *iface,
         LPOLESTR *filename, AM_MEDIA_TYPE *mt)
 {
-    struct file_writer *filter = impl_from_IFileSinkFilter(iface);
+    struct file_writer *filter = impl_from_IFileSinkFilter2(iface);
 
     TRACE("filter %p, filename %p, mt %p.\n", filter, filename, mt);
 
@@ -326,13 +327,41 @@ static HRESULT WINAPI filesinkfilter_GetCurFile(IFileSinkFilter *iface,
     return S_OK;
 }
 
-static const IFileSinkFilterVtbl filesinkfilter_vtbl =
+static HRESULT WINAPI filesinkfilter_SetMode(IFileSinkFilter2 *iface, DWORD mode)
+{
+    struct file_writer *filter = impl_from_IFileSinkFilter2(iface);
+
+    TRACE("filter %p, mode %#lx.\n", filter, mode);
+
+    if (mode & ~AM_FILE_OVERWRITE)
+        return E_INVALIDARG;
+
+    filter->mode = mode;
+    return S_OK;
+}
+
+static HRESULT WINAPI filesinkfilter_GetMode(IFileSinkFilter2 *iface, DWORD *mode)
+{
+    struct file_writer *filter = impl_from_IFileSinkFilter2(iface);
+
+    TRACE("filter %p, mode %p.\n", filter, mode);
+
+    if (!mode)
+        return E_POINTER;
+
+    *mode = filter->mode;
+    return S_OK;
+}
+
+static const IFileSinkFilter2Vtbl filesinkfilter_vtbl =
 {
     filesinkfilter_QueryInterface,
     filesinkfilter_AddRef,
     filesinkfilter_Release,
     filesinkfilter_SetFileName,
     filesinkfilter_GetCurFile,
+    filesinkfilter_SetMode,
+    filesinkfilter_GetMode,
 };
 
 static inline struct file_writer *impl_from_IAMFilterMiscFlags(IAMFilterMiscFlags *iface)
@@ -595,7 +624,7 @@ HRESULT file_writer_create(IUnknown *outer, IUnknown **out)
         return E_OUTOFMEMORY;
 
     strmbase_filter_init(&object->filter, outer, &CLSID_FileWriter, &filter_ops);
-    object->IFileSinkFilter_iface.lpVtbl = &filesinkfilter_vtbl;
+    object->IFileSinkFilter2_iface.lpVtbl = &filesinkfilter_vtbl;
     object->IAMFilterMiscFlags_iface.lpVtbl = &misc_flags_vtbl;
     object->IStream_iface.lpVtbl = &stream_vtbl;
     object->IQualityControl_iface.lpVtbl = &quality_control_vtbl;
