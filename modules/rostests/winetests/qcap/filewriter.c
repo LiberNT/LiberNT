@@ -905,6 +905,118 @@ static void test_default_allocator(void)
     DeleteFileW(filename);
 }
 
+static void write_test_file(const WCHAR *filename, DWORD size)
+{
+    char buffer[1000];
+    HANDLE file;
+    DWORD ret_size;
+    BOOL ret;
+
+    memset(buffer, 'A', sizeof(buffer));
+    file = CreateFileW(filename, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, 0, NULL);
+    ok(file != INVALID_HANDLE_VALUE, "Failed to create file, error %lu.\n", GetLastError());
+    ret = WriteFile(file, buffer, size, &ret_size, NULL);
+    ok(ret, "Failed to write file, error %lu.\n", GetLastError());
+    CloseHandle(file);
+}
+
+static DWORD get_file_size(const WCHAR *filename)
+{
+    WIN32_FILE_ATTRIBUTE_DATA data;
+
+    if (!GetFileAttributesExW(filename, GetFileExInfoStandard, &data))
+        return ~0u;
+    return data.nFileSizeLow;
+}
+
+static void test_file_mode(void)
+{
+    AM_MEDIA_TYPE req_mt =
+    {
+        .majortype = MEDIATYPE_Stream,
+        .subtype = {0x2222},
+        .formattype = {0x3333},
+    };
+
+    IBaseFilter *filter = create_file_writer();
+    WCHAR *filename = set_filename(filter);
+    IFileSinkFilter2 *filesink;
+    struct testfilter source;
+    IMediaControl *control;
+    IFilterGraph2 *graph;
+    DWORD mode, size;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    IBaseFilter_QueryInterface(filter, &IID_IFileSinkFilter2, (void **)&filesink);
+
+    hr = IFileSinkFilter2_GetMode(filesink, NULL);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+    mode = 0xdeadbeef;
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!mode, "Got mode %#lx.\n", mode);
+
+    hr = IFileSinkFilter2_SetMode(filesink, AM_FILE_OVERWRITE);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(mode == AM_FILE_OVERWRITE, "Got mode %#lx.\n", mode);
+
+    hr = IFileSinkFilter2_SetMode(filesink, 2);
+    ok(hr == E_INVALIDARG, "Got hr %#lx.\n", hr);
+    hr = IFileSinkFilter2_SetMode(filesink, 0xffffffff);
+    ok(hr == E_INVALIDARG, "Got hr %#lx.\n", hr);
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(mode == AM_FILE_OVERWRITE, "Got mode %#lx.\n", mode);
+
+    hr = IFileSinkFilter2_SetMode(filesink, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IFileSinkFilter2_GetMode(filesink, &mode);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!mode, "Got mode %#lx.\n", mode);
+
+    testfilter_init(&source);
+    CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER, &IID_IFilterGraph2, (void **)&graph);
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    IFilterGraph2_AddFilter(graph, filter, L"filewriter");
+    IFilterGraph2_AddFilter(graph, &source.filter.IBaseFilter_iface, L"source");
+    IBaseFilter_FindPin(filter, L"in", &pin);
+    hr = IFilterGraph2_ConnectDirect(graph, &source.source.pin.IPin_iface, pin, &req_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    write_test_file(filename, 1000);
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    size = get_file_size(filename);
+    ok(size == 1000, "Got size %lu.\n", size);
+    IMediaControl_Stop(control);
+
+    hr = IFileSinkFilter2_SetMode(filesink, AM_FILE_OVERWRITE);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    write_test_file(filename, 1000);
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    size = get_file_size(filename);
+    ok(!size, "Got size %lu.\n", size);
+    IMediaControl_Stop(control);
+
+    IFilterGraph2_Disconnect(graph, pin);
+    IFilterGraph2_Disconnect(graph, &source.source.pin.IPin_iface);
+    IMediaControl_Release(control);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    IPin_Release(pin);
+    IFileSinkFilter2_Release(filesink);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(&source.filter.IBaseFilter_iface);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    DeleteFileW(filename);
+}
+
 static void test_quality_control(void)
 {
     IBaseFilter *filter = create_file_writer();
@@ -1056,6 +1168,7 @@ START_TEST(filewriter)
     test_default_allocator();
     test_misc_flags();
     test_file_sink();
+    test_file_mode();
     test_quality_control();
 
     CoUninitialize();
