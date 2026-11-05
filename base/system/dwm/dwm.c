@@ -787,6 +787,20 @@ typedef struct _DWM_POINTER
 
 static DWM_POINTER g_pointer;
 
+/* Windows 11 has this session event while the compositor runs: a second create collides. */
+static VOID
+DwmCreateSessionShutdownEvent(VOID)
+{
+    typedef HRESULT (WINAPI *PFN_CREATE_EVENT)(DWORD, HANDLE *);
+    HMODULE Module = LoadLibraryW(L"dwmapi.dll");
+    PFN_CREATE_EVENT Create = Module ? (PFN_CREATE_EVENT)GetProcAddress(Module, (LPCSTR)(ULONG_PTR)170) : NULL;
+    static HANDLE Event;
+    DWORD Session;
+
+    if (Create != NULL && Event == NULL && ProcessIdToSessionId(GetCurrentProcessId(), &Session))
+        Create(Session, &Event);
+}
+
 static VOID
 DwmPointerSelectPath(HDC hdcScreen)
 {
@@ -4252,6 +4266,8 @@ DwmComposeLoop(HANDLE hStopEvent)
         ReleaseDC(NULL, hdcScreen);
         return;
     }
+
+    DwmCreateSessionShutdownEvent();
 
     /* Registration of the trusted Direct3D swapchain is accepted only after
      * this process has attached as the desktop compositor. OpenGL is a separate
