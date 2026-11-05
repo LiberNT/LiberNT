@@ -8,6 +8,8 @@
 #include "loadconfig.h"
 
 
+static ULONG_PTR ImageSecurityCookie = sizeof(void *) == 8 ? (ULONG_PTR)0x00002B992DDFA232ULL : (ULONG_PTR)0xBB40E64EUL;
+
 // Tell the linker we want a LOAD_CONFIG
 const IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used =
 {
@@ -28,7 +30,7 @@ const IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used =
     0,                          // CSDVersion
     0,                          // Reserved1
     0,                          // EditList
-    0,                          // SecurityCookie
+    (ULONG_PTR)&ImageSecurityCookie, // SecurityCookie
 };
 
 

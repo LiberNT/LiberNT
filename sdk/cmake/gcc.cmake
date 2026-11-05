@@ -416,6 +416,15 @@ function(set_module_type_toolchain MODULE TYPE)
     target_link_options(${MODULE} PRIVATE
         -Wl,--major-image-version,${_NT_MAJOR} -Wl,--minor-image-version,0${_NT_MINOR} -Wl,--major-os-version,${_NT_MAJOR} -Wl,--minor-os-version,0${_NT_MINOR})
 
+    if(NOT TYPE IN_LIST KERNEL_MODULE_TYPES)
+        target_link_libraries(${MODULE} loadconfig)
+        if(ARCH STREQUAL "i386")
+            target_link_options(${MODULE} PRIVATE -Wl,-u,__load_config_used)
+        else()
+            target_link_options(${MODULE} PRIVATE -Wl,-u,_load_config_used)
+        endif()
+    endif()
+
     if(TYPE IN_LIST KERNEL_MODULE_TYPES)
         # "kmdfdriver" is treated the same way as "wdmdriver" in toolchain-specific set_module_type
         if(${TYPE} STREQUAL "kmdfdriver")
