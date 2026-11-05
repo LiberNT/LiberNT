@@ -15,6 +15,7 @@ extern void func_wgl_flat_shading(void);
 extern void func_wgl_close_midrender(void);
 extern void func_wgl_front_facing(void);
 extern void func_wgl_scaled_attrib(void);
+extern void func_wgl_depth_blit(void);
 
 const struct test winetest_testlist[] =
 {
@@ -31,6 +32,7 @@ const struct test winetest_testlist[] =
     { "wgl_close_midrender", func_wgl_close_midrender },
     { "wgl_front_facing", func_wgl_front_facing },
     { "wgl_scaled_attrib", func_wgl_scaled_attrib },
+    { "wgl_depth_blit", func_wgl_depth_blit },
 
     { 0, 0 }
 };
