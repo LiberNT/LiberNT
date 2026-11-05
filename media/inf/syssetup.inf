@@ -67,7 +67,6 @@ RegisterDlls = Wow64RegisterDlls
 11,,winegstreamer.dll,1
 11,,devenum.dll,1
 11,,quartz.dll,1
-11,,dsdmo.dll,1
 11,,dsound.dll,1
 11,,fontext.dll,1
 11,,mfh264enc.dll,1
@@ -218,7 +217,6 @@ RegisterDlls = Wow64RegisterDlls
 11,,devenum.dll,1
 11,,quartz.dll,1
 11,,devenum.dll,1
-11,,dsdmo.dll,1
 11,,dsound.dll,1
 11,,fontext.dll,1
 11,,mfh264enc.dll,1
