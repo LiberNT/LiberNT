@@ -60,6 +60,9 @@ UsbNetLayout(
     Page += PAGE_SIZE;
     Adapter->TxBuffers = Page;
     Page += USBNET_TX_COUNT * PAGE_SIZE;
+    Adapter->Status.Ring.Trbs = (PULONG)Page;
+    Adapter->StatusBuffer = Page + USBNET_RING_SIZE;
+    Page += PAGE_SIZE;
     for (Tier = 1; Tier < USBNET_MAX_TIERS; Tier++)
     {
         Adapter->Devices[Tier].Context = Page;
@@ -113,7 +116,40 @@ UsbNetSetLink(
         Adapter->KdNet->LinkDuplex = 1;
     }
 
-    *Adapter->KdNet->LinkState = Up;
+    *Adapter->KdNet->LinkState = Up && Adapter->Carrier;
+}
+
+static
+VOID
+UsbNetWaitForCarrier(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    ULONG Waited;
+
+    if (!Adapter->StatusActive)
+        return;
+
+    for (Waited = 0; Waited < USBNET_CARRIER_WAIT; Waited += USBNET_CARRIER_STEP)
+    {
+        UsbNetPollStatus(Adapter);
+        if (!Adapter->StatusActive)
+            return;
+
+        if (Adapter->StatusSeen && Adapter->Carrier)
+        {
+            UsbNetTrace("USB debugger: Ethernet link up after %lu ms\n", Waited);
+            return;
+        }
+
+        if (!(Waited % USBNET_CARRIER_REMIND))
+            UsbNetTrace("USB debugger: waiting for the Ethernet link on root port %lu\n", Adapter->Devices[0].Port);
+
+        XhciStall(USBNET_CARRIER_STEP * 1000);
+    }
+
+    /* FIXME: a device that never reports its connection state counts as linked, so it cannot lose to a PCI NIC */
+    UsbNetTrace("USB debugger: no Ethernet link after %lu ms, reported %lu, carrier %lu\n", Waited,
+                (ULONG)Adapter->StatusSeen, (ULONG)Adapter->Carrier);
 }
 
 NTSTATUS
@@ -124,7 +160,6 @@ UsbNetInitializeController(
     PDEBUG_DEVICE_DESCRIPTOR Device = KdNet->Device;
     PUSBNET_ADAPTER Adapter = KdNet->Hardware;
     NTSTATUS Status;
-    BOOLEAN Phone;
     ULONG i;
 
     if (!Device->BaseAddress[0].Valid || Device->BaseAddress[0].Type != CmResourceTypeMemory ||
@@ -144,11 +179,11 @@ UsbNetInitializeController(
     if (NT_SUCCESS(Status))
         Status = UsbFindFunction(Adapter);
 
-    Phone = NT_SUCCESS(Status) && !Adapter->Tier && Adapter->PhonePort == Adapter->Devices[0].Port;
     if (!NT_SUCCESS(Status) && (Adapter->PhonePort || Status == STATUS_DEVICE_NOT_CONNECTED))
     {
         Status = UsbWaitForTethering(Adapter);
-        Phone = TRUE;
+        if (!NT_SUCCESS(Status))
+            Status = UsbStartEthernet(Adapter);
     }
 
     if (!NT_SUCCESS(Status))
@@ -157,8 +192,20 @@ UsbNetInitializeController(
         return Status;
     }
 
-    UsbNetSetMessage(STATUS_SUCCESS, Phone ? L"Connected to the phone" : NULL);
+    UsbNetSetMessage(STATUS_SUCCESS, Adapter->Phone ? L"Connected to the phone" : NULL);
+    UsbNetTrace("USB debugger: using %04lx:%04lx on root port %lu, %lu hub(s) away, %lu Mbit/s\n",
+                (ULONG)Adapter->VendorId, (ULONG)Adapter->ProductId, Adapter->Devices[0].Port, Adapter->Tier,
+                UsbNetLinkSpeed(Adapter->Device->Speed));
+    UsbNetWaitForCarrier(Adapter);
+
+    /* The transfer pending now reports to interrupter 0, which the OS owns once the controller is shared */
+    if (Adapter->StatusActive)
+        XhciRecoverEndpoint(Adapter, Adapter->Device, &Adapter->Status);
+
     XhciShareController(Adapter);
+    if (Adapter->StatusActive)
+        UsbNetStartStatus(Adapter);
+
     UsbNetSetLink(Adapter, TRUE);
     return STATUS_SUCCESS;
 }
@@ -170,6 +217,8 @@ UsbNetShutdownController(
 {
     PUSBNET_ADAPTER Adapter = Context;
 
+    /* Only device selection stops a controller; the OS never saw this share, so it must stop its DMA */
+    Adapter->Shared = FALSE;
     XhciHalt(Adapter);
     UsbNetSetLink(Adapter, FALSE);
 }
@@ -272,6 +321,7 @@ UsbNetGetRxPacket(
         return STATUS_IO_TIMEOUT;
     }
 
+    UsbNetPollStatus(Adapter);
     if (Adapter->RxHeld)
         return STATUS_IO_TIMEOUT;
 

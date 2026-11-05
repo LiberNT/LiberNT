@@ -151,6 +151,8 @@ XhciSharedLinkReady(
         KeMemoryBarrier();
         XhciWrite(Doorbell, Adapter->BulkIn.Dci);
         XhciWrite(Doorbell, Adapter->BulkOut.Dci);
+        if (Adapter->Status.Dci)
+            XhciWrite(Doorbell, Adapter->Status.Dci);
     }
 
     return TRUE;
@@ -197,6 +199,9 @@ XhciFindEndpoint(
 
     if (Adapter->BulkOut.Dci && Dci == Adapter->BulkOut.Dci)
         return &Adapter->BulkOut;
+
+    if (Adapter->Status.Dci && Dci == Adapter->Status.Dci)
+        return &Adapter->Status;
 
     return NULL;
 }
@@ -631,6 +636,7 @@ XhciShareController(
     Share->Size = sizeof(*Share);
     Share->Port = Adapter->Devices[0].Port;
     Share->Interrupter = USBNET_SHARED_INTERRUPTER;
+    Share->Phone = Adapter->Phone;
     Share->SlotCount = 0;
     for (Tier = 0; Tier <= Adapter->Tier && Tier < KD_USB_SHARE_MAX_SLOTS; Tier++)
     {
@@ -642,7 +648,8 @@ XhciShareController(
         Share->DeviceContexts[Share->SlotCount] = Adapter->Dcbaa[Device->Slot];
         Share->ContextAddresses[Share->SlotCount] = (ULONG64)(ULONG_PTR)Device->Context;
         Share->Endpoints[Share->SlotCount] = Device != Adapter->Device ? 0 :
-                                             (1UL << Adapter->BulkIn.Dci) | (1UL << Adapter->BulkOut.Dci);
+                                             (1UL << Adapter->BulkIn.Dci) | (1UL << Adapter->BulkOut.Dci) |
+                                             (Adapter->Status.Dci ? 1UL << Adapter->Status.Dci : 0);
         Share->SlotCount++;
     }
 
