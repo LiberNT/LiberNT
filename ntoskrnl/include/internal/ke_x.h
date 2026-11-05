@@ -1883,13 +1883,13 @@ KiCompleteThreadSwitch(
     KeMemoryBarrier();
 
     KiAcquireThreadLock(OldThread);
-    OldThread->Running = FALSE;
-    KeMemoryBarrier();
     ReadyTransition = OldThread->ReadyTransition;
     OldThread->ReadyTransition = FALSE;
     ReapThread = (OldThread->State == Terminated);
     ASSERT(!ReadyTransition || (OldThread->State == DeferredReady));
     ASSERT(!ReadyTransition || !ReapThread);
+    KeMemoryBarrier();
+    OldThread->Running = FALSE;
     KiReleaseThreadLock(OldThread);
 
     if (ReadyTransition)
