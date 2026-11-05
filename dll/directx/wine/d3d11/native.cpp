@@ -6487,6 +6487,10 @@ void STDMETHODCALLTYPE NativeContext::RSSetState(ID3D11RasterizerState *state)
     if (!deferred) device->functions.pfnSetRasterizerState(device->driver_device, handle);
     ReplaceObject(rasterizer_state, state);
 }
+static FLOAT NativeTruncateViewportExtent(FLOAT value)
+{
+    return value > -8388608.0f && value < 8388608.0f ? static_cast<FLOAT>(static_cast<INT>(value)) : value;
+}
 void STDMETHODCALLTYPE NativeContext::RSSetViewports(UINT count, const D3D11_VIEWPORT *values)
 {
     if (StateCallIgnored()) return;
@@ -6495,13 +6499,23 @@ void STDMETHODCALLTYPE NativeContext::RSSetViewports(UINT count, const D3D11_VIE
     UINT old_count = viewport_count;
     viewport_count = count;
     if (count) memcpy(viewports, values, count * sizeof(*values));
+    if (device->feature_level < D3D_FEATURE_LEVEL_11_0)
+    {
+        for (UINT i = 0; i < count; ++i)
+        {
+            viewports[i].TopLeftX = NativeTruncateViewportExtent(viewports[i].TopLeftX);
+            viewports[i].TopLeftY = NativeTruncateViewportExtent(viewports[i].TopLeftY);
+            viewports[i].Width = NativeTruncateViewportExtent(viewports[i].Width);
+            viewports[i].Height = NativeTruncateViewportExtent(viewports[i].Height);
+        }
+    }
     if (deferred && !recording_disabled)
     {
-        NativeCommandArray<D3D11_VIEWPORT> copied(count, values);
+        NativeCommandArray<D3D11_VIEWPORT> copied(count, viewports);
         if (Captured(copied)) Record([=](NativeContext *context) { context->RSSetViewports(count, copied.Data()); });
     }
     if (!deferred) device->functions.pfnSetViewports(device->driver_device, count, old_count > count ? old_count - count : 0,
-            reinterpret_cast<const D3D10_DDI_VIEWPORT *>(values));
+            count ? reinterpret_cast<const D3D10_DDI_VIEWPORT *>(viewports) : NULL);
 }
 void STDMETHODCALLTYPE NativeContext::RSSetScissorRects(UINT count, const D3D11_RECT *values)
 {
