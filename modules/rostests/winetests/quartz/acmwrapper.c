@@ -578,6 +578,87 @@ static void test_unconnected_filter_state(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static unsigned int bag_read_calls;
+
+static HRESULT WINAPI property_bag_QueryInterface(IPropertyBag *iface, REFIID iid, void **out)
+{
+    ok(0, "Unexpected iid %s.\n", wine_dbgstr_guid(iid));
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI property_bag_AddRef(IPropertyBag *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI property_bag_Release(IPropertyBag *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI property_bag_Read(IPropertyBag *iface, const WCHAR *name, VARIANT *var, IErrorLog *log)
+{
+    ok(!wcscmp(name, L"AcmId"), "Got unexpected name %s.\n", wine_dbgstr_w(name));
+    ok(V_VT(var) == VT_I4, "Got unexpected type %u.\n", V_VT(var));
+    ok(!log, "Got unexpected error log %p.\n", log);
+    ++bag_read_calls;
+    return E_INVALIDARG;
+}
+
+static HRESULT WINAPI property_bag_Write(IPropertyBag *iface, const WCHAR *name, VARIANT *var)
+{
+    ok(0, "Unexpected call (name %s).\n", wine_dbgstr_w(name));
+    return E_FAIL;
+}
+
+static const IPropertyBagVtbl property_bag_vtbl =
+{
+    property_bag_QueryInterface,
+    property_bag_AddRef,
+    property_bag_Release,
+    property_bag_Read,
+    property_bag_Write,
+};
+
+static void test_property_bag(void)
+{
+    IPropertyBag property_bag = {&property_bag_vtbl};
+    IBaseFilter *filter = create_acm_wrapper();
+    IPersistPropertyBag *ppb;
+    CLSID clsid;
+    HRESULT hr;
+    ULONG ref;
+
+    hr = IBaseFilter_QueryInterface(filter, &IID_IPersistPropertyBag, (void **)&ppb);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (FAILED(hr))
+    {
+        IBaseFilter_Release(filter);
+        return;
+    }
+
+    hr = IPersistPropertyBag_GetClassID(ppb, &clsid);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&clsid, &CLSID_ACMWrapper), "Got CLSID %s.\n", wine_dbgstr_guid(&clsid));
+
+    hr = IPersistPropertyBag_InitNew(ppb);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPersistPropertyBag_InitNew(ppb);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IPersistPropertyBag_Save(ppb, &property_bag, TRUE, TRUE);
+    ok(hr == E_NOTIMPL, "Got hr %#lx.\n", hr);
+
+    bag_read_calls = 0;
+    hr = IPersistPropertyBag_Load(ppb, &property_bag, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(bag_read_calls == 1, "Got %u calls to Read().\n", bag_read_calls);
+
+    IPersistPropertyBag_Release(ppb);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(acmwrapper)
 {
     CoInitialize(NULL);
@@ -588,6 +669,7 @@ START_TEST(acmwrapper)
     test_find_pin();
     test_pin_info();
     test_unconnected_filter_state();
+    test_property_bag();
 
     CoUninitialize();
 }
