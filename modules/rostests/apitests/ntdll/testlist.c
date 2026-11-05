@@ -57,6 +57,7 @@ extern void func_NtContinue(void);
 #ifdef _M_AMD64
 extern void func_NullGsSelector(void);
 extern void func_RtlRestoreContextConsolidate(void);
+extern void func_RtlVirtualUnwindFragment(void);
 extern void func_SyscallStub(void);
 extern void func_x87Exception(void);
 #endif
@@ -249,6 +250,7 @@ const struct test winetest_testlist[] =
 #ifdef _M_AMD64
     { "NullGsSelector",                 func_NullGsSelector },
     { "RtlRestoreContextConsolidate",   func_RtlRestoreContextConsolidate },
+    { "RtlVirtualUnwindFragment",       func_RtlVirtualUnwindFragment },
     { "SyscallStub",                    func_SyscallStub },
     { "x87Exception",                   func_x87Exception },
 #endif
