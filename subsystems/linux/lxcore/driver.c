@@ -1220,6 +1220,7 @@ DriverEntry(
     LxProcessInitialize();
     LxHugeInitialize();
     LxTmpfsInitialize();
+    LxFlockInitialize();
     InitializeListHead(&LxInstanceList);
     ExInitializeFastMutex(&LxInstanceListLock);
     LxKlogInitialize();

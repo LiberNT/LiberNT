@@ -439,6 +439,7 @@ LxFileDereference(
 
     LxEpollFileReleased(File);
     LxFileAsyncRelease(File);
+    LxFlockRelease(File);
     if (File->Written)
         LxInotifyFileEvent(File, LX_IN_CLOSE_WRITE);
     if (File->Ops->Release != NULL)

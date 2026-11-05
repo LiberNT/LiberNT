@@ -300,6 +300,7 @@ struct _LX_FILE
     BOOLEAN MountsFull;
     BOOLEAN MountsRead;
     PSTR SynthRelative;
+    BOOLEAN Flocked;
 };
 
 typedef enum _LX_FS_KIND
@@ -1000,6 +1001,8 @@ BOOLEAN LxVforkFinish(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FR
 VOID LxVforkAbandon(_Inout_ PLX_THREAD Thread);
 
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);
+VOID LxFlockInitialize(VOID);
+VOID LxFlockRelease(_In_ PLX_FILE File);
 VOID LxEventSourceInit(_Out_ PLX_EVENT_SOURCE Source);
 VOID LxEventSourceSignal(_In_ PLX_EVENT_SOURCE Source);
 VOID LxPollAdd(_In_ PLX_POLL_HEAD Head, _Inout_ PLX_POLL_ENTRY Entry);
