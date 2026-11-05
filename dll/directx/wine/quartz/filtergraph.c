@@ -793,66 +793,82 @@ static HRESULT WINAPI FilterGraph2_FindFilterByName(IFilterGraph2 *iface,
     return VFW_E_NOT_FOUND;
 }
 
-static HRESULT check_cyclic_connection(IPin *source, IPin *sink)
+static HRESULT check_cyclic_connection(IPin *source, IPin *sink);
+
+static HRESULT check_cyclic_output(IPin *source, IPin *output)
 {
-    IPin *upstream_source, *upstream_sink;
-    PIN_INFO source_info, sink_info;
-    IEnumPins *enumpins;
+    IPin *peer;
     HRESULT hr;
 
-    hr = IPin_QueryPinInfo(sink, &sink_info);
-    if (FAILED(hr))
-    {
-        ERR("Failed to query pin, hr %#lx.\n", hr);
-        return hr;
-    }
-    IBaseFilter_Release(sink_info.pFilter);
-
-    hr = IPin_QueryPinInfo(source, &source_info);
-    if (FAILED(hr))
-    {
-        ERR("Failed to query pin, hr %#lx.\n", hr);
-        return hr;
-    }
-
-    if (sink_info.pFilter == source_info.pFilter)
+    if (output == source)
     {
         WARN("Cyclic connection detected; returning VFW_E_CIRCULAR_GRAPH.\n");
-        IBaseFilter_Release(source_info.pFilter);
         return VFW_E_CIRCULAR_GRAPH;
     }
 
-    hr = IBaseFilter_EnumPins(source_info.pFilter, &enumpins);
+    if (IPin_ConnectedTo(output, &peer) != S_OK)
+        return S_OK;
+
+    hr = check_cyclic_connection(source, peer);
+    IPin_Release(peer);
+    return hr;
+}
+
+static HRESULT check_cyclic_connection(IPin *source, IPin *sink)
+{
+    IPin **pins = NULL, *pin;
+    IEnumPins *enumpins;
+    ULONG count = 0, i;
+    PIN_DIRECTION dir;
+    PIN_INFO info;
+    HRESULT hr;
+
+    hr = IPin_QueryInternalConnections(sink, NULL, &count);
+    if (SUCCEEDED(hr) && count)
+    {
+        if (!(pins = calloc(count, sizeof(*pins))))
+            return E_OUTOFMEMORY;
+        hr = IPin_QueryInternalConnections(sink, pins, &count);
+    }
+
+    if (hr == S_OK)
+    {
+        for (i = 0; i < count; ++i)
+        {
+            if (hr == S_OK)
+                hr = check_cyclic_output(source, pins[i]);
+            IPin_Release(pins[i]);
+        }
+        free(pins);
+        return hr;
+    }
+    free(pins);
+
+    hr = IPin_QueryPinInfo(sink, &info);
     if (FAILED(hr))
     {
-        ERR("Failed to enumerate pins, hr %#lx.\n", hr);
-        IBaseFilter_Release(source_info.pFilter);
+        ERR("Failed to query pin, hr %#lx.\n", hr);
         return hr;
     }
 
-    while ((hr = IEnumPins_Next(enumpins, 1, &upstream_sink, NULL)) == S_OK)
+    hr = IBaseFilter_EnumPins(info.pFilter, &enumpins);
+    IBaseFilter_Release(info.pFilter);
+    if (FAILED(hr))
     {
-        PIN_DIRECTION dir = PINDIR_OUTPUT;
+        ERR("Failed to enumerate pins, hr %#lx.\n", hr);
+        return hr;
+    }
 
-        IPin_QueryDirection(upstream_sink, &dir);
-        if (dir == PINDIR_INPUT && IPin_ConnectedTo(upstream_sink, &upstream_source) == S_OK)
-        {
-            hr = check_cyclic_connection(upstream_source, sink);
-            IPin_Release(upstream_source);
-            if (FAILED(hr))
-            {
-                IPin_Release(upstream_sink);
-                IEnumPins_Release(enumpins);
-                IBaseFilter_Release(source_info.pFilter);
-                return hr;
-            }
-        }
-        IPin_Release(upstream_sink);
+    while (hr == S_OK && IEnumPins_Next(enumpins, 1, &pin, NULL) == S_OK)
+    {
+        IPin_QueryDirection(pin, &dir);
+        if (dir == PINDIR_OUTPUT)
+            hr = check_cyclic_output(source, pin);
+        IPin_Release(pin);
     }
     IEnumPins_Release(enumpins);
 
-    IBaseFilter_Release(source_info.pFilter);
-    return S_OK;
+    return hr;
 }
 
 static struct filter *find_sorted_filter(struct filter_graph *graph, IBaseFilter *iface)
@@ -892,7 +908,7 @@ static void sort_filter_recurse(struct filter_graph *graph, struct filter *filte
         {
             IPin_QueryPinInfo(peer, &info);
             /* Note that the filter may have already been sorted. */
-            if ((peer_filter = find_sorted_filter(graph, info.pFilter)))
+            if ((peer_filter = find_sorted_filter(graph, info.pFilter)) && !peer_filter->sorting)
                 sort_filter_recurse(graph, peer_filter, sorted);
             IBaseFilter_Release(info.pFilter);
             IPin_Release(peer);
@@ -920,55 +936,19 @@ static void sort_filters(struct filter_graph *graph)
     list_move_tail(&graph->filters, &sorted);
 }
 
-/* NOTE: despite the implication, it doesn't matter which
- * way round you put in the input and output pins */
-static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *ppinIn, IPin *ppinOut,
-        const AM_MEDIA_TYPE *pmt)
+static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *source, IPin *sink,
+        const AM_MEDIA_TYPE *mt)
 {
-    struct filter_graph *This = impl_from_IFilterGraph2(iface);
-    PIN_DIRECTION dir;
+    struct filter_graph *graph = impl_from_IFilterGraph2(iface);
     HRESULT hr;
 
-    TRACE("(%p/%p)->(%p, %p, %p)\n", This, iface, ppinIn, ppinOut, pmt);
-    strmbase_dump_media_type(pmt);
+    TRACE("graph %p, source %p, sink %p, mt %p.\n", graph, source, sink, mt);
+    strmbase_dump_media_type(mt);
 
     /* FIXME: check pins are in graph */
 
-    if (TRACE_ON(quartz))
-    {
-        PIN_INFO PinInfo;
-
-        hr = IPin_QueryPinInfo(ppinIn, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinIn(%p) => %p\n", ppinIn, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-
-        hr = IPin_QueryPinInfo(ppinOut, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinOut(%p) => %p\n", ppinOut, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-    }
-
-    hr = IPin_QueryDirection(ppinIn, &dir);
-    if (SUCCEEDED(hr))
-    {
-        if (dir == PINDIR_INPUT)
-        {
-            hr = check_cyclic_connection(ppinOut, ppinIn);
-            if (SUCCEEDED(hr))
-                hr = IPin_Connect(ppinOut, ppinIn, pmt);
-        }
-        else
-        {
-            hr = check_cyclic_connection(ppinIn, ppinOut);
-            if (SUCCEEDED(hr))
-                hr = IPin_Connect(ppinIn, ppinOut, pmt);
-        }
-    }
+    if (SUCCEEDED(hr = check_cyclic_connection(source, sink)))
+        hr = IPin_Connect(source, sink, mt);
 
     return hr;
 }
@@ -976,8 +956,16 @@ static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *ppi
 static HRESULT WINAPI FilterGraph2_Reconnect(IFilterGraph2 *iface, IPin *pin)
 {
     struct filter_graph *graph = impl_from_IFilterGraph2(iface);
+    FILTER_STATE state;
 
     TRACE("graph %p, pin %p.\n", graph, pin);
+
+    EnterCriticalSection(&graph->cs);
+    state = graph->state;
+    LeaveCriticalSection(&graph->cs);
+
+    if (state != State_Stopped)
+        return VFW_E_WRONG_STATE;
 
     return IFilterGraph2_ReconnectEx(iface, pin, NULL);
 }
@@ -1432,27 +1420,12 @@ out:
 static HRESULT WINAPI FilterGraph2_Connect(IFilterGraph2 *iface, IPin *source, IPin *sink)
 {
     struct filter_graph *graph = impl_from_IFilterGraph2(iface);
-    PIN_DIRECTION dir;
     HRESULT hr;
 
     TRACE("graph %p, source %p, sink %p.\n", graph, source, sink);
 
     if (!source || !sink)
         return E_POINTER;
-
-    if (FAILED(hr = IPin_QueryDirection(source, &dir)))
-        return hr;
-
-    if (dir == PINDIR_INPUT)
-    {
-        IPin *temp;
-
-        TRACE("Directions seem backwards, swapping pins\n");
-
-        temp = sink;
-        sink = source;
-        source = temp;
-    }
 
     EnterCriticalSection(&graph->cs);
 

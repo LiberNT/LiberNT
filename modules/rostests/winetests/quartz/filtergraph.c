@@ -1429,12 +1429,15 @@ static void check_state_transition(struct testfilter *filter, FILTER_STATE expec
         {
             IPin_QueryPinInfo(filter->pins[i].peer, &info);
             IBaseFilter_GetState(info.pFilter, 0, &state);
-            if (filter->pins[i].dir == PINDIR_OUTPUT)
-                ok(state == expect, "Expected state %d for downstream filter %p, got %d.\n",
-                        expect, info.pFilter, state);
-            else
-                ok(state == filter->state, "Expected state %d for upstream filter %p, got %d.\n",
-                        filter->state, info.pFilter, state);
+            if (info.pFilter != &filter->IBaseFilter_iface)
+            {
+                if (filter->pins[i].dir == PINDIR_OUTPUT)
+                    ok(state == expect, "Expected state %d for downstream filter %p, got %d.\n",
+                            expect, info.pFilter, state);
+                else
+                    ok(state == filter->state, "Expected state %d for upstream filter %p, got %d.\n",
+                            filter->state, info.pFilter, state);
+            }
             IBaseFilter_Release(info.pFilter);
         }
     }
@@ -2385,6 +2388,7 @@ static void test_graph_builder_connect(void)
     REGPINTYPES regtypes = {0};
     REGFILTER2 regfilter = {0};
     IFilterMapper2 *mapper;
+    IMediaControl *control;
     DWORD cookie1, cookie2;
     HRESULT hr;
     ULONG ref;
@@ -2605,6 +2609,13 @@ static void test_graph_builder_connect(void)
     hr = IFilterGraph2_Connect(graph, &parser1_pins[1].IPin_iface, &parser1_pins[0].IPin_iface);
     todo_wine ok(hr == S_OK, "Got hr %#lx.\n", hr);
     parser1_pins[0].QueryInternalConnections_hr = E_NOTIMPL;
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IMediaControl_Release(control);
 
     ref = IFilterGraph2_Release(graph);
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
