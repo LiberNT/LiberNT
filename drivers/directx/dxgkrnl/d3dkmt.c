@@ -5283,10 +5283,11 @@ DxgkDispatchCreate(
 {
     PIO_STACK_LOCATION Stack;
     PDXGKRNL_FILE_CONTEXT Context;
+    NTSTATUS DisplayStatus;
 
     /* Route \Device\Video0 opens to the display handler */
-    if (DxgkDisplayDispatchCreate(DeviceObject, Irp))
-        return STATUS_SUCCESS;
+    if (DxgkDisplayDispatchCreate(DeviceObject, Irp, &DisplayStatus))
+        return DisplayStatus;
 
     DXGKRNL_TRACE("DxgkDispatchCreate\n");
 
@@ -5330,10 +5331,11 @@ DxgkDispatchClose(
 {
     PIO_STACK_LOCATION Stack;
     PDXGKRNL_FILE_CONTEXT Context = NULL;
+    NTSTATUS DisplayStatus;
 
     /* Route \Device\Video0 closes to the display handler */
-    if (DxgkDisplayDispatchClose(DeviceObject, Irp))
-        return STATUS_SUCCESS;
+    if (DxgkDisplayDispatchClose(DeviceObject, Irp, &DisplayStatus))
+        return DisplayStatus;
 
     DXGKRNL_TRACE("DxgkDispatchClose\n");
 
