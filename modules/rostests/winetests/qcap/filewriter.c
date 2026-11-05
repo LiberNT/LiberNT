@@ -542,8 +542,10 @@ static void test_allocator(IMemInputPin *input, IMemAllocator *allocator)
         ok(!props.cbPrefix, "Got prefix %ld.\n", props.cbPrefix);
     }
 
+    ret_allocator = (IMemAllocator *)0xdeadbeef;
     hr = IMemInputPin_GetAllocator(input, &ret_allocator);
     todo_wine ok(hr == E_INVALIDARG, "Got hr %#lx.\n", hr);
+    todo_wine ok(!ret_allocator, "Got allocator %p.\n", ret_allocator);
 
     hr = IMemInputPin_NotifyAllocator(input, NULL, TRUE);
     ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
@@ -835,11 +837,14 @@ static void test_connect_pin(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static ALLOCATOR_PROPERTIES decided_props;
+
 static HRESULT WINAPI testsource_DecideBufferSize(struct strmbase_source *iface,
         IMemAllocator *allocator, ALLOCATOR_PROPERTIES *props)
 {
     ALLOCATOR_PROPERTIES ret_props;
 
+    decided_props = *props;
     props->cBuffers = 1;
     props->cbBuffer = 512;
     if (!props->cbAlign)
@@ -881,6 +886,7 @@ static void test_default_allocator(void)
     hr = IFilterGraph2_ConnectDirect(graph, &source.source.pin.IPin_iface, pin, &req_mt);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     ok(!!source.source.pAllocator, "Got no allocator.\n");
+    ok(decided_props.cbAlign == 512, "Got alignment %ld.\n", decided_props.cbAlign);
 
     IFilterGraph2_Disconnect(graph, pin);
     IFilterGraph2_Disconnect(graph, &source.source.pin.IPin_iface);

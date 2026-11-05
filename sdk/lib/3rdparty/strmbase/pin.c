@@ -1066,6 +1066,9 @@ static HRESULT WINAPI MemInputPin_GetAllocator(IMemInputPin * iface, IMemAllocat
     TRACE("pin %p %s:%s, allocator %p.\n", This, debugstr_w(This->pin.filter->name),
             debugstr_w(This->pin.name), ppAllocator);
 
+    if (This->pFuncsTable->sink_get_allocator)
+        return This->pFuncsTable->sink_get_allocator(This, ppAllocator);
+
     if (!This->pAllocator)
     {
         HRESULT hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER,
@@ -1120,6 +1123,9 @@ static HRESULT WINAPI MemInputPin_GetAllocatorRequirements(IMemInputPin *iface, 
             debugstr_w(pin->pin.name), props);
 
     /* override this method if you have any specific requirements */
+
+    if (pin->pFuncsTable->sink_get_allocator_requirements)
+        return pin->pFuncsTable->sink_get_allocator_requirements(pin, props);
 
     return E_NOTIMPL;
 }
