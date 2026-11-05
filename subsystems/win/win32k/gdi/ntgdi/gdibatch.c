@@ -36,6 +36,33 @@ DoDeviceSync(
         Device->DriverFunctions.Synchronize(Surface->dhpdev, Rect);
 }
 
+static
+VOID
+SynchronizeDevice(
+    _In_ PPDEVOBJ Device,
+    _In_ FLONG Flags,
+    _In_ FLONG Event)
+{
+    if (!(Device->devinfo.flGraphicsCaps2 & Flags))
+        return;
+
+    /* The periodic callback runs on the raw input thread. It must not wait
+     * behind a present while mouse/button packets are waiting to be read.
+     * Dirty pixels remain pending for the next tick or explicit GdiFlush. */
+    if (Event == DSS_TIMER_EVENT)
+    {
+        if (!EngAcquireSemaphoreNoWait(Device->hsemDevLock))
+            return;
+    }
+    else
+    {
+        EngAcquireSemaphore(Device->hsemDevLock);
+    }
+    if (!(Device->flFlags & PDEV_DISABLED) && Device->pSurface != NULL)
+        DoDeviceSync(&Device->pSurface->SurfObj, NULL, Event);
+    EngReleaseSemaphore(Device->hsemDevLock);
+}
+
 VOID
 FASTCALL
 SynchronizeDriver(FLONG Flags)
@@ -53,35 +80,17 @@ SynchronizeDriver(FLONG Flags)
     /* Native GDI gives one device the periodic callback. The global PDEV is
      * the primary device and EngpGetPDEV keeps it alive across the call. */
     Device = EngpGetPDEV(NULL);
-    if (Device == NULL)
-        return;
-
-    if (!(Device->devinfo.flGraphicsCaps2 & Flags))
+    if (Device != NULL)
     {
+        SynchronizeDevice(Device, Flags, Event);
         PDEVOBJ_vRelease(Device);
-        return;
     }
 
-    /* The periodic callback runs on the raw input thread. It must not wait
-     * behind a present while mouse/button packets are waiting to be read.
-     * Dirty pixels remain pending for the next tick or explicit GdiFlush. */
-    if (Event == DSS_TIMER_EVENT)
+    if (Event == DSS_FLUSH_EVENT && (Device = EngpGetDetachedPDEV()) != NULL)
     {
-        if (!EngAcquireSemaphoreNoWait(Device->hsemDevLock))
-        {
-            PDEVOBJ_vRelease(Device);
-            return;
-        }
+        SynchronizeDevice(Device, Flags, Event);
+        PDEVOBJ_vRelease(Device);
     }
-    else
-    {
-        EngAcquireSemaphore(Device->hsemDevLock);
-    }
-    if (!(Device->flFlags & PDEV_DISABLED) && Device->pSurface != NULL)
-        DoDeviceSync(&Device->pSurface->SurfObj, NULL, Event);
-    EngReleaseSemaphore(Device->hsemDevLock);
-
-    PDEVOBJ_vRelease(Device);
 }
 
 static BOOL

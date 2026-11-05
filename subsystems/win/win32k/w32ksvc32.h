@@ -911,3 +911,4 @@
     SVC_(GdiDdDDISetDodIndirectSwapchain, 1)
     SVC_(GdiDdDDICreateBundleObject, 1)
     SVC_(GdiDdDDIExtractBundleObject, 1)
+    SVC_(UserSetDisplayConfig, 5)
