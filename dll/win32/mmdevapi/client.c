@@ -421,7 +421,11 @@ static HRESULT stream_init(struct audio_client *client, const BOOLEAN force_def_
         return E_INVALIDARG;
 
     if (mode == AUDCLNT_SHAREMODE_EXCLUSIVE) {
+#ifdef __REACTOS__
+        if (flags & (AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_LOOPBACK))
+#else
         if (flags & AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM)
+#endif
             return E_INVALIDARG;
 
         compatible = TRUE;
@@ -1038,6 +1042,21 @@ static HRESULT WINAPI client_GetService(IAudioClient3 *iface, REFIID riid, void 
         hr = AUDCLNT_E_NOT_INITIALIZED;
         goto exit;
     }
+
+#ifdef __REACTOS__
+    {
+        struct get_buffer_size_params size_params;
+        UINT32 size_frames;
+
+        size_params.stream = This->stream;
+        size_params.frames = &size_frames;
+        wine_unix_call(get_buffer_size, &size_params);
+        if (size_params.result == AUDCLNT_E_DEVICE_INVALIDATED) {
+            hr = size_params.result;
+            goto exit;
+        }
+    }
+#endif
 
     if (IsEqualIID(riid, &IID_IAudioRenderClient)) {
         if (This->dataflow != eRender) {

@@ -25,6 +25,7 @@ add_importlibs(mmdevapi_child ole32 setupapi advapi32 msvcrt kernel32 ntdll)
 add_dependencies(mmdevapi_child dxsdk)
 
 add_executable(mmdevapi_apitest
+    capturestream.c
     deviceenum.c
     exclusivestream.c
     renderstream.c

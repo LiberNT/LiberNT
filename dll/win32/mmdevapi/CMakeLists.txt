@@ -21,6 +21,8 @@ list(APPEND SOURCE
 
 if(NOT ARCH STREQUAL "arm")
     list(APPEND SOURCE
+        reactos_capture_engine.c
+        reactos_capture_engine.h
         reactos_render_engine.c
         reactos_render_engine.h
         reactos_wdmaud.c)

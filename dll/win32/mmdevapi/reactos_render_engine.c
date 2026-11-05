@@ -17,6 +17,7 @@
 #include "mmreg.h"
 #include "audioclient.h"
 
+#include "reactos_capture_engine.h"
 #include "reactos_render_engine.h"
 
 #ifndef ARRAY_SIZE
@@ -78,6 +79,7 @@ struct local_render_endpoint
     HANDLE worker_thread;
     struct shared_render_region *region;
     struct reactos_render_transport_ops transport_ops;
+    struct reactos_shared_capture_sink *loopback_sink;
     void *transport;
     BOOL transport_started;
     BYTE *mix_buffer;
@@ -818,6 +820,8 @@ mix_one_chunk(struct local_render_endpoint *endpoint)
         notify_render_client(endpoint, client_index);
     }
     unlock_endpoint(endpoint);
+    if (endpoint->loopback_sink)
+        reactos_shared_capture_write(endpoint->loopback_sink, endpoint->mix_buffer, frames);
     SetEvent(endpoint->wake_event);
     return TRUE;
 }
@@ -948,6 +952,8 @@ destroy_local_endpoint(struct local_render_endpoint *endpoint)
     }
     if (endpoint->wake_event)
         SetEvent(endpoint->wake_event);
+    if (endpoint->loopback_sink)
+        reactos_shared_capture_close_sink(endpoint->loopback_sink);
     if (endpoint->region)
         UnmapViewOfFile(endpoint->region);
     if (endpoint->mapping)
@@ -1025,6 +1031,8 @@ create_local_endpoint(
     unlock_endpoint(endpoint);
     if (FAILED(hr))
         goto failed;
+    if (FAILED(reactos_shared_capture_open_loopback_sink(endpoint_index, format, &endpoint->loopback_sink)))
+        endpoint->loopback_sink = NULL;
 
     *created = endpoint;
     return S_OK;
