@@ -31,6 +31,7 @@ set(COMPAT_RUNTIME_MODULES
     cabview
     cfgmgr32
     clusapi
+    colorcnv
     combase
     comcat
     comctl32
