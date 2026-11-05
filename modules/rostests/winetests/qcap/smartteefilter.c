@@ -1413,6 +1413,8 @@ static void test_streaming(void)
     /* No EOS events are sent downstream, however. */
 
     IMediaSample_Release(sample);
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, AM_GBF_NOWAIT);
+    ok(hr == VFW_E_NOT_COMMITTED, "Got hr %#lx.\n", hr);
     IMemAllocator_Release(allocator);
     IMemInputPin_Release(input);
     IPin_Release(sink);
@@ -1431,6 +1433,72 @@ static void test_streaming(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_streaming_unconnected_outputs(void)
+{
+    static const AM_MEDIA_TYPE req_mt =
+    {
+        .majortype = {0x111},
+        .subtype = {0x222},
+        .formattype = {0x333},
+    };
+    IBaseFilter *filter = create_smart_tee();
+    struct testfilter testsource;
+    IMemAllocator *allocator;
+    IMediaControl *control;
+    IFilterGraph2 *graph;
+    IMediaSample *sample;
+    IMemInputPin *input;
+    HRESULT hr;
+    ULONG ref;
+    IPin *sink;
+
+    testfilter_init(&testsource);
+    CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IFilterGraph2, (void **)&graph);
+    IFilterGraph2_AddFilter(graph, &testsource.filter.IBaseFilter_iface, L"source");
+    IFilterGraph2_AddFilter(graph, filter, L"smart tee");
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    IBaseFilter_FindPin(filter, L"Input", &sink);
+    IPin_QueryInterface(sink, &IID_IMemInputPin, (void **)&input);
+
+    hr = IFilterGraph2_ConnectDirect(graph, &testsource.source.pin.IPin_iface, sink, &req_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_GetAllocator(input, &allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, AM_GBF_NOWAIT);
+    ok(hr == VFW_E_NOT_COMMITTED, "Got hr %#lx.\n", hr);
+
+    hr = IMemAllocator_Commit(allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_EndOfStream(sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    IMediaSample_Release(sample);
+    IMemAllocator_Decommit(allocator);
+
+    IMemAllocator_Release(allocator);
+    IMemInputPin_Release(input);
+    IPin_Release(sink);
+    IMediaControl_Release(control);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(&testsource.filter.IBaseFilter_iface);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(smartteefilter)
 {
     CoInitialize(NULL);
@@ -1446,6 +1514,7 @@ START_TEST(smartteefilter)
     test_unconnected_filter_state();
     test_connect_pin();
     test_streaming();
+    test_streaming_unconnected_outputs();
 
     CloseHandle(event);
     CoUninitialize();
