@@ -315,6 +315,9 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Play(IDirectSoundBuffer8 *iface, DW
 
 	AcquireSRWLockExclusive(&This->lock);
 
+#ifdef __REACTOS__
+	This->resources_acquired = TRUE;
+#endif
 	This->playflags = flags;
 	if (This->state == STATE_STOPPED) {
 		This->state = STATE_STARTING;
@@ -441,7 +444,11 @@ static HRESULT WINAPI IDirectSoundBufferImpl_GetStatus(IDirectSoundBuffer8 *ifac
 		if (This->playflags & DSBPLAY_LOOPING)
 			*status |= DSBSTATUS_LOOPING;
 	}
+#ifdef __REACTOS__
+	if ((This->dsbd.dwFlags & DSBCAPS_LOCDEFER) && This->resources_acquired)
+#else
 	if (This->dsbd.dwFlags & DSBCAPS_LOCDEFER)
+#endif
 		*status |= DSBSTATUS_LOCSOFTWARE;
 	ReleaseSRWLockShared(&This->lock);
 
@@ -484,6 +491,55 @@ static HRESULT WINAPI IDirectSoundBufferImpl_GetFormat(IDirectSoundBuffer8 *ifac
     return DS_OK;
 }
 
+#ifdef __REACTOS__
+static BOOL locked_region_overlaps(const BufferMemory *buffer, DWORD offset, DWORD size)
+{
+    UINT i;
+
+    for (i = 0; i < buffer->region_count; ++i)
+    {
+        if (offset < buffer->regions[i].offset + buffer->regions[i].size &&
+            buffer->regions[i].offset < offset + size)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static HRESULT locked_region_add(BufferMemory *buffer, DWORD offset, DWORD size)
+{
+    if (buffer->region_count == buffer->region_capacity)
+    {
+        UINT capacity = buffer->region_capacity ? buffer->region_capacity * 2 : 4;
+        void *regions = realloc(buffer->regions, capacity * sizeof(*buffer->regions));
+
+        if (!regions)
+            return DSERR_OUTOFMEMORY;
+        buffer->regions = regions;
+        buffer->region_capacity = capacity;
+    }
+    buffer->regions[buffer->region_count].offset = offset;
+    buffer->regions[buffer->region_count].size = size;
+    ++buffer->region_count;
+    return DS_OK;
+}
+
+static BOOL locked_region_remove(BufferMemory *buffer, DWORD offset, DWORD *size)
+{
+    UINT i;
+
+    for (i = 0; i < buffer->region_count; ++i)
+    {
+        if (buffer->regions[i].offset == offset)
+        {
+            *size = buffer->regions[i].size;
+            buffer->regions[i] = buffer->regions[--buffer->region_count];
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+#endif
+
 static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DWORD writecursor,
         DWORD writebytes, void **lplpaudioptr1, DWORD *audiobytes1, void **lplpaudioptr2,
         DWORD *audiobytes2, DWORD flags)
@@ -494,8 +550,16 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DW
         TRACE("(%p,%lu,%lu,%p,%p,%p,%p,0x%08lx) at %lu\n", This, writecursor, writebytes, lplpaudioptr1,
                 audiobytes1, lplpaudioptr2, audiobytes2, flags, GetTickCount());
 
+#ifdef __REACTOS__
+        if (!lplpaudioptr1)
+            return DSERR_INVALIDPARAM;
+        *(LPBYTE*)lplpaudioptr1 = NULL;
+        if (!audiobytes1)
+            return DSERR_INVALIDPARAM;
+#else
         if (!audiobytes1 || !lplpaudioptr1)
             return DSERR_INVALIDPARAM;
+#endif
 
         *(LPBYTE*)lplpaudioptr1 = NULL;
         *audiobytes1 = 0;
@@ -530,6 +594,28 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DW
 		return DSERR_INVALIDPARAM;
         }
 
+#ifdef __REACTOS__
+	if (!writebytes)
+		return DSERR_INVALIDPARAM;
+
+	{
+		DWORD first = min(writebytes, This->buflen - writecursor);
+		DWORD second = writebytes - first;
+
+		AcquireSRWLockExclusive(&This->buffer->region_lock);
+		if (locked_region_overlaps(This->buffer, writecursor, first) ||
+		    (second && locked_region_overlaps(This->buffer, 0, second)))
+			hres = DSERR_INVALIDPARAM;
+		if (hres == DS_OK)
+			hres = locked_region_add(This->buffer, writecursor, first);
+		if (hres == DS_OK && second)
+			hres = locked_region_add(This->buffer, 0, second);
+		ReleaseSRWLockExclusive(&This->buffer->region_lock);
+		if (hres != DS_OK)
+			return hres;
+	}
+#endif
+
 	AcquireSRWLockShared(&This->lock);
 
 	if (writecursor+writebytes <= This->buflen) {
@@ -558,6 +644,10 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DW
 			*audiobytes2 = writebytes-(This->buflen-writecursor);
 			This->buffer->lockedbytes += *audiobytes2;
 		}
+#ifdef __REACTOS__
+		else
+			This->buffer->lockedbytes += remainder;
+#endif
 		if (audiobytes2 && This->sec_mixpos < remainder && This->state == STATE_PLAYING) {
 			WARN("Overwriting mixing position, case 3\n");
 			commit_next_chunk(This);
@@ -659,6 +749,31 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Unlock(IDirectSoundBuffer8 *iface, 
 
 	TRACE("(%p,%p,%lu,%p,%lu)\n", This, p1, x1, p2, x2);
 
+#ifdef __REACTOS__
+	{
+		void *regions[2];
+		DWORD size;
+		UINT i;
+
+		regions[0] = p1;
+		regions[1] = p2;
+		AcquireSRWLockExclusive(&This->buffer->region_lock);
+		for (i = 0; i < ARRAY_SIZE(regions) && hres == DS_OK; ++i)
+		{
+			if (!regions[i])
+				continue;
+			if ((BYTE *)regions[i] < This->buffer->memory ||
+			    (BYTE *)regions[i] >= This->buffer->memory + This->buflen ||
+			    !locked_region_remove(This->buffer, (DWORD)((BYTE *)regions[i] - This->buffer->memory), &size))
+				hres = DSERR_INVALIDPARAM;
+			else
+				This->buffer->lockedbytes -= size;
+		}
+		ReleaseSRWLockExclusive(&This->buffer->region_lock);
+		return hres;
+	}
+#endif
+
 	if (!p2)
 		x2 = 0;
 
@@ -749,8 +864,10 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFX(IDirectSoundBuffer8 *iface, D
 
 	TRACE("(%p,%lu,%p,%p)\n", This, dwEffectsCount, pDSFXDesc, pdwResultCodes);
 
+#ifndef __REACTOS__
 	if (pdwResultCodes)
 		for (u=0; u<dwEffectsCount; u++) pdwResultCodes[u] = DSFXR_UNKNOWN;
+#endif
 
 	if ((dwEffectsCount > 0 && !pDSFXDesc) ||
 		(dwEffectsCount == 0 && (pDSFXDesc || pdwResultCodes))
@@ -767,6 +884,11 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFX(IDirectSoundBuffer8 *iface, D
 
 	if (This->buffer->lockedbytes > 0)
 		return DSERR_INVALIDCALL;
+
+#ifdef __REACTOS__
+	if (pdwResultCodes)
+		for (u=0; u<dwEffectsCount; u++) pdwResultCodes[u] = DSFXR_UNKNOWN;
+#endif
 
 	if (dwEffectsCount == 0) {
 		if (This->num_filters > 0) {
@@ -847,6 +969,15 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFX(IDirectSoundBuffer8 *iface, D
 		}
 
 		free(filters);
+#ifdef __REACTOS__
+		for (u = 0; u < This->num_filters; u++) {
+			IMediaObject_Release(This->filters[u].obj);
+			if (This->filters[u].inplace) IMediaObjectInPlace_Release(This->filters[u].inplace);
+		}
+		free(This->filters);
+		This->filters = NULL;
+		This->num_filters = 0;
+#endif
 	} else {
 		if (This->num_filters > 0) {
 			for (u = 0; u < This->num_filters; u++) {
@@ -876,6 +1007,10 @@ static HRESULT WINAPI IDirectSoundBufferImpl_AcquireResources(IDirectSoundBuffer
 	DWORD u;
 
 	FIXME("(%p,%08lu,%lu,%p): stub, faking success\n",This,dwFlags,dwEffectsCount,pdwResultCodes);
+
+#ifdef __REACTOS__
+	This->resources_acquired = TRUE;
+#endif
 
 	if (pdwResultCodes)
 		for (u=0; u<dwEffectsCount; u++) pdwResultCodes[u] = DSFXR_UNKNOWN;
@@ -1105,6 +1240,12 @@ HRESULT secondarybuffer_create(DirectSoundDevice *device, const DSBUFFERDESC *ds
 
 	dsb->buffer->ref = 1;
 	dsb->buffer->lockedbytes = 0;
+#ifdef __REACTOS__
+	InitializeSRWLock(&dsb->buffer->region_lock);
+	dsb->buffer->regions = NULL;
+	dsb->buffer->region_count = 0;
+	dsb->buffer->region_capacity = 0;
+#endif
 	list_init(&dsb->buffer->buffers);
 	list_add_head(&dsb->buffer->buffers, &dsb->entry);
 	FillMemory(dsb->buffer->memory, dsb->buflen, dsbd->lpwfxFormat->wBitsPerSample == 8 ? 128 : 0);
@@ -1176,7 +1317,14 @@ void secondarybuffer_destroy(IDirectSoundBufferImpl *This)
     This->buffer->ref--;
     list_remove(&This->entry);
     if (This->buffer->ref == 0)
+#ifdef __REACTOS__
+    {
+        free(This->buffer->regions);
         free(This->buffer);
+    }
+#else
+        free(This->buffer);
+#endif
 
     free(This->notifies);
     free(This->pwfx);

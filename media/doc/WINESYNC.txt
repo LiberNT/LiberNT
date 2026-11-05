@@ -49,6 +49,7 @@ dll/directx/wine/dplay          # Synced to Wine-11.14
 dll/directx/wine/dplayx         # Synced to Wine-11.14
 dll/directx/wine/dpnhpast       # Synced to Wine-11.14
 dll/directx/wine/dpwsockx       # Synced to Wine-11.14
+dll/directx/wine/dsdmo          # Synced to Wine-11.14
 dll/directx/wine/dsound         # Synced to Wine-11.14
 dll/directx/wine/dxdiagn        # Synced to Wine-11.14
 dll/directx/wine/msdmo          # Synced to Wine-11.14
