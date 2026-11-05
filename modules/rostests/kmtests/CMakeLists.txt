@@ -202,6 +202,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeAffinityKM.c
     ntos_ke/KeApc.c
     ntos_ke/KeApcInject.c
+    ntos_ke/KeApcScheduling.c
     ntos_ke/KeBugCheckCbKM.c
     ntos_ke/KeDevQueue.c
     ntos_ke/KeCriticalRegionKM.c

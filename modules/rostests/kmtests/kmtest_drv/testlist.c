@@ -196,6 +196,7 @@ KMT_TESTFUNC Test_KsecBcrypt;
 KMT_TESTFUNC Test_KeWddmExports;
 KMT_TESTFUNC Test_KeApc;
 KMT_TESTFUNC Test_KeApcInject;
+KMT_TESTFUNC Test_KeApcScheduling;
 KMT_TESTFUNC Test_KeCacheInvalidation;
 KMT_TESTFUNC Test_KeModern;
 #ifdef _M_ARM64
@@ -516,6 +517,7 @@ const KMT_TEST TestList[] =
     { "KeWddmExports",                      Test_KeWddmExports },
     { "KeApc",                              Test_KeApc },
     { "KeApcInject",                        Test_KeApcInject },
+    { "KeApcScheduling",                    Test_KeApcScheduling },
     { "KeCacheInvalidation",                Test_KeCacheInvalidation },
     { "KeModern",                           Test_KeModern },
 #ifdef _M_ARM64

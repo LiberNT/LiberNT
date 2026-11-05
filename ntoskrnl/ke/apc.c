@@ -192,6 +192,7 @@ KiInsertQueueApc(IN PKAPC Apc,
             {
                 /* Kernel-mode APC, set us pending */
                 Thread->ApcState.KernelApcPending = TRUE;
+                KeMemoryBarrier();
 
                 /* Are we currently running? */
                 if (Thread->State == Running)
