@@ -5887,12 +5887,13 @@ DxgkpDisplayPnpDispatch(
 BOOLEAN
 DxgkDisplayDispatchPnp(
     _In_  PDEVICE_OBJECT DeviceObject,
-    _In_  PIRP           Irp)
+    _In_  PIRP           Irp,
+    _Out_ PNTSTATUS      Status)
 {
     if (DxgkpDisplayBridgeFromDevice(DeviceObject) == NULL)
         return FALSE;
 
-    DxgkpDisplayPnpDispatch(DeviceObject, Irp);
+    *Status = DxgkpDisplayPnpDispatch(DeviceObject, Irp);
     return TRUE;
 }
 
@@ -5929,12 +5930,13 @@ DxgkDisplayDispatchIoctl(
 BOOLEAN
 DxgkDisplayDispatchCreate(
     _In_  PDEVICE_OBJECT DeviceObject,
-    _In_  PIRP           Irp)
+    _In_  PIRP           Irp,
+    _Out_ PNTSTATUS      Status)
 {
     if (DxgkpDisplayBridgeFromDevice(DeviceObject) == NULL)
         return FALSE;
 
-    DxgkpDisplayCreate(DeviceObject, Irp);
+    *Status = DxgkpDisplayCreate(DeviceObject, Irp);
     return TRUE;
 }
 
@@ -5946,11 +5948,12 @@ DxgkDisplayDispatchCreate(
 BOOLEAN
 DxgkDisplayDispatchClose(
     _In_  PDEVICE_OBJECT DeviceObject,
-    _In_  PIRP           Irp)
+    _In_  PIRP           Irp,
+    _Out_ PNTSTATUS      Status)
 {
     if (DxgkpDisplayBridgeFromDevice(DeviceObject) == NULL)
         return FALSE;
 
-    DxgkpDisplayClose(DeviceObject, Irp);
+    *Status = DxgkpDisplayClose(DeviceObject, Irp);
     return TRUE;
 }
