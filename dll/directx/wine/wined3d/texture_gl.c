@@ -387,6 +387,17 @@ static void ffp_blitter_clear(struct wined3d_blitter *blitter, struct wined3d_de
 
         if (have_identical_size)
         {
+#ifdef __REACTOS__
+            /* The depth buffer lost its contents on the UTM GPU when it stayed bound to a colour clear. */
+            if (!(flags & (WINED3DCLEAR_ZBUFFER | WINED3DCLEAR_STENCIL)))
+            {
+                tmp_fb = *fb;
+                tmp_fb.depth_stencil = NULL;
+                ffp_blitter_clear_rendertargets(device, rt_count, &tmp_fb, rect_count,
+                        clear_rects, draw_rect, flags, colour, depth, stencil);
+            }
+            else
+#endif
             ffp_blitter_clear_rendertargets(device, rt_count, fb, rect_count,
                     clear_rects, draw_rect, flags, colour, depth, stencil);
         }
