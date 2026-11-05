@@ -771,7 +771,6 @@ LxBootRoot(
     Boot.Detached = TRUE;
     if (LxStringsAdd(&Boot.Args, Boot.FileName) &&
         LxStringsAdd(&Boot.Args, "systemd.getty_auto=0") &&
-        LxEnvSet(&Boot.Env, "container=libernt") &&
         LxEnvSet(&Boot.Env, "TERM=linux"))
     {
         LxLaunch(&Boot);
