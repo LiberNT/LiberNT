@@ -36,6 +36,13 @@ struct pin_property_set
     struct strmbase_pin *pin;
     const GUID *category;
 };
+
+struct dropped_frames
+{
+    IAMDroppedFrames IAMDroppedFrames_iface;
+    IUnknown *outer;
+    struct vfw_capture *filter;
+};
 #endif
 
 struct vfw_capture
@@ -66,6 +73,9 @@ struct vfw_capture
     BOOL has_still;
     HANDLE still_thread;
     HANDLE still_stop;
+    struct dropped_frames filter_dropped;
+    struct dropped_frames source_dropped;
+    LONG delivered;
 #endif
 
     /* FIXME: It would be nice to avoid duplicating this variable with strmbase.
@@ -169,6 +179,8 @@ static HRESULT vfw_capture_query_interface(struct strmbase_filter *iface, REFIID
 #ifdef __REACTOS__
     else if (IsEqualGUID(iid, &IID_IAMCameraControl))
         *out = &filter->IAMCameraControl_iface;
+    else if (IsEqualGUID(iid, &IID_IAMDroppedFrames))
+        *out = &filter->filter_dropped.IAMDroppedFrames_iface;
 #endif
     else if (IsEqualGUID(iid, &IID_IAMFilterMiscFlags))
         *out = &filter->IAMFilterMiscFlags_iface;
@@ -244,6 +256,9 @@ static DWORD WINAPI stream_thread(void *arg)
             ERR("IMemInputPin::Receive() returned %#lx.\n", hr);
             break;
         }
+#ifdef __REACTOS__
+        InterlockedIncrement(&filter->delivered);
+#endif
     }
 
     return 0;
@@ -297,6 +312,9 @@ static HRESULT vfw_capture_init_stream(struct strmbase_filter *iface)
     filter->state = State_Paused;
     LeaveCriticalSection(&filter->state_cs);
 
+#ifdef __REACTOS__
+    InterlockedExchange(&filter->delivered, 0);
+#endif
     filter->thread = CreateThread(NULL, 0, stream_thread, filter, 0, NULL);
 
 #ifdef __REACTOS__
@@ -889,12 +907,80 @@ static HRESULT source_query_interface(struct strmbase_pin *iface, REFIID iid, vo
         *out = &filter->IKsPropertySet_iface;
     else if (IsEqualGUID(iid, &IID_IAMStreamConfig))
         *out = &filter->IAMStreamConfig_iface;
+#ifdef __REACTOS__
+    else if (IsEqualGUID(iid, &IID_IAMDroppedFrames))
+        *out = &filter->source_dropped.IAMDroppedFrames_iface;
+#endif
     else
         return E_NOINTERFACE;
 
     IUnknown_AddRef((IUnknown *)*out);
     return S_OK;
 }
+
+#ifdef __REACTOS__
+static inline struct dropped_frames *impl_from_IAMDroppedFrames(IAMDroppedFrames *iface)
+{
+    return CONTAINING_RECORD(iface, struct dropped_frames, IAMDroppedFrames_iface);
+}
+
+static HRESULT WINAPI dropped_frames_QueryInterface(IAMDroppedFrames *iface, REFIID iid, void **out)
+{
+    return IUnknown_QueryInterface(impl_from_IAMDroppedFrames(iface)->outer, iid, out);
+}
+
+static ULONG WINAPI dropped_frames_AddRef(IAMDroppedFrames *iface)
+{
+    return IUnknown_AddRef(impl_from_IAMDroppedFrames(iface)->outer);
+}
+
+static ULONG WINAPI dropped_frames_Release(IAMDroppedFrames *iface)
+{
+    return IUnknown_Release(impl_from_IAMDroppedFrames(iface)->outer);
+}
+
+static HRESULT WINAPI dropped_frames_GetNumDropped(IAMDroppedFrames *iface, LONG *dropped)
+{
+    if (!dropped)
+        return E_POINTER;
+    *dropped = 0;
+    return S_OK;
+}
+
+static HRESULT WINAPI dropped_frames_GetNumNotDropped(IAMDroppedFrames *iface, LONG *delivered)
+{
+    if (!delivered)
+        return E_POINTER;
+    *delivered = InterlockedCompareExchange(&impl_from_IAMDroppedFrames(iface)->filter->delivered, 0, 0);
+    return S_OK;
+}
+
+static HRESULT WINAPI dropped_frames_GetDroppedInfo(IAMDroppedFrames *iface, LONG size, LONG *frames, LONG *copied)
+{
+    if (!frames || !copied)
+        return E_POINTER;
+    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+}
+
+static HRESULT WINAPI dropped_frames_GetAverageFrameSize(IAMDroppedFrames *iface, LONG *size)
+{
+    if (!size)
+        return E_POINTER;
+    *size = get_image_size(impl_from_IAMDroppedFrames(iface)->filter);
+    return S_OK;
+}
+
+static const IAMDroppedFramesVtbl dropped_frames_vtbl =
+{
+    dropped_frames_QueryInterface,
+    dropped_frames_AddRef,
+    dropped_frames_Release,
+    dropped_frames_GetNumDropped,
+    dropped_frames_GetNumNotDropped,
+    dropped_frames_GetDroppedInfo,
+    dropped_frames_GetAverageFrameSize,
+};
+#endif
 
 static HRESULT WINAPI VfwPin_DecideBufferSize(struct strmbase_source *iface,
         IMemAllocator *allocator, ALLOCATOR_PROPERTIES *req_props)
@@ -1507,6 +1593,12 @@ HRESULT vfw_capture_create(IUnknown *outer, IUnknown **out)
     object->still_properties.IKsPropertySet_iface.lpVtbl = &pin_properties_vtbl;
     object->still_properties.pin = &object->still.pin;
     object->still_properties.category = &PIN_CATEGORY_STILL;
+    object->filter_dropped.IAMDroppedFrames_iface.lpVtbl = &dropped_frames_vtbl;
+    object->filter_dropped.outer = (IUnknown *)&object->filter.IBaseFilter_iface;
+    object->filter_dropped.filter = object;
+    object->source_dropped.IAMDroppedFrames_iface.lpVtbl = &dropped_frames_vtbl;
+    object->source_dropped.outer = (IUnknown *)&object->source.pin.IPin_iface;
+    object->source_dropped.filter = object;
     object->still_stop = CreateEventW(NULL, TRUE, FALSE, NULL);
 #endif
 
