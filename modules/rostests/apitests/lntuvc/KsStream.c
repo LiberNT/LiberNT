@@ -140,6 +140,14 @@ StreamFormat(HANDLE Filter, const GUID *Subtype, DWORD FourCc, LONG Width, LONG 
     CloseHandle(Pin);
 }
 
+static BOOL
+IsWow64(void)
+{
+    BOOL Wow64 = FALSE;
+
+    return IsWow64Process(GetCurrentProcess(), &Wow64) && Wow64;
+}
+
 static void
 ReadOnce(HANDLE Pin, DWORD Size, DWORD HeaderSize, const char *What, BOOL ExpectResult, DWORD ExpectError, DWORD ExpectReturned, DWORD ExpectUsed)
 {
@@ -225,7 +233,7 @@ StreamEdges(HANDLE Filter)
     ReadOnce(Pin, Size, Header, "Read in RUN", TRUE, 0, Header, Size);
     UvcIoctlTimeout = 300;
     ReadOnce(Pin, Size / 2, Header, "Read with half a buffer", FALSE, WAIT_TIMEOUT, 0, 0);
-    ReadOnce(Pin, 0, Header, "Read with no buffer", FALSE, WAIT_TIMEOUT, 0, 0);
+    ReadOnce(Pin, 0, Header, "Read with no buffer", FALSE, IsWow64() ? ERROR_NOACCESS : WAIT_TIMEOUT, 0, 0);
     UvcIoctlTimeout = 5000;
     ReadOnce(Pin, Size * 2, Header, "Read with a double buffer", TRUE, 0, Header, Size);
     ReadOnce(Pin, Size, sizeof(KSSTREAM_HEADER), "Read with a bare header", TRUE, 0, sizeof(KSSTREAM_HEADER), Size);

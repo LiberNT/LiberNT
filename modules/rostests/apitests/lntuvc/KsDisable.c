@@ -126,7 +126,7 @@ START_TEST(KsDisable)
         return;
 
     Veto = PNP_VetoTypeUnknown;
-    VetoName[0] = 0;
+    ZeroMemory(VetoName, sizeof(VetoName));
     Result = CM_Query_And_Remove_SubTreeW(Instance, &Veto, VetoName, ARRAYSIZE(VetoName), 0);
     ok(Result == CR_REMOVE_VETOED, "Removing with a handle open: cr %lu\n", Result);
     ok(Veto == PNP_VetoOutstandingOpen, "Removing with a handle open: veto %d\n", Veto);
@@ -143,7 +143,7 @@ START_TEST(KsDisable)
     }
 
     Veto = PNP_VetoTypeUnknown;
-    VetoName[0] = 0;
+    ZeroMemory(VetoName, sizeof(VetoName));
     Result = CM_Query_And_Remove_SubTreeW(Instance, &Veto, VetoName, ARRAYSIZE(VetoName), 0);
     ok(Result == CR_SUCCESS, "Removing with no handle open: cr %lu veto %d\n", Result, Veto);
     ok(!UvcFindCamera(&UvcCategoryCapture, Path, ARRAYSIZE(Path)), "The removed camera is still listed\n");
