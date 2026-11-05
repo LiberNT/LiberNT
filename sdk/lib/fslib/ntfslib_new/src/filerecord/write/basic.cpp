@@ -90,6 +90,8 @@ FileRecord::GetBasicInformation(
         Standard->ChangeTime;
     Information->FileAttributes =
         Standard->FilePermissions & ~(ULONG)FILE_PERM_NORMAL;
+    if ((Information->FileAttributes & FILE_PERM_REPARSE_PT) && IsWofBacked())
+        Information->FileAttributes &= ~NTFS_WOF_HIDDEN_ATTRIBUTES;
     if (Header->Flags & FR_IS_DIRECTORY)
     {
         Information->FileAttributes |=

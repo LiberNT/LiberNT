@@ -71,10 +71,12 @@ NtfsGetReparsePoint(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
     if (NT_SUCCESS(Status))
     {
-        Status = NtfsFileRecordReadReparsePoint(
-            FileCB->FileRec,
-            (PUCHAR)Irp->AssociatedIrp.SystemBuffer,
-            &BufferLength);
+        Status = NtfsFileRecordIsWofBacked(FileCB->FileRec)
+            ? STATUS_NOT_A_REPARSE_POINT
+            : NtfsFileRecordReadReparsePoint(
+                FileCB->FileRec,
+                (PUCHAR)Irp->AssociatedIrp.SystemBuffer,
+                &BufferLength);
     }
     NtfsReleaseMetadata(VolCB);
     ExReleaseResourceLite(NtfsGetMainResource(FileCB));

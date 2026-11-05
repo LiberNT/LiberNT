@@ -54,7 +54,12 @@ do
     "$driver" --cat "$image" "/$name" | cmp - "$expected"
     "$driver" --cat-range "$image" "/$name" 123 70001 |
         cmp - "$slice"
+    # The backing is invisible, as under the Windows WOF filter.
+    test "$("$driver" --basic "$image" "/$name" |
+        awk '{ print $5 }')" = 0x00000020
 done
+"$driver" --list-info "$image" / |
+    awk '$4 ~ /(xpress|lzx)/ && $6 != "0x00000000" { bad = 1 } END { exit bad }'
 
 # Modifying externally backed content must first restore the complete logical
 # stream as ordinary $DATA, then discard the WOF point and backing stream.

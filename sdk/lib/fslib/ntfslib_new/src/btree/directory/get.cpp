@@ -38,6 +38,12 @@ AddKeyToBothDirInfo(_In_     PBTreeKey Key,
     Info.EaSize = (FileNameData->Flags & FILE_PERM_REPARSE_PT)
         ? FileNameData->Extended.ReparseTag
         : FileNameData->Extended.EAInfo.PackedEASize;
+    if ((FileNameData->Flags & FILE_PERM_REPARSE_PT) &&
+        FileNameData->Extended.ReparseTag == NTFS_IO_REPARSE_TAG_WOF)
+    {
+        Info.FileAttributes &= ~NTFS_WOF_HIDDEN_ATTRIBUTES;
+        Info.EaSize = 0;
+    }
     Info.FileId.QuadPart = FileRef(Key);
 
     if (FileNameData->Flags & FN_DIRECTORY)
@@ -954,7 +960,14 @@ Directory::GetNextEntry(_In_ BOOLEAN RestartScan,
     Entry->EndOfFile = FileNameData->DataSize;
     Entry->AllocationSize = FileNameData->AllocatedSize;
     Entry->FileAttributes = FileNameData->Flags;
-    if (FileNameData->Flags & FILE_PERM_REPARSE_PT)
+    if ((FileNameData->Flags & FILE_PERM_REPARSE_PT) &&
+        FileNameData->Extended.ReparseTag == NTFS_IO_REPARSE_TAG_WOF)
+    {
+        Entry->FileAttributes &= ~NTFS_WOF_HIDDEN_ATTRIBUTES;
+        Entry->EaSize = 0;
+        Entry->ReparseTag = 0;
+    }
+    else if (FileNameData->Flags & FILE_PERM_REPARSE_PT)
     {
         Entry->EaSize = 0;
         Entry->ReparseTag =

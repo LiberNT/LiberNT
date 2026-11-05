@@ -1020,7 +1020,8 @@ NtfsLookupInCachedParent(
         NtfsFileRecordGetAttribute(
             *File,
             TypeReparsePoint,
-            NULL))
+            NULL) &&
+        !NtfsFileRecordIsWofBacked(*File))
     {
         Status = STATUS_REPARSE;
     }
@@ -2165,7 +2166,8 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     CachedRecord = NtfsAcquireCachedRecord(VolCB, FileObject->FileName.Buffer, (USHORT)(FileObject->FileName.Length / sizeof(WCHAR)));
     if (CachedRecord &&
         !(IrpSp->Parameters.Create.Options & FILE_OPEN_REPARSE_POINT) &&
-        NtfsFileRecordGetAttribute(CachedRecord->Record, TypeReparsePoint, NULL))
+        NtfsFileRecordGetAttribute(CachedRecord->Record, TypeReparsePoint, NULL) &&
+        !NtfsFileRecordIsWofBacked(CachedRecord->Record))
     {
         NtfsReleaseCachedRecord(VolCB, CachedRecord);
         CachedRecord = NULL;

@@ -874,6 +874,7 @@ public:
     NTSTATUS ReadAttributeAlloc(_In_ PAttribute Attr,
                                 _Outptr_result_bytebuffer_(*Length) PUCHAR* Buffer,
                                 _Out_ PULONG Length);
+    BOOLEAN IsWofBacked();
     NTSTATUS ReadReparsePoint(_In_opt_ PUCHAR Buffer,
                               _Inout_ PULONG BufferLength);
     NTSTATUS SetReparsePoint(

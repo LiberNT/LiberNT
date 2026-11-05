@@ -83,6 +83,7 @@ enum FileRecordNumbers
 #define FILE_PERM_OFFLINE    0x1000
 #define FILE_PERM_NOT_INDXED 0x2000
 #define FILE_PERM_ENCRYPTED  0x4000
+#define FILE_PERM_RECALL_ON_OPEN 0x00040000
 
 typedef struct
 {
@@ -141,6 +142,7 @@ typedef NtfsVolume* PNtfsVolume;
 #define NTFS_IO_REPARSE_TAG_WOF ((UINT32)0x80000017)
 #define NTFS_SYMLINK_FLAG_RELATIVE ((UINT32)0x00000001)
 #define NTFS_WOF_PROVIDER_FILE ((UINT32)2)
+#define NTFS_WOF_HIDDEN_ATTRIBUTES ((ULONG)(FILE_PERM_SPARSE | FILE_PERM_REPARSE_PT | FILE_PERM_RECALL_ON_OPEN))
 #define NTFS_WOF_COMPRESSION_XPRESS4K ((UINT32)0)
 #define NTFS_WOF_COMPRESSION_LZX ((UINT32)1)
 #define NTFS_WOF_COMPRESSION_XPRESS8K ((UINT32)2)
@@ -425,6 +427,10 @@ NtfsFileRecordUpdateAutomaticTimestamps(
  * capacity on input and the required/returned byte count on output. A NULL
  * or undersized buffer returns STATUS_BUFFER_TOO_SMALL.
  */
+BOOLEAN
+NtfsFileRecordIsWofBacked(
+    _In_ NtfsFileRecord *FileRecord);
+
 NTSTATUS
 NtfsFileRecordReadReparsePoint(
     _In_ NtfsFileRecord *FileRecord,
