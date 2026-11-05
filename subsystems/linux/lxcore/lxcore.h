@@ -101,6 +101,8 @@ typedef struct _LX_CGROUP LX_CGROUP, *PLX_CGROUP;
 typedef struct _LX_NS LX_NS, *PLX_NS;
 typedef struct _LX_KEY LX_KEY, *PLX_KEY;
 typedef struct _LX_TMPFS LX_TMPFS, *PLX_TMPFS;
+typedef struct _LX_SQUASHFS LX_SQUASHFS, *PLX_SQUASHFS;
+typedef struct _LX_LOOP LX_LOOP, *PLX_LOOP;
 typedef struct _LX_TMPFS_INODE LX_TMPFS_INODE, *PLX_TMPFS_INODE;
 
 typedef enum _LX_NS_KIND
@@ -466,6 +468,7 @@ struct _LX_INSTANCE
     LONG InitStatus;
     ULONG NextDetachedId;
     ULONG NextPeerGroup;
+    LIST_ENTRY Loops;
 };
 
 typedef struct _LX_NODE
@@ -1290,6 +1293,7 @@ LONG LxCgroupSetAttributes(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ UL
 PLX_TTY LxPtsNodeTty(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 VOID LxTmpfsInitialize(VOID);
 PLX_TMPFS LxTmpfsCreate(_In_ ULONG Mode);
+LONG LxTmpfsCreateSquashfs(_In_ PLX_SQUASHFS Squash, _Out_ PLX_TMPFS *Result);
 LONG LxTmpfsParseOptions(_In_ PLX_PROCESS Process, _In_opt_ PCSTR Data, _Inout_ PLX_TMPFS_OPTIONS Options);
 VOID LxTmpfsApplyOptions(_In_ PLX_TMPFS Fs, _In_ PLX_TMPFS_OPTIONS Options);
 VOID LxTmpfsReference(_In_ PLX_TMPFS Fs);
@@ -1343,6 +1347,68 @@ VOID LxSysDevList(_In_ PCSTR Path, _In_ PLX_SYSDEV_LIST_ROUTINE Routine, _In_ PV
 LONG LxSysDevRead(_In_ PLX_PROCESS Process, _In_ PCSTR Path, _Out_ PVOID *Data, _Out_ PULONG Length);
 ULONG LxSysDevUsbNodes(_Out_writes_(Count) PULONG Nodes, _In_ ULONG Count);
 VOID LxSysDevInitialize(VOID);
+
+#define LX_LOOP_MAJOR           7
+#define LX_LOOP_CONTROL_MINOR   237
+#define LX_LOOP_PRESET_COUNT    8
+
+typedef VOID (*PLX_LOOP_ENUM_ROUTINE)(_In_ PVOID Context, _In_ ULONG Number, _In_ ULONG64 Capacity);
+
+typedef struct _LX_LOOP_STATE
+{
+    BOOLEAN Bound;
+    ULONG Flags;
+    ULONG BlockSize;
+    ULONG64 Offset;
+    ULONG64 SizeLimit;
+    ULONG64 Capacity;
+    PSTR BackingPath;
+} LX_LOOP_STATE, *PLX_LOOP_STATE;
+
+PLX_FILE LxLoopOpen(_In_ PLX_PROCESS Process, _In_ ULONG Minor, _In_ ULONG Flags, _In_ PCSTR Path);
+PLX_FILE LxLoopControlOpen(_In_ PLX_PROCESS Process, _In_ ULONG Flags, _In_ PCSTR Path);
+BOOLEAN LxLoopIsDevice(_In_ PLX_FILE File);
+LONG64 LxLoopReadKernel(_In_ PLX_FILE Device, _Out_writes_bytes_(Length) PVOID Buffer, _In_ ULONG Length, _In_ ULONG64 Offset);
+ULONG64 LxLoopCapacity(_In_ PLX_FILE Device);
+VOID LxLoopEnumerate(_In_ PLX_INSTANCE Instance, _In_ PLX_LOOP_ENUM_ROUTINE Routine, _In_ PVOID Context);
+VOID LxLoopFreeAll(_In_ PLX_INSTANCE Instance);
+BOOLEAN LxLoopQuery(_In_ PLX_INSTANCE Instance, _In_ ULONG Number, _Out_ PLX_LOOP_STATE State);
+VOID LxLoopList(_In_ PLX_INSTANCE Instance, _In_ PLX_LOOP_ENUM_ROUTINE Routine, _In_ PVOID Context);
+
+typedef struct _LX_SQUASHFS_INODE
+{
+    ULONG Mode;
+    ULONG Uid;
+    ULONG Gid;
+    ULONG Nlink;
+    ULONG Mtime;
+    ULONG Number;
+    ULONG64 Device;
+    ULONG64 Size;
+    ULONG DirBlock;
+    ULONG DirOffset;
+    ULONG64 DataStart;
+    ULONG Fragment;
+    ULONG FragmentOffset;
+    ULONG64 ListBlock;
+    ULONG ListOffset;
+} LX_SQUASHFS_INODE, *PLX_SQUASHFS_INODE;
+
+typedef LONG (*PLX_SQUASHFS_DIR_ROUTINE)(_In_ PVOID Context, _In_reads_(Length) PCSTR Name, _In_ ULONG Length,
+                                         _In_ ULONG64 Inode);
+
+LONG LxSquashfsOpen(_In_ PLX_PROCESS Process, _In_ PCSTR Source, _Out_ PLX_SQUASHFS *Result);
+VOID LxSquashfsClose(_In_opt_ PLX_SQUASHFS Squash);
+VOID LxSquashfsAddUser(_In_ PLX_SQUASHFS Squash);
+VOID LxSquashfsRemoveUser(_In_ PLX_SQUASHFS Squash);
+ULONG64 LxSquashfsRoot(_In_ PLX_SQUASHFS Squash);
+LONG LxSquashfsReadInode(_In_ PLX_SQUASHFS Squash, _In_ ULONG64 Inode, _Out_ PLX_SQUASHFS_INODE Info);
+LONG LxSquashfsReadLink(_In_ PLX_SQUASHFS Squash, _In_ PLX_SQUASHFS_INODE Info, _Out_ PSTR *Target);
+LONG LxSquashfsListDirectory(_In_ PLX_SQUASHFS Squash, _In_ ULONG64 Inode, _In_ PLX_SQUASHFS_DIR_ROUTINE Routine,
+                             _In_ PVOID Context);
+LONG LxSquashfsReadFile(_In_ PLX_SQUASHFS Squash, _In_ ULONG64 Inode, _Out_writes_bytes_(Capacity) PUCHAR View,
+                        _In_ ULONG64 Capacity);
+VOID LxSquashfsStatfs(_In_ PLX_SQUASHFS Squash, _Out_ PULONG64 Bytes, _Out_ PULONG64 Inodes);
 PLX_FILE LxUsbfsOpen(_In_ ULONG Minor, _In_ ULONG Flags, _In_ PCSTR Path);
 PLX_CGROUP LxCgroupFromFile(_In_ PLX_FILE File);
 PLX_CGROUP LxCgroupCreateRoot(VOID);

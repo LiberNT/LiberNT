@@ -59,7 +59,8 @@ typedef enum _LX_SYNTH_ID
     LxNsfsFile,
     LxSysDevNode,
     LxMqRoot,
-    LxMqFile
+    LxMqFile,
+    LxSysLoop
 } LX_SYNTH_ID;
 
 typedef struct _LX_SYNTH
@@ -4167,6 +4168,29 @@ LxGenKeyUsers(
 
 static
 VOID
+LxGenPartitionLoop(
+    _In_ PVOID Context,
+    _In_ ULONG Number,
+    _In_ ULONG64 Capacity)
+{
+    if (Capacity != 0)
+        LxTextPrintf(Context, "%4lu  %7lu %10llu loop%lu\n", (ULONG)LX_LOOP_MAJOR, Number, Capacity >> 10, Number);
+}
+
+static
+VOID
+LxGenPartitions(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    UNREFERENCED_PARAMETER(Synth);
+    LxTextPrintf(Text, "major minor  #blocks  name\n\n");
+    LxLoopEnumerate(Self->Instance, LxGenPartitionLoop, Text);
+}
+
+static
+VOID
 LxGenLoadavg(
     _In_ PLX_PROCESS Self,
     _In_ PLX_SYNTH Synth,
@@ -4189,13 +4213,13 @@ static const LX_TABLE_ENTRY LxProcStaticTable[] =
     { "config.gz", 0444, NULL, LxGenKernelConfig, NULL },
     { "consoles", 0444, "console              -W- (EC p a)    5:1\n", NULL, NULL },
     { "cpuinfo", 0444, NULL, LxGenCpuinfo, NULL },
-    { "devices", 0444, "Character devices:\n  1 mem\n  4 /dev/vc/0\n  4 tty\n  5 /dev/tty\n  5 /dev/console\n  5 /dev/ptmx\n136 pts\n\nBlock devices:\n", NULL, NULL },
-    { "filesystems", 0444, "nodev\tsysfs\nnodev\ttmpfs\nnodev\tbdev\nnodev\tproc\nnodev\tcgroup2\nnodev\tdevtmpfs\nnodev\tdevpts\nnodev\tmqueue\nnodev\tpipefs\nnodev\tsockfs\n\tlxfs\n", NULL, NULL },
+    { "devices", 0444, "Character devices:\n  1 mem\n  4 /dev/vc/0\n  4 tty\n  5 /dev/tty\n  5 /dev/console\n  5 /dev/ptmx\n 10 misc\n136 pts\n\nBlock devices:\n  7 loop\n", NULL, NULL },
+    { "filesystems", 0444, "nodev\tsysfs\nnodev\ttmpfs\nnodev\tbdev\nnodev\tproc\nnodev\tcgroup2\nnodev\tdevtmpfs\nnodev\tdevpts\nnodev\tmqueue\nnodev\tpipefs\nnodev\tsockfs\n\tlxfs\n\tsquashfs\n", NULL, NULL },
     { "key-users", 0444, NULL, LxGenKeyUsers, NULL },
     { "keys", 0444, NULL, LxGenKeys, NULL },
     { "loadavg", 0444, NULL, LxGenLoadavg, NULL },
     { "meminfo", 0444, NULL, LxGenMeminfo, NULL },
-    { "partitions", 0444, "major minor  #blocks  name\n\n", NULL, NULL },
+    { "partitions", 0444, NULL, LxGenPartitions, NULL },
     { "stat", 0444, NULL, LxGenStat, NULL },
     { "swaps", 0444, "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n", NULL, NULL },
     { "uptime", 0444, NULL, LxGenUptime, NULL },
@@ -4712,9 +4736,278 @@ LxResolveProc(
     return -LX_ENOENT;
 }
 
+static const PCSTR LxSysLoopAttributes[] =
+{
+    "alignment_offset", "dev", "discard_alignment", "hidden", "removable", "ro", "size", "uevent"
+};
+
+static const PCSTR LxSysLoopBoundAttributes[] =
+{
+    "autoclear", "backing_file", "dio", "offset", "partscan", "sizelimit"
+};
+
+static const PCSTR LxSysLoopQueueAttributes[] =
+{
+    "hw_sector_size", "logical_block_size", "minimum_io_size", "optimal_io_size", "physical_block_size", "rotational"
+};
+
+static
+BOOLEAN
+LxSysLoopNumber(
+    _In_ PCSTR Text,
+    _In_ PCSTR Prefix,
+    _Out_ PULONG Number)
+{
+    SIZE_T Length = strlen(Prefix);
+
+    return (strncmp(Text, Prefix, Length) == 0) && (Text[Length] != '\0') && LxParseNumber(Text + Length, Number);
+}
+
+static
+BOOLEAN
+LxSysLoopFind(
+    _In_reads_(Count) const PCSTR *Names,
+    _In_ ULONG Count,
+    _In_ PCSTR Name)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (strcmp(Names[Index], Name) == 0)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
+LONG
+LxResolveSysLoop(
+    _In_ PLX_PROCESS Process,
+    _In_reads_(Count) PCSTR *Components,
+    _In_ ULONG Count,
+    _Out_ PLX_SYNTH Synth)
+{
+    LX_LOOP_STATE State;
+    ULONG Number;
+    PCSTR Link = NULL;
+    BOOLEAN Exists;
+
+    if ((Count == 2) && (strcmp(Components[0], "block") == 0) && LxSysLoopNumber(Components[1], "loop", &Number))
+        Link = "../devices/virtual/block/loop%lu";
+    else if ((Count == 3) && (strcmp(Components[0], "class") == 0) && (strcmp(Components[1], "block") == 0) &&
+             LxSysLoopNumber(Components[2], "loop", &Number))
+        Link = "../../devices/virtual/block/loop%lu";
+    else if ((Count == 3) && (strcmp(Components[0], "dev") == 0) && (strcmp(Components[1], "block") == 0) &&
+             LxSysLoopNumber(Components[2], "7:", &Number))
+        Link = "../../devices/virtual/block/loop%lu";
+    else if ((Count >= 3) && (strcmp(Components[0], "devices") == 0) && (strcmp(Components[1], "virtual") == 0) &&
+             (strcmp(Components[2], "block") == 0))
+        Number = (Count >= 4) && LxSysLoopNumber(Components[3], "loop", &Number) ? Number : MAXULONG;
+    else
+        return -LX_ENOENT;
+
+    Synth->Id = LxSysLoop;
+    Synth->Mode = 0755;
+    Synth->Type = LX_S_IFDIR;
+    Synth->Index = Number;
+    if (Count == 3 && (Link == NULL))
+        return 0;
+    if (Number == MAXULONG)
+        return -LX_ENOENT;
+    Exists = LxLoopQuery(Process->Instance, Number, &State);
+    LxFree(State.BackingPath);
+    if (!Exists)
+        return -LX_ENOENT;
+    if (Link != NULL)
+    {
+        Synth->Type = LX_S_IFLNK;
+        Synth->Mode = 0777;
+        Synth->LinkTarget = LxStrPrintf(Link, Number);
+        return (Synth->LinkTarget != NULL) ? 0 : -LX_ENOMEM;
+    }
+    if (Count == 4)
+        return 0;
+    if (Count == 5)
+    {
+        if (strcmp(Components[4], "subsystem") == 0)
+        {
+            Synth->Type = LX_S_IFLNK;
+            Synth->Mode = 0777;
+            Synth->LinkTarget = LxStrDup("../../../../class/block");
+            return (Synth->LinkTarget != NULL) ? 0 : -LX_ENOMEM;
+        }
+        if ((strcmp(Components[4], "queue") == 0) || ((strcmp(Components[4], "loop") == 0) && State.Bound))
+            return 0;
+        if (!LxSysLoopFind(LxSysLoopAttributes, RTL_NUMBER_OF(LxSysLoopAttributes), Components[4]))
+            return -LX_ENOENT;
+    }
+    else if ((Count == 6) && (strcmp(Components[4], "queue") == 0))
+    {
+        if (!LxSysLoopFind(LxSysLoopQueueAttributes, RTL_NUMBER_OF(LxSysLoopQueueAttributes), Components[5]))
+            return -LX_ENOENT;
+    }
+    else if ((Count == 6) && (strcmp(Components[4], "loop") == 0) && State.Bound)
+    {
+        if (!LxSysLoopFind(LxSysLoopBoundAttributes, RTL_NUMBER_OF(LxSysLoopBoundAttributes), Components[5]))
+            return -LX_ENOENT;
+    }
+    else
+    {
+        return -LX_ENOENT;
+    }
+    Synth->Type = LX_S_IFREG;
+    Synth->Mode = (strcmp(Components[Count - 1], "uevent") == 0) ? 0644 : 0444;
+    return 0;
+}
+
+static
+VOID
+LxSysLoopListLink(
+    _In_ PVOID Context,
+    _In_ ULONG Number,
+    _In_ ULONG64 Capacity)
+{
+    CHAR Name[24];
+
+    UNREFERENCED_PARAMETER(Capacity);
+    RtlStringCbPrintfA(Name, sizeof(Name), "loop%lu", Number);
+    LxDirAdd(Context, LX_DT_LNK, Name);
+}
+
+static
+VOID
+LxSysLoopListDevice(
+    _In_ PVOID Context,
+    _In_ ULONG Number,
+    _In_ ULONG64 Capacity)
+{
+    CHAR Name[24];
+
+    UNREFERENCED_PARAMETER(Capacity);
+    RtlStringCbPrintfA(Name, sizeof(Name), "7:%lu", Number);
+    LxDirAdd(Context, LX_DT_LNK, Name);
+}
+
+static
+VOID
+LxSysLoopListDirectory(
+    _In_ PVOID Context,
+    _In_ ULONG Number,
+    _In_ ULONG64 Capacity)
+{
+    CHAR Name[24];
+
+    UNREFERENCED_PARAMETER(Capacity);
+    RtlStringCbPrintfA(Name, sizeof(Name), "loop%lu", Number);
+    LxDirAdd(Context, LX_DT_DIR, Name);
+}
+
+static
+VOID
+LxSysLoopListTable(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Prefix,
+    _Inout_ PLX_TEXT Text)
+{
+    if ((strcmp(Prefix, "block") == 0) || (strcmp(Prefix, "class/block") == 0))
+        LxLoopList(Process->Instance, LxSysLoopListLink, Text);
+    else if (strcmp(Prefix, "dev/block") == 0)
+        LxLoopList(Process->Instance, LxSysLoopListDevice, Text);
+    else if (strcmp(Prefix, "devices/virtual") == 0)
+        LxDirAdd(Text, LX_DT_DIR, "block");
+}
+
+static
+VOID
+LxSysLoopListEntries(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    LX_LOOP_STATE State;
+    PCSTR Last = strrchr(Synth->Prefix, '/');
+    ULONG Index;
+
+    LxDirAdd(Text, LX_DT_DIR, ".");
+    LxDirAdd(Text, LX_DT_DIR, "..");
+    if (Synth->Index == MAXULONG)
+    {
+        LxLoopList(Process->Instance, LxSysLoopListDirectory, Text);
+        return;
+    }
+    if (!LxLoopQuery(Process->Instance, Synth->Index, &State))
+        return;
+    LxFree(State.BackingPath);
+    Last = (Last != NULL) ? Last + 1 : Synth->Prefix;
+    if (strcmp(Last, "queue") == 0)
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(LxSysLoopQueueAttributes); Index++)
+            LxDirAdd(Text, LX_DT_REG, LxSysLoopQueueAttributes[Index]);
+    }
+    else if (strcmp(Last, "loop") == 0)
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(LxSysLoopBoundAttributes); Index++)
+            LxDirAdd(Text, LX_DT_REG, LxSysLoopBoundAttributes[Index]);
+    }
+    else
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(LxSysLoopAttributes); Index++)
+            LxDirAdd(Text, LX_DT_REG, LxSysLoopAttributes[Index]);
+        LxDirAdd(Text, LX_DT_LNK, "subsystem");
+        LxDirAdd(Text, LX_DT_DIR, "queue");
+        if (State.Bound)
+            LxDirAdd(Text, LX_DT_DIR, "loop");
+    }
+}
+
+static
+VOID
+LxSysLoopRead(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    LX_LOOP_STATE State;
+    PCSTR Name = strrchr(Synth->Prefix, '/');
+    ULONG Number = Synth->Index;
+
+    if ((Name == NULL) || !LxLoopQuery(Process->Instance, Number, &State))
+        return;
+    Name++;
+    if (strcmp(Name, "dev") == 0)
+        LxTextPrintf(Text, "%lu:%lu\n", (ULONG)LX_LOOP_MAJOR, Number);
+    else if (strcmp(Name, "size") == 0)
+        LxTextPrintf(Text, "%llu\n", State.Capacity >> 9);
+    else if (strcmp(Name, "ro") == 0)
+        LxTextPrintf(Text, "%u\n", (State.Flags & 1) ? 1 : 0);
+    else if (strcmp(Name, "uevent") == 0)
+        LxTextPrintf(Text, "MAJOR=%lu\nMINOR=%lu\nDEVNAME=loop%lu\nDEVTYPE=disk\n", (ULONG)LX_LOOP_MAJOR, Number,
+                     Number);
+    else if (strcmp(Name, "backing_file") == 0)
+        LxTextPrintf(Text, "%s\n", (State.BackingPath != NULL) ? State.BackingPath : "");
+    else if (strcmp(Name, "offset") == 0)
+        LxTextPrintf(Text, "%llu\n", State.Offset);
+    else if (strcmp(Name, "sizelimit") == 0)
+        LxTextPrintf(Text, "%llu\n", State.SizeLimit);
+    else if (strcmp(Name, "autoclear") == 0)
+        LxTextPrintf(Text, "%u\n", (State.Flags & 4) ? 1 : 0);
+    else if (strcmp(Name, "partscan") == 0)
+        LxTextPrintf(Text, "%u\n", (State.Flags & 8) ? 1 : 0);
+    else if (strcmp(Name, "dio") == 0)
+        LxTextPrintf(Text, "%u\n", (State.Flags & 16) ? 1 : 0);
+    else if ((strcmp(Name, "logical_block_size") == 0) || (strcmp(Name, "physical_block_size") == 0) ||
+             (strcmp(Name, "minimum_io_size") == 0) || (strcmp(Name, "hw_sector_size") == 0))
+        LxTextPrintf(Text, "%lu\n", State.BlockSize);
+    else
+        LxTextPrintf(Text, "0\n");
+    LxFree(State.BackingPath);
+}
+
 static
 LONG
 LxResolveSys(
+    _In_ PLX_PROCESS Process,
     _In_reads_(Count) PCSTR *Components,
     _In_ ULONG Count,
     _Out_ PLX_SYNTH Synth)
@@ -4736,6 +5029,9 @@ LxResolveSys(
     }
     Path[Used] = '\0';
     RtlStringCbCopyA(Synth->Prefix, sizeof(Synth->Prefix), Path);
+
+    if (LxResolveSysLoop(Process, Components, Count, Synth) == 0)
+        return 0;
 
     if ((Count >= 4) && (strcmp(Components[0], "devices") == 0) && (strcmp(Components[1], "system") == 0) &&
         (strcmp(Components[2], "cpu") == 0) && (strncmp(Components[3], "cpu", 3) == 0) &&
@@ -5041,7 +5337,7 @@ LxSynthResolve(
             Error = LxResolveProc(Process, Components, Count, Synth);
             break;
         case LxFsSys:
-            Error = LxResolveSys(Components, Count, Synth);
+            Error = LxResolveSys(Process, Components, Count, Synth);
             break;
         case LxFsCgroup:
             Error = LxResolveCgroup(Process, Components, Count, Synth);
@@ -6058,6 +6354,10 @@ LxSynthOpen(
             if (Node->Mount->NsFile != NULL)
                 LxMqList(Node->Mount->NsFile, LxMqDirAdd, &Text);
         }
+        else if (Synth.Id == LxSysLoop)
+        {
+            LxSysLoopListEntries(Process, &Synth, &Text);
+        }
         else if ((Synth.Id == LxSysDir) || (Synth.Id == LxProcRoot) || (Synth.Id == LxPtsRoot))
         {
             if (Synth.Id == LxSysDir)
@@ -6072,6 +6372,7 @@ LxSynthOpen(
                 {
                     LxTableList(LxSysTable, RTL_NUMBER_OF(LxSysTable), Synth.Prefix, &Text);
                     LxSysDevList(Synth.Prefix, LxSysDevDirAdd, &Text);
+                    LxSysLoopListTable(Process, Synth.Prefix, &Text);
                     if (strcmp(Synth.Prefix, "devices/system/cpu") == 0)
                     {
                         ULONG Cpu, Count = KeQueryActiveProcessorCount(NULL);
@@ -6273,6 +6574,10 @@ LxSynthOpen(
                     LxTextAppend(&Text, LxProcSysTable[Synth.Index].Text, (ULONG)strlen(LxProcSysTable[Synth.Index].Text));
                 Writer = LxProcSysTable[Synth.Index].Writer;
                 Context = (PVOID)(ULONG_PTR)Synth.Index;
+                break;
+
+            case LxSysLoop:
+                LxSysLoopRead(Process, &Synth, &Text);
                 break;
 
             case LxSysDevNode:

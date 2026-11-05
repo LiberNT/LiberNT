@@ -3569,7 +3569,7 @@ LX_SYSCALL(LxSysFsopen)
         return Result;
     if ((strcmp(Name, "tmpfs") != 0) && (strcmp(Name, "ramfs") != 0) && (strcmp(Name, "proc") != 0) &&
         (strcmp(Name, "sysfs") != 0) && (strcmp(Name, "cgroup2") != 0) && (strcmp(Name, "devpts") != 0) &&
-        (strcmp(Name, "mqueue") != 0) && (strcmp(Name, "devtmpfs") != 0))
+        (strcmp(Name, "mqueue") != 0) && (strcmp(Name, "devtmpfs") != 0) && (strcmp(Name, "squashfs") != 0))
     {
         LxFree(Name);
         return -LX_ENODEV;
