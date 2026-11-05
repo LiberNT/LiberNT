@@ -5136,7 +5136,7 @@ static HRESULT graph_stop(struct filter_graph *graph, BOOL pause_first)
         LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
         {
             filter_hr = IBaseFilter_Pause(filter->filter);
-            if (hr == S_OK)
+            if (hr == S_OK && FAILED(filter_hr))
                 hr = filter_hr;
         }
     }
