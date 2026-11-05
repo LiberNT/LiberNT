@@ -158,3 +158,132 @@ START_TEST(NonClientCaption)
     HeapFree(GetProcessHeap(), 0, Background);
     DestroyWindow(Window);
 }
+
+static COLORREF
+paint_and_activate(HWND Window, LPARAM Parameter, COLORREF *Before)
+{
+    HDC Dc = GetWindowDC(Window);
+    COLORREF After;
+
+    PatBlt(Dc, 60, 10, 20, 8, BLACKNESS);
+    GdiFlush();
+    *Before = GetPixel(Dc, 70, 14);
+    DefWindowProcW(Window, WM_NCACTIVATE, FALSE, Parameter);
+    GdiFlush();
+    After = GetPixel(Dc, 70, 14);
+    ReleaseDC(Window, Dc);
+    return After;
+}
+
+START_TEST(NonClientActivate)
+{
+    HWND Window;
+    COLORREF Before, After, ControlBefore, ControlAfter;
+
+    if (!IsThemeActive())
+    {
+        skip("Visual styles are not active\n");
+        return;
+    }
+    Window = CreateWindowExW(WS_EX_TOPMOST, L"STATIC", L"Activation test",
+                             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                             60, 60, 360, 160, NULL, NULL,
+                             GetModuleHandleW(NULL), NULL);
+    ok(Window != NULL, "CreateWindowExW failed, error %lu\n", GetLastError());
+    if (!Window)
+        return;
+    UpdateWindow(Window);
+    ControlAfter = paint_and_activate(Window, 0, &ControlBefore);
+    After = paint_and_activate(Window, -1, &Before);
+    trace("control %08lx -> %08lx, suppressed %08lx -> %08lx\n",
+          ControlBefore, ControlAfter, Before, After);
+    ok(Before != CLR_INVALID, "unable to read the non-client area\n");
+    if (ControlBefore == CLR_INVALID || ControlAfter == CLR_INVALID || ControlBefore == ControlAfter)
+        skip("The control activation did not visibly repaint the sampled area\n");
+    else
+        ok(After == Before, "WM_NCACTIVATE -1 repainted: %08lx -> %08lx\n", Before, After);
+    DestroyWindow(Window);
+}
+
+static LRESULT CALLBACK
+custom_caption_inset_proc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
+{
+    if (Message == WM_NCCALCSIZE)
+    {
+        RECT *Client = WParam ? &((NCCALCSIZE_PARAMS *)LParam)->rgrc[0] : (RECT *)LParam;
+        Client->left += 7;
+        Client->top += 7;
+        Client->right -= 7;
+        Client->bottom -= 7;
+        return 0;
+    }
+    return DefWindowProcW(Window, Message, WParam, LParam);
+}
+
+START_TEST(CustomCaptionInset)
+{
+    WNDCLASSW Class = {0};
+    HWND Window;
+    HDC Screen;
+    HBRUSH Blue;
+    RECT Rect;
+    COLORREF Pixel, Example = CLR_INVALID;
+    UINT RedPixels = 0, ValidPixels = 0;
+    LRESULT Hit, TopHit, ClientHit;
+    LONG x, y;
+
+    if (!IsThemeActive())
+    {
+        skip("Visual styles are not active\n");
+        return;
+    }
+    Blue = CreateSolidBrush(RGB(0, 0, 255));
+    Class.hInstance = GetModuleHandleW(NULL);
+    Class.lpfnWndProc = custom_caption_inset_proc;
+    Class.hbrBackground = Blue;
+    Class.lpszClassName = L"LiberNTCustomCaptionInset";
+    RegisterClassW(&Class);
+    Window = CreateWindowExW(WS_EX_TOPMOST, Class.lpszClassName, L"Custom title",
+                             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                             100, 100, 400, 240, NULL, NULL, Class.hInstance, NULL);
+    ok(Window != NULL, "window creation failed %lu\n", GetLastError());
+    if (Window)
+    {
+        SetForegroundWindow(Window);
+        UpdateWindow(Window);
+        SendMessageW(Window, WM_NCPAINT, 1, 0);
+        flush_messages(1000);
+        GetWindowRect(Window, &Rect);
+        Screen = GetDC(NULL);
+        for (y = Rect.top + 1; y < Rect.top + 7; ++y)
+        {
+            for (x = Rect.right - 48; x < Rect.right - 8; ++x)
+            {
+                Pixel = GetPixel(Screen, x, y);
+                if (Pixel != CLR_INVALID)
+                    ++ValidPixels;
+                if (Pixel != CLR_INVALID && GetRValue(Pixel) > GetGValue(Pixel) + 40 &&
+                    GetRValue(Pixel) > GetBValue(Pixel) + 40)
+                {
+                    ++RedPixels;
+                    Example = Pixel;
+                }
+            }
+        }
+        ReleaseDC(NULL, Screen);
+        Hit = SendMessageW(Window, WM_NCHITTEST, 0, MAKELPARAM(Rect.right - 25, Rect.top + 4));
+        TopHit = SendMessageW(Window, WM_NCHITTEST, 0, MAKELPARAM(Rect.left + 200, Rect.top + 4));
+        ClientHit = SendMessageW(Window, WM_NCHITTEST, 0, MAKELPARAM(Rect.left + 200, Rect.top + 20));
+        trace("native close button red pixels: %u example %08lx hits %ld,%ld,%ld\n",
+              RedPixels, Example, (LONG)Hit, (LONG)TopHit, (LONG)ClientHit);
+        ok(Hit == HTTOP || Hit == HTTOPRIGHT, "custom titlebar close-button area hit test: %ld\n", (LONG)Hit);
+        ok(TopHit == HTTOP, "custom titlebar top hit test: %ld\n", (LONG)TopHit);
+        ok(ClientHit == HTCLIENT, "custom titlebar client hit test: %ld\n", (LONG)ClientHit);
+        ok(ValidPixels != 0, "unable to sample the custom titlebar inset\n");
+        if (ValidPixels != 0)
+            ok(RedPixels == 0, "native close button painted into custom titlebar inset (%u pixels)\n", RedPixels);
+        DestroyWindow(Window);
+    }
+    UnregisterClassW(Class.lpszClassName, Class.hInstance);
+    DeleteObject(Blue);
+}
