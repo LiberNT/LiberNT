@@ -212,6 +212,9 @@ HRESULT WINAPI BaseControlWindowImpl_get_Caption(IVideoWindow *iface, BSTR *capt
 
     TRACE("window %p, caption %p.\n", window, caption);
 
+    if (!window->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
+
     *caption = NULL;
 
     len = GetWindowTextLengthW(window->hwnd) + 1;
@@ -254,6 +257,9 @@ HRESULT WINAPI BaseControlWindowImpl_get_WindowStyle(IVideoWindow *iface, LONG *
     struct video_window *window = impl_from_IVideoWindow(iface);
 
     TRACE("window %p, style %p.\n", window, style);
+
+    if (!window->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
 
     *style = GetWindowLongW(window->hwnd, GWL_STYLE);
     return S_OK;
@@ -299,6 +305,9 @@ HRESULT WINAPI BaseControlWindowImpl_get_AutoShow(IVideoWindow *iface, LONG *Aut
     struct video_window *This = impl_from_IVideoWindow(iface);
 
     TRACE("(%p/%p)->(%p)\n", This, iface, AutoShow);
+
+    if (!This->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
 
     *AutoShow = This->AutoShow;
 
@@ -1190,8 +1199,10 @@ static HRESULT WINAPI basic_video_GetVideoPaletteEntries(IBasicVideo *iface,
     FIXME("window %p, start %ld, count %ld, ret_count %p, palette %p, stub!\n",
             window, start, count, ret_count, palette);
 
-    if (!ret_count || !palette)
+    if (!ret_count)
         return E_POINTER;
+    if (!window->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
 
     *ret_count = 0;
     return VFW_E_NO_PALETTE_AVAILABLE;
@@ -1203,7 +1214,7 @@ static HRESULT WINAPI basic_video_GetCurrentImage(IBasicVideo *iface, LONG *size
 
     TRACE("window %p, size %p, image %p.\n", window, size, image);
 
-    if (!size || !image)
+    if (!size)
         return E_POINTER;
 
     return window->ops->get_current_image(window, size, image);
