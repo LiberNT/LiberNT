@@ -1935,33 +1935,43 @@ static ULONG WINAPI video_presenter_quality_advise_Release(IMFQualityAdvise *ifa
 static HRESULT WINAPI video_presenter_quality_advise_SetDropMode(IMFQualityAdvise *iface,
         MF_QUALITY_DROP_MODE mode)
 {
-    FIXME("%p, %u.\n", iface, mode);
+    TRACE("%p, %u.\n", iface, mode);
 
-    return E_NOTIMPL;
+    return mode == MF_DROP_MODE_NONE ? S_OK : MF_E_NO_MORE_DROP_MODES;
 }
 
 static HRESULT WINAPI video_presenter_quality_advise_SetQualityLevel(IMFQualityAdvise *iface,
         MF_QUALITY_LEVEL level)
 {
-    FIXME("%p, %u.\n", iface, level);
+    TRACE("%p, %u.\n", iface, level);
 
-    return E_NOTIMPL;
+    return level == MF_QUALITY_NORMAL ? S_OK : MF_E_NO_MORE_QUALITY_LEVELS;
 }
 
 static HRESULT WINAPI video_presenter_quality_advise_GetDropMode(IMFQualityAdvise *iface,
         MF_QUALITY_DROP_MODE *mode)
 {
-    FIXME("%p, %p.\n", iface, mode);
+    TRACE("%p, %p.\n", iface, mode);
 
-    return E_NOTIMPL;
+    if (!mode)
+        return E_POINTER;
+
+    *mode = MF_DROP_MODE_NONE;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI video_presenter_quality_advise_GetQualityLevel(IMFQualityAdvise *iface,
         MF_QUALITY_LEVEL *level)
 {
-    FIXME("%p, %p.\n", iface, level);
+    TRACE("%p, %p.\n", iface, level);
 
-    return E_NOTIMPL;
+    if (!level)
+        return E_POINTER;
+
+    *level = MF_QUALITY_NORMAL;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI video_presenter_quality_advise_DropTime(IMFQualityAdvise *iface, LONGLONG interval)
@@ -2082,16 +2092,26 @@ static ULONG WINAPI video_presenter_qa_limits_Release(IMFQualityAdviseLimits *if
 
 static HRESULT WINAPI video_presenter_qa_limits_GetMaximumDropMode(IMFQualityAdviseLimits *iface, MF_QUALITY_DROP_MODE *mode)
 {
-    FIXME("%p, %p.\n", iface, mode);
+    TRACE("%p, %p.\n", iface, mode);
 
-    return E_NOTIMPL;
+    if (!mode)
+        return E_POINTER;
+
+    *mode = MF_DROP_MODE_NONE;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI video_presenter_qa_limits_GetMinimumQualityLevel(IMFQualityAdviseLimits *iface, MF_QUALITY_LEVEL *level)
 {
-    FIXME("%p, %p.\n", iface, level);
+    TRACE("%p, %p.\n", iface, level);
 
-    return E_NOTIMPL;
+    if (!level)
+        return E_POINTER;
+
+    *level = MF_QUALITY_NORMAL;
+
+    return S_OK;
 }
 
 static const IMFQualityAdviseLimitsVtbl video_presenter_qa_limits_vtbl =
