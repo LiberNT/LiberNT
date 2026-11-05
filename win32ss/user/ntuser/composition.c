@@ -247,6 +247,11 @@ static LONGLONG        g_DwmWatchdogStart = 0;
  * instead of polling when the desktop is idle. */
 static PKEVENT         g_DwmWakeEvent = NULL;
 static BOOL            g_DwmPointerComposed = FALSE;
+static BOOL            g_DwmScreenMirror = FALSE;
+static volatile LONG   g_ScreenReadRequest = 0;
+static volatile LONG   g_ScreenReadServed = 0;
+static volatile LONG   g_ScreenReadEventReady = 0;
+static KEVENT          g_ScreenReadEvent;
 /* The attached compositor process: every DWM entry point is rejected for
  * anyone else (frame metadata + window surfaces are session-global state). */
 static PEPROCESS       g_DwmProcess = NULL;
@@ -504,6 +509,47 @@ IntCompositionDwmPresented(VOID)
     g_DwmFramePresented = g_DwmFrameIssued;
     IntCompositionWakeFlushWaiters();
     return STATUS_SUCCESS;
+}
+
+/* A driver that cannot capture the composed desktop reads dwm's copy instead: have dwm refresh it before a screen read. */
+VOID
+IntCompositionPrepareScreenRead(_In_opt_ HDC hDC)
+{
+    static ULONGLONG s_MirroredFrame = MAXULONGLONG;
+    LARGE_INTEGER Timeout;
+    ULONG Attempt;
+    LONG Target;
+    PDC pdc;
+    BOOL Screen;
+
+    if (!g_DwmScreenMirror || hDC == NULL || ExGetPreviousMode() != UserMode ||
+        UserIsEntered() || IntCompositionIsAttachedProcess())
+    {
+        return;
+    }
+    pdc = DC_LockDc(hDC);
+    if (pdc == NULL)
+        return;
+    Screen = pdc->dctype == DCTYPE_DIRECT && pdc->ppdev != NULL &&
+             pdc->dclevel.pSurface != NULL && pdc->dclevel.pSurface == pdc->ppdev->pSurface;
+    DC_UnlockDc(pdc);
+    if (!Screen || s_MirroredFrame == g_DwmFramePresented)
+        return;
+
+    Target = InterlockedIncrement(&g_ScreenReadRequest);
+    IntCompositionDwmWake();
+    Timeout.QuadPart = -100 * 10000LL;
+    for (Attempt = 0; Attempt < 3; ++Attempt)
+    {
+        KeClearEvent(&g_ScreenReadEvent);
+        if ((LONG)(g_ScreenReadServed - Target) >= 0)
+        {
+            s_MirroredFrame = g_DwmFramePresented;
+            return;
+        }
+        if (KeWaitForSingleObject(&g_ScreenReadEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)
+            return;
+    }
 }
 
 NTSTATUS
@@ -2940,6 +2986,14 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     RtlZeroMemory(&Frame, sizeof(Frame));
     Frame.Magic = DWM_FRAME_MAGIC;
     g_DwmPointerComposed = Input.PointerComposed != 0;
+    g_DwmScreenMirror = Input.ScreenMirror != 0;
+    if (Input.ScreenReadServed != 0)
+    {
+        InterlockedExchange(&g_ScreenReadServed, (LONG)Input.ScreenReadServed);
+        KeSetEvent(&g_ScreenReadEvent, IO_NO_INCREMENT, FALSE);
+    }
+    if (g_ScreenReadRequest != g_ScreenReadServed)
+        Frame.ScreenReadRequest = (ULONG)g_ScreenReadRequest;
     {
         PSYSTEM_CURSORINFO CurInfo = IntGetSysCursorInfo();
         PCURICON_OBJECT Cursor = CurInfo->CurrentCursorObject;
@@ -3613,6 +3667,8 @@ IntCompositionDwmTeardown(VOID)
     PKEVENT WakeEvent;
 
     g_DwmAttached = FALSE;
+    g_DwmPointerComposed = FALSE;
+    g_DwmScreenMirror = FALSE;
     IntCompositionWakeFlushWaiters();
     IntCompositionReleaseFrameSurfaces();
     (VOID)IntCompositionReleaseGpuOutput(TRUE);
@@ -3736,6 +3792,9 @@ IntCompositionDwmAttach(_In_ PVOID pUser)
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
     NTSTATUS Status = STATUS_SUCCESS;
     NTSTATUS RegisterStatus;
+
+    if (InterlockedCompareExchange(&g_ScreenReadEventReady, 1, 0) == 0)
+        KeInitializeEvent(&g_ScreenReadEvent, NotificationEvent, FALSE);
 
     _SEH2_TRY
     {

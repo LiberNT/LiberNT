@@ -57,6 +57,17 @@
 #define CDD_ESCAPE_PRESENT_SOURCE  0x44574D06
 /* LONG out: non-zero when the display device has a hardware pointer. */
 #define CDD_ESCAPE_HW_POINTER      0x44574D08
+/* Accepted only from attached DWM: gives CDD a composed frame for screen reads. */
+#define DWM_ESCAPE_MIRROR_FRAME    0x44574D09
+/* LONG out: non-zero when screen reads need DWM's copy of the composed desktop. */
+#define CDD_ESCAPE_MIRROR_NEEDED   0x44574D0A
+typedef struct _DWM_MIRROR_FRAME
+{
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+    ULONG Reserved;
+} DWM_MIRROR_FRAME;
 
 typedef struct _DWM_PRESENT_BITMAP
 {
@@ -117,6 +128,8 @@ typedef struct _CDD_PRESENT_SOURCE
  * Without a compositor, CDD continues reading its ordinary GDI drawing
  * surface. */
 #define DXGK_DESKTOP_CAPTURE_HAS_IMAGE 0x00000001u
+/* The driver has no staging surface to capture through; only the compositor can supply the image. */
+#define DXGK_DESKTOP_CAPTURE_NEEDS_COMPOSITOR 0x00000002u
 typedef struct _DXGK_DESKTOP_CAPTURE
 {
     ULONG StructSize;
@@ -422,6 +435,9 @@ typedef struct _DWM_FRAME_HEADER
     LONG  PointerX, PointerY; /* out: hot spot position, screen px   */
     ULONG PointerStep;        /* out: frame of an animated cursor    */
     ULONGLONG PointerHandle;  /* out: HCURSOR, 0 = hidden            */
+    ULONG ScreenMirror;       /* in : dwm can mirror frames for screen reads */
+    ULONG ScreenReadServed;   /* in : last request mirrored, 0 = none */
+    ULONG ScreenReadRequest;  /* out: a screen read waits for a mirror */
 } DWM_FRAME_HEADER, *PDWM_FRAME_HEADER;
 
 /* DwmEnableBlurBehindWindow exchange. The HRGN is consumed synchronously in

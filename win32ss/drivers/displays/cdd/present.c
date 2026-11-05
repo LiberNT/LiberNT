@@ -427,6 +427,60 @@ RcddPresentTarget(
 }
 
 static BOOL
+RcddEnsureCaptureSurface(PRCDD_PDEV ppdev)
+{
+   SIZEL Size;
+
+   if (ppdev->CaptureSurface != NULL)
+      return TRUE;
+   Size.cx = ppdev->ScreenWidth;
+   Size.cy = ppdev->ScreenHeight;
+   ppdev->CaptureBitmap = (HSURF)EngCreateBitmap(Size, 0, BMF_32BPP, BMF_TOPDOWN, NULL);
+   if (ppdev->CaptureBitmap == NULL)
+      return FALSE;
+   ppdev->CaptureSurface = EngLockSurface(ppdev->CaptureBitmap);
+   if (ppdev->CaptureSurface == NULL)
+   {
+      EngDeleteSurface(ppdev->CaptureBitmap);
+      ppdev->CaptureBitmap = NULL;
+      return FALSE;
+   }
+   return TRUE;
+}
+
+ULONG
+RcddStoreScreenMirror(PRCDD_PDEV ppdev, CONST DWM_MIRROR_FRAME *Frame, ULONG Bytes)
+{
+   const UCHAR *Source;
+   PUCHAR Target;
+   ULONG Row, Rows, RowBytes, Result = 0;
+
+   if (Frame == NULL || Bytes < sizeof(*Frame) || Frame->Pitch < Frame->Width * sizeof(ULONG) ||
+       (ULONGLONG)Frame->Pitch * Frame->Height > Bytes - sizeof(*Frame))
+   {
+      return 0;
+   }
+   KeWaitForSingleObject(&ppdev->CaptureMutex, Executive, KernelMode, FALSE, NULL);
+   if (RcddEnsureCaptureSurface(ppdev))
+   {
+      Source = (const UCHAR *)(Frame + 1);
+      Target = ppdev->CaptureSurface->pvScan0;
+      Rows = min(Frame->Height, ppdev->ScreenHeight);
+      RowBytes = min(Frame->Width, ppdev->ScreenWidth) * sizeof(ULONG);
+      for (Row = 0; Row < Rows; ++Row)
+      {
+         RtlCopyMemory(Target, Source, RowBytes);
+         Target += ppdev->CaptureSurface->lDelta;
+         Source += Frame->Pitch;
+      }
+      ppdev->ScreenMirrorValid = TRUE;
+      Result = 1;
+   }
+   KeReleaseMutex(&ppdev->CaptureMutex, FALSE);
+   return Result;
+}
+
+static BOOL
 RcddAcquireScreenReadRegion(
    SURFOBJ *Destination,
    SURFOBJ **Source,
@@ -436,7 +490,6 @@ RcddAcquireScreenReadRegion(
    PRCDD_PDEV ppdev;
    DXGK_DESKTOP_CAPTURE Capture;
    RECTL Region;
-   SIZEL Size;
    ULONG Returned, Error;
 
    *LockedPdev = NULL;
@@ -456,22 +509,19 @@ RcddAcquireScreenReadRegion(
       return TRUE;
 
    KeWaitForSingleObject(&ppdev->CaptureMutex, Executive, KernelMode, FALSE, NULL);
-   if (ppdev->CaptureSurface == NULL)
+   if (ppdev->ScreenMirrorNeeded)
    {
-      Size.cx = ppdev->ScreenWidth;
-      Size.cy = ppdev->ScreenHeight;
-      ppdev->CaptureBitmap = (HSURF)EngCreateBitmap(Size, 0, BMF_32BPP,
-                                                   BMF_TOPDOWN, NULL);
-      if (ppdev->CaptureBitmap == NULL)
-         goto Failure;
-      ppdev->CaptureSurface = EngLockSurface(ppdev->CaptureBitmap);
-      if (ppdev->CaptureSurface == NULL)
+      if (!ppdev->ScreenMirrorValid)
       {
-         EngDeleteSurface(ppdev->CaptureBitmap);
-         ppdev->CaptureBitmap = NULL;
-         goto Failure;
+         KeReleaseMutex(&ppdev->CaptureMutex, FALSE);
+         return TRUE;
       }
+      *Source = ppdev->CaptureSurface;
+      *LockedPdev = ppdev;
+      return TRUE;
    }
+   if (!RcddEnsureCaptureSurface(ppdev))
+      goto Failure;
    RtlZeroMemory(&Capture, sizeof(Capture));
    Capture.StructSize = sizeof(Capture);
    Capture.Width = ppdev->ScreenWidth;
@@ -487,6 +537,8 @@ RcddAcquireScreenReadRegion(
       goto Failure;
    if (!(Capture.Flags & DXGK_DESKTOP_CAPTURE_HAS_IMAGE))
    {
+      if (Capture.Flags & DXGK_DESKTOP_CAPTURE_NEEDS_COMPOSITOR)
+         ppdev->ScreenMirrorNeeded = TRUE;
       KeReleaseMutex(&ppdev->CaptureMutex, FALSE);
       return TRUE;
    }

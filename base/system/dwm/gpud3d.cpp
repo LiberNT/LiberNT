@@ -187,7 +187,7 @@ struct Compositor
      * A copy made after that fence cannot be released early. */
     BOOL CopyingClients, ClientCopiesFenced, ClientCopiesUnfenced;
     Texture Canvas, Backdrop, PointerImage, PointerInvert;
-    ID3D11Texture2D *BackBuffer;
+    ID3D11Texture2D *BackBuffer, *Mirror;
     Surface Surfaces[DWM_MAX_WINDOWS * 2];
     ClientSource ClientSources[DWM_MAX_WINDOWS * 2];
     BlurTarget Blurs[4];
@@ -913,6 +913,7 @@ BOOL CreateDevice(IDXGIAdapter1 **Selected)
 BOOL BindOutput()
 {
     Release(State.BackBuffer);
+    Release(State.Mirror);
     return Result(State.SwapChain->GetBuffer(0, IID_ID3D11Texture2D, (void **)&State.BackBuffer), "GetBuffer") &&
            CreateTexture(State.Canvas, State.Width, State.Height, TRUE);
 }
@@ -1726,6 +1727,7 @@ DwmD3dShutdown(void)
     State.Canvas.Reset();
     State.PointerImage.Reset();
     State.PointerInvert.Reset();
+    Release(State.Mirror);
     Release(State.BackBuffer);
     Release(State.ClientCopies);
     Release(State.Completion);
@@ -2354,6 +2356,46 @@ DwmD3dSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const ULONG *
         State.PointerInvert.Reset();
     return FillPointerTexture(State.PointerImage, Width, Height, Image) &&
            (Invert == NULL || FillPointerTexture(State.PointerInvert, Width, Height, Invert));
+}
+
+/* FIXME: the copy has no overlay plane, and it assumes the canvas origin is the device's. */
+BOOL
+DwmD3dMirrorCanvas(HDC Screen)
+{
+    if (!State.Active || State.Canvas.Resource == NULL)
+        return FALSE;
+    if (State.Mirror == NULL)
+    {
+        D3D11_TEXTURE2D_DESC Desc;
+        State.Canvas.Resource->GetDesc(&Desc);
+        Desc.Usage = D3D11_USAGE_STAGING;
+        Desc.BindFlags = 0;
+        Desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        Desc.MiscFlags = 0;
+        if (!Result(State.Device->CreateTexture2D(&Desc, NULL, &State.Mirror), "CreateTexture2D(mirror)"))
+            return FALSE;
+    }
+    UnbindTextures();
+    State.Context->CopyResource(State.Mirror, State.Canvas.Resource);
+    D3D11_MAPPED_SUBRESOURCE Mapped;
+    if (!Result(State.Context->Map(State.Mirror, 0, D3D11_MAP_READ, 0, &Mapped), "Map(mirror)"))
+        return FALSE;
+    ULONG RowBytes = (ULONG)State.Width * sizeof(ULONG), Bytes = RowBytes * (ULONG)State.Height + sizeof(DWM_MIRROR_FRAME);
+    DWM_MIRROR_FRAME *Frame = (DWM_MIRROR_FRAME *)HeapAlloc(GetProcessHeap(), 0, Bytes);
+    BOOL Done = FALSE;
+    if (Frame != NULL)
+    {
+        Frame->Width = (ULONG)State.Width;
+        Frame->Height = (ULONG)State.Height;
+        Frame->Pitch = RowBytes;
+        Frame->Reserved = 0;
+        for (LONG Row = 0; Row < State.Height; ++Row)
+            memcpy((BYTE *)(Frame + 1) + (ULONG)Row * RowBytes, (const BYTE *)Mapped.pData + (SIZE_T)Row * Mapped.RowPitch, RowBytes);
+        Done = ExtEscape(Screen, DWM_ESCAPE_MIRROR_FRAME, (int)Bytes, (LPCSTR)Frame, 0, NULL) > 0;
+        HeapFree(GetProcessHeap(), 0, Frame);
+    }
+    State.Context->Unmap(State.Mirror, 0);
+    return Done;
 }
 
 /* TODO: a client on an overlay plane hides the pointer drawn here. */

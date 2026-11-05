@@ -303,6 +303,18 @@ RcddEscape(
       return 1;
    }
 
+   if (iEsc == DWM_ESCAPE_MIRROR_FRAME)
+      return RcddStoreScreenMirror(ppdev, pvIn, cjIn);
+
+   if (iEsc == CDD_ESCAPE_MIRROR_NEEDED)
+   {
+      if (pvOut == NULL || cjOut < sizeof(LONG))
+         return 0;
+
+      *(PLONG)pvOut = ppdev->ScreenMirrorNeeded ? 1 : 0;
+      return 1;
+   }
+
    if (iEsc == CDD_ESCAPE_HW_POINTER)
    {
       if (pvOut == NULL || cjOut < sizeof(LONG))

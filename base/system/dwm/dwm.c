@@ -4169,6 +4169,9 @@ DwmComposeLoop(HANDLE hStopEvent)
     DWM_SETTINGS Settings = {DWM_EFFECT_ALL, FALSE, DwmGpuComposeIsActive};
     BOOL forceFull = TRUE;
     BOOL pointerChanged;
+    ULONG screenRead = 0;
+    BOOL screenCaptureProbed = FALSE;
+    LONG screenMirrorNeeded = 0;
     BOOL gpuDeferred = FALSE;
     DWORD gpuLastOutputCheck = 0;
     LONG vw, vh, primW, primH;
@@ -4356,6 +4359,8 @@ DwmComposeLoop(HANDLE hStopEvent)
         hdr->BufBytes = g_bufSize;
         DwmPointerSelectPath(hdcScreen);
         hdr->PointerComposed = g_pointer.Composed;
+        hdr->ScreenMirror = g_pointer.GpuActive && screenMirrorNeeded != 0;
+        hdr->ScreenReadServed = screenRead;
 
         DwmStatCounter(&statFetchStart);
         FetchTrace = DptBegin(&g_DwmPresentTrace, DPT_FETCH);
@@ -4416,11 +4421,14 @@ DwmComposeLoop(HANDLE hStopEvent)
             g_lastFrameQpc = 0;
             forceFull = TRUE;
             g_pointer.GpuActive = FALSE;
+            screenCaptureProbed = FALSE;
+            screenMirrorNeeded = 0;
             continue;
         }
 
         pointerChanged = DwmPointerUpdate(hdcScreen, hdr);
-        if (hdr->Dirty == 0 && !forceFull && !pointerChanged)
+        screenRead = hdr->ScreenReadRequest;
+        if (hdr->Dirty == 0 && !forceFull && !pointerChanged && screenRead == 0)
         {
             HANDLE WaitHandles[2] = {hStopEvent, hWake};
 
@@ -4440,7 +4448,7 @@ DwmComposeLoop(HANDLE hStopEvent)
             RECT damageParts[4];
             ULONG damagePartCount = 0;
 
-            if (forceFull || hdr->FullDamage || (!windowDamage && !contentDamage && !pointerChanged))
+            if (forceFull || hdr->FullDamage || (!windowDamage && !contentDamage && !pointerChanged && screenRead == 0))
             {
                 pl = 0; pt = 0; pr = g_W; pb = g_H;
             }
@@ -4614,6 +4622,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                         }
                     }
 
+                    if (gpuFrame && screenRead != 0)
+                        DwmGpuComposeMirror(hdcScreen);
                     if (gpuFrame && g_pointer.Composed && g_pointer.Valid)
                     {
                         RECT PointerRect = g_pointer.Rect;
@@ -4659,6 +4669,14 @@ DwmComposeLoop(HANDLE hStopEvent)
                     if (gpuResult == DWM_GPU_COMPLETE)
                     {
                         NtUserCallOneParam(0, DWM_ROUTINE_PRESENTED);
+                        if (!screenCaptureProbed)
+                        {
+                            /* A first read tells CDD whether the driver can capture, before any client reads. */
+                            screenCaptureProbed = TRUE;
+                            GetPixel(hdcScreen, 0, 0);
+                            ExtEscape(hdcScreen, CDD_ESCAPE_MIRROR_NEEDED, 0, NULL,
+                                      sizeof(screenMirrorNeeded), (LPSTR)&screenMirrorNeeded);
+                        }
                         g_lastFrameQpc = (ULONGLONG)statFrameStart.QuadPart;
                         /* On the GPU path these fields mean clear/context,
                          * window draw/upload, and swap/direct-flip.  Keeping

@@ -1559,6 +1559,12 @@ DwmGpuComposeSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const 
 }
 
 BOOL
+DwmGpuComposeMirror(HDC Screen)
+{
+    return DwmD3dMirrorCanvas(Screen);
+}
+
+BOOL
 DwmGpuComposePointer(const RECT *Rect)
 {
     return DwmD3dDrawPointer(Rect);

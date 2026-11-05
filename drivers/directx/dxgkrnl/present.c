@@ -2237,6 +2237,13 @@ DxgkpCaptureDesktop(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
+    if (Adapter->CddCaptureUnsupported)
+    {
+        Capture->Flags = DXGK_DESKTOP_CAPTURE_NEEDS_COMPOSITOR;
+        Status = STATUS_SUCCESS;
+        goto Cleanup;
+    }
+
     /* The GPU primary may be tiled and non-CPU-visible. Ask the KMD for a
      * linear staging allocation and reuse it for this mode generation. The
      * GDI drawing shadow is never overwritten by composed screen reads. */
@@ -2258,6 +2265,10 @@ DxgkpCaptureDesktop(
         if (!NT_SUCCESS(Status))
         {
             ExFreePoolWithTag(Cached, TAG_DXGK_PRESENT);
+            /* No blit to read through, and a blob's CPU view need not hold what the host renders: only the compositor can say. */
+            Adapter->CddCaptureUnsupported = TRUE;
+            Capture->Flags = DXGK_DESKTOP_CAPTURE_NEEDS_COMPOSITOR;
+            Status = STATUS_SUCCESS;
             goto Cleanup;
         }
         Adapter->CddCapture = Cached;

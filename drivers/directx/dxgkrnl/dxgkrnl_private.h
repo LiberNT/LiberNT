@@ -1440,6 +1440,7 @@ struct _DXGKRNL_ADAPTER
     D3DKMT_HANDLE               CddPrimaryBindingHandle;
     ULONG64                     CddBindingGeneration;
     struct _DXGKRNL_CDD_CAPTURE *CddCapture;
+    BOOLEAN CddCaptureUnsupported;
     BOOLEAN                     GdiHardwareAcceleration;
     KMUTEX                      GdiBltTextureMutex;
     LIST_ENTRY                  GdiBltTextureList;
