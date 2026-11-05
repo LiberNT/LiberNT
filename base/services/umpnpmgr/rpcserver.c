@@ -94,6 +94,12 @@ RpcServerThread(LPVOID lpParameter)
         return 0;
     }
 
+    Status = RpcServerRegisterIf(pnpsw_v1_0_s_ifspec,
+                                 NULL,
+                                 NULL);
+    if (Status != RPC_S_OK)
+        DPRINT1("Software device interface not registered (Status %lx)\n", Status);
+
     Status = RpcServerUseProtseqEpW(L"ncacn_np",
                                     20,
                                     L"\\pipe\\wine_plugplay",
@@ -623,7 +629,6 @@ IsRootDeviceInstanceID(
 }
 
 
-static
 BOOL
 IsPresentDeviceInstanceID(
     _In_ LPWSTR pszDeviceInstanceID)

@@ -34,6 +34,7 @@
 #include <shlwapi.h>
 #include <winsvc_undoc.h>
 #include <pnp_s.h>
+#include <pnpsw_s.h>
 #include <plugplay_s.h>
 #include <dll/newdevp.h>
 
@@ -146,6 +147,10 @@ RpcServerThread(
 BOOL
 IsRootDeviceInstanceID(
     _In_ PWSTR pszDeviceInstanceID);
+
+BOOL
+IsPresentDeviceInstanceID(
+    _In_ LPWSTR pszDeviceInstanceID);
 
 
 /* umpnpmgr.c */
