@@ -399,7 +399,7 @@ static HRESULT WINAPI avi_decompressor_sink_Receive(struct strmbase_sink *iface,
 
     IMediaSample_SetPreroll(pOutSample, (IMediaSample_IsPreroll(pSample) == S_OK));
     IMediaSample_SetDiscontinuity(pOutSample, (IMediaSample_IsDiscontinuity(pSample) == S_OK));
-    IMediaSample_SetSyncPoint(pOutSample, (IMediaSample_IsSyncPoint(pSample) == S_OK));
+    IMediaSample_SetSyncPoint(pOutSample, TRUE);
 
     if (hr == S_OK)
         IMediaSample_SetTime(pOutSample, &tStart, &tStop);

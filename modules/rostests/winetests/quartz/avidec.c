@@ -1851,6 +1851,17 @@ static void test_sample_processing(IMediaControl *control, IMemInputPin *input, 
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     todo_wine ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
 
+    for (i = 0; i < 27; ++i)
+    {
+        hr = IMemInputPin_Receive(input, sample);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    }
+    ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(sink->got_sample == 1, "Got %u calls to Receive().\n", sink->got_sample);
+    sink->got_sample = 0;
+
     testmode = 7;
     hr = IMediaSample_SetSyncPoint(sample, TRUE);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
