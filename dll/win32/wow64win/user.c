@@ -5228,6 +5228,17 @@ NTSTATUS WINAPI wow64_NtUserSetCursorPos( UINT *args )
     return NtUserSetCursorPos( x, y );
 }
 
+NTSTATUS WINAPI wow64_NtUserSetDisplayConfig( UINT *args )
+{
+    UINT32 path_count = get_ulong( &args );
+    DISPLAYCONFIG_PATH_INFO *paths = get_ptr( &args );
+    UINT32 mode_count = get_ulong( &args );
+    DISPLAYCONFIG_MODE_INFO *modes = get_ptr( &args );
+    UINT32 flags = get_ulong( &args );
+
+    return NtUserSetDisplayConfig( path_count, paths, mode_count, modes, flags );
+}
+
 NTSTATUS WINAPI wow64_NtUserSetFocus( UINT *args )
 {
     HWND hwnd = get_handle( &args );

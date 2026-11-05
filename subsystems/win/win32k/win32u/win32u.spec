@@ -731,6 +731,7 @@
 @ stdcall NtUserSetCursorContents(ptr ptr)
 @ stdcall NtUserSetCursorIconData(ptr ptr ptr ptr)
 @ stdcall -dbg NtUserSetDbgTag(long long)
+@ stdcall NtUserSetDisplayConfig(long ptr long ptr long)
 @ stdcall NtUserSetFocus(ptr)
 @ stdcall NtUserSetImeHotKey(long long long long long)
 @ stdcall NtUserSetImeInfoEx(long)
