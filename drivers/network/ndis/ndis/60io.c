@@ -250,6 +250,9 @@ NdisMRegisterScatterGatherDma(
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
 
+    DmaDescription->ScatterGatherListSize = FIELD_OFFSET(SCATTER_GATHER_LIST, Elements) +
+        (ULONG)(BYTES_TO_PAGES(DmaDescription->MaximumPhysicalMapping) + 1) * sizeof(SCATTER_GATHER_ELEMENT);
+
     /* A3: save the driver's ProcessSGListHandler + MaximumPhysicalMapping
      * so NdisMAllocateNetBufferSGList can call the driver back when the
      * DMA adapter produces a SGL. */

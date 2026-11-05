@@ -33,6 +33,7 @@ KMT_TESTFUNC Test_NtProcessClone;
 KMT_TESTFUNC Test_BatteryClassNotify;
 KMT_TESTFUNC Test_PoIrp;
 KMT_TESTFUNC Test_PoFxState;
+KMT_TESTFUNC Test_NdisSgDma;
 KMT_TESTFUNC Test_IoDeviceNumaNode;
 KMT_TESTFUNC Test_ExWddmPoFx;
 KMT_TESTFUNC Test_RtlAvlTree;
@@ -80,6 +81,7 @@ const KMT_TEST TestList[] =
     { "IoReadWrite",                  Test_IoReadWrite },
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },
+    { "NdisSgDma",                    Test_NdisSgDma },
     { "NtSystemDebugControl",         Test_NtSystemDebugControl },
     { "NtUserPhysicalPages",          Test_NtUserPhysicalPages },
     { "NtProcessClone",               Test_NtProcessClone },
