@@ -463,6 +463,7 @@ DriverEntry(
     DriverObject->MajorFunction[IRP_MJ_PNP] = SdBusDispatchPnpImpl;
     DriverObject->MajorFunction[IRP_MJ_POWER] = SdBusDispatchPowerImpl;
     DriverObject->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = SdBusDispatchInternalDeviceControlImpl;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = SdBusDispatchDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_CREATE] = SdBusDispatchCreateCloseImpl;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = SdBusDispatchCreateCloseImpl;
 

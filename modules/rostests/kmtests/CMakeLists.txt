@@ -175,6 +175,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCsqKM.c
     ntos_io/IoDeviceInterface.c
     ntos_io/IoEvent.c
+    ntos_io/IoStorageDumpPath.c
     ntos_io/IoFilesystem.c
     ntos_io/IoInterrupt.c
     ntos_io/IoIommu.c
