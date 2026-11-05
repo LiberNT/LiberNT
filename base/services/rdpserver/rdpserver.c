@@ -478,11 +478,9 @@ static BOOL WINAPI Stop(DWORD event)
 
 int main(int argc, char **argv)
 {
-    char config[MAX_PATH], modules[MAX_PATH], *separator;
+    char config[MAX_PATH];
     char mac[MAX_INTERFACE_MACS * 18 + 16], mask[64], tail;
     unsigned octets[6], i;
-    typedef int (__cdecl *SET_PROVIDER_PATH)(void *, const char *);
-    SET_PROVIDER_PATH setProviderPath;
     freerdp_listener *listener;
     HANDLE events[32], singleton;
     DWORD count, status;
@@ -537,17 +535,6 @@ int main(int argc, char **argv)
     singleton = CreateMutexA(NULL, FALSE, "Local\\LiberNT-RDPServer-Console");
     if (!singleton || GetLastError() == ERROR_ALREADY_EXISTS) { if (singleton) CloseHandle(singleton); return 1; }
     if (WSAStartup(MAKEWORD(2, 2), &winsock)) return 1;
-    if (!GetModuleFileNameA(NULL, modules, sizeof(modules))) return 1;
-    separator = strrchr(modules, '\\');
-    if (!separator || (size_t)(separator - modules) + sizeof("\\ossl-modules") > sizeof(modules)) return 1;
-    strcpy(separator, "\\ossl-modules");
-    SetEnvironmentVariableA("OPENSSL_MODULES", modules);
-    /* OpenSSL's CRT may cache its environment before main. Set its provider
-     * path directly so ReactOS does not fall back to the build-machine path. */
-    setProviderPath = (SET_PROVIDER_PATH)(void *)GetProcAddress(
-        GetModuleHandleA("libcrypto-3-x64.dll"), "OSSL_PROVIDER_set_default_search_path");
-    if (!setProviderPath || !setProviderPath(NULL, modules))
-    { Log("Cannot configure the bundled OpenSSL provider directory"); return 1; }
     if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT)) return 1;
     StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!StopEvent) return 1;

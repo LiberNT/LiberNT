@@ -9,39 +9,13 @@ file transfers to a configured local directory.
 
 ## Building
 
-The server is built outside the LiberNT toolchain, with an x86_64 MinGW
-compiler, against FreeRDP 3.32.0 and OpenSSL 3:
-
-1. Apply `freerdp-rdpdr.patch` to FreeRDP 3.32.0 and build and install it
-   with MinGW (`WITH_SERVER=ON`, `WITH_CHANNELS=ON`, `WITH_SERVER_CHANNELS=ON`
-   and the `rdpdr` channel; the client, shadow and proxy parts are not
-   needed). The patch keeps the 64-bit offsets of RDPDR read and write
-   requests and handles a write acknowledgement as a length without a data
-   payload ([MS-RDPEFS]).
-2. Configure and build `mingw/CMakeLists.txt` against that installation and
-   install it to the same prefix.
-3. Add the OpenSSL and MinGW runtime DLLs next to the server, so that the
-   install directory holds:
-
-   ```
-   bin/rdpserver.exe
-   bin/libfreerdp3.dll  bin/libfreerdp-server3.dll  bin/libwinpr3.dll
-   bin/libssl-3-x64.dll  bin/libcrypto-3-x64.dll
-   bin/libgcc_s_seh-1.dll  bin/libwinpthread-1.dll
-   bin/ossl-modules/legacy.dll
-   licenses/FreeRDP-LICENSE  licenses/OpenSSL-LICENSE
-   ```
-
-Point a 64-bit build directory at it (arm64 and riscv64 run the server as x64 code) (or set *System > RDP console server
-build directory* in rosconfig):
-
-```sh
-cmake -DRDPSERVER_DIR=/path/to/install .
-```
-
-The live and preinstalled images then carry `%SystemRoot%\system32\rdpserver`
-and an HKCU `Run` value that starts the server with the interactive desktop.
-`RDPSERVER_DIR` is empty by default, which leaves the server out.
+The server is part of every build. It links statically against FreeRDP 3.32.0
+(`sdk/lib/3rdparty/freerdp`: WinPR, the core library and the server with the
+`drdynvc` and `rdpdr` channels) and OpenSSL 3.5.4 (`sdk/lib/3rdparty/openssl`,
+without assembler and with the legacy provider built in for NTLM), so the
+images carry a single `%SystemRoot%\system32\rdpserver\rdpserver.exe`, its
+`rdpserver.ini`, an HKCU `Run` value that starts the server with the
+interactive desktop and the FreeRDP and OpenSSL licenses in `licenses`.
 
 ## Configuration
 
