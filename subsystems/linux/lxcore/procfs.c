@@ -6451,7 +6451,7 @@ LxSynthOpen(
             File->PidProcess = LxProcessLookup(Process->Instance, Synth.Pid);
         }
     }
-    else if ((Synth.Id == LxNsfsFile) || (Synth.Id == LxProcNsLink))
+    else if ((Synth.Id == LxNsfsFile) || ((Synth.Id == LxProcNsLink) && !(Flags & LX_O_NOFOLLOW)))
     {
         PLX_NS Ns = LxNsFromNode(Process, Node);
 
