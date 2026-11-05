@@ -812,6 +812,8 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     QueryCaps(D3D12DDICAPS_TYPE_GPUVA_CAPS, &node, &gpuva, sizeof(gpuva));
     if (ddi_build >= D3D12DDI_BUILD_VERSION_0098)
         QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0098, NULL, &gpu_upload, sizeof(gpu_upload));
+    else
+        gpu_upload.L1MemoryFullyCpuAccessible = memory.UMA;
     TRACE("UMA %u, cache coherent %u, L1 fully CPU accessible %u.\n", memory.UMA, memory.CacheCoherent,
             gpu_upload.L1MemoryFullyCpuAccessible);
 
