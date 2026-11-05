@@ -22,13 +22,18 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
+struct output_file
+{
+    HANDLE handle;
+    WCHAR *name;
+};
+
 struct file_writer
 {
     struct strmbase_filter filter;
     IAMFilterMiscFlags IAMFilterMiscFlags_iface;
     IFileSinkFilter2 IFileSinkFilter2_iface;
     IPersistStream IPersistStream_iface;
-    IStream IStream_iface;
     IQualityControl IQualityControl_iface;
 
     struct strmbase_sink sink;
@@ -37,10 +42,59 @@ struct file_writer
     GUID majortype, subtype;
     DWORD mode;
     BOOL dirty;
-    HANDLE file;
+    struct output_file file;
 
     BOOL eos;
 };
+
+struct file_writer_stream
+{
+    IStream IStream_iface;
+    LONG refcount;
+    struct file_writer *filter;
+    struct output_file file;
+};
+
+static HRESULT open_output_file(struct output_file *file, const WCHAR *name, DWORD disposition)
+{
+    HANDLE handle;
+    DWORD error;
+    WCHAR *copy;
+
+    if ((handle = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL, disposition, 0, NULL)) == INVALID_HANDLE_VALUE)
+    {
+        error = GetLastError();
+        ERR("Failed to open %s, error %lu.\n", debugstr_w(name), error);
+        return HRESULT_FROM_WIN32(error);
+    }
+    if (!(copy = wcsdup(name)))
+    {
+        CloseHandle(handle);
+        return E_OUTOFMEMORY;
+    }
+    file->handle = handle;
+    file->name = copy;
+    return S_OK;
+}
+
+static void close_output_file(struct output_file *file, BOOL delete_empty)
+{
+    LARGE_INTEGER size;
+    BOOL empty;
+
+    if (!file->handle)
+        return;
+    empty = delete_empty && GetFileSizeEx(file->handle, &size) && !size.QuadPart;
+    CloseHandle(file->handle);
+    if (empty)
+        DeleteFileW(file->name);
+    free(file->name);
+    file->handle = NULL;
+    file->name = NULL;
+}
+
+static HRESULT stream_create(struct file_writer *filter, IStream **out);
 
 static inline struct file_writer *impl_from_strmbase_pin(struct strmbase_pin *iface)
 {
@@ -54,7 +108,7 @@ static HRESULT file_writer_sink_query_interface(struct strmbase_pin *iface, REFI
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->sink.IMemInputPin_iface;
     else if (IsEqualGUID(iid, &IID_IStream))
-        *out = &filter->IStream_iface;
+        return stream_create(filter, (IStream **)out);
     else if (IsEqualGUID(iid, &IID_IQualityControl))
         *out = &filter->IQualityControl_iface;
     else
@@ -92,8 +146,8 @@ static HRESULT WINAPI file_writer_sink_receive(struct strmbase_sink *iface, IMed
         ERR("Failed to get sample pointer, hr %#lx.\n", hr);
 
     offset.QuadPart = start;
-    if (!SetFilePointerEx(filter->file, offset, NULL, FILE_BEGIN)
-            || !WriteFile(filter->file, data, size, &ret_size, NULL))
+    if (!SetFilePointerEx(filter->file.handle, offset, NULL, FILE_BEGIN)
+            || !WriteFile(filter->file.handle, data, size, &ret_size, NULL))
     {
         ERR("Failed to write file, error %lu.\n", GetLastError());
         return HRESULT_FROM_WIN32(hr);
@@ -133,16 +187,9 @@ static HRESULT file_writer_sink_eos(struct strmbase_sink *iface)
     return S_OK;
 }
 
-static void close_file(struct file_writer *filter)
-{
-    if (filter->file)
-        CloseHandle(filter->file);
-    filter->file = NULL;
-}
-
 static void file_writer_sink_disconnect(struct strmbase_sink *iface)
 {
-    close_file(impl_from_strmbase_pin(&iface->pin));
+    close_output_file(&impl_from_strmbase_pin(&iface->pin)->file, FALSE);
 }
 
 static HRESULT file_writer_sink_get_allocator(struct strmbase_sink *iface, IMemAllocator **allocator)
@@ -204,7 +251,7 @@ static void file_writer_destroy(struct strmbase_filter *iface)
 {
     struct file_writer *filter = impl_from_strmbase_filter(iface);
 
-    close_file(filter);
+    close_output_file(&filter->file, FALSE);
     free(filter->filename);
     strmbase_sink_cleanup(&filter->sink);
     strmbase_filter_cleanup(&filter->filter);
@@ -214,17 +261,10 @@ static void file_writer_destroy(struct strmbase_filter *iface)
 static HRESULT file_writer_init_stream(struct strmbase_filter *iface)
 {
     struct file_writer *filter = impl_from_strmbase_filter(iface);
-    HANDLE file;
 
-    close_file(filter);
-    if ((file = CreateFileW(filter->filename, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-            NULL, (filter->mode & AM_FILE_OVERWRITE) ? CREATE_ALWAYS : OPEN_ALWAYS, 0, NULL)) == INVALID_HANDLE_VALUE)
-    {
-        ERR("Failed to create %s, error %lu.\n", debugstr_w(filter->filename), GetLastError());
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-    filter->file = file;
-    return S_OK;
+    close_output_file(&filter->file, FALSE);
+    return open_output_file(&filter->file, filter->filename,
+            (filter->mode & AM_FILE_OVERWRITE) ? CREATE_ALWAYS : OPEN_ALWAYS);
 }
 
 static HRESULT file_writer_start_stream(struct strmbase_filter *iface, REFERENCE_TIME start)
@@ -241,6 +281,7 @@ static HRESULT file_writer_cleanup_stream(struct strmbase_filter *iface)
 {
     struct file_writer *filter = impl_from_strmbase_filter(iface);
 
+    close_output_file(&filter->file, FALSE);
     if (!filter->sink.pin.peer)
         return S_OK;
     if (!filter->sink.pAllocator)
@@ -528,55 +569,87 @@ static const IAMFilterMiscFlagsVtbl misc_flags_vtbl =
     misc_flags_GetMiscFlags,
 };
 
-static inline struct file_writer *impl_from_IStream(IStream *iface)
+static inline struct file_writer_stream *impl_from_IStream(IStream *iface)
 {
-    return CONTAINING_RECORD(iface, struct file_writer, IStream_iface);
+    return CONTAINING_RECORD(iface, struct file_writer_stream, IStream_iface);
+}
+
+static HRESULT stream_open(struct file_writer_stream *stream)
+{
+    if (stream->file.handle)
+        return S_OK;
+    if (!stream->filter->filename)
+        return E_UNEXPECTED;
+    return open_output_file(&stream->file, stream->filter->filename, OPEN_ALWAYS);
 }
 
 static HRESULT WINAPI stream_QueryInterface(IStream *iface, REFIID iid, void **out)
 {
-    struct file_writer *filter = impl_from_IStream(iface);
-    return IPin_QueryInterface(&filter->sink.pin.IPin_iface, iid, out);
+    struct file_writer_stream *stream = impl_from_IStream(iface);
+
+    if (IsEqualGUID(iid, &IID_IStream))
+    {
+        IStream_AddRef(iface);
+        *out = iface;
+        return S_OK;
+    }
+    return IPin_QueryInterface(&stream->filter->sink.pin.IPin_iface, iid, out);
 }
 
 static ULONG WINAPI stream_AddRef(IStream *iface)
 {
-    struct file_writer *filter = impl_from_IStream(iface);
-    return IPin_AddRef(&filter->sink.pin.IPin_iface);
+    struct file_writer_stream *stream = impl_from_IStream(iface);
+    ULONG refcount = InterlockedIncrement(&stream->refcount);
+
+    TRACE("%p increasing refcount to %lu.\n", stream, refcount);
+    return refcount;
 }
 
 static ULONG WINAPI stream_Release(IStream *iface)
 {
-    struct file_writer *filter = impl_from_IStream(iface);
-    return IPin_Release(&filter->sink.pin.IPin_iface);
+    struct file_writer_stream *stream = impl_from_IStream(iface);
+    ULONG refcount = InterlockedDecrement(&stream->refcount);
+
+    TRACE("%p decreasing refcount to %lu.\n", stream, refcount);
+    if (!refcount)
+    {
+        close_output_file(&stream->file, TRUE);
+        IPin_Release(&stream->filter->sink.pin.IPin_iface);
+        free(stream);
+    }
+    return refcount;
 }
 
 static HRESULT WINAPI stream_Read(IStream *iface, void *data, ULONG size, ULONG *ret_size)
 {
-    struct file_writer *filter = impl_from_IStream(iface);
+    struct file_writer_stream *stream = impl_from_IStream(iface);
     DWORD read = 0;
+    HRESULT hr;
 
-    TRACE("filter %p, data %p, size %lu, ret_size %p.\n", filter, data, size, ret_size);
+    TRACE("stream %p, data %p, size %lu, ret_size %p.\n", stream, data, size, ret_size);
 
-    if (!filter->file)
-        return E_UNEXPECTED;
-    if (!ReadFile(filter->file, data, size, &read, NULL))
+    if (FAILED(hr = stream_open(stream)))
+        return hr;
+    if (!ReadFile(stream->file.handle, data, size, &read, NULL))
         return HRESULT_FROM_WIN32(GetLastError());
     if (ret_size)
         *ret_size = read;
+    if (read < size)
+        return HRESULT_FROM_WIN32(ERROR_HANDLE_EOF);
     return S_OK;
 }
 
 static HRESULT WINAPI stream_Write(IStream *iface, const void *data, ULONG size, ULONG *ret_size)
 {
-    struct file_writer *filter = impl_from_IStream(iface);
+    struct file_writer_stream *stream = impl_from_IStream(iface);
     DWORD written = 0;
+    HRESULT hr;
 
-    TRACE("filter %p, data %p, size %lu, ret_size %p.\n", filter, data, size, ret_size);
+    TRACE("stream %p, data %p, size %lu, ret_size %p.\n", stream, data, size, ret_size);
 
-    if (!filter->file)
-        return E_UNEXPECTED;
-    if (!WriteFile(filter->file, data, size, &written, NULL))
+    if (FAILED(hr = stream_open(stream)))
+        return hr;
+    if (!WriteFile(stream->file.handle, data, size, &written, NULL))
         return HRESULT_FROM_WIN32(GetLastError());
     if (ret_size)
         *ret_size = written;
@@ -585,17 +658,18 @@ static HRESULT WINAPI stream_Write(IStream *iface, const void *data, ULONG size,
 
 static HRESULT WINAPI stream_Seek(IStream *iface, LARGE_INTEGER offset, DWORD origin, ULARGE_INTEGER *ret_pos)
 {
-    struct file_writer *filter = impl_from_IStream(iface);
+    struct file_writer_stream *stream = impl_from_IStream(iface);
     LARGE_INTEGER pos;
+    HRESULT hr;
 
-    TRACE("filter %p, offset %s, origin %lu, ret_pos %p.\n", filter,
+    TRACE("stream %p, offset %s, origin %lu, ret_pos %p.\n", stream,
             wine_dbgstr_longlong(offset.QuadPart), origin, ret_pos);
 
-    if (!filter->file)
-        return E_UNEXPECTED;
+    if (FAILED(hr = stream_open(stream)))
+        return hr;
     if (origin != STREAM_SEEK_SET && origin != STREAM_SEEK_CUR && origin != STREAM_SEEK_END)
         return STG_E_INVALIDFUNCTION;
-    if (!SetFilePointerEx(filter->file, offset, &pos, origin))
+    if (!SetFilePointerEx(stream->file.handle, offset, &pos, origin))
         return HRESULT_FROM_WIN32(GetLastError());
     if (ret_pos)
         ret_pos->QuadPart = pos.QuadPart;
@@ -604,21 +678,22 @@ static HRESULT WINAPI stream_Seek(IStream *iface, LARGE_INTEGER offset, DWORD or
 
 static HRESULT WINAPI stream_SetSize(IStream *iface, ULARGE_INTEGER size)
 {
-    struct file_writer *filter = impl_from_IStream(iface);
+    struct file_writer_stream *stream = impl_from_IStream(iface);
     LARGE_INTEGER zero = {{0}}, pos, end;
-    HRESULT hr = S_OK;
+    HRESULT hr;
 
-    TRACE("filter %p, size %s.\n", filter, wine_dbgstr_longlong(size.QuadPart));
+    TRACE("stream %p, size %s.\n", stream, wine_dbgstr_longlong(size.QuadPart));
 
-    if (!filter->file)
-        return E_UNEXPECTED;
+    if (FAILED(hr = stream_open(stream)))
+        return hr;
+    /* FIXME: Windows 11 returns S_OK but keeps the size outside AM_FILE_OVERWRITE mode */
     end.QuadPart = size.QuadPart;
-    if (!SetFilePointerEx(filter->file, zero, &pos, FILE_CURRENT)
-            || !SetFilePointerEx(filter->file, end, NULL, FILE_BEGIN))
+    if (!SetFilePointerEx(stream->file.handle, zero, &pos, FILE_CURRENT)
+            || !SetFilePointerEx(stream->file.handle, end, NULL, FILE_BEGIN))
         return HRESULT_FROM_WIN32(GetLastError());
-    if (!SetEndOfFile(filter->file))
+    if (!SetEndOfFile(stream->file.handle))
         hr = HRESULT_FROM_WIN32(GetLastError());
-    SetFilePointerEx(filter->file, pos, NULL, FILE_BEGIN);
+    SetFilePointerEx(stream->file.handle, pos, NULL, FILE_BEGIN);
     return hr;
 }
 
@@ -686,6 +761,23 @@ static const IStreamVtbl stream_vtbl =
     stream_Clone,
 };
 
+static HRESULT stream_create(struct file_writer *filter, IStream **out)
+{
+    struct file_writer_stream *object;
+
+    if (!(object = calloc(1, sizeof(*object))))
+        return E_OUTOFMEMORY;
+
+    object->IStream_iface.lpVtbl = &stream_vtbl;
+    object->refcount = 1;
+    object->filter = filter;
+    IPin_AddRef(&filter->sink.pin.IPin_iface);
+
+    TRACE("Created stream %p.\n", object);
+    *out = &object->IStream_iface;
+    return S_OK;
+}
+
 static inline struct file_writer *impl_from_IQualityControl(IQualityControl *iface)
 {
     return CONTAINING_RECORD(iface, struct file_writer, IQualityControl_iface);
@@ -751,7 +843,6 @@ HRESULT file_writer_create(IUnknown *outer, IUnknown **out)
     object->IFileSinkFilter2_iface.lpVtbl = &filesinkfilter_vtbl;
     object->IPersistStream_iface.lpVtbl = &persist_stream_vtbl;
     object->IAMFilterMiscFlags_iface.lpVtbl = &misc_flags_vtbl;
-    object->IStream_iface.lpVtbl = &stream_vtbl;
     object->IQualityControl_iface.lpVtbl = &quality_control_vtbl;
 
     strmbase_sink_init(&object->sink, &object->filter, L"in", &sink_ops, NULL);

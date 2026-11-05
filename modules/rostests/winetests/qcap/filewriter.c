@@ -1017,6 +1017,118 @@ static void test_file_mode(void)
     DeleteFileW(filename);
 }
 
+static void test_file_lifetime(void)
+{
+    AM_MEDIA_TYPE req_mt =
+    {
+        .majortype = MEDIATYPE_Stream,
+        .subtype = {0x2222},
+        .formattype = {0x3333},
+    };
+
+    IBaseFilter *filter = create_file_writer();
+    WCHAR *filename = set_filename(filter);
+    LARGE_INTEGER zero = {{0}};
+    IStream *stream, *stream2;
+    struct testfilter source;
+    IMediaControl *control;
+    IFilterGraph2 *graph;
+    ULARGE_INTEGER pos;
+    char buffer[4];
+    ULONG ret_size;
+    HANDLE file;
+    DWORD size;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    IBaseFilter_FindPin(filter, L"in", &pin);
+
+    hr = IPin_QueryInterface(pin, &IID_IStream, (void **)&stream);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_QueryInterface(pin, &IID_IStream, (void **)&stream2);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(stream != stream2, "Got the same stream.\n");
+    pos.QuadPart = 0xdeadbeef;
+    hr = IStream_Seek(stream, zero, STREAM_SEEK_END, &pos);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!pos.QuadPart, "Got position %s.\n", wine_dbgstr_longlong(pos.QuadPart));
+    size = get_file_size(filename);
+    ok(!size, "Got size %lu.\n", size);
+    hr = IStream_Read(stream, buffer, 1, &ret_size);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_HANDLE_EOF), "Got hr %#lx.\n", hr);
+
+    hr = IStream_Write(stream, "AB", 2, &ret_size);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IStream_Write(stream2, "C", 1, &ret_size);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    memset(buffer, 0, sizeof(buffer));
+    hr = IStream_Read(stream, buffer, sizeof(buffer), &ret_size);
+    ok(hr == HRESULT_FROM_WIN32(ERROR_HANDLE_EOF), "Got hr %#lx.\n", hr);
+    ok(ret_size == 2, "Got size %lu.\n", ret_size);
+    ok(!memcmp(buffer, "CB", 2), "Got data %s.\n", debugstr_an(buffer, ret_size));
+    IStream_Release(stream2);
+    IStream_Release(stream);
+    DeleteFileW(filename);
+
+    testfilter_init(&source);
+    CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER, &IID_IFilterGraph2, (void **)&graph);
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    IFilterGraph2_AddFilter(graph, filter, L"filewriter");
+    IFilterGraph2_AddFilter(graph, &source.filter.IBaseFilter_iface, L"source");
+    hr = IFilterGraph2_ConnectDirect(graph, &source.source.pin.IPin_iface, pin, &req_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    size = get_file_size(filename);
+    ok(size == ~0u, "Got size %lu.\n", size);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    size = get_file_size(filename);
+    ok(!size, "Got size %lu.\n", size);
+    IMediaControl_Stop(control);
+    size = get_file_size(filename);
+    ok(!size, "Got size %lu.\n", size);
+    file = CreateFileW(filename, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(file != INVALID_HANDLE_VALUE, "Failed to open file, error %lu.\n", GetLastError());
+    CloseHandle(file);
+
+    IPin_QueryInterface(pin, &IID_IStream, (void **)&stream);
+    hr = IStream_Seek(stream, zero, STREAM_SEEK_END, &pos);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!pos.QuadPart, "Got position %s.\n", wine_dbgstr_longlong(pos.QuadPart));
+    IStream_Release(stream);
+    size = get_file_size(filename);
+    ok(size == ~0u, "Got size %lu.\n", size);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IPin_QueryInterface(pin, &IID_IStream, (void **)&stream);
+    hr = IStream_Write(stream, "ABCD", 4, &ret_size);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IStream_Release(stream);
+    IMediaControl_Stop(control);
+    size = get_file_size(filename);
+    ok(size == 4, "Got size %lu.\n", size);
+    file = CreateFileW(filename, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(file != INVALID_HANDLE_VALUE, "Failed to open file, error %lu.\n", GetLastError());
+    CloseHandle(file);
+
+    IFilterGraph2_Disconnect(graph, pin);
+    IFilterGraph2_Disconnect(graph, &source.source.pin.IPin_iface);
+    IMediaControl_Release(control);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+
+    IPin_Release(pin);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(&source.filter.IBaseFilter_iface);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    DeleteFileW(filename);
+}
+
 static HRESULT load_persist_data(IPersistStream *persist, const void *data, ULONG size, ULONG *pos)
 {
     LARGE_INTEGER zero = {{0}};
@@ -1302,6 +1414,7 @@ START_TEST(filewriter)
     test_misc_flags();
     test_file_sink();
     test_file_mode();
+    test_file_lifetime();
     test_persist_stream();
     test_quality_control();
 
