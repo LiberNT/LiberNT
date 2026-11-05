@@ -1582,6 +1582,11 @@ DxgkPresentApplyPendingModeChange(
 
     PAGED_CODE();
 
+    if (VidPnSourceId < 32 &&
+        (InterlockedCompareExchange(&Adapter->ScanoutModeChangePending, 0, 0) & (LONG)(1UL << VidPnSourceId)) == 0)
+    {
+        return STATUS_SUCCESS;
+    }
     if (Adapter->SharedPrimaryAllocationHandle == NULL ||
         Adapter->SharedPrimaryVidPnSourceId != VidPnSourceId)
     {
