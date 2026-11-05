@@ -113,7 +113,8 @@ VOID NBRemoveNeighbor(
 
 ULONG NBCopyNeighbors(
     PIP_INTERFACE Interface,
-    PIPARP_ENTRY ArpTable);
+    PIPARP_ENTRY ArpTable,
+    ULONG Capacity);
 
 VOID NBResetNeighborTimeout(
     PIP_ADDRESS Address);

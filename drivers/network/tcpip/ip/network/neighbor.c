@@ -770,7 +770,8 @@ VOID NBRemoveNeighbor(
 
 ULONG NBCopyNeighbors
 (PIP_INTERFACE Interface,
- PIPARP_ENTRY ArpTable)
+ PIPARP_ENTRY ArpTable,
+ ULONG Capacity)
 {
   PNEIGHBOR_CACHE_ENTRY CurNCE;
   KIRQL OldIrql;
@@ -783,7 +784,7 @@ ULONG NBCopyNeighbors
 	   CurNCE = CurNCE->Next ) {
 	  if( CurNCE->Interface == Interface &&
               !IsInterfaceAddress( Interface, &CurNCE->Address ) ) {
-	      if( ArpTable ) {
+	      if( ArpTable && Size < Capacity ) {
 		  ArpTable[Size].Index = Interface->Index;
 		  ArpTable[Size].AddrSize = CurNCE->LinkAddressLength;
 		  RtlCopyMemory
