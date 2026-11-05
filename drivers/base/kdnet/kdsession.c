@@ -540,7 +540,7 @@ KdSessionTimer(
     ULONG64 Tail, Pending;
     ULONG Length;
 
-    if (KdNetOptions.Broadcast)
+    if (KdNetBroadcasting)
     {
         KdpSendBroadcastOutput(Now);
         return;

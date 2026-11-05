@@ -729,13 +729,14 @@ KdIpInput(
     }
 
     DestinationPort = KdNetGet16(Udp + 2);
-    if (KdNetOptions.Broadcast)
+    if (KdNetBroadcasting && DestinationPort == KDNET_BROADCAST_INPUT_PORT)
     {
-        if (DestinationPort == KDNET_BROADCAST_INPUT_PORT)
-            KdSessionBroadcastInput(Udp + UDP_HEADER_SIZE, UdpLength - UDP_HEADER_SIZE);
-
+        KdSessionBroadcastInput(Udp + UDP_HEADER_SIZE, UdpLength - UDP_HEADER_SIZE);
         return;
     }
+
+    if (KdNetOptions.Broadcast)
+        return;
 
     if (DestinationPort == DHCP_CLIENT_PORT)
     {

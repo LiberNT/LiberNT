@@ -22,6 +22,7 @@
 #define KDNET_TAG               'tNdK'
 
 #define KDNET_DEFAULT_PORT      50000
+#define KDNET_DEFAULT_HOST      "libernt.com"
 #define KDNET_BROADCAST_INPUT_PORT  6665
 #define KDNET_BROADCAST_OUTPUT_PORT 6666
 #define KDNET_DATAGRAM_SIZE     1200
@@ -45,14 +46,15 @@ typedef struct _KDNET_OPTIONS
     ULONG Device;
     ULONG Function;
     BOOLEAN HaveKey;
-    BOOLEAN ShowKey;
     BOOLEAN Broadcast;
+    BOOLEAN BroadcastFallback;
     CHAR Key[KDNET_KEY_TEXT_SIZE];
     CHAR HostName[KDNET_HOST_NAME_SIZE];
 } KDNET_OPTIONS, *PKDNET_OPTIONS;
 
 extern KDNET_OPTIONS KdNetOptions;
 extern volatile BOOLEAN KdNetReady;
+extern BOOLEAN KdNetBroadcasting;
 extern KD_TERMINAL_HOST KdNetHost;
 extern BOOLEAN KdNetStopped;
 

@@ -1591,40 +1591,6 @@ LoadAndBootWindows(
     /* Post-process the boot options */
     NtLdrNormalizeOptions(BootOptions);
     TRACE("BootOptions(2): '%s'\n", BootOptions);
-    if (NtLdrGetOption(BootOptions, "DEBUGPORT=NET"))
-    {
-        CHAR AssistanceOption[32];
-        ULONG AssistanceKey, AssistanceRound;
-        TIMEINFO* AssistanceTime;
-
-        if (!NtLdrGetOption(BootOptions, "ENCRYPTION_KEY=") &&
-            !NtLdrGetOption(BootOptions, "ASSISTANCE_KEY="))
-        {
-            AssistanceRound = 0;
-            do
-            {
-#ifdef UEFIBOOT
-                if (UefiGetRandom(&AssistanceKey, sizeof(AssistanceKey)))
-                    continue;
-#endif
-                AssistanceTime = ArcGetTime();
-                AssistanceKey = (ULONG)(ULONG_PTR)&AssistanceTime ^ ++AssistanceRound;
-                AssistanceKey = AssistanceKey * 1664525UL + AssistanceTime->Second;
-                AssistanceKey = AssistanceKey * 1664525UL + AssistanceTime->Minute;
-                AssistanceKey = AssistanceKey * 1664525UL + AssistanceTime->Hour;
-                AssistanceKey = AssistanceKey * 1664525UL + AssistanceTime->Day;
-                AssistanceKey = AssistanceKey * 1664525UL + AssistanceTime->Month;
-                AssistanceKey = AssistanceKey * 1664525UL + AssistanceTime->Year;
-                AssistanceKey = (AssistanceKey ^ (AssistanceKey >> 15)) * 2246822519UL;
-                AssistanceKey ^= AssistanceKey >> 13;
-            } while (AssistanceKey >= 4200000000UL);
-
-            AssistanceKey %= 100000000UL;
-            RtlStringCbPrintfA(AssistanceOption, sizeof(AssistanceOption), "ASSISTANCE_KEY=%04lu-%04lu",
-                               AssistanceKey / 10000, AssistanceKey % 10000);
-            NtLdrAddOptions(BootOptions, sizeof(BootOptions), TRUE, AssistanceOption);
-        }
-    }
 
 #if defined(UEFIBOOT) && defined(FREELDR_HTTP_BOOT)
     /* HTTP boot: download the ISO and initialize it as the boot ramdisk. */

@@ -9,18 +9,15 @@
 #include <gui.h>
 
 #define BM_PROFILE_DEBUGGING          1
-#define BM_PROFILE_LOCAL_BROADCAST    2
 
 static PCSTR BmStartupNames[] =
 {
-    "Debugging",
-    "Network debugging on this cable"
+    "Debugging"
 };
 
 static const ULONG BmStartupProfiles[] =
 {
-    BM_PROFILE_DEBUGGING,
-    BM_PROFILE_LOCAL_BROADCAST
+    BM_PROFILE_DEBUGGING
 };
 
 BOOLEAN

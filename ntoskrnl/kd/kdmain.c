@@ -107,6 +107,7 @@ KdpGetDebugMode(
     {
         p2 += CONST_STR_LEN("NET");
         KdpDebugMode.Net = TRUE;
+        KdpDebugMode.File = TRUE;
     }
 
     return (PSTR)p2;

@@ -16,7 +16,9 @@
 
 KDNET_OPTIONS KdNetOptions;
 volatile BOOLEAN KdNetReady;
+BOOLEAN KdNetBroadcasting;
 
+static ULONG64 KdpLinkSince;
 static LARGE_INTEGER KdpFrequency;
 static LONGLONG KdpLastCounter;
 static ULONG64 KdpClockOffset;
@@ -62,53 +64,44 @@ KdpIsConnected(VOID)
 }
 
 static
-PCSTR
-KdpVisibleKey(VOID)
-{
-    if (!KdpIsConnected())
-        return NULL;
-
-    if (KdNetOptions.ShowKey)
-        return KdNetOptions.Key;
-
-    return KdNetOptions.HaveKey ? NULL : KdSessionKeyText;
-}
-
-static
 VOID
 KdpShowHost(VOID)
 {
-    CHAR Text[KDNET_PROMPT_SIZE];
-    ULONG Host = KdNetOptions.HostIp;
-    int Length;
-
     if (KdpHostShown || !KdpIsConnected() || !KdNetHost.ShowPrompt)
         return;
 
     KdpHostShown = TRUE;
 
     /* The host draws the key with every prompt, and the key is all a person needs to see */
-    if (KdpVisibleKey() || !Host)
+    KdNetHost.ShowPrompt(NULL);
+}
+
+static
+VOID
+KdpUpdateBroadcast(
+    _In_ ULONG64 Now)
+{
+    if (!KdNetOptions.BroadcastFallback)
+        return;
+
+    if (KdIpAddress)
     {
-        KdNetHost.ShowPrompt(NULL);
+        KdNetBroadcasting = FALSE;
         return;
     }
 
-    if (KdNetOptions.HostName[0])
+    if (!KdNicLinkState)
     {
-        Length = _snprintf(Text, sizeof(Text), "Connected to %s", KdNetOptions.HostName);
-    }
-    else
-    {
-        Length = _snprintf(Text, sizeof(Text), "Connected to %lu.%lu.%lu.%lu",
-                           Host >> 24, (Host >> 16) & 255, (Host >> 8) & 255, Host & 255);
+        KdpLinkSince = 0;
+        return;
     }
 
-    if (Length < 0 || (ULONG)Length >= sizeof(Text))
-        Length = sizeof(Text) - 1;
+    if (!KdpLinkSince)
+        KdpLinkSince = Now;
 
-    Text[Length] = ANSI_NULL;
-    KdNetHost.ShowPrompt(Text);
+    /* A link that gets no address is a cable straight to a host, which runs no DHCP server */
+    if (Now - KdpLinkSince >= KDNET_ADDRESS_WAIT)
+        KdNetBroadcasting = TRUE;
 }
 
 VOID
@@ -132,6 +125,7 @@ KdNetService(VOID)
     }
 
     Now = KdNetTime();
+    KdpUpdateBroadcast(Now);
     KdIpTimer(Now);
     KdSessionTimer(Now);
     KdpShowHost();
@@ -197,14 +191,20 @@ KdpParseOptions(
     ULONG Values[4], i;
     PCSTR Text;
     PCHAR Secret;
+    BOOLEAN NoHost;
 
     RtlZeroMemory(&KdNetOptions, sizeof(KdNetOptions));
     KdNetOptions.HostPort = KDNET_DEFAULT_PORT;
     if (!Options)
         return;
 
+    NoHost = !KdpFindOption(Options, "HOST_IP") && !KdpFindOption(Options, "HOST_NAME");
     Text = KdpFindOption(Options, "LOCAL_BROADCAST");
     KdNetOptions.Broadcast = Text && *Text == '1';
+    KdNetOptions.BroadcastFallback = NoHost && !Text;
+    KdNetBroadcasting = KdNetOptions.Broadcast;
+    if (NoHost && !KdNetOptions.Broadcast)
+        RtlCopyMemory(KdNetOptions.HostName, KDNET_DEFAULT_HOST, sizeof(KDNET_DEFAULT_HOST));
 
     Text = KdpFindOption(Options, "HOST_IP");
     if (Text && KdpParseNumbers(Text, '.', Values, 4) &&
@@ -237,12 +237,6 @@ KdpParseOptions(
     }
 
     Text = KdpFindOption(Options, "ENCRYPTION_KEY");
-    if (!Text)
-    {
-        Text = KdpFindOption(Options, "ASSISTANCE_KEY");
-        KdNetOptions.ShowKey = Text != NULL;
-    }
-
     if (Text)
     {
         for (i = 0; i < sizeof(KdNetOptions.Key) - 1 && Text[i] && Text[i] != ' '; i++)
@@ -410,7 +404,7 @@ KdpTerminalQueryStatus(
     {
         Length = _snprintf(Buffer, Size, "Network debugger: no usable network card");
     }
-    else if (KdNetOptions.Broadcast)
+    else if (KdNetBroadcasting)
     {
         Length = _snprintf(Buffer, Size,
                            "Network debugger: %02x-%02x-%02x-%02x-%02x-%02x broadcasts to UDP port %u%s",
@@ -421,9 +415,10 @@ KdpTerminalQueryStatus(
     else if (!KdIpAddress)
     {
         Length = _snprintf(Buffer, Size,
-                           "Network debugger: %02x-%02x-%02x-%02x-%02x-%02x has no address yet",
+                           "Network debugger: %02x-%02x-%02x-%02x-%02x-%02x has no address yet%s",
                            KdNicAddress[0], KdNicAddress[1], KdNicAddress[2],
-                           KdNicAddress[3], KdNicAddress[4], KdNicAddress[5]);
+                           KdNicAddress[3], KdNicAddress[4], KdNicAddress[5],
+                           KdNetOptions.BroadcastFallback ? ", broadcasts to UDP port 6666 without one" : "");
     }
     else if (!Host && KdNetOptions.HostName[0])
     {
@@ -464,18 +459,16 @@ KdpTerminalQueryKey(
     _Out_writes_z_(Size) PCHAR Buffer,
     _In_ ULONG Size)
 {
-    PCSTR Key;
     int Length;
 
     if (!Size)
         return 0;
 
     *Buffer = ANSI_NULL;
-    Key = KdpVisibleKey();
-    if (!Key)
+    if (!KdpIsConnected() || KdNetOptions.HaveKey)
         return 0;
 
-    Length = _snprintf(Buffer, Size, "%s", Key);
+    Length = _snprintf(Buffer, Size, "%s", KdSessionKeyText);
     if (Length < 0 || (ULONG)Length >= Size)
         Length = Size - 1;
 
