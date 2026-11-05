@@ -6086,6 +6086,59 @@ static void test_event_dispatch(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_default_handling(void)
+{
+    static const struct
+    {
+        LONG code;
+        HRESULT hr;
+    }
+    tests[] =
+    {
+        {0, E_INVALIDARG},
+        {EC_COMPLETE, S_OK},
+        {EC_USERABORT, E_INVALIDARG},
+        {EC_ERRORABORT, E_INVALIDARG},
+        {EC_REPAINT, S_OK},
+        {EC_CLOCK_CHANGED, E_INVALIDARG},
+        {EC_PAUSED, E_INVALIDARG},
+        {EC_ACTIVATE, S_OK},
+        {EC_NEED_RESTART, S_OK},
+        {EC_WINDOW_DESTROYED, S_OK},
+        {EC_DISPLAY_CHANGED, S_OK},
+        {EC_STARVATION, S_OK},
+        {EC_STREAM_CONTROL_STOPPED, E_INVALIDARG},
+        {EC_STATE_CHANGE, S_OK},
+        {EC_USER, E_INVALIDARG},
+        {0x12345, E_INVALIDARG},
+    };
+    IFilterGraph2 *graph = create_graph();
+    IMediaEventEx *events;
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaEventEx, (void **)&events);
+
+    for (i = 0; i < ARRAY_SIZE(tests); ++i)
+    {
+        winetest_push_context("Code %#lx", tests[i].code);
+        hr = IMediaEventEx_RestoreDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        hr = IMediaEventEx_CancelDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        hr = IMediaEventEx_CancelDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        hr = IMediaEventEx_RestoreDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        winetest_pop_context();
+    }
+
+    IMediaEventEx_Release(events);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(filtergraph)
 {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -6114,6 +6167,7 @@ START_TEST(filtergraph)
     test_autoplug_uyvy();
     test_set_notify_flags();
     test_events();
+    test_default_handling();
     test_event_dispatch();
 
     CoUninitialize();
