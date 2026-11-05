@@ -355,11 +355,11 @@ static HRESULT WINAPI BaseRenderer_Receive(struct strmbase_sink *pin, IMediaSamp
     AM_MEDIA_TYPE *mt;
 
     if (filter->sink.flushing)
-        return S_FALSE;
+        return filter->fail_inactive_receive ? E_FAIL : S_FALSE;
 
     state = filter->filter.state;
     if (state == State_Stopped)
-        return VFW_E_WRONG_STATE;
+        return filter->fail_inactive_receive ? E_FAIL : VFW_E_WRONG_STATE;
 
     if (filter->eos)
         return E_UNEXPECTED;

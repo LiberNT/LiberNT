@@ -69,6 +69,7 @@ HRESULT null_renderer_create(IUnknown *outer, IUnknown **out)
         return E_OUTOFMEMORY;
 
     strmbase_renderer_init(&object->renderer, outer, &CLSID_NullRenderer, L"In", &renderer_ops);
+    object->renderer.fail_inactive_receive = TRUE;
 
     TRACE("Created null renderer %p.\n", object);
     *out = &object->renderer.filter.IUnknown_inner;
