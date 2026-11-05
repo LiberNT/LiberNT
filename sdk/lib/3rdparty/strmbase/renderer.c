@@ -230,6 +230,11 @@ static HRESULT renderer_query_interface(struct strmbase_filter *iface, REFIID ii
 static HRESULT renderer_init_stream(struct strmbase_filter *iface)
 {
     struct strmbase_renderer *filter = impl_from_strmbase_filter(iface);
+    HRESULT hr;
+
+    if (filter->sink.pin.peer && filter->sink.pAllocator
+            && FAILED(hr = IMemAllocator_Commit(filter->sink.pAllocator)))
+        return hr;
 
     if (filter->sink.pin.peer)
         ResetEvent(filter->state_event);
@@ -285,6 +290,8 @@ static HRESULT renderer_cleanup_stream(struct strmbase_filter *iface)
     strmbase_passthrough_invalidate_time(&filter->passthrough);
     SetEvent(filter->state_event);
     SetEvent(filter->flush_event);
+    if (filter->sink.pin.peer && filter->sink.pAllocator)
+        IMemAllocator_Decommit(filter->sink.pAllocator);
 
     return S_OK;
 }
