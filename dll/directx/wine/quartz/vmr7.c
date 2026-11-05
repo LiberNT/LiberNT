@@ -330,6 +330,9 @@ static HRESULT vmr_query_accept(struct strmbase_renderer *iface, const AM_MEDIA_
             && !IsEqualGUID(&mt->formattype, &FORMAT_VideoInfo2))
         return S_FALSE;
 
+    if (IsEqualGUID(&mt->subtype, &MEDIASUBTYPE_RGB8))
+        return S_FALSE;
+
     if (bitmap_header->biCompression == BI_RGB || bitmap_header->biCompression == BI_BITFIELDS)
         return S_OK;
 
@@ -623,8 +626,8 @@ static const IVideoWindowVtbl IVideoWindow_VTable =
     BaseControlWindowImpl_NotifyOwnerMessage,
     BaseControlWindowImpl_SetWindowPosition,
     BaseControlWindowImpl_GetWindowPosition,
-    BaseControlWindowImpl_GetMinIdealImageSize,
-    BaseControlWindowImpl_GetMaxIdealImageSize,
+    vmr_window_GetMinIdealImageSize,
+    vmr_window_GetMaxIdealImageSize,
     BaseControlWindowImpl_GetRestorePosition,
     BaseControlWindowImpl_HideCursor,
     BaseControlWindowImpl_IsCursorHidden,

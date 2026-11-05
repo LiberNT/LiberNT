@@ -692,6 +692,52 @@ HRESULT WINAPI BaseControlWindowImpl_GetMaxIdealImageSize(IVideoWindow *iface, L
     return S_OK;
 }
 
+HRESULT WINAPI vmr_window_GetMinIdealImageSize(IVideoWindow *iface, LONG *width, LONG *height)
+{
+    struct video_window *window = impl_from_IVideoWindow(iface);
+    HRESULT hr = S_OK;
+
+    TRACE("window %p, width %p, height %p.\n", window, width, height);
+
+    if (!width || !height)
+        return E_POINTER;
+
+    EnterCriticalSection(&window->pFilter->filter_cs);
+    if (window->pFilter->state == State_Stopped)
+        hr = VFW_E_WRONG_STATE;
+    else
+        *width = *height = 1;
+    LeaveCriticalSection(&window->pFilter->filter_cs);
+
+    return hr;
+}
+
+HRESULT WINAPI vmr_window_GetMaxIdealImageSize(IVideoWindow *iface, LONG *width, LONG *height)
+{
+    struct video_window *window = impl_from_IVideoWindow(iface);
+    MONITORINFO info = {.cbSize = sizeof(info)};
+    HRESULT hr = S_OK;
+
+    TRACE("window %p, width %p, height %p.\n", window, width, height);
+
+    if (!width || !height)
+        return E_POINTER;
+
+    EnterCriticalSection(&window->pFilter->filter_cs);
+    if (window->pFilter->state == State_Stopped)
+        hr = VFW_E_WRONG_STATE;
+    else if (GetMonitorInfoW(MonitorFromWindow(window->hwnd, MONITOR_DEFAULTTOPRIMARY), &info))
+    {
+        *width = info.rcMonitor.right + 1;
+        *height = info.rcMonitor.bottom + 1;
+    }
+    else
+        hr = E_FAIL;
+    LeaveCriticalSection(&window->pFilter->filter_cs);
+
+    return hr;
+}
+
 HRESULT WINAPI BaseControlWindowImpl_GetRestorePosition(IVideoWindow *iface, LONG *pLeft, LONG *pTop, LONG *pWidth, LONG *pHeight)
 {
     struct video_window *This = impl_from_IVideoWindow(iface);
