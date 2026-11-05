@@ -3759,6 +3759,20 @@ static void test_filter_state(void)
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     ok(state == State_Stopped, "Got state %lu.\n", state);
 
+    source.state_hr = E_FAIL;
+    hr = IMediaControl_Pause(control);
+    ok(hr == E_FAIL, "Got hr %#lx.\n", hr);
+    source.state_hr = S_OK;
+    check_filter_state(graph, State_Stopped);
+
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    source.state_hr = E_FAIL;
+    hr = IMediaControl_Pause(control);
+    ok(hr == E_FAIL, "Got hr %#lx.\n", hr);
+    source.state_hr = S_OK;
+    check_filter_state(graph, State_Stopped);
+
     /* Renderers are expected to block completing a state change into paused
      * until they receive a sample. Because the graph can transition from
      * stopped -> paused -> running in one call, which itself needs to be
