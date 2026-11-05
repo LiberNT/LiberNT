@@ -27,6 +27,7 @@ struct file_writer
     struct strmbase_filter filter;
     IAMFilterMiscFlags IAMFilterMiscFlags_iface;
     IFileSinkFilter2 IFileSinkFilter2_iface;
+    IPersistStream IPersistStream_iface;
     IStream IStream_iface;
     IQualityControl IQualityControl_iface;
 
@@ -35,6 +36,7 @@ struct file_writer
     WCHAR *filename;
     GUID majortype, subtype;
     DWORD mode;
+    BOOL dirty;
     HANDLE file;
 
     BOOL eos;
@@ -180,6 +182,8 @@ static HRESULT file_writer_query_interface(struct strmbase_filter *iface, REFIID
         *out = &filter->IAMFilterMiscFlags_iface;
     else if (IsEqualGUID(iid, &IID_IFileSinkFilter) || IsEqualGUID(iid, &IID_IFileSinkFilter2))
         *out = &filter->IFileSinkFilter2_iface;
+    else if (IsEqualGUID(iid, &IID_IPersistStream))
+        *out = &filter->IPersistStream_iface;
     else
         return E_NOINTERFACE;
 
@@ -337,6 +341,7 @@ static HRESULT WINAPI filesinkfilter_SetMode(IFileSinkFilter2 *iface, DWORD mode
         return E_INVALIDARG;
 
     filter->mode = mode;
+    filter->dirty = TRUE;
     return S_OK;
 }
 
@@ -362,6 +367,125 @@ static const IFileSinkFilter2Vtbl filesinkfilter_vtbl =
     filesinkfilter_GetCurFile,
     filesinkfilter_SetMode,
     filesinkfilter_GetMode,
+};
+
+struct file_writer_persist_data
+{
+    DWORD size;
+    DWORD mode;
+};
+
+static const WCHAR file_writer_persist_version[] = L"00000000000 ";
+
+static inline struct file_writer *impl_from_IPersistStream(IPersistStream *iface)
+{
+    return CONTAINING_RECORD(iface, struct file_writer, IPersistStream_iface);
+}
+
+static HRESULT WINAPI persist_stream_QueryInterface(IPersistStream *iface, REFIID iid, void **out)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+    return IUnknown_QueryInterface(filter->filter.outer_unk, iid, out);
+}
+
+static ULONG WINAPI persist_stream_AddRef(IPersistStream *iface)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+    return IUnknown_AddRef(filter->filter.outer_unk);
+}
+
+static ULONG WINAPI persist_stream_Release(IPersistStream *iface)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+    return IUnknown_Release(filter->filter.outer_unk);
+}
+
+static HRESULT WINAPI persist_stream_GetClassID(IPersistStream *iface, CLSID *clsid)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+    return IBaseFilter_GetClassID(&filter->filter.IBaseFilter_iface, clsid);
+}
+
+static HRESULT WINAPI persist_stream_IsDirty(IPersistStream *iface)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+
+    TRACE("filter %p.\n", filter);
+
+    return filter->dirty ? S_OK : S_FALSE;
+}
+
+static HRESULT WINAPI persist_stream_Load(IPersistStream *iface, IStream *stream)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+    struct file_writer_persist_data data = {0};
+    ULONG size;
+    HRESULT hr;
+    WCHAR c;
+
+    TRACE("filter %p, stream %p.\n", filter, stream);
+
+    do
+    {
+        if (FAILED(hr = IStream_Read(stream, &c, sizeof(c), &size)))
+            return hr;
+        if (size != sizeof(c))
+            return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        if (c != ' ' && (c < '0' || c > '9'))
+            return VFW_E_INVALID_FILE_FORMAT;
+    } while (c != ' ');
+
+    if (FAILED(hr = IStream_Read(stream, &data, sizeof(data), &size)))
+        return hr;
+    if (data.size != sizeof(data))
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+
+    filter->mode = data.mode;
+    return S_OK;
+}
+
+static HRESULT WINAPI persist_stream_Save(IPersistStream *iface, IStream *stream, BOOL clear_dirty)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+    struct file_writer_persist_data data = {sizeof(data), filter->mode};
+    HRESULT hr;
+
+    TRACE("filter %p, stream %p, clear_dirty %d.\n", filter, stream, clear_dirty);
+
+    if (FAILED(hr = IStream_Write(stream, file_writer_persist_version,
+            sizeof(file_writer_persist_version) - sizeof(WCHAR), NULL)))
+        return hr;
+    if (FAILED(hr = IStream_Write(stream, &data, sizeof(data), NULL)))
+        return hr;
+
+    if (clear_dirty)
+        filter->dirty = FALSE;
+    return S_OK;
+}
+
+static HRESULT WINAPI persist_stream_GetSizeMax(IPersistStream *iface, ULARGE_INTEGER *size)
+{
+    struct file_writer *filter = impl_from_IPersistStream(iface);
+
+    TRACE("filter %p, size %p.\n", filter, size);
+
+    if (!size)
+        return E_POINTER;
+
+    size->QuadPart = sizeof(file_writer_persist_version) - sizeof(WCHAR) + sizeof(struct file_writer_persist_data);
+    return S_OK;
+}
+
+static const IPersistStreamVtbl persist_stream_vtbl =
+{
+    persist_stream_QueryInterface,
+    persist_stream_AddRef,
+    persist_stream_Release,
+    persist_stream_GetClassID,
+    persist_stream_IsDirty,
+    persist_stream_Load,
+    persist_stream_Save,
+    persist_stream_GetSizeMax,
 };
 
 static inline struct file_writer *impl_from_IAMFilterMiscFlags(IAMFilterMiscFlags *iface)
@@ -625,6 +749,7 @@ HRESULT file_writer_create(IUnknown *outer, IUnknown **out)
 
     strmbase_filter_init(&object->filter, outer, &CLSID_FileWriter, &filter_ops);
     object->IFileSinkFilter2_iface.lpVtbl = &filesinkfilter_vtbl;
+    object->IPersistStream_iface.lpVtbl = &persist_stream_vtbl;
     object->IAMFilterMiscFlags_iface.lpVtbl = &misc_flags_vtbl;
     object->IStream_iface.lpVtbl = &stream_vtbl;
     object->IQualityControl_iface.lpVtbl = &quality_control_vtbl;
