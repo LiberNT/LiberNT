@@ -70,6 +70,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,dsound.dll,1
 11,,fontext.dll,1
 11,,mfh264enc.dll,1
+11,,mp3dmod.dll,1
 11,,mmdevapi.dll,1
 11,,mscat32.dll,1
 11,,mshtml.dll,3
@@ -136,6 +137,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,mf.dll,1
 11,,mfasfsrcsnk.dll,1
 11,,mfh264enc.dll,1
+11,,mp3dmod.dll,1
 11,,mfmediaengine.dll,1
 11,,mfmp4srcsnk.dll,1
 11,,mfplay.dll,1
@@ -222,6 +224,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,dsound.dll,1
 11,,fontext.dll,1
 11,,mfh264enc.dll,1
+11,,mp3dmod.dll,1
 11,,mmdevapi.dll,1
 11,,mscat32.dll,1
 11,,mshtml.dll,3

@@ -164,6 +164,7 @@ set(COMPAT_RUNTIME_MODULES
     mlang
     mmcshext
     mmdevapi
+    mp3dmod
     mpr
     mprapi
     msacm32
