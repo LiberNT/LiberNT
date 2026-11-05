@@ -32,6 +32,9 @@ enum device_type
     DEVICE_FILTER,
     DEVICE_CODEC,
     DEVICE_DMO,
+#ifdef __REACTOS__
+    DEVICE_PNP,
+#endif
 };
 
 struct moniker
@@ -51,6 +54,9 @@ HRESULT create_filter_data(VARIANT *var, REGFILTER2 *rgf);
 struct moniker *dmo_moniker_create(const GUID class, const GUID clsid);
 struct moniker *codec_moniker_create(const GUID *class, const WCHAR *name);
 struct moniker *filter_moniker_create(const GUID *class, const WCHAR *name);
+#ifdef __REACTOS__
+struct moniker *pnp_moniker_create(const WCHAR *path);
+#endif
 HRESULT enum_moniker_create(REFCLSID class, IEnumMoniker **enum_mon);
 
 extern ICreateDevEnum devenum_factory;

@@ -711,6 +711,7 @@ static void register_vfw_codecs(void)
     }
 }
 
+#ifndef __REACTOS__
 static void register_avicap_devices(void)
 {
     WCHAR friendlyname[32], version[32], device_path[32];
@@ -763,6 +764,8 @@ static void register_avicap_devices(void)
     }
 }
 
+#endif
+
 static HRESULT WINAPI devenum_factory_CreateClassEnumerator(ICreateDevEnum *iface,
         REFCLSID class, IEnumMoniker **out, DWORD flags)
 {
@@ -796,8 +799,10 @@ static HRESULT WINAPI devenum_factory_CreateClassEnumerator(ICreateDevEnum *ifac
         register_wavein_devices();
     else if (IsEqualGUID(class, &CLSID_VideoCompressorCategory))
         register_vfw_codecs();
+#ifndef __REACTOS__
     else if (IsEqualGUID(class, &CLSID_VideoInputDeviceCategory))
         register_avicap_devices();
+#endif
 
     if (SUCCEEDED(hr = enum_moniker_create(class, out)))
     {

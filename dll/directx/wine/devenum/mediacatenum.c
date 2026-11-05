@@ -25,6 +25,9 @@
 #include "devenum_private.h"
 
 #include "wine/debug.h"
+#ifdef __REACTOS__
+#include <setupapi.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(devenum);
 
@@ -67,6 +70,11 @@ typedef struct
     DWORD sw_index;
     HKEY cm_key;
     DWORD cm_index;
+#ifdef __REACTOS__
+    WCHAR **pnp_paths;
+    DWORD pnp_count;
+    DWORD pnp_index;
+#endif
 } EnumMonikerImpl;
 
 static inline struct moniker *impl_from_IPropertyBag(IPropertyBag *iface)
@@ -106,6 +114,84 @@ static ULONG WINAPI property_bag_Release(IPropertyBag *iface)
     struct moniker *moniker = impl_from_IPropertyBag(iface);
     return IMoniker_Release(&moniker->IMoniker_iface);
 }
+
+#ifdef __REACTOS__
+static HRESULT pnp_read_string(const WCHAR *value, VARIANT *var)
+{
+    if (V_VT(var) == VT_EMPTY)
+        V_VT(var) = VT_BSTR;
+    if (V_VT(var) != VT_BSTR)
+        return E_INVALIDARG;
+    if (!(V_BSTR(var) = SysAllocString(value)))
+        return E_OUTOFMEMORY;
+    return S_OK;
+}
+
+static HKEY pnp_open_interface_key(const WCHAR *path)
+{
+    SP_DEVICE_INTERFACE_DATA data = {sizeof(data)};
+    HDEVINFO set = SetupDiCreateDeviceInfoList(NULL, NULL);
+    HKEY key = NULL;
+
+    if (set == INVALID_HANDLE_VALUE)
+        return NULL;
+    if (SetupDiOpenDeviceInterfaceW(set, path, 0, &data))
+    {
+        key = SetupDiOpenDeviceInterfaceRegKey(set, &data, 0, KEY_READ);
+        if (key == INVALID_HANDLE_VALUE)
+            key = NULL;
+    }
+    SetupDiDestroyDeviceInfoList(set);
+    return key;
+}
+
+static HRESULT pnp_read_device_name(const WCHAR *path, VARIANT *var)
+{
+    SP_DEVICE_INTERFACE_DATA data = {sizeof(data)};
+    SP_DEVINFO_DATA info = {sizeof(info)};
+    BYTE buffer[1024];
+    SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail = (void *)buffer;
+    WCHAR device_name[128];
+    HDEVINFO set = SetupDiCreateDeviceInfoList(NULL, NULL);
+    HRESULT hr = HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    if (set == INVALID_HANDLE_VALUE)
+        return hr;
+    detail->cbSize = sizeof(*detail);
+    if (SetupDiOpenDeviceInterfaceW(set, path, 0, &data)
+            && SetupDiGetDeviceInterfaceDetailW(set, &data, detail, sizeof(buffer), NULL, &info)
+            && (SetupDiGetDeviceRegistryPropertyW(set, &info, SPDRP_FRIENDLYNAME, NULL,
+                    (BYTE *)device_name, sizeof(device_name), NULL)
+                || SetupDiGetDeviceRegistryPropertyW(set, &info, SPDRP_DEVICEDESC, NULL,
+                    (BYTE *)device_name, sizeof(device_name), NULL)))
+        hr = pnp_read_string(device_name, var);
+    SetupDiDestroyDeviceInfoList(set);
+    return hr;
+}
+
+static HRESULT pnp_read_default(const WCHAR *path, const WCHAR *name, VARIANT *var)
+{
+    if (!wcscmp(name, L"CLSID"))
+        return pnp_read_string(L"{17CCA71B-ECD7-11D0-B908-00A0C9223196}", var);
+    if (!wcscmp(name, L"FriendlyName"))
+        return pnp_read_device_name(path, var);
+    if (!wcscmp(name, L"FilterData"))
+    {
+        REGPINTYPES type = {&MEDIATYPE_Video, &MEDIASUBTYPE_None};
+        REGFILTERPINS2 pin = {0};
+        REGFILTER2 filter = {0};
+
+        pin.nMediaTypes = 1;
+        pin.lpMediaType = &type;
+        filter.dwVersion = 2;
+        filter.dwMerit = MERIT_DO_NOT_USE;
+        filter.cPins2 = 1;
+        filter.rgPins2 = &pin;
+        return create_filter_data(var, &filter);
+    }
+    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+}
+#endif
 
 static HRESULT WINAPI property_bag_Read(IPropertyBag *iface,
         const WCHAR *name, VARIANT *var, IErrorLog *errorlog)
@@ -217,6 +303,21 @@ static HRESULT WINAPI property_bag_Read(IPropertyBag *iface,
             return HRESULT_FROM_WIN32(ret);
         break;
 
+#ifdef __REACTOS__
+    case DEVICE_PNP:
+        if (!wcscmp(name, L"DevicePath"))
+            return pnp_read_string(moniker->name, var);
+        key = pnp_open_interface_key(moniker->name);
+        if (!key)
+            return pnp_read_default(moniker->name, name, var);
+        if (RegQueryValueExW(key, name, NULL, NULL, NULL, &size))
+        {
+            RegCloseKey(key);
+            return pnp_read_default(moniker->name, name, var);
+        }
+        goto read_value;
+#endif
+
     DEFAULT_UNREACHABLE;
     }
 
@@ -225,6 +326,9 @@ static HRESULT WINAPI property_bag_Read(IPropertyBag *iface,
     if (ret)
         return HRESULT_FROM_WIN32(ret);
 
+#ifdef __REACTOS__
+read_value:
+#endif
     if ((ret = RegQueryValueExW(key, name, NULL, NULL, NULL, &size)))
     {
         RegCloseKey(key);
@@ -308,6 +412,9 @@ static HRESULT WINAPI property_bag_Write(IPropertyBag *iface, const WCHAR *name,
     switch (moniker->type)
     {
     case DEVICE_DMO:
+#ifdef __REACTOS__
+    case DEVICE_PNP:
+#endif
         return E_ACCESSDENIED;
 
     case DEVICE_FILTER:
@@ -711,14 +818,23 @@ static HRESULT WINAPI moniker_GetDisplayName(IMoniker *iface, IBindCtx *pbc,
     }
     else
     {
+#ifdef __REACTOS__
+        buffer = CoTaskMemAlloc((12 + (This->has_class ? CHARS_IN_GUID : 0)
+                + wcslen(This->name) + 1) * sizeof(WCHAR));
+#else
         buffer = CoTaskMemAlloc((11 + (This->has_class ? CHARS_IN_GUID : 0)
                 + wcslen(This->name) + 1) * sizeof(WCHAR));
+#endif
         if (!buffer) return E_OUTOFMEMORY;
 
         if (This->type == DEVICE_FILTER)
             wcscpy(buffer, L"@device:sw:");
         else if (This->type == DEVICE_CODEC)
             wcscpy(buffer, L"@device:cm:");
+#ifdef __REACTOS__
+        else if (This->type == DEVICE_PNP)
+            wcscpy(buffer, L"@device:pnp:");
+#endif
 
         if (This->has_class)
         {
@@ -815,6 +931,24 @@ struct moniker *codec_moniker_create(const GUID *class, const WCHAR *name)
     return object;
 }
 
+#ifdef __REACTOS__
+struct moniker *pnp_moniker_create(const WCHAR *path)
+{
+    struct moniker *object;
+
+    if (!(object = calloc(1, sizeof(*object))))
+        return NULL;
+
+    object->IMoniker_iface.lpVtbl = &IMoniker_Vtbl;
+    object->IPropertyBag_iface.lpVtbl = &IPropertyBag_Vtbl;
+    object->ref = 1;
+    object->type = DEVICE_PNP;
+    object->name = wcsdup(path);
+
+    return object;
+}
+#endif
+
 struct moniker *dmo_moniker_create(const GUID class, const GUID clsid)
 {
     struct moniker *object;
@@ -882,6 +1016,11 @@ static ULONG WINAPI enum_moniker_Release(IEnumMoniker *iface)
             IEnumDMO_Release(This->dmo_enum2);
         RegCloseKey(This->sw_key);
         RegCloseKey(This->cm_key);
+#ifdef __REACTOS__
+        while (This->pnp_count)
+            free(This->pnp_paths[--This->pnp_count]);
+        free(This->pnp_paths);
+#endif
         free(This);
         return 0;
     }
@@ -923,6 +1062,11 @@ static HRESULT WINAPI enum_moniker_Next(IEnumMoniker *iface, ULONG celt, IMonike
     while (fetched < celt)
     {
         /* FIXME: try PNP devices first */
+#ifdef __REACTOS__
+        if (This->pnp_index < This->pnp_count)
+            moniker = pnp_moniker_create(This->pnp_paths[This->pnp_index++]);
+        else
+#endif
 
         /* try DMOs */
         if ((moniker = get_dmo_moniker(This)))
@@ -975,6 +1119,13 @@ static HRESULT WINAPI enum_moniker_Skip(IEnumMoniker *iface, ULONG celt)
     while (celt--)
     {
         /* FIXME: try PNP devices first */
+#ifdef __REACTOS__
+        if (This->pnp_index < This->pnp_count)
+        {
+            This->pnp_index++;
+            continue;
+        }
+#endif
 
         /* try DMOs */
         if (This->dmo_enum && IEnumDMO_Skip(This->dmo_enum, 1) == S_OK)
@@ -1010,6 +1161,9 @@ static HRESULT WINAPI enum_moniker_Reset(IEnumMoniker *iface)
         IEnumDMO_Reset(This->dmo_enum2);
     This->sw_index = 0;
     This->cm_index = 0;
+#ifdef __REACTOS__
+    This->pnp_index = 0;
+#endif
 
     return S_OK;
 }
@@ -1034,6 +1188,46 @@ static const IEnumMonikerVtbl IEnumMoniker_Vtbl =
     enum_moniker_Reset,
     enum_moniker_Clone,
 };
+
+#ifdef __REACTOS__
+static void pnp_enum_cameras(EnumMonikerImpl *object)
+{
+    static const GUID category_camera = {0xe5323777, 0xf976, 0x4f5b, {0x9b, 0x55, 0xb9, 0x46, 0x99, 0xc4, 0x6e, 0x44}};
+    static const WCHAR camera_guid[] = L"{e5323777-f976-4f5b-9b55-b94699c46e44}";
+    static const WCHAR capture_guid[] = L"{65e8773d-8f56-11d0-a3b9-00a0c9223196}";
+    SP_DEVICE_INTERFACE_DATA data = {sizeof(data)};
+    BYTE buffer[1024];
+    SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail = (void *)buffer;
+    unsigned int capacity = 0;
+    HDEVINFO set;
+    DWORD index;
+
+    set = SetupDiGetClassDevsW(&category_camera, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (set == INVALID_HANDLE_VALUE)
+        return;
+
+    for (index = 0; SetupDiEnumDeviceInterfaces(set, NULL, &category_camera, index, &data); ++index)
+    {
+        WCHAR *guid, *path;
+
+        detail->cbSize = sizeof(*detail);
+        if (!SetupDiGetDeviceInterfaceDetailW(set, &data, detail, sizeof(buffer), NULL, NULL))
+            continue;
+
+        _wcslwr(detail->DevicePath);
+        if ((guid = wcsstr(detail->DevicePath, camera_guid)))
+            memcpy(guid, capture_guid, wcslen(capture_guid) * sizeof(WCHAR));
+
+        if (!array_reserve((void **)&object->pnp_paths, &capacity, object->pnp_count + 1, sizeof(*object->pnp_paths)))
+            break;
+        if (!(path = wcsdup(detail->DevicePath)))
+            break;
+        object->pnp_paths[object->pnp_count++] = path;
+    }
+
+    SetupDiDestroyDeviceInfoList(set);
+}
+#endif
 
 HRESULT enum_moniker_create(REFCLSID class, IEnumMoniker **out)
 {
@@ -1070,6 +1264,11 @@ HRESULT enum_moniker_create(REFCLSID class, IEnumMoniker **out)
         if (FAILED(DMOEnum(class, 0, 0, NULL, 0, NULL, &object->dmo_enum)))
             object->dmo_enum = NULL;
     }
+
+#ifdef __REACTOS__
+    if (IsEqualGUID(class, &CLSID_VideoInputDeviceCategory))
+        pnp_enum_cameras(object);
+#endif
 
     *out = &object->IEnumMoniker_iface;
 

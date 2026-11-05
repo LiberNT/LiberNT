@@ -92,6 +92,15 @@ static HRESULT WINAPI devenum_parser_ParseDisplayName(IParseDisplayName *iface,
         type = DEVICE_DMO;
         name += 4;
     }
+#ifdef __REACTOS__
+    else if (!wcsncmp(name, L"pnp:", 4))
+    {
+        if (!(moniker = pnp_moniker_create(name + 4)))
+            return E_OUTOFMEMORY;
+        *ret = &moniker->IMoniker_iface;
+        return S_OK;
+    }
+#endif
     else
     {
         FIXME("unhandled device type %s\n", debugstr_w(name));
