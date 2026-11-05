@@ -573,8 +573,68 @@ static void vmr_get_default_rect(struct video_window *iface, RECT *rect)
 
 static HRESULT vmr_get_current_image(struct video_window *iface, LONG *size, LONG *image)
 {
-    FIXME("stub!\n");
-    return E_NOTIMPL;
+    struct vmr7 *filter = impl_from_video_window(iface);
+    IDirectDrawSurface7 *surface;
+    HBITMAP bitmap, old_bitmap;
+    BITMAPINFOHEADER bih;
+    HDC dc, mem_dc;
+    HRESULT hr;
+    void *bits;
+    LONG left;
+
+    EnterCriticalSection(&filter->renderer.filter.stream_cs);
+
+    if (!filter->renderer.sink.pin.peer || !filter->surface_count)
+    {
+        LeaveCriticalSection(&filter->renderer.filter.stream_cs);
+        return VFW_E_NOT_CONNECTED;
+    }
+
+    bih = *get_filter_bitmap_header(filter);
+    bih.biBitCount = 32;
+    bih.biCompression = BI_RGB;
+    bih.biSizeImage = bih.biWidth * abs(bih.biHeight) * 4;
+
+    if (!image)
+    {
+        *size = sizeof(BITMAPINFOHEADER) + bih.biSizeImage;
+        LeaveCriticalSection(&filter->renderer.filter.stream_cs);
+        return S_OK;
+    }
+
+    surface = filter->surfaces[filter->surface_index % filter->surface_count];
+    if (FAILED(hr = IDirectDrawSurface7_GetDC(surface, &dc)))
+    {
+        LeaveCriticalSection(&filter->renderer.filter.stream_cs);
+        return hr;
+    }
+
+    mem_dc = CreateCompatibleDC(dc);
+    if (!(bitmap = CreateDIBSection(mem_dc, (BITMAPINFO *)&bih, DIB_RGB_COLORS, &bits, NULL, 0)))
+    {
+        DeleteDC(mem_dc);
+        IDirectDrawSurface7_ReleaseDC(surface, dc);
+        LeaveCriticalSection(&filter->renderer.filter.stream_cs);
+        return E_OUTOFMEMORY;
+    }
+    old_bitmap = SelectObject(mem_dc, bitmap);
+    BitBlt(mem_dc, 0, 0, bih.biWidth, abs(bih.biHeight), dc, 0, 0, SRCCOPY);
+    GdiFlush();
+    IDirectDrawSurface7_ReleaseDC(surface, dc);
+
+    left = *size;
+    if (left > 0)
+        memcpy(image, &bih, min(left, (LONG)sizeof(BITMAPINFOHEADER)));
+    left -= sizeof(BITMAPINFOHEADER);
+    if (left > 0)
+        memcpy((char *)image + sizeof(BITMAPINFOHEADER), bits, min(left, (LONG)bih.biSizeImage));
+
+    SelectObject(mem_dc, old_bitmap);
+    DeleteObject(bitmap);
+    DeleteDC(mem_dc);
+
+    LeaveCriticalSection(&filter->renderer.filter.stream_cs);
+    return S_OK;
 }
 
 static const struct video_window_ops window_ops =
