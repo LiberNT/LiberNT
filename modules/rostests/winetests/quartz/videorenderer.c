@@ -70,6 +70,37 @@ static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOO
         IUnknown_Release(unk);
 }
 
+static void test_pin_quality_control(IBaseFilter *filter, IPin *pin)
+{
+    Quality q = {Famine, 1000, -10000, 0};
+    IQualityControl *qc;
+    IPin *qc_pin;
+    HRESULT hr;
+
+    hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (FAILED(hr))
+        return;
+
+    hr = IQualityControl_QueryInterface(qc, &IID_IPin, (void **)&qc_pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(qc_pin == pin, "Got pin %p, expected %p.\n", qc_pin, pin);
+    IPin_Release(qc_pin);
+
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, NULL, q);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_SetSink(qc, qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_SetSink(qc, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    IQualityControl_Release(qc);
+}
+
 static void test_interfaces(void)
 {
     IBaseFilter *filter = create_video_renderer();
@@ -111,6 +142,8 @@ static void test_interfaces(void)
     check_interface(pin, &IID_IAsyncReader, FALSE);
     check_interface(pin, &IID_IMediaPosition, FALSE);
     check_interface(pin, &IID_IMediaSeeking, FALSE);
+
+    test_pin_quality_control(filter, pin);
 
     IPin_Release(pin);
     IBaseFilter_Release(filter);
