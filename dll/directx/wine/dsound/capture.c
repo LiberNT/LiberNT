@@ -999,9 +999,10 @@ static HRESULT DirectSoundCaptureDevice_Initialize(
             IsEqualGUID(lpcGUID, &DSDEVID_DefaultVoicePlayback))
         return DSERR_NODRIVER;
 
-    if (GetDeviceID(lpcGUID, &devGUID) != DS_OK) {
+    hr = GetDeviceID(lpcGUID, &devGUID);
+    if (FAILED(hr)) {
         WARN("invalid parameter: lpcGUID\n");
-        return DSERR_INVALIDPARAM;
+        return hr;
     }
 
     hr = get_mmdevice(eCapture, &devGUID, &mmdevice);
