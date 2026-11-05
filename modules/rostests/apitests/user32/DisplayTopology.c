@@ -237,8 +237,22 @@ TestMove(
        "Screen %dx%d, was %lux%lu\n", GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
        Before.dmPelsWidth, Before.dmPelsHeight);
 
-    if (SwDevice)
-        SwDeviceClose(SwDevice);
+    if (!SwDevice)
+        return;
+
+    ok_long(SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_EXTERNAL), ERROR_SUCCESS);
+    ok(WaitForPrimary(External->DeviceName, &Device), "%ls did not become the primary\n", External->DeviceName);
+    PumpFor(1000);
+    InterlockedExchange(&DisplayChanges, 0);
+    SwDeviceClose(SwDevice);
+    ok(WaitForPrimary(Internal->DeviceName, &Device), "The desktop did not leave the removed %ls\n", External->DeviceName);
+    ok(Device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, "%ls has flags 0x%lx\n", Device.DeviceName, Device.StateFlags);
+    PumpFor(2000);
+    ok_long(DisplayChanges, 1);
+    ok(!FindDevice(External->DeviceName, FALSE, FALSE, &Device), "The removed %ls is still listed\n", External->DeviceName);
+    ok(GetSystemMetrics(SM_CXSCREEN) == (INT)Before.dmPelsWidth && GetSystemMetrics(SM_CYSCREEN) == (INT)Before.dmPelsHeight,
+       "Screen %dx%d, was %lux%lu\n", GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
+       Before.dmPelsWidth, Before.dmPelsHeight);
 }
 
 START_TEST(DisplayTopology)

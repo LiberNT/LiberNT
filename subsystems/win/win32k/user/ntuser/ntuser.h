@@ -132,4 +132,8 @@ VOID
 NTAPI
 co_UserProcessDisplayConfigurationUpdate(VOID);
 
+VOID
+NTAPI
+UserQueueDisplayDetach(VOID);
+
 /* EOF */
