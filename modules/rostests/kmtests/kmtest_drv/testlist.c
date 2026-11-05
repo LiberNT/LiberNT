@@ -192,6 +192,7 @@ KMT_TESTFUNC Test_IoTimerKM;
 #endif
 KMT_TESTFUNC Test_IoVolume;
 KMT_TESTFUNC Test_KdSystemDebugControl;
+KMT_TESTFUNC Test_KdUsbNetRules;
 KMT_TESTFUNC Test_KsecBcrypt;
 KMT_TESTFUNC Test_KeWddmExports;
 KMT_TESTFUNC Test_KeApc;
@@ -519,6 +520,7 @@ const KMT_TEST TestList[] =
     { "IoReportRootDevice",                 Test_IoReportRootDevice },
     { "IoVolume",                           Test_IoVolume },
     { "KdSystemDebugControl",               Test_KdSystemDebugControl },
+    { "KdUsbNetRules",                      Test_KdUsbNetRules },
     { "KsecBcrypt",                         Test_KsecBcrypt },
     { "KeWddmExports",                      Test_KeWddmExports },
     { "KeApc",                              Test_KeApc },

@@ -232,8 +232,7 @@ UsbNetStartNcm(
     if (Divisor > USBNET_TX_SIZE / 4)
         return STATUS_NOT_SUPPORTED;
 
-    while (Header % Divisor != Remainder)
-        Header++;
+    Header = KdUsbNcmDatagramOffset(Header, Divisor, Remainder);
 
     if (Header + USBNET_MAX_FRAME > Adapter->NcmOutMaxSize)
         return STATUS_NOT_SUPPORTED;

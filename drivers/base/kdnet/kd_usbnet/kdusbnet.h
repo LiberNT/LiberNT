@@ -13,6 +13,7 @@
 #include <usb100.h>
 #include <usb200.h>
 #include <drivers/kdusbshare.h>
+#include <drivers/kdusbrules.h>
 
 #define XHCI_CAP_LENGTH             0x00
 #define XHCI_CAP_HCSPARAMS1         0x04
