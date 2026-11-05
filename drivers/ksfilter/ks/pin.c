@@ -2328,6 +2328,101 @@ IKsPin_PinCentricWorker(
 }
 
 
+static
+NTSTATUS
+IKsPin_WidenStreamHeaders(
+    IN PIRP Irp,
+    IN BOOLEAN Write)
+{
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG Length = IoStack->Parameters.DeviceIoControl.OutputBufferLength;
+    ULONG Offset, WideOffset, WideLength = 0;
+    PUCHAR Narrow, Wide;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (!Length || !Irp->UserBuffer)
+        return STATUS_INVALID_BUFFER_SIZE;
+
+    Narrow = AllocateItem(NonPagedPool, Length);
+    if (!Narrow)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    _SEH2_TRY
+    {
+        if (Write)
+            ProbeForRead(Irp->UserBuffer, Length, sizeof(UCHAR));
+        else
+            ProbeForWrite(Irp->UserBuffer, Length, sizeof(UCHAR));
+        RtlCopyMemory(Narrow, Irp->UserBuffer, Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    for (Offset = 0; NT_SUCCESS(Status) && Offset < Length; )
+    {
+        PKSSTREAM_HEADER32 Header = (PKSSTREAM_HEADER32)(Narrow + Offset);
+
+        if (Length - Offset < sizeof(KSSTREAM_HEADER32) || Header->Size < sizeof(KSSTREAM_HEADER32) ||
+            Header->Size > Length - Offset || (Header->Size & 7))
+        {
+            Status = STATUS_INVALID_BUFFER_SIZE;
+        }
+        else if (!Write && !Header->FrameExtent)
+        {
+            Status = STATUS_ACCESS_VIOLATION;
+        }
+        else
+        {
+            WideLength += Header->Size + sizeof(KSSTREAM_HEADER) - sizeof(KSSTREAM_HEADER32);
+            Offset += Header->Size;
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        FreeItem(Narrow);
+        return Status;
+    }
+
+    Wide = AllocateItem(NonPagedPool, WideLength);
+    if (!Wide)
+    {
+        FreeItem(Narrow);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    for (Offset = 0, WideOffset = 0; Offset < Length; )
+    {
+        PKSSTREAM_HEADER32 Header32 = (PKSSTREAM_HEADER32)(Narrow + Offset);
+        PKSSTREAM_HEADER Header = (PKSSTREAM_HEADER)(Wide + WideOffset);
+
+        Header->Size = Header32->Size + sizeof(KSSTREAM_HEADER) - sizeof(KSSTREAM_HEADER32);
+        Header->TypeSpecificFlags = Header32->TypeSpecificFlags;
+        Header->PresentationTime = Header32->PresentationTime;
+        Header->Duration = Header32->Duration;
+        Header->FrameExtent = Header32->FrameExtent;
+        Header->DataUsed = Header32->DataUsed;
+        Header->Data = UlongToPtr(Header32->Data);
+        Header->OptionsFlags = Header32->OptionsFlags;
+        RtlCopyMemory(Header + 1, Header32 + 1, Header32->Size - sizeof(KSSTREAM_HEADER32));
+
+        Offset += Header32->Size;
+        WideOffset += Header->Size;
+    }
+
+    FreeItem(Narrow);
+    Irp->AssociatedIrp.SystemBuffer = Wide;
+    Irp->Flags |= IRP_DEALLOCATE_BUFFER | IRP_BUFFERED_IO;
+    if (!Write)
+        Irp->Flags |= IRP_INPUT_OPERATION;
+    IoStack->Parameters.DeviceIoControl.OutputBufferLength = WideLength;
+    Irp->Tail.Overlay.DriverContext[3] = &KspNarrowStreamMarker;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 IKsPin_DispatchKsStream(
@@ -2363,6 +2458,18 @@ IKsPin_DispatchKsStream(
 
     /* get current stack location */
     IoStack = IoGetCurrentIrpStackLocation(Irp);
+
+    if (KspIs32bitRequest(Irp))
+    {
+        Status = IKsPin_WidenStreamHeaders(Irp, IoStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_WRITE_STREAM);
+        if (!NT_SUCCESS(Status))
+        {
+            Irp->IoStatus.Status = Status;
+            Irp->IoStatus.Information = 0;
+            CompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+        }
+    }
 
     /* probe stream pointer */
     if (IoStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_WRITE_STREAM)

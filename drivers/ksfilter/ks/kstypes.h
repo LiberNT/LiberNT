@@ -84,6 +84,20 @@ typedef struct DECLSPEC_ALIGN(8)
 
 typedef struct
 {
+    ULONG Size;
+    ULONG TypeSpecificFlags;
+    KSTIME PresentationTime;
+    LONGLONG Duration;
+    ULONG FrameExtent;
+    ULONG DataUsed;
+    ULONG Data;
+    ULONG OptionsFlags;
+} KSSTREAM_HEADER32, *PKSSTREAM_HEADER32;
+
+C_ASSERT(sizeof(KSSTREAM_HEADER32) == 48);
+
+typedef struct
+{
     KSBASIC_HEADER BasicHeader;
     KSDEVICE KsDevice;
 

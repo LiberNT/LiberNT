@@ -8,6 +8,12 @@ CompleteRequest(
     PIRP Irp,
     CCHAR PriorityBoost);
 
+extern UCHAR KspNarrowStreamMarker;
+
+BOOLEAN
+KspIs32bitRequest(
+    IN PIRP Irp);
+
 
 
 NTSTATUS
