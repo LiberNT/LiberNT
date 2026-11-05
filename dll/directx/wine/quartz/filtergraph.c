@@ -982,10 +982,36 @@ static HRESULT WINAPI FilterGraph2_Disconnect(IFilterGraph2 *iface, IPin *ppin)
     return IPin_Disconnect(ppin);
 }
 
+static BOOL has_connected_input(IBaseFilter *filter)
+{
+    IEnumPins *enumpins;
+    PIN_DIRECTION dir;
+    IPin *pin, *peer;
+    BOOL ret = FALSE;
+
+    if (FAILED(IBaseFilter_EnumPins(filter, &enumpins)))
+        return FALSE;
+
+    while (!ret && IEnumPins_Next(enumpins, 1, &pin, NULL) == S_OK)
+    {
+        IPin_QueryDirection(pin, &dir);
+        if (dir == PINDIR_INPUT && IPin_ConnectedTo(pin, &peer) == S_OK)
+        {
+            IPin_Release(peer);
+            ret = TRUE;
+        }
+        IPin_Release(pin);
+    }
+    IEnumPins_Release(enumpins);
+
+    return ret;
+}
+
 static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface)
 {
     struct filter_graph *This = impl_from_IFilterGraph2(iface);
-    IReferenceClock *pClock = NULL;
+    IReferenceClock *pClock = NULL, *clock;
+    IBaseFilter *provider = NULL;
     struct filter *filter;
     HRESULT hr = S_OK;
 
@@ -995,20 +1021,32 @@ static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface)
 
     LIST_FOR_EACH_ENTRY(filter, &This->filters, struct filter, entry)
     {
-        if (IBaseFilter_QueryInterface(filter->filter, &IID_IReferenceClock, (void **)&pClock) == S_OK)
+        if (IBaseFilter_QueryInterface(filter->filter, &IID_IReferenceClock, (void **)&clock) != S_OK)
+            continue;
+
+        if (has_connected_input(filter->filter))
+        {
+            if (pClock)
+                IReferenceClock_Release(pClock);
+            pClock = clock;
+            provider = filter->filter;
             break;
+        }
+
+        if (pClock)
+        {
+            IReferenceClock_Release(clock);
+        }
+        else
+        {
+            pClock = clock;
+            provider = filter->filter;
+        }
     }
 
+    This->refClockProvider = provider;
     if (!pClock)
-    {
         hr = CoCreateInstance(&CLSID_SystemClock, NULL, CLSCTX_INPROC_SERVER, &IID_IReferenceClock, (LPVOID*)&pClock);
-        This->refClockProvider = NULL;
-    }
-    else
-    {
-        filter = LIST_ENTRY(list_tail(&This->filters), struct filter, entry);
-        This->refClockProvider = filter->filter;
-    }
 
     if (SUCCEEDED(hr))
     {
@@ -1016,6 +1054,9 @@ static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface)
         This->defaultclock = TRUE;
         IReferenceClock_Release(pClock);
     }
+
+    sort_filters(This);
+
     LeaveCriticalSection(&This->cs);
 
     return hr;
@@ -5561,7 +5602,7 @@ static HRESULT WINAPI MediaFilter_GetSyncSource(IMediaFilter *iface, IReferenceC
     }
     LeaveCriticalSection(&This->cs);
 
-    return S_OK;
+    return *ppClock ? S_OK : S_FALSE;
 }
 
 static const IMediaFilterVtbl IMediaFilter_VTable =
