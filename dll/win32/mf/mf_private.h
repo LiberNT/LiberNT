@@ -58,6 +58,11 @@ struct activate_funcs
 
 HRESULT create_activation_object(void *context, const struct activate_funcs *funcs, IMFActivate **ret);
 
+#ifdef __REACTOS__
+HRESULT enum_ks_video_sources(IMFActivate ***ret_sources, UINT32 *ret_count);
+HRESULT create_ks_video_source(IMFAttributes *attributes, IMFMediaSource **source);
+#endif
+
 static inline const char *debugstr_time(LONGLONG time)
 {
     ULONGLONG abstime = time >= 0 ? time : -time;
