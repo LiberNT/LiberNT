@@ -52,6 +52,7 @@ dll/directx/wine/dpwsockx       # Synced to Wine-11.14
 dll/directx/wine/dsdmo          # Synced to Wine-11.14
 dll/directx/wine/dsound         # Synced to Wine-11.14
 dll/directx/wine/dxdiagn        # Synced to Wine-11.14
+dll/directx/wine/mp3dmod        # Synced to Wine-11.21 (LiberNT output framing and IPropertyStore)
 dll/directx/wine/msdmo          # Synced to Wine-11.14
 dll/directx/wine/qcap           # Synced to Wine-11.14
 dll/directx/wine/qedit          # Synced to Wine-11.14
