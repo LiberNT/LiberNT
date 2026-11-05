@@ -147,7 +147,8 @@ endif()
 
 # OpenGL through a native D3D12 driver, for a GPU whose driver package ships no OpenGL ICD.
 # TODO: x86 and x64 applications stay on software OpenGL until the ARM64EC runtime builds this driver.
-if(NOT ARCH STREQUAL "i386" AND NOT ARM64EC_RUNTIME)
+# TODO: the RV64X OpenGL host links the WGL object without kernel32, so it cannot take this driver yet.
+if(NOT ARCH STREQUAL "i386" AND NOT ARM64EC_RUNTIME AND NOT (ARCH STREQUAL "riscv64" AND ENABLE_FELIX86))
     list(APPEND _mesa_features -DMESA_D3D12:BOOL=ON)
     if(NOT _mesa_lavapipe_enabled)
         set(MESA_DIRECTX_HEADERS_ROOT "${MESA_WORK_DIR}/directx-headers-install")
@@ -166,6 +167,8 @@ if(NOT ARCH STREQUAL "i386" AND NOT ARM64EC_RUNTIME)
         list(APPEND _mesa_features -DMESA_DIRECTX_HEADERS_ROOT:PATH=${MESA_DIRECTX_HEADERS_ROOT})
         set(_mesa_d3d12_headers_target mesa_directx_headers)
     endif()
+else()
+    list(APPEND _mesa_features -DMESA_D3D12:BOOL=OFF)
 endif()
 
 ExternalProject_Add(mesa_gallium_build
