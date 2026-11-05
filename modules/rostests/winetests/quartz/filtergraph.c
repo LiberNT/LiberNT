@@ -4794,6 +4794,15 @@ static void test_graph_seeking(void)
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     todo_wine ok(IsEqualGUID(&format, &testguid), "Got format %s.\n", wine_dbgstr_guid(&format));
 
+    filter1.support_testguid = FALSE;
+    hr = IMediaSeeking_SetTimeFormat(seeking, &testguid);
+    ok(hr == E_FAIL, "Got hr %#lx.\n", hr);
+    hr = IMediaSeeking_GetTimeFormat(seeking, &format);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&format, &testguid), "Got format %s.\n", wine_dbgstr_guid(&format));
+    ok(IsEqualGUID(&filter1.time_format, &testguid), "Got format %s.\n", debugstr_guid(&filter1.time_format));
+    filter1.support_testguid = TRUE;
+
     hr = IMediaSeeking_QueryPreferredFormat(seeking, &format);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     ok(IsEqualGUID(&format, &TIME_FORMAT_MEDIA_TIME), "Got format %s.\n", wine_dbgstr_guid(&format));
@@ -5040,6 +5049,24 @@ static void test_graph_seeking(void)
     hr = IMediaSeeking_GetRate(seeking, &rate);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     todo_wine ok(rate == -1.0, "Got rate %.16e.\n", rate);
+
+    filter1.seek_rate = filter2.seek_rate = 0.5;
+    hr = IMediaSeeking_SetRate(seeking, -1.0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(filter1.seek_rate == 0.5, "Got rate %.16e.\n", filter1.seek_rate);
+    ok(filter2.seek_rate == 0.5, "Got rate %.16e.\n", filter2.seek_rate);
+
+    hr = IMediaSeeking_SetRate(seeking, 0.0);
+    ok(hr == E_INVALIDARG, "Got hr %#lx.\n", hr);
+    ok(filter1.seek_rate == 0.5, "Got rate %.16e.\n", filter1.seek_rate);
+
+    hr = IMediaSeeking_GetAvailable(seeking, &earliest, &latest);
+    ok(hr == E_NOTIMPL, "Got hr %#lx.\n", hr);
+
+    time = 0xdeadbeef;
+    hr = IMediaSeeking_GetPreroll(seeking, &time);
+    ok(hr == E_NOTIMPL, "Got hr %#lx.\n", hr);
+    ok(!time, "Got time %I64d.\n", time);
 
     hr = IMediaSeeking_SetRate(seeking, 1.0);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
