@@ -8,8 +8,53 @@
 #include "precomp.h"
 #include <winreg.h>
 #include <cfgmgr32.h>
+#include <swdevice.h>
 
 #define MAX_TEST_DEVICES 16
+#define REMOTE_HARDWARE_ID L"RdpVdd_RemoteDisplay"
+
+static WCHAR RemoteInstanceId[MAX_DEVICE_ID_LEN];
+
+static VOID WINAPI
+CreateCallback(
+    _In_ HSWDEVICE hSwDevice,
+    _In_ HRESULT CreateResult,
+    _In_opt_ PVOID pContext,
+    _In_opt_ PCWSTR pszDeviceInstanceId)
+{
+    UNREFERENCED_PARAMETER(hSwDevice);
+    if (SUCCEEDED(CreateResult) && pszDeviceInstanceId)
+        lstrcpynW(RemoteInstanceId, pszDeviceInstanceId, ARRAYSIZE(RemoteInstanceId));
+    SetEvent(pContext);
+}
+
+static HSWDEVICE
+CreateRemoteDisplay(VOID)
+{
+    static const WCHAR HardwareIds[] = REMOTE_HARDWARE_ID L"\0";
+    SW_DEVICE_CREATE_INFO Info = { 0 };
+    HSWDEVICE SwDevice = NULL;
+    HANDLE Event;
+
+    Event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Info.cbSize = sizeof(Info);
+    Info.pszInstanceId = L"RemoteDisplayRemoval";
+    Info.pszzHardwareIds = HardwareIds;
+    Info.pszzCompatibleIds = HardwareIds;
+    Info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
+                           SWDeviceCapabilitiesDriverRequired;
+    Info.pszDeviceDescription = L"LiberNT display removal test";
+    if (FAILED(SwDeviceCreate(L"LiberNTDisplayTest", L"HTREE\\ROOT\\0", &Info, 0, NULL, CreateCallback, Event,
+                              &SwDevice)) ||
+        WaitForSingleObject(Event, 15000) != WAIT_OBJECT_0)
+    {
+        if (SwDevice)
+            SwDeviceClose(SwDevice);
+        SwDevice = NULL;
+    }
+    CloseHandle(Event);
+    return SwDevice;
+}
 
 static BOOL
 FindDisplayDevice(
@@ -122,25 +167,48 @@ WaitForDisplayDevice(
     }
 }
 
+static VOID
+TestRemoval(
+    _In_ PDISPLAY_DEVICEW pDetached);
+
 START_TEST(DisplayDeviceRemoval)
 {
-    DISPLAY_DEVICEW Detached, Primary, PrimaryAfter, Device;
+    DISPLAY_DEVICEW Detached;
+    HSWDEVICE SwDevice = NULL;
+
+    if (!FindDisplayDevice(NULL, NULL, TRUE, &Detached) || !Detached.DeviceID[0])
+    {
+        SwDevice = CreateRemoteDisplay();
+        if (!SwDevice || !WaitForDisplayDevice(NULL, REMOTE_HARDWARE_ID, TRUE, &Detached))
+        {
+            if (SwDevice)
+                SwDeviceClose(SwDevice);
+            skip("No display device is detached from the desktop\n");
+            return;
+        }
+    }
+    TestRemoval(&Detached);
+    if (SwDevice)
+        SwDeviceClose(SwDevice);
+}
+
+static VOID
+TestRemoval(
+    _In_ PDISPLAY_DEVICEW pDetached)
+{
+    DISPLAY_DEVICEW Detached = *pDetached, Primary, PrimaryAfter, Device;
     PNP_VETO_TYPE VetoType;
     WCHAR VetoName[MAX_PATH];
     DEVMODEW Before, After;
     DEVINST DevInst;
     CONFIGRET cr;
 
-    if (!FindDisplayDevice(NULL, NULL, TRUE, &Detached) || !Detached.DeviceID[0])
-    {
-        skip("No display device is detached from the desktop\n");
-        return;
-    }
     ok(FindPrimary(&Primary), "No primary display device\n");
     trace("Removing %ls '%ls' (%ls), primary %ls\n",
           Detached.DeviceName, Detached.DeviceString, Detached.DeviceID, Primary.DeviceName);
 
-    if (!FindDevNode(Detached.DeviceID, &DevInst))
+    if ((!RemoteInstanceId[0] || CM_Locate_DevNodeW(&DevInst, RemoteInstanceId, CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS) &&
+        !FindDevNode(Detached.DeviceID, &DevInst))
     {
         skip("No device node for %ls\n", Detached.DeviceID);
         return;
