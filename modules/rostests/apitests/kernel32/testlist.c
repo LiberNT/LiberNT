@@ -109,6 +109,7 @@ extern void func_WaitForMultipleObjects(void);
 extern void func_WerRegisterFile(void);
 extern void func_WideCharToMultiByte(void);
 extern void func_Wow64GetThreadContext(void);
+extern void func_WriteFileBadBuffer(void);
 extern void func_WriteFileSeekBack(void);
 extern void func_XState(void);
 
@@ -221,6 +222,7 @@ const struct test winetest_testlist[] =
     { "WerRegisterFile",             func_WerRegisterFile },
     { "WideCharToMultiByte",         func_WideCharToMultiByte },
     { "Wow64GetThreadContext",       func_Wow64GetThreadContext },
+    { "WriteFileBadBuffer",          func_WriteFileBadBuffer },
     { "WriteFileSeekBack",           func_WriteFileSeekBack },
     { "XState",                      func_XState },
     { 0, 0 }

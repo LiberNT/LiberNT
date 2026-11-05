@@ -113,6 +113,7 @@ list(APPEND SOURCE
     WideCharToMultiByte.c
     Wow64GetThreadContext.c
     WriteFile.c
+    WriteFileBadBuffer.c
     WriteFileSeekBack.c
     XState.c
 )

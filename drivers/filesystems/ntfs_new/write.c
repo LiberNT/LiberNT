@@ -12,6 +12,14 @@
 
 #define NTFS_CACHED_GROWTH_LIMIT     (64 * 1024 * 1024)
 
+typedef struct _NTFS_CACHED_GROWTH
+{
+    LONGLONG FileSize;
+    LONGLONG AllocationSize;
+    ULONGLONG ResidentSize;
+    BOOLEAN ResidentSizeSet;
+} NTFS_CACHED_GROWTH, *PNTFS_CACHED_GROWTH;
+
 /* FUNCTIONS ****************************************************************/
 
 static
@@ -19,7 +27,8 @@ BOOLEAN
 NtfsGrowForCachedWrite(_In_ PVolumeContextBlock VolCB,
                        _In_ PFileContextBlock FileCB,
                        _In_ PFILE_OBJECT FileObj,
-                       _In_ LONGLONG EndOffset)
+                       _In_ LONGLONG EndOffset,
+                       _Out_ PNTFS_CACHED_GROWTH Growth)
 {
     PFSRTL_ADVANCED_FCB_HEADER Header = NtfsGetCommonFcbHeader(FileCB);
     LONGLONG Allocation = Header->AllocationSize.QuadPart;
@@ -27,6 +36,10 @@ NtfsGrowForCachedWrite(_In_ PVolumeContextBlock VolCB,
     LONGLONG Target;
     NTSTATUS Status;
     BOOLEAN SizePersisted = FALSE;
+
+    RtlZeroMemory(Growth, sizeof(*Growth));
+    Growth->FileSize = Header->FileSize.QuadPart;
+    Growth->AllocationSize = Allocation;
 
     if (EndOffset > Allocation)
     {
@@ -46,9 +59,12 @@ NtfsGrowForCachedWrite(_In_ PVolumeContextBlock VolCB,
         if (EndOffset <= PAGE_SIZE &&
             (Allocation == 0 || (DataAttribute && !DataAttribute->IsNonResident)))
         {
+            if (DataAttribute && !DataAttribute->IsNonResident)
+                Growth->ResidentSize = DataAttribute->Resident.DataLength;
             Status = NtfsFileRecordSetFileDataSize(FileCB->FileRec, FileCB->RequestedType,
                                                    FileCB->RequestedStream, EndOffset);
             SizePersisted = NT_SUCCESS(Status);
+            Growth->ResidentSizeSet = SizePersisted;
         }
         else
         {
@@ -85,6 +101,41 @@ NtfsGrowForCachedWrite(_In_ PVolumeContextBlock VolCB,
     FileObj->Flags |= FO_FILE_SIZE_CHANGED;
     FileCB->NotifyFilter |= FILE_NOTIFY_CHANGE_SIZE;
     return TRUE;
+}
+
+static
+VOID
+NtfsUndoCachedGrowth(_In_ PVolumeContextBlock VolCB,
+                     _In_ PFileContextBlock FileCB,
+                     _In_ PFILE_OBJECT FileObj,
+                     _In_ PNTFS_CACHED_GROWTH Growth)
+{
+    PFSRTL_ADVANCED_FCB_HEADER Header = NtfsGetCommonFcbHeader(FileCB);
+    LONGLONG Allocation = Header->AllocationSize.QuadPart;
+    NTSTATUS Status;
+
+    if (Growth->ResidentSizeSet)
+    {
+        NtfsAcquireMetadata(VolCB);
+        Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtfsFileRecordSetFileDataSize(FileCB->FileRec, FileCB->RequestedType,
+                                                   FileCB->RequestedStream, Growth->ResidentSize);
+            InterlockedIncrement(&VolCB->DirGeneration);
+        }
+        NtfsReleaseMetadata(VolCB);
+        if (NT_SUCCESS(Status))
+            Allocation = Growth->AllocationSize;
+    }
+
+    ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
+    Header->FileSize.QuadPart = Growth->FileSize;
+    Header->AllocationSize.QuadPart = Allocation;
+    ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
+
+    if (FileObj->PrivateCacheMap != NULL)
+        CcSetFileSizes(FileObj, (PCC_FILE_SIZES)&Header->AllocationSize);
 }
 
 NTSTATUS
@@ -229,6 +280,7 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
 {
     PFSRTL_ADVANCED_FCB_HEADER Header = NtfsGetCommonFcbHeader(FileCB);
     LONGLONG EndOffset = ByteOffset->QuadPart + Length;
+    NTFS_CACHED_GROWTH Growth;
     BOOLEAN Handled = FALSE;
     BOOLEAN Extending;
     NTSTATUS TimestampStatus;
@@ -251,7 +303,7 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
         ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
         if (!FileCB->StreamCB ||
             FileCB->StreamCB->Deleted ||
-            !NtfsGrowForCachedWrite(VolCB, FileCB, FileObj, EndOffset))
+            !NtfsGrowForCachedWrite(VolCB, FileCB, FileObj, EndOffset, &Growth))
         {
             ExReleaseResourceLite(NtfsGetMainResource(FileCB));
             KeLeaveCriticalRegion();
@@ -276,6 +328,8 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
         }
         _SEH2_END;
 
+        if (!NT_SUCCESS(*Status) && Extending)
+            NtfsUndoCachedGrowth(VolCB, FileCB, FileObj, &Growth);
         if (NT_SUCCESS(*Status))
         {
             if (EndOffset > Header->ValidDataLength.QuadPart)
