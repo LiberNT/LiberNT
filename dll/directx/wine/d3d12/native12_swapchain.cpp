@@ -1011,8 +1011,17 @@ HRESULT Native12SwapChain::PresentToDriver(UINT slot, UINT buffer)
     args.phSurfacesToPresent = &surface;
     args.SurfacesToPresent = 1;
     args.Flags.Blt = 1;
+    if (device->functions.pfnGetPresentPrivateDriverDataSize)
+        args.PrivateDriverDataSize = device->functions.pfnGetPresentPrivateDriverDataSize(device->driver_device, &args);
+    if (args.PrivateDriverDataSize
+            && !(args.pPrivateDriverData = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, args.PrivateDriverDataSize)))
+    {
+        record_list[slot]->Close();
+        return E_OUTOFMEMORY;
+    }
     device->list_functions.pfnPresent(static_cast<Native12CommandList *>(record_list[slot])->driver,
             queue->driver, &args, &output, &contexts, &hw_queues);
+    HeapFree(GetProcessHeap(), 0, args.pPrivateDriverData);
     if (FAILED(hr = record_list[slot]->Close())) return hr;
     if (output.AddedGpuWork)
     {
