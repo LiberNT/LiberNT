@@ -2547,6 +2547,37 @@ co_IntDoSendMessage( HWND hWnd,
 }
 
 BOOL FASTCALL
+UserSendNotifyMessageToDesktop( PWND DesktopWindow,
+                                UINT Msg,
+                                WPARAM wParam,
+                                LPARAM lParam )
+{
+    BOOL Ret = TRUE;
+    HWND *List;
+    ULONG i;
+
+    List = IntWinListChildren(DesktopWindow);
+
+    if (List != NULL)
+    {
+        UserSendNotifyMessage(UserHMGetHandle(DesktopWindow), Msg, wParam, lParam);
+        for (i = 0; List[i]; i++)
+        {
+           PWND pwnd = UserGetWindowObject(List[i]);
+           if (!pwnd) continue;
+
+           if ( pwnd->fnid == FNID_MENU ||
+                pwnd->pcls->atomClassName == gpsi->atomSysClass[ICLS_SWITCH] )
+              continue;
+
+           Ret = UserSendNotifyMessage(List[i], Msg, wParam, lParam);
+        }
+        ExFreePoolWithTag(List, USERTAG_WINDOWLIST);
+    }
+    return Ret;
+}
+
+BOOL FASTCALL
 UserSendNotifyMessage( HWND hWnd,
                        UINT Msg,
                        WPARAM wParam,
@@ -2563,29 +2594,7 @@ UserSendNotifyMessage( HWND hWnd,
     // Basicly the same as IntPostOrSendMessage
     if (hWnd == HWND_BROADCAST) // Handle Broadcast
     {
-        HWND *List;
-        PWND DesktopWindow;
-        ULONG i;
-
-        DesktopWindow = UserGetDesktopWindow();
-        List = IntWinListChildren(DesktopWindow);
-
-        if (List != NULL)
-        {
-            UserSendNotifyMessage(UserHMGetHandle(DesktopWindow), Msg, wParam, lParam);
-            for (i = 0; List[i]; i++)
-            {
-               PWND pwnd = UserGetWindowObject(List[i]);
-               if (!pwnd) continue;
-
-               if ( pwnd->fnid == FNID_MENU ||
-                    pwnd->pcls->atomClassName == gpsi->atomSysClass[ICLS_SWITCH] )
-                  continue;
-
-               Ret = UserSendNotifyMessage(List[i], Msg, wParam, lParam);
-            }
-            ExFreePoolWithTag(List, USERTAG_WINDOWLIST);
-        }
+        Ret = UserSendNotifyMessageToDesktop(UserGetDesktopWindow(), Msg, wParam, lParam);
     }
     else
     {
