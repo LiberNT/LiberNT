@@ -4401,6 +4401,84 @@ sync_test("text element props", function() {
     ok(e.size === 3, "basefont.size after setAttribute(x.htm) = " + e.size);
 });
 
+sync_test("color props", function() {
+    var v = document.documentMode, i, j, e, r, exp;
+
+    var targets = [
+        [ "td", "bgColor" ], [ "tr", "bgColor" ], [ "tbody", "bgColor" ], [ "table", "bgColor" ],
+        [ "body", "bgColor" ], [ "body", "text" ], [ "body", "link" ], [ "body", "vLink" ], [ "body", "aLink" ],
+        [ "font", "color" ], [ "basefont", "color" ], [ "frameset", "borderColor" ],
+        [ "td", "borderColor" ], [ "table", "borderColor" ]
+    ];
+
+    var vals = [
+        [ "7", "#070000", "#7", "#7" ],
+        [ "RED", "#ff0000", "red", "red" ],
+        [ " red", "#00ed00", "#00ed", "red" ],
+        [ "\u000bred", "#00ed00", "#00ed", "red" ],
+        [ "#ABC", "#0a0b0c", "#abc", "#abc" ],
+        [ "##12", "#000102", "#012", "#012" ],
+        [ "#", "#000000", "#000000", "#000000" ],
+        [ "x.htm", "#000000", "#00000", "#00000" ],
+        [ "1234567", "#124570", "#124570", "#124570" ],
+        [ "#abcdef\n", "#abde00", "#abde00", "#abcdef" ],
+        [ "AliceBlue", "#f0f8ff", "aliceblue", "aliceblue" ],
+        [ "rgb( 1 , 2 , 3 )", "#010203", "rgb(1,2,3)", "rgb(1,2,3)" ],
+        [ "rgb(10.5%,0,0)", "#1b0000", "rgb(27,0,0)", "rgb(27,0,0)" ],
+        [ "rgb(+1,0,0)", "#010000", "rgb(1,0,0)", "rgb(1,0,0)" ],
+        [ "rgb(300,2,3)", "#ff0203", "rgb(255,2,3)", "rgb(255,2,3)" ],
+        [ "rgb(1,2,3)\t", "#001030", "#001030", "rgb(1,2,3)" ],
+        [ "rgb(1,2,3) x", "#001030", "#001030", "#001030" ],
+        [ "transparent x", "transparent", "transparent", "transparent", "#0aa000" ],
+        [ " transparent", "#0000e0", "#0000e0", "transparent" ],
+        [ "RGBA(1,2,3,0.5)", "#001000", "#001000", "rgba(1,2,3,0.5)" ],
+        [ "rgba(1.5,2,3,0.5)", "#0b5000", "#0b5000", "rgba(2,2,3,0.5)" ],
+        [ "rgba(1,2,3,-1)", "#001000", "#001000", "rgba(1,2,3,0)" ],
+        [ "rgba(1,2,3,1.5e-1)", "#0b205e", "#0b205e", "#0b205e" ],
+        [ "hsl(-10,100%,50%)", "#000150", "#000150", "hsl(350,100%,50%)" ],
+        [ "hsl(0.5,10.5%,20%)", "#005000", "#005000", "hsl(0,10%,20%)" ],
+        [ "HSLA( 0 , 100% , 50% , .25 )", "#a00002", "#a00002", "hsla(0, 100%, 50%, 0.25)" ],
+        [ "hsl(0,100,50)", "#000150", "#000150", "#000150" ],
+        [ "currentColor", "#c0e000", "#c0e000", "currentColor" ],
+        [ "inherit", "#00e000", "#00e000", "#00e000" ]
+    ];
+
+    var nums = [ [ 12.7, "#00000c", "#00000c" ], [ -0.5, "#000000", "#000000" ], [ 0x1000000, "", null ], [ true, "", null ], [ "", "", "" ] ];
+
+    for(i = 0; i < targets.length; i++) {
+        var tag = targets[i][0], prop = targets[i][1], name = tag + "." + prop;
+
+        e = document.createElement(tag);
+        ok(e[prop] === "", name + " unset = " + e[prop]);
+
+        for(j = 0; j < vals.length; j++) {
+            e = document.createElement(tag);
+            e.setAttribute(prop, vals[j][0]);
+            exp = v < 9 ? vals[j][1] : v >= 10 && vals[j].length > 4 ? vals[j][4] : vals[j][3];
+            ok(e[prop] === exp, name + " after setAttribute(" + vals[j][0] + ") = " + e[prop] + " expected " + exp);
+
+            e = document.createElement(tag);
+            e[prop] = vals[j][0];
+            exp = v < 9 ? vals[j][1] : vals[j][2];
+            ok(e[prop] === exp, name + " after put(" + vals[j][0] + ") = " + e[prop] + " expected " + exp);
+            if(v >= 8) {
+                r = e.getAttribute(prop);
+                ok(r === vals[j][2], name + " attribute after put(" + vals[j][0] + ") = " + r + " expected " + vals[j][2]);
+            }
+        }
+
+        for(j = 0; j < nums.length; j++) {
+            e = document.createElement(tag);
+            e[prop] = nums[j][0];
+            ok(e[prop] === nums[j][1], name + " after put(" + nums[j][0] + ") = " + e[prop]);
+            if(v >= 8) {
+                r = e.getAttribute(prop);
+                ok(r === nums[j][2], name + " attribute after put(" + nums[j][0] + ") = " + r);
+            }
+        }
+    }
+});
+
 sync_test("table section props", function() {
     var v = document.documentMode, i, e, d, s, r;
     if(v < 9)

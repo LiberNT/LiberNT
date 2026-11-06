@@ -1406,7 +1406,6 @@ HRESULT create_element(HTMLDocumentNode*,const WCHAR*,HTMLElement**);
 
 HRESULT HTMLDOMTextNode_Create(HTMLDocumentNode*,nsIDOMNode*,HTMLDOMNode**);
 
-BOOL variant_to_nscolor(const VARIANT *v, nsAString *nsstr);
 HRESULT nscolor_to_str(LPCWSTR color, BSTR *ret);
 
 static inline BOOL is_main_content_window(HTMLOuterWindow *window)

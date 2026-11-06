@@ -171,24 +171,24 @@ static int hex_value(WCHAR c)
     return 0;
 }
 
-static BOOL find_color_name(const WCHAR *v, DWORD *rgb)
+static const WCHAR *find_color_name(const WCHAR *v, DWORD *rgb)
 {
     unsigned i;
 
     for(i = 0; i < ARRAY_SIZE(named_colors); i++) {
         if(!wcsicmp(v, named_colors[i].name)) {
             *rgb = named_colors[i].rgb;
-            return TRUE;
+            return named_colors[i].name;
         }
     }
     for(i = 0; i < ARRAY_SIZE(system_colors); i++) {
         if(!wcsicmp(v, system_colors[i].name)) {
             COLORREF c = GetSysColor(system_colors[i].index);
             *rgb = (GetRValue(c) << 16) | (GetGValue(c) << 8) | GetBValue(c);
-            return TRUE;
+            return system_colors[i].name;
         }
     }
-    return FALSE;
+    return NULL;
 }
 
 static BOOL parse_rgb_component(const WCHAR **ptr, unsigned *ret)
@@ -197,10 +197,8 @@ static BOOL parse_rgb_component(const WCHAR **ptr, unsigned *ret)
     double val = 0, scale = 1;
     BOOL neg = FALSE;
 
-    if(*v == '-') {
-        neg = TRUE;
-        v++;
-    }
+    if(*v == '-' || *v == '+')
+        neg = *v++ == '-';
     if(!is_digit(*v))
         return FALSE;
     for(; is_digit(*v); v++)
@@ -279,7 +277,7 @@ static HRESULT normalize_color(const WCHAR *v, BSTR *ret)
     WCHAR buf[8];
     DWORD rgb;
 
-    if(!wcsicmp(v, L"transparent"))
+    if(!wcsnicmp(v, L"transparent", 11))
         return (*ret = SysAllocString(L"transparent")) ? S_OK : E_OUTOFMEMORY;
     if(!find_color_name(v, &rgb) && !parse_rgb_function(v, &rgb))
         rgb = legacy_color_value(v);
@@ -287,7 +285,147 @@ static HRESULT normalize_color(const WCHAR *v, BSTR *ret)
     return (*ret = SysAllocString(buf)) ? S_OK : E_OUTOFMEMORY;
 }
 
-/* FIXME: IE9+ document modes keep most color strings unparsed; this applies the quirks to IE8 rules in every mode */
+HRESULT nscolor_to_str(LPCWSTR color, BSTR *ret)
+{
+    if(!color || !*color) {
+        *ret = NULL;
+        return S_OK;
+    }
+    return normalize_color(color, ret);
+}
+
+static HRESULT canonical_color(const WCHAR *v, BOOL exact_transparent, BSTR *ret)
+{
+    const WCHAR *name, *hex = *v == '#' ? v + 1 : v;
+    unsigned len, i;
+    WCHAR buf[24];
+    DWORD rgb;
+
+    if(exact_transparent ? !wcsicmp(v, L"transparent") : !wcsnicmp(v, L"transparent", 11))
+        name = L"transparent";
+    else
+        name = find_color_name(v, &rgb);
+    if(name)
+        return (*ret = SysAllocString(name)) ? S_OK : E_OUTOFMEMORY;
+    len = lstrlenW(hex);
+    if(parse_rgb_function(v, &rgb))
+        swprintf(buf, ARRAY_SIZE(buf), L"rgb(%u,%u,%u)", rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff);
+    else if(!len || len > 6)
+        swprintf(buf, ARRAY_SIZE(buf), L"#%06x", legacy_color_value(v));
+    else {
+        /* FIXME: each non-ASCII character counts as one digit; Windows 11 counts some of them as several */
+        buf[0] = '#';
+        for(i = 0; i < len; i++)
+            buf[i + 1] = L"0123456789abcdef"[hex_value(hex[i])];
+        buf[len + 1] = 0;
+    }
+    return (*ret = SysAllocString(buf)) ? S_OK : E_OUTOFMEMORY;
+}
+
+static BOOL parse_css_number(const WCHAR **ptr, double *ret)
+{
+    const WCHAR *v = *ptr;
+    double val = 0, scale = 1;
+    BOOL neg = FALSE, digits = FALSE;
+
+    if(*v == '-' || *v == '+')
+        neg = *v++ == '-';
+    for(; is_digit(*v); v++, digits = TRUE)
+        val = min(val * 10 + (*v - '0'), 1e6);
+    if(*v == '.') {
+        for(v++; is_digit(*v); v++, digits = TRUE)
+            val += (*v - '0') * (scale /= 10);
+    }
+    if(!digits)
+        return FALSE;
+    *ret = neg ? -val : val;
+    *ptr = v;
+    return TRUE;
+}
+
+static BOOL parse_hsl_component(const WCHAR **ptr, unsigned idx, unsigned *ret)
+{
+    const WCHAR *v = *ptr;
+    double val;
+    int i;
+
+    if(!parse_css_number(&v, &val) || (*v == '%') != (idx > 0))
+        return FALSE;
+    if(idx)
+        v++;
+    i = (int)val;
+    *ret = idx ? (unsigned)max(0, min(i, 100)) : (unsigned)((i % 360 + 360) % 360);
+    *ptr = v;
+    return TRUE;
+}
+
+static HRESULT css_color_function(const WCHAR *v, BSTR *ret)
+{
+    unsigned comp[3], count, i;
+    WCHAR buf[64], alpha[32];
+    BOOL hsl = TRUE;
+    double a;
+
+    if(!wcsnicmp(v, L"rgba(", 5) || !wcsnicmp(v, L"hsla(", 5)) {
+        hsl = towlower(*v) == 'h';
+        count = 4;
+        v += 5;
+    }else if(!wcsnicmp(v, L"hsl(", 4)) {
+        count = 3;
+        v += 4;
+    }else {
+        return S_FALSE;
+    }
+    for(i = 0; i < count; i++) {
+        while(*v == ' ')
+            v++;
+        if(i == 3) {
+            if(!parse_css_number(&v, &a))
+                return S_FALSE;
+            swprintf(alpha, ARRAY_SIZE(alpha), L"%g", max(0.0, min(a, 1.0)));
+        }else if(hsl ? !parse_hsl_component(&v, i, &comp[i]) : !parse_rgb_component(&v, &comp[i])) {
+            return S_FALSE;
+        }
+        while(*v == ' ')
+            v++;
+        if(*v++ != (i < count - 1 ? ',' : ')'))
+            return S_FALSE;
+    }
+    if(*v)
+        return S_FALSE;
+    if(!hsl)
+        swprintf(buf, ARRAY_SIZE(buf), L"rgba(%u,%u,%u,%s)", comp[0], comp[1], comp[2], alpha);
+    else if(count == 4)
+        swprintf(buf, ARRAY_SIZE(buf), L"hsla(%u, %u%%, %u%%, %s)", comp[0], comp[1], comp[2], alpha);
+    else
+        swprintf(buf, ARRAY_SIZE(buf), L"hsl(%u,%u%%,%u%%)", comp[0], comp[1], comp[2]);
+    return (*ret = SysAllocString(buf)) ? S_OK : E_OUTOFMEMORY;
+}
+
+static BOOL is_color_space(WCHAR c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
+}
+
+static HRESULT ie9_color_value(const WCHAR *v, compat_mode_t mode, BSTR *ret)
+{
+    const WCHAR *end;
+    HRESULT hres;
+    BSTR str;
+
+    while(is_color_space(*v))
+        v++;
+    for(end = v + lstrlenW(v); end > v && is_color_space(end[-1]); end--);
+    if(!(str = SysAllocStringLen(v, end - v)))
+        return E_OUTOFMEMORY;
+    if(!wcsicmp(str, L"currentcolor"))
+        hres = (*ret = SysAllocString(L"currentColor")) ? S_OK : E_OUTOFMEMORY;
+    else if((hres = css_color_function(str, ret)) == S_FALSE)
+        hres = canonical_color(str, mode >= COMPAT_MODE_IE10, ret);
+    SysFreeString(str);
+    return hres;
+}
+
 HRESULT elem_put_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *v)
 {
     WCHAR buf[8];
@@ -297,8 +435,8 @@ HRESULT elem_put_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *v)
     switch(V_VT(v)) {
     case VT_BSTR:
         if(!V_BSTR(v) || !*V_BSTR(v))
-            return element_remove_attribute(elem, name);
-        hres = normalize_color(V_BSTR(v), &str);
+            return elem_put_reflected_string(elem, name, NULL);
+        hres = canonical_color(V_BSTR(v), FALSE, &str);
         if(FAILED(hres))
             return hres;
         hres = elem_put_reflected_string(elem, name, str);
@@ -309,6 +447,11 @@ HRESULT elem_put_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *v)
             return S_OK;
         swprintf(buf, ARRAY_SIZE(buf), L"#%06x", V_I4(v));
         return elem_put_reflected_string(elem, name, buf);
+    case VT_R8:
+        if(!(V_R8(v) > -1.0 && V_R8(v) < 16777216.0))
+            return S_OK;
+        swprintf(buf, ARRAY_SIZE(buf), L"#%06x", (LONG)V_R8(v));
+        return elem_put_reflected_string(elem, name, buf);
     default:
         return S_OK;
     }
@@ -316,6 +459,7 @@ HRESULT elem_put_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *v)
 
 HRESULT elem_get_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *p)
 {
+    compat_mode_t mode;
     HRESULT hres;
     BSTR val;
 
@@ -324,7 +468,12 @@ HRESULT elem_get_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *p)
     hres = elem_get_attr_string(elem, name, &val);
     if(FAILED(hres) || !val)
         return hres;
-    if(*val)
+    mode = dispex_compat_mode(&elem->node.event_target.dispex);
+    if(!*val)
+        hres = S_OK;
+    else if(mode >= COMPAT_MODE_IE9)
+        hres = ie9_color_value(val, mode, &V_BSTR(p));
+    else
         hres = normalize_color(val, &V_BSTR(p));
     SysFreeString(val);
     return hres;

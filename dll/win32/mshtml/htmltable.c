@@ -284,47 +284,19 @@ static HRESULT WINAPI HTMLTableCell_get_vAlign(IHTMLTableCell *iface, BSTR *p)
 static HRESULT WINAPI HTMLTableCell_put_bgColor(IHTMLTableCell *iface, VARIANT v)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    nsAString strColor;
-    nsresult nsres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
-    if(!variant_to_nscolor(&v, &strColor))
-        return S_OK;
-
-    nsres = nsIDOMHTMLTableCellElement_SetBgColor(This->nscell, &strColor);
-    nsAString_Finish(&strColor);
-    if(NS_FAILED(nsres)) {
-        ERR("SetBgColor(%s) failed: %08lx\n", debugstr_variant(&v), nsres);
-        return E_FAIL;
-    }
-
-    return S_OK;
+    return elem_put_color_attr(&This->element, L"bgColor", &v);
 }
 
 static HRESULT WINAPI HTMLTableCell_get_bgColor(IHTMLTableCell *iface, VARIANT *p)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    nsAString strColor;
-    nsresult nsres;
-    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    nsAString_Init(&strColor, NULL);
-    nsres = nsIDOMHTMLTableCellElement_GetBgColor(This->nscell, &strColor);
-
-    if(NS_SUCCEEDED(nsres)) {
-        const PRUnichar *color;
-        nsAString_GetData(&strColor, &color);
-        V_VT(p) = VT_BSTR;
-        hres = nscolor_to_str(color, &V_BSTR(p));
-    }else {
-        ERR("GetBgColor failed: %08lx\n", nsres);
-        hres = E_FAIL;
-    }
-    nsAString_Finish(&strColor);
-    return hres;
+    return elem_get_color_attr(&This->element, L"bgColor", p);
 }
 
 static HRESULT WINAPI HTMLTableCell_put_noWrap(IHTMLTableCell *iface, VARIANT_BOOL v)
@@ -358,15 +330,19 @@ static HRESULT WINAPI HTMLTableCell_get_background(IHTMLTableCell *iface, BSTR *
 static HRESULT WINAPI HTMLTableCell_put_borderColor(IHTMLTableCell *iface, VARIANT v)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_variant(&v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return elem_put_color_attr(&This->element, L"borderColor", &v);
 }
 
 static HRESULT WINAPI HTMLTableCell_get_borderColor(IHTMLTableCell *iface, VARIANT *p)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_color_attr(&This->element, L"borderColor", p);
 }
 
 static HRESULT WINAPI HTMLTableCell_put_borderColorLight(IHTMLTableCell *iface, VARIANT v)
@@ -869,49 +845,19 @@ static HRESULT WINAPI HTMLTableRow_get_vAlign(IHTMLTableRow *iface, BSTR *p)
 static HRESULT WINAPI HTMLTableRow_put_bgColor(IHTMLTableRow *iface, VARIANT v)
 {
     HTMLTableRow *This = impl_from_IHTMLTableRow(iface);
-    nsAString val;
-    nsresult nsres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
-    if (!variant_to_nscolor(&v, &val))
-        return S_OK;
-
-    nsres = nsIDOMHTMLTableRowElement_SetBgColor(This->nsrow, &val);
-    nsAString_Finish(&val);
-
-    if (NS_FAILED(nsres)){
-        ERR("Set BgColor(%s) failed!\n", debugstr_variant(&v));
-        return E_FAIL;
-    }
-
-    return S_OK;
+    return elem_put_color_attr(&This->element, L"bgColor", &v);
 }
 
 static HRESULT WINAPI HTMLTableRow_get_bgColor(IHTMLTableRow *iface, VARIANT *p)
 {
     HTMLTableRow *This = impl_from_IHTMLTableRow(iface);
-    nsAString strColor;
-    nsresult nsres;
-    HRESULT hres;
-    const PRUnichar *color;
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    nsAString_Init(&strColor, NULL);
-    nsres = nsIDOMHTMLTableRowElement_GetBgColor(This->nsrow, &strColor);
-
-    if(NS_SUCCEEDED(nsres)) {
-       nsAString_GetData(&strColor, &color);
-       V_VT(p) = VT_BSTR;
-       hres = nscolor_to_str(color, &V_BSTR(p));
-    }else {
-       ERR("SetBgColor failed: %08lx\n", nsres);
-       hres = E_FAIL;
-    }
-
-    nsAString_Finish(&strColor);
-    return hres;
+    return elem_get_color_attr(&This->element, L"bgColor", p);
 }
 
 static HRESULT WINAPI HTMLTableRow_put_borderColor(IHTMLTableRow *iface, VARIANT v)
@@ -1598,62 +1544,37 @@ static HRESULT WINAPI HTMLTable_get_background(IHTMLTable *iface, BSTR *p)
 static HRESULT WINAPI HTMLTable_put_bgColor(IHTMLTable *iface, VARIANT v)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    nsAString val;
-    nsresult nsres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
-    if(!variant_to_nscolor(&v, &val))
-        return S_OK;
-
-    nsres = nsIDOMHTMLTableElement_SetBgColor(This->nstable, &val);
-    nsAString_Finish(&val);
-    if (NS_FAILED(nsres)){
-        ERR("Set BgColor(%s) failed!\n", debugstr_variant(&v));
-        return E_FAIL;
-    }
-
-    return S_OK;
+    return elem_put_color_attr(&This->element, L"bgColor", &v);
 }
 
 static HRESULT WINAPI HTMLTable_get_bgColor(IHTMLTable *iface, VARIANT *p)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    nsAString strColor;
-    nsresult nsres;
-    HRESULT hres;
-    const PRUnichar *color;
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    nsAString_Init(&strColor, NULL);
-    nsres = nsIDOMHTMLTableElement_GetBgColor(This->nstable, &strColor);
-
-    if(NS_SUCCEEDED(nsres)) {
-       nsAString_GetData(&strColor, &color);
-       V_VT(p) = VT_BSTR;
-       hres = nscolor_to_str(color, &V_BSTR(p));
-    }else {
-       ERR("SetBgColor failed: %08lx\n", nsres);
-       hres = E_FAIL;
-    }
-
-    nsAString_Finish(&strColor);
-    return hres;
+    return elem_get_color_attr(&This->element, L"bgColor", p);
 }
 
 static HRESULT WINAPI HTMLTable_put_borderColor(IHTMLTable *iface, VARIANT v)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_variant(&v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return elem_put_color_attr(&This->element, L"borderColor", &v);
 }
 
 static HRESULT WINAPI HTMLTable_get_borderColor(IHTMLTable *iface, VARIANT *p)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_color_attr(&This->element, L"borderColor", p);
 }
 
 static HRESULT WINAPI HTMLTable_put_borderColorLight(IHTMLTable *iface, VARIANT v)
