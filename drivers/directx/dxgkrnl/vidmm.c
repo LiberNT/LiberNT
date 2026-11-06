@@ -15041,6 +15041,12 @@ DxgkpVidMmRecoverAllocationOwned(
     CleanupStatus = DxgkpVidMmUnmapUserMappings(Allocation, TRUE);
     if (NT_SUCCESS(Status) && !NT_SUCCESS(CleanupStatus))
         Status = CleanupStatus;
+    /* CDD keeps painting through its permanent pointer into this placement, so the placement must stay owned. */
+    if (InterlockedCompareExchangePointer((PVOID volatile *)&Allocation->RedirectionSurfaceHandle, NULL, NULL) != NULL &&
+        Allocation->CpuAddress != NULL && Allocation->CpuAddress != Allocation->SystemMemory)
+    {
+        return Status;
+    }
     if (Allocation->CpuAddress != NULL && Allocation->CpuAddress != Allocation->SystemMemory)
         DxgkVidMmUnmapAllocationCpu(Allocation);
     Allocation->ContentLost = TRUE;
