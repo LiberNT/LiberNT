@@ -1,6 +1,6 @@
 # 如何贡献
 
-> [English](../../CONTRIBUTING.md) | **中文** | [Français](../fr-FR/CONTRIBUTING.md) | [Español](../es-ES/CONTRIBUTING.md) | [日本語](../ja-JP/CONTRIBUTING.md) | [العربية](../ar-MA/CONTRIBUTING.md)
+> [English](../../CONTRIBUTING.md) | **中文** | [Français](../fr-FR/CONTRIBUTING.md) | [Español](../es-ES/CONTRIBUTING.md) | [日本語](../ja-JP/CONTRIBUTING.md) | [العربية](../ar-MA/CONTRIBUTING.md) | [Українська](../uk-UA/CONTRIBUTING.md)
 >
 > 翻译说明：本译文由 AI 初译并排版；术语、代码块、链接与锚点已与英文原版核对，中文术语已经人工核对。如有纰漏，请提交 issue 指出；表述以英文版为准。
 

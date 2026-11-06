@@ -2,7 +2,7 @@
 
 # مدونة السلوك
 
-> [English](../../CODE_OF_CONDUCT.md) | [中文](../zh-CN/CODE_OF_CONDUCT.md) | [Français](../fr-FR/CODE_OF_CONDUCT.md) | [Español](../es-ES/CODE_OF_CONDUCT.md) | [日本語](../ja-JP/CODE_OF_CONDUCT.md) | **العربية**
+> [English](../../CODE_OF_CONDUCT.md) | [中文](../zh-CN/CODE_OF_CONDUCT.md) | [Français](../fr-FR/CODE_OF_CONDUCT.md) | [Español](../es-ES/CODE_OF_CONDUCT.md) | [日本語](../ja-JP/CODE_OF_CONDUCT.md) | **العربية** | [Українська](../uk-UA/CODE_OF_CONDUCT.md)
 
 **كن محترمًا تجاه أعضاء المجتمع الآخرين.**
 - لا تبدأ نقاشات ولا تشارك في نقاشات تهدف إلى إهانة الآخرين أو استفزازهم أو مهاجمتهم أو التحريض على الكراهية أو التمييز أو التنمر ضدهم.

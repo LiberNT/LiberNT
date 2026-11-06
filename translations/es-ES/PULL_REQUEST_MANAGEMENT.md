@@ -1,6 +1,6 @@
 # Reglas para gestionar las pull requests
 
-> [English](../../PULL_REQUEST_MANAGEMENT.md) | [中文](../zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](../fr-FR/PULL_REQUEST_MANAGEMENT.md) | **Español** | [日本語](../ja-JP/PULL_REQUEST_MANAGEMENT.md) | [العربية](../ar-MA/PULL_REQUEST_MANAGEMENT.md)
+> [English](../../PULL_REQUEST_MANAGEMENT.md) | [中文](../zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](../fr-FR/PULL_REQUEST_MANAGEMENT.md) | **Español** | [日本語](../ja-JP/PULL_REQUEST_MANAGEMENT.md) | [العربية](../ar-MA/PULL_REQUEST_MANAGEMENT.md) | [Українська](../uk-UA/PULL_REQUEST_MANAGEMENT.md)
 
 Para mantener un número aceptable de PR abiertas pero inactivas, conviene tener en cuenta las siguientes reglas:
 - Si una PR tiene al menos una aprobación, se puede fusionar tras 1 semana de espera por si llegan más comentarios.

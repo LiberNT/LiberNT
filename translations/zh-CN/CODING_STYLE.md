@@ -1,6 +1,6 @@
 # 代码风格
 
-> [English](../../CODING_STYLE.md) | **中文** | [Français](../fr-FR/CODING_STYLE.md) | [Español](../es-ES/CODING_STYLE.md) | [日本語](../ja-JP/CODING_STYLE.md) | [العربية](../ar-MA/CODING_STYLE.md)
+> [English](../../CODING_STYLE.md) | **中文** | [Français](../fr-FR/CODING_STYLE.md) | [Español](../es-ES/CODING_STYLE.md) | [日本語](../ja-JP/CODING_STYLE.md) | [العربية](../ar-MA/CODING_STYLE.md) | [Українська](../uk-UA/CODING_STYLE.md)
 >
 > 翻译说明：本译文由 AI 初译并排版；术语、代码块、链接与锚点已与英文原版核对，中文术语已经人工核对。如有纰漏，请提交 issue 指出；表述以英文版为准。
 

@@ -1,6 +1,6 @@
 # How To Contribute
 
-> **English** | [中文](translations/zh-CN/CONTRIBUTING.md) | [Français](translations/fr-FR/CONTRIBUTING.md) | [Español](translations/es-ES/CONTRIBUTING.md) | [日本語](translations/ja-JP/CONTRIBUTING.md) | [العربية](translations/ar-MA/CONTRIBUTING.md)
+> **English** | [中文](translations/zh-CN/CONTRIBUTING.md) | [Français](translations/fr-FR/CONTRIBUTING.md) | [Español](translations/es-ES/CONTRIBUTING.md) | [日本語](translations/ja-JP/CONTRIBUTING.md) | [العربية](translations/ar-MA/CONTRIBUTING.md) | [Українська](translations/uk-UA/CONTRIBUTING.md)
 
 LiberNT welcomes bug reports, tests, fixes, new features and documentation. This page explains how to send your work. The engineering rules every change follows are in [AGENTS.md](AGENTS.md), and they apply to human contributors and AI tools alike.
 

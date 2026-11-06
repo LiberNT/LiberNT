@@ -1,6 +1,6 @@
 # Style de code
 
-> [English](../../CODING_STYLE.md) | [中文](../zh-CN/CODING_STYLE.md) | **Français** | [Español](../es-ES/CODING_STYLE.md) | [日本語](../ja-JP/CODING_STYLE.md) | [العربية](../ar-MA/CODING_STYLE.md)
+> [English](../../CODING_STYLE.md) | [中文](../zh-CN/CODING_STYLE.md) | **Français** | [Español](../es-ES/CODING_STYLE.md) | [日本語](../ja-JP/CODING_STYLE.md) | [العربية](../ar-MA/CODING_STYLE.md) | [Українська](../uk-UA/CODING_STYLE.md)
 
 Cet article décrit les règles générales de style de code à appliquer au nouveau code de LiberNT. Ces règles s'appliquent exclusivement aux fichiers source C et C++. Elles viennent du style de code de ReactOS, adopté par les membres de ReactOS lors de leur réunion d'octobre 2013.
 

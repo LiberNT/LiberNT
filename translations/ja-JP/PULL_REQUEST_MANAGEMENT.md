@@ -1,6 +1,6 @@
 # プルリクエストの管理ルール
 
-> [English](../../PULL_REQUEST_MANAGEMENT.md) | [中文](../zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](../fr-FR/PULL_REQUEST_MANAGEMENT.md) | [Español](../es-ES/PULL_REQUEST_MANAGEMENT.md) | **日本語** | [العربية](../ar-MA/PULL_REQUEST_MANAGEMENT.md)
+> [English](../../PULL_REQUEST_MANAGEMENT.md) | [中文](../zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](../fr-FR/PULL_REQUEST_MANAGEMENT.md) | [Español](../es-ES/PULL_REQUEST_MANAGEMENT.md) | **日本語** | [العربية](../ar-MA/PULL_REQUEST_MANAGEMENT.md) | [Українська](../uk-UA/PULL_REQUEST_MANAGEMENT.md)
 
 オープンなまま放置された PR の数を適切に保つため、次のルールを考慮してください。
 - PR に 1 つ以上の承認があれば、追加のコメントを 1 週間待ったあとでマージできます。

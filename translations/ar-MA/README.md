@@ -1,6 +1,6 @@
 <div dir="rtl" lang="ar">
 
-> [English](../../README.md) | [中文](../zh-CN/README.md) | [Français](../fr-FR/README.md) | [Español](../es-ES/README.md) | [日本語](../ja-JP/README.md) | **العربية**
+> [English](../../README.md) | [中文](../zh-CN/README.md) | [Français](../fr-FR/README.md) | [Español](../es-ES/README.md) | [日本語](../ja-JP/README.md) | **العربية** | [Українська](../uk-UA/README.md)
 
 <p align="center">
   <img src="../../media/graphics/branding/libernt-banner.png" width="480" alt="LiberNT">
