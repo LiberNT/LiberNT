@@ -3,6 +3,7 @@ list(APPEND SOURCE
     NextDriveLetter.c
     QueryDosVolumePaths.c
     QueryPoints.c
+    RemoteDatabase.c
     utils.c)
 
 list(APPEND PCH_SKIP_SOURCE
