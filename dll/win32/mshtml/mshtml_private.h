@@ -113,7 +113,11 @@ struct constructor;
     XDIID(DispHTMLAnchorElement) \
     XDIID(DispHTMLAreaElement) \
     XDIID(DispHTMLAttributeCollection) \
+    XDIID(DispHTMLBaseElement) \
+    XDIID(DispHTMLBaseFontElement) \
+    XDIID(DispHTMLBlockElement) \
     XDIID(DispHTMLBody) \
+    XDIID(DispHTMLBRElement) \
     XDIID(DispHTMLButtonElement) \
     XDIID(DispHTMLCommentElement) \
     XDIID(DispHTMLCurrentStyle) \
@@ -124,10 +128,12 @@ struct constructor;
     XDIID(DispHTMLDOMTextNode) \
     XDIID(DispHTMLElementCollection) \
     XDIID(DispHTMLEmbed) \
+    XDIID(DispHTMLFontElement) \
     XDIID(DispHTMLFormElement) \
     XDIID(DispHTMLGenericElement) \
     XDIID(DispHTMLFrameElement) \
     XDIID(DispHTMLHeadElement) \
+    XDIID(DispHTMLHeaderElement) \
     XDIID(DispHTMLHtmlElement) \
     XDIID(DispHTMLHistory) \
     XDIID(DispHTMLIFrame) \
@@ -141,6 +147,8 @@ struct constructor;
     XDIID(DispHTMLNavigator) \
     XDIID(DispHTMLObjectElement) \
     XDIID(DispHTMLOptionElement) \
+    XDIID(DispHTMLParaElement) \
+    XDIID(DispHTMLPhraseElement) \
     XDIID(DispHTMLScreen) \
     XDIID(DispHTMLScriptElement) \
     XDIID(DispHTMLSelectElement) \
@@ -190,7 +198,12 @@ struct constructor;
     XIID(IHTMLAttributeCollection2) \
     XIID(IHTMLAttributeCollection3) \
     XIID(IHTMLAttributeCollection4) \
+    XIID(IHTMLBaseElement) \
+    XIID(IHTMLBaseFontElement) \
+    XIID(IHTMLBlockElement) \
+    XIID(IHTMLBlockElement2) \
     XIID(IHTMLBodyElement) \
+    XIID(IHTMLBRElement) \
     XIID(IHTMLBodyElement2) \
     XIID(IHTMLButtonElement) \
     XIID(IHTMLCSSStyleDeclaration) \
@@ -231,12 +244,14 @@ struct constructor;
     XIID(IHTMLEventObj) \
     XIID(IHTMLEventObj5) \
     XIID(IHTMLFiltersCollection) \
+    XIID(IHTMLFontElement) \
     XIID(IHTMLFormElement) \
     XIID(IHTMLFrameBase) \
     XIID(IHTMLFrameBase2) \
     XIID(IHTMLFrameElement3) \
     XIID(IHTMLGenericElement) \
     XIID(IHTMLHeadElement) \
+    XIID(IHTMLHeaderElement) \
     XIID(IHTMLHtmlElement) \
     XIID(IHTMLIFrameElement) \
     XIID(IHTMLIFrameElement2) \
@@ -255,9 +270,11 @@ struct constructor;
     XIID(IHTMLObjectElement2) \
     XIID(IHTMLOptionElement) \
     XIID(IHTMLOptionElementFactory) \
+    XIID(IHTMLParaElement) \
     XIID(IHTMLPerformance) \
     XIID(IHTMLPerformanceNavigation) \
     XIID(IHTMLPerformanceTiming) \
+    XIID(IHTMLPhraseElement2) \
     XIID(IHTMLPluginsCollection) \
     XIID(IHTMLRect) \
     XIID(IHTMLRect2) \
@@ -461,15 +478,21 @@ typedef struct {
     X(Event)                               \
     X(HTMLAnchorElement)                   \
     X(HTMLAreaElement)                     \
+    X(HTMLBRElement)                       \
+    X(HTMLBaseElement)                     \
+    X(HTMLBaseFontElement)                 \
+    X(HTMLBlockElement)                    \
     X(HTMLBodyElement)                     \
     X(HTMLButtonElement)                   \
     X(HTMLCollection)                      \
     X(HTMLDocument)                        \
     X(HTMLElement)                         \
     X(HTMLEmbedElement)                    \
+    X(HTMLFontElement)                     \
     X(HTMLFormElement)                     \
     X(HTMLFrameElement)                    \
     X(HTMLHeadElement)                     \
+    X(HTMLHeadingElement)                  \
     X(HTMLHtmlElement)                     \
     X(HTMLIFrameElement)                   \
     X(HTMLImageElement)                    \
@@ -477,8 +500,13 @@ typedef struct {
     X(HTMLLabelElement)                    \
     X(HTMLLinkElement)                     \
     X(HTMLMetaElement)                     \
+    X(HTMLModElement)                      \
     X(HTMLObjectElement)                   \
     X(HTMLOptionElement)                   \
+    X(HTMLParagraphElement)                \
+    X(HTMLPhraseElement)                   \
+    X(HTMLPreElement)                      \
+    X(HTMLQuoteElement)                    \
     X(HTMLScriptElement)                   \
     X(HTMLSelectElement)                   \
     X(HTMLStyleElement)                    \
@@ -1416,6 +1444,17 @@ HRESULT HTMLEmbedElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLFormElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLFrameElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLHeadElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLBRElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLBaseElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLBaseFontElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLBlockElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLFontElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLHeaderElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLParaElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLPhraseElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLModElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLQuoteElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLPreElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLHtmlElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLIFrame_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLStyleElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
@@ -1488,6 +1527,10 @@ HRESULT get_elem_source_index(HTMLElement*,LONG*);
 nsresult get_elem_attr_value(nsIDOMElement*,const WCHAR*,nsAString*,const PRUnichar**);
 HRESULT elem_string_attr_getter(HTMLElement*,const WCHAR*,BOOL,BSTR*);
 HRESULT elem_string_attr_setter(HTMLElement*,const WCHAR*,const WCHAR*);
+HRESULT elem_put_reflected_string(HTMLElement*,const WCHAR*,BSTR);
+HRESULT elem_get_reflected_string(HTMLElement*,const WCHAR*,BSTR*);
+VARIANT_BOOL element_has_attribute(HTMLElement*,const WCHAR*);
+HRESULT element_remove_attribute(HTMLElement*,const WCHAR*);
 
 HRESULT elem_unique_id(unsigned id, BSTR *p);
 

@@ -50,99 +50,103 @@ static HRESULT HTMLElement_Ctor(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 
 static const tag_desc_t tag_descs[] = {
     {L"A",              HTMLAnchorElement_Create},
-    {L"ABBR",           HTMLElement_Ctor},
-    {L"ACRONYM",        HTMLElement_Ctor},
-    {L"ADDRESS",        HTMLElement_Ctor},
+    {L"ABBR",           HTMLPhraseElement_Create},
+    {L"ACRONYM",        HTMLPhraseElement_Create},
+    {L"ADDRESS",        HTMLBlockElement_Create},
     {L"APPLET",         HTMLElement_Ctor},
     {L"AREA",           HTMLAreaElement_Create},
     {L"ARTICLE",        HTMLElement_Ctor},
     {L"ASIDE",          HTMLElement_Ctor},
     {L"AUDIO",          HTMLElement_Ctor},
-    {L"B",              HTMLElement_Ctor},
-    {L"BASE",           HTMLElement_Ctor},
-    {L"BASEFONT",       HTMLElement_Ctor},
-    {L"BDO",            HTMLElement_Ctor},
-    {L"BIG",            HTMLElement_Ctor},
-    {L"BLOCKQUOTE",     HTMLElement_Ctor},
+    {L"B",              HTMLPhraseElement_Create},
+    {L"BASE",           HTMLBaseElement_Create},
+    {L"BASEFONT",       HTMLBaseFontElement_Create},
+    {L"BDO",            HTMLPhraseElement_Create},
+    {L"BIG",            HTMLPhraseElement_Create},
+    {L"BLINK",          HTMLPhraseElement_Create},
+    {L"BLOCKQUOTE",     HTMLBlockElement_Create},
     {L"BODY",           HTMLBodyElement_Create},
-    {L"BR",             HTMLElement_Ctor},
+    {L"BR",             HTMLBRElement_Create},
     {L"BUTTON",         HTMLButtonElement_Create},
     {L"CANVAS",         HTMLElement_Ctor},
     {L"CAPTION",        HTMLElement_Ctor},
-    {L"CENTER",         HTMLElement_Ctor},
-    {L"CITE",           HTMLElement_Ctor},
-    {L"CODE",           HTMLElement_Ctor},
+    {L"CENTER",         HTMLBlockElement_Create},
+    {L"CITE",           HTMLPhraseElement_Create},
+    {L"CODE",           HTMLPhraseElement_Create},
     {L"COL",            HTMLElement_Ctor},
     {L"COLGROUP",       HTMLElement_Ctor},
     {L"DATALIST",       HTMLElement_Ctor},
     {L"DD",             HTMLElement_Ctor},
-    {L"DEL",            HTMLElement_Ctor},
-    {L"DFN",            HTMLElement_Ctor},
+    {L"DEL",            HTMLModElement_Create},
+    {L"DFN",            HTMLPhraseElement_Create},
     {L"DIR",            HTMLElement_Ctor},
     {L"DIV",            HTMLElement_Ctor},
     {L"DL",             HTMLElement_Ctor},
     {L"DT",             HTMLElement_Ctor},
-    {L"EM",             HTMLElement_Ctor},
+    {L"EM",             HTMLPhraseElement_Create},
     {L"EMBED",          HTMLEmbedElement_Create},
     {L"FIELDSET",       HTMLElement_Ctor},
     {L"FIGCAPTION",     HTMLElement_Ctor},
     {L"FIGURE",         HTMLElement_Ctor},
-    {L"FONT",           HTMLElement_Ctor},
+    {L"FONT",           HTMLFontElement_Create},
     {L"FOOTER",         HTMLElement_Ctor},
     {L"FORM",           HTMLFormElement_Create},
     {L"FRAME",          HTMLFrameElement_Create},
     {L"FRAMESET",       HTMLElement_Ctor},
-    {L"H1",             HTMLElement_Ctor},
-    {L"H2",             HTMLElement_Ctor},
-    {L"H3",             HTMLElement_Ctor},
-    {L"H4",             HTMLElement_Ctor},
-    {L"H5",             HTMLElement_Ctor},
-    {L"H6",             HTMLElement_Ctor},
+    {L"H1",             HTMLHeaderElement_Create},
+    {L"H2",             HTMLHeaderElement_Create},
+    {L"H3",             HTMLHeaderElement_Create},
+    {L"H4",             HTMLHeaderElement_Create},
+    {L"H5",             HTMLHeaderElement_Create},
+    {L"H6",             HTMLHeaderElement_Create},
     {L"HEAD",           HTMLHeadElement_Create},
     {L"HEADER",         HTMLElement_Ctor},
     {L"HR",             HTMLElement_Ctor},
     {L"HTML",           HTMLHtmlElement_Create},
-    {L"I",              HTMLElement_Ctor},
+    {L"I",              HTMLPhraseElement_Create},
     {L"IFRAME",         HTMLIFrame_Create},
     {L"IMG",            HTMLImgElement_Create},
     {L"INPUT",          HTMLInputElement_Create},
-    {L"INS",            HTMLElement_Ctor},
-    {L"KBD",            HTMLElement_Ctor},
+    {L"INS",            HTMLModElement_Create},
+    {L"KBD",            HTMLPhraseElement_Create},
     {L"LABEL",          HTMLLabelElement_Create},
     {L"LEGEND",         HTMLElement_Ctor},
     {L"LI",             HTMLElement_Ctor},
     {L"LINK",           HTMLLinkElement_Create},
+    {L"LISTING",        HTMLBlockElement_Create},
     {L"MAP",            HTMLElement_Ctor},
     {L"MARK",           HTMLElement_Ctor},
     {L"META",           HTMLMetaElement_Create},
     {L"NAV",            HTMLElement_Ctor},
+    {L"NOBR",           HTMLPhraseElement_Create},
     {L"NOFRAMES",       HTMLElement_Ctor},
     {L"NOSCRIPT",       HTMLElement_Ctor},
     {L"OBJECT",         HTMLObjectElement_Create},
     {L"OL",             HTMLElement_Ctor},
     {L"OPTGROUP",       HTMLElement_Ctor},
     {L"OPTION",         HTMLOptionElement_Create},
-    {L"P",              HTMLElement_Ctor},
+    {L"P",              HTMLParaElement_Create},
     {L"PARAM",          HTMLElement_Ctor},
-    {L"PRE",            HTMLElement_Ctor},
+    {L"PLAINTEXT",      HTMLBlockElement_Create},
+    {L"PRE",            HTMLPreElement_Create},
     {L"PROGRESS",       HTMLElement_Ctor},
-    {L"Q",              HTMLElement_Ctor},
-    {L"RP",             HTMLElement_Ctor},
-    {L"RT",             HTMLElement_Ctor},
-    {L"RUBY",           HTMLElement_Ctor},
-    {L"S",              HTMLElement_Ctor},
-    {L"SAMP",           HTMLElement_Ctor},
+    {L"Q",              HTMLQuoteElement_Create},
+    {L"RP",             HTMLPhraseElement_Create},
+    {L"RT",             HTMLPhraseElement_Create},
+    {L"RUBY",           HTMLPhraseElement_Create},
+    {L"S",              HTMLPhraseElement_Create},
+    {L"SAMP",           HTMLPhraseElement_Create},
     {L"SCRIPT",         HTMLScriptElement_Create},
     {L"SECTION",        HTMLElement_Ctor},
     {L"SELECT",         HTMLSelectElement_Create},
-    {L"SMALL",          HTMLElement_Ctor},
+    {L"SMALL",          HTMLPhraseElement_Create},
     {L"SOURCE",         HTMLElement_Ctor},
     {L"SPAN",           HTMLElement_Ctor},
-    {L"STRIKE",         HTMLElement_Ctor},
-    {L"STRONG",         HTMLElement_Ctor},
+    {L"STRIKE",         HTMLPhraseElement_Create},
+    {L"STRONG",         HTMLPhraseElement_Create},
     {L"STYLE",          HTMLStyleElement_Create},
-    {L"SUB",            HTMLElement_Ctor},
-    {L"SUP",            HTMLElement_Ctor},
+    {L"SUB",            HTMLPhraseElement_Create},
+    {L"SUP",            HTMLPhraseElement_Create},
     {L"TABLE",          HTMLTable_Create},
     {L"TBODY",          HTMLElement_Ctor},
     {L"TD",             HTMLTableCell_Create},
@@ -153,12 +157,13 @@ static const tag_desc_t tag_descs[] = {
     {L"TITLE",          HTMLTitleElement_Create},
     {L"TR",             HTMLTableRow_Create},
     {L"TRACK",          HTMLElement_Ctor},
-    {L"TT",             HTMLElement_Ctor},
-    {L"U",              HTMLElement_Ctor},
+    {L"TT",             HTMLPhraseElement_Create},
+    {L"U",              HTMLPhraseElement_Create},
     {L"UL",             HTMLElement_Ctor},
-    {L"VAR",            HTMLElement_Ctor},
+    {L"VAR",            HTMLPhraseElement_Create},
     {L"VIDEO",          HTMLElement_Ctor},
-    {L"WBR",            HTMLElement_Ctor}
+    {L"WBR",            HTMLElement_Ctor},
+    {L"XMP",            HTMLBlockElement_Create},
 };
 
 static const tag_desc_t *get_tag_desc(const WCHAR *tag_name)
@@ -288,7 +293,7 @@ HRESULT elem_string_attr_setter(HTMLElement *elem, const WCHAR *name, const WCHA
     return S_OK;
 }
 
-static VARIANT_BOOL element_has_attribute(HTMLElement *element, const WCHAR *name)
+VARIANT_BOOL element_has_attribute(HTMLElement *element, const WCHAR *name)
 {
     nsAString name_str;
     cpp_bool r;
@@ -305,7 +310,7 @@ static VARIANT_BOOL element_has_attribute(HTMLElement *element, const WCHAR *nam
     return variant_bool(NS_SUCCEEDED(nsres) && r);
 }
 
-static HRESULT element_remove_attribute(HTMLElement *element, const WCHAR *name)
+HRESULT element_remove_attribute(HTMLElement *element, const WCHAR *name)
 {
     nsAString name_str;
     nsresult nsres;
@@ -4539,7 +4544,7 @@ static HRESULT WINAPI HTMLElement5_hasAttribute(IHTMLElement5 *iface, BSTR name,
     return IHTMLElement6_hasAttribute(&This->IHTMLElement6_iface, name, pfHasAttribute);
 }
 
-static HRESULT elem_put_reflected_string(HTMLElement *This, const WCHAR *name, BSTR v)
+HRESULT elem_put_reflected_string(HTMLElement *This, const WCHAR *name, BSTR v)
 {
     TRACE("(%p)->(%s %s)\n", This, debugstr_w(name), debugstr_w(v));
 
@@ -4551,7 +4556,7 @@ static HRESULT elem_put_reflected_string(HTMLElement *This, const WCHAR *name, B
     return elem_string_attr_setter(This, name, v ? v : L"");
 }
 
-static HRESULT elem_get_reflected_string(HTMLElement *This, const WCHAR *name, BSTR *p)
+HRESULT elem_get_reflected_string(HTMLElement *This, const WCHAR *name, BSTR *p)
 {
     TRACE("(%p)->(%s %p)\n", This, debugstr_w(name), p);
 

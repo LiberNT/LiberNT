@@ -4138,6 +4138,28 @@ sync_test("prototypes", function() {
     check(document.createElement("option"), HTMLOptionElement.prototype, "option elem");
     check(HTMLOptionElement.prototype, HTMLElement.prototype, "option elem prototype");
     check(Option, Function.prototype, "Option constructor");
+    check(document.createElement("b"), HTMLPhraseElement.prototype, "b elem");
+    check(document.createElement("del"), HTMLModElement.prototype, "del elem");
+    check(document.createElement("q"), HTMLQuoteElement.prototype, "q elem");
+    check(document.createElement("pre"), HTMLPreElement.prototype, "pre elem");
+    check(document.createElement("center"), HTMLBlockElement.prototype, "center elem");
+    check(document.createElement("p"), HTMLParagraphElement.prototype, "p elem");
+    check(document.createElement("h1"), HTMLHeadingElement.prototype, "h1 elem");
+    check(document.createElement("br"), HTMLBRElement.prototype, "br elem");
+    check(document.createElement("font"), HTMLFontElement.prototype, "font elem");
+    check(document.createElement("basefont"), HTMLBaseFontElement.prototype, "basefont elem");
+    check(document.createElement("base"), HTMLBaseElement.prototype, "base elem");
+    check(HTMLPhraseElement.prototype, HTMLElement.prototype, "phrase elem prototype");
+    check(HTMLModElement.prototype, HTMLElement.prototype, "mod elem prototype");
+    check(HTMLQuoteElement.prototype, HTMLElement.prototype, "quote elem prototype");
+    check(HTMLPreElement.prototype, HTMLElement.prototype, "pre elem prototype");
+    check(HTMLBlockElement.prototype, HTMLElement.prototype, "block elem prototype");
+    check(HTMLParagraphElement.prototype, HTMLElement.prototype, "paragraph elem prototype");
+    check(HTMLHeadingElement.prototype, HTMLElement.prototype, "heading elem prototype");
+    check(HTMLBRElement.prototype, HTMLElement.prototype, "br elem prototype");
+    check(HTMLFontElement.prototype, HTMLElement.prototype, "font elem prototype");
+    check(HTMLBaseFontElement.prototype, HTMLElement.prototype, "basefont elem prototype");
+    check(HTMLBaseElement.prototype, HTMLElement.prototype, "base elem prototype");
     check(new DOMParser(), DOMParser.prototype, "dom parser");
     check(DOMParser.prototype, Object.prototype, "dom parser prototype");
     check(DOMParser, Function.prototype, "dom parser constructor");
@@ -4334,6 +4356,44 @@ sync_test("prototypes", function() {
     }
 });
 
+sync_test("text element props", function() {
+    var v = document.documentMode, a = document.createElement("a"), url, i, e;
+    if(v < 9)
+        return;
+
+    a.href = "x.htm";
+    url = a.href;
+
+    var cases = [
+        [ "b", "cite", "x.htm", url ], [ "b", "dateTime", "x.htm", "x.htm" ],
+        [ "del", "cite", "x.htm", url ], [ "ins", "dateTime", "x.htm", "x.htm" ],
+        [ "q", "cite", "x.htm", url ], [ "q", "dateTime", "x.htm", "x.htm" ],
+        [ "center", "cite", "x.htm", url ], [ "center", "width", "x.htm", "x.htm" ],
+        [ "center", "clear", "all", "all" ], [ "center", "clear", "x.htm", "" ],
+        [ "pre", "cite", "x.htm", url ], [ "pre", "width", "x.htm", "x.htm" ], [ "pre", "clear", "x.htm", "" ],
+        [ "p", "align", "left", "left" ], [ "p", "align", "x.htm", "" ], [ "p", "clear", "x.htm", "" ],
+        [ "h1", "align", "x.htm", "" ], [ "h1", "clear", "x.htm", "" ],
+        [ "br", "clear", "x.htm", "" ],
+        [ "font", "face", "x.htm", "x.htm" ], [ "font", "size", "x.htm", "3" ], [ "font", "color", null, null ],
+        [ "basefont", "face", "x.htm", "x.htm" ], [ "basefont", "color", null, null ],
+        [ "base", "href", "x.htm", url ], [ "base", "target", "x.htm", "x.htm" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        e = document.createElement(cases[i][0]);
+        ok(e[cases[i][1]] === "", cases[i][0] + "." + cases[i][1] + " = " + e[cases[i][1]]);
+        if(cases[i][2] === null)
+            continue;
+        e.setAttribute(cases[i][1], cases[i][2]);
+        ok(e[cases[i][1]] === cases[i][3], cases[i][0] + "." + cases[i][1] + " after setAttribute(" + cases[i][2] + ") = " + e[cases[i][1]]);
+    }
+
+    e = document.createElement("basefont");
+    ok(e.size === 3, "basefont.size = " + e.size);
+    e.setAttribute("size", "x.htm");
+    ok(e.size === 3, "basefont.size after setAttribute(x.htm) = " + e.size);
+});
+
 sync_test("prototype props", function() {
     var v = document.documentMode;
     if(v < 9)
@@ -4485,6 +4545,10 @@ sync_test("prototype props", function() {
         "name", "nameProp", "pathname", "port", "protocol", "protocolLong", "rel", "rev", "search", "shape", "target", ["text",10], "toString", "type", "urn"
     ], [ "charset", "coords", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "hreflang", "shape", ["text",10], "type" ]);
     check(HTMLAreaElement, [ "alt", "coords", "hash", "host", "hostname", "href", "noHref", "pathname", "port", "protocol", "search", "shape", "target", "toString" ], null, [ "rel" ]);
+    check(HTMLBRElement, [ "clear" ]);
+    check(HTMLBaseElement, [ "href", "target" ]);
+    check(HTMLBaseFontElement, [ "color", "face", "size" ]);
+    check(HTMLBlockElement, [ "cite", "clear", "width" ]);
     check(HTMLButtonElement, [
         ["autofocus",10], ["checkValidity",10], "createTextRange", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10],
         "form", ["formAction",10], ["formEnctype",10], ["formMethod",10], ["formNoValidate",10], ["formTarget",10], "name",
@@ -4520,6 +4584,7 @@ sync_test("prototype props", function() {
         "getSVGDocument", "height", "hidden", ["msPlayToDisabled",11], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11],
         "name", "palette", "pluginspage", ["readyState",11], "src", "units", "width"
     ], [ "getSVGDocument", ["msPlayToDisabled",11], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], ["readyState",11] ]);
+    check(HTMLFontElement, [ "color", "face", "size" ]);
     check(HTMLFormElement, [
         "acceptCharset", "action", ["autocomplete",10], ["checkValidity",10], "elements", "encoding", "enctype", "item",
         "length", "method", "name", "namedItem", ["noValidate",10], "reset", "submit", "tags", "target", "urns"
@@ -4532,6 +4597,7 @@ sync_test("prototype props", function() {
         ["onreadystatechange",11], ["readyState",11], "security", "width"
     ]);
     check(HTMLHeadElement, [ "profile" ]);
+    check(HTMLHeadingElement, [ "align", "clear" ]);
     check(HTMLHtmlElement, [ "version" ]);
     check(HTMLIFrameElement, [
         "align", "border", "contentDocument", "contentWindow", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10],
@@ -4565,6 +4631,7 @@ sync_test("prototype props", function() {
     check(HTMLLinkElement, [ "charset", "href", "hreflang", "media", "rel", "rev", "sheet", ["styleSheet",9,10], "target", "type" ],
                            [ "charset", "hreflang", ["onreadystatechange",11], ["readyState",11], "sheet", ["styleSheet",11], "target" ]);
     check(HTMLMetaElement, [ "charset", "content", "httpEquiv", "name", "scheme", "url" ], [ "scheme" ]);
+    check(HTMLModElement, [ "cite", "dateTime" ]);
     check(HTMLObjectElement, [
         "BaseHref", "align", "alt", "altHtml", "archive", "border", ["checkValidity",10], "classid", "code", "codeBase", "codeType", "contentDocument", "data",
         ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "declare", "form", "getSVGDocument", "height", "hspace", ["msPlayToDisabled",11],
@@ -4576,6 +4643,10 @@ sync_test("prototype props", function() {
     ]);
     check(HTMLOptionElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "defaultSelected", "form", "index", "label", "selected", "text", "value" ],
                              [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "label" ]);
+    check(HTMLParagraphElement, [ "align", "clear" ]);
+    check(HTMLPhraseElement, [ "cite", "dateTime" ]);
+    check(HTMLPreElement, [ "cite", "clear", "width" ]);
+    check(HTMLQuoteElement, [ "cite", "dateTime" ]);
     check(HTMLScriptElement, [ ["async",10], "charset", "defer", "event", "htmlFor", "src", "text", "type" ], [ ["async",10], "charset", ["readyState",11] ], [ "crossOrigin" ]);
     check(HTMLSelectElement, [
         "add", ["autofocus",10], ["checkValidity",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "item", "length",
@@ -4862,11 +4933,11 @@ async_test("window own props", function() {
             "CSSMediaRule", "CSSNamespaceRule", "CSSPageRule", "CSSRuleList", "DataTransfer", "Debug", ["DeviceAcceleration",11], ["DeviceMotionEvent",11],
             ["DeviceOrientationEvent",11], ["DeviceRotationRate",11], ["DOMError",10], "DOMException", ["DOMSettableTokenList",10], ["DOMStringList",10], ["DOMStringMap",11],
             "DragEvent", ["ErrorEvent",10], "EventException", ["EXT_texture_filter_anisotropic",11], ["File",10], ["FileList",10], ["FileReader",10],
-            "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement", "HTMLBaseElement",
-            "HTMLBaseFontElement", "HTMLBGSoundElement", "HTMLBlockElement", "HTMLBRElement", "HTMLCanvasElement", ["HTMLDataListElement",10], "HTMLDDElement", "HTMLDirectoryElement",
-            "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLFontElement", "HTMLFrameSetElement", "HTMLHeadingElement", "HTMLHRElement", "HTMLIsIndexElement",
-            "HTMLLegendElement", "HTMLLIElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLMenuElement", "HTMLModElement", "HTMLNextIdElement", "HTMLOListElement",
-            "HTMLOptGroupElement", "HTMLParagraphElement", "HTMLParamElement", "HTMLPhraseElement", "HTMLPreElement", ["HTMLProgressElement",10], "HTMLQuoteElement", "HTMLSourceElement",
+            "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement",
+            "HTMLBGSoundElement", "HTMLCanvasElement", ["HTMLDataListElement",10], "HTMLDDElement", "HTMLDirectoryElement",
+            "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLFrameSetElement", "HTMLHRElement", "HTMLIsIndexElement",
+            "HTMLLegendElement", "HTMLLIElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLMenuElement", "HTMLNextIdElement", "HTMLOListElement",
+            "HTMLOptGroupElement", "HTMLParamElement", ["HTMLProgressElement",10], "HTMLSourceElement",
             "HTMLSpanElement", "HTMLTableCaptionElement", "HTMLTableColElement", "HTMLTableHeaderCellElement", "HTMLTableSectionElement", ["HTMLTrackElement",10], "HTMLUListElement",
             "HTMLVideoElement", ["IDBCursor",10], ["IDBCursorWithValue",10], ["IDBDatabase",10], ["IDBFactory",10], ["IDBIndex",10], ["IDBKeyRange",10], ["IDBObjectStore",10], ["IDBOpenDBRequest",10],
             ["IDBRequest",10], ["IDBTransaction",10], ["IDBVersionChangeEvent",10], "ImageData", ["Intl",11], ["Key",11], ["KeyOperation",11],

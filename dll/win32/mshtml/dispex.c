@@ -1420,6 +1420,19 @@ HRESULT change_type(VARIANT *dst, VARIANT *src, VARTYPE vt, IServiceProvider *ca
     }
 
     switch(vt) {
+    case VT_BSTR:
+        if(V_VT(src) == VT_NULL) {
+            V_VT(dst) = VT_BSTR;
+            return (V_BSTR(dst) = SysAllocString(L"null")) ? S_OK : E_OUTOFMEMORY;
+        }
+        break;
+    case VT_I4:
+        if(V_VT(src) == VT_NULL || (V_VT(src) == VT_BSTR && (!V_BSTR(src) || !*V_BSTR(src)))) {
+            V_VT(dst) = VT_I4;
+            V_I4(dst) = 0;
+            return S_OK;
+        }
+        break;
     case VT_BOOL:
         if(V_VT(src) == VT_BSTR) {
             V_VT(dst) = VT_BOOL;
