@@ -12486,6 +12486,58 @@ static void test_sample_allocator_sysmem(void)
     IMFAttributes_Release(attributes);
 }
 
+static void test_sample_allocator_release(void)
+{
+    IMFVideoSampleAllocatorCallback *allocator_cb;
+    IMFVideoSampleAllocator *allocator;
+    IMFSample *sample, *sample2;
+    IMFMediaType *video_type;
+    LONG count;
+    HRESULT hr;
+
+    if (!pMFCreateVideoSampleAllocatorEx)
+        return;
+
+    hr = pMFCreateVideoSampleAllocatorEx(&IID_IMFVideoSampleAllocator, (void **)&allocator);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFVideoSampleAllocator_QueryInterface(allocator, &IID_IMFVideoSampleAllocatorCallback, (void **)&allocator_cb);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    hr = MFCreateMediaType(&video_type);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFMediaType_SetGUID(video_type, &MF_MT_MAJOR_TYPE, &MFMediaType_Video);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFMediaType_SetGUID(video_type, &MF_MT_SUBTYPE, &MFVideoFormat_RGB32);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFMediaType_SetUINT64(video_type, &MF_MT_FRAME_SIZE, (UINT64)64 << 32 | 64);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    hr = IMFVideoSampleAllocator_InitializeSampleAllocator(allocator, 1, video_type);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    hr = IMFVideoSampleAllocator_AllocateSample(allocator, &sample);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFVideoSampleAllocator_AllocateSample(allocator, &sample2);
+    ok(hr == MF_E_SAMPLEALLOCATOR_EMPTY, "Unexpected hr %#lx.\n", hr);
+
+    /* A released sample can be allocated again at once, before the tracking callback returns it. */
+    IMFSample_Release(sample);
+    hr = IMFVideoSampleAllocatorCallback_GetFreeSampleCount(allocator_cb, &count);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(!count, "Unexpected count %ld.\n", count);
+    hr = IMFVideoSampleAllocator_AllocateSample(allocator, &sample);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFVideoSampleAllocator_AllocateSample(allocator, &sample2);
+    ok(hr == MF_E_SAMPLEALLOCATOR_EMPTY, "Unexpected hr %#lx.\n", hr);
+    IMFSample_Release(sample);
+
+    hr = IMFVideoSampleAllocator_UninitializeSampleAllocator(allocator);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    IMFMediaType_Release(video_type);
+    IMFVideoSampleAllocatorCallback_Release(allocator_cb);
+    IMFVideoSampleAllocator_Release(allocator);
+}
+
 static void test_sample_allocator_d3d9(void)
 {
     IDirect3DDeviceManager9 *d3d9_manager;
@@ -14861,6 +14913,7 @@ START_TEST(mfplat)
     test_d3d12_surface_buffer();
     test_d3d12_sync_object();
     test_sample_allocator_sysmem();
+    test_sample_allocator_release();
     test_sample_allocator_d3d9();
     test_sample_allocator_d3d11();
     test_sample_allocator_d3d12();
