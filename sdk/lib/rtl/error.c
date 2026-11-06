@@ -32,7 +32,7 @@ struct error_table
     const DWORD *table;
 };
 
-static const struct error_table error_table[27];
+static const struct error_table error_table[28];
 
 /**************************************************************************
  *           RtlNtStatusToDosErrorNoTeb (NTDLL.@)
@@ -1554,6 +1554,11 @@ static const DWORD table_c0000446[] =
     ERROR_INVALID_LABEL                   /* c0000446 (STATUS_INVALID_LABEL) */
 };
 
+static const DWORD table_c0000472[] =
+{
+    ERROR_FILE_LEVEL_TRIM_NOT_SUPPORTED
+};
+
 static const DWORD table_c000049d[] =
 {
     ERROR_CHILD_PROCESS_BLOCKED
@@ -1592,6 +1597,7 @@ static const struct error_table error_table[] =
     { 0xc0000202, 0xc000038e, table_c0000202 },
     { 0xc0000428, 0xc0000429, table_c0000428 },
     { 0xc0000446, 0xc0000447, table_c0000446 },
+    { 0xc0000472, 0xc0000473, table_c0000472 },
     { 0xc000049d, 0xc000049e, table_c000049d },
     { 0xc0000604, 0xc0000605, table_c0000604 },
     { 0xc0000716, 0xc0000718, table_c0000716 },
