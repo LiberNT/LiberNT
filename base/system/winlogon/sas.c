@@ -2157,6 +2157,8 @@ SASWindowProc(
         case WL_WM_SETUP_DONE:
         {
             RegisterHotKeys(Session, hwndDlg);
+            if (!StartRemoteConsole(Session))
+                TRACE("WL: No remote console for this session\n");
             SwitchDesktop(Session->WinlogonDesktop);
             PostMessageW(hwndDlg, WLX_WM_SAS, WLX_SAS_TYPE_CTRL_ALT_DEL, 0);
             return TRUE;
