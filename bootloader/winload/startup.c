@@ -14,7 +14,7 @@ static const struct
 } StartupProfiles[] =
 {
     {NULL, NULL},
-    {"DEBUG DEBUGPORT=NET", "/NODEBUG/DEBUGPORT=NET"}
+    {"DEBUG DEBUGPORT=NET DEBUGPORT=SCREEN", "/NODEBUG/DEBUGPORT=NET/DEBUGPORT=SCREEN"}
 };
 
 static

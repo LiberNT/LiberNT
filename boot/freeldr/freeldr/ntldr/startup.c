@@ -23,8 +23,8 @@ static const struct
 } StartupProfiles[] =
 {
     {"Boot normally", NULL, NULL},
-    {"Boot with debugging", "DEBUG DEBUGPORT=NET", "/NODEBUG/DEBUGPORT=NET"},
-    {"Boot without RAM disk with debugging", "DEBUG DEBUGPORT=NET", "/NODEBUG/DEBUGPORT=NET/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE}
+    {"Boot with debugging", "DEBUG DEBUGPORT=NET DEBUGPORT=SCREEN", "/NODEBUG/DEBUGPORT=NET/DEBUGPORT=SCREEN"},
+    {"Boot without RAM disk with debugging", "DEBUG DEBUGPORT=NET DEBUGPORT=SCREEN", "/NODEBUG/DEBUGPORT=NET/DEBUGPORT=SCREEN/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE}
 };
 
 static PCSTR StartupModes[] =
