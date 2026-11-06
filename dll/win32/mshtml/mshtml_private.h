@@ -1405,6 +1405,7 @@ struct HTMLAttributeCollection {
 
     nsIDOMMozNamedAttrMap *dom_attrs;
     HTMLElement *elem;
+    const WCHAR *const *tag_attr_only_names;
     struct list attrs;
 };
 
