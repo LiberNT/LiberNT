@@ -1123,9 +1123,17 @@ SurfaceStore(SURFACE *Surface, const RECT32 *Damage, uint32_t DamageCount)
         }
         for (Row = Y0; Row < Y1; Row++)
         {
-            memcpy(Surface->Image + ((size_t)Row * Buffer->Width + X0) * 4,
-                   Buffer->Pool->Map + Buffer->Offset + (size_t)Row * Buffer->Stride + (size_t)X0 * 4,
+            uint8_t *Target = Surface->Image + ((size_t)Row * Buffer->Width + X0) * 4;
+
+            memcpy(Target, Buffer->Pool->Map + Buffer->Offset + (size_t)Row * Buffer->Stride + (size_t)X0 * 4,
                    (size_t)(X1 - X0) * 4);
+            if (Buffer->Format == WL_SHM_FORMAT_XRGB8888)
+            {
+                int32_t Column;
+
+                for (Column = 0; Column < X1 - X0; Column++)
+                    Target[Column * 4 + 3] = 0xFF;
+            }
         }
     }
     return Resized;

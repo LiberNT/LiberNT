@@ -648,7 +648,7 @@ LxCreateWindow(
         X = Origin.x;
         Y = Origin.y;
         Style = WS_POPUP;
-        ExStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
+        ExStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED;
     }
     else if (Message->Flags & LX_WIN_FLAG_DECORATED)
     {
@@ -751,8 +751,19 @@ LxApplyPixels(
                    Source + (SIZE_T)Row * Width * 4, (SIZE_T)Columns * 4);
     }
     GdiFlush();
-    SetRect(&Dirty, X, Y, X + Columns, Y + Row);
-    InvalidateRect(Window->Hwnd, &Dirty, FALSE);
+    if (Window->Flags & LX_WIN_FLAG_POPUP)
+    {
+        BLENDFUNCTION Blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+        POINT Origin = { 0, 0 };
+        SIZE Size = { Window->Width, Window->Height };
+
+        UpdateLayeredWindow(Window->Hwnd, NULL, NULL, &Size, Window->MemoryDc, &Origin, 0, &Blend, ULW_ALPHA);
+    }
+    else
+    {
+        SetRect(&Dirty, X, Y, X + Columns, Y + Row);
+        InvalidateRect(Window->Hwnd, &Dirty, FALSE);
+    }
     if (!Window->Shown)
     {
         CHAR Text[96];

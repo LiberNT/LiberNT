@@ -54,6 +54,7 @@ extern const WL_INTERFACE wl_shm_interface;
 #define WL_SHM_CREATE_POOL 0
 #define WL_SHM_RELEASE 1
 #define WL_SHM_EVENT_FORMAT 0
+#define WL_SHM_FORMAT_XRGB8888 1
 
 extern const WL_INTERFACE wl_buffer_interface;
 #define WL_BUFFER_DESTROY 0
