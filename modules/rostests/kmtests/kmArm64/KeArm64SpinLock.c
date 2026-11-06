@@ -112,6 +112,9 @@ static VOID Arm64SpinLockCheck(VOID)
 #define LOCK_STRESS_ROUNDS 64
 #define LOCK_STRESS_WORDS 32
 
+typedef VOID (FASTCALL *PKMT_ACQUIRE_IN_STACK)(PKSPIN_LOCK, PKLOCK_QUEUE_HANDLE);
+static PKMT_ACQUIRE_IN_STACK AcquireInStackSynch;
+
 typedef struct _LOCK_STRESS_SHARED
 {
     KSPIN_LOCK Lock;
@@ -170,7 +173,7 @@ LockStressThread(PVOID Parameter)
                 OldIrql = Handle.OldIrql;
                 break;
             case 3:
-                KeAcquireInStackQueuedSpinLockRaiseToSynch(&Shared->Lock, &Handle);
+                AcquireInStackSynch(&Shared->Lock, &Handle);
                 OldIrql = Handle.OldIrql;
                 break;
             case 4:
@@ -296,5 +299,11 @@ START_TEST(KeArm64SpinLock)
 
     dump_trace("[arm64][KeArm64SpinLock] enter\n");
     Arm64SpinLockCheck();
-    for (Mode = 0; Mode < 6; Mode++) Arm64SpinLockContention(Mode);
+    AcquireInStackSynch = (PKMT_ACQUIRE_IN_STACK)KmtGetSystemRoutineAddress(L"KeAcquireInStackQueuedSpinLockRaiseToSynch");
+    for (Mode = 0; Mode < 6; Mode++)
+    {
+        if (Mode == 3 && skip(AcquireInStackSynch != NULL, "KeAcquireInStackQueuedSpinLockRaiseToSynch unavailable\n"))
+            continue;
+        Arm64SpinLockContention(Mode);
+    }
 }
