@@ -5,6 +5,7 @@ extern PUSER_MESSAGE_QUEUE gpqForegroundPrev;
 extern HWND ghwndForeground;
 extern HWND ghwndForegroundPrev;
 extern PTHREADINFO ptiLastInput;
+extern PPROCESSINFO gppiLastInput;
 
 /*
  * These functions take the window handles from current message queue.

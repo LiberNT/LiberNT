@@ -282,7 +282,7 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
         {
             TRACE("UPTM Hot key Id %d Key %u\n", pHotKey->id, wVk );
             UserPostThreadMessage(pHotKey->pti, WM_HOTKEY, pHotKey->id, MAKELONG(fModifiers, wVk));
-            //ptiLastInput = pHotKey->pti;
+            gppiLastInput = pHotKey->pti->ppi;
             return TRUE; /* Don't send any message */
         }
         else
@@ -320,7 +320,7 @@ co_UserProcessHotKeys(WORD wVk, BOOL bIsDown)
                     TRACE("UPM Hot key Id %d Key %u\n", pHotKey->id, wVk );
                     UserPostMessage(UserHMGetHandle(pWnd), WM_HOTKEY, pHotKey->id, MAKELONG(fModifiers, wVk));
                 }
-                //ptiLastInput = pWnd->head.pti;
+                gppiLastInput = pWnd->head.pti->ppi;
                 return TRUE; /* Don't send any message */
             }
         }

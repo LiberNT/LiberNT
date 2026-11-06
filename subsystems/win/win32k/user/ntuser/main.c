@@ -247,6 +247,7 @@ UserProcessDestroy(PEPROCESS Process)
     UserSetProcessWindowStation(NULL);
 
     if (gppiInputProvider == ppiCurrent) gppiInputProvider = NULL;
+    if (gppiLastInput == ppiCurrent) gppiLastInput = NULL;
 
     if (ppiCurrent->hdeskStartup)
     {

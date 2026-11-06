@@ -1473,6 +1473,8 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
         {
             INPUT_MESSAGE_SOURCE KbdSource = { IMDT_KEYBOARD, bInjected ? IMO_INJECTED : IMO_HARDWARE };
             MsqPostMessageEx(pti, &Msg, TRUE, QS_KEY, 0, dwExtraInfo, &KbdSource);
+            if (bIsDown)
+                gppiLastInput = pti->ppi;
         }
     }
     return TRUE;
