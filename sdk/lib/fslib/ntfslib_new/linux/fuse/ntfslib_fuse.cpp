@@ -2527,7 +2527,8 @@ ApplySecurityFromPolicy(NtfsFuseState* State, const char* PolicyPath)
 
 static NTSTATUS
 EnsureImageDirectory(NtfsFuseState* State,
-                     const std::string& Directory)
+                     const std::string& Directory,
+                     BOOLEAN CaseSensitive)
 {
     std::string Path = NormalizeImagePath(Directory);
     size_t End = 0;
@@ -2572,7 +2573,7 @@ EnsureImageDirectory(NtfsFuseState* State,
                 TRUE,
                 0,
                 &File);
-            if (NT_SUCCESS(Status))
+            if (NT_SUCCESS(Status) && CaseSensitive)
                 Status = NtfsFileRecordSetCaseSensitiveDirectory(File, TRUE);
             NtfsFileRecordDestroy(File);
             if (!NT_SUCCESS(Status))
@@ -2950,7 +2951,7 @@ AddLinuxTreeFromList(NtfsFuseState* State,
             std::vector<WCHAR> OldPath, NewPath;
             std::string Existing = NormalizeImagePath(EncodeLinuxName(Fields[8]));
 
-            Status = EnsureImageDirectory(State, Parent);
+            Status = EnsureImageDirectory(State, Parent, TRUE);
             if (NT_SUCCESS(Status) &&
                 (!Utf8ToNtfsPath(Existing.c_str(), OldPath) ||
                  !Utf8ToNtfsPath(Destination.c_str(), NewPath)))
@@ -2994,11 +2995,11 @@ AddLinuxTreeFromList(NtfsFuseState* State,
 
         if (Type == 'd')
         {
-            Status = EnsureImageDirectory(State, Destination);
+            Status = EnsureImageDirectory(State, Destination, TRUE);
         }
         else
         {
-            Status = EnsureImageDirectory(State, Parent);
+            Status = EnsureImageDirectory(State, Parent, TRUE);
             if (NT_SUCCESS(Status))
                 Status = PrepareImageFile(State, Destination);
         }
@@ -3117,7 +3118,7 @@ AddFilesFromList(NtfsFuseState* State,
 
         if (S_ISDIR(SourceStat.st_mode))
         {
-            Status = EnsureImageDirectory(State, Destination);
+            Status = EnsureImageDirectory(State, Destination, FALSE);
         }
         else if (S_ISREG(SourceStat.st_mode))
         {
@@ -3125,7 +3126,7 @@ AddFilesFromList(NtfsFuseState* State,
 
             if (Slash != std::string::npos)
                 Parent = Destination.substr(0, Slash);
-            Status = EnsureImageDirectory(State, Parent);
+            Status = EnsureImageDirectory(State, Parent, FALSE);
             if (NT_SUCCESS(Status))
                 Status = PrepareImageFile(State, Destination);
             if (NT_SUCCESS(Status))
