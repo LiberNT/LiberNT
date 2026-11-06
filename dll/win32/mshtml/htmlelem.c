@@ -4454,6 +4454,381 @@ static const IHTMLElement4Vtbl HTMLElement4Vtbl = {
     HTMLElement4_get_onfocusout
 };
 
+static inline HTMLElement *impl_from_IHTMLElement5(IHTMLElement5 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLElement, IHTMLElement5_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLElement5, IHTMLElement5,
+                      impl_from_IHTMLElement5(iface)->node.event_target.dispex)
+
+static HRESULT WINAPI HTMLElement5_getAttributeNode(IHTMLElement5 *iface, BSTR bstrname, IHTMLDOMAttribute2 **ppretAttribute)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+    IHTMLDOMAttribute *attr;
+    HRESULT hres;
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_w(bstrname), ppretAttribute);
+
+    hres = IHTMLElement4_getAttributeNode(&This->IHTMLElement4_iface, bstrname, &attr);
+    if(FAILED(hres))
+        return hres;
+
+    if(!attr) {
+        *ppretAttribute = NULL;
+        return S_OK;
+    }
+
+    hres = IHTMLDOMAttribute_QueryInterface(attr, &IID_IHTMLDOMAttribute2, (void**)ppretAttribute);
+    IHTMLDOMAttribute_Release(attr);
+    return hres;
+}
+
+static HRESULT element5_attr_node_call(HTMLElement *This, IHTMLDOMAttribute2 *pattr, IHTMLDOMAttribute2 **ppretAttribute,
+        HRESULT (WINAPI *call)(IHTMLElement4*,IHTMLDOMAttribute*,IHTMLDOMAttribute**))
+{
+    IHTMLDOMAttribute *attr, *ret_attr;
+    HRESULT hres;
+
+    if(!pattr)
+        return E_INVALIDARG;
+
+    hres = IHTMLDOMAttribute2_QueryInterface(pattr, &IID_IHTMLDOMAttribute, (void**)&attr);
+    if(FAILED(hres))
+        return hres;
+
+    hres = call(&This->IHTMLElement4_iface, attr, &ret_attr);
+    IHTMLDOMAttribute_Release(attr);
+    if(FAILED(hres))
+        return hres;
+
+    if(!ret_attr) {
+        *ppretAttribute = NULL;
+        return S_OK;
+    }
+
+    hres = IHTMLDOMAttribute_QueryInterface(ret_attr, &IID_IHTMLDOMAttribute2, (void**)ppretAttribute);
+    IHTMLDOMAttribute_Release(ret_attr);
+    return hres;
+}
+
+static HRESULT WINAPI HTMLElement5_setAttributeNode(IHTMLElement5 *iface, IHTMLDOMAttribute2 *pattr, IHTMLDOMAttribute2 **ppretAttribute)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+
+    TRACE("(%p)->(%p %p)\n", This, pattr, ppretAttribute);
+
+    return element5_attr_node_call(This, pattr, ppretAttribute, This->IHTMLElement4_iface.lpVtbl->setAttributeNode);
+}
+
+static HRESULT WINAPI HTMLElement5_removeAttributeNode(IHTMLElement5 *iface, IHTMLDOMAttribute2 *pattr, IHTMLDOMAttribute2 **ppretAttribute)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+
+    TRACE("(%p)->(%p %p)\n", This, pattr, ppretAttribute);
+
+    return element5_attr_node_call(This, pattr, ppretAttribute, This->IHTMLElement4_iface.lpVtbl->removeAttributeNode);
+}
+
+static HRESULT WINAPI HTMLElement5_hasAttribute(IHTMLElement5 *iface, BSTR name, VARIANT_BOOL *pfHasAttribute)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_w(name), pfHasAttribute);
+
+    return IHTMLElement6_hasAttribute(&This->IHTMLElement6_iface, name, pfHasAttribute);
+}
+
+static HRESULT elem_put_reflected_string(HTMLElement *This, const WCHAR *name, BSTR v)
+{
+    TRACE("(%p)->(%s %s)\n", This, debugstr_w(name), debugstr_w(v));
+
+    if(!This->dom_element) {
+        FIXME("no DOM element\n");
+        return E_NOTIMPL;
+    }
+
+    return elem_string_attr_setter(This, name, v ? v : L"");
+}
+
+static HRESULT elem_get_reflected_string(HTMLElement *This, const WCHAR *name, BSTR *p)
+{
+    TRACE("(%p)->(%s %p)\n", This, debugstr_w(name), p);
+
+    if(!This->dom_element) {
+        *p = NULL;
+        return S_OK;
+    }
+
+    return elem_string_attr_getter(This, name, TRUE, p);
+}
+
+static HRESULT elem_put_reflected_short(HTMLElement *This, const WCHAR *name, short v)
+{
+    WCHAR buf[8];
+
+    TRACE("(%p)->(%s %d)\n", This, debugstr_w(name), v);
+
+    if(!This->dom_element) {
+        FIXME("no DOM element\n");
+        return E_NOTIMPL;
+    }
+
+    swprintf(buf, ARRAY_SIZE(buf), L"%d", v);
+    return elem_string_attr_setter(This, name, buf);
+}
+
+static HRESULT elem_get_reflected_short(HTMLElement *This, const WCHAR *name, short *p)
+{
+    const PRUnichar *val;
+    nsAString val_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_w(name), p);
+
+    *p = 0;
+    if(!This->dom_element)
+        return S_OK;
+
+    nsres = get_elem_attr_value(This->dom_element, name, &val_str, &val);
+    if(NS_FAILED(nsres))
+        return E_FAIL;
+
+    *p = wcstol(val, NULL, 10);
+    nsAString_Finish(&val_str);
+    return S_OK;
+}
+
+#define HTMLELEMENT5_STRING_ATTR(prop, attr)                                               \
+static HRESULT WINAPI HTMLElement5_put_##prop(IHTMLElement5 *iface, BSTR v)                \
+{                                                                                          \
+    return elem_put_reflected_string(impl_from_IHTMLElement5(iface), attr, v);              \
+}                                                                                          \
+static HRESULT WINAPI HTMLElement5_get_##prop(IHTMLElement5 *iface, BSTR *p)               \
+{                                                                                          \
+    return elem_get_reflected_string(impl_from_IHTMLElement5(iface), attr, p);              \
+}
+
+#define HTMLELEMENT5_SHORT_ATTR(prop, attr)                                                \
+static HRESULT WINAPI HTMLElement5_put_##prop(IHTMLElement5 *iface, short v)               \
+{                                                                                          \
+    return elem_put_reflected_short(impl_from_IHTMLElement5(iface), attr, v);               \
+}                                                                                          \
+static HRESULT WINAPI HTMLElement5_get_##prop(IHTMLElement5 *iface, short *p)              \
+{                                                                                          \
+    return elem_get_reflected_short(impl_from_IHTMLElement5(iface), attr, p);               \
+}
+
+HTMLELEMENT5_STRING_ATTR(role,                 L"role")
+HTMLELEMENT5_STRING_ATTR(ariaBusy,             L"aria-busy")
+HTMLELEMENT5_STRING_ATTR(ariaChecked,          L"aria-checked")
+HTMLELEMENT5_STRING_ATTR(ariaDisabled,         L"aria-disabled")
+HTMLELEMENT5_STRING_ATTR(ariaExpanded,         L"aria-expanded")
+HTMLELEMENT5_STRING_ATTR(ariaHaspopup,         L"aria-haspopup")
+HTMLELEMENT5_STRING_ATTR(ariaHidden,           L"aria-hidden")
+HTMLELEMENT5_STRING_ATTR(ariaInvalid,          L"aria-invalid")
+HTMLELEMENT5_STRING_ATTR(ariaMultiselectable,  L"aria-multiselectable")
+HTMLELEMENT5_STRING_ATTR(ariaPressed,          L"aria-pressed")
+HTMLELEMENT5_STRING_ATTR(ariaReadonly,         L"aria-readonly")
+HTMLELEMENT5_STRING_ATTR(ariaRequired,         L"aria-required")
+HTMLELEMENT5_STRING_ATTR(ariaSecret,           L"aria-secret")
+HTMLELEMENT5_STRING_ATTR(ariaSelected,         L"aria-selected")
+HTMLELEMENT5_STRING_ATTR(ariaValuenow,         L"aria-valuenow")
+HTMLELEMENT5_SHORT_ATTR(ariaPosinset,          L"aria-posinset")
+HTMLELEMENT5_SHORT_ATTR(ariaSetsize,           L"aria-setsize")
+HTMLELEMENT5_SHORT_ATTR(ariaLevel,             L"aria-level")
+HTMLELEMENT5_STRING_ATTR(ariaValuemin,         L"aria-valuemin")
+HTMLELEMENT5_STRING_ATTR(ariaValuemax,         L"aria-valuemax")
+HTMLELEMENT5_STRING_ATTR(ariaControls,         L"aria-controls")
+HTMLELEMENT5_STRING_ATTR(ariaDescribedby,      L"aria-describedby")
+HTMLELEMENT5_STRING_ATTR(ariaFlowto,           L"aria-flowto")
+HTMLELEMENT5_STRING_ATTR(ariaLabelledby,       L"aria-labelledby")
+HTMLELEMENT5_STRING_ATTR(ariaActivedescendant, L"aria-activedescendant")
+HTMLELEMENT5_STRING_ATTR(ariaOwns,             L"aria-owns")
+HTMLELEMENT5_STRING_ATTR(ariaLive,             L"aria-live")
+HTMLELEMENT5_STRING_ATTR(ariaRelevant,         L"aria-relevant")
+
+static HRESULT WINAPI HTMLElement5_getAttribute(IHTMLElement5 *iface, BSTR strAttributeName, VARIANT *AttributeValue)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_w(strAttributeName), AttributeValue);
+
+    return IHTMLElement_getAttribute(&This->IHTMLElement_iface, strAttributeName, 0, AttributeValue);
+}
+
+static HRESULT WINAPI HTMLElement5_setAttribute(IHTMLElement5 *iface, BSTR strAttributeName, VARIANT AttributeValue)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+
+    TRACE("(%p)->(%s %s)\n", This, debugstr_w(strAttributeName), debugstr_variant(&AttributeValue));
+
+    return IHTMLElement_setAttribute(&This->IHTMLElement_iface, strAttributeName, AttributeValue, 0);
+}
+
+static HRESULT WINAPI HTMLElement5_removeAttribute(IHTMLElement5 *iface, BSTR strAttributeName, VARIANT_BOOL *pfSuccess)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_w(strAttributeName), pfSuccess);
+
+    return IHTMLElement_removeAttribute(&This->IHTMLElement_iface, strAttributeName, 0, pfSuccess);
+}
+
+static HRESULT WINAPI HTMLElement5_get_attributes(IHTMLElement5 *iface, IHTMLAttributeCollection3 **p)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+    HTMLAttributeCollection *attrs;
+    HRESULT hres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    hres = HTMLElement_get_attr_col(&This->node, &attrs);
+    if(FAILED(hres))
+        return hres;
+
+    *p = &attrs->IHTMLAttributeCollection3_iface;
+    return S_OK;
+}
+
+static HRESULT WINAPI HTMLElement5_hasAttributes(IHTMLElement5 *iface, VARIANT_BOOL *pfHasAttributes)
+{
+    HTMLElement *This = impl_from_IHTMLElement5(iface);
+
+    TRACE("(%p)->(%p)\n", This, pfHasAttributes);
+
+    return IHTMLElement6_hasAttributes(&This->IHTMLElement6_iface, pfHasAttributes);
+}
+
+static const IHTMLElement5Vtbl HTMLElement5Vtbl = {
+    HTMLElement5_QueryInterface,
+    HTMLElement5_AddRef,
+    HTMLElement5_Release,
+    HTMLElement5_GetTypeInfoCount,
+    HTMLElement5_GetTypeInfo,
+    HTMLElement5_GetIDsOfNames,
+    HTMLElement5_Invoke,
+    HTMLElement5_getAttributeNode,
+    HTMLElement5_setAttributeNode,
+    HTMLElement5_removeAttributeNode,
+    HTMLElement5_hasAttribute,
+    HTMLElement5_put_role,
+    HTMLElement5_get_role,
+    HTMLElement5_put_ariaBusy,
+    HTMLElement5_get_ariaBusy,
+    HTMLElement5_put_ariaChecked,
+    HTMLElement5_get_ariaChecked,
+    HTMLElement5_put_ariaDisabled,
+    HTMLElement5_get_ariaDisabled,
+    HTMLElement5_put_ariaExpanded,
+    HTMLElement5_get_ariaExpanded,
+    HTMLElement5_put_ariaHaspopup,
+    HTMLElement5_get_ariaHaspopup,
+    HTMLElement5_put_ariaHidden,
+    HTMLElement5_get_ariaHidden,
+    HTMLElement5_put_ariaInvalid,
+    HTMLElement5_get_ariaInvalid,
+    HTMLElement5_put_ariaMultiselectable,
+    HTMLElement5_get_ariaMultiselectable,
+    HTMLElement5_put_ariaPressed,
+    HTMLElement5_get_ariaPressed,
+    HTMLElement5_put_ariaReadonly,
+    HTMLElement5_get_ariaReadonly,
+    HTMLElement5_put_ariaRequired,
+    HTMLElement5_get_ariaRequired,
+    HTMLElement5_put_ariaSecret,
+    HTMLElement5_get_ariaSecret,
+    HTMLElement5_put_ariaSelected,
+    HTMLElement5_get_ariaSelected,
+    HTMLElement5_getAttribute,
+    HTMLElement5_setAttribute,
+    HTMLElement5_removeAttribute,
+    HTMLElement5_get_attributes,
+    HTMLElement5_put_ariaValuenow,
+    HTMLElement5_get_ariaValuenow,
+    HTMLElement5_put_ariaPosinset,
+    HTMLElement5_get_ariaPosinset,
+    HTMLElement5_put_ariaSetsize,
+    HTMLElement5_get_ariaSetsize,
+    HTMLElement5_put_ariaLevel,
+    HTMLElement5_get_ariaLevel,
+    HTMLElement5_put_ariaValuemin,
+    HTMLElement5_get_ariaValuemin,
+    HTMLElement5_put_ariaValuemax,
+    HTMLElement5_get_ariaValuemax,
+    HTMLElement5_put_ariaControls,
+    HTMLElement5_get_ariaControls,
+    HTMLElement5_put_ariaDescribedby,
+    HTMLElement5_get_ariaDescribedby,
+    HTMLElement5_put_ariaFlowto,
+    HTMLElement5_get_ariaFlowto,
+    HTMLElement5_put_ariaLabelledby,
+    HTMLElement5_get_ariaLabelledby,
+    HTMLElement5_put_ariaActivedescendant,
+    HTMLElement5_get_ariaActivedescendant,
+    HTMLElement5_put_ariaOwns,
+    HTMLElement5_get_ariaOwns,
+    HTMLElement5_hasAttributes,
+    HTMLElement5_put_ariaLive,
+    HTMLElement5_get_ariaLive,
+    HTMLElement5_put_ariaRelevant,
+    HTMLElement5_get_ariaRelevant
+};
+
+static inline HTMLElement *impl_from_IHTMLDatabinding(IHTMLDatabinding *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLElement, IHTMLDatabinding_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLDatabinding, IHTMLDatabinding,
+                      impl_from_IHTMLDatabinding(iface)->node.event_target.dispex)
+
+static HRESULT WINAPI HTMLDatabinding_put_dataFld(IHTMLDatabinding *iface, BSTR v)
+{
+    return elem_put_reflected_string(impl_from_IHTMLDatabinding(iface), L"dataFld", v);
+}
+
+static HRESULT WINAPI HTMLDatabinding_get_dataFld(IHTMLDatabinding *iface, BSTR *p)
+{
+    return elem_get_reflected_string(impl_from_IHTMLDatabinding(iface), L"dataFld", p);
+}
+
+static HRESULT WINAPI HTMLDatabinding_put_dataSrc(IHTMLDatabinding *iface, BSTR v)
+{
+    return elem_put_reflected_string(impl_from_IHTMLDatabinding(iface), L"dataSrc", v);
+}
+
+static HRESULT WINAPI HTMLDatabinding_get_dataSrc(IHTMLDatabinding *iface, BSTR *p)
+{
+    return elem_get_reflected_string(impl_from_IHTMLDatabinding(iface), L"dataSrc", p);
+}
+
+static HRESULT WINAPI HTMLDatabinding_put_dataFormatAs(IHTMLDatabinding *iface, BSTR v)
+{
+    return elem_put_reflected_string(impl_from_IHTMLDatabinding(iface), L"dataFormatAs", v);
+}
+
+static HRESULT WINAPI HTMLDatabinding_get_dataFormatAs(IHTMLDatabinding *iface, BSTR *p)
+{
+    return elem_get_reflected_string(impl_from_IHTMLDatabinding(iface), L"dataFormatAs", p);
+}
+
+static const IHTMLDatabindingVtbl HTMLDatabindingVtbl = {
+    HTMLDatabinding_QueryInterface,
+    HTMLDatabinding_AddRef,
+    HTMLDatabinding_Release,
+    HTMLDatabinding_GetTypeInfoCount,
+    HTMLDatabinding_GetTypeInfo,
+    HTMLDatabinding_GetIDsOfNames,
+    HTMLDatabinding_Invoke,
+    HTMLDatabinding_put_dataFld,
+    HTMLDatabinding_get_dataFld,
+    HTMLDatabinding_put_dataSrc,
+    HTMLDatabinding_get_dataSrc,
+    HTMLDatabinding_put_dataFormatAs,
+    HTMLDatabinding_get_dataFormatAs
+};
+
 static inline HTMLElement *impl_from_IHTMLElement6(IHTMLElement6 *iface)
 {
     return CONTAINING_RECORD(iface, HTMLElement, IHTMLElement6_iface);
@@ -6181,6 +6556,10 @@ void *HTMLElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLElement3_iface;
     if(IsEqualGUID(&IID_IHTMLElement4, riid))
         return &This->IHTMLElement4_iface;
+    if(IsEqualGUID(&IID_IHTMLElement5, riid))
+        return &This->IHTMLElement5_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->IHTMLDatabinding_iface;
     if(IsEqualGUID(&IID_IHTMLElement6, riid))
         return &This->IHTMLElement6_iface;
     if(IsEqualGUID(&IID_IHTMLElement7, riid))
@@ -6634,7 +7013,7 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 
         /* Common for all modes */
         {DISPID_IHTMLELEMENT_PARENTELEMENT,  .noattr = TRUE},
-        {DISPID_IHTMLELEMENT_CLASSNAME,      .noattr = TRUE},
+        {DISPID_IHTMLELEMENT_CLASSNAME,      .attr_name = L"class"},
         {DISPID_IHTMLELEMENT_TAGNAME,        .noattr = TRUE},
         {DISPID_IHTMLELEMENT_OFFSETLEFT,     .noattr = TRUE},
         {DISPID_IHTMLELEMENT_OFFSETTOP,      .noattr = TRUE},
@@ -6702,6 +7081,7 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
         {DISPID_IHTMLELEMENT2_CLIENTTOP,       .noattr = TRUE},
         {DISPID_IHTMLELEMENT2_CLIENTLEFT,      .noattr = TRUE},
         {DISPID_IHTMLELEMENT2_READYSTATE,      .noattr = TRUE},
+        {DISPID_IHTMLELEMENT2_READYSTATEVALUE, .noattr = TRUE},
         {DISPID_UNKNOWN}
     };
     const dispex_hook_t *const elem2_ie10_hooks = elem2_ie11_hooks + 15;
@@ -6725,11 +7105,74 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
         {DISPID_IHTMLELEMENT3_CANHAVEHTML,       .noattr = TRUE},
         {DISPID_IHTMLELEMENT3_ISCONTENTEDITABLE, .noattr = TRUE},
         {DISPID_IHTMLELEMENT3_ISDISABLED,        .noattr = TRUE},
+        {DISPID_IHTMLELEMENT3_INFLATEBLOCK,      .noattr = TRUE},
+        {DISPID_IHTMLELEMENT3_GLYPHMODE,         .noattr = TRUE},
 
         {DISPID_UNKNOWN}
     };
     const dispex_hook_t *const elem3_ie9_hooks = elem3_ie11_hooks + 8;
     const dispex_hook_t *const elem3_hooks     = elem3_ie9_hooks  + 1;
+    static const dispex_hook_t elem5_hooks[] = {
+        {DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTENODE},
+        {DISPID_IHTMLELEMENT5_IE8_SETATTRIBUTENODE},
+        {DISPID_IHTMLELEMENT5_IE8_REMOVEATTRIBUTENODE},
+        {DISPID_IHTMLELEMENT5_HASATTRIBUTE},
+        {DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTE},
+        {DISPID_IHTMLELEMENT5_IE8_SETATTRIBUTE},
+        {DISPID_IHTMLELEMENT5_IE8_REMOVEATTRIBUTE},
+        {DISPID_IHTMLELEMENT5_IE8_ATTRIBUTES},
+        {DISPID_IHTMLELEMENT5_HASATTRIBUTES},
+        {DISPID_IHTMLELEMENT5_ARIABUSY,             .name = L"aria-busy"},
+        {DISPID_IHTMLELEMENT5_ARIACHECKED,          .name = L"aria-checked"},
+        {DISPID_IHTMLELEMENT5_ARIADISABLED,         .name = L"aria-disabled"},
+        {DISPID_IHTMLELEMENT5_ARIAEXPANDED,         .name = L"aria-expanded"},
+        {DISPID_IHTMLELEMENT5_ARIAHASPOPUP,         .name = L"aria-haspopup"},
+        {DISPID_IHTMLELEMENT5_ARIAHIDDEN,           .name = L"aria-hidden"},
+        {DISPID_IHTMLELEMENT5_ARIAINVALID,          .name = L"aria-invalid"},
+        {DISPID_IHTMLELEMENT5_ARIAMULTISELECTABLE,  .name = L"aria-multiselectable"},
+        {DISPID_IHTMLELEMENT5_ARIAPRESSED,          .name = L"aria-pressed"},
+        {DISPID_IHTMLELEMENT5_ARIAREADONLY,         .name = L"aria-readonly"},
+        {DISPID_IHTMLELEMENT5_ARIAREQUIRED,         .name = L"aria-required"},
+        {DISPID_IHTMLELEMENT5_ARIASECRET,           .name = L"aria-secret"},
+        {DISPID_IHTMLELEMENT5_ARIASELECTED,         .name = L"aria-selected"},
+        {DISPID_IHTMLELEMENT5_ARIAVALUENOW,         .name = L"aria-valuenow"},
+        {DISPID_IHTMLELEMENT5_ARIAPOSINSET,         .name = L"aria-posinset"},
+        {DISPID_IHTMLELEMENT5_ARIASETSIZE,          .name = L"aria-setsize"},
+        {DISPID_IHTMLELEMENT5_ARIALEVEL,            .name = L"aria-level"},
+        {DISPID_IHTMLELEMENT5_ARIAVALUEMIN,         .name = L"aria-valuemin"},
+        {DISPID_IHTMLELEMENT5_ARIAVALUEMAX,         .name = L"aria-valuemax"},
+        {DISPID_IHTMLELEMENT5_ARIACONTROLS,         .name = L"aria-controls"},
+        {DISPID_IHTMLELEMENT5_ARIADESCRIBEDBY,      .name = L"aria-describedby"},
+        {DISPID_IHTMLELEMENT5_ARIAFLOWTO,           .name = L"aria-flowto"},
+        {DISPID_IHTMLELEMENT5_ARIALABELLEDBY,       .name = L"aria-labelledby"},
+        {DISPID_IHTMLELEMENT5_ARIAACTIVEDESCENDANT, .name = L"aria-activedescendant"},
+        {DISPID_IHTMLELEMENT5_ARIAOWNS,             .name = L"aria-owns"},
+        {DISPID_IHTMLELEMENT5_ARIALIVE,             .name = L"aria-live"},
+        {DISPID_IHTMLELEMENT5_ARIARELEVANT,         .name = L"aria-relevant"},
+        {DISPID_UNKNOWN}
+    };
+    static const dispex_hook_t elem7_hooks[] = {
+        {DISPID_IHTMLELEMENT7_ONMSPOINTERDOWN},
+        {DISPID_IHTMLELEMENT7_ONMSPOINTERMOVE},
+        {DISPID_IHTMLELEMENT7_ONMSPOINTERUP},
+        {DISPID_IHTMLELEMENT7_ONMSPOINTEROVER},
+        {DISPID_IHTMLELEMENT7_ONMSPOINTEROUT},
+        {DISPID_IHTMLELEMENT7_ONMSPOINTERCANCEL},
+        {DISPID_IHTMLELEMENT7_ONMSPOINTERHOVER},
+        {DISPID_IHTMLELEMENT7_ONMSLOSTPOINTERCAPTURE},
+        {DISPID_IHTMLELEMENT7_ONMSGOTPOINTERCAPTURE},
+        {DISPID_IHTMLELEMENT7_ONMSGESTURESTART},
+        {DISPID_IHTMLELEMENT7_ONMSGESTURECHANGE},
+        {DISPID_IHTMLELEMENT7_ONMSGESTUREEND},
+        {DISPID_IHTMLELEMENT7_ONMSGESTUREHOLD},
+        {DISPID_IHTMLELEMENT7_ONMSGESTURETAP},
+        {DISPID_IHTMLELEMENT7_ONMSGESTUREDOUBLETAP},
+        {DISPID_IHTMLELEMENT7_ONMSINERTIASTART},
+        {DISPID_IHTMLELEMENT7_MSSETPOINTERCAPTURE},
+        {DISPID_IHTMLELEMENT7_MSRELEASEPOINTERCAPTURE},
+        {DISPID_IHTMLELEMENT7_XMSACCELERATORKEY, .name = L"x-ms-acceleratorkey"},
+        {DISPID_UNKNOWN}
+    };
     static const dispex_hook_t elem7_ie11_hooks[] = {
         {DISPID_IHTMLELEMENT7_ONMSPOINTERHOVER},
 
@@ -6756,6 +7199,15 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
                                                        mode >= COMPAT_MODE_IE9  ? elem2_ie9_hooks  : elem2_hooks);
     if(mode >= COMPAT_MODE_IE8)
         dispex_info_add_interface(info, IElementSelector_tid, NULL);
+
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
+
+    /* TODO: IE9+ attribute collections also list role and aria-* without exposing them to script */
+    if(mode < COMPAT_MODE_IE9) {
+        dispex_info_add_interface(info, IHTMLElement5_tid, elem5_hooks);
+        dispex_info_add_interface(info, IHTMLElement7_tid, elem7_hooks);
+    }
 
     if(mode >= COMPAT_MODE_IE9) {
         dispex_info_add_interface(info, IHTMLElement6_tid, mode >= COMPAT_MODE_IE10 ? elem6_ie10_hooks : elem6_ie9_hooks);
@@ -7426,6 +7878,8 @@ void HTMLElement_Init(HTMLElement *This, HTMLDocumentNode *doc, nsIDOMElement *n
     This->IHTMLElement2_iface.lpVtbl = &HTMLElement2Vtbl;
     This->IHTMLElement3_iface.lpVtbl = &HTMLElement3Vtbl;
     This->IHTMLElement4_iface.lpVtbl = &HTMLElement4Vtbl;
+    This->IHTMLElement5_iface.lpVtbl = &HTMLElement5Vtbl;
+    This->IHTMLDatabinding_iface.lpVtbl = &HTMLDatabindingVtbl;
     This->IHTMLElement6_iface.lpVtbl = &HTMLElement6Vtbl;
     This->IHTMLElement7_iface.lpVtbl = &HTMLElement7Vtbl;
     This->IHTMLUniqueName_iface.lpVtbl = &HTMLUniqueNameVtbl;
@@ -7695,16 +8149,52 @@ static inline BOOL is_valid_attr_dispid(HTMLAttributeCollection *col, DISPID id)
     return TRUE;
 }
 
-static HRESULT get_attr_dispid_by_idx(HTMLAttributeCollection *This, LONG *idx, DISPID *dispid)
+static const WCHAR *const attr_only_names[] = {
+    L"aria-atomic", L"aria-autocomplete", L"aria-dropeffect", L"aria-grabbed", L"aria-label", L"aria-multiline",
+    L"aria-orientation", L"aria-sort", L"aria-valuetext", L"implementation", L"x-ms-aria-flowfrom"
+};
+
+typedef struct {
+    DISPID id;
+    const WCHAR *name;
+} attr_ref_t;
+
+static BOOL is_attr_only_name_listed(HTMLAttributeCollection *This, const WCHAR *name)
+{
+    DISPID id;
+
+    return SUCCEEDED(dispex_get_id(&This->elem->node.event_target.dispex, name, fdexNameCaseInsensitive, &id))
+        && is_valid_attr_dispid(This, id);
+}
+
+static BOOL next_attr_only_ref(HTMLAttributeCollection *This, unsigned *pos, LONG *len, LONG idx, attr_ref_t *ref)
+{
+    for(; *pos < ARRAY_SIZE(attr_only_names); (*pos)++) {
+        if(is_attr_only_name_listed(This, attr_only_names[*pos]))
+            continue;
+
+        (*len)++;
+        if(ref && *len == idx) {
+            ref->id = DISPID_UNKNOWN;
+            ref->name = attr_only_names[*pos];
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, attr_ref_t *ref)
 {
     DISPID id = DISPID_STARTENUM;
+    unsigned attr_only_pos = 0;
     LONG len = -1;
     HRESULT hres;
 
     FIXME("filter non-enumerable attributes out\n");
 
     while(1) {
-        hres = dispex_next_id(&This->elem->node.event_target.dispex, id, FALSE, &id);
+        hres = dispex_next_attr_id(&This->elem->node.event_target.dispex, id, &id);
         if(FAILED(hres))
             return hres;
         else if(hres == S_FALSE)
@@ -7712,22 +8202,31 @@ static HRESULT get_attr_dispid_by_idx(HTMLAttributeCollection *This, LONG *idx, 
         else if(!is_valid_attr_dispid(This, id))
             continue;
 
+        if(get_dispid_type(id) != DISPEXPROP_BUILTIN && next_attr_only_ref(This, &attr_only_pos, &len, *idx, ref))
+            return S_OK;
+
         len++;
-        if(len == *idx)
-            break;
+        if(ref && len == *idx) {
+            ref->id = id;
+            ref->name = NULL;
+            return S_OK;
+        }
     }
 
-    if(dispid) {
-        *dispid = id;
-        return *idx==len ? S_OK : DISP_E_UNKNOWNNAME;
-    }
+    if(next_attr_only_ref(This, &attr_only_pos, &len, *idx, ref))
+        return S_OK;
+
+    if(ref)
+        return DISP_E_UNKNOWNNAME;
 
     *idx = len+1;
     return S_OK;
 }
 
-static inline HRESULT get_attr_dispid_by_name(HTMLAttributeCollection *This, const WCHAR *name, DISPID *id)
+static HRESULT get_attr_ref_by_name(HTMLAttributeCollection *This, const WCHAR *name, attr_ref_t *ref)
 {
+    DispatchEx *dispex = &This->elem->node.event_target.dispex;
+    unsigned i;
     HRESULT hres;
 
     if(name[0]>='0' && name[0]<='9') {
@@ -7736,22 +8235,68 @@ static inline HRESULT get_attr_dispid_by_name(HTMLAttributeCollection *This, con
 
         idx = wcstoul(name, &end_ptr, 10);
         if(!*end_ptr) {
-            hres = get_attr_dispid_by_idx(This, &idx, id);
+            hres = get_attr_ref_by_idx(This, &idx, ref);
             if(SUCCEEDED(hres))
                 return hres;
         }
     }
 
-    hres = dispex_get_id(&This->elem->node.event_target.dispex, name, fdexNameCaseInsensitive, id);
-    return (FAILED(hres) || is_valid_attr_dispid(This, *id)) ? hres : DISP_E_UNKNOWNNAME;
+    ref->name = NULL;
+
+    hres = dispex_get_id(dispex, name, fdexNameCaseInsensitive, &ref->id);
+    if(SUCCEEDED(hres)) {
+        if(!is_valid_attr_dispid(This, ref->id))
+            return DISP_E_UNKNOWNNAME;
+        if(get_dispid_type(ref->id) == DISPEXPROP_BUILTIN && wcsicmp(dispex_builtin_attr_name(dispex, ref->id), name))
+            return DISP_E_UNKNOWNNAME;
+        return S_OK;
+    }
+    if(hres != DISP_E_UNKNOWNNAME)
+        return hres;
+
+    hres = dispex_get_builtin_attr_id(dispex, name, &ref->id);
+    if(SUCCEEDED(hres))
+        return hres;
+
+    for(i = 0; i < ARRAY_SIZE(attr_only_names); i++) {
+        if(!wcsicmp(attr_only_names[i], name)) {
+            ref->id = DISPID_UNKNOWN;
+            ref->name = attr_only_names[i];
+            return S_OK;
+        }
+    }
+
+    return DISP_E_UNKNOWNNAME;
 }
 
-static inline HRESULT get_domattr(HTMLAttributeCollection *This, DISPID id, LONG *list_pos, HTMLDOMAttribute **attr)
+static HTMLDOMAttribute *find_attr_ref_in_list(HTMLAttributeCollection *attrs, const attr_ref_t *ref, LONG *pos)
+{
+    HTMLDOMAttribute *iter;
+    unsigned i = 0;
+
+    if(!ref->name)
+        return find_attr_in_list(attrs, ref->id, pos);
+
+    LIST_FOR_EACH_ENTRY(iter, &attrs->attrs, HTMLDOMAttribute, entry) {
+        if(iter->dispid == DISPID_UNKNOWN && iter->name && !wcsicmp(iter->name, ref->name)) {
+            if(pos)
+                *pos = i;
+            return iter;
+        }
+        i++;
+    }
+
+    if(pos)
+        *pos = i;
+    return NULL;
+}
+
+static inline HRESULT get_domattr(HTMLAttributeCollection *This, const attr_ref_t *ref, LONG *list_pos, HTMLDOMAttribute **attr)
 {
     HRESULT hres;
 
-    if(!(*attr = find_attr_in_list(This, id, list_pos))) {
-        hres = HTMLDOMAttribute_Create(NULL, This->elem, id, This->elem->node.doc, attr);
+    if(!(*attr = find_attr_ref_in_list(This, ref, list_pos))) {
+        hres = HTMLDOMAttribute_Create(ref->name, This->elem, ref->id, This->elem->node.doc, attr);
         if(FAILED(hres))
             return hres;
     }
@@ -7777,7 +8322,7 @@ static HRESULT WINAPI HTMLAttributeCollection_get_length(IHTMLAttributeCollectio
     TRACE("(%p)->(%p)\n", This, p);
 
     *p = -1;
-    hres = get_attr_dispid_by_idx(This, p, NULL);
+    hres = get_attr_ref_by_idx(This, p, NULL);
     return hres;
 }
 
@@ -7794,17 +8339,17 @@ static HRESULT WINAPI HTMLAttributeCollection_item(IHTMLAttributeCollection *ifa
 {
     HTMLAttributeCollection *This = impl_from_IHTMLAttributeCollection(iface);
     HTMLDOMAttribute *attr;
-    DISPID id;
+    attr_ref_t ref;
     HRESULT hres;
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_variant(name), ppItem);
 
     switch(V_VT(name)) {
     case VT_I4:
-        hres = get_attr_dispid_by_idx(This, &V_I4(name), &id);
+        hres = get_attr_ref_by_idx(This, &V_I4(name), &ref);
         break;
     case VT_BSTR:
-        hres = get_attr_dispid_by_name(This, V_BSTR(name), &id);
+        hres = get_attr_ref_by_name(This, V_BSTR(name), &ref);
         break;
     default:
         FIXME("unsupported name %s\n", debugstr_variant(name));
@@ -7815,7 +8360,7 @@ static HRESULT WINAPI HTMLAttributeCollection_item(IHTMLAttributeCollection *ifa
     if(FAILED(hres))
         return hres;
 
-    hres = get_domattr(This, id, NULL, &attr);
+    hres = get_domattr(This, &ref, NULL, &attr);
     if(FAILED(hres))
         return hres;
 
@@ -7849,12 +8394,12 @@ static HRESULT WINAPI HTMLAttributeCollection2_getNamedItem(IHTMLAttributeCollec
 {
     HTMLAttributeCollection *This = impl_from_IHTMLAttributeCollection2(iface);
     HTMLDOMAttribute *attr;
-    DISPID id;
+    attr_ref_t ref;
     HRESULT hres;
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_w(bstrName), newretNode);
 
-    hres = get_attr_dispid_by_name(This, bstrName, &id);
+    hres = get_attr_ref_by_name(This, bstrName, &ref);
     if(hres == DISP_E_UNKNOWNNAME) {
         *newretNode = NULL;
         return S_OK;
@@ -7862,7 +8407,7 @@ static HRESULT WINAPI HTMLAttributeCollection2_getNamedItem(IHTMLAttributeCollec
         return hres;
     }
 
-    hres = get_domattr(This, id, NULL, &attr);
+    hres = get_domattr(This, &ref, NULL, &attr);
     if(FAILED(hres))
         return hres;
 
@@ -7934,18 +8479,18 @@ static HRESULT WINAPI HTMLAttributeCollection3_item(IHTMLAttributeCollection3 *i
 {
     HTMLAttributeCollection *This = impl_from_IHTMLAttributeCollection3(iface);
     HTMLDOMAttribute *attr;
-    DISPID id;
+    attr_ref_t ref;
     HRESULT hres;
 
     TRACE("(%p)->(%ld %p)\n", This, index, ppNodeOut);
 
-    hres = get_attr_dispid_by_idx(This, &index, &id);
+    hres = get_attr_ref_by_idx(This, &index, &ref);
     if(hres == DISP_E_UNKNOWNNAME)
         return E_INVALIDARG;
     if(FAILED(hres))
         return hres;
 
-    hres = get_domattr(This, id, NULL, &attr);
+    hres = get_domattr(This, &ref, NULL, &attr);
     if(FAILED(hres))
         return hres;
 
@@ -8170,6 +8715,7 @@ static HRESULT HTMLAttributeCollection_get_dispid(DispatchEx *dispex, const WCHA
 {
     HTMLAttributeCollection *This = HTMLAttributeCollection_from_DispatchEx(dispex);
     HTMLDOMAttribute *attr;
+    attr_ref_t ref;
     LONG pos;
     HRESULT hres;
 
@@ -8216,11 +8762,11 @@ static HRESULT HTMLAttributeCollection_get_dispid(DispatchEx *dispex, const WCHA
         return S_OK;
     }
 
-    hres = get_attr_dispid_by_name(This, name, dispid);
+    hres = get_attr_ref_by_name(This, name, &ref);
     if(FAILED(hres))
         return hres;
 
-    hres = get_domattr(This, *dispid, &pos, &attr);
+    hres = get_domattr(This, &ref, &pos, &attr);
     if(FAILED(hres))
         return hres;
     IHTMLDOMAttribute_Release(&attr->IHTMLDOMAttribute_iface);
@@ -8284,7 +8830,7 @@ static ULONG HTMLAttributeCollection_collection_len(DispatchEx *dispex)
     HTMLAttributeCollection *This = HTMLAttributeCollection_from_DispatchEx(dispex);
     LONG idx = -1;
 
-    return SUCCEEDED(get_attr_dispid_by_idx(This, &idx, NULL)) ? idx : 0;
+    return SUCCEEDED(get_attr_ref_by_idx(This, &idx, NULL)) ? idx : 0;
 }
 
 static HRESULT HTMLAttributeCollection_collection_item(DispatchEx *dispex, ULONG index, IDispatch **p)

@@ -1444,6 +1444,7 @@ static void HTMLInputElement_init_dispex_info(dispex_data_t *info, compat_mode_t
         {DISPID_IHTMLINPUTELEMENT_FORM,                .noattr = TRUE},
         {DISPID_IHTMLINPUTELEMENT_STATUS,              .noattr = TRUE},
         {DISPID_IHTMLINPUTELEMENT_DEFAULTCHECKED,      .noattr = TRUE},
+        {DISPID_IHTMLINPUTELEMENT_DEFAULTVALUE,        .noattr = TRUE},
         {DISPID_IHTMLINPUTELEMENT_COMPLETE,            .noattr = TRUE},
         {DISPID_UNKNOWN}
     };

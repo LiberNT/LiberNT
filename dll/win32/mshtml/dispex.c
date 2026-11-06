@@ -63,6 +63,7 @@ typedef struct {
     USHORT argc;
     USHORT default_value_cnt;
     BOOLEAN noattr;
+    const WCHAR *attr_name;
     VARTYPE prop_vt;
     VARTYPE *arg_types;
     func_arg_info_t *arg_info;
@@ -334,6 +335,7 @@ static void add_func_info(dispex_data_t *data, tid_t tid, const FUNCDESC *desc, 
         info->prop_vt = VT_EMPTY;
         info->hook = hook ? hook->invoke : NULL;
         info->noattr = hook ? hook->noattr : FALSE;
+        info->attr_name = hook ? hook->attr_name : NULL;
     }else {
         SysFreeString(name);
     }
@@ -482,7 +484,7 @@ static HRESULT process_interface(dispex_data_t *data, tid_t tid, ITypeInfo *disp
             }
         }
 
-        if(!hook || hook->invoke || hook->name || hook->noattr)
+        if(!hook || hook->invoke || hook->name || hook->noattr || hook->attr_name)
             add_func_info(data, tid, funcdesc, disp_typeinfo ? disp_typeinfo : typeinfo, hook);
 
         ITypeInfo_ReleaseFuncDesc(typeinfo, funcdesc);
@@ -2560,6 +2562,31 @@ const WCHAR *dispex_builtin_prop_name(DispatchEx *dispex, DISPID id)
     return func->name;
 }
 
+const WCHAR *dispex_builtin_attr_name(DispatchEx *dispex, DISPID id)
+{
+    func_info_t *func;
+    HRESULT hres;
+
+    hres = get_builtin_func(dispex->info, id, &func);
+    assert(SUCCEEDED(hres));
+
+    return func->attr_name ? func->attr_name : func->name;
+}
+
+HRESULT dispex_get_builtin_attr_id(DispatchEx *dispex, const WCHAR *name, DISPID *id)
+{
+    func_info_t *func;
+
+    for(func = dispex->info->funcs; func < dispex->info->funcs + dispex->info->func_cnt; func++) {
+        if(func->attr_name && !wcsicmp(func->attr_name, name)) {
+            *id = func->id;
+            return S_OK;
+        }
+    }
+
+    return DISP_E_UNKNOWNNAME;
+}
+
 static HRESULT WINAPI DispatchEx_GetMemberName(IWineJSDispatchHost *iface, DISPID id, BSTR *pbstrName)
 {
     DispatchEx *This = impl_from_IWineJSDispatchHost(iface);
@@ -2588,7 +2615,7 @@ static HRESULT next_dynamic_id(DispatchEx *dispex, DWORD idx, DISPID *ret_id)
     return S_OK;
 }
 
-HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, DISPID *ret)
+static HRESULT next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, BOOL hidden_props, DISPID *ret)
 {
     func_info_t *func;
     HRESULT hres;
@@ -2613,7 +2640,8 @@ HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, D
         }
 
         while(func < dispex->info->funcs + dispex->info->func_cnt) {
-            if(enum_all_own_props ? (func->prototype_id == OBJID_NONE) : (func->func_disp_idx == -1)) {
+            if(enum_all_own_props ? (func->prototype_id == OBJID_NONE) :
+               hidden_props ? (func->func_disp_idx < 0) : (func->func_disp_idx == -1)) {
                 *ret = func->id;
                 return S_OK;
             }
@@ -2634,6 +2662,16 @@ HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, D
 
     *ret = DISPID_STARTENUM;
     return S_FALSE;
+}
+
+HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, DISPID *ret)
+{
+    return next_id(dispex, id, enum_all_own_props, FALSE, ret);
+}
+
+HRESULT dispex_next_attr_id(DispatchEx *dispex, DISPID id, DISPID *ret)
+{
+    return next_id(dispex, id, FALSE, TRUE, ret);
 }
 
 static HRESULT WINAPI DispatchEx_GetNextDispID(IWineJSDispatchHost *iface, DWORD grfdex, DISPID id, DISPID *pid)

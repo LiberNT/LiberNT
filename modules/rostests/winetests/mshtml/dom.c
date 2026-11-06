@@ -10950,6 +10950,161 @@ static void test_attr_node(IHTMLDOMAttribute *test_attr, IHTMLDocument2 *doc)
     IHTMLDOMAttribute2_Release(attr);
 }
 
+static void test_attr_collection_builtins_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *name;
+        HRESULT hres;
+    } script_names[] = {
+        { L"role", S_OK },
+        { L"aria-busy", S_OK },
+        { L"aria-level", S_OK },
+        { L"x-ms-acceleratorkey", S_OK },
+        { L"spellcheck", S_OK },
+        { L"oncuechange", S_OK },
+        { L"onmsanimationend", S_OK },
+        { L"dataFld", S_OK },
+        { L"ariaBusy", DISP_E_UNKNOWNNAME },
+        { L"xmsAcceleratorKey", DISP_E_UNKNOWNNAME },
+        { L"hasAttribute", DISP_E_UNKNOWNNAME },
+        { L"onmspointerdown", DISP_E_UNKNOWNNAME },
+        { L"class", DISP_E_UNKNOWNNAME },
+        { L"aria-label", DISP_E_UNKNOWNNAME },
+        { L"implementation", DISP_E_UNKNOWNNAME },
+    };
+    IHTMLAttributeCollection2 *attr_col;
+    IHTMLDatabinding *databinding;
+    IHTMLElement5 *elem5;
+    IHTMLDOMAttribute *attr;
+    IDispatchEx *dispex;
+    VARIANT_BOOL vb;
+    IHTMLElement *elem;
+    IHTMLDOMNode *node;
+    IDispatch *disp;
+    DISPID dispid;
+    HRESULT hres;
+    VARIANT v;
+    short s;
+    BSTR str;
+    unsigned i;
+
+    elem = test_create_elem(doc, L"div");
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLElement5, (void**)&elem5);
+    ok(hres == S_OK, "Could not get IHTMLElement5: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDatabinding, (void**)&databinding);
+    ok(hres == S_OK, "Could not get IHTMLDatabinding: %08lx\n", hres);
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+    for(i = 0; i < ARRAY_SIZE(script_names); i++) {
+        str = SysAllocString(script_names[i].name);
+        hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+        ok(hres == script_names[i].hres, "GetDispID(%s) returned %08lx, expected %08lx\n",
+           wine_dbgstr_w(script_names[i].name), hres, script_names[i].hres);
+        SysFreeString(str);
+    }
+    IDispatchEx_Release(dispex);
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDOMNode, (void**)&node);
+    ok(hres == S_OK, "Could not get IHTMLDOMNode: %08lx\n", hres);
+    hres = IHTMLDOMNode_get_attributes(node, &disp);
+    ok(hres == S_OK, "get_attributes failed: %08lx\n", hres);
+    IHTMLDOMNode_Release(node);
+    hres = IDispatch_QueryInterface(disp, &IID_IHTMLAttributeCollection2, (void**)&attr_col);
+    ok(hres == S_OK, "Could not get IHTMLAttributeCollection2: %08lx\n", hres);
+    IDispatch_Release(disp);
+
+    str = SysAllocString(L"aria-label");
+    hres = IHTMLAttributeCollection2_getNamedItem(attr_col, str, &attr);
+    ok(hres == S_OK, "getNamedItem(aria-label) failed: %08lx\n", hres);
+    ok(attr != NULL, "aria-label attr is NULL\n");
+    SysFreeString(str);
+    if(attr) {
+        test_attr_node_name(attr, L"aria-label");
+        V_VT(&v) = VT_ERROR;
+        hres = IHTMLDOMAttribute_get_nodeValue(attr, &v);
+        ok(hres == S_OK, "get_nodeValue failed: %08lx\n", hres);
+        ok(V_VT(&v) == VT_NULL, "aria-label nodeValue = %s\n", wine_dbgstr_variant(&v));
+        vb = VARIANT_TRUE;
+        hres = IHTMLDOMAttribute_get_specified(attr, &vb);
+        ok(hres == S_OK, "get_specified failed: %08lx\n", hres);
+        ok(vb == VARIANT_FALSE, "aria-label specified = %x\n", vb);
+        IHTMLDOMAttribute_Release(attr);
+    }
+
+    str = SysAllocString(L"class");
+    hres = IHTMLAttributeCollection2_getNamedItem(attr_col, str, &attr);
+    ok(hres == S_OK, "getNamedItem(class) failed: %08lx\n", hres);
+    ok(attr != NULL, "class attr is NULL\n");
+    SysFreeString(str);
+    if(attr) {
+        test_attr_node_name(attr, L"class");
+        V_VT(&v) = VT_ERROR;
+        hres = IHTMLDOMAttribute_get_nodeValue(attr, &v);
+        ok(hres == S_OK, "get_nodeValue failed: %08lx\n", hres);
+        ok(V_VT(&v) == VT_BSTR && !V_BSTR(&v), "class nodeValue = %s\n", wine_dbgstr_variant(&v));
+        VariantClear(&v);
+        IHTMLDOMAttribute_Release(attr);
+    }
+
+    str = SysAllocString(L"className");
+    attr = (void*)0xdeadbeef;
+    hres = IHTMLAttributeCollection2_getNamedItem(attr_col, str, &attr);
+    ok(hres == S_OK, "getNamedItem(className) failed: %08lx\n", hres);
+    ok(!attr, "className attr = %p\n", attr);
+    SysFreeString(str);
+
+    str = (void*)0xdeadbeef;
+    hres = IHTMLElement5_get_role(elem5, &str);
+    ok(hres == S_OK, "get_role failed: %08lx\n", hres);
+    ok(!str, "role = %s\n", wine_dbgstr_w(str));
+
+    str = SysAllocString(L"button");
+    hres = IHTMLElement5_put_role(elem5, str);
+    ok(hres == S_OK, "put_role failed: %08lx\n", hres);
+    SysFreeString(str);
+
+    str = SysAllocString(L"role");
+    hres = IHTMLAttributeCollection2_getNamedItem(attr_col, str, &attr);
+    ok(hres == S_OK, "getNamedItem(role) failed: %08lx\n", hres);
+    SysFreeString(str);
+    if(attr) {
+        test_attr_node_name(attr, L"role");
+        get_attr_node_value(attr, &v, VT_BSTR);
+        ok(!lstrcmpW(V_BSTR(&v), L"button"), "role nodeValue = %s\n", wine_dbgstr_w(V_BSTR(&v)));
+        VariantClear(&v);
+        vb = VARIANT_FALSE;
+        hres = IHTMLDOMAttribute_get_specified(attr, &vb);
+        ok(hres == S_OK, "get_specified failed: %08lx\n", hres);
+        ok(vb == VARIANT_TRUE, "role specified = %x\n", vb);
+        IHTMLDOMAttribute_Release(attr);
+    }
+
+    s = 7;
+    hres = IHTMLElement5_get_ariaLevel(elem5, &s);
+    ok(hres == S_OK, "get_ariaLevel failed: %08lx\n", hres);
+    ok(s == 0, "ariaLevel = %d\n", s);
+
+    hres = IHTMLElement5_put_ariaLevel(elem5, 3);
+    ok(hres == S_OK, "put_ariaLevel failed: %08lx\n", hres);
+    s = 0;
+    hres = IHTMLElement5_get_ariaLevel(elem5, &s);
+    ok(hres == S_OK, "get_ariaLevel failed: %08lx\n", hres);
+    ok(s == 3, "ariaLevel = %d\n", s);
+
+    str = (void*)0xdeadbeef;
+    hres = IHTMLDatabinding_get_dataFld(databinding, &str);
+    ok(hres == S_OK, "get_dataFld failed: %08lx\n", hres);
+    ok(!str, "dataFld = %s\n", wine_dbgstr_w(str));
+
+    IHTMLAttributeCollection2_Release(attr_col);
+    IHTMLDatabinding_Release(databinding);
+    IHTMLElement5_Release(elem5);
+    IHTMLElement_Release(elem);
+}
+
+
 static void test_attr(IHTMLDocument2 *doc, IHTMLElement *elem)
 {
     static const WCHAR *elem_attr_props[] = {
@@ -13939,6 +14094,7 @@ START_TEST(dom)
         run_domtest(doc_blank, test_dom_elements);
         run_domtest(doc_blank, test_about_blank_storage);
         run_domtest(doc_blank, test_attr_collection_builtins);
+        run_domtest(doc_blank, test_attr_collection_builtins_libernt);
         if(is_ie9plus) {
             compat_mode = COMPAT_IE9;
             run_domtest(doc_blank_ie9, test_doc_open);

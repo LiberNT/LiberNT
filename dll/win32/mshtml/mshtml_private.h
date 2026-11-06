@@ -200,6 +200,7 @@ struct constructor;
     XIID(IHTMLCurrentStyle2) \
     XIID(IHTMLCurrentStyle3) \
     XIID(IHTMLCurrentStyle4) \
+    XIID(IHTMLDatabinding) \
     XIID(IHTMLDocument2) \
     XIID(IHTMLDocument3) \
     XIID(IHTMLDocument4) \
@@ -222,6 +223,7 @@ struct constructor;
     XIID(IHTMLElement2) \
     XIID(IHTMLElement3) \
     XIID(IHTMLElement4) \
+    XIID(IHTMLElement5) \
     XIID(IHTMLElement6) \
     XIID(IHTMLElement7) \
     XIID(IHTMLElementCollection) \
@@ -576,6 +578,7 @@ typedef struct {
     dispex_hook_invoke_t invoke;
     const WCHAR *name;
     BOOL noattr;
+    const WCHAR *attr_name;
 } dispex_hook_t;
 
 struct DispatchEx {
@@ -676,10 +679,13 @@ HRESULT dispex_prop_put(DispatchEx *dispex, DISPID id, LCID lcid, VARIANT *v, EX
 HRESULT dispex_get_chain_builtin_id(DispatchEx *dispex, const WCHAR *name, DWORD flags, DISPID *pid);
 HRESULT dispex_get_id(DispatchEx *dispex, const WCHAR *name, DWORD flags, DISPID *pid);
 HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, DISPID *ret);
+HRESULT dispex_next_attr_id(DispatchEx *dispex, DISPID id, DISPID *ret);
 HRESULT dispex_prop_name(DispatchEx *dispex, DISPID id, BSTR *ret);
 HRESULT dispex_define_property(DispatchEx *dispex, const WCHAR *name, DWORD flags, VARIANT *v, DISPID *id);
 HRESULT dispex_index_prop_desc(DispatchEx*,DISPID,struct property_info*);
 const WCHAR *dispex_builtin_prop_name(DispatchEx *dispex, DISPID id);
+const WCHAR *dispex_builtin_attr_name(DispatchEx *dispex, DISPID id);
+HRESULT dispex_get_builtin_attr_id(DispatchEx *dispex, const WCHAR *name, DISPID *id);
 BOOL dispex_builtin_is_noattr(DispatchEx *dispex, DISPID id);
 IWineJSDispatchHost *dispex_outer_iface(DispatchEx *dispex);
 HRESULT get_constructor(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret);
@@ -1088,6 +1094,8 @@ typedef struct {
     IHTMLElement2 IHTMLElement2_iface;
     IHTMLElement3 IHTMLElement3_iface;
     IHTMLElement4 IHTMLElement4_iface;
+    IHTMLElement5 IHTMLElement5_iface;
+    IHTMLDatabinding IHTMLDatabinding_iface;
     IHTMLElement6 IHTMLElement6_iface;
     IHTMLElement7 IHTMLElement7_iface;
     IHTMLUniqueName IHTMLUniqueName_iface;

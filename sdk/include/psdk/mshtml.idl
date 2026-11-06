@@ -11619,6 +11619,210 @@ interface IHTMLUniqueName : IDispatch
     [propget, id(DISPID_IHTMLUNIQUENAME_UNIQUEID), hidden]      \
     BSTR uniqueID()
 
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3051045d-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLElement5 : IDispatch
+{
+    [id(DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTENODE)]
+    HRESULT getAttributeNode([in] BSTR bstrname, [retval, out] IHTMLDOMAttribute2 **ppretAttribute);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_SETATTRIBUTENODE)]
+    HRESULT setAttributeNode([in] IHTMLDOMAttribute2 *pattr, [retval, out] IHTMLDOMAttribute2 **ppretAttribute);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_REMOVEATTRIBUTENODE)]
+    HRESULT removeAttributeNode([in] IHTMLDOMAttribute2 *pattr, [retval, out] IHTMLDOMAttribute2 **ppretAttribute);
+
+    [id(DISPID_IHTMLELEMENT5_HASATTRIBUTE)]
+    HRESULT hasAttribute([in] BSTR name, [retval, out] VARIANT_BOOL *pfHasAttribute);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ROLE), displaybind, bindable]
+    HRESULT role([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ROLE), displaybind, bindable]
+    HRESULT role([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIABUSY), displaybind, bindable]
+    HRESULT ariaBusy([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIABUSY), displaybind, bindable]
+    HRESULT ariaBusy([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIACHECKED), displaybind, bindable]
+    HRESULT ariaChecked([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIACHECKED), displaybind, bindable]
+    HRESULT ariaChecked([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIADISABLED), displaybind, bindable]
+    HRESULT ariaDisabled([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIADISABLED), displaybind, bindable]
+    HRESULT ariaDisabled([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAEXPANDED), displaybind, bindable]
+    HRESULT ariaExpanded([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAEXPANDED), displaybind, bindable]
+    HRESULT ariaExpanded([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAHASPOPUP), displaybind, bindable]
+    HRESULT ariaHaspopup([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAHASPOPUP), displaybind, bindable]
+    HRESULT ariaHaspopup([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAHIDDEN), displaybind, bindable]
+    HRESULT ariaHidden([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAHIDDEN), displaybind, bindable]
+    HRESULT ariaHidden([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAINVALID), displaybind, bindable]
+    HRESULT ariaInvalid([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAINVALID), displaybind, bindable]
+    HRESULT ariaInvalid([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAMULTISELECTABLE), displaybind, bindable]
+    HRESULT ariaMultiselectable([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAMULTISELECTABLE), displaybind, bindable]
+    HRESULT ariaMultiselectable([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAPRESSED), displaybind, bindable]
+    HRESULT ariaPressed([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAPRESSED), displaybind, bindable]
+    HRESULT ariaPressed([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAREADONLY), displaybind, bindable]
+    HRESULT ariaReadonly([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAREADONLY), displaybind, bindable]
+    HRESULT ariaReadonly([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAREQUIRED), displaybind, bindable]
+    HRESULT ariaRequired([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAREQUIRED), displaybind, bindable]
+    HRESULT ariaRequired([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIASECRET), displaybind, bindable]
+    HRESULT ariaSecret([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIASECRET), displaybind, bindable]
+    HRESULT ariaSecret([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIASELECTED), displaybind, bindable]
+    HRESULT ariaSelected([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIASELECTED), displaybind, bindable]
+    HRESULT ariaSelected([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTE)]
+    HRESULT getAttribute([in] BSTR strAttributeName, [retval, out] VARIANT *AttributeValue);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_SETATTRIBUTE)]
+    HRESULT setAttribute([in] BSTR strAttributeName, [in] VARIANT AttributeValue);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_REMOVEATTRIBUTE)]
+    HRESULT removeAttribute([in] BSTR strAttributeName, [retval, out] VARIANT_BOOL *pfSuccess);
+
+    [propget, id(DISPID_IHTMLELEMENT5_IE8_ATTRIBUTES)]
+    HRESULT attributes([retval, out] IHTMLAttributeCollection3 **p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAVALUENOW), displaybind, bindable]
+    HRESULT ariaValuenow([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAVALUENOW), displaybind, bindable]
+    HRESULT ariaValuenow([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAPOSINSET), displaybind, bindable]
+    HRESULT ariaPosinset([in] short v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAPOSINSET), displaybind, bindable]
+    HRESULT ariaPosinset([retval, out] short *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIASETSIZE), displaybind, bindable]
+    HRESULT ariaSetsize([in] short v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIASETSIZE), displaybind, bindable]
+    HRESULT ariaSetsize([retval, out] short *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIALEVEL), displaybind, bindable]
+    HRESULT ariaLevel([in] short v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIALEVEL), displaybind, bindable]
+    HRESULT ariaLevel([retval, out] short *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAVALUEMIN), displaybind, bindable]
+    HRESULT ariaValuemin([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAVALUEMIN), displaybind, bindable]
+    HRESULT ariaValuemin([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAVALUEMAX), displaybind, bindable]
+    HRESULT ariaValuemax([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAVALUEMAX), displaybind, bindable]
+    HRESULT ariaValuemax([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIACONTROLS), displaybind, bindable]
+    HRESULT ariaControls([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIACONTROLS), displaybind, bindable]
+    HRESULT ariaControls([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIADESCRIBEDBY), displaybind, bindable]
+    HRESULT ariaDescribedby([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIADESCRIBEDBY), displaybind, bindable]
+    HRESULT ariaDescribedby([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAFLOWTO), displaybind, bindable]
+    HRESULT ariaFlowto([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAFLOWTO), displaybind, bindable]
+    HRESULT ariaFlowto([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIALABELLEDBY), displaybind, bindable]
+    HRESULT ariaLabelledby([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIALABELLEDBY), displaybind, bindable]
+    HRESULT ariaLabelledby([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAACTIVEDESCENDANT), displaybind, bindable]
+    HRESULT ariaActivedescendant([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAACTIVEDESCENDANT), displaybind, bindable]
+    HRESULT ariaActivedescendant([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAOWNS), displaybind, bindable]
+    HRESULT ariaOwns([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAOWNS), displaybind, bindable]
+    HRESULT ariaOwns([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLELEMENT5_HASATTRIBUTES)]
+    HRESULT hasAttributes([retval, out] VARIANT_BOOL *pfHasAttributes);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIALIVE), displaybind, bindable]
+    HRESULT ariaLive([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIALIVE), displaybind, bindable]
+    HRESULT ariaLive([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIARELEVANT), displaybind, bindable]
+    HRESULT ariaRelevant([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIARELEVANT), displaybind, bindable]
+    HRESULT ariaRelevant([retval, out] BSTR *p);
+}
+
 #define WINE_IHTMLELEMENT5_DISPINTERFACE_DECL                           \
     [id(DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTENODE)]                     \
     IHTMLDOMAttribute2 *ie8_getAttributeNode([in] BSTR bstrname);       \
