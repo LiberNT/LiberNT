@@ -23,6 +23,7 @@ extern void func_DisplayChangeMaximized(void);
 extern void func_DisplayDeviceAttach(void);
 extern void func_DisplayDeviceRemoval(void);
 extern void func_DisplayTopology(void);
+extern void func_ForegroundLastInput(void);
 extern void func_RemoteDisplayAdapter(void);
 extern void func_CreateIconFromResourceEx(void);
 extern void func_CoveredWindow(void);
@@ -192,6 +193,7 @@ const struct test winetest_testlist[] =
     { "DisplayDeviceAttach", func_DisplayDeviceAttach },
     { "DisplayDeviceRemoval", func_DisplayDeviceRemoval },
     { "DisplayTopology", func_DisplayTopology },
+    { "ForegroundLastInput", func_ForegroundLastInput },
     { "RemoteDisplayAdapter", func_RemoteDisplayAdapter },
     { "CreateIconFromResourceEx", func_CreateIconFromResourceEx },
     { "CoveredWindow", func_CoveredWindow },
