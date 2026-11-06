@@ -19,6 +19,7 @@ extern void func_CursorPresentation(void);
 extern void func_CreateDialog(void);
 extern void func_DisplayChangeBroadcast(void);
 extern void func_DisplayChangeDesktops(void);
+extern void func_DisplayChangeMaximized(void);
 extern void func_DisplayDeviceAttach(void);
 extern void func_DisplayDeviceRemoval(void);
 extern void func_DisplayTopology(void);
@@ -179,6 +180,7 @@ const struct test winetest_testlist[] =
     { "CreateDialog", func_CreateDialog },
     { "DisplayChangeBroadcast", func_DisplayChangeBroadcast },
     { "DisplayChangeDesktops", func_DisplayChangeDesktops },
+    { "DisplayChangeMaximized", func_DisplayChangeMaximized },
     { "DisplayDeviceAttach", func_DisplayDeviceAttach },
     { "DisplayDeviceRemoval", func_DisplayDeviceRemoval },
     { "DisplayTopology", func_DisplayTopology },
