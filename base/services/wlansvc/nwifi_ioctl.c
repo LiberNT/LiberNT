@@ -355,6 +355,24 @@ NwifiQueryState(ULONG InterfaceIndex, ULONG64 UpperLuid,
  * WLAN ACM notification (delivered to subscribed clients by notify.c).
  */
 
+static WLAN_REASON_CODE
+NwifiReasonFromStatus(NDIS_STATUS Status)
+{
+    switch (Status)
+    {
+        case NDIS_STATUS_DOT11_ASSOCIATION_COMPLETION:
+            return WLAN_REASON_CODE_ASSOCIATION_FAILURE;
+        case NDIS_STATUS_DOT11_CONNECTION_COMPLETION:
+            return WLAN_REASON_CODE_NETWORK_NOT_AVAILABLE;
+        case NWIFI_STATUS_KEY_START_TIMEOUT:
+            return WLAN_REASON_CODE_MSMSEC_KEY_START_TIMEOUT;
+        case NWIFI_STATUS_KEY_SUCCESS_TIMEOUT:
+            return WLAN_REASON_CODE_MSMSEC_KEY_SUCCESS_TIMEOUT;
+        default:
+            return WLAN_REASON_CODE_UNKNOWN;
+    }
+}
+
 /* Map a kernel notification onto its WLAN ACM code + signalled interface. */
 static VOID
 NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
@@ -422,19 +440,12 @@ NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
                 }
                 else
                 {
-                    WLAN_REASON_CODE reason = WLAN_REASON_CODE_UNKNOWN;
-
-                    if (pNotif->StatusCode == NDIS_STATUS_DOT11_ASSOCIATION_COMPLETION)
-                        reason = WLAN_REASON_CODE_ASSOCIATION_FAILURE;
-                    else if (pNotif->StatusCode == NDIS_STATUS_DOT11_CONNECTION_COMPLETION)
-                        reason = WLAN_REASON_CODE_NETWORK_NOT_AVAILABLE;
-
                     WlanSvcIndicateConnection(iface,
                         wlan_notification_acm_connection_attempt_fail,
                         (iface->ConnectedProfile[0] != L'\0')
                             ? wlan_connection_mode_profile
                             : wlan_connection_mode_discovery_unsecure,
-                        iface->ConnectedProfile, reason);
+                        iface->ConnectedProfile, NwifiReasonFromStatus(pNotif->StatusCode));
                 }
             }
             break;
@@ -453,7 +464,8 @@ NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
                 iface->LinkQuality = 0;
                 if (!wasDisconnected)
                 {
-                    WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_DISCONNECTED, WLAN_REASON_CODE_UNKNOWN);
+                    WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_DISCONNECTED,
+                                       NwifiReasonFromStatus(pNotif->StatusCode));
                     WlanSvcIndicateAcm(iface, wlan_notification_acm_disconnected);
                 }
             }

@@ -1139,6 +1139,21 @@ NwifiSupplicantResetSession(
     NdisReleaseSpinLock(&Msm->Lock);
 }
 
+BOOLEAN
+NwifiSupplicantKeyExchangeStarted(
+    _In_ PNWIFI_MSM Msm)
+{
+    PNWIFI_SUPPLICANT Sup;
+    BOOLEAN Started = FALSE;
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Sup = Msm->Supplicant;
+    if (Sup != NULL && Sup->Initialised)
+        Started = RsnaGetState(&Sup->Ctx) != RSNA_STATE_IDLE;
+    NdisReleaseSpinLock(&Msm->Lock);
+    return Started;
+}
+
 /* Fully free the supplicant object.  Only safe once the data path is
  * quiesced (NwifiMsmDestroy at unbind). */
 VOID
