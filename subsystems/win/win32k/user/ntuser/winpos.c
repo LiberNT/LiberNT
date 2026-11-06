@@ -3540,6 +3540,37 @@ void IntForceMinimizeWindow(PWND pWnd)
         co_WinPosActivateOtherWindow(pWnd);
 }
 
+BOOL FASTCALL
+co_WinPosUpdateMaximized(PWND Wnd)
+{
+   POINT Size, Pos;
+
+   ASSERT_REFS_CO(Wnd);
+   if ((Wnd->style & (WS_MAXIMIZE | WS_MINIMIZE | WS_CHILD)) != WS_MAXIMIZE)
+      return FALSE;
+   co_WinPosGetMinMaxInfo(Wnd, &Size, &Pos, NULL, NULL);
+   return co_WinPosSetWindowPos(Wnd, NULL, Pos.x, Pos.y, Size.x, Size.y, SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+VOID FASTCALL
+IntUpdateMaximizedWindows(PWND DesktopWindow)
+{
+   HWND *List;
+   PWND Child;
+   ULONG i;
+
+   List = IntWinListChildren(DesktopWindow);
+   if (!List)
+      return;
+   for (i = 0; List[i]; i++)
+   {
+      Child = UserGetWindowObject(List[i]);
+      if (Child && (Child->style & (WS_MAXIMIZE | WS_MINIMIZE | WS_CHILD)) == WS_MAXIMIZE)
+         co_IntSendMessageNoWait(List[i], WM_ASYNC_UPDATEMAXIMIZED, 0, 0);
+   }
+   ExFreePoolWithTag(List, USERTAG_WINDOWLIST);
+}
+
 /*
    ShowWindow does not set SWP_FRAMECHANGED!!! Fix wine msg test_SetParent:WmSetParentSeq_2:23 wParam bits!
  */

@@ -1103,6 +1103,7 @@ UserNotifyDesktopDisplayChange(
                                    WM_DISPLAYCHANGE,
                                    gpsi->BitCount,
                                    MAKELONG(gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN]));
+    IntUpdateMaximizedWindows(pdesk->pDeskInfo->spwnd);
 }
 
 static
@@ -1125,6 +1126,7 @@ UserNotifyDisplayChange(
                           WM_DISPLAYCHANGE,
                           gpsi->BitCount,
                           MAKELONG(gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN]));
+    IntUpdateMaximizedWindows(UserGetDesktopWindow());
 
     ERR("BitCount New %d Orig %d\n", gpsi->BitCount, OrigBC);
 
