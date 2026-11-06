@@ -729,6 +729,18 @@ LxCreateWindow(
     Window->Applying = TRUE;
     Window->Hwnd = CreateWindowExW(ExStyle, LX_HOST_CLASS, L"", Style, X, Y, Width, Height, Owner, NULL,
                                    GetModuleHandleW(NULL), Window);
+    if ((Window->Hwnd != NULL) && !(Message->Flags & LX_WIN_FLAG_POPUP))
+    {
+        RECT Placed;
+        POINT Origin;
+
+        GetWindowRect(Window->Hwnd, &Placed);
+        Origin.x = Placed.left;
+        Origin.y = Placed.top;
+        LxClampToWorkArea(&Origin, Placed.right - Placed.left, Placed.bottom - Placed.top);
+        if ((Origin.x != Placed.left) || (Origin.y != Placed.top))
+            SetWindowPos(Window->Hwnd, NULL, Origin.x, Origin.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     Window->Applying = FALSE;
     if (Window->Hwnd == NULL)
     {
