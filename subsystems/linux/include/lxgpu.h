@@ -22,9 +22,14 @@
 #define LX_GPU_RES_UNREF            5
 #define LX_GPU_SUBMIT               6
 #define LX_GPU_TRANSFER             7
+#define LX_GPU_BLOB_CREATE          8
 
 #define LX_GPU_REPLY                100
 #define LX_GPU_DONE                 101
+#define LX_GPU_RING_DONE            102
+
+#define LX_GPU_CAPSET_VIRGL2        2
+#define LX_GPU_CAPSET_VENUS         4
 
 typedef struct _LX_GPU_HEADER
 {
@@ -62,7 +67,7 @@ typedef struct _LX_GPU_RES_MSG
     ULONG LastLevel;
     ULONG NrSamples;
     ULONG Flags;
-    ULONG Reserved;
+    ULONG CtxId;
     ULONG64 Size;
     ULONG64 Section;
 } LX_GPU_RES_MSG, *PLX_GPU_RES_MSG;
@@ -73,7 +78,7 @@ typedef struct _LX_GPU_SUBMIT_MSG
     ULONG CtxId;
     ULONG Length;
     ULONG ResCount;
-    ULONG Reserved;
+    ULONG RingIdx;
 } LX_GPU_SUBMIT_MSG, *PLX_GPU_SUBMIT_MSG;
 
 typedef struct _LX_GPU_TRANSFER_MSG
@@ -88,6 +93,32 @@ typedef struct _LX_GPU_TRANSFER_MSG
     ULONG Box[6];
     ULONG64 Offset;
 } LX_GPU_TRANSFER_MSG, *PLX_GPU_TRANSFER_MSG;
+
+typedef struct _LX_GPU_BLOB_MSG
+{
+    LX_GPU_HEADER Header;
+    ULONG CtxId;
+    ULONG ResId;
+    ULONG BlobMem;
+    ULONG BlobFlags;
+    ULONG64 BlobId;
+    ULONG64 Size;
+} LX_GPU_BLOB_MSG, *PLX_GPU_BLOB_MSG;
+
+typedef struct _LX_GPU_BLOB_REPLY
+{
+    ULONG64 Section;
+    ULONG MapInfo;
+    ULONG Reserved;
+} LX_GPU_BLOB_REPLY, *PLX_GPU_BLOB_REPLY;
+
+typedef struct _LX_GPU_RING_DONE_MSG
+{
+    LX_GPU_HEADER Header;
+    ULONG CtxId;
+    ULONG RingIdx;
+    ULONG64 FenceId;
+} LX_GPU_RING_DONE_MSG, *PLX_GPU_RING_DONE_MSG;
 
 typedef struct _LX_GPU_DONE_MSG
 {

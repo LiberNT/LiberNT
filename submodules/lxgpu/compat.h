@@ -11,7 +11,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#define CLOCK_REALTIME 0
 #define CLOCK_MONOTONIC 1
 #define strtok_r strtok_s
 
 int clock_gettime(int Clock, struct timespec *Time);
+int clock_nanosleep(int Clock, int Flags, const struct timespec *Request, struct timespec *Remain);
+void *lxgpu_vulkan_loader(void);
