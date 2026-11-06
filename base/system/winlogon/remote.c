@@ -678,17 +678,14 @@ RemoteConsoleThread(
     if (!Overlapped.hEvent)
         return GetLastError();
 
-    for (;;)
-    {
-        Pipe = CreateNamedPipeW(PipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
-                                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-                                1, sizeof(Message), sizeof(Message), 0, &Attributes);
-        if (Pipe == INVALID_HANDLE_VALUE)
-        {
-            ERR("WL: Cannot create %S: %lu\n", PipeName, GetLastError());
-            break;
-        }
+    Pipe = CreateNamedPipeW(PipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                            1, sizeof(Message), sizeof(Message), 0, &Attributes);
+    if (Pipe == INVALID_HANDLE_VALUE)
+        ERR("WL: Cannot create %S: %lu\n", PipeName, GetLastError());
 
+    while (Pipe != INVALID_HANDLE_VALUE)
+    {
         ResetEvent(Overlapped.hEvent);
         bConnected = ConnectNamedPipe(Pipe, &Overlapped) || GetLastError() == ERROR_PIPE_CONNECTED ||
                      (GetLastError() == ERROR_IO_PENDING && GetOverlappedResult(Pipe, &Overlapped, &Bytes, TRUE));
@@ -709,11 +706,16 @@ RemoteConsoleThread(
             RtlZeroMemory(&Message, sizeof(Message));
             Message.Code = REMOTE_CONSOLE_DISCONNECT;
             SendMessageW(Session->SASWindow, WLX_WM_REMOTE_CONSOLE, 0, (LPARAM)&Message);
-            DisconnectNamedPipe(Pipe);
         }
-        CloseHandle(Pipe);
+        if (!DisconnectNamedPipe(Pipe) && GetLastError() != ERROR_PIPE_NOT_CONNECTED)
+        {
+            ERR("WL: Cannot reset %S: %lu\n", PipeName, GetLastError());
+            break;
+        }
     }
 
+    if (Pipe != INVALID_HANDLE_VALUE)
+        CloseHandle(Pipe);
     CloseHandle(Overlapped.hEvent);
     LocalFree(Attributes.lpSecurityDescriptor);
     return 0;

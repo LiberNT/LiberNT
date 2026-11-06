@@ -562,6 +562,8 @@ static BOOL ConnectRemoteConsole(DESKTOP_CONTEXT *ctx)
     _snwprintf(pipe, ARRAYSIZE(pipe), REMOTE_CONSOLE_PIPE_FORMAT, session);
     pipe[ARRAYSIZE(pipe) - 1] = 0;
     RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    if (RemoteConsole == INVALID_HANDLE_VALUE && GetLastError() == ERROR_PIPE_BUSY && WaitNamedPipeW(pipe, 10000))
+        RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (RemoteConsole == INVALID_HANDLE_VALUE)
     {
         Log("Cannot reach Winlogon: %lu", GetLastError());
