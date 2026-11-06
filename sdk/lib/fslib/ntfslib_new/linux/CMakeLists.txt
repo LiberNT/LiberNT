@@ -603,4 +603,10 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
                 "${XXD_EXECUTABLE}"
         )
     endif()
+    add_test(
+        NAME ntfslib_linux_case_sensitive
+        COMMAND /bin/sh
+            "${CMAKE_CURRENT_LIST_DIR}/tests/case_sensitive_smoke.sh"
+            "$<TARGET_FILE:ntfslib_fuse>"
+    )
 endif()
