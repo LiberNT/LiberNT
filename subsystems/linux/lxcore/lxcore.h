@@ -1418,6 +1418,7 @@ typedef struct _LX_SQUASHFS_INODE
     ULONG FragmentOffset;
     ULONG64 ListBlock;
     ULONG ListOffset;
+    ULONG Xattr;
 } LX_SQUASHFS_INODE, *PLX_SQUASHFS_INODE;
 
 typedef LONG (*PLX_SQUASHFS_DIR_ROUTINE)(_In_ PVOID Context, _In_reads_(Length) PCSTR Name, _In_ ULONG Length,
@@ -1430,6 +1431,8 @@ VOID LxSquashfsRemoveUser(_In_ PLX_SQUASHFS Squash);
 ULONG64 LxSquashfsRoot(_In_ PLX_SQUASHFS Squash);
 LONG LxSquashfsReadInode(_In_ PLX_SQUASHFS Squash, _In_ ULONG64 Inode, _Out_ PLX_SQUASHFS_INODE Info);
 LONG LxSquashfsReadLink(_In_ PLX_SQUASHFS Squash, _In_ PLX_SQUASHFS_INODE Info, _Out_ PSTR *Target);
+LONG LxSquashfsReadXattrs(_In_ PLX_SQUASHFS Squash, _In_ PLX_SQUASHFS_INODE Info,
+                          _Outptr_result_bytebuffer_maybenull_(*Length) PUCHAR *Result, _Out_ PULONG Length);
 LONG LxSquashfsListDirectory(_In_ PLX_SQUASHFS Squash, _In_ ULONG64 Inode, _In_ PLX_SQUASHFS_DIR_ROUTINE Routine,
                              _In_ PVOID Context);
 LONG LxSquashfsReadFile(_In_ PLX_SQUASHFS Squash, _In_ ULONG64 Inode, _Out_writes_bytes_(Capacity) PUCHAR View,
