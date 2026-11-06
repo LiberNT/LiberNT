@@ -39,6 +39,7 @@ typedef struct {
     HTMLElement element;
 
     IHTMLBodyElement IHTMLBodyElement_iface;
+    IHTMLBodyElement2 IHTMLBodyElement2_iface;
     IHTMLTextContainer IHTMLTextContainer_iface;
 
     nsIDOMHTMLBodyElement *nsbody;
@@ -509,15 +510,19 @@ static HRESULT WINAPI HTMLBodyElement_get_onload(IHTMLBodyElement *iface, VARIAN
 static HRESULT WINAPI HTMLBodyElement_put_onunload(IHTMLBodyElement *iface, VARIANT v)
 {
     HTMLBodyElement *This = impl_from_IHTMLBodyElement(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_variant(&v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return set_node_event(&This->element.node, EVENTID_UNLOAD, &v);
 }
 
 static HRESULT WINAPI HTMLBodyElement_get_onunload(IHTMLBodyElement *iface, VARIANT *p)
 {
     HTMLBodyElement *This = impl_from_IHTMLBodyElement(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return get_node_event(&This->element.node, EVENTID_UNLOAD, p);
 }
 
 static HRESULT WINAPI HTMLBodyElement_put_scroll(IHTMLBodyElement *iface, BSTR v)
@@ -597,15 +602,19 @@ static HRESULT WINAPI HTMLBodyElement_get_onselect(IHTMLBodyElement *iface, VARI
 static HRESULT WINAPI HTMLBodyElement_put_onbeforeunload(IHTMLBodyElement *iface, VARIANT v)
 {
     HTMLBodyElement *This = impl_from_IHTMLBodyElement(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_variant(&v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return set_node_event(&This->element.node, EVENTID_BEFOREUNLOAD, &v);
 }
 
 static HRESULT WINAPI HTMLBodyElement_get_onbeforeunload(IHTMLBodyElement *iface, VARIANT *p)
 {
     HTMLBodyElement *This = impl_from_IHTMLBodyElement(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return get_node_event(&This->element.node, EVENTID_BEFOREUNLOAD, p);
 }
 
 static HRESULT WINAPI HTMLBodyElement_createTextRange(IHTMLBodyElement *iface, IHTMLTxtRange **range)
@@ -680,6 +689,64 @@ static const IHTMLBodyElementVtbl HTMLBodyElementVtbl = {
     HTMLBodyElement_put_onbeforeunload,
     HTMLBodyElement_get_onbeforeunload,
     HTMLBodyElement_createTextRange
+};
+
+static inline HTMLBodyElement *impl_from_IHTMLBodyElement2(IHTMLBodyElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLBodyElement, IHTMLBodyElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLBodyElement2, IHTMLBodyElement2,
+                      impl_from_IHTMLBodyElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLBodyElement2_put_onbeforeprint(IHTMLBodyElement2 *iface, VARIANT v)
+{
+    HTMLBodyElement *This = impl_from_IHTMLBodyElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return set_node_event(&This->element.node, EVENTID_BEFOREPRINT, &v);
+}
+
+static HRESULT WINAPI HTMLBodyElement2_get_onbeforeprint(IHTMLBodyElement2 *iface, VARIANT *p)
+{
+    HTMLBodyElement *This = impl_from_IHTMLBodyElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return get_node_event(&This->element.node, EVENTID_BEFOREPRINT, p);
+}
+
+static HRESULT WINAPI HTMLBodyElement2_put_onafterprint(IHTMLBodyElement2 *iface, VARIANT v)
+{
+    HTMLBodyElement *This = impl_from_IHTMLBodyElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return set_node_event(&This->element.node, EVENTID_AFTERPRINT, &v);
+}
+
+static HRESULT WINAPI HTMLBodyElement2_get_onafterprint(IHTMLBodyElement2 *iface, VARIANT *p)
+{
+    HTMLBodyElement *This = impl_from_IHTMLBodyElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return get_node_event(&This->element.node, EVENTID_AFTERPRINT, p);
+}
+
+static const IHTMLBodyElement2Vtbl HTMLBodyElement2Vtbl = {
+    HTMLBodyElement2_QueryInterface,
+    HTMLBodyElement2_AddRef,
+    HTMLBodyElement2_Release,
+    HTMLBodyElement2_GetTypeInfoCount,
+    HTMLBodyElement2_GetTypeInfo,
+    HTMLBodyElement2_GetIDsOfNames,
+    HTMLBodyElement2_Invoke,
+    HTMLBodyElement2_put_onbeforeprint,
+    HTMLBodyElement2_get_onbeforeprint,
+    HTMLBodyElement2_put_onafterprint,
+    HTMLBodyElement2_get_onafterprint
 };
 
 static inline HTMLBodyElement *impl_from_IHTMLTextContainer(IHTMLTextContainer *iface)
@@ -785,27 +852,38 @@ static const IHTMLTextContainerVtbl HTMLTextContainerVtbl = {
     HTMLTextContainer_get_onscroll
 };
 
-static inline HTMLBodyElement *impl_from_HTMLDOMNode(HTMLDOMNode *iface)
+EventTarget *get_window_event_prop_target(HTMLDOMNode *node, int eid)
 {
-    return CONTAINING_RECORD(iface, HTMLBodyElement, element.node);
-}
+    HTMLDocumentNode *doc = node->doc;
+    cpp_bool connected = FALSE;
+    nsresult nsres;
 
-static EventTarget *HTMLBodyElement_get_event_prop_target(HTMLDOMNode *iface, int event_id)
-{
-    HTMLBodyElement *This = impl_from_HTMLDOMNode(iface);
+    /* FIXME: in IE9+ a detached element's onscroll reads VT_EMPTY while its put is kept. */
+    if(eid == EVENTID_SCROLL && dispex_compat_mode(&node->event_target.dispex) >= COMPAT_MODE_IE9)
+        return &node->event_target;
 
-    switch(event_id) {
+    switch(eid) {
+    case EVENTID_AFTERPRINT:
+    case EVENTID_BEFOREPRINT:
+    case EVENTID_BEFOREUNLOAD:
     case EVENTID_BLUR:
-    case EVENTID_ERROR:
     case EVENTID_FOCUS:
     case EVENTID_LOAD:
+    case EVENTID_PAGEHIDE:
+    case EVENTID_PAGESHOW:
+    case EVENTID_RESIZE:
     case EVENTID_SCROLL:
-        return This->element.node.doc && This->element.node.doc->window
-            ? &This->element.node.doc->window->event_target
-            : &This->element.node.event_target;
+    case EVENTID_UNLOAD:
+        break;
     default:
-        return &This->element.node.event_target;
+        return &node->event_target;
     }
+
+    if(!doc || !doc->window)
+        return &node->event_target;
+
+    nsres = nsIDOMNode_Contains(doc->node.nsnode, node->nsnode, &connected);
+    return NS_SUCCEEDED(nsres) && connected ? &doc->window->event_target : NULL;
 }
 
 static BOOL HTMLBodyElement_is_text_edit(HTMLDOMNode *iface)
@@ -834,6 +912,8 @@ static void *HTMLBodyElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLBodyElement, riid))
         return &This->IHTMLBodyElement_iface;
+    if(IsEqualGUID(&IID_IHTMLBodyElement2, riid))
+        return &This->IHTMLBodyElement2_iface;
     if(IsEqualGUID(&IID_IHTMLTextContainer, riid))
         return &This->IHTMLTextContainer_iface;
 
@@ -868,7 +948,7 @@ static const NodeImplVtbl HTMLBodyElementImplVtbl = {
     .cpc_entries           = HTMLBodyElement_cpc,
     .clone                 = HTMLElement_clone,
     .get_attr_col          = HTMLElement_get_attr_col,
-    .get_event_prop_target = HTMLBodyElement_get_event_prop_target,
+    .get_event_prop_target = get_window_event_prop_target,
     .is_text_edit          = HTMLBodyElement_is_text_edit,
     .is_settable           = HTMLBodyElement_is_settable
 };
@@ -911,6 +991,7 @@ HRESULT HTMLBodyElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTM
         return E_OUTOFMEMORY;
 
     ret->IHTMLBodyElement_iface.lpVtbl = &HTMLBodyElementVtbl;
+    ret->IHTMLBodyElement2_iface.lpVtbl = &HTMLBodyElement2Vtbl;
     ret->IHTMLTextContainer_iface.lpVtbl = &HTMLTextContainerVtbl;
     ret->element.node.vtbl = &HTMLBodyElementImplVtbl;
 
