@@ -37,7 +37,7 @@
 #define VWIFI_BEACON_PERIOD         100
 
 /* Maximum number of simulated BSS entries. */
-#define VWIFI_MAX_BSS               2
+#define VWIFI_MAX_BSS               3
 
 #define VWIFI_MAX_JOBS              8
 
@@ -57,6 +57,7 @@ typedef struct _VWIFI_FAKE_BSS
     ULONG LinkQuality;              /* 0..100                                */
     USHORT CapabilityInformation;  /* 802.11 capability bits                */
     DOT11_AUTH_ALGORITHM AuthAlgorithm; /* what this AP requires            */
+    BOOLEAN RoamAfterConnect;
 } VWIFI_FAKE_BSS, *PVWIFI_FAKE_BSS;
 
 typedef enum _VWIFI_CONN_STATE
@@ -73,7 +74,8 @@ typedef enum _VWIFI_JOB
     VWifiJobNone = 0,
     VWifiJobScan,           /* finish a scan -> SCAN_CONFIRM                  */
     VWifiJobConnect,        /* assoc-start/assoc-complete/connect-complete   */
-    VWifiJobDisconnect      /* DISASSOCIATION + link down                    */
+    VWifiJobDisconnect,     /* DISASSOCIATION + link down                    */
+    VWifiJobRoam
 } VWIFI_JOB;
 
 /* dot11 station configuration accepted/stored from OIDs. */
