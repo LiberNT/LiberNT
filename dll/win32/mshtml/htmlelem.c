@@ -106,7 +106,7 @@ static const tag_desc_t tag_descs[] = {
     {L"FOOTER",         HTMLElement_Ctor},
     {L"FORM",           HTMLFormElement_Create},
     {L"FRAME",          HTMLFrameElement_Create},
-    {L"FRAMESET",       HTMLElement_Ctor},
+    {L"FRAMESET",       HTMLFrameSetElement_Create},
     {L"H1",             HTMLHeaderElement_Create, para_attr_only_names},
     {L"H2",             HTMLHeaderElement_Create, para_attr_only_names},
     {L"H3",             HTMLHeaderElement_Create, para_attr_only_names},

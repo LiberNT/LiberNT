@@ -4596,6 +4596,11 @@ sync_test("prototype props", function() {
         "allowTransparency", "borderColor", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "getSVGDocument", "height", "onload",
         ["onreadystatechange",11], ["readyState",11], "security", "width"
     ]);
+    check(HTMLFrameSetElement, [
+        "border", "borderColor", "cols", "frameBorder", "frameSpacing", "name", "onafterprint", "onbeforeprint", "onbeforeunload", "onblur",
+        "onerror", "onfocus", "onhashchange", "onload", "onmessage", "onoffline", "ononline", ["onpagehide",11], ["onpageshow",11], "onresize",
+        "onstorage", "onunload", "rows"
+    ], [ "onblur", "onerror", "onfocus", "onload", ["onpagehide",11], ["onpageshow",11], "onresize" ]);
     check(HTMLHeadElement, [ "profile" ]);
     check(HTMLHeadingElement, [ "align", "clear" ]);
     check(HTMLHtmlElement, [ "version" ]);
@@ -4935,7 +4940,7 @@ async_test("window own props", function() {
             "DragEvent", ["ErrorEvent",10], "EventException", ["EXT_texture_filter_anisotropic",11], ["File",10], ["FileList",10], ["FileReader",10],
             "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement",
             "HTMLBGSoundElement", "HTMLCanvasElement", ["HTMLDataListElement",10], "HTMLDDElement", "HTMLDirectoryElement",
-            "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLFrameSetElement", "HTMLHRElement", "HTMLIsIndexElement",
+            "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLHRElement", "HTMLIsIndexElement",
             "HTMLLegendElement", "HTMLLIElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLMenuElement", "HTMLNextIdElement", "HTMLOListElement",
             "HTMLOptGroupElement", "HTMLParamElement", ["HTMLProgressElement",10], "HTMLSourceElement",
             "HTMLSpanElement", "HTMLTableCaptionElement", "HTMLTableColElement", "HTMLTableHeaderCellElement", "HTMLTableSectionElement", ["HTMLTrackElement",10], "HTMLUListElement",

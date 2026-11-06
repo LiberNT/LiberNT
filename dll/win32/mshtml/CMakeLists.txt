@@ -24,6 +24,7 @@ list(APPEND SOURCE
     htmlevent.c
     htmlform.c
     htmlframe.c
+    htmlframeset.c
     htmlgeneric.c
     htmlhead.c
     htmlimg.c

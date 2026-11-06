@@ -29292,6 +29292,273 @@ coclass HTMLIFrame
 }
 
 /*****************************************************************************
+ *    IHTMLFrameSetElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f319-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameSetElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    HRESULT rows([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    HRESULT rows([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    HRESULT cols([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    HRESULT cols([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    HRESULT border([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    HRESULT border([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    HRESULT frameBorder([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    HRESULT frameBorder([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    HRESULT frameSpacing([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    HRESULT frameSpacing([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    HRESULT name([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    HRESULT name([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONLOAD), displaybind, bindable]
+    HRESULT onload([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONLOAD), displaybind, bindable]
+    HRESULT onload([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    HRESULT onunload([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    HRESULT onunload([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    HRESULT onbeforeunload([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    HRESULT onbeforeunload([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameSetElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f5c6-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameSetElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    HRESULT onbeforeprint([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    HRESULT onbeforeprint([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    HRESULT onafterprint([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    HRESULT onafterprint([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameSetElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(30510796-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameSetElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    HRESULT onhashchange([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    HRESULT onhashchange([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    HRESULT onmessage([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    HRESULT onmessage([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    HRESULT onoffline([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    HRESULT onoffline([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    HRESULT ononline([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    HRESULT ononline([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    HRESULT onstorage([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    HRESULT onstorage([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLFrameSetSite dispinterface
+ */
+[
+    hidden,
+    uuid(3050f514-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLFrameSetSite
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    void rows(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    BSTR rows();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    void cols(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    BSTR cols();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    void border(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    VARIANT border();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    void borderColor(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    VARIANT borderColor();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    void frameBorder(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    BSTR frameBorder();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    void frameSpacing(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    VARIANT frameSpacing();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    void name(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    BSTR name();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    void onunload(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    VARIANT onunload();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    void onbeforeunload(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    VARIANT onbeforeunload();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    void onbeforeprint(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    VARIANT onbeforeprint();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    void onafterprint(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    VARIANT onafterprint();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    void onhashchange(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    VARIANT onhashchange();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    void onmessage(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    VARIANT onmessage();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    void onoffline(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    VARIANT onoffline();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    void ononline(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    VARIANT ononline();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    void onstorage(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    VARIANT onstorage();
+}
+
+/*****************************************************************************
+ *    HTMLFrameSetSite coclass
+ */
+[
+    noncreatable,
+    uuid(3050f31a-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLFrameSetSite
+{
+    [default]         dispinterface DispHTMLFrameSetSite;
+ /* [source, default] dispinterface HTMLControlElementEvents; */
+ /* [source]          dispinterface HTMLControlElementEvents2; */
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLControlElement;
+    interface IHTMLFrameSetElement;
+    interface IHTMLFrameSetElement2;
+    interface IHTMLFrameSetElement3;
+}
+
+/*****************************************************************************
  *    IHTMLStyleElement interface
  */
 [
