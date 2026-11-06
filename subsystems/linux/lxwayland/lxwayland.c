@@ -1575,12 +1575,165 @@ SendIcon(WINDOW *Window, TOPLEVEL *Toplevel)
 }
 
 static
+bool
+HasSlash(const char *Text)
+{
+    for (; *Text != '\0'; Text++)
+    {
+        if (*Text == '/')
+            return true;
+    }
+    return false;
+}
+
+static
+bool
+JoinPath(char *Out, size_t Size, const char *First, const char *Second, const char *Third)
+{
+    const char *Parts[3] = { First, Second, Third };
+    size_t Used = 0, Index, Length;
+
+    for (Index = 0; Index < 3; Index++)
+    {
+        Length = strlen(Parts[Index]);
+        if (Used + Length >= Size)
+            return false;
+        memcpy(Out + Used, Parts[Index], Length);
+        Used += Length;
+    }
+    Out[Used] = '\0';
+    return true;
+}
+
+static
+uint8_t *
+ReadSmallFile(const char *Path, size_t Limit, size_t *Length)
+{
+    long Fd = LxSyscall(LX_NR_OPENAT, LX_AT_FDCWD, (long)Path, LX_O_RDONLY | LX_O_CLOEXEC, 0, 0, 0);
+    uint8_t *Data;
+    size_t Used = 0;
+    long Got = 0;
+
+    if (Fd < 0)
+        return NULL;
+    Data = LxAlloc(Limit);
+    while (Data != NULL && Used < Limit &&
+           (Got = LxSyscall(LX_NR_READ, Fd, (long)(Data + Used), (long)(Limit - Used), 0, 0, 0)) > 0)
+    {
+        Used += (size_t)Got;
+    }
+    LxSyscall(LX_NR_CLOSE, Fd, 0, 0, 0, 0, 0);
+    if (Data != NULL && (Got < 0 || Used == 0 || Used == Limit))
+    {
+        LxFree(Data);
+        Data = NULL;
+    }
+    *Length = Used;
+    return Data;
+}
+
+static
+bool
+DesktopIconName(const char *AppId, char *Icon, size_t Size)
+{
+    static const char *const Directories[] = { "/usr/local/share/applications/", "/usr/share/applications/" };
+    char Path[512];
+    uint8_t *Data = NULL;
+    size_t Length = 0, Index, Line;
+    bool Entry = false, Found = false;
+
+    for (Index = 0; Index < sizeof(Directories) / sizeof(Directories[0]) && Data == NULL; Index++)
+    {
+        if (JoinPath(Path, sizeof(Path), Directories[Index], AppId, ".desktop"))
+            Data = ReadSmallFile(Path, 256 * 1024, &Length);
+    }
+    if (Data == NULL)
+        return false;
+    for (Line = 0; Line < Length && !Found;)
+    {
+        size_t End = Line, Value;
+
+        while (End < Length && Data[End] != '\n')
+            End++;
+        if (Data[Line] == '[')
+            Entry = End - Line >= 15 && memcmp(Data + Line, "[Desktop Entry]", 15) == 0;
+        else if (Entry && End - Line > 5 && memcmp(Data + Line, "Icon=", 5) == 0)
+        {
+            Value = End;
+            while (Value > Line + 5 && (Data[Value - 1] == '\r' || Data[Value - 1] == ' '))
+                Value--;
+            if (Value - (Line + 5) > 0 && Value - (Line + 5) < Size)
+            {
+                memcpy(Icon, Data + Line + 5, Value - (Line + 5));
+                Icon[Value - (Line + 5)] = '\0';
+                Found = true;
+            }
+        }
+        Line = End + 1;
+    }
+    LxFree(Data);
+    return Found;
+}
+
+static
+void
+SendThemeIcon(WINDOW *Window, TOPLEVEL *Toplevel)
+{
+    static const char *const Sizes[] = { "48x48", "64x64", "32x32", "128x128", "256x256", "24x24", "16x16" };
+    static const uint8_t Signature[8] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+    char Icon[256], Directory[64], Path[512];
+    uint8_t *Data = NULL, *Payload;
+    size_t Length = 0, Index;
+    uint32_t Size[2];
+
+    if (Toplevel->Icon != NULL || Toplevel->AppId == NULL || Toplevel->AppId[0] == '\0' ||
+        Toplevel->AppId[0] == '.' || HasSlash(Toplevel->AppId) || !DesktopIconName(Toplevel->AppId, Icon, sizeof(Icon)) ||
+        Icon[0] == '.' || (Icon[0] != '/' && HasSlash(Icon)))
+    {
+        return;
+    }
+    if (Icon[0] == '/')
+    {
+        Data = ReadSmallFile(Icon, 1024 * 1024, &Length);
+    }
+    else
+    {
+        for (Index = 0; Index < sizeof(Sizes) / sizeof(Sizes[0]) && Data == NULL; Index++)
+        {
+            if (JoinPath(Directory, sizeof(Directory), "/usr/share/icons/hicolor/", Sizes[Index], "/apps/") &&
+                JoinPath(Path, sizeof(Path), Directory, Icon, ".png"))
+            {
+                Data = ReadSmallFile(Path, 1024 * 1024, &Length);
+            }
+        }
+        if (Data == NULL && JoinPath(Path, sizeof(Path), "/usr/share/pixmaps/", Icon, ".png"))
+            Data = ReadSmallFile(Path, 1024 * 1024, &Length);
+    }
+    if (Data == NULL)
+        return;
+    if (Length > 24 && memcmp(Data, Signature, sizeof(Signature)) == 0 && memcmp(Data + 12, "IHDR", 4) == 0)
+    {
+        Size[0] = ((uint32_t)Data[16] << 24) | ((uint32_t)Data[17] << 16) | ((uint32_t)Data[18] << 8) | Data[19];
+        Size[1] = ((uint32_t)Data[20] << 24) | ((uint32_t)Data[21] << 16) | ((uint32_t)Data[22] << 8) | Data[23];
+        Payload = HostBegin(LX_WIN_ICON_FILE, Window->Id, sizeof(Size) + Length);
+        if (Payload != NULL)
+        {
+            memcpy(Payload, Size, sizeof(Size));
+            memcpy(Payload + sizeof(Size), Data, Length);
+            HostWrite(sizeof(LX_WIN_HEADER) + sizeof(Size) + Length);
+        }
+    }
+    LxFree(Data);
+}
+
+static
 void
 SendAppInfo(WINDOW *Window, TOPLEVEL *Toplevel)
 {
     if (Toplevel->AppId != NULL && Toplevel->AppId[0] != '\0')
         HostSend(LX_WIN_APP_ID, Window->Id, Toplevel->AppId, strlen(Toplevel->AppId));
     SendIcon(Window, Toplevel);
+    SendThemeIcon(Window, Toplevel);
 }
 
 static

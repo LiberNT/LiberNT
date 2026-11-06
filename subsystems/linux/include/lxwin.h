@@ -32,6 +32,7 @@
 #define LX_WIN_APP_ID               14
 #define LX_WIN_ICON                 15
 #define LX_WIN_READY                16
+#define LX_WIN_ICON_FILE            17
 
 #define LX_WIN_HELLO                100
 #define LX_WIN_CONFIGURE            101
@@ -152,6 +153,13 @@ typedef struct _LX_WIN_ICON_IMAGE
     ULONG Width;
     ULONG Height;
 } LX_WIN_ICON_IMAGE, *PLX_WIN_ICON_IMAGE;
+
+typedef struct _LX_WIN_ICON_FILE_MSG
+{
+    LX_WIN_HEADER Header;
+    ULONG Width;
+    ULONG Height;
+} LX_WIN_ICON_FILE_MSG, *PLX_WIN_ICON_FILE_MSG;
 
 typedef struct _LX_WIN_SIZES_MSG
 {

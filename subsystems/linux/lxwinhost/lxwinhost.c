@@ -575,6 +575,42 @@ LxSetIcon(
 
 static
 VOID
+LxSetIconFile(
+    _In_ PLX_HOST_WINDOW Window,
+    _In_ PLX_WIN_ICON_FILE_MSG Message,
+    _In_ ULONG Size)
+{
+    ULONG Length = Size - sizeof(*Message), IconSize = 22 + Length;
+    HICON BigIcon, SmallIcon;
+    PUCHAR Icon;
+
+    if ((Size <= sizeof(*Message)) || (Message->Width == 0) || (Message->Height == 0) || (Length > 4 * 1024 * 1024))
+        return;
+    Icon = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, IconSize);
+    if (Icon == NULL)
+        return;
+    Icon[2] = 1;
+    Icon[4] = 1;
+    Icon[6] = (Message->Width >= 256) ? 0 : (UCHAR)Message->Width;
+    Icon[7] = (Message->Height >= 256) ? 0 : (UCHAR)Message->Height;
+    Icon[10] = 1;
+    Icon[12] = 32;
+    CopyMemory(Icon + 14, &Length, sizeof(Length));
+    Icon[18] = 22;
+    CopyMemory(Icon + 22, Message + 1, Length);
+    BigIcon = LxCreateIconFromIco(Icon, IconSize, GetSystemMetrics(SM_CXICON));
+    SmallIcon = LxCreateIconFromIco(Icon, IconSize, GetSystemMetrics(SM_CXSMICON));
+    if ((BigIcon != NULL) || (SmallIcon != NULL))
+    {
+        LxApplyIcons(Window, BigIcon, SmallIcon);
+        if (Window->AppIdLength != 0)
+            LxIconCacheStore(Window->AppId, Window->AppIdLength, Icon, IconSize);
+    }
+    HeapFree(GetProcessHeap(), 0, Icon);
+}
+
+static
+VOID
 LxDestroyAll(VOID)
 {
     while (LxWindows != NULL)
@@ -1032,6 +1068,11 @@ LxHandleMessage(
         case LX_WIN_ICON:
             if (Header->Size >= sizeof(LX_WIN_ICON_MSG))
                 LxSetIcon(Window, (PLX_WIN_ICON_MSG)Header, Header->Size);
+            break;
+
+        case LX_WIN_ICON_FILE:
+            if (Header->Size > sizeof(LX_WIN_ICON_FILE_MSG))
+                LxSetIconFile(Window, (PLX_WIN_ICON_FILE_MSG)Header, Header->Size);
             break;
 
         case LX_WIN_SHOW:
