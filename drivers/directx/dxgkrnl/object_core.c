@@ -168,6 +168,7 @@ DxgkCapsCoreInterfaceVersionToLevel(
         case 0x4002:
         case 0x4003:
             return DXGK_CAPS_CORE_LEVEL_WDDM_1_3;
+        case 0x5020:
         case 0x5022:
         case 0x5023:
             return DXGK_CAPS_CORE_LEVEL_WDDM_2_0;
