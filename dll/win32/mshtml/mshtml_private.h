@@ -132,6 +132,7 @@ struct constructor;
     XDIID(DispHTMLFormElement) \
     XDIID(DispHTMLGenericElement) \
     XDIID(DispHTMLFrameElement) \
+    XDIID(DispHTMLFrameSetSite) \
     XDIID(DispHTMLHeadElement) \
     XDIID(DispHTMLHeaderElement) \
     XDIID(DispHTMLHtmlElement) \
@@ -250,6 +251,9 @@ struct constructor;
     XIID(IHTMLFrameBase) \
     XIID(IHTMLFrameBase2) \
     XIID(IHTMLFrameElement3) \
+    XIID(IHTMLFrameSetElement) \
+    XIID(IHTMLFrameSetElement2) \
+    XIID(IHTMLFrameSetElement3) \
     XIID(IHTMLGenericElement) \
     XIID(IHTMLHeadElement) \
     XIID(IHTMLHeaderElement) \
@@ -492,6 +496,7 @@ typedef struct {
     X(HTMLFontElement)                     \
     X(HTMLFormElement)                     \
     X(HTMLFrameElement)                    \
+    X(HTMLFrameSetElement)                 \
     X(HTMLHeadElement)                     \
     X(HTMLHeadingElement)                  \
     X(HTMLHtmlElement)                     \
@@ -1451,6 +1456,7 @@ HRESULT HTMLBaseElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLBaseFontElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLBlockElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLFontElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLFrameSetElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLHeaderElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLParaElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLPhraseElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
@@ -1533,6 +1539,9 @@ HRESULT elem_put_reflected_string(HTMLElement*,const WCHAR*,BSTR);
 HRESULT elem_get_reflected_string(HTMLElement*,const WCHAR*,BSTR*);
 VARIANT_BOOL element_has_attribute(HTMLElement*,const WCHAR*);
 HRESULT element_remove_attribute(HTMLElement*,const WCHAR*);
+HRESULT elem_get_attr_string(HTMLElement*,const WCHAR*,BSTR*);
+HRESULT elem_put_color_attr(HTMLElement*,const WCHAR*,VARIANT*);
+HRESULT elem_get_color_attr(HTMLElement*,const WCHAR*,VARIANT*);
 
 HRESULT elem_unique_id(unsigned id, BSTR *p);
 

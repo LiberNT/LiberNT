@@ -20,7 +20,7 @@
 #include "htmlevent.h"
 #include "binding.h"
 
-static HRESULT get_attr_string(HTMLElement *elem, const WCHAR *name, BSTR *p)
+HRESULT elem_get_attr_string(HTMLElement *elem, const WCHAR *name, BSTR *p)
 {
     *p = NULL;
     if(!elem->dom_element || !element_has_attribute(elem, name))
@@ -35,7 +35,7 @@ static HRESULT get_url_attr(HTMLElement *elem, const WCHAR *name, BSTR *p)
     BSTR val;
     IUri *uri;
 
-    hres = get_attr_string(elem, name, &val);
+    hres = elem_get_attr_string(elem, name, &val);
     if(SUCCEEDED(hres) && !val)
         return (*p = SysAllocString(L"")) ? S_OK : E_OUTOFMEMORY;
     if(FAILED(hres) || !window || !window->base.outer_window) {
@@ -81,7 +81,7 @@ static HRESULT get_keyword_attr(HTMLElement *elem, const WCHAR *name, BSTR *p, c
     HRESULT hres;
     BSTR val;
 
-    hres = get_attr_string(elem, name, &val);
+    hres = elem_get_attr_string(elem, name, &val);
     if(FAILED(hres))
         return hres;
 
@@ -288,7 +288,7 @@ static HRESULT normalize_color(const WCHAR *v, BSTR *ret)
 }
 
 /* FIXME: IE9+ document modes keep most color strings unparsed; this applies the quirks to IE8 rules in every mode */
-static HRESULT put_color_attr(HTMLElement *elem, VARIANT *v)
+HRESULT elem_put_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *v)
 {
     WCHAR buf[8];
     HRESULT hres;
@@ -297,31 +297,31 @@ static HRESULT put_color_attr(HTMLElement *elem, VARIANT *v)
     switch(V_VT(v)) {
     case VT_BSTR:
         if(!V_BSTR(v) || !*V_BSTR(v))
-            return element_remove_attribute(elem, L"color");
+            return element_remove_attribute(elem, name);
         hres = normalize_color(V_BSTR(v), &str);
         if(FAILED(hres))
             return hres;
-        hres = elem_put_reflected_string(elem, L"color", str);
+        hres = elem_put_reflected_string(elem, name, str);
         SysFreeString(str);
         return hres;
     case VT_I4:
         if(V_I4(v) < 0 || V_I4(v) > 0xffffff)
             return S_OK;
         swprintf(buf, ARRAY_SIZE(buf), L"#%06x", V_I4(v));
-        return elem_put_reflected_string(elem, L"color", buf);
+        return elem_put_reflected_string(elem, name, buf);
     default:
         return S_OK;
     }
 }
 
-static HRESULT get_color_attr(HTMLElement *elem, VARIANT *p)
+HRESULT elem_get_color_attr(HTMLElement *elem, const WCHAR *name, VARIANT *p)
 {
     HRESULT hres;
     BSTR val;
 
     V_VT(p) = VT_BSTR;
     V_BSTR(p) = NULL;
-    hres = get_attr_string(elem, L"color", &val);
+    hres = elem_get_attr_string(elem, name, &val);
     if(FAILED(hres) || !val)
         return hres;
     if(*val)
@@ -386,7 +386,7 @@ static HRESULT get_font_size_attr(HTMLElement *elem, VARIANT *p)
 
     V_VT(p) = VT_BSTR;
     V_BSTR(p) = NULL;
-    hres = get_attr_string(elem, L"size", &val);
+    hres = elem_get_attr_string(elem, L"size", &val);
     if(FAILED(hres) || !val)
         return hres;
     if(normalize_font_size(val, buf, ARRAY_SIZE(buf)) && !(V_BSTR(p) = SysAllocString(buf)))
@@ -437,13 +437,13 @@ static HRESULT ie9_attr_get(DispatchEx *dispex, WORD flags, DISPPARAMS *dp, VARI
     }
 
 IE9_ATTR_HOOK(ie9_cite_hook,     get_url_attr,     L"cite")
-IE9_ATTR_HOOK(ie9_datetime_hook, get_attr_string,  L"datetime")
-IE9_ATTR_HOOK(ie9_width_hook,    get_attr_string,  L"width")
+IE9_ATTR_HOOK(ie9_datetime_hook, elem_get_attr_string,  L"datetime")
+IE9_ATTR_HOOK(ie9_width_hook,    elem_get_attr_string,  L"width")
 IE9_ATTR_HOOK(ie9_clear_hook,    get_clear_attr,   L"clear")
 IE9_ATTR_HOOK(ie9_align_hook,    get_align_attr,   L"align")
-IE9_ATTR_HOOK(ie9_face_hook,     get_attr_string,  L"face")
+IE9_ATTR_HOOK(ie9_face_hook,     elem_get_attr_string,  L"face")
 IE9_ATTR_HOOK(ie9_href_hook,     get_url_attr,     L"href")
-IE9_ATTR_HOOK(ie9_target_hook,   get_attr_string,  L"target")
+IE9_ATTR_HOOK(ie9_target_hook,   elem_get_attr_string,  L"target")
 
 static HRESULT ie9_color_hook(DispatchEx *dispex, WORD flags, DISPPARAMS *dp, VARIANT *res,
         EXCEPINFO *ei, IServiceProvider *caller)
@@ -453,7 +453,7 @@ static HRESULT ie9_color_hook(DispatchEx *dispex, WORD flags, DISPPARAMS *dp, VA
     if(!(flags & DISPATCH_PROPERTYGET) || (dp && dp->cArgs))
         return S_FALSE;
 
-    hres = get_color_attr(elem_from_dispex(dispex), res);
+    hres = elem_get_color_attr(elem_from_dispex(dispex), L"color", res);
     if(SUCCEEDED(hres) && !V_BSTR(res) && !(V_BSTR(res) = SysAllocString(L"")))
         hres = E_OUTOFMEMORY;
     return hres;
@@ -516,7 +516,7 @@ static HRESULT WINAPI HTMLPhraseElement2_put_cite(IHTMLPhraseElement2 *iface, BS
 
 static HRESULT WINAPI HTMLPhraseElement2_get_cite(IHTMLPhraseElement2 *iface, BSTR *p)
 {
-    return get_attr_string(&impl_from_IHTMLPhraseElement2(iface)->element, L"cite", p);
+    return elem_get_attr_string(&impl_from_IHTMLPhraseElement2(iface)->element, L"cite", p);
 }
 
 static HRESULT WINAPI HTMLPhraseElement2_put_dateTime(IHTMLPhraseElement2 *iface, BSTR v)
@@ -526,7 +526,7 @@ static HRESULT WINAPI HTMLPhraseElement2_put_dateTime(IHTMLPhraseElement2 *iface
 
 static HRESULT WINAPI HTMLPhraseElement2_get_dateTime(IHTMLPhraseElement2 *iface, BSTR *p)
 {
-    return get_attr_string(&impl_from_IHTMLPhraseElement2(iface)->element, L"datetime", p);
+    return elem_get_attr_string(&impl_from_IHTMLPhraseElement2(iface)->element, L"datetime", p);
 }
 
 static const IHTMLPhraseElement2Vtbl HTMLPhraseElement2Vtbl = {
@@ -755,7 +755,7 @@ static HRESULT WINAPI HTMLBlockElement2_get_cite(IHTMLBlockElement2 *iface, BSTR
         *p = NULL;
         return S_OK;
     }
-    return get_attr_string(&This->element, L"cite", p);
+    return elem_get_attr_string(&This->element, L"cite", p);
 }
 
 static HRESULT WINAPI HTMLBlockElement2_put_width(IHTMLBlockElement2 *iface, BSTR v)
@@ -775,7 +775,7 @@ static HRESULT WINAPI HTMLBlockElement2_get_width(IHTMLBlockElement2 *iface, BST
         *p = NULL;
         return S_OK;
     }
-    return get_attr_string(&This->element, L"width", p);
+    return elem_get_attr_string(&This->element, L"width", p);
 }
 
 static const IHTMLBlockElement2Vtbl HTMLBlockElement2Vtbl = {
@@ -1175,12 +1175,12 @@ DISPEX_IDISPATCH_IMPL(HTMLFontElement, IHTMLFontElement,
 
 static HRESULT WINAPI HTMLFontElement_put_color(IHTMLFontElement *iface, VARIANT v)
 {
-    return put_color_attr(&impl_from_IHTMLFontElement(iface)->element, &v);
+    return elem_put_color_attr(&impl_from_IHTMLFontElement(iface)->element, L"color", &v);
 }
 
 static HRESULT WINAPI HTMLFontElement_get_color(IHTMLFontElement *iface, VARIANT *p)
 {
-    return get_color_attr(&impl_from_IHTMLFontElement(iface)->element, p);
+    return elem_get_color_attr(&impl_from_IHTMLFontElement(iface)->element, L"color", p);
 }
 
 static HRESULT WINAPI HTMLFontElement_put_face(IHTMLFontElement *iface, BSTR v)
@@ -1190,7 +1190,7 @@ static HRESULT WINAPI HTMLFontElement_put_face(IHTMLFontElement *iface, BSTR v)
 
 static HRESULT WINAPI HTMLFontElement_get_face(IHTMLFontElement *iface, BSTR *p)
 {
-    return get_attr_string(&impl_from_IHTMLFontElement(iface)->element, L"face", p);
+    return elem_get_attr_string(&impl_from_IHTMLFontElement(iface)->element, L"face", p);
 }
 
 static HRESULT WINAPI HTMLFontElement_put_size(IHTMLFontElement *iface, VARIANT v)
@@ -1307,12 +1307,12 @@ DISPEX_IDISPATCH_IMPL(HTMLBaseFontElement, IHTMLBaseFontElement,
 
 static HRESULT WINAPI HTMLBaseFontElement_put_color(IHTMLBaseFontElement *iface, VARIANT v)
 {
-    return put_color_attr(&impl_from_IHTMLBaseFontElement(iface)->element, &v);
+    return elem_put_color_attr(&impl_from_IHTMLBaseFontElement(iface)->element, L"color", &v);
 }
 
 static HRESULT WINAPI HTMLBaseFontElement_get_color(IHTMLBaseFontElement *iface, VARIANT *p)
 {
-    return get_color_attr(&impl_from_IHTMLBaseFontElement(iface)->element, p);
+    return elem_get_color_attr(&impl_from_IHTMLBaseFontElement(iface)->element, L"color", p);
 }
 
 static HRESULT WINAPI HTMLBaseFontElement_put_face(IHTMLBaseFontElement *iface, BSTR v)
@@ -1322,7 +1322,7 @@ static HRESULT WINAPI HTMLBaseFontElement_put_face(IHTMLBaseFontElement *iface, 
 
 static HRESULT WINAPI HTMLBaseFontElement_get_face(IHTMLBaseFontElement *iface, BSTR *p)
 {
-    return get_attr_string(&impl_from_IHTMLBaseFontElement(iface)->element, L"face", p);
+    return elem_get_attr_string(&impl_from_IHTMLBaseFontElement(iface)->element, L"face", p);
 }
 
 static HRESULT WINAPI HTMLBaseFontElement_put_size(IHTMLBaseFontElement *iface, LONG v)
@@ -1341,7 +1341,7 @@ static HRESULT WINAPI HTMLBaseFontElement_get_size(IHTMLBaseFontElement *iface, 
     BSTR val;
 
     *p = 3;
-    hres = get_attr_string(&This->element, L"size", &val);
+    hres = elem_get_attr_string(&This->element, L"size", &val);
     if(FAILED(hres) || !val)
         return hres;
 
@@ -1463,7 +1463,7 @@ static HRESULT WINAPI HTMLBaseElement_put_href(IHTMLBaseElement *iface, BSTR v)
 
 static HRESULT WINAPI HTMLBaseElement_get_href(IHTMLBaseElement *iface, BSTR *p)
 {
-    return get_attr_string(&impl_from_IHTMLBaseElement(iface)->element, L"href", p);
+    return elem_get_attr_string(&impl_from_IHTMLBaseElement(iface)->element, L"href", p);
 }
 
 static HRESULT WINAPI HTMLBaseElement_put_target(IHTMLBaseElement *iface, BSTR v)
@@ -1473,7 +1473,7 @@ static HRESULT WINAPI HTMLBaseElement_put_target(IHTMLBaseElement *iface, BSTR v
 
 static HRESULT WINAPI HTMLBaseElement_get_target(IHTMLBaseElement *iface, BSTR *p)
 {
-    return get_attr_string(&impl_from_IHTMLBaseElement(iface)->element, L"target", p);
+    return elem_get_attr_string(&impl_from_IHTMLBaseElement(iface)->element, L"target", p);
 }
 
 static const IHTMLBaseElementVtbl HTMLBaseElementVtbl = {

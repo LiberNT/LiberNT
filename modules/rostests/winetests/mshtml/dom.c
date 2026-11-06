@@ -11972,6 +11972,308 @@ static void test_attr_name_alias_libernt(IHTMLDocument2 *doc)
 }
 
 
+static BOOL is_bstr_or_null(BSTR s, const WCHAR *exp)
+{
+    return exp ? s && !wcscmp(s, exp) : !s;
+}
+
+static void test_frameset_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *name;
+        DISPID dispid;
+    } props[] = {
+        {L"rows",           DISPID_IHTMLFRAMESETELEMENT_ROWS},
+        {L"cols",           DISPID_IHTMLFRAMESETELEMENT_COLS},
+        {L"border",         DISPID_IHTMLFRAMESETELEMENT_BORDER},
+        {L"borderColor",    DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR},
+        {L"frameBorder",    DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER},
+        {L"frameSpacing",   DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING},
+        {L"name",           DISPID_IHTMLFRAMESETELEMENT_NAME},
+        {L"onload",         DISPID_IHTMLFRAMESETELEMENT_ONLOAD},
+        {L"onunload",       DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD},
+        {L"onbeforeunload", DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD},
+        {L"onbeforeprint",  DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT},
+        {L"onafterprint",   DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT},
+    };
+    static const WCHAR *hidden[] = { L"onhashchange", L"onmessage", L"onoffline", L"ononline", L"onstorage" };
+    static const struct {
+        const WCHAR *prop;
+        const WCHAR *value;
+        const WCHAR *get;
+    } str_tests[] = {
+        {L"rows",        L"25, 50%,*", L"25, 50%,*"},
+        {L"rows",        L"",          L""},
+        {L"rows",        L"abc",       L"abc"},
+        {L"cols",        L"10,*",      L"10,*"},
+        {L"cols",        L"",          L""},
+        {L"name",        L"fsname",    L"fsname"},
+        {L"name",        L"",          NULL},
+        {L"frameBorder", L"no",        L"no"},
+        {L"frameBorder", L"YES",       L"YES"},
+        {L"frameBorder", L"abc",       L"abc"},
+        {L"frameBorder", L"",          L""},
+    };
+    static const struct {
+        const WCHAR *prop;
+        VARTYPE vt;
+        const WCHAR *str;
+        LONG i4;
+        HRESULT hres;
+        const WCHAR *get;
+    } var_tests[] = {
+        {L"border",       VT_I4,   NULL,       5,        S_OK,         L"5"},
+        {L"border",       VT_BSTR, L"7",       0,        S_OK,         L"7"},
+        {L"border",       VT_BSTR, L"7px",     0,        S_OK,         L"7"},
+        {L"border",       VT_BSTR, L"abc",     0,        E_INVALIDARG, L"7"},
+        {L"border",       VT_BSTR, L"",        0,        S_OK,         NULL},
+        {L"border",       VT_I4,   NULL,       -3,       S_OK,         L"-3"},
+        {L"border",       VT_NULL, NULL,       0,        S_OK,         NULL},
+        {L"frameSpacing", VT_I4,   NULL,       3,        S_OK,         L"3"},
+        {L"frameSpacing", VT_BSTR, L"4px",     0,        S_OK,         L"4"},
+        {L"frameSpacing", VT_BSTR, L"abc",     0,        E_INVALIDARG, L"4"},
+        {L"frameSpacing", VT_BSTR, L"",        0,        S_OK,         NULL},
+        {L"frameSpacing", VT_I4,   NULL,       -2,       S_OK,         L"-2"},
+        {L"frameSpacing", VT_NULL, NULL,       0,        S_OK,         NULL},
+        {L"borderColor",  VT_BSTR, L"red",     0,        S_OK,         L"#ff0000"},
+        {L"borderColor",  VT_BSTR, L"#ABCDEF", 0,        S_OK,         L"#abcdef"},
+        {L"borderColor",  VT_I4,   NULL,       0x123456, S_OK,         L"#123456"},
+        {L"borderColor",  VT_BSTR, L"foo",     0,        S_OK,         L"#0f0000"},
+        {L"borderColor",  VT_BSTR, L"",        0,        S_OK,         NULL},
+        {L"borderColor",  VT_NULL, NULL,       0,        S_OK,         NULL},
+    };
+    IHTMLFrameSetElement2 *fs2 = NULL;
+    IHTMLFrameSetElement3 *fs3 = NULL;
+    IHTMLFrameSetElement *fs = NULL;
+    IDispatchEx *dispex;
+    IHTMLElement *elem;
+    IHTMLWindow2 *win;
+    DISPID dispid;
+    HRESULT hres;
+    unsigned i;
+    VARIANT v;
+    BSTR str;
+
+    elem = test_create_elem(doc, L"frameset");
+    test_disp((IUnknown*)elem, &DIID_DispHTMLFrameSetSite, &CLSID_HTMLFrameSetSite, L"[object]");
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLFrameSetElement, (void**)&fs);
+    ok(hres == S_OK, "Could not get IHTMLFrameSetElement: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLFrameSetElement2, (void**)&fs2);
+    ok(hres == S_OK, "Could not get IHTMLFrameSetElement2: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLFrameSetElement3, (void**)&fs3);
+    ok(hres == S_OK, "Could not get IHTMLFrameSetElement3: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+    if(FAILED(hres) || !fs || !fs2 || !fs3) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+
+    for(i = 0; i < ARRAY_SIZE(props); i++) {
+        str = SysAllocString(props[i].name);
+        dispid = DISPID_UNKNOWN;
+        hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+        SysFreeString(str);
+        ok(hres == S_OK, "GetDispID(%s) failed: %08lx\n", wine_dbgstr_w(props[i].name), hres);
+        ok(dispid == props[i].dispid, "%s dispid = %08lx\n", wine_dbgstr_w(props[i].name), dispid);
+
+        hres = get_disp_prop(dispex, props[i].name, &v);
+        ok(hres == S_OK, "get %s failed: %08lx\n", wine_dbgstr_w(props[i].name), hres);
+        if(!wcsncmp(props[i].name, L"on", 2))
+            ok(V_VT(&v) == VT_EMPTY, "unset %s = %s\n", wine_dbgstr_w(props[i].name), wine_dbgstr_variant(&v));
+        else
+            ok(is_bstr_variant(&v, NULL), "unset %s = %s\n", wine_dbgstr_w(props[i].name), wine_dbgstr_variant(&v));
+        VariantClear(&v);
+    }
+
+    for(i = 0; i < ARRAY_SIZE(hidden); i++) {
+        str = SysAllocString(hidden[i]);
+        hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+        SysFreeString(str);
+        ok(hres == DISP_E_UNKNOWNNAME, "GetDispID(%s) returned %08lx\n", wine_dbgstr_w(hidden[i]), hres);
+    }
+
+    for(i = 0; i < ARRAY_SIZE(str_tests); i++) {
+        hres = put_disp_prop(dispex, str_tests[i].prop, str_tests[i].value);
+        ok(hres == S_OK, "put %s(%s) failed: %08lx\n", wine_dbgstr_w(str_tests[i].prop), wine_dbgstr_w(str_tests[i].value), hres);
+        hres = get_disp_prop(dispex, str_tests[i].prop, &v);
+        ok(hres == S_OK, "get %s failed: %08lx\n", wine_dbgstr_w(str_tests[i].prop), hres);
+        ok(is_bstr_variant(&v, str_tests[i].get), "%s after put(%s) = %s\n", wine_dbgstr_w(str_tests[i].prop),
+           wine_dbgstr_w(str_tests[i].value), wine_dbgstr_variant(&v));
+        VariantClear(&v);
+    }
+
+    str = (void*)0xdeadbeef;
+    hres = IHTMLFrameSetElement_get_rows(fs, &str);
+    ok(hres == S_OK && is_bstr_or_null(str, L"abc"), "get_rows: %08lx %s\n", hres, wine_dbgstr_w(str));
+    SysFreeString(str);
+    str = (void*)0xdeadbeef;
+    hres = IHTMLFrameSetElement_get_name(fs, &str);
+    ok(hres == S_OK && !str, "get_name: %08lx %s\n", hres, wine_dbgstr_w(str));
+
+    for(i = 0; i < ARRAY_SIZE(var_tests); i++) {
+        V_VT(&v) = var_tests[i].vt;
+        if(var_tests[i].vt == VT_BSTR)
+            V_BSTR(&v) = SysAllocString(var_tests[i].str);
+        else if(var_tests[i].vt == VT_I4)
+            V_I4(&v) = var_tests[i].i4;
+        if(!wcscmp(var_tests[i].prop, L"border"))
+            hres = IHTMLFrameSetElement_put_border(fs, v);
+        else if(!wcscmp(var_tests[i].prop, L"frameSpacing"))
+            hres = IHTMLFrameSetElement_put_frameSpacing(fs, v);
+        else
+            hres = IHTMLFrameSetElement_put_borderColor(fs, v);
+        ok(hres == var_tests[i].hres, "[%u] put %s(%s) returned %08lx\n", i, wine_dbgstr_w(var_tests[i].prop),
+           wine_dbgstr_variant(&v), hres);
+        VariantClear(&v);
+
+        V_VT(&v) = VT_ERROR;
+        if(!wcscmp(var_tests[i].prop, L"border"))
+            hres = IHTMLFrameSetElement_get_border(fs, &v);
+        else if(!wcscmp(var_tests[i].prop, L"frameSpacing"))
+            hres = IHTMLFrameSetElement_get_frameSpacing(fs, &v);
+        else
+            hres = IHTMLFrameSetElement_get_borderColor(fs, &v);
+        ok(hres == S_OK, "[%u] get %s failed: %08lx\n", i, wine_dbgstr_w(var_tests[i].prop), hres);
+        ok(is_bstr_variant(&v, var_tests[i].get), "[%u] %s = %s\n", i, wine_dbgstr_w(var_tests[i].prop), wine_dbgstr_variant(&v));
+        VariantClear(&v);
+    }
+
+    str = SysAllocString(L"border");
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = SysAllocString(L"9");
+    hres = IHTMLElement_setAttribute(elem, str, v, 0);
+    ok(hres == S_OK, "setAttribute(border) failed: %08lx\n", hres);
+    VariantClear(&v);
+    SysFreeString(str);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLFrameSetElement_get_border(fs, &v);
+    ok(hres == S_OK && is_bstr_variant(&v, L"9"), "border after setAttribute = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+
+    str = SysAllocString(L"borderColor");
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = SysAllocString(L"blue");
+    hres = IHTMLElement_setAttribute(elem, str, v, 0);
+    ok(hres == S_OK, "setAttribute(borderColor) failed: %08lx\n", hres);
+    VariantClear(&v);
+    SysFreeString(str);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLFrameSetElement_get_borderColor(fs, &v);
+    ok(hres == S_OK && is_bstr_variant(&v, L"#0000ff"), "borderColor after setAttribute = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+
+    hres = IHTMLDocument2_get_parentWindow(doc, &win);
+    ok(hres == S_OK, "get_parentWindow failed: %08lx\n", hres);
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = SysAllocString(L"alert(1)");
+    hres = IHTMLFrameSetElement_put_onload(fs, v);
+    ok(hres == S_OK, "put_onload failed: %08lx\n", hres);
+    VariantClear(&v);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLFrameSetElement_get_onload(fs, &v);
+    ok(hres == S_OK && V_VT(&v) == VT_EMPTY, "detached onload = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLWindow2_get_onload(win, &v);
+    ok(hres == S_OK && V_VT(&v) == VT_NULL, "window onload = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = SysAllocString(L"z()");
+    hres = IHTMLFrameSetElement2_put_onbeforeprint(fs2, v);
+    ok(hres == S_OK, "put_onbeforeprint failed: %08lx\n", hres);
+    VariantClear(&v);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLFrameSetElement2_get_onbeforeprint(fs2, &v);
+    ok(hres == S_OK && V_VT(&v) == VT_EMPTY, "detached onbeforeprint = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    IHTMLWindow2_Release(win);
+
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLFrameSetElement3_get_onstorage(fs3, &v);
+    ok(hres == S_OK && V_VT(&v) == VT_NULL, "unset onstorage = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = SysAllocString(L"m()");
+    hres = IHTMLFrameSetElement3_put_onmessage(fs3, v);
+    ok(hres == S_OK, "put_onmessage failed: %08lx\n", hres);
+    VariantClear(&v);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLFrameSetElement3_get_onmessage(fs3, &v);
+    ok(hres == S_OK && is_bstr_variant(&v, L"m()"), "onmessage = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+
+    IDispatchEx_Release(dispex);
+    IHTMLFrameSetElement3_Release(fs3);
+    IHTMLFrameSetElement2_Release(fs2);
+    IHTMLFrameSetElement_Release(fs);
+    IHTMLElement_Release(elem);
+}
+
+static void test_frameset_events_libernt(IHTMLDocument2 *doc)
+{
+    static const WCHAR *events[] = { L"onload", L"onunload", L"onbeforeunload", L"onbeforeprint", L"onafterprint" };
+    IDispatchEx *dispex;
+    IHTMLElement *body;
+    IHTMLWindow2 *win;
+    HRESULT hres;
+    unsigned i;
+    VARIANT v;
+    BSTR str;
+
+    hres = IHTMLDocument2_get_body(doc, &body);
+    ok(hres == S_OK && body, "get_body: %08lx %p\n", hres, body);
+    if(!body)
+        return;
+    hres = IHTMLElement_get_tagName(body, &str);
+    ok(hres == S_OK && !wcscmp(str, L"FRAMESET"), "body tagName = %s\n", wine_dbgstr_w(str));
+    SysFreeString(str);
+    hres = IHTMLDocument2_get_parentWindow(doc, &win);
+    ok(hres == S_OK, "get_parentWindow failed: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(body, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+
+    for(i = 0; i < ARRAY_SIZE(events); i++) {
+        hres = put_disp_prop(dispex, events[i], L"q()");
+        ok(hres == S_OK, "put %s failed: %08lx\n", wine_dbgstr_w(events[i]), hres);
+        hres = get_disp_prop(dispex, events[i], &v);
+        ok(hres == S_OK && is_bstr_variant(&v, L"q()"), "%s = %08lx %s\n", wine_dbgstr_w(events[i]), hres, wine_dbgstr_variant(&v));
+        VariantClear(&v);
+    }
+
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLWindow2_get_onload(win, &v);
+    ok(hres == S_OK && is_bstr_variant(&v, L"q()"), "window onload = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLWindow2_get_onunload(win, &v);
+    ok(hres == S_OK && is_bstr_variant(&v, L"q()"), "window onunload = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLWindow2_get_onbeforeunload(win, &v);
+    ok(hres == S_OK && is_bstr_variant(&v, L"q()"), "window onbeforeunload = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+
+    V_VT(&v) = VT_NULL;
+    for(i = 0; i < 3; i++) {
+        DISPID propput_arg = DISPID_PROPERTYPUT;
+        DISPPARAMS dp = {&v, &propput_arg, 1, 1};
+        DISPID dispid;
+
+        str = SysAllocString(events[i]);
+        hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+        SysFreeString(str);
+        if(SUCCEEDED(hres))
+            hres = IDispatchEx_InvokeEx(dispex, dispid, LOCALE_NEUTRAL, DISPATCH_PROPERTYPUT, &dp, NULL, NULL, NULL);
+        ok(hres == S_OK, "reset %s failed: %08lx\n", wine_dbgstr_w(events[i]), hres);
+    }
+
+    IDispatchEx_Release(dispex);
+    IHTMLWindow2_Release(win);
+    IHTMLElement_Release(body);
+}
+
 static void test_attr(IHTMLDocument2 *doc, IHTMLElement *elem)
 {
     static const WCHAR *elem_attr_props[] = {
@@ -14964,6 +15266,7 @@ START_TEST(dom)
         run_domtest(doc_blank, test_attr_collection_builtins_libernt);
         run_domtest(doc_blank, test_tag_attr_only_libernt);
         run_domtest(doc_blank, test_attr_name_alias_libernt);
+        run_domtest(doc_blank, test_frameset_libernt);
         run_domtest(doc_blank, test_text_elements_libernt);
         run_domtest(doc_blank_ie9, test_text_elements_ie9_libernt);
         if(is_ie9plus) {
@@ -14984,6 +15287,7 @@ START_TEST(dom)
     run_domtest(indent_test_str, test_indent);
     run_domtest(cond_comment_str, test_cond_comment);
     run_domtest(frameset_str, test_frameset);
+    run_domtest(frameset_str, test_frameset_events_libernt);
     run_domtest(emptydiv_str, test_docfrag);
     run_domtest(doc_blank, test_replacechild_elems);
     run_domtest(doc_blank, test_quirks_mode_perf_toJSON);
