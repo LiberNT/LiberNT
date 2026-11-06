@@ -541,7 +541,6 @@ LxIpcShmVmaClose(
     LxIpcShmFree(Destroy);
 }
 
-static
 NTSTATUS
 LxIpcCreateSection(
     _In_ ULONG64 Size,
