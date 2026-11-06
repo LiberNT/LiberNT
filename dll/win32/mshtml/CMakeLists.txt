@@ -40,6 +40,7 @@ list(APPEND SOURCE
     htmlstylesheet.c
     htmltable.c
     htmltextarea.c
+    htmltextelem.c
     htmltextnode.c
     htmlwindow.c
     loadopts.c

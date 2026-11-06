@@ -10950,6 +10950,441 @@ static void test_attr_node(IHTMLDOMAttribute *test_attr, IHTMLDocument2 *doc)
     IHTMLDOMAttribute2_Release(attr);
 }
 
+static const char *text_elem_variant_str(const VARIANT *v, char *buf, size_t size)
+{
+    switch(V_VT(v)) {
+    case VT_EMPTY: snprintf(buf, size, "EMPTY"); break;
+    case VT_NULL: snprintf(buf, size, "NULL"); break;
+    case VT_I4: snprintf(buf, size, "I4:%ld", V_I4(v)); break;
+    case VT_BSTR:
+        if(!V_BSTR(v)) {
+            snprintf(buf, size, "null");
+            break;
+        }
+        snprintf(buf, size, "\"%s\"", wine_dbgstr_w(V_BSTR(v)) + 2);
+        buf[strlen(buf) - 2] = '"';
+        buf[strlen(buf) - 1] = 0;
+        break;
+    default: snprintf(buf, size, "vt%d", V_VT(v)); break;
+    }
+    return buf;
+}
+
+static void test_text_elements_libernt(IHTMLDocument2 *doc)
+{
+    static const IID * const text_iids[] = {
+        &IID_IHTMLPhraseElement, &IID_IHTMLPhraseElement2, &IID_IHTMLPhraseElement3,
+        &IID_IHTMLBlockElement, &IID_IHTMLBlockElement2, &IID_IHTMLBlockElement3,
+        &IID_IHTMLBRElement, &IID_IHTMLFontElement, &IID_IHTMLBaseFontElement,
+        &IID_IHTMLBaseElement, &IID_IHTMLBaseElement2, &IID_IHTMLParaElement, &IID_IHTMLHeaderElement,
+    };
+    static const struct {
+        const WCHAR *tag;
+        const char *qi;
+    } qi_tests[] = {
+        {L"b",          "111.........."}, {L"i",          "111.........."}, {L"code",       "111.........."},
+        {L"q",          "111.........."}, {L"abbr",       "111.........."}, {L"acronym",    "111.........."},
+        {L"bdo",        "111.........."}, {L"big",        "111.........."}, {L"blink",      "111.........."},
+        {L"cite",       "111.........."}, {L"del",        "111.........."}, {L"dfn",        "111.........."},
+        {L"em",         "111.........."}, {L"ins",        "111.........."}, {L"kbd",        "111.........."},
+        {L"nobr",       "111.........."}, {L"rp",         "111.........."}, {L"rt",         "111.........."},
+        {L"ruby",       "111.........."}, {L"s",          "111.........."}, {L"samp",       "111.........."},
+        {L"small",      "111.........."}, {L"strike",     "111.........."}, {L"strong",     "111.........."},
+        {L"sub",        "111.........."}, {L"sup",        "111.........."}, {L"tt",         "111.........."},
+        {L"u",          "111.........."}, {L"var",        "111.........."},
+        {L"address",    "...111......."}, {L"blockquote", "...111......."}, {L"center",     "...111......."},
+        {L"listing",    "...111......."}, {L"plaintext",  "...111......."}, {L"pre",        "...111......."},
+        {L"xmp",        "...111......."},
+        {L"p",          "...111.....1."}, {L"h1",         "...111......1"}, {L"h2",         "...111......1"},
+        {L"h3",         "...111......1"}, {L"h4",         "...111......1"}, {L"h5",         "...111......1"},
+        {L"h6",         "...111......1"},
+        {L"br",         "......1......"}, {L"font",       ".......1....."}, {L"basefont",   "........1...."},
+        {L"base",       ".........11.."},
+        {L"a",          "............."}, {L"dd",         "............."}, {L"hr",         "............."},
+        {L"winetest",   "............."},
+    };
+    static const struct {
+        const WCHAR *tag;
+        const IID *diid;
+        const CLSID *clsid;
+    } disp_tests[] = {
+        {L"b",        &DIID_DispHTMLPhraseElement,   &CLSID_HTMLPhraseElement},
+        {L"center",   &DIID_DispHTMLBlockElement,    &CLSID_HTMLBlockElement},
+        {L"p",        &DIID_DispHTMLParaElement,     &CLSID_HTMLParaElement},
+        {L"h2",       &DIID_DispHTMLHeaderElement,   &CLSID_HTMLHeaderElement},
+        {L"br",       &DIID_DispHTMLBRElement,       &CLSID_HTMLBRElement},
+        {L"font",     &DIID_DispHTMLFontElement,     &CLSID_HTMLFontElement},
+        {L"basefont", &DIID_DispHTMLBaseFontElement, &CLSID_HTMLBaseFontElement},
+        {L"base",     &DIID_DispHTMLBaseElement,     &CLSID_HTMLBaseElement},
+    };
+    static const struct {
+        const WCHAR *tag, *prop;
+        VARTYPE vt;
+        const WCHAR *str;
+        LONG i4;
+        HRESULT hres;
+        const char *get;
+        DISPID dispid;
+    } prop_tests[] = {
+        {L"b",        L"cite",     VT_EMPTY, NULL,             0,          S_OK,                "null",          DISPID_IHTMLPHRASEELEMENT2_CITE},
+        {L"b",        L"cite",     VT_BSTR,  L"x.htm",         0,          S_OK,                "\"x.htm\""},
+        {L"b",        L"cite",     VT_BSTR,  L"",              0,          S_OK,                "\"\""},
+        {L"code",     L"cite",     VT_I4,    NULL,             7,          S_OK,                "\"7\""},
+        {L"i",        L"cite",     VT_NULL,  NULL,             0,          S_OK,                "\"null\""},
+        {L"b",        L"title",    VT_NULL,  NULL,             0,          S_OK,                "\"null\""},
+        {L"q",        L"dateTime", VT_BSTR,  L"2020-01-01",    0,          S_OK,                "\"2020-01-01\"",DISPID_IHTMLPHRASEELEMENT2_DATETIME},
+        {L"b",        L"ie8_cite", VT_EMPTY, NULL,             0,          DISP_E_UNKNOWNNAME,  NULL},
+        {L"center",   L"clear",    VT_EMPTY, NULL,             0,          S_OK,                "null",          DISPID_IHTMLBLOCKELEMENT_CLEAR},
+        {L"center",   L"clear",    VT_BSTR,  L"ALL",           0,          S_OK,                "\"all\""},
+        {L"center",   L"clear",    VT_BSTR,  L"both",          0,          S_OK,                "\"both\""},
+        {L"pre",      L"clear",    VT_BSTR,  L"bogus",         0,          E_INVALIDARG,        "null"},
+        {L"pre",      L"clear",    VT_BSTR,  L" all",          0,          E_INVALIDARG,        "null"},
+        {L"pre",      L"clear",    VT_BSTR,  L"",              0,          S_OK,                "null"},
+        {L"pre",      L"clear",    VT_NULL,  NULL,             0,          E_INVALIDARG,        "null"},
+        {L"center",   L"cite",     VT_BSTR,  L"x.htm",         0,          S_OK,                "\"x.htm\"",     DISPID_IHTMLBLOCKELEMENT2_CITE},
+        {L"pre",      L"width",    VT_BSTR,  L"10px",          0,          S_OK,                "\"10px\"",      DISPID_IHTMLBLOCKELEMENT2_WIDTH},
+        {L"pre",      L"width",    VT_I4,    NULL,             9,          S_OK,                "\"9\""},
+        {L"br",       L"clear",    VT_BSTR,  L"LEFT",          0,          S_OK,                "\"left\"",      DISPID_IHTMLBRELEMENT_CLEAR},
+        {L"br",       L"clear",    VT_BSTR,  L"none",          0,          S_OK,                "\"none\""},
+        {L"br",       L"clear",    VT_BSTR,  L"right",         0,          S_OK,                "\"right\""},
+        {L"br",       L"clear",    VT_BOOL,  NULL,             0,          E_INVALIDARG,        "null"},
+        {L"p",        L"align",    VT_EMPTY, NULL,             0,          S_OK,                "null",          DISPID_IHTMLPARAELEMENT_ALIGN},
+        {L"p",        L"align",    VT_BSTR,  L"CENTER",        0,          S_OK,                "\"center\""},
+        {L"p",        L"align",    VT_BSTR,  L"justify",       0,          S_OK,                "\"justify\""},
+        {L"p",        L"align",    VT_BSTR,  L"middle",        0,          E_INVALIDARG,        "null"},
+        {L"p",        L"align",    VT_BSTR,  L"left ",         0,          E_INVALIDARG,        "null"},
+        {L"p",        L"clear",    VT_BSTR,  L"right",         0,          S_OK,                "\"right\"",     DISPID_IHTMLBLOCKELEMENT_CLEAR},
+        {L"p",        L"cite",     VT_EMPTY, NULL,             0,          DISP_E_UNKNOWNNAME,  NULL},
+        {L"h1",       L"align",    VT_BSTR,  L"right",         0,          S_OK,                "\"right\"",     DISPID_IHTMLHEADERELEMENT_ALIGN},
+        {L"h1",       L"align",    VT_BSTR,  L"top",           0,          E_INVALIDARG,        "null"},
+        {L"h3",       L"clear",    VT_BSTR,  L"all",           0,          S_OK,                "\"all\""},
+        {L"h1",       L"width",    VT_EMPTY, NULL,             0,          DISP_E_UNKNOWNNAME,  NULL},
+        {L"font",     L"color",    VT_EMPTY, NULL,             0,          S_OK,                "null",          DISPID_IHTMLFONTELEMENT_COLOR},
+        {L"font",     L"color",    VT_BSTR,  L"red",           0,          S_OK,                "\"#ff0000\""},
+        {L"font",     L"color",    VT_BSTR,  L"ReD",           0,          S_OK,                "\"#ff0000\""},
+        {L"font",     L"color",    VT_BSTR,  L"aliceblue",     0,          S_OK,                "\"#f0f8ff\""},
+        {L"font",     L"color",    VT_BSTR,  L"lightgoldenrodyellow", 0,   S_OK,                "\"#fafad2\""},
+        {L"font",     L"color",    VT_BSTR,  L"rebeccapurple", 0,          S_OK,                "\"#663399\""},
+        {L"font",     L"color",    VT_BSTR,  L"grey",          0,          S_OK,                "\"#808080\""},
+        {L"font",     L"color",    VT_BSTR,  L"Transparent",   0,          S_OK,                "\"transparent\""},
+        {L"font",     L"color",    VT_BSTR,  L"x.htm",         0,          S_OK,                "\"#000000\""},
+        {L"font",     L"color",    VT_BSTR,  L"#ABC",          0,          S_OK,                "\"#0a0b0c\""},
+        {L"font",     L"color",    VT_BSTR,  L"1",             0,          S_OK,                "\"#010000\""},
+        {L"font",     L"color",    VT_BSTR,  L"#12",           0,          S_OK,                "\"#010200\""},
+        {L"font",     L"color",    VT_BSTR,  L"1234",          0,          S_OK,                "\"#123400\""},
+        {L"font",     L"color",    VT_BSTR,  L"12345",         0,          S_OK,                "\"#123450\""},
+        {L"font",     L"color",    VT_BSTR,  L"123456",        0,          S_OK,                "\"#123456\""},
+        {L"font",     L"color",    VT_BSTR,  L"1234567",       0,          S_OK,                "\"#124570\""},
+        {L"font",     L"color",    VT_BSTR,  L"123456789",     0,          S_OK,                "\"#124578\""},
+        {L"font",     L"color",    VT_BSTR,  L"fffffff0",      0,          S_OK,                "\"#fffff0\""},
+        {L"font",     L"color",    VT_BSTR,  L"http://h/a b",  0,          S_OK,                "\"#0000a0\""},
+        {L"font",     L"color",    VT_BSTR,  L"2020-01-01",    0,          S_OK,                "\"#200001\""},
+        {L"font",     L"color",    VT_BSTR,  L" red",          0,          S_OK,                "\"#00ed00\""},
+        {L"font",     L"color",    VT_BSTR,  L"left",          0,          S_OK,                "\"#0ef000\""},
+        {L"font",     L"color",    VT_BSTR,  L"#",             0,          S_OK,                "\"#000000\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(1,2,3)",    0,          S_OK,                "\"#010203\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb( 1 , 2 , 3 )", 0,       S_OK,                "\"#010203\""},
+        {L"font",     L"color",    VT_BSTR,  L"RGB(300,2,3)",  0,          S_OK,                "\"#ff0203\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(10%,0,0)",  0,          S_OK,                "\"#1a0000\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(1,2)",      0,          S_OK,                "\"#000120\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(2%,0,0)",   0,          S_OK,                "\"#050000\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(12.5%,0,0)",0,          S_OK,                "\"#200000\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(200%,0,0)", 0,          S_OK,                "\"#ff0000\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(50%,1,2)",  0,          S_OK,                "\"#800102\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(1.5,0,0)",  0,          S_OK,                "\"#020000\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(-1,0,0)",   0,          S_OK,                "\"#000000\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(1,2,3",     0,          S_OK,                "\"#000120\""},
+        {L"font",     L"color",    VT_BSTR,  L"rgb(1,2,3)x",   0,          S_OK,                "\"#001030\""},
+        {L"font",     L"color",    VT_BSTR,  L"",              0,          S_OK,                "null"},
+        {L"font",     L"color",    VT_I4,    NULL,             0x123456,   S_OK,                "\"#123456\""},
+        {L"font",     L"color",    VT_I4,    NULL,             100,        S_OK,                "\"#000064\""},
+        {L"font",     L"color",    VT_I4,    NULL,             0x1000000,  S_OK,                "null"},
+        {L"font",     L"color",    VT_I4,    NULL,             -1,         S_OK,                "null"},
+        {L"font",     L"color",    VT_NULL,  NULL,             0,          S_OK,                "null"},
+        {L"font",     L"color",    VT_BOOL,  NULL,             0,          S_OK,                "null"},
+        {L"font",     L"face",     VT_BSTR,  L"Arial, Courier",0,          S_OK,                "\"Arial, Courier\"", DISPID_IHTMLFONTELEMENT_FACE},
+        {L"font",     L"face",     VT_BSTR,  L"",              0,          S_OK,                "\"\""},
+        {L"font",     L"size",     VT_EMPTY, NULL,             0,          S_OK,                "null",          DISPID_IHTMLFONTELEMENT_SIZE},
+        {L"font",     L"size",     VT_BSTR,  L"",              0,          S_OK,                "\"3\""},
+        {L"font",     L"size",     VT_BSTR,  L" 3",            0,          S_OK,                "\"3\""},
+        {L"font",     L"size",     VT_BSTR,  L"\t2",           0,          S_OK,                "\"2\""},
+        {L"font",     L"size",     VT_BSTR,  L"3x",            0,          S_OK,                "\"3\""},
+        {L"font",     L"size",     VT_BSTR,  L"+0",            0,          S_OK,                "\"+0\""},
+        {L"font",     L"size",     VT_BSTR,  L"07",            0,          S_OK,                "\"7\""},
+        {L"font",     L"size",     VT_BSTR,  L"-8",            0,          S_OK,                "\"-8\""},
+        {L"font",     L"size",     VT_BSTR,  L"99999999999",   0,          S_OK,                "\"2147483647\""},
+        {L"font",     L"size",     VT_BSTR,  L"-99999999999",  0,          S_OK,                "\"-2147483648\""},
+        {L"font",     L"size",     VT_BSTR,  L"+99999999999",  0,          S_OK,                "\"+2147483647\""},
+        {L"font",     L"size",     VT_BSTR,  L"1.5",           0,          S_OK,                "\"1\""},
+        {L"font",     L"size",     VT_BSTR,  L"0x10",          0,          S_OK,                "\"0\""},
+        {L"font",     L"size",     VT_BSTR,  L"2020-01-01",    0,          S_OK,                "\"2020\""},
+        {L"font",     L"size",     VT_BSTR,  L"+",             0,          E_INVALIDARG,        "null"},
+        {L"font",     L"size",     VT_BSTR,  L"abc",           0,          E_INVALIDARG,        "null"},
+        {L"font",     L"size",     VT_BSTR,  L" ",             0,          E_INVALIDARG,        "null"},
+        {L"font",     L"size",     VT_I4,    NULL,             -1,         S_OK,                "\"-1\""},
+        {L"font",     L"size",     VT_I4,    NULL,             0x123456,   S_OK,                "\"1193046\""},
+        {L"font",     L"size",     VT_NULL,  NULL,             0,          S_OK,                "null"},
+        {L"font",     L"size",     VT_BOOL,  NULL,             0,          E_INVALIDARG,        "null"},
+        {L"basefont", L"color",    VT_BSTR,  L"1234567",       0,          S_OK,                "\"#124570\"",   DISPID_IHTMLBASEFONTELEMENT_COLOR},
+        {L"basefont", L"color",    VT_BSTR,  L"Transparent",   0,          S_OK,                "\"transparent\""},
+        {L"basefont", L"face",     VT_BSTR,  L"Arial",         0,          S_OK,                "\"Arial\"",     DISPID_IHTMLBASEFONTELEMENT_FACE},
+        {L"basefont", L"size",     VT_EMPTY, NULL,             0,          S_OK,                "I4:3",          DISPID_IHTMLBASEFONTELEMENT_SIZE},
+        {L"basefont", L"size",     VT_I4,    NULL,             5,          S_OK,                "I4:5"},
+        {L"basefont", L"size",     VT_I4,    NULL,             -1,         S_OK,                "I4:-1"},
+        {L"basefont", L"size",     VT_I4,    NULL,             100,        S_OK,                "I4:100"},
+        {L"basefont", L"size",     VT_BSTR,  L"+2",            0,          S_OK,                "I4:2"},
+        {L"basefont", L"size",     VT_BSTR,  L" 4",            0,          S_OK,                "I4:4"},
+        {L"basefont", L"size",     VT_BSTR,  L"1.5",           0,          S_OK,                "I4:2"},
+        {L"basefont", L"size",     VT_BSTR,  L"abc",           0,          DISP_E_TYPEMISMATCH, "I4:3"},
+        {L"basefont", L"size",     VT_BSTR,  L"3x",            0,          DISP_E_TYPEMISMATCH, "I4:3"},
+        {L"basefont", L"size",     VT_BSTR,  L"",              0,          S_OK,                "I4:0"},
+        {L"basefont", L"size",     VT_NULL,  NULL,             0,          S_OK,                "I4:0"},
+        {L"base",     L"href",     VT_EMPTY, NULL,             0,          S_OK,                "null",          DISPID_IHTMLBASEELEMENT_HREF},
+        {L"base",     L"href",     VT_BSTR,  L"x.htm",         0,          S_OK,                "\"x.htm\""},
+        {L"base",     L"target",   VT_BSTR,  L"_blank",        0,          S_OK,                "\"_blank\"",    DISPID_IHTMLBASEELEMENT_TARGET},
+        {L"base",     L"ie8_href", VT_EMPTY, NULL,             0,          DISP_E_UNKNOWNNAME,  NULL},
+    };
+    static const struct {
+        const WCHAR *tag;
+        const IID *iid;
+        unsigned slot;
+        const WCHAR *attr, *unset, *set, *put;
+    } url_tests[] = {
+        {L"b",      &IID_IHTMLPhraseElement3, 7, L"cite",  L"", L"about:x.htm", L"y.htm"},
+        {L"pre",    &IID_IHTMLBlockElement3,  7, L"cite",  L"", L"about:x.htm", L"y.htm"},
+        {L"p",      &IID_IHTMLBlockElement3,  7, L"cite",  L"", L"",            L"x.htm"},
+        {L"h1",     &IID_IHTMLBlockElement3,  7, L"cite",  L"", L"",            L"x.htm"},
+        {L"center", &IID_IHTMLBlockElement2,  7, L"cite",  NULL, L"x.htm",      L"y.htm"},
+        {L"p",      &IID_IHTMLBlockElement2,  7, L"cite",  NULL, NULL,          L"x.htm"},
+        {L"h1",     &IID_IHTMLBlockElement2,  7, L"cite",  NULL, NULL,          L"x.htm"},
+        {L"center", &IID_IHTMLBlockElement2,  9, L"width", NULL, L"x.htm",      L"y.htm"},
+        {L"p",      &IID_IHTMLBlockElement2,  9, L"width", NULL, NULL,          L"x.htm"},
+        {L"h1",     &IID_IHTMLBlockElement2,  9, L"width", NULL, NULL,          L"x.htm"},
+        {L"base",   &IID_IHTMLBaseElement2,   7, L"href",  L"", L"about:x.htm", L"y.htm"},
+    };
+    char buf[256], buf2[256];
+    unsigned i, j;
+
+    for(i = 0; i < ARRAY_SIZE(qi_tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, qi_tests[i].tag);
+        char qi[ARRAY_SIZE(text_iids) + 1];
+
+        for(j = 0; j < ARRAY_SIZE(text_iids); j++) {
+            IUnknown *unk;
+            HRESULT hres = IHTMLElement_QueryInterface(elem, text_iids[j], (void**)&unk);
+            qi[j] = SUCCEEDED(hres) ? '1' : '.';
+            if(SUCCEEDED(hres))
+                IUnknown_Release(unk);
+        }
+        qi[j] = 0;
+        ok(!strcmp(qi, qi_tests[i].qi), "%s: QueryInterface %s, expected %s\n", wine_dbgstr_w(qi_tests[i].tag), qi, qi_tests[i].qi);
+        IHTMLElement_Release(elem);
+    }
+
+    for(i = 0; i < ARRAY_SIZE(disp_tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, disp_tests[i].tag);
+        test_disp((IUnknown*)elem, disp_tests[i].diid, disp_tests[i].clsid, L"[object]");
+        IHTMLElement_Release(elem);
+    }
+
+    for(i = 0; i < ARRAY_SIZE(prop_tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, prop_tests[i].tag);
+        DISPID id = DISPID_UNKNOWN, named = DISPID_PROPERTYPUT;
+        DISPPARAMS dp = {NULL, &named, 1, 1}, dp0 = {0};
+        IDispatchEx *dispex;
+        BSTR name = SysAllocString(prop_tests[i].prop);
+        VARIANT v, res, attr;
+        HRESULT hres;
+
+        IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+        hres = IDispatchEx_GetDispID(dispex, name, fdexNameCaseInsensitive, &id);
+        if(prop_tests[i].hres == DISP_E_UNKNOWNNAME) {
+            ok(hres == DISP_E_UNKNOWNNAME, "%s.%s: GetDispID returned %08lx\n",
+               wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop), hres);
+        }else {
+            ok(hres == S_OK, "%s.%s: GetDispID returned %08lx\n",
+               wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop), hres);
+            if(prop_tests[i].dispid)
+                ok(id == prop_tests[i].dispid, "%s.%s: dispid %lx, expected %lx\n",
+                   wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop), id, prop_tests[i].dispid);
+
+            if(prop_tests[i].vt != VT_EMPTY) {
+                V_VT(&v) = prop_tests[i].vt;
+                if(prop_tests[i].vt == VT_BSTR)
+                    V_BSTR(&v) = SysAllocString(prop_tests[i].str);
+                else if(prop_tests[i].vt == VT_I4)
+                    V_I4(&v) = prop_tests[i].i4;
+                else if(prop_tests[i].vt == VT_BOOL)
+                    V_BOOL(&v) = VARIANT_TRUE;
+                dp.rgvarg = &v;
+                hres = IDispatchEx_InvokeEx(dispex, id, 0, DISPATCH_PROPERTYPUT, &dp, NULL, NULL, NULL);
+                ok(hres == prop_tests[i].hres, "%s.%s = %s: put returned %08lx, expected %08lx\n",
+                   wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop),
+                   text_elem_variant_str(&v, buf, sizeof(buf)), hres, prop_tests[i].hres);
+                VariantClear(&v);
+            }
+
+            V_VT(&res) = VT_EMPTY;
+            hres = IDispatchEx_InvokeEx(dispex, id, 0, DISPATCH_PROPERTYGET, &dp0, &res, NULL, NULL);
+            ok(hres == S_OK, "%s.%s: get returned %08lx\n", wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop), hres);
+            ok(!strcmp(text_elem_variant_str(&res, buf, sizeof(buf)), prop_tests[i].get), "%s.%s #%u: got %s, expected %s\n",
+               wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop), i, buf, prop_tests[i].get);
+
+            V_VT(&attr) = VT_EMPTY;
+            hres = IHTMLElement_getAttribute(elem, name, 0, &attr);
+            ok(hres == S_OK, "%s.%s: getAttribute returned %08lx\n", wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop), hres);
+            ok(!strcmp(text_elem_variant_str(&attr, buf2, sizeof(buf2)), text_elem_variant_str(&res, buf, sizeof(buf))),
+               "%s.%s #%u: getAttribute %s, property %s\n", wine_dbgstr_w(prop_tests[i].tag), wine_dbgstr_w(prop_tests[i].prop), i, buf2, buf);
+            VariantClear(&res);
+            VariantClear(&attr);
+        }
+        SysFreeString(name);
+        IDispatchEx_Release(dispex);
+        IHTMLElement_Release(elem);
+    }
+
+    {
+        IHTMLElement *elem = test_create_elem(doc, L"font");
+        VARIANT v, res;
+        COLORREF c = GetSysColor(COLOR_WINDOWTEXT);
+        char expected[16];
+        BSTR name = SysAllocString(L"color");
+        HRESULT hres;
+
+        snprintf(expected, sizeof(expected), "\"#%02x%02x%02x\"", GetRValue(c), GetGValue(c), GetBValue(c));
+        V_VT(&v) = VT_BSTR;
+        V_BSTR(&v) = SysAllocString(L"WindowText");
+        hres = IHTMLElement_setAttribute(elem, name, v, 0);
+        ok(hres == S_OK, "setAttribute returned %08lx\n", hres);
+        VariantClear(&v);
+        V_VT(&res) = VT_EMPTY;
+        hres = IHTMLElement_getAttribute(elem, name, 0, &res);
+        ok(hres == S_OK, "getAttribute returned %08lx\n", hres);
+        ok(!strcmp(text_elem_variant_str(&res, buf, sizeof(buf)), expected), "windowtext color %s, expected %s\n", buf, expected);
+        VariantClear(&res);
+        SysFreeString(name);
+        IHTMLElement_Release(elem);
+    }
+
+    for(i = 0; i < ARRAY_SIZE(url_tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, url_tests[i].tag);
+        BSTR name = SysAllocString(url_tests[i].attr), str = (void*)0xdeadbeef;
+        HRESULT (WINAPI *get)(IDispatch*,BSTR*);
+        HRESULT (WINAPI *put)(IDispatch*,BSTR);
+        IDispatch *iface;
+        VARIANT v, expected;
+        HRESULT hres;
+
+        hres = IHTMLElement_QueryInterface(elem, url_tests[i].iid, (void**)&iface);
+        ok(hres == S_OK, "%s: QueryInterface returned %08lx\n", wine_dbgstr_w(url_tests[i].tag), hres);
+        if(FAILED(hres)) {
+            SysFreeString(name);
+            IHTMLElement_Release(elem);
+            continue;
+        }
+        put = ((void**)iface->lpVtbl)[url_tests[i].slot];
+        get = ((void**)iface->lpVtbl)[url_tests[i].slot + 1];
+
+        hres = get(iface, &str);
+        ok(hres == S_OK, "%s: get returned %08lx\n", wine_dbgstr_w(url_tests[i].tag), hres);
+        ok(url_tests[i].unset ? str && !wcscmp(str, url_tests[i].unset) : !str, "%s #%u: unset value %s\n",
+           wine_dbgstr_w(url_tests[i].tag), i, wine_dbgstr_w(str));
+        SysFreeString(str);
+
+        V_VT(&v) = VT_BSTR;
+        V_BSTR(&v) = SysAllocString(L"x.htm");
+        IHTMLElement_setAttribute(elem, name, v, 0);
+        VariantClear(&v);
+        hres = get(iface, &str);
+        ok(hres == S_OK, "%s: get returned %08lx\n", wine_dbgstr_w(url_tests[i].tag), hres);
+        ok(url_tests[i].set ? str && !wcscmp(str, url_tests[i].set) : !str, "%s #%u: value %s\n", wine_dbgstr_w(url_tests[i].tag), i, wine_dbgstr_w(str));
+        SysFreeString(str);
+
+        str = SysAllocString(L"y.htm");
+        hres = put(iface, str);
+        ok(hres == S_OK, "%s: put returned %08lx\n", wine_dbgstr_w(url_tests[i].tag), hres);
+        SysFreeString(str);
+        V_VT(&v) = VT_EMPTY;
+        IHTMLElement_getAttribute(elem, name, 0, &v);
+        V_VT(&expected) = VT_BSTR;
+        V_BSTR(&expected) = SysAllocString(url_tests[i].put);
+        ok(!strcmp(text_elem_variant_str(&v, buf, sizeof(buf)), text_elem_variant_str(&expected, buf2, sizeof(buf2))),
+           "%s #%u: attribute %s\n", wine_dbgstr_w(url_tests[i].tag), i, buf);
+        VariantClear(&expected);
+        VariantClear(&v);
+
+        IDispatch_Release(iface);
+        SysFreeString(name);
+        IHTMLElement_Release(elem);
+    }
+}
+
+static void test_text_elements_ie9_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *tag;
+        const IID *iid;
+        unsigned slot;
+        const WCHAR *attr, *value, *unset, *set;
+    } tests[] = {
+        {L"b",        &IID_IHTMLPhraseElement2,  8,  L"cite",     L"x.htm", NULL, L"x.htm"},
+        {L"b",        &IID_IHTMLPhraseElement2,  10, L"datetime", L"x.htm", NULL, L"x.htm"},
+        {L"b",        &IID_IHTMLPhraseElement3,  8,  L"cite",     L"x.htm", L"", L"about:x.htm"},
+        {L"del",      &IID_IHTMLPhraseElement2,  8,  L"cite",     L"x.htm", NULL, L"x.htm"},
+        {L"q",        &IID_IHTMLPhraseElement2,  10, L"datetime", L"x.htm", NULL, L"x.htm"},
+        {L"pre",      &IID_IHTMLBlockElement2,   8,  L"cite",     L"x.htm", NULL, L"x.htm"},
+        {L"pre",      &IID_IHTMLBlockElement2,   10, L"width",    L"x.htm", NULL, L"x.htm"},
+        {L"center",   &IID_IHTMLBlockElement,    8,  L"clear",    L"all",   NULL, L"all"},
+        {L"p",        &IID_IHTMLParaElement,     8,  L"align",    L"left",  NULL, L"left"},
+        {L"h1",       &IID_IHTMLHeaderElement,   8,  L"align",    L"left",  NULL, L"left"},
+        {L"br",       &IID_IHTMLBRElement,       8,  L"clear",    L"all",   NULL, L"all"},
+        {L"font",     &IID_IHTMLFontElement,     10, L"face",     L"x.htm", NULL, L"x.htm"},
+        {L"basefont", &IID_IHTMLBaseFontElement, 10, L"face",     L"x.htm", NULL, L"x.htm"},
+        {L"base",     &IID_IHTMLBaseElement,     8,  L"href",     L"x.htm", NULL, L"x.htm"},
+        {L"base",     &IID_IHTMLBaseElement,     10, L"target",   L"x.htm", NULL, L"x.htm"},
+    };
+    unsigned i;
+
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, tests[i].tag);
+        BSTR name = SysAllocString(tests[i].attr), str = (void*)0xdeadbeef;
+        HRESULT (WINAPI *get)(IDispatch*,BSTR*);
+        IDispatch *iface;
+        VARIANT v;
+        HRESULT hres;
+
+        hres = IHTMLElement_QueryInterface(elem, tests[i].iid, (void**)&iface);
+        ok(hres == S_OK, "%s #%u: QueryInterface returned %08lx\n", wine_dbgstr_w(tests[i].tag), i, hres);
+        if(FAILED(hres)) {
+            SysFreeString(name);
+            IHTMLElement_Release(elem);
+            continue;
+        }
+        get = ((void**)iface->lpVtbl)[tests[i].slot];
+
+        hres = get(iface, &str);
+        ok(hres == S_OK, "%s #%u: get returned %08lx\n", wine_dbgstr_w(tests[i].tag), i, hres);
+        ok(tests[i].unset ? str && !wcscmp(str, tests[i].unset) : !str, "%s #%u: unset value %s\n",
+           wine_dbgstr_w(tests[i].tag), i, wine_dbgstr_w(str));
+        SysFreeString(str);
+
+        V_VT(&v) = VT_BSTR;
+        V_BSTR(&v) = SysAllocString(tests[i].value);
+        hres = IHTMLElement_setAttribute(elem, name, v, 0);
+        ok(hres == S_OK, "%s #%u: setAttribute returned %08lx\n", wine_dbgstr_w(tests[i].tag), i, hres);
+        VariantClear(&v);
+        hres = get(iface, &str);
+        ok(hres == S_OK, "%s #%u: get returned %08lx\n", wine_dbgstr_w(tests[i].tag), i, hres);
+        ok(tests[i].set ? str && !wcscmp(str, tests[i].set) : !str, "%s #%u: value %s\n",
+           wine_dbgstr_w(tests[i].tag), i, wine_dbgstr_w(str));
+        SysFreeString(str);
+
+        IDispatch_Release(iface);
+        SysFreeString(name);
+        IHTMLElement_Release(elem);
+    }
+}
+
 static void test_attr_collection_builtins_libernt(IHTMLDocument2 *doc)
 {
     static const struct {
@@ -14095,6 +14530,8 @@ START_TEST(dom)
         run_domtest(doc_blank, test_about_blank_storage);
         run_domtest(doc_blank, test_attr_collection_builtins);
         run_domtest(doc_blank, test_attr_collection_builtins_libernt);
+        run_domtest(doc_blank, test_text_elements_libernt);
+        run_domtest(doc_blank_ie9, test_text_elements_ie9_libernt);
         if(is_ie9plus) {
             compat_mode = COMPAT_IE9;
             run_domtest(doc_blank_ie9, test_doc_open);

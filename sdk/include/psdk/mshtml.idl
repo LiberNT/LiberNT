@@ -17185,6 +17185,649 @@ coclass HTMLTitleElement
 }
 
 /*****************************************************************************
+ *    IHTMLBaseElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f204-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBaseElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    HRESULT href([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    HRESULT href([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    HRESULT target([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    HRESULT target([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBaseElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(30510420-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBaseElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    HRESULT href([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    HRESULT href([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBaseFontElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f202-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBaseFontElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([in] LONG v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([out, retval] LONG *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFontElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1d9-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFontElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLPhraseElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f20a-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLPhraseElement : IDispatch
+{
+}
+
+/*****************************************************************************
+ *    IHTMLPhraseElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f824-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLPhraseElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    HRESULT dateTime([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    HRESULT dateTime([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLPhraseElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3051043d-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLPhraseElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    HRESULT cite([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBlockElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f208-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBlockElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBlockElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f823-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBlockElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    HRESULT width([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    HRESULT width([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBlockElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(30510494-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBlockElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    HRESULT cite([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBRElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f0-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBRElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLParaElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f5-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLParaElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    HRESULT align([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLHeaderElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f6-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLHeaderElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    HRESULT align([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLBaseElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f518-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBaseElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    void href(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    BSTR href();
+
+    [propput, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    void target(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    BSTR target();
+
+    [propput, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    void ie8_href(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    BSTR ie8_href();
+}
+
+/*****************************************************************************
+ *    HTMLBaseElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f276-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBaseElement
+{
+    [default]         dispinterface DispHTMLBaseElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBaseElement;
+    interface IHTMLBaseElement2;
+}
+
+/*****************************************************************************
+ *    DispHTMLBaseFontElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f504-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBaseFontElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    void color(VARIANT v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    VARIANT color();
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    void face(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    BSTR face();
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    void size(LONG v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    LONG size();
+}
+
+/*****************************************************************************
+ *    HTMLBaseFontElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f282-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBaseFontElement
+{
+    [default]         dispinterface DispHTMLBaseFontElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBaseFontElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLFontElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f512-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLFontElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    void color(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    VARIANT color();
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    void face(BSTR v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    BSTR face();
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    void size(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    VARIANT size();
+}
+
+/*****************************************************************************
+ *    HTMLFontElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27b-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLFontElement
+{
+    [default]         dispinterface DispHTMLFontElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLFontElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLPhraseElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f52d-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLPhraseElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    void cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    BSTR cite();
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    void dateTime(BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    BSTR dateTime();
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    void ie8_cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    BSTR ie8_cite();
+}
+
+/*****************************************************************************
+ *    HTMLPhraseElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f26e-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLPhraseElement
+{
+    [default]         dispinterface DispHTMLPhraseElement;
+    [source, default] dispinterface HTMLElementEvents;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLPhraseElement;
+    interface IHTMLPhraseElement2;
+    interface IHTMLPhraseElement3;
+}
+
+/*****************************************************************************
+ *    DispHTMLBlockElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f506-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBlockElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    void cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    BSTR cite();
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    void width(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    BSTR width();
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    void ie8_cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    BSTR ie8_cite();
+}
+
+/*****************************************************************************
+ *    HTMLBlockElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f281-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBlockElement
+{
+    [default]         dispinterface DispHTMLBlockElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBlockElement;
+    interface IHTMLBlockElement2;
+    interface IHTMLBlockElement3;
+}
+
+/*****************************************************************************
+ *    DispHTMLBRElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f53a-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBRElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+}
+
+/*****************************************************************************
+ *    HTMLBRElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f280-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBRElement
+{
+    [default]         dispinterface DispHTMLBRElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBRElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLParaElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f52c-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLParaElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+
+    [propput, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLParaElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f26f-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLParaElement
+{
+    [default]         dispinterface DispHTMLParaElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBlockElement;
+    interface IHTMLParaElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLHeaderElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f515-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLHeaderElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+
+    [propput, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLHeaderElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27a-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLHeaderElement
+{
+    [default]         dispinterface DispHTMLHeaderElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBlockElement;
+    interface IHTMLHeaderElement;
+}
+
+/*****************************************************************************
  *    DispHTMLMetaElement dispinterface
  */
 [
