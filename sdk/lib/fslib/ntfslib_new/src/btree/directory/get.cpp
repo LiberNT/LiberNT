@@ -773,6 +773,8 @@ Directory::GetFileBothDirInfoDirect(
     ULONG TotalBufferLength = *BufferLength;
     BOOLEAN ExactName = FileNameFilter && !NameContainsWildCards(FileNameFilter);
     BOOLEAN ExactLookedUp = FALSE;
+    WCHAR ExactBuffer[NTFS_MAX_FILE_NAME_LENGTH];
+    UNICODE_STRING ExactTarget = {};
     NTSTATUS Status;
 
     if (RestartScan)
@@ -809,6 +811,14 @@ Directory::GetFileBothDirInfoDirect(
         return STATUS_NO_MORE_FILES;
     }
 
+    if (ExactName && CaseSensitive && FileNameFilter->Length <= sizeof(ExactBuffer))
+    {
+        RtlCopyMemory(ExactBuffer, FileNameFilter->Buffer, FileNameFilter->Length);
+        ExactTarget.Buffer = ExactBuffer;
+        ExactTarget.Length = FileNameFilter->Length;
+        ExactTarget.MaximumLength = FileNameFilter->Length;
+    }
+
     if (FileNameFilter)
     {
         Status = DiskVolume->UpcaseWideString(
@@ -834,7 +844,7 @@ Directory::GetFileBothDirInfoDirect(
         {
             Status = ExactLookedUp
                 ? STATUS_NO_MORE_FILES
-                : FindDirectExactEntry(FileNameFilter, &IndexEntry);
+                : FindDirectExactEntry(ExactTarget.Buffer != NULL ? &ExactTarget : FileNameFilter, &IndexEntry);
             ExactLookedUp = TRUE;
         }
         else
