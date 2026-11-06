@@ -537,6 +537,7 @@ list(APPEND KMTEST_SOURCE
     ntos_mm/NtCreateSection_user.c
     ntos_mm/NtUserPhysicalPages.c
     ntos_mm/NtProcessClone.c
+    ndis/NdisPoll_user.c
     ndis/NdisSgDma_user.c
     ntos_po/BatteryClassNotify_user.c
     ntos_po/PoIrp_user.c
@@ -571,6 +572,7 @@ add_custom_target(kmtest_drivers)
 add_dependencies(kmtest_drivers
     kmtest_drv
     example_drv
+    ndispoll_drv
     ndissg_drv
     FltMgrLoad_drv
     fltmgrio_drv

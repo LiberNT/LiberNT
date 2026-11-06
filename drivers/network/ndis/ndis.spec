@@ -429,6 +429,7 @@
  @ stdcall NdisRegisterPoll(ptr ptr ptr ptr)
  @ stdcall NdisDeregisterPoll(ptr)
  @ stdcall NdisRequestPoll(ptr ptr)
+ @ stdcall NdisSetPollAffinity(ptr ptr)
  @ stdcall NdisMRegisterInterruptEx(ptr ptr ptr ptr)
  @ stdcall NdisMDeregisterInterruptEx(ptr)
  @ stdcall NdisMSynchronizeWithInterruptEx(ptr long ptr ptr)

@@ -1093,146 +1093,279 @@ NdisGetSystemUpTimeEx(
     pSystemUpTime->QuadPart = TickCount.QuadPart * KeQueryTimeIncrement();
 }
 
-/* ============================================================================
- *  E4: NDIS 6.30+ polling API — NdisRegisterPoll / NdisMPollComplete
- *
- *  The polling API lets a driver run its RX/TX work via a kernel poll
- *  callback instead of DPC-based dispatch. We model each registered poll
- *  as a KDPC that the driver can request via NdisRequestPoll; the DPC
- *  calls back into the driver's NDIS_POLL routine, which does work and
- *  optionally re-requests.
- *
- *  This is a minimal functional implementation — no NUMA affinity, no
- *  budget tracking, no separate DPC queue priority. Sufficient for
- *  drivers that opt-in but not full-performance poll mode.
- * ============================================================================ */
+#define NDIS6_POLL_TAG              'PlNn'
+#define NDIS6_POLL_BUDGET           64
+#define NDIS6_POLL_ITERATIONS       8
 
-typedef VOID (NTAPI *PNDIS6_POLL_HANDLER)(
-    _In_ PVOID PollContext,
-    _In_ PVOID Parameters);
+#define NDIS6_POLL_IDLE             0
+#define NDIS6_POLL_QUEUED           1
+#define NDIS6_POLL_RUNNING          2
+#define NDIS6_POLL_RUNNING_REQUESTED 3
 
-typedef struct _NDIS6_POLL_CONTEXT
+typedef struct _NDIS6_POLL
 {
-    ULONG                   Magic;
-    KDPC                    Dpc;
-    PNDIS6_POLL_HANDLER     PollHandler;
-    PVOID                   PollContext;
-    LONG                    RequestCount;       /* atomic: pending requests */
-    BOOLEAN                 Unregistered;
-} NDIS6_POLL_CONTEXT, *PNDIS6_POLL_CONTEXT;
+    NDIS_HANDLE MiniportHandle;
+    PVOID Context;
+    NDIS_SET_POLL_NOTIFICATION_HANDLER SetPollNotificationHandler;
+    NDIS_POLL_HANDLER PollHandler;
+    KDPC Dpc;
+    volatile LONG State;
+    volatile LONG Deregistering;
+    volatile LONG AffinityChanged;
+    volatile LONG Affinity;
+    BOOLEAN NotificationEnabled;
+} NDIS6_POLL, *PNDIS6_POLL;
 
-#define NDIS6_POLL_MAGIC   0x504F4C4CU  /* 'POLL' */
-#define NDIS6_POLL_TAG     'PlNn'
+static
+VOID
+Ndis6PollQueue(
+    _Inout_ PNDIS6_POLL Poll)
+{
+    PROCESSOR_NUMBER Processor;
+    LONG Affinity;
 
-static VOID NTAPI
-Ndis6PollDpcRoutine(
-    _In_     PKDPC Dpc,
+    if (InterlockedExchange(&Poll->AffinityChanged, 0))
+    {
+        Affinity = InterlockedCompareExchange(&Poll->Affinity, 0, 0);
+        RtlZeroMemory(&Processor, sizeof(Processor));
+        Processor.Group = (USHORT)((ULONG)Affinity >> 16);
+        Processor.Number = (UCHAR)Affinity;
+        (VOID)KeSetTargetProcessorDpcEx(&Poll->Dpc, &Processor);
+    }
+    KeInsertQueueDpc(&Poll->Dpc, NULL, NULL);
+}
+
+static
+VOID
+Ndis6PollNotify(
+    _Inout_ PNDIS6_POLL Poll,
+    _In_ BOOLEAN Enabled)
+{
+    NDIS_POLL_NOTIFICATION Notification;
+
+    RtlZeroMemory(&Notification, sizeof(Notification));
+    Notification.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    Notification.Header.Revision = NDIS_POLL_NOTIFICATION_REVISION_1;
+    Notification.Header.Size = sizeof(Notification);
+    Notification.Enabled = Enabled;
+    Poll->SetPollNotificationHandler(Poll->Context, &Notification);
+    Poll->NotificationEnabled = Enabled;
+}
+
+static
+ULONG
+Ndis6PollCountNbls(
+    _In_ PNET_BUFFER_LIST Chain)
+{
+    ULONG Count = 0;
+
+    for (; Chain != NULL; Chain = NET_BUFFER_LIST_NEXT_NBL(Chain))
+        Count++;
+    return Count;
+}
+
+static
+BOOLEAN
+Ndis6PollIterate(
+    _Inout_ PNDIS6_POLL Poll)
+{
+    NDIS_POLL_DATA Data;
+    ULONG Count;
+
+    RtlZeroMemory(&Data, sizeof(Data));
+    Data.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    Data.Header.Revision = NDIS_POLL_DATA_REVISION_1;
+    Data.Header.Size = NDIS_SIZEOF_NDIS_POLL_DATA_REVISION_1;
+    Data.Transmit.MaxNblsToComplete = NDIS6_POLL_BUDGET;
+    Data.Receive.MaxNblsToIndicate = NDIS6_POLL_BUDGET;
+    Poll->PollHandler(Poll->Context, &Data);
+
+    if (Data.Receive.IndicatedNblChain != NULL)
+    {
+        Count = Data.Receive.NumberOfIndicatedNbls;
+        if (Count == NDIS_ANY_NUMBER_OF_NBLS)
+            Count = Ndis6PollCountNbls(Data.Receive.IndicatedNblChain);
+        NdisMIndicateReceiveNetBufferLists(Poll->MiniportHandle,
+                                           Data.Receive.IndicatedNblChain,
+                                           NDIS_DEFAULT_PORT_NUMBER,
+                                           Count,
+                                           Data.Receive.Flags | NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
+    }
+    if (Data.Transmit.CompletedNblChain != NULL)
+    {
+        NdisMSendNetBufferListsComplete(Poll->MiniportHandle,
+                                        Data.Transmit.CompletedNblChain,
+                                        Data.Transmit.SendCompleteFlags | NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+    }
+
+    return Data.Receive.IndicatedNblChain != NULL || Data.Transmit.CompletedNblChain != NULL;
+}
+
+static
+VOID
+NTAPI
+Ndis6PollDpc(
+    _In_ PKDPC Dpc,
     _In_opt_ PVOID DeferredContext,
     _In_opt_ PVOID SystemArgument1,
     _In_opt_ PVOID SystemArgument2)
 {
-    PNDIS6_POLL_CONTEXT Poll = (PNDIS6_POLL_CONTEXT)DeferredContext;
+    PNDIS6_POLL Poll = DeferredContext;
+    ULONG Iteration = 0;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (Poll == NULL || Poll->Magic != NDIS6_POLL_MAGIC || Poll->Unregistered)
-        return;
-
-    if (Poll->PollHandler != NULL)
+    InterlockedExchange(&Poll->State, NDIS6_POLL_RUNNING);
+    while (!InterlockedCompareExchange(&Poll->Deregistering, 0, 0))
     {
-        /* Windows passes a NDIS_POLL_PARAMETERS struct. Most driver-side
-         * NDIS_POLL routines tolerate NULL (they only look at
-         * Parameters->MaxNblsToIndicate and fall through to the "no
-         * limit" path when it's 0). */
-        Poll->PollHandler(Poll->PollContext, NULL);
+        if (Iteration >= NDIS6_POLL_ITERATIONS)
+        {
+            InterlockedExchange(&Poll->State, NDIS6_POLL_QUEUED);
+            Ndis6PollQueue(Poll);
+            return;
+        }
+
+        if (Poll->NotificationEnabled)
+            Ndis6PollNotify(Poll, FALSE);
+
+        while (Ndis6PollIterate(Poll))
+        {
+            if (++Iteration >= NDIS6_POLL_ITERATIONS)
+                break;
+        }
+        if (Iteration >= NDIS6_POLL_ITERATIONS)
+            continue;
+
+        Ndis6PollNotify(Poll, TRUE);
+        Iteration++;
+        if (Ndis6PollIterate(Poll))
+            continue;
+
+        if (InterlockedCompareExchange(&Poll->State, NDIS6_POLL_IDLE,
+                                       NDIS6_POLL_RUNNING) == NDIS6_POLL_RUNNING)
+            return;
+        InterlockedExchange(&Poll->State, NDIS6_POLL_RUNNING);
     }
 
-    /* If the driver re-requested a poll while we were inside the handler,
-     * queue another DPC round. Otherwise clear the count. */
-    if (InterlockedExchange(&Poll->RequestCount, 0) > 1)
-    {
-        InterlockedIncrement(&Poll->RequestCount);
-        KeInsertQueueDpc(&Poll->Dpc, NULL, NULL);
-    }
+    InterlockedExchange(&Poll->State, NDIS6_POLL_IDLE);
 }
 
 NDIS_STATUS
 NTAPI
 NdisRegisterPoll(
-    _In_     NDIS_HANDLE   NdisHandle,
-    _In_opt_ PVOID         PollContext,
-    _In_     PVOID         PollCharacteristics,  /* NDIS_POLL_CHARACTERISTICS */
-    _Out_    PNDIS_HANDLE  PollHandle)
+    _In_ NDIS_HANDLE NdisHandle,
+    _In_opt_ PVOID Context,
+    _In_ NDIS_POLL_CHARACTERISTICS const *Characteristics,
+    _Out_ NDIS_POLL_HANDLE *PollHandle)
 {
-    PNDIS6_POLL_CONTEXT Poll;
-    PNDIS6_POLL_HANDLER Handler = NULL;
+    PNDIS6_POLL Poll;
 
-    UNREFERENCED_PARAMETER(NdisHandle);
-
-    if (PollHandle == NULL || PollCharacteristics == NULL)
+    if (NdisHandle == NULL || Characteristics == NULL || PollHandle == NULL)
         return NDIS_STATUS_INVALID_PARAMETER;
-
-    /* NDIS_POLL_CHARACTERISTICS layout: Header + PollHandler +
-     * SetPollNotificationHandler. We read PollHandler at offset
-     * sizeof(NDIS_OBJECT_HEADER). */
-    Handler = *(PNDIS6_POLL_HANDLER*)((PUCHAR)PollCharacteristics +
-                                      sizeof(NDIS_OBJECT_HEADER));
-    if (Handler == NULL)
+    *PollHandle = NULL;
+    if (Characteristics->Header.Type != NDIS_OBJECT_TYPE_DEFAULT ||
+        Characteristics->Header.Revision < NDIS_POLL_CHARACTERISTICS_REVISION_1 ||
+        Characteristics->Header.Size < NDIS_SIZEOF_NDIS_POLL_CHARACTERISTICS_REVISION_1 ||
+        Characteristics->SetPollNotificationHandler == NULL ||
+        Characteristics->PollHandler == NULL)
+    {
         return NDIS_STATUS_INVALID_PARAMETER;
+    }
 
-    Poll = (PNDIS6_POLL_CONTEXT)ExAllocatePoolWithTag(
-        NonPagedPool, sizeof(NDIS6_POLL_CONTEXT), NDIS6_POLL_TAG);
+    Poll = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Poll), NDIS6_POLL_TAG);
     if (Poll == NULL)
         return NDIS_STATUS_RESOURCES;
 
-    RtlZeroMemory(Poll, sizeof(*Poll));
-    Poll->Magic        = NDIS6_POLL_MAGIC;
-    Poll->PollHandler  = Handler;
-    Poll->PollContext  = PollContext;
-    Poll->RequestCount = 0;
-    KeInitializeDpc(&Poll->Dpc, Ndis6PollDpcRoutine, Poll);
+    Poll->MiniportHandle = NdisHandle;
+    Poll->Context = Context;
+    Poll->SetPollNotificationHandler = Characteristics->SetPollNotificationHandler;
+    Poll->PollHandler = Characteristics->PollHandler;
+    Poll->State = NDIS6_POLL_QUEUED;
+    KeInitializeDpc(&Poll->Dpc, Ndis6PollDpc, Poll);
 
-    *PollHandle = (NDIS_HANDLE)Poll;
+    *PollHandle = (NDIS_POLL_HANDLE)Poll;
+    KeInsertQueueDpc(&Poll->Dpc, NULL, NULL);
     return NDIS_STATUS_SUCCESS;
 }
 
 VOID
 NTAPI
 NdisDeregisterPoll(
-    _In_ NDIS_HANDLE PollHandle)
+    _In_ NDIS_POLL_HANDLE PollHandle)
 {
-    PNDIS6_POLL_CONTEXT Poll = (PNDIS6_POLL_CONTEXT)PollHandle;
-    if (Poll == NULL || Poll->Magic != NDIS6_POLL_MAGIC)
+    PNDIS6_POLL Poll = (PNDIS6_POLL)PollHandle;
+    LARGE_INTEGER Delay;
+
+    if (Poll == NULL)
         return;
 
-    Poll->Unregistered = TRUE;
-    /* Flush any pending DPC. */
-    KeRemoveQueueDpc(&Poll->Dpc);
+    InterlockedExchange(&Poll->Deregistering, 1);
+    if (KeRemoveQueueDpc(&Poll->Dpc))
+        InterlockedExchange(&Poll->State, NDIS6_POLL_IDLE);
 
-    Poll->Magic = 0;
+    Delay.QuadPart = -10 * 1000;
+    while (InterlockedCompareExchange(&Poll->State, NDIS6_POLL_IDLE, NDIS6_POLL_IDLE) != NDIS6_POLL_IDLE)
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    KeFlushQueuedDpcs();
+    if (Poll->NotificationEnabled)
+        Ndis6PollNotify(Poll, FALSE);
+
     ExFreePoolWithTag(Poll, NDIS6_POLL_TAG);
 }
 
 VOID
 NTAPI
-NdisRequestPoll(
-    _In_ NDIS_HANDLE PollHandle,
-    _In_opt_ PVOID   Reserved)
+NdisSetPollAffinity(
+    _In_ NDIS_POLL_HANDLE PollHandle,
+    _In_ PROCESSOR_NUMBER const *PollAffinity)
 {
-    PNDIS6_POLL_CONTEXT Poll = (PNDIS6_POLL_CONTEXT)PollHandle;
+    PNDIS6_POLL Poll = (PNDIS6_POLL)PollHandle;
+
+    if (Poll == NULL || PollAffinity == NULL)
+        return;
+
+    InterlockedExchange(&Poll->Affinity, (LONG)(((ULONG)PollAffinity->Group << 16) | PollAffinity->Number));
+    InterlockedExchange(&Poll->AffinityChanged, 1);
+}
+
+VOID
+NTAPI
+NdisRequestPoll(
+    _In_ NDIS_POLL_HANDLE PollHandle,
+    _Reserved_ PVOID Reserved)
+{
+    PNDIS6_POLL Poll = (PNDIS6_POLL)PollHandle;
+    LONG State;
 
     UNREFERENCED_PARAMETER(Reserved);
 
-    if (Poll == NULL || Poll->Magic != NDIS6_POLL_MAGIC || Poll->Unregistered)
+    if (Poll == NULL || InterlockedCompareExchange(&Poll->Deregistering, 0, 0))
         return;
 
-    /* Only queue a DPC on the 0→1 transition. Subsequent requests just
-     * bump the counter; the running handler will re-queue itself on exit
-     * if RequestCount > 1. */
-    if (InterlockedIncrement(&Poll->RequestCount) == 1)
-        KeInsertQueueDpc(&Poll->Dpc, NULL, NULL);
+    for (;;)
+    {
+        State = InterlockedCompareExchange(&Poll->State, NDIS6_POLL_IDLE, NDIS6_POLL_IDLE);
+        if (State == NDIS6_POLL_IDLE)
+        {
+            if (InterlockedCompareExchange(&Poll->State, NDIS6_POLL_QUEUED, NDIS6_POLL_IDLE) == NDIS6_POLL_IDLE)
+            {
+                Ndis6PollQueue(Poll);
+                return;
+            }
+        }
+        else if (State == NDIS6_POLL_RUNNING)
+        {
+            if (InterlockedCompareExchange(&Poll->State, NDIS6_POLL_RUNNING_REQUESTED,
+                                           NDIS6_POLL_RUNNING) == NDIS6_POLL_RUNNING)
+                return;
+        }
+        else
+        {
+            return;
+        }
+    }
 }
 
 PNDIS_GENERIC_OBJECT
