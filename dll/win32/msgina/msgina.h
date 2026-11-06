@@ -35,7 +35,7 @@ typedef struct
 {
     HANDLE hWlx;
     LPWSTR station;
-    PWLX_DISPATCH_VERSION_1_3 pWlxFuncs;
+    PWLX_DISPATCH_VERSION_1_4 pWlxFuncs;
     HANDLE hDllInstance;
     HWND hStatusWindow;
     HANDLE LsaHandle;

@@ -49,10 +49,10 @@ WlxNegotiate(
 {
     TRACE("WlxNegotiate(%lx, %p)\n", dwWinlogonVersion, pdwDllVersion);
 
-    if(!pdwDllVersion || (dwWinlogonVersion < WLX_VERSION_1_3))
+    if(!pdwDllVersion || (dwWinlogonVersion < WLX_VERSION_1_4))
         return FALSE;
 
-    *pdwDllVersion = WLX_VERSION_1_3;
+    *pdwDllVersion = WLX_VERSION_1_4;
 
     return TRUE;
 }
@@ -313,7 +313,7 @@ WlxInitialize(
     pgContext->hDllInstance = hDllInstance;
 
     /* Save pointer to dispatch table */
-    pgContext->pWlxFuncs = (PWLX_DISPATCH_VERSION_1_3)pWinlogonFunctions;
+    pgContext->pWlxFuncs = (PWLX_DISPATCH_VERSION_1_4)pWinlogonFunctions;
 
     /* Save the winlogon handle used to call the dispatch functions */
     pgContext->hWlx = hWlx;
@@ -1193,6 +1193,39 @@ WlxDisplaySASNotice(
     TRACE("WlxDisplaySASNotice() done\n");
 }
 
+static
+INT
+RemoteLogon(
+    _Inout_ PGINA_CONTEXT pgContext)
+{
+    WLX_CLIENT_CREDENTIALS_INFO_V2_0 Credentials;
+    NTSTATUS Status, SubStatus;
+    INT res = WLX_SAS_ACTION_NONE;
+
+    if (!pgContext->pWlxFuncs->WlxQueryTsLogonCredentials(&Credentials))
+        return WLX_SAS_ACTION_NONE;
+
+    /* FIXME: Windows signs a Remote Desktop client in with the RemoteInteractive logon type */
+    Status = DoLoginTasks(pgContext, Credentials.pszUserName, Credentials.pszDomain, Credentials.pszPassword,
+                          &SubStatus);
+    if (NT_SUCCESS(Status) &&
+        CreateProfile(pgContext, Credentials.pszUserName, Credentials.pszDomain, Credentials.pszPassword))
+    {
+        res = WLX_SAS_ACTION_LOGON;
+    }
+    else
+    {
+        WARN("Remote logon of %S failed (Status 0x%08lx, SubStatus 0x%08lx)\n",
+             Credentials.pszUserName, Status, SubStatus);
+    }
+    SecureZeroMemory(pgContext->Password, sizeof(pgContext->Password));
+    SecureZeroMemory(Credentials.pszPassword, (wcslen(Credentials.pszPassword) + 1) * sizeof(WCHAR));
+    LocalFree(Credentials.pszUserName);
+    LocalFree(Credentials.pszDomain);
+    LocalFree(Credentials.pszPassword);
+    return res;
+}
+
 /*
  * @implemented
  */
@@ -1214,7 +1247,6 @@ WlxLoggedOutSAS(
 
     RefreshRegistrySettings(pgContext);
 
-    UNREFERENCED_PARAMETER(dwSasType);
     UNREFERENCED_PARAMETER(pLogonSid);
 
     pgContext->pAuthenticationId = pAuthenticationId;
@@ -1222,7 +1254,10 @@ WlxLoggedOutSAS(
     pgContext->pMprNotifyInfo = pMprNotifyInfo;
     pgContext->pProfile = pProfile;
 
-    res = pGinaUI->LoggedOutSAS(pgContext);
+    if (dwSasType == WLX_SAS_TYPE_AUTHENTICATED)
+        res = RemoteLogon(pgContext);
+    else
+        res = pGinaUI->LoggedOutSAS(pgContext);
 
     /* Return the logon information only if necessary */
     if (res == WLX_SAS_ACTION_LOGON)
