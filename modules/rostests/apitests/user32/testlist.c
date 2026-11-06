@@ -154,6 +154,7 @@ extern void func_WindowRegionFrame(void);
 extern void func_ShellWindowQueries(void);
 extern void func_ShellWindowZOrder(void);
 extern void func_ShowWindow(void);
+extern void func_SwitchDesktopActivate(void);
 extern void func_SwitchToThisWindow(void);
 extern void func_SystemParametersInfo(void);
 extern void func_TopmostBand(void);
@@ -329,6 +330,7 @@ const struct test winetest_testlist[] =
     { "ShellWindowQueries", func_ShellWindowQueries },
     { "ShellWindowZOrder", func_ShellWindowZOrder },
     { "ShowWindow", func_ShowWindow },
+    { "SwitchDesktopActivate", func_SwitchDesktopActivate },
     { "SwitchToThisWindow", func_SwitchToThisWindow },
     { "SystemMenu", func_SystemMenu },
     { "SystemParametersInfo", func_SystemParametersInfo },
