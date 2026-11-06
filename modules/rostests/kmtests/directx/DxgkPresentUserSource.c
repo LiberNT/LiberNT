@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Dirty-rectangle presents refuse a user-mode source
+ * PURPOSE:     Display device IOCTLs: dirty-rectangle presents refuse a user-mode source
  * COPYRIGHT:   Copyright 2026 Ahmed Arif <arif.ing@outlook.com>
  */
 
@@ -42,6 +42,7 @@ PresentDirtyRect(PDEVICE_OBJECT Device, PVOID Source, LONG Top)
     PRESENT_COMPLETION Completion;
     DXGK_PRESENT_DIRTY_RECTS_INPUT Input;
     PIO_STACK_LOCATION Stack;
+    NTSTATUS Returned;
     PIRP Irp;
 
     RtlZeroMemory(&Input, sizeof(Input));
@@ -69,9 +70,12 @@ PresentDirtyRect(PDEVICE_OBJECT Device, PVOID Source, LONG Top)
     Completion.Status = STATUS_PENDING;
     KeInitializeEvent(&Completion.Event, NotificationEvent, FALSE);
     IoSetCompletionRoutine(Irp, PresentCompleted, &Completion, TRUE, TRUE, TRUE);
-    (VOID)IoCallDriver(Device, Irp);
+    Returned = IoCallDriver(Device, Irp);
     KeWaitForSingleObject(&Completion.Event, Executive, KernelMode, FALSE, NULL);
     IoFreeIrp(Irp);
+    /* A request completed in the dispatch routine returns the status it completed with. */
+    if (Returned != STATUS_PENDING)
+        ok_eq_hex(Returned, Completion.Status);
     return Completion.Status;
 }
 

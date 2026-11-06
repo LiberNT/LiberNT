@@ -5447,7 +5447,8 @@ DxgkDisplayDispatchPnp(
 BOOLEAN
 DxgkDisplayDispatchIoctl(
     _In_  PDEVICE_OBJECT DeviceObject,
-    _In_  PIRP           Irp)
+    _In_  PIRP           Irp,
+    _Out_ PNTSTATUS      Status)
 {
     if (DeviceObject == NULL || g_DisplayDeviceObject == NULL ||
         DeviceObject != g_DisplayDeviceObject)
@@ -5456,7 +5457,7 @@ DxgkDisplayDispatchIoctl(
     }
 
     /* DxgkpDisplayDispatch completes the IRP and returns NTSTATUS */
-    DxgkpDisplayDispatch(DeviceObject, Irp);
+    *Status = DxgkpDisplayDispatch(DeviceObject, Irp);
     return TRUE;
 }
 

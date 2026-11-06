@@ -15548,8 +15548,8 @@ DxgkDispatchDeviceControl(
      * Route \Device\Video0 IOCTLs (IOCTL_VIDEO_*) to the display handler.
      * The display handler completes the IRP and returns TRUE.
      */
-    if (DxgkDisplayDispatchIoctl(DeviceObject, Irp))
-        return STATUS_SUCCESS;
+    if (DxgkDisplayDispatchIoctl(DeviceObject, Irp, &Status))
+        return Status;
 
     if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_RXGK_QUERY_MONITOR_DESCRIPTOR)
         return DxgkpChildQueryMonitorDescriptor(DeviceObject, Irp);

@@ -3993,12 +3993,13 @@ DxgkDisplayUnregister(
 /*
  * Display dispatch helpers — called from dxgkrnl dispatch routines
  * to route IRPs targeting \Device\Video0 to the display handler.
- * Return TRUE if the IRP was handled, FALSE if not.
+ * Return TRUE if the IRP was handled, with the status it completed with.
  */
 BOOLEAN
 DxgkDisplayDispatchIoctl(
     _In_ PDEVICE_OBJECT DeviceObject,
-    _In_ PIRP           Irp);
+    _In_ PIRP           Irp,
+    _Out_ PNTSTATUS     Status);
 
 BOOLEAN
 DxgkDisplayDispatchCreate(
