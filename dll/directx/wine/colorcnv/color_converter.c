@@ -271,7 +271,7 @@ static HRESULT color_convert_process_output(struct color_convert *impl, DMO_OUTP
     if ((ret = pixels_fill_planes(&impl->output_format, data, size, pitch, &dst)))
     {
         pixels_fill_planes(&impl->input_format, impl->frame, impl->frame_size, 0, &src);
-        pixels_convert(&impl->input_format, &src, &impl->output_format, &dst);
+        pixels_convert(&impl->input_format, &src, &impl->output_format, &dst, 0);
     }
     unlock_media_buffer(output->pBuffer);
     impl->has_frame = FALSE;
