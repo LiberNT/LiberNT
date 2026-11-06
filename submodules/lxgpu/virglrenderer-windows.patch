@@ -875,3 +875,112 @@ index c4944e6..42c9168 100644
        mtx_unlock(&ring->mutex);
        return false;
     }
+diff --git a/src/virgl_util.c b/src/virgl_util.c
+index 8184650..3207c57 100644
+--- a/src/virgl_util.c
++++ b/src/virgl_util.c
+@@ -32,6 +32,9 @@
+ #ifdef HAVE_EVENTFD_H
+ #include <sys/eventfd.h>
+ #endif
++#ifdef _WIN32
++#include <windows.h>
++#endif
+ #include <unistd.h>
+ 
+ #include "util/os_misc.h"
+@@ -88,7 +91,7 @@ bool equal_func(const void *key1, const void *key2)
+ 
+ bool has_eventfd(void)
+ {
+-#ifdef HAVE_EVENTFD_H
++#if defined(HAVE_EVENTFD_H) || defined(_WIN32)
+    return true;
+ #else
+    return false;
+@@ -99,6 +102,10 @@ int create_eventfd(unsigned int initval)
+ {
+ #ifdef HAVE_EVENTFD_H
+    return eventfd(initval, EFD_CLOEXEC | EFD_NONBLOCK);
++#elif defined(_WIN32)
++   /* On Windows the "eventfd" is a manual-reset event handle value */
++   HANDLE event = CreateEventW(NULL, TRUE, initval != 0, NULL);
++   return event ? (int)(intptr_t)event : -1;
+ #else
+    (void)initval;
+    return -1;
+@@ -107,6 +114,10 @@ int create_eventfd(unsigned int initval)
+ 
+ int write_eventfd(int fd, uint64_t val)
+ {
++#ifdef _WIN32
++   (void)val;
++   return SetEvent((HANDLE)(intptr_t)fd) ? 0 : -1;
++#else
+    const char *buf = (const char *)&val;
+    size_t count = sizeof(val);
+    ssize_t ret = 0;
+@@ -123,15 +134,29 @@ int write_eventfd(int fd, uint64_t val)
+    }
+ 
+    return count ? -1 : 0;
++#endif
+ }
+ 
+ void flush_eventfd(int fd)
+ {
++#ifdef _WIN32
++    ResetEvent((HANDLE)(intptr_t)fd);
++#else
+     ssize_t len;
+     uint64_t value;
+     do {
+        len = read(fd, &value, sizeof(value));
+     } while ((len == -1 && errno == EINTR) || len == sizeof(value));
++#endif
++}
++
++void close_eventfd(int fd)
++{
++#ifdef _WIN32
++   CloseHandle((HANDLE)(intptr_t)fd);
++#else
++   close(fd);
++#endif
+ }
+ 
+ const struct log_levels_lut {
+diff --git a/src/virgl_util.h b/src/virgl_util.h
+index 6024b57..9325409 100644
+--- a/src/virgl_util.h
++++ b/src/virgl_util.h
+@@ -69,6 +69,7 @@ bool has_eventfd(void);
+ int create_eventfd(unsigned int initval);
+ int write_eventfd(int fd, uint64_t val);
+ void flush_eventfd(int fd);
++void close_eventfd(int fd);
+ 
+ void virgl_override_log_level(enum virgl_log_level_flags log_level);
+ void virgl_log_set_handler(virgl_log_callback_type log_cb,
+diff --git a/src/vrend_renderer.c b/src/vrend_renderer.c
+index c1f48aa..3bdef3a 100644
+--- a/src/vrend_renderer.c
++++ b/src/vrend_renderer.c
+@@ -7437,7 +7437,7 @@ static void vrend_renderer_use_threaded_sync(void)
+ 
+    vrend_state.sync_thread = u_thread_create(thread_sync, NULL);
+    if (!vrend_state.sync_thread) {
+-      close(vrend_state.eventfd);
++      close_eventfd(vrend_state.eventfd);
+       vrend_state.eventfd = -1;
+       vrend_clicbs->destroy_gl_context_surfaceless(vrend_state.sync_context);
+       cnd_destroy(&vrend_state.fence_cond);
+@@ -7754,7 +7754,7 @@ vrend_renderer_fini(void)
+    vrend_state.finishing = true;
+ 
+    if (vrend_state.eventfd != -1) {
+-      close(vrend_state.eventfd);
++      close_eventfd(vrend_state.eventfd);
+       vrend_state.eventfd = -1;
+    }
+ 
