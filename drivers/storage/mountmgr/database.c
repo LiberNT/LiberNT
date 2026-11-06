@@ -765,7 +765,10 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
      */
     if (DatabaseHandle == 0)
     {
-        DatabaseHandle = OpenRemoteDatabase(&Snapshot, TRUE);
+        if (ReparsePointInformation.Tag == IO_REPARSE_TAG_MOUNT_POINT)
+        {
+            DatabaseHandle = OpenRemoteDatabase(&Snapshot, TRUE);
+        }
         if (DatabaseHandle == 0)
         {
             ZwClose(Handle);
@@ -1898,7 +1901,7 @@ OpenRemoteDatabase(IN PDEVICE_INFORMATION DeviceInformation,
                           NULL,
                           FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN,
                           0,
-                          (!MigrateDatabase || DeviceInformation->Migrated == 0) ? FILE_OPEN_IF : FILE_OPEN,
+                          (MigrateDatabase && DeviceInformation->Migrated == 0) ? FILE_OPEN_IF : FILE_OPEN,
                           FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_ALERT,
                           NULL,
                           0,
@@ -1906,7 +1909,7 @@ OpenRemoteDatabase(IN PDEVICE_INFORMATION DeviceInformation,
                           NULL,
                           IO_STOP_ON_SYMLINK | IO_NO_PARAMETER_CHECKING);
     if (Status == STATUS_OBJECT_PATH_NOT_FOUND &&
-        (!MigrateDatabase || DeviceInformation->Migrated == 0) &&
+        MigrateDatabase && DeviceInformation->Migrated == 0 &&
         NT_SUCCESS(RtlCreateSystemVolumeInformationFolder(&DeviceInformation->DeviceName)))
     {
         Status = IoCreateFile(&Database,
