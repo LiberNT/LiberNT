@@ -44,9 +44,23 @@ WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 typedef struct {
     const WCHAR *name;
     HRESULT (*constructor)(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+    const WCHAR *const *attr_only_names;
 } tag_desc_t;
 
 static HRESULT HTMLElement_Ctor(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+
+static const WCHAR *const para_attr_only_names[] = { L"cite", L"width", NULL };
+static const WCHAR *const col_attr_only_names[] = { L"bgColor", NULL };
+static const WCHAR *const div_attr_only_names[] = { L"nofocusrect", NULL };
+static const WCHAR *const embed_attr_only_names[] = { L"align", L"codeBase", L"type", NULL };
+static const WCHAR *const button_attr_only_names[] = {
+    L"formaction", L"formenctype", L"formmethod", L"formnovalidate", L"formtarget", NULL
+};
+static const WCHAR *const input_attr_only_names[] = {
+    L"cache", L"formaction", L"formenctype", L"formmethod", L"formnovalidate", L"formtarget", NULL
+};
+static const WCHAR *const select_attr_only_names[] = { L"align", NULL };
+static const WCHAR *const span_attr_only_names[] = { L"cite", L"dateTime", L"nofocusrect", NULL };
 
 static const tag_desc_t tag_descs[] = {
     {L"A",              HTMLAnchorElement_Create},
@@ -67,24 +81,24 @@ static const tag_desc_t tag_descs[] = {
     {L"BLOCKQUOTE",     HTMLBlockElement_Create},
     {L"BODY",           HTMLBodyElement_Create},
     {L"BR",             HTMLBRElement_Create},
-    {L"BUTTON",         HTMLButtonElement_Create},
+    {L"BUTTON",         HTMLButtonElement_Create, button_attr_only_names},
     {L"CANVAS",         HTMLElement_Ctor},
     {L"CAPTION",        HTMLElement_Ctor},
     {L"CENTER",         HTMLBlockElement_Create},
     {L"CITE",           HTMLPhraseElement_Create},
     {L"CODE",           HTMLPhraseElement_Create},
-    {L"COL",            HTMLElement_Ctor},
-    {L"COLGROUP",       HTMLElement_Ctor},
+    {L"COL",            HTMLElement_Ctor, col_attr_only_names},
+    {L"COLGROUP",       HTMLElement_Ctor, col_attr_only_names},
     {L"DATALIST",       HTMLElement_Ctor},
     {L"DD",             HTMLElement_Ctor},
     {L"DEL",            HTMLModElement_Create},
     {L"DFN",            HTMLPhraseElement_Create},
     {L"DIR",            HTMLElement_Ctor},
-    {L"DIV",            HTMLElement_Ctor},
+    {L"DIV",            HTMLElement_Ctor, div_attr_only_names},
     {L"DL",             HTMLElement_Ctor},
     {L"DT",             HTMLElement_Ctor},
     {L"EM",             HTMLPhraseElement_Create},
-    {L"EMBED",          HTMLEmbedElement_Create},
+    {L"EMBED",          HTMLEmbedElement_Create, embed_attr_only_names},
     {L"FIELDSET",       HTMLElement_Ctor},
     {L"FIGCAPTION",     HTMLElement_Ctor},
     {L"FIGURE",         HTMLElement_Ctor},
@@ -93,12 +107,12 @@ static const tag_desc_t tag_descs[] = {
     {L"FORM",           HTMLFormElement_Create},
     {L"FRAME",          HTMLFrameElement_Create},
     {L"FRAMESET",       HTMLElement_Ctor},
-    {L"H1",             HTMLHeaderElement_Create},
-    {L"H2",             HTMLHeaderElement_Create},
-    {L"H3",             HTMLHeaderElement_Create},
-    {L"H4",             HTMLHeaderElement_Create},
-    {L"H5",             HTMLHeaderElement_Create},
-    {L"H6",             HTMLHeaderElement_Create},
+    {L"H1",             HTMLHeaderElement_Create, para_attr_only_names},
+    {L"H2",             HTMLHeaderElement_Create, para_attr_only_names},
+    {L"H3",             HTMLHeaderElement_Create, para_attr_only_names},
+    {L"H4",             HTMLHeaderElement_Create, para_attr_only_names},
+    {L"H5",             HTMLHeaderElement_Create, para_attr_only_names},
+    {L"H6",             HTMLHeaderElement_Create, para_attr_only_names},
     {L"HEAD",           HTMLHeadElement_Create},
     {L"HEADER",         HTMLElement_Ctor},
     {L"HR",             HTMLElement_Ctor},
@@ -106,7 +120,7 @@ static const tag_desc_t tag_descs[] = {
     {L"I",              HTMLPhraseElement_Create},
     {L"IFRAME",         HTMLIFrame_Create},
     {L"IMG",            HTMLImgElement_Create},
-    {L"INPUT",          HTMLInputElement_Create},
+    {L"INPUT",          HTMLInputElement_Create, input_attr_only_names},
     {L"INS",            HTMLModElement_Create},
     {L"KBD",            HTMLPhraseElement_Create},
     {L"LABEL",          HTMLLabelElement_Create},
@@ -125,7 +139,7 @@ static const tag_desc_t tag_descs[] = {
     {L"OL",             HTMLElement_Ctor},
     {L"OPTGROUP",       HTMLElement_Ctor},
     {L"OPTION",         HTMLOptionElement_Create},
-    {L"P",              HTMLParaElement_Create},
+    {L"P",              HTMLParaElement_Create, para_attr_only_names},
     {L"PARAM",          HTMLElement_Ctor},
     {L"PLAINTEXT",      HTMLBlockElement_Create},
     {L"PRE",            HTMLPreElement_Create},
@@ -138,10 +152,10 @@ static const tag_desc_t tag_descs[] = {
     {L"SAMP",           HTMLPhraseElement_Create},
     {L"SCRIPT",         HTMLScriptElement_Create},
     {L"SECTION",        HTMLElement_Ctor},
-    {L"SELECT",         HTMLSelectElement_Create},
+    {L"SELECT",         HTMLSelectElement_Create, select_attr_only_names},
     {L"SMALL",          HTMLPhraseElement_Create},
     {L"SOURCE",         HTMLElement_Ctor},
-    {L"SPAN",           HTMLElement_Ctor},
+    {L"SPAN",           HTMLElement_Ctor, span_attr_only_names},
     {L"STRIKE",         HTMLPhraseElement_Create},
     {L"STRONG",         HTMLPhraseElement_Create},
     {L"STYLE",          HTMLStyleElement_Create},
@@ -184,6 +198,26 @@ static const tag_desc_t *get_tag_desc(const WCHAR *tag_name)
     }
 
     return NULL;
+}
+
+static const WCHAR *const *get_tag_attr_only_names(HTMLElement *elem)
+{
+    const WCHAR *const *ret = NULL;
+    nsAString tag_name_str;
+    const PRUnichar *tag_name;
+    const tag_desc_t *tag;
+
+    if(!elem->html_element)
+        return NULL;
+
+    nsAString_Init(&tag_name_str, NULL);
+    if(NS_SUCCEEDED(nsIDOMElement_GetTagName(elem->dom_element, &tag_name_str))) {
+        nsAString_GetData(&tag_name_str, &tag_name);
+        if((tag = get_tag_desc(tag_name)))
+            ret = tag->attr_only_names;
+    }
+    nsAString_Finish(&tag_name_str);
+    return ret;
 }
 
 HRESULT replace_node_by_html(nsIDOMDocument *nsdoc, nsIDOMNode *nsnode, const WCHAR *html)
@@ -8169,19 +8203,56 @@ static BOOL is_attr_only_name_listed(HTMLAttributeCollection *This, const WCHAR 
     DISPID id;
 
     return SUCCEEDED(dispex_get_id(&This->elem->node.event_target.dispex, name, fdexNameCaseInsensitive, &id))
-        && is_valid_attr_dispid(This, id);
+        && get_dispid_type(id) == DISPEXPROP_BUILTIN && is_valid_attr_dispid(This, id);
+}
+
+static const WCHAR *attr_only_name_at(HTMLAttributeCollection *This, unsigned pos)
+{
+    if(pos < ARRAY_SIZE(attr_only_names))
+        return attr_only_names[pos];
+    return This->tag_attr_only_names ? This->tag_attr_only_names[pos - ARRAY_SIZE(attr_only_names)] : NULL;
+}
+
+static const WCHAR *find_attr_only_name(HTMLAttributeCollection *This, const WCHAR *name)
+{
+    const WCHAR *attr_name;
+    unsigned i;
+
+    for(i = 0; (attr_name = attr_only_name_at(This, i)); i++) {
+        if(!wcsicmp(attr_name, name))
+            return attr_name;
+    }
+
+    return NULL;
+}
+
+static BOOL is_attr_only_dynamic_prop(HTMLAttributeCollection *This, DISPID id)
+{
+    BOOL ret = FALSE;
+    BSTR name;
+
+    if(get_dispid_type(id) == DISPEXPROP_BUILTIN)
+        return FALSE;
+
+    if(SUCCEEDED(dispex_prop_name(&This->elem->node.event_target.dispex, id, &name))) {
+        ret = find_attr_only_name(This, name) != NULL;
+        SysFreeString(name);
+    }
+    return ret;
 }
 
 static BOOL next_attr_only_ref(HTMLAttributeCollection *This, unsigned *pos, LONG *len, LONG idx, attr_ref_t *ref)
 {
-    for(; *pos < ARRAY_SIZE(attr_only_names); (*pos)++) {
-        if(is_attr_only_name_listed(This, attr_only_names[*pos]))
+    const WCHAR *name;
+
+    for(; (name = attr_only_name_at(This, *pos)); (*pos)++) {
+        if(is_attr_only_name_listed(This, name))
             continue;
 
         (*len)++;
         if(ref && *len == idx) {
             ref->id = DISPID_UNKNOWN;
-            ref->name = attr_only_names[*pos];
+            ref->name = name;
             return TRUE;
         }
     }
@@ -8209,6 +8280,8 @@ static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, att
 
         if(get_dispid_type(id) != DISPEXPROP_BUILTIN && next_attr_only_ref(This, &attr_only_pos, &len, *idx, ref))
             return S_OK;
+        if(is_attr_only_dynamic_prop(This, id))
+            continue;
 
         len++;
         if(ref && len == *idx) {
@@ -8231,7 +8304,7 @@ static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, att
 static HRESULT get_attr_ref_by_name(HTMLAttributeCollection *This, const WCHAR *name, attr_ref_t *ref)
 {
     DispatchEx *dispex = &This->elem->node.event_target.dispex;
-    unsigned i;
+    const WCHAR *attr_name;
     HRESULT hres;
 
     if(name[0]>='0' && name[0]<='9') {
@@ -8249,6 +8322,11 @@ static HRESULT get_attr_ref_by_name(HTMLAttributeCollection *This, const WCHAR *
     ref->name = NULL;
 
     hres = dispex_get_id(dispex, name, fdexNameCaseInsensitive, &ref->id);
+    if(SUCCEEDED(hres) && get_dispid_type(ref->id) != DISPEXPROP_BUILTIN && (attr_name = find_attr_only_name(This, name))) {
+        ref->id = DISPID_UNKNOWN;
+        ref->name = attr_name;
+        return S_OK;
+    }
     if(SUCCEEDED(hres)) {
         if(!is_valid_attr_dispid(This, ref->id))
             return DISP_E_UNKNOWNNAME;
@@ -8263,12 +8341,10 @@ static HRESULT get_attr_ref_by_name(HTMLAttributeCollection *This, const WCHAR *
     if(SUCCEEDED(hres))
         return hres;
 
-    for(i = 0; i < ARRAY_SIZE(attr_only_names); i++) {
-        if(!wcsicmp(attr_only_names[i], name)) {
-            ref->id = DISPID_UNKNOWN;
-            ref->name = attr_only_names[i];
-            return S_OK;
-        }
+    if((attr_name = find_attr_only_name(This, name))) {
+        ref->id = DISPID_UNKNOWN;
+        ref->name = attr_name;
+        return S_OK;
     }
 
     return DISP_E_UNKNOWNNAME;
@@ -8907,8 +8983,10 @@ HRESULT HTMLElement_get_attr_col(HTMLDOMNode *iface, HTMLAttributeCollection **a
     init_dispatch(&This->attrs->dispex, &NamedNodeMap_dispex, This->node.doc->script_global,
                   dispex_compat_mode(&This->node.event_target.dispex));
 
-    if(This->dom_element)
+    if(This->dom_element) {
         nsIDOMElement_GetAttributes(This->dom_element, &This->attrs->dom_attrs);
+        This->attrs->tag_attr_only_names = get_tag_attr_only_names(This);
+    }
 
     *ac = This->attrs;
     IHTMLAttributeCollection_AddRef(&This->attrs->IHTMLAttributeCollection_iface);

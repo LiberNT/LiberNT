@@ -39,33 +39,9 @@ static inline HTMLDOMAttribute *impl_from_IHTMLDOMAttribute(IHTMLDOMAttribute *i
 
 DISPEX_IDISPATCH_IMPL(HTMLDOMAttribute, IHTMLDOMAttribute, impl_from_IHTMLDOMAttribute(iface)->node.event_target.dispex)
 
-static HRESULT resolve_attr_only(HTMLDOMAttribute *This, BOOL ensure)
-{
-    DISPID id;
-    HRESULT hres;
-
-    if(This->dispid != DISPID_UNKNOWN)
-        return S_OK;
-
-    hres = dispex_get_id(&This->elem->node.event_target.dispex, This->name,
-                         fdexNameCaseInsensitive | (ensure ? fdexNameEnsure : 0), &id);
-    if(hres == DISP_E_UNKNOWNNAME && !ensure)
-        return S_FALSE;
-    if(FAILED(hres))
-        return hres;
-
-    This->dispid = id;
-    return S_OK;
-}
-
 static HRESULT get_attached_attr_value(HTMLDOMAttribute *This, VARIANT *p)
 {
-    HRESULT hres;
-
-    hres = resolve_attr_only(This, FALSE);
-    if(FAILED(hres))
-        return hres;
-    if(hres == S_FALSE) {
+    if(This->dispid == DISPID_UNKNOWN) {
         V_VT(p) = VT_NULL;
         return S_OK;
     }
@@ -113,7 +89,6 @@ static HRESULT WINAPI HTMLDOMAttribute_put_nodeValue(IHTMLDOMAttribute *iface, V
 {
     HTMLDOMAttribute *This = impl_from_IHTMLDOMAttribute(iface);
     EXCEPINFO ei;
-    HRESULT hres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
@@ -123,9 +98,8 @@ static HRESULT WINAPI HTMLDOMAttribute_put_nodeValue(IHTMLDOMAttribute *iface, V
     if(!This->elem)
         return VariantCopy(&This->value, &v);
 
-    hres = resolve_attr_only(This, TRUE);
-    if(FAILED(hres))
-        return hres;
+    if(This->dispid == DISPID_UNKNOWN)
+        return DISP_E_MEMBERNOTFOUND;
 
     memset(&ei, 0, sizeof(ei));
     return dispex_prop_put(&This->elem->node.event_target.dispex, This->dispid, LOCALE_SYSTEM_DEFAULT, &v, &ei, NULL);
@@ -163,7 +137,7 @@ static HRESULT WINAPI HTMLDOMAttribute_get_specified(IHTMLDOMAttribute *iface, V
         return S_OK;
     }
 
-    if(!This->elem || !This->elem->dom_element || resolve_attr_only(This, FALSE) != S_OK) {
+    if(!This->elem || !This->elem->dom_element || This->dispid == DISPID_UNKNOWN) {
         *p = VARIANT_FALSE;
         return S_OK;
     }
