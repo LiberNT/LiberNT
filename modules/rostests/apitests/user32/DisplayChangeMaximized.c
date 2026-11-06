@@ -61,6 +61,24 @@ CheckMaximized(HWND Window, PCSTR Step, const RECT *Expected, const DEVMODEW *Mo
        Step, wine_dbgstr_rect(&Insets), wine_dbgstr_rect(&Work), wine_dbgstr_rect(Expected));
 }
 
+static VOID
+CheckShellWindow(PCSTR Step, const DEVMODEW *Mode)
+{
+    HWND Shell = GetShellWindow();
+    RECT Rect;
+
+    if (!Shell)
+    {
+        skip("%s: no shell window\n", Step);
+        return;
+    }
+    GetWindowRect(Shell, &Rect);
+    ok(Rect.left >= 0 && Rect.top >= 0 && Rect.right == (LONG)Mode->dmPelsWidth &&
+       Rect.bottom <= (LONG)Mode->dmPelsHeight,
+       "%s: shell window %s on a %lux%lu display\n", Step, wine_dbgstr_rect(&Rect),
+       Mode->dmPelsWidth, Mode->dmPelsHeight);
+}
+
 START_TEST(DisplayChangeMaximized)
 {
     DEVMODEW Current = { 0 }, Mode = { 0 }, Target = { 0 };
@@ -128,11 +146,13 @@ START_TEST(DisplayChangeMaximized)
         trace("Right after the change: window %s, work area %s\n", wine_dbgstr_rect(&After), wine_dbgstr_rect(&Work));
         PumpFor(3000);
         CheckMaximized(Window, "smaller mode", &Insets, &Target);
+        CheckShellWindow("smaller mode", &Target);
 
         Result = ChangeDisplaySettingsExW(NULL, NULL, NULL, 0, NULL);
         ok(Result == DISP_CHANGE_SUCCESSFUL, "Reset returned %ld\n", Result);
         PumpFor(3000);
         CheckMaximized(Window, "reset", &Insets, &Current);
+        CheckShellWindow("reset", &Current);
     }
 
     DestroyWindow(Window);
