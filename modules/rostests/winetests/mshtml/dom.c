@@ -12336,6 +12336,786 @@ static void test_body_window_events_libernt(IHTMLDocument2 *doc)
     IHTMLElement_Release(body);
 }
 
+static void test_table_dispids_libernt(IHTMLElement *elem, const WCHAR *tag, const WCHAR *const *names, const DISPID *dispids)
+{
+    IDispatchEx *dispex;
+    DISPID dispid;
+    HRESULT hres;
+    unsigned i;
+    BSTR str;
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+    for(i = 0; names[i]; i++) {
+        str = SysAllocString(names[i]);
+        dispid = DISPID_UNKNOWN;
+        hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+        SysFreeString(str);
+        ok(hres == S_OK, "%s: GetDispID(%s) failed: %08lx\n", wine_dbgstr_w(tag), wine_dbgstr_w(names[i]), hres);
+        ok(dispid == dispids[i], "%s: %s dispid = %08lx\n", wine_dbgstr_w(tag), wine_dbgstr_w(names[i]), dispid);
+    }
+    IDispatchEx_Release(dispex);
+}
+
+static void test_table_attr_libernt(IHTMLElement *elem, const WCHAR *name, const WCHAR *value, const WCHAR *exp)
+{
+    BSTR str = SysAllocString(name);
+    HRESULT hres;
+    VARIANT v;
+
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLElement_getAttribute(elem, str, 0, &v);
+    ok(hres == S_OK, "getAttribute(%s) failed: %08lx\n", wine_dbgstr_w(name), hres);
+    ok(exp ? is_bstr_variant(&v, exp) : V_VT(&v) == VT_NULL || is_bstr_variant(&v, NULL),
+       "getAttribute(%s) after put %s = %s\n", wine_dbgstr_w(name), wine_dbgstr_w(value), wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    SysFreeString(str);
+}
+
+typedef HRESULT (WINAPI *table_put_bstr_t)(IDispatch*,BSTR);
+typedef HRESULT (WINAPI *table_get_bstr_t)(IDispatch*,BSTR*);
+typedef HRESULT (WINAPI *table_put_var_t)(IDispatch*,VARIANT);
+typedef HRESULT (WINAPI *table_get_var_t)(IDispatch*,VARIANT*);
+
+static IDispatch *get_table_iface_libernt(IHTMLElement *elem, const IID *iid, const char *name)
+{
+    IDispatch *iface = NULL;
+    HRESULT hres;
+
+    hres = IHTMLElement_QueryInterface(elem, iid, (void**)&iface);
+    ok(hres == S_OK, "Could not get %s: %08lx\n", name, hres);
+    return iface;
+}
+
+static void test_table_strings_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *tag;
+        const IID *iid;
+        const char *iface;
+        unsigned slot;
+        const WCHAR *name;
+        BOOL ie9;
+    } tests[] = {
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    7,  L"abbr"},
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    9,  L"axis"},
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    11, L"ch"},
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    13, L"chOff"},
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    15, L"headers"},
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    17, L"scope"},
+        {L"td",    &IID_IHTMLTableCell3,    "IHTMLTableCell3",    7,  L"ch",    TRUE},
+        {L"tr",    &IID_IHTMLTableRow3,     "IHTMLTableRow3",     7,  L"ch"},
+        {L"tr",    &IID_IHTMLTableRow3,     "IHTMLTableRow3",     9,  L"chOff"},
+        {L"tr",    &IID_IHTMLTableRow4,     "IHTMLTableRow4",     9,  L"chOff", TRUE},
+        {L"col",   &IID_IHTMLTableCol2,     "IHTMLTableCol2",     7,  L"ch"},
+        {L"col",   &IID_IHTMLTableCol2,     "IHTMLTableCol2",     9,  L"chOff"},
+        {L"col",   &IID_IHTMLTableCol3,     "IHTMLTableCol3",     7,  L"ch",    TRUE},
+        {L"tbody", &IID_IHTMLTableSection3, "IHTMLTableSection3", 7,  L"ch"},
+        {L"tbody", &IID_IHTMLTableSection3, "IHTMLTableSection3", 9,  L"chOff"},
+        {L"tfoot", &IID_IHTMLTableSection4, "IHTMLTableSection4", 7,  L"ch",    TRUE},
+    };
+    static const WCHAR *values[] = { L"abc", L"Left", L"" };
+    unsigned i, j;
+
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, tests[i].tag);
+        IDispatch *iface = get_table_iface_libernt(elem, tests[i].iid, tests[i].iface);
+        table_put_bstr_t put;
+        table_get_bstr_t get;
+        HRESULT hres;
+        BSTR str;
+
+        if(!iface) {
+            IHTMLElement_Release(elem);
+            continue;
+        }
+        put = ((void**)iface->lpVtbl)[tests[i].slot];
+        get = ((void**)iface->lpVtbl)[tests[i].slot + 1];
+
+        str = (void*)0xdeadbeef;
+        hres = get(iface, &str);
+        ok(hres == S_OK && !str, "%s.%s unset: %08lx %s\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].name),
+           hres, wine_dbgstr_w(str));
+
+        for(j = 0; j < ARRAY_SIZE(values); j++) {
+            str = SysAllocString(values[j]);
+            hres = put(iface, str);
+            ok(hres == S_OK, "%s.%s put(%s) returned %08lx\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].name),
+               wine_dbgstr_w(values[j]), hres);
+            SysFreeString(str);
+            str = NULL;
+            hres = get(iface, &str);
+            ok(hres == S_OK && str && !wcscmp(str, values[j]), "%s.%s after put(%s): %08lx %s\n", wine_dbgstr_w(tests[i].tag),
+               wine_dbgstr_w(tests[i].name), wine_dbgstr_w(values[j]), hres, wine_dbgstr_w(str));
+            SysFreeString(str);
+            test_table_attr_libernt(elem, tests[i].name, values[j], tests[i].ie9 ? NULL : values[j]);
+        }
+
+        IDispatch_Release(iface);
+        IHTMLElement_Release(elem);
+    }
+}
+
+static void test_table_lengths_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *tag;
+        const IID *iid;
+        const char *iface;
+        unsigned slot;
+        const WCHAR *name;
+    } props[] = {
+        {L"tr",       &IID_IHTMLTableRow2, "IHTMLTableRow2", 7, L"height"},
+        {L"col",      &IID_IHTMLTableCol,  "IHTMLTableCol",  9, L"width"},
+        {L"colgroup", &IID_IHTMLTableCol,  "IHTMLTableCol",  9, L"width"},
+    };
+    static const struct {
+        VARTYPE vt;
+        const WCHAR *str;
+        LONG i4;
+        HRESULT hres;
+        const WCHAR *get;
+    } tests[] = {
+        {VT_BSTR, L"10px",   0,  S_OK,         L"10"},
+        {VT_BSTR, L"50%",    0,  S_OK,         L"50%"},
+        {VT_BSTR, L"abc",    0,  E_INVALIDARG, L"50%"},
+        {VT_BSTR, L"",       0,  S_OK,         NULL},
+        {VT_BSTR, L"-3",     0,  E_INVALIDARG, NULL},
+        {VT_I4,   NULL,      10, S_OK,         L"10"},
+        {VT_I4,   NULL,      0,  E_INVALIDARG, L"10"},
+        {VT_I4,   NULL,      -1, E_INVALIDARG, L"10"},
+        {VT_BSTR, L"10abc",  0,  S_OK,         L"10"},
+        {VT_BSTR, L" 12",    0,  S_OK,         L"12"},
+        {VT_BSTR, L"10.5",   0,  S_OK,         L"10"},
+        {VT_BSTR, L"010",    0,  S_OK,         L"10"},
+        {VT_BSTR, L"0%",     0,  E_INVALIDARG, L"10"},
+        {VT_BSTR, L"10 %",   0,  S_OK,         L"10%"},
+        {VT_BSTR, L"1e2",    0,  S_OK,         L"100"},
+        {VT_BSTR, L"10%x",   0,  S_OK,         L"10%"},
+        {VT_BSTR, L"%",      0,  E_INVALIDARG, L"10%"},
+        {VT_BSTR, L"0",      0,  E_INVALIDARG, L"10%"},
+        {VT_BSTR, L"10PX",   0,  S_OK,         L"10"},
+        {VT_BSTR, L"+5",     0,  S_OK,         L"5"},
+        {VT_R8,   NULL,      0,  S_OK,         L"10"},
+        {VT_NULL, NULL,      0,  S_OK,         NULL},
+    };
+    unsigned i, j;
+
+    for(i = 0; i < ARRAY_SIZE(props); i++) {
+        IHTMLElement *elem = test_create_elem(doc, props[i].tag);
+        IDispatch *iface = get_table_iface_libernt(elem, props[i].iid, props[i].iface);
+        table_put_var_t put;
+        table_get_var_t get;
+        HRESULT hres;
+        VARIANT v;
+
+        if(!iface) {
+            IHTMLElement_Release(elem);
+            continue;
+        }
+        put = ((void**)iface->lpVtbl)[props[i].slot];
+        get = ((void**)iface->lpVtbl)[props[i].slot + 1];
+
+        V_VT(&v) = VT_ERROR;
+        hres = get(iface, &v);
+        ok(hres == S_OK && is_bstr_variant(&v, NULL), "%s.%s unset: %08lx %s\n", wine_dbgstr_w(props[i].tag),
+           wine_dbgstr_w(props[i].name), hres, wine_dbgstr_variant(&v));
+        VariantClear(&v);
+
+        for(j = 0; j < ARRAY_SIZE(tests); j++) {
+            V_VT(&v) = tests[j].vt;
+            if(tests[j].vt == VT_BSTR)
+                V_BSTR(&v) = SysAllocString(tests[j].str);
+            else if(tests[j].vt == VT_I4)
+                V_I4(&v) = tests[j].i4;
+            else if(tests[j].vt == VT_R8)
+                V_R8(&v) = 10.5;
+            hres = put(iface, v);
+            ok(hres == tests[j].hres, "%s.%s [%u] put %s returned %08lx\n", wine_dbgstr_w(props[i].tag),
+               wine_dbgstr_w(props[i].name), j, wine_dbgstr_variant(&v), hres);
+            VariantClear(&v);
+
+            V_VT(&v) = VT_ERROR;
+            hres = get(iface, &v);
+            ok(hres == S_OK && is_bstr_variant(&v, tests[j].get), "%s.%s [%u] = %08lx %s\n", wine_dbgstr_w(props[i].tag),
+               wine_dbgstr_w(props[i].name), j, hres, wine_dbgstr_variant(&v));
+            VariantClear(&v);
+        }
+
+        IDispatch_Release(iface);
+        IHTMLElement_Release(elem);
+    }
+}
+
+static void test_table_keywords_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *tag;
+        const IID *iid;
+        const char *iface;
+        unsigned slot;
+        BOOL valign;
+    } props[] = {
+        {L"col",   &IID_IHTMLTableCol,     "IHTMLTableCol",     11, FALSE},
+        {L"col",   &IID_IHTMLTableCol,     "IHTMLTableCol",     13, TRUE},
+        {L"tbody", &IID_IHTMLTableSection, "IHTMLTableSection", 7,  FALSE},
+        {L"thead", &IID_IHTMLTableSection, "IHTMLTableSection", 9,  TRUE},
+    };
+    static const struct {
+        const WCHAR *value;
+        HRESULT hres;
+        const WCHAR *get;
+    } align_tests[] = {
+        {L"left",      S_OK,         L"left"},
+        {L"CENTER",    S_OK,         L"center"},
+        {L"right",     S_OK,         L"right"},
+        {L"justify",   E_INVALIDARG, L"right"},
+        {L"char",      E_INVALIDARG, L"right"},
+        {L"middle",    S_OK,         L"center"},
+        {L"foo",       E_INVALIDARG, L"center"},
+        {L" left",     E_INVALIDARG, L"center"},
+        {L"absmiddle", E_INVALIDARG, L"center"},
+        {L"",          S_OK,         NULL},
+        {L"Right",     S_OK,         L"right"},
+    }, valign_tests[] = {
+        {L"top",       S_OK,         L"top"},
+        {L"MIDDLE",    S_OK,         L"middle"},
+        {L"bottom",    S_OK,         L"bottom"},
+        {L"baseline",  S_OK,         L"baseline"},
+        {L"center",    S_OK,         L"middle"},
+        {L"foo",       E_INVALIDARG, L"middle"},
+        {L"",          S_OK,         NULL},
+    };
+    unsigned i, j, count;
+
+    for(i = 0; i < ARRAY_SIZE(props); i++) {
+        IHTMLElement *elem = test_create_elem(doc, props[i].tag);
+        IDispatch *iface = get_table_iface_libernt(elem, props[i].iid, props[i].iface);
+        const WCHAR *name = props[i].valign ? L"vAlign" : L"align";
+        table_put_bstr_t put;
+        table_get_bstr_t get;
+        HRESULT hres;
+        BSTR str;
+
+        if(!iface) {
+            IHTMLElement_Release(elem);
+            continue;
+        }
+        put = ((void**)iface->lpVtbl)[props[i].slot];
+        get = ((void**)iface->lpVtbl)[props[i].slot + 1];
+
+        str = (void*)0xdeadbeef;
+        hres = get(iface, &str);
+        ok(hres == S_OK && !str, "%s.%s unset: %08lx %s\n", wine_dbgstr_w(props[i].tag), wine_dbgstr_w(name), hres, wine_dbgstr_w(str));
+
+        count = props[i].valign ? ARRAY_SIZE(valign_tests) : ARRAY_SIZE(align_tests);
+        for(j = 0; j < count; j++) {
+            const WCHAR *value = props[i].valign ? valign_tests[j].value : align_tests[j].value;
+            const WCHAR *exp = props[i].valign ? valign_tests[j].get : align_tests[j].get;
+            HRESULT exp_hres = props[i].valign ? valign_tests[j].hres : align_tests[j].hres;
+
+            str = SysAllocString(value);
+            hres = put(iface, str);
+            ok(hres == exp_hres, "%s.%s put(%s) returned %08lx\n", wine_dbgstr_w(props[i].tag), wine_dbgstr_w(name),
+               wine_dbgstr_w(value), hres);
+            SysFreeString(str);
+            str = (void*)0xdeadbeef;
+            hres = get(iface, &str);
+            ok(hres == S_OK && is_bstr_or_null(str, exp), "%s.%s after put(%s): %08lx %s\n", wine_dbgstr_w(props[i].tag),
+               wine_dbgstr_w(name), wine_dbgstr_w(value), hres, wine_dbgstr_w(str));
+            SysFreeString(str);
+        }
+
+        IDispatch_Release(iface);
+        IHTMLElement_Release(elem);
+    }
+}
+
+static void test_table_col_span_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        LONG value;
+        HRESULT hres;
+        LONG get;
+    } tests[] = {
+        {3,    S_OK,                       3},
+        {0,    CTL_E_INVALIDPROPERTYVALUE, 3},
+        {-1,   CTL_E_INVALIDPROPERTYVALUE, 3},
+        {1000, S_OK,                       1000},
+        {1001, CTL_E_INVALIDPROPERTYVALUE, 1000},
+        {1,    S_OK,                       1},
+    };
+    IHTMLElement *elem = test_create_elem(doc, L"colgroup");
+    IHTMLTableCol *col;
+    HRESULT hres;
+    unsigned i;
+    LONG span;
+    VARIANT v;
+    BSTR str;
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLTableCol, (void**)&col);
+    ok(hres == S_OK, "Could not get IHTMLTableCol: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+
+    span = -2;
+    hres = IHTMLTableCol_get_span(col, &span);
+    ok(hres == S_OK && span == 1, "unset span: %08lx %ld\n", hres, span);
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        hres = IHTMLTableCol_put_span(col, tests[i].value);
+        ok(hres == tests[i].hres, "put_span(%ld) returned %08lx\n", tests[i].value, hres);
+        span = -2;
+        hres = IHTMLTableCol_get_span(col, &span);
+        ok(hres == S_OK && span == tests[i].get, "span after put(%ld): %08lx %ld\n", tests[i].value, hres, span);
+    }
+
+    str = SysAllocString(L"span");
+    V_VT(&v) = VT_BSTR;
+    V_BSTR(&v) = SysAllocString(L"7");
+    hres = IHTMLElement_setAttribute(elem, str, v, 0);
+    ok(hres == S_OK, "setAttribute(span) failed: %08lx\n", hres);
+    VariantClear(&v);
+    SysFreeString(str);
+    span = -2;
+    hres = IHTMLTableCol_get_span(col, &span);
+    ok(hres == S_OK && span == 7, "span after setAttribute: %08lx %ld\n", hres, span);
+
+    IHTMLTableCol_Release(col);
+    IHTMLElement_Release(elem);
+}
+
+static void test_table_section_bgcolor_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        VARTYPE vt;
+        const WCHAR *str;
+        LONG i4;
+        const WCHAR *get;
+    } tests[] = {
+        {VT_BSTR, L"red",     0,        L"#ff0000"},
+        {VT_BSTR, L"#ABCDEF", 0,        L"#abcdef"},
+        {VT_BSTR, L"foo",     0,        L"#0f0000"},
+        {VT_BSTR, L"",        0,        NULL},
+        {VT_I4,   NULL,       0x123456, L"#123456"},
+        {VT_NULL, NULL,       0,        L"#123456"},
+    };
+    IHTMLElement *elem = test_create_elem(doc, L"tbody");
+    IHTMLTableSection *section;
+    HRESULT hres;
+    unsigned i;
+    VARIANT v;
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLTableSection, (void**)&section);
+    ok(hres == S_OK, "Could not get IHTMLTableSection: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+
+    V_VT(&v) = VT_ERROR;
+    hres = IHTMLTableSection_get_bgColor(section, &v);
+    ok(hres == S_OK && is_bstr_variant(&v, NULL), "unset bgColor: %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        V_VT(&v) = tests[i].vt;
+        if(tests[i].vt == VT_BSTR)
+            V_BSTR(&v) = SysAllocString(tests[i].str);
+        else if(tests[i].vt == VT_I4)
+            V_I4(&v) = tests[i].i4;
+        hres = IHTMLTableSection_put_bgColor(section, v);
+        ok(hres == S_OK, "[%u] put_bgColor returned %08lx\n", i, hres);
+        VariantClear(&v);
+        V_VT(&v) = VT_ERROR;
+        hres = IHTMLTableSection_get_bgColor(section, &v);
+        ok(hres == S_OK && is_bstr_variant(&v, tests[i].get), "[%u] bgColor = %08lx %s\n", i, hres, wine_dbgstr_variant(&v));
+        VariantClear(&v);
+    }
+
+    IHTMLTableSection_Release(section);
+    IHTMLElement_Release(elem);
+}
+
+static IHTMLTableSection *create_table_section_libernt(IHTMLDocument2 *doc, IHTMLElement **div)
+{
+    IHTMLElementCollection *col;
+    IHTMLTableSection *section;
+    IHTMLElement2 *elem2;
+    IDispatch *disp;
+    HRESULT hres;
+    VARIANT idx;
+    BSTR str;
+
+    *div = test_create_elem(doc, L"div");
+    test_elem_set_innerhtml((IUnknown*)*div,
+        L"<table><tbody><tr id=\"ra\"><td>1</td></tr><tr id=\"rb\"><td>2</td></tr></tbody></table>");
+    elem2 = get_elem2_iface((IUnknown*)*div);
+    str = SysAllocString(L"tbody");
+    hres = IHTMLElement2_getElementsByTagName(elem2, str, &col);
+    SysFreeString(str);
+    IHTMLElement2_Release(elem2);
+    ok(hres == S_OK, "getElementsByTagName failed: %08lx\n", hres);
+    V_VT(&idx) = VT_I4;
+    V_I4(&idx) = 0;
+    disp = NULL;
+    hres = IHTMLElementCollection_item(col, idx, idx, &disp);
+    IHTMLElementCollection_Release(col);
+    ok(hres == S_OK && disp, "item failed: %08lx\n", hres);
+    hres = IDispatch_QueryInterface(disp, &IID_IHTMLTableSection, (void**)&section);
+    IDispatch_Release(disp);
+    ok(hres == S_OK, "Could not get IHTMLTableSection: %08lx\n", hres);
+    return section;
+}
+
+static LONG table_section_row_count_libernt(IHTMLTableSection *section)
+{
+    IHTMLElementCollection *rows;
+    HRESULT hres;
+    LONG len = -1;
+
+    hres = IHTMLTableSection_get_rows(section, &rows);
+    ok(hres == S_OK, "get_rows failed: %08lx\n", hres);
+    if(FAILED(hres))
+        return -1;
+    hres = IHTMLElementCollection_get_length(rows, &len);
+    ok(hres == S_OK, "get_length failed: %08lx\n", hres);
+    IHTMLElementCollection_Release(rows);
+    return len;
+}
+
+static void test_table_section_row_id_libernt(IHTMLTableSection *section, LONG index, const WCHAR *exid)
+{
+    IHTMLElementCollection *rows;
+    IDispatch *disp = NULL;
+    HRESULT hres;
+    VARIANT idx;
+
+    hres = IHTMLTableSection_get_rows(section, &rows);
+    ok(hres == S_OK, "get_rows failed: %08lx\n", hres);
+    if(FAILED(hres))
+        return;
+    V_VT(&idx) = VT_I4;
+    V_I4(&idx) = index;
+    hres = IHTMLElementCollection_item(rows, idx, idx, &disp);
+    IHTMLElementCollection_Release(rows);
+    ok(hres == S_OK && disp, "rows item(%ld) failed: %08lx\n", index, hres);
+    if(disp) {
+        test_elem_id((IUnknown*)disp, exid);
+        IDispatch_Release(disp);
+    }
+}
+
+static void test_table_section_rows_libernt(IHTMLDocument2 *doc)
+{
+    IHTMLTableSection4 *section4;
+    IHTMLTableSection *section;
+    IHTMLElement *div, *elem;
+    IDispatch *row;
+    HRESULT hres;
+    BSTR str;
+
+    section = create_table_section_libernt(doc, &div);
+    if(!section) {
+        IHTMLElement_Release(div);
+        return;
+    }
+    ok(table_section_row_count_libernt(section) == 2, "unexpected row count\n");
+
+    row = NULL;
+    hres = IHTMLTableSection_insertRow(section, -1, &row);
+    ok(hres == S_OK && row, "insertRow(-1) returned %08lx\n", hres);
+    if(row) {
+        elem = get_elem_iface((IUnknown*)row);
+        hres = IHTMLElement_get_tagName(elem, &str);
+        ok(hres == S_OK && !wcscmp(str, L"TR"), "inserted tagName %s\n", wine_dbgstr_w(str));
+        SysFreeString(str);
+        IHTMLElement_Release(elem);
+        IDispatch_Release(row);
+    }
+    ok(table_section_row_count_libernt(section) == 3, "unexpected row count after insertRow(-1)\n");
+    test_table_section_row_id_libernt(section, 2, NULL);
+
+    row = NULL;
+    hres = IHTMLTableSection_insertRow(section, 0, &row);
+    ok(hres == S_OK && row, "insertRow(0) returned %08lx\n", hres);
+    if(row)
+        IDispatch_Release(row);
+    test_table_section_row_id_libernt(section, 0, NULL);
+    test_table_section_row_id_libernt(section, 1, L"ra");
+    ok(table_section_row_count_libernt(section) == 4, "unexpected row count after insertRow(0)\n");
+
+    row = (void*)0xdeadbeef;
+    hres = IHTMLTableSection_insertRow(section, 5, &row);
+    ok(hres == E_INVALIDARG, "insertRow(5) returned %08lx\n", hres);
+    hres = IHTMLTableSection_insertRow(section, -2, &row);
+    ok(hres == E_INVALIDARG, "insertRow(-2) returned %08lx\n", hres);
+    row = NULL;
+    hres = IHTMLTableSection_insertRow(section, 4, &row);
+    ok(hres == S_OK && row, "insertRow(4) returned %08lx\n", hres);
+    if(row)
+        IDispatch_Release(row);
+    ok(table_section_row_count_libernt(section) == 5, "unexpected row count after insertRow(4)\n");
+
+    hres = IHTMLTableSection_deleteRow(section, 0);
+    ok(hres == S_OK, "deleteRow(0) returned %08lx\n", hres);
+    test_table_section_row_id_libernt(section, 0, L"ra");
+    hres = IHTMLTableSection_deleteRow(section, -1);
+    ok(hres == S_OK, "deleteRow(-1) returned %08lx\n", hres);
+    ok(table_section_row_count_libernt(section) == 3, "unexpected row count after deleteRow\n");
+    test_table_section_row_id_libernt(section, 2, NULL);
+    hres = IHTMLTableSection_deleteRow(section, 3);
+    ok(hres == E_INVALIDARG, "deleteRow(3) returned %08lx\n", hres);
+    hres = IHTMLTableSection_deleteRow(section, -2);
+    ok(hres == E_INVALIDARG, "deleteRow(-2) returned %08lx\n", hres);
+    hres = IHTMLTableSection_deleteRow(section, 2);
+    ok(hres == S_OK, "deleteRow(2) returned %08lx\n", hres);
+    test_table_section_row_id_libernt(section, 1, L"rb");
+
+    hres = IHTMLTableSection_QueryInterface(section, &IID_IHTMLTableSection4, (void**)&section4);
+    ok(hres == S_OK, "Could not get IHTMLTableSection4: %08lx\n", hres);
+    if(SUCCEEDED(hres)) {
+        hres = IHTMLTableSection4_deleteRow(section4, 0);
+        ok(hres == E_UNEXPECTED, "IHTMLTableSection4 deleteRow(0) returned %08lx\n", hres);
+        hres = IHTMLTableSection4_deleteRow(section4, 2);
+        ok(hres == 0x80700001, "IHTMLTableSection4 deleteRow(2) returned %08lx\n", hres);
+        row = (void*)0xdeadbeef;
+        hres = IHTMLTableSection4_insertRow(section4, 1, &row);
+        ok(hres == E_UNEXPECTED, "IHTMLTableSection4 insertRow(1) returned %08lx\n", hres);
+        hres = IHTMLTableSection4_insertRow(section4, 3, &row);
+        ok(hres == 0x80700001, "IHTMLTableSection4 insertRow(3) returned %08lx\n", hres);
+        ok(table_section_row_count_libernt(section) == 2, "unexpected row count after IHTMLTableSection4 calls\n");
+        IHTMLTableSection4_Release(section4);
+    }
+    IHTMLTableSection_Release(section);
+    IHTMLElement_Release(div);
+
+    elem = test_create_elem(doc, L"tbody");
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLTableSection, (void**)&section);
+    ok(hres == S_OK, "Could not get IHTMLTableSection: %08lx\n", hres);
+    if(SUCCEEDED(hres)) {
+        row = (void*)0xdeadbeef;
+        hres = IHTMLTableSection_insertRow(section, -1, &row);
+        ok(hres == S_OK && !row, "detached insertRow(-1) returned %08lx %p\n", hres, row);
+        hres = IHTMLTableSection_deleteRow(section, 0);
+        ok(hres == S_OK, "empty deleteRow(0) returned %08lx\n", hres);
+        hres = IHTMLTableSection_deleteRow(section, -1);
+        ok(hres == S_OK, "empty deleteRow(-1) returned %08lx\n", hres);
+        hres = IHTMLTableSection_deleteRow(section, 5);
+        ok(hres == S_OK, "empty deleteRow(5) returned %08lx\n", hres);
+        IHTMLTableSection_Release(section);
+    }
+    IHTMLElement_Release(elem);
+}
+
+static void test_table_row4_libernt(IHTMLDocument2 *doc)
+{
+    IHTMLElement *elem = test_create_elem(doc, L"tr");
+    IHTMLTableRow4 *row4;
+    IDispatch *cell;
+    HRESULT hres;
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLTableRow4, (void**)&row4);
+    ok(hres == S_OK, "Could not get IHTMLTableRow4: %08lx\n", hres);
+    if(SUCCEEDED(hres)) {
+        cell = (void*)0xdeadbeef;
+        hres = IHTMLTableRow4_insertCell(row4, 0, &cell);
+        ok(hres == E_UNEXPECTED, "IHTMLTableRow4 insertCell(0) returned %08lx\n", hres);
+        if(hres == S_OK)
+            IDispatch_Release(cell);
+        hres = IHTMLTableRow4_insertCell(row4, 5, &cell);
+        ok(hres == 0x80700001, "IHTMLTableRow4 insertCell(5) returned %08lx\n", hres);
+        hres = IHTMLTableRow4_deleteCell(row4, 5);
+        ok(hres == 0x80700001, "IHTMLTableRow4 deleteCell(5) returned %08lx\n", hres);
+        IHTMLTableRow4_Release(row4);
+    }
+    IHTMLElement_Release(elem);
+}
+
+static void test_table_sections_libernt(IHTMLDocument2 *doc)
+{
+    static const WCHAR *cell_names[] = { L"abbr", L"axis", L"ch", L"chOff", L"headers", L"scope", NULL };
+    static const DISPID cell_dispids[] = {
+        DISPID_IHTMLTABLECELL2_ABBR, DISPID_IHTMLTABLECELL2_AXIS, DISPID_IHTMLTABLECELL2_CH, DISPID_IHTMLTABLECELL2_CHOFF,
+        DISPID_IHTMLTABLECELL2_HEADERS, DISPID_IHTMLTABLECELL2_SCOPE
+    };
+    static const WCHAR *row_names[] = { L"height", L"ch", L"chOff", NULL };
+    static const DISPID row_dispids[] = { DISPID_IHTMLTABLEROW2_HEIGHT, DISPID_IHTMLTABLEROW3_CH, DISPID_IHTMLTABLEROW3_CHOFF };
+    static const WCHAR *col_names[] = { L"span", L"width", L"align", L"vAlign", L"ch", L"chOff", NULL };
+    static const DISPID col_dispids[] = {
+        DISPID_IHTMLTABLECOL_SPAN, DISPID_IHTMLTABLECOL_WIDTH, DISPID_IHTMLTABLECOL_ALIGN, DISPID_IHTMLTABLECOL_VALIGN,
+        DISPID_IHTMLTABLECOL2_CH, DISPID_IHTMLTABLECOL2_CHOFF
+    };
+    static const WCHAR *section_names[] = { L"align", L"vAlign", L"bgColor", L"rows", L"insertRow", L"deleteRow", L"moveRow", L"ch", L"chOff", NULL };
+    static const DISPID section_dispids[] = {
+        DISPID_IHTMLTABLESECTION_ALIGN, DISPID_IHTMLTABLESECTION_VALIGN, DISPID_IHTMLTABLESECTION_BGCOLOR, DISPID_IHTMLTABLESECTION_ROWS,
+        DISPID_IHTMLTABLESECTION_INSERTROW, DISPID_IHTMLTABLESECTION_DELETEROW, DISPID_IHTMLTABLESECTION2_MOVEROW,
+        DISPID_IHTMLTABLESECTION3_CH, DISPID_IHTMLTABLESECTION3_CHOFF
+    };
+    static const struct {
+        const WCHAR *tag;
+        const IID *iids[4];
+        const IID *diid;
+        const CLSID *clsid;
+        const WCHAR *const *names;
+        const DISPID *dispids;
+    } tests[] = {
+        {L"col",      {&IID_IHTMLTableCol, &IID_IHTMLTableCol2, &IID_IHTMLTableCol3},
+                      &DIID_DispHTMLTableCol, &CLSID_HTMLTableCol, col_names, col_dispids},
+        {L"colgroup", {&IID_IHTMLTableCol, &IID_IHTMLTableCol2, &IID_IHTMLTableCol3},
+                      &DIID_DispHTMLTableCol, &CLSID_HTMLTableCol, col_names, col_dispids},
+        {L"tbody",    {&IID_IHTMLTableSection, &IID_IHTMLTableSection2, &IID_IHTMLTableSection3, &IID_IHTMLTableSection4},
+                      &DIID_DispHTMLTableSection, &CLSID_HTMLTableSection, section_names, section_dispids},
+        {L"thead",    {&IID_IHTMLTableSection, &IID_IHTMLTableSection2, &IID_IHTMLTableSection3, &IID_IHTMLTableSection4},
+                      &DIID_DispHTMLTableSection, &CLSID_HTMLTableSection, section_names, section_dispids},
+        {L"tfoot",    {&IID_IHTMLTableSection, &IID_IHTMLTableSection2, &IID_IHTMLTableSection3, &IID_IHTMLTableSection4},
+                      &DIID_DispHTMLTableSection, &CLSID_HTMLTableSection, section_names, section_dispids},
+        {L"td",       {&IID_IHTMLTableCell, &IID_IHTMLTableCell2, &IID_IHTMLTableCell3},
+                      &DIID_DispHTMLTableCell, &CLSID_HTMLTableCell, cell_names, cell_dispids},
+        {L"tr",       {&IID_IHTMLTableRow, &IID_IHTMLTableRow2, &IID_IHTMLTableRow3, &IID_IHTMLTableRow4},
+                      &DIID_DispHTMLTableRow, &CLSID_HTMLTableRow, row_names, row_dispids},
+    };
+    unsigned i, j;
+
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, tests[i].tag);
+        IUnknown *unk;
+        HRESULT hres;
+
+        test_disp((IUnknown*)elem, tests[i].diid, tests[i].clsid, L"[object]");
+        for(j = 0; j < ARRAY_SIZE(tests[i].iids) && tests[i].iids[j]; j++) {
+            hres = IHTMLElement_QueryInterface(elem, tests[i].iids[j], (void**)&unk);
+            ok(hres == S_OK, "%s: QueryInterface(%s) returned %08lx\n", wine_dbgstr_w(tests[i].tag),
+               wine_dbgstr_guid(tests[i].iids[j]), hres);
+            if(SUCCEEDED(hres))
+                IUnknown_Release(unk);
+        }
+        test_table_dispids_libernt(elem, tests[i].tag, tests[i].names, tests[i].dispids);
+        IHTMLElement_Release(elem);
+    }
+
+    test_table_row4_libernt(doc);
+    test_table_strings_libernt(doc);
+    test_table_lengths_libernt(doc);
+    test_table_keywords_libernt(doc);
+    test_table_col_span_libernt(doc);
+    test_table_section_bgcolor_libernt(doc);
+    test_table_section_rows_libernt(doc);
+}
+
+static void test_table_section_ie9_rows_libernt(IHTMLDocument2 *doc)
+{
+    IHTMLElement *elem = test_create_elem(doc, L"tbody");
+    IHTMLTableSection4 *section4 = NULL;
+    IHTMLTableSection *section = NULL;
+    IDispatch *row;
+    HRESULT hres;
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLTableSection, (void**)&section);
+    ok(hres == S_OK, "Could not get IHTMLTableSection: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLTableSection4, (void**)&section4);
+    ok(hres == S_OK, "Could not get IHTMLTableSection4: %08lx\n", hres);
+    if(section && section4) {
+        row = (void*)0xdeadbeef;
+        hres = IHTMLTableSection_insertRow(section, 5, &row);
+        ok(hres == E_INVALIDARG, "insertRow(5) returned %08lx\n", hres);
+        hres = IHTMLTableSection4_insertRow(section4, 5, &row);
+        ok(hres == 0x80700001, "IHTMLTableSection4 insertRow(5) returned %08lx\n", hres);
+        row = NULL;
+        hres = IHTMLTableSection4_insertRow(section4, 0, &row);
+        ok(hres == S_OK && row, "IHTMLTableSection4 insertRow(0) returned %08lx\n", hres);
+        if(row)
+            IDispatch_Release(row);
+        ok(table_section_row_count_libernt(section) == 1, "unexpected row count after insertRow\n");
+        hres = IHTMLTableSection4_deleteRow(section4, 1);
+        ok(hres == 0x80700001, "IHTMLTableSection4 deleteRow(1) returned %08lx\n", hres);
+        hres = IHTMLTableSection_deleteRow(section, 1);
+        ok(hres == E_INVALIDARG, "deleteRow(1) returned %08lx\n", hres);
+        hres = IHTMLTableSection4_deleteRow(section4, 0);
+        ok(hres == S_OK, "IHTMLTableSection4 deleteRow(0) returned %08lx\n", hres);
+        ok(table_section_row_count_libernt(section) == 0, "unexpected row count after deleteRow\n");
+        hres = IHTMLTableSection4_deleteRow(section4, -1);
+        ok(hres == S_OK, "empty IHTMLTableSection4 deleteRow(-1) returned %08lx\n", hres);
+        hres = IHTMLTableSection4_deleteRow(section4, 5);
+        ok(hres == 0x80700001, "empty IHTMLTableSection4 deleteRow(5) returned %08lx\n", hres);
+        hres = IHTMLTableSection4_deleteRow(section4, 0);
+        ok(hres == 0x80700001, "empty IHTMLTableSection4 deleteRow(0) returned %08lx\n", hres);
+        hres = IHTMLTableSection_deleteRow(section, 5);
+        ok(hres == E_INVALIDARG, "empty deleteRow(5) returned %08lx\n", hres);
+        hres = IHTMLTableSection_deleteRow(section, -1);
+        ok(hres == S_OK, "empty deleteRow(-1) returned %08lx\n", hres);
+    }
+    if(section4)
+        IHTMLTableSection4_Release(section4);
+    if(section)
+        IHTMLTableSection_Release(section);
+    IHTMLElement_Release(elem);
+}
+
+static void test_table_sections_ie9_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *tag;
+        const IID *iid;
+        const char *iface;
+        unsigned slot;
+        const WCHAR *attr;
+        BOOL ie9;
+    } tests[] = {
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    11, L"char"},
+        {L"td",    &IID_IHTMLTableCell2,    "IHTMLTableCell2",    13, L"charOff"},
+        {L"td",    &IID_IHTMLTableCell3,    "IHTMLTableCell3",    7,  L"char",    TRUE},
+        {L"tr",    &IID_IHTMLTableRow3,     "IHTMLTableRow3",     9,  L"charOff"},
+        {L"tr",    &IID_IHTMLTableRow4,     "IHTMLTableRow4",     7,  L"char",    TRUE},
+        {L"col",   &IID_IHTMLTableCol2,     "IHTMLTableCol2",     7,  L"char"},
+        {L"col",   &IID_IHTMLTableCol3,     "IHTMLTableCol3",     9,  L"charOff", TRUE},
+        {L"thead", &IID_IHTMLTableSection3, "IHTMLTableSection3", 7,  L"char"},
+        {L"tbody", &IID_IHTMLTableSection4, "IHTMLTableSection4", 9,  L"charOff", TRUE},
+    };
+    unsigned i;
+
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        IHTMLElement *elem = test_create_elem(doc, tests[i].tag);
+        IDispatch *iface = get_table_iface_libernt(elem, tests[i].iid, tests[i].iface);
+        BSTR str, name;
+        table_put_bstr_t put;
+        table_get_bstr_t get;
+        HRESULT hres;
+        VARIANT v;
+
+        if(!iface) {
+            IHTMLElement_Release(elem);
+            continue;
+        }
+        put = ((void**)iface->lpVtbl)[tests[i].slot];
+        get = ((void**)iface->lpVtbl)[tests[i].slot + 1];
+
+        str = SysAllocString(L"x");
+        hres = put(iface, str);
+        ok(hres == S_OK, "%s [%u] put returned %08lx\n", wine_dbgstr_w(tests[i].tag), i, hres);
+        SysFreeString(str);
+        test_table_attr_libernt(elem, tests[i].attr, L"x", tests[i].ie9 ? L"x" : NULL);
+
+        name = SysAllocString(tests[i].attr);
+        V_VT(&v) = VT_BSTR;
+        V_BSTR(&v) = SysAllocString(L"y");
+        hres = IHTMLElement_setAttribute(elem, name, v, 0);
+        ok(hres == S_OK, "%s [%u] setAttribute returned %08lx\n", wine_dbgstr_w(tests[i].tag), i, hres);
+        VariantClear(&v);
+        SysFreeString(name);
+        str = NULL;
+        hres = get(iface, &str);
+        ok(hres == S_OK && str && !wcscmp(str, tests[i].ie9 ? L"y" : L"x"), "%s [%u] after setAttribute: %08lx %s\n",
+           wine_dbgstr_w(tests[i].tag), i, hres, wine_dbgstr_w(str));
+        SysFreeString(str);
+
+        IDispatch_Release(iface);
+        IHTMLElement_Release(elem);
+    }
+
+    test_table_section_ie9_rows_libernt(doc);
+}
+
 static void test_frameset_events_libernt(IHTMLDocument2 *doc)
 {
     static const WCHAR *events[] = { L"onload", L"onunload", L"onbeforeunload", L"onbeforeprint", L"onafterprint" };
@@ -15392,6 +16172,8 @@ START_TEST(dom)
         run_domtest(doc_blank, test_tag_attr_only_libernt);
         run_domtest(doc_blank, test_attr_name_alias_libernt);
         run_domtest(doc_blank, test_frameset_libernt);
+        run_domtest(doc_blank, test_table_sections_libernt);
+        run_domtest(doc_blank_ie9, test_table_sections_ie9_libernt);
         run_domtest(doc_blank, test_body_window_events_libernt);
         run_domtest(doc_blank, test_text_elements_libernt);
         run_domtest(doc_blank_ie9, test_text_elements_ie9_libernt);

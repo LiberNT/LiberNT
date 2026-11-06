@@ -78,6 +78,7 @@
 #define MSHTML_E_NODOC            0x800a025c
 #define MSHTML_E_SYNTAX           0x800a03ea
 #define MSHTML_E_NOT_FUNC         0x800a138a
+#define MSHTML_E_INDEX_SIZE       0x80700001
 
 typedef struct HTMLWindow HTMLWindow;
 typedef struct HTMLInnerWindow HTMLInnerWindow;
@@ -161,7 +162,9 @@ struct constructor;
     XDIID(DispHTMLStyleSheetsCollection) \
     XDIID(DispHTMLTable) \
     XDIID(DispHTMLTableCell) \
+    XDIID(DispHTMLTableCol) \
     XDIID(DispHTMLTableRow) \
+    XDIID(DispHTMLTableSection) \
     XDIID(DispHTMLTextAreaElement) \
     XDIID(DispHTMLTitleElement) \
     XDIID(DispHTMLUnknownElement) \
@@ -307,7 +310,19 @@ struct constructor;
     XIID(IHTMLTable2) \
     XIID(IHTMLTable3) \
     XIID(IHTMLTableCell) \
+    XIID(IHTMLTableCell2) \
+    XIID(IHTMLTableCell3) \
+    XIID(IHTMLTableCol) \
+    XIID(IHTMLTableCol2) \
+    XIID(IHTMLTableCol3) \
     XIID(IHTMLTableRow) \
+    XIID(IHTMLTableRow2) \
+    XIID(IHTMLTableRow3) \
+    XIID(IHTMLTableRow4) \
+    XIID(IHTMLTableSection) \
+    XIID(IHTMLTableSection2) \
+    XIID(IHTMLTableSection3) \
+    XIID(IHTMLTableSection4) \
     XIID(IHTMLTextAreaElement) \
     XIID(IHTMLTextContainer) \
     XIID(IHTMLTitleElement) \
@@ -517,9 +532,11 @@ typedef struct {
     X(HTMLSelectElement)                   \
     X(HTMLStyleElement)                    \
     X(HTMLTableCellElement)                \
+    X(HTMLTableColElement)                 \
     X(HTMLTableDataCellElement)            \
     X(HTMLTableElement)                    \
     X(HTMLTableRowElement)                 \
+    X(HTMLTableSectionElement)             \
     X(HTMLTextAreaElement)                 \
     X(HTMLTitleElement)                    \
     X(HTMLUnknownElement)                  \
@@ -1477,7 +1494,9 @@ HRESULT HTMLScriptElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**)
 HRESULT HTMLSelectElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTable_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableCell_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLTableCol_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableRow_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLTableSection_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTextAreaElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTitleElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLGenericElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);

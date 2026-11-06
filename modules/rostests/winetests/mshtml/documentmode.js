@@ -4211,6 +4211,13 @@ sync_test("prototypes", function() {
     check(document.createElement("td"), HTMLTableDataCellElement.prototype, "td element");
     check(HTMLTableDataCellElement.prototype, HTMLTableCellElement.prototype, "td element prototype");
     check(HTMLTableCellElement.prototype, HTMLElement.prototype, "table cell prototype");
+    check(document.createElement("col"), HTMLTableColElement.prototype, "col element");
+    check(document.createElement("colgroup"), HTMLTableColElement.prototype, "colgroup element");
+    check(HTMLTableColElement.prototype, HTMLElement.prototype, "table col prototype");
+    check(document.createElement("tbody"), HTMLTableSectionElement.prototype, "tbody element");
+    check(document.createElement("thead"), HTMLTableSectionElement.prototype, "thead element");
+    check(document.createElement("tfoot"), HTMLTableSectionElement.prototype, "tfoot element");
+    check(HTMLTableSectionElement.prototype, HTMLElement.prototype, "table section prototype");
     check(document.createElement("textarea"), HTMLTextAreaElement.prototype, "textarea element");
     check(HTMLTextAreaElement.prototype, HTMLElement.prototype, "textarea element prototype");
     check(document.createElement("test"), HTMLUnknownElement.prototype, "unknown element");
@@ -4392,6 +4399,58 @@ sync_test("text element props", function() {
     ok(e.size === 3, "basefont.size = " + e.size);
     e.setAttribute("size", "x.htm");
     ok(e.size === 3, "basefont.size after setAttribute(x.htm) = " + e.size);
+});
+
+sync_test("table section props", function() {
+    var v = document.documentMode, i, e, d, s, r;
+    if(v < 9)
+        return;
+
+    var cases = [
+        [ "td", "abbr", "abbr" ], [ "td", "axis", "axis" ], [ "td", "ch", "char" ], [ "td", "chOff", "charOff" ],
+        [ "td", "headers", "headers" ], [ "td", "scope", "scope" ], [ "tr", "ch", "char" ], [ "tr", "chOff", "charOff" ],
+        [ "tr", "height", "height" ], [ "col", "ch", "char" ], [ "col", "chOff", "charOff" ], [ "col", "width", "width" ],
+        [ "col", "align", "align" ], [ "col", "vAlign", "vAlign" ], [ "colgroup", "ch", "char" ], [ "tbody", "ch", "char" ],
+        [ "tbody", "chOff", "charOff" ], [ "tbody", "align", "align" ], [ "thead", "vAlign", "vAlign" ], [ "tfoot", "ch", "char" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        e = document.createElement(cases[i][0]);
+        ok(e[cases[i][1]] === "", cases[i][0] + "." + cases[i][1] + " = " + e[cases[i][1]]);
+        e.setAttribute(cases[i][2], "7");
+        ok(e[cases[i][1]] === (cases[i][1] === "vAlign" ? "top" : cases[i][1] === "align" ? "" : "7"),
+           cases[i][0] + "." + cases[i][1] + " after setAttribute(" + cases[i][2] + ") = " + e[cases[i][1]]);
+    }
+
+    e = document.createElement("col");
+    e.setAttribute("width", "abc");
+    ok(e.width === "", "col.width after setAttribute(abc) = " + e.width);
+    e.setAttribute("width", "10px");
+    ok(e.width === "10", "col.width after setAttribute(10px) = " + e.width);
+    e.setAttribute("span", "1001");
+    ok(e.span === 1, "col.span after setAttribute(1001) = " + e.span);
+    e.setAttribute("span", "2.5");
+    ok(e.span === 2, "col.span after setAttribute(2.5) = " + e.span);
+    e.removeAttribute("span");
+    ok(e.span === 1, "col.span = " + e.span);
+    e.span = 2;
+    ok(e.getAttribute("span") === "2", "col span attribute = " + e.getAttribute("span"));
+    e.ch = "y";
+    ok(e.getAttribute("char") === "y", "col char attribute = " + e.getAttribute("char"));
+
+    d = document.createElement("div");
+    d.innerHTML = "<table><tbody><tr id='ra'><td>1</td></tr><tr id='rb'><td>2</td></tr></tbody></table>";
+    s = d.firstChild.tBodies[0];
+    ok(s.rows.length === 2, "tbody.rows.length = " + s.rows.length);
+    r = s.insertRow();
+    ok(Object.prototype.toString.call(r) === "[object HTMLTableRowElement]", "insertRow() = " + Object.prototype.toString.call(r));
+    ok(r.parentNode === s, "inserted row parent = " + r.parentNode);
+    ok(s.rows.length === 3, "tbody.rows.length after insertRow = " + s.rows.length);
+    s.deleteRow(0);
+    ok(s.rows[0].id === "rb", "first row after deleteRow(0) = " + s.rows[0].id);
+    s = document.createElement("thead");
+    r = s.insertRow();
+    ok(r.parentNode === s, "detached thead insertRow() parent = " + r.parentNode);
 });
 
 sync_test("body window event props", function() {
@@ -4728,7 +4787,8 @@ sync_test("prototype props", function() {
     check(HTMLTableCellElement, [
         "abbr", "align", "axis", "background", "bgColor", "borderColor", "borderColorDark", "borderColorLight",
         "cellIndex", "ch", "chOff", "colSpan", "headers", "height", "noWrap", "rowSpan", "scope", "vAlign", "width"
-    ], [ "abbr", "axis", "ch", "chOff", "headers", "scope" ]);
+    ]);
+    check(HTMLTableColElement, [ "align", "ch", "chOff", "span", "vAlign", "width" ]);
     check(HTMLTableDataCellElement, []);
     check(HTMLTableElement, [
         "align", "background", "bgColor", "border", "borderColor", "borderColorDark", "borderColorLight", "caption", "cellPadding", "cells", "cellSpacing", "cols",
@@ -4742,7 +4802,8 @@ sync_test("prototype props", function() {
     check(HTMLTableRowElement, [
         "align", "bgColor", "borderColor", "borderColorDark", "borderColorLight", "cells", "ch", "chOff",
         "deleteCell", "height", "insertCell", "rowIndex", "sectionRowIndex", "vAlign"
-    ], [ "ch", "chOff", "height" ]);
+    ]);
+    check(HTMLTableSectionElement, [ "align", "bgColor", "ch", "chOff", "deleteRow", "insertRow", "moveRow", "rows", "vAlign" ]);
     check(HTMLTextAreaElement, [
         ["autofocus",10], ["checkValidity",10], "cols", "createTextRange", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "defaultValue", "form",
         ["maxLength",10], "name", ["placeholder",10], "readOnly", ["required",10], "rows", "select", "selectionEnd", "selectionStart", ["setCustomValidity",10],
@@ -5009,7 +5070,7 @@ async_test("window own props", function() {
             "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLHRElement", "HTMLIsIndexElement",
             "HTMLLegendElement", "HTMLLIElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLMenuElement", "HTMLNextIdElement", "HTMLOListElement",
             "HTMLOptGroupElement", "HTMLParamElement", ["HTMLProgressElement",10], "HTMLSourceElement",
-            "HTMLSpanElement", "HTMLTableCaptionElement", "HTMLTableColElement", "HTMLTableHeaderCellElement", "HTMLTableSectionElement", ["HTMLTrackElement",10], "HTMLUListElement",
+            "HTMLSpanElement", "HTMLTableCaptionElement", "HTMLTableHeaderCellElement", ["HTMLTrackElement",10], "HTMLUListElement",
             "HTMLVideoElement", ["IDBCursor",10], ["IDBCursorWithValue",10], ["IDBDatabase",10], ["IDBFactory",10], ["IDBIndex",10], ["IDBKeyRange",10], ["IDBObjectStore",10], ["IDBOpenDBRequest",10],
             ["IDBRequest",10], ["IDBTransaction",10], ["IDBVersionChangeEvent",10], "ImageData", ["Intl",11], ["Key",11], ["KeyOperation",11],
             ["KeyPair",11], "Location", "MediaError", "MediaList", ["MediaSource",11], ["MessageChannel",10], ["MessagePort",10], ["MimeType",11], ["MimeTypeArray",9,10], "MouseWheelEvent",
