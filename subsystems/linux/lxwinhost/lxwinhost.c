@@ -1021,6 +1021,7 @@ LxHandleMessage(
 
         case LX_WIN_COMPOSITOR_DETACHED:
             LxDestroyAll();
+            PostQuitMessage(0);
             return;
 
         case LX_WIN_READY:
