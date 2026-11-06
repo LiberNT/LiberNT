@@ -31,6 +31,11 @@ static ULONG ConsolePasswordLength;
 static BOOL ConsolePasswordWrong;
 static BYTE ConsoleKeys[256];
 static HANDLE ConsoleLsa;
+static HANDLE RemoteLogonDone;
+static BOOL RemoteLogonPending;
+static WCHAR RemoteLogonUser[257];
+static WCHAR RemoteLogonDomain[256];
+static WCHAR RemoteLogonPassword[256];
 static ULONG ConsolePackage;
 
 static
@@ -480,10 +485,20 @@ ConnectRemote(
 
     if (RemoteConnected)
         return ERROR_ALREADY_EXISTS;
+    if (Session->LogonState == STATE_LOGGED_OFF && Message->UserName[0] && Message->Password[0] && RemoteLogonDone)
+    {
+        StringCchCopyW(RemoteLogonUser, ARRAYSIZE(RemoteLogonUser), Message->UserName);
+        StringCchCopyW(RemoteLogonDomain, ARRAYSIZE(RemoteLogonDomain), Message->Domain);
+        StringCchCopyW(RemoteLogonPassword, ARRAYSIZE(RemoteLogonPassword), Message->Password);
+        RemoteLogonPending = TRUE;
+        ResetEvent(RemoteLogonDone);
+        PostMessageW(Session->SASWindow, WLX_WM_SAS, WLX_SAS_TYPE_AUTHENTICATED, 0);
+        return ERROR_IO_PENDING;
+    }
     if (Session->LogonState != STATE_LOGGED_ON && Session->LogonState != STATE_LOGGED_ON_SAS &&
         Session->LogonState != STATE_LOCKED && Session->LogonState != STATE_LOCKED_SAS)
     {
-        /* TODO: connect a client to a session nobody is signed in to */
+        /* TODO: sign in a client while the console sign-in screen is open */
         return ERROR_NOT_SUPPORTED;
     }
     if (!Session->UserName || _wcsicmp(Session->UserName, Message->UserName) ||
@@ -604,6 +619,58 @@ DisconnectRemote(
     return lRet;
 }
 
+BOOL
+QueryRemoteLogonCredentials(
+    _Out_ PWLX_CLIENT_CREDENTIALS_INFO_V2_0 Credentials)
+{
+    SIZE_T cbUser, cbDomain, cbPassword;
+
+    RtlZeroMemory(Credentials, sizeof(*Credentials));
+    if (!RemoteLogonPending)
+        return FALSE;
+
+    cbUser = (wcslen(RemoteLogonUser) + 1) * sizeof(WCHAR);
+    cbDomain = (wcslen(RemoteLogonDomain) + 1) * sizeof(WCHAR);
+    cbPassword = (wcslen(RemoteLogonPassword) + 1) * sizeof(WCHAR);
+    Credentials->pszUserName = LocalAlloc(LMEM_FIXED, cbUser);
+    Credentials->pszDomain = LocalAlloc(LMEM_FIXED, cbDomain);
+    Credentials->pszPassword = LocalAlloc(LMEM_FIXED, cbPassword);
+    if (Credentials->pszPassword)
+        RtlCopyMemory(Credentials->pszPassword, RemoteLogonPassword, cbPassword);
+    SecureZeroMemory(RemoteLogonPassword, sizeof(RemoteLogonPassword));
+    if (!Credentials->pszUserName || !Credentials->pszDomain || !Credentials->pszPassword)
+    {
+        LocalFree(Credentials->pszUserName);
+        LocalFree(Credentials->pszDomain);
+        if (Credentials->pszPassword)
+        {
+            SecureZeroMemory(Credentials->pszPassword, cbPassword);
+            LocalFree(Credentials->pszPassword);
+        }
+        RtlZeroMemory(Credentials, sizeof(*Credentials));
+        return FALSE;
+    }
+    RtlCopyMemory(Credentials->pszUserName, RemoteLogonUser, cbUser);
+    RtlCopyMemory(Credentials->pszDomain, RemoteLogonDomain, cbDomain);
+    Credentials->dwType = WLX_CREDENTIAL_TYPE_V2_0;
+    Credentials->fPromptForPassword = FALSE;
+    Credentials->fDisconnectOnLogonFailure = TRUE;
+    return TRUE;
+}
+
+VOID
+HandleRemoteLogonDone(
+    _In_ PWLSESSION Session)
+{
+    UNREFERENCED_PARAMETER(Session);
+
+    if (!RemoteLogonPending)
+        return;
+    RemoteLogonPending = FALSE;
+    SecureZeroMemory(RemoteLogonPassword, sizeof(RemoteLogonPassword));
+    SetEvent(RemoteLogonDone);
+}
+
 LRESULT
 HandleRemoteConsoleMessage(
     _In_ PWLSESSION Session,
@@ -697,6 +764,15 @@ RemoteConsoleThread(
             while (ReadRemoteMessage(Pipe, &Message))
             {
                 Message.Status = (ULONG)SendMessageW(Session->SASWindow, WLX_WM_REMOTE_CONSOLE, 0, (LPARAM)&Message);
+                if (Message.Status == ERROR_IO_PENDING)
+                {
+                    WaitForSingleObject(RemoteLogonDone, INFINITE);
+                    SecureZeroMemory(Message.Password, sizeof(Message.Password));
+                    Message.Status = (ULONG)SendMessageW(Session->SASWindow, WLX_WM_REMOTE_CONSOLE, 0, (LPARAM)&Message);
+                    if (Message.Status == ERROR_NOT_SUPPORTED)
+                        Message.Status = ERROR_LOGON_FAILURE;
+                }
+                SecureZeroMemory(Message.Password, sizeof(Message.Password));
                 if (!WriteRemoteMessage(&Message))
                     break;
             }
@@ -731,6 +807,7 @@ StartRemoteConsole(
         return FALSE;
 
     InitializeCriticalSection(&RemotePipeLock);
+    RemoteLogonDone = CreateEventW(NULL, TRUE, FALSE, NULL);
     SetRemoteRecord(FALSE, FALSE, 0);
     hThread = CreateThread(NULL, 0, RemoteConsoleThread, Session, 0, NULL);
     if (!hThread)

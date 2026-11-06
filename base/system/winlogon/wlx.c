@@ -730,17 +730,14 @@ WlxQueryConsoleSwitchCredentials(
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
 WlxQueryTsLogonCredentials(
     PWLX_CLIENT_CREDENTIALS_INFO_V2_0 pCred)
 {
-    UNREFERENCED_PARAMETER(pCred);
-
-    UNIMPLEMENTED;
-    return FALSE;
+    return QueryRemoteLogonCredentials(pCred);
 }
 
 static

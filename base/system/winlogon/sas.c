@@ -1604,14 +1604,17 @@ DoGenericAction(
                 if (!HandleLogon(Session))
                 {
                     Session->LogonState = STATE_LOGGED_OFF;
+                    HandleRemoteLogonDone(Session);
                     Session->Gina.Functions.WlxDisplaySASNotice(Session->Gina.Context);
                 }
+                HandleRemoteLogonDone(Session);
             }
             break;
         case WLX_SAS_ACTION_NONE: /* 0x02 */
             if (Session->LogonState == STATE_LOGGED_OFF_SAS)
             {
                 Session->LogonState = STATE_LOGGED_OFF;
+                HandleRemoteLogonDone(Session);
                 Session->Gina.Functions.WlxDisplaySASNotice(Session->Gina.Context);
             }
             else if (Session->LogonState == STATE_LOGGED_ON_SAS)
@@ -1804,6 +1807,27 @@ DispatchSAS(
                 default:
                     return;
             }
+            break;
+
+        case WLX_SAS_TYPE_AUTHENTICATED:
+            if (Session->LogonState != STATE_LOGGED_OFF)
+            {
+                HandleRemoteLogonDone(Session);
+                return;
+            }
+            Session->LogonState = STATE_LOGGED_OFF_SAS;
+            CloseAllDialogWindows();
+            Session->Options = 0;
+            wlxAction = (DWORD)Session->Gina.Functions.WlxLoggedOutSAS(Session->Gina.Context,
+                                                                       WLX_SAS_TYPE_AUTHENTICATED,
+                                                                       &Session->LogonId,
+                                                                       LogonSid,
+                                                                       &Session->Options,
+                                                                       &Session->UserToken,
+                                                                       &Session->MprNotifyInfo,
+                                                                       (PVOID*)&Session->Profile);
+            if (wlxAction != WLX_SAS_ACTION_LOGON && wlxAction != WLX_SAS_ACTION_NONE)
+                HandleRemoteLogonDone(Session);
             break;
 
         case WLX_SAS_TYPE_TIMEOUT:
