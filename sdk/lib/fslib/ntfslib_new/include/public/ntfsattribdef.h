@@ -39,6 +39,9 @@
 #define VOL_UPGRADE_ON_MNT 0x0004
 #define VOL_USN_DEL_INPROG 0x0010
 #define VOL_REPAIR_OBJ_IDS 0x0020
+/* Windows 11 sets these with VOL_DIRTY: a full chkdsk is needed, or only an online scan. */
+#define VOL_FULL_CHKDSK    0x0100
+#define VOL_ONLINE_SCAN    0x0200
 #define VOL_CHECKED        0x8000
 
 /* Attribute types

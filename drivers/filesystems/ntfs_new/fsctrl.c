@@ -1717,7 +1717,7 @@ NtfsMarkVolumeDirty(
 
     KeEnterCriticalRegion();
     NtfsAcquireMetadata(VolCB);
-    Status = NtfsVolumeSetFlags(VolCB->DiskVolume, VOL_DIRTY, 0);
+    Status = NtfsVolumeSetFlags(VolCB->DiskVolume, VOL_DIRTY | VOL_FULL_CHKDSK, 0);
     NtfsReleaseMetadata(VolCB);
     KeLeaveCriticalRegion();
     return Status;
