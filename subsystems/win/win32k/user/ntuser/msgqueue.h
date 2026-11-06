@@ -188,6 +188,7 @@ co_IntSendMessageTimeout(HWND hWnd,
                       ULONG_PTR *uResult);
 
 BOOL FASTCALL UserSendNotifyMessage( HWND hWnd,UINT Msg,WPARAM wParam,LPARAM lParam );
+BOOL FASTCALL UserSendNotifyMessageToDesktop( PWND DesktopWindow,UINT Msg,WPARAM wParam,LPARAM lParam );
 LRESULT FASTCALL co_IntSendMessageNoWait(HWND hWnd,
                         UINT Msg,
                         WPARAM wParam,
