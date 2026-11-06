@@ -6,6 +6,7 @@ list(APPEND SOURCE
     DeviceRemoveVeto.c
     InterruptAffinityPolicy.c
     InvalidDeviceInfoSet.c
+    NewDeviceInstall.c
     SetupCommitFileQueue.c
     SetupDiInstallClassExA.c
     SetupDiOpenDeviceInterface.c
