@@ -841,6 +841,7 @@ typedef struct _LX_SYSCALL_ENTRY
 {
     PLX_SYSCALL_HANDLER Handler;
     PCSTR Name;
+    BOOLEAN MayBlock;
 } LX_SYSCALL_ENTRY, *PLX_SYSCALL_ENTRY;
 
 typedef struct _LX_ELF_INFO
