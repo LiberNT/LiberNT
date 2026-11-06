@@ -20,6 +20,7 @@
 #define LX_MAGIC_DEVPTS     0x00001CD1ULL
 #define LX_MAGIC_MQUEUE     0x19800202ULL
 #define LX_MAGIC_SQUASHFS   0x73717368ULL
+#define LX_MAGIC_BPF        0xCAFE4A11ULL
 
 LIST_ENTRY LxInstanceList;
 FAST_MUTEX LxInstanceListLock;
@@ -788,7 +789,8 @@ LxInstanceTmpfs(
     _In_ ULONG Mode,
     _Out_opt_ PLX_MOUNT *Out)
 {
-    PLX_MOUNT Mount = LxMountAllocate(Target, FsType, FsType, Flags, LxFsTmpfs, LX_MAGIC_TMPFS);
+    ULONG64 Magic = (strcmp(FsType, "bpf") == 0) ? LX_MAGIC_BPF : LX_MAGIC_TMPFS;
+    PLX_MOUNT Mount = LxMountAllocate(Target, FsType, FsType, Flags, LxFsTmpfs, Magic);
 
     if (Mount == NULL)
         return -LX_ENOMEM;
@@ -2917,6 +2919,11 @@ LxLookupFinish(
     Node->LinkTarget = LinkTarget;
     Node->Mount = LxMountFind(LxProcessNs(Process, LxNsMnt), Path, &Relative);
     Node->Relative = Relative;
+    if ((Node->Mount != NULL) && (Node->Mount->Magic == LX_MAGIC_BPF) && (strchr(Relative, '.') != NULL))
+    {
+        LxNodeFree(Node);
+        return -LX_EPERM;
+    }
     if ((Node->Mount != NULL) && (Node->Mount->Kind == LxFsNt))
     {
         Error = LxNtPath(Node->Mount, Relative, &Node->NtPath);
@@ -3238,6 +3245,11 @@ LxLookupWalk(
         Error = LxNodeQuery(Process, Candidate, &Mount, &Relative, &Type, &LinkTarget, NULL);
         if ((Mount != NULL) && (Mount->Kind != LxFsNt))
             *Synthetic = TRUE;
+        if ((Mount != NULL) && (Mount->Magic == LX_MAGIC_BPF) && (strchr(Component, '.') != NULL))
+        {
+            Error = -LX_EPERM;
+            break;
+        }
         if (Error == -LX_ENOENT)
         {
             if (Last && (Flags & LX_LOOKUP_CREATE))
