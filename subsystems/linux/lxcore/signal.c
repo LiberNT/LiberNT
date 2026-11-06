@@ -171,18 +171,26 @@ LxSignalApcNormal(
     Base = PsPicoGetThreadContext(PsGetCurrentThread());
     if (Base == NULL)
         return;
-    InterlockedExchange(&Base->SignalApc, 0);
     Thread = LxCurrentThread();
     if ((Base->InKernel != 0) || (Thread == NULL) || Thread->VforkExited)
+    {
+        InterlockedExchange(&Base->SignalApc, 0);
         return;
+    }
+    /* SignalApc stays set while this runs: it may end the thread, and an APC queued meanwhile could never run */
     if (!LxSignalPending(Thread) || LxArchDeliverAsync(Thread))
     {
+        InterlockedExchange(&Base->SignalApc, 0);
+        if (LxSignalPending(Thread) && (InterlockedExchange(&Base->SignalApc, 1) == 0))
+            LxSignalRetryExpired(NULL, Base);
         return;
     }
     if (Base->SignalRetry == NULL)
         Base->SignalRetry = ExAllocateTimer(LxSignalRetryExpired, Base, EX_TIMER_HIGH_RESOLUTION);
-    if ((Base->SignalRetry != NULL) && (InterlockedExchange(&Base->SignalApc, 1) == 0))
+    if (Base->SignalRetry != NULL)
         ExSetTimer(Base->SignalRetry, -1000, 0, NULL);
+    else
+        InterlockedExchange(&Base->SignalApc, 0);
 }
 
 static
