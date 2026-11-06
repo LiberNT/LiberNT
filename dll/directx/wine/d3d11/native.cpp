@@ -3786,6 +3786,8 @@ HRESULT NativeDevice::CreateTexture(const D3D11_TEXTURE2D_DESC *input,
             || (feature_level < D3D_FEATURE_LEVEL_10_1 && input->ArraySize != 6))) return E_INVALIDARG;
     if ((input->MiscFlags & (D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX))
             == (D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX)) return E_INVALIDARG;
+    if (feature_level < D3D_FEATURE_LEVEL_10_0 && (input->MiscFlags & (D3D11_RESOURCE_MISC_SHARED
+            | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX | D3D11_RESOURCE_MISC_SHARED_NTHANDLE))) return E_INVALIDARG;
     if ((input->MiscFlags & D3D11_RESOURCE_MISC_GDI_COMPATIBLE) && ((input->Format != DXGI_FORMAT_B8G8R8A8_UNORM
             && input->Format != DXGI_FORMAT_B8G8R8A8_TYPELESS && input->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
             || input->Usage != D3D11_USAGE_DEFAULT || !(input->BindFlags & D3D11_BIND_RENDER_TARGET)
