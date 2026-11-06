@@ -140,6 +140,7 @@ list(APPEND SOURCE
     ShellWindowQueries.c
     ShellWindowZOrder.c
     ShowWindow.c
+    SwitchDesktopActivate.c
     SwitchToThisWindow.c
     SystemMenu.c
     TopmostBand.c
