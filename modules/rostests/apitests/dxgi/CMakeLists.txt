@@ -27,6 +27,7 @@ add_executable(dxgi_apitest
     keyedmutex_kill.cpp
     d3d10_bindings.cpp
     d3d10_create.cpp
+    copy_regions.cpp
     adapter_outputs.cpp
     counters.cpp
     query_order.cpp
