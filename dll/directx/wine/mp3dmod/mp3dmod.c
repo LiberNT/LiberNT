@@ -862,10 +862,7 @@ static HRESULT WINAPI MFTransform_GetInputAvailableType(IMFTransform *iface, DWO
     if (FAILED(hr = IMediaObject_GetInputType(&decoder->IMediaObject_iface, id, index, &pt)))
         return convert_dmo_to_mf_error(hr);
 
-    if (FAILED(hr = MFCreateMediaType(type)))
-        return hr;
-
-    hr = MFInitMediaTypeFromAMMediaType(*type, (AM_MEDIA_TYPE*)&pt);
+    hr = MFCreateMediaTypeFromRepresentation(AM_MEDIA_TYPE_REPRESENTATION, &pt, type);
     MoFreeMediaType(&pt);
     return hr;
 }
@@ -994,10 +991,7 @@ static HRESULT WINAPI MFTransform_GetInputCurrentType(IMFTransform *iface, DWORD
     if (FAILED(hr = IMediaObject_GetInputCurrentType(&decoder->IMediaObject_iface, id, &mt)))
         return convert_dmo_to_mf_error(hr);
 
-    if (FAILED(hr = MFCreateMediaType(out)))
-        return hr;
-
-    hr = MFInitMediaTypeFromAMMediaType(*out, (AM_MEDIA_TYPE*)&mt);
+    hr = MFCreateMediaTypeFromRepresentation(AM_MEDIA_TYPE_REPRESENTATION, &mt, out);
     MoFreeMediaType(&mt);
     return hr;
 }
@@ -1013,10 +1007,7 @@ static HRESULT WINAPI MFTransform_GetOutputCurrentType(IMFTransform *iface, DWOR
     if (FAILED(hr = IMediaObject_GetOutputCurrentType(&decoder->IMediaObject_iface, id, &mt)))
         return convert_dmo_to_mf_error(hr);
 
-    if (FAILED(hr = MFCreateMediaType(out)))
-        return hr;
-
-    hr = MFInitMediaTypeFromAMMediaType(*out, (AM_MEDIA_TYPE*)&mt);
+    hr = MFCreateMediaTypeFromRepresentation(AM_MEDIA_TYPE_REPRESENTATION, &mt, out);
     MoFreeMediaType(&mt);
     return hr;
 }
