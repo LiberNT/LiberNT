@@ -38,6 +38,7 @@
 #define LX_VIRTGPU_PARAM_HOST_VISIBLE       4
 #define LX_VIRTGPU_PARAM_CONTEXT_INIT       6
 #define LX_VIRTGPU_PARAM_SUPPORTED_CAPSET_IDS 7
+#define LX_VIRTGPU_EXECBUF_FENCE_FD_IN      0x01
 #define LX_VIRTGPU_EXECBUF_FENCE_FD_OUT     0x02
 #define LX_VIRTGPU_EXECBUF_RING_IDX         0x04
 #define LX_VIRTGPU_CONTEXT_PARAM_CAPSET_ID  1
@@ -902,6 +903,44 @@ LxDrmCollectBos(
 }
 
 static
+BOOLEAN
+LxGpuFenceSignaled(
+    _In_ PVOID Context)
+{
+    return ReadNoFence(&((PLX_GPU_FENCE)Context)->Signaled) != 0;
+}
+
+static
+LONG
+LxDrmWaitInFence(
+    _In_ PLX_DRM_FILE Drm,
+    _In_ LONG Fd,
+    _In_ BOOLEAN Global,
+    _In_ ULONG RingIdx)
+{
+    PLX_FILE File = LxFdGet(LxCurrentThread()->Process, Fd);
+    PLX_GPU_FENCE Fence;
+    LONG Error = 0;
+
+    if (File == NULL)
+        return -LX_EINVAL;
+    if (File->Ops != &LxGpuFenceOps)
+    {
+        LxFileDereference(File);
+        return -LX_EINVAL;
+    }
+    Fence = File->Object;
+    if ((Fence->Channel != Drm->Channel) || (Fence->Global != Global) ||
+        (!Global && ((Fence->CtxId != Drm->CtxId) || (Fence->RingIdx != RingIdx))))
+    {
+        while ((Error == 0) && !LxGpuFenceSignaled(Fence))
+            Error = (LONG)LxWaitHead(&Fence->Poll, LxGpuFenceSignaled, Fence, NULL);
+    }
+    LxFileDereference(File);
+    return Error;
+}
+
+static
 LONG64
 LxDrmExecbuffer(
     _In_ PLX_DRM_FILE Drm,
@@ -920,8 +959,8 @@ LxDrmExecbuffer(
 
     if (LxCopyFromUser(&Args, Argument, sizeof(Args)) != 0)
         return -LX_EFAULT;
-    /* TODO: fence fd input and syncobjs */
-    if (Args.Flags & ~(LX_VIRTGPU_EXECBUF_FENCE_FD_OUT | LX_VIRTGPU_EXECBUF_RING_IDX))
+    /* TODO: syncobjs */
+    if (Args.Flags & ~(LX_VIRTGPU_EXECBUF_FENCE_FD_IN | LX_VIRTGPU_EXECBUF_FENCE_FD_OUT | LX_VIRTGPU_EXECBUF_RING_IDX))
         return -LX_EINVAL;
     Error = LxDrmEnsureContext(Drm);
     if (Error != 0)
@@ -937,6 +976,12 @@ LxDrmExecbuffer(
         RingIdx = Args.Rest[0];
         if (RingIdx >= max(Drm->NumRings, 1))
             return -LX_EINVAL;
+    }
+    if (Args.Flags & LX_VIRTGPU_EXECBUF_FENCE_FD_IN)
+    {
+        Error = LxDrmWaitInFence(Drm, Args.FenceFd, !Venus, RingIdx);
+        if (Error != 0)
+            return Error;
     }
     if (Args.Flags & LX_VIRTGPU_EXECBUF_FENCE_FD_OUT)
     {
@@ -1234,7 +1279,9 @@ LxDrmIoctl(
             {
                 return -LX_EFAULT;
             }
-            Version.Major = Version.Minor = Version.Patch = 0;
+            Version.Major = 0;
+            Version.Minor = 1;
+            Version.Patch = 0;
             Version.NameLength = sizeof(Name) - 1;
             Version.DateLength = sizeof(Date) - 1;
             Version.DescLength = sizeof(Desc) - 1;
