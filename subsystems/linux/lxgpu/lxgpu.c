@@ -18,6 +18,9 @@
 #include <virgl_hw.h>
 #include "lxgpu.h"
 
+#define LX_ATTACH_RETRIES 100
+#define LX_ATTACH_RETRY_MS 100
+
 struct iovec
 {
     void *iov_base;
@@ -417,6 +420,32 @@ LxDispatch(PLX_GPU_HEADER Header)
 }
 
 static
+BOOL
+LxAttachChannel(PCWSTR Nt, HANDLE Event, HANDLE Parent)
+{
+    OVERLAPPED Overlapped = { 0 };
+    DWORD Bytes, Attempt;
+
+    Overlapped.hEvent = Event;
+    for (Attempt = 0; Attempt < LX_ATTACH_RETRIES; Attempt++)
+    {
+        if (DeviceIoControl(LxDevice, IOCTL_LX_GPU_ATTACH, (PVOID)Nt, (DWORD)(wcslen(Nt) * sizeof(WCHAR)), NULL, 0,
+                            &Bytes, &Overlapped) ||
+            ((GetLastError() == ERROR_IO_PENDING) && GetOverlappedResult(LxDevice, &Overlapped, &Bytes, TRUE)))
+        {
+            return TRUE;
+        }
+        if (GetLastError() != ERROR_BUSY)
+            return FALSE;
+        if (Parent == NULL)
+            Sleep(LX_ATTACH_RETRY_MS);
+        else if (WaitForSingleObject(Parent, LX_ATTACH_RETRY_MS) == WAIT_OBJECT_0)
+            return FALSE;
+    }
+    return FALSE;
+}
+
+static
 int
 LxServe(PCWSTR Root, HANDLE Parent)
 {
@@ -446,10 +475,7 @@ LxServe(PCWSTR Root, HANDLE Parent)
         return 3;
     }
     Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    if ((Overlapped.hEvent == NULL) ||
-        (!DeviceIoControl(LxDevice, IOCTL_LX_GPU_ATTACH, Nt, (DWORD)(wcslen(Nt) * sizeof(WCHAR)), NULL, 0, &Bytes,
-                          &Overlapped) &&
-         !((GetLastError() == ERROR_IO_PENDING) && GetOverlappedResult(LxDevice, &Overlapped, &Bytes, TRUE))))
+    if ((Overlapped.hEvent == NULL) || !LxAttachChannel(Nt, Overlapped.hEvent, Parent))
     {
         LxTrace("attach failed %lu\n", GetLastError());
         return 4;
@@ -503,8 +529,10 @@ LxServe(PCWSTR Root, HANDLE Parent)
             LxDispatch((PLX_GPU_HEADER)Buffer);
         virgl_renderer_poll();
     }
-    if (Pending && (CancelIoEx(LxDevice, &Overlapped) || (GetLastError() != ERROR_NOT_FOUND)))
-        GetOverlappedResult(LxDevice, &Overlapped, &Bytes, TRUE);
+    CloseHandle(LxDevice);
+    LxDevice = NULL;
+    if (Pending)
+        WaitForSingleObject(Overlapped.hEvent, INFINITE);
     free(Buffer);
     return Result;
 }
