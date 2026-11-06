@@ -581,7 +581,7 @@ NtfsNeedsOnlineScanOnly(
         Status = NtfsVolumeQueryFlags(Volume, &Flags);
     if (Volume)
         NtfsVolumeDestroy(Volume);
-    return NT_SUCCESS(Status) && (Flags & (VOL_FULL_CHKDSK | VOL_ONLINE_SCAN)) == VOL_ONLINE_SCAN;
+    return NT_SUCCESS(Status) && (Flags & VOL_DIRTY) && !NtfsVolumeNeedsStartupRepair(Flags);
 }
 
 BOOLEAN

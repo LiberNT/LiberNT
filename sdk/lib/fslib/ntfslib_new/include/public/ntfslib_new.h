@@ -1137,6 +1137,10 @@ NtfsVolumeSetFlags(
     _In_ USHORT Set,
     _In_ USHORT Clear);
 
+BOOLEAN
+NtfsVolumeNeedsStartupRepair(
+    _In_ USHORT Flags);
+
 #ifdef __cplusplus
 }
 #endif
