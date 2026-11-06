@@ -457,15 +457,12 @@ ThreadShutdownNotify(IN PCSR_THREAD CsrThread,
     if (Context->UIThread)
     {
         MY_DPRINT("Context->UIThread != NULL\n");
-        if (Context->Dlg)
+        while (WaitForSingleObject(Context->UIThread, 100) == WAIT_TIMEOUT)
         {
-            MY_DPRINT("Sending WM_CLOSE because Dlg is != NULL\n");
-            SendMessageW(Context->Dlg, WM_CLOSE, 0, 0);
-        }
-        else
-        {
-            MY_DPRINT("Terminating UIThread thread with QUERY_RESULT_ERROR\n");
-            TerminateThread(Context->UIThread, QUERY_RESULT_ERROR);
+            HWND Dlg = Context->Dlg;
+
+            if (Dlg)
+                PostMessageW(Dlg, WM_CLOSE, 0, 0);
         }
         CloseHandle(Context->UIThread);
         /**/Context->UIThread = NULL;/**/
