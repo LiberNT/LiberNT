@@ -163,6 +163,7 @@ typedef struct _BUFFER
     int32_t Stride;
     uint32_t Format;
     uint32_t Handle;
+    uint32_t RenderGen;
     bool YInvert;
     bool Blob;
 } BUFFER;
@@ -393,6 +394,7 @@ static WINDOW *Windows;
 static uint32_t NextWindow = 1;
 static WL_RESOURCE **Frames;
 static int RenderFd = -1;
+static uint32_t RenderGen;
 static uint32_t *HandleRefs;
 static uint32_t HandleRefCapacity;
 static uint32_t FrameCount;
@@ -558,11 +560,12 @@ PoolRelease(POOL *Pool)
 
 static
 void
-GemRelease(uint32_t Handle)
+GemRelease(uint32_t Handle, uint32_t Gen)
 {
     uint32_t Close[2] = { Handle, 0 };
 
-    if (Handle == 0 || Handle >= HandleRefCapacity || HandleRefs[Handle] == 0 || --HandleRefs[Handle] != 0)
+    if (Gen != RenderGen || Handle == 0 || Handle >= HandleRefCapacity || HandleRefs[Handle] == 0 ||
+        --HandleRefs[Handle] != 0)
         return;
     LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_GEM_CLOSE, (long)Close, 0, 0, 0);
 }
@@ -616,7 +619,7 @@ FreeData(WL_RESOURCE *Resource)
     {
         BUFFER *Buffer = Resource->Data;
 
-        GemRelease(Buffer->Handle);
+        GemRelease(Buffer->Handle, Buffer->RenderGen);
         if (Buffer->Pool != NULL)
             PoolRelease(Buffer->Pool);
     }
@@ -1211,7 +1214,7 @@ SurfaceStore(SURFACE *Surface, const RECT32 *Damage, uint32_t DamageCount)
     }
     if (Surface->Image == NULL)
         return true;
-    if (Buffer->Handle != 0 && !Buffer->Blob)
+    if (Buffer->Handle != 0 && !Buffer->Blob && Buffer->RenderGen == RenderGen)
         BufferReadback(Buffer, Damage, DamageCount);
     for (Index = 0; Index < (DamageCount != 0 ? DamageCount : 1); Index++)
     {
@@ -2931,6 +2934,38 @@ DmabufRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
 }
 
 static
+long
+RenderPrimeImport(uint32_t *Prime)
+{
+    long Result = -LX_ENODEV;
+    uint32_t Attempt;
+
+    for (Attempt = 0; Attempt < 2 && Result == -LX_ENODEV; Attempt++)
+    {
+        if (RenderFd < 0)
+        {
+            RenderFd = (int)LxSyscall(LX_NR_OPENAT, LX_AT_FDCWD, (long)"/dev/dri/renderD128",
+                                      LX_O_RDWR | LX_O_CLOEXEC, 0, 0, 0);
+            if (RenderFd < 0)
+            {
+                RenderFd = -1;
+                return -LX_ENODEV;
+            }
+        }
+        Result = LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_PRIME_FD_TO_HANDLE, (long)Prime, 0, 0, 0);
+        if (Result == -LX_ENODEV)
+        {
+            CloseFd(RenderFd);
+            RenderFd = -1;
+            if (HandleRefs != NULL)
+                memset(HandleRefs, 0, (size_t)HandleRefCapacity * sizeof(uint32_t));
+            RenderGen++;
+        }
+    }
+    return Result;
+}
+
+static
 BUFFER *
 DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Format, uint32_t Flags, bool *Bounds)
 {
@@ -2948,17 +2983,7 @@ DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Form
         *Bounds = true;
         return NULL;
     }
-    if (RenderFd < 0)
-    {
-        RenderFd = (int)LxSyscall(LX_NR_OPENAT, LX_AT_FDCWD, (long)"/dev/dri/renderD128", LX_O_RDWR | LX_O_CLOEXEC,
-                                  0, 0, 0);
-        if (RenderFd < 0)
-        {
-            RenderFd = -1;
-            return NULL;
-        }
-    }
-    if (LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_PRIME_FD_TO_HANDLE, (long)Prime, 0, 0, 0) != 0 || Prime[0] == 0)
+    if (RenderPrimeImport(Prime) != 0 || Prime[0] == 0)
         return NULL;
     if (!Grow((void **)&HandleRefs, &HandleRefCapacity, Prime[0] + 1, sizeof(uint32_t)))
     {
@@ -2979,7 +3004,7 @@ DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Form
         LxFree(Pool);
         if (!(Map < 0 && Map > -4096))
             LxSyscall(LX_NR_MUNMAP, Map, Size, 0, 0, 0, 0);
-        GemRelease(Prime[0]);
+        GemRelease(Prime[0], RenderGen);
         return NULL;
     }
     Pool->Refs = 1;
@@ -2994,6 +3019,7 @@ DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Form
     Buffer->Stride = (int32_t)Params->Stride;
     Buffer->Format = (Format == DRM_FORMAT_XRGB8888) ? WL_SHM_FORMAT_XRGB8888 : 0;
     Buffer->Handle = Prime[0];
+    Buffer->RenderGen = RenderGen;
     Buffer->YInvert = (Flags & ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT) != 0;
     Info[0] = Prime[0];
     Buffer->Blob = LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_VIRTGPU_RESOURCE_INFO, (long)Info, 0, 0, 0) == 0 &&
@@ -3079,7 +3105,7 @@ DmabufParamsRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
                       ClientAddServer(Resource->Client, &wl_buffer_interface, 1);
     if (Created == NULL)
     {
-        GemRelease(Buffer->Handle);
+        GemRelease(Buffer->Handle, Buffer->RenderGen);
         if (Buffer->Pool != NULL)
             PoolRelease(Buffer->Pool);
         LxFree(Buffer);
