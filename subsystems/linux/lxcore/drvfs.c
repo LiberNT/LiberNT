@@ -17,28 +17,21 @@ LxDrvfsParseSource(
     _Out_ PSTR *Display)
 {
     static const WCHAR Prefix[] = L"\\??\\";
-    ULONG Length = (ULONG)strlen(Source), Needed = 0, Written = 0, Index;
+    ULONG Length = (ULONG)strlen(Source);
     USHORT Out;
     PWCHAR Buffer;
     PSTR Shown;
-    NTSTATUS Status;
 
     RtlZeroMemory(NtRoot, sizeof(*NtRoot));
     *Display = NULL;
-    if ((Length < 2) || (Length > 1024) || (Source[1] != ':') ||
+    if ((Length < 2) || (Length > 3) || (Source[1] != ':') ||
         !(((Source[0] >= 'A') && (Source[0] <= 'Z')) || ((Source[0] >= 'a') && (Source[0] <= 'z'))) ||
-        ((Length > 2) && (Source[2] != '\\') && (Source[2] != '/')))
+        ((Length == 3) && (Source[2] != '\\') && (Source[2] != '/')))
     {
         return -LX_EINVAL;
     }
-    if (Length > 2)
-    {
-        Status = RtlUTF8ToUnicodeN(NULL, 0, &Needed, Source + 2, Length - 2);
-        if (!NT_SUCCESS(Status))
-            return -LX_EINVAL;
-    }
 
-    Buffer = LxAlloc(sizeof(Prefix) + 2 * sizeof(WCHAR) + Needed);
+    Buffer = LxAlloc(sizeof(Prefix) + 2 * sizeof(WCHAR));
     Shown = LxAlloc(Length + 1);
     if ((Buffer == NULL) || (Shown == NULL))
     {
@@ -51,34 +44,11 @@ LxDrvfsParseSource(
     RtlCopyMemory(Buffer, Prefix, Out * sizeof(WCHAR));
     Buffer[Out++] = (WCHAR)((Source[0] >= 'a') ? (Source[0] - 'a' + 'A') : Source[0]);
     Buffer[Out++] = L':';
-    if (Length > 2)
-    {
-        PWCHAR Tail = LxAllocPaged(Needed);
 
-        if (Tail == NULL)
-        {
-            LxFree(Buffer);
-            LxFree(Shown);
-            return -LX_ENOMEM;
-        }
-        Status = RtlUTF8ToUnicodeN(Tail, Needed, &Written, Source + 2, Length - 2);
-        if (!NT_SUCCESS(Status))
-            Written = 0;
-        for (Index = 0; Index < Written / sizeof(WCHAR); Index++)
-        {
-            WCHAR Character = (Tail[Index] == L'/') ? L'\\' : Tail[Index];
-
-            if ((Character != L'\\') || (Buffer[Out - 1] != L'\\'))
-                Buffer[Out++] = Character;
-        }
-        LxFreePaged(Tail);
-    }
-    if ((Out > RTL_NUMBER_OF(Prefix) + 1) && (Buffer[Out - 1] == L'\\'))
-        Out--;
-
-    for (Index = 0; Index < Length; Index++)
-        Shown[Index] = (Source[Index] == '/') ? '\\' : Source[Index];
     Shown[0] = (CHAR)Buffer[RTL_NUMBER_OF(Prefix) - 1];
+    Shown[1] = ':';
+    if (Length == 3)
+        Shown[2] = '\\';
     Shown[Length] = '\0';
 
     NtRoot->Buffer = Buffer;
@@ -274,9 +244,9 @@ LxDrvfsAdjustStat(
 
     if (!Mount->Drvfs)
         return;
-    if (!(LxFlags & LX_FILE_METADATA_HAS_UID))
+    if (!Options->Metadata || !(LxFlags & LX_FILE_METADATA_HAS_UID))
         Stat->Uid = Options->Uid;
-    if (!(LxFlags & LX_FILE_METADATA_HAS_GID))
+    if (!Options->Metadata || !(LxFlags & LX_FILE_METADATA_HAS_GID))
         Stat->Gid = Options->Gid;
     if (LxFlags & LX_FILE_METADATA_HAS_MODE)
         return;

@@ -1321,17 +1321,41 @@ LxInstanceMountDrvfs(
     _In_opt_ PCSTR Data,
     _Out_ PLX_MOUNT *Mount)
 {
+    PLX_INSTANCE Instance = Process->Instance;
     LX_DRVFS_OPTIONS Options;
     UNICODE_STRING NtRoot;
+    PLIST_ENTRY Entry;
+    BOOLEAN Shared = FALSE;
     PSTR Display;
     LONG Error;
 
-    Error = LxDrvfsParseOptions(Process, Data, &Options);
-    if (Error != 0)
-        return Error;
     Error = LxDrvfsParseSource(Source, &NtRoot, &Display);
     if (Error != 0)
         return Error;
+    ExAcquireFastMutex(&Instance->Lock);
+    for (Entry = Instance->AllMounts.Flink; Entry != &Instance->AllMounts; Entry = Entry->Flink)
+    {
+        PLX_MOUNT Other = CONTAINING_RECORD(Entry, LX_MOUNT, InstanceLink);
+
+        if (Other->Drvfs && (Other->Detached || !IsListEmpty(&Other->Link)) &&
+            RtlEqualUnicodeString(&Other->NtRoot, &NtRoot, TRUE))
+        {
+            Options = Other->DrvfsOptions;
+            Shared = TRUE;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&Instance->Lock);
+    if (!Shared)
+    {
+        Error = LxDrvfsParseOptions(Process, Data, &Options);
+        if (Error != 0)
+        {
+            LxFree(NtRoot.Buffer);
+            LxFree(Display);
+            return Error;
+        }
+    }
     Error = LxInstanceMountNt(Ns, Target, Display, "drvfs", Flags, &NtRoot, LX_MAGIC_NTFS, &Options, Mount);
     LxFree(NtRoot.Buffer);
     LxFree(Display);
@@ -2351,6 +2375,8 @@ LxMountNsCopy(
         Copy->NsFile = Source->NsFile;
         Copy->Tmpfs = Source->Tmpfs;
         Copy->Devpts = Source->Devpts;
+        Copy->Drvfs = Source->Drvfs;
+        Copy->DrvfsOptions = Source->DrvfsOptions;
         Copy->Unbindable = Source->Unbindable;
         Copy->PeerGroup = Source->PeerGroup;
         Copy->MasterGroup = Source->MasterGroup;
@@ -5472,7 +5498,7 @@ LxVfsSetAttributes(
     ULONG64 Device;
     LX_STAT Stat;
     PLX_MOUNT Mount = (File != NULL) ? File->Mount : ((Node != NULL) ? Node->Mount : NULL);
-    BOOLEAN Close = FALSE, Stored = TRUE;
+    BOOLEAN Close = FALSE, Plain = (Mount != NULL) && Mount->Drvfs && !Mount->DrvfsOptions.Metadata;
     LONG Error;
 
     if ((Mount != NULL) && (Mount->Flags & LX_MS_RDONLY))
@@ -5536,11 +5562,10 @@ LxVfsSetAttributes(
     {
         LxTtyGetAttributes(Tty, &OldMode, &OldUid, &OldGid);
     }
-    else if ((LxNtReadLxAttributes(Handle, &OldMode, &OldUid, &OldGid, &Device) != 0) || (OldMode == MAXULONG))
+    else if (Plain || (LxNtReadLxAttributes(Handle, &OldMode, &OldUid, &OldGid, &Device) != 0) || (OldMode == MAXULONG))
     {
         PLX_FILE Temporary = LxFileFromNtHandle(Handle, LX_O_PATH);
 
-        Stored = FALSE;
         OldMode = 0;
         OldUid = OldGid = 0;
         if (Temporary != NULL)
@@ -5600,7 +5625,7 @@ LxVfsSetAttributes(
         LxTtyDereference(Tty);
         Error = 0;
     }
-    else if (!Stored && (Mount != NULL) && Mount->Drvfs && !Mount->DrvfsOptions.Metadata)
+    else if (Plain)
     {
         Error = (Mode != MAXULONG) ? LxDrvfsSetMode(Handle, OldMode) : 0;
     }
