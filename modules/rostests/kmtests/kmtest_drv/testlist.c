@@ -200,6 +200,8 @@ KMT_TESTFUNC Test_KeWddmExports;
 KMT_TESTFUNC Test_KeApc;
 KMT_TESTFUNC Test_KeApcInject;
 KMT_TESTFUNC Test_KeApcScheduling;
+KMT_TESTFUNC Test_KeApcQueueTransitions;
+KMT_TESTFUNC Test_KeDpcQueueTransitions;
 #ifdef _M_AMD64
 KMT_TESTFUNC Test_KeSwitchReaper;
 KMT_TESTFUNC Test_KeSwitchSelfWake;
@@ -532,6 +534,8 @@ const KMT_TEST TestList[] =
     { "KeApc",                              Test_KeApc },
     { "KeApcInject",                        Test_KeApcInject },
     { "KeApcScheduling",                    Test_KeApcScheduling },
+    { "KeApcQueueTransitions",              Test_KeApcQueueTransitions },
+    { "KeDpcQueueTransitions",              Test_KeDpcQueueTransitions },
 #ifdef _M_AMD64
     { "KeSwitchReaper",                     Test_KeSwitchReaper },
     { "KeSwitchSelfWake",                   Test_KeSwitchSelfWake },

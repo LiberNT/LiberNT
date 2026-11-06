@@ -208,6 +208,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeApc.c
     ntos_ke/KeApcInject.c
     ntos_ke/KeApcScheduling.c
+    ntos_ke/KeApcDpcTransitions.c
     ntos_ke/KeDeferredReady.c
     ntos_ke/KeBugCheckCbKM.c
     ntos_ke/KeDevQueue.c
