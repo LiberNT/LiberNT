@@ -8,6 +8,11 @@
 
 VOID Test_KeArm64IpiPreemption(VOID);
 
+typedef BOOLEAN (NTAPI *PKMT_CONNECT_INTERRUPT)(PKINTERRUPT);
+typedef BOOLEAN (NTAPI *PKMT_DISCONNECT_INTERRUPT)(PKINTERRUPT);
+static PKMT_CONNECT_INTERRUPT ConnectInterrupt;
+static PKMT_DISCONNECT_INTERRUPT DisconnectInterrupt;
+
 typedef struct _IPI_PREEMPTION
 {
     ULONG TimerCpu;
@@ -107,7 +112,7 @@ TestProcessor(ULONG Cpu)
     KeSetSystemAffinityThread((KAFFINITY)1 << ControllerCpu);
     KeInitializeInterrupt(&Interrupt, PhysicalTimerIsr, &State, NULL,
                           30, CLOCK_LEVEL, CLOCK_LEVEL, LevelSensitive, FALSE, (CHAR)Cpu, FALSE);
-    Connected = KeConnectInterrupt(&Interrupt);
+    Connected = ConnectInterrupt(&Interrupt);
     ok_eq_ulong(KeGetCurrentProcessorNumber(), ControllerCpu);
     if (skip(Connected, "Physical timer vector is already connected on CPU %lu\n", Cpu))
     {
@@ -159,7 +164,7 @@ TestProcessor(ULONG Cpu)
 Cleanup:
     __asm__ __volatile__("msr cntp_ctl_el0, %0\n\tisb" :: "r"((ULONG64)0) : "memory");
     KeSetSystemAffinityThread((KAFFINITY)1 << ControllerCpu);
-    Connected = KeDisconnectInterrupt(&Interrupt);
+    Connected = DisconnectInterrupt(&Interrupt);
     ok_eq_bool(Connected, TRUE);
     ok_eq_ulong(KeGetCurrentProcessorNumber(), ControllerCpu);
     KeSetSystemAffinityThread((KAFFINITY)1 << Cpu);
@@ -364,7 +369,7 @@ TestDisabledPending(ULONG Cpu, PKMT_DISABLE_INTERRUPT Disable, PKMT_ENABLE_INTER
     State.Cpu = Cpu;
     KeInitializeInterrupt(&Interrupt, MaskedTimerIsr, &State, NULL,
                           30, CLOCK_LEVEL, CLOCK_LEVEL, LevelSensitive, FALSE, (CHAR)Cpu, FALSE);
-    Connected = KeConnectInterrupt(&Interrupt);
+    Connected = ConnectInterrupt(&Interrupt);
     if (skip(Connected, "Physical timer vector is occupied on CPU %lu\n", Cpu)) goto Done;
 
     ArmPhysicalTimer();
@@ -390,7 +395,7 @@ TestDisabledPending(ULONG Cpu, PKMT_DISABLE_INTERRUPT Disable, PKMT_ENABLE_INTER
     StallForTimer();
     EnabledCalls = State.Calls;
     __asm__ __volatile__("msr cntp_ctl_el0, %0\n\tisb" :: "r"((ULONG64)0) : "memory");
-    Connected = KeDisconnectInterrupt(&Interrupt);
+    Connected = DisconnectInterrupt(&Interrupt);
     __asm__ __volatile__("msr cntp_cval_el0, %0\n\tmsr cntp_ctl_el0, %1\n\tisb"
                          :: "r"(SavedDeadline), "r"(SavedControl) : "memory");
 
@@ -437,6 +442,9 @@ START_TEST(KeArm64IpiPreemption)
 
     if (skip(KeNumberProcessors >= 2, "SMP required\n")) return;
     if (skip(PhysicalTimerAccessible(), "Physical timer is not accessible\n")) return;
+    ConnectInterrupt = (PKMT_CONNECT_INTERRUPT)KmtGetSystemRoutineAddress(L"KeConnectInterrupt");
+    DisconnectInterrupt = (PKMT_DISCONNECT_INTERRUPT)KmtGetSystemRoutineAddress(L"KeDisconnectInterrupt");
+    if (skip(ConnectInterrupt != NULL && DisconnectInterrupt != NULL, "Interrupt connection routines unavailable\n")) return;
     for (Cpu = 0; Cpu < (ULONG)KeNumberProcessors; Cpu++)
         TestProcessor(Cpu);
     TestBankLifetime();
