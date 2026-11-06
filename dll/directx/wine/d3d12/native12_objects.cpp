@@ -886,6 +886,15 @@ void STDMETHODCALLTYPE Native12CommandList::WriteBufferImmediate(UINT count,
             return;
         }
     }
+    /* NULL means DEFAULT for every write, but drivers read the array the spec makes optional. */
+    if (!modes)
+    {
+        static const D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_0032 defaults[16] = {};
+        for (UINT done = 0; done < count; done += ARRAYSIZE(defaults))
+            table->pfnWriteBufferImmediate(driver, min(count - done, (UINT)ARRAYSIZE(defaults)),
+                    reinterpret_cast<const D3D12DDI_WRITEBUFFERIMMEDIATE_PARAMETER_0032 *>(parameters + done), defaults);
+        return;
+    }
     table->pfnWriteBufferImmediate(driver, count,
             reinterpret_cast<const D3D12DDI_WRITEBUFFERIMMEDIATE_PARAMETER_0032 *>(parameters),
             reinterpret_cast<const D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_0032 *>(modes));
