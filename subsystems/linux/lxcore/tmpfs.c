@@ -70,6 +70,8 @@ struct _LX_TMPFS_INODE
     BOOLEAN Mapped;
     ULONG64 SquashInode;
     volatile LONG SquashPending;
+    PVOID Private;
+    PLX_TMPFS_PRIVATE_RELEASE PrivateRelease;
 };
 
 struct _LX_TMPFS
@@ -273,6 +275,8 @@ LxTmpfsInodeFree(
     LxTmpfsStoreDereference(Inode->Store);
     LxFree(Inode->LinkTarget);
     LxFree(Inode->Xattr);
+    if (Inode->PrivateRelease != NULL)
+        Inode->PrivateRelease(Inode->Private);
     InterlockedDecrement(&Inode->Fs->Inodes);
     LxFree(Inode);
 }
@@ -1548,6 +1552,42 @@ LxTmpfsXattrRead(
         RtlCopyMemory(Buffer, Inode->Xattr, *Length);
     LxTmpfsUnlock(Inode->Fs);
     return 0;
+}
+
+LONG
+LxTmpfsSetPrivate(
+    _In_ PLX_TMPFS_INODE Inode,
+    _In_ PVOID Object,
+    _In_ PLX_TMPFS_PRIVATE_RELEASE Release)
+{
+    LONG Error = 0;
+
+    LxTmpfsLockExclusive(Inode->Fs);
+    if (Inode->PrivateRelease != NULL)
+    {
+        Error = -LX_EEXIST;
+    }
+    else
+    {
+        Inode->Private = Object;
+        Inode->PrivateRelease = Release;
+    }
+    LxTmpfsUnlock(Inode->Fs);
+    return Error;
+}
+
+PVOID
+LxTmpfsGetPrivate(
+    _In_ PLX_TMPFS_INODE Inode,
+    _In_ PLX_TMPFS_PRIVATE_RELEASE Release)
+{
+    PVOID Object = NULL;
+
+    LxTmpfsLockShared(Inode->Fs);
+    if (Inode->PrivateRelease == Release)
+        Object = Inode->Private;
+    LxTmpfsUnlock(Inode->Fs);
+    return Object;
 }
 
 LONG

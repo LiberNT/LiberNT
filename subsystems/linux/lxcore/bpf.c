@@ -10,16 +10,51 @@
 #define NDEBUG
 #include <debug.h>
 
+#define LX_BPF_MAP_CREATE           0
+#define LX_BPF_MAP_LOOKUP_ELEM      1
+#define LX_BPF_MAP_UPDATE_ELEM      2
+#define LX_BPF_MAP_DELETE_ELEM      3
+#define LX_BPF_MAP_GET_NEXT_KEY     4
 #define LX_BPF_PROG_LOAD            5
+#define LX_BPF_OBJ_PIN              6
+#define LX_BPF_OBJ_GET              7
 #define LX_BPF_PROG_ATTACH          8
 #define LX_BPF_PROG_DETACH          9
 #define LX_BPF_PROG_GET_NEXT_ID     11
+#define LX_BPF_MAP_GET_NEXT_ID      12
 #define LX_BPF_PROG_GET_FD_BY_ID    13
+#define LX_BPF_MAP_GET_FD_BY_ID     14
 #define LX_BPF_OBJ_GET_INFO_BY_FD   15
 #define LX_BPF_PROG_QUERY           16
 
 #define LX_BPF_PROG_TYPE_CGROUP_DEVICE  15
 #define LX_BPF_CGROUP_DEVICE            6
+
+#define LX_BPF_MAP_TYPE_HASH        1
+#define LX_BPF_MAP_TYPE_ARRAY       2
+
+#define LX_BPF_ANY                  0
+#define LX_BPF_NOEXIST              1
+#define LX_BPF_EXIST                2
+
+#define LX_BPF_F_NO_PREALLOC        0x1
+
+#define LX_BPF_PSEUDO_MAP_FD        1
+
+#define LX_BPF_FUNC_map_lookup_elem 1
+#define LX_BPF_FUNC_map_update_elem 2
+#define LX_BPF_FUNC_map_delete_elem 3
+
+#define LX_BPF_OBJ_NAME_LEN         16
+#define LX_BPF_FS_MAGIC             0xCAFE4A11ULL
+#define LX_BPF_F_RDONLY             0x08
+#define LX_BPF_F_WRONLY             0x10
+
+#define LX_BPF_MAX_KEY_SIZE         512
+#define LX_BPF_MAX_VALUE_SIZE       (1UL << 20)
+#define LX_BPF_MAX_MAP_ENTRIES      (1UL << 20)
+#define LX_BPF_MAX_ARRAY_BYTES      (64UL << 20)
+#define LX_BPF_PROG_MAX_MAPS        8
 
 #define LX_BPF_F_ALLOW_OVERRIDE     0x1
 #define LX_BPF_F_ALLOW_MULTI        0x2
@@ -99,6 +134,8 @@ typedef struct _LX_BPF_INSN
 
 C_ASSERT(sizeof(LX_BPF_INSN) == 8);
 
+struct _LX_BPF_MAP;
+
 typedef struct _LX_BPF_PROG
 {
     volatile LONG RefCount;
@@ -113,7 +150,44 @@ typedef struct _LX_BPF_PROG
     CHAR Name[16];
     LONG64 LoadTime;
     PLX_BPF_INSN Insns;
+    ULONG MapRefCount;
+    struct _LX_BPF_MAP *MapRefs[LX_BPF_PROG_MAX_MAPS];
 } LX_BPF_PROG, *PLX_BPF_PROG;
+
+typedef struct _LX_BPF_MAP_ENTRY
+{
+    LIST_ENTRY Link;
+    UCHAR Data[ANYSIZE_ARRAY];
+} LX_BPF_MAP_ENTRY, *PLX_BPF_MAP_ENTRY;
+
+typedef struct _LX_BPF_MAP
+{
+    volatile LONG RefCount;
+    LIST_ENTRY Link;
+    ULONG Id;
+    ULONG Type;
+    ULONG KeySize;
+    ULONG ValueSize;
+    ULONG MaxEntries;
+    ULONG Flags;
+    ULONG Uid;
+    CHAR Name[16];
+    LONG64 LoadTime;
+    FAST_MUTEX Lock;
+    ULONG Count;
+    ULONG BucketCount;
+    PLIST_ENTRY Buckets;
+    PUCHAR Array;
+} LX_BPF_MAP, *PLX_BPF_MAP;
+
+typedef struct _LX_BPF_PIN
+{
+    ULONG ObjType;
+    PVOID Object;
+} LX_BPF_PIN, *PLX_BPF_PIN;
+
+#define LX_BPF_PIN_MAP      0
+#define LX_BPF_PIN_PROG     1
 
 typedef struct _LX_BPF_ATTACH
 {
@@ -129,15 +203,383 @@ typedef struct _LX_BPF_DEV_CTX
 } LX_BPF_DEV_CTX, *PLX_BPF_DEV_CTX;
 
 static LIST_ENTRY LxBpfProgs;
+static LIST_ENTRY LxBpfMaps;
 static FAST_MUTEX LxBpfLock;
 static ULONG LxBpfNextId = 1;
+static ULONG LxBpfMapNextId = 1;
 
 VOID
 LxBpfInitialize(VOID)
 {
     InitializeListHead(&LxBpfProgs);
+    InitializeListHead(&LxBpfMaps);
     ExInitializeFastMutex(&LxBpfLock);
 }
+
+static
+BOOLEAN
+LxBpfTryReference(
+    _Inout_ volatile LONG *RefCount)
+{
+    LONG Count = *RefCount;
+
+    while (Count != 0)
+    {
+        LONG Seen = InterlockedCompareExchange(RefCount, Count + 1, Count);
+
+        if (Seen == Count)
+            return TRUE;
+        Count = Seen;
+    }
+    return FALSE;
+}
+
+static
+VOID
+LxBpfMapReference(
+    _In_ PLX_BPF_MAP Map)
+{
+    InterlockedIncrement(&Map->RefCount);
+}
+
+static
+VOID
+LxBpfMapDereference(
+    _In_ PLX_BPF_MAP Map)
+{
+    ULONG Index;
+
+    if (InterlockedDecrement(&Map->RefCount) != 0)
+        return;
+    ExAcquireFastMutex(&LxBpfLock);
+    RemoveEntryList(&Map->Link);
+    ExReleaseFastMutex(&LxBpfLock);
+    if (Map->Buckets != NULL)
+    {
+        for (Index = 0; Index < Map->BucketCount; Index++)
+        {
+            while (!IsListEmpty(&Map->Buckets[Index]))
+                LxFreePaged(CONTAINING_RECORD(RemoveHeadList(&Map->Buckets[Index]), LX_BPF_MAP_ENTRY, Link));
+        }
+        LxFreePaged(Map->Buckets);
+    }
+    LxFreePaged(Map->Array);
+    LxFree(Map);
+}
+
+static
+VOID
+LxBpfMapRelease(
+    _In_ PLX_FILE File)
+{
+    if (File->Object != NULL)
+        LxBpfMapDereference(File->Object);
+    File->Object = NULL;
+}
+
+static const LX_FILE_OPS LxBpfMapOps =
+{
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, LxBpfMapRelease
+};
+
+static
+PLX_BPF_MAP
+LxBpfMapFromFd(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG Fd)
+{
+    PLX_FILE File = LxFdGet(Process, Fd);
+    PLX_BPF_MAP Map = NULL;
+
+    if (File == NULL)
+        return NULL;
+    if (File->Ops == &LxBpfMapOps)
+    {
+        Map = File->Object;
+        LxBpfMapReference(Map);
+    }
+    LxFileDereference(File);
+    return Map;
+}
+
+static
+LONG
+LxBpfMapInstall(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_BPF_MAP Map)
+{
+    PLX_FILE File = LxFileAlloc(&LxBpfMapOps, LX_O_RDWR, 0);
+    LONG Fd;
+
+    if (File == NULL)
+        return -LX_ENOMEM;
+    File->Path = LxStrDup("anon_inode:bpf-map");
+    LxBpfMapReference(Map);
+    File->Object = Map;
+    Fd = LxFdInstall(Process, File, 0, TRUE);
+    LxFileDereference(File);
+    return Fd;
+}
+
+static
+ULONG
+LxBpfKeyHash(
+    _In_reads_bytes_(Length) PCUCHAR Key,
+    _In_ ULONG Length)
+{
+    ULONG Hash = 0x811C9DC5;
+    ULONG Index;
+
+    for (Index = 0; Index < Length; Index++)
+    {
+        Hash ^= Key[Index];
+        Hash *= 0x01000193;
+    }
+    return Hash;
+}
+
+static
+PLX_BPF_MAP_ENTRY
+LxBpfHashFind(
+    _In_ PLX_BPF_MAP Map,
+    _In_reads_bytes_(Map->KeySize) PCUCHAR Key,
+    _Out_ PULONG Bucket)
+{
+    ULONG Index = LxBpfKeyHash(Key, Map->KeySize) % Map->BucketCount;
+    PLIST_ENTRY Entry;
+
+    *Bucket = Index;
+    for (Entry = Map->Buckets[Index].Flink; Entry != &Map->Buckets[Index]; Entry = Entry->Flink)
+    {
+        PLX_BPF_MAP_ENTRY Item = CONTAINING_RECORD(Entry, LX_BPF_MAP_ENTRY, Link);
+
+        if (RtlCompareMemory(Item->Data, Key, Map->KeySize) == Map->KeySize)
+            return Item;
+    }
+    return NULL;
+}
+
+static
+LONG
+LxBpfMapLookupKernel(
+    _In_ PLX_BPF_MAP Map,
+    _In_reads_bytes_(Map->KeySize) PCUCHAR Key,
+    _Out_writes_bytes_(Map->ValueSize) PUCHAR Value)
+{
+    LONG Error = -LX_ENOENT;
+
+    ExAcquireFastMutex(&Map->Lock);
+    if (Map->Type == LX_BPF_MAP_TYPE_ARRAY)
+    {
+        ULONG Index;
+
+        RtlCopyMemory(&Index, Key, sizeof(Index));
+        if (Index < Map->MaxEntries)
+        {
+            RtlCopyMemory(Value, Map->Array + (SIZE_T)Index * Map->ValueSize, Map->ValueSize);
+            Error = 0;
+        }
+    }
+    else
+    {
+        ULONG Bucket;
+        PLX_BPF_MAP_ENTRY Item = LxBpfHashFind(Map, Key, &Bucket);
+
+        if (Item != NULL)
+        {
+            RtlCopyMemory(Value, Item->Data + Map->KeySize, Map->ValueSize);
+            Error = 0;
+        }
+    }
+    ExReleaseFastMutex(&Map->Lock);
+    return Error;
+}
+
+static
+LONG
+LxBpfMapUpdateKernel(
+    _In_ PLX_BPF_MAP Map,
+    _In_reads_bytes_(Map->KeySize) PCUCHAR Key,
+    _In_reads_bytes_(Map->ValueSize) PCUCHAR Value,
+    _In_ ULONG64 Flags)
+{
+    LONG Error = 0;
+
+    if (Flags > LX_BPF_EXIST)
+        return -LX_EINVAL;
+
+    ExAcquireFastMutex(&Map->Lock);
+    if (Map->Type == LX_BPF_MAP_TYPE_ARRAY)
+    {
+        ULONG Index;
+
+        RtlCopyMemory(&Index, Key, sizeof(Index));
+        if (Index >= Map->MaxEntries)
+            Error = -LX_E2BIG;
+        else if (Flags == LX_BPF_NOEXIST)
+            Error = -LX_EEXIST;
+        else
+            RtlCopyMemory(Map->Array + (SIZE_T)Index * Map->ValueSize, Value, Map->ValueSize);
+    }
+    else
+    {
+        ULONG Bucket;
+        PLX_BPF_MAP_ENTRY Item = LxBpfHashFind(Map, Key, &Bucket);
+
+        if (Item != NULL)
+        {
+            if (Flags == LX_BPF_NOEXIST)
+                Error = -LX_EEXIST;
+            else
+                RtlCopyMemory(Item->Data + Map->KeySize, Value, Map->ValueSize);
+        }
+        else if (Flags == LX_BPF_EXIST)
+        {
+            Error = -LX_ENOENT;
+        }
+        else if (Map->Count >= Map->MaxEntries)
+        {
+            Error = -LX_E2BIG;
+        }
+        else
+        {
+            Item = LxAllocPaged(FIELD_OFFSET(LX_BPF_MAP_ENTRY, Data) + Map->KeySize + Map->ValueSize);
+            if (Item == NULL)
+            {
+                Error = -LX_ENOMEM;
+            }
+            else
+            {
+                RtlCopyMemory(Item->Data, Key, Map->KeySize);
+                RtlCopyMemory(Item->Data + Map->KeySize, Value, Map->ValueSize);
+                InsertTailList(&Map->Buckets[Bucket], &Item->Link);
+                Map->Count++;
+            }
+        }
+    }
+    ExReleaseFastMutex(&Map->Lock);
+    return Error;
+}
+
+static
+LONG
+LxBpfMapDeleteKernel(
+    _In_ PLX_BPF_MAP Map,
+    _In_reads_bytes_(Map->KeySize) PCUCHAR Key)
+{
+    ULONG Bucket;
+    PLX_BPF_MAP_ENTRY Item;
+    LONG Error;
+
+    if (Map->Type == LX_BPF_MAP_TYPE_ARRAY)
+        return -LX_EINVAL;
+
+    ExAcquireFastMutex(&Map->Lock);
+    Item = LxBpfHashFind(Map, Key, &Bucket);
+    if (Item != NULL)
+    {
+        RemoveEntryList(&Item->Link);
+        Map->Count--;
+        LxFreePaged(Item);
+        Error = 0;
+    }
+    else
+    {
+        Error = -LX_ENOENT;
+    }
+    ExReleaseFastMutex(&Map->Lock);
+    return Error;
+}
+
+static
+LONG
+LxBpfMapNextKeyKernel(
+    _In_ PLX_BPF_MAP Map,
+    _In_opt_ PCUCHAR Key,
+    _Out_writes_bytes_(Map->KeySize) PUCHAR NextKey)
+{
+    LONG Error = -LX_ENOENT;
+
+    ExAcquireFastMutex(&Map->Lock);
+    if (Map->Type == LX_BPF_MAP_TYPE_ARRAY)
+    {
+        ULONG Index = 0xFFFFFFFF, Next;
+
+        if (Key != NULL)
+            RtlCopyMemory(&Index, Key, sizeof(Index));
+        Next = (Index >= Map->MaxEntries) ? 0 : Index + 1;
+        if (Next < Map->MaxEntries)
+        {
+            RtlCopyMemory(NextKey, &Next, sizeof(Next));
+            Error = 0;
+        }
+    }
+    else
+    {
+        ULONG Bucket = 0;
+        PLX_BPF_MAP_ENTRY Found = NULL;
+
+        if (Key != NULL)
+        {
+            PLX_BPF_MAP_ENTRY Item = LxBpfHashFind(Map, Key, &Bucket);
+
+            if (Item != NULL)
+            {
+                if (Item->Link.Flink != &Map->Buckets[Bucket])
+                    Found = CONTAINING_RECORD(Item->Link.Flink, LX_BPF_MAP_ENTRY, Link);
+                else
+                    Bucket++;
+            }
+            else
+            {
+                Bucket = 0;
+            }
+        }
+        for (; (Found == NULL) && (Bucket < Map->BucketCount); Bucket++)
+        {
+            if (!IsListEmpty(&Map->Buckets[Bucket]))
+                Found = CONTAINING_RECORD(Map->Buckets[Bucket].Flink, LX_BPF_MAP_ENTRY, Link);
+        }
+        if (Found != NULL)
+        {
+            RtlCopyMemory(NextKey, Found->Data, Map->KeySize);
+            Error = 0;
+        }
+    }
+    ExReleaseFastMutex(&Map->Lock);
+    return Error;
+}
+
+static
+PUCHAR
+LxBpfMapLookupAddress(
+    _In_ PLX_BPF_MAP Map,
+    _In_reads_bytes_(Map->KeySize) PCUCHAR Key)
+{
+    PUCHAR Address = NULL;
+
+    ExAcquireFastMutex(&Map->Lock);
+    if (Map->Type == LX_BPF_MAP_TYPE_ARRAY)
+    {
+        ULONG Index;
+
+        RtlCopyMemory(&Index, Key, sizeof(Index));
+        if (Index < Map->MaxEntries)
+            Address = Map->Array + (SIZE_T)Index * Map->ValueSize;
+    }
+    else
+    {
+        ULONG Bucket;
+        PLX_BPF_MAP_ENTRY Item = LxBpfHashFind(Map, Key, &Bucket);
+
+        if (Item != NULL)
+            Address = Item->Data + Map->KeySize;
+    }
+    ExReleaseFastMutex(&Map->Lock);
+    return Address;
+}
+
+static VOID LxBpfProgReleaseMaps(_In_ PLX_BPF_PROG Prog);
 
 static
 VOID
@@ -157,6 +599,7 @@ LxBpfProgDereference(
     ExAcquireFastMutex(&LxBpfLock);
     RemoveEntryList(&Prog->Link);
     ExReleaseFastMutex(&LxBpfLock);
+    LxBpfProgReleaseMaps(Prog);
     LxFree(Prog->Insns);
     LxFree(Prog);
 }
@@ -269,7 +712,15 @@ LxBpfCheck(
                 if (Op == LX_BPF_EXIT)
                     break;
                 if (Op == LX_BPF_CALL)
-                    return -LX_EINVAL;
+                {
+                    if ((Class != LX_BPF_JMP) || (Src != 0) || (Dst != 0) || (Insn->Off != 0) ||
+                        ((Insn->Imm != LX_BPF_FUNC_map_lookup_elem) && (Insn->Imm != LX_BPF_FUNC_map_update_elem) &&
+                         (Insn->Imm != LX_BPF_FUNC_map_delete_elem)))
+                    {
+                        return -LX_EINVAL;
+                    }
+                    break;
+                }
                 if (Op > LX_BPF_JSLE)
                     return -LX_EINVAL;
                 if (((LONG)Index + 1 + Insn->Off < 0) || ((LONG)Index + 1 + Insn->Off >= (LONG)Count))
@@ -288,7 +739,8 @@ LxBpfCheck(
                 break;
 
             case LX_BPF_LD:
-                if ((Insn->Code != (LX_BPF_LD | LX_BPF_IMM | LX_BPF_DW)) || (Src != 0) || (Dst == 10) ||
+                if ((Insn->Code != (LX_BPF_LD | LX_BPF_IMM | LX_BPF_DW)) ||
+                    ((Src != 0) && (Src != LX_BPF_PSEUDO_MAP_FD)) || (Dst == 10) ||
                     (Index + 1 >= Count) || (Insns[Index + 1].Code != 0) || (Insns[Index + 1].Regs != 0) ||
                     (Insns[Index + 1].Off != 0))
                 {
@@ -346,6 +798,76 @@ LxBpfSwap(
     if (Bits == 32)
         return RtlUlongByteSwap((ULONG)Value);
     return RtlUlonglongByteSwap(Value);
+}
+
+static
+BOOLEAN
+LxBpfRange(
+    _In_ ULONG64 Address,
+    _In_ ULONG Size,
+    _In_ PLX_BPF_DEV_CTX Ctx,
+    _In_ PUCHAR Stack)
+{
+    ULONG64 CtxStart = (ULONG64)(ULONG_PTR)Ctx, StackStart = (ULONG64)(ULONG_PTR)Stack;
+
+    if ((Size == 0) || (Address + Size <= Address))
+        return FALSE;
+    if ((Address >= CtxStart) && (Address + Size <= CtxStart + sizeof(*Ctx)))
+        return TRUE;
+    return (Address >= StackStart) && (Address + Size <= StackStart + LX_BPF_STACK_SIZE);
+}
+
+static
+BOOLEAN
+LxBpfHelperCall(
+    _In_ PLX_BPF_PROG Prog,
+    _In_ LONG FuncId,
+    _Inout_updates_(11) PULONG64 Regs,
+    _In_ PLX_BPF_DEV_CTX Ctx,
+    _In_ PUCHAR Stack)
+{
+    PLX_BPF_MAP Map = NULL;
+    ULONG Index;
+
+    for (Index = 0; Index < Prog->MapRefCount; Index++)
+    {
+        if ((ULONG64)(ULONG_PTR)Prog->MapRefs[Index] == Regs[1])
+        {
+            Map = Prog->MapRefs[Index];
+            break;
+        }
+    }
+    if (Map == NULL)
+        return FALSE;
+
+    switch (FuncId)
+    {
+        case LX_BPF_FUNC_map_lookup_elem:
+            if (!LxBpfRange(Regs[2], Map->KeySize, Ctx, Stack))
+                return FALSE;
+            /* TODO: the returned value pointer is valid only as a non-NULL membership
+             * token; reading map values from within a program is not supported. */
+            Regs[0] = (ULONG64)(ULONG_PTR)LxBpfMapLookupAddress(Map, (PCUCHAR)(ULONG_PTR)Regs[2]);
+            break;
+
+        case LX_BPF_FUNC_map_update_elem:
+            if (!LxBpfRange(Regs[2], Map->KeySize, Ctx, Stack) || !LxBpfRange(Regs[3], Map->ValueSize, Ctx, Stack))
+                return FALSE;
+            Regs[0] = (ULONG64)(LONG64)LxBpfMapUpdateKernel(Map, (PCUCHAR)(ULONG_PTR)Regs[2],
+                                                            (PCUCHAR)(ULONG_PTR)Regs[3], Regs[4]);
+            break;
+
+        case LX_BPF_FUNC_map_delete_elem:
+            if (!LxBpfRange(Regs[2], Map->KeySize, Ctx, Stack))
+                return FALSE;
+            Regs[0] = (ULONG64)(LONG64)LxBpfMapDeleteKernel(Map, (PCUCHAR)(ULONG_PTR)Regs[2]);
+            break;
+
+        default:
+            return FALSE;
+    }
+    Regs[1] = Regs[2] = Regs[3] = Regs[4] = Regs[5] = 0;
+    return TRUE;
 }
 
 static
@@ -431,6 +953,12 @@ LxBpfRun(
                     *Result = Regs[0];
                     return TRUE;
                 }
+                if (Op == LX_BPF_CALL)
+                {
+                    if ((Class != LX_BPF_JMP) || !LxBpfHelperCall(Prog, Insn->Imm, Regs, Ctx, Stack))
+                        return FALSE;
+                    break;
+                }
                 switch (Op)
                 {
                     case LX_BPF_JA: Taken = TRUE; break;
@@ -503,6 +1031,100 @@ LxBpfRun(
 }
 
 static
+VOID
+LxBpfProgReleaseMaps(
+    _In_ PLX_BPF_PROG Prog)
+{
+    while (Prog->MapRefCount != 0)
+        LxBpfMapDereference(Prog->MapRefs[--Prog->MapRefCount]);
+}
+
+static
+LONG
+LxBpfResolveMaps(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_BPF_PROG Prog,
+    _In_ ULONG Count)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        PLX_BPF_INSN Insn = &Prog->Insns[Index];
+        PLX_BPF_MAP Map;
+        ULONG Existing;
+
+        if (Insn->Code != (LX_BPF_LD | LX_BPF_IMM | LX_BPF_DW))
+            continue;
+        if ((Insn->Regs >> 4) != LX_BPF_PSEUDO_MAP_FD)
+        {
+            Index++;
+            continue;
+        }
+
+        Map = LxBpfMapFromFd(Process, Insn->Imm);
+        if (Map == NULL)
+        {
+            LxBpfProgReleaseMaps(Prog);
+            return -LX_EBADF;
+        }
+
+        for (Existing = 0; Existing < Prog->MapRefCount; Existing++)
+        {
+            if (Prog->MapRefs[Existing] == Map)
+            {
+                LxBpfMapDereference(Map);
+                break;
+            }
+        }
+        if (Existing == Prog->MapRefCount)
+        {
+            if (Prog->MapRefCount >= LX_BPF_PROG_MAX_MAPS)
+            {
+                LxBpfMapDereference(Map);
+                LxBpfProgReleaseMaps(Prog);
+                return -LX_E2BIG;
+            }
+            Prog->MapRefs[Prog->MapRefCount++] = Map;
+        }
+
+        Insn->Imm = (LONG)(ULONG)(ULONG_PTR)Map;
+        Prog->Insns[Index + 1].Imm = (LONG)(ULONG)((ULONG64)(ULONG_PTR)Map >> 32);
+        Index++;
+    }
+    return 0;
+}
+
+static
+PLX_BPF_INSN
+LxBpfProgDump(
+    _In_ PLX_BPF_PROG Prog,
+    _In_ BOOLEAN ForTag)
+{
+    PLX_BPF_INSN Copy = LxAllocPaged((SIZE_T)Prog->InsnCount * sizeof(LX_BPF_INSN));
+    ULONG Index;
+
+    if (Copy == NULL)
+        return NULL;
+    RtlCopyMemory(Copy, Prog->Insns, (SIZE_T)Prog->InsnCount * sizeof(LX_BPF_INSN));
+    for (Index = 0; Index + 1 < Prog->InsnCount; Index++)
+    {
+        if (Copy[Index].Code != (LX_BPF_LD | LX_BPF_IMM | LX_BPF_DW))
+            continue;
+        if ((Copy[Index].Regs >> 4) == LX_BPF_PSEUDO_MAP_FD)
+        {
+            PLX_BPF_MAP Map = (PLX_BPF_MAP)(ULONG_PTR)((ULONG64)(ULONG)Copy[Index].Imm |
+                                                      ((ULONG64)(ULONG)Copy[Index + 1].Imm << 32));
+
+            Copy[Index].Imm = ForTag ? 0 : (LONG)Map->Id;
+            Copy[Index + 1].Imm = 0;
+        }
+        Index++;
+    }
+    return Copy;
+}
+
+static
 LONG64
 LxBpfProgLoad(
     _In_ PLX_CALL Call,
@@ -550,6 +1172,8 @@ LxBpfProgLoad(
         Result = LxCopyStringFromUser(LicensePointer, &License, 127);
     if (Result == 0)
         Result = LxBpfCheck(Prog->Insns, Count);
+    if (Result == 0)
+        Result = LxBpfResolveMaps(Call->Process, Prog, Count);
     if (Result != 0)
     {
         LxFree(License);
@@ -575,12 +1199,13 @@ LxBpfProgLoad(
         UCHAR Digest[20];
         BCRYPT_ALG_HANDLE Algorithm;
         BCRYPT_HASH_HANDLE Hash;
+        PLX_BPF_INSN Tagged = LxBpfProgDump(Prog, TRUE);
 
-        if (NT_SUCCESS(BCryptOpenAlgorithmProvider(&Algorithm, BCRYPT_SHA1_ALGORITHM, NULL, 0)))
+        if ((Tagged != NULL) && NT_SUCCESS(BCryptOpenAlgorithmProvider(&Algorithm, BCRYPT_SHA1_ALGORITHM, NULL, 0)))
         {
             if (NT_SUCCESS(BCryptCreateHash(Algorithm, &Hash, NULL, 0, NULL, 0, 0)))
             {
-                if (NT_SUCCESS(BCryptHashData(Hash, (PUCHAR)Prog->Insns, Count * sizeof(LX_BPF_INSN), 0)) &&
+                if (NT_SUCCESS(BCryptHashData(Hash, (PUCHAR)Tagged, Count * sizeof(LX_BPF_INSN), 0)) &&
                     NT_SUCCESS(BCryptFinishHash(Hash, Digest, sizeof(Digest), 0)))
                 {
                     RtlCopyMemory(Prog->Tag, Digest, sizeof(Prog->Tag));
@@ -589,6 +1214,7 @@ LxBpfProgLoad(
             }
             BCryptCloseAlgorithmProvider(Algorithm, 0);
         }
+        LxFreePaged(Tagged);
     }
 
     ExAcquireFastMutex(&LxBpfLock);
@@ -873,22 +1499,399 @@ LxBpfFindById(
     _In_ BOOLEAN Next)
 {
     PLIST_ENTRY Entry;
-    PLX_BPF_PROG Found = NULL;
+    PLX_BPF_PROG Found;
 
     ExAcquireFastMutex(&LxBpfLock);
-    for (Entry = LxBpfProgs.Flink; Entry != &LxBpfProgs; Entry = Entry->Flink)
+    do
     {
-        PLX_BPF_PROG Prog = CONTAINING_RECORD(Entry, LX_BPF_PROG, Link);
+        Found = NULL;
+        for (Entry = LxBpfProgs.Flink; Entry != &LxBpfProgs; Entry = Entry->Flink)
+        {
+            PLX_BPF_PROG Prog = CONTAINING_RECORD(Entry, LX_BPF_PROG, Link);
 
-        if (Prog->RefCount == 0)
-            continue;
-        if (Next ? ((Prog->Id > Id) && ((Found == NULL) || (Prog->Id < Found->Id))) : (Prog->Id == Id))
-            Found = Prog;
-    }
-    if (Found != NULL)
-        LxBpfProgReference(Found);
+            if (Prog->RefCount == 0)
+                continue;
+            if (Next ? ((Prog->Id > Id) && ((Found == NULL) || (Prog->Id < Found->Id))) : (Prog->Id == Id))
+                Found = Prog;
+        }
+    } while ((Found != NULL) && !LxBpfTryReference(&Found->RefCount));
     ExReleaseFastMutex(&LxBpfLock);
     return Found;
+}
+
+static
+LONG64
+LxBpfMapCreate(
+    _In_ PLX_CALL Call,
+    _In_reads_bytes_(Size) PUCHAR Attr,
+    _In_ ULONG Size)
+{
+    ULONG Type, KeySize, ValueSize, MaxEntries, Flags, Index;
+    PLX_BPF_MAP Map;
+    LONG Fd;
+
+    if (Size < 20)
+        return -LX_EINVAL;
+    RtlCopyMemory(&Type, Attr + 0, 4);
+    RtlCopyMemory(&KeySize, Attr + 4, 4);
+    RtlCopyMemory(&ValueSize, Attr + 8, 4);
+    RtlCopyMemory(&MaxEntries, Attr + 12, 4);
+    RtlCopyMemory(&Flags, Attr + 16, 4);
+
+    if (!LxCapable(Call->Process, LX_CAP_BPF) && !LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
+        return -LX_EPERM;
+    if ((Type != LX_BPF_MAP_TYPE_HASH) && (Type != LX_BPF_MAP_TYPE_ARRAY))
+        return -LX_EINVAL;
+    if ((ValueSize == 0) || (ValueSize > LX_BPF_MAX_VALUE_SIZE) ||
+        (MaxEntries == 0) || (MaxEntries > LX_BPF_MAX_MAP_ENTRIES))
+    {
+        return -LX_EINVAL;
+    }
+    if (Type == LX_BPF_MAP_TYPE_HASH)
+    {
+        if ((KeySize == 0) || (KeySize > LX_BPF_MAX_KEY_SIZE) || (Flags & ~LX_BPF_F_NO_PREALLOC))
+            return -LX_EINVAL;
+    }
+    else
+    {
+        if ((KeySize != 4) || (Flags != 0))
+            return -LX_EINVAL;
+        if ((ULONG64)MaxEntries * ValueSize > LX_BPF_MAX_ARRAY_BYTES)
+            return -LX_E2BIG;
+    }
+
+    Map = LxAlloc(sizeof(*Map));
+    if (Map == NULL)
+        return -LX_ENOMEM;
+    Map->RefCount = 1;
+    Map->Type = Type;
+    Map->KeySize = KeySize;
+    Map->ValueSize = ValueSize;
+    Map->MaxEntries = MaxEntries;
+    Map->Flags = Flags;
+    Map->Uid = Call->Process->Uid[1];
+    Map->LoadTime = (LONG64)KeQueryInterruptTime() * 100;
+    ExInitializeFastMutex(&Map->Lock);
+    if (Size >= 44)
+    {
+        RtlCopyMemory(Map->Name, Attr + 28, 16);
+        Map->Name[15] = '\0';
+    }
+
+    if (Type == LX_BPF_MAP_TYPE_HASH)
+    {
+        ULONG Buckets = 16;
+
+        while ((Buckets < MaxEntries) && (Buckets < 65536))
+            Buckets <<= 1;
+        Map->BucketCount = Buckets;
+        Map->Buckets = LxAllocPaged((SIZE_T)Buckets * sizeof(LIST_ENTRY));
+        if (Map->Buckets == NULL)
+        {
+            LxFree(Map);
+            return -LX_ENOMEM;
+        }
+        for (Index = 0; Index < Buckets; Index++)
+            InitializeListHead(&Map->Buckets[Index]);
+    }
+    else
+    {
+        Map->Array = LxAllocPaged((SIZE_T)MaxEntries * ValueSize);
+        if (Map->Array == NULL)
+        {
+            LxFree(Map);
+            return -LX_ENOMEM;
+        }
+    }
+
+    ExAcquireFastMutex(&LxBpfLock);
+    Map->Id = LxBpfMapNextId++;
+    InsertTailList(&LxBpfMaps, &Map->Link);
+    ExReleaseFastMutex(&LxBpfLock);
+
+    Fd = LxBpfMapInstall(Call->Process, Map);
+    LxBpfMapDereference(Map);
+    return Fd;
+}
+
+static
+LONG64
+LxBpfMapElem(
+    _In_ PLX_CALL Call,
+    _In_reads_bytes_(Size) PUCHAR Attr,
+    _In_ ULONG Size,
+    _In_ ULONG Command)
+{
+    ULONG MapFd;
+    ULONG64 KeyPtr, ValuePtr = 0, Flags = 0;
+    PLX_BPF_MAP Map;
+    PUCHAR Key, Out;
+    ULONG OutSize;
+    LONG64 Result;
+
+    if (Size < 16)
+        return -LX_EINVAL;
+    RtlCopyMemory(&MapFd, Attr + 0, 4);
+    RtlCopyMemory(&KeyPtr, Attr + 8, 8);
+    if (Size >= 24)
+        RtlCopyMemory(&ValuePtr, Attr + 16, 8);
+    if (Size >= 32)
+        RtlCopyMemory(&Flags, Attr + 24, 8);
+
+    Map = LxBpfMapFromFd(Call->Process, (LONG)MapFd);
+    if (Map == NULL)
+        return -LX_EBADF;
+
+    OutSize = (Command == LX_BPF_MAP_GET_NEXT_KEY) ? Map->KeySize : Map->ValueSize;
+    Key = LxAllocPaged(Map->KeySize);
+    Out = (Command == LX_BPF_MAP_DELETE_ELEM) ? NULL : LxAllocPaged(OutSize);
+    if ((Key == NULL) || ((Command != LX_BPF_MAP_DELETE_ELEM) && (Out == NULL)))
+    {
+        LxFreePaged(Key);
+        LxFreePaged(Out);
+        LxBpfMapDereference(Map);
+        return -LX_ENOMEM;
+    }
+
+    Result = 0;
+    switch (Command)
+    {
+        case LX_BPF_MAP_LOOKUP_ELEM:
+            Result = LxCopyFromUser(Key, KeyPtr, Map->KeySize);
+            if (Result == 0)
+                Result = LxBpfMapLookupKernel(Map, Key, Out);
+            if (Result == 0)
+                Result = LxCopyToUser(ValuePtr, Out, Map->ValueSize);
+            break;
+
+        case LX_BPF_MAP_UPDATE_ELEM:
+            Result = LxCopyFromUser(Key, KeyPtr, Map->KeySize);
+            if (Result == 0)
+                Result = LxCopyFromUser(Out, ValuePtr, Map->ValueSize);
+            if (Result == 0)
+                Result = LxBpfMapUpdateKernel(Map, Key, Out, Flags);
+            break;
+
+        case LX_BPF_MAP_DELETE_ELEM:
+            Result = LxCopyFromUser(Key, KeyPtr, Map->KeySize);
+            if (Result == 0)
+                Result = LxBpfMapDeleteKernel(Map, Key);
+            break;
+
+        case LX_BPF_MAP_GET_NEXT_KEY:
+            if (KeyPtr != 0)
+                Result = LxCopyFromUser(Key, KeyPtr, Map->KeySize);
+            if (Result == 0)
+                Result = LxBpfMapNextKeyKernel(Map, (KeyPtr != 0) ? Key : NULL, Out);
+            if (Result == 0)
+                Result = LxCopyToUser(ValuePtr, Out, Map->KeySize);
+            break;
+
+        default:
+            Result = -LX_EINVAL;
+            break;
+    }
+
+    LxFreePaged(Key);
+    LxFreePaged(Out);
+    LxBpfMapDereference(Map);
+    return Result;
+}
+
+static
+PLX_BPF_MAP
+LxBpfMapFindById(
+    _In_ ULONG Id,
+    _In_ BOOLEAN Next)
+{
+    PLIST_ENTRY Entry;
+    PLX_BPF_MAP Found;
+
+    ExAcquireFastMutex(&LxBpfLock);
+    do
+    {
+        Found = NULL;
+        for (Entry = LxBpfMaps.Flink; Entry != &LxBpfMaps; Entry = Entry->Flink)
+        {
+            PLX_BPF_MAP Map = CONTAINING_RECORD(Entry, LX_BPF_MAP, Link);
+
+            if (Map->RefCount == 0)
+                continue;
+            if (Next ? ((Map->Id > Id) && ((Found == NULL) || (Map->Id < Found->Id))) : (Map->Id == Id))
+                Found = Map;
+        }
+    } while ((Found != NULL) && !LxBpfTryReference(&Found->RefCount));
+    ExReleaseFastMutex(&LxBpfLock);
+    return Found;
+}
+
+static
+VOID
+LxBpfObjDereference(
+    _In_ ULONG ObjType,
+    _In_ PVOID Object)
+{
+    if (ObjType == LX_BPF_PIN_MAP)
+        LxBpfMapDereference(Object);
+    else
+        LxBpfProgDereference(Object);
+}
+
+static
+VOID
+LxBpfPinRelease(
+    _In_ PVOID Object)
+{
+    PLX_BPF_PIN Pin = Object;
+
+    LxBpfObjDereference(Pin->ObjType, Pin->Object);
+    LxFree(Pin);
+}
+
+static
+LONG64
+LxBpfObjPin(
+    _In_ PLX_CALL Call,
+    _In_reads_bytes_(Size) PUCHAR Attr,
+    _In_ ULONG Size)
+{
+    ULONG64 PathPtr;
+    ULONG BpfFd;
+    PSTR Path = NULL;
+    PVOID Object;
+    ULONG ObjType;
+    LX_NODE Node;
+    PLX_TMPFS_INODE Inode;
+    PLX_BPF_PIN Pin;
+    LONG Error;
+
+    if (Size < 12)
+        return -LX_EINVAL;
+    RtlCopyMemory(&PathPtr, Attr + 0, 8);
+    RtlCopyMemory(&BpfFd, Attr + 8, 4);
+
+    Object = LxBpfMapFromFd(Call->Process, (LONG)BpfFd);
+    ObjType = LX_BPF_PIN_MAP;
+    if (Object == NULL)
+    {
+        Object = LxBpfProgFromFd(Call->Process, (LONG)BpfFd);
+        ObjType = LX_BPF_PIN_PROG;
+    }
+    if (Object == NULL)
+        return -LX_EINVAL;
+
+    Error = (LONG)LxCopyStringFromUser(PathPtr, &Path, 4095);
+    if (Error == 0)
+    {
+        Error = LxLookup(Call->Process, LX_AT_FDCWD, Path, LX_LOOKUP_CREATE, &Node);
+        LxFree(Path);
+    }
+    if (Error != 0)
+    {
+        LxBpfObjDereference(ObjType, Object);
+        return Error;
+    }
+
+    if (Node.Exists)
+        Error = -LX_EEXIST;
+    else if ((Node.Mount == NULL) || (Node.Mount->Magic != LX_BPF_FS_MAGIC) || (Node.Mount->Kind != LxFsTmpfs))
+        Error = -LX_EPERM;
+    else
+        Error = LxVfsMknod(Call->Process, &Node, LX_S_IFREG | 0600, 0);
+    if (Error == 0)
+        Error = LxTmpfsLookup(Node.Mount, Node.Relative, &Inode);
+    LxNodeFree(&Node);
+    if (Error == 0)
+    {
+        Pin = LxAlloc(sizeof(*Pin));
+        if (Pin == NULL)
+        {
+            Error = -LX_ENOMEM;
+        }
+        else
+        {
+            Pin->ObjType = ObjType;
+            Pin->Object = Object;
+            Error = LxTmpfsSetPrivate(Inode, Pin, LxBpfPinRelease);
+            if (Error != 0)
+                LxFree(Pin);
+        }
+        LxTmpfsInodeDereference(Inode);
+    }
+    if (Error != 0)
+        LxBpfObjDereference(ObjType, Object);
+    return Error;
+}
+
+static
+LONG64
+LxBpfObjGet(
+    _In_ PLX_CALL Call,
+    _In_reads_bytes_(Size) PUCHAR Attr,
+    _In_ ULONG Size)
+{
+    ULONG64 PathPtr, Device;
+    ULONG FileFlags = 0, Mask, Mode, Uid, Gid;
+    PSTR Path = NULL;
+    LX_NODE Node;
+    PLX_TMPFS_INODE Inode;
+    PLX_BPF_PIN Pin;
+    PVOID Object = NULL;
+    ULONG ObjType = 0;
+    LONG Error;
+    LONG64 Result;
+
+    if (Size < 8)
+        return -LX_EINVAL;
+    RtlCopyMemory(&PathPtr, Attr + 0, 8);
+    if (Size >= 16)
+        RtlCopyMemory(&FileFlags, Attr + 12, 4);
+    if ((FileFlags & ~(LX_BPF_F_RDONLY | LX_BPF_F_WRONLY)) ||
+        ((FileFlags & LX_BPF_F_RDONLY) && (FileFlags & LX_BPF_F_WRONLY)))
+    {
+        return -LX_EINVAL;
+    }
+    Mask = (FileFlags & LX_BPF_F_RDONLY) ? LX_MAY_READ :
+           (FileFlags & LX_BPF_F_WRONLY) ? LX_MAY_WRITE : (LX_MAY_READ | LX_MAY_WRITE);
+
+    Result = LxCopyStringFromUser(PathPtr, &Path, 4095);
+    if (Result != 0)
+        return Result;
+    Error = LxLookup(Call->Process, LX_AT_FDCWD, Path, LX_LOOKUP_FOLLOW, &Node);
+    LxFree(Path);
+    if (Error != 0)
+        return Error;
+
+    if ((Node.Mount == NULL) || (Node.Mount->Magic != LX_BPF_FS_MAGIC) || (Node.Mount->Kind != LxFsTmpfs))
+        Error = -LX_EACCES;
+    else
+        Error = LxTmpfsLookup(Node.Mount, Node.Relative, &Inode);
+    LxNodeFree(&Node);
+    if (Error != 0)
+        return Error;
+
+    LxTmpfsInodeAttributes(Inode, &Mode, &Uid, &Gid, &Device);
+    Error = LxPermission(Call->Process, Mode, Uid, Gid, Mask);
+    Pin = LxTmpfsGetPrivate(Inode, LxBpfPinRelease);
+    if ((Error == 0) && (Pin == NULL))
+        Error = -LX_EACCES;
+    if (Error == 0)
+    {
+        Object = Pin->Object;
+        ObjType = Pin->ObjType;
+        if (ObjType == LX_BPF_PIN_MAP)
+            LxBpfMapReference(Object);
+        else
+            LxBpfProgReference(Object);
+    }
+    LxTmpfsInodeDereference(Inode);
+    if (Error != 0)
+        return Error;
+
+    Result = (ObjType == LX_BPF_PIN_MAP) ? LxBpfMapInstall(Call->Process, Object)
+                                         : LxBpfProgInstall(Call->Process, Object);
+    LxBpfObjDereference(ObjType, Object);
+    return Result;
 }
 
 static
@@ -903,6 +1906,7 @@ LxBpfGetInfo(
     ULONG Fd, Length, Value, Have = 0;
     ULONG64 InfoPointer, Insns = 0;
     PLX_BPF_PROG Prog;
+    PLX_BPF_MAP Map;
     LONG64 Result;
 
     if (Size < 16)
@@ -910,6 +1914,26 @@ LxBpfGetInfo(
     RtlCopyMemory(&Fd, Attr + 0, 4);
     RtlCopyMemory(&Length, Attr + 4, 4);
     RtlCopyMemory(&InfoPointer, Attr + 8, 8);
+
+    Map = LxBpfMapFromFd(Call->Process, (LONG)Fd);
+    if (Map != NULL)
+    {
+        Length = min(Length, (ULONG)sizeof(Info));
+        RtlZeroMemory(Info, sizeof(Info));
+        RtlCopyMemory(Info + 0, &Map->Type, 4);
+        RtlCopyMemory(Info + 4, &Map->Id, 4);
+        RtlCopyMemory(Info + 8, &Map->KeySize, 4);
+        RtlCopyMemory(Info + 12, &Map->ValueSize, 4);
+        RtlCopyMemory(Info + 16, &Map->MaxEntries, 4);
+        RtlCopyMemory(Info + 20, &Map->Flags, 4);
+        RtlCopyMemory(Info + 24, Map->Name, 16);
+        Result = LxCopyToUser(InfoPointer, Info, Length);
+        if (Result == 0)
+            Result = LxCopyToUser(AttrPointer + 4, &Length, sizeof(Length));
+        LxBpfMapDereference(Map);
+        return Result;
+    }
+
     Prog = LxBpfProgFromFd(Call->Process, (LONG)Fd);
     if (Prog == NULL)
         return -LX_EINVAL;
@@ -936,7 +1960,13 @@ LxBpfGetInfo(
         Value = Prog->Gpl ? 1 : 0;
         RtlCopyMemory(Info + 84, &Value, 4);
         if ((Insns != 0) && (Have != 0))
-            Result = LxCopyToUser(Insns, Prog->Insns, min(Have, Prog->InsnCount * (ULONG)sizeof(LX_BPF_INSN)));
+        {
+            PLX_BPF_INSN Dump = LxBpfProgDump(Prog, FALSE);
+
+            Result = (Dump == NULL) ? -LX_ENOMEM :
+                     LxCopyToUser(Insns, Dump, min(Have, Prog->InsnCount * (ULONG)sizeof(LX_BPF_INSN)));
+            LxFreePaged(Dump);
+        }
     }
     if (Result == 0)
         Result = LxCopyToUser(InfoPointer, Info, Length);
@@ -952,6 +1982,7 @@ LX_SYSCALL(LxSysBpf)
     ULONG Size = (ULONG)min(Call->Args[2], 256);
     UCHAR Attr[256];
     PLX_BPF_PROG Prog;
+    PLX_BPF_MAP Map;
     LONG64 Result;
     ULONG Id;
 
@@ -961,8 +1992,23 @@ LX_SYSCALL(LxSysBpf)
 
     switch (Command)
     {
+        case LX_BPF_MAP_CREATE:
+            return LxBpfMapCreate(Call, Attr, Size);
+
+        case LX_BPF_MAP_LOOKUP_ELEM:
+        case LX_BPF_MAP_UPDATE_ELEM:
+        case LX_BPF_MAP_DELETE_ELEM:
+        case LX_BPF_MAP_GET_NEXT_KEY:
+            return LxBpfMapElem(Call, Attr, Size, Command);
+
         case LX_BPF_PROG_LOAD:
             return LxBpfProgLoad(Call, Attr, Size);
+
+        case LX_BPF_OBJ_PIN:
+            return LxBpfObjPin(Call, Attr, Size);
+
+        case LX_BPF_OBJ_GET:
+            return LxBpfObjGet(Call, Attr, Size);
 
         case LX_BPF_PROG_ATTACH:
             return LxBpfAttach(Call, Attr, Size, FALSE);
@@ -989,6 +2035,21 @@ LX_SYSCALL(LxSysBpf)
             else
                 Result = LxBpfProgInstall(Call->Process, Prog);
             LxBpfProgDereference(Prog);
+            return Result;
+
+        case LX_BPF_MAP_GET_NEXT_ID:
+        case LX_BPF_MAP_GET_FD_BY_ID:
+            if (!LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
+                return -LX_EPERM;
+            RtlCopyMemory(&Id, Attr, 4);
+            Map = LxBpfMapFindById(Id, Command == LX_BPF_MAP_GET_NEXT_ID);
+            if (Map == NULL)
+                return -LX_ENOENT;
+            if (Command == LX_BPF_MAP_GET_NEXT_ID)
+                Result = LxCopyToUser(Call->Args[1] + 4, &Map->Id, sizeof(ULONG));
+            else
+                Result = LxBpfMapInstall(Call->Process, Map);
+            LxBpfMapDereference(Map);
             return Result;
 
         default:

@@ -1330,6 +1330,9 @@ VOID LxTmpfsInodeSetTimes(_In_ PLX_TMPFS_INODE Inode, _In_reads_(2) PLX_TIMESPEC
 PSTR LxTmpfsInodeLinkTarget(_In_ PLX_TMPFS_INODE Inode);
 PSTR LxTmpfsInodePath(_In_ PLX_TMPFS_INODE Inode, _In_ PLX_MOUNT Mount);
 ULONG64 LxTmpfsInodeId(_In_ PLX_TMPFS_INODE Inode);
+typedef VOID (*PLX_TMPFS_PRIVATE_RELEASE)(_In_ PVOID Object);
+LONG LxTmpfsSetPrivate(_In_ PLX_TMPFS_INODE Inode, _In_ PVOID Object, _In_ PLX_TMPFS_PRIVATE_RELEASE Release);
+PVOID LxTmpfsGetPrivate(_In_ PLX_TMPFS_INODE Inode, _In_ PLX_TMPFS_PRIVATE_RELEASE Release);
 ULONG64 LxTmpfsInodeSize(_In_ PLX_TMPFS_INODE Inode);
 LONG LxTmpfsInodeTruncate(_In_ PLX_TMPFS_INODE Inode, _In_ LONG64 Size);
 LONG LxTmpfsInodeZeroRange(_In_ PLX_TMPFS_INODE Inode, _In_ ULONG64 Start, _In_ ULONG64 End);
