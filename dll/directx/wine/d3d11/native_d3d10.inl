@@ -1400,7 +1400,8 @@ extern "C" HRESULT WINAPI RosD3D11CreateD3D10Device(IDXGIAdapter *adapter, UINT 
 {
     if (!out) return E_INVALIDARG;
     *out = NULL;
-    if (level != D3D_FEATURE_LEVEL_10_0 && level != D3D_FEATURE_LEVEL_10_1) return E_INVALIDARG;
+    if (level != D3D_FEATURE_LEVEL_9_1 && level != D3D_FEATURE_LEVEL_9_2 && level != D3D_FEATURE_LEVEL_9_3
+            && level != D3D_FEATURE_LEVEL_10_0 && level != D3D_FEATURE_LEVEL_10_1) return E_INVALIDARG;
     UINT device_flags = flags & (D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_DEBUG
             | D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS | D3D11_CREATE_DEVICE_BGRA_SUPPORT);
     ID3D11Device *created = NULL;
