@@ -261,6 +261,9 @@ CdSyncFileEvent(
     if (File->FileObject->Event.Header.Type == SynchronizationEvent &&
         File->FileObject->Event.Header.SignalState)
     {
+        /* A synchronous caller has not consumed its completion yet: leave it signaled while input remains. */
+        if (File->Mirror && File->Mirror->Signaled)
+            File->FileObject->Event.Header.Type = NotificationEvent;
         return;
     }
     File->FileObject->Event.Header.Type = NotificationEvent;
@@ -284,6 +287,12 @@ static
 VOID
 CdDereferenceScreen(
     _In_ PCD_SCREEN Screen);
+
+static
+VOID
+CdUpdateFileEventShared(
+    _In_ PCD_FILE File,
+    _In_ BOOLEAN Sync);
 
 static
 VOID
@@ -711,9 +720,13 @@ CdFinishIrp(
     if (NoEvent)
     {
         PCD_FILE File = FileObject->FsContext;
+        KIRQL OldIrql;
 
         KeSetEvent(&FileObject->Event, IO_NO_INCREMENT, FALSE);
-        InterlockedDecrement(&File->NoEventIrps);
+        OldIrql = ExAcquireSpinLockShared(&CdLock);
+        if (InterlockedDecrement(&File->NoEventIrps) == 0 && (FileObject->Flags & FO_SYNCHRONOUS_IO))
+            CdUpdateFileEventShared(File, TRUE);
+        ExReleaseSpinLockShared(&CdLock, OldIrql);
         ObDereferenceObject(FileObject);
     }
 }
