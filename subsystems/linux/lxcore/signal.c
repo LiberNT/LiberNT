@@ -199,14 +199,33 @@ LxSignalWake(
     _In_ PLX_PROCESS Process,
     _In_ ULONG Tid)
 {
-    PETHREAD Threads[LX_MAX_WAKE];
-    PKAPC Apcs[LX_MAX_WAKE];
+    PETHREAD LocalThreads[LX_MAX_WAKE];
+    PKAPC LocalApcs[LX_MAX_WAKE];
+    PETHREAD *Threads = LocalThreads;
+    PKAPC *Apcs = LocalApcs;
+    PVOID Buffer = NULL;
     PETHREAD Current = PsGetCurrentThread();
     PLIST_ENTRY Entry;
-    ULONG Count = 0, Index;
+    ULONG Count = 0, Index, Capacity = LX_MAX_WAKE;
+
+    if ((Tid == 0) && (ReadNoFence(&Process->ThreadCount) + 8 > LX_MAX_WAKE))
+    {
+        Capacity = (ULONG)ReadNoFence(&Process->ThreadCount) + 8;
+        Buffer = LxAlloc(Capacity * (sizeof(PETHREAD) + sizeof(PKAPC)));
+        if (Buffer != NULL)
+        {
+            Threads = Buffer;
+            Apcs = (PKAPC *)(Threads + Capacity);
+        }
+        else
+        {
+            /* FIXME: only LX_MAX_WAKE threads are woken when this allocation fails */
+            Capacity = LX_MAX_WAKE;
+        }
+    }
 
     ExAcquireFastMutex(&Process->Lock);
-    for (Entry = Process->Threads.Flink; (Entry != &Process->Threads) && (Count < LX_MAX_WAKE); Entry = Entry->Flink)
+    for (Entry = Process->Threads.Flink; (Entry != &Process->Threads) && (Count < Capacity); Entry = Entry->Flink)
     {
         PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
         PLX_THREAD Base;
@@ -215,8 +234,8 @@ LxSignalWake(
             continue;
         Base = PsPicoGetThreadContext(Thread->EThread);
         Apcs[Count] = NULL;
-        if ((Base != NULL) && (InterlockedExchange(&Base->SignalApc, 1) == 0) &&
-            ((Apcs[Count] = LxAlloc(sizeof(KAPC))) == NULL))
+        if ((Base != NULL) && !PsIsThreadTerminating(Thread->EThread) &&
+            (InterlockedExchange(&Base->SignalApc, 1) == 0) && ((Apcs[Count] = LxAlloc(sizeof(KAPC))) == NULL))
         {
             InterlockedExchange(&Base->SignalApc, 0);
         }
@@ -244,6 +263,8 @@ LxSignalWake(
         }
         ObDereferenceObject(Threads[Index]);
     }
+    if (Buffer != NULL)
+        LxFree(Buffer);
 }
 
 static
@@ -289,6 +310,8 @@ LxSignalTerminate(
         ZwClose(Handle);
     }
     ObDereferenceObject(EProcess);
+    InterlockedOr64(&Target->Pending, (LONG64)LX_SIGNAL_BIT(LX_SIGKILL));
+    LxSignalWake(Target, 0);
 }
 
 static
