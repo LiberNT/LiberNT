@@ -58,6 +58,7 @@ C_ASSERT(sizeof(DESKTOP) == 360);
 #define DF_DESTROYED        0x00008000
 #define DF_DESKWNDDESTROYED 0x00010000
 #define DF_DYING            0x00020000
+#define DF_DISPLAYCHANGED   0x00040000
 
 extern PDESKTOP gpdeskInputDesktop;
 extern PCLS DesktopWindowClass;
@@ -166,6 +167,7 @@ IntCreateDesktop(
     IN ACCESS_MASK dwDesiredAccess);
 
 VOID APIENTRY UserRedrawDesktop(VOID);
+VOID FASTCALL UserNotifyDesktopDisplayChange(PDESKTOP pdesk);
 VOID FASTCALL UserReleaseBootDisplay(VOID);
 BOOL IntRegisterShellHookWindow(HWND hWnd);
 BOOL IntDeRegisterShellHookWindow(HWND hWnd);
