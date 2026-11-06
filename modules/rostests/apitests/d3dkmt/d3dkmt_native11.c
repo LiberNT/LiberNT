@@ -1362,9 +1362,12 @@ static void TestOutputOwnership(IDXGIAdapter1 *adapter, const LUID *luid)
             ok(NT_SUCCESS(status), "Open output %S returned %#lx\n", desc.DeviceName, status);
             if (NT_SUCCESS(status))
             {
-                ok(open.AdapterLuid.LowPart == luid->LowPart && open.AdapterLuid.HighPart == luid->HighPart,
-                        "Output %S belongs to %lx:%lx, enumerated under %lx:%lx\n", desc.DeviceName,
-                        open.AdapterLuid.HighPart, open.AdapterLuid.LowPart, luid->HighPart, luid->LowPart);
+                ok(open.AdapterLuid.LowPart != 0 || open.AdapterLuid.HighPart != 0,
+                        "Output %S has no adapter LUID\n", desc.DeviceName);
+                /* Windows 11 lists a hybrid system's primary output under the preferred GPU too. */
+                if (open.AdapterLuid.LowPart != luid->LowPart || open.AdapterLuid.HighPart != luid->HighPart)
+                    trace("Output %S belongs to %lx:%lx, enumerated under %lx:%lx\n", desc.DeviceName,
+                          open.AdapterLuid.HighPart, open.AdapterLuid.LowPart, luid->HighPart, luid->LowPart);
                 CloseAdapter(open.hAdapter);
             }
         }

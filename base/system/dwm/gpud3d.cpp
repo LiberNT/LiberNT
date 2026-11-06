@@ -709,6 +709,18 @@ BOOL HasNativeDriver(const LUID &Luid)
     return Status >= 0 && Name.UmdFileName[0] != 0;
 }
 
+BOOL ScansOutOutput(const WCHAR *DeviceName, const LUID &Luid)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME Open = {};
+    lstrcpynW(Open.DeviceName, DeviceName, ARRAYSIZE(Open.DeviceName));
+    if (D3DKMTOpenAdapterFromGdiDisplayName(&Open) < 0)
+        return FALSE;
+    D3DKMT_CLOSEADAPTER Close = {};
+    Close.hAdapter = Open.hAdapter;
+    D3DKMTCloseAdapter(&Close);
+    return Open.AdapterLuid.LowPart == Luid.LowPart && Open.AdapterLuid.HighPart == Luid.HighPart;
+}
+
 void SetNativeTraceProvider(IDXGIAdapter1 *Adapter)
 {
     DXGI_ADAPTER_DESC1 Desc = {};
@@ -850,7 +862,10 @@ BOOL CreateDevice(IDXGIAdapter1 **Selected)
                 if (Adapter->EnumOutputs(OutputIndex, &Output) != S_OK)
                     break;
                 DXGI_OUTPUT_DESC OutputDesc = {};
-                if (SUCCEEDED(Output->GetDesc(&OutputDesc)) && OutputDesc.AttachedToDesktop && OutputDesc.Monitor == Monitor)
+                /* DXGI lists the primary output under a hybrid system's preferred GPU; the window
+                 * surfaces DWM imports live on the adapter that scans the output out. */
+                if (SUCCEEDED(Output->GetDesc(&OutputDesc)) && OutputDesc.AttachedToDesktop && OutputDesc.Monitor == Monitor &&
+                    ScansOutOutput(OutputDesc.DeviceName, Desc.AdapterLuid))
                     OwnsOutput = TRUE;
                 Release(Output);
                 if (OwnsOutput)
