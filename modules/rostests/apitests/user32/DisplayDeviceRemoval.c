@@ -176,8 +176,18 @@ START_TEST(DisplayDeviceRemoval)
     cr = CM_Setup_DevNode(DevInst, CM_SETUP_DEVNODE_READY);
     ok(cr == CR_SUCCESS, "CM_Setup_DevNode: %lu\n", cr);
     ok(WaitForDisplayDevice(NULL, Detached.DeviceID, TRUE, &Device), "%ls did not come back\n", Detached.DeviceID);
-    ok(!(Device.StateFlags & (DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE)),
-       "%ls came back as %ls with flags 0x%lx\n", Detached.DeviceID, Device.DeviceName, Device.StateFlags);
+    if (is_reactos())
+    {
+        /* TODO: Expect the restored adapter on an extended desktop once LiberNT has one (rdp branch 5) */
+        skip("%ls came back as %ls with flags 0x%lx, no extended desktop\n", Detached.DeviceID, Device.DeviceName,
+             Device.StateFlags);
+    }
+    else
+    {
+        ok((Device.StateFlags & (DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE)) ==
+               DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
+           "%ls came back as %ls with flags 0x%lx\n", Detached.DeviceID, Device.DeviceName, Device.StateFlags);
+    }
     ok(FindPrimary(&PrimaryAfter) && !lstrcmpiW(PrimaryAfter.DeviceName, Primary.DeviceName),
        "Primary changed from %ls to %ls\n", Primary.DeviceName, PrimaryAfter.DeviceName);
 }
