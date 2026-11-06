@@ -85,6 +85,7 @@ typedef struct _LX_GPU_CHANNEL
     LIST_ENTRY Pending;
     LIST_ENTRY Waiting;
     BOOLEAN HostAttached;
+    ULONG Generation;
     ULONG64 QueuedBytes;
     KEVENT DrainEvent;
     ULONG NextSerial;
@@ -153,6 +154,7 @@ typedef struct _LX_DRM_FILE
     ULONG CtxId;
     ULONG Capset;
     ULONG NumRings;
+    ULONG Generation;
 } LX_DRM_FILE, *PLX_DRM_FILE;
 
 static LIST_ENTRY LxGpuChannels;
@@ -1194,7 +1196,15 @@ LxDrmIoctl(
     ULONG64 Pair[2];
     ULONG Small[4];
     PLX_DRM_BO Bo;
+    BOOLEAN Current;
     LONG Error;
+    KIRQL Irql;
+
+    KeAcquireSpinLock(&Drm->Channel->Lock, &Irql);
+    Current = Drm->Channel->HostAttached && (Drm->Channel->Generation == Drm->Generation);
+    KeReleaseSpinLock(&Drm->Channel->Lock, Irql);
+    if (!Current)
+        return -LX_ENODEV;
 
     switch (Request)
     {
@@ -1438,6 +1448,7 @@ LxDrmOpen(
     PLX_DRM_FILE Drm;
     PLX_FILE File;
     BOOLEAN Attached;
+    ULONG Generation;
     KIRQL Irql;
 
     if ((Minor != 0) && (Minor != 128))
@@ -1447,6 +1458,7 @@ LxDrmOpen(
         return NULL;
     KeAcquireSpinLock(&Channel->Lock, &Irql);
     Attached = Channel->HostAttached;
+    Generation = Channel->Generation;
     KeReleaseSpinLock(&Channel->Lock, Irql);
     Drm = Attached ? LxAlloc(sizeof(*Drm)) : NULL;
     File = (Drm != NULL) ? LxFileAlloc(&LxDrmOps, Flags & (LX_O_ACCMODE | LX_O_NONBLOCK), LX_S_IFCHR) : NULL;
@@ -1459,6 +1471,7 @@ LxDrmOpen(
     }
     RtlZeroMemory(Drm, sizeof(*Drm));
     Drm->Channel = Channel;
+    Drm->Generation = Generation;
     ExInitializeFastMutex(&Drm->Lock);
     File->Object = Drm;
     File->Path = LxStrDup(Path);
@@ -1620,7 +1633,10 @@ LxGpuHostAttach(
     KeAcquireSpinLock(&Channel->Lock, &Irql);
     Busy = Channel->HostAttached;
     if (!Busy)
+    {
         Channel->HostAttached = TRUE;
+        Channel->Generation++;
+    }
     KeReleaseSpinLock(&Channel->Lock, Irql);
     if (Busy)
     {
