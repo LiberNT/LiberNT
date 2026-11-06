@@ -12,6 +12,7 @@ list(APPEND SOURCE
     SetupDiOpenDeviceInterface.c
     SetupDiGetActualModelsSection.c
     SetupInstallFile.c
+    SetupInstallRegisterDlls.c
     SetupInstallServicesFromInfSectionEx.c
     UsbInterfaceIds.c
     testlist.c)

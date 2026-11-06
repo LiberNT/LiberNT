@@ -711,6 +711,166 @@ done:
 }
 
 
+static BOOL is_wow64_dll( const WCHAR *path )
+{
+    IMAGE_DOS_HEADER dos;
+    struct
+    {
+        DWORD Signature;
+        IMAGE_FILE_HEADER FileHeader;
+        WORD Magic;
+    } nt;
+    HANDLE file;
+    DWORD read;
+    BOOL ret = FALSE;
+
+    if (sizeof(void *) != 8)
+        return FALSE;
+
+    file = CreateFileW( path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL );
+    if (file == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    if (ReadFile( file, &dos, sizeof(dos), &read, NULL ) && read == sizeof(dos) &&
+        dos.e_magic == IMAGE_DOS_SIGNATURE && dos.e_lfanew > 0 &&
+        SetFilePointer( file, dos.e_lfanew, NULL, FILE_BEGIN ) == (DWORD)dos.e_lfanew &&
+        ReadFile( file, &nt, sizeof(nt), &read, NULL ) && read == sizeof(nt) &&
+        nt.Signature == IMAGE_NT_SIGNATURE)
+    {
+        ret = (nt.FileHeader.Characteristics & IMAGE_FILE_DLL) && nt.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC;
+    }
+
+    CloseHandle( file );
+    return ret;
+}
+
+static void run_wow64_regsvr32( BOOL unregister, const WCHAR *path, INT flags, INT timeout,
+                                const WCHAR *args, SP_REGISTER_CONTROL_STATUSW *status )
+{
+    WCHAR system[MAX_PATH];
+    STARTUPINFOW startup;
+    PROCESS_INFORMATION process;
+    WCHAR *cmd_line;
+    DWORD exit_code;
+    UINT len;
+    BOOL ok;
+
+    len = GetSystemWow64DirectoryW( system, ARRAY_SIZE(system) );
+    if (!len || len >= ARRAY_SIZE(system))
+    {
+        status->FailureCode = SPREG_LOADLIBRARY;
+        status->Win32Error = len ? ERROR_BUFFER_OVERFLOW : GetLastError();
+        return;
+    }
+
+    /* FIXME: regsvr32 passes an empty DllInstall command line where the in-process path passes NULL */
+    if (!args) args = L"";
+    cmd_line = HeapAlloc( GetProcessHeap(), 0, (len + strlenW(path) + strlenW(args) + 40) * sizeof(WCHAR) );
+    if (!cmd_line)
+    {
+        status->FailureCode = SPREG_UNKNOWN;
+        status->Win32Error = ERROR_NOT_ENOUGH_MEMORY;
+        return;
+    }
+
+    sprintfW( cmd_line, L"\"%s\\regsvr32.exe\" /s", system );
+    if (unregister) strcatW( cmd_line, L" /u" );
+    if (flags & FLG_REGSVR_DLLINSTALL)
+    {
+        if (!(flags & FLG_REGSVR_DLLREGISTER)) strcatW( cmd_line, L" /n" );
+        strcatW( cmd_line, L" /i:\"" );
+        strcatW( cmd_line, args );
+        strcatW( cmd_line, L"\"" );
+    }
+    strcatW( cmd_line, L" \"" );
+    strcatW( cmd_line, path );
+    strcatW( cmd_line, L"\"" );
+
+    memset( &startup, 0, sizeof(startup) );
+    startup.cb = sizeof(startup);
+    TRACE( "executing %s\n", debugstr_w(cmd_line) );
+    ok = CreateProcessW( NULL, cmd_line, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &startup, &process );
+    HeapFree( GetProcessHeap(), 0, cmd_line );
+    if (!ok)
+    {
+        status->FailureCode = SPREG_LOADLIBRARY;
+        status->Win32Error = GetLastError();
+        return;
+    }
+    CloseHandle( process.hThread );
+
+    if (WaitForSingleObject( process.hProcess, timeout * 1000 ) == WAIT_TIMEOUT)
+    {
+        TerminateProcess( process.hProcess, 1 );
+        status->FailureCode = SPREG_TIMEOUT;
+        status->Win32Error = ERROR_TIMEOUT;
+    }
+    else if (!GetExitCodeProcess( process.hProcess, &exit_code ))
+    {
+        status->FailureCode = SPREG_UNKNOWN;
+        status->Win32Error = GetLastError();
+    }
+    else
+    {
+        /* FIXME: the regsvr32 exit code carries no loader error or HRESULT, so generic values are reported */
+        switch (exit_code)
+        {
+        case 0:
+            break;
+        case 3:
+            status->FailureCode = SPREG_LOADLIBRARY;
+            status->Win32Error = ERROR_MOD_NOT_FOUND;
+            break;
+        case 4:
+            status->FailureCode = SPREG_GETPROCADDR;
+            status->Win32Error = ERROR_PROC_NOT_FOUND;
+            break;
+        case 5:
+            status->FailureCode = SPREG_REGSVR;
+            status->Win32Error = E_FAIL;
+            break;
+        default:
+            status->FailureCode = SPREG_UNKNOWN;
+            status->Win32Error = exit_code;
+            break;
+        }
+    }
+    CloseHandle( process.hProcess );
+}
+
+static BOOL do_register_wow64_dll( const struct register_dll_info *info, const WCHAR *path,
+                                   INT flags, INT timeout, const WCHAR *args )
+{
+    SP_REGISTER_CONTROL_STATUSW status;
+
+    status.cbSize = sizeof(status);
+    status.FileName = path;
+    status.FailureCode = SPREG_SUCCESS;
+    status.Win32Error = ERROR_SUCCESS;
+
+    if (info->callback)
+    {
+        switch (info->callback( info->callback_context, SPFILENOTIFY_STARTREGISTRATION,
+                                (UINT_PTR)&status, !info->unregister ))
+        {
+        case FILEOP_ABORT:
+            SetLastError( ERROR_OPERATION_ABORTED );
+            return FALSE;
+        case FILEOP_SKIP:
+            return TRUE;
+        default:
+            break;
+        }
+    }
+
+    if (flags & (FLG_REGSVR_DLLREGISTER | FLG_REGSVR_DLLINSTALL))
+        run_wow64_regsvr32( info->unregister, path, flags, timeout, args, &status );
+
+    if (info->callback) info->callback( info->callback_context, SPFILENOTIFY_ENDREGISTRATION,
+                                        (UINT_PTR)&status, !info->unregister );
+    return TRUE;
+}
+
 static HMODULE register_dlls_com_enter( HRESULT *hr )
 {
     HMODULE ole32 = LoadLibraryW( L"ole32.dll" );
@@ -780,7 +940,11 @@ static BOOL register_dlls_callback( HINF hinf, PCWSTR field, void *arg )
         if (SetupGetStringFieldW( &context, 6, buffer, sizeof(buffer)/sizeof(WCHAR), NULL ))
             args = buffer;
 
-        ret = do_register_dll( info, path, flags, timeout, args );
+        /* TODO: launch 32-bit executables listed in RegisterDlls from a 64-bit process */
+        if (is_wow64_dll( path ))
+            ret = do_register_wow64_dll( info, path, flags, timeout, args );
+        else
+            ret = do_register_dll( info, path, flags, timeout, args );
 
     done:
         HeapFree( GetProcessHeap(), 0, path );
