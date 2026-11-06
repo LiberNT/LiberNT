@@ -12211,6 +12211,131 @@ static void test_frameset_libernt(IHTMLDocument2 *doc)
     IHTMLElement_Release(elem);
 }
 
+#define test_window_event_prop(e,w,n,ev,ew) _test_window_event_prop(__LINE__,e,w,n,ev,ew)
+static void _test_window_event_prop(unsigned line, IDispatchEx *elem, IDispatchEx *win, const WCHAR *name,
+                                    const WCHAR *elem_val, const WCHAR *win_val)
+{
+    VARIANT v;
+    HRESULT hres;
+
+    hres = get_disp_prop(elem, name, &v);
+    if(elem_val)
+        ok_(__FILE__,line)(hres == S_OK && is_bstr_variant(&v, elem_val), "%s = %08lx %s\n",
+                           wine_dbgstr_w(name), hres, wine_dbgstr_variant(&v));
+    else
+        ok_(__FILE__,line)(hres == S_OK && V_VT(&v) == VT_EMPTY, "%s = %08lx %s\n",
+                           wine_dbgstr_w(name), hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+
+    hres = get_disp_prop(win, name, &v);
+    if(win_val)
+        ok_(__FILE__,line)(hres == S_OK && is_bstr_variant(&v, win_val), "window %s = %08lx %s\n",
+                           wine_dbgstr_w(name), hres, wine_dbgstr_variant(&v));
+    else
+        ok_(__FILE__,line)(hres == S_OK && V_VT(&v) == VT_NULL, "window %s = %08lx %s\n",
+                           wine_dbgstr_w(name), hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+}
+
+static void test_body_window_events_libernt(IHTMLDocument2 *doc)
+{
+    static const WCHAR *events[] = {
+        L"onload", L"onunload", L"onbeforeunload", L"onblur", L"onfocus", L"onscroll",
+        L"onbeforeprint", L"onafterprint", L"onresize"
+    };
+    DISPID propput_arg = DISPID_PROPERTYPUT;
+    IDispatchEx *windisp, *dispex;
+    IHTMLElement *body, *elem;
+    IHTMLDOMNode *node;
+    IHTMLWindow2 *win;
+    DISPPARAMS dp;
+    DISPID dispid;
+    HRESULT hres;
+    unsigned i;
+    VARIANT v;
+    BSTR str;
+
+    hres = IHTMLDocument2_get_body(doc, &body);
+    ok(hres == S_OK && body, "get_body: %08lx %p\n", hres, body);
+    if(!body)
+        return;
+    hres = IHTMLDocument2_get_parentWindow(doc, &win);
+    ok(hres == S_OK, "get_parentWindow failed: %08lx\n", hres);
+    hres = IHTMLWindow2_QueryInterface(win, &IID_IDispatchEx, (void**)&windisp);
+    ok(hres == S_OK, "Could not get window IDispatchEx: %08lx\n", hres);
+
+    for(i = 0; i < ARRAY_SIZE(events); i++) {
+        winetest_push_context("%s", wine_dbgstr_w(events[i]));
+
+        elem = test_create_elem(doc, L"body");
+        hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+        ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+        test_window_event_prop(dispex, windisp, events[i], NULL, NULL);
+        hres = put_disp_prop(dispex, events[i], L"d()");
+        ok(hres == S_OK, "detached put failed: %08lx\n", hres);
+        test_window_event_prop(dispex, windisp, events[i], NULL, NULL);
+        node = test_node_append_child((IUnknown*)body, (IUnknown*)elem);
+        V_VT(&v) = VT_ERROR;
+        hres = get_disp_prop(dispex, events[i], &v);
+        ok(hres == S_OK && V_VT(&v) == VT_NULL, "attached after detached put = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+        test_node_remove_child((IUnknown*)body, node);
+        IHTMLDOMNode_Release(node);
+        IDispatchEx_Release(dispex);
+        IHTMLElement_Release(elem);
+
+        elem = test_create_elem(doc, L"body");
+        hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+        ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+        node = test_node_append_child((IUnknown*)body, (IUnknown*)elem);
+        hres = put_disp_prop(dispex, events[i], L"n()");
+        ok(hres == S_OK, "nested put failed: %08lx\n", hres);
+        test_window_event_prop(dispex, windisp, events[i], L"n()", L"n()");
+        test_node_remove_child((IUnknown*)body, node);
+        test_window_event_prop(dispex, windisp, events[i], NULL, L"n()");
+        IHTMLDOMNode_Release(node);
+        IDispatchEx_Release(dispex);
+        IHTMLElement_Release(elem);
+
+        elem = test_create_elem(doc, L"frameset");
+        hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+        ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+        node = test_node_append_child((IUnknown*)body, (IUnknown*)elem);
+        hres = put_disp_prop(dispex, events[i], L"f()");
+        ok(hres == S_OK, "nested frameset put failed: %08lx\n", hres);
+        test_window_event_prop(dispex, windisp, events[i], L"f()", L"f()");
+        test_node_remove_child((IUnknown*)body, node);
+        test_window_event_prop(dispex, windisp, events[i], NULL, L"f()");
+        IHTMLDOMNode_Release(node);
+        IDispatchEx_Release(dispex);
+        IHTMLElement_Release(elem);
+
+        hres = IHTMLElement_QueryInterface(body, &IID_IDispatchEx, (void**)&dispex);
+        ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+        hres = put_disp_prop(dispex, events[i], L"a()");
+        ok(hres == S_OK, "body put failed: %08lx\n", hres);
+        test_window_event_prop(dispex, windisp, events[i], L"a()", L"a()");
+        IDispatchEx_Release(dispex);
+
+        str = SysAllocString(events[i]);
+        hres = IDispatchEx_GetDispID(windisp, str, fdexNameCaseSensitive, &dispid);
+        SysFreeString(str);
+        ok(hres == S_OK, "window GetDispID failed: %08lx\n", hres);
+        V_VT(&v) = VT_NULL;
+        dp.rgvarg = &v;
+        dp.rgdispidNamedArgs = &propput_arg;
+        dp.cArgs = dp.cNamedArgs = 1;
+        if(SUCCEEDED(hres))
+            hres = IDispatchEx_InvokeEx(windisp, dispid, LOCALE_NEUTRAL, DISPATCH_PROPERTYPUT, &dp, NULL, NULL, NULL);
+        ok(hres == S_OK, "window reset failed: %08lx\n", hres);
+
+        winetest_pop_context();
+    }
+
+    IDispatchEx_Release(windisp);
+    IHTMLWindow2_Release(win);
+    IHTMLElement_Release(body);
+}
+
 static void test_frameset_events_libernt(IHTMLDocument2 *doc)
 {
     static const WCHAR *events[] = { L"onload", L"onunload", L"onbeforeunload", L"onbeforeprint", L"onafterprint" };
@@ -15267,6 +15392,7 @@ START_TEST(dom)
         run_domtest(doc_blank, test_tag_attr_only_libernt);
         run_domtest(doc_blank, test_attr_name_alias_libernt);
         run_domtest(doc_blank, test_frameset_libernt);
+        run_domtest(doc_blank, test_body_window_events_libernt);
         run_domtest(doc_blank, test_text_elements_libernt);
         run_domtest(doc_blank_ie9, test_text_elements_ie9_libernt);
         if(is_ie9plus) {

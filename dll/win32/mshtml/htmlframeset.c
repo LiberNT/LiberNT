@@ -83,43 +83,6 @@ static HRESULT get_int_attr(HTMLElement *elem, const WCHAR *name, VARIANT *p)
     return elem_get_attr_string(elem, name, &V_BSTR(p));
 }
 
-static EventTarget *get_window_event_target(HTMLFrameSetElement *This)
-{
-    HTMLDocumentNode *doc = This->element.node.doc;
-    nsIDOMHTMLElement *nsbody = NULL;
-    EventTarget *ret = NULL;
-    nsresult nsres;
-
-    if(!doc || !doc->window || !doc->html_document || !This->element.html_element)
-        return NULL;
-
-    nsres = nsIDOMHTMLDocument_GetBody(doc->html_document, &nsbody);
-    if(NS_FAILED(nsres) || !nsbody)
-        return NULL;
-    if(nsbody == This->element.html_element)
-        ret = &doc->window->event_target;
-    nsIDOMHTMLElement_Release(nsbody);
-    return ret;
-}
-
-static HRESULT put_window_event(HTMLFrameSetElement *This, eventid_t eid, VARIANT *v)
-{
-    EventTarget *target = get_window_event_target(This);
-
-    return target ? set_event_handler(target, eid, v) : S_OK;
-}
-
-static HRESULT get_window_event(HTMLFrameSetElement *This, eventid_t eid, VARIANT *p)
-{
-    EventTarget *target = get_window_event_target(This);
-
-    if(!target) {
-        V_VT(p) = VT_EMPTY;
-        return S_OK;
-    }
-    return get_event_handler(target, eid, p);
-}
-
 static inline HTMLFrameSetElement *impl_from_IHTMLFrameSetElement(IHTMLFrameSetElement *iface)
 {
     return CONTAINING_RECORD(iface, HTMLFrameSetElement, IHTMLFrameSetElement_iface);
@@ -200,32 +163,32 @@ static HRESULT WINAPI HTMLFrameSetElement_get_name(IHTMLFrameSetElement *iface, 
 
 static HRESULT WINAPI HTMLFrameSetElement_put_onload(IHTMLFrameSetElement *iface, VARIANT v)
 {
-    return put_window_event(impl_from_IHTMLFrameSetElement(iface), EVENTID_LOAD, &v);
+    return set_node_event(&impl_from_IHTMLFrameSetElement(iface)->element.node, EVENTID_LOAD, &v);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement_get_onload(IHTMLFrameSetElement *iface, VARIANT *p)
 {
-    return get_window_event(impl_from_IHTMLFrameSetElement(iface), EVENTID_LOAD, p);
+    return get_node_event(&impl_from_IHTMLFrameSetElement(iface)->element.node, EVENTID_LOAD, p);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement_put_onunload(IHTMLFrameSetElement *iface, VARIANT v)
 {
-    return put_window_event(impl_from_IHTMLFrameSetElement(iface), EVENTID_UNLOAD, &v);
+    return set_node_event(&impl_from_IHTMLFrameSetElement(iface)->element.node, EVENTID_UNLOAD, &v);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement_get_onunload(IHTMLFrameSetElement *iface, VARIANT *p)
 {
-    return get_window_event(impl_from_IHTMLFrameSetElement(iface), EVENTID_UNLOAD, p);
+    return get_node_event(&impl_from_IHTMLFrameSetElement(iface)->element.node, EVENTID_UNLOAD, p);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement_put_onbeforeunload(IHTMLFrameSetElement *iface, VARIANT v)
 {
-    return put_window_event(impl_from_IHTMLFrameSetElement(iface), EVENTID_BEFOREUNLOAD, &v);
+    return set_node_event(&impl_from_IHTMLFrameSetElement(iface)->element.node, EVENTID_BEFOREUNLOAD, &v);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement_get_onbeforeunload(IHTMLFrameSetElement *iface, VARIANT *p)
 {
-    return get_window_event(impl_from_IHTMLFrameSetElement(iface), EVENTID_BEFOREUNLOAD, p);
+    return get_node_event(&impl_from_IHTMLFrameSetElement(iface)->element.node, EVENTID_BEFOREUNLOAD, p);
 }
 
 static const IHTMLFrameSetElementVtbl HTMLFrameSetElementVtbl = {
@@ -268,22 +231,22 @@ DISPEX_IDISPATCH_IMPL(HTMLFrameSetElement2, IHTMLFrameSetElement2,
 
 static HRESULT WINAPI HTMLFrameSetElement2_put_onbeforeprint(IHTMLFrameSetElement2 *iface, VARIANT v)
 {
-    return put_window_event(impl_from_IHTMLFrameSetElement2(iface), EVENTID_BEFOREPRINT, &v);
+    return set_node_event(&impl_from_IHTMLFrameSetElement2(iface)->element.node, EVENTID_BEFOREPRINT, &v);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement2_get_onbeforeprint(IHTMLFrameSetElement2 *iface, VARIANT *p)
 {
-    return get_window_event(impl_from_IHTMLFrameSetElement2(iface), EVENTID_BEFOREPRINT, p);
+    return get_node_event(&impl_from_IHTMLFrameSetElement2(iface)->element.node, EVENTID_BEFOREPRINT, p);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement2_put_onafterprint(IHTMLFrameSetElement2 *iface, VARIANT v)
 {
-    return put_window_event(impl_from_IHTMLFrameSetElement2(iface), EVENTID_AFTERPRINT, &v);
+    return set_node_event(&impl_from_IHTMLFrameSetElement2(iface)->element.node, EVENTID_AFTERPRINT, &v);
 }
 
 static HRESULT WINAPI HTMLFrameSetElement2_get_onafterprint(IHTMLFrameSetElement2 *iface, VARIANT *p)
 {
-    return get_window_event(impl_from_IHTMLFrameSetElement2(iface), EVENTID_AFTERPRINT, p);
+    return get_node_event(&impl_from_IHTMLFrameSetElement2(iface)->element.node, EVENTID_AFTERPRINT, p);
 }
 
 static const IHTMLFrameSetElement2Vtbl HTMLFrameSetElement2Vtbl = {
@@ -409,7 +372,8 @@ static const NodeImplVtbl HTMLFrameSetElementImplVtbl = {
     .clsid                 = &CLSID_HTMLFrameSetSite,
     .cpc_entries           = HTMLElement_cpc,
     .clone                 = HTMLElement_clone,
-    .get_attr_col          = HTMLElement_get_attr_col
+    .get_attr_col          = HTMLElement_get_attr_col,
+    .get_event_prop_target = get_window_event_prop_target
 };
 
 static const event_target_vtbl_t HTMLFrameSetElement_event_target_vtbl = {

@@ -4394,6 +4394,72 @@ sync_test("text element props", function() {
     ok(e.size === 3, "basefont.size after setAttribute(x.htm) = " + e.size);
 });
 
+sync_test("body window event props", function() {
+    var v = document.documentMode, i, j, e, f, name, prev, todo;
+    var forwarded = [ "onload", "onunload", "onbeforeunload", "onblur", "onfocus", "onbeforeprint", "onafterprint", "onresize" ];
+    var own = [ "onerror", "onscroll" ];
+    if(v < 9)
+        return;
+
+    function mk(tag, attach) {
+        var r = document.createElement(tag);
+        if(attach)
+            document.body.appendChild(r);
+        return r;
+    }
+
+    for(i = 0; i < forwarded.length; i++) {
+        name = forwarded[i];
+        todo = v >= 11 && name === "onresize";
+        prev = window[name];
+        window[name] = null;
+
+        e = mk("body", false);
+        f = function() {};
+        ok(e[name] === undefined, "detached body." + name + " = " + e[name]);
+        e[name] = f;
+        todo_wine_if(todo).ok(e[name] === undefined, "detached body." + name + " after put = " + e[name]);
+        ok(window[name] === null, "window." + name + " after detached body put = " + window[name]);
+        document.body.appendChild(e);
+        todo_wine_if(todo).ok(e[name] === null, "body." + name + " attached after detached put = " + e[name]);
+        document.body.removeChild(e);
+
+        for(j = 0; j < 2; j++) {
+            if(j && name === "onfocus")
+                continue;
+            e = mk(j ? "frameset" : "body", true);
+            f = function() {};
+            e[name] = f;
+            ok(e[name] === f, e.tagName + "." + name + " = " + e[name]);
+            todo_wine_if(todo).ok(window[name] === f, "window." + name + " after nested " + e.tagName + " put = " + window[name]);
+            document.body.removeChild(e);
+            todo_wine_if(todo).ok(e[name] === undefined, "removed " + e.tagName + "." + name + " = " + e[name]);
+            todo_wine_if(todo).ok(window[name] === f, "window." + name + " after removing " + e.tagName + " = " + window[name]);
+        }
+
+        f = function() {};
+        document.body[name] = f;
+        ok(document.body[name] === f, "document.body." + name + " = " + document.body[name]);
+        todo_wine_if(todo).ok(window[name] === f, "window." + name + " after document.body put = " + window[name]);
+        document.body[name] = null;
+        window[name] = prev;
+    }
+
+    for(i = 0; i < own.length; i++) {
+        name = own[i];
+        prev = window[name];
+        window[name] = null;
+        e = mk("body", true);
+        f = function() {};
+        e[name] = f;
+        ok(e[name] === f, "body." + name + " = " + e[name]);
+        ok(window[name] === null, "window." + name + " after nested body put = " + window[name]);
+        document.body.removeChild(e);
+        ok(e[name] === f, "removed body." + name + " = " + e[name]);
+        window[name] = prev;
+    }
+});
+
 sync_test("prototype props", function() {
     var v = document.documentMode;
     if(v < 9)

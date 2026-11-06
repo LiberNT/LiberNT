@@ -4913,7 +4913,9 @@ void event_attr_changed(HTMLDocumentNode *doc, nsIDOMElement *nselem, const WCHA
 
         disp = script_parse_event(doc->window, value);
         if(disp) {
-            set_event_handler_disp(get_node_event_prop_target(node, eid), eid, disp);
+            EventTarget *target = get_node_event_prop_target(node, eid);
+            if(target)
+                set_event_handler_disp(target, eid, disp);
             IDispatch_Release(disp);
         }
     }
@@ -4929,6 +4931,7 @@ void check_event_attr(HTMLDocumentNode *doc, nsIDOMElement *nselem)
     const PRUnichar *name, *value;
     nsAString name_str, value_str;
     HTMLDOMNode *node = NULL;
+    EventTarget *target;
     cpp_bool has_attrs;
     nsIDOMAttr *attr;
     IDispatch *disp;
@@ -4992,7 +4995,9 @@ void check_event_attr(HTMLDocumentNode *doc, nsIDOMElement *nselem)
             }
         }
 
-        set_event_handler_disp(get_node_event_prop_target(node, eid), eid, disp);
+        target = get_node_event_prop_target(node, eid);
+        if(target)
+            set_event_handler_disp(target, eid, disp);
         IDispatch_Release(disp);
     }
 
