@@ -5249,21 +5249,25 @@ XHCI_HandleEnumerationTransfer(
                 BufferLength >= sizeof(USB_DEVICE_DESCRIPTOR))
             {
                 PUSB_DEVICE_DESCRIPTOR DevDesc = (PUSB_DEVICE_DESCRIPTOR)Buffer;
+                ULONG DescriptorMps = DevDesc->bMaxPacketSize0;
 
+                /* USB 3.2 9.6.1: a bcdUSB 3.x device gives bMaxPacketSize0 as an exponent (9 = 512). */
+                if (DevDesc->bcdUSB >= 0x0300 && DescriptorMps < 16)
+                    DescriptorMps = 1UL << DescriptorMps;
 
                 if (Endpoint->EndpointProperties.DeviceSpeed < UsbSuperSpeed &&
-                    Endpoint->EndpointProperties.MaxPacketSize != DevDesc->bMaxPacketSize0 &&
-                    DevDesc->bMaxPacketSize0 != 0)
+                    Endpoint->EndpointProperties.MaxPacketSize != DescriptorMps &&
+                    DescriptorMps != 0)
                 {
-                    DPRINT1("usbxhci: Detected EP0 MPS mismatch (Msg=%u vs Ctx=%u) -- updating\n",
-                            DevDesc->bMaxPacketSize0,
+                    DPRINT1("usbxhci: Detected EP0 MPS mismatch (Msg=%lu vs Ctx=%lu) -- updating\n",
+                            DescriptorMps,
                             Endpoint->EndpointProperties.MaxPacketSize);
 
-                    Endpoint->EndpointProperties.MaxPacketSize = DevDesc->bMaxPacketSize0;
+                    Endpoint->EndpointProperties.MaxPacketSize = DescriptorMps;
 
                     if (KeGetCurrentIrql() <= PASSIVE_LEVEL)
                     {
-                        XHCI_UpdateEp0MaxPacketSize(Extension, Endpoint->Slot, DevDesc->bMaxPacketSize0);
+                        XHCI_UpdateEp0MaxPacketSize(Extension, Endpoint->Slot, DescriptorMps);
                     }
                     else
                     {
@@ -5281,7 +5285,7 @@ XHCI_HandleEnumerationTransfer(
                             {
                                 Work->Extension = Extension;
                                 Work->Slot = Endpoint->Slot;
-                                Work->MaxPacketSize = DevDesc->bMaxPacketSize0;
+                                Work->MaxPacketSize = DescriptorMps;
                                 ExInitializeWorkItem(&Work->WorkItem, XHCI_UpdateEp0MaxPacketSizeWorker, Work);
                                 ExQueueWorkItem(&Work->WorkItem, CriticalWorkQueue);
                             }
