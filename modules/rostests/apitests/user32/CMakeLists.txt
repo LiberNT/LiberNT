@@ -24,6 +24,7 @@ list(APPEND SOURCE
     CreateStructHook.c
     DisplayChangeBroadcast.c
     DisplayChangeDesktops.c
+    DisplayChangeMaximized.c
     DisplayDeviceAttach.c
     DisplayDeviceRemoval.c
     DisplayTopology.c
