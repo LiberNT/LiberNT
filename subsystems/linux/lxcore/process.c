@@ -1062,6 +1062,9 @@ LxProcessExited(
         {
             PLX_CHILD Child = CONTAINING_RECORD(RemoveHeadList(&Orphans), LX_CHILD, Link);
 
+            /* FIXME: Linux sends the parent-death signal when the creating thread exits, not the whole process */
+            if (!Child->Lx->Exited && (Child->Lx->PdeathSignal != 0))
+                LxSignalSend(Child->Lx, NULL, (LONG)Child->Lx->PdeathSignal, NULL);
             if ((Reaper == NULL) || Reaper->Exited)
             {
                 LxProcessUnregister(Child->Lx);
