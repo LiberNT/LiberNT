@@ -55,6 +55,10 @@ ULONG DxgkCapsCoreReportedVersion(_In_ const DXGK_CAPS_INPUT *Input);
  * WDDM 2.0 selector, are listed explicitly.
  */
 ULONG DxgkCapsCoreInterfaceVersionToLevel(_In_ ULONG InterfaceVersion);
+ULONG DxgkCapsCoreDriverCapsSize(_In_ ULONG InterfaceVersion);
+ULONG DxgkCapsCorePhysicalAdapterCapsSize(_In_ ULONG InterfaceVersion);
+BOOLEAN DxgkCapsCoreStablePowerSet(_Inout_ PLONG ProcessReferences, _Inout_ PLONG AdapterReferences, _In_ BOOLEAN Enabled);
+BOOLEAN DxgkCapsCoreStablePowerRelease(_Inout_ PLONG ProcessReferences, _Inout_ PLONG AdapterReferences);
 BOOLEAN DxgkCapsCoreInterfaceVersionAtLeast(
     _In_ ULONG InterfaceVersion,
     _In_ ULONG MinimumLevel);

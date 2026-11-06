@@ -21,6 +21,8 @@ STRINGTABLE
 ます。\n"
     WCMD_CHDIR, "CHDIR <ディレクトリ> は現在の既定ディレクトリを変更します。\n"
     WCMD_CLS, "CLSはコンソール画面をクリアします。\n"
+    WCMD_BREAK, "BREAK は DOS の拡張 CTRL+C チェックを設定または解除します。Windows では効果\n\
+がなく、DOS のバッチ ファイルのために残されています。\n"
     WCMD_COPY, "COPY <ファイル名> はファイルをコピーします。\n"
     WCMD_DATE, "DATE はシステム日を表示または変更します。\n"
     WCMD_DEL, "DEL <ファイル名> はファイルやファイル群を削除します。\n"

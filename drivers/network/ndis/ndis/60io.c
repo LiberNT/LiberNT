@@ -193,7 +193,10 @@ Ndis6IoInitDmaAdapter(
 
     dmaAdapter = IoGetDmaAdapter(Pdo, &desc, &numMapRegs);
     if (dmaAdapter == NULL)
+    {
+        DbgPrint("NDIS6: IoGetDmaAdapter failed for PDO %p\n", Pdo);
         return NDIS_STATUS_RESOURCES;
+    }
 
     Ext->DmaAdapter           = dmaAdapter;
     Ext->NumberOfMapRegisters = numMapRegs;
@@ -249,6 +252,9 @@ NdisMRegisterScatterGatherDma(
     Status = Ndis6IoInitDmaAdapter(Ext, Ext->PhysicalDeviceObject);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
+
+    DmaDescription->ScatterGatherListSize = FIELD_OFFSET(SCATTER_GATHER_LIST, Elements) +
+        (ULONG)(BYTES_TO_PAGES(DmaDescription->MaximumPhysicalMapping) + 1) * sizeof(SCATTER_GATHER_ELEMENT);
 
     /* A3: save the driver's ProcessSGListHandler + MaximumPhysicalMapping
      * so NdisMAllocateNetBufferSGList can call the driver back when the
@@ -607,7 +613,10 @@ Ndis6MAllocateSharedMemory(
     va = Ext->DmaAdapter->DmaOperations->AllocateCommonBuffer(
         Ext->DmaAdapter, Length, &pa, FALSE);
     if (va == NULL)
+    {
+        DbgPrint("NDIS6: NdisMAllocateSharedMemory of %lu bytes failed\n", Length);
         return;
+    }
 
     *VirtualAddress = va;
     *PhysicalAddress = pa;

@@ -367,6 +367,10 @@ CODE_SEG("INIT")
 BOOLEAN
 CcInitializeCacheManager(VOID);
 
+ULONG
+CcUnmapIdleViews(
+    _In_ SIZE_T Bytes);
+
 PROS_VACB
 CcRosLookupVacb(
     PROS_SHARED_CACHE_MAP SharedCacheMap,

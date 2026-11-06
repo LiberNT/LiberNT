@@ -133,6 +133,19 @@ IsNameRangeValid(_In_ const UCHAR* PathBuffer,
     return TRUE;
 }
 
+BOOLEAN
+FileRecord::IsWofBacked()
+{
+    PAttribute Attribute = GetAttribute(TypeReparsePoint, NULL);
+    UINT32 Tag = 0;
+    ULONG BytesRemaining = sizeof(Tag);
+
+    return Attribute &&
+           NT_SUCCESS(CopyData(Attribute, reinterpret_cast<PUCHAR>(&Tag), &BytesRemaining, 0)) &&
+           BytesRemaining == 0 &&
+           Tag == NTFS_IO_REPARSE_TAG_WOF;
+}
+
 NTSTATUS
 FileRecord::ReadReparsePoint(_In_opt_ PUCHAR Buffer,
                              _Inout_ PULONG BufferLength)

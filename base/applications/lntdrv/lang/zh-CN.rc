@@ -134,6 +134,7 @@ BEGIN
     IDS_ERROR_NOT_IN_USE "该设备已不再使用此目录驱动程序。"
     IDS_ERROR_NO_SIGNATURE "此程序包没有签名。"
     IDS_ERROR_OFFLINE "无法访问 Microsoft 更新目录。请检查此电脑是否已连接到 Internet。"
+    IDS_ERROR_THROTTLED "Microsoft 更新目录正在限制来自此电脑的搜索。请过几分钟再试。"
     IDS_ERROR_SIGNATURE "程序包签名不受信任: %1"
     IDS_ERROR_CODE "错误 %1"
     IDS_STATUS_MISSING "缺少驱动程序"

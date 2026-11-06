@@ -185,6 +185,110 @@ static void TestMultipleUserAPCs(void)
     ok_long(s_record[2], 6);
 }
 
+#define APC_WAIT_RACE_ITERATIONS 512
+
+typedef struct _APC_WAIT_RACE_CONTEXT
+{
+    HANDLE Ready;
+    HANDLE Done;
+    HANDLE Never;
+    volatile LONG Delivered;
+    volatile LONG Failed;
+} APC_WAIT_RACE_CONTEXT;
+
+static APC_WAIT_RACE_CONTEXT RaceContext;
+
+static VOID NTAPI RaceApc(ULONG_PTR Parameter)
+{
+    APC_WAIT_RACE_CONTEXT *Context = (APC_WAIT_RACE_CONTEXT *)Parameter;
+    InterlockedIncrement(&Context->Delivered);
+}
+
+static DWORD WINAPI RaceWaitThread(LPVOID Parameter)
+{
+    APC_WAIT_RACE_CONTEXT *Context = Parameter;
+    DWORD Result;
+    LONG Index;
+
+    for (Index = 0; Index < APC_WAIT_RACE_ITERATIONS; ++Index)
+    {
+        SetEvent(Context->Ready);
+        Result = WaitForSingleObjectEx(Context->Never, 3000, TRUE);
+        if (Result != WAIT_IO_COMPLETION || Context->Delivered != Index + 1)
+        {
+            InterlockedExchange(&Context->Failed, 1);
+            SetEvent(Context->Done);
+            return 1;
+        }
+        SetEvent(Context->Done);
+    }
+    return 0;
+}
+
+static void TestUserApcWaitRace(void)
+{
+    DWORD_PTR ProcessMask, SystemMask, FirstCpu, SecondCpu, PreviousMask;
+    DWORD Result, Index;
+    HANDLE Thread;
+    BOOL Queued;
+
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &ProcessMask, &SystemMask))
+    {
+        skip("GetProcessAffinityMask failed %lu\n", GetLastError());
+        return;
+    }
+    FirstCpu = ProcessMask & (0 - ProcessMask);
+    ProcessMask &= ~FirstCpu;
+    SecondCpu = ProcessMask & (0 - ProcessMask);
+    if (!FirstCpu || !SecondCpu)
+    {
+        skip("Two processors are required for the APC wait race\n");
+        return;
+    }
+
+    RaceContext.Ready = CreateEventW(NULL, FALSE, FALSE, NULL);
+    RaceContext.Done = CreateEventW(NULL, FALSE, FALSE, NULL);
+    RaceContext.Never = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(RaceContext.Ready && RaceContext.Done && RaceContext.Never,
+       "CreateEventW failed %lu\n", GetLastError());
+    if (!RaceContext.Ready || !RaceContext.Done || !RaceContext.Never)
+        goto Cleanup;
+    RaceContext.Delivered = 0;
+    RaceContext.Failed = 0;
+    Thread = CreateThread(NULL, 0, RaceWaitThread, &RaceContext, CREATE_SUSPENDED, NULL);
+    ok(Thread != NULL, "CreateThread failed %lu\n", GetLastError());
+    if (!Thread) goto Cleanup;
+    ok(SetThreadAffinityMask(Thread, SecondCpu) != 0, "Target affinity failed %lu\n", GetLastError());
+    PreviousMask = SetThreadAffinityMask(GetCurrentThread(), FirstCpu);
+    ok(PreviousMask != 0, "Producer affinity failed %lu\n", GetLastError());
+    ResumeThread(Thread);
+
+    for (Index = 0; Index < APC_WAIT_RACE_ITERATIONS; ++Index)
+    {
+        Result = WaitForSingleObject(RaceContext.Ready, 5000);
+        if (Result != WAIT_OBJECT_0) break;
+        Queued = QueueUserAPC(RaceApc, Thread, (ULONG_PTR)&RaceContext);
+        if (!Queued) break;
+        Result = WaitForSingleObject(RaceContext.Done, 5000);
+        if (Result != WAIT_OBJECT_0 || RaceContext.Failed) break;
+    }
+    ok(Index == APC_WAIT_RACE_ITERATIONS, "APC wait race stopped at %lu, result %lu, error %lu\n",
+       Index, Result, GetLastError());
+    if (PreviousMask) SetThreadAffinityMask(GetCurrentThread(), PreviousMask);
+    if (Index != APC_WAIT_RACE_ITERATIONS) SetEvent(RaceContext.Never);
+    Result = WaitForSingleObject(Thread, 5000);
+    ok(Result == WAIT_OBJECT_0, "Worker did not terminate: %lu\n", Result);
+    CloseHandle(Thread);
+    if (Result != WAIT_OBJECT_0) return;
+    ok(RaceContext.Delivered == APC_WAIT_RACE_ITERATIONS,
+       "Delivered %ld APCs\n", RaceContext.Delivered);
+
+Cleanup:
+    if (RaceContext.Never) CloseHandle(RaceContext.Never);
+    if (RaceContext.Done) CloseHandle(RaceContext.Done);
+    if (RaceContext.Ready) CloseHandle(RaceContext.Ready);
+}
+
 START_TEST(QueueUserAPC)
 {
     s_hMainRecorded = CreateSemaphoreW(NULL, 0, 3, NULL);
@@ -193,6 +297,7 @@ START_TEST(QueueUserAPC)
     TestForSleepEx();
     TestForWaitForSingleObjectEx();
     TestMultipleUserAPCs();
+    TestUserApcWaitRace();
 
     CloseHandle(s_hMainRecorded);
 }

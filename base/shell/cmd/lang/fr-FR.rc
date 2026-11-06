@@ -21,6 +21,8 @@ effectués dans le fichier appelé sont répercutés dans l'appelant.\n"
 courant.\n"
     WCMD_CHDIR, "CHDIR <répertoire> change le répertoire courant.\n"
     WCMD_CLS, "CLS efface l'écran de la console.\n"
+    WCMD_BREAK, "BREAK active ou désactive la vérification étendue de CTRL+C sous DOS. Cette\n\
+commande est sans effet sous Windows et reste pour les fichiers de commandes DOS.\n"
     WCMD_COPY, "COPY copie un ou plusieurs fichiers.\n"
     WCMD_DATE, "DATE affiche ou modifie la date système.\n"
     WCMD_DEL, "DEL <fichier> efface un fichier ou un groupe de fichiers.\n"

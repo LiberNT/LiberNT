@@ -30,8 +30,10 @@ KMT_TESTFUNC Test_NtCreateSection;
 KMT_TESTFUNC Test_NtSystemDebugControl;
 KMT_TESTFUNC Test_NtUserPhysicalPages;
 KMT_TESTFUNC Test_NtProcessClone;
+KMT_TESTFUNC Test_BatteryClassNotify;
 KMT_TESTFUNC Test_PoIrp;
 KMT_TESTFUNC Test_PoFxState;
+KMT_TESTFUNC Test_NdisSgDma;
 KMT_TESTFUNC Test_IoDeviceNumaNode;
 KMT_TESTFUNC Test_ExWddmPoFx;
 KMT_TESTFUNC Test_RtlAvlTree;
@@ -49,6 +51,7 @@ KMT_TESTFUNC Test_RtlUnicodeString;
 KMT_TESTFUNC Test_TcpIpIoctl;
 KMT_TESTFUNC Test_TcpIpTdi;
 KMT_TESTFUNC Test_TcpIpConnect;
+KMT_TESTFUNC Test_TcpIpCancelReceive;
 KMT_TESTFUNC Test_WfpListen;
 KMT_TESTFUNC Test_WfpTcp;
 KMT_TESTFUNC Test_WfpUdp;
@@ -78,12 +81,14 @@ const KMT_TEST TestList[] =
     { "IoReadWrite",                  Test_IoReadWrite },
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },
+    { "NdisSgDma",                    Test_NdisSgDma },
     { "NtSystemDebugControl",         Test_NtSystemDebugControl },
     { "NtUserPhysicalPages",          Test_NtUserPhysicalPages },
     { "NtProcessClone",               Test_NtProcessClone },
     { "ExWddmPoFx",                    Test_ExWddmPoFx },
     { "PoFxState",                     Test_PoFxState },
     { "IoDeviceNumaNode",              Test_IoDeviceNumaNode },
+    { "BatteryClassNotify",           Test_BatteryClassNotify },
     { "PoIrp",                        Test_PoIrp },
     { "RtlAvlTree",                   Test_RtlAvlTree },
     { "RtlException",                 Test_RtlException },
@@ -98,6 +103,7 @@ const KMT_TEST TestList[] =
     { "RtlUnicodeString",             Test_RtlUnicodeString },
     { "TcpIpTdi",                     Test_TcpIpTdi },
     { "TcpIpConnect",                 Test_TcpIpConnect },
+    { "TcpIpCancelReceive",           Test_TcpIpCancelReceive },
     { "WfpListen",                    Test_WfpListen },
     { "WfpTcp",                       Test_WfpTcp },
     { "WfpUdp",                       Test_WfpUdp },

@@ -17,6 +17,7 @@ list(APPEND SOURCE
     sdset.c
     sdshow.c
     start.c
+    trigger.c
     usage.c
     sc.h)
 

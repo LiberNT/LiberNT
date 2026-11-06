@@ -1118,10 +1118,17 @@ static HWND create_parent_window(void)
 
     if (!register_parent_wnd_class()) return NULL;
 
+#ifdef __REACTOS__
+    hwnd = CreateWindowExA(0, "MyTestWnd", "Blah", WS_OVERLAPPEDWINDOW,
+      CW_USEDEFAULT, CW_USEDEFAULT, 672+2*(GetSystemMetrics(SM_CXSIZEFRAME)+GetSystemMetrics(SM_CXPADDEDBORDER)),
+      226+GetSystemMetrics(SM_CYCAPTION)+2*(GetSystemMetrics(SM_CYSIZEFRAME)+GetSystemMetrics(SM_CXPADDEDBORDER)),
+      NULL, NULL, GetModuleHandleA(NULL), 0);
+#else
     hwnd = CreateWindowExA(0, "MyTestWnd", "Blah", WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, CW_USEDEFAULT, 672+2*GetSystemMetrics(SM_CXSIZEFRAME),
       226+GetSystemMetrics(SM_CYCAPTION)+2*GetSystemMetrics(SM_CYSIZEFRAME),
       NULL, NULL, GetModuleHandleA(NULL), 0);
+#endif
 
     ShowWindow(hwnd, SW_SHOW);
     return hwnd;

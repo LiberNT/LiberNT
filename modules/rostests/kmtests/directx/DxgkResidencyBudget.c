@@ -270,8 +270,20 @@ static VOID TestSharedProcessCharges(VOID)
     ok_eq_ulonglong(BudgetA.CurrentUsage, 0ULL);
 }
 
+static VOID TestSegmentBudgetGroup(VOID)
+{
+    ok_eq_int(DxgkResidencyCoreSegmentBudgetGroup(TRUE, FALSE, FALSE, TRUE), DxgkResidencyBudgetGroupLocal);
+    ok_eq_int(DxgkResidencyCoreSegmentBudgetGroup(FALSE, TRUE, TRUE, TRUE), DxgkResidencyBudgetGroupNonLocal);
+    ok_eq_int(DxgkResidencyCoreSegmentBudgetGroup(TRUE, FALSE, TRUE, TRUE), DxgkResidencyBudgetGroupLocal);
+    ok_eq_int(DxgkResidencyCoreSegmentBudgetGroup(FALSE, FALSE, FALSE, TRUE), DxgkResidencyBudgetGroupNone);
+    ok_eq_int(DxgkResidencyCoreSegmentBudgetGroup(FALSE, FALSE, TRUE, TRUE), DxgkResidencyBudgetGroupNone);
+    ok_eq_int(DxgkResidencyCoreSegmentBudgetGroup(FALSE, FALSE, FALSE, FALSE), DxgkResidencyBudgetGroupLocal);
+    ok_eq_int(DxgkResidencyCoreSegmentBudgetGroup(FALSE, FALSE, TRUE, FALSE), DxgkResidencyBudgetGroupNonLocal);
+}
+
 START_TEST(DxgkResidencyBudget)
 {
+    TestSegmentBudgetGroup();
     TestInitialization();
     TestChargeAndRelease();
     TestPressureAndTrim();

@@ -21,6 +21,8 @@
  */
 // #define INBV_HEADLESS_COLORS
 
+#define INBV_SNAPSHOT_POOL_TAG 'sSbI'
+
 typedef struct _INBV_PROGRESS_STATE
 {
     ULONG Floor;
@@ -40,6 +42,10 @@ static KIRQL InbvOldIrql;
 static INBV_DISPLAY_STATE InbvDisplayState = INBV_DISPLAY_STATE_DISABLED;
 BOOLEAN InbvBootDriverInstalled = FALSE;
 static INBV_RESET_DISPLAY_PARAMETERS InbvResetDisplayParameters = NULL;
+static PUCHAR InbvSnapshot = NULL;
+static ULONG InbvSnapshotWidth = 0;
+static ULONG InbvSnapshotHeight = 0;
+static BOOLEAN InbvSnapshotValid = FALSE;
 
 static BOOLEAN InbvDisplayDebugStrings = FALSE;
 static INBV_DISPLAY_STRING_FILTER InbvDisplayFilter = NULL;
@@ -536,6 +542,62 @@ InbvNotifyDisplayOwnershipLost(
         InbvResetDisplayParameters = Callback;
         InbvDisplayState = INBV_DISPLAY_STATE_LOST;
     }
+}
+
+BOOLEAN
+NTAPI
+InbvDisplayNeedsDriverReset(VOID)
+{
+    return InbvResetDisplayParameters != NULL;
+}
+
+VOID
+NTAPI
+InbvReserveDisplaySnapshot(VOID)
+{
+    VID_DISPLAY_INFO DisplayInfo;
+
+    if (!InbvBootDriverInstalled || InbvSnapshot)
+        return;
+
+    InbvQueryDisplayInfo(&DisplayInfo);
+    if (!DisplayInfo.PhysicalWidth || !DisplayInfo.PhysicalHeight ||
+        DisplayInfo.PhysicalWidth > MAXULONG / sizeof(ULONG) / DisplayInfo.PhysicalHeight)
+    {
+        return;
+    }
+
+    InbvSnapshotWidth = DisplayInfo.PhysicalWidth;
+    InbvSnapshotHeight = DisplayInfo.PhysicalHeight;
+    InbvSnapshot = ExAllocatePoolWithTag(NonPagedPool,
+                                         (SIZE_T)InbvSnapshotWidth * InbvSnapshotHeight * sizeof(ULONG),
+                                         INBV_SNAPSHOT_POOL_TAG);
+}
+
+VOID
+NTAPI
+InbvSaveDisplaySnapshot(VOID)
+{
+    if (!InbvSnapshot)
+        return;
+
+    InbvAcquireLock();
+    VidScreenToBufferBlt(InbvSnapshot, 0, 0, InbvSnapshotWidth, InbvSnapshotHeight, InbvSnapshotWidth * sizeof(ULONG));
+    InbvReleaseLock();
+    InbvSnapshotValid = TRUE;
+}
+
+VOID
+NTAPI
+InbvRestoreDisplaySnapshot(VOID)
+{
+    if (!InbvSnapshotValid)
+        return;
+
+    InbvSnapshotValid = FALSE;
+    InbvAcquireLock();
+    VidBufferToScreenBlt(InbvSnapshot, 0, 0, InbvSnapshotWidth, InbvSnapshotHeight, InbvSnapshotWidth * sizeof(ULONG));
+    InbvReleaseLock();
 }
 
 NTSTATUS

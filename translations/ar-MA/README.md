@@ -336,7 +336,7 @@ LiberNT مشروع مستقل. وهو غير تابع لشركة Microsoft، و�
 
 ## حول المشروع
 
-يبني LiberNT **مساهمو LiberNT**، وقد بدأه ويتولى صيانته [Ahmed Arif](https://github.com/ahmedarif193).
+يبني LiberNT **مساهمو LiberNT**، وقد بدأه [Ahmed Arif](https://github.com/ahmedarif193) ويتولى صيانته [Ahmed Arif](https://github.com/ahmedarif193) و[Ostap Brehin](https://github.com/osbre) و[Vivyy](https://github.com/enginelesscc).
 
 - [زُر منظمة LiberNT](https://github.com/LiberNT)
 - [الموقع الإلكتروني](https://libernt.com)

@@ -2285,6 +2285,36 @@ unsigned int CDECL wined3d_calculate_format_pitch(const struct wined3d_adapter *
     return row_pitch;
 }
 
+#ifdef __REACTOS__
+static BOOL wined3d_format_is_conversion_target(enum wined3d_format_id format_id)
+{
+    switch (format_id)
+    {
+        case WINED3DFMT_B8G8R8A8_UNORM:
+        case WINED3DFMT_B8G8R8X8_UNORM:
+        case WINED3DFMT_B5G6R5_UNORM:
+        case WINED3DFMT_B5G5R5X1_UNORM:
+        case WINED3DFMT_B5G5R5A1_UNORM:
+        case WINED3DFMT_R10G10B10A2_UNORM:
+        case WINED3DFMT_R8G8B8A8_UNORM:
+        case WINED3DFMT_B10G10R10A2_UNORM:
+        case WINED3DFMT_R16G16B16A16_UNORM:
+        case WINED3DFMT_R16G16B16A16_FLOAT:
+            return TRUE;
+        default:
+            return FALSE;
+    }
+}
+
+static BOOL wined3d_formats_are_channel_variants(enum wined3d_format_id first, enum wined3d_format_id second)
+{
+    return (first == WINED3DFMT_R8G8B8A8_UNORM && second == WINED3DFMT_R8G8B8X8_UNORM)
+            || (first == WINED3DFMT_R8G8B8X8_UNORM && second == WINED3DFMT_R8G8B8A8_UNORM)
+            || (first == WINED3DFMT_B4G4R4A4_UNORM && second == WINED3DFMT_B4G4R4X4_UNORM)
+            || (first == WINED3DFMT_B4G4R4X4_UNORM && second == WINED3DFMT_B4G4R4A4_UNORM);
+}
+#endif
+
 HRESULT CDECL wined3d_check_device_format_conversion(const struct wined3d_output *output,
         enum wined3d_device_type device_type, enum wined3d_format_id src_format_id,
         enum wined3d_format_id dst_format_id)
@@ -2307,6 +2337,16 @@ HRESULT CDECL wined3d_check_device_format_conversion(const struct wined3d_output
         TRACE("Destination format does not support blitting.\n");
         return WINED3DERR_NOTAVAILABLE;
     }
+
+#ifdef __REACTOS__
+    if (src_format_id != dst_format_id && !wined3d_formats_are_channel_variants(src_format_id, dst_format_id)
+            && (!(wined3d_format_is_conversion_target(src_format_id) || src_format_id == WINED3DFMT_YUY2)
+            || !wined3d_format_is_conversion_target(dst_format_id)))
+    {
+        TRACE("Windows 11 reports no conversion between these formats.\n");
+        return WINED3DERR_NOTAVAILABLE;
+    }
+#endif
 
     /* Source cannot be depth/stencil (although it can be YUV or compressed,
      * and AMD also allows blitting from luminance formats). */

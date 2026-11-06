@@ -87,7 +87,7 @@ public:
  * CRegistrySource
  */
 class CRegistrySource
-    : public IQuerySourceOld
+    : public IQuerySource
     , public IObjectWithRegistryKeyOld
 {
     LONG m_cRefs = 1;
@@ -102,17 +102,16 @@ public:
     STDMETHODIMP QueryInterface(REFIID riid, void **ppvObject) override;
     STDMETHODIMP_(ULONG) AddRef() override;
     STDMETHODIMP_(ULONG) Release() override;
-    // IQuerySourceOld methods
+    // IQuerySource methods
     STDMETHODIMP EnumValues(IEnumString **ppEnum) override;
-    STDMETHODIMP EnumSources(IEnumString **ppEnum) override;
     STDMETHODIMP QueryValueString(PCWSTR keyName, PCWSTR valueName, PWSTR *ppszValue) override;
     STDMETHODIMP QueryValueDword(PCWSTR keyName, PCWSTR valueName, DWORD *pdwValue) override;
+    STDMETHODIMP QueryValueGuid(PCWSTR keyName, PCWSTR valueName, GUID *pGuid) override;
     STDMETHODIMP QueryValueExists(PCWSTR keyName, PCWSTR valueName) override;
     STDMETHODIMP QueryValueDirect(PCWSTR keyName, PCWSTR valueName,
                                   FLAGGED_BYTE_BLOB **ppBlob) override;
-    STDMETHODIMP OpenSource(PCWSTR keyName, BOOL bCreate, IQuerySourceOld **ppSource) override;
-    STDMETHODIMP SetValueDirect(PCWSTR keyName, PCWSTR valueName, DWORD dwType, DWORD cbData,
-                                LPCVOID pvData) override;
+    STDMETHODIMP EnumSources(IEnumString **ppEnum) override;
+    STDMETHODIMP OpenSource(PCWSTR keyName, IQuerySource **ppSource) override;
     // IObjectWithRegistryKeyOld methods
     STDMETHODIMP SetKey(HKEY hKey) override;
     STDMETHODIMP GetKey(HKEY *phKey) override;
@@ -271,9 +270,9 @@ STDMETHODIMP CRegistrySource::QueryInterface(REFIID riid, void **ppvObject)
     if (!ppvObject)
         return E_POINTER;
 
-    if (riid == IID_IQuerySourceOld)
+    if (riid == IID_IQuerySource)
     {
-        *ppvObject = static_cast<IQuerySourceOld*>(this);
+        *ppvObject = static_cast<IQuerySource*>(this);
         AddRef();
         return S_OK;
     }
@@ -448,22 +447,23 @@ STDMETHODIMP CRegistrySource::QueryValueDirect(
     return hr;
 }
 
-STDMETHODIMP CRegistrySource::OpenSource(PCWSTR keyName, BOOL bCreate, IQuerySourceOld **ppSource)
+STDMETHODIMP CRegistrySource::QueryValueGuid(PCWSTR keyName, PCWSTR valueName, GUID *pGuid)
 {
-    return QuerySourceCreateFromKey(m_hKey, keyName, bCreate, IID_IQuerySourceOld, (PVOID*)ppSource);
+    PWSTR pszValue;
+    HRESULT hr = QueryValueString(keyName, valueName, &pszValue);
+    if (hr == E_DATATYPE_MISMATCH)
+        return HRESULT_FROM_WIN32(ERROR_UNSUPPORTED_TYPE);
+    if (FAILED(hr))
+        return hr;
+
+    hr = CLSIDFromString(pszValue, pGuid);
+    CoTaskMemFree(pszValue);
+    return hr;
 }
 
-STDMETHODIMP CRegistrySource::SetValueDirect(
-    PCWSTR keyName,
-    PCWSTR valueName,
-    DWORD dwType,
-    DWORD cbData,
-    LPCVOID pvData)
+STDMETHODIMP CRegistrySource::OpenSource(PCWSTR keyName, IQuerySource **ppSource)
 {
-    LSTATUS error = SHSetValueW(m_hKey, keyName, valueName, dwType, pvData, cbData);
-    if (error)
-        return HRESULT_FROM_WIN32(error);
-    return S_OK;
+    return QuerySourceCreateFromKey(m_hKey, keyName, FALSE, IID_IQuerySource, (PVOID*)ppSource);
 }
 
 STDMETHODIMP CRegistrySource::SetKey(HKEY hKey)

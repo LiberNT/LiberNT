@@ -18,6 +18,7 @@ list(APPEND INF_FILES
     ks.inf
     kscaptur.inf
     legcydrv.inf
+    lntuvc.inf
     machine.inf
     monitor.inf
     msmouse.inf
@@ -30,7 +31,6 @@ list(APPEND INF_FILES
     unknown.inf
     usb.inf
     usbaudio.inf
-    usbvideo.inf
     usbport.inf
     volume.inf
     wdmaudio.inf

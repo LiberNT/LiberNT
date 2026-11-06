@@ -352,12 +352,16 @@ static LSTATUS open_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKE
     UNICODE_STRING nameW;
 
 #ifdef __REACTOS__
-    if (hkey == HKEY_CLASSES_ROOT)
+    if (!(access & (KEY_WOW64_32KEY | KEY_WOW64_64KEY)))
     {
         WCHAR *user_name;
-        SIZE_T length = (wcslen(L"Software\\Classes\\") + wcslen(name) + 1) * sizeof(WCHAR);
+        SIZE_T length;
         LSTATUS res = ERROR_FILE_NOT_FOUND;
 
+        if (hkey != HKEY_CLASSES_ROOT)
+            return RegOpenKeyExW(hkey, name, 0, access, retkey);
+
+        length = (wcslen(L"Software\\Classes\\") + wcslen(name) + 1) * sizeof(WCHAR);
         if ((user_name = malloc(length)))
         {
             wcscpy(user_name, L"Software\\Classes\\");

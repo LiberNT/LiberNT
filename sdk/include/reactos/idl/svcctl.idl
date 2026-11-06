@@ -161,9 +161,12 @@ typedef struct _SERVICE_DELAYED_AUTO_START_INFO {
     BOOL fDelayedAutoStart;
 } SERVICE_DELAYED_AUTO_START_INFO, *LPSERVICE_DELAYED_AUTO_START_INFO;
 
+cpp_quote("#ifndef _SERVICE_FAILURE_ACTIONS_FLAG_DEFINED_")
+cpp_quote("#define _SERVICE_FAILURE_ACTIONS_FLAG_DEFINED_")
 typedef struct _SERVICE_FAILURE_ACTIONS_FLAG {
     BOOL fFailureActionsOnNonCrashFailures;
 } SERVICE_FAILURE_ACTIONS_FLAG, *LPSERVICE_FAILURE_ACTIONS_FLAG;
+cpp_quote("#endif")
 
 typedef struct _SERVICE_SID_INFO {
     DWORD dwServicesSidType;
@@ -181,6 +184,29 @@ typedef struct _SERVICE_PRESHUTDOWN_INFO {
 } SERVICE_PRESHUTDOWN_INFO, *LPSERVICE_PRESHUTDOWN_INFO;
 cpp_quote("#endif")
 
+cpp_quote("#ifndef _SERVICE_TRIGGER_INFO_DEFINED_")
+cpp_quote("#define _SERVICE_TRIGGER_INFO_DEFINED_")
+typedef struct _SERVICE_TRIGGER_SPECIFIC_DATA_ITEM {
+    DWORD dwDataType;
+    [range(0, 1024)] DWORD cbData;
+    [size_is(cbData)] PBYTE pData;
+} SERVICE_TRIGGER_SPECIFIC_DATA_ITEM, *PSERVICE_TRIGGER_SPECIFIC_DATA_ITEM;
+
+typedef struct _SERVICE_TRIGGER {
+    DWORD dwTriggerType;
+    DWORD dwAction;
+    GUID *pTriggerSubtype;
+    [range(0, 64)] DWORD cDataItems;
+    [size_is(cDataItems)] PSERVICE_TRIGGER_SPECIFIC_DATA_ITEM pDataItems;
+} SERVICE_TRIGGER, *PSERVICE_TRIGGER;
+
+typedef struct _SERVICE_TRIGGER_INFO {
+    [range(0, 64)] DWORD cTriggers;
+    [size_is(cTriggers)] PSERVICE_TRIGGER pTriggers;
+    PBYTE pReserved;
+} SERVICE_TRIGGER_INFO, *PSERVICE_TRIGGER_INFO;
+cpp_quote("#endif")
+
 typedef struct _SC_RPC_CONFIG_INFOA {
     DWORD dwInfoLevel;
     [switch_is(dwInfoLevel)] union {
@@ -191,6 +217,7 @@ typedef struct _SC_RPC_CONFIG_INFOA {
         [case(5)] LPSERVICE_SID_INFO pssid;
         [case(6)] LPSERVICE_RPC_REQUIRED_PRIVILEGES_INFO psrp;
         [case(7)] LPSERVICE_PRESHUTDOWN_INFO psps;
+        [case(8)] PSERVICE_TRIGGER_INFO psti;
     } DUMMYUNIONNAME;
 } SC_RPC_CONFIG_INFOA, *LPSC_RPC_CONFIG_INFOA;
 
@@ -204,6 +231,7 @@ typedef struct _SC_RPC_CONFIG_INFOW {
         [case(5)] LPSERVICE_SID_INFO pssid;
         [case(6)] LPSERVICE_RPC_REQUIRED_PRIVILEGES_INFO psrp;
         [case(7)] LPSERVICE_PRESHUTDOWN_INFO psps;
+        [case(8)] PSERVICE_TRIGGER_INFO psti;
     } DUMMYUNIONNAME;
 } SC_RPC_CONFIG_INFOW, *LPSC_RPC_CONFIG_INFOW;
 

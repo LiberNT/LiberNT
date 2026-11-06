@@ -229,6 +229,47 @@ DwmDxDropView(DWM_DX_VIEW *View)
     return TRUE;
 }
 
+static void
+DwmDxCloseDevice(DWM_DX_DEVICE *Device)
+{
+    if (Device->hDevice != 0)
+    {
+        D3DKMT_DESTROYDEVICE DestroyDevice;
+
+        RtlZeroMemory(&DestroyDevice, sizeof(DestroyDevice));
+        DestroyDevice.hDevice = Device->hDevice;
+        (void)D3DKMTDestroyDevice(&DestroyDevice);
+    }
+    if (Device->hAdapter != 0)
+    {
+        D3DKMT_CLOSEADAPTER CloseAdapter;
+
+        RtlZeroMemory(&CloseAdapter, sizeof(CloseAdapter));
+        CloseAdapter.hAdapter = Device->hAdapter;
+        (void)D3DKMTCloseAdapter(&CloseAdapter);
+    }
+    RtlZeroMemory(Device, sizeof(*Device));
+}
+
+/* A removed device stays removed; destroying it frees what its views opened. */
+static void
+DwmDxRetireRemovedDevice(ULONG DeviceIndex)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < DWM_DX_MAX_VIEWS; ++Index)
+    {
+        DWM_DX_VIEW *View = &g_Views[Index];
+
+        if (View->GlobalShare == 0 || View->DeviceIndex != DeviceIndex)
+            continue;
+        if (View->Snapshot != NULL)
+            HeapFree(GetProcessHeap(), 0, View->Snapshot);
+        RtlZeroMemory(View, sizeof(*View));
+    }
+    DwmDxCloseDevice(&g_Devices[DeviceIndex]);
+}
+
 static BOOL
 DwmDxOpenView(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
 {
@@ -285,6 +326,8 @@ DwmDxOpenView(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
     Query.pPrivateRuntimeData = &RuntimeInfo;
     Query.PrivateRuntimeDataSize = sizeof(RuntimeInfo);
     Status = D3DKMTQueryResourceInfo(&Query);
+    if (Status == STATUS_DEVICE_REMOVED)
+        DwmDxRetireRemovedDevice(DeviceIndex);
     if (!NT_SUCCESS(Status) || Query.NumAllocations != 1 ||
         Query.PrivateRuntimeDataSize != sizeof(RuntimeInfo) ||
         Query.ResourcePrivateDriverDataSize > DWM_DX_MAX_PRIVATE ||
@@ -331,6 +374,8 @@ DwmDxOpenView(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
     Open.pTotalPrivateDriverDataBuffer = TotalPrivate;
     Open.TotalPrivateDriverDataBufferSize = Query.TotalPrivateDriverDataSize;
     Status = D3DKMTOpenResource(&Open);
+    if (Status == STATUS_DEVICE_REMOVED)
+        DwmDxRetireRemovedDevice(DeviceIndex);
     if (!NT_SUCCESS(Status) || Open.hResource == 0 ||
         Allocations[0].hAllocation == 0)
     {
@@ -417,6 +462,8 @@ DwmDxMapRedirection(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
         Lock.Flags.ReadOnly = 1;
         Lock.Flags.LockEntire = 1;
         Status = D3DKMTLock(&Lock);
+        if (Status == STATUS_DEVICE_REMOVED)
+            DwmDxRetireRemovedDevice(View->DeviceIndex);
         if (!NT_SUCCESS(Status) || Lock.pData == NULL)
             return NULL;
         View->Mapped = Lock.pData;
@@ -502,6 +549,11 @@ DwmDxGetSnapshot(const DWM_DX_SOURCE *Source)
         Lock.Flags.ReadOnly = 1;
         Lock.Flags.LockEntire = 1;
         Status = D3DKMTLock(&Lock);
+        if (Status == STATUS_DEVICE_REMOVED)
+        {
+            DwmDxRetireRemovedDevice(View->DeviceIndex);
+            return NULL;
+        }
         if (!NT_SUCCESS(Status) || Lock.pData == NULL)
             return View->LastUpdateId != 0 ? View->Snapshot : NULL;
 
@@ -560,6 +612,24 @@ DwmDxGetSurfaceSnapshot(const DWM_WIN *Window)
     Source.Pitch = Window->DxPitch;
     Source.Format = Window->DxFormat;
     return DwmDxGetSnapshot(&Source);
+}
+
+const BYTE *
+DwmDxGetSurfacePixels(const DWM_WIN *Window, ULONG *Pitch)
+{
+    *Pitch = 0;
+    if (Window == NULL || Window->DxGlobalShare == 0)
+        return NULL;
+    if (Window->DxPitch == 0)
+        return DwmDxReadbackSurface(Window, Pitch);
+    *Pitch = Window->DxPitch;
+    return DwmDxGetSurfaceSnapshot(Window);
+}
+
+BOOL
+DwmDxSurfaceReadBack(const DWM_WIN *Window)
+{
+    return Window != NULL && (Window->DxPitch != 0 || DwmDxReadbackCurrent(Window));
 }
 
 const BYTE *
@@ -871,6 +941,7 @@ DwmDxCleanupSurfaces(void)
     /* Release locked mappings before destroying their owning devices. */
     for (Index = 0; Index < DWM_DX_MAX_VIEWS; ++Index)
         DwmDxDropView(&g_Views[Index]);
+    DwmDxReadbackCleanup();
 
     /* Composition has stopped, so no retained frame is read any more. */
     for (Index = 0; Index < ARRAYSIZE(g_HeldFrames); ++Index)
@@ -884,27 +955,7 @@ DwmDxCleanupSurfaces(void)
     RtlZeroMemory(g_RetiringFrames, sizeof(g_RetiringFrames));
 
     for (Index = 0; Index < DWM_DX_MAX_DEVICES; ++Index)
-    {
-        DWM_DX_DEVICE *Device = &g_Devices[Index];
-
-        if (Device->hDevice != 0)
-        {
-            D3DKMT_DESTROYDEVICE DestroyDevice;
-
-            RtlZeroMemory(&DestroyDevice, sizeof(DestroyDevice));
-            DestroyDevice.hDevice = Device->hDevice;
-            (void)D3DKMTDestroyDevice(&DestroyDevice);
-        }
-        if (Device->hAdapter != 0)
-        {
-            D3DKMT_CLOSEADAPTER CloseAdapter;
-
-            RtlZeroMemory(&CloseAdapter, sizeof(CloseAdapter));
-            CloseAdapter.hAdapter = Device->hAdapter;
-            (void)D3DKMTCloseAdapter(&CloseAdapter);
-        }
-        RtlZeroMemory(Device, sizeof(*Device));
-    }
+        DwmDxCloseDevice(&g_Devices[Index]);
     g_CurrentFrame = 0;
     DwmDxCloseVBlankAdapter();
 }

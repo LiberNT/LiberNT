@@ -819,8 +819,10 @@ RtlPcToFileHeader(IN PVOID PcValue,
     PLIST_ENTRY Entry;
     PLDR_DATA_TABLE_ENTRY Module;
     PVOID ImageBase = NULL;
+    BOOLEAN Shared = !LdrpOwnsLoaderLock();
 
-    RtlEnterCriticalSection (NtCurrentPeb()->LoaderLock);
+    if (Shared)
+        RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
     ModuleListHead = &NtCurrentPeb()->Ldr->InLoadOrderModuleList;
     Entry = ModuleListHead->Flink;
     while (Entry != ModuleListHead)
@@ -835,7 +837,8 @@ RtlPcToFileHeader(IN PVOID PcValue,
         }
         Entry = Entry->Flink;
     }
-    RtlLeaveCriticalSection (NtCurrentPeb()->LoaderLock);
+    if (Shared)
+        RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
 
     *BaseOfImage = ImageBase;
     return ImageBase;
@@ -933,7 +936,9 @@ find_actctx_dll_load_from( const ACTCTX_SECTION_KEYED_DATA *data,
     return STATUS_SUCCESS;
 }
 
-NTSTATUS find_actctx_dll( PUNICODE_STRING pnameW, LPWSTR *fullname, PUNICODE_STRING CallerBuffer, BOOLEAN bAllocateBuffer)
+NTSTATUS NTAPI RtlpFindSystemDefaultActivationContextSectionString(ULONG Flags, ULONG SectionKind, PCUNICODE_STRING SectionName, PACTCTX_SECTION_KEYED_DATA Data);
+
+NTSTATUS find_actctx_dll( PUNICODE_STRING pnameW, LPWSTR *fullname, PUNICODE_STRING CallerBuffer, BOOLEAN bAllocateBuffer, BOOLEAN SystemDefault)
 {
     static const WCHAR winsxsW[] = {'\\','w','i','n','s','x','s','\\'};
     static const WCHAR dotManifestW[] = {'.','m','a','n','i','f','e','s','t',0};
@@ -946,10 +951,16 @@ NTSTATUS find_actctx_dll( PUNICODE_STRING pnameW, LPWSTR *fullname, PUNICODE_STR
     WCHAR *p, *manifest_path, *directory_name;
 
     data.cbSize = sizeof(data);
-    status = RtlFindActivationContextSectionString( FIND_ACTCTX_SECTION_KEY_RETURN_HACTCTX |
-                                                    FIND_ACTCTX_SECTION_KEY_RETURN_ASSEMBLY_METADATA, NULL,
-                                                    ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION,
-                                                    pnameW, &data );
+    if (SystemDefault)
+        status = RtlpFindSystemDefaultActivationContextSectionString( FIND_ACTCTX_SECTION_KEY_RETURN_HACTCTX |
+                                                                      FIND_ACTCTX_SECTION_KEY_RETURN_ASSEMBLY_METADATA,
+                                                                      ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION,
+                                                                      pnameW, &data );
+    else
+        status = RtlFindActivationContextSectionString( FIND_ACTCTX_SECTION_KEY_RETURN_HACTCTX |
+                                                        FIND_ACTCTX_SECTION_KEY_RETURN_ASSEMBLY_METADATA, NULL,
+                                                        ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION,
+                                                        pnameW, &data );
     if (status != STATUS_SUCCESS)
     {
         //DPRINT1("RtlFindActivationContextSectionString returned 0x%x for %wZ\n", status, pnameW);
@@ -1061,6 +1072,7 @@ RtlDosApplyFileIsolationRedirection_Ustr(IN ULONG Flags,
     UNICODE_STRING localStr, localStr2, *pstrParam;
     WCHAR *p;
     BOOLEAN GotExtension;
+    BOOLEAN SystemDefault = FALSE;
     WCHAR c;
     C_ASSERT(sizeof(UNICODE_NULL) == sizeof(WCHAR));
 
@@ -1182,6 +1194,7 @@ RtlDosApplyFileIsolationRedirection_Ustr(IN ULONG Flags,
             Tail.MaximumLength = Tail.Length;
             if (!RtlEqualUnicodeString(&Tail, &System32, TRUE))
                 return STATUS_SXS_KEY_NOT_FOUND;
+            SystemDefault = TRUE;
             break;
         }
     }
@@ -1228,7 +1241,7 @@ RtlDosApplyFileIsolationRedirection_Ustr(IN ULONG Flags,
     }
 
     /* Use wine's function as long as we use wine's sxs implementation in ntdll */
-    Status = find_actctx_dll(pstrParam, &fullname, StaticString, DynamicString != NULL);
+    Status = find_actctx_dll(pstrParam, &fullname, StaticString, DynamicString != NULL, SystemDefault);
     if (!NT_SUCCESS(Status))
     {
         return Status;

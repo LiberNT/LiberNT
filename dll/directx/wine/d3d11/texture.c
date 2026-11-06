@@ -943,6 +943,13 @@ static BOOL validate_texture2d_desc(const D3D11_TEXTURE2D_DESC *desc, D3D_FEATUR
         return FALSE;
     }
 
+    if (desc->MiscFlags & D3D11_RESOURCE_MISC_TEXTURECUBE
+            && desc->Width != desc->Height)
+    {
+        WARN("Invalid size %ux%u for cube texture.\n", desc->Width, desc->Height);
+        return FALSE;
+    }
+
     if (desc->MiscFlags & D3D11_RESOURCE_MISC_GDI_COMPATIBLE
             && !is_gdi_compatible_texture(desc))
     {
@@ -957,6 +964,15 @@ static BOOL validate_texture2d_desc(const D3D11_TEXTURE2D_DESC *desc, D3D_FEATUR
                 "D3D11_BIND_SHADER_RESOURCE.\n");
         return FALSE;
     }
+
+#ifdef __REACTOS__
+    if (feature_level < D3D_FEATURE_LEVEL_10_0 && (desc->MiscFlags & (D3D11_RESOURCE_MISC_SHARED
+            | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX | D3D11_RESOURCE_MISC_SHARED_NTHANDLE)))
+    {
+        WARN("Sharing is not available below feature level 10_0.\n");
+        return FALSE;
+    }
+#endif
 
     return TRUE;
 }

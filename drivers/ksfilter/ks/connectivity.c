@@ -56,6 +56,48 @@ KsCreatePin(
                                ConnectionHandle);
 }
 
+typedef struct
+{
+    KSPIN_INTERFACE Interface;
+    KSPIN_MEDIUM Medium;
+    ULONG PinId;
+    ULONG PinToHandle;
+    KSPRIORITY Priority;
+} KSPIN_CONNECT32, *PKSPIN_CONNECT32;
+
+C_ASSERT(sizeof(KSPIN_CONNECT32) == 64);
+
+static
+NTSTATUS
+KspWidenConnectRequest(
+    IN OUT PKSPIN_CONNECT *Connect,
+    IN OUT PULONG Size)
+{
+    PKSPIN_CONNECT32 Narrow = (PKSPIN_CONNECT32)*Connect;
+    PKSPIN_CONNECT Wide;
+    ULONG Extra;
+
+    if (*Size < sizeof(KSPIN_CONNECT32))
+        return STATUS_INVALID_PARAMETER;
+
+    Extra = *Size - sizeof(KSPIN_CONNECT32);
+    Wide = AllocateItem(NonPagedPool, sizeof(KSPIN_CONNECT) + Extra);
+    if (!Wide)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Wide->Interface = Narrow->Interface;
+    Wide->Medium = Narrow->Medium;
+    Wide->PinId = Narrow->PinId;
+    Wide->PinToHandle = (HANDLE)(LONG_PTR)(LONG)Narrow->PinToHandle;
+    Wide->Priority = Narrow->Priority;
+    RtlCopyMemory(Wide + 1, Narrow + 1, Extra);
+
+    FreeItem(*Connect);
+    *Connect = Wide;
+    *Size = sizeof(KSPIN_CONNECT) + Extra;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 KspValidateConnectRequest(
     IN PIRP Irp,
@@ -91,6 +133,24 @@ KspValidateConnectRequest(
     /* check for success */
     if (!NT_SUCCESS(Status))
         return Status;
+
+    if (KspIs32bitRequest(Irp))
+    {
+        Status = KspWidenConnectRequest(&ConnectDetails, &Size);
+        if (!NT_SUCCESS(Status))
+        {
+            FreeItem(ConnectDetails);
+            return Status;
+        }
+    }
+
+    if (Size < sizeof(KSPIN_CONNECT) + sizeof(KSDATAFORMAT) ||
+        ((PKSDATAFORMAT)(ConnectDetails + 1))->FormatSize < sizeof(KSDATAFORMAT) ||
+        ((PKSDATAFORMAT)(ConnectDetails + 1))->FormatSize > Size - sizeof(KSPIN_CONNECT))
+    {
+        FreeItem(ConnectDetails);
+        return STATUS_INVALID_PARAMETER;
+    }
 
     /* is pin id out of bounds */
     if (ConnectDetails->PinId >= DescriptorsCount)

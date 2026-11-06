@@ -49,11 +49,14 @@ DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC1, MAKEFOURCC('I','M','C','1'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC2, MAKEFOURCC('I','M','C','2'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC3, MAKEFOURCC('I','M','C','3'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC4, MAKEFOURCC('I','M','C','4'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I422, MAKEFOURCC('I','4','2','2'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I444, MAKEFOURCC('I','4','4','4'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_P208, MAKEFOURCC('P','2','0','8'));
 
 static const UINT32 default_channel_mask[7] =
 {
     0,
-    SPEAKER_FRONT_LEFT,
+    SPEAKER_FRONT_CENTER,
     SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT,
     SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER,
     KSAUDIO_SPEAKER_QUAD,
@@ -2714,6 +2717,8 @@ static struct uncompressed_video_format video_formats[] =
     { &MFVideoFormat_RGB32,         32, 3, 1, 0, BI_RGB },
     { &MFVideoFormat_RGB565,        16, 3, 1, 0, BI_BITFIELDS },
     { &MFVideoFormat_RGB555,        16, 3, 1, 0, BI_RGB },
+    { &MFVideoFormat_ARGB1555,      16, 3, 1, 0, BI_RGB },
+    { &MFVideoFormat_ARGB4444,      16, 3, 1, 0, -1 },
     { &MFVideoFormat_ABGR32,        32, 3, 1, 0, BI_RGB },
     { &MFVideoFormat_A2R10G10B10,   32, 3, 1, 0, -1 },
     { &MFVideoFormat_A2B10G10R10,   32, 3, 1, 0, -1 },
@@ -2729,6 +2734,19 @@ static struct uncompressed_video_format video_formats[] =
     { &MFVideoFormat_NV11,          12, 0, 0, 1, -1 },
     { &MFVideoFormat_NV12,          12, 0, 0, 1, -1 },
     { &MFVideoFormat_P010,          24, 0, 0, 1, -1 },
+    { &MFVideoFormat_P016,          24, 0, 0, 1, -1 },
+    { &MFVideoFormat_P210,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_P216,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_NV21,          12, 0, 0, 1, -1 },
+    { &MFVideoFormat_420O,          12, 0, 0, 1, -1 },
+    { &MFVideoFormat_I422,          16, 0, 0, 1, -1 },
+    { &MFVideoFormat_I444,          24, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y41P,          12, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y210,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y216,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y410,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_v410,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y416,          64, 0, 0, 1, -1 },
     { &MFVideoFormat_D16,           16, 3, 0, 0, -1 },
     { &MFVideoFormat_L16,           16, 3, 0, 0, -1 },
     { &MFVideoFormat_UYVY,          16, 0, 0, 1, -1 },
@@ -2762,9 +2780,57 @@ static struct uncompressed_video_format *mf_get_video_format(const GUID *subtype
 
 static unsigned int mf_get_stride_for_format(const struct uncompressed_video_format *format, unsigned int width)
 {
-    if (format->bpp < 8) return (width * format->bpp) / 8;
-    else if (IsEqualGUID(format->subtype, &MFVideoFormat_P010)) return width * 2;
+    if (format->bpp < 8) return ((width * format->bpp + 31) >> 3) & ~3;
+    switch (format->subtype->Data1)
+    {
+        case MAKEFOURCC('P','0','1','0'):
+        case MAKEFOURCC('P','0','1','6'):
+        case MAKEFOURCC('P','2','1','0'):
+        case MAKEFOURCC('P','2','1','6'):
+            return width * 2;
+        case MAKEFOURCC('I','4','2','2'):
+        case MAKEFOURCC('I','4','4','4'):
+            return width;
+        case MAKEFOURCC('Y','4','1','P'):
+            return width * 3 / 2;
+        case MAKEFOURCC('Y','U','Y','2'):
+        case MAKEFOURCC('U','Y','V','Y'):
+        case MAKEFOURCC('Y','V','Y','U'):
+            return ((width + 1) & ~1) * 2;
+    }
     return (width * (format->bpp / 8) + format->alignment) & ~format->alignment;
+}
+
+static unsigned int mf_get_video_format_pitch(const struct uncompressed_video_format *format, unsigned int width)
+{
+    switch (format->subtype->Data1)
+    {
+        case MAKEFOURCC('N','V','1','2'):
+        case MAKEFOURCC('Y','V','1','2'):
+        case MAKEFOURCC('I','4','2','0'):
+        case MAKEFOURCC('I','Y','U','V'):
+        case MAKEFOURCC('I','M','C','1'):
+        case MAKEFOURCC('I','M','C','2'):
+        case MAKEFOURCC('I','M','C','3'):
+        case MAKEFOURCC('I','M','C','4'):
+        case MAKEFOURCC('I','4','2','2'):
+            return (width + 1) & ~1;
+        case MAKEFOURCC('N','V','1','1'):
+            return (width + 3) & ~3;
+        case MAKEFOURCC('P','0','1','0'):
+        case MAKEFOURCC('P','0','1','6'):
+            return ((width + 1) & ~1) * 2;
+        case MAKEFOURCC('Y','2','1','0'):
+        case MAKEFOURCC('Y','2','1','6'):
+            return ((width + 1) & ~1) * 4;
+        case MAKEFOURCC('Y','4','1','P'):
+            return ((width + 1) & ~1) * 3 / 2;
+        case D3DFMT_L8:
+        case D3DFMT_L16:
+        case D3DFMT_D16:
+            return width * (format->bpp / 8);
+    }
+    return mf_get_stride_for_format(format, width);
 }
 
 unsigned int mf_format_get_stride(const GUID *subtype, unsigned int width, BOOL *is_yuv)
@@ -2793,7 +2859,7 @@ HRESULT WINAPI MFGetStrideForBitmapInfoHeader(DWORD fourcc, DWORD width, LONG *s
     memcpy(&subtype, &MFVideoFormat_Base, sizeof(subtype));
     subtype.Data1 = fourcc;
 
-    if (!(format = mf_get_video_format(&subtype)))
+    if (!(format = mf_get_video_format(&subtype)) || format->bpp < 8)
     {
         *stride = 0;
         return MF_E_INVALIDMEDIATYPE;
@@ -2816,7 +2882,8 @@ HRESULT WINAPI MFCalculateImageSize(REFGUID subtype, UINT32 width, UINT32 height
 
     TRACE("%s, %u, %u, %p.\n", debugstr_mf_guid(subtype), width, height, size);
 
-    if (!(format = mf_get_video_format(subtype)))
+    format = mf_get_video_format(subtype);
+    if ((!format && !IsEqualGUID(subtype, &MFVideoFormat_P208)) || IsEqualGUID(subtype, &MFVideoFormat_NV21))
     {
         *size = 0;
         return E_INVALIDARG;
@@ -2830,12 +2897,28 @@ HRESULT WINAPI MFCalculateImageSize(REFGUID subtype, UINT32 width, UINT32 height
         case MAKEFOURCC('Y','V','1','2'):
         case MAKEFOURCC('I','4','2','0'):
         case MAKEFOURCC('I','Y','U','V'):
+        case MAKEFOURCC('4','2','0','O'):
+        case MAKEFOURCC('Y','4','1','P'):
             /* 2 x 2 block, interleaving UV for half the height */
             *size = ((width + 1) & ~1) * height * 3 / 2;
             break;
         case MAKEFOURCC('P','0','1','0'):
+        case MAKEFOURCC('P','0','1','6'):
             /* width is rounded up to a multiple of two */
             *size = ((width + 1) & ~1) * height * 3;
+            break;
+        case MAKEFOURCC('I','4','2','2'):
+        case MAKEFOURCC('P','2','0','8'):
+            *size = ((width + 1) & ~1) * height * 2;
+            break;
+        case MAKEFOURCC('P','2','1','0'):
+        case MAKEFOURCC('P','2','1','6'):
+        case MAKEFOURCC('Y','2','1','0'):
+        case MAKEFOURCC('Y','2','1','6'):
+            *size = ((width + 1) & ~1) * height * 4;
+            break;
+        case MAKEFOURCC('I','4','4','4'):
+            *size = width * height * 3;
             break;
         case MAKEFOURCC('N','V','1','1'):
             *size = ((width + 3) & ~3) * height * 3 / 2;
@@ -2881,8 +2964,22 @@ HRESULT WINAPI MFGetPlaneSize(DWORD fourcc, DWORD width, DWORD height, DWORD *si
         case MAKEFOURCC('I','4','2','0'):
         case MAKEFOURCC('I','Y','U','V'):
         case MAKEFOURCC('N','V','1','1'):
+        case MAKEFOURCC('N','V','2','1'):
+        case MAKEFOURCC('4','2','0','O'):
         case MAKEFOURCC('P','0','1','0'):
+        case MAKEFOURCC('P','0','1','6'):
             *size = stride * height * 3 / 2;
+            break;
+        case MAKEFOURCC('Y','4','1','P'):
+            *size = width * height * 3 / 2;
+            break;
+        case MAKEFOURCC('I','4','2','2'):
+        case MAKEFOURCC('P','2','1','0'):
+        case MAKEFOURCC('P','2','1','6'):
+            *size = stride * height * 2;
+            break;
+        case MAKEFOURCC('I','4','4','4'):
+            *size = stride * height * 3;
             break;
         default:
             *size = stride * height;
@@ -3023,6 +3120,9 @@ HRESULT WINAPI MFCreateWaveFormatExFromMFMediaType(IMFMediaType *mediatype, WAVE
             flags = MFWaveFormatExConvertFlag_ForceExtensible;
     }
 
+    if (media_type_get_uint32(mediatype, &MF_MT_AUDIO_BITS_PER_SAMPLE) > 16)
+        flags = MFWaveFormatExConvertFlag_ForceExtensible;
+
     basetype.Data1 = subtype.Data1;
     if (subtype.Data1 >> 16 || !IsEqualGUID(&subtype, &basetype))
         flags = MFWaveFormatExConvertFlag_ForceExtensible;
@@ -3053,8 +3153,12 @@ HRESULT WINAPI MFCreateWaveFormatExFromMFMediaType(IMFMediaType *mediatype, WAVE
         format_ext->SubFormat = subtype;
         user_data = format_ext + 1;
 
-        format_ext->Samples.wValidBitsPerSample = media_type_get_uint32(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE);
-        format_ext->Samples.wSamplesPerBlock = media_type_get_uint32(mediatype, &MF_MT_AUDIO_SAMPLES_PER_BLOCK);
+        if (SUCCEEDED(IMFMediaType_GetItem(mediatype, &MF_MT_AUDIO_SAMPLES_PER_BLOCK, NULL)))
+            format_ext->Samples.wSamplesPerBlock = media_type_get_uint32(mediatype, &MF_MT_AUDIO_SAMPLES_PER_BLOCK);
+        else if (SUCCEEDED(IMFMediaType_GetItem(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE, NULL)))
+            format_ext->Samples.wValidBitsPerSample = media_type_get_uint32(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE);
+        else
+            format_ext->Samples.wValidBitsPerSample = format->wBitsPerSample;
 
         if (SUCCEEDED(IMFMediaType_GetItem(mediatype, &MF_MT_AUDIO_CHANNEL_MASK, NULL)))
             format_ext->dwChannelMask = media_type_get_uint32(mediatype, &MF_MT_AUDIO_CHANNEL_MASK);
@@ -3124,8 +3228,11 @@ HRESULT WINAPI MFInitMediaTypeFromWaveFormatEx(IMFMediaType *mediatype, const WA
         if (wfex->dwChannelMask)
             mediatype_set_uint32(mediatype, &MF_MT_AUDIO_CHANNEL_MASK, wfex->dwChannelMask, &hr);
 
-        if (format->wBitsPerSample && wfex->Samples.wValidBitsPerSample)
+        if (format->wBitsPerSample && wfex->Samples.wValidBitsPerSample
+                && wfex->Samples.wValidBitsPerSample != format->wBitsPerSample)
             mediatype_set_uint32(mediatype, &MF_MT_AUDIO_VALID_BITS_PER_SAMPLE, wfex->Samples.wValidBitsPerSample, &hr);
+        else if (!format->wBitsPerSample && wfex->Samples.wSamplesPerBlock)
+            mediatype_set_uint32(mediatype, &MF_MT_AUDIO_SAMPLES_PER_BLOCK, wfex->Samples.wSamplesPerBlock, &hr);
 
         user_data_size = format->cbSize - sizeof(WAVEFORMATEXTENSIBLE) + sizeof(WAVEFORMATEX);
         user_data = wfex + 1;
@@ -3162,7 +3269,7 @@ HRESULT WINAPI MFInitMediaTypeFromWaveFormatEx(IMFMediaType *mediatype, const WA
         mediatype_set_uint32(mediatype, &MF_MT_ALL_SAMPLES_INDEPENDENT, 1, &hr);
     }
 
-    if (IsEqualGUID(&subtype, &MFAudioFormat_AAC))
+    if (format->wFormatTag != WAVE_FORMAT_EXTENSIBLE && IsEqualGUID(&subtype, &MFAudioFormat_AAC))
     {
         HEAACWAVEINFO *info = CONTAINING_RECORD(format, HEAACWAVEINFO, wfx);
         if (format->cbSize < sizeof(HEAACWAVEINFO) - sizeof(WAVEFORMATEX))
@@ -3727,14 +3834,17 @@ HRESULT WINAPI MFInitVideoFormat_RGB(MFVIDEOFORMAT *format, DWORD width, DWORD h
     return S_OK;
 }
 
-static HRESULT mf_get_stride_for_bitmap_info_header(DWORD fourcc, const BITMAPINFOHEADER *bih, LONG *stride)
+static HRESULT mf_get_stride_for_bitmap_info_header(const GUID *subtype, const BITMAPINFOHEADER *bih, LONG *stride)
 {
-    HRESULT hr;
+    struct uncompressed_video_format *format;
 
-    if (FAILED(hr = MFGetStrideForBitmapInfoHeader(fourcc, bih->biWidth, stride))) return hr;
-    if (bih->biHeight < 0) *stride *= -1;
+    if (!(format = mf_get_video_format(subtype)))
+        return MF_E_INVALIDMEDIATYPE;
 
-    return hr;
+    *stride = mf_get_stride_for_format(format, bih->biWidth);
+    if (format->bottom_up != (bih->biHeight < 0)) *stride *= -1;
+
+    return S_OK;
 }
 
 static const GUID * get_mf_subtype_for_am_subtype(const GUID *subtype)
@@ -3797,10 +3907,37 @@ HRESULT WINAPI MFCreateVideoMediaTypeFromVideoInfoHeader(const KS_VIDEOINFOHEADE
         DWORD pixel_aspect_ratio_y, MFVideoInterlaceMode interlace_mode, QWORD video_flags, const GUID *subtype,
         IMFVideoMediaType **ret)
 {
-    FIXME("%p, %lu, %lu, %lu, %d, %I64x, %s, %p.\n", vih, size, pixel_aspect_ratio_x, pixel_aspect_ratio_y, interlace_mode,
+    struct media_type *object;
+    UINT32 value;
+    HRESULT hr;
+
+    TRACE("%p, %lu, %lu, %lu, %d, %I64x, %s, %p.\n", vih, size, pixel_aspect_ratio_x, pixel_aspect_ratio_y, interlace_mode,
             video_flags, debugstr_guid(subtype), ret);
 
-    return E_NOTIMPL;
+    if (!vih || !ret || size < sizeof(*vih) || vih->bmiHeader.biSize < sizeof(vih->bmiHeader))
+        return E_INVALIDARG;
+
+    if (FAILED(hr = create_media_type(&object)))
+        return hr;
+
+    hr = MFInitMediaTypeFromVideoInfoHeader(&object->IMFMediaType_iface, (const VIDEOINFOHEADER *)vih, size, subtype);
+    if (pixel_aspect_ratio_x && pixel_aspect_ratio_y)
+        mediatype_set_uint64(&object->IMFMediaType_iface, &MF_MT_PIXEL_ASPECT_RATIO, pixel_aspect_ratio_x,
+                pixel_aspect_ratio_y, &hr);
+    if (interlace_mode != MFVideoInterlace_Unknown)
+        mediatype_set_uint32(&object->IMFMediaType_iface, &MF_MT_INTERLACE_MODE, interlace_mode, &hr);
+    /* TODO: map the MFVideoFlags other than the DRM ones. */
+    if ((value = video_flags & (MFVideoFlag_AnalogProtected | MFVideoFlag_DigitallyProtected)))
+        mediatype_set_uint32(&object->IMFMediaType_iface, &MF_MT_DRM_FLAGS, value >> 5, &hr);
+
+    if (FAILED(hr))
+    {
+        IMFMediaType_Release(&object->IMFMediaType_iface);
+        return hr;
+    }
+
+    *ret = &object->IMFVideoMediaType_iface;
+    return S_OK;
 }
 
 /***********************************************************************
@@ -3819,6 +3956,8 @@ HRESULT WINAPI MFInitMediaTypeFromMFVideoFormat(IMFMediaType *media_type, const 
         return E_INVALIDARG;
     if (size < offsetof(MFVIDEOFORMAT, surfaceInfo.Palette[format->surfaceInfo.PaletteEntries + 1]))
         return E_INVALIDARG;
+    if ((LONG)format->videoInfo.dwWidth < 0 || (LONG)format->videoInfo.dwHeight < 0)
+        return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
 
     mediatype_set_guid(media_type, &MF_MT_MAJOR_TYPE, &MFMediaType_Video, &hr);
     if (!IsEqualGUID(&format->guidFormat, &GUID_NULL))
@@ -3833,15 +3972,16 @@ HRESULT WINAPI MFInitMediaTypeFromMFVideoFormat(IMFMediaType *media_type, const 
     {
         mediatype_set_uint64(media_type, &MF_MT_FRAME_SIZE, format->videoInfo.dwWidth, format->videoInfo.dwHeight, &hr);
 
-        if (video_format && (stride = mf_get_stride_for_format(video_format, format->videoInfo.dwWidth)))
-        {
-            if (!video_format->yuv && (format->videoInfo.VideoFlags & MFVideoFlag_BottomUpLinearRep))
-                stride = -stride;
-            mediatype_set_uint32(media_type, &MF_MT_DEFAULT_STRIDE, stride, &hr);
-        }
-
         if (SUCCEEDED(MFCalculateImageSize(&format->guidFormat, format->videoInfo.dwWidth, format->videoInfo.dwHeight, &sample_size)))
+        {
+            if (video_format && (stride = mf_get_video_format_pitch(video_format, format->videoInfo.dwWidth)))
+            {
+                if (!video_format->yuv && (format->videoInfo.VideoFlags & MFVideoFlag_BottomUpLinearRep))
+                    stride = -stride;
+                mediatype_set_uint32(media_type, &MF_MT_DEFAULT_STRIDE, stride, &hr);
+            }
             mediatype_set_uint32(media_type, &MF_MT_SAMPLE_SIZE, sample_size, &hr);
+        }
     }
 
     if (format->videoInfo.PixelAspectRatio.Denominator)
@@ -3906,20 +4046,31 @@ HRESULT WINAPI MFInitMediaTypeFromMFVideoFormat(IMFMediaType *media_type, const 
 /***********************************************************************
  *      MFInitMediaTypeFromVideoInfoHeader2 (mfplat.@)
  */
-HRESULT WINAPI MFInitMediaTypeFromVideoInfoHeader2(IMFMediaType *media_type, const VIDEOINFOHEADER2 *vih, UINT32 size,
-        const GUID *subtype)
+static HRESULT init_media_type_from_video_info(IMFMediaType *media_type, const VIDEOINFOHEADER2 *vih,
+        const BITMAPINFOHEADER *bih, const BYTE *end, const GUID *subtype, BOOL picture_aspect_ratio)
 {
+    const BYTE *tail = (const BYTE *)(bih + 1), *palette = NULL;
+    UINT32 palette_size = 0;
     HRESULT hr = S_OK;
     DWORD height;
     LONG stride;
 
-    TRACE("%p, %p, %u, %s.\n", media_type, vih, size, debugstr_guid(subtype));
-
     IMFMediaType_DeleteAllItems(media_type);
+
+    if (bih->biBitCount >= 1 && bih->biBitCount <= 8)
+    {
+        if (bih->biClrUsed > 256)
+            return MF_E_INVALIDMEDIATYPE;
+        palette_size = (bih->biClrUsed ? bih->biClrUsed : 1u << bih->biBitCount) * sizeof(PALETTEENTRY);
+        if ((UINT64)bih->biSize + palette_size <= (UINT64)(end - (const BYTE *)bih))
+            palette = (const BYTE *)bih + bih->biSize;
+        else if (bih->biClrUsed)
+            return MF_E_INVALIDMEDIATYPE;
+    }
 
     if (!subtype)
     {
-        switch (vih->bmiHeader.biBitCount)
+        switch (bih->biBitCount)
         {
         case 1: subtype = &MFVideoFormat_RGB1; break;
         case 4: subtype = &MFVideoFormat_RGB4; break;
@@ -3931,15 +4082,34 @@ HRESULT WINAPI MFInitMediaTypeFromVideoInfoHeader2(IMFMediaType *media_type, con
         }
     }
 
-    height = abs(vih->bmiHeader.biHeight);
+    height = abs(bih->biHeight);
 
     mediatype_set_guid(media_type, &MF_MT_MAJOR_TYPE, &MFMediaType_Video, &hr);
     mediatype_set_guid(media_type, &MF_MT_SUBTYPE, subtype, &hr);
-    mediatype_set_uint64(media_type, &MF_MT_PIXEL_ASPECT_RATIO, 1, 1, &hr);
-    if (vih->bmiHeader.biWidth || height)
-        mediatype_set_uint64(media_type, &MF_MT_FRAME_SIZE, vih->bmiHeader.biWidth, height, &hr);
+    if (bih->biWidth && height)
+    {
+        mediatype_set_uint64(media_type, &MF_MT_FRAME_SIZE, bih->biWidth, height, &hr);
 
-    if (SUCCEEDED(mf_get_stride_for_bitmap_info_header(subtype->Data1, &vih->bmiHeader, &stride)))
+        if (!picture_aspect_ratio)
+            mediatype_set_uint64(media_type, &MF_MT_PIXEL_ASPECT_RATIO, 1, 1, &hr);
+        else if (vih->dwPictAspectRatioX && vih->dwPictAspectRatioY)
+        {
+            UINT64 num = (UINT64)vih->dwPictAspectRatioX * height, den = (UINT64)vih->dwPictAspectRatioY * bih->biWidth;
+            UINT64 a = num, b = den, t;
+
+            while (b) { t = a % b; a = b; b = t; }
+            mediatype_set_uint64(media_type, &MF_MT_PIXEL_ASPECT_RATIO, num / a, den / a, &hr);
+        }
+
+        if (!(vih->dwInterlaceFlags & AMINTERLACE_IsInterlaced))
+            mediatype_set_uint32(media_type, &MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive, &hr);
+        else if (vih->dwInterlaceFlags & AMINTERLACE_DisplayModeBobOrWeave)
+            mediatype_set_uint32(media_type, &MF_MT_INTERLACE_MODE, MFVideoInterlace_MixedInterlaceOrProgressive, &hr);
+        else
+            FIXME("dwInterlaceFlags %#lx not implemented\n", vih->dwInterlaceFlags);
+    }
+
+    if (SUCCEEDED(mf_get_stride_for_bitmap_info_header(subtype, bih, &stride)))
     {
         if (stride)
         {
@@ -3950,8 +4120,12 @@ HRESULT WINAPI MFInitMediaTypeFromVideoInfoHeader2(IMFMediaType *media_type, con
         mediatype_set_uint32(media_type, &MF_MT_ALL_SAMPLES_INDEPENDENT, 1, &hr);
     }
 
-    if (vih->bmiHeader.biSizeImage)
-        mediatype_set_uint32(media_type, &MF_MT_SAMPLE_SIZE, vih->bmiHeader.biSizeImage, &hr);
+    if (bih->biSizeImage)
+        mediatype_set_uint32(media_type, &MF_MT_SAMPLE_SIZE, bih->biSizeImage, &hr);
+    if (vih->dwBitRate)
+        mediatype_set_uint32(media_type, &MF_MT_AVG_BITRATE, vih->dwBitRate, &hr);
+    if (vih->dwBitErrorRate)
+        mediatype_set_uint32(media_type, &MF_MT_AVG_BIT_ERROR_RATE, vih->dwBitErrorRate, &hr);
 
     if (vih->rcSource.left || vih->rcSource.top || vih->rcSource.right || vih->rcSource.bottom)
     {
@@ -3992,15 +4166,25 @@ HRESULT WINAPI MFInitMediaTypeFromVideoInfoHeader2(IMFMediaType *media_type, con
             mediatype_set_uint32(media_type, &MF_MT_TRANSFER_FUNCTION, format->VideoTransferFunction, &hr);
     }
 
-    if (!(vih->dwInterlaceFlags & AMINTERLACE_IsInterlaced))
-        mediatype_set_uint32(media_type, &MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive, &hr);
-    else if (vih->dwInterlaceFlags & AMINTERLACE_DisplayModeBobOrWeave)
-        mediatype_set_uint32(media_type, &MF_MT_INTERLACE_MODE, MFVideoInterlace_MixedInterlaceOrProgressive, &hr);
-    else
-        FIXME("dwInterlaceFlags %#lx not implemented\n", vih->dwInterlaceFlags);
-
-    if (size > sizeof(*vih)) mediatype_set_blob(media_type, &MF_MT_USER_DATA, (BYTE *)(vih + 1), size - sizeof(*vih), &hr);
+    if (palette)
+        mediatype_set_blob(media_type, &MF_MT_PALETTE, palette, palette_size, &hr);
+    else if (end > tail)
+        mediatype_set_blob(media_type, &MF_MT_USER_DATA, tail, end - tail, &hr);
     return hr;
+}
+
+/***********************************************************************
+ *      MFInitMediaTypeFromVideoInfoHeader2 (mfplat.@)
+ */
+HRESULT WINAPI MFInitMediaTypeFromVideoInfoHeader2(IMFMediaType *media_type, const VIDEOINFOHEADER2 *vih, UINT32 size,
+        const GUID *subtype)
+{
+    TRACE("%p, %p, %u, %s.\n", media_type, vih, size, debugstr_guid(subtype));
+
+    if (size < sizeof(*vih))
+        return E_INVALIDARG;
+
+    return init_media_type_from_video_info(media_type, vih, &vih->bmiHeader, (const BYTE *)vih + size, subtype, TRUE);
 }
 
 /***********************************************************************
@@ -4016,15 +4200,14 @@ HRESULT WINAPI MFInitMediaTypeFromVideoInfoHeader(IMFMediaType *media_type, cons
         .dwBitRate = vih->dwBitRate,
         .dwBitErrorRate = vih->dwBitErrorRate,
         .AvgTimePerFrame = vih->AvgTimePerFrame,
-        .bmiHeader = vih->bmiHeader,
     };
-    HRESULT hr;
 
     TRACE("%p, %p, %u, %s.\n", media_type, vih, size, debugstr_guid(subtype));
 
-    hr = MFInitMediaTypeFromVideoInfoHeader2(media_type, &vih2, sizeof(vih2), subtype);
-    if (size > sizeof(*vih)) mediatype_set_blob(media_type, &MF_MT_USER_DATA, (BYTE *)(vih + 1), size - sizeof(*vih), &hr);
-    return hr;
+    if (size < sizeof(*vih))
+        return E_INVALIDARG;
+
+    return init_media_type_from_video_info(media_type, &vih2, &vih->bmiHeader, (const BYTE *)vih + size, subtype, FALSE);
 }
 
 /***********************************************************************
@@ -4125,6 +4308,8 @@ static void init_video_info_header2(VIDEOINFOHEADER2 *vih, const GUID *subtype, 
 
     if (video_format && video_format->compression != -1)
         vih->bmiHeader.biCompression = video_format->compression;
+    else if (memcmp(&subtype->Data2, &MFVideoFormat_Base.Data2, sizeof(GUID) - sizeof(subtype->Data1)))
+        vih->bmiHeader.biCompression = BI_RGB;
     else
         vih->bmiHeader.biCompression = subtype->Data1;
 
@@ -4199,21 +4384,18 @@ static void init_video_info_header(VIDEOINFOHEADER *vih, const GUID *subtype, IM
     vih->bmiHeader = vih2.bmiHeader;
 }
 
-static UINT32 get_am_media_type_video_format_size(const GUID *format_type, IMFMediaType *media_type)
-{
-    if (IsEqualGUID(format_type, &FORMAT_VideoInfo))
-    {
-        UINT32 size = sizeof(VIDEOINFOHEADER), user_size;
-        if (SUCCEEDED(IMFMediaType_GetBlobSize(media_type, &MF_MT_USER_DATA, &user_size)))
-            size += user_size;
-        return size;
-    }
+static const DWORD rgb565_masks[] = {0xf800, 0x07e0, 0x001f};
 
-    if (IsEqualGUID(format_type, &FORMAT_VideoInfo2))
+static UINT32 get_am_media_type_video_format_size(const GUID *format_type, const GUID *subtype, IMFMediaType *media_type)
+{
+    if (IsEqualGUID(format_type, &FORMAT_VideoInfo) || IsEqualGUID(format_type, &FORMAT_VideoInfo2))
     {
-        UINT32 size = sizeof(VIDEOINFOHEADER2), user_size;
+        UINT32 size = IsEqualGUID(format_type, &FORMAT_VideoInfo) ? sizeof(VIDEOINFOHEADER) : sizeof(VIDEOINFOHEADER2);
+        UINT32 user_size;
         if (SUCCEEDED(IMFMediaType_GetBlobSize(media_type, &MF_MT_USER_DATA, &user_size)))
             size += user_size;
+        else if (IsEqualGUID(subtype, &MFVideoFormat_RGB565) || IsEqualGUID(subtype, &MEDIASUBTYPE_RGB565))
+            size += sizeof(rgb565_masks);
         return size;
     }
 
@@ -4234,6 +4416,25 @@ static UINT32 get_am_media_type_video_format_size(const GUID *format_type, IMFMe
     }
 
     return 0;
+}
+
+static HRESULT init_video_info_header_tail(void *tail, UINT32 size, BITMAPINFOHEADER *bih, IMFMediaType *media_type)
+{
+    HRESULT hr;
+
+    if (!size)
+        return S_OK;
+
+    if (FAILED(IMFMediaType_GetItem(media_type, &MF_MT_USER_DATA, NULL)))
+    {
+        memcpy(tail, rgb565_masks, size);
+        return S_OK;
+    }
+
+    if (FAILED(hr = IMFMediaType_GetBlob(media_type, &MF_MT_USER_DATA, tail, size, NULL)))
+        return hr;
+    bih->biSize += size;
+    return S_OK;
 }
 
 static HRESULT init_am_media_type_video_format(AM_MEDIA_TYPE *am_type, IMFMediaType *media_type)
@@ -4259,7 +4460,7 @@ static HRESULT init_am_media_type_video_format(AM_MEDIA_TYPE *am_type, IMFMediaT
             am_type->formattype = FORMAT_VideoInfo;
     }
 
-    am_type->cbFormat = get_am_media_type_video_format_size(&am_type->formattype, media_type);
+    am_type->cbFormat = get_am_media_type_video_format_size(&am_type->formattype, &am_type->subtype, media_type);
     if (!(am_type->pbFormat = CoTaskMemAlloc(am_type->cbFormat)))
         return E_OUTOFMEMORY;
     memset(am_type->pbFormat, 0, am_type->cbFormat);
@@ -4269,10 +4470,9 @@ static HRESULT init_am_media_type_video_format(AM_MEDIA_TYPE *am_type, IMFMediaT
         VIDEOINFOHEADER *format = (VIDEOINFOHEADER *)am_type->pbFormat;
         init_video_info_header(format, &am_type->subtype, media_type);
 
-        if (am_type->cbFormat > sizeof(*format) && FAILED(hr = IMFMediaType_GetBlob(media_type, &MF_MT_USER_DATA,
-                (BYTE *)(format + 1), am_type->cbFormat - sizeof(*format), NULL)))
+        if (FAILED(hr = init_video_info_header_tail(format + 1, am_type->cbFormat - sizeof(*format),
+                &format->bmiHeader, media_type)))
             return hr;
-        format->bmiHeader.biSize += am_type->cbFormat - sizeof(*format);
 
         am_type->subtype = get_am_subtype_for_mf_subtype(am_type->subtype);
         am_type->bFixedSizeSamples = !!video_format;
@@ -4283,10 +4483,9 @@ static HRESULT init_am_media_type_video_format(AM_MEDIA_TYPE *am_type, IMFMediaT
         VIDEOINFOHEADER2 *format = (VIDEOINFOHEADER2 *)am_type->pbFormat;
         init_video_info_header2(format, &am_type->subtype, media_type);
 
-        if (am_type->cbFormat > sizeof(*format) && FAILED(hr = IMFMediaType_GetBlob(media_type, &MF_MT_USER_DATA,
-                (BYTE *)(format + 1), am_type->cbFormat - sizeof(*format), NULL)))
+        if (FAILED(hr = init_video_info_header_tail(format + 1, am_type->cbFormat - sizeof(*format),
+                &format->bmiHeader, media_type)))
             return hr;
-        format->bmiHeader.biSize += am_type->cbFormat - sizeof(*format);
 
         am_type->subtype = get_am_subtype_for_mf_subtype(am_type->subtype);
         am_type->bFixedSizeSamples = !!video_format;
@@ -4391,12 +4590,20 @@ HRESULT WINAPI MFInitMediaTypeFromAMMediaType(IMFMediaType *media_type, const AM
 
     IMFMediaType_DeleteAllItems(media_type);
 
-    if (IsEqualGUID(&am_type->majortype, &MEDIATYPE_Video))
+    if (IsEqualGUID(&am_type->formattype, &FORMAT_WaveFormatEx) && !IsEqualGUID(&am_type->majortype, &MEDIATYPE_Video)
+            && am_type->pbFormat && am_type->cbFormat >= sizeof(WAVEFORMATEX))
+        hr = MFInitMediaTypeFromWaveFormatEx(media_type, (WAVEFORMATEX *)am_type->pbFormat, am_type->cbFormat);
+    else if (IsEqualGUID(&am_type->majortype, &MEDIATYPE_Video))
     {
         const GUID *subtype = get_mf_subtype_for_am_subtype(&am_type->subtype);
 
         if (am_type->cbFormat && !am_type->pbFormat)
             hr = E_INVALIDARG;
+        else if (IsEqualGUID(&am_type->formattype, &GUID_NULL))
+        {
+            mediatype_set_guid(media_type, &MF_MT_MAJOR_TYPE, &MFMediaType_Video, &hr);
+            mediatype_set_guid(media_type, &MF_MT_SUBTYPE, &am_type->subtype, &hr);
+        }
         else if (IsEqualGUID(&am_type->formattype, &FORMAT_VideoInfo)
                 && am_type->cbFormat >= sizeof(VIDEOINFOHEADER))
             hr = MFInitMediaTypeFromVideoInfoHeader(media_type, (VIDEOINFOHEADER *)am_type->pbFormat, am_type->cbFormat, subtype);
@@ -4422,14 +4629,10 @@ HRESULT WINAPI MFInitMediaTypeFromAMMediaType(IMFMediaType *media_type, const AM
     {
         if (am_type->cbFormat && !am_type->pbFormat)
             hr = E_INVALIDARG;
-        else if (IsEqualGUID(&am_type->formattype, &FORMAT_WaveFormatEx)
-                && am_type->cbFormat >= sizeof(WAVEFORMATEX))
-            hr = MFInitMediaTypeFromWaveFormatEx(media_type, (WAVEFORMATEX *)am_type->pbFormat, am_type->cbFormat);
         else if (IsEqualGUID(&am_type->formattype, &GUID_NULL))
         {
             mediatype_set_guid(media_type, &MF_MT_MAJOR_TYPE, &MFMediaType_Audio, &hr);
             mediatype_set_guid(media_type, &MF_MT_SUBTYPE, &am_type->subtype, &hr);
-            mediatype_set_guid(media_type, &MF_MT_AM_FORMAT_TYPE, &GUID_NULL, &hr);
             mediatype_set_uint32(media_type, &MF_MT_ALL_SAMPLES_INDEPENDENT, 1, &hr);
         }
         else
@@ -4440,9 +4643,11 @@ HRESULT WINAPI MFInitMediaTypeFromAMMediaType(IMFMediaType *media_type, const AM
     }
     else
     {
-        FIXME("Unsupported major type %s.\n", debugstr_guid(&am_type->majortype));
-        return E_NOTIMPL;
+        mediatype_set_guid(media_type, &MF_MT_MAJOR_TYPE, &am_type->majortype, &hr);
+        mediatype_set_guid(media_type, &MF_MT_SUBTYPE, &am_type->subtype, &hr);
     }
+
+    mediatype_set_guid(media_type, &MF_MT_AM_FORMAT_TYPE, &am_type->formattype, &hr);
 
     if (!am_type->bTemporalCompression && FAILED(IMFMediaType_GetItem(media_type, &MF_MT_ALL_SAMPLES_INDEPENDENT, NULL)))
         mediatype_set_uint32(media_type, &MF_MT_ALL_SAMPLES_INDEPENDENT, 1, &hr);
@@ -4460,6 +4665,7 @@ HRESULT WINAPI MFInitMediaTypeFromAMMediaType(IMFMediaType *media_type, const AM
 HRESULT WINAPI MFCreateMediaTypeFromRepresentation(GUID guid_representation, void *representation,
         IMFMediaType **media_type)
 {
+    const AM_MEDIA_TYPE *am_type = representation;
     HRESULT hr;
 
     TRACE("%s, %p, %p\n", debugstr_guid(&guid_representation), representation, media_type);
@@ -4471,11 +4677,18 @@ HRESULT WINAPI MFCreateMediaTypeFromRepresentation(GUID guid_representation, voi
 
     if (FAILED(hr = MFCreateMediaType(media_type)))
         return hr;
-    if (FAILED(hr = MFInitMediaTypeFromAMMediaType(*media_type, representation)))
+    if (FAILED(hr = MFInitMediaTypeFromAMMediaType(*media_type, am_type)))
     {
         IMFMediaType_Release(*media_type);
         *media_type = NULL;
+        return hr;
     }
+
+    if (IsEqualGUID(&am_type->majortype, &MEDIATYPE_Audio) || IsEqualGUID(&am_type->majortype, &MEDIATYPE_Video))
+        IMFMediaType_DeleteItem(*media_type, &MF_MT_AM_FORMAT_TYPE);
+    if (IsEqualGUID(&am_type->majortype, &MEDIATYPE_Audio) && IsEqualGUID(&am_type->formattype, &FORMAT_WaveFormatEx)
+            && !((WAVEFORMATEX *)am_type->pbFormat)->wFormatTag)
+        hr = IMFMediaType_SetGUID(*media_type, &MF_MT_SUBTYPE, &am_type->subtype);
 
     return hr;
 }

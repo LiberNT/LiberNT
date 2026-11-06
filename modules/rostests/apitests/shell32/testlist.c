@@ -42,6 +42,7 @@ extern void func_PathMakeUniqueName(void);
 extern void func_PathProcessCommand(void);
 extern void func_PathResolve(void);
 extern void func_ProgramFilesDir(void);
+extern void func_SHGetFolderPathToken(void);
 extern void func_PIDL(void);
 extern void func_RealShellExecuteEx(void);
 extern void func_RegItemParse(void);
@@ -63,6 +64,7 @@ extern void func_ShellHook(void);
 extern void func_Shell_NotifyIconGetRect(void);
 extern void func_ShellState(void);
 extern void func_SHGetAttributesFromDataObject(void);
+extern void func_SHOpenFolderAndSelectItems(void);
 extern void func_SHGetComputerDisplayNameW(void);
 extern void func_SHGetFileInfo(void);
 extern void func_SHGetUnreadMailCountW(void);
@@ -135,6 +137,7 @@ const struct test winetest_testlist[] =
     { "PathProcessCommand", func_PathProcessCommand },
     { "PathResolve", func_PathResolve },
     { "ProgramFilesDir", func_ProgramFilesDir },
+    { "SHGetFolderPathToken", func_SHGetFolderPathToken },
     { "PIDL", func_PIDL },
     { "RealShellExecuteEx", func_RealShellExecuteEx },
     { "RegItemParse", func_RegItemParse },
@@ -156,6 +159,7 @@ const struct test winetest_testlist[] =
     { "Shell_NotifyIconGetRect", func_Shell_NotifyIconGetRect },
     { "ShellState", func_ShellState },
     { "SHGetAttributesFromDataObject", func_SHGetAttributesFromDataObject },
+    { "SHOpenFolderAndSelectItems", func_SHOpenFolderAndSelectItems },
     { "SHGetComputerDisplayNameW", func_SHGetComputerDisplayNameW },
     { "SHGetFileInfo", func_SHGetFileInfo },
     { "SHGetUnreadMailCountW", func_SHGetUnreadMailCountW },

@@ -16,6 +16,7 @@ extern void func_softgpu_lifetime(void);
 extern void func_softgpu_occlusion(void);
 extern void func_hwqueue(void);
 extern void func_sync2(void);
+extern void func_fencestorage(void);
 extern void func_videomem(void);
 extern void func_enum2(void);
 extern void func_context2(void);
@@ -43,7 +44,13 @@ extern void func_renderpath(void);
 extern void func_capsaudit(void);
 extern void func_umdabi(void);
 extern void func_adapterid(void);
+extern void func_queryregistry(void);
+extern void func_ctxvalidate(void);
+extern void func_gpuvareserve(void);
 extern void func_gpusync(void);
+extern void func_syncshare(void);
+extern void func_stubparity(void);
+extern void func_badptr(void);
 extern void func_ctxflags(void);
 extern void func_eventcancel(void);
 extern void func_scheduling(void);
@@ -102,6 +109,7 @@ const struct test winetest_testlist[] =
     { "softgpu_occlusion", func_softgpu_occlusion },
     { "hwqueue",       func_hwqueue },
     { "sync2",         func_sync2 },
+    { "fencestorage",  func_fencestorage },
     { "videomem",      func_videomem },
     { "enum2",         func_enum2 },
     { "context2",      func_context2 },
@@ -129,7 +137,13 @@ const struct test winetest_testlist[] =
     { "capsaudit",     func_capsaudit },
     { "umdabi",        func_umdabi },
     { "adapterid",     func_adapterid },
+    { "queryregistry", func_queryregistry },
+    { "ctxvalidate",   func_ctxvalidate },
+    { "gpuvareserve",  func_gpuvareserve },
     { "gpusync",       func_gpusync },
+    { "syncshare",     func_syncshare },
+    { "stubparity",    func_stubparity },
+    { "badptr",        func_badptr },
     { "ctxflags",      func_ctxflags },
     { "eventcancel",   func_eventcancel },
     { "scheduling",    func_scheduling },

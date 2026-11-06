@@ -47,6 +47,9 @@
 #elif defined(__aarch64__)
 #define MYEXT "ARM64"
 #define WRONGEXT "AMD64"
+#elif defined(__REACTOS__) && defined(__riscv)
+#define MYEXT "RISCV64"
+#define WRONGEXT "AMD64"
 #else
 #define MYEXT
 #define WRONGEXT

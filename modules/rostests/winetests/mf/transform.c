@@ -65,6 +65,8 @@ DEFINE_MEDIATYPE_GUID(MFVideoFormat_ARGB4444, D3DFMT_A4R4G4B4);
 /* SDK MFVideoFormat_A2R10G10B10 uses D3DFMT_A2B10G10R10, let's name it the other way */
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_A2B10G10R10, D3DFMT_A2R10G10B10);
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_P208,MAKEFOURCC('P','2','0','8'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I422,MAKEFOURCC('I','4','2','2'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I444,MAKEFOURCC('I','4','4','4'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_VC1S,MAKEFOURCC('V','C','1','S'));
 
 DEFINE_GUID(mft_output_sample_incomplete,0xffffff,0xffff,0xffff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff);
@@ -1849,6 +1851,11 @@ static BOOL is_supported_video_type(const GUID *guid)
             || IsEqualGUID(guid, &MFVideoFormat_Y41P)
             || IsEqualGUID(guid, &MFVideoFormat_Y41T)
             || IsEqualGUID(guid, &MFVideoFormat_Y42T)
+            || IsEqualGUID(guid, &MFVideoFormat_Y210)
+            || IsEqualGUID(guid, &MFVideoFormat_Y410)
+            || IsEqualGUID(guid, &MFVideoFormat_Y416)
+            || IsEqualGUID(guid, &MFVideoFormat_I422)
+            || IsEqualGUID(guid, &MFVideoFormat_I444)
             || IsEqualGUID(guid, &MFVideoFormat_ABGR32);
 }
 
@@ -8539,8 +8546,12 @@ static void test_wmv_decoder_dmo_get_size_info(void)
 
     hr = CoInitialize(NULL);
     ok(hr == S_OK, "CoInitialize failed, hr %#lx.\n", hr);
-    hr = CoCreateInstance(&CLSID_CWMVDecMediaObject, NULL, CLSCTX_INPROC_SERVER, &IID_IMediaObject, (void **)&dmo);
-    ok(hr == S_OK, "CoCreateInstance failed, hr %#lx.\n", hr);
+    if (FAILED(hr = CoCreateInstance(&CLSID_CWMVDecMediaObject, NULL, CLSCTX_INPROC_SERVER, &IID_IMediaObject, (void **)&dmo)))
+    {
+        CoUninitialize();
+        winetest_pop_context();
+        return;
+    }
 
     /* Test GetOutputSizeInfo. */
     hr = IMediaObject_GetOutputSizeInfo(dmo, 1, NULL, NULL);
@@ -9286,6 +9297,64 @@ failed:
     CoUninitialize();
 }
 
+static void check_video_processor_streams(IMFTransform *transform)
+{
+    DWORD in_id, out_id, in_count, out_count, in_min, in_max, out_min, out_max;
+    PROPVARIANT propvar = {.vt = VT_EMPTY};
+    IMFMediaEvent *event;
+    HRESULT hr;
+
+    in_min = in_max = out_min = out_max = 0xdeadbeef;
+    hr = IMFTransform_GetStreamLimits(transform, &in_min, &in_max, &out_min, &out_max);
+    ok(hr == S_OK, "GetStreamLimits returned %#lx\n", hr);
+    ok(in_min == 1, "got input_min %lu\n", in_min);
+    ok(in_max == 4, "got input_max %lu\n", in_max);
+    ok(out_min == 1, "got output_min %lu\n", out_min);
+    ok(out_max == 1, "got output_max %lu\n", out_max);
+
+    in_count = out_count = 0xdeadbeef;
+    hr = IMFTransform_GetStreamCount(transform, &in_count, &out_count);
+    ok(hr == S_OK, "GetStreamCount returned %#lx\n", hr);
+    ok(in_count == 1, "got input_count %lu\n", in_count);
+    ok(out_count == 1, "got output_count %lu\n", out_count);
+
+    in_id = out_id = 0xdeadbeef;
+    hr = IMFTransform_GetStreamIDs(transform, 1, &in_id, 1, &out_id);
+    ok(hr == S_OK, "GetStreamIDs returned %#lx\n", hr);
+    ok(in_id == 0, "got input id %#lx\n", in_id);
+    ok(out_id == 0, "got output id %#lx\n", out_id);
+
+    hr = IMFTransform_DeleteInputStream(transform, 0);
+    ok(hr == MF_E_INVALIDREQUEST, "DeleteInputStream returned %#lx\n", hr);
+    hr = IMFTransform_DeleteInputStream(transform, 1);
+    ok(hr == MF_E_INVALIDSTREAMNUMBER, "DeleteInputStream returned %#lx\n", hr);
+
+    hr = IMFTransform_AddInputStreams(transform, 0, NULL);
+    ok(hr == E_INVALIDARG, "AddInputStreams returned %#lx\n", hr);
+    in_id = 1;
+    hr = IMFTransform_AddInputStreams(transform, 1, &in_id);
+    ok(hr == S_OK, "AddInputStreams returned %#lx\n", hr);
+    in_count = out_count = 0xdeadbeef;
+    hr = IMFTransform_GetStreamCount(transform, &in_count, &out_count);
+    ok(hr == S_OK, "GetStreamCount returned %#lx\n", hr);
+    ok(in_count == 2, "got input_count %lu\n", in_count);
+    hr = IMFTransform_DeleteInputStream(transform, 1);
+    ok(hr == S_OK, "DeleteInputStream returned %#lx\n", hr);
+
+    hr = IMFTransform_SetOutputBounds(transform, 0, 0);
+    ok(hr == E_NOTIMPL, "SetOutputBounds returned %#lx\n", hr);
+
+    hr = MFCreateMediaEvent(MEEndOfStream, &GUID_NULL, S_OK, &propvar, &event);
+    ok(hr == S_OK, "MFCreateMediaEvent returned %#lx\n", hr);
+    hr = IMFTransform_ProcessEvent(transform, 0, NULL);
+    ok(hr == E_POINTER, "ProcessEvent returned %#lx\n", hr);
+    hr = IMFTransform_ProcessEvent(transform, 1, event);
+    ok(hr == S_OK, "ProcessEvent returned %#lx\n", hr);
+    hr = IMFTransform_ProcessEvent(transform, 0, event);
+    ok(hr == S_OK, "ProcessEvent returned %#lx\n", hr);
+    IMFMediaEvent_Release(event);
+}
+
 static void test_video_processor(BOOL use_2d_buffer)
 {
     const GUID *const class_id = &CLSID_VideoProcessorMFT;
@@ -9363,20 +9432,25 @@ static void test_video_processor(BOOL use_2d_buffer)
         {MFVideoFormat_UYVY},
         {MFVideoFormat_YUY2},
         {MFVideoFormat_P208},
+        {MFVideoFormat_Y210, .optional = TRUE /* >= W11 */},
+        {MFVideoFormat_Y216},
         {MFVideoFormat_NV11},
         {MFVideoFormat_AYUV},
+        {MFVideoFormat_Y410, .optional = TRUE /* >= W11 */},
         {MFVideoFormat_ARGB32},
         {MFVideoFormat_ABGR32, .optional = TRUE /* >= W10 */},
         {MFVideoFormat_RGB32},
         {MFVideoFormat_A2R10G10B10, .optional = TRUE /* >= W10 */},
+        {MFVideoFormat_Y416, .optional = TRUE /* >= W11 */},
         {MFVideoFormat_A16B16G16R16F, .optional = TRUE /* >= W10 */},
         {MFVideoFormat_RGB24},
         {MFVideoFormat_I420},
+        {MFVideoFormat_I422, .optional = TRUE /* >= W11 */},
+        {MFVideoFormat_I444, .optional = TRUE /* >= W11 */},
         {MFVideoFormat_YVYU},
         {MFVideoFormat_RGB555},
         {MFVideoFormat_RGB565},
         {MFVideoFormat_RGB8},
-        {MFVideoFormat_Y216},
         {MFVideoFormat_v410},
         {MFVideoFormat_Y41P},
         {MFVideoFormat_Y41T},
@@ -9404,6 +9478,13 @@ static void test_video_processor(BOOL use_2d_buffer)
         MFVideoFormat_NV12, /* P010 enumerates NV12 after (A)RGB32 formats */
         MFVideoFormat_A16B16G16R16F, /* enumerated with MFVideoFormat_P010 input */
         MFVideoFormat_NV21, /* enumerated with some input formats */
+        MFVideoFormat_P016, /* >= W11 */
+        MFVideoFormat_I422, /* >= W11 */
+        MFVideoFormat_I444, /* >= W11 */
+        MFVideoFormat_ABGR32, /* >= W11 */
+        MFVideoFormat_L8, /* >= W11 */
+        MFVideoFormat_L16, /* >= W11 */
+        MFVideoFormat_D16, /* >= W11 */
     };
     static const media_type_desc expect_available_common =
     {
@@ -10185,7 +10266,7 @@ static void test_video_processor(BOOL use_2d_buffer)
     check_interface(transform, &IID_IPropertyStore, FALSE);
     check_interface(transform, &IID_IPropertyBag, FALSE);
 
-    check_mft_optional_methods(transform, 1);
+    check_video_processor_streams(transform);
     check_mft_get_attributes(transform, expect_transform_attributes, TRUE);
     check_mft_get_input_stream_info(transform, S_OK, &initial_input_info);
     check_mft_get_output_stream_info(transform, S_OK, &initial_output_info);
@@ -10250,10 +10331,9 @@ static void test_video_processor(BOOL use_2d_buffer)
             hr = IMFMediaType_GetUINT64(media_type2, &MF_MT_FRAME_SIZE, &tmp);
             ok(hr == MF_E_ATTRIBUTENOTFOUND, "Unexpected frame size: %#lx %#I64x\n", hr, tmp);
 
-            for (; k < ARRAY_SIZE(expect_available_outputs); k++)
+            for (k = 0; k < ARRAY_SIZE(expect_available_outputs); k++)
                 if (IsEqualGUID(&expect_available_outputs[k], &guid))
                     break;
-            todo_wine_if(IsEqualGUID(&guid, &MFVideoFormat_ABGR32)) /* enumerated on purpose on Wine */
             ok(k < ARRAY_SIZE(expect_available_outputs), "got subtype %s\n", debugstr_guid(&guid));
 
             ret = IMFMediaType_Release(media_type2);
@@ -10304,7 +10384,6 @@ static void test_video_processor(BOOL use_2d_buffer)
     }
     ok(hr == MF_E_NO_MORE_TYPES, "GetInputAvailableType returned %#lx\n", hr);
 
-    /* MFVideoFormat_ABGR32 isn't supported by the video processor in non-D3D mode */
     check_mft_set_input_type(transform, nv12_default_stride, S_OK);
 
     hr = IMFTransform_GetOutputAvailableType(transform, 0, 0, &media_type);
@@ -10312,7 +10391,7 @@ static void test_video_processor(BOOL use_2d_buffer)
     hr = IMFMediaType_SetGUID(media_type, &MF_MT_SUBTYPE, &MFVideoFormat_ABGR32);
     ok(hr == S_OK, "got %#lx\n", hr);
     hr = IMFTransform_SetOutputType(transform, 0, media_type, 0);
-    todo_wine ok(hr == MF_E_INVALIDMEDIATYPE, "got %#lx\n", hr);
+    ok(hr == MF_E_ATTRIBUTENOTFOUND, "got %#lx\n", hr);
     IMFMediaType_Release(media_type);
 
     /* MFVideoFormat_RGB32 output format works */

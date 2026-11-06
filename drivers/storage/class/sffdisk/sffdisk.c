@@ -33,6 +33,11 @@ SffdiskCreatePhysicalDriveLink(
 
 static
 NTSTATUS
+SffdiskCreatePartitionZeroLink(
+    _Inout_ PSFFDISK_DEVICE_EXTENSION DeviceExtension);
+
+static
+NTSTATUS
 SffdiskOpenBusInterface(
     _Inout_ PSFFDISK_DEVICE_EXTENSION DeviceExtension);
 
@@ -1105,6 +1110,12 @@ SffdiskStartDevice(
         goto CleanupInterface;
     }
 
+    Status = SffdiskCreatePartitionZeroLink(DeviceExtension);
+    if (!NT_SUCCESS(Status))
+    {
+        goto CleanupInterface;
+    }
+
     SffdiskUnblockBusRequests(DeviceExtension);
 
     DPRINT1("SffdiskStartDevice: Card type %d, %I64u sectors, %s, %s\n",
@@ -1184,6 +1195,63 @@ SffdiskDeletePhysicalDriveLink(
     DeviceExtension->PhysicalDriveLinkCreated = FALSE;
 }
 
+/** Create the whole-disk name that Setup and the kernel's disk code open, as disk.sys does. */
+static
+NTSTATUS
+SffdiskCreatePartitionZeroLink(
+    _Inout_ PSFFDISK_DEVICE_EXTENSION DeviceExtension)
+{
+    WCHAR LinkNameBuffer[64];
+    UNICODE_STRING LinkName;
+    NTSTATUS Status;
+
+    if (DeviceExtension->PartitionZeroLinkCreated)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    swprintf(LinkNameBuffer,
+             RTL_NUMBER_OF(LinkNameBuffer),
+             L"\\Device\\Harddisk%lu\\Partition0",
+             DeviceExtension->DiskNumber);
+    RtlInitUnicodeString(&LinkName, LinkNameBuffer);
+
+    Status = IoCreateSymbolicLink(&LinkName, &DeviceExtension->DeviceName);
+    if (NT_SUCCESS(Status))
+    {
+        DeviceExtension->PartitionZeroLinkCreated = TRUE;
+    }
+    else
+    {
+        DPRINT1("Sffdisk: IoCreateSymbolicLink(%wZ) failed 0x%08lx\n",
+                &LinkName, Status);
+    }
+
+    return Status;
+}
+
+static
+VOID
+SffdiskDeletePartitionZeroLink(
+    _Inout_ PSFFDISK_DEVICE_EXTENSION DeviceExtension)
+{
+    WCHAR LinkNameBuffer[64];
+    UNICODE_STRING LinkName;
+
+    if (!DeviceExtension->PartitionZeroLinkCreated)
+    {
+        return;
+    }
+
+    swprintf(LinkNameBuffer,
+             RTL_NUMBER_OF(LinkNameBuffer),
+             L"\\Device\\Harddisk%lu\\Partition0",
+             DeviceExtension->DiskNumber);
+    RtlInitUnicodeString(&LinkName, LinkNameBuffer);
+    IoDeleteSymbolicLink(&LinkName);
+    DeviceExtension->PartitionZeroLinkCreated = FALSE;
+}
+
 static
 VOID
 SffdiskStopDevice(
@@ -1200,6 +1268,7 @@ SffdiskStopDevice(
         DeviceExtension->DiskInterfaceEnabled = FALSE;
     }
 
+    SffdiskDeletePartitionZeroLink(DeviceExtension);
     SffdiskDeletePhysicalDriveLink(DeviceExtension);
 
     SffdiskCloseBusInterface(DeviceExtension);

@@ -205,7 +205,7 @@ KiInitializeContextThread(IN PKTHREAD Thread,
         TrapFrame->DbgArgMark = 0xBADB0D00;
 
         /* Set the previous mode as user */
-        TrapFrame->PreviousPreviousMode = UserMode;
+        TrapFrame->PreviousPreviousMode = UserMode | KI_EXCEPTION_ACTIVE_FRAME;
 
         /* Terminate the Exception Handler List */
         TrapFrame->ExceptionList = EXCEPTION_CHAIN_END;
@@ -484,6 +484,10 @@ KiSwapContextEntry(IN PKSWITCHFRAME SwitchFrame,
 
     /* ISRs can change FPU state, so disable interrupts while checking */
     _disable();
+
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+    KiChargeThreadCycleTime(&Pcr->PrcbData, OldThread);
+#endif
 
     /* Get the current CR0 state */
     Cr0 = __readcr0();

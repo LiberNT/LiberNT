@@ -248,6 +248,13 @@ ScControl(LPCTSTR Server,       // remote machine name
         else
             QueryDescriptionUsage();
     }
+    else if (!lstrcmpi(Command, _T("qfailureflag")))
+    {
+        if (ArgCount > 0)
+            QueryFailureFlag(*ServiceArgs);
+        else
+            QueryFailureFlagUsage();
+    }
     else if (!lstrcmpi(Command, _T("qfailure")))
     {
         if (ArgCount > 0)
@@ -287,6 +294,21 @@ ScControl(LPCTSTR Server,       // remote machine name
     else if (!lstrcmpi(Command, _T("failure")))
     {
         SetFailure(ServiceArgs, ArgCount);
+    }
+    else if (!lstrcmpi(Command, _T("failureflag")))
+    {
+        SetFailureFlag(ServiceArgs, ArgCount);
+    }
+    else if (!lstrcmpi(Command, _T("triggerinfo")))
+    {
+        SetTriggerInfo(ServiceArgs, ArgCount);
+    }
+    else if (!lstrcmpi(Command, _T("qtriggerinfo")))
+    {
+        if (ArgCount > 0)
+            QueryTriggerInfo(*ServiceArgs);
+        else
+            QueryTriggerInfoUsage();
     }
     else if (!lstrcmpi(Command, _T("GetDisplayName")))
     {

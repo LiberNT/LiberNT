@@ -632,6 +632,8 @@ static HRESULT source_query_interface(struct strmbase_pin *iface, REFIID iid, vo
 
     if (IsEqualGUID(iid, &IID_IAsyncReader))
         *out = &filter->IAsyncReader_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->source.pin.IQualityControl_iface;
     else
         return E_NOINTERFACE;
 

@@ -353,6 +353,7 @@ MiBalanceMemory(
                                       TRUE);
 
     MI_ATOMIC_ADD64(&Manager->PagesTrimmed, Trimmed);
+    /* FIXME: the caller writes mapped-file pages itself, so a busy file system lock delays the next trim */
     MiWriteModifiedPages(System, Trimmed + 64);
     return Trimmed;
 }

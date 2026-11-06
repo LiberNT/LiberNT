@@ -945,9 +945,13 @@ HRESULT WINAPI MFEnumDeviceSources(IMFAttributes *attributes, IMFActivate ***sou
 
     if (IsEqualGUID(&source_type, &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID))
     {
+#ifdef __REACTOS__
+        return enum_ks_video_sources(sources, ret_count);
+#else
         FIXME("Not implemented for video capture devices.\n");
         *ret_count = 0;
         return S_OK;
+#endif
     }
     if (IsEqualGUID(&source_type, &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_GUID))
         return enum_audio_capture_sources(attributes, sources, ret_count);
@@ -960,11 +964,29 @@ HRESULT WINAPI MFEnumDeviceSources(IMFAttributes *attributes, IMFActivate ***sou
  */
 HRESULT WINAPI MFCreateDeviceSource(IMFAttributes *attributes, IMFMediaSource **source)
 {
+#ifdef __REACTOS__
+    GUID source_type;
+    HRESULT hr;
+
+    TRACE("%p, %p.\n", attributes, source);
+
+    if (!attributes || !source) return E_INVALIDARG;
+    *source = NULL;
+
+    if (FAILED(hr = IMFAttributes_GetGUID(attributes, &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, &source_type)))
+        return hr;
+    if (IsEqualGUID(&source_type, &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID))
+        return create_ks_video_source(attributes, source);
+
+    FIXME("Device source type %s is not implemented.\n", debugstr_guid(&source_type));
+    return E_NOTIMPL;
+#else
     FIXME("%p %p: stub!\n", attributes, source);
 
     if (!attributes || !source) return E_INVALIDARG;
     *source = NULL;
     return E_NOTIMPL;
+#endif
 }
 
 struct simple_type_handler

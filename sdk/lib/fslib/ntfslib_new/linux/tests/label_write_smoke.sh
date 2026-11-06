@@ -29,3 +29,12 @@ reference_label=$("$ntfslabel" "$image")
 test -z "$core_label"
 test -z "$reference_label"
 "$ntfsfix" -n "$image" >/dev/null
+
+# The native formatter writes an empty $VOLUME_NAME for an unlabeled volume,
+# as Windows 11 format does, so a label can be set afterwards.
+native="$workdir/native.ntfs"
+truncate -s 64M "$native"
+"$driver" --format "$native" 131072 0 8 "" >/dev/null
+"$driver" --set-label "$native" AFTER
+test "$("$ntfslabel" "$native")" = AFTER
+"$ntfsfix" -n "$native" >/dev/null

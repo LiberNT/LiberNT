@@ -246,25 +246,35 @@ TDI_STATUS InfoTdiQueryGetArptableMIB(TDIEntityID ID,
 				      PNDIS_BUFFER Buffer,
 				      PUINT BufferSize) {
     NTSTATUS Status;
-    ULONG NumNeighbors = NBCopyNeighbors( Interface, NULL );
-    ULONG MemSize = NumNeighbors * sizeof(IPARP_ENTRY);
+    ULONG Capacity = NBCopyNeighbors( Interface, NULL, 0 );
+    ULONG NumNeighbors;
     PIPARP_ENTRY ArpEntries;
 
-    if (MemSize != 0)
-    {
-        ArpEntries = ExAllocatePoolWithTag( NonPagedPool, MemSize, ARP_ENTRY_TAG );
+    if (Capacity == 0)
+        return InfoCopyOut(NULL, 0, NULL, BufferSize);
+
+    for (;;) {
+        if (Capacity > MAXULONG / sizeof(IPARP_ENTRY))
+            return TDI_NO_RESOURCES;
+
+        ArpEntries = ExAllocatePoolWithTag( NonPagedPool, Capacity * sizeof(IPARP_ENTRY), ARP_ENTRY_TAG );
         if( !ArpEntries ) return STATUS_NO_MEMORY;
 
-        NBCopyNeighbors( Interface, ArpEntries );
-
-        Status = InfoCopyOut( (PVOID)ArpEntries, MemSize, Buffer, BufferSize );
+        RtlZeroMemory(ArpEntries, Capacity * sizeof(IPARP_ENTRY));
+        NumNeighbors = NBCopyNeighbors( Interface, ArpEntries, Capacity );
+        if (NumNeighbors <= Capacity)
+            break;
 
         ExFreePoolWithTag( ArpEntries, ARP_ENTRY_TAG );
+        Capacity = NumNeighbors;
     }
-    else
-    {
+
+    if (NumNeighbors == 0)
         Status = InfoCopyOut(NULL, 0, NULL, BufferSize);
-    }
+    else
+        Status = InfoCopyOut( (PVOID)ArpEntries, NumNeighbors * sizeof(IPARP_ENTRY), Buffer, BufferSize );
+
+    ExFreePoolWithTag( ArpEntries, ARP_ENTRY_TAG );
 
     return Status;
 }

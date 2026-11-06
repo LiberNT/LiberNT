@@ -183,6 +183,25 @@ CcLruInsert(
 }
 
 static
+VOID
+CcLruInsertHead(
+    _Inout_ PCC_CACHE Cache,
+    _Inout_ PCC_VIEW View)
+{
+    PCC_LRU_SHARD Shard = &Cache->Lru[View->LruShard];
+    KIRQL OldIrql;
+
+    CC_LOCK_ACQUIRE(&Shard->Lock, &OldIrql);
+    if (!View->OnLru)
+    {
+        InsertHeadList(&Shard->List, &View->LruLink);
+        View->OnLru = TRUE;
+        Shard->Count++;
+    }
+    CC_LOCK_RELEASE(&Shard->Lock, OldIrql);
+}
+
+static
 PCC_VIEW
 CcViewReclaimShard(
     _Inout_ PCC_CACHE Cache,
@@ -245,6 +264,59 @@ CcViewReclaimShard(
 
     if (Claimed != NULL)
         Claimed->ReferenceCount = 1;
+
+    CC_LOCK_RELEASE(&Shard->Lock, ShardIrql);
+    return Claimed;
+}
+
+static
+PCC_VIEW
+CcViewDetachIdleShard(
+    _Inout_ PCC_CACHE Cache,
+    _In_ ULONG ShardIndex,
+    _Out_ PCC_MAP *OldMap,
+    _Out_ PVOID *OldBase)
+{
+    PCC_LRU_SHARD Shard = &Cache->Lru[ShardIndex];
+    PCC_VIEW Claimed = NULL;
+    PLIST_ENTRY Entry;
+    KIRQL ShardIrql;
+    KIRQL OldIrql;
+
+    CC_LOCK_ACQUIRE(&Shard->Lock, &ShardIrql);
+    for (Entry = Shard->List.Flink; Entry != &Shard->List && Claimed == NULL; Entry = Entry->Flink)
+    {
+        PCC_VIEW View = CONTAINING_RECORD(Entry, CC_VIEW, LruLink);
+        PCC_MAP Map = View->Map;
+
+        if (Map == NULL)
+            continue;
+
+        CC_LOCK_ACQUIRE(&Map->IndexLock, &OldIrql);
+        if (!Map->ReclaimsDraining && View->Map == Map && CC_ATOMIC_READ32(&View->ReferenceCount) == 0)
+        {
+            PCC_SLOT Slot = CcMapSlot(Map, CcSlotNumber(View->FileOffset), FALSE);
+
+            CC_ASSERT(Slot != NULL && Slot->View == View);
+            Slot->View = NULL;
+            Map->ViewsAttached--;
+            Map->ReclaimsInProgress++;
+            *OldMap = Map;
+            *OldBase = View->BaseAddress;
+            View->Map = NULL;
+            View->BaseAddress = NULL;
+            Claimed = View;
+        }
+        CC_LOCK_RELEASE(&Map->IndexLock, OldIrql);
+    }
+
+    if (Claimed != NULL)
+    {
+        RemoveEntryList(&Claimed->LruLink);
+        Claimed->OnLru = FALSE;
+        Shard->Count--;
+        Claimed->ReferenceCount = 1;
+    }
 
     CC_LOCK_RELEASE(&Shard->Lock, ShardIrql);
     return Claimed;
@@ -389,6 +461,8 @@ CcViewGet(
     }
 
     Status = Map->Ops.MapView(Map->Context, ViewOffset, CC_VIEW_SIZE, &Base);
+    while (Status == STATUS_NO_MEMORY && CcCacheReleaseIdle(Cache, 1) != 0)
+        Status = Map->Ops.MapView(Map->Context, ViewOffset, CC_VIEW_SIZE, &Base);
     if (!NT_SUCCESS(Status))
     {
         Fresh->ReferenceCount = 0;
@@ -557,6 +631,37 @@ CcMapDetachViews(
     }
 
     return AllDetached;
+}
+
+ULONG
+CcCacheReleaseIdle(
+    _Inout_ PCC_CACHE Cache,
+    _In_ ULONG ViewTarget)
+{
+    ULONG Released = 0;
+    ULONG Shard;
+
+    for (Shard = 0; Shard < CC_LRU_SHARDS && Released < ViewTarget; Shard++)
+    {
+        while (Released < ViewTarget)
+        {
+            PCC_MAP OldMap = NULL;
+            PVOID OldBase = NULL;
+            PCC_VIEW View = CcViewDetachIdleShard(Cache, Shard, &OldMap, &OldBase);
+
+            if (View == NULL)
+                break;
+
+            OldMap->Ops.UnmapView(OldMap->Context, OldBase);
+            CcMapReleaseReclaim(OldMap);
+            CC_ATOMIC_ADD64(&Cache->ViewReclaims, 1);
+            View->ReferenceCount = 0;
+            CcLruInsertHead(Cache, View);
+            Released++;
+        }
+    }
+
+    return Released;
 }
 
 ULONG

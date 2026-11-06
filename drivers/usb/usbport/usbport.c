@@ -1330,7 +1330,9 @@ USBPORT_FlushDoneTransfers(IN PDEVICE_OBJECT FdoDevice)
     PUSBPORT_ENDPOINT Endpoint;
     ULONG TransferCount = 0;
     KIRQL OldIrql;
+    KIRQL EntryIrql;
     BOOLEAN IsHasTransfers;
+    BOOLEAN IsFlushOwner = FALSE;
     ULONG Iterations = 0;
 
     DPRINT_CORE("USBPORT_FlushDoneTransfers: ...\n");
@@ -1338,9 +1340,24 @@ USBPORT_FlushDoneTransfers(IN PDEVICE_OBJECT FdoDevice)
     FdoExtension = FdoDevice->DeviceExtension;
     DoneTransferList = &FdoExtension->DoneTransferList;
 
+    KeRaiseIrql(DISPATCH_LEVEL, &EntryIrql);
+
     while (TRUE)
     {
         KeAcquireSpinLock(&FdoExtension->DoneTransferSpinLock, &OldIrql);
+
+        /* One CPU drains at a time so a pipe's transfers complete in order. */
+        if (!IsFlushOwner)
+        {
+            if (FdoExtension->DoneTransferFlushActive)
+            {
+                KeReleaseSpinLock(&FdoExtension->DoneTransferSpinLock, OldIrql);
+                KeLowerIrql(EntryIrql);
+                return;
+            }
+            FdoExtension->DoneTransferFlushActive = TRUE;
+            IsFlushOwner = TRUE;
+        }
 
         if (IsListEmpty(DoneTransferList))
             break;
@@ -1348,8 +1365,10 @@ USBPORT_FlushDoneTransfers(IN PDEVICE_OBJECT FdoDevice)
         /* Yield after N transfers to prevent DPC timeout */
         if (Iterations >= USBPORT_MAX_DONE_TRANSFERS_PER_DPC)
         {
+            FdoExtension->DoneTransferFlushActive = FALSE;
             KeReleaseSpinLock(&FdoExtension->DoneTransferSpinLock, OldIrql);
             KeInsertQueueDpc(&FdoExtension->TransferFlushDpc, NULL, NULL);
+            KeLowerIrql(EntryIrql);
             return;
         }
 
@@ -1437,7 +1456,9 @@ USBPORT_FlushDoneTransfers(IN PDEVICE_OBJECT FdoDevice)
         }
     }
 
+    FdoExtension->DoneTransferFlushActive = FALSE;
     KeReleaseSpinLock(&FdoExtension->DoneTransferSpinLock, OldIrql);
+    KeLowerIrql(EntryIrql);
 }
 
 
@@ -1693,9 +1714,7 @@ USBPORT_IsrDpcHandler(IN PDEVICE_OBJECT FdoDevice,
         {
             KeReleaseSpinLockFromDpcLevel(&Endpoint->EndpointSpinLock);
 
-            ExInterlockedInsertHeadList(&FdoExtension->EpStateChangeList,
-                                        &Endpoint->StateChangeLink,
-                                        &FdoExtension->EpStateChangeSpinLock);
+            USBPORT_QueueEndpointStateChange(Endpoint, TRUE);
 
             KeAcquireSpinLockAtDpcLevel(&FdoExtension->MiniportSpinLock);
             Packet->InterruptNextSOF(FdoExtension->MiniPortExt);

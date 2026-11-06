@@ -58,6 +58,16 @@ D3DUmdRtRegisterResource(HANDLE hRuntimeDevice, HANDLE hRuntimeResource,
                         D3DKMT_CREATEALLOCATIONFLAGS Flags,
                         CONST VOID *RuntimeData, UINT RuntimeDataSize);
 
+/* Applies IDXGIDevice::SetGPUThreadPriority (-7..7) to every context of the device. */
+HRESULT WINAPI
+D3DUmdRtSetContextSchedulingPriority(HANDLE hRuntimeDevice, INT Priority);
+
+/* Opens a monitored fence shared through an NT handle on the runtime's device and
+ * tracks it like a created sync object; pfnDestroySynchronizationObjectCb closes it. */
+HRESULT WINAPI
+D3DUmdRtOpenSyncObjectFromNtHandle(HANDLE hRuntimeDevice, HANDLE NtHandle, D3DKMT_HANDLE *SyncObjectHandle,
+                                   PVOID *CpuValue, D3DGPU_VIRTUAL_ADDRESS *GpuValue);
+
 /* Either output may be NULL. An unshared resource has a zero global handle. */
 HRESULT WINAPI
 D3DUmdRtGetResourceHandles(HANDLE hRuntimeDevice, HANDLE hRuntimeResource,

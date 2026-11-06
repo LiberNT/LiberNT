@@ -405,6 +405,15 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_TakeOwnership(IDXGIOutput6 *iface, 
 
     if (!device)
         return DXGI_ERROR_INVALID_CALL;
+#ifdef __REACTOS__
+    {
+        IDXGIDevice *dxgi_device;
+
+        if (FAILED(IUnknown_QueryInterface(device, &IID_IDXGIDevice, (void **)&dxgi_device)))
+            return E_NOINTERFACE;
+        IDXGIDevice_Release(dxgi_device);
+    }
+#endif
 
     wined3d_mutex_lock();
     hr = wined3d_output_take_ownership(output->wined3d_output, exclusive);
@@ -434,6 +443,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetGammaControlCapabilities(IDXGIOu
     if (!gamma_caps)
         return E_INVALIDARG;
 #ifdef __REACTOS__
+    /* FIXME: a native D3D11 fullscreen swap chain composites through DWM and takes no ownership, so this fails there */
     if (!wined3d_output_is_exclusively_owned(impl_from_IDXGIOutput6(iface)->wined3d_output))
         return DXGI_ERROR_INVALID_CALL;
 #endif

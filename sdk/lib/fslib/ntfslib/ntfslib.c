@@ -560,6 +560,30 @@ NtfsCheckControl(
     return NtFsControlFile(Handle, NULL, NULL, NULL, &IoStatusBlock, Code, NULL, 0, Output, OutputLength);
 }
 
+static
+BOOLEAN
+NtfsNeedsOnlineScanOnly(
+    IN HANDLE Handle)
+{
+    PNtfsVolume Volume = NULL;
+    ULONG BytesPerSector = 0;
+    USHORT Flags = 0;
+    NTSTATUS Status;
+
+    Status = NtfsDiskInitializeUm(Handle, &BytesPerSector);
+    if (NT_SUCCESS(Status))
+    {
+        NtfsSetReadOnlyMode(TRUE);
+        Status = NtfsProbePartitionAndOpenVolume(BytesPerSector, &Volume);
+        NtfsSetReadOnlyMode(FALSE);
+    }
+    if (NT_SUCCESS(Status))
+        Status = NtfsVolumeQueryFlags(Volume, &Flags);
+    if (Volume)
+        NtfsVolumeDestroy(Volume);
+    return NT_SUCCESS(Status) && (Flags & VOL_DIRTY) && !NtfsVolumeNeedsStartupRepair(Flags);
+}
+
 BOOLEAN
 NTAPI
 NtfsChkdsk(
@@ -622,6 +646,13 @@ NtfsChkdsk(
     }
     if (CheckOnlyIfDirty && Dirty && !FixErrors)
     {
+        if (NtfsNeedsOnlineScanOnly(Handle))
+        {
+            NtfsFormatReport(Callback, "The volume needs an online scan, which is not run at startup.\n");
+            NtClose(Handle);
+            *ExitStatus = (ULONG)STATUS_SUCCESS;
+            return TRUE;
+        }
         NtfsFormatReport(Callback, "The volume is dirty.\n");
         NtClose(Handle);
         return TRUE;
@@ -650,7 +681,7 @@ NtfsChkdsk(
         Status = NtfsVolumeCheck(Volume, Locked, NtfsCheckReport, &Check, &Result);
     }
     if (NT_SUCCESS(Status) && Locked && Dirty && Result.Errors == 0)
-        Status = NtfsVolumeSetFlags(Volume, 0, VOL_DIRTY);
+        Status = NtfsVolumeSetFlags(Volume, 0, VOL_DIRTY | VOL_FULL_CHKDSK | VOL_ONLINE_SCAN);
 
     if (Volume)
         NtfsVolumeDestroy(Volume);

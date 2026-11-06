@@ -22,6 +22,7 @@
 #include "lxinstall.h"
 
 #define LX_USER_GROUPS_MAX 3
+#define LX_MANAGER_WAIT_TRIES 100
 
 static
 VOID
@@ -255,6 +256,23 @@ LxCreateDefaultUser(
 }
 
 static
+BOOL
+LxWaitForManager(
+    _In_ PCWSTR Root)
+{
+    PCSTR Args[3] = { "test", "-S", "/run/systemd/private" };
+    ULONG Try;
+
+    for (Try = 0; Try < LX_MANAGER_WAIT_TRIES; Try++)
+    {
+        if (LxRunRootTool(Root, "/usr/bin/test", Args, 3, NULL, LX_CREATE_JOIN) == 0)
+            return TRUE;
+        Sleep(100);
+    }
+    return FALSE;
+}
+
+static
 VOID
 LxStartUserSession(
     _Inout_ PLX_LAUNCH Launch,
@@ -264,7 +282,8 @@ LxStartUserSession(
     PCSTR Args[3];
 
     if (!LxInstanceBooted(Launch->Name, Launch->Root) ||
-        !LxRootHasFile(Launch->Root, L"\\etc\\systemd\\system\\lxsession@.service"))
+        !LxRootHasFile(Launch->Root, L"\\etc\\systemd\\system\\lxsession@.service") ||
+        !LxWaitForManager(Launch->Root))
     {
         return;
     }
@@ -386,6 +405,8 @@ wmain(
     }
     if (GetFullPathNameW(Launch.Root, MAX_PATH, FullRoot, NULL))
         LxKeepResolvConf(FullRoot);
+    if (!(Launch.Flags & (LX_CREATE_NEW_INSTANCE | LX_CREATE_JOIN)))
+        LxBootRoot(Launch.Name, Launch.Root);
     LxStartWindowHost(Launch.Root);
 
     if (!LxEnvSet(&Launch.Env, "TERM=xterm-256color") ||

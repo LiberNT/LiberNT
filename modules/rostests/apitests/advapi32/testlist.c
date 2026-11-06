@@ -7,6 +7,7 @@ extern void func_ControlServiceEx(void);
 extern void func_CopySid(void);
 extern void func_CreateService(void);
 extern void func_DuplicateTokenEx(void);
+extern void func_EnableTraceEx(void);
 extern void func_EnumerateTraceGuidsEx(void);
 extern void func_eventlog_supp(void);
 extern void func_Hash(void);
@@ -34,7 +35,9 @@ extern void func_RegQueryValueExW(void);
 extern void func_RtlEncryptMemory(void);
 extern void func_SaferIdentifyLevel(void);
 extern void func_ServiceArgs(void);
+extern void func_ServiceCrash(void);
 extern void func_ServiceEnv(void);
+extern void func_TriggerInfo(void);
 extern void func_ServiceNetwork(void);
 extern void func_TokenBnoIsolation(void);
 extern void func_TraceGuids(void);
@@ -46,6 +49,7 @@ const struct test winetest_testlist[] =
     { "CopySid", func_CopySid },
     { "CreateService", func_CreateService },
     { "DuplicateTokenEx", func_DuplicateTokenEx },
+    { "EnableTraceEx", func_EnableTraceEx },
     { "EnumerateTraceGuidsEx", func_EnumerateTraceGuidsEx },
     { "eventlog_supp", func_eventlog_supp },
     { "Hash", func_Hash },
@@ -73,7 +77,9 @@ const struct test winetest_testlist[] =
     { "RtlEncryptMemory", func_RtlEncryptMemory },
     { "SaferIdentifyLevel", func_SaferIdentifyLevel },
     { "ServiceArgs", func_ServiceArgs },
+    { "ServiceCrash", func_ServiceCrash },
     { "ServiceEnv", func_ServiceEnv },
+    { "TriggerInfo", func_TriggerInfo },
     { "ServiceNetwork", func_ServiceNetwork },
     { "TokenBnoIsolation", func_TokenBnoIsolation },
     { "TraceGuids", func_TraceGuids },

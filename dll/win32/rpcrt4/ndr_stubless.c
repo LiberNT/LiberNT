@@ -486,6 +486,37 @@ static size_t basetype_arg_size( unsigned char fc )
     }
 }
 
+#if defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+static void riscv64_widen_basetype( unsigned char fc, LONG_PTR *slot )
+{
+    switch (fc)
+    {
+    case FC_SMALL:
+        *slot = *(signed char *)slot;
+        break;
+    case FC_BYTE:
+    case FC_CHAR:
+    case FC_USMALL:
+        *slot = *(unsigned char *)slot;
+        break;
+    case FC_SHORT:
+        *slot = *(short *)slot;
+        break;
+    case FC_USHORT:
+    case FC_WCHAR:
+        *slot = *(unsigned short *)slot;
+        break;
+    case FC_LONG:
+    case FC_ULONG:
+    case FC_ENUM16:
+    case FC_ENUM32:
+    case FC_ERROR_STATUS_T:
+        *slot = *(int *)slot;
+        break;
+    }
+}
+
+#endif
 void client_do_args( PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat, enum stubless_phase phase,
                      BOOLEAN fpu_args, unsigned short number_of_params, unsigned char *pRetVal )
 {
@@ -535,6 +566,10 @@ void client_do_args( PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat, enum s
             {
                 if (params[i].attr.IsReturn && pRetVal) pArg = pRetVal;
                 call_unmarshaller(pStubMsg, &pArg, &params[i], 0);
+#if defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+                if (params[i].attr.IsReturn && pRetVal && params[i].attr.IsBasetype)
+                    riscv64_widen_basetype( params[i].u.type_format_char, (LONG_PTR *)pRetVal );
+#endif
             }
             break;
         case STUBLESS_FREE:
@@ -1306,6 +1341,11 @@ static LONG_PTR *stub_do_args(MIDL_STUB_MESSAGE *pStubMsg,
 
             if (params[i].attr.IsIn)
                 call_unmarshaller(pStubMsg, &pArg, &params[i], 0);
+#if defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+            if (params[i].attr.IsIn && params[i].attr.IsBasetype && !params[i].attr.IsSimpleRef)
+                riscv64_widen_basetype( params[i].u.type_format_char,
+                                        (LONG_PTR *)(pStubMsg->StackTop + params[i].stack_offset) );
+#endif
             break;
         case STUBLESS_CALCSIZE:
             if (params[i].attr.IsOut || params[i].attr.IsReturn)

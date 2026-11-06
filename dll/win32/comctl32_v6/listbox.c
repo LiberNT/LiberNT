@@ -44,6 +44,9 @@ WINE_DEFAULT_DEBUG_CHANNEL(listbox);
 
 /* Listbox system timer id */
 #define LB_TIMER_ID  2
+#ifdef __REACTOS__
+#define LB_SEARCH_TIMER_ID  3
+#endif
 
 /* flag listbox changed while setredraw false - internal style */
 #define LBS_DISPLAYCHANGED 0x80000000
@@ -91,6 +94,10 @@ typedef struct
     HFONT       font;           /* Current font */
     LCID        locale;         /* Current locale for string comparisons */
     HEADCOMBO  *lphc;           /* ComboLBox */
+#ifdef __REACTOS__
+    WCHAR       search[256];
+    INT         search_len;
+#endif
 } LB_DESCR;
 
 
@@ -2556,6 +2563,20 @@ static LRESULT LISTBOX_HandleChar( LB_DESCR *descr, WCHAR charW )
                                 (LPARAM)descr->self );
         if (caret == -2) return 0;
     }
+#ifdef __REACTOS__
+    if (caret == -1 && (descr->style & LBS_SORT) && HAS_STRINGS(descr))
+    {
+        SetSystemTimer( descr->self, LB_SEARCH_TIMER_ID, 4 * GetDoubleClickTime(), 0 );
+        if (descr->search_len < ARRAY_SIZE(descr->search) - 1)
+        {
+            descr->search[descr->search_len] = charW;
+            descr->search[descr->search_len + 1] = 0;
+            caret = LISTBOX_FindString( descr, -1, descr->search, FALSE );
+            if (caret != -1) descr->search_len++;
+        }
+        if (caret == -1) return 0;
+    }
+#endif
     if (caret == -1)
         caret = LISTBOX_FindString( descr, descr->focus_item, str, FALSE);
     if (caret != -1)
@@ -2564,7 +2585,15 @@ static LRESULT LISTBOX_HandleChar( LB_DESCR *descr, WCHAR charW )
            LISTBOX_SetSelection( descr, caret, TRUE, FALSE);
         LISTBOX_MoveCaret( descr, caret, TRUE );
         if ((descr->style & LBS_NOTIFY) && descr->nb_items)
+#ifdef __REACTOS__
+        {
+            if (descr->lphc && IsWindowVisible( descr->self ))
+                descr->lphc->wState |= CBF_NOROLLUP;
             SEND_NOTIFICATION( descr, LBN_SELCHANGE );
+        }
+#else
+            SEND_NOTIFICATION( descr, LBN_SELCHANGE );
+#endif
     }
     return 0;
 }
@@ -2598,6 +2627,9 @@ static BOOL LISTBOX_Create( HWND hwnd, LPHEADCOMBO lphc )
     descr->item_height   = 1;
     descr->page_size     = 1;
     descr->column_width  = 150;
+#ifdef __REACTOS__
+    descr->search_len    = 0;
+#endif
     descr->horz_extent   = 0;
     descr->horz_pos      = 0;
     descr->nb_tabs       = 0;
@@ -2884,9 +2916,16 @@ static LRESULT CALLBACK LISTBOX_WindowProc( HWND hwnd, UINT msg, WPARAM wParam, 
 
     case LB_SETCURSEL:
         if (IS_MULTISELECT(descr)) return LB_ERR;
+#ifdef __REACTOS__
+        if ((descr->style & LBS_NOSEL) && (INT)wParam >= descr->nb_items) return LB_ERR;
+#endif
         LISTBOX_SetCaretIndex( descr, wParam, TRUE );
         ret = LISTBOX_SetSelection( descr, wParam, TRUE, FALSE );
+#ifdef __REACTOS__
+	if (ret != LB_ERR || ((descr->style & LBS_NOSEL) && (INT)wParam >= 0)) ret = descr->selected_item;
+#else
 	if (ret != LB_ERR) ret = descr->selected_item;
+#endif
 	return ret;
 
     case LB_GETSELCOUNT:
@@ -2953,6 +2992,9 @@ static LRESULT CALLBACK LISTBOX_WindowProc( HWND hwnd, UINT msg, WPARAM wParam, 
         return LISTBOX_SetTabStops( descr, wParam, (LPINT)lParam );
 
     case LB_CARETON:
+#ifdef __REACTOS__
+        descr->search_len = 0;
+#endif
         if (descr->caret_on)
             return LB_OKAY;
         descr->caret_on = TRUE;
@@ -3123,6 +3165,14 @@ static LRESULT CALLBACK LISTBOX_WindowProc( HWND hwnd, UINT msg, WPARAM wParam, 
         return LISTBOX_HandleChar( descr, wParam );
 
     case WM_SYSTIMER:
+#ifdef __REACTOS__
+        if (wParam == LB_SEARCH_TIMER_ID)
+        {
+            KillSystemTimer( descr->self, LB_SEARCH_TIMER_ID );
+            descr->search_len = 0;
+            return 0;
+        }
+#endif
         return LISTBOX_HandleSystemTimer( descr );
     case WM_ERASEBKGND:
         if ((IS_OWNERDRAW(descr)) && !(descr->style & LBS_DISPLAYCHANGED))

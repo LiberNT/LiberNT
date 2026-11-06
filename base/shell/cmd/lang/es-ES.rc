@@ -23,6 +23,8 @@ el procedimiento que realizo la llamada.\n"
 el directorio actual.\n"
     WCMD_CHDIR, "CHDIR <directorio> cambia el directorio actual.\n"
     WCMD_CLS, "CLS limpia la consola actual.\n"
+    WCMD_BREAK, "BREAK activa o desactiva la comprobación extendida de CTRL+C en DOS. No tiene\n\
+efecto en Windows y se conserva para los archivos por lotes de DOS.\n"
     WCMD_COPY, "COPY <archivo> copia un archivo.\n"
     WCMD_DATE, "DATE muestra o cambia la fecha del sistema.\n"
     WCMD_DEL, "DEL <archivo> borra un archivo o grupo de archivos.\n"

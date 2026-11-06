@@ -263,6 +263,16 @@ unsigned char* CRTDLL__mbsncat(unsigned char* dest, const unsigned char* src, si
 }
 
 /*********************************************************************
+ *    _mbsncmp (CRTDLL.@)
+ */
+int CRTDLL__mbsncmp(const unsigned char* str1, const unsigned char* str2, size_t n)
+{
+    int ret = _mbsncmp(str1, str2, n);
+
+    return (ret > 0) - (ret < 0);
+}
+
+/*********************************************************************
  *    _vsnprintf (CRTDLL.@)
  */
 int CRTDLL__vsnprintf(char* buffer, size_t count, const char* format, va_list argptr)
@@ -302,6 +312,23 @@ int CRTDLL__vsnwprintf(wchar_t* buffer, size_t count, const wchar_t* format, va_
     if ((ret > (int)count) || !buffer)
         ret = -1;
     errno = 0;;
+    return ret;
+}
+
+/*********************************************************************
+ *    _snwprintf (CRTDLL.@)
+ */
+int CRTDLL__snwprintf(wchar_t* buffer, size_t count, const wchar_t* format, ...)
+{
+    va_list args;
+    int ret;
+    if (count)
+    {
+        (void)*(volatile wchar_t*)buffer;
+    }
+    va_start(args, format);
+    ret = CRTDLL__vsnwprintf(buffer, count, format, args);
+    va_end(args);
     return ret;
 }
 

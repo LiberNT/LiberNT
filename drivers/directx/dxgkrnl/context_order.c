@@ -233,6 +233,8 @@ static BOOLEAN DxgkpContextOrderAttachRetireSignal(_Inout_ PDXGKRNL_CONTEXT Cont
             Operation->RetireSignalCount < DXGK_CONTEXT_ORDER_MAX_RETIRE_SIGNALS)
         {
             Operation->RetireSignals[Operation->RetireSignalCount++] = Capture;
+            /* Retirement owns and frees the capture once this lock drops. */
+            DxgkContextSyncAdmitSignalState(Capture);
             Attached = TRUE;
         }
     }
@@ -306,6 +308,29 @@ VOID DxgkContextOrderWakeDevice(_Inout_ PDXGKRNL_DEVICE Device)
             DxgkContextOrderScheduleReferenced(Context);
     }
     ExReleaseFastMutex(&Device->DeviceMutex);
+}
+
+static VOID NTAPI DxgkpContextOrderDeviceWakeWorker(_In_ PVOID Parameter)
+{
+    PDXGKRNL_DEVICE Device = Parameter;
+
+    /* Cleared first: a publish that lands during the wake must queue another. */
+    InterlockedExchange(&Device->StreamWakeQueued, 0);
+    DxgkContextOrderWakeDevice(Device);
+    DxgkDereferenceDevice(Device);
+}
+
+VOID DxgkContextOrderQueueDeviceWake(_Inout_ PDXGKRNL_DEVICE Device)
+{
+    if (Device == NULL || InterlockedCompareExchange(&Device->StreamWakeQueued, 1, 0) != 0)
+        return;
+    if (!DxgkReferenceDevice(Device))
+    {
+        InterlockedExchange(&Device->StreamWakeQueued, 0);
+        return;
+    }
+    ExInitializeWorkItem(&Device->StreamWakeWorkItem, DxgkpContextOrderDeviceWakeWorker, Device);
+    ExQueueWorkItem(&Device->StreamWakeWorkItem, CriticalWorkQueue);
 }
 
 static BOOLEAN DxgkpContextOrderFindNextMarker(_In_ PDXGKRNL_CONTEXT Context, _In_ ULONGLONG Sequence, _Out_ PDXGK_CONTEXT_ORDER_MARKER *Marker)
@@ -755,6 +780,7 @@ NTSTATUS DxgkContextOrderAdmitWait(_Inout_ PDXGKRNL_CONTEXT Context, _In_ DXGK_C
     DXGMMS2_ADMIT_CONTEXT_WAIT_V1 Info;
     ULONGLONG Deadline = 0;
     ULONGLONG Sequence = 0;
+    BOOLEAN QueuedStateClaimed = FALSE;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -797,6 +823,14 @@ NTSTATUS DxgkContextOrderAdmitWait(_Inout_ PDXGKRNL_CONTEXT Context, _In_ DXGK_C
     Info.ObjectId = (ULONGLONG)(ULONG_PTR)Operation;
     Info.FenceValue = FenceValue;
     Info.ClientTag = (ULONGLONG)(ULONG_PTR)Operation;
+    Status = DxgkContextSyncAdmitWaitState(Capture);
+    if (!NT_SUCCESS(Status))
+    {
+        KeReleaseMutex(&Context->StreamAdmissionMutex, FALSE);
+        DxgkpContextOrderFreeUnpublishedOperation(Operation);
+        return Status;
+    }
+    QueuedStateClaimed = TRUE;
 
 RetryAdmission:
     Status = Interface.AdmitWait(Interface.AdapterHandle, Context->Mms2ContextStream, &Info, &Sequence);
@@ -848,6 +882,8 @@ RetryAdmission:
     return STATUS_SUCCESS;
 
 Failure:
+    if (QueuedStateClaimed)
+        DxgkContextSyncCancelWaitState(Capture);
     KeReleaseMutex(&Context->StreamAdmissionMutex, FALSE);
     DxgkpContextOrderFreeUnpublishedOperation(Operation);
     return Status;
@@ -952,6 +988,7 @@ NTSTATUS DxgkContextOrderAdmitSignal(_In_reads_(ContextCount) PDXGKRNL_CONTEXT c
     if (!NT_SUCCESS(Status))
         goto Failure;
     ASSERT(TransactionId != 0);
+    DxgkContextSyncAdmitSignalState(Capture);
     for (ContextIndex = 0; ContextIndex < ContextCount; ++ContextIndex)
         DxgkpContextOrderPublishMarker(Operation, ContextIndex, Contexts[ContextIndex], Sequences[ContextIndex]);
     while (LockedCount != 0)

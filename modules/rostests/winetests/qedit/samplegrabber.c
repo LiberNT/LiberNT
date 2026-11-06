@@ -136,6 +136,111 @@ static void test_interfaces(void)
     ok(!ref, "Got unexpected refcount %ld.\n", ref);
 }
 
+static unsigned int quality_sink_calls;
+static IBaseFilter *quality_sink_sender;
+
+static HRESULT WINAPI quality_sink_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI quality_sink_AddRef(IQualityControl *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI quality_sink_Release(IQualityControl *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI quality_sink_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    ++quality_sink_calls;
+    quality_sink_sender = sender;
+    return 0xdead;
+}
+
+static HRESULT WINAPI quality_sink_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static const IQualityControlVtbl quality_sink_vtbl =
+{
+    quality_sink_QueryInterface,
+    quality_sink_AddRef,
+    quality_sink_Release,
+    quality_sink_Notify,
+    quality_sink_SetSink,
+};
+
+static void test_quality_control(void)
+{
+    IQualityControl quality_sink = {&quality_sink_vtbl};
+    IBaseFilter *filter = create_sample_grabber();
+    Quality q = {Famine, 1000, -10000, 0};
+    IQualityControl *sink_qc, *source_qc;
+    IPin *sink, *source, *pin;
+    HRESULT hr;
+    ULONG ref;
+
+    IBaseFilter_FindPin(filter, L"In", &sink);
+    IBaseFilter_FindPin(filter, L"Out", &source);
+    IPin_QueryInterface(sink, &IID_IQualityControl, (void **)&sink_qc);
+    IPin_QueryInterface(source, &IID_IQualityControl, (void **)&source_qc);
+
+    hr = IQualityControl_QueryInterface(sink_qc, &IID_IPin, (void **)&pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(pin == sink, "Got pin %p.\n", pin);
+    IPin_Release(pin);
+    hr = IQualityControl_QueryInterface(source_qc, &IID_IPin, (void **)&pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(pin == source, "Got pin %p.\n", pin);
+    IPin_Release(pin);
+
+    hr = IQualityControl_Notify(sink_qc, filter, q);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(sink_qc, NULL, q);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+
+    hr = IQualityControl_Notify(source_qc, filter, q);
+    ok(hr == VFW_E_NOT_FOUND, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(source_qc, NULL, q);
+    ok(hr == VFW_E_NOT_FOUND, "Got hr %#lx.\n", hr);
+
+    hr = IQualityControl_SetSink(source_qc, &quality_sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(source_qc, filter, q);
+    ok(hr == VFW_E_NOT_FOUND, "Got hr %#lx.\n", hr);
+    ok(!quality_sink_calls, "Got %u calls.\n", quality_sink_calls);
+    hr = IQualityControl_SetSink(source_qc, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IQualityControl_SetSink(sink_qc, &quality_sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(sink_qc, filter, q);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!quality_sink_calls, "Got %u calls.\n", quality_sink_calls);
+    hr = IQualityControl_Notify(source_qc, NULL, q);
+    ok(hr == 0xdead, "Got hr %#lx.\n", hr);
+    ok(quality_sink_calls == 1, "Got %u calls.\n", quality_sink_calls);
+    ok(quality_sink_sender == filter, "Got sender %p.\n", quality_sink_sender);
+    hr = IQualityControl_SetSink(sink_qc, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(source_qc, filter, q);
+    ok(hr == VFW_E_NOT_FOUND, "Got hr %#lx.\n", hr);
+
+    IQualityControl_Release(source_qc);
+    IQualityControl_Release(sink_qc);
+    IPin_Release(source);
+    IPin_Release(sink);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got unexpected refcount %ld.\n", ref);
+}
+
 static void test_enum_pins(void)
 {
     IBaseFilter *filter = create_sample_grabber();
@@ -828,7 +933,8 @@ static void testfilter_init(struct testfilter *filter)
 static void test_sample_processing(IMediaControl *control, IMemInputPin *input, struct testfilter *sink)
 {
     REFERENCE_TIME start, stop;
-    IMemAllocator *allocator;
+    ALLOCATOR_PROPERTIES props = {1, 256, 1, 0}, ret_props;
+    IMemAllocator *allocator, *other_allocator;
     IMediaSample *sample;
     LONG size, i;
     HRESULT hr;
@@ -842,6 +948,23 @@ static void test_sample_processing(IMediaControl *control, IMemInputPin *input, 
 
     hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, 0);
     ok(hr == VFW_E_NOT_COMMITTED, "Got hr %#lx.\n", hr);
+
+    hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMemAllocator, (void **)&other_allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_SetProperties(other_allocator, &props, &ret_props);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_Commit(other_allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_GetBuffer(other_allocator, &sample, NULL, NULL, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
+    sink->got_sample = 0;
+    IMediaSample_Release(sample);
+    IMemAllocator_Decommit(other_allocator);
+    IMemAllocator_Release(other_allocator);
 
     hr = IMediaControl_Pause(control);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
@@ -887,6 +1010,7 @@ static void test_sample_processing(IMediaControl *control, IMemInputPin *input, 
 
     hr = IMemInputPin_Receive(input, sample);
     todo_wine ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
 
     IMediaSample_Release(sample);
     IMemAllocator_Release(allocator);
@@ -1320,6 +1444,7 @@ START_TEST(samplegrabber)
     IBaseFilter_Release(filter);
 
     test_interfaces();
+    test_quality_control();
     test_enum_pins();
     test_find_pin();
     test_pin_info();

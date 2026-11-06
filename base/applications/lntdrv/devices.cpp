@@ -119,8 +119,10 @@ bool IsSpecificId(const std::wstring &id)
         return false;
     if (StartsWith(upper, L"ACPI\\"))
         return !StartsWith(upper, L"ACPI\\PNP");
-    return upper.find(L"VEN_") != std::wstring::npos || upper.find(L"VID_") != std::wstring::npos ||
-           upper.find(L"DEV_") != std::wstring::npos || upper.find(L"PID_") != std::wstring::npos;
+    if (upper.find(L"DEV_") != std::wstring::npos || upper.find(L"PID_") != std::wstring::npos)
+        return true;
+    return (upper.find(L"VEN_") != std::wstring::npos || upper.find(L"VID_") != std::wstring::npos) &&
+           upper.find(L"CC_") != std::wstring::npos;
 }
 
 DWORDLONG ParseVersion(const std::wstring &text)
@@ -418,6 +420,7 @@ DWORD EnumerateDevices(std::vector<DeviceInfo> &devices)
             device.DriverDate = RegistryString(key, L"DriverDate");
             device.Provider = RegistryString(key, L"ProviderName");
             device.Inf = RegistryString(key, L"InfPath");
+            device.MatchingId = RegistryString(key, L"MatchingDeviceId");
             if (RegQueryValueExW(key, L"DriverDateData", NULL, &type, (LPBYTE)&device.DriverDateData, &size) !=
                     ERROR_SUCCESS || type != REG_BINARY || size != sizeof(device.DriverDateData))
             {
@@ -472,6 +475,31 @@ bool HasDriver(const DeviceInfo &device)
     return !device.Inf.empty() || !device.Service.empty();
 }
 
+DWORD InstalledRank(const DeviceInfo &device)
+{
+    const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
+    const DWORD bases[] = { 0, 0x2000 };
+
+    if (device.MatchingId.empty())
+        return MAXDWORD;
+    for (size_t list = 0; list < _countof(lists); list++)
+    {
+        for (size_t i = 0; i < lists[list]->size(); i++)
+        {
+            if (_wcsicmp((*lists[list])[i].c_str(), device.MatchingId.c_str()) == 0)
+                return bases[list] + (DWORD)i;
+        }
+    }
+    return MAXDWORD;
+}
+
+bool GenericDriver(const DeviceInfo &device)
+{
+    DWORD rank = InstalledRank(device);
+
+    return HasDriver(device) && rank != MAXDWORD && rank >= 0x2000;
+}
+
 bool NeedsDriver(const DeviceInfo &device)
 {
     return device.Problem == CM_PROB_FAILED_INSTALL || device.Problem == CM_PROB_NOT_CONFIGURED ||
@@ -521,15 +549,16 @@ std::vector<std::wstring> CatalogQueries(const DeviceInfo &device)
 {
     std::vector<std::wstring> queries;
     const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
+    size_t count = GenericDriver(device) ? 1 : _countof(lists);
 
     if (StartsWith(device.InstanceId, L"ROOT\\") || StartsWith(device.InstanceId, L"SWD\\") ||
         StartsWith(device.InstanceId, L"HTREE\\"))
     {
         return queries;
     }
-    for (const std::vector<std::wstring> *list : lists)
+    for (size_t list = 0; list < count; list++)
     {
-        for (const std::wstring &id : *list)
+        for (const std::wstring &id : *lists[list])
         {
             bool seen = std::find_if(queries.begin(), queries.end(), [&id](const std::wstring &other) {
                 return _wcsicmp(other.c_str(), id.c_str()) == 0;
@@ -547,6 +576,8 @@ DriverOrder CompareVersionText(const DeviceInfo &device, const std::wstring &ver
 
     if (NeedsDriver(device) || device.Inf.empty() || device.DriverVersion.empty())
         return DriverOrder::Missing;
+    if (GenericDriver(device))
+        return DriverOrder::Newer;
     installed = ParseVersion(device.DriverVersion);
     offered = ParseVersion(version);
     if (offered == installed)
@@ -557,10 +588,14 @@ DriverOrder CompareVersionText(const DeviceInfo &device, const std::wstring &ver
 DriverOrder CompareWithInstalled(const DeviceInfo &device, const PackageDriver &driver)
 {
     DWORDLONG installed;
+    DWORD rank;
     LONG order;
 
     if (NeedsDriver(device) || device.Inf.empty())
         return DriverOrder::Missing;
+    rank = InstalledRank(device);
+    if (rank != MAXDWORD && driver.Rank != rank)
+        return driver.Rank < rank ? DriverOrder::Newer : DriverOrder::Older;
     order = CompareFileTime(&driver.Date, &device.DriverDateData);
     if (order)
         return order > 0 ? DriverOrder::Newer : DriverOrder::Older;

@@ -182,6 +182,7 @@ LsaEnumerateLogonSessions(
         return Status;
 
     ApiMessage.ApiNumber = LSASS_REQUEST_ENUM_LOGON_SESSIONS;
+    ApiMessage.EnumLogonSessions.Request.PointerSize = sizeof(PVOID);
     ApiMessage.h.u1.s1.DataLength = LSA_PORT_DATA_SIZE(ApiMessage.EnumLogonSessions);
     ApiMessage.h.u1.s1.TotalLength = LSA_PORT_MESSAGE_SIZE;
     ApiMessage.h.u2.ZeroInit = 0;
@@ -200,7 +201,7 @@ LsaEnumerateLogonSessions(
     }
 
     *LogonSessionCount = ApiMessage.EnumLogonSessions.Reply.LogonSessionCount;
-    *LogonSessionList = ApiMessage.EnumLogonSessions.Reply.LogonSessionBuffer;
+    *LogonSessionList = (PLUID)(ULONG_PTR)ApiMessage.EnumLogonSessions.Reply.LogonSessionBuffer;
 
     return Status;
 }
@@ -232,6 +233,7 @@ LsaGetLogonSessionData(
 
     RtlCopyLuid(&ApiMessage.GetLogonSessionData.Request.LogonId,
                 LogonId);
+    ApiMessage.GetLogonSessionData.Request.PointerSize = sizeof(PVOID);
 
     Status = LsapClientCall(LsaPortHandle, &ApiMessage);
     if (!NT_SUCCESS(Status))

@@ -104,6 +104,10 @@ static struct class_factory capture_graph_cf = {{&class_factory_vtbl}, capture_g
 static struct class_factory file_writer_cf = {{&class_factory_vtbl}, file_writer_create};
 static struct class_factory smart_tee_cf = {{&class_factory_vtbl}, smart_tee_create};
 static struct class_factory vfw_capture_cf = {{&class_factory_vtbl}, vfw_capture_create};
+#ifdef __REACTOS__
+static struct class_factory ks_proxy_cf = {{&class_factory_vtbl}, ks_proxy_create};
+static const GUID clsid_ks_proxy = {0x17cca71b, 0xecd7, 0x11d0, {0xb9, 0x08, 0x00, 0xa0, 0xc9, 0x22, 0x31, 0x96}};
+#endif
 
 HRESULT WINAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void **out)
 {
@@ -127,6 +131,10 @@ HRESULT WINAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void **out)
         factory = &smart_tee_cf;
     else if (IsEqualGUID(clsid, &CLSID_VfwCapture))
         factory = &vfw_capture_cf;
+#ifdef __REACTOS__
+    else if (IsEqualGUID(clsid, &clsid_ks_proxy))
+        factory = &ks_proxy_cf;
+#endif
     else
     {
         FIXME("%s not implemented, returning CLASS_E_CLASSNOTAVAILABLE.\n", debugstr_guid(clsid));

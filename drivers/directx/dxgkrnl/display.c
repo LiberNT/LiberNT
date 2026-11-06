@@ -4345,8 +4345,10 @@ DxgkpDisplayDispatch(
                 DirtyRects = Input->Rects;
             }
 
+            /* The source reaches DxgkDdiPresentDisplayOnly, whose pSource is kernel memory. */
             if ((RectCount == 0 && Flags == 0) ||
-                Source == NULL || SourcePitch == 0 || SourceSize == 0)
+                Source == NULL || SourcePitch == 0 || SourceSize == 0 ||
+                (ULONG_PTR)Source < (ULONG_PTR)MmSystemRangeStart)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
@@ -5445,7 +5447,8 @@ DxgkDisplayDispatchPnp(
 BOOLEAN
 DxgkDisplayDispatchIoctl(
     _In_  PDEVICE_OBJECT DeviceObject,
-    _In_  PIRP           Irp)
+    _In_  PIRP           Irp,
+    _Out_ PNTSTATUS      Status)
 {
     if (DeviceObject == NULL || g_DisplayDeviceObject == NULL ||
         DeviceObject != g_DisplayDeviceObject)
@@ -5454,7 +5457,7 @@ DxgkDisplayDispatchIoctl(
     }
 
     /* DxgkpDisplayDispatch completes the IRP and returns NTSTATUS */
-    DxgkpDisplayDispatch(DeviceObject, Irp);
+    *Status = DxgkpDisplayDispatch(DeviceObject, Irp);
     return TRUE;
 }
 

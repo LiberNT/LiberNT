@@ -8,6 +8,12 @@ CompleteRequest(
     PIRP Irp,
     CCHAR PriorityBoost);
 
+extern UCHAR KspNarrowStreamMarker;
+
+BOOLEAN
+KspIs32bitRequest(
+    IN PIRP Irp);
+
 
 
 NTSTATUS
@@ -141,6 +147,10 @@ NTAPI
 IKsFilterFactory_Create(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp);
+
+VOID
+KspForgetFilterFactoryInterfaces(
+    IN PKSIDEVICE_HEADER DeviceHeader);
 
 NTSTATUS
 KspSetFilterFactoriesState(

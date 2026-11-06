@@ -15,6 +15,12 @@
     #pragma function(strncmp)
 #endif
 
+#ifdef __REACTOS__
+#define STRNCMP_RESULT(a, b) (((a) > (b)) - ((a) < (b)))
+#else
+#define STRNCMP_RESULT(a, b) ((a) - (b))
+#endif
+
 /***
 *int strncmp(first, last, count) - compare first count chars of strings
 *
@@ -66,22 +72,22 @@ int __cdecl strncmp
 
             if (*(first-4) == 0 || *(first-4) != *(last-4))
             {
-                return(*(unsigned char *)(first-4) - *(unsigned char *)(last-4));
+                return STRNCMP_RESULT(*(unsigned char *)(first-4), *(unsigned char *)(last-4));
             }
 
             if (*(first-3) == 0 || *(first-3) != *(last-3))
             {
-                return(*(unsigned char *)(first-3) - *(unsigned char *)(last-3));
+                return STRNCMP_RESULT(*(unsigned char *)(first-3), *(unsigned char *)(last-3));
             }
 
             if (*(first-2) == 0 || *(first-2) != *(last-2))
             {
-                return(*(unsigned char *)(first-2) - *(unsigned char *)(last-2));
+                return STRNCMP_RESULT(*(unsigned char *)(first-2), *(unsigned char *)(last-2));
             }
 
             if (*(first-1) == 0 || *(first-1) != *(last-1))
             {
-                return(*(unsigned char *)(first-1) - *(unsigned char *)(last-1));
+                return STRNCMP_RESULT(*(unsigned char *)(first-1), *(unsigned char *)(last-1));
             }
         }
     }
@@ -91,7 +97,7 @@ int __cdecl strncmp
     {
         if (*first == 0 || *first != *last)
         {
-            return(*(unsigned char *)first - *(unsigned char *)last);
+            return STRNCMP_RESULT(*(unsigned char *)first, *(unsigned char *)last);
         }
         first+=1;
         last+=1;

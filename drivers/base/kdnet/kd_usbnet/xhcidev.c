@@ -11,6 +11,9 @@
 #define XHCI_CONTROL_WAIT       500
 #define XHCI_ADDRESS_RECOVERY   2000
 #define XHCI_DEVICE_CONTEXTS    32
+#define XHCI_INTERVAL_MAX       16
+#define XHCI_INTERVAL_MIN_FRAME 3
+#define XHCI_INTERVAL_MAX_FRAME 10
 
 static
 volatile ULONG *
@@ -161,24 +164,60 @@ XhciConfigureHub(
                        XhciSlotControl(Device, TRB_CONFIGURE_ENDPOINT));
 }
 
+static
+ULONG
+XhciInterruptInterval(
+    _In_ UCHAR Speed,
+    _In_ UCHAR Interval)
+{
+    ULONG Exponent = XHCI_INTERVAL_MIN_FRAME;
+
+    if (Speed != XHCI_SPEED_FULL && Speed != XHCI_SPEED_LOW)
+        return Interval ? min(Interval, XHCI_INTERVAL_MAX) - 1 : 0;
+
+    while (Exponent < XHCI_INTERVAL_MAX_FRAME && (2UL << Exponent) <= (ULONG)Interval * 8)
+        Exponent++;
+
+    return Exponent;
+}
+
 NTSTATUS
 XhciConfigureBulk(
     _In_ PUSBNET_ADAPTER Adapter)
 {
     PUSBNET_DEVICE Device = Adapter->Device;
-    PUSBNET_ENDPOINT In = &Adapter->BulkIn, Out = &Adapter->BulkOut;
+    PUSBNET_ENDPOINT In = &Adapter->BulkIn, Out = &Adapter->BulkOut, Notify = &Adapter->Status;
+    ULONG Mask, Entries, Payload;
     NTSTATUS Status;
 
     In->Dci = (UCHAR)((In->Address & 0x0F) * 2 + 1);
     Out->Dci = (UCHAR)((Out->Address & 0x0F) * 2);
+    Notify->Dci = Notify->MaxPacket ? (UCHAR)((Notify->Address & 0x0F) * 2 + 1) : 0;
     XhciInitializeRing(&In->Ring, In->Ring.Trbs);
     XhciInitializeRing(&Out->Ring, Out->Ring.Trbs);
 
+    Mask = 1 | (1 << In->Dci) | (1 << Out->Dci);
+    Entries = max(In->Dci, Out->Dci);
+    if (Notify->Dci)
+    {
+        XhciInitializeRing(&Notify->Ring, Notify->Ring.Trbs);
+        Mask |= 1 << Notify->Dci;
+        Entries = max(Entries, Notify->Dci);
+    }
+
     XhciClearInput(Adapter);
-    XhciInputContext(Adapter, 0)[1] = 1 | (1 << In->Dci) | (1 << Out->Dci);
-    XhciSetSlotContext(Adapter, Device, max(In->Dci, Out->Dci));
+    XhciInputContext(Adapter, 0)[1] = Mask;
+    XhciSetSlotContext(Adapter, Device, Entries);
     XhciSetEndpointContext(Adapter, In, EP_TYPE_BULK_IN, EP_BULK_AVERAGE);
     XhciSetEndpointContext(Adapter, Out, EP_TYPE_BULK_OUT, EP_BULK_AVERAGE);
+    if (Notify->Dci)
+    {
+        Payload = (ULONG)Notify->MaxPacket * (Notify->MaxBurst + 1);
+        XhciSetEndpointContext(Adapter, Notify, EP_TYPE_INTERRUPT_IN, Payload | (Payload << 16));
+        XhciInputContext(Adapter, Notify->Dci + 1)[0] =
+            XhciInterruptInterval(Device->Speed, Adapter->Function.StatusInterval) << 16;
+    }
+
     KeMemoryBarrier();
 
     Status = XhciCommand(Adapter, XhciPhysical(Adapter->InputContext), 0,
@@ -187,6 +226,7 @@ XhciConfigureBulk(
     {
         In->Dci = 0;
         Out->Dci = 0;
+        Notify->Dci = 0;
     }
 
     return Status;
@@ -207,6 +247,8 @@ XhciDisableSlot(
     {
         Adapter->BulkIn.Dci = 0;
         Adapter->BulkOut.Dci = 0;
+        Adapter->Status.Dci = 0;
+        Adapter->StatusActive = FALSE;
     }
 }
 
@@ -347,7 +389,7 @@ XhciQueueBulk(
 {
     ULONG Control = (TRB_NORMAL << TRB_TYPE_SHIFT) | TRB_IOC;
 
-    if (Endpoint == &Adapter->BulkIn)
+    if (Endpoint != &Adapter->BulkOut)
         Control |= TRB_SHORT_PACKET;
 
     Endpoint->Done = FALSE;

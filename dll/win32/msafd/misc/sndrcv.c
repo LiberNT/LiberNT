@@ -77,6 +77,7 @@ WSPAsyncSelect(IN  SOCKET Handle,
 
     /* Set up the Async Data */
     AsyncData->ParentSocket = Socket;
+    InterlockedIncrement(&Socket->RefCount);
     AsyncData->SequenceNumber = Socket->SharedData->SequenceNumber;
 
     /* Begin Async Select by using I/O Completion */
@@ -197,6 +198,7 @@ MsafdRecvAPC(
     if (Context->lpCompletionRoutine)
         Context->lpCompletionRoutine(TranslateNtStatusError(IoStatusBlock->Status), IoStatusBlock->Information, (LPWSAOVERLAPPED)IoStatusBlock, 0);
 
+    SockDereferenceSocket(Context->lpSocket);
     HeapFree(GlobalHeap, 0, ApcContext);
 }
 
@@ -217,6 +219,8 @@ MsafdSendAPC(
 
     if (Context->lpCompletionRoutine)
         Context->lpCompletionRoutine(TranslateNtStatusError(IoStatusBlock->Status), IoStatusBlock->Information, (LPWSAOVERLAPPED)IoStatusBlock, 0);
+
+    SockDereferenceSocket(Context->lpSocket);
 
     /* Free IOCTL buffers */
     HeapFree(GlobalHeap, 0, ApcContext);
@@ -341,6 +345,7 @@ WSPRecv(SOCKET Handle,
             APCContext->lpCompletionRoutine = lpCompletionRoutine;
             APCContext->lpOverlapped = lpOverlapped;
             APCContext->lpSocket = Socket;
+            InterlockedIncrement(&Socket->RefCount);
             Event = NULL;
         }
         else
@@ -377,6 +382,12 @@ WSPRecv(SOCKET Handle,
                                    sizeof(RecvInfo),
                                    NULL,
                                    0);
+
+    if (APCFunction && NT_ERROR(Status))
+    {
+        SockDereferenceSocket(Socket);
+        HeapFree(GlobalHeap, 0, APCContext);
+    }
 
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)
@@ -578,6 +589,7 @@ MsafdRecvFrom(SOCKET Handle,
             APCContext->lpCompletionRoutine = lpCompletionRoutine;
             APCContext->lpOverlapped = lpOverlapped;
             APCContext->lpSocket = Socket;
+            InterlockedIncrement(&Socket->RefCount);
             Event = NULL;
         }
         else
@@ -622,6 +634,12 @@ MsafdRecvFrom(SOCKET Handle,
                                     Control ? sizeof(MsgInfo) : sizeof(RecvInfo),
                                     NULL,
                                     0);
+
+    if (APCFunction && NT_ERROR(Status))
+    {
+        SockDereferenceSocket(Socket);
+        HeapFree(GlobalHeap, 0, APCContext);
+    }
 
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)
@@ -861,6 +879,7 @@ WSPSend(SOCKET Handle,
             APCContext->lpCompletionRoutine = lpCompletionRoutine;
             APCContext->lpOverlapped = lpOverlapped;
             APCContext->lpSocket = Socket;
+            InterlockedIncrement(&Socket->RefCount);
             APCContext->lpRemoteAddress = NULL;
             Event = NULL;
         }
@@ -907,6 +926,12 @@ WSPSend(SOCKET Handle,
                                     sizeof(SendInfo),
                                     NULL,
                                     0);
+
+    if (APCFunction && NT_ERROR(Status))
+    {
+        SockDereferenceSocket(Socket);
+        HeapFree(GlobalHeap, 0, APCContext);
+    }
 
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)
@@ -1091,6 +1116,7 @@ WSPSendTo(SOCKET Handle,
             APCContext->lpCompletionRoutine = lpCompletionRoutine;
             APCContext->lpOverlapped = lpOverlapped;
             APCContext->lpSocket = Socket;
+            InterlockedIncrement(&Socket->RefCount);
             APCContext->lpRemoteAddress = RemoteAddress;
             Event = NULL;
         }
@@ -1128,6 +1154,12 @@ WSPSendTo(SOCKET Handle,
                                    sizeof(SendInfo),
                                    NULL,
                                    0);
+
+    if (APCFunction && NT_ERROR(Status))
+    {
+        SockDereferenceSocket(Socket);
+        HeapFree(GlobalHeap, 0, APCContext);
+    }
 
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)

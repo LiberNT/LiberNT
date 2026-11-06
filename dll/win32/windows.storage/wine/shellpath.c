@@ -7739,7 +7739,8 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
 #ifndef __REACTOS__
         hr = _SHExpandEnvironmentStrings(szTemp, szBuildPath);
 #else
-        hr = _SHExpandEnvironmentStrings(hToken, szTemp, szBuildPath, _countof(szBuildPath));
+        hr = _SHExpandEnvironmentStrings((type == CSIDL_Type_AllUsers || type == CSIDL_Type_ProgramData) ? NULL : hToken,
+                                         szTemp, szBuildPath, _countof(szBuildPath));
 #endif
     else
         strcpyW(szBuildPath, szTemp);

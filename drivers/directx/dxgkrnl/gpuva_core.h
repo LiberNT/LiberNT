@@ -74,6 +74,11 @@ typedef struct _DXGK_GPUVA_CORE_SPAN
 } DXGK_GPUVA_CORE_SPAN;
 
 BOOLEAN
+DxgkGpuVaCoreRangeIsUpdateSpan(
+    _In_ BOOLEAN Mapped,
+    _In_ BOOLEAN Reserved);
+
+BOOLEAN
 DxgkGpuVaCoreNextMapPiece(
     _In_reads_bytes_(SpanCount * SpanStride) const VOID *Spans,
     _In_ ULONG SpanCount,
@@ -101,6 +106,15 @@ DxgkGpuVaCore64KBEntries(
     _In_ ULONG PageTableLevel,
     _In_ BOOLEAN Repeat);
 
+BOOLEAN
+DxgkGpuVaCoreNextWriteRun(
+    _In_reads_(Count * 2) const ULONGLONG *Entries,
+    _In_reads_opt_(Count * 2) const ULONGLONG *Entries64KB,
+    _In_ ULONG Count,
+    _In_ BOOLEAN ZeroFilled,
+    _Inout_ PULONG Cursor,
+    _Out_ PULONG RunLength);
+
 ULONG
 DxgkGpuVaCoreTableUpdateMode(
     _In_ ULONG AdapterUpdateMode,
@@ -115,6 +129,22 @@ DxgkGpuVaCoreTableNeedsCpuMapping(
 BOOLEAN
 DxgkGpuVaCoreUsesPagingProcessVa(
     _In_ ULONG AdapterUpdateMode);
+
+typedef enum _DXGK_GPUVA_TABLE_SNAPSHOT
+{
+    DxgkGpuVaTableSnapshotNone = 0,
+    DxgkGpuVaTableSnapshotWhole,
+    DxgkGpuVaTableSnapshotSpan,
+    DxgkGpuVaTableSnapshotDirty,
+    DxgkGpuVaTableSnapshotAwaitPlacement
+} DXGK_GPUVA_TABLE_SNAPSHOT;
+
+DXGK_GPUVA_TABLE_SNAPSHOT
+DxgkGpuVaCoreTableSnapshot(
+    _In_ BOOLEAN PlacementPending,
+    _In_ BOOLEAN InitialUpdatePending,
+    _In_ BOOLEAN ResendSpan,
+    _In_ BOOLEAN Dirty);
 
 /* --- page-table geometry --------------------------------------------- */
 

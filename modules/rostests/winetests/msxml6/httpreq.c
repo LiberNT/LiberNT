@@ -30,6 +30,9 @@
 #include "objsafe.h"
 #include "initguid.h"
 #include "mshtml.h"
+#ifdef __REACTOS__
+#include "winhttp.h"
+#endif
 
 #include "wine/test.h"
 
@@ -1718,6 +1721,92 @@ static void test_server_xhr(void)
     free_bstrs();
 }
 
+#ifdef __REACTOS__
+static void test_server_xhr_proxy(void)
+{
+    const HRESULT before_open = HRESULT_FROM_WIN32(ERROR_WINHTTP_CANNOT_CALL_BEFORE_OPEN);
+    IServerXMLHTTPRequest2 *xhr;
+    VARIANT server, bypass, missing, number, async, empty;
+    BSTR user, password, blank, method, url;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_ServerXMLHTTP60, NULL, CLSCTX_INPROC_SERVER, &IID_IServerXMLHTTPRequest2, (void **)&xhr);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    if (FAILED(hr))
+        return;
+
+    V_VT(&missing) = VT_ERROR;
+    V_ERROR(&missing) = DISP_E_PARAMNOTFOUND;
+    V_VT(&empty) = VT_EMPTY;
+    V_VT(&number) = VT_I4;
+    V_I4(&number) = 5;
+    V_VT(&server) = VT_BSTR;
+    V_BSTR(&server) = SysAllocString(L"proxy.example:8080");
+    V_VT(&bypass) = VT_BSTR;
+    V_BSTR(&bypass) = SysAllocString(L"<local>");
+    user = SysAllocString(L"user");
+    password = SysAllocString(L"password");
+    blank = SysAllocString(L"");
+
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_DEFAULT, missing, missing);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_DIRECT, missing, missing);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_PROXY, missing, missing);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_PROXY, server, bypass);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_DIRECT, server, bypass);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_PROXY, empty, empty);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_PROXY, number, number);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, 3, missing, missing);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, -1, missing, missing);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, NULL, NULL);
+    ok(hr == before_open, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, user, password);
+    ok(hr == before_open, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_DEFAULT, missing, missing);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    method = SysAllocString(L"GET");
+    url = SysAllocString(L"http://127.0.0.1:1/proxy");
+    V_VT(&async) = VT_BOOL;
+    V_BOOL(&async) = VARIANT_FALSE;
+    hr = IServerXMLHTTPRequest2_open(xhr, method, url, async, empty, empty);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, user, password);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, NULL, NULL);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, user, NULL);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, NULL, password);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, blank, blank);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxyCredentials(xhr, user, blank);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IServerXMLHTTPRequest2_setProxy(xhr, SXH_PROXY_SET_DIRECT, missing, missing);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+
+    SysFreeString(method);
+    SysFreeString(url);
+    SysFreeString(user);
+    SysFreeString(password);
+    SysFreeString(blank);
+    VariantClear(&server);
+    VariantClear(&bypass);
+    IServerXMLHTTPRequest2_Release(xhr);
+}
+#endif
+
 static void test_safe_httpreq(void)
 {
     IXMLHTTPRequest *xhr;
@@ -1932,6 +2021,9 @@ START_TEST(httpreq)
 
     test_XMLHTTP60();
     test_server_xhr();
+#ifdef __REACTOS__
+    test_server_xhr_proxy();
+#endif
     test_safe_httpreq();
     test_supporterrorinfo();
     test_FreeThreadedXMLHTTP60();

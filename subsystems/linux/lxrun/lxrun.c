@@ -118,10 +118,7 @@ wmain(
     }
 
     if (Launch.Flags & LX_CREATE_BOOT)
-    {
-        LxEnvSet(&Launch.Env, "container=libernt");
         LxEnvSet(&Launch.Env, "TERM=linux");
-    }
 
     if (Index >= argc)
     {

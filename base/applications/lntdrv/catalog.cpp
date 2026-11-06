@@ -198,8 +198,12 @@ DWORD ParseResults(const std::string &html, const std::wstring &query, std::vect
 
     rows = 0;
     if (!table)
-        return html.find("id=\"ctl00_catalogBody_noResultText\"") != std::string::npos ? ERROR_SUCCESS
-                                                                                         : ERROR_LNTDRV_CATALOG_FORMAT;
+    {
+        if (html.find("id=\"ctl00_catalogBody_noResultText\"") != std::string::npos)
+            return ERROR_SUCCESS;
+        return html.find("id=\"ctl00_catalogBody_searchThrottled\"") != std::string::npos ? ERROR_LNTDRV_CATALOG_THROTTLED
+                                                                                           : ERROR_LNTDRV_CATALOG_FORMAT;
+    }
     while ((pos = html.find(Marker, pos)) != std::string::npos)
     {
         size_t start = pos + Marker.size(), end;
@@ -383,7 +387,7 @@ DWORD WINAPI DetailsWorker(LPVOID parameter)
         if (index >= (LONG)work->Items->size())
             break;
         error = catalog.QueryDetails(*(*work->Items)[index]);
-        if (error == ERROR_CANCELLED || IsOfflineError(error))
+        if (error == ERROR_CANCELLED || StopsCatalogScan(error))
             InterlockedExchange(&work->Error, (LONG)error);
     }
     return 0;
@@ -710,6 +714,7 @@ DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector
     SystemTarget system = CurrentSystem();
     std::vector<std::wstring> others;
     bool rows = false, fits = false, supported = false;
+    DWORD failure = ERROR_SUCCESS;
 
     updates.clear();
     m_OtherArchitectures.clear();
@@ -725,8 +730,13 @@ DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector
             bool last = true;
             DWORD status = SearchPage(query, page, found, last);
 
-            if (status)
+            if (status == ERROR_CANCELLED || StopsCatalogScan(status))
                 return status;
+            if (status)
+            {
+                failure = status;
+                break;
+            }
             rows = rows || !found.empty();
             for (CatalogUpdate &row : found)
             {
@@ -779,7 +789,7 @@ DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector
         }
     }
     if (!rows)
-        return ERROR_NOT_FOUND;
+        return failure ? failure : ERROR_NOT_FOUND;
     if (!fits)
         return ERROR_LNTDRV_OTHER_WINDOWS;
     if (!supported)

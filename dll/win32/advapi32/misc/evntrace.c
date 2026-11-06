@@ -678,3 +678,27 @@ EnableTraceEx2(IN TRACEHANDLE TraceHandle,
 
     return ERROR_SUCCESS;
 }
+
+ULONG
+WINAPI
+EnableTraceEx(IN LPCGUID ProviderId,
+              IN LPCGUID SourceId OPTIONAL,
+              IN TRACEHANDLE TraceHandle,
+              IN ULONG IsEnabled,
+              IN UCHAR Level,
+              IN ULONGLONG MatchAnyKeyword,
+              IN ULONGLONG MatchAllKeyword,
+              IN ULONG EnableProperty,
+              IN PEVENT_FILTER_DESCRIPTOR EnableFilterDesc OPTIONAL)
+{
+    ENABLE_TRACE_PARAMETERS Parameters;
+
+    RtlZeroMemory(&Parameters, sizeof(Parameters));
+    Parameters.Version = ENABLE_TRACE_PARAMETERS_VERSION;
+    Parameters.EnableProperty = EnableProperty;
+    if (SourceId)
+        Parameters.SourceId = *SourceId;
+    Parameters.EnableFilterDesc = EnableFilterDesc;
+
+    return EnableTraceEx2(TraceHandle, ProviderId, IsEnabled, Level, MatchAnyKeyword, MatchAllKeyword, 0, &Parameters);
+}

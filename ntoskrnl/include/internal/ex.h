@@ -142,6 +142,9 @@ typedef struct _ETIMER
     ULONG SetSequence;
     ULONG ApcQueuedSequence;
     ULONGLONG ApcQueuedDueTime;
+    BOOLEAN HighResolution;
+    BOOLEAN HighResolutionArmed;
+    LIST_ENTRY HighResolutionLink;
 } ETIMER, *PETIMER;
 
 VOID

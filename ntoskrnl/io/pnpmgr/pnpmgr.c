@@ -2452,6 +2452,8 @@ IoOpenDeviceRegistryKey(IN PDEVICE_OBJECT DeviceObject,
     if (!IopIsValidPhysicalDeviceObject(DeviceObject))
         return STATUS_INVALID_DEVICE_REQUEST;
     DeviceNode = IopGetDeviceNode(DeviceObject);
+    if (DeviceNode->InstancePath.Length == 0)
+        return STATUS_INVALID_DEVICE_REQUEST;
 
     /*
      * Calculate the length of the base key name. This is the full

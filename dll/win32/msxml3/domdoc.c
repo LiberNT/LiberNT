@@ -38,6 +38,9 @@
 #include "shlwapi.h"
 #include "ocidl.h"
 #include "objsafe.h"
+#ifdef __REACTOS__
+#include "docobj.h"
+#endif
 
 #include "wine/debug.h"
 
@@ -45,6 +48,10 @@
 #include "xpath.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msxml);
+
+#ifdef __REACTOS__
+static const GUID domdoc_transform_target = {0xf5078f3a,0xc551,0x11d3,{0x89,0xb9,0x00,0x00,0xf8,0x1f,0xe2,0x21}};
+#endif
 
 typedef struct ConnectionPoint ConnectionPoint;
 typedef struct domdoc domdoc;
@@ -113,6 +120,9 @@ struct domdoc
     IProvideClassInfo IProvideClassInfo_iface;
     IPersistMoniker IPersistMoniker_iface;
     IMoniker *moniker;
+    IOleCommandTarget IOleCommandTarget_iface;
+    IStream IStream_iface;
+    IStream *stream;
 #endif
 };
 
@@ -413,6 +423,18 @@ static HRESULT WINAPI domdoc_QueryInterface(IXMLDOMDocument3 *iface, REFIID riid
     {
         *obj = &doc->IPersistMoniker_iface;
     }
+    else if (IsEqualGUID(riid, &IID_IOleCommandTarget))
+    {
+        *obj = &doc->IOleCommandTarget_iface;
+    }
+    else if (IsEqualGUID(riid, &IID_IStream))
+    {
+        *obj = &doc->IStream_iface;
+    }
+    else if (IsEqualGUID(riid, &domdoc_transform_target))
+    {
+        *obj = iface;
+    }
 #endif
     else
     {
@@ -446,6 +468,8 @@ static void domdoc_destroy(domdoc *doc)
         IUri_Release(doc->base_uri);
     if (doc->moniker)
         IMoniker_Release(doc->moniker);
+    if (doc->stream)
+        IStream_Release(doc->stream);
 
     domnode_release(doc->node);
 
@@ -788,6 +812,14 @@ static HRESULT WINAPI domdoc_selectNodes(IXMLDOMDocument3 *iface, BSTR p, IXMLDO
 
     TRACE("%p, %s, %p.\n", iface, debugstr_w(p), list);
 
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+    {
+        if (list) *list = NULL;
+        return E_PENDING;
+    }
+#endif
+
     return node_select_nodes(doc->node, p, list);
 }
 
@@ -796,6 +828,14 @@ static HRESULT WINAPI domdoc_selectSingleNode(IXMLDOMDocument3 *iface, BSTR p, I
     domdoc *doc = impl_from_IXMLDOMDocument3(iface);
 
     TRACE("%p, %s, %p.\n", iface, debugstr_w(p), node);
+
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+    {
+        if (node) *node = NULL;
+        return E_PENDING;
+    }
+#endif
 
     return node_select_singlenode(doc->node, p, node);
 }
@@ -849,6 +889,20 @@ static HRESULT WINAPI domdoc_transformNodeToObject(IXMLDOMDocument3 *iface,
         if (!V_UNKNOWN(&output))
             return E_INVALIDARG;
 
+#ifdef __REACTOS__
+        if (IUnknown_QueryInterface(V_UNKNOWN(&output), &domdoc_transform_target, (void **)&output_doc) == S_OK)
+        {
+            VARIANT_BOOL b;
+
+            if (SUCCEEDED(hr = node_transform_node(doc->node, stylesheet, &str)))
+            {
+                hr = IXMLDOMDocument_loadXML(output_doc, str, &b);
+                SysFreeString(str);
+            }
+            IXMLDOMDocument_Release(output_doc);
+            return hr;
+        }
+#else
         /* FIXME: we're not supposed to query for document interface, should use IStream
            which we don't support currently. */
         if (IUnknown_QueryInterface(V_UNKNOWN(&output), &IID_IXMLDOMDocument, (void **)&output_doc) == S_OK)
@@ -862,6 +916,7 @@ static HRESULT WINAPI domdoc_transformNodeToObject(IXMLDOMDocument3 *iface,
             SysFreeString(str);
             return hr;
         }
+#endif
         else if (IUnknown_QueryInterface(V_UNKNOWN(&output), &IID_ISequentialStream, (void**)&stream) == S_OK)
         {
             hr = node_transform_node_params(doc->node, stylesheet, NULL, stream, NULL);
@@ -1129,6 +1184,11 @@ static HRESULT WINAPI domdoc_createProcessingInstruction(IXMLDOMDocument3 *iface
 
     TRACE("%p, %s, %s, %p.\n", iface, debugstr_w(target), debugstr_w(data), pi);
 
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+        return E_FAIL;
+#endif
+
     return create_pi_node(doc->node, target, data, pi);
 }
 
@@ -1194,6 +1254,14 @@ static HRESULT WINAPI domdoc_getElementsByTagName(IXMLDOMDocument3 *iface, BSTR 
 
     TRACE("%p, %s, %p.\n", iface, debugstr_w(name), list);
 
+#ifdef __REACTOS__
+    if (doc->node->flags & DOMNODE_SAX_BUILD)
+    {
+        if (list) *list = NULL;
+        return E_PENDING;
+    }
+#endif
+
     return node_get_elements_by_tagname(doc->node, name, list);
 }
 
@@ -1254,6 +1322,12 @@ static HRESULT WINAPI domdoc_createNode(IXMLDOMDocument3 *iface, VARIANT type, B
 
     if (FAILED(hr = get_node_type(&type, &node_type)))
         return hr;
+
+#ifdef __REACTOS__
+    if ((doc->node->flags & DOMNODE_SAX_BUILD) && (node_type == NODE_ELEMENT || node_type == NODE_ATTRIBUTE ||
+            node_type == NODE_PROCESSING_INSTRUCTION || node_type == NODE_ENTITY_REFERENCE))
+        return E_FAIL;
+#endif
 
     switch (node_type)
     {
@@ -1533,12 +1607,20 @@ static HRESULT WINAPI domdoc_load(IXMLDOMDocument3 *iface, VARIANT source, VARIA
 
 static HRESULT WINAPI domdoc_get_readyState(IXMLDOMDocument3 *iface, LONG *value)
 {
+#ifdef __REACTOS__
+    domdoc *doc = impl_from_IXMLDOMDocument3(iface);
+#endif
+
     FIXME("%p, %p.\n", iface, value);
 
     if (!value)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    *value = (doc->node->flags & DOMNODE_SAX_BUILD) ? READYSTATE_INTERACTIVE : READYSTATE_COMPLETE;
+#else
     *value = READYSTATE_COMPLETE;
+#endif
     return S_OK;
 }
 
@@ -1782,6 +1864,11 @@ static HRESULT WINAPI domdoc_put_preserveWhiteSpace(IXMLDOMDocument3 *iface, VAR
     struct domnode *node = doc->node;
 
     TRACE("%p, %d.\n", iface, v);
+
+#ifdef __REACTOS__
+    if (node->flags & DOMNODE_SAX_BUILD)
+        return E_FAIL;
+#endif
 
     node->properties->preserving = v;
     return S_OK;
@@ -2793,6 +2880,77 @@ static HRESULT WINAPI domdoc_ObjectWithSite_GetSite(IObjectWithSite *iface, REFI
     return IUnknown_QueryInterface(doc->site, iid, obj);
 }
 
+#ifdef __REACTOS__
+static IUri *domdoc_get_parent_uri(IUnknown *site)
+{
+    IXMLDOMDocument *parent = NULL;
+    IServiceProvider *provider;
+    IUri *uri = NULL;
+    BSTR url = NULL;
+
+    if (FAILED(IUnknown_QueryInterface(site, &IID_IXMLDOMDocument, (void **)&parent)) &&
+            SUCCEEDED(IUnknown_QueryInterface(site, &IID_IServiceProvider, (void **)&provider)))
+    {
+        if (FAILED(IServiceProvider_QueryService(provider, &SID_SInternetHostSecurityManager,
+                &IID_IXMLDOMDocument, (void **)&parent)))
+            parent = NULL;
+        IServiceProvider_Release(provider);
+    }
+
+    if (parent)
+    {
+        if (IXMLDOMDocument_get_url(parent, &url) == S_OK && url)
+        {
+            if (FAILED(CreateUri(url, 0, 0, &uri)))
+                uri = NULL;
+            SysFreeString(url);
+        }
+        IXMLDOMDocument_Release(parent);
+    }
+
+    return uri;
+}
+
+static IUri *domdoc_get_client_site_uri(IUnknown *site)
+{
+    IOleClientSite *client;
+    IMoniker *moniker;
+    IBindCtx *ctx;
+    IUri *uri = NULL;
+    WCHAR *name;
+
+    if (FAILED(IUnknown_QueryInterface(site, &IID_IOleClientSite, (void **)&client)))
+        return NULL;
+
+    if (SUCCEEDED(IOleClientSite_GetMoniker(client, OLEGETMONIKER_ONLYIFTHERE, OLEWHICHMK_CONTAINER, &moniker)))
+    {
+        if (SUCCEEDED(CreateBindCtx(0, &ctx)))
+        {
+            if (SUCCEEDED(IMoniker_GetDisplayName(moniker, ctx, NULL, &name)))
+            {
+                if (FAILED(CreateUri(name, 0, 0, &uri)))
+                    uri = NULL;
+                CoTaskMemFree(name);
+            }
+            IBindCtx_Release(ctx);
+        }
+        IMoniker_Release(moniker);
+    }
+    IOleClientSite_Release(client);
+
+    return uri;
+}
+
+static IUri *domdoc_get_site_uri(IUnknown *site)
+{
+    IUri *uri = domdoc_get_parent_uri(site);
+
+    if (!uri)
+        uri = domdoc_get_client_site_uri(site);
+    return uri ? uri : get_base_uri(site);
+}
+#endif
+
 static HRESULT WINAPI domdoc_ObjectWithSite_SetSite(IObjectWithSite *iface, IUnknown *punk)
 {
     domdoc *doc = impl_from_IObjectWithSite(iface);
@@ -2820,9 +2978,18 @@ static HRESULT WINAPI domdoc_ObjectWithSite_SetSite(IObjectWithSite *iface, IUnk
 
     if (doc->site)
         IUnknown_Release(doc->site);
+    if (doc->base_uri)
+    {
+        IUri_Release(doc->base_uri);
+        doc->base_uri = NULL;
+    }
 
     doc->site = punk;
+#ifdef __REACTOS__
+    doc->base_uri = domdoc_get_site_uri(doc->site);
+#else
     doc->base_uri = get_base_uri(doc->site);
+#endif
 
     return S_OK;
 }
@@ -2837,6 +3004,210 @@ static const IObjectWithSiteVtbl domdocObjectSite =
 };
 
 #ifdef __REACTOS__
+static inline domdoc *impl_from_IOleCommandTarget(IOleCommandTarget *iface)
+{
+    return CONTAINING_RECORD(iface, domdoc, IOleCommandTarget_iface);
+}
+
+static HRESULT WINAPI domdoc_OleCommandTarget_QueryInterface(IOleCommandTarget *iface, REFIID riid, void **obj)
+{
+    domdoc *doc = impl_from_IOleCommandTarget(iface);
+    return IXMLDOMDocument3_QueryInterface(&doc->IXMLDOMDocument3_iface, riid, obj);
+}
+
+static ULONG WINAPI domdoc_OleCommandTarget_AddRef(IOleCommandTarget *iface)
+{
+    domdoc *doc = impl_from_IOleCommandTarget(iface);
+    return IXMLDOMDocument3_AddRef(&doc->IXMLDOMDocument3_iface);
+}
+
+static ULONG WINAPI domdoc_OleCommandTarget_Release(IOleCommandTarget *iface)
+{
+    domdoc *doc = impl_from_IOleCommandTarget(iface);
+    return IXMLDOMDocument3_Release(&doc->IXMLDOMDocument3_iface);
+}
+
+static HRESULT WINAPI domdoc_OleCommandTarget_QueryStatus(IOleCommandTarget *iface, const GUID *group,
+        ULONG count, OLECMD *commands, OLECMDTEXT *text)
+{
+    TRACE("%p, %s, %lu, %p, %p.\n", iface, debugstr_guid(group), count, commands, text);
+
+    return OLECMDERR_E_UNKNOWNGROUP;
+}
+
+static HRESULT WINAPI domdoc_OleCommandTarget_Exec(IOleCommandTarget *iface, const GUID *group,
+        DWORD id, DWORD options, VARIANT *in, VARIANT *out)
+{
+    TRACE("%p, %s, %lu, %#lx, %p, %p.\n", iface, debugstr_guid(group), id, options, in, out);
+
+    return OLECMDERR_E_UNKNOWNGROUP;
+}
+
+static const IOleCommandTargetVtbl domdocOleCommandTargetVtbl =
+{
+    domdoc_OleCommandTarget_QueryInterface,
+    domdoc_OleCommandTarget_AddRef,
+    domdoc_OleCommandTarget_Release,
+    domdoc_OleCommandTarget_QueryStatus,
+    domdoc_OleCommandTarget_Exec,
+};
+
+static inline domdoc *impl_from_IStream(IStream *iface)
+{
+    return CONTAINING_RECORD(iface, domdoc, IStream_iface);
+}
+
+static HRESULT domdoc_stream_prepare(domdoc *doc, BOOL save)
+{
+    LARGE_INTEGER zero = {{0}};
+    HRESULT hr;
+
+    if (doc->stream)
+        return S_OK;
+
+    if (FAILED(hr = CreateStreamOnHGlobal(NULL, TRUE, &doc->stream)))
+        return hr;
+
+    if (save && SUCCEEDED(hr = node_save(doc->node, doc->stream)))
+        hr = IStream_Seek(doc->stream, zero, STREAM_SEEK_SET, NULL);
+    return hr;
+}
+
+static HRESULT WINAPI domdoc_Stream_QueryInterface(IStream *iface, REFIID riid, void **obj)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    return IXMLDOMDocument3_QueryInterface(&doc->IXMLDOMDocument3_iface, riid, obj);
+}
+
+static ULONG WINAPI domdoc_Stream_AddRef(IStream *iface)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    return IXMLDOMDocument3_AddRef(&doc->IXMLDOMDocument3_iface);
+}
+
+static ULONG WINAPI domdoc_Stream_Release(IStream *iface)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    return IXMLDOMDocument3_Release(&doc->IXMLDOMDocument3_iface);
+}
+
+static HRESULT WINAPI domdoc_Stream_Read(IStream *iface, void *buffer, ULONG size, ULONG *read)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    HRESULT hr = domdoc_stream_prepare(doc, TRUE);
+
+    return FAILED(hr) ? hr : IStream_Read(doc->stream, buffer, size, read);
+}
+
+static HRESULT WINAPI domdoc_Stream_Write(IStream *iface, const void *buffer, ULONG size, ULONG *written)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    HRESULT hr = domdoc_stream_prepare(doc, FALSE);
+
+    return FAILED(hr) ? hr : IStream_Write(doc->stream, buffer, size, written);
+}
+
+static HRESULT WINAPI domdoc_Stream_Seek(IStream *iface, LARGE_INTEGER move, DWORD origin, ULARGE_INTEGER *position)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    HRESULT hr = domdoc_stream_prepare(doc, TRUE);
+
+    return FAILED(hr) ? hr : IStream_Seek(doc->stream, move, origin, position);
+}
+
+static HRESULT WINAPI domdoc_Stream_SetSize(IStream *iface, ULARGE_INTEGER size)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    HRESULT hr = domdoc_stream_prepare(doc, TRUE);
+
+    return FAILED(hr) ? hr : IStream_SetSize(doc->stream, size);
+}
+
+static HRESULT WINAPI domdoc_Stream_CopyTo(IStream *iface, IStream *target, ULARGE_INTEGER size,
+        ULARGE_INTEGER *read, ULARGE_INTEGER *written)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    HRESULT hr = domdoc_stream_prepare(doc, TRUE);
+
+    return FAILED(hr) ? hr : IStream_CopyTo(doc->stream, target, size, read, written);
+}
+
+static HRESULT WINAPI domdoc_Stream_Commit(IStream *iface, DWORD flags)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    LARGE_INTEGER zero = {{0}};
+    IStream *stream = doc->stream;
+    HRESULT hr;
+
+    TRACE("%p, %#lx.\n", iface, flags);
+
+    if (!stream)
+        return S_OK;
+
+    doc->stream = NULL;
+    if (SUCCEEDED(hr = IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL)))
+        hr = doc->error = domdoc_load_from_stream(doc, (ISequentialStream *)stream);
+    IStream_Release(stream);
+    return hr;
+}
+
+static HRESULT WINAPI domdoc_Stream_Revert(IStream *iface)
+{
+    domdoc *doc = impl_from_IStream(iface);
+
+    TRACE("%p.\n", iface);
+
+    if (doc->stream)
+    {
+        IStream_Release(doc->stream);
+        doc->stream = NULL;
+    }
+    return S_OK;
+}
+
+static HRESULT WINAPI domdoc_Stream_LockRegion(IStream *iface, ULARGE_INTEGER offset, ULARGE_INTEGER size, DWORD type)
+{
+    return STG_E_INVALIDFUNCTION;
+}
+
+static HRESULT WINAPI domdoc_Stream_UnlockRegion(IStream *iface, ULARGE_INTEGER offset, ULARGE_INTEGER size, DWORD type)
+{
+    return STG_E_INVALIDFUNCTION;
+}
+
+static HRESULT WINAPI domdoc_Stream_Stat(IStream *iface, STATSTG *stat, DWORD flags)
+{
+    domdoc *doc = impl_from_IStream(iface);
+    HRESULT hr = domdoc_stream_prepare(doc, TRUE);
+
+    return FAILED(hr) ? hr : IStream_Stat(doc->stream, stat, flags);
+}
+
+static HRESULT WINAPI domdoc_Stream_Clone(IStream *iface, IStream **clone)
+{
+    /* TODO: clone the stream position with its own reference to the document */
+    *clone = NULL;
+    return E_NOTIMPL;
+}
+
+static const IStreamVtbl domdocStreamVtbl =
+{
+    domdoc_Stream_QueryInterface,
+    domdoc_Stream_AddRef,
+    domdoc_Stream_Release,
+    domdoc_Stream_Read,
+    domdoc_Stream_Write,
+    domdoc_Stream_Seek,
+    domdoc_Stream_SetSize,
+    domdoc_Stream_CopyTo,
+    domdoc_Stream_Commit,
+    domdoc_Stream_Revert,
+    domdoc_Stream_LockRegion,
+    domdoc_Stream_UnlockRegion,
+    domdoc_Stream_Stat,
+    domdoc_Stream_Clone,
+};
+
 static inline domdoc *impl_from_IProvideClassInfo(IProvideClassInfo *iface)
 {
     return CONTAINING_RECORD(iface, domdoc, IProvideClassInfo_iface);
@@ -3185,6 +3556,8 @@ HRESULT create_domdoc(struct domnode *node, IUnknown **obj)
 #ifdef __REACTOS__
     object->IProvideClassInfo_iface.lpVtbl = &domdocProvideClassInfoVtbl;
     object->IPersistMoniker_iface.lpVtbl = &domdocPersistMonikerVtbl;
+    object->IOleCommandTarget_iface.lpVtbl = &domdocOleCommandTargetVtbl;
+    object->IStream_iface.lpVtbl = &domdocStreamVtbl;
 #endif
     object->refcount = 1;
     object->async = VARIANT_TRUE;

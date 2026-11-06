@@ -130,6 +130,15 @@ DxgkGpuVaCoreAllocationMapChunk(
     return TRUE;
 }
 
+/* A range mapped without an allocation, such as a monitored-fence page, still gets its own page-table update. */
+BOOLEAN
+DxgkGpuVaCoreRangeIsUpdateSpan(
+    _In_ BOOLEAN Mapped,
+    _In_ BOOLEAN Reserved)
+{
+    return Mapped || Reserved;
+}
+
 BOOLEAN
 DxgkGpuVaCoreNextMapPiece(
     _In_reads_bytes_(SpanCount * SpanStride) const VOID *Spans,
@@ -400,6 +409,53 @@ DxgkGpuVaCore64KBEntries(
     return PageTableLevel == 1 ? DxgkGpuVa64KBEntriesTableHalf : DxgkGpuVa64KBEntriesNone;
 }
 
+static BOOLEAN
+GpuVaCoreEntryIsZero(
+    _In_ const ULONGLONG *Entries,
+    _In_opt_ const ULONGLONG *Entries64KB,
+    _In_ ULONG Index)
+{
+    if (Entries[Index * 2] != 0 || Entries[Index * 2 + 1] != 0)
+        return FALSE;
+    return Entries64KB == NULL || (Entries64KB[Index * 2] == 0 && Entries64KB[Index * 2 + 1] == 0);
+}
+
+/* A table that was just zero-filled is written once per entry: only its non-zero runs follow the fill. */
+BOOLEAN
+DxgkGpuVaCoreNextWriteRun(
+    _In_reads_(Count * 2) const ULONGLONG *Entries,
+    _In_reads_opt_(Count * 2) const ULONGLONG *Entries64KB,
+    _In_ ULONG Count,
+    _In_ BOOLEAN ZeroFilled,
+    _Inout_ PULONG Cursor,
+    _Out_ PULONG RunLength)
+{
+    ULONG Start = *Cursor;
+    ULONG End;
+
+    *RunLength = 0;
+    if (Entries == NULL || Start >= Count)
+        return FALSE;
+    if (!ZeroFilled)
+    {
+        *RunLength = Count - Start;
+        return TRUE;
+    }
+    while (Start < Count && GpuVaCoreEntryIsZero(Entries, Entries64KB, Start))
+        Start++;
+    if (Start >= Count)
+    {
+        *Cursor = Count;
+        return FALSE;
+    }
+    End = Start + 1;
+    while (End < Count && !GpuVaCoreEntryIsZero(Entries, Entries64KB, End))
+        End++;
+    *Cursor = Start;
+    *RunLength = End - Start;
+    return TRUE;
+}
+
 ULONG
 DxgkGpuVaCoreTableUpdateMode(
     _In_ ULONG AdapterUpdateMode,
@@ -429,6 +485,25 @@ DxgkGpuVaCoreUsesPagingProcessVa(
 {
     return AdapterUpdateMode == DXGK_GPUVA_CORE_UPDATE_GPU_VIRTUAL ||
            AdapterUpdateMode == DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL;
+}
+
+/* An update described before placement lands where the table will not be. */
+DXGK_GPUVA_TABLE_SNAPSHOT
+DxgkGpuVaCoreTableSnapshot(
+    _In_ BOOLEAN PlacementPending,
+    _In_ BOOLEAN InitialUpdatePending,
+    _In_ BOOLEAN ResendSpan,
+    _In_ BOOLEAN Dirty)
+{
+    if (PlacementPending)
+        return DxgkGpuVaTableSnapshotAwaitPlacement;
+    if (InitialUpdatePending)
+        return DxgkGpuVaTableSnapshotWhole;
+    if (ResendSpan)
+        return DxgkGpuVaTableSnapshotSpan;
+    if (Dirty)
+        return DxgkGpuVaTableSnapshotDirty;
+    return DxgkGpuVaTableSnapshotNone;
 }
 
 /* EOF */

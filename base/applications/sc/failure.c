@@ -186,3 +186,95 @@ done:
 
     return bResult;
 }
+
+
+static SC_HANDLE
+OpenFailureFlagService(LPCTSTR ServiceName, DWORD dwDesiredAccess, SC_HANDLE *phManager)
+{
+    SC_HANDLE hService;
+
+    *phManager = OpenSCManager(NULL, NULL, SC_MANAGER_CONNECT);
+    if (*phManager == NULL)
+    {
+        _tprintf(_T("[SC] OpenSCManager FAILED %lu:\n\n"), GetLastError());
+        return NULL;
+    }
+    hService = OpenService(*phManager, ServiceName, dwDesiredAccess);
+    if (hService == NULL)
+    {
+        _tprintf(_T("[SC] OpenService FAILED %lu:\n\n"), GetLastError());
+        CloseServiceHandle(*phManager);
+        *phManager = NULL;
+    }
+    return hService;
+}
+
+BOOL QueryFailureFlag(LPCTSTR ServiceName)
+{
+    SERVICE_FAILURE_ACTIONS_FLAG Flag = { FALSE };
+    SC_HANDLE hManager, hService;
+    DWORD cbBytesNeeded = 0;
+    BOOL bResult;
+
+    hService = OpenFailureFlagService(ServiceName, SERVICE_QUERY_CONFIG, &hManager);
+    if (hService == NULL)
+    {
+        ReportLastError();
+        return FALSE;
+    }
+
+    bResult = QueryServiceConfig2(hService, SERVICE_CONFIG_FAILURE_ACTIONS_FLAG,
+                                  (LPBYTE)&Flag, sizeof(Flag), &cbBytesNeeded);
+    if (bResult)
+    {
+        _tprintf(_T("[SC] QueryServiceConfig2 SUCCESS\n\n"));
+        _tprintf(_T("SERVICE_NAME: %s\n"), ServiceName);
+        _tprintf(_T("        FAILURE_ACTIONS_ON_NONCRASH_FAILURES: %s\n\n"),
+                 Flag.fFailureActionsOnNonCrashFailures ? _T("TRUE") : _T("FALSE"));
+    }
+    else
+    {
+        _tprintf(_T("[SC] QueryServiceConfig2 FAILED %lu:\n\n"), GetLastError());
+        ReportLastError();
+    }
+
+    CloseServiceHandle(hService);
+    CloseServiceHandle(hManager);
+    return bResult;
+}
+
+BOOL SetFailureFlag(LPCTSTR *ServiceArgs, INT ArgCount)
+{
+    SERVICE_FAILURE_ACTIONS_FLAG Flag;
+    SC_HANDLE hManager, hService;
+    BOOL bResult;
+
+    if (ArgCount != 2)
+    {
+        SetFailureFlagUsage();
+        return FALSE;
+    }
+    Flag.fFailureActionsOnNonCrashFailures = _ttoi(ServiceArgs[1]) != 0;
+
+    hService = OpenFailureFlagService(ServiceArgs[0], SERVICE_CHANGE_CONFIG, &hManager);
+    if (hService == NULL)
+    {
+        ReportLastError();
+        return FALSE;
+    }
+
+    bResult = ChangeServiceConfig2(hService, SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, (LPBYTE)&Flag);
+    if (bResult)
+    {
+        _tprintf(_T("[SC] ChangeServiceConfig2 SUCCESS\n\n"));
+    }
+    else
+    {
+        _tprintf(_T("[SC] ChangeServiceConfig2 FAILED %lu:\n\n"), GetLastError());
+        ReportLastError();
+    }
+
+    CloseServiceHandle(hService);
+    CloseServiceHandle(hManager);
+    return bResult;
+}

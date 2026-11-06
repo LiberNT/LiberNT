@@ -321,6 +321,12 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         WARN("GetStreamLatency failed with %08lx\n", hres);
         goto err;
     }
+#ifdef __REACTOS__
+    if (!period && FAILED(hres = IAudioClient_GetDevicePeriod(client, &period, NULL))) {
+        WARN("GetDevicePeriod failed with %08lx\n", hres);
+        goto err;
+    }
+#endif
     hres = IAudioClient_GetBufferSize(client, &acbuf_frames);
     if (FAILED(hres)) {
         WARN("GetBufferSize failed with %08lx\n", hres);

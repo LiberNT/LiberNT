@@ -100,6 +100,13 @@ typedef struct _CMD_IF_CONDITION
     unsigned case_insensitive : 1,
              negated : 1,
              op;
+#ifdef __REACTOS__
+    const WCHAR *keyword;
+    const WCHAR *else_keyword;
+    WCHAR case_option[3];
+    WCHAR negation[4];
+    WCHAR unary[11];
+#endif
     union
     {
         /* CMD_IF_ERRORLEVEL, CMD_IF_EXIST, CMD_IF_DEFINED */
@@ -340,6 +347,9 @@ struct env_stack
     } u;
     WCHAR *strings;
     BOOL delayedsubst;        /* Is delayed substitution in effect */
+#ifdef __REACTOS__
+    BOOL extensions;
+#endif
 };
 
 /* Data structure to save setlocal and pushd information */
@@ -383,6 +393,9 @@ extern WCHAR quals[MAXSTRING], param1[MAXSTRING], param2[MAXSTRING];
 extern int errorlevel;
 extern struct batch_context *context;
 extern BOOL delayedsubst;
+#ifdef __REACTOS__
+extern BOOL extensions;
+#endif
 
 static inline BOOL WCMD_is_in_context(const WCHAR *ext)
 {
@@ -411,6 +424,9 @@ static inline BOOL WCMD_is_in_context(const WCHAR *ext)
 #define WCMD_CLS       3
 #define WCMD_COPY      4
 /* no longer used slot */
+#ifdef __REACTOS__
+#define WCMD_BREAK     5
+#endif
 #define WCMD_DATE      6
 #define WCMD_DEL       7
 #define WCMD_DIR       8

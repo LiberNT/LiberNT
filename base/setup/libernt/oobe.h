@@ -48,6 +48,9 @@ AppsPageProc(
     _In_ WPARAM wParam,
     _In_ LPARAM lParam);
 
+BOOL
+WaitForInternet(VOID);
+
 DWORD
 InstallOobeApp(
     _Inout_ POOBE_APP App,

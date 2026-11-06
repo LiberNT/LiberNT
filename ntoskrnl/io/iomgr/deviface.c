@@ -2005,6 +2005,9 @@ IoSetDeviceInterfaceState(IN PUNICODE_STRING SymbolicLinkName,
 
     DPRINT("IoSetDeviceInterfaceState('%wZ', %u)\n", SymbolicLinkName, Enable);
 
+    if (!Enable && PiIsRemovingRenamedStack())
+        return STATUS_SUCCESS;
+
     /* Symbolic link name is \??\ACPI#PNP0501#1#{GUID}\ReferenceString */
     /* Make sure it starts with the expected prefix */
     if (!RtlPrefixUnicodeString(&DosDevicesPrefix1, SymbolicLinkName, FALSE) &&

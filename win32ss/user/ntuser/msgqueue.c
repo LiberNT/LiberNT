@@ -254,6 +254,7 @@ int UserShowCursor(BOOL bShow)
 
         /* Update global info */
         IntGetSysCursorInfo()->ShowingCursor = MessageQueue->iCursorLevel;
+        IntCompositionPointerChanged();
     }
 
     return MessageQueue->iCursorLevel;

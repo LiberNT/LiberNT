@@ -10,6 +10,7 @@ list(APPEND SOURCE
     enum.c
     hotplug.c
     request.c
+    dump.c
     interface.c
     power.c
     sdio.c

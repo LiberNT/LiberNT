@@ -2673,6 +2673,56 @@ struct _I10_OUTPUT_DATA {
     char str[I10_OUTPUT_MAX_PREC+1]; /* add space for '\0' */
 };
 
+#ifdef __REACTOS__
+/* Writes count significant digits of a finite non-zero value, returns the digits before the point */
+static int i10_digits(const struct MSVCRT__LDOUBLE *ld, char *digits, int count)
+{
+    BYTE bnum_data[FIELD_OFFSET(struct bnum, data) + BNUM_PREC80 * sizeof(DWORD)];
+    struct bnum *b = (struct bnum *)bnum_data;
+    int exp = (ld->exp & 0x7fff) - 0x3fff - 63;
+    char limb[LIMB_DIGITS + 1];
+    int i, len, top;
+
+    b->b = 0;
+    b->e = 3;
+    b->size = BNUM_PREC80;
+    b->data[0] = ld->m % LIMB_MAX;
+    b->data[1] = ld->m / LIMB_MAX % LIMB_MAX;
+    b->data[2] = ld->m / LIMB_MAX / LIMB_MAX;
+    while (b->e > 1 && !b->data[bnum_idx(b, b->e - 1)])
+        b->e--;
+
+    while (exp > 0)
+    {
+        int shift = exp > 29 ? 29 : exp;
+
+        bnum_lshift(b, shift);
+        exp -= shift;
+    }
+    while (exp < 0)
+    {
+        int shift = -exp > 9 ? 9 : -exp;
+
+        bnum_rshift(b, shift);
+        exp += shift;
+    }
+
+    top = sprintf(limb, "%lu", b->data[bnum_idx(b, b->e - 1)]);
+    len = min(top, count);
+    memcpy(digits, limb, len);
+    for (i = b->e - 2; i >= b->b && len < count; i--)
+    {
+        int part = min(LIMB_DIGITS, count - len);
+
+        sprintf(limb, "%09lu", b->data[bnum_idx(b, i)]);
+        memcpy(digits + len, limb, part);
+        len += part;
+    }
+    memset(digits + len, '0', count - len);
+    return top + LIMB_DIGITS * (b->e - 1);
+}
+#endif
+
 /*********************************************************************
  *              $I10_OUTPUT (MSVCRT.@)
  * ld80 - long double (Intel 80 bit FP in 12 bytes) to be printed to data
@@ -2740,8 +2790,39 @@ int CDECL I10_OUTPUT(_LDOUBLE ld80, int prec, int flag, struct _I10_OUTPUT_DATA 
 
     sprintf(format, "%%.%dle", prec);
     sprintf(buf, format, d);
-
     buf[1] = buf[0];
+
+#ifdef __REACTOS__
+    if(d) {
+        char digits[I10_OUTPUT_MAX_PREC+1];
+        int i;
+
+        data->pos = i10_digits(ld, digits, prec+2);
+        if(digits[prec+1] >= '5') {
+            for(i = prec; i >= 0 && digits[i] == '9'; i--)
+                digits[i] = '0';
+            if(i >= 0)
+                digits[i]++;
+            else {
+                digits[0] = '1';
+                data->pos++;
+            }
+        }
+
+        for(i = prec; i > 0 && digits[i] == '0'; i--);
+        data->len = i+1;
+
+        memcpy(data->str, digits, data->len);
+        data->str[data->len] = '\0';
+
+        /* FIXME: native sets the final trailing byte to '0' or '9'; we keep the sprintf digit, so the trailing-'9' cases stay todo_wine */
+        if(prec+1 > data->len)
+            memcpy(data->str+data->len+1, buf+data->len+1, prec+1-data->len);
+
+        return 1;
+    }
+#endif
+
     data->pos = atoi(buf+prec+3);
     if(buf[1] != '0')
         data->pos++;

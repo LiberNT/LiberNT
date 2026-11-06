@@ -37,12 +37,19 @@ list(APPEND SOURCE
     d3dkmt_softgpu_occlusion.c
     d3dkmt_hwqueue.c
     d3dkmt_sync2.c
+    d3dkmt_fencestorage.c
     d3dkmt_videomem.c
     d3dkmt_enum2.c
     d3dkmt_surface.c
     d3dkmt_adapterinfo.c
     d3dkmt_adapterid.c
+    d3dkmt_queryregistry.c
+    d3dkmt_ctxvalidate.c
+    d3dkmt_gpuvareserve.c
     d3dkmt_gpusync.c
+    d3dkmt_syncshare.c
+    d3dkmt_stubparity.c
+    d3dkmt_badptr.c
     d3dkmt_ctxflags.c
     d3dkmt_umdcallbacks.c
     d3dkmt_sharing.c

@@ -1,0 +1,66 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Copyright 2026 Ahmed ARIF <arifing193@gmail.com>
+[Version]
+Signature="$WINDOWS NT$"
+Class=Net
+ClassGuid={4d36e972-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=11/05/2026,1.0.0.0
+CatalogFile=kmtest_ndissg.cat
+
+[Manufacturer]
+%Provider%=Models,NTx86,NTamd64,NTarm64,NTriscv64
+
+[Models.NTx86]
+%Device%=Miniport,PCI\VEN_1234&DEV_11E8
+
+[Models.NTamd64]
+%Device%=Miniport,PCI\VEN_1234&DEV_11E8
+
+[Models.NTarm64]
+%Device%=Miniport,PCI\VEN_1234&DEV_11E8
+
+[Models.NTriscv64]
+%Device%=Miniport,PCI\VEN_1234&DEV_11E8
+
+[Miniport.NT]
+Characteristics=0x4
+BusType=5
+*IfType=6
+*MediaType=0
+*PhysicalMediaType=14
+AddReg=MiniportReg
+CopyFiles=DriverCopy
+
+[Miniport.NT.Services]
+AddService=ndissg_drv,0x2,MiniportService
+
+[MiniportReg]
+HKR,Ndi,Service,0,"ndissg_drv"
+HKR,Ndi\Interfaces,UpperRange,0,"ndis5"
+HKR,Ndi\Interfaces,LowerRange,0,"ethernet"
+
+[MiniportService]
+DisplayName=%Device%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\ndissg_drv.sys
+LoadOrderGroup=NDIS
+
+[DestinationDirs]
+DriverCopy=12
+
+[DriverCopy]
+ndissg_drv.sys,,,0x10
+
+[SourceDisksNames]
+1=%Disk%,,,
+
+[SourceDisksFiles]
+ndissg_drv.sys=1
+
+[Strings]
+Provider="LiberNT kernel tests"
+Device="Kmtest scatter/gather DMA miniport"
+Disk="Kmtest driver package"

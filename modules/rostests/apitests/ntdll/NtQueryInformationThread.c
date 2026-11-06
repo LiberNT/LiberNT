@@ -613,10 +613,54 @@ Quit:
         NtClose(hWaitEvent);
 }
 
+static
+DWORD
+WINAPI
+ShortSpinThread(PVOID Parameter)
+{
+    LARGE_INTEGER Frequency, Start, Now;
+
+    UNREFERENCED_PARAMETER(Parameter);
+    QueryPerformanceFrequency(&Frequency);
+    QueryPerformanceCounter(&Start);
+    do
+    {
+        QueryPerformanceCounter(&Now);
+    } while (Now.QuadPart - Start.QuadPart < Frequency.QuadPart / 1000);
+
+    return 0;
+}
+
+static
+void
+Test_ThreadCycleTimeShortRun(void)
+{
+    THREAD_CYCLE_TIME_INFORMATION Information;
+    NTSTATUS Status;
+    HANDLE hThread;
+    ULONG i;
+
+    for (i = 0; i < 8; i++)
+    {
+        hThread = CreateThread(NULL, 0, ShortSpinThread, NULL, 0, NULL);
+        ok(hThread != NULL, "CreateThread failed with error %lu\n", GetLastError());
+        if (!hThread)
+            return;
+
+        ok_long(WaitForSingleObject(hThread, 10000), WAIT_OBJECT_0);
+        RtlZeroMemory(&Information, sizeof(Information));
+        Status = NtQueryInformationThread(hThread, ThreadCycleTime, &Information, sizeof(Information), NULL);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        ok(Information.AccumulatedCycles != 0, "Run %lu: a thread that ran for 1 ms has no cycles\n", i);
+        CloseHandle(hThread);
+    }
+}
+
 START_TEST(NtQueryInformationThread)
 {
     Test_ThreadBasicInformationClass();
     Test_ThreadHideFromDebuggerClass();
     Test_ThreadQueryAlignmentProbe();
     Test_ThreadNameInformation();
+    Test_ThreadCycleTimeShortRun();
 }

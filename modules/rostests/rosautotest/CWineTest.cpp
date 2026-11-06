@@ -6,6 +6,9 @@
  */
 
 #include "precomp.h"
+#include <tlhelp32.h>
+#include <algorithm>
+#include <map>
 
 static const DWORD ListTimeout = 10000;
 
@@ -24,6 +27,57 @@ ProcessCpuTime(HANDLE hProcess)
 
     return ((ULONGLONG)Kernel.dwHighDateTime << 32 | Kernel.dwLowDateTime) +
            ((ULONGLONG)User.dwHighDateTime << 32 | User.dwLowDateTime);
+}
+
+static bool
+DescendantsActiveSince(DWORD RootId, map<DWORD, ULONGLONG>& Seen)
+{
+    vector<PROCESSENTRY32W> Processes;
+    vector<DWORD> Tree(1, RootId);
+    map<DWORD, ULONGLONG> Current;
+    PROCESSENTRY32W Entry;
+    ULONGLONG Used = 0;
+    bool Started = false;
+    HANDLE hSnapshot;
+    size_t i, j;
+
+    hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE)
+        return false;
+    Entry.dwSize = sizeof(Entry);
+    for (BOOL More = Process32FirstW(hSnapshot, &Entry); More; More = Process32NextW(hSnapshot, &Entry))
+        Processes.push_back(Entry);
+    CloseHandle(hSnapshot);
+
+    for (i = 0; i < Tree.size(); i++)
+    {
+        for (j = 0; j < Processes.size(); j++)
+        {
+            DWORD Id = Processes[j].th32ProcessID;
+
+            if (Processes[j].th32ParentProcessID != Tree[i] || Id == RootId || Id == 0)
+                continue;
+            if (find(Tree.begin(), Tree.end(), Id) != Tree.end())
+                continue;
+            Tree.push_back(Id);
+
+            HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, Id);
+            if (!hProcess)
+                continue;
+            ULONGLONG CpuTime = ProcessCpuTime(hProcess);
+            CloseHandle(hProcess);
+
+            map<DWORD, ULONGLONG>::iterator Last = Seen.find(Id);
+            if (Last == Seen.end())
+                Started = true;
+            else if (CpuTime > Last->second)
+                Used += CpuTime - Last->second;
+            Current[Id] = CpuTime;
+        }
+    }
+
+    Seen.swap(Current);
+    return Started || Used >= 10000000;
 }
 
 static VOID
@@ -408,6 +462,8 @@ CWineTest::RunTest(CTestInfo* TestInfo)
         /* Execute the test */
         CPipedProcess Process(TestInfo->CommandLine, Pipe);
         ULONGLONG LastCpuTime = ProcessCpuTime(Process.GetProcessHandle());
+        DWORD TestProcessId = GetProcessId(Process.GetProcessHandle());
+        map<DWORD, ULONGLONG> Descendants;
 
         /* Receive all the data from the pipe */
         for (;;)
@@ -434,7 +490,8 @@ CWineTest::RunTest(CTestInfo* TestInfo)
             {
                 // The process activity timeout above has elapsed without any new data.
                 ULONGLONG CpuTime = ProcessCpuTime(Process.GetProcessHandle());
-                if (CpuTime - LastCpuTime >= 10000000)
+                // Tests such as cmd's batch test do their work in processes they start.
+                if (CpuTime - LastCpuTime >= 10000000 || DescendantsActiveSince(TestProcessId, Descendants))
                 {
                     LastCpuTime = CpuTime;
                     continue;

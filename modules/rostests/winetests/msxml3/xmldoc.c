@@ -1770,6 +1770,83 @@ static void test_cdata(void)
     IXMLDocument_Release(doc);
 }
 
+#ifdef __REACTOS__
+static void check_error_info_(unsigned int line, IXMLDocument *doc, BOOL failed, const WCHAR *reason)
+{
+    IXMLError *error;
+    XML_ERROR info;
+    HRESULT hr;
+
+    hr = IXMLDocument_QueryInterface(doc, &IID_IXMLError, (void **)&error);
+    ok_(__FILE__, line)(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    if (FAILED(hr))
+        return;
+
+    memset(&info, 0xcc, sizeof(info));
+    hr = IXMLError_GetErrorInfo(error, &info);
+    ok_(__FILE__, line)(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok_(__FILE__, line)(info._nLine == 0, "Unexpected line %u.\n", info._nLine);
+    ok_(__FILE__, line)(info._pchBuf && !SysStringLen(info._pchBuf), "Unexpected buffer %s.\n", wine_dbgstr_w(info._pchBuf));
+    ok_(__FILE__, line)(info._cchBuf == 0, "Unexpected buffer length %u.\n", info._cchBuf);
+    ok_(__FILE__, line)(info._ich == (failed ? ~0u : 0), "Unexpected position %u.\n", info._ich);
+    if (reason)
+        ok_(__FILE__, line)(info._pszFound && !lstrcmpW(info._pszFound, reason), "Unexpected reason %s.\n", wine_dbgstr_w(info._pszFound));
+    else
+        ok_(__FILE__, line)(info._pszFound && (failed ? SysStringLen(info._pszFound) != 0 : !SysStringLen(info._pszFound)),
+                "Unexpected reason %s.\n", wine_dbgstr_w(info._pszFound));
+    ok_(__FILE__, line)(info._pszExpected && !SysStringLen(info._pszExpected),
+            "Unexpected expected text %s.\n", wine_dbgstr_w(info._pszExpected));
+    ok_(__FILE__, line)(info._reserved1 == 0xcccccccc && info._reserved2 == 0xcccccccc, "Reserved fields were written.\n");
+    SysFreeString(info._pchBuf);
+    SysFreeString(info._pszFound);
+    SysFreeString(info._pszExpected);
+
+    hr = IXMLError_GetErrorInfo(error, NULL);
+    ok_(__FILE__, line)(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+
+    IXMLError_Release(error);
+}
+#define check_error_info(a, b, c) check_error_info_(__LINE__, a, b, c)
+
+static void test_xmldoc_error(void)
+{
+    static const char good[] = "<a><b>text</b></a>";
+    static const char unclosed[] = "<a><b>text</b>";
+    static const char nested[] = "<p:a xmlns:p=\"u\"><Bb>";
+    IXMLDocument *doc;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_XMLDocument, NULL, CLSCTX_INPROC_SERVER, &IID_IXMLDocument, (void **)&doc);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_error_info(doc, FALSE, NULL);
+    hr = load_document(doc, good, sizeof(good) - 1);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    check_error_info(doc, FALSE, NULL);
+    IXMLDocument_Release(doc);
+
+    hr = CoCreateInstance(&CLSID_XMLDocument, NULL, CLSCTX_INPROC_SERVER, &IID_IXMLDocument, (void **)&doc);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = load_document(doc, unclosed, sizeof(unclosed) - 1);
+    ok(hr == 0xc00ce553, "Unexpected hr %#lx.\n", hr);
+    check_error_info(doc, TRUE, L"The following tags were not closed: A.\r\n");
+    IXMLDocument_Release(doc);
+
+    hr = CoCreateInstance(&CLSID_XMLDocument, NULL, CLSCTX_INPROC_SERVER, &IID_IXMLDocument, (void **)&doc);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = load_document(doc, nested, sizeof(nested) - 1);
+    ok(hr == 0xc00ce553, "Unexpected hr %#lx.\n", hr);
+    check_error_info(doc, TRUE, L"The following tags were not closed: P:A, BB.\r\n");
+    IXMLDocument_Release(doc);
+
+    hr = CoCreateInstance(&CLSID_XMLDocument, NULL, CLSCTX_INPROC_SERVER, &IID_IXMLDocument, (void **)&doc);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = load_document(doc, "", 0);
+    ok(hr == 0xc00ce558, "Unexpected hr %#lx.\n", hr);
+    check_error_info(doc, TRUE, NULL);
+    IXMLDocument_Release(doc);
+}
+#endif
+
 START_TEST(xmldoc)
 {
     HRESULT hr;
@@ -1797,6 +1874,9 @@ START_TEST(xmldoc)
     test_comments();
     test_pi();
     test_cdata();
+#ifdef __REACTOS__
+    test_xmldoc_error();
+#endif
 
     CoUninitialize();
 }

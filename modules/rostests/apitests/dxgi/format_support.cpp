@@ -63,6 +63,88 @@ static void TestFormatSupport(ID3D11Device *Device)
     ok(Hr == S_OK || Hr == E_FAIL, "P010: %#lx\n", Hr);
 }
 
+static void TestRequiredSupport(ID3D11Device *Device)
+{
+    static const struct
+    {
+        DXGI_FORMAT Format;
+        UINT Required[3];
+    } Tests[] =
+    {
+        {DXGI_FORMAT_R32G32B32A32_TYPELESS, {0x001210f0, 0x001210f0, 0x001210f0}},
+        {DXGI_FORMAT_R32G32B32A32_FLOAT, {0x0016f1fb, 0x0056f3fb, 0x02f6f3fb}},
+        {DXGI_FORMAT_R11G11B10_FLOAT, {0x0006f3f3, 0x0066f3f3, 0x02e6f3f3}},
+        {DXGI_FORMAT_R8G8B8A8_UNORM, {0x101ef3f3, 0x107ef3f3, 0x12fef3f3}},
+        {DXGI_FORMAT_R32_FLOAT, {0x0016f5fb, 0x00f6f7fb, 0x06f6f7fb}},
+        {DXGI_FORMAT_D24_UNORM_S8_UINT, {0x001310b0, 0x003310b0, 0x003310b0}},
+        {DXGI_FORMAT_BC7_UNORM, {0, 0, 0x009213e0}},
+        {DXGI_FORMAT_NV12, {0x3802c320, 0x3882c320, 0x3a82c320}},
+    };
+    D3D_FEATURE_LEVEL Level = Device->GetFeatureLevel();
+    UINT Index = Level >= D3D_FEATURE_LEVEL_11_0 ? 2 : Level >= D3D_FEATURE_LEVEL_10_1 ? 1 : 0;
+
+    if (Level < D3D_FEATURE_LEVEL_10_0)
+    {
+        skip("Feature level %#x has no D3D10+ format requirements\n", Level);
+        return;
+    }
+    for (UINT i = 0; i < ARRAYSIZE(Tests); ++i)
+    {
+        UINT Support = 0;
+        HRESULT Hr = Device->CheckFormatSupport(Tests[i].Format, &Support);
+
+        if (!Tests[i].Required[Index])
+            continue;
+        ok(Hr == S_OK, "level %#x format %u: %#lx\n", Level, Tests[i].Format, Hr);
+        ok((Support & Tests[i].Required[Index]) == Tests[i].Required[Index],
+           "level %#x format %u support %#x lacks required %#x\n",
+           Level, Tests[i].Format, Support, Tests[i].Required[Index] & ~Support);
+    }
+}
+
+static void TestListedSupport(ID3D11Device *Device)
+{
+    static const struct
+    {
+        DXGI_FORMAT Format;
+        UINT Disallowed;
+    } Tests[] =
+    {
+        {DXGI_FORMAT_R32G32B32A32_TYPELESS, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_LOAD
+            | D3D11_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D11_FORMAT_SUPPORT_MULTISAMPLE_LOAD},
+        {DXGI_FORMAT_B8G8R8A8_TYPELESS, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_BLENDABLE
+            | D3D11_FORMAT_SUPPORT_SHADER_LOAD},
+        {DXGI_FORMAT_D32_FLOAT, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_LOAD},
+        {DXGI_FORMAT_D24_UNORM_S8_UINT, D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_LOAD},
+        {DXGI_FORMAT_NV12, D3D11_FORMAT_SUPPORT_TEXTURE3D | D3D11_FORMAT_SUPPORT_TEXTURECUBE | D3D11_FORMAT_SUPPORT_MIP},
+    };
+    const UINT MipGeneration = D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE | D3D11_FORMAT_SUPPORT_MIP;
+    D3D_FEATURE_LEVEL Level = Device->GetFeatureLevel();
+    UINT Support;
+    HRESULT Hr;
+
+    if (Level < D3D_FEATURE_LEVEL_10_0)
+    {
+        skip("Feature level %#x has no D3D10+ format list\n", Level);
+        return;
+    }
+    for (UINT i = 0; i < ARRAYSIZE(Tests); ++i)
+    {
+        Support = QuerySupport(Device, Tests[i].Format, &Hr);
+        ok(!(Support & Tests[i].Disallowed), "level %#x format %u support %#x has disallowed %#x\n",
+           Level, Tests[i].Format, Support, Support & Tests[i].Disallowed);
+    }
+    Support = QuerySupport(Device, DXGI_FORMAT_R1_UNORM, &Hr);
+    ok(Hr == E_FAIL && !Support, "level %#x R1_UNORM: %#lx, support %#x\n", Level, Hr, Support);
+    for (UINT Format = 1; Format <= DXGI_FORMAT_B4G4R4A4_UNORM; ++Format)
+    {
+        Support = QuerySupport(Device, static_cast<DXGI_FORMAT>(Format), &Hr);
+        ok(!(Support & D3D11_FORMAT_SUPPORT_MIP_AUTOGEN) == ((Support & MipGeneration) != MipGeneration),
+           "level %#x format %u support %#x: MIP_AUTOGEN does not follow render target, sample and mip\n",
+           Level, Format, Support);
+    }
+}
+
 static void TestOverlaySupport(ID3D11Device *Device)
 {
     IDXGIDevice *DxgiDevice = NULL;
@@ -138,9 +220,22 @@ START_TEST(format_support)
     if (FAILED(Hr)) { skip("Hardware D3D11 unavailable: %#lx\n", Hr); FreeLibrary(Module); return; }
 
     TestFormatSupport(Device);
+    TestRequiredSupport(Device);
+    TestListedSupport(Device);
     TestOverlaySupport(Device);
     TestTrim(Device);
 
     Device->Release();
+    static const D3D_FEATURE_LEVEL Levels[] = {D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_10_1};
+    for (UINT i = 0; i < ARRAYSIZE(Levels); ++i)
+    {
+        Device = NULL;
+        Hr = Create(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, &Levels[i], 1, D3D11_SDK_VERSION, &Device, NULL, NULL);
+        ok(Hr == S_OK, "D3D11CreateDevice level %#x: %#lx\n", Levels[i], Hr);
+        if (FAILED(Hr)) continue;
+        TestRequiredSupport(Device);
+        TestListedSupport(Device);
+        Device->Release();
+    }
     FreeLibrary(Module);
 }

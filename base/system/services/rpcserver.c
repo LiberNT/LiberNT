@@ -1775,23 +1775,34 @@ ScmIsValidServiceState(DWORD dwCurrentState)
     }
 }
 
+/* A stopped service hands its share of the image to the thread completing the stop. */
+typedef struct _SCM_STOP_CONTEXT
+{
+    PSERVICE lpService;
+    PSERVICE_IMAGE lpImage;
+} SCM_STOP_CONTEXT, *PSCM_STOP_CONTEXT;
+
 static
 DWORD
 WINAPI
 ScmStopThread(PVOID pParam)
 {
-    PSERVICE lpService = (PSERVICE)pParam;
+    PSCM_STOP_CONTEXT pContext = (PSCM_STOP_CONTEXT)pParam;
+    PSERVICE lpService = pContext->lpService;
+    PSERVICE_IMAGE lpImage = pContext->lpImage;
     WCHAR szLogBuffer[80];
     LPCWSTR lpLogStrings[2];
 
+    HeapFree(GetProcessHeap(), 0, pContext);
+
     /* Check if we are about to stop this service */
-    if (lpService->lpImage->dwImageRunCount == 1)
+    if (lpImage != NULL && lpImage->bStopping)
     {
         /* Stop the dispatcher thread.
          * We must not send a control message while holding the database lock, otherwise it can cause timeouts
          * We are sure that the service won't be deleted in the meantime because we still have a reference to it. */
         DPRINT("Stopping the dispatcher thread for service %S\n", lpService->lpServiceName);
-        ScmControlService(lpService->lpImage->hControlPipe,
+        ScmControlService(lpImage->hControlPipe,
                           L"",
                           SERVICE_CONTROL_STOP,
                           lpService->dwResumeCount);
@@ -1800,18 +1811,18 @@ ScmStopThread(PVOID pParam)
     /* Lock the service database exclusively */
     ScmLockDatabaseExclusive();
 
-    DPRINT("Service %S image count:%d\n", lpService->lpServiceName, lpService->lpImage->dwImageRunCount);
-
     /* Decrement the image run counter */
-    lpService->lpImage->dwImageRunCount--;
-
-    /* If we just stopped the last running service... */
-    if (lpService->lpImage->dwImageRunCount == 0)
+    if (lpImage != NULL)
     {
-        /* Remove the service image */
-        DPRINT("Removing service image for %S\n", lpService->lpServiceName);
-        ScmRemoveServiceImage(lpService->lpImage);
-        lpService->lpImage = NULL;
+        lpImage->dwImageRunCount--;
+
+        /* If we just stopped the last running service... */
+        if (lpImage->dwImageRunCount == 0)
+        {
+            /* Remove the service image */
+            DPRINT("Removing service image for %S\n", lpService->lpServiceName);
+            ScmRemoveServiceImage(lpImage);
+        }
     }
 
     /* Report the results of the status change here */
@@ -1827,6 +1838,8 @@ ScmStopThread(PVOID pParam)
                     EVENTLOG_ERROR_TYPE,
                     ARRAYSIZE(lpLogStrings),
                     lpLogStrings);
+
+        ScmServiceFailure(lpService, FALSE);
     }
     else
     {
@@ -1974,17 +1987,41 @@ RSetServiceStatus(
          * This thread will remove the reference that was added when the service started.
          * This will ensure that the service will remain valid as long as this reference is still held.
          */
-        hStopThread = CreateThread(NULL,
-                                   0,
-                                   ScmStopThread,
-                                   (LPVOID)lpService,
-                                   0,
-                                   &dwStopThreadId);
+        PSCM_STOP_CONTEXT pStopContext = HeapAlloc(GetProcessHeap(), 0, sizeof(*pStopContext));
+
+        hStopThread = NULL;
+        if (pStopContext != NULL)
+        {
+            pStopContext->lpService = lpService;
+            pStopContext->lpImage = lpService->lpImage;
+            lpService->lpImage = NULL;
+
+            /* A start request from now on gets a new process when this image is about to exit */
+            if (pStopContext->lpImage != NULL && !ScmImageHasServices(pStopContext->lpImage))
+                pStopContext->lpImage->bStopping = TRUE;
+            hStopThread = CreateThread(NULL,
+                                       0,
+                                       ScmStopThread,
+                                       pStopContext,
+                                       0,
+                                       &dwStopThreadId);
+        }
         if (hStopThread == NULL)
         {
             DPRINT1("Failed to create thread to complete service stop\n");
-            /* We can't leave without releasing the reference.
-             * We also can't remove it without holding the lock. */
+            if (pStopContext != NULL)
+            {
+                lpService->lpImage = pStopContext->lpImage;
+                HeapFree(GetProcessHeap(), 0, pStopContext);
+            }
+            if (lpService->lpImage != NULL)
+            {
+                lpService->lpImage->bStopping = FALSE;
+                if (--lpService->lpImage->dwImageRunCount == 0)
+                    ScmRemoveServiceImage(lpService->lpImage);
+                lpService->lpImage = NULL;
+            }
+            /* We can't leave without releasing the reference. */
             ScmDereferenceService(lpService);
             DPRINT1("Service %S has %d references after stop\n", lpService->lpServiceName, lpService->RefCount);
         }
@@ -5207,6 +5244,45 @@ Done:
 }
 
 
+/* TODO: SERVICE_CONFIG_DELAYED_AUTO_START_INFO, SERVICE_SID_INFO, REQUIRED_PRIVILEGES_INFO and PRESHUTDOWN_INFO */
+static BOOL
+ScmIsSupportedConfigLevel(DWORD dwInfoLevel)
+{
+    return dwInfoLevel == SERVICE_CONFIG_DESCRIPTION ||
+           dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS ||
+           dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG ||
+           dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO;
+}
+
+static DWORD
+ScmSetFailureActionsFlag(HKEY hServiceKey, const SERVICE_FAILURE_ACTIONS_FLAG *lpFlag)
+{
+    DWORD dwValue;
+
+    if (lpFlag == NULL)
+        return ERROR_SUCCESS;
+    dwValue = (DWORD)lpFlag->fFailureActionsOnNonCrashFailures;
+    return RegSetValueExW(hServiceKey, L"FailureActionsOnNonCrashFailures", 0, REG_DWORD,
+                          (LPBYTE)&dwValue, sizeof(dwValue));
+}
+
+static DWORD
+ScmQueryFailureActionsFlag(HKEY hServiceKey, LPBYTE lpBuffer, DWORD cbBufSize, LPBOUNDED_DWORD_8K pcbBytesNeeded)
+{
+    LPSERVICE_FAILURE_ACTIONS_FLAG lpFlag = (LPSERVICE_FAILURE_ACTIONS_FLAG)lpBuffer;
+    DWORD dwValue = 0, dwSize = sizeof(dwValue), dwType = REG_NONE;
+
+    *pcbBytesNeeded = sizeof(SERVICE_FAILURE_ACTIONS_FLAG);
+    if (cbBufSize < sizeof(SERVICE_FAILURE_ACTIONS_FLAG))
+        return ERROR_INSUFFICIENT_BUFFER;
+    if (RegQueryValueExW(hServiceKey, L"FailureActionsOnNonCrashFailures", NULL, &dwType,
+                         (LPBYTE)&dwValue, &dwSize) != ERROR_SUCCESS || dwType != REG_DWORD)
+        dwValue = 0;
+    lpFlag->fFailureActionsOnNonCrashFailures = (BOOL)dwValue;
+    return ERROR_SUCCESS;
+}
+
+
 /* Function 36 */
 DWORD
 WINAPI
@@ -5221,13 +5297,16 @@ RChangeServiceConfig2A(
     DPRINT("RChangeServiceConfig2A() called\n");
     DPRINT("dwInfoLevel = %lu\n", Info.dwInfoLevel);
 
-    if ((Info.dwInfoLevel < SERVICE_CONFIG_DESCRIPTION) ||
-        (Info.dwInfoLevel > SERVICE_CONFIG_FAILURE_ACTIONS))
+    if (!ScmIsSupportedConfigLevel(Info.dwInfoLevel))
     {
         return ERROR_INVALID_LEVEL;
     }
 
     InfoW.dwInfoLevel = Info.dwInfoLevel;
+    if (Info.dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG)
+        InfoW.psfaf = Info.psfaf;
+    else if (Info.dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+        InfoW.psti = Info.psti;
 
     if (InfoW.dwInfoLevel == SERVICE_CONFIG_DESCRIPTION)
     {
@@ -5386,16 +5465,7 @@ RChangeServiceConfig2A(
 }
 
 
-typedef struct _SERVICE_FAILURE_ACTIONS_VALUE
-{
-    DWORD dwResetPeriod;
-    DWORD lpRebootMsg;
-    DWORD lpCommand;
-    DWORD cActions;
-    DWORD lpsaActions;
-} SERVICE_FAILURE_ACTIONS_VALUE, *PSERVICE_FAILURE_ACTIONS_VALUE;
-
-static DWORD
+DWORD
 ScmReadFailureActions(HKEY hServiceKey,
                       PSERVICE_FAILURE_ACTIONS_VALUE *lpValue,
                       LPDWORD lpActionCount)
@@ -5589,8 +5659,7 @@ RChangeServiceConfig2W(
     if (ScmShutdown)
         return ERROR_SHUTDOWN_IN_PROGRESS;
 
-    if ((Info.dwInfoLevel < SERVICE_CONFIG_DESCRIPTION) ||
-        (Info.dwInfoLevel > SERVICE_CONFIG_FAILURE_ACTIONS))
+    if (!ScmIsSupportedConfigLevel(Info.dwInfoLevel))
     {
         return ERROR_INVALID_LEVEL;
     }
@@ -5688,6 +5757,16 @@ RChangeServiceConfig2W(
         dwError = ScmSetFailureActions(hServiceKey,
                                        (LPSERVICE_FAILURE_ACTIONSW)Info.psfa);
     }
+    else if (Info.dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG)
+    {
+        dwError = ScmSetFailureActionsFlag(hServiceKey, Info.psfaf);
+    }
+    else if (Info.dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+    {
+        dwError = ScmSetServiceTriggers(hServiceKey, Info.psti);
+        if (dwError == ERROR_SUCCESS)
+            ScmTriggersChanged();
+    }
 
 done:
     if (hServiceKey != NULL)
@@ -5730,8 +5809,7 @@ RQueryServiceConfig2A(
     if (ScmShutdown)
         return ERROR_SHUTDOWN_IN_PROGRESS;
 
-    if ((dwInfoLevel < SERVICE_CONFIG_DESCRIPTION) ||
-        (dwInfoLevel > SERVICE_CONFIG_FAILURE_ACTIONS))
+    if (!ScmIsSupportedConfigLevel(dwInfoLevel))
     {
         return ERROR_INVALID_LEVEL;
     }
@@ -5902,6 +5980,14 @@ RQueryServiceConfig2A(
 
         dwError = ERROR_SUCCESS;
     }
+    else if (dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG)
+    {
+        dwError = ScmQueryFailureActionsFlag(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
+    }
+    else if (dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+    {
+        dwError = ScmQueryServiceTriggers(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
+    }
 
 done:
     /* Unlock the service database */
@@ -5952,8 +6038,7 @@ RQueryServiceConfig2W(
     if (ScmShutdown)
         return ERROR_SHUTDOWN_IN_PROGRESS;
 
-    if ((dwInfoLevel < SERVICE_CONFIG_DESCRIPTION) ||
-        (dwInfoLevel > SERVICE_CONFIG_FAILURE_ACTIONS))
+    if (!ScmIsSupportedConfigLevel(dwInfoLevel))
     {
         return ERROR_INVALID_LEVEL;
     }
@@ -6101,6 +6186,14 @@ RQueryServiceConfig2W(
         }
 
         dwError = ERROR_SUCCESS;
+    }
+    else if (dwInfoLevel == SERVICE_CONFIG_FAILURE_ACTIONS_FLAG)
+    {
+        dwError = ScmQueryFailureActionsFlag(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
+    }
+    else if (dwInfoLevel == SERVICE_CONFIG_TRIGGER_INFO)
+    {
+        dwError = ScmQueryServiceTriggers(hServiceKey, lpBuffer, cbBufSize, pcbBytesNeeded);
     }
 
 done:

@@ -413,6 +413,27 @@ RawInputFirstDevice(DWORD dwType)
     return NULL;
 }
 
+static PCUNICODE_STRING gRawInputSourcePath;
+
+VOID NTAPI
+RawInputSetSourceDevice(PCUNICODE_STRING Path)
+{
+    gRawInputSourcePath = Path;
+}
+
+static HANDLE
+RawInputSourceDevice(DWORD dwType)
+{
+    PRAWINPUT_DEVICE_OBJECT Device = NULL;
+
+    if (gRawInputSourcePath && gRawInputSourcePath->Length >= 2 * sizeof(WCHAR))
+    {
+        Device = RawInputFindDevicePath(dwType, gRawInputSourcePath->Buffer,
+                                        gRawInputSourcePath->Length / sizeof(WCHAR));
+    }
+    return Device ? UserHMGetHandle(Device) : RawInputFirstDevice(dwType);
+}
+
 static PRAWINPUTDEVICE
 RawInputFindRegistration(PPROCESSINFO ppi, USHORT UsagePage, USHORT Usage)
 {
@@ -546,7 +567,7 @@ RawInputProcessKeyboard(WORD wScanCode, WORD wVk, DWORD dwFlags, UINT uMsg, ULON
     RtlZeroMemory(&Raw, sizeof(Raw));
     Raw.header.dwType = RIM_TYPEKEYBOARD;
     Raw.header.dwSize = sizeof(RAWINPUTHEADER) + sizeof(RAWKEYBOARD);
-    Raw.header.hDevice = bInjected ? NULL : RawInputFirstDevice(RIM_TYPEKEYBOARD);
+    Raw.header.hDevice = bInjected ? NULL : RawInputSourceDevice(RIM_TYPEKEYBOARD);
     Raw.data.keyboard.MakeCode = wScanCode;
     Raw.data.keyboard.Flags = (dwFlags & KEYEVENTF_KEYUP) ? RI_KEY_BREAK : RI_KEY_MAKE;
     if ((dwFlags & KEYEVENTF_EXTENDEDKEY) && wVk != VK_SHIFT)
@@ -566,7 +587,7 @@ RawInputProcessMouseData(PMOUSE_INPUT_DATA pMouseInputData)
     RtlZeroMemory(&Raw, sizeof(Raw));
     Raw.header.dwType = RIM_TYPEMOUSE;
     Raw.header.dwSize = sizeof(RAWINPUTHEADER) + sizeof(RAWMOUSE);
-    Raw.header.hDevice = RawInputFirstDevice(RIM_TYPEMOUSE);
+    Raw.header.hDevice = RawInputSourceDevice(RIM_TYPEMOUSE);
     Raw.data.mouse.usFlags = pMouseInputData->Flags;
     Raw.data.mouse.usButtonFlags = pMouseInputData->ButtonFlags;
     Raw.data.mouse.usButtonData = pMouseInputData->ButtonData;

@@ -315,7 +315,7 @@ KdpTrap(IN PKTRAP_FRAME TrapFrame,
          * If the PC was not updated, we'll increment it ourselves so execution
          * continues past the breakpoint.
          */
-        if (ProgramCounter == KeGetContextPc(ContextRecord))
+        if (Handled && ProgramCounter == KeGetContextPc(ContextRecord))
         {
             /* Update it */
             KeSetContextPc(ContextRecord,

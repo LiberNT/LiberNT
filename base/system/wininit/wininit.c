@@ -112,6 +112,30 @@ CreateShutdownEvents(VOID)
     return TRUE;
 }
 
+/* Session notifications come from win32k, which this session already runs, so services may register them at once. */
+static
+HANDLE
+CreateTermSrvReadyEvent(VOID)
+{
+    SECURITY_ATTRIBUTES Attributes = { sizeof(Attributes), NULL, FALSE };
+    HANDLE Event;
+
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"O:BAG:SYD:(A;;0x100000;;;WD)(A;;0x100000;;;AC)"
+            L"(A;;0x100000;;;S-1-15-3-1024-1864111754-776273317-3666925027-2523908081-3792458206-3582472437-4114419977-1582884857)"
+            L"(A;;0x2;;;SY)",
+            SDDL_REVISION_1,
+            &Attributes.lpSecurityDescriptor,
+            NULL))
+    {
+        return NULL;
+    }
+
+    Event = CreateEventW(&Attributes, TRUE, TRUE, L"Global\\TermSrvReadyEvent");
+    LocalFree(Attributes.lpSecurityDescriptor);
+    return Event;
+}
+
 static
 HANDLE
 StartSystemProcess(
@@ -174,6 +198,9 @@ wWinMain(
         if (!Desktop || !SetThreadDesktop(Desktop))
             ERR("WININIT: Could not use the Default desktop (error %lu)\n", GetLastError());
     }
+
+    if (!CreateTermSrvReadyEvent())
+        ERR("WININIT: Could not create the TermSrvReadyEvent (error %lu)\n", GetLastError());
 
     Processes[0] = StartSystemProcess(L"services.exe");
     Processes[1] = StartSystemProcess(L"lsass.exe");

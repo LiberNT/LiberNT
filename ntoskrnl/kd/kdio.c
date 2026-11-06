@@ -294,6 +294,7 @@ KdpScreenRelease(
         /* Release the display */
         // InbvSetDisplayOwnership(FALSE);
         InbvNotifyDisplayOwnershipLost(NULL);
+        InbvRestoreDisplaySnapshot();
     }
 }
 
@@ -452,6 +453,43 @@ KdpScreenAcquire(VOID)
 }
 
 static VOID
+KdpScreenRegister(
+    _In_ PKD_DISPATCH_TABLE Table);
+
+/* A stop the machine hit by itself takes the display on every boot profile; one a debugger asked for needs DEBUGPORT=SCREEN. */
+BOOLEAN
+KdpScreenEnterStop(
+    _In_ BOOLEAN Requested)
+{
+    BOOLEAN DisplayAcquired;
+    ULONG Length;
+
+    if (!KdpDebugMode.Screen)
+    {
+        /* TODO: a native display driver keeps showing the frozen desktop: it gives the display back for good, which only a bugcheck can afford */
+        if (Requested || !InbvHasValidGopFrameBuffer() || !InbvIsBootDriverInstalled() || InbvDisplayNeedsDriverReset())
+            return FALSE;
+
+        if (DispatchTable[KdScreen].KdpPrintRoutine == NULL)
+        {
+            Length = KdpCopyPrintBufferTail(KdpScreenHistory, KdpScreenHistorySize);
+            KdpScreenHistoryEnd = Length % KdpScreenHistorySize;
+            KdpScreenHistoryWrapped = (Length == KdpScreenHistorySize);
+            KdpScreenRegister(&DispatchTable[KdScreen]);
+        }
+    }
+
+    if (InbvGetDisplayState() == INBV_DISPLAY_STATE_LOST)
+        InbvSaveDisplaySnapshot();
+
+    DisplayAcquired = KdpScreenAcquire();
+    if (KdpScreenLineLength != 0)
+        HalDisplayString("\r\n");
+    KdpNetDisplayStatus();
+    return DisplayAcquired;
+}
+
+static VOID
 NTAPI
 KdpScreenPrint(
     _In_ PCCH String,
@@ -476,6 +514,16 @@ KdpScreenPrint(
     KdbpReleaseLock(&KdpScreenSpinLock, OldIrql, LockAcquired);
 }
 
+static VOID
+KdpScreenRegister(
+    _In_ PKD_DISPATCH_TABLE Table)
+{
+    Table->KdpPrintRoutine = KdpScreenPrint;
+    KeInitializeSpinLock(&KdpScreenSpinLock);
+    Table->KdpInitRoutine = KdpScreenInit;
+    InsertTailList(&KdProviders, &Table->KdProvidersList);
+}
+
 NTSTATUS
 NTAPI
 KdpScreenInit(
@@ -487,13 +535,7 @@ KdpScreenInit(
 
     if (BootPhase == 0)
     {
-        /* Write out the functions that we support for now */
-        DispatchTable->KdpPrintRoutine = KdpScreenPrint;
-        KeInitializeSpinLock(&KdpScreenSpinLock);
-
-        /* Register for BootPhase 1 initialization and as a Provider */
-        DispatchTable->KdpInitRoutine = KdpScreenInit;
-        InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
+        KdpScreenRegister(DispatchTable);
     }
     else if (BootPhase == 1)
     {
@@ -566,6 +608,8 @@ extern const CSTRING KdbPromptStr;
 
 #define KDP_FILE_IO_TIMEOUT_POLLS 100000
 #define KDP_FILE_IO_NET_TIMEOUT_POLLS 400000
+#define KDP_FILE_IO_TIMEOUT_MS 1000
+#define KDP_FILE_IO_NET_TIMEOUT_MS 4000
 
 static BOOLEAN KdpFileIoHostAbsent = FALSE;
 static ULONG KdpFileIoPacketId = INITIAL_PACKET_ID;
@@ -594,13 +638,20 @@ KdpFileIoReceive(
 {
     PUCHAR Byte = Buffer;
     ULONG Polls;
+    LARGE_INTEGER Frequency;
+    LONGLONG Deadline;
 
     while (Length-- > 0)
     {
+        Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart +
+                   Frequency.QuadPart * (KdpDebugMode.Net ? KDP_FILE_IO_NET_TIMEOUT_MS : KDP_FILE_IO_TIMEOUT_MS) / 1000;
         for (Polls = 0; !(KdpDebugMode.Net ? KdpNetGetByte(Byte) : KdPortGetByteEx(&SerialPortInfo, Byte)); Polls++)
         {
-            if (Polls == (KdpDebugMode.Net ? KDP_FILE_IO_NET_TIMEOUT_POLLS : KDP_FILE_IO_TIMEOUT_POLLS))
+            if (Polls == (KdpDebugMode.Net ? KDP_FILE_IO_NET_TIMEOUT_POLLS : KDP_FILE_IO_TIMEOUT_POLLS) ||
+                KeQueryPerformanceCounter(NULL).QuadPart >= Deadline)
+            {
                 return FALSE;
+            }
             KeStallExecutionProcessor(10);
         }
         Byte++;
@@ -875,6 +926,7 @@ KdReceivePacket(
     PDBGKD_DEBUG_IO DebugIo;
     STRING ResponseString;
     CHAR MessageBuffer[512];
+    BOOLEAN DisplayAcquired;
 #endif
 
     if (PacketType == PACKET_TYPE_KD_POLL_BREAKIN)
@@ -944,6 +996,9 @@ KdReceivePacket(
     /* An assertion may prompt before KDBG has initialized its pager. */
     KdpInitTerminal();
 
+    /* KDBG reads its own command line here too, with the display already settled */
+    DisplayAcquired = KdbActive ? FALSE : KdpScreenEnterStop(FALSE);
+
     /* The prompt string has been printed by KdSendPacket; go to
      * new line and print the kdb prompt -- for SYSREG2 support. */
     KdIoPrintString("\n", 1);
@@ -966,6 +1021,8 @@ KdReceivePacket(
 
     if (!KdTermSerial)
         KbdEnableMouse();
+
+    KdpScreenRelease(DisplayAcquired);
 
     /* Adjust and return the string length */
     *DataLength = min(ResponseString.Length + sizeof(ANSI_NULL),

@@ -240,6 +240,8 @@ static const DWM_NAMED_EXPORT DwmApiNamedExports[] =
     {206, "DwmUnregisterThumbnail"},
     {207, "DwmUpdateThumbnailProperties"},
     {208, "DwmpDxPublishWindowSurface"},
+    {209, "DwmpDxGetWindowGpuSurface"},
+    {210, "DwmpDxPublishWindowGpuSurface"},
 };
 
 static const char * const DwmApiOrdinalNames[] =
@@ -353,11 +355,12 @@ static const char * const DwmApiOrdinalNames[] =
     "DwmUnregisterThumbnail",
     "DwmUpdateThumbnailProperties",
     "DwmpDxPublishWindowSurface",
+    "DwmpDxGetWindowGpuSurface",
+    "DwmpDxPublishWindowGpuSurface",
 };
 
-/* Windows' ordinals 100-207, then the ReactOS DwmpDxPublishWindowSurface
- * extension at 208. */
-C_ASSERT(sizeof(DwmApiOrdinalNames) / sizeof(DwmApiOrdinalNames[0]) == 109);
+/* Windows' ordinals 100-207, then the LiberNT DwmpDx extensions from 208. */
+C_ASSERT(sizeof(DwmApiOrdinalNames) / sizeof(DwmApiOrdinalNames[0]) == 111);
 
 static const WORD DwmApiFormerStubOrdinals[] =
 {
@@ -619,7 +622,8 @@ GetExportDirectory(HMODULE Module, const char *ModuleName)
 
 static void
 TestOrdinalInventory(HMODULE Module, const char *ModuleName, DWORD Base,
-                     DWORD FunctionCount, DWORD NameCount)
+                     DWORD FunctionCount, DWORD NameCount,
+                     DWORD PrivateFunctions, DWORD PrivateNames)
 {
     const IMAGE_EXPORT_DIRECTORY *Exports;
     DWORD Index;
@@ -629,8 +633,8 @@ TestOrdinalInventory(HMODULE Module, const char *ModuleName, DWORD Base,
         return;
 
     ok_eq_ulong(Exports->Base, Base);
-    ok_eq_ulong(Exports->NumberOfFunctions, FunctionCount);
-    ok_eq_ulong(Exports->NumberOfNames, NameCount);
+    ok_eq_ulong(Exports->NumberOfFunctions, FunctionCount + PrivateFunctions);
+    ok_eq_ulong(Exports->NumberOfNames, NameCount + PrivateNames);
 
     /* A spec-file stub still has an address and therefore passes only this
      * ABI inventory gate.  Per-function behavior is tested separately. */
@@ -2277,9 +2281,9 @@ START_TEST(dwmstack)
     if (DwmExe != NULL)
         TestImageVersionContract(DwmExe, "dwm.exe");
 
-    TestOrdinalInventory(Core, "dwmcore", 1000, 7, 5);
+    TestOrdinalInventory(Core, "dwmcore", 1000, 7, 5, 2, 1);
     if (UserDwm != NULL)
-        TestOrdinalInventory(UserDwm, "uDWM", 101, 1, 0);
+        TestOrdinalInventory(UserDwm, "uDWM", 101, 1, 0, 0, 0);
 
     ok(GetProcAddress(Core, (LPCSTR)(ULONG_PTR)1000) != NULL,
        "dwmcore ordinal 1000 is absent\n");

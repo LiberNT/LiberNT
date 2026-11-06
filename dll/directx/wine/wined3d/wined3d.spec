@@ -383,6 +383,7 @@
 @ cdecl vkd3d_set_dred_enablement(long long)
 @ cdecl vkd3d_set_device_configuration_flags(long)
 @ cdecl vkd3d_create_shader_cache_session(ptr ptr ptr ptr)
+@ cdecl vkd3d_shader_cache_control(long)
 @ cdecl vkd3d_get_vk_device(ptr)
 @ cdecl vkd3d_get_vk_format(long)
 @ cdecl vkd3d_get_vk_physical_device(ptr)

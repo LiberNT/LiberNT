@@ -16,6 +16,13 @@
 #define LDRP_UPDATE_DEREFCOUNT 0x02
 #define LDRP_UPDATE_PIN        0x03
 
+typedef struct _LDRP_WALK_SET
+{
+    struct _LDR_DATA_TABLE_ENTRY **Entries;
+    ULONG Count;
+    ULONG Size;
+} LDRP_WALK_SET, *PLDRP_WALK_SET;
+
 /* Loader flags */
 #define IMAGE_LOADER_FLAGS_COMPLUS 0x00000001
 #define IMAGE_LOADER_FLAGS_SYSTEM_GLOBAL 0x01000000
@@ -74,6 +81,8 @@ NTSTATUS
 
 /* Global data */
 extern RTL_CRITICAL_SECTION LdrpLoaderLock;
+extern RTL_SRWLOCK LdrpModuleDatatableLock;
+extern RTL_SRWLOCK LdrpLoadCountWalkLock;
 extern BOOLEAN LdrpInLdrInit;
 extern PVOID LdrpHeap;
 extern LIST_ENTRY LdrpHashTable[LDR_HASH_TABLE_ENTRIES];
@@ -144,11 +153,20 @@ LdrpSnapThunk(IN PVOID ExportBase,
               IN ULONG ExportSize,
               IN BOOLEAN Static,
               IN LPSTR DllName,
-              IN PWSTR DllPath OPTIONAL);
+              IN PWSTR DllPath OPTIONAL,
+              IN BOOLEAN LookupOnly);
 
 NTSTATUS NTAPI
 LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
                          IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+
+BOOLEAN
+NTAPI
+LdrpReferenceLoadedDll(
+    _In_opt_ PWSTR DllPath,
+    _In_ PUNICODE_STRING DllName,
+    _In_ BOOLEAN Redirected,
+    _Out_ PVOID *BaseAddress);
 
 /* libsupp.c */
 NTSYSAPI
@@ -198,6 +216,24 @@ LdrpAllocateDataTableEntry(IN PVOID BaseAddress);
 VOID NTAPI
 LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
 
+VOID NTAPI
+LdrpRemoveMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+
+FORCEINLINE
+BOOLEAN
+LdrpOwnsLoaderLock(VOID)
+{
+    return LdrpLoaderLock.OwningThread == NtCurrentTeb()->ClientId.UniqueThread;
+}
+
+FORCEINLINE
+BOOLEAN
+LdrpIsModuleReady(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    return (ReadAcquire((volatile LONG *)&LdrEntry->Flags) & LDRP_ENTRY_PROCESSED) != 0;
+}
+
 NTSTATUS NTAPI
 LdrpLoadDll(IN BOOLEAN Redirected,
             IN PWSTR DllPath OPTIONAL,
@@ -209,6 +245,22 @@ LdrpLoadDll(IN BOOLEAN Redirected,
 VOID NTAPI
 LdrpUpdateLoadCount2(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                      IN ULONG Flags);
+
+BOOLEAN NTAPI
+LdrpAllocateWalkSet(OUT PLDRP_WALK_SET Set);
+
+VOID NTAPI
+LdrpFreeWalkSet(IN PLDRP_WALK_SET Set);
+
+VOID NTAPI
+LdrpWalkLoadCount(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
+                  IN ULONG Flags,
+                  IN PLDRP_WALK_SET Set);
+
+BOOLEAN NTAPI
+LdrpTryReferenceModule(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
+                       IN BOOLEAN Release,
+                       OUT PBOOLEAN Walk);
 
 ULONG NTAPI
 LdrpClearLoadInProgress(VOID);

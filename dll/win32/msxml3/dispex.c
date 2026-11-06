@@ -129,6 +129,7 @@ static tid_id_t tid_ids[] = {
     { &IID_IServerXMLHTTPRequest, LibXml2 },
 #ifdef __REACTOS__
     { &IID_IMXNamespacePrefixes, LibXml2 },
+    { &IID_IServerXMLHTTPRequest2, LibXml2 },
 #endif
 };
 

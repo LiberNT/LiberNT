@@ -200,5 +200,5 @@ public:
 
 private:
     HRESULT _KeyboardItemChange(DWORD change);
-    HRESULT _CallCB(UINT uMsg, WPARAM wParam, LPARAM lParam, UINT id = 0, LPITEMIDLIST pidl = NULL);
+    HRESULT _CallCB(UINT uMsg, WPARAM wParam, LPARAM lParam, UINT id = 0, LPITEMIDLIST pidl = NULL, DWORD dwMask = 0);
 };

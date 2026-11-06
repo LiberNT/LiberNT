@@ -45,6 +45,9 @@ struct sample_grabber
     IMemInputPin IMemInputPin_iface;
     IMemAllocator *allocator;
 
+    IQualityControl sink_IQualityControl_iface, source_IQualityControl_iface;
+    IQualityControl *qc_sink;
+
     ISampleGrabberCB *grabberIface;
     LONG grabberMethod;
     LONG oneShot;
@@ -122,11 +125,31 @@ static HRESULT sample_grabber_query_interface(struct strmbase_filter *iface, REF
     return S_OK;
 }
 
+static HRESULT sample_grabber_init_stream(struct strmbase_filter *iface)
+{
+    struct sample_grabber *filter = impl_from_strmbase_filter(iface);
+
+    if (filter->sink.pin.peer && filter->allocator)
+        return IMemAllocator_Commit(filter->allocator);
+    return S_OK;
+}
+
+static HRESULT sample_grabber_cleanup_stream(struct strmbase_filter *iface)
+{
+    struct sample_grabber *filter = impl_from_strmbase_filter(iface);
+
+    if (filter->sink.pin.peer && filter->allocator)
+        IMemAllocator_Decommit(filter->allocator);
+    return S_OK;
+}
+
 static const struct strmbase_filter_ops filter_ops =
 {
     .filter_get_pin = sample_grabber_get_pin,
     .filter_destroy = sample_grabber_destroy,
     .filter_query_interface = sample_grabber_query_interface,
+    .filter_init_stream = sample_grabber_init_stream,
+    .filter_cleanup_stream = sample_grabber_cleanup_stream,
 };
 
 /* Helper that buffers data and/or calls installed sample callbacks */
@@ -347,13 +370,17 @@ static HRESULT WINAPI
 SampleGrabber_IMemInputPin_GetAllocator(IMemInputPin *iface, IMemAllocator **allocator)
 {
     struct sample_grabber *This = impl_from_IMemInputPin(iface);
+    HRESULT hr;
+
     TRACE("(%p)->(%p) allocator = %p\n", This, allocator, This->allocator);
     if (!allocator)
         return E_POINTER;
-    *allocator = This->allocator;
-    if (!*allocator)
-        return VFW_E_NO_ALLOCATOR;
-    IMemAllocator_AddRef(*allocator);
+    if (!This->allocator && This->source.pMemInputPin)
+        return IMemInputPin_GetAllocator(This->source.pMemInputPin, allocator);
+    if (!This->allocator && FAILED(hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL,
+            CLSCTX_INPROC_SERVER, &IID_IMemAllocator, (void **)&This->allocator)))
+        return hr;
+    IMemAllocator_AddRef(*allocator = This->allocator);
     return S_OK;
 }
 
@@ -363,6 +390,8 @@ SampleGrabber_IMemInputPin_NotifyAllocator(IMemInputPin *iface, IMemAllocator *a
 {
     struct sample_grabber *This = impl_from_IMemInputPin(iface);
     TRACE("(%p)->(%p, %u) allocator = %p\n", This, allocator, readOnly, This->allocator);
+    if (!allocator)
+        return E_POINTER;
     if (This->allocator == allocator)
         return S_OK;
     if (This->allocator)
@@ -393,6 +422,8 @@ SampleGrabber_IMemInputPin_Receive(IMemInputPin *iface, IMediaSample *sample)
     TRACE("(%p)->(%p) output = %p, grabber = %p\n", This, sample, This->source.pMemInputPin, This->grabberIface);
     if (!sample)
         return E_POINTER;
+    if (This->filter.state == State_Stopped && This->sink.pin.peer)
+        return VFW_E_WRONG_STATE;
     if (This->oneShot == OneShot_Past)
         return S_FALSE;
     SampleGrabber_callback(This, sample);
@@ -471,6 +502,8 @@ static HRESULT sample_grabber_sink_query_interface(struct strmbase_pin *iface, R
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->sink_IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -532,11 +565,19 @@ static HRESULT sample_grabber_sink_get_media_type(struct strmbase_pin *iface,
     return VFW_S_NO_MORE_ITEMS;
 }
 
+static HRESULT sample_grabber_sink_eos(struct strmbase_sink *iface)
+{
+    struct sample_grabber *filter = impl_from_sink_pin(&iface->pin);
+
+    return filter->source.pin.peer ? IPin_EndOfStream(filter->source.pin.peer) : S_OK;
+}
+
 static const struct strmbase_sink_ops sink_ops =
 {
     .base.pin_query_interface = sample_grabber_sink_query_interface,
     .base.pin_query_accept = sample_grabber_sink_query_accept,
     .base.pin_get_media_type = sample_grabber_sink_get_media_type,
+    .sink_eos = sample_grabber_sink_eos,
 };
 
 static struct sample_grabber *impl_from_source_pin(struct strmbase_pin *iface)
@@ -552,6 +593,8 @@ static HRESULT sample_grabber_source_query_interface(struct strmbase_pin *iface,
         *out = &filter->passthrough.IMediaPosition_iface;
     else if (IsEqualGUID(iid, &IID_IMediaSeeking))
         *out = &filter->passthrough.IMediaSeeking_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->source_IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -637,6 +680,122 @@ static const struct strmbase_source_ops source_ops =
     .pfnDecideAllocator = sample_grabber_source_DecideAllocator,
 };
 
+static struct sample_grabber *impl_from_sink_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct sample_grabber, sink_IQualityControl_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct sample_grabber *filter = impl_from_sink_IQualityControl(iface);
+    return IPin_QueryInterface(&filter->sink.pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI sink_quality_control_AddRef(IQualityControl *iface)
+{
+    struct sample_grabber *filter = impl_from_sink_IQualityControl(iface);
+    return IPin_AddRef(&filter->sink.pin.IPin_iface);
+}
+
+static ULONG WINAPI sink_quality_control_Release(IQualityControl *iface)
+{
+    struct sample_grabber *filter = impl_from_sink_IQualityControl(iface);
+    return IPin_Release(&filter->sink.pin.IPin_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct sample_grabber *filter = impl_from_sink_IQualityControl(iface);
+
+    TRACE("filter %p, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            filter, sender, q.Type, q.Proportion, wine_dbgstr_longlong(q.Late), wine_dbgstr_longlong(q.TimeStamp));
+
+    if (!sender)
+        return E_POINTER;
+    return S_OK;
+}
+
+static HRESULT WINAPI sink_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct sample_grabber *filter = impl_from_sink_IQualityControl(iface);
+
+    TRACE("filter %p, sink %p.\n", filter, sink);
+
+    filter->qc_sink = sink;
+    return S_OK;
+}
+
+static const IQualityControlVtbl sink_quality_control_vtbl =
+{
+    sink_quality_control_QueryInterface,
+    sink_quality_control_AddRef,
+    sink_quality_control_Release,
+    sink_quality_control_Notify,
+    sink_quality_control_SetSink,
+};
+
+static struct sample_grabber *impl_from_source_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct sample_grabber, source_IQualityControl_iface);
+}
+
+static HRESULT WINAPI source_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct sample_grabber *filter = impl_from_source_IQualityControl(iface);
+    return IPin_QueryInterface(&filter->source.pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI source_quality_control_AddRef(IQualityControl *iface)
+{
+    struct sample_grabber *filter = impl_from_source_IQualityControl(iface);
+    return IPin_AddRef(&filter->source.pin.IPin_iface);
+}
+
+static ULONG WINAPI source_quality_control_Release(IQualityControl *iface)
+{
+    struct sample_grabber *filter = impl_from_source_IQualityControl(iface);
+    return IPin_Release(&filter->source.pin.IPin_iface);
+}
+
+static HRESULT WINAPI source_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct sample_grabber *filter = impl_from_source_IQualityControl(iface);
+    IQualityControl *peer_qc;
+    HRESULT hr;
+
+    TRACE("filter %p, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            filter, sender, q.Type, q.Proportion, wine_dbgstr_longlong(q.Late), wine_dbgstr_longlong(q.TimeStamp));
+
+    if (filter->qc_sink)
+        return IQualityControl_Notify(filter->qc_sink, &filter->filter.IBaseFilter_iface, q);
+
+    if (!filter->sink.pin.peer || FAILED(IPin_QueryInterface(filter->sink.pin.peer,
+            &IID_IQualityControl, (void **)&peer_qc)))
+        return VFW_E_NOT_FOUND;
+
+    hr = IQualityControl_Notify(peer_qc, &filter->filter.IBaseFilter_iface, q);
+    IQualityControl_Release(peer_qc);
+    return hr;
+}
+
+static HRESULT WINAPI source_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct sample_grabber *filter = impl_from_source_IQualityControl(iface);
+
+    TRACE("filter %p, sink %p.\n", filter, sink);
+
+    return S_OK;
+}
+
+static const IQualityControlVtbl source_quality_control_vtbl =
+{
+    source_quality_control_QueryInterface,
+    source_quality_control_AddRef,
+    source_quality_control_Release,
+    source_quality_control_Notify,
+    source_quality_control_SetSink,
+};
+
 HRESULT sample_grabber_create(IUnknown *outer, IUnknown **out)
 {
     struct sample_grabber *object;
@@ -647,6 +806,8 @@ HRESULT sample_grabber_create(IUnknown *outer, IUnknown **out)
     strmbase_filter_init(&object->filter, outer, &CLSID_SampleGrabber, &filter_ops);
     object->ISampleGrabber_iface.lpVtbl = &ISampleGrabber_VTable;
     object->IMemInputPin_iface.lpVtbl = &IMemInputPin_VTable;
+    object->sink_IQualityControl_iface.lpVtbl = &sink_quality_control_vtbl;
+    object->source_IQualityControl_iface.lpVtbl = &source_quality_control_vtbl;
 
     strmbase_sink_init(&object->sink, &object->filter, L"In", &sink_ops, NULL);
     wcscpy(object->sink.pin.name, L"Input");

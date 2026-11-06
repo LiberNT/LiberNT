@@ -47,12 +47,7 @@ OslArchMapFirmwareRuntime(
     _In_ BOOLEAN Executable,
     _Out_ PULONGLONG VirtualStart)
 {
-    UNREFERENCED_PARAMETER(PhysicalStart);
-    UNREFERENCED_PARAMETER(PageCount);
-    UNREFERENCED_PARAMETER(Device);
-    UNREFERENCED_PARAMETER(Executable);
-    *VirtualStart = 0;
-    return FALSE;
+    return RiscvMapFirmwareRuntime(PhysicalStart, PageCount, Device, Executable, VirtualStart);
 }
 
 TYPE_OF_MEMORY

@@ -69,7 +69,9 @@ RegisterDlls = Wow64RegisterDlls
 11,,quartz.dll,1
 11,,dsound.dll,1
 11,,fontext.dll,1
-11,,mfh264enc.dll,1
+11,,colorcnv.dll,1
+11,,mp3dmod.dll,1
+11,,msvproc.dll,1
 11,,mmdevapi.dll,1
 11,,mscat32.dll,1
 11,,mshtml.dll,3
@@ -77,6 +79,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,mydocs.dll,1
 11,,qcap.dll,1
 11,,qedit.dll,1
+11,,resampledmo.dll,1
 11,,sendmail.dll,1
 11,,shdocvw.dll,1
 11,,shell32.dll,3
@@ -114,6 +117,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,dinput8.dll,1
 11,,dmusic.dll,1
 11,,dplayx.dll,1
+11,,dsdmo.dll,1
 11,,dsound.dll,1
 11,,dssenh.dll,1
 11,,dxdiagn.dll,1
@@ -133,7 +137,9 @@ RegisterDlls = Wow64RegisterDlls
 11,,mmcshext.dll,1
 11,,mf.dll,1
 11,,mfasfsrcsnk.dll,1
-11,,mfh264enc.dll,1
+11,,colorcnv.dll,1
+11,,mp3dmod.dll,1
+11,,msvproc.dll,1
 11,,mfmediaengine.dll,1
 11,,mfmp4srcsnk.dll,1
 11,,mfplay.dll,1
@@ -179,6 +185,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,pstorec.dll,1
 11,,qcap.dll,1
 11,,qedit.dll,1
+11,,resampledmo.dll,1
 11,,qasf.dll,1
 11,,qmgr.dll,1
 11,,qmgrprxy.dll,1
@@ -218,7 +225,9 @@ RegisterDlls = Wow64RegisterDlls
 11,,devenum.dll,1
 11,,dsound.dll,1
 11,,fontext.dll,1
-11,,mfh264enc.dll,1
+11,,colorcnv.dll,1
+11,,mp3dmod.dll,1
+11,,msvproc.dll,1
 11,,mmdevapi.dll,1
 11,,mscat32.dll,1
 11,,mshtml.dll,3
@@ -227,6 +236,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,wpdshext.dll,1
 11,,qcap.dll,1
 11,,qedit.dll,1
+11,,resampledmo.dll,1
 11,,sendmail.dll,1
 11,,shdocvw.dll,1
 11,,shell32.dll,3

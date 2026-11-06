@@ -313,11 +313,14 @@ VOID ProcessFragment(
   BOOLEAN Forward;
   KIRQL OldIrql;
   PIPDATAGRAM_REASSEMBLY IPDR;
-  PLIST_ENTRY CurrentEntry;
+  PLIST_ENTRY CurrentEntry, NextEntry;
   PIPDATAGRAM_HOLE Hole, NewHole;
-  USHORT FragFirst;
-  USHORT FragLast;
+  ULONG FragFirst;
+  ULONG FragEnd;
+  ULONG FragSize;
   BOOLEAN MoreFragments;
+  BOOLEAN Overlap;
+  BOOLEAN Contained;
   PIPv4_HEADER IPv4Header;
   IP_PACKET Datagram;
   PIP_FRAGMENT Fragment;
@@ -327,6 +330,16 @@ VOID ProcessFragment(
   /* FIXME: Assume IPv4 */
 
   IPv4Header = (PIPv4_HEADER)IPPacket->Header;
+  FragFirst = (WN2H(IPv4Header->FlagsFragOfs) & IPv4_FRAGOFS_MASK) << 3;
+  MoreFragments = (WN2H(IPv4Header->FlagsFragOfs) & IPv4_MF_MASK) > 0;
+  FragSize = IPPacket->TotalSize - IPPacket->HeaderSize;
+  FragEnd = FragFirst + FragSize;
+
+  if (MoreFragments && (FragSize == 0 || (FragSize & 7)))
+      return;
+
+  if (IPPacket->HeaderSize + FragEnd > 65535)
+      return;
 
   /* Check if we already have an reassembly structure for this datagram */
   IPDR = GetReassemblyInfo(IPPacket, &OldIrql);
@@ -384,30 +397,65 @@ VOID ProcessFragment(
     }
   }
 
-  FragFirst     = (WN2H(IPv4Header->FlagsFragOfs) & IPv4_FRAGOFS_MASK) << 3;
-  FragLast      = FragFirst + WN2H(IPv4Header->TotalLength);
-  MoreFragments = (WN2H(IPv4Header->FlagsFragOfs) & IPv4_MF_MASK) > 0;
+  if (IPDR->DataSize != 0 &&
+      (FragEnd > IPDR->DataSize || (!MoreFragments && FragEnd != IPDR->DataSize)))
+    goto Discard;
 
+  if (!MoreFragments && IPDR->DataSize == 0) {
+    for (CurrentEntry = IPDR->FragmentListHead.Flink;
+         CurrentEntry != &IPDR->FragmentListHead;
+         CurrentEntry = CurrentEntry->Flink) {
+      Fragment = CONTAINING_RECORD(CurrentEntry, IP_FRAGMENT, ListEntry);
+      if (Fragment->Offset + Fragment->Size > FragEnd)
+        goto Discard;
+    }
+
+    IPDR->DataSize = FragEnd;
+  }
+
+  Overlap = FALSE;
+  Contained = FALSE;
+  for (CurrentEntry = IPDR->HoleListHead.Flink;
+       CurrentEntry != &IPDR->HoleListHead;
+       CurrentEntry = CurrentEntry->Flink) {
+    Hole = CONTAINING_RECORD(CurrentEntry, IPDATAGRAM_HOLE, ListEntry);
+    if (FragFirst <= Hole->Last && FragEnd > Hole->First) {
+      Overlap = TRUE;
+      if (FragFirst >= Hole->First && FragEnd <= Hole->Last + 1)
+        Contained = TRUE;
+    }
+  }
+
+  if (Overlap && !Contained)
+    goto Discard;
+
+  Overlap = FALSE;
   CurrentEntry = IPDR->HoleListHead.Flink;
-  for (;;) {
-    if (CurrentEntry == &IPDR->HoleListHead)
-        break;
-
+  while (CurrentEntry != &IPDR->HoleListHead) {
+    NextEntry = CurrentEntry->Flink;
     Hole = CONTAINING_RECORD(CurrentEntry, IPDATAGRAM_HOLE, ListEntry);
 
     TI_DbgPrint(DEBUG_IP, ("Comparing Fragment (%d,%d) to Hole (%d,%d).\n",
-      FragFirst, FragLast, Hole->First, Hole->Last));
+      FragFirst, FragEnd, Hole->First, Hole->Last));
 
-    if ((FragFirst > Hole->Last) || (FragLast < Hole->First)) {
+    if (!MoreFragments && Hole->First >= FragEnd) {
+      RemoveEntryList(CurrentEntry);
+      ExFreeToNPagedLookasideList(&IPHoleList, Hole);
+      CurrentEntry = NextEntry;
+      continue;
+    }
+
+    if ((FragFirst > Hole->Last) || (FragEnd <= Hole->First)) {
       TI_DbgPrint(MID_TRACE, ("No overlap.\n"));
       /* The fragment does not overlap with the hole, try next
          descriptor in the list */
 
-      CurrentEntry = CurrentEntry->Flink;
+      CurrentEntry = NextEntry;
       continue;
     }
 
     /* The fragment overlap with the hole, unlink the descriptor */
+    Overlap = TRUE;
     RemoveEntryList(CurrentEntry);
 
     if (FragFirst > Hole->First) {
@@ -420,11 +468,11 @@ VOID ProcessFragment(
       }
 
       /* Put the new descriptor in the list */
-      InsertTailList(&IPDR->HoleListHead, &NewHole->ListEntry);
+      InsertTailList(NextEntry, &NewHole->ListEntry);
     }
 
-    if ((FragLast < Hole->Last) && MoreFragments) {
-      NewHole = CreateHoleDescriptor(FragLast + 1, Hole->Last);
+    if (MoreFragments && (FragEnd <= Hole->Last)) {
+      NewHole = CreateHoleDescriptor(FragEnd, Hole->Last);
       if (!NewHole) {
         /* We don't have the resources to process this packet, discard it */
         ExFreeToNPagedLookasideList(&IPHoleList, Hole);
@@ -433,30 +481,32 @@ VOID ProcessFragment(
       }
 
       /* Put the new hole descriptor in the list */
-      InsertTailList(&IPDR->HoleListHead, &NewHole->ListEntry);
+      InsertTailList(NextEntry, &NewHole->ListEntry);
     }
 
     ExFreeToNPagedLookasideList(&IPHoleList, Hole);
+    CurrentEntry = NextEntry;
+  }
 
-    /* If this is the first fragment, save the IP header */
-    if (FragFirst == 0) {
-        IPDR->IPv4Header = ExAllocatePoolWithTag(NonPagedPool,
-                                                 IPPacket->HeaderSize,
-                                                 PACKET_BUFFER_TAG);
-        if (!IPDR->IPv4Header)
-        {
-            Cleanup(&IPDR->Lock, OldIrql, IPDR);
-            return;
-        }
-
-        RtlCopyMemory(IPDR->IPv4Header, IPPacket->Header, IPPacket->HeaderSize);
-        IPDR->HeaderSize = IPPacket->HeaderSize;
-
-        TI_DbgPrint(DEBUG_IP, ("First fragment found. Header buffer is at (0x%X). "
-                               "Header size is (%d).\n", &IPDR->IPv4Header, IPPacket->HeaderSize));
-
+  /* If this is the first fragment, save the IP header */
+  if (FragFirst == 0 && !IPDR->IPv4Header) {
+    IPDR->IPv4Header = ExAllocatePoolWithTag(NonPagedPool,
+                                             IPPacket->HeaderSize,
+                                             PACKET_BUFFER_TAG);
+    if (!IPDR->IPv4Header)
+    {
+      Cleanup(&IPDR->Lock, OldIrql, IPDR);
+      return;
     }
 
+    RtlCopyMemory(IPDR->IPv4Header, IPPacket->Header, IPPacket->HeaderSize);
+    IPDR->HeaderSize = IPPacket->HeaderSize;
+
+    TI_DbgPrint(DEBUG_IP, ("First fragment found. Header buffer is at (0x%X). "
+                           "Header size is (%d).\n", &IPDR->IPv4Header, IPPacket->HeaderSize));
+  }
+
+  if (Overlap && FragSize != 0) {
     /* Create a buffer, copy the data into it and put it
        in the fragment list */
 
@@ -469,7 +519,7 @@ VOID ProcessFragment(
 
     TI_DbgPrint(DEBUG_IP, ("Fragment descriptor allocated at (0x%X).\n", Fragment));
 
-    Fragment->Size = IPPacket->TotalSize - IPPacket->HeaderSize;
+    Fragment->Size = FragSize;
     Fragment->Packet = IPPacket->NdisPacket;
     Fragment->PacketOffset = IPPacket->Position + IPPacket->HeaderSize;
     Fragment->Offset = FragFirst;
@@ -477,13 +527,8 @@ VOID ProcessFragment(
     /* Disassociate the NDIS packet so it isn't freed upon return from IPReceive() */
     IPPacket->NdisPacket = NULL;
 
-    /* If this is the last fragment, compute and save the datagram data size */
-    if (!MoreFragments)
-      IPDR->DataSize = FragFirst + Fragment->Size;
-
     /* Put the fragment in the list */
     InsertTailList(&IPDR->FragmentListHead, &Fragment->ListEntry);
-    break;
   }
 
   TI_DbgPrint(DEBUG_IP, ("Done searching for hole descriptor.\n"));
@@ -495,6 +540,12 @@ VOID ProcessFragment(
     TcpipReleaseSpinLock(&IPDR->Lock, OldIrql);
 
     if (!RemoveIPDR(IPDR))
+    {
+      DereferenceIPDR(IPDR);
+      return;
+    }
+
+    if (IPDR->DataSize > 65535 - IPDR->HeaderSize)
     {
       DereferenceIPDR(IPDR);
       return;
@@ -526,6 +577,12 @@ VOID ProcessFragment(
     TcpipReleaseSpinLock(&IPDR->Lock, OldIrql);
     DereferenceIPDR(IPDR);
   }
+  return;
+
+Discard:
+  TcpipReleaseSpinLock(&IPDR->Lock, OldIrql);
+  RemoveIPDR(IPDR);
+  DereferenceIPDR(IPDR);
 }
 
 

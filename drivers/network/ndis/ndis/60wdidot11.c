@@ -3228,6 +3228,28 @@ Ndis6WdiHandleActionFrame(
         Ndis6WdiQueueInternalJob(Wdi, Ndis6WdiJobBssTransition);
 }
 
+static
+LONG
+Ndis6WdiDisconnectFrameReason(
+    _In_reads_bytes_(Length) PUCHAR Tlvs,
+    _In_ ULONG Length)
+{
+    NDIS6_WDI_TLV Tlv;
+    ULONG Offset;
+
+    if (!Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_DISCONNECT_DEAUTH_FRAME, &Tlv) &&
+        !Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_DISCONNECT_DISASSOCIATION_FRAME, &Tlv))
+    {
+        return -1;
+    }
+
+    /* A whole frame starts with the 24-byte management header, a bare body with the reason. */
+    Offset = (Tlv.Length >= 26) ? 24 : 0;
+    if (Tlv.Length < Offset + 2)
+        return -1;
+    return (LONG)(Tlv.Value[Offset] | ((ULONG)Tlv.Value[Offset + 1] << 8));
+}
+
 VOID
 Ndis6WdiDot11Indication(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
@@ -3284,7 +3306,9 @@ Ndis6WdiDot11Indication(
                     Ndis6WdiIndicateStatusUp(Wdi, NDIS_STATUS_DOT11_ROAMING_START, &Start, sizeof(Start));
                 }
 
-                DbgPrint("WDI: disassociated, reason %lu\n", Ndis6WdiRead32(Tlv.Value + 6));
+                DbgPrint("WDI: disassociated, status %lu, 802.11 reason %ld\n",
+                         Ndis6WdiRead32(Tlv.Value + 6),
+                         Ndis6WdiDisconnectFrameReason(Tlvs, Length));
                 Ndis6WdiIndicateDisassociation(Wdi, Tlv.Value, Ndis6WdiAssocStatus(Ndis6WdiRead32(Tlv.Value + 6), 0));
                 if (Lost && !Ndis6WdiQueueInternalJob(Wdi, Ndis6WdiJobReconnect))
                 {
@@ -3349,6 +3373,10 @@ Ndis6WdiDot11Indication(
 
         case WDI_INDICATION_IHV_EVENT:
         case WDI_INDICATION_ADAPTER_STATE:
+            break;
+
+        case WDI_INDICATION_TASK_OFFLOAD_CURRENT_CONFIG:
+            /* TODO: pass the current offload settings up to the protocols */
             break;
 
         default:

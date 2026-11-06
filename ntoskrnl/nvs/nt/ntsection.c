@@ -15,6 +15,7 @@
 #define MI_IMAGE32_RELOCATION_LOWEST 0x50000000ULL
 #define MI_IMAGE32_RELOCATION_HIGHEST 0x77FFFFFFULL
 #define MI_IMAGE32_EXECUTABLE_RANGE 0x1000000ULL
+#define MI_IMAGE32_BIAS_SLOTS 256
 
 POBJECT_TYPE MmSectionObjectType;
 
@@ -33,6 +34,7 @@ static LIST_ENTRY MiImageBuilds[MI_CONTROL_LOCKS];
 static MI_MUTEX MiImageWindowLock;
 static MI_IMAGE_WINDOW MiImageWindows[8];
 static ULONG MiImageWindowCount;
+static LONG MiImage32Bias = -1;
 static LONG64 MiBasedSectionCursor;
 
 static GENERIC_MAPPING MiSectionMapping =
@@ -245,9 +247,13 @@ MiControlAcquireForModWrite(
 
     *Token = NULL;
     End.QuadPart = (LONGLONG)EndingOffset;
+    KeEnterCriticalRegion();
     Status = FsRtlAcquireFileForModWriteEx(Control->FileObject, &End, (PERESOURCE *)Token);
     if (!NT_SUCCESS(Status))
+    {
+        KeLeaveCriticalRegion();
         return Status;
+    }
 
     /* The file system then knows the write comes from the modified writer. */
     ASSERT(IoGetTopLevelIrp() == NULL);
@@ -266,6 +272,7 @@ MiControlReleaseForModWrite(
     IoSetTopLevelIrp(NULL);
     if (Token != NULL)
         FsRtlReleaseFileForModWrite(Control->FileObject, (PERESOURCE)Token);
+    KeLeaveCriticalRegion();
 }
 
 static
@@ -656,8 +663,10 @@ MiRelocateImageControlArea(
     ULONG64 Slots, Base, Delta;
     PMI_IMAGE_WINDOW Window = NULL;
     BOOLEAN Executable = FALSE;
+    BOOLEAN TopDown = FALSE;
     BOOLEAN Reserved = FALSE;
     BOOLEAN Applied = FALSE;
+    LONG Bias, Previous;
     ULONG Seed, Page, Position = 0;
     PUCHAR Relocations = NULL;
     PUCHAR *Pages = NULL;
@@ -683,6 +692,7 @@ MiRelocateImageControlArea(
         {
             Highest = MI_IMAGE32_RELOCATION_HIGHEST;
             Lowest = MI_IMAGE32_RELOCATION_LOWEST;
+            TopDown = TRUE;
         }
         else
         {
@@ -708,7 +718,15 @@ MiRelocateImageControlArea(
         Base = Lowest + ((Base - Lowest) / MI_ALLOCATION_GRANULARITY % Slots + 1) * MI_ALLOCATION_GRANULARITY;
     if (!Executable)
         Window = MiImageWindowFor(Lowest, Highest);
-    if (Window != NULL)
+    if (Window != NULL && TopDown)
+    {
+        Bias = (LONG)(RtlRandomEx(&Seed) % MI_IMAGE32_BIAS_SLOTS);
+        Previous = InterlockedCompareExchange(&MiImage32Bias, Bias, -1);
+        if (Previous >= 0)
+            Bias = Previous;
+        Reserved = MiImageWindowReserveTopDown(Window, Control->ImageSize, Window->SlotCount - (ULONG64)Bias, &Base);
+    }
+    else if (Window != NULL)
         Reserved = MiImageWindowReserve(Window, Control->ImageSize, (Base - Lowest) / MI_ALLOCATION_GRANULARITY, &Base);
     Delta = Base - OldBase;
 
@@ -1011,6 +1029,12 @@ MiBuildImageControlArea(
     }
 
     RtlZeroMemory(Information, sizeof(*Information));
+
+    if (NtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC && sizeof(ULONG_PTR) < sizeof(ULONG64))
+    {
+        Status = STATUS_INVALID_IMAGE_WIN_64;
+        goto Done;
+    }
 
     if ((NtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC &&
          MiIsImageMachine32Bit(NtHeaders->FileHeader.Machine)) ||
@@ -1626,7 +1650,7 @@ MiCreateSectionWithMode(
         if ((AllocationAttributes & SEC_RESERVE) && Size > SizeLimit)
             return STATUS_INSUFFICIENT_RESOURCES;
 
-        Size = ROUND_TO_PAGES(Size);
+        Size = (Size + PAGE_SIZE - 1) & ~((ULONG64)PAGE_SIZE - 1);
 
         Control = MiAllocateControlArea(NULL, FALSE);
         if (Control == NULL)
@@ -1941,7 +1965,7 @@ MiMapSectionView(
             return STATUS_INVALID_VIEW_SIZE;
     }
 
-    Base &= ~(((AllocationType & MEM_REPLACE_PLACEHOLDER) ? PAGE_SIZE : Space->Granularity) - 1);
+    Base &= ~(((AllocationType & (MEM_REPLACE_PLACEHOLDER | MEM_DOS_LIM)) ? PAGE_SIZE : Space->Granularity) - 1);
 
     for (;;)
     {
@@ -1950,7 +1974,8 @@ MiMapSectionView(
 
         Status = MiMapViewEx(Space, Control->Segment, &TryBase, Offset, &TrySize, Protection,
                              (AllocationType & (MEM_TOP_DOWN | MEM_RESERVE | MEM_LARGE_PAGES)) |
-                             ((AllocationType & MEM_REPLACE_PLACEHOLDER) ? MI_MEM_REPLACE_PLACEHOLDER : 0),
+                             ((AllocationType & MEM_REPLACE_PLACEHOLDER) ? MI_MEM_REPLACE_PLACEHOLDER : 0) |
+                             ((AllocationType & MEM_DOS_LIM) ? MI_MEM_PAGE_GRANULAR : 0),
                              Highest, Control->Image ? 0 : Section->Protection, Inherit);
 
         if (NT_SUCCESS(Status))
@@ -1965,6 +1990,9 @@ MiMapSectionView(
             Base = 0;
             continue;
         }
+
+        if (Status == STATUS_NO_MEMORY && Space->IsSystem && CcUnmapIdleViews((SIZE_T)Size) != 0)
+            continue;
 
         if (Status != STATUS_NO_MEMORY || !NT_SUCCESS(MiWaitForMemory(Status, &Attempts)))
             break;
@@ -2645,7 +2673,7 @@ NtMapViewOfSection(
     if ((ULONG_PTR)MM_HIGHEST_VAD_ADDRESS - (ULONG_PTR)SafeBase < SafeSize)
         return STATUS_INVALID_PARAMETER;
 
-    if (ZeroBits > 21 && ZeroBits < 32)
+    if ((ZeroBits > 21 && ZeroBits < 32) || (ZeroBits >= 32 && sizeof(ZeroBits) < sizeof(ULONG64)))
         return STATUS_INVALID_PARAMETER_4;
 
     if (SafeBase != NULL && ZeroBits != 0 &&

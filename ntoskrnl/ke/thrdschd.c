@@ -1100,6 +1100,8 @@ KiSwapThread(IN PKTHREAD CurrentThread,
     PKTHREAD NextThread;
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
+    KiCheckDeferredReadyList(Prcb);
+
     /* Acquire the PRCB lock */
     KiAcquirePrcbLock(Prcb);
 
@@ -1605,6 +1607,9 @@ KiSetAffinityThread(IN PKTHREAD Thread,
 /*
  * @implemented
  */
+/* Spin loops count yields, and a driver sizes them on Windows, where an empty yield measures about 1 us. */
+#define KI_EMPTY_YIELD_STALL_US 1
+
 NTSTATUS
 NTAPI
 NtYieldExecution(VOID)
@@ -1621,10 +1626,15 @@ NtYieldExecution(VOID)
     if (!KiGetCurrentReadySummary() &&
         !KiAnyReadyThreadQueued(KeGetCurrentProcessorNumber()))
     {
+        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
         return STATUS_NO_YIELD_PERFORMED;
     }
 #else
-    if (!KiGetCurrentReadySummary()) return STATUS_NO_YIELD_PERFORMED;
+    if (!KiGetCurrentReadySummary())
+    {
+        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
+        return STATUS_NO_YIELD_PERFORMED;
+    }
 #endif
 
     /* Now get the current thread, set the status... */
@@ -1713,5 +1723,7 @@ NtYieldExecution(VOID)
 
     /* Lower IRQL and return */
     KeLowerIrql(OldIrql);
+    if (Status == STATUS_NO_YIELD_PERFORMED)
+        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
     return Status;
 }

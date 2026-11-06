@@ -439,6 +439,7 @@ LxFileDereference(
 
     LxEpollFileReleased(File);
     LxFileAsyncRelease(File);
+    LxFlockRelease(File);
     if (File->Written)
         LxInotifyFileEvent(File, LX_IN_CLOSE_WRITE);
     if (File->Ops->Release != NULL)
@@ -1874,16 +1875,9 @@ LxDeviceOpenFile(
             default: return NULL;
         }
     }
-    else if ((Major == 5) && (Minor == 2))
-    {
-        if (LxPtmxOpen(Process, Flags, &File) != 0)
-            return NULL;
-        File->Path = LxStrDup(Path);
-        return File;
-    }
     else if (Major == 136)
     {
-        Tty = LxTtyLookup(Process->Instance, Minor);
+        Tty = LxTtyLookup(Process->Instance, Process->Instance->Devpts, Minor);
         if (Tty == NULL)
             return NULL;
         if (LxTtyOpenSlave(Process, Tty, Flags | LX_O_NOCTTY, &File) != 0)
@@ -1893,9 +1887,21 @@ LxDeviceOpenFile(
             File->Path = LxStrDup(Path);
         return File;
     }
+    else if (Major == LX_LOOP_MAJOR)
+    {
+        return LxLoopOpen(Process, Minor, Flags, Path);
+    }
+    else if ((Major == 10) && (Minor == LX_LOOP_CONTROL_MINOR))
+    {
+        return LxLoopControlOpen(Process, Flags, Path);
+    }
     else if ((Major == LX_WIN_DEVICE_MAJOR) && (Minor == LX_WIN_DEVICE_MINOR))
     {
         return LxWinOpen(Process, Flags, Path);
+    }
+    else if (Major == LX_DRM_MAJOR)
+    {
+        return LxDrmOpen(Process, Minor, Flags, Path);
     }
     else if (Major == LX_USB_DEVICE_MAJOR)
     {
@@ -1954,6 +1960,17 @@ LxDeviceOpen(
             (*Result)->Rdev = (1 << 8) | 11;
             (*Result)->Path = LxStrDup(Path);
         }
+        return Error;
+    }
+    if (Device == ((5ULL << 32) | 2))
+    {
+        PLX_DEVPTS Devpts;
+
+        Error = LxDevptsForPtmx(Process, Path, &Devpts);
+        if (Error == 0)
+            Error = LxPtmxOpen(Process, Devpts, Flags, Result);
+        if (Error == 0)
+            (*Result)->Path = LxStrDup(Path);
         return Error;
     }
     *Result = LxDeviceOpenFile(Process, Device, Flags, Path);

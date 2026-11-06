@@ -168,7 +168,7 @@ TestReAllocate(VOID)
     }
     for (Index = 0; Index < 24 && Moved[Index] == (UCHAR)(Index * 9 + 1); Index++);
     ok(Index == 24, "HeapReAlloc lost the contents at byte %lu\n", Index);
-    ok(HeapSize(TestHeap, 0, Moved) >= 4000, "HeapSize is %Iu\n", HeapSize(TestHeap, 0, Moved));
+    ok(HeapSize(TestHeap, 0, Moved) >= 4000, "HeapSize is %Iu\n", (size_t)HeapSize(TestHeap, 0, Moved));
     ok(HeapValidate(TestHeap, 0, NULL), "HeapValidate failed after HeapReAlloc\n");
     ok(HeapFree(TestHeap, 0, Moved), "HeapFree failed: %lu\n", GetLastError());
 }
@@ -288,9 +288,9 @@ TestChurnCommit(VOID)
         if (Entry.wFlags & PROCESS_HEAP_REGION)
             Committed += Entry.Region.dwCommittedSize;
     }
-    trace("Committed %Iu bytes after %u rounds on %u threads\n", Committed, LFH_CHURN_ROUNDS, LFH_TEST_THREADS);
+    trace("Committed %Iu bytes after %u rounds on %u threads\n", (size_t)Committed, LFH_CHURN_ROUNDS, LFH_TEST_THREADS);
     ok(Committed < 4 * 1024 * 1024, "the heap committed %Iu bytes for a live set of %u small blocks\n",
-       Committed, LFH_CHURN_LIVE * LFH_TEST_THREADS);
+       (size_t)Committed, LFH_CHURN_LIVE * LFH_TEST_THREADS);
     ok(HeapDestroy(ChurnHeap), "HeapDestroy failed: %lu\n", GetLastError());
 }
 

@@ -254,6 +254,9 @@ static unsigned get_machine_bitness(USHORT machine)
         return 32;
     case IMAGE_FILE_MACHINE_AMD64:
     case IMAGE_FILE_MACHINE_ARM64:
+#ifdef __REACTOS__
+    case IMAGE_FILE_MACHINE_RISCV64:
+#endif
         return 64;
     default:
         ok(0, "Unsupported machine %x\n", machine);

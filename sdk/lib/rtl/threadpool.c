@@ -331,6 +331,7 @@ struct threadpool_object
             RTL_WAITORTIMERCALLBACKFUNC rtl_callback;
 #ifdef __REACTOS__
             struct list     rtl_callers;
+            ULONGLONG       rtl_period;
 #endif
         } wait;
         struct
@@ -1585,6 +1586,27 @@ static void tp_timerqueue_unlock( struct threadpool_object *timer )
     RtlLeaveCriticalSection( &timerqueue.cs );
 }
 
+#ifdef __REACTOS__
+static ULONGLONG tp_wait_now( void )
+{
+    LARGE_INTEGER counter;
+
+    NtQueryPerformanceCounter( &counter, NULL );
+    return qpc_to_100ns( counter.QuadPart );
+}
+
+static BOOL tp_wait_rearm( struct threadpool_object *wait )
+{
+    ULONGLONG period = wait->u.wait.rtl_period;
+    ULONG maximum, minimum, current;
+
+    if (wait->u.wait.timeout == MAXLONGLONG) return FALSE;
+    if (!period && NT_SUCCESS(NtQueryTimerResolution( &maximum, &minimum, &current ))) period = current;
+    wait->u.wait.timeout = tp_wait_now() + period;
+    return TRUE;
+}
+#endif
+
 /***********************************************************************
  *           waitqueue_thread_proc    (internal)
  */
@@ -1614,7 +1636,11 @@ static void CALLBACK waitqueue_thread_proc( void *param )
 
     for (;;)
     {
+#ifdef __REACTOS__
+        now.QuadPart = tp_wait_now();
+#else
         NtQuerySystemTime( &now );
+#endif
         timeout.QuadPart = MAXLONGLONG;
         num_handles = 0;
 
@@ -1632,6 +1658,10 @@ static void CALLBACK waitqueue_thread_proc( void *param )
                     list_add_tail( &bucket->reserved, &wait->u.wait.wait_entry );
                     wait->u.wait.wait_pending = FALSE;
                 }
+#ifdef __REACTOS__
+                else if (tp_wait_rearm( wait ))
+                    timeout.QuadPart = 0;
+#endif
                 if ((wait->u.wait.flags & (WT_EXECUTEINWAITTHREAD | WT_EXECUTEINIOTHREAD)))
                 {
                     InterlockedIncrement( &wait->refcount );
@@ -1682,6 +1712,13 @@ static void CALLBACK waitqueue_thread_proc( void *param )
         else
         {
             handles[num_handles] = bucket->update_event;
+#ifdef __REACTOS__
+            if (timeout.QuadPart != MAXLONGLONG)
+            {
+                now.QuadPart = tp_wait_now();
+                timeout.QuadPart = (timeout.QuadPart > now.QuadPart) ? now.QuadPart - timeout.QuadPart : 0;
+            }
+#endif
             RtlLeaveCriticalSection( &waitqueue.cs );
             status = NtWaitForMultipleObjects( num_handles + 1, handles, WaitAny, bucket->alertable, &timeout );
 #ifdef __REACTOS__
@@ -1704,6 +1741,9 @@ static void CALLBACK waitqueue_thread_proc( void *param )
                         list_add_tail( &bucket->reserved, &wait->u.wait.wait_entry );
                         wait->u.wait.wait_pending = FALSE;
                     }
+#ifdef __REACTOS__
+                    else tp_wait_rearm( wait );
+#endif
                     if ((wait->u.wait.flags & (WT_EXECUTEINWAITTHREAD | WT_EXECUTEINIOTHREAD)))
                     {
                         wait->u.wait.signaled++;
@@ -3806,6 +3846,22 @@ static BOOL tp_set_wait( TP_WAIT *wait, HANDLE handle, LARGE_INTEGER *timeout )
         /* Convert relative timeout to absolute timestamp. */
         if (handle && timeout)
         {
+#ifdef __REACTOS__
+            timestamp = tp_wait_now();
+            if (timeout->QuadPart < 0)
+            {
+                timestamp -= timeout->QuadPart;
+            }
+            else
+            {
+                LARGE_INTEGER now;
+
+                /* FIXME: an absolute timeout does not follow later changes of the system time */
+                NtQuerySystemTime( &now );
+                if (timeout->QuadPart > now.QuadPart)
+                    timestamp += timeout->QuadPart - now.QuadPart;
+            }
+#else
             timestamp = timeout->QuadPart;
             if ((LONGLONG)timestamp < 0)
             {
@@ -3813,6 +3869,7 @@ static BOOL tp_set_wait( TP_WAIT *wait, HANDLE handle, LARGE_INTEGER *timeout )
                 NtQuerySystemTime( &now );
                 timestamp = now.QuadPart - timestamp;
             }
+#endif
         }
 
         /* Add wait object back into one of the queues. */
@@ -4087,6 +4144,7 @@ NTSTATUS WINAPI RtlRegisterWait( HANDLE *out, HANDLE handle, RTL_WAITORTIMERCALL
     object->u.wait.rtl_callback = callback;
 #ifdef __REACTOS__
     list_init( &object->u.wait.rtl_callers );
+    object->u.wait.rtl_period = (ULONGLONG)milliseconds * 10000;
 #endif
 
     RtlEnterCriticalSection( &waitqueue.cs );

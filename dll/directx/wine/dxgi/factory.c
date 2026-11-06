@@ -770,7 +770,12 @@ static HRESULT dxgi_factory_init(struct dxgi_factory *factory, BOOL extended)
         if (!dxgi_wined3d_initialized)
         {
             dxgi_wined3d_initializing_thread = GetCurrentThreadId();
+#ifdef REACTOS_DXGI_D3DKMT_ADAPTER_ORDER
+            /* A native driver renders; a cached OpenGL context would only pin the driver's device across a GPU reset. */
+            dxgi_cached_wined3d = wined3d_create(dxgi_wddm_adapters_have_d3d11_umd() ? WINED3D_NO3D : 0);
+#else
             dxgi_cached_wined3d = wined3d_create(0);
+#endif
             dxgi_wined3d_initializing_thread = 0;
             dxgi_wined3d_initialized = dxgi_cached_wined3d != NULL;
         }

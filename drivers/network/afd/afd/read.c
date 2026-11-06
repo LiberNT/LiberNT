@@ -10,6 +10,46 @@
 
 #include "afd.h"
 
+NTSTATUS
+AfdRearmDatagram(PAFD_FCB FCB)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (FCB->ReceiveRepostActive)
+    {
+        FCB->ReceiveRepostPending = TRUE;
+        return STATUS_SUCCESS;
+    }
+
+    FCB->ReceiveRepostActive = TRUE;
+    do
+    {
+        FCB->ReceiveRepostPending = FALSE;
+        if (!(FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) || FCB->CleanedUp ||
+            FCB->SharedData.State == SOCKET_STATE_CLOSED || FCB->TdiReceiveClosed ||
+            FCB->ReceiveIrp.InFlightRequest || !FCB->AddressFile.Object ||
+            !FCB->AddressFrom || !FCB->Recv.Window ||
+            (FCB->Recv.Size ? FCB->Recv.Content >= FCB->Recv.Size : !IsListEmpty(&FCB->DatagramList)))
+            break;
+
+        FCB->AddressFrom->Options = FCB->RecvControl;
+        FCB->AddressFrom->OptionsLength = FCB->RecvControl ? AFD_RECV_CONTROL_SIZE : 0;
+        Status = TdiReceiveDatagram(&FCB->ReceiveIrp.InFlightRequest,
+                                    FCB->AddressFile.Object,
+                                    0,
+                                    FCB->Recv.Window,
+                                    FCB->ReceiveWindowAllocationSize,
+                                    FCB->AddressFrom,
+                                    PacketSocketRecvComplete,
+                                    FCB);
+        if (Status == STATUS_PENDING)
+            Status = STATUS_SUCCESS;
+    } while (NT_SUCCESS(Status) && FCB->ReceiveRepostPending);
+
+    FCB->ReceiveRepostActive = FALSE;
+    return Status;
+}
+
 static VOID RefillSocketBuffer( PAFD_FCB FCB )
 {
     /* A lower transport may complete the receive before TdiReceive returns.
@@ -698,6 +738,15 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     if( FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS )
     {
+        if (IsListEmpty(&FCB->DatagramList))
+        {
+            Status = AfdRearmDatagram(FCB);
+            if (!NT_SUCCESS(Status))
+            {
+                UnlockBuffers(RecvReq->BufferArray, RecvReq->BufferCount, FALSE);
+                return UnlockAndMaybeComplete(FCB, Status, Irp, 0);
+            }
+        }
         if (!IsListEmpty(&FCB->DatagramList))
         {
             ListEntry = RemoveHeadList(&FCB->DatagramList);
@@ -720,6 +769,8 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
             else
                 FCB->PollState &= ~AFD_EVENT_RECEIVE;
 
+            if (!(RecvReq->TdiFlags & TDI_RECEIVE_PEEK))
+                AfdRearmDatagram(FCB);
             UnlockBuffers(RecvReq->BufferArray, RecvReq->BufferCount, FALSE);
 
             return UnlockAndMaybeComplete(FCB, Status, Irp, Irp->IoStatus.Information);
@@ -770,6 +821,109 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     SocketStateUnlock( FCB );
     return Status;
+}
+
+BOOLEAN
+AfdFastConnectedSocketReadData(
+    _In_ PFILE_OBJECT FileObject,
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_ PIO_STATUS_BLOCK IoStatus)
+{
+    PAFD_FCB FCB = FileObject->FsContext;
+    KPROCESSOR_MODE Mode = ExGetPreviousMode();
+    BOOLEAN Is32Bit = AfdIs32bitCaller(Mode);
+    BOOLEAN CopyFailed = FALSE;
+    AFD_RECV_INFO RecvReq;
+    AFD_WSABUF Buffers[8];
+    UINT BytesAvailable, BytesCopied = 0, BytesToCopy, i;
+
+    if (!AfdCaptureRecvRequest(InputBuffer, InputBufferLength, Mode, Is32Bit, &RecvReq) ||
+        (RecvReq.AfdFlags & (AFD_OVERLAPPED | AFD_SKIP_FIO)) ||
+        RecvReq.TdiFlags != TDI_RECEIVE_NORMAL ||
+        !RecvReq.BufferArray || !RecvReq.BufferCount ||
+        RecvReq.BufferCount > ARRAYSIZE(Buffers))
+    {
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        for (i = 0; i < RecvReq.BufferCount; i++)
+        {
+            AfdReadUserWsaBuf(RecvReq.BufferArray, i, Mode, Is32Bit, &Buffers[i]);
+            if (Mode != KernelMode)
+                ProbeForWrite(Buffers[i].buf, Buffers[i].len, sizeof(UCHAR));
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        CopyFailed = TRUE;
+    }
+    _SEH2_END;
+
+    if (CopyFailed)
+        return FALSE;
+
+    if (!SocketAcquireStateLock(FCB))
+        return FALSE;
+
+    BytesAvailable = FCB->Recv.Content - FCB->Recv.BytesUsed;
+    if ((FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) ||
+        FCB->SharedData.State != SOCKET_STATE_CONNECTED ||
+        FCB->TdiReceiveClosed || !BytesAvailable ||
+        !IsListEmpty(&FCB->PendingIrpList[FUNCTION_RECV]) ||
+        !IsListEmpty(&FCB->PendingIrpList[FUNCTION_RECV_OOB]) ||
+        !IsListEmpty(&FCB->PendingIrpList[FUNCTION_ACCEPT]))
+    {
+        SocketStateUnlock(FCB);
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        for (i = 0; i < RecvReq.BufferCount && BytesCopied < BytesAvailable; i++)
+        {
+            BytesToCopy = MIN(Buffers[i].len, BytesAvailable - BytesCopied);
+            if (!BytesToCopy || !Buffers[i].buf)
+                continue;
+
+            RtlCopyMemory(Buffers[i].buf, FCB->Recv.Window + FCB->Recv.BytesUsed + BytesCopied, BytesToCopy);
+            BytesCopied += BytesToCopy;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        CopyFailed = TRUE;
+    }
+    _SEH2_END;
+
+    if (CopyFailed || !BytesCopied)
+    {
+        SocketStateUnlock(FCB);
+        return FALSE;
+    }
+
+    FCB->EventSelectDisabled &= ~AFD_EVENT_RECEIVE;
+    FCB->Recv.BytesUsed += BytesCopied;
+    RefillSocketBuffer(FCB);
+
+    if (FCB->Recv.Content - FCB->Recv.BytesUsed)
+    {
+        FCB->PollState |= AFD_EVENT_RECEIVE;
+        FCB->PollStatus[FD_READ_BIT] = STATUS_SUCCESS;
+        PollReeval(FCB->DeviceExt, FCB->FileObject);
+    }
+    else
+    {
+        FCB->PollState &= ~AFD_EVENT_RECEIVE;
+    }
+
+    SocketStateUnlock(FCB);
+
+    IoStatus->Status = STATUS_SUCCESS;
+    IoStatus->Information = BytesCopied;
+    return TRUE;
 }
 
 static
@@ -878,6 +1032,9 @@ PacketSocketRecvComplete(
         goto SatisfyRequests;
     }
 
+    if (Irp->IoStatus.Information > MAXULONG - FCB->Recv.Content)
+        goto SatisfyRequests;
+
     DGSize = FIELD_OFFSET(AFD_STORED_DATAGRAM, Buffer) +
              ALIGN_UP_BY(Irp->IoStatus.Information, MAX_NATURAL_ALIGNMENT) + ControlLen;
     DatagramRecv = ExAllocatePoolWithTag(NonPagedPool,
@@ -964,20 +1121,8 @@ SatisfyRequests:
 
     AfdTryApplyPendingReceiveWindow(FCB);
 
-    if( NT_SUCCESS(Irp->IoStatus.Status) && FCB->Recv.Content < FCB->Recv.Size ) {
-        FCB->AddressFrom->Options = FCB->RecvControl;
-        FCB->AddressFrom->OptionsLength = FCB->RecvControl ? AFD_RECV_CONTROL_SIZE : 0;
-        /* Now relaunch the datagram request */
-        Status = TdiReceiveDatagram
-            ( &FCB->ReceiveIrp.InFlightRequest,
-              FCB->AddressFile.Object,
-              0,
-              FCB->Recv.Window,
-              FCB->Recv.Size,
-              FCB->AddressFrom,
-              PacketSocketRecvComplete,
-              FCB );
-    }
+    if (NT_SUCCESS(Irp->IoStatus.Status))
+        AfdRearmDatagram(FCB);
 
     if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
     SocketStateUnlock( FCB );
@@ -1035,6 +1180,15 @@ AfdPacketSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         return UnlockAndMaybeComplete(FCB, STATUS_ACCESS_VIOLATION, Irp, 0);
     }
 
+    if (IsListEmpty(&FCB->DatagramList))
+    {
+        Status = AfdRearmDatagram(FCB);
+        if (!NT_SUCCESS(Status))
+        {
+            UnlockBuffers(RecvReq->BufferArray, RecvReq->BufferCount, TRUE);
+            return UnlockAndMaybeComplete(FCB, Status, Irp, 0);
+        }
+    }
     if (!IsListEmpty(&FCB->DatagramList))
     {
         ListEntry = RemoveHeadList(&FCB->DatagramList);
@@ -1057,6 +1211,8 @@ AfdPacketSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         else
             FCB->PollState &= ~AFD_EVENT_RECEIVE;
 
+        if (!(RecvReq->TdiFlags & TDI_RECEIVE_PEEK))
+            AfdRearmDatagram(FCB);
         UnlockBuffers(RecvReq->BufferArray, RecvReq->BufferCount, TRUE);
 
         return UnlockAndMaybeComplete(FCB, Status, Irp, Irp->IoStatus.Information);

@@ -693,6 +693,10 @@ USBSTOR_PdoHandlePnp(
            break;
        }
        case IRP_MN_QUERY_REMOVE_DEVICE:
+       {
+           Status = STATUS_SUCCESS;
+           break;
+       }
        case IRP_MN_QUERY_STOP_DEVICE:
        {
            if (DeviceExtension->Claimed)

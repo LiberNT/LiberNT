@@ -401,6 +401,51 @@ GetNumaNodeProcessorMaskEx(IN USHORT Node,
     return TRUE;
 }
 
+BOOL
+WINAPI
+GetNumaNodeProcessorMask2(IN USHORT NodeNumber,
+                          OUT PGROUP_AFFINITY ProcessorMasks,
+                          IN USHORT ProcessorMaskCount,
+                          OUT PUSHORT RequiredMaskCount)
+{
+    NTSTATUS Status;
+    SYSTEM_NUMA_INFORMATION NumaInformation;
+    KAFFINITY Mask;
+
+    Status = NtQuerySystemInformation(SystemNumaProcessorMap, &NumaInformation, sizeof(NumaInformation), NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    if (NodeNumber > NumaInformation.HighestNodeNumber || NodeNumber >= MAXIMUM_NUMA_NODES)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    /* TODO: report nodes that span several processor groups; only group 0 exists */
+    Mask = (KAFFINITY)NumaInformation.ActiveProcessorsAffinityMask[NodeNumber];
+    if (Mask == 0)
+    {
+        *RequiredMaskCount = 0;
+        return TRUE;
+    }
+
+    *RequiredMaskCount = 1;
+    if (ProcessorMaskCount < 1)
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    RtlZeroMemory(&ProcessorMasks[0], sizeof(ProcessorMasks[0]));
+    ProcessorMasks[0].Mask = Mask;
+    ProcessorMasks[0].Group = 0;
+    return TRUE;
+}
+
 /*
  * @implemented
  */
@@ -529,6 +574,112 @@ GetNumaAvailableMemoryNode(IN UCHAR Node,
     }
 
     /* Return available memory for that node */
+    *AvailableBytes = NumaInformation.AvailableMemory[Node];
+    return TRUE;
+}
+
+BOOLEAN
+WINAPI
+BasepIsValidNumaNode(IN ULONG Node)
+{
+    ULONG HighestNodeNumber;
+
+    if (!NT_SUCCESS(NtQuerySystemInformation(SystemNumaProcessorMap,
+                                             &HighestNodeNumber,
+                                             sizeof(HighestNodeNumber),
+                                             NULL)))
+    {
+        return FALSE;
+    }
+
+    return Node <= HighestNodeNumber;
+}
+
+BOOL
+WINAPI
+GetNumaProximityNodeEx(IN ULONG ProximityId,
+                       OUT PUSHORT NodeNumber)
+{
+    SYSTEM_NUMA_PROXIMITY_MAP ProximityMap;
+    NTSTATUS Status;
+
+    ProximityMap.NodeProximityId = ProximityId;
+    Status = NtQuerySystemInformation(SystemNumaProximityNodeInformation,
+                                      &ProximityMap,
+                                      sizeof(ProximityMap),
+                                      NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    *NodeNumber = ProximityMap.NodeNumber;
+    return TRUE;
+}
+
+BOOL
+WINAPI
+GetNumaProximityNode(IN ULONG ProximityId,
+                     OUT PUCHAR NodeNumber)
+{
+    USHORT Node;
+
+    if (!GetNumaProximityNodeEx(ProximityId, &Node))
+        return FALSE;
+
+    *NodeNumber = (UCHAR)Node;
+    return TRUE;
+}
+
+BOOL
+WINAPI
+GetNumaNodeNumberFromHandle(IN HANDLE hFile,
+                            OUT PUSHORT NodeNumber)
+{
+    FILE_NUMA_NODE_INFORMATION NumaInformation;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    Status = NtQueryInformationFile(hFile,
+                                    &IoStatusBlock,
+                                    &NumaInformation,
+                                    sizeof(NumaInformation),
+                                    FileNumaNodeInformation);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    *NodeNumber = NumaInformation.NodeNumber;
+    return TRUE;
+}
+
+BOOL
+WINAPI
+GetNumaAvailableMemoryNodeEx(IN USHORT Node,
+                             OUT PULONGLONG AvailableBytes)
+{
+    NTSTATUS Status;
+    SYSTEM_NUMA_INFORMATION NumaInformation;
+
+    Status = NtQuerySystemInformation(SystemNumaAvailableMemory,
+                                      &NumaInformation,
+                                      sizeof(NumaInformation),
+                                      NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    if (Node > NumaInformation.HighestNodeNumber || Node >= MAXIMUM_NUMA_NODES)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
     *AvailableBytes = NumaInformation.AvailableMemory[Node];
     return TRUE;
 }

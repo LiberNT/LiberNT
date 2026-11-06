@@ -51,6 +51,8 @@ struct avi_decompressor
 
     CRITICAL_SECTION late_cs;
     REFERENCE_TIME late;
+
+    unsigned int key_wait;
 };
 
 static const BITMAPINFOHEADER *get_bitmap_header(const AM_MEDIA_TYPE *mt)
@@ -91,6 +93,8 @@ static HRESULT avi_decompressor_sink_query_interface(struct strmbase_pin *iface,
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->sink.IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->sink.IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -98,8 +102,31 @@ static HRESULT avi_decompressor_sink_query_interface(struct strmbase_pin *iface,
     return S_OK;
 }
 
+static const BITMAPINFOHEADER *get_compressed_header(const AM_MEDIA_TYPE *mt)
+{
+    if (!IsEqualGUID(&mt->majortype, &MEDIATYPE_Video)
+            || memcmp((const char *)&mt->subtype + 4, (const char *)&MEDIATYPE_Video + 4, sizeof(GUID) - 4))
+        return NULL;
+
+    if (IsEqualGUID(&mt->formattype, &FORMAT_VideoInfo) && mt->cbFormat >= sizeof(VIDEOINFOHEADER))
+        return &((const VIDEOINFOHEADER *)mt->pbFormat)->bmiHeader;
+    if (IsEqualGUID(&mt->formattype, &FORMAT_VideoInfo2) && mt->cbFormat >= sizeof(VIDEOINFOHEADER2))
+        return &((const VIDEOINFOHEADER2 *)mt->pbFormat)->bmiHeader;
+    return NULL;
+}
+
 static HRESULT avi_decompressor_sink_query_accept(struct strmbase_pin *iface, const AM_MEDIA_TYPE *mt)
 {
+    const BITMAPINFOHEADER *header;
+    HIC hic;
+
+    if (!(header = get_compressed_header(mt)))
+        return S_FALSE;
+
+    if (!(hic = ICLocate(mt->majortype.Data1, mt->subtype.Data1, (BITMAPINFOHEADER *)header, NULL, ICMODE_DECOMPRESS)))
+        return S_FALSE;
+
+    ICClose(hic);
     return S_OK;
 }
 
@@ -237,7 +264,7 @@ static HRESULT WINAPI avi_decompressor_sink_Receive(struct strmbase_sink *iface,
     LPBYTE pbSrcStream;
     LONGLONG tStart, tStop;
     AM_MEDIA_TYPE *mt;
-    DWORD flags = 0;
+    DWORD flags = 0, size_image;
     LRESULT res;
 
     /* We do not expect pin connection state to change while the filter is
@@ -264,9 +291,6 @@ static HRESULT WINAPI avi_decompressor_sink_Receive(struct strmbase_sink *iface,
     }
 
     cbSrcStream = IMediaSample_GetActualDataLength(pSample);
-
-    /* Update input size to match sample size */
-    This->input_format->biSizeImage = cbSrcStream;
 
     if (FAILED(hr = IMemAllocator_GetBuffer(This->source.pAllocator, &pOutSample, NULL, NULL, 0)))
     {
@@ -338,6 +362,15 @@ static HRESULT WINAPI avi_decompressor_sink_Receive(struct strmbase_sink *iface,
         flags |= ICDECOMPRESS_HURRYUP;
     LeaveCriticalSection(&This->late_cs);
 
+    if (IMediaSample_IsDiscontinuity(pSample) == S_OK)
+        This->key_wait = 30;
+    if (IMediaSample_IsSyncPoint(pSample) == S_OK)
+        This->key_wait = 0;
+    else if (This->key_wait)
+        --This->key_wait;
+
+    size_image = This->input_format->biSizeImage;
+    This->input_format->biSizeImage = cbSrcStream;
     if (needs_decompressex(&This->source.pin.mt))
     {
         ICDECOMPRESSEX params;
@@ -352,11 +385,12 @@ static HRESULT WINAPI avi_decompressor_sink_Receive(struct strmbase_sink *iface,
     {
         res = ICDecompress(This->hvid, flags, This->input_format, pbSrcStream, This->output_format, pbDstStream);
     }
+    This->input_format->biSizeImage = size_image;
     if (res != ICERR_OK)
         ERR("Failed to decompress, error %Id.\n", res);
 
     /* Drop sample if it's intended to be dropped */
-    if (flags & ICDECOMPRESS_HURRYUP) {
+    if ((flags & (ICDECOMPRESS_HURRYUP | ICDECOMPRESS_PREROLL)) || This->key_wait) {
         IMediaSample_Release(pOutSample);
         return S_OK;
     }
@@ -365,7 +399,7 @@ static HRESULT WINAPI avi_decompressor_sink_Receive(struct strmbase_sink *iface,
 
     IMediaSample_SetPreroll(pOutSample, (IMediaSample_IsPreroll(pSample) == S_OK));
     IMediaSample_SetDiscontinuity(pOutSample, (IMediaSample_IsDiscontinuity(pSample) == S_OK));
-    IMediaSample_SetSyncPoint(pOutSample, (IMediaSample_IsSyncPoint(pSample) == S_OK));
+    IMediaSample_SetSyncPoint(pOutSample, TRUE);
 
     if (hr == S_OK)
         IMediaSample_SetTime(pOutSample, &tStart, &tStop);
@@ -455,6 +489,8 @@ static HRESULT avi_decompressor_source_query_interface(struct strmbase_pin *ifac
 
     if (IsEqualGUID(iid, &IID_IQualityControl))
         *out = &filter->source_IQualityControl_iface;
+    else if (IsEqualGUID(iid, &IID_IMediaPosition))
+        *out = &filter->passthrough.IMediaPosition_iface;
     else if (IsEqualGUID(iid, &IID_IMediaSeeking))
         *out = &filter->passthrough.IMediaSeeking_iface;
     else
@@ -618,8 +654,8 @@ static HRESULT WINAPI avi_decompressor_source_DecideBufferSize(struct strmbase_s
     if (!ppropInputRequest->cbAlign)
         ppropInputRequest->cbAlign = 1;
 
-    if (ppropInputRequest->cbBuffer < filter->output_format->biSizeImage)
-        ppropInputRequest->cbBuffer = filter->output_format->biSizeImage;
+    if (iface->pin.mt.bFixedSizeSamples && ppropInputRequest->cbBuffer < iface->pin.mt.lSampleSize)
+        ppropInputRequest->cbBuffer = iface->pin.mt.lSampleSize;
 
     if (!ppropInputRequest->cBuffers)
         ppropInputRequest->cBuffers = 1;
@@ -757,7 +793,11 @@ static HRESULT avi_decompressor_init_stream(struct strmbase_filter *iface)
         return E_FAIL;
 
     if (FAILED(hr = IMemAllocator_Commit(filter->source.pAllocator)))
+    {
         ERR("Failed to commit allocator, hr %#lx.\n", hr);
+        end_decompress(filter);
+        return hr;
+    }
 
     return S_OK;
 }
@@ -767,7 +807,7 @@ static HRESULT avi_decompressor_cleanup_stream(struct strmbase_filter *iface)
     struct avi_decompressor *filter = impl_from_strmbase_filter(iface);
     LRESULT res;
 
-    if (!filter->source.pin.peer)
+    if (!filter->source.pin.peer || filter->filter.state == State_Stopped)
         return S_OK;
 
     IMemAllocator_Decommit(filter->source.pAllocator);

@@ -5,6 +5,7 @@ list(APPEND SOURCE
     CopySid.c
     CreateService.c
     DuplicateTokenEx.c
+    EnableTraceEx.c
     EnumerateTraceGuidsEx.c
     eventlog.c
     Hash.c
@@ -30,8 +31,10 @@ list(APPEND SOURCE
     RtlEncryptMemory.c
     SaferIdentifyLevel.c
     ServiceArgs.c
+    ServiceCrash.c
     ServiceEnv.c
     ServiceNetwork.c
+    TriggerInfo.c
     TokenBnoIsolation.c
     TraceGuids.c
     svchlp.c)

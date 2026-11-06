@@ -3620,6 +3620,12 @@ LX_SYSCALL(LxSysMmap)
     {
         Result = -LX_EPERM;
     }
+    else if ((File != NULL) && LxDrmIsFile(File))
+    {
+        Result = LxDrmMmap(Call->Process, File, Call->Args[0], Call->Args[1], Prot, Flags, Call->Args[5]);
+        LxFileDereference(File);
+        return Result;
+    }
     else if ((File != NULL) &&
              (((File->Handle == NULL) && (File->Data == NULL) && (LxTmpfsFileInode(File) == NULL)) || File->Directory ||
               File->NtPipe))

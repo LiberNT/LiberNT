@@ -347,6 +347,9 @@ static HRESULT vmr_query_accept(struct strmbase_renderer *iface, const AM_MEDIA_
             && !IsEqualGUID(&mt->formattype, &FORMAT_VideoInfo2))
         return S_FALSE;
 
+    if (IsEqualGUID(&mt->subtype, &MEDIASUBTYPE_RGB8))
+        return S_FALSE;
+
     return S_OK;
 }
 
@@ -557,9 +560,9 @@ static HRESULT vmr_query_interface(struct strmbase_renderer *iface, REFIID iid, 
 {
     struct quartz_vmr *filter = impl_from_IBaseFilter(&iface->filter.IBaseFilter_iface);
 
-    if (IsEqualGUID(iid, &IID_IVideoWindow))
+    if (IsEqualGUID(iid, &IID_IVideoWindow) && filter->mode != VMR9Mode_Windowless && filter->mode != VMR9Mode_Renderless)
         *out = &filter->window.IVideoWindow_iface;
-    else if (IsEqualGUID(iid, &IID_IBasicVideo))
+    else if (IsEqualGUID(iid, &IID_IBasicVideo) && filter->mode != VMR9Mode_Windowless && filter->mode != VMR9Mode_Renderless)
         *out = &filter->window.IBasicVideo_iface;
     else if (IsEqualGUID(iid, &IID_IAMCertifiedOutputProtection))
         *out = &filter->IAMCertifiedOutputProtection_iface;
@@ -733,8 +736,8 @@ static const IVideoWindowVtbl IVideoWindow_VTable =
     BaseControlWindowImpl_NotifyOwnerMessage,
     BaseControlWindowImpl_SetWindowPosition,
     BaseControlWindowImpl_GetWindowPosition,
-    BaseControlWindowImpl_GetMinIdealImageSize,
-    BaseControlWindowImpl_GetMaxIdealImageSize,
+    vmr_window_GetMinIdealImageSize,
+    vmr_window_GetMaxIdealImageSize,
     BaseControlWindowImpl_GetRestorePosition,
     BaseControlWindowImpl_HideCursor,
     BaseControlWindowImpl_IsCursorHidden

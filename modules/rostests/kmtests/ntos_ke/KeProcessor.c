@@ -18,18 +18,18 @@ CheckStallDuration(
     _In_ ULONG Iterations)
 {
     ULONG i;
-    LARGE_INTEGER TimeStart, TimeFinish;
+    ULONGLONG TimeStart, TimeFinish;
     LONGLONG ExpectedMs, ElapsedMs;
 
-    KeQuerySystemTime(&TimeStart);
+    TimeStart = KeQueryInterruptTime();
     for (i = 0; i < Iterations; i++)
     {
         KeStallExecutionProcessor(MicroSeconds);
     }
-    KeQuerySystemTime(&TimeFinish);
+    TimeFinish = KeQueryInterruptTime();
 
     ExpectedMs = ((LONGLONG)MicroSeconds * Iterations) / 1000;
-    ElapsedMs = (TimeFinish.QuadPart - TimeStart.QuadPart) / 10000;
+    ElapsedMs = (LONGLONG)(TimeFinish - TimeStart) / 10000;
     ok(ElapsedMs >= ExpectedMs - 50,
        "%s returned too early: %I64d ms, expected at least %I64d ms\n",
        Description, ElapsedMs, ExpectedMs - 50);

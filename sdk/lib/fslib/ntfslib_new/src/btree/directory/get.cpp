@@ -38,6 +38,12 @@ AddKeyToBothDirInfo(_In_     PBTreeKey Key,
     Info.EaSize = (FileNameData->Flags & FILE_PERM_REPARSE_PT)
         ? FileNameData->Extended.ReparseTag
         : FileNameData->Extended.EAInfo.PackedEASize;
+    if ((FileNameData->Flags & FILE_PERM_REPARSE_PT) &&
+        FileNameData->Extended.ReparseTag == NTFS_IO_REPARSE_TAG_WOF)
+    {
+        Info.FileAttributes &= ~NTFS_WOF_HIDDEN_ATTRIBUTES;
+        Info.EaSize = 0;
+    }
     Info.FileId.QuadPart = FileRef(Key);
 
     if (FileNameData->Flags & FN_DIRECTORY)
@@ -767,6 +773,8 @@ Directory::GetFileBothDirInfoDirect(
     ULONG TotalBufferLength = *BufferLength;
     BOOLEAN ExactName = FileNameFilter && !NameContainsWildCards(FileNameFilter);
     BOOLEAN ExactLookedUp = FALSE;
+    WCHAR ExactBuffer[NTFS_MAX_FILE_NAME_LENGTH];
+    UNICODE_STRING ExactTarget = {};
     NTSTATUS Status;
 
     if (RestartScan)
@@ -803,6 +811,14 @@ Directory::GetFileBothDirInfoDirect(
         return STATUS_NO_MORE_FILES;
     }
 
+    if (ExactName && CaseSensitive && FileNameFilter->Length <= sizeof(ExactBuffer))
+    {
+        RtlCopyMemory(ExactBuffer, FileNameFilter->Buffer, FileNameFilter->Length);
+        ExactTarget.Buffer = ExactBuffer;
+        ExactTarget.Length = FileNameFilter->Length;
+        ExactTarget.MaximumLength = FileNameFilter->Length;
+    }
+
     if (FileNameFilter)
     {
         Status = DiskVolume->UpcaseWideString(
@@ -828,7 +844,7 @@ Directory::GetFileBothDirInfoDirect(
         {
             Status = ExactLookedUp
                 ? STATUS_NO_MORE_FILES
-                : FindDirectExactEntry(FileNameFilter, &IndexEntry);
+                : FindDirectExactEntry(ExactTarget.Buffer != NULL ? &ExactTarget : FileNameFilter, &IndexEntry);
             ExactLookedUp = TRUE;
         }
         else
@@ -954,7 +970,14 @@ Directory::GetNextEntry(_In_ BOOLEAN RestartScan,
     Entry->EndOfFile = FileNameData->DataSize;
     Entry->AllocationSize = FileNameData->AllocatedSize;
     Entry->FileAttributes = FileNameData->Flags;
-    if (FileNameData->Flags & FILE_PERM_REPARSE_PT)
+    if ((FileNameData->Flags & FILE_PERM_REPARSE_PT) &&
+        FileNameData->Extended.ReparseTag == NTFS_IO_REPARSE_TAG_WOF)
+    {
+        Entry->FileAttributes &= ~NTFS_WOF_HIDDEN_ATTRIBUTES;
+        Entry->EaSize = 0;
+        Entry->ReparseTag = 0;
+    }
+    else if (FileNameData->Flags & FILE_PERM_REPARSE_PT)
     {
         Entry->EaSize = 0;
         Entry->ReparseTag =

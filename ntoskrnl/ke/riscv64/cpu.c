@@ -29,8 +29,12 @@ ULONG
 NTAPI
 KeGetRecommendedSharedDataAlignment(VOID)
 {
+    ULONG Line = KiRiscvQueryLargestCacheLine();
+
+    if (!Line)
+        Line = KiRiscvQueryCacheBlockSize();
     /* Page alignment also separates data when firmware omits cache geometry. */
-    return PAGE_SIZE;
+    return Line ? Line : PAGE_SIZE;
 }
 
 VOID

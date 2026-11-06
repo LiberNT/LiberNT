@@ -365,7 +365,7 @@ typedef struct _DXGKVMM_VIRTUAL_DMA_BACKING
         BOOLEAN Write;
         BOOLEAN Pinned;
         BOOLEAN Borrowed;
-    } DataMappings[2];
+    } DataMappings[8];
 } DXGKVMM_VIRTUAL_DMA_BACKING, *PDXGKVMM_VIRTUAL_DMA_BACKING;
 
 typedef struct _DXGKVMM_ALLOCATION_SNAPSHOT_ENTRY
@@ -666,10 +666,26 @@ VidMmAllocationSizeForSegment(_In_ CONST PDXGKVMM_ALLOCATION Allocation, _In_ CO
 
 typedef enum _VIDMM_BUDGET_GROUP
 {
-    VidMmBudgetGroupNone = 0,
-    VidMmBudgetGroupLocal,
-    VidMmBudgetGroupNonLocal
+    VidMmBudgetGroupNone = DxgkResidencyBudgetGroupNone,
+    VidMmBudgetGroupLocal = DxgkResidencyBudgetGroupLocal,
+    VidMmBudgetGroupNonLocal = DxgkResidencyBudgetGroupNonLocal
 } VIDMM_BUDGET_GROUP;
+
+FORCEINLINE
+BOOLEAN
+VidMmAdapterDeclaresBudgetGroups(_In_ PDXGKRNL_ADAPTER Adapter)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Adapter->SegmentCount; ++Index)
+    {
+        CONST DXGKRNL_SEGMENT *Segment = &ADAPTER_SEGMENTS(Adapter)[Index];
+
+        if (Segment->Flags.LocalBudgetGroup || Segment->Flags.NonLocalBudgetGroup)
+            return TRUE;
+    }
+    return FALSE;
+}
 
 FORCEINLINE
 VIDMM_BUDGET_GROUP
@@ -679,11 +695,11 @@ VidMmSegmentBudgetGroup(_In_ PDXGKRNL_ADAPTER Adapter, _In_ CONST PDXGKRNL_SEGME
             Adapter->MiniportContext->InitData.s.Version,
             DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
     {
-        if (Segment->Flags.LocalBudgetGroup)
-            return VidMmBudgetGroupLocal;
-        if (Segment->Flags.NonLocalBudgetGroup)
-            return VidMmBudgetGroupNonLocal;
-        return VidMmBudgetGroupNone;
+        return (VIDMM_BUDGET_GROUP)DxgkResidencyCoreSegmentBudgetGroup(
+            Segment->Flags.LocalBudgetGroup,
+            Segment->Flags.NonLocalBudgetGroup,
+            VidMmSegmentIsAperture(Segment),
+            VidMmAdapterDeclaresBudgetGroups(Adapter));
     }
     return VidMmSegmentIsAperture(Segment) ? VidMmBudgetGroupNonLocal : VidMmBudgetGroupLocal;
 }
@@ -1693,17 +1709,22 @@ DxgkVidMmMapVirtualPresentAllocation(
         (VOID)DxgkpVidMmFreeVirtualDmaBufferMapping(Backing, Index);
         break;
     }
-    /* Make room by retiring an idle mapping of some other binding. */
+    /* Make room by retiring an idle mapping of another binding, borrowed first: only an owned one costs a page-table update. */
     if (Backing->DataMappingCount >= RTL_NUMBER_OF(Backing->DataMappings))
     {
+        ULONG Victim = MAXULONG;
+
         for (Index = 0; Index < Backing->DataMappingCount; Index++)
         {
-            if (!Backing->DataMappings[Index].Pinned)
-            {
-                (VOID)DxgkpVidMmFreeVirtualDmaBufferMapping(Backing, Index);
+            if (Backing->DataMappings[Index].Pinned)
+                continue;
+            if (Victim == MAXULONG || Backing->DataMappings[Index].Borrowed)
+                Victim = Index;
+            if (Backing->DataMappings[Index].Borrowed)
                 break;
-            }
         }
+        if (Victim != MAXULONG)
+            (VOID)DxgkpVidMmFreeVirtualDmaBufferMapping(Backing, Victim);
         if (Backing->DataMappingCount >= RTL_NUMBER_OF(Backing->DataMappings))
             return STATUS_INVALID_PARAMETER;
     }
@@ -8491,6 +8512,7 @@ C_ASSERT(sizeof(D3DKMT_CREATEALLOCATIONFLAGS) == sizeof(UINT));
 #define DXGKP_CA_FLAG_STANDARD_ALLOCATION   0x00010000U
 #define DXGKP_CA_FLAG_EXISTING_SECTION      0x00020000U
 #define DXGKP_CA_FLAG_ALLOW_NOT_ZEROED       0x00040000U
+#define DXGKP_CA_FLAG_NO_KMD_ACCESS          0x00100000U
 #define DXGKP_CA_KNOWN_FLAGS_WDDM_1_0       0x0000003FU
 #define DXGKP_CA_KNOWN_FLAGS_WDDM_1_2       0x000007FFU
 #define DXGKP_CA_KNOWN_FLAGS_WDDM_1_3       0x0000FFFFU
@@ -8570,6 +8592,9 @@ DxgkpValidateCreateAllocationFlags(
                  DXGKP_CA_FLAG_ALLOW_NOT_ZEROED;
     *StandardAllocation = (RawFlags & DXGKP_CA_FLAG_STANDARD_ALLOCATION) != 0;
     if ((RawFlags & ~KnownFlags) != 0 || (RawFlags & DXGKP_CA_INVALID_INPUT_FLAGS_MASK) != 0)
+        return STATUS_INVALID_PARAMETER;
+    /* TODO: NoKmdAccess allocations once a test-signing mode exists; without it Windows 11 refuses them */
+    if ((RawFlags & DXGKP_CA_FLAG_NO_KMD_ACCESS) != 0)
         return STATUS_INVALID_PARAMETER;
     if ((RawFlags & DXGKP_CA_FLAG_CREATE_SHARED) != 0 && (RawFlags & DXGKP_CA_FLAG_CREATE_RESOURCE) == 0)
         return STATUS_INVALID_PARAMETER;
@@ -14773,11 +14798,10 @@ DxgkpVidMmSubmitTransferPagingPacket(
  *
  * A memory-segment placement that receives no content (a fresh allocation)
  * is cleared, as Windows VidMm fills it with zeros, so it never shows what
- * an earlier owner of that memory left.  A CPU-visible segment is cleared
- * directly; otherwise the miniport is asked for DXGK_OPERATION_VIRTUAL_FILL
- * through the paging process (GpuMmu) or DXGK_OPERATION_FILL.  Where no
- * fill can be issued (adapter teardown, KMD-exclusive callers) the
- * placement is left as it is and that is logged.
+ * an earlier owner of that memory left.  The miniport is asked for
+ * DXGK_OPERATION_VIRTUAL_FILL through the paging process (GpuMmu) or
+ * DXGK_OPERATION_FILL.  Where no fill can be issued (adapter teardown,
+ * KMD-exclusive callers) the placement is left as it is and that is logged.
  */
 static NTSTATUS
 DxgkpVidMmZeroFillPlacement(
@@ -14795,14 +14819,8 @@ DxgkpVidMmZeroFillPlacement(
         return STATUS_SUCCESS;
     }
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
-    if (VidMmSegmentIsAperture(Segment) || Segment->Flags.PitchAlignment)
+    if (DxgkPagingCorePlacementClearOperation(Segment->Flags) == DxgkPagingCoreOpNone)
         return STATUS_SUCCESS;
-    if (VidMmSegmentIsCpuVisible(Segment) && NT_SUCCESS(VidMmMapSegmentCpu(Segment)) &&
-        Allocation->SegmentOffset + Allocation->Size <= Segment->Size)
-    {
-        RtlZeroMemory((PUCHAR)Segment->CpuBase + Allocation->SegmentOffset, Allocation->Size);
-        return STATUS_SUCCESS;
-    }
     if (Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread() ||
         InterlockedCompareExchange(&Adapter->SubmitDmaStopping, 0, 0) != 0)
     {
@@ -14832,7 +14850,7 @@ DxgkpVidMmZeroFillPlacement(
     if (Status == STATUS_NOT_SUPPORTED && DxgkPagingOperationSupported(Adapter, DxgkPagingOpFill))
     {
         Op.Type = DxgkPagingOpFill;
-        Op.hMiniportDevice = Allocation->MiniportDeviceHandle;
+        Op.hMiniportDevice = Adapter->PagingSystemDevice != NULL ? Adapter->PagingSystemDevice->hMiniportDevice : NULL;
         Op.DestinationGpuVirtualAddress = 0;
         Op.DestinationSegmentId = Allocation->SegmentId;
         Op.DestinationSegmentAddress.QuadPart = (LONGLONG)Allocation->SegmentOffset;
@@ -15023,6 +15041,12 @@ DxgkpVidMmRecoverAllocationOwned(
     CleanupStatus = DxgkpVidMmUnmapUserMappings(Allocation, TRUE);
     if (NT_SUCCESS(Status) && !NT_SUCCESS(CleanupStatus))
         Status = CleanupStatus;
+    /* CDD keeps painting through its permanent pointer into this placement, so the placement must stay owned. */
+    if (InterlockedCompareExchangePointer((PVOID volatile *)&Allocation->RedirectionSurfaceHandle, NULL, NULL) != NULL &&
+        Allocation->CpuAddress != NULL && Allocation->CpuAddress != Allocation->SystemMemory)
+    {
+        return Status;
+    }
     if (Allocation->CpuAddress != NULL && Allocation->CpuAddress != Allocation->SystemMemory)
         DxgkVidMmUnmapAllocationCpu(Allocation);
     Allocation->ContentLost = TRUE;

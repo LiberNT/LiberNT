@@ -20,6 +20,8 @@ STRINGTABLE
 الحالي.\n"
     WCMD_CHDIR, "CHDIR <directory> يغيّر الدليل الافتراضي الحالي.\n"
     WCMD_CLS, "CLS يمسح شاشة وحدة التحكم.\n"
+    WCMD_BREAK, "BREAK يفعّل أو يعطّل التحقق الموسّع من CTRL+C في DOS. ليس له أي تأثير في\n\
+Windows ويبقى من أجل ملفات الدفعات الخاصة بـ DOS.\n"
     WCMD_COPY, "COPY <filename> يقوم بنسخ الملفات.\n"
     WCMD_DATE, "DATE يقوم بإظهار أو تعديل التاريخ.\n"
     WCMD_DEL, "DEL <filename> يقوم بحذف ملف أو مجموعة ملفات.\n"

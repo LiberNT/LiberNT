@@ -685,6 +685,8 @@ VidSchpDrainRetirements(_In_ PDXGKRNL_ADAPTER Adapter)
                 continue;
             if (Packet->UnboundFence)
                 Packet->SubmissionFenceId = Records[Index].SubmissionFenceId;
+            if ((Records[Index].Flags & DXGMMS2_SCHEDULER_RETIRE_FENCE_RELEASED) != 0)
+                Packet->FenceIdentityReserved = FALSE;
             if (Packet->PresentationRetireTrace.Epoch && Packet->Device != NULL &&
                 Packet->Device->ProcessRecord != NULL)
                 DxgPresentTracePacket(HandleToUlong(PsGetProcessId(Packet->Device->ProcessRecord->Process)),
@@ -927,7 +929,7 @@ BOOLEAN VidSchIsContextOrderPacketResubmittable(_In_ PVIDSCH_DMA_PACKET Packet)
         return FALSE;
     Engine = Packet->OwnerEngine;
     KeAcquireSpinLock(&Engine->QueueLock, &OldIrql);
-    Resubmittable = !Packet->Kicked && VidSchpReadState(Engine) == VidSchEngineIdle && Engine->Scheduler != NULL && (VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerRunning || VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerSuspending);
+    Resubmittable = !Packet->Kicked && VidSchPolicyResubmissionAllowed(VidSchpReadState(Engine), VidSchEngineIdle, VidSchEngineRunning) && Engine->Scheduler != NULL && (VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerRunning || VidSchpReadSchedulerState(Engine->Scheduler) == VidSchSchedulerSuspending);
     KeReleaseSpinLock(&Engine->QueueLock, OldIrql);
     return Resubmittable;
 }
@@ -1534,6 +1536,7 @@ VidSchQuerySystemNodeStatistics(
     return STATUS_SUCCESS;
 }
 
+/* TODO: DxgkDdiCancelCommand for undispatched packets of CancelCommandAware drivers; it needs PASSIVE_LEVEL, which this path does not guarantee */
 static VOID VidSchpFinalizeDequeuedPacket(_Inout_ PVIDSCH_DMA_PACKET Packet, _In_ NTSTATUS CompletionStatus)
 {
     VidSchAccountNodeRetire(Packet);
@@ -1664,14 +1667,17 @@ VidSchpCancelOwnerPacketsActive(
     _In_ NTSTATUS CompletionStatus)
 {
     PDXGMMS2_SCHEDULER_INTERFACE_V1 Sched;
+    PVIDSCH_CONTEXT Ctx = (PVIDSCH_CONTEXT)Adapter->VidSchContext;
 
     Sched = VidSchpScheduler(Adapter);
-    if (Sched == NULL)
+    if (Sched == NULL || Ctx == NULL)
         return;
+    ExAcquireFastMutex(&Ctx->LifecycleMutex);
     (VOID)Sched->CancelOwnerPackets(
         Sched->SchedulerHandle,
         (ULONGLONG)(ULONG_PTR)Owner,
         CompletionStatus);
+    ExReleaseFastMutex(&Ctx->LifecycleMutex);
     (VOID)VidSchpDrainRetirements(Adapter);
 }
 
@@ -2341,6 +2347,7 @@ VidSchpProcessCompletion(
 
     /* Signal completion event so VidSchWaitForIdle can wake up. */
     KeSetEvent(&Engine->CompletionEvent, IO_NO_INCREMENT, FALSE);
+    KeSetEvent(&Engine->Adapter->FenceProgressEvent, IO_NO_INCREMENT, FALSE);
 
 }
 
@@ -3084,7 +3091,9 @@ VOID VidSchCancelContextPackets(_In_ PDXGKRNL_ADAPTER Adapter, _In_ PDXGKRNL_CON
     Sched = VidSchpScheduler(Adapter);
     if (Sched != NULL)
     {
+        ExAcquireFastMutex(&Ctx->LifecycleMutex);
         (VOID)Sched->CancelOwnerPackets(Sched->SchedulerHandle, (ULONGLONG)(ULONG_PTR)Context, CompletionStatus);
+        ExReleaseFastMutex(&Ctx->LifecycleMutex);
         VidSchpDrainRetirements(Adapter);
     }
     for (i = 0; i < Ctx->EngineCount; ++i)
@@ -3319,6 +3328,35 @@ VidSchSubmitCommand(
     return STATUS_SUCCESS;
 }
 
+/* Windows 11 lets a driver refuse the private data of a submission before it is queued. */
+static NTSTATUS
+VidSchpValidateSubmitCommand(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_CONTEXT Context,
+    _In_ D3DGPU_VIRTUAL_ADDRESS DmaBufferGpuVa,
+    _In_ ULONG DmaBufferSize,
+    _In_ PVIDSCH_DMA_PACKET Packet)
+{
+    DXGKARG_VALIDATESUBMITCOMMAND Args;
+    NTSTATUS Status;
+
+    if (Packet->DriverPrivateDataSize == 0 || DXGK_CB_FULL(Adapter, DxgkDdiValidateSubmitCommand) == NULL)
+        return STATUS_SUCCESS;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+    RtlZeroMemory(&Args, sizeof(Args));
+    Args.Commands = DmaBufferGpuVa;
+    Args.CommandLength = DmaBufferSize;
+    Args.ContextCount = 1;
+    Args.Context[0] = Context->hMiniportContext;
+    Args.pPrivateDriverData = Packet->DriverPrivateData;
+    Args.PrivateDriverDataSize = Packet->DriverPrivateDataSize;
+    Args.UmdPrivateDataSize = Packet->UmdPrivateDataSize;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiValidateSubmitCommand)(Adapter->MiniportDeviceContext, &Args);
+    DxgkReleaseKmdCall(Adapter);
+    return Status;
+}
+
 /*
  * Queues a WDDM 2.0 GPU-virtual command. Context arrives with one transient
  * reference; ownership transfers to the packet only on STATUS_SUCCESS.
@@ -3440,6 +3478,13 @@ VidSchSubmitCommandVirtual(
         Packet->DriverPrivateDataSize = KmdPrivateDataSize;
     }
     Packet->UmdPrivateDataSize = DriverPrivateDataSize;
+    Status = VidSchpValidateSubmitCommand(Adapter, Context, DmaBufferGpuVa, DmaBufferSize, Packet);
+    if (!NT_SUCCESS(Status))
+    {
+        VidSchpDereferencePacket(Packet);
+        VidSchpReleaseCall(Adapter);
+        return Status;
+    }
 
     Packet->DmaBufferGpuVa = DmaBufferGpuVa;
     Packet->VirtualDmaBufferSize = DmaBufferSize;
@@ -3560,6 +3605,7 @@ VidSchSubmitCommandVirtual(
     Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
     if (Packet->SubmissionFenceId == 0 || !DxgkReserveSubmissionFenceIdentity(Adapter, Context->NodeOrdinal, Packet->SubmissionFenceId, &Packet->FenceIdentityEpoch))
     {
+        DxgkReturnSubmissionFenceId(Adapter, Packet->SubmissionFenceId);
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
         DxgkContextOrderAbortPacket(Packet, STATUS_DEVICE_BUSY);
@@ -3578,6 +3624,9 @@ VidSchSubmitCommandVirtual(
     {
         /* The caller still owns its context reference on failed admission. */
         Packet->HoldsContextReference = FALSE;
+        DxgkReleaseSubmittedFenceIdentity(Adapter, Context->NodeOrdinal, Packet->SubmissionFenceId, Packet->FenceIdentityEpoch);
+        Packet->FenceIdentityReserved = FALSE;
+        DxgkReturnSubmissionFenceId(Adapter, Packet->SubmissionFenceId);
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
         DxgkContextOrderAbortPacket(Packet, Status);
@@ -3921,7 +3970,7 @@ VidSchSubmitCommandTrackedMeasured(
         }
         Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_CONTEXT_ADMIT);
         Status = DxgkContextOrderAdmitPacket(OrderedContext, Packet);
-        DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
+        DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status) || Status == STATUS_RETRY, 0);
         if (!NT_SUCCESS(Status))
         {
             ExReleaseRundownProtection(&OrderedContext->StreamAdmissionRundown);
@@ -3949,6 +3998,7 @@ VidSchSubmitCommandTrackedMeasured(
     {
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        DxgkReturnAdoptedTrackedDmaBufferDeviceWork(Reservation);
         if (OrderedPacket)
             DxgkContextOrderAbortPacket(Packet, Status);
         if (OrderedContext != NULL)
@@ -4000,7 +4050,7 @@ VidSchSubmitCommandTracked(
 {
     DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_TRACK);
     NTSTATUS Result = VidSchSubmitCommandTrackedMeasured(Adapter, NodeOrdinal, EngineOrdinal, DmaBuffer, DriverPrivateData, DriverPrivateDataSize, AllocationList, AllocationListCount, PatchLocationList, PatchLocationListCount, MiniportDeviceHandle, MiniportContextHandle, Priority, TrackArgs, SubmitFlags, VidPnSourceId, OutFenceId);
-    DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Result), 0);
+    DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Result) || Result == STATUS_RETRY, 0);
     return Result;
 }
 
@@ -4839,6 +4889,49 @@ VidSchKickEngines(
     VidSchpReleaseCall(Adapter);
 }
 
+#define VIDSCH_RESET_DEPENDENT_PREEMPT_WAIT_MS 100
+
+/* Windows 11 stops the engines the driver ties to the one being reset, and
+ * resets the adapter instead when the driver cannot name them. */
+static NTSTATUS
+VidSchpPrepareToResetEngine(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PVIDSCH_CONTEXT Ctx,
+    _In_ ULONG NodeOrdinal)
+{
+    DXGKARG_QUERYDEPENDENTENGINEGROUP Query;
+    ULONGLONG Nodes;
+    ULONG Node;
+    NTSTATUS Status;
+
+    if (DXGK_CB_FULL(Adapter, DxgkDdiQueryDependentEngineGroup) == NULL)
+        return STATUS_SUCCESS;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+    RtlZeroMemory(&Query, sizeof(Query));
+    Query.NodeOrdinal = NodeOrdinal;
+    DxgkEnterSchedulerClass(Adapter);
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiQueryDependentEngineGroup)(Adapter->MiniportDeviceContext, &Query);
+    DxgkLeaveSchedulerClass(Adapter);
+    DxgkReleaseKmdCall(Adapter);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Nodes = VidSchPolicyDependentNodes(Query.DependentNodeOrdinalMask, NodeOrdinal, Ctx->EngineCount);
+    for (Node = 0; Nodes != 0; ++Node, Nodes >>= 1)
+    {
+        ULONG PreemptionFenceId = 0;
+
+        if ((Nodes & 1) != 0 &&
+            NT_SUCCESS(VidSchPreemptEngine(Adapter, Node, 0, &PreemptionFenceId)) &&
+            PreemptionFenceId != 0)
+        {
+            (VOID)VidSchWaitForPreemption(Adapter, Node, 0, PreemptionFenceId, VIDSCH_RESET_DEPENDENT_PREEMPT_WAIT_MS);
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 VidSchResetEngine(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4888,6 +4981,14 @@ VidSchResetEngine(
     {
         VidSchpReleaseCall(Adapter);
         return STATUS_DEVICE_NOT_READY;
+    }
+    Status = VidSchpPrepareToResetEngine(Adapter, Ctx, EngineOrdinal);
+    if (!NT_SUCCESS(Status))
+    {
+        if (EndTdrDdiDeadline)
+            DxgkpDisarmTdrDdiDeadline(Adapter);
+        VidSchpReleaseCall(Adapter);
+        return Status;
     }
     ExAcquireFastMutex(&Ctx->LifecycleMutex);
     if (VidSchpReadSchedulerState(Ctx) != VidSchSchedulerRunning && VidSchpReadSchedulerState(Ctx) != VidSchSchedulerSuspended)

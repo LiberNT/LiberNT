@@ -29,11 +29,36 @@ if(NOT FELIX86_GIT_EXECUTABLE)
         "Use -DENABLE_FELIX86=OFF to disable it explicitly.")
 endif()
 execute_process(
+    COMMAND "${FELIX86_GIT_EXECUTABLE}" rev-parse --absolute-git-dir
+    WORKING_DIRECTORY "${FELIX86_SOURCE_DIR}"
+    OUTPUT_VARIABLE _felix86_git_dir
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+set(_felix86_applied_patch "${_felix86_git_dir}/libernt-applied.patch")
+execute_process(
     COMMAND "${FELIX86_GIT_EXECUTABLE}" apply --reverse --check "${_felix86_patch}"
     WORKING_DIRECTORY "${FELIX86_SOURCE_DIR}"
     RESULT_VARIABLE _felix86_patch_applied
     OUTPUT_QUIET
     ERROR_QUIET)
+if(NOT _felix86_patch_applied EQUAL 0 AND _felix86_git_dir AND EXISTS "${_felix86_applied_patch}")
+    execute_process(
+        COMMAND "${FELIX86_GIT_EXECUTABLE}" apply --reverse --check "${_felix86_applied_patch}"
+        WORKING_DIRECTORY "${FELIX86_SOURCE_DIR}"
+        RESULT_VARIABLE _felix86_old_patch_applied
+        OUTPUT_QUIET
+        ERROR_QUIET)
+    if(_felix86_old_patch_applied EQUAL 0)
+        execute_process(
+            COMMAND "${FELIX86_GIT_EXECUTABLE}" apply --reverse "${_felix86_applied_patch}"
+            WORKING_DIRECTORY "${FELIX86_SOURCE_DIR}"
+            RESULT_VARIABLE _felix86_old_patch_result
+            ERROR_VARIABLE _felix86_old_patch_error)
+        if(NOT _felix86_old_patch_result EQUAL 0)
+            message(FATAL_ERROR "Failed to remove the previous felix86 patch: ${_felix86_old_patch_error}")
+        endif()
+    endif()
+endif()
 if(NOT _felix86_patch_applied EQUAL 0)
     execute_process(
         COMMAND "${FELIX86_GIT_EXECUTABLE}" apply "${_felix86_patch}"
@@ -44,6 +69,9 @@ if(NOT _felix86_patch_applied EQUAL 0)
     if(NOT _felix86_patch_result EQUAL 0)
         message(FATAL_ERROR "Failed to apply ${_felix86_patch}: ${_felix86_patch_output}${_felix86_patch_error}")
     endif()
+endif()
+if(_felix86_git_dir)
+    configure_file("${_felix86_patch}" "${_felix86_applied_patch}" COPYONLY)
 endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_felix86_patch}")
 

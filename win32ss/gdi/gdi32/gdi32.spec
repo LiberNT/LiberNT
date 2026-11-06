@@ -705,7 +705,7 @@
 @ stdcall -version=0xA00+ D3DKMTOpenKeyedMutexFromNtHandle(ptr) NtGdiDdDDIOpenKeyedMutexFromNtHandle
 @ stdcall -version=0xA00+ D3DKMTOpenNativeFenceFromNtHandle(ptr) NtGdiDdDDIOpenNativeFenceFromNtHandle
 @ stdcall -version=0xA00+ D3DKMTOpenProtectedSessionFromNtHandle(ptr) NtGdiDdDDIOpenProtectedSessionFromNtHandle
-@ stdcall -version=0x600+ D3DKMTOpenResource(ptr) NtGdiDdDDIOpenResource
+@ stdcall -version=0x600+ D3DKMTOpenResource(ptr)
 @ stdcall -version=0xA00+ D3DKMTOutputDuplPresentToHwQueue(ptr) NtGdiDdDDIOutputDuplPresentToHwQueue
 @ stdcall -version=0x600+ D3DKMTPollDisplayChildren(ptr) NtGdiDdDDIPollDisplayChildren
 @ stdcall -version=0x600+ D3DKMTPresent(ptr) NtGdiDdDDIPresent
@@ -797,8 +797,6 @@
 @ stdcall -version=0x600+ D3DKMTGetContextInProcessSchedulingPriority(ptr) NtGdiDdDDIGetContextInProcessSchedulingPriority
 @ stdcall -version=0x600+ D3DKMTRegisterTrimNotification(ptr) NtGdiDdDDIRegisterTrimNotification
 @ stdcall -version=0x600+ D3DKMTUnregisterTrimNotification(ptr) NtGdiDdDDIUnregisterTrimNotification
-@ stdcall -version=0x600+ D3DKMTRegisterBudgetChangeNotification(ptr) NtGdiDdDDIRegisterBudgetChangeNotification
-@ stdcall -version=0x600+ D3DKMTUnregisterBudgetChangeNotification(ptr) NtGdiDdDDIUnregisterBudgetChangeNotification
 @ stdcall -version=0xA00+ D3DKMTInvalidateCache(ptr) NtGdiDdDDIInvalidateCache
 @ stdcall -version=0x600+ D3DKMTGetSharedResourceAdapterLuid(ptr) NtGdiDdDDIGetSharedResourceAdapterLuid
 @ stdcall -version=0x600+ D3DKMTOpenResourceFromNtHandle(ptr) NtGdiDdDDIOpenResourceFromNtHandle

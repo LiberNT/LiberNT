@@ -1096,6 +1096,24 @@ static void test_samplegrabber(void)
     refcount = IUnknown_Release(&my_sample.sample);
     ok(!refcount, "Got unexpected refcount %ld.\n", refcount);
 
+    hr = IBaseFilter_Pause(bf);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    samplecb_called = FALSE;
+    hr = IMemInputPin_Receive(inpin, &my_sample.sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(samplecb_called == TRUE, "SampleCB should have been called\n");
+    if (samplecb_called)
+        IUnknown_Release(&my_sample.sample);
+
+    hr = IBaseFilter_Stop(bf);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    samplecb_called = FALSE;
+    hr = IMemInputPin_Receive(inpin, &my_sample.sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(samplecb_called == TRUE, "SampleCB should have been called\n");
+    if (samplecb_called)
+        IUnknown_Release(&my_sample.sample);
+
     IMemInputPin_Release(inpin);
     IPin_Release(pin);
 

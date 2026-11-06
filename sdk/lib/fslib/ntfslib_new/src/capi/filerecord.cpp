@@ -241,6 +241,13 @@ NtfsFileRecordUpdateAutomaticTimestamps(
         UpdateAutomaticTimestamps(Fields);
 }
 
+BOOLEAN
+NtfsFileRecordIsWofBacked(
+    _In_ PNtfsFileRecord Fr)
+{
+    return Fr && reinterpret_cast<PFileRecord>(Fr)->IsWofBacked();
+}
+
 NTSTATUS
 NtfsFileRecordReadReparsePoint(
     _In_ PNtfsFileRecord Fr,

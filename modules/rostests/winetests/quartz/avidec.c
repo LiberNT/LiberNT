@@ -302,6 +302,93 @@ static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOO
         IUnknown_Release(unk);
 }
 
+static unsigned int qc_sink_calls;
+static IBaseFilter *qc_sink_sender;
+
+static HRESULT WINAPI qc_sink_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    *out = iface;
+    return S_OK;
+}
+
+static ULONG WINAPI qc_sink_AddRef(IQualityControl *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI qc_sink_Release(IQualityControl *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI qc_sink_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    ++qc_sink_calls;
+    qc_sink_sender = sender;
+    return 0xdeadbeef;
+}
+
+static HRESULT WINAPI qc_sink_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static const IQualityControlVtbl qc_sink_vtbl =
+{
+    qc_sink_QueryInterface,
+    qc_sink_AddRef,
+    qc_sink_Release,
+    qc_sink_Notify,
+    qc_sink_SetSink,
+};
+
+static void test_pin_quality_control(IBaseFilter *filter, IPin *pin, HRESULT expect_hr, HRESULT expect_null_hr, BOOL forwards)
+{
+    IQualityControl qc_sink = {&qc_sink_vtbl};
+    Quality q = {Famine, 1000, -10000, 0};
+    IQualityControl *qc;
+    IPin *qc_pin;
+    HRESULT hr;
+
+    hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (FAILED(hr))
+        return;
+
+    hr = IQualityControl_QueryInterface(qc, &IID_IPin, (void **)&qc_pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(qc_pin == pin, "Got pin %p, expected %p.\n", qc_pin, pin);
+    IPin_Release(qc_pin);
+
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == expect_hr, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, NULL, q);
+    ok(hr == expect_null_hr, "Got hr %#lx.\n", hr);
+
+    hr = IQualityControl_SetSink(qc, &qc_sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    qc_sink_calls = 0;
+    qc_sink_sender = NULL;
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == (forwards ? 0xdeadbeef : expect_hr), "Got hr %#lx.\n", hr);
+    ok(qc_sink_calls == !!forwards, "Got %u calls.\n", qc_sink_calls);
+    ok(qc_sink_sender == (forwards ? filter : NULL), "Got sender %p.\n", qc_sink_sender);
+    if (forwards)
+    {
+        qc_sink_sender = NULL;
+        hr = IQualityControl_Notify(qc, NULL, q);
+        ok(hr == 0xdeadbeef, "Got hr %#lx.\n", hr);
+        ok(qc_sink_sender == filter, "Got sender %p.\n", qc_sink_sender);
+    }
+    hr = IQualityControl_SetSink(qc, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == expect_hr, "Got hr %#lx.\n", hr);
+
+    IQualityControl_Release(qc);
+}
+
 static void test_interfaces(void)
 {
     IBaseFilter *filter = create_avi_dec();
@@ -334,6 +421,8 @@ static void test_interfaces(void)
 
     check_interface(pin, &IID_IMediaPosition, FALSE);
     check_interface(pin, &IID_IMediaSeeking, FALSE);
+
+    test_pin_quality_control(filter, pin, S_OK, E_POINTER, FALSE);
 
     IPin_Release(pin);
 
@@ -1761,6 +1850,17 @@ static void test_sample_processing(IMediaControl *control, IMemInputPin *input, 
     hr = IMemInputPin_Receive(input, sample);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     todo_wine ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
+
+    for (i = 0; i < 27; ++i)
+    {
+        hr = IMemInputPin_Receive(input, sample);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    }
+    ok(!sink->got_sample, "Got %u calls to Receive().\n", sink->got_sample);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(sink->got_sample == 1, "Got %u calls to Receive().\n", sink->got_sample);
+    sink->got_sample = 0;
 
     testmode = 7;
     hr = IMediaSample_SetSyncPoint(sample, TRUE);

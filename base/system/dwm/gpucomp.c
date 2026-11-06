@@ -1540,6 +1540,36 @@ DwmGpuComposeClientCopiesRetired(void)
     return DwmD3dIsActive() && DwmD3dClientCopiesRetired();
 }
 
+BOOL
+DwmGpuComposeSupportsPointer(void)
+{
+    return DwmD3dIsActive();
+}
+
+BOOL
+DwmGpuComposeHasPointerImage(void)
+{
+    return DwmD3dHasPointerImage();
+}
+
+BOOL
+DwmGpuComposeSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const ULONG *Invert)
+{
+    return DwmD3dSetPointerImage(Width, Height, Image, Invert);
+}
+
+BOOL
+DwmGpuComposeMirror(HDC Screen)
+{
+    return DwmD3dMirrorCanvas(Screen);
+}
+
+BOOL
+DwmGpuComposePointer(const RECT *Rect)
+{
+    return DwmD3dDrawPointer(Rect);
+}
+
 DWM_GPU_RESULT
 DwmGpuComposeEnd(void)
 {

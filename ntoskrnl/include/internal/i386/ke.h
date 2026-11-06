@@ -209,6 +209,8 @@ KeGetTrapFrameFrameRegister(PKTRAP_FRAME TrapFrame)
 //
 #define KiGetSecondLevelDCacheSize() ((PKIPCR)KeGetPcr())->SecondLevelCacheSize
 
+#define ReadTimeStampCounter() ((ULONG64)__rdtsc())
+
 //
 // Returns the Interrupt State from a Trap Frame.
 // ON = TRUE, OFF = FALSE

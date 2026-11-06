@@ -518,7 +518,7 @@ static VOID UDPInjectWorker(
     }
     else
     {
-        if (AddrFile->Protocol != IPPROTO_UDP || Injection->Length < sizeof(UDP_HEADER))
+        if (AddrFile->Protocol != IPPROTO_UDP || AddrFile->Raw || Injection->Length < sizeof(UDP_HEADER))
         {
             Status = STATUS_INVALID_PARAMETER;
         }
@@ -730,7 +730,7 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
       if (!IsMulticast || IGMPIsMember(AddrFile, MemberIndex, DstAddress->Address.IPv4Address))
           UDPDeliverToAddrFile(AddrFile, Interface, IPPacket, IPv4Header, UDPHeader, DataSize);
       DereferenceObject(AddrFile);
-    } else if (Chosen == NULL || !ChosenSpecific || !AddrIsUnspecified(&AddrFile->Address)) {
+    } else if (Chosen == NULL || (!ChosenSpecific && !AddrIsUnspecified(&AddrFile->Address))) {
       if (Chosen != NULL)
           DereferenceObject(Chosen);
       Chosen = AddrFile;

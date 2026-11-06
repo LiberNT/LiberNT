@@ -9,6 +9,8 @@
 #include <wdmsec.h>
 #include <devguid.h>
 #include <drivers/bthleio.h>
+#include <initguid.h>
+#include <devpkey.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -247,6 +249,8 @@ typedef struct _BTHMINI_LE_PDO
     PBTHMINI_DEVICE Dev;
     BTH_ADDR Address;
     USHORT Service;
+    USHORT FriendlyNameLength;
+    WCHAR FriendlyName[BTH_MAX_NAME_SIZE + 16];
 } BTHMINI_LE_PDO, *PBTHMINI_LE_PDO;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(BTHMINI_LE_PDO, BthGattGetPdo)
@@ -907,6 +911,29 @@ BthGattEvtPdoIoctl(
 
 static
 NTSTATUS
+NTAPI
+BthGattEvtPdoPrepareHardware(
+    _In_ WDFDEVICE Device,
+    _In_ WDFCMRESLIST ResourcesRaw,
+    _In_ WDFCMRESLIST ResourcesTranslated)
+{
+    PBTHMINI_LE_PDO Pdo = BthGattGetPdo(Device);
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(ResourcesRaw);
+    UNREFERENCED_PARAMETER(ResourcesTranslated);
+
+    if (!Pdo->FriendlyNameLength)
+        return STATUS_SUCCESS;
+    Status = IoSetDevicePropertyData(WdfDeviceWdmGetPhysicalDevice(Device), &DEVPKEY_Device_FriendlyName, LOCALE_NEUTRAL, 0,
+                                     DEVPROP_TYPE_STRING, Pdo->FriendlyNameLength + sizeof(WCHAR), Pdo->FriendlyName);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("BTHMINI: friendly name for %012I64x not set: 0x%08lx\n", Pdo->Address, Status);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 BthGattCreatePdo(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ PBTHMINI_REMOTE Remote,
@@ -921,6 +948,7 @@ BthGattCreatePdo(
     DECLARE_UNICODE_STRING_SIZE(Description, BTH_MAX_NAME_SIZE + 16);
     PBTHMINI_GATT Gatt = Remote->Gatt;
     WDF_DEVICE_PNP_CAPABILITIES Capabilities;
+    WDF_PNPPOWER_EVENT_CALLBACKS PnpCallbacks;
     WDF_OBJECT_ATTRIBUTES Attributes;
     WDF_IO_QUEUE_CONFIG QueueConfig;
     PWDFDEVICE_INIT Init;
@@ -1006,6 +1034,9 @@ BthGattCreatePdo(
         return Status;
     }
     WdfPdoInitSetDefaultLocale(Init, 0x409);
+    WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&PnpCallbacks);
+    PnpCallbacks.EvtDevicePrepareHardware = BthGattEvtPdoPrepareHardware;
+    WdfDeviceInitSetPnpPowerEventCallbacks(Init, &PnpCallbacks);
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&Attributes, BTHMINI_LE_PDO);
     Status = WdfDeviceCreate(&Init, &Attributes, &Child);
@@ -1018,6 +1049,11 @@ BthGattCreatePdo(
     Pdo->Dev = Dev;
     Pdo->Address = Remote->Address;
     Pdo->Service = Service ? Service->Info.AttributeHandle : 0;
+    if (!Service && Remote->Name[0] && Description.Length < sizeof(Pdo->FriendlyName))
+    {
+        RtlCopyMemory(Pdo->FriendlyName, Description.Buffer, Description.Length);
+        Pdo->FriendlyNameLength = Description.Length;
+    }
 
     WDF_DEVICE_PNP_CAPABILITIES_INIT(&Capabilities);
     Capabilities.Removable = WdfTrue;

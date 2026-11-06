@@ -26,6 +26,13 @@ struct Native12BackgroundWork
 
 DWORD WINAPI Native12BackgroundWorker(void *parameter);
 
+struct Native12CreationLayout
+{
+    D3D12_BARRIER_LAYOUT layout;
+    UINT32 castable_format_count;
+    const DXGI_FORMAT *castable_formats;
+};
+
 class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2,
         public ID3D12DeviceConfiguration1, public ID3D12VideoDevice3, public Native12Allocation
 {
@@ -54,6 +61,7 @@ public:
     HRESULT (WINAPI *get_resource_handles)(HANDLE, HANDLE, D3DKMT_HANDLE *, D3DKMT_HANDLE *) = NULL;
     HRESULT (WINAPI *adopt_resource)(HANDLE, HANDLE, D3DKMT_HANDLE, D3DKMT_HANDLE, D3DKMT_HANDLE) = NULL;
     HRESULT (WINAPI *enqueue_set_event)(HANDLE, HANDLE) = NULL;
+    HRESULT (WINAPI *open_sync_from_nt_handle)(HANDLE, HANDLE, D3DKMT_HANDLE *, PVOID *, D3DGPU_VIRTUAL_ADDRESS *) = NULL;
     ROS_UMD_ADAPTER_CALLBACKS adapter_callbacks = {};
     D3D12DDI_ADAPTERFUNCS_0109 adapter_functions = {};
     D3D12DDI_HADAPTER driver_adapter = {};
@@ -76,6 +84,8 @@ public:
     D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_11_0;
     UINT ddi_build = NATIVE12_DDI_BUILD;
     D3D12DDI_D3D12_OPTIONS_DATA_0089 options = {};
+    UINT shader_cache_disabled_kinds = 0;
+    D3D12DDI_OPTIONS_DATA_0090 relaxed_casting = {};
     D3D12DDI_SHADER_CAPS_0084 shader_caps = {};
     D3D12DDI_ARCHITECTURE_INFO_DATA architecture = {};
     D3D12DDI_MEMORY_ARCHITECTURE_CAPS_0041 memory = {};
@@ -102,10 +112,14 @@ public:
     void BackgroundDone();
     HRESULT CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
             const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value,
-            const D3D12_MIP_REGION *mip_region, REFIID iid, void **out);
+            const D3D12_MIP_REGION *mip_region, REFIID iid, void **out,
+            const Native12CreationLayout *layout = NULL);
     HRESULT CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offset, const D3D12_RESOURCE_DESC *desc,
             D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value, const D3D12_MIP_REGION *mip_region,
-            REFIID iid, void **out);
+            REFIID iid, void **out,
+            const Native12CreationLayout *layout = NULL);
+    HRESULT CreateReservedResourceRegion(const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state,
+            const D3D12_CLEAR_VALUE *clear_value, REFIID iid, void **out, const Native12CreationLayout *layout);
     D3D12_RESOURCE_ALLOCATION_INFO *GetResourceAllocationInfoRegion(D3D12_RESOURCE_ALLOCATION_INFO *out, UINT count,
             const D3D12_RESOURCE_DESC *descs, const D3D12_MIP_REGION *mip_region);
     D3D12_SAMPLER_FEEDBACK_TIER SamplerFeedbackTier() const;
@@ -149,6 +163,14 @@ public:
     ~Native12Device();
     HRESULT Initialize(IDXGIAdapter *, D3D_FEATURE_LEVEL);
     HRESULT QueryCaps(D3D12DDICAPS_TYPE, void *, void *, UINT);
+    HRESULT ValidateCreationLayout(const D3D12_RESOURCE_DESC *desc, D3D12_BARRIER_LAYOUT layout, UINT32 castable_count,
+            const DXGI_FORMAT *castable_formats);
+    bool EnhancedBarriersSupported() const
+    {
+        return ddi_build >= D3D12DDI_BUILD_VERSION_0094 && options.EnhancedBarriersSupported;
+    }
+    HRESULT QueryFeature106(D3D12DDICAPS_TYPE type, void *data, UINT size, BOOL *supported);
+    HRESULT QueryPlacedResourceSupport(D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO *caps);
     HRESULT WaitForPaging(UINT64 fence_value);
     static Native12Device *FromRuntime(HANDLE);
     static Native12Device *FromKernelHandle(HANDLE);
@@ -203,6 +225,7 @@ public:
     HRESULT STDMETHODCALLTYPE CreateSharedHandle(ID3D12DeviceChild *, const SECURITY_ATTRIBUTES *, DWORD,
             const WCHAR *, HANDLE *) override;
     HRESULT STDMETHODCALLTYPE OpenSharedHandle(HANDLE, REFIID, void **) override;
+    HRESULT OpenSharedFence(HANDLE handle, REFIID iid, void **out);
     HRESULT STDMETHODCALLTYPE OpenSharedHandleByName(const WCHAR *, DWORD, HANDLE *) override;
     HRESULT STDMETHODCALLTYPE MakeResident(UINT, ID3D12Pageable *const *) override;
     HRESULT STDMETHODCALLTYPE Evict(UINT, ID3D12Pageable *const *) override;
@@ -334,6 +357,5 @@ public:
 Native12Device *Native12QueueDevice(HANDLE queue);
 void Native12QueueAddContext(HANDLE queue, HANDLE context);
 void Native12QueueRemoveContext(HANDLE queue, HANDLE context);
-void Native12NoteSubmission(Native12Device *device, HANDLE context);
 void Native12SetCommandListErrorObject(HANDLE list, HRESULT hr);
 void Native12SetCommandListTableObject(HANDLE list, HANDLE table);

@@ -3,6 +3,7 @@
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     Small library with probing utilities for thread/process classes information
  * COPYRIGHT:   Copyright 2020 George Bișoc <george.bisoc@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "precomp.h"
@@ -117,6 +118,44 @@ static const WINDOWS11_STATUS Windows11SetThreadStatus[] =
     { 55, STATUS_ACCESS_VIOLATION, STATUS_INVALID_INFO_CLASS },
 };
 
+static const WINDOWS11_STATUS Windows11X86QueryProcessStatus[] =
+{
+    { 10, STATUS_INFO_LENGTH_MISMATCH, STATUS_NOT_IMPLEMENTED },
+    { 10, STATUS_ACCESS_VIOLATION, STATUS_NOT_IMPLEMENTED },
+    { 83, STATUS_DATATYPE_MISALIGNMENT, STATUS_INVALID_INFO_CLASS },
+};
+
+static const WINDOWS11_STATUS Windows11X86SetProcessStatus[] =
+{
+    { 10, STATUS_INFO_LENGTH_MISMATCH, STATUS_NOT_IMPLEMENTED },
+    { 10, STATUS_ACCESS_VIOLATION, STATUS_NOT_IMPLEMENTED },
+    { 11, STATUS_INFO_LENGTH_MISMATCH, STATUS_NOT_IMPLEMENTED },
+    { 11, STATUS_ACCESS_VIOLATION, STATUS_NOT_IMPLEMENTED },
+    { 13, STATUS_INFO_LENGTH_MISMATCH, STATUS_NOT_IMPLEMENTED },
+    { 13, STATUS_ACCESS_VIOLATION, STATUS_NOT_IMPLEMENTED },
+    { 83, STATUS_DATATYPE_MISALIGNMENT, STATUS_INVALID_INFO_CLASS },
+    { 83, STATUS_INFO_LENGTH_MISMATCH, STATUS_INVALID_INFO_CLASS },
+    { 83, STATUS_ACCESS_VIOLATION, STATUS_INVALID_INFO_CLASS },
+};
+
+static const WINDOWS11_STATUS Windows11X86QueryThreadStatus[] =
+{
+    { 29, STATUS_DATATYPE_MISALIGNMENT, STATUS_INVALID_INFO_CLASS },
+    { 29, STATUS_INFO_LENGTH_MISMATCH, STATUS_INVALID_INFO_CLASS },
+    { 29, STATUS_ACCESS_VIOLATION, STATUS_INVALID_INFO_CLASS },
+    { 48, STATUS_DATATYPE_MISALIGNMENT, STATUS_INVALID_INFO_CLASS },
+};
+
+static const WINDOWS11_STATUS Windows11X86SetThreadStatus[] =
+{
+    { 29, STATUS_DATATYPE_MISALIGNMENT, STATUS_INVALID_INFO_CLASS },
+    { 29, STATUS_INFO_LENGTH_MISMATCH, STATUS_INVALID_INFO_CLASS },
+    { 29, STATUS_ACCESS_VIOLATION, STATUS_INVALID_INFO_CLASS },
+    { 48, STATUS_DATATYPE_MISALIGNMENT, STATUS_INVALID_INFO_CLASS },
+    { 48, STATUS_INFO_LENGTH_MISMATCH, STATUS_INVALID_INFO_CLASS },
+    { 48, STATUS_ACCESS_VIOLATION, STATUS_INVALID_INFO_CLASS },
+};
+
 static
 BOOLEAN
 IsWindows11Status(
@@ -134,6 +173,18 @@ IsWindows11Status(
             return TRUE;
     }
     return FALSE;
+}
+
+static
+BOOLEAN
+IsWindows11X86Status(
+    _In_reads_(Count) const WINDOWS11_STATUS *Table,
+    _In_ ULONG Count,
+    _In_ ULONG InfoClass,
+    _In_ NTSTATUS ProbeStatus,
+    _In_ NTSTATUS Status)
+{
+    return sizeof(PVOID) == sizeof(ULONG) && IsWindows11Status(Table, Count, InfoClass, ProbeStatus, Status);
 }
 
 VOID
@@ -258,7 +309,8 @@ QuerySetProcessValidator(
 
             /* And probe the results we've got */
             ok(Status == ExpectedStatus || Status == SpecialStatus ||
-               IsWindows11Status(Windows11QueryProcessStatus, RTL_NUMBER_OF(Windows11QueryProcessStatus), InfoClassIndex, ExpectedStatus, Status),
+               IsWindows11Status(Windows11QueryProcessStatus, RTL_NUMBER_OF(Windows11QueryProcessStatus), InfoClassIndex, ExpectedStatus, Status) ||
+               IsWindows11X86Status(Windows11X86QueryProcessStatus, RTL_NUMBER_OF(Windows11X86QueryProcessStatus), InfoClassIndex, ExpectedStatus, Status),
                 "0x%lx or special status (0x%lx) expected but got 0x%lx for class information %lu in query information process operation!\n", ExpectedStatus, SpecialStatus, Status, InfoClassIndex);
             break;
         }
@@ -363,7 +415,8 @@ QuerySetProcessValidator(
 
             /* And probe the results we've got */
             ok(Status == ExpectedStatus || Status == SpecialStatus ||
-               IsWindows11Status(Windows11SetProcessStatus, RTL_NUMBER_OF(Windows11SetProcessStatus), InfoClassIndex, ExpectedStatus, Status),
+               IsWindows11Status(Windows11SetProcessStatus, RTL_NUMBER_OF(Windows11SetProcessStatus), InfoClassIndex, ExpectedStatus, Status) ||
+               IsWindows11X86Status(Windows11X86SetProcessStatus, RTL_NUMBER_OF(Windows11X86SetProcessStatus), InfoClassIndex, ExpectedStatus, Status),
                 "0x%lx or special status (0x%lx) expected but got 0x%lx for class information %lu in set information process operation!\n", ExpectedStatus, SpecialStatus, Status, InfoClassIndex);
             break;
         }
@@ -468,7 +521,8 @@ QuerySetThreadValidator(
 
             /* And probe the results we've got */
             ok(Status == ExpectedStatus || Status == SpecialStatus || Status == STATUS_DATATYPE_MISALIGNMENT ||
-               IsWindows11Status(Windows11QueryThreadStatus, RTL_NUMBER_OF(Windows11QueryThreadStatus), InfoClassIndex, ExpectedStatus, Status),
+               IsWindows11Status(Windows11QueryThreadStatus, RTL_NUMBER_OF(Windows11QueryThreadStatus), InfoClassIndex, ExpectedStatus, Status) ||
+               IsWindows11X86Status(Windows11X86QueryThreadStatus, RTL_NUMBER_OF(Windows11X86QueryThreadStatus), InfoClassIndex, ExpectedStatus, Status),
                 "0x%lx or special status (0x%lx) expected but got 0x%lx for class information %lu in query information thread operation!\n", ExpectedStatus, SpecialStatus, Status, InfoClassIndex);
             break;
         }
@@ -565,7 +619,8 @@ QuerySetThreadValidator(
 
             /* And probe the results we've got */
             ok(Status == ExpectedStatus || Status == SpecialStatus || Status == STATUS_DATATYPE_MISALIGNMENT || Status == STATUS_SUCCESS ||
-               IsWindows11Status(Windows11SetThreadStatus, RTL_NUMBER_OF(Windows11SetThreadStatus), InfoClassIndex, ExpectedStatus, Status),
+               IsWindows11Status(Windows11SetThreadStatus, RTL_NUMBER_OF(Windows11SetThreadStatus), InfoClassIndex, ExpectedStatus, Status) ||
+               IsWindows11X86Status(Windows11X86SetThreadStatus, RTL_NUMBER_OF(Windows11X86SetThreadStatus), InfoClassIndex, ExpectedStatus, Status),
                 "0x%lx or special status (0x%lx) expected but got 0x%lx for class information %lu in set information thread operation!\n", ExpectedStatus, SpecialStatus, Status, InfoClassIndex);
         }
 

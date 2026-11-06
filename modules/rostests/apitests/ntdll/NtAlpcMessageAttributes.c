@@ -519,7 +519,7 @@ AlpcTestHandleRollback(
     Entries[1].ObjectType = ALPC_PORFLG_OBJECT_TYPE_EVENT;
     Status = AlpcTestSendIndirectHandles(ClientPort, Event, 2, Entries);
     trace("ALPC_OBSERVE status Handle.partial_rollback=%08lx\n", Status);
-    ok(!NT_SUCCESS(Status), "partially invalid indirect list unexpectedly succeeded\n");
+    ok_hex(Status, STATUS_INVALID_HANDLE);
     if (NT_SUCCESS(Status))
         AlpcTestDrainUnexpectedRequest(ConnectionPort, ServerPort, 2, "Handle.partial_rollback");
     CloseHandle(Event);

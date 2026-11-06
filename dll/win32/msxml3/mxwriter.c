@@ -165,6 +165,7 @@ typedef struct
     IStream *dest;
 #ifdef __REACTOS__
     IUnknown *dest_unk;
+    struct dom_builder *dom;
 #endif
 
     output_buffer buffer;
@@ -870,6 +871,7 @@ static ULONG WINAPI mxwriter_Release(IMXWriter *iface)
         if (This->dest) IStream_Release(This->dest);
 #ifdef __REACTOS__
         if (This->dest_unk) IUnknown_Release(This->dest_unk);
+        dom_builder_release(This->dom);
 #endif
         SysFreeString(This->version);
         SysFreeString(This->encoding);
@@ -929,6 +931,42 @@ static HRESULT WINAPI mxwriter_put_output(IMXWriter *iface, VARIANT dest)
     if (FAILED(hr))
         return hr;
 
+#ifdef __REACTOS__
+    if (V_VT(&dest) == (VT_DISPATCH | VT_BYREF))
+    {
+        IDispatch *disp = V_DISPATCHREF(&dest) ? *V_DISPATCHREF(&dest) : NULL;
+
+        V_VT(&dest) = VT_DISPATCH;
+        V_DISPATCH(&dest) = disp;
+    }
+    if ((V_VT(&dest) == VT_DISPATCH || V_VT(&dest) == VT_UNKNOWN) && !V_UNKNOWN(&dest))
+        V_VT(&dest) = VT_EMPTY;
+
+    if (This->class_version == MSXML6 && (V_VT(&dest) == VT_DISPATCH || V_VT(&dest) == VT_UNKNOWN))
+    {
+        struct dom_builder *builder;
+
+        hr = dom_builder_create(V_UNKNOWN(&dest), &builder);
+        if (hr == S_OK)
+        {
+            close_output_buffer(This);
+            if (This->dest) IStream_Release(This->dest);
+            This->dest = NULL;
+            if (This->dest_unk) IUnknown_Release(This->dest_unk);
+            This->dest_unk = NULL;
+            dom_builder_release(This->dom);
+            This->dom = builder;
+            This->newline = TRUE;
+            This->text = FALSE;
+            This->root_started = FALSE;
+            return S_OK;
+        }
+        if (hr != E_NOINTERFACE)
+            return hr;
+        V_VT(&dest) = VT_UNKNOWN;
+    }
+#endif
+
     switch (V_VT(&dest))
     {
     case VT_EMPTY:
@@ -938,6 +976,8 @@ static HRESULT WINAPI mxwriter_put_output(IMXWriter *iface, VARIANT dest)
 #ifdef __REACTOS__
         if (This->dest_unk) IUnknown_Release(This->dest_unk);
         This->dest_unk = NULL;
+        dom_builder_release(This->dom);
+        This->dom = NULL;
 #endif
         close_output_buffer(This);
         break;
@@ -958,6 +998,8 @@ static HRESULT WINAPI mxwriter_put_output(IMXWriter *iface, VARIANT dest)
             IUnknown_AddRef(V_UNKNOWN(&dest));
             if (This->dest_unk) IUnknown_Release(This->dest_unk);
             This->dest_unk = V_UNKNOWN(&dest);
+            dom_builder_release(This->dom);
+            This->dom = NULL;
 #endif
             break;
         }
@@ -985,6 +1027,14 @@ static HRESULT WINAPI mxwriter_get_output(IMXWriter *iface, VARIANT *dest)
     TRACE("(%p)->(%p)\n", This, dest);
 
     if (!dest) return E_POINTER;
+
+#ifdef __REACTOS__
+    if (This->dom)
+    {
+        dom_builder_get_output(This->dom, dest);
+        return S_OK;
+    }
+#endif
 
     if (This->dest)
     {
@@ -1243,8 +1293,16 @@ static ULONG WINAPI SAXContentHandler_Release(ISAXContentHandler *iface)
 
 static HRESULT WINAPI SAXContentHandler_putDocumentLocator(ISAXContentHandler *iface, ISAXLocator *locator)
 {
+#ifdef __REACTOS__
+    mxwriter *This = impl_from_ISAXContentHandler( iface );
+#endif
+
     TRACE("%p, %p.\n", iface, locator);
 
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_putDocumentLocator(dom_builder_get_content_handler(This->dom), locator);
+#endif
     return S_OK;
 }
 
@@ -1253,6 +1311,11 @@ static HRESULT WINAPI SAXContentHandler_startDocument(ISAXContentHandler *iface)
     mxwriter *This = impl_from_ISAXContentHandler( iface );
 
     TRACE("(%p)\n", This);
+
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_startDocument(dom_builder_get_content_handler(This->dom));
+#endif
 
     /* If properties have been changed since the last "endDocument" call
      * we need to reset the output buffer. If we don't the output buffer
@@ -1285,6 +1348,10 @@ static HRESULT WINAPI SAXContentHandler_endDocument(ISAXContentHandler *iface)
 {
     mxwriter *This = impl_from_ISAXContentHandler( iface );
     TRACE("(%p)\n", This);
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_endDocument(dom_builder_get_content_handler(This->dom));
+#endif
     This->prop_changed = FALSE;
     return flush_output_buffer(This);
 }
@@ -1298,6 +1365,11 @@ static HRESULT WINAPI SAXContentHandler_startPrefixMapping(
 {
     mxwriter *This = impl_from_ISAXContentHandler( iface );
     TRACE("(%p)->(%s %s)\n", This, debugstr_wn(prefix, nprefix), debugstr_wn(uri, nuri));
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_startPrefixMapping(dom_builder_get_content_handler(This->dom), prefix, nprefix,
+                uri, nuri);
+#endif
     return S_OK;
 }
 
@@ -1308,6 +1380,10 @@ static HRESULT WINAPI SAXContentHandler_endPrefixMapping(
 {
     mxwriter *This = impl_from_ISAXContentHandler( iface );
     TRACE("(%p)->(%s)\n", This, debugstr_wn(prefix, nprefix));
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_endPrefixMapping(dom_builder_get_content_handler(This->dom), prefix, nprefix);
+#endif
     return S_OK;
 }
 
@@ -1357,6 +1433,12 @@ static HRESULT WINAPI SAXContentHandler_startElement(
     if (((!namespaceUri || !local_name || !QName) && This->class_version != MSXML6) ||
         (nQName == -1 && This->class_version == MSXML6))
         return E_INVALIDARG;
+
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_startElement(dom_builder_get_content_handler(This->dom), namespaceUri,
+                nnamespaceUri, local_name, nlocal_name, QName, nQName, attr);
+#endif
 
     mxwriter_write_starttag(This, QName, nQName);
 #ifdef __REACTOS__
@@ -1410,6 +1492,12 @@ static HRESULT WINAPI SAXContentHandler_endElement(
          (nQName == -1 && This->class_version == MSXML6))
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_endElement(dom_builder_get_content_handler(This->dom), namespaceUri,
+                nnamespaceUri, local_name, nlocal_name, QName, nQName);
+#endif
+
     writer_dec_indent(This);
 
     if (This->element)
@@ -1437,6 +1525,8 @@ static HRESULT WINAPI SAXContentHandler_characters(ISAXContentHandler *iface, co
 
 #ifdef __REACTOS__
     if (!chars && (writer->class_version != MSXML6 || nchars)) return E_INVALIDARG;
+    if (writer->dom)
+        return ISAXContentHandler_characters(dom_builder_get_content_handler(writer->dom), chars, nchars);
 #else
     if (!chars) return E_INVALIDARG;
 #endif
@@ -1471,6 +1561,8 @@ static HRESULT WINAPI SAXContentHandler_ignorableWhitespace(
 
 #ifdef __REACTOS__
     if (!chars && (This->class_version != MSXML6 || nchars)) return E_INVALIDARG;
+    if (This->dom)
+        return ISAXContentHandler_ignorableWhitespace(dom_builder_get_content_handler(This->dom), chars, nchars);
     if (!chars) return S_OK;
 #else
     if (!chars) return E_INVALIDARG;
@@ -1494,6 +1586,9 @@ static HRESULT WINAPI SAXContentHandler_processingInstruction(
 
 #ifdef __REACTOS__
     if (!target && (writer->class_version != MSXML6 || ntarget)) return E_INVALIDARG;
+    if (writer->dom)
+        return ISAXContentHandler_processingInstruction(dom_builder_get_content_handler(writer->dom), target,
+                ntarget, data, ndata);
 #else
     if (!target) return E_INVALIDARG;
 #endif
@@ -1535,6 +1630,10 @@ static HRESULT WINAPI SAXContentHandler_skippedEntity(
     int nname)
 {
     mxwriter *This = impl_from_ISAXContentHandler( iface );
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXContentHandler_skippedEntity(dom_builder_get_content_handler(This->dom), name, nname);
+#endif
     FIXME("(%p)->(%s)\n", This, debugstr_wn(name, nname));
     return E_NOTIMPL;
 }
@@ -1588,6 +1687,9 @@ static HRESULT WINAPI SAXLexicalHandler_startDTD(ISAXLexicalHandler *iface,
 
 #ifdef __REACTOS__
     if (!name && (writer->class_version != MSXML6 || name_len)) return E_INVALIDARG;
+    if (writer->dom)
+        return ISAXLexicalHandler_startDTD(dom_builder_get_lexical_handler(writer->dom), name, name_len,
+                publicId, publicId_len, systemId, systemId_len);
 #else
     if (!name) return E_INVALIDARG;
 #endif
@@ -1643,6 +1745,11 @@ static HRESULT WINAPI SAXLexicalHandler_endDTD(ISAXLexicalHandler *iface)
 
     TRACE("%p.\n", iface);
 
+#ifdef __REACTOS__
+    if (writer->dom)
+        return ISAXLexicalHandler_endDTD(dom_builder_get_lexical_handler(writer->dom));
+#endif
+
     write_output_buffer(writer, L"]>\r\n", 4);
 
     return S_OK;
@@ -1651,6 +1758,10 @@ static HRESULT WINAPI SAXLexicalHandler_endDTD(ISAXLexicalHandler *iface)
 static HRESULT WINAPI SAXLexicalHandler_startEntity(ISAXLexicalHandler *iface, const WCHAR *name, int len)
 {
     mxwriter *This = impl_from_ISAXLexicalHandler( iface );
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXLexicalHandler_startEntity(dom_builder_get_lexical_handler(This->dom), name, len);
+#endif
     FIXME("(%p)->(%s): stub\n", This, debugstr_wn(name, len));
     return E_NOTIMPL;
 }
@@ -1658,6 +1769,10 @@ static HRESULT WINAPI SAXLexicalHandler_startEntity(ISAXLexicalHandler *iface, c
 static HRESULT WINAPI SAXLexicalHandler_endEntity(ISAXLexicalHandler *iface, const WCHAR *name, int len)
 {
     mxwriter *This = impl_from_ISAXLexicalHandler( iface );
+#ifdef __REACTOS__
+    if (This->dom)
+        return ISAXLexicalHandler_endEntity(dom_builder_get_lexical_handler(This->dom), name, len);
+#endif
     FIXME("(%p)->(%s): stub\n", This, debugstr_wn(name, len));
     return E_NOTIMPL;
 }
@@ -1667,6 +1782,11 @@ static HRESULT WINAPI SAXLexicalHandler_startCDATA(ISAXLexicalHandler *iface)
     mxwriter *writer = impl_from_ISAXLexicalHandler(iface);
 
     TRACE("%p.\n", iface);
+
+#ifdef __REACTOS__
+    if (writer->dom)
+        return ISAXLexicalHandler_startCDATA(dom_builder_get_lexical_handler(writer->dom));
+#endif
 
     write_node_indent(writer);
     write_output_buffer(writer, L"<![CDATA[", 9);
@@ -1680,6 +1800,11 @@ static HRESULT WINAPI SAXLexicalHandler_endCDATA(ISAXLexicalHandler *iface)
     mxwriter *writer = impl_from_ISAXLexicalHandler(iface);
 
     TRACE("%p.\n", iface);
+
+#ifdef __REACTOS__
+    if (writer->dom)
+        return ISAXLexicalHandler_endCDATA(dom_builder_get_lexical_handler(writer->dom));
+#endif
 
     write_output_buffer(writer, L"]]>", 3);
     writer->cdata = FALSE;
@@ -1695,6 +1820,8 @@ static HRESULT WINAPI SAXLexicalHandler_comment(ISAXLexicalHandler *iface, const
 
 #ifdef __REACTOS__
     if (!chars && (writer->class_version != MSXML6 || nchars)) return E_INVALIDARG;
+    if (writer->dom)
+        return ISAXLexicalHandler_comment(dom_builder_get_lexical_handler(writer->dom), chars, nchars);
 #else
     if (!chars) return E_INVALIDARG;
 #endif
@@ -1761,6 +1888,8 @@ static HRESULT WINAPI SAXDeclHandler_elementDecl(ISAXDeclHandler *iface,
         debugstr_wn(model, n_model), n_model);
 
 #ifdef __REACTOS__
+    if (This->dom)
+        return dom_builder_declaration(This->dom);
     if (This->class_version == MSXML6)
     {
         if ((!name && n_name) || (!model && n_model)) return E_INVALIDARG;
@@ -1798,6 +1927,11 @@ static HRESULT WINAPI SAXDeclHandler_attributeDecl(ISAXDeclHandler *iface,
     TRACE("(%p)->(%s:%d %s:%d %s:%d %s:%d %s:%d)\n", This, debugstr_wn(element, n_element), n_element,
         debugstr_wn(attr, n_attr), n_attr, debugstr_wn(type, n_type), n_type, debugstr_wn(Default, n_default), n_default,
         debugstr_wn(value, n_value), n_value);
+
+#ifdef __REACTOS__
+    if (This->dom)
+        return dom_builder_declaration(This->dom);
+#endif
 
     write_output_buffer(This, L"<!ATTLIST ", 10);
     if (n_element) {
@@ -1847,6 +1981,8 @@ static HRESULT WINAPI SAXDeclHandler_internalEntityDecl(ISAXDeclHandler *iface,
         debugstr_wn(value, n_value), n_value);
 
 #ifdef __REACTOS__
+    if (writer->dom)
+        return dom_builder_declaration(writer->dom);
     if (writer->class_version == MSXML6)
     {
         if (n_name < 0 || n_value < 0 || (!name && n_name) || (!value && n_value)) return E_INVALIDARG;
@@ -1885,6 +2021,8 @@ static HRESULT WINAPI SAXDeclHandler_externalEntityDecl(ISAXDeclHandler *iface,
         debugstr_wn(publicId, n_publicId), n_publicId, debugstr_wn(systemId, n_systemId), n_systemId);
 
 #ifdef __REACTOS__
+    if (writer->dom)
+        return dom_builder_declaration(writer->dom);
     if (writer->class_version == MSXML6)
     {
         if (n_name < 0) return E_INVALIDARG;
@@ -2451,6 +2589,8 @@ static HRESULT WINAPI SAXDTDHandler_notationDecl(ISAXDTDHandler *iface,
         debugstr_wn(publicid, n_publicid), n_publicid, debugstr_wn(systemid, n_systemid), n_systemid);
 
 #ifdef __REACTOS__
+    if (This->dom)
+        return dom_builder_declaration(This->dom);
     if (This->class_version == MSXML6)
         write_output_buffer(This, L"<!NOTATION ", 11);
 #endif
@@ -2495,6 +2635,10 @@ static HRESULT WINAPI SAXDTDHandler_unparsedEntityDecl(ISAXDTDHandler *iface,
     const WCHAR *notation, INT nnotation)
 {
     mxwriter *This = impl_from_ISAXDTDHandler( iface );
+#ifdef __REACTOS__
+    if (This->dom)
+        return dom_builder_declaration(This->dom);
+#endif
     FIXME("(%p)->(%s:%d, %s:%d, %s:%d, %s:%d): stub\n", This, debugstr_wn(name, nname), nname,
         debugstr_wn(publicid, npublicid), npublicid, debugstr_wn(systemid, nsystemid), nsystemid,
         debugstr_wn(notation, nnotation), nnotation);
@@ -2782,6 +2926,7 @@ HRESULT MXWriter_create(MSXML_VERSION version, void **ppObj)
     This->dest = NULL;
 #ifdef __REACTOS__
     This->dest_unk = NULL;
+    This->dom = NULL;
 #endif
 
     hr = init_output_buffer(This->xml_enc, &This->buffer);

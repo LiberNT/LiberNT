@@ -25,7 +25,7 @@
 #include <vkd3d.h>
 
 #ifdef REACTOS_D3D12_NATIVE_UMD
-HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, BOOL independent,
+HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, BOOL independent, UINT factory_flags,
         D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
         void **device);
 #endif
@@ -129,13 +129,13 @@ d3d12_create_vkd3d_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_l
 
 static HRESULT
 d3d12_create_configured_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level,
-        const struct vkd3d_device_configuration_info *configuration, REFIID iid, void **device)
+        const struct vkd3d_device_configuration_info *configuration, UINT factory_flags, REFIID iid, void **device)
 {
 #ifdef REACTOS_D3D12_NATIVE_UMD
     HRESULT hr = configuration
-            ? d3d12_native_create_device(adapter, minimum_feature_level, TRUE, configuration->dred_auto_breadcrumbs,
+            ? d3d12_native_create_device(adapter, minimum_feature_level, TRUE, factory_flags, configuration->dred_auto_breadcrumbs,
                     configuration->dred_page_fault, configuration->configuration_flags, iid, device)
-            : d3d12_native_create_device(adapter, minimum_feature_level, FALSE, D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED,
+            : d3d12_native_create_device(adapter, minimum_feature_level, FALSE, 0, D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED,
                     D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED, 0, iid, device);
 
     if (hr != DXGI_ERROR_UNSUPPORTED)
@@ -147,7 +147,7 @@ d3d12_create_configured_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feat
 HRESULT WINAPI
 d3d12_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, REFIID iid, void **device)
 {
-    return d3d12_create_configured_device(adapter, minimum_feature_level, NULL, iid, device);
+    return d3d12_create_configured_device(adapter, minimum_feature_level, NULL, 0, iid, device);
 }
 
 struct d3d12_dred_state
@@ -645,7 +645,7 @@ d3d12_device_factory_CreateDevice(ID3D12DeviceFactory *iface, IUnknown *adapter,
     configuration.dred_auto_breadcrumbs = factory->dred.auto_breadcrumbs;
     configuration.dred_page_fault = factory->dred.page_fault;
     configuration.configuration_flags = d3d12_dred_flags(&factory->dred);
-    return d3d12_create_configured_device(adapter, feature_level, &configuration, iid, device);
+    return d3d12_create_configured_device(adapter, feature_level, &configuration, factory->flags, iid, device);
 }
 
 static const ID3D12DeviceFactoryVtbl d3d12_device_factory_vtbl =

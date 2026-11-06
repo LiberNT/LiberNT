@@ -386,6 +386,16 @@ static HRESULT WINAPI HTMLLocation_get_pathname(IHTMLLocation *iface, BSTR *p)
         SysFreeString(path);
         path = NULL;
     }
+#ifdef __REACTOS__
+    else if(path[0] == '/' && dispex_compat_mode(&This->window->base.inner_window->event_target.dispex) < COMPAT_MODE_IE10) {
+        BSTR stripped = SysAllocString(path + 1);
+
+        SysFreeString(path);
+        if(!stripped)
+            return E_OUTOFMEMORY;
+        path = stripped;
+    }
+#endif
 
     *p = path;
     return S_OK;

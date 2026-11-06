@@ -578,6 +578,7 @@ struct d3d_device
     LONG refcount;
 
     BOOL d3d11_only;
+    LONG multithread_protected;
 
     struct d3d_device_context_state *state;
     struct d3d11_device_context immediate_context;

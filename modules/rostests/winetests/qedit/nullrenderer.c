@@ -63,6 +63,37 @@ static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOO
         IUnknown_Release(unk);
 }
 
+static void test_pin_quality_control(IBaseFilter *filter, IPin *pin)
+{
+    Quality q = {Famine, 1000, -10000, 0};
+    IQualityControl *qc;
+    IPin *qc_pin;
+    HRESULT hr;
+
+    hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (FAILED(hr))
+        return;
+
+    hr = IQualityControl_QueryInterface(qc, &IID_IPin, (void **)&qc_pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(qc_pin == pin, "Got pin %p, expected %p.\n", qc_pin, pin);
+    IPin_Release(qc_pin);
+
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, NULL, q);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_SetSink(qc, qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_SetSink(qc, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    IQualityControl_Release(qc);
+}
+
 static void test_interfaces(void)
 {
     IBaseFilter *filter = create_null_renderer();
@@ -97,6 +128,8 @@ static void test_interfaces(void)
     check_interface(pin, &IID_IKsPropertySet, FALSE);
     check_interface(pin, &IID_IMediaPosition, FALSE);
     check_interface(pin, &IID_IMediaSeeking, FALSE);
+
+    test_pin_quality_control(filter, pin);
 
     IPin_Release(pin);
     ref = IBaseFilter_Release(filter);
@@ -728,7 +761,27 @@ static void test_filter_state(IMemInputPin *input, IFilterGraph2 *graph)
     hr = IMediaControl_GetState(control, 0, &state);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
 
+    thread = send_frame_time(input, 2, 0x55);
+    ok(WaitForSingleObject(thread, 100) == WAIT_TIMEOUT, "Thread should block in Receive().\n");
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_GetState(control, 0, &state);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(state == State_Paused, "Got state %lu.\n", state);
+
+    ok(WaitForSingleObject(thread, 100) == WAIT_TIMEOUT, "Thread should block in Receive().\n");
+
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    ok(WaitForSingleObject(thread, 100) == WAIT_TIMEOUT, "Thread should block in Receive().\n");
+
     hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = join_thread(thread);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
 
     hr = IMediaControl_GetState(control, 0, &state);

@@ -140,6 +140,7 @@ RcddEscape(
 
       RequestedEscape = *(PULONG)pvIn;
       if (RequestedEscape == CDD_ESCAPE_SUPPRESS_CURSOR ||
+          RequestedEscape == CDD_ESCAPE_HW_POINTER ||
           RequestedEscape == CDD_ESCAPE_PRESENT_STATS ||
           RequestedEscape == CDD_ESCAPE_PRESENT_CAPTURE)
       {
@@ -299,6 +300,27 @@ RcddEscape(
       RcddSetCursorSuppressed(ppdev,
                               pso,
                               *(const LONG *)pvIn != 0);
+      return 1;
+   }
+
+   if (iEsc == DWM_ESCAPE_MIRROR_FRAME)
+      return RcddStoreScreenMirror(ppdev, pvIn, cjIn);
+
+   if (iEsc == CDD_ESCAPE_MIRROR_NEEDED)
+   {
+      if (pvOut == NULL || cjOut < sizeof(LONG))
+         return 0;
+
+      *(PLONG)pvOut = ppdev->ScreenMirrorNeeded ? 1 : 0;
+      return 1;
+   }
+
+   if (iEsc == CDD_ESCAPE_HW_POINTER)
+   {
+      if (pvOut == NULL || cjOut < sizeof(LONG))
+         return 0;
+
+      *(PLONG)pvOut = ppdev->HwPointerSupported ? 1 : 0;
       return 1;
    }
 

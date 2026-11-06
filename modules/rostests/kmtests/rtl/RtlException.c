@@ -53,6 +53,7 @@ TestVectoredHandlers(VOID)
 {
     EXCEPTION_RECORD Record = {0};
     PVOID First, Second, Continue;
+    ULONG Removed;
 
     Record.ExceptionCode = VECTORED_TEST_EXCEPTION;
     VectoredContinue = TRUE;
@@ -87,7 +88,8 @@ TestVectoredHandlers(VOID)
     _SEH2_END;
     ok_eq_hex(VectoredTrace, 0x1243);
 
-    ok_eq_ulong(RtlRemoveVectoredExceptionHandler(First), 1);
+    Removed = RtlRemoveVectoredExceptionHandler(First);
+    ok_eq_ulong(Removed, 1);
     First = NULL;
     VectoredContinue = TRUE;
     VectoredTrace = 0;
@@ -98,9 +100,21 @@ TestVectoredHandlers(VOID)
     ok_eq_hex(VectoredTrace, 0x23);
 
 Cleanup:
-    if (First) ok_eq_ulong(RtlRemoveVectoredExceptionHandler(First), 1);
-    if (Second) ok_eq_ulong(RtlRemoveVectoredExceptionHandler(Second), 1);
-    if (Continue) ok_eq_ulong(RtlRemoveVectoredContinueHandler(Continue), 1);
+    if (First)
+    {
+        Removed = RtlRemoveVectoredExceptionHandler(First);
+        ok_eq_ulong(Removed, 1);
+    }
+    if (Second)
+    {
+        Removed = RtlRemoveVectoredExceptionHandler(Second);
+        ok_eq_ulong(Removed, 1);
+    }
+    if (Continue)
+    {
+        Removed = RtlRemoveVectoredContinueHandler(Continue);
+        ok_eq_ulong(Removed, 1);
+    }
 }
 
 #endif

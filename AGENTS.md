@@ -128,6 +128,39 @@ Most of the tree is still shared with ReactOS, and the components synchronised w
 - note that there is kdgdb in case of stall to attach live to the OS and debug using gdb client, like gdb multiarch
 - Compare benchmark numbers only between runs made the same way (headless, same CPU count, host not throttling the VM), and A/B against the baseline build before blaming a change.
 
+## Debugging a real machine over a cable
+
+Boot the machine with the boot menu's "Startup options" > "Network debugging on this cable" (load options `DEBUG DEBUGPORT=NET LOCAL_BROADCAST=1`), cable its NIC to the host, and on the host run, as a normal user:
+
+```sh
+python3 sdk/tools/kdnet/kdnet.py --local <interface cabled to the machine>
+```
+
+- There is no key, no DHCP and no relay, and the host interface needs no address. The machine broadcasts everything it logs as plain UDP from `0.0.0.0` to port 6666, the port the boot loader's UDP log uses, and reads what the host broadcasts to port 6665. Ctrl-C breaks in; `kdb:>` then works as usual.
+- Anyone on that cable can read the log and control the debugger, so use it only on a dedicated cable. For other networks use the modes below, which are encrypted.
+- Output waits in a 4 MB ring until a link exists, so a cable plugged in late still gets the log from its start.
+- Ctrl-] leaves `kdnet.py`.
+- The machine's boot log says what the debugger found. `USB debugger: using <vid>:<pid> on root port <n>, <h> hub(s) away, <speed> Mbit/s` names the adapter and its path. `no Ethernet link after 8000 ms, reported 1, carrier 0` is the adapter reporting that its own cable has no link: check the cable and whatever is on its far end before suspecting the debugger.
+
+The debugger NIC is chosen in this order, whatever the mode:
+1. A phone: an RNDIS function, or a device with an ADB interface. With tethering off, the boot waits for it; unplugging it moves on to the next choice.
+2. A USB-Ethernet adapter with a link (CDC-ECM, CDC-NCM or CDC-EEM). `kd_usbnet` drives the RTL8153 out of the standby a previous OS leaves it in across a warm reboot.
+3. A PCI NIC with a link.
+4. If nothing has a link, the first device found, which starts working when its link comes up.
+
+| Load options next to `DEBUG DEBUGPORT=NET` | Target | Host |
+|---|---|---|
+| `LOCAL_BROADCAST=1` | plain broadcast, as above | `kdnet.py --local <interface>` |
+| none | DHCP, encrypted session | `kdnet.py --key <key>` on the same network |
+| `HOST_IP=<host>` | DHCP, sends to that host | `kdnet.py --key <key>` on that host |
+| `HOST_NAME=libernt.com HOST_PORT=50000` (with `DEBUGPORT=FILE`, the boot menu's "Debugging") | DHCP, relay | `kdnet.py --relay libernt.com:50000 --key <key>` |
+
+The boot menu's "Debugging" also serves as remote assistance for a normal user: the debugger, the log file and the relay are all on, and the only thing it adds to the screen is the key. The boot screen and the desktop show the key once the machine has an address and has resolved the relay's name; the relay acknowledges nothing, so that is as close to "connected" as the target can tell. Add `DEBUGPORT=SCREEN` to the BCD's load options for the log on screen as well.
+
+Test VMs must not reach the production relay, which records every machine that announces itself for 30 days. Boot "Debugging" in a VM only on a private network: `pc-bt/src/kdnet-pt/fakenet.py` on the development host is one that answers DHCP and DNS and carries the announcements to a local `kdrelay.py`. Otherwise use `HOST_IP`.
+
+To develop this without a second machine, `~/reactos-scripts/kdnet_bench.sh` (see its header) boots a private image through `vm_monitor.py` with a host USB-Ethernet adapter passed through; cable that adapter to another NIC of the host and run `kdnet.py` there. It is a development aid only, and QEMU differs from hardware: after the OS took the xHCI controller over, the interrupt endpoint completed about 9 s late in the runs measured, so a late link can be noticed that much later. Real hardware was not measured.
+
 ## Fixing bugs
 
 - Fix bugs recursively. A bug found while working toward a goal becomes the goal: never step past it to stay on the main task. Fix that exact bug, then return to the parent bug or goal, and treat every bug found beneath it the same way. A `TODO:` or `FIXME:` marker never replaces that fix: markers are for gaps outside the current work, not for bugs met on the way.

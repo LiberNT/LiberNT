@@ -24,22 +24,29 @@ CPipe::CPipe()
 
     // Construct a unique pipe name.
     WCHAR wszPipeName[MAX_PATH];
-    InterlockedIncrement(&m_lPipeCount);
-    _swprintf(wszPipeName, L"\\\\.\\pipe\\TestmanPipe%lu_%ld", GetCurrentProcessId(), m_lPipeCount);
+    DWORD dwAttempts = 0;
+    DWORD dwError;
 
     // Create a named pipe with the default settings, but overlapped (asynchronous) operations.
     // Latter feature is why we can't simply use CreatePipe.
     const DWORD dwDefaultBufferSize = 4096;
     const DWORD dwDefaultTimeoutMilliseconds = 120000;
 
-    m_hReadPipe = CreateNamedPipeW(wszPipeName,
-        PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
-        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-        1,
-        dwDefaultBufferSize,
-        dwDefaultBufferSize,
-        dwDefaultTimeoutMilliseconds,
-        &SecurityAttributes);
+    // A pipe of an earlier process with the same ID lives on while a process it started still holds the write end.
+    do
+    {
+        _swprintf(wszPipeName, L"\\\\.\\pipe\\TestmanPipe%lu_%ld", GetCurrentProcessId(),
+                  InterlockedIncrement(&m_lPipeCount));
+        m_hReadPipe = CreateNamedPipeW(wszPipeName,
+            PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+            1,
+            dwDefaultBufferSize,
+            dwDefaultBufferSize,
+            dwDefaultTimeoutMilliseconds,
+            &SecurityAttributes);
+        dwError = (m_hReadPipe == INVALID_HANDLE_VALUE) ? GetLastError() : ERROR_SUCCESS;
+    } while ((dwError == ERROR_PIPE_BUSY || dwError == ERROR_ACCESS_DENIED) && ++dwAttempts < 64);
     if (m_hReadPipe == INVALID_HANDLE_VALUE)
     {
         FATAL("CreateNamedPipe failed\n");

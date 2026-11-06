@@ -640,7 +640,6 @@ START_TEST(IShellFolderViewCB)
     switch (GetNTVersion())
     {
         case _WIN32_WINNT_WS03:
-        case _WIN32_WINNT_WIN10:
             ok(refCount == 1, "refCount = %lu\n", refCount);
             break;
         case _WIN32_WINNT_VISTA:
@@ -649,6 +648,7 @@ START_TEST(IShellFolderViewCB)
         case _WIN32_WINNT_WIN7:
         case _WIN32_WINNT_WIN8:
         case _WIN32_WINNT_WINBLUE:
+        case _WIN32_WINNT_WIN10:
             ok(refCount == 6, "refCount = %lu\n", refCount);
             break;
         default:

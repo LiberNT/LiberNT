@@ -86,6 +86,9 @@ struct BSCallback {
     DWORD bindf;
     DWORD bindinfo_options;
     BOOL bindinfo_ready;
+#ifdef __REACTOS__
+    BOOL post_data_as_stream;
+#endif
     binding_bom_t bom;
 
     IMoniker *mon;

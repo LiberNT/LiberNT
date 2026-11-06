@@ -3975,9 +3975,27 @@ HRESULT SHAPE_GetFontScriptTags( HDC hdc, ScriptCache *psc,
         searching = scriptInformation[psa->eScript].scriptTag;
 
     hr = OpenType_GetFontScriptTags(psc, searching, cMaxTags, pScriptTags, pcTags);
+    if (hr == USP_E_SCRIPT_NOT_IN_FONT && !*pcTags)
+        hr = S_OK;
     if (FAILED(hr))
         *pcTags = 0;
     return hr;
+}
+
+static BOOL script_in_font(ScriptCache *psc, OPENTYPE_TAG script)
+{
+    OPENTYPE_TAG found;
+    int count;
+
+    return OpenType_GetFontScriptTags(psc, script, 1, &found, &count) != USP_E_SCRIPT_NOT_IN_FONT;
+}
+
+static HRESULT get_absent_script_tags(const SCRIPT_ANALYSIS *psa, OPENTYPE_TAG script, int *pcTags)
+{
+    if (psa && scriptInformation[psa->eScript].scriptTag && scriptInformation[psa->eScript].scriptTag != script)
+        return E_INVALIDARG;
+    *pcTags = 0;
+    return S_OK;
 }
 
 HRESULT SHAPE_GetFontLanguageTags( HDC hdc, ScriptCache *psc,
@@ -3990,6 +4008,9 @@ HRESULT SHAPE_GetFontLanguageTags( HDC hdc, ScriptCache *psc,
     BOOL fellback = FALSE;
 
     load_ot_tables(hdc, psc);
+
+    if (!script_in_font(psc, tagScript))
+        return get_absent_script_tags(psa, tagScript, pcTags);
 
     if (psa && psc->userLang != 0)
         searching = psc->userLang;
@@ -4017,6 +4038,9 @@ HRESULT SHAPE_GetFontFeatureTags( HDC hdc, ScriptCache *psc,
     BOOL filter = FALSE;
 
     load_ot_tables(hdc, psc);
+
+    if (!script_in_font(psc, tagScript))
+        return get_absent_script_tags(psa, tagScript, pcTags);
 
     if (psa && scriptInformation[psa->eScript].scriptTag)
     {

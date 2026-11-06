@@ -68,6 +68,8 @@ public:
     using Native12Child::Native12Child;
     ~Native12Fence();
     HRESULT Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS flags);
+    HRESULT InitializeOpened(D3DKMT_HANDLE opened, const volatile UINT64 *cpu_value, D3DGPU_VIRTUAL_ADDRESS gpu_value);
+    HRESULT CreateDriverFence(D3DGPU_VIRTUAL_ADDRESS gpu_value);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
     UINT64 STDMETHODCALLTYPE GetCompletedValue() override;
     HRESULT STDMETHODCALLTYPE SetEventOnCompletion(UINT64 value, HANDLE event) override;
@@ -93,7 +95,6 @@ public:
     SRWLOCK context_lock = SRWLOCK_INIT;
     SRWLOCK submit_lock = SRWLOCK_INIT;
     HANDLE contexts[D3DDDI_MAX_BROADCAST_CONTEXT] = {};
-    bool submitted[D3DDDI_MAX_BROADCAST_CONTEXT] = {};
     UINT context_count = 0;
 
     using Native12Child::Native12Child;
@@ -101,8 +102,6 @@ public:
     HRESULT Initialize(const D3D12_COMMAND_QUEUE_DESC *input);
     void AddContext(HANDLE context);
     void RemoveContext(HANDLE context);
-    bool NoteSubmission(HANDLE context);
-    UINT SignalContexts(HANDLE *out);
     UINT WaitContexts(HANDLE *out);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
     void STDMETHODCALLTYPE UpdateTileMappings(ID3D12Resource *resource, UINT region_count,
@@ -205,6 +204,7 @@ public:
     using Native12Child::Native12Child;
     ~Native12Resource();
     D3D12_MIP_REGION mip_region = {};
+    const Native12CreationLayout *creation_layout = NULL;
 
     HRESULT Initialize(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
             const D3D12_RESOURCE_DESC *input, D3D12_RESOURCE_STATES initial_state,
@@ -271,6 +271,7 @@ public:
 
     using Native12Child::Native12Child;
     ~Native12RootSignature();
+    HRESULT CreateDriver0013(const D3D12DDI_ROOT_SIGNATURE_0100 &signature);
     HRESULT Initialize(const void *bytecode, SIZE_T length);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
 };
@@ -602,7 +603,9 @@ class Native12PipelineLibrary;
 class Native12PipelineState final : public Native12Child<ID3D12PipelineState>
 {
 public:
-    enum { ShaderCount = 6 };
+    enum { ShaderCount = 8 };
+    D3D12_SHADER_BYTECODE mesh_bytecode = {};
+    D3D12_SHADER_BYTECODE amplification_bytecode = {};
     D3D12DDI_HPIPELINESTATE driver = {};
     bool driver_created = false;
     Native12RootSignature *root_signature = NULL;
@@ -921,8 +924,8 @@ bool Native12GetFormatInfo(DXGI_FORMAT format, Native12FormatInfo *info);
 HRESULT Native12ValidateResourceDesc(const D3D12_RESOURCE_DESC *desc);
 HRESULT Native12ValidateResource(D3D12_HEAP_TYPE heap_type, const D3D12_RESOURCE_DESC *desc,
         D3D12_RESOURCE_STATES state, const D3D12_CLEAR_VALUE *clear_value);
-void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, D3D12_FORMAT_SUPPORT1 *support1,
-        D3D12_FORMAT_SUPPORT2 *support2);
+void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, bool logic_op, bool tiled,
+        D3D12_FORMAT_SUPPORT1 *support1, D3D12_FORMAT_SUPPORT2 *support2);
 D3D12DDI_COMMAND_QUEUE_FLAGS Native12QueueFlags(D3D12_COMMAND_LIST_TYPE type);
 bool Native12VideoListError(HANDLE handle, HRESULT hr);
 UINT Native12ConvertResourceBarriers(UINT count, const D3D12_RESOURCE_BARRIER *barriers,

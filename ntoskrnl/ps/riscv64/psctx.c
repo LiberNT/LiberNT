@@ -45,7 +45,9 @@ PspGetOrSetContextKernelRoutine(
 
     /* Accept only this architecture's context layout. */
     if (!(Request->Context.ContextFlags & CONTEXT_RISCV64) ||
-        (Request->Context.ContextFlags & ~(CONTEXT_ALL | CONTEXT_EXCEPTION_REQUEST)))
+        (Request->Context.ContextFlags & ~(CONTEXT_ALL | CONTEXT_EXCEPTION_REQUEST |
+                                           CONTEXT_EXCEPTION_REPORTING | CONTEXT_SERVICE_ACTIVE |
+                                           CONTEXT_EXCEPTION_ACTIVE)))
     {
         Request->Status = STATUS_INVALID_PARAMETER;
         KeSetEvent(&Request->Event, IO_NO_INCREMENT, FALSE);

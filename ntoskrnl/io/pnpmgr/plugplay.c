@@ -1074,6 +1074,13 @@ IopGetRelatedDevice(PPLUGPLAY_CONTROL_RELATED_DEVICE_DATA RelatedDeviceData)
             return STATUS_INVALID_PARAMETER;
     }
 
+    while (Relation != PNP_GET_PARENT_DEVICE &&
+           RelatedDeviceNode != NULL &&
+           RelatedDeviceNode->InstancePath.Length == 0)
+    {
+        RelatedDeviceNode = RelatedDeviceNode->Sibling;
+    }
+
     if (RelatedDeviceNode == NULL)
     {
         if (DeviceObject)
@@ -1411,7 +1418,7 @@ IopGetDeviceRelations(PPLUGPLAY_CONTROL_DEVICE_RELATIONS_DATA RelationsData)
             ChildDeviceObject = DeviceRelations->Objects[i];
 
             ChildDeviceNode = IopGetDeviceNode(ChildDeviceObject);
-            if (ChildDeviceNode)
+            if (ChildDeviceNode && ChildDeviceNode->InstancePath.Length != 0)
             {
                 DPRINT("Device instance: %wZ\n", &ChildDeviceNode->InstancePath);
                 DPRINT("RequiredSize: %hu\n", ChildDeviceNode->InstancePath.Length + sizeof(WCHAR));

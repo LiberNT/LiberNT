@@ -550,6 +550,93 @@ static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOO
         IUnknown_Release(unk);
 }
 
+static unsigned int qc_sink_calls;
+static IBaseFilter *qc_sink_sender;
+
+static HRESULT WINAPI qc_sink_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    *out = iface;
+    return S_OK;
+}
+
+static ULONG WINAPI qc_sink_AddRef(IQualityControl *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI qc_sink_Release(IQualityControl *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI qc_sink_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    ++qc_sink_calls;
+    qc_sink_sender = sender;
+    return 0xdeadbeef;
+}
+
+static HRESULT WINAPI qc_sink_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static const IQualityControlVtbl qc_sink_vtbl =
+{
+    qc_sink_QueryInterface,
+    qc_sink_AddRef,
+    qc_sink_Release,
+    qc_sink_Notify,
+    qc_sink_SetSink,
+};
+
+static void test_pin_quality_control(IBaseFilter *filter, IPin *pin, HRESULT expect_hr, HRESULT expect_null_hr, BOOL forwards)
+{
+    IQualityControl qc_sink = {&qc_sink_vtbl};
+    Quality q = {Famine, 1000, -10000, 0};
+    IQualityControl *qc;
+    IPin *qc_pin;
+    HRESULT hr;
+
+    hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (FAILED(hr))
+        return;
+
+    hr = IQualityControl_QueryInterface(qc, &IID_IPin, (void **)&qc_pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(qc_pin == pin, "Got pin %p, expected %p.\n", qc_pin, pin);
+    IPin_Release(qc_pin);
+
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == expect_hr, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, NULL, q);
+    ok(hr == expect_null_hr, "Got hr %#lx.\n", hr);
+
+    hr = IQualityControl_SetSink(qc, &qc_sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    qc_sink_calls = 0;
+    qc_sink_sender = NULL;
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == (forwards ? 0xdeadbeef : expect_hr), "Got hr %#lx.\n", hr);
+    ok(qc_sink_calls == !!forwards, "Got %u calls.\n", qc_sink_calls);
+    ok(qc_sink_sender == (forwards ? filter : NULL), "Got sender %p.\n", qc_sink_sender);
+    if (forwards)
+    {
+        qc_sink_sender = NULL;
+        hr = IQualityControl_Notify(qc, NULL, q);
+        ok(hr == 0xdeadbeef, "Got hr %#lx.\n", hr);
+        ok(qc_sink_sender == filter, "Got sender %p.\n", qc_sink_sender);
+    }
+    hr = IQualityControl_SetSink(qc, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == expect_hr, "Got hr %#lx.\n", hr);
+
+    IQualityControl_Release(qc);
+}
+
 static void test_interfaces(void)
 {
     IBaseFilter *filter = create_dmo_wrapper();
@@ -559,7 +646,7 @@ static void test_interfaces(void)
     check_interface(filter, &IID_IDMOWrapperFilter, TRUE);
     check_interface(filter, &IID_IMediaFilter, TRUE);
     check_interface(filter, &IID_IPersist, TRUE);
-    todo_wine check_interface(filter, &IID_IPersistStream, TRUE);
+    check_interface(filter, &IID_IPersistStream, TRUE);
     check_interface(filter, &IID_IUnknown, TRUE);
 
     check_interface(filter, &IID_IAMFilterMiscFlags, FALSE);
@@ -586,6 +673,8 @@ static void test_interfaces(void)
     check_interface(pin, &IID_IMediaPosition, FALSE);
     check_interface(pin, &IID_IMediaSeeking, FALSE);
 
+    test_pin_quality_control(filter, pin, E_NOTIMPL, E_NOTIMPL, FALSE);
+
     IPin_Release(pin);
 
     IBaseFilter_FindPin(filter, L"out0", &pin);
@@ -598,6 +687,8 @@ static void test_interfaces(void)
 
     check_interface(pin, &IID_IAsyncReader, FALSE);
     check_interface(pin, &IID_IKsPropertySet, FALSE);
+
+    test_pin_quality_control(filter, pin, E_FAIL, E_FAIL, TRUE);
 
     IPin_Release(pin);
 
@@ -2282,6 +2373,27 @@ static void test_streaming_events(IMediaControl *control, IPin *sink, IMemInputP
 
     hr = IMediaControl_Stop(control);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_EndOfStream(sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == VFW_E_SAMPLE_REJECTED_EOS, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_EndOfStream(sink);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    got_ProcessInput = got_ProcessOutput = got_Receive = 0;
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(got_ProcessInput == 1, "Got %u calls to ProcessInput().\n", got_ProcessInput);
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    got_ProcessInput = got_ProcessOutput = got_Receive = 0;
     IMediaSample_Release(sample);
     IMemAllocator_Release(allocator);
 }
@@ -2593,6 +2705,94 @@ static void test_uninitialized(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_persist_stream(void)
+{
+    LARGE_INTEGER zero = {{0}};
+    IPersistStream *persist;
+    ULARGE_INTEGER pos;
+    IBaseFilter *filter;
+    IStream *stream;
+    GUID ids[2];
+    CLSID clsid;
+    IPin *pin;
+    HRESULT hr;
+    ULONG ref;
+
+    hr = CoCreateInstance(&CLSID_DMOWrapperFilter, NULL,
+            CLSCTX_INPROC_SERVER, &IID_IPersistStream, (void **)&persist);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IPersistStream_GetClassID(persist, &clsid);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&clsid, &CLSID_DMOWrapperFilter), "Got clsid %s.\n", wine_dbgstr_guid(&clsid));
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    CreateStreamOnHGlobal(NULL, TRUE, &stream);
+    hr = IPersistStream_Save(persist, stream, TRUE);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IStream_Seek(stream, zero, STREAM_SEEK_CUR, &pos);
+    ok(pos.QuadPart == sizeof(ids), "Got position %I64u.\n", pos.QuadPart);
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    hr = IStream_Read(stream, ids, sizeof(ids), NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&ids[0], &GUID_NULL), "Got clsid %s.\n", wine_dbgstr_guid(&ids[0]));
+    ok(IsEqualGUID(&ids[1], &GUID_NULL), "Got category %s.\n", wine_dbgstr_guid(&ids[1]));
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    hr = IPersistStream_Load(persist, stream);
+    ok(hr == REGDB_E_CLASSNOTREG, "Got hr %#lx.\n", hr);
+    IStream_Release(stream);
+    ref = IPersistStream_Release(persist);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+
+    filter = create_dmo_wrapper();
+    IBaseFilter_QueryInterface(filter, &IID_IPersistStream, (void **)&persist);
+    CreateStreamOnHGlobal(NULL, TRUE, &stream);
+    hr = IPersistStream_Save(persist, stream, TRUE);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPersistStream_IsDirty(persist);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    hr = IStream_Read(stream, ids, sizeof(ids), NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&ids[0], &testdmo_clsid), "Got clsid %s.\n", wine_dbgstr_guid(&ids[0]));
+    ok(IsEqualGUID(&ids[1], &DMOCATEGORY_AUDIO_DECODER), "Got category %s.\n", wine_dbgstr_guid(&ids[1]));
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    hr = IPersistStream_Load(persist, stream);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    ids[1] = GUID_NULL;
+    IStream_Write(stream, ids, sizeof(ids), NULL);
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    hr = IPersistStream_Load(persist, stream);
+    ok(hr == E_UNEXPECTED, "Got hr %#lx.\n", hr);
+    IPersistStream_Release(persist);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+
+    hr = CoCreateInstance(&CLSID_DMOWrapperFilter, NULL,
+            CLSCTX_INPROC_SERVER, &IID_IBaseFilter, (void **)&filter);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IBaseFilter_QueryInterface(filter, &IID_IPersistStream, (void **)&persist);
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    ids[1] = DMOCATEGORY_AUDIO_DECODER;
+    IStream_Write(stream, ids, sizeof(ids), NULL);
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    hr = IPersistStream_Load(persist, stream);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IBaseFilter_FindPin(filter, L"in0", &pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IPin_Release(pin);
+    hr = IBaseFilter_FindPin(filter, L"out0", &pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IPin_Release(pin);
+    IStream_Release(stream);
+    IPersistStream_Release(persist);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(dmowrapper)
 {
     DWORD cookie;
@@ -2621,6 +2821,7 @@ START_TEST(dmowrapper)
     test_enum_media_types();
     test_connect_pin();
     test_uninitialized();
+    test_persist_stream();
 
     CoRevokeClassObject(cookie);
     DMOUnregister(&testdmo_clsid, &DMOCATEGORY_AUDIO_DECODER);

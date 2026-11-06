@@ -10,6 +10,7 @@ list(APPEND SOURCE
     CloseWindow.c
     ClipboardAccess.c
     ClipboardData.c
+    FrameMetrics.c
     ComboBox.c
     CopyImage.c
     CopyImage_Icon.c
@@ -78,6 +79,7 @@ list(APPEND SOURCE
     NextDlgItem.c
     NonClientPaint.c
     NonClientUpdate.c
+    OwnedZOrder.c
     OwnerDestroy.c
     PersianLayout.c
     PhysicalPoint.c
@@ -117,6 +119,7 @@ list(APPEND SOURCE
     UpdateRegion.c
     UserHandleGrantAccess.c
     VirtualKey.c
+    WaitForInputIdle.c
     WindowBand.c
     WndProc.c
     wsprintf.c)

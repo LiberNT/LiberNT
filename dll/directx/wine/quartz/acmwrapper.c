@@ -38,6 +38,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 struct acm_wrapper
 {
     struct strmbase_filter filter;
+    IPersistPropertyBag IPersistPropertyBag_iface;
 
     struct strmbase_source source;
     IQualityControl source_IQualityControl_iface;
@@ -65,6 +66,8 @@ static HRESULT acm_wrapper_sink_query_interface(struct strmbase_pin *iface, REFI
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->sink.IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->sink.IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -506,12 +509,94 @@ static HRESULT acm_wrapper_cleanup_stream(struct strmbase_filter *iface)
     return S_OK;
 }
 
+static HRESULT acm_wrapper_query_interface(struct strmbase_filter *iface, REFIID iid, void **out)
+{
+    struct acm_wrapper *filter = impl_from_strmbase_filter(iface);
+
+    if (IsEqualGUID(iid, &IID_IPersistPropertyBag))
+        *out = &filter->IPersistPropertyBag_iface;
+    else
+        return E_NOINTERFACE;
+
+    IUnknown_AddRef((IUnknown *)*out);
+    return S_OK;
+}
+
 static const struct strmbase_filter_ops filter_ops =
 {
     .filter_get_pin = acm_wrapper_get_pin,
+    .filter_query_interface = acm_wrapper_query_interface,
     .filter_destroy = acm_wrapper_destroy,
     .filter_init_stream = acm_wrapper_init_stream,
     .filter_cleanup_stream = acm_wrapper_cleanup_stream,
+};
+
+static struct acm_wrapper *impl_from_IPersistPropertyBag(IPersistPropertyBag *iface)
+{
+    return CONTAINING_RECORD(iface, struct acm_wrapper, IPersistPropertyBag_iface);
+}
+
+static HRESULT WINAPI property_bag_QueryInterface(IPersistPropertyBag *iface, REFIID iid, void **out)
+{
+    struct acm_wrapper *filter = impl_from_IPersistPropertyBag(iface);
+    return IUnknown_QueryInterface(filter->filter.outer_unk, iid, out);
+}
+
+static ULONG WINAPI property_bag_AddRef(IPersistPropertyBag *iface)
+{
+    struct acm_wrapper *filter = impl_from_IPersistPropertyBag(iface);
+    return IUnknown_AddRef(filter->filter.outer_unk);
+}
+
+static ULONG WINAPI property_bag_Release(IPersistPropertyBag *iface)
+{
+    struct acm_wrapper *filter = impl_from_IPersistPropertyBag(iface);
+    return IUnknown_Release(filter->filter.outer_unk);
+}
+
+static HRESULT WINAPI property_bag_GetClassID(IPersistPropertyBag *iface, CLSID *clsid)
+{
+    struct acm_wrapper *filter = impl_from_IPersistPropertyBag(iface);
+    return IBaseFilter_GetClassID(&filter->filter.IBaseFilter_iface, clsid);
+}
+
+static HRESULT WINAPI property_bag_InitNew(IPersistPropertyBag *iface)
+{
+    TRACE("iface %p.\n", iface);
+
+    return S_OK;
+}
+
+static HRESULT WINAPI property_bag_Load(IPersistPropertyBag *iface, IPropertyBag *bag, IErrorLog *log)
+{
+    VARIANT var;
+    HRESULT hr;
+
+    TRACE("iface %p, bag %p, log %p.\n", iface, bag, log);
+
+    V_VT(&var) = VT_I4;
+    hr = IPropertyBag_Read(bag, L"AcmId", &var, NULL);
+    /* TODO: restrict the output media types to the AcmId format tag */
+    TRACE("AcmId hr %#lx.\n", hr);
+    return S_OK;
+}
+
+static HRESULT WINAPI property_bag_Save(IPersistPropertyBag *iface, IPropertyBag *bag, BOOL clear_dirty, BOOL save_all)
+{
+    TRACE("iface %p, bag %p, clear_dirty %d, save_all %d.\n", iface, bag, clear_dirty, save_all);
+
+    return E_NOTIMPL;
+}
+
+static const IPersistPropertyBagVtbl property_bag_vtbl =
+{
+    property_bag_QueryInterface,
+    property_bag_AddRef,
+    property_bag_Release,
+    property_bag_GetClassID,
+    property_bag_InitNew,
+    property_bag_Load,
+    property_bag_Save,
 };
 
 HRESULT acm_wrapper_create(IUnknown *outer, IUnknown **out)
@@ -522,6 +607,7 @@ HRESULT acm_wrapper_create(IUnknown *outer, IUnknown **out)
         return E_OUTOFMEMORY;
 
     strmbase_filter_init(&object->filter, outer, &CLSID_ACMWrapper, &filter_ops);
+    object->IPersistPropertyBag_iface.lpVtbl = &property_bag_vtbl;
 
     strmbase_sink_init(&object->sink, &object->filter, L"In", &sink_ops, NULL);
     wcscpy(object->sink.pin.name, L"Input");

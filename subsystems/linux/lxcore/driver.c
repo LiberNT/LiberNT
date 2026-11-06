@@ -6,6 +6,7 @@
  */
 
 #include "lxcore.h"
+#include "../include/lxgpu.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -511,7 +512,9 @@ LxInstallTty(
     }
 
     Status = LxTtyCreate(Process->Instance,
+                         Process->Instance->Devpts,
                          (Boot ? LX_TTY_CONSOLE : 0) | LX_TTY_NT_MASTER,
+                         0,
                          0,
                          In->Rows ? In->Rows : 25,
                          In->Columns ? In->Columns : 80,
@@ -526,7 +529,7 @@ LxInstallTty(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if (Boot || (Process->Instance->Console == NULL))
+    if (Boot || ((Process->Instance->Console == NULL) && !Process->Instance->Booted))
     {
         LxTtyReference(Tty);
         Process->Instance->Console = Tty;
@@ -993,6 +996,16 @@ LxCompleteIrp(
 }
 
 static
+BOOLEAN
+LxIsGpuFile(
+    _In_ PFILE_OBJECT FileObject)
+{
+    UNICODE_STRING GpuName = RTL_CONSTANT_STRING(LX_GPU_FILE_NAME);
+
+    return RtlEqualUnicodeString(&FileObject->FileName, &GpuName, TRUE);
+}
+
+static
 NTSTATUS
 NTAPI
 LxDispatchCreate(
@@ -1011,6 +1024,8 @@ LxDispatchCreate(
         return LxCompleteIrp(Irp, STATUS_SUCCESS, 0);
     if (RtlEqualUnicodeString(&FileObject->FileName, &WindowName, TRUE))
         return LxCompleteIrp(Irp, LxWinHostCreate(FileObject), FILE_OPENED);
+    if (LxIsGpuFile(FileObject))
+        return LxCompleteIrp(Irp, LxGpuHostCreate(FileObject), FILE_OPENED);
     if (!RtlEqualUnicodeString(&FileObject->FileName, &PtyName, TRUE))
         return LxCompleteIrp(Irp, STATUS_OBJECT_NAME_NOT_FOUND, 0);
 
@@ -1033,7 +1048,10 @@ LxDispatchCleanup(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    LxWinHostCleanup(IoGetCurrentIrpStackLocation(Irp)->FileObject);
+    if (LxIsGpuFile(IoGetCurrentIrpStackLocation(Irp)->FileObject))
+        LxGpuHostCleanup(IoGetCurrentIrpStackLocation(Irp)->FileObject);
+    else
+        LxWinHostCleanup(IoGetCurrentIrpStackLocation(Irp)->FileObject);
     if (Pty != NULL)
     {
         InterlockedExchange(&Pty->Closed, TRUE);
@@ -1056,7 +1074,10 @@ LxDispatchClose(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    LxWinHostClose(FileObject);
+    if (LxIsGpuFile(FileObject))
+        LxGpuHostClose(FileObject);
+    else
+        LxWinHostClose(FileObject);
     if (Pty != NULL)
     {
         FileObject->FsContext = NULL;
@@ -1165,8 +1186,15 @@ LxDispatchDeviceControl(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    if (LxWinHostIoctl(Stack->FileObject, Irp, Stack, &Status))
+    if (LxIsGpuFile(Stack->FileObject))
+    {
+        if (LxGpuHostIoctl(Stack->FileObject, Irp, Stack, &Status))
+            return Status;
+    }
+    else if (LxWinHostIoctl(Stack->FileObject, Irp, Stack, &Status))
+    {
         return Status;
+    }
 
     Irp->IoStatus.Information = 0;
     switch (Stack->Parameters.DeviceIoControl.IoControlCode)
@@ -1218,6 +1246,7 @@ DriverEntry(
     LxProcessInitialize();
     LxHugeInitialize();
     LxTmpfsInitialize();
+    LxFlockInitialize();
     InitializeListHead(&LxInstanceList);
     ExInitializeFastMutex(&LxInstanceListLock);
     LxKlogInitialize();

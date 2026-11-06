@@ -75,6 +75,15 @@ DxgkPagingCoreValidate(
     }
 }
 
+DXGK_PAGING_CORE_OP
+DxgkPagingCorePlacementClearOperation(
+    _In_ DXGK_SEGMENTFLAGS SegmentFlags)
+{
+    if (SegmentFlags.Aperture || SegmentFlags.Agp || SegmentFlags.PitchAlignment)
+        return DxgkPagingCoreOpNone;
+    return DxgkPagingCoreOpFill;
+}
+
 NTSTATUS
 DxgkPagingCoreMultipassBegin(
     _Out_ PDXGK_PAGING_CORE_MULTIPASS Pass,

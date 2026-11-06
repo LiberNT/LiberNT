@@ -369,6 +369,8 @@ wWinMain(HINSTANCE hInstance,
     /* Signal auto-start complete event */
     SetEvent(hScmAutoStartCompleteEvent);
 
+    ScmStartTriggers();
+
     /* FIXME: more to do ? */
 
     /* Release the service start lock */

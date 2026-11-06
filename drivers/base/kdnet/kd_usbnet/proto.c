@@ -232,14 +232,88 @@ UsbNetStartNcm(
     if (Divisor > USBNET_TX_SIZE / 4)
         return STATUS_NOT_SUPPORTED;
 
-    while (Header % Divisor != Remainder)
-        Header++;
+    Header = KdUsbNcmDatagramOffset(Header, Divisor, Remainder);
 
     if (Header + USBNET_MAX_FRAME > Adapter->NcmOutMaxSize)
         return STATUS_NOT_SUPPORTED;
 
     Adapter->TxHeader = Header;
     return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+UsbNetRtlRead(
+    _In_ PUSBNET_ADAPTER Adapter,
+    _In_ USHORT Register,
+    _Out_ PULONG Value)
+{
+    ULONG Got;
+
+    if (!NT_SUCCESS(XhciControl(Adapter, RTL_REQUEST_IN, RTL_REQUEST_REGISTER, Register, RTL_INDEX_READ,
+                                RTL_REGISTER_SIZE, &Got)) || Got < RTL_REGISTER_SIZE)
+    {
+        return FALSE;
+    }
+
+    *Value = UsbNetGet32(Adapter->Control);
+    return TRUE;
+}
+
+static
+VOID
+UsbNetRtlWrite(
+    _In_ PUSBNET_ADAPTER Adapter,
+    _In_ USHORT Register,
+    _In_ ULONG Value)
+{
+    UsbNetPut32(Adapter->Control, Value);
+    XhciControl(Adapter, RTL_REQUEST_OUT, RTL_REQUEST_REGISTER, Register, RTL_INDEX_WRITE, RTL_REGISTER_SIZE, NULL);
+}
+
+static
+VOID
+UsbNetRtlWaitLinkList(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    ULONG Value, i;
+
+    for (i = 0; i < RTL_LIST_WAIT; i++)
+    {
+        if (!UsbNetRtlRead(Adapter, RTL_REG_OOB, &Value) || (Value & RTL_OOB_LIST_READY))
+            return;
+
+        XhciStall(RTL_LIST_STEP);
+    }
+}
+
+/* A warm reboot keeps the chip powered: the driver of the previous OS can leave its MAC off, which ECM cannot see */
+/* TODO: other products of the RTL8153 family (rebranded vendor and product IDs) */
+static
+VOID
+UsbNetRtlWake(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    ULONG Command, Oob, List;
+
+    if (Adapter->VendorId != RTL_VENDOR_ID || Adapter->ProductId != RTL_PRODUCT_8153 ||
+        !UsbNetRtlRead(Adapter, RTL_REG_COMMAND, &Command) || !UsbNetRtlRead(Adapter, RTL_REG_OOB, &Oob) ||
+        !(Oob & RTL_OOB_ACTIVE))
+    {
+        return;
+    }
+
+    UsbNetTrace("USB debugger: RTL8153 was left in standby (command %08lx, standby %08lx), enabling its MAC\n", Command, Oob);
+    UsbNetRtlWrite(Adapter, RTL_REG_OOB, Oob & ~RTL_OOB_ACTIVE);
+    if (UsbNetRtlRead(Adapter, RTL_REG_LINK_LIST, &List))
+        UsbNetRtlWrite(Adapter, RTL_REG_LINK_LIST, List & ~RTL_LIST_MCU_BORROW);
+
+    UsbNetRtlWaitLinkList(Adapter);
+    if (UsbNetRtlRead(Adapter, RTL_REG_LINK_LIST, &List))
+        UsbNetRtlWrite(Adapter, RTL_REG_LINK_LIST, List | RTL_LIST_REINIT);
+
+    UsbNetRtlWaitLinkList(Adapter);
+    UsbNetRtlWrite(Adapter, RTL_REG_COMMAND, Command | RTL_COMMAND_ENABLE);
 }
 
 NTSTATUS
@@ -259,6 +333,17 @@ UsbNetStartFunction(
     Adapter->BulkOut.Address = Function->OutAddress;
     Adapter->BulkOut.MaxPacket = Function->OutPacket;
     Adapter->BulkOut.MaxBurst = Function->OutBurst;
+    Adapter->Status.Address = Function->StatusAddress;
+    Adapter->Status.MaxBurst = Function->StatusBurst;
+    Adapter->Status.MaxPacket = 0;
+    Adapter->StatusActive = FALSE;
+    Adapter->StatusSeen = FALSE;
+    Adapter->Carrier = TRUE;
+    if ((Function->Protocol == UsbNetEcm || Function->Protocol == UsbNetNcm) &&
+        Function->StatusPacket <= USBNET_STATUS_SIZE)
+    {
+        Adapter->Status.MaxPacket = Function->StatusPacket;
+    }
 
     if (Function->Protocol == UsbNetNcm)
     {
@@ -287,11 +372,14 @@ UsbNetStartFunction(
         case UsbNetEcm:
         case UsbNetNcm:
             UsbNetReadMacString(Adapter);
+            UsbNetRtlWake(Adapter);
             XhciControl(Adapter, USB_CLASS_OUT, CDC_SET_ETHERNET_PACKET_FILTER,
                         CDC_PACKET_TYPE_DIRECTED | CDC_PACKET_TYPE_BROADCAST,
                         Function->ControlInterface, 0, NULL);
             if (Function->Protocol == UsbNetEcm)
                 Adapter->TxHeader = 0;
+
+            UsbNetStartStatus(Adapter);
             return STATUS_SUCCESS;
 
         case UsbNetEem:
@@ -301,6 +389,52 @@ UsbNetStartFunction(
         default:
             return STATUS_NOT_SUPPORTED;
     }
+}
+
+VOID
+UsbNetStartStatus(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    if (!Adapter->Status.Dci)
+        return;
+
+    XhciQueueBulk(Adapter, &Adapter->Status, Adapter->StatusBuffer, USBNET_STATUS_SIZE, FALSE);
+    Adapter->StatusActive = TRUE;
+}
+
+VOID
+UsbNetPollStatus(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    PUSBNET_ENDPOINT Endpoint = &Adapter->Status;
+    ULONG Got;
+    UCHAR Completion;
+    BOOLEAN Connected;
+
+    if (!Adapter->StatusActive || !XhciPollEndpoint(Adapter, Endpoint))
+        return;
+
+    Completion = Endpoint->Completion;
+    if (Completion == XHCI_CC_SUCCESS || Completion == XHCI_CC_SHORT_PACKET)
+    {
+        Got = Endpoint->Residual <= USBNET_STATUS_SIZE ? USBNET_STATUS_SIZE - Endpoint->Residual : 0;
+        if (KdUsbParseNotifications(Adapter->StatusBuffer, Got, &Connected))
+        {
+            Adapter->StatusSeen = TRUE;
+            Adapter->Carrier = Connected;
+            *Adapter->KdNet->LinkState = Adapter->LinkUp && Adapter->Carrier;
+        }
+    }
+    else if (Completion < XHCI_CC_STOPPED || Completion > XHCI_CC_STOPPED_SHORT)
+    {
+        /* The state of the cable is now unknown and bulk transfers may still work */
+        Adapter->StatusActive = FALSE;
+        Adapter->Carrier = TRUE;
+        *Adapter->KdNet->LinkState = Adapter->LinkUp;
+        return;
+    }
+
+    UsbNetStartStatus(Adapter);
 }
 
 static

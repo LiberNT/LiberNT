@@ -671,6 +671,17 @@ static void on_before_navigate2(DocHost *This, LPCWSTR url, SAFEARRAY *post_data
     call_sink(This->cps.wbe2, DISPID_BEFORENAVIGATE2, &dispparams);
 
     SysFreeString(V_BSTR(&var_url));
+
+#ifdef __REACTOS__
+    if(!*cancel) {
+        VARIANTARG lock_icon;
+        DISPPARAMS lock_dp = {&lock_icon, NULL, 1, 0};
+
+        V_VT(&lock_icon) = VT_I4;
+        V_I4(&lock_icon) = secureLockIconUnsecure;
+        call_sink(This->cps.wbe2, DISPID_SETSECURELOCKICON, &lock_dp);
+    }
+#endif
 }
 
 /* FIXME: urlmon should handle it */

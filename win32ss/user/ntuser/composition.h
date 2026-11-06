@@ -80,6 +80,8 @@ typedef struct _WND_REDIRECT
     LONG      DxClientY;
     ULONG     DxDrawWidth;
     ULONG     DxDrawHeight;
+    ULONG     DxSourceWidth;
+    ULONG     DxSourceHeight;
     LONG      DxLayerX;
     LONG      DxLayerY;
     RECTL     DxLayerClip;
@@ -170,6 +172,8 @@ VOID IntCompositionOnDisplayChangeEnd(VOID);
 
 /* Damage: a window (NULL = the whole frame) changed — schedule a recompose. */
 VOID IntCompositionDamageWindow(_In_opt_ PWND Wnd);
+VOID IntCompositionPointerChanged(VOID);
+VOID IntCompositionPrepareScreenRead(_In_opt_ HDC hDC);
 VOID IntCompositionAnimateMove(_In_opt_ PWND Wnd, _In_opt_ const RECTL *From);
 VOID IntCompositionDamageWindowMetadata(_In_opt_ PWND Wnd);
 BOOLEAN IntCompositionIsFrameAtom(_In_ ATOM Atom);
@@ -190,8 +194,23 @@ VOID IntCompositionCommitOpenGLFrame(_In_opt_ PSURFACE psurf,
                                      _In_ const RECTL *prcDest);
 
 NTSTATUS
+IntCompositionQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect);
+
+NTSTATUS
 IntCompositionAdmitRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present);
+
+NTSTATUS
+IntCompositionIssueWindowBltTarget(
+    _In_ HWND hWnd,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target);
+
+NTSTATUS
+IntCompositionCancelWindowBltTarget(
+    _In_ HWND hWnd,
+    _In_ ULONGLONG UpdateId);
 
 NTSTATUS
 IntCompositionValidateRedirectedBltPresent(

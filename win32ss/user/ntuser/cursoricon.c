@@ -144,6 +144,7 @@ IntAnimateCursorTimerProc(
         return;
 
     pacon->iicur = (pacon->iicur + 1) % pacon->cicur;
+    IntCompositionPointerChanged();
     IntSetTimer(NULL,
                 gtmridAniCursor,
                 IntGetAconFrameDelay(pacon),
@@ -198,6 +199,7 @@ IntSetCurrentCursorObject(
     }
 
     CurInfo->CurrentCursorObject = pcur;
+    IntCompositionPointerChanged();
 
     if (pcurOld)
         UserDereferenceObject(pcurOld);
@@ -526,6 +528,7 @@ BOOL UserSetCursorPos( INT x, INT y, DWORD flags, ULONG_PTR dwExtraInfo, BOOL Ho
 
     /* 2. Store the new cursor position */
     gpsi->ptCursor = pt;
+    IntCompositionPointerChanged();
 
     return TRUE;
 }

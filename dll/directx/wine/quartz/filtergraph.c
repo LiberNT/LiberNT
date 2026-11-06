@@ -132,7 +132,6 @@ struct filter_graph
     int EcCompleteCount;
     int HandleEcComplete;
     int HandleEcRepaint;
-    int HandleEcClockChanged;
     unsigned int media_events_disabled : 1;
 
     CRITICAL_SECTION cs;
@@ -140,6 +139,8 @@ struct filter_graph
     int nItfCacheEntries;
     BOOL defaultclock;
     GUID timeformatseek;
+    struct filter *time_format_filter;
+    double rate;
     IUnknown *pSite;
     LONG version;
 
@@ -435,6 +436,8 @@ static ULONG WINAPI FilterGraphInner_AddRef(IUnknown *iface)
     return refcount;
 }
 
+static HRESULT graph_stop(struct filter_graph *graph, BOOL pause_first);
+
 static ULONG WINAPI FilterGraphInner_Release(IUnknown *iface)
 {
     struct filter_graph *This = impl_from_IUnknown(iface);
@@ -449,7 +452,7 @@ static ULONG WINAPI FilterGraphInner_Release(IUnknown *iface)
 
         This->ref = 1; /* guard against reentrancy (aggregation). */
 
-        IMediaControl_Stop(&This->IMediaControl_iface);
+        graph_stop(This, FALSE);
 
         while ((cursor = list_head(&This->filters)))
         {
@@ -739,6 +742,8 @@ static HRESULT WINAPI FilterGraph2_RemoveFilter(IFilterGraph2 *iface, IBaseFilte
                 IBaseFilter_Release(pFilter);
                 if (entry->seeking)
                     IMediaSeeking_Release(entry->seeking);
+                if (This->time_format_filter == entry)
+                    This->time_format_filter = NULL;
                 list_remove(&entry->entry);
                 CoTaskMemFree(entry->name);
                 free(entry);
@@ -788,66 +793,82 @@ static HRESULT WINAPI FilterGraph2_FindFilterByName(IFilterGraph2 *iface,
     return VFW_E_NOT_FOUND;
 }
 
-static HRESULT check_cyclic_connection(IPin *source, IPin *sink)
+static HRESULT check_cyclic_connection(IPin *source, IPin *sink);
+
+static HRESULT check_cyclic_output(IPin *source, IPin *output)
 {
-    IPin *upstream_source, *upstream_sink;
-    PIN_INFO source_info, sink_info;
-    IEnumPins *enumpins;
+    IPin *peer;
     HRESULT hr;
 
-    hr = IPin_QueryPinInfo(sink, &sink_info);
-    if (FAILED(hr))
-    {
-        ERR("Failed to query pin, hr %#lx.\n", hr);
-        return hr;
-    }
-    IBaseFilter_Release(sink_info.pFilter);
-
-    hr = IPin_QueryPinInfo(source, &source_info);
-    if (FAILED(hr))
-    {
-        ERR("Failed to query pin, hr %#lx.\n", hr);
-        return hr;
-    }
-
-    if (sink_info.pFilter == source_info.pFilter)
+    if (output == source)
     {
         WARN("Cyclic connection detected; returning VFW_E_CIRCULAR_GRAPH.\n");
-        IBaseFilter_Release(source_info.pFilter);
         return VFW_E_CIRCULAR_GRAPH;
     }
 
-    hr = IBaseFilter_EnumPins(source_info.pFilter, &enumpins);
+    if (IPin_ConnectedTo(output, &peer) != S_OK)
+        return S_OK;
+
+    hr = check_cyclic_connection(source, peer);
+    IPin_Release(peer);
+    return hr;
+}
+
+static HRESULT check_cyclic_connection(IPin *source, IPin *sink)
+{
+    IPin **pins = NULL, *pin;
+    IEnumPins *enumpins;
+    ULONG count = 0, i;
+    PIN_DIRECTION dir;
+    PIN_INFO info;
+    HRESULT hr;
+
+    hr = IPin_QueryInternalConnections(sink, NULL, &count);
+    if (SUCCEEDED(hr) && count)
+    {
+        if (!(pins = calloc(count, sizeof(*pins))))
+            return E_OUTOFMEMORY;
+        hr = IPin_QueryInternalConnections(sink, pins, &count);
+    }
+
+    if (hr == S_OK)
+    {
+        for (i = 0; i < count; ++i)
+        {
+            if (hr == S_OK)
+                hr = check_cyclic_output(source, pins[i]);
+            IPin_Release(pins[i]);
+        }
+        free(pins);
+        return hr;
+    }
+    free(pins);
+
+    hr = IPin_QueryPinInfo(sink, &info);
     if (FAILED(hr))
     {
-        ERR("Failed to enumerate pins, hr %#lx.\n", hr);
-        IBaseFilter_Release(source_info.pFilter);
+        ERR("Failed to query pin, hr %#lx.\n", hr);
         return hr;
     }
 
-    while ((hr = IEnumPins_Next(enumpins, 1, &upstream_sink, NULL)) == S_OK)
+    hr = IBaseFilter_EnumPins(info.pFilter, &enumpins);
+    IBaseFilter_Release(info.pFilter);
+    if (FAILED(hr))
     {
-        PIN_DIRECTION dir = PINDIR_OUTPUT;
+        ERR("Failed to enumerate pins, hr %#lx.\n", hr);
+        return hr;
+    }
 
-        IPin_QueryDirection(upstream_sink, &dir);
-        if (dir == PINDIR_INPUT && IPin_ConnectedTo(upstream_sink, &upstream_source) == S_OK)
-        {
-            hr = check_cyclic_connection(upstream_source, sink);
-            IPin_Release(upstream_source);
-            if (FAILED(hr))
-            {
-                IPin_Release(upstream_sink);
-                IEnumPins_Release(enumpins);
-                IBaseFilter_Release(source_info.pFilter);
-                return hr;
-            }
-        }
-        IPin_Release(upstream_sink);
+    while (hr == S_OK && IEnumPins_Next(enumpins, 1, &pin, NULL) == S_OK)
+    {
+        IPin_QueryDirection(pin, &dir);
+        if (dir == PINDIR_OUTPUT)
+            hr = check_cyclic_output(source, pin);
+        IPin_Release(pin);
     }
     IEnumPins_Release(enumpins);
 
-    IBaseFilter_Release(source_info.pFilter);
-    return S_OK;
+    return hr;
 }
 
 static struct filter *find_sorted_filter(struct filter_graph *graph, IBaseFilter *iface)
@@ -887,7 +908,7 @@ static void sort_filter_recurse(struct filter_graph *graph, struct filter *filte
         {
             IPin_QueryPinInfo(peer, &info);
             /* Note that the filter may have already been sorted. */
-            if ((peer_filter = find_sorted_filter(graph, info.pFilter)))
+            if ((peer_filter = find_sorted_filter(graph, info.pFilter)) && !peer_filter->sorting)
                 sort_filter_recurse(graph, peer_filter, sorted);
             IBaseFilter_Release(info.pFilter);
             IPin_Release(peer);
@@ -915,55 +936,19 @@ static void sort_filters(struct filter_graph *graph)
     list_move_tail(&graph->filters, &sorted);
 }
 
-/* NOTE: despite the implication, it doesn't matter which
- * way round you put in the input and output pins */
-static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *ppinIn, IPin *ppinOut,
-        const AM_MEDIA_TYPE *pmt)
+static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *source, IPin *sink,
+        const AM_MEDIA_TYPE *mt)
 {
-    struct filter_graph *This = impl_from_IFilterGraph2(iface);
-    PIN_DIRECTION dir;
+    struct filter_graph *graph = impl_from_IFilterGraph2(iface);
     HRESULT hr;
 
-    TRACE("(%p/%p)->(%p, %p, %p)\n", This, iface, ppinIn, ppinOut, pmt);
-    strmbase_dump_media_type(pmt);
+    TRACE("graph %p, source %p, sink %p, mt %p.\n", graph, source, sink, mt);
+    strmbase_dump_media_type(mt);
 
     /* FIXME: check pins are in graph */
 
-    if (TRACE_ON(quartz))
-    {
-        PIN_INFO PinInfo;
-
-        hr = IPin_QueryPinInfo(ppinIn, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinIn(%p) => %p\n", ppinIn, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-
-        hr = IPin_QueryPinInfo(ppinOut, &PinInfo);
-        if (FAILED(hr))
-            return hr;
-
-        TRACE("Filter owning ppinOut(%p) => %p\n", ppinOut, PinInfo.pFilter);
-        IBaseFilter_Release(PinInfo.pFilter);
-    }
-
-    hr = IPin_QueryDirection(ppinIn, &dir);
-    if (SUCCEEDED(hr))
-    {
-        if (dir == PINDIR_INPUT)
-        {
-            hr = check_cyclic_connection(ppinOut, ppinIn);
-            if (SUCCEEDED(hr))
-                hr = IPin_Connect(ppinOut, ppinIn, pmt);
-        }
-        else
-        {
-            hr = check_cyclic_connection(ppinIn, ppinOut);
-            if (SUCCEEDED(hr))
-                hr = IPin_Connect(ppinIn, ppinOut, pmt);
-        }
-    }
+    if (SUCCEEDED(hr = check_cyclic_connection(source, sink)))
+        hr = IPin_Connect(source, sink, mt);
 
     return hr;
 }
@@ -971,8 +956,16 @@ static HRESULT WINAPI FilterGraph2_ConnectDirect(IFilterGraph2 *iface, IPin *ppi
 static HRESULT WINAPI FilterGraph2_Reconnect(IFilterGraph2 *iface, IPin *pin)
 {
     struct filter_graph *graph = impl_from_IFilterGraph2(iface);
+    FILTER_STATE state;
 
     TRACE("graph %p, pin %p.\n", graph, pin);
+
+    EnterCriticalSection(&graph->cs);
+    state = graph->state;
+    LeaveCriticalSection(&graph->cs);
+
+    if (state != State_Stopped)
+        return VFW_E_WRONG_STATE;
 
     return IFilterGraph2_ReconnectEx(iface, pin, NULL);
 }
@@ -989,10 +982,36 @@ static HRESULT WINAPI FilterGraph2_Disconnect(IFilterGraph2 *iface, IPin *ppin)
     return IPin_Disconnect(ppin);
 }
 
+static BOOL has_connected_input(IBaseFilter *filter)
+{
+    IEnumPins *enumpins;
+    PIN_DIRECTION dir;
+    IPin *pin, *peer;
+    BOOL ret = FALSE;
+
+    if (FAILED(IBaseFilter_EnumPins(filter, &enumpins)))
+        return FALSE;
+
+    while (!ret && IEnumPins_Next(enumpins, 1, &pin, NULL) == S_OK)
+    {
+        IPin_QueryDirection(pin, &dir);
+        if (dir == PINDIR_INPUT && IPin_ConnectedTo(pin, &peer) == S_OK)
+        {
+            IPin_Release(peer);
+            ret = TRUE;
+        }
+        IPin_Release(pin);
+    }
+    IEnumPins_Release(enumpins);
+
+    return ret;
+}
+
 static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface)
 {
     struct filter_graph *This = impl_from_IFilterGraph2(iface);
-    IReferenceClock *pClock = NULL;
+    IReferenceClock *pClock = NULL, *clock;
+    IBaseFilter *provider = NULL;
     struct filter *filter;
     HRESULT hr = S_OK;
 
@@ -1002,20 +1021,32 @@ static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface)
 
     LIST_FOR_EACH_ENTRY(filter, &This->filters, struct filter, entry)
     {
-        if (IBaseFilter_QueryInterface(filter->filter, &IID_IReferenceClock, (void **)&pClock) == S_OK)
+        if (IBaseFilter_QueryInterface(filter->filter, &IID_IReferenceClock, (void **)&clock) != S_OK)
+            continue;
+
+        if (has_connected_input(filter->filter))
+        {
+            if (pClock)
+                IReferenceClock_Release(pClock);
+            pClock = clock;
+            provider = filter->filter;
             break;
+        }
+
+        if (pClock)
+        {
+            IReferenceClock_Release(clock);
+        }
+        else
+        {
+            pClock = clock;
+            provider = filter->filter;
+        }
     }
 
+    This->refClockProvider = provider;
     if (!pClock)
-    {
         hr = CoCreateInstance(&CLSID_SystemClock, NULL, CLSCTX_INPROC_SERVER, &IID_IReferenceClock, (LPVOID*)&pClock);
-        This->refClockProvider = NULL;
-    }
-    else
-    {
-        filter = LIST_ENTRY(list_tail(&This->filters), struct filter, entry);
-        This->refClockProvider = filter->filter;
-    }
 
     if (SUCCEEDED(hr))
     {
@@ -1023,6 +1054,9 @@ static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface)
         This->defaultclock = TRUE;
         IReferenceClock_Release(pClock);
     }
+
+    sort_filters(This);
+
     LeaveCriticalSection(&This->cs);
 
     return hr;
@@ -1090,6 +1124,12 @@ static HRESULT create_filter(struct filter_graph *graph, IMoniker *moniker, IBas
 static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
         BOOL render_to_existing, unsigned int recursion_depth);
 
+static void set_render_error(HRESULT *error, HRESULT hr)
+{
+    if (hr != E_FAIL && hr != VFW_E_CANNOT_CONNECT)
+        *error = hr;
+}
+
 static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
         IBaseFilter *filter, IPin *middle_sink, IPin *sink,
         BOOL render_to_existing, unsigned int recursion_depth)
@@ -1099,7 +1139,7 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
     IEnumPins *source_enum;
     PIN_DIRECTION dir;
     PIN_INFO info;
-    HRESULT hr;
+    HRESULT hr, sink_hr = S_OK, render_hr = S_OK, fail_hr = VFW_E_CANNOT_CONNECT;
 
     TRACE("Trying to autoplug %p to %p through %p.\n", source, sink, middle_sink);
 
@@ -1114,7 +1154,7 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
     }
 
     if (FAILED(hr = IFilterGraph2_ConnectDirect(&graph->IFilterGraph2_iface, source, middle_sink, NULL)))
-        return E_FAIL;
+        return sink ? E_FAIL : hr;
 
     if (FAILED(hr = IBaseFilter_EnumPins(filter, &source_enum)))
         goto err;
@@ -1141,41 +1181,66 @@ static HRESULT autoplug_through_sink(struct filter_graph *graph, IPin *source,
             continue;
         }
 
+        if (sink && any)
+        {
+            all = FALSE;
+            IPin_Release(middle_source);
+            continue;
+        }
+
         hr = autoplug(graph, middle_source, sink, render_to_existing, recursion_depth + 1);
         IPin_Release(middle_source);
         if (SUCCEEDED(hr) && sink)
         {
-            IEnumPins_Release(source_enum);
-            return hr;
-        }
-        if (SUCCEEDED(hr))
             any = TRUE;
-        if (hr != S_OK)
+            sink_hr = hr;
+            continue;
+        }
+        if (sink)
+        {
+            if (SUCCEEDED(hr))
+                any = TRUE;
+            if (hr != S_OK)
+                all = FALSE;
+        }
+        else if (SUCCEEDED(hr))
+        {
+            any = TRUE;
+            if (hr != S_OK)
+                render_hr = hr;
+        }
+        else
+        {
             all = FALSE;
+            set_render_error(&fail_hr, hr);
+        }
     }
     IEnumPins_Release(source_enum);
+
+    if (sink && any)
+        return all ? sink_hr : VFW_S_PARTIAL_RENDER;
 
     if (!sink)
     {
         if (all)
-            return S_OK;
+            return render_hr;
         if (any)
-            return VFW_S_PARTIAL_RENDER;
+            return fail_hr == VFW_E_NO_AUDIO_HARDWARE ? VFW_S_AUDIO_NOT_RENDERED : VFW_S_PARTIAL_RENDER;
     }
 
 err:
     IFilterGraph2_Disconnect(&graph->IFilterGraph2_iface, source);
     IFilterGraph2_Disconnect(&graph->IFilterGraph2_iface, middle_sink);
-    return E_FAIL;
+    return sink ? E_FAIL : fail_hr;
 }
 
 static HRESULT autoplug_through_filter(struct filter_graph *graph, IPin *source,
         IBaseFilter *filter, IPin *sink, BOOL render_to_existing,
         unsigned int recursion_depth)
 {
+    HRESULT hr, error = VFW_E_CANNOT_CONNECT;
     IEnumPins *sink_enum;
     IPin *filter_sink;
-    HRESULT hr;
 
     TRACE("Trying to autoplug %p to %p through %p.\n", source, sink, filter);
 
@@ -1187,14 +1252,15 @@ static HRESULT autoplug_through_filter(struct filter_graph *graph, IPin *source,
         hr = autoplug_through_sink(graph, source, filter, filter_sink, sink,
                 render_to_existing, recursion_depth);
         IPin_Release(filter_sink);
-        if (SUCCEEDED(hr))
+        if (SUCCEEDED(hr) || (!sink && hr == VFW_E_NO_AUDIO_HARDWARE))
         {
             IEnumPins_Release(sink_enum);
             return hr;
         }
+        set_render_error(&error, hr);
     }
     IEnumPins_Release(sink_enum);
-    return VFW_E_CANNOT_CONNECT;
+    return error;
 }
 
 static HRESULT get_autoplug_types(IPin *source, unsigned int *ret_count, GUID **ret_types)
@@ -1297,9 +1363,9 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
     unsigned int type_count = 0;
     IFilterMapper2 *mapper;
     IBaseFilter *filter;
+    HRESULT hr, error = VFW_E_CANNOT_CONNECT;
     GUID *types = NULL;
     IMoniker *moniker;
-    HRESULT hr;
 
     TRACE("Trying to autoplug %p to %p, recursion depth %u.\n", source, sink, recursion_depth);
 
@@ -1327,6 +1393,9 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
         if (SUCCEEDED(hr = autoplug_through_filter(graph, source, graph_filter->filter,
                 sink, render_to_existing, recursion_depth)))
             return hr;
+        if (!sink && hr == VFW_E_NO_AUDIO_HARDWARE)
+            return hr;
+        set_render_error(&error, hr);
     }
 
     IUnknown_QueryInterface(graph->punkFilterMapper2, &IID_IFilterMapper2, (void **)&mapper);
@@ -1373,6 +1442,11 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
         {
             ERR("Failed to create filter for %s, hr %#lx.\n", debugstr_w(V_BSTR(&var)), hr);
             VariantClear(&var);
+            if (!sink && hr == VFW_E_NO_AUDIO_HARDWARE)
+            {
+                IEnumMoniker_Release(enummoniker);
+                goto out;
+            }
             continue;
         }
 
@@ -1401,10 +1475,16 @@ static HRESULT autoplug(struct filter_graph *graph, IPin *source, IPin *sink,
 
         IFilterGraph2_RemoveFilter(&graph->IFilterGraph2_iface, filter);
         IBaseFilter_Release(filter);
+        if (!sink && hr == VFW_E_NO_AUDIO_HARDWARE)
+        {
+            IEnumMoniker_Release(enummoniker);
+            goto out;
+        }
+        set_render_error(&error, hr);
     }
     IEnumMoniker_Release(enummoniker);
 
-    hr = VFW_E_CANNOT_CONNECT;
+    hr = sink ? VFW_E_CANNOT_CONNECT : error;
 
 out:
     free(types);
@@ -1416,27 +1496,12 @@ out:
 static HRESULT WINAPI FilterGraph2_Connect(IFilterGraph2 *iface, IPin *source, IPin *sink)
 {
     struct filter_graph *graph = impl_from_IFilterGraph2(iface);
-    PIN_DIRECTION dir;
     HRESULT hr;
 
     TRACE("graph %p, source %p, sink %p.\n", graph, source, sink);
 
     if (!source || !sink)
         return E_POINTER;
-
-    if (FAILED(hr = IPin_QueryDirection(source, &dir)))
-        return hr;
-
-    if (dir == PINDIR_INPUT)
-    {
-        IPin *temp;
-
-        TRACE("Directions seem backwards, swapping pins\n");
-
-        temp = sink;
-        sink = source;
-        source = temp;
-    }
 
     EnterCriticalSection(&graph->cs);
 
@@ -1465,16 +1530,36 @@ static HRESULT WINAPI FilterGraph2_Render(IFilterGraph2 *iface, IPin *source)
     return hr;
 }
 
+static BOOL is_unknown_stream(IPin *pin)
+{
+    IEnumMediaTypes *enummt;
+    AM_MEDIA_TYPE *mt;
+    BOOL ret = FALSE;
+
+    if (FAILED(IPin_EnumMediaTypes(pin, &enummt)))
+        return FALSE;
+
+    if (IEnumMediaTypes_Next(enummt, 1, &mt, NULL) == S_OK)
+    {
+        ret = IsEqualGUID(&mt->majortype, &MEDIATYPE_Stream) && IsEqualGUID(&mt->subtype, &GUID_NULL);
+        DeleteMediaType(mt);
+    }
+    IEnumMediaTypes_Release(enummt);
+
+    return ret;
+}
+
 static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcwstrFile,
         LPCWSTR lpcwstrPlayList)
 {
     struct filter_graph *This = impl_from_IFilterGraph2(iface);
+    HRESULT hr, render_hr = S_OK, fail_hr = VFW_E_CANNOT_RENDER;
     IBaseFilter* preader = NULL;
     IPin* ppinreader = NULL;
     IEnumPins* penumpins = NULL;
     struct filter *filter;
-    HRESULT hr;
     BOOL partial = FALSE;
+    BOOL unknown = FALSE;
     BOOL any = FALSE;
 
     TRACE("(%p/%p)->(%s, %s)\n", This, iface, debugstr_w(lpcwstrFile), debugstr_w(lpcwstrPlayList));
@@ -1503,9 +1588,17 @@ static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcw
                     TRACE("- %s.\n", debugstr_w(filter->name));
 
                 if (SUCCEEDED(hr))
+                {
                     any = TRUE;
-                if (hr != S_OK)
+                    if (hr != S_OK)
+                        render_hr = hr;
+                }
+                else
+                {
                     partial = TRUE;
+                    fail_hr = hr;
+                    unknown = is_unknown_stream(ppinreader);
+                }
             }
             IPin_Release(ppinreader);
         }
@@ -1515,7 +1608,7 @@ static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcw
         {
             if (FAILED(hr = IFilterGraph2_RemoveFilter(iface, preader)))
                 ERR("Failed to remove source filter, hr %#lx.\n", hr);
-            hr = VFW_E_CANNOT_RENDER;
+            hr = unknown ? VFW_E_UNSUPPORTED_STREAM : fail_hr;
         }
         else if (partial)
         {
@@ -1523,7 +1616,7 @@ static HRESULT WINAPI FilterGraph2_RenderFile(IFilterGraph2 *iface, LPCWSTR lpcw
         }
         else
         {
-            hr = S_OK;
+            hr = render_hr;
         }
     }
     IBaseFilter_Release(preader);
@@ -1574,7 +1667,7 @@ static HRESULT WINAPI FilterGraph2_AddSourceFilter(IFilterGraph2 *iface,
         return hr;
     }
 
-    if (FAILED(hr = IFilterGraph2_AddFilter(iface, filter, filter_name)))
+    if (FAILED(hr = IFilterGraph2_AddFilter(iface, filter, filter_name ? filter_name : filename)))
     {
         IBaseFilter_Release(filter);
         return hr;
@@ -1834,6 +1927,12 @@ static HRESULT graph_start(struct filter_graph *graph, REFERENCE_TIME stream_sta
          * initialize. */
         stream_start += 200 * 10000;
     }
+    else if (!graph->refClock)
+    {
+        if (!stream_start)
+            stream_start = 100 * 10000 - graph->stream_elapsed;
+        graph->stream_start = stream_start;
+    }
 
     if (SUCCEEDED(IMediaSeeking_GetStopPosition(&graph->IMediaSeeking_iface, &stream_stop)))
         graph->stream_stop = stream_stop;
@@ -1922,8 +2021,9 @@ static HRESULT WINAPI MediaControl_Run(IMediaControl *iface)
 
     if (graph->state == State_Running)
     {
+        hr = graph->needs_async_run ? S_FALSE : S_OK;
         LeaveCriticalSection(&graph->cs);
-        return S_OK;
+        return hr;
     }
 
     sort_filters(graph);
@@ -1936,6 +2036,9 @@ static HRESULT WINAPI MediaControl_Run(IMediaControl *iface)
     {
         if (graph->defaultclock && !graph->refClock)
             IFilterGraph2_SetDefaultSyncSource(&graph->IFilterGraph2_iface);
+
+        if (!graph->refClock)
+            graph->stream_elapsed = 0;
 
         LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
         {
@@ -2190,11 +2293,25 @@ static HRESULT WINAPI FoundCapabilities(struct filter_graph *This, IMediaSeeking
     return hr;
 }
 
+static BOOL any_seeking_filter(struct filter_graph *graph)
+{
+    struct filter *filter;
+    BOOL ret = FALSE;
+
+    LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+    {
+        update_seeking(filter);
+        if (filter->seeking)
+            ret = TRUE;
+    }
+    return ret;
+}
+
 /*** IMediaSeeking methods ***/
 static HRESULT WINAPI MediaSeeking_GetCapabilities(IMediaSeeking *iface, DWORD *pCapabilities)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
-    HRESULT hr;
+    HRESULT hr = S_OK;
 
     TRACE("(%p/%p)->(%p)\n", This, iface, pCapabilities);
 
@@ -2202,9 +2319,15 @@ static HRESULT WINAPI MediaSeeking_GetCapabilities(IMediaSeeking *iface, DWORD *
         return E_POINTER;
 
     EnterCriticalSection(&This->cs);
-    *pCapabilities = 0xffffffff;
-
-    hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    if (any_seeking_filter(This))
+    {
+        *pCapabilities = 0xffffffff;
+        hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    }
+    else
+    {
+        *pCapabilities = 0;
+    }
     LeaveCriticalSection(&This->cs);
 
     return hr;
@@ -2223,7 +2346,15 @@ static HRESULT WINAPI MediaSeeking_CheckCapabilities(IMediaSeeking *iface, DWORD
 
     EnterCriticalSection(&This->cs);
     originalcaps = *pCapabilities;
-    hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    if (any_seeking_filter(This))
+    {
+        hr = all_renderers_seek(This, FoundCapabilities, (DWORD_PTR)pCapabilities);
+    }
+    else
+    {
+        *pCapabilities = 0;
+        hr = S_OK;
+    }
     LeaveCriticalSection(&This->cs);
 
     if (FAILED(hr))
@@ -2239,19 +2370,32 @@ static HRESULT WINAPI MediaSeeking_CheckCapabilities(IMediaSeeking *iface, DWORD
 static HRESULT WINAPI MediaSeeking_IsFormatSupported(IMediaSeeking *iface, const GUID *pFormat)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
-
-    if (!pFormat)
-        return E_POINTER;
+    struct filter *filter;
+    HRESULT hr;
 
     TRACE("(%p/%p)->(%s)\n", This, iface, debugstr_guid(pFormat));
 
-    if (!IsEqualGUID(&TIME_FORMAT_MEDIA_TIME, pFormat))
+    EnterCriticalSection(&This->cs);
+
+    if (!any_seeking_filter(This))
+        hr = E_NOTIMPL;
+    else if (!pFormat)
+        hr = E_POINTER;
+    else
     {
-        WARN("Unhandled time format %s\n", debugstr_guid(pFormat));
-        return S_FALSE;
+        hr = S_FALSE;
+        LIST_FOR_EACH_ENTRY(filter, &This->filters, struct filter, entry)
+        {
+            if (filter->seeking && IMediaSeeking_IsFormatSupported(filter->seeking, pFormat) == S_OK)
+            {
+                hr = S_OK;
+                break;
+            }
+        }
     }
 
-    return S_OK;
+    LeaveCriticalSection(&This->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_QueryPreferredFormat(IMediaSeeking *iface, GUID *pFormat)
@@ -2297,19 +2441,46 @@ static HRESULT WINAPI MediaSeeking_IsUsingTimeFormat(IMediaSeeking *iface, const
 static HRESULT WINAPI MediaSeeking_SetTimeFormat(IMediaSeeking *iface, const GUID *pFormat)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
+    struct filter *filter;
+    HRESULT hr = E_FAIL;
 
     if (!pFormat)
         return E_POINTER;
 
     TRACE("(%p/%p)->(%s)\n", This, iface, debugstr_guid(pFormat));
 
-    if (!IsEqualGUID(&TIME_FORMAT_MEDIA_TIME, pFormat))
+    EnterCriticalSection(&This->cs);
+
+    if (IsEqualGUID(pFormat, &TIME_FORMAT_MEDIA_TIME) || IsEqualGUID(pFormat, &TIME_FORMAT_NONE))
     {
-        FIXME("Unhandled time format %s\n", debugstr_guid(pFormat));
-        return E_INVALIDARG;
+        if (This->time_format_filter)
+            IMediaSeeking_SetTimeFormat(This->time_format_filter->seeking, &TIME_FORMAT_MEDIA_TIME);
+        This->time_format_filter = NULL;
+        This->timeformatseek = TIME_FORMAT_MEDIA_TIME;
+        hr = S_OK;
+    }
+    else if (!any_seeking_filter(This))
+    {
+        hr = E_NOTIMPL;
+    }
+    else
+    {
+        LIST_FOR_EACH_ENTRY(filter, &This->filters, struct filter, entry)
+        {
+            if (!filter->seeking || FAILED(IMediaSeeking_SetTimeFormat(filter->seeking, pFormat)))
+                continue;
+
+            if (This->time_format_filter && This->time_format_filter != filter)
+                IMediaSeeking_SetTimeFormat(This->time_format_filter->seeking, &TIME_FORMAT_MEDIA_TIME);
+            This->time_format_filter = filter;
+            This->timeformatseek = *pFormat;
+            hr = S_OK;
+            break;
+        }
     }
 
-    return S_OK;
+    LeaveCriticalSection(&This->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_GetDuration(IMediaSeeking *iface, LONGLONG *duration)
@@ -2398,6 +2569,8 @@ static HRESULT WINAPI MediaSeeking_GetCurrentPosition(IMediaSeeking *iface, LONG
 {
     struct filter_graph *graph = impl_from_IMediaSeeking(iface);
     LONGLONG ret = graph->current_pos;
+    LONGLONG filter_current, offset;
+    struct filter *filter;
 
     TRACE("graph %p, current %p.\n", graph, current);
 
@@ -2417,6 +2590,19 @@ static HRESULT WINAPI MediaSeeking_GetCurrentPosition(IMediaSeeking *iface, LONG
                 ret = graph->stream_stop;
         }
     }
+    else if (graph->state == State_Running && !graph->needs_async_run)
+    {
+        offset = 0;
+        LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+        {
+            update_seeking(filter);
+            if (filter->seeking && SUCCEEDED(IMediaSeeking_GetCurrentPosition(filter->seeking, &filter_current)))
+                offset = max(offset, filter_current);
+        }
+        ret += offset;
+        if (ret > graph->stream_stop)
+            ret = graph->stream_stop;
+    }
 
     LeaveCriticalSection(&graph->cs);
 
@@ -2430,9 +2616,12 @@ static HRESULT WINAPI MediaSeeking_ConvertTimeFormat(IMediaSeeking *iface, LONGL
         const GUID *pTargetFormat, LONGLONG Source, const GUID *pSourceFormat)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
+    HRESULT hr = E_NOTIMPL;
 
     TRACE("graph %p, target %p, target_format %s, source %I64d, source_format %s.\n",
             This, pTarget, debugstr_guid(pTargetFormat), Source, debugstr_guid(pSourceFormat));
+
+    EnterCriticalSection(&This->cs);
 
     if (!pSourceFormat)
         pSourceFormat = &This->timeformatseek;
@@ -2441,11 +2630,18 @@ static HRESULT WINAPI MediaSeeking_ConvertTimeFormat(IMediaSeeking *iface, LONGL
         pTargetFormat = &This->timeformatseek;
 
     if (IsEqualGUID(pTargetFormat, pSourceFormat))
+    {
         *pTarget = Source;
-    else
-        FIXME("conversion %s->%s not supported\n", debugstr_guid(pSourceFormat), debugstr_guid(pTargetFormat));
+        hr = S_OK;
+    }
+    else if (This->time_format_filter)
+    {
+        hr = IMediaSeeking_ConvertTimeFormat(This->time_format_filter->seeking,
+                pTarget, pTargetFormat, Source, pSourceFormat);
+    }
 
-    return S_OK;
+    LeaveCriticalSection(&This->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface, LONGLONG *current_ptr,
@@ -2538,30 +2734,89 @@ static HRESULT WINAPI MediaSeeking_GetAvailable(IMediaSeeking *iface, LONGLONG *
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
 
-    FIXME("(%p/%p)->(%p, %p): stub !!!\n", This, iface, pEarliest, pLatest);
+    TRACE("(%p/%p)->(%p, %p)\n", This, iface, pEarliest, pLatest);
 
-    return S_OK;
+    return E_NOTIMPL;
 }
 
 static HRESULT WINAPI MediaSeeking_SetRate(IMediaSeeking *iface, double dRate)
 {
-    struct filter_graph *This = impl_from_IMediaSeeking(iface);
+    struct filter_graph *graph = impl_from_IMediaSeeking(iface);
+    HRESULT hr = E_NOTIMPL, filter_hr;
+    struct filter *filter;
+    LONGLONG current;
 
-    FIXME("(%p/%p)->(%f): stub !!!\n", This, iface, dRate);
+    TRACE("graph %p, rate %.16e.\n", graph, dRate);
 
-    return S_OK;
+    if (!dRate)
+        return E_INVALIDARG;
+
+    EnterCriticalSection(&graph->cs);
+
+    if (dRate == graph->rate)
+    {
+        LeaveCriticalSection(&graph->cs);
+        return S_OK;
+    }
+
+    if (!any_seeking_filter(graph))
+    {
+        LeaveCriticalSection(&graph->cs);
+        return E_NOTIMPL;
+    }
+
+    if (graph->state != State_Stopped)
+    {
+        IMediaSeeking_GetCurrentPosition(iface, &current);
+        IMediaSeeking_SetPositions(iface, &current, AM_SEEKING_AbsolutePositioning, NULL, AM_SEEKING_NoPositioning);
+    }
+
+    LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+    {
+        if (!filter->seeking)
+            continue;
+
+        filter_hr = IMediaSeeking_SetRate(filter->seeking, dRate);
+        if (SUCCEEDED(filter_hr))
+        {
+            hr = S_OK;
+        }
+        else if (filter_hr != E_NOTIMPL)
+        {
+            hr = filter_hr;
+            break;
+        }
+    }
+
+    if (SUCCEEDED(hr))
+    {
+        graph->rate = dRate;
+    }
+    else if (hr != E_NOTIMPL)
+    {
+        LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
+        {
+            if (filter->seeking)
+                IMediaSeeking_SetRate(filter->seeking, graph->rate);
+        }
+    }
+
+    LeaveCriticalSection(&graph->cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_GetRate(IMediaSeeking *iface, double *pdRate)
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
 
-    FIXME("(%p/%p)->(%p): stub !!!\n", This, iface, pdRate);
+    TRACE("(%p/%p)->(%p)\n", This, iface, pdRate);
 
     if (!pdRate)
         return E_POINTER;
 
-    *pdRate = 1.0;
+    EnterCriticalSection(&This->cs);
+    *pdRate = This->rate;
+    LeaveCriticalSection(&This->cs);
 
     return S_OK;
 }
@@ -2570,9 +2825,14 @@ static HRESULT WINAPI MediaSeeking_GetPreroll(IMediaSeeking *iface, LONGLONG *pl
 {
     struct filter_graph *This = impl_from_IMediaSeeking(iface);
 
-    FIXME("(%p/%p)->(%p): stub !!!\n", This, iface, pllPreroll);
+    TRACE("(%p/%p)->(%p)\n", This, iface, pllPreroll);
 
-    return S_OK;
+    if (!pllPreroll)
+        return E_POINTER;
+
+    *pllPreroll = 0;
+
+    return E_NOTIMPL;
 }
 
 
@@ -4890,6 +5150,8 @@ static HRESULT WINAPI MediaEvent_GetEvent(IMediaEventEx *iface, LONG *code,
     TRACE("graph %p, code %p, param1 %p, param2 %p, timeout %ld.\n", graph, code, param1, param2, timeout);
 
     *code = 0;
+    *param1 = 0;
+    *param2 = 0;
 
     if (WaitForSingleObject(graph->media_event_handle, timeout))
         return E_ABORT;
@@ -4917,20 +5179,70 @@ static HRESULT WINAPI MediaEvent_WaitForCompletion(IMediaEventEx *iface, LONG ms
         LONG *pEvCode)
 {
     struct filter_graph *This = impl_from_IMediaEventEx(iface);
+    DWORD start = GetTickCount(), elapsed, timeout = msTimeout;
+    LONG_PTR param1, param2;
+    BOOL completed;
+    HRESULT hr;
+    LONG code;
 
     TRACE("graph %p, timeout %ld, code %p.\n", This, msTimeout, pEvCode);
 
     if (This->state != State_Running)
         return VFW_E_WRONG_STATE;
 
-    if (WaitForSingleObject(This->hEventCompletion, msTimeout) == WAIT_OBJECT_0)
+    if (This->media_events_disabled)
     {
-	*pEvCode = This->CompletionStatus;
-	return S_OK;
+        if (WaitForSingleObject(This->hEventCompletion, msTimeout) == WAIT_OBJECT_0)
+        {
+            *pEvCode = This->CompletionStatus;
+            return S_OK;
+        }
+
+        *pEvCode = 0;
+        return E_ABORT;
     }
 
-    *pEvCode = 0;
-    return E_ABORT;
+    for (;;)
+    {
+        EnterCriticalSection(&This->event_cs);
+        completed = list_empty(&This->media_events) && !WaitForSingleObject(This->hEventCompletion, 0);
+        LeaveCriticalSection(&This->event_cs);
+        if (completed)
+        {
+            *pEvCode = 0;
+            return VFW_E_WRONG_STATE;
+        }
+
+        elapsed = GetTickCount() - start;
+        hr = IMediaEventEx_GetEvent(iface, &code, &param1, &param2,
+                timeout == INFINITE ? INFINITE : (elapsed < timeout ? timeout - elapsed : 0));
+        if (hr != S_OK)
+        {
+            *pEvCode = 0;
+            return E_ABORT;
+        }
+        IMediaEventEx_FreeEventParams(iface, code, param1, param2);
+
+        if (code == EC_COMPLETE || code == EC_ERRORABORT || code == EC_USERABORT)
+        {
+            *pEvCode = code;
+            return S_OK;
+        }
+
+        if (timeout != INFINITE && GetTickCount() - start >= timeout)
+        {
+            *pEvCode = 0;
+            return E_ABORT;
+        }
+    }
+}
+
+static BOOL is_default_handled_event(LONG code)
+{
+    /* TODO: default handling of EC_ACTIVATE, EC_NEED_RESTART, EC_WINDOW_DESTROYED, EC_DISPLAY_CHANGED, EC_STARVATION and EC_STATE_CHANGE; they reach the application either way */
+    return code == EC_COMPLETE || code == EC_REPAINT || code == EC_ACTIVATE || code == EC_NEED_RESTART
+            || code == EC_WINDOW_DESTROYED || code == EC_DISPLAY_CHANGED || code == EC_STARVATION
+            || code == EC_STATE_CHANGE;
 }
 
 static HRESULT WINAPI MediaEvent_CancelDefaultHandling(IMediaEventEx *iface, LONG lEvCode)
@@ -4943,10 +5255,8 @@ static HRESULT WINAPI MediaEvent_CancelDefaultHandling(IMediaEventEx *iface, LON
 	This->HandleEcComplete = FALSE;
     else if (lEvCode == EC_REPAINT)
 	This->HandleEcRepaint = FALSE;
-    else if (lEvCode == EC_CLOCK_CHANGED)
-        This->HandleEcClockChanged = FALSE;
-    else
-	return S_FALSE;
+    else if (!is_default_handled_event(lEvCode))
+        return E_INVALIDARG;
 
     return S_OK;
 }
@@ -4961,10 +5271,8 @@ static HRESULT WINAPI MediaEvent_RestoreDefaultHandling(IMediaEventEx *iface, LO
 	This->HandleEcComplete = TRUE;
     else if (lEvCode == EC_REPAINT)
 	This->HandleEcRepaint = TRUE;
-    else if (lEvCode == EC_CLOCK_CHANGED)
-        This->HandleEcClockChanged = TRUE;
-    else
-	return S_FALSE;
+    else if (!is_default_handled_event(lEvCode))
+        return E_INVALIDARG;
 
     return S_OK;
 }
@@ -5097,14 +5405,11 @@ static void graph_update_positions(struct filter_graph *graph)
     }
 }
 
-static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
+static HRESULT graph_stop(struct filter_graph *graph, BOOL pause_first)
 {
-    struct filter_graph *graph = impl_from_IMediaFilter(iface);
     HRESULT hr = S_OK, filter_hr;
     struct filter *filter;
     TP_WORK *work;
-
-    TRACE("graph %p.\n", graph);
 
     EnterCriticalSection(&graph->cs);
 
@@ -5118,12 +5423,12 @@ static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
 
     graph_update_positions(graph);
 
-    if (graph->state == State_Running)
+    if (pause_first && graph->state == State_Running)
     {
         LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
         {
             filter_hr = IBaseFilter_Pause(filter->filter);
-            if (hr == S_OK)
+            if (hr == S_OK && FAILED(filter_hr))
                 hr = filter_hr;
         }
     }
@@ -5149,6 +5454,15 @@ static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
         WaitForThreadpoolWorkCallbacks(work, TRUE);
 
     return hr;
+}
+
+static HRESULT WINAPI MediaFilter_Stop(IMediaFilter *iface)
+{
+    struct filter_graph *graph = impl_from_IMediaFilter(iface);
+
+    TRACE("graph %p.\n", graph);
+
+    return graph_stop(graph, TRUE);
 }
 
 static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
@@ -5179,6 +5493,14 @@ static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
 
     graph_update_positions(graph);
 
+    if (!graph->refClock)
+    {
+        if (graph->state == State_Stopped)
+            graph->stream_elapsed = 0;
+        else if (!graph->needs_async_run)
+            graph->stream_elapsed = -graph->stream_start;
+    }
+
     LIST_FOR_EACH_ENTRY(filter, &graph->filters, struct filter, entry)
     {
         filter_hr = IBaseFilter_Pause(filter->filter);
@@ -5194,6 +5516,9 @@ static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
 
     if (work)
         WaitForThreadpoolWorkCallbacks(work, TRUE);
+
+    if (FAILED(hr))
+        graph_stop(graph, FALSE);
 
     return hr;
 }
@@ -5333,18 +5658,7 @@ static HRESULT WINAPI MediaFilter_SetSyncSource(IMediaFilter *iface, IReferenceC
                 IReferenceClock_AddRef(This->refClock);
             This->defaultclock = FALSE;
 
-            if (This->HandleEcClockChanged)
-            {
-                IMediaEventSink *pEventSink;
-                HRESULT eshr;
-
-                eshr = IMediaFilter_QueryInterface(iface, &IID_IMediaEventSink, (void **)&pEventSink);
-                if (SUCCEEDED(eshr))
-                {
-                    IMediaEventSink_Notify(pEventSink, EC_CLOCK_CHANGED, 0, 0);
-                    IMediaEventSink_Release(pEventSink);
-                }
-            }
+            IMediaEventSink_Notify(&This->IMediaEventSink_iface, EC_CLOCK_CHANGED, 0, 0);
         }
     }
     LeaveCriticalSection(&This->cs);
@@ -5369,7 +5683,7 @@ static HRESULT WINAPI MediaFilter_GetSyncSource(IMediaFilter *iface, IReferenceC
     }
     LeaveCriticalSection(&This->cs);
 
-    return S_OK;
+    return *ppClock ? S_OK : S_FALSE;
 }
 
 static const IMediaFilterVtbl IMediaFilter_VTable =
@@ -5767,13 +6081,13 @@ static HRESULT filter_graph_common_create(IUnknown *outer, IUnknown **out, BOOL 
     object->media_event_handle = CreateEventW(NULL, TRUE, FALSE, NULL);
     list_init(&object->media_events);
     list_init(&object->filters);
-    object->HandleEcClockChanged = TRUE;
     object->HandleEcComplete = TRUE;
     object->HandleEcRepaint = TRUE;
     object->hEventCompletion = CreateEventW(0, TRUE, FALSE, 0);
 
     object->name_index = 1;
     object->timeformatseek = TIME_FORMAT_MEDIA_TIME;
+    object->rate = 1.0;
 
     object->threaded = !!threaded;
 

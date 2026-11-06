@@ -40,6 +40,10 @@ START_TEST(IoAddDeviceUnload)
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, ServiceKey, 0, KEY_SET_VALUE, &Key) == ERROR_SUCCESS)
     {
         RegDeleteValueW(Key, L"UnloadDuringAddDevice");
+        RegDeleteValueW(Key, L"AuxiliaryUnloadBeforeReinitialize");
+        RegDeleteValueW(Key, L"AuxiliaryReinitializeCount");
+        RegDeleteValueW(Key, L"ReinitializeCount");
+        RegDeleteValueW(Key, L"ReinitializedBeforeUnload");
         RegCloseKey(Key);
     }
 
@@ -75,6 +79,32 @@ START_TEST(IoAddDeviceUnload)
             ok_eq_ulong(Type, REG_DWORD);
             ok(Value == 0, "DriverUnload ran while AddDevice was still executing\n");
         }
+        Size = sizeof(Value);
+        Value = MAXDWORD;
+        Error = RegQueryValueExW(Key, L"AuxiliaryUnloadBeforeReinitialize", NULL, &Type, (BYTE *)&Value, &Size);
+        ok(Error == ERROR_SUCCESS, "Auxiliary driver did not record unload state: %lu\n", Error);
+        if (Error == ERROR_SUCCESS)
+            ok(Value == 0, "Auxiliary driver unloaded before reinitialization\n");
+
+        Size = sizeof(Value);
+        Value = MAXDWORD;
+        Error = RegQueryValueExW(Key, L"AuxiliaryReinitializeCount", NULL, &Type, (BYTE *)&Value, &Size);
+        ok(Error == ERROR_SUCCESS, "Auxiliary reinitialization did not run: %lu\n", Error);
+        if (Error == ERROR_SUCCESS)
+            ok(Value == 1, "Auxiliary reinitialization count was %lu\n", Value);
+
+        Size = sizeof(Value);
+        Value = MAXDWORD;
+        Error = RegQueryValueExW(Key, L"ReinitializeCount", NULL, &Type, (BYTE *)&Value, &Size);
+        ok(Error == ERROR_SUCCESS, "Reinitialize did not run: %lu\n", Error);
+        if (Error == ERROR_SUCCESS)
+            ok(Value == 1, "Reinitialize count was %lu\n", Value);
+
+        Size = sizeof(Value);
+        Value = MAXDWORD;
+        Error = RegQueryValueExW(Key, L"ReinitializedBeforeUnload", NULL, &Type, (BYTE *)&Value, &Size);
+        if (Error == ERROR_SUCCESS)
+            ok(Value == 1, "DriverUnload ran before Reinitialize\n");
         RegCloseKey(Key);
     }
 

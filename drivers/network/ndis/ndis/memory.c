@@ -59,10 +59,15 @@ NdisAllocateMemoryWithTagPriority(
     IN ULONG            Tag,
     IN EX_POOL_PRIORITY Priority)
 {
+  PVOID Memory;
+
   UNREFERENCED_PARAMETER(NdisHandle);
 
   NDIS_DbgPrint(MAX_TRACE, ("Called.\n"));
-  return ExAllocatePoolWithTagPriority(NonPagedPool, Length, Tag, Priority);
+  Memory = ExAllocatePoolWithTagPriority(NonPagedPool, Length, Tag, Priority);
+  if (!Memory)
+      DbgPrint("NDIS6: NdisAllocateMemoryWithTagPriority of %u bytes (tag %.4s) failed\n", Length, (PCSTR)&Tag);
+  return Memory;
 }
 
 VOID

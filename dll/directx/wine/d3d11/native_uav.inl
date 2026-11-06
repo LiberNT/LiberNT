@@ -393,49 +393,6 @@ void STDMETHODCALLTYPE NativeContext::OMGetRenderTargetsAndUnorderedAccessViews(
     NativeGetSlots(device, pixel_uavs, start, uav_count, uavs);
 }
 
-static void NativeUavClearValues(DXGI_FORMAT format, const UINT input[4], UINT output[4])
-{
-    UINT mask = ~0u;
-    switch (NativeFormatFamily(format))
-    {
-        case DXGI_FORMAT_R8_TYPELESS:
-        case DXGI_FORMAT_R8G8_TYPELESS:
-        case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-        case DXGI_FORMAT_B8G8R8A8_TYPELESS:
-        case DXGI_FORMAT_B8G8R8X8_TYPELESS:
-            mask = 0xff;
-            break;
-        case DXGI_FORMAT_R16_TYPELESS:
-        case DXGI_FORMAT_R16G16_TYPELESS:
-        case DXGI_FORMAT_R16G16B16A16_TYPELESS:
-            mask = 0xffff;
-            break;
-        case DXGI_FORMAT_R10G10B10A2_TYPELESS:
-            for (UINT i = 0; i < 3; ++i) output[i] = input[i] & 0x3ff;
-            output[3] = input[3] & 3;
-            return;
-        default:
-            break;
-    }
-    if (format == DXGI_FORMAT_R11G11B10_FLOAT)
-    {
-        output[0] = input[0] & 0x7ff;
-        output[1] = input[1] & 0x7ff;
-        output[2] = input[2] & 0x3ff;
-        output[3] = 0;
-        return;
-    }
-    /* Uint clears copy low channel bits without conversion or sign extension.
-     * Keep raw/structured and 32-bit values intact. In particular, passing a
-     * sign-extended narrow integer to the UMD can corrupt adjacent channels. */
-    for (UINT i = 0; i < 4; ++i) output[i] = input[i] & mask;
-}
-
-static void NativeUavClearValues(DXGI_FORMAT, const FLOAT input[4], FLOAT output[4])
-{
-    memcpy(output, input, 4 * sizeof(*output));
-}
-
 #define NATIVE_CLEAR_UAV(Suffix, ValueType) \
 void STDMETHODCALLTYPE NativeContext::ClearUnorderedAccessView##Suffix(ID3D11UnorderedAccessView *object, const ValueType values[4]) \
 { \
@@ -450,10 +407,8 @@ void STDMETHODCALLTYPE NativeContext::ClearUnorderedAccessView##Suffix(ID3D11Uno
         if (Captured(copied)) Record([=](NativeContext *context) { context->ClearUnorderedAccessView##Suffix(retained.Get(), copied.Data()); }); \
         return; \
     } \
-    ValueType normalized[4]; \
     NativeWaitPendingRelease(view->texture, device); \
-    NativeUavClearValues(view->desc.Format, values, normalized); \
-    device->functions.pfnClearUnorderedAccessView##Suffix(device->driver_device, view->handle, normalized); \
+    device->functions.pfnClearUnorderedAccessView##Suffix(device->driver_device, view->handle, values); \
 }
 NATIVE_CLEAR_UAV(Uint, UINT)
 NATIVE_CLEAR_UAV(Float, FLOAT)

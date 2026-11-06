@@ -847,6 +847,7 @@ struct _DXGKRNL_ADAPTER
     FAST_MUTEX                  KmdFeatureCacheLock;
     ULONGLONG                   KmdFeatureCached;
     DXGKARG_QUERYFEATURESUPPORT KmdFeatureCache[DXGK_DRIVER_FEATURE_MAX];
+    UCHAR                       DriverFeatureSupportState[DXGK_DRIVER_FEATURE_MAX];
     LUID                        AdapterLuid;
 
     /*
@@ -938,6 +939,8 @@ struct _DXGKRNL_ADAPTER
     BOOLEAN                     SupportMultiPlaneOverlay;
     UINT                        MaxOverlayPlanes;
     BOOLEAN                     IndependentVidPnVSyncControl;
+    BOOLEAN                     DisplayableSupport;
+    ULONG                       DriverCapsWddmVersion;
     BOOLEAN                     SurpriseRemovalHandled;
 
     /*
@@ -1067,6 +1070,9 @@ struct _DXGKRNL_ADAPTER
      * (device-list modifications, resource assignments, etc.).
      */
     KMUTEX                     AdapterMutex;
+    /* Processes holding a stable power request; a leaf lock so process teardown can take it. */
+    KMUTEX                     StablePowerMutex;
+    LONG                       StablePowerReferences;
 
     /* Serializes replacement of the active VidPn and every adapter-level
      * reader that does not already hold an explicit VidPn reference.  The
@@ -1434,6 +1440,10 @@ struct _DXGKRNL_ADAPTER
     D3DKMT_HANDLE               CddPrimaryBindingHandle;
     ULONG64                     CddBindingGeneration;
     struct _DXGKRNL_CDD_CAPTURE *CddCapture;
+    BOOLEAN CddCaptureUnsupported;
+    BOOLEAN                     GdiHardwareAcceleration;
+    KMUTEX                      GdiBltTextureMutex;
+    LIST_ENTRY                  GdiBltTextureList;
     /* Set by an adapter reset and by a miniport Present that rejects the
      * persistent CDD bindings: the KMD's device-specific opens are gone and
      * the next Present must recreate them. */
@@ -1480,6 +1490,8 @@ struct _DXGKRNL_ADAPTER
     KSPIN_LOCK                  PagingBufferPoolLock;
     LIST_ENTRY                  PagingBufferPoolList;
     KEVENT                      PagingBufferPoolEvent;
+    /* Set by the completion DPC after it retires a node fence; waiters clear it before checking. */
+    KEVENT                      FenceProgressEvent;
 
     /*
      * GUID_DISPLAY_DEVICE_ARRIVAL device interface.
@@ -1624,6 +1636,10 @@ struct _DXGKRNL_DEVICE
      */
     LIST_ENTRY                  ContextListHead;
 
+    /* Wakes ordered waits for publishers above APC_LEVEL, which cannot take DeviceMutex. */
+    volatile LONG               StreamWakeQueued;
+    WORK_QUEUE_ITEM             StreamWakeWorkItem;
+
     /*
      * List of D3DKMT_SYNCHRONIZATIONOBJECT handles created against this
      * device.  Protected by DeviceMutex.
@@ -1634,6 +1650,12 @@ struct _DXGKRNL_DEVICE
     LIST_ENTRY                  OverlayListHead;
 
     FAST_MUTEX                  DeviceMutex;
+
+    /* Open of the window surface this device last Blt-presented to by window; protected by WindowBltMutex. */
+    KMUTEX                      WindowBltMutex;
+    ULONG                       WindowBltShare;
+    D3DKMT_HANDLE               WindowBltResource;
+    D3DKMT_HANDLE               WindowBltAllocation;
 };
 
 /* A published overlay owns its device and displayed-allocation references. */
@@ -2038,6 +2060,9 @@ struct _DXGKRNL_PROCESS
      * by queued or committed tracker entries. */
     volatile LONG               InFlightSubmissions;
 
+    /* D3DKMTSetStablePowerState requests of this process, under the adapter StablePowerMutex. */
+    LONG                        StablePowerReferences;
+
     /*
      * This process's share of each node's execution clock.  Indexed by node
      * ordinal, which the adapter has already bounded to the array size, so
@@ -2212,6 +2237,8 @@ typedef struct _DXGKRNL_SYNC_OBJECT
     volatile LONG               MutexOwned;
     volatile LONG64             SemaphoreCount;
     ULONG                       SemaphoreLimit;
+    PVOID volatile              MutexQueuedOwner;
+    volatile LONG64             SemaphoreQueuedCount;
     PKEVENT                     CpuNotificationEvent;
     BOOLEAN                     CpuNotificationEventReferenced;
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
@@ -2254,13 +2281,17 @@ typedef struct _DXGKRNL_SYNC_OBJECT
     /*
      * Legacy sharing.  A supported legacy object that asked for Shared gets
      * a private global share handle and an alias to the authoritative state.
-     * Monitored-fence sharing is refused: it requires the native NT
-     * synchronization-object lifetime, access, and security contract.
+     * A monitored fence created with NtSecuritySharing is shared through an
+     * NT handle instead; opening it creates the same kind of alias.
      */
     D3DKMT_HANDLE               GlobalShareHandle;
     BOOLEAN                     Shareable;
     struct _DXGKRNL_SYNC_OBJECT *BackingSyncObject;
     LIST_ENTRY                  GlobalShareListEntry;
+    LIST_ENTRY                  ViewListHead;
+    LIST_ENTRY                  ViewListEntry;
+    volatile LONG               ViewCount;
+    volatile LONG               MonitoredPageQuarantined;
 
     /*
      * WDDM 2.2 periodic monitored fence.  The KMD owns one notification
@@ -3228,6 +3259,15 @@ VOID
 DxgkContextOrderWakeDevice(
     _Inout_ PDXGKRNL_DEVICE Device);
 
+VOID
+DxgkContextOrderQueueDeviceWake(
+    _Inout_ PDXGKRNL_DEVICE Device);
+
+VOID
+DxgkStablePowerNotify(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN Enabled);
+
 NTSTATUS
 DxgkAcquireProcessRecord(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -3410,6 +3450,70 @@ DxgkpReferenceSyncObjectByHandle(
     _In_opt_ PEPROCESS OwnerProcess,
     _Out_ PDXGKRNL_SYNC_OBJECT *OutSyncObj);
 
+NTSTATUS
+DxgkpReferenceSyncObjectView(
+    _In_ D3DKMT_HANDLE Handle,
+    _In_opt_ PEPROCESS OwnerProcess,
+    _Out_ PDXGKRNL_SYNC_OBJECT *OutSyncObj,
+    _Out_opt_ PDXGKRNL_DEVICE *ViewDevice,
+    _Out_opt_ D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS *ViewFlags);
+
+VOID
+DxgkSyncWakeViews(
+    _In_opt_ PDXGKRNL_SYNC_OBJECT SyncObj);
+
+NTSTATUS
+DxgkSyncSharedObjectsInitialize(VOID);
+
+POBJECT_TYPE
+DxgkSyncSharedObjectType(VOID);
+
+POBJECT_TYPE
+DxgkSharedResourceType(VOID);
+
+NTSTATUS
+DxgkOutputDuplCreate(
+    _In_ D3DKMT_HANDLE hAdapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG SurfaceCount,
+    _In_reads_(SurfaceCount) CONST HANDLE *Surfaces,
+    _Out_ PULONG RequiredSurfaceCount);
+
+NTSTATUS
+DxgkOutputDuplDestroy(
+    _In_ D3DKMT_HANDLE hAdapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId);
+
+NTSTATUS
+DxgkOutputDuplFrameAccess(
+    _In_ D3DKMT_HANDLE hAdapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId);
+
+VOID
+DxgkOutputDuplProcessCleanup(
+    _In_ PEPROCESS Process);
+
+NTSTATUS
+DxgkSyncShareNtObject(
+    _In_ D3DKMT_HANDLE hSyncObject,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _Out_ PHANDLE NtHandle);
+
+NTSTATUS
+DxgkSyncOpenFromNtHandle(
+    _In_ HANDLE NtHandle,
+    _Out_ D3DKMT_HANDLE *hSyncObject);
+
+NTSTATUS
+DxgkSyncOpenFromNtHandle2(
+    _In_ HANDLE NtHandle,
+    _In_ D3DKMT_HANDLE hDevice,
+    _In_ UINT FlagsValue,
+    _Out_ D3DKMT_HANDLE *hSyncObject,
+    _Out_ PVOID *CpuVa,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *GpuVa);
+
 VOID
 DxgkpDereferenceSyncObject(
     _In_ PDXGKRNL_SYNC_OBJECT SyncObj);
@@ -3484,7 +3588,8 @@ DxgkSyncObjectCpuWaitBatch(
     _In_reads_(ObjectCount) CONST UINT64 *FenceValues,
     _In_ ULONG ObjectCount,
     _In_opt_ HANDLE AsyncEventHandle,
-    _In_ BOOLEAN WaitAny);
+    _In_ BOOLEAN WaitAny,
+    _In_ KPROCESSOR_MODE WaitMode);
 
 VOID
 NTAPI
@@ -3728,8 +3833,14 @@ DxgkCreateCaptureSurface(
     _In_ PDXGKRNL_DEVICE Device,
     _Inout_ struct _DXGK_REDIRECTION_SURFACE_CREATE *Create);
 
+NTSTATUS
+DxgkCreateGdiTextureSurface(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ struct _DXGK_REDIRECTION_SURFACE_CREATE *Create);
+
 /* Adapter device cleanup owns the resources; discard only the cache record. */
 VOID DxgkpForgetCddCapture(_In_ PDXGKRNL_ADAPTER Adapter);
+VOID DxgkForgetGdiBltTextures(_In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS
 DxgkDestroyRedirectionSurface(
@@ -3771,6 +3882,21 @@ DxgkPublishRedirectionPresent(
 
 NTSTATUS
 DxgkQueryWindowPresentState(_In_ ULONG_PTR WindowHandle);
+
+NTSTATUS
+DxgkQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect);
+
+NTSTATUS
+DxgkIssueWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target);
+
+VOID
+DxgkCancelWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _In_ ULONGLONG UpdateId);
 
 VOID
 DxgkRequestCompositionRefresh(VOID);
@@ -3867,12 +3993,13 @@ DxgkDisplayUnregister(
 /*
  * Display dispatch helpers — called from dxgkrnl dispatch routines
  * to route IRPs targeting \Device\Video0 to the display handler.
- * Return TRUE if the IRP was handled, FALSE if not.
+ * Return TRUE if the IRP was handled, with the status it completed with.
  */
 BOOLEAN
 DxgkDisplayDispatchIoctl(
     _In_ PDEVICE_OBJECT DeviceObject,
-    _In_ PIRP           Irp);
+    _In_ PIRP           Irp,
+    _Out_ PNTSTATUS     Status);
 
 BOOLEAN
 DxgkDisplayDispatchCreate(
@@ -4110,6 +4237,12 @@ ULONG
 NTAPI
 DxgkAllocateSubmissionFenceId(
     _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+NTAPI
+DxgkReturnSubmissionFenceId(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG FenceId);
 
 BOOLEAN
 NTAPI
@@ -4638,6 +4771,12 @@ DxgkCommitTrackedDmaBuffer(
 VOID
 NTAPI
 DxgkAdoptTrackedDmaBuffer(
+    _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
+
+/* The scheduler refused an adopted submission: its device work goes back to the submitter. */
+VOID
+NTAPI
+DxgkReturnAdoptedTrackedDmaBufferDeviceWork(
     _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
 
 NTSTATUS

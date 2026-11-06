@@ -440,6 +440,61 @@ static HRESULT WINAPI pin_QueryInternalConnections(IPin *iface, IPin **pins, ULO
     return E_NOTIMPL; /* to tell caller that all input pins connected to all output pins */
 }
 
+static inline struct strmbase_pin *impl_from_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct strmbase_pin, IQualityControl_iface);
+}
+
+static HRESULT WINAPI pin_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct strmbase_pin *pin = impl_from_IQualityControl(iface);
+
+    return IPin_QueryInterface(&pin->IPin_iface, iid, out);
+}
+
+static ULONG WINAPI pin_quality_control_AddRef(IQualityControl *iface)
+{
+    struct strmbase_pin *pin = impl_from_IQualityControl(iface);
+
+    return IPin_AddRef(&pin->IPin_iface);
+}
+
+static ULONG WINAPI pin_quality_control_Release(IQualityControl *iface)
+{
+    struct strmbase_pin *pin = impl_from_IQualityControl(iface);
+
+    return IPin_Release(&pin->IPin_iface);
+}
+
+static HRESULT WINAPI pin_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct strmbase_pin *pin = impl_from_IQualityControl(iface);
+
+    TRACE("pin %p %s:%s, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            pin, debugstr_w(pin->filter->name), debugstr_w(pin->name), sender, q.Type, q.Proportion,
+            debugstr_time(q.Late), debugstr_time(q.TimeStamp));
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI pin_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct strmbase_pin *pin = impl_from_IQualityControl(iface);
+
+    TRACE("pin %p %s:%s, sink %p.\n", pin, debugstr_w(pin->filter->name), debugstr_w(pin->name), sink);
+
+    return S_OK;
+}
+
+static const IQualityControlVtbl pin_quality_control_vtbl =
+{
+    pin_quality_control_QueryInterface,
+    pin_quality_control_AddRef,
+    pin_quality_control_Release,
+    pin_quality_control_Notify,
+    pin_quality_control_SetSink,
+};
+
 /*** OutputPin implementation ***/
 
 static inline struct strmbase_source *impl_source_from_IPin( IPin *iface )
@@ -686,7 +741,7 @@ HRESULT WINAPI BaseOutputPinImpl_DecideAllocator(struct strmbase_source *This,
 
     hr = IMemInputPin_GetAllocator(pPin, pAlloc);
 
-    if (hr == VFW_E_NO_ALLOCATOR)
+    if (FAILED(hr))
         hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL,
                 CLSCTX_INPROC_SERVER, &IID_IMemAllocator, (void **)pAlloc);
 
@@ -774,6 +829,7 @@ void strmbase_source_init(struct strmbase_source *pin, struct strmbase_filter *f
     lstrcpyW(pin->pin.name, name);
     lstrcpyW(pin->pin.id, name);
     pin->pin.ops = &func_table->base;
+    pin->pin.IQualityControl_iface.lpVtbl = &pin_quality_control_vtbl;
     pin->pFuncsTable = func_table;
 }
 
@@ -1066,11 +1122,24 @@ static HRESULT WINAPI MemInputPin_GetAllocator(IMemInputPin * iface, IMemAllocat
     TRACE("pin %p %s:%s, allocator %p.\n", This, debugstr_w(This->pin.filter->name),
             debugstr_w(This->pin.name), ppAllocator);
 
-    *ppAllocator = This->pAllocator;
-    if (*ppAllocator)
-        IMemAllocator_AddRef(*ppAllocator);
+    if (This->pFuncsTable->sink_get_allocator)
+        return This->pFuncsTable->sink_get_allocator(This, ppAllocator);
 
-    return *ppAllocator ? S_OK : VFW_E_NO_ALLOCATOR;
+    if (!This->pAllocator)
+    {
+        HRESULT hr = CoCreateInstance(&CLSID_MemoryAllocator, NULL, CLSCTX_INPROC_SERVER,
+                &IID_IMemAllocator, (void **)&This->pAllocator);
+
+        if (FAILED(hr))
+        {
+            *ppAllocator = NULL;
+            return hr;
+        }
+    }
+
+    *ppAllocator = This->pAllocator;
+    IMemAllocator_AddRef(*ppAllocator);
+    return S_OK;
 }
 
 static HRESULT WINAPI MemInputPin_NotifyAllocator(IMemInputPin * iface, IMemAllocator * pAllocator, BOOL bReadOnly)
@@ -1110,6 +1179,9 @@ static HRESULT WINAPI MemInputPin_GetAllocatorRequirements(IMemInputPin *iface, 
             debugstr_w(pin->pin.name), props);
 
     /* override this method if you have any specific requirements */
+
+    if (pin->pFuncsTable->sink_get_allocator_requirements)
+        return pin->pFuncsTable->sink_get_allocator_requirements(pin, props);
 
     return E_NOTIMPL;
 }
@@ -1171,6 +1243,63 @@ static const IMemInputPinVtbl MemInputPin_Vtbl =
     MemInputPin_ReceiveCanBlock
 };
 
+static inline struct strmbase_sink *impl_sink_from_IQualityControl(IQualityControl *iface)
+{
+    return CONTAINING_RECORD(iface, struct strmbase_sink, IQualityControl_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    struct strmbase_sink *pin = impl_sink_from_IQualityControl(iface);
+
+    return IPin_QueryInterface(&pin->pin.IPin_iface, iid, out);
+}
+
+static ULONG WINAPI sink_quality_control_AddRef(IQualityControl *iface)
+{
+    struct strmbase_sink *pin = impl_sink_from_IQualityControl(iface);
+
+    return IPin_AddRef(&pin->pin.IPin_iface);
+}
+
+static ULONG WINAPI sink_quality_control_Release(IQualityControl *iface)
+{
+    struct strmbase_sink *pin = impl_sink_from_IQualityControl(iface);
+
+    return IPin_Release(&pin->pin.IPin_iface);
+}
+
+static HRESULT WINAPI sink_quality_control_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    struct strmbase_sink *pin = impl_sink_from_IQualityControl(iface);
+
+    TRACE("pin %p %s:%s, sender %p, type %#x, proportion %ld, late %s, timestamp %s.\n",
+            pin, debugstr_w(pin->pin.filter->name), debugstr_w(pin->pin.name), sender, q.Type, q.Proportion,
+            debugstr_time(q.Late), debugstr_time(q.TimeStamp));
+
+    if (!sender)
+        return E_POINTER;
+    return S_OK;
+}
+
+static HRESULT WINAPI sink_quality_control_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    struct strmbase_sink *pin = impl_sink_from_IQualityControl(iface);
+
+    TRACE("pin %p %s:%s, sink %p.\n", pin, debugstr_w(pin->pin.filter->name), debugstr_w(pin->pin.name), sink);
+
+    return S_OK;
+}
+
+static const IQualityControlVtbl sink_quality_control_vtbl =
+{
+    sink_quality_control_QueryInterface,
+    sink_quality_control_AddRef,
+    sink_quality_control_Release,
+    sink_quality_control_Notify,
+    sink_quality_control_SetSink,
+};
+
 void strmbase_sink_init(struct strmbase_sink *pin, struct strmbase_filter *filter,
         const WCHAR *name, const struct strmbase_sink_ops *func_table, IMemAllocator *allocator)
 {
@@ -1181,11 +1310,13 @@ void strmbase_sink_init(struct strmbase_sink *pin, struct strmbase_filter *filte
     lstrcpyW(pin->pin.name, name);
     lstrcpyW(pin->pin.id, name);
     pin->pin.ops = &func_table->base;
+    pin->pin.IQualityControl_iface.lpVtbl = &pin_quality_control_vtbl;
     pin->pFuncsTable = func_table;
     pin->pAllocator = pin->preferred_allocator = allocator;
     if (pin->preferred_allocator)
         IMemAllocator_AddRef(pin->preferred_allocator);
     pin->IMemInputPin_iface.lpVtbl = &MemInputPin_Vtbl;
+    pin->IQualityControl_iface.lpVtbl = &sink_quality_control_vtbl;
 }
 
 void strmbase_sink_cleanup(struct strmbase_sink *pin)

@@ -114,7 +114,10 @@ KeSetGdtSelector(ULONG Entry,
    DPRINT("KeSetGdtSelector(Entry %x, Value1 %x, Value2 %x)\n",
 	   Entry, Value1, Value2);
 
-   KeAcquireSpinLock(&GdtLock, &oldIrql);
+   oldIrql = KeGetCurrentIrql();
+   if (oldIrql < DISPATCH_LEVEL)
+      KeRaiseIrql(DISPATCH_LEVEL, &oldIrql);
+   KeAcquireSpinLockAtDpcLevel(&GdtLock);
 
    Gdt = (PULONG) KeGetPcr()->GDT;
    Entry = (Entry & (~0x3)) / 4;
@@ -126,7 +129,9 @@ KeSetGdtSelector(ULONG Entry,
 	   Gdt[Entry + 0],
 	   Gdt[Entry + 1]);
 
-   KeReleaseSpinLock(&GdtLock, oldIrql);
+   KeReleaseSpinLockFromDpcLevel(&GdtLock);
+   if (oldIrql < DISPATCH_LEVEL)
+      KeLowerIrql(oldIrql);
 }
 
 BOOLEAN PspIsDescriptorValid(PLDT_ENTRY ldt_entry)

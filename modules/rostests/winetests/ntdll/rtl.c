@@ -3657,6 +3657,10 @@ static LONG CALLBACK test_heap_destroy_except_handler( EXCEPTION_POINTERS *eptrs
         eptrs->ContextRecord->Pc += 4;
         test_heap_destroy_break = TRUE;
         return (LONG)EXCEPTION_CONTINUE_EXECUTION;
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+        eptrs->ContextRecord->Pc += ((*(USHORT *)eptrs->ContextRecord->Pc & 3) == 3) ? 4 : 2;
+        test_heap_destroy_break = TRUE;
+        return (LONG)EXCEPTION_CONTINUE_EXECUTION;
 #endif
     }
 

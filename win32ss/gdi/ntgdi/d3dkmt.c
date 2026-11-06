@@ -13,7 +13,6 @@
 #include <debug.h>
 
 #define IOCTL_RXGK_OPENADAPTERFROMDEVICENAME CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x112, METHOD_BUFFERED, FILE_ANY_ACCESS)
-#define IOCTL_RXGK_OPENLOGICALADAPTERFROMDEVICENAME CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x113, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_RXGK_CLOSEADAPTER CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x103, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_D3DKMT_CHECKOCCLUSION CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x169, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
@@ -118,7 +117,9 @@ C_ASSERT(FIELD_OFFSET(RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET, GlobalShareHand
             return Status;                                               \
         if (DxgAdapterCallbacks.CallbackField == NULL)                   \
             return STATUS_PROCEDURE_NOT_FOUND;                           \
-        return DxgAdapterCallbacks.CallbackField(Argument);              \
+        return D3dkmtCallCaptured((PVOID)(Argument), sizeof(*(Argument)), \
+                                  (PD3DKMT_ARGUMENT_CALLBACK)DxgAdapterCallbacks.CallbackField, \
+                                  FALSE);                                \
     } while (0)
 
 #define D3DKMT_CALL_HANDLE_CALLBACK(CallbackField, HandleArgument)        \
@@ -142,6 +143,9 @@ C_ASSERT(FIELD_OFFSET(RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET, GlobalShareHand
 
 #define D3DKMT_PRESENT_MAX_SUBRECTS 64U
 #define TAG_D3DKMT_PRESENT_SUBRECTS 'rPmD'
+#define TAG_D3DKMT_CAPTURE 'aCmD'
+
+typedef NTSTATUS (APIENTRY *PD3DKMT_ARGUMENT_CALLBACK)(PVOID Argument);
 
 NTSTATUS
 APIENTRY
@@ -163,7 +167,6 @@ D3dkmtCloseCapturedAdapter(
 static NTSTATUS
 D3dkmtOpenAdapterByCapturedNtDeviceName(
     _In_ PCWSTR DeviceName,
-    _In_ BOOLEAN PreferRenderPair,
     _Out_ D3DKMT_HANDLE *AdapterHandle,
     _Out_ LUID *AdapterLuid)
 {
@@ -178,8 +181,7 @@ D3dkmtOpenAdapterByCapturedNtDeviceName(
     RtlZeroMemory(&OpenByName, sizeof(OpenByName));
     OpenByName.pDeviceName = DeviceName;
     Status = WddmBridgeSendIoctlWithInformation(
-                 PreferRenderPair ? IOCTL_RXGK_OPENLOGICALADAPTERFROMDEVICENAME
-                                  : IOCTL_RXGK_OPENADAPTERFROMDEVICENAME,
+                 IOCTL_RXGK_OPENADAPTERFROMDEVICENAME,
                  &OpenByName,
                  sizeof(OpenByName),
                  &OpenByName,
@@ -233,6 +235,7 @@ D3DKMTEnumAdapters3(
 NTSTATUS APIENTRY D3DKMTCreateKeyedMutex(_Inout_ D3DKMT_CREATEKEYEDMUTEX *pData);
 NTSTATUS APIENTRY D3DKMTQueryClockCalibration(_Inout_ struct _D3DKMT_QUERYCLOCKCALIBRATION *pData);
 NTSTATUS APIENTRY D3DKMTChangeVideoMemoryReservation(_In_ CONST struct _D3DKMT_CHANGEVIDEOMMEMORYRESERVATION *pData);
+NTSTATUS APIENTRY D3DKMTSetStablePowerState(_In_ CONST struct _D3DKMT_SETSTABLEPOWERSTATE *pData);
 NTSTATUS APIENTRY D3DKMTSetProcessSchedulingPriorityClass(_In_ HANDLE hProcess, _In_ D3DKMT_SCHEDULINGPRIORITYCLASS Class);
 NTSTATUS APIENTRY D3DKMTGetProcessSchedulingPriorityClass(_In_ HANDLE hProcess, _Out_ D3DKMT_SCHEDULINGPRIORITYCLASS *pClass);
 #if (REACTOS_WDDM_TARGET_LEVEL >= 1300)
@@ -406,6 +409,52 @@ D3dkmtCaptureUserStructure(
 }
 
 static NTSTATUS
+D3dkmtCallCaptured(
+    _In_opt_ PVOID Argument,
+    _In_ SIZE_T Size,
+    _In_ PD3DKMT_ARGUMENT_CALLBACK Callback,
+    _In_ BOOLEAN ZeroOnBadArgument)
+{
+    UCHAR StackBuffer[2 * 512];
+    PUCHAR Captured = StackBuffer;
+    NTSTATUS Status;
+
+    if (ExGetPreviousMode() == KernelMode)
+        return Callback(Argument);
+    if (Size > sizeof(StackBuffer) / 2)
+    {
+        Captured = ExAllocatePoolWithTag(PagedPool, 2 * Size, TAG_D3DKMT_CAPTURE);
+        if (Captured == NULL)
+            return STATUS_NO_MEMORY;
+    }
+    if (Argument == NULL || !NT_SUCCESS(D3dkmtCaptureUserStructure(Argument, Size, Captured)))
+    {
+        RtlZeroMemory(Captured, Size);
+        Status = ZeroOnBadArgument ? Callback(Captured) : STATUS_INVALID_PARAMETER;
+        goto Done;
+    }
+    RtlCopyMemory(Captured + Size, Captured, Size);
+    Status = Callback(Captured);
+    if (RtlCompareMemory(Captured, Captured + Size, Size) != Size)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(Argument, Size, 1);
+            RtlCopyMemory(Argument, Captured, Size);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        _SEH2_END;
+    }
+Done:
+    if (Captured != StackBuffer)
+        ExFreePoolWithTag(Captured, TAG_D3DKMT_CAPTURE);
+    return Status;
+}
+
+static NTSTATUS
 D3dkmtValidateWddmHandleThunk(
     _In_opt_ HANDLE Handle)
 {
@@ -513,8 +562,11 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDISharedPrimaryLockNotification(_In_ const D3DKMT_SHAREDPRIMARYLOCKNOTIFICATION* unnamedParam1)
 {
+    D3DKMT_SHAREDPRIMARYLOCKNOTIFICATION Captured;
+
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    /* Windows 11 accepts the notification for any adapter LUID, source and rectangle. */
+    return D3dkmtCaptureUserStructure((PVOID)unnamedParam1, sizeof(Captured), &Captured);
 }
 
 NTSTATUS
@@ -522,7 +574,7 @@ APIENTRY
 NtGdiDdDDISharedPrimaryUnLockNotification(_In_ const D3DKMT_SHAREDPRIMARYUNLOCKNOTIFICATION* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTSharedPrimaryUnLockNotification(unnamedParam1);
 }
 
 NTSTATUS
@@ -585,7 +637,6 @@ NtGdiDdDDIOpenAdapterFromGdiDisplayName(_Inout_ D3DKMT_OPENADAPTERFROMGDIDISPLAY
         return Status;
     Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
                  NtDeviceName,
-                 FALSE,
                  &Captured.hAdapter,
                  &Captured.AdapterLuid);
     if (!NT_SUCCESS(Status))
@@ -649,7 +700,6 @@ NtGdiDdDDIOpenAdapterFromHdc(_Inout_ D3DKMT_OPENADAPTERFROMHDC* unnamedParam1)
 
     Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
                  DeviceName,
-                 TRUE,
                  &Captured.hAdapter,
                  &Captured.AdapterLuid);
     if (!NT_SUCCESS(Status))
@@ -878,9 +928,14 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDIGetPresentHistory(_Inout_ D3DKMT_GETPRESENTHISTORY* unnamedParam1)
 {
-    /* FIXME: Windows 11 refuses a non-DWM caller with STATUS_ACCESS_DENIED before looking at a NULL argument */
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnGetPresentHistory, unnamedParam1);
+    NTSTATUS Status = WddmBridgeRequireReady();
+
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (DxgAdapterCallbacks.RxgkIntPfnGetPresentHistory == NULL)
+        return STATUS_PROCEDURE_NOT_FOUND;
+    return D3dkmtCallCaptured(unnamedParam1, sizeof(*unnamedParam1),
+                              (PD3DKMT_ARGUMENT_CALLBACK)DxgAdapterCallbacks.RxgkIntPfnGetPresentHistory, TRUE);
 }
 
 NTSTATUS
@@ -1723,9 +1778,11 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDISetStablePowerState(_In_ const struct _D3DKMT_SETSTABLEPOWERSTATE* unnamedParam1)
 {
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* Win11 refuses this without developer mode; not implementing it is honest, answering NOT_IMPLEMENTED is not. */
-    return STATUS_INVALID_PARAMETER;
+    NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return D3DKMTSetStablePowerState(unnamedParam1);
 }
 
 NTSTATUS
@@ -1990,7 +2047,7 @@ APIENTRY
 NtGdiDdDDIOpenSyncObjectFromNtHandle(_Inout_ struct _D3DKMT_OPENSYNCOBJECTFROMNTHANDLE* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenSyncObjectFromNtHandle(unnamedParam1);
 }
 
 NTSTATUS
@@ -1998,7 +2055,7 @@ APIENTRY
 NtGdiDdDDIOpenSyncObjectFromNtHandle2(_Inout_ struct _D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenSyncObjectFromNtHandle2(unnamedParam1);
 }
 
 NTSTATUS
@@ -2006,7 +2063,7 @@ APIENTRY
 NtGdiDdDDIOpenSyncObjectNtHandleFromName(_Inout_ struct _D3DKMT_OPENSYNCOBJECTNTHANDLEFROMNAME* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenSyncObjectNtHandleFromName(unnamedParam1);
 }
 
 NTSTATUS
@@ -2014,7 +2071,7 @@ APIENTRY
 NtGdiDdDDIOpenNtHandleFromName(_Inout_ struct _D3DKMT_OPENNTHANDLEFROMNAME* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOpenNtHandleFromName(unnamedParam1);
 }
 
 NTSTATUS
@@ -2022,7 +2079,7 @@ APIENTRY
 NtGdiDdDDICreateOutputDupl(_In_ const struct _D3DKMT_CREATE_OUTPUTDUPL* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTCreateOutputDupl(unnamedParam1);
 }
 
 NTSTATUS
@@ -2030,7 +2087,7 @@ APIENTRY
 NtGdiDdDDIDestroyOutputDupl(_In_ const struct _D3DKMT_DESTROY_OUTPUTDUPL* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTDestroyOutputDupl(unnamedParam1);
 }
 
 NTSTATUS
@@ -2038,7 +2095,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplGetFrameInfo(_Inout_ struct _D3DKMT_OUTPUTDUPL_GET_FRAMEINFO* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplGetFrameInfo(unnamedParam1);
 }
 
 NTSTATUS
@@ -2046,7 +2103,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplGetMetaData(_Inout_ struct _D3DKMT_OUTPUTDUPL_METADATA* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplGetMetaData(unnamedParam1);
 }
 
 NTSTATUS
@@ -2054,7 +2111,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplGetPointerShapeData(_Inout_ struct _D3DKMT_OUTPUTDUPL_GET_POINTER_SHAPE_DATA* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplGetPointerShapeData(unnamedParam1);
 }
 
 NTSTATUS
@@ -2070,7 +2127,7 @@ APIENTRY
 NtGdiDdDDIOutputDuplReleaseFrame(_In_ const struct _D3DKMT_OUTPUTDUPL_RELEASE_FRAME* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTOutputDuplReleaseFrame((D3DKMT_OUTPUTDUPL_RELEASE_FRAME *)unnamedParam1);
 }
 
 /* ---- Multi-plane overlays ------------------------------------------------- */
@@ -2464,7 +2521,7 @@ APIENTRY
 NtGdiDdDDICancelPresents(_In_ const struct _D3DKMT_CANCEL_PRESENTS* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTCancelPresents((D3DKMT_CANCEL_PRESENTS *)unnamedParam1);
 }
 
 NTSTATUS
@@ -2618,7 +2675,6 @@ NtGdiDdDDIQueryVidPnExclusiveOwnership(_Inout_ struct _D3DKMT_QUERYVIDPNEXCLUSIV
     {
         Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
                      NtDeviceName,
-                     FALSE,
                      &AdapterHandle,
                      &QueryAdapterLuid);
         if (!NT_SUCCESS(Status))
@@ -3382,6 +3438,8 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
 {
     RXGK_SHAREOBJECTS_PACKET Packet;
     OBJECT_ATTRIBUTES ObjectAttributes;
+    PSECURITY_DESCRIPTOR SecurityDescriptor = NULL;
+    UNICODE_STRING ObjectName = {0};
     ULONG_PTR Information = 0;
     NTSTATUS Status;
     UINT Index;
@@ -3412,20 +3470,37 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
 
     if (ObjectAttributes.Length != sizeof(ObjectAttributes))
         return STATUS_INVALID_PARAMETER;
-    if (ObjectAttributes.RootDirectory != NULL ||
-        ObjectAttributes.ObjectName != NULL ||
-        ObjectAttributes.Attributes != 0 ||
-        ObjectAttributes.SecurityDescriptor != NULL ||
-        ObjectAttributes.SecurityQualityOfService != NULL)
+    if ((ObjectAttributes.Attributes & ~(OBJ_INHERIT | OBJ_EXCLUSIVE | OBJ_CASE_INSENSITIVE | OBJ_OPENIF)) != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (ObjectAttributes.ObjectName != NULL)
     {
-        return STATUS_NOT_SUPPORTED;
+        Status = ProbeAndCaptureUnicodeString(&ObjectName, ExGetPreviousMode(), ObjectAttributes.ObjectName);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    if (ObjectAttributes.SecurityDescriptor != NULL)
+    {
+        Status = SeCaptureSecurityDescriptor(ObjectAttributes.SecurityDescriptor,
+                                             ExGetPreviousMode(),
+                                             PagedPool,
+                                             TRUE,
+                                             &SecurityDescriptor);
+        if (!NT_SUCCESS(Status))
+        {
+            ReleaseCapturedUnicodeString(&ObjectName, ExGetPreviousMode());
+            return Status;
+        }
     }
 
-    Packet.Size = RXGK_SHAREOBJECTS_PACKET_V1_SIZE;
-    Packet.Version = RXGK_WDDM_PACKET_VERSION_1;
+    Packet.Size = RXGK_SHAREOBJECTS_PACKET_V3_SIZE;
+    Packet.Version = RXGK_SHAREOBJECTS_PACKET_VERSION_3;
     Packet.ObjectCount = cObjects;
     Packet.DesiredAccess = dwDesiredAccess;
     Packet.ObjectAttributesPresent = 1;
+    Packet.Attributes = ObjectAttributes.Attributes;
+    Packet.SecurityDescriptor = (ULONGLONG)(ULONG_PTR)SecurityDescriptor;
+    Packet.RootDirectory = (ULONGLONG)(ULONG_PTR)ObjectAttributes.RootDirectory;
+    Packet.ObjectName = ObjectAttributes.ObjectName != NULL ? (ULONGLONG)(ULONG_PTR)&ObjectName : 0;
 
     Status = WddmBridgeSendIoctlWithInformation(
                  IOCTL_D3DKMT_SHAREOBJECTS,
@@ -3434,9 +3509,12 @@ NtGdiDdDDIShareObjects(_In_ UINT cObjects,
                  &Packet,
                  sizeof(Packet),
                  &Information);
+    if (SecurityDescriptor != NULL)
+        SeReleaseSecurityDescriptor(SecurityDescriptor, ExGetPreviousMode(), TRUE);
+    ReleaseCapturedUnicodeString(&ObjectName, ExGetPreviousMode());
     if (!NT_SUCCESS(Status))
         return Status;
-    if (Information != RXGK_SHAREOBJECTS_PACKET_V1_SIZE ||
+    if (Information != RXGK_SHAREOBJECTS_PACKET_V3_SIZE ||
         Packet.SharedNtHandle == 0 ||
         Packet.SharedNtHandle > (ULONGLONG)(ULONG_PTR)-1)
     {

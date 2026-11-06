@@ -36,6 +36,7 @@
 #include "dxgkrnl_private.h"
 #include "vidmm.h"
 #include "vidpn.h"
+#include "display_core.h"
 #include "present.h"
 #include "pnp.h"
 #include "hotplug_work_core.h"
@@ -1366,7 +1367,7 @@ DxgkpPopulateDefaultPath(
     Path->GammaRamp.Type = D3DDDI_GAMMARAMP_DEFAULT;
     Path->GammaRamp.DataSize = 0;
 
-    Path->VidPnTargetColorBasis = D3DKMDT_CB_SRGB;
+    Path->VidPnTargetColorBasis = D3DKMDT_CB_UNINITIALIZED;
     Path->VidPnTargetColorCoeffDynamicRanges.FirstChannel  = 8;
     Path->VidPnTargetColorCoeffDynamicRanges.SecondChannel = 8;
     Path->VidPnTargetColorCoeffDynamicRanges.ThirdChannel  = 8;
@@ -6394,6 +6395,14 @@ DxgkCreateRedirectionSurface(
 }
 
 NTSTATUS
+DxgkCreateGdiTextureSurface(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ PDXGK_REDIRECTION_SURFACE_CREATE Create)
+{
+    return DxgkpCreateGdiSurface(Adapter, NULL, Create, D3DKMDT_GDISURFACE_TEXTURE);
+}
+
+NTSTATUS
 DxgkCreateCaptureSurface(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PDXGKRNL_DEVICE Device,
@@ -6420,6 +6429,7 @@ DxgkDestroyRedirectionSurface(
         return STATUS_INVALID_PARAMETER;
     }
 
+    DxgkRetireGdiBltTexture(Adapter, Destroy->GlobalShare);
     Status = DxgkVidMmReferenceResource(
         Destroy->ResourceHandle, FALSE, NULL, &Resource);
     if (!NT_SUCCESS(Status))
@@ -6455,6 +6465,35 @@ DxgkDestroyRedirectionSurface(
         Status = DxgkpVidMmDestroyResourceWrapper(Adapter, Resource);
     DxgkVidMmDereferenceResource(Resource);
     return Status;
+}
+
+static D3DDDIFORMAT
+DxgkpDesktopSurfaceFormat(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
+{
+    D3DDDIFORMAT PinnedFormat = D3DDDIFMT_UNKNOWN;
+    PDXGKP_VIDPN VidPn;
+    PDXGKP_VIDPN_SOURCE_MODESET SourceSet;
+    ULONG Index;
+
+    (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
+    VidPn = (PDXGKP_VIDPN)Adapter->VidPn;
+    if (VidPn != NULL && VidPn->Signature == DXGKP_VIDPN_SIGNATURE && VidPnSourceId < VidPn->NumSources)
+    {
+        SourceSet = VidPn->SourceModeSets[VidPnSourceId];
+        for (Index = 0; SourceSet != NULL && Index < SourceSet->NumModes; ++Index)
+        {
+            if (SourceSet->Modes[Index].Id == SourceSet->PinnedModeId &&
+                SourceSet->Modes[Index].Type == D3DKMDT_RMT_GRAPHICS)
+            {
+                PinnedFormat = SourceSet->Modes[Index].Format.Graphics.PixelFormat;
+                break;
+            }
+        }
+    }
+    KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+    return DxgkVidPnCoreDesktopSurfaceFormat(PinnedFormat);
 }
 
 static NTSTATUS
@@ -6494,7 +6533,7 @@ DxgkpEnsureSharedShadowSurfaceLocked(
     RtlZeroMemory(&SurfaceData, sizeof(SurfaceData));
     SurfaceData.Width = Adapter->CommittedWidth;
     SurfaceData.Height = Adapter->CommittedHeight;
-    SurfaceData.Format = D3DDDIFMT_X8R8G8B8;
+    SurfaceData.Format = DxgkpDesktopSurfaceFormat(Adapter, VidPnSourceId);
     SurfaceData.Pitch = Adapter->CommittedWidth * 4;
 
     RtlZeroMemory(&QueryArgs, sizeof(QueryArgs));
@@ -6812,7 +6851,7 @@ DxgkpEnsureSharedPrimarySizeLocked(
     RtlZeroMemory(&SurfaceData, sizeof(SurfaceData));
     SurfaceData.Width = Width;
     SurfaceData.Height = Height;
-    SurfaceData.Format = D3DDDIFMT_X8R8G8B8;
+    SurfaceData.Format = DxgkpDesktopSurfaceFormat(Adapter, VidPnSourceId);
     SurfaceData.RefreshRate.Numerator = 60;
     SurfaceData.RefreshRate.Denominator = 1;
     SurfaceData.VidPnSourceId = VidPnSourceId;
@@ -7108,7 +7147,15 @@ DxgkSetDisplayMode(
     Status = DxgkVidMmReferenceAllocation((HANDLE)(ULONG_PTR)pSetDisplayMode->hPrimaryAllocation, Adapter, Device, &Allocation);
     if (!NT_SUCCESS(Status))
     {
-        Status = STATUS_INVALID_HANDLE;
+        Status = STATUS_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+    if (pSetDisplayMode->ScanLineOrdering < D3DDDI_VSSLO_PROGRESSIVE ||
+        pSetDisplayMode->ScanLineOrdering > D3DDDI_VSSLO_INTERLACED_LOWERFIELDFIRST ||
+        pSetDisplayMode->DisplayOrientation < D3DDDI_ROTATION_IDENTITY ||
+        pSetDisplayMode->DisplayOrientation > D3DDDI_ROTATION_270)
+    {
+        Status = STATUS_INVALID_PARAMETER;
         goto Cleanup;
     }
     VidPnSourceId = Allocation->PrimaryVidPnSourceId;
@@ -7224,6 +7271,22 @@ DxgkGetSharedPrimaryHandle(
     }
 
     (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    if (pGetSharedPrimaryHandle->VidPnSourceId < Adapter->NumberOfVideoPresentSources)
+    {
+        D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
+
+        /* FIXME: one shared primary per adapter; a second desktop source of a multi-output adapter gets none */
+        if ((Adapter->SharedPrimaryAllocationHandle != NULL &&
+             Adapter->SharedPrimaryVidPnSourceId != pGetSharedPrimaryHandle->VidPnSourceId) ||
+            (Adapter->SharedPrimaryAllocationHandle == NULL && Adapter->VidPnCommitted &&
+             !NT_SUCCESS(DxgkVidPnResolveTargetForSource(Adapter, pGetSharedPrimaryHandle->VidPnSourceId, &TargetId))))
+        {
+            pGetSharedPrimaryHandle->hSharedPrimary = 0;
+            KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
+            Status = STATUS_SUCCESS;
+            goto Cleanup;
+        }
+    }
     Status = DxgkpEnsureSharedPrimaryLocked(Adapter, pGetSharedPrimaryHandle->VidPnSourceId);
     if (!NT_SUCCESS(Status))
     {
@@ -7597,11 +7660,34 @@ DxgkVidPnQueryMonitorPreferredMode(
         if (Signal != NULL && Signal->ActiveSize.cx != 0 && Signal->ActiveSize.cy != 0 &&
             Signal->VSyncFreq.Denominator != 0)
         {
+            PDXGKP_VIDPN_TARGET_MODESET TargetSet = VidPn->TargetModeSets[TargetIndex];
+            ULONG OfferedRate = 0;
+
             *Width = Signal->ActiveSize.cx;
             *Height = Signal->ActiveSize.cy;
             *RefreshRate = (ULONG)(((ULONGLONG)Signal->VSyncFreq.Numerator +
                                     Signal->VSyncFreq.Denominator / 2) /
                                    Signal->VSyncFreq.Denominator);
+            for (Index = 0; TargetSet != NULL && Index < TargetSet->NumModes; Index++)
+            {
+                CONST D3DKMDT_VIDEO_SIGNAL_INFO *Offered = &TargetSet->Modes[Index].VideoSignalInfo;
+                ULONG Rate;
+
+                if (Offered->ActiveSize.cx != Signal->ActiveSize.cx ||
+                    Offered->ActiveSize.cy != Signal->ActiveSize.cy ||
+                    !DxgkpIsRefreshRateSpecified(&Offered->VSyncFreq))
+                    continue;
+                Rate = Offered->VSyncFreq.Numerator / Offered->VSyncFreq.Denominator;
+                if (Rate == *RefreshRate)
+                {
+                    OfferedRate = 0;
+                    break;
+                }
+                if (OfferedRate == 0)
+                    OfferedRate = Rate;
+            }
+            if (OfferedRate != 0)
+                *RefreshRate = OfferedRate;
         }
     }
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);

@@ -9,18 +9,15 @@
 #include <gui.h>
 
 #define BM_PROFILE_DEBUGGING          1
-#define BM_PROFILE_REMOTE_ASSISTANCE  2
 
 static PCSTR BmStartupNames[] =
 {
-    "Debugging",
-    "Remote assistance"
+    "Debugging"
 };
 
 static const ULONG BmStartupProfiles[] =
 {
-    BM_PROFILE_DEBUGGING,
-    BM_PROFILE_REMOTE_ASSISTANCE
+    BM_PROFILE_DEBUGGING
 };
 
 BOOLEAN

@@ -704,6 +704,7 @@ DestroyClassInstallParams(struct ClassInstallParams* installParams)
     HeapFree(GetProcessHeap(), 0, installParams->PropChangeParams);
     HeapFree(GetProcessHeap(), 0, installParams->AddPropertyPageData);
     HeapFree(GetProcessHeap(), 0, installParams->DetectDeviceParams);
+    HeapFree(GetProcessHeap(), 0, installParams->RemoveDeviceParams);
     return TRUE;
 }
 
@@ -3354,7 +3355,8 @@ BOOL WINAPI SetupDiEnumDeviceInterfaces(
         return FALSE;
     }
     if (!DeviceInterfaceData ||
-            DeviceInterfaceData->cbSize != sizeof(SP_DEVICE_INTERFACE_DATA))
+            DeviceInterfaceData->cbSize != sizeof(SP_DEVICE_INTERFACE_DATA) ||
+            !InterfaceClassGuid)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
@@ -5289,6 +5291,101 @@ HKEY WINAPI SetupDiOpenClassRegKeyExW(
     return key;
 }
 
+static BOOL
+AddOpenedDeviceInterface(
+    struct DeviceInfoSet *list,
+    PCWSTR InstancePath,
+    const GUID *ClassId,
+    PCWSTR SymbolicLink,
+    HKEY hSymKey,
+    PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData)
+{
+    struct DeviceInfo *deviceInfo;
+    struct DeviceInterface *deviceInterface;
+    DWORD Linked = 0, LinkedSize = sizeof(Linked);
+
+    RegGetValueW(hSymKey, L"Control", L"Linked", RRF_RT_REG_DWORD, NULL, &Linked, &LinkedSize);
+    if (!CreateDeviceInfo(list, InstancePath, ClassId, &deviceInfo))
+        return FALSE;
+
+    deviceInterface = HeapAlloc(GetProcessHeap(), 0, sizeof(struct DeviceInterface) + (wcslen(SymbolicLink) + 1) * sizeof(WCHAR));
+    if (!deviceInterface)
+    {
+        HeapFree(GetProcessHeap(), 0, deviceInfo);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    CopyMemory(&deviceInterface->InterfaceClassGuid, ClassId, sizeof(GUID));
+    deviceInterface->DeviceInfo = deviceInfo;
+    deviceInterface->Flags = Linked ? SPINT_ACTIVE : 0;
+    wcscpy(deviceInterface->SymbolicLink, SymbolicLink);
+
+    InsertTailList(&deviceInfo->InterfaceListHead, &deviceInterface->ListEntry);
+    InsertTailList(&list->ListHead, &deviceInfo->ListEntry);
+
+    if (DeviceInterfaceData)
+    {
+        DeviceInterfaceData->Reserved = (ULONG_PTR)deviceInterface;
+        DeviceInterfaceData->Flags = deviceInterface->Flags;
+        CopyMemory(&DeviceInterfaceData->InterfaceClassGuid, ClassId, sizeof(GUID));
+    }
+    return TRUE;
+}
+
+static BOOL
+OpenDeviceInterfaceByKeyName(
+    struct DeviceInfoSet *list,
+    HKEY hClassKey,
+    PCWSTR DevicePath,
+    PCWSTR pEnd,
+    const GUID *ClassId,
+    PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData,
+    BOOL *Found)
+{
+    WCHAR KeyName[MAX_PATH + 1], RefName[MAX_PATH + 1];
+    WCHAR SymBuffer[MAX_PATH + 1], InstancePath[MAX_PATH + 1];
+    SIZE_T PathLength = pEnd - DevicePath, i;
+    DWORD Size;
+    HKEY hDevKey, hSymKey;
+    BOOL Ret = FALSE;
+
+    *Found = FALSE;
+    if (PathLength > MAX_PATH || wcslen(pEnd) > MAX_PATH)
+        return FALSE;
+
+    wcscpy(KeyName, L"##?#");
+    memcpy(KeyName + 4, DevicePath + 4, (PathLength - 4) * sizeof(WCHAR));
+    KeyName[PathLength] = UNICODE_NULL;
+    for (i = 4; i < PathLength; i++)
+    {
+        if (KeyName[i] == L'\\')
+            KeyName[i] = L'#';
+    }
+    RefName[0] = L'#';
+    wcscpy(RefName + 1, *pEnd ? pEnd + 1 : L"");
+
+    if (RegOpenKeyExW(hClassKey, KeyName, 0, KEY_READ, &hDevKey) != ERROR_SUCCESS)
+        return FALSE;
+    Size = sizeof(InstancePath);
+    InstancePath[0] = UNICODE_NULL;
+    if (RegQueryValueExW(hDevKey, L"DeviceInstance", NULL, NULL, (LPBYTE)InstancePath, &Size) == ERROR_SUCCESS &&
+        RegOpenKeyExW(hDevKey, RefName, 0, KEY_READ, &hSymKey) == ERROR_SUCCESS)
+    {
+        Size = sizeof(SymBuffer);
+        SymBuffer[0] = UNICODE_NULL;
+        if (RegQueryValueExW(hSymKey, L"SymbolicLink", NULL, NULL, (LPBYTE)SymBuffer, &Size) == ERROR_SUCCESS &&
+            !wcsicmp(SymBuffer, DevicePath))
+        {
+            *Found = TRUE;
+            Ret = AddOpenedDeviceInterface(list, InstancePath, ClassId, SymBuffer, hSymKey, DeviceInterfaceData);
+        }
+        RegCloseKey(hSymKey);
+    }
+    RegCloseKey(hDevKey);
+    return Ret;
+}
+
 /***********************************************************************
  *		SetupDiOpenDeviceInterfaceW (SETUPAPI.@)
  */
@@ -5308,7 +5405,7 @@ BOOL WINAPI SetupDiOpenDeviceInterfaceW(
     HKEY hKey, hDevKey, hSymKey;
     struct DeviceInfo * deviceInfo;
     struct DeviceInterface *deviceInterface;
-    BOOL Ret;
+    BOOL Ret, Found;
     PLIST_ENTRY ItemList;
     PLIST_ENTRY InterfaceListEntry;
 
@@ -5347,7 +5444,7 @@ BOOL WINAPI SetupDiOpenDeviceInterfaceW(
 
     if (DevicePath[0] != L'\\' ||
         DevicePath[1] != L'\\' ||
-        (DevicePath[2] != L'?' && DevicePath[2] != L'.') ||
+        DevicePath[2] != L'?' ||
         DevicePath[3] != L'\\')
     {
         /* invalid formatted path */
@@ -5415,6 +5512,12 @@ BOOL WINAPI SetupDiOpenDeviceInterfaceW(
         ItemList = ItemList->Flink;
     }
 
+    Ret = OpenDeviceInterfaceByKeyName(list, hKey, DevicePath, pEnd, &ClassId, DeviceInterfaceData, &Found);
+    if (Found)
+    {
+        RegCloseKey(hKey);
+        return Ret;
+    }
 
     dwIndex = 0;
     do
@@ -5461,49 +5564,10 @@ BOOL WINAPI SetupDiOpenDeviceInterfaceW(
 
             if (!wcsicmp(SymBuffer, DevicePath))
             {
-                DWORD Linked = 0, LinkedSize = sizeof(Linked);
-
-                RegGetValueW(hSymKey, L"Control", L"Linked", RRF_RT_REG_DWORD, NULL, &Linked, &LinkedSize);
-                Ret = CreateDeviceInfo(list, InstancePath, &ClassId, &deviceInfo);
+                Ret = AddOpenedDeviceInterface(list, InstancePath, &ClassId, SymBuffer, hSymKey, DeviceInterfaceData);
                 RegCloseKey(hSymKey);
                 RegCloseKey(hDevKey);
                 RegCloseKey(hKey);
-
-                if (Ret)
-                {
-                    deviceInterface = HeapAlloc(GetProcessHeap(), 0, sizeof(struct DeviceInterface) + (wcslen(SymBuffer) + 1) * sizeof(WCHAR));
-                    if (deviceInterface)
-                    {
-
-                        CopyMemory(&deviceInterface->InterfaceClassGuid, &ClassId, sizeof(GUID));
-                        deviceInterface->DeviceInfo = deviceInfo;
-                        deviceInterface->Flags = Linked ? SPINT_ACTIVE : 0;
-
-                        wcscpy(deviceInterface->SymbolicLink, SymBuffer);
-
-                        InsertTailList(&deviceInfo->InterfaceListHead, &deviceInterface->ListEntry);
-                        InsertTailList(&list->ListHead, &deviceInfo->ListEntry);
-
-
-                        if (DeviceInterfaceData)
-                        {
-                            DeviceInterfaceData->Reserved = (ULONG_PTR)deviceInterface;
-                            DeviceInterfaceData->Flags = deviceInterface->Flags;
-                            CopyMemory(&DeviceInterfaceData->InterfaceClassGuid, &ClassId, sizeof(GUID));
-                        }
-                    }
-                    else
-                    {
-                        HeapFree(GetProcessHeap(), 0, deviceInfo);
-                        Ret = FALSE;
-                        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-                    }
-                }
-                else
-                {
-                    HeapFree(GetProcessHeap(), 0, deviceInfo);
-                    Ret = FALSE;
-                }
                 return Ret;
         }
         RegCloseKey(hSymKey);

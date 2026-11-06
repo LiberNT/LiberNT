@@ -304,6 +304,135 @@ DxgkPresentCoreCopyDestinationSubRects(
     return STATUS_SUCCESS;
 }
 
+/* Clip [*Low1, *High1] to [Low, High] and shrink [*Low2, *High2], which maps onto [Low, High], by the clipped share. */
+FORCEINLINE
+VOID
+DxgkPresentCoreClipIntervals(
+    _Inout_ LONG *Low1,
+    _Inout_ LONG *High1,
+    _Inout_ LONG *Low2,
+    _Inout_ LONG *High2,
+    _In_ LONG Low,
+    _In_ LONG High)
+{
+    LONGLONG Length = (LONGLONG)High - Low;
+    LONGLONG Length2;
+
+    if (*Low1 < Low)
+        *Low1 = Low;
+    if (*High1 > High)
+        *High1 = High;
+    if ((LONGLONG)*High1 - *Low1 == Length || Length <= 0)
+        return;
+    Length2 = (LONGLONG)*High2 - *Low2;
+    if (*Low1 > Low)
+        *Low2 += (LONG)((Length + ((LONGLONG)*Low1 - Low) * Length2 - 1) / Length);
+    if (*High1 < High)
+        *High2 -= (LONG)((((LONGLONG)High - *High1) * Length2) / Length);
+    if (*Low2 == *High2)
+    {
+        if ((LONGLONG)*Low1 - Low < (LONGLONG)High - *High1)
+            *High2 += 1;
+        else
+            *Low2 -= 1;
+    }
+}
+
+FORCEINLINE
+BOOLEAN
+DxgkPresentCoreIntersectRect(
+    _Out_ RECT *Result,
+    _In_ const RECT *First,
+    _In_ const RECT *Second)
+{
+    RECT Rect;
+
+    Rect.left = max(First->left, Second->left);
+    Rect.top = max(First->top, Second->top);
+    Rect.right = min(First->right, Second->right);
+    Rect.bottom = min(First->bottom, Second->bottom);
+    if (Rect.left >= Rect.right || Rect.top >= Rect.bottom)
+        return FALSE;
+    *Result = Rect;
+    return TRUE;
+}
+
+/*
+ * Source and destination of a window Blt present.  The source starts as the
+ * whole source allocation and the destination as the whole window client; a
+ * valid SrcRect or DstRect (client relative) clips its side, and the clipped
+ * part maps proportionally onto the other side.  FALSE: nothing to present.
+ */
+FORCEINLINE
+BOOLEAN
+DxgkPresentCoreComputeBltRects(
+    _In_ ULONG SourceWidth,
+    _In_ ULONG SourceHeight,
+    _In_ ULONG ClientWidth,
+    _In_ ULONG ClientHeight,
+    _In_opt_ const RECT *SrcRect,
+    _In_opt_ const RECT *DstRect,
+    _Out_ RECT *Source,
+    _Out_ RECT *Destination)
+{
+    RECT Src = {0, 0, (LONG)SourceWidth, (LONG)SourceHeight};
+    RECT Dst = {0, 0, (LONG)ClientWidth, (LONG)ClientHeight};
+
+    if (SourceWidth == 0 || SourceHeight == 0 || ClientWidth == 0 || ClientHeight == 0 ||
+        SourceWidth > MAXLONG || SourceHeight > MAXLONG || ClientWidth > MAXLONG || ClientHeight > MAXLONG)
+        return FALSE;
+    if (SrcRect != NULL &&
+        (Src.bottom <= SrcRect->top || SrcRect->bottom <= Src.top ||
+         Src.right <= SrcRect->left || SrcRect->right <= Src.left ||
+         SrcRect->bottom <= SrcRect->top || SrcRect->right <= SrcRect->left))
+        return FALSE;
+    if (DstRect != NULL &&
+        (Dst.bottom <= DstRect->top || DstRect->bottom < 1 ||
+         Dst.right <= DstRect->left || DstRect->right < 1 ||
+         DstRect->bottom <= DstRect->top || DstRect->right <= DstRect->left))
+        return FALSE;
+
+    if (SrcRect != NULL && DstRect != NULL)
+    {
+        LONGLONG ScaleX = (((LONGLONG)DstRect->right - DstRect->left) << 16) / ((LONGLONG)SrcRect->right - SrcRect->left);
+        LONGLONG ScaleY = (((LONGLONG)DstRect->bottom - DstRect->top) << 16) / ((LONGLONG)SrcRect->bottom - SrcRect->top);
+        LONGLONG MapLeft, MapTop, MapRight, MapBottom;
+        RECT Clip, Mapped, Back;
+
+        if (ScaleX == 0 || ScaleY == 0 || !DxgkPresentCoreIntersectRect(&Clip, SrcRect, &Src))
+            return FALSE;
+        MapLeft = ((LONGLONG)Clip.left - SrcRect->left) * ScaleX + ((LONGLONG)DstRect->left << 16);
+        MapTop = ((LONGLONG)Clip.top - SrcRect->top) * ScaleY + ((LONGLONG)DstRect->top << 16);
+        MapRight = ((LONGLONG)Clip.right - SrcRect->right) * ScaleX + ((LONGLONG)DstRect->right << 16);
+        MapBottom = ((LONGLONG)Clip.bottom - SrcRect->bottom) * ScaleY + ((LONGLONG)DstRect->bottom << 16);
+        Mapped.left = (LONG)((MapLeft + 0xffff) >> 16);
+        Mapped.top = (LONG)((MapTop + 0xffff) >> 16);
+        Mapped.right = (LONG)(MapRight >> 16);
+        Mapped.bottom = (LONG)(MapBottom >> 16);
+        if (!DxgkPresentCoreIntersectRect(&Dst, &Mapped, &Dst))
+            return FALSE;
+        Back.left = Clip.left + (LONG)((((LONGLONG)Dst.left << 16) - MapLeft + ScaleX - 1) / ScaleX);
+        Back.top = Clip.top + (LONG)((((LONGLONG)Dst.top << 16) - MapTop + ScaleY - 1) / ScaleY);
+        Back.right = Clip.right + (LONG)((((LONGLONG)Dst.right << 16) - MapRight) / ScaleX);
+        Back.bottom = Clip.bottom + (LONG)((((LONGLONG)Dst.bottom << 16) - MapBottom) / ScaleY);
+        if (!DxgkPresentCoreIntersectRect(&Src, &Back, &Src))
+            return FALSE;
+    }
+    else if (SrcRect != NULL)
+    {
+        DxgkPresentCoreClipIntervals(&Src.top, &Src.bottom, &Dst.top, &Dst.bottom, SrcRect->top, SrcRect->bottom);
+        DxgkPresentCoreClipIntervals(&Src.left, &Src.right, &Dst.left, &Dst.right, SrcRect->left, SrcRect->right);
+    }
+    else if (DstRect != NULL)
+    {
+        DxgkPresentCoreClipIntervals(&Dst.top, &Dst.bottom, &Src.top, &Src.bottom, DstRect->top, DstRect->bottom);
+        DxgkPresentCoreClipIntervals(&Dst.left, &Dst.right, &Src.left, &Src.right, DstRect->left, DstRect->right);
+    }
+    *Source = Src;
+    *Destination = Dst;
+    return TRUE;
+}
+
 FORCEINLINE
 BOOLEAN
 DxgkPresentCoreIsFullDestinationRegion(

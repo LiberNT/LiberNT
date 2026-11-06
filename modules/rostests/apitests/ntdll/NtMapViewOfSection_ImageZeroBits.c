@@ -9,12 +9,18 @@
 START_TEST(NtMapViewOfSection_ImageZeroBits)
 {
     static const ULONG_PTR Masks[] = { 0x7fffffff, 0x0fffffff };
+    static const ULONG_PTR Bits[] = { 1, 4 };
+    BOOL IsWow64 = FALSE;
+    BOOL UseMasks;
     WCHAR Path[MAX_PATH];
     HANDLE File, Section;
     PVOID Views[2];
     SIZE_T Size;
     NTSTATUS Status;
     ULONG Length, i, j;
+
+    IsWow64Process(GetCurrentProcess(), &IsWow64);
+    UseMasks = (sizeof(void *) == 8 || IsWow64);
 
     Length = GetWindowsDirectoryW(Path, ARRAYSIZE(Path));
     ok(Length && Length + ARRAYSIZE(L"\\system32\\apphelp.dll") <= ARRAYSIZE(Path),
@@ -36,7 +42,8 @@ START_TEST(NtMapViewOfSection_ImageZeroBits)
         {
             Views[j] = NULL;
             Size = 0;
-            Status = NtMapViewOfSection(Section, NtCurrentProcess(), &Views[j], Masks[i], 0, NULL, &Size, ViewShare, 0, PAGE_READONLY);
+            Status = NtMapViewOfSection(Section, NtCurrentProcess(), &Views[j], UseMasks ? Masks[i] : Bits[i], 0, NULL,
+                                        &Size, ViewShare, 0, PAGE_READONLY);
             ok(NT_SUCCESS(Status), "Map mask %Ix view %lu failed: %lx\n", Masks[i], j, Status);
             if (!NT_SUCCESS(Status))
             {

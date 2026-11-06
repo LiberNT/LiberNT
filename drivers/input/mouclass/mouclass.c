@@ -36,6 +36,48 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
 	// nothing to do here yet
 }
 
+static PDEVICE_OBJECT
+ClassDeviceFor(
+	IN PDEVICE_OBJECT DeviceObject)
+{
+	PPORT_DEVICE_EXTENSION PortExtension;
+	PCLASS_DEVICE_EXTENSION ClassExtension;
+
+	if (((PCOMMON_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->IsClassDO)
+		return DeviceObject;
+	PortExtension = DeviceObject->DeviceExtension;
+	if (!PortExtension->ClassDO)
+		return NULL;
+	ClassExtension = PortExtension->ClassDO->DeviceExtension;
+	return ClassExtension->DriverExtension->ConnectMultiplePorts ? NULL : PortExtension->ClassDO;
+}
+
+static VOID
+ClassCompletePendingRead(
+	IN PDEVICE_OBJECT ClassDeviceObject,
+	IN PFILE_OBJECT FileObject,
+	IN NTSTATUS Status)
+{
+	PCLASS_DEVICE_EXTENSION ClassExtension = ClassDeviceObject->DeviceExtension;
+	KIRQL OldIrql;
+	PIRP Irp;
+
+	KeAcquireSpinLock(&ClassExtension->SpinLock, &OldIrql);
+	Irp = ClassExtension->PendingIrp;
+	if (Irp && (!FileObject || IoGetCurrentIrpStackLocation(Irp)->FileObject == FileObject) &&
+	    IoSetCancelRoutine(Irp, NULL))
+		ClassExtension->PendingIrp = NULL;
+	else
+		Irp = NULL;
+	KeReleaseSpinLock(&ClassExtension->SpinLock, OldIrql);
+	if (Irp)
+	{
+		Irp->IoStatus.Status = Status;
+		Irp->IoStatus.Information = 0;
+		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	}
+}
+
 static NTSTATUS NTAPI
 ClassCreate(
 	IN PDEVICE_OBJECT DeviceObject,
@@ -78,7 +120,13 @@ ClassCleanup(
 	TRACE_(CLASS_NAME, "IRP_MJ_CLEANUP\n");
 
 	if (!((PCOMMON_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->IsClassDO)
+	{
+		PDEVICE_OBJECT ClassDevice = ClassDeviceFor(DeviceObject);
+
+		if (ClassDevice)
+			ClassCompletePendingRead(ClassDevice, IoGetCurrentIrpStackLocation(Irp)->FileObject, STATUS_CANCELLED);
 		return ForwardIrpAndForget(DeviceObject, Irp);
+	}
 
 	/* FIXME: cleanup all associated Port devices */
 	Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -92,15 +140,17 @@ ClassRead(
 	IN PDEVICE_OBJECT DeviceObject,
 	IN PIRP Irp)
 {
-	PCLASS_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+	PDEVICE_OBJECT ClassDevice = ClassDeviceFor(DeviceObject);
+	PCLASS_DEVICE_EXTENSION DeviceExtension;
 	KIRQL OldIrql;
 	NTSTATUS Status;
 
 	TRACE_(CLASS_NAME, "IRP_MJ_READ\n");
 
-	if (!((PCOMMON_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->IsClassDO)
+	if (!ClassDevice)
 		return ForwardIrpAndForget(DeviceObject, Irp);
 
+	DeviceExtension = ClassDevice->DeviceExtension;
 	ASSERT(DeviceExtension->Common.IsClassDO);
 
 	if (IoGetCurrentIrpStackLocation(Irp)->Parameters.Read.Length < sizeof(MOUSE_INPUT_DATA))
@@ -113,7 +163,7 @@ ClassRead(
 	}
 
 	KeAcquireSpinLock(&DeviceExtension->SpinLock, &OldIrql);
-	Status = HandleReadIrp(DeviceObject, Irp, FALSE);
+	Status = HandleReadIrp(ClassDevice, Irp, FALSE);
 	KeReleaseSpinLock(&DeviceExtension->SpinLock, OldIrql);
 	return Status;
 }
@@ -123,13 +173,19 @@ ClassDeviceControl(
 	IN PDEVICE_OBJECT DeviceObject,
 	IN PIRP Irp)
 {
-	//PCLASS_DEVICE_EXTENSION DeviceExtension;
+	PDEVICE_OBJECT ClassDevice = ClassDeviceFor(DeviceObject);
 	NTSTATUS Status = STATUS_NOT_SUPPORTED;
 
 	TRACE_(CLASS_NAME, "IRP_MJ_DEVICE_CONTROL\n");
 
-	if (!((PCOMMON_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->IsClassDO)
+	if (!ClassDevice)
 		return ForwardIrpAndForget(DeviceObject, Irp);
+
+	if (ClassDevice != DeviceObject &&
+	    IoGetCurrentIrpStackLocation(Irp)->Parameters.DeviceIoControl.IoControlCode != IOCTL_MOUSE_QUERY_ATTRIBUTES)
+	{
+		return ForwardIrpAndForget(DeviceObject, Irp);
+	}
 
 	//DeviceExtension = (PCLASS_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
@@ -139,7 +195,7 @@ ClassDeviceControl(
 		{
 			/* FIXME: We hope that all devices will return the same result.
 			 * Ask only the first one */
-			PLIST_ENTRY Head = &((PCLASS_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->ListHead;
+			PLIST_ENTRY Head = &((PCLASS_DEVICE_EXTENSION)ClassDevice->DeviceExtension)->ListHead;
 			if (Head->Flink != Head)
 			{
 				/* We have at least one device */
@@ -246,7 +302,7 @@ ReadRegistryEntries(
 	RTL_QUERY_REGISTRY_TABLE Parameters[4];
 	NTSTATUS Status;
 
-	ULONG DefaultConnectMultiplePorts = 1;
+	ULONG DefaultConnectMultiplePorts = 0;
 	ULONG DefaultDataQueueSize = 0x64;
 	PCWSTR DefaultDeviceBaseName = L"PointerClass";
 
@@ -429,21 +485,21 @@ cleanup:
 
 static NTSTATUS
 FillEntries(
-	IN PDEVICE_OBJECT ClassDeviceObject,
 	IN PIRP Irp,
 	IN PMOUSE_INPUT_DATA DataStart,
 	IN SIZE_T NumberOfEntries)
 {
+	PDEVICE_OBJECT TargetDevice = IoGetCurrentIrpStackLocation(Irp)->DeviceObject;
 	NTSTATUS Status = STATUS_SUCCESS;
 
-	if (ClassDeviceObject->Flags & DO_BUFFERED_IO)
+	if (TargetDevice->Flags & DO_BUFFERED_IO)
 	{
 		RtlCopyMemory(
 			Irp->AssociatedIrp.SystemBuffer,
 			DataStart,
 			NumberOfEntries * sizeof(MOUSE_INPUT_DATA));
 	}
-	else if (ClassDeviceObject->Flags & DO_DIRECT_IO)
+	else if (TargetDevice->Flags & DO_DIRECT_IO)
 	{
 		PVOID DestAddress = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
 		if (DestAddress)
@@ -635,6 +691,7 @@ DestroyPortDriver(
 
 	if (!DriverExtension->ConnectMultiplePorts && DeviceExtension->ClassDO)
 	{
+		ClassCompletePendingRead(DeviceExtension->ClassDO, NULL, STATUS_DEVICE_NOT_CONNECTED);
 		ExFreePoolWithTag(ClassDeviceExtension->PortData, CLASS_TAG);
 		ExFreePoolWithTag((PVOID)ClassDeviceExtension->DeviceName, CLASS_TAG);
 		IoDeleteDevice(DeviceExtension->ClassDO);
@@ -701,6 +758,8 @@ ClassAddDevice(
 		DeviceExtension->ClassDO = DriverExtension->MainClassDeviceObject;
 	else
 	{
+		Fdo->Flags |= DO_BUFFERED_IO;
+		Fdo->Flags &= ~DO_DIRECT_IO;
 		/* We need a new class device object for this Fdo */
 		Status = CreateClassDeviceObject(
 			DriverObject,
@@ -742,7 +801,7 @@ ClassCancelRoutine(
 	IN PDEVICE_OBJECT DeviceObject,
 	IN PIRP Irp)
 {
-	PCLASS_DEVICE_EXTENSION ClassDeviceExtension = DeviceObject->DeviceExtension;
+	PCLASS_DEVICE_EXTENSION ClassDeviceExtension = ClassDeviceFor(DeviceObject)->DeviceExtension;
 	KIRQL OldIrql;
 	BOOLEAN wasQueued = FALSE;
 
@@ -796,7 +855,6 @@ HandleReadIrp(
 			IoGetCurrentIrpStackLocation(Irp)->Parameters.Read.Length / sizeof(MOUSE_INPUT_DATA));
 
 		Status = FillEntries(
-			DeviceObject,
 			Irp,
 			DeviceExtension->PortData,
 			NumberOfEntries);
@@ -1025,8 +1083,22 @@ ClassPnp(
 			IoCompleteRequest(Irp, IO_NO_INCREMENT);
 			return Status;
 
-		case IRP_MN_STOP_DEVICE:
 		case IRP_MN_SURPRISE_REMOVAL:
+			if (DeviceExtension->InterfaceName.Length != 0)
+				if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE)))
+					DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &DeviceExtension->InterfaceName);
+			if (ClassDeviceFor(DeviceObject))
+				ClassCompletePendingRead(DeviceExtension->ClassDO, NULL, STATUS_DEVICE_NOT_CONNECTED);
+			ClassDisarmWaitWake(DeviceExtension);
+			if (DeviceExtension->FileHandle)
+			{
+				ZwClose(DeviceExtension->FileHandle);
+				DeviceExtension->FileHandle = NULL;
+			}
+			Status = STATUS_SUCCESS;
+			break;
+
+		case IRP_MN_STOP_DEVICE:
 			ClassDisarmWaitWake(DeviceExtension);
 			if (DeviceExtension->FileHandle)
 			{

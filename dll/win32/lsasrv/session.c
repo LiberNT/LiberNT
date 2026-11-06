@@ -25,6 +25,43 @@ typedef struct _LSAP_LOGON_SESSION
 } LSAP_LOGON_SESSION, *PLSAP_LOGON_SESSION;
 
 
+typedef struct _LSAP_LOGON_SESSION_DATA32
+{
+    ULONG Size;
+    LUID LogonId;
+    UNICODE_STRING32 UserName;
+    UNICODE_STRING32 LogonDomain;
+    UNICODE_STRING32 AuthenticationPackage;
+    ULONG LogonType;
+    ULONG Session;
+    ULONG Sid;
+    LARGE_INTEGER LogonTime;
+    UNICODE_STRING32 LogonServer;
+    UNICODE_STRING32 DnsDomainName;
+    UNICODE_STRING32 Upn;
+#if (_WIN32_WINNT >= 0x0600)
+    ULONG UserFlags;
+    LSA_LAST_INTER_LOGON_INFO LastLogonInfo;
+    UNICODE_STRING32 LogonScript;
+    UNICODE_STRING32 ProfilePath;
+    UNICODE_STRING32 HomeDirectory;
+    UNICODE_STRING32 HomeDirectoryDrive;
+    LARGE_INTEGER LogoffTime;
+    LARGE_INTEGER KickOffTime;
+    LARGE_INTEGER PasswordLastSet;
+    LARGE_INTEGER PasswordCanChange;
+    LARGE_INTEGER PasswordMustChange;
+#endif
+} LSAP_LOGON_SESSION_DATA32;
+
+static VOID
+LsapCopyString32(PUNICODE_STRING32 Destination, const UNICODE_STRING *Source)
+{
+    Destination->Length = Source->Length;
+    Destination->MaximumLength = Source->MaximumLength;
+    Destination->Buffer = (ULONG)(ULONG_PTR)Source->Buffer;
+}
+
 /* GLOBALS *****************************************************************/
 
 LIST_ENTRY SessionListHead;
@@ -309,9 +346,14 @@ LsapEnumLogonSessions(IN OUT PLSA_API_MSG RequestMsg)
     ULONG i, Length;
     SIZE_T MemSize;
     PVOID ClientBaseAddress = NULL;
+    ULONG PointerSize = RequestMsg->EnumLogonSessions.Request.PointerSize;
     NTSTATUS Status;
 
     TRACE("LsapEnumLogonSessions(%p)\n", RequestMsg);
+
+    if (RequestMsg->EnumLogonSessions.Request.PointerSize != sizeof(ULONG) &&
+        RequestMsg->EnumLogonSessions.Request.PointerSize != sizeof(ULONGLONG))
+        return STATUS_INVALID_PARAMETER;
 
     Length = SessionCount * sizeof(LUID);
     SessionList = RtlAllocateHeap(RtlGetProcessHeap(),
@@ -356,7 +398,7 @@ LsapEnumLogonSessions(IN OUT PLSA_API_MSG RequestMsg)
     MemSize = Length;
     Status = NtAllocateVirtualMemory(ProcessHandle,
                                      &ClientBaseAddress,
-                                     0,
+                                     PointerSize == sizeof(ULONG) && sizeof(PVOID) > sizeof(ULONG) ? MAXULONG : 0,
                                      &MemSize,
                                      MEM_COMMIT,
                                      PAGE_READWRITE);
@@ -381,7 +423,8 @@ LsapEnumLogonSessions(IN OUT PLSA_API_MSG RequestMsg)
     }
 
     RequestMsg->EnumLogonSessions.Reply.LogonSessionCount = SessionCount;
-    RequestMsg->EnumLogonSessions.Reply.LogonSessionBuffer = ClientBaseAddress;
+    RequestMsg->EnumLogonSessions.Reply.Reserved = 0;
+    RequestMsg->EnumLogonSessions.Reply.LogonSessionBuffer = (ULONGLONG)(ULONG_PTR)ClientBaseAddress;
 
 done:
     if (ProcessHandle != NULL)
@@ -401,13 +444,18 @@ LsapGetLogonSessionData(IN OUT PLSA_API_MSG RequestMsg)
     HANDLE ProcessHandle = NULL;
     PLSAP_LOGON_SESSION Session;
     PSECURITY_LOGON_SESSION_DATA LocalSessionData;
+    LSAP_LOGON_SESSION_DATA32 Data32;
     PVOID ClientBaseAddress = NULL;
+    ULONG PointerSize = RequestMsg->GetLogonSessionData.Request.PointerSize;
     ULONG TotalLength, SidLength = 0;
     SIZE_T MemSize;
     PUCHAR Ptr;
     NTSTATUS Status;
 
     TRACE("LsapGetLogonSessionData(%p)\n", RequestMsg);
+
+    if (PointerSize != sizeof(ULONG) && PointerSize != sizeof(ULONGLONG))
+        return STATUS_INVALID_PARAMETER;
 
     TRACE("LogonId: %lx\n", RequestMsg->GetLogonSessionData.Request.LogonId.LowPart);
     Session = LsapGetLogonSession(&RequestMsg->GetLogonSessionData.Request.LogonId);
@@ -526,6 +574,24 @@ LsapGetLogonSessionData(IN OUT PLSA_API_MSG RequestMsg)
         Ptr = (PUCHAR)((ULONG_PTR)Ptr + Session->Upn.MaximumLength);
     }
 
+    if (PointerSize == sizeof(ULONG) && sizeof(PVOID) > sizeof(ULONG))
+    {
+        RtlZeroMemory(&Data32, sizeof(Data32));
+        Data32.Size = sizeof(Data32);
+        Data32.LogonId = LocalSessionData->LogonId;
+        LsapCopyString32(&Data32.UserName, &LocalSessionData->UserName);
+        LsapCopyString32(&Data32.LogonDomain, &LocalSessionData->LogonDomain);
+        LsapCopyString32(&Data32.AuthenticationPackage, &LocalSessionData->AuthenticationPackage);
+        Data32.LogonType = LocalSessionData->LogonType;
+        Data32.Session = LocalSessionData->Session;
+        Data32.Sid = (ULONG)(ULONG_PTR)LocalSessionData->Sid;
+        Data32.LogonTime = LocalSessionData->LogonTime;
+        LsapCopyString32(&Data32.LogonServer, &LocalSessionData->LogonServer);
+        LsapCopyString32(&Data32.DnsDomainName, &LocalSessionData->DnsDomainName);
+        LsapCopyString32(&Data32.Upn, &LocalSessionData->Upn);
+        RtlCopyMemory(LocalSessionData, &Data32, sizeof(Data32));
+    }
+
     InitializeObjectAttributes(&ObjectAttributes,
                                NULL,
                                0,
@@ -545,7 +611,7 @@ LsapGetLogonSessionData(IN OUT PLSA_API_MSG RequestMsg)
     MemSize = TotalLength;
     Status = NtAllocateVirtualMemory(ProcessHandle,
                                      &ClientBaseAddress,
-                                     0,
+                                     PointerSize == sizeof(ULONG) && sizeof(PVOID) > sizeof(ULONG) ? MAXULONG : 0,
                                      &MemSize,
                                      MEM_COMMIT,
                                      PAGE_READWRITE);

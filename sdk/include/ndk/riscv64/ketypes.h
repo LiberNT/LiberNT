@@ -27,6 +27,18 @@
 #define KF_RISCV_V           0x00002000
 #define KF_RISCV_H           0x00004000
 #define KF_RISCV_SSCOFPMF    0x00008000
+#define KF_RISCV_ZBC         0x00010000
+#define KF_RISCV_ZICOND      0x00020000
+#define KF_RISCV_ZFA         0x00040000
+#define KF_RISCV_ZACAS       0x00080000
+#define KF_RISCV_ZABHA       0x00100000
+#define KF_RISCV_ZVBB        0x00200000
+#define KF_RISCV_ZVBC        0x00400000
+#define KF_RISCV_ZVKNED      0x00800000
+#define KF_RISCV_ZVKNHA      0x01000000
+#define KF_RISCV_ZVFHMIN     0x02000000
+#define KF_RISCV_ZKND        0x04000000
+#define KF_RISCV_ZICCLSM     0x08000000
 
 /* ReactOS-private U-mode ECALL selector, outside the NT service-table space. */
 #define RISCV_DEBUG_SERVICE_CALL 0x10000

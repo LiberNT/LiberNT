@@ -716,7 +716,6 @@ NTSTATUS NTAPI RtlGetLengthWithoutLastFullDosOrNtPathElement(ULONG Flags, PCUNIC
 PRTL_UNLOAD_EVENT_TRACE NTAPI RtlGetUnloadEventTrace(VOID);
 typedef NTSTATUS (NTAPI *PCHPE_LENGTH_FUNCTION)(ULONG, PUNICODE_STRING, PULONG);
 NTSTATUS NTAPI RtlpApplyLengthFunction(ULONG Flags, ULONG Type, PVOID StringBuffer, PCHPE_LENGTH_FUNCTION LengthFunction);
-NTSTATUS NTAPI LdrGetDllFullName(HMODULE Module, PUNICODE_STRING FullDllName);
 PVOID NTAPI RtlLocateExtendedFeature(PVOID ContextEx, ULONG FeatureId, PULONG Length);
 PVOID NTAPI RtlLocateExtendedFeature2(PVOID ContextEx, ULONG FeatureId, XSTATE_CONFIGURATION *Configuration, PULONG Length);
 BOOL NTAPI RtlQueryPerformanceCounter(PLARGE_INTEGER Counter);

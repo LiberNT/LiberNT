@@ -169,6 +169,24 @@ ffmpeg_enabled() {
 	return 1
 }
 
+felix86_enabled() {
+	[ "$ARCH" = "riscv64" ] || return 1
+
+	FELIX86_SETTING=ON
+	for FELIX86_ARG in $ROS_CMAKEOPTS; do
+		case "$FELIX86_ARG" in
+			-DENABLE_FELIX86=*|-DENABLE_FELIX86:*=*)
+				FELIX86_SETTING=$(printf '%s' "${FELIX86_ARG#*=}" | tr '[:lower:]' '[:upper:]')
+				;;
+		esac
+	done
+
+	case "$FELIX86_SETTING" in
+		""|0|OFF|NO|FALSE|N|IGNORE|NOTFOUND|*-NOTFOUND) return 1 ;;
+	esac
+	return 0
+}
+
 optional_fex_warning() {
 	echo "configure.sh: warning: $*. FEX ARM64EC is optional; configuration will continue." >&2
 }
@@ -228,6 +246,9 @@ sync_feeds() {
 	fi
 	if ffmpeg_enabled; then
 		FEEDS_WANTED="$FEEDS_WANTED ffmpeg"
+	fi
+	if felix86_enabled; then
+		FEEDS_WANTED="$FEEDS_WANTED felix86"
 	fi
 
 	echo "Updating source feeds:$FEEDS_WANTED"

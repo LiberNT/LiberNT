@@ -38,6 +38,8 @@ LxX64Number(long Number)
             return 281;
         case LX_NR_FCNTL:
             return 72;
+        case LX_NR_IOCTL:
+            return 16;
         case LX_NR_MKDIRAT:
             return 258;
         case LX_NR_UNLINKAT:
@@ -50,6 +52,8 @@ LxX64Number(long Number)
             return 3;
         case LX_NR_PIPE2:
             return 293;
+        case LX_NR_LSEEK:
+            return 8;
         case LX_NR_READ:
             return 0;
         case LX_NR_WRITE:

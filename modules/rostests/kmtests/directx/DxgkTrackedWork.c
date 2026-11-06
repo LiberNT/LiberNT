@@ -186,6 +186,15 @@ static VOID DxgkTrackedWorkTestOwnership(VOID)
     ok_eq_ulong(Context.EventCount, 0);
 
     DxgkTrackedWorkTestInitialize(&Context, FALSE);
+    ok_bool_true(DxgkTrackedWorkCoreClaimDeviceWork(&Context.Core), "supplied work is claimed at activation");
+    DxgkTrackedWorkCoreSetDeviceWorkTransferred(&Context.Core, TRUE);
+    ok_bool_false(DxgkTrackedWorkCoreReleaseDeviceWork(&Context.Core), "transferred device work is not returned to the submitter");
+    ok_bool_true(DxgkTrackedWorkCoreOwnsDeviceWork(&Context.Core), "a cancelled transfer still owns its device work");
+    DxgkTrackedWorkCoreSetDeviceWorkTransferred(&Context.Core, FALSE);
+    ok_bool_true(DxgkTrackedWorkCoreReleaseDeviceWork(&Context.Core), "a returned transfer gives the device work back");
+    ok_bool_false(DxgkTrackedWorkCoreOwnsDeviceWork(&Context.Core), "returned transfer is no longer owned");
+
+    DxgkTrackedWorkTestInitialize(&Context, FALSE);
     ok_bool_true(DxgkTrackedWorkCoreClaimDeviceWork(&Context.Core), "supplied work is claimed before commit");
     ok_bool_true(DxgkTrackedWorkCoreCommit(&Context.Core, FALSE, &RetiredNow), "claimed work commits");
     ok_bool_false(DxgkTrackedWorkCoreReleaseDeviceWork(&Context.Core), "committed work keeps the device work");

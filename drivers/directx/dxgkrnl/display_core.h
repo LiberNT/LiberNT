@@ -12,6 +12,7 @@
 #define _DXGK_DISPLAY_CORE_H_
 
 #include <ntddk.h>
+#include <dispmprt.h>
 
 /* --- VidPN topology --------------------------------------------------- */
 
@@ -108,5 +109,7 @@ NTSTATUS DxgkFlipCoreQueue(_Inout_ PDXGK_FLIP_QUEUE Queue, _In_ ULONGLONG Alloca
  * became visible on this vsync. */
 BOOLEAN DxgkFlipCoreNotifyVSync(_Inout_ PDXGK_FLIP_QUEUE Queue, _Out_ PULONGLONG PresentedCookie);
 ULONG DxgkFlipCoreQueuedCount(_In_ const DXGK_FLIP_QUEUE *Queue);
+
+D3DDDIFORMAT DxgkVidPnCoreDesktopSurfaceFormat(_In_ D3DDDIFORMAT PinnedFormat);
 
 #endif /* _DXGK_DISPLAY_CORE_H_ */

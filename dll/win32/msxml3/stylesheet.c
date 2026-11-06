@@ -640,6 +640,19 @@ static HRESULT WINAPI xslprocessor_transform(
     {
         IStream *src = (IStream *)stream;
 
+#ifdef __REACTOS__
+        if (This->output_type == PROCESSOR_OUTPUT_STREAM)
+        {
+            IStream *target;
+
+            if (SUCCEEDED(ISequentialStream_QueryInterface(stream, &IID_IStream, (void **)&target)))
+            {
+                IStream_Commit(target, STGC_DEFAULT);
+                IStream_Release(target);
+            }
+        }
+#endif
+
         switch (This->output_type)
         {
         case PROCESSOR_OUTPUT_PERSISTSTREAM:

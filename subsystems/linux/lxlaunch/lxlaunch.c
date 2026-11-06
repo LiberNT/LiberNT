@@ -23,6 +23,7 @@
 #include "../include/lxlaunch.h"
 
 #define LX_PTY_CHUNK 4096
+#define LX_SYSTEMD_PATH L"\\usr\\lib\\systemd\\systemd"
 
 typedef struct _LX_PUMP
 {
@@ -467,6 +468,8 @@ LxLaunchError(
     _In_ PLX_LAUNCH Launch,
     _In_ DWORD Error)
 {
+    if (Launch->Detached && (Launch->Flags & LX_CREATE_BOOT) && (Error == ERROR_ALREADY_EXISTS))
+        return;
     if ((Error == ERROR_FILE_NOT_FOUND) || (Error == ERROR_PATH_NOT_FOUND))
         fwprintf(stderr, L"%s: %S: not found\n", Launch->Name, Launch->FileName);
     else if (Error == ERROR_BAD_EXE_FORMAT)
@@ -669,6 +672,7 @@ LxLaunch(
         {
             CloseHandle(Out.ProcessHandle);
             LxChildProcess = NULL;
+            SetConsoleOutputCP(OldOutputCp);
             CloseHandle(Device);
             free(In);
             return 0;
@@ -712,8 +716,9 @@ LxLaunch(
     return (int)ExitCode;
 }
 
-BOOL
-LxInstanceBooted(
+static
+ULONG
+LxInstanceFlags(
     _In_ PCWSTR Name,
     _In_ PCWSTR Root)
 {
@@ -727,7 +732,7 @@ LxInstanceBooted(
     if (!GetFullPathNameW(Root, MAX_PATH, FullRoot, NULL) ||
         !RtlDosPathNameToNtPathName_U(FullRoot, &NtRoot, NULL, NULL))
     {
-        return FALSE;
+        return 0;
     }
     Device = LxOpenDevice(Name);
     Queried = (Device != INVALID_HANDLE_VALUE) &&
@@ -737,5 +742,39 @@ LxInstanceBooted(
     if (Device != INVALID_HANDLE_VALUE)
         CloseHandle(Device);
     RtlFreeUnicodeString(&NtRoot);
-    return Queried && (Out.Flags & LX_INSTANCE_BOOTED);
+    return Queried ? Out.Flags : 0;
+}
+
+BOOL
+LxInstanceBooted(
+    _In_ PCWSTR Name,
+    _In_ PCWSTR Root)
+{
+    return (LxInstanceFlags(Name, Root) & LX_INSTANCE_BOOTED) != 0;
+}
+
+VOID
+LxBootRoot(
+    _In_ PCWSTR Name,
+    _In_ PCWSTR Root)
+{
+    LX_LAUNCH Boot;
+
+    if (!LxRootHasFile(Root, LX_SYSTEMD_PATH) || (LxInstanceFlags(Name, Root) & LX_INSTANCE_RUNNING))
+        return;
+    ZeroMemory(&Boot, sizeof(Boot));
+    Boot.Name = Name;
+    Boot.Root = Root;
+    Boot.Flags = LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE;
+    Boot.Cwd = "/";
+    Boot.FileName = "/sbin/init";
+    Boot.Detached = TRUE;
+    if (LxStringsAdd(&Boot.Args, Boot.FileName) &&
+        LxStringsAdd(&Boot.Args, "systemd.getty_auto=0") &&
+        LxEnvSet(&Boot.Env, "TERM=linux"))
+    {
+        LxLaunch(&Boot);
+    }
+    free(Boot.Args.Buffer);
+    free(Boot.Env.Buffer);
 }

@@ -1565,9 +1565,6 @@ Phase1InitializationDiscard(IN PVOID Context)
         /* It is, display the boot logo and enable printing strings */
         InbvEnableDisplayString(FALSE);
         DisplayBootBitmap();
-#ifndef _WINKD_
-        KdDisplayTransportKey(FALSE);
-#endif
     }
     else
     {

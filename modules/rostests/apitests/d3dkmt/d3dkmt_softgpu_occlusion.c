@@ -103,6 +103,77 @@ cleanup:
 
 /* A device with a completed DMA fault must keep reporting that terminal
  * failure even if the destination window later becomes occluded. */
+static void present_window_subrect(D3DKMT_HANDLE device, D3DKMT_HANDLE context,
+        D3DKMT_HANDLE source, HWND window)
+{
+    D3DKMT_LOCK2 lock = {0};
+    D3DKMT_UNLOCK2 unlock = {0};
+    D3DKMT_PRESENT present = {0};
+    D3DKMT_WAITFORIDLE wait = {0};
+    RECT sub = {0, 0, 16, 16};
+    COLORREF pixel;
+    HDC dc;
+    NTSTATUS status;
+    DWORD *pixels;
+    unsigned i;
+
+    lock.hDevice = unlock.hDevice = device;
+    lock.hAllocation = unlock.hAllocation = source;
+    status = Lock(&lock);
+    ok(NT_SUCCESS(status), "Lock source: %#lx\n", (long)status);
+    if (!NT_SUCCESS(status))
+        return;
+    pixels = lock.pData;
+    for (i = 0; i < 256; ++i)
+        pixels[i] = 0x00203040;
+    status = Unlock(&unlock);
+    ok(NT_SUCCESS(status), "Unlock source: %#lx\n", (long)status);
+    if (!NT_SUCCESS(status))
+        return;
+
+    present.hContext = context;
+    present.hSource = source;
+    present.hWindow = window;
+    present.Flags.Blt = 1;
+    present.Flags.SrcRectValid = present.Flags.DstRectValid = 1;
+    present.SrcRect.right = present.SrcRect.bottom = 16;
+    present.DstRect = present.SrcRect;
+    present.SubRectCnt = 1;
+    present.pSrcSubRects = &sub;
+    status = Present(&present);
+    if (status == STATUS_GRAPHICS_PRESENT_OCCLUDED)
+    {
+        skip("Window presents need desktop composition\n");
+        return;
+    }
+    ok(status == STATUS_SUCCESS, "Window present with a sub-rectangle: %#lx\n", (long)status);
+    if (!NT_SUCCESS(status))
+        return;
+    wait.hDevice = device;
+    status = WaitForIdle(&wait);
+    ok(NT_SUCCESS(status), "Wait for idle: %#lx\n", (long)status);
+    dc = GetDC(window);
+    pixel = GetPixel(dc, 8, 8);
+    ReleaseDC(window, dc);
+    ok(pixel == RGB(0x20, 0x30, 0x40), "Client pixel %#lx\n", (long)pixel);
+}
+
+/* A framed window's client starts inside its redirection surface: the sub-rectangle must land on the client. */
+static void check_window_subrect(D3DKMT_HANDLE device, D3DKMT_HANDLE context,
+        D3DKMT_HANDLE source)
+{
+    HWND window;
+
+    window = CreateWindowExW(0, L"STATIC", L"KMT window blt", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+            40, 40, 160, 160, NULL, NULL, NULL, NULL);
+    ok(window != NULL, "Create framed window: %lu\n", GetLastError());
+    if (!window)
+        return;
+    UpdateWindow(window);
+    present_window_subrect(device, context, source, window);
+    DestroyWindow(window);
+}
+
 static void check_failed_device(D3DKMT_HANDLE adapter, D3DKMT_HANDLE device,
         D3DKMT_HANDLE present_context, D3DKMT_HANDLE source)
 {
@@ -310,6 +381,7 @@ START_TEST(softgpu_occlusion)
     if (!window || !child) goto cleanup;
 
     check_copy(device, context.hContext, source, destination, 0);
+    check_window_subrect(device, context.hContext, source);
     present.hContext = context.hContext;
     present.hSource = source;
     present.Flags.Blt = 1;

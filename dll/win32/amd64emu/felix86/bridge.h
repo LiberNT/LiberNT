@@ -88,6 +88,9 @@ void Felix86NtEndTermination(int Terminated);
 
 void Felix86NtSystemService(void *Owner, uint64_t *Registers);
 void Felix86NtSystemService32(void *Owner, uint64_t *Registers);
+void Felix86NtBreakpoint(void *Owner, uint64_t *Registers, uint64_t Next);
+void Felix86NtInterrupt(void *Owner, uint64_t *Registers, uint64_t Next, uint32_t Vector);
+void Felix86NtSingleStep(void *Owner, uint64_t *Registers);
 uint64_t Felix86NtNativeEntry(uint64_t Rip);
 void Felix86NtPrint(const char *Text);
 void Felix86NtTerminate(uint32_t Status) __attribute__((noreturn));

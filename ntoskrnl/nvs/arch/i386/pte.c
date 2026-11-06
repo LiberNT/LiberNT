@@ -24,6 +24,8 @@ MiArchPteMakeLeaf(ULONG64 Frame, ULONG Protection, ULONG Flags)
     Flags |= MI_PROT_LEAF_CACHE(Protection);
 
     Attributes = Access[Protection & MI_PROT_ACCESS_MASK];
+    if (MI_PROT_IS_EXECUTE(Protection))
+        Attributes |= MI_I386_PTE_EXECUTE;
     Attributes |= MI_I386_PTE_PRESENT | MI_I386_PTE_ACCESSED;
     if (Flags & MI_LEAF_USER)
         Attributes |= MI_I386_PTE_USER;
@@ -170,7 +172,7 @@ BOOLEAN
 MiArchPteIsExecutable(MI_PTE Pte, BOOLEAN UserMode)
 {
     UNREFERENCED_PARAMETER(UserMode);
-    return MiI386PteHas(Pte, 0);
+    return MiI386PteHas(Pte, MI_I386_PTE_EXECUTE);
 }
 
 MI_PTE

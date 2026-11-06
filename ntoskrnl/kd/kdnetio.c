@@ -17,6 +17,12 @@ NTAPI
 KdpNetShowPrompt(
     _In_opt_z_ PCSTR Prompt);
 
+static
+VOID
+NTAPI
+KdpNetPublishWorker(
+    _In_ PVOID Context);
+
 static KD_TERMINAL_INTERFACE KdpNetInterface;
 static const KD_TERMINAL_HOST KdpNetHost = {KdpInfoQuery, KdpInfoState, KdpNetShowPrompt};
 static KSPIN_LOCK KdpNetSpinLock;
@@ -25,6 +31,8 @@ static BOOLEAN KdpNetConfigured;
 static BOOLEAN KdpNetPrinted;
 static CHAR KdpNetPrompt[128];
 static KDPC KdpNetPromptDpc;
+static WORK_QUEUE_ITEM KdpNetPublishItem;
+static LONG KdpNetPublishQueued;
 
 static
 VOID
@@ -170,6 +178,7 @@ VOID
 KdpNetDrawPrompt(VOID)
 {
     CHAR Text[sizeof(KdpNetPrompt)];
+    CHAR Key[40];
 
     RtlCopyMemory(Text, KdpNetPrompt, sizeof(Text));
     Text[sizeof(Text) - 1] = ANSI_NULL;
@@ -177,6 +186,13 @@ KdpNetDrawPrompt(VOID)
         InbvGopDisplayStatus(Text);
     else
         InbvGopEraseStatus();
+
+    if (!KdQueryTransportKey(Key, sizeof(Key)))
+        return;
+
+    KdDisplayTransportKey(FALSE);
+    if (KdpNetReady && !InterlockedExchange(&KdpNetPublishQueued, TRUE))
+        ExQueueWorkItem(&KdpNetPublishItem, DelayedWorkQueue);
 }
 
 static
@@ -256,6 +272,17 @@ KdpNetPublishKey(VOID)
     ZwClose(Handle);
 }
 
+static
+VOID
+NTAPI
+KdpNetPublishWorker(
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    KdpNetPublishKey();
+}
+
 NTSTATUS
 NTAPI
 KdpNetInit(
@@ -279,6 +306,7 @@ KdpNetInit(
 
         KdpNetInterface.Configure(KeLoaderBlock ? KeLoaderBlock->LoadOptions : NULL);
         KeInitializeDpc(&KdpNetPromptDpc, KdpNetPromptDpcRoutine, NULL);
+        ExInitializeWorkItem(&KdpNetPublishItem, KdpNetPublishWorker, NULL);
         KdpNetInterface.SetHost(&KdpNetHost);
         KdpNetConfigured = TRUE;
         KeInitializeSpinLock(&KdpNetSpinLock);

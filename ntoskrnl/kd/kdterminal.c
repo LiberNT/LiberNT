@@ -33,6 +33,10 @@ SIZE KdTermSize = {0,0};
 BOOLEAN KdTermConnected = FALSE;
 BOOLEAN KdTermSerial = FALSE;
 BOOLEAN KdTermReportsSize = TRUE;
+BOOLEAN KdTermCrashMode = FALSE;
+
+#define KD_TERM_IDLE_STALL_US 100
+#define KD_TERM_IDLE_SAVE_SECONDS 30
 
 static CHAR KdTermNextKey = ANSI_NULL; /* 1-character input queue buffer */
 
@@ -261,6 +265,38 @@ KdpTryReadSerialKey(
     return Key;
 }
 
+static VOID
+KdpTermNotice(
+    _In_ PCSTR Text)
+{
+    STRING Output;
+
+    RtlInitString(&Output, Text);
+    KdLogDbgPrint(&Output);
+    KdIoPuts(Text);
+}
+
+static VOID
+KdpSaveUnattendedSession(VOID)
+{
+    CHAR Text[160];
+    NTSTATUS Status;
+
+    RtlStringCbPrintfA(Text, sizeof(Text),
+                       "\nKD: no debugger input for %u s, saving this session to lastboot.log; restart instead of continuing\n",
+                       KD_TERM_IDLE_SAVE_SECONDS);
+    KdpTermNotice(Text);
+    Status = KdpWriteBootLogAtCrash(NULL, NULL);
+    if (NT_SUCCESS(Status))
+    {
+        KdTermCrashMode = TRUE;
+        return;
+    }
+
+    RtlStringCbPrintfA(Text, sizeof(Text), "KD: saving the session to lastboot.log failed with 0x%08lx\n", Status);
+    KdpTermNotice(Text);
+}
+
 /**
  * @brief
  * Reads one character from the first terminal input that has one:
@@ -273,6 +309,7 @@ KdpReadTermKey(
 {
     CHAR Key;
     BOOLEAN FromSerial = TRUE;
+    ULONG IdleUs = 0;
 
     *ScanCode = 0;
 
@@ -300,6 +337,20 @@ KdpReadTermKey(
             Key = KdpUsbKeyboardTryGetChar(ScanCode);
             if (Key != -1)
                 break;
+
+            if (KdTermCrashMode || KdTermConnected || KeBugCheckActive || (IdleUs == MAXULONG) ||
+                KdpNetQueryAttached(NULL, NULL))
+            {
+                continue;
+            }
+
+            KeStallExecutionProcessor(KD_TERM_IDLE_STALL_US);
+            IdleUs += KD_TERM_IDLE_STALL_US;
+            if (IdleUs >= KD_TERM_IDLE_SAVE_SECONDS * 1000000)
+            {
+                KdpSaveUnattendedSession();
+                IdleUs = MAXULONG;
+            }
         }
     }
 

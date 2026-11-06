@@ -543,6 +543,19 @@ static HRESULT submit_standalone_thread_work(struct work_item *item, WorkItemPri
 {
     HANDLE thread;
 
+#ifdef __REACTOS__
+    IAsyncAction_AddRef((*action = item->action));
+    if (!(thread = CreateThread(NULL, 0, sliced_thread_proc, item, priority == WorkItemPriority_Normal ?
+            0 : CREATE_SUSPENDED, NULL)))
+    {
+        HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+
+        WARN("Failed to create a thread, error %ld.\n", GetLastError());
+        IAsyncAction_Release(*action);
+        *action = NULL;
+        return hr;
+    }
+#else
     if (!(thread = CreateThread(NULL, 0, sliced_thread_proc, item, priority == WorkItemPriority_Normal ?
             0 : CREATE_SUSPENDED, NULL)))
     {
@@ -551,6 +564,7 @@ static HRESULT submit_standalone_thread_work(struct work_item *item, WorkItemPri
     }
 
     IAsyncAction_AddRef((*action = item->action));
+#endif
     if (priority != WorkItemPriority_Normal)
     {
         SetThreadPriority(thread, priority == WorkItemPriority_High ? THREAD_PRIORITY_HIGHEST : THREAD_PRIORITY_LOWEST);

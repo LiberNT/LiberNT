@@ -77,7 +77,8 @@ IopLoadDriverWithImage(
     _In_opt_ PIOP_SYSTEM_DRIVER_PREPARATION Preparation,
     _Out_ PDRIVER_OBJECT *DriverObject,
     _Out_opt_ PNTSTATUS DriverEntryStatus,
-    _Out_opt_ PBOOLEAN AlreadyLoaded);
+    _Out_opt_ PBOOLEAN AlreadyLoaded,
+    _In_ BOOLEAN HoldPnpUnloadBarrier);
 
 // Parameters packet for Load/Unload work item's context
 typedef struct _LOAD_UNLOAD_PARAMS
@@ -854,8 +855,10 @@ IopDiscardDriverReinitializations(
     _Inout_ PKSPIN_LOCK Lock)
 {
     PLIST_ENTRY Entry, Next;
+    LIST_ENTRY Discarded;
     KIRQL OldIrql;
 
+    InitializeListHead(&Discarded);
     KeAcquireSpinLock(Lock, &OldIrql);
     for (Entry = List->Flink; Entry != List; Entry = Next)
     {
@@ -864,10 +867,17 @@ IopDiscardDriverReinitializations(
         if (Item->DriverObject == DriverObject)
         {
             RemoveEntryList(Entry);
-            ExFreePool(Item);
+            InsertTailList(&Discarded, Entry);
         }
     }
     KeReleaseSpinLock(Lock, OldIrql);
+
+    while (!IsListEmpty(&Discarded))
+    {
+        Entry = RemoveHeadList(&Discarded);
+        ExFreePool(Entry);
+        IopReleasePnpUnloadBarrier(DriverObject);
+    }
 }
 
 static
@@ -1189,6 +1199,7 @@ IopInitializeDriverModuleImpl(
     if (!NT_SUCCESS(Status))
     {
         /* Failed DriverEntry must not leave callbacks into an unloaded image. */
+        InterlockedOr((PLONG)&driverObject->Flags, DRVO_UNLOAD_INVOKED);
         IopDiscardDriverReinitializations(driverObject, &DriverReinitListHead, &DriverReinitListLock);
         IopDiscardDriverReinitializations(driverObject, &DriverBootReinitListHead, &DriverBootReinitListLock);
         // if the driver entry has been failed, clear the object
@@ -1213,7 +1224,8 @@ IopInitializeDriverModule(
     _In_ PLDR_DATA_TABLE_ENTRY ModuleObject,
     _In_ HANDLE ServiceHandle,
     _Out_ PDRIVER_OBJECT *OutDriverObject,
-    _Out_ NTSTATUS *DriverEntryStatus)
+    _Out_ NTSTATUS *DriverEntryStatus,
+    _In_ BOOLEAN HoldPnpUnloadBarrier)
 {
     KIRQL OldIrql;
     NTSTATUS Status;
@@ -1224,6 +1236,8 @@ IopInitializeDriverModule(
 
     Status = IopInitializeDriverModuleImpl(ModuleObject, ServiceHandle,
                                           OutDriverObject, DriverEntryStatus);
+    if (NT_SUCCESS(Status) && HoldPnpUnloadBarrier)
+        IopAcquirePnpUnloadBarrier(*OutDriverObject);
 
     KeAcquireSpinLock(&DriverReinitListLock, &OldIrql);
     --IopActiveDriverInitializations;
@@ -1442,7 +1456,8 @@ IopInitializeBuiltinDriver(IN PLDR_DATA_TABLE_ENTRY BootLdrEntry)
     Status = IopInitializeDriverModule(LdrEntry,
                                        serviceHandle,
                                        &DriverObject,
-                                       &driverEntryStatus);
+                                       &driverEntryStatus,
+                                       FALSE);
 
     if (!NT_SUCCESS(Status))
     {
@@ -1921,7 +1936,7 @@ IopInitializeSystemDrivers(VOID)
                 if (NT_SUCCESS(IopOpenRegistryKeyEx(&ServiceHandle, NULL, *DriverList, KEY_READ)))
                 {
                     DriverObject = NULL;
-                    IopLoadDriverWithImage(ServiceHandle, Current, &DriverObject, NULL, NULL);
+                    IopLoadDriverWithImage(ServiceHandle, Current, &DriverObject, NULL, NULL, FALSE);
                     ZwClose(ServiceHandle);
                 }
             }
@@ -2203,6 +2218,7 @@ NTAPI
 IopReinitializeDrivers(VOID)
 {
     PDRIVER_REINIT_ITEM ReinitItem;
+    PDRIVER_OBJECT DriverObject;
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
 
@@ -2221,6 +2237,7 @@ IopReinitializeDrivers(VOID)
     {
         Entry = RemoveHeadList(&DriverReinitListHead);
         ReinitItem = CONTAINING_RECORD(Entry, DRIVER_REINIT_ITEM, ItemEntry);
+        DriverObject = ReinitItem->DriverObject;
         KeReleaseSpinLock(&DriverReinitListLock, OldIrql);
 
         ReinitItem->DriverObject->DriverExtension->Count++;
@@ -2229,6 +2246,7 @@ IopReinitializeDrivers(VOID)
                                   ReinitItem->Context,
                                   ReinitItem->DriverObject->DriverExtension->Count);
         ExFreePool(Entry);
+        IopReleasePnpUnloadBarrier(DriverObject);
 
         KeAcquireSpinLock(&DriverReinitListLock, &OldIrql);
     }
@@ -2241,6 +2259,7 @@ NTAPI
 IopReinitializeBootDrivers(VOID)
 {
     PDRIVER_REINIT_ITEM ReinitItem;
+    PDRIVER_OBJECT DriverObject;
     PLIST_ENTRY Entry;
 
     /* Get the first entry and start looping */
@@ -2250,6 +2269,7 @@ IopReinitializeBootDrivers(VOID)
     {
         /* Get the item */
         ReinitItem = CONTAINING_RECORD(Entry, DRIVER_REINIT_ITEM, ItemEntry);
+        DriverObject = ReinitItem->DriverObject;
 
         /* Increment reinitialization counter */
         ReinitItem->DriverObject->DriverExtension->Count++;
@@ -2265,6 +2285,7 @@ IopReinitializeBootDrivers(VOID)
 
         /* Free the entry */
         ExFreePool(Entry);
+        IopReleasePnpUnloadBarrier(DriverObject);
 
         /* Move to the next one */
         Entry = ExInterlockedRemoveHeadList(&DriverBootReinitListHead,
@@ -2687,6 +2708,8 @@ IoRegisterBootDriverReinitialization(IN PDRIVER_OBJECT DriverObject,
     ReinitItem->ReinitRoutine = ReinitRoutine;
     ReinitItem->Context = Context;
 
+    IopAcquirePnpUnloadBarrier(DriverObject);
+
     /* Set the Driver Object flag and insert the entry into the list */
     DriverObject->Flags |= DRVO_BOOTREINIT_REGISTERED;
     ExInterlockedInsertTailList(&DriverBootReinitListHead,
@@ -2715,6 +2738,8 @@ IoRegisterDriverReinitialization(IN PDRIVER_OBJECT DriverObject,
     ReinitItem->DriverObject = DriverObject;
     ReinitItem->ReinitRoutine = ReinitRoutine;
     ReinitItem->Context = Context;
+
+    IopAcquirePnpUnloadBarrier(DriverObject);
 
     /* Set the Driver Object flag and insert the entry into the list */
     InterlockedOr((PLONG)&DriverObject->Flags, DRVO_REINIT_REGISTERED);
@@ -3045,7 +3070,8 @@ IopLoadDriverWithImage(
     _In_opt_ PIOP_SYSTEM_DRIVER_PREPARATION Preparation,
     _Out_ PDRIVER_OBJECT *DriverObject,
     _Out_opt_ PNTSTATUS DriverEntryStatus,
-    _Out_opt_ PBOOLEAN AlreadyLoaded)
+    _Out_opt_ PBOOLEAN AlreadyLoaded,
+    _In_ BOOLEAN HoldPnpUnloadBarrier)
 {
     UNICODE_STRING ImagePath;
     UNICODE_STRING DriverName;
@@ -3086,6 +3112,7 @@ IopLoadDriverWithImage(
                                      NULL, (PVOID *)DriverObject);
     if (NT_SUCCESS(Status))
     {
+        if (HoldPnpUnloadBarrier) IopAcquirePnpUnloadBarrier(*DriverObject);
         IopReleaseDriverLoadSlot(LoadSlot);
         RtlFreeUnicodeString(&DriverName);
         RtlFreeUnicodeString(&ImagePath);
@@ -3123,7 +3150,8 @@ IopLoadDriverWithImage(
     Status = IopInitializeDriverModule(ModuleObject,
                                        ServiceHandle,
                                        DriverObject,
-                                       &driverEntryStatus);
+                                       &driverEntryStatus,
+                                       HoldPnpUnloadBarrier);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("IopInitializeDriverModule() failed (Status %lx)\n", Status);
@@ -3139,11 +3167,11 @@ IopLoadDriverWithImage(
 }
 
 NTSTATUS
-IopLoadDriver(
+IopLoadDriverForPnp(
     _In_ HANDLE ServiceHandle,
     _Out_ PDRIVER_OBJECT *DriverObject)
 {
-    return IopLoadDriverWithImage(ServiceHandle, NULL, DriverObject, NULL, NULL);
+    return IopLoadDriverWithImage(ServiceHandle, NULL, DriverObject, NULL, NULL, TRUE);
 }
 
 static
@@ -3185,7 +3213,8 @@ IopLoadUnloadDriverWorker(
                                                             NULL,
                                                             &LoadParams->DriverObject,
                                                             &driverEntryStatus,
-                                                            &alreadyLoaded);
+                                                            &alreadyLoaded,
+                                                            FALSE);
             if (NT_SUCCESS(LoadParams->Status) && alreadyLoaded)
             {
                 ObDereferenceObject(LoadParams->DriverObject);

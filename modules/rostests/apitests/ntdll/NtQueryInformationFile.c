@@ -51,5 +51,27 @@ START_TEST(NtQueryInformationFile)
     ok_hex(Status, STATUS_INVALID_INFO_CLASS);
     ok(EndOfFileInformation.EndOfFile.QuadPart == 0xdeaddead, "EndOfFile is modified\n");
 
+    FILE_BASIC_INFORMATION BasicInformation;
+    IO_STATUS_BLOCK IoStatusBlock;
+    ULONG64 Storage[8];
+    Status = NtQueryInformationFile(hFile,
+                                    &IoStatusBlock,
+                                    (PUCHAR)Storage + 1,
+                                    sizeof(FILE_BASIC_INFORMATION),
+                                    FileBasicInformation);
+    ok_hex(Status, STATUS_DATATYPE_MISALIGNMENT);
+    Status = NtQueryInformationFile(hFile,
+                                    &IoStatusBlock,
+                                    (PUCHAR)Storage + 1,
+                                    sizeof(FILE_STANDARD_INFORMATION),
+                                    FileStandardInformation);
+    ok_hex(Status, STATUS_DATATYPE_MISALIGNMENT);
+    Status = NtQueryInformationFile(hFile,
+                                    &IoStatusBlock,
+                                    &BasicInformation,
+                                    sizeof(BasicInformation),
+                                    FileBasicInformation);
+    ok_hex(Status, STATUS_SUCCESS);
+
     CloseHandle(hFile);
 }

@@ -215,7 +215,7 @@
 @ cdecl _mbsnbset(str long long)
 @ cdecl _mbsncat(str str long) CRTDLL__mbsncat
 @ cdecl _mbsnccnt(str long)
-@ cdecl _mbsncmp(str str long)
+@ cdecl _mbsncmp(str str long) CRTDLL__mbsncmp
 @ cdecl _mbsncpy(str str long)
 @ cdecl _mbsnextc(str)
 @ cdecl _mbsnicmp(str str long)
@@ -268,7 +268,7 @@
 @ stub _setsystime(ptr long)
 @ cdecl _sleep(long)
 @ varargs _snprintf(str long str) CRTDLL__snprintf
-@ varargs _snwprintf(wstr long wstr)
+@ varargs _snwprintf(wstr long wstr) CRTDLL__snwprintf
 @ varargs _sopen(str long long)
 @ varargs _spawnl(long str str)
 @ varargs _spawnle(long str str)

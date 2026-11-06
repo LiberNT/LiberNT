@@ -82,6 +82,7 @@ extern PETHREAD KdbCurrentThread;
 extern PETHREAD KdbOriginalThread;
 extern EXCEPTION_RECORD64 KdbCurrentExceptionRecord;
 extern BOOLEAN KdbCurrentExceptionRecordValid;
+extern BOOLEAN KdbActive;
 extern LONG KdbLastBreakPointNr;
 extern ULONG KdbNumSingleSteps;
 extern BOOLEAN KdbSingleStepOver;

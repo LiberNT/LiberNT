@@ -62,6 +62,12 @@ add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:CXX>>:-nostdinc>")
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-aggressive-loop-optimizations)
+    # Wine code passes NULL to strdup, and the builtin's nonnull deletes the checks after the call
+    add_compile_options(-fno-builtin-strdup)
+    # GCC 15 makes {0} set only the first union member; the tree relies on {0} clearing the whole union
+    if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fzero-init-padding-bits=unions>")
+    endif()
     if (DBG)
         add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wold-style-declaration>")
     endif()
@@ -398,14 +404,7 @@ function(set_entrypoint MODULE ENTRYPOINT)
 endfunction()
 
 function(set_subsystem MODULE SUBSYSTEM)
-    if(ARCH STREQUAL "amd64")
-        set(_subsystem_version "5.02")
-    elseif(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
-        set(_subsystem_version "6.02")
-    else()
-        set(_subsystem_version "5.01")
-    endif()
-    target_link_options(${MODULE} PRIVATE "-Wl,--subsystem,${SUBSYSTEM}:${_subsystem_version}")
+    target_link_options(${MODULE} PRIVATE "-Wl,--subsystem,${SUBSYSTEM}:10.00")
 endfunction()
 
 function(set_image_base MODULE IMAGE_BASE)
@@ -416,6 +415,15 @@ function(set_module_type_toolchain MODULE TYPE)
     # Set the PE image version numbers from the NT OS version ReactOS is based on
     target_link_options(${MODULE} PRIVATE
         -Wl,--major-image-version,${_NT_MAJOR} -Wl,--minor-image-version,0${_NT_MINOR} -Wl,--major-os-version,${_NT_MAJOR} -Wl,--minor-os-version,0${_NT_MINOR})
+
+    if(NOT TYPE IN_LIST KERNEL_MODULE_TYPES)
+        target_link_libraries(${MODULE} loadconfig)
+        if(ARCH STREQUAL "i386")
+            target_link_options(${MODULE} PRIVATE -Wl,-u,__load_config_used)
+        else()
+            target_link_options(${MODULE} PRIVATE -Wl,-u,_load_config_used)
+        endif()
+    endif()
 
     if(TYPE IN_LIST KERNEL_MODULE_TYPES)
         # "kmdfdriver" is treated the same way as "wdmdriver" in toolchain-specific set_module_type

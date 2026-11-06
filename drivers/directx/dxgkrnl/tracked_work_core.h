@@ -39,11 +39,13 @@ typedef struct _DXGK_TRACKED_WORK_CORE
     volatile LONG State;
     BOOLEAN DeviceWorkOwned;
     BOOLEAN ExternalCleanupOwned;
+    BOOLEAN DeviceWorkTransferred;
 } DXGK_TRACKED_WORK_CORE, *PDXGK_TRACKED_WORK_CORE;
 
 VOID DxgkTrackedWorkCoreInitialize(_Out_ PDXGK_TRACKED_WORK_CORE Core, _In_opt_ const DXGK_TRACKED_WORK_CALLBACKS *Callbacks, _In_opt_ PVOID CallbackContext, _In_ BOOLEAN DeviceWorkOwned);
 BOOLEAN DxgkTrackedWorkCoreClaimDeviceWork(_Inout_ PDXGK_TRACKED_WORK_CORE Core);
 BOOLEAN DxgkTrackedWorkCoreReleaseDeviceWork(_Inout_ PDXGK_TRACKED_WORK_CORE Core);
+VOID DxgkTrackedWorkCoreSetDeviceWorkTransferred(_Inout_ PDXGK_TRACKED_WORK_CORE Core, _In_ BOOLEAN Transferred);
 BOOLEAN DxgkTrackedWorkCoreClaimExternalCleanup(_Inout_ PDXGK_TRACKED_WORK_CORE Core);
 BOOLEAN DxgkTrackedWorkCoreCommit(_Inout_ PDXGK_TRACKED_WORK_CORE Core, _In_ BOOLEAN CompletionAlreadyReached, _Out_ PBOOLEAN RetiredNow);
 BOOLEAN DxgkTrackedWorkCoreRetire(_Inout_ PDXGK_TRACKED_WORK_CORE Core);

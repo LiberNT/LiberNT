@@ -55,6 +55,9 @@ typedef struct _SERVICE_IMAGE
     DWORD dwProcessId;
     HANDLE hToken;
     HANDLE hProfile;
+    ULONG ImageSerial;
+    BOOL bProcessWatched;
+    BOOL bStopping;
 } SERVICE_IMAGE, *PSERVICE_IMAGE;
 
 
@@ -76,6 +79,8 @@ typedef struct _SERVICE
 
     DWORD dwServiceBits;
     DWORD dwServiceTag;
+    DWORD dwFailureCount;
+    ULONGLONG ullLastFailureTime;
 
     ULONG Flags;
 
@@ -90,6 +95,15 @@ typedef struct _SERVICE
 
 
 #define LOCK_TAG 0x4C697041 /* 'ApiL' */
+
+typedef struct _SERVICE_FAILURE_ACTIONS_VALUE
+{
+    DWORD dwResetPeriod;
+    DWORD lpRebootMsg;
+    DWORD lpCommand;
+    DWORD cActions;
+    DWORD lpsaActions;
+} SERVICE_FAILURE_ACTIONS_VALUE, *PSERVICE_FAILURE_ACTIONS_VALUE;
 
 typedef struct _START_LOCK
 {
@@ -194,6 +208,8 @@ DWORD ScmReferenceService(PSERVICE lpService);
 DWORD ScmDereferenceService(PSERVICE lpService);
 
 VOID ScmRemoveServiceImage(PSERVICE_IMAGE pServiceImage);
+DWORD ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine);
+BOOL ScmImageHasServices(PSERVICE_IMAGE pServiceImage);
 PSERVICE ScmGetServiceEntryByName(LPCWSTR lpServiceName);
 PSERVICE ScmGetServiceEntryByDisplayName(LPCWSTR lpDisplayName);
 PSERVICE ScmGetServiceEntryByResumeCount(DWORD dwResumeCount);
@@ -250,6 +266,19 @@ DWORD ScmControlDriver(PSERVICE lpService,
                        LPSERVICE_STATUS lpServiceStatus);
 
 
+/* failure.c */
+
+VOID ScmServiceFailure(PSERVICE lpService, BOOL bCrashed);
+
+
+/* trigger.c */
+
+DWORD ScmSetServiceTriggers(HKEY hServiceKey, const SERVICE_TRIGGER_INFO *lpInfo);
+DWORD ScmQueryServiceTriggers(HKEY hServiceKey, LPBYTE lpBuffer, DWORD cbBufSize, LPDWORD pcbBytesNeeded);
+VOID ScmStartTriggers(VOID);
+VOID ScmTriggersChanged(VOID);
+
+
 /* groupdb.c */
 
 PSERVICE_GROUP
@@ -279,6 +308,9 @@ DWORD ScmQueryServiceLockStatusA(OUT LPQUERY_SERVICE_LOCK_STATUSA lpLockStatus,
 VOID ScmStartRpcServer(VOID);
 VOID ScmInitServiceNotify(VOID);
 VOID ScmNotifyServiceStatus(PSERVICE lpService);
+DWORD ScmReadFailureActions(HKEY hServiceKey,
+                            PSERVICE_FAILURE_ACTIONS_VALUE *lpValue,
+                            LPDWORD lpActionCount);
 
 
 /* security.c */

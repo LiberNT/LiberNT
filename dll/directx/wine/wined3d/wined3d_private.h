@@ -2658,7 +2658,12 @@ struct texture_stage_op
     unsigned                tex_type : 3;
     unsigned                tmp_dst : 1;
     unsigned                projected : 1;
+#ifdef __REACTOS__
+    unsigned                shadow : 1;
+    unsigned                padding : 10;
+#else
     unsigned                padding : 11;
+#endif
 };
 
 struct ffp_frag_settings
@@ -2735,10 +2740,17 @@ struct wined3d_ffp_vs_settings
     DWORD fog_mode        : 2;
     DWORD texcoords       : 8;  /* WINED3D_MAX_FFP_TEXTURES */
     DWORD ortho_fog       : 1;
+#ifdef __REACTOS__
+    DWORD pixel_fog       : 1;
+#endif
     DWORD flatshading     : 1;
     DWORD specular_enable : 1;
     DWORD diffuse         : 1;
+#ifdef __REACTOS__
+    DWORD padding         : 15;
+#else
     DWORD padding         : 16;
+#endif
 
     DWORD swizzle_map; /* MAX_ATTRIBS, 32 */
 

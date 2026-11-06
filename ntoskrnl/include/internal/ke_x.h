@@ -159,8 +159,10 @@ KiDecrementThreadQuantum(
     _Inout_ PKTHREAD Thread,
     _In_ ULONG Decrement)
 {
-    Thread->Quantum -= (SCHAR)Decrement;
-    return Thread->Quantum <= 0;
+    LONG Quantum = (LONG)Thread->Quantum - (LONG)Decrement;
+
+    Thread->Quantum = (SCHAR)max(Quantum, 0);
+    return Quantum <= 0;
 }
 
 /* Quantum is counted in clock units, not counter cycles. */
@@ -1069,9 +1071,12 @@ KiCheckAlertability(IN PKTHREAD Thread,
                     IN KPROCESSOR_MODE WaitMode)
 {
     UCHAR WaitModeIndex;
+    NTSTATUS Status = STATUS_WAIT_0;
 
     ASSERT((WaitMode == KernelMode) || (WaitMode == UserMode));
+    if (!Alertable && (WaitMode == KernelMode)) return STATUS_WAIT_0;
     WaitModeIndex = (UCHAR)WaitMode;
+    KiAcquireThreadLock(Thread);
 
     /* Check if the wait is alertable */
     if (Alertable)
@@ -1081,30 +1086,30 @@ KiCheckAlertability(IN PKTHREAD Thread,
         {
             /* It is, so bail out of the wait */
             Thread->Alerted[WaitModeIndex] = FALSE;
-            return STATUS_ALERTED;
+            Status = STATUS_ALERTED;
         }
         else if ((WaitMode != KernelMode) &&
                 (!IsListEmpty(&Thread->ApcState.ApcListHead[UserMode])))
         {
             /* It's isn't, but this is a user wait with queued user APCs */
             Thread->ApcState.UserApcPending = TRUE;
-            return STATUS_USER_APC;
+            Status = STATUS_USER_APC;
         }
         else if (Thread->Alerted[KernelMode])
         {
             /* It isn't that either, but we're alered in kernel mode */
             Thread->Alerted[KernelMode] = FALSE;
-            return STATUS_ALERTED;
+            Status = STATUS_ALERTED;
         }
     }
     else if ((WaitMode != KernelMode) && (Thread->ApcState.UserApcPending))
     {
         /* Not alertable, but this is a user wait with pending user APCs */
-        return STATUS_USER_APC;
+        Status = STATUS_USER_APC;
     }
 
-    /* Otherwise, we're fine */
-    return STATUS_WAIT_0;
+    KiReleaseThreadLock(Thread);
+    return Status;
 }
 
 FORCEINLINE
@@ -1878,13 +1883,13 @@ KiCompleteThreadSwitch(
     KeMemoryBarrier();
 
     KiAcquireThreadLock(OldThread);
-    OldThread->Running = FALSE;
-    KeMemoryBarrier();
     ReadyTransition = OldThread->ReadyTransition;
     OldThread->ReadyTransition = FALSE;
     ReapThread = (OldThread->State == Terminated);
     ASSERT(!ReadyTransition || (OldThread->State == DeferredReady));
     ASSERT(!ReadyTransition || !ReapThread);
+    KeMemoryBarrier();
+    OldThread->Running = FALSE;
     KiReleaseThreadLock(OldThread);
 
     if (ReadyTransition)

@@ -3484,8 +3484,12 @@ GetNextFrame(
             /* No function entry, so this must be a leaf function.
             Note: this can happen after the first frame as the result of an exception */
 #if defined(_M_AMD64)
-            /* Pop the return address from the stack */
-            Context->Rip = *(DWORD64*)Context->Rsp;
+            DWORD64 ReturnAddress;
+
+            /* The debugger runs at an IRQL where a non-present stack page cannot be paged in. */
+            if (!NT_SUCCESS(KdbpSafeReadMemory(&ReturnAddress, (PVOID)(ULONG_PTR)Context->Rsp, sizeof(ReturnAddress))))
+                return FALSE;
+            Context->Rip = ReturnAddress;
             Context->Rsp += sizeof(DWORD64);
             return TRUE;
 #else
@@ -3498,6 +3502,9 @@ GetNextFrame(
 #endif
         }
 
+        /* FIXME: RtlVirtualUnwind reads the frame directly; only the page at the stack pointer is known present */
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&InstructionByte, (PVOID)(ULONG_PTR)OldSp, sizeof(InstructionByte))))
+            return FALSE;
         RtlVirtualUnwind(UNW_FLAG_NHANDLER, ImageBase, LookupPc, FunctionEntry, Context, &HandlerData, &EstablisherFrame, NULL);
     }
     _SEH2_EXCEPT(1)
@@ -10090,8 +10097,8 @@ KdbpPrintFrozenProcessors(VOID)
 static VOID
 KdbpPersistSessionLog(VOID)
 {
-    /* Writing through the crash storage path resets the boot disk, so only a bugcheck session may do it. */
-    if (KiBugCheckData[0])
+    /* Writing through the crash storage path resets the boot disk, so only a bugcheck session or an unattended stop may do it. */
+    if (KiBugCheckData[0] || KdTermCrashMode)
         (VOID)KdpWriteBootLogAtCrash(NULL, NULL);
 }
 

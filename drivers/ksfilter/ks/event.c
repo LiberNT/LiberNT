@@ -101,7 +101,8 @@ KspEnableEvent(
     PKSEVENTDATA EventData;
     const KSEVENT_SET *FoundEventSet;
     PKSEVENT_ENTRY EventEntry;
-    ULONG Index, SubIndex, Size, ItemSize, RequestType, SupportedTypes;
+    ULONG Index, SubIndex, Size, ItemSize, RequestType;
+    BOOLEAN SetFound = FALSE;
     PVOID Object = NULL;
     KSEVENT_CTX Ctx;
     LPGUID Guid;
@@ -204,6 +205,7 @@ KspEnableEvent(
     {
         if (IsEqualGUIDAligned(&Event.Set, EventSet[Index].Set))
         {
+            SetFound = TRUE;
             EventItem = (PKSEVENT_ITEM)EventSet[Index].EventItem;
 
             /* sanity check */
@@ -238,7 +240,7 @@ KspEnableEvent(
 
         DPRINT("Guid %S Id %u Flags %x not found\n", GuidString.Buffer, Event.Id, Event.Flags);
         RtlFreeUnicodeString(&GuidString);
-        return STATUS_PROPSET_NOT_FOUND;
+        return SetFound ? STATUS_NOT_FOUND : STATUS_PROPSET_NOT_FOUND;
 
 
     }
@@ -256,29 +258,6 @@ KspEnableEvent(
                 Irp->UserBuffer);
         }
 
-        Irp->IoStatus.Information = sizeof(ULONG);
-        if (IoStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
-            return STATUS_BUFFER_TOO_SMALL;
-
-        SupportedTypes = KSEVENT_TYPE_ENABLE | KSEVENT_TYPE_ONESHOT;
-        if (Irp->RequestorMode == UserMode)
-        {
-            _SEH2_TRY
-            {
-                ProbeForWrite(Irp->UserBuffer, sizeof(ULONG), sizeof(UCHAR));
-                *(PULONG)Irp->UserBuffer = SupportedTypes;
-                Status = STATUS_SUCCESS;
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
-
-            return Status;
-        }
-
-        *(PULONG)Irp->UserBuffer = SupportedTypes;
         return STATUS_SUCCESS;
     }
 

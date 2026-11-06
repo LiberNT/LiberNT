@@ -49,13 +49,140 @@ LxTtyDereference(
 
 static
 BOOLEAN
-LxTtyIndexUsed(
+LxDevptsOptionIs(
+    _In_ PCSTR Key,
+    _In_ SIZE_T Length,
+    _In_ PCSTR Name)
+{
+    return (strlen(Name) == Length) && (RtlCompareMemory(Key, Name, Length) == Length);
+}
+
+static
+BOOLEAN
+LxDevptsParseNumber(
+    _In_ PCSTR Value,
+    _In_ PCSTR End,
+    _In_ ULONG Base,
+    _Out_ PULONG Number)
+{
+    ULONG64 Result = 0;
+
+    if (Value == End)
+        return FALSE;
+    for (; Value < End; Value++)
+    {
+        if ((*Value < '0') || (*Value >= (CHAR)('0' + Base)))
+            return FALSE;
+        Result = Result * Base + (ULONG)(*Value - '0');
+        if (Result > MAXULONG)
+            return FALSE;
+    }
+    *Number = (ULONG)Result;
+    return TRUE;
+}
+
+LONG
+LxDevptsCreate(
+    _In_opt_ PLX_PROCESS Process,
     _In_ PLX_INSTANCE Instance,
+    _In_opt_ PCSTR Data,
+    _Out_ PLX_DEVPTS *Result)
+{
+    PLX_DEVPTS Devpts;
+    PCSTR Cursor = Data;
+
+    *Result = NULL;
+    Devpts = LxAlloc(sizeof(*Devpts));
+    if (Devpts == NULL)
+        return -LX_ENOMEM;
+    InitializeListHead(&Devpts->Ptys);
+    Devpts->PtmxMode = 0;
+    Devpts->Mode = 0600;
+
+    while ((Cursor != NULL) && (*Cursor != '\0'))
+    {
+        PCSTR Key = Cursor, Value = NULL, End;
+        SIZE_T KeyLength;
+        ULONG Number;
+
+        End = strchr(Cursor, ',');
+        if (End == NULL)
+            End = Cursor + strlen(Cursor);
+        Cursor = (*End == ',') ? End + 1 : End;
+        for (KeyLength = 0; (Key + KeyLength < End) && (Key[KeyLength] != '='); KeyLength++)
+        {
+        }
+        if (Key + KeyLength < End)
+            Value = Key + KeyLength + 1;
+        /* FIXME: Linux fails the mount with EINVAL on an unknown option; unknown options are ignored here */
+        if (Value == NULL)
+            continue;
+        if (LxDevptsOptionIs(Key, KeyLength, "mode") || LxDevptsOptionIs(Key, KeyLength, "ptmxmode"))
+        {
+            if (!LxDevptsParseNumber(Value, End, 8, &Number))
+            {
+                LxFree(Devpts);
+                return -LX_EINVAL;
+            }
+            if (KeyLength == 4)
+                Devpts->Mode = Number & 07777;
+            else
+                Devpts->PtmxMode = Number & 07777;
+        }
+        else if (LxDevptsOptionIs(Key, KeyLength, "uid") || LxDevptsOptionIs(Key, KeyLength, "gid"))
+        {
+            BOOLEAN Group = (Key[0] == 'g');
+
+            if ((Process == NULL) || !LxDevptsParseNumber(Value, End, 10, &Number) ||
+                ((Number = LxCredMakeId(Process, Group, Number)) == MAXULONG))
+            {
+                LxFree(Devpts);
+                return -LX_EINVAL;
+            }
+            if (Group)
+            {
+                Devpts->Gid = Number;
+                Devpts->GidSet = TRUE;
+            }
+            else
+            {
+                Devpts->Uid = Number;
+                Devpts->UidSet = TRUE;
+            }
+        }
+    }
+
+    ExAcquireFastMutex(&Instance->Lock);
+    InsertTailList(&Instance->DevptsList, &Devpts->Link);
+    ExReleaseFastMutex(&Instance->Lock);
+    *Result = Devpts;
+    return 0;
+}
+
+VOID
+LxDevptsFreeAll(
+    _In_ PLX_INSTANCE Instance)
+{
+    while (!IsListEmpty(&Instance->DevptsList))
+    {
+        PLX_DEVPTS Devpts = CONTAINING_RECORD(RemoveHeadList(&Instance->DevptsList), LX_DEVPTS, Link);
+
+        while (!IsListEmpty(&Devpts->Ptys))
+            InitializeListHead(RemoveHeadList(&Devpts->Ptys));
+        LxFree(Devpts);
+    }
+    Instance->Devpts = NULL;
+}
+
+static
+BOOLEAN
+LxTtyIndexUsed(
+    _In_ PLX_DEVPTS Devpts,
     _In_ LONG Index)
 {
     PLIST_ENTRY Entry;
 
-    for (Entry = Instance->Ptys.Flink; Entry != &Instance->Ptys; Entry = Entry->Flink)
+    for (Entry = Devpts->Ptys.Flink; Entry != &Devpts->Ptys; Entry = Entry->Flink)
     {
         if (CONTAINING_RECORD(Entry, LX_TTY, Link)->Index == Index)
             return TRUE;
@@ -66,8 +193,10 @@ LxTtyIndexUsed(
 NTSTATUS
 LxTtyCreate(
     _In_ PLX_INSTANCE Instance,
+    _In_opt_ PLX_DEVPTS Devpts,
     _In_ ULONG Flags,
     _In_ ULONG Uid,
+    _In_ ULONG Gid,
     _In_ USHORT Rows,
     _In_ USHORT Columns,
     _Out_ PLX_TTY *Result)
@@ -94,6 +223,12 @@ LxTtyCreate(
     Tty->Uid = Uid;
     Tty->Gid = LX_TTY_GID;
     Tty->Mode = 0620;
+    if (Devpts != NULL)
+    {
+        Tty->Uid = Devpts->UidSet ? Devpts->Uid : Uid;
+        Tty->Gid = Devpts->GidSet ? Devpts->Gid : Gid;
+        Tty->Mode = Devpts->Mode;
+    }
     Tty->Locked = (Flags & LX_TTY_LOCKED) != 0;
     Tty->NtMaster = (Flags & LX_TTY_NT_MASTER) != 0;
 
@@ -118,12 +253,13 @@ LxTtyCreate(
     Tty->WinSize.Rows = Rows;
     Tty->WinSize.Cols = Columns;
 
-    if (!(Flags & LX_TTY_CONSOLE))
+    if (!(Flags & LX_TTY_CONSOLE) && (Devpts != NULL))
     {
         ExAcquireFastMutex(&Instance->Lock);
+        /* TODO: limit the instance to its max= option; only the global limit applies */
         for (Index = 0; Index < LX_PTY_MAX; Index++)
         {
-            if (!LxTtyIndexUsed(Instance, Index))
+            if (!LxTtyIndexUsed(Devpts, Index))
                 break;
         }
         if (Index == LX_PTY_MAX)
@@ -133,7 +269,7 @@ LxTtyCreate(
             return STATUS_TOO_MANY_OPENED_FILES;
         }
         Tty->Index = Index;
-        InsertTailList(&Instance->Ptys, &Tty->Link);
+        InsertTailList(&Devpts->Ptys, &Tty->Link);
         ExReleaseFastMutex(&Instance->Lock);
     }
 
@@ -158,13 +294,14 @@ LxTtyDevice(
 PLX_TTY
 LxTtyLookup(
     _In_ PLX_INSTANCE Instance,
+    _In_ PLX_DEVPTS Devpts,
     _In_ ULONG Index)
 {
     PLIST_ENTRY Entry;
     PLX_TTY Found = NULL;
 
     ExAcquireFastMutex(&Instance->Lock);
-    for (Entry = Instance->Ptys.Flink; Entry != &Instance->Ptys; Entry = Entry->Flink)
+    for (Entry = Devpts->Ptys.Flink; Entry != &Devpts->Ptys; Entry = Entry->Flink)
     {
         PLX_TTY Tty = CONTAINING_RECORD(Entry, LX_TTY, Link);
 
@@ -182,6 +319,7 @@ LxTtyLookup(
 ULONG
 LxTtyList(
     _In_ PLX_INSTANCE Instance,
+    _In_ PLX_DEVPTS Devpts,
     _Out_writes_(Count) PULONG Indexes,
     _In_ ULONG Count)
 {
@@ -189,7 +327,7 @@ LxTtyList(
     ULONG Used = 0;
 
     ExAcquireFastMutex(&Instance->Lock);
-    for (Entry = Instance->Ptys.Flink; (Entry != &Instance->Ptys) && (Used < Count); Entry = Entry->Flink)
+    for (Entry = Devpts->Ptys.Flink; (Entry != &Devpts->Ptys) && (Used < Count); Entry = Entry->Flink)
         Indexes[Used++] = (ULONG)CONTAINING_RECORD(Entry, LX_TTY, Link)->Index;
     ExReleaseFastMutex(&Instance->Lock);
     return Used;
@@ -1409,6 +1547,7 @@ static const LX_FILE_OPS LxPtmxFileOps =
 LONG
 LxPtmxOpen(
     _In_ PLX_PROCESS Process,
+    _In_ PLX_DEVPTS Devpts,
     _In_ ULONG Flags,
     _Out_ PLX_FILE *Result)
 {
@@ -1417,7 +1556,7 @@ LxPtmxOpen(
     NTSTATUS Status;
 
     *Result = NULL;
-    Status = LxTtyCreate(Process->Instance, LX_TTY_LOCKED, Process->Uid[1], 0, 0, &Tty);
+    Status = LxTtyCreate(Process->Instance, Devpts, LX_TTY_LOCKED, Process->Fsuid, Process->Fsgid, 0, 0, &Tty);
     if (Status == STATUS_TOO_MANY_OPENED_FILES)
         return -LX_ENOSPC;
     if (!NT_SUCCESS(Status))

@@ -623,6 +623,7 @@ struct testfilter
     struct strmbase_sink sink;
     const AM_MEDIA_TYPE *sink_mt;
     AM_MEDIA_TYPE source_mt;
+    const AM_MEDIA_TYPE *source_mt2;
     HANDLE sample_event, eos_event, segment_event;
     BOOL preview;
     unsigned int got_begin_flush, got_end_flush;
@@ -671,6 +672,11 @@ static HRESULT testsource_get_media_type(struct strmbase_pin *iface, unsigned in
     if (!index)
     {
         CopyMediaType(mt, &filter->source_mt);
+        return S_OK;
+    }
+    if (index == 1 && filter->source_mt2)
+    {
+        CopyMediaType(mt, filter->source_mt2);
         return S_OK;
     }
     return VFW_S_NO_MORE_ITEMS;
@@ -1111,10 +1117,17 @@ static void test_connect_pin(void)
         .formattype = FORMAT_None,
         .lSampleSize = 1,
     };
+    static const AM_MEDIA_TYPE source_mt2 =
+    {
+        .majortype = {0x444},
+        .subtype = {0x555},
+        .formattype = {0x666},
+    };
     IBaseFilter *filter = create_smart_tee();
     struct testfilter testsource, testsink;
     IPin *sink, *capture, *preview, *peer;
     AM_MEDIA_TYPE mt, *mts[3];
+    ULONG count, i;
     IEnumMediaTypes *enummt;
     IMediaControl *control;
     IFilterGraph2 *graph;
@@ -1192,6 +1205,28 @@ static void test_connect_pin(void)
 
     test_source_media_types(req_mt, &testsource.source_mt, capture);
     test_source_media_types(req_mt, &testsource.source_mt, preview);
+
+    testsource.source_mt2 = &source_mt2;
+    hr = IPin_EnumMediaTypes(capture, &enummt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IEnumMediaTypes_Next(enummt, 3, mts, &count);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(count == 3, "Got %lu types.\n", count);
+    ok(compare_media_types(mts[0], &req_mt), "Media types didn't match.\n");
+    if (count > 2)
+    {
+        ok(compare_media_types(mts[1], &testsource.source_mt), "Media types didn't match.\n");
+        ok(compare_media_types(mts[2], &source_mt2), "Media types didn't match.\n");
+    }
+    for (i = 0; i < count; ++i)
+        CoTaskMemFree(mts[i]);
+    hr = IEnumMediaTypes_Next(enummt, 1, mts, NULL);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    IEnumMediaTypes_Release(enummt);
+    hr = IPin_QueryAccept(capture, &source_mt2);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+    testsource.source_mt2 = NULL;
+
     test_source_connection(req_mt, graph, control, &testsink, capture);
     test_source_connection(req_mt, graph, control, &testsink, preview);
 
@@ -1378,6 +1413,8 @@ static void test_streaming(void)
     /* No EOS events are sent downstream, however. */
 
     IMediaSample_Release(sample);
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, AM_GBF_NOWAIT);
+    ok(hr == VFW_E_NOT_COMMITTED, "Got hr %#lx.\n", hr);
     IMemAllocator_Release(allocator);
     IMemInputPin_Release(input);
     IPin_Release(sink);
@@ -1396,6 +1433,354 @@ static void test_streaming(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_streaming_unconnected_outputs(void)
+{
+    static const AM_MEDIA_TYPE req_mt =
+    {
+        .majortype = {0x111},
+        .subtype = {0x222},
+        .formattype = {0x333},
+    };
+    IBaseFilter *filter = create_smart_tee();
+    struct testfilter testsource;
+    IMemAllocator *allocator;
+    IMediaControl *control;
+    IFilterGraph2 *graph;
+    IMediaSample *sample;
+    IMemInputPin *input;
+    HRESULT hr;
+    ULONG ref;
+    IPin *sink;
+
+    testfilter_init(&testsource);
+    CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IFilterGraph2, (void **)&graph);
+    IFilterGraph2_AddFilter(graph, &testsource.filter.IBaseFilter_iface, L"source");
+    IFilterGraph2_AddFilter(graph, filter, L"smart tee");
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    IBaseFilter_FindPin(filter, L"Input", &sink);
+    IPin_QueryInterface(sink, &IID_IMemInputPin, (void **)&input);
+
+    hr = IFilterGraph2_ConnectDirect(graph, &testsource.source.pin.IPin_iface, sink, &req_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_GetAllocator(input, &allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, AM_GBF_NOWAIT);
+    ok(hr == VFW_E_NOT_COMMITTED, "Got hr %#lx.\n", hr);
+
+    hr = IMemAllocator_Commit(allocator);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_EndOfStream(sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    IMediaSample_Release(sample);
+    IMemAllocator_Decommit(allocator);
+
+    IMemAllocator_Release(allocator);
+    IMemInputPin_Release(input);
+    IPin_Release(sink);
+    IMediaControl_Release(control);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(&testsource.filter.IBaseFilter_iface);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
+static void test_quality_control(void)
+{
+    static const WCHAR *const names[] = {L"Input", L"Capture", L"Preview"};
+    IBaseFilter *filter = create_smart_tee();
+    Quality quality = {Famine, 500, 0, 0};
+    IQualityControl *qc;
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    for (i = 0; i < ARRAY_SIZE(names); ++i)
+    {
+        winetest_push_context("%s", wine_dbgstr_w(names[i]));
+        IBaseFilter_FindPin(filter, names[i], &pin);
+        hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+        if (hr == S_OK)
+        {
+            hr = IQualityControl_Notify(qc, NULL, quality);
+            ok(hr == (i ? E_NOTIMPL : E_POINTER), "Got hr %#lx.\n", hr);
+            hr = IQualityControl_Notify(qc, filter, quality);
+            ok(hr == (i ? E_NOTIMPL : S_OK), "Got hr %#lx.\n", hr);
+            hr = IQualityControl_SetSink(qc, qc);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            hr = IQualityControl_SetSink(qc, NULL);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            IQualityControl_Release(qc);
+        }
+        IPin_Release(pin);
+        winetest_pop_context();
+    }
+
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
+#define check_stream_info(a, b, c, d, e, f) check_stream_info_(__LINE__, a, b, c, d, e, f)
+static void check_stream_info_(unsigned int line, IAMStreamControl *control, REFERENCE_TIME start,
+        REFERENCE_TIME stop, DWORD start_cookie, DWORD stop_cookie, DWORD flags)
+{
+    AM_STREAM_INFO info;
+    HRESULT hr;
+
+    memset(&info, 0xcc, sizeof(info));
+    hr = IAMStreamControl_GetInfo(control, &info);
+    ok_(__FILE__, line)(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok_(__FILE__, line)(info.tStart == start, "Got start %I64d.\n", info.tStart);
+    ok_(__FILE__, line)(info.tStop == stop, "Got stop %I64d.\n", info.tStop);
+    ok_(__FILE__, line)(info.dwStartCookie == start_cookie, "Got start cookie %lu.\n", info.dwStartCookie);
+    ok_(__FILE__, line)(info.dwStopCookie == stop_cookie, "Got stop cookie %lu.\n", info.dwStopCookie);
+    ok_(__FILE__, line)(info.dwFlags == flags, "Got flags %#lx.\n", info.dwFlags);
+}
+
+static void test_stream_control_info(void)
+{
+    static const WCHAR *const names[] = {L"Capture", L"Preview"};
+    IBaseFilter *filter = create_smart_tee();
+    REFERENCE_TIME start, stop;
+    IAMStreamControl *control;
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+    IPin *pin;
+
+    for (i = 0; i < ARRAY_SIZE(names); ++i)
+    {
+        winetest_push_context("%s", wine_dbgstr_w(names[i]));
+        IBaseFilter_FindPin(filter, names[i], &pin);
+        hr = IPin_QueryInterface(pin, &IID_IAMStreamControl, (void **)&control);
+        ok(hr == S_OK, "Got hr %#lx.\n", hr);
+        if (hr == S_OK)
+        {
+            hr = IAMStreamControl_GetInfo(control, NULL);
+            ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+            check_stream_info(control, MAXLONGLONG, MAXLONGLONG, 0, 0, 0);
+
+            hr = IAMStreamControl_StartAt(control, NULL, 0);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            check_stream_info(control, MAXLONGLONG, MAXLONGLONG, 0, 0, 0);
+            hr = IAMStreamControl_StopAt(control, NULL, FALSE, 0);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            check_stream_info(control, MAXLONGLONG, MAXLONGLONG, 0, 0, AM_STREAM_INFO_DISCARDING);
+
+            start = 1000;
+            hr = IAMStreamControl_StartAt(control, &start, 5);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            check_stream_info(control, 1000, MAXLONGLONG, 5, 0,
+                    AM_STREAM_INFO_START_DEFINED | AM_STREAM_INFO_DISCARDING);
+            stop = 2000;
+            hr = IAMStreamControl_StopAt(control, &stop, TRUE, 6);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            check_stream_info(control, 1000, 2000, 5, 6, AM_STREAM_INFO_START_DEFINED
+                    | AM_STREAM_INFO_STOP_DEFINED | AM_STREAM_INFO_DISCARDING | AM_STREAM_INFO_STOP_SEND_EXTRA);
+
+            stop = MAXLONGLONG;
+            hr = IAMStreamControl_StopAt(control, &stop, FALSE, 7);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            check_stream_info(control, 1000, MAXLONGLONG, 5, 0,
+                    AM_STREAM_INFO_START_DEFINED | AM_STREAM_INFO_DISCARDING);
+            start = MAXLONGLONG;
+            hr = IAMStreamControl_StartAt(control, &start, 8);
+            ok(hr == S_OK, "Got hr %#lx.\n", hr);
+            check_stream_info(control, MAXLONGLONG, MAXLONGLONG, 0, 0, AM_STREAM_INFO_DISCARDING);
+
+            IAMStreamControl_Release(control);
+        }
+        IPin_Release(pin);
+        winetest_pop_context();
+    }
+
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
+#define check_stream_event(a, b, c, d) check_stream_event_(__LINE__, a, b, c, d)
+static void check_stream_event_(unsigned int line, IMediaEvent *events, LONG code,
+        IAMStreamControl *control, DWORD cookie)
+{
+    LONG_PTR param1, param2;
+    LONG ret_code;
+    HRESULT hr;
+
+    hr = IMediaEvent_GetEvent(events, &ret_code, &param1, &param2, code ? 1000 : 0);
+    ok_(__FILE__, line)(hr == (code ? S_OK : E_ABORT), "Got hr %#lx.\n", hr);
+    if (hr != S_OK)
+        return;
+    ok_(__FILE__, line)(ret_code == code, "Got code %#lx.\n", ret_code);
+    ok_(__FILE__, line)(param1 == (LONG_PTR)control, "Got param1 %#Ix.\n", param1);
+    ok_(__FILE__, line)(param2 == cookie, "Got param2 %#Ix.\n", param2);
+    IMediaEvent_FreeEventParams(events, ret_code, param1, param2);
+}
+
+static void test_stream_control_streaming(void)
+{
+    static const AM_MEDIA_TYPE req_mt =
+    {
+        .majortype = {0x111},
+        .subtype = {0x222},
+        .formattype = {0x333},
+    };
+    IBaseFilter *filter = create_smart_tee();
+    struct testfilter testsource, testsink;
+    REFERENCE_TIME start, stop, time;
+    IAMStreamControl *control;
+    IMemAllocator *allocator;
+    IMediaControl *graph_control;
+    IMediaEvent *events;
+    IFilterGraph2 *graph;
+    IMediaSample *sample;
+    LONG_PTR param1, param2;
+    IPin *sink, *capture;
+    IMemInputPin *input;
+    LONG code, i;
+    HRESULT hr;
+    BYTE *data;
+    ULONG ref;
+
+    testfilter_init(&testsource);
+    testfilter_init(&testsink);
+    CoCreateInstance(&CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IFilterGraph2, (void **)&graph);
+    IFilterGraph2_AddFilter(graph, &testsource.filter.IBaseFilter_iface, L"source");
+    IFilterGraph2_AddFilter(graph, &testsink.filter.IBaseFilter_iface, L"sink");
+    IFilterGraph2_AddFilter(graph, filter, L"smart tee");
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&graph_control);
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaEvent, (void **)&events);
+    IBaseFilter_FindPin(filter, L"Input", &sink);
+    IPin_QueryInterface(sink, &IID_IMemInputPin, (void **)&input);
+    IBaseFilter_FindPin(filter, L"Capture", &capture);
+    IPin_QueryInterface(capture, &IID_IAMStreamControl, (void **)&control);
+
+    hr = IFilterGraph2_ConnectDirect(graph, &testsource.source.pin.IPin_iface, sink, &req_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IFilterGraph2_ConnectDirect(graph, capture, &testsink.sink.pin.IPin_iface, &req_mt);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IMemInputPin_GetAllocator(input, &allocator);
+
+    hr = IMediaControl_Run(graph_control);
+    ok(SUCCEEDED(hr), "Got hr %#lx.\n", hr);
+    while (IMediaEvent_GetEvent(events, &code, &param1, &param2, 0) == S_OK)
+        IMediaEvent_FreeEventParams(events, code, param1, param2);
+    hr = IMemAllocator_GetBuffer(allocator, &sample, NULL, NULL, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IMediaSample_GetPointer(sample, &data);
+    for (i = 0; i < 200; ++i)
+        data[i] = i;
+    IMediaSample_SetActualDataLength(sample, 200);
+    start = 10000;
+    stop = 20000;
+    IMediaSample_SetMediaTime(sample, &start, &stop);
+    start = 30000;
+    stop = 40000;
+    IMediaSample_SetTime(sample, &start, &stop);
+    IMediaSample_SetDiscontinuity(sample, TRUE);
+    IMediaSample_SetPreroll(sample, TRUE);
+    IMediaSample_SetSyncPoint(sample, TRUE);
+
+    time = 0;
+    hr = IAMStreamControl_StopAt(control, &time, FALSE, 21);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(WaitForSingleObject(testsink.sample_event, 200) == WAIT_TIMEOUT, "Sample was delivered.\n");
+    check_stream_event(events, EC_STREAM_CONTROL_STOPPED, control, 21);
+    check_stream_event(events, 0, NULL, 0);
+
+    IAMStreamControl_StartAt(control, NULL, 0);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!WaitForSingleObject(testsink.sample_event, 1000), "Sample was not delivered.\n");
+
+    time = 35000;
+    IAMStreamControl_StopAt(control, &time, FALSE, 12);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!WaitForSingleObject(testsink.sample_event, 1000), "Sample was not delivered.\n");
+    check_stream_event(events, 0, NULL, 0);
+
+    time = 30000;
+    IAMStreamControl_StopAt(control, &time, TRUE, 13);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!WaitForSingleObject(testsink.sample_event, 1000), "Sample was not delivered.\n");
+    check_stream_event(events, 0, NULL, 0);
+
+    time = 39999;
+    IAMStreamControl_StartAt(control, &time, 15);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!WaitForSingleObject(testsink.sample_event, 1000), "Sample was not delivered.\n");
+    check_stream_event(events, EC_STREAM_CONTROL_STOPPED, control, 13);
+    check_stream_event(events, EC_STREAM_CONTROL_STARTED, control, 15);
+    check_stream_event(events, 0, NULL, 0);
+
+    IAMStreamControl_StopAt(control, NULL, FALSE, 0);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(WaitForSingleObject(testsink.sample_event, 200) == WAIT_TIMEOUT, "Sample was delivered.\n");
+
+    IAMStreamControl_StartAt(control, NULL, 0);
+    time = 0;
+    IAMStreamControl_StopAt(control, &time, TRUE, 22);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!WaitForSingleObject(testsink.sample_event, 1000), "Sample was not delivered.\n");
+    check_stream_event(events, EC_STREAM_CONTROL_STOPPED, control, 22);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(WaitForSingleObject(testsink.sample_event, 200) == WAIT_TIMEOUT, "Sample was delivered.\n");
+    check_stream_info(control, MAXLONGLONG, MAXLONGLONG, 0, 0,
+            AM_STREAM_INFO_DISCARDING | AM_STREAM_INFO_STOP_SEND_EXTRA);
+
+    IAMStreamControl_StartAt(control, NULL, 0);
+    time = 50000;
+    IAMStreamControl_StartAt(control, &time, 23);
+    hr = IMemInputPin_Receive(input, sample);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!WaitForSingleObject(testsink.sample_event, 1000), "Sample was not delivered.\n");
+    check_stream_event(events, 0, NULL, 0);
+
+    hr = IMediaControl_Stop(graph_control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IMediaSample_Release(sample);
+
+    IAMStreamControl_Release(control);
+    IMemAllocator_Release(allocator);
+    IMemInputPin_Release(input);
+    IPin_Release(sink);
+    IPin_Release(capture);
+    IMediaEvent_Release(events);
+    IMediaControl_Release(graph_control);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(&testsource.filter.IBaseFilter_iface);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IBaseFilter_Release(&testsink.filter.IBaseFilter_iface);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(smartteefilter)
 {
     CoInitialize(NULL);
@@ -1411,6 +1796,10 @@ START_TEST(smartteefilter)
     test_unconnected_filter_state();
     test_connect_pin();
     test_streaming();
+    test_streaming_unconnected_outputs();
+    test_quality_control();
+    test_stream_control_info();
+    test_stream_control_streaming();
 
     CloseHandle(event);
     CoUninitialize();

@@ -383,6 +383,7 @@ KiArm64CreateNodeForDomain(_In_ ULONG ProximityDomain)
     KiArm64NodeDomains[Node].Present = TRUE;
     KiArm64NodeDomains[Node].ProximityDomain = ProximityDomain;
     KeNodeBlock[Node]->NodeNumber = Node;
+    KeNodeBlock[Node]->ProximityId = ProximityDomain;
     KeNodeBlock[Node]->ProcessorMask = 0;
     return Node;
 }
@@ -797,6 +798,7 @@ KiArm64CompactActiveNumaNodes(_In_ KAFFINITY ActiveMask)
     for (Node = 0; Node < KeNumberNodes; Node++)
     {
         KeNodeBlock[Node]->NodeNumber = (UCHAR)Node;
+        KeNodeBlock[Node]->ProximityId = KiArm64NodeDomains[Node].ProximityDomain;
     }
 }
 

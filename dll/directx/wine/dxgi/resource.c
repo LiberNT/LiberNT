@@ -389,9 +389,19 @@ static HRESULT STDMETHODCALLTYPE dxgi_resource_GetDevice(IDXGIResource1 *iface, 
 /* IDXGIResource methods */
 static HRESULT STDMETHODCALLTYPE dxgi_resource_GetSharedHandle(IDXGIResource1 *iface, HANDLE *shared_handle)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, shared_handle %p.\n", iface, shared_handle);
+
+    if (!shared_handle)
+        return E_INVALIDARG;
+    /* TODO: sharing of wined3d-path resources; they report no shared handle */
+    *shared_handle = NULL;
+    return S_OK;
+#else
     FIXME("iface %p, shared_handle %p stub!\n", iface, shared_handle);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE dxgi_resource_GetUsage(IDXGIResource1 *iface, DXGI_USAGE *usage)

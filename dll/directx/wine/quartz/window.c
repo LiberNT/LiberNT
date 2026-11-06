@@ -80,6 +80,7 @@ static LRESULT CALLBACK WndProcW(HWND hwnd, UINT message, WPARAM wparam, LPARAM 
     {
         IFilterGraph *graph = window->pFilter->graph;
         IMediaEventSink *event_sink;
+        CONTAINING_RECORD(window->pFilter, struct strmbase_renderer, filter)->abort = TRUE;
         IVideoWindow_put_Visible(&window->IVideoWindow_iface, OAFALSE);
         if (graph && SUCCEEDED(IFilterGraph_QueryInterface(graph,
                                                            &IID_IMediaEventSink,
@@ -211,6 +212,9 @@ HRESULT WINAPI BaseControlWindowImpl_get_Caption(IVideoWindow *iface, BSTR *capt
 
     TRACE("window %p, caption %p.\n", window, caption);
 
+    if (!window->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
+
     *caption = NULL;
 
     len = GetWindowTextLengthW(window->hwnd) + 1;
@@ -253,6 +257,9 @@ HRESULT WINAPI BaseControlWindowImpl_get_WindowStyle(IVideoWindow *iface, LONG *
     struct video_window *window = impl_from_IVideoWindow(iface);
 
     TRACE("window %p, style %p.\n", window, style);
+
+    if (!window->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
 
     *style = GetWindowLongW(window->hwnd, GWL_STYLE);
     return S_OK;
@@ -298,6 +305,9 @@ HRESULT WINAPI BaseControlWindowImpl_get_AutoShow(IVideoWindow *iface, LONG *Aut
     struct video_window *This = impl_from_IVideoWindow(iface);
 
     TRACE("(%p/%p)->(%p)\n", This, iface, AutoShow);
+
+    if (!This->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
 
     *AutoShow = This->AutoShow;
 
@@ -680,6 +690,52 @@ HRESULT WINAPI BaseControlWindowImpl_GetMaxIdealImageSize(IVideoWindow *iface, L
     *width = rect.right - rect.left;
     *height = rect.bottom - rect.top;
     return S_OK;
+}
+
+HRESULT WINAPI vmr_window_GetMinIdealImageSize(IVideoWindow *iface, LONG *width, LONG *height)
+{
+    struct video_window *window = impl_from_IVideoWindow(iface);
+    HRESULT hr = S_OK;
+
+    TRACE("window %p, width %p, height %p.\n", window, width, height);
+
+    if (!width || !height)
+        return E_POINTER;
+
+    EnterCriticalSection(&window->pFilter->filter_cs);
+    if (window->pFilter->state == State_Stopped)
+        hr = VFW_E_WRONG_STATE;
+    else
+        *width = *height = 1;
+    LeaveCriticalSection(&window->pFilter->filter_cs);
+
+    return hr;
+}
+
+HRESULT WINAPI vmr_window_GetMaxIdealImageSize(IVideoWindow *iface, LONG *width, LONG *height)
+{
+    struct video_window *window = impl_from_IVideoWindow(iface);
+    MONITORINFO info = {.cbSize = sizeof(info)};
+    HRESULT hr = S_OK;
+
+    TRACE("window %p, width %p, height %p.\n", window, width, height);
+
+    if (!width || !height)
+        return E_POINTER;
+
+    EnterCriticalSection(&window->pFilter->filter_cs);
+    if (window->pFilter->state == State_Stopped)
+        hr = VFW_E_WRONG_STATE;
+    else if (GetMonitorInfoW(MonitorFromWindow(window->hwnd, MONITOR_DEFAULTTOPRIMARY), &info))
+    {
+        *width = info.rcMonitor.right + 1;
+        *height = info.rcMonitor.bottom + 1;
+    }
+    else
+        hr = E_FAIL;
+    LeaveCriticalSection(&window->pFilter->filter_cs);
+
+    return hr;
 }
 
 HRESULT WINAPI BaseControlWindowImpl_GetRestorePosition(IVideoWindow *iface, LONG *pLeft, LONG *pTop, LONG *pWidth, LONG *pHeight)
@@ -1189,8 +1245,10 @@ static HRESULT WINAPI basic_video_GetVideoPaletteEntries(IBasicVideo *iface,
     FIXME("window %p, start %ld, count %ld, ret_count %p, palette %p, stub!\n",
             window, start, count, ret_count, palette);
 
-    if (!ret_count || !palette)
+    if (!ret_count)
         return E_POINTER;
+    if (!window->pPin->peer)
+        return VFW_E_NOT_CONNECTED;
 
     *ret_count = 0;
     return VFW_E_NO_PALETTE_AVAILABLE;
@@ -1202,7 +1260,7 @@ static HRESULT WINAPI basic_video_GetCurrentImage(IBasicVideo *iface, LONG *size
 
     TRACE("window %p, size %p, image %p.\n", window, size, image);
 
-    if (!size || !image)
+    if (!size)
         return E_POINTER;
 
     return window->ops->get_current_image(window, size, image);

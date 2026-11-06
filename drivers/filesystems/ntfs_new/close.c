@@ -99,6 +99,8 @@ NtfsFsdClose(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             if (FileCB->RequestedStream)
                 ExFreePool(FileCB->RequestedStream);
 
+            NtfsPagingFileClose(FileCB);
+
             if (FileCB->StreamCB)
             {
                 NtfsDereferenceStreamContext(

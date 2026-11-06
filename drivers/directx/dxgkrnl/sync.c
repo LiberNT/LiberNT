@@ -12,6 +12,7 @@
 #include "dxgkrnl_private.h"
 #include "presenttrace.h"
 #include "pnp.h"
+#include <ndk/obfuncs.h>
 #include <ndk/psfuncs.h>
 
 #define DXGK_CPU_SIGNAL_ALLOW_FENCE_REWIND 0x00000004UL
@@ -49,6 +50,7 @@ DxgkpIsListEntryLinked(
 static BOOLEAN DxgkpReferenceSyncObject(_In_ PVOID Object);
 static NTSTATUS DxgkpSyncObjectPublishRetiredFence(_In_ PDXGKRNL_SYNC_OBJECT SyncObj, _In_ UINT64 FenceValue);
 static PDXGKRNL_SYNC_OBJECT DxgkpSyncResolveShared(_In_ PDXGKRNL_SYNC_OBJECT SyncObj);
+static VOID DxgkpSyncUnlinkView(_Inout_ PDXGKRNL_SYNC_OBJECT View);
 static VOID DxgkpSyncDestroyPeriodicNotification(_Inout_ PDXGKRNL_SYNC_OBJECT SyncObj);
 
 /* ========================================================================
@@ -74,6 +76,8 @@ static volatile LONG DxgkSyncMonitoredInterruptSequence;
 static KSPIN_LOCK DxgkSyncKmdCpuEventLock;
 static LIST_ENTRY DxgkSyncKmdCpuEventListHead;
 #endif
+static KSPIN_LOCK DxgkSyncViewLock;
+static POBJECT_TYPE DxgkSharedSyncObjectType;
 static volatile LONG DxgkSyncNextShareHandle = 0;
 static volatile LONG DxgkSyncNextPeriodicNotificationId = 0;
 static CONST ULONG DxgkSyncShareHandleCookie = 0x4E595353; /* "SSYN" */
@@ -87,6 +91,7 @@ DxgkpSyncShareInitialize(VOID)
     {
         ExInitializeFastMutex(&DxgkSyncShareLock);
         KeInitializeSpinLock(&DxgkSyncPeriodicLock);
+        KeInitializeSpinLock(&DxgkSyncViewLock);
         InitializeListHead(&DxgkSyncShareListHead);
         InitializeListHead(&DxgkSyncPeriodicListHead);
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
@@ -852,10 +857,12 @@ DxgkpReferenceSyncObject(
 }
 
 NTSTATUS
-DxgkpReferenceSyncObjectByHandle(
+DxgkpReferenceSyncObjectView(
     _In_ D3DKMT_HANDLE Handle,
     _In_opt_ PEPROCESS OwnerProcess,
-    _Out_ PDXGKRNL_SYNC_OBJECT *OutSyncObj)
+    _Out_ PDXGKRNL_SYNC_OBJECT *OutSyncObj,
+    _Out_opt_ PDXGKRNL_DEVICE *ViewDevice,
+    _Out_opt_ D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS *ViewFlags)
 {
     PDXGKRNL_SYNC_OBJECT SyncObj;
     PVOID Object;
@@ -867,14 +874,17 @@ DxgkpReferenceSyncObjectByHandle(
         return Status;
 
     /*
-     * An opened alias carries the access flags of the view the caller holds
-     * but none of the fence state: the created object stays authoritative.
-     * Resolve to it and hand back a reference on that object, so every state
-     * operation reads and writes one fence and one value page.  The alias's
-     * own access flags are copied from the creator at open time, so they
-     * still gate this request.
+     * An opened alias carries the device and access flags of the view the
+     * caller holds but none of the fence state: the created object stays
+     * authoritative.  Resolve to it and hand back a reference on that object,
+     * so every state operation reads and writes one fence and one value page,
+     * while the view's device and flags still gate the request.
      */
     SyncObj = Object;
+    if (ViewDevice != NULL)
+        *ViewDevice = SyncObj->Device;
+    if (ViewFlags != NULL)
+        *ViewFlags = SyncObj->Flags;
     if (SyncObj->BackingSyncObject != NULL)
     {
         PDXGKRNL_SYNC_OBJECT Backing = DxgkpSyncResolveShared(SyncObj);
@@ -889,6 +899,15 @@ DxgkpReferenceSyncObjectByHandle(
     }
     *OutSyncObj = SyncObj;
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+DxgkpReferenceSyncObjectByHandle(
+    _In_ D3DKMT_HANDLE Handle,
+    _In_opt_ PEPROCESS OwnerProcess,
+    _Out_ PDXGKRNL_SYNC_OBJECT *OutSyncObj)
+{
+    return DxgkpReferenceSyncObjectView(Handle, OwnerProcess, OutSyncObj, NULL, NULL);
 }
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
@@ -1274,9 +1293,11 @@ DxgkpSyncReleaseMonitoredPage(
         SyncObj->MonitoredValueMdl = NULL;
     }
 
+    if (QuarantineKernelPage && SyncObj->BackingSyncObject != NULL)
+        InterlockedExchange(&DxgkpSyncResolveShared(SyncObj)->MonitoredPageQuarantined, 1);
     if (SyncObj->MonitoredValueKernelVa != NULL)
     {
-        if (!QuarantineKernelPage)
+        if (!QuarantineKernelPage && InterlockedCompareExchange(&SyncObj->MonitoredPageQuarantined, 0, 0) == 0)
             ExFreePoolWithTag(SyncObj->MonitoredValueKernelVa, TAG_DXGK_SYNC);
         SyncObj->MonitoredValueKernelVa = NULL;
     }
@@ -1301,6 +1322,7 @@ DxgkpDereferenceSyncObject(
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
         DxgkpSyncUnregisterMonitoredFence(SyncObj);
 #endif
+        DxgkpSyncUnlinkView(SyncObj);
         DxgkpSyncUnpublishShare(SyncObj);
         DxgkpSyncDestroyPeriodicNotification(SyncObj);
         DxgkpSyncReleaseMonitoredPage(SyncObj);
@@ -1386,8 +1408,6 @@ DxgkpCpuWaitAdmission(
             return STATUS_DELETE_PENDING;
         if (Request->Objects[Index]->PublicType != D3DDDI_MONITORED_FENCE || Request->Objects[Index]->MonitoredValueKernelVa == NULL)
             return STATUS_INVALID_PARAMETER;
-        if (Request->Objects[Index]->Flags.NoWait)
-            return STATUS_ACCESS_DENIED;
     }
     return STATUS_SUCCESS;
 }
@@ -1411,20 +1431,30 @@ DxgkpReferenceMonitoredFenceArray(
     _In_ PDXGKRNL_DEVICE Device,
     _In_reads_(ObjectCount) CONST D3DKMT_HANDLE *ObjectHandles,
     _In_ ULONG ObjectCount,
+    _In_ BOOLEAN Signal,
     _Out_writes_(ObjectCount) PDXGKRNL_SYNC_OBJECT *Objects)
 {
+    D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS ViewFlags;
+    PDXGKRNL_DEVICE ViewDevice;
     NTSTATUS Status = STATUS_SUCCESS;
     ULONG Index;
 
     RtlZeroMemory(Objects, sizeof(*Objects) * ObjectCount);
     for (Index = 0; Index < ObjectCount; ++Index)
     {
-        Status = DxgkpReferenceSyncObjectByHandle(ObjectHandles[Index], PsGetCurrentProcess(), &Objects[Index]);
+        Status = DxgkpReferenceSyncObjectView(ObjectHandles[Index], PsGetCurrentProcess(), &Objects[Index], &ViewDevice, &ViewFlags);
         if (!NT_SUCCESS(Status))
             break;
-        if (Objects[Index]->Device != Device || Objects[Index]->PublicType != D3DDDI_MONITORED_FENCE || Objects[Index]->MonitoredValueKernelVa == NULL)
+        if (ViewDevice != Device || Objects[Index]->Device == NULL || Objects[Index]->Device->Adapter != Device->Adapter ||
+            Objects[Index]->PublicType != D3DDDI_MONITORED_FENCE || Objects[Index]->MonitoredValueKernelVa == NULL)
         {
             Status = STATUS_INVALID_PARAMETER;
+            ++Index;
+            break;
+        }
+        if ((Signal && ViewFlags.NoSignal) || (!Signal && ViewFlags.NoWait))
+        {
+            Status = STATUS_ACCESS_DENIED;
             ++Index;
             break;
         }
@@ -1667,7 +1697,7 @@ DxgkpCreateSynchronizationObjectInternal(
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_0)
     if (Info->Flags.SignalByKmd)
     {
-        if (Info->Type != D3DDDI_CPU_NOTIFICATION || Info->Flags.Shared)
+        if (Info->Type != D3DDDI_CPU_NOTIFICATION || Info->Flags.Shared || Info->Flags.CrossAdapter)
             return STATUS_INVALID_PARAMETER;
 #if (REACTOS_WDDM_TARGET_LEVEL < 3000)
         return STATUS_NOT_SUPPORTED;
@@ -1676,13 +1706,12 @@ DxgkpCreateSynchronizationObjectInternal(
 #endif
     if ((Info->Type == D3DDDI_MONITORED_FENCE ||
          Info->Type == D3DDDI_PERIODIC_MONITORED_FENCE) &&
-        Info->Flags.Shared)
+        Info->Flags.Shared &&
+        (Info->Type != D3DDDI_MONITORED_FENCE || !Info->Flags.NtSecuritySharing))
     {
         /*
-         * Native sharing needs an NT synchronization-object/security contract;
-         * the private global-handle alias is not that. Windows 11 reports the
-         * request as a bad parameter, which is what a caller sees when it asks
-         * for sharing without supplying those parameters.
+         * A monitored fence is shared only through an NT handle. Windows 11
+         * reports Shared without NtSecuritySharing as a bad parameter.
          */
         return STATUS_INVALID_PARAMETER;
     }
@@ -1768,7 +1797,9 @@ DxgkpCreateSynchronizationObjectInternal(
     {
         case D3DDDI_SYNCHRONIZATION_MUTEX:
             SyncObj->Info.SynchronizationMutex.InitialState = Info->SynchronizationMutex.InitialState ? TRUE : FALSE;
-            SyncObj->MutexOwned = Info->SynchronizationMutex.InitialState ? 1 : 0;
+            /* Windows 11 creates the mutex free when InitialState is TRUE and owned by its creator when FALSE. */
+            SyncObj->MutexOwned = Info->SynchronizationMutex.InitialState ? 0 : 1;
+            SyncObj->MutexQueuedOwner = SyncObj->MutexOwned ? DXGK_CONTEXT_SYNC_MUTEX_CREATOR_OWNER : NULL;
             SyncObj->FenceValue = SyncObj->MutexOwned ? 0 : 1;
             InitialEventState = !SyncObj->MutexOwned;
             break;
@@ -1777,6 +1808,7 @@ DxgkpCreateSynchronizationObjectInternal(
             SyncObj->Info.Semaphore.InitialCount = Info->Semaphore.InitialCount;
             SyncObj->SemaphoreLimit = Info->Semaphore.MaxCount;
             SyncObj->SemaphoreCount = Info->Semaphore.InitialCount;
+            SyncObj->SemaphoreQueuedCount = Info->Semaphore.InitialCount;
             SyncObj->FenceValue = Info->Semaphore.InitialCount;
             InitialEventState = Info->Semaphore.InitialCount != 0;
             break;
@@ -1807,6 +1839,8 @@ DxgkpCreateSynchronizationObjectInternal(
     InitializeListHead(&SyncObj->SyncObjListEntry);
     InitializeListHead(&SyncObj->DeviceSyncObjListEntry);
     InitializeListHead(&SyncObj->GlobalShareListEntry);
+    InitializeListHead(&SyncObj->ViewListHead);
+    InitializeListHead(&SyncObj->ViewListEntry);
     InitializeListHead(&SyncObj->PeriodicListEntry);
     DxgkPeriodicNotificationCoreInitialize(
         &SyncObj->PeriodicNotification);
@@ -1923,7 +1957,7 @@ DxgkpCreateSynchronizationObjectInternal(
         DxgkpDereferenceSyncObject(SyncObj);
         return STATUS_DELETE_PENDING;
     }
-    if (SyncObj->Flags.Shared)
+    if (SyncObj->Flags.Shared && !SyncObj->Flags.NtSecuritySharing)
         (VOID)DxgkpSyncPublishShare(SyncObj);
     *SyncObjectHandle = SyncObj->Handle;
     DXGKRNL_TRACE("DxgkCreateSynchronizationObject: handle=0x%X type=%d shared=0x%X\n", SyncObj->Handle, SyncObj->Info.Type, SyncObj->GlobalShareHandle);
@@ -1954,6 +1988,233 @@ DxgkSyncObjectQueryShareHandle(
     return Share;
 }
 
+static VOID
+DxgkpSyncLinkView(
+    _Inout_ PDXGKRNL_SYNC_OBJECT Backing,
+    _Inout_ PDXGKRNL_SYNC_OBJECT View)
+{
+    KIRQL OldIrql;
+
+    DxgkpSyncShareInitialize();
+    KeAcquireSpinLock(&DxgkSyncViewLock, &OldIrql);
+    InsertTailList(&Backing->ViewListHead, &View->ViewListEntry);
+    InterlockedIncrement(&Backing->ViewCount);
+    KeReleaseSpinLock(&DxgkSyncViewLock, OldIrql);
+}
+
+static VOID
+DxgkpSyncUnlinkView(
+    _Inout_ PDXGKRNL_SYNC_OBJECT View)
+{
+    KIRQL OldIrql;
+
+    if (View->BackingSyncObject == NULL)
+        return;
+    KeAcquireSpinLock(&DxgkSyncViewLock, &OldIrql);
+    if (DxgkpIsListEntryLinked(&View->ViewListEntry))
+    {
+        RemoveEntryList(&View->ViewListEntry);
+        InitializeListHead(&View->ViewListEntry);
+        InterlockedDecrement(&View->BackingSyncObject->ViewCount);
+    }
+    KeReleaseSpinLock(&DxgkSyncViewLock, OldIrql);
+}
+
+/*
+ * DxgkSyncWakeViews
+ *
+ * A state change of an object opened on other devices must reach waiters on
+ * those devices as well: their CPU waits are registered with their own
+ * device and their context streams are woken per device.
+ *
+ * IRQL: <= DISPATCH_LEVEL
+ */
+VOID
+DxgkSyncWakeViews(
+    _In_opt_ PDXGKRNL_SYNC_OBJECT SyncObj)
+{
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    if (SyncObj == NULL || InterlockedCompareExchange(&SyncObj->ViewCount, 0, 0) == 0)
+        return;
+    KeAcquireSpinLock(&DxgkSyncViewLock, &OldIrql);
+    DxgkContextOrderQueueDeviceWake(SyncObj->Device);
+    for (Entry = SyncObj->ViewListHead.Flink; Entry != &SyncObj->ViewListHead; Entry = Entry->Flink)
+    {
+        PDXGKRNL_SYNC_OBJECT View = CONTAINING_RECORD(Entry, DXGKRNL_SYNC_OBJECT, ViewListEntry);
+
+        if (View->Device != SyncObj->Device)
+            DxgkSyncWaitCoreReevaluate(&View->Device->SyncWaitRegistry);
+        DxgkContextOrderQueueDeviceWake(View->Device);
+    }
+    KeReleaseSpinLock(&DxgkSyncViewLock, OldIrql);
+}
+
+static VOID
+DxgkpSyncCancelViewWaits(
+    _In_ PDXGKRNL_SYNC_OBJECT SyncObj,
+    _In_ NTSTATUS Status)
+{
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    if (InterlockedCompareExchange(&SyncObj->ViewCount, 0, 0) == 0)
+        return;
+    KeAcquireSpinLock(&DxgkSyncViewLock, &OldIrql);
+    for (Entry = SyncObj->ViewListHead.Flink; Entry != &SyncObj->ViewListHead; Entry = Entry->Flink)
+    {
+        PDXGKRNL_SYNC_OBJECT View = CONTAINING_RECORD(Entry, DXGKRNL_SYNC_OBJECT, ViewListEntry);
+
+        if (View->Device != SyncObj->Device)
+            DxgkSyncWaitCoreCancelObject(&View->Device->SyncWaitRegistry, SyncObj, Status);
+    }
+    KeReleaseSpinLock(&DxgkSyncViewLock, OldIrql);
+}
+
+/* Maps the backing value page read-only into the opening process and, on a
+ * GpuMmu adapter, into the opening device's GPU address space. */
+static NTSTATUS
+DxgkpSyncMapViewPage(
+    _Inout_ PDXGKRNL_SYNC_OBJECT View,
+    _In_ PDXGKRNL_SYNC_OBJECT Backing)
+{
+    ULONG MappingPriority;
+    NTSTATUS Status;
+
+    if (Backing->MonitoredValueKernelVa == NULL)
+        return STATUS_INVALID_PARAMETER;
+    View->MonitoredValueMdl = IoAllocateMdl(Backing->MonitoredValueKernelVa, PAGE_SIZE, FALSE, FALSE, NULL);
+    if (View->MonitoredValueMdl == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    MmBuildMdlForNonPagedPool(View->MonitoredValueMdl);
+    MappingPriority = NormalPagePriority | MdlMappingNoExecute;
+    if (sizeof(PVOID) != sizeof(ULONG) && !DxgkpIsWow64Caller())
+        MappingPriority |= MdlMappingNoWrite;
+    _SEH2_TRY
+    {
+        View->MonitoredValueUserVa = MmMapLockedPagesSpecifyCache(View->MonitoredValueMdl, UserMode, MmCached, NULL, FALSE, MappingPriority);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        View->MonitoredValueUserVa = NULL;
+    }
+    _SEH2_END;
+    if (View->MonitoredValueUserVa == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    View->MonitoredValueProcess = PsGetCurrentProcess();
+    ObReferenceObject(View->MonitoredValueProcess);
+
+    if (View->Flags.NoGPUAccess)
+        return STATUS_SUCCESS;
+    if (View->Device->ProcessRecord == NULL || View->Device->Adapter == NULL)
+        return STATUS_NOT_SUPPORTED;
+    if (!View->Device->Adapter->GpuMmuCapsValid)
+        return STATUS_SUCCESS;
+    Status = DxgkGpuVaMapFencePage(View->Device->Adapter, View->Device->ProcessRecord, Backing->MonitoredValueKernelVa, &View->MonitoredValueGpuVa);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return DxgkGpuVaFlushPageTableUpdates(View->Device->ProcessRecord);
+}
+
+/*
+ * DxgkpSyncCreateView
+ *
+ * Creates a handle on Device for the authoritative object Backing.  The
+ * caller's references on Backing and Device pass to the view, which releases
+ * them when it is freed, whatever the outcome.
+ */
+static NTSTATUS
+DxgkpSyncCreateView(
+    _In_ PDXGKRNL_SYNC_OBJECT Backing,
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS Flags,
+    _Out_ D3DKMT_HANDLE *ViewHandle,
+    _Out_opt_ PVOID *CpuVa,
+    _Out_opt_ D3DGPU_VIRTUAL_ADDRESS *GpuVa)
+{
+    PDXGKRNL_SYNC_OBJECT Alias;
+    NTSTATUS Status;
+
+    *ViewHandle = 0;
+    Alias = (PDXGKRNL_SYNC_OBJECT)ExAllocatePoolWithTag(NonPagedPool, sizeof(*Alias), TAG_DXGK_SYNC);
+    if (Alias == NULL)
+    {
+        DxgkDereferenceDevice(Device);
+        DxgkpDereferenceSyncObject(Backing);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory(Alias, sizeof(*Alias));
+    Alias->hDevice = Device->Handle;
+    Alias->Device = Device;
+    Alias->OwnerProcess = PsGetCurrentProcess();
+    Alias->Info.Type = Backing->Info.Type;
+    Alias->PublicType = Backing->PublicType;
+    Alias->Flags = Flags;
+    Alias->RefCount = 1;
+    Alias->BackingSyncObject = Backing;
+    Alias->SemaphoreLimit = Backing->SemaphoreLimit;
+    Alias->Periodic = Backing->Periodic;
+    Alias->PeriodicVidPnTargetId = Backing->PeriodicVidPnTargetId;
+    KeInitializeEvent(&Alias->CpuEvent, SynchronizationEvent, FALSE);
+    InitializeListHead(&Alias->SyncObjListEntry);
+    InitializeListHead(&Alias->DeviceSyncObjListEntry);
+    InitializeListHead(&Alias->GlobalShareListEntry);
+    InitializeListHead(&Alias->ViewListHead);
+    InitializeListHead(&Alias->ViewListEntry);
+    InitializeListHead(&Alias->PeriodicListEntry);
+#if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
+    InitializeListHead(&Alias->KmdCpuEventListEntry);
+#endif
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
+    ExInitializeRundownProtection(
+        &Alias->MonitoredInterruptRundown);
+    Alias->MonitoredEngineAffinity =
+        Backing->MonitoredEngineAffinity;
+#endif
+    DxgkpSyncLinkView(Backing, Alias);
+
+    if (Alias->PublicType == D3DDDI_MONITORED_FENCE && CpuVa != NULL)
+    {
+        Status = DxgkpSyncMapViewPage(Alias, Backing);
+        if (!NT_SUCCESS(Status))
+        {
+            InterlockedExchange(&Alias->Destroying, 1);
+            DxgkpDereferenceSyncObject(Alias);
+            return Status;
+        }
+    }
+
+    Status = DxgkCreateOwnedHandle(DxgkHandleTypeSynchronizationObject, Alias, Device->Adapter, Alias->OwnerProcess, &Alias->Destroying, &Alias->TeardownClaimed, &Alias->Handle);
+    if (!NT_SUCCESS(Status))
+    {
+        InterlockedExchange(&Alias->Destroying, 1);
+        DxgkpDereferenceSyncObject(Alias);
+        return Status;
+    }
+
+    ExAcquireFastMutex(&Device->DeviceMutex);
+    if (InterlockedCompareExchange(&Device->Destroying, 0, 0) != 0 || InterlockedCompareExchange(&Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE)
+    {
+        Status = InterlockedCompareExchange(&Device->Destroying, 0, 0) != 0 ? STATUS_DELETE_PENDING : STATUS_DEVICE_REMOVED;
+        ExReleaseFastMutex(&Device->DeviceMutex);
+        DxgkRemoveOwnedHandleObject(DxgkHandleTypeSynchronizationObject, Alias);
+        InterlockedExchange(&Alias->Destroying, 1);
+        DxgkpDereferenceSyncObject(Alias);
+        return Status;
+    }
+    InsertTailList(&Device->SyncObjListHead, &Alias->DeviceSyncObjListEntry);
+    /* Device teardown may free the alias as soon as this mutex drops, so
+     * take what is returned while it is still held. */
+    *ViewHandle = Alias->Handle;
+    if (CpuVa != NULL)
+        *CpuVa = Alias->MonitoredValueUserVa;
+    if (GpuVa != NULL)
+        *GpuVa = Alias->MonitoredValueGpuVa;
+    ExReleaseFastMutex(&Device->DeviceMutex);
+    return STATUS_SUCCESS;
+}
+
 /*
  * DxgkOpenSynchronizationObject
  *
@@ -1973,7 +2234,7 @@ DxgkOpenSynchronizationObject(
     PDXGKRNL_ADAPTER Adapter;
     PDXGKRNL_DEVICE Device;
     PDXGKRNL_SYNC_OBJECT Backing = NULL;
-    PDXGKRNL_SYNC_OBJECT Alias;
+    D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS Flags;
     D3DKMT_HANDLE AliasHandle;
     PLIST_ENTRY Entry;
     NTSTATUS Status;
@@ -2035,67 +2296,230 @@ DxgkOpenSynchronizationObject(
         return STATUS_INVALID_HANDLE;
     }
 
-    Alias = (PDXGKRNL_SYNC_OBJECT)ExAllocatePoolWithTag(NonPagedPool, sizeof(*Alias), TAG_DXGK_SYNC);
-    if (Alias == NULL)
-    {
-        DxgkDereferenceDevice(Device);
-        DxgkpDereferenceSyncObject(Backing);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-    RtlZeroMemory(Alias, sizeof(*Alias));
-    Alias->hDevice = Device->Handle;
-    Alias->Device = Device;
-    Alias->OwnerProcess = PsGetCurrentProcess();
-    Alias->Info.Type = Backing->Info.Type;
-    Alias->PublicType = Backing->PublicType;
-    Alias->Flags = Backing->Flags;
-    Alias->Flags.Shared = 0;
-    Alias->RefCount = 1;
-    Alias->BackingSyncObject = Backing;
-    Alias->SemaphoreLimit = Backing->SemaphoreLimit;
-    Alias->Periodic = Backing->Periodic;
-    Alias->PeriodicVidPnTargetId = Backing->PeriodicVidPnTargetId;
-    KeInitializeEvent(&Alias->CpuEvent, SynchronizationEvent, FALSE);
-    InitializeListHead(&Alias->SyncObjListEntry);
-    InitializeListHead(&Alias->DeviceSyncObjListEntry);
-    InitializeListHead(&Alias->GlobalShareListEntry);
-    InitializeListHead(&Alias->PeriodicListEntry);
-#if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
-    InitializeListHead(&Alias->KmdCpuEventListEntry);
-#endif
-#if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
-    ExInitializeRundownProtection(
-        &Alias->MonitoredInterruptRundown);
-    Alias->MonitoredEngineAffinity =
-        Backing->MonitoredEngineAffinity;
-#endif
-
-    Status = DxgkCreateOwnedHandle(DxgkHandleTypeSynchronizationObject, Alias, Adapter, Alias->OwnerProcess, &Alias->Destroying, &Alias->TeardownClaimed, &Alias->Handle);
+    Flags = Backing->Flags;
+    Flags.Shared = 0;
+    Status = DxgkpSyncCreateView(Backing, Device, Flags, &AliasHandle, NULL, NULL);
     if (!NT_SUCCESS(Status))
-    {
-        InterlockedExchange(&Alias->Destroying, 1);
-        DxgkpDereferenceSyncObject(Alias);
         return Status;
-    }
-
-    ExAcquireFastMutex(&Device->DeviceMutex);
-    if (InterlockedCompareExchange(&Device->Destroying, 0, 0) != 0 || InterlockedCompareExchange(&Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE)
-    {
-        Status = InterlockedCompareExchange(&Device->Destroying, 0, 0) != 0 ? STATUS_DELETE_PENDING : STATUS_DEVICE_REMOVED;
-        ExReleaseFastMutex(&Device->DeviceMutex);
-        DxgkRemoveOwnedHandleObject(DxgkHandleTypeSynchronizationObject, Alias);
-        InterlockedExchange(&Alias->Destroying, 1);
-        DxgkpDereferenceSyncObject(Alias);
-        return Status;
-    }
-    InsertTailList(&Device->SyncObjListHead, &Alias->DeviceSyncObjListEntry);
-    /* Device teardown may free the alias as soon as this mutex drops, so
-     * take what is returned while it is still held. */
-    AliasHandle = Alias->Handle;
-    ExReleaseFastMutex(&Device->DeviceMutex);
-
     pData->hSyncObject = AliasHandle;
     return STATUS_SUCCESS;
+}
+
+/* ========================================================================
+ * NT-handle sharing
+ *
+ * A monitored fence created with Shared and NtSecuritySharing is exported by
+ * D3DKMTShareObjects as an NT object that references the authoritative sync
+ * object.  D3DKMTOpenSyncObjectFromNtHandle2 opens it on a device of the
+ * calling process; the access granted to the NT handle decides whether that
+ * view may wait on and signal the fence.
+ * ====================================================================== */
+
+#define DXGK_SYNC_OPEN_RESERVED_FLAGS 0x7FFFF800UL
+
+typedef struct _DXGKRNL_SHARED_SYNC_OBJECT
+{
+    PDXGKRNL_SYNC_OBJECT SyncObject;
+} DXGKRNL_SHARED_SYNC_OBJECT, *PDXGKRNL_SHARED_SYNC_OBJECT;
+
+static VOID
+NTAPI
+DxgkpDeleteSharedSyncObject(
+    _In_ PVOID Object)
+{
+    PDXGKRNL_SHARED_SYNC_OBJECT SharedObject = Object;
+
+    if (SharedObject->SyncObject != NULL)
+    {
+        DxgkpDereferenceSyncObject(SharedObject->SyncObject);
+        SharedObject->SyncObject = NULL;
+    }
+}
+
+POBJECT_TYPE
+DxgkSyncSharedObjectType(VOID)
+{
+    return DxgkSharedSyncObjectType;
+}
+
+NTSTATUS
+DxgkSyncSharedObjectsInitialize(VOID)
+{
+    OBJECT_TYPE_INITIALIZER TypeInitializer;
+    UNICODE_STRING TypeName;
+
+    if (DxgkSharedSyncObjectType != NULL)
+        return STATUS_SUCCESS;
+    RtlZeroMemory(&TypeInitializer, sizeof(TypeInitializer));
+    RtlInitUnicodeString(&TypeName, L"DxgkSharedSyncObject");
+    TypeInitializer.Length = sizeof(TypeInitializer);
+    TypeInitializer.InvalidAttributes = OBJ_OPENLINK;
+    TypeInitializer.GenericMapping.GenericRead = STANDARD_RIGHTS_READ | SYNCHRONIZE | D3DDDI_SYNC_OBJECT_WAIT;
+    TypeInitializer.GenericMapping.GenericWrite = STANDARD_RIGHTS_WRITE | D3DDDI_SYNC_OBJECT_SIGNAL;
+    TypeInitializer.GenericMapping.GenericExecute = STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE;
+    TypeInitializer.GenericMapping.GenericAll = D3DDDI_SYNC_OBJECT_ALL_ACCESS;
+    TypeInitializer.ValidAccessMask = D3DDDI_SYNC_OBJECT_ALL_ACCESS;
+    TypeInitializer.PoolType = NonPagedPool;
+    TypeInitializer.DefaultNonPagedPoolCharge = sizeof(DXGKRNL_SHARED_SYNC_OBJECT);
+    TypeInitializer.UseDefaultObject = TRUE;
+    TypeInitializer.SecurityRequired = TRUE;
+    TypeInitializer.DeleteProcedure = DxgkpDeleteSharedSyncObject;
+    return ObCreateObjectType(&TypeName, &TypeInitializer, NULL, &DxgkSharedSyncObjectType);
+}
+
+/*
+ * DxgkSyncShareNtObject
+ *
+ * D3DKMTShareObjects for one sync object handle of the calling process.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkSyncShareNtObject(
+    _In_ D3DKMT_HANDLE hSyncObject,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _Out_ PHANDLE NtHandle)
+{
+    PDXGKRNL_SHARED_SYNC_OBJECT SharedObject;
+    PDXGKRNL_SYNC_OBJECT SyncObj;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    *NtHandle = NULL;
+    if (DxgkSharedSyncObjectType == NULL)
+        return STATUS_DEVICE_NOT_READY;
+    Status = DxgkpReferenceSyncObjectByHandle(hSyncObject, PsGetCurrentProcess(), &SyncObj);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_PARAMETER;
+    if (!SyncObj->Flags.NtSecuritySharing)
+    {
+        DxgkpDereferenceSyncObject(SyncObj);
+        return STATUS_INVALID_PARAMETER;
+    }
+    Status = ObCreateObject(KernelMode, DxgkSharedSyncObjectType, ObjectAttributes, KernelMode, NULL,
+                            sizeof(*SharedObject), 0, 0, (PVOID *)&SharedObject);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkpDereferenceSyncObject(SyncObj);
+        return Status;
+    }
+    SharedObject->SyncObject = SyncObj;
+    return ObInsertObject(SharedObject, NULL, DesiredAccess, 0, NULL, NtHandle);
+}
+
+static NTSTATUS
+DxgkpSyncReferenceNtShared(
+    _In_ HANDLE NtHandle,
+    _Out_ PDXGKRNL_SYNC_OBJECT *SyncObj,
+    _Out_opt_ ACCESS_MASK *GrantedAccess)
+{
+    PDXGKRNL_SHARED_SYNC_OBJECT SharedObject;
+    OBJECT_HANDLE_INFORMATION HandleInformation;
+    NTSTATUS Status;
+
+    *SyncObj = NULL;
+    if (DxgkSharedSyncObjectType == NULL)
+        return STATUS_DEVICE_NOT_READY;
+    Status = ObReferenceObjectByHandle(NtHandle, READ_CONTROL, DxgkSharedSyncObjectType, UserMode,
+                                       (PVOID *)&SharedObject, &HandleInformation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    /* FIXME: the NT object keeps the sync object only until its creator destroys it; Windows keeps it alive for every holder. */
+    if (SharedObject->SyncObject == NULL || !DxgkpReferenceSyncObject(SharedObject->SyncObject))
+    {
+        ObDereferenceObject(SharedObject);
+        return STATUS_DELETE_PENDING;
+    }
+    *SyncObj = SharedObject->SyncObject;
+    if (GrantedAccess != NULL)
+        *GrantedAccess = HandleInformation.GrantedAccess;
+    ObDereferenceObject(SharedObject);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * DxgkSyncOpenFromNtHandle
+ *
+ * D3DKMTOpenSyncObjectFromNtHandle: the device-less open.  Windows 11 refuses
+ * it for monitored fences, which need the device form.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkSyncOpenFromNtHandle(
+    _In_ HANDLE NtHandle,
+    _Out_ D3DKMT_HANDLE *hSyncObject)
+{
+    PDXGKRNL_SYNC_OBJECT SyncObj;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    *hSyncObject = 0;
+    Status = DxgkpSyncReferenceNtShared(NtHandle, &SyncObj, NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (SyncObj->PublicType == D3DDDI_MONITORED_FENCE || SyncObj->PublicType == D3DDDI_PERIODIC_MONITORED_FENCE)
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        Status = STATUS_NOT_SUPPORTED; /* TODO: legacy sync objects shared through an NT handle */
+    DxgkpDereferenceSyncObject(SyncObj);
+    return Status;
+}
+
+/*
+ * DxgkSyncOpenFromNtHandle2
+ *
+ * D3DKMTOpenSyncObjectFromNtHandle2: opens the shared object on hDevice.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkSyncOpenFromNtHandle2(
+    _In_ HANDLE NtHandle,
+    _In_ D3DKMT_HANDLE hDevice,
+    _In_ UINT FlagsValue,
+    _Out_ D3DKMT_HANDLE *hSyncObject,
+    _Out_ PVOID *CpuVa,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *GpuVa)
+{
+    D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS Flags;
+    PDXGKRNL_SYNC_OBJECT SyncObj;
+    PDXGKRNL_ADAPTER Adapter;
+    PDXGKRNL_DEVICE Device;
+    ACCESS_MASK GrantedAccess;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    *hSyncObject = 0;
+    *CpuVa = NULL;
+    *GpuVa = 0;
+    if ((FlagsValue & DXGK_SYNC_OPEN_RESERVED_FLAGS) != 0)
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkReferenceOwnedDeviceByHandle(hDevice, PsGetCurrentProcess(), &Adapter, &Device);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkpSyncReferenceNtShared(NtHandle, &SyncObj, &GrantedAccess);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkDereferenceDevice(Device);
+        return Status;
+    }
+    Flags.Value = FlagsValue;
+    Flags.NoSignal = (GrantedAccess & D3DDDI_SYNC_OBJECT_SIGNAL) == 0;
+    Flags.NoWait = (GrantedAccess & D3DDDI_SYNC_OBJECT_WAIT) == 0;
+    Flags.Shared = 0;
+    Flags.NtSecuritySharing = SyncObj->Flags.NtSecuritySharing;
+    /* TODO: CrossAdapter opens on another adapter */
+    if (SyncObj->Device == NULL || SyncObj->Device->Adapter != Adapter ||
+        Flags.NoGPUAccess != SyncObj->Flags.NoGPUAccess ||
+        SyncObj->PublicType != D3DDDI_MONITORED_FENCE)
+    {
+        DxgkpDereferenceSyncObject(SyncObj);
+        DxgkDereferenceDevice(Device);
+        return STATUS_INVALID_PARAMETER;
+    }
+    return DxgkpSyncCreateView(SyncObj, Device, Flags, hSyncObject, CpuVa, GpuVa);
 }
 
 /*
@@ -2223,6 +2647,7 @@ DxgkDestroySynchronizationObject(
     DxgkpSyncUnregisterMonitoredFence(SyncObj);
 #endif
     DxgkSyncWaitCoreCancelObject(&SyncObj->Device->SyncWaitRegistry, SyncObj, STATUS_DELETE_PENDING);
+    DxgkpSyncCancelViewWaits(SyncObj, STATUS_DELETE_PENDING);
     DxgkpSyncDestroyPeriodicNotification(SyncObj);
     KeSetEvent(&SyncObj->CpuEvent, IO_NO_INCREMENT, FALSE);
 
@@ -2339,14 +2764,12 @@ DxgkpSyncPublishAdmission(
             return STATUS_INVALID_PARAMETER;
         if (Admission->PublicCpuSignal && InterlockedCompareExchange(&SyncObj->Destroying, 0, 0) != 0)
             return STATUS_DELETE_PENDING;
-        if (Admission->PublicCpuSignal && SyncObj->Flags.NoSignal)
-            return STATUS_ACCESS_DENIED;
     }
     return STATUS_SUCCESS;
 }
 
-NTSTATUS
-DxgkSyncPublishFenceBatch(
+static NTSTATUS
+DxgkpSyncPublishDeviceBatch(
     _In_reads_(ObjectCount) PDXGKRNL_SYNC_OBJECT *Objects,
     _In_reads_(ObjectCount) CONST UINT64 *FenceValues,
     _In_ ULONG ObjectCount,
@@ -2355,17 +2778,12 @@ DxgkSyncPublishFenceBatch(
 {
     DXGK_SYNC_WAIT_CORE_UPDATE Updates[D3DDDI_MAX_OBJECT_SIGNALED];
     DXGKRNL_SYNC_PUBLISH_ADMISSION Admission;
-    PDXGKRNL_DEVICE Device;
+    PDXGKRNL_DEVICE Device = Objects[0]->Device;
     NTSTATUS Status;
     ULONG Index;
 
-    if (Objects == NULL || FenceValues == NULL || ObjectCount == 0 || ObjectCount > D3DDDI_MAX_OBJECT_SIGNALED || Objects[0] == NULL)
-        return STATUS_INVALID_PARAMETER;
-    Device = Objects[0]->Device;
     for (Index = 0; Index < ObjectCount; ++Index)
     {
-        if (Objects[Index] == NULL || Objects[Index]->Device != Device)
-            return STATUS_INVALID_PARAMETER;
         Updates[Index].Object = Objects[Index];
         Updates[Index].FenceValue = &Objects[Index]->FenceValue;
         Updates[Index].PublishedValue = (volatile UINT64 *)Objects[Index]->MonitoredValueKernelVa;
@@ -2379,9 +2797,64 @@ DxgkSyncPublishFenceBatch(
     if (NT_SUCCESS(Status))
     {
         for (Index = 0; Index < ObjectCount; ++Index)
+        {
             KeSetEvent(&Objects[Index]->CpuEvent, IO_NO_INCREMENT, FALSE);
+            DxgkSyncWakeViews(Objects[Index]);
+        }
         if (PublicCpuSignal)
             DxgkContextOrderWakeDevice(Device);
+    }
+    return Status;
+}
+
+/*
+ * A batch normally names objects of one device.  A context or CPU signal
+ * through an opened view also names objects created on other devices of the
+ * adapter; each device's objects publish under that device's wait registry.
+ */
+NTSTATUS
+DxgkSyncPublishFenceBatch(
+    _In_reads_(ObjectCount) PDXGKRNL_SYNC_OBJECT *Objects,
+    _In_reads_(ObjectCount) CONST UINT64 *FenceValues,
+    _In_ ULONG ObjectCount,
+    _In_ BOOLEAN AllowFenceRewind,
+    _In_ BOOLEAN PublicCpuSignal)
+{
+    PDXGKRNL_SYNC_OBJECT GroupObjects[D3DDDI_MAX_OBJECT_SIGNALED];
+    UINT64 GroupValues[D3DDDI_MAX_OBJECT_SIGNALED];
+    BOOLEAN Published[D3DDDI_MAX_OBJECT_SIGNALED];
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG GroupCount;
+    ULONG First;
+    ULONG Index;
+
+    if (Objects == NULL || FenceValues == NULL || ObjectCount == 0 || ObjectCount > D3DDDI_MAX_OBJECT_SIGNALED || Objects[0] == NULL)
+        return STATUS_INVALID_PARAMETER;
+    for (Index = 0; Index < ObjectCount; ++Index)
+    {
+        if (Objects[Index] == NULL || Objects[Index]->Device == NULL ||
+            Objects[Index]->Device->Adapter != Objects[0]->Device->Adapter)
+            return STATUS_INVALID_PARAMETER;
+        Published[Index] = FALSE;
+    }
+    for (First = 0; First < ObjectCount; ++First)
+    {
+        if (Published[First])
+            continue;
+        GroupCount = 0;
+        for (Index = First; Index < ObjectCount; ++Index)
+        {
+            if (Published[Index] || Objects[Index]->Device != Objects[First]->Device)
+                continue;
+            GroupObjects[GroupCount] = Objects[Index];
+            GroupValues[GroupCount] = FenceValues[Index];
+            ++GroupCount;
+            Published[Index] = TRUE;
+        }
+        /* FIXME: a refusal in a later device group leaves the earlier groups published */
+        Status = DxgkpSyncPublishDeviceBatch(GroupObjects, GroupValues, GroupCount, AllowFenceRewind, PublicCpuSignal);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
     return Status;
 }
@@ -2407,6 +2880,9 @@ DxgkpSyncObjectPublishRetiredFence(
     DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_SIGNAL);
     NTSTATUS Result = DxgkpSyncObjectPublishRetiredFenceMeasured(SyncObj, FenceValue);
     DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Result), 0);
+    /* A context stream may be parked on this fence, and nothing else may wake it. */
+    if (NT_SUCCESS(Result))
+        DxgkContextOrderQueueDeviceWake(SyncObj->Device);
     return Result;
 }
 
@@ -2464,6 +2940,8 @@ DxgkSyncObjectCpuSignal(
     _In_ D3DKMT_HANDLE hSyncObject,
     _In_ UINT64 FenceValue)
 {
+    D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS ViewFlags;
+    PDXGKRNL_DEVICE ViewDevice;
     PDXGKRNL_SYNC_OBJECT SyncObj;
     PDXGKRNL_SYNC_OBJECT Objects[1];
     UINT64 FenceValues[1];
@@ -2471,14 +2949,19 @@ DxgkSyncObjectCpuSignal(
 
     PAGED_CODE();
 
-    Status = DxgkpReferenceSyncObjectByHandle(hSyncObject, PsGetCurrentProcess(), &SyncObj);
+    Status = DxgkpReferenceSyncObjectView(hSyncObject, PsGetCurrentProcess(), &SyncObj, &ViewDevice, &ViewFlags);
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if ((hDevice != 0 && SyncObj->hDevice != hDevice) || SyncObj->PublicType != D3DDDI_MONITORED_FENCE || SyncObj->MonitoredValueKernelVa == NULL)
+    if ((hDevice != 0 && (ViewDevice == NULL || ViewDevice->Handle != hDevice)) || SyncObj->PublicType != D3DDDI_MONITORED_FENCE || SyncObj->MonitoredValueKernelVa == NULL)
     {
         DxgkpDereferenceSyncObject(SyncObj);
         return STATUS_INVALID_PARAMETER;
+    }
+    if (ViewFlags.NoSignal)
+    {
+        DxgkpDereferenceSyncObject(SyncObj);
+        return STATUS_ACCESS_DENIED;
     }
     Objects[0] = SyncObj;
     FenceValues[0] = FenceValue;
@@ -2504,7 +2987,7 @@ DxgkSyncObjectCpuSignalBatch(
         return STATUS_INVALID_PARAMETER;
     if ((Flags.Value & ~DXGK_CPU_SIGNAL_ALLOW_FENCE_REWIND) != 0)
         return STATUS_NOT_SUPPORTED;
-    Status = DxgkpReferenceMonitoredFenceArray(Device, ObjectHandles, ObjectCount, Objects);
+    Status = DxgkpReferenceMonitoredFenceArray(Device, ObjectHandles, ObjectCount, TRUE, Objects);
     if (!NT_SUCCESS(Status))
         return Status;
     Status = DxgkSyncPublishFenceBatch(Objects, FenceValues, ObjectCount, Flags.AllowFenceRewind != 0, TRUE);
@@ -2705,7 +3188,8 @@ DxgkSyncObjectCpuWaitBatch(
     _In_reads_(ObjectCount) CONST UINT64 *FenceValues,
     _In_ ULONG ObjectCount,
     _In_opt_ HANDLE AsyncEventHandle,
-    _In_ BOOLEAN WaitAny)
+    _In_ BOOLEAN WaitAny,
+    _In_ KPROCESSOR_MODE WaitMode)
 {
     PDXGKRNL_CPU_WAIT_REQUEST Request;
     NTSTATUS Status;
@@ -2741,7 +3225,7 @@ DxgkSyncObjectCpuWaitBatch(
         KeInitializeEvent(&Request->SynchronousEvent, NotificationEvent, FALSE);
         Request->CompletionEvent = &Request->SynchronousEvent;
     }
-    Status = DxgkpReferenceMonitoredFenceArray(Device, ObjectHandles, ObjectCount, Request->Objects);
+    Status = DxgkpReferenceMonitoredFenceArray(Device, ObjectHandles, ObjectCount, FALSE, Request->Objects);
     if (!NT_SUCCESS(Status))
     {
         if (Request->EventObjectReferenced)
@@ -2799,7 +3283,7 @@ DxgkSyncObjectCpuWaitBatch(
         ULONG Slices = 0;
 
         Slice.QuadPart = -50000000LL; /* 5 s */
-        while (KeWaitForSingleObject(&Request->SynchronousEvent, Executive, KernelMode, FALSE, &Slice) == STATUS_TIMEOUT)
+        while ((Status = KeWaitForSingleObject(&Request->SynchronousEvent, UserRequest, WaitMode, FALSE, &Slice)) == STATUS_TIMEOUT)
         {
             Slices++;
             if (Slices == 1 || (Slices % 12) == 0)
@@ -2821,7 +3305,8 @@ DxgkSyncObjectCpuWaitBatch(
             }
         }
     }
-    Status = Request->CoreRequest.CompletionStatus;
+    if (Status == STATUS_SUCCESS)
+        Status = Request->CoreRequest.CompletionStatus;
     DxgkpCpuWaitRequestDereference(Request);
     return Status;
 }
@@ -2873,7 +3358,7 @@ DxgkSyncObjectCpuWait(
         DxgkpDereferenceSyncObject(SyncObj);
         return Reached ? STATUS_SUCCESS : (TdrAffected ? STATUS_DEVICE_REMOVED : STATUS_TIMEOUT);
     }
-    Status = DxgkSyncObjectCpuWaitBatch(SyncObj->Device, &hSyncObject, &FenceValue, 1, NULL, FALSE);
+    Status = DxgkSyncObjectCpuWaitBatch(SyncObj->Device, &hSyncObject, &FenceValue, 1, NULL, FALSE, KernelMode);
     DxgkpDereferenceSyncObject(SyncObj);
     return Status;
 }
@@ -2914,6 +3399,7 @@ DxgkCleanupDeviceSynchronizationObjects(
         InitializeListHead(Entry);
         ExReleaseFastMutex(&Device->DeviceMutex);
         DxgkSyncWaitCoreCancelObject(&Device->SyncWaitRegistry, SyncObj, STATUS_DELETE_PENDING);
+        DxgkpSyncCancelViewWaits(SyncObj, STATUS_DELETE_PENDING);
 
         if (!OwnsTeardown)
         {

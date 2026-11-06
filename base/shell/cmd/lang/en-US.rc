@@ -21,6 +21,8 @@ called procedure are inherited by the caller.\n"
 default directory.\n"
     WCMD_CHDIR, "CHDIR <directory> changes the current default directory.\n"
     WCMD_CLS, "CLS clears the console screen.\n"
+    WCMD_BREAK, "BREAK sets or clears extended CTRL+C checking on DOS. It has no effect on\n\
+Windows and is kept for DOS batch files.\n"
     WCMD_COPY, "COPY <filename> copies a file.\n"
     WCMD_DATE, "DATE shows or changes the system date.\n"
     WCMD_DEL, "DEL <filename> deletes a file or set of files.\n"

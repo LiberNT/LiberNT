@@ -19,7 +19,7 @@
 @ stdcall -stub -version=0x600+ AdjustCalendarDate(ptr long long)
 @ stdcall AllocConsole() kernelbase.AllocConsole
 @ stdcall AllocateUserPhysicalPages(long ptr ptr)
-@ stdcall -stub -version=0x600+ AllocateUserPhysicalPagesNuma(ptr ptr ptr long)
+@ stdcall -version=0x600+ AllocateUserPhysicalPagesNuma(ptr ptr ptr long)
 @ stdcall -version=0x602+ AppXFreeMemory(ptr) kernelbase.AppXFreeMemory
 @ stdcall -version=0x602+ AppXGetPackageSid(wstr ptr) kernelbase.AppXGetPackageSid
 @ stdcall -version=0x600+ ApplicationRecoveryFinished(long)
@@ -46,7 +46,7 @@
 @ stdcall BaseQueryModuleData(str str ptr ptr ptr) ;check
 @ stdcall -version=0x602+ BaseReadAppCompatDataForProcess(ptr ptr ptr)
 @ stdcall BaseSetLastNTError(long)
-@ stdcall -version=0x600+ BaseThreadInitThunk(long ptr ptr)
+@ fastcall -version=0x600+ BaseThreadInitThunk(long ptr ptr)
 ;@ stdcall -version=0x502 -arch=x86_64 BaseThreadStart()
 @ stdcall BaseUpdateAppcompatCache(long long long)
 @ stdcall BasepCheckBadapp(long ptr long long long long long long long)
@@ -141,8 +141,8 @@
 @ stdcall CreateFiberEx(long long long ptr ptr)
 @ stdcall CreateFileA(str long long ptr long long long)
 @ stdcall CreateFileMappingA(long ptr long long long str)
-@ stdcall -stub -version=0x600+ CreateFileMappingNumaA(ptr ptr long long long str long)
-@ stdcall -stub -version=0x600+ CreateFileMappingNumaW(ptr ptr long long long wstr long)
+@ stdcall -version=0x600+ CreateFileMappingNumaA(ptr ptr long long long str long)
+@ stdcall -version=0x600+ CreateFileMappingNumaW(ptr ptr long long long wstr long)
 @ stdcall CreateFileMappingW(long ptr long long long wstr)
 @ stdcall -stub -version=0x600+ CreateFileTransactedA(str long long ptr long long ptr ptr ptr ptr)
 @ stdcall -stub -version=0x600+ CreateFileTransactedW(wstr long long ptr long long ptr ptr ptr ptr)
@@ -593,12 +593,16 @@
 @ stdcall GetNextVDMCommand(long)
 @ stdcall -version=0x500-0x502 GetNlsSectionName(long long long str str long)
 @ stdcall GetNumaAvailableMemoryNode(long ptr)
+@ stdcall -version=0x601+ GetNumaAvailableMemoryNodeEx(long ptr)
 @ stdcall GetNumaHighestNodeNumber(ptr)
+@ stdcall -version=0x601+ GetNumaNodeNumberFromHandle(ptr ptr)
 @ stdcall GetNumaNodeProcessorMask(long ptr)
 @ stdcall -version=0x601+ GetNumaNodeProcessorMaskEx(long ptr)
+@ stdcall -version=0xA00+ GetNumaNodeProcessorMask2(long ptr long ptr)
 @ stdcall GetNumaProcessorNode(long ptr)
 @ stdcall GetNumaProcessorNodeEx(ptr ptr)
-@ stub -version=0x600+ GetNumaProximityNode
+@ stdcall -version=0x600+ GetNumaProximityNode(long ptr)
+@ stdcall -version=0x601+ GetNumaProximityNodeEx(long ptr)
 @ stdcall GetNumberFormatA(long long str ptr ptr long)
 @ stdcall -version=0x600+ GetNumberFormatEx(wstr long wstr ptr wstr long)
 @ stdcall GetNumberFormatW(long long wstr ptr ptr long)
@@ -741,7 +745,7 @@
 @ stdcall GetWindowsDirectoryA(ptr long)
 @ stdcall GetWindowsDirectoryW(ptr long)
 @ stdcall GetWriteWatch(long ptr long ptr ptr ptr)
-@ stdcall -version=0x601+ -arch=x86_64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
+@ stdcall -version=0x601+ -arch=i386,x86_64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
 @ stdcall GlobalAddAtomA(str)
 @ stdcall GlobalAddAtomW(wstr)
 @ stdcall GlobalAlloc(long long)
@@ -795,8 +799,8 @@
 @ stdcall -version=0x600+ InitOnceExecuteOnce(ptr ptr ptr ptr)
 @ stdcall -version=0x600+ InitOnceInitialize(ptr) ntdll.RtlRunOnceInitialize
 @ stdcall -version=0x600+ InitializeConditionVariable(ptr) ntdll.RtlInitializeConditionVariable
-@ stdcall -version=0x601+ -arch=win64 InitializeContext(ptr long ptr ptr) kernelbase.InitializeContext
-@ stdcall -version=0xA00+ -arch=win64 InitializeContext2(ptr long ptr ptr int64) kernelbase.InitializeContext2
+@ stdcall -version=0x601+ InitializeContext(ptr long ptr ptr) kernelbase.InitializeContext
+@ stdcall -version=0xA00+ InitializeContext2(ptr long ptr ptr int64) kernelbase.InitializeContext2
 @ stdcall InitializeCriticalSection(ptr)
 @ stdcall InitializeCriticalSectionAndSpinCount(ptr long)
 @ stdcall -version=0x600+ InitializeCriticalSectionEx(ptr long long)
@@ -909,7 +913,7 @@
 @ stdcall LocalSize(long)
 @ stdcall LocalUnlock(long)
 @ stdcall -version=0x600+ LocaleNameToLCID(wstr long) kernelbase.LocaleNameToLCID
-@ stdcall -version=0x601+ -arch=x86_64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
+@ stdcall -version=0x601+ -arch=i386,x86_64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
 @ stdcall LockFile(long long long long long)
 @ stdcall LockFileEx(long long long long long ptr)
 @ stdcall LockResource(long)
@@ -918,7 +922,7 @@
 @ stdcall MapUserPhysicalPagesScatter(ptr long ptr)
 @ stdcall MapViewOfFile(long long long long long)
 @ stdcall MapViewOfFileEx(long long long long long ptr)
-@ stub -version=0x600+ MapViewOfFileExNuma
+@ stdcall -version=0x600+ MapViewOfFileExNuma(long long long long long ptr long)
 @ stdcall Module32First(long ptr)
 @ stdcall Module32FirstW(long ptr)
 @ stdcall Module32Next(long ptr)
@@ -1295,7 +1299,7 @@
 @ stdcall SetVolumeMountPointW(wstr wstr)
 @ stdcall SetWaitableTimer(long ptr long ptr ptr long)
 @ stdcall -version=0x601+ SetWaitableTimerEx(long ptr long ptr ptr ptr long)
-@ stdcall -version=0x601+ -arch=x86_64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
+@ stdcall -version=0x601+ -arch=i386,x86_64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
 @ stdcall SetupComm(long long long)
 @ stdcall ShowConsoleCursor(long long) kernelbase.ShowConsoleCursor
 @ stdcall SignalObjectAndWait(long long long long)
@@ -1359,7 +1363,7 @@
 @ stdcall VerifyVersionInfoW(long long double)
 @ stdcall VirtualAlloc(ptr long long long)
 @ stdcall VirtualAllocEx(long ptr long long long)
-@ stub -version=0x600+ VirtualAllocExNuma
+@ stdcall -version=0x600+ VirtualAllocExNuma(long ptr long long long long)
 @ stdcall VirtualFree(ptr long long)
 @ stdcall VirtualFreeEx(long ptr long long)
 @ stdcall VirtualLock(ptr long)

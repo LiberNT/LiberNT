@@ -53,6 +53,7 @@ set(ALPC_SOURCE
     TpAlpc.c)
 
 list(APPEND SOURCE
+    ApiSetMap.c
     DllLoadNotification.c
     DebugRegisters.c
     FileStatInformation.c
@@ -149,6 +150,7 @@ list(APPEND SOURCE
     RtlDosPathNameToNtPathName_U.c
     RtlDosSearchPath_U.c
     RtlDosSearchPath_Ustr.c
+    RtlExitUserProcess.c
     RtlFirstFreeAce.c
     RtlGenerate8dot3Name.c
     RtlGetFullPathName_U.c
@@ -162,6 +164,7 @@ list(APPEND SOURCE
     RtlGetProductInfo.c
     RtlGetUnloadEventTrace.c
     RtlHandle.c
+    RtlHeapDecommit.c
     RtlHeapFreeCoalesce.c
     RtlImageDirectoryEntryToData.c
     RtlImageRvaToVa.c
@@ -180,6 +183,7 @@ list(APPEND SOURCE
     RtlReAllocateHeap.c
     RtlSRWLock.c
     RtlRemovePrivileges.c
+    SehHandlerLocals.c
     RtlUnhandledExceptionFilter.c
     RtlUnicodeStringToAnsiString.c
     RtlUnicodeStringToCountedOemString.c
@@ -189,6 +193,7 @@ list(APPEND SOURCE
     RtlWaitOnAddress.c
     RtlxUnicodeStringToAnsiSize.c
     RtlxUnicodeStringToOemSize.c
+    SatisfiedWait.c
     ScanfSecure.c
     StackOverflow.c
     StackProbe.c
@@ -209,7 +214,7 @@ if(ARCH STREQUAL "i386")
         i386/NtCreateThread.S
     )
 elseif(ARCH STREQUAL "amd64")
-    list(APPEND SOURCE NullGsSelector.c RtlRestoreContextConsolidate.c SyscallStub.c x87Exception.c)
+    list(APPEND SOURCE NullGsSelector.c RtlRestoreContextConsolidate.c RtlVirtualUnwindFragment.c SyscallStub.c x87Exception.c)
     add_asm_files(ntdll_apitest_asm
         ../crt/amd64/setjmp_helper.s
         amd64/NtContinue.S

@@ -273,10 +273,6 @@ static NTSTATUS NTAPI SendComplete
         SendReq = GetLockedData(NextIrp, NextIrpSp);
         Map = (PAFD_MAPBUF)(SendReq->BufferArray + SendReq->BufferCount);
 
-        /* A partially consumed IRP is already in the window. */
-        if (NextIrp->Tail.Overlay.DriverContext[3])
-            NextIrp = NULL;
-
         AFD_DbgPrint(MID_TRACE,("SendReq @ %p\n", SendReq));
 
         SpaceAvail = (FCB->Send.BytesUsed < FCB->Send.Size) ? FCB->Send.Size - FCB->Send.BytesUsed : 0;
@@ -292,6 +288,10 @@ static NTSTATUS NTAPI SendComplete
         BytesAlreadyCopied = NextIrp->IoStatus.Information;
         ASSERT(BytesAlreadyCopied <= RequestLength);
         RequestLength -= BytesAlreadyCopied;
+
+        /* A partially consumed IRP is already in the window. */
+        if (NextIrp->Tail.Overlay.DriverContext[3])
+            NextIrp = NULL;
 
         if (SpaceAvail && RequestLength <= FCB->Send.Size)
             SpaceAvail = RequestLength;

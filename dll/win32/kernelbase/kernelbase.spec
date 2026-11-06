@@ -119,7 +119,7 @@
 @ stdcall ConvertThreadToFiber(ptr) kernel32.ConvertThreadToFiber
 @ stdcall ConvertThreadToFiberEx(ptr long) kernel32.ConvertThreadToFiberEx
 @ stdcall ConvertToAutoInheritPrivateObjectSecurity(ptr ptr ptr ptr long ptr)
-@ stdcall -arch=win64 CopyContext(ptr long ptr)
+@ stdcall CopyContext(ptr long ptr)
 @ stdcall -version=0x602+ CopyFile2(wstr wstr ptr) kernel32.CopyFile2
 @ stdcall CopyFileExW(wstr wstr ptr ptr ptr long) kernel32.CopyFileExW
 @ stdcall CopyFileW(wstr wstr long) kernel32.CopyFileW
@@ -491,8 +491,9 @@
 @ stdcall GetNamedPipeInfo(long ptr ptr ptr ptr) kernel32.GetNamedPipeInfo
 @ stdcall GetNativeSystemInfo(ptr) kernel32.GetNativeSystemInfo
 @ stdcall GetNumaHighestNodeNumber(ptr) kernel32.GetNumaHighestNodeNumber
+@ stdcall -version=0xA00+ GetNumaNodeProcessorMask2(long ptr long ptr) kernel32.GetNumaNodeProcessorMask2
 @ stdcall -version=0x601+ GetNumaNodeProcessorMaskEx(long ptr) kernel32.GetNumaNodeProcessorMaskEx
-@ stub GetNumaProximityNodeEx
+@ stdcall GetNumaProximityNodeEx(long ptr) kernel32.GetNumaProximityNodeEx
 @ stdcall -version=0x600+ GetNumberFormatEx(wstr long wstr ptr wstr long) kernel32.GetNumberFormatEx
 @ stdcall GetNumberFormatW(long long wstr ptr ptr long) kernel32.GetNumberFormatW
 @ stdcall GetNumberOfConsoleInputEvents(long ptr)
@@ -630,7 +631,7 @@
 @ stdcall GetWriteWatch(long ptr long ptr ptr ptr) kernel32.GetWriteWatch
 @ stdcall -version=0x601+ GetWsChanges(long ptr long) kernel32.K32GetWsChanges
 @ stdcall -version=0x601+ GetWsChangesEx(long ptr ptr) kernel32.K32GetWsChangesEx
-@ stdcall -arch=x86_64,arm64ec GetXStateFeaturesMask(ptr ptr)
+@ stdcall -arch=i386,x86_64,arm64ec GetXStateFeaturesMask(ptr ptr)
 @ stdcall GlobalAlloc(long long) kernel32.GlobalAlloc
 @ stdcall GlobalFree(long) kernel32.GlobalFree
 @ stdcall GlobalMemoryStatusEx(ptr) kernel32.GlobalMemoryStatusEx
@@ -662,8 +663,8 @@
 @ stdcall -version=0x600+ InitOnceInitialize(ptr) ntdll.RtlRunOnceInitialize
 @ stdcall InitializeAcl(ptr long long)
 @ stdcall InitializeConditionVariable(ptr) ntdll.RtlInitializeConditionVariable
-@ stdcall -arch=win64 InitializeContext(ptr long ptr ptr)
-@ stdcall -arch=win64 InitializeContext2(ptr long ptr ptr int64)
+@ stdcall InitializeContext(ptr long ptr ptr)
+@ stdcall InitializeContext2(ptr long ptr ptr int64)
 @ stdcall InitializeCriticalSection(ptr) kernel32.InitializeCriticalSection
 @ stdcall InitializeCriticalSectionAndSpinCount(ptr long) kernel32.InitializeCriticalSectionAndSpinCount
 @ stdcall -version=0x600+ InitializeCriticalSectionEx(ptr long long) kernel32.InitializeCriticalSectionEx
@@ -784,7 +785,7 @@
 @ stdcall LocalReAlloc(long long long) kernel32.LocalReAlloc
 @ stdcall LocalUnlock(long) kernel32.LocalUnlock
 @ stdcall LocaleNameToLCID(wstr long)
-@ stdcall -arch=x86_64,arm64ec LocateXStateFeature(ptr long ptr)
+@ stdcall -arch=i386,x86_64,arm64ec LocateXStateFeature(ptr long ptr)
 @ stdcall LockFile(long long long long long) kernel32.LockFile
 @ stdcall LockFileEx(long long long long long ptr) kernel32.LockFileEx
 @ stdcall LockResource(long) kernel32.LockResource
@@ -1223,7 +1224,7 @@
 @ stdcall SetUserGeoName(wstr)
 @ stdcall SetWaitableTimer(long ptr long ptr ptr long) kernel32.SetWaitableTimer
 @ stdcall SetWaitableTimerEx(long ptr long ptr ptr ptr long) kernel32.SetWaitableTimerEx
-@ stdcall -arch=x86_64,arm64ec SetXStateFeaturesMask(ptr int64)
+@ stdcall -arch=i386,x86_64,arm64ec SetXStateFeaturesMask(ptr int64)
 @ stdcall SetupComm(long long long) kernel32.SetupComm
 @ stdcall SignalObjectAndWait(long long long long) kernel32.SignalObjectAndWait
 @ stdcall SizeofResource(long long) kernel32.SizeofResource

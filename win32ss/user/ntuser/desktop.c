@@ -2082,7 +2082,6 @@ IntPaintDesktopContent(HDC hDC)
 {
     static WCHAR s_wszSafeMode[] = L"Safe Mode"; // FIXME: Localize!
     static WCHAR s_wszAssistance[64];
-    static BOOLEAN s_AssistanceQueried;
 
     RECTL Rect;
     HBRUSH DesktopBrush, PreviousBrush;
@@ -2332,11 +2331,9 @@ IntPaintDesktopContent(HDC hDC)
     /*
      * Display the system version on the desktop background
      */
-    if (!s_AssistanceQueried)
-    {
-        s_AssistanceQueried = TRUE;
+    /* TODO: a key that appears after the desktop was painted shows at the next paint, nothing asks for one */
+    if (!*s_wszAssistance && KD_DEBUGGER_ENABLED)
         IntQueryNetworkAssistanceKey(s_wszAssistance, ARRAYSIZE(s_wszAssistance));
-    }
 
     if (InSafeMode || g_AlwaysDisplayVersion || g_PaintDesktopVersion || *s_wszAssistance)
     {

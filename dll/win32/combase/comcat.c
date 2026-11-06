@@ -1050,7 +1050,11 @@ static HRESULT WINAPI CLSIDEnumGUID_Clone(
     memcpy(cloned->categories, This->categories, This->categories->size);
 
     cloned->key = NULL;
+#ifdef __REACTOS__
+    RegOpenKeyExW(HKEY_CLASSES_ROOT, L"CLSID", 0, KEY_READ, &cloned->key);
+#else
     open_classes_key(HKEY_CLASSES_ROOT, L"CLSID", KEY_READ, &cloned->key);
+#endif
     cloned->next_index = This->next_index;
 
     *ppenum = &cloned->IEnumGUID_iface;
@@ -1080,7 +1084,11 @@ static HRESULT CLSIDEnumGUID_Construct(struct class_categories *categories, IEnu
     This->IEnumGUID_iface.lpVtbl = &CLSIDEnumGUIDVtbl;
     This->ref = 1;
     This->categories = categories;
+#ifdef __REACTOS__
+    RegOpenKeyExW(HKEY_CLASSES_ROOT, L"CLSID", 0, KEY_READ, &This->key);
+#else
     open_classes_key(HKEY_CLASSES_ROOT, L"CLSID", KEY_READ, &This->key);
+#endif
 
     *ret = &This->IEnumGUID_iface;
 

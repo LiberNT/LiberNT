@@ -165,6 +165,7 @@ RtlLookupFunctionEntry(
         else
         {
             /* ControlPc is within limits, return entry */
+            /* TODO: follow RUNTIME_FUNCTION_INDIRECT entries */
             return FunctionEntry;
         }
     }
@@ -332,6 +333,46 @@ RtlpIsInEpilogV2(
 }
 
 static
+ULONG
+RtlpGetPrimaryBeginAddress(
+    _In_ ULONG64 ImageBase,
+    _In_ PRUNTIME_FUNCTION FunctionEntry)
+{
+    PUNWIND_INFO UnwindInfo = RVA(ImageBase, FunctionEntry->UnwindData);
+
+    while (UnwindInfo->Flags & UNW_FLAG_CHAININFO)
+    {
+        FunctionEntry = (PRUNTIME_FUNCTION)&UnwindInfo->UnwindCode[(UnwindInfo->CountOfCodes + 1) & ~1];
+        UnwindInfo = RVA(ImageBase, FunctionEntry->UnwindData);
+    }
+
+    return FunctionEntry->BeginAddress;
+}
+
+static
+BOOLEAN
+RtlpIsJumpWithinFunction(
+    _In_ ULONG64 ImageBase,
+    _In_ PRUNTIME_FUNCTION FunctionEntry,
+    _In_ ULONG64 Target)
+{
+    PRUNTIME_FUNCTION TargetEntry;
+    ULONG64 TargetBase;
+    ULONG PrimaryBegin, TableLength;
+
+    if (RtlLookupFunctionTable(Target, &TargetBase, &TableLength) == NULL)
+        return FALSE;
+
+    TargetEntry = RtlLookupFunctionEntry(Target, &TargetBase, NULL);
+    if ((TargetEntry == NULL) || (TargetBase != ImageBase))
+        return FALSE;
+
+    PrimaryBegin = RtlpGetPrimaryBeginAddress(ImageBase, FunctionEntry);
+    return (RtlpGetPrimaryBeginAddress(TargetBase, TargetEntry) == PrimaryBegin) &&
+           (Target - ImageBase != PrimaryBegin);
+}
+
+static
 __inline
 BOOLEAN
 RtlpTryToUnwindEpilog(
@@ -458,6 +499,8 @@ RtlpTryToUnwindEpilog(
             Target = 0;
         }
         if (Target != 0 && Target >= BeginAddress && Target < EndAddress)
+            return FALSE;
+        if (Target != 0 && RtlpIsJumpWithinFunction(ImageBase, FunctionEntry, Target))
             return FALSE;
     }
 

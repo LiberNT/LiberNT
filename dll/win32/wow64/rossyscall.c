@@ -361,6 +361,7 @@ NTSYSAPI NTSTATUS WINAPI NtCompressKey( HANDLE );
 NTSYSAPI NTSTATUS WINAPI NtCreateJobSet( ULONG, JOB_SET_ARRAY64 *, ULONG );
 NTSYSAPI NTSTATUS WINAPI NtCreatePrivateNamespace( HANDLE *, ACCESS_MASK, OBJECT_ATTRIBUTES *, void * );
 NTSYSAPI NTSTATUS WINAPI NtCreateProcessEx( HANDLE *, ACCESS_MASK, OBJECT_ATTRIBUTES *, HANDLE, ULONG, HANDLE, HANDLE, HANDLE, BOOLEAN );
+NTSYSAPI NTSTATUS WINAPI NtCreateTimer2( HANDLE *, void *, OBJECT_ATTRIBUTES *, ULONG, ACCESS_MASK );
 NTSYSAPI NTSTATUS WINAPI NtCreateTransactionManager( HANDLE *, ACCESS_MASK, OBJECT_ATTRIBUTES *, UNICODE_STRING *, ULONG, ULONG );
 NTSYSAPI NTSTATUS WINAPI NtCreateWaitCompletionPacket( HANDLE *, ACCESS_MASK, OBJECT_ATTRIBUTES * );
 NTSYSAPI NTSTATUS WINAPI NtCreateWaitablePort( HANDLE *, OBJECT_ATTRIBUTES *, ULONG, ULONG, ULONG );
@@ -793,6 +794,27 @@ NTSTATUS WINAPI wow64_NtCreatePrivateNamespace( UINT *args )
 
     *handle_ptr = 0;
     status = NtCreatePrivateNamespace( &handle, access, objattr_32to64( &attr, attr32 ), boundary );
+    put_handle( handle_ptr, handle );
+    return status;
+}
+
+
+/**********************************************************************
+ *           wow64_NtCreateTimer2
+ */
+NTSTATUS WINAPI wow64_NtCreateTimer2( UINT *args )
+{
+    ULONG *handle_ptr = get_ptr( &args );
+    void *reserved = get_ptr( &args );
+    OBJECT_ATTRIBUTES32 *attr32 = get_ptr( &args );
+    ULONG attributes = get_ulong( &args );
+    ACCESS_MASK access = get_ulong( &args );
+    struct object_attr64 attr;
+    HANDLE handle = 0;
+    NTSTATUS status;
+
+    *handle_ptr = 0;
+    status = NtCreateTimer2( &handle, reserved, objattr_32to64( &attr, attr32 ), attributes, access );
     put_handle( handle_ptr, handle );
     return status;
 }

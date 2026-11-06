@@ -8,8 +8,11 @@ list(APPEND SOURCE
     ConsoleAlias.c
     ApiSetCoreSynch.c
     BaseSetLastNTError.c
+    BaseThreadInitThunk.c
+    CallbackCallingConventions.c
     Arm64ThreadContext.c
     ConsoleCP.c
+    ConsoleInputSignal.c
     ConsoleDbcsCells.c
     ConsoleProcessInheritance.c
     ConsoleVirtualTerminal.c
@@ -22,6 +25,7 @@ list(APPEND SOURCE
     dosdev.c
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
+    FileStorageInfo.c
     FindFiles.c
     FindPackagesByPackageFamily.c
     FLS.c
@@ -57,11 +61,17 @@ list(APPEND SOURCE
     LoadLibraryExW.c
     LockFileEx.c
     OpenFileByIdRename.c
+    LoaderLock.c
+    PagingFileOpen.c
+    QuantumRoundRobin.c
+    RegisterWaitPeriodic.c
     SandboxLaunch.c
     SystemImageCatalog.c
     TebSegmentAfterWait.c
     SharedMemorySecurity.c
     SharedMemoryTransfer.c
+    StarvationBoost.c
+    SystemTimeChangeTimers.c
     StdHandleInheritance.c
     LocaleNameToLCID.c
     lstrcpynW.c
@@ -69,16 +79,19 @@ list(APPEND SOURCE
     Mailslot.c
     MuiResources.c
     MultiByteToWideChar.c
+    NumaApis.c
     Pipes.c
     PackageNames.c
     PixeloramaCompat.c
     ProcessPreferredUILanguages.c
     PseudoConsoleCtrlC.c
+    PseudoConsoleVtInput.c
     PssSnapshot.c
     PrivMoveFileIdentityW.c
     QueueUserAPC.c
     QueryProcessCycleTime.c
     ReadFile.c
+    RemoteThreadInit.c
     RenameDirectoryOldPath.c
     ResizePseudoConsole.c
     SetComputerNameExW.c
@@ -88,6 +101,8 @@ list(APPEND SOURCE
     SetThreadStackGuarantee.c
     SetUnhandledExceptionFilter.c
     SetWaitableTimerEx.c
+    WaitableTimerHighResolution.c
+    SwitchToThreadCost.c
     SuspendThread.c
     SystemFirmware.c
     TerminateProcess.c
@@ -101,6 +116,7 @@ list(APPEND SOURCE
     WideCharToMultiByte.c
     Wow64GetThreadContext.c
     WriteFile.c
+    WriteFileBadBuffer.c
     WriteFileSeekBack.c
     XState.c
 )

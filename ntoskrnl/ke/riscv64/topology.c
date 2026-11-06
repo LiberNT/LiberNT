@@ -185,6 +185,24 @@ KiRiscvLookupHart(
     return NULL;
 }
 
+ULONG
+NTAPI
+KiRiscvQueryLargestCacheLine(VOID)
+{
+    ULONG Hart, Index, Size, Line = 0;
+
+    for (Hart = 0; Hart < KiRiscvHartTopologyCount; ++Hart)
+    {
+        for (Index = 0; Index < KiRiscvHartTopology[Hart].CacheCount; ++Index)
+        {
+            Size = KiRiscvHartTopology[Hart].Cache[Index].LineSize;
+            if ((Size >= 16) && (Size <= PAGE_SIZE) && !(Size & (Size - 1)))
+                Line = max(Line, Size);
+        }
+    }
+    return Line;
+}
+
 VOID
 NTAPI
 KiQueryProcessorTopology(

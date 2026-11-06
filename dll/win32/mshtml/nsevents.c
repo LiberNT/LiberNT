@@ -343,6 +343,18 @@ static nsresult handle_load(HTMLDocumentNode *doc, nsIDOMEvent *event)
             IDocObjectService_FireDocumentComplete(doc_obj->doc_object_service,
                     &doc->window->base.outer_window->base.IHTMLWindow2_iface, 0);
 
+#ifdef __REACTOS__
+        if(doc_obj->doc_object_service && !is_detached_window(doc->window)) {
+            IHTMLElement *active = NULL;
+
+            if(SUCCEEDED(IHTMLDocument2_get_activeElement(&doc->IHTMLDocument2_iface, &active))) {
+                IDocObjectService_ActiveElementChanged(doc_obj->doc_object_service, active);
+                if(active)
+                    IHTMLElement_Release(active);
+            }
+        }
+#endif
+
         IUnknown_Release(doc_obj->outer_unk);
     }
 

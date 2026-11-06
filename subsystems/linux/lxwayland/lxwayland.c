@@ -27,6 +27,15 @@ typedef int32_t LONG;
 #define LX_FRAME_MS             16
 #define LX_DEVICE_READ          (2 * 1024 * 1024)
 
+#define DRM_FORMAT_ARGB8888     0x34325241u
+#define DRM_FORMAT_XRGB8888     0x34325258u
+#define DRM_FORMAT_MOD_INVALID  0x00FFFFFFFFFFFFFFull
+#define DRM_RENDER_DEV          ((226u << 8) | 128u)
+#define DRM_IOCTL_GEM_CLOSE     0x40086409u
+#define DRM_IOCTL_PRIME_FD_TO_HANDLE 0xC00C642Eu
+#define DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST 0xC02C6446u
+#define DRM_IOCTL_VIRTGPU_WAIT  0xC0086448u
+
 #define XDG_STATE_MAXIMIZED     1
 #define XDG_STATE_FULLSCREEN    2
 #define XDG_STATE_RESIZING      3
@@ -152,7 +161,18 @@ typedef struct _BUFFER
     int32_t Height;
     int32_t Stride;
     uint32_t Format;
+    uint32_t Handle;
+    bool YInvert;
 } BUFFER;
+
+typedef struct _DMABUF_PARAMS
+{
+    int Fd;
+    uint32_t Offset;
+    uint32_t Stride;
+    uint64_t Modifier;
+    bool Used;
+} DMABUF_PARAMS;
 
 typedef struct _XDG_SURFACE XDG_SURFACE;
 typedef struct _WINDOW WINDOW;
@@ -171,6 +191,10 @@ typedef struct _SURFACE
     WL_RESOURCE *Buffer;
     int32_t Width;
     int32_t Height;
+    uint8_t *Image;
+    int32_t ImageWidth;
+    int32_t ImageHeight;
+    uint32_t BelowCount;
     uint32_t Role;
     XDG_SURFACE *Xdg;
     struct _SURFACE *Parent;
@@ -334,6 +358,7 @@ static const GLOBAL Globals[] =
     { &zxdg_decoration_manager_v1_interface, 1 },
     { &wp_cursor_shape_manager_v1_interface, 1 },
     { &xdg_toplevel_icon_manager_v1_interface, 1 },
+    { &zwp_linux_dmabuf_v1_interface, 4 },
 };
 
 static const char *const TextTypes[] =
@@ -365,10 +390,17 @@ static uint32_t Serial = 1;
 static WINDOW *Windows;
 static uint32_t NextWindow = 1;
 static WL_RESOURCE **Frames;
+static int RenderFd = -1;
+static uint32_t *HandleRefs;
+static uint32_t HandleRefCapacity;
 static uint32_t FrameCount;
 static uint32_t FrameCapacity;
 static uint32_t ScreenWidth = 1280;
 static uint32_t ScreenHeight = 800;
+static uint32_t WorkWidth = 1280;
+static uint32_t WorkHeight = 800;
+static uint32_t FrameWidth;
+static uint32_t FrameHeight;
 static bool Host;
 static SURFACE *PointerFocus;
 static SURFACE *KeyboardFocus;
@@ -394,6 +426,7 @@ static void DrawWindow(WINDOW *Window, const RECT32 *Damage, uint32_t DamageCoun
 static void SetSelection(WL_RESOURCE *Source, HOST_SOURCE *Host);
 static void SendAppInfo(WINDOW *Window, TOPLEVEL *Toplevel);
 static void SendIcon(WINDOW *Window, TOPLEVEL *Toplevel);
+static void RequestState(TOPLEVEL *Toplevel, uint32_t State);
 
 static
 bool
@@ -523,6 +556,17 @@ PoolRelease(POOL *Pool)
 
 static
 void
+GemRelease(uint32_t Handle)
+{
+    uint32_t Close[2] = { Handle, 0 };
+
+    if (Handle == 0 || Handle >= HandleRefCapacity || HandleRefs[Handle] == 0 || --HandleRefs[Handle] != 0)
+        return;
+    LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_GEM_CLOSE, (long)Close, 0, 0, 0);
+}
+
+static
+void
 HostSourceRelease(HOST_SOURCE *Source)
 {
     if (Source == NULL || --Source->Refs != 0)
@@ -559,6 +603,7 @@ FreeData(WL_RESOURCE *Resource)
 
         LxFree(Surface->PendingFrames);
         LxFree(Surface->Children);
+        LxFree(Surface->Image);
     }
     else if (Interface == &wl_shm_pool_interface)
     {
@@ -567,7 +612,15 @@ FreeData(WL_RESOURCE *Resource)
     }
     else if (Interface == &wl_buffer_interface)
     {
-        PoolRelease(((BUFFER *)Resource->Data)->Pool);
+        BUFFER *Buffer = Resource->Data;
+
+        GemRelease(Buffer->Handle);
+        if (Buffer->Pool != NULL)
+            PoolRelease(Buffer->Pool);
+    }
+    else if (Interface == &zwp_linux_buffer_params_v1_interface)
+    {
+        CloseFd(((DMABUF_PARAMS *)Resource->Data)->Fd);
     }
     else if (Interface == &xdg_toplevel_interface)
     {
@@ -1065,6 +1118,14 @@ SendToplevelConfigure(TOPLEVEL *Toplevel)
         if ((States & (1u << State)) && (State <= 4 || Toplevel->Resource->Version >= 2))
             Array[Count++] = State;
     }
+    if (Toplevel->Resource->Version >= 4)
+    {
+        int32_t BoundsWidth = (int32_t)WorkWidth - (Toplevel->Decorated ? (int32_t)FrameWidth : 0);
+        int32_t BoundsHeight = (int32_t)WorkHeight - (Toplevel->Decorated ? (int32_t)FrameHeight : 0);
+
+        if (BoundsWidth > 0 && BoundsHeight > 0)
+            WlSend(Toplevel->Resource, XDG_TOPLEVEL_EVENT_CONFIGURE_BOUNDS, BoundsWidth, BoundsHeight);
+    }
     WlSend(Toplevel->Resource, XDG_TOPLEVEL_EVENT_CONFIGURE, Toplevel->Width, Toplevel->Height, Array,
            Count * (uint32_t)sizeof(uint32_t));
     SendXdgConfigure(Toplevel->Xdg);
@@ -1072,18 +1133,133 @@ SendToplevelConfigure(TOPLEVEL *Toplevel)
 
 static
 void
-Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY)
+BufferReadback(BUFFER *Buffer, const RECT32 *Damage, uint32_t DamageCount)
 {
-    BUFFER *Buffer = Surface->Buffer != NULL ? Surface->Buffer->Data : NULL;
+    int32_t X0 = DamageCount != 0 ? Buffer->Width : 0, Y0 = DamageCount != 0 ? Buffer->Height : 0;
+    int32_t X1 = DamageCount != 0 ? 0 : Buffer->Width, Y1 = DamageCount != 0 ? 0 : Buffer->Height;
+    uint32_t Transfer[11], Wait[2];
     uint32_t Index;
 
-    if (Buffer != NULL && Buffer->Pool != NULL && Buffer->Pool->Map != NULL &&
-        (int64_t)Buffer->Offset + (int64_t)Buffer->Stride * Buffer->Height <= Buffer->Pool->Size)
+    for (Index = 0; Index < DamageCount; Index++)
     {
-        int32_t X0 = OffsetX > 0 ? OffsetX : 0;
-        int32_t Y0 = OffsetY > 0 ? OffsetY : 0;
-        int32_t X1 = OffsetX + Buffer->Width < Window->Width ? OffsetX + Buffer->Width : Window->Width;
-        int32_t Y1 = OffsetY + Buffer->Height < Window->Height ? OffsetY + Buffer->Height : Window->Height;
+        int64_t DX1 = (int64_t)Damage[Index].X + Damage[Index].Width;
+        int64_t DY1 = (int64_t)Damage[Index].Y + Damage[Index].Height;
+
+        if (Damage[Index].X < X0)
+            X0 = Damage[Index].X > 0 ? Damage[Index].X : 0;
+        if (Damage[Index].Y < Y0)
+            Y0 = Damage[Index].Y > 0 ? Damage[Index].Y : 0;
+        if (DX1 > X1)
+            X1 = DX1 < Buffer->Width ? (int32_t)DX1 : Buffer->Width;
+        if (DY1 > Y1)
+            Y1 = DY1 < Buffer->Height ? (int32_t)DY1 : Buffer->Height;
+    }
+    if (X1 <= X0 || Y1 <= Y0)
+        return;
+    if (Buffer->YInvert)
+    {
+        int32_t Top = Buffer->Height - Y1;
+
+        Y1 = Buffer->Height - Y0;
+        Y0 = Top;
+    }
+    Transfer[0] = Buffer->Handle;
+    Transfer[1] = (uint32_t)X0;
+    Transfer[2] = (uint32_t)Y0;
+    Transfer[3] = 0;
+    Transfer[4] = (uint32_t)(X1 - X0);
+    Transfer[5] = (uint32_t)(Y1 - Y0);
+    Transfer[6] = 1;
+    Transfer[7] = 0;
+    Transfer[8] = (uint32_t)Buffer->Offset + (uint32_t)Y0 * (uint32_t)Buffer->Stride + (uint32_t)X0 * 4;
+    Transfer[9] = (uint32_t)Buffer->Stride;
+    Transfer[10] = 0;
+    if (LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST, (long)Transfer, 0, 0, 0) != 0)
+        return;
+    Wait[0] = Buffer->Handle;
+    Wait[1] = 0;
+    LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_VIRTGPU_WAIT, (long)Wait, 0, 0, 0);
+}
+
+static
+bool
+SurfaceStore(SURFACE *Surface, const RECT32 *Damage, uint32_t DamageCount)
+{
+    BUFFER *Buffer = Surface->Buffer != NULL ? Surface->Buffer->Data : NULL;
+    bool Resized = false;
+    uint32_t Index;
+
+    if (Buffer == NULL || Buffer->Pool == NULL || Buffer->Pool->Map == NULL || Buffer->Width <= 0 ||
+        Buffer->Height <= 0 || (int64_t)Buffer->Offset + (int64_t)Buffer->Stride * Buffer->Height > Buffer->Pool->Size)
+    {
+        LxFree(Surface->Image);
+        Surface->Image = NULL;
+        Surface->ImageWidth = 0;
+        Surface->ImageHeight = 0;
+        return true;
+    }
+    if (Surface->Image == NULL || Surface->ImageWidth != Buffer->Width || Surface->ImageHeight != Buffer->Height)
+    {
+        LxFree(Surface->Image);
+        Surface->Image = LxAlloc((size_t)Buffer->Width * Buffer->Height * 4);
+        Surface->ImageWidth = Surface->Image != NULL ? Buffer->Width : 0;
+        Surface->ImageHeight = Surface->Image != NULL ? Buffer->Height : 0;
+        Resized = true;
+        DamageCount = 0;
+    }
+    if (Surface->Image == NULL)
+        return true;
+    if (Buffer->Handle != 0)
+        BufferReadback(Buffer, Damage, DamageCount);
+    for (Index = 0; Index < (DamageCount != 0 ? DamageCount : 1); Index++)
+    {
+        int32_t X0 = 0, Y0 = 0, X1 = Buffer->Width, Y1 = Buffer->Height;
+        int32_t Row;
+
+        if (DamageCount != 0)
+        {
+            int64_t DX1 = (int64_t)Damage[Index].X + Damage[Index].Width;
+            int64_t DY1 = (int64_t)Damage[Index].Y + Damage[Index].Height;
+
+            X0 = Damage[Index].X > 0 ? Damage[Index].X : 0;
+            Y0 = Damage[Index].Y > 0 ? Damage[Index].Y : 0;
+            X1 = DX1 < Buffer->Width ? (int32_t)DX1 : Buffer->Width;
+            Y1 = DY1 < Buffer->Height ? (int32_t)DY1 : Buffer->Height;
+            if (X1 <= X0 || Y1 <= Y0)
+                continue;
+        }
+        for (Row = Y0; Row < Y1; Row++)
+        {
+            uint8_t *Target = Surface->Image + ((size_t)Row * Buffer->Width + X0) * 4;
+
+            memcpy(Target, Buffer->Pool->Map + Buffer->Offset +
+                               (size_t)(Buffer->YInvert ? Buffer->Height - 1 - Row : Row) * Buffer->Stride +
+                               (size_t)X0 * 4,
+                   (size_t)(X1 - X0) * 4);
+            if (Buffer->Format == WL_SHM_FORMAT_XRGB8888)
+            {
+                int32_t Column;
+
+                for (Column = 0; Column < X1 - X0; Column++)
+                    Target[Column * 4 + 3] = 0xFF;
+            }
+        }
+    }
+    return Resized;
+}
+
+static
+void
+BlitImage(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY, const RECT32 *Clip)
+{
+    if (Surface->Image != NULL)
+    {
+        int32_t ClipX1 = Clip->X + Clip->Width;
+        int32_t ClipY1 = Clip->Y + Clip->Height;
+        int32_t X0 = OffsetX > Clip->X ? OffsetX : Clip->X;
+        int32_t Y0 = OffsetY > Clip->Y ? OffsetY : Clip->Y;
+        int32_t X1 = OffsetX + Surface->ImageWidth < ClipX1 ? OffsetX + Surface->ImageWidth : ClipX1;
+        int32_t Y1 = OffsetY + Surface->ImageHeight < ClipY1 ? OffsetY + Surface->ImageHeight : ClipY1;
         int32_t Row;
 
         if (X1 > X0 && Y1 > Y0)
@@ -1092,19 +1268,31 @@ Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY)
 
             for (Row = Y0; Row < Y1; Row++)
             {
-                const uint8_t *Source = Buffer->Pool->Map + Buffer->Offset + (size_t)(Row - OffsetY) * Buffer->Stride +
-                                        (size_t)(X0 - OffsetX) * 4;
+                const uint8_t *Source = Surface->Image + ((size_t)(Row - OffsetY) * Surface->ImageWidth +
+                                                          (size_t)(X0 - OffsetX)) * 4;
 
                 memcpy(Window->Image + ((size_t)Row * Window->Width + X0) * 4, Source, Span);
             }
         }
     }
+}
+
+static
+void
+Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY, const RECT32 *Clip)
+{
+    uint32_t Index;
+
     for (Index = 0; Index < Surface->ChildCount; Index++)
     {
         SURFACE *Child = Surface->Children[Index];
 
-        Blit(Window, Child, OffsetX + Child->SubX, OffsetY + Child->SubY);
+        if (Index == Surface->BelowCount)
+            BlitImage(Window, Surface, OffsetX, OffsetY, Clip);
+        Blit(Window, Child, OffsetX + Child->SubX, OffsetY + Child->SubY, Clip);
     }
+    if (Surface->BelowCount >= Surface->ChildCount)
+        BlitImage(Window, Surface, OffsetX, OffsetY, Clip);
 }
 
 static
@@ -1135,6 +1323,7 @@ DrawWindow(WINDOW *Window, const RECT32 *Damage, uint32_t DamageCount)
 {
     XDG_SURFACE *Xdg = Window->Xdg;
     RECT32 Rect = WindowRect(Xdg);
+    RECT32 Clip;
     int32_t X0 = 0, Y0 = 0, X1 = 0, Y1 = 0;
     bool Any = false;
     uint32_t Index;
@@ -1198,7 +1387,11 @@ DrawWindow(WINDOW *Window, const RECT32 *Damage, uint32_t DamageCount)
     }
     if (!Any)
         return;
-    Blit(Window, Xdg->Surface, -Rect.X, -Rect.Y);
+    Clip.X = X0;
+    Clip.Y = Y0;
+    Clip.Width = X1 - X0;
+    Clip.Height = Y1 - Y0;
+    Blit(Window, Xdg->Surface, -Rect.X, -Rect.Y, &Clip);
     SendPixels(Window, X0, Y0, X1 - X0, Y1 - Y0);
 }
 
@@ -1259,6 +1452,10 @@ Map(XDG_SURFACE *Xdg)
             HostSend(LX_WIN_TITLE, Window->Id, Toplevel->Title, strlen(Toplevel->Title));
         SendAppInfo(Window, Toplevel);
         SendSizes(Toplevel);
+        if (Toplevel->States & (1u << XDG_STATE_FULLSCREEN))
+            RequestState(Toplevel, LX_WIN_STATE_FULLSCREEN);
+        else if (Toplevel->States & (1u << XDG_STATE_MAXIMIZED))
+            RequestState(Toplevel, LX_WIN_STATE_MAXIMIZED);
     }
 }
 
@@ -1430,6 +1627,12 @@ RequestState(TOPLEVEL *Toplevel, uint32_t State)
         HostSendValues(LX_WIN_STATE, Window->Id, 2, Values);
     else if (State == LX_WIN_STATE_MAXIMIZED)
         Toplevel->States |= 1u << XDG_STATE_MAXIMIZED;
+    else if (State == LX_WIN_STATE_FULLSCREEN)
+        Toplevel->States |= 1u << XDG_STATE_FULLSCREEN;
+    else if (State == LX_WIN_STATE_NORMAL)
+        Toplevel->States &= ~(1u << XDG_STATE_MAXIMIZED);
+    else if (State == LX_WIN_STATE_WINDOWED)
+        Toplevel->States &= ~(1u << XDG_STATE_FULLSCREEN);
 }
 
 static
@@ -1469,12 +1672,165 @@ SendIcon(WINDOW *Window, TOPLEVEL *Toplevel)
 }
 
 static
+bool
+HasSlash(const char *Text)
+{
+    for (; *Text != '\0'; Text++)
+    {
+        if (*Text == '/')
+            return true;
+    }
+    return false;
+}
+
+static
+bool
+JoinPath(char *Out, size_t Size, const char *First, const char *Second, const char *Third)
+{
+    const char *Parts[3] = { First, Second, Third };
+    size_t Used = 0, Index, Length;
+
+    for (Index = 0; Index < 3; Index++)
+    {
+        Length = strlen(Parts[Index]);
+        if (Used + Length >= Size)
+            return false;
+        memcpy(Out + Used, Parts[Index], Length);
+        Used += Length;
+    }
+    Out[Used] = '\0';
+    return true;
+}
+
+static
+uint8_t *
+ReadSmallFile(const char *Path, size_t Limit, size_t *Length)
+{
+    long Fd = LxSyscall(LX_NR_OPENAT, LX_AT_FDCWD, (long)Path, LX_O_RDONLY | LX_O_CLOEXEC, 0, 0, 0);
+    uint8_t *Data;
+    size_t Used = 0;
+    long Got = 0;
+
+    if (Fd < 0)
+        return NULL;
+    Data = LxAlloc(Limit);
+    while (Data != NULL && Used < Limit &&
+           (Got = LxSyscall(LX_NR_READ, Fd, (long)(Data + Used), (long)(Limit - Used), 0, 0, 0)) > 0)
+    {
+        Used += (size_t)Got;
+    }
+    LxSyscall(LX_NR_CLOSE, Fd, 0, 0, 0, 0, 0);
+    if (Data != NULL && (Got < 0 || Used == 0 || Used == Limit))
+    {
+        LxFree(Data);
+        Data = NULL;
+    }
+    *Length = Used;
+    return Data;
+}
+
+static
+bool
+DesktopIconName(const char *AppId, char *Icon, size_t Size)
+{
+    static const char *const Directories[] = { "/usr/local/share/applications/", "/usr/share/applications/" };
+    char Path[512];
+    uint8_t *Data = NULL;
+    size_t Length = 0, Index, Line;
+    bool Entry = false, Found = false;
+
+    for (Index = 0; Index < sizeof(Directories) / sizeof(Directories[0]) && Data == NULL; Index++)
+    {
+        if (JoinPath(Path, sizeof(Path), Directories[Index], AppId, ".desktop"))
+            Data = ReadSmallFile(Path, 256 * 1024, &Length);
+    }
+    if (Data == NULL)
+        return false;
+    for (Line = 0; Line < Length && !Found;)
+    {
+        size_t End = Line, Value;
+
+        while (End < Length && Data[End] != '\n')
+            End++;
+        if (Data[Line] == '[')
+            Entry = End - Line >= 15 && memcmp(Data + Line, "[Desktop Entry]", 15) == 0;
+        else if (Entry && End - Line > 5 && memcmp(Data + Line, "Icon=", 5) == 0)
+        {
+            Value = End;
+            while (Value > Line + 5 && (Data[Value - 1] == '\r' || Data[Value - 1] == ' '))
+                Value--;
+            if (Value - (Line + 5) > 0 && Value - (Line + 5) < Size)
+            {
+                memcpy(Icon, Data + Line + 5, Value - (Line + 5));
+                Icon[Value - (Line + 5)] = '\0';
+                Found = true;
+            }
+        }
+        Line = End + 1;
+    }
+    LxFree(Data);
+    return Found;
+}
+
+static
+void
+SendThemeIcon(WINDOW *Window, TOPLEVEL *Toplevel)
+{
+    static const char *const Sizes[] = { "48x48", "64x64", "32x32", "128x128", "256x256", "24x24", "16x16" };
+    static const uint8_t Signature[8] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+    char Icon[256], Directory[64], Path[512];
+    uint8_t *Data = NULL, *Payload;
+    size_t Length = 0, Index;
+    uint32_t Size[2];
+
+    if (Toplevel->Icon != NULL || Toplevel->AppId == NULL || Toplevel->AppId[0] == '\0' ||
+        Toplevel->AppId[0] == '.' || HasSlash(Toplevel->AppId) || !DesktopIconName(Toplevel->AppId, Icon, sizeof(Icon)) ||
+        Icon[0] == '.' || (Icon[0] != '/' && HasSlash(Icon)))
+    {
+        return;
+    }
+    if (Icon[0] == '/')
+    {
+        Data = ReadSmallFile(Icon, 1024 * 1024, &Length);
+    }
+    else
+    {
+        for (Index = 0; Index < sizeof(Sizes) / sizeof(Sizes[0]) && Data == NULL; Index++)
+        {
+            if (JoinPath(Directory, sizeof(Directory), "/usr/share/icons/hicolor/", Sizes[Index], "/apps/") &&
+                JoinPath(Path, sizeof(Path), Directory, Icon, ".png"))
+            {
+                Data = ReadSmallFile(Path, 1024 * 1024, &Length);
+            }
+        }
+        if (Data == NULL && JoinPath(Path, sizeof(Path), "/usr/share/pixmaps/", Icon, ".png"))
+            Data = ReadSmallFile(Path, 1024 * 1024, &Length);
+    }
+    if (Data == NULL)
+        return;
+    if (Length > 24 && memcmp(Data, Signature, sizeof(Signature)) == 0 && memcmp(Data + 12, "IHDR", 4) == 0)
+    {
+        Size[0] = ((uint32_t)Data[16] << 24) | ((uint32_t)Data[17] << 16) | ((uint32_t)Data[18] << 8) | Data[19];
+        Size[1] = ((uint32_t)Data[20] << 24) | ((uint32_t)Data[21] << 16) | ((uint32_t)Data[22] << 8) | Data[23];
+        Payload = HostBegin(LX_WIN_ICON_FILE, Window->Id, sizeof(Size) + Length);
+        if (Payload != NULL)
+        {
+            memcpy(Payload, Size, sizeof(Size));
+            memcpy(Payload + sizeof(Size), Data, Length);
+            HostWrite(sizeof(LX_WIN_HEADER) + sizeof(Size) + Length);
+        }
+    }
+    LxFree(Data);
+}
+
+static
 void
 SendAppInfo(WINDOW *Window, TOPLEVEL *Toplevel)
 {
     if (Toplevel->AppId != NULL && Toplevel->AppId[0] != '\0')
         HostSend(LX_WIN_APP_ID, Window->Id, Toplevel->AppId, strlen(Toplevel->AppId));
     SendIcon(Window, Toplevel);
+    SendThemeIcon(Window, Toplevel);
 }
 
 static
@@ -2077,6 +2433,8 @@ SurfaceCommit(SURFACE *Surface)
     RECT32 Damage[LX_MAX_DAMAGE];
     uint32_t DamageCount = Surface->PendingDamageFull ? 0 : Surface->PendingDamageCount;
     bool Attached = Surface->PendingAttached;
+    bool Moved = Surface->PendingSubSet;
+    bool Resized = false;
     uint32_t Index;
 
     if (Attached)
@@ -2102,6 +2460,8 @@ SurfaceCommit(SURFACE *Surface)
     memcpy(Damage, Surface->PendingDamage, DamageCount * sizeof(RECT32));
     Surface->PendingDamageCount = 0;
     Surface->PendingDamageFull = false;
+    if (Attached)
+        Resized = SurfaceStore(Surface, Damage, DamageCount);
     if (Grow((void **)&Frames, &FrameCapacity, FrameCount + Surface->PendingFrameCount, sizeof(WL_RESOURCE *)))
     {
         for (Index = 0; Index < Surface->PendingFrameCount; Index++)
@@ -2128,11 +2488,38 @@ SurfaceCommit(SURFACE *Surface)
     else if (Surface->Role == ROLE_SUBSURFACE)
     {
         SURFACE *Root = Surface;
+        int32_t OffsetX = 0, OffsetY = 0;
 
         while (Root->Parent != NULL && Root->Role == ROLE_SUBSURFACE)
+        {
+            OffsetX += Root->SubX;
+            OffsetY += Root->SubY;
             Root = Root->Parent;
+        }
         if (Root->Xdg != NULL && Root->Xdg->Window != NULL)
-            DrawWindow(Root->Xdg->Window, NULL, 0);
+        {
+            if (Moved || Resized)
+            {
+                DrawWindow(Root->Xdg->Window, NULL, 0);
+            }
+            else if (Attached)
+            {
+                if (DamageCount == 0)
+                {
+                    Damage[0].X = 0;
+                    Damage[0].Y = 0;
+                    Damage[0].Width = Surface->ImageWidth;
+                    Damage[0].Height = Surface->ImageHeight;
+                    DamageCount = 1;
+                }
+                for (Index = 0; Index < DamageCount; Index++)
+                {
+                    Damage[Index].X += OffsetX;
+                    Damage[Index].Y += OffsetY;
+                }
+                DrawWindow(Root->Xdg->Window, Damage, DamageCount);
+            }
+        }
     }
     if (Surface->Buffer != NULL && Attached)
         WlSend(Surface->Buffer, WL_BUFFER_EVENT_RELEASE);
@@ -2140,13 +2527,65 @@ SurfaceCommit(SURFACE *Surface)
 
 static
 void
+RestackChild(SURFACE *Child, SURFACE *Sibling, bool Above)
+{
+    SURFACE *Parent = Child->Parent;
+    SURFACE *Root = Child;
+    uint32_t From, To;
+
+    if (Parent == NULL || Sibling == Child || (Sibling != Parent && Sibling->Parent != Parent))
+        return;
+    for (From = 0; From < Parent->ChildCount && Parent->Children[From] != Child; From++)
+        ;
+    if (From == Parent->ChildCount)
+        return;
+    if (From < Parent->BelowCount)
+        Parent->BelowCount--;
+    memmove(&Parent->Children[From], &Parent->Children[From + 1], (Parent->ChildCount - From - 1) * sizeof(SURFACE *));
+    Parent->ChildCount--;
+    if (Sibling == Parent)
+    {
+        To = Parent->BelowCount;
+        if (!Above)
+            Parent->BelowCount++;
+    }
+    else
+    {
+        for (To = 0; To < Parent->ChildCount && Parent->Children[To] != Sibling; To++)
+            ;
+        if (To < Parent->BelowCount)
+            Parent->BelowCount++;
+        if (Above)
+            To++;
+    }
+    memmove(&Parent->Children[To + 1], &Parent->Children[To], (Parent->ChildCount - To) * sizeof(SURFACE *));
+    Parent->Children[To] = Child;
+    Parent->ChildCount++;
+    while (Root->Parent != NULL && Root->Role == ROLE_SUBSURFACE)
+        Root = Root->Parent;
+    if (Root->Xdg != NULL && Root->Xdg->Window != NULL)
+        DrawWindow(Root->Xdg->Window, NULL, 0);
+}
+
+static
+void
 DetachChild(SURFACE *Child)
 {
     SURFACE *Parent = Child->Parent;
+    uint32_t Index;
 
     if (Parent == NULL)
         return;
     Child->Parent = NULL;
+    for (Index = 0; Index < Parent->ChildCount; Index++)
+    {
+        if (Parent->Children[Index] == Child)
+        {
+            if (Index < Parent->BelowCount)
+                Parent->BelowCount--;
+            break;
+        }
+    }
     if (PointerArrayRemove((void **)Parent->Children, &Parent->ChildCount, Child))
         Unref(Child->Resource);
     Unref(Parent->Resource);
@@ -2363,6 +2802,13 @@ RegistryBind(WL_RESOURCE *Registry, WL_ARG *Args)
         WlSend(Resource, WL_SHM_EVENT_FORMAT, 0);
         WlSend(Resource, WL_SHM_EVENT_FORMAT, 1);
     }
+    else if (Global->Interface == &zwp_linux_dmabuf_v1_interface && Version < 4)
+    {
+        WlSend(Resource, ZWP_LINUX_DMABUF_V1_EVENT_FORMAT, DRM_FORMAT_ARGB8888);
+        WlSend(Resource, ZWP_LINUX_DMABUF_V1_EVENT_FORMAT, DRM_FORMAT_XRGB8888);
+        WlSend(Resource, ZWP_LINUX_DMABUF_V1_EVENT_MODIFIER, DRM_FORMAT_ARGB8888, 0x00FFFFFFu, 0xFFFFFFFFu);
+        WlSend(Resource, ZWP_LINUX_DMABUF_V1_EVENT_MODIFIER, DRM_FORMAT_XRGB8888, 0x00FFFFFFu, 0xFFFFFFFFu);
+    }
     else if (Global->Interface == &wl_seat_interface)
     {
         WlSend(Resource, WL_SEAT_EVENT_CAPABILITIES, 3);
@@ -2426,6 +2872,216 @@ ShmCreatePool(WL_RESOURCE *Shm, WL_ARG *Args)
     Pool->Size = Size;
     Pool->Map = Size > 0 ? (uint8_t *)Map : NULL;
     Resource->Data = Pool;
+}
+
+static
+void
+DmabufSendFeedback(WL_RESOURCE *Feedback)
+{
+    static const uint16_t Indices[] = { 0, 1 };
+    uint64_t Table[4] = { DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_INVALID, DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_INVALID };
+    uint64_t Device = DRM_RENDER_DEV;
+    long Fd;
+
+    Fd = LxSyscall(LX_NR_MEMFD_CREATE, (long)"lxwayland-dmabuf", LX_MFD_CLOEXEC, 0, 0, 0, 0);
+    if (Fd >= 0 && LxSyscall(LX_NR_WRITE, Fd, (long)Table, sizeof(Table), 0, 0, 0) == (long)sizeof(Table))
+        WlSend(Feedback, ZWP_LINUX_DMABUF_FEEDBACK_V1_EVENT_FORMAT_TABLE, (int)Fd, (uint32_t)sizeof(Table));
+    else
+        CloseFd((int)Fd);
+    WlSend(Feedback, ZWP_LINUX_DMABUF_FEEDBACK_V1_EVENT_MAIN_DEVICE, &Device, (uint32_t)sizeof(Device));
+    WlSend(Feedback, ZWP_LINUX_DMABUF_FEEDBACK_V1_EVENT_TRANCHE_TARGET_DEVICE, &Device, (uint32_t)sizeof(Device));
+    WlSend(Feedback, ZWP_LINUX_DMABUF_FEEDBACK_V1_EVENT_TRANCHE_FLAGS, 0);
+    WlSend(Feedback, ZWP_LINUX_DMABUF_FEEDBACK_V1_EVENT_TRANCHE_FORMATS, Indices, (uint32_t)sizeof(Indices));
+    WlSend(Feedback, ZWP_LINUX_DMABUF_FEEDBACK_V1_EVENT_TRANCHE_DONE);
+    WlSend(Feedback, ZWP_LINUX_DMABUF_FEEDBACK_V1_EVENT_DONE);
+}
+
+static
+void
+DmabufRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
+{
+    WL_RESOURCE *Created;
+
+    if (Opcode == ZWP_LINUX_DMABUF_V1_CREATE_PARAMS)
+    {
+        DMABUF_PARAMS *Params = LxAllocZero(sizeof(*Params));
+
+        if (Params == NULL)
+        {
+            WlError(Resource->Client->Display, 2, "out of memory");
+            return;
+        }
+        Params->Fd = -1;
+        Created = ClientAdd(Resource->Client, Args[0].U, &zwp_linux_buffer_params_v1_interface, Resource->Version);
+        if (Created == NULL)
+        {
+            LxFree(Params);
+            return;
+        }
+        Created->Data = Params;
+    }
+    else if (Opcode == ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK || Opcode == ZWP_LINUX_DMABUF_V1_GET_SURFACE_FEEDBACK)
+    {
+        Created = ClientAdd(Resource->Client, Args[0].U, &zwp_linux_dmabuf_feedback_v1_interface, Resource->Version);
+        if (Created != NULL)
+            DmabufSendFeedback(Created);
+    }
+}
+
+static
+BUFFER *
+DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Format, uint32_t Flags, bool *Bounds)
+{
+    uint32_t Prime[3] = { 0, 0, (uint32_t)Params->Fd };
+    BUFFER *Buffer;
+    POOL *Pool;
+    long Size, Map;
+
+    *Bounds = false;
+    Size = LxSyscall(LX_NR_LSEEK, Params->Fd, 0, LX_SEEK_END, 0, 0, 0);
+    if (Size <= 0 || Size > 0x7FFFFFFF || (int64_t)Params->Stride < (int64_t)Width * 4 ||
+        (int64_t)Params->Offset + (int64_t)Params->Stride * Height > Size)
+    {
+        *Bounds = true;
+        return NULL;
+    }
+    if (RenderFd < 0)
+    {
+        RenderFd = (int)LxSyscall(LX_NR_OPENAT, LX_AT_FDCWD, (long)"/dev/dri/renderD128", LX_O_RDWR | LX_O_CLOEXEC,
+                                  0, 0, 0);
+        if (RenderFd < 0)
+        {
+            RenderFd = -1;
+            return NULL;
+        }
+    }
+    if (LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_PRIME_FD_TO_HANDLE, (long)Prime, 0, 0, 0) != 0 || Prime[0] == 0)
+        return NULL;
+    if (!Grow((void **)&HandleRefs, &HandleRefCapacity, Prime[0] + 1, sizeof(uint32_t)))
+    {
+        if (Prime[0] >= HandleRefCapacity || HandleRefs[Prime[0]] == 0)
+        {
+            uint32_t Close[2] = { Prime[0], 0 };
+
+            LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_GEM_CLOSE, (long)Close, 0, 0, 0);
+        }
+        return NULL;
+    }
+    HandleRefs[Prime[0]]++;
+    Map = LxSyscall(LX_NR_MMAP, 0, Size, LX_PROT_READ, LX_MAP_SHARED, Params->Fd, 0);
+    Pool = (Map < 0 && Map > -4096) ? NULL : LxAllocZero(sizeof(*Pool));
+    Buffer = (Pool != NULL) ? LxAllocZero(sizeof(*Buffer)) : NULL;
+    if (Buffer == NULL)
+    {
+        LxFree(Pool);
+        if (!(Map < 0 && Map > -4096))
+            LxSyscall(LX_NR_MUNMAP, Map, Size, 0, 0, 0, 0);
+        GemRelease(Prime[0]);
+        return NULL;
+    }
+    Pool->Refs = 1;
+    Pool->Fd = Params->Fd;
+    Pool->Size = (int32_t)Size;
+    Pool->Map = (uint8_t *)Map;
+    Params->Fd = -1;
+    Buffer->Pool = Pool;
+    Buffer->Offset = (int32_t)Params->Offset;
+    Buffer->Width = Width;
+    Buffer->Height = Height;
+    Buffer->Stride = (int32_t)Params->Stride;
+    Buffer->Format = (Format == DRM_FORMAT_XRGB8888) ? WL_SHM_FORMAT_XRGB8888 : 0;
+    Buffer->Handle = Prime[0];
+    Buffer->YInvert = (Flags & ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT) != 0;
+    return Buffer;
+}
+
+static
+void
+DmabufParamsRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
+{
+    DMABUF_PARAMS *Params = Resource->Data;
+    bool Immed = Opcode == ZWP_LINUX_BUFFER_PARAMS_V1_CREATE_IMMED;
+    uint32_t Base = Immed ? 1 : 0;
+    WL_RESOURCE *Created;
+    BUFFER *Buffer;
+    bool Bounds;
+
+    if (Opcode == ZWP_LINUX_BUFFER_PARAMS_V1_ADD)
+    {
+        if (Params->Used || Args[1].U != 0 || Params->Fd >= 0)
+        {
+            CloseFd(Args[0].H);
+            WlError(Resource, Params->Used ? ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED :
+                              (Args[1].U != 0 ? ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX :
+                                                ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_SET),
+                    "invalid plane");
+            return;
+        }
+        Params->Fd = Args[0].H;
+        Params->Offset = Args[2].U;
+        Params->Stride = Args[3].U;
+        Params->Modifier = ((uint64_t)Args[4].U << 32) | Args[5].U;
+        return;
+    }
+    if (Opcode != ZWP_LINUX_BUFFER_PARAMS_V1_CREATE && !Immed)
+        return;
+    if (Params->Used)
+    {
+        WlError(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED, "params already used");
+        return;
+    }
+    Params->Used = true;
+    if (Params->Fd < 0)
+    {
+        WlError(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE, "missing plane");
+        return;
+    }
+    if (Args[Base + 2].U != DRM_FORMAT_ARGB8888 && Args[Base + 2].U != DRM_FORMAT_XRGB8888)
+    {
+        WlError(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT, "unsupported format");
+        return;
+    }
+    if (Args[Base].I <= 0 || Args[Base + 1].I <= 0)
+    {
+        WlError(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DIMENSIONS, "invalid dimensions");
+        return;
+    }
+    Buffer = DmabufImport(Params, Args[Base].I, Args[Base + 1].I, Args[Base + 2].U, Args[Base + 3].U, &Bounds);
+    if (Bounds)
+    {
+        WlError(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS, "plane out of bounds");
+        return;
+    }
+    if (Buffer == NULL && !Immed)
+    {
+        WlSend(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_EVENT_FAILED);
+        return;
+    }
+    if (Buffer == NULL)
+    {
+        Buffer = LxAllocZero(sizeof(*Buffer));
+        if (Buffer == NULL)
+        {
+            WlError(Resource->Client->Display, 2, "out of memory");
+            return;
+        }
+        Buffer->Width = Args[Base].I;
+        Buffer->Height = Args[Base + 1].I;
+        WlSend(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_EVENT_FAILED);
+    }
+    Created = Immed ? ClientAdd(Resource->Client, Args[0].U, &wl_buffer_interface, 1) :
+                      ClientAddServer(Resource->Client, &wl_buffer_interface, 1);
+    if (Created == NULL)
+    {
+        GemRelease(Buffer->Handle);
+        if (Buffer->Pool != NULL)
+            PoolRelease(Buffer->Pool);
+        LxFree(Buffer);
+        return;
+    }
+    Created->Data = Buffer;
+    if (!Immed)
+        WlSend(Resource, ZWP_LINUX_BUFFER_PARAMS_V1_EVENT_CREATED, Created);
 }
 
 static
@@ -2920,12 +3576,16 @@ ToplevelRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
             }
             break;
         case XDG_TOPLEVEL_SET_MAXIMIZED:
-        case XDG_TOPLEVEL_SET_FULLSCREEN:
             RequestState(Toplevel, LX_WIN_STATE_MAXIMIZED);
             break;
+        case XDG_TOPLEVEL_SET_FULLSCREEN:
+            RequestState(Toplevel, LX_WIN_STATE_FULLSCREEN);
+            break;
         case XDG_TOPLEVEL_UNSET_MAXIMIZED:
-        case XDG_TOPLEVEL_UNSET_FULLSCREEN:
             RequestState(Toplevel, LX_WIN_STATE_NORMAL);
+            break;
+        case XDG_TOPLEVEL_UNSET_FULLSCREEN:
+            RequestState(Toplevel, LX_WIN_STATE_WINDOWED);
             break;
         case XDG_TOPLEVEL_SET_MINIMIZED:
             RequestState(Toplevel, LX_WIN_STATE_MINIMIZED);
@@ -3167,6 +3827,14 @@ Dispatch(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
     {
         ShmPoolRequest(Resource, Opcode, Args);
     }
+    else if (Interface == &zwp_linux_dmabuf_v1_interface)
+    {
+        DmabufRequest(Resource, Opcode, Args);
+    }
+    else if (Interface == &zwp_linux_buffer_params_v1_interface)
+    {
+        DmabufParamsRequest(Resource, Opcode, Args);
+    }
     else if (Interface == &wl_surface_interface)
     {
         SurfaceRequest(Resource, Opcode, Args);
@@ -3213,6 +3881,17 @@ Dispatch(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
             Surface->PendingSubSet = true;
             Surface->PendingSubX = Args[0].I;
             Surface->PendingSubY = Args[1].I;
+        }
+        else if ((Opcode == WL_SUBSURFACE_PLACE_ABOVE || Opcode == WL_SUBSURFACE_PLACE_BELOW) &&
+                 SurfaceResource != NULL)
+        {
+            if (Args[0].O == NULL || Args[0].O->Interface != &wl_surface_interface)
+            {
+                WlError(Resource, 0, "bad surface");
+                return;
+            }
+            /* FIXME: the new order applies at once instead of on the parent's next commit */
+            RestackChild(SurfaceResource->Data, Args[0].O->Data, Opcode == WL_SUBSURFACE_PLACE_ABOVE);
         }
     }
     else if (Interface == &wl_seat_interface)
@@ -3706,6 +4385,15 @@ HostHello(const uint8_t *Payload, uint32_t Length)
         return;
     memcpy(&ScreenWidth, Payload, 4);
     memcpy(&ScreenHeight, Payload + 4, 4);
+    WorkWidth = ScreenWidth;
+    WorkHeight = ScreenHeight;
+    if (Length >= __builtin_offsetof(LX_WIN_HELLO_MSG, FrameHeight) + 4 - sizeof(LX_WIN_HEADER))
+    {
+        memcpy(&WorkWidth, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, WorkWidth) - sizeof(LX_WIN_HEADER), 4);
+        memcpy(&WorkHeight, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, WorkHeight) - sizeof(LX_WIN_HEADER), 4);
+        memcpy(&FrameWidth, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, FrameWidth) - sizeof(LX_WIN_HEADER), 4);
+        memcpy(&FrameHeight, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, FrameHeight) - sizeof(LX_WIN_HEADER), 4);
+    }
     Host = true;
     LxLog("window host ready, screen %ux%u", ScreenWidth, ScreenHeight);
     HostSend(LX_WIN_READY, 0, NULL, 0);

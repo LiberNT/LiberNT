@@ -163,7 +163,11 @@ SdBusSendCommand(
 
     if (WaitStatus == STATUS_IO_TIMEOUT)
     {
-        DPRINT1("SdBusSendCommand: CMD%u completion timed out\n", CommandIndex);
+        DPRINT1("SdBusSendCommand: CMD%u completion timed out, status 0x%08lx, present 0x%08lx, clock 0x%04x\n",
+                CommandIndex,
+                SdBusReadReg32(FdoExtension, SDHCI_INT_STATUS),
+                SdBusReadReg32(FdoExtension, SDHCI_PRESENT_STATE),
+                SdBusReadReg16(FdoExtension, SDHCI_CLOCK_CONTROL));
         (void)SdBusResetHost(FdoExtension, SDHCI_RESET_CMD);
         return STATUS_IO_TIMEOUT;
     }
@@ -368,11 +372,13 @@ SdBusParseCid(
  * preserved in the Csd->Raw array.
  *
  * @param[in]  RawResponse  Pointer to a 4-element ULONG array containing the R2 response.
+ * @param[in]  IsMmc        The card follows JEDEC, whose CSD versions do not change the layout.
  * @param[out] Csd          Pointer to an SD_CSD structure to populate.
  */
 VOID
 SdBusParseCsd(
     _In_ PULONG RawResponse,
+    _In_ BOOLEAN IsMmc,
     _Out_ PSD_CSD Csd)
 {
     RtlZeroMemory(Csd, sizeof(SD_CSD));
@@ -386,7 +392,8 @@ SdBusParseCsd(
     /* CSD structure version is in bits [127:126] -> Response3[23:22] */
     Csd->CsdVersion = (UCHAR)((RawResponse[3] >> 22) & 0x03);
 
-    if (Csd->CsdVersion == 0)
+    /* Every JEDEC CSD structure version keeps the fields where SD CSD v1 has them. */
+    if (Csd->CsdVersion == 0 || IsMmc)
     {
         /* CSD v1 -- standard capacity */
         Csd->V1.CsdStructure = 0;
@@ -1791,7 +1798,9 @@ SdBusEnumerateCard(
             return Status;
         }
 
-        SdBusParseCsd(Response, &PdoExtension->Csd);
+        SdBusParseCsd(Response,
+                      (BOOLEAN)(CardType == SdCardTypeMmc || CardType == SdCardTypeEmmc),
+                      &PdoExtension->Csd);
     }
 
     PdoExtension->RelativeAddress = Rca;
@@ -2039,16 +2048,6 @@ SdBusEnumerateCard(
                 }
             }
         }
-
-        PdoExtension->CardType = CardType;
-        PdoExtension->HighCapacity = IsHighCapacity;
-        Status = SdBusEmmcEnumeratePartitions(FdoExtension, PdoExtension);
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("SdBusEnumerateCard: eMMC partition enumeration failed "
-                    "(0x%08lx)\n", Status);
-            return Status;
-        }
     }
 
     /* Store the determined card type */
@@ -2099,7 +2098,7 @@ SdBusEnumerateCard(
         /* Sector-addressed MMC media expose capacity via EXT_CSD[212:215]. */
         PdoExtension->TotalSectors = (ULONGLONG)EMMC_SECTOR_COUNT(PdoExtension->ExtCsd);
     }
-    else if (PdoExtension->Csd.CsdVersion == 0)
+    else if (CardType == SdCardTypeMmc || PdoExtension->Csd.CsdVersion == 0)
     {
         /* CSD v1 (SDSC): capacity = (C_SIZE+1) * 2^(C_SIZE_MULT+2) * 2^READ_BL_LEN */
         PdoExtension->TotalSectors =

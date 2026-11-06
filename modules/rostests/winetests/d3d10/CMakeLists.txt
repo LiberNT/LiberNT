@@ -12,5 +12,5 @@ add_executable(d3d10_winetest
 target_link_libraries(d3d10_winetest dx10guid uuid)
 set_module_type(d3d10_winetest win32cui)
 add_dependencies(d3d10_winetest d3d_idl_headers)
-add_importlibs(d3d10_winetest d3d10 d3dcompiler_43 msvcrt kernel32)
+add_importlibs(d3d10_winetest d3d10 d3dcompiler_47 msvcrt kernel32)
 add_rostests_file(TARGET d3d10_winetest)

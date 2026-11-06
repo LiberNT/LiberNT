@@ -304,4 +304,11 @@ DxgkFlipCoreQueuedCount(
     return Queue->Count;
 }
 
+D3DDDIFORMAT
+DxgkVidPnCoreDesktopSurfaceFormat(
+    _In_ D3DDDIFORMAT PinnedFormat)
+{
+    return PinnedFormat == D3DDDIFMT_X8R8G8B8 ? D3DDDIFMT_X8R8G8B8 : D3DDDIFMT_A8R8G8B8;
+}
+
 /* EOF */

@@ -140,3 +140,4 @@
 #define IDS_SCAN_FOUND               2127
 #define IDS_SCAN_NONE                2128
 #define IDS_RESULT_UNSIGNED          2129
+#define IDS_ERROR_THROTTLED          2130

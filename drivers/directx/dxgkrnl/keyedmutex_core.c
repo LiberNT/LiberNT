@@ -21,7 +21,7 @@ DxgkKeyedMutexCoreCanAcquire(
     _In_ CONST DXGK_KEYED_MUTEX_STATE *State,
     _In_ UINT64 Key)
 {
-    return (!State->Owned && State->CurrentKey == Key);
+    return (!State->Abandoned && !State->Owned && State->CurrentKey == Key);
 }
 
 BOOLEAN
@@ -46,6 +46,18 @@ DxgkKeyedMutexCoreRelease(
     State->CurrentKey = Key;
     State->FenceValue = FenceValue;
     State->Owned = FALSE;
+    return TRUE;
+}
+
+/* The holder went away without releasing: the surface contents are no longer consistent. */
+BOOLEAN
+DxgkKeyedMutexCoreAbandon(
+    _Inout_ PDXGK_KEYED_MUTEX_STATE State)
+{
+    if (!State->Owned)
+        return FALSE;
+    State->Owned = FALSE;
+    State->Abandoned = TRUE;
     return TRUE;
 }
 

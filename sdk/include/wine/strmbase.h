@@ -55,6 +55,7 @@ static inline const char *debugstr_time(REFERENCE_TIME time)
 struct strmbase_pin
 {
     IPin IPin_iface;
+    IQualityControl IQualityControl_iface;
     struct strmbase_filter *filter;
     PIN_DIRECTION dir;
     WCHAR name[128];
@@ -106,6 +107,7 @@ struct strmbase_sink
     struct strmbase_pin pin;
 
     IMemInputPin IMemInputPin_iface;
+    IQualityControl IQualityControl_iface;
     IMemAllocator *pAllocator;
     BOOL flushing;
     IMemAllocator *preferred_allocator;
@@ -126,6 +128,8 @@ struct strmbase_sink_ops
     HRESULT (*sink_end_flush)(struct strmbase_sink *pin);
     HRESULT (*sink_new_segment)(struct strmbase_sink *pin, REFERENCE_TIME start, REFERENCE_TIME stop, double rate);
     HRESULT (*sink_receive_can_block)(struct strmbase_sink *pin);
+    HRESULT (*sink_get_allocator)(struct strmbase_sink *pin, IMemAllocator **allocator);
+    HRESULT (*sink_get_allocator_requirements)(struct strmbase_sink *pin, ALLOCATOR_PROPERTIES *props);
 };
 
 /* Base Pin */
@@ -278,7 +282,15 @@ struct strmbase_renderer
     HANDLE flush_event;
     REFERENCE_TIME stream_start;
 
+    HANDLE eos_event, eos_wait;
+    IReferenceClock *eos_clock;
+    DWORD_PTR eos_cookie;
+    REFERENCE_TIME last_stop;
+    BOOL have_last_stop;
+    CRITICAL_SECTION eos_cs;
+
     IMediaSample *current_sample;
+    BOOL sample_waiting;
 
     IQualityControl *qc_sink;
     REFERENCE_TIME last_left, avg_duration, avg_pt;
@@ -287,6 +299,9 @@ struct strmbase_renderer
     const struct strmbase_renderer_ops *ops;
 
     BOOL eos;
+    BOOL abort;
+    BOOL fail_inactive_receive;
+    BOOL no_filter_quality_control;
 };
 
 struct strmbase_renderer_ops

@@ -18,6 +18,7 @@ typedef struct _KD_USB_SHARE
     ULONG Size;
     ULONG Port;
     ULONG Interrupter;
+    ULONG Phone;
     ULONG SlotCount;
     UCHAR Slots[KD_USB_SHARE_MAX_SLOTS];
     ULONG64 DeviceContexts[KD_USB_SHARE_MAX_SLOTS];

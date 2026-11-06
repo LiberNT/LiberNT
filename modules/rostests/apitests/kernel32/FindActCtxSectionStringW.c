@@ -264,10 +264,47 @@ VOID TestLibDependency(HANDLE h)
     }
 }
 
+static VOID TestMissingSectionErrors(VOID)
+{
+    static const struct
+    {
+        ULONG Section;
+        PCWSTR Key;
+        DWORD Error;
+    } Tests[] =
+    {
+        { ACTIVATION_CONTEXT_SECTION_ASSEMBLY_INFORMATION, L"Probe.Sections", ERROR_SXS_KEY_NOT_FOUND },
+        { ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION, L"probedll.dll", ERROR_SXS_KEY_NOT_FOUND },
+        { ACTIVATION_CONTEXT_SECTION_WINDOW_CLASS_REDIRECTION, L"ProbeClass", ERROR_SXS_KEY_NOT_FOUND },
+        { ACTIVATION_CONTEXT_SECTION_COM_SERVER_REDIRECTION, L"{00000000-0000-0000-0000-000000000001}", ERROR_SXS_INVALID_ACTCTXDATA_FORMAT },
+        { ACTIVATION_CONTEXT_SECTION_COM_INTERFACE_REDIRECTION, L"{00000000-0000-0000-0000-000000000001}", ERROR_SXS_INVALID_ACTCTXDATA_FORMAT },
+        { ACTIVATION_CONTEXT_SECTION_COM_TYPE_LIBRARY_REDIRECTION, L"{00000000-0000-0000-0000-000000000001}", ERROR_SXS_INVALID_ACTCTXDATA_FORMAT },
+        { ACTIVATION_CONTEXT_SECTION_COM_PROGID_REDIRECTION, L"Probe.ProgId", ERROR_SXS_KEY_NOT_FOUND },
+        { ACTIVATION_CONTEXT_SECTION_GLOBAL_OBJECT_RENAME_TABLE, L"Probe", ERROR_SXS_SECTION_NOT_FOUND },
+        { ACTIVATION_CONTEXT_SECTION_CLR_SURROGATES, L"{00000000-0000-0000-0000-000000000001}", ERROR_SXS_INVALID_ACTCTXDATA_FORMAT },
+        { ACTIVATION_CONTEXT_SECTION_APPLICATION_SETTINGS, L"Probe", ERROR_SXS_SECTION_NOT_FOUND },
+        { ACTIVATION_CONTEXT_SECTION_WINRT_ACTIVATABLE_CLASSES, L"Probe.Class", ERROR_SXS_SECTION_NOT_FOUND },
+    };
+    ACTCTX_SECTION_KEYED_DATA Data;
+    ULONG i;
+    BOOL ret;
+
+    for (i = 0; i < ARRAYSIZE(Tests); i++)
+    {
+        Data.cbSize = sizeof(Data);
+        SetLastError(0xdeadbeef);
+        ret = FindActCtxSectionStringW(0, NULL, Tests[i].Section, Tests[i].Key, &Data);
+        ok(!ret, "Section %lu: FindActCtxSectionStringW succeeded\n", Tests[i].Section);
+        ok(GetLastError() == Tests[i].Error, "Section %lu: error %lu, expected %lu\n", Tests[i].Section, GetLastError(), Tests[i].Error);
+    }
+}
+
 START_TEST(FindActCtxSectionStringW)
 {
     HANDLE h, h2;
     ULONG_PTR cookie, cookie2;
+
+    TestMissingSectionErrors();
 
     /*First run the redirection tests without using our own actctx */
     TestClassRedirection(NULL, L"Button", L"Button", L"comctl32.dll", 27);

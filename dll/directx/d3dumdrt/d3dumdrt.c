@@ -64,6 +64,7 @@ typedef struct _D3DUMDRT_ALLOCATION_DEALLOCATION
 typedef struct _D3DUMDRT_SYNC_OBJECT
 {
     D3DKMT_HANDLE hSyncObject;
+    BOOL MonitoredFence;
     BOOL Destroying;
     struct _D3DUMDRT_SYNC_OBJECT *Next;
 } D3DUMDRT_SYNC_OBJECT, *PD3DUMDRT_SYNC_OBJECT;
@@ -117,6 +118,7 @@ typedef struct _D3DUMDRT_DEVICE
 #if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WDDM2_1_2)
     PD3DUMDRT_SYNC_TOKEN     SyncTokens;
 #endif
+    INT                      SchedulingPriority;
     struct _D3DUMDRT_DEVICE *Next;
 } D3DUMDRT_DEVICE, *PD3DUMDRT_DEVICE;
 
@@ -138,10 +140,13 @@ static BOOL D3DUmdRtDeviceLockReady;
 static PFND3DKMT_CREATEALLOCATION  pfnCreateAllocation;
 static PFND3DKMT_CREATEALLOCATION2 pfnCreateAllocation2;
 static PFND3DKMT_DESTROYALLOCATION pfnDestroyAllocation;
+static PFND3DKMT_SETALLOCATIONPRIORITY pfnSetAllocationPriority;
+static PFND3DKMT_QUERYALLOCATIONRESIDENCY pfnQueryAllocationResidency;
 static PFND3DKMT_LOCK              pfnLock;
 static PFND3DKMT_UNLOCK            pfnUnlock;
 static PFND3DKMT_RENDER            pfnRender;
 static PFND3DKMT_CREATECONTEXT     pfnCreateContext;
+static PFND3DKMT_SETCONTEXTSCHEDULINGPRIORITY pfnSetContextSchedulingPriority;
 static PFND3DKMT_DESTROYCONTEXT    pfnDestroyContext;
 static PFND3DKMT_ESCAPE            pfnEscape;
 static PFND3DKMT_SETDISPLAYMODE    pfnSetDisplayMode;
@@ -183,6 +188,7 @@ static PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMCPU pfnSignalSynchronizationObje
 static PFND3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU pfnWaitForSynchronizationObjectFromGpu;
 static PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU  pfnSignalSynchronizationObjectFromGpu;
 static PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 pfnSignalSynchronizationObjectFromGpu2;
+static PFND3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 pfnOpenSyncObjectFromNtHandle2;
 #endif
 #if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WDDM2_1_1)
 static PFND3DKMT_UPDATEALLOCATIONPROPERTY pfnUpdateAllocationProperty;
@@ -207,10 +213,13 @@ static BOOL D3DUmdRtResolveProcs(VOID)
     RESOLVE(CreateAllocation, CREATEALLOCATION);
     RESOLVE(CreateAllocation2, CREATEALLOCATION2);
     RESOLVE(DestroyAllocation, DESTROYALLOCATION);
+    RESOLVE(SetAllocationPriority, SETALLOCATIONPRIORITY);
+    RESOLVE(QueryAllocationResidency, QUERYALLOCATIONRESIDENCY);
     RESOLVE(Lock, LOCK);
     RESOLVE(Unlock, UNLOCK);
     RESOLVE(Render, RENDER);
     RESOLVE(CreateContext, CREATECONTEXT);
+    RESOLVE(SetContextSchedulingPriority, SETCONTEXTSCHEDULINGPRIORITY);
     RESOLVE(DestroyContext, DESTROYCONTEXT);
     RESOLVE(Escape, ESCAPE);
     RESOLVE(SetDisplayMode, SETDISPLAYMODE);
@@ -251,6 +260,7 @@ static BOOL D3DUmdRtResolveProcs(VOID)
     RESOLVE(WaitForSynchronizationObjectFromGpu, WAITFORSYNCHRONIZATIONOBJECTFROMGPU);
     RESOLVE(SignalSynchronizationObjectFromGpu, SIGNALSYNCHRONIZATIONOBJECTFROMGPU);
     RESOLVE(SignalSynchronizationObjectFromGpu2, SIGNALSYNCHRONIZATIONOBJECTFROMGPU2);
+    RESOLVE(OpenSyncObjectFromNtHandle2, OPENSYNCOBJECTFROMNTHANDLE2);
 #endif
 #if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WDDM2_1_1)
     RESOLVE(UpdateAllocationProperty, UPDATEALLOCATIONPROPERTY);
@@ -346,18 +356,62 @@ D3DUmdRtEndOverlayCall(
     LeaveCriticalSection(&D3DUmdRtDeviceLock);
 }
 
+static HRESULT D3DUmdRtStatusToHresult(NTSTATUS Status);
+
 static VOID
 D3DUmdRtTrackContext(
     PD3DUMDRT_DEVICE Device,
     PD3DUMDRT_CONTEXT Context,
     D3DKMT_HANDLE hContext)
 {
+    INT Priority;
+
     Context->hContext = hContext;
     EnterCriticalSection(&D3DUmdRtDeviceLock);
     Context->Next = Device->Contexts;
     Device->Contexts = Context;
     InterlockedIncrement(&Device->LiveObjectCount);
+    Priority = Device->SchedulingPriority;
     LeaveCriticalSection(&D3DUmdRtDeviceLock);
+    if (Priority != 0 && pfnSetContextSchedulingPriority != NULL)
+    {
+        D3DKMT_SETCONTEXTSCHEDULINGPRIORITY Set;
+
+        Set.hContext = hContext;
+        Set.Priority = Priority;
+        (VOID)pfnSetContextSchedulingPriority(&Set);
+    }
+}
+
+/* IDXGIDevice::SetGPUThreadPriority: every context of the device, present and future. */
+HRESULT WINAPI
+D3DUmdRtSetContextSchedulingPriority(HANDLE hRuntimeDevice, INT Priority)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hRuntimeDevice);
+    D3DKMT_SETCONTEXTSCHEDULINGPRIORITY Set;
+    PD3DUMDRT_CONTEXT Context;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Device == NULL || Priority < -7 || Priority > 7)
+        return E_INVALIDARG;
+    if (pfnSetContextSchedulingPriority == NULL)
+        return E_NOTIMPL;
+    EnterCriticalSection(&D3DUmdRtDeviceLock);
+    Device->SchedulingPriority = Priority;
+    for (Context = Device->Contexts; Context != NULL; Context = Context->Next)
+    {
+        NTSTATUS ContextStatus;
+
+        if (Context->Destroying)
+            continue;
+        Set.hContext = Context->hContext;
+        Set.Priority = Priority;
+        ContextStatus = pfnSetContextSchedulingPriority(&Set);
+        if (ContextStatus < 0 && Status >= 0)
+            Status = ContextStatus;
+    }
+    LeaveCriticalSection(&D3DUmdRtDeviceLock);
+    return D3DUmdRtStatusToHresult(Status);
 }
 
 static HRESULT
@@ -475,6 +529,13 @@ static HRESULT D3DUmdRtStatusToHresult(NTSTATUS Status)
         default:
             return E_FAIL;
     }
+}
+
+static HRESULT D3DUmdRtPagingStatusToHresult(NTSTATUS Status)
+{
+    if (Status == STATUS_PENDING)
+        return E_PENDING;
+    return D3DUmdRtStatusToHresult(Status);
 }
 
 /* ------------------------------------------------------------------------ *
@@ -1328,6 +1389,88 @@ static HRESULT APIENTRY D3DUmdRtRenderCb(HANDLE hDevice, D3DDDICB_RENDER *pData)
 }
 
 /* ------------------------------------------------------------------------ *
+ * Allocation priority and residency
+ * ------------------------------------------------------------------------ */
+
+C_ASSERT(sizeof(D3DDDI_RESIDENCYSTATUS) == sizeof(D3DKMT_ALLOCATIONRESIDENCYSTATUS));
+C_ASSERT((INT)D3DDDI_RESIDENCYSTATUS_RESIDENTINGPUMEMORY == (INT)D3DKMT_ALLOCATIONRESIDENCYSTATUS_RESIDENTINGPUMEMORY);
+C_ASSERT((INT)D3DDDI_RESIDENCYSTATUS_RESIDENTINSHAREDMEMORY == (INT)D3DKMT_ALLOCATIONRESIDENCYSTATUS_RESIDENTINSHAREDMEMORY);
+C_ASSERT((INT)D3DDDI_RESIDENCYSTATUS_NOTRESIDENT == (INT)D3DKMT_ALLOCATIONRESIDENCYSTATUS_NOTRESIDENT);
+
+/* A runtime resource names all of its allocations; otherwise the handle list does. */
+static HRESULT
+D3DUmdRtAllocationTarget(
+    _In_ PD3DUMDRT_DEVICE Device,
+    _In_opt_ HANDLE hResource,
+    _In_ UINT NumAllocations,
+    _In_opt_ CONST D3DKMT_HANDLE *HandleList,
+    _Out_ D3DKMT_HANDLE *KmResource)
+{
+    D3DKMT_HANDLE *Handles;
+    HRESULT Result;
+
+    *KmResource = 0;
+    if (hResource == NULL)
+        return (NumAllocations == 0 || HandleList == NULL) ? E_INVALIDARG : S_OK;
+    Result = D3DUmdRtTranslateResourceHandles(Device, &hResource, 1, &Handles);
+    if (FAILED(Result))
+        return Result;
+    *KmResource = Handles[0];
+    HeapFree(GetProcessHeap(), 0, Handles);
+    return S_OK;
+}
+
+static HRESULT APIENTRY
+D3DUmdRtSetPriorityCb(
+    HANDLE hDevice,
+    D3DDDICB_SETPRIORITY *pData)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hDevice);
+    D3DKMT_SETALLOCATIONPRIORITY Set;
+    HRESULT Result;
+
+    if (Device == NULL || pData == NULL || pData->pPriorities == NULL || pfnSetAllocationPriority == NULL)
+        return E_INVALIDARG;
+    ZeroMemory(&Set, sizeof(Set));
+    Result = D3DUmdRtAllocationTarget(Device, pData->hResource, pData->NumAllocations, pData->HandleList, &Set.hResource);
+    if (FAILED(Result))
+        return Result;
+    Set.hDevice = Device->hDevice;
+    if (Set.hResource == 0)
+    {
+        Set.phAllocationList = pData->HandleList;
+        Set.AllocationCount = pData->NumAllocations;
+    }
+    Set.pPriorities = pData->pPriorities;
+    return D3DUmdRtStatusToHresult(pfnSetAllocationPriority(&Set));
+}
+
+static HRESULT APIENTRY
+D3DUmdRtQueryResidencyCb(
+    HANDLE hDevice,
+    CONST D3DDDICB_QUERYRESIDENCY *pData)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hDevice);
+    D3DKMT_QUERYALLOCATIONRESIDENCY Query;
+    HRESULT Result;
+
+    if (Device == NULL || pData == NULL || pData->pResidencyStatus == NULL || pfnQueryAllocationResidency == NULL)
+        return E_INVALIDARG;
+    ZeroMemory(&Query, sizeof(Query));
+    Result = D3DUmdRtAllocationTarget(Device, pData->hResource, pData->NumAllocations, pData->HandleList, &Query.hResource);
+    if (FAILED(Result))
+        return Result;
+    Query.hDevice = Device->hDevice;
+    if (Query.hResource == 0)
+    {
+        Query.phAllocationList = pData->HandleList;
+        Query.AllocationCount = pData->NumAllocations;
+    }
+    Query.pResidencyStatus = (D3DKMT_ALLOCATIONRESIDENCYSTATUS *)pData->pResidencyStatus;
+    return D3DUmdRtStatusToHresult(pfnQueryAllocationResidency(&Query));
+}
+
+/* ------------------------------------------------------------------------ *
  * Display mode
  * ------------------------------------------------------------------------ */
 
@@ -1815,7 +1958,7 @@ static HRESULT APIENTRY D3DUmdRtMakeResidentCb(HANDLE hDevice, D3DDDI_MAKERESIDE
      * freeing the amount it was just told to free.
      */
     pData->hPagingQueue = pData->hPagingQueue;
-    return D3DUmdRtStatusToHresult(pfnMakeResident(pData));
+    return D3DUmdRtPagingStatusToHresult(pfnMakeResident(pData));
 }
 
 static HRESULT APIENTRY D3DUmdRtEvictCb(HANDLE hDevice, D3DDDICB_EVICT *pData)
@@ -2307,6 +2450,8 @@ static HRESULT APIENTRY D3DUmdRtReserveGpuVirtualAddressCb(HANDLE hDevice,
 
     if (Device == NULL || pData == NULL || pfnReserveGpuVirtualAddress == NULL)
         return E_INVALIDARG;
+    if (pData->hAdapter == 0)
+        pData->hAdapter = Device->hAdapter;
     /* Shared structure again: reserve, map, and free all take exactly what
      * D3DKMT takes, so nothing is translated and nothing can be lost. */
     return D3DUmdRtStatusToHresult(pfnReserveGpuVirtualAddress(pData));
@@ -2325,7 +2470,7 @@ static HRESULT APIENTRY D3DUmdRtMapGpuVirtualAddressCb(HANDLE hDevice,
      * pData, so a driver that used the address immediately would be reading a
      * page table entry that has not been written yet.
      */
-    return D3DUmdRtStatusToHresult(pfnMapGpuVirtualAddress(pData));
+    return D3DUmdRtPagingStatusToHresult(pfnMapGpuVirtualAddress(pData));
 }
 
 static HRESULT APIENTRY D3DUmdRtFreeGpuVirtualAddressCb(HANDLE hDevice,
@@ -2871,10 +3016,48 @@ D3DUmdRtCreateSynchronizationObject2Cb(
         return E_FAIL;
     }
 
+    SyncObject->MonitoredFence = pData->Info.Type == D3DDDI_MONITORED_FENCE ||
+                                 pData->Info.Type == D3DDDI_PERIODIC_MONITORED_FENCE;
     D3DUmdRtTrackSynchronizationObject(Device, SyncObject,
                                        Create.hSyncObject);
     pData->Info = Create.Info;
     pData->hSyncObject = Create.hSyncObject;
+    return S_OK;
+}
+
+HRESULT WINAPI
+D3DUmdRtOpenSyncObjectFromNtHandle(HANDLE hRuntimeDevice, HANDLE NtHandle, D3DKMT_HANDLE *SyncObjectHandle,
+                                   PVOID *CpuValue, D3DGPU_VIRTUAL_ADDRESS *GpuValue)
+{
+    PD3DUMDRT_DEVICE Device = D3DUmdRtDevice(hRuntimeDevice);
+    D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 Open;
+    PD3DUMDRT_SYNC_OBJECT SyncObject;
+    NTSTATUS Status;
+
+    if (SyncObjectHandle != NULL) *SyncObjectHandle = 0;
+    if (CpuValue != NULL) *CpuValue = NULL;
+    if (GpuValue != NULL) *GpuValue = 0;
+    if (Device == NULL || NtHandle == NULL || SyncObjectHandle == NULL || CpuValue == NULL || GpuValue == NULL)
+        return E_INVALIDARG;
+    if (pfnOpenSyncObjectFromNtHandle2 == NULL)
+        return E_NOTIMPL;
+    SyncObject = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*SyncObject));
+    if (SyncObject == NULL)
+        return E_OUTOFMEMORY;
+    ZeroMemory(&Open, sizeof(Open));
+    Open.hNtHandle = NtHandle;
+    Open.hDevice = Device->hDevice;
+    Status = pfnOpenSyncObjectFromNtHandle2(&Open);
+    if (Status < 0 || Open.hSyncObject == 0)
+    {
+        HeapFree(GetProcessHeap(), 0, SyncObject);
+        return Status < 0 ? D3DUmdRtStatusToHresult(Status) : E_FAIL;
+    }
+    SyncObject->MonitoredFence = TRUE;
+    D3DUmdRtTrackSynchronizationObject(Device, SyncObject, Open.hSyncObject);
+    *SyncObjectHandle = Open.hSyncObject;
+    *CpuValue = Open.MonitoredFence.FenceValueCPUVirtualAddress;
+    *GpuValue = Open.MonitoredFence.FenceValueGPUVirtualAddress;
     return S_OK;
 }
 
@@ -2953,6 +3136,31 @@ D3DUmdRtSignalSynchronizationObject2Cb(
 /* Called after the runtime flushes the UMD. The CPU event is one broadcast
  * marker, so it is set only after every captured engine context reaches it.
  * This is render completion, not notification that a Present was displayed. */
+#if (D3D_UMD_INTERFACE_VERSION >= D3D_UMD_INTERFACE_VERSION_WIN8)
+static HRESULT
+D3DUmdRtSetEventNow(HANDLE Event)
+{
+    DWORD Error;
+
+    if (SetEvent(Event))
+        return S_OK;
+    Error = GetLastError();
+    switch (Error)
+    {
+        case ERROR_ACCESS_DENIED:
+            return E_ACCESSDENIED;
+        case ERROR_INVALID_HANDLE:
+        case ERROR_INVALID_PARAMETER:
+            return E_INVALIDARG;
+        case ERROR_NOT_ENOUGH_MEMORY:
+        case ERROR_OUTOFMEMORY:
+            return E_OUTOFMEMORY;
+        default:
+            return HRESULT_FROM_WIN32(Error);
+    }
+}
+#endif
+
 HRESULT WINAPI
 D3DUmdRtEnqueueSetEvent(HANDLE hDevice, HANDLE Event)
 {
@@ -2993,11 +3201,11 @@ D3DUmdRtEnqueueSetEvent(HANDLE hDevice, HANDLE Event)
         NTSTATUS Status = pfnSignalSynchronizationObject2(&Signal);
         /* Pseudo-handles and handles to another object type are invalid
          * event arguments too; insufficient event access is not E_FAIL. */
-        Result = Status == STATUS_OBJECT_TYPE_MISMATCH || Status == STATUS_ACCESS_DENIED ?
-            E_INVALIDARG : D3DUmdRtStatusToHresult(Status);
+        Result = Status == STATUS_ACCESS_DENIED ? E_ACCESSDENIED :
+            Status == STATUS_OBJECT_TYPE_MISMATCH ? E_INVALIDARG : D3DUmdRtStatusToHresult(Status);
     }
     else
-        Result = SetEvent(Event) ? S_OK : E_INVALIDARG;
+        Result = D3DUmdRtSetEventNow(Event);
 
     EnterCriticalSection(&D3DUmdRtDeviceLock);
     for (Index = 0; Index < Count; ++Index)
@@ -3180,8 +3388,7 @@ D3DUmdRtWaitForSynchronizationObjectFromGpuCb(
         pData->hContext == NULL ||
         pData->ObjectCount == 0 ||
         pData->ObjectCount > D3DDDI_MAX_OBJECT_WAITED_ON ||
-        pData->ObjectHandleArray == NULL ||
-        pData->MonitoredFenceValueArray == NULL)
+        pData->ObjectHandleArray == NULL)
     {
         return E_INVALIDARG;
     }
@@ -3223,6 +3430,37 @@ D3DUmdRtSignalSynchronizationObjectFromGpuCb(
                pfnSignalSynchronizationObjectFromGpu(&Signal));
 }
 
+/* Counts how many of the handles name monitored fences this device created; an untracked handle counts as neither. */
+static VOID
+D3DUmdRtCountMonitoredFences(
+    PD3DUMDRT_DEVICE Device,
+    CONST D3DKMT_HANDLE *Handles,
+    UINT Count,
+    UINT *Monitored,
+    UINT *Other)
+{
+    PD3DUMDRT_SYNC_OBJECT SyncObject;
+    UINT Index;
+
+    *Monitored = 0;
+    *Other = 0;
+    EnterCriticalSection(&D3DUmdRtDeviceLock);
+    for (Index = 0; Index < Count; ++Index)
+    {
+        for (SyncObject = Device->SyncObjects; SyncObject != NULL; SyncObject = SyncObject->Next)
+        {
+            if (SyncObject->hSyncObject != Handles[Index])
+                continue;
+            if (SyncObject->MonitoredFence)
+                ++*Monitored;
+            else
+                ++*Other;
+            break;
+        }
+    }
+    LeaveCriticalSection(&D3DUmdRtDeviceLock);
+}
+
 static HRESULT APIENTRY
 D3DUmdRtSignalSynchronizationObjectFromGpu2Cb(
     HANDLE hDevice,
@@ -3240,6 +3478,39 @@ D3DUmdRtSignalSynchronizationObjectFromGpu2Cb(
         pData->BroadcastContextArray == NULL)
     {
         return E_INVALIDARG;
+    }
+    if (!pData->Flags.EnqueueCpuEvent &&
+        pData->ObjectCount != 0 &&
+        pData->ObjectCount <= D3DDDI_MAX_OBJECT_SIGNALED &&
+        pData->ObjectHandleArray != NULL)
+    {
+        UINT Monitored;
+        UINT Other;
+
+        /* The value union is FenceValue for objects that are not monitored
+         * fences; that is the SignalSynchronizationObject2 form. */
+        D3DUmdRtCountMonitoredFences(Device, pData->ObjectHandleArray, pData->ObjectCount, &Monitored, &Other);
+        if (Other == pData->ObjectCount)
+        {
+            D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 Legacy;
+
+            ZeroMemory(&Legacy, sizeof(Legacy));
+            Legacy.hContext = (D3DKMT_HANDLE)(ULONG_PTR)pData->BroadcastContextArray[0];
+            Legacy.ObjectCount = pData->ObjectCount;
+            CopyMemory(Legacy.ObjectHandleArray, pData->ObjectHandleArray,
+                       pData->ObjectCount * sizeof(Legacy.ObjectHandleArray[0]));
+            Legacy.Flags = pData->Flags;
+            Legacy.BroadcastContextCount = pData->BroadcastContextCount - 1;
+            for (Index = 1; Index < pData->BroadcastContextCount; ++Index)
+                Legacy.BroadcastContext[Index - 1] = (D3DKMT_HANDLE)(ULONG_PTR)pData->BroadcastContextArray[Index];
+            Legacy.Fence.FenceValue = pData->FenceValue;
+            if (pfnSignalSynchronizationObject2 == NULL)
+                return E_INVALIDARG;
+            return D3DUmdRtStatusToHresult(pfnSignalSynchronizationObject2(&Legacy));
+        }
+        /* TODO: split a signal that mixes monitored fences with other object types */
+        if (Other != 0)
+            return E_INVALIDARG;
     }
     if ((pData->Flags.EnqueueCpuEvent && pData->ObjectCount != 0) ||
         (!pData->Flags.EnqueueCpuEvent &&
@@ -3334,6 +3605,8 @@ D3DUmdRtCreateDeviceCallbacksEx(
     ZeroMemory(pCallbacks, sizeof(*pCallbacks));
     pCallbacks->pfnAllocateCb = D3DUmdRtAllocateCb;
     pCallbacks->pfnDeallocateCb = D3DUmdRtDeallocateCb;
+    pCallbacks->pfnSetPriorityCb = D3DUmdRtSetPriorityCb;
+    pCallbacks->pfnQueryResidencyCb = D3DUmdRtQueryResidencyCb;
     pCallbacks->pfnSetDisplayModeCb = D3DUmdRtSetDisplayModeCb;
     pCallbacks->pfnLockCb = D3DUmdRtLockCb;
     pCallbacks->pfnUnlockCb = D3DUmdRtUnlockCb;

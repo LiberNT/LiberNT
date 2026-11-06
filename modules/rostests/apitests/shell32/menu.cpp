@@ -250,6 +250,11 @@ public:
          * we will ignore callbacks of this type
          * Note: this callback is invoked by shell32.dll!CMenuSFToolbar::_FilterPidl
          */
+        if (psmd && uMsg == 0x10000000)
+            ok(psmd->dwMask == SMDM_SHELLFOLDER, "dwMask is %lx for a shell folder item\n", psmd->dwMask);
+        if (psmd && uMsg == SMC_GETINFO)
+            ok(psmd->dwMask == SMDM_HMENU, "dwMask is %lx for a menu item\n", psmd->dwMask);
+
         if (uMsg == 0x10000000 && m_results[m_iCallback-1].uMsg == 0x13)
         {
             return S_OK;
@@ -309,7 +314,7 @@ void test_CShellMenu_callbacks(IShellFolder *shellFolder, HMENU hmenu)
 
     if (GetNTVersion() <= _WIN32_WINNT_WS03)
     {
-        struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
+        static struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
                                              {2, SMC_GETSFOBJECT},
                                              {3, SMC_SFEXEC_MIDDLE},
                                              {4, SMC_INITMENU},
@@ -332,7 +337,7 @@ void test_CShellMenu_callbacks(IShellFolder *shellFolder, HMENU hmenu)
 
     else
     {
-        struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
+        static struct _test_info cbtest_info[] =  { {1, SMC_CREATE},
                                              {2, SMC_GETSFOBJECT},
                                              {3, SMC_SFEXEC_MIDDLE},
                                              {4, SMC_INITMENU},

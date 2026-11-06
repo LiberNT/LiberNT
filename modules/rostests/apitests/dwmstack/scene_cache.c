@@ -31,6 +31,8 @@ START_TEST(scene_cache)
     Old.DxClientY = 32;
     Old.DxWidth = 800;
     Old.DxHeight = 600;
+    Old.DxDrawWidth = 800;
+    Old.DxDrawHeight = 600;
     Old.BaseUpdateId = 3;
     Current = Old;
     ++Current.DxUpdateId;
@@ -54,7 +56,7 @@ START_TEST(scene_cache)
     ok(!SAME(&ShadowCapture, &ShadowCapture), "Changing opacity must invalidate\n");
     Current = Old; ++Current.DxUpdateId; Current.AnimFlags = 1;
     ok(!SAME(&ShadowCapture, &ShadowCapture), "Animated geometry must invalidate\n");
-    Current = Old; ++Current.DxUpdateId; Current.DxWidth = 0;
+    Current = Old; ++Current.DxUpdateId; Current.DxDrawWidth = 0;
     ok(!SAME(&ShadowCapture, &ShadowCapture), "Invalid client geometry must invalidate\n");
     Current = Old; Current.DxUpdateId = 0;
     ok(!SAME(&ShadowCapture, &ShadowCapture), "Removing the client publication must invalidate\n");

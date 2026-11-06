@@ -70,6 +70,7 @@ typedef struct _SFFDISK_DEVICE_EXTENSION
     HANDLE HarddiskDirectory;           /**< Handle to \\Device\\HarddiskN directory object */
     UNICODE_STRING DeviceName;          /**< FDO device name (e.g. \\Device\\Harddisk0\\DR0) */
     BOOLEAN PhysicalDriveLinkCreated;   /**< TRUE while \\DosDevices\\PhysicalDriveN exists */
+    BOOLEAN PartitionZeroLinkCreated;   /**< TRUE while \\Device\\HarddiskN\\Partition0 exists. */
     UNICODE_STRING DiskInterfaceName;
     BOOLEAN DiskInterfaceRegistered;
     BOOLEAN DiskInterfaceEnabled;

@@ -103,38 +103,6 @@ Ndis6ValidateMiniportDriverCharacteristics(
     ULONG RequiredSize;
     UCHAR RequiredRevision;
 
-    if (Characteristics->Header.Type != NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS &&
-        Characteristics->Header.Type != NDIS_OBJECT_TYPE_DEFAULT)
-    {
-        return NDIS_STATUS_BAD_CHARACTERISTICS;
-    }
-
-    switch (Characteristics->Header.Revision)
-    {
-        case NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1:
-            RequiredSize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
-            break;
-
-        case NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2:
-            RequiredSize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
-            break;
-
-#if NDIS_SUPPORT_NDIS680
-        case NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3:
-            RequiredSize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3;
-            break;
-#endif
-
-        default:
-            return NDIS_STATUS_BAD_VERSION;
-    }
-
-    if (Characteristics->Header.Size < RequiredSize ||
-        Characteristics->Header.Size > sizeof(*Characteristics))
-    {
-        return NDIS_STATUS_BAD_CHARACTERISTICS;
-    }
-
     if (Characteristics->MajorNdisVersion != 6 ||
         !Ndis6IsSupportedMinorVersion(Characteristics->MinorNdisVersion))
     {
@@ -143,17 +111,62 @@ Ndis6ValidateMiniportDriverCharacteristics(
 
 #if NDIS_SUPPORT_NDIS680
     if (Characteristics->MinorNdisVersion >= 80)
+    {
         RequiredRevision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3;
+        RequiredSize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3;
+    }
     else
 #endif
     if (Characteristics->MinorNdisVersion >= 1)
+    {
         RequiredRevision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+        RequiredSize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+    }
     else
+    {
         RequiredRevision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
-    if (Characteristics->Header.Revision < RequiredRevision)
+        RequiredSize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
+    }
+
+    /* Windows 11 checks the header type and revision only from NDIS 6.1 on. */
+    if (RequiredRevision != NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1 &&
+        (Characteristics->Header.Type != NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS ||
+         Characteristics->Header.Revision < RequiredRevision))
+    {
+        return NDIS_STATUS_BAD_CHARACTERISTICS;
+    }
+    if (Characteristics->Header.Size < RequiredSize)
         return NDIS_STATUS_BAD_CHARACTERISTICS;
 
-    *CopySize = Characteristics->Header.Size;
+    *CopySize = RequiredSize;
+    return NDIS_STATUS_SUCCESS;
+}
+
+static NDIS_STATUS
+Ndis6ValidateMiniportDriverEntryPoints(
+    _In_ PNDIS_MINIPORT_DRIVER_CHARACTERISTICS Characteristics,
+    _In_ BOOLEAN WdiHost)
+{
+    if (Characteristics->PauseHandler == NULL ||
+        Characteristics->RestartHandler == NULL ||
+        Characteristics->SendNetBufferListsHandler == NULL ||
+        Characteristics->ReturnNetBufferListsHandler == NULL ||
+        Characteristics->CancelSendHandler == NULL ||
+        Characteristics->CancelOidRequestHandler == NULL ||
+        Characteristics->InitializeHandlerEx == NULL ||
+        Characteristics->HaltHandlerEx == NULL ||
+        Characteristics->DevicePnPEventNotifyHandler == NULL ||
+        Characteristics->ShutdownHandlerEx == NULL)
+    {
+        return NDIS_STATUS_BAD_CHARACTERISTICS;
+    }
+    if (!WdiHost && (Characteristics->Flags & NDIS_NETCX_DRIVER) == 0 && Characteristics->UnloadHandler == NULL)
+        return NDIS_STATUS_BAD_CHARACTERISTICS;
+    if (Characteristics->MinorNdisVersion != 0 &&
+        (Characteristics->DirectOidRequestHandler == NULL) != (Characteristics->CancelDirectOidRequestHandler == NULL))
+    {
+        return NDIS_STATUS_BAD_CHARACTERISTICS;
+    }
     return NDIS_STATUS_SUCCESS;
 }
 
@@ -381,14 +394,9 @@ Ndis6RegisterMiniportDriverInternal(
     Status = Ndis6ValidateMiniportDriverCharacteristics(MiniportDriverCharacteristics, &CharacteristicsSize);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
-
-    /* Ordinary miniports provide InitializeEx/HaltEx. WDI drivers register
-     * separate adapter lifecycle callbacks in their WDI characteristics. */
-    if (!WdiCharacteristics && (MiniportDriverCharacteristics->InitializeHandlerEx == NULL ||
-        MiniportDriverCharacteristics->HaltHandlerEx == NULL))
-    {
-        return NDIS_STATUS_BAD_CHARACTERISTICS;
-    }
+    Status = Ndis6ValidateMiniportDriverEntryPoints(MiniportDriverCharacteristics, WdiCharacteristics != NULL);
+    if (Status != NDIS_STATUS_SUCCESS)
+        return Status;
 
     Ndis6DriverInit();
 

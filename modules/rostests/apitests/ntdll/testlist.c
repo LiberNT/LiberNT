@@ -25,6 +25,7 @@ extern void func_strtoul(void);
 extern void func_wcstoul(void);
 extern void func_wcstombs(void);
 
+extern void func_ApiSetMap(void);
 extern void func_DebugRegisters(void);
 extern void func_DllLoadNotification(void);
 extern void func_FileStatInformation(void);
@@ -56,6 +57,7 @@ extern void func_NtContinue(void);
 #ifdef _M_AMD64
 extern void func_NullGsSelector(void);
 extern void func_RtlRestoreContextConsolidate(void);
+extern void func_RtlVirtualUnwindFragment(void);
 extern void func_SyscallStub(void);
 extern void func_x87Exception(void);
 #endif
@@ -131,6 +133,7 @@ extern void func_RtlDoesFileExists(void);
 extern void func_RtlDosPathNameToNtPathName_U(void);
 extern void func_RtlDosSearchPath_U(void);
 extern void func_RtlDosSearchPath_Ustr(void);
+extern void func_RtlExitUserProcess(void);
 extern void func_RtlFirstFreeAce(void);
 extern void func_RtlGenerate8dot3Name(void);
 extern void func_RtlGetFullPathName_U(void);
@@ -144,6 +147,7 @@ extern void func_RtlGetProcessHeaps(void);
 extern void func_RtlGetProductInfo(void);
 extern void func_RtlGetUnloadEventTrace(void);
 extern void func_RtlHandle(void);
+extern void func_RtlHeapDecommit(void);
 extern void func_RtlHeapFreeCoalesce(void);
 extern void func_RtlImageDirectoryEntryToData(void);
 extern void func_RtlImageRvaToVa(void);
@@ -177,10 +181,12 @@ extern void func_RtlVirtualUnwind(void);
 extern void func_RtlVirtualUnwindChainedHandler(void);
 extern void func_RtlxUnicodeStringToAnsiSize(void);
 extern void func_RtlxUnicodeStringToOemSize(void);
+extern void func_SatisfiedWait(void);
 extern void func_StackOverflow(void);
 extern void func_ScanfSecure(void);
 extern void func_StackProbe(void);
 extern void func_TimerResolution(void);
+extern void func_SehHandlerLocals(void);
 #if defined(_M_IX86) || defined(_M_AMD64)
 extern void func_UserModeException(void);
 #endif
@@ -228,6 +234,7 @@ const struct test winetest_testlist[] =
     { "load_notifications",             func_load_notifications },
     { "memmove",                        func_memmove },
     { "memset",                         func_memset },
+    { "ApiSetMap",                      func_ApiSetMap },
     { "MemoryAccounting",               func_MemoryAccounting },
     { "NtAcceptConnectPort",            func_NtAcceptConnectPort },
     { "NtAccessCheck",                  func_NtAccessCheck },
@@ -244,6 +251,7 @@ const struct test winetest_testlist[] =
 #ifdef _M_AMD64
     { "NullGsSelector",                 func_NullGsSelector },
     { "RtlRestoreContextConsolidate",   func_RtlRestoreContextConsolidate },
+    { "RtlVirtualUnwindFragment",       func_RtlVirtualUnwindFragment },
     { "SyscallStub",                    func_SyscallStub },
     { "x87Exception",                   func_x87Exception },
 #endif
@@ -320,6 +328,7 @@ const struct test winetest_testlist[] =
     { "RtlDosPathNameToNtPathName_U",   func_RtlDosPathNameToNtPathName_U },
     { "RtlDosSearchPath_U",             func_RtlDosSearchPath_U },
     { "RtlDosSearchPath_Ustr",          func_RtlDosSearchPath_Ustr },
+    { "RtlExitUserProcess",             func_RtlExitUserProcess },
     { "RtlFirstFreeAce",                func_RtlFirstFreeAce },
     { "RtlGenerate8dot3Name",           func_RtlGenerate8dot3Name },
     { "RtlGetFullPathName_U",           func_RtlGetFullPathName_U },
@@ -333,6 +342,7 @@ const struct test winetest_testlist[] =
     { "RtlGetProductInfo",              func_RtlGetProductInfo },
     { "RtlGetUnloadEventTrace",         func_RtlGetUnloadEventTrace },
     { "RtlHandle",                      func_RtlHandle },
+    { "RtlHeapDecommit",                func_RtlHeapDecommit },
     { "RtlHeapFreeCoalesce",            func_RtlHeapFreeCoalesce },
     { "RtlImageDirectoryEntryToData",   func_RtlImageDirectoryEntryToData },
     { "RtlImageRvaToVa",                func_RtlImageRvaToVa },
@@ -363,10 +373,12 @@ const struct test winetest_testlist[] =
     { "RtlValidateUnicodeString",       func_RtlValidateUnicodeString },
     { "RtlWaitOnAddress",               func_RtlWaitOnAddress },
     { "RtlWaitOnAddressPriority",       func_RtlWaitOnAddressPriority },
+    { "SatisfiedWait",                  func_SatisfiedWait },
     { "StackOverflow",                  func_StackOverflow },
     { "ScanfSecure",                    func_ScanfSecure },
     { "StackProbe",                     func_StackProbe },
     { "TimerResolution",                func_TimerResolution },
+    { "SehHandlerLocals",               func_SehHandlerLocals },
 #if defined(_M_IX86) || defined(_M_AMD64)
     { "UserModeException",              func_UserModeException },
 #endif

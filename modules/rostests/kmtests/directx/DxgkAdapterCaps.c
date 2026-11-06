@@ -301,8 +301,144 @@ TestFeatureQueryNegotiation(VOID)
                 DXGK_FEATURE_QUERY_RESULT_SUPPORTED_ON_CONFIG);
 }
 
+static VOID TestDriverCapsQuerySize(VOID)
+{
+    static const struct
+    {
+        ULONG Selector;
+        ULONG Size;
+    } Cases[] =
+    {
+        { 0x104D, 0 },
+        { 0x1052, 0x150 },
+        { 0x2000, 0 },
+        { 0x2005, 0x210 },
+        { 0x300E, 0x220 },
+        { 0x4002, 0x228 },
+        { 0x5003, 0 },
+        { 0x5010, 0x228 },
+        { 0x5023, 0x240 },
+        { 0x8001, 0x240 },
+        { 0x9006, 0x248 },
+        { 0xD001, 0x248 },
+        { 0xE003, 0x250 },
+        { 0x11007, 0x250 },
+    };
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Cases); ++Index)
+    {
+        ok(DxgkCapsCoreDriverCapsSize(Cases[Index].Selector) == Cases[Index].Size,
+           "DRIVERCAPS size for 0x%lx is 0x%lx, expected 0x%lx\n", Cases[Index].Selector,
+           DxgkCapsCoreDriverCapsSize(Cases[Index].Selector), Cases[Index].Size);
+    }
+}
+
+static VOID TestPhysicalAdapterCapsQuerySize(VOID)
+{
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0x5023), 0x14);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0x6003), 0x18);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0xB004), 0x18);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0xC004), 0x20);
+    ok_eq_ulong(DxgkCapsCorePhysicalAdapterCapsSize(0x11007), 0x20);
+}
+
+static VOID TestStablePowerCounting(VOID)
+{
+    LONG Process1 = 0, Process2 = 0, Adapter = 0;
+
+    ok_bool_false(DxgkCapsCoreStablePowerSet(&Process1, &Adapter, FALSE), "disable without a request stays silent");
+    ok_eq_long(Process1, 0);
+    ok_bool_true(DxgkCapsCoreStablePowerSet(&Process1, &Adapter, TRUE), "first request reaches the miniport");
+    ok_bool_false(DxgkCapsCoreStablePowerSet(&Process1, &Adapter, TRUE), "second request of a process stays silent");
+    ok_bool_false(DxgkCapsCoreStablePowerSet(&Process2, &Adapter, TRUE), "second process stays silent");
+    ok_eq_long(Adapter, 2);
+    ok_bool_false(DxgkCapsCoreStablePowerSet(&Process1, &Adapter, FALSE), "a process still holds a request");
+    ok_bool_false(DxgkCapsCoreStablePowerSet(&Process1, &Adapter, FALSE), "another process still holds a request");
+    ok_eq_long(Adapter, 1);
+    ok_bool_true(DxgkCapsCoreStablePowerSet(&Process2, &Adapter, FALSE), "last release reaches the miniport");
+    ok_eq_long(Adapter, 0);
+
+    ok_bool_true(DxgkCapsCoreStablePowerSet(&Process1, &Adapter, TRUE), "request again");
+    (VOID)DxgkCapsCoreStablePowerSet(&Process1, &Adapter, TRUE);
+    ok_bool_true(DxgkCapsCoreStablePowerRelease(&Process1, &Adapter), "process exit drops every request at once");
+    ok_eq_long(Process1, 0);
+    ok_eq_long(Adapter, 0);
+    ok_bool_false(DxgkCapsCoreStablePowerRelease(&Process1, &Adapter), "exit without a request stays silent");
+}
+
+static VOID TestWddmCaps(VOID)
+{
+    DXGK_WDDM_CAPS_CORE_INPUT Input;
+
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.HwSchSupportState = 2;
+    Input.HwSchEnabled = TRUE;
+    Input.HwFlipQueueSupportState = 1;
+    Input.HwFlipQueueEnabled = TRUE;
+    Input.IndependentVidPnVSyncControl = TRUE;
+    Input.DisplayableSupport = TRUE;
+    Input.NativeGpuFence = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0UL);
+    ok_eq_ulong(DxgkWddmCapsCore30(&Input), 0UL);
+    ok_eq_ulong(DxgkWddmCapsCore31(&Input), 0UL);
+
+    /* Win11 NVIDIA, hardware scheduling off: WDDM_2_7_CAPS 0x9. */
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.RenderCapable = TRUE;
+    Input.HwSchSupportState = 2;
+    Input.IndependentVidPnVSyncControl = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0x9UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0x2UL);
+    Input.HwSchEnabled = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0xBUL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0x6UL);
+    Input.HwSchSupportState = 1;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input) & 0x1UL, 0x1UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input) & 0x3UL, 0x1UL);
+    Input.HwSchSupportState = 3;
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input) & 0x3UL, 0x3UL);
+    Input.HwSchSupportState = 0;
+    Input.HwSchEnabled = FALSE;
+    ok_eq_ulong(DxgkWddmCapsCore27(&Input), 0x8UL);
+    ok_eq_ulong(DxgkWddmCapsCore29(&Input), 0UL);
+
+    Input.HwFlipQueueSupportState = 2;
+    ok_eq_ulong(DxgkWddmCapsCore30(&Input), 0x2UL);
+    Input.HwFlipQueueEnabled = TRUE;
+    Input.DisplayableSupport = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore30(&Input), 0xEUL);
+    ok_eq_ulong(DxgkWddmCapsCore31(&Input), 0UL);
+    Input.NativeGpuFence = TRUE;
+    ok_eq_ulong(DxgkWddmCapsCore31(&Input), 0x1UL);
+}
+
+static VOID TestAdapterTypeBits(VOID)
+{
+    /* Win11: NVIDIA (WDDM 3.2) 0x2313, Basic Render (WDDM 3.2) 0x105, Basic Display (WDDM 1.3, ACGSupported value) 0x10a. */
+    ok_bool_true(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x3200), "WDDM 3.2 driver");
+    ok_bool_true(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x2200), "WDDM 2.2 driver");
+    ok_bool_false(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x2100), "WDDM 2.1 driver");
+    ok_bool_false(DxgkAdapterTypeCoreAcgSupported(FALSE, 0x1300), "WDDM 1.3 driver");
+    ok_bool_true(DxgkAdapterTypeCoreAcgSupported(TRUE, 0x1300), "ACGSupported value");
+
+    ok_bool_true(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x11007, TRUE, TRUE, TRUE), "WDDM 3.2 full driver");
+    ok_bool_false(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x11007, TRUE, TRUE, FALSE), "render without MPO3");
+    ok_bool_true(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x11007, TRUE, FALSE, FALSE), "display-only driver");
+    ok_bool_false(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x11007, FALSE, TRUE, TRUE), "no SetTimingsFromVidPn");
+    ok_bool_false(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x2100, 0x11007, TRUE, TRUE, TRUE), "WDDM 2.1 caps");
+    ok_bool_false(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x3200, 0x7006, TRUE, TRUE, TRUE), "DDI before 0x7007");
+    ok_bool_true(DxgkAdapterTypeCoreSetTimingsFromVidPn(0x2200, 0x7007, TRUE, TRUE, TRUE), "lowest accepted pair");
+}
+
 START_TEST(DxgkAdapterCaps)
 {
+    TestAdapterTypeBits();
+    TestWddmCaps();
+    TestDriverCapsQuerySize();
+    TestStablePowerCounting();
+    TestPhysicalAdapterCapsQuerySize();
     TestVersionIsTheMinimum();
     TestRenderSupport();
     TestFeatureGating();

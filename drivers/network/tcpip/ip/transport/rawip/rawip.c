@@ -106,11 +106,55 @@ NTSTATUS BuildRawIpPacket(
 {
     NTSTATUS Status;
     PCHAR Payload;
+    PCHAR PacketData;
+    PIPv4_HEADER IPv4Header;
+    UINT AvailableSize;
+    UCHAR HeaderSize;
 
     TI_DbgPrint(MAX_TRACE, ("Called.\n"));
 
     /* FIXME: Assumes IPv4 */
     IPInitializePacket(Packet, IP_ADDRESS_V4);
+
+    if (AddrFile->HeaderIncl)
+    {
+        if (RemoteAddress->Type != IP_ADDRESS_V4 ||
+            DataLen < sizeof(IPv4_HEADER) ||
+            DataLen > 65535)
+            return STATUS_INVALID_PARAMETER;
+
+        Packet->TotalSize = DataLen;
+        Status = AllocatePacketWithBuffer(&Packet->NdisPacket, DataBuffer, DataLen);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        AvailableSize = 0;
+        PacketData = NULL;
+        GetDataPtr(Packet->NdisPacket, 0, &PacketData, &AvailableSize);
+        if (!PacketData || AvailableSize < DataLen)
+        {
+            Packet->Free(Packet);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        IPv4Header = (PIPv4_HEADER)PacketData;
+        HeaderSize = (IPv4Header->VerIHL & 0x0f) * 4;
+        if ((IPv4Header->VerIHL >> 4) != 4 ||
+            HeaderSize < sizeof(IPv4_HEADER) ||
+            HeaderSize > DataLen ||
+            ((WN2H(IPv4Header->FlagsFragOfs) & IPv4_FRAGOFS_MASK) << 3) + DataLen > 65535)
+        {
+            Packet->Free(Packet);
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        Packet->Header = PacketData;
+        Packet->HeaderSize = HeaderSize;
+        Packet->Data = PacketData + HeaderSize;
+        Packet->MappedHeader = TRUE;
+        Packet->Flags |= IP_PACKET_FLAG_RAW;
+        return STATUS_SUCCESS;
+    }
 
     Packet->TotalSize = sizeof(IPv4_HEADER) + DataLen;
 
@@ -303,7 +347,7 @@ NTSTATUS RawIPSendDatagram(
 }
 
 
-VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
+BOOLEAN RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
 /*
  * FUNCTION: Receives and queues a RawIp datagram
  * ARGUMENTS:
@@ -319,6 +363,7 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
   PADDRESS_FILE AddrFile;
   PIP_ADDRESS DstAddress, SrcAddress;
   UINT DataSize;
+  BOOLEAN Delivered;
 
   TI_DbgPrint(MAX_TRACE, ("Called.\n"));
 
@@ -336,10 +381,10 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
     TI_DbgPrint(MIN_TRACE, ("Discarded IPv6 datagram (%i bytes).\n", IPPacket->TotalSize));
 
     /* FIXME: IPv6 is not supported */
-    return;
+    return FALSE;
 
   default:
-    return;
+    return FALSE;
   }
 
   /* Locate a receive request on destination address file object
@@ -351,6 +396,7 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
                              0,
                              IPv4Header->Protocol,
                              &SearchContext);
+  Delivered = AddrFile != NULL;
   if (AddrFile) {
     do {
       DGDeliverData(AddrFile,
@@ -372,6 +418,7 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
     /* FIXME: Send ICMP reply */
   }
   TI_DbgPrint(MAX_TRACE, ("Leaving.\n"));
+  return Delivered;
 }
 
 
@@ -384,9 +431,6 @@ NTSTATUS RawIPStartup(VOID)
 {
   RtlZeroMemory(&UDPStats, sizeof(UDP_STATISTICS));
 
-  /* Register this protocol with IP layer */
-  IPRegisterProtocol(IPPROTO_RAW, RawIpReceive);
-
   return STATUS_SUCCESS;
 }
 
@@ -398,9 +442,6 @@ NTSTATUS RawIPShutdown(VOID)
  *     Status of operation
  */
 {
-  /* Deregister this protocol with IP layer */
-  IPRegisterProtocol(IPPROTO_RAW, NULL);
-
   return STATUS_SUCCESS;
 }
 

@@ -1,0 +1,81 @@
+/*
+ * PROJECT:     LiberNT API tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Interface with counted strings embedded in other structures
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+[
+    uuid(5a1f7e3c-2c4d-4b6e-9a51-0f3b8d2e6c71),
+    version(1.0),
+    pointer_default(unique)
+]
+interface EmbeddedPointers
+{
+    typedef struct _COUNTED_STRING
+    {
+        unsigned short Length;
+        unsigned short MaximumLength;
+        [size_is(MaximumLength / 2), length_is(Length / 2)] wchar_t *Buffer;
+    } COUNTED_STRING;
+
+    typedef struct _SID_AUTHORITY
+    {
+        unsigned char Value[6];
+    } SID_AUTHORITY;
+
+    typedef struct _SID_BLOB
+    {
+        unsigned char Revision;
+        unsigned char SubAuthorityCount;
+        SID_AUTHORITY IdentifierAuthority;
+        [size_is(SubAuthorityCount)] unsigned long SubAuthority[];
+    } SID_BLOB, *PSID_BLOB;
+
+    typedef struct _DOMAIN_INFO
+    {
+        COUNTED_STRING Name;
+        PSID_BLOB Sid;
+    } DOMAIN_INFO;
+
+    typedef struct _NAME_INFO
+    {
+        COUNTED_STRING UserName;
+        COUNTED_STRING FullName;
+    } NAME_INFO;
+
+    typedef struct _DISPLAY_ENTRY
+    {
+        unsigned long Index;
+        unsigned long Rid;
+        unsigned long AccountControl;
+        COUNTED_STRING AccountName;
+        COUNTED_STRING AdminComment;
+        COUNTED_STRING FullName;
+    } DISPLAY_ENTRY;
+
+    typedef [switch_type(unsigned long)] union _INFO
+    {
+        [case(1)] DOMAIN_INFO Domain;
+        [case(2)] NAME_INFO Name;
+        [case(3)] DISPLAY_ENTRY Display;
+    } INFO;
+
+    typedef struct _DOMAIN_LIST
+    {
+        unsigned long Entries;
+        [size_is(Entries)] DOMAIN_INFO *Domains;
+        unsigned long MaxEntries;
+    } DOMAIN_LIST;
+
+    typedef struct _DISPLAY_BUFFER
+    {
+        unsigned long EntriesRead;
+        [size_is(EntriesRead)] DISPLAY_ENTRY *Buffer;
+    } DISPLAY_BUFFER;
+
+    long SetInfo([in] handle_t Binding, [in] unsigned long Class, [in, switch_is(Class)] INFO *Info);
+    long QueryInfo([in] handle_t Binding, [in] unsigned long Class, [out, switch_is(Class)] INFO **Info);
+    long QueryDomains([in] handle_t Binding, [in] unsigned long Count, [out] DOMAIN_LIST **List);
+    long QueryDisplay([in] handle_t Binding, [in] unsigned long Count, [out] DISPLAY_BUFFER *Buffer);
+}

@@ -1115,6 +1115,7 @@ SoftGpuPlatformScanoutWritten(
     LONG X;
     LONG Y;
     ULONG Byte;
+    BOOLEAN Direct;
 
     if (Device == NULL || Rect == NULL || Device->PlatformContext == NULL)
         return;
@@ -1159,11 +1160,27 @@ SoftGpuPlatformScanoutWritten(
             break;
     }
 
+    Direct = Shadow->BytesPerPixel == sizeof(ULONG) &&
+             Shadow->RedSize == 8 && Shadow->RedPosition == 16 &&
+             Shadow->GreenSize == 8 && Shadow->GreenPosition == 8 &&
+             Shadow->BlueSize == 8 && Shadow->BluePosition == 0;
     for (Y = FrameTop; Y < FrameBottom; Y++)
     {
         LONG_PTR Index = SoftGpuRootShadowIndex(Shadow, FrameLeft, Y);
         PUCHAR Destination = Shadow->FrameBuffer + (SIZE_T)Y * Shadow->Pitch +
                              (SIZE_T)FrameLeft * Shadow->BytesPerPixel;
+
+        if (Direct)
+        {
+            PULONG Pixels = (PULONG)Destination;
+
+            for (X = FrameLeft; X < FrameRight; X++)
+            {
+                *Pixels++ = Shadow->Shadow[Index] & 0x00FFFFFF;
+                Index += Step;
+            }
+            continue;
+        }
 
         for (X = FrameLeft; X < FrameRight; X++)
         {

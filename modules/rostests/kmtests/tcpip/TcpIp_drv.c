@@ -10,6 +10,7 @@
 
 extern KMT_MESSAGE_HANDLER TestTdi;
 extern KMT_MESSAGE_HANDLER TestConnect;
+extern KMT_MESSAGE_HANDLER TestCancelReceiveHandler;
 
 static struct
 {
@@ -19,6 +20,7 @@ static struct
 {
     { IOCTL_TEST_TDI,       TestTdi },
     { IOCTL_TEST_CONNECT,   TestConnect },
+    { IOCTL_TEST_CANCEL_RECEIVE, TestCancelReceiveHandler },
 };
 
 NTSTATUS

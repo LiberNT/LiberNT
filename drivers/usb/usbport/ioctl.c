@@ -172,6 +172,19 @@ static NTSTATUS USBPORT_DumpControl(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_
     return USBPORT_DumpSubmit(DumpContext, DumpContext->ControlEndpoint, &SetupPacket, FALSE, NULL, PhysicalAddress, FALSE, 0);
 }
 
+static VOID USBPORT_DumpResetPipe(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_opt_ PUSBPORT_ENDPOINT Endpoint)
+{
+    PUSBPORT_DEVICE_EXTENSION FdoExtension = DumpContext->FdoExtension;
+    PUSBPORT_REGISTRATION_PACKET Packet = &FdoExtension->MiniPortInterface->Packet;
+
+    if ((Endpoint == NULL) || (Packet->SetEndpointStatus == NULL))
+        return;
+
+    if ((Endpoint != DumpContext->ControlEndpoint) && (Packet->SetEndpointDataToggle != NULL))
+        Packet->SetEndpointDataToggle(FdoExtension->MiniPortExt, Endpoint + 1, 0);
+    Packet->SetEndpointStatus(FdoExtension->MiniPortExt, Endpoint + 1, USBPORT_ENDPOINT_RUN);
+}
+
 static NTSTATUS NTAPI USBPORT_DumpPrepare(_In_ PVOID Context)
 {
     PUSBPORT_DUMP_CONTEXT DumpContext = Context;
@@ -184,6 +197,11 @@ static NTSTATUS NTAPI USBPORT_DumpPrepare(_In_ PVOID Context)
     DumpContext->DumpMode = TRUE;
     KeMemoryBarrier();
     Packet->DisableInterrupts(FdoExtension->MiniPortExt);
+
+    /* The crashed system can leave transfers queued on these pipes; drop them so the dump's own transfers run. */
+    USBPORT_DumpResetPipe(DumpContext, DumpContext->ControlEndpoint);
+    USBPORT_DumpResetPipe(DumpContext, DumpContext->BulkInEndpoint);
+    USBPORT_DumpResetPipe(DumpContext, DumpContext->BulkOutEndpoint);
 
     /* Bulk-Only Mass Storage Reset. */
     Status = USBPORT_DumpControl(DumpContext, USBPORT_DUMP_RT_CLASS_INTERFACE_OUT, USBPORT_DUMP_BULK_RESET_DEVICE, 0, DumpContext->InterfaceNumber);

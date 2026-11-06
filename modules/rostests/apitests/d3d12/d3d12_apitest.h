@@ -55,6 +55,7 @@ extern const SIZE_T vs_position_code_size;
 ID3D12Device *d3d12_test_create_device(void);
 BOOL d3d12_test_bounded(const char *name, void (*function)(void *), void *argument, DWORD timeout);
 BOOL d3d12_test_init(struct d3d12_test_context *context);
+BOOL d3d12_test_on_virtio3d(ID3D12Device *device);
 void d3d12_test_destroy(struct d3d12_test_context *context);
 BOOL d3d12_test_execute(struct d3d12_test_context *context, ID3D12GraphicsCommandList *list, DWORD timeout);
 BOOL d3d12_test_wait_queue(ID3D12Device *device, ID3D12CommandQueue *queue, DWORD timeout);

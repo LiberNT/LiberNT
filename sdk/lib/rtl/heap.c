@@ -26,7 +26,8 @@
 #include <debug.h>
 
 #define HEAP_DECOMMIT_MINIMUM_BLOCK 0x8000
-#define HEAP_DECOMMIT_COMMITTED_DIVISOR 8
+#define HEAP_DECOMMIT_MINIMUM_TOTAL_FREE 0x10000
+#define HEAP_DECOMMIT_COMMITTED_DIVISOR 16
 #define HEAP_INITIAL_REGION 0x10000
 #define HEAP_INITIAL_COMMIT_ALIGN (0x400 * sizeof(PVOID))
 #define HEAP_MAX_GROW_SIZE 0xFD0000
@@ -182,7 +183,15 @@ RtlpCloseCommittedRun(PHEAP_SEGMENT Segment,
     RunSize = EndEntry - FirstEntry;
 
     if (UcrSize != 0)
+    {
         ClosingSize = HEAP_UCR_TAIL_SIZE;
+        if ((Segment->Heap->Flags & HEAP_CREATE_ALIGN_16) &&
+            (((ULONG_PTR)(EndEntry - ClosingSize) + sizeof(HEAP_ENTRY)) & 15) &&
+            RunSize >= ClosingSize + 1 && RunSize != ClosingSize + 2)
+        {
+            ClosingSize++;
+        }
+    }
     else if (EndEntry == Segment->LastValidEntry)
         ClosingSize = 1;
     else
@@ -286,6 +295,8 @@ RtlpInitializeHeap(OUT PHEAP Heap,
     }
 
     HeaderSize = ROUND_UP(HeaderSize, HEAP_ENTRY_SIZE);
+    if ((Flags & HEAP_CREATE_ALIGN_16) && (((ULONG_PTR)Heap + HeaderSize + HEAP_ENTRY_SIZE) & 15))
+        HeaderSize += HEAP_ENTRY_SIZE;
     /* Sanity check */
     ASSERT(HeaderSize <= PAGE_SIZE);
 
@@ -982,6 +993,11 @@ RtlpInitializeHeapSegment(IN OUT PHEAP Heap,
     if ((PHEAP_SEGMENT) (Heap) != Segment)
     {
         Segment->Entry.Size = ROUND_UP(sizeof(HEAP_SEGMENT), sizeof(HEAP_ENTRY)) >> HEAP_ENTRY_SHIFT;
+        if ((Heap->Flags & HEAP_CREATE_ALIGN_16) &&
+            (((ULONG_PTR)Segment + ((SIZE_T)Segment->Entry.Size << HEAP_ENTRY_SHIFT) + sizeof(HEAP_ENTRY)) & 15))
+        {
+            Segment->Entry.Size++;
+        }
         Segment->Entry.Flags = HEAP_ENTRY_BUSY;
         Segment->Entry.SmallTagIndex = LOBYTE(Segment->Entry.Size) ^ HIBYTE(Segment->Entry.Size) ^ Segment->Entry.Flags;
         Segment->Entry.PreviousSize = 0;
@@ -1072,13 +1088,14 @@ BOOLEAN
 RtlpShouldDeCommitFreeBlock(PHEAP Heap,
                             SIZE_T BlockSize)
 {
-    SIZE_T CommittedPages = 0;
+    SIZE_T CommittedPages = 0, TotalFree = Heap->TotalFreeSize + BlockSize;
     PLIST_ENTRY Link;
     PHEAP_SEGMENT Segment;
 
     if (BlockSize < Heap->DeCommitFreeBlockThreshold ||
         BlockSize < (HEAP_DECOMMIT_MINIMUM_BLOCK >> HEAP_ENTRY_SHIFT) ||
-        Heap->TotalFreeSize + BlockSize < Heap->DeCommitTotalFreeThreshold)
+        TotalFree < Heap->DeCommitTotalFreeThreshold ||
+        TotalFree < HEAP_DECOMMIT_MINIMUM_TOTAL_FREE)
     {
         return FALSE;
     }
@@ -1089,7 +1106,7 @@ RtlpShouldDeCommitFreeBlock(PHEAP Heap,
         CommittedPages += Segment->NumberOfPages - Segment->NumberOfUnCommittedPages;
     }
 
-    return BlockSize >= (CommittedPages << (PAGE_SHIFT - HEAP_ENTRY_SHIFT)) / HEAP_DECOMMIT_COMMITTED_DIVISOR;
+    return TotalFree >= (CommittedPages << (PAGE_SHIFT - HEAP_ENTRY_SHIFT)) / HEAP_DECOMMIT_COMMITTED_DIVISOR;
 }
 
 PHEAP_FREE_ENTRY NTAPI

@@ -44,6 +44,7 @@
 
 enum dxgi_frame_latency
 {
+    DXGI_FRAME_LATENCY_DEFAULT = 3,
     DXGI_FRAME_LATENCY_MAX     = 16,
 };
 
@@ -133,6 +134,8 @@ struct dxgi_factory
     BOOL null_driver;
     struct dxgi_window_association *associations;
     SIZE_T association_count, association_size;
+    LUID first_adapter_luid;
+    BOOL first_adapter_known;
 #endif
     HWND device_window;
 };
@@ -152,6 +155,7 @@ struct dxgi_device
     struct wined3d_device *wined3d_device;
     struct wined3d_swapchain *implicit_swapchain;
     IWineDXGIAdapter *adapter;
+    UINT max_frame_latency;
 };
 
 HRESULT dxgi_device_init(struct dxgi_device *device, struct dxgi_device_layer *layer,
@@ -188,6 +192,7 @@ struct dxgi_adapter
 #ifdef __REACTOS__
     LUID wddm_luid;
     BOOL wddm_foreign;
+    LONG wddm_memory_adapter;
 #endif
 };
 
@@ -233,14 +238,17 @@ HRESULT d3d12_swapchain_create(IWineDXGIFactory *factory, ID3D12CommandQueue *qu
 
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
 HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc);
-HRESULT dxgi_query_wddm_video_memory_info(LUID luid, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
+LONG dxgi_open_wddm_adapter(LUID luid);
+void dxgi_close_wddm_adapter(LONG kmt_adapter);
+HRESULT dxgi_query_wddm_video_memory_info(LONG kmt_adapter, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
         DXGI_QUERY_VIDEO_MEMORY_INFO *info);
 BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid);
+BOOL dxgi_wddm_adapters_have_d3d11_umd(void);
 BOOL dxgi_wddm_adapter_supports_mpo(LUID luid);
 HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
         UINT *wined3d_adapter_idx, LUID *luid, BOOL *foreign);
 DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void);
-HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,
+HRESULT dxgi_get_wddm_output_index(struct dxgi_factory *factory, struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,
         UINT *wined3d_output_idx);
 void dxgi_get_wddm_output_color(const WCHAR *device_name, DXGI_OUTPUT_DESC1 *desc);
 #endif

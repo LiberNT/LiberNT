@@ -209,6 +209,7 @@ RcddDisableSurface(
    PRCDD_PDEV ppdev = (PRCDD_PDEV)dhpdev;
 
    KeWaitForSingleObject(&ppdev->CaptureMutex, Executive, KernelMode, FALSE, NULL);
+   ppdev->ScreenMirrorValid = FALSE;
    if (ppdev->CaptureSurface != NULL)
    {
       EngUnlockSurface(ppdev->CaptureSurface);

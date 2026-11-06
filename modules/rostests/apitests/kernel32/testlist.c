@@ -5,9 +5,12 @@
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_BaseSetLastNTError(void);
+extern void func_BaseThreadInitThunk(void);
+extern void func_CallbackCallingConventions(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
 extern void func_ConsoleCP(void);
+extern void func_ConsoleInputSignal(void);
 extern void func_ConsoleDbcsCells(void);
 extern void func_ConsoleProcessInheritance(void);
 extern void func_ConsoleVirtualTerminal(void);
@@ -20,6 +23,7 @@ extern void func_DeviceIoControl(void);
 extern void func_dosdev(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FindActCtxSectionStringW(void);
+extern void func_FileStorageInfo(void);
 extern void func_FindFiles(void);
 extern void func_FindPackagesByPackageFamily(void);
 extern void func_FLS(void);
@@ -54,11 +58,16 @@ extern void func_JobObjectUI(void);
 extern void func_LCMapString(void);
 extern void func_LoadLibraryExW(void);
 extern void func_LockFileEx(void);
+extern void func_QuantumRoundRobin(void);
+extern void func_RegisterWaitPeriodic(void);
+extern void func_RemoteThreadInit(void);
 extern void func_SandboxLaunch(void);
 extern void func_SystemImageCatalog(void);
+extern void func_SystemTimeChangeTimers(void);
 extern void func_TebSegmentAfterWait(void);
 extern void func_SharedMemorySecurity(void);
 extern void func_SharedMemoryTransfer(void);
+extern void func_StarvationBoost(void);
 extern void func_StdHandleInheritance(void);
 extern void func_LocaleNameToLCID(void);
 extern void func_lstrcpynW(void);
@@ -66,13 +75,17 @@ extern void func_lstrlen(void);
 extern void func_MailslotRead(void);
 extern void func_MuiResources(void);
 extern void func_MultiByteToWideChar(void);
+extern void func_NumaApis(void);
 extern void func_Pipes(void);
 extern void func_PackageNames(void);
 extern void func_PixeloramaCompat(void);
 extern void func_ProcessPreferredUILanguages(void);
 extern void func_PseudoConsoleCtrlC(void);
+extern void func_PseudoConsoleVtInput(void);
 extern void func_PssSnapshot(void);
 extern void func_OpenFileByIdRename(void);
+extern void func_LoaderLock(void);
+extern void func_PagingFileOpen(void);
 extern void func_PrivMoveFileIdentityW(void);
 extern void func_RenameDirectoryOldPath(void);
 extern void func_QueueUserAPC(void);
@@ -85,6 +98,8 @@ extern void func_SetFileAllocationInfo(void);
 extern void func_SetThreadStackGuarantee(void);
 extern void func_SetUnhandledExceptionFilter(void);
 extern void func_SetWaitableTimerEx(void);
+extern void func_WaitableTimerHighResolution(void);
+extern void func_SwitchToThreadCost(void);
 extern void func_SuspendThread(void);
 extern void func_SystemFirmware(void);
 extern void func_TerminateProcess(void);
@@ -97,6 +112,7 @@ extern void func_WaitForMultipleObjects(void);
 extern void func_WerRegisterFile(void);
 extern void func_WideCharToMultiByte(void);
 extern void func_Wow64GetThreadContext(void);
+extern void func_WriteFileBadBuffer(void);
 extern void func_WriteFileSeekBack(void);
 extern void func_XState(void);
 
@@ -106,9 +122,12 @@ const struct test winetest_testlist[] =
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "BaseSetLastNTError",          func_BaseSetLastNTError },
+    { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
+    { "CallbackCallingConventions", func_CallbackCallingConventions },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
     { "ConsoleCP",                   func_ConsoleCP },
+    { "ConsoleInputSignal",          func_ConsoleInputSignal },
     { "ConsoleDbcsCells",            func_ConsoleDbcsCells },
     { "ConsoleProcessInheritance",   func_ConsoleProcessInheritance },
     { "ConsoleVirtualTerminal",      func_ConsoleVirtualTerminal },
@@ -121,6 +140,7 @@ const struct test winetest_testlist[] =
     { "dosdev",                      func_dosdev },
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
+    { "FileStorageInfo",             func_FileStorageInfo },
     { "FindFiles",                   func_FindFiles },
     { "FindPackagesByPackageFamily", func_FindPackagesByPackageFamily },
     { "FLS",                         func_FLS },
@@ -156,10 +176,15 @@ const struct test winetest_testlist[] =
     { "LoadLibraryExW",              func_LoadLibraryExW },
     { "LockFileEx",                  func_LockFileEx },
     { "SystemImageCatalog",            func_SystemImageCatalog },
+    { "SystemTimeChangeTimers",      func_SystemTimeChangeTimers },
     { "TebSegmentAfterWait",           func_TebSegmentAfterWait },
+    { "QuantumRoundRobin",           func_QuantumRoundRobin },
+    { "RegisterWaitPeriodic",        func_RegisterWaitPeriodic },
+    { "RemoteThreadInit",            func_RemoteThreadInit },
     { "SandboxLaunch",               func_SandboxLaunch },
     { "SharedMemorySecurity",        func_SharedMemorySecurity },
     { "SharedMemoryTransfer",        func_SharedMemoryTransfer },
+    { "StarvationBoost",             func_StarvationBoost },
     { "StdHandleInheritance",        func_StdHandleInheritance },
     { "LocaleNameToLCID",            func_LocaleNameToLCID },
     { "lstrcpynW",                   func_lstrcpynW },
@@ -167,13 +192,17 @@ const struct test winetest_testlist[] =
     { "MailslotRead",                func_MailslotRead },
     { "MuiResources",                func_MuiResources },
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
+    { "NumaApis",                    func_NumaApis },
     { "Pipes",                       func_Pipes },
     { "PackageNames",                func_PackageNames },
     { "PixeloramaCompat",            func_PixeloramaCompat },
     { "ProcessPreferredUILanguages", func_ProcessPreferredUILanguages },
     { "PseudoConsoleCtrlC",          func_PseudoConsoleCtrlC },
+    { "PseudoConsoleVtInput",        func_PseudoConsoleVtInput },
     { "PssSnapshot",                 func_PssSnapshot },
     { "OpenFileByIdRename",          func_OpenFileByIdRename },
+    { "LoaderLock",                  func_LoaderLock },
+    { "PagingFileOpen",              func_PagingFileOpen },
     { "PrivMoveFileIdentityW",       func_PrivMoveFileIdentityW },
     { "RenameDirectoryOldPath",      func_RenameDirectoryOldPath },
     { "QueueUserAPC",                func_QueueUserAPC },
@@ -185,6 +214,8 @@ const struct test winetest_testlist[] =
     { "SetThreadStackGuarantee",     func_SetThreadStackGuarantee },
     { "SetUnhandledExceptionFilter", func_SetUnhandledExceptionFilter },
     { "SetWaitableTimerEx",          func_SetWaitableTimerEx },
+    { "WaitableTimerHighResolution", func_WaitableTimerHighResolution },
+    { "SwitchToThreadCost", func_SwitchToThreadCost },
     { "SuspendThread",               func_SuspendThread },
     { "SystemFirmware",              func_SystemFirmware },
     { "TerminateProcess",            func_TerminateProcess },
@@ -197,6 +228,7 @@ const struct test winetest_testlist[] =
     { "WerRegisterFile",             func_WerRegisterFile },
     { "WideCharToMultiByte",         func_WideCharToMultiByte },
     { "Wow64GetThreadContext",       func_Wow64GetThreadContext },
+    { "WriteFileBadBuffer",          func_WriteFileBadBuffer },
     { "WriteFileSeekBack",           func_WriteFileSeekBack },
     { "XState",                      func_XState },
     { 0, 0 }

@@ -22,7 +22,13 @@
 #define READY_SCAN_CANDIDATES 16
 #define READY_SCAN_BOOSTS 1
 #define READY_SCAN_WAIT_TICKS 6
+#define STARVATION_SCAN_PRIORITY_MIN 1
+#define STARVATION_SCAN_PRIORITY_MAX (LOW_REALTIME_PRIORITY - 2)
+#define STARVATION_BOOST_PRIORITY (LOW_REALTIME_PRIORITY - 1)
+#define STARVATION_SCAN_BOOSTS 10
+#define STARVATION_WAIT_TICKS 300
 ULONG KiReadyScanLast;
+static ULONG KiStarvationScanIndex[MAXIMUM_PROCESSORS];
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
@@ -31,7 +37,12 @@ VOID
 KiScanReadyQueuesOnPrcb(IN PKPRCB Prcb,
                         IN ULONG TickNow,
                         IN ULONG CandidateQuota,
-                        IN ULONG BoostQuota)
+                        IN ULONG BoostQuota,
+                        IN ULONG PriorityMin,
+                        IN ULONG PriorityMax,
+                        IN KPRIORITY BoostPriority,
+                        IN ULONG WaitTicks,
+                        IN OUT PULONG QueueIndex)
 {
     ULONG Index;
     ULONG Summary;
@@ -41,16 +52,16 @@ KiScanReadyQueuesOnPrcb(IN PKPRCB Prcb,
     PKTHREAD Thread;
 
     KiAcquirePrcbLock(Prcb);
-    Index = Prcb->QueueIndex;
+    Index = *QueueIndex;
 
     /* Check if there's any thread that need help */
-    Summary = Prcb->ReadySummary & (PRIORITY_MASK(READY_SCAN_PRIORITY_MIN) | PRIORITY_MASK(READY_SCAN_PRIORITY_MAX));
+    Summary = Prcb->ReadySummary & (PRIORITY_MASK(PriorityMax + 1) - PRIORITY_MASK(PriorityMin));
     while (Summary &&
            (CandidatesScanned < CandidateQuota) &&
            (ThreadsBoosted < BoostQuota))
     {
         /* Normalize the index */
-        if ((Index < READY_SCAN_PRIORITY_MIN) || (Index > READY_SCAN_PRIORITY_MAX)) Index = READY_SCAN_PRIORITY_MIN;
+        if ((Index < PriorityMin) || (Index > PriorityMax)) Index = PriorityMin;
 
         /* Loop for ready threads */
         if (Summary & PRIORITY_MASK(Index))
@@ -83,8 +94,7 @@ KiScanReadyQueuesOnPrcb(IN PKPRCB Prcb,
                     continue;
                 }
 
-                if ((ULONG)(TickNow - Thread->WaitTime) >=
-                    READY_SCAN_WAIT_TICKS)
+                if ((ULONG)(TickNow - Thread->WaitTime) >= WaitTicks)
                 {
                     ASSERT(Prcb->ReadySummary & PRIORITY_MASK(Index));
                     if (RemoveEntryList(&Thread->WaitListEntry))
@@ -95,12 +105,12 @@ KiScanReadyQueuesOnPrcb(IN PKPRCB Prcb,
                     ASSERT((Thread->PriorityDecrement >= 0) &&
                            (Thread->PriorityDecrement <= Thread->Priority));
                     Thread->PriorityDecrement +=
-                        (THREAD_BOOST_PRIORITY - KiGetUnflooredPriority(Thread));
+                        (BoostPriority - KiGetUnflooredPriority(Thread));
                     ASSERT((Thread->PriorityDecrement >= 0) &&
                            (Thread->PriorityDecrement <=
-                            THREAD_BOOST_PRIORITY));
+                            BoostPriority));
 
-                    Thread->Priority = (SCHAR)KiApplyPriorityFloor(Thread, THREAD_BOOST_PRIORITY);
+                    Thread->Priority = (SCHAR)KiApplyPriorityFloor(Thread, BoostPriority);
                     KiSetThreadQuantum(Thread, WAIT_QUANTUM_DECREMENT * 4);
                     KiInsertDeferredReadyList(Thread);
                     ThreadsBoosted++;
@@ -121,7 +131,7 @@ KiScanReadyQueuesOnPrcb(IN PKPRCB Prcb,
         Index++;
     }
 
-    Prcb->QueueIndex = Summary ? Index : READY_SCAN_PRIORITY_MIN;
+    *QueueIndex = Summary ? Index : PriorityMin;
     KiReleasePrcbLock(Prcb);
 
     if (SmpDbgEnabled && ThreadsBoosted)
@@ -159,7 +169,21 @@ KiScanReadyQueues(IN PKDPC Dpc,
         KiScanReadyQueuesOnPrcb(KiProcessorBlock[ScanIndex],
                                 TickNow,
                                 CandidateQuota,
-                                BoostQuota);
+                                BoostQuota,
+                                READY_SCAN_PRIORITY_MIN,
+                                READY_SCAN_PRIORITY_MAX,
+                                THREAD_BOOST_PRIORITY,
+                                READY_SCAN_WAIT_TICKS,
+                                &KiProcessorBlock[ScanIndex]->QueueIndex);
+        KiScanReadyQueuesOnPrcb(KiProcessorBlock[ScanIndex],
+                                TickNow,
+                                CandidateQuota,
+                                STARVATION_SCAN_BOOSTS,
+                                STARVATION_SCAN_PRIORITY_MIN,
+                                STARVATION_SCAN_PRIORITY_MAX,
+                                STARVATION_BOOST_PRIORITY,
+                                STARVATION_WAIT_TICKS,
+                                &KiStarvationScanIndex[ScanIndex]);
 
         ScanIndex++;
         if (ScanIndex == KeNumberProcessors) ScanIndex = 0;

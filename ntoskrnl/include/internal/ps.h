@@ -470,6 +470,15 @@ BOOLEAN
 NTAPI
 PspInitializeApiSetSchema(VOID);
 
+BOOLEAN
+NTAPI
+PspInitializeApiSetSection(VOID);
+
+NTSTATUS
+NTAPI
+PspMapApiSetSchema(
+    _In_ PEPROCESS Process);
+
 VOID
 NTAPI
 PspTlsThreadCleanup(

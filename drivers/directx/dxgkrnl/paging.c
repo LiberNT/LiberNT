@@ -1241,19 +1241,20 @@ DxgkPagingWaitForFence(
         return STATUS_INVALID_PARAMETER;
 
     Start100ns = KeQueryInterruptTime();
-    Interval.QuadPart = -1000LL;
+    Interval.QuadPart = -10 * 10000LL;
     for (;;)
     {
+        KeClearEvent(&Adapter->FenceProgressEvent);
         DxgkRetireCompletedDmaBuffers(Adapter);
         if (DxgkPagingFenceCompleted(Adapter, PagingFenceId))
             return STATUS_SUCCESS;
         if (InterlockedCompareExchange(&Adapter->SubmitDmaStopping, 0, 0) != 0)
             return STATUS_DEVICE_REMOVED;
-        /* Delays are rounded to the timer resolution. Count elapsed time,
-         * not requested 100-us sleeps, and never report a timeout as success. */
+        /* Waits are rounded to the timer resolution. Count elapsed time,
+         * not requested waits, and never report a timeout as success. */
         if (KeQueryInterruptTime() - Start100ns >= (ULONGLONG)TimeoutMs * 10000)
             return STATUS_IO_TIMEOUT;
-        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+        (VOID)KeWaitForSingleObject(&Adapter->FenceProgressEvent, Executive, KernelMode, FALSE, &Interval);
     }
 }
 

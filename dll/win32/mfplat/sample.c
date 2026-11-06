@@ -91,6 +91,7 @@ struct queued_sample
 {
     struct list entry;
     IMFSample *sample;
+    unsigned int reclaimed;
 };
 
 static struct sample_allocator *impl_from_IMFVideoSampleAllocatorEx(IMFVideoSampleAllocatorEx *iface)
@@ -1410,6 +1411,7 @@ static HRESULT sample_allocator_allocate_sample(struct sample_allocator *allocat
         return E_OUTOFMEMORY;
     }
     (*queued_sample)->sample = sample;
+    (*queued_sample)->reclaimed = 0;
 
     return hr;
 }
@@ -1542,6 +1544,29 @@ static HRESULT sample_allocator_track_sample(struct sample_allocator *allocator,
     return hr;
 }
 
+static void sample_allocator_reclaim_released_samples(struct sample_allocator *allocator)
+{
+    struct queued_sample *iter, *next;
+    struct sample *sample;
+    BOOL released;
+
+    LIST_FOR_EACH_ENTRY_SAFE(iter, next, &allocator->used_samples, struct queued_sample, entry)
+    {
+        sample = impl_from_IMFSample(iter->sample);
+        EnterCriticalSection(&sample->attributes.cs);
+        released = !sample->tracked_result;
+        LeaveCriticalSection(&sample->attributes.cs);
+        if (!released)
+            continue;
+
+        list_remove(&iter->entry);
+        list_add_tail(&allocator->free_samples, &iter->entry);
+        IMFSample_AddRef(iter->sample);
+        allocator->free_sample_count++;
+        iter->reclaimed++;
+    }
+}
+
 static HRESULT WINAPI sample_allocator_AllocateSample(IMFVideoSampleAllocatorEx *iface, IMFSample **out)
 {
     struct sample_allocator *allocator = impl_from_IMFVideoSampleAllocatorEx(iface);
@@ -1551,6 +1576,9 @@ static HRESULT WINAPI sample_allocator_AllocateSample(IMFVideoSampleAllocatorEx 
     TRACE("%p, %p.\n", iface, out);
 
     EnterCriticalSection(&allocator->cs);
+
+    if (list_empty(&allocator->free_samples))
+        sample_allocator_reclaim_released_samples(allocator);
 
     if (list_empty(&allocator->free_samples) && list_empty(&allocator->used_samples))
         hr = MF_E_NOT_INITIALIZED;
@@ -1749,10 +1777,24 @@ static HRESULT WINAPI sample_allocator_tracking_callback_Invoke(IMFAsyncCallback
 
     EnterCriticalSection(&allocator->cs);
 
+    LIST_FOR_EACH_ENTRY(iter, &allocator->free_samples, struct queued_sample, entry)
+    {
+        if (sample == iter->sample && iter->reclaimed)
+        {
+            iter->reclaimed--;
+            goto done;
+        }
+    }
+
     LIST_FOR_EACH_ENTRY(iter, &allocator->used_samples, struct queued_sample, entry)
     {
         if (sample == iter->sample)
         {
+            if (iter->reclaimed)
+            {
+                iter->reclaimed--;
+                break;
+            }
             list_remove(&iter->entry);
             list_add_tail(&allocator->free_samples, &iter->entry);
             IMFSample_AddRef(iter->sample);
@@ -1761,6 +1803,7 @@ static HRESULT WINAPI sample_allocator_tracking_callback_Invoke(IMFAsyncCallback
         }
     }
 
+done:
     IMFSample_Release(sample);
 
     if (allocator->callback)

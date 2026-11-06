@@ -1068,6 +1068,106 @@ static void test_render_stream(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_output_file_name(void)
+{
+    static const GUID bad_clsid = {0x33333333};
+    ICaptureGraphBuilder2 *capture_graph = create_capture_graph();
+    IBaseFilter *mux, *writer, *filter;
+    IFileSinkFilter *filesink;
+    IGraphBuilder *graph;
+    IPin *pin, *peer;
+    PIN_INFO info;
+    WCHAR *name;
+    HRESULT hr;
+    ULONG ref;
+
+    mux = (IBaseFilter *)0xdeadbeef;
+    filesink = (IFileSinkFilter *)0xdeadbeef;
+    hr = ICaptureGraphBuilder2_SetOutputFileName(capture_graph, NULL, L"qcaptest.avi", &mux, &filesink);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+    hr = ICaptureGraphBuilder2_SetOutputFileName(capture_graph, &MEDIASUBTYPE_Avi, NULL, &mux, &filesink);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+    hr = ICaptureGraphBuilder2_SetOutputFileName(capture_graph, &MEDIASUBTYPE_Avi, L"", &mux, &filesink);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+    hr = ICaptureGraphBuilder2_SetOutputFileName(capture_graph, &MEDIASUBTYPE_Avi, L"qcaptest.avi", NULL, &filesink);
+    ok(hr == E_POINTER, "Got hr %#lx.\n", hr);
+    ok(mux == (IBaseFilter *)0xdeadbeef, "Got filter %p.\n", mux);
+    ok(filesink == (IFileSinkFilter *)0xdeadbeef, "Got sink %p.\n", filesink);
+
+    hr = ICaptureGraphBuilder2_SetOutputFileName(capture_graph, &bad_clsid, L"qcaptest.avi", &mux, &filesink);
+    ok(hr == REGDB_E_CLASSNOTREG, "Got hr %#lx.\n", hr);
+    ok(mux == (IBaseFilter *)0xdeadbeef, "Got filter %p.\n", mux);
+    ok(!filesink, "Got sink %p.\n", filesink);
+
+    hr = ICaptureGraphBuilder2_GetFiltergraph(capture_graph, &graph);
+    ok(hr == E_UNEXPECTED, "Got hr %#lx.\n", hr);
+
+    hr = ICaptureGraphBuilder2_SetOutputFileName(capture_graph, &MEDIASUBTYPE_Avi, L"qcaptest.avi", &mux, &filesink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = ICaptureGraphBuilder2_GetFiltergraph(capture_graph, &graph);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IGraphBuilder_FindFilterByName(graph, L"Mux", &filter);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(filter == mux, "Got filter %p, expected %p.\n", filter, mux);
+    IBaseFilter_Release(filter);
+    hr = IGraphBuilder_FindFilterByName(graph, L"File Writer", &writer);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IFileSinkFilter_QueryInterface(filesink, &IID_IBaseFilter, (void **)&filter);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(filter == writer, "Got filter %p, expected %p.\n", filter, writer);
+    IBaseFilter_Release(filter);
+
+    hr = IFileSinkFilter_GetCurFile(filesink, &name, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!wcscmp(name, L"qcaptest.avi"), "Got filename %s.\n", wine_dbgstr_w(name));
+    CoTaskMemFree(name);
+
+    hr = IBaseFilter_FindPin(mux, L"AVI Out", &pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPin_ConnectedTo(pin, &peer);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IPin_QueryPinInfo(peer, &info);
+    ok(info.pFilter == writer, "Got filter %p, expected %p.\n", info.pFilter, writer);
+    ok(!wcscmp(info.achName, L"in"), "Got pin %s.\n", wine_dbgstr_w(info.achName));
+    IBaseFilter_Release(info.pFilter);
+    IPin_Release(peer);
+    IPin_Release(pin);
+
+    IBaseFilter_Release(writer);
+    IFileSinkFilter_Release(filesink);
+    IBaseFilter_Release(mux);
+    ref = ICaptureGraphBuilder2_Release(capture_graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IGraphBuilder_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+
+    capture_graph = create_capture_graph();
+    hr = ICaptureGraphBuilder2_SetOutputFileName(capture_graph, &CLSID_FileWriter, L"qcaptest.avi", &mux, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IBaseFilter_QueryInterface(mux, &IID_IFileSinkFilter, (void **)&filesink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IFileSinkFilter_GetCurFile(filesink, &name, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(!wcscmp(name, L"qcaptest.avi"), "Got filename %s.\n", wine_dbgstr_w(name));
+    CoTaskMemFree(name);
+    IFileSinkFilter_Release(filesink);
+
+    hr = ICaptureGraphBuilder2_GetFiltergraph(capture_graph, &graph);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IGraphBuilder_FindFilterByName(graph, L"File Writer", &writer);
+    ok(hr == VFW_E_NOT_FOUND, "Got hr %#lx.\n", hr);
+
+    IBaseFilter_Release(mux);
+    ref = ICaptureGraphBuilder2_Release(capture_graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ref = IGraphBuilder_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    ok(GetFileAttributesW(L"qcaptest.avi") == INVALID_FILE_ATTRIBUTES, "File should not exist.\n");
+}
+
 START_TEST(capturegraph)
 {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -1075,6 +1175,7 @@ START_TEST(capturegraph)
     test_find_interface();
     test_find_pin();
     test_render_stream();
+    test_output_file_name();
 
     CoUninitialize();
 }

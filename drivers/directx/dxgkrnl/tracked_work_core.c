@@ -52,11 +52,23 @@ BOOLEAN DxgkTrackedWorkCoreReleaseDeviceWork(_Inout_ PDXGK_TRACKED_WORK_CORE Cor
     if (Core == NULL)
         return FALSE;
     KeAcquireSpinLock(&Core->Lock, &OldIrql);
-    Released = Core->State == DxgkTrackedWorkPrepared && Core->DeviceWorkOwned;
+    Released = Core->State == DxgkTrackedWorkPrepared && Core->DeviceWorkOwned && !Core->DeviceWorkTransferred;
     if (Released)
         Core->DeviceWorkOwned = FALSE;
     KeReleaseSpinLock(&Core->Lock, OldIrql);
     return Released;
+}
+
+/* Once the submitter has handed its device work over, a later cancel must complete it here, not return it. */
+VOID DxgkTrackedWorkCoreSetDeviceWorkTransferred(_Inout_ PDXGK_TRACKED_WORK_CORE Core, _In_ BOOLEAN Transferred)
+{
+    KIRQL OldIrql;
+
+    if (Core == NULL)
+        return;
+    KeAcquireSpinLock(&Core->Lock, &OldIrql);
+    Core->DeviceWorkTransferred = Transferred;
+    KeReleaseSpinLock(&Core->Lock, OldIrql);
 }
 
 BOOLEAN DxgkTrackedWorkCoreClaimExternalCleanup(_Inout_ PDXGK_TRACKED_WORK_CORE Core)

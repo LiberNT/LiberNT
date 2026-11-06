@@ -169,6 +169,15 @@ NtGdiDdDDICreateDCFromMemory(
     /* Get the handle for the bitmap */
     hBitmap = (HBITMAP)psurf->SurfObj.hsurf;
 
+    psurf->hSecure = EngSecureMem(Captured.pMemory, BufferSize);
+    if (psurf->hSecure == NULL)
+    {
+        SURFACE_UnlockSurface(psurf);
+        NtGdiDeleteObjectApp(hBitmap);
+        NtGdiDeleteObjectApp(hDC);
+        return STATUS_INVALID_PARAMETER;
+    }
+
     /* Allocate a palette for this surface */
     ppal = NULL;
     if (format->palette_size != 0)

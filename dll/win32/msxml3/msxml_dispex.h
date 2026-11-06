@@ -85,6 +85,7 @@ typedef enum tid_t
     IServerXMLHTTPRequest_tid,
 #ifdef __REACTOS__
     IMXNamespacePrefixes_tid,
+    IServerXMLHTTPRequest2_tid,
 #endif
     LAST_tid
 } tid_t;
@@ -169,6 +170,14 @@ static inline HRESULT return_bstrn(const WCHAR *value, int len, BSTR *p)
 extern HRESULT dom_document_create(MSXML_VERSION class_version, void **document);
 #ifdef __REACTOS__
 extern HRESULT dom_freethreaded_document_create(MSXML_VERSION class_version, void **document);
+
+struct dom_builder;
+extern HRESULT dom_builder_create(IUnknown *output, struct dom_builder **builder);
+extern void dom_builder_release(struct dom_builder *builder);
+extern ISAXContentHandler *dom_builder_get_content_handler(struct dom_builder *builder);
+extern ISAXLexicalHandler *dom_builder_get_lexical_handler(struct dom_builder *builder);
+extern HRESULT dom_builder_declaration(struct dom_builder *builder);
+extern void dom_builder_get_output(struct dom_builder *builder, VARIANT *dest);
 #endif
 
 typedef struct bsc_t bsc_t;

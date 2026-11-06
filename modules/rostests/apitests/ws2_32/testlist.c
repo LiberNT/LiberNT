@@ -2,7 +2,11 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_BufferedRecv(void);
+extern void func_BusyLoopback(void);
+extern void func_CloseCompletion(void);
 extern void func_MulticastInterface(void);
+extern void func_ReuseDelivery(void);
 extern void func_addresslistsort(void);
 extern void func_bind(void);
 extern void func_broadcast(void);
@@ -30,7 +34,11 @@ extern void func_WSAStartup(void);
 
 const struct test winetest_testlist[] =
 {
+    { "BufferedRecv", func_BufferedRecv },
+    { "BusyLoopback", func_BusyLoopback },
+    { "CloseCompletion", func_CloseCompletion },
     { "MulticastInterface", func_MulticastInterface },
+    { "ReuseDelivery", func_ReuseDelivery },
     { "addresslistsort", func_addresslistsort },
     { "bind", func_bind },
     { "broadcast", func_broadcast },

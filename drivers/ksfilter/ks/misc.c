@@ -13,6 +13,58 @@
 
 #define TAG_KS 'ssKK'
 
+UCHAR KspNarrowStreamMarker;
+
+BOOLEAN
+KspIs32bitRequest(
+    IN PIRP Irp)
+{
+#ifdef _WIN64
+    return IoIs32bitProcess(Irp);
+#else
+    UNREFERENCED_PARAMETER(Irp);
+    return FALSE;
+#endif
+}
+
+static
+VOID
+KspNarrowStreamHeaders(
+    PIRP Irp)
+{
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG WideLength = IoStack->Parameters.DeviceIoControl.OutputBufferLength;
+    PUCHAR Buffer = Irp->AssociatedIrp.SystemBuffer;
+    ULONG WideOffset = 0, Offset = 0, Returned = 0;
+
+    while (Buffer && WideLength - WideOffset >= sizeof(KSSTREAM_HEADER))
+    {
+        KSSTREAM_HEADER Wide = *(PKSSTREAM_HEADER)(Buffer + WideOffset);
+        PKSSTREAM_HEADER32 Narrow = (PKSSTREAM_HEADER32)(Buffer + Offset);
+
+        if (Wide.Size < sizeof(KSSTREAM_HEADER) || Wide.Size > WideLength - WideOffset)
+            break;
+
+        Narrow->Size = Wide.Size - (sizeof(KSSTREAM_HEADER) - sizeof(KSSTREAM_HEADER32));
+        Narrow->TypeSpecificFlags = Wide.TypeSpecificFlags;
+        Narrow->PresentationTime = Wide.PresentationTime;
+        Narrow->Duration = Wide.Duration;
+        Narrow->FrameExtent = Wide.FrameExtent;
+        Narrow->DataUsed = Wide.DataUsed;
+        Narrow->Data = PtrToUlong(Wide.Data);
+        Narrow->OptionsFlags = Wide.OptionsFlags;
+        RtlMoveMemory(Narrow + 1, Buffer + WideOffset + sizeof(KSSTREAM_HEADER), Wide.Size - sizeof(KSSTREAM_HEADER));
+
+        WideOffset += Wide.Size;
+        Offset += Narrow->Size;
+        if (WideOffset <= Irp->IoStatus.Information)
+            Returned = Offset;
+    }
+
+    Irp->IoStatus.Information = Returned;
+    IoStack->Parameters.DeviceIoControl.OutputBufferLength = Offset;
+}
+
 VOID
 CompleteRequest(
     PIRP Irp,
@@ -21,6 +73,12 @@ CompleteRequest(
     DPRINT("Completing IRP %p Status %x\n", Irp, Irp->IoStatus.Status);
 
     ASSERT(Irp->IoStatus.Status != STATUS_PENDING);
+
+    if (Irp->Tail.Overlay.DriverContext[3] == &KspNarrowStreamMarker)
+    {
+        Irp->Tail.Overlay.DriverContext[3] = NULL;
+        KspNarrowStreamHeaders(Irp);
+    }
 
     IoCompleteRequest(Irp, PriorityBoost);
 }

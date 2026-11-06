@@ -98,7 +98,9 @@ struct lwip_callback_msg
     } Output;
 };
 
-NTSTATUS    LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHAR RecvBuffer, UINT RecvLen, UINT *Received, const int safe);
+VOID        LibTCPRecheckReceive(PCONNECTION_ENDPOINT Connection);
+VOID        LibTCPRecheckSend(PCONNECTION_ENDPOINT Connection);
+NTSTATUS    LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PMDL RecvMdl, UINT *Received, const int safe);
 
 /* External TCP event handlers */
 extern void TCPConnectEventHandler(void *arg, const err_t err);

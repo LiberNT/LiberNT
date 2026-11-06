@@ -4070,6 +4070,14 @@ void CDECL wined3d_device_apply_stateblock(struct wined3d_device *device,
                 fog.end = 0.0f;
                 fog.scale = 0.0f;
             }
+#ifdef __REACTOS__
+            else if (start == end)
+            {
+                /* An infinite scale is undefined on a GPU compiling shaders with fast math. */
+                fog.end = end;
+                fog.scale = 1.0e20f;
+            }
+#endif
             else
             {
                 fog.end = end;

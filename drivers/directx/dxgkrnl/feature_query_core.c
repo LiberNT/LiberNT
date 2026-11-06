@@ -98,3 +98,63 @@ DxgkFeatureQueryCoreEvaluate(
     Result->Value |= DXGK_FEATURE_QUERY_RESULT_ENABLED;
     return TRUE;
 }
+
+/* Windows answers these only for an adapter that can render; HwSchEnabledByDefault is never set. */
+ULONG
+DxgkWddmCapsCore27(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    if (!Input->RenderCapable)
+        return 0;
+    return (Input->HwSchSupportState != 0 ? 0x1UL : 0) |
+           (Input->HwSchEnabled ? 0x2UL : 0) |
+           (Input->IndependentVidPnVSyncControl ? 0x8UL : 0);
+}
+
+ULONG
+DxgkWddmCapsCore29(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    if (!Input->RenderCapable)
+        return 0;
+    return (Input->HwSchSupportState & 0x3UL) | (Input->HwSchEnabled ? 0x4UL : 0);
+}
+
+ULONG
+DxgkWddmCapsCore30(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    if (!Input->RenderCapable)
+        return 0;
+    return (Input->HwFlipQueueSupportState & 0x3UL) |
+           (Input->HwFlipQueueEnabled ? 0x4UL : 0) |
+           (Input->DisplayableSupport ? 0x8UL : 0);
+}
+
+ULONG
+DxgkWddmCapsCore31(
+    _In_ const DXGK_WDDM_CAPS_CORE_INPUT *Input)
+{
+    return Input->RenderCapable && Input->NativeGpuFence ? 0x1UL : 0;
+}
+
+/* Windows sets ACGSupported from the driver key's ACGSupported value or for a WDDM 2.2 or later driver. */
+BOOLEAN
+DxgkAdapterTypeCoreAcgSupported(
+    _In_ BOOLEAN AcgSupportedValue,
+    _In_ ULONG WddmVersion)
+{
+    return AcgSupportedValue || WddmVersion >= 0x2200UL;
+}
+
+BOOLEAN
+DxgkAdapterTypeCoreSetTimingsFromVidPn(
+    _In_ ULONG WddmVersion,
+    _In_ ULONG InterfaceVersion,
+    _In_ BOOLEAN HasSetTimingsFromVidPn,
+    _In_ BOOLEAN RenderCapable,
+    _In_ BOOLEAN HasMultiPlaneOverlay3)
+{
+    return WddmVersion >= 0x2200UL && InterfaceVersion >= 0x7007UL && HasSetTimingsFromVidPn &&
+           (!RenderCapable || HasMultiPlaneOverlay3);
+}

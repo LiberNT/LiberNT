@@ -192,7 +192,7 @@ void CAppBarManager::OnAppBarSetPos(_Inout_ PAPPBAR_COMMAND pData)
     if (!pOutput)
         return;
 
-    RECT rcOld = pAppBar->rc, rcNew = pData->abd.rc;
+    RECT rcOld = pAppBar->rc, rcNew = pOutput->rc;
     BOOL bChanged = !::EqualRect(&rcOld, &rcNew);
 
     pAppBar->rc = rcNew;

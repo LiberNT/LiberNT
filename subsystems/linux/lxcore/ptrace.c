@@ -478,6 +478,7 @@ LxPtraceGroupStop(
 
     if ((Thread->Ptrace == NULL) || !LxPtraceTracedOptions(Thread, &Options, &Seized))
         return FALSE;
+    InterlockedAnd(&Thread->PtraceWork, ~LX_PTW_TRAP);
     if (!Seized)
     {
         LxPtraceStopCommon(Thread, TrapFrame, ExceptionFrame, Signal, LX_CLD_STOPPED, NULL, FALSE, NULL);
@@ -1065,7 +1066,7 @@ LxPtraceAttach(
         Error = -LX_EPERM;
     else
         Ptrace = LxPtraceLinkLocked(Call->Process, Thread, Seize, Seize ? (ULONG)Flags : 0);
-    Stopped = (Target->JobctlFlags & LX_JOBCTL_STOPPED) != 0;
+    Stopped = ((Target->JobctlFlags & LX_JOBCTL_STOPPED) != 0) || Thread->Stopped;
     if ((Ptrace != NULL) && Stopped)
         InterlockedOr(&Thread->PtraceWork, LX_PTW_TRAP);
     Tid = Thread->Tid;
@@ -1076,7 +1077,14 @@ LxPtraceAttach(
     if (Ptrace == NULL)
         return -LX_ENOMEM;
     if (!Seize)
-        LxSignalSend(Target, NULL, LX_SIGSTOP, NULL);
+    {
+        LX_SIGINFO Info;
+
+        RtlZeroMemory(&Info, sizeof(Info));
+        Info.Signo = LX_SIGSTOP;
+        Info.Code = LX_SI_KERNEL;
+        LxSignalSend(Target, Thread, LX_SIGSTOP, &Info);
+    }
     if (Stopped)
         LxSignalWakeThread(Target, Tid);
     return 0;

@@ -161,9 +161,13 @@ cmdenvvar(envvar_archdir     "PROCESSOR_ARCHITECTURE:x86=I386" TRUE)
 add_livecd_shortcut("Install LiberNT"
     "shell:system\\cmd.exe"
     CMDLINE_ARGS "/D /E:ON /C \"start ${envvar_systemdrive}\\${envvar_archdir}\\libernt.exe\""
-    ICON "${envvar_systemdrive}\\${envvar_archdir}\\libernt.exe"
+    ICON "${envvar_systemdrive}\\${ARCH}\\libernt.exe"
     MINIMIZE
     DESTINATION "${dir_allusers_desktop}")
+add_cd_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/Install LiberNT.lnk"
+            TARGET livecd_links
+            DESTINATION "${dir_startmenu_programs}"
+            FOR preinstall)
 
 add_livecd_shortcut("Read Me"
     "shell:windows\\readme.txt"
@@ -177,6 +181,10 @@ add_livecd_shortcut("Terminal"
     "shell:system\\terminal.exe" ICON_INDEX 0
     WORKDIR "${envvar_homedrive}${envvar_homepath}"
     DESTINATION "${dir_startmenu_accessories}" "${dir_quicklaunch}")
+add_livecd_shortcut("Command Prompt"
+    "shell:system\\cmd.exe" ICON_INDEX 0
+    WORKDIR "${envvar_homedrive}${envvar_homepath}"
+    DESTINATION "${dir_startmenu_accessories}")
 add_livecd_shortcut("Applications Manager"
     "shell:system\\rapps.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_programs}")

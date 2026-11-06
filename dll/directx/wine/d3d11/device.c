@@ -2744,6 +2744,8 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_context_FinishCommandList(ID3D11De
     if (context->type == D3D11_DEVICE_CONTEXT_IMMEDIATE)
     {
         WARN("Attempt to record command list on an immediate context; returning DXGI_ERROR_INVALID_CALL.\n");
+        if (command_list)
+            *command_list = NULL;
         return DXGI_ERROR_INVALID_CALL;
     }
 
@@ -3986,16 +3988,20 @@ static void STDMETHODCALLTYPE d3d11_multithread_Leave(ID3D11Multithread *iface)
 static BOOL STDMETHODCALLTYPE d3d11_multithread_SetMultithreadProtected(
         ID3D11Multithread *iface, BOOL enable)
 {
-    FIXME("iface %p, enable %#x stub!\n", iface, enable);
+    struct d3d11_device_context *context = impl_from_ID3D11Multithread(iface);
 
-    return TRUE;
+    TRACE("iface %p, enable %#x.\n", iface, enable);
+
+    return InterlockedExchange(&context->device->multithread_protected, !!enable);
 }
 
 static BOOL STDMETHODCALLTYPE d3d11_multithread_GetMultithreadProtected(ID3D11Multithread *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct d3d11_device_context *context = impl_from_ID3D11Multithread(iface);
 
-    return TRUE;
+    TRACE("iface %p.\n", iface);
+
+    return InterlockedCompareExchange(&context->device->multithread_protected, 0, 0);
 }
 
 static const struct ID3D11MultithreadVtbl d3d11_multithread_vtbl =
@@ -7935,16 +7941,20 @@ static void STDMETHODCALLTYPE d3d10_multithread_Leave(ID3D10Multithread *iface)
 
 static BOOL STDMETHODCALLTYPE d3d10_multithread_SetMultithreadProtected(ID3D10Multithread *iface, BOOL enable)
 {
-    FIXME("iface %p, enable %#x stub!\n", iface, enable);
+    struct d3d_device *device = impl_from_ID3D10Multithread(iface);
 
-    return TRUE;
+    TRACE("iface %p, enable %#x.\n", iface, enable);
+
+    return InterlockedExchange(&device->multithread_protected, !!enable);
 }
 
 static BOOL STDMETHODCALLTYPE d3d10_multithread_GetMultithreadProtected(ID3D10Multithread *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct d3d_device *device = impl_from_ID3D10Multithread(iface);
 
-    return TRUE;
+    TRACE("iface %p.\n", iface);
+
+    return InterlockedCompareExchange(&device->multithread_protected, 0, 0);
 }
 
 static const struct ID3D10MultithreadVtbl d3d10_multithread_vtbl =
@@ -8407,6 +8417,7 @@ void d3d_device_init(struct d3d_device *device, void *outer_unknown)
     /* COM aggregation always takes place */
     device->outer_unk = outer_unknown;
     device->d3d11_only = FALSE;
+    device->multithread_protected = FALSE;
     device->state = NULL;
 
     d3d11_device_context_init(&device->immediate_context, device, D3D11_DEVICE_CONTEXT_IMMEDIATE);

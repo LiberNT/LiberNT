@@ -145,6 +145,32 @@ if(_mesa_lavapipe_enabled)
         "${MESA_BINARY_DIR}/src/gallium/targets/lavapipe/lvp_icd.json")
 endif()
 
+# OpenGL through a native D3D12 driver, for a GPU whose driver package ships no OpenGL ICD.
+# TODO: x86 and x64 applications stay on software OpenGL until the ARM64EC runtime builds this driver.
+# TODO: the RV64X OpenGL host links the WGL object without kernel32, so it cannot take this driver yet.
+if(NOT ARCH STREQUAL "i386" AND NOT ARM64EC_RUNTIME AND NOT (ARCH STREQUAL "riscv64" AND ENABLE_FELIX86))
+    list(APPEND _mesa_features -DMESA_D3D12:BOOL=ON)
+    if(NOT _mesa_lavapipe_enabled)
+        set(MESA_DIRECTX_HEADERS_ROOT "${MESA_WORK_DIR}/directx-headers-install")
+        ExternalProject_Add(mesa_directx_headers
+            EXCLUDE_FROM_ALL TRUE
+            PREFIX "${MESA_WORK_DIR}/directx-headers-prefix"
+            URL https://github.com/microsoft/DirectX-Headers/archive/refs/tags/v1.619.1.tar.gz
+            URL_HASH SHA256=6193774904c940eebb9b0c51b816b93dd776cfeb25a951f0f4a58f22387e5008
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+            CONFIGURE_COMMAND ""
+            BUILD_COMMAND ""
+            INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/include "${MESA_DIRECTX_HEADERS_ROOT}/include"
+            BUILD_BYPRODUCTS
+                "${MESA_DIRECTX_HEADERS_ROOT}/include/directx/d3d12.h"
+                "${MESA_DIRECTX_HEADERS_ROOT}/include/dxguids/dxguids.h")
+        list(APPEND _mesa_features -DMESA_DIRECTX_HEADERS_ROOT:PATH=${MESA_DIRECTX_HEADERS_ROOT})
+        set(_mesa_d3d12_headers_target mesa_directx_headers)
+    endif()
+else()
+    list(APPEND _mesa_features -DMESA_D3D12:BOOL=OFF)
+endif()
+
 ExternalProject_Add(mesa_gallium_build
     EXCLUDE_FROM_ALL TRUE
     PREFIX "${MESA_WORK_DIR}/cmake-prefix"
@@ -179,6 +205,9 @@ ExternalProject_Add(mesa_gallium_build
     USES_TERMINAL_CONFIGURE TRUE
     USES_TERMINAL_BUILD TRUE)
 ExternalProject_Add_StepDependencies(mesa_gallium_build configure mesa_reactos_sdk_libs)
+if(_mesa_d3d12_headers_target)
+    ExternalProject_Add_StepDependencies(mesa_gallium_build configure ${_mesa_d3d12_headers_target})
+endif()
 if(_mesa_llvmpipe_from_source)
     # These producers are declared later under submodules/. Attach them here,
     # where ExternalProject's configure-step custom command is scoped.

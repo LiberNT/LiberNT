@@ -270,6 +270,14 @@ NtfsVolumeSetFlags(
     return reinterpret_cast<PVolume>(DiskVolume)->SetVolumeFlags(Set, Clear);
 }
 
+BOOLEAN
+NtfsVolumeNeedsStartupRepair(
+    _In_ USHORT Flags)
+{
+    return (Flags & VOL_DIRTY) != 0 &&
+           (Flags & (VOL_FULL_CHKDSK | VOL_ONLINE_SCAN)) != VOL_ONLINE_SCAN;
+}
+
 #ifdef __cplusplus
 }
 #endif

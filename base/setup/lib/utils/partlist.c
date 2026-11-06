@@ -1904,11 +1904,7 @@ AddDiskToList(
         return;
     }
 
-    /*
-     * FIXME: Here we suppose the disk is always SCSI. What if it is
-     * of another type? To check this we need to retrieve the name of
-     * the driver the disk device belongs to.
-     */
+    /* Only SCSI disks have an address. An SD or eMMC disk answers with an error and must not match a real one. */
     Status = NtDeviceIoControlFile(FileHandle,
                                    NULL,
                                    NULL,
@@ -1920,7 +1916,7 @@ AddDiskToList(
                                    &ScsiAddress,
                                    sizeof(ScsiAddress));
     if (!NT_SUCCESS(Status))
-        return;
+        RtlFillMemory(&ScsiAddress, sizeof(ScsiAddress), 0xFF);
 
     /*
      * Check whether the disk is initialized, by looking at its MBR.

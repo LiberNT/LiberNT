@@ -277,6 +277,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_SetMaximumFrameLatency(IWineDXGIDev
 
     wined3d_mutex_lock();
     wined3d_device_set_max_frame_latency(device->wined3d_device, max_latency);
+    device->max_frame_latency = max_latency;
     wined3d_mutex_unlock();
 
     return S_OK;
@@ -292,7 +293,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_GetMaximumFrameLatency(IWineDXGIDev
         return DXGI_ERROR_INVALID_CALL;
 
     wined3d_mutex_lock();
-    *max_latency = wined3d_device_get_max_frame_latency(device->wined3d_device);
+    *max_latency = device->max_frame_latency;
     wined3d_mutex_unlock();
 
     return S_OK;
@@ -604,6 +605,7 @@ HRESULT dxgi_device_init(struct dxgi_device *device, struct dxgi_device_layer *l
     device->IWineDXGIDevice_iface.lpVtbl = &dxgi_device_vtbl;
     device->IWineDXGISwapChainFactory_iface.lpVtbl = &dxgi_swapchain_factory_vtbl;
     device->refcount = 1;
+    device->max_frame_latency = DXGI_FRAME_LATENCY_DEFAULT;
     wined3d_mutex_lock();
     wined3d_private_store_init(&device->private_store);
 

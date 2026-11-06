@@ -101,7 +101,11 @@ static void msvcrt_search_executable(const wchar_t *name, wchar_t *fullname, int
     if (path_len + name_len <= MAX_PATH - 2)
     {
       memcpy(buffer, env, path_len * sizeof(wchar_t));
+#ifdef __REACTOS__
+      if (buffer[path_len - 1] != '/' && buffer[path_len - 1] != '\\')
+#else
       if (buffer[path_len] != '/' && buffer[path_len] != '\\')
+#endif
       {
         buffer[path_len++] = '\\';
         buffer[path_len] = '\0';

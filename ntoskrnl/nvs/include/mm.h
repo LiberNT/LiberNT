@@ -179,6 +179,7 @@ VOID MiPtUnpinRange(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress
 #define MI_MEM_PHYSICAL             0x00400000
 #define MI_MEM_IMAGE                0x01000000
 #define MI_MEM_LARGE_PAGES          0x20000000
+#define MI_MEM_PAGE_GRANULAR        0x40000000
 #define MI_MEM_ROTATE               0x00800000
 #define MI_MEM_RESERVE_PLACEHOLDER  0x00080000
 #define MI_MEM_REPLACE_PLACEHOLDER  0x02000000
@@ -322,6 +323,7 @@ typedef struct _MI_PAGEFILE
 BOOLEAN MiSpaceFindEmptyRange(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 PageCount, _In_ ULONG64 Alignment,
                               _In_ ULONG64 LowestVpn, _In_ ULONG64 HighestVpn, _In_ BOOLEAN TopDown,
                               _Out_ PULONG64 StartingVpn);
+ULONG64 MiSpaceFreeBytes(_Inout_ PMI_ADDRESS_SPACE Space);
 NTSTATUS MiAllocateVirtualMemory(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PULONG64 BaseAddress,
                                  _Inout_ PULONG64 RegionSize, _In_ ULONG AllocationType, _In_ ULONG Protection);
 NTSTATUS MiAllocateVirtualMemoryEx(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PULONG64 BaseAddress,
@@ -407,6 +409,7 @@ NTSTATUS MiWriteWatchAttach(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad
 NTSTATUS MiWriteWatchDuplicate(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad);
 VOID MiWriteWatchRelease(_Inout_ PMI_VAD Vad);
 VOID MiWriteWatchNoteWrite(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
+VOID MiWriteWatchNoteWriteLocked(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
 NTSTATUS MiGetWriteWatch(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base, _In_ ULONG64 Size, _In_ BOOLEAN Reset,
                          _Out_ PULONG64 Addresses, _Inout_ PULONG64 Count);
 NTSTATUS MiResetWriteWatch(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base, _In_ ULONG64 Size);
@@ -547,6 +550,8 @@ VOID MiImageWindowInitialize(_Out_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Lowest,
 VOID MiImageWindowUninitialize(_Inout_ PMI_IMAGE_WINDOW Window);
 BOOLEAN MiImageWindowReserve(_Inout_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Size, _In_ ULONG64 HintSlot,
                              _Out_ PULONG64 Base);
+BOOLEAN MiImageWindowReserveTopDown(_Inout_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Size, _In_ ULONG64 TopSlot,
+                                    _Out_ PULONG64 Base);
 VOID MiImageWindowRelease(_Inout_ PMI_IMAGE_WINDOW Window, _In_ ULONG64 Base, _In_ ULONG64 Size);
 
 NTSTATUS MiSegmentCreate(_Inout_ struct _MI_SYSTEM *System, _In_ UCHAR Kind, _In_ ULONG64 SizeInBytes,

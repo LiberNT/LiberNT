@@ -49,8 +49,9 @@ static void Test_HardwareSchedulingAbsentAndRefused(D3DKMT_HANDLE hAdapter)
     Status = QueryCap(hAdapter, KMTQAITYPE_WDDM_2_9_CAPS, &Caps29, sizeof(Caps29));
     if (NT_SUCCESS(Status))
     {
-        ok(Caps29.HwSchSupportState == DXGK_FEATURE_SUPPORT_ALWAYS_OFF,
-           "WDDM 2.9 caps report hardware scheduling as %u, not ALWAYS_OFF\n",
+        /* Windows 11 reports the driver's support state (STABLE on NVIDIA) with hardware scheduling disabled. */
+        ok(Caps29.HwSchSupportState <= DXGK_FEATURE_SUPPORT_ALWAYS_ON,
+           "WDDM 2.9 caps report undefined hardware scheduling state %u\n",
            (unsigned)Caps29.HwSchSupportState);
         ok(Caps29.HwSchEnabled == 0, "hardware scheduling reported enabled\n");
     }
@@ -90,9 +91,10 @@ static void Test_HardwareFlipQueueAbsent(D3DKMT_HANDLE hAdapter)
         trace("WDDM 3.0 caps unavailable (0x%08lX)\n", (long)Status);
         return;
     }
-    ok(Caps30.HwFlipQueueSupportState == DXGK_FEATURE_SUPPORT_ALWAYS_OFF,
-       "WDDM 3.0 caps report a hardware flip queue as %u, not ALWAYS_OFF\n",
+    ok(Caps30.HwFlipQueueSupportState <= DXGK_FEATURE_SUPPORT_ALWAYS_ON,
+       "WDDM 3.0 caps report undefined hardware flip queue state %u\n",
        (unsigned)Caps30.HwFlipQueueSupportState);
+    ok(Caps30.HwFlipQueueEnabled == 0, "hardware flip queue reported enabled\n");
 }
 
 /* ------------------------------------------------------------------ *

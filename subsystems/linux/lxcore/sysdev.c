@@ -25,6 +25,11 @@
 #define LX_SYSDEV_MAX_INTERFACES    32
 #define LX_SYSDEV_MAX_USB_DRIVERS   128
 
+#define LX_SYSDEV_GPU_DOMAIN        "devices/pci0001:00"
+#define LX_SYSDEV_GPU_SLOT          "0001:00:00.0"
+#define LX_SYSDEV_GPU_PCI           LX_SYSDEV_GPU_DOMAIN "/" LX_SYSDEV_GPU_SLOT
+#define LX_SYSDEV_GPU_VIRTIO        LX_SYSDEV_GPU_PCI "/virtio0"
+
 #define LX_IORESOURCE_IO            0x00000100
 #define LX_IORESOURCE_MEM           0x00000200
 #define LX_IORESOURCE_PREFETCH      0x00002000
@@ -833,18 +838,14 @@ static
 VOID
 LxSysDevPciDevice(
     _Inout_ PLX_SYSDEV_TREE Tree,
-    _In_ PLX_SYSDEV_PCI Pci,
+    _In_opt_ PLX_SYSDEV_DRIVER Driver,
     _In_ PCSTR Directory,
     _In_ PCSTR Name,
-    _In_ ULONG Bus,
-    _In_ ULONG Device,
-    _In_ ULONG Function,
     _In_reads_(LX_SYSDEV_PCI_CONFIG) PUCHAR Config)
 {
     USHORT VendorId = *(PUSHORT)&Config[0x00], DeviceId = *(PUSHORT)&Config[0x02];
     USHORT SubVendor = 0, SubDevice = 0;
     ULONG Class = (Config[0x0B] << 16) | (Config[0x0A] << 8) | Config[0x09];
-    PLX_SYSDEV_DRIVER Driver = LxSysDevFindDriver(Pci, Bus, Device, Function, VendorId, DeviceId);
     PSTR Link;
 
     if ((Config[0x0E] & 0x7F) == 0)
@@ -953,7 +954,10 @@ LxSysDevScanBus(
                 Tree->Failed = TRUE;
                 return;
             }
-            LxSysDevPciDevice(Tree, Pci, Directory, Name, Bus, Device, Function, Config);
+            LxSysDevPciDevice(Tree,
+                              LxSysDevFindDriver(Pci, Bus, Device, Function, *(PUSHORT)&Config[0x00],
+                                                 *(PUSHORT)&Config[0x02]),
+                              Directory, Name, Config);
             if (((Config[0x0E] & 0x7F) == 1) && (Config[0x19] > Bus))
                 LxSysDevScanBus(Tree, Pci, Config[0x19], Directory, Depth + 1, Seen);
             LxFree(Directory);
@@ -1888,6 +1892,70 @@ LxSysDevUsb(
 }
 
 static
+VOID
+LxSysDevVirtioGpu(
+    _Inout_ PLX_SYSDEV_TREE Tree)
+{
+    static LX_SYSDEV_DRIVER VirtioPci = { 0, 0, 0, 0x1AF4, 0x1050, "virtio-pci" };
+    static const PCSTR Names[] = { "card0", "renderD128" };
+    static const ULONG Minors[] = { 0, 128 };
+    UCHAR Config[LX_SYSDEV_PCI_CONFIG];
+    ULONG Index;
+
+    RtlZeroMemory(Config, sizeof(Config));
+    *(PUSHORT)&Config[0x00] = 0x1AF4;
+    *(PUSHORT)&Config[0x02] = 0x1050;
+    *(PUSHORT)&Config[0x04] = 0x0006;
+    Config[0x08] = 0x01;
+    Config[0x0A] = 0x80;
+    Config[0x0B] = 0x03;
+    *(PUSHORT)&Config[0x2C] = 0x1AF4;
+    *(PUSHORT)&Config[0x2E] = 0x1100;
+    LxSysDevDirectory(Tree, LX_SYSDEV_GPU_DOMAIN);
+    LxSysDevText(Tree, LX_SYSDEV_GPU_DOMAIN, "uevent", "");
+    LxSysDevPciDevice(Tree, &VirtioPci, LX_SYSDEV_GPU_PCI, LX_SYSDEV_GPU_SLOT, Config);
+
+    LxSysDevDirectory(Tree, "bus/virtio/devices");
+    LxSysDevDirectory(Tree, "bus/virtio/drivers/virtio_gpu");
+    LxSysDevDirectory(Tree, "class/drm");
+    LxSysDevDirectory(Tree, LX_SYSDEV_GPU_VIRTIO);
+    LxSysDevText(Tree, LX_SYSDEV_GPU_VIRTIO, "vendor", "0x1af4\n");
+    LxSysDevText(Tree, LX_SYSDEV_GPU_VIRTIO, "device", "0x0010\n");
+    LxSysDevText(Tree, LX_SYSDEV_GPU_VIRTIO, "modalias", "virtio:d00000010v00001AF4\n");
+    LxSysDevText(Tree, LX_SYSDEV_GPU_VIRTIO, "uevent", "DRIVER=virtio_gpu\nMODALIAS=virtio:d00000010v00001AF4\n");
+    LxSysDevLinkIn(Tree, LX_SYSDEV_GPU_VIRTIO, "subsystem", "bus/virtio");
+    LxSysDevLinkIn(Tree, LX_SYSDEV_GPU_VIRTIO, "driver", "bus/virtio/drivers/virtio_gpu");
+    LxSysDevLink(Tree, "bus/virtio/devices/virtio0", LX_SYSDEV_GPU_VIRTIO);
+    LxSysDevLinkIn(Tree, "bus/virtio/drivers/virtio_gpu", "virtio0", LX_SYSDEV_GPU_VIRTIO);
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Names); Index++)
+    {
+        PSTR Directory = LxStrPrintf("%s/drm/%s", LX_SYSDEV_GPU_VIRTIO, Names[Index]);
+        PSTR Class = LxStrPrintf("class/drm/%s", Names[Index]);
+        PSTR Char = LxStrPrintf("dev/char/%u:%u", LX_DRM_MAJOR, Minors[Index]);
+
+        if ((Directory != NULL) && (Class != NULL) && (Char != NULL))
+        {
+            LxSysDevDirectory(Tree, Directory);
+            LxSysDevText(Tree, Directory, "dev", "%u:%u\n", LX_DRM_MAJOR, Minors[Index]);
+            LxSysDevText(Tree, Directory, "uevent", "MAJOR=%u\nMINOR=%u\nDEVNAME=dri/%s\nDEVTYPE=drm_minor\n",
+                         LX_DRM_MAJOR, Minors[Index], Names[Index]);
+            LxSysDevLinkIn(Tree, Directory, "device", LX_SYSDEV_GPU_VIRTIO);
+            LxSysDevLinkIn(Tree, Directory, "subsystem", "class/drm");
+            LxSysDevLink(Tree, Class, Directory);
+            LxSysDevLink(Tree, Char, Directory);
+        }
+        else
+        {
+            Tree->Failed = TRUE;
+        }
+        LxFree(Directory);
+        LxFree(Class);
+        LxFree(Char);
+    }
+}
+
+static
 PLX_SYSDEV_TREE
 LxSysDevBuild(VOID)
 {
@@ -1918,6 +1986,9 @@ LxSysDevBuild(VOID)
     }
     LxSysDevReadUsbDrivers(Tree);
     LxSysDevUsb(Tree);
+    /* FIXME: sysfs is shared by every instance, while a GPU renderer attaches to one instance */
+    if (LxDrmPresent())
+        LxSysDevVirtioGpu(Tree);
     LxSysDevSort(Tree);
     Tree->Built = (LONG64)KeQueryInterruptTime();
     if (Tree->Failed)
@@ -1935,10 +2006,14 @@ LxSysDevOwns(
     _In_ PCSTR Path,
     _In_ BOOLEAN Parents)
 {
-    static const PCSTR Roots[] = { "bus/pci", "bus/usb", "devices/pci0000:00", "devices/platform" };
+    static const PCSTR Roots[] =
+    {
+        "bus/pci", "bus/usb", "bus/virtio", "class/drm", "dev/char", "devices/pci0000:00", LX_SYSDEV_GPU_DOMAIN,
+        "devices/platform"
+    };
     ULONG Index;
 
-    if (Parents && ((strcmp(Path, "bus") == 0) || (strcmp(Path, "devices") == 0)))
+    if (Parents && ((strcmp(Path, "bus") == 0) || (strcmp(Path, "class") == 0) || (strcmp(Path, "devices") == 0)))
         return TRUE;
     for (Index = 0; Index < RTL_NUMBER_OF(Roots); Index++)
     {

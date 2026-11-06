@@ -455,12 +455,20 @@
         <LAYER NAME="640X480">
             <SHIM_REF NAME="Force640x480" />
         </LAYER>
+        <LAYER NAME="HIGHDPIAWARE">
+        </LAYER>
 
 
         <!-- misc layers -->
 
         <LAYER NAME="DisableThemes">
             <SHIM_REF NAME="DisableThemes" />
+        </LAYER>
+        <LAYER NAME="DisableNXHideUI">
+            <!-- TODO: Turn off data execution prevention for the process -->
+        </LAYER>
+        <LAYER NAME="DisableNXShowUI">
+            <!-- TODO: Turn off data execution prevention for the process -->
         </LAYER>
         <LAYER NAME="ForceDXSetupSuccess">
             <SHIM_REF NAME="ForceDXSetupSuccess" />

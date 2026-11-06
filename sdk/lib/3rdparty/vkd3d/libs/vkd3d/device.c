@@ -2838,6 +2838,7 @@ struct d3d12_cache_session
 
 static struct vkd3d_mutex cache_list_mutex = VKD3D_MUTEX_INITIALIZER;
 static struct list cache_list = LIST_INIT(cache_list);
+static bool cache_list_disabled;
 
 static uint32_t d3d12_cache_hash(const void *key, unsigned int size)
 {
@@ -3318,6 +3319,44 @@ static HRESULT STDMETHODCALLTYPE d3d12_cache_session_GetDevice(ID3D12ShaderCache
     return ID3D12Device_QueryInterface(session->device, iid, device);
 }
 
+static bool d3d12_shader_caches_disabled(void)
+{
+    bool disabled;
+
+    vkd3d_mutex_lock(&cache_list_mutex);
+    disabled = cache_list_disabled;
+    vkd3d_mutex_unlock(&cache_list_mutex);
+    return disabled;
+}
+
+void vkd3d_shader_cache_control(UINT control)
+{
+    struct d3d12_shader_cache *cache;
+    unsigned int i;
+
+    vkd3d_mutex_lock(&cache_list_mutex);
+    if (control & D3D12_SHADER_CACHE_CONTROL_FLAG_DISABLE)
+        cache_list_disabled = true;
+    if (control & D3D12_SHADER_CACHE_CONTROL_FLAG_ENABLE)
+        cache_list_disabled = false;
+    if (control & D3D12_SHADER_CACHE_CONTROL_FLAG_CLEAR)
+    {
+        LIST_FOR_EACH_ENTRY(cache, &cache_list, struct d3d12_shader_cache, entry)
+        {
+            vkd3d_mutex_lock(&cache->mutex);
+            for (i = 0; i < D3D12_CACHE_BUCKET_COUNT; ++i)
+            {
+                while (cache->buckets[i])
+                    d3d12_cache_remove(cache, cache->buckets[i]);
+            }
+            if (cache->file && cache->file != INVALID_HANDLE_VALUE)
+                d3d12_cache_reset_file(cache);
+            vkd3d_mutex_unlock(&cache->mutex);
+        }
+    }
+    vkd3d_mutex_unlock(&cache_list_mutex);
+}
+
 static HRESULT STDMETHODCALLTYPE d3d12_cache_session_FindValue(ID3D12ShaderCacheSession *iface,
         const void *key, UINT key_size, void *value, UINT *value_size)
 {
@@ -3335,6 +3374,8 @@ static HRESULT STDMETHODCALLTYPE d3d12_cache_session_FindValue(ID3D12ShaderCache
         WARN("Invalid parameters, returning E_INVALIDARG.\n");
         return E_INVALIDARG;
     }
+    if (d3d12_shader_caches_disabled())
+        return DXGI_ERROR_NOT_FOUND;
 
     hash = d3d12_cache_hash(key, key_size);
     vkd3d_mutex_lock(&cache->mutex);
@@ -3382,6 +3423,8 @@ static HRESULT STDMETHODCALLTYPE d3d12_cache_session_StoreValue(ID3D12ShaderCach
         WARN("Invalid input parameters, returning E_INVALIDARG.\n");
         return E_INVALIDARG;
     }
+    if (d3d12_shader_caches_disabled())
+        return S_OK;
 
     hash = d3d12_cache_hash(key, key_size);
     vkd3d_mutex_lock(&cache->mutex);

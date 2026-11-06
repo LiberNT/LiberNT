@@ -8,6 +8,12 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
 5 BITMAP "test.bmp"
 
+STRINGTABLE
+{
+    100 "Task dialog title"
+    101 "Next string in the same block"
+}
+
 LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 
 1 DIALOG 0, 0, 171, 82

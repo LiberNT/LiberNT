@@ -40,10 +40,11 @@ DEFINE_KSPROPERTY_ITEM_GENERAL_COMPONENTID(PropGeneral)\
 }
 
 #define DEFINE_KSPROPERTY_CONNECTIONSET(PinSet,\
-    PropStateHandler, PropDataFormatHandler, PropAllocatorFraming)\
+    PropStateHandler, PropDataFormatHandler, PropAcquireOrdering, PropAllocatorFraming)\
 DEFINE_KSPROPERTY_TABLE(PinSet) {\
     DEFINE_KSPROPERTY_ITEM_CONNECTION_STATE(PropStateHandler, PropStateHandler),\
     DEFINE_KSPROPERTY_ITEM_CONNECTION_DATAFORMAT(PropDataFormatHandler, PropDataFormatHandler),\
+    DEFINE_KSPROPERTY_ITEM_CONNECTION_ACQUIREORDERING(PropAcquireOrdering),\
     DEFINE_KSPROPERTY_ITEM_CONNECTION_ALLOCATORFRAMING_EX(PropAllocatorFraming)\
 }
 

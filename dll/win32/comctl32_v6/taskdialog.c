@@ -145,6 +145,9 @@ static WCHAR *taskdialog_get_exe_name(WCHAR *name, DWORD length)
 static DLGTEMPLATE *create_taskdialog_template(const TASKDIALOGCONFIG *taskconfig)
 {
     unsigned int size, title_size;
+#ifdef __REACTOS__
+    unsigned int title_len = 0;
+#endif
     static const WORD fontsize = 0x7fff;
     const WCHAR *titleW = NULL;
     DLGTEMPLATE *template;
@@ -156,14 +159,24 @@ static DLGTEMPLATE *create_taskdialog_template(const TASKDIALOGCONFIG *taskconfi
         titleW = taskdialog_get_exe_name(pathW, ARRAY_SIZE(pathW));
     else if (IS_INTRESOURCE(taskconfig->pszWindowTitle))
     {
+#ifdef __REACTOS__
+        if (!(title_len = LoadStringW(taskconfig->hInstance, LOWORD(taskconfig->pszWindowTitle), (WCHAR *)&titleW, 0)))
+#else
         if (!LoadStringW(taskconfig->hInstance, LOWORD(taskconfig->pszWindowTitle), (WCHAR *)&titleW, 0))
+#endif
             titleW = taskdialog_get_exe_name(pathW, ARRAY_SIZE(pathW));
     }
     else
         titleW = taskconfig->pszWindowTitle;
     if (!titleW)
         titleW = L"";
+#ifdef __REACTOS__
+    if (!title_len)
+        title_len = lstrlenW(titleW);
+    title_size = (title_len + 1) * sizeof(WCHAR);
+#else
     title_size = (lstrlenW(titleW) + 1) * sizeof(WCHAR);
+#endif
 
     size = sizeof(DLGTEMPLATE) + 2 * sizeof(WORD);
     size += title_size;
@@ -180,7 +193,12 @@ static DLGTEMPLATE *create_taskdialog_template(const TASKDIALOGCONFIG *taskconfi
     ptr = (char *)(template + 1);
     ptr += 2; /* menu */
     ptr += 2; /* class */
+#ifdef __REACTOS__
+    template_write_data(&ptr, titleW, title_len * sizeof(WCHAR));
+    ptr += sizeof(WCHAR);
+#else
     template_write_data(&ptr, titleW, title_size);
+#endif
     template_write_data(&ptr, &fontsize, sizeof(fontsize));
 
     return template;

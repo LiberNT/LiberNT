@@ -265,11 +265,23 @@ static HRESULT WINAPI domdoctype_get_nextSibling(IXMLDOMDocumentType *iface, IXM
     return node_get_next_sibling(doctype->node, node);
 }
 
+#ifdef __REACTOS__
+static const struct nodemap_funcs domdoctype_attr_map;
+#endif
+
 static HRESULT WINAPI domdoctype_get_attributes(IXMLDOMDocumentType *iface, IXMLDOMNamedNodeMap **map)
 {
+#ifdef __REACTOS__
+    domdoctype *doctype = impl_from_IXMLDOMDocumentType(iface);
+
+    TRACE("%p, %p.\n", iface, map);
+
+    return create_nodemap(doctype->node, &domdoctype_attr_map, map);
+#else
     FIXME("%p, %p: stub\n", iface, map);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI domdoctype_insertBefore(IXMLDOMDocumentType *iface, IXMLDOMNode *node,
@@ -664,6 +676,67 @@ static HRESULT domdoctype_entities_next_node(const struct domnode *node, LONG *i
 
     return E_NOTIMPL;
 }
+
+#ifdef __REACTOS__
+static HRESULT domdoctype_attr_get_named_item(const struct domnode *node, BSTR name, IXMLDOMNode **item)
+{
+    if (!name || !item)
+        return E_INVALIDARG;
+
+    return node_get_attribute(node, name, (IXMLDOMAttribute **)item);
+}
+
+static HRESULT domdoctype_attr_set_named_item(struct domnode *node, IXMLDOMNode *item, IXMLDOMNode **old)
+{
+    return E_INVALIDARG;
+}
+
+static HRESULT domdoctype_attr_remove_named_item(struct domnode *node, BSTR name, IXMLDOMNode **item)
+{
+    return E_INVALIDARG;
+}
+
+static HRESULT domdoctype_attr_get_item(struct domnode *node, LONG index, IXMLDOMNode **item)
+{
+    return node_get_attribute_by_index(node, index, item);
+}
+
+static HRESULT domdoctype_attr_get_length(struct domnode *node, LONG *length)
+{
+    return node_get_attribute_count(node, length);
+}
+
+static HRESULT domdoctype_attr_get_qualified_item(const struct domnode *node, BSTR name, BSTR uri, IXMLDOMNode **item)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT domdoctype_attr_remove_qualified_item(struct domnode *node, BSTR name, BSTR uri, IXMLDOMNode **item)
+{
+    return E_INVALIDARG;
+}
+
+static HRESULT domdoctype_attr_next_node(const struct domnode *node, LONG *iter, IXMLDOMNode **next)
+{
+    HRESULT hr = node_get_attribute_by_index((struct domnode *)node, *iter, next);
+
+    if (hr == S_OK)
+        ++*iter;
+    return hr;
+}
+
+static const struct nodemap_funcs domdoctype_attr_map =
+{
+    .get_named_item = domdoctype_attr_get_named_item,
+    .set_named_item = domdoctype_attr_set_named_item,
+    .remove_named_item = domdoctype_attr_remove_named_item,
+    .get_item = domdoctype_attr_get_item,
+    .get_length = domdoctype_attr_get_length,
+    .get_qualified_item = domdoctype_attr_get_qualified_item,
+    .remove_qualified_item = domdoctype_attr_remove_qualified_item,
+    .next_node = domdoctype_attr_next_node,
+};
+#endif
 
 static const struct nodemap_funcs domdoctype_entities_map =
 {

@@ -421,7 +421,11 @@ static HRESULT stream_init(struct audio_client *client, const BOOLEAN force_def_
         return E_INVALIDARG;
 
     if (mode == AUDCLNT_SHAREMODE_EXCLUSIVE) {
+#ifdef __REACTOS__
+        if (flags & (AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_LOOPBACK))
+#else
         if (flags & AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM)
+#endif
             return E_INVALIDARG;
 
         compatible = TRUE;
@@ -508,6 +512,9 @@ static HRESULT stream_init(struct audio_client *client, const BOOLEAN force_def_
 
     wine_unix_call(create_stream, &params);
 
+#ifdef __REACTOS__
+    client->stream_flags = flags;
+#endif
     free(name);
 
     if (FAILED(params.result)) {
@@ -1036,6 +1043,21 @@ static HRESULT WINAPI client_GetService(IAudioClient3 *iface, REFIID riid, void 
         goto exit;
     }
 
+#ifdef __REACTOS__
+    {
+        struct get_buffer_size_params size_params;
+        UINT32 size_frames;
+
+        size_params.stream = This->stream;
+        size_params.frames = &size_frames;
+        wine_unix_call(get_buffer_size, &size_params);
+        if (size_params.result == AUDCLNT_E_DEVICE_INVALIDATED) {
+            hr = size_params.result;
+            goto exit;
+        }
+    }
+#endif
+
     if (IsEqualIID(riid, &IID_IAudioRenderClient)) {
         if (This->dataflow != eRender) {
             hr = AUDCLNT_E_WRONG_ENDPOINT_TYPE;
@@ -1080,6 +1102,12 @@ static HRESULT WINAPI client_GetService(IAudioClient3 *iface, REFIID riid, void 
         if (!new_session)
             IUnknown_AddRef((IUnknown *)*ppv);
     } else if (IsEqualIID(riid, &IID_IAudioClockAdjustment)) {
+#ifdef __REACTOS__
+        if (!(This->stream_flags & AUDCLNT_STREAMFLAGS_RATEADJUST)) {
+            hr = E_INVALIDARG;
+            goto exit;
+        }
+#endif
         IAudioClockAdjustment_AddRef(&This->IAudioClockAdjustment_iface);
         *ppv = &This->IAudioClockAdjustment_iface;
     } else {

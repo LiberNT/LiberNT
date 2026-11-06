@@ -80,34 +80,42 @@ PspQueryDescriptorThread(IN PETHREAD Thread,
                                         DescriptorEntry.Selector & 0xFFFFFFF8,
                                         (PKGDTENTRY)&Descriptor);
         if (!NT_SUCCESS(Status)) return Status;
-
-        /* Enter SEH for the copy */
-        _SEH2_TRY
-        {
-            /* Copy the GDT entry to caller */
-            RtlCopyMemory(&((PDESCRIPTOR_TABLE_ENTRY)ThreadInformation)->
-                          Descriptor,
-                          &Descriptor,
-                          sizeof(LDT_ENTRY));
-            if (ReturnLength) *ReturnLength = sizeof(LDT_ENTRY);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            /* Return the exception code */
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
-
-        /* Success */
-        Status = STATUS_SUCCESS;
     }
     else
     {
-        /* This is only supported for VDM, which we don't implement */
-        ASSERT(THREAD_TO_PROCESS(Thread)->LdtInformation == NULL);
-        Status = STATUS_NO_LDT;
+        PUSHORT LdtDescriptor = (PUSHORT)&THREAD_TO_PROCESS(Thread)->Pcb.LdtDescriptor;
+        ULONG LdtBase, LdtLimit;
+        ULONG Offset = DescriptorEntry.Selector & 0xFFFFFFF8;
+
+        LdtBase = LdtDescriptor[1] |
+                  ((LdtDescriptor[2] & 0xff) << 16) |
+                  ((LdtDescriptor[3] & ~0xff) << 16);
+        LdtLimit = LdtDescriptor[0] |
+                   ((LdtDescriptor[3] & 0xf) << 16);
+
+        if (!LdtBase) return STATUS_NO_LDT;
+        if (Offset + sizeof(LDT_ENTRY) - 1 > LdtLimit) return STATUS_ACCESS_VIOLATION;
+
+        Descriptor = *(PLDT_ENTRY)(LdtBase + Offset);
     }
 
+    /* Enter SEH for the copy */
+    _SEH2_TRY
+    {
+        /* Copy the entry to caller */
+        RtlCopyMemory(&((PDESCRIPTOR_TABLE_ENTRY)ThreadInformation)->
+                      Descriptor,
+                      &Descriptor,
+                      sizeof(LDT_ENTRY));
+        if (ReturnLength) *ReturnLength = sizeof(LDT_ENTRY);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        /* Return the exception code */
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
     /* Return status to caller */
-    return Status;
+    return STATUS_SUCCESS;
 }

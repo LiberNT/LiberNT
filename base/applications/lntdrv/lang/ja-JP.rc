@@ -134,6 +134,7 @@ BEGIN
     IDS_ERROR_NOT_IN_USE "デバイスはこのカタログのドライバーを使用しなくなりました。"
     IDS_ERROR_NO_SIGNATURE "パッケージに署名がありません。"
     IDS_ERROR_OFFLINE "Microsoft Update カタログに接続できません。この PC がインターネットに接続されていることを確認してください。"
+    IDS_ERROR_THROTTLED "Microsoft Update カタログがこの PC からの検索を制限しています。数分後にもう一度お試しください。"
     IDS_ERROR_SIGNATURE "パッケージの署名は信頼されていません: %1"
     IDS_ERROR_CODE "エラー %1"
     IDS_STATUS_MISSING "ドライバーがありません"

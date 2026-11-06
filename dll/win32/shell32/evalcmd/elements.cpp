@@ -22,7 +22,7 @@
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(evalcmd);
 
-typedef HRESULT (CALLBACK* QUERY_CALLBACK)(IQuerySourceOld*, ASSOCQUERY query, PCWSTR keyName,
+typedef HRESULT (CALLBACK* QUERY_CALLBACK)(IQuerySource*, ASSOCQUERY query, PCWSTR keyName,
                                            PCWSTR valueName, PVOID pValue);
 
 typedef struct QUERYKEYVAL
@@ -128,15 +128,14 @@ static inline HRESULT _SHAllocLoadString(HINSTANCE hInstance, UINT uID, PWSTR* p
 }
 
 static HRESULT QSOpen2(
-    IQuerySourceOld* pSource,
+    IQuerySource* pSource,
     PCWSTR key,
     PCWSTR pszSrc,
-    BOOL bCreate,
-    IQuerySourceOld** ppSource)
+    IQuerySource** ppSource)
 {
     WCHAR szDest[MAX_PATH];
     PathCchCombineEx(szDest, _countof(szDest), key, pszSrc, PATHCCH_NONE);
-    return pSource->OpenSource(szDest, bCreate, ppSource);
+    return pSource->OpenSource(szDest, ppSource);
 }
 
 static HRESULT _GetFileTypeName(PWSTR lpsz, PWSTR* ppwsz)
@@ -180,7 +179,7 @@ _RegSetVolatileString(HKEY hKey, PCWSTR lpSubKey, PCWSTR lpString)
 
 static HRESULT CALLBACK
 _QuerySourceDirect(
-    IQuerySourceOld* pSource,
+    IQuerySource* pSource,
     ASSOCQUERY query,
     PCWSTR keyName,
     PCWSTR valueName,
@@ -191,7 +190,7 @@ _QuerySourceDirect(
 
 static HRESULT CALLBACK
 _QuerySourceDword(
-    IQuerySourceOld* pSource,
+    IQuerySource* pSource,
     ASSOCQUERY query,
     PCWSTR keyName,
     PCWSTR valueName,
@@ -202,7 +201,7 @@ _QuerySourceDword(
 
 static HRESULT CALLBACK
 _QuerySourceExists(
-    IQuerySourceOld* pSource,
+    IQuerySource* pSource,
     ASSOCQUERY query,
     PCWSTR keyName,
     PCWSTR valueName,
@@ -213,7 +212,7 @@ _QuerySourceExists(
 
 static HRESULT CALLBACK
 _QuerySourceString(
-    IQuerySourceOld* pSource,
+    IQuerySource* pSource,
     ASSOCQUERY query,
     PCWSTR keyName,
     PCWSTR valueName,
@@ -226,10 +225,10 @@ _QuerySourceString(
 }
 
 static inline HRESULT
-_QuerySourceCreateFromKey(HKEY hKey, PCWSTR lpSubKey, BOOL bCreate, IQuerySourceOld** ppSource)
+_QuerySourceCreateFromKey(HKEY hKey, PCWSTR lpSubKey, BOOL bCreate, IQuerySource** ppSource)
 {
     return QuerySourceCreateFromKey(hKey, lpSubKey, bCreate,
-                                    IID_PPV_ARG(IQuerySourceOld, ppSource));
+                                    IID_PPV_ARG(IQuerySource, ppSource));
 }
 
 static HRESULT
@@ -237,7 +236,7 @@ _QuerySourceCreateFromKey2(
     HKEY    hKey,
     PCWSTR  key1,
     PCWSTR  key2,
-    IQuerySourceOld** ppSource)
+    IQuerySource** ppSource)
 {
     WCHAR szBuff[MAX_PATH];
 
@@ -399,26 +398,26 @@ static HRESULT _ExeFromCmd(PCWSTR pszCmdTemplate, PWSTR* ppszApplication)
  * CAssocElement
  */
 class CAssocElement
-    : public IObjectWithQuerySourceOld
+    : public IObjectWithQuerySource
     , public IAssociationElementOld
     , public IAssociationElement
 {
 protected:
     LONG m_cRefs = 1;
-    IQuerySourceOld* m_pSource = NULL;
+    IQuerySource* m_pSource = NULL;
 
     HRESULT _QueryKeyValAny(
         QUERY_CALLBACK callback,
         const QUERYKEYVAL* pItems,
         UINT cItems,
-        IQuerySourceOld* pQS,
+        IQuerySource* pQS,
         ASSOCQUERY query,
         PCWSTR valueName,
         PVOID pValue);
 
     HRESULT _QuerySourceAny(
         QUERY_CALLBACK callback,
-        IQuerySourceOld* pSource,
+        IQuerySource* pSource,
         DWORD dwFlags,
         ASSOCQUERY query,
         PCWSTR valueName,
@@ -431,8 +430,8 @@ public:
     STDMETHODIMP QueryInterface(REFIID riid, PVOID* ppv) override;
     STDMETHODIMP_(ULONG) AddRef() override;
     STDMETHODIMP_(ULONG) Release() override;
-    /*** IObjectWithQuerySourceOld ***/
-    STDMETHODIMP SetSource(IQuerySourceOld* pSource) override;
+    /*** IObjectWithQuerySource ***/
+    STDMETHODIMP SetSource(IQuerySource* pSource) override;
     STDMETHODIMP GetSource(REFIID riid, PVOID* ppSource) override;
     /*** IAssociationElementOld ***/
     STDMETHODIMP QueryString(ASSOCQUERY query, PCWSTR key, PWSTR* ppszValue) override;
@@ -459,7 +458,7 @@ protected:
     WCHAR m_szBuff[64] = L"";
 
     UINT _GetQueryKeyVal(const QUERYKEYVAL** ppItems) override;
-    HRESULT _DefaultVerbSource(IQuerySourceOld** ppSource);
+    HRESULT _DefaultVerbSource(IQuerySource** ppSource);
 
 public:
     ~CAssocShellElement();
@@ -530,7 +529,7 @@ public:
 class CAssocProgidElement
     : public CAssocShellElement
 {
-    IQuerySourceOld* m_pSource2 = NULL;
+    IQuerySource* m_pSource2 = NULL;
 
 public:
     ~CAssocProgidElement() override;
@@ -618,7 +617,7 @@ protected:
 public:
     /*** IPersist ***/
     STDMETHODIMP GetClassID(CLSID* pClassID) override;
-    /*** IObjectWithQuerySourceOld ***/
+    /*** IObjectWithQuerySource ***/
     STDMETHODIMP GetSource(REFIID riid, PVOID* ppSource) override;
 
     HRESULT _InitSource() override;
@@ -667,7 +666,7 @@ CAssocElement::_QueryKeyValAny(
     QUERY_CALLBACK callback,
     const QUERYKEYVAL* pItems,
     UINT cItems,
-    IQuerySourceOld* pQS,
+    IQuerySource* pQS,
     ASSOCQUERY query,
     PCWSTR valueName,
     PVOID pValue)
@@ -689,14 +688,14 @@ CAssocElement::_QueryKeyValAny(
 HRESULT
 CAssocElement::_QuerySourceAny(
     QUERY_CALLBACK callback,
-    IQuerySourceOld* pSource,
+    IQuerySource* pSource,
     DWORD dwFlags,
     ASSOCQUERY query,
     PCWSTR valueName,
     PVOID pValue)
 {
     if (!pSource)
-        return E_INVALIDARG;
+        return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
 
     if (query == (ASSOCQUERY_SDED | ASSOCQUERY_EXTRA_NON_VERB) ||
         query == ASSOCQUERY_LOCALIZEDSTRING)
@@ -717,9 +716,9 @@ CAssocElement::_QuerySourceAny(
 
 STDMETHODIMP CAssocElement::QueryInterface(REFIID riid, PVOID* ppv)
 {
-    if (riid == IID_IObjectWithQuerySourceOld)
+    if (riid == IID_IObjectWithQuerySource)
     {
-        *ppv = static_cast<IObjectWithQuerySourceOld*>(this);
+        *ppv = static_cast<IObjectWithQuerySource*>(this);
         AddRef();
         return S_OK;
     }
@@ -769,7 +768,7 @@ STDMETHODIMP_(ULONG) CAssocElement::Release()
     return refs;
 }
 
-STDMETHODIMP CAssocElement::SetSource(IQuerySourceOld* pSource)
+STDMETHODIMP CAssocElement::SetSource(IQuerySource* pSource)
 {
     if (m_pSource)
         return E_UNEXPECTED;
@@ -883,9 +882,9 @@ HRESULT CAssocShellElement::_GetVerbDelegate(PCWSTR pszSrc, IAssociationElementO
         return E_FAIL;
 
     HRESULT hr;
-    IQuerySourceOld* pSource;
+    IQuerySource* pSource;
     if (pszSrc)
-        hr = QSOpen2(m_pSource, L"shell", pszSrc, 0, &pSource);
+        hr = QSOpen2(m_pSource, L"shell", pszSrc, &pSource);
     else
         hr = _DefaultVerbSource(&pSource);
 
@@ -909,6 +908,13 @@ HRESULT CAssocShellElement::_GetVerbDelegate(PCWSTR pszSrc, IAssociationElementO
 
 STDMETHODIMP CAssocShellElement::QueryString(ASSOCQUERY query, PCWSTR key, PWSTR* ppszValue)
 {
+    if (!m_pszName && !m_pSource && (query & ASSOCQUERY_INDIRECT))
+    {
+        /* An element with neither a name nor a source resolves a NULL indirect string and faults, as on Windows 11 */
+        *ppszValue = NULL;
+        return SHAllocMUI(ppszValue);
+    }
+
     if (!(query & ASSOCQUERY_EXTRA_VERB))
         return CAssocElement::QueryString(query, key, ppszValue);
 
@@ -1040,10 +1046,10 @@ STDMETHODIMP CAssocShellElement::GetString(PWSTR* ppsz)
     return SHStrDupW(m_pszName, ppsz);
 }
 
-HRESULT CAssocShellElement::_DefaultVerbSource(IQuerySourceOld** ppSource)
+HRESULT CAssocShellElement::_DefaultVerbSource(IQuerySource** ppSource)
 {
-    IQuerySourceOld* pShellSource;
-    HRESULT hr = m_pSource->OpenSource(L"shell", FALSE, &pShellSource);
+    IQuerySource* pShellSource;
+    HRESULT hr = m_pSource->OpenSource(L"shell", &pShellSource);
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
@@ -1052,7 +1058,7 @@ HRESULT CAssocShellElement::_DefaultVerbSource(IQuerySourceOld** ppSource)
     if (SUCCEEDED(pShellSource->QueryValueString(NULL, NULL, &pszValue)))
         pszVerb = pszValue;
 
-    hr = pShellSource->OpenSource(pszVerb, FALSE, ppSource);
+    hr = pShellSource->OpenSource(pszVerb, ppSource);
     if (FAILED_UNEXPECTEDLY(hr))
     {
         if (pszValue)
@@ -1061,7 +1067,7 @@ HRESULT CAssocShellElement::_DefaultVerbSource(IQuerySourceOld** ppSource)
             if (nDelim != lstrlenW(pszValue))
             {
                 pszValue[nDelim] = UNICODE_NULL;
-                hr = pShellSource->OpenSource(pszValue, FALSE, ppSource);
+                hr = pShellSource->OpenSource(pszValue, ppSource);
             }
         }
         else
@@ -1073,7 +1079,7 @@ HRESULT CAssocShellElement::_DefaultVerbSource(IQuerySourceOld** ppSource)
                 ULONG cFetched = 0;
                 if (SUCCEEDED(pEnum->Next(1, &pszFirst, &cFetched)))
                 {
-                    hr = pShellSource->OpenSource(pszFirst, FALSE, ppSource);
+                    hr = pShellSource->OpenSource(pszFirst, ppSource);
                     CoTaskMemFree(pszFirst);
                 }
                 pEnum->Release();
@@ -1201,7 +1207,7 @@ HRESULT CAssocApplicationElement::_InitSource()
     _MakeApplicationsKey(pchFileName, szSubKey, _countof(szSubKey));
 
     HRESULT hr = QuerySourceCreateFromKey(HKEY_CLASSES_ROOT, szSubKey, FALSE,
-                                          IID_PPV_ARG(IQuerySourceOld, &m_pSource));
+                                          IID_PPV_ARG(IQuerySource, &m_pSource));
     m_bHasDir = (pchFileName != m_pszName);
     if (FAILED_UNEXPECTEDLY(hr) && m_bHasDir && PathFileExistsW(m_pszName))
         return S_FALSE;
@@ -1420,7 +1426,7 @@ STDMETHODIMP CAssocFolderElement::GetClassID(CLSID* pClassID)
 HRESULT CAssocFolderElement::_InitSource()
 {
     return QuerySourceCreateFromKey(HKEY_CLASSES_ROOT, L"Folder", FALSE,
-                                    IID_PPV_ARG(IQuerySourceOld, &m_pSource));
+                                    IID_PPV_ARG(IQuerySource, &m_pSource));
 }
 
 /******************************************************************************
@@ -1444,7 +1450,7 @@ STDMETHODIMP CAssocStarElement::GetClassID(CLSID* pClassID)
 HRESULT CAssocStarElement::_InitSource()
 {
     return QuerySourceCreateFromKey(HKEY_CLASSES_ROOT, L"*", FALSE,
-                                    IID_PPV_ARG(IQuerySourceOld, &m_pSource));
+                                    IID_PPV_ARG(IQuerySource, &m_pSource));
 }
 
 /******************************************************************************
@@ -1578,7 +1584,7 @@ HRESULT CAssocClientElement::_FixNetscapeRegistration()
     HRESULT hr = E_FAIL;
     if (dwDisposition == REG_OPENED_EXISTING_KEY || _CreateRepairedNetscapeRegistration(hKey))
     {
-        IQuerySourceOld* pNewSource = NULL;
+        IQuerySource* pNewSource = NULL;
         hr = _QuerySourceCreateFromKey(hKey, NULL, NULL, &pNewSource);
         if (SUCCEEDED(hr))
         {

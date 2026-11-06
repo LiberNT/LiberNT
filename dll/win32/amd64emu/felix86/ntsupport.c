@@ -16,51 +16,50 @@
 #include <semaphore.h>
 #include "bridge.h"
 
-typedef BOOLEAN (*FELIX86_NT_PROBE)(VOID);
+#define KF_RISCV_ZICBOM  0x00000001
+#define KF_RISCV_ZBA     0x00000020
+#define KF_RISCV_ZBB     0x00000040
+#define KF_RISCV_ZBS     0x00000080
+#define KF_RISCV_V       0x00002000
+#define KF_RISCV_ZBC     0x00010000
+#define KF_RISCV_ZICOND  0x00020000
+#define KF_RISCV_ZFA     0x00040000
+#define KF_RISCV_ZACAS   0x00080000
+#define KF_RISCV_ZABHA   0x00100000
+#define KF_RISCV_ZVBB    0x00200000
+#define KF_RISCV_ZVBC    0x00400000
+#define KF_RISCV_ZVKNED  0x00800000
+#define KF_RISCV_ZVKNHA  0x01000000
+#define KF_RISCV_ZVFHMIN 0x02000000
+#define KF_RISCV_ZKND    0x04000000
+#define KF_RISCV_ZICCLSM 0x08000000
 
-BOOLEAN Felix86NtProbeV(VOID);
-BOOLEAN Felix86NtProbeZba(VOID);
-BOOLEAN Felix86NtProbeZbb(VOID);
-BOOLEAN Felix86NtProbeZbs(VOID);
-BOOLEAN Felix86NtProbeZbc(VOID);
-BOOLEAN Felix86NtProbeZicond(VOID);
-BOOLEAN Felix86NtProbeZfa(VOID);
-BOOLEAN Felix86NtProbeZacas(VOID);
-BOOLEAN Felix86NtProbeZabha(VOID);
-BOOLEAN Felix86NtProbeZvbb(VOID);
-BOOLEAN Felix86NtProbeZvbc(VOID);
-BOOLEAN Felix86NtProbeZvkned(VOID);
-BOOLEAN Felix86NtProbeZvknha(VOID);
-BOOLEAN Felix86NtProbeZvfhmin(VOID);
-BOOLEAN Felix86NtProbeZknd(VOID);
-BOOLEAN Felix86NtProbeZicbom(VOID);
-BOOLEAN Felix86NtProbeZicclsm(VOID);
 ULONG Felix86NtReadVectorBytes(VOID);
 
 static const struct
 {
     ULONG Extension;
     ULONG Requires;
-    FELIX86_NT_PROBE Probe;
-} Felix86NtProbes[] =
+    ULONG64 FeatureBit;
+} Felix86NtFeatures[] =
 {
-    { FELIX86_NT_EXT_V, 0, Felix86NtProbeV },
-    { FELIX86_NT_EXT_ZBA, 0, Felix86NtProbeZba },
-    { FELIX86_NT_EXT_ZBB, 0, Felix86NtProbeZbb },
-    { FELIX86_NT_EXT_ZBS, 0, Felix86NtProbeZbs },
-    { FELIX86_NT_EXT_ZBC, 0, Felix86NtProbeZbc },
-    { FELIX86_NT_EXT_ZICOND, 0, Felix86NtProbeZicond },
-    { FELIX86_NT_EXT_ZFA, 0, Felix86NtProbeZfa },
-    { FELIX86_NT_EXT_ZACAS, 0, Felix86NtProbeZacas },
-    { FELIX86_NT_EXT_ZABHA, 0, Felix86NtProbeZabha },
-    { FELIX86_NT_EXT_ZVBB, FELIX86_NT_EXT_V, Felix86NtProbeZvbb },
-    { FELIX86_NT_EXT_ZVBC, FELIX86_NT_EXT_V, Felix86NtProbeZvbc },
-    { FELIX86_NT_EXT_ZVKNED, FELIX86_NT_EXT_V, Felix86NtProbeZvkned },
-    { FELIX86_NT_EXT_ZVKNHA, FELIX86_NT_EXT_V, Felix86NtProbeZvknha },
-    { FELIX86_NT_EXT_ZVFHMIN, FELIX86_NT_EXT_V, Felix86NtProbeZvfhmin },
-    { FELIX86_NT_EXT_ZKND, 0, Felix86NtProbeZknd },
-    { FELIX86_NT_EXT_ZICBOM, 0, Felix86NtProbeZicbom },
-    { FELIX86_NT_EXT_ZICCLSM, FELIX86_NT_EXT_V, Felix86NtProbeZicclsm },
+    { FELIX86_NT_EXT_V, 0, KF_RISCV_V },
+    { FELIX86_NT_EXT_ZBA, 0, KF_RISCV_ZBA },
+    { FELIX86_NT_EXT_ZBB, 0, KF_RISCV_ZBB },
+    { FELIX86_NT_EXT_ZBS, 0, KF_RISCV_ZBS },
+    { FELIX86_NT_EXT_ZBC, 0, KF_RISCV_ZBC },
+    { FELIX86_NT_EXT_ZICOND, 0, KF_RISCV_ZICOND },
+    { FELIX86_NT_EXT_ZFA, 0, KF_RISCV_ZFA },
+    { FELIX86_NT_EXT_ZACAS, 0, KF_RISCV_ZACAS },
+    { FELIX86_NT_EXT_ZABHA, 0, KF_RISCV_ZABHA },
+    { FELIX86_NT_EXT_ZVBB, FELIX86_NT_EXT_V, KF_RISCV_ZVBB },
+    { FELIX86_NT_EXT_ZVBC, FELIX86_NT_EXT_V, KF_RISCV_ZVBC },
+    { FELIX86_NT_EXT_ZVKNED, FELIX86_NT_EXT_V, KF_RISCV_ZVKNED },
+    { FELIX86_NT_EXT_ZVKNHA, FELIX86_NT_EXT_V, KF_RISCV_ZVKNHA },
+    { FELIX86_NT_EXT_ZVFHMIN, FELIX86_NT_EXT_V, KF_RISCV_ZVFHMIN },
+    { FELIX86_NT_EXT_ZKND, 0, KF_RISCV_ZKND },
+    { FELIX86_NT_EXT_ZICBOM, 0, KF_RISCV_ZICBOM },
+    { FELIX86_NT_EXT_ZICCLSM, FELIX86_NT_EXT_V, KF_RISCV_ZICCLSM },
 };
 
 static ULONG Felix86NtExtensions;
@@ -72,20 +71,17 @@ static BOOLEAN Felix86NtTerminationHeapLocked;
 uint32_t
 Felix86NtProbeExtensions(void)
 {
+    SYSTEM_PROCESSOR_INFORMATION Information;
     ULONG Index;
 
-    for (Index = 0; Index < RTL_NUMBER_OF(Felix86NtProbes); Index++)
-    {
-        if ((Felix86NtExtensions & Felix86NtProbes[Index].Requires) != Felix86NtProbes[Index].Requires) continue;
+    if (!NT_SUCCESS(NtQuerySystemInformation(SystemProcessorInformation, &Information, sizeof(Information), NULL)))
+        return Felix86NtExtensions;
 
-        _SEH2_TRY
-        {
-            if (Felix86NtProbes[Index].Probe()) Felix86NtExtensions |= Felix86NtProbes[Index].Extension;
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-        }
-        _SEH2_END;
+    for (Index = 0; Index < RTL_NUMBER_OF(Felix86NtFeatures); Index++)
+    {
+        if ((Felix86NtExtensions & Felix86NtFeatures[Index].Requires) != Felix86NtFeatures[Index].Requires) continue;
+        if (Information.ProcessorFeatureBits & Felix86NtFeatures[Index].FeatureBit)
+            Felix86NtExtensions |= Felix86NtFeatures[Index].Extension;
     }
 
     return Felix86NtExtensions;
@@ -293,6 +289,15 @@ F86LazyRemember(
     _In_ ULONG Protect)
 {
     BOOLEAN Remembered = FALSE;
+    HANDLE DebugPort = NULL;
+
+    /* TODO: mappings remembered before a debugger attaches still fault into that debugger on first touch */
+    if (!NT_SUCCESS(ZwQueryInformationProcess(NtCurrentProcess(), ProcessDebugPort, &DebugPort, sizeof(DebugPort),
+                                              NULL)) ||
+        DebugPort != NULL)
+    {
+        return FALSE;
+    }
 
     if (!InterlockedCompareExchange(&F86LazyHandler, 1, 0) && !RtlAddVectoredExceptionHandler(1, F86LazyFault))
         InterlockedExchange(&F86LazyHandler, 0);

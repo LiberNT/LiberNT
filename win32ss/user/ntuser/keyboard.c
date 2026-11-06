@@ -121,14 +121,11 @@ IntKeyboardGetIndicatorTrans(HANDLE hKeyboardDevice,
  */
 static
 NTSTATUS APIENTRY
-IntKeyboardUpdateLeds(HANDLE hKeyboardDevice,
-                      WORD wVk,
+IntKeyboardUpdateLeds(WORD wVk,
                       WORD wScanCode)
 {
-    NTSTATUS Status;
     UINT i;
     USHORT LedFlag = 0;
-    IO_STATUS_BLOCK Block;
 
     if (!gpKeyboardIndicatorTrans)
         return STATUS_NOT_SUPPORTED;
@@ -154,16 +151,7 @@ IntKeyboardUpdateLeds(HANDLE hKeyboardDevice,
         gIndicators.LedFlags ^= LedFlag;
 
         /* Update the lights on the hardware */
-        Status = ZwDeviceIoControlFile(hKeyboardDevice,
-                                       NULL,
-                                       NULL,
-                                       NULL,
-                                       &Block,
-                                       IOCTL_KEYBOARD_SET_INDICATORS,
-                                       &gIndicators, sizeof(gIndicators),
-                                       NULL, 0);
-
-        return Status;
+        UserSendKeyboardControl(IOCTL_KEYBOARD_SET_INDICATORS, &gIndicators, sizeof(gIndicators));
     }
 
     return STATUS_SUCCESS;
@@ -230,6 +218,13 @@ UserInitKeyboard(HANDLE hKeyboardDevice)
 
 VOID
 NTAPI
+UserRefreshKeyboardIndicators(VOID)
+{
+    UserSendKeyboardControl(IOCTL_KEYBOARD_SET_INDICATORS, &gIndicators, sizeof(gIndicators));
+}
+
+VOID
+NTAPI
 UserGetKeyboardTypematic(
     _Out_ PULONG Delay,
     _Out_ PULONG Rate)
@@ -243,34 +238,16 @@ NTAPI
 UserSetKeyboardTypematic(VOID)
 {
     KEYBOARD_TYPEMATIC_PARAMETERS Typematic;
-    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(L"\\Device\\KeyboardClass0");
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    IO_STATUS_BLOCK Block;
-    HANDLE Handle;
     ULONG Delay, Rate;
-    NTSTATUS Status;
 
-    if (!ghKeyboardDevice)
+    if (!UserKeyboardPresent())
         return;
-
-    InitializeObjectAttributes(&ObjectAttributes, &DeviceName, OBJ_KERNEL_HANDLE, NULL, NULL);
-    Status = ZwOpenFile(&Handle, SYNCHRONIZE | FILE_READ_DATA, &ObjectAttributes, &Block,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
-    if (!NT_SUCCESS(Status))
-    {
-        WARN("Opening the keyboard for IOCTL_KEYBOARD_SET_TYPEMATIC failed: 0x%08lx\n", Status);
-        return;
-    }
 
     UserGetKeyboardTypematic(&Delay, &Rate);
     Typematic.UnitId = 0;
     Typematic.Delay = (USHORT)Delay;
     Typematic.Rate = (USHORT)Rate;
-    Status = ZwDeviceIoControlFile(Handle, NULL, NULL, NULL, &Block, IOCTL_KEYBOARD_SET_TYPEMATIC,
-                                   &Typematic, sizeof(Typematic), NULL, 0);
-    ZwClose(Handle);
-    if (!NT_SUCCESS(Status))
-        WARN("IOCTL_KEYBOARD_SET_TYPEMATIC failed: 0x%08lx\n", Status);
+    UserSendKeyboardControl(IOCTL_KEYBOARD_SET_TYPEMATIC, &Typematic, sizeof(Typematic));
 }
 
 /*
@@ -1289,8 +1266,7 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
     if (bIsDown)
     {
         /* Update keyboard LEDs */
-        IntKeyboardUpdateLeds(ghKeyboardDevice,
-                              wSimpleVk,
+        IntKeyboardUpdateLeds(wSimpleVk,
                               wScanCode);
     }
 

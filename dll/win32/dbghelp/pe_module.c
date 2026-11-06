@@ -594,9 +594,32 @@ static BOOLEAN pe_symz_symbol(PVOID context, ULONG rva, const char* name)
         load->capacity = capacity;
     }
 
-    if (name[0] == '_') name++;
     load->symbols[load->count].rva = rva;
     load->symbols[load->count].func = NULL;
+    if (name[0] == '_' || name[0] == '@')
+    {
+        const char *at = strrchr(name + 1, '@');
+
+        /* FIXME: SYMOPT_UNDNAME is applied when the module loads, not when a symbol is queried */
+        if ((dbghelp_options & SYMOPT_UNDNAME) &&
+            at && at != name + 1 && at[1] && strspn(at + 1, "0123456789") == strlen(at + 1))
+        {
+            size_t length = at - (name + 1);
+            char *undecorated = pool_alloc(&load->module->pool, length + 1);
+
+            if (!undecorated)
+            {
+                load->failed = TRUE;
+                return FALSE;
+            }
+            memcpy(undecorated, name + 1, length);
+            undecorated[length] = '\0';
+            load->symbols[load->count].name = undecorated;
+            load->count++;
+            return TRUE;
+        }
+        if (name[0] == '_') name++;
+    }
     load->symbols[load->count].name = pool_strdup(&load->module->pool, name);
     load->count++;
     return TRUE;

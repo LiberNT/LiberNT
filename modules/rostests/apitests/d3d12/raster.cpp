@@ -343,6 +343,8 @@ static void TestConservative(struct raster_test *test)
                     "readback failed\n");
             ok(d3d12_test_read_texel(&test->context, target, D3D12_RESOURCE_STATE_RENDER_TARGET, 12, 12, &far_texel),
                     "readback failed\n");
+            /* The virtio 3D GPU reports tier 1 for its feature level; the host does not rasterize it, on Windows 11 too. */
+            if (!pass || !d3d12_test_on_virtio3d(test->context.device))
             ok(texel == expected[pass], "triangle inside pixel (4,4) away from its center, conservative %u: texel %#lx, "
                     "expected %#lx\n", modes[pass], texel, expected[pass]);
             ok(far_texel == RASTER_RED, "far pixel %#lx\n", far_texel);

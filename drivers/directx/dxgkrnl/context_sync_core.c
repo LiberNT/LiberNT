@@ -190,11 +190,11 @@ DxgkContextSyncCoreValidate(
         switch (Object->Type)
         {
             case D3DDDI_SYNCHRONIZATION_MUTEX:
-                if (Object->MutexOwned == NULL)
+                if (Object->MutexOwned == NULL || Object->MutexQueuedOwner == NULL)
                     return STATUS_INVALID_PARAMETER;
                 break;
             case D3DDDI_SEMAPHORE:
-                if (Object->SemaphoreCount == NULL || Object->SemaphoreLimit == 0)
+                if (Object->SemaphoreCount == NULL || Object->SemaphoreQueuedCount == NULL || Object->SemaphoreLimit == 0)
                     return STATUS_INVALID_PARAMETER;
                 break;
             case D3DDDI_FENCE:
@@ -227,6 +227,107 @@ DxgkContextSyncCoreValidate(
     if ((SignalFlags & DXGK_CONTEXT_SYNC_ALLOW_FENCE_REWIND) != 0 && !FencePresent)
         return STATUS_INVALID_PARAMETER;
     return STATUS_SUCCESS;
+}
+
+static BOOLEAN
+DxgkpContextSyncReturnSemaphoreToken(
+    _Inout_ PDXGK_CONTEXT_SYNC_CORE_OBJECT Object)
+{
+    LONG64 Count;
+
+    do
+    {
+        Count = InterlockedCompareExchange64(Object->SemaphoreQueuedCount, 0, 0);
+        if ((UINT64)Count >= (UINT64)Object->SemaphoreLimit)
+            return FALSE;
+    } while (InterlockedCompareExchange64(Object->SemaphoreQueuedCount, Count + 1, Count) != Count);
+    return TRUE;
+}
+
+static BOOLEAN
+DxgkpContextSyncClaimQueued(
+    _Inout_ PDXGK_CONTEXT_SYNC_CORE_OBJECT Object,
+    _In_ PVOID Waiter)
+{
+    LONG64 Count;
+
+    if (Object->Type == D3DDDI_SYNCHRONIZATION_MUTEX)
+        return InterlockedCompareExchangePointer(Object->MutexQueuedOwner, Waiter, NULL) == NULL;
+    if (Object->Type != D3DDDI_SEMAPHORE)
+        return TRUE;
+    do
+    {
+        Count = InterlockedCompareExchange64(Object->SemaphoreQueuedCount, 0, 0);
+        if (Count <= 0)
+            return FALSE;
+    } while (InterlockedCompareExchange64(Object->SemaphoreQueuedCount, Count - 1, Count) != Count);
+    return TRUE;
+}
+
+static VOID
+DxgkpContextSyncReturnQueued(
+    _Inout_ PDXGK_CONTEXT_SYNC_CORE_OBJECT Object,
+    _In_ PVOID Waiter)
+{
+    if (Object->Type == D3DDDI_SYNCHRONIZATION_MUTEX)
+        (VOID)InterlockedCompareExchangePointer(Object->MutexQueuedOwner, NULL, Waiter);
+    else if (Object->Type == D3DDDI_SEMAPHORE)
+        (VOID)DxgkpContextSyncReturnSemaphoreToken(Object);
+}
+
+NTSTATUS
+DxgkContextSyncCoreAdmitWait(
+    _In_reads_(ObjectCount) PDXGK_CONTEXT_SYNC_CORE_OBJECT Objects,
+    _In_ ULONG ObjectCount,
+    _In_ PVOID Waiter)
+{
+    ULONG Index;
+
+    if (Objects == NULL || ObjectCount == 0 || ObjectCount > D3DDDI_MAX_OBJECT_WAITED_ON || Waiter == NULL ||
+        Waiter == DXGK_CONTEXT_SYNC_MUTEX_CREATOR_OWNER)
+        return STATUS_INVALID_PARAMETER;
+    for (Index = 0; Index < ObjectCount; ++Index)
+    {
+        if (!DxgkpContextSyncClaimQueued(&Objects[Index], Waiter))
+        {
+            while (Index != 0)
+                DxgkpContextSyncReturnQueued(&Objects[--Index], Waiter);
+            return STATUS_UNSUCCESSFUL;
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
+VOID
+DxgkContextSyncCoreCancelWait(
+    _In_reads_(ObjectCount) PDXGK_CONTEXT_SYNC_CORE_OBJECT Objects,
+    _In_ ULONG ObjectCount,
+    _In_ PVOID Waiter)
+{
+    ULONG Index;
+
+    if (Objects == NULL)
+        return;
+    for (Index = ObjectCount; Index != 0; --Index)
+        DxgkpContextSyncReturnQueued(&Objects[Index - 1], Waiter);
+}
+
+VOID
+DxgkContextSyncCoreAdmitSignal(
+    _In_reads_opt_(ObjectCount) PDXGK_CONTEXT_SYNC_CORE_OBJECT Objects,
+    _In_ ULONG ObjectCount)
+{
+    ULONG Index;
+
+    if (Objects == NULL)
+        return;
+    for (Index = 0; Index < ObjectCount; ++Index)
+    {
+        if (Objects[Index].Type == D3DDDI_SYNCHRONIZATION_MUTEX)
+            (VOID)InterlockedExchangePointer(Objects[Index].MutexQueuedOwner, NULL);
+        else if (Objects[Index].Type == D3DDDI_SEMAPHORE)
+            (VOID)DxgkpContextSyncReturnSemaphoreToken(&Objects[Index]);
+    }
 }
 
 NTSTATUS

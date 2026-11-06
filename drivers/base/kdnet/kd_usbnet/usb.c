@@ -84,12 +84,16 @@ UsbFindControl(
 {
     USB_SCAN Scan = { USB_NO_INTERFACE };
     ULONG Offset;
-    BOOLEAN Found = FALSE;
+    BOOLEAN Found = FALSE, AfterStatus = FALSE;
 
     Function->Protocol = UsbNetNone;
     Function->DataInterface = USB_NO_INTERFACE;
     Function->MacIndex = 0;
     Function->NcmCapabilities = 0;
+    Function->StatusAddress = 0;
+    Function->StatusBurst = 0;
+    Function->StatusInterval = 0;
+    Function->StatusPacket = 0;
 
     for (Offset = 0; Offset + 2 <= Length && Data[Offset] >= 2 && Offset + Data[Offset] <= Length;
          Offset += Data[Offset])
@@ -114,6 +118,25 @@ UsbFindControl(
                 Found = TRUE;
             }
 
+            continue;
+        }
+
+        if (Found && AfterStatus && Data[Offset + 1] == USB_SUPERSPEED_ENDPOINT_COMPANION_DESCRIPTOR_TYPE &&
+            Data[Offset] >= 3)
+        {
+            Function->StatusBurst = Data[Offset + 2];
+        }
+
+        AfterStatus = FALSE;
+        if (Found && !Function->StatusPacket && Data[Offset + 1] == USB_ENDPOINT_DESCRIPTOR_TYPE &&
+            Data[Offset] >= sizeof(USB_ENDPOINT_DESCRIPTOR) &&
+            (Data[Offset + 3] & USB_ENDPOINT_TYPE_MASK) == USB_ENDPOINT_TYPE_INTERRUPT &&
+            USB_ENDPOINT_DIRECTION_IN(Data[Offset + 2]))
+        {
+            Function->StatusAddress = Data[Offset + 2];
+            Function->StatusPacket = UsbNetGet16(Data + Offset + 4) & 0x7FF;
+            Function->StatusInterval = Data[Offset + 6];
+            AfterStatus = TRUE;
             continue;
         }
 
@@ -452,7 +475,8 @@ UsbProbeDevice(
     USBNET_FUNCTION Function;
     NTSTATUS Status;
     ULONG Got, Total, Configurations, i;
-    USHORT MaxPacket;
+    USHORT MaxPacket, VendorId, ProductId;
+    BOOLEAN Phone;
 
     Status = XhciAddressDevice(Adapter, Device);
     if (!NT_SUCCESS(Status))
@@ -493,6 +517,8 @@ UsbProbeDevice(
     if (Data[4] == USB_DEVICE_CLASS_HUB)
         return UsbEnumerateHub(Adapter, Tier);
 
+    VendorId = UsbNetGet16(Data + 8);
+    ProductId = UsbNetGet16(Data + 10);
     Configurations = min(Data[17], USB_MAX_CONFIGURATIONS);
     for (i = 0; i < Configurations; i++)
     {
@@ -512,8 +538,20 @@ UsbProbeDevice(
         if (!UsbFindControl(Data, Got, &Function) || !UsbFindEndpoints(Data, Got, &Function))
             continue;
 
+        Phone = Function.Protocol == UsbNetRndis || (!Tier && Adapter->PhonePort == Device->Port);
+        if (!Phone && !Adapter->AcceptEthernet)
+        {
+            if (!Adapter->EthernetPort)
+                Adapter->EthernetPort = Device->Port;
+
+            return STATUS_NOT_SUPPORTED;
+        }
+
         Function.Configuration = Data[5];
         Adapter->Function = Function;
+        Adapter->Phone = Phone;
+        Adapter->VendorId = VendorId;
+        Adapter->ProductId = ProductId;
         return UsbNetStartFunction(Adapter);
     }
 
@@ -663,6 +701,7 @@ UsbFindFunction(
 
     Adapter->WaitPort = 0;
     Adapter->PhonePort = 0;
+    Adapter->EthernetPort = 0;
     if (!XhciWaitForConnections(Adapter))
         return STATUS_NO_SUCH_DEVICE;
 
@@ -674,7 +713,25 @@ UsbFindFunction(
 
     Adapter->Tier = 0;
     Adapter->Device = &Adapter->Devices[0];
+    if (!Adapter->PhonePort && NT_SUCCESS(UsbStartEthernet(Adapter)))
+        return STATUS_SUCCESS;
+
     return Adapter->WaitPort ? STATUS_DEVICE_NOT_CONNECTED : STATUS_NO_SUCH_DEVICE;
+}
+
+NTSTATUS
+UsbStartEthernet(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    NTSTATUS Status;
+
+    if (!Adapter->EthernetPort)
+        return STATUS_NO_SUCH_DEVICE;
+
+    Adapter->AcceptEthernet = TRUE;
+    Status = UsbProbeRootPort(Adapter, Adapter->EthernetPort);
+    Adapter->AcceptEthernet = FALSE;
+    return Status;
 }
 
 NTSTATUS
@@ -736,7 +793,7 @@ UsbWaitForTethering(
     }
 
     UsbNetSetMessage(STATUS_NO_SUCH_DEVICE, NULL);
-    UsbNetTrace("USB debugger: stopped waiting for root port %lu, booting without the debugger\n", Port);
+    UsbNetTrace("USB debugger: stopped waiting for root port %lu\n", Port);
     Adapter->PhonePort = 0;
     return STATUS_NO_SUCH_DEVICE;
 }

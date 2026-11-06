@@ -16,6 +16,19 @@
  * controller is deferred only at this device level or higher. */
 #define KI_PPC_EXTERNAL_IRQL (IPI_LEVEL - 2)
 
+FORCEINLINE
+ULONG64
+ReadTimeStampCounter(VOID)
+{
+    ULONG Upper, Lower, Check;
+
+    do
+    {
+        __asm__ __volatile__("mftbu %0\n\tmftb %1\n\tmftbu %2" : "=r"(Upper), "=r"(Lower), "=r"(Check));
+    } while (Upper != Check);
+    return ((ULONG64)Upper << 32) | Lower;
+}
+
 /*
  * Trap model. Interrupts enter little-endian real mode (MSR[ILE]). The
  * vector code is copied to physical 0x100 and finds the PCR through SPRG1

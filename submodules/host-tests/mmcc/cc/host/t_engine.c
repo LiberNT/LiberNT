@@ -91,6 +91,40 @@ TestViews(void)
 }
 
 void
+TestViewAddressLimit(void)
+{
+    TEST_FILE File;
+    CC_CACHE Cache;
+    CC_MAP Map;
+    ULONG i;
+
+    FileCreate(&File, 64 * MB);
+    File.MapLimit = 8;
+    CHECK(CcCacheInitialize(&Cache, 1, 1000) == STATUS_SUCCESS);
+    CHECK(Cache.ViewCount > (ULONG)File.MapLimit);
+    CcMapInitialize(&Map, &Cache, &File.Ops, &File, File.Size, File.Size, File.Size);
+
+    for (i = 0; i < 32; i++)
+        ReadCheck(&Map, (ULONG64)i * CC_VIEW_SIZE + 17, 5000, NULL);
+    CHECK(File.MapFailures > 0);
+    CHECK(File.MappedViews <= File.MapLimit);
+    CHECK(CcCacheCheck(&Cache) == 0);
+
+    for (i = 0; i < 32; i++)
+        ReadCheck(&Map, (ULONG64)(31 - i) * CC_VIEW_SIZE + 4093, 9000, NULL);
+    CHECK(File.MappedViews <= File.MapLimit);
+    CHECK(CcCacheCheck(&Cache) == 0);
+
+    CHECK(CcMapDetachViews(&Map, 0, (ULONG64)-1));
+    CHECK(CcMapUninitialize(&Map));
+    CHECK(File.MappedViews == 0);
+    CHECK(File.Errors == 0);
+
+    CcCacheUninitialize(&Cache);
+    FileDestroy(&File);
+}
+
+void
 TestDirty(void)
 {
     TEST_FILE File;

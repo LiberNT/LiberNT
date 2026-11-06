@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
+#include <unistd.h>
 #include "mmharness.h"
 #include <cc/include/ccengine.h>
 #include <cc/api/ccnt.h>
@@ -152,7 +153,7 @@ CcmmMove(PVOID Context, PVOID CacheAddress, ULONG64 FileOffset, ULONG Length)
         if (Status != STATUS_NO_MEMORY)
             break;
 
-        sched_yield();
+        usleep(50);
     }
 
     return Status;
@@ -174,7 +175,7 @@ CcmmCopy(CCMM_FILE *File, ULONG64 Offset, ULONG Length, BOOLEAN ForWrite, CCMM_M
             break;
 
         __sync_fetch_and_add(&CcmmMemoryWaits, 1);
-        sched_yield();
+        usleep(50);
     }
 
     if (!NT_SUCCESS(Status) && getenv("MM_DEBUG"))

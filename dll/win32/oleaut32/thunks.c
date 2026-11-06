@@ -184,4 +184,63 @@ __ASM_GLOBAL_FUNC( call_float_method,
 __ASM_GLOBAL_FUNC( call_double_method,
                    "b " __ASM_NAME("call_method") )
 
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+
+__ASM_GLOBAL_FUNC( call_method,
+                   "addi sp,sp,-16\n\t"
+                   __ASM_SEH(".seh_set_cfa x2, 16\n\t")
+                   "sd ra,8(sp)\n\t"
+                   __ASM_SEH(".seh_save_gpr x1, -8\n\t")
+                   "sd s0,0(sp)\n\t"
+                   __ASM_SEH(".seh_save_gpr x8, -16\n\t")
+                   "addi s0,sp,16\n\t"
+                   __ASM_SEH(".seh_set_cfa x8, 0\n\t")
+                   __ASM_SEH(".seh_endprologue\n\t")
+                   "mv t0,a0\n\t"
+                   "mv t1,a2\n\t"
+                   "addi t2,a1,-8\n\t"
+                   "blez t2,2f\n\t"
+                   "slli t3,t2,3\n\t"
+                   "addi t3,t3,15\n\t"
+                   "andi t3,t3,-16\n\t"
+                   "sub sp,sp,t3\n"
+                   "1:\n\t"
+                   "addi t2,t2,-1\n\t"
+                   "slli t3,t2,3\n\t"
+                   "add t4,t1,t3\n\t"
+                   "ld t5,64(t4)\n\t"
+                   "add t4,sp,t3\n\t"
+                   "sd t5,0(t4)\n\t"
+                   "bnez t2,1b\n"
+                   "2:\n\t"
+                   "ld a0,0(t1)\n\t"
+                   "ld a1,8(t1)\n\t"
+                   "ld a2,16(t1)\n\t"
+                   "ld a3,24(t1)\n\t"
+                   "ld a4,32(t1)\n\t"
+                   "ld a5,40(t1)\n\t"
+                   "ld a6,48(t1)\n\t"
+                   "ld a7,56(t1)\n\t"
+                   "jalr ra,t0,0\n\t"
+                   __ASM_SEH(".seh_startepilogue\n\t")
+                   "addi sp,s0,-16\n\t"
+                   __ASM_SEH(".seh_set_cfa x2, 16\n\t")
+                   "ld s0,0(sp)\n\t"
+                   __ASM_SEH(".seh_same_gpr x8\n\t")
+                   "ld ra,8(sp)\n\t"
+                   __ASM_SEH(".seh_same_gpr x1\n\t")
+                   "addi sp,sp,16\n\t"
+                   __ASM_SEH(".seh_set_cfa x2, 0\n\t")
+                   "ret\n\t"
+                   __ASM_SEH(".seh_endepilogue") )
+__ASM_GLOBAL_FUNC( call_float_method,
+                   __ASM_SEH(".seh_endprologue\n\t")
+                   "j " __ASM_NAME("call_method") )
+__ASM_GLOBAL_FUNC( call_double_method,
+                   __ASM_SEH(".seh_endprologue\n\t")
+                   "j " __ASM_NAME("call_method") )
+__ASM_GLOBAL_FUNC( call_decimal_method,
+                   __ASM_SEH(".seh_endprologue\n\t")
+                   "j " __ASM_NAME("call_method") )
+
 #endif

@@ -12,6 +12,7 @@
 #include <reactos/dwmprof.h>
 #include <reactos/dwmpresenttracenames.h>
 #include "gpud3dshader.h"
+#include "gpuquery.h"
 
 namespace
 {
@@ -91,7 +92,13 @@ bool WaitForGpu(TestState &State)
         HRESULT DeviceStatus = State.Device->GetDeviceRemovedReason();
         if (FAILED(DeviceStatus)) return Check(State, DeviceStatus, "device_state");
         if (FAILED(Status)) return Check(State, Status, "gpu_completion");
-        if (Status == S_OK && Complete) return true;
+        DWM_GPU_EVENT_POLL Poll = DwmGpuEventPoll(Status, Complete);
+        if (Poll == DWM_GPU_EVENT_COMPLETE) return true;
+        if (Poll == DWM_GPU_EVENT_REISSUE)
+        {
+            State.Context->End(State.Completion);
+            State.Context->Flush();
+        }
         Sleep(1);
     } while (GetTickCount() - Start < 5000);
     return Check(State, HRESULT_FROM_WIN32(ERROR_TIMEOUT), "gpu_completion_timeout");

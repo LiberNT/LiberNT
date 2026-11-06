@@ -90,6 +90,10 @@ DxgkSyncWaitCorePublishBatch(
     _In_opt_ PVOID AdmissionContext);
 
 VOID
+DxgkSyncWaitCoreReevaluate(
+    _Inout_ PDXGK_SYNC_WAIT_CORE_REGISTRY Registry);
+
+VOID
 DxgkSyncWaitCoreCancelObject(
     _Inout_ PDXGK_SYNC_WAIT_CORE_REGISTRY Registry,
     _In_ PVOID Object,

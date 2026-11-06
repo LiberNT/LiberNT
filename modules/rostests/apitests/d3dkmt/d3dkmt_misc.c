@@ -287,6 +287,47 @@ static void Test_QueryClockCalibration_RealAdapter(void)
     CloseAdapter(hAdapter);
 }
 
+static void Test_QueryClockCalibration_RenderAdapter(void)
+{
+    D3DKMT_QUERYCLOCKCALIBRATION qcc;
+    LARGE_INTEGER Before, After;
+    D3DKMT_HANDLE hAdapter;
+    BOOL Software = FALSE;
+    NTSTATUS Status;
+
+    LOADFN(PFND3DKMT_QUERYCLOCKCALIBRATION, p, "D3DKMTQueryClockCalibration");
+
+    hAdapter = OpenRenderAdapterEx(NULL, &Software);
+    if (!hAdapter) { skip("No render adapter\n"); return; }
+    if (Software)
+    {
+        skip("Render adapter is a software adapter\n");
+        CloseAdapter(hAdapter);
+        return;
+    }
+
+    memset(&qcc, 0, sizeof(qcc));
+    qcc.hAdapter = hAdapter;
+    QueryPerformanceCounter(&Before);
+    Status = p(&qcc);
+    QueryPerformanceCounter(&After);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok(qcc.ClockData.GpuFrequency != 0, "GpuFrequency is zero\n");
+        ok(qcc.ClockData.CpuClockCounter >= (ULONGLONG)Before.QuadPart &&
+           qcc.ClockData.CpuClockCounter <= (ULONGLONG)After.QuadPart,
+           "CpuClockCounter %llu outside [%llu, %llu]\n",
+           (unsigned long long)qcc.ClockData.CpuClockCounter,
+           (unsigned long long)Before.QuadPart, (unsigned long long)After.QuadPart);
+        trace("ClockCalibration render node0: GpuFrequency=%llu GpuClock=%llu CpuClock=%llu\n",
+              (unsigned long long)qcc.ClockData.GpuFrequency,
+              (unsigned long long)qcc.ClockData.GpuClockCounter,
+              (unsigned long long)qcc.ClockData.CpuClockCounter);
+    }
+    CloseAdapter(hAdapter);
+}
+
 /* =====================================================================
  *  Stable power state (per the typedef this takes a single struct pointer
  *  carrying { hAdapter, Enabled }, not separate arguments)
@@ -320,9 +361,8 @@ static void Test_SetStablePowerState_RealAdapter(void)
     hAdapter = OpenAdapterFromDisplay1();
     if (!hAdapter) { skip("No adapter on \\\\.\\DISPLAY1\n"); return; }
 
-    /* Stable power state requires the machine to be in developer / debug mode
-     * and a real GPU; on a normal Win11 box this is refused. Attempt, never
-     * assert success, and try to restore the state on the way out. */
+    /* Windows 11 refused the adapter behind \\\\.\\DISPLAY1 on a machine with a
+     * display-only primary, so this is not asserted; ctxvalidate pins enumerated adapters. */
     memset(&sps, 0, sizeof(sps));
     sps.hAdapter = hAdapter;
     sps.Enabled = TRUE;
@@ -1054,6 +1094,7 @@ START_TEST(misc)
     Test_QueryClockCalibration_NullArg();
     Test_QueryClockCalibration_BadHandle();
     Test_QueryClockCalibration_RealAdapter();
+    Test_QueryClockCalibration_RenderAdapter();
 
     /* Stable power state */
     Test_SetStablePowerState_NullArg();

@@ -716,6 +716,7 @@ VmWriteWatch(void)
     ULONG64 Place = 0;
     ULONG64 Addresses[16];
     NTSTATUS Status;
+    ULONG Old;
 
     WorldCreate(&World, 256, 2, 100000);
     World.Machine.StrictTlb = TRUE;
@@ -756,6 +757,17 @@ VmWriteWatch(void)
     CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 5 * PAGE_SIZE, 6)));
     CHECK(VmGetWatch(&Space, Base, KB64, TRUE, Addresses, 16, &Status) == 1 && NT_SUCCESS(Status));
     CHECK(Addresses[0] == Base + 5 * PAGE_SIZE);
+
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 6 * PAGE_SIZE, 7)));
+    CHECK(VmGetWatch(&Space, Base, KB64, TRUE, Addresses, 16, &Status) == 1 && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(Protect(&Space, Base + 6 * PAGE_SIZE, PAGE_SIZE, MI_PROT_READWRITE | MI_PROT_GUARD, &Old)));
+    UserRead64(&World, 0, Base + 6 * PAGE_SIZE, &Status);
+    CHECK(Status == STATUS_GUARD_PAGE_VIOLATION);
+    CHECK(UserRead64(&World, 0, Base + 6 * PAGE_SIZE, &Status) == 7 && NT_SUCCESS(Status));
+    CHECK(VmGetWatch(&Space, Base, KB64, FALSE, Addresses, 16, &Status) == 0 && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 6 * PAGE_SIZE, 8)));
+    CHECK(VmGetWatch(&Space, Base, KB64, TRUE, Addresses, 16, &Status) == 1 && NT_SUCCESS(Status));
+    CHECK(Addresses[0] == Base + 6 * PAGE_SIZE);
 
     CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 8 * PAGE_SIZE, 4)));
     CHECK(NT_SUCCESS(Free(&Space, Base + 2 * PAGE_SIZE, 2 * PAGE_SIZE, MI_MEM_RELEASE)));

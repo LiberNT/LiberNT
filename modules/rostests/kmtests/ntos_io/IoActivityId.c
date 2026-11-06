@@ -64,7 +64,7 @@ CheckIrp(
 START_TEST(IoActivityId)
 {
     GUID Propagated, Saved;
-    LPCGUID Original, Previous;
+    LPCGUID Original, Previous, Replaced;
     PTEB Teb;
     NTSTATUS Status;
     PIRP Irp;
@@ -91,7 +91,8 @@ START_TEST(IoActivityId)
     ok_eq_hex(Status, STATUS_NOT_SUPPORTED);
     ok_eq_pointer(Irp->Tail.Overlay.IrpExtension, NULL);
     CheckIrp(Irp, STATUS_NOT_FOUND, NULL, "cleared");
-    ok_eq_pointer(IoSetActivityIdThread(&Second), &First);
+    Replaced = IoSetActivityIdThread(&Second);
+    ok_eq_pointer(Replaced, &First);
     ok_eq_pointer(IoGetActivityIdThread(), &Second);
     IoClearActivityIdThread(&First);
     ok_eq_pointer(IoGetActivityIdThread(), &First);

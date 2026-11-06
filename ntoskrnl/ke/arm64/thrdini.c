@@ -432,7 +432,10 @@ KiSwapContextResume(
         KiSwapProcess(NewProcess, OldProcess);
     }
 
+    /* A lock holder may already be frozen; a masked spin would never see the freeze IPI. */
+    _enable();
     KiCompleteThreadSwitch(OldThread, NewThread);
+    _disable();
 
     /* KiSwapContext saves and restores the complete eager per-thread VFP image. */
 

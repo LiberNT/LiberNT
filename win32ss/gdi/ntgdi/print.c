@@ -107,6 +107,13 @@ NtGdiExtEscape(
       return 0;
    }
 
+   if (Escape == DWM_ESCAPE_MIRROR_FRAME &&
+       (!IntCompositionIsAttachedProcess() || hDC == NULL || pDriver != NULL))
+   {
+      EngSetLastError(ERROR_ACCESS_DENIED);
+      return 0;
+   }
+
    if (Escape == DWM_ESCAPE_PRESENT_BITMAP &&
        (!IntCompositionIsAttachedProcess() || hDC == NULL || pDriver != NULL ||
         InSize != sizeof(DWM_PRESENT_BITMAP) || OutSize != 0))

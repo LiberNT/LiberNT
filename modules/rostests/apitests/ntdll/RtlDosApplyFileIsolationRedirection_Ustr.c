@@ -140,6 +140,8 @@ void TestRedirection(void)
                     wcscpy(Expected, L"\\winsxs\\amd64_");
 #elif defined(_M_ARM64)
                     wcscpy(Expected, L"\\winsxs\\arm64_");
+#elif defined(_M_RISCV64)
+                    wcscpy(Expected, L"\\winsxs\\riscv64_");
 #else
                     wcscpy(Expected, L"\\winsxs\\x86_");
 #endif

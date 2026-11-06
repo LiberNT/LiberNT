@@ -90,7 +90,7 @@ CheckImportance(ULONG Cpu, KDPC_IMPORTANCE Importance, BOOLEAN CheckOrder)
     LONGLONG Deadline;
     ULONG Attempt, Index, Queued = 0, Count = CheckOrder ? 4 : 1;
     ULONG DpcSummary = 0, IpiSummary = 0;
-    BOOLEAN Accepted = FALSE, Requested = FALSE, Present = FALSE, IpiRequested = FALSE, Expected;
+    BOOLEAN Accepted = FALSE, Requested = FALSE, Present = FALSE, IpiRequested = FALSE, IpiPending, Expected;
     static const KDPC_IMPORTANCE OrderImportance[] = {
         LowImportance, MediumHighImportance, MediumImportance, HighImportance
     };
@@ -118,6 +118,7 @@ CheckImportance(ULONG Cpu, KDPC_IMPORTANCE Importance, BOOLEAN CheckOrder)
         if (Context.Ready && Context.Clean && (CheckOrder || Context.MaximumDepth > Count))
         {
             KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+            IpiPending = (Context.Prcb->RequestSummary & IPI_DPC) != 0;
             for (Index = 0; Index < Count; Index++)
             {
                 if (KeInsertQueueDpc(&Context.Dpcs[Index], (PVOID)(ULONG_PTR)Index, NULL))
@@ -130,7 +131,8 @@ CheckImportance(ULONG Cpu, KDPC_IMPORTANCE Importance, BOOLEAN CheckOrder)
             DpcSummary = (ULONG)Context.Prcb->DpcRequestSummary;
             IpiSummary = (ULONG)Context.Prcb->RequestSummary;
             IpiRequested = (IpiSummary & IPI_DPC) != 0;
-            Accepted = Data->DpcCount == Context.InitialCount + Count &&
+            Accepted = !IpiPending &&
+                       Data->DpcCount == Context.InitialCount + Count &&
                        Data->DpcQueueDepth == (LONG)Count;
             KeReleaseSpinLockFromDpcLevel(&Data->DpcLock);
             InterlockedExchange(&Context.Release, 1);

@@ -471,7 +471,7 @@ SpiUpdatePerUserSystemParameters(VOID)
     gspv.ncm.iMenuWidth = SpiLoadMetric(L"MenuWidth", 18);
     gspv.ncm.iMenuHeight = SpiLoadMetric(L"MenuHeight", 18);
 #if (WINVER >= 0x0600)
-    gspv.ncm.iPaddedBorderWidth = SpiLoadMetric(L"PaddedBorderWidth", 3);
+    gspv.ncm.iPaddedBorderWidth = SpiLoadMetric(L"PaddedBorderWidth", 4);
 #endif
     SpiLoadFont(&gspv.ncm.lfCaptionFont, L"CaptionFont", &lf1);
     SpiLoadFont(&gspv.ncm.lfSmCaptionFont, L"SmCaptionFont", &lf1);
@@ -828,6 +828,7 @@ SpiGetNonClientMetrics(PVOID pvParam, FLONG fl)
 {
     NONCLIENTMETRICSW Metrics;
     ULONG cbSize;
+    PTHREADINFO pti;
 
     /*
      * NONCLIENTMETRICS gained iPaddedBorderWidth in Vista. Applications built
@@ -846,6 +847,12 @@ SpiGetNonClientMetrics(PVOID pvParam, FLONG fl)
 
     Metrics = gspv.ncm;
     Metrics.cbSize = cbSize;
+    pti = PsGetCurrentThreadWin32Thread();
+    if (pti && LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA)
+    {
+        Metrics.iBorderWidth += Metrics.iPaddedBorderWidth;
+        Metrics.iPaddedBorderWidth = 0;
+    }
     return SpiGet(pvParam, &Metrics, cbSize, fl);
 }
 
@@ -1385,6 +1392,7 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             /* Fixup user's structure size */
             metrics->cbSize = sizeof(NONCLIENTMETRICSW);
 
+            /* FIXME: Windows 11 leaves a padded border of 0 after this call whatever the structure holds; uxtheme applies themes through it, so the value is kept here */
             if (!SpiSet(&gspv.ncm, metrics, sizeof(NONCLIENTMETRICSW), fl))
                 return 0;
 

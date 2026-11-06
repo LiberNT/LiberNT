@@ -7,6 +7,7 @@
 
 #include "precomp.h"
 #include <winreg.h>
+#include <winuser.h>
 
 static const WCHAR graphics_drivers_key[] = L"System\\CurrentControlSet\\Control\\GraphicsDrivers";
 
@@ -34,6 +35,65 @@ static D3DKMT_DEVICEEXECUTION_STATE ExecutionState(PFN_D3DKMTGetDeviceState pfnG
     return State.ExecutionState;
 }
 
+static COLORREF PaintColor;
+
+static LRESULT CALLBACK PaintProc(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
+{
+    if (Message == WM_PAINT)
+    {
+        PAINTSTRUCT Paint;
+        HDC Dc = BeginPaint(Window, &Paint);
+        HBRUSH Brush = CreateSolidBrush(PaintColor);
+
+        FillRect(Dc, &Paint.rcPaint, Brush);
+        DeleteObject(Brush);
+        EndPaint(Window, &Paint);
+        return 0;
+    }
+    return DefWindowProcW(Window, Message, wParam, lParam);
+}
+
+static void Repaint(HWND Window, COLORREF Color)
+{
+    PaintColor = Color;
+    InvalidateRect(Window, NULL, FALSE);
+    UpdateWindow(Window);
+    GdiFlush();
+}
+
+static BOOL WaitForScreenColor(HWND Window, COLORREF Color)
+{
+    MSG Message;
+    HDC Screen = GetDC(NULL);
+    ULONG Waited;
+    BOOL Shown = FALSE;
+
+    for (Waited = 0; Screen && Waited < 5000 && !Shown; Waited += 50)
+    {
+        while (PeekMessageW(&Message, Window, 0, 0, PM_REMOVE))
+            DispatchMessageW(&Message);
+        Shown = (GetPixel(Screen, 132, 132) & 0xFFFFFF) == Color;
+        if (!Shown)
+            Sleep(50);
+    }
+    if (Screen)
+        ReleaseDC(NULL, Screen);
+    return Shown;
+}
+
+static HWND CreatePaintWindow(void)
+{
+    WNDCLASSW Class = {0};
+
+    Class.lpfnWndProc = PaintProc;
+    Class.hInstance = GetModuleHandleW(NULL);
+    Class.lpszClassName = L"D3dkmtTdrPaint";
+    RegisterClassW(&Class);
+    PaintColor = RGB(0x20, 0xC0, 0x40);
+    return CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, Class.lpszClassName, L"", WS_POPUP | WS_VISIBLE,
+                           100, 100, 64, 64, NULL, NULL, Class.hInstance, NULL);
+}
+
 static BOOL SetTestMode(HKEY Key, DWORD Value, BOOL Delete)
 {
     if (Delete)
@@ -49,7 +109,8 @@ START_TEST(D3dkmtTdr)
     D3DKMT_DEVICEEXECUTION_STATE State = D3DKMT_DEVICEEXECUTION_ACTIVE;
     D3DKMT_HANDLE hAdapter, hDevice, hNewDevice;
     DWORD OldValue = 0, Size = sizeof(OldValue), Type = 0;
-    BOOL HadValue;
+    BOOL HadValue, ShownBefore = FALSE;
+    HWND Window;
     HKEY Key;
     NTSTATUS Status;
     ULONG Waited;
@@ -89,6 +150,16 @@ START_TEST(D3dkmtTdr)
     if (hDevice)
         ok_eq_long(ExecutionState(pfnD3DKMTGetDeviceState, hDevice), D3DKMT_DEVICEEXECUTION_ACTIVE);
 
+    /* A window whose surface exists before the timeout has to keep reaching the screen after the recovery. */
+    Window = CreatePaintWindow();
+    ok(Window != NULL, "CreateWindow failed: %lu\n", GetLastError());
+    if (Window)
+    {
+        Repaint(Window, RGB(0x20, 0xC0, 0x40));
+        ShownBefore = WaitForScreenColor(Window, RGB(0x20, 0xC0, 0x40));
+        ok(ShownBefore, "the window never reached the screen before the timeout\n");
+    }
+
     Status = TdrControl(pfnD3DKMTEscape, hAdapter, D3DKMT_TDRDBGCTRLTYPE_FORCETDR);
     ok_eq_hex(Status, STATUS_SUCCESS);
     for (Waited = 0; hDevice && NT_SUCCESS(Status) && Waited < 10000; Waited += 100)
@@ -101,6 +172,14 @@ START_TEST(D3dkmtTdr)
     trace("device state %d after %lu ms\n", State, Waited);
     ok(State == D3DKMT_DEVICEEXECUTION_RESET || State == D3DKMT_DEVICEEXECUTION_HUNG,
        "the device survived the forced timeout in state %d\n", State);
+
+    if (Window && ShownBefore)
+    {
+        Repaint(Window, RGB(0xC0, 0x30, 0x90));
+        ok(WaitForScreenColor(Window, RGB(0xC0, 0x30, 0x90)), "the window no longer reaches the screen after the recovery\n");
+    }
+    if (Window)
+        DestroyWindow(Window);
 
     hNewDevice = CreateTestDevice(hAdapter);
     ok(hNewDevice != 0, "CreateDevice after the recovery failed\n");

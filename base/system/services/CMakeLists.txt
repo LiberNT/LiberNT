@@ -11,11 +11,13 @@ list(APPEND SOURCE
     controlset.c
     database.c
     driver.c
+    failure.c
     groupdb.c
     lock.c
     rpcserver.c
     security.c
     services.c
+    trigger.c
     services.h
     ${CMAKE_CURRENT_BINARY_DIR}/svcctl_s.c)
 
@@ -23,6 +25,6 @@ add_executable(services ${SOURCE} services.rc)
 target_link_libraries(services ${PSEH_LIB})
 
 set_module_type(services win32gui UNICODE)
-add_importlibs(services userenv user32 advapi32 advapi32_vista rpcrt4 msvcrt kernel32 ntdll)
+add_importlibs(services userenv user32 advapi32 advapi32_vista rpcrt4 cfgmgr32 iphlpapi msvcrt kernel32 ntdll)
 add_pch(services services.h SOURCE)
 add_cd_file(TARGET services DESTINATION reactos/system32 FOR all)

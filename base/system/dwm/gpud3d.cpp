@@ -29,6 +29,7 @@
 #include "gpugeometry.h"
 #include "gpublurdamage.h"
 #include "gpuscenecache.h"
+#include "gpuquery.h"
 
 extern "C" {
 #include "presenttrace.h"
@@ -130,6 +131,7 @@ struct Constants
     FLOAT SampleExtent[4], SampleOrigin[4];
     FLOAT FrameKey[4], FrameClient[4], FrameButtons[4];
     FLOAT Taps[33][4];
+    FLOAT SourceScale[4];
 };
 
 struct ConstantBuffer
@@ -138,7 +140,7 @@ struct ConstantBuffer
     ConstantBuffer *Next;
 };
 
-enum Shader { Solid, Copy, Window, Filter, Shadow, BlurCopy, ShaderCount };
+enum Shader { Solid, Copy, Window, Filter, Shadow, BlurCopy, PointerSprite, ShaderCount };
 
 /* Disjoint rectangles repaired separately, so distant damage does not
  * redraw everything between it. */
@@ -178,14 +180,14 @@ struct Compositor
     ID3D11PixelShader *PixelShaders[ShaderCount];
     ConstantBuffer *ConstantsHead, *ConstantsTail, *NextConstants;
     ID3D11SamplerState *Sampler;
-    ID3D11BlendState *Blend, *PremultipliedBlend;
+    ID3D11BlendState *Blend, *PremultipliedBlend, *InvertBlend;
     ID3D11RasterizerState *Rasterizer;
     ID3D11Query *Completion, *ClientCopies;
     /* ClientCopies fences the copies Begin makes of new client publications.
      * A copy made after that fence cannot be released early. */
     BOOL CopyingClients, ClientCopiesFenced, ClientCopiesUnfenced;
-    Texture Canvas, Backdrop;
-    ID3D11Texture2D *BackBuffer;
+    Texture Canvas, Backdrop, PointerImage, PointerInvert;
+    ID3D11Texture2D *BackBuffer, *Mirror;
     Surface Surfaces[DWM_MAX_WINDOWS * 2];
     ClientSource ClientSources[DWM_MAX_WINDOWS * 2];
     BlurTarget Blurs[4];
@@ -338,7 +340,8 @@ BOOL Draw(Texture &Target,
           ID3D11ShaderResourceView *Backdrop = NULL,
           BOOL Blend = FALSE,
           BOOL Premultiplied = FALSE,
-          ID3D11ShaderResourceView *Buttons = NULL)
+          ID3D11ShaderResourceView *Buttons = NULL,
+          ID3D11BlendState *BlendOverride = NULL)
 {
     if (Clip.left >= Clip.right || Clip.top >= Clip.bottom)
         return TRUE;
@@ -392,7 +395,7 @@ BOOL Draw(Texture &Target,
     State.Context->RSSetViewports(1, &Viewport);
     State.Context->RSSetState(State.Rasterizer);
     State.Context->OMSetRenderTargets(1, &Target.Target, NULL);
-    State.Context->OMSetBlendState(Premultiplied ? State.PremultipliedBlend : Blend ? State.Blend : NULL, NULL, ~0u);
+    State.Context->OMSetBlendState(BlendOverride ? BlendOverride : Premultiplied ? State.PremultipliedBlend : Blend ? State.Blend : NULL, NULL, ~0u);
     State.Context->IASetInputLayout(NULL);
     State.Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     State.Context->VSSetShader(State.VertexShader, NULL, 0);
@@ -430,6 +433,9 @@ BOOL FinishGpuReadsImpl(DWM_GPU_WAIT_TIMING *Timing)
         Timing->Ticks[DWM_WAIT_FLUSH] += DptNow() - Tick;
     DWORD Start = GetTickCount();
     BOOL Reported = FALSE;
+    LARGE_INTEGER Frequency, YieldStart, YieldNow;
+    QueryPerformanceFrequency(&Frequency);
+    QueryPerformanceCounter(&YieldStart);
     for (;;)
     {
         BOOL Complete = FALSE;
@@ -455,10 +461,16 @@ BOOL FinishGpuReadsImpl(DWM_GPU_WAIT_TIMING *Timing)
             State.WorkPending = FALSE;
             return Result(Status, "GPU completion query");
         }
-        if (Status == S_OK && Complete)
+        DWM_GPU_EVENT_POLL Poll = DwmGpuEventPoll(Status, Complete);
+        if (Poll == DWM_GPU_EVENT_COMPLETE)
         {
             State.WorkPending = FALSE;
             return TRUE;
+        }
+        if (Poll == DWM_GPU_EVENT_REISSUE)
+        {
+            State.Context->End(State.Completion);
+            State.Context->Flush();
         }
         if (!Reported && GetTickCount() - Start >= 5000)
         {
@@ -469,7 +481,12 @@ BOOL FinishGpuReadsImpl(DWM_GPU_WAIT_TIMING *Timing)
          * reuse published surfaces. A removed device has stopped executing
          * this command stream, so its resources are released and recreated. */
         if (Timing) Tick = DptNow();
-        Sleep(1);
+        /* A timer-granular Sleep would cost most of a frame, so yield first. */
+        QueryPerformanceCounter(&YieldNow);
+        if ((YieldNow.QuadPart - YieldStart.QuadPart) * 250 < Frequency.QuadPart)
+            SwitchToThread();
+        else
+            Sleep(1);
         if (Timing)
         {
             ULONGLONG Elapsed = DptNow() - Tick;
@@ -612,7 +629,7 @@ BOOL CreateShaders()
     CompileProc Compile = (CompileProc)GetProcAddress(State.Compiler, "D3DCompile");
     if (Compile == NULL)
         return FALSE;
-    const char *Entries[] = {"QuadVS", "SolidPS", "CopyPS", "WindowPS", "FilterPS", "ShadowPS", "BlurCopyPS"};
+    const char *Entries[] = {"QuadVS", "SolidPS", "CopyPS", "WindowPS", "FilterPS", "ShadowPS", "BlurCopyPS", "PointerPS"};
     for (ULONG Index = 0; Index < ARRAYSIZE(Entries); ++Index)
     {
         ID3DBlob *Bytecode = NULL, *Errors = NULL;
@@ -654,6 +671,12 @@ BOOL CreateShaders()
     Blend.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
     if (!Result(State.Device->CreateBlendState(&Blend, &State.PremultipliedBlend), "CreateBlendState(premultiplied)"))
         return FALSE;
+    Blend.RenderTarget[0].SrcBlend = D3D11_BLEND_INV_DEST_COLOR;
+    Blend.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_COLOR;
+    Blend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
+    Blend.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+    if (!Result(State.Device->CreateBlendState(&Blend, &State.InvertBlend), "CreateBlendState(invert)"))
+        return FALSE;
     D3D11_RASTERIZER_DESC Rasterizer = {};
     Rasterizer.FillMode = D3D11_FILL_SOLID;
     Rasterizer.CullMode = D3D11_CULL_NONE;
@@ -684,6 +707,18 @@ BOOL HasNativeDriver(const LUID &Luid)
     Close.hAdapter = Open.hAdapter;
     D3DKMTCloseAdapter(&Close);
     return Status >= 0 && Name.UmdFileName[0] != 0;
+}
+
+BOOL ScansOutOutput(const WCHAR *DeviceName, const LUID &Luid)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME Open = {};
+    lstrcpynW(Open.DeviceName, DeviceName, ARRAYSIZE(Open.DeviceName));
+    if (D3DKMTOpenAdapterFromGdiDisplayName(&Open) < 0)
+        return FALSE;
+    D3DKMT_CLOSEADAPTER Close = {};
+    Close.hAdapter = Open.hAdapter;
+    D3DKMTCloseAdapter(&Close);
+    return Open.AdapterLuid.LowPart == Luid.LowPart && Open.AdapterLuid.HighPart == Luid.HighPart;
 }
 
 void SetNativeTraceProvider(IDXGIAdapter1 *Adapter)
@@ -827,7 +862,10 @@ BOOL CreateDevice(IDXGIAdapter1 **Selected)
                 if (Adapter->EnumOutputs(OutputIndex, &Output) != S_OK)
                     break;
                 DXGI_OUTPUT_DESC OutputDesc = {};
-                if (SUCCEEDED(Output->GetDesc(&OutputDesc)) && OutputDesc.AttachedToDesktop && OutputDesc.Monitor == Monitor)
+                /* DXGI lists the primary output under a hybrid system's preferred GPU; the window
+                 * surfaces DWM imports live on the adapter that scans the output out. */
+                if (SUCCEEDED(Output->GetDesc(&OutputDesc)) && OutputDesc.AttachedToDesktop && OutputDesc.Monitor == Monitor &&
+                    ScansOutOutput(OutputDesc.DeviceName, Desc.AdapterLuid))
                     OwnsOutput = TRUE;
                 Release(Output);
                 if (OwnsOutput)
@@ -890,6 +928,7 @@ BOOL CreateDevice(IDXGIAdapter1 **Selected)
 BOOL BindOutput()
 {
     Release(State.BackBuffer);
+    Release(State.Mirror);
     return Result(State.SwapChain->GetBuffer(0, IID_ID3D11Texture2D, (void **)&State.BackBuffer), "GetBuffer") &&
            CreateTexture(State.Canvas, State.Width, State.Height, TRUE);
 }
@@ -1156,18 +1195,20 @@ BOOL ForeignAdapter(const DWM_WIN *Window)
 
 Texture *ImportForeign(const DWM_WIN *Window, DXGI_FORMAT Format)
 {
-    if (Window->DxUpdateId == 0 || Window->DxPitch < Window->DxWidth * sizeof(ULONG))
+    if (Window->DxUpdateId == 0)
         return NULL;
     Surface *Slot = FindSurface(Window, TRUE);
     if (Slot->Image.Resource == NULL || Slot->Share != Window->DxGlobalShare ||
         Slot->Generation != Window->DxGeneration || Slot->UpdateId != Window->DxUpdateId)
     {
-        const BYTE *Pixels = DwmDxGetSurfaceSnapshot(Window);
-        if (Pixels == NULL ||
-            !EnsureTexture(Slot->Image, (LONG)Window->DxWidth, (LONG)Window->DxHeight, FALSE, Format))
+        ULONG Pitch;
+        const BYTE *Pixels = DwmDxGetSurfacePixels(Window, &Pitch);
+        if (Pixels == NULL || Pitch < Window->DxWidth * sizeof(ULONG) ||
+            !EnsureTexture(Slot->Image, (LONG)Window->DxWidth, (LONG)Window->DxHeight, FALSE,
+                           Window->DxPitch == 0 ? DXGI_FORMAT_B8G8R8A8_UNORM : Format))
             return NULL;
         UnbindTextures();
-        State.Context->UpdateSubresource(Slot->Image.Resource, 0, NULL, Pixels, Window->DxPitch, 0);
+        State.Context->UpdateSubresource(Slot->Image.Resource, 0, NULL, Pixels, Pitch, 0);
         State.WorkPending = TRUE;
         Slot->Share = Window->DxGlobalShare;
         Slot->Generation = Window->DxGeneration;
@@ -1204,7 +1245,9 @@ Texture *Import(const DWM_WIN *Window, BOOL Client)
     ULONG Format = Client ? Window->DxFormat : Window->BaseFormat;
     if (Share == 0 || Generation == 0 || Width == 0 || Height == 0 ||
         Width > MAXLONG || Height > MAXLONG ||
-        (Format != DWM_DX_FORMAT_B8G8R8A8_UNORM && (!Client || Format != DWM_DX_FORMAT_R8G8B8A8_UNORM)))
+        (Format != DWM_DX_FORMAT_B8G8R8A8_UNORM &&
+         (!Client || (Format != DWM_DX_FORMAT_R8G8B8A8_UNORM && Format != DWM_DX_FORMAT_R10G10B10A2_UNORM &&
+                      Format != DWM_DX_FORMAT_R16G16B16A16_FLOAT))))
         return NULL;
     if (!Client && (Width != (ULONG)Window->cx || Height != (ULONG)Window->cy))
         return NULL;
@@ -1498,6 +1541,13 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     Data.SourceSize[1] = Client ? Window->DxHeight : Window->cy;
     Data.SourceSize[2] = Alpha;
     Data.SourceSize[3] = Client ? 0 : min(Window->CornerRadius, (ULONG)min(Window->cx / 2, Window->cy / 2));
+    Data.SourceScale[2] = Client && Window->DxFormat == DWM_DX_FORMAT_R16G16B16A16_FLOAT;
+    if (Client && Window->DxWidth != 0 && Window->DxHeight != 0 &&
+        (Window->DxSourceWidth < Window->DxWidth || Window->DxSourceHeight < Window->DxHeight))
+    {
+        Data.SourceScale[0] = (FLOAT)Window->DxSourceWidth / Window->DxWidth;
+        Data.SourceScale[1] = (FLOAT)Window->DxSourceHeight / Window->DxHeight;
+    }
     RECTL Interior;
     DwmFrameInterior(Window, &Interior);
     Data.ClientRect[0] = (FLOAT)Interior.left;
@@ -1693,11 +1743,15 @@ DwmD3dShutdown(void)
         State.FrameAtlases[Index].Image.Reset();
     State.Backdrop.Reset();
     State.Canvas.Reset();
+    State.PointerImage.Reset();
+    State.PointerInvert.Reset();
+    Release(State.Mirror);
     Release(State.BackBuffer);
     Release(State.ClientCopies);
     Release(State.Completion);
     Release(State.Rasterizer);
     Release(State.PremultipliedBlend);
+    Release(State.InvertBlend);
     Release(State.Blend);
     Release(State.Sampler);
     while (State.ConstantsHead != NULL)
@@ -2277,16 +2331,106 @@ DwmD3dClientCopiesRetired(void)
                                                 D3D11_ASYNC_GETDATA_DONOTFLUSH);
         if (FAILED(Status))
             return FALSE;
-        if (Status == S_OK && Complete)
+        DWM_GPU_EVENT_POLL Poll = DwmGpuEventPoll(Status, Complete);
+        if (Poll == DWM_GPU_EVENT_COMPLETE)
         {
             State.ClientCopiesFenced = FALSE;
             return TRUE;
+        }
+        if (Poll == DWM_GPU_EVENT_REISSUE)
+        {
+            State.Context->End(State.ClientCopies);
+            State.Context->Flush();
         }
         QueryPerformanceCounter(&Now);
         if ((Now.QuadPart - Start.QuadPart) * 250 >= Frequency.QuadPart)
             return FALSE;
         SwitchToThread();
     }
+}
+
+BOOL
+DwmD3dHasPointerImage(void)
+{
+    return State.Active && State.PointerImage.Resource != NULL;
+}
+
+/* An animated cursor replaces its image many times a second: reuse the texture. */
+static BOOL
+FillPointerTexture(Texture &Image, LONG Width, LONG Height, const ULONG *Pixels)
+{
+    if (Image.Resource == NULL || Image.Width != Width || Image.Height != Height)
+        return CreateTexture(Image, Width, Height, FALSE, (const BYTE *)Pixels, Width * sizeof(ULONG));
+    State.Context->UpdateSubresource(Image.Resource, 0, NULL, Pixels, Width * sizeof(ULONG), 0);
+    return TRUE;
+}
+
+BOOL
+DwmD3dSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const ULONG *Invert)
+{
+    if (!State.Active)
+        return FALSE;
+    if (Invert == NULL)
+        State.PointerInvert.Reset();
+    return FillPointerTexture(State.PointerImage, Width, Height, Image) &&
+           (Invert == NULL || FillPointerTexture(State.PointerInvert, Width, Height, Invert));
+}
+
+/* FIXME: the copy has no overlay plane, and it assumes the canvas origin is the device's. */
+BOOL
+DwmD3dMirrorCanvas(HDC Screen)
+{
+    if (!State.Active || State.Canvas.Resource == NULL)
+        return FALSE;
+    if (State.Mirror == NULL)
+    {
+        D3D11_TEXTURE2D_DESC Desc;
+        State.Canvas.Resource->GetDesc(&Desc);
+        Desc.Usage = D3D11_USAGE_STAGING;
+        Desc.BindFlags = 0;
+        Desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        Desc.MiscFlags = 0;
+        if (!Result(State.Device->CreateTexture2D(&Desc, NULL, &State.Mirror), "CreateTexture2D(mirror)"))
+            return FALSE;
+    }
+    UnbindTextures();
+    State.Context->CopyResource(State.Mirror, State.Canvas.Resource);
+    D3D11_MAPPED_SUBRESOURCE Mapped;
+    if (!Result(State.Context->Map(State.Mirror, 0, D3D11_MAP_READ, 0, &Mapped), "Map(mirror)"))
+        return FALSE;
+    ULONG RowBytes = (ULONG)State.Width * sizeof(ULONG), Bytes = RowBytes * (ULONG)State.Height + sizeof(DWM_MIRROR_FRAME);
+    DWM_MIRROR_FRAME *Frame = (DWM_MIRROR_FRAME *)HeapAlloc(GetProcessHeap(), 0, Bytes);
+    BOOL Done = FALSE;
+    if (Frame != NULL)
+    {
+        Frame->Width = (ULONG)State.Width;
+        Frame->Height = (ULONG)State.Height;
+        Frame->Pitch = RowBytes;
+        Frame->Reserved = 0;
+        for (LONG Row = 0; Row < State.Height; ++Row)
+            memcpy((BYTE *)(Frame + 1) + (ULONG)Row * RowBytes, (const BYTE *)Mapped.pData + (SIZE_T)Row * Mapped.RowPitch, RowBytes);
+        Done = ExtEscape(Screen, DWM_ESCAPE_MIRROR_FRAME, (int)Bytes, (LPCSTR)Frame, 0, NULL) > 0;
+        HeapFree(GetProcessHeap(), 0, Frame);
+    }
+    State.Context->Unmap(State.Mirror, 0);
+    return Done;
+}
+
+/* TODO: a client on an overlay plane hides the pointer drawn here. */
+BOOL
+DwmD3dDrawPointer(const RECT *Rect)
+{
+    if (!State.Active || State.PointerImage.View == NULL)
+        return FALSE;
+    Constants Data = {};
+    RECT Clip = ClipDraw(*Rect);
+    SetRectangle(Data, Rect->left, Rect->top, Rect->right, Rect->bottom);
+    /* The pointer lies above every window, so also above the occluder. */
+    State.OccluderActive = FALSE;
+    return Draw(State.Canvas, PointerSprite, Clip, Data, State.PointerImage.View, NULL, FALSE, TRUE) &&
+           (State.PointerInvert.View == NULL ||
+            Draw(State.Canvas, PointerSprite, Clip, Data, State.PointerInvert.View, NULL, FALSE, FALSE, NULL,
+                 State.InvertBlend));
 }
 
 DWM_GPU_RESULT

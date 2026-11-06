@@ -3,8 +3,8 @@
 # PURPOSE:     Stage a MinGW build of the RDP console server into the images
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
 
-if(NOT ARCH STREQUAL "amd64")
-    message(FATAL_ERROR "RDPSERVER_DIR holds an x86_64 build; it can only be staged into amd64 images.")
+if(NOT ARCH_64BIT)
+    message(FATAL_ERROR "RDPSERVER_DIR holds an x86_64 build; it can only be staged into 64-bit images.")
 endif()
 
 set(_rdpserver_bin "${RDPSERVER_DIR}/bin")

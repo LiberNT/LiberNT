@@ -159,6 +159,10 @@ struct DocHost {
     VARIANT_BOOL silent;
     VARIANT_BOOL offline;
     VARIANT_BOOL busy;
+#ifdef __REACTOS__
+    LONG progress;
+    LONG progress_max;
+#endif
 
     READYSTATE ready_state;
     READYSTATE doc_state;

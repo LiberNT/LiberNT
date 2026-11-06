@@ -75,7 +75,7 @@ UCHAR IopQueryOperationLength[FileMaximumInformation] =
     0,
     0,
     0,
-    0,
+    sizeof(FILE_NUMA_NODE_INFORMATION),
     0,
     0,
     0,
@@ -237,7 +237,7 @@ ACCESS_MASK IopSetOperationAccess[FileMaximumInformation] =
 //
 // Volume Information Classes
 //
-/* TODO: FileFsSectorSizeInformation, FileFsDataCopyInformation and FileFsMetadataSizeInformation are rejected as invalid classes */
+/* TODO: FileFsDataCopyInformation and FileFsMetadataSizeInformation are rejected as invalid classes */
 UCHAR IopQueryFsOperationLength[FileFsMaximumInformation] =
 {
     0,
@@ -253,7 +253,8 @@ UCHAR IopQueryFsOperationLength[FileFsMaximumInformation] =
 #if 0 // VISTA
     sizeof(FILE_FS_VOLUME_FLAGS_INFORMATION),
 #endif
-    0xFF
+    0xFF,
+    sizeof(FILE_FS_SECTOR_SIZE_INFORMATION)
 };
 
 UCHAR IopSetFsOperationLength[FileFsMaximumInformation] =

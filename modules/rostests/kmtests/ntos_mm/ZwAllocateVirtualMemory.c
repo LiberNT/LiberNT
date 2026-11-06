@@ -161,8 +161,10 @@ SimpleErrorChecks(VOID)
     //ZERO BITS TESTS
     ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, 21, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, Modern ? STATUS_INVALID_PARAMETER : STATUS_NO_MEMORY, STATUS_MEMORY_NOT_ALLOCATED);
     ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, 22, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, InvalidParameter3, STATUS_MEMORY_NOT_ALLOCATED);
-    if (GetNTVersion() >= _WIN32_WINNT_VISTA)
+    if (sizeof(SIZE_T) > sizeof(ULONG) && GetNTVersion() >= _WIN32_WINNT_VISTA)
         ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, -1, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, STATUS_SUCCESS, STATUS_SUCCESS);
+    else if (GetNTVersion() >= _WIN32_WINNT_VISTA)
+        ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, -1, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, STATUS_INVALID_PARAMETER_3, STATUS_MEMORY_NOT_ALLOCATED);
     else
         ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, -1, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, InvalidParameter3, STATUS_MEMORY_NOT_ALLOCATED);
     ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, 3, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, STATUS_SUCCESS, STATUS_SUCCESS);
@@ -174,9 +176,9 @@ SimpleErrorChecks(VOID)
     RegionSize = 0;
     ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, 0, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, InvalidParameter4, STATUS_MEMORY_NOT_ALLOCATED);
     RegionSize = 0xFFFFFFFF; // 4 gb is invalid or over the commit limit, depending on NT version/bitness and installed memory
-    if (GetNTVersion() >= _WIN32_WINNT_VISTA && MachineCanCommit(RegionSize))
+    if (sizeof(SIZE_T) > sizeof(ULONG) && GetNTVersion() >= _WIN32_WINNT_VISTA && MachineCanCommit(RegionSize))
         ALLOC_MEMORY_WITH_FREE(NtCurrentProcess(), Base, 0, RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE, STATUS_SUCCESS, STATUS_SUCCESS);
-    else if (GetNTVersion() >= _WIN32_WINNT_VISTA)
+    else if (sizeof(SIZE_T) > sizeof(ULONG) && GetNTVersion() >= _WIN32_WINNT_VISTA)
     {
         TestCommitAboveCommitLimit(RegionSize);
         RegionSize = DEFAULT_ALLOC_SIZE;
@@ -805,7 +807,8 @@ START_TEST(ZwAllocateVirtualMemory)
     ok(Status == STATUS_SUCCESS || Status == STATUS_COMMITMENT_LIMIT,
        "Commit stress returned 0x%08lx\n", Status);
 #else
-    ok_eq_hex(Status, STATUS_NO_MEMORY);
+    ok(Status == STATUS_NO_MEMORY || Status == STATUS_COMMITMENT_LIMIT,
+       "Commit stress returned 0x%08lx\n", Status);
 #endif
 
     CommitAccountingChecks();

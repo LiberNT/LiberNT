@@ -86,6 +86,8 @@ list(APPEND SOURCE
     TypoMetrics.c)
 
 list(APPEND PCH_SKIP_SOURCE
+    ScriptGetFontTags.c
+    ScriptGetLogicalWidths.c
     testlist.c)
 
 add_executable(gdi32_apitest

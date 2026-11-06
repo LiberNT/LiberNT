@@ -464,7 +464,7 @@ CRegPropertyBag::Read(
     DWORD dwType, cbValue;
     LONG error = SHGetValueW(m_hKey, NULL, pszPropName, &dwType, NULL, &cbValue);
     if (error != ERROR_SUCCESS)
-        hr = E_FAIL;
+        hr = HRESULT_FROM_WIN32(error);
     else if (dwType == REG_SZ)
         hr = _ReadString(pszPropName, pvari, cbValue);
     else if (dwType == REG_BINARY)

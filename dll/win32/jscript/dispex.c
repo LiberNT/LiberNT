@@ -2213,6 +2213,17 @@ static HRESULT WINAPI DispatchEx_InvokeEx(IWineJSDispatch *iface, DISPID id, LCI
         if(FAILED(hres))
             break;
 
+#ifdef __REACTOS__
+        if(wFlags == DISPATCH_PROPERTYPUT && is_object_instance(val) && !to_jsdisp(get_object(val))) {
+            jsval_t value;
+
+            if(SUCCEEDED(disp_propget(This->ctx, get_object(val), DISPID_VALUE, &value))) {
+                jsval_release(val);
+                val = value;
+            }
+        }
+#endif
+
         hres = prop_put(This, prop, val);
         jsval_release(val);
         break;

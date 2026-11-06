@@ -141,3 +141,7 @@ target_include_directories(vcruntime INTERFACE inc)
 if(ARM64EC_RUNTIME)
     add_library(chpe STATIC arm64ec/chpe.S)
 endif()
+
+# Linked to every user-mode module; an image that defines its own _load_config_used never pulls it.
+add_library(loadconfig loadconfig.c)
+add_dependencies(loadconfig psdk)

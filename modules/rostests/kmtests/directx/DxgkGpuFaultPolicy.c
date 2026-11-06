@@ -14,6 +14,12 @@ START_TEST(DxgkGpuFaultPolicy)
     PVOID Device = (PVOID)(ULONG_PTR)0x2222;
     SOFTGPU_FAULT_RETIREMENT Retirement;
 
+    ok(VidSchPolicyDependentNodes(0, 0, 4) == 0, "no dependents\n");
+    ok(VidSchPolicyDependentNodes(0x1, 0, 4) == 0, "the reset node is not its own dependent\n");
+    ok(VidSchPolicyDependentNodes(0x7, 1, 4) == 0x5, "dependents without the reset node\n");
+    ok(VidSchPolicyDependentNodes(0xF0, 0, 4) == 0, "mask bits past the node count are ignored\n");
+    ok(VidSchPolicyDependentNodes(0xFFFFFFFFFFFFFFFFULL, 63, 64) == 0x7FFFFFFFFFFFFFFFULL, "the full 64-node mask keeps its nodes\n");
+
     /* Node and engine are distinct WDDM coordinates. */
     ok_bool_true(
         VidSchPolicyNodeEngineSupported(0, 0, 2),
@@ -54,6 +60,16 @@ START_TEST(DxgkGpuFaultPolicy)
     ok_bool_true(
         VidSchPolicyPacketCleanupMustDefer(DISPATCH_LEVEL),
         "completion-DPC packet cleanup must be deferred");
+
+    ok_bool_true(
+        VidSchPolicyResubmissionAllowed(0, 0, 1),
+        "an idle engine accepts a handed-back packet");
+    ok_bool_true(
+        VidSchPolicyResubmissionAllowed(1, 0, 1),
+        "a running engine accepts a handed-back packet");
+    ok_bool_false(
+        VidSchPolicyResubmissionAllowed(6, 0, 1),
+        "a resetting engine does not");
 
     ok_bool_true(
         SoftGpuDmaCommandAddressClassAllowed(

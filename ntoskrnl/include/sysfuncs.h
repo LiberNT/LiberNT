@@ -254,9 +254,7 @@
     SVC_(SetInformationProcess, 4)
     SVC_(SetInformationThread, 4)
     SVC_(SetInformationToken, 4)
-#if defined(_WIN64) && !defined(SYSFUNCS_WOW64)
     SVC_WRAP_(SetInformationVirtualMemory, 6)
-#endif
     SVC_(SetIntervalProfile, 2)
     SVC_(SetIoCompletion, 5)
     SVC_(SetLdtEntries, 6)
@@ -448,6 +446,7 @@
     SVC_(UnmapViewOfSectionEx, 3)
     SVC_(QueryLicenseValue, 5)
     SVC_(TraceControl, 6)
+    SVC_(CreateTimer2, 5)
 #if defined(WOW64_I386_RUNTIME) || defined(SYSFUNCS_WOW64)
     /* User-mode WoW64 services follow the native syscall table. */
     SVC_(Wow64GetNativeSystemInformation, 4)

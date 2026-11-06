@@ -140,20 +140,19 @@ static enum arabic_shaping_action arabic_get_shaping_action(const struct scripts
     return (context->glyph_infos[idx].props >> 16) & 0xf;
 }
 
-static void arabic_setup_masks(struct scriptshaping_context *context,
-        const struct shaping_features *features)
+static void arabic_set_joining_actions(struct scriptshaping_context *context, BOOL reverse)
 {
     unsigned int i, prev = ~0u, state = 0;
-    unsigned int masks[NUM_FEATURES+1];
 
     for (i = 0; i < context->glyph_count; ++i)
     {
-        unsigned short this_type = arabic_get_joining_type(context->glyph_infos[i].codepoint);
+        unsigned int idx = reverse ? context->glyph_count - i - 1 : i;
+        unsigned short this_type = arabic_get_joining_type(context->glyph_infos[idx].codepoint);
         const struct arabic_state_table_entry *entry;
 
         if (this_type == JOINING_TYPE_T)
         {
-            arabic_set_shaping_action(context, i, NONE);
+            arabic_set_shaping_action(context, idx, NONE);
             continue;
         }
 
@@ -162,11 +161,139 @@ static void arabic_setup_masks(struct scriptshaping_context *context,
         if (entry->prev_action != NONE && prev != ~0u)
             arabic_set_shaping_action(context, prev, entry->prev_action);
 
-        arabic_set_shaping_action(context, i, entry->curr_action);
+        arabic_set_shaping_action(context, idx, entry->curr_action);
 
-        prev = i;
+        prev = idx;
         state = entry->next_state;
     }
+}
+
+static const struct arabic_justification
+{
+    unsigned short first;
+    unsigned short last;
+    unsigned char init;
+    unsigned char medi;
+    unsigned char fina;
+}
+arabic_justification_table[] =
+{
+    { 0x0622, 0x0623, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_ALEF, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0624, 0x0624, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_RA, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x0625, 0x0625, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_ALEF, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0626, 0x0626, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x0627, 0x0627, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_ALEF, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0628, 0x0628, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0629, 0x0629, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_HA, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x062a, 0x062b, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x062c, 0x062e, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x062f, 0x0630, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_HA, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x0631, 0x0632, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BARA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x0633, 0x0636, SCRIPT_JUSTIFY_ARABIC_SEEN, SCRIPT_JUSTIFY_ARABIC_SEEN_M, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0637, 0x0638, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0639, 0x063a, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x0641, 0x0642, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x0643, 0x0644, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0645, 0x0645, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0646, 0x0646, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0647, 0x0647, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x0648, 0x0648, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_RA, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x0649, 0x0649, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x064a, 0x064a, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x066e, 0x066e, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x066f, 0x066f, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x0671, 0x0673, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_ALEF, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0675, 0x0675, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_ALEF, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0676, 0x0677, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_RA, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x0678, 0x0680, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x0681, 0x0687, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0688, 0x068f, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_HA, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x0690, 0x0690, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0691, 0x0699, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BARA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x069a, 0x069e, SCRIPT_JUSTIFY_ARABIC_SEEN, SCRIPT_JUSTIFY_ARABIC_SEEN_M, SCRIPT_JUSTIFY_NONE },
+    { 0x069f, 0x069f, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x06a0, 0x06a8, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x06a9, 0x06af, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x06b0, 0x06b4, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x06b5, 0x06b8, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_ALEF },
+    { 0x06b9, 0x06bd, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x06be, 0x06be, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x06bf, 0x06bf, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x06c0, 0x06c0, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_HA, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x06c1, 0x06c1, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x06c2, 0x06c2, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x06c3, 0x06c3, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_HA, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x06c4, 0x06cb, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_RA, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x06cc, 0x06cc, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x06cd, 0x06cd, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BARA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x06ce, 0x06ce, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x06cf, 0x06cf, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_RA, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x06d0, 0x06d1, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_BARA },
+    { 0x06d2, 0x06d3, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x06fa, 0x06fb, SCRIPT_JUSTIFY_ARABIC_SEEN, SCRIPT_JUSTIFY_ARABIC_SEEN_M, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x06fc, 0x06fc, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x0750, 0x0756, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_BA, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0757, 0x0757, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x0758, 0x0758, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_NONE },
+    { 0x0759, 0x075a, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_HA, SCRIPT_JUSTIFY_ARABIC_HA },
+    { 0x075b, 0x075b, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_RA, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x075c, 0x075c, SCRIPT_JUSTIFY_ARABIC_SEEN, SCRIPT_JUSTIFY_ARABIC_SEEN_M, SCRIPT_JUSTIFY_NONE },
+    { 0x075d, 0x075f, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_NONE },
+    { 0x0760, 0x076a, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_NORMAL, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+    { 0x076b, 0x076c, SCRIPT_JUSTIFY_NONE, SCRIPT_JUSTIFY_ARABIC_RA, SCRIPT_JUSTIFY_ARABIC_RA },
+    { 0x076d, 0x076d, SCRIPT_JUSTIFY_ARABIC_SEEN, SCRIPT_JUSTIFY_ARABIC_SEEN_M, SCRIPT_JUSTIFY_ARABIC_NORMAL },
+};
+
+static unsigned char arabic_get_justification(unsigned int ch, enum arabic_shaping_action action)
+{
+    unsigned int i;
+
+    if (ch == 0x640)
+        return SCRIPT_JUSTIFY_ARABIC_KASHIDA;
+    if (ch == 0x20)
+        return SCRIPT_JUSTIFY_ARABIC_BLANK;
+
+    for (i = 0; i < ARRAY_SIZE(arabic_justification_table); ++i)
+    {
+        const struct arabic_justification *entry = &arabic_justification_table[i];
+
+        if (ch < entry->first || ch > entry->last)
+            continue;
+        if (action == INIT)
+            return entry->init;
+        if (action == MEDI)
+            return entry->medi;
+        if (action == FINA)
+            return entry->fina;
+        break;
+    }
+
+    return SCRIPT_JUSTIFY_NONE;
+}
+
+static void arabic_set_justification(struct scriptshaping_context *context)
+{
+    unsigned int i;
+
+    arabic_set_joining_actions(context, !context->is_rtl);
+
+    for (i = 0; i < context->glyph_count; ++i)
+    {
+        context->u.buffer.glyph_props[i].justification = arabic_get_justification(context->glyph_infos[i].codepoint,
+                arabic_get_shaping_action(context, i));
+    }
+}
+
+static void arabic_setup_masks(struct scriptshaping_context *context,
+        const struct shaping_features *features)
+{
+    unsigned int i;
+    unsigned int masks[NUM_FEATURES+1];
+
+    if (context->script == Script_Arabic)
+        arabic_set_justification(context);
+
+    arabic_set_joining_actions(context, FALSE);
 
     for (i = 0; i < NUM_FEATURES; ++i)
         masks[i] = shape_get_feature_1_mask(features, arabic_features[i]);

@@ -439,6 +439,8 @@ static int has_sse2(void)
     return sse2_supported;
 }
 
+#define fenv_unit_active(unit) ((unit) == 0 || has_sse2())
+
 static unsigned short __getcw(void)
 {
     unsigned short cw;
@@ -578,6 +580,10 @@ static void fenv_hw_reset(void)
 
 #else
 #error Unsupported architecture
+#endif
+
+#ifndef fenv_unit_active
+#define fenv_unit_active(unit) 1
 #endif
 
 /* ========================================================================
@@ -844,6 +850,25 @@ static unsigned int apply_cw(unsigned int ctl, unsigned int newval,
     return ctl_from_cw((cw_from_ctl(ctl) & ~m) | (newval & m));
 }
 
+static unsigned int cw_merge(const unsigned int* ctl)
+{
+    unsigned int cw = cw_from_ctl(ctl[0]);
+    int unit;
+
+    for (unit = 1; unit < FENV_UNITS; unit++)
+    {
+        unsigned int other;
+
+        if (!fenv_unit_active(unit))
+            continue;
+        other = cw_from_ctl(ctl[unit]);
+        if ((cw ^ other) & (_MCW_EM | _MCW_RC))
+            cw |= _EM_AMBIGUOUS;
+        cw |= other;
+    }
+    return cw;
+}
+
 unsigned int __cdecl _control87(unsigned int newval, unsigned int mask)
 {
     unsigned int ctl[FENV_UNITS], stat[FENV_UNITS];
@@ -857,7 +882,7 @@ unsigned int __cdecl _control87(unsigned int newval, unsigned int mask)
         fenv_hw_set(ctl, stat);
         fenv_hw_get(ctl, stat);
     }
-    return cw_from_ctl(ctl[0]);
+    return cw_merge(ctl);
 }
 
 unsigned int __cdecl _controlfp(unsigned int newval, unsigned int mask)

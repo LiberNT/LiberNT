@@ -32,6 +32,7 @@ static KDNET_SHARED_DATA KdpSavedShared;
 static DEBUG_DEVICE_DESCRIPTOR KdpSavedDevice;
 static UCHAR KdpSavedAddress[MAC_ADDRESS_SIZE];
 static BOOLEAN KdpSavedValid;
+static BOOLEAN KdpSavedLink;
 static NTSTATUS KdpErrorStatus;
 static PWCHAR KdpErrorString;
 static PWCHAR KdpShownErrorString;
@@ -511,6 +512,16 @@ KdpIsUsbController(
 }
 
 static
+BOOLEAN
+KdpIsPhone(VOID)
+{
+    PKD_USB_SHARE Share = KdNicDevice.OemData;
+
+    return Share && KdNicDevice.OemDataLength >= sizeof(*Share) &&
+           Share->Signature == KD_USB_SHARE_SIGNATURE && Share->Phone;
+}
+
+static
 NTSTATUS
 KdpStartDevice(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -798,7 +809,7 @@ KdpScanPci(
                       KdNetOptions.Function == Function)))
                 {
                     Result = KdpStartDevice(LoaderBlock, Bus, Slot, &Config);
-                    if (NT_SUCCESS(Result) && KdNicLinkState)
+                    if (NT_SUCCESS(Result) && KdNicLinkState && (!Usb || KdpIsPhone()))
                     {
                         KdpDropSavedDevice();
                         KdpNicStarted = TRUE;
@@ -808,10 +819,21 @@ KdpScanPci(
 
                     if (NT_SUCCESS(Result))
                     {
-                        if (KdpSavedValid)
-                            KdpStopDevice();
-                        else
+                        if (!KdpSavedValid)
+                        {
+                            KdpSavedLink = KdNicLinkState != 0;
                             KdpSaveDevice();
+                        }
+                        else if (KdNicLinkState && !KdpSavedLink)
+                        {
+                            KdpDropSavedDevice();
+                            KdpSavedLink = TRUE;
+                            KdpSaveDevice();
+                        }
+                        else
+                        {
+                            KdpStopDevice();
+                        }
                     }
                     else
                     {
@@ -836,7 +858,19 @@ KdNicInitialize(
 {
     NTSTATUS Status = STATUS_NO_SUCH_DEVICE;
 
-    if (KdpScanPci(LoaderBlock, TRUE, &Status) || KdpScanPci(LoaderBlock, FALSE, &Status))
+    if (KdpScanPci(LoaderBlock, TRUE, &Status))
+        return STATUS_SUCCESS;
+
+    if (KdpSavedValid && KdpSavedLink)
+    {
+        KdpRestoreDevice();
+        KdNicLinkState = 1;
+        KdpNicStarted = TRUE;
+        KdpReserveDevice();
+        return STATUS_SUCCESS;
+    }
+
+    if (KdpScanPci(LoaderBlock, FALSE, &Status))
         return STATUS_SUCCESS;
 
     if (KdpSavedValid)
@@ -882,12 +916,12 @@ KdNicGetTxBufferAddress(
     return KdpExports.KdGetPacketAddress(KdpShared.Hardware, Handle);
 }
 
-VOID
+BOOLEAN
 KdNicSend(
     _In_ ULONG Handle,
     _In_ ULONG Length)
 {
-    KdpExports.KdSendTxPacket(KdpShared.Hardware, Handle, Length);
+    return NT_SUCCESS(KdpExports.KdSendTxPacket(KdpShared.Hardware, Handle, Length));
 }
 
 BOOLEAN

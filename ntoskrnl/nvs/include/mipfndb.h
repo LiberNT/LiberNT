@@ -123,6 +123,7 @@ struct _MI_PFN_DATABASE;
 
 typedef VOID (*MI_PFN_REPURPOSE_ROUTINE)(_Inout_ struct _MI_PFN_DATABASE *Db, _In_ ULONG Frame);
 typedef VOID (*MI_PFN_NOTIFY_ROUTINE)(_Inout_ struct _MI_PFN_DATABASE *Db);
+typedef ULONG (*MI_PFN_FLOOR_ROUTINE)(_In_ struct _MI_PFN_DATABASE *Db);
 
 typedef struct _MI_PFN_DATABASE
 {
@@ -133,6 +134,7 @@ typedef struct _MI_PFN_DATABASE
     BOOLEAN RegionRotation;
     MI_PFN_REPURPOSE_ROUTINE Repurpose;
     MI_PFN_NOTIFY_ROUTINE FreeNotify;
+    MI_PFN_FLOOR_ROUTINE ReserveFloor;
     PVOID Owner;
     ULONG DirectFrames;
     MI_PFN_WINDOW Window;

@@ -102,6 +102,9 @@ typedef struct {
     unsigned short head;
     unsigned short cnt;
     bstr_t *buf[BUCKET_BUFFER_SIZE];
+#ifdef __REACTOS__
+    SIZE_T size[BUCKET_BUFFER_SIZE];
+#endif
 } bstr_cache_entry_t;
 
 #define ARENA_INUSE_FILLER     0x55
@@ -122,6 +125,10 @@ static inline bstr_t *bstr_from_str(BSTR str)
 
 static inline bstr_cache_entry_t *get_cache_entry_from_idx(unsigned cache_idx)
 {
+#ifdef __REACTOS__
+    if(cache_idx == 1)
+        cache_idx = 0;
+#endif
     return bstr_cache_enabled && cache_idx < ARRAY_SIZE(bstr_cache) ? bstr_cache + cache_idx : NULL;
 }
 
@@ -139,6 +146,25 @@ static inline bstr_cache_entry_t *get_cache_entry_from_alloc_size(SIZE_T alloc_s
     return get_cache_entry_from_idx(cache_idx);
 }
 
+#ifdef __REACTOS__
+static bstr_t *take_cached_bstr(bstr_cache_entry_t *cache_entry, SIZE_T needed)
+{
+    bstr_t *ret;
+    unsigned i;
+
+    for(i = 0; i < BUCKET_BUFFER_SIZE; i++) {
+        if(cache_entry->buf[i] && cache_entry->size[i] >= needed) {
+            ret = cache_entry->buf[i];
+            cache_entry->buf[i] = NULL;
+            cache_entry->cnt--;
+            return ret;
+        }
+    }
+
+    return NULL;
+}
+#endif
+
 static bstr_t *alloc_bstr(size_t size)
 {
     bstr_cache_entry_t *cache_entry = get_cache_entry(size);
@@ -147,6 +173,16 @@ static bstr_t *alloc_bstr(size_t size)
     if(cache_entry) {
         EnterCriticalSection(&cs_bstr_cache);
 
+#ifdef __REACTOS__
+        ret = take_cached_bstr(cache_entry, bstr_alloc_size(size));
+        if(!ret && cache_entry != bstr_cache) {
+            bstr_cache_entry_t *next_entry = get_cache_entry(size+BUCKET_SIZE);
+            if(next_entry)
+                ret = take_cached_bstr(next_entry, bstr_alloc_size(size));
+        }
+        if(!ret)
+            cache_entry = NULL;
+#else
         if(!cache_entry->cnt) {
             cache_entry = get_cache_entry(size+BUCKET_SIZE);
             if(cache_entry && !cache_entry->cnt)
@@ -158,6 +194,7 @@ static bstr_t *alloc_bstr(size_t size)
             cache_entry->head %= BUCKET_BUFFER_SIZE;
             cache_entry->cnt--;
         }
+#endif
 
         LeaveCriticalSection(&cs_bstr_cache);
 
@@ -294,14 +331,46 @@ void WINAPI DECLSPEC_HOTPATCH SysFreeString(BSTR str)
 
         /* According to tests, freeing a string that's already in cache doesn't corrupt anything.
          * For that to work we need to search the cache. */
+#ifdef __REACTOS__
+        for(i=0; i < BUCKET_BUFFER_SIZE; i++) {
+            if(cache_entry->buf[i] == bstr) {
+#else
         for(i=0; i < cache_entry->cnt; i++) {
             if(cache_entry->buf[(cache_entry->head+i) % BUCKET_BUFFER_SIZE] == bstr) {
+#endif
                 WARN_(heap)("String already is in cache!\n");
                 LeaveCriticalSection(&cs_bstr_cache);
                 return;
             }
         }
 
+#ifdef __REACTOS__
+        if(cache_entry->cnt < BUCKET_BUFFER_SIZE) {
+            for(i = 0; cache_entry->buf[i]; i++);
+            cache_entry->buf[i] = bstr;
+            cache_entry->size[i] = alloc_size;
+            cache_entry->cnt++;
+            LeaveCriticalSection(&cs_bstr_cache);
+            return;
+        }else {
+            unsigned smallest = 0;
+
+            for(i = 1; i < BUCKET_BUFFER_SIZE; i++) {
+                if(cache_entry->size[i] < cache_entry->size[smallest])
+                    smallest = i;
+            }
+
+            if(cache_entry->size[smallest] < alloc_size) {
+                bstr_t *evicted = cache_entry->buf[smallest];
+
+                cache_entry->buf[smallest] = bstr;
+                cache_entry->size[smallest] = alloc_size;
+                LeaveCriticalSection(&cs_bstr_cache);
+                CoTaskMemFree(evicted);
+                return;
+            }
+        }
+#else
         if(cache_entry->cnt < ARRAY_SIZE(cache_entry->buf)) {
             cache_entry->buf[(cache_entry->head+cache_entry->cnt) % BUCKET_BUFFER_SIZE] = bstr;
             cache_entry->cnt++;
@@ -315,6 +384,7 @@ void WINAPI DECLSPEC_HOTPATCH SysFreeString(BSTR str)
             LeaveCriticalSection(&cs_bstr_cache);
             return;
         }
+#endif
 
         LeaveCriticalSection(&cs_bstr_cache);
     }

@@ -1201,6 +1201,10 @@ static void COMBO_SetFocus( LPHEADCOMBO lphc )
 {
    if( !(lphc->wState & CBF_FOCUSED) )
    {
+#ifdef __REACTOS__
+       if (lphc->wState & CBF_EDIT)
+           SendMessageW(lphc->hWndEdit, EM_SETSEL, 0, MAXLONG);
+#endif
        if( CB_GETTYPE(lphc) == CBS_DROPDOWNLIST )
            SendMessageW(lphc->hWndLBox, LB_CARETON, 0, 0);
 
@@ -1234,6 +1238,10 @@ static void COMBO_KillFocus( LPHEADCOMBO lphc )
        {
            if( CB_GETTYPE(lphc) == CBS_DROPDOWNLIST )
                SendMessageW(lphc->hWndLBox, LB_CARETOFF, 0, 0);
+#ifdef __REACTOS__
+           else if (lphc->wState & CBF_EDIT)
+               SendMessageW(lphc->hWndEdit, EM_SETSEL, 0, 0);
+#endif
 
 	   lphc->wState &= ~CBF_FOCUSED;
 
@@ -1876,12 +1884,14 @@ static LRESULT CALLBACK COMBO_WindowProc( HWND hwnd, UINT message, WPARAM wParam
         if (lphc->wState & CBF_EDIT)
         {
             SetFocus( lphc->hWndEdit );
+#ifndef __REACTOS__
             /* The first time focus is received, select all the text */
             if (!(lphc->wState & CBF_BEENFOCUSED))
             {
                 SendMessageW(lphc->hWndEdit, EM_SETSEL, 0, -1);
                 lphc->wState |= CBF_BEENFOCUSED;
             }
+#endif
         }
         else
             COMBO_SetFocus( lphc );

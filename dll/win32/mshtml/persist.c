@@ -191,9 +191,21 @@ void set_download_state(HTMLDocumentObj *doc, int state)
     doc->download_state = state;
 }
 
+#ifdef __REACTOS__
+typedef struct {
+    task_t header;
+    HTMLDocumentObj *doc;
+    BOOL navigation;
+} progress_task_t;
+#endif
+
 static void set_progress_proc(task_t *_task)
 {
+#ifdef __REACTOS__
+    progress_task_t *task = (progress_task_t*)_task;
+#else
     docobj_task_t *task = (docobj_task_t*)_task;
+#endif
     IOleCommandTarget *olecmd = NULL;
     HTMLDocumentObj *doc = task->doc;
     HRESULT hres;
@@ -220,7 +232,11 @@ static void set_progress_proc(task_t *_task)
         IOleCommandTarget_Release(olecmd);
     }
 
+#ifdef __REACTOS__
+    if((doc->nscontainer->usermode == EDITMODE || task->navigation) && doc->hostui) {
+#else
     if(doc->nscontainer->usermode == EDITMODE && doc->hostui) {
+#endif
         DOCHOSTUIINFO hostinfo;
 
         memset(&hostinfo, 0, sizeof(DOCHOSTUIINFO));
@@ -404,12 +420,17 @@ HRESULT set_moniker(HTMLOuterWindow *window, IMoniker *mon, IUri *nav_uri, IBind
         HTMLDocument_LockContainer(doc_obj, TRUE);
 
         if(doc_obj->frame) {
+#ifdef __REACTOS__
+            progress_task_t *task;
+
+            task = malloc(sizeof(progress_task_t));
+            if (!task)
+                RaiseException(STATUS_NO_MEMORY, EXCEPTION_NONCONTINUABLE, 0, NULL);
+            task->navigation = async_bsc != NULL;
+#else
             docobj_task_t *task;
 
             task = malloc(sizeof(docobj_task_t));
-#ifdef __REACTOS__
-            if (!task)
-                RaiseException(STATUS_NO_MEMORY, EXCEPTION_NONCONTINUABLE, 0, NULL);
 #endif
             task->doc = doc_obj;
             hres = push_task(&task->header, set_progress_proc, set_progress_destr, doc_obj->task_magic);

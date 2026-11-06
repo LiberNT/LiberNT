@@ -106,6 +106,8 @@ RTL_CRITICAL_SECTION LdrpLoaderLock =
     0,
     0
 };
+RTL_SRWLOCK LdrpModuleDatatableLock = RTL_SRWLOCK_INIT;
+RTL_SRWLOCK LdrpLoadCountWalkLock = RTL_SRWLOCK_INIT;
 RTL_CRITICAL_SECTION FastPebLock;
 
 BOOLEAN ShowSnaps;
@@ -950,7 +952,7 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
         }
 
         /* Set the flag */
-        LdrEntry->Flags |= LDRP_ENTRY_PROCESSED;
+        InterlockedOr((PLONG)&LdrEntry->Flags, LDRP_ENTRY_PROCESSED);
         NextEntry = NextEntry->Flink;
     }
 
@@ -1043,16 +1045,16 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
             RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                    LdrEntry->EntryPointActivationContext);
 
+            /* Check if it has TLS */
+            if (LdrEntry->TlsIndex)
+            {
+                /* Call TLS */
+                LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_ATTACH);
+            }
+
             DllInitCompleted = FALSE;
             _SEH2_TRY
             {
-                /* Check if it has TLS */
-                if (LdrEntry->TlsIndex)
-                {
-                    /* Call TLS */
-                    LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_ATTACH);
-                }
-
                 /* Call the Entrypoint */
                 if (ShowSnaps)
                 {
@@ -3473,9 +3475,16 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     /* Check if we had Shim Data */
     if (OldShimData)
     {
+        WCHAR ShimEngineBuffer[MAX_PATH];
+        UNICODE_STRING ShimEngine;
+
+        RtlInitEmptyUnicodeString(&ShimEngine, ShimEngineBuffer, sizeof(ShimEngineBuffer));
+        RtlAppendUnicodeToString(&ShimEngine, SharedUserData->NtSystemRoot);
+        RtlAppendUnicodeToString(&ShimEngine, L"\\System32\\apphelp.dll");
+
         /* Load the Shim Engine */
         Peb->AppCompatInfo = NULL;
-        LdrpLoadShimEngine(OldShimData, &ImagePathName, OldShimData);
+        LdrpLoadShimEngine(ShimEngine.Buffer, &ImagePathName, OldShimData);
     }
     else
     {
@@ -3787,7 +3796,7 @@ RtlpUserThreadStart(
     _SEH2_TRY
     {
         if (Kernel32ThreadInitThunkFunction)
-            ((VOID (NTAPI *)(ULONG, PVOID, PVOID))Kernel32ThreadInitThunkFunction)(0, StartAddress, Parameter);
+            ((VOID (FASTCALL *)(ULONG, PVOID, PVOID))Kernel32ThreadInitThunkFunction)(0, StartAddress, Parameter);
         else
             Status = ((NTSTATUS (NTAPI *)(PVOID))StartAddress)(Parameter);
     }

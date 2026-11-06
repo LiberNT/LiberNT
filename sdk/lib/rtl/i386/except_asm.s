@@ -285,6 +285,13 @@ _RtlRaiseException@4:
     test al, al
     jnz DebuggerActive1
 
+    /* A dispatched breakpoint reports the address of the breakpoint */
+    mov eax, [ebp+8]
+    cmp dword ptr [eax+EXCEPTION_RECORD_EXCEPTION_CODE], HEX(80000003)
+    jne NotBreakpoint
+    dec dword ptr [esp+CONTEXT_EIP]
+NotBreakpoint:
+
     /* Dispatch the exception */
     push esp
     push [ebp+8]

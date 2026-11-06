@@ -22,6 +22,8 @@ typedef struct _TEST_FILE
     ULONG64 Size;
     ULONG64 PageCount;
     volatile LONG MappedViews;
+    LONG MapLimit;
+    volatile LONG MapFailures;
     volatile LONG64 DiskReads;
     volatile LONG64 DiskWrites;
     volatile LONG64 FlushFailuresLeft;
@@ -55,6 +57,7 @@ typedef struct _MOVE_CONTEXT
 } MOVE_CONTEXT;
 
 void TestViews(void);
+void TestViewAddressLimit(void);
 void TestDirty(void);
 void TestBcb(void);
 void TestNtPin(void);

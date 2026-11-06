@@ -482,6 +482,7 @@ HRESULT video_renderer_create(IUnknown *outer, IUnknown **out)
 
     strmbase_renderer_init(&object->renderer, outer, &CLSID_VideoRenderer, L"In", &renderer_ops);
     wcscpy(object->renderer.sink.pin.name, L"Input");
+    object->renderer.fail_inactive_receive = TRUE;
 
     object->IOverlay_iface.lpVtbl = &overlay_vtbl;
 

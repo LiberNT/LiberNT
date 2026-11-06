@@ -13,6 +13,7 @@
 #include <usb100.h>
 #include <usb200.h>
 #include <drivers/kdusbshare.h>
+#include <drivers/kdusbrules.h>
 
 #define XHCI_CAP_LENGTH             0x00
 #define XHCI_CAP_HCSPARAMS1         0x04
@@ -123,6 +124,7 @@
 #define EP_TYPE_BULK_OUT            2
 #define EP_TYPE_CONTROL             4
 #define EP_TYPE_BULK_IN             6
+#define EP_TYPE_INTERRUPT_IN        7
 #define EP_ERROR_COUNT              3
 #define EP_CONTROL_AVERAGE          8
 #define EP_BULK_AVERAGE             3072
@@ -139,13 +141,17 @@
 #define USBNET_RX_SIZE              4096
 #define USBNET_TX_SIZE              4096
 #define USBNET_TX_COUNT             2
-#define USBNET_FIXED_PAGES          8
+#define USBNET_FIXED_PAGES          9
 #define USBNET_MAX_TIERS            4
 #define USBNET_TIER_RING_OFFSET     2048
 #define USBNET_MAX_FRAME            1514
 #define USBNET_MIN_FRAME            14
 #define USBNET_PAD_FRAME            60
 #define USBNET_SHARED_INTERRUPTER   1
+#define USBNET_STATUS_SIZE          1024
+#define USBNET_CARRIER_WAIT         8000
+#define USBNET_CARRIER_STEP         100
+#define USBNET_CARRIER_REMIND       2000
 #define USBNET_PHONE_GONE           10000
 #define USBNET_PHONE_REMIND         10000
 #define USBNET_PHONE_STEP           100
@@ -211,6 +217,25 @@
 #define NCM_NTH16_SIZE              12
 #define NCM_NDP16_SIZE              16
 #define NCM_MIN_INPUT_SIZE          2048
+
+#define RTL_VENDOR_ID               0x0BDA
+#define RTL_PRODUCT_8153            0x8153
+#define RTL_REQUEST_REGISTER        0x05
+#define RTL_REQUEST_IN              0xC0
+#define RTL_REQUEST_OUT             0x40
+#define RTL_INDEX_READ              0x0100
+#define RTL_INDEX_WRITE             0x01FF
+#define RTL_REGISTER_SIZE           4
+#define RTL_REG_COMMAND             0xE810
+#define RTL_REG_OOB                 0xE84C
+#define RTL_REG_LINK_LIST           0xE8DC
+#define RTL_COMMAND_ENABLE          0x0C000000
+#define RTL_OOB_ACTIVE              0x80000000
+#define RTL_OOB_LIST_READY          0x02000000
+#define RTL_LIST_MCU_BORROW         0x40000000
+#define RTL_LIST_REINIT             0x80000000
+#define RTL_LIST_WAIT               50
+#define RTL_LIST_STEP               10000
 
 #define EEM_HEADER_SIZE             2
 #define EEM_CRC_SIZE                4
@@ -281,8 +306,12 @@ typedef struct _USBNET_FUNCTION
     UCHAR OutAddress;
     UCHAR InBurst;
     UCHAR OutBurst;
+    UCHAR StatusAddress;
+    UCHAR StatusBurst;
+    UCHAR StatusInterval;
     USHORT InPacket;
     USHORT OutPacket;
+    USHORT StatusPacket;
 } USBNET_FUNCTION, *PUSBNET_FUNCTION;
 
 typedef struct _USBNET_ADAPTER
@@ -319,6 +348,11 @@ typedef struct _USBNET_ADAPTER
     BOOLEAN Shared;
     ULONG WaitPort;
     ULONG PhonePort;
+    ULONG EthernetPort;
+    BOOLEAN AcceptEthernet;
+    BOOLEAN Phone;
+    USHORT VendorId;
+    USHORT ProductId;
     KD_USB_SHARE Share;
     ULONG64 CommandTrb;
     UCHAR CommandCompletion;
@@ -331,6 +365,11 @@ typedef struct _USBNET_ADAPTER
     USBNET_FUNCTION Function;
     USBNET_ENDPOINT BulkIn;
     USBNET_ENDPOINT BulkOut;
+    USBNET_ENDPOINT Status;
+    PUCHAR StatusBuffer;
+    BOOLEAN StatusActive;
+    BOOLEAN StatusSeen;
+    BOOLEAN Carrier;
     ULONG RndisRequest;
     ULONG NcmOutMaxSize;
     USHORT NcmNdpOffset;
@@ -578,6 +617,10 @@ NTSTATUS
 UsbWaitForTethering(
     _In_ PUSBNET_ADAPTER Adapter);
 
+NTSTATUS
+UsbStartEthernet(
+    _In_ PUSBNET_ADAPTER Adapter);
+
 VOID
 UsbReleaseDevices(
     _In_ PUSBNET_ADAPTER Adapter);
@@ -592,6 +635,14 @@ UsbReconnectBehindHub(
 
 NTSTATUS
 UsbNetStartFunction(
+    _In_ PUSBNET_ADAPTER Adapter);
+
+VOID
+UsbNetStartStatus(
+    _In_ PUSBNET_ADAPTER Adapter);
+
+VOID
+UsbNetPollStatus(
     _In_ PUSBNET_ADAPTER Adapter);
 
 BOOLEAN

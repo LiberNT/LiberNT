@@ -18,6 +18,8 @@
 #include "dxsurface.h"
 #include "framebuttons.h"
 #include "gpucomp.h"
+#include "gpupointer.h"
+#include "gpuretry.h"
 #include "material.h"
 #include "animation.h"
 #include "presenttrace.h"
@@ -772,6 +774,137 @@ DwmUnionDamage(LONG *Left, LONG *Top, LONG *Right, LONG *Bottom,
     *Right = max(*Right, (LONG)R);
     *Bottom = max(*Bottom, (LONG)B);
     SetRect(&Parts[(*PartCount)++], (LONG)L, (LONG)T, (LONG)R, (LONG)B);
+}
+
+typedef struct _DWM_POINTER
+{
+    BOOL GpuActive, Composed, Valid;
+    ULONGLONG Handle;
+    ULONG Step;
+    LONG HotX, HotY, Width, Height;
+    RECT Rect, Drawn;
+} DWM_POINTER;
+
+static DWM_POINTER g_pointer;
+
+/* Windows 11 has this session event while the compositor runs: a second create collides. */
+static VOID
+DwmCreateSessionShutdownEvent(VOID)
+{
+    typedef HRESULT (WINAPI *PFN_CREATE_EVENT)(DWORD, HANDLE *);
+    HMODULE Module = LoadLibraryW(L"dwmapi.dll");
+    PFN_CREATE_EVENT Create = Module ? (PFN_CREATE_EVENT)GetProcAddress(Module, (LPCSTR)(ULONG_PTR)170) : NULL;
+    static HANDLE Event;
+    DWORD Session;
+
+    if (Create != NULL && Event == NULL && ProcessIdToSessionId(GetCurrentProcessId(), &Session))
+        Create(Session, &Event);
+}
+
+static VOID
+DwmPointerSelectPath(HDC hdcScreen)
+{
+    BOOL Active = DwmGpuComposeSupportsPointer();
+    LONG Hardware = 1;
+
+    if (Active == g_pointer.GpuActive)
+        return;
+    g_pointer.GpuActive = Active;
+    g_pointer.Composed = Active &&
+        ExtEscape(hdcScreen, CDD_ESCAPE_HW_POINTER, 0, NULL, sizeof(Hardware), (LPSTR)&Hardware) > 0 && !Hardware;
+}
+
+static BOOL
+DwmPointerLoadImage(HDC hdcScreen, HCURSOR Cursor, ULONG Step)
+{
+    BITMAPINFO Info = {{sizeof(BITMAPINFOHEADER)}};
+    ICONINFO Icon;
+    BITMAP Bitmap;
+    HDC Dc = NULL;
+    HBITMAP Dib = NULL, OldDib = NULL;
+    ULONG *Bits = NULL, *Pixels = NULL;
+    LONG Width, Height;
+    ULONG Count;
+    BOOL Ok = FALSE;
+
+    if (!GetIconInfo(Cursor, &Icon))
+        return FALSE;
+    Ok = GetObjectW(Icon.hbmColor ? Icon.hbmColor : Icon.hbmMask, sizeof(Bitmap), &Bitmap) == sizeof(Bitmap);
+    if (Icon.hbmColor) DeleteObject(Icon.hbmColor);
+    if (Icon.hbmMask) DeleteObject(Icon.hbmMask);
+    if (!Ok)
+        return FALSE;
+    Ok = FALSE;
+    Width = Bitmap.bmWidth;
+    Height = Icon.hbmColor ? Bitmap.bmHeight : Bitmap.bmHeight / 2;
+    if (Width <= 0 || Height <= 0 || Width > DWM_POINTER_MAX_SIZE || Height > DWM_POINTER_MAX_SIZE)
+        return FALSE;
+    Count = (ULONG)Width * Height;
+
+    Info.bmiHeader.biWidth = Width;
+    Info.bmiHeader.biHeight = -Height;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+    Dc = CreateCompatibleDC(hdcScreen);
+    Dib = CreateDIBSection(hdcScreen, &Info, DIB_RGB_COLORS, (void **)&Bits, NULL, 0);
+    Pixels = (ULONG *)HeapAlloc(GetProcessHeap(), 0, Count * 3 * sizeof(ULONG));
+    if (Dc != NULL && Dib != NULL && Bits != NULL && Pixels != NULL)
+    {
+        ULONG *Image = Pixels + Count, *Invert = Image + Count;
+
+        OldDib = (HBITMAP)SelectObject(Dc, Dib);
+        memset(Bits, 0x00, Count * sizeof(ULONG));
+        if (DrawIconEx(Dc, 0, 0, Cursor, Width, Height, Step, NULL, DI_NORMAL))
+        {
+            GdiFlush();
+            memcpy(Pixels, Bits, Count * sizeof(ULONG));
+            memset(Bits, 0xFF, Count * sizeof(ULONG));
+            if (DrawIconEx(Dc, 0, 0, Cursor, Width, Height, Step, NULL, DI_NORMAL))
+            {
+                BOOL Inverts;
+
+                GdiFlush();
+                Inverts = DwmPointerConvert(Pixels, Bits, Count, Image, Invert);
+                Ok = DwmGpuComposeSetPointerImage(Width, Height, Image, Inverts ? Invert : NULL);
+            }
+        }
+        SelectObject(Dc, OldDib);
+    }
+    if (Pixels != NULL) HeapFree(GetProcessHeap(), 0, Pixels);
+    if (Dib != NULL) DeleteObject(Dib);
+    if (Dc != NULL) DeleteDC(Dc);
+    if (Ok)
+    {
+        g_pointer.Width = Width;
+        g_pointer.Height = Height;
+        g_pointer.HotX = (LONG)Icon.xHotspot;
+        g_pointer.HotY = (LONG)Icon.yHotspot;
+    }
+    return Ok;
+}
+
+/* TRUE when the pointer differs from what the last frame drew. */
+static BOOL
+DwmPointerUpdate(HDC hdcScreen, const DWM_FRAME_HEADER *Frame)
+{
+    BOOL ImageChanged = Frame->PointerHandle != g_pointer.Handle || Frame->PointerStep != g_pointer.Step ||
+                        (g_pointer.Valid && !DwmGpuComposeHasPointerImage());
+
+    if (!g_pointer.Composed)
+        return FALSE;
+    if (ImageChanged)
+    {
+        g_pointer.Handle = Frame->PointerHandle;
+        g_pointer.Step = Frame->PointerStep;
+        g_pointer.Valid = Frame->PointerHandle != 0 &&
+                          DwmPointerLoadImage(hdcScreen, (HCURSOR)(ULONG_PTR)Frame->PointerHandle, Frame->PointerStep);
+    }
+    SetRectEmpty(&g_pointer.Rect);
+    if (g_pointer.Valid)
+        DwmPointerRect(&g_pointer.Rect, Frame->PointerX, Frame->PointerY, g_pointer.HotX, g_pointer.HotY,
+                       g_pointer.Width, g_pointer.Height);
+    return ImageChanged || !EqualRect(&g_pointer.Rect, &g_pointer.Drawn);
 }
 
 static BOOL
@@ -3603,7 +3736,7 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
 static void
 DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
                       LONG clipL, LONG clipT, LONG clipR, LONG clipB,
-                      const BYTE *pix, const BYTE *dxpix, const DWM_WIN *w,
+                      const BYTE *pix, const BYTE *dxpix, ULONG dxPitch, const DWM_WIN *w,
                       const ULONG *backdropBase)
 {
     LONG dstX = w->AnimX - g_originX;
@@ -3646,7 +3779,7 @@ DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
         if (cx < 1) cx = 1;
         if (cy < 1) cy = 1;
         DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
-                      dxpix, (LONG)w->DxWidth, (LONG)w->DxHeight, w->DxPitch,
+                      dxpix, (LONG)w->DxSourceWidth, (LONG)w->DxSourceHeight, dxPitch,
                       dstX + (LONG)((LONGLONG)w->DxClientX * drawCx / w->cx),
                       dstY + (LONG)((LONGLONG)w->DxClientY * drawCy / w->cy),
                       cx, cy, alpha, NULL, NULL, 0);
@@ -4050,8 +4183,14 @@ DwmComposeLoop(HANDLE hStopEvent)
     HWND SettingsWindow;
     DWM_SETTINGS Settings = {DWM_EFFECT_ALL, FALSE, DwmGpuComposeIsActive};
     BOOL forceFull = TRUE;
+    BOOL pointerChanged;
+    ULONG screenRead = 0;
+    ULONG screenCaptureProbes = 0;
+    LONG screenMirrorNeeded = 0;
     BOOL gpuDeferred = FALSE;
     DWORD gpuLastOutputCheck = 0;
+    DWORD gpuRetryLast = GetTickCount();
+    ULONG gpuRetryFailures = 0;
     LONG vw, vh, primW, primH;
     ULONG ViewIndex;
 
@@ -4127,6 +4266,8 @@ DwmComposeLoop(HANDLE hStopEvent)
         ReleaseDC(NULL, hdcScreen);
         return;
     }
+
+    DwmCreateSessionShutdownEvent();
 
     /* Registration of the trusted Direct3D swapchain is accepted only after
      * this process has attached as the desktop compositor. OpenGL is a separate
@@ -4207,6 +4348,25 @@ DwmComposeLoop(HANDLE hStopEvent)
             }
         }
 
+        if (DwmGpuComposeIsActive())
+        {
+            gpuRetryFailures = 0;
+        }
+        else if (DwmGpuRetryDue(GetTickCount(), gpuRetryLast, gpuRetryFailures))
+        {
+            gpuRetryLast = GetTickCount();
+            if (DwmGpuComposeInitialize(g_W, g_H))
+            {
+                DwmLog("DWM: Direct3D compositor available again\n");
+                forceFull = TRUE;
+                g_lastFrameQpc = 0;
+            }
+            else if (gpuRetryFailures < DWM_GPU_RETRY_MAX_DOUBLINGS)
+            {
+                ++gpuRetryFailures;
+            }
+        }
+
         /* Budget from the start of the last frame. Waiting a full refresh
          * period after presentation adds rendering time to every interval. */
         if (g_refreshPeriodQpc != 0 && g_lastFrameQpc != 0)
@@ -4235,6 +4395,15 @@ DwmComposeLoop(HANDLE hStopEvent)
 
         hdr->Magic = DWM_FRAME_MAGIC;
         hdr->BufBytes = g_bufSize;
+        DwmPointerSelectPath(hdcScreen);
+        hdr->PointerComposed = g_pointer.Composed;
+        if (g_pointer.GpuActive && screenMirrorNeeded == 0)
+        {
+            ExtEscape(hdcScreen, CDD_ESCAPE_MIRROR_NEEDED, 0, NULL,
+                      sizeof(screenMirrorNeeded), (LPSTR)&screenMirrorNeeded);
+        }
+        hdr->ScreenMirror = g_pointer.GpuActive && screenMirrorNeeded != 0;
+        hdr->ScreenReadServed = screenRead;
 
         DwmStatCounter(&statFetchStart);
         FetchTrace = DptBegin(&g_DwmPresentTrace, DPT_FETCH);
@@ -4294,10 +4463,15 @@ DwmComposeLoop(HANDLE hStopEvent)
                 DwmLog("DWM: native Direct3D compositor available\n");
             g_lastFrameQpc = 0;
             forceFull = TRUE;
+            g_pointer.GpuActive = FALSE;
+            screenCaptureProbes = 0;
+            screenMirrorNeeded = 0;
             continue;
         }
 
-        if (hdr->Dirty == 0 && !forceFull)
+        pointerChanged = DwmPointerUpdate(hdcScreen, hdr);
+        screenRead = hdr->ScreenReadRequest;
+        if (hdr->Dirty == 0 && !forceFull && !pointerChanged && screenRead == 0)
         {
             HANDLE WaitHandles[2] = {hStopEvent, hWake};
 
@@ -4314,10 +4488,10 @@ DwmComposeLoop(HANDLE hStopEvent)
             BOOL refreshBackdrop = forceFull || hdr->FullDamage;
             BOOL windowDamage = hdr->DmgR > hdr->DmgL && hdr->DmgB > hdr->DmgT;
             BOOL contentDamage = hdr->ContentR > hdr->ContentL && hdr->ContentB > hdr->ContentT;
-            RECT damageParts[2];
+            RECT damageParts[4];
             ULONG damagePartCount = 0;
 
-            if (forceFull || hdr->FullDamage || (!windowDamage && !contentDamage))
+            if (forceFull || hdr->FullDamage || (!windowDamage && !contentDamage && !pointerChanged && screenRead == 0))
             {
                 pl = 0; pt = 0; pr = g_W; pb = g_H;
             }
@@ -4340,6 +4514,20 @@ DwmComposeLoop(HANDLE hStopEvent)
                                    (LONGLONG)hdr->ContentT - g_originY,
                                    (LONGLONG)hdr->ContentR - g_originX,
                                    (LONGLONG)hdr->ContentB - g_originY);
+                }
+                if (g_pointer.Composed)
+                {
+                    /* The pointer must never straddle a repair edge and blend twice. */
+                    DwmUnionDamage(&pl, &pt, &pr, &pb, damageParts, &damagePartCount,
+                                   (LONGLONG)g_pointer.Drawn.left - g_originX,
+                                   (LONGLONG)g_pointer.Drawn.top - g_originY,
+                                   (LONGLONG)g_pointer.Drawn.right - g_originX,
+                                   (LONGLONG)g_pointer.Drawn.bottom - g_originY);
+                    DwmUnionDamage(&pl, &pt, &pr, &pb, damageParts, &damagePartCount,
+                                   (LONGLONG)g_pointer.Rect.left - g_originX,
+                                   (LONGLONG)g_pointer.Rect.top - g_originY,
+                                   (LONGLONG)g_pointer.Rect.right - g_originX,
+                                   (LONGLONG)g_pointer.Rect.bottom - g_originY);
                 }
                 if (pr <= pl || pb <= pt)
                 {
@@ -4423,7 +4611,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     ULONGLONG TraceDrawStart = 0, TraceDrawEnd = 0, TracePresentEnd = 0;
                     BOOL gpuFrame;
                     DWM_GPU_RESULT gpuResult;
-                    RECT gpuDamage[2] = {{pl, pt, pr, pb}};
+                    RECT gpuDamage[ARRAYSIZE(damageParts)] = {{pl, pt, pr, pb}};
                     ULONG gpuDamageCount = 1;
                     RECT gpuShadowMargins = {g_shadowMarginLeft, g_shadowMarginTop,
                                               g_shadowMarginRight, g_shadowMarginBottom};
@@ -4477,6 +4665,17 @@ DwmComposeLoop(HANDLE hStopEvent)
                         }
                     }
 
+                    if (gpuFrame && screenRead != 0)
+                        DwmGpuComposeMirror(hdcScreen);
+                    if (gpuFrame && g_pointer.Composed && g_pointer.Valid)
+                    {
+                        RECT PointerRect = g_pointer.Rect;
+
+                        OffsetRect(&PointerRect, -g_originX, -g_originY);
+                        gpuFrame = DwmGpuComposePointer(&PointerRect);
+                    }
+                    g_pointer.Drawn = g_pointer.Rect;
+
                     DwmStatThreadTime(&statDrawCpuEnd);
                     if (statDrawCpuStart.Valid && statDrawCpuEnd.Valid)
                     {
@@ -4513,6 +4712,13 @@ DwmComposeLoop(HANDLE hStopEvent)
                     if (gpuResult == DWM_GPU_COMPLETE)
                     {
                         NtUserCallOneParam(0, DWM_ROUTINE_PRESENTED);
+                        /* A read tells CDD whether the driver can capture, before any client reads;
+                         * one issued before the compositor owns the output finds nothing yet. */
+                        if (screenMirrorNeeded == 0 && screenCaptureProbes < 16)
+                        {
+                            ++screenCaptureProbes;
+                            GetPixel(hdcScreen, 0, 0);
+                        }
                         g_lastFrameQpc = (ULONGLONG)statFrameStart.QuadPart;
                         /* On the GPU path these fields mean clear/context,
                          * window draw/upload, and swap/direct-flip.  Keeping
@@ -4604,6 +4810,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                 {
                     const BYTE *pix;
                     const BYTE *dxpix;
+                    ULONG dxPitch;
                     const ULONG *backdropBase;
                     const RECTL *windowBlurRects = NULL;
                     RECTL Cover;
@@ -4650,8 +4857,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                         DwmStatCounter(&stgA);
                         DwmBlitWindowAnimated((ULONG *)g_compBits, g_W,
                                               cl, ct, cr, cb, pix,
-                                              DwmDxGetSurfaceSnapshot(&wins[i]),
-                                              &wins[i], animatedBackdrop);
+                                              DwmDxGetSurfacePixels(&wins[i], &dxPitch),
+                                              dxPitch, &wins[i], animatedBackdrop);
                         DwmBlitReplaced((ULONG *)g_compBits, g_W, cl, ct, cr, cb, &wins[i]);
                         DwmStatCounter(&stgB);
                         if (g_frameStats)
@@ -4690,7 +4897,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     if (g_frameStats)
                         g_statBlitTicks += (ULONGLONG)(stgA.QuadPart - stgB.QuadPart);
 
-                    dxpix = DwmDxGetSurfaceSnapshot(&wins[i]);
+                    dxpix = DwmDxGetSurfacePixels(&wins[i], &dxPitch);
                     if (dxpix != NULL)
                     {
                         DWM_WIN client = wins[i];
@@ -4703,10 +4910,20 @@ DwmComposeLoop(HANDLE hStopEvent)
                         client.y += wins[i].DxClientY;
                         client.cx = (LONG)wins[i].DxWidth;
                         client.cy = (LONG)wins[i].DxHeight;
-                        client.Stride = wins[i].DxPitch;
+                        client.Stride = dxPitch;
                         if (client.BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT)
                             client.BackdropType = 0;
-                        if (ClipL < ClipR && ClipT < ClipB)
+                        if (ClipL < ClipR && ClipT < ClipB &&
+                            (wins[i].DxSourceWidth != wins[i].DxDrawWidth ||
+                             wins[i].DxSourceHeight != wins[i].DxDrawHeight))
+                        {
+                            DwmBlitScaled((ULONG *)g_compBits, g_W, ClipL, ClipT, ClipR, ClipB,
+                                          dxpix, (LONG)wins[i].DxSourceWidth, (LONG)wins[i].DxSourceHeight,
+                                          dxPitch, client.x - g_originX, client.y - g_originY,
+                                          (LONG)wins[i].DxDrawWidth, (LONG)wins[i].DxDrawHeight,
+                                          255, NULL, NULL, 0);
+                        }
+                        else if (ClipL < ClipR && ClipT < ClipB)
                         {
                             DwmBlitWindowVisible((ULONG *)g_compBits, g_W,
                                                  ClipL, ClipT, ClipR, ClipB, dxpix,
@@ -4769,9 +4986,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                         DptCount(&g_DwmPresentTrace, DPT_FRAME, (ULONGLONG)(pr - pl) * (pb - pt) * 4);
                         for (i = 0; i < hdr->Count; ++i)
                         {
-                            /* Native GPU textures have no linear CPU view.
-                             * A software frame cannot acknowledge their use. */
-                            if (wins[i].DxPitch != 0)
+                            /* A native GPU texture is used only once read back. */
+                            if (DwmDxSurfaceReadBack(&wins[i]))
                                 DwmDxAcknowledgeSurface(&wins[i]);
                         }
                         NtUserCallOneParam(0, DWM_ROUTINE_PRESENTED);

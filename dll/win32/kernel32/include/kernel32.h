@@ -290,7 +290,7 @@ BaseThreadStartup(
     _In_ LPVOID lpParameter);
 
 VOID
-WINAPI
+FASTCALL
 BaseThreadInitThunk(
     _In_ DWORD Unknown,
     _In_ LPTHREAD_START_ROUTINE lpStartAddress,
@@ -312,6 +312,10 @@ BaseProcessStartup(
 PVOID
 WINAPI
 BasepIsRealtimeAllowed(IN BOOLEAN Keep);
+
+BOOLEAN
+WINAPI
+BasepIsValidNumaNode(IN ULONG Node);
 
 VOID
 WINAPI

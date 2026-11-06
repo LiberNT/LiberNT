@@ -1568,6 +1568,9 @@ IopUpdateControlKeyWithResources(
     NTSTATUS Status;
     OBJECT_ATTRIBUTES ObjectAttributes;
 
+    if (DeviceNode->InstancePath.Length == 0)
+        return STATUS_SUCCESS;
+
     /* Open the Enum key */
     Status = IopOpenRegistryKeyEx(&EnumKey, NULL, &EnumRoot, KEY_ENUMERATE_SUB_KEYS);
     if (!NT_SUCCESS(Status))

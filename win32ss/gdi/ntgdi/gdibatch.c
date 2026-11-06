@@ -295,6 +295,40 @@ DxgkEngQueryWindowPresentState(_In_ ULONG_PTR WindowHandle)
 
 NTSTATUS
 NTAPI
+DxgkEngIssueWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _Out_ PDXGKRNL_WINDOW_BLT_TARGET Target)
+{
+    NTSTATUS Status;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    UserEnterExclusive();
+    Status = IntCompositionIssueWindowBltTarget((HWND)WindowHandle, Target);
+    UserLeave();
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+DxgkEngCancelWindowBltTarget(
+    _In_ ULONG_PTR WindowHandle,
+    _In_ ULONGLONG UpdateId)
+{
+    NTSTATUS Status;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    UserEnterExclusive();
+    Status = IntCompositionCancelWindowBltTarget((HWND)WindowHandle, UpdateId);
+    UserLeave();
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 DxgkEngAdmitRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present)
 {
@@ -305,6 +339,23 @@ DxgkEngAdmitRedirectedBltPresent(
 
     UserEnterExclusive();
     Status = IntCompositionAdmitRedirectedBltPresent(Present);
+    UserLeave();
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+DxgkEngQueryRedirectedBltClient(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _Out_ RECT *ClientRect)
+{
+    NTSTATUS Status;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    UserEnterShared();
+    Status = IntCompositionQueryRedirectedBltClient(Present, ClientRect);
     UserLeave();
     return Status;
 }

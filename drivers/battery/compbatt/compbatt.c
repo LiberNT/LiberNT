@@ -190,6 +190,7 @@ CompBattMonitorIrpCompleteWorker(
             DbgPrint("CompBatt: Battery arrived for first time or disappeared (Status 0x%08lx)\n", Status);
 
         BatteryData->Tag = BATTERY_TAG_INVALID;
+        BatteryData->Flags = 0;
 
         /*
          * Invalidate the last read status interrupt time as well since the last
@@ -989,7 +990,7 @@ CompBattQueryStatus(
      */
     CurrentReadTime = KeQueryInterruptTime();
     LastReadTime = CurrentReadTime - DeviceExtension->InterruptTime;
-    if (LastReadTime < COMPBATT_FRESH_STATUS_TIME)
+    if ((DeviceExtension->InterruptTime != 0) && (LastReadTime < COMPBATT_FRESH_STATUS_TIME))
     {
         if (CompBattDebug & COMPBATT_DEBUG_WARN)
             DbgPrint("CompBatt: Composite battery status data is fresh, no need to update it again\n");
@@ -1032,7 +1033,7 @@ CompBattQueryStatus(
         {
             /* Only query new battery status data if it is no longer fresh */
             LastReadTime = CurrentReadTime - BatteryData->InterruptTime;
-            if (LastReadTime > COMPBATT_FRESH_STATUS_TIME)
+            if ((BatteryData->InterruptTime == 0) || (LastReadTime > COMPBATT_FRESH_STATUS_TIME))
             {
                 RtlZeroMemory(&BatteryData->BatteryStatus,
                               sizeof(BatteryData->BatteryStatus));

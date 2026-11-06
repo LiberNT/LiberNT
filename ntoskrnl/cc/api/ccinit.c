@@ -103,6 +103,18 @@ CcNtKickLazyWriter(VOID)
         KeSetEvent(&CcNtLazyWriterEvent, IO_NO_INCREMENT, FALSE);
 }
 
+ULONG
+CcUnmapIdleViews(
+    _In_ SIZE_T Bytes)
+{
+    ULONG64 Views = ((ULONG64)Bytes >> CC_VIEW_SHIFT) + 2;
+
+    if (!CcNtReady)
+        return 0;
+
+    return CcCacheReleaseIdle(&CcNtCache, (ULONG)min(Views, (ULONG64)MAXULONG));
+}
+
 VOID
 CcNtProcessDeferredWrites(VOID)
 {
@@ -341,7 +353,8 @@ CcInitializeCacheManager(VOID)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     ULONG64 PhysicalBytes = (ULONG64)MmNumberOfPhysicalPages << PAGE_SHIFT;
-    ULONG Views = (ULONG)((PhysicalBytes / 2) >> CC_VIEW_SHIFT);
+    ULONG64 ViewBytes = min(PhysicalBytes, MiSpaceFreeBytes(&MiSystem.SystemSpace)) / 2;
+    ULONG Views = (ULONG)min(ViewBytes >> CC_VIEW_SHIFT, (ULONG64)MAXULONG);
     LONG64 DirtyThreshold = (LONG64)(MmNumberOfPhysicalPages / 8);
     HANDLE Handle;
 

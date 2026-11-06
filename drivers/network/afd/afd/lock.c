@@ -200,6 +200,65 @@ AfdCaptureTransferRequest32(ULONG Code, PVOID Destination, const VOID *Source, U
 }
 #endif
 
+BOOLEAN
+AfdCaptureRecvRequest(
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_ KPROCESSOR_MODE Mode,
+    _In_ BOOLEAN Is32Bit,
+    _Out_ PAFD_RECV_INFO Request)
+{
+    ULONG Size = AfdTransferRequestSize(IOCTL_AFD_RECV, Is32Bit);
+    BOOLEAN Captured = TRUE;
+
+    if (!InputBuffer || InputBufferLength < Size)
+        return FALSE;
+
+    _SEH2_TRY
+    {
+        if (Mode != KernelMode)
+            ProbeForRead(InputBuffer, Size, sizeof(ULONG));
+#ifdef _WIN64
+        if (Is32Bit)
+            AfdCaptureTransferRequest32(IOCTL_AFD_RECV, Request, InputBuffer, Size);
+        else
+#endif
+            RtlCopyMemory(Request, InputBuffer, sizeof(*Request));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Captured = FALSE;
+    }
+    _SEH2_END;
+
+    return Captured;
+}
+
+VOID
+AfdReadUserWsaBuf(
+    _In_ PAFD_WSABUF Array,
+    _In_ UINT Index,
+    _In_ KPROCESSOR_MODE Mode,
+    _In_ BOOLEAN Is32Bit,
+    _Out_ PAFD_WSABUF Buffer)
+{
+#ifdef _WIN64
+    if (Is32Bit)
+    {
+        PAFD_WSABUF32 Buffer32 = (PAFD_WSABUF32)Array + Index;
+
+        if (Mode != KernelMode)
+            ProbeForRead(Buffer32, sizeof(*Buffer32), TYPE_ALIGNMENT(AFD_WSABUF32));
+        Buffer->len = Buffer32->len;
+        Buffer->buf = ULongToPtr(Buffer32->buf);
+        return;
+    }
+#endif
+    if (Mode != KernelMode)
+        ProbeForRead(Array + Index, sizeof(*Array), TYPE_ALIGNMENT(AFD_WSABUF));
+    *Buffer = Array[Index];
+}
+
 PVOID GetLockedData(PIRP Irp, PIO_STACK_LOCATION IrpSp)
 {
     ASSERT(Irp->MdlAddress);

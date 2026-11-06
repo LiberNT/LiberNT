@@ -5095,6 +5095,47 @@ static bool xslpattern_collate(const WCHAR *str1, const WCHAR *str2, bool inf, b
     return strict ? ret > 0 : ret >= 0;
 }
 
+static bool xslpattern_equal_boolean(struct xpath_parser_context *ctxt, bool negate, int *result)
+{
+    struct xpath_object *arg1, *arg2, *boolean, *other;
+    bool handled = false;
+
+    arg2 = xpath_pop_value(ctxt);
+    arg1 = xpath_pop_value(ctxt);
+
+    if (arg1 && arg2 && arg1->type != arg2->type &&
+            (arg1->type == _XPATH_BOOLEAN || arg2->type == _XPATH_BOOLEAN))
+    {
+        boolean = arg1->type == _XPATH_BOOLEAN ? arg1 : arg2;
+        other = arg1->type == _XPATH_BOOLEAN ? arg2 : arg1;
+
+        if (other->type == _XPATH_NUMBER)
+        {
+            *result = false;
+            handled = true;
+        }
+        else if (other->type == _XPATH_STRING)
+        {
+            bool equal = !wcscmp(other->stringval, boolean->boolval ? L"1" : L"0");
+
+            *result = negate ? !equal : equal;
+            handled = true;
+        }
+    }
+
+    if (handled)
+    {
+        xpath_object_release(ctxt->context, arg1);
+        xpath_object_release(ctxt->context, arg2);
+    }
+    else
+    {
+        xpath_push_value(ctxt, arg1);
+        xpath_push_value(ctxt, arg2);
+    }
+    return handled;
+}
+
 static bool xslpattern_compare_values(struct xpath_parser_context *ctxt, bool inf, bool strict)
 {
     struct xpath_object *arg1, *arg2, *set;
@@ -5105,6 +5146,15 @@ static bool xslpattern_compare_values(struct xpath_parser_context *ctxt, bool in
 
     arg2 = xpath_pop_value(ctxt);
     arg1 = xpath_pop_value(ctxt);
+
+    if (arg1 && arg2 &&
+            ((arg1->type == _XPATH_BOOLEAN && arg2->type == _XPATH_NUMBER) ||
+             (arg1->type == _XPATH_NUMBER && arg2->type == _XPATH_BOOLEAN)))
+    {
+        xpath_object_release(ctxt->context, arg1);
+        xpath_object_release(ctxt->context, arg2);
+        return false;
+    }
 
     if (arg1 && arg2 && arg2->type == _XPATH_STRING
             && (arg1->type == _XPATH_STRING || arg1->type == _XPATH_NODESET))
@@ -5241,6 +5291,13 @@ static int xpath_comp_op_eval(struct xpath_parser_context *ctxt, struct xpath_st
             if (ctxt->error != XPATH_EXPRESSION_OK) return 0;
             total += xpath_comp_op_eval(ctxt, &comp->steps.values[op->ch2]);
             if (ctxt->error != XPATH_EXPRESSION_OK) return 0;
+#ifdef __REACTOS__
+            if (!ctxt->context->xpath && xslpattern_equal_boolean(ctxt, !op->value, &equal))
+            {
+                xpath_push_value(ctxt, xpath_new_boolean(ctxt, equal));
+                break;
+            }
+#endif
             if (op->value)
                 equal = xpath_equal_values(ctxt);
             else

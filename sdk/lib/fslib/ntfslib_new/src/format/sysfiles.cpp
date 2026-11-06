@@ -293,17 +293,14 @@ FormatWriteVolumeRecord(_In_ PFormatContext Ctx)
         }
     }
 
-    if (LabelLength != 0)
+    if (!FormatAddResident(Ctx,
+                           TypeVolumeName,
+                           NULL,
+                           Ctx->Params->VolumeLabel,
+                           LabelLength * sizeof(WCHAR),
+                           0))
     {
-        if (!FormatAddResident(Ctx,
-                               TypeVolumeName,
-                               NULL,
-                               Ctx->Params->VolumeLabel,
-                               LabelLength * sizeof(WCHAR),
-                               0))
-        {
-            return STATUS_INSUFFICIENT_RESOURCES;
-        }
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     RtlZeroMemory(Information, sizeof(Information));

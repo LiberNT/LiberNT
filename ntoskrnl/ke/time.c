@@ -26,7 +26,7 @@ BOOLEAN KiRelaxedTiming;
 
 /* FUNCTIONS ******************************************************************/
 
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_LONGHORN)
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 VOID
 NTAPI
 KiChargeThreadCycleTime(
@@ -292,7 +292,7 @@ KiUpdateRunTime(IN PKTRAP_FRAME TrapFrame,
         return;
     }
 
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_LONGHORN)
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     /* Charge measured execution against the absolute quantum target. */
     KiChargeThreadCycleTime(Prcb, Thread);
 #endif

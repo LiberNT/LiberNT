@@ -51,6 +51,8 @@ DxgkpContextSyncInitializeCoreObject(
     CoreObject->SemaphoreLimit = SyncObject->SemaphoreLimit;
     CoreObject->StateEvent = &SyncObject->CpuEvent;
     CoreObject->NotificationEvent = SyncObject->CpuNotificationEvent;
+    CoreObject->MutexQueuedOwner = &SyncObject->MutexQueuedOwner;
+    CoreObject->SemaphoreQueuedCount = &SyncObject->SemaphoreQueuedCount;
 }
 
 static NTSTATUS
@@ -89,7 +91,7 @@ DxgkContextSyncCapture(
     DxgkContextSyncCoreInitializeRetention(&Capture->Retention, DxgkpContextSyncReleaseReference, NULL);
     if (Device == NULL || OwnerProcess == NULL || ObjectCount > D3DDDI_MAX_OBJECT_SIGNALED)
         return STATUS_INVALID_PARAMETER;
-    if ((SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) != 0 && ObjectCount != 0)
+    if ((SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) != 0 && (ObjectCount != 0 || PayloadValue == 0))
         return STATUS_INVALID_PARAMETER;
     if ((SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) == 0 && ObjectCount != 0 && ObjectHandles == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -128,7 +130,7 @@ DxgkContextSyncCapture(
             Status = STATUS_ACCESS_DENIED;
             goto Failure;
         }
-        Status = ObReferenceObjectByHandle(EventHandle, EVENT_MODIFY_STATE, *ExEventObjectType, AccessMode, (PVOID *)&Capture->EnqueueEvent, NULL);
+        Status = ObReferenceObjectByHandle(EventHandle, EVENT_ALL_ACCESS, *ExEventObjectType, AccessMode, (PVOID *)&Capture->EnqueueEvent, NULL);
         if (!NT_SUCCESS(Status))
             goto Failure;
         Status = DxgkpContextSyncRetain(Capture, Capture->EnqueueEvent, DxgkContextSyncReferenceEvent);
@@ -141,10 +143,16 @@ DxgkContextSyncCapture(
     }
     for (Index = 0; Index < ObjectCount && Index < RTL_NUMBER_OF(Capture->Objects); ++Index)
     {
-        Status = DxgkpReferenceSyncObjectByHandle(ObjectHandles[Index], OwnerProcess, &Capture->Objects[Index]);
+        D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS ViewFlags;
+        PDXGKRNL_DEVICE ViewDevice;
+
+        Status = DxgkpReferenceSyncObjectView(ObjectHandles[Index], OwnerProcess, &Capture->Objects[Index], &ViewDevice, &ViewFlags);
         if (!NT_SUCCESS(Status))
             goto Failure;
-        if (Capture->Objects[Index]->Device != Device || Capture->Objects[Index]->OwnerProcess != OwnerProcess)
+        /* TODO: legacy objects opened on another device; their state changes serialize per device */
+        if (ViewDevice != Device || Capture->Objects[Index]->Device == NULL ||
+            Capture->Objects[Index]->Device->Adapter != Device->Adapter ||
+            (Capture->Objects[Index]->Device != Device && Capture->Objects[Index]->PublicType != D3DDDI_MONITORED_FENCE))
         {
             DxgkpDereferenceSyncObject(Capture->Objects[Index]);
             Capture->Objects[Index] = NULL;
@@ -159,6 +167,7 @@ DxgkContextSyncCapture(
             goto Failure;
         }
         DxgkpContextSyncInitializeCoreObject(&Capture->CoreObjects[Index], Capture->Objects[Index]);
+        Capture->CoreObjects[Index].ObjectFlags = ViewFlags.Value;
     }
     Status = DxgkContextSyncCoreValidate(Operation, Capture->CoreObjects, ObjectCount, SignalFlags, (SignalFlags & DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT) != 0 ? 0 : PayloadValue, Capture->PerObjectValues ? Capture->PayloadValues : NULL, Capture->EnqueueEvent != NULL);
     if (!NT_SUCCESS(Status))
@@ -275,6 +284,30 @@ DxgkContextSyncExecute(
     KeReleaseSpinLock(&Device->SyncWaitRegistry.Lock, OldIrql);
     KeReleaseSpinLock(&Capture->Lock, CaptureOldIrql);
     return Status;
+}
+
+NTSTATUS
+DxgkContextSyncAdmitWaitState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
+{
+    if (Capture->ObjectCount == 0)
+        return STATUS_SUCCESS;
+    return DxgkContextSyncCoreAdmitWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+}
+
+VOID
+DxgkContextSyncCancelWaitState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
+{
+    if (Capture->ObjectCount != 0)
+        DxgkContextSyncCoreCancelWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+}
+
+VOID
+DxgkContextSyncAdmitSignalState(
+    _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
+{
+    DxgkContextSyncCoreAdmitSignal(Capture->CoreObjects, Capture->ObjectCount);
 }
 
 VOID

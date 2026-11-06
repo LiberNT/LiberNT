@@ -50,6 +50,7 @@
     ROS_SYSCALL_ENTRY( NtCreateProcess ) \
     ROS_SYSCALL_ENTRY( NtCreateProfile ) \
     ROS_SYSCALL_ENTRY( NtCreateResourceManager ) \
+    ROS_SYSCALL_ENTRY( NtCreateTimer2 ) \
     ROS_SYSCALL_ENTRY( NtCreateTransactionManager ) \
     ROS_SYSCALL_ENTRY( NtCreateWaitCompletionPacket ) \
     ROS_SYSCALL_ENTRY( NtCreateWaitablePort ) \

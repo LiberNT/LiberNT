@@ -1429,12 +1429,15 @@ static void check_state_transition(struct testfilter *filter, FILTER_STATE expec
         {
             IPin_QueryPinInfo(filter->pins[i].peer, &info);
             IBaseFilter_GetState(info.pFilter, 0, &state);
-            if (filter->pins[i].dir == PINDIR_OUTPUT)
-                ok(state == expect, "Expected state %d for downstream filter %p, got %d.\n",
-                        expect, info.pFilter, state);
-            else
-                ok(state == filter->state, "Expected state %d for upstream filter %p, got %d.\n",
-                        filter->state, info.pFilter, state);
+            if (info.pFilter != &filter->IBaseFilter_iface)
+            {
+                if (filter->pins[i].dir == PINDIR_OUTPUT)
+                    ok(state == expect, "Expected state %d for downstream filter %p, got %d.\n",
+                            expect, info.pFilter, state);
+                else
+                    ok(state == filter->state, "Expected state %d for upstream filter %p, got %d.\n",
+                            filter->state, info.pFilter, state);
+            }
             IBaseFilter_Release(info.pFilter);
         }
     }
@@ -2370,6 +2373,109 @@ out:
     ok(parser_pins[1].ref == 1, "Got outstanding refcount %ld.\n", parser_pins[1].ref);
 }
 
+static HRESULT render_parser_outputs(const HRESULT *connect_hr, unsigned int count, BOOL *connected)
+{
+    AM_MEDIA_TYPE source_type = {{0}}, parser_type = {{0}};
+    struct testpin source_pin, parser_pins[4], sink_pins[3];
+    struct testfilter source, parser, sink;
+    IFilterGraph2 *graph = create_graph();
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+
+    memset(&source_type.majortype, 0xcc, sizeof(GUID));
+    memset(&parser_type.majortype, 0xdd, sizeof(GUID));
+    testsource_init(&source_pin, &source_type, 1);
+    source_pin.request_mt = &source_type;
+    testfilter_init(&source, &source_pin, 1);
+    testsink_init(&parser_pins[0]);
+    for (i = 0; i < count; ++i)
+    {
+        testsource_init(&parser_pins[1 + i], &parser_type, 1);
+        parser_pins[1 + i].request_mt = &parser_type;
+        parser_pins[1 + i].Connect_hr = connect_hr[i];
+        testsink_init(&sink_pins[i]);
+        sink_pins[i].accept_mt = &parser_type;
+    }
+    testfilter_init(&parser, parser_pins, 1 + count);
+    testfilter_init(&sink, sink_pins, count);
+
+    IFilterGraph2_AddFilter(graph, &source.IBaseFilter_iface, NULL);
+    IFilterGraph2_AddFilter(graph, &parser.IBaseFilter_iface, NULL);
+    IFilterGraph2_AddFilter(graph, &sink.IBaseFilter_iface, NULL);
+
+    hr = IFilterGraph2_Render(graph, &source_pin.IPin_iface);
+    for (i = 0; i < count; ++i)
+        connected[i] = !!parser_pins[1 + i].peer;
+
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+    return hr;
+}
+
+static void test_graph_builder_render_errors(void)
+{
+    static const HRESULT ok_nah_ok[] = {S_OK, VFW_E_NO_AUDIO_HARDWARE, S_OK};
+    static const HRESULT fail_nah_ok[] = {E_FAIL, VFW_E_NO_AUDIO_HARDWARE, S_OK};
+    static const HRESULT ok_nah_fail[] = {S_OK, VFW_E_NO_AUDIO_HARDWARE, E_FAIL};
+    static const HRESULT ok_fail[] = {S_OK, E_FAIL};
+    static const HRESULT errors[] = {E_FAIL, VFW_E_UNSUPPORTED_VIDEO, VFW_E_NO_TRANSPORT, VFW_E_NO_AUDIO_HARDWARE};
+    static const HRESULT expect[] = {VFW_E_CANNOT_RENDER, VFW_E_UNSUPPORTED_VIDEO, VFW_E_NO_TRANSPORT, VFW_E_NO_AUDIO_HARDWARE};
+    AM_MEDIA_TYPE source_type = {{0}}, sink_type = {{0}};
+    struct testpin source_pin, sink_pin;
+    struct testfilter source, sink;
+    IFilterGraph2 *graph;
+    BOOL connected[3];
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+
+    hr = render_parser_outputs(ok_nah_ok, 3, connected);
+    ok(hr == VFW_S_AUDIO_NOT_RENDERED, "Got hr %#lx.\n", hr);
+    ok(connected[0] && !connected[1] && connected[2], "Got connections %d %d %d.\n",
+            connected[0], connected[1], connected[2]);
+
+    hr = render_parser_outputs(fail_nah_ok, 3, connected);
+    ok(hr == VFW_S_AUDIO_NOT_RENDERED, "Got hr %#lx.\n", hr);
+    ok(!connected[0] && !connected[1] && connected[2], "Got connections %d %d %d.\n",
+            connected[0], connected[1], connected[2]);
+
+    hr = render_parser_outputs(ok_nah_fail, 3, connected);
+    ok(hr == VFW_S_AUDIO_NOT_RENDERED, "Got hr %#lx.\n", hr);
+    ok(connected[0] && !connected[1] && !connected[2], "Got connections %d %d %d.\n",
+            connected[0], connected[1], connected[2]);
+
+    hr = render_parser_outputs(ok_fail, 2, connected);
+    ok(hr == VFW_S_PARTIAL_RENDER, "Got hr %#lx.\n", hr);
+    ok(connected[0] && !connected[1], "Got connections %d %d.\n", connected[0], connected[1]);
+
+    for (i = 0; i < ARRAY_SIZE(errors); ++i)
+    {
+        winetest_push_context("Error %#lx", errors[i]);
+
+        graph = create_graph();
+        memset(&source_type.majortype, 0xcc, sizeof(GUID));
+        memset(&sink_type.majortype, 0xdd, sizeof(GUID));
+        testsource_init(&source_pin, &source_type, 1);
+        source_pin.Connect_hr = errors[i];
+        testfilter_init(&source, &source_pin, 1);
+        testsink_init(&sink_pin);
+        sink_pin.accept_mt = &sink_type;
+        testfilter_init(&sink, &sink_pin, 1);
+        IFilterGraph2_AddFilter(graph, &source.IBaseFilter_iface, NULL);
+        IFilterGraph2_AddFilter(graph, &sink.IBaseFilter_iface, NULL);
+
+        hr = IFilterGraph2_Render(graph, &source_pin.IPin_iface);
+        ok(hr == expect[i], "Got hr %#lx.\n", hr);
+        ok(!source_pin.peer, "Got peer %p.\n", source_pin.peer);
+
+        ref = IFilterGraph2_Release(graph);
+        ok(!ref, "Got outstanding refcount %ld.\n", ref);
+
+        winetest_pop_context();
+    }
+}
+
 static void test_graph_builder_connect(void)
 {
     static const GUID parser1_clsid = {0x12345678};
@@ -2385,6 +2491,7 @@ static void test_graph_builder_connect(void)
     REGPINTYPES regtypes = {0};
     REGFILTER2 regfilter = {0};
     IFilterMapper2 *mapper;
+    IMediaControl *control;
     DWORD cookie1, cookie2;
     HRESULT hr;
     ULONG ref;
@@ -2605,6 +2712,13 @@ static void test_graph_builder_connect(void)
     hr = IFilterGraph2_Connect(graph, &parser1_pins[1].IPin_iface, &parser1_pins[0].IPin_iface);
     todo_wine ok(hr == S_OK, "Got hr %#lx.\n", hr);
     parser1_pins[0].QueryInternalConnections_hr = E_NOTIMPL;
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IMediaControl_Release(control);
 
     ref = IFilterGraph2_Release(graph);
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
@@ -3724,6 +3838,26 @@ static void test_filter_state(void)
             "Got time %I64d.\n", source.start_time);
     ok(sink.start_time == source.start_time, "Expected time %I64d, got %I64d.\n",
             source.start_time, sink.start_time);
+    ok(source.start_time == 100 * 10000, "Got time %I64d.\n", source.start_time);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    Sleep(100);
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(source.start_time == 200 * 10000, "Got time %I64d.\n", source.start_time);
+
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(source.start_time == 300 * 10000, "Got time %I64d.\n", source.start_time);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(source.start_time == 100 * 10000, "Got time %I64d.\n", source.start_time);
 
     hr = IMediaControl_Stop(control);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
@@ -3758,6 +3892,20 @@ static void test_filter_state(void)
     hr = IMediaControl_GetState(control, 0, &state);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     ok(state == State_Stopped, "Got state %lu.\n", state);
+
+    source.state_hr = E_FAIL;
+    hr = IMediaControl_Pause(control);
+    ok(hr == E_FAIL, "Got hr %#lx.\n", hr);
+    source.state_hr = S_OK;
+    check_filter_state(graph, State_Stopped);
+
+    hr = IMediaControl_Run(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    source.state_hr = E_FAIL;
+    hr = IMediaControl_Pause(control);
+    ok(hr == E_FAIL, "Got hr %#lx.\n", hr);
+    source.state_hr = S_OK;
+    check_filter_state(graph, State_Stopped);
 
     /* Renderers are expected to block completing a state change into paused
      * until they receive a sample. Because the graph can transition from
@@ -4780,6 +4928,15 @@ static void test_graph_seeking(void)
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     todo_wine ok(IsEqualGUID(&format, &testguid), "Got format %s.\n", wine_dbgstr_guid(&format));
 
+    filter1.support_testguid = FALSE;
+    hr = IMediaSeeking_SetTimeFormat(seeking, &testguid);
+    ok(hr == E_FAIL, "Got hr %#lx.\n", hr);
+    hr = IMediaSeeking_GetTimeFormat(seeking, &format);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&format, &testguid), "Got format %s.\n", wine_dbgstr_guid(&format));
+    ok(IsEqualGUID(&filter1.time_format, &testguid), "Got format %s.\n", debugstr_guid(&filter1.time_format));
+    filter1.support_testguid = TRUE;
+
     hr = IMediaSeeking_QueryPreferredFormat(seeking, &format);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     ok(IsEqualGUID(&format, &TIME_FORMAT_MEDIA_TIME), "Got format %s.\n", wine_dbgstr_guid(&format));
@@ -5026,6 +5183,24 @@ static void test_graph_seeking(void)
     hr = IMediaSeeking_GetRate(seeking, &rate);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
     todo_wine ok(rate == -1.0, "Got rate %.16e.\n", rate);
+
+    filter1.seek_rate = filter2.seek_rate = 0.5;
+    hr = IMediaSeeking_SetRate(seeking, -1.0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(filter1.seek_rate == 0.5, "Got rate %.16e.\n", filter1.seek_rate);
+    ok(filter2.seek_rate == 0.5, "Got rate %.16e.\n", filter2.seek_rate);
+
+    hr = IMediaSeeking_SetRate(seeking, 0.0);
+    ok(hr == E_INVALIDARG, "Got hr %#lx.\n", hr);
+    ok(filter1.seek_rate == 0.5, "Got rate %.16e.\n", filter1.seek_rate);
+
+    hr = IMediaSeeking_GetAvailable(seeking, &earliest, &latest);
+    ok(hr == E_NOTIMPL, "Got hr %#lx.\n", hr);
+
+    time = 0xdeadbeef;
+    hr = IMediaSeeking_GetPreroll(seeking, &time);
+    ok(hr == E_NOTIMPL, "Got hr %#lx.\n", hr);
+    ok(!time, "Got time %I64d.\n", time);
 
     hr = IMediaSeeking_SetRate(seeking, 1.0);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
@@ -5983,6 +6158,36 @@ static void test_events(void)
     hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
     todo_wine ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
 
+    hr = IMediaEventSink_Notify(media_event_sink, EC_USER + 1, 0, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IMediaEventSink_Notify(media_event_sink, EC_COMPLETE, S_OK,
+            (LONG_PTR)&filter.IBaseFilter_iface);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == E_ABORT, "Got hr %#lx.\n", hr);
+    ok(!code, "Got code %#lx.\n", code);
+
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(code == EC_COMPLETE, "Got code %#lx.\n", code);
+
+    check_events(media_event, 0, 0);
+
+    hr = IMediaEventSink_Notify(media_event_sink, EC_ERRORABORT, E_FAIL, 0);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(code == EC_ERRORABORT, "Got code %#lx.\n", code);
+
+    code = 0xdeadbeef;
+    hr = IMediaEventEx_WaitForCompletion(media_event, 0, &code);
+    ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+    ok(!code, "Got code %#lx.\n", code);
+
     hr = IMediaEventEx_SetNotifyFlags(media_event, AM_MEDIAEVENT_NONOTIFY);
     ok(hr == S_OK, "Got hr %#lx.\n", hr);
 
@@ -6086,6 +6291,59 @@ static void test_event_dispatch(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static void test_default_handling(void)
+{
+    static const struct
+    {
+        LONG code;
+        HRESULT hr;
+    }
+    tests[] =
+    {
+        {0, E_INVALIDARG},
+        {EC_COMPLETE, S_OK},
+        {EC_USERABORT, E_INVALIDARG},
+        {EC_ERRORABORT, E_INVALIDARG},
+        {EC_REPAINT, S_OK},
+        {EC_CLOCK_CHANGED, E_INVALIDARG},
+        {EC_PAUSED, E_INVALIDARG},
+        {EC_ACTIVATE, S_OK},
+        {EC_NEED_RESTART, S_OK},
+        {EC_WINDOW_DESTROYED, S_OK},
+        {EC_DISPLAY_CHANGED, S_OK},
+        {EC_STARVATION, S_OK},
+        {EC_STREAM_CONTROL_STOPPED, E_INVALIDARG},
+        {EC_STATE_CHANGE, S_OK},
+        {EC_USER, E_INVALIDARG},
+        {0x12345, E_INVALIDARG},
+    };
+    IFilterGraph2 *graph = create_graph();
+    IMediaEventEx *events;
+    unsigned int i;
+    HRESULT hr;
+    ULONG ref;
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaEventEx, (void **)&events);
+
+    for (i = 0; i < ARRAY_SIZE(tests); ++i)
+    {
+        winetest_push_context("Code %#lx", tests[i].code);
+        hr = IMediaEventEx_RestoreDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        hr = IMediaEventEx_CancelDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        hr = IMediaEventEx_CancelDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        hr = IMediaEventEx_RestoreDefaultHandling(events, tests[i].code);
+        ok(hr == tests[i].hr, "Got hr %#lx.\n", hr);
+        winetest_pop_context();
+    }
+
+    IMediaEventEx_Release(events);
+    ref = IFilterGraph2_Release(graph);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(filtergraph)
 {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -6097,6 +6355,7 @@ START_TEST(filtergraph)
     test_render_run(L"test.wav", TRUE, FALSE);
     test_enum_filters();
     test_graph_builder_render();
+    test_graph_builder_render_errors();
     test_graph_builder_connect();
     test_aggregation();
     test_control_delegation();
@@ -6114,6 +6373,7 @@ START_TEST(filtergraph)
     test_autoplug_uyvy();
     test_set_notify_flags();
     test_events();
+    test_default_handling();
     test_event_dispatch();
 
     CoUninitialize();

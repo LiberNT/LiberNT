@@ -1331,6 +1331,15 @@ SectionPlaceholderView(void)
     Base = Place;
     Size = 0;
     CHECK(NT_SUCCESS(MiFreeVirtualMemory(&A, &Base, &Size, MI_MEM_RELEASE)));
+
+    Base = Place + PAGE_SIZE;
+    ViewSize = PAGE_SIZE;
+    CHECK(MiMapViewEx(&A, Segment, &Base, 0, &ViewSize, MI_PROT_READWRITE, 0, ~0ULL, MI_PROT_READWRITE, FALSE) ==
+          STATUS_INVALID_PARAMETER);
+    CHECK(NT_SUCCESS(MiMapViewEx(&A, Segment, &Base, 0, &ViewSize, MI_PROT_READWRITE, MI_MEM_PAGE_GRANULAR, ~0ULL,
+                                 MI_PROT_READWRITE, FALSE)));
+    CHECK(Base == Place + PAGE_SIZE && ViewSize == PAGE_SIZE);
+    CHECK(NT_SUCCESS(MiUnmapView(&A, Base)));
     MiSegmentDereference(Segment);
     SpaceDestroy(&World, 0, &A);
     WorldExpectClean(&World, 256);
@@ -1650,6 +1659,48 @@ SectionImageWindow(void)
 
 static
 void
+SectionImageWindowTopDown(void)
+{
+    const ULONG64 G = MI_ALLOCATION_GRANULARITY;
+    MI_IMAGE_WINDOW Window, Small;
+    ULONG64 Lowest = 0x50000000ULL, Highest = 0x77FFFFFFULL;
+    ULONG64 Top, A, B, C, D, E;
+
+    MiImageWindowInitialize(&Window, Lowest, Highest);
+    CHECK(Window.SlotCount == 0x2800);
+    Top = Window.SlotCount - 0xCC;
+
+    CHECK(MiImageWindowReserveTopDown(&Window, 0x247000, Top, &A) && A == Lowest + (Top - 37) * G);
+    CHECK(MiImageWindowReserveTopDown(&Window, 3 * G, Top, &B) && B == A - 3 * G);
+    CHECK(MiImageWindowReserveTopDown(&Window, G + 1, Top, &C) && C == B - 2 * G);
+    MiImageWindowRelease(&Window, B, 3 * G);
+    CHECK(MiImageWindowReserveTopDown(&Window, 2 * G, Top, &D) && D == B + G);
+    CHECK(MiImageWindowReserveTopDown(&Window, G, Top, &E) && E == B);
+    CHECK(MiImageWindowReserveTopDown(&Window, G, Window.SlotCount + 5, &E) &&
+          E == Lowest + (Window.SlotCount - 1) * G);
+    CHECK(E + G - 1 == Highest);
+    CHECK(!MiImageWindowReserveTopDown(&Window, 0, Top, &E));
+    CHECK(!MiImageWindowReserveTopDown(&Window, (Window.SlotCount + 1) * G, Top, &E));
+    MiImageWindowUninitialize(&Window);
+
+    MiImageWindowInitialize(&Small, Lowest, Lowest + 4 * G - 1);
+    CHECK(MiImageWindowReserveTopDown(&Small, 2 * G, 1, &A) && A == Lowest + 2 * G);
+    CHECK(MiImageWindowReserveTopDown(&Small, G, 1, &B) && B == Lowest);
+    CHECK(MiImageWindowReserveTopDown(&Small, G, 1, &C) && C == Lowest + G);
+    CHECK(!MiImageWindowReserveTopDown(&Small, G, 4, &D));
+    MiImageWindowUninitialize(&Small);
+
+    MiImageWindowInitialize(&Small, Lowest, Lowest + 200 * G - 1);
+    CHECK(MiImageWindowReserveTopDown(&Small, 128 * G, 192, &A) && A == Lowest + 64 * G);
+    CHECK(MiImageWindowReserveTopDown(&Small, G, 192, &B) && B == Lowest + 63 * G);
+    CHECK(MiImageWindowReserveTopDown(&Small, 8 * G, 200, &C) && C == Lowest + 192 * G);
+    CHECK(MiImageWindowReserveTopDown(&Small, 63 * G, 200, &D) && D == Lowest);
+    CHECK(!MiImageWindowReserveTopDown(&Small, G, 200, &E));
+    MiImageWindowUninitialize(&Small);
+}
+
+static
+void
 SectionExecCleanFrames(void)
 {
     TEST_WORLD World;
@@ -1775,6 +1826,7 @@ TestSection(void)
     SectionUncachedLargePages();
     SectionUncachedPageFile();
     SectionImageWindow();
+    SectionImageWindowTopDown();
     SectionExecCleanFrames();
 }
 

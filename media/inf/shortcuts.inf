@@ -33,11 +33,13 @@ QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
 [AccessoriesShortcuts]
 %SystemRoot%\system32\calc.exe, %CALC_TITLE%, %CALC_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\terminal.exe, %TERMINAL_TITLE%, %TERMINAL_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
+%SystemRoot%\system32\cmd.exe, %CMD_TITLE%, %CMD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\notepad.exe, %NOTEPAD_TITLE%, %NOTEPAD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\wordpad.exe, %WORDPAD_TITLE%, %WORDPAD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\mspaint.exe, %MSPAINT_TITLE%, %MSPAINT_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 
 [SystemToolsShortcuts]
+%SystemRoot%\system32\camera.exe, %CAMERA_TITLE%, %CAMERA_DESC%, 0
 %SystemRoot%\system32\charmap.exe, %CHARMAP_TITLE%, %CHARMAP_DESC%, 0
 %SystemRoot%\system32\clipbrd.exe, %CLIPBRD_TITLE%, %CLIPBRD_DESC%, 0
 %SystemRoot%\system32\kbswitch.exe, %KBSWITCH_TITLE%, %KBSWITCH_DESC%, 0
@@ -124,6 +126,8 @@ WORDPAD_TITLE=WordPad
 WORDPAD_DESC=Launch Document Editor
 MSPAINT_TITLE=Paint
 MSPAINT_DESC=Launch Paint
+CAMERA_TITLE=Camera
+CAMERA_DESC=Camera
 CHARMAP_TITLE=Character Map
 CHARMAP_DESC=Character Map
 CLIPBRD_TITLE=Clipboard Viewer

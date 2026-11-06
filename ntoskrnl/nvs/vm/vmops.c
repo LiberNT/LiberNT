@@ -296,7 +296,10 @@ MiSetPrivatePageProtectionAt(
                       (MiArchPteIsDirty(Pte) ? MI_LEAF_DIRTY : 0);
 
         if (MiArchPteIsDirty(Pte))
+        {
             MiPfnSetModified(&System->Pfn, Frame);
+            MiWriteWatchNoteWriteLocked(Space, VirtualAddress);
+        }
 
         if (!(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE))
             Entry->OriginalPte = MiSoftWithProtection(Entry->OriginalPte, Protection);
@@ -515,6 +518,29 @@ MiSpaceFindEmptyRange(
 
     return MiVadFindEmptyRangeEx(&Space->VadRoot, PageCount, Alignment, Lowest, HighestVpn,
                                  TopDown, StartingVpn);
+}
+
+ULONG64
+MiSpaceFreeBytes(
+    _Inout_ PMI_ADDRESS_SPACE Space)
+{
+    ULONG64 Next = Space->LowestVa >> PAGE_SHIFT;
+    ULONG64 FreePages = 0;
+    PMI_VAD_NODE Node;
+
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    for (Node = MiVadFirst(&Space->VadRoot); Node != NULL; Node = MiVadNext(Node))
+    {
+        if (Node->StartingVpn > Next)
+            FreePages += Node->StartingVpn - Next;
+        if (Node->EndingVpn + 1 > Next)
+            Next = Node->EndingVpn + 1;
+    }
+    if ((Space->HighestVa >> PAGE_SHIFT) + 1 > Next)
+        FreePages += (Space->HighestVa >> PAGE_SHIFT) + 1 - Next;
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+
+    return FreePages << PAGE_SHIFT;
 }
 
 static

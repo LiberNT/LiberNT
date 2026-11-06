@@ -1,0 +1,81 @@
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index 58551b652..6d879f2e6 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -375,6 +375,27 @@ static const uint8_t tailMergeRISCV64[] = {
+     0x67, 0x80, 0x02, 0x00, // jr   t0
+ };
+ 
++// RVUW version 1 record for tailMergeRISCV64, as the RISC-V assembler emits it
++// for the same instructions with .seh_set_cfa x2, 144 after the stack
++// allocation, .seh_save_gpr x1, -80 after the ra store, and an epilogue scope
++// covering the ra reload, the stack release and the jump.
++static const uint8_t tailMergeUnwindInfoRISCV64[] = {
++    0x52, 0x56, 0x55, 0x57, 0x01, 0x00, 0x20, 0x00, // "RVUW", version 1, header 32
++    0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // record size 80, no flags
++    0x48, 0x00, 0x00, 0x00, 0x70, 0xff, 0xff, 0xff, // prologue end 0x48, frame -144
++    0x02, 0x00, 0x01, 0x00, 0x02, 0x00, 0x01, 0x00, // 2 prologue codes, 1 epilogue
++                                                    // scope, 2 epilogue codes,
++                                                    // integer state
++    0x04, 0x00, 0x00, 0x00, 0x81, 0x80, 0x04, 0x00, // 0x04: set_cfa x2, 144
++    0x08, 0x00, 0x00, 0x00, 0x42, 0x80, 0xfd, 0xff, // 0x08: save_gpr x1, -80
++    0xa0, 0x00, 0x00, 0x00, 0xac, 0x00, 0x00, 0x00, // epilogue 0xa0-0xac,
++    0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, // codes 0-1
++    0x04, 0x00, 0x00, 0x00, 0x43, 0x00, 0x00, 0x00, // +0x04: same_gpr x1
++    0x08, 0x00, 0x00, 0x00, 0x81, 0x00, 0x00, 0x00, // +0x08: set_cfa x2, 0
++};
++static_assert(sizeof(tailMergeRISCV64) == 43 * 4,
++              "tailMergeUnwindInfoRISCV64 describes 43 instructions");
++
+ static const uint8_t tailMergeARM64[] = {
+     0xfd, 0x7b, 0xb2, 0xa9, // stp     x29, x30, [sp, #-224]!
+     0xfd, 0x03, 0x00, 0x91, // mov     x29, sp
+@@ -673,6 +694,37 @@ public:
+   }
+ };
+ 
++class TailMergePDataChunkRISCV64 : public NonSectionChunk {
++public:
++  TailMergePDataChunkRISCV64(Chunk *tm, Chunk *unwind) : tm(tm), unwind(unwind) {
++    setAlignment(4);
++  }
++
++  size_t getSize() const override { return 3 * sizeof(uint32_t); }
++  MachineTypes getMachine() const override { return RISCV64; }
++
++  void writeTo(uint8_t *buf) const override {
++    write32le(buf + 0, tm->getRVA());
++    write32le(buf + 4, tm->getRVA() + tm->getSize());
++    write32le(buf + 8, unwind->getRVA());
++  }
++
++  Chunk *tm = nullptr;
++  Chunk *unwind = nullptr;
++};
++
++class TailMergeUnwindInfoRISCV64 : public NonSectionChunk {
++public:
++  TailMergeUnwindInfoRISCV64() { setAlignment(4); }
++
++  size_t getSize() const override { return sizeof(tailMergeUnwindInfoRISCV64); }
++  MachineTypes getMachine() const override { return RISCV64; }
++
++  void writeTo(uint8_t *buf) const override {
++    memcpy(buf, tailMergeUnwindInfoRISCV64, sizeof(tailMergeUnwindInfoRISCV64));
++  }
++};
++
+ class ThunkChunkRISCV64 : public NonSectionCodeChunk {
+ public:
+   ThunkChunkRISCV64(Defined *i, Chunk *tm) : imp(i), tailMerge(tm) {
+@@ -1334,6 +1386,10 @@ Chunk *DelayLoadContents::newTailMergePDataChunk(SymbolTable &symtab,
+     if (!symtab.tailMergeUnwindInfoChunk)
+       symtab.tailMergeUnwindInfoChunk = make<TailMergeUnwindInfoARM64>();
+     return make<TailMergePDataChunkARM64>(tm, symtab.tailMergeUnwindInfoChunk);
++  case RISCV64:
++    if (!symtab.tailMergeUnwindInfoChunk)
++      symtab.tailMergeUnwindInfoChunk = make<TailMergeUnwindInfoRISCV64>();
++    return make<TailMergePDataChunkRISCV64>(tm, symtab.tailMergeUnwindInfoChunk);
+     // FIXME: Add support for other architectures.
+   default:
+     return nullptr; // Just don't generate unwind info.

@@ -136,12 +136,34 @@ LibTCPRecved(PCONNECTION_ENDPOINT Connection, u32_t Length, const int safe)
     UNLOCK_TCPIP_CORE();
 }
 
-NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHAR RecvBuffer, UINT RecvLen, UINT *Received, const int safe)
+VOID
+LibTCPRecheckReceive(PCONNECTION_ENDPOINT Connection)
+{
+    LOCK_TCPIP_CORE();
+    TCPRecvEventHandler(Connection);
+    UNLOCK_TCPIP_CORE();
+}
+
+VOID
+LibTCPRecheckSend(PCONNECTION_ENDPOINT Connection)
+{
+    PTCP_PCB pcb;
+
+    LOCK_TCPIP_CORE();
+    pcb = Connection->SocketContext;
+    if (pcb && tcp_sndbuf(pcb))
+        TCPSendEventHandler(Connection, tcp_sndbuf(pcb));
+    UNLOCK_TCPIP_CORE();
+}
+
+NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PMDL RecvMdl, UINT *Received, const int safe)
 {
     PQUEUE_ENTRY qp;
     struct pbuf* p;
     NTSTATUS Status = STATUS_SUCCESS;
     UINT ReadLength, PayloadLength, Offset, Copied;
+    UINT RecvLen = MmGetMdlByteCount(RecvMdl);
+    PUCHAR RecvBuffer;
     BOOLEAN AtMark;
 
     (*Received) = 0;
@@ -150,6 +172,13 @@ NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHA
 
     if (!IsListEmpty(&Connection->PacketQueue))
     {
+        RecvBuffer = MmGetSystemAddressForMdlSafe(RecvMdl, NormalPagePriority);
+        if (!RecvBuffer)
+        {
+            UnlockObject(Connection);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
         while ((qp = LibTCPDequeuePacket(Connection)) != NULL)
         {
             p = qp->p;
@@ -418,11 +447,15 @@ InternalPendingAcceptRecvEventHandler(void *arg,
                                       struct pbuf *p,
                                       const err_t err)
 {
-    UNREFERENCED_PARAMETER(arg);
+    PTCP_PENDING_ACCEPT Pending = arg;
+
     UNREFERENCED_PARAMETER(pcb);
 
     if (p)
         return ERR_MEM;
+
+    if (Pending && err == ERR_OK)
+        Pending->FinReceived = TRUE;
 
     return err;
 }
@@ -463,6 +496,7 @@ LibTCPDeferAcceptLocked(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb)
 
     Pending->Listener = Connection;
     Pending->SocketContext = pcb;
+    Pending->FinReceived = FALSE;
     ReferenceObject(Connection);
     InsertTailList(&Connection->PendingAccepts, &Pending->Entry);
 
@@ -502,6 +536,8 @@ LibTCPDrainPendingAcceptCallback(void *arg)
     if (Status == STATUS_SUCCESS)
     {
         tcp_backlog_accepted(pcb);
+        if (Pending->FinReceived && pcb->callback_arg)
+            InternalRecvEventHandler(pcb->callback_arg, pcb, NULL, ERR_OK);
     }
     else if (Status != STATUS_PENDING)
     {

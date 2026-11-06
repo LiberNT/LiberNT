@@ -110,6 +110,7 @@ START_TEST(PsPropertyThread)
     PFN_PS_SET_THREAD_PROPERTY pSet = TestPsGetRoutine(L"PsSetThreadProperty");
     PETHREAD Thread = PsGetCurrentThread();
     TEST_PS_OBJECT Event1, Event2;
+    NTSTATUS Status;
 
     if (!pGet || !pSet)
     {
@@ -127,26 +128,37 @@ START_TEST(PsPropertyThread)
 
     ok_eq_pointer(pGet(Thread, TEST_KEY_1, 0), NULL);
 
-    ok_eq_hex(pSet(Thread, TEST_KEY_1, Event1.Object), STATUS_SUCCESS);
+    Status = pSet(Thread, TEST_KEY_1, Event1.Object);
+
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(TestPsDelta(&Event1), 1);
     TestPsCheckGet(pGet(Thread, TEST_KEY_1, 0), &Event1, 1);
     TestPsCheckGet(pGet(Thread, TEST_KEY_1, 1), &Event1, 1);
 
-    ok_eq_hex(pSet(Thread, TEST_KEY_2, Event2.Object), STATUS_SUCCESS);
+    Status = pSet(Thread, TEST_KEY_2, Event2.Object);
+
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(TestPsDelta(&Event2), 1);
     TestPsCheckGet(pGet(Thread, TEST_KEY_2, 0), &Event2, 1);
 
-    ok_eq_hex(pSet(Thread, TEST_KEY_1, Event2.Object), STATUS_OBJECT_NAME_COLLISION);
+    Status = pSet(Thread, TEST_KEY_1, Event2.Object);
+
+    ok_eq_hex(Status, STATUS_OBJECT_NAME_COLLISION);
     ok_eq_long(TestPsDelta(&Event1), 1);
     ok_eq_long(TestPsDelta(&Event2), 1);
     TestPsCheckGet(pGet(Thread, TEST_KEY_1, 0), &Event1, 1);
 
-    ok_eq_hex(pSet(Thread, TEST_KEY_1, NULL), STATUS_SUCCESS);
+    Status = pSet(Thread, TEST_KEY_1, NULL);
+
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(TestPsDelta(&Event1), 0);
     ok_eq_pointer(pGet(Thread, TEST_KEY_1, 0), NULL);
-    ok_eq_hex(pSet(Thread, TEST_KEY_1, NULL), STATUS_SUCCESS);
+    Status = pSet(Thread, TEST_KEY_1, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
 
-    ok_eq_hex(pSet(Thread, TEST_KEY_2, NULL), STATUS_SUCCESS);
+    Status = pSet(Thread, TEST_KEY_2, NULL);
+
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(TestPsDelta(&Event2), 0);
     ok_eq_pointer(pGet(Thread, TEST_KEY_2, 0), NULL);
 
@@ -285,20 +297,28 @@ START_TEST(PsPropertyJob)
 
     ok_eq_pointer(pGet(Job, TEST_KEY_1), NULL);
 
-    ok_eq_hex(pSet(Job, TEST_KEY_1, Event1.Object), STATUS_SUCCESS);
+    Status = pSet(Job, TEST_KEY_1, Event1.Object);
+
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(TestPsDelta(&Event1), 1);
     TestPsCheckGet(pGet(Job, TEST_KEY_1), &Event1, 1);
 
-    ok_eq_hex(pSet(Job, TEST_KEY_1, Event2.Object), STATUS_OBJECT_NAME_COLLISION);
+    Status = pSet(Job, TEST_KEY_1, Event2.Object);
+
+    ok_eq_hex(Status, STATUS_OBJECT_NAME_COLLISION);
     ok_eq_long(TestPsDelta(&Event1), 1);
     ok_eq_long(TestPsDelta(&Event2), 0);
     TestPsCheckGet(pGet(Job, TEST_KEY_1), &Event1, 1);
 
-    ok_eq_hex(pSet(Job, TEST_KEY_1, NULL), STATUS_SUCCESS);
+    Status = pSet(Job, TEST_KEY_1, NULL);
+
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(TestPsDelta(&Event1), 0);
     ok_eq_pointer(pGet(Job, TEST_KEY_1), NULL);
 
-    ok_eq_hex(pSet(Job, TEST_KEY_2, Event2.Object), STATUS_SUCCESS);
+    Status = pSet(Job, TEST_KEY_2, Event2.Object);
+
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(TestPsDelta(&Event2), 1);
 
     ObDereferenceObject(Job);

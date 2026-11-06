@@ -60,6 +60,7 @@ list(APPEND SOURCE
     redirection.c
     composition_frame.c
     ntgdi_exports.c
+    outputdupl.c
     sync.c
     keyedmutex.c
     overlay.c

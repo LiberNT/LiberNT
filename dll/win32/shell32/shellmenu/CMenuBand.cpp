@@ -771,20 +771,21 @@ HRESULT STDMETHODCALLTYPE CMenuBand::IsWindowOwner(HWND hWnd)
 
 HRESULT CMenuBand::_CallCBWithItemId(UINT id, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    return _CallCB(uMsg, wParam, lParam, id);
+    return _CallCB(uMsg, wParam, lParam, id, NULL, SMDM_HMENU);
 }
 
 HRESULT CMenuBand::_CallCBWithItemPidl(LPITEMIDLIST pidl, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    return _CallCB(uMsg, wParam, lParam, 0, pidl);
+    return _CallCB(uMsg, wParam, lParam, 0, pidl, SMDM_SHELLFOLDER);
 }
 
-HRESULT CMenuBand::_CallCB(UINT uMsg, WPARAM wParam, LPARAM lParam, UINT id, LPITEMIDLIST pidl)
+HRESULT CMenuBand::_CallCB(UINT uMsg, WPARAM wParam, LPARAM lParam, UINT id, LPITEMIDLIST pidl, DWORD dwMask)
 {
     if (!m_psmc)
         return S_FALSE;
 
     SMDATA smData = { 0 };
+    smData.dwMask = dwMask;
     smData.punk = static_cast<IShellMenu2*>(this);
     smData.uId = id;
     smData.uIdParent = m_uId;

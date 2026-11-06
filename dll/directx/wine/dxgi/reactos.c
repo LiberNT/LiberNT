@@ -13,13 +13,62 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dxgi);
 
-HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,
-        UINT *wined3d_output_idx)
+static BOOL dxgi_luid_equal(const LUID *a, const LUID *b)
+{
+    return a->LowPart == b->LowPart && a->HighPart == b->HighPart;
+}
+
+static BOOL dxgi_get_wddm_display_owner(const WCHAR *device_name, LUID *owner)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME open_adapter;
+    D3DKMT_CLOSEADAPTER close_adapter;
+
+    memset(&open_adapter, 0, sizeof(open_adapter));
+    lstrcpynW(open_adapter.DeviceName, device_name, ARRAY_SIZE(open_adapter.DeviceName));
+    if (!NT_SUCCESS(D3DKMTOpenAdapterFromGdiDisplayName(&open_adapter)))
+        return FALSE;
+    close_adapter.hAdapter = open_adapter.hAdapter;
+    D3DKMTCloseAdapter(&close_adapter);
+    *owner = open_adapter.AdapterLuid;
+    return TRUE;
+}
+
+/* The first adapter of the process enumerates the outputs of the adapter that
+ * scans out the primary display; that adapter then enumerates none of them. */
+static BOOL dxgi_get_wddm_primary_move(struct dxgi_factory *factory, LUID *owner, LUID *first)
+{
+    DISPLAY_DEVICEW device;
+    UINT wined3d_idx;
+    BOOL foreign;
+    DWORD i;
+
+    memset(&device, 0, sizeof(device));
+    device.cb = sizeof(device);
+    for (i = 0; EnumDisplayDevicesW(NULL, i, &device, 0); ++i)
+    {
+        if (device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
+            break;
+    }
+    if (!(device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) || !dxgi_get_wddm_display_owner(device.DeviceName, owner))
+        return FALSE;
+    if (!factory->first_adapter_known)
+    {
+        if (FAILED(dxgi_get_wddm_adapter(factory->wined3d, 0, dxgi_get_user_gpu_preference(), &wined3d_idx,
+                &factory->first_adapter_luid, &foreign)))
+            return FALSE;
+        factory->first_adapter_known = TRUE;
+    }
+    *first = factory->first_adapter_luid;
+    return !dxgi_luid_equal(owner, first);
+}
+
+HRESULT dxgi_get_wddm_output_index(struct dxgi_factory *factory, struct wined3d_adapter *adapter, const LUID *luid,
+        UINT output_idx, UINT *wined3d_output_idx)
 {
     struct wined3d_adapter_identifier identifier = {0};
     struct wined3d_output_desc desc;
-    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME open_adapter;
-    D3DKMT_CLOSEADAPTER close_adapter;
+    LUID primary_owner, first, owner;
+    BOOL move;
     UINT i, count;
     HRESULT hr;
 
@@ -31,6 +80,7 @@ HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *
         return hr;
     if (luid)
         identifier.adapter_luid = *luid;
+    move = dxgi_get_wddm_primary_move(factory, &primary_owner, &first);
 
     /* WineD3D uses desktop outputs to host its GL contexts, including when
      * the ICD renders on a different adapter. DXGI must enumerate only the
@@ -41,16 +91,11 @@ HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *
         wined3d_mutex_lock();
         hr = wined3d_output_get_desc(wined3d_adapter_get_output(adapter, i), &desc);
         wined3d_mutex_unlock();
-        if (FAILED(hr))
+        if (FAILED(hr) || !dxgi_get_wddm_display_owner(desc.device_name, &owner))
             continue;
-        memset(&open_adapter, 0, sizeof(open_adapter));
-        lstrcpynW(open_adapter.DeviceName, desc.device_name, ARRAY_SIZE(open_adapter.DeviceName));
-        if (!NT_SUCCESS(D3DKMTOpenAdapterFromGdiDisplayName(&open_adapter)))
-            continue;
-        close_adapter.hAdapter = open_adapter.hAdapter;
-        D3DKMTCloseAdapter(&close_adapter);
-        if (open_adapter.AdapterLuid.LowPart != identifier.adapter_luid.LowPart
-                || open_adapter.AdapterLuid.HighPart != identifier.adapter_luid.HighPart)
+        if (move && dxgi_luid_equal(&owner, &primary_owner))
+            owner = first;
+        if (!dxgi_luid_equal(&owner, &identifier.adapter_luid))
             continue;
         if (!output_idx--)
         {
@@ -61,23 +106,32 @@ HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *
     return DXGI_ERROR_NOT_FOUND;
 }
 
-HRESULT dxgi_query_wddm_video_memory_info(LUID luid, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
-        DXGI_QUERY_VIDEO_MEMORY_INFO *info)
+LONG dxgi_open_wddm_adapter(LUID luid)
 {
     D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};
-    D3DKMT_QUERYVIDEOMEMORYINFO query = {0};
-    D3DKMT_CLOSEADAPTER close_adapter;
-    NTSTATUS status;
 
     open_adapter.AdapterLuid = luid;
-    if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)))
-        return E_FAIL;
-    query.hAdapter = open_adapter.hAdapter;
+    return NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)) ? (LONG)open_adapter.hAdapter : 0;
+}
+
+void dxgi_close_wddm_adapter(LONG kmt_adapter)
+{
+    D3DKMT_CLOSEADAPTER close_adapter;
+
+    close_adapter.hAdapter = (D3DKMT_HANDLE)kmt_adapter;
+    D3DKMTCloseAdapter(&close_adapter);
+}
+
+HRESULT dxgi_query_wddm_video_memory_info(LONG kmt_adapter, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
+        DXGI_QUERY_VIDEO_MEMORY_INFO *info)
+{
+    D3DKMT_QUERYVIDEOMEMORYINFO query = {0};
+    NTSTATUS status;
+
+    query.hAdapter = (D3DKMT_HANDLE)kmt_adapter;
     query.PhysicalAdapterIndex = node_index;
     query.MemorySegmentGroup = (D3DKMT_MEMORY_SEGMENT_GROUP)segment_group;
     status = D3DKMTQueryVideoMemoryInfo(&query);
-    close_adapter.hAdapter = open_adapter.hAdapter;
-    D3DKMTCloseAdapter(&close_adapter);
     if (!NT_SUCCESS(status))
     {
         WARN("Failed to query video memory info, status %#lx.\n", status);
@@ -208,6 +262,35 @@ BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid)
     return found;
 }
 
+BOOL dxgi_wddm_adapters_have_d3d11_umd(void)
+{
+    D3DKMT_ENUMADAPTERS2 enum_adapters = {0};
+    D3DKMT_ADAPTERINFO *adapters;
+    D3DKMT_CLOSEADAPTER close_adapter;
+    unsigned int capacity, i;
+    BOOL result = FALSE;
+
+    if (!NT_SUCCESS(D3DKMTEnumAdapters2(&enum_adapters)) || !enum_adapters.NumAdapters)
+        return FALSE;
+    capacity = enum_adapters.NumAdapters;
+    if (!(adapters = calloc(capacity, sizeof(*adapters))))
+        return FALSE;
+    enum_adapters.pAdapters = adapters;
+    if (NT_SUCCESS(D3DKMTEnumAdapters2(&enum_adapters)) && enum_adapters.NumAdapters <= capacity)
+    {
+        result = enum_adapters.NumAdapters != 0;
+        for (i = 0; i < enum_adapters.NumAdapters; ++i)
+        {
+            if (!dxgi_wddm_adapter_has_d3d11_umd(adapters[i].AdapterLuid))
+                result = FALSE;
+            close_adapter.hAdapter = adapters[i].hAdapter;
+            D3DKMTCloseAdapter(&close_adapter);
+        }
+    }
+    free(adapters);
+    return result;
+}
+
 static unsigned int dxgi_get_wddm_adapter_priority(const D3DKMT_ADAPTERINFO *adapter)
 {
     D3DKMT_QUERYADAPTERINFO query_info = {0};
@@ -284,6 +367,7 @@ static void dxgi_describe_wddm_candidate(const D3DKMT_ADAPTERINFO *adapter, stru
         candidate->dedicated_memory = segments.DedicatedVideoMemorySize;
 }
 
+/* TODO: with no user GPU preference Windows enumerates the adapter that scans out the primary display first */
 static BOOL dxgi_wddm_candidate_precedes(const struct dxgi_wddm_candidate *a, const struct dxgi_wddm_candidate *b,
         DXGI_GPU_PREFERENCE preference)
 {

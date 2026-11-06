@@ -68,6 +68,7 @@ static PKDB_BREAKPOINT KdbBreakPointToReenable = NULL; /* Set to a breakpoint st
 #if !defined(_M_ARM64) && !defined(_M_RISCV64)
 static BOOLEAN KdbpEvenThoughWeHaveABreakPointToReenableWeAlsoHaveARealSingleStep;
 #endif
+BOOLEAN KdbActive = FALSE;
 LONG KdbLastBreakPointNr = -1;  /* Index of the breakpoint which cause KDB to be entered */
 ULONG KdbNumSingleSteps = 0; /* How many single steps to do */
 BOOLEAN KdbSingleStepOver = FALSE; /* Whether to step over calls/reps. */
@@ -1744,21 +1745,19 @@ KdbpCallMainLoop(VOID)
  **/
 static VOID
 KdbpInternalEnter(
-    _In_ VOID (*Procedure)(VOID))
+    _In_ VOID (*Procedure)(VOID),
+    _In_ BOOLEAN RequestedStop)
 {
     PETHREAD Thread;
     PVOID SavedInitialStack, SavedStackBase, SavedKernelStack;
     ULONG_PTR SavedStackLimit;
-    BOOLEAN DisplayAcquired = FALSE;
+    BOOLEAN DisplayAcquired;
 
     KbdDisableMouse();
 
     /* Take control of the display */
-    if (KdpDebugMode.Screen)
-    {
-        DisplayAcquired = KdpScreenAcquire();
-        KdpNetDisplayStatus();
-    }
+    DisplayAcquired = KdpScreenEnterStop(RequestedStop);
+    KdbActive = TRUE;
 
     /* Call the specified debugger procedure on a different stack */
     Thread = PsGetCurrentThread();
@@ -1778,8 +1777,8 @@ KdbpInternalEnter(
     Thread->Tcb.KernelStack = SavedKernelStack;
 
     /* Release the display */
-    if (KdpDebugMode.Screen)
-        KdpScreenRelease(DisplayAcquired);
+    KdbActive = FALSE;
+    KdpScreenRelease(DisplayAcquired);
 
     KbdEnableMouse();
 }
@@ -2268,7 +2267,9 @@ EnterKdbg:;
     }
 
     /* Enter KDBG proper and run either the main loop or the KDBinit file */
-    KdbpInternalEnter(EntryPoint);
+    KdbpInternalEnter(EntryPoint,
+                      KdpControlCPressed || (KdbLastBreakPointNr >= 0) || KdbEnteredOnSingleStep ||
+                      (EntryPoint != KdbpCallMainLoop));
 
     /* Check if we should single step */
 #if defined(_M_RISCV64)

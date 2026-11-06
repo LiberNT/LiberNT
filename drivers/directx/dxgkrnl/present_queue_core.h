@@ -29,6 +29,7 @@ typedef struct _DXGK_PRESENT_LIMIT_CORE
     KSPIN_LOCK Lock;
     KEVENT AvailableEvent;
     ULONG Limit;
+    ULONG RequestedLimit;
     ULONG Reserved;
 } DXGK_PRESENT_LIMIT_CORE, *PDXGK_PRESENT_LIMIT_CORE;
 

@@ -18,16 +18,14 @@ VOID NTAPI RtlUnregisterCfgTargetRange(PVOID Base);
 
 /* FUNCTIONS ******************************************************************/
 
-/*
- * @implemented
- */
+static
 LPVOID
-NTAPI
-VirtualAllocEx(IN HANDLE hProcess,
-               IN LPVOID lpAddress,
-               IN SIZE_T dwSize,
-               IN DWORD flAllocationType,
-               IN DWORD flProtect)
+BasepVirtualAllocEx(IN HANDLE hProcess,
+                    IN LPVOID lpAddress,
+                    IN SIZE_T dwSize,
+                    IN DWORD flAllocationType,
+                    IN DWORD flProtect,
+                    IN PMEM_EXTENDED_PARAMETER NumaNode)
 {
     NTSTATUS Status;
 
@@ -41,12 +39,25 @@ VirtualAllocEx(IN HANDLE hProcess,
     }
 
     /* Allocate the memory */
-    Status = NtAllocateVirtualMemory(hProcess,
-                                     &lpAddress,
-                                     0,
-                                     &dwSize,
-                                     flAllocationType,
-                                     flProtect);
+    if (NumaNode)
+    {
+        Status = NtAllocateVirtualMemoryEx(hProcess,
+                                           &lpAddress,
+                                           &dwSize,
+                                           flAllocationType,
+                                           flProtect,
+                                           NumaNode,
+                                           1);
+    }
+    else
+    {
+        Status = NtAllocateVirtualMemory(hProcess,
+                                         &lpAddress,
+                                         0,
+                                         &dwSize,
+                                         flAllocationType,
+                                         flProtect);
+    }
 
     /* Check for status */
     if (!NT_SUCCESS(Status))
@@ -70,6 +81,40 @@ VirtualAllocEx(IN HANDLE hProcess,
 
     /* Return the allocated address */
     return lpAddress;
+}
+
+/*
+ * @implemented
+ */
+LPVOID
+NTAPI
+VirtualAllocEx(IN HANDLE hProcess,
+               IN LPVOID lpAddress,
+               IN SIZE_T dwSize,
+               IN DWORD flAllocationType,
+               IN DWORD flProtect)
+{
+    return BasepVirtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect, NULL);
+}
+
+LPVOID
+WINAPI
+VirtualAllocExNuma(IN HANDLE hProcess,
+                   IN LPVOID lpAddress,
+                   IN SIZE_T dwSize,
+                   IN DWORD flAllocationType,
+                   IN DWORD flProtect,
+                   IN DWORD nndPreferred)
+{
+    MEM_EXTENDED_PARAMETER NumaNode;
+
+    if (nndPreferred == NUMA_NO_PREFERRED_NODE)
+        return BasepVirtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect, NULL);
+
+    RtlZeroMemory(&NumaNode, sizeof(NumaNode));
+    NumaNode.Type = MemExtendedParameterNumaNode;
+    NumaNode.ULong = nndPreferred;
+    return BasepVirtualAllocEx(hProcess, lpAddress, dwSize, flAllocationType, flProtect, &NumaNode);
 }
 
 /*
@@ -374,6 +419,23 @@ AllocateUserPhysicalPages(IN HANDLE hProcess,
     }
 
     return TRUE;
+}
+
+BOOL
+WINAPI
+AllocateUserPhysicalPagesNuma(IN HANDLE hProcess,
+                              IN OUT PULONG_PTR NumberOfPages,
+                              OUT PULONG_PTR PageArray,
+                              IN DWORD nndPreferred)
+{
+    if ((nndPreferred != NUMA_NO_PREFERRED_NODE) && !BasepIsValidNumaNode(nndPreferred))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    /* TODO: nndPreferred does not steer the frame choice; any node is used */
+    return AllocateUserPhysicalPages(hProcess, NumberOfPages, PageArray);
 }
 
 /*

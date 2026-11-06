@@ -108,6 +108,16 @@ typedef struct BufferMemory
     LONG                        ref;
     LONG                        lockedbytes;
     LPBYTE                      memory;
+#ifdef __REACTOS__
+    SRWLOCK                     region_lock;
+    struct
+    {
+        DWORD offset;
+        DWORD size;
+    }                           *regions;
+    UINT                        region_count;
+    UINT                        region_capacity;
+#endif
     struct list buffers;
 } BufferMemory;
 
@@ -122,6 +132,9 @@ void DirectSoundDevice_RemoveBuffer(DirectSoundDevice * device, IDirectSoundBuff
 struct IDirectSoundBufferImpl
 {
     IDirectSoundBuffer8         IDirectSoundBuffer8_iface;
+#ifdef __REACTOS__
+    BOOL                        resources_acquired;
+#endif
     IDirectSoundNotify          IDirectSoundNotify_iface;
     IDirectSound3DListener      IDirectSound3DListener_iface; /* only primary buffer */
     IDirectSound3DBuffer        IDirectSound3DBuffer_iface; /* only secondary buffer */

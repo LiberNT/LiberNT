@@ -620,6 +620,14 @@ static VOID TestConcurrent(VOID)
 
 START_TEST(NtAlpcWow64)
 {
+    BOOL IsWow64 = FALSE;
+
+    if (sizeof(void *) == 4 && (!IsWow64Process(GetCurrentProcess(), &IsWow64) || !IsWow64))
+    {
+        skip("The 32-bit checks describe WoW64, and this is a 32-bit kernel\n");
+        return;
+    }
+
     if (AlpcTestIsChildMode("probe"))
     {
         TestGuardPages();

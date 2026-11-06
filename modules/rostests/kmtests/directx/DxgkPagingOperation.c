@@ -109,6 +109,35 @@ static VOID TestFillAndAperture(VOID)
     { NTSTATUS Observed = DxgkPagingCoreValidate(&Request, LEVELS); ok_eq_hex(Observed, STATUS_SUCCESS); }
 }
 
+static VOID TestPlacementClear(VOID)
+{
+    DXGK_SEGMENTFLAGS Flags;
+
+    RtlZeroMemory(&Flags, sizeof(Flags));
+    ok_eq_int(DxgkPagingCorePlacementClearOperation(Flags), DxgkPagingCoreOpFill);
+
+    Flags.CpuVisible = 1;
+    Flags.CacheCoherent = 1;
+    ok_eq_int(DxgkPagingCorePlacementClearOperation(Flags), DxgkPagingCoreOpFill);
+
+    Flags.PopulatedFromSystemMemory = 1;
+    ok_eq_int(DxgkPagingCorePlacementClearOperation(Flags), DxgkPagingCoreOpFill);
+
+    RtlZeroMemory(&Flags, sizeof(Flags));
+    Flags.Aperture = 1;
+    Flags.CacheCoherent = 1;
+    ok_eq_int(DxgkPagingCorePlacementClearOperation(Flags), DxgkPagingCoreOpNone);
+
+    RtlZeroMemory(&Flags, sizeof(Flags));
+    Flags.Agp = 1;
+    ok_eq_int(DxgkPagingCorePlacementClearOperation(Flags), DxgkPagingCoreOpNone);
+
+    RtlZeroMemory(&Flags, sizeof(Flags));
+    Flags.CpuVisible = 1;
+    Flags.PitchAlignment = 1;
+    ok_eq_int(DxgkPagingCorePlacementClearOperation(Flags), DxgkPagingCoreOpNone);
+}
+
 static VOID TestPageTableAndTlb(VOID)
 {
     DXGK_PAGING_CORE_REQUEST Request;
@@ -214,6 +243,7 @@ START_TEST(DxgkPagingOperation)
     TestOperationRange();
     TestTransfer();
     TestFillAndAperture();
+    TestPlacementClear();
     TestPageTableAndTlb();
     TestContextResourceHints();
 }

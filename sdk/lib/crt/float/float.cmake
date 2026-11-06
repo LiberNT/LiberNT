@@ -16,7 +16,6 @@ if(ARCH STREQUAL "i386")
         float/i386/clearfp.c
         float/i386/cntrlfp.c
         float/i386/fpreset.c
-        float/i386/logb.c
         float/i386/statfp.c
     )
 elseif(ARCH STREQUAL "amd64")

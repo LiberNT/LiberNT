@@ -10286,6 +10286,120 @@ HRESULT WINAPI DispCallFunc( void *instance, ULONG_PTR offset, CALLCONV cc, VART
     return S_OK;
 }
 
+#elif defined(__REACTOS__) && defined(__riscv) && (__riscv_xlen == 64)
+
+extern DWORD_PTR CDECL call_method( void *func, int nb_args, const DWORD_PTR *args );
+extern float CDECL call_float_method( void *func, int nb_args, const DWORD_PTR *args );
+extern double CDECL call_double_method( void *func, int nb_args, const DWORD_PTR *args );
+extern DECIMAL CDECL call_decimal_method( void *func, int nb_args, const DWORD_PTR *args );
+
+HRESULT WINAPI DispCallFunc( void *instance, ULONG_PTR offset, CALLCONV cc, VARTYPE ret_type, UINT count,
+                             VARTYPE *types, VARIANTARG **vargs, VARIANT *result )
+{
+    int argspos = 0;
+    void *func;
+    UINT i;
+    DWORD_PTR *args;
+
+    TRACE("(%p, %Id, %d, %d, %d, %p, %p, %p (vt=%d))\n",
+          instance, offset, cc, ret_type, count, types, vargs, result, V_VT(result));
+
+    if (cc != CC_STDCALL && cc != CC_CDECL)
+    {
+        FIXME("unsupported calling convention %d\n",cc);
+        return E_INVALIDARG;
+    }
+
+    /* call_method always loads a0-a7 from the first eight slots */
+    args = calloc( max( 2 * count + 2, 8 ), sizeof(*args) );
+    if (!args) return E_OUTOFMEMORY;
+
+    if (ret_type == VT_VARIANT) args[argspos++] = (DWORD_PTR)result;
+
+    if (instance)
+    {
+        const FARPROC *vtable = *(FARPROC **)instance;
+        func = vtable[offset/sizeof(void *)];
+        args[argspos++] = (DWORD_PTR)instance;
+    }
+    else func = (void *)offset;
+
+    for (i = 0; i < count; i++)
+    {
+        VARIANT *arg = vargs[i];
+
+        switch (types[i])
+        {
+        case VT_I1:
+            args[argspos++] = (LONG_PTR)V_I1(arg);
+            break;
+        case VT_UI1:
+            args[argspos++] = V_UI1(arg);
+            break;
+        case VT_I2:
+            args[argspos++] = (LONG_PTR)V_I2(arg);
+            break;
+        case VT_UI2:
+            args[argspos++] = V_UI2(arg);
+            break;
+        case VT_BOOL:
+            args[argspos++] = (LONG_PTR)V_BOOL(arg);
+            break;
+        case VT_I4:
+        case VT_INT:
+        case VT_ERROR:
+        case VT_HRESULT:
+            args[argspos++] = (LONG_PTR)V_I4(arg);
+            break;
+        case VT_UI4:
+        case VT_UINT:
+            args[argspos++] = (LONG_PTR)(LONG)V_UI4(arg);
+            break;
+        case VT_R4:
+            args[argspos++] = *(DWORD *)&V_R4(arg);
+            break;
+        case VT_DECIMAL:
+            memcpy( &args[argspos], &V_DECIMAL(arg), sizeof(DECIMAL) );
+            argspos += 2;
+            break;
+        case VT_VARIANT:
+            args[argspos++] = (DWORD_PTR)arg;
+            break;
+        default:
+            args[argspos++] = V_UI8(arg);
+            break;
+        }
+        TRACE("arg %u: type %s %s\n", i, debugstr_vt(types[i]), debugstr_variant(arg));
+    }
+
+    switch (ret_type)
+    {
+    case VT_HRESULT:
+        free( args );
+        return E_INVALIDARG;
+    case VT_VARIANT:
+        call_method( func, argspos, args );
+        break;
+    case VT_DECIMAL:
+        V_DECIMAL(result) = call_decimal_method( func, argspos, args );
+        break;
+    case VT_R4:
+        V_R4(result) = call_float_method( func, argspos, args );
+        break;
+    case VT_R8:
+    case VT_DATE:
+        V_R8(result) = call_double_method( func, argspos, args );
+        break;
+    default:
+        V_UI8(result) = call_method( func, argspos, args );
+        break;
+    }
+    free( args );
+    if (ret_type != VT_VARIANT) V_VT(result) = ret_type;
+    TRACE("retval: %s\n", debugstr_variant(result));
+    return S_OK;
+}
+
 #else  /* __aarch64__ */
 
 HRESULT WINAPI DispCallFunc( void* pvInstance, ULONG_PTR oVft, CALLCONV cc, VARTYPE vtReturn,

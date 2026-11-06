@@ -6090,6 +6090,23 @@ static void test_bstr_cache(void)
     pSysFreeString(str2);
     SysFreeString(str);
     SysFreeString(str2);
+#ifdef __REACTOS__
+    {
+        static const WCHAR dataW[] = {'a',0,'b',0,0,0,'c',0};
+        BSTR drain[6];
+
+        for(i=0; i < ARRAY_SIZE(drain); i++)
+            drain[i] = SysAllocStringLen(NULL, 1);
+        str = SysAllocStringLen(dataW, ARRAY_SIZE(dataW));
+        SysFreeString(str);
+        str2 = SysAllocStringLen(L"x", 1);
+        ok(str2 == str, "small string did not reuse the cached larger block\n");
+        ok(!memcmp(str2 + 2, dataW + 2, sizeof(dataW) - 2 * sizeof(WCHAR)), "tail of the cached block changed\n");
+        SysFreeString(str2);
+        for(i=0; i < ARRAY_SIZE(drain); i++)
+            SysFreeString(drain[i]);
+    }
+#endif
 }
 
 static void write_typelib(int res_no, const char *filename)

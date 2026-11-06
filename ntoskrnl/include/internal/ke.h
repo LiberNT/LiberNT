@@ -987,7 +987,7 @@ KiDisplayBugCheckRegisterState(
     _In_ PCONTEXT Context);
 #endif
 
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_LONGHORN)
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 VOID
 NTAPI
 KiChargeThreadCycleTime(

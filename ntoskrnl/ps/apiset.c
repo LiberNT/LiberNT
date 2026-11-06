@@ -54,6 +54,7 @@ typedef struct _PSP_API_SET_HASH_ENTRY
 /* GLOBALS *******************************************************************/
 
 static PPSP_API_SET_NAMESPACE PspApiSetSchema;
+static PVOID PspApiSetSection;
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
@@ -202,6 +203,72 @@ PspInitializeApiSetSchema(VOID)
     qsort(HashEntry, EntryCount, sizeof(*HashEntry), PspCompareApiSetHashes);
     PspApiSetSchema = Schema;
     return TRUE;
+}
+
+BOOLEAN
+NTAPI
+PspInitializeApiSetSection(VOID)
+{
+    OBJECT_ATTRIBUTES Attributes;
+    LARGE_INTEGER SectionSize;
+    HANDLE Handle;
+    PVOID Section;
+    PVOID Base = NULL;
+    SIZE_T ViewSize = 0;
+    NTSTATUS Status;
+
+    SectionSize.QuadPart = PspApiSetSchema->Size;
+    InitializeObjectAttributes(&Attributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateSection(&Handle, SECTION_ALL_ACCESS, &Attributes, &SectionSize,
+                             PAGE_READWRITE, SEC_COMMIT, NULL);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = ObReferenceObjectByHandle(Handle, SECTION_ALL_ACCESS, MmSectionObjectType,
+                                       KernelMode, &Section, NULL);
+    ZwClose(Handle);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = MmMapViewInSystemSpace(Section, &Base, &ViewSize);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(Section);
+        return FALSE;
+    }
+
+    RtlCopyMemory(Base, PspApiSetSchema, PspApiSetSchema->Size);
+    MmUnmapViewInSystemSpace(Base);
+    PspApiSetSection = Section;
+    return TRUE;
+}
+
+NTSTATUS
+NTAPI
+PspMapApiSetSchema(
+    _In_ PEPROCESS Process)
+{
+    KAPC_STATE ApcState;
+    PVOID Base = NULL;
+    SIZE_T ViewSize = 0;
+    NTSTATUS Status;
+
+    Status = MmMapViewOfSection(PspApiSetSection, Process, &Base, MAXULONG, 0, NULL,
+                                &ViewSize, ViewShare, 0, PAGE_READONLY);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        Process->Peb->ApiSetMap = Base;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
+
+    if (!NT_SUCCESS(Status)) MmUnmapViewOfSection(Process, Base);
+    return Status;
 }
 
 PVOID

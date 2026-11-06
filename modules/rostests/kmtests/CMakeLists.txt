@@ -8,6 +8,7 @@ add_subdirectory(example)
 add_subdirectory(fltmgr)
 add_subdirectory(hidparse)
 add_subdirectory(kernel32)
+add_subdirectory(ndis)
 add_subdirectory(ntos_cc)
 add_subdirectory(ntos_io)
 add_subdirectory(ntos_mm)
@@ -74,6 +75,7 @@ list(APPEND KMTEST_DRV_SOURCE
     directx/DxgkHotPlugWork.c
     directx/DxgkChildDescriptor.c
     directx/DxgkPostDisplayHandoff.c
+    directx/DxgkPresentUserSource.c
     directx/DxgkGpuVaAddress.c
     directx/DxgkGpuVaPageTable.c
     directx/DxgkGpuVaPte.c
@@ -119,6 +121,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ndis/NdisRwLock.c
     ndis/NdisProcessorGroup.c
     ndis/NdisLegacyHelpers.c
+    ndis/NdisMiniportCharacteristics.c
     npfs/NpfsConnect.c
     npfs/NpfsCreate.c
     npfs/NpfsFileInfo.c
@@ -174,6 +177,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCsqKM.c
     ntos_io/IoDeviceInterface.c
     ntos_io/IoEvent.c
+    ntos_io/IoStorageDumpPath.c
     ntos_io/IoFilesystem.c
     ntos_io/IoInterrupt.c
     ntos_io/IoIommu.c
@@ -187,6 +191,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoErrorLogEntry.c
     ntos_io/IoPciD3Cold.c
     ntos_io/IoPciExpressInterfaces.c
+    ntos_io/IoPciEnumeration.c
     ntos_io/IoPciRom.c
     ntos_io/IoStackLimits.c
     ntos_io/IoMdl.c
@@ -195,12 +200,15 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoVolume.c
     ntos_io/IoWmiAcpi.c
     ntos_kd/KdSystemDebugControl.c
+    ntos_kd/KdUsbNetRules.c
     ksecdd/KsecBcrypt.c
     ntos_ke/KeDpcWatchdog.c
     ntos_ke/KeWddmExports.c
     ntos_ke/KeAffinityKM.c
     ntos_ke/KeApc.c
     ntos_ke/KeApcInject.c
+    ntos_ke/KeApcScheduling.c
+    ntos_ke/KeDeferredReady.c
     ntos_ke/KeBugCheckCbKM.c
     ntos_ke/KeDevQueue.c
     ntos_ke/KeCriticalRegionKM.c
@@ -241,6 +249,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_mm/MmUserLayout.c
     ntos_mm/MmSecureKM.c
     ntos_mm/MmSection.c
+    ntos_mm/MmSystemViewCache.c
     ntos_mm/MmWddm.c
     ntos_mm/MmPhysicalAddressRace.c
     ntos_mm/ZwAllocateVirtualMemory.c
@@ -343,6 +352,10 @@ endif()
 if(REACTOS_USE_WDDM AND (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000))
     list(APPEND KMTEST_DRV_SOURCE directx/SoftGpuGpuVaIsolation.c)
     set(KMTEST_SOFTGPU_GPUVA_ISOLATION TRUE)
+endif()
+
+if(ARCH STREQUAL "amd64")
+    list(APPEND KMTEST_DRV_SOURCE ntos_ke/amd64/KeSwitchHandoff.c)
 endif()
 
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
@@ -523,6 +536,8 @@ list(APPEND KMTEST_SOURCE
     ntos_mm/NtCreateSection_user.c
     ntos_mm/NtUserPhysicalPages.c
     ntos_mm/NtProcessClone.c
+    ndis/NdisSgDma_user.c
+    ntos_po/BatteryClassNotify_user.c
     ntos_po/PoIrp_user.c
     ntos_po/PoFxState_user.c
     tcpip/TcpIp_user.c
@@ -555,6 +570,7 @@ add_custom_target(kmtest_drivers)
 add_dependencies(kmtest_drivers
     kmtest_drv
     example_drv
+    ndissg_drv
     FltMgrLoad_drv
     fltmgrio_drv
     fltmgr_create
@@ -568,6 +584,7 @@ add_dependencies(kmtest_drivers
     kernel32_drv
     mmmaplockedpagesspecifycache_drv
     ntcreatesection_drv
+    batteryclassnotify_drv
     poirp_drv
     tcpip_drv
     cccopyread_drv

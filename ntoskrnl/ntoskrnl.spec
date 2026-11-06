@@ -2636,7 +2636,7 @@
 @ stdcall -arch=win64 KeQueryActiveProcessorAffinity(ptr)
 @ stdcall -arch=win64 KeQueryActiveProcessorAffinity2(ptr ptr)
 @ stdcall -arch=win64 KeQueryAuxiliaryCounterFrequency(ptr)
-@ stdcall -arch=win64 KeQueryDpcWatchdogInformation(ptr)
+@ stdcall KeQueryDpcWatchdogInformation(ptr)
 @ stdcall -arch=win64 KeQueryEffectivePriorityThread(ptr)
 @ stdcall KeQueryGroupAffinity(long)
 @ stdcall KeQueryGroupAffinityEx(ptr long)

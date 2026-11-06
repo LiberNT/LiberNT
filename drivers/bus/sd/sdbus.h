@@ -199,6 +199,7 @@ typedef struct _PDO_EXTENSION {
     BOOLEAN EjectPending;
 
     ULONG InsertionGeneration;
+    PVOID DumpContext;
 
     /* Interface callback */
     PSDBUS_CALLBACK_ROUTINE CallbackRoutine;
@@ -225,10 +226,7 @@ typedef struct _PDO_EXTENSION {
     UCHAR SdioNumFunctions;
     ULONG SdioCommonCisPointer;
 
-    BOOLEAN IsEmmcPartition;
     BOOLEAN IsInternalSdioHost;
-    UCHAR EmmcPartitionId;
-    ULONGLONG EmmcPartitionSizeBytes;
 
     /* Remove lock */
     IO_REMOVE_LOCK RemoveLock;
@@ -271,6 +269,7 @@ SdBusAddDevice(
 DRIVER_DISPATCH SdBusDispatchPnp;
 DRIVER_DISPATCH SdBusDispatchPower;
 DRIVER_DISPATCH SdBusDispatchInternalDeviceControl;
+DRIVER_DISPATCH SdBusDispatchDeviceControl;
 DRIVER_DISPATCH SdBusDispatchCreateClose;
 
 /**
@@ -482,6 +481,7 @@ SdBusParseCid(
 VOID
 SdBusParseCsd(
     _In_ PULONG RawResponse,
+    _In_ BOOLEAN IsMmc,
     _Out_ PSD_CSD Csd);
 
 /**
@@ -810,11 +810,6 @@ NTSTATUS
 SdBusEmmcEnableCache(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ PPDO_EXTENSION PdoExtension);
-
-NTSTATUS
-SdBusEmmcEnumeratePartitions(
-    _In_ PFDO_EXTENSION FdoExtension,
-    _In_ PPDO_EXTENSION MainPdo);
 
 NTSTATUS
 SdhcRegisterBusCallbacks(

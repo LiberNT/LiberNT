@@ -25,6 +25,9 @@ Test_PageFileSection(void)
     PVOID BaseAddress, BaseAddress2;
     SIZE_T ViewSize;
     ULONG OldProtect;
+    BOOL IsWow64 = FALSE;
+
+    IsWow64Process(GetCurrentProcess(), &IsWow64);
 
     /* Create a page file backed section with SEC_COMMIT */
     MaximumSize.QuadPart = 0x20000;
@@ -174,11 +177,15 @@ Test_PageFileSection(void)
                                 ViewShare,
                                 0,
                                 PAGE_READWRITE);
-    if (GetNTVersion() >= _WIN32_WINNT_VISTA)
+    if (GetNTVersion() >= _WIN32_WINNT_VISTA && (sizeof(void *) == 8 || IsWow64))
     {
         ok_ntstatus(Status, STATUS_SUCCESS);
         ok(((ULONG_PTR)BaseAddress & 0x0000FFFF) == 0, "BaseAddress not 64k aligned: %p\n", BaseAddress);
         ok(((ULONG_PTR)BaseAddress & (ULONG_PTR)0xFFFFFFFFF0000000ULL) == 0, "Upper bits are not all zero: %p\n", BaseAddress);
+    }
+    else if (GetNTVersion() >= _WIN32_WINNT_VISTA)
+    {
+        ok_ntstatus(Status, STATUS_INVALID_PARAMETER_4);
     }
     else
     {

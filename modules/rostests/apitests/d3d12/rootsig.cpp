@@ -335,14 +335,14 @@ static void TestCreation(ID3D12Device *device)
     signature = CreateRootSignature12(device, &sampler, FALSE, &hr);
     ok(hr == S_OK, "version 1.2 root signature: %#lx\n", hr);
     if (signature) signature->Release();
+    hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS17, &options, sizeof(options));
+    ok(hr == S_OK, "OPTIONS17: %#lx\n", hr);
     sampler = Sampler(0, D3D12_SAMPLER_FLAG_UINT_BORDER_COLOR, D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK_UINT,
             D3D12_FILTER_MIN_MAG_MIP_POINT);
     signature = CreateRootSignature12(device, &sampler, FALSE, &hr);
-    ok(hr == S_OK, "integer border colour: %#lx\n", hr);
+    ok(hr == (options.NonNormalizedCoordinateSamplersSupported ? S_OK : E_FAIL), "integer border colour: %#lx\n", hr);
     if (signature) signature->Release();
 
-    hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS17, &options, sizeof(options));
-    ok(hr == S_OK, "OPTIONS17: %#lx\n", hr);
     if (!options.NonNormalizedCoordinateSamplersSupported)
     {
         trace("Non-normalised coordinate samplers are not supported, skipping them\n");

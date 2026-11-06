@@ -42,6 +42,7 @@ extern SIZE KdTermSize;
 extern BOOLEAN KdTermConnected;
 extern BOOLEAN KdTermSerial;
 extern BOOLEAN KdTermReportsSize;
+extern BOOLEAN KdTermCrashMode;
 
 BOOLEAN
 KdpInitTerminal(VOID);

@@ -133,11 +133,7 @@ IsRootDeviceInstanceID(
 
 extern HKEY hEnumKey;
 extern HKEY hClassKey;
-extern BOOL g_IsUISuppressed;
 extern BOOL g_ShuttingDown;
 extern BOOL g_IsMiniNT;
-
-BOOL
-GetSuppressNewUIValue(VOID);
 
 #endif /* _UMPNPMGR_PCH_ */

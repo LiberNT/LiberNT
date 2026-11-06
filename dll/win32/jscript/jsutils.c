@@ -333,6 +333,10 @@ HRESULT variant_to_jsval(script_ctx_t *ctx, VARIANT *var, jsval_t *r)
         /* FIXME: Native converts VT_CY to a special kind number type, which is
          * never converted to VT_I4 when it's converted back to VARIANT. */
         *r = jsval_number((double)V_CY(var).int64 / 10000.0);
+#ifdef __REACTOS__
+        if(is_int32(get_number(*r)))
+            *r = jsval_currency(get_number(*r));
+#endif
         WARN("VT_CY: %lf\n", get_number(*r));
         return S_OK;
     case VT_UNKNOWN:
@@ -387,7 +391,11 @@ HRESULT jsval_to_variant(jsval_t val, VARIANT *retv)
     case JSV_NUMBER: {
         double n = get_number(val);
 
+#ifdef __REACTOS__
+        if(is_int32(n) && !is_currency(val)) {
+#else
         if(is_int32(n)) {
+#endif
             V_VT(retv) = VT_I4;
             V_I4(retv) = n;
         }else {

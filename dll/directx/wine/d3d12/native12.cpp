@@ -6,6 +6,7 @@
  */
 
 #include "native12.h"
+#include "../d3d11/nativeerror.h"
 #include "native12_device.h"
 #include "native12_objects.h"
 
@@ -232,6 +233,7 @@ static void APIENTRY Native12SetError(D3D10DDI_HRTDEVICE handle, HRESULT hr)
 {
     Native12Device *device = Native12Device::FromRuntime(handle.handle);
     WARN("Driver reported device error %#lx.\n", hr);
+    hr = NativeDriverErrorToApi(hr);
     if (device && FAILED(hr) && hr != E_OUTOFMEMORY)
         InterlockedCompareExchange(reinterpret_cast<LONG *>(&device->removed_reason), hr, S_OK);
 }
@@ -448,15 +450,6 @@ static HRESULT APIENTRY Native12KernelAllocate(HANDLE handle, D3DDDICB_ALLOCATE 
     return hr;
 }
 
-static HRESULT APIENTRY Native12KernelSubmit(HANDLE handle, const D3DDDICB_SUBMITCOMMAND *args)
-{
-    Native12Device *device = Native12Device::FromKernelHandle(handle);
-    if (!device || !args || !device->kernel_callbacks.pfnSubmitCommandCb) return E_INVALIDARG;
-    for (UINT i = 0; i < args->BroadcastContextCount && i < ARRAYSIZE(args->BroadcastContext); ++i)
-        Native12NoteSubmission(device, args->BroadcastContext[i]);
-    return device->kernel_callbacks.pfnSubmitCommandCb(handle, args);
-}
-
 static HRESULT APIENTRY Native12Deallocate(D3D12DDI_HRTDEVICE handle, const D3D12DDICB_DEALLOCATE_0022 *args)
 {
     Native12Device *device = Native12Device::FromRuntime(handle.handle);
@@ -591,6 +584,20 @@ HRESULT Native12Device::QueryCaps(D3D12DDICAPS_TYPE type, void *info, void *data
     return adapter_functions.pfnGetCaps(driver_adapter, &caps);
 }
 
+HRESULT Native12Device::QueryFeature106(D3D12DDICAPS_TYPE type, void *data, UINT size, BOOL *supported)
+{
+    HRESULT hr;
+
+    if (ddi_build < D3D12DDI_BUILD_VERSION_0106)
+    {
+        *supported = TRUE;
+        return S_OK;
+    }
+    if (FAILED(hr = QueryCaps(type, NULL, data, size))) return hr;
+    /* Optional only on D3D_FEATURE_LEVEL_1_0_GENERIC, which this runtime does not create. */
+    return *supported ? S_OK : DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+}
+
 HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_LEVEL minimum_level)
 {
     DXGI_ADAPTER_DESC desc;
@@ -649,20 +656,14 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     UINT64 *versions = static_cast<UINT64 *>(HeapAlloc(GetProcessHeap(), 0, version_count * sizeof(*versions)));
     if (!versions) return E_OUTOFMEMORY;
     UINT32 capacity = version_count;
-    bool offers_0110 = false, offers_0102 = false;
+    ddi_build = 0;
     if (SUCCEEDED(adapter_functions.pfnGetSupportedVersions(driver_adapter, &version_count, versions)))
-        for (UINT32 i = 0; i < version_count && i < capacity; ++i)
-        {
-            if (versions[i] == D3D12DDI_SUPPORTED_0110) offers_0110 = true;
-            if (versions[i] == D3D12DDI_SUPPORTED_0102) offers_0102 = true;
-        }
+        ddi_build = Native12SelectDdiBuild(versions, version_count < capacity ? version_count : capacity);
     HeapFree(GetProcessHeap(), 0, versions);
-    if (offers_0110) ddi_build = D3D12DDI_BUILD_VERSION_0110;
-    else if (offers_0102) ddi_build = D3D12DDI_BUILD_VERSION_0102;
-    else
+    if (!ddi_build)
     {
-        WARN("The driver offers neither D3D12 DDI build %u nor %u.\n", D3D12DDI_BUILD_VERSION_0110,
-                D3D12DDI_BUILD_VERSION_0102);
+        WARN("The driver offers none of the D3D12 DDI builds %u, %u and %u.\n", D3D12DDI_BUILD_VERSION_0110,
+                D3D12DDI_BUILD_VERSION_0102, D3D12DDI_BUILD_VERSION_0082);
         return DXGI_ERROR_UNSUPPORTED;
     }
 
@@ -695,6 +696,8 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
             GetProcAddress(runtime, "D3DUmdRtAdoptResource"));
     enqueue_set_event = reinterpret_cast<HRESULT (WINAPI *)(HANDLE, HANDLE)>(
             GetProcAddress(runtime, "D3DUmdRtEnqueueSetEvent"));
+    open_sync_from_nt_handle = reinterpret_cast<HRESULT (WINAPI *)(HANDLE, HANDLE, D3DKMT_HANDLE *, PVOID *,
+            D3DGPU_VIRTUAL_ADDRESS *)>(GetProcAddress(runtime, "D3DUmdRtOpenSyncObjectFromNtHandle"));
     if (!create_callbacks || !destroy_callbacks || !release_resource) return E_NOINTERFACE;
     if (FAILED(hr = create_callbacks(km_adapter, km_device, 2, &kernel_callbacks, &runtime_device))) return hr;
 
@@ -748,7 +751,6 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     create_args.Version = size_args.Version;
     driver_callbacks = kernel_callbacks;
     driver_callbacks.pfnAllocateCb = Native12KernelAllocate;
-    if (kernel_callbacks.pfnSubmitCommandCb) driver_callbacks.pfnSubmitCommandCb = Native12KernelSubmit;
     create_args.pKTCallbacks = &driver_callbacks;
     if (WARN_ON(d3d12))
     {
@@ -781,8 +783,11 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
         WARN("The driver failed to fill the command queue table, hr %#lx.\n", hr);
         return hr;
     }
+    C_ASSERT(FIELD_OFFSET(NATIVE12_DEVICE_FUNCS, pfnGetProgramIdentifier) == 122 * sizeof(void *));
+    C_ASSERT(FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnBarrier) == 68 * sizeof(void *));
     SIZE_T list_table_size = ddi_build >= D3D12DDI_BUILD_VERSION_0110 ? sizeof(list_functions)
-            : FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnSetProgram);
+            : ddi_build >= D3D12DDI_BUILD_VERSION_0102 ? FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnSetProgram)
+            : FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnBarrier);
     table.handle = &list_functions;
     if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D,
             &list_functions, list_table_size, 0, table)))
@@ -793,6 +798,8 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     if (FAILED(hr = FillListTables(list_table_size))) return hr;
 
     QueryCaps(D3D12DDICAPS_TYPE_D3D12_OPTIONS, NULL, &options, sizeof(options));
+    if (ddi_build >= D3D12DDI_BUILD_VERSION_0090)
+        QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0090, NULL, &relaxed_casting, sizeof(relaxed_casting));
     background_supported = options.BackgroundProcessingSupported && functions.pfnSetBackgroundProcessingMode;
     if (background_supported)
     {
@@ -807,6 +814,8 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     QueryCaps(D3D12DDICAPS_TYPE_GPUVA_CAPS, &node, &gpuva, sizeof(gpuva));
     if (ddi_build >= D3D12DDI_BUILD_VERSION_0098)
         QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0098, NULL, &gpu_upload, sizeof(gpu_upload));
+    else
+        gpu_upload.L1MemoryFullyCpuAccessible = memory.UMA;
     TRACE("UMA %u, cache coherent %u, L1 fully CPU accessible %u.\n", memory.UMA, memory.CacheCoherent,
             gpu_upload.L1MemoryFullyCpuAccessible);
 
@@ -1375,7 +1384,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             caps->MaxGPUVirtualAddressBitsPerResource = gpuva.MaxGPUVirtualAddressBitsPerResource;
             caps->StandardSwizzle64KBSupported = FALSE;
             caps->CrossNodeSharingTier = D3D12_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
-            caps->CrossAdapterRowMajorTextureSupported = FALSE;
+            caps->CrossAdapterRowMajorTextureSupported = TRUE;
             caps->VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation =
                     !!options.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation;
             caps->ResourceHeapTier = static_cast<D3D12_RESOURCE_HEAP_TIER>(options.ResourceHeapTier);
@@ -1399,7 +1408,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             caps->TileBasedRenderer = !!architecture.TileBasedDeferredRenderer;
             caps->UMA = !!memory.UMA;
             caps->CacheCoherentUMA = !!memory.CacheCoherent;
-            caps->IsolatedMMU = FALSE;
+            caps->IsolatedMMU = TRUE;
             return S_OK;
         }
         case D3D12_FEATURE_FEATURE_LEVELS:
@@ -1444,6 +1453,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             caps->WaveLaneCountMin = shader_caps.WaveLaneCountMin;
             caps->WaveLaneCountMax = shader_caps.WaveLaneCountMax;
             caps->TotalLaneCount = shader_caps.TotalLaneCount;
+            caps->ExpandedComputeResourceStates = TRUE;
             caps->Int64ShaderOps = !!shader_caps.Int64Ops;
             return S_OK;
         }
@@ -1459,8 +1469,9 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             }
             UINT ddi_support = 0;
             functions.pfnCheckFormatSupport(driver_device, caps->Format, &ddi_support);
-            Native12FormatSupport(caps->Format, ddi_support, &caps->Support1, &caps->Support2);
-            return S_OK;
+            Native12FormatSupport(caps->Format, ddi_support, !!options.OutputMergerLogicOp,
+                    options.TiledResourcesTier != 0, &caps->Support1, &caps->Support2);
+            return caps->Support1 || caps->Support2 ? S_OK : E_FAIL;
         }
         case D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS:
         {
@@ -1522,10 +1533,12 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
             caps->CopyQueueTimestampQueriesSupported = !!options.CopyQueueTimestampQueriesSupported;
+            caps->CastingFullyTypedFormatSupported = TRUE;
             caps->BarycentricsSupported = !!options.BarycentricsSupported;
             caps->ViewInstancingTier = static_cast<D3D12_VIEW_INSTANCING_TIER>(options.ViewInstancingTier);
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_3D)
-                caps->WriteBufferImmediateSupportFlags |= D3D12_COMMAND_LIST_SUPPORT_FLAG_DIRECT;
+                caps->WriteBufferImmediateSupportFlags |= D3D12_COMMAND_LIST_SUPPORT_FLAG_DIRECT
+                        | D3D12_COMMAND_LIST_SUPPORT_FLAG_BUNDLE;
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE)
                 caps->WriteBufferImmediateSupportFlags |= D3D12_COMMAND_LIST_SUPPORT_FLAG_COMPUTE;
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_COPY)
@@ -1537,6 +1550,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS4 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->MSAA64KBAlignedTextureSupported = TRUE;
+            caps->SharedResourceCompatibilityTier = D3D12_SHARED_RESOURCE_COMPATIBILITY_TIER_2;
             caps->Native16BitShaderOpsSupported = !!shader_caps.Native16BitOps;
             return S_OK;
         }
@@ -1568,6 +1583,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS7 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->MeshShaderTier = static_cast<D3D12_MESH_SHADER_TIER>(options.MeshShaderTier);
             caps->SamplerFeedbackTier = SamplerFeedbackTier();
             return S_OK;
         }
@@ -1598,7 +1614,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         {
             D3D12_FEATURE_DATA_SHADER_CACHE *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            caps->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO;
+            caps->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO | D3D12_SHADER_CACHE_SUPPORT_SHADER_CONTROL_CLEAR
+                    | D3D12_SHADER_CACHE_SUPPORT_SHADER_SESSION_DELETE;
             if (functions.pfnCreatePipelineLibrary && functions.pfnAddPipelineStateToLibrary
                     && functions.pfnSerializeLibrary)
                 caps->SupportFlags |= D3D12_SHADER_CACHE_SUPPORT_LIBRARY;
@@ -1666,6 +1683,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS9 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->MeshShaderPipelineStatsSupported = options.MeshShaderTier != D3D12DDI_MESH_SHADER_TIER_NOT_SUPPORTED;
+            caps->MeshShaderSupportsFullRangeRenderTargetArrayIndex = options.MeshShaderSupportsFullRangeRenderTargetArrayIndex;
             caps->AtomicInt64OnTypedResourceSupported = !!shader_caps.AtomicInt64OnTypedResource;
             caps->AtomicInt64OnGroupSharedSupported = !!shader_caps.AtomicInt64OnGroupShared;
             return S_OK;
@@ -1689,8 +1708,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS12 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             caps->MSPrimitivesPipelineStatisticIncludesCulledPrimitives = D3D12_TRI_STATE_UNKNOWN;
-            caps->EnhancedBarriersSupported = FALSE;
-            caps->RelaxedFormatCastingSupported = FALSE;
+            caps->EnhancedBarriersSupported = EnhancedBarriersSupported();
+            caps->RelaxedFormatCastingSupported = EnhancedBarriersSupported() && relaxed_casting.RelaxedFormatCastingSupported;
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS13:
@@ -1749,6 +1768,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS17 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->NonNormalizedCoordinateSamplersSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0100;
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS18:
@@ -1809,19 +1829,19 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         {
             D3D12_FEATURE_DATA_PREDICATION *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            return E_UNEXPECTED;
+            return QueryFeature106(D3D12DDI_FEATURE_D3D12_PREDICATION_106, caps, sizeof(*caps), &caps->Supported);
         }
         case D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO:
         {
             D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            return E_UNEXPECTED;
+            return QueryPlacedResourceSupport(caps);
         }
         case D3D12_FEATURE_HARDWARE_COPY:
         {
             D3D12_FEATURE_DATA_HARDWARE_COPY *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            return E_UNEXPECTED;
+            return QueryFeature106(D3D12DDI_FEATURE_HARDWARE_COPY_106, caps, sizeof(*caps), &caps->Supported);
         }
         default:
             WARN("Unknown feature %#x.\n", feature);
@@ -1837,10 +1857,11 @@ LUID *STDMETHODCALLTYPE Native12Device::GetAdapterLuid(LUID *out)
 
 HRESULT STDMETHODCALLTYPE Native12Device::GetDeviceRemovedReason() { return RefreshRemovedReason(); }
 
-HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL independent,
+HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL factory_device, UINT factory_flags,
         D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
         void **out)
 {
+    BOOL independent = factory_device;
     IDXGIAdapter *selected = NULL;
     HRESULT hr;
 
@@ -1866,11 +1887,16 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
         return hr;
     }
     Native12Device *device = NULL;
-    if (!independent)
+    AcquireSRWLockExclusive(&Native12SingletonLock);
+    device = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level);
+    ReleaseSRWLockExclusive(&Native12SingletonLock);
+    if (device && factory_device && (!(factory_flags & D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE)
+            || (device->configuration_flags != configuration
+            && !(factory_flags & D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_INCOMPATIBLE_EXISTING_DEVICE))))
     {
-        AcquireSRWLockExclusive(&Native12SingletonLock);
-        device = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level);
-        ReleaseSRWLockExclusive(&Native12SingletonLock);
+        device->Release();
+        selected->Release();
+        return DXGI_ERROR_ALREADY_EXISTS;
     }
     if (device) hr = S_OK;
     else
@@ -1888,7 +1914,7 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
             device->dred_page_fault = page_fault;
             device->configuration_flags = configuration;
         }
-        else if (SUCCEEDED(hr))
+        if (SUCCEEDED(hr) && !(factory_flags & D3D12_DEVICE_FACTORY_FLAG_DISALLOW_STORING_NEW_DEVICE_AS_SINGLETON))
         {
             Native12Device *existing;
             AcquireSRWLockExclusive(&Native12SingletonLock);
@@ -1921,10 +1947,10 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
     return hr;
 }
 
-extern "C" HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL independent,
-        D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
-        void **out)
+extern "C" HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL factory_device,
+        UINT factory_flags, D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration,
+        REFIID iid, void **out)
 {
-    return Native12CreateDevice(adapter, minimum_level, independent, auto_breadcrumbs, page_fault, configuration, iid,
-            out);
+    return Native12CreateDevice(adapter, minimum_level, factory_device, factory_flags, auto_breadcrumbs, page_fault,
+            configuration, iid, out);
 }

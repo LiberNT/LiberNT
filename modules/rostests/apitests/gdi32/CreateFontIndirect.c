@@ -762,6 +762,34 @@ Test_FontSelection(void)
 }
 
 
+static void
+Test_Orientation(void)
+{
+    static const LONG Angles[][2] = { { -900, 0 }, { 0, 300 }, { 450, -900 }, { 900, 900 } };
+    LOGFONTW logfont, got;
+    HFONT hFont;
+    INT i, ret;
+
+    for (i = 0; i < ARRAYSIZE(Angles); ++i)
+    {
+        ZeroMemory(&logfont, sizeof(logfont));
+        logfont.lfHeight = -50;
+        logfont.lfEscapement = Angles[i][0];
+        logfont.lfOrientation = Angles[i][1];
+        logfont.lfCharSet = ANSI_CHARSET;
+        lstrcpyW(logfont.lfFaceName, L"Arial");
+        hFont = CreateFontIndirectW(&logfont);
+        ok(hFont != NULL, "%d: CreateFontIndirectW failed\n", i);
+
+        ZeroMemory(&got, sizeof(got));
+        ret = GetObjectW(hFont, sizeof(got), &got);
+        ok(ret == sizeof(got), "%d: ret = %d\n", i, ret);
+        ok(got.lfEscapement == Angles[i][0], "%d: lfEscapement = %ld\n", i, got.lfEscapement);
+        ok(got.lfOrientation == Angles[i][1], "%d: lfOrientation = %ld\n", i, got.lfOrientation);
+        DeleteObject(hFont);
+    }
+}
+
 START_TEST(CreateFontIndirect)
 {
     Test_CreateFontIndirectA();
@@ -770,5 +798,6 @@ START_TEST(CreateFontIndirect)
     Test_CreateFontIndirectExW();
     Test_FontPresence();
     Test_FontSelection();
+    Test_Orientation();
 }
 

@@ -8,6 +8,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_capturestream(void);
 extern void func_deviceenum(void);
 extern void func_exclusivestream(void);
 extern void func_renderstream(void);
@@ -20,6 +21,7 @@ extern void func_wdmaudbroker(void);
 
 const struct test winetest_testlist[] =
 {
+    { "capturestream", func_capturestream },
     { "deviceenum", func_deviceenum },
     { "exclusivestream", func_exclusivestream },
     { "renderstream", func_renderstream },

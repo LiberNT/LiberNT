@@ -32,6 +32,9 @@
 #include "lmcons.h"
 #include "wtsapi32.h"
 #include <reactos/wtssession.h>
+#ifdef __REACTOS__
+#include <ntsecapi.h>
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wtsapi);
@@ -368,38 +371,38 @@ BOOL WINAPI WTSEnumerateSessionsA(HANDLE server, DWORD reserved, DWORD version,
  *                WTSEnumerateEnumerateSessionsW  (WTSAPI32.@)
  */
 #ifdef __REACTOS__
-BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
-        PWTS_SESSION_INFOW *session_info, DWORD *count)
+static const WCHAR wts_console_name[] = L"Console";
+static const WCHAR wts_services_name[] = L"Services";
+
+typedef struct _WTS_SESSION_USER
 {
-    static const WCHAR console_name[] = L"Console";
-    static const WCHAR services_name[] = L"Services";
-    SYSTEM_PROCESS_INFORMATION *nt_info, *nt_process;
-    ULONG nt_size = 4096, sessions[64], session_count = 1, console, i, j;
-    WTS_SESSION_INFOW *info;
+    LUID LogonId;
+    LARGE_INTEGER LogonTime;
+    WCHAR UserName[UNLEN + 1];
+    WCHAR Domain[MAX_PATH];
+} WTS_SESSION_USER;
+
+static SYSTEM_PROCESS_INFORMATION *wts_query_processes(void)
+{
+    SYSTEM_PROCESS_INFORMATION *nt_info, *new_info;
+    ULONG nt_size = 4096;
     NTSTATUS status;
-    WCHAR *name;
-
-    TRACE("%p 0x%08lx 0x%08lx %p %p\n", server, reserved, version, session_info, count);
-
-    if (!session_info || !count) return FALSE;
 
     if (!(nt_info = malloc(nt_size)))
     {
         SetLastError(ERROR_OUTOFMEMORY);
-        return FALSE;
+        return NULL;
     }
 
     while ((status = NtQuerySystemInformation(SystemProcessInformation, nt_info,
             nt_size, NULL)) == STATUS_INFO_LENGTH_MISMATCH)
     {
-        SYSTEM_PROCESS_INFORMATION *new_info;
-
         nt_size *= 2;
         if (!(new_info = realloc(nt_info, nt_size)))
         {
             free(nt_info);
             SetLastError(ERROR_OUTOFMEMORY);
-            return FALSE;
+            return NULL;
         }
         nt_info = new_info;
     }
@@ -407,51 +410,171 @@ BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
     {
         free(nt_info);
         SetLastError(RtlNtStatusToDosError(status));
-        return FALSE;
+        return NULL;
     }
+    return nt_info;
+}
+
+static SYSTEM_PROCESS_INFORMATION *wts_next_process(SYSTEM_PROCESS_INFORMATION *nt_process)
+{
+    if (!nt_process->NextEntryOffset)
+        return NULL;
+    return (SYSTEM_PROCESS_INFORMATION *)((char *)nt_process + nt_process->NextEntryOffset);
+}
+
+static BOOL wts_get_session_ids(ULONG *sessions, ULONG max_sessions, ULONG *session_count)
+{
+    SYSTEM_PROCESS_INFORMATION *nt_info, *nt_process;
+    ULONG count = 1, i, j;
+
+    if (!(nt_info = wts_query_processes()))
+        return FALSE;
 
     sessions[0] = 0;
-    nt_process = nt_info;
-    for (;;)
+    for (nt_process = nt_info; nt_process; nt_process = wts_next_process(nt_process))
     {
-        for (i = 0; i < session_count && sessions[i] < nt_process->SessionId; ++i) ;
-        if ((i == session_count || sessions[i] != nt_process->SessionId) && session_count < ARRAY_SIZE(sessions))
+        for (i = 0; i < count && sessions[i] < nt_process->SessionId; ++i) ;
+        if ((i == count || sessions[i] != nt_process->SessionId) && count < max_sessions)
         {
-            for (j = session_count; j > i; --j) sessions[j] = sessions[j - 1];
+            for (j = count; j > i; --j) sessions[j] = sessions[j - 1];
             sessions[i] = nt_process->SessionId;
-            ++session_count;
+            ++count;
         }
-
-        if (!nt_process->NextEntryOffset)
-            break;
-        nt_process = (SYSTEM_PROCESS_INFORMATION *)((char *)nt_process + nt_process->NextEntryOffset);
     }
     free(nt_info);
+    *session_count = count;
+    return TRUE;
+}
 
-    if (!(info = malloc(session_count * (sizeof(*info) + sizeof(services_name)))))
+static BOOL wts_session_exists(DWORD session_id)
+{
+    ULONG sessions[64], count = 0, i;
+
+    if (!wts_get_session_ids(sessions, ARRAY_SIZE(sessions), &count))
+        return FALSE;
+    for (i = 0; i < count; ++i)
+    {
+        if (sessions[i] == session_id)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOL wts_is_session_user_sid(PSID sid)
+{
+    static const SID_IDENTIFIER_AUTHORITY nt_authority = { SECURITY_NT_AUTHORITY };
+
+    if (!sid || !IsValidSid(sid))
+        return FALSE;
+    if (memcmp(GetSidIdentifierAuthority(sid), &nt_authority, sizeof(nt_authority)))
+        return TRUE;
+    if (!*GetSidSubAuthorityCount(sid))
+        return FALSE;
+
+    switch (*GetSidSubAuthority(sid, 0))
+    {
+        case SECURITY_LOCAL_SYSTEM_RID:
+        case SECURITY_LOCAL_SERVICE_RID:
+        case SECURITY_NETWORK_SERVICE_RID:
+        case SECURITY_WINDOW_MANAGER_BASE_RID:
+        case SECURITY_UMFD_BASE_RID:
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static void wts_copy_lsa_string(WCHAR *dst, SIZE_T dst_count, const LSA_UNICODE_STRING *src)
+{
+    SIZE_T length = src->Buffer ? src->Length / sizeof(WCHAR) : 0;
+
+    if (length >= dst_count)
+        length = dst_count - 1;
+    if (length)
+        memcpy(dst, src->Buffer, length * sizeof(WCHAR));
+    dst[length] = 0;
+}
+
+/* FIXME: the interactive user of a session comes from the LSA logon sessions; Windows keeps it in the local session manager */
+static BOOL wts_get_session_user(DWORD session_id, WTS_SESSION_USER *user)
+{
+    PSECURITY_LOGON_SESSION_DATA data;
+    PLUID logon_ids = NULL;
+    ULONG logon_count = 0, i;
+    BOOL found = FALSE;
+
+    if (LsaEnumerateLogonSessions(&logon_count, &logon_ids) != STATUS_SUCCESS)
+        return FALSE;
+
+    for (i = 0; i < logon_count; ++i)
+    {
+        data = NULL;
+        if (LsaGetLogonSessionData(&logon_ids[i], &data) != STATUS_SUCCESS || !data)
+            continue;
+        if (data->Session == session_id &&
+            (data->LogonType == Interactive ||
+             data->LogonType == RemoteInteractive ||
+             data->LogonType == CachedInteractive ||
+             data->LogonType == CachedRemoteInteractive) &&
+            wts_is_session_user_sid(data->Sid) &&
+            (!found || data->LogonTime.QuadPart > user->LogonTime.QuadPart))
+        {
+            user->LogonId = data->LogonId;
+            user->LogonTime = data->LogonTime;
+            wts_copy_lsa_string(user->UserName, ARRAY_SIZE(user->UserName), &data->UserName);
+            wts_copy_lsa_string(user->Domain, ARRAY_SIZE(user->Domain), &data->LogonDomain);
+            found = TRUE;
+        }
+        LsaFreeReturnBuffer(data);
+    }
+    LsaFreeReturnBuffer(logon_ids);
+    return found;
+}
+
+static WTS_CONNECTSTATE_CLASS wts_session_state(DWORD session_id, BOOL has_user)
+{
+    if (session_id && session_id == WTSGetActiveConsoleSessionId())
+        return has_user ? WTSActive : WTSConnected;
+    return (session_id && has_user) ? WTSActive : WTSDisconnected;
+}
+
+static const WCHAR *wts_session_station(DWORD session_id)
+{
+    if (!session_id)
+        return wts_services_name;
+    if (session_id == WTSGetActiveConsoleSessionId())
+        return wts_console_name;
+    return L"";
+}
+
+BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
+        PWTS_SESSION_INFOW *session_info, DWORD *count)
+{
+    ULONG sessions[64], session_count = 0, i;
+    WTS_SESSION_USER user;
+    WTS_SESSION_INFOW *info;
+    WCHAR *name;
+
+    TRACE("%p 0x%08lx 0x%08lx %p %p\n", server, reserved, version, session_info, count);
+
+    if (!session_info || !count) return FALSE;
+
+    if (!wts_get_session_ids(sessions, ARRAY_SIZE(sessions), &session_count))
+        return FALSE;
+
+    if (!(info = malloc(session_count * (sizeof(*info) + sizeof(wts_services_name)))))
     {
         SetLastError(ERROR_OUTOFMEMORY);
         return FALSE;
     }
 
-    console = WTSGetActiveConsoleSessionId();
     name = (WCHAR *)(info + session_count);
     for (i = 0; i < session_count; ++i)
     {
         info[i].SessionId = sessions[i];
+        info[i].State = wts_session_state(sessions[i], sessions[i] && wts_get_session_user(sessions[i], &user));
         info[i].pWinStationName = name;
-        if (sessions[i] == console)
-        {
-            info[i].State = WTSActive;
-            memcpy(name, console_name, sizeof(console_name));
-        }
-        else
-        {
-            info[i].State = WTSDisconnected;
-            if (!sessions[i]) memcpy(name, services_name, sizeof(services_name));
-            else *name = 0;
-        }
-        name += ARRAY_SIZE(services_name);
+        wcscpy(name, wts_session_station(sessions[i]));
+        name += ARRAY_SIZE(wts_services_name);
     }
 
     *session_info = info;
@@ -582,7 +705,11 @@ BOOL WINAPI WTSQuerySessionInformationA(HANDLE server, DWORD session_id, WTS_INF
         return FALSE;
     }
 
-    if (class == WTSClientProtocolType || class == WTSConnectState)
+    if (class == WTSClientProtocolType || class == WTSConnectState
+#ifdef __REACTOS__
+        || class == WTSSessionId || class == WTSIsRemoteSession
+#endif
+        )
         return WTSQuerySessionInformationW(server, session_id, class, (WCHAR **)buffer, count);
 
     if (class == WTSSessionInfo)
@@ -660,6 +787,210 @@ BOOL WINAPI WTSQuerySessionInformationA(HANDLE server, DWORD session_id, WTS_INF
 /************************************************************
  *                WTSQuerySessionInformationW  (WTSAPI32.@)
  */
+#ifdef __REACTOS__
+static BOOL wts_return_data(WCHAR **buffer, DWORD *count, const void *data, DWORD size)
+{
+    void *copy;
+
+    if (!(copy = malloc(size)))
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    memcpy(copy, data, size);
+    *buffer = copy;
+    *count = size;
+    return TRUE;
+}
+
+static BOOL wts_return_string(WCHAR **buffer, DWORD *count, const WCHAR *string)
+{
+    return wts_return_data(buffer, count, string, (wcslen(string) + 1) * sizeof(WCHAR));
+}
+
+static BOOL wts_query_session_info(DWORD session_id, BOOL has_user, const WTS_SESSION_USER *user, WCHAR **buffer, DWORD *count)
+{
+    WTSINFOW info;
+    FILETIME ft;
+
+    memset(&info, 0, sizeof(info));
+    info.State = wts_session_state(session_id, has_user);
+    info.SessionId = session_id;
+    lstrcpynW(info.WinStationName, wts_session_station(session_id), ARRAY_SIZE(info.WinStationName));
+    if (has_user)
+    {
+        lstrcpynW(info.UserName, user->UserName, ARRAY_SIZE(info.UserName));
+        lstrcpynW(info.Domain, user->Domain, ARRAY_SIZE(info.Domain));
+        info.LogonTime = user->LogonTime;
+    }
+    GetSystemTimeAsFileTime(&ft);
+    info.CurrentTime.LowPart = ft.dwLowDateTime;
+    info.CurrentTime.HighPart = ft.dwHighDateTime;
+    /* TODO: connect, disconnect and last input times and the I/O counters of the session */
+    return wts_return_data(buffer, count, &info, sizeof(info));
+}
+
+BOOL WINAPI WTSQuerySessionInformationW(HANDLE server, DWORD session_id, WTS_INFO_CLASS class, WCHAR **buffer, DWORD *count)
+{
+    WTS_SESSION_USER user;
+    BOOL has_user;
+
+    TRACE("%p 0x%08lx %d %p %p\n", server, session_id, class, buffer, count);
+
+    if (!buffer || !count)
+    {
+        SetLastError(ERROR_INVALID_USER_BUFFER);
+        return FALSE;
+    }
+
+    if (session_id == WTS_CURRENT_SESSION && !ProcessIdToSessionId(GetCurrentProcessId(), &session_id))
+        return FALSE;
+    if (!wts_session_exists(session_id))
+    {
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        return FALSE;
+    }
+    has_user = session_id && wts_get_session_user(session_id, &user);
+
+    switch (class)
+    {
+        case WTSConnectState:
+        {
+            WTS_CONNECTSTATE_CLASS state = wts_session_state(session_id, has_user);
+            return wts_return_data(buffer, count, &state, sizeof(state));
+        }
+        case WTSClientProtocolType:
+        {
+            USHORT protocol = 0;
+            return wts_return_data(buffer, count, &protocol, sizeof(protocol));
+        }
+        case WTSSessionId:
+            return wts_return_data(buffer, count, &session_id, sizeof(session_id));
+        case WTSIsRemoteSession:
+        {
+            BYTE remote = FALSE;
+            return wts_return_data(buffer, count, &remote, sizeof(remote));
+        }
+        case WTSUserName:
+            return wts_return_string(buffer, count, has_user ? user.UserName : L"");
+        case WTSDomainName:
+            return wts_return_string(buffer, count, has_user ? user.Domain : L"");
+        case WTSWinStationName:
+            return wts_return_string(buffer, count, wts_session_station(session_id));
+        case WTSSessionInfo:
+            return wts_query_session_info(session_id, has_user, &user, buffer, count);
+        default:
+            break;
+    }
+
+    FIXME("Unimplemented class %d\n", class);
+
+    *buffer = NULL;
+    *count = 0;
+    return FALSE;
+}
+
+static BOOL wts_caller_has_tcb(void)
+{
+    TOKEN_PRIVILEGES *privileges;
+    HANDLE token;
+    DWORD size = 0, i;
+    BOOL enabled = FALSE;
+    LUID tcb;
+
+    if (!LookupPrivilegeValueW(NULL, L"SeTcbPrivilege", &tcb))
+        return FALSE;
+    if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &token) &&
+        !OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+        return FALSE;
+
+    GetTokenInformation(token, TokenPrivileges, NULL, 0, &size);
+    if (size && (privileges = malloc(size)))
+    {
+        if (GetTokenInformation(token, TokenPrivileges, privileges, size, &size))
+        {
+            for (i = 0; i < privileges->PrivilegeCount; ++i)
+            {
+                if (privileges->Privileges[i].Luid.LowPart == tcb.LowPart &&
+                    privileges->Privileges[i].Luid.HighPart == tcb.HighPart &&
+                    (privileges->Privileges[i].Attributes & SE_PRIVILEGE_ENABLED))
+                {
+                    enabled = TRUE;
+                }
+            }
+        }
+        free(privileges);
+    }
+    CloseHandle(token);
+    return enabled;
+}
+
+/* FIXME: Windows hands out the token the local session manager kept at logon; here it is duplicated from a process of that logon */
+static BOOL wts_duplicate_logon_token(DWORD session_id, const LUID *logon_id, PHANDLE token)
+{
+    SYSTEM_PROCESS_INFORMATION *nt_info, *nt_process;
+    TOKEN_STATISTICS statistics;
+    HANDLE process, process_token;
+    DWORD size;
+    BOOL found = FALSE;
+
+    if (!(nt_info = wts_query_processes()))
+        return FALSE;
+
+    for (nt_process = nt_info; nt_process && !found; nt_process = wts_next_process(nt_process))
+    {
+        if (nt_process->SessionId != session_id || !nt_process->UniqueProcessId)
+            continue;
+        if (!(process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, HandleToUlong(nt_process->UniqueProcessId))))
+            continue;
+        if (OpenProcessToken(process, TOKEN_QUERY | TOKEN_DUPLICATE, &process_token))
+        {
+            if (GetTokenInformation(process_token, TokenStatistics, &statistics, sizeof(statistics), &size) &&
+                statistics.AuthenticationId.LowPart == logon_id->LowPart &&
+                statistics.AuthenticationId.HighPart == logon_id->HighPart)
+            {
+                found = DuplicateTokenEx(process_token, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, token);
+            }
+            CloseHandle(process_token);
+        }
+        CloseHandle(process);
+    }
+    free(nt_info);
+
+    if (!found)
+        SetLastError(ERROR_NO_TOKEN);
+    return found;
+}
+
+/************************************************************
+ *                WTSQueryUserToken (WTSAPI32.@)
+ */
+BOOL WINAPI WTSQueryUserToken(ULONG session_id, PHANDLE token)
+{
+    WTS_SESSION_USER user;
+
+    TRACE("%lu %p\n", session_id, token);
+
+    if (!token)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!wts_caller_has_tcb())
+    {
+        SetLastError(ERROR_PRIVILEGE_NOT_HELD);
+        return FALSE;
+    }
+    if (session_id == WTS_CURRENT_SESSION && !ProcessIdToSessionId(GetCurrentProcessId(), &session_id))
+        return FALSE;
+    if (!session_id || !wts_get_session_user(session_id, &user))
+    {
+        SetLastError(ERROR_NO_TOKEN);
+        return FALSE;
+    }
+    return wts_duplicate_logon_token(session_id, &user.LogonId, token);
+}
+#else
 BOOL WINAPI WTSQuerySessionInformationW(HANDLE server, DWORD session_id, WTS_INFO_CLASS class, WCHAR **buffer, DWORD *count)
 {
     TRACE("%p 0x%08lx %d %p %p\n", server, session_id, class, buffer, count);
@@ -772,6 +1103,8 @@ BOOL WINAPI WTSQueryUserToken(ULONG session_id, PHANDLE token)
                            GetCurrentProcess(), token,
                            0, FALSE, DUPLICATE_SAME_ACCESS);
 }
+
+#endif
 
 /************************************************************
  *                WTSQueryUserConfigA (WTSAPI32.@)

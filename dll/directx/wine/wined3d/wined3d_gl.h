@@ -585,6 +585,7 @@ struct wined3d_rendertarget_info
     struct wined3d_gl_view gl_view;
     struct wined3d_resource *resource;
     unsigned int sub_resource_idx;
+    unsigned int layer_idx;
     unsigned int layer_count;
 };
 

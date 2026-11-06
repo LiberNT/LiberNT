@@ -268,6 +268,8 @@ RtlpLfhUsageDataSize(PHEAP Heap, ULONG Flags, PRTL_HEAP_PARAMETERS Parameters)
         return 0;
     if (Flags & (HEAP_NO_SERIALIZE | HEAP_TAIL_CHECKING_ENABLED | HEAP_FREE_CHECKING_ENABLED))
         return 0;
+    if ((Flags & HEAP_CREATE_ALIGN_16) && sizeof(HEAP_ENTRY) < 16)
+        return 0;
     if (RtlpHeapIsSpecial(Flags))
         return 0;
     if (Parameters->CommitRoutine)

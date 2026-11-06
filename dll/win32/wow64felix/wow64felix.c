@@ -24,6 +24,7 @@
 #define FELIX_INTERRUPT_ASSERT   0x2C
 #define FELIX_INTERRUPT_DEBUG    0x2D
 #define FELIX_PARK_TIMEOUT       (-10 * 1000 * 1000)
+#define FELIX_EFLAGS_TF          0x100
 
 enum
 {
@@ -47,6 +48,7 @@ typedef struct _FELIX_THREAD
     SIZE_T UnmapSize;
     HANDLE ParkEvent;
     HANDLE ReleaseEvent;
+    BOOLEAN RaisingGuest;
 } FELIX_THREAD, *PFELIX_THREAD;
 
 #pragma pack(push, 1)
@@ -192,7 +194,8 @@ FelixSaveState(
 {
     PULONG64 Registers = Felix86NtRegisters(Thread->Cpu);
 
-    Context->ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+    Context->ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS |
+                            WOW64_CONTEXT_DEBUG_REGISTERS;
     Context->Eax = (ULONG)Registers[FelixRax];
     Context->Ecx = (ULONG)Registers[FelixRcx];
     Context->Edx = (ULONG)Registers[FelixRdx];
@@ -209,7 +212,7 @@ FelixSaveState(
     Context->SegSs = FELIX_SEG_DATA;
     Context->SegGs = FELIX_SEG_DATA;
     Context->SegFs = FELIX_SEG_TEB;
-    Context->Dr0 = Context->Dr1 = Context->Dr2 = Context->Dr3 = Context->Dr6 = Context->Dr7 = 0;
+    /* FIXME: hardware breakpoints in Dr0-3/Dr7 are kept but never fire */
     RtlZeroMemory(Context->ExtendedRegisters, sizeof(Context->ExtendedRegisters));
     Felix86NtSaveFloating(Thread->Cpu, Context->ExtendedRegisters);
     FelixFxsaveToFloatSave((PFELIX_FXSAVE)Context->ExtendedRegisters, &Context->FloatSave);
@@ -296,6 +299,141 @@ Felix86NtSystemService32(
     Thread->EntryContext = EntryContext;
     Felix86NtSetFrame(Thread->Cpu, Frame);
     FelixLoadCpuArea(Thread, &Status, Bop);
+}
+
+static
+VOID
+FelixRaiseGuest(
+    _In_ PFELIX_THREAD Thread,
+    _In_ PEXCEPTION_RECORD Record)
+{
+    ULONG InService = Thread->InService;
+    volatile BOOLEAN Raised = FALSE;
+    CONTEXT Context;
+
+    FelixSaveState(Thread, FelixCpuArea());
+    Thread->InService = InService + 1;
+    RtlCaptureContext(&Context);
+    if (!Raised)
+    {
+        Raised = TRUE;
+        Thread->RaisingGuest = TRUE;
+        NtRaiseException(Record, &Context, TRUE);
+    }
+    Thread->RaisingGuest = FALSE;
+    Thread->InService = InService;
+    FelixLoadCpuArea(Thread, NULL, 0);
+}
+
+VOID
+Felix86NtBreakpoint(
+    _In_ PVOID Owner,
+    _Inout_ PULONG64 Registers,
+    _In_ ULONG64 Next)
+{
+    EXCEPTION_RECORD Record;
+
+    RtlZeroMemory(&Record, sizeof(Record));
+    Record.ExceptionCode = STATUS_WX86_BREAKPOINT;
+    Record.ExceptionAddress = ULongToPtr((ULONG)Next - 1);
+    Record.NumberParameters = 1;
+    Registers[FelixRip] = (ULONG)Next;
+    FelixRaiseGuest(Owner, &Record);
+}
+
+VOID
+Felix86NtSingleStep(
+    _In_ PVOID Owner,
+    _Inout_ PULONG64 Registers)
+{
+    PFELIX_THREAD Thread = Owner;
+    EXCEPTION_RECORD Record;
+
+    RtlZeroMemory(&Record, sizeof(Record));
+    Record.ExceptionCode = STATUS_WX86_SINGLE_STEP;
+    Record.ExceptionAddress = ULongToPtr((ULONG)Registers[FelixRip]);
+    Felix86NtSetFlags(Thread->Cpu, Felix86NtGetFlags(Thread->Cpu) & ~(ULONG64)FELIX_EFLAGS_TF);
+    FelixRaiseGuest(Thread, &Record);
+}
+
+static
+BOOLEAN
+FelixDebugService(
+    _Inout_ PULONG64 Registers,
+    _In_ ULONG Next)
+{
+    UCHAR Instruction = 0;
+    ULONG Length;
+
+    _SEH2_TRY
+    {
+        Instruction = *(volatile UCHAR *)ULongToPtr(Next);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+    if (Instruction != 0xCC) return FALSE;
+
+    if ((ULONG)Registers[FelixRax] == BREAKPOINT_PRINT)
+    {
+        Length = min((USHORT)Registers[FelixRdx], 512);
+        _SEH2_TRY
+        {
+            DbgPrintEx((ULONG)Registers[FelixRbx],
+                       (ULONG)Registers[FelixRdi],
+                       "%.*s",
+                       Length,
+                       (PCSTR)ULongToPtr((ULONG)Registers[FelixRcx]));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
+    }
+    Registers[FelixRax] = STATUS_SUCCESS;
+    Registers[FelixRip] = Next + 1;
+    return TRUE;
+}
+
+VOID
+Felix86NtInterrupt(
+    _In_ PVOID Owner,
+    _Inout_ PULONG64 Registers,
+    _In_ ULONG64 Next,
+    _In_ uint32_t Vector)
+{
+    ULONG Address = (ULONG)Registers[FelixRip];
+    EXCEPTION_RECORD Record;
+
+    RtlZeroMemory(&Record, sizeof(Record));
+    switch (Vector)
+    {
+        case FELIX_INTERRUPT_DEBUG:
+            if (FelixDebugService(Registers, (ULONG)Next)) return;
+            Address = (ULONG)Next + 1;
+            Registers[FelixRip] = Address;
+            Record.ExceptionCode = STATUS_WX86_BREAKPOINT;
+            Record.NumberParameters = 1;
+            Record.ExceptionInformation[0] = (ULONG)Registers[FelixRax];
+            break;
+
+        case FELIX_INTERRUPT_FASTFAIL:
+            NtTerminateProcess(NtCurrentProcess(), STATUS_STACK_BUFFER_OVERRUN);
+            return;
+
+        case FELIX_INTERRUPT_ASSERT:
+            Record.ExceptionCode = STATUS_ASSERTION_FAILURE;
+            break;
+
+        default:
+            Record.ExceptionCode = STATUS_ACCESS_VIOLATION;
+            Record.NumberParameters = 2;
+            Record.ExceptionInformation[1] = 0xFFFFFFFF;
+            break;
+    }
+    Record.ExceptionAddress = ULongToPtr(Address);
+    FelixRaiseGuest(Owner, &Record);
 }
 
 ULONG64
@@ -525,35 +663,6 @@ FelixSimulate(
     Felix86NtRun(Thread->Cpu);
 }
 
-static
-BOOLEAN
-FelixDebugService(
-    _In_ PFELIX_THREAD Thread)
-{
-    PULONG64 Registers = Felix86NtRegisters(Thread->Cpu);
-    ULONG Length;
-
-    if ((ULONG)Registers[FelixRax] == BREAKPOINT_PRINT)
-    {
-        Length = min((USHORT)Registers[FelixRdx], 512);
-        _SEH2_TRY
-        {
-            DbgPrintEx((ULONG)Registers[FelixRbx],
-                       (ULONG)Registers[FelixRdi],
-                       "%.*s",
-                       Length,
-                       (PCSTR)ULongToPtr((ULONG)Registers[FelixRcx]));
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-        }
-        _SEH2_END;
-    }
-    Registers[FelixRax] = STATUS_SUCCESS;
-    Registers[FelixRip] += 3;
-    return TRUE;
-}
-
 NTSTATUS
 WINAPI
 BTCpuResetToConsistentState(
@@ -569,6 +678,14 @@ BTCpuResetToConsistentState(
     int Result;
 
     if (!Thread || !Thread->Cpu || !Thread->EntryContext) return STATUS_SUCCESS;
+    if (Thread->RaisingGuest)
+    {
+        Thread->RaisingGuest = FALSE;
+        if (Record->ExceptionCode == STATUS_WX86_BREAKPOINT) Record->ExceptionCode = STATUS_BREAKPOINT;
+        else if (Record->ExceptionCode == STATUS_WX86_SINGLE_STEP) Record->ExceptionCode = STATUS_SINGLE_STEP;
+        *NativeContext = *Thread->EntryContext;
+        return STATUS_SUCCESS;
+    }
     if (Felix86NtHostFault(Pointers)) NtContinue(NativeContext, FALSE);
 
     RtlZeroMemory(&Native, sizeof(Native));
@@ -593,14 +710,10 @@ BTCpuResetToConsistentState(
         NtContinue(NativeContext, FALSE);
     }
 
-    if (Guest.Interrupt == FELIX_INTERRUPT_DEBUG && FelixDebugService(Thread)) NtContinue(NativeContext, FALSE);
-    if (Guest.Interrupt == FELIX_INTERRUPT_FASTFAIL)
-        NtTerminateProcess(NtCurrentProcess(), STATUS_STACK_BUFFER_OVERRUN);
-
     RtlZeroMemory(Record, sizeof(*Record));
-    Record->ExceptionCode = Guest.Interrupt == FELIX_INTERRUPT_ASSERT ? STATUS_ASSERTION_FAILURE : Guest.Code;
+    Record->ExceptionCode = Guest.Code;
     Record->ExceptionAddress = (PVOID)(ULONG_PTR)Guest.Address;
-    Record->NumberParameters = Guest.Interrupt == FELIX_INTERRUPT_ASSERT ? 0 : Guest.Parameters;
+    Record->NumberParameters = Guest.Parameters;
     for (Index = 0; Index < Record->NumberParameters; Index++) Record->ExceptionInformation[Index] = Guest.Information[Index];
 
     Context = FelixCpuArea();

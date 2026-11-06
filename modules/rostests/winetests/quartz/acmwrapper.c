@@ -53,6 +53,93 @@ static void check_interface_(unsigned int line, void *iface_ptr, REFIID iid, BOO
         IUnknown_Release(unk);
 }
 
+static unsigned int qc_sink_calls;
+static IBaseFilter *qc_sink_sender;
+
+static HRESULT WINAPI qc_sink_QueryInterface(IQualityControl *iface, REFIID iid, void **out)
+{
+    *out = iface;
+    return S_OK;
+}
+
+static ULONG WINAPI qc_sink_AddRef(IQualityControl *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI qc_sink_Release(IQualityControl *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI qc_sink_Notify(IQualityControl *iface, IBaseFilter *sender, Quality q)
+{
+    ++qc_sink_calls;
+    qc_sink_sender = sender;
+    return 0xdeadbeef;
+}
+
+static HRESULT WINAPI qc_sink_SetSink(IQualityControl *iface, IQualityControl *sink)
+{
+    ok(0, "Unexpected call.\n");
+    return E_NOTIMPL;
+}
+
+static const IQualityControlVtbl qc_sink_vtbl =
+{
+    qc_sink_QueryInterface,
+    qc_sink_AddRef,
+    qc_sink_Release,
+    qc_sink_Notify,
+    qc_sink_SetSink,
+};
+
+static void test_pin_quality_control(IBaseFilter *filter, IPin *pin, HRESULT expect_hr, HRESULT expect_null_hr, BOOL forwards)
+{
+    IQualityControl qc_sink = {&qc_sink_vtbl};
+    Quality q = {Famine, 1000, -10000, 0};
+    IQualityControl *qc;
+    IPin *qc_pin;
+    HRESULT hr;
+
+    hr = IPin_QueryInterface(pin, &IID_IQualityControl, (void **)&qc);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (FAILED(hr))
+        return;
+
+    hr = IQualityControl_QueryInterface(qc, &IID_IPin, (void **)&qc_pin);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(qc_pin == pin, "Got pin %p, expected %p.\n", qc_pin, pin);
+    IPin_Release(qc_pin);
+
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == expect_hr, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, NULL, q);
+    ok(hr == expect_null_hr, "Got hr %#lx.\n", hr);
+
+    hr = IQualityControl_SetSink(qc, &qc_sink);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    qc_sink_calls = 0;
+    qc_sink_sender = NULL;
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == (forwards ? 0xdeadbeef : expect_hr), "Got hr %#lx.\n", hr);
+    ok(qc_sink_calls == !!forwards, "Got %u calls.\n", qc_sink_calls);
+    ok(qc_sink_sender == (forwards ? filter : NULL), "Got sender %p.\n", qc_sink_sender);
+    if (forwards)
+    {
+        qc_sink_sender = NULL;
+        hr = IQualityControl_Notify(qc, NULL, q);
+        ok(hr == 0xdeadbeef, "Got hr %#lx.\n", hr);
+        ok(qc_sink_sender == filter, "Got sender %p.\n", qc_sink_sender);
+    }
+    hr = IQualityControl_SetSink(qc, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IQualityControl_Notify(qc, filter, q);
+    ok(hr == expect_hr, "Got hr %#lx.\n", hr);
+
+    IQualityControl_Release(qc);
+}
+
 static void test_interfaces(void)
 {
     IBaseFilter *filter = create_acm_wrapper();
@@ -85,6 +172,8 @@ static void test_interfaces(void)
 
     check_interface(pin, &IID_IMediaPosition, FALSE);
     check_interface(pin, &IID_IMediaSeeking, FALSE);
+
+    test_pin_quality_control(filter, pin, S_OK, E_POINTER, FALSE);
 
     IPin_Release(pin);
 
@@ -489,6 +578,87 @@ static void test_unconnected_filter_state(void)
     ok(!ref, "Got outstanding refcount %ld.\n", ref);
 }
 
+static unsigned int bag_read_calls;
+
+static HRESULT WINAPI property_bag_QueryInterface(IPropertyBag *iface, REFIID iid, void **out)
+{
+    ok(0, "Unexpected iid %s.\n", wine_dbgstr_guid(iid));
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI property_bag_AddRef(IPropertyBag *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI property_bag_Release(IPropertyBag *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI property_bag_Read(IPropertyBag *iface, const WCHAR *name, VARIANT *var, IErrorLog *log)
+{
+    ok(!wcscmp(name, L"AcmId"), "Got unexpected name %s.\n", wine_dbgstr_w(name));
+    ok(V_VT(var) == VT_I4, "Got unexpected type %u.\n", V_VT(var));
+    ok(!log, "Got unexpected error log %p.\n", log);
+    ++bag_read_calls;
+    return E_INVALIDARG;
+}
+
+static HRESULT WINAPI property_bag_Write(IPropertyBag *iface, const WCHAR *name, VARIANT *var)
+{
+    ok(0, "Unexpected call (name %s).\n", wine_dbgstr_w(name));
+    return E_FAIL;
+}
+
+static const IPropertyBagVtbl property_bag_vtbl =
+{
+    property_bag_QueryInterface,
+    property_bag_AddRef,
+    property_bag_Release,
+    property_bag_Read,
+    property_bag_Write,
+};
+
+static void test_property_bag(void)
+{
+    IPropertyBag property_bag = {&property_bag_vtbl};
+    IBaseFilter *filter = create_acm_wrapper();
+    IPersistPropertyBag *ppb;
+    CLSID clsid;
+    HRESULT hr;
+    ULONG ref;
+
+    hr = IBaseFilter_QueryInterface(filter, &IID_IPersistPropertyBag, (void **)&ppb);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    if (FAILED(hr))
+    {
+        IBaseFilter_Release(filter);
+        return;
+    }
+
+    hr = IPersistPropertyBag_GetClassID(ppb, &clsid);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(IsEqualGUID(&clsid, &CLSID_ACMWrapper), "Got CLSID %s.\n", wine_dbgstr_guid(&clsid));
+
+    hr = IPersistPropertyBag_InitNew(ppb);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    hr = IPersistPropertyBag_InitNew(ppb);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+
+    hr = IPersistPropertyBag_Save(ppb, &property_bag, TRUE, TRUE);
+    ok(hr == E_NOTIMPL, "Got hr %#lx.\n", hr);
+
+    bag_read_calls = 0;
+    hr = IPersistPropertyBag_Load(ppb, &property_bag, NULL);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(bag_read_calls == 1, "Got %u calls to Read().\n", bag_read_calls);
+
+    IPersistPropertyBag_Release(ppb);
+    ref = IBaseFilter_Release(filter);
+    ok(!ref, "Got outstanding refcount %ld.\n", ref);
+}
+
 START_TEST(acmwrapper)
 {
     CoInitialize(NULL);
@@ -499,6 +669,7 @@ START_TEST(acmwrapper)
     test_find_pin();
     test_pin_info();
     test_unconnected_filter_state();
+    test_property_bag();
 
     CoUninitialize();
 }

@@ -22,9 +22,10 @@ LxTracePathArgument(
     if ((Handler == LxSysOpenat) || (Handler == LxSysNewfstatat) || (Handler == LxSysStatx) ||
         (Handler == LxSysFaccessat) || (Handler == LxSysFaccessat2) || (Handler == LxSysReadlinkat) ||
         (Handler == LxSysMkdirat) || (Handler == LxSysUnlinkat) || (Handler == LxSysMknodat) ||
-        (Handler == LxSysUtimensat) || (Handler == LxSysFchmodat) || (Handler == LxSysFchownat) ||
-        (Handler == LxSysExecveat) || (Handler == LxSysMount) || (Handler == LxSysSymlinkat) ||
-        (Handler == LxSysRenameat) || (Handler == LxSysRenameat2) || (Handler == LxSysInotifyAddWatch))
+        (Handler == LxSysUtimensat) || (Handler == LxSysFchmodat) || (Handler == LxSysFchmodat2) ||
+        (Handler == LxSysFchownat) || (Handler == LxSysExecveat) || (Handler == LxSysMount) ||
+        (Handler == LxSysSymlinkat) || (Handler == LxSysRenameat) || (Handler == LxSysRenameat2) ||
+        (Handler == LxSysInotifyAddWatch))
     {
         return 1;
     }
@@ -37,25 +38,6 @@ LxTracePathArgument(
         return 0;
     }
     return -1;
-}
-
-static
-BOOLEAN
-LxSyscallMayBlock(
-    _In_ PLX_SYSCALL_HANDLER Handler)
-{
-    return (Handler == LxSysEpollPwait) || (Handler == LxSysEpollPwait2) || (Handler == LxSysPpoll) ||
-           (Handler == LxSysPselect6) || (Handler == LxSysWaitid) || (Handler == LxSysWait4) ||
-           (Handler == LxSysFutex) || (Handler == LxSysFutexWaitv) || (Handler == LxSysFutexWait) ||
-           (Handler == LxSysNanosleep) || (Handler == LxSysClockNanosleep) ||
-           (Handler == LxSysRead) || (Handler == LxSysReadv) || (Handler == LxSysRecvmsg) ||
-           (Handler == LxSysRecvfrom) || (Handler == LxSysRecvmmsg) || (Handler == LxSysRtSigtimedwait) ||
-           (Handler == LxSysRtSigsuspend) || (Handler == LxSysAccept) || (Handler == LxSysAccept4) ||
-           (Handler == LxSysWrite) || (Handler == LxSysWritev) || (Handler == LxSysSendmsg) ||
-           (Handler == LxSysSendto) || (Handler == LxSysConnect) || (Handler == LxSysOpenat) ||
-           (Handler == LxSysFlock) || (Handler == LxSysSemop) || (Handler == LxSysSemtimedop) ||
-           (Handler == LxSysMsgsnd) || (Handler == LxSysMsgrcv) || (Handler == LxSysSplice) ||
-           (Handler == LxSysTee) || (Handler == LxSysVmsplice);
 }
 
 static
@@ -108,7 +90,7 @@ LxSysCall(
         Call->Thread = LxThreadOf(PsGetCurrentThread());
         Call->Process = Call->Thread->Process;
         Call->Thread->CurrentSyscall = MAXULONG;
-        if (((LONG64)KeQueryInterruptTime() - Start > 10000000LL) && !LxSyscallMayBlock(Entry->Handler))
+        if (((LONG64)KeQueryInterruptTime() - Start > 10000000LL) && !Entry->MayBlock)
         {
             DbgPrint("lx %lu/%lu slow %s took %lld ms\n", Call->Process->Pid, Call->Thread->Tid,
                      (Entry->Name != NULL) ? Entry->Name : "?", ((LONG64)KeQueryInterruptTime() - Start) / 10000);

@@ -311,6 +311,86 @@ PfnPurgeStandby(VOID)
     WorldDestroy(&World);
 }
 
+static ULONG PfnFloor;
+
+static
+ULONG
+PfnTestFloor(PMI_PFN_DATABASE Db)
+{
+    UNREFERENCED_PARAMETER(Db);
+    return PfnFloor;
+}
+
+static
+ULONG64
+PfnDirectListedPages(PMI_PFN_DATABASE Db)
+{
+    ULONG64 Total = 0;
+    ULONG i;
+
+    for (i = 0; i < MI_PFN_SHARDS; i++)
+    {
+        Total += Db->Shard[i].List[MiPageZeroed].Count + Db->Shard[i].List[MiPageFree].Count +
+                 Db->Shard[i].List[MiPageStandby].Count;
+    }
+
+    return Total;
+}
+
+static
+VOID
+PfnReserveFloor(VOID)
+{
+    static TEST_WORLD World;
+    static ULONG Frames[4096];
+    PMI_PFN_DATABASE Db;
+    ULONG64 Available;
+    ULONG Count = 0;
+    ULONG Extra;
+    ULONG i;
+
+    WorldCreate(&World, 4096, 1, 100000);
+    Db = &World.System.Pfn;
+    Available = MiPfnAvailablePages(Db);
+    PfnFloor = 256;
+    Db->ReserveFloor = PfnTestFloor;
+
+    while (Count < RTL_NUMBER_OF(Frames) && (Frames[Count] = MiPfnAllocatePage(Db, 0)) != MI_FRAME_INVALID)
+        Count++;
+
+    CHECK(Count != 0 && Count < RTL_NUMBER_OF(Frames));
+    CHECK(PfnDirectListedPages(Db) <= PfnFloor && PfnDirectListedPages(Db) + MI_PFN_CACHE_BATCH > PfnFloor);
+    CHECK(MiPfnAllocatePage(Db, MI_ALLOCATE_ZEROED) == MI_FRAME_INVALID);
+
+    if (Db->DirectFrames < Db->FrameCount)
+    {
+        Extra = MiPfnAllocatePage(Db, MI_ALLOCATE_HIGH);
+        CHECK(Extra != MI_FRAME_INVALID && Extra >= Db->DirectFrames);
+        MiPfnShareDecrement(Db, Extra, TRUE);
+    }
+
+    PfnFloor = PfnFloor / 4;
+    Extra = MiPfnAllocatePage(Db, 0);
+    CHECK(Extra != MI_FRAME_INVALID && Extra < Db->DirectFrames);
+    if (Extra != MI_FRAME_INVALID)
+        MiPfnShareDecrement(Db, Extra, TRUE);
+
+    PfnFloor = 0;
+    while (Count < RTL_NUMBER_OF(Frames) &&
+           (Frames[Count] = MiPfnAllocatePage(Db, MI_ALLOCATE_HIGH)) != MI_FRAME_INVALID)
+        Count++;
+    CHECK(MiPfnListCount(Db, MiPageZeroed) + MiPfnListCount(Db, MiPageFree) == 0);
+    CHECK(Count == Available);
+
+    Db->ReserveFloor = NULL;
+    for (i = 0; i < Count; i++)
+        MiPfnShareDecrement(Db, Frames[i], TRUE);
+    MiPfnDrainCaches(Db);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    CHECK(MiPfnAvailablePages(Db) == Available);
+    WorldDestroy(&World);
+}
+
 void
 TestPfn(void)
 {
@@ -323,6 +403,7 @@ TestPfn(void)
     PfnRegionRotation();
     PfnZeroPages();
     PfnPurgeStandby();
+    PfnReserveFloor();
 
     WorldCreate(&World, 4096, 4, 100000);
     Db = &World.System.Pfn;

@@ -313,6 +313,18 @@ static void propset_private_tests(void)
                               DSPROPERTY_DIRECTSOUNDDEVICE_DESCRIPTION_1,
                               NULL, 0, &data, sizeof(data), &bytes);
         ok(rc==DS_OK || broken(rc == 0x88780078), "Couldn't get description: 0x%lx\n",rc);
+        if (rc == DSERR_NODRIVER)
+        {
+            static const GUID unknown_device = {0x12345678, 0x1234, 0x1234, {1, 2, 3, 4, 5, 6, 7, 8}};
+
+            data.DeviceId = unknown_device;
+            bytes = 0;
+            rc = IKsPropertySet_Get(pps, &DSPROPSETID_DirectSoundDevice,
+                                  DSPROPERTY_DIRECTSOUNDDEVICE_DESCRIPTION_1,
+                                  NULL, 0, &data, sizeof(data), &bytes);
+            ok(rc == DSERR_NODRIVER, "Got hr %#lx.\n", rc);
+            ok(bytes == sizeof(data), "Got size %lu.\n", bytes);
+        }
     }
     /* test DSPROPERTY_DIRECTSOUNDDEVICE_DESCRIPTION_A */
     rc = IKsPropertySet_QuerySupport(pps, &DSPROPSETID_DirectSoundDevice,

@@ -1602,6 +1602,11 @@ LX_SYSCALL(LxSysFchmod)
 
     if (File == NULL)
         return -LX_EBADF;
+    if (File->Flags & LX_O_PATH)
+    {
+        LxFileDereference(File);
+        return -LX_EBADF;
+    }
     Error = LxSetAttributesFile(Call->Process, File, (ULONG)Call->Args[1] & 07777, MAXULONG, MAXULONG);
     LxFileDereference(File);
     return Error;
@@ -1609,6 +1614,14 @@ LX_SYSCALL(LxSysFchmod)
 
 LX_SYSCALL(LxSysFchmodat)
 {
+    return LxSetAttributesAt(Call, (LONG)Call->Args[0], Call->Args[1], 0, (ULONG)Call->Args[2] & 07777, MAXULONG,
+                             MAXULONG);
+}
+
+LX_SYSCALL(LxSysFchmodat2)
+{
+    if ((ULONG)Call->Args[3] & ~(ULONG)(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+        return -LX_EINVAL;
     return LxSetAttributesAt(Call, (LONG)Call->Args[0], Call->Args[1], (ULONG)Call->Args[3],
                              (ULONG)Call->Args[2] & 07777, MAXULONG, MAXULONG);
 }
@@ -1646,6 +1659,11 @@ LX_SYSCALL(LxSysFchown)
     File = LxCallFile(Call, 0);
     if (File == NULL)
         return -LX_EBADF;
+    if (File->Flags & LX_O_PATH)
+    {
+        LxFileDereference(File);
+        return -LX_EBADF;
+    }
     Error = LxSetAttributesFile(Call->Process, File, MAXULONG, Uid, Gid);
     LxFileDereference(File);
     return Error;
@@ -1655,6 +1673,8 @@ LX_SYSCALL(LxSysFchownat)
 {
     ULONG Uid = (ULONG)Call->Args[2], Gid = (ULONG)Call->Args[3];
 
+    if ((ULONG)Call->Args[4] & ~(ULONG)(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+        return -LX_EINVAL;
     if (!LxChownIds(Call->Process, &Uid, &Gid))
         return -LX_EINVAL;
     return LxSetAttributesAt(Call, (LONG)Call->Args[0], Call->Args[1], (ULONG)Call->Args[4], MAXULONG, Uid, Gid);
@@ -1946,17 +1966,173 @@ LX_SYSCALL(LxSysUmask)
     return Previous;
 }
 
+typedef struct _LX_FLOCK_HOLDER
+{
+    LIST_ENTRY Link;
+    PLX_INSTANCE Instance;
+    ULONG64 Dev;
+    ULONG64 Ino;
+    PLX_FILE File;
+    BOOLEAN Exclusive;
+} LX_FLOCK_HOLDER, *PLX_FLOCK_HOLDER;
+
+typedef struct _LX_FLOCK_REQUEST
+{
+    PLX_FLOCK_HOLDER Holder;
+    BOOLEAN Acquired;
+} LX_FLOCK_REQUEST, *PLX_FLOCK_REQUEST;
+
+static LIST_ENTRY LxFlockHolders;
+static FAST_MUTEX LxFlockLock;
+static LX_POLL_HEAD LxFlockWaiters;
+
+VOID
+LxFlockInitialize(VOID)
+{
+    InitializeListHead(&LxFlockHolders);
+    ExInitializeFastMutex(&LxFlockLock);
+    LxPollHeadInit(&LxFlockWaiters);
+}
+
+static
+PLX_FLOCK_HOLDER
+LxFlockFindLocked(
+    _In_ PLX_FILE File)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = LxFlockHolders.Flink; Entry != &LxFlockHolders; Entry = Entry->Flink)
+    {
+        PLX_FLOCK_HOLDER Holder = CONTAINING_RECORD(Entry, LX_FLOCK_HOLDER, Link);
+
+        if (Holder->File == File)
+            return Holder;
+    }
+    return NULL;
+}
+
+static
+BOOLEAN
+LxFlockTryAcquire(
+    _In_ PVOID Context)
+{
+    PLX_FLOCK_REQUEST Request = Context;
+    PLX_FLOCK_HOLDER Want = Request->Holder;
+    PLIST_ENTRY Entry;
+    BOOLEAN Conflict = FALSE;
+
+    ExAcquireFastMutex(&LxFlockLock);
+    for (Entry = LxFlockHolders.Flink; !Conflict && (Entry != &LxFlockHolders); Entry = Entry->Flink)
+    {
+        PLX_FLOCK_HOLDER Holder = CONTAINING_RECORD(Entry, LX_FLOCK_HOLDER, Link);
+
+        Conflict = (Holder->File != Want->File) && (Holder->Instance == Want->Instance) && (Holder->Dev == Want->Dev) &&
+                   (Holder->Ino == Want->Ino) && (Holder->Exclusive || Want->Exclusive);
+    }
+    if (!Conflict)
+    {
+        InsertTailList(&LxFlockHolders, &Want->Link);
+        Want->File->Flocked = TRUE;
+    }
+    ExReleaseFastMutex(&LxFlockLock);
+    Request->Acquired = !Conflict;
+    return !Conflict;
+}
+
+static
+VOID
+LxFlockRemove(
+    _In_ PLX_FILE File)
+{
+    PLX_FLOCK_HOLDER Holder;
+
+    ExAcquireFastMutex(&LxFlockLock);
+    Holder = LxFlockFindLocked(File);
+    if (Holder != NULL)
+        RemoveEntryList(&Holder->Link);
+    ExReleaseFastMutex(&LxFlockLock);
+    if (Holder == NULL)
+        return;
+    LxFree(Holder);
+    LxPollWake(&LxFlockWaiters, LX_POLLIN);
+}
+
+VOID
+LxFlockRelease(
+    _In_ PLX_FILE File)
+{
+    if (File->Flocked)
+        LxFlockRemove(File);
+}
+
+static
+LONG64
+LxFlockLockFile(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_FILE File,
+    _In_ BOOLEAN Exclusive,
+    _In_ BOOLEAN NonBlocking)
+{
+    LX_FLOCK_REQUEST Request;
+    PLX_FLOCK_HOLDER Existing;
+    LX_STAT Stat;
+    LONG64 Result;
+
+    Result = LxFileStat(File, &Stat);
+    if (Result != 0)
+        return Result;
+    ExAcquireFastMutex(&LxFlockLock);
+    Existing = LxFlockFindLocked(File);
+    Result = ((Existing != NULL) && (Existing->Exclusive == Exclusive)) ? 1 : 0;
+    ExReleaseFastMutex(&LxFlockLock);
+    if (Result != 0)
+        return 0;
+    if (Existing != NULL)
+        LxFlockRemove(File);
+
+    Request.Holder = LxAlloc(sizeof(*Request.Holder));
+    Request.Acquired = FALSE;
+    if (Request.Holder == NULL)
+        return -LX_ENOMEM;
+    Request.Holder->Instance = Process->Instance;
+    Request.Holder->Dev = Stat.Dev;
+    Request.Holder->Ino = Stat.Ino;
+    Request.Holder->File = File;
+    Request.Holder->Exclusive = Exclusive;
+    if (NonBlocking)
+    {
+        Result = LxFlockTryAcquire(&Request) ? 0 : -LX_EAGAIN;
+    }
+    else
+    {
+        do
+        {
+            Result = LxWaitHead(&LxFlockWaiters, LxFlockTryAcquire, &Request, NULL);
+        } while ((Result == 0) && !Request.Acquired);
+    }
+    if (!Request.Acquired)
+        LxFree(Request.Holder);
+    return Result;
+}
+
 LX_SYSCALL(LxSysFlock)
 {
     PLX_FILE File = LxCallFile(Call, 0);
     ULONG Operation = (ULONG)Call->Args[1] & ~LX_LOCK_NB;
+    LONG64 Result = 0;
 
     if (File == NULL)
         return -LX_EBADF;
-    LxFileDereference(File);
     if ((Operation != LX_LOCK_SH) && (Operation != LX_LOCK_EX) && (Operation != LX_LOCK_UN))
-        return -LX_EINVAL;
-    return 0;
+        Result = -LX_EINVAL;
+    else if (File->Flags & LX_O_PATH)
+        Result = -LX_EBADF;
+    else if (Operation == LX_LOCK_UN)
+        LxFlockRemove(File);
+    else
+        Result = LxFlockLockFile(Call->Process, File, Operation == LX_LOCK_EX, (Call->Args[1] & LX_LOCK_NB) != 0);
+    LxFileDereference(File);
+    return Result;
 }
 
 static
@@ -2256,6 +2432,8 @@ LX_SYSCALL(LxSysMount)
     LONG64 Result;
     LONG Error;
 
+    if ((Flags & LX_MS_MGC_MSK) == LX_MS_MGC_VAL)
+        Flags &= ~LX_MS_MGC_MSK;
     Error = LxMountLookup(Process, LX_AT_FDCWD, Call->Args[1], LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
@@ -2618,6 +2796,40 @@ LxXattrFind(
     *RecordLength = 0;
     *ValueLength = 0;
     return NULL;
+}
+
+LONG
+LxXattrRemoveName(
+    _In_opt_ PLX_TMPFS_INODE Inode,
+    _In_opt_ HANDLE Handle,
+    _In_ PCSTR Name)
+{
+    PUCHAR Blob = LxAlloc(LX_XATTR_BLOB_MAX), Record;
+    ULONG Length, RecordLength;
+    USHORT ValueLength;
+    LONG Error;
+
+    if (Blob == NULL)
+        return -LX_ENOMEM;
+    if (Inode != NULL)
+        Error = LxTmpfsXattrRead(Inode, Blob, LX_XATTR_BLOB_MAX, &Length);
+    else
+        Error = LxXattrRead(Handle, Blob, LX_XATTR_BLOB_MAX, &Length);
+    if (Error == 0)
+    {
+        Record = LxXattrFind(Blob, Length, Name, &RecordLength, &ValueLength);
+        if (Record != NULL)
+        {
+            RtlMoveMemory(Record, Record + RecordLength, Length - (ULONG)(Record - Blob) - RecordLength);
+            Length -= RecordLength;
+            if (Inode != NULL)
+                Error = LxTmpfsXattrWrite(Inode, Blob, Length);
+            else
+                Error = LxXattrWrite(Handle, Blob, Length);
+        }
+    }
+    LxFree(Blob);
+    return Error;
 }
 
 static
@@ -3515,7 +3727,7 @@ LX_SYSCALL(LxSysFsopen)
         return Result;
     if ((strcmp(Name, "tmpfs") != 0) && (strcmp(Name, "ramfs") != 0) && (strcmp(Name, "proc") != 0) &&
         (strcmp(Name, "sysfs") != 0) && (strcmp(Name, "cgroup2") != 0) && (strcmp(Name, "devpts") != 0) &&
-        (strcmp(Name, "mqueue") != 0) && (strcmp(Name, "devtmpfs") != 0))
+        (strcmp(Name, "mqueue") != 0) && (strcmp(Name, "devtmpfs") != 0) && (strcmp(Name, "squashfs") != 0))
     {
         LxFree(Name);
         return -LX_ENODEV;

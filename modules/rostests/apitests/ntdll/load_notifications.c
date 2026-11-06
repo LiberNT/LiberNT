@@ -329,6 +329,13 @@ START_TEST(load_notifications)
         g_TLS_DETACH = 5;
         g_DLL_DETACH = 4;
     }
+    else if (sizeof(void *) != sizeof(ULONGLONG))
+    {
+        g_TLS_ATTACH = 1;
+        g_TLS_DETACH = 1;
+        g_DLL_ATTACH = 1;
+        g_DLL_DETACH = 1;
+    }
 
     ret = GetTempPathW(_countof(workdir), workdir);
     ok(ret, "GetTempPathW error: %lu\n", GetLastError());

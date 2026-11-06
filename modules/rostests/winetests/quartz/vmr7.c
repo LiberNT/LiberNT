@@ -2377,6 +2377,8 @@ static void test_video_window(void)
     WNDCLASSA window_class = {0};
     struct testfilter source;
     IMemAllocator *allocator;
+    MONITORINFO monitorinfo;
+    IMediaControl *control;
     LONG width, height, l;
     IVideoWindow *window;
     IMemInputPin *input;
@@ -2497,6 +2499,28 @@ static void test_video_window(void)
     todo_wine ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
     hr = IVideoWindow_GetMaxIdealImageSize(window, &width, &height);
     todo_wine ok(hr == VFW_E_WRONG_STATE, "Got hr %#lx.\n", hr);
+
+    IFilterGraph2_QueryInterface(graph, &IID_IMediaControl, (void **)&control);
+    hr = IMediaControl_Pause(control);
+    ok(hr == S_FALSE, "Got hr %#lx.\n", hr);
+
+    monitorinfo.cbSize = sizeof(monitorinfo);
+    GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &monitorinfo);
+
+    hr = IVideoWindow_GetMinIdealImageSize(window, &width, &height);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(width == 1, "Got width %ld.\n", width);
+    ok(height == 1, "Got height %ld.\n", height);
+    hr = IVideoWindow_GetMaxIdealImageSize(window, &width, &height);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    ok(width == monitorinfo.rcMonitor.right + 1, "Expected width %ld, got %ld.\n",
+            monitorinfo.rcMonitor.right + 1, width);
+    ok(height == monitorinfo.rcMonitor.bottom + 1, "Expected height %ld, got %ld.\n",
+            monitorinfo.rcMonitor.bottom + 1, height);
+
+    hr = IMediaControl_Stop(control);
+    ok(hr == S_OK, "Got hr %#lx.\n", hr);
+    IMediaControl_Release(control);
 
     IVideoWindow_Release(window);
 

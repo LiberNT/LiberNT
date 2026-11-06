@@ -2827,6 +2827,10 @@ static void create_cache_entry(http_request_t *req)
         CloseHandle(req->hCacheFile);
         req->hCacheFile = NULL;
     }
+#ifdef __REACTOS__
+    if(req->verb && !wcscmp(req->verb, L"HEAD"))
+        return;
+#endif
 
     if(req->hdr.dwFlags & INTERNET_FLAG_NO_CACHE_WRITE)
         b = FALSE;
@@ -5795,6 +5799,15 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
 
             if (HTTP_GetResponseHeaders(request, &responseLen))
             {
+#ifdef __REACTOS__
+                if(reusing_connection) {
+                    TRACE("Reused connection failed, reconnecting\n");
+                    http_release_netconn(request, FALSE);
+                    silent_retry = TRUE;
+                    loop_next = TRUE;
+                    continue;
+                }
+#endif
                 http_release_netconn(request, FALSE);
                 res = ERROR_INTERNET_CONNECTION_ABORTED;
                 goto lend;

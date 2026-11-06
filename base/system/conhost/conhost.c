@@ -2080,6 +2080,13 @@ static DWORD WINAPI tty_input( void *param )
                 key_press( console, ch, 'H', LEFT_CTRL_PRESSED );
                 break;
             case 0x1b:
+#ifdef __REACTOS__
+                if (console->mode & ENABLE_VIRTUAL_TERMINAL_INPUT)
+                {
+                    key_press( console, ch, VK_ESCAPE, 0 );
+                    break;
+                }
+#endif
                 i += process_input_escape( console, buf + i + 1, count - i - 1 );
                 break;
             case 0x1c: /* map ctrl-\ unix-ism into ctrl-break/pause windows-ism for unix consoles */
@@ -2089,6 +2096,13 @@ static DWORD WINAPI tty_input( void *param )
                     char_key_press( console, ch, 0 );
                 break;
             case 0x7f:
+#ifdef __REACTOS__
+                if (console->mode & ENABLE_VIRTUAL_TERMINAL_INPUT)
+                {
+                    key_press( console, ch, VK_BACK, 0 );
+                    break;
+                }
+#endif
                 key_press( console, '\b', VK_BACK, 0 );
                 break;
             default:

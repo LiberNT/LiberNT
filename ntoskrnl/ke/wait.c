@@ -863,10 +863,8 @@ WaitStart:
     }
 
 NoWait:
-    /* We aren't going to block: release the timer lock, exit the dispatcher via
-     * the quantum adjustment, and return the completed wait status. */
     KiReleaseDispatcherObject(&Timer->Header);
-    KiAdjustQuantumThread(Thread);
+    KiExitDispatcher(Thread->WaitIrql);
     return WaitStatus;
 }
 
@@ -1062,8 +1060,7 @@ DontWait:
     /* Release the object lock but maintain high IRQL */
     KiReleaseDispatcherObject(&CurrentObject->Header);
 
-    /* Adjust the Quantum and return the wait status */
-    KiAdjustQuantumThread(Thread);
+    KiExitDispatcher(Thread->WaitIrql);
     return WaitStatus;
 }
 
@@ -1412,8 +1409,7 @@ DontWait:
     /* Release the object locks but maintain high IRQL */
     KiReleaseObjectLocks(Object, LockOrder, Count);
 
-    /* Adjust the Quantum and return the wait status */
-    KiAdjustQuantumThread(Thread);
+    KiExitDispatcher(Thread->WaitIrql);
     return WaitStatus;
 }
 

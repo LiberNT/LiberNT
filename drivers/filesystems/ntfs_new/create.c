@@ -843,8 +843,7 @@ NtfsAssignCreateSecurity(
     _Out_ PSECURITY_DESCRIPTOR* NewDescriptor)
 {
     PNtfsFileRecord ParentFile = NULL;
-    PUCHAR ParentDescriptor = NULL;
-    ULONG DescriptorLength = 0;
+    PSECURITY_DESCRIPTOR ParentDescriptor;
     ULONG RemainingNameLength = 0;
     ULONG AutoInheritFlags = 0;
     SECURITY_DESCRIPTOR_CONTROL Control = 0;
@@ -875,36 +874,13 @@ NtfsAssignCreateSecurity(
         Parent = ParentFile;
     }
 
-    Status = NtfsFileRecordReadSecurityDescriptor(Parent, NULL, &DescriptorLength);
-    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_NOT_FOUND)
-    {
-        if (ParentFile)
-            NtfsFileRecordDestroy(ParentFile);
-        return Status;
-    }
-    if (Status == STATUS_BUFFER_TOO_SMALL)
-    {
-        ParentDescriptor = (PUCHAR)ExAllocatePoolWithTag(PagedPool, DescriptorLength, TAG_NTFS);
-        if (!ParentDescriptor)
-        {
-            if (ParentFile)
-                NtfsFileRecordDestroy(ParentFile);
-            return STATUS_INSUFFICIENT_RESOURCES;
-        }
-        Status = NtfsFileRecordReadSecurityDescriptor(Parent, ParentDescriptor, &DescriptorLength);
-        if (!NT_SUCCESS(Status))
-        {
-            ExFreePoolWithTag(ParentDescriptor, TAG_NTFS);
-            if (ParentFile)
-                NtfsFileRecordDestroy(ParentFile);
-            return Status;
-        }
-    }
+    Status = NtfsReadRecordSecurityDescriptor(Parent, &ParentDescriptor);
     if (ParentFile)
         NtfsFileRecordDestroy(ParentFile);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
-    if (ParentDescriptor &&
-        !(AccessState->Flags & TOKEN_HAS_RESTORE_PRIVILEGE) &&
+    if (!(AccessState->Flags & TOKEN_HAS_RESTORE_PRIVILEGE) &&
         !SeAccessCheck(ParentDescriptor,
                        &AccessState->SubjectSecurityContext,
                        FALSE,
@@ -920,8 +896,7 @@ NtfsAssignCreateSecurity(
         return Status;
     }
 
-    if (ParentDescriptor)
-        ParentControl = ((PISECURITY_DESCRIPTOR_RELATIVE)ParentDescriptor)->Control;
+    ParentControl = ((PISECURITY_DESCRIPTOR_RELATIVE)ParentDescriptor)->Control;
     if (AccessState->SecurityDescriptor)
         Control = ((PISECURITY_DESCRIPTOR_RELATIVE)AccessState->SecurityDescriptor)->Control;
     if (!(Control & SE_DACL_PRESENT) && (ParentControl & SE_DACL_AUTO_INHERITED))
@@ -939,8 +914,7 @@ NtfsAssignCreateSecurity(
                                 IoGetFileObjectGenericMapping(),
                                 PagedPool);
 
-    if (ParentDescriptor)
-        ExFreePoolWithTag(ParentDescriptor, TAG_NTFS);
+    ExFreePoolWithTag(ParentDescriptor, TAG_NTFS);
     return Status;
 }
 
@@ -1046,7 +1020,8 @@ NtfsLookupInCachedParent(
         NtfsFileRecordGetAttribute(
             *File,
             TypeReparsePoint,
-            NULL))
+            NULL) &&
+        !NtfsFileRecordIsWofBacked(*File))
     {
         Status = STATUS_REPARSE;
     }
@@ -1777,6 +1752,8 @@ NtfsCompleteFailedCreate(
                 ExAcquireFastMutex(&Vol->StreamListMutex);
                 IoRemoveShareAccess(IoGetCurrentIrpStackLocation(Irp)->FileObject,
                                     &FileCB->StreamCB->ShareAccess);
+                if (FileCB->PagingFileOpen)
+                    FileCB->StreamCB->PagingFile = FALSE;
                 ExReleaseFastMutex(&Vol->StreamListMutex);
                 FileCB->ShareAccessSet = FALSE;
                 InterlockedDecrement(&FileCB->StreamCB->UncleanCount);
@@ -1878,6 +1855,7 @@ NtfsOpenVolume(
         FileCB->DesiredAccess |=
             SecurityContext->AccessState->PreviouslyGrantedAccess;
     }
+    FileCB->MaximumAccess = FileCB->DesiredAccess;
 
     ExAcquireFastMutex(&VolCB->VolumeStateMutex);
     if (VolCB->Dismounting || VolCB->Dismounted)
@@ -2188,7 +2166,8 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     CachedRecord = NtfsAcquireCachedRecord(VolCB, FileObject->FileName.Buffer, (USHORT)(FileObject->FileName.Length / sizeof(WCHAR)));
     if (CachedRecord &&
         !(IrpSp->Parameters.Create.Options & FILE_OPEN_REPARSE_POINT) &&
-        NtfsFileRecordGetAttribute(CachedRecord->Record, TypeReparsePoint, NULL))
+        NtfsFileRecordGetAttribute(CachedRecord->Record, TypeReparsePoint, NULL) &&
+        !NtfsFileRecordIsWofBacked(CachedRecord->Record))
     {
         NtfsReleaseCachedRecord(VolCB, CachedRecord);
         CachedRecord = NULL;
@@ -2892,6 +2871,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
     FileCB->LastAccessStampPending = NtfsShouldStampLastAccess(FileCB);
     FileCB->CreateOptions = IrpSp->Parameters.Create.Options;
+    FileCB->PagingFileOpen = BooleanFlagOn(IrpSp->Flags, SL_OPEN_PAGING_FILE);
     FileCB->ManageVolumeAccess = SeSinglePrivilegeCheck(SeExports->SeManageVolumePrivilege, Irp->RequestorMode);
     if (NamedDataStream)
     {
@@ -2923,10 +2903,28 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
     }
     FileCB->DesiredAccess = IrpSp->Parameters.Create.SecurityContext->DesiredAccess;
+    FileCB->MaximumAccess = FileCB->DesiredAccess;
     if (IrpSp->Parameters.Create.SecurityContext->AccessState)
     {
+        PPRIVILEGE_SET Privileges = NULL;
+        ACCESS_MASK MaximumAccess;
+
         FileCB->DesiredAccess |=
             IrpSp->Parameters.Create.SecurityContext->AccessState->PreviouslyGrantedAccess;
+        FileCB->MaximumAccess = FileCB->DesiredAccess;
+        if (CurrentFile &&
+            NT_SUCCESS(NtfsCheckRecordAccess(CurrentFile,
+                                             &IrpSp->Parameters.Create.SecurityContext->AccessState->SubjectSecurityContext,
+                                             MAXIMUM_ALLOWED,
+                                             0,
+                                             (IrpSp->Flags & SL_FORCE_ACCESS_CHECK) ? UserMode : Irp->RequestorMode,
+                                             &MaximumAccess,
+                                             &Privileges)))
+        {
+            FileCB->MaximumAccess = MaximumAccess;
+        }
+        if (Privileges)
+            SeFreePrivileges(Privileges);
     }
     /* A read-only file may still be opened to change its attributes, but it
      * cannot be opened for data writes or an overwriting disposition. */
@@ -3045,11 +3043,13 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         LARGE_INTEGER ZeroSize;
 
         ExAcquireFastMutex(&VolCB->StreamListMutex);
-        Status = IoCheckShareAccess(FileCB->DesiredAccess,
-                                    IrpSp->Parameters.Create.ShareAccess,
-                                    FileObject,
-                                    &FileCB->StreamCB->ShareAccess,
-                                    FALSE);
+        Status = FileCB->StreamCB->PagingFile
+            ? STATUS_SHARING_VIOLATION
+            : IoCheckShareAccess(FileCB->DesiredAccess,
+                                 IrpSp->Parameters.Create.ShareAccess,
+                                 FileObject,
+                                 &FileCB->StreamCB->ShareAccess,
+                                 FALSE);
         ExReleaseFastMutex(&VolCB->StreamListMutex);
         if (!NT_SUCCESS(Status))
         {
@@ -3083,14 +3083,17 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     else
     {
         ExAcquireFastMutex(&VolCB->StreamListMutex);
-        Status = IoCheckShareAccess(FileCB->DesiredAccess,
-                                    IrpSp->Parameters.Create.ShareAccess,
-                                    FileObject,
-                                    &FileCB->StreamCB->ShareAccess,
-                                    TRUE);
+        Status = FileCB->StreamCB->PagingFile
+            ? STATUS_SHARING_VIOLATION
+            : IoCheckShareAccess(FileCB->DesiredAccess,
+                                 IrpSp->Parameters.Create.ShareAccess,
+                                 FileObject,
+                                 &FileCB->StreamCB->ShareAccess,
+                                 TRUE);
         if (NT_SUCCESS(Status))
         {
             FileCB->ShareAccessSet = TRUE;
+            FileCB->StreamCB->PagingFile = FileCB->PagingFileOpen;
             InterlockedIncrement(&FileCB->StreamCB->UncleanCount);
         }
         ExReleaseFastMutex(&VolCB->StreamListMutex);

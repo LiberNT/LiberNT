@@ -184,7 +184,11 @@ static inline unsigned char *u__strnset( unsigned char *s, unsigned char c, size
  */
 unsigned char* CDECL __p__mbctype(void)
 {
+#if defined(__REACTOS__) && _MSVCR_VER == 0
+  return MSVCRT_mbctype;
+#else
   return get_mbcinfo()->mbctype;
+#endif
 }
 
 /*********************************************************************

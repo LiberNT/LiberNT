@@ -358,8 +358,7 @@ SdBusReIdentifyChildren(
         PPDO_EXTENSION Candidate;
 
         Candidate = CONTAINING_RECORD(Entry, PDO_EXTENSION, ListEntry);
-        if (Candidate->Present && Candidate->FunctionNumber == 0 &&
-            !Candidate->IsEmmcPartition)
+        if (Candidate->Present && Candidate->FunctionNumber == 0)
         {
             PdoExtension = Candidate;
             ObReferenceObject(PdoExtension->Common.Self);

@@ -490,6 +490,15 @@ static struct domnode *node_get_doc(struct domnode *node)
     return node->owner ? node->owner : node;
 }
 
+#ifdef __REACTOS__
+bool domnode_is_sax_building(const struct domnode *node)
+{
+    const struct domnode *doc = node->owner ? node->owner : node;
+
+    return !!(doc->flags & DOMNODE_SAX_BUILD);
+}
+#endif
+
 HRESULT node_get_name(struct domnode *node, BSTR *name)
 {
     return return_bstr(node->qname, name);
@@ -845,6 +854,11 @@ HRESULT node_insert_before(struct domnode *node, IXMLDOMNode *new_child, const V
     if (ret)
         *ret = NULL;
 
+#ifdef __REACTOS__
+    if (domnode_is_sax_building(node))
+        return E_FAIL;
+#endif
+
     if (!(child_node = get_node_obj(new_child)))
         return E_FAIL;
 
@@ -1172,6 +1186,11 @@ HRESULT node_remove_child(struct domnode *node, IXMLDOMNode *child, IXMLDOMNode 
     if (oldChild)
         *oldChild = NULL;
 
+#ifdef __REACTOS__
+    if (domnode_is_sax_building(node))
+        return E_FAIL;
+#endif
+
     child_node = get_node_obj(child);
     if (!child_node)
         return E_FAIL;
@@ -1424,8 +1443,22 @@ static void domnode_insert_attribute(struct domnode *parent, struct domnode *nod
     domnode_set_owner(node, parent);
 }
 
+#ifdef __REACTOS__
+static HRESULT domnode_create_named(DOMNodeType type, const WCHAR *name, int name_len, const WCHAR *uri, int uri_len,
+        struct domnode *owner, bool check_name, struct domnode **node);
+
 HRESULT domnode_create(DOMNodeType type, const WCHAR *name, int name_len, const WCHAR *uri, int uri_len,
         struct domnode *owner, struct domnode **node)
+{
+    return domnode_create_named(type, name, name_len, uri, uri_len, owner, true, node);
+}
+
+static HRESULT domnode_create_named(DOMNodeType type, const WCHAR *name, int name_len, const WCHAR *uri, int uri_len,
+        struct domnode *owner, bool check_name, struct domnode **node)
+#else
+HRESULT domnode_create(DOMNodeType type, const WCHAR *name, int name_len, const WCHAR *uri, int uri_len,
+        struct domnode *owner, struct domnode **node)
+#endif
 {
     struct domnode *object, *xmlns_xml;
     WCHAR *p;
@@ -1448,7 +1481,11 @@ HRESULT domnode_create(DOMNodeType type, const WCHAR *name, int name_len, const 
     object->qname = SysAllocStringLen(name, name_len);
     if (type == NODE_ELEMENT || type == NODE_ATTRIBUTE)
     {
+#ifdef __REACTOS__
+        if (check_name && !parser_is_valid_qualified_name(object->qname))
+#else
         if (!parser_is_valid_qualified_name(object->qname))
+#endif
         {
             domnode_destroy_tree(object);
             return E_FAIL;
@@ -2380,6 +2417,7 @@ static void node_dump_element_attributes(struct node_dump_context *context, stru
     if (!is_namespace_defined(context, node))
         node_dump_namespace_for_node(context, node);
 
+#ifndef __REACTOS__
     LIST_FOR_EACH_ENTRY(attr, &node->attributes, struct domnode, entry)
     {
         if (domnode_is_namespace_declaration(attr))
@@ -2388,9 +2426,14 @@ static void node_dump_element_attributes(struct node_dump_context *context, stru
         if (!is_namespace_defined(context, attr))
             node_dump_namespace_for_node(context, attr);
     }
+#endif
 
     LIST_FOR_EACH_ENTRY(attr, &node->attributes, struct domnode, entry)
     {
+#ifdef __REACTOS__
+        if (!domnode_is_namespace_declaration(attr) && !is_namespace_defined(context, attr))
+            node_dump_namespace_for_node(context, attr);
+#endif
         node_dump_append(context, L" ", 1);
         node_dump(attr, context);
     }
@@ -3977,6 +4020,11 @@ HRESULT node_set_attribute_value(struct domnode *node, const WCHAR *name, const 
     HRESULT hr;
     VARIANT v;
 
+#ifdef __REACTOS__
+    if (domnode_is_sax_building(node))
+        return E_FAIL;
+#endif
+
     if (FAILED(parse_qualified_name(name, &attr_name)))
         return E_FAIL;
 
@@ -4134,6 +4182,9 @@ struct parse_context
     HRESULT status;
     int max_depth;
     int depth;
+#ifdef __REACTOS__
+    bool builder;
+#endif
 };
 
 static void parse_context_node_create(struct parse_context *context, DOMNodeType type,
@@ -4145,7 +4196,11 @@ static void parse_context_node_create(struct parse_context *context, DOMNodeType
     if (context->status != S_OK)
         return;
 
+#ifdef __REACTOS__
+    context->status = domnode_create_named(type, name, name_len, uri, uri_len, owner, !context->builder, node);
+#else
     context->status = domnode_create(type, name, name_len, uri, uri_len, owner, node);
+#endif
 }
 
 static void parse_context_append_child(struct parse_context *context, struct domnode *parent, struct domnode *child)
@@ -4179,7 +4234,11 @@ static void parse_context_node_put_data(struct parse_context *context, struct do
 
 static HRESULT parse_context_create_text_node(struct parse_context *c, DOMNodeType type)
 {
+#ifdef __REACTOS__
+    bool preserve = c->builder || is_preserving_whitespace(c->node), space = true;
+#else
     bool preserve = is_preserving_whitespace(c->node), space = true;
+#endif
     bool ignored_whitespace = false;
     struct domnode *node;
 
@@ -4553,6 +4612,20 @@ static HRESULT WINAPI parse_decl_handler_attributeDecl(ISAXDeclHandler *iface, c
         const WCHAR *type, int type_len, const WCHAR *value_default, int value_default_len,
         const WCHAR *value, int value_len)
 {
+#ifdef __REACTOS__
+    struct parse_context *c = impl_from_ISAXDeclHandler(iface);
+    struct domnode *attr;
+
+    if (value && c->node->type == NODE_DOCUMENT_TYPE && c->node->name &&
+            !wcsncmp(c->node->name, element_name, element_name_len) &&
+            !c->node->name[element_name_len])
+    {
+        parse_context_node_create(c, NODE_ATTRIBUTE, attribute_name, attribute_name_len, NULL, 0, c->root, &attr);
+        parse_context_append_attribute(c, c->node, attr);
+        parse_context_node_put_data(c, attr, value, value_len);
+        return c->status;
+    }
+#endif
     return S_OK;
 }
 
@@ -4882,6 +4955,436 @@ HRESULT parse_stream(ISequentialStream *stream, bool utf16, const struct domdoc_
 
     return hr;
 }
+
+#ifdef __REACTOS__
+struct dom_builder
+{
+    ISAXContentHandler ISAXContentHandler_iface;
+    ISAXLexicalHandler ISAXLexicalHandler_iface;
+    struct parse_context context;
+    IUnknown *output;
+    struct domnode *doc;
+    struct domnode *held;
+    bool active;
+    bool cdata;
+    int entity_depth;
+};
+
+static struct dom_builder *dom_builder_from_ISAXContentHandler(ISAXContentHandler *iface)
+{
+    return CONTAINING_RECORD(iface, struct dom_builder, ISAXContentHandler_iface);
+}
+
+static struct dom_builder *dom_builder_from_ISAXLexicalHandler(ISAXLexicalHandler *iface)
+{
+    return CONTAINING_RECORD(iface, struct dom_builder, ISAXLexicalHandler_iface);
+}
+
+static void dom_builder_hold(struct dom_builder *builder, struct domnode *node)
+{
+    if (node == builder->held)
+        return;
+    if (node)
+        domnode_addref(node);
+    if (builder->held)
+        domnode_release(builder->held);
+    builder->held = node;
+}
+
+static void dom_builder_stop(struct dom_builder *builder, bool keep)
+{
+    struct parse_context *c = &builder->context;
+
+    if (!builder->active)
+        return;
+
+    if (keep)
+        parse_context_create_text_node(c, NODE_TEXT);
+    else
+        domnode_unlink_children(builder->doc);
+
+    dom_builder_hold(builder, NULL);
+    c->node = builder->doc;
+    c->buffer.count = 0;
+    builder->doc->flags &= ~DOMNODE_SAX_BUILD;
+    builder->active = false;
+}
+
+static HRESULT dom_builder_abort(struct dom_builder *builder)
+{
+    dom_builder_stop(builder, false);
+    return E_FAIL;
+}
+
+static HRESULT dom_builder_status(struct dom_builder *builder)
+{
+    HRESULT hr = builder->context.status;
+
+    if (hr != S_OK)
+        dom_builder_stop(builder, false);
+    return hr;
+}
+
+static bool dom_builder_at_document(const struct dom_builder *builder)
+{
+    return builder->context.node == builder->doc;
+}
+
+static HRESULT WINAPI dom_builder_content_QueryInterface(ISAXContentHandler *iface, REFIID riid, void **obj)
+{
+    if (IsEqualGUID(riid, &IID_ISAXContentHandler) || IsEqualGUID(riid, &IID_IUnknown))
+    {
+        *obj = iface;
+        return S_OK;
+    }
+
+    *obj = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI dom_builder_content_AddRef(ISAXContentHandler *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI dom_builder_content_Release(ISAXContentHandler *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI dom_builder_putDocumentLocator(ISAXContentHandler *iface, ISAXLocator *locator)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+
+    return locator ? S_OK : dom_builder_abort(builder);
+}
+
+static HRESULT WINAPI dom_builder_startDocument(ISAXContentHandler *iface)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+    struct parse_context *c = &builder->context;
+
+    if (builder->active)
+        return dom_builder_abort(builder);
+
+    domnode_unlink_children(builder->doc);
+    c->root = builder->doc;
+    c->node = builder->doc;
+    c->status = S_OK;
+    c->buffer.count = 0;
+    c->depth = 0;
+    builder->cdata = false;
+    builder->entity_depth = 0;
+    builder->doc->flags |= DOMNODE_SAX_BUILD;
+    builder->active = true;
+    return S_OK;
+}
+
+static HRESULT WINAPI dom_builder_endDocument(ISAXContentHandler *iface)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+    struct domnode *root = builder->active ? domnode_get_root_element(builder->doc) : NULL;
+
+    dom_builder_stop(builder, true);
+    return root && !SysStringLen(root->qname) ? E_FAIL : S_OK;
+}
+
+static HRESULT WINAPI dom_builder_startPrefixMapping(ISAXContentHandler *iface,
+        const WCHAR *prefix, int prefix_len, const WCHAR *uri, int uri_len)
+{
+    return S_OK;
+}
+
+static HRESULT WINAPI dom_builder_endPrefixMapping(ISAXContentHandler *iface, const WCHAR *prefix, int prefix_len)
+{
+    return S_OK;
+}
+
+static HRESULT WINAPI dom_builder_startElement(ISAXContentHandler *iface, const WCHAR *uri, int uri_len,
+        const WCHAR *name, int name_len, const WCHAR *qname, int qname_len, ISAXAttributes *attrs)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+    struct parse_context *c = &builder->context;
+
+    if (!builder->active)
+        return E_FAIL;
+    if (builder->cdata || (dom_builder_at_document(builder) && domnode_get_root_element(builder->doc)))
+        return dom_builder_abort(builder);
+
+    parse_content_handler_startElement(&c->content_handler, uri, uri_len, name, name_len, qname, qname_len, attrs);
+    if (c->status == S_OK)
+        dom_builder_hold(builder, c->node);
+    return dom_builder_status(builder);
+}
+
+static HRESULT WINAPI dom_builder_endElement(ISAXContentHandler *iface, const WCHAR *uri, int uri_len,
+        const WCHAR *name, int name_len, const WCHAR *qname, int qname_len)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+    struct parse_context *c = &builder->context;
+    struct domnode *element = c->node;
+
+    if (!builder->active)
+        return E_FAIL;
+    if (dom_builder_at_document(builder) || builder->entity_depth || !element->parent)
+        return dom_builder_abort(builder);
+
+    parse_content_handler_endElement(&c->content_handler, uri, uri_len, name, name_len, qname, qname_len);
+    if (c->status == S_OK)
+    {
+        element->flags |= DOMNODE_EXPLICIT_END_TAG;
+        dom_builder_hold(builder, dom_builder_at_document(builder) ? NULL : c->node);
+    }
+    return dom_builder_status(builder);
+}
+
+static HRESULT WINAPI dom_builder_characters(ISAXContentHandler *iface, const WCHAR *chars, int count)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+    struct parse_context *c = &builder->context;
+
+    if (!builder->active)
+        return E_FAIL;
+    if (dom_builder_at_document(builder))
+        return dom_builder_abort(builder);
+
+    if (count)
+        string_append(&c->buffer, chars, count);
+    return dom_builder_status(builder);
+}
+
+static HRESULT WINAPI dom_builder_ignorableWhitespace(ISAXContentHandler *iface, const WCHAR *chars, int count)
+{
+    return dom_builder_characters(iface, chars, count);
+}
+
+static HRESULT WINAPI dom_builder_processingInstruction(ISAXContentHandler *iface, const WCHAR *target,
+        int target_len, const WCHAR *data, int data_len)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+    struct parse_context *c = &builder->context;
+
+    if (!builder->active)
+        return E_FAIL;
+
+    parse_content_handler_processingInstruction(&c->content_handler, target, target_len, data, data_len);
+    return dom_builder_status(builder);
+}
+
+static HRESULT WINAPI dom_builder_skippedEntity(ISAXContentHandler *iface, const WCHAR *name, int name_len)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXContentHandler(iface);
+    struct parse_context *c = &builder->context;
+    struct domnode *node;
+
+    if (!builder->active)
+        return E_FAIL;
+    if (dom_builder_at_document(builder))
+        return dom_builder_abort(builder);
+
+    parse_context_create_text_node(c, NODE_TEXT);
+    parse_context_node_create(c, NODE_ENTITY_REFERENCE, name, name_len, NULL, 0, c->root, &node);
+    parse_context_append_child(c, c->node, node);
+    return dom_builder_status(builder);
+}
+
+static const ISAXContentHandlerVtbl dom_builder_content_vtbl =
+{
+    dom_builder_content_QueryInterface,
+    dom_builder_content_AddRef,
+    dom_builder_content_Release,
+    dom_builder_putDocumentLocator,
+    dom_builder_startDocument,
+    dom_builder_endDocument,
+    dom_builder_startPrefixMapping,
+    dom_builder_endPrefixMapping,
+    dom_builder_startElement,
+    dom_builder_endElement,
+    dom_builder_characters,
+    dom_builder_ignorableWhitespace,
+    dom_builder_processingInstruction,
+    dom_builder_skippedEntity,
+};
+
+static HRESULT WINAPI dom_builder_lexical_QueryInterface(ISAXLexicalHandler *iface, REFIID riid, void **obj)
+{
+    if (IsEqualGUID(riid, &IID_ISAXLexicalHandler) || IsEqualGUID(riid, &IID_IUnknown))
+    {
+        *obj = iface;
+        return S_OK;
+    }
+
+    *obj = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI dom_builder_lexical_AddRef(ISAXLexicalHandler *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI dom_builder_lexical_Release(ISAXLexicalHandler *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI dom_builder_startDTD(ISAXLexicalHandler *iface, const WCHAR *name, int name_len,
+        const WCHAR *pubid, int pubid_len, const WCHAR *sysid, int sysid_len)
+{
+    return dom_builder_abort(dom_builder_from_ISAXLexicalHandler(iface));
+}
+
+static HRESULT WINAPI dom_builder_endDTD(ISAXLexicalHandler *iface)
+{
+    return dom_builder_declaration(dom_builder_from_ISAXLexicalHandler(iface));
+}
+
+static HRESULT WINAPI dom_builder_startEntity(ISAXLexicalHandler *iface, const WCHAR *name, int name_len)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXLexicalHandler(iface);
+
+    if (!builder->active)
+        return E_FAIL;
+    if (dom_builder_at_document(builder))
+        return dom_builder_abort(builder);
+
+    builder->entity_depth++;
+    return S_OK;
+}
+
+static HRESULT WINAPI dom_builder_endEntity(ISAXLexicalHandler *iface, const WCHAR *name, int name_len)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXLexicalHandler(iface);
+
+    if (!builder->active)
+        return E_FAIL;
+    if (!builder->entity_depth)
+        return dom_builder_abort(builder);
+
+    builder->entity_depth--;
+    return S_OK;
+}
+
+static HRESULT WINAPI dom_builder_startCDATA(ISAXLexicalHandler *iface)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXLexicalHandler(iface);
+    struct parse_context *c = &builder->context;
+
+    if (!builder->active)
+        return E_FAIL;
+    if (dom_builder_at_document(builder))
+        return dom_builder_abort(builder);
+
+    parse_lexical_handler_startCDATA(&c->lexical_handler);
+    builder->cdata = true;
+    return dom_builder_status(builder);
+}
+
+static HRESULT WINAPI dom_builder_endCDATA(ISAXLexicalHandler *iface)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXLexicalHandler(iface);
+    struct parse_context *c = &builder->context;
+
+    if (!builder->active || !builder->cdata)
+        return E_FAIL;
+
+    parse_lexical_handler_endCDATA(&c->lexical_handler);
+    builder->cdata = false;
+    return dom_builder_status(builder);
+}
+
+static HRESULT WINAPI dom_builder_comment(ISAXLexicalHandler *iface, const WCHAR *chars, int count)
+{
+    struct dom_builder *builder = dom_builder_from_ISAXLexicalHandler(iface);
+    struct parse_context *c = &builder->context;
+
+    if (!builder->active)
+        return E_FAIL;
+
+    parse_lexical_handler_comment(&c->lexical_handler, chars, count);
+    return dom_builder_status(builder);
+}
+
+static const ISAXLexicalHandlerVtbl dom_builder_lexical_vtbl =
+{
+    dom_builder_lexical_QueryInterface,
+    dom_builder_lexical_AddRef,
+    dom_builder_lexical_Release,
+    dom_builder_startDTD,
+    dom_builder_endDTD,
+    dom_builder_startEntity,
+    dom_builder_endEntity,
+    dom_builder_startCDATA,
+    dom_builder_endCDATA,
+    dom_builder_comment,
+};
+
+HRESULT dom_builder_create(IUnknown *output, struct dom_builder **ret)
+{
+    struct dom_builder *builder;
+    struct domnode *doc;
+
+    *ret = NULL;
+
+    if (!(doc = get_node_obj(output)))
+        return E_NOINTERFACE;
+    if (doc->type != NODE_DOCUMENT)
+        return E_FAIL;
+    if (domdoc_version(doc) != MSXML6)
+        return E_NOINTERFACE;
+
+    if (!(builder = calloc(1, sizeof(*builder))))
+        return E_OUTOFMEMORY;
+
+    builder->ISAXContentHandler_iface.lpVtbl = &dom_builder_content_vtbl;
+    builder->ISAXLexicalHandler_iface.lpVtbl = &dom_builder_lexical_vtbl;
+    builder->context.content_handler.lpVtbl = &parse_content_handler_vtbl;
+    builder->context.lexical_handler.lpVtbl = &parse_lexical_handler_vtbl;
+    builder->context.buffer.status = &builder->context.status;
+    builder->context.version = MSXML6;
+    builder->context.builder = true;
+    IUnknown_QueryInterface(output, &IID_IUnknown, (void **)&builder->output);
+    builder->doc = doc;
+
+    *ret = builder;
+    return S_OK;
+}
+
+void dom_builder_release(struct dom_builder *builder)
+{
+    if (!builder)
+        return;
+
+    dom_builder_stop(builder, true);
+    free(builder->context.buffer.data);
+    IUnknown_Release(builder->output);
+    free(builder);
+}
+
+ISAXContentHandler *dom_builder_get_content_handler(struct dom_builder *builder)
+{
+    return &builder->ISAXContentHandler_iface;
+}
+
+ISAXLexicalHandler *dom_builder_get_lexical_handler(struct dom_builder *builder)
+{
+    return &builder->ISAXLexicalHandler_iface;
+}
+
+HRESULT dom_builder_declaration(struct dom_builder *builder)
+{
+    if (builder->active && dom_builder_at_document(builder))
+        return dom_builder_abort(builder);
+    return E_FAIL;
+}
+
+void dom_builder_get_output(struct dom_builder *builder, VARIANT *dest)
+{
+    V_VT(dest) = VT_UNKNOWN;
+    V_UNKNOWN(dest) = builder->output;
+    IUnknown_AddRef(builder->output);
+}
+#endif
 
 struct xmldoc_context
 {

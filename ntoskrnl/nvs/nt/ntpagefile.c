@@ -464,7 +464,7 @@ NtCreatePagingFile(
     {
         Status = IoCreateFile(&PagingFile->FileHandle, SYNCHRONIZE | FILE_READ_DATA | FILE_WRITE_DATA,
                               &ObjectAttributes, &IoStatus, &AllocationSize,
-                              FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN, FILE_SHARE_WRITE, FILE_SUPERSEDE,
+                              FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN, 0, FILE_SUPERSEDE,
                               FILE_NO_COMPRESSION | FILE_NO_INTERMEDIATE_BUFFERING, NULL, 0, CreateFileTypeNone, NULL,
                               IO_OPEN_PAGING_FILE | IO_NO_PARAMETER_CHECKING);
         if (Status != STATUS_SHARING_VIOLATION || !IoReleaseCrashDumpFile())

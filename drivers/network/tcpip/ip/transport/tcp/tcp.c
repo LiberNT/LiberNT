@@ -669,16 +669,14 @@ NTSTATUS TCPReceiveData
   PVOID Context )
 {
     PTDI_BUCKET Bucket;
-    PUCHAR DataBuffer;
-    UINT DataLen, Received;
+    UINT Received;
     NTSTATUS Status;
+    BOOLEAN Recheck;
 
     TI_DbgPrint(DEBUG_TCP,("[IP, TCPReceiveData] Called for %d bytes (on socket %x)\n",
                            ReceiveLength, Connection->SocketContext));
 
-    NdisQueryBuffer(Buffer, &DataBuffer, &DataLen);
-
-    Status = LibTCPGetDataFromConnectionQueue(Connection, DataBuffer, DataLen, &Received, FALSE);
+    Status = LibTCPGetDataFromConnectionQueue(Connection, Buffer, &Received, FALSE);
 
     if (Status == STATUS_PENDING)
     {
@@ -693,9 +691,14 @@ NTSTATUS TCPReceiveData
         Bucket->Request.RequestNotifyObject = Complete;
         Bucket->Request.RequestContext = Context;
 
+        ReferenceObject(Connection);
         LockObject(Connection);
         InsertTailList( &Connection->ReceiveRequest, &Bucket->Entry );
+        Recheck = !IsListEmpty(&Connection->PacketQueue) || Connection->ReceiveShutdown;
         UnlockObject(Connection);
+        if (Recheck)
+            LibTCPRecheckReceive(Connection);
+        DereferenceObject(Connection);
         TI_DbgPrint(DEBUG_TCP,("[IP, TCPReceiveData] Queued read irp\n"));
 
         TI_DbgPrint(DEBUG_TCP,("[IP, TCPReceiveData] Leaving. Status = STATUS_PENDING\n"));
@@ -759,6 +762,7 @@ NTSTATUS TCPSendData
         InsertTailList( &Connection->SendRequest, &Bucket->Entry );
         TI_DbgPrint(DEBUG_TCP,("[IP, TCPSendData] Queued write irp\n"));
         UnlockObject(Connection);
+        LibTCPRecheckSend(Connection);
     }
 
 

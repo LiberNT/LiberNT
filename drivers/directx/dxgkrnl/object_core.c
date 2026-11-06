@@ -207,6 +207,76 @@ DxgkCapsCoreInterfaceVersionToLevel(
     }
 }
 
+/* Windows 11 sizes DXGKQAITYPE_DRIVERCAPS by the DDI version and refuses the versions given 0. */
+ULONG
+DxgkCapsCoreDriverCapsSize(
+    _In_ ULONG InterfaceVersion)
+{
+    if (InterfaceVersion >= 0xE003)
+        return 0x250;
+    if (InterfaceVersion >= 0x9002)
+        return 0x248;
+    if (InterfaceVersion >= 0x5011)
+        return 0x240;
+    if (InterfaceVersion >= 0x5000 && InterfaceVersion <= 0x5005)
+        return 0;
+    if (InterfaceVersion >= 0x4000)
+        return 0x228;
+    if (InterfaceVersion >= 0x3000)
+        return 0x220;
+    if (InterfaceVersion >= 0x2001)
+        return 0x210;
+    if (InterfaceVersion > 0x104D && InterfaceVersion < 0x2000)
+        return 0x150;
+    return 0;
+}
+
+/* Windows 11 sizes DXGKQAITYPE_PHYSICALADAPTERCAPS by the DDI version as well. */
+ULONG
+DxgkCapsCorePhysicalAdapterCapsSize(
+    _In_ ULONG InterfaceVersion)
+{
+    if (InterfaceVersion >= 0xC003)
+        return 0x20;
+    if (InterfaceVersion >= 0x6000)
+        return 0x18;
+    return 0x14;
+}
+
+/* Windows 11 counts requests per process and processes per adapter; the
+ * miniport hears only the adapter's first and last reference, which is what
+ * TRUE reports. */
+BOOLEAN
+DxgkCapsCoreStablePowerSet(
+    _Inout_ PLONG ProcessReferences,
+    _Inout_ PLONG AdapterReferences,
+    _In_ BOOLEAN Enabled)
+{
+    if (Enabled)
+    {
+        BOOLEAN First = FALSE;
+
+        if (*ProcessReferences == 0)
+            First = (*AdapterReferences)++ == 0;
+        ++*ProcessReferences;
+        return First;
+    }
+    if (*ProcessReferences == 0 || --*ProcessReferences != 0)
+        return FALSE;
+    return --*AdapterReferences == 0;
+}
+
+BOOLEAN
+DxgkCapsCoreStablePowerRelease(
+    _Inout_ PLONG ProcessReferences,
+    _Inout_ PLONG AdapterReferences)
+{
+    if (*ProcessReferences == 0)
+        return FALSE;
+    *ProcessReferences = 0;
+    return --*AdapterReferences == 0;
+}
+
 BOOLEAN
 DxgkCapsCoreInterfaceVersionAtLeast(
     _In_ ULONG InterfaceVersion,

@@ -17,11 +17,6 @@ import struct
 import sys
 import time
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
-
 MAGIC = b'LKDN'
 VERSION = 1
 TYPE_HELLO, TYPE_INIT, TYPE_RESPONSE, TYPE_DATA, TYPE_SUBSCRIBE = 1, 2, 3, 4, 5
@@ -44,6 +39,8 @@ INFO_SYSTEM, INFO_PCI, INFO_ACPI, INFO_MODULES = 1, 2, 3, 4
 INFO_NAMES = {INFO_SYSTEM: 'system', INFO_PCI: 'pci', INFO_ACPI: 'acpi', INFO_MODULES: 'modules'}
 INFO_LIMIT = 0x10000
 QUIT_KEY = 0x1D
+LOCAL_INPUT_PORT = 6665
+LOCAL_OUTPUT_PORT = 6666
 
 
 def sha256(*parts):
@@ -74,6 +71,14 @@ def nonce(counter):
 
 def normalize_key(text):
     return text.replace('-', '').replace(' ', '').upper().encode('ascii')
+
+
+def load_crypto():
+    global InvalidTag, serialization, X25519PrivateKey, X25519PublicKey, ChaCha20Poly1305
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+    from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 
 class Target:
@@ -239,7 +244,9 @@ class Target:
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Attach to a LiberNT target over the network debugger transport.')
-    parser.add_argument('--key', required=True, help='key shown by the target or set with /ENCRYPTION_KEY')
+    parser.add_argument('--key', help='key shown by the target or set with /ENCRYPTION_KEY')
+    parser.add_argument('--local', metavar='INTERFACE',
+                        help='target booted with LOCAL_BROADCAST=1 on this cabled interface: no key, no root')
     parser.add_argument('--port', type=int, default=50000, help='UDP port to listen on')
     parser.add_argument('--bind', default='0.0.0.0', help='local address to listen on')
     parser.add_argument('--relay', metavar='HOST[:PORT]', help='reach the target through this relay')
@@ -259,8 +266,6 @@ def parse_args():
 
 def file_server(args, target, emit, report):
     '''Return a feed for target output that answers .kdfiles requests made after the attach.'''
-    if not args.kdfiles and not args.m:
-        return emit
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kdfiles'))
     import kdfiles
     entries = (kdfiles.read_map(args.kdfiles) if args.kdfiles else []) + [tuple(m) for m in args.m]
@@ -278,8 +283,70 @@ def file_server(args, target, emit, report):
     return feed
 
 
+def local_main(args):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.local.encode('ascii'))
+    sock.bind(('', LOCAL_OUTPUT_PORT))
+    sock.setblocking(False)
+
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    saved_terminal = None
+    if interactive:
+        import termios
+        import tty
+        saved_terminal = termios.tcgetattr(sys.stdin.fileno())
+        tty.setraw(sys.stdin.fileno())
+
+    log = open(args.output, 'wb') if args.output else None
+    script = []
+    for item in args.send:
+        delay, _, text = item.partition(':')
+        script.append((float(delay), text.encode('ascii').decode('unicode_escape').encode('latin-1')))
+    script.sort()
+
+    sys.stderr.write('kdnet: listening on %s, UDP port %d\n' % (args.local, LOCAL_OUTPUT_PORT))
+    sys.stderr.flush()
+    start = time.monotonic()
+    readers = [sock] + ([sys.stdin] if interactive else [])
+    seen = False
+    try:
+        while args.duration is None or time.monotonic() - start < args.duration:
+            ready, _, _ = select.select(readers, [], [], 0.05)
+            if sock in ready:
+                data = sock.recv(2048)
+                seen = True
+                if log:
+                    log.write(data)
+                    log.flush()
+                sys.stdout.buffer.write(data.replace(b'\n', b'\r\n') if interactive else data)
+                sys.stdout.buffer.flush()
+            if interactive and sys.stdin in ready:
+                typed = os.read(sys.stdin.fileno(), 256)
+                if not typed or QUIT_KEY in typed:
+                    break
+                sock.sendto(typed, ('255.255.255.255', LOCAL_INPUT_PORT))
+            while script and time.monotonic() - start >= script[0][0]:
+                sock.sendto(script.pop(0)[1], ('255.255.255.255', LOCAL_INPUT_PORT))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if saved_terminal is not None:
+            import termios
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved_terminal)
+        if log:
+            log.close()
+    return 0 if seen else 1
+
+
 def main():
     args = parse_args()
+    if args.local:
+        return local_main(args)
+    if not args.key:
+        sys.exit('kdnet: --key is required unless --local is used')
+    load_crypto()
     target = Target(args.key)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     relay = None

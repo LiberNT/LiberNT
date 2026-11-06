@@ -2097,8 +2097,16 @@ static void test_condvars_base(RTL_CONDITION_VARIABLE *cv)
 
     while (condvar_seq < 9)
         Sleep (5);
+#ifdef __REACTOS__
+    /* The next call reinitializes condvar_srwlock, so both threads must be done with it */
+    WaitForSingleObject(hp, 5000);
+    WaitForSingleObject(hc, 5000);
+    CloseHandle(hp);
+    CloseHandle(hc);
+#else
     WaitForSingleObject(hp, 100);
     WaitForSingleObject(hc, 100);
+#endif
 }
 
 static LONG srwlock_seq = 0;

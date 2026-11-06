@@ -4150,6 +4150,15 @@ static HRESULT str_to_float( const unsigned char *str, ULONG len, float *ret )
     }
 
     if ((hr = str_to_double( p, len, &val )) != S_OK) return hr;
+#ifdef __REACTOS__
+    if (val != val)
+    {
+        unsigned __int64 bits = *(unsigned __int64 *)&val;
+        *(unsigned int *)ret = (unsigned int)((bits >> 32) & 0x80000000) | 0x7fc00000 |
+                               (unsigned int)((bits >> 29) & 0x003fffff);
+        return S_OK;
+    }
+#endif
     *ret = val;
     return S_OK;
 }

@@ -552,6 +552,11 @@ static HRESULT WINAPI control_GetSessionIdentifier(IAudioSessionControl2 *iface,
     WCHAR exe_path[MAX_PATH], session_guid[39], *dev_id;
     DWORD len;
     HRESULT hr;
+#ifdef __REACTOS__
+    WCHAR native_path[MAX_PATH];
+    HANDLE process;
+    DWORD pid;
+#endif
 
     TRACE("(%p)->(%p).\n", This, id);
 
@@ -564,7 +569,18 @@ static HRESULT WINAPI control_GetSessionIdentifier(IAudioSessionControl2 *iface,
     sync_audio_session(This->session);
     lstrcpynW(exe_path, This->session->process_path ?
               This->session->process_path : L"", ARRAY_SIZE(exe_path));
+    pid = This->session->process_id;
     sessions_unlock();
+    process = pid == GetCurrentProcessId() ? GetCurrentProcess() :
+              OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (process)
+    {
+        len = ARRAY_SIZE(native_path);
+        if (QueryFullProcessImageNameW(process, PROCESS_NAME_NATIVE, native_path, &len))
+            lstrcpynW(exe_path, native_path, ARRAY_SIZE(exe_path));
+        if (process != GetCurrentProcess())
+            CloseHandle(process);
+    }
 #else
     len = ARRAY_SIZE(exe_path);
     if (!QueryFullProcessImageNameW(GetCurrentProcess(), PROCESS_NAME_NATIVE, exe_path, &len))

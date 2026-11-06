@@ -446,6 +446,46 @@ struct enum_dev_object_params
 };
 
 #ifdef __REACTOS__
+static void add_filter_property_key( DEVPROPCOMPKEY *keys, ULONG *keys_len, const DEVPROPCOMPKEY *key )
+{
+    if (key->Store != DEVPROP_STORE_SYSTEM || key->LocaleName) return;
+    for (ULONG i = 0; i < *keys_len; i++)
+        if (IsEqualDevPropKey( keys[i].Key, key->Key )) return;
+    keys[*keys_len].Key = key->Key;
+    keys[*keys_len].Store = DEVPROP_STORE_SYSTEM;
+    keys[*keys_len].LocaleName = NULL;
+    (*keys_len)++;
+}
+
+static LSTATUS get_filter_property_keys( const DEVPROPCOMPKEY *props, ULONG props_len, const DEVPROP_FILTER_EXPRESSION *filters,
+                                         const DEVPROP_FILTER_EXPRESSION *end, const DEVPROPCOMPKEY **comp_keys, ULONG *comp_keys_len )
+{
+    DEVPROPCOMPKEY *keys;
+    ULONG keys_len = 0;
+
+    *comp_keys = NULL;
+    if (!(keys = calloc( props_len + (end - filters) + 1, sizeof(*keys) ))) return ERROR_OUTOFMEMORY;
+    for (ULONG i = 0; i < props_len; i++) add_filter_property_key( keys, &keys_len, &props[i] );
+    for (const DEVPROP_FILTER_EXPRESSION *filter = filters; filter < end; filter++)
+        if (filter->Operator & DEVPROP_OPERATOR_MASK_EVAL) add_filter_property_key( keys, &keys_len, &filter->Property.CompKey );
+
+    *comp_keys = keys;
+    *comp_keys_len = keys_len;
+    return ERROR_SUCCESS;
+}
+
+static void remove_missing_properties( DEVPROPERTY *props, ULONG *props_len )
+{
+    ULONG count = 0;
+
+    for (ULONG i = 0; i < *props_len; i++)
+    {
+        if (props[i].Type == DEVPROP_TYPE_EMPTY) free( props[i].Buffer );
+        else props[count++] = props[i];
+    }
+    *props_len = count;
+}
+
 static BOOL device_interface_may_match( const struct device_interface *iface, const DEVPROP_FILTER_EXPRESSION *filters,
                                         const DEVPROP_FILTER_EXPRESSION *end )
 {
@@ -507,12 +547,20 @@ static LSTATUS enum_dev_objects_device_interface( HKEY hkey, const void *object,
 
     /* If we're also filtering objects, get all properties for this object. Once the filters have been
      * evaluated, free properties that have not been requested, and set cPropertyCount to comp_keys_len.  */
+#ifdef __REACTOS__
+    if (params->filters && !params->all_props)
+        err = get_filter_property_keys( params->props, params->props_len, params->filters, params->filters_end, &keys, &keys_len );
+    else
+#endif
     if (params->all_props || params->filters) err = copy_device_interface_property_keys( hkey, iface, &keys, &keys_len );
     if (!err)
     {
         if (keys_len && !(properties = calloc( keys_len, sizeof(*properties) ))) err = ERROR_OUTOFMEMORY;
         else err = copy_device_interface_properties( hkey, iface, keys, keys_len, properties, &properties_len );
     }
+#ifdef __REACTOS__
+    if (!err && params->filters && !params->all_props) remove_missing_properties( properties, &properties_len );
+#endif
 
     if (!err)
     {

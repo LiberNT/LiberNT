@@ -155,6 +155,31 @@ static VOID TestMapPieces(VOID)
     ok_eq_ulong(Cover, MAXULONG);
 }
 
+static VOID TestFencePagePieces(VOID)
+{
+    TEST_SPAN Spans[2] = { { { 0x310000, 0x311000 }, 1 },
+                           { { 0x320000, 0x321000 }, 2 } };
+    ULONG Index = 0;
+    ULONGLONG End = 0;
+    ULONG Cover = 0;
+
+    ok_bool_true(DxgkGpuVaCoreRangeIsUpdateSpan(TRUE, FALSE), "mapped range without an allocation");
+    ok_bool_true(DxgkGpuVaCoreRangeIsUpdateSpan(FALSE, TRUE), "reserved range");
+    ok_bool_false(DxgkGpuVaCoreRangeIsUpdateSpan(FALSE, FALSE), "free address space");
+    ok_bool_true(DxgkGpuVaCoreNextMapPiece(Spans, 2, sizeof(TEST_SPAN), 0x310000, 0x363000, &Index, &End, &Cover), "first fence page");
+    ok_eq_ulonglong(End, 0x311000ULL);
+    ok_eq_ulong(Cover, 0UL);
+    ok_bool_true(DxgkGpuVaCoreNextMapPiece(Spans, 2, sizeof(TEST_SPAN), End, 0x363000, &Index, &End, &Cover), "gap between fence pages");
+    ok_eq_ulonglong(End, 0x320000ULL);
+    ok_eq_ulong(Cover, MAXULONG);
+    ok_bool_true(DxgkGpuVaCoreNextMapPiece(Spans, 2, sizeof(TEST_SPAN), End, 0x363000, &Index, &End, &Cover), "second fence page");
+    ok_eq_ulonglong(End, 0x321000ULL);
+    ok_eq_ulong(Cover, 1UL);
+    ok_bool_true(DxgkGpuVaCoreNextMapPiece(Spans, 2, sizeof(TEST_SPAN), End, 0x363000, &Index, &End, &Cover), "unmapped tail");
+    ok_eq_ulonglong(End, 0x363000ULL);
+    ok_eq_ulong(Cover, MAXULONG);
+}
+
 static VOID TestAllocationRepeatMapping(VOID)
 {
     static const struct
@@ -208,6 +233,7 @@ START_TEST(DxgkGpuVaAddress)
     TestOverlapAndContainment();
     TestPageMath();
     TestMapPieces();
+    TestFencePagePieces();
     TestAllocationRepeatMapping();
 }
 

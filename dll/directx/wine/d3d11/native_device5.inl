@@ -769,6 +769,7 @@ class NativeFence final : public NativeChild<ID3D11Fence, &IID_ID3D11Fence>
 public:
     D3DKMT_HANDLE sync = 0;
     const volatile UINT64 *value = NULL;
+    D3D11_FENCE_FLAG flags = D3D11_FENCE_FLAG(0);
     explicit NativeFence(NativeDevice *d) : NativeChild(d) {}
     ~NativeFence()
     {
@@ -777,11 +778,19 @@ public:
         destroy.hSyncObject = sync;
         device->kernel_callbacks.pfnDestroySynchronizationObjectCb(device->runtime_device, &destroy);
     }
-    HRESULT STDMETHODCALLTYPE CreateSharedHandle(const SECURITY_ATTRIBUTES *, DWORD, const WCHAR *,
+    HRESULT STDMETHODCALLTYPE CreateSharedHandle(const SECURITY_ATTRIBUTES *attributes, DWORD access, const WCHAR *name,
             HANDLE *handle) override
     {
-        if (handle) *handle = NULL;
-        return E_NOTIMPL;
+        if (!handle) return E_INVALIDARG;
+        if (!(flags & (D3D11_FENCE_FLAG_SHARED | D3D11_FENCE_FLAG_SHARED_CROSS_ADAPTER))) return E_INVALIDARG;
+        OBJECT_ATTRIBUTES object;
+        UNICODE_STRING object_name;
+        NativeSharedObjectAttributes(&object, &object_name, attributes, name);
+        HANDLE shared = NULL;
+        NTSTATUS status = D3DKMTShareObjects(1, &sync, &object, access, &shared);
+        if (status == STATUS_OBJECT_NAME_COLLISION) return DXGI_ERROR_NAME_ALREADY_EXISTS;
+        if (status >= 0) *handle = shared;
+        return StatusToHresult(status);
     }
     UINT64 STDMETHODCALLTYPE GetCompletedValue() override { return *value; }
     HRESULT STDMETHODCALLTYPE SetEventOnCompletion(UINT64 fence_value, HANDLE event) override
@@ -801,7 +810,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateFence(UINT64 initial_value, D3D11_
 {
     if (!out) return E_INVALIDARG;
     *out = NULL;
-    if (flags & (D3D11_FENCE_FLAG_SHARED | D3D11_FENCE_FLAG_SHARED_CROSS_ADAPTER | D3D11_FENCE_FLAG_NON_MONITORED))
+    if (flags & D3D11_FENCE_FLAG_NON_MONITORED)
         return E_NOTIMPL;
     if (!kernel_callbacks.pfnCreateSynchronizationObject2Cb || !signal_fence || !wait_fence) return E_NOTIMPL;
     NativeLock guard(this);
@@ -811,6 +820,13 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateFence(UINT64 initial_value, D3D11_
     create.Info.Type = D3DDDI_MONITORED_FENCE;
     create.Info.MonitoredFence.InitialFenceValue = initial_value;
     create.Info.MonitoredFence.EngineAffinity = 1;
+    /* TODO: D3D11_FENCE_FLAG_SHARED_CROSS_ADAPTER fences on another adapter */
+    if (flags & (D3D11_FENCE_FLAG_SHARED | D3D11_FENCE_FLAG_SHARED_CROSS_ADAPTER))
+    {
+        create.Info.Flags.Shared = 1;
+        create.Info.Flags.NtSecuritySharing = 1;
+    }
+    fence->flags = flags;
     HRESULT hr = kernel_callbacks.pfnCreateSynchronizationObject2Cb(runtime_device, &create);
     if (SUCCEEDED(hr))
     {
@@ -822,10 +838,27 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateFence(UINT64 initial_value, D3D11_
     return hr;
 }
 
-HRESULT STDMETHODCALLTYPE NativeDevice::OpenSharedFence(HANDLE, REFIID, void **out)
+HRESULT STDMETHODCALLTYPE NativeDevice::OpenSharedFence(HANDLE handle, REFIID iid, void **out)
 {
-    if (out) *out = NULL;
-    return E_NOTIMPL;
+    D3DGPU_VIRTUAL_ADDRESS gpu_value = 0;
+    PVOID cpu_value = NULL;
+    if (!out) return E_INVALIDARG;
+    *out = NULL;
+    if (!handle) return E_INVALIDARG;
+    if (!open_sync_from_nt_handle || !signal_fence || !wait_fence) return E_NOTIMPL;
+    NativeLock guard(this);
+    NativeFence *fence = new NativeFence(this);
+    if (!fence) return E_OUTOFMEMORY;
+    HRESULT hr = open_sync_from_nt_handle(runtime_device, handle, &fence->sync, &cpu_value, &gpu_value);
+    if (FAILED(hr)) hr = E_INVALIDARG;
+    else
+    {
+        fence->flags = D3D11_FENCE_FLAG_SHARED;
+        fence->value = static_cast<const volatile UINT64 *>(cpu_value);
+        hr = fence->value ? fence->QueryInterface(iid, out) : E_FAIL;
+    }
+    fence->Release();
+    return hr;
 }
 
 static NativeFence *NativeOwnedFence(NativeDevice *device, ID3D11Fence *fence)

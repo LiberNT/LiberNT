@@ -42,7 +42,15 @@ WINE_DEFAULT_DEBUG_CHANNEL(msacm);
 /**********************************************************************/
 
 HANDLE MSACM_hHeap = NULL;
+#ifdef __REACTOS__
+#undef MSACM_pFirstACMDriverID
+static PWINE_ACMDRIVERID MSACM_pFirstACMDriverID = NULL;
+static CRITICAL_SECTION MSACM_RegisterLock;
+static volatile LONG MSACM_DriversRegistered;
+static BOOL MSACM_RegisteringDrivers;
+#else
 PWINE_ACMDRIVERID MSACM_pFirstACMDriverID = NULL;
+#endif
 static PWINE_ACMDRIVERID MSACM_pLastACMDriverID;
 
 static DWORD MSACM_suspendBroadcastCount = 0;
@@ -781,6 +789,37 @@ PWINE_ACMDRIVERID MSACM_UnregisterDriver(PWINE_ACMDRIVERID p)
 
     return pNextACMDriverID;
 }
+
+#ifdef __REACTOS__
+void MSACM_InitializeDriverList(void)
+{
+    InitializeCriticalSection(&MSACM_RegisterLock);
+}
+
+void MSACM_DeleteDriverList(void)
+{
+    DeleteCriticalSection(&MSACM_RegisterLock);
+}
+
+/* Driver DLLs load on first use: DllMain runs under the loader lock. */
+PWINE_ACMDRIVERID MSACM_GetFirstDriverID(void)
+{
+    if (!InterlockedCompareExchange(&MSACM_DriversRegistered, 0, 0))
+    {
+        EnterCriticalSection(&MSACM_RegisterLock);
+        if (!MSACM_DriversRegistered && !MSACM_RegisteringDrivers)
+        {
+            MSACM_RegisteringDrivers = TRUE;
+            MSACM_RegisterAllDrivers();
+            MSACM_RegisteringDrivers = FALSE;
+            InterlockedExchange(&MSACM_DriversRegistered, TRUE);
+        }
+        LeaveCriticalSection(&MSACM_RegisterLock);
+    }
+
+    return MSACM_pFirstACMDriverID;
+}
+#endif
 
 /***********************************************************************
  *           MSACM_UnregisterAllDrivers()

@@ -108,6 +108,7 @@ NdisAllocateTimerObject(
     if (TimerCharacteristics == NULL || pTimerObject == NULL ||
         TimerCharacteristics->TimerFunction == NULL)
     {
+        DbgPrint("NDIS6: NdisAllocateTimerObject rejected its parameters\n");
         return NDIS_STATUS_INVALID_PARAMETER;
     }
 

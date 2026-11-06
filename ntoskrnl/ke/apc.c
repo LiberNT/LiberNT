@@ -114,6 +114,8 @@ KiInsertQueueApc(IN PKAPC Apc,
     /* The APC must be "inserted" already */
     ASSERT(Apc->Inserted == TRUE);
 
+    KiAcquireThreadLock(Thread);
+
     /* Three scenarios:
      * 1) Kernel APC with Normal Routine or User APC = Put it at the end of the List
      * 2) User APC which is PsExitSpecialApc = Put it at the front of the List
@@ -185,14 +187,12 @@ KiInsertQueueApc(IN PKAPC Apc,
         }
         else
         {
-            /* Lock the target thread */
-            KiAcquireThreadLock(Thread);
-
             /* Check if this is a kernel-mode APC */
             if (ApcMode == KernelMode)
             {
                 /* Kernel-mode APC, set us pending */
                 Thread->ApcState.KernelApcPending = TRUE;
+                KeMemoryBarrier();
 
                 /* Are we currently running? */
                 if (Thread->State == Running)
@@ -265,14 +265,12 @@ KiInsertQueueApc(IN PKAPC Apc,
                 /* Wake up the thread */
                 KiUnwaitThread(Thread, Status, PriorityBoost);
             }
-
-            /* Release the thread lock */
-            KiReleaseThreadLock(Thread);
-
-            /* Check if an interrupt was requested */
-            KiRequestApcInterrupt(RequestInterrupt, Thread->NextProcessor);
         }
     }
+
+    KiReleaseThreadLock(Thread);
+    if (RequestInterrupt)
+        KiRequestApcInterrupt(TRUE, Thread->NextProcessor);
 }
 
 /*++
@@ -342,7 +340,7 @@ KiDeliverApc(IN KPROCESSOR_MODE DeliveryMode,
     if (Thread->SpecialApcDisable) goto Quickie;
 
     /* Do the Kernel APCs first */
-    while (!IsListEmpty(&Thread->ApcState.ApcListHead[KernelMode]))
+    for (;;)
     {
         /* Lock the APC Queue */
         KiAcquireApcLockRaiseToDpc(Thread, &ApcLock);
@@ -451,23 +449,21 @@ KiDeliverApc(IN KPROCESSOR_MODE DeliveryMode,
     }
 
     /* Now we do the User APCs */
-    if ((DeliveryMode == UserMode) &&
-        !(IsListEmpty(&Thread->ApcState.ApcListHead[UserMode])) &&
-         (Thread->ApcState.UserApcPending))
+    if (DeliveryMode == UserMode)
     {
         /* Lock the APC Queue */
         KiAcquireApcLockRaiseToDpc(Thread, &ApcLock);
 
-        /* It's not pending anymore */
-        Thread->ApcState.UserApcPending = FALSE;
-
         /* Check if the list became empty now */
-        if (IsListEmpty(&Thread->ApcState.ApcListHead[UserMode]))
+        if (!Thread->ApcState.UserApcPending ||
+            IsListEmpty(&Thread->ApcState.ApcListHead[UserMode]))
         {
             /* It is, release the lock and break out */
             KiReleaseApcLock(&ApcLock);
             goto Quickie;
         }
+
+        Thread->ApcState.UserApcPending = FALSE;
 
         /* Get the actual APC object */
         ApcListEntry = Thread->ApcState.ApcListHead[UserMode].Flink;
@@ -845,18 +841,19 @@ KeFlushQueueApc(IN PKTHREAD Thread,
     {
         PreviousMode = KernelMode;
 
+        KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
+
         /* Select kernel list and check if it's empty */
         if (IsListEmpty( &Thread->ApcState.ApcListHead[KernelMode]))
         {
             /* Don't return anything */
-            return NULL;
+            FirstEntry = NULL;
+            goto FlushDone;
         }
-
-        /* Otherwise, acquire the APC lock */
-        KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
     }
 
     PreviousModeIndex = (UCHAR)PreviousMode;
+    KiAcquireThreadLock(Thread);
 
     /* Get the first entry and check if the list is empty now */
     FirstEntry = Thread->ApcState.ApcListHead[PreviousModeIndex].Flink;
@@ -885,6 +882,8 @@ KeFlushQueueApc(IN PKTHREAD Thread,
         /* Re-initialize the list */
         InitializeListHead(&Thread->ApcState.ApcListHead[PreviousModeIndex]);
     }
+
+    KiReleaseThreadLock(Thread);
 
     /* Release the lock */
 FlushDone:

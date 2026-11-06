@@ -216,7 +216,9 @@ static void RunSampler(void *)
     desc.MaxLOD = D3D12_FLOAT32_MAX;
     test.context.device->CreateSampler(&desc, test.sampler_heap->GetCPUDescriptorHandleForHeapStart());
     texel = Draw(&test);
-    ok(ColourNear(texel, 0xff996633u), "CreateSampler custom border colour: got %08lx\n", texel);
+    /* Metal has only fixed border colours: Windows 11 reads the same through this host. */
+    if (!d3d12_test_on_virtio3d(test.context.device))
+        ok(ColourNear(texel, 0xff996633u), "CreateSampler custom border colour: got %08lx\n", texel);
 
     desc.AddressU = desc.AddressV = desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     test.context.device->CreateSampler(&desc, test.sampler_heap->GetCPUDescriptorHandleForHeapStart());
@@ -239,7 +241,8 @@ static void RunSampler(void *)
     desc2.MaxLOD = D3D12_FLOAT32_MAX;
     device11->CreateSampler2(&desc2, test.sampler_heap->GetCPUDescriptorHandleForHeapStart());
     texel = Draw(&test);
-    ok(ColourNear(texel, 0xff336699u), "CreateSampler2 custom border colour: got %08lx\n", texel);
+    if (!d3d12_test_on_virtio3d(test.context.device))
+        ok(ColourNear(texel, 0xff336699u), "CreateSampler2 custom border colour: got %08lx\n", texel);
 
     test.context.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS17, &options17, sizeof(options17));
     if (options17.NonNormalizedCoordinateSamplersSupported)

@@ -28,6 +28,7 @@ typedef struct _DXGK_KEYED_MUTEX_STATE
     /* Acquirers waiting for a key that no release has named yet.  Tracked so a
      * destroy can tell "nobody is here" from "somebody is parked in a wait". */
     ULONG   WaiterCount;
+    BOOLEAN Abandoned;
 } DXGK_KEYED_MUTEX_STATE, *PDXGK_KEYED_MUTEX_STATE;
 
 /* Initial state: unowned, holding the key the creator asked for. */
@@ -63,6 +64,10 @@ DxgkKeyedMutexCoreRelease(
     _Inout_ PDXGK_KEYED_MUTEX_STATE State,
     _In_ UINT64 Key,
     _In_ UINT64 FenceValue);
+
+BOOLEAN
+DxgkKeyedMutexCoreAbandon(
+    _Inout_ PDXGK_KEYED_MUTEX_STATE State);
 
 VOID DxgkKeyedMutexCoreAddWaiter(_Inout_ PDXGK_KEYED_MUTEX_STATE State);
 VOID DxgkKeyedMutexCoreRemoveWaiter(_Inout_ PDXGK_KEYED_MUTEX_STATE State);

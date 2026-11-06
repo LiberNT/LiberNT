@@ -53,3 +53,42 @@ DxgkAdapterStartVsyncControlDdi(
 NTSTATUS
 DxgkAdapterStartVsyncControlStatus(
     _In_ NTSTATUS MiniportStatus);
+
+NTSTATUS
+DxgkAdapterStartNativeFenceStatus(
+    _In_ BOOLEAN NativeGpuFenceCap,
+    _In_ BOOLEAN NativeFenceFeatureEnabled);
+
+typedef struct _DXGK_ADAPTER_START_CAPS
+{
+    ULONG InterfaceVersion;
+    ULONG WddmVersion;
+    ULONG MiscCaps;
+    ULONG MemoryManagementCaps;
+    BOOLEAN SupportPerEngineTdr;
+    BOOLEAN SupportKernelModeCommandBuffer;
+    BOOLEAN SupportRuntimePowerManagement;
+    BOOLEAN HasControlInterrupt3;
+    BOOLEAN HasEngineResetDdis;
+    BOOLEAN HasRenderKm;
+    BOOLEAN HasRuntimePowerDdis;
+    BOOLEAN SupportMultiPlaneOverlay;
+    BOOLEAN SupportDirectFlip;
+    ULONG MaxOverlayPlanes;
+    BOOLEAN HasMpoSetAddress;
+    BOOLEAN HasMpoCheck;
+    ULONG ColorTransformCaps;
+    BOOLEAN HasUpdateActiveVidPnPresentPath;
+    BOOLEAN HasSetTargetGamma;
+    BOOLEAN HasQueryDiagnosticTypesSupport;
+    BOOLEAN HasControlDiagnosticReporting;
+    BOOLEAN HybridDiscrete;
+    BOOLEAN HybridIntegrated;
+    ULONG NumberOfVideoPresentSources;
+    ULONG NumberOfChildren;
+} DXGK_ADAPTER_START_CAPS, *PDXGK_ADAPTER_START_CAPS;
+
+NTSTATUS
+DxgkAdapterStartValidateCaps(
+    _In_ const DXGK_ADAPTER_START_CAPS *Caps);
+

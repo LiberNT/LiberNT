@@ -409,12 +409,12 @@ BatteryClassStatusNotify(
             Status = BattClass->MiniportInfo.QueryStatus(BattClass->MiniportInfo.Context,
                                                          BattWait.BatteryTag,
                                                          &BattStatus);
-            if (!NT_SUCCESS(Status))
-                return Status;
 
             ExAcquireFastMutex(&BattClass->Mutex);
 
-            if (BattWait.PowerState != BattStatus.PowerState ||
+            /* A failed query means the tag died: only the waiter can tell its owner to ask for the new one. */
+            if (!NT_SUCCESS(Status) ||
+                BattWait.PowerState != BattStatus.PowerState ||
                 BattWait.HighCapacity < BattStatus.Capacity ||
                 BattWait.LowCapacity > BattStatus.Capacity)
             {
@@ -422,6 +422,8 @@ BatteryClassStatusNotify(
             }
 
             ExReleaseFastMutex(&BattClass->Mutex);
+            if (!NT_SUCCESS(Status))
+                return Status;
             break;
 
         default:

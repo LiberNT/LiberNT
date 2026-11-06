@@ -1526,10 +1526,13 @@ NtInitiatePowerAction(IN POWER_ACTION SystemAction,
     return STATUS_SUCCESS;
 }
 
+#define POP_BATTERY_TAG_WAIT_MS 500
+
 static
 NTSTATUS
-PopQueryBatteryState(
-    _Out_ PSYSTEM_BATTERY_STATE BatteryState)
+PopQueryBatteryStateOnce(
+    _Out_ PSYSTEM_BATTERY_STATE BatteryState,
+    _In_ ULONG TagWait)
 {
     static const UNICODE_STRING CompBattDeviceName =
         RTL_CONSTANT_STRING(L"\\Device\\CompositeBattery");
@@ -1549,6 +1552,13 @@ PopQueryBatteryState(
                         &IoStatusBlock,
                         FILE_SHARE_READ | FILE_SHARE_WRITE,
                         FILE_SYNCHRONOUS_IO_NONALERT);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+    {
+        /* The composite battery driver has not started yet. */
+        RtlZeroMemory(BatteryState, sizeof(*BatteryState));
+        BatteryState->AcOnLine = TRUE;
+        return STATUS_SUCCESS;
+    }
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to open CompositeBattery device: Status: 0x%08lX\n", Status);
@@ -1556,7 +1566,7 @@ PopQueryBatteryState(
     }
 
     /* Query the battery tag */
-    ULONG Wait = 0;
+    ULONG Wait = TagWait;
     Status = ZwDeviceIoControlFile(CompBattHandle,
                                    NULL,
                                    NULL,
@@ -1614,7 +1624,7 @@ PopQueryBatteryState(
                                    sizeof(BatteryStatus));
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Failed to query battery status: Status: 0x%08lX\n", Status);
+        DPRINT("Failed to query battery status: Status: 0x%08lX\n", Status);
         goto Exit;
     }
 
@@ -1652,6 +1662,21 @@ PopQueryBatteryState(
 
 Exit:
     ZwClose(CompBattHandle);
+    return Status;
+}
+
+static
+NTSTATUS
+PopQueryBatteryState(
+    _Out_ PSYSTEM_BATTERY_STATE BatteryState)
+{
+    NTSTATUS Status;
+
+    Status = PopQueryBatteryStateOnce(BatteryState, 0);
+
+    /* A battery change killed the tag between the queries: the new one arrives once the battery reports in. */
+    if (Status == STATUS_NO_SUCH_DEVICE)
+        Status = PopQueryBatteryStateOnce(BatteryState, POP_BATTERY_TAG_WAIT_MS);
     return Status;
 }
 

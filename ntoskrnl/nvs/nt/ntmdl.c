@@ -282,6 +282,9 @@ MmProbeAndLockSelectedPages(
     }
     _SEH2_END;
 
+    for (i = 0; NT_SUCCESS(Status) && i < Count; i++)
+        Addresses[i] = (ULONG64)(ULONG_PTR)Addresses[i];
+
     if (NT_SUCCESS(Status))
     {
         do

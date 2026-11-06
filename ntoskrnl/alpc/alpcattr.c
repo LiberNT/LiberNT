@@ -702,6 +702,15 @@ SkipViewAttribute:;
                 return Status;
             }
 
+            /* Indirect entries are zero-extended 32-bit values, which never name a pseudo or kernel handle */
+            if (HandleInformation && (LONG)HandleInformation[HandleIndex].Handle < 0)
+            {
+                HandleData->Count = HandleIndex;
+                AlpcpFreeHandleData(HandleData);
+                ExFreePoolWithTag(HandleInformation, 'IcpA');
+                return STATUS_INVALID_HANDLE;
+            }
+
             Status = ObReferenceObjectByHandle(SourceHandle, (EntryFlags & ALPC_HANDLEFLG_DUPLICATE_SAME_ACCESS) ? 0 : DesiredAccess, NULL, PreviousMode, &Object, &ObjectHandleInformation);
             if (!NT_SUCCESS(Status))
             {

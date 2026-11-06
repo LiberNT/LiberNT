@@ -126,12 +126,175 @@ TestVsyncControlStatus(VOID)
     ok_eq_hex(DxgkAdapterStartVsyncControlStatus(STATUS_DEVICE_REMOVED), STATUS_DEVICE_REMOVED);
 }
 
+static VOID
+TestNativeFenceStatus(VOID)
+{
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(TRUE, FALSE), STATUS_INVALID_PARAMETER);
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(TRUE, TRUE), STATUS_SUCCESS);
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(FALSE, FALSE), STATUS_SUCCESS);
+    ok_eq_hex(DxgkAdapterStartNativeFenceStatus(FALSE, TRUE), STATUS_SUCCESS);
+}
+
+static VOID
+TestStartCapsValidation(VOID)
+{
+    DXGK_ADAPTER_START_CAPS Caps;
+
+    /* Win11 NVIDIA RTX 4000 driver: WDDM 3.2, MiscCaps 0x71, loads. */
+    RtlZeroMemory(&Caps, sizeof(Caps));
+    Caps.InterfaceVersion = 0x11007;
+    Caps.WddmVersion = 0x3200;
+    Caps.MiscCaps = 0x71;
+    Caps.HasControlInterrupt3 = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+
+    Caps.MiscCaps = 0x271;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.WddmVersion = 0x2300;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x3200;
+    Caps.MiscCaps = 0x10;
+    Caps.HasControlInterrupt3 = FALSE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MiscCaps = 0;
+
+    Caps.WddmVersion = 0x1100;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_REVISION_MISMATCH);
+    Caps.WddmVersion = 0x3300;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_REVISION_MISMATCH);
+    Caps.InterfaceVersion = 0x3000;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.InterfaceVersion = 0x11007;
+    Caps.WddmVersion = 0x1000;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x3200;
+
+    Caps.MemoryManagementCaps = 1UL << 15;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MemoryManagementCaps |= 1UL << 4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MemoryManagementCaps = (1UL << 16) | (1UL << 4);
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MemoryManagementCaps = (1UL << 16) | (1UL << 15);
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MemoryManagementCaps = (1UL << 16) | (1UL << 15) | (1UL << 4);
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MemoryManagementCaps = 0;
+
+    Caps.SupportPerEngineTdr = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasEngineResetDdis = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.SupportKernelModeCommandBuffer = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasRenderKm = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.SupportRuntimePowerManagement = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasRuntimePowerDdis = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+
+    Caps.SupportMultiPlaneOverlay = TRUE;
+    Caps.SupportDirectFlip = TRUE;
+    Caps.MaxOverlayPlanes = 4;
+    Caps.HasMpoSetAddress = TRUE;
+    Caps.HasMpoCheck = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MaxOverlayPlanes = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MaxOverlayPlanes = 10;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MaxOverlayPlanes = 11;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.WddmVersion = 0x2100;
+    Caps.MaxOverlayPlanes = 10;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.MaxOverlayPlanes = 9;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.WddmVersion = 0x1300;
+    Caps.MaxOverlayPlanes = 10;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.WddmVersion = 0x3200;
+    Caps.MaxOverlayPlanes = 4;
+    Caps.HasMpoSetAddress = FALSE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasMpoSetAddress = TRUE;
+    Caps.HasMpoCheck = FALSE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasMpoCheck = TRUE;
+    Caps.SupportDirectFlip = FALSE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.SupportDirectFlip = TRUE;
+    Caps.InterfaceVersion = 0x300A;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.InterfaceVersion = 0x11007;
+
+    Caps.ColorTransformCaps = 0x4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.HasUpdateActiveVidPnPresentPath = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasSetTargetGamma = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.ColorTransformCaps = 0x8;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.ColorTransformCaps = 0x14;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.ColorTransformCaps = 0x1C;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x2200;
+    Caps.ColorTransformCaps = 0x8;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x3200;
+    Caps.ColorTransformCaps = 0;
+
+    Caps.HasQueryDiagnosticTypesSupport = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.HasControlDiagnosticReporting = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.HasQueryDiagnosticTypesSupport = FALSE;
+    Caps.WddmVersion = 0x2300;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.WddmVersion = 0x3200;
+    Caps.HasControlDiagnosticReporting = FALSE;
+
+    /* Win11 NVIDIA laptop GPU: hybrid discrete with outputs and cross-adapter resources. */
+    Caps.HybridDiscrete = TRUE;
+    Caps.NumberOfVideoPresentSources = 4;
+    Caps.NumberOfChildren = 4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MemoryManagementCaps = 1UL << 4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.InterfaceVersion = 0x5004;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.NumberOfVideoPresentSources = 0;
+    Caps.NumberOfChildren = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.InterfaceVersion = 0x3FFF;
+    Caps.MemoryManagementCaps = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.InterfaceVersion = 0x11007;
+    Caps.HybridDiscrete = FALSE;
+
+    Caps.HybridIntegrated = TRUE;
+    Caps.NumberOfChildren = 2;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.MemoryManagementCaps = 1UL << 4;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_SUCCESS);
+    Caps.NumberOfChildren = 0;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+    Caps.NumberOfChildren = 2;
+    Caps.HybridDiscrete = TRUE;
+    ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
+}
+
 START_TEST(DxgkWddmAbi)
 {
+    TestStartCapsValidation();
     TestMapMemoryContractCore();
     TestAdapterStartRolePolicy();
     TestVsyncControlDdiSelection();
     TestVsyncControlStatus();
+    TestNativeFenceStatus();
 
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_4, 0x9006);
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_5, 0xA00B);

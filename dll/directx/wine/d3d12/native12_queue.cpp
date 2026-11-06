@@ -45,6 +45,12 @@ HRESULT Native12Fence::Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS creati
     create.Info.Type = D3DDDI_MONITORED_FENCE;
     create.Info.MonitoredFence.InitialFenceValue = initial_value;
     create.Info.MonitoredFence.EngineAffinity = 1;
+    /* TODO: D3D12_FENCE_FLAG_SHARED_CROSS_ADAPTER fences on another adapter */
+    if (creation_flags & (D3D12_FENCE_FLAG_SHARED | D3D12_FENCE_FLAG_SHARED_CROSS_ADAPTER))
+    {
+        create.Info.Flags.Shared = 1;
+        create.Info.Flags.NtSecuritySharing = 1;
+    }
     HRESULT hr = device->kernel_callbacks.pfnCreateSynchronizationObject2Cb(device->runtime_device, &create);
     if (FAILED(hr))
     {
@@ -54,9 +60,24 @@ HRESULT Native12Fence::Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS creati
     sync = create.hSyncObject;
     value = static_cast<const volatile UINT64 *>(create.Info.MonitoredFence.FenceValueCPUVirtualAddress);
     if (!value) return E_FAIL;
+    return CreateDriverFence(create.Info.MonitoredFence.FenceValueGPUVirtualAddress);
+}
 
+HRESULT Native12Fence::InitializeOpened(D3DKMT_HANDLE opened, const volatile UINT64 *cpu_value,
+        D3DGPU_VIRTUAL_ADDRESS gpu_value)
+{
+    flags = D3D12_FENCE_FLAG_SHARED;
+    sync = opened;
+    value = cpu_value;
+    if (!value) return E_FAIL;
+    return CreateDriverFence(gpu_value);
+}
+
+HRESULT Native12Fence::CreateDriverFence(D3DGPU_VIRTUAL_ADDRESS gpu_value)
+{
+    HRESULT hr;
     D3D12DDI_FENCE info = {};
-    info.FenceValue.BaseAddress = create.Info.MonitoredFence.FenceValueGPUVirtualAddress;
+    info.FenceValue.BaseAddress = gpu_value;
     D3D12DDIARG_CREATE_FENCE args = {};
     args.FenceCount = 1;
     args.Fences = &info;
@@ -196,7 +217,6 @@ void Native12CommandQueue::AddContext(HANDLE context)
     if (context_count < ARRAYSIZE(contexts))
     {
         contexts[context_count] = context;
-        submitted[context_count] = false;
         ++context_count;
     }
     else WARN("Queue %p has no room to track context %p.\n", this, context);
@@ -210,44 +230,10 @@ void Native12CommandQueue::RemoveContext(HANDLE context)
     {
         if (contexts[i] != context) continue;
         --context_count;
-        for (UINT j = i; j < context_count; ++j)
-        {
-            contexts[j] = contexts[j + 1];
-            submitted[j] = submitted[j + 1];
-        }
+        for (UINT j = i; j < context_count; ++j) contexts[j] = contexts[j + 1];
         break;
     }
     ReleaseSRWLockExclusive(&context_lock);
-}
-
-bool Native12CommandQueue::NoteSubmission(HANDLE context)
-{
-    bool found = false;
-    AcquireSRWLockExclusive(&context_lock);
-    for (UINT i = 0; i < context_count; ++i)
-    {
-        if (contexts[i] != context) continue;
-        submitted[i] = true;
-        found = true;
-        break;
-    }
-    ReleaseSRWLockExclusive(&context_lock);
-    return found;
-}
-
-UINT Native12CommandQueue::SignalContexts(HANDLE *out)
-{
-    UINT count = 0;
-    AcquireSRWLockExclusive(&context_lock);
-    for (UINT i = 0; i < context_count; ++i)
-    {
-        if (!submitted[i]) continue;
-        submitted[i] = false;
-        out[count++] = contexts[i];
-    }
-    if (!count && context_count) out[count++] = contexts[0];
-    ReleaseSRWLockExclusive(&context_lock);
-    return count;
 }
 
 UINT Native12CommandQueue::WaitContexts(HANDLE *out)
@@ -267,16 +253,6 @@ void Native12QueueAddContext(HANDLE queue, HANDLE context)
 void Native12QueueRemoveContext(HANDLE queue, HANDLE context)
 {
     if (queue) static_cast<Native12CommandQueue *>(queue)->RemoveContext(context);
-}
-
-void Native12NoteSubmission(Native12Device *device, HANDLE context)
-{
-    AcquireSRWLockShared(&device->queue_lock);
-    for (Native12CommandQueue *queue = device->queues; queue; queue = queue->next_queue)
-    {
-        if (queue->NoteSubmission(context)) break;
-    }
-    ReleaseSRWLockShared(&device->queue_lock);
 }
 
 HRESULT STDMETHODCALLTYPE Native12CommandQueue::QueryInterface(REFIID iid, void **out)
@@ -426,15 +402,8 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Signal(ID3D12Fence *fence, UINT6
     if (!fence) return E_INVALIDARG;
     if (!device->kernel_callbacks.pfnSignalSynchronizationObjectFromGpu2Cb) return E_NOINTERFACE;
     Native12Fence *native = static_cast<Native12Fence *>(fence);
-    D3D12DDIARG_FENCE_OPERATION operation = {};
-    operation.Fence = native->driver;
-    operation.Value = value;
-    operation.PhysicalAdapterMask = 1;
+    /* TODO: linked adapters also call pfnSignalFence, masked by pfnGetImplicitPhysicalAdapterMask */
     AcquireSRWLockExclusive(&submit_lock);
-    if (VideoFunctions())
-        VideoFunctions()->pfnSignalFence(driver, &operation);
-    else
-        device->queue_functions.pfnSignalFence(driver, &operation);
     if (FAILED(device->removed_reason))
     {
         ReleaseSRWLockExclusive(&submit_lock);
@@ -445,7 +414,8 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Signal(ID3D12Fence *fence, UINT6
     D3DDDICB_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 signal = {};
     signal.ObjectCount = 1;
     signal.ObjectHandleArray = &native->sync;
-    signal.BroadcastContextCount = SignalContexts(targets);
+    /* Every context of the queue, as Windows does: work still running on any of them precedes the signal. */
+    signal.BroadcastContextCount = WaitContexts(targets);
     signal.BroadcastContextArray = targets;
     signal.MonitoredFenceValueArray = &value;
     signal.Flags.AllowFenceRewind = 1;
@@ -466,15 +436,8 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Wait(ID3D12Fence *fence, UINT64 
     if (!fence) return E_INVALIDARG;
     if (!device->kernel_callbacks.pfnWaitForSynchronizationObjectFromGpuCb) return E_NOINTERFACE;
     Native12Fence *native = static_cast<Native12Fence *>(fence);
-    D3D12DDIARG_FENCE_OPERATION operation = {};
-    operation.Fence = native->driver;
-    operation.Value = value;
-    operation.PhysicalAdapterMask = 1;
+    /* TODO: linked adapters also call pfnWaitForFence, masked by pfnGetImplicitPhysicalAdapterMask */
     AcquireSRWLockExclusive(&submit_lock);
-    if (VideoFunctions())
-        VideoFunctions()->pfnWaitForFence(driver, &operation);
-    else
-        device->queue_functions.pfnWaitForFence(driver, &operation);
     if (FAILED(device->removed_reason))
     {
         ReleaseSRWLockExclusive(&submit_lock);

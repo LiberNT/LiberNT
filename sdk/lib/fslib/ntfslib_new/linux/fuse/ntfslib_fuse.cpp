@@ -1100,6 +1100,7 @@ ProbeImage(NtfsFuseState* State)
     std::string LabelUtf8;
     NTSTATUS LabelStatus;
     NTSTATUS FreeStatus;
+    USHORT Flags = 0;
 
     LabelStatus = NtfsVolumeGetVolumeLabel(State->Volume,
                                            Label,
@@ -1130,6 +1131,11 @@ ProbeImage(NtfsFuseState* State)
     else
         printf("free clusters: unavailable (0x%08" PRIx32 ")\n",
                (uint32_t)FreeStatus);
+    if (NT_SUCCESS(NtfsVolumeQueryFlags(State->Volume, &Flags)))
+    {
+        printf("volume flags: 0x%04" PRIx16 "\n", (uint16_t)Flags);
+        printf("startup repair: %s\n", NtfsVolumeNeedsStartupRepair(Flags) ? "yes" : "no");
+    }
     return 0;
 }
 
@@ -2566,6 +2572,8 @@ EnsureImageDirectory(NtfsFuseState* State,
                 TRUE,
                 0,
                 &File);
+            if (NT_SUCCESS(Status))
+                Status = NtfsFileRecordSetCaseSensitiveDirectory(File, TRUE);
             NtfsFileRecordDestroy(File);
             if (!NT_SUCCESS(Status))
                 return Status;

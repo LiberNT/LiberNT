@@ -24,14 +24,15 @@ template <typename T> static void TestLongFeature(ID3D12Device *device, D3D12_FE
     ok(hr == E_INVALIDARG, "feature %u: long size: %#lx\n", feature, hr);
 }
 
-template <typename T> static void TestGenericOnlyFeature(ID3D12Device *device, D3D12_FEATURE feature)
+template <typename T> static void TestDriverFeature(ID3D12Device *device, D3D12_FEATURE feature)
 {
     T data;
     memset(&data, 0x55, sizeof(data));
     HRESULT hr = device->CheckFeatureSupport(feature, &data, sizeof(data));
-    ok(hr == E_UNEXPECTED, "feature %u: %#lx\n", feature, hr);
-    ok(*reinterpret_cast<const BYTE *>(&data) == 0x55 && reinterpret_cast<const BYTE *>(&data)[sizeof(data) - 1] == 0x55,
-            "feature %u: output written\n", feature);
+    if (hr == S_OK)
+        ok(data.Supported == TRUE, "feature %u: supported %d\n", feature, data.Supported);
+    else
+        ok(hr == E_UNEXPECTED && *reinterpret_cast<const BYTE *>(&data) == 0x55, "feature %u: %#lx\n", feature, hr);
     hr = device->CheckFeatureSupport(feature, &data, sizeof(data) - 1);
     ok(hr == E_INVALIDARG, "feature %u: short size: %#lx\n", feature, hr);
     TestLongFeature<T>(device, feature);
@@ -140,16 +141,16 @@ static void RunFeatures(void *)
     ok(options21.WorkGraphsTier == D3D12_WORK_GRAPHS_TIER_NOT_SUPPORTED
             || options21.WorkGraphsTier == D3D12_WORK_GRAPHS_TIER_1_0, "work graphs tier %d\n", options21.WorkGraphsTier);
 
-    TestGenericOnlyFeature<D3D12_FEATURE_DATA_PREDICATION>(device, D3D12_FEATURE_PREDICATION);
-    TestGenericOnlyFeature<D3D12_FEATURE_DATA_HARDWARE_COPY>(device, D3D12_FEATURE_HARDWARE_COPY);
-    TestGenericOnlyFeature<D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO>(device,
-            D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO);
+    TestDriverFeature<D3D12_FEATURE_DATA_PREDICATION>(device, D3D12_FEATURE_PREDICATION);
+    TestDriverFeature<D3D12_FEATURE_DATA_HARDWARE_COPY>(device, D3D12_FEATURE_HARDWARE_COPY);
+    TestLongFeature<D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO>(device, D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO);
     placed.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     placed.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     placed.DestHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
     placed.Supported = 0x55;
     hr = device->CheckFeatureSupport(D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO, &placed, sizeof(placed));
-    ok(hr == E_UNEXPECTED && placed.Supported == 0x55, "placed resource support %d, hr %#lx\n", placed.Supported, hr);
+    ok(hr == S_OK ? placed.Supported == TRUE : hr == E_UNEXPECTED && placed.Supported == 0x55,
+            "placed resource support %d, hr %#lx\n", placed.Supported, hr);
 
     shader_model.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(0x69);
     hr = device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shader_model, sizeof(shader_model));

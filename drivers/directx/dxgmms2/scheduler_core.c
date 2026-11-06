@@ -159,6 +159,7 @@ Dxgmms2SchedCoreAdmit(
     Packet->PacketCookie = Info->PacketCookie;
     Packet->OwnerCookie = Info->OwnerCookie;
     Packet->SubmissionFenceId = FenceId;
+    Packet->NodeOrdinal = Info->NodeOrdinal;
     Packet->Flags = Info->Flags;
     Packet->Priority = Info->Priority;
     Packet->DeferredStatus = STATUS_SUCCESS;
@@ -485,6 +486,34 @@ Dxgmms2SchedCoreNotifyCompletion(
     return Count;
 }
 
+/* Later reservations slide down over a cancelled slot, leaving the newest id of the unbound run free. */
+static VOID
+Dxgmms2SchedCoreGiveBackFenceSlot(
+    _Inout_ PDXGMMS2_SCHED_ENGINE Engine,
+    _Inout_ PDXGMMS2_SCHED_PACKET Packet)
+{
+    PLIST_ENTRY Entry;
+    ULONG Fence = Packet->SubmissionFenceId;
+
+    for (Entry = Packet->Entry.Flink; Entry != &Engine->RunQueue; Entry = Entry->Flink)
+    {
+        PDXGMMS2_SCHED_PACKET Later = CONTAINING_RECORD(Entry, DXGMMS2_SCHED_PACKET, Entry);
+        ULONG Slot;
+
+        /* TODO: an id left below a fixed fence stays unused, and a miniport tracking contiguous ids stalls behind it */
+        if (Later->FenceBound || Later->Claimed)
+            break;
+        Slot = Later->SubmissionFenceId;
+        Later->SubmissionFenceId = Fence;
+        Fence = Slot;
+    }
+    Packet->SubmissionFenceId = Fence;
+    if (Engine->LastSubmittedFenceId == Fence)
+        Engine->LastSubmittedFenceId = Fence - 1;
+    if ((ULONG)Engine->NextFenceId == Fence)
+        Engine->NextFenceId = (LONG)(Fence - 1);
+}
+
 static ULONG
 Dxgmms2SchedCoreRemoveMatching(
     _Inout_ PDXGMMS2_SCHED_CORE Core,
@@ -511,6 +540,8 @@ Dxgmms2SchedCoreRemoveMatching(
              * it terminalizes through completion or reset instead. */
             if ((MatchAll || Packet->OwnerCookie == OwnerCookie) && (IncludeDispatched || (!Packet->Dispatched && !Packet->Claimed)))
             {
+                if (!MatchAll && !Packet->FenceBound)
+                    Dxgmms2SchedCoreGiveBackFenceSlot(Engine, Packet);
                 RemoveEntryList(&Packet->Entry);
                 InitializeListHead(&Packet->Entry);
                 Engine->PendingPacketCount--;

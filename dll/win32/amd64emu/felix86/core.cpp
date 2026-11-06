@@ -165,6 +165,21 @@ void felix86_syscall32(felix86_frame* frame, u32 rip_next) {
     Felix86NtSystemService32(cpu->owner, cpu->state.ctx.gprs);
 }
 
+void felix86_breakpoint(felix86_frame* frame, u64 rip_next) {
+    NtCpu* cpu = (NtCpu*)frame->state;
+    Felix86NtBreakpoint(cpu->owner, cpu->state.ctx.gprs, rip_next);
+}
+
+void felix86_interrupt(felix86_frame* frame, u64 rip_next, u64 vector) {
+    NtCpu* cpu = (NtCpu*)frame->state;
+    Felix86NtInterrupt(cpu->owner, cpu->state.ctx.gprs, rip_next, (u32)vector);
+}
+
+void felix86_single_step(felix86_frame* frame) {
+    NtCpu* cpu = (NtCpu*)frame->state;
+    Felix86NtSingleStep(cpu->owner, cpu->state.ctx.gprs);
+}
+
 void felix86_raise_hardware_breakpoint(ThreadState* state, u64 rip, int index) {
     ERROR("Hardware breakpoint %d at %llx", index, (unsigned long long)rip);
 }
@@ -327,9 +342,13 @@ uint64_t Felix86NtGetFlags(FELIX86_NT_CPU* handle) {
 
 void Felix86NtSetFlags(FELIX86_NT_CPU* handle, uint64_t flags) {
     ThreadState* state = &((NtCpu*)handle)->state;
+    bool old_tf = state->ctx.tf;
     state->ctx.SetFlags(flags);
     state->ac_bit = (flags >> 18) & 1;
     state->cpuid_bit = (flags >> 21) & 1;
+    if (state->ctx.tf != old_tf) {
+        felix86_tf_changed(state, state->ctx.tf);
+    }
 }
 
 void Felix86NtSaveFloating(FELIX86_NT_CPU* handle, void* area) {
@@ -522,6 +541,9 @@ static bool hint_fault(ThreadState* state, FELIX86_NT_NATIVE* native, FELIX86_NT
         break;
     case FELIX86_HINT_GP:
         set_fault(guest, NT_STATUS_PRIVILEGED_INSTRUCTION);
+        break;
+    case FELIX86_HINT_SEGMENT_GP:
+        set_fault(guest, NT_STATUS_ACCESS_VIOLATION, 2, 0, -1ull);
         break;
     case FELIX86_HINT_INT_GP:
         set_fault(guest, NT_STATUS_ACCESS_VIOLATION, 2, 0, -1ull);

@@ -35,6 +35,8 @@ NtGdiAlphaBlend(
     BLENDOBJ BlendObj;
     BlendObj.BlendFunction = BlendFunc;
 
+    IntCompositionPrepareScreenRead(hDCSrc);
+
     if (WidthDest < 0 || HeightDest < 0 || WidthSrc < 0 || HeightSrc < 0)
     {
         EngSetLastError(ERROR_INVALID_PARAMETER);
@@ -204,6 +206,8 @@ NtGdiBitBlt(
     IN FLONG fl)
 {
 
+    IntCompositionPrepareScreenRead(hDCSrc);
+
     BOOL bRtlDest = FALSE;
     PDC pdcPeek;
 
@@ -274,6 +278,8 @@ NtGdiTransparentBlt(
     ULONG TransparentColor = 0;
     BOOL Ret = FALSE;
     EXLATEOBJ exlo;
+
+    IntCompositionPrepareScreenRead(hdcSrc);
 
     if ((hdcDst == NULL) || (hdcSrc == NULL))
     {
@@ -393,6 +399,8 @@ NtGdiMaskBlt(
     XLATEOBJ *XlateObj = NULL;
     BOOL UsesSource, UsesPattern;
     ROP4 rop4;
+
+    IntCompositionPrepareScreenRead(hdcSrc);
 
     rop4 = WIN32_ROP4_TO_ENG_ROP4(dwRop4);
 
@@ -642,6 +650,8 @@ NtGdiPlgBlt(
     BOOL Result = FALSE;
     BOOL XlateInitialized = FALSE;
     ULONG Index;
+
+    IntCompositionPrepareScreenRead(hdcSrc);
 
     MinimumLong = -((LONGLONG)MAXLONG) - 1;
     SourceRight = (LONGLONG)xSrc + cxSrc;
@@ -1184,6 +1194,8 @@ NtGdiStretchBlt(
     IN DWORD dwBackColor)
 {
     BOOL bNoMirror = (dwRop3 & NOMIRRORBITMAP) != 0;
+
+    IntCompositionPrepareScreenRead(hDCSrc);
 
     dwRop3 = dwRop3 & ~(NOMIRRORBITMAP|CAPTUREBLT);
 
@@ -1927,6 +1939,8 @@ NtGdiGetPixel(
     POINTL ptlSrc;
     RECT rcDest;
     PSURFACE psurfSrc, psurfDest;
+
+    IntCompositionPrepareScreenRead(hdc);
 
     /* Lock the DC */
     pdc = DC_LockDc(hdc);

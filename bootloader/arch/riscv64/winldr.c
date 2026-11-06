@@ -1184,6 +1184,53 @@ RiscvSetKseg0Permissions(
     return FALSE;
 }
 
+BOOLEAN
+RiscvMapFirmwareRuntime(
+    _In_ ULONGLONG PhysicalStart,
+    _In_ ULONGLONG PageCount,
+    _In_ BOOLEAN Device,
+    _In_ BOOLEAN Executable,
+    _Out_ PULONGLONG VirtualStart)
+{
+    const ULONGLONG MaximumPage = RISCV64_MAX_PHYSICAL_ADDRESS >> RISCV64_PAGE_SHIFT;
+    ULONGLONG StartPage = PhysicalStart >> RISCV64_PAGE_SHIFT;
+    ULONGLONG VirtualAddress = RISCV64_LOADER_KSEG0_BASE + PhysicalStart;
+    ULONGLONG Page;
+
+    *VirtualStart = 0;
+    if (!RiscvLoaderState.SetupSucceeded ||
+        (PhysicalStart & (RISCV64_PAGE_SIZE - 1)) ||
+        StartPage >= MaximumPage ||
+        PageCount > MaximumPage - StartPage)
+    {
+        ERR("RISC-V: firmware runtime range 0x%llx + 0x%llx pages is not representable\n",
+            PhysicalStart,
+            PageCount);
+        return FALSE;
+    }
+
+    if (!RiscvMapRange(VirtualAddress,
+                       PhysicalStart,
+                       PageCount << RISCV64_PAGE_SHIFT,
+                       Device ? RISCV64_PTE_DEVICE_LEAF : RISCV64_PTE_DATA_LEAF,
+                       RISCV64_MAP_LEVEL_4K))
+    {
+        return FALSE;
+    }
+
+    for (Page = 0; Executable && Page < PageCount; ++Page)
+    {
+        if (!RiscvSetKseg0Permissions(VirtualAddress + (Page << RISCV64_PAGE_SHIFT),
+                                      RISCV64_PTE_PERMISSION_MASK))
+        {
+            return FALSE;
+        }
+    }
+
+    *VirtualStart = VirtualAddress;
+    return TRUE;
+}
+
 /* Give every boot image the protections of its sections: headers and pages
  * outside any section are read-only, and only code is executable. The
  * relocations and import bindings are complete at this point. An image

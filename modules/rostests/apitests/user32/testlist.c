@@ -37,6 +37,7 @@ extern void func_EnumDisplaySettings(void);
 extern void func_ForegroundRetake(void);
 extern void func_ForegroundRight(void);
 extern void func_ForegroundStartup(void);
+extern void func_FrameMetrics(void);
 extern void func_GetClassInfo(void);
 extern void func_GetDCEx(void);
 extern void func_GetProp(void);
@@ -78,6 +79,7 @@ extern void func_NcPaintRgn(void);
 extern void func_NextDlgItem(void);
 extern void func_NonClientPaint(void);
 extern void func_NonClientUpdate(void);
+extern void func_OwnedZOrder(void);
 extern void func_OwnerDestroy(void);
 extern void func_PersianLayout(void);
 extern void func_PhysicalPoint(void);
@@ -117,6 +119,7 @@ extern void func_UncoveredWindow(void);
 extern void func_UpdateRegion(void);
 extern void func_UserHandleGrantAccess(void);
 extern void func_VirtualKey(void);
+extern void func_WaitForInputIdle(void);
 extern void func_WindowBand(void);
 extern void func_CallWindowProc(void);
 extern void func_WndProc(void);
@@ -159,6 +162,7 @@ const struct test winetest_testlist[] =
     { "ForegroundRetake", func_ForegroundRetake },
     { "ForegroundRight", func_ForegroundRight },
     { "ForegroundStartup", func_ForegroundStartup },
+    { "FrameMetrics", func_FrameMetrics },
     { "GetClassInfo", func_GetClassInfo },
     { "GetDCEx", func_GetDCEx },
     { "GetProp", func_GetProp },
@@ -200,6 +204,7 @@ const struct test winetest_testlist[] =
     { "NextDlgItem", func_NextDlgItem },
     { "NonClientPaint", func_NonClientPaint },
     { "NonClientUpdate", func_NonClientUpdate },
+    { "OwnedZOrder", func_OwnedZOrder },
     { "OwnerDestroy", func_OwnerDestroy },
     { "PersianLayout", func_PersianLayout },
     { "PhysicalPoint", func_PhysicalPoint },
@@ -239,6 +244,7 @@ const struct test winetest_testlist[] =
     { "UpdateRegion", func_UpdateRegion },
     { "UserHandleGrantAccess", func_UserHandleGrantAccess },
     { "VirtualKey", func_VirtualKey },
+    { "WaitForInputIdle", func_WaitForInputIdle },
     { "WindowBand", func_WindowBand },
     { "CallWindowProc", func_CallWindowProc },
     { "WndProc", func_WndProc },

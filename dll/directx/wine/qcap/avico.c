@@ -28,6 +28,7 @@ typedef struct {
 
     struct strmbase_sink sink;
     struct strmbase_source source;
+    struct strmbase_passthrough passthrough;
 
     DWORD fcc_handler;
     HIC hic;
@@ -118,6 +119,7 @@ static void avi_compressor_destroy(struct strmbase_filter *iface)
     free(filter->videoinfo);
     strmbase_sink_cleanup(&filter->sink);
     strmbase_source_cleanup(&filter->source);
+    strmbase_passthrough_cleanup(&filter->passthrough);
     strmbase_filter_cleanup(&filter->filter);
     free(filter);
 }
@@ -200,8 +202,8 @@ static HRESULT WINAPI AVICompressorPropertyBag_GetClassID(IPersistPropertyBag *i
 static HRESULT WINAPI AVICompressorPropertyBag_InitNew(IPersistPropertyBag *iface)
 {
     AVICompressor *This = impl_from_IPersistPropertyBag(iface);
-    FIXME("(%p)->()\n", This);
-    return E_NOTIMPL;
+    TRACE("(%p)->()\n", This);
+    return S_OK;
 }
 
 static HRESULT WINAPI AVICompressorPropertyBag_Load(IPersistPropertyBag *iface, IPropertyBag *pPropBag, IErrorLog *pErrorLog)
@@ -289,6 +291,8 @@ static HRESULT sink_query_interface(struct strmbase_pin *iface, REFIID iid, void
 
     if (IsEqualGUID(iid, &IID_IMemInputPin))
         *out = &filter->sink.IMemInputPin_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->sink.IQualityControl_iface;
     else
         return E_NOINTERFACE;
 
@@ -461,8 +465,26 @@ static HRESULT WINAPI AVICompressorOut_DecideAllocator(struct strmbase_source *b
     return BaseOutputPinImpl_DecideAllocator(base, pPin, pAlloc);
 }
 
+static HRESULT source_query_interface(struct strmbase_pin *iface, REFIID iid, void **out)
+{
+    AVICompressor *filter = impl_from_strmbase_pin(iface);
+
+    if (IsEqualGUID(iid, &IID_IMediaPosition))
+        *out = &filter->passthrough.IMediaPosition_iface;
+    else if (IsEqualGUID(iid, &IID_IMediaSeeking))
+        *out = &filter->passthrough.IMediaSeeking_iface;
+    else if (IsEqualGUID(iid, &IID_IQualityControl))
+        *out = &filter->source.pin.IQualityControl_iface;
+    else
+        return E_NOINTERFACE;
+
+    IUnknown_AddRef((IUnknown *)*out);
+    return S_OK;
+}
+
 static const struct strmbase_source_ops source_ops =
 {
+    .base.pin_query_interface = source_query_interface,
     .base.pin_get_media_type = source_get_media_type,
     .pfnAttemptConnection = BaseOutputPinImpl_AttemptConnection,
     .pfnDecideBufferSize = AVICompressorOut_DecideBufferSize,
@@ -484,6 +506,9 @@ HRESULT avi_compressor_create(IUnknown *outer, IUnknown **out)
 
     strmbase_source_init(&object->source, &object->filter, L"Out", &source_ops);
     wcscpy(object->source.pin.name, L"Output");
+
+    strmbase_passthrough_init(&object->passthrough, (IUnknown *)&object->source.pin.IPin_iface);
+    ISeekingPassThru_Init(&object->passthrough.ISeekingPassThru_iface, FALSE, &object->sink.pin.IPin_iface);
 
     TRACE("Created AVI compressor %p.\n", object);
     *out = &object->filter.IUnknown_inner;

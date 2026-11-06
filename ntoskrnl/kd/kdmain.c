@@ -107,6 +107,7 @@ KdpGetDebugMode(
     {
         p2 += CONST_STR_LEN("NET");
         KdpDebugMode.Net = TRUE;
+        KdpDebugMode.File = TRUE;
     }
 
     return (PSTR)p2;
@@ -398,6 +399,9 @@ KdDebuggerInitialize1(
     BOOLEAN ReinitForPhase2 = FALSE;
 
     KdpUsbKeyboardInitialize();
+
+    if (KdDebuggerEnabled && InbvHasValidGopFrameBuffer())
+        InbvReserveDisplaySnapshot();
 
     /* Make space for the displayed providers' signons */
     HalDisplayString("\r\n");

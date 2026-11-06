@@ -239,7 +239,7 @@ NTSTATUS TiCreateFileObject(
         Shared = ((IrpSp->Parameters.Create.ShareAccess & FILE_SHARE_WRITE) != 0);
         Exclusive = (IrpSp->Parameters.Create.ShareAccess == 0);
 
-        Status = FileOpenAddress(&Request, Address, Protocol, Shared, Exclusive, NULL);
+        Status = FileOpenAddress(&Request, Address, Protocol, DeviceObject == RawIPDeviceObject, Shared, Exclusive, NULL);
         if (NT_SUCCESS(Status))
         {
             IrpSp->FileObject->FsContext2 = (PVOID)TDI_TRANSPORT_ADDRESS_FILE;

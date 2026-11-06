@@ -599,7 +599,8 @@ MasterFileTable::GetFileRecordFromQuery(_In_ PWCHAR Query,
                 TypeReparsePoint,
                 NULL) &&
             (HasRemainingName ||
-             !OpenFinalReparsePoint))
+             !OpenFinalReparsePoint) &&
+            !CurrentFile->IsWofBacked())
         {
             SIZE_T RemainingCharacters =
                 NextSeparator

@@ -3409,6 +3409,10 @@ static void test_device_install_params(void)
 #define MYEXT "ARM64"
 #define WOWEXT "ARM"
 #define WRONGEXT "AMD64"
+#elif defined(__REACTOS__) && defined(__riscv)
+#define MYEXT "RISCV64"
+#define WOWEXT "x86"
+#define WRONGEXT "AMD64"
 #else
 #define MYEXT
 #define WOWEXT
@@ -5367,6 +5371,11 @@ static void test_device_enum(void)
 
     i = 0;
     next = SetupDiEnumDeviceInfo(set, i, &devinfodata);
+#ifdef __REACTOS__
+    if (!next && GetLastError() == ERROR_NO_MORE_ITEMS)
+        skip("No display adapter is present.\n");
+    else
+#endif
     ok(next, "Failed getting at least one element from SetupDiEnumDeviceInfo with error %lu.\n", GetLastError());
 
     while (next)

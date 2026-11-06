@@ -23,6 +23,10 @@ DEBUG_CHANNEL(kernel32sync);
 #undef InterlockedExchangeAdd
 #undef InterlockedCompareExchange
 
+#ifndef EX_TIMER_HIGH_RESOLUTION
+#define EX_TIMER_HIGH_RESOLUTION 0x00000004
+#define EX_TIMER_NOTIFICATION (1UL << 31)
+#endif
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
@@ -348,14 +352,25 @@ CreateWaitableTimerExW(IN LPSECURITY_ATTRIBUTES lpTimerAttributes OPTIONAL,
         return NULL;
     }
 
-    /* TODO: CREATE_WAITABLE_TIMER_HIGH_RESOLUTION creates a normal timer that expires on clock ticks; high-resolution timers need NtCreateTimer2 */
     TimerType = (dwFlags & CREATE_WAITABLE_TIMER_MANUAL_RESET) ? NotificationTimer
                                                                : SynchronizationTimer;
 
     if (lpTimerName) RtlInitUnicodeString(&ObjectName, lpTimerName);
     ObjectAttributes = BaseFormatObjectAttributes(&LocalAttributes, lpTimerAttributes, lpTimerName ? &ObjectName : NULL);
 
-    Status = NtCreateTimer(&Handle, dwDesiredAccess, ObjectAttributes, TimerType);
+    if (dwFlags & CREATE_WAITABLE_TIMER_HIGH_RESOLUTION)
+    {
+        Status = NtCreateTimer2(&Handle,
+                                NULL,
+                                ObjectAttributes,
+                                EX_TIMER_HIGH_RESOLUTION |
+                                    ((dwFlags & CREATE_WAITABLE_TIMER_MANUAL_RESET) ? EX_TIMER_NOTIFICATION : 0),
+                                dwDesiredAccess);
+    }
+    else
+    {
+        Status = NtCreateTimer(&Handle, dwDesiredAccess, ObjectAttributes, TimerType);
+    }
     if (!NT_SUCCESS(Status))
     {
         BaseSetLastNTError(Status);

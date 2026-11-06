@@ -884,6 +884,17 @@ static HRESULT WINAPI xhr_send(struct xhr *xhr, VARIANT *varBody)
         return map_nsresult(nsres);
     }
 
+#ifdef __REACTOS__
+    if(!xhr->synchronous && xhr->ready_state == READYSTATE_LOADING) {
+        DOMEvent *event;
+
+        if(SUCCEEDED(create_document_event(xhr->window->doc, EVENTID_READYSTATECHANGE, &event))) {
+            dispatch_event(&xhr->event_target, event);
+            IDOMEvent_Release(&event->IDOMEvent_iface);
+        }
+    }
+#endif
+
     return S_OK;
 }
 

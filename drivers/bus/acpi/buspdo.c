@@ -241,33 +241,6 @@ BuspCachePciRootIoWindow(
     }
 }
 
-static __inline VOID
-BuspCachePciRootMemWindow(
-    _Inout_ PPDO_DEVICE_DATA DeviceData,
-    _In_ ULONGLONG Start,
-    _In_ ULONGLONG End,
-    _In_ BOOLEAN Prefetchable)
-{
-    if (!DeviceData) return;
-    if (!BuspIsPciRootDevice(DeviceData)) return;
-    if (DeviceData->PciRootMemWindowCount < ACPI_PCI_MAX_WINDOWS)
-    {
-        ULONG i = DeviceData->PciRootMemWindowCount++;
-        DeviceData->PciRootMemWindows[i].Start = Start;
-        DeviceData->PciRootMemWindows[i].End = End;
-        DeviceData->PciRootMemWindows[i].Prefetchable = Prefetchable ? TRUE : FALSE;
-    }
-    else
-    {
-        DPRINT1("ACPI: PCI root %S exceeded memory window cache capacity (%u); ignoring window [0x%I64x,0x%I64x] prefetch=%d\n",
-                DeviceData->HardwareIDs ? DeviceData->HardwareIDs : L"<unknown>",
-                ACPI_PCI_MAX_WINDOWS,
-                Start,
-                End,
-                Prefetchable ? 1 : 0);
-    }
-}
-
 static
 BOOLEAN
 BuspShouldForceSharedInterrupt(
@@ -2400,10 +2373,6 @@ BuspCreateResourceListFromAcpiResources(
                     if (IsPciRoot)
                     {
                         ResourceDescriptor->Flags |= CM_RESOURCE_MEMORY_WINDOW_DECODE;
-                        ULONGLONG s = addr16->Address.Minimum + addr16->Address.TranslationOffset;
-                        ULONGLONG e = (addr16->Address.AddressLength) ? (s + addr16->Address.AddressLength - 1) : s;
-                        BOOLEAN prefetch = (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) ? TRUE : FALSE;
-                        BuspCachePciRootMemWindow(DeviceData, s, e, prefetch);
                     }
                 }
                 ResourceDescriptor++;
@@ -2472,10 +2441,6 @@ BuspCreateResourceListFromAcpiResources(
                     if (IsPciRoot)
                     {
                         ResourceDescriptor->Flags |= CM_RESOURCE_MEMORY_WINDOW_DECODE;
-                        ULONGLONG s = addr32->Address.Minimum + addr32->Address.TranslationOffset;
-                        ULONGLONG e = (addr32->Address.AddressLength) ? (s + addr32->Address.AddressLength - 1) : s;
-                        BOOLEAN prefetch = (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) ? TRUE : FALSE;
-                        BuspCachePciRootMemWindow(DeviceData, s, e, prefetch);
                     }
                 }
                 ResourceDescriptor++;
@@ -2538,10 +2503,6 @@ BuspCreateResourceListFromAcpiResources(
                     if (IsPciRoot)
                     {
                         ResourceDescriptor->Flags |= CM_RESOURCE_MEMORY_WINDOW_DECODE;
-                        ULONGLONG s = addr64->Address.Minimum + addr64->Address.TranslationOffset;
-                        ULONGLONG e = (addr64->Address.AddressLength) ? (s + addr64->Address.AddressLength - 1) : s;
-                        BOOLEAN prefetch = (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) ? TRUE : FALSE;
-                        BuspCachePciRootMemWindow(DeviceData, s, e, prefetch);
                     }
                 }
                 ResourceDescriptor++;
@@ -2604,10 +2565,6 @@ BuspCreateResourceListFromAcpiResources(
                     if (IsPciRoot)
                     {
                         ResourceDescriptor->Flags |= CM_RESOURCE_MEMORY_WINDOW_DECODE;
-                        ULONGLONG s = addrx->Address.Minimum + addrx->Address.TranslationOffset;
-                        ULONGLONG e = (addrx->Address.AddressLength) ? (s + addrx->Address.AddressLength - 1) : s;
-                        BOOLEAN prefetch = (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) ? TRUE : FALSE;
-                        BuspCachePciRootMemWindow(DeviceData, s, e, prefetch);
                     }
                 }
                 ResourceDescriptor++;
@@ -2627,10 +2584,6 @@ BuspCreateResourceListFromAcpiResources(
                 if (IsPciRoot)
                 {
                     ResourceDescriptor->Flags |= CM_RESOURCE_MEMORY_WINDOW_DECODE;
-                    ULONGLONG s = mem24->Minimum;
-                    ULONGLONG e = (mem24->AddressLength) ? (s + mem24->AddressLength - 1) : s;
-                    BOOLEAN prefetch = (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) ? TRUE : FALSE;
-                    BuspCachePciRootMemWindow(DeviceData, s, e, prefetch);
                 }
                 ResourceDescriptor++;
                 break;
@@ -2648,10 +2601,6 @@ BuspCreateResourceListFromAcpiResources(
                 if (IsPciRoot)
                 {
                     ResourceDescriptor->Flags |= CM_RESOURCE_MEMORY_WINDOW_DECODE;
-                    ULONGLONG s = mem32->Minimum;
-                    ULONGLONG e = (mem32->AddressLength) ? (s + mem32->AddressLength - 1) : s;
-                    BOOLEAN prefetch = (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) ? TRUE : FALSE;
-                    BuspCachePciRootMemWindow(DeviceData, s, e, prefetch);
                 }
                 ResourceDescriptor++;
                 break;
@@ -2669,10 +2618,6 @@ BuspCreateResourceListFromAcpiResources(
                 if (IsPciRoot)
                 {
                     ResourceDescriptor->Flags |= CM_RESOURCE_MEMORY_WINDOW_DECODE;
-                    ULONGLONG s = mfix->Address;
-                    ULONGLONG e = (mfix->AddressLength) ? (s + mfix->AddressLength - 1) : s;
-                    BOOLEAN prefetch = (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) ? TRUE : FALSE;
-                    BuspCachePciRootMemWindow(DeviceData, s, e, prefetch);
                 }
                 ResourceDescriptor++;
                 break;

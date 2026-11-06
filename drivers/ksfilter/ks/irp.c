@@ -715,7 +715,7 @@ AllocMdl:
         if (Irp->MdlAddress)
         {
 ProbeMdl:
-            if (ProbeFlags & KSPROBE_PROBEANDLOCK)
+            if ((ProbeFlags & KSPROBE_PROBEANDLOCK) && Irp->MdlAddress)
             {
                 if (Irp->MdlAddress->MdlFlags & (MDL_PAGES_LOCKED | MDL_SOURCE_IS_NONPAGED_POOL))
                 {

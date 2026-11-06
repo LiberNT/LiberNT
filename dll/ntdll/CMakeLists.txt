@@ -55,14 +55,11 @@ list(APPEND SOURCE
     rtl/wnf.c
     rtl/time.c
     rtl/virtual.c
-    rtl/xstate.c)
+    rtl/xstate.c
+    rtl/xstate_wow64.c)
 
 set_source_files_properties(rtl/capability.c PROPERTIES
     COMPILE_DEFINITIONS "__WINE_PE_BUILD;SYMCRYPT_PLATFORM_WINE=1")
-
-if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64")
-    list(APPEND SOURCE rtl/xstate_wow64.c)
-endif()
 
 list(APPEND SOURCE wow64.c)
 
@@ -145,7 +142,7 @@ endif()
 set_subsystem(ntdll console)
 ################# END  HACK #################
 
-target_link_libraries(ntdll ntdll_vista_static etwtrace csrlib rtl rtl_um rtl_vista ntdllsys ntdllsys_nt6 libcntpr setjmp uuid symcrypt ${PSEH_LIB})
+target_link_libraries(ntdll ntdllsys ntdllsys_nt6 ntdll_vista_static etwtrace csrlib rtl rtl_um rtl_vista libcntpr setjmp uuid symcrypt ${PSEH_LIB})
 if(MSVC AND ARCH STREQUAL "arm64")
     target_link_libraries(ntdll chkstk)
 endif()

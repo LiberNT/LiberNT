@@ -1,0 +1,5 @@
+add_executable(resampledmo_apitest resample.c testlist.c)
+set_module_type(resampledmo_apitest win32cui)
+target_link_libraries(resampledmo_apitest mfuuid wmcodecdspuuid uuid)
+add_importlibs(resampledmo_apitest mfplat ole32 oleaut32 msvcrt kernel32 ntdll)
+add_rostests_file(TARGET resampledmo_apitest)

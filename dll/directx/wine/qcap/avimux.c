@@ -77,6 +77,7 @@ typedef struct {
 
     REFERENCE_TIME start, stop;
     AVIMAINHEADER avih;
+    GUID time_format;
 
     int idx1_entries;
     int idx1_size;
@@ -249,7 +250,7 @@ static HRESULT flush_queue(AviMux *avimux, AviMuxIn *avimuxin, BOOL closing)
     DWORD flags;
     HRESULT hr;
 
-    if (avimux->cur_stream != avimuxin->stream_id)
+    if (avimux->mode == INTERLEAVE_FULL && avimux->cur_stream != avimuxin->stream_id)
         return S_OK;
 
     while(avimuxin->samples_head) {
@@ -272,7 +273,8 @@ static HRESULT flush_queue(AviMux *avimux, AviMuxIn *avimuxin, BOOL closing)
         if(IMediaSample_IsSyncPoint(sample) == S_OK)
             flags |= AM_SAMPLE_SPLICEPOINT;
 
-        if (avimuxin->stream_time + (closing ? 0 : avimuxin->strh.dwScale) > avimux->cur_time
+        if (avimux->mode == INTERLEAVE_FULL
+                && avimuxin->stream_time + (closing ? 0 : avimuxin->strh.dwScale) > avimux->cur_time
                 && !(flags & AM_SAMPLE_TIMEDISCONTINUITY))
         {
             if(closing)
@@ -536,10 +538,8 @@ static HRESULT avi_mux_init_stream(struct strmbase_filter *iface)
     HRESULT hr;
     int i, stream_id;
 
-    if(This->mode != INTERLEAVE_FULL) {
-        FIXME("mode not supported (%d)\n", This->mode);
-        return E_NOTIMPL;
-    }
+    if (This->mode == INTERLEAVE_CAPTURE)
+        FIXME("Approximate interleaving is not implemented; writing samples in arrival order.\n");
 
     for(i=0; i<This->input_pin_no; i++) {
         IMediaSeeking *ms;
@@ -642,8 +642,11 @@ static HRESULT avi_mux_init_stream(struct strmbase_filter *iface)
     This->avih.dwMicroSecPerFrame = This->in[0]->avg_time_per_frame/10;
     This->avih.dwPaddingGranularity = 1;
     This->avih.dwFlags = AVIF_TRUSTCKTYPE | AVIF_HASINDEX;
-    This->avih.dwWidth = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biWidth;
-    This->avih.dwHeight = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biHeight;
+    if (This->in[0]->strf)
+    {
+        This->avih.dwWidth = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biWidth;
+        This->avih.dwHeight = ((BITMAPINFOHEADER*)This->in[0]->strf->data)->biHeight;
+    }
 
     return S_OK;
 }
@@ -832,68 +835,144 @@ static ULONG WINAPI MediaSeeking_Release(IMediaSeeking *iface)
     return IBaseFilter_Release(&This->filter.IBaseFilter_iface);
 }
 
+#define AVI_MUX_SEEKING_CAPS (AM_SEEKING_CanGetCurrentPos | AM_SEEKING_CanGetDuration)
+
 static HRESULT WINAPI MediaSeeking_GetCapabilities(
         IMediaSeeking *iface, DWORD *pCapabilities)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%p)\n", This, pCapabilities);
-    return E_NOTIMPL;
+    TRACE("(%p)->(%p)\n", This, pCapabilities);
+
+    if (!pCapabilities)
+        return E_POINTER;
+    *pCapabilities = AVI_MUX_SEEKING_CAPS;
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaSeeking_CheckCapabilities(
         IMediaSeeking *iface, DWORD *pCapabilities)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%p)\n", This, pCapabilities);
-    return E_NOTIMPL;
+    TRACE("(%p)->(%p)\n", This, pCapabilities);
+
+    if (!pCapabilities)
+        return E_POINTER;
+    *pCapabilities &= AVI_MUX_SEEKING_CAPS;
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaSeeking_IsFormatSupported(
         IMediaSeeking *iface, const GUID *pFormat)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_guid(pFormat));
-    return E_NOTIMPL;
+    TRACE("(%p)->(%s)\n", This, debugstr_guid(pFormat));
+
+    if (!pFormat)
+        return E_POINTER;
+    if (IsEqualGUID(pFormat, &TIME_FORMAT_MEDIA_TIME) || IsEqualGUID(pFormat, &TIME_FORMAT_BYTE))
+        return S_OK;
+    return S_FALSE;
 }
 
 static HRESULT WINAPI MediaSeeking_QueryPreferredFormat(
         IMediaSeeking *iface, GUID *pFormat)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%p)\n", This, pFormat);
-    return E_NOTIMPL;
+    TRACE("(%p)->(%p)\n", This, pFormat);
+
+    if (!pFormat)
+        return E_POINTER;
+    *pFormat = TIME_FORMAT_MEDIA_TIME;
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaSeeking_GetTimeFormat(
         IMediaSeeking *iface, GUID *pFormat)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%p)\n", This, pFormat);
-    return E_NOTIMPL;
+    TRACE("(%p)->(%p)\n", This, pFormat);
+
+    if (!pFormat)
+        return E_POINTER;
+    EnterCriticalSection(&This->filter.filter_cs);
+    *pFormat = This->time_format;
+    LeaveCriticalSection(&This->filter.filter_cs);
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaSeeking_IsUsingTimeFormat(
         IMediaSeeking *iface, const GUID *pFormat)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_guid(pFormat));
-    return E_NOTIMPL;
+    HRESULT hr;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_guid(pFormat));
+
+    if (!pFormat)
+        return E_POINTER;
+    EnterCriticalSection(&This->filter.filter_cs);
+    hr = IsEqualGUID(pFormat, &This->time_format) || IsEqualGUID(pFormat, &TIME_FORMAT_BYTE) ? S_OK : S_FALSE;
+    LeaveCriticalSection(&This->filter.filter_cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_SetTimeFormat(
         IMediaSeeking *iface, const GUID *pFormat)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_guid(pFormat));
-    return E_NOTIMPL;
+    TRACE("(%p)->(%s)\n", This, debugstr_guid(pFormat));
+
+    if (!pFormat)
+        return E_POINTER;
+    if (!IsEqualGUID(pFormat, &TIME_FORMAT_MEDIA_TIME) && !IsEqualGUID(pFormat, &TIME_FORMAT_BYTE))
+        return E_INVALIDARG;
+    EnterCriticalSection(&This->filter.filter_cs);
+    This->time_format = *pFormat;
+    LeaveCriticalSection(&This->filter.filter_cs);
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaSeeking_GetDuration(
         IMediaSeeking *iface, LONGLONG *pDuration)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%p)\n", This, pDuration);
-    return E_NOTIMPL;
+    LONGLONG duration;
+    IMediaSeeking *seeking;
+    HRESULT hr = S_OK, pin_hr;
+    int i;
+
+    TRACE("(%p)->(%p)\n", This, pDuration);
+
+    if (!pDuration)
+        return E_POINTER;
+    *pDuration = 0;
+
+    EnterCriticalSection(&This->filter.filter_cs);
+    if (!IsEqualGUID(&This->time_format, &TIME_FORMAT_MEDIA_TIME))
+    {
+        LeaveCriticalSection(&This->filter.filter_cs);
+        return E_UNEXPECTED;
+    }
+    for (i = 0; i < This->input_pin_no; i++)
+    {
+        if (!This->in[i]->pin.pin.peer)
+            continue;
+        if (SUCCEEDED(pin_hr = IPin_QueryInterface(This->in[i]->pin.pin.peer, &IID_IMediaSeeking, (void **)&seeking)))
+        {
+            pin_hr = IMediaSeeking_GetDuration(seeking, &duration);
+            IMediaSeeking_Release(seeking);
+        }
+        if (FAILED(pin_hr))
+        {
+            if (SUCCEEDED(hr))
+                hr = pin_hr;
+            continue;
+        }
+        if (duration > *pDuration)
+            *pDuration = duration;
+    }
+    LeaveCriticalSection(&This->filter.filter_cs);
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_GetStopPosition(
@@ -908,8 +987,17 @@ static HRESULT WINAPI MediaSeeking_GetCurrentPosition(
         IMediaSeeking *iface, LONGLONG *pCurrent)
 {
     AviMux *This = impl_from_IMediaSeeking(iface);
-    FIXME("(%p)->(%p)\n", This, pCurrent);
-    return E_NOTIMPL;
+    TRACE("(%p)->(%p)\n", This, pCurrent);
+
+    if (!pCurrent)
+        return E_POINTER;
+    EnterCriticalSection(&This->filter.filter_cs);
+    if (IsEqualGUID(&This->time_format, &TIME_FORMAT_BYTE))
+        *pCurrent = This->size;
+    else
+        *pCurrent = This->stop == -1 ? 0 : This->stop;
+    LeaveCriticalSection(&This->filter.filter_cs);
+    return S_OK;
 }
 
 static HRESULT WINAPI MediaSeeking_ConvertTimeFormat(IMediaSeeking *iface, LONGLONG *pTarget,
@@ -1313,6 +1401,9 @@ static HRESULT WINAPI AviMuxIn_Receive(struct strmbase_sink *base, IMediaSample 
 
     TRACE("pin %p, pSample %p.\n", avimuxin, pSample);
 
+    if (avimux->filter.state == State_Stopped)
+        return VFW_E_WRONG_STATE;
+
     hr = IMediaSample_QueryInterface(pSample, &IID_IMediaSample2, (void**)&ms2);
     if(SUCCEEDED(hr)) {
         AM_SAMPLE2_PROPERTIES props;
@@ -1327,11 +1418,25 @@ static HRESULT WINAPI AviMuxIn_Receive(struct strmbase_sink *base, IMediaSample 
         frame = props.pbBuffer;
         size = props.lActual;
     }else {
+        LONGLONG media_start, media_stop;
+        AM_MEDIA_TYPE *mt;
+
         flags = IMediaSample_IsSyncPoint(pSample) == S_OK ? AM_SAMPLE_SPLICEPOINT : 0;
+        if(IMediaSample_IsDiscontinuity(pSample) == S_OK)
+            flags |= AM_SAMPLE_DATADISCONTINUITY;
+        if(IMediaSample_IsPreroll(pSample) == S_OK)
+            flags |= AM_SAMPLE_PREROLL;
+        if(IMediaSample_GetMediaType(pSample, &mt) == S_OK && mt) {
+            /* TODO: reject a format change the pin does not accept */
+            flags |= AM_SAMPLE_TYPECHANGED;
+            DeleteMediaType(mt);
+        }
         hr = IMediaSample_GetPointer(pSample, &frame);
         if(FAILED(hr))
             return hr;
         size = IMediaSample_GetActualDataLength(pSample);
+        IMediaSample_GetSize(pSample);
+        IMediaSample_GetMediaTime(pSample, &media_start, &media_stop);
     }
 
     if(!avimuxin->pin.pin.mt.bTemporalCompression)
@@ -1859,6 +1964,7 @@ HRESULT avi_mux_create(IUnknown *outer, IUnknown **out)
     }
 
     avimux->interleave = 10000000;
+    avimux->time_format = TIME_FORMAT_MEDIA_TIME;
 
     TRACE("Created AVI mux %p.\n", avimux);
     *out = &avimux->filter.IUnknown_inner;

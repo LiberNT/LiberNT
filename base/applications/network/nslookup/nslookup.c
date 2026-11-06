@@ -715,6 +715,7 @@ BOOL ParseCommandLine( int argc, char* argv[] )
                    DNS server provided was an IP or an FQDN. */
                 if( IsValidIP( Server ) )
                 {
+State.DefaultServerScope = 0;
                     strncpy( State.DefaultServerAddress, Server, SERVER_ADDRESS_LENGTH - 1 );
                     State.DefaultServerAddress[SERVER_ADDRESS_LENGTH - 1] = '\0';
 
@@ -1358,6 +1359,14 @@ static void SelectDefaultServer( void )
 
         if( !inet_ntop( pServer->sa_family, pBytes, State.DefaultServerAddress, Length ) )
             State.DefaultServerAddress[0] = '\0';
+
+        State.DefaultServerScope = 0;
+        if( pServer->sa_family == AF_INET6 && IN6_IS_ADDR_LINKLOCAL( &((SOCKADDR_IN6*)pServer)->sin6_addr ) )
+        {
+            State.DefaultServerScope = ((SOCKADDR_IN6*)pServer)->sin6_scope_id;
+            if( !State.DefaultServerScope )
+                State.DefaultServerScope = pBest->Ipv6IfIndex;
+        }
     }
 
     HeapFree( ProcessHeap, 0, pList );

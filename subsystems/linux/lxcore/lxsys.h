@@ -29,6 +29,7 @@ LX_SYSCALL(LxSysFchdir);
 LX_SYSCALL(LxSysChroot);
 LX_SYSCALL(LxSysFchmod);
 LX_SYSCALL(LxSysFchmodat);
+LX_SYSCALL(LxSysFchmodat2);
 LX_SYSCALL(LxSysFchownat);
 LX_SYSCALL(LxSysFchown);
 LX_SYSCALL(LxSysOpenat);

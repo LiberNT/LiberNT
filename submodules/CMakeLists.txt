@@ -11,3 +11,7 @@ if(ENABLE_MESA_LLVMPIPE AND MESA_LLVMPIPE_FROM_SOURCE)
 elseif(ENABLE_MESA_LLVMPIPE)
     include(mesa-llvmpipe-payload.cmake)
 endif()
+
+if(ENABLE_LXGPU)
+    include(lxgpu.cmake)
+endif()

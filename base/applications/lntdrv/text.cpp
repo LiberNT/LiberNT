@@ -86,8 +86,12 @@ std::wstring NumberText(ULONGLONG value)
 bool IsOfflineError(DWORD error)
 {
     return error == ERROR_INTERNET_NAME_NOT_RESOLVED || error == ERROR_INTERNET_CANNOT_CONNECT ||
-           error == ERROR_INTERNET_TIMEOUT || error == ERROR_INTERNET_CONNECTION_ABORTED ||
-           error == ERROR_INTERNET_CONNECTION_RESET || error == ERROR_INTERNET_DISCONNECTED;
+           error == ERROR_INTERNET_DISCONNECTED;
+}
+
+bool StopsCatalogScan(DWORD error)
+{
+    return IsOfflineError(error) || error == ERROR_LNTDRV_CATALOG_THROTTLED;
 }
 
 std::wstring ErrorText(DWORD error)
@@ -111,6 +115,8 @@ std::wstring ErrorText(DWORD error)
             return LoadText(IDS_ERROR_NO_COMPAT);
         case ERROR_LNTDRV_CATALOG_FORMAT:
             return LoadText(IDS_ERROR_FORMAT);
+        case ERROR_LNTDRV_CATALOG_THROTTLED:
+            return LoadText(IDS_ERROR_THROTTLED);
         case ERROR_LNTDRV_PROGRAM_PACKAGE:
             return LoadText(IDS_ERROR_PROGRAM);
         case ERROR_LNTDRV_ALREADY_INSTALLED:

@@ -35,6 +35,10 @@ BOOL DwmD3dShadow(const RECT *Bounds, LONGLONG X, LONGLONG Y, LONG Width,
                   ULONG WideOpacity, ULONG TightOpacity, ULONG WindowAlpha);
 void DwmD3dBlurStats(ULONGLONG *Filtered, ULONGLONG *Reused);
 BOOL DwmD3dClientCopiesRetired(void);
+BOOL DwmD3dHasPointerImage(void);
+BOOL DwmD3dSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const ULONG *Invert);
+BOOL DwmD3dDrawPointer(const RECT *Rect);
+BOOL DwmD3dMirrorCanvas(HDC Screen);
 DWM_GPU_RESULT DwmD3dEnd(void);
 DWM_GPU_RESULT DwmD3dCheckOutput(void);
 

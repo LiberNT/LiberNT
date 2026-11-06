@@ -198,6 +198,18 @@ KeGetTrapFrameFrameRegister(_In_ PKTRAP_FRAME TrapFrame)
 #define KI_RISCV_FEATURE_V           0x00002000
 #define KI_RISCV_FEATURE_H           0x00004000
 #define KI_RISCV_FEATURE_SSCOFPMF    0x00008000
+#define KI_RISCV_FEATURE_ZBC         0x00010000
+#define KI_RISCV_FEATURE_ZICOND      0x00020000
+#define KI_RISCV_FEATURE_ZFA         0x00040000
+#define KI_RISCV_FEATURE_ZACAS       0x00080000
+#define KI_RISCV_FEATURE_ZABHA       0x00100000
+#define KI_RISCV_FEATURE_ZVBB        0x00200000
+#define KI_RISCV_FEATURE_ZVBC        0x00400000
+#define KI_RISCV_FEATURE_ZVKNED      0x00800000
+#define KI_RISCV_FEATURE_ZVKNHA      0x01000000
+#define KI_RISCV_FEATURE_ZVFHMIN     0x02000000
+#define KI_RISCV_FEATURE_ZKND        0x04000000
+#define KI_RISCV_FEATURE_ZICCLSM     0x08000000
 
 #define KI_RISCV_EXTENSION_LIST_SIZE 512
 
@@ -272,6 +284,7 @@ VOID NTAPI KiRiscvSynchronizeInterruptMask(VOID);
 #define KI_RISCV_FENCE_SLEEPING ((LONG)0x80000000L)
 KAFFINITY NTAPI KiRiscvDeferSleepingFences(_In_ KAFFINITY Targets, _In_ LONG Request);
 ULONG NTAPI KiRiscvQueryCacheBlockSize(VOID);
+ULONG NTAPI KiRiscvQueryLargestCacheLine(VOID);
 BOOLEAN NTAPI KiRiscvIsPhysicalCached(_In_ ULONG64 PhysicalAddress);
 BOOLEAN NTAPI KiRiscvFlushDmaRange(_In_ ULONG64 PhysicalAddress, _In_ SIZE_T Length, _In_ BOOLEAN Invalidate);
 extern KI_RISCV_PROCESSOR_FEATURES KiRiscvProcessorFeatures;

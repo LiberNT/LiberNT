@@ -69,7 +69,31 @@ typedef enum _DXGKRNL_PRESENT_TYPE
      */
     DxgkPresentTypeColorFill,
 
+    /* GDI copy-only bitblt (DXGK_GDIOP_BITBLT) through DxgkDdiRenderKm on the CDD context. */
+    DxgkPresentTypeGdiBitBlt,
+
 } DXGKRNL_PRESENT_TYPE;
+
+/* GPU texture that takes a window's Blt presents while its CDD redirection surface is CPU-visible staging. */
+typedef struct _DXGKRNL_GDI_BLT_TEXTURE
+{
+    LIST_ENTRY                      Link;
+    volatile LONG                   ReferenceCount;
+    BOOLEAN                         Linked;
+    struct _DXGKRNL_ADAPTER        *Adapter;
+    ULONG                           StagingShare;
+    D3DKMT_HANDLE                   StagingAllocation;
+    ULONG                           StagingPitch;
+    ULONG                           Width;
+    ULONG                           Height;
+    D3DKMT_HANDLE                   TextureAllocation;
+    D3DKMT_HANDLE                   TextureResource;
+    ULONG                           TextureShare;
+    ULONG                           TexturePitch;
+    D3DKMT_HANDLE                   CddDevice;
+    D3DKMT_HANDLE                   CddTextureBinding;
+    D3DKMT_HANDLE                   CddStagingBinding;
+} DXGKRNL_GDI_BLT_TEXTURE, *PDXGKRNL_GDI_BLT_TEXTURE;
 
 /* One coherent SharedPrimary/SharedShadow generation.  The snapshot owns the
  * allocation references and the shared-surface rundown reference until it is
@@ -226,6 +250,9 @@ typedef struct _DXGKRNL_PRESENT_ENTRY
     DXGKRNL_REDIRECTED_BLT_PRESENT  RedirectedBltPresent;
     BOOLEAN                         RedirectedBltPresentAdmitted;
     PVOID                           RedirectedBltWork;
+    PDXGKRNL_GDI_BLT_TEXTURE        GdiBltTexture;
+    UINT                            GdiSourcePitch;
+    UINT                            GdiDestinationPitch;
 
     /* Colour value for colour-fill presents (ARGB 32-bit). */
     UINT                            Color;
@@ -249,6 +276,7 @@ typedef struct _DXGKRNL_PRESENT_ENTRY
      * reference; the last one releases the entry. */
     LIST_ENTRY                      MmioFlipEntry;
     volatile LONG                   MmioFlipReferences;
+    PDXGKVMM_ALLOCATION             MmioFlipBinding;
 
     /* Overlay planes a compositor flip shows above its primary. */
     UINT                            OverlayCount;
@@ -630,6 +658,32 @@ DxgkQueueRedirectedBltPresent(
     _In_ BOOLEAN Complete,
     _In_reads_opt_(DirtyRectCount) const RECT *DirtyRects,
     _In_ UINT DirtyRectCount,
-    _In_opt_ struct _DXGKRNL_CONTEXT *Context);
+    _In_opt_ struct _DXGKRNL_CONTEXT *Context,
+    _In_opt_ PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture);
+
+NTSTATUS
+DxgkReferenceGdiBltTexture(
+    _In_ struct _DXGKRNL_ADAPTER *Adapter,
+    _In_ ULONG StagingShare,
+    _Out_ PDXGKRNL_GDI_BLT_TEXTURE *OutTexture);
+
+VOID
+DxgkDereferenceGdiBltTexture(
+    _In_ PDXGKRNL_GDI_BLT_TEXTURE Texture);
+
+VOID
+DxgkRetireGdiBltTexture(
+    _In_ struct _DXGKRNL_ADAPTER *Adapter,
+    _In_ ULONG StagingShare);
+
+NTSTATUS
+DxgkExecuteCddGdiBitBlt(
+    _In_ PDXGKRNL_GDI_BLT_TEXTURE Texture,
+    _In_reads_(RectCount) const RECT *Rects,
+    _In_ UINT RectCount);
+
+VOID
+DxgkReleaseCddGdiBltBindings(
+    _In_ PDXGKRNL_GDI_BLT_TEXTURE Texture);
 
 /* EOF */

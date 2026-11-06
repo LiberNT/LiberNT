@@ -152,14 +152,6 @@ BOOL WINAPIV ShimDbgPrint(SHIM_LOG_LEVEL Level, PCSTR FunctionName, PCSTR Format
 }
 
 
-#define APPHELP_DONTWRITE_REASON    2
-#define APPHELP_CLEARBITS           0x100   /* TODO: Investigate */
-#define APPHELP_IGNORE_ENVIRONMENT  0x400
-
-#define APPHELP_VALID_RESULT        0x10000
-#define APPHELP_RESULT_NOTFOUND     0x20000
-#define APPHELP_RESULT_FOUND        0x40000
-
 /**
  * Lookup Shims / Fixes for the specified application
  *
@@ -168,6 +160,7 @@ BOOL WINAPIV ShimDbgPrint(SHIM_LOG_LEVEL Level, PCSTR FunctionName, PCSTR Format
  * @param [in]  Unk2
  * @param [in]  ApplicationName             Exe to check
  * @param [in]  Environment                 The environment variables to use, or NULL to use the current environment.
+ * @param [in]  Unk3
  * @param [in]  ExeType                     Exe type (MACHINE_TYPE_XXXX)
  * @param [in,out]  Reason                  Input/output flags
  * @param [in]  SdbQueryAppCompatData       The resulting data.
@@ -188,6 +181,7 @@ ApphelpCheckRunAppEx(
     _In_opt_ PVOID Unk2,
     _In_opt_z_ PCWSTR ApplicationName,
     _In_opt_ PVOID Environment,
+    _In_opt_ PVOID Unk3,
     _In_opt_ USHORT ExeType,
     _Inout_opt_ PULONG Reason,
     _Out_opt_ PVOID* SdbQueryAppCompatData,
@@ -200,7 +194,8 @@ ApphelpCheckRunAppEx(
 {
     SDBQUERYRESULT* result = NULL;
     HSDB hsdb = NULL;
-    DWORD dwFlags = 0;
+
+    UNREFERENCED_PARAMETER(Reason);
 
     if (SxsData)
         *SxsData = NULL;
@@ -212,10 +207,6 @@ ApphelpCheckRunAppEx(
         *SomeFlag1 = 0;
     if (SomeFlag2)
         *SomeFlag2 = 0;
-    if (Reason)
-        dwFlags = *Reason;
-
-    dwFlags &= ~APPHELP_CLEARBITS;
 
     *SdbQueryAppCompatData = result = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(SDBQUERYRESULT));
     if (SdbQueryAppCompatDataSize)
@@ -225,24 +216,13 @@ ApphelpCheckRunAppEx(
     hsdb = SdbInitDatabase(HID_DOS_PATHS | SDB_DATABASE_MAIN_SHIM, NULL);
     if (hsdb)
     {
-        BOOL FoundMatch;
-        DWORD MatchingExeFlags = 0;
+        BOOL FoundMatch = SdbGetMatchingExe(hsdb, ApplicationName, NULL, Environment, 0, result);
 
-        if (dwFlags & APPHELP_IGNORE_ENVIRONMENT)
-            MatchingExeFlags |= SDBGMEF_IGNORE_ENVIRONMENT;
-
-        FoundMatch = SdbGetMatchingExe(hsdb, ApplicationName, NULL, Environment, MatchingExeFlags, result);
-        if (FileHandle != INVALID_HANDLE_VALUE)
-        {
-            dwFlags |= APPHELP_VALID_RESULT;
-            dwFlags |= (FoundMatch ? APPHELP_RESULT_FOUND : APPHELP_RESULT_NOTFOUND);
-        }
+        if (SomeFlag2 && FoundMatch && FileHandle != INVALID_HANDLE_VALUE)
+            *SomeFlag2 = 1;
 
         SdbReleaseDatabase(hsdb);
     }
-
-    if (Reason && !(dwFlags & APPHELP_DONTWRITE_REASON))
-        *Reason = dwFlags;
 
 
     /* We should _ALWAYS_ return TRUE here, unless we want to block an application from starting! */

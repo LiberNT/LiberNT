@@ -41,6 +41,7 @@ list(APPEND SOURCE
     PathResolve.cpp
     PreviewHandler.cpp
     ProgramFilesDir.cpp
+    SHGetFolderPathToken.cpp
     RealShellExecuteEx.cpp
     RecentDocs.cpp
     RegItemParse.cpp
@@ -72,6 +73,7 @@ list(APPEND SOURCE
     SHGetAttributesFromDataObject.cpp
     SHGetUserDisplayName.cpp
     SHLimitInputEdit.cpp
+    SHOpenFolderAndSelectItems.cpp
     SHSetUnreadMailCountW.cpp
     StrRStr.cpp
     Thumbnails.cpp

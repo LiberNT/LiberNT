@@ -534,9 +534,9 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
         return NULL;
     }
 
-    _SEH2_TRY
+    if (dwFlags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE))
     {
-        if (dwFlags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE))
+        _SEH2_TRY
         {
             /* If the image is loaded as a datafile, try to get its handle */
             Status = LdrGetDllHandleEx(0, SearchPath, NULL, &DllName, (PVOID*)&hInst);
@@ -545,19 +545,19 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
                 /* It's not loaded yet - so load it up */
                 Status = BasepLoadLibraryAsDatafile(SearchPath, DllName.Buffer, dwFlags, &hInst);
             }
-            _SEH2_YIELD(goto done;)
         }
-
-        /* Call the API Properly */
-        Status = LdrLoadDll(SearchPath,
-                            &DllCharacteristics,
-                            &DllName,
-                            (PVOID*)&hInst);
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        } _SEH2_END;
+        goto done;
     }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    } _SEH2_END;
+
+    /* Call the API Properly */
+    Status = LdrLoadDll(SearchPath,
+                        &DllCharacteristics,
+                        &DllName,
+                        (PVOID*)&hInst);
 
 
 done:
@@ -815,72 +815,33 @@ GetModuleFileNameW(HINSTANCE hModule,
                    LPWSTR lpFilename,
                    DWORD nSize)
 {
-    PLIST_ENTRY ModuleListHead, Entry;
-    PLDR_DATA_TABLE_ENTRY Module;
-    ULONG Length = 0;
-    ULONG_PTR Cookie;
-    PPEB Peb;
+    UNICODE_STRING Name;
+    NTSTATUS Status;
 
     hModule = BasepMapModuleHandle(hModule, FALSE);
-
-    /* Upscale nSize from chars to bytes */
-    nSize *= sizeof(WCHAR);
-
-    _SEH2_TRY
+    if (!hModule)
     {
-        /* We don't use per-thread cur dir now */
-        //PRTL_PERTHREAD_CURDIR PerThreadCurdir = (PRTL_PERTHREAD_CURDIR)teb->NtTib.SubSystemTib;
-
-        Peb = NtCurrentPeb ();
-
-        /* Acquire a loader lock */
-        LdrLockLoaderLock(LDR_LOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, NULL, &Cookie);
-
-        /* Traverse the module list */
-        ModuleListHead = &Peb->Ldr->InLoadOrderModuleList;
-        Entry = ModuleListHead->Flink;
-        while (Entry != ModuleListHead)
-        {
-            Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-
-            /* Check if this is the requested module */
-            if (Module->DllBase == (PVOID)hModule)
-            {
-                /* Calculate size to copy */
-                Length = min(nSize, Module->FullDllName.MaximumLength);
-
-                /* Copy contents */
-                RtlMoveMemory(lpFilename, Module->FullDllName.Buffer, Length);
-
-                /* Subtract a terminating zero */
-                if (Length == Module->FullDllName.MaximumLength)
-                {
-                    Length -= sizeof(WCHAR);
-                    SetLastError(ERROR_SUCCESS);
-                }
-                else
-                {
-                    SetLastError(ERROR_INSUFFICIENT_BUFFER);
-                }
-
-                /* Break out of the loop */
-                break;
-            }
-
-            /* Advance to the next entry */
-            Entry = Entry->Flink;
-        }
+        BaseSetLastNTError(STATUS_DLL_NOT_FOUND);
+        return 0;
     }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+
+    Name.Buffer = lpFilename;
+    Name.Length = 0;
+    Name.MaximumLength = (USHORT)(min(nSize, UNICODE_STRING_MAX_CHARS) * sizeof(WCHAR));
+    Status = LdrGetDllFullName(hModule, &Name);
+    if (Status == STATUS_SUCCESS)
     {
-        BaseSetLastNTError(_SEH2_GetExceptionCode());
-        Length = 0;
-    } _SEH2_END
+        SetLastError(ERROR_SUCCESS);
+        return Name.Length / sizeof(WCHAR);
+    }
 
-    /* Release the loader lock */
-    LdrUnlockLoaderLock(LDR_UNLOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, Cookie);
+    BaseSetLastNTError(Status);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+        return 0;
 
-    return Length / sizeof(WCHAR);
+    if (Name.MaximumLength)
+        lpFilename[Name.MaximumLength / sizeof(WCHAR) - 1] = UNICODE_NULL;
+    return Name.MaximumLength / sizeof(WCHAR);
 }
 
 HMODULE
@@ -946,6 +907,9 @@ BasepGetModuleHandleExW(BOOLEAN NoLock, DWORD dwPublicFlags, LPCWSTR lpwModuleNa
     /* Validate parameters */
     dwValid = BasepGetModuleHandleExParameterValidation(dwPublicFlags, lpwModuleName, phModule);
     ASSERT(dwValid == BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_CONTINUE);
+
+    if (dwPublicFlags & GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT)
+        NoLock = TRUE;
 
     /* Acquire lock if necessary */
     if (!NoLock)

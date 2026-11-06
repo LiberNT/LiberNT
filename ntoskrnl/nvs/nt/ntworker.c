@@ -16,6 +16,53 @@ static KEVENT MiModifiedWriterEvent;
 static KEVENT MiDereferenceSegmentEvent;
 static KEVENT MiZeroPageEvent;
 static volatile LONG MiZeroPageWaiting;
+static ULONG MiReservePages;
+
+static
+ULONG
+MiReserveFloor(
+    _In_ PMI_PFN_DATABASE Db)
+{
+    UNREFERENCED_PARAMETER(Db);
+
+    if (PsGetCurrentThread()->MemoryMaker)
+        return 0;
+
+    return (KeGetCurrentIrql() > APC_LEVEL) ? MiReservePages / 4 : MiReservePages;
+}
+
+static
+ULONG
+MiReservePageCount(VOID)
+{
+    ULONG64 Value = (ULONG64)MmNumberOfPhysicalPages * (PAGE_SIZE / 1024) * 16;
+    ULONG64 Bit = 1ULL << 62;
+    ULONG64 Root = 0;
+
+    while (Bit > Value)
+        Bit >>= 2;
+
+    while (Bit != 0)
+    {
+        if (Value >= Root + Bit)
+        {
+            Value -= Root + Bit;
+            Root = (Root >> 1) + Bit;
+        }
+        else
+        {
+            Root >>= 1;
+        }
+        Bit >>= 2;
+    }
+
+    if (Root < 128)
+        Root = 128;
+    else if (Root > 262144)
+        Root = 262144;
+
+    return (ULONG)(Root / (PAGE_SIZE / 1024));
+}
 
 static
 VOID
@@ -27,6 +74,7 @@ MiBalanceSetManager(
 
     UNREFERENCED_PARAMETER(Context);
 
+    PsGetCurrentThread()->MemoryMaker = 1;
     Period.QuadPart = -10 * 1000 * 1000;
     KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY + 1);
 
@@ -55,6 +103,7 @@ MiModifiedPageWriter(
 
     UNREFERENCED_PARAMETER(Context);
 
+    PsGetCurrentThread()->MemoryMaker = 1;
     Period.QuadPart = -3 * 10 * 1000 * 1000;
     KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY + 1);
 
@@ -114,6 +163,8 @@ MiWorkerThreadsInitialize(VOID)
     KeInitializeEvent(&MiBalanceEvent, SynchronizationEvent, FALSE);
     KeInitializeEvent(&MiModifiedWriterEvent, SynchronizationEvent, FALSE);
     MiMemoryEventInitialize();
+    MiReservePages = MiReservePageCount();
+    MI_ATOMIC_WRITE_POINTER(&MiSystem.Pfn.ReserveFloor, (PVOID)MiReserveFloor);
 
     InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
 

@@ -69,6 +69,17 @@ AfdIs32bitIoctl(PIRP Irp)
 #endif
 }
 
+static __inline BOOLEAN
+AfdIs32bitCaller(KPROCESSOR_MODE Mode)
+{
+#ifdef _WIN64
+    return Mode != KernelMode && IoIs32bitProcess(NULL);
+#else
+    UNREFERENCED_PARAMETER(Mode);
+    return FALSE;
+#endif
+}
+
 typedef struct IPADDR_ENTRY {
 	ULONG  Addr;
 	ULONG  Index;
@@ -360,6 +371,9 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 BOOLEAN
 AfdTryApplyPendingReceiveWindow(PAFD_FCB FCB);
 
+NTSTATUS
+AfdRearmDatagram(PAFD_FCB FCB);
+
 NTSTATUS NTAPI
 AfdGetSockName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 PIO_STACK_LOCATION IrpSp );
@@ -406,6 +420,8 @@ VOID UnlockHandles( PAFD_HANDLE HandleArray, UINT HandleCount );
 PVOID LockRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp, BOOLEAN Output, KPROCESSOR_MODE *LockMode );
 VOID UnlockRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp );
 PVOID GetLockedData( PIRP Irp, PIO_STACK_LOCATION IrpSp );
+BOOLEAN AfdCaptureRecvRequest(PVOID InputBuffer, ULONG InputBufferLength, KPROCESSOR_MODE Mode, BOOLEAN Is32Bit, PAFD_RECV_INFO Request);
+VOID AfdReadUserWsaBuf(PAFD_WSABUF Array, UINT Index, KPROCESSOR_MODE Mode, BOOLEAN Is32Bit, PAFD_WSABUF Buffer);
 NTSTATUS LeaveIrpUntilLater( PAFD_FCB FCB, PIRP Irp, UINT Function );
 NTSTATUS QueueUserModeIrp(PAFD_FCB FCB, PIRP Irp, UINT Function);
 
@@ -427,6 +443,8 @@ IO_COMPLETION_ROUTINE PacketSocketRecvComplete;
 
 NTSTATUS NTAPI
 AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION IrpSp, BOOLEAN Short);
+BOOLEAN
+AfdFastConnectedSocketReadData(PFILE_OBJECT FileObject, PVOID InputBuffer, ULONG InputBufferLength, PIO_STATUS_BLOCK IoStatus);
 NTSTATUS NTAPI
 AfdPacketSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 			PIO_STACK_LOCATION IrpSp );

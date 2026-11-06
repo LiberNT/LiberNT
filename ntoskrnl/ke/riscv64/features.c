@@ -42,6 +42,18 @@ static const struct
     { "v",           KI_RISCV_FEATURE_V },
     { "h",           KI_RISCV_FEATURE_H },
     { "sscofpmf",    KI_RISCV_FEATURE_SSCOFPMF },
+    { "zbc",         KI_RISCV_FEATURE_ZBC },
+    { "zicond",      KI_RISCV_FEATURE_ZICOND },
+    { "zfa",         KI_RISCV_FEATURE_ZFA },
+    { "zacas",       KI_RISCV_FEATURE_ZACAS },
+    { "zabha",       KI_RISCV_FEATURE_ZABHA },
+    { "zvbb",        KI_RISCV_FEATURE_ZVBB },
+    { "zvbc",        KI_RISCV_FEATURE_ZVBC },
+    { "zvkned",      KI_RISCV_FEATURE_ZVKNED },
+    { "zvknha",      KI_RISCV_FEATURE_ZVKNHA },
+    { "zvfhmin",     KI_RISCV_FEATURE_ZVFHMIN },
+    { "zknd",        KI_RISCV_FEATURE_ZKND },
+    { "zicclsm",     KI_RISCV_FEATURE_ZICCLSM },
 };
 
 static

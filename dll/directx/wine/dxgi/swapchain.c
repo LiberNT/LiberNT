@@ -404,7 +404,7 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
         const RECT *dst_rect)
 {
 #ifdef __REACTOS__
-    RECT unscaled_rect, composition_source, composition_target;
+    RECT unscaled_rect, composition_source, composition_target, source_rect;
 #endif
     HRESULT hr;
 
@@ -475,6 +475,22 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
             }
             dst_rect = &unscaled_rect;
         }
+    }
+    if (!swapchain->composition && !src_rect)
+    {
+        struct wined3d_swapchain_desc wined3d_desc;
+
+        wined3d_mutex_lock();
+        wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &wined3d_desc);
+        /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
+        if (swapchain->source_width && swapchain->source_height &&
+                (swapchain->source_width < wined3d_desc.backbuffer_width ||
+                 swapchain->source_height < wined3d_desc.backbuffer_height))
+        {
+            SetRect(&source_rect, 0, 0, swapchain->source_width, swapchain->source_height);
+            src_rect = &source_rect;
+        }
+        wined3d_mutex_unlock();
     }
 #endif
 
@@ -1159,7 +1175,7 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetSourceSize(IDXGISwapChain4 *
     if (width > wined3d_desc.backbuffer_width || height > wined3d_desc.backbuffer_height)
     {
         wined3d_mutex_unlock();
-        return E_INVALIDARG;
+        return DXGI_ERROR_INVALID_CALL;
     }
     swapchain->source_width = width;
     swapchain->source_height = height;

@@ -50,7 +50,11 @@ const WCHAR inbuilt[][10] = {
         L"CHDIR",
         L"CLS",
         L"COPY",
+#ifdef __REACTOS__
+        L"BREAK",
+#else
         L"",
+#endif
         L"DATE",
         L"DEL",
         L"DIR",
@@ -276,6 +280,10 @@ RETURN_CODE WCMD_clear_screen(void)
       FillConsoleOutputAttribute(hStdOut, consoleInfo.wAttributes, screenSize, topLeft, &written);
       SetConsoleCursorPosition(hStdOut, topLeft);
   }
+#ifdef __REACTOS__
+  else
+      WCMD_output_asis(L"\f");
+#endif
   return NO_ERROR;
 }
 
@@ -758,6 +766,13 @@ RETURN_CODE WCMD_copy(WCHAR * args)
             }
           }
         } else {
+#ifdef __REACTOS__
+          if (towupper(*thisparam) != 'L') {
+            WCMD_output_asis(WCMD_LoadMessage(WCMD_SYNTAXERR));
+            return_code = ERROR_INVALID_FUNCTION;
+            goto exitreturn;
+          }
+#endif
           WINE_FIXME("Unexpected copy switch %s\n", wine_dbgstr_w(thisparam));
         }
         thisparam++;
@@ -1804,6 +1819,22 @@ RETURN_CODE WCMD_pushd(const WCHAR *args)
       return errorlevel = ERROR_INVALID_FUNCTION;
     }
 
+#ifdef __REACTOS__
+    {
+      BOOL quoted = FALSE;
+      const WCHAR *pos;
+
+      for (pos = args; *pos; pos++) {
+        if (*pos == '"')
+          quoted = !quoted;
+        else if (*pos == '/' && !quoted) {
+          WCMD_output_stderr(WCMD_LoadMessage(WCMD_SYNTAXERR));
+          return errorlevel = ERROR_INVALID_FUNCTION;
+        }
+      }
+    }
+#endif
+
     curdir  = xalloc(sizeof(struct env_stack));
     thisdir = xalloc(1024 * sizeof(WCHAR));
 
@@ -2043,6 +2074,15 @@ RETURN_CODE WCMD_remove_dir(WCHAR *args)
           if (!ok) return ERROR_INVALID_FUNCTION;
         }
 
+#ifdef __REACTOS__
+        if (GetFileAttributesW(thisArg) == INVALID_FILE_ATTRIBUTES)
+        {
+            RETURN_CODE return_code = GetLastError();
+            WCMD_print_error();
+            return return_code;
+        }
+
+#endif
         /* Do the delete */
         lpDir.hwnd   = NULL;
         lpDir.pTo    = NULL;
@@ -2200,6 +2240,9 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
   struct env_stack *env_copy;
   WCHAR cwd[MAX_PATH];
   BOOL newdelay;
+#ifdef __REACTOS__
+  BOOL newext;
+#endif
   int argno = 0;
   WCHAR *argN = args;
 
@@ -2207,6 +2250,9 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
   if (!WCMD_is_in_context(NULL))
       return NO_ERROR;
   newdelay = delayedsubst;
+#ifdef __REACTOS__
+  newext = extensions;
+#endif
   while (argN)
   {
       WCHAR *thisArg = WCMD_parameter (args, argno++, &argN, FALSE, FALSE);
@@ -2215,9 +2261,17 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
           newdelay = TRUE;
       else if (!wcsicmp(thisArg, L"DISABLEDELAYEDEXPANSION"))
           newdelay = FALSE;
+#ifdef __REACTOS__
+      /* TODO: only the dynamic variables follow the extensions setting */
+      else if (!wcsicmp(thisArg, L"ENABLEEXTENSIONS"))
+          newext = TRUE;
+      else if (!wcsicmp(thisArg, L"DISABLEEXTENSIONS"))
+          newext = FALSE;
+#else
       /* ENABLE/DISABLE EXTENSIONS ignored for now */
       else if (!wcsicmp(thisArg, L"ENABLEEXTENSIONS") || !wcsicmp(thisArg, L"DISABLEEXTENSIONS"))
       {}
+#endif
       else
           return errorlevel = ERROR_INVALID_FUNCTION;
       TRACE("Setting delayed expansion to %d\n", newdelay);
@@ -2233,6 +2287,10 @@ RETURN_CODE WCMD_setlocal(WCHAR *args)
     env_copy->next = saved_environment;
     env_copy->delayedsubst = delayedsubst;
     delayedsubst = newdelay;
+#ifdef __REACTOS__
+    env_copy->extensions = extensions;
+    extensions = newext;
+#endif
     saved_environment = env_copy;
 
     /* Save the current drive letter */
@@ -2292,6 +2350,9 @@ RETURN_CODE WCMD_endlocal(void)
   env = temp->strings;
   len = 0;
   delayedsubst = temp->delayedsubst;
+#ifdef __REACTOS__
+  extensions = temp->extensions;
+#endif
   WINE_TRACE("Delayed expansion now %d\n", delayedsubst);
   while (env[len]) {
     n = lstrlenW(&env[len]) + 1;
@@ -2367,6 +2428,14 @@ RETURN_CODE WCMD_setshow_default(const WCHAR *args)
     while (pos > string && (*(pos-1) == ' ' || *(pos-1) == '\t'))
       pos--;
     *pos = 0x00;
+
+#ifdef __REACTOS__
+    if (!*string) {
+      lstrcatW(cwd, L"\r\n");
+      WCMD_output_asis (cwd);
+      return errorlevel = NO_ERROR;
+    }
+#endif
 
     /* Search for appropriate directory */
     WINE_TRACE("Looking for directory '%s'\n", wine_dbgstr_w(string));
@@ -3312,6 +3381,9 @@ RETURN_CODE WCMD_start(WCHAR *args)
     RETURN_CODE return_code = NO_ERROR;
     int argno;
     int have_title;
+#ifdef __REACTOS__
+    BOOL wait = FALSE;
+#endif
     WCHAR file[MAX_PATH];
     WCHAR *cmdline, *cmdline_params;
     STARTUPINFOW st;
@@ -3362,6 +3434,22 @@ RETURN_CODE WCMD_start(WCHAR *args)
      * - need to access start.exe's child to get its running state
      *   (not start.exe itself)
      */
+#ifdef __REACTOS__
+    have_title = FALSE;
+    for (argno = 0; ; argno++) {
+        WCHAR *thisArg, *argN = NULL;
+
+        thisArg = WCMD_parameter_with_delims(args, argno, &argN, FALSE, FALSE, L" \t/");
+        if (!argN)
+            break;
+        if (argN[0] == '"' && !have_title)
+            have_title = TRUE;
+        else if (argN != args && argN[-1] == '/')
+            wait |= !wcsicmp(thisArg, L"WAIT");
+        else
+            break;
+    }
+#endif
     have_title = FALSE;
     for (argno=0; ; argno++) {
         WCHAR *thisArg, *argN;
@@ -3418,7 +3506,15 @@ RETURN_CODE WCMD_start(WCHAR *args)
         DWORD exit_code;
         WaitForSingleObject( pi.hProcess, INFINITE );
         GetExitCodeProcess( pi.hProcess, &exit_code );
+#ifdef __REACTOS__
+        /* Without /WAIT start.exe exits with its own status, not the program's */
+        if (wait)
+            errorlevel = (exit_code == STILL_ACTIVE) ? NO_ERROR : exit_code;
+        else if (exit_code != NO_ERROR)
+            return_code = errorlevel = exit_code;
+#else
         errorlevel = (exit_code == STILL_ACTIVE) ? NO_ERROR : exit_code;
+#endif
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
     }
@@ -3660,6 +3756,11 @@ RETURN_CODE WCMD_more(WCHAR *args)
     int argno = 0;
     WCHAR *argN;
 
+#ifdef __REACTOS__
+    if (!GetStdHandle(STD_INPUT_HANDLE) || GetStdHandle(STD_INPUT_HANDLE) == INVALID_HANDLE_VALUE)
+        return errorlevel = NO_ERROR;
+
+#endif
     if (param1[0] == 0x00)
     {
         WINE_TRACE("No parms - working probably in pipe mode\n");

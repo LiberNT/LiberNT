@@ -25,6 +25,21 @@ extern void ThreadStartupThunk(void*);
 #define KGDT64_R3_CODE          0x0030
 #define KGDT64_R3_CMTEB         0x0050
 
+#ifdef _M_IX86
+static
+BOOLEAN
+IsQemuTcg(VOID)
+{
+    INT CpuInfo[4];
+
+    __cpuid(CpuInfo, 1);
+    if (!(CpuInfo[2] & (1u << 31)))
+        return FALSE;
+    __cpuid(CpuInfo, 0x40000000);
+    return memcmp(&CpuInfo[1], "TCGTCGTCGTCG", 12) == 0;
+}
+#endif
+
 static
 VOID
 InitializeTestContext(PCONTEXT Context)
@@ -264,7 +279,10 @@ START_TEST(NtCreateThread)
 
     /* Control */
     ok_eq_hex(TestThreadStartupContext.Esp, Context.Esp);
-    ok_eq_hex(TestThreadStartupContext.EFlags, IsWow64 ? 0x00240ED7 : 0x003C4ED7);
+    if (!IsWow64 && IsQemuTcg())
+        skip("QEMU TCG drops VIF and VIP on a return to user mode\n");
+    else
+        ok_eq_hex(TestThreadStartupContext.EFlags, IsWow64 ? 0x00240ED7 : 0x003C4ED7);
 
     /* Integer (copied) */
     ok_eq_hex(TestThreadStartupContext.Eax, Context.Eax);
@@ -284,13 +302,20 @@ START_TEST(NtCreateThread)
     ok_eq_hex((USHORT)TestThreadStartupContext.SegSs, IsWow64 ? KGDT64_R3_DATA | RPL_MASK : KGDT_R3_DATA | RPL_MASK);
 
     /* Floating point (hardcoded) */
-    ok_eq_hex(TestThreadStartupContext.FloatSave.ControlWord, IsWow64 ? 0x27F : 0xFFFF0A6A);
-    ok_eq_hex(TestThreadStartupContext.FloatSave.StatusWord, IsWow64 ? 0 : 0xFFFF2A2A);
-    ok_eq_hex(TestThreadStartupContext.FloatSave.TagWord, IsWow64 ? 0x0000FFFF : 0xFFFF0000);
-    ok_eq_hex(TestThreadStartupContext.FloatSave.ErrorOffset, IsWow64 ? 0 : 0xAAAAAAAA);
-    ok_eq_hex(TestThreadStartupContext.FloatSave.ErrorSelector, IsWow64 ? 0 : 0x02AAAAAA);
-    ok_eq_hex(TestThreadStartupContext.FloatSave.DataOffset, IsWow64 ? 0 : 0xAAAAAAAA);
-    ok_eq_hex(TestThreadStartupContext.FloatSave.DataSelector, IsWow64 ? 0 : 0xFFFFAAAA);
+    if (!IsWow64 && IsQemuTcg())
+    {
+        skip("QEMU TCG does not mask the x87 control word or store the FNSAVE upper halves and pointers\n");
+    }
+    else
+    {
+        ok_eq_hex(TestThreadStartupContext.FloatSave.ControlWord, IsWow64 ? 0x27F : 0xFFFF0A6A);
+        ok_eq_hex(TestThreadStartupContext.FloatSave.StatusWord, IsWow64 ? 0 : 0xFFFF2A2A);
+        ok_eq_hex(TestThreadStartupContext.FloatSave.TagWord, IsWow64 ? 0x0000FFFF : 0xFFFF0000);
+        ok_eq_hex(TestThreadStartupContext.FloatSave.ErrorOffset, IsWow64 ? 0 : 0xAAAAAAAA);
+        ok_eq_hex(TestThreadStartupContext.FloatSave.ErrorSelector, IsWow64 ? 0 : 0x02AAAAAA);
+        ok_eq_hex(TestThreadStartupContext.FloatSave.DataOffset, IsWow64 ? 0 : 0xAAAAAAAA);
+        ok_eq_hex(TestThreadStartupContext.FloatSave.DataSelector, IsWow64 ? 0 : 0xFFFFAAAA);
+    }
 
     /* Debug registers (reset to 0) */
     ok_eq_hex(TestThreadStartupContext.Dr0, 0x00000000);

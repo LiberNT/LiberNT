@@ -445,6 +445,7 @@ NTSTATUS WINAPI wow64_NtQuerySystemInformation( UINT *args )
     case SystemFlagsInformation:  /* SYSTEM_FLAGS_INFORMATION */
     case SystemNumaProcessorMap:  /* SYSTEM_NUMA_INFORMATION */
     case SystemNumaAvailableMemory:  /* SYSTEM_NUMA_INFORMATION */
+    case SystemNumaProximityNodeInformation:  /* SYSTEM_NUMA_PROXIMITY_MAP */
     case SystemBootEnvironmentInformation:  /* SYSTEM_BOOT_ENVIRONMENT_INFORMATION */
 #endif
         return NtQuerySystemInformation( class, ptr, len, retlen );

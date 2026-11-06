@@ -32,6 +32,7 @@
 #define LX_WIN_APP_ID               14
 #define LX_WIN_ICON                 15
 #define LX_WIN_READY                16
+#define LX_WIN_ICON_FILE            17
 
 #define LX_WIN_HELLO                100
 #define LX_WIN_CONFIGURE            101
@@ -56,6 +57,7 @@
 #define LX_WIN_STATE_MAXIMIZED      1
 #define LX_WIN_STATE_MINIMIZED      2
 #define LX_WIN_STATE_FULLSCREEN     3
+#define LX_WIN_STATE_WINDOWED       4
 
 #define LX_WIN_CONFIGURE_MAXIMIZED  0x00000001
 #define LX_WIN_CONFIGURE_FULLSCREEN 0x00000002
@@ -117,6 +119,10 @@ typedef struct _LX_WIN_HELLO_MSG
     ULONG ScreenHeight;
     ULONG Dpi;
     ULONG RefreshMilliHz;
+    ULONG WorkWidth;
+    ULONG WorkHeight;
+    ULONG FrameWidth;
+    ULONG FrameHeight;
 } LX_WIN_HELLO_MSG, *PLX_WIN_HELLO_MSG;
 
 typedef struct _LX_WIN_CONFIGURE_MSG
@@ -147,6 +153,13 @@ typedef struct _LX_WIN_ICON_IMAGE
     ULONG Width;
     ULONG Height;
 } LX_WIN_ICON_IMAGE, *PLX_WIN_ICON_IMAGE;
+
+typedef struct _LX_WIN_ICON_FILE_MSG
+{
+    LX_WIN_HEADER Header;
+    ULONG Width;
+    ULONG Height;
+} LX_WIN_ICON_FILE_MSG, *PLX_WIN_ICON_FILE_MSG;
 
 typedef struct _LX_WIN_SIZES_MSG
 {

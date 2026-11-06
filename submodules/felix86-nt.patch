@@ -107,10 +107,69 @@ index fcf5a42..d58c6f7 100644
  extern "C" u8 softfloat_getRoundPrecision() {
      ThreadState* state = ThreadState::Get();
 diff --git a/src/felix86/v2/handlers.cpp b/src/felix86/v2/handlers.cpp
-index 04754f8..7ee56ec 100644
+index 04754f8..89652d2 100644
 --- a/src/felix86/v2/handlers.cpp
 +++ b/src/felix86/v2/handlers.cpp
-@@ -1174,6 +1174,11 @@ FAST_HANDLE(CMP) {
+@@ -26,6 +26,12 @@ void felix86_syscall32(felix86_frame* frame, u32 rip_nex);
+ 
+ void felix86_cpuid(ThreadState* state);
+ 
++#ifndef __linux__
++void felix86_breakpoint(felix86_frame* frame, u64 rip_next);
++void felix86_interrupt(felix86_frame* frame, u64 rip_next, u64 vector);
++void felix86_single_step(felix86_frame* frame);
++#endif
++
+ [[nodiscard]] constexpr static int sew_to_bits(SEW sew) {
+     return 8 << static_cast<int>(sew);
+ }
+@@ -549,11 +555,45 @@ static void SHIFT_noflags(Recompiler& rec, u64 rip, Assembler& as, ZydisDecodedI
+     rec.setGPR(&operands[0], result);
+ }
+ 
++static void check_stack_selector(Recompiler& rec, Assembler& as, biscuit::GPR selector) {
++    biscuit::GPR tmp = rec.scratch();
++    biscuit::Label ok;
++    as.XORI(tmp, selector, 0x2b);
++    as.BEQZ(tmp, &ok);
++    as.XORI(tmp, selector, 0x53);
++    as.BEQZ(tmp, &ok);
++    as.SD(x0, 0, x0);
++    as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
++    as.C_UNDEF();
++    as.C_UNDEF();
++    as.Bind(&ok);
++    rec.popScratch();
++}
++
++static bool is_system_register(const ZydisDecodedOperand& operand) {
++    return operand.type == ZYDIS_OPERAND_TYPE_REGISTER &&
++           ((operand.reg.value >= ZYDIS_REGISTER_CR0 && operand.reg.value <= ZYDIS_REGISTER_CR15) ||
++            (operand.reg.value >= ZYDIS_REGISTER_DR0 && operand.reg.value <= ZYDIS_REGISTER_DR15));
++}
++
+ FAST_HANDLE(MOV) {
++    if (is_system_register(operands[0]) || is_system_register(operands[1])) {
++        as.SD(x0, 0, x0);
++        as.SLTIU(x0, x0, FELIX86_HINT_GP);
++        as.C_UNDEF();
++        as.C_UNDEF();
++        rec.stopCompiling();
++        return;
++    }
++
+     if (is_segment(operands[0])) {
+         if (MODE32) {
+             ASSERT(operands[0].reg.value != ZYDIS_REGISTER_CS);
+             biscuit::GPR src = rec.getGPR(&operands[1]);
++            /* TODO: validate DS, ES, FS and GS selectors and raise the access violation Windows gives for an unusable one */
++            if (operands[0].reg.value == ZYDIS_REGISTER_SS) {
++                check_stack_selector(rec, as, src);
++            }
+             rec.writebackState();
+             as.MV(a1, src);
+             as.LI(a2, operands[0].reg.value);
+@@ -1174,6 +1214,11 @@ FAST_HANDLE(CMP) {
      bool needs_any_flag = needs_cf || needs_of || needs_pf || needs_sf || needs_zf || needs_af;
      if (!needs_any_flag) {
          // Same as TEST, don't warn here
@@ -122,7 +181,148 @@ index 04754f8..7ee56ec 100644
          return;
      }
  
-@@ -3295,6 +3300,9 @@ FAST_HANDLE(TEST) {
+@@ -1893,7 +1938,7 @@ FAST_HANDLE(CALL) {
+             as.XORI(tmp, new_cs, 0x33);
+             as.BEQZ(tmp, &cs_ok);
+             as.SD(x0, 0, x0);
+-            as.SLTIU(x0, x0, FELIX86_HINT_GP);
++            as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
+             as.C_UNDEF();
+             as.C_UNDEF();
+             as.Bind(&cs_ok);
+@@ -1919,6 +1964,39 @@ FAST_HANDLE(CALL) {
+ 
+     biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
+ 
++    if (operands[0].type == ZYDIS_OPERAND_TYPE_POINTER) {
++        u16 selector = operands[0].ptr.segment;
++        if (selector != 0x23 && selector != 0x33) {
++            as.SD(x0, 0, x0);
++            as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
++            as.C_UNDEF();
++            as.C_UNDEF();
++            rec.stopCompiling();
++            return;
++        }
++        bool bit32 = instruction.operand_width == 32;
++        biscuit::GPR rsp = rec.getGPR(X86_REF_RSP, rec.stackWidth());
++        biscuit::GPR old_cs = rec.scratch();
++        biscuit::GPR scratch = rec.scratch();
++        u64 return_address_offset = (rip - rec.getCurrentRipregValue()) + instruction.length;
++        rec.addi(scratch, ripreg, return_address_offset);
++        as.LHU(old_cs, offsetof(ThreadState, ctx.cs), Recompiler::threadStatePointer());
++        as.ADDI(rsp, rsp, bit32 ? -8 : -16);
++        rec.writeMemory(scratch, rsp, 0, bit32 ? X86_SIZE_DWORD : X86_SIZE_QWORD);
++        rec.writeMemory(old_cs, rsp, bit32 ? 4 : 8, bit32 ? X86_SIZE_DWORD : X86_SIZE_QWORD);
++        rec.setGPR(X86_REF_RSP, rec.stackWidth(), rsp);
++        as.LI(ripreg, operands[0].ptr.offset);
++        rec.writebackState();
++        as.LI(a1, selector);
++        as.LI(a2, ZYDIS_REGISTER_CS);
++        as.MV(a0, rec.threadStatePointer());
++        rec.callPointer(offsetof(ThreadState, felix86_set_segment));
++        rec.restoreState();
++        rec.backToDispatcher();
++        rec.stopCompiling();
++        return;
++    }
++
+     switch (operands[0].type) {
+     case ZYDIS_OPERAND_TYPE_REGISTER:
+     case ZYDIS_OPERAND_TYPE_MEMORY: {
+@@ -1997,7 +2075,7 @@ FAST_HANDLE(RET) {
+         as.XORI(tmp, new_cs, 0x33);
+         as.BEQZ(tmp, &cs_ok);
+         as.SD(x0, 0, x0);
+-        as.SLTIU(x0, x0, FELIX86_HINT_GP);
++        as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
+         as.C_UNDEF();
+         as.C_UNDEF();
+         as.Bind(&cs_ok);
+@@ -2057,7 +2135,7 @@ FAST_HANDLE(IRETD) {
+     as.XORI(tmp, new_cs, 0x33);
+     as.BEQZ(tmp, &cs_ok);
+     as.SD(x0, 0, x0);
+-    as.SLTIU(x0, x0, FELIX86_HINT_GP);
++    as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
+     as.C_UNDEF();
+     as.C_UNDEF();
+     as.Bind(&cs_ok);
+@@ -2084,7 +2162,7 @@ FAST_HANDLE(IRETQ) {
+     as.XORI(tmp, new_cs, 0x33);
+     as.BEQZ(tmp, &cs_ok);
+     as.SD(x0, 0, x0);
+-    as.SLTIU(x0, x0, FELIX86_HINT_GP);
++    as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
+     as.C_UNDEF();
+     as.C_UNDEF();
+     as.Bind(&cs_ok);
+@@ -2209,6 +2287,9 @@ FAST_HANDLE(POP) {
+         biscuit::GPR rsp = rec.getGPR(X86_REF_RSP, rec.stackWidth());
+         int imm = size_to_bytes(instruction.operand_width);
+         rec.readMemory(src, rsp, 0, X86_SIZE_WORD);
++        if (operands[0].reg.value == ZYDIS_REGISTER_SS) {
++            check_stack_selector(rec, as, src);
++        }
+         rec.writebackState();
+         as.MV(a0, rec.threadStatePointer());
+         as.MV(a1, src);
+@@ -2233,6 +2314,16 @@ FAST_HANDLE(POP) {
+                 rec.setGPR(operands[0].reg.value, X86_SIZE_QWORD, reg);
+                 as.ADDI(rsp, rsp, imm);
+                 rec.setGPR(X86_REF_RSP, X86_SIZE_QWORD, rsp);
++            } else if (operands[0].type == ZYDIS_OPERAND_TYPE_MEMORY) {
++                rec.readMemory(result, rsp, 0, rec.zydisToSize(instruction.operand_width));
++                as.ADDI(rsp, rsp, imm);
++                rec.setGPR(X86_REF_RSP, X86_SIZE_QWORD, rsp);
++                biscuit::GPR address = rec.lea(&operands[0], true);
++                as.ADDI(rsp, rsp, -imm);
++                rec.setGPR(X86_REF_RSP, X86_SIZE_QWORD, rsp);
++                rec.writeMemory(result, address, 0, rec.zydisToSize(operands[0].size));
++                as.ADDI(rsp, rsp, imm);
++                rec.setGPR(X86_REF_RSP, X86_SIZE_QWORD, rsp);
+             } else {
+                 rec.readMemory(result, rsp, 0, rec.zydisToSize(instruction.operand_width));
+                 as.ADDI(rsp, rsp, imm);
+@@ -2973,7 +3064,7 @@ FAST_HANDLE(JMP) {
+             as.XORI(tmp, cs, 0x33);
+             as.BEQZ(tmp, &cs_ok);
+             as.SD(x0, 0, x0);
+-            as.SLTIU(x0, x0, FELIX86_HINT_GP);
++            as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
+             as.C_UNDEF();
+             as.C_UNDEF();
+             as.Bind(&cs_ok);
+@@ -3016,6 +3107,28 @@ FAST_HANDLE(JMP) {
+         rec.stopCompiling();
+         break;
+     }
++    case ZYDIS_OPERAND_TYPE_POINTER: {
++        u16 selector = operands[0].ptr.segment;
++        if (selector != 0x23 && selector != 0x33) {
++            as.SD(x0, 0, x0);
++            as.SLTIU(x0, x0, FELIX86_HINT_SEGMENT_GP);
++            as.C_UNDEF();
++            as.C_UNDEF();
++            rec.stopCompiling();
++            break;
++        }
++        biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
++        as.LI(ripreg, operands[0].ptr.offset);
++        rec.writebackState();
++        as.LI(a1, selector);
++        as.LI(a2, ZYDIS_REGISTER_CS);
++        as.MV(a0, rec.threadStatePointer());
++        rec.callPointer(offsetof(ThreadState, felix86_set_segment));
++        rec.restoreState();
++        rec.backToDispatcher();
++        rec.stopCompiling();
++        break;
++    }
+     default: {
+         UNREACHABLE();
+         break;
+@@ -3295,6 +3408,9 @@ FAST_HANDLE(TEST) {
      if (!needs_any_flag) {
          // Weirdly enough some x86 programs run test al, al and use no flags and overwrite them right after
          // Unsure if this is some sort of special nop or something, but in any case we don't warn about this
@@ -132,7 +332,7 @@ index 04754f8..7ee56ec 100644
          return;
      }
  
-@@ -4733,6 +4741,9 @@ FAST_HANDLE(SYSCALL) {
+@@ -4733,6 +4849,9 @@ FAST_HANDLE(SYSCALL) {
      rec.setGPR(X86_REF_RCX, X86_SIZE_QWORD, rcx);
  
      // Normally the syscall instruction also writes the flags to R11 but we don't need them in our syscall handler
@@ -142,7 +342,7 @@ index 04754f8..7ee56ec 100644
      rec.writebackState();
      as.MV(a0, sp);
      rec.callPointer(offsetof(ThreadState, felix86_syscall));
-@@ -4741,7 +4752,11 @@ FAST_HANDLE(SYSCALL) {
+@@ -4741,7 +4860,11 @@ FAST_HANDLE(SYSCALL) {
      biscuit::Label after;
      // TODO: we can get this faster by returning
      biscuit::GPR temp = rec.scratch();
@@ -155,7 +355,7 @@ index 04754f8..7ee56ec 100644
      as.BEQ(ripreg, temp, &after);
      // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
      rec.backToDispatcher();
-@@ -9639,7 +9654,7 @@ FAST_HANDLE(XGETBV) {
+@@ -9639,7 +9762,7 @@ FAST_HANDLE(XGETBV) {
      biscuit::GPR ecx = rec.getGPR(X86_REF_RCX, X86_SIZE_DWORD);
      as.BEQZ(ecx, &is_zero);
      as.MV(a0, ecx);
@@ -164,7 +364,15 @@ index 04754f8..7ee56ec 100644
      as.JALR(scratch);
      as.C_UNDEF();
      as.C_UNDEF();
-@@ -12174,7 +12189,7 @@ FAST_HANDLE(CMPXCHG16B) {
+@@ -11472,6 +11595,7 @@ FAST_HANDLE(STMXCSR) {
+ }
+ 
+ FAST_HANDLE(LDMXCSR) {
++    /* TODO: raise the SSE floating-point exceptions that MXCSR unmasks */
+     biscuit::GPR src = rec.getGPR(&operands[0]);
+     biscuit::GPR rc = rec.scratch(); // rounding control
+     biscuit::GPR temp = rec.scratch();
+@@ -12174,7 +12298,7 @@ FAST_HANDLE(CMPXCHG16B) {
          biscuit::Label spinloop, writeloop;
          biscuit::GPR lock_address = rec.scratch();
          biscuit::GPR lock = rec.scratch();
@@ -173,7 +381,69 @@ index 04754f8..7ee56ec 100644
          // We will pick one of 256 different spinlocks based on a hash created by our address
          // This means that if two cmpxchg16b target the same address they will spin on the same lock
          // but if they target a different address they will likely get a different lock, which should decrease
-@@ -13668,6 +13683,9 @@ FAST_HANDLE(INT) {
+@@ -12715,6 +12839,7 @@ FAST_HANDLE(FPTAN) {
+ }
+ 
+ FAST_HANDLE(FWAIT) {
++    /* TODO: raise the pending unmasked x87 floating-point exception */
+     WARN("FWAIT encountered, treating as NOP");
+ }
+ 
+@@ -13630,6 +13755,21 @@ X87_HANDLE(FFREEP);
+ #undef X87_HANDLE
+ 
+ FAST_HANDLE(INT3) {
++#ifndef __linux__
++    u64 offset = rip - rec.getCurrentRipregValue();
++    biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
++    if (offset != 0) {
++        rec.setCurrentRipregValue(rec.getCurrentRipregValue() + offset);
++        rec.addi(ripreg, ripreg, offset);
++    }
++    rec.writebackState();
++    as.MV(a0, sp);
++    as.ADDI(a1, ripreg, instruction.length);
++    rec.loadHostAddress(t4, (u64)felix86_breakpoint);
++    as.JALR(t4);
++    rec.restoreState();
++    rec.backToDispatcher();
++#else
+     WARN_ONCE("INT3 instruction being compiled?");
+     as.SD(x0, 0, x0);
+     // This hint will tell the handle_synchronous signal handler to change si_code to SI_KERNEL
+@@ -13638,16 +13778,31 @@ FAST_HANDLE(INT3) {
+     // Unreachable
+     as.C_UNDEF();
+     as.C_UNDEF();
++#endif
+     rec.stopCompiling();
+ }
+ 
+ FAST_HANDLE(INT1) {
++#ifndef __linux__
++    u64 offset = (rip + instruction.length) - rec.getCurrentRipregValue();
++    biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
++    rec.setCurrentRipregValue(rec.getCurrentRipregValue() + offset);
++    rec.addi(ripreg, ripreg, offset);
++    rec.writebackState();
++    as.MV(a0, sp);
++    rec.loadHostAddress(t4, (u64)felix86_single_step);
++    as.JALR(t4);
++    rec.restoreState();
++    rec.backToDispatcher();
++    rec.stopCompiling();
++#else
+     WARN("INT1 encountered");
+     as.SD(x0, 0, x0);
+     as.SLTIU(x0, x0, FELIX86_HINT_INT1);
+     // Unreachable
+     as.C_UNDEF();
+     as.C_UNDEF();
++#endif
+ }
+ 
+ FAST_HANDLE(INT) {
+@@ -13668,6 +13823,9 @@ FAST_HANDLE(INT) {
              rec.addi(ripreg, ripreg, offset);
          }
          rec.insertSafepoint();
@@ -183,7 +453,7 @@ index 04754f8..7ee56ec 100644
          rec.writebackState();
          as.MV(a0, sp);
          as.ADDI(a1, ripreg, instruction.length);
-@@ -13677,7 +13695,11 @@ FAST_HANDLE(INT) {
+@@ -13677,7 +13835,11 @@ FAST_HANDLE(INT) {
          biscuit::Label after;
          // TODO: we can get this faster by returning
          biscuit::GPR temp = rec.scratch();
@@ -196,21 +466,55 @@ index 04754f8..7ee56ec 100644
          as.BEQ(ripreg, temp, &after);
          // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
          rec.backToDispatcher();
+@@ -13690,6 +13852,23 @@ FAST_HANDLE(INT) {
+     } else if (operands[0].imm.value.u == 3) {
+         fast_INT3(rec, rip, as, instruction, operands);
+     } else {
++#ifndef __linux__
++        u64 offset = rip - rec.getCurrentRipregValue();
++        biscuit::GPR ripreg = rec.allocatedGPR(X86_REF_RIP);
++        if (offset != 0) {
++            rec.setCurrentRipregValue(rec.getCurrentRipregValue() + offset);
++            rec.addi(ripreg, ripreg, offset);
++        }
++        rec.writebackState();
++        as.MV(a0, sp);
++        as.ADDI(a1, ripreg, instruction.length);
++        as.LI(a2, operands[0].imm.value.u & 0xFF);
++        rec.loadHostAddress(t4, (u64)felix86_interrupt);
++        as.JALR(t4);
++        rec.restoreState();
++        rec.backToDispatcher();
++        rec.stopCompiling();
++#else
+         WARN("INT encountered with unknown immediate: %lx", operands[0].imm.value.u);
+         as.SD(x0, 0, x0);
+         // This hint will tell the handle_synchronous signal handler to change si_code from SEGV_MAPERR to SI_KERNEL
+@@ -13700,6 +13879,7 @@ FAST_HANDLE(INT) {
+         // Unreachable
+         as.C_UNDEF();
+         as.C_UNDEF();
++#endif
+     }
+ 
+     if (MODE32) {
 diff --git a/src/felix86/v2/recompiler.cpp b/src/felix86/v2/recompiler.cpp
-index f3c0aaf..50a93db 100644
+index f3c0aaf..fd4bf9c 100644
 --- a/src/felix86/v2/recompiler.cpp
 +++ b/src/felix86/v2/recompiler.cpp
-@@ -18,6 +18,9 @@
+@@ -18,6 +18,11 @@
  #include "felix86/common/state.hpp"
  #include "felix86/common/types.hpp"
  #include "felix86/common/utility.hpp"
 +#ifndef __linux__
 +#include "bridge.h"
++
++void felix86_single_step(felix86_frame* frame);
 +#endif
  #include "felix86/emulator.hpp"
  #include "felix86/hle/mmap.hpp"
  #include "felix86/hle/ptrace.hpp"
-@@ -518,8 +521,15 @@ void Recompiler::clearCodeCache(ThreadState* state) {
+@@ -518,8 +523,15 @@ void Recompiler::clearCodeCache(ThreadState* state) {
      emitNecessaryStuff();
  }
  
@@ -226,7 +530,7 @@ index f3c0aaf..50a93db 100644
      if (g_config.guest_memory_tracking_enabled) {
          // If memory region isn't mapped or doesn't have the correct protections
          // return a thunk that is in JIT code that will fault and get handled as
-@@ -561,6 +571,13 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
+@@ -561,6 +573,13 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
          }
      }
  
@@ -240,7 +544,7 @@ index f3c0aaf..50a93db 100644
      u64 size = code_cache_sizes[code_cache_size_index];
      size_t remaining_size = size - as.GetCodeBuffer().GetCursorOffset();
      // TODO: restrict max x86 instruction count per block
-@@ -601,6 +618,13 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
+@@ -601,6 +620,13 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
          entry.guest = start_rip;
      }
  
@@ -254,7 +558,7 @@ index f3c0aaf..50a93db 100644
      // If other blocks were waiting for this block to be linked, link them now
      expirePendingLinks(rip);
  
-@@ -663,6 +687,29 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
+@@ -663,6 +689,29 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
      return block_meta.host_address;
  }
  
@@ -284,7 +588,7 @@ index f3c0aaf..50a93db 100644
  void Recompiler::insertSafepoint() {
      // This instruction must be 4 bytes, see invalidateBlock for reason
      OptimizationGuard guard(as, optimization_guard_counter);
-@@ -670,6 +717,10 @@ void Recompiler::insertSafepoint() {
+@@ -670,6 +719,10 @@ void Recompiler::insertSafepoint() {
  }
  
  void Recompiler::markPagesAsReadOnly(u64 start, u64 end) {
@@ -295,7 +599,7 @@ index f3c0aaf..50a93db 100644
      if (!g_config.protect_pages) {
          return;
      }
-@@ -694,6 +745,8 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+@@ -694,6 +747,8 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
      const u64 start_rip = rip;
      const bool is_single_step = g_config.single_step || single_step != SingleStepMode::None;
      compiling = true;
@@ -304,7 +608,7 @@ index f3c0aaf..50a93db 100644
  
      // When invalidating from other threads we need to do it in a single atomic instruction, thus block starts
      // need to be aligned to 4 bytes
-@@ -716,6 +769,9 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+@@ -716,6 +771,9 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
      block_meta.host_address = (u64)as.GetCursorPointer();
      block_meta.guest_address = start_rip;
      block_meta.translation_sizes.resize(instructions.size());
@@ -314,7 +618,25 @@ index f3c0aaf..50a93db 100644
      current_block_metadata = &block_meta;
  
      resetBlockState(rip);
-@@ -876,7 +932,13 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+@@ -821,6 +879,9 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+ 
+         if (is_single_step && compiling) {
+             flushBlockState(rip);
++#ifndef __linux__
++            backToDispatcher();
++#else
+             if (single_step != SingleStepMode::None) {
+                 as.SD(x0, 0, x0);
+                 as.SLTIU(x0, x0, FELIX86_HINT_TF);
+@@ -834,6 +895,7 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+                 // g_config.single_step
+                 backToDispatcher();
+             }
++#endif
+             stopCompiling();
+         }
+ 
+@@ -876,7 +938,13 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
  
      flush_icache(block_meta.host_address, (u64)as.GetCursorPointer());
  
@@ -328,7 +650,7 @@ index f3c0aaf..50a93db 100644
      local_x87_state = x87State::Unknown; // we don't know what ThreadState::x87_state is at runtime
      if (single_step == SingleStepMode::PtraceSinglestep) {
          single_step = SingleStepMode::None;
-@@ -1574,6 +1636,7 @@ void Recompiler::clearBreakpoints() {
+@@ -1574,6 +1642,7 @@ void Recompiler::clearBreakpoints() {
  bool Recompiler::checkIfBreakpoint(u64 rip) {
      for (size_t i = 0; i < breakpoints.size(); i++) {
          if (rip == breakpoints[i].second) {
@@ -336,7 +658,7 @@ index f3c0aaf..50a93db 100644
              writebackState();
              as.MV(a0, Recompiler::threadStatePointer());
              as.LI(a1, rip);
-@@ -2235,7 +2298,7 @@ void Recompiler::restoreState() {
+@@ -2235,17 +2304,27 @@ void Recompiler::restoreState() {
      scratch_index = saved_scratch_index;
  }
  
@@ -345,16 +667,28 @@ index f3c0aaf..50a93db 100644
      OptimizationGuard guard(as, optimization_guard_counter);
      const bool is_single_step = single_step != SingleStepMode::None;
      const u64 handler = skip_lookup ? compile_next_skip_address_cache : compile_next_handler;
-@@ -2245,7 +2308,7 @@ void Recompiler::backToDispatcher(bool return_hint, bool skip_lookup) {
+     if (compiling && is_single_step) {
++#ifndef __linux__
++        writebackState();
++        as.MV(a0, sp);
++        loadHostAddress(t4, (u64)felix86_single_step);
++        as.JALR(t4);
++        restoreState();
++    }
++    if (!relocatable || direct) {
++#else
+         as.SD(x0, 0, x0);
+         as.SLTIU(x0, x0, FELIX86_HINT_TF);
          // Unreachable
          as.C_UNDEF();
          as.C_UNDEF();
 -    } else if (!relocatable) {
 +    } else if (!relocatable || direct) {
++#endif
          const u64 offset = handler - (u64)as.GetCursorPointer();
          ASSERT(IsValid2GBImm(offset));
          const auto hi20 = static_cast<int32_t>(((static_cast<uint32_t>(offset) + 0x800) >> 12) & 0xFFFFF);
-@@ -2853,16 +2916,28 @@ void Recompiler::updateSign(biscuit::GPR result, x86_size_e size) {
+@@ -2853,16 +2932,28 @@ void Recompiler::updateSign(biscuit::GPR result, x86_size_e size) {
  void Recompiler::jumpAndLink(u64 rip, bool return_link, bool skip_lookup) {
      OptimizationGuard guard(as, optimization_guard_counter);
      const bool is_single_step = g_config.single_step || single_step != SingleStepMode::None;
@@ -385,7 +719,7 @@ index f3c0aaf..50a93db 100644
  
          // The top 7 bits are used as flags.
          link_me &= ((u64)1 << 57) - 1;
-@@ -2965,11 +3040,125 @@ void Recompiler::jumpAndLinkConditional(biscuit::GPR condition, u64 rip_true, u6
+@@ -2965,11 +3056,125 @@ void Recompiler::jumpAndLinkConditional(biscuit::GPR condition, u64 rip_true, u6
      jumpAndLink(rip_true);
  }
  
@@ -514,10 +848,18 @@ index f3c0aaf..50a93db 100644
          return;
      }
 diff --git a/src/felix86/v2/recompiler.hpp b/src/felix86/v2/recompiler.hpp
-index e438ab2..743e83e 100644
+index e438ab2..40daa96 100644
 --- a/src/felix86/v2/recompiler.hpp
 +++ b/src/felix86/v2/recompiler.hpp
-@@ -95,6 +95,8 @@ struct BlockMetadata {
+@@ -17,6 +17,7 @@
+ 
+ #define FELIX86_HINT_SAFEPOINT_SYSCALL 0xa5
+ #define FELIX86_HINT_GP 0x86
++#define FELIX86_HINT_SEGMENT_GP 0x5e
+ #define FELIX86_HINT_INT_GP 0x1d
+ #define FELIX86_HINT_DIVZERO 0xd0
+ #define FELIX86_HINT_INT3 0xc3
+@@ -95,6 +96,8 @@ struct BlockMetadata {
      // When the block would get recompiled the address cache entry would point to the new block and RSB prediction
      // would fail. We want RSB to succeed and to not compile past the CALL, so this is our compromise.
      u64 ret_stub{};
@@ -526,7 +868,7 @@ index e438ab2..743e83e 100644
  };
  
  using InterruptibleSyscallFunc = u64 (*)(u64* effective_deferred_signals, u64 nr, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5, u64 arg6);
-@@ -202,7 +204,7 @@ struct Recompiler {
+@@ -202,7 +205,7 @@ struct Recompiler {
  
      void stopCompiling();
  
@@ -535,7 +877,7 @@ index e438ab2..743e83e 100644
  
      void writebackState();
  
-@@ -240,6 +242,14 @@ struct Recompiler {
+@@ -240,6 +243,14 @@ struct Recompiler {
  
      void jumpAndLink(u64 rip, bool return_hint = false, bool skip_lookup = false);
  
@@ -550,7 +892,7 @@ index e438ab2..743e83e 100644
      void jumpAndLinkConditional(biscuit::GPR condition, u64 rip_true, u64 rip_false);
  
      void invalidateBlock(BlockMetadata* block);
-@@ -530,6 +540,18 @@ struct Recompiler {
+@@ -530,6 +541,18 @@ struct Recompiler {
          return restore_state_handler;
      }
  
@@ -569,7 +911,7 @@ index e438ab2..743e83e 100644
      u64 getCompileNext() {
          return compile_next_handler;
      }
-@@ -621,9 +643,16 @@ struct Recompiler {
+@@ -621,9 +644,16 @@ struct Recompiler {
          current_grouping = LMUL::M1;
      }
  
@@ -586,7 +928,7 @@ index e438ab2..743e83e 100644
          i64 offset = target - (u64)as.GetCursorPointer();
          if (IsValidJTypeImm(offset)) {
              as.JAL(offset);
-@@ -955,6 +984,8 @@ private:
+@@ -955,6 +985,8 @@ private:
      std::map<u64, BlockMetadata*> host_pc_map{};
  
      bool compiling{};
@@ -595,7 +937,7 @@ index e438ab2..743e83e 100644
  
      // Whether we already set ThreadState::x87_state to a value or not
      x87State local_x87_state = x87State::Unknown;
-@@ -1013,6 +1044,14 @@ private:
+@@ -1013,6 +1045,14 @@ private:
      int pushed_this_block = 0;
  
      bool relocatable = false;

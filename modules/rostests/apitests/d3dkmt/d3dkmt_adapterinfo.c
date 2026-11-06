@@ -1169,6 +1169,71 @@ START_TEST(adapterclass)
  * target OS/adapter does not support is traced, never a failure.
  * -------------------------------------------------------------------------- */
 
+/* Win11 derives the 2.7 and 2.9 hardware scheduling caps from one driver support state and never sets HwSchEnabledByDefault. */
+static void
+Test_WddmCapsPerAdapter(PFND3DKMT_QUERYADAPTERINFO pfn)
+{
+    PFN_D3DKMTEnumAdapters pfnEnum = (PFN_D3DKMTEnumAdapters)LoadD3DKMTProc("D3DKMTEnumAdapters");
+    D3DKMT_ENUMADAPTERS Enum;
+    ULONG i;
+
+    if (!pfnEnum)
+    {
+        skip("D3DKMTEnumAdapters not exported by gdi32.dll\n");
+        return;
+    }
+    memset(&Enum, 0, sizeof(Enum));
+    if (!NT_SUCCESS(pfnEnum(&Enum)))
+    {
+        skip("D3DKMTEnumAdapters failed\n");
+        return;
+    }
+    for (i = 0; i < Enum.NumAdapters; i++)
+    {
+        D3DKMT_HANDLE h = Enum.Adapters[i].hAdapter;
+        D3DKMT_WDDM_2_7_CAPS caps27;
+        D3DKMT_WDDM_2_9_CAPS caps29;
+        D3DKMT_WDDM_3_0_CAPS caps30;
+        D3DKMT_WDDM_3_1_CAPS caps31;
+        D3DKMT_ADAPTERTYPE type;
+        NTSTATUS st27, st29, st30, st31, stType;
+
+        caps27.Value = caps29.Value = caps30.Value = caps31.Value = 0xCCCCCCCC;
+        type.Value = 0;
+        st27 = QueryAI(pfn, h, KMTQAITYPE_WDDM_2_7_CAPS, &caps27, sizeof(caps27));
+        st29 = QueryAI(pfn, h, KMTQAITYPE_WDDM_2_9_CAPS, &caps29, sizeof(caps29));
+        st30 = QueryAI(pfn, h, KMTQAITYPE_WDDM_3_0_CAPS, &caps30, sizeof(caps30));
+        st31 = QueryAI(pfn, h, KMTQAITYPE_WDDM_3_1_CAPS, &caps31, sizeof(caps31));
+        stType = QueryAI(pfn, h, KMTQAITYPE_ADAPTERTYPE, &type, sizeof(type));
+        trace("adapter %08lx:%08lx type 0x%08X (0x%08lX) 2_7 0x%08X (0x%08lX) 2_9 0x%08X (0x%08lX) 3_0 0x%08X (0x%08lX) 3_1 0x%08X (0x%08lX)\n",
+              Enum.Adapters[i].AdapterLuid.HighPart, Enum.Adapters[i].AdapterLuid.LowPart,
+              (unsigned)type.Value, (long)stType, (unsigned)caps27.Value, (long)st27, (unsigned)caps29.Value, (long)st29,
+              (unsigned)caps30.Value, (long)st30, (unsigned)caps31.Value, (long)st31);
+        if (NT_SUCCESS(stType))
+        {
+            D3DKMT_DRIVERVERSION version = KMT_DRIVERVERSION_WDDM_1_0;
+
+            if (NT_SUCCESS(QueryAI(pfn, h, KMTQAITYPE_DRIVERVERSION, &version, sizeof(version))) &&
+                version >= KMT_DRIVERVERSION_WDDM_2_2)
+                ok(type.ACGSupported, "adapter %lu: driver version %d without ACGSupported (0x%08X)\n",
+                   i, (int)version, (unsigned)type.Value);
+            ok(!type.SupportSetTimingsFromVidPn || type.DisplaySupported,
+               "adapter %lu: SupportSetTimingsFromVidPn without display (0x%08X)\n", i, (unsigned)type.Value);
+        }
+        if (NT_SUCCESS(st27))
+            ok(!caps27.HwSchEnabledByDefault, "adapter %lu: HwSchEnabledByDefault set (0x%08X)\n", i, (unsigned)caps27.Value);
+        if (NT_SUCCESS(st27) && NT_SUCCESS(st29))
+        {
+            ok(caps27.HwSchSupported == (caps29.HwSchSupportState != DXGK_FEATURE_SUPPORT_ALWAYS_OFF),
+               "adapter %lu: 2_7 HwSchSupported %u, 2_9 HwSchSupportState %u\n",
+               i, (unsigned)caps27.HwSchSupported, (unsigned)caps29.HwSchSupportState);
+            ok(caps27.HwSchEnabled == caps29.HwSchEnabled, "adapter %lu: 2_7 HwSchEnabled %u, 2_9 HwSchEnabled %u\n",
+               i, (unsigned)caps27.HwSchEnabled, (unsigned)caps29.HwSchEnabled);
+        }
+        CloseAdapter(h);
+    }
+}
+
 START_TEST(wddmcaps)
 {
     PFND3DKMT_QUERYADAPTERINFO pfn;
@@ -1181,6 +1246,7 @@ START_TEST(wddmcaps)
         skip("D3DKMTQueryAdapterInfo not exported by gdi32.dll\n");
         return;
     }
+    Test_WddmCapsPerAdapter(pfn);
     h = OpenAdapterFromDisplay1();
     if (!h)
     {

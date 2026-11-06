@@ -27,6 +27,8 @@
 LIST_ENTRY ImageListHead;
 LIST_ENTRY ServiceListHead;
 
+static LONG ScmImageSerial;
+
 static RTL_RESOURCE DatabaseLock;
 static DWORD ResumeCount = 1;
 static DWORD NoInteractiveServices = 1;
@@ -290,7 +292,7 @@ ScmGetServiceImageByImagePath(LPWSTR lpImagePath)
         CurrentImage = CONTAINING_RECORD(ImageEntry,
                                          SERVICE_IMAGE,
                                          ImageListEntry);
-        if (_wcsicmp(CurrentImage->pszImagePath, lpImagePath) == 0)
+        if (!CurrentImage->bStopping && _wcsicmp(CurrentImage->pszImagePath, lpImagePath) == 0)
         {
             DPRINT("Found image: '%S'\n", CurrentImage->pszImagePath);
             return CurrentImage;
@@ -657,6 +659,7 @@ ScmCreateOrReferenceServiceImage(PSERVICE pService)
         pServiceImage->dwImageRunCount = 1;
         pServiceImage->hControlPipe = INVALID_HANDLE_VALUE;
         pServiceImage->hProcess = INVALID_HANDLE_VALUE;
+        pServiceImage->ImageSerial = (ULONG)InterlockedIncrement(&ScmImageSerial);
 
         pString = (PWSTR)((INT_PTR)pServiceImage + sizeof(SERVICE_IMAGE));
 
@@ -790,6 +793,208 @@ ScmRemoveServiceImage(PSERVICE_IMAGE pServiceImage)
 
     /* Release the service image */
     HeapFree(GetProcessHeap(), 0, pServiceImage);
+}
+
+
+typedef struct _SCM_IMAGE_WATCH
+{
+    HANDLE hProcess;
+    ULONG ImageSerial;
+} SCM_IMAGE_WATCH, *PSCM_IMAGE_WATCH;
+
+/* The database lock must be held exclusively. */
+static VOID
+ScmServiceImageTerminated(ULONG ImageSerial)
+{
+    PSERVICE_IMAGE pServiceImage = NULL;
+    PLIST_ENTRY Entry;
+
+    if (ScmShutdown)
+        return;
+
+    for (Entry = ImageListHead.Flink; Entry != &ImageListHead; Entry = Entry->Flink)
+    {
+        PSERVICE_IMAGE pCurrent = CONTAINING_RECORD(Entry, SERVICE_IMAGE, ImageListEntry);
+
+        if (pCurrent->ImageSerial == ImageSerial)
+        {
+            pServiceImage = pCurrent;
+            break;
+        }
+    }
+    if (pServiceImage == NULL)
+        return;
+
+    Entry = ServiceListHead.Flink;
+    while (Entry != &ServiceListHead)
+    {
+        PSERVICE lpService = CONTAINING_RECORD(Entry, SERVICE, ServiceListEntry);
+
+        Entry = Entry->Flink;
+        if (lpService->lpImage != pServiceImage ||
+            lpService->Status.dwCurrentState == SERVICE_STOPPED)
+            continue;
+
+        DPRINT1("Service %S terminated unexpectedly\n", lpService->lpServiceName);
+        lpService->Status.dwCurrentState = SERVICE_STOPPED;
+        lpService->Status.dwControlsAccepted = 0;
+        lpService->Status.dwWin32ExitCode = ERROR_PROCESS_ABORTED;
+        lpService->Status.dwServiceSpecificExitCode = 0;
+        lpService->Status.dwCheckPoint = 0;
+        lpService->Status.dwWaitHint = 0;
+        ScmNotifyServiceStatus(lpService);
+        ScmServiceFailure(lpService, TRUE);
+
+        pServiceImage->dwImageRunCount--;
+        lpService->lpImage = NULL;
+
+        /* Release the reference a service holds while it is not stopped */
+        ScmDereferenceService(lpService);
+    }
+
+    if (pServiceImage->dwImageRunCount == 0)
+        ScmRemoveServiceImage(pServiceImage);
+}
+
+static DWORD
+WINAPI
+ScmWatchServiceImageThread(PVOID pParam)
+{
+    PSCM_IMAGE_WATCH pWatch = (PSCM_IMAGE_WATCH)pParam;
+
+    WaitForSingleObject(pWatch->hProcess, INFINITE);
+
+    ScmLockDatabaseExclusive();
+    ScmServiceImageTerminated(pWatch->ImageSerial);
+    ScmUnlockDatabase();
+
+    CloseHandle(pWatch->hProcess);
+    HeapFree(GetProcessHeap(), 0, pWatch);
+    return 0;
+}
+
+/* The database lock must be held exclusively. */
+static VOID
+ScmWatchServiceImage(PSERVICE_IMAGE pServiceImage)
+{
+    PSCM_IMAGE_WATCH pWatch;
+    HANDLE hThread;
+
+    if (pServiceImage->bProcessWatched ||
+        pServiceImage->hProcess == NULL ||
+        pServiceImage->hProcess == INVALID_HANDLE_VALUE)
+        return;
+
+    pWatch = HeapAlloc(GetProcessHeap(), 0, sizeof(*pWatch));
+    if (pWatch == NULL)
+        return;
+    pWatch->ImageSerial = pServiceImage->ImageSerial;
+    if (!DuplicateHandle(GetCurrentProcess(), pServiceImage->hProcess, GetCurrentProcess(),
+                         &pWatch->hProcess, SYNCHRONIZE, FALSE, 0))
+    {
+        DPRINT1("Cannot watch the process of %S (Error %lu)\n", pServiceImage->pszImagePath, GetLastError());
+        HeapFree(GetProcessHeap(), 0, pWatch);
+        return;
+    }
+
+    hThread = CreateThread(NULL, 64 * 1024, ScmWatchServiceImageThread, pWatch,
+                           STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+    if (hThread == NULL)
+    {
+        DPRINT1("Cannot watch the process of %S (Error %lu)\n", pServiceImage->pszImagePath, GetLastError());
+        CloseHandle(pWatch->hProcess);
+        HeapFree(GetProcessHeap(), 0, pWatch);
+        return;
+    }
+    CloseHandle(hThread);
+    pServiceImage->bProcessWatched = TRUE;
+}
+
+
+/* Whether a service still runs in the image; stopped services are detached from theirs. The database lock must be held. */
+BOOL
+ScmImageHasServices(PSERVICE_IMAGE pServiceImage)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = ServiceListHead.Flink; Entry != &ServiceListHead; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, SERVICE, ServiceListEntry)->lpImage == pServiceImage)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* A recovery program runs under the account of the service, like its processes. */
+DWORD
+ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine)
+{
+    PROCESS_INFORMATION ProcessInformation;
+    STARTUPINFOW StartupInfo;
+    SERVICE_IMAGE Image;
+    LPVOID lpEnvironment = NULL;
+    HKEY hServiceKey;
+    DWORD dwError;
+    BOOL bResult = FALSE;
+
+    ZeroMemory(&Image, sizeof(Image));
+    if (ScmOpenServiceKey(pService->lpServiceName, KEY_READ, &hServiceKey) == ERROR_SUCCESS)
+    {
+        ScmReadString(hServiceKey, L"ObjectName", &Image.pszAccountName);
+        RegCloseKey(hServiceKey);
+    }
+
+    dwError = ScmLogonService(pService, &Image);
+    if (dwError == ERROR_SUCCESS)
+    {
+        ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+        StartupInfo.cb = sizeof(StartupInfo);
+        if (!CreateEnvironmentBlock(&lpEnvironment, Image.hToken, Image.hToken == NULL))
+            lpEnvironment = NULL;
+
+        if (Image.hToken != NULL)
+        {
+            if (ImpersonateLoggedOnUser(Image.hToken))
+            {
+                bResult = CreateProcessAsUserW(Image.hToken, NULL, lpCommandLine, NULL, NULL, FALSE,
+                                               CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS,
+                                               lpEnvironment, NULL, &StartupInfo, &ProcessInformation);
+                dwError = bResult ? ERROR_SUCCESS : GetLastError();
+                RevertToSelf();
+            }
+            else
+            {
+                dwError = GetLastError();
+            }
+        }
+        else
+        {
+            bResult = CreateProcessW(NULL, lpCommandLine, NULL, NULL, FALSE,
+                                     CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS,
+                                     lpEnvironment, NULL, &StartupInfo, &ProcessInformation);
+            dwError = bResult ? ERROR_SUCCESS : GetLastError();
+        }
+
+        if (bResult)
+        {
+            CloseHandle(ProcessInformation.hThread);
+            CloseHandle(ProcessInformation.hProcess);
+        }
+        if (lpEnvironment != NULL)
+            DestroyEnvironmentBlock(lpEnvironment);
+        if (Image.hProfile != NULL)
+        {
+            ScmEnableBackupRestorePrivileges(Image.hToken, TRUE);
+            UnloadUserProfile(Image.hToken, Image.hProfile);
+            ScmEnableBackupRestorePrivileges(Image.hToken, FALSE);
+        }
+        if (Image.hToken != NULL)
+            CloseHandle(Image.hToken);
+    }
+
+    if (Image.pszAccountName != NULL)
+        HeapFree(GetProcessHeap(), 0, Image.pszAccountName);
+    return dwError;
 }
 
 
@@ -2214,7 +2419,14 @@ ScmLoadService(PSERVICE Service,
             ScmUnlockDatabase();
 
             dwError = ScmStartUserModeService(Service, argc, argv);
-            if (dwError != ERROR_SUCCESS)
+            if (dwError == ERROR_SUCCESS)
+            {
+                ScmLockDatabaseExclusive();
+                if (Service->lpImage != NULL)
+                    ScmWatchServiceImage(Service->lpImage);
+                ScmUnlockDatabase();
+            }
+            else
             {
                 Service->lpImage->dwImageRunCount--;
                 if (Service->lpImage->dwImageRunCount == 0)

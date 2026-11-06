@@ -9,7 +9,6 @@
 
 #define NDIS6_WDI_DRAIN_TIMEOUT_MS  5000
 #define NDIS6_WDI_TX_ROUNDS         64
-#define NDIS6_WDI_RX_ROUNDS         64
 #define NDIS6_WDI_FRAME_PEEK        34
 
 typedef struct _NDIS6_WDI_TX_DONE
@@ -1050,7 +1049,6 @@ Ndis6WdiRxInorderData(
     ULONG Flags = KeGetCurrentIrql() == DISPATCH_LEVEL ? NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL : 0;
     PNET_BUFFER_LIST Chain;
     PNET_BUFFER_LIST Nbl;
-    ULONG Rounds;
     ULONG Count;
 
     UNREFERENCED_PARAMETER(pRxThrottleParams);
@@ -1059,47 +1057,45 @@ Ndis6WdiRxInorderData(
     if (!Wdi->TalStarted)
         return;
 
-    for (Rounds = 0; Rounds < NDIS6_WDI_RX_ROUNDS; Rounds++)
+    /* One pull per indication: the RxEngine indicates again for more, and a TAL can hand the same chain out twice. */
+    Chain = NULL;
+    Wdi->Tal.RxGetMpdusHandler(Wdi->TalContext, PeerId, ExTid, &Chain);
+    if (Chain == NULL)
+        return;
+
+    if (!Wdi->DataPathRunning || Wdi->Halting)
     {
-        Chain = NULL;
-        Wdi->Tal.RxGetMpdusHandler(Wdi->TalContext, PeerId, ExTid, &Chain);
-        if (Chain == NULL)
-            break;
-
-        if (!Wdi->DataPathRunning || Wdi->Halting)
-        {
-            Wdi->Tal.RxReturnFramesHandler(Wdi->TalContext, Chain);
-            continue;
-        }
-
-        if (Resources)
-        {
-            PNET_BUFFER_LIST Next;
-
-            for (Nbl = Chain; Nbl != NULL; Nbl = Next)
-            {
-                Next = NET_BUFFER_LIST_NEXT_NBL(Nbl);
-                NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
-                Ndis6WdiAttachRecvContext(Wdi, Nbl);
-                NdisMIndicateReceiveNetBufferLists(Wdi->Adapter, Nbl, NDIS_DEFAULT_PORT_NUMBER, 1,
-                                                   Flags | NDIS_RECEIVE_FLAGS_RESOURCES);
-                Ndis6WdiDetachRecvContexts(Nbl);
-                Wdi->Tal.RxReturnFramesHandler(Wdi->TalContext, Nbl);
-            }
-            continue;
-        }
-
-        Count = 0;
-        for (Nbl = Chain; Nbl != NULL; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
-        {
-            Ndis6WdiAttachRecvContext(Wdi, Nbl);
-            Count++;
-        }
-
-        if (InterlockedExchangeAdd(&Wdi->RxOutstanding, (LONG)Count) == 0)
-            KeClearEvent(&Wdi->RxIdleEvent);
-        NdisMIndicateReceiveNetBufferLists(Wdi->Adapter, Chain, NDIS_DEFAULT_PORT_NUMBER, Count, Flags);
+        Wdi->Tal.RxReturnFramesHandler(Wdi->TalContext, Chain);
+        return;
     }
+
+    if (Resources)
+    {
+        PNET_BUFFER_LIST Next;
+
+        for (Nbl = Chain; Nbl != NULL; Nbl = Next)
+        {
+            Next = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+            NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+            Ndis6WdiAttachRecvContext(Wdi, Nbl);
+            NdisMIndicateReceiveNetBufferLists(Wdi->Adapter, Nbl, NDIS_DEFAULT_PORT_NUMBER, 1,
+                                               Flags | NDIS_RECEIVE_FLAGS_RESOURCES);
+            Ndis6WdiDetachRecvContexts(Nbl);
+            Wdi->Tal.RxReturnFramesHandler(Wdi->TalContext, Nbl);
+        }
+        return;
+    }
+
+    Count = 0;
+    for (Nbl = Chain; Nbl != NULL; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+    {
+        Ndis6WdiAttachRecvContext(Wdi, Nbl);
+        Count++;
+    }
+
+    if (InterlockedExchangeAdd(&Wdi->RxOutstanding, (LONG)Count) == 0)
+        KeClearEvent(&Wdi->RxIdleEvent);
+    NdisMIndicateReceiveNetBufferLists(Wdi->Adapter, Chain, NDIS_DEFAULT_PORT_NUMBER, Count, Flags);
 }
 
 VOID
