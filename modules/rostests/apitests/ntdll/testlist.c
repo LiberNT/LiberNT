@@ -82,6 +82,8 @@ extern void func_NtImpersonateAnonymousToken(void);
 extern void func_NtLoadUnloadKey(void);
 extern void func_NtMapViewOfSection(void);
 extern void func_NtMapViewOfSection_ImageZeroBits(void);
+extern void func_NtKeDispatcherTransitions(void);
+extern void func_NtKeHandoff(void);
 extern void func_NtMutant(void);
 extern void func_NtNotifyChangeMultipleKeys(void);
 extern void func_NtOpenKey(void);
@@ -277,6 +279,8 @@ const struct test winetest_testlist[] =
     { "NtLoadUnloadKey",                func_NtLoadUnloadKey },
     { "NtMapViewOfSection",             func_NtMapViewOfSection },
     { "NtMapViewOfSection_ImageZeroBits", func_NtMapViewOfSection_ImageZeroBits },
+    { "NtKeDispatcherTransitions",       func_NtKeDispatcherTransitions },
+    { "NtKeHandoff",                     func_NtKeHandoff },
     { "NtMutant",                       func_NtMutant },
     { "NtNotifyChangeMultipleKeys",     func_NtNotifyChangeMultipleKeys },
     { "NtOpenKeyEx",                    func_NtOpenKeyEx },
