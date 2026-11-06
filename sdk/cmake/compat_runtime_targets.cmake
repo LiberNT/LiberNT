@@ -200,6 +200,7 @@ set(COMPAT_RUNTIME_MODULES
     msvcrt
     msvfw32
     msvidc32
+    msvproc
     mswsock
     msxml3
     msxml3r

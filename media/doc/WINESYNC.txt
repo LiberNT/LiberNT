@@ -55,6 +55,7 @@ dll/directx/wine/colorcnv       # Synced to Wine-11.21 (LiberNT pixel conversion
 dll/directx/wine/dxdiagn        # Synced to Wine-11.14
 dll/directx/wine/mp3dmod        # Synced to Wine-11.21 (LiberNT output framing and IPropertyStore)
 dll/directx/wine/msdmo          # Synced to Wine-11.14
+dll/directx/wine/msvproc        # Synced to Wine-11.21 (LiberNT pixel conversion instead of FFmpeg)
 dll/directx/wine/qcap           # Synced to Wine-11.14
 dll/directx/wine/qedit          # Synced to Wine-11.14
 dll/directx/wine/quartz         # Synced to Wine-11.14

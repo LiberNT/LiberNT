@@ -27,6 +27,8 @@ enum pixel_format
     PIXEL_YVYU,
     PIXEL_AYUV,
     PIXEL_RGB32,
+    PIXEL_ARGB32,
+    PIXEL_ABGR32,
     PIXEL_RGB24,
     PIXEL_RGB565,
     PIXEL_RGB555,
@@ -61,6 +63,8 @@ static enum pixel_format get_pixel_format(const GUID *subtype)
     case MAKEFOURCC('Y','V','Y','U'): return PIXEL_YVYU;
     case MAKEFOURCC('A','Y','U','V'): return PIXEL_AYUV;
     case 0xe436eb7e: case 22: return PIXEL_RGB32;
+    case 21: return PIXEL_ARGB32;
+    case 32: return PIXEL_ABGR32;
     case 0xe436eb7d: case 20: return PIXEL_RGB24;
     case 0xe436eb7b: case 23: return PIXEL_RGB565;
     case 0xe436eb7c: case 24: return PIXEL_RGB555;
@@ -85,7 +89,7 @@ static UINT get_bytes_per_pixel(enum pixel_format format)
     {
     case PIXEL_YUY2: case PIXEL_UYVY: case PIXEL_YVYU: case PIXEL_RGB565: case PIXEL_RGB555: return 2;
     case PIXEL_RGB24: return 3;
-    case PIXEL_AYUV: case PIXEL_RGB32: return 4;
+    case PIXEL_AYUV: case PIXEL_RGB32: case PIXEL_ARGB32: case PIXEL_ABGR32: return 4;
     default: return 1;
     }
 }
@@ -295,6 +299,13 @@ static BYTE get_chroma(const struct frame *frame, UINT x, UINT y, BOOL v)
     }
 }
 
+static BYTE get_nearest_chroma(const struct frame *frame, UINT x, UINT y, BOOL v)
+{
+    if (get_chroma_layout(frame->format) != CHROMA_420)
+        return get_chroma(frame, x, y, v);
+    return *chroma_sample(frame, min(x / 2, chroma_width(frame) - 1), min(y / 2, chroma_height(frame) - 1), v);
+}
+
 static void get_420_lines(const struct frame *frame, UINT cy, UINT *near_line, UINT *far_line)
 {
     if (cy & 1)
@@ -321,7 +332,14 @@ static void get_rgb(const struct frame *frame, UINT x, UINT y, BYTE rgbx[4])
     switch (frame->format)
     {
     case PIXEL_RGB32:
+    case PIXEL_ARGB32:
         memcpy(rgbx, row + 4 * x, 4);
+        break;
+    case PIXEL_ABGR32:
+        rgbx[0] = row[4 * x + 2];
+        rgbx[1] = row[4 * x + 1];
+        rgbx[2] = row[4 * x];
+        rgbx[3] = row[4 * x + 3];
         break;
     case PIXEL_RGB24:
         memcpy(rgbx, row + 3 * x, 3);
@@ -354,7 +372,14 @@ static void set_rgb(const struct frame *frame, UINT x, UINT y, const BYTE rgbx[4
     switch (frame->format)
     {
     case PIXEL_RGB32:
+    case PIXEL_ARGB32:
         memcpy(row + 4 * x, rgbx, 4);
+        break;
+    case PIXEL_ABGR32:
+        row[4 * x] = rgbx[2];
+        row[4 * x + 1] = rgbx[1];
+        row[4 * x + 2] = rgbx[0];
+        row[4 * x + 3] = rgbx[3];
         break;
     case PIXEL_RGB24:
         memcpy(row + 3 * x, rgbx, 3);
@@ -381,6 +406,16 @@ static void yuv_to_rgb(BYTE y, BYTE u, BYTE v, BYTE rgbx[4])
     rgbx[0] = clip_byte(luma + ((132201 * (u - 128)) >> 16));
     rgbx[1] = clip_byte(luma - ((25675 * (u - 128)) >> 16) - ((53279 * (v - 128)) >> 16));
     rgbx[2] = clip_byte(luma + ((104597 * (v - 128)) >> 16));
+    rgbx[3] = 0;
+}
+
+static void yuv_to_rgb_rounded(BYTE y, BYTE u, BYTE v, BYTE rgbx[4])
+{
+    int luma = 76309 * (y - 16) + 32768;
+
+    rgbx[0] = clip_byte((luma + 132201 * (u - 128)) >> 16);
+    rgbx[1] = clip_byte((luma - 25675 * (u - 128) - 53279 * (v - 128)) >> 16);
+    rgbx[2] = clip_byte((luma + 104597 * (v - 128)) >> 16);
     rgbx[3] = 0;
 }
 
@@ -442,7 +477,7 @@ static BYTE get_downsampled_chroma(const struct frame *src, const struct frame *
 }
 
 void pixels_convert(const MFVIDEOFORMAT *input, const struct pixel_planes *src_planes,
-        const MFVIDEOFORMAT *output, const struct pixel_planes *dst_planes)
+        const MFVIDEOFORMAT *output, const struct pixel_planes *dst_planes, DWORD flags)
 {
     struct frame src = {get_pixel_format(&input->guidFormat), input->videoInfo.dwWidth, input->videoInfo.dwHeight, src_planes};
     struct frame dst = {get_pixel_format(&output->guidFormat), output->videoInfo.dwWidth, output->videoInfo.dwHeight, dst_planes};
@@ -466,8 +501,23 @@ void pixels_convert(const MFVIDEOFORMAT *input, const struct pixel_planes *src_p
                     get_rgb(&src, x, y, rgbx);
                 else
                 {
-                    yuv_to_rgb(get_y(&src, x, y), get_chroma(&src, x, y, FALSE), get_chroma(&src, x, y, TRUE), rgbx);
-                    if (src_layout == CHROMA_422)
+                    BYTE u, v;
+
+                    if (flags & PIXELS_NEAREST_CHROMA)
+                    {
+                        u = get_nearest_chroma(&src, x, y, FALSE);
+                        v = get_nearest_chroma(&src, x, y, TRUE);
+                    }
+                    else
+                    {
+                        u = get_chroma(&src, x, y, FALSE);
+                        v = get_chroma(&src, x, y, TRUE);
+                    }
+                    if (flags & PIXELS_ROUNDED_MATRIX)
+                        yuv_to_rgb_rounded(get_y(&src, x, y), u, v, rgbx);
+                    else
+                        yuv_to_rgb(get_y(&src, x, y), u, v, rgbx);
+                    if (src_layout == CHROMA_422 || (flags & PIXELS_OPAQUE_ALPHA))
                         rgbx[3] = 0xff;
                 }
                 set_rgb(&dst, x, y, rgbx);
@@ -484,6 +534,8 @@ void pixels_convert(const MFVIDEOFORMAT *input, const struct pixel_planes *src_p
             {
                 get_rgb(&src, x, y, rgbx);
                 set_y(&dst, x, y, rgb_to_y(rgbx));
+                if ((flags & PIXELS_OPAQUE_ALPHA) && dst.format == PIXEL_AYUV)
+                    pixel_row(dst.planes, 0, y)[4 * x + 3] = rgbx[3];
             }
             else
                 set_y(&dst, x, y, get_y(&src, x, y));
