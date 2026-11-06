@@ -44,6 +44,7 @@
 #define LX_EINTR                4
 #define LX_EAGAIN               11
 #define LX_EEXIST               17
+#define LX_ENODEV               19
 #define LX_ENOTCONN             107
 
 #define LX_O_RDONLY             0
