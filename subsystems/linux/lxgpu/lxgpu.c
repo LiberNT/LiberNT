@@ -421,6 +421,7 @@ int
 LxServe(PCWSTR Root, HANDLE Parent)
 {
     WCHAR Full[MAX_PATH], Nt[MAX_PATH + 8];
+    CHAR Utf8[3 * (MAX_PATH + 8)];
     OVERLAPPED Overlapped = { 0 };
     PUCHAR Buffer;
     HANDLE Waits[2];
@@ -428,10 +429,10 @@ LxServe(PCWSTR Root, HANDLE Parent)
     BOOL Pending = FALSE;
     int Result = -1;
 
-    if (!GetFullPathNameW(Root, MAX_PATH, Full, NULL))
+    if (!GetFullPathNameW(Root, MAX_PATH, Full, NULL) || (wcslen(Full) + 4 >= ARRAYSIZE(Nt)))
         return 1;
-    _snwprintf(Nt, MAX_PATH + 8, L"\\??\\%s", Full);
-    Nt[MAX_PATH + 7] = UNICODE_NULL;
+    wcscpy(Nt, L"\\??\\");
+    wcscat(Nt, Full);
     if (!LxInitializeRenderer())
     {
         LxTrace("renderer init failed\n");
@@ -453,7 +454,9 @@ LxServe(PCWSTR Root, HANDLE Parent)
         LxTrace("attach failed %lu\n", GetLastError());
         return 4;
     }
-    LxTrace("attached %ls\n", Nt);
+    if (!WideCharToMultiByte(CP_UTF8, 0, Nt, -1, Utf8, sizeof(Utf8), NULL, NULL))
+        Utf8[0] = '\0';
+    LxTrace("attached %s\n", Utf8);
     Buffer = malloc(LX_GPU_MAX_MESSAGE);
     if (Buffer == NULL)
         return 1;
