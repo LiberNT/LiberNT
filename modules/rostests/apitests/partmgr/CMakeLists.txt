@@ -2,7 +2,8 @@
 list(APPEND SOURCE
     DriveLayout.c
     PhysicalDriveRaw.c
-    StorDeviceNumber.c)
+    StorDeviceNumber.c
+    VirtioDisk.c)
 
 list(APPEND PCH_SKIP_SOURCE
     testlist.c)
