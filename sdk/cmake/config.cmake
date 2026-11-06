@@ -213,6 +213,11 @@ cmake_dependent_option(MESA_LLVMPIPE_FROM_SOURCE
                        "Build LLVM and LLVMpipe into mesa_gallium.dll instead of using the LiberNT release payload." OFF
                        "ENABLE_MESA_LLVMPIPE" OFF)
 
+# TODO: build the Linux GPU renderer for riscv64
+cmake_dependent_option(ENABLE_LXGPU
+                       "Whether to build the Linux subsystem GPU renderer (virglrenderer on WGL)." ON
+                       "ARCH STREQUAL amd64 OR ARCH STREQUAL arm64" OFF)
+
 cmake_dependent_option(ENABLE_FEX_ARM64EC
                        "Whether to build the optional FEX ARM64EC emulator for running AMD64 binaries on ARM64." ON
                        "ARCH STREQUAL arm64" OFF)
