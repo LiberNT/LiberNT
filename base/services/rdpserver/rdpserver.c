@@ -75,7 +75,6 @@ static HANDLE RemoteConsole;
 #define TILE_WIDTH 64
 #define TILE_HEIGHT 32
 #define TILE_BYTES (TILE_WIDTH * TILE_HEIGHT * 4 + 2)
-#define REMOTE_FRAME_GRACE 3000
 /* TS_UPDATE_BITMAP_DATA header, and TS_BITMAP_DATA fields with its TS_CD_HEADER */
 #define UPDATE_HEADER_BYTES 4
 #define TILE_HEADER_BYTES 26
@@ -95,7 +94,6 @@ typedef struct DESKTOP_CONTEXT
     HANDLE FrameEvent;
     BOOL FramePending;
     int FrameWidth, FrameHeight;
-    DWORD FrameInactiveSince;
     RECT CursorRect;
     POINT CursorPoint;
     HCURSOR CursorShape;
@@ -614,13 +612,14 @@ static BOOL ConsoleSignedIn(void)
     return InterlockedCompareExchange(&ConsoleTakeover, 0, 0) != 0;
 }
 
-static void AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
+static UINT32 AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
 {
     static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
     SW_DEVICE_CREATE_INFO info = {0};
     WCHAR instance[64];
     DWORD session = 0;
     int width = GetSystemMetrics(SM_CXSCREEN), height = GetSystemMetrics(SM_CYSCREEN);
+    UINT32 error = ERRINFO_SUCCESS;
     HRESULT hr;
 
     EnterCriticalSection(&RemoteDisplayLock);
@@ -644,47 +643,63 @@ static void AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
         {
             Log("Cannot create the remote display adapter: 0x%08lx", hr);
             RemoteDisplay = NULL;
+            error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
         }
         else if (WaitForSingleObject(RemoteDisplayReady, 15000) == WAIT_OBJECT_0 && WaitForRemoteDisplay(0, 0))
         {
             if (SetRemoteDisplayMode(width, height) && !WaitForRemoteDisplay(width, height))
                 Log("The remote display does not list %dx%d", width, height);
             RemoteDisplayShown = ConnectRemoteConsole(ctx);
-            if (RemoteDisplayShown && SetRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight) &&
-                !WaitForRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight))
+            if (!RemoteDisplayShown)
+                error = ERRINFO_SERVER_DENIED_CONNECTION;
+            else if (SetRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight) &&
+                     !WaitForRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight))
                 Log("The desktop did not take the %dx%d mode", ctx->ClientWidth, ctx->ClientHeight);
         }
         else
         {
             Log("The remote display adapter did not start");
+            error = ERRINFO_CLOSE_STACK_ON_DRIVER_NOT_READY;
+        }
+        if (error && RemoteDisplay)
+        {
+            SwDeviceClose(RemoteDisplay);
+            RemoteDisplay = NULL;
+            Log("Remote display adapter closed");
         }
     }
-    else if (RemoteDisplay && RemoteDisplayShown)
+    else if (RemoteDisplayShown)
     {
         SetRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight);
     }
-    if (RemoteDisplay)
+    if (!error)
     {
         RemoteDisplayUsers++;
         ctx->RemoteDisplay = TRUE;
     }
     LeaveCriticalSection(&RemoteDisplayLock);
+    return error;
 }
 
-static void OpenRemoteFrames(DESKTOP_CONTEXT *ctx)
+static BOOL OpenRemoteFrames(DESKTOP_CONTEXT *ctx)
 {
     RDPVDD_FRAME_ESCAPE request = {0};
-    NTSTATUS status;
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
     EnterCriticalSection(&RemoteDisplayLock);
     if (RemoteDisplayShown && OpenRemoteAdapter(&ctx->FrameAdapter))
     {
         ctx->FrameEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
         request.Code = RDPVDD_ESCAPE_READ_FRAME;
         status = ctx->FrameEvent ? FrameEscape(ctx->FrameAdapter, &request) : STATUS_NO_MEMORY;
-        if (!NT_SUCCESS(status) || !request.Width || !request.Height)
+        if (!NT_SUCCESS(status))
         {
-            Log("The remote display has no frame: 0x%08lx", status);
             CloseRemoteFrames(ctx);
+        }
+        else if (!request.Width || !request.Height)
+        {
+            Log("The remote display has no frame yet");
+            ctx->FrameWidth = ctx->ClientWidth;
+            ctx->FrameHeight = ctx->ClientHeight;
         }
         else
         {
@@ -693,7 +708,13 @@ static void OpenRemoteFrames(DESKTOP_CONTEXT *ctx)
         }
     }
     LeaveCriticalSection(&RemoteDisplayLock);
-    Log("Sending the %s", ctx->FrameAdapter ? "remote display" : "console desktop");
+    if (!ctx->FrameAdapter)
+    {
+        Log("Cannot read the remote display: 0x%08lx", status);
+        return FALSE;
+    }
+    Log("Sending the remote display");
+    return TRUE;
 }
 
 static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
@@ -715,6 +736,7 @@ static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
 static BOOL PostConnect(freerdp_peer *peer)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
+    UINT32 error;
     if (!ctx->NlaLogon)
     {
         Log("Authentication rejected for peer %s", peer->hostname);
@@ -722,8 +744,15 @@ static BOOL PostConnect(freerdp_peer *peer)
     }
     ctx->Generation = InterlockedIncrement(&ClientGeneration);
     ctx->Authorized = TRUE;
-    AcquireRemoteDisplay(ctx);
-    OpenRemoteFrames(ctx);
+    error = AcquireRemoteDisplay(ctx);
+    if (!error && !OpenRemoteFrames(ctx)) error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
+    if (error)
+    {
+        Log("Peer %s refused: the session has no remote display", peer->hostname);
+        freerdp_set_error_info(ctx->rdp.rdp, error);
+        if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", peer->hostname);
+        return FALSE;
+    }
     if (!FollowInputDesktop(ctx)) return FALSE;
     if (*TransferRoot && WTSVirtualChannelManagerIsChannelJoined(ctx->Vcm, "rdpdr"))
     {
@@ -899,39 +928,27 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
     CURSORINFO cursor = {0};
     RDPVDD_FRAME_ESCAPE frame = {0};
     BITMAP_DATA *rectangle;
-    BOOL remote = FALSE;
+    RECT old;
+    POINT position;
     size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
     if (!ctx->Authorized || !ctx->Active || ctx->Suppressed) return TRUE;
-    if (!FollowInputDesktop(ctx)) return FALSE;
+    if (!FollowInputDesktop(ctx) || !ctx->FrameAdapter) return FALSE;
     ApplyRequestedMode(ctx);
-    width = GetSystemMetrics(SM_CXSCREEN);
-    height = GetSystemMetrics(SM_CYSCREEN);
-    if (ctx->FrameAdapter)
+    if (WaitForSingleObject(ctx->FrameEvent, 0) == WAIT_OBJECT_0) ctx->FramePending = TRUE;
+    frame.Width = ctx->Width;
+    frame.Height = ctx->Height;
+    if (ctx->FramePending)
     {
-        if (WaitForSingleObject(ctx->FrameEvent, 0) == WAIT_OBJECT_0) ctx->FramePending = TRUE;
-        frame.Width = ctx->Width;
-        frame.Height = ctx->Height;
-        if (ctx->FramePending)
-        {
-            ctx->FramePending = FALSE;
-            if (!ReadRemoteFrame(ctx, &frame)) frame.Width = 0;
-        }
-        if (ctx->FrameAdapter && !frame.Width)
-        {
-            ctx->FramePending = TRUE;
-            if (!ctx->FrameInactiveSince) ctx->FrameInactiveSince = GetTickCount() | 1;
-            if (GetTickCount() - ctx->FrameInactiveSince <= REMOTE_FRAME_GRACE) return TRUE;
-            Log("The remote display shows nothing");
-            CloseRemoteFrames(ctx);
-        }
-        if (ctx->FrameAdapter)
-        {
-            ctx->FrameInactiveSince = 0;
-            ctx->FrameWidth = width = (int)frame.Width;
-            ctx->FrameHeight = height = (int)frame.Height;
-            remote = TRUE;
-        }
+        ctx->FramePending = FALSE;
+        if (!ReadRemoteFrame(ctx, &frame)) return FALSE;
     }
+    if (!frame.Width)
+    {
+        ctx->FramePending = TRUE;
+        return TRUE;
+    }
+    ctx->FrameWidth = width = (int)frame.Width;
+    ctx->FrameHeight = height = (int)frame.Height;
     if (ctx->Width != width || ctx->Height != height)
     {
         if (!AllocateCapture(ctx) ||
@@ -943,30 +960,17 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
     }
     cursor.cbSize = sizeof(cursor);
     if (!GetCursorInfo(&cursor)) cursor.flags = 0;
-    if (remote)
-    {
-        RECT old = ctx->CursorRect;
-        POINT position = CursorPosition(ctx, cursor.ptScreenPos);
-        if (!frame.RectCount && !ctx->Refresh && !IsRectEmpty(&old) == !!(cursor.flags & CURSOR_SHOWING) &&
-            cursor.hCursor == ctx->CursorShape && position.x == ctx->CursorPoint.x && position.y == ctx->CursorPoint.y)
-            return TRUE;
-        ctx->CursorShape = cursor.hCursor;
-        ctx->CursorPoint = position;
-        for (i = 0; i < frame.RectCount; ++i) CopyFrameRect(ctx, &frame.Rects[i]);
-        CopyFrameRect(ctx, &old);
-        DrawCursor(ctx, &cursor);
-        MarkTiles(ctx, &ctx->CursorRect);
-    }
-    else
-    {
-        if (!BitBlt(ctx->MemoryDC, 0, 0, ctx->Width, ctx->Height, ctx->ScreenDC, 0, 0, SRCCOPY | CAPTUREBLT))
-        {
-            Log("Desktop capture failed error=%lu", GetLastError());
-            return FALSE;
-        }
-        DrawCursor(ctx, &cursor);
-        memset(ctx->TileMask, 1, (size_t)ctx->TileColumns * ctx->TileRows);
-    }
+    old = ctx->CursorRect;
+    position = CursorPosition(ctx, cursor.ptScreenPos);
+    if (!frame.RectCount && !ctx->Refresh && !IsRectEmpty(&old) == !!(cursor.flags & CURSOR_SHOWING) &&
+        cursor.hCursor == ctx->CursorShape && position.x == ctx->CursorPoint.x && position.y == ctx->CursorPoint.y)
+        return TRUE;
+    ctx->CursorShape = cursor.hCursor;
+    ctx->CursorPoint = position;
+    for (i = 0; i < frame.RectCount; ++i) CopyFrameRect(ctx, &frame.Rects[i]);
+    CopyFrameRect(ctx, &old);
+    DrawCursor(ctx, &cursor);
+    MarkTiles(ctx, &ctx->CursorRect);
     GdiFlush();
     for (y = 0; y < ctx->Height; y += TILE_HEIGHT)
         for (x = 0; x < ctx->Width; x += TILE_WIDTH)
