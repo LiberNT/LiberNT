@@ -89,6 +89,7 @@ list(APPEND SOURCE
     QueueUserAPC.c
     QueryProcessCycleTime.c
     ReadFile.c
+    RemoteThreadInit.c
     RenameDirectoryOldPath.c
     ResizePseudoConsole.c
     SetComputerNameExW.c

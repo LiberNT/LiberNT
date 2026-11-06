@@ -32,7 +32,7 @@ extern ULONG CsrMaxApiRequestThreads;
 /* FUNCTIONS ******************************************************************/
 
 static NTSTATUS
-CsrpRegisterClientThread(PCLIENT_ID ClientId)
+CsrpRegisterClientThread(PCLIENT_ID ClientId, BOOLEAN Connecting)
 {
     NTSTATUS Status;
     PCSR_PROCESS Process;
@@ -40,11 +40,11 @@ CsrpRegisterClientThread(PCLIENT_ID ClientId)
     HANDLE ThreadHandle;
 
     /* The LPC header supplies the sender's kernel-authenticated identity.
-     * Only threads of an already connected, live CSR process may join it. */
+     * Only threads of a live CSR process may join it, and outside its connection request only once it is connected. */
     Status = CsrLockProcessByClientId(ClientId->UniqueProcess, &Process);
     if (!NT_SUCCESS(Status)) return STATUS_ILLEGAL_FUNCTION;
 
-    if (!Process->ClientPort ||
+    if ((!Connecting && !Process->ClientPort) ||
         (Process->Flags & (CsrProcessTerminating | CsrProcessTerminated | CsrProcessLastThreadTerminated)))
     {
         CsrUnlockProcess(Process);
@@ -396,7 +396,8 @@ CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
     if (!CsrThread)
     {
         CsrReleaseProcessLock();
-        CsrpRegisterSessionClient(&ApiMessage->Header.ClientId);
+        if (CsrpRegisterClientThread(&ApiMessage->Header.ClientId, TRUE) == STATUS_ILLEGAL_FUNCTION)
+            CsrpRegisterSessionClient(&ApiMessage->Header.ClientId);
         CsrAcquireProcessLock();
         CsrThread = CsrLocateThreadByClientId(NULL, &ApiMessage->Header.ClientId);
     }
@@ -727,7 +728,7 @@ CsrApiRequestThread(IN PVOID Parameter)
          * create notification. Capture the actual sender on its first API. */
         if (!CsrThread && MessageType == LPC_REQUEST)
         {
-            Status = CsrpRegisterClientThread(&ReceiveMsg.Header.ClientId);
+            Status = CsrpRegisterClientThread(&ReceiveMsg.Header.ClientId, FALSE);
             if (NT_SUCCESS(Status))
                 CsrThread = CsrLocateThreadByClientId(&CsrProcess, &ReceiveMsg.Header.ClientId);
         }
