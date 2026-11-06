@@ -27592,6 +27592,164 @@ interface IHTMLTableSection : IDispatch
 }
 
 /*****************************************************************************
+ *    IHTMLTableSection2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f5c7-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableSection2 : IDispatch
+{
+    [id(DISPID_IHTMLTABLESECTION2_MOVEROW)]
+    HRESULT moveRow(
+            [defaultvalue(-1), in] LONG indexFrom,
+            [defaultvalue(-1), in] LONG indexTo,
+            [retval, out] IDispatch **row);
+}
+
+/*****************************************************************************
+ *    IHTMLTableSection3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82b-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableSection3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableSection4 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c5-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableSection4 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_INSERTROW)]
+    HRESULT insertRow(
+            [defaultvalue(-1), in] LONG index,
+            [retval, out] IDispatch **row);
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_DELETEROW)]
+    HRESULT deleteRow([defaultvalue(-1), in] LONG index);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCol interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f23a-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCol : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECOL_SPAN)]
+    HRESULT span([in] LONG v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_SPAN)]
+    HRESULT span([retval, out] LONG *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    HRESULT width([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    HRESULT width([retval, out] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    HRESULT align([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    HRESULT vAlign([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    HRESULT vAlign([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCol2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82a-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCol2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCol3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c4-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCol3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
  *    IHTMLTableRow interface
  */
 [
@@ -27654,6 +27812,80 @@ interface IHTMLTableRow : IDispatch
 
     [id(DISPID_IHTMLTABLEROW_DELETECELL)]
     HRESULT deleteCell([in, defaultvalue(-1)] LONG index);
+}
+
+/*****************************************************************************
+ *    IHTMLTableRow2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f4a1-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableRow2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLEROW2_HEIGHT)]
+    HRESULT height([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLEROW2_HEIGHT)]
+    HRESULT height([retval, out] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableRow3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82c-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableRow3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLEROW3_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW3_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLEROW3_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW3_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableRow4 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c6-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableRow4 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_INSERTCELL)]
+    HRESULT insertCell(
+            [defaultvalue(-1), in] LONG index,
+            [retval, out] IDispatch **row);
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_DELETECELL)]
+    HRESULT deleteCell([defaultvalue(-1), in] LONG index);
 }
 
 /*****************************************************************************
@@ -27741,6 +27973,78 @@ interface IHTMLTableCell : IDispatch
 
     [propget, id(DISPID_IHTMLTABLECELL_CELLINDEX)]
     HRESULT cellIndex([retval, out] long *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCell2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82d-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCell2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECELL2_ABBR), displaybind, bindable]
+    HRESULT abbr([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_ABBR), displaybind, bindable]
+    HRESULT abbr([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_AXIS), displaybind, bindable]
+    HRESULT axis([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_AXIS), displaybind, bindable]
+    HRESULT axis([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_HEADERS), displaybind, bindable]
+    HRESULT headers([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_HEADERS), displaybind, bindable]
+    HRESULT headers([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_SCOPE), displaybind, bindable]
+    HRESULT scope([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_SCOPE), displaybind, bindable]
+    HRESULT scope([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCell3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c7-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCell3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECELL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
 }
 
 /*****************************************************************************
@@ -27996,6 +28300,24 @@ methods:
 
     [propget, id(DISPID_IHTMLTABLEROW3_CHOFF), displaybind, bindable]
     BSTR chOff();
+
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    void ie9_ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    BSTR ie9_ch();
+
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    void ie9_chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    BSTR ie9_chOff();
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_INSERTCELL)]
+    IDispatch *ie9_insertCell([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_DELETECELL)]
+    void ie9_deleteCell([in, defaultvalue(-1)] LONG index);
 }
 
 /*****************************************************************************
@@ -28013,9 +28335,9 @@ coclass HTMLTableRow
     WINE_HTMLELEMENT_INTERFACES;
     interface IHTMLTableRow;
  /* interface IHTMLTableRowMetrics; */
- /* interface IHTMLTableRow2; */
- /* interface IHTMLTableRow3; */
- /* interface IHTMLTableRow4; */
+    interface IHTMLTableRow2;
+    interface IHTMLTableRow3;
+    interface IHTMLTableRow4;
 }
 
 /*****************************************************************************
@@ -28171,8 +28493,183 @@ coclass HTMLTableCell
     interface IHTMLControlElement;
     interface IHTMLTextContainer;
     interface IHTMLTableCell;
- /* interface IHTMLTableCell2; */
- /* interface IHTMLTableCell3; */
+    interface IHTMLTableCell2;
+    interface IHTMLTableCell3;
+}
+
+/*****************************************************************************
+ *    DispHTMLTableCol dispinterface
+ */
+[
+    hidden,
+    uuid(3050f533-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLTableCol
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLTABLECOL_SPAN)]
+    void span(LONG v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_SPAN)]
+    LONG span();
+
+    [propput, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    void width(VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    VARIANT width();
+
+    [propput, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    void vAlign(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    BSTR vAlign();
+
+    [propput, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    void ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    BSTR ch();
+
+    [propput, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    void chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    BSTR chOff();
+
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    void ie9_ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    BSTR ie9_ch();
+
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    void ie9_chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    BSTR ie9_chOff();
+}
+
+/*****************************************************************************
+ *    HTMLTableCol coclass
+ */
+[
+    noncreatable,
+    uuid(3050f26c-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLTableCol
+{
+    [default]         dispinterface DispHTMLTableCol;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLTableCol;
+    interface IHTMLTableCol2;
+    interface IHTMLTableCol3;
+}
+
+/*****************************************************************************
+ *    DispHTMLTableSection dispinterface
+ */
+[
+    hidden,
+    uuid(3050f534-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLTableSection
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLTABLESECTION_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION_ALIGN)]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLTABLESECTION_VALIGN)]
+    void vAlign(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION_VALIGN)]
+    BSTR vAlign();
+
+    [propput, id(DISPID_IHTMLTABLESECTION_BGCOLOR)]
+    void bgColor(VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION_BGCOLOR)]
+    VARIANT bgColor();
+
+    [propget, id(DISPID_IHTMLTABLESECTION_ROWS)]
+    IHTMLElementCollection *rows();
+
+    [id(DISPID_IHTMLTABLESECTION_INSERTROW)]
+    IDispatch *insertRow([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLESECTION_DELETEROW)]
+    void deleteRow([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLESECTION2_MOVEROW)]
+    IDispatch *moveRow(
+            [in, defaultvalue(-1)] LONG indexFrom,
+            [in, defaultvalue(-1)] LONG indexTo);
+
+    [propput, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    void ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    BSTR ch();
+
+    [propput, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    void chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    BSTR chOff();
+
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    void ie9_ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    BSTR ie9_ch();
+
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    void ie9_chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    BSTR ie9_chOff();
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_INSERTROW)]
+    IDispatch *ie9_insertRow([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_DELETEROW)]
+    void ie9_deleteRow([in, defaultvalue(-1)] LONG index);
+}
+
+/*****************************************************************************
+ *    HTMLTableSection coclass
+ */
+[
+    noncreatable,
+    uuid(3050f2e9-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLTableSection
+{
+    [default]         dispinterface DispHTMLTableSection;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLTableSection;
+    interface IHTMLTableSection2;
+    interface IHTMLTableSection3;
+    interface IHTMLTableSection4;
 }
 
 /*****************************************************************************
