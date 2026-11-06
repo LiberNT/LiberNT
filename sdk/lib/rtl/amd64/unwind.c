@@ -490,12 +490,24 @@ RtlpTryToUnwindEpilog(
         {
             Target = (ULONG64)InstrPtr + 2 + (CHAR)InstrPtr[1];
         }
+        else if ((InstrPtr[0] & 0xf8) == 0x48)
+        {
+            if ((DWORD64)InstrPtr + 3 > EndAddress ||
+                InstrPtr[1] != 0xff ||
+                (InstrPtr[2] & 0x38) != 0x20)
+            {
+                return FALSE;
+            }
+            Target = 0;
+        }
         else
         {
-            if ((InstrPtr[0] & 0xf0) == 0x40)
-                InstrPtr++;
-            if (InstrPtr[0] != 0xff || (InstrPtr[1] & 0xf8) != 0x20)
+            if ((DWORD64)InstrPtr + 6 > EndAddress ||
+                InstrPtr[0] != 0xff ||
+                InstrPtr[1] != 0x25)
+            {
                 return FALSE;
+            }
             Target = 0;
         }
         if (Target != 0 && Target >= BeginAddress && Target < EndAddress)
