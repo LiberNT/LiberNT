@@ -9,6 +9,8 @@
 
 #define LAST_LISTED_FORMAT 115
 #define UNDEFINED_SUPPORT1_BITS 0x00022000u
+#define VIDEO_SUPPORT1_BITS (D3D12_FORMAT_SUPPORT1_DECODER_OUTPUT | D3D12_FORMAT_SUPPORT1_VIDEO_PROCESSOR_OUTPUT \
+        | D3D12_FORMAT_SUPPORT1_VIDEO_PROCESSOR_INPUT | D3D12_FORMAT_SUPPORT1_VIDEO_ENCODER)
 
 struct required_format
 {
@@ -87,8 +89,10 @@ static void RunFormatSupport(void *)
     {
         UINT support = QuerySupport(device, entry.format).Support1;
 
+        /* Video support is the driver's: Windows 11 reports it for R8G8B8A8_UNORM on NVIDIA, not on virtio-gpu. */
         if (entry.exact)
-            ok(support == entry.support1, "format %u: got %#x, expected %#x\n", entry.format, support, entry.support1);
+            ok((support & ~VIDEO_SUPPORT1_BITS) == entry.support1, "format %u: got %#x, expected %#x\n", entry.format,
+               support, entry.support1);
         else
             ok((support & entry.support1) == entry.support1, "format %u: got %#x, required %#x\n", entry.format,
                support, entry.support1);

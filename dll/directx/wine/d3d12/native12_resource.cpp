@@ -157,6 +157,17 @@ static const UINT Native12UnlistedSupport = Native12VideoSupport | D3D12_FORMAT_
 static const UINT Native12D3D11OnlySupport = D3D11_FORMAT_SUPPORT_MIP_AUTOGEN | D3D11_FORMAT_SUPPORT_CPU_LOCKABLE;
 static const UINT Native12Level11Column = 2;
 
+static bool Native12ListedAllows(DXGI_FORMAT format, UINT support)
+{
+    const NATIVE_FORMAT_REQUIREMENT *found = NULL;
+
+    for (const NATIVE_FORMAT_REQUIREMENT &entry : NativeFormatRequirements)
+    {
+        if (entry.Format == format) found = &entry;
+    }
+    return found && (found->Allowed[Native12Level11Column] & support) == support;
+}
+
 static UINT Native12ListedSupport(DXGI_FORMAT format, UINT support)
 {
     const NATIVE_FORMAT_REQUIREMENT *found = NULL;
@@ -234,17 +245,18 @@ void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, bool logic_op, 
         if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_VIDEO_PROCESSOR_INPUT)
             first |= D3D12_FORMAT_SUPPORT1_VIDEO_PROCESSOR_INPUT;
         if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_VIDEO_ENCODER) first |= D3D12_FORMAT_SUPPORT1_VIDEO_ENCODER;
-        if (ddi_support & (D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES | D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS))
+        /* A driver's typed UAV beyond the format list needs writes; reads alone imply it only where the list allows it. */
+        if ((ddi_support & D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES) || ((ddi_support & D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS)
+                && Native12ListedAllows(format, D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW)))
         {
             first |= D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW;
             second |= D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE;
+            if (ddi_support & D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS) second |= D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD;
         }
-        if (ddi_support & D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS) second |= D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD;
         if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_OUTPUT_MERGER_LOGIC_OP)
             second |= D3D12_FORMAT_SUPPORT2_OUTPUT_MERGER_LOGIC_OP;
         if (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_MULTIPLANE_OVERLAY)
             second |= D3D12_FORMAT_SUPPORT2_MULTIPLANE_OVERLAY;
-        if (ddi_support & D3DWDDM1_3DDI_FORMAT_SUPPORT_TILED) second |= D3D12_FORMAT_SUPPORT2_TILED;
 
         if (ddi_support & (D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE | D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET
                 | D3D10_DDI_FORMAT_SUPPORT_BLENDABLE))
