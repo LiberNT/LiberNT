@@ -258,6 +258,7 @@ UserUpdateMonitorSize(IN HDEV hDev)
 {
 	PMONITOR pMonitor;
     SIZEL DeviceSize;
+    RECT rcOldMonitor, rcOldWork;
 
     /* Find monitor attached to given device */
     for (pMonitor = gMonitorList; pMonitor != NULL; pMonitor = pMonitor->pMonitorNext)
@@ -275,6 +276,9 @@ UserUpdateMonitorSize(IN HDEV hDev)
     /* Get the size of the hdev */
     PDEVOBJ_sizl((PPDEVOBJ)hDev, &DeviceSize);
 
+    rcOldMonitor = pMonitor->rcMonitor;
+    rcOldWork = pMonitor->rcWork;
+
     /* Update monitor size; a display of a multi-display desktop sits at its position */
     pMonitor->rcMonitor.left  = 0;
     pMonitor->rcMonitor.top   = 0;
@@ -288,7 +292,16 @@ UserUpdateMonitorSize(IN HDEV hDev)
     }
     pMonitor->rcMonitor.right  = pMonitor->rcMonitor.left + DeviceSize.cx;
     pMonitor->rcMonitor.bottom = pMonitor->rcMonitor.top + DeviceSize.cy;
-    pMonitor->rcWork = pMonitor->rcMonitor;
+    pMonitor->rcWork.left = pMonitor->rcMonitor.left + (rcOldWork.left - rcOldMonitor.left);
+    pMonitor->rcWork.top = pMonitor->rcMonitor.top + (rcOldWork.top - rcOldMonitor.top);
+    pMonitor->rcWork.right = pMonitor->rcMonitor.right - (rcOldMonitor.right - rcOldWork.right);
+    pMonitor->rcWork.bottom = pMonitor->rcMonitor.bottom - (rcOldMonitor.bottom - rcOldWork.bottom);
+    if (pMonitor->rcWork.left < pMonitor->rcMonitor.left || pMonitor->rcWork.top < pMonitor->rcMonitor.top ||
+        pMonitor->rcWork.right > pMonitor->rcMonitor.right || pMonitor->rcWork.bottom > pMonitor->rcMonitor.bottom ||
+        pMonitor->rcWork.left >= pMonitor->rcWork.right || pMonitor->rcWork.top >= pMonitor->rcWork.bottom)
+    {
+        pMonitor->rcWork = pMonitor->rcMonitor;
+    }
 
     /* Destroy monitor region... */
     if (pMonitor->hrgnMonitor)
