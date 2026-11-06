@@ -4345,8 +4345,10 @@ DxgkpDisplayDispatch(
                 DirtyRects = Input->Rects;
             }
 
+            /* The source reaches DxgkDdiPresentDisplayOnly, whose pSource is kernel memory. */
             if ((RectCount == 0 && Flags == 0) ||
-                Source == NULL || SourcePitch == 0 || SourceSize == 0)
+                Source == NULL || SourcePitch == 0 || SourceSize == 0 ||
+                (ULONG_PTR)Source < (ULONG_PTR)MmSystemRangeStart)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;

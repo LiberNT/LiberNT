@@ -12,6 +12,7 @@ KMT_TESTFUNC Test_DxgkDeviceWork;
 KMT_TESTFUNC Test_DxgkHotPlugWork;
 KMT_TESTFUNC Test_DxgkChildDescriptor;
 KMT_TESTFUNC Test_DxgkPostDisplayHandoff;
+KMT_TESTFUNC Test_DxgkPresentUserSource;
 KMT_TESTFUNC Test_DxgkGpuVaAddress;
 KMT_TESTFUNC Test_DxgkGpuVaPageTable;
 KMT_TESTFUNC Test_DxgkGpuVaPte;
@@ -371,6 +372,7 @@ const KMT_TEST TestList[] =
     { "DxgkHotPlugWork",                   Test_DxgkHotPlugWork },
     { "DxgkChildDescriptor",               Test_DxgkChildDescriptor },
     { "DxgkPostDisplayHandoff",            Test_DxgkPostDisplayHandoff },
+    { "DxgkPresentUserSource",             Test_DxgkPresentUserSource },
     { "DxgkGpuVaAddress",                   Test_DxgkGpuVaAddress },
     { "DxgkGpuVaPageTable",                 Test_DxgkGpuVaPageTable },
     { "DxgkGpuVaPte",                       Test_DxgkGpuVaPte },

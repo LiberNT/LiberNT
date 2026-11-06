@@ -264,15 +264,15 @@ RcddPresentComposition(PRCDD_PDEV ppdev, const CDD_PRESENT_SOURCE *Source)
       return FALSE;
 
    /* Keep the shared GDI primary authoritative for GetPixel, capture and
-    * shared-allocation users. The scanout copy reads DWM's cached user bitmap
-    * directly, without another full-screen staging copy. */
+    * shared-allocation users. Scanout reads the rectangle from that kernel
+    * copy: DWM's bitmap is user memory, which miniports cannot read. */
    RcddCopyPresentRect(ppdev->ScreenPtr, ppdev->ScreenDelta,
                        (PVOID)Source->Bits, Source->Pitch, Rect);
    InterlockedIncrement((volatile LONG *)&ppdev->DrawSeq);
    RcddAccumulateDirtyRect(ppdev, Rect);
    InterlockedIncrement((volatile LONG *)&ppdev->PresentQueuedCount);
-   SourceBytes = (SIZE_T)Source->Pitch * Source->Height;
-   Notified = RcddNotifyDirtyRects(ppdev, (PVOID)Source->Bits, Source->Pitch,
+   SourceBytes = (SIZE_T)ppdev->ScreenDelta * ppdev->ScreenHeight;
+   Notified = RcddNotifyDirtyRects(ppdev, ppdev->ScreenPtr, ppdev->ScreenDelta,
                                    (ULONG)SourceBytes, Rect, 1,
                                    DXGK_PRESENT_DIRTY_FLUSH);
    if (!Notified)
