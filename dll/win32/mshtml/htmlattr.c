@@ -39,6 +39,54 @@ static inline HTMLDOMAttribute *impl_from_IHTMLDOMAttribute(IHTMLDOMAttribute *i
 
 DISPEX_IDISPATCH_IMPL(HTMLDOMAttribute, IHTMLDOMAttribute, impl_from_IHTMLDOMAttribute(iface)->node.event_target.dispex)
 
+static HRESULT resolve_attr_only(HTMLDOMAttribute *This, BOOL ensure)
+{
+    DISPID id;
+    HRESULT hres;
+
+    if(This->dispid != DISPID_UNKNOWN)
+        return S_OK;
+
+    hres = dispex_get_id(&This->elem->node.event_target.dispex, This->name,
+                         fdexNameCaseInsensitive | (ensure ? fdexNameEnsure : 0), &id);
+    if(hres == DISP_E_UNKNOWNNAME && !ensure)
+        return S_FALSE;
+    if(FAILED(hres))
+        return hres;
+
+    This->dispid = id;
+    return S_OK;
+}
+
+static HRESULT get_attached_attr_value(HTMLDOMAttribute *This, VARIANT *p)
+{
+    HRESULT hres;
+
+    hres = resolve_attr_only(This, FALSE);
+    if(FAILED(hres))
+        return hres;
+    if(hres == S_FALSE) {
+        V_VT(p) = VT_NULL;
+        return S_OK;
+    }
+
+    return get_elem_attr_value_by_dispid(This->elem, This->dispid, p);
+}
+
+static HRESULT get_attached_attr_name(HTMLDOMAttribute *This, BSTR *p)
+{
+    DispatchEx *dispex = &This->elem->node.event_target.dispex;
+
+    if(This->dispid == DISPID_UNKNOWN)
+        *p = SysAllocString(This->name);
+    else if(get_dispid_type(This->dispid) == DISPEXPROP_BUILTIN)
+        *p = SysAllocString(dispex_builtin_attr_name(dispex, This->dispid));
+    else
+        return dispex_prop_name(dispex, This->dispid, p);
+
+    return *p ? S_OK : E_OUTOFMEMORY;
+}
+
 static HRESULT WINAPI HTMLDOMAttribute_get_nodeName(IHTMLDOMAttribute *iface, BSTR *p)
 {
     HTMLDOMAttribute *This = impl_from_IHTMLDOMAttribute(iface);
@@ -58,13 +106,14 @@ static HRESULT WINAPI HTMLDOMAttribute_get_nodeName(IHTMLDOMAttribute *iface, BS
         return *p ? S_OK : E_OUTOFMEMORY;
     }
 
-    return dispex_prop_name(&This->elem->node.event_target.dispex, This->dispid, p);
+    return get_attached_attr_name(This, p);
 }
 
 static HRESULT WINAPI HTMLDOMAttribute_put_nodeValue(IHTMLDOMAttribute *iface, VARIANT v)
 {
     HTMLDOMAttribute *This = impl_from_IHTMLDOMAttribute(iface);
     EXCEPINFO ei;
+    HRESULT hres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
@@ -73,6 +122,10 @@ static HRESULT WINAPI HTMLDOMAttribute_put_nodeValue(IHTMLDOMAttribute *iface, V
 
     if(!This->elem)
         return VariantCopy(&This->value, &v);
+
+    hres = resolve_attr_only(This, TRUE);
+    if(FAILED(hres))
+        return hres;
 
     memset(&ei, 0, sizeof(ei));
     return dispex_prop_put(&This->elem->node.event_target.dispex, This->dispid, LOCALE_SYSTEM_DEFAULT, &v, &ei, NULL);
@@ -90,7 +143,7 @@ static HRESULT WINAPI HTMLDOMAttribute_get_nodeValue(IHTMLDOMAttribute *iface, V
     if(!This->elem)
         return VariantCopy(p, &This->value);
 
-    return get_elem_attr_value_by_dispid(This->elem, This->dispid, p);
+    return get_attached_attr_value(This, p);
 }
 
 static HRESULT WINAPI HTMLDOMAttribute_get_specified(IHTMLDOMAttribute *iface, VARIANT_BOOL *p)
@@ -110,7 +163,7 @@ static HRESULT WINAPI HTMLDOMAttribute_get_specified(IHTMLDOMAttribute *iface, V
         return S_OK;
     }
 
-    if(!This->elem || !This->elem->dom_element) {
+    if(!This->elem || !This->elem->dom_element || resolve_attr_only(This, FALSE) != S_OK) {
         *p = VARIANT_FALSE;
         return S_OK;
     }
@@ -121,7 +174,7 @@ static HRESULT WINAPI HTMLDOMAttribute_get_specified(IHTMLDOMAttribute *iface, V
     }
 
     /* FIXME: This is not exactly right, we have some attributes that don't map directly to Gecko attributes. */
-    nsAString_InitDepend(&nsname, dispex_builtin_prop_name(&This->elem->node.event_target.dispex, This->dispid));
+    nsAString_InitDepend(&nsname, dispex_builtin_attr_name(&This->elem->node.event_target.dispex, This->dispid));
     nsres = nsIDOMElement_HasAttribute(This->elem->dom_element, &nsname, &r);
     nsAString_Finish(&nsname);
 
@@ -190,7 +243,7 @@ static HRESULT WINAPI HTMLDOMAttribute2_get_value(IHTMLDOMAttribute2 *iface, BST
 
     V_VT(&val) = VT_EMPTY;
     if(This->elem)
-        hres = get_elem_attr_value_by_dispid(This->elem, This->dispid, &val);
+        hres = get_attached_attr_value(This, &val);
     else
         hres = VariantCopy(&val, &This->value);
     if(SUCCEEDED(hres))
@@ -428,14 +481,14 @@ static HRESULT WINAPI HTMLDOMAttribute2_cloneNode(IHTMLDOMAttribute2 *iface, VAR
     }
 
     if(This->elem) {
-        hres = dispex_prop_name(&This->elem->node.event_target.dispex, This->dispid, &name);
+        hres = get_attached_attr_name(This, &name);
         if(FAILED(hres))
             return hres;
         hres = HTMLDOMAttribute_Create(name, NULL, 0, This->doc, &new_attr);
         SysFreeString(name);
         if(FAILED(hres))
             return hres;
-        hres = get_elem_attr_value_by_dispid(This->elem, This->dispid, &new_attr->value);
+        hres = get_attached_attr_value(This, &new_attr->value);
     }else {
         hres = HTMLDOMAttribute_Create(This->name, NULL, 0, This->doc, &new_attr);
         if(FAILED(hres))

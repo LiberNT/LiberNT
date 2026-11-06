@@ -502,6 +502,7 @@ static void HTMLTextAreaElement_init_dispex_info(dispex_data_t *info, compat_mod
         {DISPID_IHTMLTEXTAREAELEMENT_VALUE,  .noattr = TRUE},
         {DISPID_IHTMLTEXTAREAELEMENT_TYPE,   .noattr = TRUE},
         {DISPID_IHTMLTEXTAREAELEMENT_STATUS, .noattr = TRUE},
+        {DISPID_IHTMLTEXTAREAELEMENT_DEFAULTVALUE, .noattr = TRUE},
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLTextAreaElement_tid, hooks);
