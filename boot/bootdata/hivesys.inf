@@ -2119,6 +2119,14 @@ HKLM,"SYSTEM\CurrentControlSet\Services\stornvme","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\stornvme","Type",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\stornvme","Tag",0x00010001,0x00000006
 
+; vioblk driver (StorPort VirtIO block miniport)
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","ErrorControl",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","Group",0x00000000,"SCSI Miniport"
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","ImagePath",0x00020000,"system32\drivers\vioblk.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","Start",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk\Parameters","BusType",0x00010001,0x00000001
+
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","Group",0x00000000,"SCSI Miniport"
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","ImagePath",0x00020000,"system32\drivers\lsi_sas.sys"
