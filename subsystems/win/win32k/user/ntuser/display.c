@@ -1231,6 +1231,45 @@ UserUpdateDisplayInfo(
 
 static
 VOID
+FASTCALL
+co_UserResizeDesktopForDisplayChange(
+    _In_ PDESKTOP pdesk)
+{
+    USER_REFERENCE_ENTRY Ref;
+    PWND DesktopWindow;
+
+    if ((pdesk->dwDTFlags & (DF_DESTROYED | DF_DYING | DF_DESKWNDDESTROYED)) || !pdesk->pDeskInfo)
+        return;
+    DesktopWindow = pdesk->pDeskInfo->spwnd;
+    if (!DesktopWindow)
+        return;
+    UserRefObjectCo(DesktopWindow, &Ref);
+    co_WinPosSetWindowPos(DesktopWindow, NULL, 0, 0,
+                          gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN],
+                          SWP_NOZORDER | SWP_NOACTIVATE);
+    UserDerefObjectCo(DesktopWindow);
+    if (pdesk != gpdeskInputDesktop)
+        pdesk->dwDTFlags |= DF_DISPLAYCHANGED;
+}
+
+VOID
+FASTCALL
+UserNotifyDesktopDisplayChange(
+    _In_ PDESKTOP pdesk)
+{
+    if (!(pdesk->dwDTFlags & DF_DISPLAYCHANGED))
+        return;
+    pdesk->dwDTFlags &= ~DF_DISPLAYCHANGED;
+    if (!pdesk->pDeskInfo || !pdesk->pDeskInfo->spwnd)
+        return;
+    UserSendNotifyMessageToDesktop(pdesk->pDeskInfo->spwnd,
+                                   WM_DISPLAYCHANGE,
+                                   gpsi->BitCount,
+                                   MAKELONG(gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN]));
+}
+
+static
+VOID
 UserNotifyDisplayChange(
     _In_ WORD OrigBC,
     _In_ DWORD flags)
@@ -1240,6 +1279,9 @@ UserNotifyDisplayChange(
 
     //pdesk = IntGetActiveDesktop();
     //IntHideDesktop(pdesk);
+
+    if (gpDisplaySession)
+        UserForEachSessionDesktop(gpDisplaySession, co_UserResizeDesktopForDisplayChange);
 
     /* Send WM_DISPLAYCHANGE to all toplevel windows */
     UserSendNotifyMessage(HWND_BROADCAST,
@@ -1868,8 +1910,10 @@ NtUserChangeDisplaySettings(
     /* Acquire global USER lock */
     UserEnterExclusive();
 
-    /* Call internal function */
-    lRet = UserChangeDisplaySettings(pustrDevice, lpDevMode, dwflags, NULL);
+    if (!(dwflags & CDS_NORESET) && GetW32ThreadInfo()->rpdesk != gpdeskInputDesktop)
+        lRet = DISP_CHANGE_FAILED;
+    else
+        lRet = UserChangeDisplaySettings(pustrDevice, lpDevMode, dwflags, NULL);
 
     /* Release lock */
     UserLeave();
