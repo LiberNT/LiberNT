@@ -374,36 +374,76 @@ LxCredCommit(
     }
 }
 
-VOID
+BOOLEAN
+LxCredRootOwnsNs(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG RootId)
+{
+    PLX_NS Ns;
+
+    if (RootId == MAXULONG)
+        return FALSE;
+    for (Ns = LxCredUserNs(Process); Ns != NULL; Ns = Ns->Parent)
+    {
+        if (LxIdFromKernel(Ns, FALSE, RootId) == 0)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+ULONG
 LxCredExec(
     _Inout_ PLX_PROCESS Process,
-    _In_ PLX_CRED_SAVE Old)
+    _In_ PLX_CRED_SAVE Old,
+    _In_ PLX_FILE_CAPS FileCaps)
 {
     ULONG Root = LxCredMakeId(Process, FALSE, 0);
     ULONG64 Permitted = 0;
-    BOOLEAN Effective = FALSE, IdChanged;
+    BOOLEAN Effective = FALSE, IdChanged, Gained;
+    ULONG Result = 0;
 
-    if (!(Process->SecureBits & LX_SECBIT_NOROOT))
+    if (FileCaps->Present)
+    {
+        Permitted = (FileCaps->Permitted & Process->CapBounding) | (FileCaps->Inheritable & Process->CapInheritable);
+        Effective = FileCaps->Effective;
+    }
+    if (!(Process->SecureBits & LX_SECBIT_NOROOT) &&
+        !(FileCaps->Present && (Process->Uid[1] == Root) && (Process->Uid[0] != Root)))
     {
         if ((Process->Uid[1] == Root) || (Process->Uid[0] == Root))
             Permitted = Process->CapBounding | Process->CapInheritable;
-        Effective = (Process->Uid[1] == Root);
+        if (Process->Uid[1] == Root)
+            Effective = TRUE;
     }
+    Gained = (Permitted & ~Old->CapPermitted) != 0;
+    if (Gained)
+        Result |= LX_CRED_EXEC_GAINED;
     IdChanged = (Process->Uid[1] != Old->Uid[1]) || !LxInGroup(Process, Process->Gid[1]);
-    if ((IdChanged || (Permitted & ~Old->CapPermitted)) && Process->NoNewPrivs)
+    if ((IdChanged || Gained) && Process->NoNewPrivs)
         Permitted &= Old->CapPermitted;
 
     Process->Uid[2] = Process->Fsuid = Process->Uid[1];
     Process->Gid[2] = Process->Fsgid = Process->Gid[1];
-    if (IdChanged)
+    if (FileCaps->Present || IdChanged)
         Process->CapAmbient = 0;
     Permitted |= Process->CapAmbient;
     Process->CapPermitted = Permitted;
     Process->CapEffective = Effective ? Permitted : Process->CapAmbient;
     Process->SecureBits &= ~LX_SECBIT_KEEP_CAPS;
-    if (IdChanged || (Process->Uid[1] != Process->Uid[0]) || (Process->Gid[1] != Process->Gid[0]))
+    if (IdChanged || (Process->Uid[1] != Old->Uid[0]) || (Process->Gid[1] != Old->Gid[0]) ||
+        ((Process->Uid[0] != Root) && (Effective || (Permitted & ~Process->CapAmbient))))
+    {
+        Result |= LX_CRED_EXEC_SECURE;
+    }
+    Gained = (Permitted & ~Old->CapPermitted) != 0;
+    if ((Result & LX_CRED_EXEC_SECURE) || Gained || (Process->Uid[1] != Old->Uid[1]) ||
+        (Process->Gid[1] != Old->Gid[1]) || (Process->Fsuid != Old->Fsuid) || (Process->Fsgid != Old->Fsgid))
+    {
         Process->PdeathSignal = 0;
-    Process->Dumpable = ((Process->Uid[1] == Process->Uid[0]) && (Process->Gid[1] == Process->Gid[0])) ? 1 : LX_SUID_DUMPABLE;
+    }
+    Process->Dumpable = ((Process->Uid[1] == Process->Uid[0]) && (Process->Gid[1] == Process->Gid[0]) && !Gained) ?
+                        1 : LX_SUID_DUMPABLE;
+    return Result;
 }
 
 LONG

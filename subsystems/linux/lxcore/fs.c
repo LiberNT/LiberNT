@@ -2542,9 +2542,7 @@ LX_SYSCALL(LxSysUmount2)
 
 #define LX_XATTR_CREATE     0x1
 #define LX_XATTR_REPLACE    0x2
-#define LX_XATTR_NAME_MAX   255
 #define LX_XATTR_SIZE_MAX   65536
-#define LX_XATTR_BLOB_MAX   65535
 
 typedef struct _LX_XATTR_TARGET
 {
@@ -2717,6 +2715,8 @@ LxXattrPermission(
     ULONG Type = Target->Type & LX_S_IFMT;
     ULONG Bits;
 
+    if (strcmp(Name, LX_XATTR_NAME_CAPS) == 0)
+        return (Write && !LxCapableWrtIds(Process, Target->Uid, Target->Gid, LX_CAP_SETFCAP)) ? -LX_EPERM : 0;
     if (strncmp(Name, "security.", 9) == 0)
         return (Write && !Admin) ? -LX_EPERM : 0;
     if (strncmp(Name, "trusted.", 8) == 0)
@@ -2745,6 +2745,80 @@ LxXattrPermission(
     else
         Bits = Target->Mode;
     return (Bits & (Write ? 2 : 4)) ? 0 : -LX_EACCES;
+}
+
+static
+BOOLEAN
+LxXattrCapsHeader(
+    _In_reads_bytes_(Length) PUCHAR Value,
+    _In_ ULONG Length)
+{
+    ULONG Magic;
+
+    if ((Length != LX_XATTR_CAPS_SZ_2) && (Length != LX_XATTR_CAPS_SZ_3))
+        return FALSE;
+    RtlCopyMemory(&Magic, Value, sizeof(Magic));
+    Magic &= ~LX_VFS_CAP_FLAGS_EFFECTIVE;
+    return (Length == LX_XATTR_CAPS_SZ_2) ? (Magic == LX_VFS_CAP_REVISION_2) : (Magic == LX_VFS_CAP_REVISION_3);
+}
+
+static
+LONG
+LxXattrCapsView(
+    _In_ PLX_PROCESS Process,
+    _In_reads_bytes_(Length) PUCHAR Value,
+    _In_ ULONG Length,
+    _Out_writes_bytes_to_(LX_XATTR_CAPS_SZ_3, *Converted) PUCHAR Out,
+    _Out_ PULONG Converted)
+{
+    ULONG Words[LX_XATTR_CAPS_SZ_3 / sizeof(ULONG)] = { 0 };
+    ULONG Root, Mapped, Effective;
+
+    *Converted = 0;
+    if (!LxXattrCapsHeader(Value, Length))
+        return -LX_EINVAL;
+    RtlCopyMemory(Words, Value, Length);
+    Root = (Length == LX_XATTR_CAPS_SZ_3) ? Words[5] : 0;
+    Effective = Words[0] & LX_VFS_CAP_FLAGS_EFFECTIVE;
+    Mapped = LxIdFromKernel(LxCredUserNs(Process), FALSE, Root);
+    if ((Mapped != MAXULONG) && (Mapped != 0))
+    {
+        Words[0] = LX_VFS_CAP_REVISION_3 | Effective;
+        Words[5] = Mapped;
+        *Converted = LX_XATTR_CAPS_SZ_3;
+    }
+    else
+    {
+        if (!LxCredRootOwnsNs(Process, Root))
+            return -LX_EOVERFLOW;
+        Words[0] = LX_VFS_CAP_REVISION_2 | Effective;
+        *Converted = LX_XATTR_CAPS_SZ_2;
+    }
+    RtlCopyMemory(Out, Words, *Converted);
+    return 0;
+}
+
+static
+LONG
+LxXattrCapsStore(
+    _In_ PLX_PROCESS Process,
+    _Inout_updates_bytes_(LX_XATTR_CAPS_SZ_3) PUCHAR Value,
+    _Inout_ PULONG Length)
+{
+    ULONG Words[LX_XATTR_CAPS_SZ_3 / sizeof(ULONG)] = { 0 };
+    ULONG Root;
+
+    if ((*Length == LX_XATTR_CAPS_SZ_2) && LxCapable(Process, LX_CAP_SETFCAP))
+        return 0;
+    RtlCopyMemory(Words, Value, *Length);
+    Root = LxCredMakeId(Process, FALSE, (*Length == LX_XATTR_CAPS_SZ_3) ? Words[5] : 0);
+    if (Root == MAXULONG)
+        return -LX_EINVAL;
+    Words[0] = LX_VFS_CAP_REVISION_3 | (Words[0] & LX_VFS_CAP_FLAGS_EFFECTIVE);
+    Words[5] = Root;
+    RtlCopyMemory(Value, Words, LX_XATTR_CAPS_SZ_3);
+    *Length = LX_XATTR_CAPS_SZ_3;
+    return 0;
 }
 
 static
@@ -2799,6 +2873,61 @@ LxXattrFind(
     *RecordLength = 0;
     *ValueLength = 0;
     return NULL;
+}
+
+LONG
+LxFileReadXattr(
+    _In_ PLX_FILE File,
+    _In_ PCSTR Name,
+    _Out_writes_bytes_to_(Capacity, *Length) PUCHAR Buffer,
+    _In_ ULONG Capacity,
+    _Out_ PULONG Length)
+{
+    PLX_TMPFS_INODE Inode = LxTmpfsFileInode(File);
+    PUCHAR Blob = LxAllocPaged(LX_XATTR_BLOB_MAX), Record;
+    ULONG BlobLength = 0, RecordLength;
+    USHORT ValueLength;
+    HANDLE Handle = NULL;
+    BOOLEAN Close = FALSE;
+    LONG Error;
+
+    *Length = 0;
+    if (Blob == NULL)
+        return -LX_ENOMEM;
+    if (Inode != NULL)
+    {
+        Error = LxTmpfsXattrRead(Inode, Blob, LX_XATTR_BLOB_MAX, &BlobLength);
+    }
+    else
+    {
+        Error = LxXattrOpenFile(File, FALSE, &Handle, &Close);
+        if (Error == 0)
+        {
+            Error = LxXattrRead(Handle, Blob, LX_XATTR_BLOB_MAX, &BlobLength);
+            if (Close && (Handle != NULL))
+                ZwClose(Handle);
+        }
+    }
+    if (Error != 0)
+    {
+        LxFreePaged(Blob);
+        return Error;
+    }
+    Record = LxXattrFind(Blob, BlobLength, Name, &RecordLength, &ValueLength);
+    if (Record == NULL)
+    {
+        LxFreePaged(Blob);
+        return -LX_ENODATA;
+    }
+    if (ValueLength > Capacity)
+    {
+        LxFreePaged(Blob);
+        return -LX_ERANGE;
+    }
+    RtlCopyMemory(Buffer, Record + RecordLength - ValueLength, ValueLength);
+    *Length = ValueLength;
+    LxFreePaged(Blob);
+    return 0;
 }
 
 LONG
@@ -2859,19 +2988,31 @@ LxXattrGetCommon(
         Result = LxXattrTargetRead(Target, Blob, LX_XATTR_BLOB_MAX, &Length);
     if (Result == 0)
     {
+        UCHAR Caps[LX_XATTR_CAPS_SZ_3];
+        PUCHAR Data = NULL;
+        ULONG DataLength = 0;
+
         Record = LxXattrFind(Blob, Length, Name, &RecordLength, &ValueLength);
         if (Record == NULL)
+        {
             Result = -LX_ENODATA;
-        else if (Size == 0)
-            Result = ValueLength;
-        else if (Size < ValueLength)
-            Result = -LX_ERANGE;
+        }
+        else if (strcmp(Name, LX_XATTR_NAME_CAPS) == 0)
+        {
+            Result = LxXattrCapsView(Call->Process, Record + 4 + strlen(Name), ValueLength, Caps, &DataLength);
+            Data = Caps;
+        }
         else
         {
-            Result = LxCopyToUser(Value, Record + 4 + strlen(Name), ValueLength);
-            if (Result == 0)
-                Result = ValueLength;
+            Data = Record + 4 + strlen(Name);
+            DataLength = ValueLength;
         }
+        if ((Result == 0) && (Size != 0) && (Size < DataLength))
+            Result = -LX_ERANGE;
+        else if ((Result == 0) && (Size != 0))
+            Result = LxCopyToUser(Value, Data, DataLength);
+        if (Result == 0)
+            Result = DataLength;
     }
     LxFree(Name);
     LxFree(Blob);
@@ -2890,7 +3031,9 @@ LxXattrSetCommon(
     _In_ BOOLEAN Remove)
 {
     PUCHAR Blob = LxAlloc(2 * LX_XATTR_BLOB_MAX + LX_XATTR_SIZE_MAX), Record, Updated;
-    ULONG Length, RecordLength, NameLength, NewLength;
+    ULONG Length, RecordLength, NameLength, NewLength, CapsLength = 0;
+    UCHAR Caps[LX_XATTR_CAPS_SZ_3];
+    BOOLEAN IsCaps = FALSE;
     USHORT ValueLength;
     PSTR Name = NULL;
     LONG64 Result;
@@ -2903,8 +3046,21 @@ LxXattrSetCommon(
         Result = -LX_EINVAL;
     if ((Result == 0) && !Remove && (Size > LX_XATTR_SIZE_MAX))
         Result = -LX_E2BIG;
+    if ((Result == 0) && !Remove && (Size != 0) && (strcmp(Name, LX_XATTR_NAME_CAPS) == 0))
+    {
+        IsCaps = TRUE;
+        CapsLength = (ULONG)min(Size, sizeof(Caps));
+        Result = LxCopyFromUser(Caps, Value, CapsLength);
+        if ((Result == 0) && ((Size > sizeof(Caps)) || !LxXattrCapsHeader(Caps, CapsLength)))
+            Result = -LX_EINVAL;
+    }
     if (Result == 0)
         Result = LxXattrPermission(Call->Process, Name, Target, TRUE);
+    if ((Result == 0) && IsCaps)
+    {
+        Result = LxXattrCapsStore(Call->Process, Caps, &CapsLength);
+        Size = CapsLength;
+    }
     if (Result == 0)
         Result = LxXattrTargetRead(Target, Blob, LX_XATTR_BLOB_MAX, &Length);
     if (Result != 0)
@@ -2947,7 +3103,10 @@ LxXattrSetCommon(
         }
         RtlCopyMemory(Updated + NewLength, Lengths, 4);
         RtlCopyMemory(Updated + NewLength + 4, Name, NameLength);
-        Result = LxCopyFromUser(Updated + NewLength + 4 + NameLength, Value, (SIZE_T)Size);
+        if (IsCaps)
+            RtlCopyMemory(Updated + NewLength + 4 + NameLength, Caps, CapsLength);
+        else
+            Result = LxCopyFromUser(Updated + NewLength + 4 + NameLength, Value, (SIZE_T)Size);
         if (Result != 0)
             goto Exit;
         NewLength += 4 + NameLength + (ULONG)Size;
