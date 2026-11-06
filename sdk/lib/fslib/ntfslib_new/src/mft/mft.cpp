@@ -11,6 +11,8 @@
 
 #define MFT_ALLOCATION_BITMAP_CHUNK_SIZE 0x10000
 #define MFT_FIRST_ORDINARY_FILE_RECORD (NTFS_LAST_RESERVED_FILE_RECORD + 1)
+/* Records 16-23 stay free for $MFT extension records, which must lie in the first $MFT run. */
+#define MFT_FIRST_ALLOCATABLE_FILE_RECORD 24
 
 /*
  * Reserve $MFT data in coarse chunks so its records stay in long runs
@@ -630,7 +632,7 @@ MasterFileTable::AllocateFileRecord(
         MFTDataAttr->NonResident.DataSize /
         FileRecordSize;
     if (RecordCount <
-        MFT_FIRST_ORDINARY_FILE_RECORD)
+        MFT_FIRST_ALLOCATABLE_FILE_RECORD)
     {
         return STATUS_FILE_CORRUPT_ERROR;
     }
@@ -659,7 +661,7 @@ MasterFileTable::AllocateFileRecord(
      * second pass covers the skipped region, so a full bitmap is still
      * detected and freed records are still reused.
      */
-    ULONGLONG ScanStart = MFT_FIRST_ORDINARY_FILE_RECORD / 8;
+    ULONGLONG ScanStart = MFT_FIRST_ALLOCATABLE_FILE_RECORD / 8;
     ULONGLONG ScanLimit = BitmapByteCount;
     BOOLEAN SecondPass = FALSE;
 
@@ -717,7 +719,7 @@ ScanAgain:
                         !(BitmapBuffer[Index] &
                           (1u << Bit)) &&
                         FirstRecord + Bit >=
-                            MFT_FIRST_ORDINARY_FILE_RECORD)
+                            MFT_FIRST_ALLOCATABLE_FILE_RECORD)
                     {
                         Candidate =
                             FirstRecord + Bit;
@@ -735,12 +737,12 @@ ScanAgain:
     }
 
     if (!Found && !SecondPass &&
-        ScanStart > MFT_FIRST_ORDINARY_FILE_RECORD / 8)
+        ScanStart > MFT_FIRST_ALLOCATABLE_FILE_RECORD / 8)
     {
         /* Cover the region the hint skipped over. */
         SecondPass = TRUE;
         ScanLimit = ScanStart;
-        ScanStart = MFT_FIRST_ORDINARY_FILE_RECORD / 8;
+        ScanStart = MFT_FIRST_ALLOCATABLE_FILE_RECORD / 8;
         goto ScanAgain;
     }
 

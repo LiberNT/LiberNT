@@ -67,8 +67,10 @@ free_before=$("$driver" --probe "$image" |
 metadata_before=$(metadata_allocation)
 cluster_size=$("$ntfsinfo" -m "$image" | awk '/Cluster Size:/ { print $3; exit }')
 
-# Empty file creation publishes an ordinary base record.
+# Empty file creation publishes an ordinary base record. Records 16-23
+# stay free for $MFT extension records, as on volumes Windows writes.
 file_record=$("$driver" --create-file "$image" /alpha.txt)
+test "$file_record" -ge 24
 test "$(mft_bitmap_bit "$file_record" "$image")" = 1
 
 # Empty directory creation, nested parents, and a trailing separator.
