@@ -84,6 +84,14 @@ static HRESULT d3d10_create_device1(IDXGIAdapter *adapter, D3D10_DRIVER_TYPE dri
     if (!hw_level)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (flags & D3D10_CREATE_DEVICE_DEBUG)
+    {
+        WARN("The Direct3D 10 SDK layers are not installed.\n");
+        return DXGI_ERROR_SDK_COMPONENT_MISSING;
+    }
+#endif
+
     if (adapter)
     {
         IDXGIAdapter_AddRef(adapter);
@@ -158,9 +166,15 @@ static HRESULT d3d10_create_device1(IDXGIAdapter *adapter, D3D10_DRIVER_TYPE dri
             }
 
             default:
+#ifdef __REACTOS__
+                WARN("Invalid driver type %#x.\n", driver_type);
+                IDXGIFactory_Release(factory);
+                return E_INVALIDARG;
+#else
                 FIXME("Unhandled driver type %#x.\n", driver_type);
                 IDXGIFactory_Release(factory);
                 return E_FAIL;
+#endif
         }
     }
 
