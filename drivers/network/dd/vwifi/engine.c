@@ -16,6 +16,7 @@
 #define VWIFI_IE_SSID               0
 #define VWIFI_IE_SUPPORTED_RATES    1
 #define VWIFI_IE_DS_PARAMETER_SET   3
+#define VWIFI_IE_RSN                48
 
 /* 802.11 capability bits. */
 #define VWIFI_CAP_ESS               0x0001
@@ -87,6 +88,8 @@ VWifiBuildBeaconIes(
     /* 802.11b/g supported rates, in 500 kbit/s units; high bit = basic rate.
      * 1, 2, 5.5, 11 (basic) + 6, 9, 12, 18 Mbit/s. */
     static const UCHAR Rates[] = { 0x82, 0x84, 0x8B, 0x96, 0x0C, 0x12, 0x18, 0x24 };
+    static const UCHAR RsnPskCcmp[] = { 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04, 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04,
+                                        0x01, 0x00, 0x00, 0x0F, 0xAC, 0x02, 0x00, 0x00 };
     ULONG Offset = 0;
 
     if (Offset + 2 + Bss->SsidLength > BufferLength)
@@ -108,6 +111,13 @@ VWifiBuildBeaconIes(
     Buffer[Offset++] = VWIFI_IE_DS_PARAMETER_SET;
     Buffer[Offset++] = 1;
     Buffer[Offset++] = (UCHAR)Bss->ChannelNumber;
+
+    if (Bss->AuthAlgorithm != DOT11_AUTH_ALGO_RSNA_PSK || Offset + 2 + sizeof(RsnPskCcmp) > BufferLength)
+        return Offset;
+    Buffer[Offset++] = VWIFI_IE_RSN;
+    Buffer[Offset++] = (UCHAR)sizeof(RsnPskCcmp);
+    RtlCopyMemory(&Buffer[Offset], RsnPskCcmp, sizeof(RsnPskCcmp));
+    Offset += sizeof(RsnPskCcmp);
 
     return Offset;
 }
