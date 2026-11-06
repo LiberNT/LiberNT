@@ -585,6 +585,124 @@ Test_KmdCpuEvent_FeatureNegotiation(void)
 #endif
 #endif
 
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
+static void
+D3dkmtTestSignal2CpuNotification(
+    _In_ D3DKMT_HANDLE Device,
+    _In_ D3DKMT_HANDLE Context,
+    _In_ PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2 Create,
+    _In_ PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT Destroy,
+    _In_ PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 Signal)
+{
+    D3DKMT_CREATESYNCHRONIZATIONOBJECT2 Sync;
+    D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 Notify;
+    HANDLE Event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    NTSTATUS Status;
+
+    ok(Event != NULL, "CreateEventW failed %lu\n", GetLastError());
+    if (Event == NULL)
+        return;
+    memset(&Sync, 0, sizeof(Sync));
+    Sync.hDevice = Device;
+    Sync.Info.Type = D3DDDI_CPU_NOTIFICATION;
+    Sync.Info.CPUNotification.Event = Event;
+    Status = Create(&Sync);
+    ok_succeeded(Status, "Create CPU notification: 0x%08lX\n", (long)Status);
+    if (NT_SUCCESS(Status))
+    {
+        memset(&Notify, 0, sizeof(Notify));
+        Notify.hContext = Context;
+        Notify.ObjectCount = 1;
+        Notify.ObjectHandleArray[0] = Sync.hSyncObject;
+        Notify.Fence.FenceValue = 1;
+        Status = Signal(&Notify);
+        ok_succeeded(Status, "Signal2 of a CPU notification with a fence value: 0x%08lX\n", (long)Status);
+        if (NT_SUCCESS(Status))
+            ok(WaitForSingleObject(Event, 5000) == WAIT_OBJECT_0, "Signal2 did not signal the CPU notification\n");
+        D3dkmtTestDestroySyncObject(Destroy, Sync.hSyncObject);
+    }
+    CloseHandle(Event);
+}
+
+static void
+D3dkmtTestSignal2Semaphore(
+    _In_ D3DKMT_HANDLE Device,
+    _In_ D3DKMT_HANDLE Context,
+    _In_ PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2 Create,
+    _In_ PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT Destroy,
+    _In_ PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 Signal)
+{
+    D3DKMT_CREATESYNCHRONIZATIONOBJECT2 Sync;
+    D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 Notify;
+    NTSTATUS Status;
+
+    memset(&Sync, 0, sizeof(Sync));
+    Sync.hDevice = Device;
+    Sync.Info.Type = D3DDDI_SEMAPHORE;
+    Sync.Info.Semaphore.MaxCount = 2;
+    Sync.Info.Semaphore.InitialCount = 0;
+    Status = Create(&Sync);
+    ok_succeeded(Status, "Create semaphore: 0x%08lX\n", (long)Status);
+    if (!NT_SUCCESS(Status))
+        return;
+    memset(&Notify, 0, sizeof(Notify));
+    Notify.hContext = Context;
+    Notify.ObjectCount = 1;
+    Notify.ObjectHandleArray[0] = Sync.hSyncObject;
+    Notify.Fence.FenceValue = 1;
+    Status = Signal(&Notify);
+    ok_succeeded(Status, "Signal2 of a semaphore with a fence value: 0x%08lX\n", (long)Status);
+    D3dkmtTestDestroySyncObject(Destroy, Sync.hSyncObject);
+}
+#endif
+
+static void Test_SignalSyncObject2_FenceValueWithoutFence(void)
+{
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
+    D3DKMT_CREATECONTEXTVIRTUAL Context;
+    D3DKMT_DESTROYCONTEXT DestroyContext;
+    D3DKMT_HANDLE hAdapter, hDevice;
+    NTSTATUS Status;
+
+    LOADFN(PFND3DKMT_CREATECONTEXTVIRTUAL, pCreateContext, "D3DKMTCreateContextVirtual");
+    LOADFN(PFND3DKMT_DESTROYCONTEXT, pDestroyContext, "D3DKMTDestroyContext");
+    LOADFN(PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2, pCreate, "D3DKMTCreateSynchronizationObject2");
+    LOADFN(PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT, pDestroy, "D3DKMTDestroySynchronizationObject");
+    LOADFN(PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECT2, pSignal, "D3DKMTSignalSynchronizationObject2");
+
+    hAdapter = OpenRenderAdapter();
+    if (!hAdapter) { skip("No render adapter\n"); return; }
+    hDevice = CreateTestDevice(hAdapter);
+    if (!hDevice)
+    {
+        skip("CreateDevice failed on the render adapter\n");
+        CloseAdapter(hAdapter);
+        return;
+    }
+    memset(&Context, 0, sizeof(Context));
+    Context.hDevice = hDevice;
+    Context.EngineAffinity = 1;
+    Context.Flags.NullRendering = 1;
+    Status = pCreateContext(&Context);
+    if (NT_SUCCESS(Status))
+    {
+        D3dkmtTestSignal2CpuNotification(hDevice, Context.hContext, pCreate, pDestroy, pSignal);
+        D3dkmtTestSignal2Semaphore(hDevice, Context.hContext, pCreate, pDestroy, pSignal);
+        memset(&DestroyContext, 0, sizeof(DestroyContext));
+        DestroyContext.hContext = Context.hContext;
+        ok_succeeded(pDestroyContext(&DestroyContext), "DestroyContext failed\n");
+    }
+    else
+    {
+        skip("CreateContextVirtual refused 0x%08lX\n", (long)Status);
+    }
+    DestroyTestDevice(hDevice);
+    CloseAdapter(hAdapter);
+#else
+    skip("Virtual contexts need WDDM 2.0 headers\n");
+#endif
+}
+
 static void Test_CreateSyncObject2_NormalizedState(void)
 {
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
@@ -1270,6 +1388,7 @@ START_TEST(sync2)
     Test_MonitoredFence_CpuValuePage();
     Test_MonitoredFence_AccessFlags();
     Test_MonitoredFence_CpuBatchSemantics();
+    Test_SignalSyncObject2_FenceValueWithoutFence();
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_0)
     Test_KmdCpuEvent_LifecycleAndKnownEscape();
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_2)
