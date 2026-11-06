@@ -4538,8 +4538,13 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_QueryInterface(ID3D10Effect *iface
 {
     TRACE("iface %p, riid %s, object %p\n", iface, debugstr_guid(riid), object);
 
+#ifdef __REACTOS__
+    /* Windows answers only ID3D10EffectPool, with the effect itself. */
+    if (IsEqualGUID(riid, &IID_ID3D10EffectPool))
+#else
     if (IsEqualGUID(riid, &IID_ID3D10Effect)
             || IsEqualGUID(riid, &IID_IUnknown))
+#endif
     {
         IUnknown_AddRef(iface);
         *object = iface;
@@ -4947,11 +4952,29 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_Optimize(ID3D10Effect *iface)
         {
             free(effect->techniques[i].passes[j].name);
             effect->techniques[i].passes[j].name = NULL;
+#ifdef __REACTOS__
+            d3d10_effect_annotations_destroy(&effect->techniques[i].passes[j].annotations);
+#endif
         }
 
         free(effect->techniques[i].name);
         effect->techniques[i].name = NULL;
+#ifdef __REACTOS__
+        d3d10_effect_annotations_destroy(&effect->techniques[i].annotations);
+#endif
     }
+
+#ifdef __REACTOS__
+    for (i = 0; i < effect->local_buffer_count; ++i)
+    {
+        v = &effect->local_buffers[i];
+        d3d10_effect_annotations_destroy(&v->annotations);
+        for (j = 0; j < v->type->member_count; ++j)
+            d3d10_effect_annotations_destroy(&v->members[j].annotations);
+    }
+    for (i = 0; i < effect->object_count; ++i)
+        d3d10_effect_annotations_destroy(&effect->object_variables[i].annotations);
+#endif
 
     effect->flags |= D3D10_EFFECT_OPTIMIZED;
 
@@ -10045,8 +10068,12 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_pool_QueryInterface(ID3D10EffectPo
 {
     TRACE("iface %p, riid %s, object %p.\n", iface, debugstr_guid(riid), object);
 
+#ifdef __REACTOS__
+    if (IsEqualGUID(riid, &IID_ID3D10EffectPool))
+#else
     if (IsEqualGUID(riid, &IID_ID3D10EffectPool) ||
             IsEqualGUID(riid, &IID_IUnknown))
+#endif
     {
         IUnknown_AddRef(iface);
         *object = iface;
