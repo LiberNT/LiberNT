@@ -920,6 +920,40 @@ LxSendHello(VOID)
 
 static
 VOID
+LxStartRenderer(
+    _In_ PCWSTR NormalizedRoot)
+{
+    WCHAR Program[MAX_PATH], Command[2 * MAX_PATH + 64];
+    STARTUPINFOW Startup;
+    PROCESS_INFORMATION Process;
+    PWSTR Slash;
+    size_t Length = wcslen(NormalizedRoot);
+
+    if (!GetModuleFileNameW(NULL, Program, ARRAYSIZE(Program)) || ((Slash = wcsrchr(Program, L'\\')) == NULL) ||
+        ((size_t)(Slash + 1 - Program) + ARRAYSIZE(L"lxgpu.exe") > ARRAYSIZE(Program)))
+    {
+        return;
+    }
+    wcscpy(Slash + 1, L"lxgpu.exe");
+    if ((GetFileAttributesW(Program) == INVALID_FILE_ATTRIBUTES) ||
+        (_snwprintf(Command, ARRAYSIZE(Command), L"\"%s\" -r \"%s%s\" -p %lu", Program, NormalizedRoot,
+                    ((Length > 0) && (NormalizedRoot[Length - 1] == L'\\')) ? L"." : L"",
+                    GetCurrentProcessId()) < 0))
+    {
+        return;
+    }
+    Command[ARRAYSIZE(Command) - 1] = UNICODE_NULL;
+    ZeroMemory(&Startup, sizeof(Startup));
+    Startup.cb = sizeof(Startup);
+    if (CreateProcessW(Program, Command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
+    {
+        CloseHandle(Process.hThread);
+        CloseHandle(Process.hProcess);
+    }
+}
+
+static
+VOID
 LxStartCompositor(
     _In_ PCWSTR Root)
 {
@@ -1632,7 +1666,10 @@ wWinMain(
     LxPendingCount = __argc - First;
 
     if (LxNormalizeRoot(Root, FullRoot, ARRAYSIZE(FullRoot)))
+    {
         LxRootTagValue = LxRootTag(FullRoot);
+        LxStartRenderer(FullRoot);
+    }
     LxIconCacheInitialize(Root);
 
     ZeroMemory(&Class, sizeof(Class));
