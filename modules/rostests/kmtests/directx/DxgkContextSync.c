@@ -133,7 +133,9 @@ DxgkContextSyncTestValidation(VOID)
     Status = DxgkContextSyncCoreValidate(DxgkContextSyncOperationLegacySignal, &Mutex.Core, 1, DXGK_CONTEXT_SYNC_ENQUEUE_CPU_EVENT, 0, NULL, FALSE);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
     Status = DxgkContextSyncCoreValidate(DxgkContextSyncOperationSignal2, &Semaphore.Core, 1, 0, 1, NULL, FALSE);
-    ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = DxgkContextSyncCoreValidate(DxgkContextSyncOperationSignal2, &CpuNotification.Core, 1, 0, 1, NULL, FALSE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
     Status = DxgkContextSyncCoreValidate(DxgkContextSyncOperationSignal2, &MonitoredFence.Core, 1, 0, 0, NULL, FALSE);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
     MonitoredValues[0] = 12;
