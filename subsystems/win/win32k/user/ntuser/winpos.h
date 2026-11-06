@@ -64,6 +64,8 @@ UINT FASTCALL co_WinPosMinMaximize(PWND WindowObject, UINT ShowFlag, RECTL* NewP
 BOOLEAN FASTCALL co_WinPosSetWindowPos(PWND Wnd, HWND WndInsertAfter, INT x, INT y, INT cx, INT cy, UINT flags);
 BOOLEAN FASTCALL co_WinPosSetWindowPosSilent(PWND Wnd, INT x, INT y, INT cx, INT cy, UINT flags);
 BOOLEAN FASTCALL co_WinPosShowWindow(PWND Window, INT Cmd);
+BOOL FASTCALL co_WinPosUpdateMaximized(PWND Window);
+VOID FASTCALL IntUpdateMaximizedWindows(PWND DesktopWindow);
 void FASTCALL co_WinPosSendSizeMove(PWND Window, BOOL ForceRestored);
 PWND APIENTRY co_WinPosWindowFromPoint(IN PWND ScopeWin, IN POINT *WinPoint, IN OUT USHORT* HitTest, IN BOOL Ignore);
 VOID FASTCALL co_WinPosActivateOtherWindow(PWND);
