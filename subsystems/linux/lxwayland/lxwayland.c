@@ -174,6 +174,7 @@ typedef struct _SURFACE
     uint8_t *Image;
     int32_t ImageWidth;
     int32_t ImageHeight;
+    uint32_t BelowCount;
     uint32_t Role;
     XDG_SURFACE *Xdg;
     struct _SURFACE *Parent;
@@ -1132,10 +1133,8 @@ SurfaceStore(SURFACE *Surface, const RECT32 *Damage, uint32_t DamageCount)
 
 static
 void
-Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY, const RECT32 *Clip)
+BlitImage(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY, const RECT32 *Clip)
 {
-    uint32_t Index;
-
     if (Surface->Image != NULL)
     {
         int32_t ClipX1 = Clip->X + Clip->Width;
@@ -1159,12 +1158,24 @@ Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY, const R
             }
         }
     }
+}
+
+static
+void
+Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY, const RECT32 *Clip)
+{
+    uint32_t Index;
+
     for (Index = 0; Index < Surface->ChildCount; Index++)
     {
         SURFACE *Child = Surface->Children[Index];
 
+        if (Index == Surface->BelowCount)
+            BlitImage(Window, Surface, OffsetX, OffsetY, Clip);
         Blit(Window, Child, OffsetX + Child->SubX, OffsetY + Child->SubY, Clip);
     }
+    if (Surface->BelowCount >= Surface->ChildCount)
+        BlitImage(Window, Surface, OffsetX, OffsetY, Clip);
 }
 
 static
@@ -2246,13 +2257,65 @@ SurfaceCommit(SURFACE *Surface)
 
 static
 void
+RestackChild(SURFACE *Child, SURFACE *Sibling, bool Above)
+{
+    SURFACE *Parent = Child->Parent;
+    SURFACE *Root = Child;
+    uint32_t From, To;
+
+    if (Parent == NULL || Sibling == Child || (Sibling != Parent && Sibling->Parent != Parent))
+        return;
+    for (From = 0; From < Parent->ChildCount && Parent->Children[From] != Child; From++)
+        ;
+    if (From == Parent->ChildCount)
+        return;
+    if (From < Parent->BelowCount)
+        Parent->BelowCount--;
+    memmove(&Parent->Children[From], &Parent->Children[From + 1], (Parent->ChildCount - From - 1) * sizeof(SURFACE *));
+    Parent->ChildCount--;
+    if (Sibling == Parent)
+    {
+        To = Parent->BelowCount;
+        if (!Above)
+            Parent->BelowCount++;
+    }
+    else
+    {
+        for (To = 0; To < Parent->ChildCount && Parent->Children[To] != Sibling; To++)
+            ;
+        if (To < Parent->BelowCount)
+            Parent->BelowCount++;
+        if (Above)
+            To++;
+    }
+    memmove(&Parent->Children[To + 1], &Parent->Children[To], (Parent->ChildCount - To) * sizeof(SURFACE *));
+    Parent->Children[To] = Child;
+    Parent->ChildCount++;
+    while (Root->Parent != NULL && Root->Role == ROLE_SUBSURFACE)
+        Root = Root->Parent;
+    if (Root->Xdg != NULL && Root->Xdg->Window != NULL)
+        DrawWindow(Root->Xdg->Window, NULL, 0);
+}
+
+static
+void
 DetachChild(SURFACE *Child)
 {
     SURFACE *Parent = Child->Parent;
+    uint32_t Index;
 
     if (Parent == NULL)
         return;
     Child->Parent = NULL;
+    for (Index = 0; Index < Parent->ChildCount; Index++)
+    {
+        if (Parent->Children[Index] == Child)
+        {
+            if (Index < Parent->BelowCount)
+                Parent->BelowCount--;
+            break;
+        }
+    }
     if (PointerArrayRemove((void **)Parent->Children, &Parent->ChildCount, Child))
         Unref(Child->Resource);
     Unref(Parent->Resource);
@@ -3323,6 +3386,17 @@ Dispatch(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
             Surface->PendingSubSet = true;
             Surface->PendingSubX = Args[0].I;
             Surface->PendingSubY = Args[1].I;
+        }
+        else if ((Opcode == WL_SUBSURFACE_PLACE_ABOVE || Opcode == WL_SUBSURFACE_PLACE_BELOW) &&
+                 SurfaceResource != NULL)
+        {
+            if (Args[0].O == NULL || Args[0].O->Interface != &wl_surface_interface)
+            {
+                WlError(Resource, 0, "bad surface");
+                return;
+            }
+            /* FIXME: the new order applies at once instead of on the parent's next commit */
+            RestackChild(SurfaceResource->Data, Args[0].O->Data, Opcode == WL_SUBSURFACE_PLACE_ABOVE);
         }
     }
     else if (Interface == &wl_seat_interface)
