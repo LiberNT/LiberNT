@@ -21,6 +21,7 @@
 
 #define LX_ATTACH_RETRIES 100
 #define LX_ATTACH_RETRY_MS 100
+#define LX_RECEIVE_BUFFER (288 * 1024)
 
 struct iovec
 {
@@ -610,6 +611,7 @@ LxServe(PCWSTR Root, HANDLE Parent)
     HANDLE Waits[2];
     DWORD Bytes, WaitCount = (Parent != NULL) ? 2 : 1;
     BOOL Pending = FALSE;
+    ULONG Capacity = LX_RECEIVE_BUFFER;
     int Result = -1;
 
     if (!GetFullPathNameW(Root, MAX_PATH, Full, NULL) || (wcslen(Full) + 4 >= ARRAYSIZE(Nt)))
@@ -637,7 +639,7 @@ LxServe(PCWSTR Root, HANDLE Parent)
     if (!WideCharToMultiByte(CP_UTF8, 0, Nt, -1, Utf8, sizeof(Utf8), NULL, NULL))
         Utf8[0] = '\0';
     LxTrace("attached %s\n", Utf8);
-    Buffer = malloc(LX_GPU_MAX_MESSAGE);
+    Buffer = malloc(Capacity);
     if (Buffer == NULL)
         return 1;
     Waits[0] = Overlapped.hEvent;
@@ -646,8 +648,27 @@ LxServe(PCWSTR Root, HANDLE Parent)
     while (Result < 0)
     {
         ResetEvent(Overlapped.hEvent);
-        if (!DeviceIoControl(LxDevice, IOCTL_LX_GPU_RECEIVE, NULL, 0, Buffer, LX_GPU_MAX_MESSAGE, &Bytes, &Overlapped))
+        if (!DeviceIoControl(LxDevice, IOCTL_LX_GPU_RECEIVE, NULL, 0, Buffer, Capacity, &Bytes, &Overlapped))
         {
+            if (GetLastError() == ERROR_MORE_DATA)
+            {
+                PUCHAR Grown = NULL;
+
+                if (!GetOverlappedResult(LxDevice, &Overlapped, &Bytes, FALSE) && (GetLastError() == ERROR_MORE_DATA) &&
+                    (Bytes > Capacity) && (Bytes <= LX_GPU_MAX_MESSAGE))
+                {
+                    Grown = realloc(Buffer, Bytes);
+                }
+                if (Grown == NULL)
+                {
+                    LxTrace("receive buffer of %lu bytes failed\n", Bytes);
+                    Result = 5;
+                    break;
+                }
+                Buffer = Grown;
+                Capacity = Bytes;
+                continue;
+            }
             if (GetLastError() != ERROR_IO_PENDING)
             {
                 LxTrace("receive failed %lu\n", GetLastError());
@@ -682,6 +703,16 @@ LxServe(PCWSTR Root, HANDLE Parent)
         if ((Result < 0) && (Bytes >= sizeof(LX_GPU_HEADER)))
             LxDispatch((PLX_GPU_HEADER)Buffer);
         virgl_renderer_poll();
+        if (Capacity > LX_RECEIVE_BUFFER)
+        {
+            PUCHAR Shrunk = realloc(Buffer, LX_RECEIVE_BUFFER);
+
+            if (Shrunk != NULL)
+            {
+                Buffer = Shrunk;
+                Capacity = LX_RECEIVE_BUFFER;
+            }
+        }
     }
     CloseHandle(LxDevice);
     LxDevice = NULL;
