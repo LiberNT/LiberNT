@@ -2566,6 +2566,8 @@ EnsureImageDirectory(NtfsFuseState* State,
                 TRUE,
                 0,
                 &File);
+            if (NT_SUCCESS(Status))
+                Status = NtfsFileRecordSetCaseSensitiveDirectory(File, TRUE);
             NtfsFileRecordDestroy(File);
             if (!NT_SUCCESS(Status))
                 return Status;
