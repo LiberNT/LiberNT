@@ -171,6 +171,9 @@ typedef struct _SURFACE
     WL_RESOURCE *Buffer;
     int32_t Width;
     int32_t Height;
+    uint8_t *Image;
+    int32_t ImageWidth;
+    int32_t ImageHeight;
     uint32_t Role;
     XDG_SURFACE *Xdg;
     struct _SURFACE *Parent;
@@ -560,6 +563,7 @@ FreeData(WL_RESOURCE *Resource)
 
         LxFree(Surface->PendingFrames);
         LxFree(Surface->Children);
+        LxFree(Surface->Image);
     }
     else if (Interface == &wl_shm_pool_interface)
     {
@@ -1072,19 +1076,74 @@ SendToplevelConfigure(TOPLEVEL *Toplevel)
 }
 
 static
-void
-Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY)
+bool
+SurfaceStore(SURFACE *Surface, const RECT32 *Damage, uint32_t DamageCount)
 {
     BUFFER *Buffer = Surface->Buffer != NULL ? Surface->Buffer->Data : NULL;
+    bool Resized = false;
     uint32_t Index;
 
-    if (Buffer != NULL && Buffer->Pool != NULL && Buffer->Pool->Map != NULL &&
-        (int64_t)Buffer->Offset + (int64_t)Buffer->Stride * Buffer->Height <= Buffer->Pool->Size)
+    if (Buffer == NULL || Buffer->Pool == NULL || Buffer->Pool->Map == NULL || Buffer->Width <= 0 ||
+        Buffer->Height <= 0 || (int64_t)Buffer->Offset + (int64_t)Buffer->Stride * Buffer->Height > Buffer->Pool->Size)
     {
-        int32_t X0 = OffsetX > 0 ? OffsetX : 0;
-        int32_t Y0 = OffsetY > 0 ? OffsetY : 0;
-        int32_t X1 = OffsetX + Buffer->Width < Window->Width ? OffsetX + Buffer->Width : Window->Width;
-        int32_t Y1 = OffsetY + Buffer->Height < Window->Height ? OffsetY + Buffer->Height : Window->Height;
+        LxFree(Surface->Image);
+        Surface->Image = NULL;
+        Surface->ImageWidth = 0;
+        Surface->ImageHeight = 0;
+        return true;
+    }
+    if (Surface->Image == NULL || Surface->ImageWidth != Buffer->Width || Surface->ImageHeight != Buffer->Height)
+    {
+        LxFree(Surface->Image);
+        Surface->Image = LxAlloc((size_t)Buffer->Width * Buffer->Height * 4);
+        Surface->ImageWidth = Surface->Image != NULL ? Buffer->Width : 0;
+        Surface->ImageHeight = Surface->Image != NULL ? Buffer->Height : 0;
+        Resized = true;
+        DamageCount = 0;
+    }
+    if (Surface->Image == NULL)
+        return true;
+    for (Index = 0; Index < (DamageCount != 0 ? DamageCount : 1); Index++)
+    {
+        int32_t X0 = 0, Y0 = 0, X1 = Buffer->Width, Y1 = Buffer->Height;
+        int32_t Row;
+
+        if (DamageCount != 0)
+        {
+            int64_t DX1 = (int64_t)Damage[Index].X + Damage[Index].Width;
+            int64_t DY1 = (int64_t)Damage[Index].Y + Damage[Index].Height;
+
+            X0 = Damage[Index].X > 0 ? Damage[Index].X : 0;
+            Y0 = Damage[Index].Y > 0 ? Damage[Index].Y : 0;
+            X1 = DX1 < Buffer->Width ? (int32_t)DX1 : Buffer->Width;
+            Y1 = DY1 < Buffer->Height ? (int32_t)DY1 : Buffer->Height;
+            if (X1 <= X0 || Y1 <= Y0)
+                continue;
+        }
+        for (Row = Y0; Row < Y1; Row++)
+        {
+            memcpy(Surface->Image + ((size_t)Row * Buffer->Width + X0) * 4,
+                   Buffer->Pool->Map + Buffer->Offset + (size_t)Row * Buffer->Stride + (size_t)X0 * 4,
+                   (size_t)(X1 - X0) * 4);
+        }
+    }
+    return Resized;
+}
+
+static
+void
+Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY, const RECT32 *Clip)
+{
+    uint32_t Index;
+
+    if (Surface->Image != NULL)
+    {
+        int32_t ClipX1 = Clip->X + Clip->Width;
+        int32_t ClipY1 = Clip->Y + Clip->Height;
+        int32_t X0 = OffsetX > Clip->X ? OffsetX : Clip->X;
+        int32_t Y0 = OffsetY > Clip->Y ? OffsetY : Clip->Y;
+        int32_t X1 = OffsetX + Surface->ImageWidth < ClipX1 ? OffsetX + Surface->ImageWidth : ClipX1;
+        int32_t Y1 = OffsetY + Surface->ImageHeight < ClipY1 ? OffsetY + Surface->ImageHeight : ClipY1;
         int32_t Row;
 
         if (X1 > X0 && Y1 > Y0)
@@ -1093,8 +1152,8 @@ Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY)
 
             for (Row = Y0; Row < Y1; Row++)
             {
-                const uint8_t *Source = Buffer->Pool->Map + Buffer->Offset + (size_t)(Row - OffsetY) * Buffer->Stride +
-                                        (size_t)(X0 - OffsetX) * 4;
+                const uint8_t *Source = Surface->Image + ((size_t)(Row - OffsetY) * Surface->ImageWidth +
+                                                          (size_t)(X0 - OffsetX)) * 4;
 
                 memcpy(Window->Image + ((size_t)Row * Window->Width + X0) * 4, Source, Span);
             }
@@ -1104,7 +1163,7 @@ Blit(WINDOW *Window, SURFACE *Surface, int32_t OffsetX, int32_t OffsetY)
     {
         SURFACE *Child = Surface->Children[Index];
 
-        Blit(Window, Child, OffsetX + Child->SubX, OffsetY + Child->SubY);
+        Blit(Window, Child, OffsetX + Child->SubX, OffsetY + Child->SubY, Clip);
     }
 }
 
@@ -1136,6 +1195,7 @@ DrawWindow(WINDOW *Window, const RECT32 *Damage, uint32_t DamageCount)
 {
     XDG_SURFACE *Xdg = Window->Xdg;
     RECT32 Rect = WindowRect(Xdg);
+    RECT32 Clip;
     int32_t X0 = 0, Y0 = 0, X1 = 0, Y1 = 0;
     bool Any = false;
     uint32_t Index;
@@ -1199,7 +1259,11 @@ DrawWindow(WINDOW *Window, const RECT32 *Damage, uint32_t DamageCount)
     }
     if (!Any)
         return;
-    Blit(Window, Xdg->Surface, -Rect.X, -Rect.Y);
+    Clip.X = X0;
+    Clip.Y = Y0;
+    Clip.Width = X1 - X0;
+    Clip.Height = Y1 - Y0;
+    Blit(Window, Xdg->Surface, -Rect.X, -Rect.Y, &Clip);
     SendPixels(Window, X0, Y0, X1 - X0, Y1 - Y0);
 }
 
@@ -2088,6 +2152,8 @@ SurfaceCommit(SURFACE *Surface)
     RECT32 Damage[LX_MAX_DAMAGE];
     uint32_t DamageCount = Surface->PendingDamageFull ? 0 : Surface->PendingDamageCount;
     bool Attached = Surface->PendingAttached;
+    bool Moved = Surface->PendingSubSet;
+    bool Resized = false;
     uint32_t Index;
 
     if (Attached)
@@ -2113,6 +2179,8 @@ SurfaceCommit(SURFACE *Surface)
     memcpy(Damage, Surface->PendingDamage, DamageCount * sizeof(RECT32));
     Surface->PendingDamageCount = 0;
     Surface->PendingDamageFull = false;
+    if (Attached)
+        Resized = SurfaceStore(Surface, Damage, DamageCount);
     if (Grow((void **)&Frames, &FrameCapacity, FrameCount + Surface->PendingFrameCount, sizeof(WL_RESOURCE *)))
     {
         for (Index = 0; Index < Surface->PendingFrameCount; Index++)
@@ -2139,11 +2207,38 @@ SurfaceCommit(SURFACE *Surface)
     else if (Surface->Role == ROLE_SUBSURFACE)
     {
         SURFACE *Root = Surface;
+        int32_t OffsetX = 0, OffsetY = 0;
 
         while (Root->Parent != NULL && Root->Role == ROLE_SUBSURFACE)
+        {
+            OffsetX += Root->SubX;
+            OffsetY += Root->SubY;
             Root = Root->Parent;
+        }
         if (Root->Xdg != NULL && Root->Xdg->Window != NULL)
-            DrawWindow(Root->Xdg->Window, NULL, 0);
+        {
+            if (Moved || Resized)
+            {
+                DrawWindow(Root->Xdg->Window, NULL, 0);
+            }
+            else if (Attached)
+            {
+                if (DamageCount == 0)
+                {
+                    Damage[0].X = 0;
+                    Damage[0].Y = 0;
+                    Damage[0].Width = Surface->ImageWidth;
+                    Damage[0].Height = Surface->ImageHeight;
+                    DamageCount = 1;
+                }
+                for (Index = 0; Index < DamageCount; Index++)
+                {
+                    Damage[Index].X += OffsetX;
+                    Damage[Index].Y += OffsetY;
+                }
+                DrawWindow(Root->Xdg->Window, Damage, DamageCount);
+            }
+        }
     }
     if (Surface->Buffer != NULL && Attached)
         WlSend(Surface->Buffer, WL_BUFFER_EVENT_RELEASE);
