@@ -3267,6 +3267,7 @@ NtUserSwitchDesktop(HDESK hdesk)
 
     /* Set the global state. */
     gpdeskInputDesktop = pdesk;
+    IntSetInputDesktopForeground(pdesk);
     IntGetSysCursorInfo()->bClipped = FALSE;
 
     /* Show the new desktop window */
