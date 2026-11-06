@@ -47,6 +47,10 @@ set(LXGPU_VIRGL_SOURCE_DIR "${LXGPU_WORK_DIR}/virglrenderer-source")
 set(LXGPU_EPOXY_SOURCE_DIR "${LXGPU_WORK_DIR}/libepoxy-source")
 set(LXGPU_BINARY_DIR "${LXGPU_WORK_DIR}/build")
 set(LXGPU_EXE "${LXGPU_WORK_DIR}/lxgpu.exe")
+set(LXGPU_VIRGL_PATCH "${CMAKE_CURRENT_LIST_DIR}/lxgpu/virglrenderer-windows.patch")
+# the hash in the patch command makes ExternalProject patch again when the patch changes
+file(SHA256 "${LXGPU_VIRGL_PATCH}" _lxgpu_virgl_patch_sha256)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LXGPU_VIRGL_PATCH}")
 set(LXGPU_LICENSES "${LXGPU_WORK_DIR}/lxgpu-licenses.zip")
 
 set(_lxgpu_sdk_targets
@@ -66,7 +70,8 @@ ExternalProject_Add(lxgpu-virglrenderer-source
     PATCH_COMMAND ${CMAKE_COMMAND}
         -DPATCH_EXECUTABLE=${LXGPU_PATCH}
         -DSOURCE_DIR=<SOURCE_DIR>
-        -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/lxgpu/virglrenderer-windows.patch
+        -DPATCH_FILE=${LXGPU_VIRGL_PATCH}
+        -DPATCH_SHA256=${_lxgpu_virgl_patch_sha256}
         -P ${CMAKE_CURRENT_LIST_DIR}/lxgpu/apply-patch.cmake
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
