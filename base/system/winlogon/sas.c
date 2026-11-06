@@ -1704,8 +1704,8 @@ DoGenericAction(
             if ((Session->LogonState == STATE_LOCKED) ||
                 (Session->LogonState == STATE_LOCKED_SAS))
             {
-                CallNotificationDlls(Session, UnlockHandler);
                 SwitchDesktop(Session->ApplicationDesktop);
+                CallNotificationDlls(Session, UnlockHandler);
                 RemoveStatusMessage(Session);
                 Session->LogonState = STATE_LOGGED_ON;
                 HandleConsoleSignIn(Session);
