@@ -105,6 +105,9 @@ DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC1, MAKEFOURCC('I','M','C','1'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC2, MAKEFOURCC('I','M','C','2'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC3, MAKEFOURCC('I','M','C','3'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC4, MAKEFOURCC('I','M','C','4'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I422, MAKEFOURCC('I','4','2','2'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I444, MAKEFOURCC('I','4','4','4'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_P208, MAKEFOURCC('P','2','0','8'));
 
 DEFINE_MEDIATYPE_GUID(MEDIASUBTYPE_AVC1,MAKEFOURCC('A','V','C','1'));
 DEFINE_MEDIATYPE_GUID(MEDIASUBTYPE_MP42,MAKEFOURCC('M','P','4','2'));
@@ -5869,6 +5872,38 @@ image_size_tests[] =
     { &MFVideoFormat_P010, 3, 2, 24, 18, 192, 18, 64 },
     { &MFVideoFormat_P010, 4, 2, 24, 0, 192, 24, 64 },
     { &MFVideoFormat_P010, 320, 240, 230400, 0, 230400, 230400, 640 },
+
+    { &MFVideoFormat_P016, 1, 2, 12, 6, 192, 6, 64 },
+    { &MFVideoFormat_P016, 16, 16, 768, 0, 1536, 768, 64 },
+
+    { &MFVideoFormat_420O, 3, 5, 30, 22, 320, 15, 64 },
+    { &MFVideoFormat_420O, 17, 3, 81, 76, 192, 51, 64 },
+
+    { &MFVideoFormat_I422, 3, 5, 40, 30, 320, 15, 64 },
+    { &MFVideoFormat_I422, 17, 3, 108, 102, 192, 51, 64 },
+
+    { &MFVideoFormat_I444, 3, 5, 45, 0, 320, 15, 64 },
+    { &MFVideoFormat_I444, 17, 3, 153, 0, 192, 51, 64 },
+
+    { &MFVideoFormat_P210, 3, 5, 80, 60, 320, 30, 64 },
+    { &MFVideoFormat_P210, 17, 3, 216, 204, 192, 102, 64 },
+    { &MFVideoFormat_P216, 3, 5, 80, 60, 320, 30, 64 },
+    { &MFVideoFormat_P216, 17, 3, 216, 204, 192, 102, 64 },
+
+    { &MFVideoFormat_Y41P, 3, 5, 30, 22, 320, 20, 64 },
+    { &MFVideoFormat_Y41P, 17, 3, 81, 76, 192, 75, 64 },
+
+    { &MFVideoFormat_Y210, 3, 5, 80, 60, 320, 60, 64 },
+    { &MFVideoFormat_Y210, 17, 3, 216, 204, 384, 204, 128 },
+    { &MFVideoFormat_Y216, 3, 5, 80, 60, 320, 60, 64 },
+    { &MFVideoFormat_Y216, 17, 3, 216, 204, 384, 204, 128 },
+
+    { &MFVideoFormat_Y410, 3, 5, 60, 0, 320, 60, 64 },
+    { &MFVideoFormat_Y410, 17, 3, 204, 0, 384, 204, 128 },
+    { &MFVideoFormat_v410, 3, 5, 60, 0, 320, 60, 64 },
+    { &MFVideoFormat_v410, 17, 3, 204, 0, 384, 204, 128 },
+    { &MFVideoFormat_Y416, 3, 5, 120, 0, 320, 120, 64 },
+    { &MFVideoFormat_Y416, 17, 3, 408, 0, 576, 408, 192 },
 };
 
 static void test_MFCalculateImageSize(void)
@@ -5881,6 +5916,15 @@ static void test_MFCalculateImageSize(void)
     hr = MFCalculateImageSize(&IID_IUnknown, 1, 1, &size);
     ok(hr == E_INVALIDARG || broken(hr == S_OK) /* Vista */, "Unexpected hr %#lx.\n", hr);
     ok(size == 0, "Unexpected size %u.\n", size);
+
+    size = 1;
+    hr = MFCalculateImageSize(&MFVideoFormat_NV21, 3, 5, &size);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#lx.\n", hr);
+    ok(size == 0, "Unexpected size %u.\n", size);
+
+    hr = MFCalculateImageSize(&MFVideoFormat_P208, 3, 5, &size);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(size == 40, "Unexpected size %u.\n", size);
 
     for (i = 0; i < ARRAY_SIZE(image_size_tests); ++i)
     {
@@ -5915,6 +5959,15 @@ static void test_MFGetPlaneSize(void)
 
     size = 1;
     hr = pMFGetPlaneSize(0xdeadbeef, 64, 64, &size);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(size == 0, "Unexpected size %lu.\n", size);
+
+    hr = pMFGetPlaneSize(MFVideoFormat_NV21.Data1, 3, 5, &size);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(size == 22, "Unexpected size %lu.\n", size);
+
+    size = 1;
+    hr = pMFGetPlaneSize(MFVideoFormat_P208.Data1, 3, 5, &size);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
     ok(size == 0, "Unexpected size %lu.\n", size);
 
@@ -7587,6 +7640,27 @@ static void test_MFCreate2DMediaBuffer(void)
 
     hr = pMFCreate2DMediaBuffer(2, 3, MAKEFOURCC('H','2','6','4'), FALSE, &buffer);
     ok(hr == MF_E_INVALIDMEDIATYPE, "Unexpected hr %#lx.\n", hr);
+
+    hr = pMFCreate2DMediaBuffer(3, 5, MFVideoFormat_P208.Data1, FALSE, &buffer);
+    ok(hr == MF_E_INVALIDMEDIATYPE, "Unexpected hr %#lx.\n", hr);
+    hr = MFGetStrideForBitmapInfoHeader(MFVideoFormat_P208.Data1, 3, &stride);
+    ok(hr == MF_E_INVALIDMEDIATYPE, "Unexpected hr %#lx.\n", hr);
+
+    hr = MFGetStrideForBitmapInfoHeader(MFVideoFormat_NV21.Data1, 3, &stride);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(stride == 3, "Unexpected stride %ld.\n", stride);
+    hr = pMFCreate2DMediaBuffer(3, 5, MFVideoFormat_NV21.Data1, FALSE, &buffer);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMFMediaBuffer_GetMaxLength(buffer, &max_length);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(max_length == 320, "Unexpected length %lu.\n", max_length);
+    hr = IMFMediaBuffer_QueryInterface(buffer, &IID_IMF2DBuffer, (void **)&_2dbuffer);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    hr = IMF2DBuffer_GetContiguousLength(_2dbuffer, &length);
+    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+    ok(length == 15, "Unexpected length %lu.\n", length);
+    IMF2DBuffer_Release(_2dbuffer);
+    IMFMediaBuffer_Release(buffer);
 
     hr = pMFCreate2DMediaBuffer(2, 3, MAKEFOURCC('N','V','1','2'), FALSE, NULL);
     ok(FAILED(hr), "Unexpected hr %#lx.\n", hr);

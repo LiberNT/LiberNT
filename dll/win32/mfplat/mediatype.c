@@ -49,6 +49,9 @@ DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC1, MAKEFOURCC('I','M','C','1'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC2, MAKEFOURCC('I','M','C','2'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC3, MAKEFOURCC('I','M','C','3'));
 DEFINE_MEDIATYPE_GUID(MFVideoFormat_IMC4, MAKEFOURCC('I','M','C','4'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I422, MAKEFOURCC('I','4','2','2'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_I444, MAKEFOURCC('I','4','4','4'));
+DEFINE_MEDIATYPE_GUID(MFVideoFormat_P208, MAKEFOURCC('P','2','0','8'));
 
 static const UINT32 default_channel_mask[7] =
 {
@@ -2729,6 +2732,19 @@ static struct uncompressed_video_format video_formats[] =
     { &MFVideoFormat_NV11,          12, 0, 0, 1, -1 },
     { &MFVideoFormat_NV12,          12, 0, 0, 1, -1 },
     { &MFVideoFormat_P010,          24, 0, 0, 1, -1 },
+    { &MFVideoFormat_P016,          24, 0, 0, 1, -1 },
+    { &MFVideoFormat_P210,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_P216,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_NV21,          12, 0, 0, 1, -1 },
+    { &MFVideoFormat_420O,          12, 0, 0, 1, -1 },
+    { &MFVideoFormat_I422,          16, 0, 0, 1, -1 },
+    { &MFVideoFormat_I444,          24, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y41P,          12, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y210,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y216,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y410,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_v410,          32, 0, 0, 1, -1 },
+    { &MFVideoFormat_Y416,          64, 0, 0, 1, -1 },
     { &MFVideoFormat_D16,           16, 3, 0, 0, -1 },
     { &MFVideoFormat_L16,           16, 3, 0, 0, -1 },
     { &MFVideoFormat_UYVY,          16, 0, 0, 1, -1 },
@@ -2763,7 +2779,19 @@ static struct uncompressed_video_format *mf_get_video_format(const GUID *subtype
 static unsigned int mf_get_stride_for_format(const struct uncompressed_video_format *format, unsigned int width)
 {
     if (format->bpp < 8) return (width * format->bpp) / 8;
-    else if (IsEqualGUID(format->subtype, &MFVideoFormat_P010)) return width * 2;
+    switch (format->subtype->Data1)
+    {
+        case MAKEFOURCC('P','0','1','0'):
+        case MAKEFOURCC('P','0','1','6'):
+        case MAKEFOURCC('P','2','1','0'):
+        case MAKEFOURCC('P','2','1','6'):
+            return width * 2;
+        case MAKEFOURCC('I','4','2','2'):
+        case MAKEFOURCC('I','4','4','4'):
+            return width;
+        case MAKEFOURCC('Y','4','1','P'):
+            return width * 3 / 2;
+    }
     return (width * (format->bpp / 8) + format->alignment) & ~format->alignment;
 }
 
@@ -2816,7 +2844,8 @@ HRESULT WINAPI MFCalculateImageSize(REFGUID subtype, UINT32 width, UINT32 height
 
     TRACE("%s, %u, %u, %p.\n", debugstr_mf_guid(subtype), width, height, size);
 
-    if (!(format = mf_get_video_format(subtype)))
+    format = mf_get_video_format(subtype);
+    if ((!format && !IsEqualGUID(subtype, &MFVideoFormat_P208)) || IsEqualGUID(subtype, &MFVideoFormat_NV21))
     {
         *size = 0;
         return E_INVALIDARG;
@@ -2830,12 +2859,28 @@ HRESULT WINAPI MFCalculateImageSize(REFGUID subtype, UINT32 width, UINT32 height
         case MAKEFOURCC('Y','V','1','2'):
         case MAKEFOURCC('I','4','2','0'):
         case MAKEFOURCC('I','Y','U','V'):
+        case MAKEFOURCC('4','2','0','O'):
+        case MAKEFOURCC('Y','4','1','P'):
             /* 2 x 2 block, interleaving UV for half the height */
             *size = ((width + 1) & ~1) * height * 3 / 2;
             break;
         case MAKEFOURCC('P','0','1','0'):
+        case MAKEFOURCC('P','0','1','6'):
             /* width is rounded up to a multiple of two */
             *size = ((width + 1) & ~1) * height * 3;
+            break;
+        case MAKEFOURCC('I','4','2','2'):
+        case MAKEFOURCC('P','2','0','8'):
+            *size = ((width + 1) & ~1) * height * 2;
+            break;
+        case MAKEFOURCC('P','2','1','0'):
+        case MAKEFOURCC('P','2','1','6'):
+        case MAKEFOURCC('Y','2','1','0'):
+        case MAKEFOURCC('Y','2','1','6'):
+            *size = ((width + 1) & ~1) * height * 4;
+            break;
+        case MAKEFOURCC('I','4','4','4'):
+            *size = width * height * 3;
             break;
         case MAKEFOURCC('N','V','1','1'):
             *size = ((width + 3) & ~3) * height * 3 / 2;
@@ -2881,8 +2926,22 @@ HRESULT WINAPI MFGetPlaneSize(DWORD fourcc, DWORD width, DWORD height, DWORD *si
         case MAKEFOURCC('I','4','2','0'):
         case MAKEFOURCC('I','Y','U','V'):
         case MAKEFOURCC('N','V','1','1'):
+        case MAKEFOURCC('N','V','2','1'):
+        case MAKEFOURCC('4','2','0','O'):
         case MAKEFOURCC('P','0','1','0'):
+        case MAKEFOURCC('P','0','1','6'):
             *size = stride * height * 3 / 2;
+            break;
+        case MAKEFOURCC('Y','4','1','P'):
+            *size = width * height * 3 / 2;
+            break;
+        case MAKEFOURCC('I','4','2','2'):
+        case MAKEFOURCC('P','2','1','0'):
+        case MAKEFOURCC('P','2','1','6'):
+            *size = stride * height * 2;
+            break;
+        case MAKEFOURCC('I','4','4','4'):
+            *size = stride * height * 3;
             break;
         default:
             *size = stride * height;
