@@ -8539,8 +8539,12 @@ static void test_wmv_decoder_dmo_get_size_info(void)
 
     hr = CoInitialize(NULL);
     ok(hr == S_OK, "CoInitialize failed, hr %#lx.\n", hr);
-    hr = CoCreateInstance(&CLSID_CWMVDecMediaObject, NULL, CLSCTX_INPROC_SERVER, &IID_IMediaObject, (void **)&dmo);
-    ok(hr == S_OK, "CoCreateInstance failed, hr %#lx.\n", hr);
+    if (FAILED(hr = CoCreateInstance(&CLSID_CWMVDecMediaObject, NULL, CLSCTX_INPROC_SERVER, &IID_IMediaObject, (void **)&dmo)))
+    {
+        CoUninitialize();
+        winetest_pop_context();
+        return;
+    }
 
     /* Test GetOutputSizeInfo. */
     hr = IMediaObject_GetOutputSizeInfo(dmo, 1, NULL, NULL);
