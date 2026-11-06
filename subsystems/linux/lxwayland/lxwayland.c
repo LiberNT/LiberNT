@@ -35,6 +35,7 @@ typedef int32_t LONG;
 #define DRM_IOCTL_PRIME_FD_TO_HANDLE 0xC00C642Eu
 #define DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST 0xC02C6446u
 #define DRM_IOCTL_VIRTGPU_WAIT  0xC0086448u
+#define DRM_IOCTL_VIRTGPU_RESOURCE_INFO 0xC0106445u
 
 #define XDG_STATE_MAXIMIZED     1
 #define XDG_STATE_FULLSCREEN    2
@@ -163,6 +164,7 @@ typedef struct _BUFFER
     uint32_t Format;
     uint32_t Handle;
     bool YInvert;
+    bool Blob;
 } BUFFER;
 
 typedef struct _DMABUF_PARAMS
@@ -1209,7 +1211,7 @@ SurfaceStore(SURFACE *Surface, const RECT32 *Damage, uint32_t DamageCount)
     }
     if (Surface->Image == NULL)
         return true;
-    if (Buffer->Handle != 0)
+    if (Buffer->Handle != 0 && !Buffer->Blob)
         BufferReadback(Buffer, Damage, DamageCount);
     for (Index = 0; Index < (DamageCount != 0 ? DamageCount : 1); Index++)
     {
@@ -2933,6 +2935,7 @@ BUFFER *
 DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Format, uint32_t Flags, bool *Bounds)
 {
     uint32_t Prime[3] = { 0, 0, (uint32_t)Params->Fd };
+    uint32_t Info[4] = { 0 };
     BUFFER *Buffer;
     POOL *Pool;
     long Size, Map;
@@ -2992,6 +2995,9 @@ DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Form
     Buffer->Format = (Format == DRM_FORMAT_XRGB8888) ? WL_SHM_FORMAT_XRGB8888 : 0;
     Buffer->Handle = Prime[0];
     Buffer->YInvert = (Flags & ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT) != 0;
+    Info[0] = Prime[0];
+    Buffer->Blob = LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_VIRTGPU_RESOURCE_INFO, (long)Info, 0, 0, 0) == 0 &&
+                   Info[3] != 0;
     return Buffer;
 }
 
