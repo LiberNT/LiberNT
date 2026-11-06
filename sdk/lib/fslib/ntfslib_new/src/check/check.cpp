@@ -19,6 +19,7 @@ struct CrossLink
 {
     ULONGLONG Owner;
     ULONGLONG Vcn;
+    ULONGLONG Lcn;
     ULONGLONG Length;
     ULONG Type;
     USHORT NameLength;
@@ -70,6 +71,7 @@ public:
     ~VolumeCheck()
     {
         delete[] UsedMap;
+        delete[] CrossMap;
         delete[] MftBitmap;
         delete[] DirectoryMap;
         delete[] InUseMap;
@@ -127,6 +129,7 @@ private:
     ULONG DanglingCapacity = 0;
 
     PUCHAR UsedMap = NULL;
+    PUCHAR CrossMap = NULL;
     PUCHAR MftBitmap = NULL;
     ULONG MftBitmapLength = 0;
     PUCHAR DirectoryMap = NULL;
@@ -233,7 +236,7 @@ private:
     static BOOLEAN KeepListEntry(_In_ void* Context, _In_ const AttributeListEx* Entry);
     void CheckAttributeLists();
     void RecoverLostFiles();
-    void RememberCrossLink(_In_ ULONGLONG Owner, _In_ PAttribute Attr, _In_ ULONGLONG Vcn, _In_ ULONGLONG Length);
+    void RememberCrossLink(_In_ ULONGLONG Owner, _In_ PAttribute Attr, _In_ ULONGLONG Vcn, _In_ ULONGLONG Lcn, _In_ ULONGLONG Length);
     void ResolveCrossLinks();
     void RemoveDangling();
     ULONG CheckIndexEntries(_In_ ULONGLONG Directory,
@@ -293,7 +296,6 @@ VolumeCheck::CheckRunList(_In_ ULONGLONG Number, _In_ ULONGLONG Owner, _In_ PAtt
     const UCHAR* End;
     ULONGLONG Vcn = Attr->NonResident.FirstVCN;
     ULONGLONG Lcn = 0;
-    BOOLEAN Reported = FALSE;
 
     if (Attr->NonResident.DataRunsOffset >= Attr->Length)
     {
@@ -333,20 +335,27 @@ VolumeCheck::CheckRunList(_In_ ULONGLONG Number, _In_ ULONGLONG Owner, _In_ PAtt
                 Event(NtfsCheckClusterOutOfRange, Number, Lcn);
                 return;
             }
+            ULONGLONG FirstShared = 0;
+            BOOLEAN Shared = FALSE;
+
             for (ULONGLONG Cluster = Lcn; Cluster < Lcn + Length; Cluster++)
             {
                 if (TestBit(UsedMap, Cluster))
                 {
-                    if (!Reported)
-                    {
-                        Event(NtfsCheckCrossLinked, Number, Cluster);
-                        RememberCrossLink(Owner, Attr, Vcn, Length);
-                    }
-                    Reported = TRUE;
+                    if (!Shared)
+                        FirstShared = Cluster;
+                    Shared = TRUE;
+                    if (CrossMap)
+                        SetBit(CrossMap, Cluster);
                     continue;
                 }
                 SetBit(UsedMap, Cluster);
                 Out->UsedClusters++;
+            }
+            if (Shared)
+            {
+                Event(NtfsCheckCrossLinked, Number, FirstShared);
+                RememberCrossLink(Owner, Attr, Vcn, Lcn, Length);
             }
         }
         Vcn += Length;
@@ -528,7 +537,7 @@ VolumeCheck::RememberCorrupt(_In_ ULONGLONG Number, _In_ ULONG Faults, _In_ BOOL
 }
 
 void
-VolumeCheck::RememberCrossLink(_In_ ULONGLONG Owner, _In_ PAttribute Attr, _In_ ULONGLONG Vcn, _In_ ULONGLONG Length)
+VolumeCheck::RememberCrossLink(_In_ ULONGLONG Owner, _In_ PAttribute Attr, _In_ ULONGLONG Vcn, _In_ ULONGLONG Lcn, _In_ ULONGLONG Length)
 {
     if (!RepairRecords || Owner < CHECK_FIRST_USER_RECORD || Length == 0 || Length > MAXULONG)
         return;
@@ -548,6 +557,7 @@ VolumeCheck::RememberCrossLink(_In_ ULONGLONG Owner, _In_ PAttribute Attr, _In_ 
 
     CrossLinks[CrossLinkCount].Owner = Owner;
     CrossLinks[CrossLinkCount].Vcn = Vcn;
+    CrossLinks[CrossLinkCount].Lcn = Lcn;
     CrossLinks[CrossLinkCount].Length = Length;
     CrossLinks[CrossLinkCount].Type = Attr->AttributeType;
     CrossLinks[CrossLinkCount].NameLength = Attr->NameLength;
@@ -591,6 +601,25 @@ VolumeCheck::ResolveCrossLinks()
                                     Lcn,
                                     (ULONG)Link->Length);
         delete File;
+
+        /* The move released the old run, but its shared clusters still belong to the other owner. */
+        for (ULONGLONG Cluster = Link->Lcn; NT_SUCCESS(Status) && Cluster < Link->Lcn + Link->Length;)
+        {
+            DataRun SharedRun = {};
+
+            if (!TestBit(CrossMap, Cluster))
+            {
+                Cluster++;
+                continue;
+            }
+            SharedRun.LCN = Cluster;
+            while (Cluster < Link->Lcn + Link->Length && TestBit(CrossMap, Cluster))
+            {
+                SharedRun.Length++;
+                Cluster++;
+            }
+            Status = V->ClaimClusters(&SharedRun);
+        }
 
         if (NT_SUCCESS(Status))
         {
@@ -1275,18 +1304,21 @@ VolumeCheck::CheckBitmap(_In_ BOOLEAN Repair)
     if (NT_SUCCESS(Status))
     {
         BOOLEAN Fix = Repair && StructuralErrors == 0 && !V->IsReadOnly;
+        BOOLEAN Claim = Repair && StructuralErrors == CrossLinkCount && !V->IsReadOnly;
 
         for (ULONG Index = 0; Index < Missing.Count; Index++)
             Event(NtfsCheckUsedClustersFree, Missing.Ranges[Index].Lcn, Missing.Ranges[Index].Length);
         if (Out->LostClusters)
             Event(NtfsCheckLostClusters, Out->LostClusters, Lost.Count);
 
-        for (ULONG Index = 0; Fix && NT_SUCCESS(Status) && Index < Missing.Count; Index++)
+        for (ULONG Index = 0; Claim && NT_SUCCESS(Status) && Index < Missing.Count; Index++)
             Status = RepairRange(TRUE, Missing.Ranges[Index].Lcn, Missing.Ranges[Index].Length);
         for (ULONG Index = 0; Fix && NT_SUCCESS(Status) && Index < Lost.Count; Index++)
             Status = RepairRange(FALSE, Lost.Ranges[Index].Lcn, Lost.Ranges[Index].Length);
-        if (Fix && NT_SUCCESS(Status))
-            Out->Errors -= Missing.Count + (Out->LostClusters ? 1 : 0);
+        if (Claim && NT_SUCCESS(Status))
+            Out->Errors -= Missing.Count;
+        if (Fix && NT_SUCCESS(Status) && Out->LostClusters)
+            Out->Errors--;
     }
 
     delete[] Lost.Ranges;
@@ -1674,6 +1706,12 @@ VolumeCheck::Run(_In_ BOOLEAN Repair)
         return Status;
 
     RepairRecords = Repair && !V->IsReadOnly;
+    if (RepairRecords)
+    {
+        CrossMap = AllocateMap(ClusterCount);
+        if (!CrossMap)
+            return STATUS_INSUFFICIENT_RESOURCES;
+    }
     for (ULONGLONG First = 0; First < RecordCount; First += CHECK_RECORD_CHUNK)
     {
         ULONG Count = (ULONG)min((ULONGLONG)CHECK_RECORD_CHUNK, RecordCount - First);
