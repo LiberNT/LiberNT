@@ -34,6 +34,10 @@
 
 #define WM_LX_MESSAGE   (WM_APP + 1)
 #define WM_LX_GONE      (WM_APP + 2)
+#define WM_LX_RENDERER  (WM_APP + 3)
+
+#define LX_RENDERER_RESTARTS        5
+#define LX_RENDERER_RESTART_WINDOW  60000
 
 #define LX_HOST_CLASS   L"LiberNT.LinuxWindow"
 #define LX_HOST_MESSAGE L"LiberNT.LinuxWindowHost"
@@ -918,6 +922,22 @@ LxSendHello(VOID)
     LxSend(&Hello, sizeof(Hello));
 }
 
+static WCHAR LxRendererRoot[MAX_PATH];
+static HANDLE LxRendererWait;
+static ULONG LxRendererRestarts;
+static ULONGLONG LxRendererWindowStart;
+
+static
+VOID
+CALLBACK
+LxRendererExited(
+    _In_ PVOID Context,
+    _In_ BOOLEAN TimedOut)
+{
+    UNREFERENCED_PARAMETER(TimedOut);
+    PostMessageW(LxMessageWindow, WM_LX_RENDERER, 0, (LPARAM)Context);
+}
+
 static
 VOID
 LxStartRenderer(
@@ -948,8 +968,35 @@ LxStartRenderer(
     if (CreateProcessW(Program, Command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
     {
         CloseHandle(Process.hThread);
-        CloseHandle(Process.hProcess);
+        if (!RegisterWaitForSingleObject(&LxRendererWait, Process.hProcess, LxRendererExited, Process.hProcess, INFINITE,
+                                         WT_EXECUTEONLYONCE))
+        {
+            CloseHandle(Process.hProcess);
+        }
     }
+}
+
+static
+VOID
+LxRendererGone(
+    _In_ HANDLE Process)
+{
+    ULONGLONG Now = GetTickCount64();
+    DWORD ExitCode = 0;
+
+    UnregisterWait(LxRendererWait);
+    LxRendererWait = NULL;
+    GetExitCodeProcess(Process, &ExitCode);
+    CloseHandle(Process);
+    if (ExitCode == 0)
+        return;
+    if (Now - LxRendererWindowStart > LX_RENDERER_RESTART_WINDOW)
+    {
+        LxRendererWindowStart = Now;
+        LxRendererRestarts = 0;
+    }
+    if (LxRendererRestarts++ < LX_RENDERER_RESTARTS)
+        LxStartRenderer(LxRendererRoot);
 }
 
 static
@@ -1505,6 +1552,11 @@ LxMessageProc(
         LxSendClipboard();
         return 0;
     }
+    if (Message == WM_LX_RENDERER)
+    {
+        LxRendererGone((HANDLE)LParam);
+        return 0;
+    }
     if (Message == WM_LX_GONE)
     {
         LxDestroyAll();
@@ -1668,7 +1720,7 @@ wWinMain(
     if (LxNormalizeRoot(Root, FullRoot, ARRAYSIZE(FullRoot)))
     {
         LxRootTagValue = LxRootTag(FullRoot);
-        LxStartRenderer(FullRoot);
+        wcscpy(LxRendererRoot, FullRoot);
     }
     LxIconCacheInitialize(Root);
 
@@ -1697,6 +1749,8 @@ wWinMain(
     if (LxMessageWindow == NULL)
         return 3;
     AddClipboardFormatListener(LxMessageWindow);
+    if (LxRendererRoot[0] != UNICODE_NULL)
+        LxStartRenderer(LxRendererRoot);
 
     Reader = CreateThread(NULL, 0, LxReaderThread, NULL, 0, NULL);
     if (Reader == NULL)
