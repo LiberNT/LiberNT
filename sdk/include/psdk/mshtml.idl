@@ -13344,6 +13344,26 @@ interface IHTMLFormElement : IDispatch
         [retval, out] IDispatch **pdisp);
 }
 
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050F4F6-98B5-11CF-BB82-00AA00BDCE0B)
+]
+interface IHTMLFormElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFORMELEMENT2_ACCEPTCHARSET), displaybind, bindable]
+    HRESULT acceptCharset([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFORMELEMENT2_ACCEPTCHARSET), displaybind, bindable]
+    HRESULT acceptCharset([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLFORMELEMENT2_URNS)]
+    HRESULT urns(
+        [in] VARIANT urn,
+        [retval, out] IDispatch **pUrnColl);
+}
+
 /*****************************************************************************
  *    DispHTMLFormElement dispinterface
  */
@@ -13828,7 +13848,7 @@ coclass HTMLFormElement
     [source]            dispinterface HTMLFormElementEvents2;
     WINE_HTMLELEMENT_INTERFACES;
     interface IHTMLFormElement;
- /* interface IHTMLFormElement2; */
+    interface IHTMLFormElement2;
  /* interface IHTMLFormElement3; */
  /* interface IHTMLSubmitData; */
  /* interface IHTMLFormElement4; */
