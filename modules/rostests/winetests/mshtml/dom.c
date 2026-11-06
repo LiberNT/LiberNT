@@ -11791,6 +11791,187 @@ static void test_tag_attr_only_libernt(IHTMLDocument2 *doc)
 }
 
 
+static HRESULT get_disp_prop(IDispatchEx *dispex, const WCHAR *name, VARIANT *v)
+{
+    DISPPARAMS dp = {NULL, NULL, 0, 0};
+    DISPID dispid;
+    HRESULT hres;
+    BSTR str;
+
+    str = SysAllocString(name);
+    hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+    SysFreeString(str);
+    if(FAILED(hres))
+        return hres;
+    V_VT(v) = VT_EMPTY;
+    return IDispatchEx_InvokeEx(dispex, dispid, LOCALE_NEUTRAL, DISPATCH_PROPERTYGET, &dp, v, NULL, NULL);
+}
+
+static HRESULT put_disp_prop(IDispatchEx *dispex, const WCHAR *name, const WCHAR *value)
+{
+    DISPID propput_arg = DISPID_PROPERTYPUT;
+    DISPPARAMS dp = {NULL, &propput_arg, 1, 1};
+    DISPID dispid;
+    HRESULT hres;
+    VARIANT arg;
+    BSTR str;
+
+    str = SysAllocString(name);
+    hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+    SysFreeString(str);
+    if(FAILED(hres))
+        return hres;
+    V_VT(&arg) = VT_BSTR;
+    V_BSTR(&arg) = SysAllocString(value);
+    dp.rgvarg = &arg;
+    hres = IDispatchEx_InvokeEx(dispex, dispid, LOCALE_NEUTRAL, DISPATCH_PROPERTYPUT, &dp, NULL, NULL, NULL);
+    VariantClear(&arg);
+    return hres;
+}
+
+static BOOL is_bstr_variant(const VARIANT *v, const WCHAR *str)
+{
+    if(V_VT(v) != VT_BSTR)
+        return FALSE;
+    if(!str)
+        return !V_BSTR(v);
+    return V_BSTR(v) && !wcscmp(V_BSTR(v), str);
+}
+
+static void test_attr_name_alias_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *tag;
+        const WCHAR *attr;
+        const WCHAR *prop;
+        const WCHAR *unset;
+        const WCHAR *value1;
+        const WCHAR *value2;
+    } tests[] = {
+        { L"form",   L"accept-charset", L"acceptCharset", L"UNKNOWN", L"utf-8", L"iso-8859-1" },
+        { L"form",   L"encType",        L"encoding",      L"application/x-www-form-urlencoded", L"multipart/form-data", L"text/plain" },
+        { L"label",  L"for",            L"htmlFor",       NULL, L"in1", L"in2" },
+        { L"meta",   L"http-equiv",     L"httpEquiv",     NULL, L"refresh", L"expires" },
+        { L"script", L"for",            L"htmlFor",       NULL, L"window", L"document" },
+    };
+    IHTMLAttributeCollection2 *col2;
+    IHTMLAttributeCollection *col;
+    IHTMLDOMAttribute *attr;
+    IDispatchEx *dispex;
+    IHTMLElement *elem;
+    IHTMLDOMNode *node;
+    VARIANT_BOOL vb;
+    IDispatch *disp;
+    DISPID dispid;
+    HRESULT hres;
+    unsigned i;
+    VARIANT v;
+    BSTR str;
+
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        elem = test_create_elem(doc, tests[i].tag);
+
+        hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+        ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+        str = SysAllocString(tests[i].attr);
+        hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &dispid);
+        ok(hres == DISP_E_UNKNOWNNAME, "[%s] GetDispID(%s) returned %08lx\n",
+           wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].attr), hres);
+        SysFreeString(str);
+
+        hres = get_disp_prop(dispex, tests[i].prop, &v);
+        ok(hres == S_OK, "[%s] get %s failed: %08lx\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].prop), hres);
+        ok(is_bstr_variant(&v, tests[i].unset), "[%s] unset %s = %s\n", wine_dbgstr_w(tests[i].tag),
+           wine_dbgstr_w(tests[i].prop), wine_dbgstr_variant(&v));
+        VariantClear(&v);
+
+        hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDOMNode, (void**)&node);
+        ok(hres == S_OK, "Could not get IHTMLDOMNode: %08lx\n", hres);
+        hres = IHTMLDOMNode_get_attributes(node, &disp);
+        ok(hres == S_OK, "get_attributes failed: %08lx\n", hres);
+        IHTMLDOMNode_Release(node);
+        hres = IDispatch_QueryInterface(disp, &IID_IHTMLAttributeCollection, (void**)&col);
+        ok(hres == S_OK, "Could not get IHTMLAttributeCollection: %08lx\n", hres);
+        hres = IDispatch_QueryInterface(disp, &IID_IHTMLAttributeCollection2, (void**)&col2);
+        ok(hres == S_OK, "Could not get IHTMLAttributeCollection2: %08lx\n", hres);
+        IDispatch_Release(disp);
+
+        ok(count_attr_col_name(col, tests[i].attr) == 1, "[%s] %s listed %u times\n", wine_dbgstr_w(tests[i].tag),
+           wine_dbgstr_w(tests[i].attr), count_attr_col_name(col, tests[i].attr));
+        ok(!count_attr_col_name(col, tests[i].prop), "[%s] %s listed %u times\n", wine_dbgstr_w(tests[i].tag),
+           wine_dbgstr_w(tests[i].prop), count_attr_col_name(col, tests[i].prop));
+
+        str = SysAllocString(tests[i].prop);
+        attr = (void*)0xdeadbeef;
+        hres = IHTMLAttributeCollection2_getNamedItem(col2, str, &attr);
+        ok(hres == S_OK, "[%s] getNamedItem(%s) failed: %08lx\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].prop), hres);
+        ok(!attr, "[%s] getNamedItem(%s) = %p\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].prop), attr);
+        SysFreeString(str);
+
+        str = SysAllocString(tests[i].attr);
+        attr = NULL;
+        hres = IHTMLAttributeCollection2_getNamedItem(col2, str, &attr);
+        ok(hres == S_OK && attr, "[%s] getNamedItem(%s): %08lx %p\n", wine_dbgstr_w(tests[i].tag),
+           wine_dbgstr_w(tests[i].attr), hres, attr);
+        SysFreeString(str);
+        if(attr) {
+            test_attr_node_name(attr, tests[i].attr);
+            V_VT(&v) = VT_ERROR;
+            hres = IHTMLDOMAttribute_get_nodeValue(attr, &v);
+            ok(hres == S_OK, "get_nodeValue failed: %08lx\n", hres);
+            ok(is_bstr_variant(&v, tests[i].unset), "[%s] %s nodeValue = %s\n", wine_dbgstr_w(tests[i].tag),
+               wine_dbgstr_w(tests[i].attr), wine_dbgstr_variant(&v));
+            VariantClear(&v);
+            vb = VARIANT_TRUE;
+            hres = IHTMLDOMAttribute_get_specified(attr, &vb);
+            ok(hres == S_OK, "get_specified failed: %08lx\n", hres);
+            ok(vb == VARIANT_FALSE, "[%s] %s specified = %x\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].attr), vb);
+
+            hres = put_disp_prop(dispex, tests[i].prop, tests[i].value1);
+            ok(hres == S_OK, "[%s] put %s failed: %08lx\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].prop), hres);
+            V_VT(&v) = VT_ERROR;
+            hres = IHTMLDOMAttribute_get_nodeValue(attr, &v);
+            ok(hres == S_OK, "get_nodeValue failed: %08lx\n", hres);
+            ok(is_bstr_variant(&v, tests[i].value1), "[%s] %s nodeValue after put = %s\n", wine_dbgstr_w(tests[i].tag),
+               wine_dbgstr_w(tests[i].attr), wine_dbgstr_variant(&v));
+            VariantClear(&v);
+            vb = VARIANT_FALSE;
+            hres = IHTMLDOMAttribute_get_specified(attr, &vb);
+            ok(hres == S_OK, "get_specified failed: %08lx\n", hres);
+            ok(vb == VARIANT_TRUE, "[%s] %s specified after put = %x\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].attr), vb);
+
+            V_VT(&v) = VT_BSTR;
+            V_BSTR(&v) = SysAllocString(tests[i].value2);
+            hres = IHTMLDOMAttribute_put_nodeValue(attr, v);
+            ok(hres == S_OK, "[%s] %s put_nodeValue failed: %08lx\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].attr), hres);
+            VariantClear(&v);
+            hres = get_disp_prop(dispex, tests[i].prop, &v);
+            ok(hres == S_OK, "[%s] get %s failed: %08lx\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(tests[i].prop), hres);
+            ok(is_bstr_variant(&v, tests[i].value2), "[%s] %s after put_nodeValue = %s\n", wine_dbgstr_w(tests[i].tag),
+               wine_dbgstr_w(tests[i].prop), wine_dbgstr_variant(&v));
+            VariantClear(&v);
+            ok(count_attr_col_name(col, tests[i].attr) == 1, "[%s] %s listed %u times after put\n", wine_dbgstr_w(tests[i].tag),
+               wine_dbgstr_w(tests[i].attr), count_attr_col_name(col, tests[i].attr));
+            IHTMLDOMAttribute_Release(attr);
+        }
+
+        if(!wcscmp(tests[i].prop, L"acceptCharset")) {
+            hres = put_disp_prop(dispex, tests[i].prop, L"");
+            ok(hres == S_OK, "put acceptCharset failed: %08lx\n", hres);
+            hres = get_disp_prop(dispex, tests[i].prop, &v);
+            ok(hres == S_OK, "get acceptCharset failed: %08lx\n", hres);
+            ok(is_bstr_variant(&v, L""), "empty acceptCharset = %s\n", wine_dbgstr_variant(&v));
+            VariantClear(&v);
+        }
+
+        IDispatchEx_Release(dispex);
+        IHTMLAttributeCollection2_Release(col2);
+        IHTMLAttributeCollection_Release(col);
+        IHTMLElement_Release(elem);
+    }
+}
+
+
 static void test_attr(IHTMLDocument2 *doc, IHTMLElement *elem)
 {
     static const WCHAR *elem_attr_props[] = {
@@ -14782,6 +14963,7 @@ START_TEST(dom)
         run_domtest(doc_blank, test_attr_collection_builtins);
         run_domtest(doc_blank, test_attr_collection_builtins_libernt);
         run_domtest(doc_blank, test_tag_attr_only_libernt);
+        run_domtest(doc_blank, test_attr_name_alias_libernt);
         run_domtest(doc_blank, test_text_elements_libernt);
         run_domtest(doc_blank_ie9, test_text_elements_ie9_libernt);
         if(is_ie9plus) {

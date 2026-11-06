@@ -99,8 +99,15 @@ static HRESULT WINAPI HTMLScriptElement_get_src(IHTMLScriptElement *iface, BSTR 
 static HRESULT WINAPI HTMLScriptElement_put_htmlFor(IHTMLScriptElement *iface, BSTR v)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_w(v));
-    return E_NOTIMPL;
+    nsAString html_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    nsAString_InitDepend(&html_str, v);
+    nsres = nsIDOMHTMLScriptElement_SetHtmlFor(This->nsscript, &html_str);
+    nsAString_Finish(&html_str);
+    return map_nsresult(nsres);
 }
 
 static HRESULT WINAPI HTMLScriptElement_get_htmlFor(IHTMLScriptElement *iface, BSTR *p)
@@ -380,7 +387,7 @@ static const NodeImplVtbl HTMLScriptElementImplVtbl = {
 static void HTMLScriptElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 {
     static const dispex_hook_t hooks[] = {
-        {DISPID_IHTMLSCRIPTELEMENT_HTMLFOR,    .noattr = TRUE},
+        {DISPID_IHTMLSCRIPTELEMENT_HTMLFOR,    .attr_name = L"for"},
         {DISPID_IHTMLSCRIPTELEMENT_TEXT,       .noattr = TRUE},
         {DISPID_IHTMLSCRIPTELEMENT_READYSTATE, .noattr = TRUE},
         {DISPID_UNKNOWN}

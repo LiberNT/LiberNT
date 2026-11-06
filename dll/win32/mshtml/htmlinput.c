@@ -1546,6 +1546,11 @@ static HRESULT WINAPI HTMLLabelElement_get_htmlFor(IHTMLLabelElement *iface, BST
 
     TRACE("(%p)->(%p)\n", This, p);
 
+    if(!element_has_attribute(&This->element, L"for")) {
+        *p = NULL;
+        return S_OK;
+    }
+
     return elem_string_attr_getter(&This->element, L"for", FALSE, p);
 }
 
@@ -1602,7 +1607,7 @@ static const NodeImplVtbl HTMLLabelElementImplVtbl = {
 static void HTMLLabelElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 {
     static const dispex_hook_t label_hooks[] = {
-        {DISPID_IHTMLLABELELEMENT_HTMLFOR, .noattr = TRUE},
+        {DISPID_IHTMLLABELELEMENT_HTMLFOR, .attr_name = L"for"},
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLLabelElement_tid, label_hooks);

@@ -246,6 +246,7 @@ struct constructor;
     XIID(IHTMLFiltersCollection) \
     XIID(IHTMLFontElement) \
     XIID(IHTMLFormElement) \
+    XIID(IHTMLFormElement2) \
     XIID(IHTMLFrameBase) \
     XIID(IHTMLFrameBase2) \
     XIID(IHTMLFrameElement3) \
