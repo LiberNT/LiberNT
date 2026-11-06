@@ -41,6 +41,8 @@
 #define LX_DRM_MAP_SHIFT                    32
 #define LX_DRM_WAIT_TIMEOUT                 (-15LL * 10000000LL)
 #define LX_DRM_REPLY_TIMEOUT                (-30LL * 10000000LL)
+#define LX_GPU_MAX_QUEUED                   (32 * 1024 * 1024)
+#define LX_GPU_DRAIN_POLL                   (-100LL * 10000LL)
 
 typedef struct _LX_GPU_REQUEST
 {
@@ -66,6 +68,8 @@ typedef struct _LX_GPU_CHANNEL
     LIST_ENTRY Pending;
     LIST_ENTRY Waiting;
     BOOLEAN HostAttached;
+    ULONG64 QueuedBytes;
+    KEVENT DrainEvent;
     ULONG NextSerial;
     volatile LONG Done;
     KEVENT DoneEvent;
@@ -165,6 +169,7 @@ LxGpuChannelGet(
         InitializeListHead(&Channel->Waiting);
         InitializeListHead(&Channel->Bos);
         KeInitializeEvent(&Channel->DoneEvent, NotificationEvent, FALSE);
+        KeInitializeEvent(&Channel->DrainEvent, NotificationEvent, TRUE);
         ExInitializeFastMutex(&Channel->BoLock);
         InsertTailList(&LxGpuChannels, &Channel->Link);
     }
@@ -265,15 +270,26 @@ LxGpuSend(
     _In_ PLX_GPU_CHANNEL Channel,
     _In_ PLX_GPU_REQUEST Request)
 {
+    LARGE_INTEGER Timeout;
     PIRP Irp;
     KIRQL Irql;
 
-    KeAcquireSpinLock(&Channel->Lock, &Irql);
-    if (!Channel->HostAttached)
+    for (;;)
     {
+        KeAcquireSpinLock(&Channel->Lock, &Irql);
+        if (!Channel->HostAttached)
+        {
+            KeReleaseSpinLock(&Channel->Lock, Irql);
+            return -LX_ENODEV;
+        }
+        if ((Channel->QueuedBytes == 0) || (Channel->QueuedBytes + Request->Size <= LX_GPU_MAX_QUEUED))
+            break;
+        KeClearEvent(&Channel->DrainEvent);
         KeReleaseSpinLock(&Channel->Lock, Irql);
-        return -LX_ENODEV;
+        Timeout.QuadPart = LX_GPU_DRAIN_POLL;
+        KeWaitForSingleObject(&Channel->DrainEvent, Executive, KernelMode, FALSE, &Timeout);
     }
+    Channel->QueuedBytes += Request->Size;
     Request->Message->Serial = ++Channel->NextSerial;
     InterlockedIncrement(&Request->RefCount);
     InsertTailList(&Channel->ToHost, &Request->Link);
@@ -1159,6 +1175,8 @@ LxGpuHostCleanup(
     Channel->HostAttached = FALSE;
     while (!IsListEmpty(&Channel->ToHost))
         InsertTailList(&Purge, RemoveHeadList(&Channel->ToHost));
+    Channel->QueuedBytes = 0;
+    KeSetEvent(&Channel->DrainEvent, IO_NO_INCREMENT, FALSE);
     while (!IsListEmpty(&Channel->Waiting))
         InsertTailList(&Purge, RemoveHeadList(&Channel->Waiting));
     while ((Irp = LxGpuTakePending(Channel)) != NULL)
@@ -1267,6 +1285,8 @@ LxGpuHostReceive(
             return STATUS_BUFFER_OVERFLOW;
         }
         RemoveEntryList(&Request->Link);
+        Channel->QueuedBytes -= Request->Size;
+        KeSetEvent(&Channel->DrainEvent, IO_NO_INCREMENT, FALSE);
         if (Request->Sync)
             InsertTailList(&Channel->Waiting, &Request->Link);
         else
