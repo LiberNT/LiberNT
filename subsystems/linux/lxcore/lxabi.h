@@ -850,6 +850,16 @@ typedef struct _LX_MSGINFO
                                  (1ULL << LX_CAP_DAC_READ_SEARCH) | (1ULL << LX_CAP_FOWNER) | (1ULL << LX_CAP_FSETID) | \
                                  (1ULL << LX_CAP_MAC_OVERRIDE) | (1ULL << LX_CAP_LINUX_IMMUTABLE))
 
+#define LX_VFS_CAP_REVISION_MASK        0xFF000000
+#define LX_VFS_CAP_FLAGS_EFFECTIVE      0x000001
+#define LX_VFS_CAP_REVISION_1           0x01000000
+#define LX_VFS_CAP_REVISION_2           0x02000000
+#define LX_VFS_CAP_REVISION_3           0x03000000
+#define LX_XATTR_CAPS_SZ_1              12
+#define LX_XATTR_CAPS_SZ_2              20
+#define LX_XATTR_CAPS_SZ_3              24
+#define LX_XATTR_NAME_CAPS              "security.capability"
+
 #define LX_SECBIT_NOROOT                0x001
 #define LX_SECBIT_NO_SETUID_FIXUP       0x004
 #define LX_SECBIT_KEEP_CAPS             0x010
