@@ -23,6 +23,7 @@ list(APPEND SOURCE
     CreateDialog.c
     CreateStructHook.c
     DisplayChangeBroadcast.c
+    DisplayChangeDesktops.c
     DisplayDeviceAttach.c
     DisplayDeviceRemoval.c
     DisplayTopology.c
