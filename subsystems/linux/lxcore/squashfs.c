@@ -21,6 +21,10 @@ void LzmaDec_InitDicAndState(CLzmaDec *p, BoolInt initDic, BoolInt initState);
 #define LX_SQUASHFS_DATA_RAW            (1UL << 24)
 #define LX_SQUASHFS_DATA_SIZE_MASK      0x00FFFFFF
 #define LX_SQUASHFS_NO_FRAGMENT         0xFFFFFFFF
+#define LX_SQUASHFS_NO_XATTR            0xFFFFFFFF
+#define LX_SQUASHFS_NO_TABLE            0xFFFFFFFFFFFFFFFFULL
+#define LX_SQUASHFS_XATTR_PREFIX_MASK   0x00FF
+#define LX_SQUASHFS_XATTR_VALUE_OOL     0x0100
 #define LX_SQUASHFS_META_CACHE          8
 #define LX_SQUASHFS_NAME_MAX            256
 #define LX_SQUASHFS_DIR_COUNT_MAX       256
@@ -105,6 +109,20 @@ typedef struct _LX_SQUASHFS_FRAGMENT
     ULONG Size;
     ULONG Unused;
 } LX_SQUASHFS_FRAGMENT, *PLX_SQUASHFS_FRAGMENT;
+
+typedef struct _LX_SQUASHFS_XATTR_TABLE
+{
+    ULONG64 Start;
+    ULONG Ids;
+    ULONG Unused;
+} LX_SQUASHFS_XATTR_TABLE, *PLX_SQUASHFS_XATTR_TABLE;
+
+typedef struct _LX_SQUASHFS_XATTR_ID
+{
+    ULONG64 Reference;
+    ULONG Count;
+    ULONG Size;
+} LX_SQUASHFS_XATTR_ID, *PLX_SQUASHFS_XATTR_ID;
 #pragma pack(pop)
 
 C_ASSERT(sizeof(LX_SQUASHFS_SUPER) == 96);
@@ -112,6 +130,8 @@ C_ASSERT(sizeof(LX_SQUASHFS_BASE) == 16);
 C_ASSERT(sizeof(LX_SQUASHFS_DIR_HEADER) == 12);
 C_ASSERT(sizeof(LX_SQUASHFS_DIR_ENTRY) == 8);
 C_ASSERT(sizeof(LX_SQUASHFS_FRAGMENT) == 16);
+C_ASSERT(sizeof(LX_SQUASHFS_XATTR_TABLE) == 16);
+C_ASSERT(sizeof(LX_SQUASHFS_XATTR_ID) == 16);
 
 typedef struct _LX_SQUASHFS_META
 {
@@ -137,6 +157,9 @@ struct _LX_SQUASHFS
     PULONG Ids;
     PULONG64 FragmentIndex;
     ULONG FragmentBlocks;
+    PULONG64 XattrIndex;
+    ULONG64 XattrStart;
+    ULONG XattrIds;
     PUCHAR Raw;
     ULONG RawSize;
     PUCHAR Block;
@@ -784,7 +807,7 @@ LONG
 LxSquashfsMetaRead(
     _In_ PLX_SQUASHFS Squash,
     _Inout_ PLX_SQUASHFS_CURSOR Cursor,
-    _Out_writes_bytes_(Length) PVOID Buffer,
+    _Out_writes_bytes_opt_(Length) PVOID Buffer,
     _In_ ULONG Length)
 {
     PUCHAR Out = Buffer;
@@ -811,8 +834,11 @@ LxSquashfsMetaRead(
             continue;
         }
         Chunk = min(Length, Meta->Length - Cursor->Offset);
-        RtlCopyMemory(Out, Meta->Data + Cursor->Offset, Chunk);
-        Out += Chunk;
+        if (Out != NULL)
+        {
+            RtlCopyMemory(Out, Meta->Data + Cursor->Offset, Chunk);
+            Out += Chunk;
+        }
         Length -= Chunk;
         Cursor->Offset += Chunk;
     }
@@ -868,6 +894,162 @@ LxSquashfsLoadFragments(
 
 static
 LONG
+LxSquashfsLoadXattrs(
+    _In_ PLX_SQUASHFS Squash)
+{
+    LX_SQUASHFS_XATTR_TABLE Table;
+    ULONG64 Blocks;
+    LONG Error;
+
+    if (Squash->Super.XattrIdTable == LX_SQUASHFS_NO_TABLE)
+        return 0;
+    Error = LxSquashfsReadRaw(Squash, Squash->Super.XattrIdTable, &Table, sizeof(Table));
+    if ((Error != 0) || (Table.Ids == 0))
+        return Error;
+    Blocks = ((ULONG64)Table.Ids * sizeof(LX_SQUASHFS_XATTR_ID) + LX_SQUASHFS_METADATA_SIZE - 1) /
+             LX_SQUASHFS_METADATA_SIZE;
+    if ((Table.Start >= Squash->Super.BytesUsed) || (Blocks * sizeof(ULONG64) > Squash->Super.BytesUsed))
+        return -LX_EIO;
+    Squash->XattrIndex = LxAllocPaged((SIZE_T)Blocks * sizeof(ULONG64));
+    if (Squash->XattrIndex == NULL)
+        return -LX_ENOMEM;
+    Error = LxSquashfsReadRaw(Squash, Squash->Super.XattrIdTable + sizeof(Table), Squash->XattrIndex,
+                              (ULONG)(Blocks * sizeof(ULONG64)));
+    if (Error != 0)
+        return Error;
+    Squash->XattrStart = Table.Start;
+    Squash->XattrIds = Table.Ids;
+    return 0;
+}
+
+static
+LONG
+LxSquashfsXattrCursor(
+    _In_ PLX_SQUASHFS Squash,
+    _In_ ULONG64 Reference,
+    _Out_ PLX_SQUASHFS_CURSOR Cursor)
+{
+    Cursor->Block = Squash->XattrStart + (Reference >> 16);
+    Cursor->Offset = (ULONG)(Reference & 0xFFFF);
+    if ((Cursor->Offset >= LX_SQUASHFS_METADATA_SIZE) ||
+        ((Reference >> 16) >= Squash->Super.BytesUsed - Squash->XattrStart))
+    {
+        return -LX_EIO;
+    }
+    return 0;
+}
+
+static
+LONG
+LxSquashfsXattrEntry(
+    _In_ PLX_SQUASHFS Squash,
+    _Inout_ PLX_SQUASHFS_CURSOR Cursor,
+    _Inout_updates_bytes_(LX_XATTR_BLOB_MAX) PUCHAR Blob,
+    _Inout_ PULONG Used)
+{
+    static const PCSTR Prefixes[] = { "user.", "trusted.", "security." };
+    USHORT Entry[2], Lengths[2];
+    LX_SQUASHFS_CURSOR ValueCursor;
+    PLX_SQUASHFS_CURSOR Value = Cursor;
+    ULONG Type, PrefixLength, NameLength, ValueLength, Offset = *Used;
+    ULONG64 Reference;
+    LONG Error;
+
+    Error = LxSquashfsMetaRead(Squash, Cursor, Entry, sizeof(Entry));
+    if (Error != 0)
+        return Error;
+    Type = Entry[0] & LX_SQUASHFS_XATTR_PREFIX_MASK;
+    if (Type >= RTL_NUMBER_OF(Prefixes))
+    {
+        Error = LxSquashfsMetaRead(Squash, Cursor, NULL, Entry[1]);
+        if (Error == 0)
+            Error = LxSquashfsMetaRead(Squash, Cursor, &ValueLength, sizeof(ValueLength));
+        if (Error == 0)
+            Error = LxSquashfsMetaRead(Squash, Cursor, NULL, ValueLength);
+        return Error;
+    }
+    PrefixLength = (ULONG)strlen(Prefixes[Type]);
+    NameLength = PrefixLength + Entry[1];
+    if ((Entry[1] == 0) || (NameLength > LX_XATTR_NAME_MAX) || (Offset + 4 + NameLength > LX_XATTR_BLOB_MAX))
+        return -LX_EIO;
+    RtlCopyMemory(Blob + Offset + 4, Prefixes[Type], PrefixLength);
+    Error = LxSquashfsMetaRead(Squash, Cursor, Blob + Offset + 4 + PrefixLength, Entry[1]);
+    if (Error == 0)
+        Error = LxSquashfsMetaRead(Squash, Cursor, &ValueLength, sizeof(ValueLength));
+    if ((Error == 0) && (Entry[0] & LX_SQUASHFS_XATTR_VALUE_OOL))
+    {
+        if (ValueLength != sizeof(Reference))
+            return -LX_EIO;
+        Error = LxSquashfsMetaRead(Squash, Cursor, &Reference, sizeof(Reference));
+        if (Error == 0)
+            Error = LxSquashfsXattrCursor(Squash, Reference, &ValueCursor);
+        if (Error == 0)
+            Error = LxSquashfsMetaRead(Squash, &ValueCursor, &ValueLength, sizeof(ValueLength));
+        Value = &ValueCursor;
+    }
+    if (Error != 0)
+        return Error;
+    if ((ValueLength > MAXUSHORT) || (Offset + 4 + NameLength + ValueLength > LX_XATTR_BLOB_MAX))
+        return -LX_EIO;
+    Error = LxSquashfsMetaRead(Squash, Value, Blob + Offset + 4 + NameLength, ValueLength);
+    if (Error != 0)
+        return Error;
+    Lengths[0] = (USHORT)NameLength;
+    Lengths[1] = (USHORT)ValueLength;
+    RtlCopyMemory(Blob + Offset, Lengths, sizeof(Lengths));
+    *Used = Offset + 4 + NameLength + ValueLength;
+    return 0;
+}
+
+LONG
+LxSquashfsReadXattrs(
+    _In_ PLX_SQUASHFS Squash,
+    _In_ PLX_SQUASHFS_INODE Info,
+    _Outptr_result_bytebuffer_maybenull_(*Length) PUCHAR *Result,
+    _Out_ PULONG Length)
+{
+    ULONG64 Position = (ULONG64)Info->Xattr * sizeof(LX_SQUASHFS_XATTR_ID);
+    LX_SQUASHFS_CURSOR Cursor;
+    LX_SQUASHFS_XATTR_ID Id;
+    PUCHAR Blob;
+    ULONG Index, Used = 0;
+    LONG Error;
+
+    *Result = NULL;
+    *Length = 0;
+    if ((Info->Xattr == LX_SQUASHFS_NO_XATTR) || (Squash->XattrIndex == NULL))
+        return 0;
+    if (Info->Xattr >= Squash->XattrIds)
+        return -LX_EIO;
+    Cursor.Block = Squash->XattrIndex[Position / LX_SQUASHFS_METADATA_SIZE];
+    Cursor.Offset = (ULONG)(Position % LX_SQUASHFS_METADATA_SIZE);
+    Error = LxSquashfsMetaRead(Squash, &Cursor, &Id, sizeof(Id));
+    if (Error == 0)
+        Error = LxSquashfsXattrCursor(Squash, Id.Reference, &Cursor);
+    if ((Error != 0) || (Id.Count == 0))
+        return Error;
+    Blob = LxAllocPaged(LX_XATTR_BLOB_MAX);
+    if (Blob == NULL)
+        return -LX_ENOMEM;
+    for (Index = 0; (Error == 0) && (Index < Id.Count); Index++)
+        Error = LxSquashfsXattrEntry(Squash, &Cursor, Blob, &Used);
+    if ((Error == 0) && (Used != 0))
+    {
+        *Result = LxAlloc(Used);
+        if (*Result == NULL)
+            Error = -LX_ENOMEM;
+        else
+        {
+            RtlCopyMemory(*Result, Blob, Used);
+            *Length = Used;
+        }
+    }
+    LxFreePaged(Blob);
+    return Error;
+}
+
+static
+LONG
 LxSquashfsId(
     _In_ PLX_SQUASHFS Squash,
     _In_ USHORT Index,
@@ -918,6 +1100,7 @@ LxSquashfsReadInode(
     Info->Number = Base.Number;
     Info->Nlink = 1;
     Info->Mode = Base.Mode & 07777;
+    Info->Xattr = LX_SQUASHFS_NO_XATTR;
 
     switch (Base.Type)
     {
@@ -941,6 +1124,7 @@ LxSquashfsReadInode(
             Info->Size = Fields[1];
             Info->DirBlock = Fields[2];
             Info->DirOffset = Fields[4] >> 16;
+            Info->Xattr = Fields[5];
             break;
 
         case LX_SQUASHFS_REG:
@@ -964,6 +1148,7 @@ LxSquashfsReadInode(
             Info->Nlink = Fields[6];
             Info->Fragment = Fields[7];
             Info->FragmentOffset = Fields[8];
+            Info->Xattr = Fields[9];
             break;
 
         case LX_SQUASHFS_SYMLINK:
@@ -976,6 +1161,16 @@ LxSquashfsReadInode(
             Info->Size = Fields[1];
             if ((Info->Size == 0) || (Info->Size >= LX_PATH_MAX))
                 return -LX_EIO;
+            if (Base.Type == LX_SQUASHFS_LSYMLINK)
+            {
+                LX_SQUASHFS_CURSOR Xattr = Cursor;
+
+                Error = LxSquashfsMetaRead(Squash, &Xattr, NULL, (ULONG)Info->Size);
+                if (Error == 0)
+                    Error = LxSquashfsMetaRead(Squash, &Xattr, &Info->Xattr, sizeof(Info->Xattr));
+                if (Error != 0)
+                    return Error;
+            }
             break;
 
         case LX_SQUASHFS_BLKDEV:
@@ -985,9 +1180,11 @@ LxSquashfsReadInode(
         {
             ULONG Major, Minor;
 
-            Error = LxSquashfsMetaRead(Squash, &Cursor, Fields, 8);
+            Error = LxSquashfsMetaRead(Squash, &Cursor, Fields, (Base.Type >= LX_SQUASHFS_LBLKDEV) ? 12 : 8);
             if (Error != 0)
                 return Error;
+            if (Base.Type >= LX_SQUASHFS_LBLKDEV)
+                Info->Xattr = Fields[2];
             Info->Mode |= ((Base.Type == LX_SQUASHFS_BLKDEV) || (Base.Type == LX_SQUASHFS_LBLKDEV)) ?
                           LX_S_IFBLK : LX_S_IFCHR;
             Info->Nlink = Fields[0];
@@ -1001,9 +1198,11 @@ LxSquashfsReadInode(
         case LX_SQUASHFS_SOCKET:
         case LX_SQUASHFS_LFIFO:
         case LX_SQUASHFS_LSOCKET:
-            Error = LxSquashfsMetaRead(Squash, &Cursor, Fields, 4);
+            Error = LxSquashfsMetaRead(Squash, &Cursor, Fields, (Base.Type >= LX_SQUASHFS_LFIFO) ? 8 : 4);
             if (Error != 0)
                 return Error;
+            if (Base.Type >= LX_SQUASHFS_LFIFO)
+                Info->Xattr = Fields[1];
             Info->Mode |= ((Base.Type == LX_SQUASHFS_FIFO) || (Base.Type == LX_SQUASHFS_LFIFO)) ?
                           LX_S_IFIFO : LX_S_IFSOCK;
             Info->Nlink = Fields[0];
@@ -1012,7 +1211,6 @@ LxSquashfsReadInode(
         default:
             return -LX_EIO;
     }
-    /* TODO: extended attributes of squashfs inodes */
     Info->ListBlock = Cursor.Block;
     Info->ListOffset = Cursor.Offset;
     return 0;
@@ -1294,6 +1492,7 @@ LxSquashfsClose(
         inflateEnd(&Squash->Zlib);
     LxFreePaged(Squash->Ids);
     LxFreePaged(Squash->FragmentIndex);
+    LxFreePaged(Squash->XattrIndex);
     LxFreePaged(Squash->Raw);
     LxFreePaged(Squash->Block);
     LxFreePaged(Squash->Fragment);
@@ -1392,6 +1591,8 @@ LxSquashfsOpen(
         Error = LxSquashfsLoadIds(Squash);
     if (Error == 0)
         Error = LxSquashfsLoadFragments(Squash);
+    if (Error == 0)
+        Error = LxSquashfsLoadXattrs(Squash);
     if (Error != 0)
     {
         LxSquashfsClose(Squash);

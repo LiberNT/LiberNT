@@ -667,17 +667,26 @@ LxTmpfsSquashAdd(
     LX_SQUASHFS_INODE Info;
     PLX_TMPFS_DIRENT Entry;
     PSTR Target = NULL;
+    PUCHAR Xattr = NULL;
+    ULONG XattrLength = 0;
     LONG Error;
 
     Error = LxSquashfsReadInode(Directory->Fs->Squash, Reference, &Info);
     if ((Error == 0) && ((Info.Mode & LX_S_IFMT) == LX_S_IFLNK))
         Error = LxSquashfsReadLink(Directory->Fs->Squash, &Info, &Target);
     if (Error == 0)
+        Error = LxSquashfsReadXattrs(Directory->Fs->Squash, &Info, &Xattr, &XattrLength);
+    if (Error == 0)
         Error = LxTmpfsInodeCreate(Directory->Fs, Info.Mode, Info.Uid, Info.Gid, Info.Device, Target, &Inode);
     LxFree(Target);
     if (Error != 0)
+    {
+        LxFree(Xattr);
         return Error;
+    }
     LxTmpfsSquashApply(Inode, Reference, &Info);
+    Inode->Xattr = Xattr;
+    Inode->XattrLength = XattrLength;
     Entry = LxTmpfsDirentAllocate(Name, Length);
     if (Entry == NULL)
     {
@@ -767,6 +776,8 @@ LxTmpfsCreateSquashfs(
     LX_SQUASHFS_INODE Info;
     ULONG64 Root = LxSquashfsRoot(Squash);
     PLX_TMPFS Fs;
+    PUCHAR Xattr = NULL;
+    ULONG XattrLength = 0;
     LONG Error;
 
     *Result = NULL;
@@ -775,12 +786,20 @@ LxTmpfsCreateSquashfs(
         return Error;
     if ((Info.Mode & LX_S_IFMT) != LX_S_IFDIR)
         return -LX_EINVAL;
+    Error = LxSquashfsReadXattrs(Squash, &Info, &Xattr, &XattrLength);
+    if (Error != 0)
+        return Error;
     Fs = LxTmpfsCreate(Info.Mode & 07777);
     if (Fs == NULL)
+    {
+        LxFree(Xattr);
         return -LX_ENOMEM;
+    }
     Fs->Limit = MAXULONG64;
     Fs->InodeLimit = MAXLONG;
     LxTmpfsSquashApply(Fs->Root, Root, &Info);
+    Fs->Root->Xattr = Xattr;
+    Fs->Root->XattrLength = XattrLength;
     Fs->Squash = Squash;
     Fs->SquashMounted = 1;
     *Result = Fs;
