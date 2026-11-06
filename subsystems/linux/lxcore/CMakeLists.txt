@@ -14,6 +14,7 @@ list(APPEND SOURCE
     kconfig.c
     keys.c
     lxwin.c
+    drm.c
     loop.c
     inet.c
     klog.c

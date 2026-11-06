@@ -1899,6 +1899,10 @@ LxDeviceOpenFile(
     {
         return LxWinOpen(Process, Flags, Path);
     }
+    else if (Major == LX_DRM_MAJOR)
+    {
+        return LxDrmOpen(Process, Minor, Flags, Path);
+    }
     else if (Major == LX_USB_DEVICE_MAJOR)
     {
         return LxUsbfsOpen(Minor, Flags, Path);

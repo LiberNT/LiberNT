@@ -25,6 +25,7 @@ LxProcessInitialize(VOID)
     LxIpcInitialize();
     LxMqInitialize();
     LxWinInitialize();
+    LxDrmInitialize();
 }
 
 PVOID

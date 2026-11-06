@@ -1580,6 +1580,18 @@ NTSTATUS LxWinHostCreate(_Inout_ PFILE_OBJECT FileObject);
 VOID LxWinHostCleanup(_Inout_ PFILE_OBJECT FileObject);
 VOID LxWinHostClose(_Inout_ PFILE_OBJECT FileObject);
 BOOLEAN LxWinHostIoctl(_In_ PFILE_OBJECT FileObject, _Inout_ PIRP Irp, _In_ PIO_STACK_LOCATION Stack, _Out_ PNTSTATUS Status);
+#define LX_DRM_MAJOR 226
+VOID LxDrmInitialize(VOID);
+PLX_FILE LxDrmOpen(_In_ PLX_PROCESS Process, _In_ ULONG Minor, _In_ ULONG Flags, _In_ PCSTR Path);
+BOOLEAN LxDrmIsFile(_In_ PLX_FILE File);
+BOOLEAN LxDrmPresent(VOID);
+LONG64 LxDrmMmap(_In_ PLX_PROCESS Process, _In_ PLX_FILE File, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot,
+                 _In_ ULONG Flags, _In_ ULONG64 Offset);
+NTSTATUS LxGpuHostCreate(_Inout_ PFILE_OBJECT FileObject);
+VOID LxGpuHostCleanup(_Inout_ PFILE_OBJECT FileObject);
+VOID LxGpuHostClose(_Inout_ PFILE_OBJECT FileObject);
+BOOLEAN LxGpuHostIoctl(_In_ PFILE_OBJECT FileObject, _Inout_ PIRP Irp, _In_ PIO_STACK_LOCATION Stack, _Out_ PNTSTATUS Status);
+NTSTATUS LxIpcCreateSection(_In_ ULONG64 Size, _Out_ PVOID *Section);
 
 LONG LxSignalFromException(_In_ NTSTATUS ExceptionCode, _Out_ PLONG Code);
 VOID LxSignalSend(_In_ PLX_PROCESS Target, _In_opt_ PLX_THREAD TargetThread, _In_ LONG Signal, _In_opt_ PLX_SIGINFO Info);

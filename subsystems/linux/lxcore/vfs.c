@@ -897,6 +897,9 @@ LxPopulateDev(
 
     for (Index = 0; Index < RTL_NUMBER_OF(Directories); Index++)
         LxTmpfsCreateNode(Dev, Directories[Index], LX_S_IFDIR | ((Index == 1) ? 01777 : 0755), 0, 0, 0, NULL, NULL);
+    LxTmpfsCreateNode(Dev, "dri", LX_S_IFDIR | 0755, 0, 0, 0, NULL, NULL);
+    LxTmpfsCreateNode(Dev, "dri/card0", LX_S_IFCHR | 0666, 0, 0, (ULONG64)LX_DRM_MAJOR << 32, NULL, NULL);
+    LxTmpfsCreateNode(Dev, "dri/renderD128", LX_S_IFCHR | 0666, 0, 0, ((ULONG64)LX_DRM_MAJOR << 32) | 128, NULL, NULL);
 
     UsbCount = LxSysDevUsbNodes(UsbNodes, RTL_NUMBER_OF(UsbNodes));
     for (Index = 0; Index < UsbCount; Index++)
