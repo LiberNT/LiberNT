@@ -585,3 +585,63 @@ const WL_INTERFACE xdg_toplevel_icon_v1_interface =
 {
     "xdg_toplevel_icon_v1", 1, 3, xdg_toplevel_icon_v1_requests, 0, 0
 };
+
+static const WL_MESSAGE zwp_linux_dmabuf_v1_requests[] =
+{
+    { "destroy", "", 1, 1 },
+    { "create_params", "n", 0, 1 },
+    { "get_default_feedback", "n", 0, 4 },
+    { "get_surface_feedback", "no", 0, 4 },
+};
+
+static const WL_MESSAGE zwp_linux_dmabuf_v1_events[] =
+{
+    { "format", "u", 0, 1 },
+    { "modifier", "uuu", 0, 3 },
+};
+
+const WL_INTERFACE zwp_linux_dmabuf_v1_interface =
+{
+    "zwp_linux_dmabuf_v1", 4, 4, zwp_linux_dmabuf_v1_requests, 2, zwp_linux_dmabuf_v1_events
+};
+
+static const WL_MESSAGE zwp_linux_buffer_params_v1_requests[] =
+{
+    { "destroy", "", 1, 1 },
+    { "add", "huuuuu", 0, 1 },
+    { "create", "iiuu", 0, 1 },
+    { "create_immed", "niiuu", 0, 2 },
+};
+
+static const WL_MESSAGE zwp_linux_buffer_params_v1_events[] =
+{
+    { "created", "n", 0, 1 },
+    { "failed", "", 0, 1 },
+};
+
+const WL_INTERFACE zwp_linux_buffer_params_v1_interface =
+{
+    "zwp_linux_buffer_params_v1", 4, 4, zwp_linux_buffer_params_v1_requests, 2, zwp_linux_buffer_params_v1_events
+};
+
+static const WL_MESSAGE zwp_linux_dmabuf_feedback_v1_requests[] =
+{
+    { "destroy", "", 1, 1 },
+};
+
+static const WL_MESSAGE zwp_linux_dmabuf_feedback_v1_events[] =
+{
+    { "done", "", 0, 1 },
+    { "format_table", "hu", 0, 1 },
+    { "main_device", "a", 0, 1 },
+    { "tranche_done", "", 0, 1 },
+    { "tranche_target_device", "a", 0, 1 },
+    { "tranche_formats", "a", 0, 1 },
+    { "tranche_flags", "u", 0, 1 },
+};
+
+const WL_INTERFACE zwp_linux_dmabuf_feedback_v1_interface =
+{
+    "zwp_linux_dmabuf_feedback_v1", 4, 1, zwp_linux_dmabuf_feedback_v1_requests, 7,
+    zwp_linux_dmabuf_feedback_v1_events
+};
