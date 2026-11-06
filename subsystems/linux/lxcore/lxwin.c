@@ -7,13 +7,19 @@
 
 #include "lxcore.h"
 
-#define LX_WIN_QUEUE_LIMIT  (128 * 1024 * 1024)
+#define LX_WIN_QUEUE_LIMIT  (32 * 1024 * 1024)
 
 typedef struct _LX_WIN_MESSAGE
 {
     LIST_ENTRY Link;
     ULONG Size;
-    UCHAR Data[ANYSIZE_ARRAY];
+    ULONG Type;
+    ULONG Window;
+    LONG X;
+    LONG Y;
+    ULONG Width;
+    ULONG Height;
+    PUCHAR Data;
 } LX_WIN_MESSAGE, *PLX_WIN_MESSAGE;
 
 typedef struct _LX_WIN_CHANNEL
@@ -87,12 +93,42 @@ LxWinChannelGet(
 }
 
 static
+PLX_WIN_MESSAGE
+LxWinMessageAlloc(
+    _In_ ULONG Size)
+{
+    PLX_WIN_MESSAGE Message = LxAlloc(sizeof(*Message));
+
+    if (Message == NULL)
+        return NULL;
+    Message->Data = LxAllocPaged(Size);
+    if (Message->Data == NULL)
+    {
+        LxFree(Message);
+        return NULL;
+    }
+    Message->Size = Size;
+    return Message;
+}
+
+static
+VOID
+LxWinMessageFree(
+    _In_opt_ PLX_WIN_MESSAGE Message)
+{
+    if (Message == NULL)
+        return;
+    LxFreePaged(Message->Data);
+    LxFree(Message);
+}
+
+static
 VOID
 LxWinPurge(
     _Inout_ PLIST_ENTRY Queue)
 {
     while (!IsListEmpty(Queue))
-        LxFree(CONTAINING_RECORD(RemoveHeadList(Queue), LX_WIN_MESSAGE, Link));
+        LxWinMessageFree(CONTAINING_RECORD(RemoveHeadList(Queue), LX_WIN_MESSAGE, Link));
 }
 
 static
@@ -118,15 +154,15 @@ PLX_WIN_MESSAGE
 LxWinNotice(
     _In_ ULONG Type)
 {
-    PLX_WIN_MESSAGE Message = LxAlloc(FIELD_OFFSET(LX_WIN_MESSAGE, Data) + sizeof(LX_WIN_HEADER));
+    PLX_WIN_MESSAGE Message = LxWinMessageAlloc(sizeof(LX_WIN_HEADER));
     PLX_WIN_HEADER Header;
 
     if (Message == NULL)
         return NULL;
-    Message->Size = sizeof(LX_WIN_HEADER);
     Header = (PLX_WIN_HEADER)Message->Data;
     Header->Type = Type;
     Header->Size = sizeof(LX_WIN_HEADER);
+    Message->Type = Type;
     return Message;
 }
 
@@ -206,40 +242,77 @@ LxWinTakePending(
 
 static
 VOID
+LxWinDropCovered(
+    _Inout_ PLX_WIN_CHANNEL Channel,
+    _In_ PLX_WIN_MESSAGE Message,
+    _Inout_ PLIST_ENTRY Dropped)
+{
+    PLIST_ENTRY Entry, Next;
+
+    if ((Message->Type != LX_WIN_PIXELS) || (Message->Width == 0) || (Message->Height == 0))
+        return;
+    for (Entry = Channel->ToHost.Flink; Entry != &Channel->ToHost; Entry = Next)
+    {
+        PLX_WIN_MESSAGE Old = CONTAINING_RECORD(Entry, LX_WIN_MESSAGE, Link);
+
+        Next = Entry->Flink;
+        if ((Old->Type == LX_WIN_PIXELS) && (Old->Window == Message->Window) && (Old->Width != 0) &&
+            ((LONG64)Message->X <= Old->X) && ((LONG64)Message->Y <= Old->Y) &&
+            ((LONG64)Message->X + Message->Width >= (LONG64)Old->X + Old->Width) &&
+            ((LONG64)Message->Y + Message->Height >= (LONG64)Old->Y + Old->Height))
+        {
+            RemoveEntryList(Entry);
+            Channel->ToHostBytes -= Old->Size;
+            InsertTailList(Dropped, Entry);
+        }
+    }
+}
+
+static
+VOID
 LxWinToHost(
     _In_ PLX_WIN_CHANNEL Channel,
     _In_ PLX_WIN_MESSAGE Message)
 {
+    ULONG Size = Message->Size;
+    LIST_ENTRY Dropped;
     PIRP Irp = NULL;
     KIRQL Irql;
 
+    InitializeListHead(&Dropped);
     KeAcquireSpinLock(&Channel->Lock, &Irql);
     if (IsListEmpty(&Channel->ToHost))
         Irp = LxWinTakePending(Channel);
     if (Irp == NULL)
     {
+        LxWinDropCovered(Channel, Message, &Dropped);
         InsertTailList(&Channel->ToHost, &Message->Link);
-        Channel->ToHostBytes += Message->Size;
+        Channel->ToHostBytes += Size;
         if (Channel->ToHostBytes >= LX_WIN_QUEUE_LIMIT)
             KeClearEvent(&Channel->ToHostSpace);
+        else
+            KeSetEvent(&Channel->ToHostSpace, IO_NO_INCREMENT, FALSE);
     }
     KeReleaseSpinLock(&Channel->Lock, Irql);
+    LxWinPurge(&Dropped);
 
     if (Irp != NULL)
     {
         PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
 
-        if (Stack->Parameters.DeviceIoControl.OutputBufferLength < Message->Size)
+        if (Stack->Parameters.DeviceIoControl.OutputBufferLength < Size)
         {
             KeAcquireSpinLock(&Channel->Lock, &Irql);
             InsertHeadList(&Channel->ToHost, &Message->Link);
-            Channel->ToHostBytes += Message->Size;
+            Channel->ToHostBytes += Size;
             KeReleaseSpinLock(&Channel->Lock, Irql);
-            LxWinComplete(Irp, Message, STATUS_SUCCESS);
+            Irp->IoStatus.Information = Size;
+            Irp->IoStatus.Status = STATUS_BUFFER_OVERFLOW;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
             return;
         }
         LxWinComplete(Irp, Message, STATUS_SUCCESS);
-        LxFree(Message);
+        LxWinMessageFree(Message);
     }
 }
 
@@ -288,7 +361,7 @@ LxWinRead(
             Result = LxCopyToUser(Buffer, Message->Data, Message->Size);
             if (Result == 0)
                 Result = Message->Size;
-            LxFree(Message);
+            LxWinMessageFree(Message);
             return Result;
         }
         KeReleaseSpinLock(&Channel->Lock, Irql);
@@ -319,18 +392,31 @@ LxWinWrite(
 
     if ((Length < sizeof(LX_WIN_HEADER)) || (Length > LX_WIN_MAX_MESSAGE))
         return -LX_EINVAL;
-    Message = LxAlloc(FIELD_OFFSET(LX_WIN_MESSAGE, Data) + (SIZE_T)Length);
+    Message = LxWinMessageAlloc((ULONG)Length);
     if (Message == NULL)
         return -LX_ENOMEM;
     Result = LxCopyFromUser(Message->Data, Buffer, (SIZE_T)Length);
     if (Result != 0)
     {
-        LxFree(Message);
+        LxWinMessageFree(Message);
         return Result;
     }
-    Message->Size = (ULONG)Length;
     Header = (PLX_WIN_HEADER)Message->Data;
     Header->Size = (ULONG)Length;
+    Message->Type = Header->Type;
+    Message->Window = Header->Window;
+    if ((Header->Type == LX_WIN_PIXELS) && (Length >= sizeof(LX_WIN_RECT_MSG)))
+    {
+        PLX_WIN_RECT_MSG Rect = (PLX_WIN_RECT_MSG)Message->Data;
+
+        if ((ULONG64)Rect->Width * Rect->Height * 4 <= Length - sizeof(LX_WIN_RECT_MSG))
+        {
+            Message->X = Rect->X;
+            Message->Y = Rect->Y;
+            Message->Width = Rect->Width;
+            Message->Height = Rect->Height;
+        }
+    }
 
     for (;;)
     {
@@ -343,19 +429,19 @@ LxWinWrite(
 
         if (!Attached)
         {
-            LxFree(Message);
+            LxWinMessageFree(Message);
             return -LX_ENOTCONN;
         }
         if (Room)
             break;
         if (File->Flags & LX_O_NONBLOCK)
         {
-            LxFree(Message);
+            LxWinMessageFree(Message);
             return -LX_EAGAIN;
         }
         if (LxWaitForEvent(&Channel->ToHostSpace, NULL) != STATUS_SUCCESS)
         {
-            LxFree(Message);
+            LxWinMessageFree(Message);
             return -LX_ERESTARTSYS;
         }
     }
@@ -425,7 +511,7 @@ LxWinRelease(
         if (Attached)
             LxWinToHost(Channel, Notice);
         else
-            LxFree(Notice);
+            LxWinMessageFree(Notice);
     }
     KeAcquireSpinLock(&Channel->Lock, &Irql);
     while (!IsListEmpty(&Channel->ToLinux))
@@ -433,7 +519,7 @@ LxWinRelease(
         PLX_WIN_MESSAGE Message = CONTAINING_RECORD(RemoveHeadList(&Channel->ToLinux), LX_WIN_MESSAGE, Link);
 
         KeReleaseSpinLock(&Channel->Lock, Irql);
-        LxFree(Message);
+        LxWinMessageFree(Message);
         KeAcquireSpinLock(&Channel->Lock, &Irql);
     }
     KeReleaseSpinLock(&Channel->Lock, Irql);
@@ -468,9 +554,9 @@ LxWinOpen(
         if (File != NULL)
             LxFileDereference(File);
         if (ToHost != NULL)
-            LxFree(ToHost);
+            LxWinMessageFree(ToHost);
         if (ToLinux != NULL)
-            LxFree(ToLinux);
+            LxWinMessageFree(ToLinux);
         LxWinChannelRelease(Channel);
         return NULL;
     }
@@ -484,8 +570,8 @@ LxWinOpen(
 
     if (Busy)
     {
-        LxFree(ToHost);
-        LxFree(ToLinux);
+        LxWinMessageFree(ToHost);
+        LxWinMessageFree(ToLinux);
         LxFileDereference(File);
         LxWinChannelRelease(Channel);
         return NULL;
@@ -501,8 +587,8 @@ LxWinOpen(
     }
     else
     {
-        LxFree(ToLinux);
-        LxFree(ToHost);
+        LxWinMessageFree(ToLinux);
+        LxWinMessageFree(ToHost);
     }
     return File;
 }
@@ -558,7 +644,7 @@ LxWinHostCleanup(
         if (LinuxOpen)
             LxWinToLinux(Channel, Notice);
         else
-            LxFree(Notice);
+            LxWinMessageFree(Notice);
     }
     LxPollWake(&Channel->Poll, LX_POLLIN | LX_POLLOUT);
     LxWinChannelRelease(Channel);
@@ -615,9 +701,9 @@ LxWinHostAttach(
         if (Channel != NULL)
             LxWinChannelRelease(Channel);
         if (ToHost != NULL)
-            LxFree(ToHost);
+            LxWinMessageFree(ToHost);
         if (ToLinux != NULL)
-            LxFree(ToLinux);
+            LxWinMessageFree(ToLinux);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
@@ -630,8 +716,8 @@ LxWinHostAttach(
 
     if (Busy)
     {
-        LxFree(ToHost);
-        LxFree(ToLinux);
+        LxWinMessageFree(ToHost);
+        LxWinMessageFree(ToLinux);
         LxWinChannelRelease(Channel);
         return STATUS_DEVICE_BUSY;
     }
@@ -643,8 +729,8 @@ LxWinHostAttach(
     }
     else
     {
-        LxFree(ToHost);
-        LxFree(ToLinux);
+        LxWinMessageFree(ToHost);
+        LxWinMessageFree(ToLinux);
     }
     LxPollWake(&Channel->Poll, LX_POLLOUT | LX_POLLWRNORM);
     return STATUS_SUCCESS;
@@ -659,6 +745,7 @@ LxWinHostReceive(
 {
     PLX_WIN_CHANNEL Channel = Host->Channel;
     PLX_WIN_MESSAGE Message = NULL;
+    ULONG Size;
     KIRQL Irql;
 
     if (Channel == NULL)
@@ -679,11 +766,12 @@ LxWinHostReceive(
                 KeSetEvent(&Channel->ToHostSpace, IO_NO_INCREMENT, FALSE);
             KeReleaseSpinLock(&Channel->Lock, Irql);
             LxWinComplete(Irp, Message, STATUS_SUCCESS);
-            LxFree(Message);
+            LxWinMessageFree(Message);
             return STATUS_SUCCESS;
         }
+        Size = Message->Size;
         KeReleaseSpinLock(&Channel->Lock, Irql);
-        Irp->IoStatus.Information = Message->Size;
+        Irp->IoStatus.Information = Size;
         Irp->IoStatus.Status = STATUS_BUFFER_OVERFLOW;
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
         return STATUS_BUFFER_OVERFLOW;
@@ -718,13 +806,14 @@ LxWinHostSend(
         return STATUS_INVALID_DEVICE_STATE;
     if ((Length < sizeof(LX_WIN_HEADER)) || (Length > LX_WIN_MAX_EVENT))
         return STATUS_INVALID_PARAMETER;
-    Message = LxAlloc(FIELD_OFFSET(LX_WIN_MESSAGE, Data) + Length);
+    Message = LxWinMessageAlloc(Length);
     if (Message == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
     RtlCopyMemory(Message->Data, Irp->AssociatedIrp.SystemBuffer, Length);
-    Message->Size = Length;
     Header = (PLX_WIN_HEADER)Message->Data;
     Header->Size = Length;
+    Message->Type = Header->Type;
+    Message->Window = Header->Window;
     LxWinToLinux(Host->Channel, Message);
     return STATUS_SUCCESS;
 }
