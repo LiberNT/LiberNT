@@ -259,7 +259,7 @@ index 9144180..bc130f0 100644
        vkr_queue_destroy(ctx, queue);
  
 diff --git a/src/venus/vkr_device_memory.c b/src/venus/vkr_device_memory.c
-index 9c2addc..eec28cc 100644
+index 9c2addc..ba3163e 100644
 --- a/src/venus/vkr_device_memory.c
 +++ b/src/venus/vkr_device_memory.c
 @@ -5,6 +5,8 @@
@@ -271,7 +271,7 @@ index 9c2addc..eec28cc 100644
  #include "venus-protocol/vn_protocol_renderer_transport.h"
  
  #include "vkr_device_memory_gen.h"
-@@ -273,10 +275,56 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+@@ -273,10 +275,64 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
        physical_dev->memory_properties.memoryTypes[mem_type_index].propertyFlags;
     uint32_t valid_fd_types = 0;
     int udmabuf_fd = -1;
@@ -324,11 +324,19 @@ index 9c2addc..eec28cc 100644
 +         host_section = -1;
 +      }
 +   }
++   if (host_section < 0 && export_info) {
++      /* FIXME: memory without a host section cannot be shared with the guest; its export is dropped */
++      VkBaseInStructure *prev_of_export_info =
++         vkr_find_prev_struct(alloc_info, VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO);
++
++      prev_of_export_info->pNext = export_info->pNext;
++      export_info = NULL;
++   }
 +#else
     if ((property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) && !res_info) {
        /* An implementation can support dma_buf import along with opaque fd export/import.
         * If the client driver is using external memory and requesting dma_buf, without
-@@ -334,6 +382,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+@@ -334,6 +390,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
           valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
        }
     }
@@ -336,7 +344,7 @@ index 9c2addc..eec28cc 100644
  
     if (export_info) {
        if (export_info->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
-@@ -345,9 +394,13 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+@@ -345,9 +402,13 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
     struct vkr_device_memory *mem = vkr_device_memory_create_and_add(ctx, args);
     if (!mem) {
        if (local_import_info.fd >= 0)
@@ -351,7 +359,7 @@ index 9c2addc..eec28cc 100644
        return;
     }
  
-@@ -355,6 +408,8 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
+@@ -355,6 +416,8 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
     mem->property_flags = property_flags;
     mem->valid_fd_types = valid_fd_types;
     mem->udmabuf_fd = udmabuf_fd;
@@ -360,7 +368,7 @@ index 9c2addc..eec28cc 100644
     mem->gbm_bo = gbm_bo;
     mem->allocation_size = alloc_info->allocationSize;
     mem->memory_type_index = mem_type_index;
-@@ -369,8 +424,19 @@ vkr_dispatch_vkFreeMemory(struct vn_dispatch_context *dispatch,
+@@ -369,8 +432,19 @@ vkr_dispatch_vkFreeMemory(struct vn_dispatch_context *dispatch,
     if (!mem)
        return;
  
@@ -380,7 +388,7 @@ index 9c2addc..eec28cc 100644
  }
  
  static void
-@@ -467,7 +533,13 @@ vkr_device_memory_release(struct vkr_device_memory *mem)
+@@ -467,7 +541,13 @@ vkr_device_memory_release(struct vkr_device_memory *mem)
     if (mem->gbm_bo)
        vkr_gbm_bo_destroy(mem->gbm_bo);
     if (mem->udmabuf_fd >= 0)
@@ -395,7 +403,7 @@ index 9c2addc..eec28cc 100644
  }
  
  bool
-@@ -538,7 +610,13 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
+@@ -538,7 +618,13 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
     }
  
     int fd;
@@ -410,7 +418,7 @@ index 9c2addc..eec28cc 100644
        fd = os_dupfd_cloexec(mem->udmabuf_fd);
        if (fd < 0) {
           vkr_log("mem udmabuf fd dup failed (%s)", strerror(errno));
-@@ -567,7 +645,7 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
+@@ -567,7 +653,7 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
        }
     }
  
