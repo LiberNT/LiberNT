@@ -669,10 +669,19 @@ LxCreateWindow(
         Width = Rect.right - Rect.left;
         Height = Rect.bottom - Rect.top;
     }
-    if (!(Message->Flags & LX_WIN_FLAG_POPUP) && !(Message->Flags & LX_WIN_FLAG_DECORATED))
+    if (!(Message->Flags & LX_WIN_FLAG_POPUP))
     {
-        X = max(0, (GetSystemMetrics(SM_CXSCREEN) - Width) / 2);
-        Y = max(0, (GetSystemMetrics(SM_CYSCREEN) - Height) / 3);
+        RECT Work;
+
+        if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &Work, 0))
+            SetRect(&Work, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+        Width = min(Width, Work.right - Work.left);
+        Height = min(Height, Work.bottom - Work.top);
+        if (!(Message->Flags & LX_WIN_FLAG_DECORATED))
+        {
+            X = Work.left + (Work.right - Work.left - Width) / 2;
+            Y = Work.top + (Work.bottom - Work.top - Height) / 3;
+        }
     }
 
     Window->Next = LxWindows;
@@ -853,6 +862,7 @@ LxSendHello(VOID)
 {
     LX_WIN_HELLO_MSG Hello;
     HDC Screen = GetDC(NULL);
+    RECT Work, Frame = { 0, 0, 0, 0 };
 
     ZeroMemory(&Hello, sizeof(Hello));
     Hello.Header.Type = LX_WIN_HELLO;
@@ -861,6 +871,13 @@ LxSendHello(VOID)
     Hello.ScreenHeight = (ULONG)GetSystemMetrics(SM_CYSCREEN);
     Hello.Dpi = (ULONG)GetDeviceCaps(Screen, LOGPIXELSX);
     Hello.RefreshMilliHz = 60000;
+    if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &Work, 0))
+        SetRect(&Work, 0, 0, (LONG)Hello.ScreenWidth, (LONG)Hello.ScreenHeight);
+    Hello.WorkWidth = (ULONG)(Work.right - Work.left);
+    Hello.WorkHeight = (ULONG)(Work.bottom - Work.top);
+    AdjustWindowRectEx(&Frame, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_APPWINDOW);
+    Hello.FrameWidth = (ULONG)(Frame.right - Frame.left);
+    Hello.FrameHeight = (ULONG)(Frame.bottom - Frame.top);
     ReleaseDC(NULL, Screen);
     LxSend(&Hello, sizeof(Hello));
 }

@@ -373,6 +373,10 @@ static uint32_t FrameCount;
 static uint32_t FrameCapacity;
 static uint32_t ScreenWidth = 1280;
 static uint32_t ScreenHeight = 800;
+static uint32_t WorkWidth = 1280;
+static uint32_t WorkHeight = 800;
+static uint32_t FrameWidth;
+static uint32_t FrameHeight;
 static bool Host;
 static SURFACE *PointerFocus;
 static SURFACE *KeyboardFocus;
@@ -1070,6 +1074,14 @@ SendToplevelConfigure(TOPLEVEL *Toplevel)
     {
         if ((States & (1u << State)) && (State <= 4 || Toplevel->Resource->Version >= 2))
             Array[Count++] = State;
+    }
+    if (Toplevel->Resource->Version >= 4)
+    {
+        int32_t BoundsWidth = (int32_t)WorkWidth - (Toplevel->Decorated ? (int32_t)FrameWidth : 0);
+        int32_t BoundsHeight = (int32_t)WorkHeight - (Toplevel->Decorated ? (int32_t)FrameHeight : 0);
+
+        if (BoundsWidth > 0 && BoundsHeight > 0)
+            WlSend(Toplevel->Resource, XDG_TOPLEVEL_EVENT_CONFIGURE_BOUNDS, BoundsWidth, BoundsHeight);
     }
     WlSend(Toplevel->Resource, XDG_TOPLEVEL_EVENT_CONFIGURE, Toplevel->Width, Toplevel->Height, Array,
            Count * (uint32_t)sizeof(uint32_t));
@@ -3898,6 +3910,15 @@ HostHello(const uint8_t *Payload, uint32_t Length)
         return;
     memcpy(&ScreenWidth, Payload, 4);
     memcpy(&ScreenHeight, Payload + 4, 4);
+    WorkWidth = ScreenWidth;
+    WorkHeight = ScreenHeight;
+    if (Length >= __builtin_offsetof(LX_WIN_HELLO_MSG, FrameHeight) + 4 - sizeof(LX_WIN_HEADER))
+    {
+        memcpy(&WorkWidth, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, WorkWidth) - sizeof(LX_WIN_HEADER), 4);
+        memcpy(&WorkHeight, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, WorkHeight) - sizeof(LX_WIN_HEADER), 4);
+        memcpy(&FrameWidth, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, FrameWidth) - sizeof(LX_WIN_HEADER), 4);
+        memcpy(&FrameHeight, Payload + __builtin_offsetof(LX_WIN_HELLO_MSG, FrameHeight) - sizeof(LX_WIN_HEADER), 4);
+    }
     Host = true;
     LxLog("window host ready, screen %ux%u", ScreenWidth, ScreenHeight);
     HostSend(LX_WIN_READY, 0, NULL, 0);

@@ -118,6 +118,10 @@ typedef struct _LX_WIN_HELLO_MSG
     ULONG ScreenHeight;
     ULONG Dpi;
     ULONG RefreshMilliHz;
+    ULONG WorkWidth;
+    ULONG WorkHeight;
+    ULONG FrameWidth;
+    ULONG FrameHeight;
 } LX_WIN_HELLO_MSG, *PLX_WIN_HELLO_MSG;
 
 typedef struct _LX_WIN_CONFIGURE_MSG
