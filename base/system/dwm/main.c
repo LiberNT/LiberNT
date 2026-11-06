@@ -369,6 +369,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PreviousInstance,
     UNREFERENCED_PARAMETER(ShowCommand);
 
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+    SetProcessShutdownParameters(1, 0);
     /* Composition must not wait behind applications' queued GPU work. */
     (void)D3DKMTSetProcessSchedulingPriorityClass(
         GetCurrentProcess(), D3DKMT_SCHEDULINGPRIORITYCLASS_REALTIME);
