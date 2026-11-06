@@ -464,6 +464,14 @@ VOID
 HandleConsoleSignIn(
     _In_ PWLSESSION Session);
 
+VOID
+HandleRemoteLogonDone(
+    _In_ PWLSESSION Session);
+
+BOOL
+QueryRemoteLogonCredentials(
+    _Out_ PWLX_CLIENT_CREDENTIALS_INFO_V2_0 Credentials);
+
 BOOL
 GinaInit(IN OUT PWLSESSION Session);
 

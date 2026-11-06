@@ -23,4 +23,5 @@ typedef struct _REMOTE_CONSOLE_MESSAGE
     ULONG TakenOver;
     WCHAR UserName[257];
     WCHAR Domain[256];
+    WCHAR Password[256];
 } REMOTE_CONSOLE_MESSAGE, *PREMOTE_CONSOLE_MESSAGE;
