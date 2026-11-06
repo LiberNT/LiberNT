@@ -140,6 +140,7 @@ static VOID TestInterfaceSelectorNormalization(VOID)
         { 0x300E, DXGK_CAPS_CORE_LEVEL_WDDM_1_2 },
         { 0x4002, DXGK_CAPS_CORE_LEVEL_WDDM_1_3 },
         { 0x4003, DXGK_CAPS_CORE_LEVEL_WDDM_1_3 },
+        { 0x5020, DXGK_CAPS_CORE_LEVEL_WDDM_2_0 },
         { 0x5022, DXGK_CAPS_CORE_LEVEL_WDDM_2_0 },
         { 0x5023, DXGK_CAPS_CORE_LEVEL_WDDM_2_0 },
         { 0x6003, DXGK_CAPS_CORE_LEVEL_WDDM_2_1 },
