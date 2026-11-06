@@ -66,6 +66,9 @@ typedef struct _LX_HOST_WINDOW
     BOOL Tracking;
     BOOL Applying;
     BOOL Shown;
+    BOOL Fullscreen;
+    LONG SavedStyle;
+    WINDOWPLACEMENT SavedPlacement;
     HICON BigIcon;
     HICON SmallIcon;
     CHAR AppId[LX_APP_ID_MAX];
@@ -172,11 +175,47 @@ LxSendConfigure(
     Message.Header.Window = Window->Id;
     Message.Width = (ULONG)Client.right;
     Message.Height = (ULONG)Client.bottom;
-    if (Placement.showCmd == SW_SHOWMAXIMIZED)
+    if (Window->Fullscreen)
+        Message.States |= LX_WIN_CONFIGURE_FULLSCREEN;
+    if ((Window->Fullscreen ? Window->SavedPlacement.showCmd : Placement.showCmd) == SW_SHOWMAXIMIZED)
         Message.States |= LX_WIN_CONFIGURE_MAXIMIZED;
     if (GetForegroundWindow() == Window->Hwnd)
         Message.States |= LX_WIN_CONFIGURE_ACTIVATED;
     LxSend(&Message, sizeof(Message));
+}
+
+static
+VOID
+LxSetFullscreen(
+    _Inout_ PLX_HOST_WINDOW Window,
+    _In_ BOOL Fullscreen)
+{
+    MONITORINFO Monitor;
+
+    if (Window->Fullscreen == Fullscreen)
+        return;
+    if (Fullscreen)
+    {
+        Monitor.cbSize = sizeof(Monitor);
+        Window->SavedPlacement.length = sizeof(Window->SavedPlacement);
+        if (!GetWindowPlacement(Window->Hwnd, &Window->SavedPlacement) ||
+            !GetMonitorInfoW(MonitorFromWindow(Window->Hwnd, MONITOR_DEFAULTTONEAREST), &Monitor))
+        {
+            return;
+        }
+        Window->SavedStyle = GetWindowLongW(Window->Hwnd, GWL_STYLE);
+        Window->Fullscreen = TRUE;
+        SetWindowLongW(Window->Hwnd, GWL_STYLE, Window->SavedStyle & ~(WS_CAPTION | WS_THICKFRAME));
+        SetWindowPos(Window->Hwnd, HWND_TOP, Monitor.rcMonitor.left, Monitor.rcMonitor.top,
+                     Monitor.rcMonitor.right - Monitor.rcMonitor.left, Monitor.rcMonitor.bottom - Monitor.rcMonitor.top,
+                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        return;
+    }
+    Window->Fullscreen = FALSE;
+    SetWindowLongW(Window->Hwnd, GWL_STYLE, Window->SavedStyle);
+    SetWindowPlacement(Window->Hwnd, &Window->SavedPlacement);
+    SetWindowPos(Window->Hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 }
 
 static
@@ -678,7 +717,7 @@ LxApplyGeometry(
         GetClientRect(Window->Hwnd, &Client);
         if ((Client.right == Width) && (Client.bottom == Height))
             return;
-        if (IsZoomed(Window->Hwnd))
+        if (IsZoomed(Window->Hwnd) || Window->Fullscreen)
             return;
         Flags |= SWP_NOMOVE;
     }
@@ -1013,9 +1052,27 @@ LxHandleMessage(
             {
                 switch (((PLX_WIN_VALUE_MSG)Header)->Value)
                 {
-                    case LX_WIN_STATE_MAXIMIZED: ShowWindow(Window->Hwnd, SW_MAXIMIZE); break;
-                    case LX_WIN_STATE_MINIMIZED: ShowWindow(Window->Hwnd, SW_MINIMIZE); break;
-                    default: ShowWindow(Window->Hwnd, SW_RESTORE); break;
+                    case LX_WIN_STATE_FULLSCREEN:
+                        LxSetFullscreen(Window, TRUE);
+                        break;
+                    case LX_WIN_STATE_MAXIMIZED:
+                        if (Window->Fullscreen)
+                            Window->SavedPlacement.showCmd = SW_SHOWMAXIMIZED;
+                        else
+                            ShowWindow(Window->Hwnd, SW_MAXIMIZE);
+                        break;
+                    case LX_WIN_STATE_MINIMIZED:
+                        ShowWindow(Window->Hwnd, SW_MINIMIZE);
+                        break;
+                    case LX_WIN_STATE_WINDOWED:
+                        LxSetFullscreen(Window, FALSE);
+                        break;
+                    default:
+                        if (Window->Fullscreen)
+                            Window->SavedPlacement.showCmd = SW_SHOWNORMAL;
+                        else
+                            ShowWindow(Window->Hwnd, SW_RESTORE);
+                        break;
                 }
                 LxSendConfigure(Window);
             }

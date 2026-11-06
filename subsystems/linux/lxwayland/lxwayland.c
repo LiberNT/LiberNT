@@ -394,6 +394,7 @@ static void DrawWindow(WINDOW *Window, const RECT32 *Damage, uint32_t DamageCoun
 static void SetSelection(WL_RESOURCE *Source, HOST_SOURCE *Host);
 static void SendAppInfo(WINDOW *Window, TOPLEVEL *Toplevel);
 static void SendIcon(WINDOW *Window, TOPLEVEL *Toplevel);
+static void RequestState(TOPLEVEL *Toplevel, uint32_t State);
 
 static
 bool
@@ -1259,6 +1260,10 @@ Map(XDG_SURFACE *Xdg)
             HostSend(LX_WIN_TITLE, Window->Id, Toplevel->Title, strlen(Toplevel->Title));
         SendAppInfo(Window, Toplevel);
         SendSizes(Toplevel);
+        if (Toplevel->States & (1u << XDG_STATE_FULLSCREEN))
+            RequestState(Toplevel, LX_WIN_STATE_FULLSCREEN);
+        else if (Toplevel->States & (1u << XDG_STATE_MAXIMIZED))
+            RequestState(Toplevel, LX_WIN_STATE_MAXIMIZED);
     }
 }
 
@@ -1430,6 +1435,12 @@ RequestState(TOPLEVEL *Toplevel, uint32_t State)
         HostSendValues(LX_WIN_STATE, Window->Id, 2, Values);
     else if (State == LX_WIN_STATE_MAXIMIZED)
         Toplevel->States |= 1u << XDG_STATE_MAXIMIZED;
+    else if (State == LX_WIN_STATE_FULLSCREEN)
+        Toplevel->States |= 1u << XDG_STATE_FULLSCREEN;
+    else if (State == LX_WIN_STATE_NORMAL)
+        Toplevel->States &= ~(1u << XDG_STATE_MAXIMIZED);
+    else if (State == LX_WIN_STATE_WINDOWED)
+        Toplevel->States &= ~(1u << XDG_STATE_FULLSCREEN);
 }
 
 static
@@ -2920,12 +2931,16 @@ ToplevelRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
             }
             break;
         case XDG_TOPLEVEL_SET_MAXIMIZED:
-        case XDG_TOPLEVEL_SET_FULLSCREEN:
             RequestState(Toplevel, LX_WIN_STATE_MAXIMIZED);
             break;
+        case XDG_TOPLEVEL_SET_FULLSCREEN:
+            RequestState(Toplevel, LX_WIN_STATE_FULLSCREEN);
+            break;
         case XDG_TOPLEVEL_UNSET_MAXIMIZED:
-        case XDG_TOPLEVEL_UNSET_FULLSCREEN:
             RequestState(Toplevel, LX_WIN_STATE_NORMAL);
+            break;
+        case XDG_TOPLEVEL_UNSET_FULLSCREEN:
+            RequestState(Toplevel, LX_WIN_STATE_WINDOWED);
             break;
         case XDG_TOPLEVEL_SET_MINIMIZED:
             RequestState(Toplevel, LX_WIN_STATE_MINIMIZED);
