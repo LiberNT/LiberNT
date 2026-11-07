@@ -578,7 +578,6 @@ AddReg = registry.inf,AddReg
 AddReg = comreg.inf,AddReg
 
 [HiveInfs.Upgrade]
-DelReg = registry.inf,DelReg
 AddReg = registry.inf,AddReg
 AddReg = comreg.inf,AddReg
 
