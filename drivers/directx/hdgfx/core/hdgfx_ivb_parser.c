@@ -37,7 +37,9 @@
 #define IVB_GFX_PIPE_CONTROL        0x1A00u
 #define IVB_MI_REGISTER_MEM_DWORDS  3u
 #define IVB_PC_FORBIDDEN            0x00A00000u
+#define IVB_PC_NOTIFY               0x00000100u
 #define IVB_FLUSH_DW_STORE_INDEX    0x00200000u
+#define IVB_FLUSH_DW_NOTIFY         0x00000100u
 #define IVB_INSTPM_CONSTANT_OFFSET  0x00400040u
 
 typedef struct _IVB_COMMAND
@@ -224,7 +226,7 @@ IvbCheckMi(
             *End = true;
             return true;
         case IVB_MI_FLUSH_DW:
-            return (Header & IVB_FLUSH_DW_STORE_INDEX) == 0;
+            return (Header & (IVB_FLUSH_DW_STORE_INDEX | IVB_FLUSH_DW_NOTIFY)) == 0;
         case IVB_MI_LOAD_REGISTER_IMM:
             if (Length % 2 == 0)
                 return false;
@@ -278,7 +280,8 @@ HdgfxIvbCheckBatch(
             Command = IvbFindCommand(IvbGfxCommands, sizeof(IvbGfxCommands) / sizeof(IvbGfxCommands[0]),
                                      (Header >> 16) & 0x1FFF, Gen, Blitter);
             Allowed = IvbCommandLength(Command, Header, Count - Position, &Length) &&
-                      (Command->First != IVB_GFX_PIPE_CONTROL || (Dwords[Position + 1] & IVB_PC_FORBIDDEN) == 0);
+                      (Command->First != IVB_GFX_PIPE_CONTROL ||
+                       (Dwords[Position + 1] & (IVB_PC_FORBIDDEN | IVB_PC_NOTIFY)) == 0);
         }
         else if (Client == IVB_CLIENT_BLT)
         {

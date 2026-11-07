@@ -775,6 +775,9 @@ TestBatchScan(void)
     static const uint32_t Predicate[] = { 0x06000000, 0x05000000 };
     static const uint32_t AppId[] = { 0x07000000, 0x05000000 };
     static const uint32_t SoDeclList[] = { 0x79170001, 0, 0, 0x05000000 };
+    static const uint32_t PipeControlNotify[] = { 0x7A000002, 0x00000100, 0, 0, 0x05000000 };
+    static const uint32_t FlushDw[] = { 0x13000001, 0, 0, 0x05000000 };
+    static const uint32_t FlushDwNotify[] = { 0x13000101, 0, 0, 0x05000000 };
     static const uint32_t Crocus[] =
     {
         0x69040000,
@@ -809,6 +812,9 @@ TestBatchScan(void)
     CHECK_EQ(HdgfxIvbCheckBatch(6, Predicate, 2, false, &Offending), 0);
     CHECK_EQ(HdgfxIvbCheckBatch(6, AppId, 2, false, &Offending), 0);
     CHECK_EQ(HdgfxIvbCheckBatch(6, SoDeclList, 4, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlNotify, 5, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDw, 4, true, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDwNotify, 4, true, &Offending), 0);
     CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, &Offending), 1);
 
     memset(Long, 0, sizeof(Long));

@@ -471,6 +471,8 @@ TestBatchCheck(void)
         { "3D packet on the blitter ring", { 0x7A000002, 0, 0, 0 }, 4, true },
         { "LRI on the blitter ring", { 0x11000001, 0x5280, 0, 0 }, 3, true },
         { "MI_FLUSH_DW store index", { 0x13200001, 0x100, 0, 0 }, 3, true },
+        { "MI_FLUSH_DW notify", { 0x13000101, 0, 0, 0 }, 3, true },
+        { "PIPE_CONTROL notify", { 0x7A000002, 0x00000100, 0, 0 }, 4, false },
         { "LRI with length bit 6", { 0x11000041, 0x5280, 0, 0 }, 3, false },
         { "MI_STORE_DATA_IMM with length bit 6", { 0x10400042, 0, 0x1000, 7 }, 4, false },
         { "MI_STORE_DATA_IMM with length bit 9", { 0x10400202, 0, 0x1000, 7 }, 4, false },
