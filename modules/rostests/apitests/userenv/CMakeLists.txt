@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    CreateEnvironmentBlock.c
     GetProfileDirs.c
     LoadUserProfile.c
     testlist.c)

@@ -3,6 +3,7 @@ list(APPEND SOURCE
     AddMandatoryAce.c
     ControlServiceEx.c
     CopySid.c
+    CreateProcessWithToken.c
     CreateService.c
     DuplicateTokenEx.c
     EnableTraceEx.c

@@ -262,6 +262,8 @@ SetTokenSessionIdTests(
     ok_ntstatus(Status, STATUS_SUCCESS);
     if (NT_SUCCESS(Status))
         ok(QueriedSessionId == OriginalSessionId, "Assigned token session changed to %lu\n", QueriedSessionId);
+    Status = NtSetInformationToken(Token, TokenSessionId, &OriginalSessionId, sizeof(OriginalSessionId));
+    ok_ntstatus(Status, STATUS_TOKEN_ALREADY_IN_USE);
     Status = NtSetInformationToken(Target, TokenSessionId, &SessionId, sizeof(SessionId));
     ok_ntstatus(Status, STATUS_SUCCESS);
     Status = NtQueryInformationToken(Target, TokenSessionId, &QueriedSessionId,

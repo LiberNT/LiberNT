@@ -704,14 +704,6 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
     if (hToken == NULL)
         return TRUE;
 
-    hKeyUser = GetCurrentUserKey(hToken);
-    if (hKeyUser == NULL)
-    {
-        DPRINT1("GetCurrentUserKey() failed\n");
-        RtlDestroyEnvironment(*Environment);
-        return FALSE;
-    }
-
     /* Set 'USERPROFILE' variable */
     Length = ARRAYSIZE(Buffer);
     if (GetUserProfileDirectoryW(hToken, Buffer, &Length))
@@ -771,6 +763,17 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
 
         if (lpDomainName != NULL)
             LocalFree(lpDomainName);
+    }
+
+    hKeyUser = GetCurrentUserKey(hToken);
+    if (hKeyUser == NULL)
+    {
+        if (GetLastError() == ERROR_FILE_NOT_FOUND)
+            return TRUE;
+
+        DPRINT1("GetCurrentUserKey() failed\n");
+        RtlDestroyEnvironment(*Environment);
+        return FALSE;
     }
 
     /* Set user environment variables */

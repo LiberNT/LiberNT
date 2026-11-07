@@ -21,12 +21,30 @@ typedef struct _SECL_REQUEST
 
 typedef struct _SECL_RESPONSE
 {
-    DWORD_PTR hProcess;
-    DWORD_PTR hThread;
+    DWORD hProcess;
+    DWORD hThread;
     DWORD dwProcessId;
     DWORD dwThreadId;
     DWORD dwError;
 } SECL_RESPONSE, *PSECL_RESPONSE;
+
+typedef struct _SECL_STARTUPINFO
+{
+    [string] WCHAR *Desktop;
+    [string] WCHAR *Title;
+    DWORD dwX;
+    DWORD dwY;
+    DWORD dwXSize;
+    DWORD dwYSize;
+    DWORD dwXCountChars;
+    DWORD dwYCountChars;
+    DWORD dwFillAttribute;
+    DWORD dwFlags;
+    WORD wShowWindow;
+    DWORD hStdInput;
+    DWORD hStdOutput;
+    DWORD hStdError;
+} SECL_STARTUPINFO, *PSECL_STARTUPINFO;
 
 [
     uuid(12b81e99-f207-4a4c-85d3-77b42f76fd14),
@@ -53,4 +71,13 @@ interface ISeclogon
         [in, ref] SECL_REQUEST *pRequest,
         [out, ref] SECL_RESPONSE *pResponse);
 */
+
+    void
+    __stdcall
+    SeclCreateProcessWithTokenW(
+        [in] handle_t hBinding,
+        [in] DWORD hToken,
+        [in, ref] SECL_REQUEST *pRequest,
+        [in, ref] SECL_STARTUPINFO *pStartupInfo,
+        [out, ref] SECL_RESPONSE *pResponse);
 }
