@@ -27,6 +27,8 @@ MiTrimPage(
     if (!MiArchPteIsValid(Pte))
         return FALSE;
 
+    MI_ASSERT(!MI_VAD_IS_DIRECT(Vad));
+    MI_ASSERT(MiArchPteFrame(Pte) < System->Pfn.FrameCount);
     Frame = (ULONG)MiArchPteFrame(Pte);
     Entry = &System->Pfn.Pfn[Frame];
 
@@ -49,6 +51,7 @@ MiTrimPage(
     {
         MI_PTE Transition = MiSoftMake(MiSoftTransition, MiSoftProtection(Entry->OriginalPte), Frame);
 
+        MI_ASSERT(MiArchPteIsValid(Pte) && MiArchPteFrame(Pte) == Frame);
         if (MiArchPteCompareExchange(Slot, Pte, Transition))
             break;
 
@@ -448,13 +451,24 @@ MiWritePageFileCluster(
     PVOID Mapping;
     ULONG i;
 
+    MI_ASSERT(PageFile != NULL);
+    MI_ASSERT(Count != 0 && Count <= MI_MAX_FILE_WRITE_PAGES);
+#if DBG || defined(MM_HOST_TEST)
+    for (i = 0; i < Count; i++)
+    {
+        MI_ASSERT(Frames[i] < System->Pfn.FrameCount);
+        MI_ASSERT(MI_PFN_FLAGS(&System->Pfn.Pfn[Frames[i]]) & MI_PFN_FLAG_IN_FLIGHT);
+        MI_ASSERT(Slots[i] != 0);
+        MI_ASSERT(i == 0 || Slots[i] == Slots[i - 1] + 1);
+    }
+#endif
     if (PageFile->Ops.WriteFrames != NULL)
     {
         Status = PageFile->Ops.WriteFrames(PageFile->Context, Slots[0], Frames, Count);
     }
     else
     {
-        MI_ASSERT(Count == 1);
+        MI_ASSERT(Count == 1 && PageFile->Ops.Write != NULL);
         Mapping = MiPfnMapFrame(&System->Pfn, Frames[0]);
         Status = PageFile->Ops.Write(PageFile->Context, Slots[0], Mapping);
         MiPfnUnmapFrame(&System->Pfn, Mapping);
@@ -507,7 +521,10 @@ MiWriteModifiedPages(
         if (Frame == MI_FRAME_INVALID)
             break;
 
+        MI_ASSERT(Written <= MaximumPages && Count <= MaximumPages - Written && Count < Limit);
+        MI_ASSERT(Frame < System->Pfn.FrameCount);
         Entry = &System->Pfn.Pfn[Frame];
+        MI_ASSERT(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_IN_FLIGHT);
 
         if ((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE) && MiSoftKind(Entry->OriginalPte) == MiSoftSubsection)
         {
@@ -530,6 +547,7 @@ MiWriteModifiedPages(
 
         Reused = (BOOLEAN)(MiSoftKind(Entry->OriginalPte) == MiSoftPageFile);
         Slot = Reused ? MiSoftValue(Entry->OriginalPte) : MiPageFileReserveSlot(PageFile);
+        MI_ASSERT(!Reused || Slot != 0);
         if (Slot == 0)
         {
             MiPfnWriteComplete(&System->Pfn, Frame, 0, FALSE);
@@ -551,6 +569,8 @@ MiWriteModifiedPages(
             Count = 0;
         }
 
+        MI_ASSERT(Count < Limit);
+        MI_ASSERT(Count == 0 || Slot == Slots[Count - 1] + 1);
         Frames[Count] = Frame;
         Slots[Count] = Slot;
         ClusterReused[Count] = Reused;
