@@ -660,6 +660,54 @@ IntCleanupCurIconCache(PPROCESSINFO Win32Process)
     }
 }
 
+static BOOL
+IntIsPhysicalSystemCursor(_In_ PCURICON_OBJECT CurIcon)
+{
+    return (CurIcon->CURSORF_flags & CURSORF_GLOBAL) && UserDpiIsVirtualCaller();
+}
+
+static HBITMAP
+IntCopyLogicalBitmap(_In_opt_ HBITMAP Source)
+{
+    SURFACE *Src, *Dst;
+    HBITMAP Copy;
+    RECTL SrcRect, DstRect;
+    EXLATEOBJ Exlo;
+
+    if (!Source)
+        return NULL;
+    Src = SURFACE_ShareLockSurface(Source);
+    if (!Src)
+        return NULL;
+    RECTL_vSetRect(&SrcRect, 0, 0, Src->SurfObj.sizlBitmap.cx, Src->SurfObj.sizlBitmap.cy);
+    RECTL_vSetRect(&DstRect, 0, 0, max(UserDpiToLogical(SrcRect.right), 1), max(UserDpiToLogical(SrcRect.bottom), 1));
+    Copy = GreCreateBitmapEx(DstRect.right, DstRect.bottom, 0, Src->SurfObj.iBitmapFormat,
+                             Src->SurfObj.fjBitmap & BMF_TOPDOWN, 0, NULL, 0);
+    Dst = Copy ? SURFACE_ShareLockSurface(Copy) : NULL;
+    if (!Dst)
+    {
+        if (Copy)
+            GreDeleteObject(Copy);
+        SURFACE_ShareUnlockSurface(Src);
+        return NULL;
+    }
+    SURFACE_vSetPalette(Dst, Src->ppal);
+    EXLATEOBJ_vInitialize(&Exlo, Src->ppal, Dst->ppal, 0, 0, 0);
+    if (!IntEngStretchBlt(&Dst->SurfObj, &Src->SurfObj, NULL, NULL, &Exlo.xlo, NULL, &DstRect, &SrcRect, NULL, NULL,
+                          NULL, COLORONCOLOR, ROP4_SRCCOPY, FALSE))
+    {
+        EXLATEOBJ_vCleanup(&Exlo);
+        SURFACE_ShareUnlockSurface(Dst);
+        SURFACE_ShareUnlockSurface(Src);
+        GreDeleteObject(Copy);
+        return NULL;
+    }
+    EXLATEOBJ_vCleanup(&Exlo);
+    SURFACE_ShareUnlockSurface(Dst);
+    SURFACE_ShareUnlockSurface(Src);
+    return Copy;
+}
+
 /*
  * @implemented
  */
@@ -715,9 +763,19 @@ NtUserGetIconInfo(
         ii.yHotspot = FrameCurIcon->yHotspot;
 
         /* Copy bitmaps */
-        ii.hbmMask = BITMAP_CopyBitmap(FrameCurIcon->hbmMask);
+        if (IntIsPhysicalSystemCursor(CurIcon))
+        {
+            ii.xHotspot = UserDpiToLogical(ii.xHotspot);
+            ii.yHotspot = UserDpiToLogical(ii.yHotspot);
+            ii.hbmMask = IntCopyLogicalBitmap(FrameCurIcon->hbmMask);
+            ii.hbmColor = IntCopyLogicalBitmap(FrameCurIcon->hbmColor);
+        }
+        else
+        {
+            ii.hbmMask = BITMAP_CopyBitmap(FrameCurIcon->hbmMask);
+            ii.hbmColor = BITMAP_CopyBitmap(FrameCurIcon->hbmColor);
+        }
         GreSetObjectOwner(ii.hbmMask, GDI_OBJ_HMGR_POWNED);
-        ii.hbmColor = BITMAP_CopyBitmap(FrameCurIcon->hbmColor);
         GreSetObjectOwner(ii.hbmColor, GDI_OBJ_HMGR_POWNED);
         colorBpp = FrameCurIcon->bpp;
 
@@ -886,7 +944,7 @@ NtUserGetIconSize(
 {
     PCURICON_OBJECT CurIcon;
     NTSTATUS Status = STATUS_SUCCESS;
-    BOOL bRet = FALSE;
+    BOOL bRet = FALSE, Logical;
 
     TRACE("Enter NtUserGetIconSize\n");
     UserEnterShared();
@@ -896,6 +954,7 @@ NtUserGetIconSize(
         goto cleanup;
     }
 
+    Logical = IntIsPhysicalSystemCursor(CurIcon);
     if (CurIcon->CURSORF_flags & CURSORF_ACON)
     {
         /* Use first frame for animated cursors */
@@ -908,9 +967,9 @@ NtUserGetIconSize(
     _SEH2_TRY
     {
         ProbeForWrite(plcx, sizeof(LONG), 1);
-        *plcx = CurIcon->cx;
+        *plcx = Logical ? UserDpiToLogical(CurIcon->cx) : CurIcon->cx;
         ProbeForWrite(plcy, sizeof(LONG), 1);
-        *plcy = CurIcon->cy * 2;
+        *plcy = (Logical ? UserDpiToLogical(CurIcon->cy) : CurIcon->cy) * 2;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -2412,6 +2471,24 @@ NtUserDrawIconEx(
         ERR("UserGetCurIconObject(0x%p) failed!\n", hIcon);
         UserLeave();
         return FALSE;
+    }
+
+    if (UserDpiIsVirtualCaller())
+    {
+        if (!cxWidth)
+        {
+            if (diFlags & DI_DEFAULTSIZE)
+                cxWidth = UserGetCallerSystemMetrics(is_icon(pIcon) ? SM_CXICON : SM_CXCURSOR);
+            else if (IntIsPhysicalSystemCursor(pIcon))
+                cxWidth = UserDpiToLogical(pIcon->cx);
+        }
+        if (!cyHeight)
+        {
+            if (diFlags & DI_DEFAULTSIZE)
+                cyHeight = UserGetCallerSystemMetrics(is_icon(pIcon) ? SM_CYICON : SM_CYCURSOR);
+            else if (IntIsPhysicalSystemCursor(pIcon))
+                cyHeight = UserDpiToLogical(pIcon->cy);
+        }
     }
 
     Ret = UserDrawIconEx(hdc,
