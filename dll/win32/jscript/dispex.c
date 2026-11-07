@@ -2698,6 +2698,10 @@ static HRESULT disp_invoke(script_ctx_t *ctx, IDispatch *disp, DISPID id, WORD f
 
     if(hres == DISP_E_EXCEPTION)
         handle_dispatch_exception(ctx, &ei);
+#ifdef __REACTOS__
+    else if(FAILED(hres))
+        hres = throw_host_error(ctx, hres);
+#endif
     return hres;
 }
 

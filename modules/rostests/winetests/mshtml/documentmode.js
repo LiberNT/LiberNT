@@ -5087,7 +5087,7 @@ sync_test("databinding props", function() {
     }catch(err) {
         ex = err.number;
     }
-    ok((ex !== undefined) === (v < 9), "option.dataFld exception " + ex);
+    ok(ex === (v < 9 ? -2146827858 : undefined), "option.dataFld exception " + ex);
 });
 
 sync_test("text block element props", function() {
