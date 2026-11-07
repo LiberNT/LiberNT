@@ -2507,7 +2507,7 @@ InstallBootManagerAndBootEntriesWorker(
     BOOLEAN IsBIOS = ((ArchType == ARCH_PcAT) || (ArchType == ARCH_NEC98x86));
     UCHAR InstallType = (Options & 0x03);
 
-    if (DiskStyle == PARTITION_STYLE_GPT)
+    if (DiskStyle == PARTITION_STYLE_GPT || IsUefiFirmware())
         return InstallEfiSystemPartition(SystemRootPath, SourceRootPath, DestinationArcPath,
                                          !!(Options & BOOT_OPTION_AFTER_WINDOWS));
 
