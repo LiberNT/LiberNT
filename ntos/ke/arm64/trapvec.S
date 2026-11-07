@@ -584,7 +584,7 @@ KiArm64SvcVectorCommon:
     ldr x13, [sp, #ARM64_EARLY_STATE_SPSR]
 .Lsvc_debug_saved:
     tbnz x13, #7, .Lsvc_keep_irq_masked
-    msr daifclr, #0x2
+    msr daifclr, #0x3
 .Lsvc_keep_irq_masked:
     isb
 
@@ -655,7 +655,7 @@ KiArm64UserServiceEntry:
     bl KiArm64SaveUserDebugState
     ldr w9, [sp, #TfSpsr]
     tbnz x9, #7, .Luser_service_irq_masked
-    msr daifclr, #0x2
+    msr daifclr, #0x3
 .Luser_service_irq_masked:
     mov x0, sp
     bl KiArm64UserServiceDispatch

@@ -110,6 +110,7 @@ KiThreadStartup:
     mov     x27, xzr
     mov     x28, xzr
     mov     x29, xzr
+    mov     x30, xzr
 
     /* ARM64: When we enter here, SP points to KSWITCH_FRAME.
      * The KSTART_FRAME is immediately above it (higher address).
@@ -206,7 +207,7 @@ KiThreadStartup:
  */
     .seh_proc KiSwapContext
 KiSwapContext:
-    msr     daifset, #0x2
+    msr     daifset, #0x3
     .seh_nop
     isb
     .seh_nop
@@ -285,7 +286,7 @@ KiSwapContext:
      */
     mrs     x18, tpidr_el1
 
-    msr     daifclr, #0x2
+    msr     daifclr, #0x3
 
     ldr     x30, [sp, #ExReturn]   /* Load caller's return address */
     add     sp, sp, #KI_SWAP_EXCEPTION_FRAME_LENGTH
