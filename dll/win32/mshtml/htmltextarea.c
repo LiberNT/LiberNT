@@ -465,6 +465,8 @@ static void *HTMLTextAreaElement_query_interface(DispatchEx *dispex, REFIID riid
         return &This->IHTMLTextAreaElement_iface;
     if(IsEqualGUID(&IID_IWineHTMLTextAreaPrivate, riid))
         return &This->IWineHTMLTextAreaPrivate_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -508,6 +510,8 @@ static void HTMLTextAreaElement_init_dispex_info(dispex_data_t *info, compat_mod
     dispex_info_add_interface(info, IHTMLTextAreaElement_tid, hooks);
     if(mode >= COMPAT_MODE_IE10)
         dispex_info_add_interface(info, IWineHTMLTextAreaPrivate_tid, NULL);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }

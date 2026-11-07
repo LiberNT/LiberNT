@@ -768,6 +768,8 @@ static void *HTMLPhraseElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(This->element.node.vtbl == &HTMLSpanElementImplVtbl && IsEqualGUID(&IID_IHTMLSpanElement, riid))
         return &This->IHTMLSpanElement_iface;
+    if(This->element.node.vtbl == &HTMLSpanElementImplVtbl && IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
     if(IsEqualGUID(&IID_IHTMLPhraseElement, riid))
         return &This->IHTMLPhraseElement_iface;
     if(IsEqualGUID(&IID_IHTMLPhraseElement2, riid))
@@ -840,12 +842,19 @@ dispex_static_data_t HTMLQuoteElement_dispex = {
     .init_info    = HTMLPhraseElement_init_dispex_info,
 };
 
+static void HTMLSpanElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
+    HTMLElement_init_dispex_info(info, mode);
+}
+
 dispex_static_data_t HTMLSpanElement_dispex = {
     .id           = OBJID_HTMLSpanElement,
     .prototype_id = OBJID_HTMLElement,
     .vtbl         = &HTMLPhraseElement_event_target_vtbl.dispex_vtbl,
     .disp_tid     = DispHTMLSpanElement_tid,
-    .init_info    = HTMLElement_init_dispex_info,
+    .init_info    = HTMLSpanElement_init_dispex_info,
 };
 
 static HRESULT create_phrase_element(HTMLDocumentNode *doc, nsIDOMElement *nselem, const NodeImplVtbl *vtbl,
@@ -1426,6 +1435,8 @@ static void *HTMLDivElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLDivElement, riid))
         return &This->IHTMLDivElement_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -1451,6 +1462,8 @@ static const event_target_vtbl_t HTMLDivElement_event_target_vtbl = {
 
 static void HTMLDivElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 {
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
     HTMLElement_init_dispex_info(info, mode);
     dispex_info_add_interface(info, IHTMLDivElement_tid, mode >= COMPAT_MODE_IE9 ? align_ie9_hooks : NULL);
 }
