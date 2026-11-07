@@ -2632,4 +2632,26 @@ GetWindowCompositionAttribute(HWND hWnd, PVOID AttributeData)
     return Result;
 }
 
+DPI_HOSTING_BEHAVIOR
+WINAPI
+SetThreadDpiHostingBehavior(_In_ DPI_HOSTING_BEHAVIOR Value)
+{
+    return (DPI_HOSTING_BEHAVIOR)(LONG_PTR)NtUserCallOneParam((DWORD_PTR)(LONG_PTR)Value,
+                                                              ONEPARAM_ROUTINE_ROS_SETTHREADDPIHOSTING);
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetThreadDpiHostingBehavior(VOID)
+{
+    return (DPI_HOSTING_BEHAVIOR)(LONG_PTR)NtUserCallOneParam(0, ONEPARAM_ROUTINE_ROS_GETTHREADDPIHOSTING);
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetWindowDpiHostingBehavior(_In_ HWND hWnd)
+{
+    return (DPI_HOSTING_BEHAVIOR)(LONG_PTR)NtUserCallHwndParam(hWnd, 0, HWNDPARAM_ROUTINE_ROS_GETDPIHOSTINGBEHAVIOR);
+}
+
 /* EOF */
