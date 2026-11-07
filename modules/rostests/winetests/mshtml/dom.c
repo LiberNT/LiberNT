@@ -72,6 +72,16 @@ static const char doc_blank_ie9[] =
     " </body>"
     "</html>";
 
+static const char doc_blank_ie11[] =
+    "<!DOCTYPE html>\n"
+    "<html>"
+    " <head>"
+    "  <meta http-equiv=\"x-ua-compatible\" content=\"IE=11\" />"
+    " </head>"
+    " <body>"
+    " </body>"
+    "</html>";
+
 static const char doc_str1[] = "<html><body>test</body></html>";
 static const char elem_test_str[] =
     "<html><head><title>test</title><style id=\"styleid\">.body { margin-right: 0px; }</style>"
@@ -11925,6 +11935,205 @@ static unsigned count_attr_col_name(IHTMLAttributeCollection *col, const WCHAR *
     return cnt;
 }
 
+static void test_databinding_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        const WCHAR *tag;
+        HRESULT qi_hres;
+        HRESULT names_hres;
+    } tests[] = {
+        { L"a",        S_OK,          S_OK },
+        { L"button",   S_OK,          S_OK },
+        { L"div",      S_OK,          S_OK },
+        { L"frame",    S_OK,          S_OK },
+        { L"iframe",   S_OK,          S_OK },
+        { L"img",      S_OK,          S_OK },
+        { L"input",    S_OK,          S_OK },
+        { L"label",    S_OK,          S_OK },
+        { L"object",   S_OK,          S_OK },
+        { L"option",   E_NOINTERFACE, S_OK },
+        { L"select",   S_OK,          S_OK },
+        { L"span",     S_OK,          S_OK },
+        { L"table",    S_OK,          S_OK },
+        { L"textarea", S_OK,          S_OK },
+        { L"b",        E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"body",     E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"br",       E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"font",     E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"form",     E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"h1",       E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"hr",       E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"li",       E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"p",        E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"td",       E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"tr",       E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"ul",       E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"winetest", E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+        { L"progress", E_NOINTERFACE, DISP_E_UNKNOWNNAME },
+    };
+    IHTMLDatabinding *databinding;
+    IHTMLElement *elem;
+    DISPID dispid;
+    HRESULT hres;
+    unsigned i;
+    BSTR str;
+
+    for(i = 0; i < ARRAY_SIZE(tests); i++) {
+        elem = test_create_elem(doc, tests[i].tag);
+
+        databinding = (void*)0xdeadbeef;
+        hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDatabinding, (void**)&databinding);
+        ok(hres == tests[i].qi_hres, "[%s] QueryInterface(IID_IHTMLDatabinding) returned %08lx\n",
+           wine_dbgstr_w(tests[i].tag), hres);
+        if(SUCCEEDED(hres)) {
+            str = (void*)0xdeadbeef;
+            hres = IHTMLDatabinding_get_dataFld(databinding, &str);
+            ok(hres == S_OK, "[%s] get_dataFld failed: %08lx\n", wine_dbgstr_w(tests[i].tag), hres);
+            ok(!str, "[%s] dataFld = %s\n", wine_dbgstr_w(tests[i].tag), wine_dbgstr_w(str));
+            IHTMLDatabinding_Release(databinding);
+        }else {
+            ok(!databinding, "[%s] databinding = %p\n", wine_dbgstr_w(tests[i].tag), databinding);
+        }
+
+        str = SysAllocString(L"dataFld");
+        hres = IHTMLElement_GetIDsOfNames(elem, &IID_NULL, &str, 1, 0, &dispid);
+        ok(hres == tests[i].names_hres, "[%s] GetIDsOfNames(dataFld) returned %08lx\n",
+           wine_dbgstr_w(tests[i].tag), hres);
+        SysFreeString(str);
+
+        IHTMLElement_Release(elem);
+    }
+}
+
+static void test_option_databinding_libernt(IHTMLDocument2 *doc)
+{
+    static const WCHAR *names[] = { L"dataFld", L"dataSrc", L"dataFormatAs" };
+    IHTMLDocument6 *doc6;
+    IHTMLElement *elem;
+    DISPPARAMS dp = {0};
+    EXCEPINFO ei;
+    BOOL ie9plus;
+    VARIANT v;
+    DISPID id;
+    HRESULT hres;
+    unsigned i, j;
+    BSTR name;
+
+    hres = IHTMLDocument2_QueryInterface(doc, &IID_IHTMLDocument6, (void**)&doc6);
+    ok(hres == S_OK, "QueryInterface(IID_IHTMLDocument6) failed: %08lx\n", hres);
+    V_VT(&v) = VT_EMPTY;
+    hres = IHTMLDocument6_get_documentMode(doc6, &v);
+    ok(hres == S_OK, "get_documentMode failed: %08lx\n", hres);
+    ie9plus = V_VT(&v) == VT_R4 && V_R4(&v) >= 9;
+    IHTMLDocument6_Release(doc6);
+
+    for(i = 0; i < ARRAY_SIZE(names); i++) {
+        elem = test_create_elem(doc, L"option");
+        name = SysAllocString(names[i]);
+
+        hres = IHTMLElement_GetIDsOfNames(elem, &IID_NULL, &name, 1, 0, &id);
+        ok(hres == S_OK, "GetIDsOfNames(%s) failed: %08lx\n", wine_dbgstr_w(names[i]), hres);
+        if(!ie9plus)
+            ok(id == DISPID_IHTMLDATABINDING_DATAFLD + (LONG)i, "%s id = %08lx\n", wine_dbgstr_w(names[i]), id);
+
+        for(j = 0; j < 2; j++) {
+            memset(&ei, 0, sizeof(ei));
+            V_VT(&v) = VT_ERROR;
+            hres = IHTMLElement_Invoke(elem, id, &IID_NULL, 0, DISPATCH_PROPERTYGET, &dp, &v, &ei, NULL);
+            if(ie9plus) {
+                ok(hres == S_OK, "[%u] get %s returned %08lx\n", j, wine_dbgstr_w(names[i]), hres);
+                ok(V_VT(&v) == VT_BSTR && !V_BSTR(&v), "[%u] %s = %s\n", j, wine_dbgstr_w(names[i]), wine_dbgstr_variant(&v));
+                VariantClear(&v);
+            }else {
+                ok(hres == E_NOINTERFACE, "[%u] get %s returned %08lx\n", j, wine_dbgstr_w(names[i]), hres);
+            }
+            if(j)
+                break;
+
+            V_VT(&v) = VT_BSTR;
+            V_BSTR(&v) = SysAllocString(L"a1");
+            hres = IHTMLElement_setAttribute(elem, name, v, 0);
+            ok(hres == S_OK, "setAttribute(%s) failed: %08lx\n", wine_dbgstr_w(names[i]), hres);
+            VariantClear(&v);
+
+            V_VT(&v) = VT_EMPTY;
+            hres = IHTMLElement_getAttribute(elem, name, 0, &v);
+            ok(hres == S_OK, "getAttribute(%s) failed: %08lx\n", wine_dbgstr_w(names[i]), hres);
+            ok(V_VT(&v) == VT_BSTR && V_BSTR(&v) && !lstrcmpW(V_BSTR(&v), L"a1"), "getAttribute(%s) = %s\n",
+               wine_dbgstr_w(names[i]), wine_dbgstr_variant(&v));
+            VariantClear(&v);
+        }
+
+        SysFreeString(name);
+        IHTMLElement_Release(elem);
+    }
+}
+
+static void test_databinding_attr_col_libernt(IHTMLDocument2 *doc)
+{
+    static const WCHAR *tags[] = { L"body", L"div" };
+    IHTMLAttributeCollection *attr_col;
+    IHTMLDOMAttribute *dom_attr;
+    IHTMLDocument6 *doc6;
+    IHTMLElement *elem;
+    IHTMLDOMNode *node;
+    LONG i, len, found;
+    unsigned t, expected;
+    IDispatch *disp;
+    HRESULT hres;
+    VARIANT v;
+    BSTR name;
+
+    hres = IHTMLDocument2_QueryInterface(doc, &IID_IHTMLDocument6, (void**)&doc6);
+    ok(hres == S_OK, "QueryInterface(IID_IHTMLDocument6) failed: %08lx\n", hres);
+    V_VT(&v) = VT_EMPTY;
+    hres = IHTMLDocument6_get_documentMode(doc6, &v);
+    ok(hres == S_OK, "get_documentMode failed: %08lx\n", hres);
+    ok(V_VT(&v) == VT_R4, "V_VT(documentMode) = %u\n", V_VT(&v));
+    expected = V_R4(&v) < 11 ? 3 : 0;
+    IHTMLDocument6_Release(doc6);
+
+    for(t = 0; t < ARRAY_SIZE(tags); t++) {
+        elem = test_create_elem(doc, tags[t]);
+
+        hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDOMNode, (void**)&node);
+        ok(hres == S_OK, "QueryInterface(IID_IHTMLDOMNode) failed: %08lx\n", hres);
+        hres = IHTMLDOMNode_get_attributes(node, &disp);
+        ok(hres == S_OK, "get_attributes failed: %08lx\n", hres);
+        hres = IDispatch_QueryInterface(disp, &IID_IHTMLAttributeCollection, (void**)&attr_col);
+        ok(hres == S_OK, "QueryInterface(IID_IHTMLAttributeCollection) failed: %08lx\n", hres);
+        IDispatch_Release(disp);
+
+        len = 0;
+        hres = IHTMLAttributeCollection_get_length(attr_col, &len);
+        ok(hres == S_OK, "get_length failed: %08lx\n", hres);
+
+        found = 0;
+        for(i = 0; i < len; i++) {
+            V_VT(&v) = VT_I4;
+            V_I4(&v) = i;
+            hres = IHTMLAttributeCollection_item(attr_col, &v, &disp);
+            ok(hres == S_OK, "[%s] item(%ld) failed: %08lx\n", wine_dbgstr_w(tags[t]), i, hres);
+            if(FAILED(hres))
+                continue;
+            hres = IDispatch_QueryInterface(disp, &IID_IHTMLDOMAttribute, (void**)&dom_attr);
+            ok(hres == S_OK, "QueryInterface(IID_IHTMLDOMAttribute) failed: %08lx\n", hres);
+            IDispatch_Release(disp);
+            hres = IHTMLDOMAttribute_get_nodeName(dom_attr, &name);
+            ok(hres == S_OK, "get_nodeName failed: %08lx\n", hres);
+            if(!wcsicmp(name, L"dataFld") || !wcsicmp(name, L"dataFormatAs") || !wcsicmp(name, L"dataSrc"))
+                found++;
+            SysFreeString(name);
+            IHTMLDOMAttribute_Release(dom_attr);
+        }
+        ok(found == expected, "[%s] %ld databinding attributes listed, expected %u\n", wine_dbgstr_w(tags[t]), found, expected);
+
+        IHTMLAttributeCollection_Release(attr_col);
+        IHTMLDOMNode_Release(node);
+        IHTMLElement_Release(elem);
+    }
+}
+
 static void test_tag_attr_only_libernt(IHTMLDocument2 *doc)
 {
     static const struct {
@@ -11957,6 +12166,9 @@ static void test_tag_attr_only_libernt(IHTMLDocument2 *doc)
         { L"span",     L"dateTime",       TRUE },
         { L"span",     L"nofocusrect",    TRUE },
         { L"div",      L"aria-label",     TRUE },
+        { L"b",        L"dataFld",        TRUE },
+        { L"hr",       L"dataFormatAs",   TRUE },
+        { L"td",       L"dataSrc",        TRUE },
         { L"address",  L"nofocusrect",    FALSE },
         { L"h1",       L"dateTime",       FALSE },
         { L"div",      L"cite",           FALSE },
@@ -16523,6 +16735,13 @@ START_TEST(dom)
         run_domtest(doc_blank, test_attr_collection_builtins);
         run_domtest(doc_blank, test_attr_collection_builtins_libernt);
         run_domtest(doc_blank, test_tag_attr_only_libernt);
+        run_domtest(doc_blank, test_databinding_libernt);
+        run_domtest(doc_blank, test_option_databinding_libernt);
+        run_domtest(doc_blank_ie8, test_option_databinding_libernt);
+        run_domtest(doc_blank_ie9, test_option_databinding_libernt);
+        run_domtest(doc_blank, test_databinding_attr_col_libernt);
+        run_domtest(doc_blank_ie9, test_databinding_attr_col_libernt);
+        run_domtest(doc_blank_ie11, test_databinding_attr_col_libernt);
         run_domtest(doc_blank, test_attr_name_alias_libernt);
         run_domtest(doc_blank, test_frameset_libernt);
         run_domtest(doc_blank, test_table_sections_libernt);

@@ -5044,6 +5044,52 @@ sync_test("list element props", function() {
     }
 });
 
+sync_test("databinding props", function() {
+    var v = document.documentMode, i, j, e, ex;
+    var tags = [ "a", "button", "div", "frame", "iframe", "img", "input", "label", "object", "select", "span", "table", "textarea" ];
+    var other_tags = [ "b", "body", "br", "hr", "p", "td" ];
+    var names = [ "dataFld", "dataFormatAs", "dataSrc" ];
+
+    for(i = 0; i < tags.length; i++) {
+        e = document.createElement(tags[i]);
+        for(j = 0; j < names.length; j++) {
+            ok((names[j] in e) === (v < 11), tags[i] + "." + names[j] + " in element = " + (names[j] in e));
+            ok(typeof(e[names[j]]) === (v < 11 ? "string" : "undefined"), "typeof " + tags[i] + "." + names[j] + " = " + typeof(e[names[j]]));
+        }
+        if(v >= 11)
+            continue;
+        e.dataFld = "fld";
+        ok(e.dataFld === "fld", tags[i] + ".dataFld after put = " + e.dataFld);
+        ok(e.getAttribute("dataFld") === "fld", tags[i] + " dataFld attribute after put = " + e.getAttribute("dataFld"));
+        e = document.createElement(tags[i]);
+        e.setAttribute("dataFld", "a1");
+        ok(e.dataFld === "a1", tags[i] + ".dataFld after setAttribute = " + e.dataFld);
+    }
+
+    for(i = 0; i < other_tags.length; i++) {
+        e = document.createElement(other_tags[i]);
+        for(j = 0; j < names.length; j++) {
+            ok(!(names[j] in e), names[j] + " in " + other_tags[i] + " element");
+            ok(typeof(e[names[j]]) === "undefined", "typeof " + other_tags[i] + "." + names[j] + " = " + typeof(e[names[j]]));
+        }
+    }
+
+    e = document.createElement("option");
+    for(j = 0; j < names.length; j++) {
+        ok((names[j] in e) === (v < 11), "option." + names[j] + " in element = " + (names[j] in e));
+        ok(typeof(e[names[j]]) === (v < 9 ? "unknown" : v < 11 ? "string" : "undefined"), "typeof option." + names[j] + " = " + typeof(e[names[j]]));
+    }
+    e.setAttribute("dataFld", "a1");
+    ok(e.getAttribute("dataFld") === "a1", "option dataFld attribute = " + e.getAttribute("dataFld"));
+    ex = undefined;
+    try {
+        ok(e.dataFld === (v < 11 ? "" : undefined), "option.dataFld after setAttribute = " + e.dataFld);
+    }catch(err) {
+        ex = err.number;
+    }
+    ok((ex !== undefined) === (v < 9), "option.dataFld exception " + ex);
+});
+
 sync_test("text block element props", function() {
     var v = document.documentMode, i, e, r, s, exp;
     function js(x) { return typeof(x) + ":" + (typeof(x) === "string" ? "'" + x + "'" : String(x)); }
@@ -5317,6 +5363,7 @@ sync_test("prototype props", function() {
     check(HTMLDListElement, [ "compact" ]);
     check(HTMLDTElement, [ "noWrap" ]);
     check(HTMLDirectoryElement, [ "compact", "type" ]);
+    check(HTMLDivElement, [ "align", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "noWrap" ]);
     check(HTMLEmbedElement, [
         "getSVGDocument", "height", "hidden", ["msPlayToDisabled",11], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11],
         "name", "palette", "pluginspage", ["readyState",11], "src", "units", "width"
@@ -5400,6 +5447,7 @@ sync_test("prototype props", function() {
         "multiple", "name", "namedItem", "options", "remove", ["required",10], "selectedIndex", ["setCustomValidity",10], "size", "tags",
         "type", "urns", ["validationMessage",10], ["validity",10], "value", ["willValidate",10]
     ], [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "namedItem", ["required",10], "urns" ]);
+    check(HTMLSpanElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10] ]);
     check(HTMLStyleElement, [ "media", "sheet", ["styleSheet",9,10], "type" ], [ ["onreadystatechange",11] ]);
     check(HTMLTableCellElement, [
         "abbr", "align", "axis", "background", "bgColor", "borderColor", "borderColorDark", "borderColorLight",
