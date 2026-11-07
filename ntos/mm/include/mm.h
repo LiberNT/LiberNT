@@ -142,8 +142,8 @@ MiSystemGetExpandCommit(_In_ PMI_SYSTEM System)
     return (PMI_EXPAND_COMMIT)MI_ATOMIC_READ_POINTER(&System->ExpandCommit);
 }
 
-NTSTATUS MiSystemInitialize(_Out_ PMI_SYSTEM System, _In_ PMI_PFN PfnArray, _In_ ULONG FrameCount,
-                            _In_ ULONG CpuCount, _In_ LONG64 CommitLimit);
+NTSTATUS MiSystemInitialize(_Out_ PMI_SYSTEM System, _In_ PMI_PFN PfnArray, _In_ ULONG FirstFrame,
+                            _In_ ULONG FrameCount, _In_ ULONG CpuCount, _In_ LONG64 CommitLimit);
 NTSTATUS MiAddressSpaceCreate(_Inout_ PMI_SYSTEM System, _Out_ PMI_ADDRESS_SPACE Space);
 VOID MiAddressSpaceDestroy(_Inout_ PMI_ADDRESS_SPACE Space);
 NTSTATUS MiAddressSpaceAdopt(_Inout_ PMI_SYSTEM System, _Out_ PMI_ADDRESS_SPACE Space, _In_ ULONG RootFrame,

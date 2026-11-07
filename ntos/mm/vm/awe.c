@@ -46,7 +46,7 @@ MiAweDeletePage(PMI_ADDRESS_SPACE Space, PMI_AWE_PAGE Page)
 
     MI_ASSERT(Page->Va == 0);
     MI_ASSERT(Page->Node.StartingVpn == Page->Node.EndingVpn);
-    MI_ASSERT(Page->Node.StartingVpn < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MiPfnTracked(&Space->System->Pfn, Page->Node.StartingVpn));
     MI_ASSERT(MiAweFindPage(Space, Frame) == Page);
     MI_ASSERT(MI_ATOMIC_READ64(&Space->AwePages) > 0);
     MiVadRemove(&Space->AweRoot, &Page->Node);

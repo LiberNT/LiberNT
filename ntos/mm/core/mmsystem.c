@@ -140,6 +140,7 @@ NTSTATUS
 MiSystemInitialize(
     _Out_ PMI_SYSTEM System,
     _In_ PMI_PFN PfnArray,
+    _In_ ULONG FirstFrame,
     _In_ ULONG FrameCount,
     _In_ ULONG CpuCount,
     _In_ LONG64 CommitLimit)
@@ -149,7 +150,7 @@ MiSystemInitialize(
     RtlZeroMemory(System, sizeof(*System));
     System->Arch = MiArchDescribe();
     System->CommitLimit = CommitLimit;
-    MiPfnDbInitialize(&System->Pfn, PfnArray, FrameCount, CpuCount);
+    MiPfnDbInitialize(&System->Pfn, PfnArray, FirstFrame, FrameCount, CpuCount);
     MiPfnDbSetDirectFrames(&System->Pfn, System->Arch->DirectFrameCount);
     MiPfnDbSetRegionRotation(&System->Pfn, System->Arch->PrefersRegionRotation);
     System->Pfn.Owner = System;

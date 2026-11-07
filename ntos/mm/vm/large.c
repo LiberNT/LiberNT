@@ -53,7 +53,7 @@ MiReleaseLargePagesLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
             MI_ASSERT(MiArchPteIsValid(Pte) ? MiArchPteIsBlock(Pte, Arch->LargePageLevel)
                       : MiSoftKind(Pte) == MiSoftResident);
             Frame = MiLargeFrame(Pte);
-            MI_ASSERT(Pages <= Db->FrameCount && Frame <= Db->FrameCount - Pages);
+            MI_ASSERT(MiPfnTracked(Db, Frame) && Pages <= Db->FrameCount - Frame);
             MI_ASSERT(Frame % Pages == 0);
             MI_ASSERT(MI_ATOMIC_READ64(&Space->LargePages) >= Pages);
             MiArchPteWrite(Slot, 0);
@@ -194,7 +194,7 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
             Status = STATUS_NO_MEMORY;
             break;
         }
-        MI_ASSERT(Pages <= Db->FrameCount && Frame <= Db->FrameCount - Pages);
+        MI_ASSERT(MiPfnTracked(Db, Frame) && Pages <= Db->FrameCount - Frame);
         MI_ASSERT(Frame % Pages == 0);
         for (i = 0; Segment == NULL && i < Pages; i++)
         {

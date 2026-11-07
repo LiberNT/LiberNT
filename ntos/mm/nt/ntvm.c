@@ -2107,7 +2107,7 @@ NtAllocateUserPhysicalPages(
     Status = MiCaptureAweCount(NumberOfPages, &Count);
     if (!NT_SUCCESS(Status))
         return Status;
-    Count = min(Count, MiSystem.Pfn.FrameCount);
+    Count = min(Count, MiSystem.Pfn.FrameCount - MiSystem.Pfn.FirstFrame);
     Frames = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Count * sizeof(*Frames), 'aAmM');
     if (Frames == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;

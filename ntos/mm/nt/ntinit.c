@@ -385,7 +385,7 @@ MiInitializePhase0(
     ULONG64 NonPagedBytes, PagedBytes, SystemPteBytes;
     ULONG64 SharedPhysical;
     PEPROCESS Process = PsGetCurrentProcess();
-    ULONG FrameCount, PfnPages, PfnFirst, ExecPages;
+    ULONG FirstFrame, FrameCount, PfnPages, PfnFirst, ExecPages;
     PLIST_ENTRY Entry;
     NTSTATUS Status;
     PMI_PFN PfnArray;
@@ -402,9 +402,10 @@ MiInitializePhase0(
     if (Largest == NULL || MmNumberOfPhysicalPages < MI_MINIMUM_PHYSICAL_PAGES)
         KeBugCheckEx(INSTALL_MORE_MEMORY, MmNumberOfPhysicalPages, MmLowestPhysicalPage, MmHighestPhysicalPage, 0);
 
+    FirstFrame = (ULONG)MmLowestPhysicalPage;
     FrameCount = (ULONG)(MmHighestPhysicalPage + 1);
-    PfnPages = (ULONG)BYTES_TO_PAGES((ULONG64)FrameCount * sizeof(MI_PFN));
-    ExecPages = (ULONG)BYTES_TO_PAGES(((ULONG64)FrameCount + 31) / 32 * sizeof(LONG));
+    PfnPages = (ULONG)BYTES_TO_PAGES((ULONG64)(FrameCount - FirstFrame) * sizeof(MI_PFN));
+    ExecPages = (ULONG)BYTES_TO_PAGES(((ULONG64)(FrameCount - FirstFrame) + 31) / 32 * sizeof(LONG));
 
     if (LargestEnd - Largest->BasePage < PfnPages + ExecPages + 1024)
         KeBugCheckEx(INSTALL_MORE_MEMORY, MmNumberOfPhysicalPages, PfnPages, (ULONG_PTR)(LargestEnd - Largest->BasePage), 1);
@@ -412,13 +413,13 @@ MiInitializePhase0(
     PfnFirst = (ULONG)(LargestEnd - PfnPages - ExecPages);
     PfnArray = MiArchMapFrame(PfnFirst);
 
-    Status = MiSystemInitialize(&MiSystem, PfnArray, FrameCount, MI_PFN_CPU_CACHES,
+    Status = MiSystemInitialize(&MiSystem, PfnArray, FirstFrame, FrameCount, MI_PFN_CPU_CACHES,
                                 (LONG64)MmNumberOfPhysicalPages);
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(MEMORY_MANAGEMENT, 0x494E4954, (ULONG_PTR)Status, 0, 0);
 
-    DbgPrint("Page frame database: %lu MB at %012I64x for %lu frames\n", PfnPages >> (20 - PAGE_SHIFT),
-             (ULONG64)PfnFirst << PAGE_SHIFT, FrameCount);
+    DbgPrint("Page frame database: %lu MB at %012I64x for %lu frames from %lx\n", PfnPages >> (20 - PAGE_SHIFT),
+             (ULONG64)PfnFirst << PAGE_SHIFT, FrameCount - FirstFrame, FirstFrame);
     RtlZeroMemory(MiArchMapFrame(PfnFirst + PfnPages), (SIZE_T)ExecPages << PAGE_SHIFT);
     MiPfnDbSetExecClean(&MiSystem.Pfn, (volatile LONG *)MiArchMapFrame(PfnFirst + PfnPages));
     MiPfnMarkInUse(&MiSystem.Pfn, PfnFirst, PfnPages + ExecPages);

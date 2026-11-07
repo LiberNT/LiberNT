@@ -98,7 +98,7 @@ MiUnlockFrames(
 
     for (i = 0; i < PageCount; i++)
     {
-        if (Frames[i] >= Db->FrameCount || Db->Pfn[Frames[i]].State == MiPageUnusable)
+        if (!MiPfnTracked(Db, Frames[i]) || Db->Pfn[Frames[i]].State == MiPageUnusable)
             continue;
 
         if (WriteAccess)
@@ -149,7 +149,7 @@ MiLockPagesWorker(
             {
                 ULONG64 Frame = Physical >> PAGE_SHIFT;
 
-                if (Frame < Db->FrameCount && Db->Pfn[Frame].State != MiPageUnusable)
+                if (MiPfnTracked(Db, Frame) && Db->Pfn[Frame].State != MiPageUnusable)
                 {
                     KIRQL OldIrql = MiPfnLock(Db, (ULONG)Frame);
 

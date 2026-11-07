@@ -129,6 +129,7 @@ typedef struct _MI_PFN_DATABASE
 {
     PMI_PFN Pfn;
     ULONG FrameCount;
+    ULONG FirstFrame;
     ULONG CacheCount;
     ULONG RegionShift;
     BOOLEAN RegionRotation;
@@ -149,24 +150,31 @@ typedef struct _MI_PFN_DATABASE
 } MI_PFN_DATABASE, *PMI_PFN_DATABASE;
 
 static __inline BOOLEAN
+MiPfnTracked(_In_ PMI_PFN_DATABASE Db, _In_ ULONG64 Frame)
+{
+    return Frame >= Db->FirstFrame && Frame < Db->FrameCount;
+}
+
+static __inline BOOLEAN
 MiPfnExecCleanTest(_In_ PMI_PFN_DATABASE Db, _In_ ULONG Frame)
 {
-    return Db->ExecClean != NULL && Frame < Db->FrameCount &&
-           (MI_ATOMIC_READ32(&Db->ExecClean[Frame >> 5]) & (1L << (Frame & 31))) != 0;
+    return Db->ExecClean != NULL && MiPfnTracked(Db, Frame) &&
+           (MI_ATOMIC_READ32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5]) &
+            (1L << ((Frame - Db->FirstFrame) & 31))) != 0;
 }
 
 static __inline VOID
 MiPfnExecCleanSet(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG Frame)
 {
-    if (Db->ExecClean != NULL && Frame < Db->FrameCount)
-        MI_ATOMIC_OR32(&Db->ExecClean[Frame >> 5], 1L << (Frame & 31));
+    if (Db->ExecClean != NULL && MiPfnTracked(Db, Frame))
+        MI_ATOMIC_OR32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5], 1L << ((Frame - Db->FirstFrame) & 31));
 }
 
 static __inline VOID
 MiPfnExecCleanClear(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG Frame)
 {
     if (MiPfnExecCleanTest(Db, Frame))
-        MI_ATOMIC_AND32(&Db->ExecClean[Frame >> 5], ~(1L << (Frame & 31)));
+        MI_ATOMIC_AND32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5], ~(1L << ((Frame - Db->FirstFrame) & 31)));
 }
 
 /* MDL aliases of managed RAM must retain the allocation's cache attributes.
@@ -174,7 +182,8 @@ MiPfnExecCleanClear(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG Frame)
 NTSTATUS MiPfnMappingFlags(_Inout_ PMI_PFN_DATABASE Db, _In_ MI_FRAME_NUMBER Frame, _In_ ULONG Flags,
                            _Out_ PULONG MappingFlags);
 
-VOID MiPfnDbInitialize(_Out_ PMI_PFN_DATABASE Db, _In_ PMI_PFN Array, _In_ ULONG FrameCount, _In_ ULONG CpuCount);
+VOID MiPfnDbInitialize(_Out_ PMI_PFN_DATABASE Db, _In_ PMI_PFN Array, _In_ ULONG FirstFrame, _In_ ULONG FrameCount,
+                       _In_ ULONG CpuCount);
 VOID MiPfnDbSetExecClean(_Inout_ PMI_PFN_DATABASE Db, _In_ volatile LONG *Bitmap);
 VOID MiPfnDbSetDirectFrames(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG64 DirectFrames);
 VOID MiPfnDbSetRegionRotation(_Inout_ PMI_PFN_DATABASE Db, _In_ BOOLEAN Enable);

@@ -68,8 +68,8 @@ MiProcessManagerInitializeEx(
     MI_MUTEX_INIT(&Manager->Lock);
     InitializeListHead(&Manager->ProcessList);
     Manager->TrimCursor = &Manager->ProcessList;
-    Manager->AvailableLow = System->Pfn.FrameCount / 16;
-    Manager->AvailableHigh = System->Pfn.FrameCount / 8;
+    Manager->AvailableLow = (System->Pfn.FrameCount - System->Pfn.FirstFrame) / 16;
+    Manager->AvailableHigh = (System->Pfn.FrameCount - System->Pfn.FirstFrame) / 8;
 
     Status = MiSegmentCreate(System, MiSegmentPageFileBacked, PAGE_SIZE, MI_PROT_READWRITE, NULL, NULL, NULL, 0,
                              &Manager->UserSharedSegment);
