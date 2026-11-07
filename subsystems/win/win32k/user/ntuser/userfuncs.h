@@ -83,6 +83,7 @@ NTSTATUS FASTCALL InitSessionImpl(VOID);
 
 BOOL NTAPI InitMetrics(VOID);
 LONG NTAPI UserGetSystemMetrics(ULONG Index);
+LONG NTAPI UserGetCallerSystemMetrics(ULONG Index);
 BOOL FASTCALL UserIsDBCSEnabled(VOID);
 BOOL FASTCALL UserIsIMMEnabled(VOID);
 BOOL FASTCALL UserIsCTFIMEEnabled(VOID);

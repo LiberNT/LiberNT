@@ -1077,7 +1077,7 @@ co_WinPosGetMinMaxInfo(PWND Window, POINT* MaxSize, POINT* MaxPos,
 
     if (!EMPTYPOINT(Window->InternalPos.MaxPos)) MinMax.ptMaxPosition = Window->InternalPos.MaxPos;
 
-    co_IntSendMessage(UserHMGetHandle(Window), WM_GETMINMAXINFO, 0, (LPARAM)&MinMax);
+    co_IntSendSystemMessage(UserHMGetHandle(Window), WM_GETMINMAXINFO, 0, (LPARAM)&MinMax);
 
     /* if the app didn't change the values, adapt them for the current monitor */
     if ((monitor = UserGetPrimaryMonitor()))
@@ -1266,7 +1266,7 @@ co_WinPosDoNCCALCSize(PWND Window, PWINDOWPOS WinPos, RECTL* WindowRect, RECTL* 
       if (Window->pcls->style & CS_HREDRAW)
          wvrFlags |= WVR_HREDRAW;
 
-      wvrFlags |= co_IntSendMessage(UserHMGetHandle(Window), WM_NCCALCSIZE, TRUE, (LPARAM)&params);
+      wvrFlags |= co_IntSendSystemMessage(UserHMGetHandle(Window), WM_NCCALCSIZE, TRUE, (LPARAM)&params);
 
       *ClientRect = params.rgrc[0]; // First rectangle contains the coordinates of the new client rectangle resulting from the move or resize
       if ((Window->style & WS_CHILD) && Parent)
@@ -1332,7 +1332,7 @@ co_WinPosDoWinPosChanging(PWND Window,
           && !((WinPos->flags & SWP_AGG_NOCLIENTCHANGE) && (WinPos->flags & SWP_SHOWWINDOW)))
    {
       TRACE("Sending WM_WINDOWPOSCHANGING to hwnd %p flags %04x.\n", UserHMGetHandle(Window), WinPos->flags);
-      co_IntSendMessage(UserHMGetHandle(Window), WM_WINDOWPOSCHANGING, 0, (LPARAM)WinPos);
+      co_IntSendSystemMessage(UserHMGetHandle(Window), WM_WINDOWPOSCHANGING, 0, (LPARAM)WinPos);
    }
 
    /* Calculate new position and size */
@@ -2814,7 +2814,7 @@ co_WinPosBatchChanged(PWINPOS_ENTRY Entry)
          WinPos.y -= Window->spwndParent->rcClient.top;
       }
       TRACE("WM_WINDOWPOSCHANGED hwnd %p Flags %04x\n",WinPos.hwnd,WinPos.flags);
-      co_IntSendMessageNoWait(WinPos.hwnd, WM_WINDOWPOSCHANGED, 0, (LPARAM) &WinPos);
+      co_IntSendSystemMessageNoWait(WinPos.hwnd, WM_WINDOWPOSCHANGED, 0, (LPARAM) &WinPos);
    }
 
    if (Entry->bRefreshFrame && Window && IntIsWindow(WinPos.hwnd))
@@ -3049,7 +3049,7 @@ co_WinPosGetNonClientSize(PWND Window, RECT* WindowRect, RECT* ClientRect)
    ASSERT_REFS_CO(Window);
 
    *ClientRect = *WindowRect;
-   Result = co_IntSendMessageNoWait(UserHMGetHandle(Window), WM_NCCALCSIZE, FALSE, (LPARAM)ClientRect);
+   Result = co_IntSendSystemMessageNoWait(UserHMGetHandle(Window), WM_NCCALCSIZE, FALSE, (LPARAM)ClientRect);
 
    return Result;
 }
@@ -3080,14 +3080,14 @@ co_WinPosSendSizeMove(PWND Wnd, BOOL ForceRestored)
         lParam = 0;
     }
 
-    co_IntSendMessageNoWait(UserHMGetHandle(Wnd), WM_SIZE, wParam, lParam);
+    co_IntSendSystemMessageNoWait(UserHMGetHandle(Wnd), WM_SIZE, wParam, lParam);
 
     if (UserIsDesktopWindow(Wnd->spwndParent))
        lParam = MAKELONG(Wnd->rcClient.left, Wnd->rcClient.top);
     else
        lParam = MAKELONG(Wnd->rcClient.left-Wnd->spwndParent->rcClient.left, Wnd->rcClient.top-Wnd->spwndParent->rcClient.top);
 
-    co_IntSendMessageNoWait(UserHMGetHandle(Wnd), WM_MOVE, 0, lParam);
+    co_IntSendSystemMessageNoWait(UserHMGetHandle(Wnd), WM_MOVE, 0, lParam);
 
     IntEngWindowChanged(Wnd, WOC_RGN_CLIENT);
 }
@@ -3686,7 +3686,7 @@ co_WinPosSearchChildren(
 
     if (ScopeWin->head.pti == PsGetCurrentThreadWin32Thread())
     {
-       *HitTest = (USHORT)co_IntSendMessage(UserHMGetHandle(ScopeWin), WM_NCHITTEST, 0, MAKELONG(Point->x, Point->y));
+       *HitTest = (USHORT)co_IntSendSystemMessage(UserHMGetHandle(ScopeWin), WM_NCHITTEST, 0, MAKELONG(Point->x, Point->y));
 
        if ((*HitTest) == (USHORT)HTTRANSPARENT)
        {
@@ -4021,6 +4021,11 @@ NtUserChildWindowFromPointEx(HWND hwndParent,
    UserEnterShared();
    if ((pwndParent = UserGetWindowObject(hwndParent)))
    {
+      if (UserDpiIsVirtualCaller())
+      {
+         x = UserDpiRelativeClientToPhysical(pwndParent, x, TRUE);
+         y = UserDpiRelativeClientToPhysical(pwndParent, y, FALSE);
+      }
       pwndParent = IntChildWindowFromPointEx(pwndParent, x, y, uiFlags);
    }
    UserLeave();
@@ -4090,6 +4095,8 @@ NtUserDeferWindowPos(HDWP WinPosInfo,
       }
    }
 
+   if (UserDpiIsVirtualCaller())
+      UserDpiWindowPosToPhysical(pWnd, &x, &y, &cx, &cy, Flags);
    Ret = IntDeferWindowPos(WinPosInfo, Wnd, WndInsertAfter, x, y, cx, cy, Flags);
 
 Exit:
@@ -4201,6 +4208,12 @@ NtUserGetWindowPlacement(HWND hWnd,
    Safepl.length = sizeof(WINDOWPLACEMENT);
 
    IntGetWindowPlacement(Wnd, &Safepl);
+   if (UserDpiIsVirtualCaller())
+   {
+      UserDpiPointToLogical(&Safepl.ptMinPosition);
+      UserDpiPointToLogical(&Safepl.ptMaxPosition);
+      UserDpiRectToLogical(&Safepl.rcNormalPosition);
+   }
 
    Status = MmCopyToCaller(lpwndpl, &Safepl, sizeof(WINDOWPLACEMENT));
    if (!NT_SUCCESS(Status))
@@ -4304,6 +4317,11 @@ NtUserRealChildWindowFromPoint(HWND Parent,
    UserEnterShared();
    if ((pwndParent = UserGetWindowObject(Parent)))
    {
+      if (UserDpiIsVirtualCaller())
+      {
+         x = UserDpiRelativeClientToPhysical(pwndParent, x, TRUE);
+         y = UserDpiRelativeClientToPhysical(pwndParent, y, FALSE);
+      }
       pwndParent = IntRealChildWindowFromPoint(pwndParent, x, y);
    }
    UserLeave();
@@ -4360,6 +4378,9 @@ UserSetWindowPos(
          goto Exit; // Return FALSE
       }
    }
+
+   if (UserDpiIsVirtualCaller())
+      UserDpiWindowPosToPhysical(Window, &X, &Y, &cx, &cy, uFlags);
 
    /* First make sure that coordinates are valid for WM_WINDOWPOSCHANGING */
    if (!(uFlags & SWP_NOMOVE))
@@ -4454,6 +4475,21 @@ NtUserSetWindowRgn(
          upper-left corner of the window, not the client area of the window. */
          if (NtGdiCombineRgn(hrgnCopy, hRgn, 0, RGN_COPY) == ERROR)
              goto Exit;
+         if (UserDpiIsVirtualCaller())
+         {
+             PREGION Region = REGION_LockRgn(hrgnCopy), Physical;
+
+             if (Region)
+             {
+                 Physical = UserDpiCreatePhysicalRegion(Region);
+                 if (Physical)
+                 {
+                     IntGdiCombineRgn(Region, Physical, NULL, RGN_COPY);
+                     REGION_Delete(Physical);
+                 }
+                 REGION_UnlockRgn(Region);
+             }
+         }
       }
       else
          goto Exit; // Return 0
@@ -4616,6 +4652,12 @@ NtUserSetWindowPlacement(HWND hWnd,
     Flags = PLACE_MAX | PLACE_RECT;
     if (Safepl.flags & WPF_SETMINPOSITION)
         Flags |= PLACE_MIN;
+    if (UserDpiIsVirtualCaller())
+    {
+        UserDpiPointToPhysical(&Safepl.ptMinPosition);
+        UserDpiPointToPhysical(&Safepl.ptMaxPosition);
+        UserDpiRectToPhysical(&Safepl.rcNormalPosition);
+    }
 
     Wnd = UserGetWindowObject(hWnd);
     if (!Wnd)
@@ -4730,6 +4772,8 @@ NtUserWindowFromPoint(LONG X, LONG Y)
 
       pt.x = X;
       pt.y = Y;
+      if (UserDpiIsVirtualCaller())
+         UserDpiPointToPhysical(&pt);
 
       // Hmm... Threads live on desktops thus we have a reference on the desktop and indirectly the desktop window.
       // It is possible this referencing is useless, though it should not hurt...
