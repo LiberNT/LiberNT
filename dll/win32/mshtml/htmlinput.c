@@ -1422,6 +1422,8 @@ static void *HTMLInputElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLInputTextElement2_iface;
     if(IsEqualGUID(&IID_IWineHTMLInputPrivate, riid))
         return &This->IWineHTMLInputPrivate_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -1472,6 +1474,8 @@ static void HTMLInputElement_init_dispex_info(dispex_data_t *info, compat_mode_t
     dispex_info_add_interface(info, IHTMLInputTextElement2_tid, inputtext_hooks);
     if(mode >= COMPAT_MODE_IE10)
         dispex_info_add_interface(info, IWineHTMLInputPrivate_tid, NULL);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -1608,6 +1612,8 @@ static void *HTMLLabelElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLLabelElement, riid))
         return &This->IHTMLLabelElement_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -1626,6 +1632,8 @@ static void HTMLLabelElement_init_dispex_info(dispex_data_t *info, compat_mode_t
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLLabelElement_tid, label_hooks);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -2037,6 +2045,8 @@ static void *HTMLButtonElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLButtonElement_iface;
     if(IsEqualGUID(&IID_IWineHTMLInputPrivate, riid))
         return &This->IWineHTMLInputPrivate_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -2078,6 +2088,8 @@ static void HTMLButtonElement_init_dispex_info(dispex_data_t *info, compat_mode_
     dispex_info_add_interface(info, IHTMLButtonElement_tid, button_hooks);
     if(mode >= COMPAT_MODE_IE10)
         dispex_info_add_interface(info, IWineHTMLInputPrivate_tid, NULL);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }

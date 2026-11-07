@@ -759,6 +759,8 @@ static void *HTMLAnchorElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLAnchorElement, riid))
         return &This->IHTMLAnchorElement_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -835,6 +837,8 @@ static void HTMLAnchorElement_init_dispex_info(dispex_data_t *info, compat_mode_
         DISPID_IHTMLELEMENT_TOSTRING,
         DISPID_UNKNOWN
     };
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
     HTMLElement_init_dispex_info(info, mode);
     if(mode >= COMPAT_MODE_IE9)
         dispex_info_add_dispids(info, IHTMLElement_tid, elem_dispids);
