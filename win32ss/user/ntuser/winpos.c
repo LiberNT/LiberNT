@@ -954,7 +954,7 @@ IntGetWindowBorderMeasures(PWND Wnd, UINT *cx, UINT *cy)
 }
 
 VOID
-UserGetWindowBorders(DWORD Style, DWORD ExStyle, SIZE *Size, BOOL WithClient)
+UserGetWindowBorders(PWND Wnd, DWORD Style, DWORD ExStyle, SIZE *Size, BOOL WithClient)
 {
    DWORD Border = 0;
 
@@ -968,21 +968,23 @@ UserGetWindowBorders(DWORD Style, DWORD ExStyle, SIZE *Size, BOOL WithClient)
       Border ++; /* The other border */
    Size->cx = Size->cy = Border;
    if (((Style & WS_THICKFRAME) ||
-        ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))) &&
+        ((Style & WS_CAPTION) == WS_CAPTION && UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER))) &&
        !(Style & WS_MINIMIZE)) /* The resize border */
    {
-      Size->cx += UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME);
-      Size->cy += UserGetSystemMetrics(SM_CYFRAME) - UserGetSystemMetrics(SM_CYDLGFRAME);
+      Size->cx += UserGetWindowViewMetric(Wnd, SM_CXFRAME) - UserGetWindowViewMetric(Wnd, SM_CXDLGFRAME);
+      Size->cy += UserGetWindowViewMetric(Wnd, SM_CYFRAME) - UserGetWindowViewMetric(Wnd, SM_CYDLGFRAME);
    }
-   Size->cx *= UserGetSystemMetrics(SM_CXBORDER);
-   Size->cy *= UserGetSystemMetrics(SM_CYBORDER);
+   Size->cx *= UserGetWindowViewMetric(Wnd, SM_CXBORDER);
+   Size->cy *= UserGetWindowViewMetric(Wnd, SM_CYBORDER);
    if (((Style & WS_THICKFRAME) ||
-        ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))) &&
+        ((Style & WS_CAPTION) == WS_CAPTION && UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER))) &&
        !(Style & WS_MINIMIZE))
    {
-      Size->cx += UserGetSystemMetrics(SM_CXPADDEDBORDER);
-      Size->cy += UserGetSystemMetrics(SM_CXPADDEDBORDER);
+      Size->cx += UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER);
+      Size->cy += UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER);
    }
+   Size->cx = UserWindowViewToPhysical(Wnd, Size->cx);
+   Size->cy = UserWindowViewToPhysical(Wnd, Size->cy);
 }
 
 UINT FASTCALL
@@ -1014,7 +1016,7 @@ co_WinPosGetMinMaxInfo(PWND Window, POINT* MaxSize, POINT* MaxPos,
     if (Window->spwndParent)
         IntGetClientRect(Window->spwndParent, &rc);
 
-    UserGetWindowBorders(adjustedStyle & ~WS_MINIMIZE, exstyle, &Borders, TRUE);
+    UserGetWindowBorders(Window, adjustedStyle & ~WS_MINIMIZE, exstyle, &Borders, TRUE);
     RECTL_vInflateRect(&rc, Borders.cx, Borders.cy);
 
     xinc = -rc.left;
