@@ -38,6 +38,37 @@ BOOL WINAPI PolyPatBlt(HDC,DWORD,PPATRECT,INT,ULONG);
 
 /* FUNCTIONS *****************************************************************/
 
+static INT
+User32DpiRegionToLogical(HRGN hRgn)
+{
+  DWORD Size = GetRegionData(hRgn, 0, NULL), Index;
+  RGNDATA *Data;
+  LPRECT Rects;
+  HRGN Scaled;
+  INT Ret = ERROR;
+
+  if (!Size)
+     return ERROR;
+  Data = HeapAlloc(GetProcessHeap(), 0, Size);
+  if (!Data)
+     return ERROR;
+  if (GetRegionData(hRgn, Size, Data))
+  {
+     Rects = (LPRECT)Data->Buffer;
+     for (Index = 0; Index < Data->rdh.nCount; Index++)
+        User32DpiRectToLogical(&Rects[Index]);
+     User32DpiRectToLogical(&Data->rdh.rcBound);
+     Scaled = ExtCreateRegion(NULL, Size, Data);
+     if (Scaled)
+     {
+        Ret = CombineRgn(hRgn, Scaled, NULL, RGN_COPY);
+        DeleteObject(Scaled);
+     }
+  }
+  HeapFree(GetProcessHeap(), 0, Data);
+  return Ret;
+}
+
 INT
 WINAPI
 MirrorWindowRect( PWND pWnd, LPRECT lprc)
@@ -301,6 +332,8 @@ GetWindowRgn(
 
   if (!Ret)
      return ERROR;
+  if (User32IsDpiVirtualThread())
+     Ret = User32DpiRegionToLogical(hRgn);
 /*
   if (hWnd != GetDesktopWindow()) // pWnd->fnid != FNID_DESKTOP)
      Ret = OffsetRgn(hRgn, -pWnd->rcWindow.left, -pWnd->rcWindow.top);
@@ -335,6 +368,8 @@ GetWindowRgnBox(
 
   if (!Ret)
      return ERROR;
+  if (User32IsDpiVirtualThread())
+     User32DpiRectToLogical(lprc);
 /*
   if (hWnd != GetDesktopWindow()) // pWnd->fnid != FNID_DESKTOP)
      OffsetRect(lprc, -pWnd->rcWindow.left, -pWnd->rcWindow.top);

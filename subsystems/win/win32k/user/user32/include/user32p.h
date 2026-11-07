@@ -66,6 +66,13 @@ extern Imm32ApiTable gImmApiEntries;
 
 #define IMM_FN(name) gImmApiEntries.p##name
 
+BOOL WINAPI User32IsDpiVirtualizationActive(VOID);
+BOOL WINAPI User32IsDpiVirtualThread(VOID);
+UINT WINAPI User32GetSystemDpi(VOID);
+LONG WINAPI User32DpiToLogical(LONG Value);
+LONG WINAPI User32DpiToPhysical(LONG Value);
+VOID WINAPI User32DpiRectToLogical(LPRECT Rect);
+
 #define IS_ATOM(x) \
   (((ULONG_PTR)(x) > 0x0) && ((ULONG_PTR)(x) < 0x10000))
 

@@ -125,6 +125,72 @@ LogFontW2A(LPLOGFONTA pA, CONST LOGFONTW *pW)
 #undef COPYS
 }
 
+ULONG WINAPI IntGetThreadDpiContext(VOID);
+
+BOOL
+WINAPI
+User32IsDpiVirtualizationActive(VOID)
+{
+#ifdef WOW64_I386_RUNTIME
+  return !!(UserGetServerInfo(dwSRVIFlags, ROS_SERVERINFO_SRVIFLAGS) & SRVINFO_DPIVIRTUALIZATION);
+#else
+  return gpsi && (gpsi->dwSRVIFlags & SRVINFO_DPIVIRTUALIZATION);
+#endif
+}
+
+UINT
+WINAPI
+User32GetSystemDpi(VOID)
+{
+#ifdef WOW64_I386_RUNTIME
+  return (UINT)UserGetServerInfo(dmLogPixels, ROS_SERVERINFO_LOGPIXELS);
+#else
+  return gpsi ? gpsi->dmLogPixels : USER_DEFAULT_SCREEN_DPI;
+#endif
+}
+
+BOOL
+WINAPI
+User32IsDpiVirtualThread(VOID)
+{
+  return User32IsDpiVirtualizationActive() &&
+         (IntGetThreadDpiContext() & 0x0f) == DPI_AWARENESS_UNAWARE;
+}
+
+static LONG
+User32DpiMulDiv(LONG Value, LONG Numerator, LONG Denominator)
+{
+  LONGLONG Product = (LONGLONG)Value * Numerator;
+
+  if (Product >= 0)
+    return (LONG)((Product + Denominator / 2) / Denominator);
+  return -(LONG)((-Product + Denominator / 2) / Denominator);
+}
+
+LONG
+WINAPI
+User32DpiToLogical(LONG Value)
+{
+  return User32DpiMulDiv(Value, USER_DEFAULT_SCREEN_DPI, (LONG)User32GetSystemDpi());
+}
+
+LONG
+WINAPI
+User32DpiToPhysical(LONG Value)
+{
+  return User32DpiMulDiv(Value, (LONG)User32GetSystemDpi(), USER_DEFAULT_SCREEN_DPI);
+}
+
+VOID
+WINAPI
+User32DpiRectToLogical(LPRECT Rect)
+{
+  Rect->left = User32DpiToLogical(Rect->left);
+  Rect->top = User32DpiToLogical(Rect->top);
+  Rect->right = User32DpiToLogical(Rect->right);
+  Rect->bottom = User32DpiToLogical(Rect->bottom);
+}
+
 int WINAPI
 RealGetSystemMetrics(int nIndex)
 {
@@ -134,6 +200,8 @@ RealGetSystemMetrics(int nIndex)
   return (int)NtUserCallOneParam(nIndex, ONEPARAM_ROUTINE_ROS_GETSYSTEMMETRICS);
 #else
   if (!gpsi) return 0;
+  if (User32IsDpiVirtualThread())
+    return (int)NtUserCallOneParam(nIndex, ONEPARAM_ROUTINE_ROS_GETSYSTEMMETRICS);
   return UserGetImageMetric(gpsi->aiSysMet, nIndex, NtCurrentPeb()->ImageSubsystemMajorVersion < 6);
 #endif
 }
@@ -209,6 +277,153 @@ GetHighContrastW(UINT uiParam, LPHIGHCONTRASTW HighContrast, UINT fWinIni)
 
 BOOL WINAPI
 RealSystemParametersInfoW(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni);
+
+static VOID
+User32DpiScaleLogFont(LPLOGFONTW LogFont, BOOL ToLogical)
+{
+  LogFont->lfHeight = ToLogical ? User32DpiToLogical(LogFont->lfHeight) : User32DpiToPhysical(LogFont->lfHeight);
+  LogFont->lfWidth = ToLogical ? User32DpiToLogical(LogFont->lfWidth) : User32DpiToPhysical(LogFont->lfWidth);
+}
+
+static VOID
+User32DpiScaleNonClientMetrics(LPNONCLIENTMETRICSW Metrics, BOOL ToLogical)
+{
+  LONG (WINAPI *Scale)(LONG) = ToLogical ? User32DpiToLogical : User32DpiToPhysical;
+
+  Metrics->iBorderWidth = Scale(Metrics->iBorderWidth);
+  Metrics->iScrollWidth = Scale(Metrics->iScrollWidth);
+  Metrics->iScrollHeight = Scale(Metrics->iScrollHeight);
+  Metrics->iCaptionWidth = Scale(Metrics->iCaptionWidth);
+  Metrics->iCaptionHeight = Scale(Metrics->iCaptionHeight);
+  Metrics->iSmCaptionWidth = Scale(Metrics->iSmCaptionWidth);
+  Metrics->iSmCaptionHeight = Scale(Metrics->iSmCaptionHeight);
+  Metrics->iMenuWidth = Scale(Metrics->iMenuWidth);
+  Metrics->iMenuHeight = Scale(Metrics->iMenuHeight);
+  if (Metrics->cbSize == sizeof(NONCLIENTMETRICSW))
+    Metrics->iPaddedBorderWidth = Scale(Metrics->iPaddedBorderWidth);
+  User32DpiScaleLogFont(&Metrics->lfCaptionFont, ToLogical);
+  User32DpiScaleLogFont(&Metrics->lfSmCaptionFont, ToLogical);
+  User32DpiScaleLogFont(&Metrics->lfMenuFont, ToLogical);
+  User32DpiScaleLogFont(&Metrics->lfStatusFont, ToLogical);
+  User32DpiScaleLogFont(&Metrics->lfMessageFont, ToLogical);
+}
+
+static BOOL
+User32SystemParametersInfo(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni)
+{
+  BOOL Ret;
+
+  if (!pvParam && uiAction != SPI_ICONHORIZONTALSPACING && uiAction != SPI_ICONVERTICALSPACING)
+    return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+  if (!User32IsDpiVirtualThread())
+    return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+
+  switch (uiAction)
+  {
+    case SPI_GETNONCLIENTMETRICS:
+      Ret = NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+      if (Ret)
+        User32DpiScaleNonClientMetrics(pvParam, TRUE);
+      return Ret;
+
+    case SPI_SETNONCLIENTMETRICS:
+    {
+      NONCLIENTMETRICSW Metrics;
+      UINT Size = ((LPNONCLIENTMETRICSW)pvParam)->cbSize;
+
+      if (Size > sizeof(Metrics))
+        return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+      RtlCopyMemory(&Metrics, pvParam, Size);
+      User32DpiScaleNonClientMetrics(&Metrics, FALSE);
+      return NtUserSystemParametersInfo(uiAction, uiParam, &Metrics, fWinIni);
+    }
+
+    case SPI_GETICONMETRICS:
+      Ret = NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+      if (Ret)
+      {
+        LPICONMETRICSW Metrics = pvParam;
+
+        Metrics->iHorzSpacing = User32DpiToLogical(Metrics->iHorzSpacing);
+        Metrics->iVertSpacing = User32DpiToLogical(Metrics->iVertSpacing);
+        User32DpiScaleLogFont(&Metrics->lfFont, TRUE);
+      }
+      return Ret;
+
+    case SPI_SETICONMETRICS:
+    {
+      ICONMETRICSW Metrics = *(LPICONMETRICSW)pvParam;
+
+      Metrics.iHorzSpacing = User32DpiToPhysical(Metrics.iHorzSpacing);
+      Metrics.iVertSpacing = User32DpiToPhysical(Metrics.iVertSpacing);
+      User32DpiScaleLogFont(&Metrics.lfFont, FALSE);
+      return NtUserSystemParametersInfo(uiAction, uiParam, &Metrics, fWinIni);
+    }
+
+    case SPI_GETICONTITLELOGFONT:
+      Ret = NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+      if (Ret)
+        User32DpiScaleLogFont(pvParam, TRUE);
+      return Ret;
+
+    case SPI_SETICONTITLELOGFONT:
+    {
+      LOGFONTW LogFont = *(LPLOGFONTW)pvParam;
+
+      User32DpiScaleLogFont(&LogFont, FALSE);
+      return NtUserSystemParametersInfo(uiAction, uiParam, &LogFont, fWinIni);
+    }
+
+    case SPI_GETWORKAREA:
+      Ret = NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+      if (Ret)
+        User32DpiRectToLogical(pvParam);
+      return Ret;
+
+    case SPI_SETWORKAREA:
+    {
+      RECT Rect = *(LPRECT)pvParam;
+
+      Rect.left = User32DpiToPhysical(Rect.left);
+      Rect.top = User32DpiToPhysical(Rect.top);
+      Rect.right = User32DpiToPhysical(Rect.right);
+      Rect.bottom = User32DpiToPhysical(Rect.bottom);
+      return NtUserSystemParametersInfo(uiAction, uiParam, &Rect, fWinIni);
+    }
+
+    case SPI_GETMINIMIZEDMETRICS:
+      Ret = NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+      if (Ret)
+      {
+        LPMINIMIZEDMETRICS Metrics = pvParam;
+
+        Metrics->iWidth = User32DpiToLogical(Metrics->iWidth);
+        Metrics->iHorzGap = User32DpiToLogical(Metrics->iHorzGap);
+        Metrics->iVertGap = User32DpiToLogical(Metrics->iVertGap);
+      }
+      return Ret;
+
+    case SPI_SETMINIMIZEDMETRICS:
+    {
+      MINIMIZEDMETRICS Metrics = *(LPMINIMIZEDMETRICS)pvParam;
+
+      Metrics.iWidth = User32DpiToPhysical(Metrics.iWidth);
+      Metrics.iHorzGap = User32DpiToPhysical(Metrics.iHorzGap);
+      Metrics.iVertGap = User32DpiToPhysical(Metrics.iVertGap);
+      return NtUserSystemParametersInfo(uiAction, uiParam, &Metrics, fWinIni);
+    }
+
+    case SPI_ICONHORIZONTALSPACING:
+    case SPI_ICONVERTICALSPACING:
+      if (!pvParam)
+        return NtUserSystemParametersInfo(uiAction, User32DpiToPhysical(uiParam), pvParam, fWinIni);
+      Ret = NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+      if (Ret)
+        *(PINT)pvParam = User32DpiToLogical(*(PINT)pvParam);
+      return Ret;
+  }
+  return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+}
 
 BOOL WINAPI
 RealSystemParametersInfoA(UINT uiAction,
@@ -431,7 +646,7 @@ RealSystemParametersInfoA(UINT uiAction,
           return Ret;
       }
     }
-    return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+    return User32SystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
 }
 
 BOOL WINAPI
@@ -465,7 +680,7 @@ RealSystemParametersInfoW(UINT uiAction,
           return NtUserSystemParametersInfo(SPI_SETDESKWALLPAPER, uiParam, &ustrWallpaper, fWinIni);
       }
   }
-  return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
+  return User32SystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
 }
 
 
