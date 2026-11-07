@@ -315,6 +315,8 @@ KiAcquireFastMutex(IN PFAST_MUTEX FastMutex)
 
     for (;;)
     {
+        ASSERT((BitsToRemove == FM_LOCK_BIT && BitsToAdd == FM_LOCK_WAITER_INC) ||
+               (BitsToRemove == (FM_LOCK_BIT | FM_LOCK_WAITER_WOKEN) && BitsToAdd == FM_LOCK_WAITER_WOKEN));
         OldValue = FastMutex->Count;
         for (;;)
         {
@@ -326,11 +328,14 @@ KiAcquireFastMutex(IN PFAST_MUTEX FastMutex)
                 NewValue = InterlockedCompareExchange(&FastMutex->Count, NewValue, OldValue);
                 if (NewValue == OldValue)
                 {
+                    ASSERT((FastMutex->Count & FM_LOCK_BIT) == 0);
+                    ASSERT(FastMutex->Owner == NULL);
                     return;
                 }
             }
             else
             {
+                ASSERT(BitsToAdd != FM_LOCK_WAITER_WOKEN || (OldValue & FM_LOCK_WAITER_WOKEN));
                 NewValue = OldValue + BitsToAdd;
                 NewValue = InterlockedCompareExchange(&FastMutex->Count, NewValue, OldValue);
                 if (NewValue == OldValue)
@@ -377,10 +382,8 @@ KiAcquireGuardedMutex(IN OUT PKGUARDED_MUTEX GuardedMutex)
     for (;;)
     {
         /* Loop sanity checks */
-        ASSERT((BitsToRemove == GM_LOCK_BIT) ||
-               (BitsToRemove == (GM_LOCK_BIT | GM_LOCK_WAITER_WOKEN)));
-        ASSERT((BitsToAdd == GM_LOCK_WAITER_INC) ||
-               (BitsToAdd == GM_LOCK_WAITER_WOKEN));
+        ASSERT((BitsToRemove == GM_LOCK_BIT && BitsToAdd == GM_LOCK_WAITER_INC) ||
+               (BitsToRemove == (GM_LOCK_BIT | GM_LOCK_WAITER_WOKEN) && BitsToAdd == GM_LOCK_WAITER_WOKEN));
 
         /* Get the Count Bits */
         OldValue = GuardedMutex->Count;
@@ -405,6 +408,7 @@ KiAcquireGuardedMutex(IN OUT PKGUARDED_MUTEX GuardedMutex)
             else
             {
                 /* The Guarded Mutex isn't locked, so simply set the bits */
+                ASSERT(BitsToAdd != GM_LOCK_WAITER_WOKEN || (OldValue & GM_LOCK_WAITER_WOKEN));
                 NewValue = OldValue + BitsToAdd;
                 NewValue = InterlockedCompareExchange(&GuardedMutex->Count,
                                                       NewValue,
