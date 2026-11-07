@@ -2219,15 +2219,17 @@ static HRESULT post_message(HTMLInnerWindow *window, VARIANT msg, BSTR targetOri
     if(V_VT(&transfer) != VT_EMPTY && V_VT(&transfer) != VT_ERROR)
         FIXME("transfer not implemented, ignoring\n");
 
-    hres = check_target_origin(window, targetOrigin);
-    if(hres != S_OK)
-        return SUCCEEDED(hres) ? S_OK : hres;
-
     source = get_source_window(caller, compat_mode);
     if(!source) {
         if(compat_mode < COMPAT_MODE_IE9)
             return E_ABORT;
         IHTMLWindow2_AddRef(source = &window->base.outer_window->base.IHTMLWindow2_iface);
+    }
+
+    hres = check_target_origin(window, targetOrigin);
+    if(hres != S_OK) {
+        IHTMLWindow2_Release(source);
+        return SUCCEEDED(hres) ? S_OK : hres;
     }
 
     switch(V_VT(&msg)) {
