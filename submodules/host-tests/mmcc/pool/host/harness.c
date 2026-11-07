@@ -23,6 +23,7 @@
 #endif
 
 _Thread_local ULONG PoolHostProcessor;
+_Thread_local volatile int *PoolHostLockBlocked;
 int TestFailures;
 int TestChecks;
 

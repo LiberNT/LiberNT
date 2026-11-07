@@ -84,6 +84,7 @@ PoolSegClaim(
 
     POOL_ASSERT(First >= Segment->HeaderPages && First < POOL_SEGMENT_PAGES);
     POOL_ASSERT(PageCount != 0 && PageCount <= POOL_SEGMENT_PAGES - First);
+    POOL_ASSERT(State == PoolRangeLfh || State == PoolRangeVs || State == PoolRangeBlock);
     POOL_ASSERT(PageCount <= Segment->FreePages);
     for (i = 0; i < POOL_SEGMENT_MAP_WORDS; i++)
         NeedCommit[i] = 0;
@@ -313,6 +314,77 @@ PoolSegCommittedFreePages(
     return Count;
 }
 
+#if DBG || defined(POOL_HOST_TEST)
+static
+VOID
+PoolSegAssertShard(
+    _In_ PPOOL_HEAP Heap,
+    _In_ PPOOL_SEGMENT_SHARD Shard,
+    _In_ ULONG ShardIndex)
+{
+    PLIST_ENTRY Head = &Shard->Available;
+    PLIST_ENTRY Entry = Head->Flink;
+    ULONG Segments = 0;
+    ULONG64 CommittedFree = 0;
+
+    POOL_ASSERT(Head->Flink->Blink == Head && Head->Blink->Flink == Head);
+    while (Entry != Head && Segments < Shard->SegmentCount)
+    {
+        PPOOL_SEGMENT Segment = CONTAINING_RECORD(Entry, POOL_SEGMENT, AvailableLink);
+        ULONG Free = 0, i;
+
+        POOL_ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        POOL_ASSERT(Segment->Signature == POOL_SEGMENT_SIGNATURE && Segment->Heap == Heap);
+        POOL_ASSERT(Segment->Shard == ShardIndex && Segment->RegionIndex < Heap->RegionCount);
+        POOL_ASSERT(Segment->HeaderPages != 0 && Segment->HeaderPages < POOL_SEGMENT_PAGES);
+        POOL_ASSERT(Segment->OnAvailable && Segment->FreePages != 0);
+        for (i = 0; i < POOL_SEGMENT_PAGES; i++)
+        {
+            PPOOL_PAGE_RANGE Range = &Segment->Range[i];
+            BOOLEAN Busy = PoolSegTest(Segment->BusyMap, i);
+
+            if (i < Segment->HeaderPages)
+            {
+                POOL_ASSERT(Busy && PoolSegTest(Segment->CommitMap, i) && Range->State == PoolRangeHeader);
+            }
+            else if (Range->State == PoolRangeFree)
+            {
+                POOL_ASSERT(!Busy && Range->Pages == 0);
+                Free++;
+            }
+            else if (Range->State == PoolRangeDraining)
+            {
+                POOL_ASSERT(Busy);
+            }
+            else
+            {
+                PPOOL_PAGE_RANGE First;
+
+                POOL_ASSERT(Busy && (Range->State == PoolRangeLfh || Range->State == PoolRangeVs ||
+                                     Range->State == PoolRangeBlock));
+                POOL_ASSERT(Range->First >= Segment->HeaderPages && Range->First <= i);
+                First = &Segment->Range[Range->First];
+                POOL_ASSERT(First->First == Range->First && First->State == Range->State &&
+                            First->Owner == Range->Owner);
+                POOL_ASSERT(First->Pages != 0 && First->Pages <= POOL_SEGMENT_PAGES - Range->First &&
+                            i - Range->First < First->Pages);
+                POOL_ASSERT(i == Range->First || Range->Pages == 0);
+            }
+        }
+        for (i = POOL_SEGMENT_PAGES; i < POOL_SEGMENT_MAP_WORDS * 64; i++)
+            POOL_ASSERT(PoolSegTest(Segment->BusyMap, i));
+        POOL_ASSERT(Free == Segment->FreePages);
+        CommittedFree += PoolSegCommittedFreePages(Segment);
+        Segments++;
+        Entry = Entry->Flink;
+    }
+    POOL_ASSERT(Entry == Head && Segments <= Shard->SegmentCount);
+    POOL_ASSERT(CommittedFree == Shard->FreeCommittedPages);
+}
+#else
+#define PoolSegAssertShard(Heap, Shard, ShardIndex) ((void)0)
+#endif
+
 static
 BOOLEAN
 PoolSegRetireLocked(
@@ -326,6 +398,7 @@ PoolSegRetireLocked(
     RemoveEntryList(&Segment->AvailableLink);
     Segment->OnAvailable = FALSE;
     Shard->SegmentCount--;
+    POOL_ASSERT(Shard->FreeCommittedPages >= PoolSegCommittedFreePages(Segment));
     Shard->FreeCommittedPages -= PoolSegCommittedFreePages(Segment);
     return TRUE;
 }
@@ -375,6 +448,7 @@ PoolSegAllocatePages(
     if (Segment != NULL)
     {
         AlreadyCommitted = PoolSegClaim(Segment, First, PageCount, State, Owner, Tag, NeedCommit);
+        POOL_ASSERT(Shard->FreeCommittedPages >= AlreadyCommitted);
         Shard->FreeCommittedPages -= AlreadyCommitted;
 
         if (Segment->FreePages == 0)
@@ -405,16 +479,17 @@ PoolSegAllocatePages(
 
     if (!NT_SUCCESS(PoolSegCommitRuns(Heap, Segment, NeedCommit)))
     {
-        for (i = 0; i < POOL_SEGMENT_MAP_WORDS; i++)
-            Segment->CommitMap[i] &= ~NeedCommit[i];
-
         if (Created)
         {
+            for (i = 0; i < POOL_SEGMENT_MAP_WORDS; i++)
+                Segment->CommitMap[i] &= ~NeedCommit[i];
             PoolSegDestroy(Heap, Segment);
             return NULL;
         }
 
         POOL_LOCK_ACQUIRE(&Shard->Lock, &OldIrql);
+        for (i = 0; i < POOL_SEGMENT_MAP_WORDS; i++)
+            Segment->CommitMap[i] &= ~NeedCommit[i];
         Shard->FreeCommittedPages += AlreadyCommitted;
         PoolSegUnclaimLocked(Shard, Segment, First, PageCount);
         POOL_LOCK_RELEASE(&Shard->Lock, OldIrql);
@@ -497,6 +572,7 @@ PoolSegTrimShard(
     KIRQL OldIrql;
 
     POOL_LOCK_ACQUIRE(&Shard->Lock, &OldIrql);
+    PoolSegAssertShard(Heap, Shard, ShardIndex);
     Budget = Shard->FreeCommittedPages;
 
     while (Budget != 0 && Shard->FreeCommittedPages != 0)
@@ -546,6 +622,7 @@ PoolSegTrimShard(
             Count++;
         }
 
+        POOL_ASSERT(Count != 0 && Count <= Segment->FreePages && Count <= Shard->FreeCommittedPages);
         Segment->FreePages = (USHORT)(Segment->FreePages - Count);
         Shard->FreeCommittedPages -= Count;
         Budget = (Budget > Count) ? Budget - Count : 0;
@@ -571,5 +648,6 @@ PoolSegTrimShard(
         }
     }
 
+    PoolSegAssertShard(Heap, Shard, ShardIndex);
     POOL_LOCK_RELEASE(&Shard->Lock, OldIrql);
 }

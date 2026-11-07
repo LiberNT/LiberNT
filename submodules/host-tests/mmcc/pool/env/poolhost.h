@@ -85,12 +85,16 @@ typedef struct _POOL_LOCK
     volatile int Held;
 } POOL_LOCK, *PPOOL_LOCK;
 
+extern _Thread_local volatile int *PoolHostLockBlocked;
+
 static inline void PoolHostLockAcquire(PPOOL_LOCK Lock)
 {
     unsigned Spins = 0;
 
     while (__sync_lock_test_and_set(&Lock->Held, 1))
     {
+        if (PoolHostLockBlocked != NULL)
+            __atomic_store_n(PoolHostLockBlocked, 1, __ATOMIC_RELEASE);
         if (++Spins > 64)
         {
             sched_yield();

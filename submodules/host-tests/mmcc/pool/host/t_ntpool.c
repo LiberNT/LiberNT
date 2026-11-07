@@ -13,6 +13,7 @@
 #define TAG_TEST 0x74507845
 
 _Thread_local ULONG PoolHostProcessor;
+_Thread_local volatile int *PoolHostLockBlocked;
 ULONG KeNumberProcessors = 1;
 int MiSystem;
 static EPROCESS SystemProcess, TestProcess;
