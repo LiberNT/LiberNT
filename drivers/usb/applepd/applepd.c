@@ -121,6 +121,32 @@ ApplePdTimerDpc(
 }
 
 static
+ULONG
+ApplePdFindInterrupt(
+    _In_ PAPPLE_PD_DEVICE Device,
+    _In_ ULONG Node,
+    _In_z_ const CHAR *Name)
+{
+    const CHAR *Names, *Entry;
+    const ULONG *Interrupts, *CellCount;
+    ULONG Cursor = 0, Index, Cells, NamesLength, Length, EntryLength;
+
+    CellCount = RiscvFdtGetProperty(&Device->Tree.Fdt, Device->Tree.Node, "#interrupt-cells", &Length);
+    Cells = (CellCount && Length >= sizeof(ULONG)) ? RiscvFdtReadBigEndian32(CellCount) : 0;
+    Names = RiscvFdtGetProperty(&Device->Tree.Fdt, Node, "interrupt-names", &NamesLength);
+    Interrupts = RiscvFdtGetProperty(&Device->Tree.Fdt, Node, "interrupts", &Length);
+    if (!Cells || !Interrupts)
+        return MAXULONG;
+    for (Index = 0; (Entry = RiscvFdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
+    {
+        if (EntryLength == strlen(Name) && !memcmp(Entry, Name, EntryLength))
+            return (Length >= (Index + 1) * Cells * sizeof(ULONG)) ? RiscvFdtReadBigEndian32(&Interrupts[Index * Cells])
+                                                                   : MAXULONG;
+    }
+    return MAXULONG;
+}
+
+static
 VOID
 ApplePdReadLabel(
     _In_ PAPPLE_PD_DEVICE Device,
@@ -201,6 +227,7 @@ ApplePdStartHardware(
         RtlZeroMemory(Port, sizeof(*Port));
         Port->Pd.Spmi = &Device->Spmi;
         Port->Pd.Sid = (UCHAR)(RiscvFdtReadBigEndian32(Reg) & 0x0f);
+        Port->Pd.WakeInterrupt = ApplePdFindInterrupt(Device, Child, "wake");
         ApplePdReadLabel(Device, Child, Port->Label);
     }
     if (!Device->PortCount)

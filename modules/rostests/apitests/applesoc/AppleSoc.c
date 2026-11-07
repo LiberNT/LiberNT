@@ -269,7 +269,8 @@ static UCHAR SimAceRegister0;
 static ULONG SimAceBusyReads;
 static BOOLEAN SimAceWrongEcho;
 static BOOLEAN SimAceRejectCommand;
-static BOOLEAN SimAceZeroPending;
+static BOOLEAN SimAceNoWake;
+static ULONG SimAceWakeInterrupt;
 static UCHAR SimAceWriteBuffer[0x41];
 
 #define SIM_CODEC_ADDRESS   0x4b
@@ -605,25 +606,38 @@ SimAceCommand(ULONG Command)
 {
     ULONG Opcode = Command & 0xff, Address = Command >> 16, Length, Index, Word;
 
-    if (SimAceZeroPending)
+    if (!(Command & 0x8000))
     {
-        SimAceZeroPending = FALSE;
-        SimAceSelected = (UCHAR)(Command & 0x7f);
+        if (SimSpmiCommandCount < RTL_NUMBER_OF(SimSpmiCommands))
+            SimSpmiCommands[SimSpmiCommandCount++] = Command;
+        return TRUE;
+    }
+    if (Opcode == 0x13)
+    {
+        if (SimSpmiCommandCount < RTL_NUMBER_OF(SimSpmiCommands))
+            SimSpmiCommands[SimSpmiCommandCount++] = Command;
+        if (!SimAceNoWake)
+            SimSpmiData[(0x60 + (SimAceWakeInterrupt / 32) * 4) / sizeof(ULONG)] |= 1UL << (SimAceWakeInterrupt % 32);
+        SimPush(0x8000 | (Command & 0x7fff));
+        return TRUE;
+    }
+    if (Opcode & 0x80)
+    {
+        if (SimSpmiCommandCount < RTL_NUMBER_OF(SimSpmiCommands))
+            SimSpmiCommands[SimSpmiCommandCount++] = Command;
+        if (Address != ((Opcode & 0x7f) << 8))
+            return TRUE;
+        SimAceSelected = (UCHAR)(Opcode & 0x7f);
         SimAceRegister0 = SimAceWrongEcho ? (UCHAR)(SimAceSelected ^ 1) : SimAceSelected;
-        SimPush(0x8000 | 0x80);
+        SimPush(0x8000 | (Command & 0x7fff));
         return TRUE;
     }
-    if (Opcode == 0x80 && (Command & 0x8000))
+    if ((Opcode & 0xe0) == 0x60)
     {
         if (SimSpmiCommandCount < RTL_NUMBER_OF(SimSpmiCommands))
             SimSpmiCommands[SimSpmiCommandCount++] = Command;
-        SimAceZeroPending = TRUE;
-        return TRUE;
-    }
-    if (Opcode == 0x60 && (Command & 0x8000))
-    {
-        if (SimSpmiCommandCount < RTL_NUMBER_OF(SimSpmiCommands))
-            SimSpmiCommands[SimSpmiCommandCount++] = Command;
+        if (Address != (Opcode & 0x1f))
+            return TRUE;
         SimPush(0xffff8000 | Opcode);
         SimPush((Address == 0 && SimAceBusyReads) ? (SimAceBusyReads--, SimAceRegister0 | 0x80) : SimAceRegister0);
         return TRUE;
@@ -736,6 +750,11 @@ SimWrite(volatile ULONG *Address, ULONG Value)
     else if (Region == &SimRegions[2] && Offset == 0x04)
     {
         SimSpmiCommand(Value);
+        return;
+    }
+    else if (Region == &SimRegions[2] && Offset >= 0x60 && Offset < 0xa0)
+    {
+        Region->Data[Offset / sizeof(ULONG)] &= ~Value;
         return;
     }
     else if (Region == &SimRegions[3] && Offset == 0x20000 && !SimAtcStuck)
@@ -992,7 +1011,8 @@ ResetSimulation(PFDT_DRIVER_TREE Tree)
     memset(SimAceRegs, 0, sizeof(SimAceRegs));
     SimAceSelected = SimAceRegister0 = 0;
     SimAceBusyReads = 0;
-    SimAceWrongEcho = SimAceRejectCommand = SimAceZeroPending = FALSE;
+    SimAceWrongEcho = SimAceRejectCommand = SimAceNoWake = FALSE;
+    SimAceWakeInterrupt = 0;
     SimStalledMicroseconds = 0;
     BuildSocTree();
     memset(Tree, 0, sizeof(*Tree));
@@ -2161,8 +2181,21 @@ TestAcePd(VOID)
     SimAceEnabled = TRUE;
     Pd.Spmi = &Spmi;
     Pd.Sid = 0x0c;
+    Pd.WakeInterrupt = 0x13;
+    SimAceWakeInterrupt = 0x13;
     SimAceSet(0x20, PowerS5, sizeof(PowerS5));
     SimAceSet(0x08, Idle, sizeof(Idle));
+
+    SimSpmiData[0x60 / sizeof(ULONG)] = 1UL << 0x13;
+    SimAceNoWake = TRUE;
+    SimSleptMs = 0;
+    SimSpmiCommandCount = 0;
+    ok_hex(AppleAcePdInitialize(&Pd, &Previous), STATUS_IO_TIMEOUT);
+    ok_int(SimSleptMs, 100);
+    ok_int(SimSpmiCommandCount, 1);
+    ok_hex(SimSpmiCommands[0], 0x8c13);
+    ok_int(Previous, 0xff);
+    SimAceNoWake = FALSE;
 
     SimSpmiCommandCount = 0;
     Status2 = AppleAcePdInitialize(&Pd, &Previous);
@@ -2172,8 +2205,16 @@ TestAcePd(VOID)
     ok_int(SimAceRegs[0x16][0], 8);
     memcpy(&Mask, &SimAceRegs[0x16][1], sizeof(Mask));
     ok(Mask == 0x602, "Interrupt mask %I64x\n", Mask);
-    ok_hex(SimSpmiCommands[0], 0x8c80);
-    ok_hex(SimSpmiCommands[1], 0x8c60);
+    ok_hex(SimSpmiCommands[0], 0x8c13);
+    ok_hex(SimSpmiCommands[1], 0x20008ca0);
+    ok_hex(SimSpmiCommands[2], 0x8c60);
+    ok_hex(SimSpmiData[0x60 / sizeof(ULONG)], 0);
+    ok_hex(SimSpmiData[0x20 / sizeof(ULONG)], 1UL << 0x13);
+
+    SimSpmiCommandCount = 0;
+    ok_hex(AppleSpmiRegisterRead(&Spmi, 0x0c, 0x05, &Byte), STATUS_SUCCESS);
+    ok_int(SimSpmiCommandCount, 1);
+    ok_hex(SimSpmiCommands[0], 0x00058c65);
 
     SimAceSet(0x14, Event, sizeof(Event));
     SimAceSet(0x1a, Status, sizeof(Status));

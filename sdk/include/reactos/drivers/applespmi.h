@@ -63,6 +63,30 @@ AppleSpmiZeroWrite(
 
 NTSTATUS
 NTAPI
+AppleSpmiWakeup(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ UCHAR Sid);
+
+BOOLEAN
+NTAPI
+AppleSpmiInterruptPending(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ ULONG Interrupt);
+
+VOID
+NTAPI
+AppleSpmiEnableInterrupt(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ ULONG Interrupt);
+
+VOID
+NTAPI
+AppleSpmiAcknowledgeInterrupt(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ ULONG Interrupt);
+
+NTSTATUS
+NTAPI
 AppleNvmemReadCell(
     _In_ PFDT_DRIVER_TREE Tree,
     _In_ ULONG Phandle,
