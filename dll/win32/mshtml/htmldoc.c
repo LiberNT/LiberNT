@@ -32,6 +32,8 @@
 
 #include "wine/debug.h"
 
+#include "activscp.h"
+
 #include "mshtml_private.h"
 #include "htmlevent.h"
 #include "pluginhost.h"
@@ -5767,12 +5769,16 @@ static const NodeImplVtbl HTMLDocumentFragmentImplVtbl = {
 static const tid_t HTMLDocumentNode_iface_tids[] = {
     IHTMLDOMNode_tid,
     IHTMLDocument5_tid,
-    IDocumentSelector_tid,
     0
 };
 
 static void HTMLDocumentNode_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 {
+    static const dispex_hook_t document_selector_hooks[] = {
+        {DISPID_IDOCUMENTSELECTOR_QUERYSELECTOR,    .min_script_version = SCRIPTLANGUAGEVERSION_5_8},
+        {DISPID_IDOCUMENTSELECTOR_QUERYSELECTORALL, .min_script_version = SCRIPTLANGUAGEVERSION_5_8},
+        {DISPID_UNKNOWN}
+    };
     static const dispex_hook_t document2_ie9_hooks[] = {
         {DISPID_IHTMLDOCUMENT2_CLEAR},
         {DISPID_IHTMLDOCUMENT2_EXPANDO},
@@ -5841,6 +5847,7 @@ static void HTMLDocumentNode_init_dispex_info(dispex_data_t *info, compat_mode_t
 
     HTMLDOMNode_init_dispex_info(info, mode);
 
+    dispex_info_add_interface(info, IDocumentSelector_tid, mode < COMPAT_MODE_IE9 ? document_selector_hooks : NULL);
     if(mode >= COMPAT_MODE_IE9) {
         dispex_info_add_interface(info, IHTMLDocument7_tid, NULL);
         dispex_info_add_interface(info, IDocumentEvent_tid, NULL);
