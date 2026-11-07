@@ -422,6 +422,22 @@ TestBatchCheck(void)
         0x71050509, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,     /* GPGPU_WALKER with flags in the length's high byte */
         0x05000000, 0,
     };
+    static const uint32_t Crocus[] =
+    {
+        0x69040000,
+        0x61010008, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x78230000, 0,
+        0x79170001, 0, 0, 0,
+        0x79160000, 0,
+        0x78300000, 0,
+        0x06000000,
+        0x10400003, 0, 0x1000, 7, 0,
+        0x0C800000, 0,
+        0x7A000003, 0x00100002, 0, 0, 0,
+        0x7B000005, 0, 3, 0, 1, 0, 0,
+        0x05000000, 0,
+    };
+    static uint32_t Long[0x200];
     static const struct
     {
         const char *Name;
@@ -455,6 +471,13 @@ TestBatchCheck(void)
         { "3D packet on the blitter ring", { 0x7A000002, 0, 0, 0 }, 4, true },
         { "LRI on the blitter ring", { 0x11000001, 0x5280, 0, 0 }, 3, true },
         { "MI_FLUSH_DW store index", { 0x13200001, 0x100, 0, 0 }, 3, true },
+        { "LRI with length bit 6", { 0x11000041, 0x5280, 0, 0 }, 3, false },
+        { "MI_STORE_DATA_IMM with length bit 6", { 0x10400042, 0, 0x1000, 7 }, 4, false },
+        { "MI_STORE_DATA_IMM with length bit 9", { 0x10400202, 0, 0x1000, 7 }, 4, false },
+        { "3DSTATE_SO_DECL_LIST with length bit 8", { 0x79170101, 0, 0, 0 }, 3, false },
+        { "unknown 3D opcode", { 0x79500000, 0, 0, 0 }, 2, false },
+        { "3DSTATE_SAMPLER_PALETTE_LOAD1", { 0x790C0000, 0, 0, 0 }, 2, false },
+        { "MI_REPORT_PERF_COUNT", { 0x14000001, 0, 0, 0 }, 3, false },
     };
     static const uint32_t Blits[] =
     {
@@ -470,6 +493,20 @@ TestBatchCheck(void)
     CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, true, &Offending), 1);
     CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, false, &Offending), 0);
     CHECK_EQ(Offending, 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Crocus, sizeof(Crocus) / 4, false, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, &Offending), 0);
+
+    memset(Long, 0, sizeof(Long));
+    Long[0] = 0x79170100;
+    Long[2] = 0x18800000;
+    Long[258] = 0x05000000;
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Long, 260, false, &Offending), 1);
+
+    memset(Long, 0, sizeof(Long));
+    Long[0] = 0x50000043;
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Long, 72, true, &Offending), 0);
+    CHECK_EQ(Offending, 0);
+
     for (Index = 0; Index < sizeof(Refused) / sizeof(Refused[0]); Index++)
     {
         if (HdgfxIvbCheckBatch(7, Refused[Index].Dwords, Refused[Index].Count, Refused[Index].Blitter, &Offending))
