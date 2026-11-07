@@ -12120,9 +12120,11 @@ static void test_invoke_error_libernt(IUnknown *obj, const WCHAR *prop, WORD fla
 
 static void test_invoke_errors_libernt(IHTMLDocument2 *doc)
 {
+    static const WCHAR *targets[] = { L"", L"example.org", L"about:blank", L"http://example.org", L"*" };
     IHTMLWindow2 *window;
     IHTMLElement *div;
     VARIANT args[2];
+    unsigned i;
     HRESULT hres;
 
     div = test_create_elem(doc, L"div");
@@ -12139,6 +12141,14 @@ static void test_invoke_errors_libernt(IHTMLDocument2 *doc)
     V_VT(&args[0]) = VT_I4;
     V_I4(&args[0]) = 1;
     test_invoke_error_libernt((IUnknown*)window, L"postMessage", DISPATCH_METHOD, args, 2, E_INVALIDARG);
+    V_VT(&args[0]) = VT_NULL;
+    test_invoke_error_libernt((IUnknown*)window, L"postMessage", DISPATCH_METHOD, args, 2, E_INVALIDARG);
+    for(i = 0; i < ARRAY_SIZE(targets); i++) {
+        V_VT(&args[0]) = VT_BSTR;
+        V_BSTR(&args[0]) = SysAllocString(targets[i]);
+        test_invoke_error_libernt((IUnknown*)window, L"postMessage", DISPATCH_METHOD, args, 2, E_ABORT);
+        VariantClear(&args[0]);
+    }
     VariantClear(&args[1]);
     IHTMLWindow2_Release(window);
 }
