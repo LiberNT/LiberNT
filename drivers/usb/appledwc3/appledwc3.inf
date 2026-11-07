@@ -1,0 +1,42 @@
+; PROJECT:     LiberNT Apple Silicon USB Glue Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = USB
+ClassGUID = {36FC9E60-C465-11CF-8056-444553540000}
+Provider = %LiberNT%
+DriverVer = 11/06/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%AppleDwc3.DeviceDesc% = AppleDwc3_Inst,FDT\apple_t8103-dwc3
+
+[AppleDwc3_Inst.NT]
+CopyFiles = AppleDwc3_CopyFiles
+
+[AppleDwc3_CopyFiles]
+appledwc3.sys
+
+[AppleDwc3_Inst.NT.Services]
+AddService = appledwc3,0x00000002,AppleDwc3_Service
+
+[AppleDwc3_Service]
+DisplayName = %AppleDwc3.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\appledwc3.sys
+LoadOrderGroup = Boot Bus Extender
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard USB host controllers)"
+AppleDwc3.DeviceDesc = "Apple silicon USB Type-C controller"
+AppleDwc3.ServiceDesc = "Apple Silicon USB Glue Driver"
