@@ -1713,6 +1713,7 @@ SoftGpuDdiQueryAdapterInfo(
         GpuMmuCaps->NoExecuteMemorySupported = 1;
         GpuMmuCaps->ZeroInPteSupported = 1;
         GpuMmuCaps->CacheCoherentMemorySupported = 1;
+        GpuMmuCaps->CachedPageTables = 1;
         GpuMmuCaps->PageTableUpdateMode = DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
         GpuMmuCaps->VirtualAddressBitCount = SOFTGPU_GPUVA_BIT_COUNT;
         GpuMmuCaps->PageTableLevelCount = SOFTGPU_GPUVA_LEVELS;
