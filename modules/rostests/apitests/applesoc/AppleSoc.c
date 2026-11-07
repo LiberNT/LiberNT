@@ -254,7 +254,7 @@ static ULONG SimFifoHead;
 static ULONG SimFifoTail;
 static BOOLEAN SimSpmiSilent;
 static BOOLEAN SimSpmiBadParity;
-static ULONG SimSpmiCommands[8];
+static ULONG SimSpmiCommands[16];
 static ULONG SimSpmiCommandCount;
 static BOOLEAN SimSpmiNoAck;
 static ULONG SimSpmiWritePending;
@@ -263,7 +263,12 @@ static ULONG SimSpmiWriteLength;
 static ULONG SimSpmiWriteDone;
 static ULONG SimSpmiWriteCommand;
 static BOOLEAN SimAceEnabled;
-static UCHAR SimAceRegs[256][0x41];
+#define SIM_ACE_WINDOW_SIZE 0x40
+#define SIM_ACE_READ_WINDOW 0x20
+#define SIM_ACE_WRITE_WINDOW 0xa0
+
+static UCHAR SimAceRegs[256][SIM_ACE_WINDOW_SIZE];
+static UCHAR SimAceLength[256];
 static UCHAR SimAceSelected;
 static UCHAR SimAceRegister0;
 static ULONG SimAceBusyReads;
@@ -271,7 +276,7 @@ static BOOLEAN SimAceWrongEcho;
 static BOOLEAN SimAceRejectCommand;
 static BOOLEAN SimAceNoWake;
 static ULONG SimAceWakeInterrupt;
-static UCHAR SimAceWriteBuffer[0x41];
+static UCHAR SimAceWriteBuffer[SIM_ACE_WINDOW_SIZE];
 
 #define SIM_CODEC_ADDRESS   0x4b
 
@@ -571,33 +576,30 @@ SimRead(volatile ULONG *Address)
 
 static
 VOID
-SimAceCommit(VOID)
+SimAceCommit(ULONG Length)
 {
-    UCHAR Length = SimAceWriteBuffer[0];
+    ULONG Index;
 
-    if (SimAceSelected == 0x08 && Length == 4 && !memcmp(&SimAceWriteBuffer[1], "SSPS", 4))
+    if (SimAceSelected == 0x08 && Length == 4 && !memcmp(SimAceWriteBuffer, "SSPS", 4))
     {
         if (SimAceRejectCommand)
         {
-            memcpy(&SimAceRegs[0x08][1], "!CMD", 4);
+            memcpy(SimAceRegs[0x08], "!CMD", 4);
             return;
         }
-        SimAceRegs[0x20][0] = 1;
-        SimAceRegs[0x20][1] = SimAceRegs[0x09][1];
-        memset(&SimAceRegs[0x08][1], 0, 4);
-        SimAceRegs[0x09][0] = 1;
-        SimAceRegs[0x09][1] = 0;
+        SimAceRegs[0x20][0] = SimAceRegs[0x09][0];
+        memset(SimAceRegs[0x08], 0, 4);
+        SimAceRegs[0x09][0] = 0;
         return;
     }
     if (SimAceSelected == 0x18)
     {
-        ULONG Index;
-
-        for (Index = 1; Index <= Length && Index <= 8; ++Index)
+        for (Index = 0; Index < Length && Index < 8; ++Index)
             SimAceRegs[0x14][Index] &= ~SimAceWriteBuffer[Index];
         return;
     }
-    memcpy(SimAceRegs[SimAceSelected], SimAceWriteBuffer, Length + 1);
+    memcpy(SimAceRegs[SimAceSelected], SimAceWriteBuffer, Length);
+    SimAceLength[SimAceSelected] = (UCHAR)Length;
 }
 
 static
@@ -642,14 +644,17 @@ SimAceCommand(ULONG Command)
         SimPush((Address == 0 && SimAceBusyReads) ? (SimAceBusyReads--, SimAceRegister0 | 0x80) : SimAceRegister0);
         return TRUE;
     }
-    if ((Opcode & 0xf8) == 0x38 && (Command & 0x8000) && Address >= 0x20 && Address < 0x61)
+    Length = (Opcode & 7) + 1;
+    if ((Opcode & 0xf8) == 0x38 && (Command & 0x8000) && Address >= SIM_ACE_READ_WINDOW &&
+        Address + Length <= SIM_ACE_READ_WINDOW + SIM_ACE_WINDOW_SIZE)
     {
-        Length = (Opcode & 7) + 1;
+        if (SimSpmiCommandCount < RTL_NUMBER_OF(SimSpmiCommands))
+            SimSpmiCommands[SimSpmiCommandCount++] = Command;
         SimPush(0xffff8000 | Opcode);
         for (Index = 0; Index < Length; Index += 4)
         {
             Word = 0;
-            memcpy(&Word, &SimAceRegs[SimAceSelected][Address - 0x20 + Index], min(4, Length - Index));
+            memcpy(&Word, &SimAceRegs[SimAceSelected][Address - SIM_ACE_READ_WINDOW + Index], min(4, Length - Index));
             SimPush(Word);
         }
         return TRUE;
@@ -672,16 +677,16 @@ SimSpmiCommand(ULONG Command)
             UCHAR Byte = (UCHAR)(Command >> (8 * Index));
             ULONG Target = SimSpmiWriteAddress + SimSpmiWriteDone++;
 
-            if (SimAceEnabled && Target >= 0xa0 && Target < 0xe1)
-                SimAceWriteBuffer[Target - 0xa0] = Byte;
+            if (SimAceEnabled && Target >= SIM_ACE_WRITE_WINDOW && Target < SIM_ACE_WRITE_WINDOW + SIM_ACE_WINDOW_SIZE)
+                SimAceWriteBuffer[Target - SIM_ACE_WRITE_WINDOW] = Byte;
             else
                 SimNvmem[Target] = Byte;
         }
         if (--SimSpmiWritePending == 0)
         {
-            if (SimAceEnabled && SimSpmiWriteAddress >= 0xa0 &&
-                SimSpmiWriteAddress + SimSpmiWriteLength >= 0xa0 + SimAceWriteBuffer[0] + 1U)
-                SimAceCommit();
+            if (SimAceEnabled && SimSpmiWriteAddress >= SIM_ACE_WRITE_WINDOW &&
+                SimSpmiWriteAddress + SimSpmiWriteLength <= SIM_ACE_WRITE_WINDOW + SIM_ACE_WINDOW_SIZE)
+                SimAceCommit(SimSpmiWriteAddress + SimSpmiWriteLength - SIM_ACE_WRITE_WINDOW);
             if (!SimSpmiSilent)
                 SimPush((SimSpmiNoAck ? 0 : 0x8000) | (SimSpmiWriteCommand & 0x7fff));
         }
@@ -1009,6 +1014,7 @@ ResetSimulation(PFDT_DRIVER_TREE Tree)
     SimSpmiWritePending = 0;
     SimAceEnabled = FALSE;
     memset(SimAceRegs, 0, sizeof(SimAceRegs));
+    memset(SimAceLength, 0, sizeof(SimAceLength));
     SimAceSelected = SimAceRegister0 = 0;
     SimAceBusyReads = 0;
     SimAceWrongEcho = SimAceRejectCommand = SimAceNoWake = FALSE;
@@ -2157,8 +2163,8 @@ static
 VOID
 SimAceSet(UCHAR Register, const UCHAR *Data, UCHAR Length)
 {
-    SimAceRegs[Register][0] = Length;
-    memcpy(&SimAceRegs[Register][1], Data, Length);
+    memcpy(SimAceRegs[Register], Data, Length);
+    SimAceLength[Register] = Length;
 }
 
 static
@@ -2171,7 +2177,7 @@ TestAcePd(VOID)
     APPLE_ACE_PD_STATE State;
     APPLE_SPMI Spmi;
     APPLE_ACE_PD Pd;
-    UCHAR Previous = 0xff, Byte;
+    UCHAR Previous = 0xff, Byte, Window[SIM_ACE_WINDOW_SIZE + 1];
     ULONG64 Mask = 0;
     NTSTATUS Status2;
 
@@ -2201,13 +2207,14 @@ TestAcePd(VOID)
     Status2 = AppleAcePdInitialize(&Pd, &Previous);
     ok_hex(Status2, STATUS_SUCCESS);
     ok_int(Previous, 5);
-    ok_int(SimAceRegs[0x20][1], 0);
-    ok_int(SimAceRegs[0x16][0], 8);
-    memcpy(&Mask, &SimAceRegs[0x16][1], sizeof(Mask));
+    ok_int(SimAceRegs[0x20][0], 0);
+    ok_int(SimAceLength[0x16], 8);
+    memcpy(&Mask, SimAceRegs[0x16], sizeof(Mask));
     ok(Mask == 0x602, "Interrupt mask %I64x\n", Mask);
     ok_hex(SimSpmiCommands[0], 0x8c13);
     ok_hex(SimSpmiCommands[1], 0x20008ca0);
     ok_hex(SimSpmiCommands[2], 0x8c60);
+    ok_hex(SimSpmiCommands[3], 0x00208c38);
     ok_hex(SimSpmiData[0x60 / sizeof(ULONG)], 0);
     ok_hex(SimSpmiData[0x20 / sizeof(ULONG)], 1UL << 0x13);
 
@@ -2226,8 +2233,8 @@ TestAcePd(VOID)
     ok_hex(State.Status, 0x61);
     ok_hex(State.DataStatus, 0x11);
     ok_hex(State.PowerStatus, 5);
+    ok_int(SimAceRegs[0x14][0], 0);
     ok_int(SimAceRegs[0x14][1], 0);
-    ok_int(SimAceRegs[0x14][2], 0);
 
     Status2 = AppleAcePdPoll(&Pd, &State);
     ok_hex(Status2, STATUS_SUCCESS);
@@ -2244,16 +2251,25 @@ TestAcePd(VOID)
     ok_hex(AppleAcePdRead(&Pd, 0x1a, &Byte, 1), STATUS_DEVICE_PROTOCOL_ERROR);
     SimAceWrongEcho = FALSE;
 
-    SimAceRegs[0x5f][0] = 2;
-    ok_hex(AppleAcePdRead(&Pd, 0x5f, &State.DataStatus, 4), STATUS_DEVICE_DATA_ERROR);
+    State.DataStatus = 0;
+    ok_hex(AppleAcePdRead(&Pd, 0x5f, &State.DataStatus, 4), STATUS_SUCCESS);
+    ok_hex(State.DataStatus, 0x11);
     ok_hex(AppleAcePdRead(&Pd, 0x5f, &State.DataStatus, 0), STATUS_INVALID_PARAMETER);
+    memset(SimAceRegs[0x1a], 0x5a, SIM_ACE_WINDOW_SIZE);
+    SimSpmiCommandCount = 0;
+    ok_hex(AppleAcePdRead(&Pd, 0x1a, Window, SIM_ACE_WINDOW_SIZE), STATUS_SUCCESS);
+    ok_int(Window[0], 0x5a);
+    ok_int(Window[SIM_ACE_WINDOW_SIZE - 1], 0x5a);
+    ok_int(SimSpmiCommandCount, 10);
+    ok_hex(SimSpmiCommands[9], 0x00588c3f);
+    ok_hex(AppleAcePdRead(&Pd, 0x1a, Window, SIM_ACE_WINDOW_SIZE + 1), STATUS_INVALID_PARAMETER);
 
     SimAceSet(0x20, PowerS5, sizeof(PowerS5));
     SimAceRejectCommand = TRUE;
     ok_hex(AppleAcePdInitialize(&Pd, NULL), STATUS_NOT_SUPPORTED);
-    ok_int(SimAceRegs[0x20][1], 5);
+    ok_int(SimAceRegs[0x20][0], 5);
     SimAceRejectCommand = FALSE;
-    memcpy(&SimAceRegs[0x08][1], "SSPS", 4);
+    memcpy(SimAceRegs[0x08], "SSPS", 4);
     ok_hex(AppleAcePdCommand(&Pd, "SSPS", NULL, 0), STATUS_DEVICE_BUSY);
     AppleSpmiClose(&Spmi);
 }
