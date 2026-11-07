@@ -100,7 +100,7 @@ IsWindowsVolume(
     return TRUE;
 }
 
-static BOOLEAN
+BOOLEAN
 IsWindowsHibernated(
     _In_ PCWSTR DeviceName)
 {

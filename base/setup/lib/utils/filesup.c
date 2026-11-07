@@ -330,7 +330,8 @@ SetupCopyFile(
                           FailIfExists ? FILE_CREATE : FILE_OVERWRITE_IF,
                           FILE_NO_INTERMEDIATE_BUFFERING |
                           FILE_SEQUENTIAL_ONLY |
-                          FILE_SYNCHRONOUS_IO_NONALERT,
+                          FILE_SYNCHRONOUS_IO_NONALERT |
+                          FILE_OPEN_FOR_BACKUP_INTENT,
                           NULL,
                           0);
     if (!NT_SUCCESS(Status))
@@ -354,7 +355,8 @@ SetupCopyFile(
                                   FILE_OPEN,
                                   FILE_NO_INTERMEDIATE_BUFFERING |
                                   FILE_SEQUENTIAL_ONLY |
-                                  FILE_SYNCHRONOUS_IO_NONALERT,
+                                  FILE_SYNCHRONOUS_IO_NONALERT |
+                                  FILE_OPEN_FOR_BACKUP_INTENT,
                                   NULL,
                                   0);
             /* Fail for real if we cannot open it that way */
@@ -389,7 +391,8 @@ SetupCopyFile(
                                   FILE_OVERWRITE_IF,
                                   FILE_NO_INTERMEDIATE_BUFFERING |
                                   FILE_SEQUENTIAL_ONLY |
-                                  FILE_SYNCHRONOUS_IO_NONALERT,
+                                  FILE_SYNCHRONOUS_IO_NONALERT |
+                                  FILE_OPEN_FOR_BACKUP_INTENT,
                                   NULL,
                                   0);
         }

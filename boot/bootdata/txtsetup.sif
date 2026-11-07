@@ -17,6 +17,17 @@ Windows = "\"
 "Windows\welcome.ini" = 1
 "Windows\welcome" = 1
 
+; A file listed here keeps its installed copy when Setup upgrades LiberNT,
+; and is copied only when it is missing.
+[SystemTrees.Preserve]
+"Windows\system.ini" = 1
+"Windows\win.ini" = 1
+"Windows\system32\drivers\etc\hosts" = 1
+"Windows\system32\drivers\etc\KDBinit" = 1
+"Windows\system32\drivers\etc\networks" = 1
+"Windows\system32\drivers\etc\protocol" = 1
+"Windows\system32\drivers\etc\services" = 1
+
 [DiskSpaceRequirements]
 ; Required free system partition disk space in MB
 FreeSysPartDiskSpace = 450
@@ -578,8 +589,26 @@ AddReg = registry.inf,AddReg
 AddReg = comreg.inf,AddReg
 
 [HiveInfs.Upgrade]
+AddReg = caroots.inf,AddReg
 AddReg = registry.inf,AddReg
 AddReg = comreg.inf,AddReg
+
+; Settings an upgrade takes back from the installed system after applying the
+; registry above: a whole key, or one value when a value name is given.
+[HiveInfs.Upgrade.Keep]
+HKLM,"SYSTEM\CurrentControlSet\Control\ComputerName"
+HKLM,"SYSTEM\CurrentControlSet\Control\TimeZoneInformation"
+HKLM,"SYSTEM\CurrentControlSet\Control\Nls\CodePage","ACP"
+HKLM,"SYSTEM\CurrentControlSet\Control\Nls\CodePage","MACCP"
+HKLM,"SYSTEM\CurrentControlSet\Control\Nls\CodePage","OEMCP"
+HKLM,"SYSTEM\CurrentControlSet\Control\Nls\Language","Default"
+HKLM,"SYSTEM\CurrentControlSet\Control\Nls\Language","InstallLanguage"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon","AutoAdminLogon"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon","DefaultDomainName"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon","DefaultPassword"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon","DefaultUserName"
+HKCU,"Control Panel\International"
+HKCU,"Keyboard Layout\Preload"
 
 [Strings]
 cdname      = "LiberNT Installation Media"
