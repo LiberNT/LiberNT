@@ -79,6 +79,39 @@ KiExpandInitialProcessAffinities(VOID)
 }
 #endif
 
+static
+VOID
+KiAssertProcessApcState(IN PKTHREAD Thread)
+{
+    PKAPC_STATE Original;
+    ULONG Mode;
+
+    UNREFERENCED_PARAMETER(Thread);
+    ASSERT(Thread->ApcStateIndex == OriginalApcEnvironment ||
+           Thread->ApcStateIndex == AttachedApcEnvironment);
+    ASSERT(Thread->ApcState.Process != NULL);
+    if (Thread->ApcStateIndex == OriginalApcEnvironment)
+    {
+        ASSERT(Thread->ApcStatePointer[OriginalApcEnvironment] == &Thread->ApcState);
+        ASSERT(Thread->ApcStatePointer[AttachedApcEnvironment] == &Thread->SavedApcState);
+    }
+    else
+    {
+        ASSERT(Thread->ApcStatePointer[OriginalApcEnvironment] == &Thread->SavedApcState);
+        ASSERT(Thread->ApcStatePointer[AttachedApcEnvironment] == &Thread->ApcState);
+        ASSERT(Thread->SavedApcState.Process != NULL);
+    }
+    Original = Thread->ApcStatePointer[OriginalApcEnvironment];
+    UNREFERENCED_PARAMETER(Original);
+    for (Mode = KernelMode; Mode <= UserMode; Mode++)
+    {
+        ASSERT(Thread->ApcState.ApcListHead[Mode].Flink->Blink == &Thread->ApcState.ApcListHead[Mode]);
+        ASSERT(Thread->ApcState.ApcListHead[Mode].Blink->Flink == &Thread->ApcState.ApcListHead[Mode]);
+        ASSERT(Original->ApcListHead[Mode].Flink->Blink == &Original->ApcListHead[Mode]);
+        ASSERT(Original->ApcListHead[Mode].Blink->Flink == &Original->ApcListHead[Mode]);
+    }
+}
+
 VOID
 NTAPI
 KiAttachProcess(IN PKTHREAD Thread,
@@ -90,6 +123,7 @@ KiAttachProcess(IN PKTHREAD Thread,
     PLIST_ENTRY ListHead, NextEntry;
     PKTHREAD CurrentThread;
 #endif
+    KiAssertProcessApcState(Thread);
     ASSERT(Process != Thread->ApcState.Process);
 
     /* Increase Stack Count */
@@ -115,6 +149,8 @@ KiAttachProcess(IN PKTHREAD Thread,
         Thread->ApcStatePointer[AttachedApcEnvironment] = &Thread->ApcState;
         Thread->ApcStateIndex = AttachedApcEnvironment;
     }
+    KiAssertProcessApcState(Thread);
+    ASSERT(SavedApcState->Process != NULL && SavedApcState->Process != Process);
 
     /* Check if the process is paged in */
     if (Process->State == ProcessInMemory)
@@ -716,6 +752,8 @@ KeDetachProcess(VOID)
     /* Acquire APC Lock */
     KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
 
+    KiAssertProcessApcState(Thread);
+
     /* Check for invalid attach attempts */
     if ((Thread->ApcState.KernelApcInProgress) ||
         !(IsListEmpty(&Thread->ApcState.ApcListHead[KernelMode])) ||
@@ -751,6 +789,7 @@ KeDetachProcess(VOID)
     Thread->ApcStatePointer[OriginalApcEnvironment] = &Thread->ApcState;
     Thread->ApcStatePointer[AttachedApcEnvironment] = &Thread->SavedApcState;
     Thread->ApcStateIndex = OriginalApcEnvironment;
+    KiAssertProcessApcState(Thread);
 
     /* Release lock */
     KiReleaseApcLockFromSynchLevel(&ApcLock);
@@ -878,6 +917,7 @@ KeUnstackDetachProcess(IN PRKAPC_STATE ApcState)
      * Check if the process isn't attacked, or has a Kernel APC in progress
      * or has pending APC of any kind.
      */
+    KiAssertProcessApcState(Thread);
     if ((Thread->ApcStateIndex == OriginalApcEnvironment) ||
         (Thread->ApcState.KernelApcInProgress) ||
         (!IsListEmpty(&Thread->ApcState.ApcListHead[KernelMode])) ||
@@ -922,6 +962,7 @@ KeUnstackDetachProcess(IN PRKAPC_STATE ApcState)
         Thread->ApcStatePointer[OriginalApcEnvironment] = &Thread->ApcState;
         Thread->ApcStatePointer[AttachedApcEnvironment] = &Thread->SavedApcState;
     }
+    KiAssertProcessApcState(Thread);
 
     /* Release lock */
     KiReleaseApcLockFromSynchLevel(&ApcLock);
