@@ -358,11 +358,14 @@ PrepareFileCopy(
     return TRUE;
 }
 
+#define INVENTORY_IMAGE_LINE L"; Image "
+
 typedef struct _INVENTORY
 {
     PWSTR Text;
     PWSTR* Entries;
     ULONG Count;
+    PCWSTR Image;
 } INVENTORY, *PINVENTORY;
 
 #define UPGRADE_MAX_TREES   8
@@ -462,6 +465,8 @@ LoadInventory(
             Line[--Length] = UNICODE_NULL;
         if (Length && *Line != L';')
             Inventory->Entries[Inventory->Count++] = Line;
+        else if (!Inventory->Image && _wcsnicmp(Line, INVENTORY_IMAGE_LINE, ARRAYSIZE(INVENTORY_IMAGE_LINE) - 1) == 0)
+            Inventory->Image = Line + ARRAYSIZE(INVENTORY_IMAGE_LINE) - 1;
     }
 
     qsort(Inventory->Entries, Inventory->Count, sizeof(PWSTR), CompareInventoryEntries);
@@ -748,7 +753,11 @@ PrepareUpgradeFileCopy(
     Status = LoadInventory(Plan->Target, &Old);
     DPRINT1("Upgrade from %lu to %lu inventory entries (Status 0x%08lx)\n", Old.Count, New.Count, Status);
 
-    DropObsoleteFiles(Plan, &Old, &New);
+    if (Old.Image && New.Image && _wcsicmp(Old.Image, New.Image) == 0)
+        DropObsoleteFiles(Plan, &Old, &New);
+    else if (Old.Count)
+        DPRINT1("The system was installed from image '%S', this is image '%S'; nothing is dropped\n",
+                Old.Image ? Old.Image : L"unknown", New.Image ? New.Image : L"unknown");
     QueueInventoryFiles(Plan, &New);
 
     CombinePaths(Plan->Source, ARRAYSIZE(Plan->Source), 2, pSetupData->SourceRootPath.Buffer,

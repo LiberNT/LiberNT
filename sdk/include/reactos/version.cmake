@@ -26,6 +26,13 @@ if(NOT KERNEL_VERSION_BUILD_TYPE STREQUAL "")
     set(DLL_VERSION_STR "${DLL_VERSION_STR}-${KERNEL_VERSION_BUILD_TYPE}")
 endif()
 
+if(NOT LIBERNT_BUILD_NUMBER)
+    set(LIBERNT_BUILD_NUMBER "$ENV{GITHUB_RUN_NUMBER}")
+endif()
+if(NOT LIBERNT_BUILD_NUMBER MATCHES "^[0-9]+$")
+    set(LIBERNT_BUILD_NUMBER 0)
+endif()
+
 # Get Git revision through "git describe"
 set(COMMIT_HASH "unknown-hash")
 set(REVISION "unknown-revision")
