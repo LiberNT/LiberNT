@@ -106,9 +106,24 @@ typedef struct _NVME_NAMESPACE
     UCHAR Nguid[16];
 } NVME_NAMESPACE, *PNVME_NAMESPACE;
 
+struct _NVME_DEVICE_EXTENSION;
+
+/* A controller that is not a plain PCI NVMe function supplies its own submission and completion steps. */
+typedef struct _NVME_TRANSPORT
+{
+    VOID (*Submit)(_In_ struct _NVME_DEVICE_EXTENSION *Device, _In_ PNVME_QUEUE Queue, _In_ ULONG Slot,
+                   _In_ PNVME_COMMAND Command);
+    VOID (*Completed)(_In_ struct _NVME_DEVICE_EXTENSION *Device, _In_ PNVME_QUEUE Queue, _In_ USHORT CommandId);
+    VOID (*PrepareIoQueue)(_In_ struct _NVME_DEVICE_EXTENSION *Device, _Inout_ PNVME_QUEUE Queue);
+    VOID (*ConfigureController)(_In_ struct _NVME_DEVICE_EXTENSION *Device);
+    BOOLEAN AsyncEvents;
+} NVME_TRANSPORT, *PNVME_TRANSPORT;
+
 typedef struct _NVME_DEVICE_EXTENSION
 {
     PUCHAR Bar0;
+    const NVME_TRANSPORT *Transport;
+    PVOID TransportContext;
     ULONG Version;
     ULONG DoorbellStride;
     ULONG TimeoutMilliseconds;
@@ -133,6 +148,10 @@ typedef struct _NVME_DEVICE_EXTENSION
     ULONG Oaes;
     BOOLEAN VolatileWriteCache;
     BOOLEAN WriteCacheEnabled;
+    BOOLEAN WriteProtected;
+    BOOLEAN WriteWindowValid;
+    ULONGLONG WriteWindowFirst;
+    ULONGLONG WriteWindowLast;
     BOOLEAN MessageInterrupts;
     ULONG MessageCount;
     BOOLEAN InterruptsLive;
@@ -215,6 +234,7 @@ VOID NvmeReleaseLock(_In_ PNVME_DEVICE_EXTENSION Device, _Inout_ PNVME_LOCK Lock
 ULONG NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device, _Inout_ PNVME_COMMAND Command, _In_ UCHAR SlotType, _In_opt_ PSCSI_REQUEST_BLOCK Srb);
 BOOLEAN NvmeAdminCommandSync(_In_ PNVME_DEVICE_EXTENSION Device, _Inout_ PNVME_COMMAND Command, _Out_opt_ PULONG Result);
 VOID NvmeDrainAdminQueue(_In_ PNVME_DEVICE_EXTENSION Device);
+ULONG NvmeProcessAdminCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device, _Out_ PNVME_COMPLETED_SRB Batch, _In_ ULONG BatchLimit);
 BOOLEAN NvmeStartController(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN FirstStart);
 VOID NvmeDisableController(_In_ PNVME_DEVICE_EXTENSION Device);
 VOID NvmeShutdownController(_In_ PNVME_DEVICE_EXTENSION Device);
@@ -222,6 +242,13 @@ BOOLEAN NvmeResetController(_In_ PNVME_DEVICE_EXTENSION Device);
 
 /* pci.c */
 VOID NvmeMaskDeviceInterrupts(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN Mask);
+BOOLEAN NTAPI NvmeHwInitialize(_In_ PVOID DeviceExtension);
+BOOLEAN NTAPI NvmeHwResetBus(_In_ PVOID DeviceExtension, _In_ ULONG PathId);
+SCSI_ADAPTER_CONTROL_STATUS NTAPI NvmeHwAdapterControl(_In_ PVOID DeviceExtension, _In_ SCSI_ADAPTER_CONTROL_TYPE ControlType, _In_ PVOID Parameters);
+SCSI_UNIT_CONTROL_STATUS NTAPI NvmeHwUnitControl(_In_ PVOID DeviceExtension, _In_ SCSI_UNIT_CONTROL_TYPE ControlType, _In_ PVOID Parameters);
+
+/* platform: controllers described by the firmware device tree */
+ULONG NvmeRegisterPlatformAdapters(_In_ PVOID DriverObject, _In_ PVOID RegistryPath, _In_ PHW_INITIALIZATION_DATA PciInitData);
 
 /* queue.c */
 ULONG NvmeQueueVector(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG QueueId);
@@ -234,6 +261,7 @@ VOID NTAPI NvmeAdminDpc(_In_ PSTOR_DPC Dpc, _In_ PVOID HwDeviceExtension, _In_op
 VOID NTAPI NvmeIoQueueDpc(_In_ PSTOR_DPC Dpc, _In_ PVOID HwDeviceExtension, _In_opt_ PVOID SystemArgument1, _In_opt_ PVOID SystemArgument2);
 BOOLEAN NTAPI NvmeHwInterrupt(_In_ PVOID DeviceExtension);
 BOOLEAN NTAPI NvmeHwMSInterrupt(_In_ PVOID DeviceExtension, _In_ ULONG MessageId);
+BOOLEAN NvmeServiceQueuesAtInterrupt(_In_ PNVME_DEVICE_EXTENSION Device);
 
 /* scsi.c */
 BOOLEAN NTAPI NvmeHwStartIo(_In_ PVOID DeviceExtension, _In_ PSCSI_REQUEST_BLOCK Srb);

@@ -20,6 +20,8 @@ NvmeMaskDeviceInterrupts(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN Mask)
     ULONG CapOffset;
     ULONG Guard;
 
+    if (Device->Transport)
+        return;
     if (StorPortGetBusData(Device, PCIConfiguration, Device->SystemIoBusNumber,
                            Device->SlotNumber, Config, sizeof(Config)) < 64)
         return;
@@ -247,7 +249,6 @@ NvmeFindAdapter(_In_ PVOID DeviceExtension,
     return SP_RETURN_FOUND;
 }
 
-static
 BOOLEAN
 NTAPI
 NvmeHwInitialize(_In_ PVOID DeviceExtension)
@@ -297,7 +298,6 @@ NvmeHwInitialize(_In_ PVOID DeviceExtension)
     return TRUE;
 }
 
-static
 BOOLEAN
 NTAPI
 NvmeHwResetBus(_In_ PVOID DeviceExtension, _In_ ULONG PathId)
@@ -308,7 +308,6 @@ NvmeHwResetBus(_In_ PVOID DeviceExtension, _In_ ULONG PathId)
     return NvmeResetController(Device);
 }
 
-static
 SCSI_ADAPTER_CONTROL_STATUS
 NTAPI
 NvmeHwAdapterControl(_In_ PVOID DeviceExtension,
@@ -358,7 +357,6 @@ NvmeHwAdapterControl(_In_ PVOID DeviceExtension,
     }
 }
 
-static
 SCSI_UNIT_CONTROL_STATUS
 NTAPI
 NvmeHwUnitControl(_In_ PVOID DeviceExtension,
@@ -420,6 +418,7 @@ NTAPI
 DriverEntry(_In_ PVOID DriverObject, _In_ PVOID RegistryPath)
 {
     HW_INITIALIZATION_DATA InitData;
+    ULONG Status;
 
     RtlZeroMemory(&InitData, sizeof(InitData));
     InitData.HwInitializationDataSize = sizeof(InitData);
@@ -441,5 +440,8 @@ DriverEntry(_In_ PVOID DriverObject, _In_ PVOID RegistryPath)
     InitData.MultipleRequestPerLu = TRUE;
     InitData.FeatureSupport = STOR_FEATURE_SUPPORTS_NVME_ADAPTER;
 
-    return StorPortInitialize(DriverObject, RegistryPath, &InitData, NULL);
+    Status = StorPortInitialize(DriverObject, RegistryPath, &InitData, NULL);
+    if (NvmeRegisterPlatformAdapters(DriverObject, RegistryPath, &InitData) == STATUS_SUCCESS)
+        Status = STATUS_SUCCESS;
+    return Status;
 }
