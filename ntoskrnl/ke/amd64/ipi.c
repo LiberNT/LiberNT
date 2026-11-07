@@ -117,21 +117,30 @@ KiIpiParticipateInGenericCall(
     PKIPI_BROADCAST_WORKER Function = KiGenericCallPacket.Function;
     ULONG_PTR Argument = KiGenericCallPacket.Argument;
     KIRQL OldIrql;
+    LONG Remaining;
+    BOOLEAN WasOutstanding;
 
+    ASSERT(Function != NULL);
+    ASSERT(KiGenericCallOwner >= 0 && KiGenericCallOwner != (LONG)Prcb->Number);
     ASSERT(KiGenericCallPacket.OutstandingDone & Prcb->SetMember);
 
-    InterlockedDecrement(&KiGenericCallPacket.TargetsRemaining);
+    Remaining = InterlockedDecrement(&KiGenericCallPacket.TargetsRemaining);
+    UNREFERENCED_PARAMETER(Remaining);
+    ASSERT(Remaining >= 0);
     while (!KiGenericCallPacket.Release)
     {
         YieldProcessor();
     }
 
+    ASSERT(KiGenericCallPacket.Release != 0);
     OldIrql = KfRaiseIrql(IPI_LEVEL);
     Function(Argument);
     KeLowerIrql(OldIrql);
 
-    InterlockedBitTestAndResetAffinity(&KiGenericCallPacket.OutstandingDone,
-                                       Prcb->Number);
+    WasOutstanding = InterlockedBitTestAndResetAffinity(&KiGenericCallPacket.OutstandingDone,
+                                                        Prcb->Number);
+    UNREFERENCED_PARAMETER(WasOutstanding);
+    ASSERT(WasOutstanding);
 }
 
 VOID
@@ -207,6 +216,7 @@ KeIpiGenericCall(
     ULONG Processor;
     LONG TargetCount;
 
+    ASSERT(Function != NULL);
     InterruptsEnabled = (__readeflags() & EFLAGS_INTERRUPT_MASK) != 0;
 
     OldIrql = KeGetCurrentIrql();
@@ -223,6 +233,8 @@ KeIpiGenericCall(
         YieldProcessor();
     }
 
+    ASSERT(KiGenericCallPacket.TargetsRemaining == 0);
+    ASSERT(KiGenericCallPacket.OutstandingDone == 0);
     Targets = (KAFFINITY)KeActiveProcessors & ~Prcb->SetMember;
 
     if (Targets != 0)
@@ -235,6 +247,8 @@ KeIpiGenericCall(
             RemainingSet &= ~AFFINITY_MASK(Processor);
         }
 
+        ASSERT(TargetCount > 0);
+        ASSERT((Targets & Prcb->SetMember) == 0);
         KiGenericCallPacket.Function = Function;
         KiGenericCallPacket.Argument = Argument;
         KiGenericCallPacket.Release = 0;
@@ -255,6 +269,7 @@ KeIpiGenericCall(
         }
     }
 
+    ASSERT(Targets == 0 || KiGenericCallPacket.OutstandingDone == Targets);
     KeRaiseIrql(IPI_LEVEL, &ExecuteIrql);
     if (Targets != 0)
         KiGenericCallPacket.Release = 1;
