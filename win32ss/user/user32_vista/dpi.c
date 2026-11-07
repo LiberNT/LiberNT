@@ -17,9 +17,6 @@
 HDC APIENTRY
 NtUserGetDC(HWND hWnd);
 
-INT APIENTRY
-NtGdiGetDeviceCaps(HDC hDC, INT Index);
-
 NTSYSAPI LONG WINAPI
 RtlQueryActivationContextApplicationSettings(
     DWORD Flags,
@@ -47,6 +44,10 @@ NtUserSetProcessDpiAwarenessContext(ULONG DpiContext, ULONG Flags);
 
 ULONG APIENTRY
 NtUserSetThreadDpiAwarenessContext(ULONG DpiContext);
+
+BOOL WINAPI User32IsDpiVirtualizationActive(VOID);
+BOOL WINAPI User32IsDpiVirtualThread(VOID);
+UINT WINAPI User32GetSystemDpi(VOID);
 
 static volatile LONG DpiCacheContextSlot = TLS_OUT_OF_INDEXES;
 static volatile LONG DpiCacheGenerationSlot = TLS_OUT_OF_INDEXES;
@@ -242,16 +243,7 @@ User32InitializeDpiAwareness(VOID)
 static UINT
 GetRawSystemDpi(VOID)
 {
-    HDC hDC;
-    UINT Dpi = USER_DEFAULT_SCREEN_DPI;
-
-    hDC = NtUserGetDC(NULL);
-    if (hDC)
-    {
-        /* Bypass the caller-aware GDI32 view and read the physical PDEV cap. */
-        Dpi = NtGdiGetDeviceCaps(hDC, LOGPIXELSY);
-        ReleaseDC(NULL, hDC);
-    }
+    UINT Dpi = User32GetSystemDpi();
 
     return Dpi ? Dpi : USER_DEFAULT_SCREEN_DPI;
 }
@@ -417,7 +409,7 @@ UINT
 WINAPI
 GetDpiForSystem(VOID)
 {
-    if (!IsProcessDPIAware())
+    if (User32IsDpiVirtualThread())
         return USER_DEFAULT_SCREEN_DPI;
 
     return GetRawSystemDpi();
@@ -454,8 +446,11 @@ GetDpiForWindow(
     if (!Context)
         return 0;
 
-    if (GetAwarenessFromDpiAwarenessContext(Context) == DPI_AWARENESS_UNAWARE)
+    if (User32IsDpiVirtualizationActive() &&
+        GetAwarenessFromDpiAwarenessContext(Context) == DPI_AWARENESS_UNAWARE)
+    {
         return USER_DEFAULT_SCREEN_DPI;
+    }
 
     return GetRawSystemDpi();
 }
@@ -539,7 +534,6 @@ WINAPI
 GetDpiForMonitorInternal(_In_ HMONITOR Monitor, _In_ UINT Type, _Out_ UINT *DpiX, _Out_ UINT *DpiY)
 {
     MONITORINFO MonitorInfo = { sizeof(MonitorInfo) };
-    DPI_AWARENESS Awareness;
     UINT Dpi;
 
     if (Type > 2)
@@ -564,8 +558,7 @@ GetDpiForMonitorInternal(_In_ HMONITOR Monitor, _In_ UINT Type, _Out_ UINT *DpiX
      * ReactOS currently has one logical DPI for the desktop. Raw and angular
      * monitor DPI require EDID physical dimensions, which GOP does not expose.
      */
-    Awareness = GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext());
-    Dpi = (Awareness == DPI_AWARENESS_UNAWARE) ? USER_DEFAULT_SCREEN_DPI : GetRawSystemDpi();
+    Dpi = User32IsDpiVirtualThread() ? USER_DEFAULT_SCREEN_DPI : GetRawSystemDpi();
     *DpiX = Dpi;
     *DpiY = Dpi;
     return TRUE;
@@ -597,7 +590,7 @@ BOOL
 WINAPI
 SystemParametersInfoForDpi(_In_ UINT Action, _In_ UINT Param, _Inout_opt_ PVOID Data, _In_ UINT Flags, _In_ UINT Dpi)
 {
-    UINT SystemDpi = GetRawSystemDpi();
+    UINT SystemDpi = User32IsDpiVirtualThread() ? USER_DEFAULT_SCREEN_DPI : GetRawSystemDpi();
 
     if (!Data || !Dpi)
     {
