@@ -769,6 +769,30 @@ TestBatchScan(void)
     static const uint32_t SoGen7Write[] = { 0x11000001, 0x5200, 0, 0x05000000 };
     static const uint32_t L3Read[] = { 0x12000001, 0xB020, 0, 0x05000000 };
     static const uint32_t StatisticsLoad[] = { 0x14800001, 0x2358, 0, 0x05000000 };
+    static const uint32_t StoreHighLength[] = { 0x10400082, 0, 0x1000, 7, 0x05000000 };
+    static const uint32_t SvbIndexWide[] = { 0x790B0102, 0, 0, 0, 0x05000000 };
+    static const uint32_t UrbClear[] = { 0x0C800000, 0, 0x05000000 };
+    static const uint32_t Predicate[] = { 0x06000000, 0x05000000 };
+    static const uint32_t AppId[] = { 0x07000000, 0x05000000 };
+    static const uint32_t SoDeclList[] = { 0x79170001, 0, 0, 0x05000000 };
+    static const uint32_t Crocus[] =
+    {
+        0x69040000,
+        0x61010008, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x78050001, 0, 0,
+        0x78010002, 0, 0, 0,
+        0x78020002, 0, 0, 0,
+        0x780D0002, 0, 0, 0,
+        0x79050005, 0, 0, 0, 0, 0, 0,
+        0x790B0002, 0, 0, 0,
+        0x780A0001, 0, 0,
+        0x10400002, 0, 0x1000, 7,
+        0x12000001, 0x2358, 0,
+        0x7A000003, 0x00100002, 0, 0, 0,
+        0x7B000004, 0, 3, 0, 1, 0,
+        0x05000000, 0,
+    };
+    static uint32_t Long[0x40];
     uint32_t Offending = 0;
 
     CHECK_EQ(HdgfxIvbCheckBatch(6, InstpmConstants, 4, false, &Offending), 1);
@@ -779,6 +803,19 @@ TestBatchScan(void)
     CHECK_EQ(HdgfxIvbCheckBatch(6, L3Read, 4, false, &Offending), 0);
     CHECK_EQ(HdgfxIvbCheckBatch(6, StatisticsLoad, 4, false, &Offending), 0);
     CHECK_EQ(HdgfxIvbCheckBatch(7, L3Write, 4, false, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, StoreHighLength, 5, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, SvbIndexWide, 5, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, UrbClear, 3, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Predicate, 2, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, AppId, 2, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, SoDeclList, 4, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, &Offending), 1);
+
+    memset(Long, 0, sizeof(Long));
+    Long[0] = 0x50C00025;
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Long, 0x40, true, &Offending), 0);
+    Long[0] = 0x54300004;
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Long, 0x40, true, &Offending), 1);
 }
 
 static void
