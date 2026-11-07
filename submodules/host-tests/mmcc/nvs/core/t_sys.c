@@ -909,7 +909,7 @@ SysBootAdoption(void)
     MachineCreate(&World.Machine, Frames, 2);
     World.Machine.StrictTlb = TRUE;
     World.PfnArray = calloc(Frames, sizeof(MI_PFN));
-    MiSystemInitialize(System, World.PfnArray, Frames, 2, 1000000);
+    MiSystemInitialize(System, World.PfnArray, 0, Frames, 2, 1000000);
     Arch = System->Arch;
     Top = Arch->PagingLevels - 1;
     TopSpan = 1ULL << Arch->Level[Top].Shift;

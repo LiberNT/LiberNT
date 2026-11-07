@@ -98,7 +98,7 @@ WorldCreateZoned(TEST_WORLD *World, ULONG Frames, ULONG DirectFrames, ULONG Cpus
     memset(World, 0, sizeof(*World));
     MachineCreate(&World->Machine, Frames, Cpus);
     World->PfnArray = calloc(Frames, sizeof(MI_PFN));
-    MiSystemInitialize(&World->System, World->PfnArray, Frames, Cpus, CommitLimit);
+    MiSystemInitialize(&World->System, World->PfnArray, 0, Frames, Cpus, CommitLimit);
     if (WorldRegionRotation)
         MiPfnDbSetRegionRotation(&World->System.Pfn, TRUE);
     if (DirectFrames != 0)

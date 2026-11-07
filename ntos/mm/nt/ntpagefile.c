@@ -613,7 +613,7 @@ MmQueryHibernationFrame(
     C_ASSERT(MM_HIBERNATE_ZERO == MI_HIBERNATE_ZERO);
     C_ASSERT(MM_HIBERNATE_SAVE == MI_HIBERNATE_SAVE);
 
-    if (Frame >= MiSystem.Pfn.FrameCount)
+    if (!MiPfnTracked(&MiSystem.Pfn, Frame))
         return MI_HIBERNATE_SKIP;
     return MiPfnHibernationClass(&MiSystem.Pfn, (ULONG)Frame);
 }
@@ -653,7 +653,7 @@ MmBuildDumpPageBitmap(
 
     RtlClearAllBits(Bitmap);
 
-    for (Frame = 0; Frame < MiSystem.Pfn.FrameCount && Frame < Bitmap->SizeOfBitMap; Frame++)
+    for (Frame = MiSystem.Pfn.FirstFrame; Frame < MiSystem.Pfn.FrameCount && Frame < Bitmap->SizeOfBitMap; Frame++)
     {
         UCHAR State = MiSystem.Pfn.Pfn[Frame].State;
 

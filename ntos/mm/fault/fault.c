@@ -260,8 +260,8 @@ MiMakePageValid(
 
     MI_ASSERT(Slot != NULL);
     MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
-    MI_ASSERT(TableFrame < Space->System->Pfn.FrameCount);
-    MI_ASSERT(Frame < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MiPfnTracked(&Space->System->Pfn, TableFrame));
+    MI_ASSERT(MiPfnTracked(&Space->System->Pfn, Frame));
     MI_ASSERT(MI_ATOMIC_READ32(&Space->System->Pfn.Pfn[Frame].ShareCount) > 0);
     MI_ASSERT(MI_PROT_IS_ACCESSIBLE(Protection));
     MI_ASSERT(!MiArchPteIsValid(MiArchPteRead(Slot)));

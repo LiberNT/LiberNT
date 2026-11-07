@@ -1629,7 +1629,7 @@ MiWorkingSetPageLocked(
     Information->Protection = Protection;
     Information->ShareCount = 1;
 
-    if ((!MI_VAD_IS_DIRECT(Vad) || (Vad->Type == MiVadLarge && Vad->Segment != NULL)) && Frame < Db->FrameCount)
+    if ((!MI_VAD_IS_DIRECT(Vad) || (Vad->Type == MiVadLarge && Vad->Segment != NULL)) && MiPfnTracked(Db, Frame))
     {
         LONG Shares = MI_ATOMIC_READ32(&Db->Pfn[Frame].ShareCount);
 

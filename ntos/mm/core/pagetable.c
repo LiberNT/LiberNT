@@ -235,12 +235,11 @@ BOOLEAN
 MiPtIsUserFrame(PMI_SYSTEM System, ULONG Frame)
 {
     PMI_PFN Pfn = System->Pfn.Pfn;
-    ULONG FrameCount = System->Pfn.FrameCount;
     ULONG Table;
     ULONG Parent;
     ULONG Level;
 
-    if (Frame >= FrameCount)
+    if (!MiPfnTracked(&System->Pfn, Frame))
         return FALSE;
     if (MI_PFN_FLAGS(&Pfn[Frame]) & (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PROTOTYPE))
         return FALSE;
@@ -248,7 +247,7 @@ MiPtIsUserFrame(PMI_SYSTEM System, ULONG Frame)
     Table = (ULONG)MI_ATOMIC_READ32(&Pfn[Frame].PteFrame);
     for (Level = 0; Level < System->Arch->PagingLevels; Level++)
     {
-        if (Table == 0 || Table >= FrameCount || !(MI_PFN_FLAGS(&Pfn[Table]) & MI_PFN_FLAG_PAGE_TABLE))
+        if (Table == 0 || !MiPfnTracked(&System->Pfn, Table) || !(MI_PFN_FLAGS(&Pfn[Table]) & MI_PFN_FLAG_PAGE_TABLE))
             return FALSE;
 
         Parent = (ULONG)MI_ATOMIC_READ32(&Pfn[Table].PteFrame);
@@ -290,7 +289,7 @@ MiPtVirtualAddressFromSlot(
             return TRUE;
         }
 
-        if (Frame >= Db->FrameCount || !(MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE))
+        if (!MiPfnTracked(Db, Frame) || !(MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE))
             return FALSE;
 
         SlotAddress = Db->Pfn[Frame].PteAddress;
@@ -423,7 +422,7 @@ MiPtPruneEmpty(
             return;
 
         Child = (ULONG)MiArchPteFrame(Pte);
-        if (Child >= Db->FrameCount || Db->Pfn[Child].PteFrame != Frame ||
+        if (!MiPfnTracked(Db, Child) || Db->Pfn[Child].PteFrame != Frame ||
             !(MI_PFN_FLAGS(&Db->Pfn[Child]) & MI_PFN_FLAG_PAGE_TABLE))
         {
             return;
@@ -445,7 +444,7 @@ MiPtWrite(
     PMI_PFN Table;
     MI_PTE Old;
 
-    MI_ASSERT(TableFrame < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MiPfnTracked(&Space->System->Pfn, TableFrame));
     Table = &Space->System->Pfn.Pfn[TableFrame];
     MI_ASSERT(MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PAGE_TABLE);
     Old = MiArchPteRead(Slot);
@@ -576,7 +575,7 @@ MiPtCheckTable(
         if (!MiArchPteIsValid(Entry))
         {
             if (Level == Arch->LargePageLevel && MiSoftKind(Entry) == MiSoftResident &&
-                MiSoftValue(Entry) < Space->System->Pfn.FrameCount)
+                MiPfnTracked(&Space->System->Pfn, MiSoftValue(Entry)))
             {
                 Used++;
                 continue;
@@ -591,7 +590,7 @@ MiPtCheckTable(
             continue;
         }
 
-        if (MiArchPteFrame(Entry) >= Space->System->Pfn.FrameCount)
+        if (!MiPfnTracked(&Space->System->Pfn, MiArchPteFrame(Entry)))
             continue;
 
         {

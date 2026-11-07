@@ -134,7 +134,7 @@ MiAssertPublishedCloneRange(PMI_ADDRESS_SPACE Space, PMI_CLONE_RANGE Range)
         MI_ASSERT(Slot != NULL);
         Pte = MiArchPteRead(Slot);
         if (MiArchPteIsValid(Pte))
-            MI_ASSERT(MiArchPteFrame(Pte) < Space->System->Pfn.FrameCount);
+            MI_ASSERT(MiPfnTracked(&Space->System->Pfn, MiArchPteFrame(Pte)));
         MI_ASSERT(MiClonePteMayBeClone(Space, Pte));
     }
     MI_ASSERT(Live == Range->Live);
