@@ -201,6 +201,22 @@ User32DpiToPhysical(LONG Value)
   return User32DpiMulDiv(Value, (LONG)User32GetSystemDpi(), USER_DEFAULT_SCREEN_DPI);
 }
 
+INT
+WINAPI
+User32GetFoldedPaddedBorder(VOID)
+{
+  INT Padded;
+
+  if (NtCurrentPeb()->ImageSubsystemMajorVersion >= 6)
+    return 0;
+#ifdef WOW64_I386_RUNTIME
+  Padded = (INT)UserGetServerInfo(aiSysMet[SM_CXPADDEDBORDER], ROS_SERVERINFO_PADDEDBORDER);
+#else
+  Padded = gpsi ? gpsi->aiSysMet[SM_CXPADDEDBORDER] : 0;
+#endif
+  return User32IsDpiVirtualThread() ? User32DpiToLogical(Padded) : Padded;
+}
+
 VOID
 WINAPI
 User32DpiRectToLogical(LPRECT Rect)
