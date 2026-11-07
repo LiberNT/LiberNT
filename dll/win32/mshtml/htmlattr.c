@@ -39,21 +39,17 @@ static inline HTMLDOMAttribute *impl_from_IHTMLDOMAttribute(IHTMLDOMAttribute *i
 
 DISPEX_IDISPATCH_IMPL(HTMLDOMAttribute, IHTMLDOMAttribute, impl_from_IHTMLDOMAttribute(iface)->node.event_target.dispex)
 
-static HRESULT get_attached_attr_value(HTMLDOMAttribute *This, VARIANT *p)
+static BOOL is_ie8_content_attr(HTMLDOMAttribute *This)
 {
-    if(This->dispid == DISPID_UNKNOWN) {
-        V_VT(p) = VT_NULL;
-        return S_OK;
-    }
-
-    return get_elem_attr_value_by_dispid(This->elem, This->dispid, p);
+    return This->elem && This->elem->dom_element &&
+           dispex_compat_mode(&This->elem->node.event_target.dispex) == COMPAT_MODE_IE8;
 }
 
 static HRESULT get_attached_attr_name(HTMLDOMAttribute *This, BSTR *p)
 {
     DispatchEx *dispex = &This->elem->node.event_target.dispex;
 
-    if(This->dispid == DISPID_UNKNOWN)
+    if(This->dispid == DISPID_UNKNOWN || (This->name && is_ie8_content_attr(This)))
         *p = SysAllocString(This->name);
     else if(get_dispid_type(This->dispid) == DISPEXPROP_BUILTIN)
         *p = SysAllocString(dispex_builtin_attr_name(dispex, This->dispid));
@@ -61,6 +57,28 @@ static HRESULT get_attached_attr_name(HTMLDOMAttribute *This, BSTR *p)
         return dispex_prop_name(dispex, This->dispid, p);
 
     return *p ? S_OK : E_OUTOFMEMORY;
+}
+
+static HRESULT get_attached_attr_value(HTMLDOMAttribute *This, VARIANT *p)
+{
+    HRESULT hres;
+    BSTR name;
+
+    if(is_ie8_content_attr(This)) {
+        hres = get_attached_attr_name(This, &name);
+        if(FAILED(hres))
+            return hres;
+        hres = IHTMLElement_getAttribute(&This->elem->IHTMLElement_iface, name, 0, p);
+        SysFreeString(name);
+        return hres;
+    }
+
+    if(This->dispid == DISPID_UNKNOWN) {
+        V_VT(p) = VT_NULL;
+        return S_OK;
+    }
+
+    return get_elem_attr_value_by_dispid(This->elem, This->dispid, p);
 }
 
 static HRESULT WINAPI HTMLDOMAttribute_get_nodeName(IHTMLDOMAttribute *iface, BSTR *p)
@@ -97,6 +115,18 @@ static HRESULT WINAPI HTMLDOMAttribute_put_nodeValue(IHTMLDOMAttribute *iface, V
 
     if(!This->elem)
         return VariantCopy(&This->value, &v);
+
+    if(is_ie8_content_attr(This)) {
+        HRESULT hres;
+        BSTR name;
+
+        hres = get_attached_attr_name(This, &name);
+        if(FAILED(hres))
+            return hres;
+        hres = IHTMLElement_setAttribute(&This->elem->IHTMLElement_iface, name, v, 0);
+        SysFreeString(name);
+        return hres;
+    }
 
     if(This->dispid == DISPID_UNKNOWN)
         return DISP_E_MEMBERNOTFOUND;
@@ -137,6 +167,11 @@ static HRESULT WINAPI HTMLDOMAttribute_get_specified(IHTMLDOMAttribute *iface, V
         return S_OK;
     }
 
+    if(is_ie8_content_attr(This) && This->dispid == DISPID_UNKNOWN) {
+        *p = element_has_attribute(This->elem, This->name);
+        return S_OK;
+    }
+
     if(!This->elem || !This->elem->dom_element || This->dispid == DISPID_UNKNOWN) {
         *p = VARIANT_FALSE;
         return S_OK;
@@ -152,7 +187,8 @@ static HRESULT WINAPI HTMLDOMAttribute_get_specified(IHTMLDOMAttribute *iface, V
     nsres = nsIDOMElement_HasAttribute(This->elem->dom_element, &nsname, &r);
     nsAString_Finish(&nsname);
 
-    *p = variant_bool(NS_SUCCEEDED(nsres) && r);
+    *p = variant_bool((NS_SUCCEEDED(nsres) && r) || (is_ie8_content_attr(This) &&
+            is_ie8_attr_specified_default(This->elem, dispex_builtin_attr_name(&This->elem->node.event_target.dispex, This->dispid))));
     return S_OK;
 }
 
@@ -278,7 +314,8 @@ static HRESULT WINAPI HTMLDOMAttribute2_get_expando(IHTMLDOMAttribute2 *iface, V
         return hres;
     }
 
-    *p = variant_bool(This->elem && !is_builtin_attribute(&This->elem->node.event_target.dispex, This->dispid));
+    *p = variant_bool(This->elem && (!is_builtin_attribute(&This->elem->node.event_target.dispex, This->dispid) ||
+            (is_ie8_content_attr(This) && dispex_builtin_is_noattr(&This->elem->node.event_target.dispex, This->dispid))));
     return S_OK;
 }
 

@@ -706,9 +706,7 @@ sync_test("attr_props", function() {
     if(v < 8)
         ok(elem.attributes.length > 50, "attributes.length = " + elem.attributes.length);
     else {
-        todo_wine_if(v === 8).
         ok(elem.attributes.length === 1, "attributes.length = " + elem.attributes.length);
-        todo_wine_if(v === 8).
         ok(elem.attributes[0] === attr, "attributes[0] != attr");
     }
 
@@ -776,7 +774,6 @@ sync_test("attr_props", function() {
     if(v < 8)
         ok(attr === null, "innerText attr != null");
     else
-        todo_wine_if(v === 8).
         ok(attr !== null, "innerText attr = null");
 
     attr = elem.getAttributeNode("removeAttribute");
@@ -786,7 +783,6 @@ sync_test("attr_props", function() {
     if(v < 8)
         test_attr(false, false);
     else
-        todo_wine_if(v === 8).
         ok(attr === null, "tabIndex attr not null.");
 });
 
@@ -4592,6 +4588,143 @@ sync_test("element attribute storage", function() {
     r = e.removeAttribute("onclick");
     ok(r === (v < 9 ? false : undefined), "removeAttribute(onclick) without attribute returned " + r);
     ok(v < 9 ? e.onclick === null : typeof(e.onclick) === "function", "onclick after removeAttribute = " + e.onclick);
+});
+
+sync_test("IE8 attribute collection", function() {
+    var v = document.documentMode, i, e, c, a, r;
+    if(v !== 8)
+        return;
+
+    function mk(tag) {
+        var e = document.createElement(tag), t, b, row;
+        if(tag === "td") {
+            t = document.createElement("table"); b = document.createElement("tbody"); row = document.createElement("tr");
+            t.appendChild(b); b.appendChild(row); row.appendChild(e);
+        }
+        return e;
+    }
+    function html(src) {
+        var d = document.createElement("div");
+        d.innerHTML = src;
+        return d.firstChild;
+    }
+    function check_attr(a, desc, name, value, specified, expando) {
+        ok(a !== null, desc + ": attribute = null");
+        if(!a)
+            return;
+        ok(a.nodeName === name, desc + ": nodeName = " + a.nodeName + " expected " + name);
+        ok(a.nodeValue === value, desc + ": nodeValue = " + a.nodeValue + " expected " + value);
+        ok(a.value === String(value), desc + ": value = " + a.value + " expected " + value);
+        ok(a.specified === specified, desc + ": specified = " + a.specified);
+        ok(a.expando === expando, desc + ": expando = " + a.expando);
+    }
+
+    var defaults = [
+        [ "div" ], [ "span" ], [ "table" ], [ "img" ], [ "select" ], [ "textarea" ], [ "label" ],
+        [ "td", [ "rowSpan", "1", false ], [ "colSpan", "1", false ] ],
+        [ "input", [ "type", "text", false ] ],
+        [ "area", [ "shape", "rect", false ] ],
+        [ "form", [ "encType", "application/x-www-form-urlencoded", false ], [ "method", "get", false ] ],
+        [ "button", [ "type", "submit", true ] ],
+        [ "iframe", [ "frameBorder", "1", false ], [ "scrolling", "auto", false ] ],
+        [ "frame", [ "frameBorder", "1", false ], [ "scrolling", "auto", false ] ],
+        [ "col", [ "span", "1", false ] ]
+    ];
+    for(i = 0; i < defaults.length; i++) {
+        var tag = defaults[i][0], j;
+        e = mk(tag);
+        c = e.attributes;
+        ok(c.length === defaults[i].length - 1, tag + " attributes.length = " + c.length);
+        for(j = 1; j < defaults[i].length; j++) {
+            var d = defaults[i][j];
+            check_attr(c[j - 1], tag + " attributes[" + (j - 1) + "]", d[0], d[1], d[2], false);
+            r = e.getAttributeNode(d[0].toLowerCase());
+            ok(r === c[j - 1], tag + " getAttributeNode(" + d[0].toLowerCase() + ") != attributes[" + (j - 1) + "]");
+        }
+    }
+
+    e = html('<span id="test" title="t" foo="bar"></span>');
+    c = e.attributes;
+    ok(c.length === 3, "parsed attributes.length = " + c.length);
+    a = e.getAttributeNode("id");
+    check_attr(a, "parsed id", "id", "test", true, false);
+    check_attr(e.getAttributeNode("title"), "parsed title", "title", "t", true, false);
+    check_attr(e.getAttributeNode("FOO"), "parsed foo", "FOO", "bar", true, true);
+    ok(c[2] === e.getAttributeNode("foo"), "attributes[2] != foo");
+    ok(c.getNamedItem("id") === a, "getNamedItem(id) != getAttributeNode(id)");
+    ok(c["id"] === a, "attributes[\"id\"] != getAttributeNode(id)");
+    ok(c.item(0) === c[0], "item(0) != attributes[0]");
+    ok(c.item("id") === c[0], "item(\"id\") != attributes[0]");
+    ok(!c.item(20), "item(20) = " + c.item(20));
+    ok(c.getNamedItem("nope") === null, "getNamedItem(nope) = " + c.getNamedItem("nope"));
+    ok(c.getNamedItem("lang") === null, "getNamedItem(lang) = " + c.getNamedItem("lang"));
+    ok(e.attributes === c, "attributes is not the same object");
+
+    e.id = "t2";
+    ok(a.nodeValue === "t2", "id node after id put = " + a.nodeValue);
+    a.value = "t3";
+    ok(e.id === "t3", "id after node value put = " + e.id);
+    ok(e.getAttribute("id") === "t3", "getAttribute(id) after node value put = " + e.getAttribute("id"));
+    e.setAttribute("x1", "y");
+    ok(c.length === 4, "attributes.length after setAttribute = " + c.length);
+    e.removeAttribute("id");
+    ok(c.length === 3, "attributes.length after removeAttribute = " + c.length);
+    ok(a.nodeValue === null, "removed id nodeValue = " + a.nodeValue);
+    ok(a.value === "null", "removed id value = " + a.value);
+    ok(a.specified === false, "removed id specified = " + a.specified);
+    ok(e.getAttributeNode("id") === a, "getAttributeNode(id) after removeAttribute != removed node");
+
+    e = mk("div");
+    ok(e.getAttributeNode("id") === null, "unset id node = " + e.getAttributeNode("id"));
+    ok(e.getAttributeNode("tabIndex") === null, "unset tabIndex node = " + e.getAttributeNode("tabIndex"));
+    ok(e.getAttributeNode("innerText") === null, "unset innerText node = " + e.getAttributeNode("innerText"));
+    e.foo = "bar";
+    ok(e.attributes.length === 1, "attributes.length after expando put = " + e.attributes.length);
+    check_attr(e.attributes[0], "expando", "foo", "bar", true, true);
+    e.foo = 3;
+    ok(e.attributes[0].value === "3", "number expando value = " + e.attributes[0].value);
+    e.className = "c";
+    e.tabIndex = 2;
+    ok(e.attributes.length === 3, "attributes.length after property puts = " + e.attributes.length);
+    check_attr(e.getAttributeNode("class"), "class", "class", "c", true, false);
+    check_attr(e.getAttributeNode("tabIndex"), "tabIndex", "tabIndex", "2", true, false);
+    ok(e.getAttributeNode("className") === null, "className node = " + e.getAttributeNode("className"));
+    e.onclick = "f()";
+    a = e.getAttributeNode("onclick");
+    check_attr(a, "onclick", "onclick", "f()", true, false);
+    e.onclick = function() {};
+    ok(e.getAttributeNode("onclick") === a, "onclick node after function put != onclick node");
+    ok(a.specified === false, "onclick node specified after function put = " + a.specified);
+    ok(a.nodeValue === null, "onclick node value after function put = " + a.nodeValue);
+    ok(e.attributes.length === 3, "attributes.length after onclick function put = " + e.attributes.length);
+
+    e = mk("div");
+    e.setAttribute("innerText", "test");
+    ok(e.innerText === "", "innerText after setAttribute = " + e.innerText);
+    ok(e.attributes.length === 1, "attributes.length after setAttribute(innerText) = " + e.attributes.length);
+    check_attr(e.getAttributeNode("innerText"), "innerText", "innerText", "test", true, true);
+    ok(e.getAttribute("innerText") === "test", "getAttribute(innerText) = " + e.getAttribute("innerText"));
+    r = e.removeAttribute("innerText");
+    ok(r === true, "removeAttribute(innerText) = " + r);
+    ok(e.attributes.length === 0, "attributes.length after removeAttribute(innerText) = " + e.attributes.length);
+
+    e = mk("div");
+    e.setAttribute("removeAttribute", "funcattr");
+    ok(e.attributes.length === 1, "attributes.length after setAttribute(removeAttribute) = " + e.attributes.length);
+    check_attr(e.attributes[0], "method name", "removeAttribute", "funcattr", true, true);
+
+    e = mk("td");
+    check_attr(e.getAttributeNode("colspan"), "td colspan", "colspan", "1", false, false);
+    ok(e.attributes[1].nodeName === "colspan", "td attributes[1].nodeName = " + e.attributes[1].nodeName);
+    ok(e.getAttributeNode("noWrap") === null, "td noWrap node = " + e.getAttributeNode("noWrap"));
+    e = mk("button");
+    ok(e.getAttribute("type") === "submit", "button getAttribute(type) = " + e.getAttribute("type"));
+    e = mk("iframe");
+    ok(e.getAttribute("scrolling") === "auto", "iframe getAttribute(scrolling) = " + e.getAttribute("scrolling"));
+    e = mk("col");
+    ok(e.getAttribute("span") === "1", "col getAttribute(span) = " + e.getAttribute("span"));
+    e = mk("area");
+    ok(e.getAttribute("shape") === "rect", "area getAttribute(shape) = " + e.getAttribute("shape"));
 });
 
 sync_test("enumerated attribute put", function() {

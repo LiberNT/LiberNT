@@ -1067,8 +1067,8 @@ static BOOL is_input_state_dispid(HTMLElement *elem, DISPID dispid)
 static BOOL is_content_attr_dispid(HTMLElement *elem, compat_mode_t compat_mode, DISPID dispid)
 {
     /* Windows 11 IE8 reads input value and type through the property and cannot remove them. */
-    return compat_mode == COMPAT_MODE_IE8 && elem->dom_element && get_dispid_type(dispid) == DISPEXPROP_BUILTIN &&
-           !dispex_builtin_is_noattr(&elem->node.event_target.dispex, dispid) && !is_input_state_dispid(elem, dispid);
+    return compat_mode == COMPAT_MODE_IE8 && elem->dom_element && is_builtin_attribute(&elem->node.event_target.dispex, dispid) &&
+           !is_input_state_dispid(elem, dispid);
 }
 
 static HRESULT get_attr_dispid(HTMLElement *elem, compat_mode_t compat_mode, const WCHAR *name, DWORD flags, DISPID *dispid)
@@ -1084,11 +1084,19 @@ static const struct {
     const WCHAR *tag;
     const WCHAR *name;
     const WCHAR *value;
+    BOOL specified;
 } ie8_default_attrs[] = {
     { L"A",      L"shape",       L"" },
+    { L"AREA",   L"shape",       L"rect" },
+    { L"BUTTON", L"type",        L"submit", TRUE },
+    { L"COL",    L"span",        L"1" },
     { L"FORM",   L"encType",     L"application/x-www-form-urlencoded" },
     { L"FORM",   L"method",      L"get" },
+    { L"FRAME",  L"frameBorder", L"1" },
+    { L"FRAME",  L"scrolling",   L"auto" },
     { L"IFRAME", L"frameBorder", L"1" },
+    { L"IFRAME", L"scrolling",   L"auto" },
+    { L"INPUT",  L"type",        L"text" },
     { L"TD",     L"colSpan",     L"1" },
     { L"TD",     L"rowSpan",     L"1" }
 };
@@ -1131,6 +1139,12 @@ static const WCHAR *get_ie8_default_attr(HTMLElement *elem, const WCHAR *name)
 {
     int i = find_tag_attr(elem, name, ie8_default_attrs, ARRAY_SIZE(ie8_default_attrs), sizeof(*ie8_default_attrs));
     return i < 0 ? NULL : ie8_default_attrs[i].value;
+}
+
+BOOL is_ie8_attr_specified_default(HTMLElement *elem, const WCHAR *name)
+{
+    int i = find_tag_attr(elem, name, ie8_default_attrs, ARRAY_SIZE(ie8_default_attrs), sizeof(*ie8_default_attrs));
+    return i >= 0 && ie8_default_attrs[i].specified;
 }
 
 static BOOL is_color_attr(HTMLElement *elem, const WCHAR *name)
@@ -1198,7 +1212,7 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
         }
 
         if(!wcsicmp(dispex_builtin_attr_name(&This->node.event_target.dispex, dispid), strAttributeName) &&
-           !is_event_attr(strAttributeName)) {
+           !dispex_builtin_is_noattr(&This->node.event_target.dispex, dispid) && !is_event_attr(strAttributeName)) {
             switch(dispex_builtin_prop_vt(&This->node.event_target.dispex, dispid)) {
             case VT_BOOL:
                 if(needs_free)
@@ -1391,7 +1405,7 @@ static HRESULT WINAPI HTMLElement_removeAttribute(IHTMLElement *iface, BSTR strA
         hres = HTMLElement_get_attr_col(&This->node, &attrs);
         if(FAILED(hres))
             return hres;
-        attr = find_attr_in_list(attrs, id, NULL);
+        attr = compat_mode == COMPAT_MODE_IE8 && This->dom_element ? NULL : find_attr_in_list(attrs, id, NULL);
         IHTMLAttributeCollection_Release(&attrs->IHTMLAttributeCollection_iface);
 
         if(attr) {
@@ -8368,6 +8382,8 @@ static const WCHAR *const attr_only_names[] = {
 typedef struct {
     DISPID id;
     const WCHAR *name;
+    const WCHAR *create_name;
+    BSTR buf;
 } attr_ref_t;
 
 static BOOL is_attr_only_name_listed(HTMLAttributeCollection *This, const WCHAR *name)
@@ -8432,12 +8448,269 @@ static BOOL next_attr_only_ref(HTMLAttributeCollection *This, unsigned *pos, LON
     return FALSE;
 }
 
+typedef struct {
+    DISPID id;
+    BSTR name;
+} ie8_attr_t;
+
+typedef struct {
+    ie8_attr_t *attrs;
+    unsigned cnt;
+    unsigned size;
+} ie8_attr_list_t;
+
+static BOOL is_ie8_attr_col(HTMLAttributeCollection *This)
+{
+    return This->elem && This->elem->dom_element && This->dom_attrs &&
+           dispex_compat_mode(&This->elem->node.event_target.dispex) == COMPAT_MODE_IE8;
+}
+
+static HRESULT push_ie8_attr(ie8_attr_list_t *list, DISPID id, BSTR name)
+{
+    unsigned i;
+
+    if(id != DISPID_UNKNOWN) {
+        for(i = 0; i < list->cnt; i++) {
+            if(list->attrs[i].id == id) {
+                SysFreeString(name);
+                return S_OK;
+            }
+        }
+    }
+
+    if(list->cnt == list->size) {
+        unsigned size = list->size ? list->size * 2 : 8;
+        ie8_attr_t *attrs = realloc(list->attrs, size * sizeof(*attrs));
+
+        if(!attrs) {
+            SysFreeString(name);
+            return E_OUTOFMEMORY;
+        }
+        list->attrs = attrs;
+        list->size = size;
+    }
+
+    list->attrs[list->cnt].id = id;
+    list->attrs[list->cnt].name = name;
+    list->cnt++;
+    return S_OK;
+}
+
+static void free_ie8_attrs(ie8_attr_list_t *list)
+{
+    unsigned i;
+
+    for(i = 0; i < list->cnt; i++)
+        SysFreeString(list->attrs[i].name);
+    free(list->attrs);
+}
+
+static int __cdecl ie8_attr_cmp(const void *a, const void *b)
+{
+    LONG id_a = ((const ie8_attr_t*)a)->id, id_b = ((const ie8_attr_t*)b)->id;
+    return id_a < id_b ? -1 : id_a > id_b;
+}
+
+static BOOL get_ie8_builtin_attr_id(DispatchEx *dispex, const WCHAR *name, DISPID *id)
+{
+    if(SUCCEEDED(dispex_get_builtin_attr_id(dispex, name, id)))
+        return TRUE;
+
+    return SUCCEEDED(dispex_get_id(dispex, name, fdexNameCaseInsensitive, id)) && is_builtin_attribute(dispex, *id) &&
+           !dispex_builtin_is_noattr(dispex, *id) && !wcsicmp(dispex_builtin_attr_name(dispex, *id), name);
+}
+
+static HRESULT get_ie8_attr_name_at(HTMLAttributeCollection *This, UINT32 i, BSTR *ret)
+{
+    const PRUnichar *name;
+    nsIDOMAttr *nsattr;
+    nsAString nsstr;
+    nsresult nsres;
+
+    nsres = nsIDOMMozNamedAttrMap_Item(This->dom_attrs, i, &nsattr);
+    if(NS_FAILED(nsres) || !nsattr)
+        return map_nsresult(nsres);
+
+    nsAString_Init(&nsstr, NULL);
+    nsres = nsIDOMAttr_GetName(nsattr, &nsstr);
+    nsIDOMAttr_Release(nsattr);
+    if(NS_FAILED(nsres)) {
+        nsAString_Finish(&nsstr);
+        return map_nsresult(nsres);
+    }
+    nsAString_GetData(&nsstr, &name);
+    *ret = SysAllocString(name);
+    nsAString_Finish(&nsstr);
+    return *ret ? S_OK : E_OUTOFMEMORY;
+}
+
+static HRESULT get_ie8_attrs(HTMLAttributeCollection *This, ie8_attr_list_t *list)
+{
+    DispatchEx *dispex = &This->elem->node.event_target.dispex;
+    const PRUnichar *tag;
+    nsAString tag_str;
+    UINT32 len = 0;
+    unsigned i;
+    BSTR name;
+    DISPID id;
+    HRESULT hres = S_OK;
+
+    memset(list, 0, sizeof(*list));
+    nsIDOMMozNamedAttrMap_GetLength(This->dom_attrs, &len);
+
+    for(i = 0; i < len && SUCCEEDED(hres); i++) {
+        if(FAILED(hres = get_ie8_attr_name_at(This, i, &name)))
+            break;
+        if(get_ie8_builtin_attr_id(dispex, name, &id))
+            hres = push_ie8_attr(list, id, NULL);
+        SysFreeString(name);
+    }
+
+    nsAString_Init(&tag_str, NULL);
+    if(SUCCEEDED(hres) && NS_SUCCEEDED(nsIDOMElement_GetTagName(This->elem->dom_element, &tag_str))) {
+        nsAString_GetData(&tag_str, &tag);
+        for(i = 0; i < ARRAY_SIZE(ie8_default_attrs) && SUCCEEDED(hres); i++) {
+            if(wcsicmp(ie8_default_attrs[i].tag, tag) || element_has_attribute(This->elem, ie8_default_attrs[i].name))
+                continue;
+            if(get_ie8_builtin_attr_id(dispex, ie8_default_attrs[i].name, &id))
+                hres = push_ie8_attr(list, id, NULL);
+        }
+    }
+    nsAString_Finish(&tag_str);
+    if(FAILED(hres)) {
+        free_ie8_attrs(list);
+        return hres;
+    }
+
+    /* FIXME: Windows 11 orders the builtin attributes by a rank of its own, not by DISPID. */
+    qsort(list->attrs, list->cnt, sizeof(*list->attrs), ie8_attr_cmp);
+
+    for(i = 0; i < len && SUCCEEDED(hres); i++) {
+        if(FAILED(hres = get_ie8_attr_name_at(This, i, &name)))
+            break;
+        if(get_ie8_builtin_attr_id(dispex, name, &id)) {
+            SysFreeString(name);
+        }else if(SUCCEEDED(dispex_get_id(dispex, name, fdexNameCaseInsensitive, &id))) {
+            SysFreeString(name);
+            if(get_dispid_type(id) == DISPEXPROP_BUILTIN)
+                hres = push_ie8_attr(list, id, NULL);
+        }else {
+            hres = push_ie8_attr(list, DISPID_UNKNOWN, name);
+        }
+    }
+
+    id = DISPID_STARTENUM;
+    while(SUCCEEDED(hres) && (hres = dispex_next_replaced_method(dispex, id, &id)) == S_OK)
+        hres = push_ie8_attr(list, id, NULL);
+
+    id = DISPID_STARTENUM;
+    while(SUCCEEDED(hres) && (hres = dispex_next_attr_id(dispex, id, &id)) == S_OK) {
+        if(get_dispid_type(id) == DISPEXPROP_DYNAMIC)
+            hres = push_ie8_attr(list, id, NULL);
+    }
+
+    if(FAILED(hres))
+        free_ie8_attrs(list);
+    return hres;
+}
+
+static HRESULT get_ie8_attr_display_name(HTMLElement *elem, DISPID id, const WCHAR *name, BSTR *ret)
+{
+    DispatchEx *dispex = &elem->node.event_target.dispex;
+
+    if(id == DISPID_UNKNOWN)
+        *ret = SysAllocString(name);
+    else if(get_dispid_type(id) == DISPEXPROP_BUILTIN)
+        *ret = SysAllocString(dispex_builtin_attr_name(dispex, id));
+    else
+        return dispex_prop_name(dispex, id, ret);
+    return *ret ? S_OK : E_OUTOFMEMORY;
+}
+
+static void set_ie8_attr_ref(ie8_attr_t *attr, attr_ref_t *ref)
+{
+    ref->id = attr->id;
+    ref->name = ref->buf = attr->name;
+    attr->name = NULL;
+}
+
+static HRESULT get_ie8_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, attr_ref_t *ref)
+{
+    ie8_attr_list_t list;
+    HRESULT hres;
+
+    hres = get_ie8_attrs(This, &list);
+    if(FAILED(hres))
+        return hres;
+
+    if(!ref)
+        *idx = list.cnt;
+    else if(*idx >= 0 && (unsigned)*idx < list.cnt)
+        set_ie8_attr_ref(&list.attrs[*idx], ref);
+    else
+        hres = DISP_E_UNKNOWNNAME;
+
+    free_ie8_attrs(&list);
+    return hres;
+}
+
+static HRESULT get_ie8_attr_ref_by_name(HTMLAttributeCollection *This, const WCHAR *name, attr_ref_t *ref)
+{
+    HTMLDOMAttribute *iter;
+    ie8_attr_list_t list;
+    BOOL found = FALSE;
+    unsigned i;
+    BSTR attr_name;
+    HRESULT hres;
+
+    hres = get_ie8_attrs(This, &list);
+    if(FAILED(hres))
+        return hres;
+
+    for(i = 0; i < list.cnt && !found; i++) {
+        hres = get_ie8_attr_display_name(This->elem, list.attrs[i].id, list.attrs[i].name, &attr_name);
+        if(FAILED(hres))
+            break;
+        if(!wcsicmp(attr_name, name)) {
+            set_ie8_attr_ref(&list.attrs[i], ref);
+            ref->create_name = name;
+            found = TRUE;
+        }
+        SysFreeString(attr_name);
+    }
+    free_ie8_attrs(&list);
+    if(FAILED(hres) || found)
+        return hres;
+
+    LIST_FOR_EACH_ENTRY(iter, &This->attrs, HTMLDOMAttribute, entry) {
+        hres = get_ie8_attr_display_name(This->elem, iter->dispid, iter->name, &attr_name);
+        if(FAILED(hres))
+            return hres;
+        found = !wcsicmp(attr_name, name);
+        SysFreeString(attr_name);
+        if(found) {
+            ref->id = iter->dispid;
+            ref->name = iter->dispid == DISPID_UNKNOWN ? iter->name : NULL;
+            return S_OK;
+        }
+    }
+
+    return DISP_E_UNKNOWNNAME;
+}
+
 static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, attr_ref_t *ref)
 {
     DISPID id = DISPID_STARTENUM;
     unsigned attr_only_pos = 0;
     LONG len = -1;
     HRESULT hres;
+
+    if(ref) {
+        ref->create_name = NULL;
+        ref->buf = NULL;
+    }
+    if(is_ie8_attr_col(This))
+        return get_ie8_attr_ref_by_idx(This, idx, ref);
 
     FIXME("filter non-enumerable attributes out\n");
 
@@ -8479,6 +8752,9 @@ static HRESULT get_attr_ref_by_name(HTMLAttributeCollection *This, const WCHAR *
     const WCHAR *attr_name;
     HRESULT hres;
 
+    ref->create_name = NULL;
+    ref->buf = NULL;
+
     if(name[0]>='0' && name[0]<='9') {
         WCHAR *end_ptr;
         LONG idx;
@@ -8490,6 +8766,9 @@ static HRESULT get_attr_ref_by_name(HTMLAttributeCollection *This, const WCHAR *
                 return hres;
         }
     }
+
+    if(is_ie8_attr_col(This))
+        return get_ie8_attr_ref_by_name(This, name, ref);
 
     ref->name = NULL;
 
@@ -8549,7 +8828,8 @@ static inline HRESULT get_domattr(HTMLAttributeCollection *This, const attr_ref_
     HRESULT hres;
 
     if(!(*attr = find_attr_ref_in_list(This, ref, list_pos))) {
-        hres = HTMLDOMAttribute_Create(ref->name, This->elem, ref->id, This->elem->node.doc, attr);
+        hres = HTMLDOMAttribute_Create(ref->create_name ? ref->create_name : ref->name, This->elem, ref->id,
+                                       This->elem->node.doc, attr);
         if(FAILED(hres))
             return hres;
     }
@@ -8614,6 +8894,7 @@ static HRESULT WINAPI HTMLAttributeCollection_item(IHTMLAttributeCollection *ifa
         return hres;
 
     hres = get_domattr(This, &ref, NULL, &attr);
+    SysFreeString(ref.buf);
     if(FAILED(hres))
         return hres;
 
@@ -8661,6 +8942,7 @@ static HRESULT WINAPI HTMLAttributeCollection2_getNamedItem(IHTMLAttributeCollec
     }
 
     hres = get_domattr(This, &ref, NULL, &attr);
+    SysFreeString(ref.buf);
     if(FAILED(hres))
         return hres;
 
@@ -8738,12 +9020,17 @@ static HRESULT WINAPI HTMLAttributeCollection3_item(IHTMLAttributeCollection3 *i
     TRACE("(%p)->(%ld %p)\n", This, index, ppNodeOut);
 
     hres = get_attr_ref_by_idx(This, &index, &ref);
+    if(hres == DISP_E_UNKNOWNNAME && is_ie8_attr_col(This)) {
+        *ppNodeOut = NULL;
+        return S_OK;
+    }
     if(hres == DISP_E_UNKNOWNNAME)
         return E_INVALIDARG;
     if(FAILED(hres))
         return hres;
 
     hres = get_domattr(This, &ref, NULL, &attr);
+    SysFreeString(ref.buf);
     if(FAILED(hres))
         return hres;
 
@@ -9020,6 +9307,7 @@ static HRESULT HTMLAttributeCollection_get_dispid(DispatchEx *dispex, const WCHA
         return hres;
 
     hres = get_domattr(This, &ref, &pos, &attr);
+    SysFreeString(ref.buf);
     if(FAILED(hres))
         return hres;
     IHTMLDOMAttribute_Release(&attr->IHTMLDOMAttribute_iface);
