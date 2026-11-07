@@ -1540,7 +1540,7 @@ NtGdiGetDCPoint(
     UINT iPoint,
     PPOINTL Point)
 {
-    BOOL Ret;
+    BOOL Ret, Virtual = FALSE;
     POINTL SafePoint;
 
     if (!Point)
@@ -1549,7 +1549,16 @@ NtGdiGetDCPoint(
         return FALSE;
     }
 
+    if (iPoint == GdiGetDCOrg && UserDpiIsVirtualizationActive())
+    {
+        UserEnterShared();
+        Virtual = UserDpiIsVirtualWindow(ValidateHwndNoErr(IntWindowFromDC(hDC)));
+        UserLeave();
+    }
+
     Ret = GreGetDCPoint(hDC, iPoint, &SafePoint);
+    if (Ret && Virtual)
+        UserDpiPointToLogical((PPOINT)&SafePoint);
     if (Ret)
     {
         _SEH2_TRY
