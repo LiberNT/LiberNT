@@ -198,7 +198,16 @@ int WINAPI GetThemeSysSize(HTHEME hTheme, int iSizeID)
         if(id != -1) {
             if((tp = MSSTYLES_FindMetric(hTheme, TMT_SIZE, id))) {
                 if(SUCCEEDED(MSSTYLES_GetPropertyInt(tp, &i))) {
+#ifdef __REACTOS__
+                    HDC hdc = GetDC(NULL);
+                    int dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSY) : 96;
+
+                    if (hdc)
+                        ReleaseDC(NULL, hdc);
+                    return MulDiv(i, dpi, 96);
+#else
                     return i;
+#endif
                 }
             }
             TRACE("Size %d not found in theme, using system metric\n", iSizeID);
