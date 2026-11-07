@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    CaptionGlyphs.c
     CloseThemeData.c
     ColorPreference.c
     DrawThemeParentBackground.c
