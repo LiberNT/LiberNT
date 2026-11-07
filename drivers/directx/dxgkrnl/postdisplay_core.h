@@ -14,7 +14,8 @@ typedef enum _DXGK_POST_DISPLAY_COMPLETION_ACTION
 {
     DxgkPostDisplayCompletionNone = 0,
     DxgkPostDisplayCompletionCommit,
-    DxgkPostDisplayCompletionRollback
+    DxgkPostDisplayCompletionRollback,
+    DxgkPostDisplayCompletionDefer
 } DXGK_POST_DISPLAY_COMPLETION_ACTION;
 
 typedef struct _DXGK_POST_DISPLAY_HANDOFF_CORE
@@ -42,8 +43,10 @@ DxgkPostDisplayCoreComplete(
 {
     if (!Core->FallbackStopped)
         return DxgkPostDisplayCompletionNone;
+    if (!NT_SUCCESS(StartStatus) && !Restartable)
+        return DxgkPostDisplayCompletionDefer;
     Core->FallbackStopped = FALSE;
-    if (!NT_SUCCESS(StartStatus) && Restartable)
+    if (!NT_SUCCESS(StartStatus))
         return DxgkPostDisplayCompletionRollback;
     return DxgkPostDisplayCompletionCommit;
 }
