@@ -8,9 +8,11 @@ list(APPEND SOURCE
     NonClientHitTest.c
     SetWindowTheme.c
     TextScaling.c
+    ThemeDpi.c
     SetThemeAppProperties.c
     ThemeRendering.c
     ThemeShellTransition.c
+    ThemeSysSize.c
     ../include/msgtrace.c
     testlist.c)
 
