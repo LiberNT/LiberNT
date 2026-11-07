@@ -124,6 +124,9 @@ NvmeConfigurePowerAndEvents(_In_ PNVME_DEVICE_EXTENSION Device)
 {
     NVME_COMMAND Command;
 
+    if (Device->Transport && !Device->Transport->AsyncEvents)
+        return;
+
     NvmeConfigureApst(Device);
     NvmeConfigureThermal(Device);
 
@@ -141,6 +144,9 @@ NvmeArmAerLocked(_In_ PNVME_DEVICE_EXTENSION Device)
 {
     NVME_COMMAND Command;
 
+    if (Device->Transport && !Device->Transport->AsyncEvents)
+        return;
+
     if (Device->AerOutstanding)
         return;
     RtlZeroMemory(&Command, sizeof(Command));
@@ -154,6 +160,9 @@ VOID
 NvmeKickSmartLocked(_In_ PNVME_DEVICE_EXTENSION Device)
 {
     NVME_COMMAND Command;
+
+    if (Device->Transport && !Device->Transport->AsyncEvents)
+        return;
 
     if (Device->SmartInFlight)
         return;
