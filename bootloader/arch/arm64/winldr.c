@@ -16,6 +16,8 @@
 #include <drivers/acpi/acpi.h>
 #include <reactos/arm64/acpi.h>
 #include <reactos/arm64/early_uart.h>
+#include <Fdt.h>
+#include <reactos/riscv64/fdtlib.h>
 extern EFI_SYSTEM_TABLE *GlobalSystemTable;
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
@@ -84,6 +86,7 @@ static PDESCRIPTION_HEADER Arm64LocateAcpiTable(ULONG Signature, ULONG MinimumLe
 static PFADT Arm64LocateFadt(VOID);
 static VOID Arm64PopulateEarlyDeviceRanges(PLOADER_PARAMETER_BLOCK LoaderBlock);
 static VOID Arm64PopulatePsciConfiguration(PLOADER_PARAMETER_BLOCK LoaderBlock);
+static VOID Arm64CaptureDeviceTree(PLOADER_PARAMETER_BLOCK LoaderBlock);
 
 /* -------------------------------------------------------------------------- */
 /* ARM64-specific data structures for kernel initialization                   */
@@ -701,6 +704,7 @@ Arm64SetupForNt(
     LoaderBlock->u.Arm64.EarlyUartAddress = EarlyUartBaseAddress;
     LoaderBlock->u.Arm64.EarlyUartInterface = (ULONG)EarlyUartInterface;
     Arm64PopulateEarlyDeviceRanges(LoaderBlock);
+    Arm64CaptureDeviceTree(LoaderBlock);
 
     /* Ensure memory is properly prepared */
     if (!Arm64InitializeMemory(LoaderBlock))
@@ -878,4 +882,133 @@ Arm64AllocateKernelDataStructures(VOID)
     }
 
     return TRUE;
+}
+
+static const PCSTR Arm64DeviceTreeInterruptControllers[] =
+{
+    "apple,t8122-aic3",
+    "apple,aic2",
+    "arm,gic-v3",
+    "arm,gic-400",
+    "arm,cortex-a15-gic",
+    "arm,cortex-a7-gic",
+    "arm,cortex-a9-gic",
+    "arm,pl390",
+};
+
+static BOOLEAN
+Arm64FindDeviceTreeInterruptController(
+    PRISCV_FDT Fdt,
+    ULONG Node,
+    ULONG Parent,
+    ULONG Depth,
+    PULONG Found,
+    PULONG FoundParent)
+{
+    const VOID *Compatible;
+    ULONG Length;
+    ULONG Child;
+    ULONG Index;
+
+    Compatible = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
+    if (Compatible && Parent != RISCV_FDT_NO_NODE)
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(Arm64DeviceTreeInterruptControllers); Index++)
+        {
+            if (RiscvFdtStringListContains(Compatible, Length, Arm64DeviceTreeInterruptControllers[Index]))
+            {
+                *Found = Node;
+                *FoundParent = Parent;
+                return TRUE;
+            }
+        }
+    }
+    if (Depth >= 8)
+        return FALSE;
+    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE; Child = RiscvFdtNextSibling(Fdt, Child))
+    {
+        if (Arm64FindDeviceTreeInterruptController(Fdt, Child, Node, Depth + 1, Found, FoundParent))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static VOID
+Arm64AddDeviceTreeInterruptRanges(
+    PLOADER_PARAMETER_BLOCK LoaderBlock,
+    const VOID *DeviceTree,
+    ULONG DeviceTreeSize)
+{
+    ULONGLONG Address;
+    ULONGLONG Size;
+    RISCV_FDT Fdt;
+    ULONG Parent;
+    ULONG Node;
+    ULONG Regions;
+    ULONG Index;
+
+    if (Arm64LocateAcpiTable(APIC_SIGNATURE, sizeof(ARM64_ACPI_MADT)) ||
+        !RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt) ||
+        !Arm64FindDeviceTreeInterruptController(&Fdt, RiscvFdtRootNode(&Fdt), RISCV_FDT_NO_NODE, 0, &Node, &Parent))
+    {
+        return;
+    }
+    if (!RiscvFdtReadU32(&Fdt, Node, "#redistributor-regions", &Regions) || Regions == 0)
+        Regions = 1;
+    for (Index = 0; Index <= Regions && Index < ARM64_LOADER_MAX_EARLY_DEVICE_RANGES; Index++)
+    {
+        if (RiscvFdtReadReg(&Fdt, Node, Parent, Index, &Address, &Size) && Size != 0)
+        {
+            Arm64AddEarlyDeviceRange(LoaderBlock, Address, Size);
+            TRACE("ARM64: interrupt controller range %llx+%llx\n", Address, Size);
+        }
+    }
+}
+
+static VOID
+Arm64CaptureDeviceTree(PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    EFI_GUID DeviceTreeGuid = FDT_TABLE_GUID;
+    const VOID *FirmwareDeviceTree = NULL;
+    ULONG DeviceTreeSize;
+    PVOID Copy;
+    UINTN Index;
+
+    LoaderBlock->u.Arm64.DeviceTree = 0;
+    LoaderBlock->u.Arm64.DeviceTreeSize = 0;
+    if (!GlobalSystemTable || !GlobalSystemTable->ConfigurationTable)
+        return;
+    for (Index = 0; Index < GlobalSystemTable->NumberOfTableEntries; ++Index)
+    {
+        EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
+
+        if (!memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)))
+        {
+            FirmwareDeviceTree = Entry->VendorTable;
+            break;
+        }
+    }
+    if (!FirmwareDeviceTree ||
+        !RiscvFdtValidateHeader(FirmwareDeviceTree, RISCV_FDT_MAXIMUM_SIZE, &DeviceTreeSize))
+    {
+        return;
+    }
+    Copy = MmAllocateMemoryWithType(DeviceTreeSize, LoaderMemoryData);
+    if (!Copy)
+    {
+        ERR("ARM64: no memory to keep the %lu-byte device tree\n", DeviceTreeSize);
+        return;
+    }
+    RtlCopyMemory(Copy, FirmwareDeviceTree, DeviceTreeSize);
+    if (!RiscvFdtValidateHeader(Copy, DeviceTreeSize, NULL))
+    {
+        ERR("ARM64: the device tree copy failed validation\n");
+        return;
+    }
+    Arm64AddDeviceTreeInterruptRanges(LoaderBlock, Copy, DeviceTreeSize);
+    Arm64FindFirmwareWatchdog(Copy, DeviceTreeSize);
+    LoaderBlock->u.Arm64.DeviceTree = ((ULONG_PTR)Copy < ARM64_KSEG0_BASE) ?
+                                      ((ULONG_PTR)Copy + ARM64_KSEG0_BASE) : (ULONG_PTR)Copy;
+    LoaderBlock->u.Arm64.DeviceTreeSize = DeviceTreeSize;
+    TRACE("ARM64: device tree kept at %p (%lu bytes)\n", Copy, DeviceTreeSize);
 }
