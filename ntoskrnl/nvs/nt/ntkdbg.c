@@ -127,9 +127,9 @@ ExpKdbgExtPfn(
     ULONG64 Frame;
     PMI_PFN Entry;
 
-    if (!MiKdbParseAddress(Argc, Argv, &Frame) || Frame >= MiSystem.Pfn.FrameCount)
+    if (!MiKdbParseAddress(Argc, Argv, &Frame) || !MiPfnTracked(&MiSystem.Pfn, Frame))
     {
-        KdbpPrint("Usage: !pfn page-frame-number (below %lx)\n", MiSystem.Pfn.FrameCount);
+        KdbpPrint("Usage: !pfn page-frame-number (%lx to %lx)\n", MiSystem.Pfn.FirstFrame, MiSystem.Pfn.FrameCount - 1);
         return TRUE;
     }
 
