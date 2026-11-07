@@ -533,6 +533,27 @@ SoftGpuTestFenceWait(
                : SoftGpuFenceWaitPending;
 }
 
+static volatile LONG64 *
+SoftGpuResolveSlabFence(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ ULONGLONG Address)
+{
+    SIZE_T Offset;
+
+    if (Address == 0 ||
+        (Address & (sizeof(UINT64) - 1)) != 0 ||
+        !NT_SUCCESS(SoftGpu2dResolveSlabRange(
+            (ULONGLONG)Device->FrameBufferPhys.QuadPart,
+            Device->FrameBufferSize,
+            Address,
+            sizeof(UINT64),
+            &Offset)))
+    {
+        return NULL;
+    }
+    return (volatile LONG64 *)((PUCHAR)Device->FrameBuffer + Offset);
+}
+
 /*
  * Copy a GPUVA range through a captured root one page at a time.  GPU virtual
  * memory is allowed to map adjacent virtual pages to unrelated physical
@@ -771,7 +792,29 @@ SoftGpuExecuteDmaBuffer(
                                      DXGK_GENERAL_ERROR_INVALID_INSTRUCTION);
             break;
         }
-        if (Cmd->Op == SOFTGPU_CMD_OP_WAIT_FENCE)
+        if (Cmd->Op == SOFTGPU_CMD_OP_WAIT_FENCE &&
+            !Submit->VirtualAddressing && Cmd->FenceGpuVa == 0)
+        {
+            volatile LONG64 *Fence = SoftGpuResolveSlabFence(Device, Cmd->DstAddress);
+
+            if (Fence == NULL)
+            {
+                Result->ResumeOffset = Offset;
+                SoftGpuSetExecutionFault(Result,
+                                         0,
+                                         0,
+                                         (DXGK_PAGE_FAULT_FLAGS)0,
+                                         DXGK_GENERAL_ERROR_INVALID_INSTRUCTION);
+                break;
+            }
+            if ((ULONGLONG)ReadAcquire64(Fence) < Cmd->FenceValue)
+            {
+                Result->ResumeOffset = Offset;
+                Result->Outcome = SoftGpuExecutionPending;
+                break;
+            }
+        }
+        else if (Cmd->Op == SOFTGPU_CMD_OP_WAIT_FENCE)
         {
             SOFTGPU_FENCE_WAIT_RESULT WaitResult;
             ULONG FaultLevel;
@@ -819,7 +862,24 @@ SoftGpuExecuteDmaBuffer(
                 break;
             }
         }
-        if (Cmd->Op == SOFTGPU_CMD_OP_SIGNAL_FENCE)
+        if (Cmd->Op == SOFTGPU_CMD_OP_SIGNAL_FENCE &&
+            !Submit->VirtualAddressing && Cmd->FenceGpuVa == 0)
+        {
+            volatile LONG64 *Fence = SoftGpuResolveSlabFence(Device, Cmd->DstAddress);
+
+            if (Fence == NULL)
+            {
+                Result->ResumeOffset = Offset;
+                SoftGpuSetExecutionFault(Result,
+                                         0,
+                                         0,
+                                         (DXGK_PAGE_FAULT_FLAGS)0,
+                                         DXGK_GENERAL_ERROR_INVALID_INSTRUCTION);
+                break;
+            }
+            WriteRelease64(Fence, (LONG64)Cmd->FenceValue);
+        }
+        else if (Cmd->Op == SOFTGPU_CMD_OP_SIGNAL_FENCE)
         {
             ULONG FaultLevel;
 
@@ -991,7 +1051,7 @@ SoftGpuDpcRoutine(
     Start100ns = SoftGpuTraceNow100ns();
 
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
-    if (Device->Stopped)
+    if (Device->Stopped || Device->Resetting)
     {
         KeReleaseSpinLock(&Device->FenceLock, OldIrql);
         return;
@@ -1006,7 +1066,8 @@ SoftGpuDpcRoutine(
         for (;;)
         {
             KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
-            if (Device->Stopped || Engine->SubmitRingHead == Engine->SubmitRingTail)
+            if (Device->Stopped || Device->Resetting ||
+                Engine->SubmitRingHead == Engine->SubmitRingTail)
             {
                 Engine->EngineActive = 0;
                 KeReleaseSpinLock(&Device->FenceLock, OldIrql);
@@ -1028,7 +1089,7 @@ SoftGpuDpcRoutine(
                     HaveMonitoredSignal = TRUE;
 #endif
                 KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
-                if (Device->Stopped)
+                if (Device->Stopped || Device->Resetting)
                 {
                     Engine->EngineActive = 0;
                     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
@@ -1092,7 +1153,7 @@ SoftGpuDpcRoutine(
     }
 
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
-    if (Device->Stopped)
+    if (Device->Stopped || Device->Resetting)
     {
         KeReleaseSpinLock(&Device->FenceLock, OldIrql);
         return;
@@ -1725,6 +1786,47 @@ SoftGpuValidateRenderSurfaceReference(
                               &Span);
 }
 
+static NTSTATUS
+SoftGpuValidateRenderFenceReference(
+    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
+    _In_ CONST DXGKARG_RENDER *Render,
+    _In_ UINT RequiredPatchOffset,
+    _In_ BOOLEAN WriteOperation)
+{
+    CONST D3DDDI_PATCHLOCATIONLIST *Patch = NULL;
+    CONST DXGK_ALLOCATIONLIST *Allocation;
+    PSOFTGPU_OPENALLOC Open;
+    UINT Index;
+    NTSTATUS Status;
+
+    for (Index = 0; Index < Render->PatchLocationListInSize; ++Index)
+    {
+        if (Render->pPatchLocationListIn[Index].PatchOffset !=
+                RequiredPatchOffset)
+        {
+            continue;
+        }
+        if (Patch != NULL)
+            return STATUS_INVALID_PARAMETER;
+        Patch = &Render->pPatchLocationListIn[Index];
+    }
+    if (Patch == NULL || Patch->AllocationIndex >= Render->AllocationListSize)
+        return STATUS_INVALID_PARAMETER;
+
+    Allocation = &Render->pAllocationList[Patch->AllocationIndex];
+    Open = (PSOFTGPU_OPENALLOC)Allocation->hDeviceSpecificAllocation;
+    Status = SoftGpuValidateAllocationOpen(KmdDevice, Open);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Patch->AllocationOffset != 0 ||
+        Open->Size < sizeof(UINT64) ||
+        (WriteOperation && !Allocation->WriteOperation))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    return STATUS_SUCCESS;
+}
+
 /*
  * SoftGpuDdiRender
  *
@@ -1918,11 +2020,26 @@ SoftGpuDdiRender(
             case SOFTGPU_CMD_OP_SIGNAL_FENCE:
             case SOFTGPU_CMD_OP_WAIT_FENCE:
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2000)
+                if (Cmd->FenceGpuVa == 0)
+                {
+                    if (ExpectedPatches == MAXULONG)
+                        return STATUS_INTEGER_OVERFLOW;
+                    Status = SoftGpuValidateRenderFenceReference(
+                                 KmdDevice,
+                                 pRender,
+                                 Offset +
+                                     FIELD_OFFSET(SOFTGPU_CMD, DstAddress),
+                                 Cmd->Op == SOFTGPU_CMD_OP_SIGNAL_FENCE);
+                    if (!NT_SUCCESS(Status))
+                        return Status;
+                    ExpectedPatches++;
+                    break;
+                }
                 /* GPU synchronization against a monitored fence the caller
                  * mapped into its own GPU address space; the engine resolves
                  * the address through that process's page tables, so an
                  * unmapped or foreign fence simply cannot be reached. */
-                if (Cmd->FenceGpuVa == 0 || (Cmd->FenceGpuVa & (sizeof(ULONGLONG) - 1)) != 0)
+                if ((Cmd->FenceGpuVa & (sizeof(ULONGLONG) - 1)) != 0)
                     return STATUS_INVALID_PARAMETER;
                 break;
 #else

@@ -380,6 +380,7 @@ typedef struct _SOFTGPU_DEVICE
      */
     KSPIN_LOCK          FenceLock;
     volatile LONG       Stopped;
+    volatile LONG       Resetting;
 
     /* The adapter's GPU nodes, indexed by node ordinal. */
     SOFTGPU_ENGINE      Engines[SOFTGPU_ENGINE_COUNT];

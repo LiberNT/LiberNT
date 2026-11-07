@@ -57,6 +57,7 @@ OslGetParameters(
     PBCD_OBJECT Object = &Entry->Object;
     WCHAR Text[BM_PATH_CHARS];
     ULONGLONG Integer;
+    BOOLEAN HasLoadOptions;
     BOOLEAN Enabled;
     ULONG i;
 
@@ -103,18 +104,23 @@ OslGetParameters(
             OslAppend(Parameters, L"(ALTERNATESHELL)");
     }
 
+    HasLoadOptions = BcdGetString(Object, BcdLibraryString_LoadOptionsString, Text, RTL_NUMBER_OF(Text));
+
     if (BcdGetBoolean(Object, BcdOSLoaderBoolean_KernelDebuggerEnabled, &Enabled) && Enabled)
     {
         OslAppend(Parameters, L" DEBUG");
 
-        if (BcdGetInteger(Object, BcdLibraryInteger_SerialDebuggerPort, &Integer))
-            OslAppend(Parameters, L" DEBUGPORT=COM%I64u", Integer);
+        if (!(HasLoadOptions && wcsstr(Text, L"DEBUGPORT=") != NULL))
+        {
+            if (BcdGetInteger(Object, BcdLibraryInteger_SerialDebuggerPort, &Integer))
+                OslAppend(Parameters, L" DEBUGPORT=COM%I64u", Integer);
 
-        if (BcdGetInteger(Object, BcdLibraryInteger_SerialDebuggerBaudRate, &Integer))
-            OslAppend(Parameters, L" BAUDRATE=%I64u", Integer);
+            if (BcdGetInteger(Object, BcdLibraryInteger_SerialDebuggerBaudRate, &Integer))
+                OslAppend(Parameters, L" BAUDRATE=%I64u", Integer);
+        }
     }
 
-    if (BcdGetString(Object, BcdLibraryString_LoadOptionsString, Text, RTL_NUMBER_OF(Text)))
+    if (HasLoadOptions)
         OslAppend(Parameters, L" %s", Text);
 
     return TRUE;
