@@ -2,6 +2,8 @@
 
 extern PUSER_MESSAGE_QUEUE gpqForeground;
 extern PUSER_MESSAGE_QUEUE gpqForegroundPrev;
+extern HWND ghwndForeground;
+extern HWND ghwndForegroundPrev;
 extern PTHREADINFO ptiLastInput;
 
 /*
