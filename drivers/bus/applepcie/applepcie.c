@@ -12,7 +12,7 @@
 #include <reactos/drivers/applepcie.h>
 #include <reactos/drivers/applesmc.h>
 
-#define APPLE_PCIE_SMC_WAIT_MS      5000
+#define APPLE_PCIE_SMC_WAIT_MS      30000
 #define APPLE_PCIE_SMC_STEP_MS      50
 #define APPLE_PCIE_TAG              'icPA'
 #define APPLE_PCIE_FDO              0x4F444650UL
@@ -28,6 +28,7 @@ typedef struct _APPLE_PCIE_EXTENSION
     struct _APPLE_PCIE_EXTENSION *Parent;
     BOOLEAN ChildReported;
     BOOLEAN Started;
+    PKTHREAD BringUpThread;
     FDT_DRIVER_TREE Tree;
     APPLE_PCIE Pcie;
 } APPLE_PCIE_EXTENSION, *PAPPLE_PCIE_EXTENSION;
@@ -135,13 +136,47 @@ ApplePcieReportPort(
     }
 }
 
+static NTSTATUS ApplePcieCreateChild(_Inout_ PAPPLE_PCIE_EXTENSION Extension);
+
+static
+VOID
+NTAPI
+ApplePcieBringUp(
+    _In_ PVOID Context)
+{
+    PAPPLE_PCIE_EXTENSION Extension = Context;
+    PAPPLE_PCIE Pcie = &Extension->Pcie;
+    ULONG Index, Mapped = 0, LinksUp = 0;
+    NTSTATUS Status;
+
+    for (Index = 0; Index < Pcie->PortCount; ++Index)
+    {
+        ApplePcieReportPort(Pcie, &Pcie->Ports[Index], ApplePcieStartPort(&Extension->Tree, Pcie, &Pcie->Ports[Index]));
+        if (Pcie->Ports[Index].LinkUp)
+        {
+            LinksUp++;
+            Mapped += ApplePcieMapPortDevices(&Extension->Tree, Pcie, &Pcie->Ports[Index]);
+        }
+    }
+    DbgPrint("applepcie: %lu links up, %lu functions mapped through their DARTs\n", LinksUp, Mapped);
+    if (Pcie->WindowCount)
+    {
+        Status = ApplePcieCreateChild(Extension);
+        if (NT_SUCCESS(Status))
+            IoInvalidateDeviceRelations(Extension->PhysicalDevice, BusRelations);
+        else
+            DbgPrint("applepcie: host bridge device not created: %lx\n", Status);
+    }
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
 static
 NTSTATUS
 ApplePcieStart(
     _Inout_ PAPPLE_PCIE_EXTENSION Extension)
 {
     PAPPLE_PCIE Pcie = &Extension->Pcie;
-    ULONG Index, Mapped = 0, LinksUp = 0;
+    HANDLE ThreadHandle;
     NTSTATUS Status;
 
     if (Extension->Started)
@@ -161,16 +196,17 @@ ApplePcieStart(
     DbgPrint("applepcie: config space %I64x+%I64x, buses %lu-%lu, %lu windows, %lu ports, %lu MSI vectors, pin controller %s\n",
              Pcie->ConfigBase, Pcie->ConfigSize, Pcie->FirstBus, Pcie->LastBus, Pcie->WindowCount, Pcie->PortCount,
              Pcie->MsiVectors, Pcie->Pinctrl.Base ? "mapped" : "missing");
-    for (Index = 0; Index < Pcie->PortCount; ++Index)
+    Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, NULL, NULL, NULL, ApplePcieBringUp, Extension);
+    if (!NT_SUCCESS(Status))
     {
-        ApplePcieReportPort(Pcie, &Pcie->Ports[Index], ApplePcieStartPort(&Extension->Tree, Pcie, &Pcie->Ports[Index]));
-        if (Pcie->Ports[Index].LinkUp)
-        {
-            LinksUp++;
-            Mapped += ApplePcieMapPortDevices(&Extension->Tree, Pcie, &Pcie->Ports[Index]);
-        }
+        DbgPrint("applepcie: link bring-up thread not started: %lx\n", Status);
+        ApplePcieClose(Pcie);
+        FdtDriverClose(&Extension->Tree);
+        return Status;
     }
-    DbgPrint("applepcie: %lu links up, %lu functions mapped through their DARTs\n", LinksUp, Mapped);
+    NT_VERIFY(NT_SUCCESS(ObReferenceObjectByHandle(ThreadHandle, THREAD_ALL_ACCESS, NULL, KernelMode,
+                                                   (PVOID *)&Extension->BringUpThread, NULL)));
+    ZwClose(ThreadHandle);
     Extension->Started = TRUE;
     return STATUS_SUCCESS;
 }
@@ -434,6 +470,7 @@ ApplePcieCreateChild(
     ChildExtension->Self = Child;
     ChildExtension->Parent = Extension;
     Child->Flags &= ~DO_DEVICE_INITIALIZING;
+    KeMemoryBarrier();
     Extension->Child = Child;
     Extension->ChildReported = TRUE;
     return STATUS_SUCCESS;
@@ -456,12 +493,6 @@ ApplePcieFdoPnp(
                                                                              : STATUS_UNSUCCESSFUL;
             if (NT_SUCCESS(Status))
                 Status = ApplePcieStart(Extension);
-            if (NT_SUCCESS(Status) && Extension->Pcie.WindowCount)
-            {
-                Status = ApplePcieCreateChild(Extension);
-                if (NT_SUCCESS(Status))
-                    IoInvalidateDeviceRelations(Extension->PhysicalDevice, BusRelations);
-            }
             Irp->IoStatus.Status = Status;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
             return Status;
@@ -501,6 +532,12 @@ ApplePcieFdoPnp(
             Irp->IoStatus.Status = STATUS_SUCCESS;
             IoSkipCurrentIrpStackLocation(Irp);
             Status = IoCallDriver(Extension->LowerDevice, Irp);
+            if (Extension->BringUpThread)
+            {
+                KeWaitForSingleObject(Extension->BringUpThread, Executive, KernelMode, FALSE, NULL);
+                ObDereferenceObject(Extension->BringUpThread);
+                Extension->BringUpThread = NULL;
+            }
             Extension->ChildReported = FALSE;
             if (Extension->Child)
             {
