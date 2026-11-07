@@ -75,6 +75,7 @@
 
 ;; install
 @ stdcall PrepareFileCopy(ptr ptr)
+@ stdcall PrepareUpgradeFileCopy(ptr ptr)
 @ stdcall DoFileCopy(ptr ptr ptr)
 
 ;; bootsup

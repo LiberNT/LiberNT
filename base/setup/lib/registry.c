@@ -1062,6 +1062,410 @@ RegCleanupRegistry(
     RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, PrivilegeSet[0], FALSE, &PrivilegeSet[0]);
 }
 
+typedef enum _KEPT_KIND
+{
+    KeptTree,
+    KeptKey,
+    KeptValue,
+    KeptNoValue
+} KEPT_KIND;
+
+typedef struct _KEPT_RECORD
+{
+    struct _KEPT_RECORD* Next;
+    KEPT_KIND Kind;
+    HANDLE RootKey;
+    PWSTR KeyPath;
+    UNICODE_STRING ValueName;
+    ULONG Type;
+    ULONG DataLength;
+    PUCHAR Data;
+} KEPT_RECORD, *PKEPT_RECORD;
+
+typedef struct _KEPT_LIST
+{
+    PKEPT_RECORD Head;
+    PKEPT_RECORD* Tail;
+} KEPT_LIST, *PKEPT_LIST;
+
+static VOID
+InitKeptList(
+    _Out_ PKEPT_LIST List)
+{
+    List->Head = NULL;
+    List->Tail = &List->Head;
+}
+
+static VOID
+FreeKeptList(
+    _Inout_ PKEPT_LIST List)
+{
+    PKEPT_RECORD Record, Next;
+
+    for (Record = List->Head; Record; Record = Next)
+    {
+        Next = Record->Next;
+        RtlFreeHeap(ProcessHeap, 0, Record);
+    }
+    InitKeptList(List);
+}
+
+static VOID
+AppendKeptList(
+    _Inout_ PKEPT_LIST List,
+    _Inout_ PKEPT_LIST Other)
+{
+    if (!Other->Head)
+        return;
+    *List->Tail = Other->Head;
+    List->Tail = Other->Tail;
+    InitKeptList(Other);
+}
+
+static BOOLEAN
+AddKeptRecord(
+    _Inout_ PKEPT_LIST List,
+    _In_ KEPT_KIND Kind,
+    _In_ HANDLE RootKey,
+    _In_ PCWSTR KeyPath,
+    _In_opt_ PCUNICODE_STRING ValueName,
+    _In_ ULONG Type,
+    _In_reads_bytes_opt_(DataLength) const VOID* Data,
+    _In_ ULONG DataLength)
+{
+    SIZE_T cbPath = (wcslen(KeyPath) + 1) * sizeof(WCHAR);
+    SIZE_T cbName = ValueName ? ValueName->Length + sizeof(WCHAR) : 0;
+    PKEPT_RECORD Record;
+
+    Record = RtlAllocateHeap(ProcessHeap, HEAP_ZERO_MEMORY, sizeof(*Record) + cbPath + cbName + DataLength);
+    if (!Record)
+        return FALSE;
+
+    Record->Kind = Kind;
+    Record->RootKey = RootKey;
+    Record->KeyPath = (PWSTR)(Record + 1);
+    RtlCopyMemory(Record->KeyPath, KeyPath, cbPath);
+    if (ValueName)
+    {
+        Record->ValueName.Buffer = (PWSTR)((PUCHAR)Record->KeyPath + cbPath);
+        Record->ValueName.Length = ValueName->Length;
+        Record->ValueName.MaximumLength = (USHORT)cbName;
+        RtlCopyMemory(Record->ValueName.Buffer, ValueName->Buffer, ValueName->Length);
+    }
+    Record->Type = Type;
+    Record->DataLength = DataLength;
+    Record->Data = (PUCHAR)Record->KeyPath + cbPath + cbName;
+    if (DataLength)
+        RtlCopyMemory(Record->Data, Data, DataLength);
+
+    *List->Tail = Record;
+    List->Tail = &Record->Next;
+    return TRUE;
+}
+
+static NTSTATUS
+OpenKeptKey(
+    _In_ HANDLE RootKey,
+    _In_ PCUNICODE_STRING KeyPath,
+    _In_ ACCESS_MASK DesiredAccess,
+    _Out_ PHANDLE KeyHandle)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+
+    InitializeObjectAttributes(&ObjectAttributes, (PUNICODE_STRING)KeyPath, OBJ_CASE_INSENSITIVE, RootKey, NULL);
+    return NtOpenKey(KeyHandle, DesiredAccess, &ObjectAttributes);
+}
+
+static NTSTATUS
+OpenKeptKeyPath(
+    _In_ HANDLE RootKey,
+    _In_ PCWSTR KeyPath,
+    _In_ ACCESS_MASK DesiredAccess,
+    _Out_ PHANDLE KeyHandle)
+{
+    UNICODE_STRING Name;
+
+    RtlInitUnicodeString(&Name, KeyPath);
+    return OpenKeptKey(RootKey, &Name, DesiredAccess, KeyHandle);
+}
+
+static PVOID
+QueryKeptEntry(
+    _In_ HANDLE KeyHandle,
+    _In_ BOOLEAN Values,
+    _In_ ULONG Index,
+    _Out_ PNTSTATUS Status)
+{
+    ULONG Size = 512, Length = 0;
+    PVOID Buffer;
+
+    for (;;)
+    {
+        Buffer = RtlAllocateHeap(ProcessHeap, 0, Size);
+        if (!Buffer)
+        {
+            *Status = STATUS_NO_MEMORY;
+            return NULL;
+        }
+
+        *Status = Values ? NtEnumerateValueKey(KeyHandle, Index, KeyValueFullInformation, Buffer, Size, &Length)
+                         : NtEnumerateKey(KeyHandle, Index, KeyBasicInformation, Buffer, Size, &Length);
+        if (NT_SUCCESS(*Status))
+            return Buffer;
+
+        RtlFreeHeap(ProcessHeap, 0, Buffer);
+        if ((*Status != STATUS_BUFFER_OVERFLOW && *Status != STATUS_BUFFER_TOO_SMALL) || Length <= Size)
+            return NULL;
+        Size = Length;
+    }
+}
+
+static BOOLEAN
+CaptureKeptKey(
+    _Inout_ PKEPT_LIST List,
+    _In_ HANDLE RootKey,
+    _In_ PCWSTR KeyPath)
+{
+    PKEY_VALUE_FULL_INFORMATION ValueInfo;
+    PKEY_BASIC_INFORMATION KeyInfo;
+    UNICODE_STRING Name;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+    SIZE_T cchSubPath;
+    PWSTR SubPath;
+    BOOLEAN Ok;
+    ULONG Index;
+
+    if (!NT_SUCCESS(OpenKeptKeyPath(RootKey, KeyPath, KEY_READ, &KeyHandle)))
+        return FALSE;
+
+    Ok = AddKeptRecord(List, KeptKey, RootKey, KeyPath, NULL, REG_NONE, NULL, 0);
+    for (Index = 0; Ok; Index++)
+    {
+        ValueInfo = QueryKeptEntry(KeyHandle, TRUE, Index, &Status);
+        if (!ValueInfo)
+        {
+            Ok = (Status == STATUS_NO_MORE_ENTRIES);
+            break;
+        }
+
+        Name.Buffer = ValueInfo->Name;
+        Name.Length = Name.MaximumLength = (USHORT)ValueInfo->NameLength;
+        Ok = AddKeptRecord(List, KeptValue, RootKey, KeyPath, &Name, ValueInfo->Type,
+                           (PUCHAR)ValueInfo + ValueInfo->DataOffset, ValueInfo->DataLength);
+        RtlFreeHeap(ProcessHeap, 0, ValueInfo);
+    }
+
+    for (Index = 0; Ok; Index++)
+    {
+        KeyInfo = QueryKeptEntry(KeyHandle, FALSE, Index, &Status);
+        if (!KeyInfo)
+        {
+            Ok = (Status == STATUS_NO_MORE_ENTRIES);
+            break;
+        }
+
+        cchSubPath = wcslen(KeyPath) + 1 + KeyInfo->NameLength / sizeof(WCHAR) + 1;
+        SubPath = RtlAllocateHeap(ProcessHeap, 0, cchSubPath * sizeof(WCHAR));
+        Ok = SubPath &&
+             NT_SUCCESS(RtlStringCchPrintfW(SubPath, cchSubPath, L"%s\\%.*s", KeyPath,
+                                            (int)(KeyInfo->NameLength / sizeof(WCHAR)), KeyInfo->Name)) &&
+             CaptureKeptKey(List, RootKey, SubPath);
+        if (SubPath)
+            RtlFreeHeap(ProcessHeap, 0, SubPath);
+        RtlFreeHeap(ProcessHeap, 0, KeyInfo);
+    }
+
+    NtClose(KeyHandle);
+    return Ok;
+}
+
+static BOOLEAN
+CaptureKeptValue(
+    _Inout_ PKEPT_LIST List,
+    _In_ HANDLE RootKey,
+    _In_ PCWSTR KeyPath,
+    _In_ PCWSTR ValueName)
+{
+    PKEY_VALUE_PARTIAL_INFORMATION Info = NULL;
+    UNICODE_STRING Name;
+    HANDLE KeyHandle;
+    ULONG Length = 0;
+    NTSTATUS Status;
+    BOOLEAN Ok;
+
+    RtlInitUnicodeString(&Name, ValueName);
+    if (!NT_SUCCESS(OpenKeptKeyPath(RootKey, KeyPath, KEY_QUERY_VALUE, &KeyHandle)))
+        return AddKeptRecord(List, KeptNoValue, RootKey, KeyPath, &Name, REG_NONE, NULL, 0);
+
+    Status = NtQueryValueKey(KeyHandle, &Name, KeyValuePartialInformation, NULL, 0, &Length);
+    if ((Status == STATUS_BUFFER_TOO_SMALL || Status == STATUS_BUFFER_OVERFLOW) && Length)
+    {
+        Info = RtlAllocateHeap(ProcessHeap, 0, Length);
+        Status = Info ? NtQueryValueKey(KeyHandle, &Name, KeyValuePartialInformation, Info, Length, &Length)
+                      : STATUS_NO_MEMORY;
+    }
+    NtClose(KeyHandle);
+
+    if (NT_SUCCESS(Status) && Info)
+        Ok = AddKeptRecord(List, KeptValue, RootKey, KeyPath, &Name, Info->Type, Info->Data, Info->DataLength);
+    else if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+        Ok = AddKeptRecord(List, KeptNoValue, RootKey, KeyPath, &Name, REG_NONE, NULL, 0);
+    else
+        Ok = FALSE;
+
+    if (Info)
+        RtlFreeHeap(ProcessHeap, 0, Info);
+    return Ok;
+}
+
+PVOID
+RegSaveKeptSettings(
+    _In_ HINF SetupInf,
+    _In_ PCWSTR Section)
+{
+    INFCONTEXT Context;
+    KEPT_LIST Tree;
+    PKEPT_LIST List;
+    HANDLE RootKey;
+    WCHAR Root[16];
+    WCHAR Key[MAX_PATH];
+    WCHAR Value[MAX_PATH];
+    BOOLEAN Ok;
+
+    if (!SpInfFindFirstLine(SetupInf, Section, NULL, &Context))
+        return NULL;
+
+    List = RtlAllocateHeap(ProcessHeap, 0, sizeof(*List));
+    if (!List)
+        return NULL;
+    InitKeptList(List);
+
+    do
+    {
+        if (!SpInfGetStringField(&Context, 1, Root, ARRAYSIZE(Root), NULL) ||
+            !SpInfGetStringField(&Context, 2, Key, ARRAYSIZE(Key), NULL) ||
+            !(RootKey = GetRootKeyByName(Root, NULL)))
+        {
+            continue;
+        }
+
+        InitKeptList(&Tree);
+        if (SpInfGetFieldCount(&Context) >= 3 &&
+            SpInfGetStringField(&Context, 3, Value, ARRAYSIZE(Value), NULL))
+        {
+            Ok = CaptureKeptValue(&Tree, RootKey, Key, Value);
+        }
+        else
+        {
+            Ok = AddKeptRecord(&Tree, KeptTree, RootKey, Key, NULL, REG_NONE, NULL, 0) &&
+                 CaptureKeptKey(&Tree, RootKey, Key);
+        }
+
+        if (Ok)
+            AppendKeptList(List, &Tree);
+        else
+            DPRINT1("Setting %S\\%S is not kept\n", Root, Key);
+        FreeKeptList(&Tree);
+    } while (SpInfFindNextLine(&Context, &Context));
+
+    return List;
+}
+
+static VOID
+DeleteKeptChildren(
+    _In_ HANDLE KeyHandle)
+{
+    PKEY_BASIC_INFORMATION KeyInfo;
+    UNICODE_STRING Name;
+    HANDLE ChildHandle;
+    NTSTATUS Status;
+
+    for (;;)
+    {
+        KeyInfo = QueryKeptEntry(KeyHandle, FALSE, 0, &Status);
+        if (!KeyInfo)
+            return;
+
+        Name.Buffer = KeyInfo->Name;
+        Name.Length = Name.MaximumLength = (USHORT)KeyInfo->NameLength;
+        Status = OpenKeptKey(KeyHandle, &Name, KEY_ENUMERATE_SUB_KEYS | DELETE, &ChildHandle);
+        RtlFreeHeap(ProcessHeap, 0, KeyInfo);
+        if (!NT_SUCCESS(Status))
+            return;
+
+        DeleteKeptChildren(ChildHandle);
+        Status = NtDeleteKey(ChildHandle);
+        NtClose(ChildHandle);
+        if (!NT_SUCCESS(Status))
+            return;
+    }
+}
+
+static VOID
+RestoreKeptRecord(
+    _In_ PKEPT_RECORD Record)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Name;
+    HANDLE KeyHandle;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RtlInitUnicodeString(&Name, Record->KeyPath);
+    switch (Record->Kind)
+    {
+        case KeptTree:
+            if (NT_SUCCESS(OpenKeptKey(Record->RootKey, &Name, KEY_ENUMERATE_SUB_KEYS | DELETE, &KeyHandle)))
+            {
+                DeleteKeptChildren(KeyHandle);
+                NtDeleteKey(KeyHandle);
+                NtClose(KeyHandle);
+            }
+            return;
+
+        case KeptKey:
+        case KeptValue:
+            InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, Record->RootKey, NULL);
+            Status = CreateNestedKey(&KeyHandle, KEY_ALL_ACCESS, &ObjectAttributes, REG_OPTION_NON_VOLATILE);
+            if (!NT_SUCCESS(Status))
+                break;
+            if (Record->Kind == KeptValue)
+                Status = NtSetValueKey(KeyHandle, &Record->ValueName, 0, Record->Type, Record->Data, Record->DataLength);
+            NtClose(KeyHandle);
+            break;
+
+        case KeptNoValue:
+            Status = OpenKeptKey(Record->RootKey, &Name, KEY_SET_VALUE, &KeyHandle);
+            if (!NT_SUCCESS(Status))
+                return;
+            Status = NtDeleteValueKey(KeyHandle, &Record->ValueName);
+            NtClose(KeyHandle);
+            if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+                return;
+            break;
+    }
+
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Restoring %S\\%wZ failed (Status 0x%08lx)\n", Record->KeyPath, &Record->ValueName, Status);
+}
+
+VOID
+RegRestoreKeptSettings(
+    _In_opt_ PVOID KeptSettings)
+{
+    PKEPT_LIST List = (PKEPT_LIST)KeptSettings;
+    PKEPT_RECORD Record;
+
+    if (!List)
+        return;
+
+    for (Record = List->Head; Record; Record = Record->Next)
+        RestoreKeptRecord(Record);
+
+    FreeKeptList(List);
+    RtlFreeHeap(ProcessHeap, 0, List);
+}
+
 static
 HANDLE
 CreateTargetRootKey(

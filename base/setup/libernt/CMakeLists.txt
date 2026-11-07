@@ -17,6 +17,7 @@ list(APPEND SOURCE
     langpage.c
     libernt.c
     selftest.c
+    upgrade.c
     wizard.c
     libernt.h)
 
