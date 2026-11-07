@@ -264,14 +264,14 @@ VOID
 __cdecl
 _disable(VOID)
 {
-    __asm__ __volatile__("msr daifset, #0x2\n\tisb" ::: "memory");
+    __asm__ __volatile__("msr daifset, #0x3\n\tisb" ::: "memory");
 }
 
 VOID
 __cdecl
 _enable(VOID)
 {
-    __asm__ __volatile__("msr daifclr, #0x2\n\tisb" ::: "memory");
+    __asm__ __volatile__("msr daifclr, #0x3\n\tisb" ::: "memory");
 }
 #endif
 

@@ -697,10 +697,10 @@ KeStartAllProcessors(
 #ifndef CONFIG_SMP
     return;
 #else
-    PVOID KernelStack;
-    PVOID DPCStack;
-    PVOID InterruptStack;
-    PARM64_APINFO APInfo;
+    PVOID KernelStack = NULL;
+    PVOID DPCStack = NULL;
+    PVOID InterruptStack = NULL;
+    PARM64_APINFO APInfo = NULL;
     ULONG ProcessorCount;
     ULONG MaximumProcessors;
 
