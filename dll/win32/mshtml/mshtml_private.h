@@ -737,6 +737,7 @@ HRESULT dispex_index_prop_desc(DispatchEx*,DISPID,struct property_info*);
 const WCHAR *dispex_builtin_prop_name(DispatchEx *dispex, DISPID id);
 const WCHAR *dispex_builtin_attr_name(DispatchEx *dispex, DISPID id);
 HRESULT dispex_get_builtin_attr_id(DispatchEx *dispex, const WCHAR *name, DISPID *id);
+VARTYPE dispex_builtin_prop_vt(DispatchEx*,DISPID);
 BOOL dispex_builtin_is_noattr(DispatchEx *dispex, DISPID id);
 IWineJSDispatchHost *dispex_outer_iface(DispatchEx *dispex);
 HRESULT get_constructor(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret);

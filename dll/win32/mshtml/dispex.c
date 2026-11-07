@@ -2586,6 +2586,17 @@ const WCHAR *dispex_builtin_attr_name(DispatchEx *dispex, DISPID id)
     return func->attr_name ? func->attr_name : func->name;
 }
 
+VARTYPE dispex_builtin_prop_vt(DispatchEx *dispex, DISPID id)
+{
+    func_info_t *func;
+    HRESULT hres;
+
+    hres = get_builtin_func(dispex->info, id, &func);
+    assert(SUCCEEDED(hres));
+
+    return func->prop_vt;
+}
+
 HRESULT dispex_get_builtin_attr_id(DispatchEx *dispex, const WCHAR *name, DISPID *id)
 {
     func_info_t *func;

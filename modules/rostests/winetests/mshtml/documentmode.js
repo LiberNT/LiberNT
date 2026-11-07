@@ -4456,6 +4456,11 @@ sync_test("color props", function() {
             e.setAttribute(prop, vals[j][0]);
             exp = v < 9 ? vals[j][1] : v >= 10 && vals[j].length > 4 ? vals[j][4] : vals[j][3];
             ok(e[prop] === exp, name + " after setAttribute(" + vals[j][0] + ") = " + e[prop] + " expected " + exp);
+            if(v >= 8) {
+                r = e.getAttribute(prop);
+                exp = v < 9 ? vals[j][2] : exp;
+                ok(r === exp, name + " attribute after setAttribute(" + vals[j][0] + ") = " + r + " expected " + exp);
+            }
 
             e = document.createElement(tag);
             e[prop] = vals[j][0];
@@ -4477,6 +4482,116 @@ sync_test("color props", function() {
             }
         }
     }
+});
+
+sync_test("element attribute storage", function() {
+    var v = document.documentMode, i, e, r;
+    if(v < 8)
+        return;
+
+    function mk(tag) {
+        var e = document.createElement(tag), t, b, row;
+        if(tag === "td") {
+            t = document.createElement("table"); b = document.createElement("tbody"); row = document.createElement("tr");
+            t.appendChild(b); b.appendChild(row); row.appendChild(e);
+        }
+        return e;
+    }
+
+    var puts = [
+        [ "div", "id", "id", "x", "x", "x" ], [ "div", "title", "title", "t", "t", "t" ], [ "div", "lang", "lang", "EN", "EN", "EN" ],
+        [ "div", "accessKey", "accessKey", "K", "K", "K" ], [ "div", "tabIndex", "tabIndex", 3, "3", "3" ],
+        [ "div", "className", "class", "c", "c", "c" ], [ "div", "onclick", "onclick", "a()", "a()", null ],
+        [ "td", "width", "width", 10, "10", "10" ], [ "td", "width", "width", "10%", "10%", "10%" ], [ "td", "abbr", "abbr", "ab", "ab", "ab" ],
+        [ "td", "bgColor", "bgColor", "7", "#7", "#7" ], [ "img", "width", "width", 10, "10", "10" ], [ "img", "alt", "alt", "al", "al", "al" ],
+        [ "a", "href", "href", "x.htm", "x.htm", "x.htm" ], [ "a", "target", "target", "_blank", "_blank", "_blank" ],
+        [ "input", "maxLength", "maxLength", 5, "5", "5" ], [ "input", "size", "size", 7, "7", "7" ], [ "input", "name", "name", "n", "n", "n" ],
+        [ "input", "disabled", "disabled", true, "disabled", "" ], [ "input", "readOnly", "readOnly", true, "readonly", "" ],
+        [ "label", "htmlFor", "for", "f", "f", "f" ], [ "meta", "httpEquiv", "http-equiv", "h", "h", "h" ],
+        [ "table", "cellPadding", "cellPadding", 5, "5", "5" ],
+        [ "font", "size", "size", "+1", "+1", "+1" ], [ "font", "face", "face", "Arial", "Arial", "Arial" ],
+        [ "form", "action", "action", "x.htm", "x.htm", "x.htm" ], [ "iframe", "frameBorder", "frameBorder", "0", "0", "0", "1" ],
+        [ "frameset", "rows", "rows", "1,2", "1,2", "1,2" ]
+    ];
+
+    var sets = [
+        [ "div", "dir", "RTL", "rtl", "RTL", "rtl" ], [ "div", "dir", "foo", "foo", "foo", "" ], [ "div", "tabIndex", "x", "x", "x", 0 ],
+        [ "td", "colSpan", "x", "x", "x", 1 ], [ "td", "bgColor", "RED", "red", "red", v < 9 ? "#ff0000" : "red" ],
+        [ "input", "disabled", true, "disabled", "true", true ], [ "input", "disabled", false, "disabled", "false", true ],
+        [ "input", "readOnly", true, "readonly", "true", true ], [ "div", "onclick", "b()", "b()", "b()", undefined ],
+        [ "input", "type", "CHECKBOX", "checkbox", "CHECKBOX", "checkbox" ], [ "form", "method", "POST", "post", "POST", "post" ]
+    ];
+
+    var unset = [
+        [ "div", "id", null, null ], [ "div", "tabIndex", null, null ], [ "input", "disabled", "", null ], [ "input", "checked", "", null ],
+        [ "td", "colSpan", "1", null ], [ "td", "rowSpan", "1", null ], [ "input", "type", "text", null ], [ "form", "method", "get", null ],
+        [ "form", "encType", "application/x-www-form-urlencoded", null ], [ "iframe", "frameBorder", "1", null ], [ "a", "shape", "", null ]
+    ];
+
+    for(i = 0; i < puts.length; i++) {
+        var name = puts[i][0] + "." + puts[i][1] + " put(" + puts[i][3] + ")", exp = v < 9 ? puts[i][4] : puts[i][5];
+
+        e = mk(puts[i][0]);
+        e[puts[i][1]] = puts[i][3];
+        r = e.getAttribute(puts[i][2]);
+        ok(r === exp, name + " attribute = " + r + " expected " + exp);
+        if(puts[i][1] !== puts[i][2]) {
+            r = e.getAttribute(puts[i][1]);
+            ok(r === null, name + " getAttribute(" + puts[i][1] + ") = " + r);
+        }
+        if(exp === null)
+            continue;
+        r = e.removeAttribute(puts[i][2]);
+        ok(r === (v < 9 ? true : undefined), name + " removeAttribute returned " + r);
+        r = e.getAttribute(puts[i][2]);
+        exp = v >= 9 ? null : puts[i].length > 6 ? puts[i][6] : puts[i][3] === true ? "" : null;
+        ok(r === exp, name + " attribute after removeAttribute = " + r + " expected " + exp);
+    }
+
+    for(i = 0; i < sets.length; i++) {
+        var name = sets[i][0] + ".setAttribute(" + sets[i][1] + ", " + sets[i][2] + ")", exp = v < 9 ? sets[i][3] : sets[i][4];
+
+        e = mk(sets[i][0]);
+        e.setAttribute(sets[i][1], sets[i][2]);
+        r = e.getAttribute(sets[i][1]);
+        ok(r === exp, name + " attribute = " + r + " expected " + exp);
+        if(sets[i][5] !== undefined) {
+            r = e[sets[i][1]];
+            ok(r === sets[i][5], name + " property = " + r);
+        }
+    }
+
+    for(i = 0; i < unset.length; i++) {
+        var exp = v < 9 ? unset[i][2] : unset[i][3];
+        r = mk(unset[i][0]).getAttribute(unset[i][1]);
+        ok(r === exp, unset[i][0] + " unset " + unset[i][1] + " attribute = " + r + " expected " + exp);
+    }
+
+    e = document.createElement("div");
+    r = e.removeAttribute("id");
+    ok(r === (v < 9 ? false : undefined), "removeAttribute(id) without attribute returned " + r);
+
+    e = document.createElement("div");
+    e.setAttribute("className", "cn");
+    ok(e.className === "", "className after setAttribute(className) = " + e.className);
+    r = e.getAttribute("className");
+    ok(r === "cn", "getAttribute(className) = " + r);
+    e = document.createElement("label");
+    e.setAttribute("htmlFor", "hf");
+    ok(e.htmlFor === "", "htmlFor after setAttribute(htmlFor) = " + e.htmlFor);
+    e.setAttribute("for", "f");
+    ok(e.htmlFor === "f", "htmlFor after setAttribute(for) = " + e.htmlFor);
+    r = e.getAttribute("htmlFor");
+    ok(r === "hf", "getAttribute(htmlFor) = " + r);
+
+    e = document.createElement("div");
+    e.onclick = "a()";
+    e.onclick = function() {};
+    r = e.getAttribute("onclick");
+    ok(r === null, "onclick attribute after function put = " + r);
+    r = e.removeAttribute("onclick");
+    ok(r === (v < 9 ? false : undefined), "removeAttribute(onclick) without attribute returned " + r);
+    ok(v < 9 ? e.onclick === null : typeof(e.onclick) === "function", "onclick after removeAttribute = " + e.onclick);
 });
 
 sync_test("enumerated attribute put", function() {

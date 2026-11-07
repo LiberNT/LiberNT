@@ -164,12 +164,9 @@ static inline EventTarget *get_node_event_prop_target(HTMLDOMNode *node, eventid
     return node->vtbl->get_event_prop_target ? node->vtbl->get_event_prop_target(node, eid) : &node->event_target;
 }
 
-static inline HRESULT set_node_event(HTMLDOMNode *node, eventid_t eid, VARIANT *var)
-{
-    EventTarget *target = get_node_event_prop_target(node, eid);
-
-    return target ? set_event_handler(target, eid, var) : S_OK;
-}
+HRESULT set_node_event(HTMLDOMNode*,eventid_t,VARIANT*);
+void remove_node_event_attr(HTMLDOMNode*,const WCHAR*);
+BOOL is_event_attr(const WCHAR*);
 
 static inline HRESULT get_node_event(HTMLDOMNode *node, eventid_t eid, VARIANT *var)
 {
