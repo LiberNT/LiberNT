@@ -515,14 +515,70 @@ TestHooks(void)
     DestroyWindow(Wnd);
 }
 
+static BOOL
+CursorIsUpscaled(HCURSOR Cursor, LONG Size)
+{
+    BITMAPINFO Info = {{sizeof(BITMAPINFOHEADER)}};
+    LONG Factor = Size / 32, x, y, i, j;
+    BOOL Upscaled = TRUE;
+    HBITMAP Bitmap;
+    HGDIOBJ Old;
+    DWORD *Bits;
+    HDC Dc;
+
+    Info.bmiHeader.biWidth = Size;
+    Info.bmiHeader.biHeight = -Size;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Dc = CreateCompatibleDC(NULL);
+    Bitmap = CreateDIBSection(Dc, &Info, DIB_RGB_COLORS, (void **)&Bits, NULL, 0);
+    if (!Dc || !Bitmap)
+    {
+        if (Bitmap)
+            DeleteObject(Bitmap);
+        if (Dc)
+            DeleteDC(Dc);
+        return FALSE;
+    }
+    Old = SelectObject(Dc, Bitmap);
+    PatBlt(Dc, 0, 0, Size, Size, WHITENESS);
+    DrawIconEx(Dc, 0, 0, Cursor, Size, Size, 0, NULL, DI_NORMAL);
+    GdiFlush();
+    for (y = 0; y < Size && Upscaled; y += Factor)
+    {
+        for (x = 0; x < Size && Upscaled; x += Factor)
+        {
+            for (j = 0; j < Factor && Upscaled; j++)
+            {
+                for (i = 0; i < Factor; i++)
+                {
+                    if (Bits[(y + j) * Size + x + i] != Bits[y * Size + x])
+                    {
+                        Upscaled = FALSE;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    SelectObject(Dc, Old);
+    DeleteObject(Bitmap);
+    DeleteDC(Dc);
+    return Upscaled;
+}
+
 static void
 CheckCursorAndIcon(const char *Context, BOOL Unaware)
 {
-    LONG Cursor = CursorImageSize(LoadCursorW(NULL, (LPCWSTR)IDC_ARROW));
+    HCURSOR Arrow = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
+    LONG Cursor = CursorImageSize(Arrow);
     LONG Icon = CursorImageSize(LoadIconW(NULL, (LPCWSTR)IDI_APPLICATION));
 
     ok(Cursor == GetSystemMetrics(SM_CXCURSOR), "%s arrow cursor %ld pixels, SM_CXCURSOR %d\n", Context, Cursor,
        GetSystemMetrics(SM_CXCURSOR));
+    if (!Unaware && Cursor >= 64 && !(Cursor % 32))
+        ok(!CursorIsUpscaled(Arrow, Cursor), "%s arrow cursor at %ld pixels is the 32 pixel image enlarged %ld times\n",
+           Context, Cursor, Cursor / 32);
     ok(Unaware ? Icon >= GetSystemMetrics(SM_CXICON) : Icon == GetSystemMetrics(SM_CXICON),
        "[P1] %s IDI_APPLICATION %ld pixels, SM_CXICON %d\n", Context, Icon, GetSystemMetrics(SM_CXICON));
 }
