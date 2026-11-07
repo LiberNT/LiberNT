@@ -126,6 +126,9 @@ LogFontW2A(LPLOGFONTA pA, CONST LOGFONTW *pW)
 }
 
 ULONG WINAPI IntGetThreadDpiContext(VOID);
+ULONG WINAPI IntSetThreadDpiContext(ULONG Context);
+
+#define DPI_CONTEXT_SYSTEM_AWARE 0x00000011
 
 BOOL
 WINAPI
@@ -155,6 +158,23 @@ User32IsDpiVirtualThread(VOID)
 {
   return User32IsDpiVirtualizationActive() &&
          (IntGetThreadDpiContext() & 0x0f) == DPI_AWARENESS_UNAWARE;
+}
+
+ULONG
+WINAPI
+User32BeginSystemDpiContext(VOID)
+{
+  if (!User32IsDpiVirtualThread())
+    return 0;
+  return IntSetThreadDpiContext(DPI_CONTEXT_SYSTEM_AWARE | (User32GetSystemDpi() << 8));
+}
+
+VOID
+WINAPI
+User32EndSystemDpiContext(ULONG Previous)
+{
+  if (Previous)
+    IntSetThreadDpiContext(Previous);
 }
 
 static LONG
