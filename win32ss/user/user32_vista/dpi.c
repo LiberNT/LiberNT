@@ -926,8 +926,15 @@ EnableNonClientDpiScaling(
         return FALSE;
     }
 
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    if (GetWindowThreadProcessId(hWnd, NULL) != GetCurrentThreadId() ||
+        (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD) ||
+        NTUSER_DPI_CONTEXT_GET_AWARENESS(NtUserGetWindowDpiAwarenessContext(hWnd)) != DPI_AWARENESS_PER_MONITOR_AWARE)
+    {
+        /* FIXME: the error Windows 11 reports for a child or non per-monitor window is not measured */
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 BOOL
@@ -971,24 +978,65 @@ LogicalToPhysicalPoint(
     return IntValidatePerMonitorDpiPoint(hWnd, Point);
 }
 
-/* ReactOS currently uses physical coordinates for all DPI awareness modes. */
+static BOOL
+IntConvertPerMonitorDpiPoint(
+    _In_ HWND hwnd,
+    _Inout_ POINT *point,
+    _In_ BOOL ToPhysical)
+{
+    RECT Rect;
+    UINT Dpi = User32GetSystemDpi();
+    BOOL Virtual;
+
+    if (!point)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!GetWindowRect(hwnd, &Rect))
+        return FALSE;
+    Virtual = User32IsDpiVirtualizationActive() &&
+              NTUSER_DPI_CONTEXT_GET_AWARENESS(NtUserGetWindowDpiAwarenessContext(hwnd)) == DPI_AWARENESS_UNAWARE;
+    if (User32IsDpiVirtualThread())
+    {
+        Rect.left = MulDiv(Rect.left, Dpi, USER_DEFAULT_SCREEN_DPI);
+        Rect.top = MulDiv(Rect.top, Dpi, USER_DEFAULT_SCREEN_DPI);
+        Rect.right = MulDiv(Rect.right, Dpi, USER_DEFAULT_SCREEN_DPI);
+        Rect.bottom = MulDiv(Rect.bottom, Dpi, USER_DEFAULT_SCREEN_DPI);
+    }
+    if (Virtual && ToPhysical)
+    {
+        Rect.left = MulDiv(Rect.left, USER_DEFAULT_SCREEN_DPI, Dpi);
+        Rect.top = MulDiv(Rect.top, USER_DEFAULT_SCREEN_DPI, Dpi);
+        Rect.right = MulDiv(Rect.right, USER_DEFAULT_SCREEN_DPI, Dpi);
+        Rect.bottom = MulDiv(Rect.bottom, USER_DEFAULT_SCREEN_DPI, Dpi);
+    }
+    if (point->x < Rect.left || point->y < Rect.top || point->x > Rect.right || point->y > Rect.bottom)
+        return FALSE;
+    if (Virtual)
+    {
+        point->x = ToPhysical ? MulDiv(point->x, Dpi, USER_DEFAULT_SCREEN_DPI) : MulDiv(point->x, USER_DEFAULT_SCREEN_DPI, Dpi);
+        point->y = ToPhysical ? MulDiv(point->y, Dpi, USER_DEFAULT_SCREEN_DPI) : MulDiv(point->y, USER_DEFAULT_SCREEN_DPI, Dpi);
+    }
+    return TRUE;
+}
+
 BOOL
 WINAPI
 LogicalToPhysicalPointForPerMonitorDPI(
     _In_ HWND hwnd,
     _Inout_ POINT *point)
 {
-    return IntValidatePerMonitorDpiPoint(hwnd, point);
+    return IntConvertPerMonitorDpiPoint(hwnd, point, TRUE);
 }
 
-/* ReactOS currently uses physical coordinates for all DPI awareness modes. */
 BOOL
 WINAPI
 PhysicalToLogicalPointForPerMonitorDPI(
     _In_ HWND hwnd,
     _Inout_ POINT *point)
 {
-    return IntValidatePerMonitorDpiPoint(hwnd, point);
+    return IntConvertPerMonitorDpiPoint(hwnd, point, FALSE);
 }
 
 BOOL
