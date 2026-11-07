@@ -19,6 +19,7 @@
 #include <ntstrsafe.h>
 #define NDEBUG
 #include <debug.h>
+#include "../devtree.h"
 
 extern VOID HalpPciLogEcamCoverage(VOID);
 
@@ -32,6 +33,8 @@ NTSYSAPI NTSTATUS NTAPI NtShutdownSystem(_In_ SHUTDOWN_ACTION Action);
 
 PHALP_ACPI_MCFG_ALLOCATION HalpAcpiMcfgAllocations;
 ULONG HalpAcpiMcfgAllocationCount;
+HALP_ARM64_PCI_WINDOW HalpArm64PciWindows[HALP_ARM64_MAX_PCI_WINDOWS];
+ULONG HalpArm64PciWindowCount;
 #define HALP_ACPI_MAX_MCFG_ALLOCATIONS 32
 static HALP_ACPI_MCFG_ALLOCATION HalpAcpiMcfgAllocationStorage[HALP_ACPI_MAX_MCFG_ALLOCATIONS];
 volatile LONG HalpAcpiEcamCoverageFlags;
@@ -2315,4 +2318,65 @@ HalpQueryAcpiRootPointer(
     }
 
     return (HalpAcpiRsdpAddress.QuadPart != 0);
+}
+
+VOID
+NTAPI
+HalpAcpiMcfgFromDeviceTree(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    static const PCSTR Compatibles[] = { "pci-host-ecam-generic", "apple,t6020-pcie", "apple,pcie" };
+    RISCV_FDT Fdt;
+    ULONG Node, Parent, Match, Length, FirstBus = 0, LastBus = 255, Segment, ParentCells, Unused, Entry, Flags;
+    ULONG64 Address, Size, BusAddress, CpuAddress, WindowSize;
+    const VOID *Property;
+
+    if ((HalpAcpiMcfgAllocations && HalpAcpiMcfgAllocationCount) || !HalpArm64OpenDeviceTree(LoaderBlock, &Fdt) ||
+        !HalpArm64FindDeviceTreeNode(&Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
+        !RiscvFdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) || !Address)
+        return;
+    Property = RiscvFdtGetProperty(&Fdt, Node, "bus-range", &Length);
+    if (Property && Length == 2 * sizeof(ULONG))
+    {
+        FirstBus = RiscvFdtReadBigEndian32(Property);
+        LastBus = RiscvFdtReadBigEndian32((const UCHAR *)Property + sizeof(ULONG));
+    }
+    if (FirstBus > LastBus || LastBus > 255 || Size < (1ULL << 20))
+        return;
+    if (Size < ((ULONG64)(LastBus - FirstBus + 1) << 20))
+        LastBus = FirstBus + (ULONG)(Size >> 20) - 1;
+    if (!RiscvFdtReadU32(&Fdt, Node, "linux,pci-domain", &Segment) || Segment > MAXUSHORT)
+        Segment = 0;
+    HalpAcpiMcfgAllocationStorage[0].BaseAddress = Address - ((ULONG64)FirstBus << 20);
+    HalpAcpiMcfgAllocationStorage[0].PciSegment = (USHORT)Segment;
+    HalpAcpiMcfgAllocationStorage[0].StartBusNumber = (UCHAR)FirstBus;
+    HalpAcpiMcfgAllocationStorage[0].EndBusNumber = (UCHAR)LastBus;
+    HalpAcpiMcfgAllocationStorage[0].Reserved = 0;
+    HalpAcpiMcfgAllocations = HalpAcpiMcfgAllocationStorage;
+    HalpAcpiMcfgAllocationCount = 1;
+    DPRINT1("HAL: device tree ECAM segment %lu buses %lu-%lu at 0x%I64x\n", Segment, FirstBus, LastBus, Address);
+
+    RiscvFdtGetCellCounts(&Fdt, Parent, &ParentCells, &Unused);
+    Property = RiscvFdtGetProperty(&Fdt, Node, "ranges", &Length);
+    for (Entry = 0; Property && ParentCells <= 2 && (Entry + 1) * (5 + ParentCells) * sizeof(ULONG) <= Length &&
+         HalpArm64PciWindowCount < HALP_ARM64_MAX_PCI_WINDOWS; ++Entry)
+    {
+        ULONG Base = Entry * (5 + ParentCells);
+
+        Flags = RiscvFdtReadBigEndian32((const UCHAR *)Property + Base * sizeof(ULONG));
+        if (!RiscvFdtReadCells(Property, Length, Base + 1, 2, &BusAddress) ||
+            !RiscvFdtReadCells(Property, Length, Base + 3, ParentCells, &CpuAddress) ||
+            !RiscvFdtReadCells(Property, Length, Base + 3 + ParentCells, 2, &WindowSize))
+            break;
+        if (((Flags >> 24) & 3) < 2 || !WindowSize)
+            continue;
+        HalpArm64PciWindows[HalpArm64PciWindowCount].FirstBus = FirstBus;
+        HalpArm64PciWindows[HalpArm64PciWindowCount].LastBus = LastBus;
+        HalpArm64PciWindows[HalpArm64PciWindowCount].BusBase = BusAddress;
+        HalpArm64PciWindows[HalpArm64PciWindowCount].CpuBase = CpuAddress;
+        HalpArm64PciWindows[HalpArm64PciWindowCount].Size = WindowSize;
+        HalpArm64PciWindowCount++;
+        DPRINT1("HAL: PCI buses %lu-%lu window 0x%I64x+0x%I64x at CPU 0x%I64x\n", FirstBus, LastBus, BusAddress,
+                WindowSize, CpuAddress);
+    }
 }

@@ -34,6 +34,20 @@ typedef struct _HALP_ACPI_MCFG_ALLOCATION
 
 extern PHALP_ACPI_MCFG_ALLOCATION HalpAcpiMcfgAllocations;
 extern ULONG HalpAcpiMcfgAllocationCount;
+
+#define HALP_ARM64_MAX_PCI_WINDOWS 8
+
+typedef struct _HALP_ARM64_PCI_WINDOW
+{
+    ULONG FirstBus;
+    ULONG LastBus;
+    ULONG64 BusBase;
+    ULONG64 CpuBase;
+    ULONG64 Size;
+} HALP_ARM64_PCI_WINDOW, *PHALP_ARM64_PCI_WINDOW;
+
+extern HALP_ARM64_PCI_WINDOW HalpArm64PciWindows[HALP_ARM64_MAX_PCI_WINDOWS];
+extern ULONG HalpArm64PciWindowCount;
 extern volatile LONG HalpAcpiEcamCoverageFlags;
 extern BOOLEAN HalpPmTimerInitialized;
 extern GEN_ADDR HalpPm1EventBlocks[2];
