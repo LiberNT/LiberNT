@@ -41,6 +41,7 @@ static CHAR KdpScreenHistory[KdpScreenHistorySize];
 static ULONG KdpScreenHistoryEnd = 0;
 static BOOLEAN KdpScreenHistoryWrapped = FALSE;
 static KSPIN_LOCK KdpScreenSpinLock;
+PKDP_EARLY_SCREEN_ROUTINE KdpEarlyScreenRoutine;
 
 KDP_DEBUG_MODE KdpDebugMode;
 LIST_ENTRY KdProviders = {&KdProviders, &KdProviders};
@@ -505,6 +506,10 @@ KdpScreenPrint(
     {
         (VOID)KdpScreenAcquireDisplay(&InitializeDisplay);
         KdpScreenReplay();
+    }
+    else if (!InbvIsBootDriverInstalled() && KdpEarlyScreenRoutine)
+    {
+        KdpEarlyScreenRoutine(String, Length);
     }
     else
     {
