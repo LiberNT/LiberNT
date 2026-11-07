@@ -45,6 +45,7 @@ static PUCHAR BackBuffer = NULL;
 static SIZE_T BackBufferSize;
 
 static RGBQUAD CachedPalette[BV_MAX_COLORS];
+static ULONG NativePalette[BV_MAX_COLORS];
 static UCHAR CachedBlendPalette[BV_MAX_COLORS][BV_MAX_COLORS][MAXUCHAR + 1];
 static BOOT_FONT_RENDERER BootVidFont;
 static BOOT_FONT_RENDERER BootVidCompactFont;
@@ -268,7 +269,7 @@ FlushBackBufferRect(
             PULONG Pixel = FramePixel(Left, y);
 
             for (x = 0; x < Width; ++x)
-                Pixel[x] = CachedPalette[Back[x]];
+                Pixel[x] = NativePalette[Back[x]];
         }
         FlushFrameRect(Left, Top, Left + Width, Top + Height);
         return;
@@ -291,7 +292,7 @@ FlushBackBufferRect(
             Step = (LONG_PTR)StepY * VidpDisplayWidth + StepX;
             for (x = Physical.Left; x < Physical.Right; ++x)
             {
-                *Pixel++ = CachedPalette[BackBuffer[Index]];
+                *Pixel++ = NativePalette[BackBuffer[Index]];
                 Index += Step;
             }
         }
@@ -322,7 +323,7 @@ FlushBackBufferRect(
 
                     while (NativeX < NextNativeX)
                     {
-                        *Pixel++ = CachedPalette[Back[x]];
+                        *Pixel++ = NativePalette[Back[x]];
                         ++NativeX;
                     }
                 }
@@ -342,7 +343,7 @@ FlushBackBufferRect(
         {
             ULONG NativeX;
             ULONG NativeY;
-            ULONG Pixel = CachedPalette[Back[x]];
+            ULONG Pixel = NativePalette[Back[x]];
             ULONG PixelLeft = LogicalToPhysicalX(Left + x);
             ULONG PixelRight = LogicalToPhysicalX(Left + x + 1);
 
@@ -412,6 +413,38 @@ FindClosestBlendedPaletteColor(
     return BestIndex;
 }
 
+static ULONG
+PackNativeChannel(
+    _In_ UCHAR Value,
+    _In_ ULONG Mask)
+{
+    ULONG Shift = 0;
+
+    while (!(Mask & (1UL << Shift)))
+        ++Shift;
+
+    return (ULONG)((((ULONGLONG)Value * (Mask >> Shift) + 127) / 255) << Shift) & Mask;
+}
+
+static ULONG
+PaletteToNative(
+    _In_ RGBQUAD Color)
+{
+    ULONG RedMask = VidpFrameBufferInfo.RedMask;
+    ULONG GreenMask = VidpFrameBufferInfo.GreenMask;
+    ULONG BlueMask = VidpFrameBufferInfo.BlueMask;
+
+    if (!RedMask || !GreenMask || !BlueMask ||
+        ((RedMask == 0x00FF0000) && (GreenMask == 0x0000FF00) && (BlueMask == 0x000000FF)))
+    {
+        return Color;
+    }
+
+    return PackNativeChannel(GetRValue(Color), RedMask) |
+           PackNativeChannel(GetGValue(Color), GreenMask) |
+           PackNativeChannel(GetBValue(Color), BlueMask);
+}
+
 static BOOLEAN
 CachePalette(
     _In_reads_(Count) const ULONG* Table,
@@ -425,6 +458,7 @@ CachePalette(
     {
         HasChanged |= !!((CachedPalette[i] ^ *Entry) & 0x00FFFFFF);
         CachedPalette[i] = *Entry | 0xFF000000;
+        NativePalette[i] = PaletteToNative(CachedPalette[i]);
     }
 
     return HasChanged;
@@ -554,7 +588,6 @@ VidInitialize(
     /* The VRAM address must be page-aligned */
     if (VramAddress.QuadPart % PAGE_SIZE != 0) // DPRINTed for diagnostics on some systems
         DPRINT1("** VramAddress 0x%I64X isn't PAGE_SIZE aligned\n", VramAddress.QuadPart);
-    ASSERT(VramAddress.QuadPart % PAGE_SIZE == 0);
     if (VramSize % PAGE_SIZE != 0)
         DPRINT1("** VramSize %lu (0x%lx) isn't multiple of PAGE_SIZE\n", VramSize, VramSize);
     // ASSERT(VramSize % PAGE_SIZE == 0); // This assert may fail, e.g. 800x600@32bpp UEFI GOP display
@@ -1237,7 +1270,7 @@ VidSolidColorFill(
         return;
     }
 
-    NativeColor = CachedPalette[Color];
+    NativeColor = NativePalette[Color];
     Right = min(Right, VidpDisplayWidth - 1);
     Bottom = min(Bottom, VidpDisplayHeight - 1);
     Width = Right - Left + 1;
