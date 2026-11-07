@@ -4929,6 +4929,16 @@ void STDMETHODCALLTYPE NativeContext::CopyResource(ID3D11Resource *dst, ID3D11Re
 }
 
 /* Copies into 4:2:0 planar textures are ignored unless every box edge and the destination are even. */
+static bool NativeBoxInside(const NativeTextureInfo *texture, UINT subresource, const D3D11_BOX *box)
+{
+    if (!box) return true;
+    UINT level = subresource % texture->desc.MipLevels, edge = NativeBlockEdge(texture->desc.Format);
+    UINT width = max(1u, texture->desc.Width >> level), height = max(1u, texture->desc.Height >> level);
+    width = (width + edge - 1) / edge * edge;
+    height = (height + edge - 1) / edge * edge;
+    return box->right <= width && box->bottom <= height && box->back <= max(1u, texture->depth >> level);
+}
+
 static bool NativeChromaRegionAligned(DXGI_FORMAT format, const D3D11_BOX *box, UINT x, UINT y)
 {
     /* TODO: the alignment rule for P010, P016 and the other subsampled formats */
@@ -4949,6 +4959,7 @@ void STDMETHODCALLTYPE NativeContext::CopySubresourceRegion(ID3D11Resource *dst,
         Record([=](NativeContext *context) { context->CopySubresourceRegion(destination.Get(), dst_subresource, x, y, z, source.Get(), src_subresource, region.Data()); });
         return;
     }
+    if (box && (box->left >= box->right || box->top >= box->bottom || box->front >= box->back)) return;
 
     if (NativeBuffer *db = GetNativeBuffer(dst, device))
     {
@@ -5056,7 +5067,8 @@ void STDMETHODCALLTYPE NativeContext::UpdateSubresource(ID3D11Resource *resource
     NativeTextureInfo *texture = GetNativeTexture(resource, device, &info);
     if (!texture || !data || texture->desc.Usage != D3D11_USAGE_DEFAULT
             || subresource >= texture->desc.MipLevels * texture->desc.ArraySize) return;
-    if (!NativeChromaRegionAligned(texture->desc.Format, box, 0, 0)) return;
+    /* FIXME: an update box past the subresource is dropped; Windows 11 behaviour (drop or clip) is unmeasured */
+    if (!NativeChromaRegionAligned(texture->desc.Format, box, 0, 0) || !NativeBoxInside(texture, subresource, box)) return;
     NativeLock guard(device);
     NativeWaitPendingRelease(resource, device);
     device->functions.pfnResourceUpdateSubresourceUP(device->driver_device, texture->handle,

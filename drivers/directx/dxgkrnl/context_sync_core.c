@@ -222,7 +222,8 @@ DxgkContextSyncCoreValidate(
                 return STATUS_NOT_SUPPORTED;
         }
     }
-    if (!FencePresent && PayloadValueArray == NULL && PayloadValue != 0)
+    /* Windows ignores the shared fence value of a signal without fence objects. */
+    if (IsWait && !FencePresent && PayloadValueArray == NULL && PayloadValue != 0)
         return STATUS_INVALID_PARAMETER;
     if ((SignalFlags & DXGK_CONTEXT_SYNC_ALLOW_FENCE_REWIND) != 0 && !FencePresent)
         return STATUS_INVALID_PARAMETER;

@@ -127,7 +127,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateDeviceContextState(UINT state_flag
     D3D_FEATURE_LEVEL selected = static_cast<D3D_FEATURE_LEVEL>(0);
     for (UINT i = 0; i < count; ++i)
     {
-        if (levels[i] != D3D_FEATURE_LEVEL_10_0 && levels[i] != D3D_FEATURE_LEVEL_10_1
+        if (levels[i] != D3D_FEATURE_LEVEL_9_1 && levels[i] != D3D_FEATURE_LEVEL_9_2
+                && levels[i] != D3D_FEATURE_LEVEL_9_3 && levels[i] != D3D_FEATURE_LEVEL_10_0
+                && levels[i] != D3D_FEATURE_LEVEL_10_1
                 && levels[i] != D3D_FEATURE_LEVEL_11_0 && levels[i] != D3D_FEATURE_LEVEL_11_1
                 && levels[i] != D3D_FEATURE_LEVEL_12_0 && levels[i] != D3D_FEATURE_LEVEL_12_1) continue;
         if (levels[i] <= feature_level) { selected = levels[i]; break; }
