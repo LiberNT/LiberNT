@@ -262,7 +262,7 @@ CCabinetBand::CreateBand(HWND parent, LPCWSTR className)
 int
 CCabinetBand::Scale(int value) const
 {
-    return MulDiv(value, m_hwnd ? GetDpiForWindow(m_hwnd) : 96, 96);
+    return MulDiv(value, m_hwnd ? GetDpiForWindow(m_hwnd) : GetDpiForSystem(), 96);
 }
 
 BOOL
