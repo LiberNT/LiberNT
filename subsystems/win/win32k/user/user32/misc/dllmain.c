@@ -744,13 +744,13 @@ User32CallSetWndIconsFromKernel(PVOID Arguments, ULONG ArgumentLength)
   {
       ULONG Previous = User32BeginSystemDpiContext();
 
-      Common->hIconSample    = LoadImageW(0, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-      Common->hIconHand      = LoadImageW(0, IDI_HAND,        IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-      Common->hIconQuestion  = LoadImageW(0, IDI_QUESTION,    IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-      Common->hIconBang      = LoadImageW(0, IDI_EXCLAMATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-      Common->hIconNote      = LoadImageW(0, IDI_ASTERISK,    IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-      Common->hIconWindows   = LoadImageW(0, IDI_WINLOGO,     IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-      Common->hIconSmWindows = LoadImageW(0, IDI_WINLOGO, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+      Common->hIconSample    = User32LoadOemImage(IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+      Common->hIconHand      = User32LoadOemImage(IDI_HAND,        IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+      Common->hIconQuestion  = User32LoadOemImage(IDI_QUESTION,    IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+      Common->hIconBang      = User32LoadOemImage(IDI_EXCLAMATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+      Common->hIconNote      = User32LoadOemImage(IDI_ASTERISK,    IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+      Common->hIconWindows   = User32LoadOemImage(IDI_WINLOGO,     IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+      Common->hIconSmWindows = User32LoadOemImage(IDI_WINLOGO, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
       hIconWindows   = Common->hIconWindows;
       hIconSmWindows = Common->hIconSmWindows;
       User32EndSystemDpiContext(Previous);
