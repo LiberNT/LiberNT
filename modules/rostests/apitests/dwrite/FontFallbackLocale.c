@@ -135,6 +135,13 @@ static void TestFullMapping(IDWriteFontFallback *pFallback, const WCHAR *pszName
     }
 }
 
+static BOOL IsUserLocale(const WCHAR *pszLocale)
+{
+    WCHAR szUser[LOCALE_NAME_MAX_LENGTH];
+
+    return GetUserDefaultLocaleName(szUser, _countof(szUser)) && !_wcsicmp(szUser, pszLocale);
+}
+
 START_TEST(FontFallbackLocale)
 {
     static const WCHAR szChineseOnly[] = L"\x9898\x8bbe";
@@ -153,7 +160,10 @@ START_TEST(FontFallbackLocale)
     if (SUCCEEDED(hr))
     {
         TestFullMapping(pFallback, L"Chinese-only, no locale", szChineseOnly, NULL);
+        TestFullMapping(pFallback, L"mixed, zh-CN", szMixed, L"zh-CN");
         TestFullMapping(pFallback, L"mixed, zh-Hans", szMixed, L"zh-Hans");
+        if (IsUserLocale(L"zh-CN"))
+            TestFullMapping(pFallback, L"mixed, no locale, zh-CN user", szMixed, NULL);
         IDWriteFontFallback_Release(pFallback);
     }
     IDWriteFactory2_Release(pFactory);
