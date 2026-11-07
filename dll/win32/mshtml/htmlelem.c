@@ -1052,6 +1052,92 @@ static inline const WCHAR *translate_attr_name(const WCHAR *attr_name, compat_mo
     return attr_name;
 }
 
+static BOOL is_input_state_dispid(HTMLElement *elem, DISPID dispid)
+{
+    nsIDOMHTMLInputElement *nsinput;
+
+    if(dispid != DISPID_IHTMLINPUTELEMENT_VALUE && dispid != DISPID_IHTMLINPUTELEMENT_TYPE)
+        return FALSE;
+    if(NS_FAILED(nsIDOMElement_QueryInterface(elem->dom_element, &IID_nsIDOMHTMLInputElement, (void**)&nsinput)))
+        return FALSE;
+    nsIDOMHTMLInputElement_Release(nsinput);
+    return TRUE;
+}
+
+static BOOL is_content_attr_dispid(HTMLElement *elem, compat_mode_t compat_mode, DISPID dispid)
+{
+    /* Windows 11 IE8 reads input value and type through the property and cannot remove them. */
+    return compat_mode == COMPAT_MODE_IE8 && elem->dom_element && get_dispid_type(dispid) == DISPEXPROP_BUILTIN &&
+           !dispex_builtin_is_noattr(&elem->node.event_target.dispex, dispid) && !is_input_state_dispid(elem, dispid);
+}
+
+static HRESULT get_attr_dispid(HTMLElement *elem, compat_mode_t compat_mode, const WCHAR *name, DWORD flags, DISPID *dispid)
+{
+    if(compat_mode == COMPAT_MODE_IE8 && elem->dom_element &&
+       SUCCEEDED(dispex_get_builtin_attr_id(&elem->node.event_target.dispex, name, dispid)))
+        return S_OK;
+
+    return dispex_get_id(&elem->node.event_target.dispex, translate_attr_name(name, compat_mode), flags, dispid);
+}
+
+static const struct {
+    const WCHAR *tag;
+    const WCHAR *name;
+    const WCHAR *value;
+} ie8_default_attrs[] = {
+    { L"A",      L"shape",       L"" },
+    { L"FORM",   L"encType",     L"application/x-www-form-urlencoded" },
+    { L"FORM",   L"method",      L"get" },
+    { L"IFRAME", L"frameBorder", L"1" },
+    { L"TD",     L"colSpan",     L"1" },
+    { L"TD",     L"rowSpan",     L"1" }
+};
+
+static const struct {
+    const WCHAR *tag;
+    const WCHAR *name;
+} color_attrs[] = {
+    { L"BASEFONT", L"color" },       { L"BODY", L"aLink" },        { L"BODY", L"bgColor" },
+    { L"BODY", L"link" },            { L"BODY", L"text" },         { L"BODY", L"vLink" },
+    { L"FONT", L"color" },           { L"FRAMESET", L"borderColor" }, { L"TABLE", L"bgColor" },
+    { L"TABLE", L"borderColor" },    { L"TBODY", L"bgColor" },     { L"TD", L"bgColor" },
+    { L"TD", L"borderColor" },       { L"TFOOT", L"bgColor" },     { L"TH", L"bgColor" },
+    { L"TH", L"borderColor" },       { L"THEAD", L"bgColor" },     { L"TR", L"bgColor" }
+};
+
+static int find_tag_attr(HTMLElement *elem, const WCHAR *name, const void *table, unsigned cnt, size_t size)
+{
+    const PRUnichar *tag;
+    nsAString tag_str;
+    unsigned i;
+    int ret = -1;
+
+    nsAString_Init(&tag_str, NULL);
+    if(NS_SUCCEEDED(nsIDOMElement_GetTagName(elem->dom_element, &tag_str))) {
+        nsAString_GetData(&tag_str, &tag);
+        for(i = 0; i < cnt; i++) {
+            const WCHAR *const *entry = (const WCHAR *const *)((const char *)table + i * size);
+            if(!wcsicmp(entry[0], tag) && !wcsicmp(entry[1], name)) {
+                ret = i;
+                break;
+            }
+        }
+    }
+    nsAString_Finish(&tag_str);
+    return ret;
+}
+
+static const WCHAR *get_ie8_default_attr(HTMLElement *elem, const WCHAR *name)
+{
+    int i = find_tag_attr(elem, name, ie8_default_attrs, ARRAY_SIZE(ie8_default_attrs), sizeof(*ie8_default_attrs));
+    return i < 0 ? NULL : ie8_default_attrs[i].value;
+}
+
+static BOOL is_color_attr(HTMLElement *elem, const WCHAR *name)
+{
+    return find_tag_attr(elem, name, color_attrs, ARRAY_SIZE(color_attrs), sizeof(*color_attrs)) >= 0;
+}
+
 static HRESULT set_elem_attr_value_by_dispid(HTMLElement *elem, DISPID dispid, VARIANT *v)
 {
     EXCEPINFO ei;
@@ -1079,13 +1165,19 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
     TRACE("(%p)->(%s %s %08lx)\n", This, debugstr_w(strAttributeName), debugstr_variant(&AttributeValue), lFlags);
 
     if(compat_mode < COMPAT_MODE_IE9 || !This->dom_element) {
-        hres = dispex_get_id(&This->node.event_target.dispex, translate_attr_name(strAttributeName, compat_mode),
+        hres = get_attr_dispid(This, compat_mode, strAttributeName,
                 (lFlags&ATTRFLAG_CASESENSITIVE ? fdexNameCaseSensitive : fdexNameCaseInsensitive) | fdexNameEnsure, &dispid);
         if(FAILED(hres))
             return hres;
 
         if(compat_mode >= COMPAT_MODE_IE8 && get_dispid_type(dispid) == DISPEXPROP_BUILTIN) {
-            if(V_VT(&val) != VT_BSTR && V_VT(&val) != VT_NULL) {
+            if(V_VT(&val) == VT_BOOL && is_content_attr_dispid(This, compat_mode, dispid)) {
+                V_VT(&val) = VT_BSTR;
+                V_BSTR(&val) = SysAllocString(V_BOOL(&AttributeValue) ? L"true" : L"false");
+                if(!V_BSTR(&val))
+                    return E_OUTOFMEMORY;
+                needs_free = TRUE;
+            }else if(V_VT(&val) != VT_BSTR && V_VT(&val) != VT_NULL) {
                 LCID lcid = MAKELCID(MAKELANGID(LANG_ENGLISH,SUBLANG_ENGLISH_US),SORT_DEFAULT);
 
                 V_VT(&val) = VT_EMPTY;
@@ -1100,11 +1192,34 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
             }
         }
 
-        /* className and style are special cases */
-        if(compat_mode != COMPAT_MODE_IE8 || !This->dom_element ||
-           (dispid != DISPID_IHTMLELEMENT_CLASSNAME && dispid != DISPID_IHTMLELEMENT_STYLE)) {
+        if(!is_content_attr_dispid(This, compat_mode, dispid)) {
             hres = set_elem_attr_value_by_dispid(This, dispid, &val);
             goto done;
+        }
+
+        if(!wcsicmp(dispex_builtin_attr_name(&This->node.event_target.dispex, dispid), strAttributeName) &&
+           !is_event_attr(strAttributeName)) {
+            switch(dispex_builtin_prop_vt(&This->node.event_target.dispex, dispid)) {
+            case VT_BOOL:
+                if(needs_free)
+                    SysFreeString(V_BSTR(&val));
+                V_VT(&val) = VT_BSTR;
+                V_BSTR(&val) = SysAllocString(strAttributeName);
+                if(!V_BSTR(&val))
+                    return E_OUTOFMEMORY;
+                wcslwr(V_BSTR(&val));
+                needs_free = TRUE;
+                break;
+            case VT_BSTR:
+            case VT_VARIANT:
+                if(V_VT(&val) == VT_BSTR && SUCCEEDED(set_elem_attr_value_by_dispid(This, dispid, &val))) {
+                    hres = S_OK;
+                    goto done;
+                }
+                break;
+            default:
+                break;
+            }
         }
     }
 
@@ -1114,8 +1229,20 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
 
     nsAString_InitDepend(&name_str, strAttributeName);
     nsres = nsIDOMElement_SetAttribute(This->dom_element, &name_str, &value_str);
-    nsAString_Finish(&name_str);
     nsAString_Finish(&value_str);
+    if(NS_SUCCEEDED(nsres) && compat_mode >= COMPAT_MODE_IE9 && is_color_attr(This, strAttributeName)) {
+        VARIANT color;
+
+        hres = elem_get_color_attr(This, strAttributeName, &color);
+        if(SUCCEEDED(hres) && V_VT(&color) == VT_BSTR) {
+            nsAString_InitDepend(&value_str, V_BSTR(&color));
+            nsres = nsIDOMElement_SetAttribute(This->dom_element, &name_str, &value_str);
+            nsAString_Finish(&value_str);
+        }
+        if(SUCCEEDED(hres))
+            VariantClear(&color);
+    }
+    nsAString_Finish(&name_str);
     if(NS_FAILED(nsres))
         WARN("SetAttribute failed: %08lx\n", nsres);
     hres = map_nsresult(nsres);
@@ -1165,8 +1292,8 @@ static HRESULT WINAPI HTMLElement_getAttribute(IHTMLElement *iface, BSTR strAttr
     HTMLElement *This = impl_from_IHTMLElement(iface);
     compat_mode_t compat_mode = dispex_compat_mode(&This->node.event_target.dispex);
     nsAString name_str, value_str;
+    DISPID dispid = DISPID_UNKNOWN;
     nsresult nsres;
-    DISPID dispid;
     HRESULT hres;
 
     TRACE("(%p)->(%s %08lx %p)\n", This, debugstr_w(strAttributeName), lFlags, AttributeValue);
@@ -1175,16 +1302,16 @@ static HRESULT WINAPI HTMLElement_getAttribute(IHTMLElement *iface, BSTR strAttr
         FIXME("Unsupported flags %lx\n", lFlags);
 
     if(compat_mode < COMPAT_MODE_IE9 || !This->dom_element) {
-        hres = dispex_get_id(&This->node.event_target.dispex, translate_attr_name(strAttributeName, compat_mode),
-                             lFlags & ATTRFLAG_CASESENSITIVE ? fdexNameCaseSensitive : fdexNameCaseInsensitive, &dispid);
-        if(FAILED(hres)) {
+        hres = get_attr_dispid(This, compat_mode, strAttributeName,
+                               lFlags & ATTRFLAG_CASESENSITIVE ? fdexNameCaseSensitive : fdexNameCaseInsensitive, &dispid);
+        if(hres == DISP_E_UNKNOWNNAME && compat_mode == COMPAT_MODE_IE8 && This->dom_element) {
+            dispid = DISPID_UNKNOWN;
+        }else if(FAILED(hres)) {
             V_VT(AttributeValue) = VT_NULL;
             return (hres == DISP_E_UNKNOWNNAME) ? S_OK : hres;
         }
 
-        /* className and style are special cases */
-        if(compat_mode != COMPAT_MODE_IE8 || !This->dom_element ||
-           (dispid != DISPID_IHTMLELEMENT_CLASSNAME && dispid != DISPID_IHTMLELEMENT_STYLE)) {
+        if(dispid != DISPID_UNKNOWN && !is_content_attr_dispid(This, compat_mode, dispid)) {
             hres = get_elem_attr_value_by_dispid(This, dispid, AttributeValue);
             if(FAILED(hres))
                 return hres;
@@ -1209,6 +1336,32 @@ static HRESULT WINAPI HTMLElement_getAttribute(IHTMLElement *iface, BSTR strAttr
     nsAString_InitDepend(&value_str, NULL);
     nsres = nsIDOMElement_GetAttribute(This->dom_element, &name_str, &value_str);
     nsAString_Finish(&name_str);
+    if(compat_mode == COMPAT_MODE_IE8 && NS_SUCCEEDED(nsres) && dispid != DISPID_UNKNOWN &&
+       dispex_builtin_prop_vt(&This->node.event_target.dispex, dispid) == VT_BOOL &&
+       !wcsicmp(dispex_builtin_attr_name(&This->node.event_target.dispex, dispid), strAttributeName) &&
+       element_has_attribute(This, strAttributeName)) {
+        nsAString_Finish(&value_str);
+        V_VT(AttributeValue) = VT_BSTR;
+        V_BSTR(AttributeValue) = SysAllocString(strAttributeName);
+        if(!V_BSTR(AttributeValue))
+            return E_OUTOFMEMORY;
+        wcslwr(V_BSTR(AttributeValue));
+        return S_OK;
+    }
+    if(compat_mode == COMPAT_MODE_IE8 && NS_SUCCEEDED(nsres) && !element_has_attribute(This, strAttributeName)) {
+        const WCHAR *def = NULL;
+
+        if(dispid != DISPID_UNKNOWN && dispex_builtin_prop_vt(&This->node.event_target.dispex, dispid) == VT_BOOL)
+            def = L"";
+        else
+            def = get_ie8_default_attr(This, strAttributeName);
+        if(def) {
+            nsAString_Finish(&value_str);
+            V_VT(AttributeValue) = VT_BSTR;
+            V_BSTR(AttributeValue) = SysAllocString(def);
+            return V_BSTR(AttributeValue) ? S_OK : E_OUTOFMEMORY;
+        }
+    }
     return return_nsstr_variant(nsres, &value_str, 0, AttributeValue);
 }
 
@@ -1226,8 +1379,8 @@ static HRESULT WINAPI HTMLElement_removeAttribute(IHTMLElement *iface, BSTR strA
         HTMLAttributeCollection *attrs;
         HTMLDOMAttribute *attr;
 
-        hres = dispex_get_id(&This->node.event_target.dispex, translate_attr_name(strAttributeName, compat_mode),
-                             lFlags & ATTRFLAG_CASESENSITIVE ? fdexNameCaseSensitive : fdexNameCaseInsensitive, &id);
+        hres = get_attr_dispid(This, compat_mode, strAttributeName,
+                               lFlags & ATTRFLAG_CASESENSITIVE ? fdexNameCaseSensitive : fdexNameCaseInsensitive, &id);
         if(hres == DISP_E_UNKNOWNNAME) {
             *pfSuccess = VARIANT_FALSE;
             return S_OK;
@@ -1279,8 +1432,10 @@ static HRESULT WINAPI HTMLElement_removeAttribute(IHTMLElement *iface, BSTR strA
             return S_OK;
         }
 
-        if(compat_mode != COMPAT_MODE_IE8 || !This->dom_element || id != DISPID_IHTMLELEMENT_CLASSNAME)
+        if(!is_content_attr_dispid(This, compat_mode, id))
             return remove_attribute(&This->node.event_target.dispex, id, pfSuccess);
+
+        remove_node_event_attr(&This->node, strAttributeName);
     }
 
     *pfSuccess = element_has_attribute(This, strAttributeName);
@@ -3069,6 +3224,18 @@ static HRESULT WINAPI HTMLElement2_get_tabIndex(IHTMLElement2 *iface, short *p)
     if(NS_FAILED(nsres)) {
         ERR("GetTabIndex failed: %08lx\n", nsres);
         return E_FAIL;
+    }
+
+    if(index == -1) {
+        const PRUnichar *value;
+        nsAString value_str;
+        WCHAR *end;
+
+        nsres = get_elem_attr_value(This->dom_element, L"tabindex", &value_str, &value);
+        if(NS_FAILED(nsres) || (wcstol(value, &end, 10), end == value))
+            index = 0;
+        if(NS_SUCCEEDED(nsres))
+            nsAString_Finish(&value_str);
     }
 
     *p = index;
