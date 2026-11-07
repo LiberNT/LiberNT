@@ -2698,6 +2698,29 @@ HRESULT dispex_next_attr_id(DispatchEx *dispex, DISPID id, DISPID *ret)
     return next_id(dispex, id, FALSE, TRUE, ret);
 }
 
+HRESULT dispex_next_replaced_method(DispatchEx *dispex, DISPID id, DISPID *ret)
+{
+    func_info_t *func = dispex->info->funcs;
+    HRESULT hres;
+
+    if(id != DISPID_STARTENUM) {
+        hres = get_builtin_func(dispex->info, id, &func);
+        if(FAILED(hres))
+            return hres;
+        func++;
+    }
+
+    for(; func < dispex->info->funcs + dispex->info->func_cnt; func++) {
+        if(func->func_disp_idx >= 0 && !is_builtin_value(dispex, func->id)) {
+            *ret = func->id;
+            return S_OK;
+        }
+    }
+
+    *ret = DISPID_STARTENUM;
+    return S_FALSE;
+}
+
 static HRESULT WINAPI DispatchEx_GetNextDispID(IWineJSDispatchHost *iface, DWORD grfdex, DISPID id, DISPID *pid)
 {
     DispatchEx *This = impl_from_IWineJSDispatchHost(iface);

@@ -731,6 +731,7 @@ HRESULT dispex_get_chain_builtin_id(DispatchEx *dispex, const WCHAR *name, DWORD
 HRESULT dispex_get_id(DispatchEx *dispex, const WCHAR *name, DWORD flags, DISPID *pid);
 HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, DISPID *ret);
 HRESULT dispex_next_attr_id(DispatchEx *dispex, DISPID id, DISPID *ret);
+HRESULT dispex_next_replaced_method(DispatchEx*,DISPID,DISPID*);
 HRESULT dispex_prop_name(DispatchEx *dispex, DISPID id, BSTR *ret);
 HRESULT dispex_define_property(DispatchEx *dispex, const WCHAR *name, DWORD flags, VARIANT *v, DISPID *id);
 HRESULT dispex_index_prop_desc(DispatchEx*,DISPID,struct property_info*);
@@ -1557,6 +1558,7 @@ HRESULT elem_string_attr_setter(HTMLElement*,const WCHAR*,const WCHAR*);
 HRESULT elem_put_reflected_string(HTMLElement*,const WCHAR*,BSTR);
 HRESULT elem_get_reflected_string(HTMLElement*,const WCHAR*,BSTR*);
 VARIANT_BOOL element_has_attribute(HTMLElement*,const WCHAR*);
+BOOL is_ie8_attr_specified_default(HTMLElement*,const WCHAR*);
 HRESULT element_remove_attribute(HTMLElement*,const WCHAR*);
 HRESULT elem_get_attr_string(HTMLElement*,const WCHAR*,BSTR*);
 HRESULT elem_put_color_attr(HTMLElement*,const WCHAR*,VARIANT*);
