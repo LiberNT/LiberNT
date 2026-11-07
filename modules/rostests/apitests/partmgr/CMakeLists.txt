@@ -1,7 +1,8 @@
 
 list(APPEND SOURCE
     DriveLayout.c
-    StorDeviceNumber.c)
+    StorDeviceNumber.c
+    VirtioDisk.c)
 
 list(APPEND PCH_SKIP_SOURCE
     testlist.c)
