@@ -1187,9 +1187,51 @@ VmQueryRuns(void)
     WorldDestroy(&World);
 }
 
+static void
+VmRotateLifecycle(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    ULONG64 Base = 0, Reserved = 0;
+    MI_FRAME_NUMBER Mapped[2], Regular[2], Swapped[2], After[2];
+    NTSTATUS Status;
+
+    WorldCreate(&World, 256, 2, 256);
+    World.Machine.StrictTlb = TRUE;
+    ProcessCreate(&World, &Space);
+    WorldAttach(&World, 1, &Space);
+    CHECK(NT_SUCCESS(Alloc(&Space, &Reserved, 2 * PAGE_SIZE, MI_MEM_RESERVE | MI_MEM_ROTATE,
+                           MI_PROT_READWRITE)));
+    CHECK(MiRotateQuery(&Space, Reserved, PAGE_SIZE, Mapped, Regular) == STATUS_INVALID_PAGE_PROTECTION);
+    CHECK(NT_SUCCESS(Free(&Space, Reserved, 0, MI_MEM_RELEASE)));
+    CHECK(NT_SUCCESS(Alloc(&Space, &Base, 2 * PAGE_SIZE, MI_MEM_RESERVE | MI_MEM_COMMIT | MI_MEM_ROTATE,
+                           MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(MiRotateQuery(&Space, Base, 2 * PAGE_SIZE, Mapped, Regular)));
+    CHECK(Mapped[0] == Regular[0] && Mapped[1] == Regular[1] && Regular[0] != Regular[1]);
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base, 0x1234)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + PAGE_SIZE, 0x5678)));
+    Swapped[0] = Regular[1];
+    Swapped[1] = Regular[0];
+    CHECK(NT_SUCCESS(MiRotateApply(&Space, Base, 2 * PAGE_SIZE, Swapped, 0)));
+    CHECK(NT_SUCCESS(MiRotateQuery(&Space, Base, 2 * PAGE_SIZE, Mapped, After)));
+    CHECK(Mapped[0] == Swapped[0] && Mapped[1] == Swapped[1]);
+    CHECK(After[0] == Regular[0] && After[1] == Regular[1]);
+    CHECK(UserRead64(&World, 1, Base, &Status) == 0x5678 && NT_SUCCESS(Status));
+    CHECK(UserRead64(&World, 1, Base + PAGE_SIZE, &Status) == 0x1234 && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(MiRotateApply(&Space, Base, 2 * PAGE_SIZE, NULL, 0)));
+    CHECK(UserRead64(&World, 1, Base, &Status) == 0x1234 && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(Free(&Space, Base, 0, MI_MEM_RELEASE)));
+    CHECK(World.Machine.StaleTlbUses == 0 && World.Machine.BreakBeforeMakeViolations == 0);
+    WorldAttach(&World, 1, NULL);
+    ProcessDestroy(&World, &Space);
+    WorldExpectClean(&World, 256);
+    WorldDestroy(&World);
+}
+
 void
 TestVm(void)
 {
+    VmRotateLifecycle();
     VmWindowsProtection();
     VmExecutableWriteTracking();
     VmDynamicCodeEcExemption();

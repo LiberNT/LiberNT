@@ -9,6 +9,23 @@
 
 #include <nvs/include/mm.h>
 
+static VOID
+MiAssertLargeVad(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
+{
+    ULONG64 Pages = Space->System->Arch->LargePageSize >> PAGE_SHIFT;
+
+    UNREFERENCED_PARAMETER(Pages);
+    UNREFERENCED_PARAMETER(Vad);
+    MI_ASSERT(Pages != 0);
+    MI_ASSERT(Vad->Type == MiVadLarge && Vad->MemCommit);
+    MI_ASSERT(Vad->Node.StartingVpn <= Vad->Node.EndingVpn);
+    MI_ASSERT(Vad->Node.StartingVpn % Pages == 0);
+    MI_ASSERT((Vad->Node.EndingVpn - Vad->Node.StartingVpn + 1) % Pages == 0);
+    MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
+    MI_ASSERT(Vad->CommitCharge == (Vad->Segment == NULL
+              ? (LONG64)(Vad->Node.EndingVpn - Vad->Node.StartingVpn + 1) : 0));
+}
+
 static ULONG
 MiLargeFrame(MI_PTE Pte)
 {
@@ -24,6 +41,7 @@ MiReleaseLargePagesLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
     ULONG Pages = (ULONG)(Arch->LargePageSize >> PAGE_SHIFT);
     ULONG64 Va, End = (Vad->Node.EndingVpn + 1) << PAGE_SHIFT;
 
+    MiAssertLargeVad(Space, Vad);
     for (Va = Vad->Node.StartingVpn << PAGE_SHIFT; Va < End; Va += Arch->LargePageSize)
     {
         ULONG Table, Frame, i;
@@ -32,7 +50,12 @@ MiReleaseLargePagesLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
 
         if (Pte != 0)
         {
+            MI_ASSERT(MiArchPteIsValid(Pte) ? MiArchPteIsBlock(Pte, Arch->LargePageLevel)
+                      : MiSoftKind(Pte) == MiSoftResident);
             Frame = MiLargeFrame(Pte);
+            MI_ASSERT(Pages <= Db->FrameCount && Frame <= Db->FrameCount - Pages);
+            MI_ASSERT(Frame % Pages == 0);
+            MI_ASSERT(MI_ATOMIC_READ64(&Space->LargePages) >= Pages);
             MiArchPteWrite(Slot, 0);
             MiArchTlbInvalidate(Va, Pages, TRUE);
             MI_ATOMIC_ADD32(&Db->Pfn[Table].UsedEntries, -1);
@@ -171,6 +194,8 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
             Status = STATUS_NO_MEMORY;
             break;
         }
+        MI_ASSERT(Pages <= Db->FrameCount && Frame <= Db->FrameCount - Pages);
+        MI_ASSERT(Frame % Pages == 0);
         for (i = 0; Segment == NULL && i < Pages; i++)
         {
             PVOID Mapping = MiArchMapFrame(Frame + i);
@@ -240,6 +265,7 @@ MiCloneLargeViewLocked(PMI_ADDRESS_SPACE Source, PMI_ADDRESS_SPACE Target, PMI_V
     const MI_ARCH_DESCRIPTOR *Arch = Target->System->Arch;
     ULONG64 Va, End = (Vad->Node.EndingVpn + 1) << PAGE_SHIFT;
 
+    MiAssertLargeVad(Target, Vad);
     for (Va = Vad->Node.StartingVpn << PAGE_SHIFT; Va < End; Va += Arch->LargePageSize)
     {
         ULONG Table;
@@ -249,6 +275,7 @@ MiCloneLargeViewLocked(PMI_ADDRESS_SPACE Source, PMI_ADDRESS_SPACE Target, PMI_V
         if (Slot == NULL)
             return STATUS_NO_MEMORY;
         MI_ASSERT(Original != NULL && MiArchPteRead(Original) != 0);
+        MI_ASSERT(MiArchPteRead(Slot) == 0);
         MiPtWrite(Target, Va, Slot, Table, MiArchPteRead(Original));
         MI_ATOMIC_ADD64(&Target->LargePages, Arch->LargePageSize >> PAGE_SHIFT);
     }
@@ -263,6 +290,10 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
     ULONG64 Large = Arch->LargePageSize, Va;
     PMI_VAD Vad = MiVadLocate(Space, Start);
 
+    MI_ASSERT(Vad != NULL);
+    MiAssertLargeVad(Space, Vad);
+    MI_ASSERT(Start >= (Vad->Node.StartingVpn << PAGE_SHIFT) &&
+              End <= ((Vad->Node.EndingVpn + 1) << PAGE_SHIFT) && Start < End);
     if (Vad->Segment != NULL && Protection != MI_PROT_NOACCESS &&
         !MiProtApplyCache(&Protection, MI_PROT_CACHE(Vad->Segment->Protection)))
     {
@@ -286,6 +317,9 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
 
         MI_ASSERT(Slot != NULL);
         Pte = MiArchPteRead(Slot);
+        MI_ASSERT(Pte != 0);
+        MI_ASSERT(MiArchPteIsValid(Pte) ? MiArchPteIsBlock(Pte, Arch->LargePageLevel)
+                  : MiSoftKind(Pte) == MiSoftResident);
         if (Va == Start)
             *OldProtection = MiArchPteIsValid(Pte) ? MiViewPageProtection(Space, NULL, Va, Pte)
                                                   : MiSoftProtection(Pte);
