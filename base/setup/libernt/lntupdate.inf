@@ -1,0 +1,7 @@
+[Version]
+Signature = "$Windows NT$"
+
+[AddReg]
+HKLM,"SOFTWARE\LiberNT\Update","Server",0x00000002,"https://libernt.com/api/update/"
+HKLM,"SOFTWARE\LiberNT\Update","Enabled",0x00010003,1
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Run","LiberNTUpdate",0x00020000,"%SystemRoot%\system32\lntupdate.exe /agent"
