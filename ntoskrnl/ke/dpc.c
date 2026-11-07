@@ -1321,6 +1321,7 @@ KeFlushQueuedDpcs(VOID)
     KDPC Dpc;
     KEVENT Event;
     KIRQL OldIrql;
+    BOOLEAN Inserted;
 
     PAGED_CODE();
     KeInitializeEvent(&Event, SynchronizationEvent, FALSE);
@@ -1339,7 +1340,9 @@ KeFlushQueuedDpcs(VOID)
             else
                 KeInitializeDpc(&Dpc, KiFlushDpcQueueRoutine, &Event);
             KeSetTargetProcessorDpc(&Dpc, (CCHAR)ProcessorIndex);
-            KeInsertQueueDpc(&Dpc, NULL, NULL);
+            Inserted = KeInsertQueueDpc(&Dpc, NULL, NULL);
+            ASSERT(Inserted);
+            UNREFERENCED_PARAMETER(Inserted);
 
             if (DpcType == DPC_NORMAL)
             {
@@ -1421,7 +1424,7 @@ KeGenericCallDpc(IN PKDEFERRED_ROUTINE Routine,
     ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
 
     Count = KeNumberProcessors;
-    ASSERT(Count <= RTL_NUMBER_OF(Flags));
+    ASSERT(Count != 0 && Count <= RTL_NUMBER_OF(Flags));
     for (Index = 0; Index < Count; Index++)
         Flags[Index] = 0;
 
@@ -1435,6 +1438,7 @@ KeGenericCallDpc(IN PKDEFERRED_ROUTINE Routine,
 
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
     CurrentPrcb = KeGetCurrentPrcb();
+    ASSERT(CurrentPrcb->Number < Count);
 
     for (Number = 0; Number < (CCHAR)Count; Number++)
     {
@@ -1468,7 +1472,10 @@ KeSignalCallDpcDone(IN PVOID SystemArgument1)
     //
     // Decrement the barrier, which is actually the processor count
     //
-    InterlockedDecrement((PLONG)SystemArgument1);
+    LONG Remaining = InterlockedDecrement((PLONG)SystemArgument1);
+
+    ASSERT(Remaining >= 0);
+    UNREFERENCED_PARAMETER(Remaining);
 }
 
 /*
@@ -1484,10 +1491,13 @@ KeSignalCallDpcSynchronize(IN PVOID SystemArgument2)
     BOOLEAN First;
 
     Total = Sync->Reverse.TotalProcessors;
+    ASSERT(Total != 0 && Total <= MAXIMUM_PROCESSORS && Sync->Flags != NULL);
     if (Total <= 1)
         return TRUE;
 
     Index = KeGetCurrentProcessorNumber();
+    ASSERT(Index < Total);
+    ASSERT((Sync->Flags[Index] & 0x7fffffffL) == 0);
 
     Sync->Flags[Index] ^= (LONG)0x80000000;
     Flag = Sync->Flags[Index];
