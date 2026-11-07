@@ -299,17 +299,28 @@ UserGetCallerSystemMetrics(ULONG Index)
 
 LONG
 NTAPI
-UserGetWindowSystemMetrics(PWND Window, ULONG Index)
+UserGetWindowViewMetric(PWND Window, ULONG Index)
 {
     PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
 
     ASSERT(Index < SM_CMETRICS);
     if (UserDpiIsVirtualWindow(Window))
-    {
-        return UserDpiToPhysical(UserGetImageMetric(gaiSysMetVirtual, Index,
-                                                    pti && LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA));
-    }
+        return UserGetImageMetric(gaiSysMetVirtual, Index, pti && LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA);
     return UserGetSystemMetrics(Index);
+}
+
+LONG
+NTAPI
+UserWindowViewToPhysical(PWND Window, LONG Value)
+{
+    return UserDpiIsVirtualWindow(Window) ? UserDpiToPhysical(Value) : Value;
+}
+
+LONG
+NTAPI
+UserGetWindowSystemMetrics(PWND Window, ULONG Index)
+{
+    return UserWindowViewToPhysical(Window, UserGetWindowViewMetric(Window, Index));
 }
 
 LONG
