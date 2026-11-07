@@ -65,21 +65,38 @@ SIC_GetMetricsValue(
 }
 
 static INT
+SIC_GetIconSizeMetric(
+    _In_ PCWSTR pszValueName,
+    _In_ INT nDefaultSize)
+{
+    INT nIconSize = SIC_GetMetricsValue(pszValueName, 0);
+    INT nDpi = USER_DEFAULT_SCREEN_DPI;
+    HDC hDC;
+
+    if (nIconSize <= 0)
+        return nDefaultSize;
+
+    hDC = GetDC(NULL);
+    if (hDC)
+    {
+        nDpi = GetDeviceCaps(hDC, LOGPIXELSY);
+        ReleaseDC(NULL, hDC);
+    }
+    return MulDiv(nIconSize, nDpi, USER_DEFAULT_SCREEN_DPI);
+}
+
+static INT
 SIC_GetLargeIconSize(VOID)
 {
     // NOTE: Shell icon size is always square
-    INT nDefaultSize = GetSystemMetrics(SM_CXICON);
-    INT nIconSize = SIC_GetMetricsValue(L"Shell Icon Size", nDefaultSize);
-    return (nIconSize > 0) ? nIconSize : nDefaultSize;
+    return SIC_GetIconSizeMetric(L"Shell Icon Size", GetSystemMetrics(SM_CXICON));
 }
 
 static INT
 SIC_GetSmallIconSize(VOID)
 {
     // NOTE: Shell icon size is always square
-    INT nDefaultSize = GetSystemMetrics(SM_CXSMICON);
-    INT nIconSize = SIC_GetMetricsValue(L"Shell Small Icon Size", nDefaultSize);
-    return (nIconSize > 0) ? nIconSize : nDefaultSize;
+    return SIC_GetIconSizeMetric(L"Shell Small Icon Size", GetSystemMetrics(SM_CXSMICON));
 }
 
 static INT
