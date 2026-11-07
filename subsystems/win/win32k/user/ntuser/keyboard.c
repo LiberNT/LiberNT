@@ -1265,6 +1265,8 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
     if (bIsDown)
     {
+        IntRevokeProcessStartForeground();
+
         /* Update keyboard LEDs */
         IntKeyboardUpdateLeds(wSimpleVk,
                               wScanCode);

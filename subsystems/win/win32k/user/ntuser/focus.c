@@ -1793,6 +1793,7 @@ typedef struct _USER_PROCESS_START
    LONGLONG CreateTime;
    BOOLEAN AllowForeground;
    BOOLEAN ConsoleForeground;
+   BOOLEAN Applied;
 } USER_PROCESS_START, *PUSER_PROCESS_START;
 
 static LIST_ENTRY gProcessStartList = { &gProcessStartList, &gProcessStartList };
@@ -1855,6 +1856,7 @@ IntGetProcessStart(PEPROCESS Process)
    Start->CreateTime = PsGetProcessCreateTimeQuadPart(Process);
    Start->AllowForeground = FALSE;
    Start->ConsoleForeground = FALSE;
+   Start->Applied = FALSE;
    InsertTailList(&gProcessStartList, &Start->ListEntry);
    return Start;
 }
@@ -1872,28 +1874,6 @@ IntIsConsoleForeground(PEPROCESS Process)
    return Start && Start->ConsoleForeground;
 }
 
-static BOOL
-IntCanStartForeground(PEPROCESS Process)
-{
-   PPROCESSINFO ppi = PsGetProcessWin32Process(Process);
-   PUSER_PROCESS_START Start;
-
-   if (!gptiForeground)
-      return TRUE;
-
-   if (ppi &&
-       (gptiForeground->ppi == ppi ||
-        (ptiLastInput && ptiLastInput->ppi == ppi) ||
-        gppiInputProvider == ppi ||
-        (ppi->W32PF_flags & (W32PF_ALLOWFOREGROUNDACTIVATE | W32PF_CONSOLEFOREGROUND))))
-   {
-      return TRUE;
-   }
-
-   Start = IntFindProcessStart(Process);
-   return Start && (Start->AllowForeground || Start->ConsoleForeground);
-}
-
 BOOL FASTCALL
 IntNotifyProcessCreate(PEPROCESS Process, PEPROCESS Creator, BOOL ConsoleApplication)
 {
@@ -1902,7 +1882,7 @@ IntNotifyProcessCreate(PEPROCESS Process, PEPROCESS Creator, BOOL ConsoleApplica
    if (!Start)
       return FALSE;
 
-   Start->AllowForeground = IntCanStartForeground(Creator);
+   Start->AllowForeground = TRUE;
    Start->ConsoleForeground = ConsoleApplication && IntIsConsoleForeground(Creator);
    return TRUE;
 }
@@ -1922,7 +1902,44 @@ IntApplyProcessStart(PPROCESSINFO ppi)
       ppi->W32PF_flags |= W32PF_ALLOWFOREGROUNDACTIVATE;
    if (Start->ConsoleForeground)
       ppi->W32PF_flags |= W32PF_CONSOLEFOREGROUND;
-   IntFreeProcessStart(Start);
+   if (!Start->AllowForeground)
+   {
+      IntFreeProcessStart(Start);
+      return;
+   }
+   Start->ConsoleForeground = FALSE;
+   Start->Applied = TRUE;
+}
+
+VOID FASTCALL
+IntRevokeProcessStartForeground(VOID)
+{
+   PLIST_ENTRY Entry, Next;
+   PUSER_PROCESS_START Start;
+   PEPROCESS Process;
+   PPROCESSINFO ppi;
+
+   for (Entry = gProcessStartList.Flink; Entry != &gProcessStartList; Entry = Next)
+   {
+      Next = Entry->Flink;
+      Start = CONTAINING_RECORD(Entry, USER_PROCESS_START, ListEntry);
+      if (!Start->Applied)
+      {
+         Start->AllowForeground = FALSE;
+         continue;
+      }
+      if (NT_SUCCESS(PsLookupProcessByProcessId(Start->ProcessId, &Process)))
+      {
+         if (PsGetProcessCreateTimeQuadPart(Process) == Start->CreateTime)
+         {
+            ppi = PsGetProcessWin32Process(Process);
+            if (ppi)
+               ppi->W32PF_flags &= ~W32PF_ALLOWFOREGROUNDACTIVATE;
+         }
+         ObDereferenceObject(Process);
+      }
+      IntFreeProcessStart(Start);
+   }
 }
 
 NTSTATUS FASTCALL

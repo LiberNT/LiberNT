@@ -225,6 +225,9 @@ UserSendMouseInputWorker(MOUSEINPUT *pmi, BOOL bInjected)
 
     gppiInputProvider = ((PTHREADINFO)PsGetCurrentThreadWin32Thread())->ppi;
 
+    if (dwFlags & (MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_MIDDLEDOWN | MOUSEEVENTF_XDOWN))
+        IntRevokeProcessStartForeground();
+
     if (bInjected)
         RawInputProcessMouseInput(pmi);
 
