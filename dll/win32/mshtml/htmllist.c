@@ -172,19 +172,6 @@ static HRESULT put_list_type(HTMLElement *elem, BSTR v)
     return elem_put_reflected_string(elem, L"type", (BSTR)type);
 }
 
-static HRESULT put_list_bool(HTMLElement *elem, const WCHAR *name, VARIANT_BOOL v)
-{
-    if(v)
-        return elem_put_reflected_string(elem, name, (BSTR)L"");
-    return element_remove_attribute(elem, name);
-}
-
-static HRESULT get_list_bool(HTMLElement *elem, const WCHAR *name, VARIANT_BOOL *p)
-{
-    *p = element_has_attribute(elem, name);
-    return S_OK;
-}
-
 struct HTMLListElement {
     HTMLElement element;
 
@@ -208,12 +195,12 @@ DISPEX_IDISPATCH_IMPL(HTMLListElement2, IHTMLListElement2,
 
 static HRESULT WINAPI HTMLListElement2_put_compact(IHTMLListElement2 *iface, VARIANT_BOOL v)
 {
-    return put_list_bool(&impl_from_IHTMLListElement2(iface)->element, L"compact", v);
+    return elem_put_bool_attr(&impl_from_IHTMLListElement2(iface)->element, L"compact", v);
 }
 
 static HRESULT WINAPI HTMLListElement2_get_compact(IHTMLListElement2 *iface, VARIANT_BOOL *p)
 {
-    return get_list_bool(&impl_from_IHTMLListElement2(iface)->element, L"compact", p);
+    return elem_get_bool_attr(&impl_from_IHTMLListElement2(iface)->element, L"compact", p);
 }
 
 static const IHTMLListElement2Vtbl HTMLListElement2Vtbl = {
@@ -238,12 +225,12 @@ DISPEX_IDISPATCH_IMPL(HTMLUListElement, IHTMLUListElement,
 
 static HRESULT WINAPI HTMLUListElement_put_compact(IHTMLUListElement *iface, VARIANT_BOOL v)
 {
-    return put_list_bool(&impl_from_IHTMLUListElement(iface)->element, L"compact", v);
+    return elem_put_bool_attr(&impl_from_IHTMLUListElement(iface)->element, L"compact", v);
 }
 
 static HRESULT WINAPI HTMLUListElement_get_compact(IHTMLUListElement *iface, VARIANT_BOOL *p)
 {
-    return get_list_bool(&impl_from_IHTMLUListElement(iface)->element, L"compact", p);
+    return elem_get_bool_attr(&impl_from_IHTMLUListElement(iface)->element, L"compact", p);
 }
 
 static HRESULT WINAPI HTMLUListElement_put_type(IHTMLUListElement *iface, BSTR v)
@@ -280,12 +267,12 @@ DISPEX_IDISPATCH_IMPL(HTMLOListElement, IHTMLOListElement,
 
 static HRESULT WINAPI HTMLOListElement_put_compact(IHTMLOListElement *iface, VARIANT_BOOL v)
 {
-    return put_list_bool(&impl_from_IHTMLOListElement(iface)->element, L"compact", v);
+    return elem_put_bool_attr(&impl_from_IHTMLOListElement(iface)->element, L"compact", v);
 }
 
 static HRESULT WINAPI HTMLOListElement_get_compact(IHTMLOListElement *iface, VARIANT_BOOL *p)
 {
-    return get_list_bool(&impl_from_IHTMLOListElement(iface)->element, L"compact", p);
+    return elem_get_bool_attr(&impl_from_IHTMLOListElement(iface)->element, L"compact", p);
 }
 
 static HRESULT WINAPI HTMLOListElement_put_start(IHTMLOListElement *iface, LONG v)
@@ -334,12 +321,12 @@ DISPEX_IDISPATCH_IMPL(HTMLDListElement, IHTMLDListElement,
 
 static HRESULT WINAPI HTMLDListElement_put_compact(IHTMLDListElement *iface, VARIANT_BOOL v)
 {
-    return put_list_bool(&impl_from_IHTMLDListElement(iface)->element, L"compact", v);
+    return elem_put_bool_attr(&impl_from_IHTMLDListElement(iface)->element, L"compact", v);
 }
 
 static HRESULT WINAPI HTMLDListElement_get_compact(IHTMLDListElement *iface, VARIANT_BOOL *p)
 {
-    return get_list_bool(&impl_from_IHTMLDListElement(iface)->element, L"compact", p);
+    return elem_get_bool_attr(&impl_from_IHTMLDListElement(iface)->element, L"compact", p);
 }
 
 static const IHTMLDListElementVtbl HTMLDListElementVtbl = {
@@ -649,12 +636,12 @@ DISPEX_IDISPATCH_IMPL(HTMLDDElement, IHTMLDDElement,
 
 static HRESULT WINAPI HTMLDDElement_put_noWrap(IHTMLDDElement *iface, VARIANT_BOOL v)
 {
-    return put_list_bool(&impl_from_IHTMLDDElement(iface)->element, L"nowrap", v);
+    return elem_put_bool_attr(&impl_from_IHTMLDDElement(iface)->element, L"nowrap", v);
 }
 
 static HRESULT WINAPI HTMLDDElement_get_noWrap(IHTMLDDElement *iface, VARIANT_BOOL *p)
 {
-    return get_list_bool(&impl_from_IHTMLDDElement(iface)->element, L"nowrap", p);
+    return elem_get_bool_attr(&impl_from_IHTMLDDElement(iface)->element, L"nowrap", p);
 }
 
 static const IHTMLDDElementVtbl HTMLDDElementVtbl = {
@@ -679,12 +666,12 @@ DISPEX_IDISPATCH_IMPL(HTMLDTElement, IHTMLDTElement,
 
 static HRESULT WINAPI HTMLDTElement_put_noWrap(IHTMLDTElement *iface, VARIANT_BOOL v)
 {
-    return put_list_bool(&impl_from_IHTMLDTElement(iface)->element, L"nowrap", v);
+    return elem_put_bool_attr(&impl_from_IHTMLDTElement(iface)->element, L"nowrap", v);
 }
 
 static HRESULT WINAPI HTMLDTElement_get_noWrap(IHTMLDTElement *iface, VARIANT_BOOL *p)
 {
-    return get_list_bool(&impl_from_IHTMLDTElement(iface)->element, L"nowrap", p);
+    return elem_get_bool_attr(&impl_from_IHTMLDTElement(iface)->element, L"nowrap", p);
 }
 
 static const IHTMLDTElementVtbl HTMLDTElementVtbl = {

@@ -4303,7 +4303,6 @@ static void test_attr_collection_builtins(IHTMLDocument2 *doc)
         L"center",    L"cite", L"clear", L"width", NULL,
         L"code",      L"cite", L"dateTime", NULL,
         L"col",       L"align", L"bgColor", L"ch", L"chOff", L"span", L"vAlign", L"width", NULL,
-        L"div",       L"align", L"nofocusrect", L"noWrap", NULL,
         L"embed",     L"align", L"codeBase", L"type", NULL,
         L"fieldset",  L"align", NULL,
         L"font",      L"color", L"face", L"size", NULL,
@@ -4311,7 +4310,6 @@ static void test_attr_collection_builtins(IHTMLDocument2 *doc)
         L"frame",     L"borderColor", L"longDesc", NULL,
         L"frameset",  L"border", L"borderColor", L"cols", L"frameBorder", L"frameSpacing", L"name", L"onafterprint", L"onbeforeprint", L"onbeforeunload", L"onload", L"onunload", L"rows", NULL,
         L"h1",        L"align", L"cite", L"clear", L"width", NULL,
-        L"hr",        L"align", L"color", L"noShade", L"SIZE", L"width", NULL,
         L"i",         L"cite", L"dateTime", NULL,
         L"iframe",    L"longDesc", NULL,
         L"img",       L"longDesc", NULL,
@@ -10964,6 +10962,155 @@ static HRESULT list_elem_put(IHTMLElement *elem, const WCHAR *prop, VARIANT *v, 
     return hres;
 }
 
+static void test_text_block_elements_libernt(IHTMLDocument2 *doc)
+{
+    static const IID * const block_iids[] = {
+        &IID_IHTMLDivElement, &IID_IHTMLSpanElement, &IID_IHTMLHRElement, &IID_IHTMLPhraseElement, &IID_IHTMLPhraseElement2,
+    };
+    static const struct {
+        const WCHAR *tag;
+        const char *qi;
+        const IID *diid;
+    } qi_tests[] = {
+        {L"div",  "1....", &DIID_DispHTMLDivElement},
+        {L"span", ".1.11", &DIID_DispHTMLSpanElement},
+        {L"hr",   "..1..", &DIID_DispHTMLHRElement},
+    };
+    static const struct {
+        const WCHAR *prop;
+        VARTYPE vt;
+        const WCHAR *str;
+        LONG i4;
+        HRESULT hres;
+        const WCHAR *get;
+    } put_tests[] = {
+        {L"width", VT_I4,    NULL,   7,  S_OK,         L"7"},
+        {L"width", VT_BOOL,  NULL,   -1, E_INVALIDARG, L"7"},
+        {L"width", VT_EMPTY, NULL,   0,  E_INVALIDARG, L"7"},
+        {L"width", VT_R8,    NULL,   0,  S_OK,         L"3"},
+        {L"width", VT_BSTR,  L"5px", 0,  S_OK,         L"5"},
+        {L"width", VT_BSTR,  L"50%", 0,  S_OK,         L"50%"},
+        {L"width", VT_BSTR,  L"x",   0,  E_INVALIDARG, L"50%"},
+        {L"width", VT_NULL,  NULL,   0,  S_OK,         NULL},
+        {L"width", VT_BSTR,  L"",    0,  S_OK,         L"1"},
+        {L"size",  VT_BSTR,  L"50%", 0,  S_OK,         L"50"},
+        {L"size",  VT_I4,    NULL,   -2, S_OK,         L"-2"},
+        {L"size",  VT_BSTR,  L"",    0,  S_OK,         NULL},
+    };
+    IHTMLDivElement *div;
+    IHTMLHRElement *hr;
+    IHTMLElement *elem;
+    ITypeInfo *typeinfo;
+    TYPEATTR *typeattr;
+    IUnknown *unk;
+    VARIANT_BOOL b;
+    VARIANT v;
+    HRESULT hres;
+    unsigned i, j;
+    char qi[16];
+    BSTR str;
+
+    for(i = 0; i < ARRAY_SIZE(qi_tests); i++) {
+        elem = test_create_elem(doc, qi_tests[i].tag);
+        for(j = 0; j < ARRAY_SIZE(block_iids); j++) {
+            hres = IHTMLElement_QueryInterface(elem, block_iids[j], (void**)&unk);
+            qi[j] = SUCCEEDED(hres) ? '1' : '.';
+            if(SUCCEEDED(hres))
+                IUnknown_Release(unk);
+        }
+        qi[j] = 0;
+        ok(!strcmp(qi, qi_tests[i].qi), "[%s] qi = %s, expected %s\n", wine_dbgstr_w(qi_tests[i].tag), qi, qi_tests[i].qi);
+        hres = IHTMLElement_GetTypeInfo(elem, 0, 0, &typeinfo);
+        ok(hres == S_OK, "[%s] GetTypeInfo failed: %08lx\n", wine_dbgstr_w(qi_tests[i].tag), hres);
+        hres = ITypeInfo_GetTypeAttr(typeinfo, &typeattr);
+        ok(hres == S_OK, "[%s] GetTypeAttr failed: %08lx\n", wine_dbgstr_w(qi_tests[i].tag), hres);
+        ok(IsEqualGUID(&typeattr->guid, qi_tests[i].diid), "[%s] typeinfo %s\n", wine_dbgstr_w(qi_tests[i].tag),
+           wine_dbgstr_guid(&typeattr->guid));
+        ITypeInfo_ReleaseTypeAttr(typeinfo, typeattr);
+        ITypeInfo_Release(typeinfo);
+        IHTMLElement_Release(elem);
+    }
+
+    elem = test_create_elem(doc, L"div");
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDivElement, (void**)&div);
+    ok(hres == S_OK, "Could not get IHTMLDivElement: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+    str = (void*)0xdeadbeef;
+    hres = IHTMLDivElement_get_align(div, &str);
+    ok(hres == S_OK && !str, "get_align = %08lx %s\n", hres, wine_dbgstr_w(str));
+    str = SysAllocString(L"x");
+    hres = IHTMLDivElement_put_align(div, str);
+    ok(hres == E_INVALIDARG, "put_align(x) = %08lx\n", hres);
+    SysFreeString(str);
+    str = SysAllocString(L"Center");
+    hres = IHTMLDivElement_put_align(div, str);
+    ok(hres == S_OK, "put_align(Center) = %08lx\n", hres);
+    SysFreeString(str);
+    hres = IHTMLDivElement_get_align(div, &str);
+    ok(hres == S_OK && str && !wcscmp(str, L"center"), "get_align = %08lx %s\n", hres, wine_dbgstr_w(str));
+    SysFreeString(str);
+    hres = IHTMLDivElement_put_noWrap(div, VARIANT_TRUE);
+    ok(hres == S_OK, "put_noWrap failed: %08lx\n", hres);
+    hres = IHTMLDivElement_get_noWrap(div, &b);
+    ok(hres == S_OK && b == VARIANT_TRUE, "get_noWrap = %08lx %d\n", hres, b);
+    IHTMLDivElement_Release(div);
+    IHTMLElement_Release(elem);
+
+    elem = test_create_elem(doc, L"hr");
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLHRElement, (void**)&hr);
+    ok(hres == S_OK, "Could not get IHTMLHRElement: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+    V_VT(&v) = VT_EMPTY;
+    hres = IHTMLHRElement_get_width(hr, &v);
+    ok(hres == S_OK && V_VT(&v) == VT_BSTR && !V_BSTR(&v), "get_width = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    for(i = 0; i < ARRAY_SIZE(put_tests); i++) {
+        V_VT(&v) = put_tests[i].vt;
+        if(put_tests[i].vt == VT_BSTR)
+            V_BSTR(&v) = SysAllocString(put_tests[i].str);
+        else if(put_tests[i].vt == VT_I4)
+            V_I4(&v) = put_tests[i].i4;
+        else if(put_tests[i].vt == VT_BOOL)
+            V_BOOL(&v) = put_tests[i].i4 ? VARIANT_TRUE : VARIANT_FALSE;
+        else if(put_tests[i].vt == VT_R8)
+            V_R8(&v) = 3.6;
+        if(!wcscmp(put_tests[i].prop, L"width"))
+            hres = IHTMLHRElement_put_width(hr, v);
+        else
+            hres = IHTMLHRElement_put_size(hr, v);
+        ok(hres == put_tests[i].hres, "[%u] put_%s = %08lx\n", i, wine_dbgstr_w(put_tests[i].prop), hres);
+        VariantClear(&v);
+        if(!wcscmp(put_tests[i].prop, L"width"))
+            hres = IHTMLHRElement_get_width(hr, &v);
+        else
+            hres = IHTMLHRElement_get_size(hr, &v);
+        ok(hres == S_OK && V_VT(&v) == VT_BSTR &&
+           (put_tests[i].get ? V_BSTR(&v) && !wcscmp(V_BSTR(&v), put_tests[i].get) : !V_BSTR(&v)),
+           "[%u] get_%s = %08lx %s\n", i, wine_dbgstr_w(put_tests[i].prop), hres, wine_dbgstr_variant(&v));
+        VariantClear(&v);
+    }
+    V_VT(&v) = VT_I4;
+    V_I4(&v) = 255;
+    hres = IHTMLHRElement_put_color(hr, v);
+    ok(hres == S_OK, "put_color failed: %08lx\n", hres);
+    hres = IHTMLHRElement_get_color(hr, &v);
+    ok(hres == S_OK && V_VT(&v) == VT_BSTR && V_BSTR(&v) && !wcscmp(V_BSTR(&v), L"#0000ff"),
+       "get_color = %08lx %s\n", hres, wine_dbgstr_variant(&v));
+    VariantClear(&v);
+    hres = IHTMLHRElement_put_noShade(hr, VARIANT_TRUE);
+    ok(hres == S_OK, "put_noShade failed: %08lx\n", hres);
+    hres = IHTMLHRElement_get_noShade(hr, &b);
+    ok(hres == S_OK && b == VARIANT_TRUE, "get_noShade = %08lx %d\n", hres, b);
+    IHTMLHRElement_Release(hr);
+    IHTMLElement_Release(elem);
+}
+
 static void test_list_elements_libernt(IHTMLDocument2 *doc)
 {
     static const IID * const list_iids[] = {
@@ -16384,6 +16531,7 @@ START_TEST(dom)
         run_domtest(doc_blank, test_text_elements_libernt);
         run_domtest(doc_blank_ie9, test_text_elements_ie9_libernt);
         run_domtest(doc_blank, test_list_elements_libernt);
+        run_domtest(doc_blank, test_text_block_elements_libernt);
         if(is_ie9plus) {
             compat_mode = COMPAT_IE9;
             run_domtest(doc_blank_ie9, test_doc_open);

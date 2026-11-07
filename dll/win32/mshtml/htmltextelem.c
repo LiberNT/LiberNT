@@ -1,12 +1,13 @@
 /*
  * PROJECT:     LiberNT MSHTML
  * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
- * PURPOSE:     Phrase, block, paragraph, heading, BR, font, basefont and base elements
+ * PURPOSE:     Phrase, span, block, paragraph, heading, div, BR, HR, font, basefont and base elements
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <math.h>
 
 #define COBJMACROS
 
@@ -26,6 +27,19 @@ HRESULT elem_get_attr_string(HTMLElement *elem, const WCHAR *name, BSTR *p)
     if(!elem->dom_element || !element_has_attribute(elem, name))
         return S_OK;
     return elem_string_attr_getter(elem, name, FALSE, p);
+}
+
+HRESULT elem_put_bool_attr(HTMLElement *elem, const WCHAR *name, VARIANT_BOOL v)
+{
+    if(v)
+        return elem_put_reflected_string(elem, name, (BSTR)L"");
+    return element_remove_attribute(elem, name);
+}
+
+HRESULT elem_get_bool_attr(HTMLElement *elem, const WCHAR *name, VARIANT_BOOL *p)
+{
+    *p = element_has_attribute(elem, name);
+    return S_OK;
 }
 
 static HRESULT get_url_attr(HTMLElement *elem, const WCHAR *name, BSTR *p)
@@ -630,6 +644,7 @@ struct HTMLPhraseElement {
     IHTMLPhraseElement IHTMLPhraseElement_iface;
     IHTMLPhraseElement2 IHTMLPhraseElement2_iface;
     IHTMLPhraseElement3 IHTMLPhraseElement3_iface;
+    IHTMLSpanElement IHTMLSpanElement_iface;
 };
 
 static inline HTMLPhraseElement *impl_from_IHTMLPhraseElement(IHTMLPhraseElement *iface)
@@ -722,6 +737,26 @@ static const IHTMLPhraseElement3Vtbl HTMLPhraseElement3Vtbl = {
     HTMLPhraseElement3_get_cite
 };
 
+static inline HTMLPhraseElement *impl_from_IHTMLSpanElement(IHTMLSpanElement *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLPhraseElement, IHTMLSpanElement_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLSpanElement, IHTMLSpanElement,
+                      impl_from_IHTMLSpanElement(iface)->element.node.event_target.dispex)
+
+static const IHTMLSpanElementVtbl HTMLSpanElementVtbl = {
+    HTMLSpanElement_QueryInterface,
+    HTMLSpanElement_AddRef,
+    HTMLSpanElement_Release,
+    HTMLSpanElement_GetTypeInfoCount,
+    HTMLSpanElement_GetTypeInfo,
+    HTMLSpanElement_GetIDsOfNames,
+    HTMLSpanElement_Invoke
+};
+
+static const NodeImplVtbl HTMLSpanElementImplVtbl;
+
 static inline HTMLPhraseElement *HTMLPhraseElement_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLPhraseElement, element.node.event_target.dispex);
@@ -731,6 +766,8 @@ static void *HTMLPhraseElement_query_interface(DispatchEx *dispex, REFIID riid)
 {
     HTMLPhraseElement *This = HTMLPhraseElement_from_DispatchEx(dispex);
 
+    if(This->element.node.vtbl == &HTMLSpanElementImplVtbl && IsEqualGUID(&IID_IHTMLSpanElement, riid))
+        return &This->IHTMLSpanElement_iface;
     if(IsEqualGUID(&IID_IHTMLPhraseElement, riid))
         return &This->IHTMLPhraseElement_iface;
     if(IsEqualGUID(&IID_IHTMLPhraseElement2, riid))
@@ -743,6 +780,13 @@ static void *HTMLPhraseElement_query_interface(DispatchEx *dispex, REFIID riid)
 
 static const NodeImplVtbl HTMLPhraseElementImplVtbl = {
     .clsid                 = &CLSID_HTMLPhraseElement,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const NodeImplVtbl HTMLSpanElementImplVtbl = {
+    .clsid                 = &CLSID_HTMLSpanElement,
     .cpc_entries           = HTMLElement_cpc,
     .clone                 = HTMLElement_clone,
     .get_attr_col          = HTMLElement_get_attr_col
@@ -796,8 +840,16 @@ dispex_static_data_t HTMLQuoteElement_dispex = {
     .init_info    = HTMLPhraseElement_init_dispex_info,
 };
 
-static HRESULT create_phrase_element(HTMLDocumentNode *doc, nsIDOMElement *nselem, dispex_static_data_t *dispex,
-        HTMLElement **elem)
+dispex_static_data_t HTMLSpanElement_dispex = {
+    .id           = OBJID_HTMLSpanElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLPhraseElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLSpanElement_tid,
+    .init_info    = HTMLElement_init_dispex_info,
+};
+
+static HRESULT create_phrase_element(HTMLDocumentNode *doc, nsIDOMElement *nselem, const NodeImplVtbl *vtbl,
+        dispex_static_data_t *dispex, HTMLElement **elem)
 {
     HTMLPhraseElement *ret;
 
@@ -808,7 +860,8 @@ static HRESULT create_phrase_element(HTMLDocumentNode *doc, nsIDOMElement *nsele
     ret->IHTMLPhraseElement_iface.lpVtbl = &HTMLPhraseElementVtbl;
     ret->IHTMLPhraseElement2_iface.lpVtbl = &HTMLPhraseElement2Vtbl;
     ret->IHTMLPhraseElement3_iface.lpVtbl = &HTMLPhraseElement3Vtbl;
-    ret->element.node.vtbl = &HTMLPhraseElementImplVtbl;
+    ret->IHTMLSpanElement_iface.lpVtbl = &HTMLSpanElementVtbl;
+    ret->element.node.vtbl = vtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, dispex);
 
@@ -818,17 +871,22 @@ static HRESULT create_phrase_element(HTMLDocumentNode *doc, nsIDOMElement *nsele
 
 HRESULT HTMLPhraseElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
 {
-    return create_phrase_element(doc, nselem, &HTMLPhraseElement_dispex, elem);
+    return create_phrase_element(doc, nselem, &HTMLPhraseElementImplVtbl, &HTMLPhraseElement_dispex, elem);
 }
 
 HRESULT HTMLModElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
 {
-    return create_phrase_element(doc, nselem, &HTMLModElement_dispex, elem);
+    return create_phrase_element(doc, nselem, &HTMLPhraseElementImplVtbl, &HTMLModElement_dispex, elem);
 }
 
 HRESULT HTMLQuoteElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
 {
-    return create_phrase_element(doc, nselem, &HTMLQuoteElement_dispex, elem);
+    return create_phrase_element(doc, nselem, &HTMLPhraseElementImplVtbl, &HTMLQuoteElement_dispex, elem);
+}
+
+HRESULT HTMLSpanElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    return create_phrase_element(doc, nselem, &HTMLSpanElementImplVtbl, &HTMLSpanElement_dispex, elem);
 }
 
 typedef enum {
@@ -1303,6 +1361,542 @@ HRESULT HTMLBRElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLE
     ret->element.node.vtbl = &HTMLBRElementImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLBRElement_dispex);
+
+    *elem = &ret->element;
+    return S_OK;
+}
+
+struct HTMLDivElement {
+    HTMLElement element;
+
+    IHTMLDivElement IHTMLDivElement_iface;
+};
+
+static inline HTMLDivElement *impl_from_IHTMLDivElement(IHTMLDivElement *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLDivElement, IHTMLDivElement_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLDivElement, IHTMLDivElement,
+                      impl_from_IHTMLDivElement(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLDivElement_put_align(IHTMLDivElement *iface, BSTR v)
+{
+    return put_keyword_attr(&impl_from_IHTMLDivElement(iface)->element, L"align", v, align_keywords);
+}
+
+static HRESULT WINAPI HTMLDivElement_get_align(IHTMLDivElement *iface, BSTR *p)
+{
+    /* FIXME: Gecko serializes the align alias middle as center, so it reads back as center instead of empty */
+    return get_keyword_attr(&impl_from_IHTMLDivElement(iface)->element, L"align", p, align_keywords);
+}
+
+static HRESULT WINAPI HTMLDivElement_put_noWrap(IHTMLDivElement *iface, VARIANT_BOOL v)
+{
+    return elem_put_bool_attr(&impl_from_IHTMLDivElement(iface)->element, L"nowrap", v);
+}
+
+static HRESULT WINAPI HTMLDivElement_get_noWrap(IHTMLDivElement *iface, VARIANT_BOOL *p)
+{
+    return elem_get_bool_attr(&impl_from_IHTMLDivElement(iface)->element, L"nowrap", p);
+}
+
+static const IHTMLDivElementVtbl HTMLDivElementVtbl = {
+    HTMLDivElement_QueryInterface,
+    HTMLDivElement_AddRef,
+    HTMLDivElement_Release,
+    HTMLDivElement_GetTypeInfoCount,
+    HTMLDivElement_GetTypeInfo,
+    HTMLDivElement_GetIDsOfNames,
+    HTMLDivElement_Invoke,
+    HTMLDivElement_put_align,
+    HTMLDivElement_get_align,
+    HTMLDivElement_put_noWrap,
+    HTMLDivElement_get_noWrap
+};
+
+static inline HTMLDivElement *HTMLDivElement_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLDivElement, element.node.event_target.dispex);
+}
+
+static void *HTMLDivElement_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLDivElement *This = HTMLDivElement_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLDivElement, riid))
+        return &This->IHTMLDivElement_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLDivElementImplVtbl = {
+    .clsid                 = &CLSID_HTMLDivElement,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const event_target_vtbl_t HTMLDivElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLDivElement_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+static void HTMLDivElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    HTMLElement_init_dispex_info(info, mode);
+    dispex_info_add_interface(info, IHTMLDivElement_tid, mode >= COMPAT_MODE_IE9 ? align_ie9_hooks : NULL);
+}
+
+dispex_static_data_t HTMLDivElement_dispex = {
+    .id           = OBJID_HTMLDivElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLDivElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLDivElement_tid,
+    .init_info    = HTMLDivElement_init_dispex_info,
+};
+
+HRESULT HTMLDivElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLDivElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLDivElement_iface.lpVtbl = &HTMLDivElementVtbl;
+    ret->element.node.vtbl = &HTMLDivElementImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLDivElement_dispex);
+
+    *elem = &ret->element;
+    return S_OK;
+}
+
+typedef enum {
+    LENGTH_EMPTY,
+    LENGTH_INVALID,
+    LENGTH_VALID
+} length_parse_t;
+
+#define MAX_LENGTH_VALUE 21474836
+#define MAX_LENGTH_MANTISSA 100000000000000000ull
+
+static BOOL is_length_space(WCHAR c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
+static length_parse_t parse_length(const WCHAR *str, BOOL allow_percent, LONGLONG *hundredths, BOOL *percent)
+{
+    BOOL negative = FALSE, digits = FALSE;
+    ULONGLONG mantissa = 0;
+    const WCHAR *ptr;
+    int exp = 2;
+
+    *percent = FALSE;
+    if(!*str)
+        return LENGTH_EMPTY;
+
+    while(is_length_space(*str))
+        str++;
+    if(*str == '-' || *str == '+')
+        negative = *str++ == '-';
+    for(; iswdigit(*str); str++, digits = TRUE) {
+        if(mantissa < MAX_LENGTH_MANTISSA)
+            mantissa = mantissa * 10 + (*str - '0');
+        else
+            exp++;
+    }
+    if(*str == '.') {
+        for(str++; iswdigit(*str); str++, digits = TRUE) {
+            if(mantissa < MAX_LENGTH_MANTISSA) {
+                mantissa = mantissa * 10 + (*str - '0');
+                exp--;
+            }
+        }
+    }
+    if(!digits)
+        return LENGTH_INVALID;
+
+    if(*str == 'e' || *str == 'E') {
+        BOOL exp_negative = FALSE;
+        int e = 0;
+
+        ptr = str + 1;
+        if(*ptr == '-' || *ptr == '+')
+            exp_negative = *ptr++ == '-';
+        if(iswdigit(*ptr)) {
+            for(; iswdigit(*ptr); ptr++) {
+                if(e < 1000)
+                    e = e * 10 + (*ptr - '0');
+            }
+            exp += exp_negative ? -e : e;
+            str = ptr;
+        }
+    }
+
+    for(; exp > 0 && mantissa; exp--) {
+        if(mantissa >= MAX_LENGTH_MANTISSA)
+            break;
+        mantissa *= 10;
+    }
+    for(; exp < 0 && mantissa; exp++)
+        mantissa /= 10;
+    if(mantissa > MAX_LENGTH_MANTISSA)
+        mantissa = MAX_LENGTH_MANTISSA;
+
+    while(is_length_space(*str))
+        str++;
+    *percent = allow_percent && *str == '%';
+    *hundredths = negative ? -(LONGLONG)mantissa : (LONGLONG)mantissa;
+    return LENGTH_VALID;
+}
+
+static void format_length(LONGLONG hundredths, BOOL percent, WCHAR *buf, unsigned size)
+{
+    LONGLONG abs_val;
+
+    if(!percent) {
+        hundredths /= 100;
+        if(hundredths > MAX_LENGTH_VALUE)
+            hundredths = MAX_LENGTH_VALUE;
+        else if(hundredths < -MAX_LENGTH_VALUE)
+            hundredths = -MAX_LENGTH_VALUE;
+        swprintf(buf, size, L"%ld", (LONG)hundredths);
+        return;
+    }
+
+    if(hundredths > 2147483647)
+        hundredths = 2147483647;
+    else if(hundredths < -2147483647 - 1)
+        hundredths = -2147483647 - 1;
+    abs_val = hundredths < 0 ? -hundredths : hundredths;
+    if(!(abs_val % 100))
+        swprintf(buf, size, L"%s%ld%%", hundredths < 0 ? L"-" : L"", (LONG)(abs_val / 100));
+    else if(!(abs_val % 10))
+        swprintf(buf, size, L"%s%ld.%ld%%", hundredths < 0 ? L"-" : L"", (LONG)(abs_val / 100), (LONG)(abs_val % 100 / 10));
+    else
+        swprintf(buf, size, L"%s%ld.%02ld%%", hundredths < 0 ? L"-" : L"", (LONG)(abs_val / 100), (LONG)(abs_val % 100));
+}
+
+static const WCHAR *canonical_length(const WCHAR *value, BOOL allow_percent, const WCHAR *empty, WCHAR *buf, unsigned size)
+{
+    LONGLONG hundredths;
+    BOOL percent;
+
+    switch(parse_length(value, allow_percent, &hundredths, &percent)) {
+    case LENGTH_EMPTY:
+        return empty;
+    case LENGTH_INVALID:
+        return NULL;
+    default:
+        format_length(hundredths, percent, buf, size);
+        return buf;
+    }
+}
+
+static HRESULT put_length_attr(HTMLElement *elem, const WCHAR *name, BOOL allow_percent, const WCHAR *empty, VARIANT *v)
+{
+    LONGLONG hundredths;
+    BOOL percent = FALSE;
+    WCHAR buf[32];
+
+    switch(V_VT(v)) {
+    case VT_NULL:
+        return element_remove_attribute(elem, name);
+    case VT_I4:
+        hundredths = V_I4(v) * 100ll;
+        break;
+    case VT_R8:
+        if(!isfinite(V_R8(v)))
+            return E_INVALIDARG;
+        hundredths = V_R8(v) > 1e15 ? 100000000000000000ll : V_R8(v) < -1e15 ? -100000000000000000ll : (LONGLONG)V_R8(v) * 100;
+        break;
+    case VT_BSTR:
+        switch(parse_length(V_BSTR(v) ? V_BSTR(v) : L"", allow_percent, &hundredths, &percent)) {
+        case LENGTH_EMPTY:
+            if(!empty)
+                return element_remove_attribute(elem, name);
+            return elem_put_reflected_string(elem, name, (BSTR)empty);
+        case LENGTH_INVALID:
+            return E_INVALIDARG;
+        default:
+            break;
+        }
+        break;
+    default:
+        return E_INVALIDARG;
+    }
+
+    format_length(hundredths, percent, buf, ARRAY_SIZE(buf));
+    return elem_put_reflected_string(elem, name, buf);
+}
+
+static HRESULT get_length_attr(HTMLElement *elem, const WCHAR *name, BOOL allow_percent, const WCHAR *empty, VARIANT *p)
+{
+    const WCHAR *canon;
+    WCHAR buf[32];
+    HRESULT hres;
+    BSTR str;
+
+    V_VT(p) = VT_BSTR;
+    V_BSTR(p) = NULL;
+    hres = elem_get_attr_string(elem, name, &str);
+    if(FAILED(hres) || !str)
+        return hres;
+    canon = canonical_length(str, allow_percent, empty, buf, ARRAY_SIZE(buf));
+    SysFreeString(str);
+    if(canon && *canon && !(V_BSTR(p) = SysAllocString(canon)))
+        return E_OUTOFMEMORY;
+    return S_OK;
+}
+
+static const struct {
+    const WCHAR *name;
+    BOOL allow_percent;
+    const WCHAR *empty;
+} hr_length_attrs[] = {
+    { L"width", TRUE,  L"1" },
+    { L"size",  FALSE, NULL }
+};
+
+static int find_hr_length_attr(HTMLElement *elem, const WCHAR *name);
+
+static HRESULT ie9_hr_length_get(DispatchEx *dispex, WORD flags, DISPPARAMS *dp, VARIANT *res, unsigned idx)
+{
+    HRESULT hres;
+
+    if(!(flags & DISPATCH_PROPERTYGET) || (dp && dp->cArgs))
+        return S_FALSE;
+
+    hres = get_length_attr(elem_from_dispex(dispex), hr_length_attrs[idx].name, hr_length_attrs[idx].allow_percent,
+                           hr_length_attrs[idx].empty, res);
+    if(SUCCEEDED(hres) && !V_BSTR(res) && !(V_BSTR(res) = SysAllocString(L"")))
+        hres = E_OUTOFMEMORY;
+    return hres;
+}
+
+static HRESULT ie9_hr_width_hook(DispatchEx *dispex, WORD flags, DISPPARAMS *dp, VARIANT *res,
+        EXCEPINFO *ei, IServiceProvider *caller)
+{
+    return ie9_hr_length_get(dispex, flags, dp, res, 0);
+}
+
+static HRESULT ie9_hr_size_hook(DispatchEx *dispex, WORD flags, DISPPARAMS *dp, VARIANT *res,
+        EXCEPINFO *ei, IServiceProvider *caller)
+{
+    return ie9_hr_length_get(dispex, flags, dp, res, 1);
+}
+
+struct HTMLHRElement {
+    HTMLElement element;
+
+    IHTMLHRElement IHTMLHRElement_iface;
+};
+
+static inline HTMLHRElement *impl_from_IHTMLHRElement(IHTMLHRElement *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLHRElement, IHTMLHRElement_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLHRElement, IHTMLHRElement,
+                      impl_from_IHTMLHRElement(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLHRElement_put_align(IHTMLHRElement *iface, BSTR v)
+{
+    return put_keyword_attr(&impl_from_IHTMLHRElement(iface)->element, L"align", v, align_keywords);
+}
+
+static HRESULT WINAPI HTMLHRElement_get_align(IHTMLHRElement *iface, BSTR *p)
+{
+    return get_keyword_attr(&impl_from_IHTMLHRElement(iface)->element, L"align", p, align_keywords);
+}
+
+static HRESULT WINAPI HTMLHRElement_put_color(IHTMLHRElement *iface, VARIANT v)
+{
+    return elem_put_color_attr(&impl_from_IHTMLHRElement(iface)->element, L"color", &v);
+}
+
+static HRESULT WINAPI HTMLHRElement_get_color(IHTMLHRElement *iface, VARIANT *p)
+{
+    return elem_get_color_attr(&impl_from_IHTMLHRElement(iface)->element, L"color", p);
+}
+
+static HRESULT WINAPI HTMLHRElement_put_noShade(IHTMLHRElement *iface, VARIANT_BOOL v)
+{
+    return elem_put_bool_attr(&impl_from_IHTMLHRElement(iface)->element, L"noshade", v);
+}
+
+static HRESULT WINAPI HTMLHRElement_get_noShade(IHTMLHRElement *iface, VARIANT_BOOL *p)
+{
+    return elem_get_bool_attr(&impl_from_IHTMLHRElement(iface)->element, L"noshade", p);
+}
+
+static HRESULT WINAPI HTMLHRElement_put_width(IHTMLHRElement *iface, VARIANT v)
+{
+    return put_length_attr(&impl_from_IHTMLHRElement(iface)->element, L"width", TRUE, L"1", &v);
+}
+
+static HRESULT WINAPI HTMLHRElement_get_width(IHTMLHRElement *iface, VARIANT *p)
+{
+    return get_length_attr(&impl_from_IHTMLHRElement(iface)->element, L"width", TRUE, L"1", p);
+}
+
+static HRESULT WINAPI HTMLHRElement_put_size(IHTMLHRElement *iface, VARIANT v)
+{
+    return put_length_attr(&impl_from_IHTMLHRElement(iface)->element, L"size", FALSE, NULL, &v);
+}
+
+static HRESULT WINAPI HTMLHRElement_get_size(IHTMLHRElement *iface, VARIANT *p)
+{
+    return get_length_attr(&impl_from_IHTMLHRElement(iface)->element, L"size", FALSE, NULL, p);
+}
+
+static const IHTMLHRElementVtbl HTMLHRElementVtbl = {
+    HTMLHRElement_QueryInterface,
+    HTMLHRElement_AddRef,
+    HTMLHRElement_Release,
+    HTMLHRElement_GetTypeInfoCount,
+    HTMLHRElement_GetTypeInfo,
+    HTMLHRElement_GetIDsOfNames,
+    HTMLHRElement_Invoke,
+    HTMLHRElement_put_align,
+    HTMLHRElement_get_align,
+    HTMLHRElement_put_color,
+    HTMLHRElement_get_color,
+    HTMLHRElement_put_noShade,
+    HTMLHRElement_get_noShade,
+    HTMLHRElement_put_width,
+    HTMLHRElement_get_width,
+    HTMLHRElement_put_size,
+    HTMLHRElement_get_size
+};
+
+static inline HTMLHRElement *HTMLHRElement_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLHRElement, element.node.event_target.dispex);
+}
+
+static void *HTMLHRElement_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLHRElement *This = HTMLHRElement_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLHRElement, riid))
+        return &This->IHTMLHRElement_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLHRElementImplVtbl = {
+    .clsid                 = &CLSID_HTMLHRElement,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const event_target_vtbl_t HTMLHRElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLHRElement_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+static void HTMLHRElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    static const dispex_hook_t hr_ie9_hooks[] = {
+        {DISPID_IHTMLHRELEMENT_ALIGN, ie9_align_hook},
+        {DISPID_IHTMLHRELEMENT_COLOR, ie9_color_hook},
+        {DISPID_IHTMLHRELEMENT_WIDTH, ie9_hr_width_hook},
+        {DISPID_IHTMLHRELEMENT_SIZE, ie9_hr_size_hook},
+        {DISPID_UNKNOWN}
+    };
+
+    HTMLElement_init_dispex_info(info, mode);
+    dispex_info_add_interface(info, IHTMLHRElement_tid, mode >= COMPAT_MODE_IE9 ? hr_ie9_hooks : NULL);
+}
+
+dispex_static_data_t HTMLHRElement_dispex = {
+    .id           = OBJID_HTMLHRElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLHRElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLHRElement_tid,
+    .init_info    = HTMLHRElement_init_dispex_info,
+};
+
+static int find_hr_length_attr(HTMLElement *elem, const WCHAR *name)
+{
+    unsigned i;
+
+    if(elem->node.vtbl != &HTMLHRElementImplVtbl)
+        return -1;
+    for(i = 0; i < ARRAY_SIZE(hr_length_attrs); i++) {
+        if(!wcsicmp(hr_length_attrs[i].name, name))
+            return i;
+    }
+    return -1;
+}
+
+static BOOL is_block_align_attr(HTMLElement *elem, const WCHAR *name)
+{
+    return (elem->node.vtbl == &HTMLHRElementImplVtbl || elem->node.vtbl == &HTMLDivElementImplVtbl) && !wcsicmp(name, L"align");
+}
+
+BOOL is_text_block_attr(HTMLElement *elem, const WCHAR *name)
+{
+    return is_block_align_attr(elem, name) || find_hr_length_attr(elem, name) >= 0;
+}
+
+const WCHAR *text_block_canonical_attr(HTMLElement *elem, const WCHAR *name, const WCHAR *value, WCHAR *buf, unsigned size)
+{
+    int idx = find_hr_length_attr(elem, name);
+
+    if(idx < 0)
+        return NULL;
+    return canonical_length(value, hr_length_attrs[idx].allow_percent, hr_length_attrs[idx].empty, buf, size);
+}
+
+BOOL text_block_attr_is_invalid(HTMLElement *elem, const WCHAR *name)
+{
+    int idx = find_hr_length_attr(elem, name);
+    LONGLONG hundredths;
+    BOOL percent, ret;
+    BSTR str;
+
+    if((idx < 0 && !is_block_align_attr(elem, name)) || FAILED(elem_get_attr_string(elem, name, &str)) || !str)
+        return FALSE;
+    if(idx < 0)
+        ret = *str && !find_keyword(str, align_keywords);
+    else
+        ret = parse_length(str, hr_length_attrs[idx].allow_percent, &hundredths, &percent) == LENGTH_INVALID;
+    SysFreeString(str);
+    return ret;
+}
+
+HRESULT HTMLHRElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLHRElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLHRElement_iface.lpVtbl = &HTMLHRElementVtbl;
+    ret->element.node.vtbl = &HTMLHRElementImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLHRElement_dispex);
 
     *elem = &ret->element;
     return S_OK;

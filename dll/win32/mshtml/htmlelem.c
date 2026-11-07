@@ -94,7 +94,7 @@ static const tag_desc_t tag_descs[] = {
     {L"DEL",            HTMLModElement_Create},
     {L"DFN",            HTMLPhraseElement_Create},
     {L"DIR",            HTMLDirectoryElement_Create},
-    {L"DIV",            HTMLElement_Ctor, div_attr_only_names},
+    {L"DIV",            HTMLDivElement_Create, div_attr_only_names},
     {L"DL",             HTMLDListElement_Create},
     {L"DT",             HTMLDTElement_Create},
     {L"EM",             HTMLPhraseElement_Create},
@@ -115,7 +115,7 @@ static const tag_desc_t tag_descs[] = {
     {L"H6",             HTMLHeaderElement_Create, para_attr_only_names},
     {L"HEAD",           HTMLHeadElement_Create},
     {L"HEADER",         HTMLElement_Ctor},
-    {L"HR",             HTMLElement_Ctor},
+    {L"HR",             HTMLHRElement_Create},
     {L"HTML",           HTMLHtmlElement_Create},
     {L"I",              HTMLPhraseElement_Create},
     {L"IFRAME",         HTMLIFrame_Create},
@@ -156,7 +156,7 @@ static const tag_desc_t tag_descs[] = {
     {L"SELECT",         HTMLSelectElement_Create, select_attr_only_names},
     {L"SMALL",          HTMLPhraseElement_Create},
     {L"SOURCE",         HTMLElement_Ctor},
-    {L"SPAN",           HTMLElement_Ctor, span_attr_only_names},
+    {L"SPAN",           HTMLSpanElement_Create, span_attr_only_names},
     {L"STRIKE",         HTMLPhraseElement_Create},
     {L"STRONG",         HTMLPhraseElement_Create},
     {L"STYLE",          HTMLStyleElement_Create},
@@ -1111,7 +1111,8 @@ static const struct {
     { L"FONT", L"color" },           { L"FRAMESET", L"borderColor" }, { L"TABLE", L"bgColor" },
     { L"TABLE", L"borderColor" },    { L"TBODY", L"bgColor" },     { L"TD", L"bgColor" },
     { L"TD", L"borderColor" },       { L"TFOOT", L"bgColor" },     { L"TH", L"bgColor" },
-    { L"TH", L"borderColor" },       { L"THEAD", L"bgColor" },     { L"TR", L"bgColor" }
+    { L"TH", L"borderColor" },       { L"THEAD", L"bgColor" },     { L"TR", L"bgColor" },
+    { L"HR", L"color" }
 };
 
 static int find_tag_attr(HTMLElement *elem, const WCHAR *name, const void *table, unsigned cnt, size_t size)
@@ -1209,7 +1210,7 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
 
         if(!is_content_attr_dispid(This, compat_mode, dispid)) {
             hres = set_elem_attr_value_by_dispid(This, dispid, &val);
-            if(V_VT(&val) == VT_BSTR && is_list_attr(This, strAttributeName) &&
+            if(V_VT(&val) == VT_BSTR && (is_list_attr(This, strAttributeName) || is_text_block_attr(This, strAttributeName)) &&
                (hres == E_INVALIDARG || hres == DISP_E_TYPEMISMATCH || hres == DISP_E_OVERFLOW ||
                 hres == CTL_E_INVALIDPROPERTYVALUE))
                 goto set_content;
@@ -1264,11 +1265,13 @@ set_content:
     }
     if(NS_SUCCEEDED(nsres) && compat_mode >= COMPAT_MODE_IE8) {
         const WCHAR *canon;
-        WCHAR buf[12];
+        WCHAR buf[32];
         BSTR str;
 
         if(SUCCEEDED(elem_get_attr_string(This, strAttributeName, &str)) && str) {
             canon = list_canonical_attr(This, strAttributeName, str, buf, ARRAY_SIZE(buf));
+            if(!canon)
+                canon = text_block_canonical_attr(This, strAttributeName, str, buf, ARRAY_SIZE(buf));
             if(canon && wcscmp(canon, str)) {
                 nsAString_InitDepend(&value_str, canon);
                 nsres = nsIDOMElement_SetAttribute(This->dom_element, &name_str, &value_str);
@@ -1347,7 +1350,7 @@ static HRESULT WINAPI HTMLElement_getAttribute(IHTMLElement *iface, BSTR strAttr
         }
 
         if(dispid != DISPID_UNKNOWN && !is_content_attr_dispid(This, compat_mode, dispid) &&
-           !list_attr_is_invalid(This, strAttributeName)) {
+           !list_attr_is_invalid(This, strAttributeName) && !text_block_attr_is_invalid(This, strAttributeName)) {
             hres = get_elem_attr_value_by_dispid(This, dispid, AttributeValue);
             if(FAILED(hres))
                 return hres;

@@ -29400,7 +29400,7 @@ dispinterface DispHTMLDivElement
 {
 properties:
 methods:
-    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+    WINE_HTMLDATAELEMENT_DISPINTERFACE_DECL;
 
     [propput, id(DISPID_IHTMLDIVELEMENT_ALIGN), displaybind, bindable]
     void align(BSTR v);
@@ -29413,6 +29413,172 @@ methods:
 
     [propget, id(DISPID_IHTMLDIVELEMENT_NOWRAP), displaybind, bindable]
     VARIANT_BOOL noWrap();
+}
+
+/*****************************************************************************
+ *    HTMLDivElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27e-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLDivElement
+{
+    [default]         dispinterface DispHTMLDivElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLTextContainerEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    [source]          dispinterface HTMLTextContainerEvents2;
+    WINE_HTMLDATAELEMENT_INTERFACES;
+    interface IHTMLDivElement;
+    interface IHTMLControlElement;
+    interface IHTMLTextContainer;
+}
+
+/*****************************************************************************
+ *    IHTMLSpanElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f3f3-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLSpanElement : IDispatch
+{
+}
+
+/*****************************************************************************
+ *    DispHTMLSpanElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f548-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLSpanElement
+{
+properties:
+methods:
+    WINE_HTMLDATAELEMENT_DISPINTERFACE_DECL;
+}
+
+/*****************************************************************************
+ *    HTMLSpanElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f3f5-98b4-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLSpanElement
+{
+    [default]         dispinterface DispHTMLSpanElement;
+    [source, default] dispinterface HTMLElementEvents;
+    WINE_HTMLDATAELEMENT_INTERFACES;
+    interface IHTMLPhraseElement;
+    interface IHTMLSpanElement;
+    interface IHTMLControlElement;
+}
+
+/*****************************************************************************
+ *    IHTMLHRElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f4-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLHRElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    HRESULT align([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    HRESULT noShade([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    HRESULT noShade([out, retval] VARIANT_BOOL *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    HRESULT width([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    HRESULT width([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    HRESULT size([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    HRESULT size([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLHRElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f53d-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLHRElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    void color(VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    VARIANT color();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    void noShade(VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    VARIANT_BOOL noShade();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    void width(VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    VARIANT width();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    void size(VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    VARIANT size();
+}
+
+/*****************************************************************************
+ *    HTMLHRElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f252-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLHRElement
+{
+    [default]         dispinterface DispHTMLHRElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLHRElement;
 }
 
 /*****************************************************************************
