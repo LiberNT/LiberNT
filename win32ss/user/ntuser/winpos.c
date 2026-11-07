@@ -2816,6 +2816,7 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
    PWINPOS_ENTRY Entry;
    RECTL ValidRects[2];
    BOOL Ret = TRUE;
+   BOOL bActivated = FALSE;
    UINT i;
 
    for (i = 0; i < Batch->Count; i++)
@@ -2894,7 +2895,11 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
       Entry = &Batch->Entries[i];
       if (Entry->bActive && Entry->bDeferActivate && IntIsWindow(Entry->WinPos.hwnd))
       {
-         co_WinPosActivateEntry(Entry->Window);
+         if (!bActivated)
+         {
+            co_WinPosActivateEntry(Entry->Window);
+            bActivated = TRUE;
+         }
          if (IntIsWindow(Entry->WinPos.hwnd))
             co_WinPosBatchSyncPaint(Entry);
       }
