@@ -150,6 +150,7 @@ KxAcquireQueuedSpinLock(
     SpinLock = LockQueue->Lock;
     ASSERT(SpinLock != NULL);
     ASSERT(((ULONG_PTR)SpinLock & KX_LOCK_QUEUE_FLAGS) == 0);
+    ASSERT(((ULONG_PTR)LockQueue & KX_LOCK_QUEUE_FLAGS) == 0);
 
     LockQueue->Next = NULL;
     LockQueue->Lock = (PKSPIN_LOCK)((ULONG_PTR)SpinLock | KX_LOCK_QUEUE_WAIT);
@@ -163,6 +164,8 @@ KxAcquireQueuedSpinLock(
         return;
     }
 
+    ASSERT(Predecessor != LockQueue);
+    ASSERT(((ULONG_PTR)Predecessor & KX_LOCK_QUEUE_FLAGS) == 0);
     KxStoreReleasePointer((PVOID volatile *)&Predecessor->Next, LockQueue);
 
     do
@@ -173,7 +176,7 @@ KxAcquireQueuedSpinLock(
         YieldProcessor();
     } while (TRUE);
 
-    ASSERT((QueueState & KX_LOCK_QUEUE_OWNER) != 0);
+    ASSERT(QueueState == ((ULONG_PTR)SpinLock | KX_LOCK_QUEUE_OWNER));
 #else
     UNREFERENCED_PARAMETER(LockQueue);
     KeMemoryBarrierWithoutFence();
@@ -189,7 +192,7 @@ KxReleaseQueuedSpinLock(
     PKSPIN_LOCK SpinLock;
     PKSPIN_LOCK_QUEUE Successor;
 
-    ASSERT(((ULONG_PTR)LockQueue->Lock & KX_LOCK_QUEUE_OWNER) != 0);
+    ASSERT(((ULONG_PTR)LockQueue->Lock & KX_LOCK_QUEUE_FLAGS) == KX_LOCK_QUEUE_OWNER);
 
     SpinLock = (PKSPIN_LOCK)((ULONG_PTR)LockQueue->Lock & ~KX_LOCK_QUEUE_FLAGS);
     ASSERT(SpinLock != NULL);
@@ -216,8 +219,9 @@ KxReleaseQueuedSpinLock(
             YieldProcessor();
         } while (TRUE);
     }
-    ASSERT(((ULONG_PTR)Successor->Lock & ~KX_LOCK_QUEUE_FLAGS) ==
-           (ULONG_PTR)SpinLock);
+    ASSERT(Successor != LockQueue);
+    ASSERT(KxLoadAcquirePointer((PVOID const volatile *)&Successor->Lock) ==
+           ((ULONG_PTR)SpinLock | KX_LOCK_QUEUE_WAIT));
     KxStoreReleasePointer(
         (PVOID volatile *)&Successor->Lock,
         (PVOID)((ULONG_PTR)SpinLock | KX_LOCK_QUEUE_OWNER));
@@ -240,6 +244,7 @@ KxTryToAcquireQueuedSpinLock(
     ULONG_PTR QueueState;
 
     QueueState = (ULONG_PTR)LockQueue->Lock;
+    ASSERT(((ULONG_PTR)LockQueue & KX_LOCK_QUEUE_FLAGS) == 0);
     ASSERT(QueueState != 0);
     if ((QueueState == 0) || (QueueState & KX_LOCK_QUEUE_FLAGS))
     {
