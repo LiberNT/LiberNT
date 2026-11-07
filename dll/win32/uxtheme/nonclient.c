@@ -808,26 +808,21 @@ ThemeFillSolidRect(HDC hDC, const RECT *rect, COLORREF color)
 static BOOL
 ThemeDrawCaptionGlyph(HDC hDC, const RECT *rect, UINT baseId, INT shade, UINT dpi)
 {
-    static const INT frames[] = { 10, 12, 14, 16, 20, 24, 32 };
+    static const struct
+    {
+        UINT MinDpi;
+        INT Size;
+    } glyphFrames[] = { { 192, 28 }, { 144, 24 }, { 120, 20 }, { 0, 16 }, { 0, 12 } };
     INT height = rect->bottom - rect->top;
-    INT size = max(MulDiv(height, 10, CAPTION_BUTTON_HEIGHT_UNITS), MulDiv(12, dpi, 96));
-    INT i;
+    INT size, i;
     HICON icon;
 
-    for (i = 0; i < ARRAYSIZE(frames); i++)
+    for (i = 0; i < ARRAYSIZE(glyphFrames) - 1; i++)
     {
-        if (frames[i] >= size)
-        {
-            size = frames[i];
+        if (dpi >= glyphFrames[i].MinDpi && glyphFrames[i].Size <= height)
             break;
-        }
     }
-    if (size > 32)
-        size = 32;
-    if (size > height)
-        size = height;
-    if (size < 12)
-        size = 12;
+    size = glyphFrames[i].Size;
 
     icon = LoadImageW(hDllInst, MAKEINTRESOURCEW(baseId + shade), IMAGE_ICON, size, size, LR_SHARED);
     if (!icon)
@@ -838,14 +833,16 @@ ThemeDrawCaptionGlyph(HDC hDC, const RECT *rect, UINT baseId, INT shade, UINT dp
 }
 
 static void
-ThemeDrawDarkCaptionButton(PDRAW_CONTEXT pcontext,
-                           CAPTIONBUTTON buttonId,
-                           INT iStateId,
-                           const RECT *rect,
-                           COLORREF background,
-                           BOOL fillNormal,
-                           UINT dpi)
+ThemeDrawCaptionGlyphButton(PDRAW_CONTEXT pcontext,
+                            CAPTIONBUTTON buttonId,
+                            INT iStateId,
+                            const RECT *rect,
+                            COLORREF background,
+                            BOOL fillNormal,
+                            UINT dpi)
 {
+    static const COLORREF foregrounds[] = { RGB(255, 255, 255), RGB(160, 160, 160), RGB(105, 105, 105),
+                                            RGB(0, 0, 0), RGB(146, 146, 146), RGB(224, 224, 224) };
     UINT glyphId = 0;
     INT shade = 0;
     COLORREF foreground;
@@ -853,17 +850,22 @@ ThemeDrawDarkCaptionButton(PDRAW_CONTEXT pcontext,
     HBRUSH oldBrush;
     INT centerX, centerY, radius;
     BOOL fill = fillNormal;
+    BOOL light = (GetRValue(background) * 299 + GetGValue(background) * 587 +
+                  GetBValue(background) * 114) / 1000 >= 128;
+    BOOL closeHighlight = FALSE;
 
     if (iStateId == BUTTON_HOT || iStateId == BUTTON_INACTIVE_HOT)
     {
         background = buttonId == CLOSEBUTTON ? RGB(196, 43, 28)
-                     : ThemeLiftColor(background, CAPTION_BUTTON_HOT_LIFT);
+                     : light ? RGB(233, 233, 233) : ThemeLiftColor(background, CAPTION_BUTTON_HOT_LIFT);
+        closeHighlight = buttonId == CLOSEBUTTON;
         fill = TRUE;
     }
     else if (iStateId == BUTTON_PRESSED || iStateId == BUTTON_INACTIVE_PRESSED)
     {
-        background = buttonId == CLOSEBUTTON ? RGB(176, 39, 25)
-                     : ThemeLiftColor(background, CAPTION_BUTTON_PRESSED_LIFT);
+        background = buttonId == CLOSEBUTTON ? (light ? RGB(200, 64, 49) : RGB(176, 39, 25))
+                     : light ? RGB(237, 237, 237) : ThemeLiftColor(background, CAPTION_BUTTON_PRESSED_LIFT);
+        closeHighlight = buttonId == CLOSEBUTTON;
         fill = TRUE;
     }
 
@@ -871,17 +873,13 @@ ThemeDrawDarkCaptionButton(PDRAW_CONTEXT pcontext,
         ThemeFillSolidRect(pcontext->hDC, rect, background);
 
     if (iStateId == BUTTON_DISABLED || iStateId == BUTTON_INACTIVE_DISABLED)
-        foreground = RGB(105, 105, 105);
+        shade = 2;
     else if (!pcontext->Active && iStateId != BUTTON_INACTIVE_HOT &&
              iStateId != BUTTON_INACTIVE_PRESSED)
-        foreground = RGB(160, 160, 160);
-    else
-        foreground = RGB(255, 255, 255);
-
-    if (iStateId == BUTTON_DISABLED || iStateId == BUTTON_INACTIVE_DISABLED)
-        shade = 2;
-    else if (foreground != RGB(255, 255, 255))
         shade = 1;
+    if (light && !closeHighlight)
+        shade += IDI_CAPTION_CLOSE_LIGHT - IDI_CAPTION_CLOSE;
+    foreground = foregrounds[shade];
 
     switch (buttonId)
     {
@@ -983,9 +981,6 @@ ThemeUseCaptionGlyphs(HTHEME hTheme, INT iPartId, INT iStateId, COLORREF *backgr
         }
     }
     if (FAILED(GetThemeColor(hTheme, WP_CAPTION, FS_ACTIVE, TMT_FILLCOLORHINT, &fill)))
-        return FALSE;
-    /* FIXME: light captions keep the stretched 96-DPI button image, there is no dark caption glyph resource */
-    if ((GetRValue(fill) * 299 + GetGValue(fill) * 587 + GetBValue(fill) * 114) / 1000 >= 128)
         return FALSE;
     *background = fill;
     return TRUE;
@@ -1103,13 +1098,13 @@ ThemeDrawCaptionButton(PDRAW_CONTEXT pcontext,
     }
 
     if (pcontext->DarkMode)
-        ThemeDrawDarkCaptionButton(pcontext, buttonId, iStateId,
-                                   &pwndData->rcCaptionButtons[buttonId],
-                                   ThemeDarkCaptionColor(pcontext), TRUE, ThemeCaptionDpi(pcontext));
+        ThemeDrawCaptionGlyphButton(pcontext, buttonId, iStateId,
+                                    &pwndData->rcCaptionButtons[buttonId],
+                                    ThemeDarkCaptionColor(pcontext), TRUE, ThemeCaptionDpi(pcontext));
     else if (ThemeUseCaptionGlyphs(pcontext->theme, iPartId, iStateId, &background))
-        ThemeDrawDarkCaptionButton(pcontext, buttonId, iStateId,
-                                   &pwndData->rcCaptionButtons[buttonId], background, FALSE,
-                                   ThemeCaptionDpi(pcontext));
+        ThemeDrawCaptionGlyphButton(pcontext, buttonId, iStateId,
+                                    &pwndData->rcCaptionButtons[buttonId], background, FALSE,
+                                    ThemeCaptionDpi(pcontext));
     else if (iPartId == WP_CLOSEBUTTON && !(pcontext->wi.dwStyle & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)))
         ThemeDrawCaptionGroupStart(pcontext, iPartId, iStateId, &pwndData->rcCaptionButtons[buttonId]);
     else
@@ -1291,8 +1286,8 @@ ThemeDwmDrawCaptionButton(HDC hDC, const RECT *prc, UINT Button, ULONG State, BO
         Dpi = GetDpiForSystem();
         if (OldContext)
             SetThreadDpiAwarenessContext(OldContext);
-        ThemeDrawDarkCaptionButton(&context, Buttons[Button], iState, prc,
-                                   ThemeDarkCaptionColor(&context), TRUE, Dpi);
+        ThemeDrawCaptionGlyphButton(&context, Buttons[Button], iState, prc,
+                                    ThemeDarkCaptionColor(&context), TRUE, Dpi);
         return TRUE;
     }
 
@@ -1322,8 +1317,8 @@ ThemeDwmDrawCaptionButton(HDC hDC, const RECT *prc, UINT Button, ULONG State, BO
         context.Active = Active;
         context.wi.dwStyle = WS_CAPTION | WS_SYSMENU | ((State & DWM_CAPTION_STATE_RESTORE) ? WS_MAXIMIZE : 0);
         context.wi.dwExStyle = (State & DWM_CAPTION_STATE_TOOLWINDOW) ? WS_EX_TOOLWINDOW : 0;
-        ThemeDrawDarkCaptionButton(&context, Buttons[Button], iState, prc, Background, FALSE,
-                                   MSSTYLES_GetThemeDPI((PTHEME_CLASS)hTheme));
+        ThemeDrawCaptionGlyphButton(&context, Buttons[Button], iState, prc, Background, FALSE,
+                                    MSSTYLES_GetThemeDPI((PTHEME_CLASS)hTheme));
     }
     else if (iPart == WP_CLOSEBUTTON &&
         (State & DWM_CAPTION_STATE_DISABLED(DWM_CAPTION_BUTTON_MAXIMIZE)) &&
