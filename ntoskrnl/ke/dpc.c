@@ -75,6 +75,22 @@ KiDpcThreadWakeRoutine(
     KeSetEvent(&Prcb->DpcEvent, IO_NO_INCREMENT, FALSE);
 }
 
+static __inline VOID
+KiAssertDpcQueue(
+    _In_ PKDPC_DATA DpcData)
+{
+    UNREFERENCED_PARAMETER(DpcData);
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+    ASSERT((DpcData->DpcQueueDepth == 0) == (DpcData->DpcList.ListHead.Next == NULL));
+    ASSERT((DpcData->DpcList.ListHead.Next == NULL) == (DpcData->DpcList.LastEntry == NULL));
+    ASSERT(DpcData->DpcList.LastEntry == NULL || DpcData->DpcList.LastEntry->Next == NULL);
+#else
+    ASSERT((DpcData->DpcQueueDepth == 0) == IsListEmpty(&DpcData->DpcListHead));
+    ASSERT(DpcData->DpcListHead.Flink->Blink == &DpcData->DpcListHead);
+    ASSERT(DpcData->DpcListHead.Blink->Flink == &DpcData->DpcListHead);
+#endif
+}
+
 static PKDPC
 KiPopThreadedDpc(
     _Inout_ PKDPC_DATA DpcData)
@@ -121,6 +137,7 @@ KiExecuteDpc(
         {
             KeRaiseIrql(HIGH_LEVEL, &OldIrql);
             KiAcquireSpinLock(&DpcData->DpcLock);
+            KiAssertDpcQueue(DpcData);
 
             Dpc = KiPopThreadedDpc(DpcData);
             if (!Dpc)
@@ -131,6 +148,7 @@ KiExecuteDpc(
                 break;
             }
 
+            ASSERT(DpcData->DpcQueueDepth != 0 && Dpc->DpcData == DpcData);
             KiSetDpcThreadActive(Prcb);
             InterlockedOrAffinity((volatile LONG_PTR *)&Dpc->ProcessorHistory, (LONG_PTR)AFFINITY_MASK(Prcb->Number));
             InterlockedExchangePointer(&KiActiveThreadedDpc[Prcb->Number], Dpc);
@@ -140,6 +158,7 @@ KiExecuteDpc(
             SystemArgument1 = Dpc->SystemArgument1;
             SystemArgument2 = Dpc->SystemArgument2;
             DpcData->DpcQueueDepth--;
+            KiAssertDpcQueue(DpcData);
 
             KiReleaseSpinLock(&DpcData->DpcLock);
             KeLowerIrql(OldIrql);
@@ -811,6 +830,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
         {
             /* Lock the DPC data and get the DPC entry*/
             KeAcquireSpinLockAtDpcLevel(&DpcData->DpcLock);
+            KiAssertDpcQueue(DpcData);
 
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
             /* Vista+: KDPC_LIST uses SINGLE_LIST_ENTRY */
@@ -845,6 +865,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
                 Dpc = CONTAINING_RECORD(DpcEntry, KDPC, DpcListEntry);
 #endif
 
+                ASSERT(DpcData->DpcQueueDepth != 0 && Dpc->DpcData == DpcData);
                 /* Clear its DPC data and save its parameters */
                 KiBeginDpcExecution(Prcb, Dpc);
                 Dpc->DpcData = NULL;
@@ -855,6 +876,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
 
                 /* Decrease the queue depth */
                 DpcData->DpcQueueDepth--;
+                KiAssertDpcQueue(DpcData);
 
 #if DBG
                 /* Clear DPC Time */
@@ -1028,6 +1050,7 @@ KeInsertQueueDpc(IN PKDPC Dpc,
 
     /* Acquire the DPC lock */
     KiAcquireSpinLock(&DpcData->DpcLock);
+    KiAssertDpcQueue(DpcData);
 
     /* Get the DPC Data */
     if (!InterlockedCompareExchangePointer(&Dpc->DpcData, DpcData, NULL))
@@ -1130,6 +1153,7 @@ KeInsertQueueDpc(IN PKDPC Dpc,
         }
     }
 
+    KiAssertDpcQueue(DpcData);
     /* Release the lock */
     KiReleaseSpinLock(&DpcData->DpcLock);
 
@@ -1179,10 +1203,12 @@ KiRemoveQueueDpc(IN PKDPC Dpc)
     {
         /* Acquire the DPC lock */
         KiAcquireSpinLock(&DpcData->DpcLock);
+        KiAssertDpcQueue(DpcData);
 
         /* Make sure that the data didn't change */
         if (DpcData == Dpc->DpcData)
         {
+            ASSERT(DpcData->DpcQueueDepth != 0);
             /* Remove the DPC */
             DpcData->DpcQueueDepth--;
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
@@ -1191,6 +1217,7 @@ KiRemoveQueueDpc(IN PKDPC Dpc)
                 PSINGLE_LIST_ENTRY Prev = &DpcData->DpcList.ListHead;
                 PSINGLE_LIST_ENTRY Cur = (PSINGLE_LIST_ENTRY)&Dpc->DpcListEntry;
                 while (Prev->Next && Prev->Next != Cur) Prev = Prev->Next;
+                ASSERT(Prev->Next == Cur);
                 if (Prev->Next == Cur)
                 {
                     Prev->Next = Cur->Next;
@@ -1205,6 +1232,7 @@ KiRemoveQueueDpc(IN PKDPC Dpc)
             Removed = TRUE;
         }
 
+        KiAssertDpcQueue(DpcData);
         /* Release the lock */
         KiReleaseSpinLock(&DpcData->DpcLock);
     }

@@ -69,6 +69,8 @@ KeWaitForGate(IN PKGATE Gate,
 
             /* Lock the gate */
             KiAcquireDispatcherObject(&Gate->Header);
+            ASSERT(Gate->Header.SignalState == 0 || Gate->Header.SignalState == 1);
+            ASSERT(Gate->Header.SignalState == 0 || IsListEmpty(&Gate->Header.WaitListHead));
 
             /* Check if it's already signaled */
             if (Gate->Header.SignalState)
@@ -158,6 +160,8 @@ KeSignalGateBoostPriority(IN PKGATE Gate)
 
         /* Lock the gate */
         KiAcquireDispatcherObject(&Gate->Header);
+        ASSERT(Gate->Header.SignalState == 0 || Gate->Header.SignalState == 1);
+        ASSERT(Gate->Header.SignalState == 0 || IsListEmpty(&Gate->Header.WaitListHead));
 
         /* Make sure we're not already signaled or that the list is empty */
         if (Gate->Header.SignalState) break;
@@ -189,6 +193,10 @@ KeSignalGateBoostPriority(IN PKGATE Gate)
                 KeLowerIrql(OldIrql);
                 continue;
             }
+
+            ASSERT(WaitThread->State == GateWait);
+            ASSERT(WaitBlock == &WaitThread->WaitBlock[0]);
+            ASSERT(WaitBlock->Object == Gate);
 
             /* Remove it */
             RemoveEntryList(&WaitBlock->WaitListEntry);

@@ -1907,6 +1907,20 @@ KiCompleteThreadSwitch(
 // This routine must be entered with the PRCB lock held and it will exit
 // with the PRCB lock released!
 //
+FORCEINLINE
+VOID
+KiAssertReadyQueue(IN PKPRCB Prcb,
+                   IN KPRIORITY Priority)
+{
+    UNREFERENCED_PARAMETER(Prcb);
+    UNREFERENCED_PARAMETER(Priority);
+    ASSERT(Priority >= 0 && Priority <= HIGH_PRIORITY);
+    ASSERT(((Prcb->ReadySummary & PRIORITY_MASK(Priority)) == 0) ==
+           IsListEmpty(&Prcb->DispatcherReadyListHead[Priority]));
+    ASSERT(Prcb->DispatcherReadyListHead[Priority].Flink->Blink == &Prcb->DispatcherReadyListHead[Priority]);
+    ASSERT(Prcb->DispatcherReadyListHead[Priority].Blink->Flink == &Prcb->DispatcherReadyListHead[Priority]);
+}
+
 _Requires_lock_held_(Prcb->PrcbLock)
 _Releases_lock_(Prcb->PrcbLock)
 FORCEINLINE
@@ -1955,6 +1969,7 @@ KxQueueReadyThread(IN PKTHREAD Thread,
 
         /* Sanity check */
         ASSERT((Priority >= 0) && (Priority <= HIGH_PRIORITY));
+        KiAssertReadyQueue(Prcb, Priority);
 
         /* Insert this thread in the appropriate order */
         Preempted ? InsertHeadList(&Prcb->DispatcherReadyListHead[Priority],
@@ -1964,6 +1979,7 @@ KxQueueReadyThread(IN PKTHREAD Thread,
 
         /* Update the ready summary */
         Prcb->ReadySummary |= PRIORITY_MASK(Priority);
+        KiAssertReadyQueue(Prcb, Priority);
 
         /* Sanity check */
         ASSERT(Priority == Thread->Priority);
@@ -2007,6 +2023,7 @@ KiSelectReadyThread(IN KPRIORITY Priority,
 
     /* Make sure the list isn't empty at the highest priority */
     ASSERT(IsListEmpty(&Prcb->DispatcherReadyListHead[HighPriority]) == FALSE);
+    KiAssertReadyQueue(Prcb, HighPriority);
 
     /* Get the first thread on the list */
     ListEntry = Prcb->DispatcherReadyListHead[HighPriority].Flink;
@@ -2023,6 +2040,7 @@ KiSelectReadyThread(IN KPRIORITY Priority,
         /* The list is empty now, reset the ready summary */
         Prcb->ReadySummary ^= PRIORITY_MASK(HighPriority);
     }
+    KiAssertReadyQueue(Prcb, HighPriority);
 
     /* Sanity check and return the thread */
 Quickie:

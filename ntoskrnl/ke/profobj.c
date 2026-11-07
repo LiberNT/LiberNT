@@ -70,6 +70,11 @@ KeStartProfile(IN PKPROFILE Profile,
     KeRaiseIrql(KiProfileIrql, &OldIrql);
     KeAcquireSpinLockAtDpcLevel(&KiProfileLock);
 
+    ASSERT(Profile->Type == ProfileObject);
+    ASSERT(Profile->Size == sizeof(KPROFILE));
+    ASSERT(KiProfileSourceListHead.Flink->Blink == &KiProfileSourceListHead);
+    ASSERT(KiProfileSourceListHead.Blink->Flink == &KiProfileSourceListHead);
+
     /* Make sure it's not running */
     if (!Profile->Started)
     {
@@ -103,6 +108,10 @@ KeStartProfile(IN PKPROFILE Profile,
                                               KPROFILE_SOURCE_OBJECT,
                                               ListEntry);
 
+            ASSERT(NextEntry->Flink->Blink == NextEntry);
+            ASSERT(NextEntry->Blink->Flink == NextEntry);
+            ASSERT(CurrentSource->ReferenceCount != 0);
+
             /* Check if it's the same as the one being requested now */
             if (CurrentSource->Source == Profile->Source)
             {
@@ -126,6 +135,9 @@ KeStartProfile(IN PKPROFILE Profile,
             FreeBuffer = FALSE;
         }
 
+        ASSERT(Profile->ProfileListEntry.Flink->Blink == &Profile->ProfileListEntry);
+        ASSERT(Profile->ProfileListEntry.Blink->Flink == &Profile->ProfileListEntry);
+        ASSERT(CurrentSource->ReferenceCount != MAXULONG);
         if (++CurrentSource->ReferenceCount == 1)
             HalStartProfileInterrupt(Profile->Source);
     }
@@ -161,9 +173,17 @@ KeStopProfile(IN PKPROFILE Profile)
     KeRaiseIrql(KiProfileIrql, &OldIrql);
     KeAcquireSpinLockAtDpcLevel(&KiProfileLock);
 
+    ASSERT(Profile->Type == ProfileObject);
+    ASSERT(Profile->Size == sizeof(KPROFILE));
+    ASSERT(KiProfileSourceListHead.Flink->Blink == &KiProfileSourceListHead);
+    ASSERT(KiProfileSourceListHead.Blink->Flink == &KiProfileSourceListHead);
+
     /* Make sure it's running */
     if (Profile->Started)
     {
+        ASSERT(Profile->ProfileListEntry.Flink->Blink == &Profile->ProfileListEntry);
+        ASSERT(Profile->ProfileListEntry.Blink->Flink == &Profile->ProfileListEntry);
+
         /* Remove it from the list and disable */
         RemoveEntryList(&Profile->ProfileListEntry);
         Profile->Started = FALSE;
@@ -179,6 +199,10 @@ KeStopProfile(IN PKPROFILE Profile)
                                               KPROFILE_SOURCE_OBJECT,
                                               ListEntry);
 
+            ASSERT(NextEntry->Flink->Blink == NextEntry);
+            ASSERT(NextEntry->Blink->Flink == NextEntry);
+            ASSERT(CurrentSource->ReferenceCount != 0);
+
             /* Check if this is the Source Object */
             if (CurrentSource->Source == Profile->Source)
             {
@@ -192,7 +216,7 @@ KeStopProfile(IN PKPROFILE Profile)
                 break;
             }
         }
-
+        ASSERT(NextEntry != &KiProfileSourceListHead);
     }
     else
     {
@@ -319,6 +343,9 @@ KiParseProfileList(IN PKTRAP_FRAME TrapFrame,
     {
         /* Get the entry */
         Profile = CONTAINING_RECORD(NextEntry, KPROFILE, ProfileListEntry);
+        ASSERT(NextEntry->Flink->Blink == NextEntry);
+        ASSERT(NextEntry->Blink->Flink == NextEntry);
+        ASSERT(Profile->Type == ProfileObject && Profile->Started);
 
         /* Check if the source is good, and if it's within the range */
         if ((Profile->Source != Source) ||

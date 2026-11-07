@@ -97,6 +97,12 @@ KiInsertTimerTable(IN PKTIMER Timer,
         NextEntry = NextEntry->Blink;
     }
 
+    ASSERT(NextEntry->Flink->Blink == NextEntry);
+    ASSERT(NextEntry == ListHead ||
+           (ULONGLONG)CONTAINING_RECORD(NextEntry, KTIMER, TimerListEntry)->DueTime.QuadPart <= DueTime);
+    ASSERT(NextEntry->Flink == ListHead ||
+           DueTime <= (ULONGLONG)CONTAINING_RECORD(NextEntry->Flink, KTIMER, TimerListEntry)->DueTime.QuadPart);
+
     /* Looped all the list, insert it here and get the interrupt time again */
     InsertHeadList(NextEntry, &Timer->TimerListEntry);
 

@@ -17,6 +17,14 @@ NTKERNELAPI LONG NTAPI KeQueryTypeEvent(_In_ PKEVENT Event);
 
 /* FUNCTIONS *****************************************************************/
 
+static __inline VOID
+KiAssertEventWaitList(IN PKEVENT Event)
+{
+    UNREFERENCED_PARAMETER(Event);
+    ASSERT(Event->Header.WaitListHead.Flink->Blink == &Event->Header.WaitListHead);
+    ASSERT(Event->Header.WaitListHead.Blink->Flink == &Event->Header.WaitListHead);
+}
+
 /*
  * @implemented
  */
@@ -81,6 +89,7 @@ KePulseEvent(IN PKEVENT Event,
 
     OldIrql = KeRaiseIrqlToSynchLevel();
     KiAcquireDispatcherObject(&Event->Header);
+    KiAssertEventWaitList(Event);
 
     PreviousState = Event->Header.SignalState;
 
@@ -92,6 +101,7 @@ KePulseEvent(IN PKEVENT Event,
 
     Event->Header.SignalState = 0;
 
+    KiAssertEventWaitList(Event);
     KiReleaseDispatcherObject(&Event->Header);
 
     if (Wait == FALSE)
@@ -151,6 +161,7 @@ KeResetEvent(IN PKEVENT Event)
 
     OldIrql = KeRaiseIrqlToSynchLevel();
     KiAcquireDispatcherObject(&Event->Header);
+    KiAssertEventWaitList(Event);
 
     PreviousState = Event->Header.SignalState;
     Event->Header.SignalState = 0;
@@ -190,6 +201,7 @@ KeSetEvent(IN PKEVENT Event,
 
     OldIrql = KeRaiseIrqlToSynchLevel();
     KiAcquireDispatcherObject(&Event->Header);
+    KiAssertEventWaitList(Event);
 
     PreviousState = Event->Header.SignalState;
     Event->Header.SignalState = 1;
@@ -199,6 +211,7 @@ KeSetEvent(IN PKEVENT Event,
         KiWaitTest(Event, Increment);
     }
 
+    KiAssertEventWaitList(Event);
     KiReleaseDispatcherObject(&Event->Header);
 
     if (!Wait)
@@ -233,6 +246,7 @@ KeSetEventBoostPriority(IN PKEVENT Event,
 
     OldIrql = KeRaiseIrqlToSynchLevel();
     KiAcquireDispatcherObject(&Event->Header);
+    KiAssertEventWaitList(Event);
 
     for (;;)
     {
@@ -299,6 +313,7 @@ KeSetEventBoostPriority(IN PKEVENT Event,
         KiReleaseThreadLock(FirstThread);
     }
 
+    KiAssertEventWaitList(Event);
     KiReleaseDispatcherObject(&Event->Header);
     KiExitDispatcher(OldIrql);
 }

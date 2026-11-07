@@ -549,8 +549,10 @@ KiBalanceReadyQueues(
             }
 
             ASSERT(Source->ReadySummary & PRIORITY_MASK(Thread->Priority));
+            KiAssertReadyQueue(Source, Thread->Priority);
             if (RemoveEntryList(&Thread->WaitListEntry))
                 Source->ReadySummary &= ~PRIORITY_MASK(Thread->Priority);
+            KiAssertReadyQueue(Source, Thread->Priority);
 
             Preempted = Thread->Preempted;
             Thread->Preempted = FALSE;
@@ -603,11 +605,13 @@ ThreadFound:
     else
     {
         Thread->State = Ready;
+        KiAssertReadyQueue(Target, Thread->Priority);
         if (Preempted)
             InsertHeadList(&Target->DispatcherReadyListHead[Thread->Priority], &Thread->WaitListEntry);
         else
             InsertTailList(&Target->DispatcherReadyListHead[Thread->Priority], &Thread->WaitListEntry);
         Target->ReadySummary |= PRIORITY_MASK(Thread->Priority);
+        KiAssertReadyQueue(Target, Thread->Priority);
     }
 
     if (CurrentThread == Target->IdleThread)
@@ -1029,6 +1033,7 @@ KiDeferredReadyThread(IN PKTHREAD Thread)
 
     /* Sanity check */
     ASSERT((OldPriority >= 0) && (OldPriority <= HIGH_PRIORITY));
+    KiAssertReadyQueue(Prcb, OldPriority);
 
     /* Set this thread as ready */
     Thread->State = Ready;
@@ -1042,6 +1047,7 @@ KiDeferredReadyThread(IN PKTHREAD Thread)
 
     /* Update the ready summary */
     Prcb->ReadySummary |= PRIORITY_MASK(OldPriority);
+    KiAssertReadyQueue(Prcb, OldPriority);
 
     /* Sanity check */
     ASSERT(OldPriority == Thread->Priority);

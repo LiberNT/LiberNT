@@ -49,6 +49,7 @@ KeInsertDeviceQueue(IN PKDEVICE_QUEUE DeviceQueue,
 
     /* Lock the queue */
     KiAcquireDeviceQueueLock(DeviceQueue, &DeviceLock);
+    ASSERT(DeviceQueue->Busy || IsListEmpty(&DeviceQueue->DeviceListHead));
 
     /* Check if it's not busy */
     if (!DeviceQueue->Busy)
@@ -94,6 +95,7 @@ KeInsertByKeyDeviceQueue(IN PKDEVICE_QUEUE DeviceQueue,
 
     /* Lock the queue */
     KiAcquireDeviceQueueLock(DeviceQueue, &DeviceLock);
+    ASSERT(DeviceQueue->Busy || IsListEmpty(&DeviceQueue->DeviceListHead));
 
     /* Set the Sort Key */
     DeviceQueueEntry->SortKey = SortKey;
@@ -163,6 +165,7 @@ KeRemoveDeviceQueue(IN PKDEVICE_QUEUE	DeviceQueue)
 
     /* Lock the queue */
     KiAcquireDeviceQueueLock(DeviceQueue, &DeviceLock);
+    ASSERT(DeviceQueue->Busy || IsListEmpty(&DeviceQueue->DeviceListHead));
     ASSERT(DeviceQueue->Busy);
 
     /* Check if this is an empty queue */
@@ -181,6 +184,7 @@ KeRemoveDeviceQueue(IN PKDEVICE_QUEUE	DeviceQueue)
                                         DeviceListEntry);
 
         /* Set it as non-inserted */
+        ASSERT(ReturnEntry->Inserted);
         ReturnEntry->Inserted = FALSE;
     }
 
@@ -208,6 +212,7 @@ KeRemoveByKeyDeviceQueue(IN PKDEVICE_QUEUE DeviceQueue,
 
     /* Lock the queue */
     KiAcquireDeviceQueueLock(DeviceQueue, &DeviceLock);
+    ASSERT(DeviceQueue->Busy || IsListEmpty(&DeviceQueue->DeviceListHead));
     ASSERT(DeviceQueue->Busy);
 
     /* Check if this is an empty queue */
@@ -257,6 +262,7 @@ KeRemoveByKeyDeviceQueue(IN PKDEVICE_QUEUE DeviceQueue,
         RemoveEntryList(&ReturnEntry->DeviceListEntry);
 
         /* Set it as non-inserted */
+        ASSERT(ReturnEntry->Inserted);
         ReturnEntry->Inserted = FALSE;
     }
 
@@ -284,6 +290,7 @@ KeRemoveByKeyDeviceQueueIfBusy(IN PKDEVICE_QUEUE DeviceQueue,
 
     /* Lock the queue */
     KiAcquireDeviceQueueLock(DeviceQueue, &DeviceLock);
+    ASSERT(DeviceQueue->Busy || IsListEmpty(&DeviceQueue->DeviceListHead));
 
     /* Check if this is an empty or idle queue */
     if (!(DeviceQueue->Busy) || (IsListEmpty(&DeviceQueue->DeviceListHead)))
@@ -332,6 +339,7 @@ KeRemoveByKeyDeviceQueueIfBusy(IN PKDEVICE_QUEUE DeviceQueue,
         RemoveEntryList(&ReturnEntry->DeviceListEntry);
 
         /* Set it as non-inserted */
+        ASSERT(ReturnEntry->Inserted);
         ReturnEntry->Inserted = FALSE;
     }
 
@@ -358,6 +366,7 @@ KeRemoveEntryDeviceQueue(IN PKDEVICE_QUEUE DeviceQueue,
 
     /* Lock the queue */
     KiAcquireDeviceQueueLock(DeviceQueue, &DeviceLock);
+    ASSERT(DeviceQueue->Busy || IsListEmpty(&DeviceQueue->DeviceListHead));
     ASSERT(DeviceQueue->Busy);
 
     /* Check the insertion state */
