@@ -889,6 +889,19 @@ EtwpShutdownLoggers(VOID)
     }
 }
 
+BOOLEAN
+NTAPI
+EtwpIsLoggerRunning(
+    _In_ TRACEHANDLE LoggerHandle)
+{
+    USHORT LoggerId = (USHORT)LoggerHandle;
+
+    if (LoggerId < ETWP_FIRST_LOGGER_ID || LoggerId >= MAXLOGGERS)
+        return FALSE;
+
+    return ReadPointerNoFence((PVOID const volatile *)&EtwpLoggers[LoggerId]) != NULL;
+}
+
 static
 NTSTATUS
 EtwpUpdateLogger(

@@ -183,3 +183,8 @@ EtwpGetTraceGuidInfo(
     _In_ ULONG OutBufferLen,
     _Out_opt_ PULONG ReturnSize,
     _In_ KPROCESSOR_MODE PreviousMode);
+
+BOOLEAN
+NTAPI
+EtwpIsLoggerRunning(
+    _In_ TRACEHANDLE LoggerHandle);

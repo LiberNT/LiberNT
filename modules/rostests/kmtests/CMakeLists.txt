@@ -135,6 +135,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_cm/CmSecurity.c
     ntos_cm/CmTransactions.c
     ntos_etw/EtwRegisterKM.c
+    ntos_etw/WmiTraceMessage.c
     ntos_ex/ExCallback.c
     ntos_ex/ExCallbackExtra.c
     ntos_ex/ExDoubleList.c

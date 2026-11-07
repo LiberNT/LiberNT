@@ -246,6 +246,7 @@ KMT_TESTFUNC Test_CmCallbacks;
 KMT_TESTFUNC Test_CmTransactions;
 KMT_TESTFUNC Test_CmKeyKM;
 KMT_TESTFUNC Test_EtwRegisterKM;
+KMT_TESTFUNC Test_WmiTraceMessage;
 KMT_TESTFUNC Test_IoBuildIoctlKM;
 KMT_TESTFUNC Test_IoCsqKM;
 KMT_TESTFUNC Test_IoNullDeviceKM;
@@ -509,6 +510,7 @@ const KMT_TEST TestList[] =
     { "CmTransactions",                     Test_CmTransactions },
     { "CmKeyKM",                            Test_CmKeyKM },
     { "EtwRegisterKM",                      Test_EtwRegisterKM },
+    { "WmiTraceMessage",                    Test_WmiTraceMessage },
     { "IoBuildIoctlKM",                     Test_IoBuildIoctlKM },
     { "IoCsqKM",                            Test_IoCsqKM },
     { "IoNullDeviceKM",                     Test_IoNullDeviceKM },

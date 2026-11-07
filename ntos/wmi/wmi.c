@@ -689,6 +689,18 @@ WmiQueryTraceInformation(IN TRACE_INFORMATION_CLASS TraceInformationClass,
     return STATUS_NOT_IMPLEMENTED;
 }
 
+static
+NTSTATUS
+WmipTraceMessage(
+    _In_ TRACEHANDLE LoggerHandle)
+{
+    if (!EtwpIsLoggerRunning(LoggerHandle))
+        return STATUS_INVALID_HANDLE;
+
+    /* TODO: write the message into the logger session */
+    return STATUS_SUCCESS;
+}
+
 /*
  * @unimplemented
  */
@@ -700,16 +712,11 @@ WmiTraceMessage(IN TRACEHANDLE LoggerHandle,
                 IN USHORT MessageNumber,
                 IN ...)
 {
-    UNREFERENCED_PARAMETER(LoggerHandle);
     UNREFERENCED_PARAMETER(MessageFlags);
-    /*
-     * Diagnostic: surface classic-WPP DoTraceMessage output (the trace-point
-     * GUID + message number) so otherwise-silent WPP-instrumented drivers
-     * (e.g. viogpudo.sys) reveal their init progress in the serial log.
-     */
-    DbgPrint("WPPTRACE: guid=%08lX msg=%u\n",
-             MessageGuid ? MessageGuid->Data1 : 0, MessageNumber);
-    return STATUS_SUCCESS;
+    UNREFERENCED_PARAMETER(MessageGuid);
+    UNREFERENCED_PARAMETER(MessageNumber);
+
+    return WmipTraceMessage(LoggerHandle);
 }
 
 /*
@@ -723,8 +730,12 @@ WmiTraceMessageVa(IN TRACEHANDLE LoggerHandle,
                   IN USHORT MessageNumber,
                   IN va_list MessageArgList)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    UNREFERENCED_PARAMETER(MessageFlags);
+    UNREFERENCED_PARAMETER(MessageGuid);
+    UNREFERENCED_PARAMETER(MessageNumber);
+    UNREFERENCED_PARAMETER(MessageArgList);
+
+    return WmipTraceMessage(LoggerHandle);
 }
 
 NTSTATUS
