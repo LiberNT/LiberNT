@@ -30,6 +30,8 @@ list(APPEND SOURCE
     DM_REPOSITION.c
     Dpi.c
     DpiHostingBehavior.c
+    DpiAwareness.c
+    DpiVirtualization.c
     DrawIconEx.c
     DrawText.c
     desktop.c
