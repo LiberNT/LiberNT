@@ -1061,7 +1061,12 @@ GetClientRect(HWND hWnd, LPRECT lpRect)
 #ifdef WOW64_I386_RUNTIME
     return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETCLIENTRECT);
 #else
-    PWND Wnd = ValidateHwnd(hWnd);
+    PWND Wnd;
+
+    if (User32IsDpiVirtualThread())
+        return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETCLIENTRECT);
+
+    Wnd = ValidateHwnd(hWnd);
 
     if (!Wnd) return FALSE;
     if ( hWnd != GetDesktopWindow()) // Wnd->fnid != FNID_DESKTOP )
@@ -1294,7 +1299,9 @@ GetWindowInfo(HWND hWnd,
     if ( !pwi || pwi->cbSize != sizeof(WINDOWINFO))
        SetLastError(ERROR_INVALID_PARAMETER); // Just set the error and go!
 
-#ifdef WOW64_I386_RUNTIME
+#ifndef WOW64_I386_RUNTIME
+    if (User32IsDpiVirtualThread())
+#endif
     {
         ROS_WINDOWINFO Info;
 
@@ -1322,7 +1329,6 @@ GetWindowInfo(HWND hWnd,
             pwi->wCreatorVersion = 0x300;
         return TRUE;
     }
-#endif
 
     pWnd = ValidateHwnd(hWnd);
     if (!pWnd)
@@ -1416,8 +1422,12 @@ GetWindowRect(HWND hWnd,
 #ifdef WOW64_I386_RUNTIME
     return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETWINDOWRECT);
 #else
-    PWND Wnd = ValidateHwnd(hWnd);
+    PWND Wnd;
 
+    if (User32IsDpiVirtualThread())
+        return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETWINDOWRECT);
+
+    Wnd = ValidateHwnd(hWnd);
     if (!Wnd) return FALSE;
     if ( hWnd != GetDesktopWindow()) // Wnd->fnid != FNID_DESKTOP )
     {
