@@ -1386,6 +1386,7 @@ typedef struct _WINPOS_ENTRY
    BOOL bSilent;
    BOOL bPointerInWindow;
    BOOL bDeferActivate;
+   BOOL bNoActivate;
    BOOL bCompositedPureMove;
    BOOL bRefreshFrame;
    UINT Flags;
@@ -2819,7 +2820,6 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
    PWINPOS_ENTRY Entry;
    RECTL ValidRects[2];
    BOOL Ret = TRUE;
-   BOOL bActivated = FALSE;
    UINT i;
 
    for (i = 0; i < Batch->Count; i++)
@@ -2856,7 +2856,7 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
          continue;
       }
 
-      WinPosFixupFlags(&Entry->WinPos, Entry->Window, Entry->bChained);
+      WinPosFixupFlags(&Entry->WinPos, Entry->Window, Entry->bChained || Entry->bNoActivate);
 
       if (Entry->bSilent)
       {
@@ -2886,7 +2886,7 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
    for (i = 0; i < Batch->Count; i++)
    {
       Entry = &Batch->Entries[i];
-      Entry->bDeferActivate = Batch->Count > 1 &&
+      Entry->bDeferActivate = Batch->Count > 1 && !Entry->bNoActivate &&
                               !(Entry->WinPos.flags & (SWP_NOACTIVATE | SWP_HIDEWINDOW)) &&
                               (Entry->Window->style & (WS_CHILD | WS_POPUP)) != WS_CHILD;
       if (Entry->bActive && (!IntIsWindow(Entry->WinPos.hwnd) || !co_WinPosBatchApply(Entry)))
@@ -2898,11 +2898,7 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
       Entry = &Batch->Entries[i];
       if (Entry->bActive && Entry->bDeferActivate && IntIsWindow(Entry->WinPos.hwnd))
       {
-         if (!bActivated)
-         {
-            co_WinPosActivateEntry(Entry->Window);
-            bActivated = TRUE;
-         }
+         co_WinPosActivateEntry(Entry->Window);
          if (IntIsWindow(Entry->WinPos.hwnd))
             co_WinPosBatchSyncPaint(Entry);
       }
@@ -3887,6 +3883,7 @@ BOOL FASTCALL IntEndDeferWindowPosEx(HDWP hdwp, BOOL bAsync)
     PSMWP pDWP;
     PCVR winpos;
     BOOL res = TRUE;
+    BOOL bActivate = TRUE;
     WINPOS_BATCH Batch;
     int i;
 
@@ -3930,6 +3927,11 @@ BOOL FASTCALL IntEndDeferWindowPosEx(HDWP hdwp, BOOL bAsync)
         }
         else if (!WinPosIsIgnoredRequest(pwnd, winpos->pos.hwndInsertAfter, winpos->pos.flags))
         {
+           BOOL bNoActivate = !bActivate && !(winpos->pos.flags & SWP_NOACTIVATE);
+           PWINPOS_ENTRY Entry;
+
+           if (!(winpos->pos.flags & SWP_NOACTIVATE))
+              bActivate = FALSE;
            WinPosBatchAddRequest(&Batch,
                                  pwnd,
                                  winpos->pos.hwndInsertAfter,
@@ -3937,7 +3939,13 @@ BOOL FASTCALL IntEndDeferWindowPosEx(HDWP hdwp, BOOL bAsync)
                                  winpos->pos.y,
                                  winpos->pos.cx,
                                  winpos->pos.cy,
-                                 winpos->pos.flags);
+                                 winpos->pos.flags | (bNoActivate ? SWP_NOACTIVATE : 0));
+           if (bNoActivate && (Entry = WinPosBatchFind(&Batch, pwnd)))
+           {
+              Entry->bNoActivate = TRUE;
+              Entry->Flags &= ~SWP_NOACTIVATE;
+              Entry->WinPos.flags &= ~SWP_NOACTIVATE;
+           }
         }
     }
 
