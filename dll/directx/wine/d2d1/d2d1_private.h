@@ -69,6 +69,26 @@ struct d2d_clip_stack
     size_t count;
 };
 
+#ifdef __REACTOS__
+struct d2d_device_context_layer
+{
+    struct d2d_bitmap *bitmap;
+    struct d2d_bitmap *target;
+    D2D1_LAYER_PARAMETERS1 parameters;
+    D2D1_MATRIX_3X2_F transform;
+    BOOL active;
+    BOOL clip;
+};
+
+struct d2d_layer_stack
+{
+    struct d2d_device_context_layer *stack;
+    size_t size;
+    size_t count;
+    size_t initialized;
+};
+#endif
+
 struct d2d_error_state
 {
     HRESULT code;
@@ -219,6 +239,9 @@ struct d2d_device_context
     D2D1_RENDER_TARGET_PROPERTIES desc;
     D2D1_SIZE_U pixel_size;
     struct d2d_clip_stack clip_stack;
+#ifdef __REACTOS__
+    struct d2d_layer_stack layer_stack;
+#endif
 
     struct d2d_indexed_objects vertex_buffers;
 };
