@@ -108,6 +108,7 @@ list(APPEND SOURCE
     WindowDisplayAffinity.c
     WindowRegionFrame.c
     ShellWindowQueries.c
+    ShellWindowZOrder.c
     ShowWindow.c
     SwitchToThisWindow.c
     SystemMenu.c
