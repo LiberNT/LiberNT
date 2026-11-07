@@ -118,16 +118,16 @@ ApplicationPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
         LoadStringW(hInst, IDS_TAB_TASK, szTemp, 256);
         column.pszText = szTemp;
-        column.cx = 250;
+        column.cx = MulDiv(250, TaskManager_GetDpi(), 96);
         (void)ListView_InsertColumn(hApplicationPageListCtrl, 0, &column);    /* Add the "Task" column */
         column.mask = LVCF_TEXT|LVCF_WIDTH;
         LoadStringW(hInst, IDS_TAB_STATUS, szTemp, 256);
         column.pszText = szTemp;
-        column.cx = 95;
+        column.cx = MulDiv(95, TaskManager_GetDpi(), 96);
         (void)ListView_InsertColumn(hApplicationPageListCtrl, 1, &column);    /* Add the "Status" column */
 
-        (void)ListView_SetImageList(hApplicationPageListCtrl, ImageList_Create(16, 16, GetSystemColorDepth()|ILC_MASK, 0, 1), LVSIL_SMALL);
-        (void)ListView_SetImageList(hApplicationPageListCtrl, ImageList_Create(32, 32, GetSystemColorDepth()|ILC_MASK, 0, 1), LVSIL_NORMAL);
+        (void)ListView_SetImageList(hApplicationPageListCtrl, ImageList_Create(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), GetSystemColorDepth()|ILC_MASK, 0, 1), LVSIL_SMALL);
+        (void)ListView_SetImageList(hApplicationPageListCtrl, ImageList_Create(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), GetSystemColorDepth()|ILC_MASK, 0, 1), LVSIL_NORMAL);
 
         UpdateApplicationListControlViewSetting();
 
