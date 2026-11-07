@@ -135,6 +135,7 @@ list(APPEND SOURCE
     user/ntuser/defwnd.c
     user/ntuser/desktop.c
     user/ntuser/display.c
+    user/ntuser/dpi.c
     user/ntuser/draw.c
     user/ntuser/event.c
     user/ntuser/focus.c

@@ -1647,7 +1647,17 @@ static void FASTCALL MENU_GetBitmapItemSize(PITEM lpitem, SIZE *size, PWND WndOw
                 measItem.itemWidth  = lpitem->cxItem - lpitem->xItem; //lpitem->Rect.right  - lpitem->Rect.left;
                 measItem.itemHeight = lpitem->cyItem - lpitem->yItem; //lpitem->Rect.bottom - lpitem->Rect.top;
                 measItem.itemData = lpitem->dwItemData;
+                if (UserDpiIsVirtualWindow(WndOwner))
+                {
+                    measItem.itemWidth = UserDpiToLogical(measItem.itemWidth);
+                    measItem.itemHeight = UserDpiToLogical(measItem.itemHeight);
+                }
                 co_IntSendMessage( UserHMGetHandle(WndOwner), WM_MEASUREITEM, 0, (LPARAM)&measItem);
+                if (UserDpiIsVirtualWindow(WndOwner))
+                {
+                    measItem.itemWidth = UserDpiToPhysical(measItem.itemWidth);
+                    measItem.itemHeight = UserDpiToPhysical(measItem.itemHeight);
+                }
                 size->cx = measItem.itemWidth;
                 size->cy = measItem.itemHeight;
                 TRACE("HBMMENU_CALLBACK Height %d Width %d\n",measItem.itemHeight,measItem.itemWidth);
@@ -1833,8 +1843,22 @@ static void FASTCALL MENU_DrawBitmapItem(HDC hdc, PITEM lpitem, const RECT *rect
                 drawItem.rcItem = *rect;
                 drawItem.itemData = lpitem->dwItemData;
                 /* some applications make this assumption on the DC's origin */
-                GreSetViewportOrgEx( hdc, lpitem->xItem, lpitem->yItem, &origorg);
                 RECTL_vOffsetRect(&drawItem.rcItem, -(LONG)lpitem->xItem, -(LONG)lpitem->yItem);
+                if (UserDpiIsVirtualWindow(WndOwner))
+                {
+                    PWND DcWindow = ValidateHwndNoErr(Menu->hWnd);
+                    INT Level = UserDpiBeginLogicalDrawing(DcWindow, hdc);
+                    BOOL LogicalDevice = UserDpiIsVirtualWindow(DcWindow);
+
+                    UserDpiRectToLogical(&drawItem.rcItem);
+                    GreSetViewportOrgEx(hdc, LogicalDevice ? UserDpiToLogical(lpitem->xItem) : (INT)lpitem->xItem,
+                                        LogicalDevice ? UserDpiToLogical(lpitem->yItem) : (INT)lpitem->yItem, &origorg);
+                    co_IntSendMessage(UserHMGetHandle(WndOwner), WM_DRAWITEM, 0, (LPARAM)&drawItem);
+                    GreSetViewportOrgEx(hdc, origorg.x, origorg.y, NULL);
+                    UserDpiEndDrawing(hdc, Level);
+                    return;
+                }
+                GreSetViewportOrgEx( hdc, lpitem->xItem, lpitem->yItem, &origorg);
                 co_IntSendMessage( UserHMGetHandle(WndOwner), WM_DRAWITEM, 0, (LPARAM)&drawItem);
                 GreSetViewportOrgEx( hdc, origorg.x, origorg.y, NULL);
                 return;
@@ -1939,7 +1963,14 @@ static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND 
         mis.itemData   = lpitem->dwItemData;
         mis.itemHeight = HIWORD( IntGetDialogBaseUnits());
         mis.itemWidth  = 0;
+        if (UserDpiIsVirtualWindow(pwndOwner))
+            mis.itemHeight = UserDpiToLogical(mis.itemHeight);
         co_IntSendMessage( UserHMGetHandle(pwndOwner), WM_MEASUREITEM, 0, (LPARAM)&mis );
+        if (UserDpiIsVirtualWindow(pwndOwner))
+        {
+            mis.itemWidth = UserDpiToPhysical(mis.itemWidth);
+            mis.itemHeight = UserDpiToPhysical(mis.itemHeight);
+        }
         /* Tests reveal that Windows ( Win95 thru WinXP) adds twice the average
          * width of a menufont character to the width of an owner-drawn menu. 
          */
@@ -2671,7 +2702,18 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         TRACE("Ownerdraw: Width %d Height %d\n", dis.rcItem.right-dis.rcItem.left, dis.rcItem.bottom-dis.rcItem.top);
         old_bk = GreGetBkColor(hdc);
         old_text = GreGetTextColor(hdc);
-        co_IntSendMessage(UserHMGetHandle(WndOwner), WM_DRAWITEM, 0, (LPARAM) &dis);
+        if (UserDpiIsVirtualWindow(WndOwner))
+        {
+            INT Level = UserDpiBeginLogicalDrawing(Wnd, hdc);
+
+            UserDpiRectToLogical(&dis.rcItem);
+            co_IntSendMessage(UserHMGetHandle(WndOwner), WM_DRAWITEM, 0, (LPARAM) &dis);
+            UserDpiEndDrawing(hdc, Level);
+        }
+        else
+        {
+            co_IntSendMessage(UserHMGetHandle(WndOwner), WM_DRAWITEM, 0, (LPARAM) &dis);
+        }
         IntGdiSetBkColor(hdc, old_bk);
         IntGdiSetTextColor(hdc, old_text);
         /* Draw the popup-menu arrow */
@@ -3581,6 +3623,7 @@ static void FASTCALL MENU_SelectItem(PWND pwndOwner, PMENU menu, UINT wIndex,
 {
     HDC hdc;
     PWND pWnd;
+    INT DpiLevel;
 
     TRACE("M_SI: owner=%p menu=%p index=0x%04x select=0x%04x\n", pwndOwner, menu, wIndex, sendMenuSelect);
 
@@ -3596,6 +3639,7 @@ static void FASTCALL MENU_SelectItem(PWND pwndOwner, PMENU menu, UINT wIndex,
        hdc = UserGetDCEx(pWnd, 0, DCX_USESTYLE);
     else
        hdc = UserGetDCEx(pWnd, 0, DCX_CACHE | DCX_WINDOW);
+    DpiLevel = UserDpiBeginPhysicalDrawing(pWnd, hdc);
 
     if (!top_popup) {
         top_popup = menu->hWnd;                  //pPopupMenu->spwndActivePopup or
@@ -3663,6 +3707,7 @@ static void FASTCALL MENU_SelectItem(PWND pwndOwner, PMENU menu, UINT wIndex,
             }
         }
     }
+    UserDpiEndDrawing(hdc, DpiLevel);
     UserReleaseDC(pWnd, hdc, FALSE);
 }
 
@@ -3731,8 +3776,11 @@ static void FASTCALL MENU_HideSubPopups(PWND pWndOwner, PMENU Menu,
 
              if (hdcBar)
              {
+                 INT DpiLevel = UserDpiBeginPhysicalDrawing(pWndBar, hdcBar);
+
                  NtGdiSelectFont(hdcBar, ghMenuFont);
                  MENU_DrawMenuItem(pWndBar, Menu, pWndOwner, hdcBar, Item, Menu->cyMenu, TRUE, ODA_DRAWENTIRE);
+                 UserDpiEndDrawing(hdcBar, DpiLevel);
                  UserReleaseDC(pWndBar, hdcBar, FALSE);
              }
          }
@@ -3836,8 +3884,11 @@ static PMENU FASTCALL MENU_ShowSubPopup(PWND WndOwner, PMENU Menu, BOOL SelectFi
   /* correct item if modified as a reaction to WM_INITMENUPOPUP message */
   if (!(Item->fState & MF_HILITE) || (!(Menu->fFlags & MNF_POPUP) && MENU_Themed(Menu)))
   {
+      INT DpiLevel;
+
       if (Menu->fFlags & MNF_POPUP) Dc = UserGetDCEx(pWnd, NULL, DCX_USESTYLE);
       else Dc = UserGetDCEx(pWnd, 0, DCX_CACHE | DCX_WINDOW);
+      DpiLevel = UserDpiBeginPhysicalDrawing(pWnd, Dc);
 
       NtGdiSelectFont(Dc, ghMenuFont);
 
@@ -3845,6 +3896,7 @@ static PMENU FASTCALL MENU_ShowSubPopup(PWND WndOwner, PMENU Menu, BOOL SelectFi
       MENU_DrawMenuItem(pWnd, Menu, WndOwner, Dc, Item, Menu->cyMenu,
                        !(Menu->fFlags & MNF_POPUP), ODA_DRAWENTIRE);
 
+      UserDpiEndDrawing(Dc, DpiLevel);
       UserReleaseDC(pWnd, Dc, FALSE);
   }
 
@@ -5238,8 +5290,12 @@ PopupMenuWndProc(
     case WM_PAINT:
       {
         PAINTSTRUCT ps;
+        INT DpiLevel;
+
         IntBeginPaint(Wnd, &ps);
+        DpiLevel = UserDpiBeginPhysicalDrawing(Wnd, ps.hdc);
         MENU_DrawPopupMenu(Wnd, ps.hdc, pPopupMenu->spmenu);
+        UserDpiEndDrawing(ps.hdc, DpiLevel);
         IntEndPaint(Wnd, &ps);
         break;
       }
@@ -6111,6 +6167,7 @@ NtUserCalcMenuBar(
     PWND Window;
     RECT Rect;
     DWORD ret;
+    BOOL Virtual;
 
     UserEnterExclusive();
 
@@ -6128,12 +6185,21 @@ NtUserCalcMenuBar(
         return 0;
     }
 
+    Virtual = UserDpiIsVirtualCaller();
+    if (Virtual)
+    {
+        leftBorder = UserDpiToPhysical(leftBorder);
+        rightBorder = UserDpiToPhysical(rightBorder);
+        top = UserDpiToPhysical(top);
+    }
     Rect.left = leftBorder;
     Rect.right = Window->rcWindow.right - Window->rcWindow.left - rightBorder;
     Rect.top = top;
     Rect.bottom = 0;
 
     ret = MENU_DrawMenuBar(hdc, &Rect, Window, TRUE);
+    if (Virtual)
+        ret = UserDpiToLogical(top + ret) - UserDpiToLogical(top);
 
     UserReleaseDC( 0, hdc, FALSE );
 
@@ -6333,6 +6399,8 @@ NtUserGetTitleBarInfo(
         // intGetTitleBarInfo() set LastError.
         goto Exit;
     }
+    if (UserDpiIsVirtualCaller())
+        UserDpiRectToLogical(&bartitleinfo.rcTitleBar);
 
     /* Copy local buffer back to user mode buffer */
     _SEH2_TRY
@@ -6592,6 +6660,8 @@ NtUserGetMenuBarInfo(
    {
        kmbi.fFocused = kmbi.fBarFocused;
    }
+   if (UserDpiIsVirtualCaller())
+      UserDpiRectToLogical(&kmbi.rcBar);
 
    _SEH2_TRY
    {
@@ -6718,6 +6788,8 @@ NtUserGetMenuItemRect(
    Rect.top    += YMove;
    Rect.right  += XMove;
    Rect.bottom += YMove;
+   if (UserDpiIsVirtualCaller())
+      UserDpiRectToLogical((PRECT)&Rect);
 
    _SEH2_TRY
    {
@@ -6909,6 +6981,8 @@ NtUserPaintMenuBar(
    PWND Window;
    RECT Rect;
    DWORD ret;
+   BOOL Virtual;
+   INT DpiLevel;
 
    UserEnterExclusive();
 
@@ -6919,12 +6993,23 @@ NtUserPaintMenuBar(
       return 0;
    }
 
+   Virtual = UserDpiIsVirtualCaller();
+   if (Virtual)
+   {
+      leftBorder = UserDpiToPhysical(leftBorder);
+      rightBorder = UserDpiToPhysical(rightBorder);
+      top = UserDpiToPhysical(top);
+   }
    Rect.left = leftBorder;
    Rect.right = Window->rcWindow.right - Window->rcWindow.left - rightBorder;
    Rect.top = top;
    Rect.bottom = 0;
 
+   DpiLevel = UserDpiBeginPhysicalDrawing(Window, hDC);
    ret = MENU_DrawMenuBar(hDC, &Rect, Window, FALSE);
+   UserDpiEndDrawing(hDC, DpiLevel);
+   if (Virtual)
+      ret = UserDpiToLogical(top + ret) - UserDpiToLogical(top);
 
    UserLeave();
    return ret;
@@ -7231,6 +7316,14 @@ NtUserTrackPopupMenuEx(
             _SEH2_YIELD(goto Exit);
         }
         _SEH2_END
+    }
+
+    if (UserDpiIsVirtualCaller())
+    {
+        x = UserDpiToPhysical(x);
+        y = UserDpiToPhysical(y);
+        if (lptpm)
+            UserDpiRectToPhysical(&tpm.rcExclude);
     }
 
     UserRefObjectCo(pWnd, &WndRef);

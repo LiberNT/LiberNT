@@ -256,6 +256,16 @@ IntUpdateLayeredWindowI( PWND pWnd,
       Rect = Window;
 
       RECTL_vOffsetRect( &Rect, -Window.left, -Window.top );
+      if (UserDpiIsVirtualWindow(pWnd))
+      {
+         RECT Logical = Window;
+
+         if ((pWnd->style & WS_CHILD) && Parent)
+            RECTL_vOffsetRect(&Logical, Parent->rcClient.left, Parent->rcClient.top);
+         UserDpiRectToLogical(&Logical);
+         Rect.right = Logical.right - Logical.left;
+         Rect.bottom = Logical.bottom - Logical.top;
+      }
 
       TRACE("H %d W %d\n",Rect.bottom - Rect.top,Rect.right - Rect.left);
 
@@ -540,6 +550,15 @@ NtUserUpdateLayeredWindow(
       ERR("Layered Window Invalid Parameters\n");
       EngSetLastError( ERROR_INVALID_PARAMETER );
       goto Exit;
+   }
+
+   if (UserDpiIsVirtualCaller())
+   {
+      INT X = pptDst ? Dst.x : 0, Y = pptDst ? Dst.y : 0;
+
+      UserDpiWindowPosToPhysical(pWnd, &X, &Y, (PINT)&Size.cx, (PINT)&Size.cy, pptDst ? 0 : SWP_NOMOVE);
+      Dst.x = X;
+      Dst.y = Y;
    }
 
    info.cbSize   = sizeof(info);

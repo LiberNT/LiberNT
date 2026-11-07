@@ -245,6 +245,24 @@ UserScrollDC(
    return Result;
 }
 
+static VOID
+IntScrollRedrawWindow(PWND Window, PREGION Region, UINT Flags, BOOL Virtual)
+{
+   PREGION Physical;
+
+   if (!Virtual)
+   {
+      co_UserRedrawWindow(Window, NULL, Region, Flags);
+      return;
+   }
+   Physical = UserDpiCreateClientRegion(Window, Region, FALSE);
+   if (Physical)
+   {
+      co_UserRedrawWindow(Window, NULL, Physical, Flags);
+      REGION_Delete(Physical);
+   }
+}
+
 DWORD
 FASTCALL
 IntScrollWindowEx(
@@ -266,13 +284,25 @@ IntScrollWindowEx(
    DWORD dcxflags = 0;
    int rdw_flags;
    USER_REFERENCE_ENTRY CaretRef;
+   BOOL Virtual;
+   INT ChildDx = dx, ChildDy = dy;
 
    if (!Window)
    {
       return ERROR;
    }
 
-   IntGetClientRect(Window, &rcClip);
+   Virtual = UserDpiIsVirtualWindow(Window);
+   if (Virtual)
+   {
+      UserDpiGetLogicalClientRect(Window, &rcClip);
+      ChildDx = UserDpiToPhysical(dx);
+      ChildDy = UserDpiToPhysical(dy);
+   }
+   else
+   {
+      IntGetClientRect(Window, &rcClip);
+   }
 
    if (prcScroll)
       RECTL_bIntersectRect(&rcScroll, &rcClip, prcScroll);
@@ -373,6 +403,17 @@ IntScrollWindowEx(
    if (co_IntGetUpdateRgn(Window, RgnTemp, FALSE) != NULLREGION)
    {
       PREGION RgnClip = IntSysCreateRectpRgnIndirect(&rcClip);
+
+      if (Virtual)
+      {
+         PREGION RgnLogical = UserDpiCreateClientRegion(Window, RgnTemp, TRUE);
+
+         if (RgnLogical)
+         {
+            IntGdiCombineRgn(RgnTemp, RgnLogical, NULL, RGN_COPY);
+            REGION_Delete(RgnLogical);
+         }
+      }
       if (RgnClip)
       {
           if (hrgnUpdate)
@@ -389,7 +430,7 @@ IntScrollWindowEx(
           if (hrgnUpdate)
               IntGdiCombineRgn( RgnWinupd, RgnWinupd, RgnTemp, RGN_OR );
 
-          co_UserRedrawWindow(Window, NULL, RgnTemp, rdw_flags );
+          IntScrollRedrawWindow(Window, RgnTemp, rdw_flags, Virtual);
 
           if (abs(dx) > abs(rcScroll.right - rcScroll.left) ||
               abs(dy) > abs(rcScroll.bottom - rcScroll.top))
@@ -432,11 +473,13 @@ ScrollChildren:
       {
          rcChild = Child->rcWindow;
          RECTL_vOffsetRect(&rcChild, -ClientOrigin.x, -ClientOrigin.y);
+         if (Virtual)
+            UserDpiClientRectToLogical(Window, (PRECT)&rcChild);
 
          if (!prcScroll || RECTL_bIntersectRect(&rcDummy, &rcChild, prcScroll))
          {
-            RECTL_vOffsetRect(&Child->rcWindow, dx, dy);
-            RECTL_vOffsetRect(&Child->rcClient, dx, dy);
+            RECTL_vOffsetRect(&Child->rcWindow, ChildDx, ChildDy);
+            RECTL_vOffsetRect(&Child->rcClient, ChildDx, ChildDy);
             UserRefObjectCo(Child, &WndRef);
 
             lParam = MAKELONG(Child->rcClient.left - ClientOrigin.x,
@@ -444,7 +487,7 @@ ScrollChildren:
 
             /* wine sends WM_POSCHANGING, WM_POSCHANGED messages */
             /* windows sometimes a WM_MOVE */
-            co_IntSendMessage(UserHMGetHandle(Child), WM_MOVE, 0, lParam);
+            co_IntSendSystemMessage(UserHMGetHandle(Child), WM_MOVE, 0, lParam);
 
             UserDerefObjectCo(Child);
          }
@@ -453,11 +496,10 @@ ScrollChildren:
 
    if (RgnUpdate && (flags & (SW_INVALIDATE | SW_ERASE)))
    {
-      co_UserRedrawWindow( Window,
-                           NULL,
-                           RgnUpdate,
-                           rdw_flags |                                    /*    HACK    */
-                          ((flags & SW_SCROLLCHILDREN) ? RDW_ALLCHILDREN : RDW_NOCHILDREN) );
+      IntScrollRedrawWindow(Window, RgnUpdate,
+                            rdw_flags |                                    /*    HACK    */
+                            ((flags & SW_SCROLLCHILDREN) ? RDW_ALLCHILDREN : RDW_NOCHILDREN),
+                            Virtual);
    }
 
    if (hwndCaret && (CaretWnd = UserGetWindowObject(hwndCaret)))

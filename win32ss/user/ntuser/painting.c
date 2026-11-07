@@ -352,7 +352,7 @@ IntSendNCPaint(PWND pWnd, HRGN hRgn)
       hRgn = HRGN_WINDOW;
    }
 
-   if (hRgn) co_IntSendMessage(UserHMGetHandle(pWnd), WM_NCPAINT, (WPARAM)hRgn, 0);
+   if (hRgn) co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_NCPAINT, (WPARAM)hRgn, 0);
 }
 
 VOID FASTCALL
@@ -1992,6 +1992,21 @@ NtUserGetUpdateRgn(HWND hWnd, HRGN hRgn, BOOL bErase)
    if (Window)
    {
       ret = co_UserGetUpdateRgn(Window, hRgn, bErase);
+      if (ret != ERROR && ret != NULLREGION && UserDpiIsVirtualCaller())
+      {
+         PREGION Region = REGION_LockRgn(hRgn), Logical;
+
+         if (Region)
+         {
+            Logical = UserDpiCreateClientRegion(Window, Region, TRUE);
+            if (Logical)
+            {
+               ret = IntGdiCombineRgn(Region, Logical, NULL, RGN_COPY);
+               REGION_Delete(Logical);
+            }
+            REGION_UnlockRgn(Region);
+         }
+      }
    }
 
    TRACE("Leave NtUserGetUpdateRgn, ret=%i\n", ret);
@@ -2023,6 +2038,8 @@ NtUserGetUpdateRect(HWND hWnd, LPRECT UnsafeRect, BOOL bErase)
    }
 
    Ret = co_UserGetUpdateRect(Window, &Rect, bErase);
+   if (Ret && UserDpiIsVirtualCaller())
+      UserDpiClientRectToLogical(Window, (PRECT)&Rect);
 
    if (UnsafeRect != NULL)
    {
@@ -2059,7 +2076,7 @@ NtUserRedrawWindow(
    BOOL Ret = FALSE;
    USER_REFERENCE_ENTRY Ref;
    NTSTATUS Status = STATUS_SUCCESS;
-   PREGION RgnUpdate = NULL;
+   PREGION RgnUpdate = NULL, PhysicalRgnUpdate = NULL;
 
    TRACE("Enter NtUserRedrawWindow\n");
    UserEnterExclusive();
@@ -2118,6 +2135,22 @@ NtUserRedrawWindow(
    if (hWnd && UserIsDesktopWindow(Wnd) && (flags & RDW_ALLCHILDREN))
        flags = (flags & ~RDW_ALLCHILDREN) | RDW_NOCHILDREN;
 
+   if (UserDpiIsVirtualCaller())
+   {
+       if (lprcUpdate)
+           UserDpiClientRectToPhysical(Wnd, (PRECT)&SafeUpdateRect);
+       if (RgnUpdate)
+       {
+           RgnUpdate = UserDpiCreateClientRegion(Wnd, RgnUpdate, FALSE);
+           if (!RgnUpdate)
+           {
+               EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+               goto Exit;
+           }
+           PhysicalRgnUpdate = RgnUpdate;
+       }
+   }
+
    UserRefObjectCo(Wnd, &Ref);
 
    Ret = co_UserRedrawWindow( Wnd,
@@ -2128,6 +2161,8 @@ NtUserRedrawWindow(
    UserDerefObjectCo(Wnd);
 
 Exit:
+   if (PhysicalRgnUpdate)
+       REGION_Delete(PhysicalRgnUpdate);
    TRACE("Leave NtUserRedrawWindow, ret=%i\n", Ret);
    UserLeave();
    return Ret;
