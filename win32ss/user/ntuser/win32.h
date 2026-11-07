@@ -151,6 +151,7 @@ typedef struct _THREADINFO
     struct tagIMC*      spDefaultImc;
     HKL                 hklPrev;
     ULONG               DpiContext; /* 0 inherits the process context */
+    ULONG               DpiHostingBehavior;
 
     INT                 cEnterCount;
     /* Queue of messages posted to the queue. */

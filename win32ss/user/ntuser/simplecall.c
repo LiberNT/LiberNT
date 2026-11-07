@@ -289,6 +289,24 @@ NtUserCallOneParam(
             Result = UserUnregisterPowerSettingNotification((ULONG)Param);
             break;
 
+        case ONEPARAM_ROUTINE_ROS_SETTHREADDPIHOSTING:
+        {
+            PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
+
+            if (Param != DPI_HOSTING_BEHAVIOR_DEFAULT && Param != DPI_HOSTING_BEHAVIOR_MIXED)
+            {
+                Result = (DWORD_PTR)(LONG_PTR)DPI_HOSTING_BEHAVIOR_INVALID;
+                break;
+            }
+            Result = pti->DpiHostingBehavior;
+            pti->DpiHostingBehavior = (ULONG)Param;
+            break;
+        }
+
+        case ONEPARAM_ROUTINE_ROS_GETTHREADDPIHOSTING:
+            Result = ((PTHREADINFO)PsGetCurrentThreadWin32Thread())->DpiHostingBehavior;
+            break;
+
         case ONEPARAM_ROUTINE_POSTQUITMESSAGE:
         {
             PTHREADINFO pti;
@@ -1495,6 +1513,19 @@ NtUserCallHwndParam(
                 else
                     EngSetLastError(ERROR_WINDOW_NOT_DIALOG);
             }
+            UserLeave();
+            return Ret;
+        }
+
+        case HWNDPARAM_ROUTINE_ROS_GETDPIHOSTINGBEHAVIOR:
+        {
+            PWND Window;
+            DWORD_PTR Ret = (DWORD_PTR)(LONG_PTR)DPI_HOSTING_BEHAVIOR_INVALID;
+
+            UserEnterShared();
+            Window = UserGetWindowObject(hWnd);
+            if (Window)
+                Ret = Window->DpiHostingBehavior;
             UserLeave();
             return Ret;
         }

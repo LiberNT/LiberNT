@@ -1303,6 +1303,15 @@ co_IntSetParent(PWND Wnd, PWND WndNewParent)
       pWndExam = pWndExam->spwndParent;
    }
 
+   if (WndNewParent && !UserIsDesktopWindow(WndNewParent) && !UserIsMessageWindow(WndNewParent) &&
+       WndNewParent->DpiHostingBehavior != DPI_HOSTING_BEHAVIOR_MIXED &&
+       Wnd->head.pti->ppi == WndNewParent->head.pti->ppi &&
+       NTUSER_DPI_CONTEXT_GET_AWARENESS(Wnd->DpiContext) != NTUSER_DPI_CONTEXT_GET_AWARENESS(WndNewParent->DpiContext))
+   {
+      EngSetLastError(ERROR_INVALID_STATE);
+      return NULL;
+   }
+
    /*
     * Windows hides the window first, then shows it again
     * including the WM_SHOWWINDOW messages and all
@@ -1331,7 +1340,8 @@ co_IntSetParent(PWND Wnd, PWND WndNewParent)
 
    /* Set the new parent */
    WndSetParent(Wnd, WndNewParent);
-   if (WndNewParent && !UserIsDesktopWindow(WndNewParent) && !UserIsMessageWindow(WndNewParent))
+   if (WndNewParent && !UserIsDesktopWindow(WndNewParent) && !UserIsMessageWindow(WndNewParent) &&
+       WndNewParent->DpiHostingBehavior != DPI_HOSTING_BEHAVIOR_MIXED)
       Wnd->DpiContext = WndNewParent->DpiContext;
 
    if (Wnd->style & WS_CHILD &&
@@ -2128,7 +2138,8 @@ PWND FASTCALL IntCreateWindow(CREATESTRUCTW* Cs,
    pWnd->fnid = 0;
    if (pdeskCreated || Class->atomClassName == gpsi->atomSysClass[ICLS_MENU])
       pWnd->DpiContext = NTUSER_DPI_PER_MONITOR_AWARE;
-   else if (ParentWindow && !UserIsDesktopWindow(ParentWindow) && !UserIsMessageWindow(ParentWindow))
+   else if (ParentWindow && !UserIsDesktopWindow(ParentWindow) && !UserIsMessageWindow(ParentWindow) &&
+            ParentWindow->DpiHostingBehavior != DPI_HOSTING_BEHAVIOR_MIXED)
       pWnd->DpiContext = ParentWindow->DpiContext;
    else if (pti->DpiContext)
       pWnd->DpiContext = pti->DpiContext;
@@ -2136,6 +2147,7 @@ PWND FASTCALL IntCreateWindow(CREATESTRUCTW* Cs,
       pWnd->DpiContext = pti->ppi->DpiContext;
    else
       pWnd->DpiContext = NTUSER_DPI_UNAWARE;
+   pWnd->DpiHostingBehavior = pti->DpiHostingBehavior;
    WndSetLastActive(pWnd, pWnd);
    // Ramp up compatible version sets.
    if ( dwVer >= WINVER_WIN31 )
