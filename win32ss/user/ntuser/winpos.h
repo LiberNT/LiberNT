@@ -67,6 +67,7 @@ BOOLEAN FASTCALL co_WinPosShowWindow(PWND Window, INT Cmd);
 void FASTCALL co_WinPosSendSizeMove(PWND Window, BOOL ForceRestored);
 PWND APIENTRY co_WinPosWindowFromPoint(IN PWND ScopeWin, IN POINT *WinPoint, IN OUT USHORT* HitTest, IN BOOL Ignore);
 VOID FASTCALL co_WinPosActivateOtherWindow(PWND);
+BOOL FASTCALL co_WinPosActivatePreviousForeground(PWND);
 PWND FASTCALL IntRealChildWindowFromPoint(PWND,LONG,LONG);
 BOOL FASTCALL IntScreenToClient(PWND,LPPOINT);
 BOOL FASTCALL IntClientToScreen(PWND,LPPOINT);

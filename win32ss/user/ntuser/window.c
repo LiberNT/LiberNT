@@ -483,7 +483,8 @@ static void IntSendDestroyMsg(HWND hWnd)
       if ( ti->MessageQueue->spwndActive == Window || // Fixes CORE-106 RegSvr32 exit and return focus to CMD.
           (ti->MessageQueue->spwndActive == NULL && ti->MessageQueue == IntGetFocusMessageQueue()) )
       {
-         co_WinPosActivateOtherWindow(Window);
+         if (!co_WinPosActivatePreviousForeground(Window))
+            co_WinPosActivateOtherWindow(Window);
       }
 
       if (ValidateHwndNoErr(hWnd) != Window) goto Cleanup;
@@ -3194,7 +3195,8 @@ BOOLEAN co_UserDestroyWindow(PVOID Object)
    {
       if (ti->MessageQueue == IntGetFocusMessageQueue())
       {
-         co_WinPosActivateOtherWindow(Window);
+         if (!co_WinPosActivatePreviousForeground(Window))
+            co_WinPosActivateOtherWindow(Window);
       }
       if (IntIsWindow(hWnd) && ti->MessageQueue->spwndActive == Window &&
           ti->MessageQueue != IntGetFocusMessageQueue())
