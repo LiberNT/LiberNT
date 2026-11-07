@@ -1394,7 +1394,7 @@ IntImeSetTopMost(_In_ PWND pImeWnd, _In_ BOOL bTopMost, _In_ PWND pwndInsertBefo
         pwndNext = pwndChild->spwndNext;
 
         // If pwndChild is a good IME-like window, ...
-        if (IS_WND_IMELIKE(pwndChild) && (pwndChild->style & WS_VISIBLE) && pwndChild != pwndInsertAfter &&
+        if (IS_WND_IMELIKE(pwndChild) && pwndChild != pwndInsertAfter &&
             pwndChild->head.pti == pImeWnd->head.pti)
         {
             // Find pImeWnd from the owners
