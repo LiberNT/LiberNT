@@ -192,9 +192,16 @@ OslFinalizeLoaderBlock(
         RtlStringCbCopyA(OslSystemBlock->ArcBootDeviceName,
                          sizeof(OslSystemBlock->ArcBootDeviceName),
                          OSL_RAMDISK_ARC_NAME);
-        RtlStringCbCopyA(OslSystemBlock->ArcHalDeviceName,
-                         sizeof(OslSystemBlock->ArcHalDeviceName),
-                         OSL_RAMDISK_ARC_NAME);
+        if (DkLocateBootPartition(&BootPartition))
+            RtlStringCbPrintfA(OslSystemBlock->ArcHalDeviceName,
+                               sizeof(OslSystemBlock->ArcHalDeviceName),
+                               "multi(0)disk(0)rdisk(%lu)partition(%lu)",
+                               BootPartition.DiskIndex,
+                               BootPartition.PartitionNumber);
+        else
+            RtlStringCbCopyA(OslSystemBlock->ArcHalDeviceName,
+                             sizeof(OslSystemBlock->ArcHalDeviceName),
+                             OSL_RAMDISK_ARC_NAME);
     }
     else
     {

@@ -33,6 +33,9 @@ VOID Arm64PreparePageTables(VOID);
 VOID Arm64EnablePageTables(VOID);
 VOID Arm64ApplyDeferredPageTableMemoryTypes(VOID);
 VOID Arm64ClearIdentityMappings(VOID);
+VOID Arm64FindFirmwareWatchdog(const VOID *DeviceTree, ULONG DeviceTreeSize);
+VOID Arm64InstallAppleSmbios(VOID);
+VOID Arm64StopFirmwareWatchdog(VOID);
 BOOLEAN Arm64MapVirtualMemory(ULONGLONG VirtualAddress, ULONGLONG PhysicalAddress, ULONGLONG Size, ULONG Attributes);
 VOID StallExecutionProcessor(ULONG Microseconds);
 VOID Arm64DescribeDeviceTreePlatform(VOID);
@@ -237,6 +240,6 @@ VOID Arm64RegisterIrqHandler(ULONG IntId, ARM64_IRQ_HANDLER Handler);
 #define ARM64_PTE_UXN           (1ULL << 54)
 #define ARM64_PTE_PXN           (1ULL << 53)
 
-#define MM_MAX_PAGE_LOADER         0x200000
-#define MM_MAX_PAGE_LOADER_MAPPED  0x200000
+#define MM_MAX_PAGE_LOADER         ((ARM64_PHYS_MAP_BASE - ARM64_KSEG0_BASE) >> PAGE_SHIFT)
+#define MM_MAX_PAGE_LOADER_MAPPED  MM_MAX_PAGE_LOADER
 

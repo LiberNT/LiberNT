@@ -226,6 +226,7 @@ if(ARCH STREQUAL "arm64")
         arch/arm64/uefitrap.S)
 
     list(APPEND WINLOAD_SOURCE
+        arch/arm64/applesmbios.c
         arch/arm64/archmm.c
         arch/arm64/early_uart.c
         arch/arm64/fdtacpi.c
@@ -235,6 +236,7 @@ if(ARCH STREQUAL "arm64")
         arch/arm64/timer.c
         arch/arm64/trap.c
         arch/arm64/uefitrap.c
+        arch/arm64/watchdog.c
         arch/arm64/winldr.c)
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND WINLOAD_ASM_SOURCE

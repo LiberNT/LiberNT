@@ -890,6 +890,8 @@ typedef struct _ARM64_LOADER_BLOCK
     ULONG EarlyUartInterface;
     ULONG EarlyDeviceRangeCount;
     ARM64_LOADER_EARLY_DEVICE_RANGE EarlyDeviceRanges[ARM64_LOADER_MAX_EARLY_DEVICE_RANGES];
+    ULONGLONG DeviceTree;
+    ULONGLONG DeviceTreeSize;
 #else
     ULONG PlaceHolder;
 #endif

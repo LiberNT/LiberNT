@@ -28,6 +28,7 @@ typedef enum _ARM64_PLATFORM_ID
 {
     Arm64PlatformUnknown = 0,
     Arm64PlatformGenericAcpi,   /* SPCR/DBG2 gave us a usable serial port */
+    Arm64PlatformDeviceTree,
     Arm64PlatformMax
 } ARM64_PLATFORM_ID;
 
