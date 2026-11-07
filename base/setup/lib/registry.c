@@ -817,58 +817,25 @@ RegInitializeRegistry(
      */
     for (i = 0; i < ARRAYSIZE(RegistryHives); ++i)
     {
-        // if (RegistryHives[i].State != Create && RegistryHives[i].State != Repair)
-            // continue;
-
-        if (RegistryHives[i].State == Create || RegistryHives[i].State == Repair)
+        Status = ConnectRegistry(NULL,
+                                 RegistryHives[i].HiveRegistryPath,
+                                 NtSystemRoot,
+                                 RegistryHives[i].HiveName
+                                 /* SystemSecurity, sizeof(SystemSecurity) */);
+        if (!NT_SUCCESS(Status))
         {
-            Status = ConnectRegistry(NULL,
-                                     RegistryHives[i].HiveRegistryPath,
-                                     NtSystemRoot,
-                                     RegistryHives[i].HiveName
-                                     /* SystemSecurity, sizeof(SystemSecurity) */);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("ConnectRegistry(%S) failed, Status 0x%08lx\n",
-                        RegistryHives[i].HiveName, Status);
-            }
-
-            /* Create the registry symlink to this key */
-            Status = CreateSymLinkKey(RootKeys[GetPredefKeyIndex(RegistryHives[i].PredefKeyHandle)].Handle,
-                                      RegistryHives[i].RegSymLink,
-                                      RegistryHives[i].HiveRegistryPath);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("CreateSymLinkKey(%S) failed, Status 0x%08lx\n",
-                        RegistryHives[i].RegSymLink, Status);
-            }
+            DPRINT1("ConnectRegistry(%S) failed, Status 0x%08lx\n",
+                    RegistryHives[i].HiveName, Status);
         }
-        else
-        {
-            /* Create *DUMMY* volatile hives just to make the update procedure working */
 
-            RtlInitUnicodeString(&KeyName, RegistryHives[i].RegSymLink);
-            InitializeObjectAttributes(&ObjectAttributes,
-                                       &KeyName,
-                                       OBJ_CASE_INSENSITIVE,
-                                       RootKeys[GetPredefKeyIndex(RegistryHives[i].PredefKeyHandle)].Handle,
-                                       NULL);
-            KeyHandle = NULL;
-            Status = NtCreateKey(&KeyHandle,
-                                 KEY_ALL_ACCESS,
-                                 &ObjectAttributes,
-                                 0,
-                                 NULL,
-                            // FIXME: Using REG_OPTION_VOLATILE works OK on Windows,
-                            // but I need to check whether it works OK on ReactOS too.
-                                 REG_OPTION_NON_VOLATILE, // REG_OPTION_VOLATILE,
-                                 &Disposition);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("NtCreateKey(%wZ) failed (Status 0x%08lx)\n", &KeyName, Status);
-                // return Status;
-            }
-            NtClose(KeyHandle);
+        /* Create the registry symlink to this key */
+        Status = CreateSymLinkKey(RootKeys[GetPredefKeyIndex(RegistryHives[i].PredefKeyHandle)].Handle,
+                                  RegistryHives[i].RegSymLink,
+                                  RegistryHives[i].HiveRegistryPath);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("CreateSymLinkKey(%S) failed, Status 0x%08lx\n",
+                    RegistryHives[i].RegSymLink, Status);
         }
     }
 
@@ -995,9 +962,6 @@ RegCleanupRegistry(
     IN PUNICODE_STRING NtSystemRoot)
 {
     NTSTATUS Status;
-    HANDLE KeyHandle;
-    UNICODE_STRING KeyName;
-    OBJECT_ATTRIBUTES ObjectAttributes;
     BOOLEAN PrivilegeSet[2] = {FALSE, FALSE};
     UINT i;
     WCHAR SrcPath[MAX_PATH];
@@ -1030,52 +994,26 @@ RegCleanupRegistry(
 
     for (i = 0; i < ARRAYSIZE(RegistryHives); ++i)
     {
-        if (RegistryHives[i].State == Create || RegistryHives[i].State == Repair)
+        /* Delete the registry symlink to this key */
+        Status = DeleteSymLinkKey(RootKeys[GetPredefKeyIndex(RegistryHives[i].PredefKeyHandle)].Handle,
+                                  RegistryHives[i].RegSymLink);
+        if (!NT_SUCCESS(Status))
         {
-            /* Delete the registry symlink to this key */
-            Status = DeleteSymLinkKey(RootKeys[GetPredefKeyIndex(RegistryHives[i].PredefKeyHandle)].Handle,
-                                      RegistryHives[i].RegSymLink);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("DeleteSymLinkKey(%S) failed, Status 0x%08lx\n",
-                        RegistryHives[i].RegSymLink, Status);
-            }
-
-            /* Unmount the hive */
-            Status = DisconnectRegistry(NULL,
-                                        RegistryHives[i].HiveRegistryPath,
-                                        1 /* REG_FORCE_UNLOAD */);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("Unmounting '%S' failed\n", RegistryHives[i].HiveRegistryPath);
-            }
-
-            /* Switch the hive state to 'Update' */
-            RegistryHives[i].State = Update;
+            DPRINT1("DeleteSymLinkKey(%S) failed, Status 0x%08lx\n",
+                    RegistryHives[i].RegSymLink, Status);
         }
-        else
+
+        /* Unmount the hive */
+        Status = DisconnectRegistry(NULL,
+                                    RegistryHives[i].HiveRegistryPath,
+                                    1 /* REG_FORCE_UNLOAD */);
+        if (!NT_SUCCESS(Status))
         {
-            /* Delete the *DUMMY* volatile hives created for the update procedure */
-
-            RtlInitUnicodeString(&KeyName, RegistryHives[i].RegSymLink);
-            InitializeObjectAttributes(&ObjectAttributes,
-                                       &KeyName,
-                                       OBJ_CASE_INSENSITIVE,
-                                       RootKeys[GetPredefKeyIndex(RegistryHives[i].PredefKeyHandle)].Handle,
-                                       NULL);
-            KeyHandle = NULL;
-            Status = NtOpenKey(&KeyHandle,
-                               DELETE,
-                               &ObjectAttributes);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("NtOpenKey(%wZ) failed, Status 0x%08lx\n", &KeyName, Status);
-                // return;
-            }
-
-            NtDeleteKey(KeyHandle);
-            NtClose(KeyHandle);
+            DPRINT1("Unmounting '%S' failed\n", RegistryHives[i].HiveRegistryPath);
         }
+
+        /* Switch the hive state to 'Update' */
+        RegistryHives[i].State = Update;
     }
 
     /*
