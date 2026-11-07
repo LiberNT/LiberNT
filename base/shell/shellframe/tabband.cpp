@@ -237,7 +237,7 @@ TabBand::Create(HWND parent, TabBandHost *host, HFONT font, LPCWSTR className)
 int
 TabBand::Scale(int value) const
 {
-    return MulDiv(value, m_hwnd ? GetDpiForWindow(m_hwnd) : 96, 96);
+    return MulDiv(value, m_hwnd ? GetDpiForWindow(m_hwnd) : GetDpiForSystem(), 96);
 }
 
 void
