@@ -270,6 +270,7 @@ struct _jsexcept_t {
 #ifdef __REACTOS__
     BOOL host_info;
     BOOL resource_message;
+    BOOL host_error;
     jsstr_t *help_file;
     DWORD help_context;
 #endif

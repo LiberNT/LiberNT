@@ -350,6 +350,7 @@ void reset_ei(jsexcept_t *ei)
     ei->help_context = 0;
     ei->host_info = FALSE;
     ei->resource_message = FALSE;
+    ei->host_error = FALSE;
 #endif
 }
 
