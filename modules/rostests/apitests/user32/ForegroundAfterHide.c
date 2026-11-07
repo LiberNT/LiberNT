@@ -264,6 +264,21 @@ START_TEST(ForegroundAfterHide)
     SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
     Pump(300);
 
+    hwndPrev = CreateIn(hwndHelper2, 300, 300);
+    GiveForeground(hwndHelper2, hwndPrev);
+    hwndOther = CreateIn(hwndHelper1, 200, 200);
+    hWnd = TakeForeground(hwndHelper1, hwndHelper2, hwndOther);
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+    Pump(300);
+    ok(!IsWindowVisible(hWnd), "SetWindowPos hide: the window is still visible\n");
+    ok(GetForegroundWindow() == hWnd, "SetWindowPos hide: the hidden window lost the foreground\n");
+    ok(GetActiveWindow() == hWnd, "SetWindowPos hide: the hidden window is not active\n");
+    DestroyWindow(hWnd);
+    ok(WaitForForeground() == hwndPrev, "SetWindowPos hide: the previous foreground window did not get the foreground back on destroy\n");
+    SendMessageW(hwndHelper1, FGHIDE_DESTROY, (WPARAM)hwndOther, 0);
+    SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
+    Pump(300);
+
     hwndPrev = CreateIn(hwndThreadControl, 200, 200);
     GiveForeground(hwndThreadControl, hwndPrev);
     hWnd = TakeForeground(hwndHelper1, hwndHelper2, NULL);
