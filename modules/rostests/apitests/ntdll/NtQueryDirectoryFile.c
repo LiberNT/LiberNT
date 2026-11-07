@@ -50,6 +50,66 @@ TestMissingDirectoryEntry(VOID)
     }
 }
 
+static VOID
+TestSmallDirectoryBuffer(VOID)
+{
+    UNICODE_STRING Directory = RTL_CONSTANT_STRING(L"\\SystemRoot\\System32");
+    UNICODE_STRING Filter = RTL_CONSTANT_STRING(L"ntdll.dll");
+    FILE_INFORMATION_CLASS Classes[] =
+    {
+        FileDirectoryInformation,
+        FileFullDirectoryInformation,
+        FileBothDirectoryInformation
+    };
+    ULONG Sizes[] = {88, 88, 128};
+    ULONG Expected[] = {82, 86, 112};
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE Handle;
+    NTSTATUS Status;
+    ULONG i;
+    union
+    {
+        ULONGLONG Alignment;
+        UCHAR Bytes[128];
+    } Buffer;
+
+    InitializeObjectAttributes(&Attributes, &Directory, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    for (i = 0; i < RTL_NUMBER_OF(Classes); ++i)
+    {
+        Status = NtOpenFile(&Handle, FILE_LIST_DIRECTORY | SYNCHRONIZE, &Attributes, &IoStatus,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                            FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT);
+        ok_hex(Status, STATUS_SUCCESS);
+        if (!NT_SUCCESS(Status))
+            continue;
+        RtlZeroMemory(&Buffer, sizeof(Buffer));
+        IoStatus.Information = 0;
+        Status = NtQueryDirectoryFile(Handle, NULL, NULL, NULL, &IoStatus, &Buffer,
+                                      Sizes[i], Classes[i], TRUE, &Filter, TRUE);
+        ok_hex(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+        {
+            PFILE_DIRECTORY_INFORMATION Information = (PFILE_DIRECTORY_INFORMATION)&Buffer;
+            ok(IoStatus.Information == Expected[i], "Class %u returned %Iu bytes, expected %lu\n",
+               Classes[i], IoStatus.Information, Expected[i]);
+            ok(Information->FileNameLength == Filter.Length, "Class %u returned name length %lu\n",
+               Classes[i], Information->FileNameLength);
+            if (Information->FileNameLength == Filter.Length)
+            {
+                ULONG NameOffset = i == 0 ? FIELD_OFFSET(FILE_DIRECTORY_INFORMATION, FileName) :
+                                   i == 1 ? FIELD_OFFSET(FILE_FULL_DIR_INFORMATION, FileName) :
+                                            FIELD_OFFSET(FILE_BOTH_DIR_INFORMATION, FileName);
+                UNICODE_STRING Found;
+                Found.Length = Found.MaximumLength = (USHORT)Information->FileNameLength;
+                Found.Buffer = (PWSTR)(Buffer.Bytes + NameOffset);
+                ok(RtlEqualUnicodeString(&Found, &Filter, TRUE), "Class %u returned the wrong name\n", Classes[i]);
+            }
+        }
+        NtClose(Handle);
+    }
+}
+
 START_TEST(NtQueryDirectoryFile)
 {
     UNICODE_STRING Directory = RTL_CONSTANT_STRING(L"\\SystemRoot\\System32");
@@ -105,4 +165,5 @@ START_TEST(NtQueryDirectoryFile)
     }
     NtClose(Handle);
     TestMissingDirectoryEntry();
+    TestSmallDirectoryBuffer();
 }
