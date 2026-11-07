@@ -1919,8 +1919,10 @@ IntFixWindowCoordinates(CREATESTRUCTW* Cs, PWND ParentWindow, DWORD* dwShowMode)
     if(!(Cs->style & (WS_POPUP | WS_CHILD)))
    {
       PMONITOR pMonitor = NULL;
-      PRTL_USER_PROCESS_PARAMETERS ProcessParams;
       PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
+      RECT Work, Screen;
+      LONG Step;
+      BOOL Virtual, DefaultX, DefaultCx, Cascade = FALSE;
 
       if (ppi && ppi->hMonitor)
          pMonitor = UserGetMonitorObject(ppi->hMonitor);
@@ -1936,44 +1938,56 @@ IntFixWindowCoordinates(CREATESTRUCTW* Cs, PWND ParentWindow, DWORD* dwShowMode)
           return;
       }
 
-      ProcessParams = PsGetCurrentProcess()->Peb->ProcessParameters;
+      Virtual = UserDpiIsVirtualCaller();
+      Work = pMonitor->rcWork;
+      Screen = pMonitor->rcMonitor;
+      if (Virtual)
+      {
+          UserDpiRectToLogical(&Work);
+          UserDpiRectToLogical(&Screen);
+      }
+      Step = UserGetCallerUnfoldedSystemMetrics(SM_CYSIZE) + UserGetCallerUnfoldedSystemMetrics(SM_CYFRAME);
+      DefaultX = IS_DEFAULT(Cs->x);
+      DefaultCx = IS_DEFAULT(Cs->cx);
 
-      if (IS_DEFAULT(Cs->x))
+      if (DefaultX)
       {
           if (!IS_DEFAULT(Cs->y)) *dwShowMode = Cs->y;
 
-          if(ProcessParams->WindowFlags & STARTF_USEPOSITION)
+          if (ppi && (ppi->usi.dwFlags & STARTF_USEPOSITION))
           {
-              Cs->x = ProcessParams->StartingX;
-              Cs->y = ProcessParams->StartingY;
+              Cs->x = ppi->usi.dwX;
+              Cs->y = ppi->usi.dwY;
+              ppi->usi.dwFlags &= ~STARTF_USEPOSITION;
           }
           else
           {
-               Cs->x = pMonitor->cWndStack * (UserGetSystemMetrics(SM_CXSIZE) + UserGetSystemMetrics(SM_CXFRAME));
-               Cs->y = pMonitor->cWndStack * (UserGetSystemMetrics(SM_CYSIZE) + UserGetSystemMetrics(SM_CYFRAME));
-               if (Cs->x > ((pMonitor->rcWork.right - pMonitor->rcWork.left) / 4) ||
-                   Cs->y > ((pMonitor->rcWork.bottom - pMonitor->rcWork.top) / 4))
+               pMonitor->cWndStack++;
+               Cs->x = Cs->y = pMonitor->cWndStack * Step;
+               if (Cs->x + 2 * Step > ((Work.right - Work.left) / 4) ||
+                   Cs->y > ((Work.bottom - Work.top) / 4))
                {
-                  /* reset counter and position */
-                  Cs->x = 0;
-                  Cs->y = 0;
+                  Cs->x = Cs->y = Step;
                   pMonitor->cWndStack = 0;
                }
-               pMonitor->cWndStack++;
+               Cascade = TRUE;
           }
       }
 
-      if (IS_DEFAULT(Cs->cx))
+      if (DefaultCx)
       {
-          if (ProcessParams->WindowFlags & STARTF_USEPOSITION)
+          if (ppi && (ppi->usi.dwFlags & STARTF_USESIZE))
           {
-              Cs->cx = ProcessParams->CountX;
-              Cs->cy = ProcessParams->CountY;
+              Cs->cx = ppi->usi.dwXSize;
+              Cs->cy = ppi->usi.dwYSize;
+              ppi->usi.dwFlags &= ~STARTF_USESIZE;
           }
           else
           {
-              Cs->cx = (pMonitor->rcWork.right - pMonitor->rcWork.left) * 3 / 4;
-              Cs->cy = (pMonitor->rcWork.bottom - pMonitor->rcWork.top) * 3 / 4;
+              Cs->cx = (Screen.right - Screen.left) - (Screen.right - Screen.left) / 4;
+              /* FIXME: the default height margin is fitted to Windows 11 at 96, 144 and 192 DPI */
+              Cs->cy = (Work.bottom - Work.top) - (Work.bottom - Work.top) / 4 -
+                       (gpsi->aiSysMet[SM_CYSMICON] + 5);
           }
       }
       /* neither x nor cx are default. Check the y values .
@@ -1983,7 +1997,35 @@ IntFixWindowCoordinates(CREATESTRUCTW* Cs, PWND ParentWindow, DWORD* dwShowMode)
       else if (IS_DEFAULT(Cs->cy))
       {
           TRACE("Strange use of CW_USEDEFAULT in nHeight\n");
-          Cs->cy = (pMonitor->rcWork.bottom - pMonitor->rcWork.top) * 3 / 4;
+          Cs->cy = (Work.bottom - Work.top) * 3 / 4;
+          DefaultCx = TRUE;
+          Cs->cx = Virtual ? UserDpiToLogical(Cs->x + Cs->cx) - UserDpiToLogical(Cs->x) : Cs->cx;
+      }
+
+      if (Cascade)
+      {
+          LONG Cx = (Virtual && !DefaultCx) ? UserDpiToLogical(Cs->cx) : Cs->cx;
+          LONG Cy = (Virtual && !DefaultCx) ? UserDpiToLogical(Cs->cy) : Cs->cy;
+
+          Cs->x = max(min(Cs->x, Screen.right - Cx), Screen.left);
+          Cs->y = max(min(Cs->y, Screen.bottom - Cy), Screen.top);
+      }
+
+      if (Virtual && (DefaultX || DefaultCx))
+      {
+          LONG Left = DefaultX ? Cs->x : UserDpiToLogical(Cs->x);
+          LONG Top = DefaultX ? Cs->y : UserDpiToLogical(Cs->y);
+
+          if (DefaultCx)
+          {
+              Cs->cx = UserDpiToPhysical(Left + Cs->cx) - UserDpiToPhysical(Left);
+              Cs->cy = UserDpiToPhysical(Top + Cs->cy) - UserDpiToPhysical(Top);
+          }
+          if (DefaultX)
+          {
+              Cs->x = UserDpiToPhysical(Left);
+              Cs->y = UserDpiToPhysical(Top);
+          }
       }
    }
    else
@@ -2605,8 +2647,6 @@ co_UserCreateWindowEx(CREATESTRUCTW* Cs,
    if ((Cs->style & WS_THICKFRAME) || !(Cs->style & (WS_POPUP | WS_CHILD)))
    {
       co_WinPosGetMinMaxInfo(Window, &MaxSize, &MaxPos, &MinTrack, &MaxTrack);
-      if (Size.cx > MaxTrack.x) Size.cx = MaxTrack.x;
-      if (Size.cy > MaxTrack.y) Size.cy = MaxTrack.y;
       if (Size.cx < MinTrack.x) Size.cx = MinTrack.x;
       if (Size.cy < MinTrack.y) Size.cy = MinTrack.y;
    }

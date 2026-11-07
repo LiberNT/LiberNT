@@ -1024,16 +1024,16 @@ co_WinPosGetMinMaxInfo(PWND Window, POINT* MaxSize, POINT* MaxPos,
     MinMax.ptMaxSize.y = rc.bottom - rc.top;
     if (style & (WS_DLGFRAME | WS_BORDER))
     {
-        MinMax.ptMinTrackSize.x = UserGetSystemMetrics(SM_CXMINTRACK);
-        MinMax.ptMinTrackSize.y = UserGetSystemMetrics(SM_CYMINTRACK);
+        MinMax.ptMinTrackSize.x = UserGetWindowSystemMetrics(Window, SM_CXMINTRACK);
+        MinMax.ptMinTrackSize.y = UserGetWindowSystemMetrics(Window, SM_CYMINTRACK);
     }
     else
     {
         MinMax.ptMinTrackSize.x = 2 * xinc;
         MinMax.ptMinTrackSize.y = 2 * yinc;
     }
-    MinMax.ptMaxTrackSize.x = UserGetSystemMetrics(SM_CXMAXTRACK);
-    MinMax.ptMaxTrackSize.y = UserGetSystemMetrics(SM_CYMAXTRACK);
+    MinMax.ptMaxTrackSize.x = UserGetWindowSystemMetrics(Window, SM_CXMAXTRACK);
+    MinMax.ptMaxTrackSize.y = UserGetWindowSystemMetrics(Window, SM_CYMAXTRACK);
     MinMax.ptMaxPosition.x = -xinc;
     MinMax.ptMaxPosition.y = -yinc;
 
