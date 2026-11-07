@@ -1920,6 +1920,30 @@ static void IntSendParentNotify( PWND pWindow, UINT msg )
     }
 }
 
+static LONG
+IntDefaultHeightMargin(BOOL Virtual)
+{
+    static const struct
+    {
+        UINT Dpi;
+        LONG System;
+        LONG Unaware;
+    } Measured[] =
+    {
+        { 96, 21, 21 }, { 144, 29, 29 }, { 168, 34, 34 }, { 192, 37, 37 }, { 216, 42, 43 }, { 240, 46, 46 },
+        { 288, 54, 54 },
+    };
+    UINT Dpi = UserGetSystemDpi(), Index;
+
+    /* FIXME: the Windows 11 rule behind these measured default height margins is not known */
+    for (Index = 0; Index < RTL_NUMBER_OF(Measured); Index++)
+    {
+        if (Measured[Index].Dpi == Dpi)
+            return Virtual ? Measured[Index].Unaware : Measured[Index].System;
+    }
+    return gpsi->aiSysMet[SM_CYSMICON] + 5;
+}
+
 void FASTCALL
 IntFixWindowCoordinates(CREATESTRUCTW* Cs, PWND ParentWindow, DWORD* dwShowMode)
 {
@@ -1994,10 +2018,12 @@ IntFixWindowCoordinates(CREATESTRUCTW* Cs, PWND ParentWindow, DWORD* dwShowMode)
           }
           else
           {
-              Cs->cx = (Screen.right - Screen.left) - (Screen.right - Screen.left) / 4;
-              /* FIXME: the default height margin is fitted to Windows 11 at 96, 144 and 192 DPI */
-              Cs->cy = (Work.bottom - Work.top) - (Work.bottom - Work.top) / 4 -
-                       (gpsi->aiSysMet[SM_CYSMICON] + 5);
+              LONG Width = pMonitor->rcMonitor.right - pMonitor->rcMonitor.left;
+
+              Cs->cx = Width - Width / 4;
+              if (Virtual)
+                  Cs->cx = UserDpiToLogical(Cs->cx);
+              Cs->cy = (Work.bottom - Work.top) - (Work.bottom - Work.top) / 4 - IntDefaultHeightMargin(Virtual);
           }
       }
       /* neither x nor cx are default. Check the y values .
