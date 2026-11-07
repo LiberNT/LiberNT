@@ -75,7 +75,7 @@ static int InsertColumn(int nCol, LPCWSTR lpszColumnHeading, int nFormat, int nW
     if (nWidth != -1)
     {
         column.mask |= LVCF_WIDTH;
-        column.cx = nWidth;
+        column.cx = MulDiv(nWidth, TaskManager_GetDpi(), 96);
     }
 
     if (nSubItem != -1)
@@ -121,7 +121,7 @@ void SaveColumnSettings(void)
             if (_wcsicmp(text, szTemp) == 0)
             {
                 TaskManagerSettings.Columns[n] = TRUE;
-                TaskManagerSettings.ColumnSizeArray[n] = hditem.cxy;
+                TaskManagerSettings.ColumnSizeArray[n] = MulDiv(hditem.cxy, 96, TaskManager_GetDpi());
             }
         }
     }
