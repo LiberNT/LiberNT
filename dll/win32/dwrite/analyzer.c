@@ -440,15 +440,44 @@ static inline unsigned int text_source_get_char_length(const struct text_source_
 
 static void text_source_read_more(struct text_source_context *context)
 {
-    if ((context->chunk_length - context->cursor) > 1) return;
-
     context->position += context->cursor;
     context->cursor = 0;
+    context->text = NULL;
+    context->chunk_length = 0;
     if (FAILED(context->status = IDWriteTextAnalysisSource_GetTextAtPosition(context->source, context->position,
             &context->text, &context->chunk_length)))
     {
+        context->text = NULL;
+        context->chunk_length = 0;
         context->end = TRUE;
     }
+}
+
+static void text_source_complete_pair(struct text_source_context *context)
+{
+    const WCHAR *text = NULL;
+    UINT32 chunk_length = 0;
+    HRESULT hr;
+
+    /* Windows 11 reads past a trailing high surrogate only while the requested range continues. */
+    if (context->chunk_length - context->cursor != 1 || !IS_HIGH_SURROGATE(context->text[context->cursor]) ||
+            context->consumed + 1 >= context->length)
+        return;
+
+    hr = IDWriteTextAnalysisSource_GetTextAtPosition(context->source, context->position + context->cursor,
+            &text, &chunk_length);
+    if (FAILED(hr))
+    {
+        context->status = hr;
+        context->end = TRUE;
+        return;
+    }
+    if (!text || !chunk_length) return;
+
+    context->position += context->cursor;
+    context->cursor = 0;
+    context->text = text;
+    context->chunk_length = chunk_length;
 }
 
 static void text_source_get_u32_char(struct text_source_context *context)
@@ -457,7 +486,7 @@ static void text_source_get_u32_char(struct text_source_context *context)
     UINT32 available;
 
     /* Make sure to have full pair of surrogates */
-    text_source_read_more(context);
+    text_source_complete_pair(context);
 
     available = context->chunk_length - context->cursor;
     text = context->text + context->cursor;
@@ -493,7 +522,7 @@ static BOOL text_source_get_next_u32_char(struct text_source_context *context)
         context->ch = 0;
         context->end = TRUE;
     }
-    else if (context->cursor < context->chunk_length)
+    else if (context->text && context->cursor < context->chunk_length)
     {
         text_source_get_u32_char(context);
     }
