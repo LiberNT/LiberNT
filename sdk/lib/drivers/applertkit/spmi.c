@@ -15,9 +15,13 @@
 #define SPMI_STATUS_RX_EMPTY        0x01000000
 #define SPMI_COMMAND                0x04
 #define SPMI_RESPONSE               0x08
+#define SPMI_IRQ_MASK_BASE          0x20
+#define SPMI_IRQ_ACK_BASE           0x60
 #define SPMI_IRQ_ACK_NOTIFY         0x80
+#define SPMI_PERIPHERAL_IRQS        256
 #define SPMI_ACTION                 0xa4
 #define SPMI_ACTION_FIFO_FLUSH      0x1
+#define SPMI_CMD_WAKEUP             0x13
 #define SPMI_CMD_EXT_WRITEL         0x30
 #define SPMI_CMD_EXT_READL          0x38
 #define SPMI_CMD_READ               0x60
@@ -94,8 +98,7 @@ AppleSpmiCommand(
     _In_reads_bytes_opt_(WriteLength) const UCHAR *WriteBuffer,
     _In_ ULONG WriteLength,
     _Out_writes_bytes_opt_(ReadLength) PUCHAR ReadBuffer,
-    _In_ ULONG ReadLength,
-    _In_ BOOLEAN RequireAck)
+    _In_ ULONG ReadLength)
 {
     ULONG Reply, Word, Waited, Done, Count;
 
@@ -136,7 +139,7 @@ AppleSpmiCommand(
     }
     if (!(AppleSpmiReadRegister(Spmi, SPMI_STATUS) & SPMI_STATUS_RX_EMPTY))
         Spmi->Failed = TRUE;
-    if (!ReadLength && RequireAck && !(Reply & SPMI_REPLY_ACK))
+    if (!ReadLength && !(Reply & SPMI_REPLY_ACK))
         return STATUS_DEVICE_PROTOCOL_ERROR;
     if (~(Reply >> 16) & ((1UL << ReadLength) - 1))
         return STATUS_DEVICE_DATA_ERROR;
@@ -161,7 +164,7 @@ AppleSpmiRead(
     {
         Count = min(Length - Done, SPMI_EXT_READL_MAX);
         Status = AppleSpmiCommand(Spmi, SPMI_CMD_EXT_READL | (Count - 1), Sid, (USHORT)(Address + Done), NULL, 0,
-                                  Buffer + Done, Count, TRUE);
+                                  Buffer + Done, Count);
         if (!NT_SUCCESS(Status))
             return Status;
     }
@@ -186,7 +189,7 @@ AppleSpmiWrite(
     {
         Count = min(Length - Done, SPMI_EXT_READL_MAX);
         Status = AppleSpmiCommand(Spmi, SPMI_CMD_EXT_WRITEL | (Count - 1), Sid, (USHORT)(Address + Done), Buffer + Done,
-                                  Count, NULL, 0, TRUE);
+                                  Count, NULL, 0);
         if (!NT_SUCCESS(Status))
             return Status;
     }
@@ -203,7 +206,7 @@ AppleSpmiRegisterRead(
 {
     if (!Spmi->Registers || Address > 0x1f)
         return STATUS_INVALID_PARAMETER;
-    return AppleSpmiCommand(Spmi, SPMI_CMD_READ, Sid, Address, NULL, 0, Value, 1, TRUE);
+    return AppleSpmiCommand(Spmi, SPMI_CMD_READ | Address, Sid, Address, NULL, 0, Value, 1);
 }
 
 NTSTATUS
@@ -215,7 +218,51 @@ AppleSpmiZeroWrite(
 {
     if (!Spmi->Registers || Data > 0x7f)
         return STATUS_INVALID_PARAMETER;
-    return AppleSpmiCommand(Spmi, SPMI_CMD_ZERO_WRITE, Sid, 0, &Data, 1, NULL, 0, FALSE);
+    return AppleSpmiCommand(Spmi, SPMI_CMD_ZERO_WRITE | Data, Sid, (USHORT)(Data << 8), NULL, 0, NULL, 0);
+}
+
+NTSTATUS
+NTAPI
+AppleSpmiWakeup(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ UCHAR Sid)
+{
+    if (!Spmi->Registers)
+        return STATUS_INVALID_PARAMETER;
+    return AppleSpmiCommand(Spmi, SPMI_CMD_WAKEUP, Sid, 0, NULL, 0, NULL, 0);
+}
+
+BOOLEAN
+NTAPI
+AppleSpmiInterruptPending(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ ULONG Interrupt)
+{
+    if (!Spmi->Registers || Interrupt >= SPMI_PERIPHERAL_IRQS)
+        return FALSE;
+    return (AppleSpmiReadRegister(Spmi, SPMI_IRQ_ACK_BASE + (Interrupt / 32) * sizeof(ULONG)) >> (Interrupt % 32)) & 1;
+}
+
+VOID
+NTAPI
+AppleSpmiEnableInterrupt(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ ULONG Interrupt)
+{
+    ULONG Offset = SPMI_IRQ_MASK_BASE + (Interrupt / 32) * sizeof(ULONG);
+
+    if (Spmi->Registers && Interrupt < SPMI_PERIPHERAL_IRQS)
+        AppleSpmiWriteRegister(Spmi, Offset, AppleSpmiReadRegister(Spmi, Offset) | (1UL << (Interrupt % 32)));
+}
+
+VOID
+NTAPI
+AppleSpmiAcknowledgeInterrupt(
+    _Inout_ PAPPLE_SPMI Spmi,
+    _In_ ULONG Interrupt)
+{
+    if (Spmi->Registers && Interrupt < SPMI_PERIPHERAL_IRQS)
+        AppleSpmiWriteRegister(Spmi, SPMI_IRQ_ACK_BASE + (Interrupt / 32) * sizeof(ULONG), 1UL << (Interrupt % 32));
 }
 
 static

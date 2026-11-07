@@ -15,6 +15,7 @@
 #define ACE_MAX_LENGTH          0x3f
 #define ACE_SELECT_BUSY         0x80
 #define ACE_SELECT_TIMEOUT_MS   100
+#define ACE_WAKE_TIMEOUT_MS     100
 #define ACE_COMMAND_TIMEOUT_MS  1000
 #define ACE_INVALID_COMMAND     0x444d4321UL
 #define ACE_TASK_TIMEOUT        1
@@ -166,8 +167,21 @@ AppleAcePdInitialize(
     static const CHAR SetPowerState[4] = { 'S', 'S', 'P', 'S' };
     ULONG64 Mask = APPLE_ACE_INT_PLUG_EVENT | APPLE_ACE_INT_POWER_STATUS_UPDATE | APPLE_ACE_INT_DATA_STATUS_UPDATE;
     UCHAR State, Target = APPLE_ACE_POWER_STATE_S0;
+    ULONG Waited;
     NTSTATUS Status;
 
+    AppleSpmiEnableInterrupt(Pd->Spmi, Pd->WakeInterrupt);
+    AppleSpmiAcknowledgeInterrupt(Pd->Spmi, Pd->WakeInterrupt);
+    Status = AppleSpmiWakeup(Pd->Spmi, Pd->Sid);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    for (Waited = 0; !AppleSpmiInterruptPending(Pd->Spmi, Pd->WakeInterrupt); ++Waited)
+    {
+        if (Waited >= ACE_WAKE_TIMEOUT_MS)
+            return STATUS_IO_TIMEOUT;
+        AcePdSleepMs(1);
+    }
+    AppleSpmiAcknowledgeInterrupt(Pd->Spmi, Pd->WakeInterrupt);
     Status = AppleAcePdRead(Pd, APPLE_ACE_REG_SYSTEM_POWER_STATE, &State, sizeof(State));
     if (!NT_SUCCESS(Status))
         return Status;

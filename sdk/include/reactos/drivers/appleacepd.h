@@ -41,6 +41,7 @@ typedef struct _APPLE_ACE_PD
 {
     PAPPLE_SPMI Spmi;
     UCHAR Sid;
+    ULONG WakeInterrupt;
 } APPLE_ACE_PD, *PAPPLE_ACE_PD;
 
 typedef struct _APPLE_ACE_PD_STATE
