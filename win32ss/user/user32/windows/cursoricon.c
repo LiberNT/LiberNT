@@ -1159,6 +1159,31 @@ done:
     return bResult;
 }
 
+static BOOL CURSORICON_GetCursorDataFromImage(
+    _Inout_ CURSORDATA* pdata,
+    _In_    const BYTE *pbImage,
+    _In_    DWORD cbImage
+)
+{
+    CURSORICONFILEDIR *pBmpDir;
+    DWORD BmpIconSize;
+    PBYTE pbBmpIcon;
+    BOOL bResult;
+
+    if (CURSORICON_GetCursorDataFromBMI(pdata, (const BITMAPINFO *)pbImage))
+        return TRUE;
+
+    pbBmpIcon = CURSORICON_ConvertPngToBmpIcon((PBYTE)pbImage, cbImage, &BmpIconSize);
+    if (!pbBmpIcon)
+        return FALSE;
+
+    pBmpDir = (CURSORICONFILEDIR *)pbBmpIcon;
+    bResult = CURSORICON_GetCursorDataFromBMI(pdata,
+                                              (const BITMAPINFO *)&pbBmpIcon[pBmpDir->idEntries[0].dwDIBOffset]);
+    HeapFree(GetProcessHeap(), 0, pbBmpIcon);
+    return bResult;
+}
+
 static BOOL CURSORICON_GetCursorDataFromIconInfo(
   _Out_ CURSORDATA* pCursorData,
   _In_  ICONINFO* pIconInfo
@@ -1368,6 +1393,7 @@ static BOOL CURSORICON_GetCursorDataFromANI(
     riff_chunk_t seq_chunk = {0};
     const unsigned char *icon_chunk;
     const unsigned char *icon_data;
+    const unsigned char *fram_end;
 
     /* Find the root chunk */
     riff_find_chunk( ANI_ACON_ID, ANI_RIFF_ID, &root_chunk, &ACON_chunk );
@@ -1418,6 +1444,7 @@ static BOOL CURSORICON_GetCursorDataFromANI(
     }
     icon_chunk = fram_chunk.data;
     icon_data = fram_chunk.data + (2 * sizeof(DWORD));
+    fram_end = fram_chunk.data + fram_chunk.data_size - sizeof(DWORD);
 
     if(pHeader->num_frames > 1)
     {
@@ -1436,8 +1463,17 @@ static BOOL CURSORICON_GetCursorDataFromANI(
     for(i=0; i < pHeader->num_frames; i++)
     {
         CURSORDATA* pFrameData;
-        const DWORD chunk_size = *(const DWORD *)(icon_chunk + sizeof(DWORD));
-        const BITMAPINFO* pbmi;
+        DWORD chunk_size;
+        const BYTE* pbImage;
+        DWORD cbImage;
+
+        if (icon_data > fram_end ||
+            *(const DWORD *)(icon_chunk + sizeof(DWORD)) > (DWORD)(fram_end - icon_data))
+        {
+            ERR("Frame %d does not fit in the frame list.\n", i);
+            goto error;
+        }
+        chunk_size = *(const DWORD *)(icon_chunk + sizeof(DWORD));
 
         if(pHeader->num_frames > 1)
             pFrameData = &pCurData->aspcur[i];
@@ -1473,17 +1509,19 @@ static BOOL CURSORICON_GetCursorDataFromANI(
                 pFrameData->cx = pHeader->width;
                 pFrameData->cy = pHeader->height;
             }
-            pbmi = (const BITMAPINFO *) (icon_data + pDirEntry->dwDIBOffset);
+            pbImage = icon_data + pDirEntry->dwDIBOffset;
+            cbImage = pDirEntry->dwDIBSize;
         }
         else
         {
             /* The chunks just describe bitmaps */
-            pbmi = (const BITMAPINFO *)icon_data;
+            pbImage = icon_data;
+            cbImage = chunk_size;
             pFrameData->xHotspot = pFrameData->yHotspot = 0;
         }
 
         /* Do the real work */
-        if (!CURSORICON_GetCursorDataFromBMI(pFrameData, pbmi))
+        if (!CURSORICON_GetCursorDataFromImage(pFrameData, pbImage, cbImage))
         {
             ERR("Unable to load frame %d.\n", i);
             goto error;
@@ -1496,7 +1534,7 @@ static BOOL CURSORICON_GetCursorDataFromANI(
 
 
         /* Next frame */
-        icon_chunk += chunk_size + (2 * sizeof(DWORD));
+        icon_chunk += ((chunk_size + 1) & ~1) + (2 * sizeof(DWORD));
         icon_data = icon_chunk + (2 * sizeof(DWORD));
     }
 
@@ -1880,8 +1918,8 @@ CURSORICON_LoadFromFileW(
 {
     const CURSORICONFILEDIRENTRY *entry;
     const CURSORICONFILEDIR *dir;
-    DWORD filesize = 0, BmpIconSize;
-    PBYTE bits, pbBmpIcon = NULL;
+    DWORD filesize = 0;
+    PBYTE bits;
     HANDLE hCurIcon = NULL;
     CURSORDATA cursorData = { 0 };
 
@@ -1913,33 +1951,10 @@ CURSORICON_LoadFromFileW(
     }
     cursorData.rt = LOWORD(bIcon ? RT_ICON : RT_CURSOR);
 
-    /* Try to load BMP icon */
-    if (!CURSORICON_GetCursorDataFromBMI(&cursorData, (PBITMAPINFO)(&bits[entry->dwDIBOffset])))
+    if (!CURSORICON_GetCursorDataFromImage(&cursorData, &bits[entry->dwDIBOffset], entry->dwDIBSize))
     {
-        /* Convert PNG raw data to BMP icon if the icon was PNG icon */
-        PBYTE pngBits = &bits[entry->dwDIBOffset];
-        pbBmpIcon = CURSORICON_ConvertPngToBmpIcon(pngBits, filesize, &BmpIconSize);
-        if (!pbBmpIcon)
-            goto end; /* Not PNG icon or failed */
-
-        /* Find icon entry from BMP icon */
-        dir = (CURSORICONFILEDIR *)pbBmpIcon;
-        entry = &dir->idEntries[0]; /* Only one entry */
-
-        /* A bit of preparation */
-        ZeroMemory(&cursorData, sizeof(cursorData));
-        cursorData.cx = cxDesired;
-        cursorData.cy = cyDesired;
-        cursorData.rt = LOWORD(bIcon ? RT_ICON : RT_CURSOR);
-
-        /* Can we load this BMP icon? */
-        if (!CURSORICON_GetCursorDataFromBMI(&cursorData, (PBITMAPINFO)(&pbBmpIcon[entry->dwDIBOffset])))
-        {
-            ERR("Failing file: '%S'.\n", lpszName);
-            goto end;
-        }
-
-        TRACE("Processing PNG/Vista icon: '%S'\n", lpszName);
+        ERR("Failing file: '%S'.\n", lpszName);
+        goto end;
     }
 
     hCurIcon = NtUserxCreateEmptyCurObject(FALSE);
@@ -1960,7 +1975,6 @@ end:
         if (cursorData.hbmColor) DeleteObject(cursorData.hbmColor);
         if (cursorData.hbmAlpha) DeleteObject(cursorData.hbmAlpha);
     }
-    HeapFree(GetProcessHeap(), 0, pbBmpIcon);
     UnmapViewOfFile(bits);
     return hCurIcon;
 }
