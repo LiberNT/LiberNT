@@ -33,6 +33,9 @@ NtUserGetProcessDpiAwarenessContext(HANDLE hProcess);
 UINT WINAPI
 GetDpiForSystem(VOID);
 
+INT WINAPI
+User32GetFoldedPaddedBorder(VOID);
+
 ULONG APIENTRY
 NtUserGetThreadDpiAwarenessContext(VOID);
 
@@ -591,12 +594,15 @@ WINAPI
 SystemParametersInfoForDpi(_In_ UINT Action, _In_ UINT Param, _Inout_opt_ PVOID Data, _In_ UINT Flags, _In_ UINT Dpi)
 {
     UINT SystemDpi = User32IsDpiVirtualThread() ? USER_DEFAULT_SCREEN_DPI : GetRawSystemDpi();
+    INT Padded;
 
-    if (!Data || !Dpi)
+    if (!Data)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+    if (!Dpi)
+        Dpi = SystemDpi;
 
     switch (Action)
     {
@@ -626,6 +632,12 @@ SystemParametersInfoForDpi(_In_ UINT Action, _In_ UINT Param, _Inout_opt_ PVOID 
             if (!SystemParametersInfoW(Action, sizeof(LocalMetrics), &LocalMetrics, Flags))
             {
                 return FALSE;
+            }
+            Padded = User32GetFoldedPaddedBorder();
+            if (Padded)
+            {
+                LocalMetrics.iBorderWidth -= Padded;
+                LocalMetrics.iPaddedBorderWidth = Padded;
             }
 
             LocalMetrics.iBorderWidth = ScaleDpiValue(LocalMetrics.iBorderWidth, SystemDpi, Dpi);
@@ -679,6 +691,32 @@ SystemParametersInfoForDpi(_In_ UINT Action, _In_ UINT Param, _Inout_opt_ PVOID 
     return FALSE;
 }
 
+static INT
+GetCaptionAverageWidth(_In_ const LOGFONTW *LogFont)
+{
+    TEXTMETRICW TextMetrics;
+    HFONT Font, OldFont;
+    LONG Width = 0;
+    HDC hDC;
+
+    hDC = NtUserGetDC(NULL);
+    Font = CreateFontIndirectW(LogFont);
+    if (hDC && Font)
+    {
+        OldFont = SelectObject(hDC, Font);
+        if (OldFont)
+        {
+            Width = GdiGetCharDimensions(hDC, &TextMetrics, NULL);
+            SelectObject(hDC, OldFont);
+        }
+    }
+    if (Font)
+        DeleteObject(Font);
+    if (hDC)
+        ReleaseDC(NULL, hDC);
+    return Width;
+}
+
 INT
 WINAPI
 GetSystemMetricsForDpi(_In_ INT Index, _In_ UINT Dpi)
@@ -730,6 +768,8 @@ GetSystemMetricsForDpi(_In_ INT Index, _In_ UINT Dpi)
         case SM_CXCURSOR:
         case SM_CYCURSOR:
             Value = ScaleDpiValue(32, USER_DEFAULT_SCREEN_DPI, Dpi);
+            if (Value >= 96)
+                return 96;
             if (Value >= 64)
                 return 64;
             if (Value >= 48)
@@ -768,6 +808,29 @@ GetSystemMetricsForDpi(_In_ INT Index, _In_ UINT Dpi)
                 return 0;
             }
             return max(Metrics.iBorderWidth, 1) + 3;
+
+        case SM_CXPADDEDBORDER:
+            Metrics.cbSize = sizeof(Metrics);
+            if (!SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(Metrics), &Metrics, 0, Dpi))
+            {
+                return 0;
+            }
+            return Metrics.iPaddedBorderWidth;
+
+        case SM_CXMIN:
+        case SM_CXMINTRACK:
+        case SM_CYMIN:
+        case SM_CYMINTRACK:
+            Metrics.cbSize = sizeof(Metrics);
+            if (!SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(Metrics), &Metrics, 0, Dpi))
+            {
+                return 0;
+            }
+            Value = 2 * (max(Metrics.iBorderWidth, 1) + 3 + Metrics.iPaddedBorderWidth);
+            if (Index == SM_CYMIN || Index == SM_CYMINTRACK)
+                return Metrics.iCaptionHeight + 1 + Value;
+            return 4 * Metrics.iCaptionHeight + 4 +
+                   4 * GetCaptionAverageWidth(&Metrics.lfCaptionFont) + Value;
 
         case SM_CXICONSPACING:
         case SM_CYICONSPACING:
