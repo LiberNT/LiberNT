@@ -61,6 +61,8 @@ static const GUID PowrProfVideoPowerdownTimeout = { 0x3C0BC021, 0xC8A8, 0x4E07, 
 static const GUID PowrProfSleepSubgroup = { 0x238C9FA8, 0x0AAD, 0x41ED, { 0x83, 0xF4, 0x97, 0xBE, 0x24, 0x2C, 0x8F, 0x20 } };
 static const GUID PowrProfStandbyTimeout = { 0x29F6C1DB, 0x86DA, 0x48C5, { 0x9F, 0xDB, 0xF2, 0xB6, 0x7B, 0x1F, 0x44, 0xDA } };
 static const GUID PowrProfHibernateTimeout = { 0x9D7815A6, 0x7EE4, 0x497E, { 0x88, 0x88, 0x51, 0x5A, 0x05, 0xF0, 0x23, 0x64 } };
+static const GUID PowrProfDiskSubgroup = { 0x0012EE47, 0x9041, 0x4B5D, { 0x9B, 0x77, 0x53, 0x5F, 0xBA, 0x8B, 0x14, 0x42 } };
+static const GUID PowrProfDiskPowerdownTimeout = { 0x6738E2C4, 0xE8A5, 0x4A42, { 0xB1, 0x6A, 0xE0, 0x40, 0xE7, 0x69, 0x75, 0x6E } };
 static const GUID PowrProfButtonSubgroup = { 0x4F971E89, 0xEEBD, 0x4455, { 0xA8, 0xDE, 0x9E, 0x59, 0x04, 0x0E, 0x73, 0x47 } };
 static const GUID PowrProfPowerButtonAction = { 0x7648EFA3, 0xDD9C, 0x4E3E, { 0xB5, 0x66, 0x50, 0xF9, 0x29, 0x38, 0x62, 0x80 } };
 static const POWER_ACTION PowrProfButtonActions[] = { PowerActionNone, PowerActionSleep, PowerActionHibernate, PowerActionShutdownOff };
@@ -79,6 +81,8 @@ typedef struct _POWRPROF_SCHEME_DEFAULTS
     DWORD DcVideoTimeout;
     DWORD AcSleepTimeout;
     DWORD DcSleepTimeout;
+    DWORD AcDiskTimeout;
+    DWORD DcDiskTimeout;
     LPCWSTR Name;
     LPCWSTR Description;
 } POWRPROF_SCHEME_DEFAULTS;
@@ -105,11 +109,11 @@ static const WCHAR szAcSettingIndex[] = L"ACSettingIndex";
 static const WCHAR szDcSettingIndex[] = L"DCSettingIndex";
 static const POWRPROF_SCHEME_DEFAULTS PowrProfSchemes[] =
 {
-    {&GUID_TYPICAL_POWER_SAVINGS, 0, 5, 5, 100, 100, 33, 50, 600, 300, 1800, 900,
+    {&GUID_TYPICAL_POWER_SAVINGS, 0, 5, 5, 100, 100, 33, 50, 600, 300, 1800, 900, 1200, 600,
      L"Balanced", L"Automatically balances performance with energy consumption on capable hardware."},
-    {&GUID_MAX_POWER_SAVINGS, 5, 5, 5, 100, 100, 60, 60, 300, 120, 900, 600,
+    {&GUID_MAX_POWER_SAVINGS, 5, 5, 5, 100, 100, 60, 60, 300, 120, 900, 600, 1200, 300,
      L"Power saver", L"Saves energy by reducing your computer's performance where possible."},
-    {&GUID_MIN_POWER_SAVINGS, 4, 100, 5, 100, 100, 0, 0, 900, 900, 0, 1200,
+    {&GUID_MIN_POWER_SAVINGS, 4, 100, 5, 100, 100, 0, 0, 900, 900, 0, 1200, 1200, 1200,
      L"High performance", L"Favors performance, but may use more energy."}
 };
 
@@ -323,6 +327,13 @@ POWRPROF_GetBuiltinSettingDefaults(
             *Value = 0;
         else
             return ERROR_FILE_NOT_FOUND;
+        return ERROR_SUCCESS;
+    }
+    if (IsEqualGUID(Subgroup, &PowrProfDiskSubgroup))
+    {
+        if (!IsEqualGUID(Setting, &PowrProfDiskPowerdownTimeout))
+            return ERROR_FILE_NOT_FOUND;
+        *Value = AcValue ? Defaults->AcDiskTimeout : Defaults->DcDiskTimeout;
         return ERROR_SUCCESS;
     }
     if (IsEqualGUID(Subgroup, &PowrProfButtonSubgroup))
@@ -579,6 +590,34 @@ POWRPROF_ApplyProcessorPolicyValues(
 }
 
 static DWORD
+POWRPROF_WriteLegacyPolicy(
+    const GUID *Scheme,
+    const POWER_POLICY *Policy)
+{
+    DWORD Values[4][2];
+    const GUID *Subgroups[4] = { &PowrProfVideoSubgroup, &PowrProfSleepSubgroup, &PowrProfSleepSubgroup, &PowrProfDiskSubgroup };
+    const GUID *Settings[4] = { &PowrProfVideoPowerdownTimeout, &PowrProfStandbyTimeout, &PowrProfHibernateTimeout, &PowrProfDiskPowerdownTimeout };
+    DWORD Error = ERROR_SUCCESS;
+    UINT Index;
+
+    Values[0][PoAc] = Policy->user.VideoTimeoutAc;
+    Values[0][PoDc] = Policy->user.VideoTimeoutDc;
+    Values[1][PoAc] = Policy->user.IdleAc.Action == PowerActionSleep ? Policy->user.IdleTimeoutAc : 0;
+    Values[1][PoDc] = Policy->user.IdleDc.Action == PowerActionSleep ? Policy->user.IdleTimeoutDc : 0;
+    Values[2][PoAc] = Policy->mach.DozeS4TimeoutAc ? Policy->user.IdleTimeoutAc + Policy->mach.DozeS4TimeoutAc : 0;
+    Values[2][PoDc] = Policy->mach.DozeS4TimeoutDc ? Policy->user.IdleTimeoutDc + Policy->mach.DozeS4TimeoutDc : 0;
+    Values[3][PoAc] = Policy->user.SpindownTimeoutAc;
+    Values[3][PoDc] = Policy->user.SpindownTimeoutDc;
+    for (Index = 0; Index < _countof(Values) && Error == ERROR_SUCCESS; Index++)
+    {
+        Error = POWRPROF_WriteValueIndex(Scheme, Subgroups[Index], Settings[Index], TRUE, Values[Index][PoAc]);
+        if (Error == ERROR_SUCCESS)
+            Error = POWRPROF_WriteValueIndex(Scheme, Subgroups[Index], Settings[Index], FALSE, Values[Index][PoDc]);
+    }
+    return Error;
+}
+
+static DWORD
 POWRPROF_ApplyScheme(
     const GUID *Scheme,
     BOOL UpdateLegacy)
@@ -638,29 +677,7 @@ POWRPROF_ApplyScheme(
     if (Error == ERROR_SUCCESS)
         Error = POWRPROF_PersistActiveScheme(Scheme, Defaults->LegacyId, UpdateLegacy);
     if (Error == ERROR_SUCCESS)
-    {
-        POWER_POLICY Policy;
-        UINT LegacyId = Defaults->LegacyId;
-        WCHAR LegacyNum[16];
-        DWORD VideoAc, VideoDc, SleepAc, SleepDc;
-        swprintf(LegacyNum, L"%u", LegacyId);
-        if (POWRPROF_GetUserPowerPolicy(LegacyNum, &Policy.user, 0, NULL, 0, NULL) &&
-            POWRPROF_GetMachinePowerPolicy(LegacyNum, &Policy.mach) &&
-            POWRPROF_ReadValueIndex(Scheme, &PowrProfVideoSubgroup, &PowrProfVideoPowerdownTimeout, TRUE, &VideoAc) == ERROR_SUCCESS &&
-            POWRPROF_ReadValueIndex(Scheme, &PowrProfVideoSubgroup, &PowrProfVideoPowerdownTimeout, FALSE, &VideoDc) == ERROR_SUCCESS &&
-            POWRPROF_ReadValueIndex(Scheme, &PowrProfSleepSubgroup, &PowrProfStandbyTimeout, TRUE, &SleepAc) == ERROR_SUCCESS &&
-            POWRPROF_ReadValueIndex(Scheme, &PowrProfSleepSubgroup, &PowrProfStandbyTimeout, FALSE, &SleepDc) == ERROR_SUCCESS)
-        {
-            Policy.user.VideoTimeoutAc = VideoAc;
-            Policy.user.VideoTimeoutDc = VideoDc;
-            Policy.user.IdleTimeoutAc = SleepAc;
-            Policy.user.IdleTimeoutDc = SleepDc;
-            Policy.user.IdleAc.Action = SleepAc ? PowerActionSleep : PowerActionNone;
-            Policy.user.IdleDc.Action = SleepDc ? PowerActionSleep : PowerActionNone;
-            (void)WritePwrPolicy(&LegacyId, &Policy);
-        }
         return ERROR_SUCCESS;
-    }
 
     if (POWRPROF_ReadProcessorPolicyValues(&OldScheme, TRUE, &OldValues[PoAc]) == ERROR_SUCCESS &&
         POWRPROF_ReadProcessorPolicyValues(&OldScheme, FALSE, &OldValues[PoDc]) == ERROR_SUCCESS)
@@ -2372,6 +2389,15 @@ SetActivePwrScheme(UINT uiID,
     {
         SetLastError(Error);
         return FALSE;
+    }
+    if (lpPowerPolicy != NULL)
+    {
+        Error = POWRPROF_WriteLegacyPolicy(POWRPROF_MapLegacyScheme(uiID), lpPowerPolicy);
+        if (Error != ERROR_SUCCESS)
+        {
+            SetLastError(Error);
+            return FALSE;
+        }
     }
     Error = POWRPROF_ApplyScheme(POWRPROF_MapLegacyScheme(uiID), FALSE);
     if (Error != ERROR_SUCCESS)
