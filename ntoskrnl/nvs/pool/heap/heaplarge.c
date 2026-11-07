@@ -10,6 +10,39 @@
 #include "../include/poolenv.h"
 #include "../include/poolheap.h"
 
+#if DBG || defined(POOL_HOST_TEST)
+static
+VOID
+PoolLargeAssertRun(
+    _Inout_ PPOOL_VA_REGION Region,
+    _In_ PVOID Base,
+    _In_ SIZE_T Units,
+    _In_ ULONG Pages)
+{
+    SIZE_T First, i;
+    KIRQL OldIrql;
+
+    POOL_ASSERT(PoolVaContains(Region, Base) && ((ULONG_PTR)Base & POOL_UNIT_MASK) == 0);
+    First = ((ULONG_PTR)Base - Region->Base) >> POOL_UNIT_SHIFT;
+    POOL_ASSERT(Units != 0 && Units <= Region->UnitCount - First);
+    if (Pages != 0)
+        POOL_ASSERT(((SIZE_T)Pages - 1) / (POOL_UNIT_SIZE >> PAGE_SHIFT) + 1 == Units);
+
+    POOL_LOCK_ACQUIRE(&Region->Lock, &OldIrql);
+    POOL_ASSERT(Region->Directory[First].State == PoolUnitLarge && Region->Directory[First].UnitCount == Units);
+    POOL_ASSERT(Region->Directory[First].PageCount == Pages);
+    for (i = 0; i < Units; i++)
+    {
+        POOL_ASSERT((Region->BusyMap[(First + i) >> 6] & ((ULONG64)1 << ((First + i) & 63))) != 0);
+        POOL_ASSERT(i == 0 || (Region->Directory[First + i].State == PoolUnitTail &&
+                               Region->Directory[First + i].UnitCount == 0));
+    }
+    POOL_LOCK_RELEASE(&Region->Lock, OldIrql);
+}
+#else
+#define PoolLargeAssertRun(Region, Base, Units, Pages) ((void)0)
+#endif
+
 PVOID
 PoolLargeAllocate(
     _Inout_ PPOOL_HEAP Heap,
@@ -30,11 +63,13 @@ PoolLargeAllocate(
         PPOOL_VA_REGION Region = Heap->Region[i];
         PPOOL_UNIT Unit;
         PVOID Base;
+        LONG Previous;
 
         Base = PoolVaReserve(Region, Units, PoolUnitLarge);
         if (Base == NULL)
             continue;
 
+        PoolLargeAssertRun(Region, Base, Units, 0);
         if (!NT_SUCCESS(PoolVaCommit(Region, Base, CommitBytes)))
         {
             PoolVaRelease(Region, Base, Units);
@@ -45,7 +80,10 @@ PoolLargeAllocate(
         Unit->Tag = Tag;
         Unit->Flags = 0;
         Unit->PageCount = (ULONG)(CommitBytes >> PAGE_SHIFT);
-        POOL_ATOMIC_ADD32(&Heap->LargeCount, 1);
+        PoolLargeAssertRun(Region, Base, Units, Unit->PageCount);
+        Previous = POOL_ATOMIC_ADD32(&Heap->LargeCount, 1);
+        POOL_ASSERT(Previous >= 0 && Previous < 0x7fffffffL);
+        UNREFERENCED_PARAMETER(Previous);
         return Base;
     }
 
@@ -62,6 +100,7 @@ PoolLargeFree(
     PPOOL_UNIT Unit = PoolVaUnit(Region, Block);
     SIZE_T Units;
     SIZE_T Bytes;
+    LONG Previous;
 
     if (((ULONG_PTR)Block & POOL_UNIT_MASK) != 0 || Unit->State != PoolUnitLarge ||
         Unit->PageCount == 0)
@@ -71,6 +110,7 @@ PoolLargeFree(
 
     Units = Unit->UnitCount;
     Bytes = (SIZE_T)Unit->PageCount << PAGE_SHIFT;
+    PoolLargeAssertRun(Region, Block, Units, Unit->PageCount);
 
     Info->Size = Bytes;
     Info->Tag = Unit->Tag;
@@ -81,6 +121,8 @@ PoolLargeFree(
     Unit->PageCount = 0;
     PoolVaDecommit(Region, Block, Bytes);
     PoolVaRelease(Region, Block, Units);
-    POOL_ATOMIC_ADD32(&Heap->LargeCount, -1);
+    Previous = POOL_ATOMIC_ADD32(&Heap->LargeCount, -1);
+    POOL_ASSERT(Previous > 0);
+    UNREFERENCED_PARAMETER(Previous);
     return TRUE;
 }
