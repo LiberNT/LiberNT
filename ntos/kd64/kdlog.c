@@ -13,6 +13,8 @@
 
 #define KDP_BOOT_LOG_CHUNK_SIZE (64 * 1024)
 #define KDP_BOOT_LOG_POLL_MS 250
+#define KDP_BOOT_LOG_REPORT_POLLS 40
+#define KDP_BOOT_LOG_FALLBACK_POLLS 120
 #define KDP_BOOT_LOG_RESERVE_SIZE (128 * 1024)
 #define KDP_BOOT_LOG_STOP_TIMEOUT_MS 5000
 
@@ -26,6 +28,12 @@ typedef struct _KDP_BOOT_LOG_STATE
 } KDP_BOOT_LOG_STATE, *PKDP_BOOT_LOG_STATE;
 
 static CHAR KdpBootLogName[128];
+CHAR KdpBootLogPath[128];
+static BOOLEAN KdpBootLogThreadStarted;
+static CHAR KdpBootLogFallbackName[128];
+static NTSTATUS KdpBootLogLastStatus;
+static ULONG KdpBootLogWaitPolls;
+static BOOLEAN KdpBootLogListed;
 static CHAR KdpBootLogBuffer[KDP_BOOT_LOG_CHUNK_SIZE];
 static UCHAR KdpBootLogZeroes[KDP_BOOT_LOG_CHUNK_SIZE];
 static ULONG64 KdpBootLogExtentBuffers[2][PAGE_SIZE / sizeof(ULONG64)];
@@ -150,6 +158,8 @@ static VOID KdpBootLogTrim(VOID)
     KdpBootLogReserveEnd = KdpBootLogWritten;
 }
 
+static NTSTATUS KdpBootLogOpen(VOID);
+
 static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
 {
     IO_STATUS_BLOCK IoStatus;
@@ -166,6 +176,31 @@ static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
     Interval.QuadPart = -10000LL * KDP_BOOT_LOG_POLL_MS;
     for (;;)
     {
+        if (KdpBootLogHandle == NULL)
+        {
+            if (KdpBootLogStopping)
+                KeSetEvent(&KdpBootLogStopped, IO_NO_INCREMENT, FALSE);
+            else if (NT_SUCCESS(KdpBootLogOpen()))
+            {
+                DPRINT1("KD: Boot log %s opened\n", KdpBootLogName);
+                continue;
+            }
+            else if (++KdpBootLogWaitPolls % KDP_BOOT_LOG_REPORT_POLLS == 0)
+            {
+                DPRINT1("KD: Boot log %s still not opened after %lu s (0x%08lx)\n", KdpBootLogName,
+                        KdpBootLogWaitPolls * KDP_BOOT_LOG_POLL_MS / 1000, KdpBootLogLastStatus);
+                if (KdpBootLogWaitPolls >= KDP_BOOT_LOG_FALLBACK_POLLS && KdpBootLogPath[0] && KdpBootLogFallbackName[0])
+                {
+                    DPRINT1("KD: Boot log goes to %s instead of %s\n", KdpBootLogFallbackName, KdpBootLogPath);
+                    KdpBootLogPath[0] = ANSI_NULL;
+                    RtlStringCbCopyA(KdpBootLogName, sizeof(KdpBootLogName), KdpBootLogFallbackName);
+                    continue;
+                }
+            }
+            KeWaitForSingleObject(&KdpBootLogWake, Executive, KernelMode, FALSE, &Interval);
+            continue;
+        }
+
         Length = KdpCopyPrintBufferFrom(&KdpBootLogPosition, KdpBootLogBuffer, sizeof(KdpBootLogBuffer), &Lost);
         Dirty = Dirty || (Lost != 0) || (Length != 0);
         if (Lost != 0)
@@ -398,7 +433,7 @@ VOID NTAPI KdShutdownBootLog(VOID)
     LARGE_INTEGER Timeout;
     PAGED_CODE();
 
-    if (KdpBootLogHandle == NULL)
+    if (!KdpBootLogThreadStarted)
         return;
 
     KdpBootLogStopping = TRUE;
@@ -407,38 +442,128 @@ VOID NTAPI KdShutdownBootLog(VOID)
     KeWaitForSingleObject(&KdpBootLogStopped, Executive, KernelMode, FALSE, &Timeout);
 }
 
-VOID NTAPI KdInitializeBootLog(_In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+static BOOLEAN KdpBootLogResolveGpt(VOID)
+{
+    PARTITION_INFORMATION_EX PartitionInfo;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING GuidString, DeviceName;
+    IO_STATUS_BLOCK IoStatus;
+    WCHAR GuidText[40], DeviceText[64];
+    PCSTR Close;
+    ULONG Disk, Partition, Index;
+    HANDLE Handle;
+    GUID PartitionId;
+    NTSTATUS Status;
+
+    if (_strnicmp(KdpBootLogPath, "GPT{", 4) || !(Close = strchr(KdpBootLogPath, '}')) ||
+        Close - KdpBootLogPath - 3 >= (LONG_PTR)RTL_NUMBER_OF(GuidText))
+        return FALSE;
+    for (Index = 0; KdpBootLogPath + 3 + Index <= Close; ++Index)
+        GuidText[Index] = (WCHAR)KdpBootLogPath[3 + Index];
+    GuidText[Index] = UNICODE_NULL;
+    RtlInitUnicodeString(&GuidString, GuidText);
+    if (!NT_SUCCESS(RtlGUIDFromString(&GuidString, &PartitionId)))
+        return FALSE;
+
+    for (Disk = 0; Disk < 16; ++Disk)
+    {
+        for (Partition = 1; Partition <= 32; ++Partition)
+        {
+            RtlStringCbPrintfW(DeviceText, sizeof(DeviceText), L"\\Device\\Harddisk%lu\\Partition%lu", Disk, Partition);
+            RtlInitUnicodeString(&DeviceName, DeviceText);
+            InitializeObjectAttributes(&ObjectAttributes, &DeviceName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+            Status = ZwOpenFile(&Handle, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &IoStatus,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT);
+            if (!NT_SUCCESS(Status))
+                break;
+            Status = ZwDeviceIoControlFile(Handle, NULL, NULL, NULL, &IoStatus, IOCTL_DISK_GET_PARTITION_INFO_EX, NULL, 0,
+                                           &PartitionInfo, sizeof(PartitionInfo));
+            ZwClose(Handle);
+            if (!KdpBootLogListed && NT_SUCCESS(Status) && PartitionInfo.PartitionStyle == PARTITION_STYLE_GPT &&
+                KdpBootLogWaitPolls == KDP_BOOT_LOG_REPORT_POLLS)
+            {
+                DPRINT1("KD: %wZ is GPT partition {%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}\n", &DeviceName,
+                        PartitionInfo.Gpt.PartitionId.Data1, PartitionInfo.Gpt.PartitionId.Data2,
+                        PartitionInfo.Gpt.PartitionId.Data3, PartitionInfo.Gpt.PartitionId.Data4[0],
+                        PartitionInfo.Gpt.PartitionId.Data4[1], PartitionInfo.Gpt.PartitionId.Data4[2],
+                        PartitionInfo.Gpt.PartitionId.Data4[3], PartitionInfo.Gpt.PartitionId.Data4[4],
+                        PartitionInfo.Gpt.PartitionId.Data4[5], PartitionInfo.Gpt.PartitionId.Data4[6],
+                        PartitionInfo.Gpt.PartitionId.Data4[7]);
+            }
+            if (NT_SUCCESS(Status) && PartitionInfo.PartitionStyle == PARTITION_STYLE_GPT &&
+                IsEqualGUID(&PartitionInfo.Gpt.PartitionId, &PartitionId))
+            {
+                RtlStringCbPrintfA(KdpBootLogName, sizeof(KdpBootLogName), "\\Device\\Harddisk%lu\\Partition%lu%s",
+                                   Disk, Partition, Close + 1);
+                DPRINT1("KD: Boot log partition %s is %s\n", KdpBootLogPath, KdpBootLogName);
+                return TRUE;
+            }
+        }
+    }
+    if (KdpBootLogWaitPolls == KDP_BOOT_LOG_REPORT_POLLS)
+        KdpBootLogListed = TRUE;
+    return FALSE;
+}
+
+static NTSTATUS KdpBootLogOpen(VOID)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     ANSI_STRING AnsiName;
     UNICODE_STRING FileName;
     IO_STATUS_BLOCK IoStatus;
-    HANDLE ThreadHandle;
-    KPRIORITY Priority;
+    HANDLE Handle;
     NTSTATUS Status;
-    PAGED_CODE();
 
-    RtlStringCbPrintfA(KdpBootLogName, sizeof(KdpBootLogName), "\\ArcName\\%s\\lastboot.log", LoaderBlock->ArcBootDeviceName);
+    if (!_strnicmp(KdpBootLogName, "GPT{", 4) && !KdpBootLogResolveGpt())
+    {
+        KdpBootLogLastStatus = STATUS_OBJECT_PATH_NOT_FOUND;
+        return STATUS_OBJECT_PATH_NOT_FOUND;
+    }
+
     RtlInitAnsiString(&AnsiName, KdpBootLogName);
     Status = RtlAnsiStringToUnicodeString(&FileName, &AnsiName, TRUE);
     if (!NT_SUCCESS(Status))
-        return;
+        return Status;
 
     InitializeObjectAttributes(&ObjectAttributes, &FileName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-    Status = ZwCreateFile(&KdpBootLogHandle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, NULL, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_SEQUENTIAL_ONLY | FILE_WRITE_THROUGH, NULL, 0);
+    Status = ZwCreateFile(&Handle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, NULL, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_SEQUENTIAL_ONLY | FILE_WRITE_THROUGH, NULL, 0);
     RtlFreeUnicodeString(&FileName);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("KD: Boot log %s not opened (0x%08lx)\n", KdpBootLogName, Status);
-        KdpBootLogHandle = NULL;
-        return;
+        KdpBootLogLastStatus = Status;
+        return Status;
     }
+    KdpBootLogHandle = Handle;
 
     Status = KdpBootLogQueryDevice();
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("KD: Boot log %s is not saved at a crash (0x%08lx)\n", KdpBootLogName, Status);
         KdpBootLogDevice = NULL;
+    }
+    return STATUS_SUCCESS;
+}
+
+VOID NTAPI KdInitializeBootLog(_In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    HANDLE ThreadHandle;
+    KPRIORITY Priority;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    RtlStringCbPrintfA(KdpBootLogFallbackName, sizeof(KdpBootLogFallbackName), "\\ArcName\\%s\\lastboot.log", LoaderBlock->ArcBootDeviceName);
+    if (KdpBootLogPath[0])
+        RtlStringCbCopyA(KdpBootLogName, sizeof(KdpBootLogName), KdpBootLogPath);
+    else
+        RtlStringCbCopyA(KdpBootLogName, sizeof(KdpBootLogName), KdpBootLogFallbackName);
+
+    Status = KdpBootLogOpen();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("KD: Boot log %s not opened (0x%08lx)%s\n", KdpBootLogName, Status,
+                KdpBootLogPath[0] ? ", retrying until its volume appears" : "");
+        if (!KdpBootLogPath[0])
+            return;
     }
 
     KeInitializeEvent(&KdpBootLogWake, SynchronizationEvent, FALSE);
@@ -447,10 +572,12 @@ VOID NTAPI KdInitializeBootLog(_In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("KD: Boot log writer not started (0x%08lx)\n", Status);
-        ZwClose(KdpBootLogHandle);
+        if (KdpBootLogHandle)
+            ZwClose(KdpBootLogHandle);
         KdpBootLogHandle = NULL;
         return;
     }
+    KdpBootLogThreadStarted = TRUE;
 
     Priority = HIGH_PRIORITY;
     ZwSetInformationThread(ThreadHandle, ThreadPriority, &Priority, sizeof(Priority));

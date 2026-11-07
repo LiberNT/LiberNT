@@ -61,6 +61,9 @@ typedef enum _KDP_DEBUG_SERVICE
     ThatsWhatSheSaid = 69 /* FIGURE IT OUT */
 } KDP_DEBUG_SERVICE;
 
+typedef VOID (NTAPI *PKDP_EARLY_SCREEN_ROUTINE)(_In_ PCCH String, _In_ ULONG Length);
+extern PKDP_EARLY_SCREEN_ROUTINE KdpEarlyScreenRoutine;
+
 #endif // _NTOSKRNL_
 
 #if DBG && defined(_M_IX86) && !defined(_WINKD_) // See ke/i386/traphdlr.c

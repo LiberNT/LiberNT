@@ -110,6 +110,8 @@ KdSystemRootAvailable(
     VOID
 );
 
+extern CHAR KdpBootLogPath[128];
+
 VOID
 NTAPI
 KdInitializeBootLog(
