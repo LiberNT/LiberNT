@@ -396,6 +396,8 @@ function(image_list_command _image _var)
         -DOPTIONAL=${CMAKE_CURRENT_BINARY_DIR}/${_image}.optional.$<CONFIG>.lst
         -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/${_image}.effective.lst
         -DSYSTEM_DIR=Windows
+        -DINVENTORY=${CMAKE_CURRENT_BINARY_DIR}/${_image}.files
+        "-DINVENTORY_HEADER=LiberNT ${KERNEL_VERSION} ${KERNEL_VERSION_BUILD}-${REVISION}"
         -P ${REACTOS_SOURCE_DIR}/sdk/cmake/optional_files.cmake PARENT_SCOPE)
 endfunction()
 
