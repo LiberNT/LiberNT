@@ -111,6 +111,38 @@ MiClonePteMayBeClone(PMI_ADDRESS_SPACE Space, MI_PTE Pte)
     return MiSoftKind(Pte) == MiSoftPrototype;
 }
 
+#if DBG || defined(MM_HOST_TEST)
+static VOID
+MiAssertPublishedCloneRange(PMI_ADDRESS_SPACE Space, PMI_CLONE_RANGE Range)
+{
+    ULONG64 Pages, Live = 0, i;
+
+    MI_ASSERT(Range->Node.StartingVpn <= Range->Node.EndingVpn);
+    MI_ASSERT(MiVadFind(&Space->CloneRoot, Range->Node.StartingVpn) == &Range->Node);
+    Pages = Range->Node.EndingVpn - Range->Node.StartingVpn + 1;
+    for (i = 0; i < Pages; i++)
+    {
+        PMI_CLONE_PAGE Page = Range->Refs[i].Page;
+        PMI_PTE Slot;
+        MI_PTE Pte;
+
+        if (Page == NULL)
+            continue;
+        Live++;
+        MI_ASSERT(Page->System == Space->System && MI_ATOMIC_READ32(&Page->References) > 0);
+        Slot = MiPtLookup(Space, (Range->Node.StartingVpn + i) << PAGE_SHIFT, NULL);
+        MI_ASSERT(Slot != NULL);
+        Pte = MiArchPteRead(Slot);
+        if (MiArchPteIsValid(Pte))
+            MI_ASSERT(MiArchPteFrame(Pte) < Space->System->Pfn.FrameCount);
+        MI_ASSERT(MiClonePteMayBeClone(Space, Pte));
+    }
+    MI_ASSERT(Live == Range->Live);
+}
+#else
+#define MiAssertPublishedCloneRange(Space, Range) ((void)0)
+#endif
+
 static PMI_CLONE_REF
 MiCloneLookupPte(PMI_ADDRESS_SPACE Space, ULONG64 Va, MI_PTE Pte)
 {
@@ -385,6 +417,7 @@ MiCloneTakeOver(PMI_ADDRESS_SPACE Space, PMI_CLONE_REF Ref, ULONG64 Va, PMI_PTE 
     MiMakePageValid(Space, Va, Slot, TableFrame, Frame, Protection, TRUE);
     MI_ATOMIC_ADD64(&Space->PrivatePages, 1);
     MiCloneForget(Space, Va);
+    MI_ASSERT(MI_ATOMIC_READ32(&Page->References) == 1);
     MI_FREE(Page);
     return TRUE;
 }
@@ -1070,6 +1103,7 @@ MiCloneAddressSpace(PMI_ADDRESS_SPACE Source, PMI_ADDRESS_SPACE Target)
     }
     for (i = 0; i < Plan.RangeCount; i++)
     {
+        MiAssertPublishedCloneRange((i < Plan.FirstSourceRange) ? Target : Source, Plan.Ranges[i]);
         if (Plan.Ranges[i]->Live == 0)
             MiCloneRemoveRange((i < Plan.FirstSourceRange) ? Target : Source, Plan.Ranges[i]);
         else
