@@ -829,6 +829,17 @@ MiSegmentReleaseAdoptedFrame(
         MiSegmentReleasePage(Segment, Proto, (ULONG)MiSoftValue(Pte));
 }
 
+static
+VOID
+MiAssertUnusedSegments(
+    _In_ PMI_SYSTEM System)
+{
+    UNREFERENCED_PARAMETER(System);
+    MI_ASSERT((System->UnusedSegmentCount == 0) == IsListEmpty(&System->UnusedSegmentList));
+    MI_ASSERT(System->UnusedSegmentList.Flink->Blink == &System->UnusedSegmentList);
+    MI_ASSERT(System->UnusedSegmentList.Blink->Flink == &System->UnusedSegmentList);
+}
+
 VOID
 MiSegmentReference(
     _Inout_ PMI_SEGMENT Segment)
@@ -856,13 +867,19 @@ MiSegmentTryReference(
         }
 
         MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+        MiAssertUnusedSegments(System);
 
         if (Segment->State == MI_SEGMENT_UNUSED)
         {
+            MI_ASSERT(MI_ATOMIC_READ32(&Segment->ReferenceCount) == 0);
+            MI_ASSERT(System->UnusedSegmentCount != 0);
+            MI_ASSERT(Segment->UnusedLink.Flink->Blink == &Segment->UnusedLink);
+            MI_ASSERT(Segment->UnusedLink.Blink->Flink == &Segment->UnusedLink);
             RemoveEntryList(&Segment->UnusedLink);
             System->UnusedSegmentCount--;
             Segment->State = MI_SEGMENT_ACTIVE;
             MI_ATOMIC_ADD32(&Segment->ReferenceCount, 1);
+            MiAssertUnusedSegments(System);
             MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
             MI_ATOMIC_ADD64(&System->UnusedSegmentHits, 1);
             return TRUE;
@@ -907,6 +924,8 @@ MiSegmentRelease(
     }
 
     MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+    MiAssertUnusedSegments(System);
+    MI_ASSERT(MI_ATOMIC_READ32(&Segment->ReferenceCount) > 0);
 
     if (MI_ATOMIC_ADD32(&Segment->ReferenceCount, -1) - 1 != 0)
     {
@@ -914,6 +933,7 @@ MiSegmentRelease(
         return FALSE;
     }
 
+    MI_ASSERT(Segment->State == MI_SEGMENT_ACTIVE);
     if (AllowCache && System->UnusedSegmentLimit != 0 && Segment->Kind != MiSegmentPageFileBacked &&
         Segment->FileOps.Release != NULL)
     {
@@ -929,6 +949,7 @@ MiSegmentRelease(
         Closed = TRUE;
     }
 
+    MiAssertUnusedSegments(System);
     MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
 
     if (Exceeded && System->UnusedSegmentsExceeded != NULL)
@@ -969,13 +990,18 @@ MiSegmentPurgeUnused(
         KIRQL OldIrql;
 
         MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+        MiAssertUnusedSegments(System);
 
         if (!IsListEmpty(&System->UnusedSegmentList))
         {
             Victim = CONTAINING_RECORD(System->UnusedSegmentList.Flink, MI_SEGMENT, UnusedLink);
+            MI_ASSERT(Victim->State == MI_SEGMENT_UNUSED);
+            MI_ASSERT(MI_ATOMIC_READ32(&Victim->ReferenceCount) == 0);
+            MI_ASSERT(System->UnusedSegmentCount != 0);
             RemoveEntryList(&Victim->UnusedLink);
             System->UnusedSegmentCount--;
             Victim->State = MI_SEGMENT_DELETING;
+            MiAssertUnusedSegments(System);
         }
 
         MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
@@ -1002,13 +1028,18 @@ MiSegmentTrimUnused(
         KIRQL OldIrql;
 
         MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+        MiAssertUnusedSegments(System);
 
         if (System->UnusedSegmentCount > System->UnusedSegmentLimit && !IsListEmpty(&System->UnusedSegmentList))
         {
             Victim = CONTAINING_RECORD(System->UnusedSegmentList.Flink, MI_SEGMENT, UnusedLink);
+            MI_ASSERT(Victim->State == MI_SEGMENT_UNUSED);
+            MI_ASSERT(MI_ATOMIC_READ32(&Victim->ReferenceCount) == 0);
+            MI_ASSERT(System->UnusedSegmentCount != 0);
             RemoveEntryList(&Victim->UnusedLink);
             System->UnusedSegmentCount--;
             Victim->State = MI_SEGMENT_DELETING;
+            MiAssertUnusedSegments(System);
         }
 
         MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
@@ -2782,6 +2813,18 @@ typedef struct _MI_SEGMENT_READ
     ULONG Bytes;
 } MI_SEGMENT_READ, *PMI_SEGMENT_READ;
 
+static
+VOID
+MiAssertPendingReads(
+    _In_ PMI_SEGMENT Segment)
+{
+    UNREFERENCED_PARAMETER(Segment);
+    MI_ASSERT(Segment->PendingReadCount <= MI_MAX_FILE_IO_PAGES);
+    MI_ASSERT((Segment->PendingReadCount == 0) == IsListEmpty(&Segment->PendingReads));
+    MI_ASSERT(Segment->PendingReads.Flink->Blink == &Segment->PendingReads);
+    MI_ASSERT(Segment->PendingReads.Blink->Flink == &Segment->PendingReads);
+}
+
 VOID
 MiSegmentDrainReads(
     _Inout_ PMI_SEGMENT Segment,
@@ -2790,6 +2833,8 @@ MiSegmentDrainReads(
     BOOLEAN Pending;
 
     MI_MUTEX_ACQUIRE(&Segment->Lock);
+    MiAssertPendingReads(Segment);
+    MI_ASSERT(Segment->PendingReadCount != 0 || IsListEmpty(&Segment->ReadDrains));
     Pending = (BOOLEAN)(Segment->PendingReadCount != 0);
     if (Pending)
         InsertTailList(&Segment->ReadDrains, &Drain->Link);
@@ -2817,8 +2862,12 @@ MiSegmentReadComplete(
     MiArchUnmapFrame(Read->Mapping);
 
     MI_MUTEX_ACQUIRE(&Segment->Lock);
+    MiAssertPendingReads(Segment);
+    MI_ASSERT(Segment->PendingReadCount != 0);
+    MI_ASSERT(Read->Link.Flink->Blink == &Read->Link && Read->Link.Blink->Flink == &Read->Link);
     RemoveEntryList(&Read->Link);
     Segment->PendingReadCount--;
+    MiAssertPendingReads(Segment);
     if (NT_SUCCESS(Status) && Segment->ReadGeneration == Read->Generation &&
         MiArchPteRead(Read->Proto) == Read->Original)
     {
@@ -2885,6 +2934,8 @@ MiSegmentPrefetch(
 
         if (!MI_MUTEX_TRY_ACQUIRE(&Segment->Lock))
             return STATUS_CANT_WAIT;
+        MiAssertPendingReads(Segment);
+        MI_ASSERT(Segment->PendingReadCount != 0 || IsListEmpty(&Segment->ReadDrains));
         if (Page >= MiSegmentPages(Segment))
         {
             MI_MUTEX_RELEASE(&Segment->Lock);
@@ -2936,9 +2987,11 @@ MiSegmentPrefetch(
         Read->Generation = Segment->ReadGeneration;
         Read->Mapping = MiArchMapFrame(Read->Frame);
         Read->Bytes = MiSegmentReadBytes(Segment, Page, FileOffset);
+        MI_ASSERT(Read->Bytes <= PAGE_SIZE);
         MiSegmentReference(Segment);
         InsertTailList(&Segment->PendingReads, &Read->Link);
         Segment->PendingReadCount++;
+        MiAssertPendingReads(Segment);
         MI_MUTEX_RELEASE(&Segment->Lock);
 
         Status = Segment->FileOps.ReadAsync(Segment->FileContext, FileOffset, Read->Frame, Read->Mapping,

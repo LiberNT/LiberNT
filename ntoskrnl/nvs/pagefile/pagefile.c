@@ -88,6 +88,10 @@ MiPageFileReserveSlot(
     KIRQL OldIrql;
 
     MI_SPIN_ACQUIRE(&PageFile->Lock, &OldIrql);
+    MI_ASSERT(PageFile->SlotCount != 0 && (PageFile->Bitmap[0] & 1) != 0);
+    MI_ASSERT(PageFile->SlotsInUse < PageFile->SlotCount);
+    MI_ASSERT(PageFile->SlotsInUse <= PageFile->PeakSlotsInUse);
+    MI_ASSERT(PageFile->Hint <= PageFile->SlotCount);
 
     for (Scanned = 0; Scanned < PageFile->SlotCount; Scanned++)
     {
@@ -120,6 +124,9 @@ MiPageFileReleaseSlot(
         return;
 
     MI_SPIN_ACQUIRE(&PageFile->Lock, &OldIrql);
+    MI_ASSERT(PageFile->SlotCount != 0 && (PageFile->Bitmap[0] & 1) != 0);
+    MI_ASSERT(PageFile->SlotsInUse != 0 && PageFile->SlotsInUse < PageFile->SlotCount);
+    MI_ASSERT(PageFile->SlotsInUse <= PageFile->PeakSlotsInUse);
     MI_ASSERT((PageFile->Bitmap[Slot >> 6] >> (Slot & 63)) & 1);
     PageFile->Bitmap[Slot >> 6] &= ~((ULONG64)1 << (Slot & 63));
     PageFile->SlotsInUse--;

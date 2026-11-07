@@ -24,6 +24,14 @@ typedef struct _MI_AWE_MAPPING
     ULONG Table;
 } MI_AWE_MAPPING, *PMI_AWE_MAPPING;
 
+static VOID
+MiAweAssertAccounting(PMI_ADDRESS_SPACE Space)
+{
+    UNREFERENCED_PARAMETER(Space);
+    MI_ASSERT(MI_ATOMIC_READ64(&Space->AwePages) >= 0);
+    MI_ASSERT((ULONG64)MI_ATOMIC_READ64(&Space->AwePages) == Space->AweRoot.NodeCount);
+}
+
 static PMI_AWE_PAGE
 MiAweFindPage(PMI_ADDRESS_SPACE Space, MI_FRAME_NUMBER Frame)
 {
@@ -37,6 +45,10 @@ MiAweDeletePage(PMI_ADDRESS_SPACE Space, PMI_AWE_PAGE Page)
     ULONG Frame = (ULONG)Page->Node.StartingVpn;
 
     MI_ASSERT(Page->Va == 0);
+    MI_ASSERT(Page->Node.StartingVpn == Page->Node.EndingVpn);
+    MI_ASSERT(Page->Node.StartingVpn < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MiAweFindPage(Space, Frame) == Page);
+    MI_ASSERT(MI_ATOMIC_READ64(&Space->AwePages) > 0);
     MiVadRemove(&Space->AweRoot, &Page->Node);
     MI_FREE(Page);
     MiPfnShareDecrement(&Space->System->Pfn, Frame, TRUE);
@@ -52,6 +64,7 @@ MiAweClearMapping(PMI_ADDRESS_SPACE Space, ULONG64 Va)
     MI_PTE Pte = Slot != NULL ? MiArchPteRead(Slot) : 0;
     PMI_AWE_PAGE Page;
 
+    MI_ASSERT((Va & (PAGE_SIZE - 1)) == 0);
     if (!MiArchPteIsValid(Pte))
         return FALSE;
     Page = MiAweFindPage(Space, (MI_FRAME_NUMBER)MiArchPteFrame(Pte));
@@ -72,6 +85,7 @@ MiAweAllocatePages(PMI_ADDRESS_SPACE Space, PULONG Count, PMI_FRAME_NUMBER Frame
     if (Wanted == 0 || Frames == NULL || Space->IsSystem)
         return STATUS_INVALID_PARAMETER;
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    MiAweAssertAccounting(Space);
     while (Done < Wanted)
     {
         PMI_AWE_PAGE Page = MI_ALLOCATE(sizeof(*Page));
@@ -101,6 +115,7 @@ MiAweAllocatePages(PMI_ADDRESS_SPACE Space, PULONG Count, PMI_FRAME_NUMBER Frame
     }
     MI_ATOMIC_ADD64(&Space->AwePages, Done);
     MI_ATOMIC_ADD64(&Space->System->AwePages, Done);
+    MiAweAssertAccounting(Space);
     *Count = Done;
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     return Done != 0 ? STATUS_SUCCESS : Status;
@@ -130,6 +145,7 @@ MiAweMapPages(PMI_ADDRESS_SPACE Space, ULONG64 Base, const ULONG64 *Addresses,
     RtlZeroMemory(Map, Bytes);
     MiVadRootInitialize(&Batch, Space->LowestVa >> PAGE_SHIFT, Space->HighestVa >> PAGE_SHIFT);
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    MiAweAssertAccounting(Space);
     if (Addresses == NULL)
     {
         PMI_VAD Vad = MiVadLocate(Space, Base);
@@ -198,6 +214,8 @@ MiAweMapPages(PMI_ADDRESS_SPACE Space, ULONG64 Base, const ULONG64 *Addresses,
 
         if (Page != NULL)
         {
+            MI_ASSERT(Page->Pending && Page->Va == 0);
+            MI_ASSERT(Map[i].Slot != NULL && MiArchPteRead(Map[i].Slot) == 0);
             MiPtWrite(Space, Va, Map[i].Slot, Map[i].Table,
                       MiArchPteMakeLeaf(Page->Node.StartingVpn, MI_PROT_READWRITE, MI_LEAF_USER | MI_LEAF_DIRTY));
             Page->Va = Va;
@@ -207,9 +225,13 @@ Done:
     for (i = 0; i < Prepared; i++)
     {
         if (Map[i].Page != NULL)
+        {
+            MI_ASSERT(Map[i].Page->Pending);
             Map[i].Page->Pending = FALSE;
+        }
         MiPtPruneEmpty(Space, Map[i].Node.StartingVpn << PAGE_SHIFT);
     }
+    MiAweAssertAccounting(Space);
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     MI_FREE(Map);
     return Status;
@@ -226,6 +248,7 @@ MiAweFreePages(PMI_ADDRESS_SPACE Space, PULONG Count, const MI_FRAME_NUMBER *Fra
     if (Wanted == 0 || Frames == NULL)
         return STATUS_INVALID_PARAMETER;
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    MiAweAssertAccounting(Space);
     while (Done < Wanted)
     {
         PMI_AWE_PAGE Page = MiAweFindPage(Space, Frames[Done]);
@@ -240,11 +263,16 @@ MiAweFreePages(PMI_ADDRESS_SPACE Space, PULONG Count, const MI_FRAME_NUMBER *Fra
     for (i = 0; i < Done; i++)
     {
         PMI_AWE_PAGE Page = MiAweFindPage(Space, Frames[i]);
-        ULONG64 Va = Page->Va;
+        ULONG64 Va;
 
+        MI_ASSERT(Page != NULL && Page->Pending);
+        Va = Page->Va;
         if (Va != 0)
         {
-            Changed |= MiAweClearMapping(Space, Va);
+            BOOLEAN Cleared = MiAweClearMapping(Space, Va);
+
+            MI_ASSERT(Cleared);
+            Changed |= Cleared;
             Page->Va = Va;
         }
     }
@@ -253,11 +281,13 @@ MiAweFreePages(PMI_ADDRESS_SPACE Space, PULONG Count, const MI_FRAME_NUMBER *Fra
     for (i = 0; i < Done; i++)
     {
         PMI_AWE_PAGE Page = MiAweFindPage(Space, Frames[i]);
+        MI_ASSERT(Page != NULL && Page->Pending);
         if (Page->Va != 0)
             MiPtPruneEmpty(Space, Page->Va);
         Page->Va = 0;
         MiAweDeletePage(Space, Page);
     }
+    MiAweAssertAccounting(Space);
     *Count = Done;
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     return Status;
@@ -271,6 +301,9 @@ MiAweReleaseWindowLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
     ULONG64 Va = Start;
     BOOLEAN Changed = FALSE;
 
+    MI_ASSERT(Vad->Type == MiVadAwe);
+    MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
+    MiAweAssertAccounting(Space);
     while (Va < End)
     {
         if (MiPtLookup(Space, Va, NULL) == NULL)
@@ -287,12 +320,15 @@ MiAweReleaseWindowLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
         MiPtPruneEmpty(Space, Va);
     MiVadRemove(&Space->VadRoot, &Vad->Node);
     MI_FREE(Vad);
+    MiAweAssertAccounting(Space);
 }
 
 VOID
 MiAweDestroyPagesLocked(PMI_ADDRESS_SPACE Space)
 {
     PMI_VAD_NODE Node;
+    MiAweAssertAccounting(Space);
     while ((Node = MiVadFirst(&Space->AweRoot)) != NULL)
         MiAweDeletePage(Space, CONTAINING_RECORD(Node, MI_AWE_PAGE, Node));
+    MiAweAssertAccounting(Space);
 }

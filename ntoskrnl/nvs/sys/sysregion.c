@@ -62,6 +62,13 @@ MiSystemRegionCreate(
         }
     }
 
+    if (NT_SUCCESS(Status))
+    {
+        MI_ASSERT(Vad->Type == MiVadSystem);
+        MI_ASSERT(Vad->Node.StartingVpn <= Vad->Node.EndingVpn);
+        MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
+    }
+
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
 
     if (!NT_SUCCESS(Status))
@@ -85,6 +92,9 @@ MiSystemRegionDelete(
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
+    MI_ASSERT(Vad->Type == MiVadSystem);
+    MI_ASSERT(Vad->Node.StartingVpn <= Vad->Node.EndingVpn);
+    MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
     if (PinnedTables)
     {
         MiPtUnpinRange(Space, Vad->Node.StartingVpn << PAGE_SHIFT,

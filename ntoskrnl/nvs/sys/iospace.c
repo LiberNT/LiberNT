@@ -79,6 +79,21 @@ MiUnmapIoSpace(
     MiReleaseSystemPtes(System, Base, (ULONG)Pages);
 }
 
+static
+VOID
+MiIoSetAllocationHeader(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Base,
+    _In_ ULONG64 Pages)
+{
+    PMI_PTE Header = MiPtLookup(Space, Base, NULL);
+
+    MI_ASSERT(Header != NULL);
+    MI_ASSERT(MiArchPteRead(Header) == 0);
+    MI_ASSERT(Pages != 0 && Pages <= 0x7FFFFFFFULL);
+    MiArchPteWrite(Header, (MI_PTE)Pages << 1);
+}
+
 NTSTATUS
 MiAllocateContiguousMemory(
     _Inout_ PMI_SYSTEM System,
@@ -119,7 +134,7 @@ MiAllocateContiguousMemory(
     Status = MiReserveSystemPtesEx(System, (ULONG)Pages + 1, &Base);
     if (NT_SUCCESS(Status))
     {
-        MiArchPteWrite(MiPtLookup(Space, Base, NULL), (MI_PTE)Pages << 1);
+        MiIoSetAllocationHeader(Space, Base, Pages);
         Base += PAGE_SIZE;
     }
 
@@ -178,7 +193,7 @@ MiAllocateNonCachedMemory(
         return Status;
     }
 
-    MiArchPteWrite(MiPtLookup(Space, Base, NULL), (MI_PTE)Pages << 1);
+    MiIoSetAllocationHeader(Space, Base, Pages);
     Base += PAGE_SIZE;
 
     for (i = 0; i < Pages; i++)
@@ -218,9 +233,15 @@ MiFreeContiguousMemory(
     _In_ ULONG64 VirtualAddress)
 {
     PMI_PTE Header = MiPtLookup(&System->SystemSpace, VirtualAddress - PAGE_SIZE, NULL);
-    ULONG64 Pages = MiArchPteRead(Header) >> 1;
+    MI_PTE HeaderValue;
+    ULONG64 Pages;
 
-    MI_ASSERT(Pages != 0 && !MiArchPteIsValid(MiArchPteRead(Header)));
+    MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(Header != NULL);
+    HeaderValue = MiArchPteRead(Header);
+    Pages = HeaderValue >> 1;
+    MI_ASSERT(Pages != 0 && Pages <= 0x7FFFFFFFULL);
+    MI_ASSERT(!MiArchPteIsValid(HeaderValue));
 
     MiSystemUnmap(System, VirtualAddress, (ULONG)Pages, TRUE);
     MiArchPteWrite(Header, 0);

@@ -11,6 +11,19 @@
 
 #define MI_MDL_LOCK_ATTEMPTS 64
 
+static
+VOID
+MiAssertMdl(
+    _In_ PMI_MDL Mdl)
+{
+    UNREFERENCED_PARAMETER(Mdl);
+    MI_ASSERT(Mdl->Space != NULL);
+    MI_ASSERT(Mdl->ByteCount != 0 && Mdl->ByteOffset < PAGE_SIZE);
+    MI_ASSERT((Mdl->StartVa & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(Mdl->PageCount == (((ULONG64)Mdl->ByteOffset + Mdl->ByteCount + PAGE_SIZE - 1) >> PAGE_SHIFT));
+    MI_ASSERT((Mdl->MappedSystemVa & (PAGE_SIZE - 1)) == 0);
+}
+
 PMI_MDL
 MiMdlAllocate(
     _In_ PMI_ADDRESS_SPACE Space,
@@ -34,6 +47,7 @@ MiMdlAllocate(
     Mdl->ByteOffset = ByteOffset;
     Mdl->ByteCount = ByteCount;
     Mdl->PageCount = Pages;
+    MiAssertMdl(Mdl);
     return Mdl;
 }
 
@@ -41,6 +55,7 @@ VOID
 MiMdlFree(
     _Inout_ PMI_MDL Mdl)
 {
+    MiAssertMdl(Mdl);
     MI_ASSERT(!Mdl->Locked && Mdl->MappedSystemVa == 0);
     MI_FREE(Mdl);
 }
@@ -238,6 +253,7 @@ MiProbeAndLockPages(
 {
     NTSTATUS Status;
 
+    MiAssertMdl(Mdl);
     if (Mdl->Locked)
         return STATUS_INVALID_PARAMETER;
 
@@ -257,6 +273,7 @@ MiProbeAndLockPagesForCopy(
 {
     NTSTATUS Status;
 
+    MiAssertMdl(Mdl);
     if (Mdl->Locked)
         return STATUS_INVALID_PARAMETER;
 
@@ -280,6 +297,7 @@ MiMapPagesForCopy(
     NTSTATUS Status;
     ULONG Page;
 
+    MiAssertMdl(Mdl);
     if (Mdl->Locked || Mdl->MappedSystemVa != 0)
         return STATUS_INVALID_PARAMETER;
 
@@ -321,10 +339,12 @@ VOID
 MiUnlockPages(
     _Inout_ PMI_MDL Mdl)
 {
+    MiAssertMdl(Mdl);
     MI_ASSERT(Mdl->Locked);
 
     if (Mdl->MappedSystemVa != 0)
         MiUnmapLockedPages(Mdl);
+    MI_ASSERT(Mdl->MappedSystemVa == 0);
 
     MiUnlockFrames(Mdl->Space->System, Mdl->Frames, Mdl->PageCount, Mdl->WriteAccess);
     Mdl->Locked = FALSE;
@@ -336,6 +356,7 @@ MiBuildMdlForSystemRange(
 {
     ULONG i;
 
+    MiAssertMdl(Mdl);
     for (i = 0; i < Mdl->PageCount; i++)
     {
         ULONG64 Physical = MiGetPhysicalAddress(Mdl->Space, Mdl->StartVa + (ULONG64)i * PAGE_SIZE);
@@ -357,6 +378,7 @@ MiMapLockedPages(
 {
     NTSTATUS Status;
 
+    MiAssertMdl(Mdl);
     *SystemVa = 0;
 
     if (Mdl->MappedSystemVa == 0)
@@ -367,6 +389,8 @@ MiMapLockedPages(
             return Status;
     }
 
+    MiAssertMdl(Mdl);
+    MI_ASSERT(Mdl->MappedSystemVa != 0);
     *SystemVa = Mdl->MappedSystemVa + Mdl->ByteOffset;
     return STATUS_SUCCESS;
 }
@@ -375,6 +399,7 @@ VOID
 MiUnmapLockedPages(
     _Inout_ PMI_MDL Mdl)
 {
+    MiAssertMdl(Mdl);
     if (Mdl->MappedSystemVa == 0)
         return;
 
@@ -386,6 +411,7 @@ VOID
 MiUnmapLockedPagesLocal(
     _Inout_ PMI_MDL Mdl)
 {
+    MiAssertMdl(Mdl);
     if (Mdl->MappedSystemVa == 0)
         return;
 

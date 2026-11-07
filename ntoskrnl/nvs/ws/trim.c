@@ -218,10 +218,16 @@ MiLockRangeSearch(
     ULONG Low = 0;
     ULONG High = Space->LockRangeCount;
 
+    MI_ASSERT(Space->LockRangeCount <= Space->LockRangeCapacity);
+    MI_ASSERT(Space->LockRangeCount == 0 || Space->LockRanges != NULL);
     while (Low < High)
     {
         ULONG Middle = Low + (High - Low) / 2;
 
+        MI_ASSERT(Space->LockRanges[Middle].Start < Space->LockRanges[Middle].End);
+        MI_ASSERT(Middle == 0 || Space->LockRanges[Middle - 1].End < Space->LockRanges[Middle].Start);
+        MI_ASSERT(Middle + 1 == Space->LockRangeCount ||
+                  Space->LockRanges[Middle].End < Space->LockRanges[Middle + 1].Start);
         if (Space->LockRanges[Middle].End <= VirtualAddress)
             Low = Middle + 1;
         else
@@ -353,6 +359,9 @@ MiLockRangeAdd(
 
     Space->LockRanges[First].Start = Start;
     Space->LockRanges[First].End = End;
+    MI_ASSERT(Start < End);
+    MI_ASSERT(First == 0 || Space->LockRanges[First - 1].End < Start);
+    MI_ASSERT(First + 1 == Space->LockRangeCount || End < Space->LockRanges[First + 1].Start);
     Space->LockedPages += Pages;
     return STATUS_SUCCESS;
 }
@@ -371,12 +380,15 @@ MiLockRangeRemove(
         ULONG64 From = (Range->Start > Start) ? Range->Start : Start;
         ULONG64 To = (Range->End < End) ? Range->End : End;
 
+        MI_ASSERT(From < To);
+        MI_ASSERT(Space->LockedPages >= ((To - From) >> PAGE_SHIFT));
         Space->LockedPages -= (To - From) >> PAGE_SHIFT;
 
         if (Range->Start < Start && Range->End > End)
         {
             if (!MiLockRangeReserve(Space, Space->LockRangeCount + 1))
             {
+                MI_ASSERT(Space->LockedPages >= ((Space->LockRanges[Index].End - End) >> PAGE_SHIFT));
                 Space->LockedPages -= (Space->LockRanges[Index].End - End) >> PAGE_SHIFT;
                 Space->LockRanges[Index].End = Start;
                 return;

@@ -161,6 +161,11 @@ PoolLfhTake(
     ULONG Word = Subsegment->HintWord;
     ULONG Scanned;
 
+    POOL_ASSERT(Subsegment->Signature == POOL_LFH_SIGNATURE);
+    POOL_ASSERT(Subsegment->FreeCount != 0 && Subsegment->FreeCount <= Subsegment->BlockCount);
+    POOL_ASSERT(Subsegment->MapWords == (Subsegment->BlockCount + 63) / 64);
+    POOL_ASSERT(Word < Subsegment->MapWords);
+
     for (Scanned = 0; Scanned < Subsegment->MapWords; Scanned++)
     {
         ULONG64 Clear = ~Subsegment->Bitmap[Word];
@@ -169,6 +174,7 @@ PoolLfhTake(
         {
             ULONG Bit = Word * 64 + POOL_CTZ64(Clear);
 
+            POOL_ASSERT(Bit < Subsegment->BlockCount);
             Subsegment->Bitmap[Word] |= ((ULONG64)1 << (Bit & 63));
             Subsegment->Tags[Bit] = Tag;
             Subsegment->Flags[Bit] = 0;
@@ -202,6 +208,8 @@ PoolLfhAllocate(
     if (!IsListEmpty(&Slot->Partial))
     {
         Subsegment = CONTAINING_RECORD(Slot->Partial.Flink, POOL_LFH_SUBSEGMENT, Link);
+        POOL_ASSERT(Subsegment->Slot == Slot && !Subsegment->OnFullList);
+        POOL_ASSERT(Slot->SubsegmentCount != 0);
         Block = PoolLfhTake(Subsegment, Tag);
         POOL_ASSERT(Block != NULL);
 
@@ -304,6 +312,10 @@ PoolLfhFree(
 
     Slot = Subsegment->Slot;
     POOL_LOCK_ACQUIRE(&Slot->Lock, &OldIrql);
+    POOL_ASSERT(Subsegment->Signature == POOL_LFH_SIGNATURE);
+    POOL_ASSERT(Subsegment->FreeCount <= Subsegment->BlockCount);
+    POOL_ASSERT((Subsegment->FreeCount == 0) == !!Subsegment->OnFullList);
+    POOL_ASSERT(Slot->SubsegmentCount != 0);
 
     if (((Subsegment->Bitmap[Bit >> 6] >> (Bit & 63)) & 1) == 0)
     {
@@ -371,6 +383,9 @@ PoolLfhTrim(
             PPOOL_LFH_SUBSEGMENT Subsegment = CONTAINING_RECORD(Entry, POOL_LFH_SUBSEGMENT, Link);
 
             Entry = Entry->Flink;
+            POOL_ASSERT(Subsegment->Slot == Slot && !Subsegment->OnFullList);
+            POOL_ASSERT(Subsegment->FreeCount != 0 && Subsegment->FreeCount <= Subsegment->BlockCount);
+            POOL_ASSERT(Slot->SubsegmentCount != 0);
             if (Subsegment->FreeCount != Subsegment->BlockCount)
                 continue;
 

@@ -74,12 +74,17 @@ MiCreateKernelStack(
         if (MI_PEEK(Cache->StackDepth) != 0)
         {
             MI_SPIN_ACQUIRE(&Cache->Lock, &OldIrql);
+            MI_ASSERT(Cache->StackDepth <= MI_KSTACK_CACHE_DEPTH);
             if (Cache->StackDepth != 0)
                 *StackTop = Cache->Stack[--Cache->StackDepth];
             MI_SPIN_RELEASE(&Cache->Lock, OldIrql);
 
             if (*StackTop != 0)
+            {
+                MI_ASSERT((*StackTop & (PAGE_SIZE - 1)) == 0 && *StackTop > Ptes->Base);
+                MI_ASSERT(((*StackTop - Ptes->Base) >> PAGE_SHIFT) <= Ptes->PageCount);
                 return STATUS_SUCCESS;
+            }
         }
     }
 
@@ -134,6 +139,7 @@ MiDeleteKernelStack(
         KIRQL OldIrql;
 
         MI_SPIN_ACQUIRE(&Cache->Lock, &OldIrql);
+        MI_ASSERT(Cache->StackDepth <= MI_KSTACK_CACHE_DEPTH);
         if (Cache->StackDepth < MI_KSTACK_CACHE_DEPTH)
         {
             Cache->Stack[Cache->StackDepth++] = StackTop;

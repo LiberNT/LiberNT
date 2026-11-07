@@ -13,6 +13,18 @@
 #define MI_PAGE_ALIGN_UP(a)     (((a) + PAGE_SIZE - 1) & ~((ULONG64)PAGE_SIZE - 1))
 
 static
+VOID
+MiAssertWriteWatchVad(
+    _In_ PMI_VAD Vad)
+{
+    UNREFERENCED_PARAMETER(Vad);
+    MI_ASSERT(Vad->WriteWatchBits != NULL);
+    MI_ASSERT((Vad->WriteWatchBase & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(Vad->WriteWatchBase <= MI_VAD_START(Vad));
+    MI_ASSERT(MI_VAD_START(Vad) < MI_VAD_END(Vad));
+}
+
+static
 SIZE_T
 MiWriteWatchBytes(
     _In_ ULONG64 Start,
@@ -34,6 +46,7 @@ MiWriteWatchAttach(
 
     RtlZeroMemory(Vad->WriteWatchBits, Bytes);
     Vad->WriteWatchBase = MI_VAD_START(Vad);
+    MiAssertWriteWatchVad(Vad);
     Space->HasWriteWatch = TRUE;
     return STATUS_SUCCESS;
 }
@@ -49,6 +62,7 @@ MiWriteWatchDuplicate(
     if (Source == NULL)
         return STATUS_SUCCESS;
 
+    MiAssertWriteWatchVad(Vad);
     Bytes = MiWriteWatchBytes(Vad->WriteWatchBase, MI_VAD_END(Vad));
     Vad->WriteWatchBits = MI_ALLOCATE(Bytes);
     if (Vad->WriteWatchBits == NULL)
@@ -84,6 +98,9 @@ MiWriteWatchNoteWriteLocked(
     Vad = MiVadLocate(Space, VirtualAddress);
     if (Vad != NULL && Vad->WriteWatchBits != NULL)
     {
+        MiAssertWriteWatchVad(Vad);
+        MI_ASSERT(MI_PAGE_ALIGN_DOWN(VirtualAddress) >= MI_VAD_START(Vad) &&
+                  MI_PAGE_ALIGN_DOWN(VirtualAddress) < MI_VAD_END(Vad));
         Page = (MI_PAGE_ALIGN_DOWN(VirtualAddress) - Vad->WriteWatchBase) >> PAGE_SHIFT;
         MI_ATOMIC_OR8(&Vad->WriteWatchBits[Page / 8], 1u << (Page % 8));
     }
@@ -107,6 +124,8 @@ MiWriteWatchTestPage(
 {
     ULONG64 Page = (Va - Vad->WriteWatchBase) >> PAGE_SHIFT;
 
+    MiAssertWriteWatchVad(Vad);
+    MI_ASSERT((Va & (PAGE_SIZE - 1)) == 0 && Va >= MI_VAD_START(Vad) && Va < MI_VAD_END(Vad));
     return (BOOLEAN)((MI_ATOMIC_READ8(&Vad->WriteWatchBits[Page / 8]) >> (Page % 8)) & 1);
 }
 
@@ -147,6 +166,9 @@ MiWriteWatchResetLocked(
     MI_PTE Pte;
     KIRQL OldIrql;
 
+    MiAssertWriteWatchVad(Vad);
+    MI_ASSERT((Start & (PAGE_SIZE - 1)) == 0 && (End & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(Start >= MI_VAD_START(Vad) && Start <= End && End <= MI_VAD_END(Vad));
     for (Va = Start; Va < End; Va += PAGE_SIZE)
     {
         Page = (Va - Vad->WriteWatchBase) >> PAGE_SHIFT;

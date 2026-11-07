@@ -82,11 +82,16 @@ PoolSegClaim(
     ULONG AlreadyCommitted = 0;
     ULONG i;
 
+    POOL_ASSERT(First >= Segment->HeaderPages && First < POOL_SEGMENT_PAGES);
+    POOL_ASSERT(PageCount != 0 && PageCount <= POOL_SEGMENT_PAGES - First);
+    POOL_ASSERT(PageCount <= Segment->FreePages);
     for (i = 0; i < POOL_SEGMENT_MAP_WORDS; i++)
         NeedCommit[i] = 0;
 
     for (i = First; i < First + PageCount; i++)
     {
+        POOL_ASSERT(!PoolSegTest(Segment->BusyMap, i));
+        POOL_ASSERT(Segment->Range[i].State == PoolRangeFree);
         Segment->BusyMap[i >> 6] |= POOL_SEG_BIT(i);
 
         if (PoolSegTest(Segment->CommitMap, i))
@@ -190,8 +195,13 @@ PoolSegUnclaimLocked(
 {
     ULONG i;
 
+    POOL_ASSERT(First >= Segment->HeaderPages && First < POOL_SEGMENT_PAGES);
+    POOL_ASSERT(PageCount != 0 && PageCount <= POOL_SEGMENT_PAGES - First);
+    POOL_ASSERT(Segment->FreePages <= POOL_SEGMENT_PAGES - Segment->HeaderPages - PageCount);
     for (i = First; i < First + PageCount; i++)
     {
+        POOL_ASSERT(PoolSegTest(Segment->BusyMap, i));
+        POOL_ASSERT(Segment->Range[i].State != PoolRangeFree);
         Segment->Range[i].State = PoolRangeFree;
         Segment->Range[i].Pages = 0;
         Segment->BusyMap[i >> 6] &= ~POOL_SEG_BIT(i);
@@ -312,6 +322,7 @@ PoolSegRetireLocked(
     if (Segment->FreePages != POOL_SEGMENT_PAGES - Segment->HeaderPages || Shard->SegmentCount <= 1)
         return FALSE;
 
+    POOL_ASSERT(Segment->OnAvailable);
     RemoveEntryList(&Segment->AvailableLink);
     Segment->OnAvailable = FALSE;
     Shard->SegmentCount--;

@@ -79,6 +79,8 @@ MiProcessManagerUninitialize(
     _Inout_ PMI_PROCESS_MANAGER Manager)
 {
     MI_ASSERT(IsListEmpty(&Manager->ProcessList));
+    MI_ASSERT(Manager->ProcessCount == 0);
+    MI_ASSERT(Manager->TrimCursor == &Manager->ProcessList);
 
     if (Manager->UserSharedMdl != NULL)
     {
@@ -127,6 +129,8 @@ MiProcessCreate(
     }
 
     MI_MUTEX_ACQUIRE(&Manager->Lock);
+    MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
+    MI_ASSERT(Manager->TrimCursor != NULL);
     InsertTailList(&Manager->ProcessList, &Process->SystemLink);
     Manager->ProcessCount++;
     MI_MUTEX_RELEASE(&Manager->Lock);
@@ -151,6 +155,8 @@ MiProcessAdopt(
         return Status;
 
     MI_MUTEX_ACQUIRE(&Manager->Lock);
+    MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
+    MI_ASSERT(Manager->TrimCursor != NULL);
     InsertTailList(&Manager->ProcessList, &Process->SystemLink);
     Manager->ProcessCount++;
     MI_MUTEX_RELEASE(&Manager->Lock);
@@ -163,10 +169,16 @@ MiProcessDelete(
     _Inout_ PMI_PROCESS Process)
 {
     MI_MUTEX_ACQUIRE(&Manager->Lock);
+    MI_ASSERT(Manager->ProcessCount != 0 && !IsListEmpty(&Manager->ProcessList));
+    MI_ASSERT(Process->SystemLink.Flink->Blink == &Process->SystemLink);
+    MI_ASSERT(Process->SystemLink.Blink->Flink == &Process->SystemLink);
+    MI_ASSERT(Manager->TrimCursor != NULL);
     if (Manager->TrimCursor == &Process->SystemLink)
         Manager->TrimCursor = Process->SystemLink.Flink;
     RemoveEntryList(&Process->SystemLink);
     Manager->ProcessCount--;
+    MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
+    MI_ASSERT(Manager->ProcessCount != 0 || Manager->TrimCursor == &Manager->ProcessList);
     MI_MUTEX_RELEASE(&Manager->Lock);
 
     MiCleanAddressSpace(&Process->Space);
@@ -312,6 +324,8 @@ MiBalanceMemory(
     }
 
     MI_MUTEX_ACQUIRE(&Manager->Lock);
+    MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
+    MI_ASSERT(Manager->TrimCursor != NULL);
 
     for (Pass = 0; Pass < 2 && Available + Trimmed < Manager->AvailableHigh; Pass++)
     {

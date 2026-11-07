@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <nvs/include/nvsenv.h>
+#include <nvs/include/mienv.h>
 #include <nvs/include/mivad.h>
 
 PMI_VAD_NODE
@@ -86,6 +86,7 @@ MiVadReplaceChild(
     _In_ PMI_VAD_NODE Old,
     _In_ PMI_VAD_NODE New)
 {
+    MI_ASSERT(Parent != NULL ? Parent->Left == Old || Parent->Right == Old : Tree->Root == Old);
     if (Parent == NULL)
         Tree->Root = New;
     else if (Parent->Left == Old)
@@ -105,6 +106,7 @@ MiVadRotateLeft(
 {
     PMI_VAD_NODE Right = Node->Right;
 
+    MI_ASSERT(Right != NULL && Right->Parent == Node);
     MiVadReplaceChild(Tree, Node->Parent, Node, Right);
 
     Node->Right = Right->Left;
@@ -126,6 +128,7 @@ MiVadRotateRight(
 {
     PMI_VAD_NODE Left = Node->Left;
 
+    MI_ASSERT(Left != NULL && Left->Parent == Node);
     MiVadReplaceChild(Tree, Node->Parent, Node, Left);
 
     Node->Left = Left->Right;
@@ -192,6 +195,8 @@ MiVadInsert(
     PMI_VAD_NODE Current = Tree->Root;
     PMI_VAD_NODE Parent = NULL;
 
+    MI_ASSERT((Tree->Root == NULL) == (Tree->NodeCount == 0));
+    MI_ASSERT(Tree->Root == NULL || Tree->Root->Parent == NULL);
     if (Node->StartingVpn > Node->EndingVpn)
         return FALSE;
 
@@ -225,6 +230,7 @@ MiVadInsert(
 
     Tree->NodeCount++;
     MiVadRebalance(Tree, Parent);
+    MI_ASSERT(Tree->Root != NULL && Tree->Root->Parent == NULL);
     return TRUE;
 }
 
@@ -247,6 +253,10 @@ MiVadRemove(
     PMI_VAD_NODE Start;
     PMI_VAD_NODE Successor;
 
+    MI_ASSERT(Tree->Root != NULL && Tree->NodeCount != 0);
+    MI_ASSERT(Node->Parent != NULL ? Node->Parent->Left == Node || Node->Parent->Right == Node : Tree->Root == Node);
+    MI_ASSERT(Node->Left == NULL || Node->Left->Parent == Node);
+    MI_ASSERT(Node->Right == NULL || Node->Right->Parent == Node);
     if (Node->Left == NULL || Node->Right == NULL)
     {
         Start = Node->Parent;
@@ -254,6 +264,8 @@ MiVadRemove(
                           Node->Left != NULL ? Node->Left : Node->Right);
         Tree->NodeCount--;
         MiVadRebalance(Tree, Start);
+        MI_ASSERT((Tree->Root == NULL) == (Tree->NodeCount == 0));
+        MI_ASSERT(Tree->Root == NULL || Tree->Root->Parent == NULL);
         return;
     }
 
@@ -281,6 +293,7 @@ MiVadRemove(
 
     Tree->NodeCount--;
     MiVadRebalance(Tree, Start);
+    MI_ASSERT(Tree->Root != NULL && Tree->Root->Parent == NULL);
 }
 
 PMI_VAD_NODE

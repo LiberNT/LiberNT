@@ -188,6 +188,8 @@ PoolVaReserveLocked(
     SIZE_T First;
     SIZE_T i;
 
+    POOL_ASSERT(Region->UnitsInUse <= Region->UnitCount);
+    POOL_ASSERT(Region->Hint < Region->UnitCount);
     if (UnitCount == 0 || UnitCount > Region->UnitCount - Region->UnitsInUse)
         return NULL;
 
@@ -197,12 +199,15 @@ PoolVaReserveLocked(
     if (First == (SIZE_T)-1)
         return NULL;
 
+    POOL_ASSERT(!PoolVaTestBit(Region->BusyMap, First));
+    POOL_ASSERT(Region->Directory[First].State == PoolUnitFree);
     PoolVaSetBits(Region->BusyMap, First, UnitCount);
     Region->UnitsInUse += UnitCount;
     Region->Hint = (First + UnitCount < Region->UnitCount) ? First + UnitCount : 0;
 
     for (i = 1; i < UnitCount; i++)
     {
+        POOL_ASSERT(Region->Directory[First + i].State == PoolUnitFree);
         Region->Directory[First + i].UnitCount = 0;
         Region->Directory[First + i].State = PoolUnitTail;
     }
@@ -246,10 +251,16 @@ PoolVaRelease(
     POOL_ASSERT(First + UnitCount <= Region->UnitCount);
 
     POOL_LOCK_ACQUIRE(&Region->Lock, &OldIrql);
+    POOL_ASSERT(UnitCount != 0 && UnitCount <= Region->UnitsInUse);
+    POOL_ASSERT(Region->UnitsInUse <= Region->UnitCount);
+    POOL_ASSERT(Region->Directory[First].State != PoolUnitFree &&
+                Region->Directory[First].State != PoolUnitTail);
+    POOL_ASSERT(Region->Directory[First].UnitCount == UnitCount);
 
     for (i = 0; i < UnitCount; i++)
     {
         POOL_ASSERT(PoolVaTestBit(Region->BusyMap, First + i));
+        POOL_ASSERT(i == 0 || Region->Directory[First + i].State == PoolUnitTail);
         Region->Directory[First + i].State = PoolUnitFree;
         Region->Directory[First + i].UnitCount = 0;
     }
