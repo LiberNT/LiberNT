@@ -398,6 +398,8 @@ function(image_list_command _image _var)
         -DSYSTEM_DIR=Windows
         -DINVENTORY=${CMAKE_CURRENT_BINARY_DIR}/${_image}.files
         "-DINVENTORY_HEADER=LiberNT ${KERNEL_VERSION} ${KERNEL_VERSION_BUILD}-${REVISION}"
+        -DINVENTORY_BUILD=${LIBERNT_BUILD_NUMBER}
+        -DINVENTORY_IMAGE=${_image}
         -P ${REACTOS_SOURCE_DIR}/sdk/cmake/optional_files.cmake PARENT_SCOPE)
 endfunction()
 

@@ -58,6 +58,8 @@ static const PCSTR TestSif =
 
 static const PCSTR NewInventory =
     "; LiberNT new\n"
+    "; Build 12\n"
+    "; Image preinstall\n"
     "Other\\outside.txt\n"
     "Program Files\\App\\app.exe\n"
     "Windows\\a.dll\n"
@@ -69,16 +71,25 @@ static const PCSTR NewInventory =
     "Windows\\servicing\\LiberNT.files\n"
     "Windows\\system32\\config\\system\n";
 
+#define OLD_INVENTORY_ENTRIES \
+    "WINDOWS\\A.DLL\r\n" \
+    "Windows\\keep.ini\r\n" \
+    "Windows\\obsolete.dll\r\n" \
+    "Windows\\olddir\\\r\n" \
+    "Windows\\olddir2\\\r\n" \
+    "Windows\\olddir2\\gone.txt\r\n" \
+    "Windows\\servicing\\LiberNT.files\r\n" \
+    "Windows\\system32\\config\\system\r\n"
+
 static const PCSTR OldInventory =
     "; LiberNT old\r\n"
-    "WINDOWS\\A.DLL\r\n"
-    "Windows\\keep.ini\r\n"
-    "Windows\\obsolete.dll\r\n"
-    "Windows\\olddir\\\r\n"
-    "Windows\\olddir2\\\r\n"
-    "Windows\\olddir2\\gone.txt\r\n"
-    "Windows\\servicing\\LiberNT.files\r\n"
-    "Windows\\system32\\config\\system\r\n";
+    "; Image preinstall\r\n"
+    OLD_INVENTORY_ENTRIES;
+
+static const PCSTR OtherImageInventory =
+    "; LiberNT old\r\n"
+    "; Image bootcd\r\n"
+    OLD_INVENTORY_ENTRIES;
 
 static HINF
 WINAPI
@@ -324,7 +335,7 @@ DeleteTree(
 
 static VOID
 BuildTestTrees(
-    _In_ BOOL WithOldInventory)
+    _In_opt_ PCSTR Inventory)
 {
     static const PCWSTR SourceFiles[] =
     {
@@ -354,8 +365,8 @@ BuildTestTrees(
     ok(CreateTestDirectory(L"dst\\Windows\\olddir"), "olddir not created\n");
     ok(WriteTestFile(L"dst\\Windows\\olddir2\\gone.txt", "old"), "gone.txt not written\n");
     ok(WriteTestFile(L"dst\\Windows\\olddir2\\data.txt", "user"), "data.txt not written\n");
-    if (WithOldInventory)
-        ok(WriteTestFile(L"dst\\Windows\\servicing\\LiberNT.files", OldInventory), "old inventory not written\n");
+    if (Inventory)
+        ok(WriteTestFile(L"dst\\Windows\\servicing\\LiberNT.files", Inventory), "old inventory not written\n");
 }
 
 static BOOL
@@ -404,7 +415,7 @@ START_TEST(PrepareUpgradeFileCopy)
     GetTempPathW(ARRAYSIZE(TestRoot), TestRoot);
     StringCchCatW(TestRoot, ARRAYSIZE(TestRoot), L"upgplan");
 
-    BuildTestTrees(TRUE);
+    BuildTestTrees(OldInventory);
     if (!RunUpgradePlan())
     {
         DeleteTree(TestRoot);
@@ -429,13 +440,23 @@ START_TEST(PrepareUpgradeFileCopy)
     Attributes = GetTestAttributes(L"dst\\Windows\\emptydir");
     ok(Attributes != INVALID_FILE_ATTRIBUTES && (Attributes & FILE_ATTRIBUTE_DIRECTORY), "listed directory not created\n");
 
-    BuildTestTrees(FALSE);
+    BuildTestTrees(NULL);
     if (RunUpgradePlan())
     {
         ok(TestFileStartsWith(L"dst\\Windows\\a.dll", "new"), "a.dll not replaced without an old inventory\n");
         ok(TestFileStartsWith(L"dst\\Windows\\obsolete.dll", "old"), "unlisted file dropped without an old inventory\n");
         ok(TestFileStartsWith(L"dst\\Windows\\servicing\\LiberNT.files", "; LiberNT new"),
            "inventory not written without an old inventory\n");
+    }
+
+    BuildTestTrees(OtherImageInventory);
+    if (RunUpgradePlan())
+    {
+        ok(TestFileStartsWith(L"dst\\Windows\\a.dll", "new"), "a.dll not replaced from another image\n");
+        ok(TestFileStartsWith(L"dst\\Windows\\obsolete.dll", "old"), "file of another image dropped\n");
+        ok(GetTestAttributes(L"dst\\Windows\\olddir") != INVALID_FILE_ATTRIBUTES, "directory of another image dropped\n");
+        ok(TestFileStartsWith(L"dst\\Windows\\servicing\\LiberNT.files", "; LiberNT new"),
+           "inventory not written from another image\n");
     }
 
     DeleteTree(TestRoot);
