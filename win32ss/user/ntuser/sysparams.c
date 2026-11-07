@@ -481,7 +481,7 @@ SpiUpdatePerUserSystemParameters(VOID)
 
     /* Load MINIMIZEDMETRICS */
     gspv.mm.cbSize = sizeof(MINIMIZEDMETRICS);
-    gspv.mm.iWidth = SpiLoadMetric(L"MinWidth", 160);
+    gspv.mm.iWidth = SpiLoadMetric(L"MinWidth", 154);
     gspv.mm.iHorzGap = SpiLoadMetric(L"MinHorzGap", 0);
     gspv.mm.iVertGap = SpiLoadMetric(L"MinVertGap", 0);
     gspv.mm.iArrange = SpiLoadInt(KEY_METRIC, L"MinArrange", ARW_HIDE);

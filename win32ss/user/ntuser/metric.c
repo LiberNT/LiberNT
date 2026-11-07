@@ -79,7 +79,7 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     TRACE("ncm.iCaptionWidth=%d,GetSystemMetrics(SM_CYSIZE)=%d,GetSystemMetrics(SM_CXFRAME)=%d,avcwCaption=%d \n",
            V(gspv.ncm.iCaptionWidth), piSysMet[SM_CYSIZE],piSysMet[SM_CXFRAME], V(gspv.tmCaptionFont.tmAveCharWidth));
 
-    piSysMet[SM_CXMIN] = 3 * max(V(gspv.ncm.iCaptionWidth), 8)
+    piSysMet[SM_CXMIN] = 3 * piSysMet[SM_CYSIZE]
                          + piSysMet[SM_CYSIZE] + 4
                          + 4 * V(gspv.tmCaptionFont.tmAveCharWidth)
                          + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
@@ -123,7 +123,9 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     piSysMet[SM_CXICONSPACING] = V(gspv.im.iHorzSpacing);  // 64;
     piSysMet[SM_CYICONSPACING] = V(gspv.im.iVertSpacing);  // 64;
     piSysMet[SM_CXCURSOR] = D(32);
-    if (piSysMet[SM_CXCURSOR] >= 64)
+    if (piSysMet[SM_CXCURSOR] >= 96)
+        piSysMet[SM_CXCURSOR] = 96;
+    else if (piSysMet[SM_CXCURSOR] >= 64)
         piSysMet[SM_CXCURSOR] = 64;
     else if (piSysMet[SM_CXCURSOR] >= 48)
         piSysMet[SM_CXCURSOR] = 48;

@@ -434,6 +434,9 @@ NtUserCallOneParam(
                 case ROS_SERVERINFO_LOGPIXELS:
                     Result = gpsi->dmLogPixels;
                     break;
+                case ROS_SERVERINFO_PADDEDBORDER:
+                    Result = gpsi->aiSysMet[SM_CXPADDEDBORDER];
+                    break;
                 default:
                     EngSetLastError(ERROR_INVALID_PARAMETER);
                     Result = 0;
