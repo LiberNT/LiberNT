@@ -78,6 +78,7 @@ interface IWineJSDispatchHost : IDispatchEx
     HRESULT FillProperties();
     HRESULT GetOuterDispatch(IWineJSDispatchHost **ret);
     HRESULT ToString(BSTR *str);
+    HRESULT CreateErrorObject(HRESULT error, IDispatch **ret);
 }
 
 const unsigned int SCRIPTLANGUAGEVERSION_HTML  = 0x400;

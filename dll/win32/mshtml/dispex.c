@@ -2980,6 +2980,15 @@ static HRESULT WINAPI JSDispatchHost_ToString(IWineJSDispatchHost *iface, BSTR *
     return dispex_to_string(This, str);
 }
 
+static HRESULT WINAPI JSDispatchHost_CreateErrorObject(IWineJSDispatchHost *iface, HRESULT error, IDispatch **ret)
+{
+    DispatchEx *This = impl_from_IWineJSDispatchHost(iface);
+
+    TRACE("%s (%p)->(%08lx)\n", This->info->name, This, error);
+
+    return create_dom_exception(This, error, ret);
+}
+
 static IWineJSDispatchHostVtbl JSDispatchHostVtbl = {
     DispatchEx_QueryInterface,
     DispatchEx_AddRef,
@@ -3007,6 +3016,7 @@ static IWineJSDispatchHostVtbl JSDispatchHostVtbl = {
     JSDispatchHost_FillProperties,
     JSDispatchHost_GetOuterDispatch,
     JSDispatchHost_ToString,
+    JSDispatchHost_CreateErrorObject,
 };
 
 struct EnumVARIANT {
@@ -3424,6 +3434,26 @@ static const dispex_static_data_vtbl_t prototype_dispex_vtbl = {
     .next_dispid = prototype_next_dispid,
 };
 
+static void define_constants(DispatchEx *dispex, const dispex_constant_t *constants, compat_mode_t compat_mode)
+{
+    const dispex_constant_t *c;
+    VARIANT v;
+    HRESULT hres;
+
+    if(!dispex->jsdisp)
+        return;
+
+    for(c = constants; c->name; c++) {
+        if(compat_mode < c->min_compat_mode)
+            continue;
+        V_VT(&v) = VT_I4;
+        V_I4(&v) = c->value;
+        hres = IWineJSDispatch_DefineProperty(dispex->jsdisp, c->name, PROPF_ENUMERABLE, &v);
+        if(FAILED(hres))
+            ERR("Could not define %s: %08lx\n", debugstr_w(c->name), hres);
+    }
+}
+
 HRESULT get_prototype(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret)
 {
     compat_mode_t compat_mode = script_global->doc->document_mode;
@@ -3465,6 +3495,8 @@ HRESULT get_prototype(HTMLInnerWindow *script_global, object_id_t id, DispatchEx
     if(!(prototype = calloc(sizeof(*prototype), 1)))
         return E_OUTOFMEMORY;
     init_dispatch_from_desc(prototype, info, script_global, prot_prototype);
+    if(desc->constants)
+        define_constants(prototype, desc->constants, compat_mode);
     *ret = script_global->prototypes[id] = prototype;
     return S_OK;
 }
@@ -3605,6 +3637,9 @@ HRESULT get_constructor(HTMLInnerWindow *script_global, object_id_t id, Dispatch
         constr->id = id;
         script_global->constructors[id] = &constr->dispex;
     }
+
+    if(info->constants)
+        define_constants(script_global->constructors[id], info->constants, script_global->doc->document_mode);
 
     *ret = script_global->constructors[id];
     return S_OK;

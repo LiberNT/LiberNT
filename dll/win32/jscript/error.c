@@ -462,6 +462,32 @@ HRESULT throw_host_error(script_ctx_t *ctx, HRESULT error)
     return DISP_E_EXCEPTION;
 }
 
+
+HRESULT throw_host_object_error(script_ctx_t *ctx, IWineJSDispatchHost *host, HRESULT error)
+{
+    IDispatch *disp;
+    VARIANT v;
+    jsval_t val;
+    HRESULT hres;
+
+    hres = IWineJSDispatchHost_CreateErrorObject(host, error, &disp);
+    if(hres != S_OK)
+        return FAILED(hres) ? hres : error;
+
+    V_VT(&v) = VT_DISPATCH;
+    V_DISPATCH(&v) = disp;
+    hres = variant_to_jsval(ctx, &v, &val);
+    IDispatch_Release(disp);
+    if(FAILED(hres))
+        return hres;
+
+    reset_ei(ctx->ei);
+    ctx->ei->error = JS_E_EXCEPTION_THROWN;
+    ctx->ei->valid_value = TRUE;
+    ctx->ei->value = val;
+    return DISP_E_EXCEPTION;
+}
+
 #endif
 void handle_dispatch_exception(script_ctx_t *ctx, EXCEPINFO *ei)
 {

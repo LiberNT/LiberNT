@@ -2258,6 +2258,8 @@ static HRESULT post_message(HTMLInnerWindow *window, VARIANT msg, BSTR targetOri
     }
 
     hres = check_target_origin(window, targetOrigin, source);
+    if(hres == E_INVALIDARG && compat_mode >= COMPAT_MODE_IE10 && targetOrigin && *targetOrigin)
+        hres = MSHTML_E_DOM_SYNTAX;
     if(hres != S_OK) {
         IHTMLWindow2_Release(source);
         return SUCCEEDED(hres) ? S_OK : hres;
@@ -3584,6 +3586,13 @@ static HRESULT WINAPI WindowDispEx_ToString(IWineJSDispatchHost *iface, BSTR *st
     return IWineJSDispatchHost_ToString(&This->base.inner_window->event_target.dispex.IWineJSDispatchHost_iface, str);
 }
 
+static HRESULT WINAPI WindowDispEx_CreateErrorObject(IWineJSDispatchHost *iface, HRESULT error, IDispatch **ret)
+{
+    HTMLOuterWindow *This = impl_from_IWineJSDispatchHost(iface);
+
+    return IWineJSDispatchHost_CreateErrorObject(&This->base.inner_window->event_target.dispex.IWineJSDispatchHost_iface, error, ret);
+}
+
 static const IWineJSDispatchHostVtbl WindowDispExVtbl = {
     WindowDispEx_QueryInterface,
     WindowDispEx_AddRef,
@@ -3611,6 +3620,7 @@ static const IWineJSDispatchHostVtbl WindowDispExVtbl = {
     WindowDispEx_FillProperties,
     WindowDispEx_GetOuterDispatch,
     WindowDispEx_ToString,
+    WindowDispEx_CreateErrorObject,
 };
 
 static inline HTMLOuterWindow *impl_from_IEventTarget(IEventTarget *iface)

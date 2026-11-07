@@ -5399,7 +5399,7 @@ static HRESULT WINAPI HTMLElement6_msMatchesSelector(IHTMLElement6 *iface, BSTR 
     nsAString_Finish(&nsstr);
     if(NS_FAILED(nsres)) {
         WARN("MozMatchesSelector failed: %08lx\n", nsres);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     *pfMatches = b;
@@ -6477,7 +6477,7 @@ static HRESULT WINAPI ElementSelector_querySelector(IElementSelector *iface, BST
     nsAString_Finish(&nsstr);
     if(NS_FAILED(nsres)) {
         WARN("QuerySelector failed: %08lx\n", nsres);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     if(!nselem) {
@@ -6516,7 +6516,7 @@ static HRESULT WINAPI ElementSelector_querySelectorAll(IElementSelector *iface, 
         WARN("QuerySelectorAll failed: %08lx\n", nsres);
         if(node_list)
             nsIDOMNodeList_Release(node_list);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     hres = create_child_collection(node_list, &This->node.event_target.dispex, pel);

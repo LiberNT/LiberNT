@@ -1005,6 +1005,13 @@ HRESULT map_nsresult(nsresult nsres)
     return E_FAIL;
 }
 
+HRESULT map_selector_nsresult(nsresult nsres, DispatchEx *dispex)
+{
+    if(nsres == NS_ERROR_DOM_SYNTAX_ERR && dispex_compat_mode(dispex) >= COMPAT_MODE_IE9)
+        return MSHTML_E_DOM_SYNTAX;
+    return map_nsresult(nsres);
+}
+
 HRESULT return_nsstr(nsresult nsres, nsAString *nsstr, BSTR *p)
 {
     const PRUnichar *str;

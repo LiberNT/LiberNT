@@ -32477,6 +32477,58 @@ coclass DOMParser
 }
 
 /*****************************************************************************
+ *    IDOMException interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3051072b-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IDOMException : IDispatch
+{
+    [propput, id(DISPID_IDOMEXCEPTION_CODE)]
+    HRESULT code([in] LONG v);
+
+    [propget, id(DISPID_IDOMEXCEPTION_CODE)]
+    HRESULT code([retval, out] LONG *p);
+
+    [propget, id(DISPID_IDOMEXCEPTION_MESSAGE)]
+    HRESULT message([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispDOMException dispinterface
+ */
+[
+    hidden,
+    uuid(30590094-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispDOMException
+{
+properties:
+methods:
+    [propput, id(DISPID_IDOMEXCEPTION_CODE)]
+    void code(LONG v);
+
+    [propget, id(DISPID_IDOMEXCEPTION_CODE)]
+    LONG code();
+
+    [propget, id(DISPID_IDOMEXCEPTION_MESSAGE)]
+    BSTR message();
+}
+
+[
+    noncreatable,
+    uuid(3051072c-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass DOMException
+{
+    [default] dispinterface DispDOMException;
+    interface IDOMException;
+}
+
+/*****************************************************************************
  *    IDOMXmlSerializer interface
  */
 [
