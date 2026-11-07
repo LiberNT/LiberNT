@@ -677,7 +677,10 @@ static void Test_PrivilegedBatches(GEN_CONTEXT *Ctx)
         { 0x54300004, 0, GEN_MI_BATCH_END, 0 },
     };
     static const ULONG Allowed[4] = { 0x11000001, 0x20C0, 0x00400040, GEN_MI_BATCH_END };
+    static const ULONG Patched[2] = { 0, GEN_MI_BATCH_END };
+    static const ULONG State[1] = { 0 };
     HDGFX_GEN_SUBMIT header;
+    GEN_PATCH patch;
     NTSTATUS status;
     UINT i;
 
@@ -692,6 +695,12 @@ static void Test_PrivilegedBatches(GEN_CONTEXT *Ctx)
         status = GenSubmit(Ctx, &header, Refused[i], NULL, NULL, 0);
         ok_hex(status, STATUS_ILLEGAL_INSTRUCTION);
     }
+    GenHeader(&header, 2, 1);
+    patch.Offset = GEN_BATCH_OFFSET;
+    patch.AllocationOffset = 0;
+    patch.DriverId = HDGFX_GEN_PATCH_STATE;
+    status = GenSubmit(Ctx, &header, Patched, State, &patch, 1);
+    ok_hex(status, STATUS_ILLEGAL_INSTRUCTION);
     GenHeader(&header, 4, 0);
     status = GenSubmit(Ctx, &header, Allowed, NULL, NULL, 0);
     ok_succeeded(status, "Render of an allowed register write: 0x%08lx\n", status);

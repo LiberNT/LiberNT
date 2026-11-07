@@ -650,15 +650,6 @@ HdgfxRenderGen(
     End = (PULONG)(Base + BatchOffset + Submit.BatchLength);
     HdgfxMiBatchEnd((uint32_t *)End);
     End[1] = 0;
-    if (Adapter->Generation->Gen >= 6 &&
-        !HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)(Base + BatchOffset),
-                            Submit.BatchLength / sizeof(ULONG),
-                            (Submit.Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
-    {
-        DPRINT1("User batch refused at dword %lu: 0x%08lx 0x%08lx\n", Offending,
-                ((PULONG)(Base + BatchOffset))[Offending], ((PULONG)(Base + BatchOffset))[Offending + 1]);
-        return STATUS_ILLEGAL_INSTRUCTION;
-    }
 
     for (Index = 0; Index < pRender->PatchLocationListInSize; Index++)
     {
@@ -680,6 +671,15 @@ HdgfxRenderGen(
         Out->DriverId = HDGFX_PATCH_GTT;
         Out->PatchOffset = Location;
         Out++;
+    }
+    if (Adapter->Generation->Gen >= 6 &&
+        !HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)(Base + BatchOffset),
+                            Submit.BatchLength / sizeof(ULONG),
+                            (Submit.Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
+    {
+        DPRINT1("User batch refused at dword %lu: 0x%08lx 0x%08lx\n", Offending,
+                ((PULONG)(Base + BatchOffset))[Offending], ((PULONG)(Base + BatchOffset))[Offending + 1]);
+        return STATUS_ILLEGAL_INSTRUCTION;
     }
 
     pRender->pDmaBuffer = Base + Size;
