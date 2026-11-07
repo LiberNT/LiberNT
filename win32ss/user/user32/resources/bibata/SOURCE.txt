@@ -1,0 +1,38 @@
+Source: Bibata Cursor, Original Classic variant
+Repository: https://github.com/ful1e5/Bibata_Cursor
+Revision: ddb09273cde49faeb6a32282660ff4293f52d6e0
+Author: Abdulkaiz Khatri (ful1e5) and contributors
+License: GPL-3.0 (see LICENSE)
+
+Files used, unmodified: svg/original/*.svg (following the repository's
+symbolic links into svg/groups), svg/groups/shared/wait/*.svg and
+svg/groups/original/left_ptr_watch/*.svg, copied to svg/.
+
+curgen.py applies the Original Classic colors from the repository's
+render.json (#00FF00 and #FF0000 to #000000, #0000FF to #FFFFFF), renders each
+256-pixel SVG at the art size Bibata uses for each Windows cursor size
+(22 in 32, 27 in 40, 32 in 48, 38 in 56, 43 in 64, 48 in 72, 54 in 80, 64 in 96
+and 86 in 128, from configs/normal/win_rg.build.toml), places it at the top
+left of the cursor as clickgen does, and writes PNG frames into ../ocr_*.cur.
+The 54-frame wait and left_ptr_watch animations go into ../ocr_wait.ani and
+../ocr_appstarting.ani at 2 jiffies per frame (win_delay 1, doubled by
+clickgen). Hotspots come from the same configuration, scaled and truncated as
+clickgen does (128,128 when a cursor has none).
+
+    ocr_normal.cur, ocr_icon.cur, ocr_cdautostart.cur   left_ptr
+    ocr_ibeam.cur                                       xterm
+    ocr_wait.ani                                        wait-01..54
+    ocr_cross.cur                                       crosshair
+    ocr_up.cur                                          sb_up_arrow
+    ocr_sizenwse.cur                                    bd_double_arrow
+    ocr_sizenesw.cur                                    fd_double_arrow
+    ocr_sizewe.cur                                      sb_h_double_arrow
+    ocr_sizens.cur                                      sb_v_double_arrow
+    ocr_sizeall.cur, ocr_size.cur                       move
+    ocr_no.cur                                          circle
+    ocr_appstarting.ani                                 left_ptr_watch-01..54
+    ocr_help.cur                                        question_arrow
+    ocr_pen.cur                                         pencil
+    ocr_hand.cur                                        hand2
+
+Regenerate with: python3 -I curgen.py svg ..

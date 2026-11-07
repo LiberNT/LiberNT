@@ -416,10 +416,10 @@ Used Version: git commit 045831e
 License: MIT (https://spdx.org/licenses/MIT.html)
 URL: https://github.com/microsoft/libdxg
 
-Title: KDE Breeze Light cursors
-Path: win32ss/user/user32/resources/breeze
+Title: Bibata Cursor (Original Classic)
+Path: win32ss/user/user32/resources/bibata
 Path: win32ss/user/user32/resources/ocr_*.cur
 Path: win32ss/user/user32/resources/ocr_*.ani
-Used Version: git commit 9151be3
-License: LGPL-3.0-or-later (https://spdx.org/licenses/LGPL-3.0-or-later.html)
-URL: https://invent.kde.org/plasma/breeze/-/tree/master/cursors/Breeze_Light
+Used Version: git commit ddb0927
+License: GPL-3.0 (https://spdx.org/licenses/GPL-3.0-only.html)
+URL: https://github.com/ful1e5/Bibata_Cursor
