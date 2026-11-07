@@ -261,6 +261,109 @@ static void test_LoadImage_OemShared(void)
         DeleteObject(Image);
 }
 
+static const BYTE PngCursorImage[] =
+{
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x08, 0x06, 0x00, 0x00, 0x00, 0x73, 0x7a, 0x7a,
+    0xf4, 0x00, 0x00, 0x00, 0x35, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0xed, 0xd6, 0xb1, 0x09, 0x00,
+    0x30, 0x0c, 0x03, 0x41, 0xef, 0xbf, 0x74, 0x32, 0x80, 0x0b, 0x57, 0x22, 0x98, 0xdc, 0x83, 0xfa,
+    0x2b, 0x55, 0x25, 0xf5, 0x4e, 0x78, 0x33, 0x20, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0xc0, 0x1e, 0xc0, 0xeb, 0x5b, 0xae, 0xbf, 0xba, 0x22, 0x68, 0xe4, 0x7e, 0x14, 0xce,
+    0xe2, 0x6d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82
+};
+
+static DWORD BuildPngCursorFile(BYTE *Buffer, WORD xHotspot, WORD yHotspot)
+{
+    WORD *Header = (WORD *)Buffer;
+    BYTE *Entry = Buffer + 3 * sizeof(WORD);
+    DWORD Size = sizeof(PngCursorImage), Offset = 3 * sizeof(WORD) + 16;
+
+    Header[0] = 0;
+    Header[1] = 2;
+    Header[2] = 1;
+    Entry[0] = 32;
+    Entry[1] = 32;
+    Entry[2] = 0;
+    Entry[3] = 0;
+    memcpy(Entry + 4, &xHotspot, sizeof(WORD));
+    memcpy(Entry + 6, &yHotspot, sizeof(WORD));
+    memcpy(Entry + 8, &Size, sizeof(DWORD));
+    memcpy(Entry + 12, &Offset, sizeof(DWORD));
+    memcpy(Buffer + Offset, PngCursorImage, Size);
+    return Offset + Size;
+}
+
+static DWORD AppendChunk(BYTE *Buffer, DWORD Position, const char *Id, const void *Data, DWORD Size)
+{
+    memcpy(Buffer + Position, Id, 4);
+    memcpy(Buffer + Position + 4, &Size, sizeof(DWORD));
+    memcpy(Buffer + Position + 8, Data, Size);
+    Position += 8 + Size;
+    if (Size & 1)
+        Buffer[Position++] = 0;
+    return Position;
+}
+
+static HANDLE LoadCursorFileData(const BYTE *Data, DWORD Size)
+{
+    WCHAR Directory[MAX_PATH], Path[MAX_PATH];
+    HANDLE File, Cursor = NULL;
+    DWORD Written;
+
+    GetTempPathW(ARRAYSIZE(Directory), Directory);
+    if (!GetTempFileNameW(Directory, L"cur", 0, Path))
+        return NULL;
+    File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        WriteFile(File, Data, Size, &Written, NULL);
+        CloseHandle(File);
+        Cursor = LoadImageW(NULL, Path, IMAGE_CURSOR, 32, 32, LR_LOADFROMFILE);
+    }
+    DeleteFileW(Path);
+    return Cursor;
+}
+
+static void CheckPngCursor(const char *Name, HANDLE Cursor)
+{
+    ICONINFO Info;
+
+    ok(Cursor != NULL, "%s with PNG frames failed to load: %lu\n", Name, GetLastError());
+    if (!Cursor)
+        return;
+    ok(GetIconInfo(Cursor, &Info), "GetIconInfo failed for the %s\n", Name);
+    ok(!Info.fIcon, "%s loaded as an icon\n", Name);
+    ok(Info.xHotspot == 5 && Info.yHotspot == 7, "%s hotspot %lu,%lu, expected 5,7\n", Name, Info.xHotspot,
+       Info.yHotspot);
+    if (Info.hbmColor)
+        DeleteObject(Info.hbmColor);
+    if (Info.hbmMask)
+        DeleteObject(Info.hbmMask);
+    DestroyCursor(Cursor);
+}
+
+static void test_LoadImage_PngCursorFiles(void)
+{
+    static const DWORD Header[9] = { 36, 2, 2, 0, 0, 0, 0, 2, 1 };
+    BYTE Cursor[256], Animated[1024], List[600];
+    DWORD CursorSize, ListSize, AnimatedSize, RiffSize;
+
+    CursorSize = BuildPngCursorFile(Cursor, 5, 7);
+    CheckPngCursor("cursor file", LoadCursorFileData(Cursor, CursorSize));
+
+    Cursor[CursorSize] = 0;
+    memcpy(List, "fram", 4);
+    ListSize = AppendChunk(List, 4, "icon", Cursor, CursorSize + 1);
+    ListSize = AppendChunk(List, ListSize, "icon", Cursor, CursorSize + 1);
+    memcpy(Animated, "RIFF", 4);
+    memcpy(Animated + 8, "ACON", 4);
+    AnimatedSize = AppendChunk(Animated, 12, "anih", Header, sizeof(Header));
+    AnimatedSize = AppendChunk(Animated, AnimatedSize, "LIST", List, ListSize);
+    RiffSize = AnimatedSize - 8;
+    memcpy(Animated + 4, &RiffSize, sizeof(DWORD));
+    CheckPngCursor("animated cursor file", LoadCursorFileData(Animated, AnimatedSize));
+}
+
 START_TEST(LoadImage)
 {
     char path[MAX_PATH];
@@ -353,4 +456,5 @@ START_TEST(LoadImage)
     test_LoadIcon_SystemIds();
     test_LoadImage_1bpp();
     test_LoadImage_OemShared();
+    test_LoadImage_PngCursorFiles();
 }
