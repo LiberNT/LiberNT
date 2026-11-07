@@ -1,6 +1,9 @@
 
 add_compile_definitions(_GCC_SAL_CHECK_RETURN)
 
+if(ARCH STREQUAL "arm64")
+    add_subdirectory(applertkit)
+endif()
 add_subdirectory(arblib)
 add_subdirectory(aux_klib)
 add_subdirectory(bufferoverflowk)
