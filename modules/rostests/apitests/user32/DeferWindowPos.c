@@ -493,6 +493,18 @@ static void Test_DWP_OwnerZOrder()
 
 }
 
+static BOOL IsAbove(HWND hWndTop, HWND hWndBelow)
+{
+    HWND hWnd;
+
+    for (hWnd = GetWindow(hWndTop, GW_HWNDNEXT); hWnd; hWnd = GetWindow(hWnd, GW_HWNDNEXT))
+    {
+        if (hWnd == hWndBelow)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 static void Test_DWP_Activate(void)
 {
     static const struct
@@ -509,6 +521,11 @@ static void Test_DWP_Activate(void)
         { 1, SWP_NOZORDER | SWP_NOACTIVATE, 2, SWP_NOZORDER, 2 },
         { 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 2, SWP_NOZORDER, 1 },
         { 1, SWP_NOSIZE, 2, SWP_NOSIZE, 1 },
+        { 1, SWP_NOZORDER, 4, SWP_NOZORDER, 1 },
+        { 4, SWP_NOZORDER, 1, SWP_NOZORDER, 4 },
+        { 3, SWP_NOZORDER, 2, SWP_NOZORDER, 3 },
+        { 3, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 2, SWP_NOZORDER, 3 },
+        { 1, SWP_NOZORDER, 2, 0, 1 },
     };
     HWND Windows[] = { NULL, hWnd1, hWnd2, hWnd3, hWnd4 };
     HDWP hdwp;
@@ -527,6 +544,12 @@ static void Test_DWP_Activate(void)
         FlushMessages();
         ok(GetActiveWindow() == Windows[Tests[i].Active], "%u: hwnd%d is active, expected hwnd%d\n",
            i, get_iwnd(GetActiveWindow()), Tests[i].Active);
+        if (Tests[i].Second != Tests[i].Active &&
+            GetWindow(Windows[Tests[i].Second], GW_OWNER) != Windows[Tests[i].Active])
+        {
+            ok(IsAbove(Windows[Tests[i].Active], Windows[Tests[i].Second]), "%u: hwnd%d is above hwnd%d\n",
+               i, Tests[i].Second, Tests[i].Active);
+        }
     }
     EMPTY_CACHE();
 }
