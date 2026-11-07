@@ -84,25 +84,30 @@ NC_GetInsideRect(PWND Wnd, RECT *rect)
     /* Remove frame from rectangle */
     if (UserHasThickFrameStyle(Style, ExStyle))
     {
-        RECTL_vInflateRect(rect, -UserGetSystemMetrics(SM_CXFRAME), -UserGetSystemMetrics(SM_CYFRAME));
-        RECTL_vInflateRect(rect, -UserGetSystemMetrics(SM_CXPADDEDBORDER), -UserGetSystemMetrics(SM_CXPADDEDBORDER));
+        RECTL_vInflateRect(rect,
+                           -UserWindowViewToPhysical(Wnd, UserGetWindowViewMetric(Wnd, SM_CXFRAME) +
+                                                          UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER)),
+                           -UserWindowViewToPhysical(Wnd, UserGetWindowViewMetric(Wnd, SM_CYFRAME) +
+                                                          UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER)));
     }
     else if (UserHasDlgFrameStyle(Style, ExStyle))
     {
-        RECTL_vInflateRect(rect, -UserGetSystemMetrics(SM_CXDLGFRAME), -UserGetSystemMetrics(SM_CYDLGFRAME));
+        RECTL_vInflateRect(rect, -UserGetWindowSystemMetrics(Wnd, SM_CXDLGFRAME), -UserGetWindowSystemMetrics(Wnd, SM_CYDLGFRAME));
         /* FIXME: this isn't in NC_AdjustRect? why not? */
         if (ExStyle & WS_EX_DLGMODALFRAME)
             RECTL_vInflateRect( rect, -1, 0 );
-        if ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))
+        if ((Style & WS_CAPTION) == WS_CAPTION && UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER))
             RECTL_vInflateRect(rect,
-                               -(UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME) +
-                                 UserGetSystemMetrics(SM_CXPADDEDBORDER)),
-                               -(UserGetSystemMetrics(SM_CYFRAME) - UserGetSystemMetrics(SM_CYDLGFRAME) +
-                                 UserGetSystemMetrics(SM_CXPADDEDBORDER)));
+                               -UserWindowViewToPhysical(Wnd, UserGetWindowViewMetric(Wnd, SM_CXFRAME) -
+                                                              UserGetWindowViewMetric(Wnd, SM_CXDLGFRAME) +
+                                                              UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER)),
+                               -UserWindowViewToPhysical(Wnd, UserGetWindowViewMetric(Wnd, SM_CYFRAME) -
+                                                              UserGetWindowViewMetric(Wnd, SM_CYDLGFRAME) +
+                                                              UserGetWindowViewMetric(Wnd, SM_CXPADDEDBORDER)));
     }
     else if (UserHasThinFrameStyle(Style, ExStyle))
     {
-        RECTL_vInflateRect(rect, -UserGetSystemMetrics(SM_CXBORDER), -UserGetSystemMetrics(SM_CYBORDER));
+        RECTL_vInflateRect(rect, -UserGetWindowSystemMetrics(Wnd, SM_CXBORDER), -UserGetWindowSystemMetrics(Wnd, SM_CYBORDER));
     }
 
     /* We have additional border information if the window
@@ -110,9 +115,9 @@ NC_GetInsideRect(PWND Wnd, RECT *rect)
     if ((Style & WS_CHILD) && !(ExStyle & WS_EX_MDICHILD))
     {
        if (ExStyle & WS_EX_CLIENTEDGE)
-          RECTL_vInflateRect (rect, -UserGetSystemMetrics(SM_CXEDGE), -UserGetSystemMetrics(SM_CYEDGE));
+          RECTL_vInflateRect (rect, -UserGetWindowSystemMetrics(Wnd, SM_CXEDGE), -UserGetWindowSystemMetrics(Wnd, SM_CYEDGE));
        if (ExStyle & WS_EX_STATICEDGE)
-          RECTL_vInflateRect (rect, -UserGetSystemMetrics(SM_CXBORDER), -UserGetSystemMetrics(SM_CYBORDER));
+          RECTL_vInflateRect (rect, -UserGetWindowSystemMetrics(Wnd, SM_CXBORDER), -UserGetWindowSystemMetrics(Wnd, SM_CYBORDER));
     }
 }
 
@@ -963,7 +968,7 @@ UserDrawCaptionButtonWnd(PWND pWnd, HDC hDC, BOOL bDown, ULONG Type)
    WindowRect.bottom -= WindowRect.top;
    WindowRect.left = WindowRect.top = 0;
 
-   UserGetWindowBorders(pWnd->style, pWnd->ExStyle, &WindowBorder, FALSE);
+   UserGetWindowBorders(pWnd, pWnd->style, pWnd->ExStyle, &WindowBorder, FALSE);
 
    RECTL_vInflateRect(&WindowRect, -WindowBorder.cx, -WindowBorder.cy);
 
@@ -971,20 +976,20 @@ UserDrawCaptionButtonWnd(PWND pWnd, HDC hDC, BOOL bDown, ULONG Type)
 }
 
 VOID
-NC_DrawFrame( HDC hDC, RECT *CurrentRect, BOOL Active, DWORD Style, DWORD ExStyle)
+NC_DrawFrame(PWND pWnd, HDC hDC, RECT *CurrentRect, BOOL Active, DWORD Style, DWORD ExStyle)
 {
    /* Firstly the "thick" frame */
    if (((Style & WS_THICKFRAME) ||
-        ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))) &&
+        ((Style & WS_CAPTION) == WS_CAPTION && UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER))) &&
        !(Style & WS_MINIMIZE))
    {
-      LONG Width =
-         (UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME)) *
-         UserGetSystemMetrics(SM_CXBORDER) + UserGetSystemMetrics(SM_CXPADDEDBORDER);
+      LONG Width = UserWindowViewToPhysical(pWnd,
+         (UserGetWindowViewMetric(pWnd, SM_CXFRAME) - UserGetWindowViewMetric(pWnd, SM_CXDLGFRAME)) *
+         UserGetWindowViewMetric(pWnd, SM_CXBORDER) + UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER));
 
-      LONG Height =
-         (UserGetSystemMetrics(SM_CYFRAME) - UserGetSystemMetrics(SM_CYDLGFRAME)) *
-         UserGetSystemMetrics(SM_CYBORDER) + UserGetSystemMetrics(SM_CXPADDEDBORDER);
+      LONG Height = UserWindowViewToPhysical(pWnd,
+         (UserGetWindowViewMetric(pWnd, SM_CYFRAME) - UserGetWindowViewMetric(pWnd, SM_CYDLGFRAME)) *
+         UserGetWindowViewMetric(pWnd, SM_CYBORDER) + UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER));
 
       NtGdiSelectBrush(hDC, IntGetSysColorBrush(Active ? COLOR_ACTIVEBORDER : COLOR_INACTIVEBORDER));
 
@@ -1000,8 +1005,8 @@ NC_DrawFrame( HDC hDC, RECT *CurrentRect, BOOL Active, DWORD Style, DWORD ExStyl
    /* Now the other bit of the frame */
    if (Style & (WS_DLGFRAME | WS_BORDER) || ExStyle & WS_EX_DLGMODALFRAME)
    {
-      LONG Width = UserGetSystemMetrics(SM_CXBORDER);
-      LONG Height = UserGetSystemMetrics(SM_CYBORDER);
+      LONG Width = UserGetWindowSystemMetrics(pWnd, SM_CXBORDER);
+      LONG Height = UserGetWindowSystemMetrics(pWnd, SM_CYBORDER);
 
       NtGdiSelectBrush(hDC, IntGetSysColorBrush(
          (ExStyle & (WS_EX_DLGMODALFRAME | WS_EX_CLIENTEDGE)) ? COLOR_3DFACE :
@@ -1065,7 +1070,7 @@ VOID UserDrawCaptionBar(
 #endif
    }
 
-   if (Flags & DC_FRAME) NC_DrawFrame(hDC, &CurrentRect, (Flags & DC_ACTIVE), Style, ExStyle);
+   if (Flags & DC_FRAME) NC_DrawFrame(pWnd, hDC, &CurrentRect, (Flags & DC_ACTIVE), Style, ExStyle);
 
    /* Draw caption */
    if ((Style & WS_CAPTION) == WS_CAPTION)
@@ -1267,7 +1272,7 @@ NC_DoPhysicalNCPaint(PWND pWnd, HDC hDC, INT Flags)
 #endif
    }
 
-   if (Flags & DC_FRAME) NC_DrawFrame(hDC, &CurrentRect, Active ? Active : (Flags & DC_ACTIVE), Style, ExStyle);
+   if (Flags & DC_FRAME) NC_DrawFrame(pWnd, hDC, &CurrentRect, Active ? Active : (Flags & DC_ACTIVE), Style, ExStyle);
 
    /* Draw caption */
    if ((Style & WS_CAPTION) == WS_CAPTION)
@@ -1304,13 +1309,13 @@ NC_DoPhysicalNCPaint(PWND pWnd, HDC hDC, INT Flags)
       if (ExStyle & WS_EX_TOOLWINDOW)
       {
          Flags |= DC_SMALLCAP;
-         TempRect.bottom = TempRect.top + UserGetSystemMetrics(SM_CYSMCAPTION) - 1;
-         CurrentRect.top += UserGetSystemMetrics(SM_CYSMCAPTION);
+         TempRect.bottom = TempRect.top + UserGetWindowSystemMetrics(pWnd, SM_CYSMCAPTION) - 1;
+         CurrentRect.top += UserGetWindowSystemMetrics(pWnd, SM_CYSMCAPTION);
       }
       else
       {
-         TempRect.bottom = TempRect.top + UserGetSystemMetrics(SM_CYCAPTION) - 1;
-         CurrentRect.top += UserGetSystemMetrics(SM_CYCAPTION);
+         TempRect.bottom = TempRect.top + UserGetWindowSystemMetrics(pWnd, SM_CYCAPTION) - 1;
+         CurrentRect.top += UserGetWindowSystemMetrics(pWnd, SM_CYCAPTION);
       }
 
       UserDrawCaption(pWnd, hDC, &TempRect, NULL, NULL, NULL, Flags);
@@ -1374,11 +1379,11 @@ NC_DoPhysicalNCPaint(PWND pWnd, HDC hDC, INT Flags)
         TempRect = CurrentRect;
 
         if (ExStyle & WS_EX_LEFTSCROLLBAR)
-           TempRect.right = TempRect.left + UserGetSystemMetrics(SM_CXVSCROLL);
+           TempRect.right = TempRect.left + UserGetWindowSystemMetrics(pWnd, SM_CXVSCROLL);
         else
-           TempRect.left = TempRect.right - UserGetSystemMetrics(SM_CXVSCROLL);
+           TempRect.left = TempRect.right - UserGetWindowSystemMetrics(pWnd, SM_CXVSCROLL);
 
-        TempRect.top = TempRect.bottom - UserGetSystemMetrics(SM_CYHSCROLL);
+        TempRect.top = TempRect.bottom - UserGetWindowSystemMetrics(pWnd, SM_CYHSCROLL);
 
         FillRect(hDC, &TempRect, IntGetSysColorBrush(COLOR_BTNFACE));
 
@@ -1431,7 +1436,7 @@ LRESULT NC_HandleNCCalcSize( PWND Wnd, WPARAM wparam, RECTL *Rect, BOOL Suspende
    {
       if (UserHasWindowEdge(Wnd->style, Wnd->ExStyle))
       {
-         UserGetWindowBorders(Wnd->style, Wnd->ExStyle, &WindowBorders, FALSE);
+         UserGetWindowBorders(Wnd, Wnd->style, Wnd->ExStyle, &WindowBorders, FALSE);
          RECTL_vInflateRect(Rect, -WindowBorders.cx, -WindowBorders.cy);
       }
       else if ((Wnd->ExStyle & WS_EX_STATICEDGE) || (Wnd->style & WS_BORDER))
@@ -1444,9 +1449,9 @@ LRESULT NC_HandleNCCalcSize( PWND Wnd, WPARAM wparam, RECTL *Rect, BOOL Suspende
          Wnd->state |= WNDS_HASCAPTION;
 
          if (Wnd->ExStyle & WS_EX_TOOLWINDOW)
-            Rect->top += UserGetSystemMetrics(SM_CYSMCAPTION);
+            Rect->top += UserGetWindowSystemMetrics(Wnd, SM_CYSMCAPTION);
          else
-            Rect->top += UserGetSystemMetrics(SM_CYCAPTION);
+            Rect->top += UserGetWindowSystemMetrics(Wnd, SM_CYCAPTION);
       }
 
       if (HAS_MENU(Wnd, Style))
@@ -1469,12 +1474,13 @@ LRESULT NC_HandleNCCalcSize( PWND Wnd, WPARAM wparam, RECTL *Rect, BOOL Suspende
 
       if (Wnd->ExStyle & WS_EX_CLIENTEDGE)
       {
-         RECTL_vInflateRect(Rect, -2 * UserGetSystemMetrics(SM_CXBORDER), -2 * UserGetSystemMetrics(SM_CYBORDER));
+         RECTL_vInflateRect(Rect, -UserWindowViewToPhysical(Wnd, 2 * UserGetWindowViewMetric(Wnd, SM_CXBORDER)),
+                            -UserWindowViewToPhysical(Wnd, 2 * UserGetWindowViewMetric(Wnd, SM_CYBORDER)));
       }
 
       if (Style & WS_VSCROLL)
       {
-         if (Rect->right - Rect->left >= UserGetSystemMetrics(SM_CXVSCROLL))
+         if (Rect->right - Rect->left >= UserGetWindowSystemMetrics(Wnd, SM_CXVSCROLL))
          {
              Wnd->state |= WNDS_HASVERTICALSCROOLLBAR;
 
@@ -1482,19 +1488,19 @@ LRESULT NC_HandleNCCalcSize( PWND Wnd, WPARAM wparam, RECTL *Rect, BOOL Suspende
              if (!wparam && (exStyle & WS_EX_LAYOUTRTL)) exStyle ^= WS_EX_LEFTSCROLLBAR;
 
              if((exStyle & WS_EX_LEFTSCROLLBAR) != 0)
-                 Rect->left  += UserGetSystemMetrics(SM_CXVSCROLL);
+                 Rect->left  += UserGetWindowSystemMetrics(Wnd, SM_CXVSCROLL);
              else
-                 Rect->right -= UserGetSystemMetrics(SM_CXVSCROLL);
+                 Rect->right -= UserGetWindowSystemMetrics(Wnd, SM_CXVSCROLL);
           }
       }
 
       if (Style & WS_HSCROLL)
       {
-         if( Rect->bottom - Rect->top > UserGetSystemMetrics(SM_CYHSCROLL))
+         if( Rect->bottom - Rect->top > UserGetWindowSystemMetrics(Wnd, SM_CYHSCROLL))
          {
               Wnd->state |= WNDS_HASHORIZONTALSCROLLBAR;
 
-              Rect->bottom -= UserGetSystemMetrics(SM_CYHSCROLL);
+              Rect->bottom -= UserGetWindowSystemMetrics(Wnd, SM_CYHSCROLL);
          }
       }
 
@@ -2109,6 +2115,13 @@ GetNCHitEx(PWND pWnd, POINT pt)
 
    if (!RECTL_bPointInRect(&rcWindow, pt.x, pt.y)) return HTNOWHERE;
 
+   if (UserDpiIsVirtualWindow(pWnd))
+   {
+      UserDpiRectToLogical(&rcWindow);
+      UserDpiRectToLogical(&rcClient);
+      UserDpiPointToLogical(&pt);
+   }
+
    Style = pWnd->style;
    ExStyle = pWnd->ExStyle;
 
@@ -2119,52 +2132,52 @@ GetNCHitEx(PWND pWnd, POINT pt)
    /* Check borders */
    if (HAS_THICKFRAME( Style, ExStyle ))
    {
-      RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXFRAME), -UserGetSystemMetrics(SM_CYFRAME) );
-      RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXPADDEDBORDER), -UserGetSystemMetrics(SM_CXPADDEDBORDER));
+      RECTL_vInflateRect(&rcWindow, -UserGetWindowViewMetric(pWnd, SM_CXFRAME), -UserGetWindowViewMetric(pWnd, SM_CYFRAME) );
+      RECTL_vInflateRect(&rcWindow, -UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER), -UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER));
       if (!RECTL_bPointInRect(&rcWindow, pt.x, pt.y ))
       {
             /* Check top sizing border */
             if (pt.y < rcWindow.top -
-                       (((Style & WS_CAPTION) == WS_CAPTION) ? UserGetSystemMetrics(SM_CXPADDEDBORDER) : 0))
+                       (((Style & WS_CAPTION) == WS_CAPTION) ? UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER) : 0))
             {
-                if (pt.x < rcWindow.left+UserGetSystemMetrics(SM_CXSIZE)) return HTTOPLEFT;
-                if (pt.x >= rcWindow.right-UserGetSystemMetrics(SM_CXSIZE)) return HTTOPRIGHT;
+                if (pt.x < rcWindow.left+UserGetWindowViewMetric(pWnd, SM_CXSIZE)) return HTTOPLEFT;
+                if (pt.x >= rcWindow.right-UserGetWindowViewMetric(pWnd, SM_CXSIZE)) return HTTOPRIGHT;
                 return HTTOP;
             }
             /* Check bottom sizing border */
             if (pt.y >= rcWindow.bottom)
             {
-                if (pt.x < rcWindow.left+UserGetSystemMetrics(SM_CXSIZE)) return HTBOTTOMLEFT;
-                if (pt.x >= rcWindow.right-UserGetSystemMetrics(SM_CXSIZE)) return HTBOTTOMRIGHT;
+                if (pt.x < rcWindow.left+UserGetWindowViewMetric(pWnd, SM_CXSIZE)) return HTBOTTOMLEFT;
+                if (pt.x >= rcWindow.right-UserGetWindowViewMetric(pWnd, SM_CXSIZE)) return HTBOTTOMRIGHT;
                 return HTBOTTOM;
             }
             /* Check left sizing border */
             if (pt.x < rcWindow.left)
             {
-                if (pt.y < rcWindow.top+UserGetSystemMetrics(SM_CYSIZE)) return HTTOPLEFT;
-                if (pt.y >= rcWindow.bottom-UserGetSystemMetrics(SM_CYSIZE)) return HTBOTTOMLEFT;
+                if (pt.y < rcWindow.top+UserGetWindowViewMetric(pWnd, SM_CYSIZE)) return HTTOPLEFT;
+                if (pt.y >= rcWindow.bottom-UserGetWindowViewMetric(pWnd, SM_CYSIZE)) return HTBOTTOMLEFT;
                 return HTLEFT;
             }
             /* Check right sizing border */
             if (pt.x >= rcWindow.right)
             {
-                if (pt.y < rcWindow.top+UserGetSystemMetrics(SM_CYSIZE)) return HTTOPRIGHT;
-                if (pt.y >= rcWindow.bottom-UserGetSystemMetrics(SM_CYSIZE)) return HTBOTTOMRIGHT;
+                if (pt.y < rcWindow.top+UserGetWindowViewMetric(pWnd, SM_CYSIZE)) return HTTOPRIGHT;
+                if (pt.y >= rcWindow.bottom-UserGetWindowViewMetric(pWnd, SM_CYSIZE)) return HTBOTTOMRIGHT;
                 return HTRIGHT;
             }
         }
     }
     else  /* No thick frame */
     {
-        if ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))
-            RECTL_vInflateRect(&rcWindow, -(UserGetSystemMetrics(SM_CXFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)),
-                               -(UserGetSystemMetrics(SM_CYFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)));
+        if ((Style & WS_CAPTION) == WS_CAPTION && UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER))
+            RECTL_vInflateRect(&rcWindow, -(UserGetWindowViewMetric(pWnd, SM_CXFRAME) + UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER)),
+                               -(UserGetWindowViewMetric(pWnd, SM_CYFRAME) + UserGetWindowViewMetric(pWnd, SM_CXPADDEDBORDER)));
         else if (HAS_DLGFRAME( Style, ExStyle ))
-            RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXDLGFRAME), -UserGetSystemMetrics(SM_CYDLGFRAME));
+            RECTL_vInflateRect(&rcWindow, -UserGetWindowViewMetric(pWnd, SM_CXDLGFRAME), -UserGetWindowViewMetric(pWnd, SM_CYDLGFRAME));
         else if (HAS_THINFRAME( Style, ExStyle ))
-            RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXBORDER), -UserGetSystemMetrics(SM_CYBORDER));
+            RECTL_vInflateRect(&rcWindow, -UserGetWindowViewMetric(pWnd, SM_CXBORDER), -UserGetWindowViewMetric(pWnd, SM_CYBORDER));
         else if (HAS_CLIENTFRAME( Style, ExStyle ))
-            RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXEDGE), -UserGetSystemMetrics(SM_CYEDGE));
+            RECTL_vInflateRect(&rcWindow, -UserGetWindowViewMetric(pWnd, SM_CXEDGE), -UserGetWindowViewMetric(pWnd, SM_CYEDGE));
         if (!RECTL_bPointInRect( &rcWindow, pt.x, pt.y  )) return HTBORDER;
     }
 
@@ -2173,9 +2186,9 @@ GetNCHitEx(PWND pWnd, POINT pt)
     if ((Style & WS_CAPTION) == WS_CAPTION)
     {
         if (ExStyle & WS_EX_TOOLWINDOW)
-            rcWindow.top += UserGetSystemMetrics(SM_CYSMCAPTION) - 1;
+            rcWindow.top += UserGetWindowViewMetric(pWnd, SM_CYSMCAPTION) - 1;
         else
-            rcWindow.top += UserGetSystemMetrics(SM_CYCAPTION) - 1;
+            rcWindow.top += UserGetWindowViewMetric(pWnd, SM_CYCAPTION) - 1;
         if (!RECTL_bPointInRect( &rcWindow, pt.x, pt.y ))
         {
             BOOL min_or_max_box = (Style & WS_SYSMENU) && (Style & (WS_MINIMIZEBOX|WS_MAXIMIZEBOX));
@@ -2184,14 +2197,14 @@ GetNCHitEx(PWND pWnd, POINT pt)
                 /* Check system menu */
                 if ((Style & WS_SYSMENU) && !(ExStyle & WS_EX_TOOLWINDOW) && NC_IconForWindow(pWnd))
                 {
-                    rcWindow.right -= UserGetSystemMetrics(SM_CYCAPTION) - 1;
+                    rcWindow.right -= UserGetWindowViewMetric(pWnd, SM_CYCAPTION) - 1;
                     if (pt.x > rcWindow.right) return HTSYSMENU;
                 }
 
                 /* Check close button */
                 if (Style & WS_SYSMENU)
                 {
-                    rcWindow.left += UserGetSystemMetrics(SM_CYCAPTION);
+                    rcWindow.left += UserGetWindowViewMetric(pWnd, SM_CYCAPTION);
                     if (pt.x < rcWindow.left) return HTCLOSE;
                 }
 
@@ -2199,14 +2212,14 @@ GetNCHitEx(PWND pWnd, POINT pt)
                 /* In Win95 there is automatically a Maximize button when there is a minimize one */
                 if (min_or_max_box && !(ExStyle & WS_EX_TOOLWINDOW))
                 {
-                    rcWindow.left += UserGetSystemMetrics(SM_CXSIZE);
+                    rcWindow.left += UserGetWindowViewMetric(pWnd, SM_CXSIZE);
                     if (pt.x < rcWindow.left) return HTMAXBUTTON;
                 }
 
                 /* Check minimize box */
                 if (min_or_max_box && !(ExStyle & WS_EX_TOOLWINDOW))
                 {
-                    rcWindow.left += UserGetSystemMetrics(SM_CXSIZE);
+                    rcWindow.left += UserGetWindowViewMetric(pWnd, SM_CXSIZE);
                     if (pt.x < rcWindow.left) return HTMINBUTTON;
                 }
             }
@@ -2215,14 +2228,14 @@ GetNCHitEx(PWND pWnd, POINT pt)
                 /* Check system menu */
                 if ((Style & WS_SYSMENU) && !(ExStyle & WS_EX_TOOLWINDOW) && NC_IconForWindow(pWnd))
                 {
-                    rcWindow.left += UserGetSystemMetrics(SM_CYCAPTION) - 1;
+                    rcWindow.left += UserGetWindowViewMetric(pWnd, SM_CYCAPTION) - 1;
                     if (pt.x < rcWindow.left) return HTSYSMENU;
                 }
 
                 /* Check close button */
                 if (Style & WS_SYSMENU)
                 {
-                    rcWindow.right -= UserGetSystemMetrics(SM_CYCAPTION);
+                    rcWindow.right -= UserGetWindowViewMetric(pWnd, SM_CYCAPTION);
                     if (pt.x > rcWindow.right) return HTCLOSE;
                 }
 
@@ -2230,14 +2243,14 @@ GetNCHitEx(PWND pWnd, POINT pt)
                 /* In Win95 there is automatically a Maximize button when there is a minimize one */
                 if (min_or_max_box && !(ExStyle & WS_EX_TOOLWINDOW))
                 {
-                    rcWindow.right -= UserGetSystemMetrics(SM_CXSIZE);
+                    rcWindow.right -= UserGetWindowViewMetric(pWnd, SM_CXSIZE);
                     if (pt.x > rcWindow.right) return HTMAXBUTTON;
                 }
 
                 /* Check minimize box */
                 if (min_or_max_box && !(ExStyle & WS_EX_TOOLWINDOW))
                 {
-                    rcWindow.right -= UserGetSystemMetrics(SM_CXSIZE);
+                    rcWindow.right -= UserGetWindowViewMetric(pWnd, SM_CXSIZE);
                     if (pt.x > rcWindow.right) return HTMINBUTTON;
                 }
             }
@@ -2257,9 +2270,9 @@ GetNCHitEx(PWND pWnd, POINT pt)
     if (Style & WS_VSCROLL)
     {
         if((ExStyle & WS_EX_LEFTSCROLLBAR) != 0)
-            rcClient.left -= UserGetSystemMetrics(SM_CXVSCROLL);
+            rcClient.left -= UserGetWindowViewMetric(pWnd, SM_CXVSCROLL);
         else
-            rcClient.right += UserGetSystemMetrics(SM_CXVSCROLL);
+            rcClient.right += UserGetWindowViewMetric(pWnd, SM_CXVSCROLL);
         if (RECTL_bPointInRect( &rcClient, pt.x, pt.y )) return HTVSCROLL;
     }
 
@@ -2267,13 +2280,13 @@ GetNCHitEx(PWND pWnd, POINT pt)
 
     if (Style & WS_HSCROLL)
     {
-        rcClient.bottom += UserGetSystemMetrics(SM_CYHSCROLL);
+        rcClient.bottom += UserGetWindowViewMetric(pWnd, SM_CYHSCROLL);
         if (RECTL_bPointInRect( &rcClient, pt.x, pt.y ))
         {
             /* Check size box */
             if ((Style & WS_VSCROLL) &&
-                ((((ExStyle & WS_EX_LEFTSCROLLBAR) != 0) && (pt.x <= rcClient.left + UserGetSystemMetrics(SM_CXVSCROLL))) ||
-                (((ExStyle & WS_EX_LEFTSCROLLBAR) == 0) && (pt.x >= rcClient.right - UserGetSystemMetrics(SM_CXVSCROLL)))))
+                ((((ExStyle & WS_EX_LEFTSCROLLBAR) != 0) && (pt.x <= rcClient.left + UserGetWindowViewMetric(pWnd, SM_CXVSCROLL))) ||
+                (((ExStyle & WS_EX_LEFTSCROLLBAR) == 0) && (pt.x >= rcClient.right - UserGetWindowViewMetric(pWnd, SM_CXVSCROLL)))))
                 return HTSIZE;
             return HTHSCROLL;
         }
