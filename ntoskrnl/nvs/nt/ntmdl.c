@@ -569,6 +569,7 @@ MmAllocatePagesForMdlEx(
     if (Flags & MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS)
         Chunk = (Skip != 0) ? (Skip >> PAGE_SHIFT) : Wanted;
 
+    ASSERT(Chunk == 0 || (Chunk <= Wanted && Wanted % Chunk == 0));
     if (HighFrame >= MiSystem.Pfn.FrameCount)
         HighFrame = MiSystem.Pfn.FrameCount - 1;
 
@@ -590,6 +591,11 @@ MmAllocatePagesForMdlEx(
             break;
         }
 
+        ASSERT(First >= (ULONG)LowFrame && First <= (ULONG)HighFrame);
+        ASSERT(First < MiSystem.Pfn.DirectFrames);
+        ASSERT(Chunk <= MiSystem.Pfn.DirectFrames - First);
+        ASSERT(Chunk - 1 <= (ULONG)HighFrame - First);
+        ASSERT(Chunk <= Wanted - Got);
         for (Index = 0; Index < Chunk; Index++)
         {
             ULONG Frame = First + (ULONG)Index;
@@ -614,6 +620,8 @@ MmAllocatePagesForMdlEx(
             break;
         }
 
+        ASSERT(Frame >= (ULONG)LowFrame && Frame <= (ULONG)HighFrame);
+        ASSERT(Frame < MiSystem.Pfn.DirectFrames);
         if (!(Flags & MM_DONT_ZERO_ALLOCATION))
             MI_ZERO_PAGE(MiArchMapFrame(Frame));
 
@@ -623,6 +631,7 @@ MmAllocatePagesForMdlEx(
         Pages[Got++] = Frame;
     }
 
+    ASSERT(Got <= Wanted);
     if (Got == 0 || ((Flags & MM_ALLOCATE_FULLY_REQUIRED) && Got != Wanted) ||
         (Chunk != 0 && SkipBytes.QuadPart == 0 && Got != Wanted))
     {
@@ -696,7 +705,7 @@ MmFreePagesFromMdl(
     ASSERT(!(Mdl->MdlFlags & MDL_IO_SPACE));
 
     for (i = 0; i < Count && Pages[i] != MI_MDL_PFN_END; i++)
-        ;
+        ASSERT(Pages[i] < MiSystem.Pfn.FrameCount);
     Count = i;
     MiPfnSetCacheFrames(&MiSystem.Pfn, (const MI_FRAME_NUMBER *)Pages, Count, 0);
 
