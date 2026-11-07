@@ -12046,6 +12046,7 @@ static void test_option_databinding_libernt(IHTMLDocument2 *doc)
                 VariantClear(&v);
             }else {
                 ok(hres == E_NOINTERFACE, "[%u] get %s returned %08lx\n", j, wine_dbgstr_w(names[i]), hres);
+                ok(ei.scode == E_NOINTERFACE, "[%u] get %s scode %08lx\n", j, wine_dbgstr_w(names[i]), ei.scode);
             }
             if(j)
                 break;
@@ -12067,6 +12068,79 @@ static void test_option_databinding_libernt(IHTMLDocument2 *doc)
         SysFreeString(name);
         IHTMLElement_Release(elem);
     }
+}
+
+static void test_invoke_error_libernt(IUnknown *obj, const WCHAR *prop, WORD flags, VARIANT *args, unsigned argc,
+                                      HRESULT expected)
+{
+    DISPID id = -1, named = DISPID_PROPERTYPUT;
+    DISPPARAMS dp = {args, NULL, argc, 0};
+    IDispatchEx *dispex;
+    BSTR name;
+    EXCEPINFO ei;
+    VARIANT r;
+    HRESULT hres;
+
+    if(flags == DISPATCH_PROPERTYPUT) {
+        dp.rgdispidNamedArgs = &named;
+        dp.cNamedArgs = 1;
+    }
+    hres = IUnknown_QueryInterface(obj, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "QueryInterface(IID_IDispatchEx) failed: %08lx\n", hres);
+    name = SysAllocString(prop);
+    hres = IDispatchEx_GetDispID(dispex, name, fdexNameCaseSensitive, &id);
+    ok(hres == S_OK, "GetDispID(%s) failed: %08lx\n", wine_dbgstr_w(prop), hres);
+    SysFreeString(name);
+
+    memset(&ei, 0, sizeof(ei));
+    V_VT(&r) = VT_EMPTY;
+    hres = IDispatchEx_InvokeEx(dispex, id, 0, flags, &dp, flags == DISPATCH_PROPERTYPUT ? NULL : &r, &ei, NULL);
+    ok(hres == DISP_E_EXCEPTION, "InvokeEx(%s) returned %08lx\n", wine_dbgstr_w(prop), hres);
+    ok(ei.scode == expected, "InvokeEx(%s) scode %08lx\n", wine_dbgstr_w(prop), ei.scode);
+    SysFreeString(ei.bstrSource);
+    SysFreeString(ei.bstrDescription);
+    SysFreeString(ei.bstrHelpFile);
+    VariantClear(&r);
+
+    memset(&ei, 0, sizeof(ei));
+    hres = IDispatchEx_Invoke(dispex, id, &IID_NULL, 0, flags, &dp, flags == DISPATCH_PROPERTYPUT ? NULL : &r, &ei, NULL);
+    ok(hres == DISP_E_EXCEPTION, "Invoke(%s) returned %08lx\n", wine_dbgstr_w(prop), hres);
+    ok(ei.scode == expected, "Invoke(%s) scode %08lx\n", wine_dbgstr_w(prop), ei.scode);
+    SysFreeString(ei.bstrSource);
+    SysFreeString(ei.bstrDescription);
+    SysFreeString(ei.bstrHelpFile);
+    VariantClear(&r);
+
+    hres = IDispatchEx_InvokeEx(dispex, id, 0, flags, &dp, flags == DISPATCH_PROPERTYPUT ? NULL : &r, NULL, NULL);
+    ok(hres == expected, "InvokeEx(%s) without EXCEPINFO returned %08lx\n", wine_dbgstr_w(prop), hres);
+    VariantClear(&r);
+
+    IDispatchEx_Release(dispex);
+}
+
+static void test_invoke_errors_libernt(IHTMLDocument2 *doc)
+{
+    IHTMLWindow2 *window;
+    IHTMLElement *div;
+    VARIANT args[2];
+    HRESULT hres;
+
+    div = test_create_elem(doc, L"div");
+    V_VT(&args[0]) = VT_BSTR;
+    V_BSTR(&args[0]) = SysAllocString(L"x");
+    test_invoke_error_libernt((IUnknown*)div, L"align", DISPATCH_PROPERTYPUT, args, 1, E_INVALIDARG);
+    VariantClear(&args[0]);
+    IHTMLElement_Release(div);
+
+    hres = IHTMLDocument2_get_parentWindow(doc, &window);
+    ok(hres == S_OK, "get_parentWindow failed: %08lx\n", hres);
+    V_VT(&args[1]) = VT_BSTR;
+    V_BSTR(&args[1]) = SysAllocString(L"m");
+    V_VT(&args[0]) = VT_I4;
+    V_I4(&args[0]) = 1;
+    test_invoke_error_libernt((IUnknown*)window, L"postMessage", DISPATCH_METHOD, args, 2, E_INVALIDARG);
+    VariantClear(&args[1]);
+    IHTMLWindow2_Release(window);
 }
 
 static void test_databinding_attr_col_libernt(IHTMLDocument2 *doc)
@@ -16739,6 +16813,8 @@ START_TEST(dom)
         run_domtest(doc_blank, test_option_databinding_libernt);
         run_domtest(doc_blank_ie8, test_option_databinding_libernt);
         run_domtest(doc_blank_ie9, test_option_databinding_libernt);
+        run_domtest(doc_blank, test_invoke_errors_libernt);
+        run_domtest(doc_blank_ie8, test_invoke_errors_libernt);
         run_domtest(doc_blank, test_databinding_attr_col_libernt);
         run_domtest(doc_blank_ie9, test_databinding_attr_col_libernt);
         run_domtest(doc_blank_ie11, test_databinding_attr_col_libernt);
