@@ -12,7 +12,7 @@
 
 #define ACE_READ_WINDOW         0x20
 #define ACE_WRITE_WINDOW        0xa0
-#define ACE_MAX_LENGTH          0x3f
+#define ACE_MAX_LENGTH          0x40
 #define ACE_SELECT_BUSY         0x80
 #define ACE_SELECT_TIMEOUT_MS   100
 #define ACE_WAKE_TIMEOUT_MS     100
@@ -72,20 +72,14 @@ AppleAcePdRead(
     _Out_writes_bytes_(Length) PVOID Buffer,
     _In_ ULONG Length)
 {
-    UCHAR Data[ACE_MAX_LENGTH + 1];
     NTSTATUS Status;
 
     if (!Length || Length > ACE_MAX_LENGTH)
         return STATUS_INVALID_PARAMETER;
     Status = AcePdSelect(Pd, Register);
     if (NT_SUCCESS(Status))
-        Status = AppleSpmiRead(Pd->Spmi, Pd->Sid, ACE_READ_WINDOW, Data, Length + 1);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    if (Data[0] < Length)
-        return STATUS_DEVICE_DATA_ERROR;
-    RtlCopyMemory(Buffer, &Data[1], Length);
-    return STATUS_SUCCESS;
+        Status = AppleSpmiRead(Pd->Spmi, Pd->Sid, ACE_READ_WINDOW, Buffer, Length);
+    return Status;
 }
 
 NTSTATUS
@@ -96,16 +90,13 @@ AppleAcePdWrite(
     _In_reads_bytes_(Length) const VOID *Buffer,
     _In_ ULONG Length)
 {
-    UCHAR Data[ACE_MAX_LENGTH + 1];
     NTSTATUS Status;
 
     if (!Length || Length > ACE_MAX_LENGTH)
         return STATUS_INVALID_PARAMETER;
-    Data[0] = (UCHAR)Length;
-    RtlCopyMemory(&Data[1], Buffer, Length);
     Status = AcePdSelect(Pd, Register);
     if (NT_SUCCESS(Status))
-        Status = AppleSpmiWrite(Pd->Spmi, Pd->Sid, ACE_WRITE_WINDOW, Data, Length + 1);
+        Status = AppleSpmiWrite(Pd->Spmi, Pd->Sid, ACE_WRITE_WINDOW, Buffer, Length);
     return Status;
 }
 
