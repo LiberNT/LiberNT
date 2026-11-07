@@ -66,6 +66,7 @@ KiRemoveParkedReadyThread(
     KiAcquirePrcbLock(Prcb);
     for (Priority = HIGH_PRIORITY; Priority >= 0; Priority--)
     {
+        KiAssertReadyQueue(Prcb, Priority);
         if (!(Prcb->ReadySummary & PRIORITY_MASK(Priority)))
             continue;
         ListHead = &Prcb->DispatcherReadyListHead[Priority];
@@ -81,6 +82,7 @@ KiRemoveParkedReadyThread(
             }
             if (RemoveEntryList(&Thread->WaitListEntry))
                 Prcb->ReadySummary &= ~PRIORITY_MASK(Priority);
+            KiAssertReadyQueue(Prcb, Priority);
             Thread->State = DeferredReady;
             KiReleasePrcbLock(Prcb);
             KiReleaseThreadLock(Thread);
@@ -131,6 +133,7 @@ KiMigrateParkedProcessorWork(
     KIRQL OldIrql;
     ULONG Processor;
 
+    ASSERT(NonParkedSet != 0 && (NewlyParkedSet & NonParkedSet) == 0);
     *InterruptSet = 0;
     OldIrql = KeRaiseIrqlToDpcLevel();
     while (NewlyParkedSet)
@@ -140,6 +143,7 @@ KiMigrateParkedProcessorWork(
         Prcb = KiProcessorBlock[Processor];
         if (!Prcb)
             continue;
+        ASSERT(Prcb->Number == Processor && Prcb->SetMember == AFFINITY_MASK(Processor));
         while ((Thread = KiRemoveParkedReadyThread(Prcb, NonParkedSet)) != NULL)
             KiDeferredReadyThread(Thread);
         Thread = KiRemoveParkedStandbyThread(Prcb, NonParkedSet);
@@ -229,8 +233,10 @@ PoSetProcessorAggregatorParking(
             Remaining--;
         }
     }
+    ASSERT(NonParkedSet != 0 && (NonParkedSet & ~ActiveSet) == 0);
     OldNonParkedSet = (KAFFINITY)InterlockedExchange64((PLONG64)&KiNode0SubNode.NonParkedSet, (LONG64)NonParkedSet);
     *ParkedProcessors = KiCountProcessorSet(ActiveSet & ~NonParkedSet);
+    ASSERT(*ParkedProcessors < ActiveCount && *ParkedProcessors <= RequestedParkedProcessors);
     MmWriteableSharedUserData->UnparkedProcessorCount = (USHORT)(ActiveCount - *ParkedProcessors);
     NewlyParkedSet = OldNonParkedSet & ~NonParkedSet;
     if (NewlyParkedSet)
