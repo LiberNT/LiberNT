@@ -1,0 +1,44 @@
+; PROJECT:     LiberNT Apple MTP HID Transport Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = HIDClass
+ClassGUID = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider = %LiberNT%
+DriverVer = 11/06/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%AppleMtp.DeviceDesc% = AppleMtp_Inst,FDT\apple_dockchannel
+
+[AppleMtp_Inst.NT]
+CopyFiles = AppleMtp_CopyFiles
+
+[AppleMtp_CopyFiles]
+applemtp.sys
+hidclass.sys
+hidparse.sys
+
+[AppleMtp_Inst.NT.Services]
+AddService = applemtp,0x00000002,AppleMtp_Service
+
+[AppleMtp_Service]
+DisplayName = %AppleMtp.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\applemtp.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+AppleMtp.DeviceDesc = "Apple Internal Keyboard and Trackpad"
+AppleMtp.ServiceDesc = "Apple MTP HID Transport Driver"
