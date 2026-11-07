@@ -31,6 +31,8 @@
 
 #include "wine/debug.h"
 
+#include "activscp.h"
+
 #include "mshtml_private.h"
 #include "htmlevent.h"
 #include "htmlstyle.h"
@@ -7438,6 +7440,11 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
         {DISPID_UNKNOWN}
     };
     const dispex_hook_t *const elem7_ie10_hooks = elem7_ie11_hooks + 1;
+    static const dispex_hook_t elem_selector_hooks[] = {
+        {DISPID_IELEMENTSELECTOR_QUERYSELECTOR,    .min_script_version = SCRIPTLANGUAGEVERSION_5_8},
+        {DISPID_IELEMENTSELECTOR_QUERYSELECTORALL, .min_script_version = SCRIPTLANGUAGEVERSION_5_8},
+        {DISPID_UNKNOWN}
+    };
     static const dispex_hook_t unique_name_noattr_hooks[] = {
         {DISPID_IHTMLUNIQUENAME_UNIQUENUMBER, .noattr = TRUE},
         {DISPID_IHTMLUNIQUENAME_UNIQUEID,     .noattr = TRUE}
@@ -7448,8 +7455,7 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
     dispex_info_add_interface(info, IHTMLElement2_tid, mode >= COMPAT_MODE_IE11 ? elem2_ie11_hooks :
                                                        mode >= COMPAT_MODE_IE10 ? elem2_ie10_hooks :
                                                        mode >= COMPAT_MODE_IE9  ? elem2_ie9_hooks  : elem2_hooks);
-    if(mode >= COMPAT_MODE_IE8)
-        dispex_info_add_interface(info, IElementSelector_tid, NULL);
+    dispex_info_add_interface(info, IElementSelector_tid, mode < COMPAT_MODE_IE9 ? elem_selector_hooks : NULL);
 
     /* TODO: IE9+ attribute collections also list role and aria-* without exposing them to script */
     if(mode < COMPAT_MODE_IE9) {

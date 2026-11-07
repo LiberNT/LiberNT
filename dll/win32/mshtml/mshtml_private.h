@@ -660,6 +660,7 @@ typedef struct {
     const WCHAR *name;
     BOOL noattr;
     const WCHAR *attr_name;
+    DWORD min_script_version;
 } dispex_hook_t;
 
 struct DispatchEx {

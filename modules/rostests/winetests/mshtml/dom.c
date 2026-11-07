@@ -12153,6 +12153,55 @@ static void test_invoke_errors_libernt(IHTMLDocument2 *doc)
     IHTMLWindow2_Release(window);
 }
 
+static void test_selector_lookup_libernt(IUnknown *obj, const WCHAR *prop, DISPID expected_id, BOOL ie9)
+{
+    static const DWORD flags[] = { 0, fdexNameCaseSensitive, fdexNameCaseSensitive | (1u << 28),
+                                   fdexNameCaseSensitive | (2u << 28), fdexNameCaseInsensitive | (3u << 28) };
+    IDispatchEx *dispex;
+    BSTR name = SysAllocString(prop);
+    DISPID id;
+    HRESULT hres;
+    unsigned i;
+
+    hres = IUnknown_QueryInterface(obj, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "QueryInterface(IID_IDispatchEx) failed: %08lx\n", hres);
+    for(i = 0; i < ARRAY_SIZE(flags); i++) {
+        BOOL visible = ie9 || (flags[i] >> 28) >= 2;
+        id = -1;
+        hres = IDispatchEx_GetDispID(dispex, name, flags[i], &id);
+        ok(hres == (visible ? S_OK : DISP_E_UNKNOWNNAME), "GetDispID(%s, %lx) returned %08lx\n", wine_dbgstr_w(prop), flags[i], hres);
+        if(visible && !ie9)
+            ok(id == expected_id, "GetDispID(%s, %lx) id %08lx\n", wine_dbgstr_w(prop), flags[i], id);
+    }
+    hres = IDispatchEx_GetIDsOfNames(dispex, &IID_NULL, &name, 1, 0, &id);
+    ok(hres == (ie9 ? S_OK : DISP_E_UNKNOWNNAME), "GetIDsOfNames(%s) returned %08lx\n", wine_dbgstr_w(prop), hres);
+    IDispatchEx_Release(dispex);
+    SysFreeString(name);
+}
+
+static void test_selector_version_libernt(IHTMLDocument2 *doc)
+{
+    IHTMLDocument2 *node = get_doc_node(doc);
+    IHTMLElement *body = doc_get_body(doc);
+    IHTMLDocument6 *doc6;
+    BOOL ie9 = FALSE;
+    VARIANT v;
+
+    if(SUCCEEDED(IHTMLDocument2_QueryInterface(doc, &IID_IHTMLDocument6, (void**)&doc6))) {
+        V_VT(&v) = VT_EMPTY;
+        if(SUCCEEDED(IHTMLDocument6_get_documentMode(doc6, &v)) && V_VT(&v) == VT_R4)
+            ie9 = V_R4(&v) >= 9;
+        IHTMLDocument6_Release(doc6);
+    }
+
+    test_selector_lookup_libernt((IUnknown*)body, L"querySelector", DISPID_IELEMENTSELECTOR_QUERYSELECTOR, ie9);
+    test_selector_lookup_libernt((IUnknown*)body, L"querySelectorAll", DISPID_IELEMENTSELECTOR_QUERYSELECTORALL, ie9);
+    test_selector_lookup_libernt((IUnknown*)node, L"querySelector", DISPID_IDOCUMENTSELECTOR_QUERYSELECTOR, ie9);
+    test_selector_lookup_libernt((IUnknown*)node, L"querySelectorAll", DISPID_IDOCUMENTSELECTOR_QUERYSELECTORALL, ie9);
+    IHTMLElement_Release(body);
+    IHTMLDocument2_Release(node);
+}
+
 static void test_databinding_attr_col_libernt(IHTMLDocument2 *doc)
 {
     static const WCHAR *tags[] = { L"body", L"div" };
@@ -16825,6 +16874,9 @@ START_TEST(dom)
         run_domtest(doc_blank_ie9, test_option_databinding_libernt);
         run_domtest(doc_blank, test_invoke_errors_libernt);
         run_domtest(doc_blank_ie8, test_invoke_errors_libernt);
+        run_domtest(doc_blank, test_selector_version_libernt);
+        run_domtest(doc_blank_ie8, test_selector_version_libernt);
+        run_domtest(doc_blank_ie9, test_selector_version_libernt);
         run_domtest(doc_blank, test_databinding_attr_col_libernt);
         run_domtest(doc_blank_ie9, test_databinding_attr_col_libernt);
         run_domtest(doc_blank_ie11, test_databinding_attr_col_libernt);

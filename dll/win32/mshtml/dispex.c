@@ -63,6 +63,7 @@ typedef struct {
     USHORT argc;
     USHORT default_value_cnt;
     BOOLEAN noattr;
+    BYTE min_script_version;
     const WCHAR *attr_name;
     VARTYPE prop_vt;
     VARTYPE *arg_types;
@@ -336,6 +337,7 @@ static void add_func_info(dispex_data_t *data, tid_t tid, const FUNCDESC *desc, 
         info->hook = hook ? hook->invoke : NULL;
         info->noattr = hook ? hook->noattr : FALSE;
         info->attr_name = hook ? hook->attr_name : NULL;
+        info->min_script_version = hook ? hook->min_script_version : 0;
     }else {
         SysFreeString(name);
     }
@@ -484,7 +486,7 @@ static HRESULT process_interface(dispex_data_t *data, tid_t tid, ITypeInfo *disp
             }
         }
 
-        if(!hook || hook->invoke || hook->name || hook->noattr || hook->attr_name)
+        if(!hook || hook->invoke || hook->name || hook->noattr || hook->attr_name || hook->min_script_version)
             add_func_info(data, tid, funcdesc, disp_typeinfo ? disp_typeinfo : typeinfo, hook);
 
         ITypeInfo_ReleaseFuncDesc(typeinfo, funcdesc);
@@ -1366,6 +1368,8 @@ static HRESULT get_builtin_id(const dispex_data_t *info, const WCHAR *name, DWOR
         c = wcsicmp(info->name_table[n]->name, name);
         if(!c) {
             if((grfdex & fdexNameCaseSensitive) && wcscmp(info->name_table[n]->name, name))
+                break;
+            if(info->name_table[n]->min_script_version > (grfdex & FDEX_VERSION_MASK) >> 28)
                 break;
 
             *ret = info->name_table[n]->id;
