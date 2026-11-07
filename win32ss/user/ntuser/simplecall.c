@@ -1280,6 +1280,23 @@ NtUserCallHwnd(
             UserLeave();
             return State;
         }
+
+        case HWND_ROUTINE_ROS_ENABLENCDPISCALING:
+        {
+            PWND Window;
+            BOOL Ret = FALSE;
+
+            UserEnterShared();
+            Window = UserGetWindowObject(hWnd);
+            if (Window && Window->head.pti == PsGetCurrentThreadWin32Thread() && !(Window->style & WS_CHILD) &&
+                !(Window->state2 & WNDS2_WMCREATEMSGPROCESSED) &&
+                NTUSER_DPI_CONTEXT_GET_AWARENESS(Window->DpiContext) == DPI_AWARENESS_PER_MONITOR_AWARE)
+            {
+                Ret = TRUE;
+            }
+            UserLeave();
+            return Ret;
+        }
     }
 
     STUB;
