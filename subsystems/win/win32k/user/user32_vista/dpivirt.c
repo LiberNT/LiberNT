@@ -47,3 +47,19 @@ User32GetSystemDpi(VOID)
 {
     return (UINT)NtUserCallOneParam(ROS_SERVERINFO_LOGPIXELS, ONEPARAM_ROUTINE_ROS_GETSERVERINFO);
 }
+
+INT
+WINAPI
+User32GetFoldedPaddedBorder(VOID)
+{
+    INT Padded;
+    UINT Dpi;
+
+    if (NtCurrentPeb()->ImageSubsystemMajorVersion >= 6)
+        return 0;
+    Padded = (INT)NtUserCallOneParam(ROS_SERVERINFO_PADDEDBORDER, ONEPARAM_ROUTINE_ROS_GETSERVERINFO);
+    if (!User32IsDpiVirtualThread())
+        return Padded;
+    Dpi = User32GetSystemDpi();
+    return Dpi ? (INT)(((LONGLONG)Padded * USER_DEFAULT_SCREEN_DPI + Dpi / 2) / Dpi) : Padded;
+}
