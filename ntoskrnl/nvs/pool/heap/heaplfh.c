@@ -22,6 +22,78 @@ static const USHORT PoolLfhSizes[POOL_LFH_CLASS_COUNT] =
 
 static UCHAR PoolLfhClassMap[(POOL_LFH_MAX_BYTES / POOL_ALIGNMENT) + 1];
 
+#if DBG || defined(POOL_HOST_TEST)
+static
+VOID
+PoolLfhAssertBitmap(
+    _In_ PPOOL_LFH_SUBSEGMENT Subsegment)
+{
+    ULONG Free = 0, Word;
+
+    POOL_ASSERT(Subsegment->Signature == POOL_LFH_SIGNATURE && Subsegment->Slot != NULL);
+    POOL_ASSERT(Subsegment->Class < POOL_LFH_CLASS_COUNT);
+    POOL_ASSERT(Subsegment->BlockSize == PoolLfhSizes[Subsegment->Class]);
+    POOL_ASSERT(Subsegment->BlockCount != 0 && Subsegment->BlockCount <= POOL_LFH_MAX_BLOCKS);
+    POOL_ASSERT(Subsegment->FreeCount <= Subsegment->BlockCount);
+    POOL_ASSERT(Subsegment->MapWords == (Subsegment->BlockCount + 63) / 64);
+    POOL_ASSERT(Subsegment->HintWord < Subsegment->MapWords);
+    POOL_ASSERT(Subsegment->FirstCount <= Subsegment->BlockCount && Subsegment->PerPage != 0);
+    POOL_ASSERT(Subsegment->Lead < PAGE_SIZE &&
+                Subsegment->PerPage == (PAGE_SIZE - Subsegment->Lead) / Subsegment->BlockSize);
+    if (Subsegment->BlockCount & 63)
+    {
+        ULONG64 Padding = ~(ULONG64)0 << (Subsegment->BlockCount & 63);
+
+        POOL_ASSERT((Subsegment->Bitmap[Subsegment->MapWords - 1] & Padding) == Padding);
+    }
+    for (Word = 0; Word < Subsegment->MapWords; Word++)
+    {
+        ULONG64 Clear = ~Subsegment->Bitmap[Word];
+
+        while (Clear != 0)
+        {
+            Clear &= Clear - 1;
+            Free++;
+        }
+    }
+    POOL_ASSERT(Free == Subsegment->FreeCount);
+}
+
+static
+VOID
+PoolLfhAssertSlot(
+    _In_ PPOOL_LFH_SLOT Slot)
+{
+    PLIST_ENTRY Heads[2] = { &Slot->Partial, &Slot->Full };
+    ULONG Seen = 0, List;
+
+    for (List = 0; List < RTL_NUMBER_OF(Heads); List++)
+    {
+        PLIST_ENTRY Head = Heads[List];
+        PLIST_ENTRY Entry = Head->Flink;
+
+        POOL_ASSERT(Head->Flink->Blink == Head && Head->Blink->Flink == Head);
+        while (Entry != Head && Seen < Slot->SubsegmentCount)
+        {
+            PPOOL_LFH_SUBSEGMENT Subsegment = CONTAINING_RECORD(Entry, POOL_LFH_SUBSEGMENT, Link);
+
+            POOL_ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+            POOL_ASSERT(Subsegment->Signature == POOL_LFH_SIGNATURE && Subsegment->Slot == Slot);
+            POOL_ASSERT((Subsegment->OnFullList != FALSE) == (List != 0));
+            POOL_ASSERT((Subsegment->FreeCount == 0) == (List != 0));
+            POOL_ASSERT(Subsegment->FreeCount <= Subsegment->BlockCount);
+            Seen++;
+            Entry = Entry->Flink;
+        }
+        POOL_ASSERT(Entry == Head);
+    }
+    POOL_ASSERT(Seen == Slot->SubsegmentCount);
+}
+#else
+#define PoolLfhAssertBitmap(Subsegment) ((void)0)
+#define PoolLfhAssertSlot(Slot) ((void)0)
+#endif
+
 VOID
 PoolLfhInitialize(VOID)
 {
@@ -149,6 +221,7 @@ PoolLfhCreateSubsegment(
         Subsegment->Bitmap[i >> 6] |= ((ULONG64)1 << (i & 63));
 
     Subsegment->Signature = POOL_LFH_SIGNATURE;
+    PoolLfhAssertBitmap(Subsegment);
     return Subsegment;
 }
 
@@ -188,6 +261,7 @@ PoolLfhTake(
             Word = 0;
     }
 
+    POOL_ASSERT(FALSE);
     return NULL;
 }
 
@@ -215,6 +289,7 @@ PoolLfhAllocate(
 
         if (Subsegment->FreeCount == 0)
         {
+            PoolLfhAssertBitmap(Subsegment);
             RemoveEntryList(&Subsegment->Link);
             InsertHeadList(&Slot->Full, &Subsegment->Link);
             Subsegment->OnFullList = TRUE;
@@ -233,6 +308,7 @@ PoolLfhAllocate(
         return NULL;
 
     Block = PoolLfhTake(Subsegment, Tag);
+    POOL_ASSERT(Block != NULL && Subsegment->FreeCount != 0);
 
     POOL_LOCK_ACQUIRE(&Slot->Lock, &OldIrql);
     InsertHeadList(&Slot->Partial, &Subsegment->Link);
@@ -344,6 +420,9 @@ PoolLfhFree(
         Subsegment->OnFullList = FALSE;
     }
 
+    if (Subsegment->FreeCount == 1 || Subsegment->FreeCount == Subsegment->BlockCount)
+        PoolLfhAssertBitmap(Subsegment);
+
     if (Subsegment->FreeCount == Subsegment->BlockCount &&
         Slot->Partial.Flink != &Subsegment->Link)
     {
@@ -376,6 +455,7 @@ PoolLfhTrim(
 
         InitializeListHead(&Retired);
         POOL_LOCK_ACQUIRE(&Slot->Lock, &OldIrql);
+        PoolLfhAssertSlot(Slot);
 
         Entry = Slot->Partial.Flink;
         while (Entry != &Slot->Partial)
@@ -389,12 +469,14 @@ PoolLfhTrim(
             if (Subsegment->FreeCount != Subsegment->BlockCount)
                 continue;
 
+            PoolLfhAssertBitmap(Subsegment);
             RemoveEntryList(&Subsegment->Link);
             InsertTailList(&Retired, &Subsegment->Link);
             Slot->SubsegmentCount--;
             Subsegment->Signature = 0;
         }
 
+        PoolLfhAssertSlot(Slot);
         POOL_LOCK_RELEASE(&Slot->Lock, OldIrql);
 
         while (!IsListEmpty(&Retired))
