@@ -64,6 +64,7 @@ list(APPEND SOURCE
     GW_ENABLEDPOPUP.c
     HiddenChildWindowPos.c
     ImeWindow.c
+    ImeWindowZOrder.c
     InitializeLpkHooks.c
     InputMessageSource.c
     InvalidHandles.c
