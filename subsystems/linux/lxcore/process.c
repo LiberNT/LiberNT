@@ -432,9 +432,7 @@ LxProcessFork(
     Process->ParentPid = Parent->Pid;
     Process->Pgid = Parent->Pgid;
     Process->Sid = Parent->Sid;
-    Process->Tty = Parent->Tty;
-    if (Process->Tty != NULL)
-        LxTtyReference(Process->Tty);
+    Process->Tty = LxProcessGetTty(Parent);
     Process->Umask = Parent->Umask;
     if (Parent->ExeDeny != NULL)
     {
@@ -1087,6 +1085,7 @@ LxProcessExited(
     }
 
     LxCgroupAttach(Process, NULL);
+    LxTtyDisassociate(Process, TRUE);
 
     if ((Process->Pid != 1) && !LxPidNsIsInit(Process))
         LxJobctlOrphanCheck(Process, NULL);

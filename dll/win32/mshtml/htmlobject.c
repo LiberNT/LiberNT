@@ -730,6 +730,7 @@ static void HTMLObjectElement_init_dispex_info(dispex_data_t *info, compat_mode_
         {DISPID_IHTMLOBJECTELEMENT_BASEHREF, .noattr = TRUE},
         {DISPID_IHTMLOBJECTELEMENT_FORM,     .noattr = TRUE},
         {DISPID_IHTMLOBJECTELEMENT_ALTHTML,  .noattr = TRUE},
+        {DISPID_IHTMLOBJECTELEMENT_RECORDSET, .noattr = TRUE},
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLObjectElement2_tid, NULL);

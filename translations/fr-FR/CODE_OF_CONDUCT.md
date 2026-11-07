@@ -1,6 +1,6 @@
 # Code de conduite
 
-> [English](../../CODE_OF_CONDUCT.md) | [中文](../zh-CN/CODE_OF_CONDUCT.md) | **Français** | [Español](../es-ES/CODE_OF_CONDUCT.md) | [日本語](../ja-JP/CODE_OF_CONDUCT.md) | [العربية](../ar-MA/CODE_OF_CONDUCT.md)
+> [English](../../CODE_OF_CONDUCT.md) | [中文](../zh-CN/CODE_OF_CONDUCT.md) | **Français** | [Español](../es-ES/CODE_OF_CONDUCT.md) | [日本語](../ja-JP/CODE_OF_CONDUCT.md) | [العربية](../ar-MA/CODE_OF_CONDUCT.md) | [Українська](../uk-UA/CODE_OF_CONDUCT.md)
 
 **Soyez respectueux envers les autres membres de la communauté.**
 - N'engagez pas et ne participez pas à des discussions destinées à insulter, envenimer, attaquer ou inciter à la haine, à la discrimination ou au harcèlement envers d'autres personnes.

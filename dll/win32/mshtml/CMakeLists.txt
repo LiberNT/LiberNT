@@ -24,6 +24,7 @@ list(APPEND SOURCE
     htmlevent.c
     htmlform.c
     htmlframe.c
+    htmlframeset.c
     htmlgeneric.c
     htmlhead.c
     htmlimg.c
@@ -40,6 +41,7 @@ list(APPEND SOURCE
     htmlstylesheet.c
     htmltable.c
     htmltextarea.c
+    htmltextelem.c
     htmltextnode.c
     htmlwindow.c
     loadopts.c

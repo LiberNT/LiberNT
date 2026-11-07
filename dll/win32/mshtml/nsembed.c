@@ -1106,6 +1106,10 @@ HRESULT variant_to_nsstr(VARIANT *v, BOOL hex_int, nsAString *nsstr)
         nsAString_Init(nsstr, buf);
         break;
 
+    case VT_BOOL:
+        nsAString_InitDepend(nsstr, V_BOOL(v) ? L"true" : L"false");
+        break;
+
     case VT_R8:
     case VT_DISPATCH: {
         VARIANT strv;

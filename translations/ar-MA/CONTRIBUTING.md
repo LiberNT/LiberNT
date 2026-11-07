@@ -2,7 +2,7 @@
 
 # المساهمة في LiberNT
 
-> [English](../../CONTRIBUTING.md) | [中文](../zh-CN/CONTRIBUTING.md) | [Français](../fr-FR/CONTRIBUTING.md) | [Español](../es-ES/CONTRIBUTING.md) | [日本語](../ja-JP/CONTRIBUTING.md) | **العربية**
+> [English](../../CONTRIBUTING.md) | [中文](../zh-CN/CONTRIBUTING.md) | [Français](../fr-FR/CONTRIBUTING.md) | [Español](../es-ES/CONTRIBUTING.md) | [日本語](../ja-JP/CONTRIBUTING.md) | **العربية** | [Українська](../uk-UA/CONTRIBUTING.md)
 
 يرحّب LiberNT بتقارير الأخطاء والاختبارات والإصلاحات والميزات الجديدة والتوثيق. تشرح هذه الصفحة كيف ترسل عملك. قواعد الهندسة التي يتبعها كل تغيير موجودة في [AGENTS.md](../../AGENTS.md)، وهي تنطبق على المساهمين من البشر وعلى أدوات الذكاء الاصطناعي على حد سواء.
 

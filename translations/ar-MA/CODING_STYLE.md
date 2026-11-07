@@ -2,7 +2,7 @@
 
 # أسلوب كتابة الشيفرة
 
-> [English](../../CODING_STYLE.md) | [中文](../zh-CN/CODING_STYLE.md) | [Français](../fr-FR/CODING_STYLE.md) | [Español](../es-ES/CODING_STYLE.md) | [日本語](../ja-JP/CODING_STYLE.md) | **العربية**
+> [English](../../CODING_STYLE.md) | [中文](../zh-CN/CODING_STYLE.md) | [Français](../fr-FR/CODING_STYLE.md) | [Español](../es-ES/CODING_STYLE.md) | [日本語](../ja-JP/CODING_STYLE.md) | **العربية** | [Українська](../uk-UA/CODING_STYLE.md)
 
 يصف هذا المقال الإرشادات العامة لأسلوب كتابة الشيفرة، والتي ينبغي اتباعها في الشيفرة الجديدة لـ LiberNT. تنطبق هذه الإرشادات حصرًا على ملفات المصدر بلغتي C وC++. وهي مأخوذة من أسلوب كتابة الشيفرة في ReactOS، الذي اتفق عليه أعضاء ReactOS في اجتماعهم في أكتوبر 2013.
 

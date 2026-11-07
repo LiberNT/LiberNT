@@ -2,7 +2,7 @@
 
 # قواعد إدارة طلبات السحب
 
-> [English](../../PULL_REQUEST_MANAGEMENT.md) | [中文](../zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](../fr-FR/PULL_REQUEST_MANAGEMENT.md) | [Español](../es-ES/PULL_REQUEST_MANAGEMENT.md) | [日本語](../ja-JP/PULL_REQUEST_MANAGEMENT.md) | **العربية**
+> [English](../../PULL_REQUEST_MANAGEMENT.md) | [中文](../zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](../fr-FR/PULL_REQUEST_MANAGEMENT.md) | [Español](../es-ES/PULL_REQUEST_MANAGEMENT.md) | [日本語](../ja-JP/PULL_REQUEST_MANAGEMENT.md) | **العربية** | [Українська](../uk-UA/PULL_REQUEST_MANAGEMENT.md)
 
 للحفاظ على عدد مقبول من طلبات السحب المفتوحة الخاملة، ينبغي مراعاة القواعد التالية:
 - إذا حصل طلب السحب على موافقة واحدة على الأقل، يمكن دمجه بعد انتظار أسبوع واحد لتلقي تعليقات إضافية.

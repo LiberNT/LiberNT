@@ -1909,11 +1909,15 @@ LxDeviceOpenFile(
     }
     else if ((Major == 5) && (Minor == 0))
     {
-        Tty = Process->Tty;
+        Tty = LxProcessGetTty(Process);
     }
     else if (((Major == 5) && (Minor == 1)) || ((Major == 4) && (Minor <= 1)))
     {
-        Tty = Process->Instance->Console ? Process->Instance->Console : Process->Tty;
+        Tty = Process->Instance->Console;
+        if (Tty != NULL)
+            LxTtyReference(Tty);
+        else
+            Tty = LxProcessGetTty(Process);
     }
     else
     {
@@ -1925,6 +1929,7 @@ LxDeviceOpenFile(
         if (Tty == NULL)
             return NULL;
         File = LxTtyOpen(Tty, Flags);
+        LxTtyDereference(Tty);
         if (File != NULL)
         {
             File->Path = LxStrDup(Path);

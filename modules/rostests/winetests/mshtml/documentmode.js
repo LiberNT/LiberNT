@@ -706,9 +706,7 @@ sync_test("attr_props", function() {
     if(v < 8)
         ok(elem.attributes.length > 50, "attributes.length = " + elem.attributes.length);
     else {
-        todo_wine_if(v === 8).
         ok(elem.attributes.length === 1, "attributes.length = " + elem.attributes.length);
-        todo_wine_if(v === 8).
         ok(elem.attributes[0] === attr, "attributes[0] != attr");
     }
 
@@ -776,7 +774,6 @@ sync_test("attr_props", function() {
     if(v < 8)
         ok(attr === null, "innerText attr != null");
     else
-        todo_wine_if(v === 8).
         ok(attr !== null, "innerText attr = null");
 
     attr = elem.getAttributeNode("removeAttribute");
@@ -786,7 +783,6 @@ sync_test("attr_props", function() {
     if(v < 8)
         test_attr(false, false);
     else
-        todo_wine_if(v === 8).
         ok(attr === null, "tabIndex attr not null.");
 });
 
@@ -4138,6 +4134,28 @@ sync_test("prototypes", function() {
     check(document.createElement("option"), HTMLOptionElement.prototype, "option elem");
     check(HTMLOptionElement.prototype, HTMLElement.prototype, "option elem prototype");
     check(Option, Function.prototype, "Option constructor");
+    check(document.createElement("b"), HTMLPhraseElement.prototype, "b elem");
+    check(document.createElement("del"), HTMLModElement.prototype, "del elem");
+    check(document.createElement("q"), HTMLQuoteElement.prototype, "q elem");
+    check(document.createElement("pre"), HTMLPreElement.prototype, "pre elem");
+    check(document.createElement("center"), HTMLBlockElement.prototype, "center elem");
+    check(document.createElement("p"), HTMLParagraphElement.prototype, "p elem");
+    check(document.createElement("h1"), HTMLHeadingElement.prototype, "h1 elem");
+    check(document.createElement("br"), HTMLBRElement.prototype, "br elem");
+    check(document.createElement("font"), HTMLFontElement.prototype, "font elem");
+    check(document.createElement("basefont"), HTMLBaseFontElement.prototype, "basefont elem");
+    check(document.createElement("base"), HTMLBaseElement.prototype, "base elem");
+    check(HTMLPhraseElement.prototype, HTMLElement.prototype, "phrase elem prototype");
+    check(HTMLModElement.prototype, HTMLElement.prototype, "mod elem prototype");
+    check(HTMLQuoteElement.prototype, HTMLElement.prototype, "quote elem prototype");
+    check(HTMLPreElement.prototype, HTMLElement.prototype, "pre elem prototype");
+    check(HTMLBlockElement.prototype, HTMLElement.prototype, "block elem prototype");
+    check(HTMLParagraphElement.prototype, HTMLElement.prototype, "paragraph elem prototype");
+    check(HTMLHeadingElement.prototype, HTMLElement.prototype, "heading elem prototype");
+    check(HTMLBRElement.prototype, HTMLElement.prototype, "br elem prototype");
+    check(HTMLFontElement.prototype, HTMLElement.prototype, "font elem prototype");
+    check(HTMLBaseFontElement.prototype, HTMLElement.prototype, "basefont elem prototype");
+    check(HTMLBaseElement.prototype, HTMLElement.prototype, "base elem prototype");
     check(new DOMParser(), DOMParser.prototype, "dom parser");
     check(DOMParser.prototype, Object.prototype, "dom parser prototype");
     check(DOMParser, Function.prototype, "dom parser constructor");
@@ -4189,6 +4207,13 @@ sync_test("prototypes", function() {
     check(document.createElement("td"), HTMLTableDataCellElement.prototype, "td element");
     check(HTMLTableDataCellElement.prototype, HTMLTableCellElement.prototype, "td element prototype");
     check(HTMLTableCellElement.prototype, HTMLElement.prototype, "table cell prototype");
+    check(document.createElement("col"), HTMLTableColElement.prototype, "col element");
+    check(document.createElement("colgroup"), HTMLTableColElement.prototype, "colgroup element");
+    check(HTMLTableColElement.prototype, HTMLElement.prototype, "table col prototype");
+    check(document.createElement("tbody"), HTMLTableSectionElement.prototype, "tbody element");
+    check(document.createElement("thead"), HTMLTableSectionElement.prototype, "thead element");
+    check(document.createElement("tfoot"), HTMLTableSectionElement.prototype, "tfoot element");
+    check(HTMLTableSectionElement.prototype, HTMLElement.prototype, "table section prototype");
     check(document.createElement("textarea"), HTMLTextAreaElement.prototype, "textarea element");
     check(HTMLTextAreaElement.prototype, HTMLElement.prototype, "textarea element prototype");
     check(document.createElement("test"), HTMLUnknownElement.prototype, "unknown element");
@@ -4331,6 +4356,514 @@ sync_test("prototypes", function() {
         ok(false, "Area element's toString on Anchor element didn't fail");
     } catch(e) {
         ok(e.number == 0xffff - 0x80000000, "Area element's toString on Anchor element threw exception " + e.number);
+    }
+});
+
+sync_test("text element props", function() {
+    var v = document.documentMode, a = document.createElement("a"), url, i, e;
+    if(v < 9)
+        return;
+
+    a.href = "x.htm";
+    url = a.href;
+
+    var cases = [
+        [ "b", "cite", "x.htm", url ], [ "b", "dateTime", "x.htm", "x.htm" ],
+        [ "del", "cite", "x.htm", url ], [ "ins", "dateTime", "x.htm", "x.htm" ],
+        [ "q", "cite", "x.htm", url ], [ "q", "dateTime", "x.htm", "x.htm" ],
+        [ "center", "cite", "x.htm", url ], [ "center", "width", "x.htm", "x.htm" ],
+        [ "center", "clear", "all", "all" ], [ "center", "clear", "x.htm", "" ],
+        [ "pre", "cite", "x.htm", url ], [ "pre", "width", "x.htm", "x.htm" ], [ "pre", "clear", "x.htm", "" ],
+        [ "p", "align", "left", "left" ], [ "p", "align", "x.htm", "" ], [ "p", "clear", "x.htm", "" ],
+        [ "h1", "align", "x.htm", "" ], [ "h1", "clear", "x.htm", "" ],
+        [ "br", "clear", "x.htm", "" ],
+        [ "font", "face", "x.htm", "x.htm" ], [ "font", "size", "x.htm", "3" ], [ "font", "color", null, null ],
+        [ "basefont", "face", "x.htm", "x.htm" ], [ "basefont", "color", null, null ],
+        [ "base", "href", "x.htm", url ], [ "base", "target", "x.htm", "x.htm" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        e = document.createElement(cases[i][0]);
+        ok(e[cases[i][1]] === "", cases[i][0] + "." + cases[i][1] + " = " + e[cases[i][1]]);
+        if(cases[i][2] === null)
+            continue;
+        e.setAttribute(cases[i][1], cases[i][2]);
+        ok(e[cases[i][1]] === cases[i][3], cases[i][0] + "." + cases[i][1] + " after setAttribute(" + cases[i][2] + ") = " + e[cases[i][1]]);
+    }
+
+    e = document.createElement("basefont");
+    ok(e.size === 3, "basefont.size = " + e.size);
+    e.setAttribute("size", "x.htm");
+    ok(e.size === 3, "basefont.size after setAttribute(x.htm) = " + e.size);
+});
+
+sync_test("color props", function() {
+    var v = document.documentMode, i, j, e, r, exp;
+
+    var targets = [
+        [ "td", "bgColor" ], [ "tr", "bgColor" ], [ "tbody", "bgColor" ], [ "table", "bgColor" ],
+        [ "body", "bgColor" ], [ "body", "text" ], [ "body", "link" ], [ "body", "vLink" ], [ "body", "aLink" ],
+        [ "font", "color" ], [ "basefont", "color" ], [ "frameset", "borderColor" ],
+        [ "td", "borderColor" ], [ "table", "borderColor" ]
+    ];
+
+    var vals = [
+        [ "7", "#070000", "#7", "#7" ],
+        [ "RED", "#ff0000", "red", "red" ],
+        [ " red", "#00ed00", "#00ed", "red" ],
+        [ "\u000bred", "#00ed00", "#00ed", "red" ],
+        [ "#ABC", "#0a0b0c", "#abc", "#abc" ],
+        [ "##12", "#000102", "#012", "#012" ],
+        [ "#", "#000000", "#000000", "#000000" ],
+        [ "x.htm", "#000000", "#00000", "#00000" ],
+        [ "1234567", "#124570", "#124570", "#124570" ],
+        [ "#abcdef\n", "#abde00", "#abde00", "#abcdef" ],
+        [ "AliceBlue", "#f0f8ff", "aliceblue", "aliceblue" ],
+        [ "rgb( 1 , 2 , 3 )", "#010203", "rgb(1,2,3)", "rgb(1,2,3)" ],
+        [ "rgb(10.5%,0,0)", "#1b0000", "rgb(27,0,0)", "rgb(27,0,0)" ],
+        [ "rgb(+1,0,0)", "#010000", "rgb(1,0,0)", "rgb(1,0,0)" ],
+        [ "rgb(300,2,3)", "#ff0203", "rgb(255,2,3)", "rgb(255,2,3)" ],
+        [ "rgb(1,2,3)\t", "#001030", "#001030", "rgb(1,2,3)" ],
+        [ "rgb(1,2,3) x", "#001030", "#001030", "#001030" ],
+        [ "transparent x", "transparent", "transparent", "transparent", "#0aa000" ],
+        [ " transparent", "#0000e0", "#0000e0", "transparent" ],
+        [ "RGBA(1,2,3,0.5)", "#001000", "#001000", "rgba(1,2,3,0.5)" ],
+        [ "rgba(1.5,2,3,0.5)", "#0b5000", "#0b5000", "rgba(2,2,3,0.5)" ],
+        [ "rgba(1,2,3,-1)", "#001000", "#001000", "rgba(1,2,3,0)" ],
+        [ "rgba(1,2,3,1.5e-1)", "#0b205e", "#0b205e", "#0b205e" ],
+        [ "hsl(-10,100%,50%)", "#000150", "#000150", "hsl(350,100%,50%)" ],
+        [ "hsl(0.5,10.5%,20%)", "#005000", "#005000", "hsl(0,10%,20%)" ],
+        [ "HSLA( 0 , 100% , 50% , .25 )", "#a00002", "#a00002", "hsla(0, 100%, 50%, 0.25)" ],
+        [ "hsl(0,100,50)", "#000150", "#000150", "#000150" ],
+        [ "currentColor", "#c0e000", "#c0e000", "currentColor" ],
+        [ "inherit", "#00e000", "#00e000", "#00e000" ]
+    ];
+
+    var nums = [ [ 12.7, "#00000c", "#00000c" ], [ -0.5, "#000000", "#000000" ], [ 0x1000000, "", null ], [ true, "", null ], [ "", "", "" ] ];
+
+    for(i = 0; i < targets.length; i++) {
+        var tag = targets[i][0], prop = targets[i][1], name = tag + "." + prop;
+
+        e = document.createElement(tag);
+        ok(e[prop] === "", name + " unset = " + e[prop]);
+
+        for(j = 0; j < vals.length; j++) {
+            e = document.createElement(tag);
+            e.setAttribute(prop, vals[j][0]);
+            exp = v < 9 ? vals[j][1] : v >= 10 && vals[j].length > 4 ? vals[j][4] : vals[j][3];
+            ok(e[prop] === exp, name + " after setAttribute(" + vals[j][0] + ") = " + e[prop] + " expected " + exp);
+            if(v >= 8) {
+                r = e.getAttribute(prop);
+                exp = v < 9 ? vals[j][2] : exp;
+                ok(r === exp, name + " attribute after setAttribute(" + vals[j][0] + ") = " + r + " expected " + exp);
+            }
+
+            e = document.createElement(tag);
+            e[prop] = vals[j][0];
+            exp = v < 9 ? vals[j][1] : vals[j][2];
+            ok(e[prop] === exp, name + " after put(" + vals[j][0] + ") = " + e[prop] + " expected " + exp);
+            if(v >= 8) {
+                r = e.getAttribute(prop);
+                ok(r === vals[j][2], name + " attribute after put(" + vals[j][0] + ") = " + r + " expected " + vals[j][2]);
+            }
+        }
+
+        for(j = 0; j < nums.length; j++) {
+            e = document.createElement(tag);
+            e[prop] = nums[j][0];
+            ok(e[prop] === nums[j][1], name + " after put(" + nums[j][0] + ") = " + e[prop]);
+            if(v >= 8) {
+                r = e.getAttribute(prop);
+                ok(r === nums[j][2], name + " attribute after put(" + nums[j][0] + ") = " + r);
+            }
+        }
+    }
+});
+
+sync_test("element attribute storage", function() {
+    var v = document.documentMode, i, e, r;
+    if(v < 8)
+        return;
+
+    function mk(tag) {
+        var e = document.createElement(tag), t, b, row;
+        if(tag === "td") {
+            t = document.createElement("table"); b = document.createElement("tbody"); row = document.createElement("tr");
+            t.appendChild(b); b.appendChild(row); row.appendChild(e);
+        }
+        return e;
+    }
+
+    var puts = [
+        [ "div", "id", "id", "x", "x", "x" ], [ "div", "title", "title", "t", "t", "t" ], [ "div", "lang", "lang", "EN", "EN", "EN" ],
+        [ "div", "accessKey", "accessKey", "K", "K", "K" ], [ "div", "tabIndex", "tabIndex", 3, "3", "3" ],
+        [ "div", "className", "class", "c", "c", "c" ], [ "div", "onclick", "onclick", "a()", "a()", null ],
+        [ "td", "width", "width", 10, "10", "10" ], [ "td", "width", "width", "10%", "10%", "10%" ], [ "td", "abbr", "abbr", "ab", "ab", "ab" ],
+        [ "td", "bgColor", "bgColor", "7", "#7", "#7" ], [ "img", "width", "width", 10, "10", "10" ], [ "img", "alt", "alt", "al", "al", "al" ],
+        [ "a", "href", "href", "x.htm", "x.htm", "x.htm" ], [ "a", "target", "target", "_blank", "_blank", "_blank" ],
+        [ "input", "maxLength", "maxLength", 5, "5", "5" ], [ "input", "size", "size", 7, "7", "7" ], [ "input", "name", "name", "n", "n", "n" ],
+        [ "input", "disabled", "disabled", true, "disabled", "" ], [ "input", "readOnly", "readOnly", true, "readonly", "" ],
+        [ "label", "htmlFor", "for", "f", "f", "f" ], [ "meta", "httpEquiv", "http-equiv", "h", "h", "h" ],
+        [ "table", "cellPadding", "cellPadding", 5, "5", "5" ],
+        [ "font", "size", "size", "+1", "+1", "+1" ], [ "font", "face", "face", "Arial", "Arial", "Arial" ],
+        [ "form", "action", "action", "x.htm", "x.htm", "x.htm" ], [ "iframe", "frameBorder", "frameBorder", "0", "0", "0", "1" ],
+        [ "frameset", "rows", "rows", "1,2", "1,2", "1,2" ]
+    ];
+
+    var sets = [
+        [ "div", "dir", "RTL", "rtl", "RTL", "rtl" ], [ "div", "dir", "foo", "foo", "foo", "" ], [ "div", "tabIndex", "x", "x", "x", 0 ],
+        [ "td", "colSpan", "x", "x", "x", 1 ], [ "td", "bgColor", "RED", "red", "red", v < 9 ? "#ff0000" : "red" ],
+        [ "input", "disabled", true, "disabled", "true", true ], [ "input", "disabled", false, "disabled", "false", true ],
+        [ "input", "readOnly", true, "readonly", "true", true ], [ "div", "onclick", "b()", "b()", "b()", undefined ],
+        [ "input", "type", "CHECKBOX", "checkbox", "CHECKBOX", "checkbox" ], [ "form", "method", "POST", "post", "POST", "post" ]
+    ];
+
+    var unset = [
+        [ "div", "id", null, null ], [ "div", "tabIndex", null, null ], [ "input", "disabled", "", null ], [ "input", "checked", "", null ],
+        [ "td", "colSpan", "1", null ], [ "td", "rowSpan", "1", null ], [ "input", "type", "text", null ], [ "form", "method", "get", null ],
+        [ "form", "encType", "application/x-www-form-urlencoded", null ], [ "iframe", "frameBorder", "1", null ], [ "a", "shape", "", null ]
+    ];
+
+    for(i = 0; i < puts.length; i++) {
+        var name = puts[i][0] + "." + puts[i][1] + " put(" + puts[i][3] + ")", exp = v < 9 ? puts[i][4] : puts[i][5];
+
+        e = mk(puts[i][0]);
+        e[puts[i][1]] = puts[i][3];
+        r = e.getAttribute(puts[i][2]);
+        ok(r === exp, name + " attribute = " + r + " expected " + exp);
+        if(puts[i][1] !== puts[i][2]) {
+            r = e.getAttribute(puts[i][1]);
+            ok(r === null, name + " getAttribute(" + puts[i][1] + ") = " + r);
+        }
+        if(exp === null)
+            continue;
+        r = e.removeAttribute(puts[i][2]);
+        ok(r === (v < 9 ? true : undefined), name + " removeAttribute returned " + r);
+        r = e.getAttribute(puts[i][2]);
+        exp = v >= 9 ? null : puts[i].length > 6 ? puts[i][6] : puts[i][3] === true ? "" : null;
+        ok(r === exp, name + " attribute after removeAttribute = " + r + " expected " + exp);
+    }
+
+    for(i = 0; i < sets.length; i++) {
+        var name = sets[i][0] + ".setAttribute(" + sets[i][1] + ", " + sets[i][2] + ")", exp = v < 9 ? sets[i][3] : sets[i][4];
+
+        e = mk(sets[i][0]);
+        e.setAttribute(sets[i][1], sets[i][2]);
+        r = e.getAttribute(sets[i][1]);
+        ok(r === exp, name + " attribute = " + r + " expected " + exp);
+        if(sets[i][5] !== undefined) {
+            r = e[sets[i][1]];
+            ok(r === sets[i][5], name + " property = " + r);
+        }
+    }
+
+    for(i = 0; i < unset.length; i++) {
+        var exp = v < 9 ? unset[i][2] : unset[i][3];
+        r = mk(unset[i][0]).getAttribute(unset[i][1]);
+        ok(r === exp, unset[i][0] + " unset " + unset[i][1] + " attribute = " + r + " expected " + exp);
+    }
+
+    e = document.createElement("div");
+    r = e.removeAttribute("id");
+    ok(r === (v < 9 ? false : undefined), "removeAttribute(id) without attribute returned " + r);
+
+    e = document.createElement("div");
+    e.setAttribute("className", "cn");
+    ok(e.className === "", "className after setAttribute(className) = " + e.className);
+    r = e.getAttribute("className");
+    ok(r === "cn", "getAttribute(className) = " + r);
+    e = document.createElement("label");
+    e.setAttribute("htmlFor", "hf");
+    ok(e.htmlFor === "", "htmlFor after setAttribute(htmlFor) = " + e.htmlFor);
+    e.setAttribute("for", "f");
+    ok(e.htmlFor === "f", "htmlFor after setAttribute(for) = " + e.htmlFor);
+    r = e.getAttribute("htmlFor");
+    ok(r === "hf", "getAttribute(htmlFor) = " + r);
+
+    e = document.createElement("div");
+    e.onclick = "a()";
+    e.onclick = function() {};
+    r = e.getAttribute("onclick");
+    ok(r === null, "onclick attribute after function put = " + r);
+    r = e.removeAttribute("onclick");
+    ok(r === (v < 9 ? false : undefined), "removeAttribute(onclick) without attribute returned " + r);
+    ok(v < 9 ? e.onclick === null : typeof(e.onclick) === "function", "onclick after removeAttribute = " + e.onclick);
+});
+
+sync_test("IE8 attribute collection", function() {
+    var v = document.documentMode, i, e, c, a, r;
+    if(v !== 8)
+        return;
+
+    function mk(tag) {
+        var e = document.createElement(tag), t, b, row;
+        if(tag === "td") {
+            t = document.createElement("table"); b = document.createElement("tbody"); row = document.createElement("tr");
+            t.appendChild(b); b.appendChild(row); row.appendChild(e);
+        }
+        return e;
+    }
+    function html(src) {
+        var d = document.createElement("div");
+        d.innerHTML = src;
+        return d.firstChild;
+    }
+    function check_attr(a, desc, name, value, specified, expando) {
+        ok(a !== null, desc + ": attribute = null");
+        if(!a)
+            return;
+        ok(a.nodeName === name, desc + ": nodeName = " + a.nodeName + " expected " + name);
+        ok(a.nodeValue === value, desc + ": nodeValue = " + a.nodeValue + " expected " + value);
+        ok(a.value === String(value), desc + ": value = " + a.value + " expected " + value);
+        ok(a.specified === specified, desc + ": specified = " + a.specified);
+        ok(a.expando === expando, desc + ": expando = " + a.expando);
+    }
+
+    var defaults = [
+        [ "div" ], [ "span" ], [ "table" ], [ "img" ], [ "select" ], [ "textarea" ], [ "label" ],
+        [ "td", [ "rowSpan", "1", false ], [ "colSpan", "1", false ] ],
+        [ "input", [ "type", "text", false ] ],
+        [ "area", [ "shape", "rect", false ] ],
+        [ "form", [ "encType", "application/x-www-form-urlencoded", false ], [ "method", "get", false ] ],
+        [ "button", [ "type", "submit", true ] ],
+        [ "iframe", [ "frameBorder", "1", false ], [ "scrolling", "auto", false ] ],
+        [ "frame", [ "frameBorder", "1", false ], [ "scrolling", "auto", false ] ],
+        [ "col", [ "span", "1", false ] ]
+    ];
+    for(i = 0; i < defaults.length; i++) {
+        var tag = defaults[i][0], j;
+        e = mk(tag);
+        c = e.attributes;
+        ok(c.length === defaults[i].length - 1, tag + " attributes.length = " + c.length);
+        for(j = 1; j < defaults[i].length; j++) {
+            var d = defaults[i][j];
+            check_attr(c[j - 1], tag + " attributes[" + (j - 1) + "]", d[0], d[1], d[2], false);
+            r = e.getAttributeNode(d[0].toLowerCase());
+            ok(r === c[j - 1], tag + " getAttributeNode(" + d[0].toLowerCase() + ") != attributes[" + (j - 1) + "]");
+        }
+    }
+
+    e = html('<span id="test" title="t" foo="bar"></span>');
+    c = e.attributes;
+    ok(c.length === 3, "parsed attributes.length = " + c.length);
+    a = e.getAttributeNode("id");
+    check_attr(a, "parsed id", "id", "test", true, false);
+    check_attr(e.getAttributeNode("title"), "parsed title", "title", "t", true, false);
+    check_attr(e.getAttributeNode("FOO"), "parsed foo", "FOO", "bar", true, true);
+    ok(c[2] === e.getAttributeNode("foo"), "attributes[2] != foo");
+    ok(c.getNamedItem("id") === a, "getNamedItem(id) != getAttributeNode(id)");
+    ok(c["id"] === a, "attributes[\"id\"] != getAttributeNode(id)");
+    ok(c.item(0) === c[0], "item(0) != attributes[0]");
+    ok(c.item("id") === c[0], "item(\"id\") != attributes[0]");
+    ok(!c.item(20), "item(20) = " + c.item(20));
+    ok(c.getNamedItem("nope") === null, "getNamedItem(nope) = " + c.getNamedItem("nope"));
+    ok(c.getNamedItem("lang") === null, "getNamedItem(lang) = " + c.getNamedItem("lang"));
+    ok(e.attributes === c, "attributes is not the same object");
+
+    e.id = "t2";
+    ok(a.nodeValue === "t2", "id node after id put = " + a.nodeValue);
+    a.value = "t3";
+    ok(e.id === "t3", "id after node value put = " + e.id);
+    ok(e.getAttribute("id") === "t3", "getAttribute(id) after node value put = " + e.getAttribute("id"));
+    e.setAttribute("x1", "y");
+    ok(c.length === 4, "attributes.length after setAttribute = " + c.length);
+    e.removeAttribute("id");
+    ok(c.length === 3, "attributes.length after removeAttribute = " + c.length);
+    ok(a.nodeValue === null, "removed id nodeValue = " + a.nodeValue);
+    ok(a.value === "null", "removed id value = " + a.value);
+    ok(a.specified === false, "removed id specified = " + a.specified);
+    ok(e.getAttributeNode("id") === a, "getAttributeNode(id) after removeAttribute != removed node");
+
+    e = mk("div");
+    ok(e.getAttributeNode("id") === null, "unset id node = " + e.getAttributeNode("id"));
+    ok(e.getAttributeNode("tabIndex") === null, "unset tabIndex node = " + e.getAttributeNode("tabIndex"));
+    ok(e.getAttributeNode("innerText") === null, "unset innerText node = " + e.getAttributeNode("innerText"));
+    e.foo = "bar";
+    ok(e.attributes.length === 1, "attributes.length after expando put = " + e.attributes.length);
+    check_attr(e.attributes[0], "expando", "foo", "bar", true, true);
+    e.foo = 3;
+    ok(e.attributes[0].value === "3", "number expando value = " + e.attributes[0].value);
+    e.className = "c";
+    e.tabIndex = 2;
+    ok(e.attributes.length === 3, "attributes.length after property puts = " + e.attributes.length);
+    check_attr(e.getAttributeNode("class"), "class", "class", "c", true, false);
+    check_attr(e.getAttributeNode("tabIndex"), "tabIndex", "tabIndex", "2", true, false);
+    ok(e.getAttributeNode("className") === null, "className node = " + e.getAttributeNode("className"));
+    e.onclick = "f()";
+    a = e.getAttributeNode("onclick");
+    check_attr(a, "onclick", "onclick", "f()", true, false);
+    e.onclick = function() {};
+    ok(e.getAttributeNode("onclick") === a, "onclick node after function put != onclick node");
+    ok(a.specified === false, "onclick node specified after function put = " + a.specified);
+    ok(a.nodeValue === null, "onclick node value after function put = " + a.nodeValue);
+    ok(e.attributes.length === 3, "attributes.length after onclick function put = " + e.attributes.length);
+
+    e = mk("div");
+    e.setAttribute("innerText", "test");
+    ok(e.innerText === "", "innerText after setAttribute = " + e.innerText);
+    ok(e.attributes.length === 1, "attributes.length after setAttribute(innerText) = " + e.attributes.length);
+    check_attr(e.getAttributeNode("innerText"), "innerText", "innerText", "test", true, true);
+    ok(e.getAttribute("innerText") === "test", "getAttribute(innerText) = " + e.getAttribute("innerText"));
+    r = e.removeAttribute("innerText");
+    ok(r === true, "removeAttribute(innerText) = " + r);
+    ok(e.attributes.length === 0, "attributes.length after removeAttribute(innerText) = " + e.attributes.length);
+
+    e = mk("div");
+    e.setAttribute("removeAttribute", "funcattr");
+    ok(e.attributes.length === 1, "attributes.length after setAttribute(removeAttribute) = " + e.attributes.length);
+    check_attr(e.attributes[0], "method name", "removeAttribute", "funcattr", true, true);
+
+    e = mk("td");
+    check_attr(e.getAttributeNode("colspan"), "td colspan", "colspan", "1", false, false);
+    ok(e.attributes[1].nodeName === "colspan", "td attributes[1].nodeName = " + e.attributes[1].nodeName);
+    ok(e.getAttributeNode("noWrap") === null, "td noWrap node = " + e.getAttributeNode("noWrap"));
+    e = mk("button");
+    ok(e.getAttribute("type") === "submit", "button getAttribute(type) = " + e.getAttribute("type"));
+    e = mk("iframe");
+    ok(e.getAttribute("scrolling") === "auto", "iframe getAttribute(scrolling) = " + e.getAttribute("scrolling"));
+    e = mk("col");
+    ok(e.getAttribute("span") === "1", "col getAttribute(span) = " + e.getAttribute("span"));
+    e = mk("area");
+    ok(e.getAttribute("shape") === "rect", "area getAttribute(shape) = " + e.getAttribute("shape"));
+});
+
+sync_test("enumerated attribute put", function() {
+    var i, e, r;
+
+    var cases = [
+        [ "div", "dir", "dir", "RTL", "rtl" ], [ "div", "dir", "dir", "Ltr", "ltr" ],
+        [ "input", "type", "type", "CHECKBOX", "checkbox" ], [ "form", "method", "method", "POST", "post" ],
+        [ "form", "method", "method", "Get", "get" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        var name = cases[i][0] + "." + cases[i][1] + " put(" + cases[i][3] + ")";
+
+        e = document.createElement(cases[i][0]);
+        e[cases[i][1]] = cases[i][3];
+        ok(e[cases[i][1]] === cases[i][4], name + " = " + e[cases[i][1]]);
+        r = e.getAttribute(cases[i][2]);
+        ok(r === cases[i][4], name + " attribute = " + r);
+        r = e.getAttributeNode(cases[i][2]).value;
+        ok(r === cases[i][4], name + " attribute node = " + r);
+    }
+});
+
+sync_test("table section props", function() {
+    var v = document.documentMode, i, e, d, s, r;
+    if(v < 9)
+        return;
+
+    var cases = [
+        [ "td", "abbr", "abbr" ], [ "td", "axis", "axis" ], [ "td", "ch", "char" ], [ "td", "chOff", "charOff" ],
+        [ "td", "headers", "headers" ], [ "td", "scope", "scope" ], [ "tr", "ch", "char" ], [ "tr", "chOff", "charOff" ],
+        [ "tr", "height", "height" ], [ "col", "ch", "char" ], [ "col", "chOff", "charOff" ], [ "col", "width", "width" ],
+        [ "col", "align", "align" ], [ "col", "vAlign", "vAlign" ], [ "colgroup", "ch", "char" ], [ "tbody", "ch", "char" ],
+        [ "tbody", "chOff", "charOff" ], [ "tbody", "align", "align" ], [ "thead", "vAlign", "vAlign" ], [ "tfoot", "ch", "char" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        e = document.createElement(cases[i][0]);
+        ok(e[cases[i][1]] === "", cases[i][0] + "." + cases[i][1] + " = " + e[cases[i][1]]);
+        e.setAttribute(cases[i][2], "7");
+        ok(e[cases[i][1]] === (cases[i][1] === "vAlign" ? "top" : cases[i][1] === "align" ? "" : "7"),
+           cases[i][0] + "." + cases[i][1] + " after setAttribute(" + cases[i][2] + ") = " + e[cases[i][1]]);
+    }
+
+    e = document.createElement("col");
+    e.setAttribute("width", "abc");
+    ok(e.width === "", "col.width after setAttribute(abc) = " + e.width);
+    e.setAttribute("width", "10px");
+    ok(e.width === "10", "col.width after setAttribute(10px) = " + e.width);
+    e.setAttribute("span", "1001");
+    ok(e.span === 1, "col.span after setAttribute(1001) = " + e.span);
+    e.setAttribute("span", "2.5");
+    ok(e.span === 2, "col.span after setAttribute(2.5) = " + e.span);
+    e.removeAttribute("span");
+    ok(e.span === 1, "col.span = " + e.span);
+    e.span = 2;
+    ok(e.getAttribute("span") === "2", "col span attribute = " + e.getAttribute("span"));
+    e.ch = "y";
+    ok(e.getAttribute("char") === "y", "col char attribute = " + e.getAttribute("char"));
+
+    d = document.createElement("div");
+    d.innerHTML = "<table><tbody><tr id='ra'><td>1</td></tr><tr id='rb'><td>2</td></tr></tbody></table>";
+    s = d.firstChild.tBodies[0];
+    ok(s.rows.length === 2, "tbody.rows.length = " + s.rows.length);
+    r = s.insertRow();
+    ok(Object.prototype.toString.call(r) === "[object HTMLTableRowElement]", "insertRow() = " + Object.prototype.toString.call(r));
+    ok(r.parentNode === s, "inserted row parent = " + r.parentNode);
+    ok(s.rows.length === 3, "tbody.rows.length after insertRow = " + s.rows.length);
+    s.deleteRow(0);
+    ok(s.rows[0].id === "rb", "first row after deleteRow(0) = " + s.rows[0].id);
+    s = document.createElement("thead");
+    r = s.insertRow();
+    ok(r.parentNode === s, "detached thead insertRow() parent = " + r.parentNode);
+});
+
+sync_test("body window event props", function() {
+    var v = document.documentMode, i, j, e, f, name, prev, todo;
+    var forwarded = [ "onload", "onunload", "onbeforeunload", "onblur", "onfocus", "onbeforeprint", "onafterprint", "onresize" ];
+    var own = [ "onerror", "onscroll" ];
+    if(v < 9)
+        return;
+
+    function mk(tag, attach) {
+        var r = document.createElement(tag);
+        if(attach)
+            document.body.appendChild(r);
+        return r;
+    }
+
+    for(i = 0; i < forwarded.length; i++) {
+        name = forwarded[i];
+        todo = v >= 11 && name === "onresize";
+        prev = window[name];
+        window[name] = null;
+
+        e = mk("body", false);
+        f = function() {};
+        ok(e[name] === undefined, "detached body." + name + " = " + e[name]);
+        e[name] = f;
+        todo_wine_if(todo).ok(e[name] === undefined, "detached body." + name + " after put = " + e[name]);
+        ok(window[name] === null, "window." + name + " after detached body put = " + window[name]);
+        document.body.appendChild(e);
+        todo_wine_if(todo).ok(e[name] === null, "body." + name + " attached after detached put = " + e[name]);
+        document.body.removeChild(e);
+
+        for(j = 0; j < 2; j++) {
+            if(j && name === "onfocus")
+                continue;
+            e = mk(j ? "frameset" : "body", true);
+            f = function() {};
+            e[name] = f;
+            ok(e[name] === f, e.tagName + "." + name + " = " + e[name]);
+            todo_wine_if(todo).ok(window[name] === f, "window." + name + " after nested " + e.tagName + " put = " + window[name]);
+            document.body.removeChild(e);
+            todo_wine_if(todo).ok(e[name] === undefined, "removed " + e.tagName + "." + name + " = " + e[name]);
+            todo_wine_if(todo).ok(window[name] === f, "window." + name + " after removing " + e.tagName + " = " + window[name]);
+        }
+
+        f = function() {};
+        document.body[name] = f;
+        ok(document.body[name] === f, "document.body." + name + " = " + document.body[name]);
+        todo_wine_if(todo).ok(window[name] === f, "window." + name + " after document.body put = " + window[name]);
+        document.body[name] = null;
+        window[name] = prev;
+    }
+
+    for(i = 0; i < own.length; i++) {
+        name = own[i];
+        prev = window[name];
+        window[name] = null;
+        e = mk("body", true);
+        f = function() {};
+        e[name] = f;
+        ok(e[name] === f, "body." + name + " = " + e[name]);
+        ok(window[name] === null, "window." + name + " after nested body put = " + window[name]);
+        document.body.removeChild(e);
+        ok(e[name] === f, "removed body." + name + " = " + e[name]);
+        window[name] = prev;
     }
 });
 
@@ -4485,6 +5018,10 @@ sync_test("prototype props", function() {
         "name", "nameProp", "pathname", "port", "protocol", "protocolLong", "rel", "rev", "search", "shape", "target", ["text",10], "toString", "type", "urn"
     ], [ "charset", "coords", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "hreflang", "shape", ["text",10], "type" ]);
     check(HTMLAreaElement, [ "alt", "coords", "hash", "host", "hostname", "href", "noHref", "pathname", "port", "protocol", "search", "shape", "target", "toString" ], null, [ "rel" ]);
+    check(HTMLBRElement, [ "clear" ]);
+    check(HTMLBaseElement, [ "href", "target" ]);
+    check(HTMLBaseFontElement, [ "color", "face", "size" ]);
+    check(HTMLBlockElement, [ "cite", "clear", "width" ]);
     check(HTMLButtonElement, [
         ["autofocus",10], ["checkValidity",10], "createTextRange", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10],
         "form", ["formAction",10], ["formEnctype",10], ["formMethod",10], ["formNoValidate",10], ["formTarget",10], "name",
@@ -4520,6 +5057,7 @@ sync_test("prototype props", function() {
         "getSVGDocument", "height", "hidden", ["msPlayToDisabled",11], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11],
         "name", "palette", "pluginspage", ["readyState",11], "src", "units", "width"
     ], [ "getSVGDocument", ["msPlayToDisabled",11], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], ["readyState",11] ]);
+    check(HTMLFontElement, [ "color", "face", "size" ]);
     check(HTMLFormElement, [
         "acceptCharset", "action", ["autocomplete",10], ["checkValidity",10], "elements", "encoding", "enctype", "item",
         "length", "method", "name", "namedItem", ["noValidate",10], "reset", "submit", "tags", "target", "urns"
@@ -4531,7 +5069,13 @@ sync_test("prototype props", function() {
         "allowTransparency", "borderColor", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "getSVGDocument", "height", "onload",
         ["onreadystatechange",11], ["readyState",11], "security", "width"
     ]);
+    check(HTMLFrameSetElement, [
+        "border", "borderColor", "cols", "frameBorder", "frameSpacing", "name", "onafterprint", "onbeforeprint", "onbeforeunload", "onblur",
+        "onerror", "onfocus", "onhashchange", "onload", "onmessage", "onoffline", "ononline", ["onpagehide",11], ["onpageshow",11], "onresize",
+        "onstorage", "onunload", "rows"
+    ], [ "onblur", "onerror", "onfocus", "onload", ["onpagehide",11], ["onpageshow",11], "onresize" ]);
     check(HTMLHeadElement, [ "profile" ]);
+    check(HTMLHeadingElement, [ "align", "clear" ]);
     check(HTMLHtmlElement, [ "version" ]);
     check(HTMLIFrameElement, [
         "align", "border", "contentDocument", "contentWindow", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10],
@@ -4565,6 +5109,7 @@ sync_test("prototype props", function() {
     check(HTMLLinkElement, [ "charset", "href", "hreflang", "media", "rel", "rev", "sheet", ["styleSheet",9,10], "target", "type" ],
                            [ "charset", "hreflang", ["onreadystatechange",11], ["readyState",11], "sheet", ["styleSheet",11], "target" ]);
     check(HTMLMetaElement, [ "charset", "content", "httpEquiv", "name", "scheme", "url" ], [ "scheme" ]);
+    check(HTMLModElement, [ "cite", "dateTime" ]);
     check(HTMLObjectElement, [
         "BaseHref", "align", "alt", "altHtml", "archive", "border", ["checkValidity",10], "classid", "code", "codeBase", "codeType", "contentDocument", "data",
         ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "declare", "form", "getSVGDocument", "height", "hspace", ["msPlayToDisabled",11],
@@ -4576,6 +5121,10 @@ sync_test("prototype props", function() {
     ]);
     check(HTMLOptionElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "defaultSelected", "form", "index", "label", "selected", "text", "value" ],
                              [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "label" ]);
+    check(HTMLParagraphElement, [ "align", "clear" ]);
+    check(HTMLPhraseElement, [ "cite", "dateTime" ]);
+    check(HTMLPreElement, [ "cite", "clear", "width" ]);
+    check(HTMLQuoteElement, [ "cite", "dateTime" ]);
     check(HTMLScriptElement, [ ["async",10], "charset", "defer", "event", "htmlFor", "src", "text", "type" ], [ ["async",10], "charset", ["readyState",11] ], [ "crossOrigin" ]);
     check(HTMLSelectElement, [
         "add", ["autofocus",10], ["checkValidity",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "item", "length",
@@ -4586,7 +5135,8 @@ sync_test("prototype props", function() {
     check(HTMLTableCellElement, [
         "abbr", "align", "axis", "background", "bgColor", "borderColor", "borderColorDark", "borderColorLight",
         "cellIndex", "ch", "chOff", "colSpan", "headers", "height", "noWrap", "rowSpan", "scope", "vAlign", "width"
-    ], [ "abbr", "axis", "ch", "chOff", "headers", "scope" ]);
+    ]);
+    check(HTMLTableColElement, [ "align", "ch", "chOff", "span", "vAlign", "width" ]);
     check(HTMLTableDataCellElement, []);
     check(HTMLTableElement, [
         "align", "background", "bgColor", "border", "borderColor", "borderColorDark", "borderColorLight", "caption", "cellPadding", "cells", "cellSpacing", "cols",
@@ -4600,7 +5150,8 @@ sync_test("prototype props", function() {
     check(HTMLTableRowElement, [
         "align", "bgColor", "borderColor", "borderColorDark", "borderColorLight", "cells", "ch", "chOff",
         "deleteCell", "height", "insertCell", "rowIndex", "sectionRowIndex", "vAlign"
-    ], [ "ch", "chOff", "height" ]);
+    ]);
+    check(HTMLTableSectionElement, [ "align", "bgColor", "ch", "chOff", "deleteRow", "insertRow", "moveRow", "rows", "vAlign" ]);
     check(HTMLTextAreaElement, [
         ["autofocus",10], ["checkValidity",10], "cols", "createTextRange", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "defaultValue", "form",
         ["maxLength",10], "name", ["placeholder",10], "readOnly", ["required",10], "rows", "select", "selectionEnd", "selectionStart", ["setCustomValidity",10],
@@ -4862,12 +5413,12 @@ async_test("window own props", function() {
             "CSSMediaRule", "CSSNamespaceRule", "CSSPageRule", "CSSRuleList", "DataTransfer", "Debug", ["DeviceAcceleration",11], ["DeviceMotionEvent",11],
             ["DeviceOrientationEvent",11], ["DeviceRotationRate",11], ["DOMError",10], "DOMException", ["DOMSettableTokenList",10], ["DOMStringList",10], ["DOMStringMap",11],
             "DragEvent", ["ErrorEvent",10], "EventException", ["EXT_texture_filter_anisotropic",11], ["File",10], ["FileList",10], ["FileReader",10],
-            "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement", "HTMLBaseElement",
-            "HTMLBaseFontElement", "HTMLBGSoundElement", "HTMLBlockElement", "HTMLBRElement", "HTMLCanvasElement", ["HTMLDataListElement",10], "HTMLDDElement", "HTMLDirectoryElement",
-            "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLFontElement", "HTMLFrameSetElement", "HTMLHeadingElement", "HTMLHRElement", "HTMLIsIndexElement",
-            "HTMLLegendElement", "HTMLLIElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLMenuElement", "HTMLModElement", "HTMLNextIdElement", "HTMLOListElement",
-            "HTMLOptGroupElement", "HTMLParagraphElement", "HTMLParamElement", "HTMLPhraseElement", "HTMLPreElement", ["HTMLProgressElement",10], "HTMLQuoteElement", "HTMLSourceElement",
-            "HTMLSpanElement", "HTMLTableCaptionElement", "HTMLTableColElement", "HTMLTableHeaderCellElement", "HTMLTableSectionElement", ["HTMLTrackElement",10], "HTMLUListElement",
+            "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement",
+            "HTMLBGSoundElement", "HTMLCanvasElement", ["HTMLDataListElement",10], "HTMLDDElement", "HTMLDirectoryElement",
+            "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLHRElement", "HTMLIsIndexElement",
+            "HTMLLegendElement", "HTMLLIElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLMenuElement", "HTMLNextIdElement", "HTMLOListElement",
+            "HTMLOptGroupElement", "HTMLParamElement", ["HTMLProgressElement",10], "HTMLSourceElement",
+            "HTMLSpanElement", "HTMLTableCaptionElement", "HTMLTableHeaderCellElement", ["HTMLTrackElement",10], "HTMLUListElement",
             "HTMLVideoElement", ["IDBCursor",10], ["IDBCursorWithValue",10], ["IDBDatabase",10], ["IDBFactory",10], ["IDBIndex",10], ["IDBKeyRange",10], ["IDBObjectStore",10], ["IDBOpenDBRequest",10],
             ["IDBRequest",10], ["IDBTransaction",10], ["IDBVersionChangeEvent",10], "ImageData", ["Intl",11], ["Key",11], ["KeyOperation",11],
             ["KeyPair",11], "Location", "MediaError", "MediaList", ["MediaSource",11], ["MessageChannel",10], ["MessagePort",10], ["MimeType",11], ["MimeTypeArray",9,10], "MouseWheelEvent",

@@ -1,6 +1,6 @@
 # 行動規範
 
-> [English](../../CODE_OF_CONDUCT.md) | [中文](../zh-CN/CODE_OF_CONDUCT.md) | [Français](../fr-FR/CODE_OF_CONDUCT.md) | [Español](../es-ES/CODE_OF_CONDUCT.md) | **日本語** | [العربية](../ar-MA/CODE_OF_CONDUCT.md)
+> [English](../../CODE_OF_CONDUCT.md) | [中文](../zh-CN/CODE_OF_CONDUCT.md) | [Français](../fr-FR/CODE_OF_CONDUCT.md) | [Español](../es-ES/CODE_OF_CONDUCT.md) | **日本語** | [العربية](../ar-MA/CODE_OF_CONDUCT.md) | [Українська](../uk-UA/CODE_OF_CONDUCT.md)
 
 **コミュニティのほかのメンバーに敬意を払ってください。**
 - 他者を侮辱し、あおり、攻撃し、あるいは他者への憎悪、差別、いじめを煽ることを目的とした議論を始めたり、それに加わったりしないでください。

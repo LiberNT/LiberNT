@@ -1,6 +1,6 @@
 # Cómo colaborar
 
-> [English](../../CONTRIBUTING.md) | [中文](../zh-CN/CONTRIBUTING.md) | [Français](../fr-FR/CONTRIBUTING.md) | **Español** | [日本語](../ja-JP/CONTRIBUTING.md) | [العربية](../ar-MA/CONTRIBUTING.md)
+> [English](../../CONTRIBUTING.md) | [中文](../zh-CN/CONTRIBUTING.md) | [Français](../fr-FR/CONTRIBUTING.md) | **Español** | [日本語](../ja-JP/CONTRIBUTING.md) | [العربية](../ar-MA/CONTRIBUTING.md) | [Українська](../uk-UA/CONTRIBUTING.md)
 
 LiberNT agradece los informes de errores, las pruebas, las correcciones, las nuevas funciones y la documentación. Esta página explica cómo enviar tu trabajo. Las reglas de ingeniería que sigue cada cambio están en [AGENTS.md](../../AGENTS.md), y se aplican por igual a los colaboradores humanos y a las herramientas de IA.
 

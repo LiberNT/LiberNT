@@ -1,6 +1,6 @@
 # Rules for managing Pull Requests
 
-> **English** | [中文](translations/zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](translations/fr-FR/PULL_REQUEST_MANAGEMENT.md) | [Español](translations/es-ES/PULL_REQUEST_MANAGEMENT.md) | [日本語](translations/ja-JP/PULL_REQUEST_MANAGEMENT.md) | [العربية](translations/ar-MA/PULL_REQUEST_MANAGEMENT.md)
+> **English** | [中文](translations/zh-CN/PULL_REQUEST_MANAGEMENT.md) | [Français](translations/fr-FR/PULL_REQUEST_MANAGEMENT.md) | [Español](translations/es-ES/PULL_REQUEST_MANAGEMENT.md) | [日本語](translations/ja-JP/PULL_REQUEST_MANAGEMENT.md) | [العربية](translations/ar-MA/PULL_REQUEST_MANAGEMENT.md) | [Українська](translations/uk-UA/PULL_REQUEST_MANAGEMENT.md)
 
 For the sake of trying to maintain an acceptable number of open but idle PRs, the following rules should be considered:
 - If a PR has at least one approval, it can be merged after 1 week of waiting for additional comments.

@@ -4752,9 +4752,6 @@ HRESULT set_event_handler(EventTarget *event_target, eventid_t eid, VARIANT *var
         VARIANT *v;
         HRESULT hres;
 
-        if(compat_mode == COMPAT_MODE_IE8)
-            FIXME("Setting to string %s not supported\n", debugstr_w(V_BSTR(var)));
-
         /*
          * Setting event handler to string is a rare case and we don't want to
          * complicate nor increase memory of listener_container_t for that. Instead,
@@ -4782,6 +4779,68 @@ HRESULT set_event_handler(EventTarget *event_target, eventid_t eid, VARIANT *var
     }
 
     return S_OK;
+}
+
+HRESULT set_node_event(HTMLDOMNode *node, eventid_t eid, VARIANT *var)
+{
+    EventTarget *target = get_node_event_prop_target(node, eid);
+    nsIDOMElement *nselem;
+    nsAString name_str;
+    WCHAR name[64];
+    nsresult nsres;
+
+    if(!target)
+        return S_OK;
+
+    if(target == &node->event_target && (V_VT(var) == VT_BSTR || V_VT(var) == VT_DISPATCH) &&
+       dispex_compat_mode(&node->event_target.dispex) == COMPAT_MODE_IE8 &&
+       NS_SUCCEEDED(nsIDOMNode_QueryInterface(node->nsnode, &IID_nsIDOMElement, (void**)&nselem))) {
+        swprintf(name, ARRAY_SIZE(name), L"on%s", event_info[eid].name);
+        nsAString_InitDepend(&name_str, name);
+        if(V_VT(var) == VT_BSTR) {
+            nsAString value_str;
+
+            nsAString_InitDepend(&value_str, V_BSTR(var));
+            nsres = nsIDOMElement_SetAttribute(nselem, &name_str, &value_str);
+            nsAString_Finish(&value_str);
+        }else {
+            nsres = nsIDOMElement_RemoveAttribute(nselem, &name_str);
+        }
+        nsAString_Finish(&name_str);
+        nsIDOMElement_Release(nselem);
+        if(NS_FAILED(nsres))
+            return map_nsresult(nsres);
+    }
+
+    return set_event_handler(target, eid, var);
+}
+
+BOOL is_event_attr(const WCHAR *name)
+{
+    WCHAR buf[64];
+
+    if(wcslen(name) >= ARRAY_SIZE(buf))
+        return FALSE;
+    wcscpy(buf, name);
+    return attr_to_eid(wcslwr(buf)) != EVENTID_LAST;
+}
+
+void remove_node_event_attr(HTMLDOMNode *node, const WCHAR *name)
+{
+    EventTarget *target;
+    WCHAR buf[64];
+    eventid_t eid;
+
+    if(wcslen(name) >= ARRAY_SIZE(buf))
+        return;
+    wcscpy(buf, name);
+    eid = attr_to_eid(wcslwr(buf));
+    if(eid == EVENTID_LAST)
+        return;
+
+    target = get_node_event_prop_target(node, eid);
+    if(target == &node->event_target)
+        remove_event_handler(target, eid);
 }
 
 HRESULT get_event_handler(EventTarget *event_target, eventid_t eid, VARIANT *var)
@@ -4913,7 +4972,9 @@ void event_attr_changed(HTMLDocumentNode *doc, nsIDOMElement *nselem, const WCHA
 
         disp = script_parse_event(doc->window, value);
         if(disp) {
-            set_event_handler_disp(get_node_event_prop_target(node, eid), eid, disp);
+            EventTarget *target = get_node_event_prop_target(node, eid);
+            if(target)
+                set_event_handler_disp(target, eid, disp);
             IDispatch_Release(disp);
         }
     }
@@ -4929,6 +4990,7 @@ void check_event_attr(HTMLDocumentNode *doc, nsIDOMElement *nselem)
     const PRUnichar *name, *value;
     nsAString name_str, value_str;
     HTMLDOMNode *node = NULL;
+    EventTarget *target;
     cpp_bool has_attrs;
     nsIDOMAttr *attr;
     IDispatch *disp;
@@ -4992,7 +5054,9 @@ void check_event_attr(HTMLDocumentNode *doc, nsIDOMElement *nselem)
             }
         }
 
-        set_event_handler_disp(get_node_event_prop_target(node, eid), eid, disp);
+        target = get_node_event_prop_target(node, eid);
+        if(target)
+            set_event_handler_disp(target, eid, disp);
         IDispatch_Release(disp);
     }
 

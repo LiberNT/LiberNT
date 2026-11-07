@@ -1446,7 +1446,10 @@ LONG LxTtyOpenSlave(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty, _In_ ULONG Flags
 LONG LxPtmxOpen(_In_ PLX_PROCESS Process, _In_ PLX_DEVPTS Devpts, _In_ ULONG Flags, _Out_ PLX_FILE *File);
 ULONG64 LxTtyDevice(_In_ PLX_TTY Tty);
 ULONG LxTtyList(_In_ PLX_INSTANCE Instance, _In_ PLX_DEVPTS Devpts, _Out_writes_(Count) PULONG Indexes, _In_ ULONG Count);
-VOID LxTtyAttachControlling(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty);
+BOOLEAN LxTtyAttachControlling(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty);
+VOID LxTtyCheckSession(_In_ PLX_PROCESS Process);
+PLX_TTY LxProcessGetTty(_In_ PLX_PROCESS Process);
+VOID LxTtyDisassociate(_In_ PLX_PROCESS Process, _In_ BOOLEAN Exiting);
 ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal);
 ULONG LxSignalGroupInfo(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal,
                         _In_opt_ PLX_SIGINFO Info, _In_opt_ PLX_PROCESS Sender, _Out_opt_ PULONG Denied);

@@ -1,6 +1,6 @@
 # Contribuer à LiberNT
 
-> [English](../../CONTRIBUTING.md) | [中文](../zh-CN/CONTRIBUTING.md) | **Français** | [Español](../es-ES/CONTRIBUTING.md) | [日本語](../ja-JP/CONTRIBUTING.md) | [العربية](../ar-MA/CONTRIBUTING.md)
+> [English](../../CONTRIBUTING.md) | [中文](../zh-CN/CONTRIBUTING.md) | **Français** | [Español](../es-ES/CONTRIBUTING.md) | [日本語](../ja-JP/CONTRIBUTING.md) | [العربية](../ar-MA/CONTRIBUTING.md) | [Українська](../uk-UA/CONTRIBUTING.md)
 
 LiberNT accueille volontiers les rapports de bogues, les tests, les correctifs, les nouvelles fonctions et la documentation. Cette page explique comment envoyer votre travail. Les règles d'ingénierie que suit chaque modification se trouvent dans [AGENTS.md](../../AGENTS.md), et elles s'appliquent aussi bien aux contributeurs humains qu'aux outils d'IA.
 

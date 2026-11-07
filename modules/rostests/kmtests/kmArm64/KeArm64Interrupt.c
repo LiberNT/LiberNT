@@ -10,6 +10,12 @@
 VOID Test_KeArm64Interrupt(VOID);
 
 typedef BOOLEAN (NTAPI *PKMT_DISPATCH_SECONDARY)(ULONG, ULONG_PTR, PVOID);
+typedef BOOLEAN (NTAPI *PKMT_CONNECT_INTERRUPT)(PKINTERRUPT);
+typedef BOOLEAN (NTAPI *PKMT_DISCONNECT_INTERRUPT)(PKINTERRUPT);
+static PKMT_CONNECT_INTERRUPT ConnectInterrupt;
+static PKMT_DISCONNECT_INTERRUPT DisconnectInterrupt;
+typedef ULONG (NTAPI *PKMT_GET_INTERRUPT_VECTOR)(INTERFACE_TYPE, ULONG, ULONG, ULONG, PKIRQL, PKAFFINITY);
+static PKMT_GET_INTERRUPT_VECTOR GetInterruptVector;
 
 typedef struct _KMT_ISR_CONTEXT
 {
@@ -139,7 +145,7 @@ TestDisconnect(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql, ULONG
         Status = HalAllocateGsivForSecondaryInterrupt("kmtest-nested", sizeof("kmtest-nested") - 1, &Gsiv);
         ok_eq_hex(Status, STATUS_SUCCESS);
         if (!NT_SUCCESS(Status)) return;
-        NestedVector = HalGetInterruptVector(Internal, 0, Gsiv, 0, &NestedIrql, &Affinity);
+        NestedVector = GetInterruptVector(Internal, 0, Gsiv, 0, &NestedIrql, &Affinity);
         ok(NestedVector != 0 && NestedIrql <= CLOCK_LEVEL, "Invalid nested vector %lu IRQL %u\n", NestedVector, NestedIrql);
         if (!NestedVector || NestedIrql > CLOCK_LEVEL) return;
         NestedState = State;
@@ -150,21 +156,21 @@ TestDisconnect(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql, ULONG
         KeInitializeInterrupt(&OtherInterrupt, HoldIsr, &NestedState, NULL,
                               NestedVector, NestedIrql, CLOCK_LEVEL, LevelSensitive, FALSE, 1, FALSE);
     }
-    if ((Mode == 2 || Mode == 3) && !KeConnectInterrupt(&OtherInterrupt))
+    if ((Mode == 2 || Mode == 3) && !ConnectInterrupt(&OtherInterrupt))
     {
         ok(FALSE, "Cannot connect the first shared/nested ISR\n");
         return;
     }
-    if (!KeConnectInterrupt(&Interrupt))
+    if (!ConnectInterrupt(&Interrupt))
     {
         ok(FALSE, "Cannot connect the disconnect-test ISR\n");
-        if (OtherInterrupt.Connected) KeDisconnectInterrupt(&OtherInterrupt);
+        if (OtherInterrupt.Connected) DisconnectInterrupt(&OtherInterrupt);
         return;
     }
-    if (Mode == 1 && !KeConnectInterrupt(&OtherInterrupt))
+    if (Mode == 1 && !ConnectInterrupt(&OtherInterrupt))
     {
         ok(FALSE, "Cannot connect the second shared ISR\n");
-        KeDisconnectInterrupt(&Interrupt);
+        DisconnectInterrupt(&Interrupt);
         return;
     }
 
@@ -183,7 +189,7 @@ TestDisconnect(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql, ULONG
         ok_eq_long(WaitState->Entered, 1);
         ok_eq_long(State.Finished, 0);
         InterlockedExchange(&WaitState->Observed, 1);
-        Result = KeDisconnectInterrupt(&Interrupt);
+        Result = DisconnectInterrupt(&Interrupt);
         ok_eq_bool(Result, TRUE);
         ok(State.Finished == 1, "Disconnect returned while the ISR was still running\n");
         Status = ZwWaitForSingleObject(Thread, FALSE, NULL);
@@ -203,14 +209,14 @@ TestDisconnect(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql, ULONG
             Result = Dispatch(Vector, 0, NULL);
             ok_eq_bool(Result, FALSE);
         }
-        Result = KeDisconnectInterrupt(&Interrupt);
+        Result = DisconnectInterrupt(&Interrupt);
         ok_eq_bool(Result, FALSE);
     }
     else
     {
-        KeDisconnectInterrupt(&Interrupt);
+        DisconnectInterrupt(&Interrupt);
     }
-    if (OtherInterrupt.Connected) KeDisconnectInterrupt(&OtherInterrupt);
+    if (OtherInterrupt.Connected) DisconnectInterrupt(&OtherInterrupt);
     Result = Dispatch(Vector, 0, NULL);
     ok_eq_bool(Result, FALSE);
     KeRevertToUserAffinityThread();
@@ -227,7 +233,7 @@ TestFailedConnection(PKMT_DISPATCH_SECONDARY Dispatch)
     KeInitializeInterrupt(&Interrupt, RecordIsr, &Record, NULL, 1020,
                           DISPATCH_LEVEL + 1, DISPATCH_LEVEL + 1,
                           LevelSensitive, FALSE, 0, FALSE);
-    Connected = KeConnectInterrupt(&Interrupt);
+    Connected = ConnectInterrupt(&Interrupt);
     ok_eq_bool(Connected, FALSE);
     ok_eq_bool(Interrupt.Connected, FALSE);
     Dispatched = Dispatch(Interrupt.Vector, 0, NULL);
@@ -235,7 +241,7 @@ TestFailedConnection(PKMT_DISPATCH_SECONDARY Dispatch)
     ok_eq_ulong(Record.Calls, 0);
     trace("INTERRUPT_CONNECT_FAILURE result=%u connected=%u dispatched=%u calls=%lu\n",
           Connected, Interrupt.Connected, Dispatched, Record.Calls);
-    if (Interrupt.Connected) KeDisconnectInterrupt(&Interrupt);
+    if (Interrupt.Connected) DisconnectInterrupt(&Interrupt);
     ok_eq_bool(Dispatch(Interrupt.Vector, 0, NULL), FALSE);
 }
 
@@ -291,8 +297,8 @@ TestIndependentInterruptChains(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, K
                           Vector, Irql, Irql, LevelSensitive, TRUE, 0, FALSE);
     KeInitializeInterrupt(&OtherCpu, UnrelatedIsr, &State, NULL,
                           Vector, Irql, Irql, LevelSensitive, FALSE, 1, FALSE);
-    ok_eq_bool(KeConnectInterrupt(&Local), TRUE);
-    ok_eq_bool(KeConnectInterrupt(&OtherCpu), TRUE);
+    ok_eq_bool(ConnectInterrupt(&Local), TRUE);
+    ok_eq_bool(ConnectInterrupt(&OtherCpu), TRUE);
     if (!Local.Connected || !OtherCpu.Connected) goto Cleanup;
 
     Status = PsCreateSystemThread(&Thread, THREAD_ALL_ACCESS, NULL, NULL, NULL,
@@ -307,9 +313,9 @@ TestIndependentInterruptChains(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, K
     ok_eq_long(State.DispatchState.Entered, 1);
 
     /* An ISR using CPU 1's table must not hold up edits to CPU 0's table. */
-    ok_eq_bool(KeConnectInterrupt(&Shared), TRUE);
-    ok_eq_bool(KeDisconnectInterrupt(&Shared), TRUE);
-    ok_eq_bool(KeDisconnectInterrupt(&Local), TRUE);
+    ok_eq_bool(ConnectInterrupt(&Shared), TRUE);
+    ok_eq_bool(DisconnectInterrupt(&Shared), TRUE);
+    ok_eq_bool(DisconnectInterrupt(&Local), TRUE);
     InterlockedExchange(&State.Release, 1);
     Status = ZwWaitForSingleObject(Thread, FALSE, NULL);
     ok_eq_hex(Status, STATUS_SUCCESS);
@@ -319,9 +325,9 @@ TestIndependentInterruptChains(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, K
     trace("INTERRUPT_CHAIN_ISOLATION unrelated_isr_timed_out=%ld\n", State.TimedOut);
 
 Cleanup:
-    if (Shared.Connected) KeDisconnectInterrupt(&Shared);
-    if (Local.Connected) KeDisconnectInterrupt(&Local);
-    if (OtherCpu.Connected) KeDisconnectInterrupt(&OtherCpu);
+    if (Shared.Connected) DisconnectInterrupt(&Shared);
+    if (Local.Connected) DisconnectInterrupt(&Local);
+    if (OtherCpu.Connected) DisconnectInterrupt(&OtherCpu);
     KeRevertToUserAffinityThreadEx(PreviousAffinity);
 }
 
@@ -361,7 +367,7 @@ ConnectWorker(PVOID Parameter)
             YieldProcessor();
             continue;
         }
-        Race->Result[Writer->Index] = KeConnectInterrupt(&Race->Interrupt);
+        Race->Result[Writer->Index] = ConnectInterrupt(&Race->Interrupt);
         InterlockedExchange(&Race->Done[Writer->Index], Next);
         KeSetEvent(&Race->Completed[Writer->Index], IO_NO_INCREMENT, FALSE);
         Phase = Next;
@@ -423,7 +429,7 @@ TestConcurrentConnection(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL I
             /* Repair only the test-owned flag so a failed round can be detached. */
             if (Dispatched && Race.Record.Calls == 1) Race.Interrupt.Connected = TRUE;
         }
-        if (!KeDisconnectInterrupt(&Race.Interrupt)) DisconnectErrors++;
+        if (!DisconnectInterrupt(&Race.Interrupt)) DisconnectErrors++;
         if (Dispatch(Vector, 0, NULL)) DisconnectErrors++;
         Completed++;
     }
@@ -435,7 +441,7 @@ Cleanup:
     Race.Record.Calls = 0;
     if (Dispatch(Vector, 0, NULL) && Race.Record.Calls == 1)
         Race.Interrupt.Connected = TRUE;
-    if (Race.Interrupt.Connected) KeDisconnectInterrupt(&Race.Interrupt);
+    if (Race.Interrupt.Connected) DisconnectInterrupt(&Race.Interrupt);
     KeRevertToUserAffinityThreadEx(PreviousAffinity);
     ok_eq_ulong(Completed, CONNECT_ROUNDS);
     ok_eq_ulong(LostState, 0);
@@ -502,8 +508,14 @@ START_TEST(KeArm64Interrupt)
     NTSTATUS Status;
     BOOLEAN Dispatched;
 
+    TestIpiCounts();
     Dispatch = (PKMT_DISPATCH_SECONDARY)KmtGetSystemRoutineAddress(L"KeDispatchSecondaryInterrupt");
     if (skip(Dispatch != NULL, "Secondary interrupt dispatcher unavailable\n")) return;
+    ConnectInterrupt = (PKMT_CONNECT_INTERRUPT)KmtGetSystemRoutineAddress(L"KeConnectInterrupt");
+    DisconnectInterrupt = (PKMT_DISCONNECT_INTERRUPT)KmtGetSystemRoutineAddress(L"KeDisconnectInterrupt");
+    GetInterruptVector = (PKMT_GET_INTERRUPT_VECTOR)KmtGetSystemRoutineAddress(L"HalGetInterruptVector");
+    if (skip(ConnectInterrupt != NULL && DisconnectInterrupt != NULL && GetInterruptVector != NULL,
+             "Interrupt connection routines unavailable\n")) return;
     Status = HalQuerySystemInformation(HalSecondaryInterruptInformation, sizeof(Information), &Information, NULL);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status)) return;
@@ -511,7 +523,7 @@ START_TEST(KeArm64Interrupt)
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status)) return;
 
-    Vector = HalGetInterruptVector(Internal, 0, Gsiv, 0, &Irql, &Affinity);
+    Vector = GetInterruptVector(Internal, 0, Gsiv, 0, &Irql, &Affinity);
     ok(Vector != 0 && Irql > DISPATCH_LEVEL && Irql < CLOCK_LEVEL,
        "Secondary vector %lu IRQL %u\n", Vector, Irql);
     if (Vector == 0 || Irql <= DISPATCH_LEVEL || Irql >= CLOCK_LEVEL) return;
@@ -523,7 +535,7 @@ START_TEST(KeArm64Interrupt)
         for (Index = 0; Index < 2; Index++)
             KeInitializeInterrupt(&Interrupts[Index], RecordIsr, &Records[Index], NULL,
                                   Vector, Irql, CLOCK_LEVEL, LevelSensitive, TRUE, (CHAR)Cpu, FALSE);
-        if (!KeConnectInterrupt(&Interrupts[0]))
+        if (!ConnectInterrupt(&Interrupts[0]))
         {
             ok(FALSE, "Cannot connect the first ISR on CPU %lu\n", Cpu);
             KeRevertToUserAffinityThread();
@@ -531,7 +543,7 @@ START_TEST(KeArm64Interrupt)
         }
         for (Count = 1; Count <= 2; Count++)
         {
-            if (Count == 2 && !KeConnectInterrupt(&Interrupts[1]))
+            if (Count == 2 && !ConnectInterrupt(&Interrupts[1]))
             {
                 ok(FALSE, "Cannot connect the shared ISR on CPU %lu\n", Cpu);
                 break;
@@ -553,13 +565,12 @@ START_TEST(KeArm64Interrupt)
                    Count, Cpu, Index, Records[Index].Irql, CLOCK_LEVEL);
             }
         }
-        if (Interrupts[1].Connected) KeDisconnectInterrupt(&Interrupts[1]);
-        KeDisconnectInterrupt(&Interrupts[0]);
+        if (Interrupts[1].Connected) DisconnectInterrupt(&Interrupts[1]);
+        DisconnectInterrupt(&Interrupts[0]);
         Dispatched = Dispatch(Vector, 0, NULL);
         ok_eq_bool(Dispatched, FALSE);
         KeRevertToUserAffinityThread();
     }
-    TestIpiCounts();
     for (Index = 0; Index < 4; Index++)
         TestDisconnect(Dispatch, Vector, Irql, Index);
     TestFailedConnection(Dispatch);

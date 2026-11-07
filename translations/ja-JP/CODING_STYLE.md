@@ -1,6 +1,6 @@
 # コーディングスタイル
 
-> [English](../../CODING_STYLE.md) | [中文](../zh-CN/CODING_STYLE.md) | [Français](../fr-FR/CODING_STYLE.md) | [Español](../es-ES/CODING_STYLE.md) | **日本語** | [العربية](../ar-MA/CODING_STYLE.md)
+> [English](../../CODING_STYLE.md) | [中文](../zh-CN/CODING_STYLE.md) | [Français](../fr-FR/CODING_STYLE.md) | [Español](../es-ES/CODING_STYLE.md) | **日本語** | [العربية](../ar-MA/CODING_STYLE.md) | [Українська](../uk-UA/CODING_STYLE.md)
 
 この記事では、LiberNT の新しいコードで使うべき一般的なコーディングスタイルのガイドラインを説明します。このガイドラインは C と C++ のソースファイルにのみ適用されます。これは ReactOS のコーディングスタイルに由来し、ReactOS のメンバーが 2013 年 10 月の会合で合意したものです。
 
