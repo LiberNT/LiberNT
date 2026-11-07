@@ -138,7 +138,7 @@ IsDriveLetterAllowed(
     _In_ PPARTENTRY PartEntry)
 {
     if (PartEntry->DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
-        return TRUE;
+        return PartEntry->PartitionType != PARTITION_SYSTEM;
 
     if (IsEqualGUID(&PartEntry->PartitionTypeGuid, &PARTITION_SYSTEM_GUID))
         return FALSE;
@@ -1235,6 +1235,7 @@ AddVolume:
     }
     else if (IsRecognizedPartition(PartEntry->PartitionType) || // PartitionInfo->RecognizedPartition
              IsOEMPartition(PartEntry->PartitionType) ||
+             PartEntry->PartitionType == PARTITION_SYSTEM ||
              IsEqualGUID(&PartEntry->PartitionTypeGuid, &PARTITION_SYSTEM_GUID))
     {
         PVOLENTRY Volume;
