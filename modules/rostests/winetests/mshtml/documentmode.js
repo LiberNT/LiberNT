@@ -3968,6 +3968,47 @@ async_test("postMessage", function() {
     if(v < 9) next_test();
 });
 
+async_test("postMessage targetOrigin", function() {
+    var v = document.documentMode, i, delivered = {}, threw = [];
+    var targets = [
+        [ "about:blank", 0, 0 ], [ "about:", 0, 0 ], [ "file:///c:/x", 0, 0 ], [ "file:", 0, 0 ],
+        [ "file://winetest.example.org/x", 1, 0 ], [ "mailto:a@winetest.example.org", 0, 0 ],
+        [ "javascript:void(0)", 0, 0 ], [ "data:text/plain,x", 0, 0 ], [ "foo:bar", 0, 0 ],
+        [ "foo://winetest.example.org", 1, 0 ], [ "http:", 0, 0 ], [ "http://", 1, 0 ],
+        [ "http:winetest.example.org", 0, 0 ], [ "http:/winetest.example.org", 0, 0 ],
+        [ "HTTP://WINETEST.EXAMPLE.ORG", 1, 1 ], [ "http://winetest.example.org/p?q#f", 1, 1 ],
+        [ "http://winetest.example.org:80", 1, 1 ], [ "http://winetest.example.org:", 1, 1 ],
+        [ "http://u:p@winetest.example.org", 1, 1 ], [ "https://winetest.example.org", 1, 0 ],
+        [ "res://mshtml.dll/x", 1, 0 ], [ "x", 0, 0 ], [ "/", v >= 9 ? 1 : 0, v >= 9 ? 1 : 0 ],
+        [ "//winetest.example.org", 0, 0 ], [ " http://winetest.example.org", 1, 1 ],
+        [ "http://winetest.example.org.", 1, 0 ], [ "http://*", 1, 0 ], [ " *", 0, 0 ], [ "**", 0, 0 ],
+        [ "http://[::1]", 1, 0 ], [ "\\\\winetest.example.org\\x", 0, 0 ], [ "http://winetest%2eexample.org", 1, 1 ]
+    ];
+
+    window.onmessage = function(e) {
+        var data = v < 9 ? window.event.data : e.data;
+        if(data !== "end") {
+            delivered[data] = true;
+            return;
+        }
+        for(i = 0; i < targets.length; i++) {
+            ok(targets[i][1] ? threw[i] === undefined : threw[i] !== undefined && (v >= 10 || threw[i] === 0x80070057),
+               "postMessage with targetOrigin '" + targets[i][0] + "' threw " + threw[i]);
+            ok(!!delivered[i] === !!targets[i][2], "postMessage with targetOrigin '" + targets[i][0] + "' delivered " + !!delivered[i]);
+        }
+        window.onmessage = null;
+        next_test();
+    };
+    for(i = 0; i < targets.length; i++) {
+        try {
+            window.postMessage(String(i), targets[i][0]);
+        }catch(ex) {
+            threw[i] = ex.number >>> 0;
+        }
+    }
+    window.postMessage("end", "*");
+});
+
 sync_test("form", function() {
     document.body.innerHTML = "";
     var form = document.createElement("form");
