@@ -273,6 +273,8 @@ VOID LoadSystemCursors(VOID)
 {
    if (!UserGetServerInfo(hIconSmWindows, ROS_SERVERINFO_HICONSMWINDOWS))
    {
+       ULONG Previous = User32BeginSystemDpiContext();
+
        TRACE("Loading System Cursors\n");
        NtUserSetSystemCursor(LoadImageW( 0, IDC_ARROW,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_NORMAL);
        NtUserSetSystemCursor(LoadImageW( 0, IDC_IBEAM,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_IBEAM);
@@ -290,6 +292,7 @@ VOID LoadSystemCursors(VOID)
        NtUserSetSystemCursor(LoadImageW( 0, IDC_HAND,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_HAND);
        NtUserSetSystemCursor(LoadImageW( 0, IDC_APPSTARTING, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_APPSTARTING);
        NtUserSetSystemCursor(LoadImageW( 0, IDC_HELP,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_HELP);
+       User32EndSystemDpiContext(Previous);
    }
 }
 
@@ -322,6 +325,7 @@ VOID LoadUserCursors(VOID)
     DWORD BaseSize = 0, BaseSizeLength = sizeof(BaseSize), Type;
     HKEY Key = NULL;
     UINT i;
+    ULONG Previous = User32BeginSystemDpiContext();
 
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
         Key = NULL;
@@ -331,6 +335,8 @@ VOID LoadUserCursors(VOID)
     {
         BaseSize = 0;
     }
+    if (BaseSize)
+        BaseSize = MulDiv(BaseSize, GetSystemMetrics(SM_CXCURSOR), 32);
     for (i = 0; i < ARRAYSIZE(UserCursorScheme); i++)
     {
         DWORD Size = sizeof(Path) - sizeof(WCHAR);
@@ -351,6 +357,7 @@ VOID LoadUserCursors(VOID)
     }
     if (Key)
         RegCloseKey(Key);
+    User32EndSystemDpiContext(Previous);
 }
 
 /* This callback routine is called directly after switching to gui mode */
