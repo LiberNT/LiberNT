@@ -835,6 +835,10 @@ MiSecureRangeConflict(
     {
         PMI_SECURE_RANGE Range = CONTAINING_RECORD(Entry, MI_SECURE_RANGE, Link);
 
+        ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        ASSERT(Range->Process != NULL && MI_PROCESS_OF(Range->Process) != NULL);
+        ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount > 0);
+        ASSERT(Range->Mode == PAGE_READONLY || Range->Mode == PAGE_READWRITE);
         if (Range->Process != Process || End <= Range->Start || Start >= Range->End)
             continue;
 
@@ -871,6 +875,8 @@ MiSecureRangePurgeProcess(
         Entry = Entry->Flink;
         if (Range->Process == Process)
         {
+            ASSERT(Range->Link.Flink->Blink == &Range->Link && Range->Link.Blink->Flink == &Range->Link);
+            ASSERT(MI_PROCESS_OF(Process)->SecureRangeCount > 0);
             RemoveEntryList(&Range->Link);
             InsertTailList(&Purged, &Range->Link);
             InterlockedDecrement(&MI_PROCESS_OF(Process)->SecureRangeCount);
@@ -898,6 +904,9 @@ MiSecureRangeRemove(
     {
         if (Entry == &Target->Link)
         {
+            ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+            ASSERT(Target->Process != NULL && MI_PROCESS_OF(Target->Process) != NULL);
+            ASSERT(MI_PROCESS_OF(Target->Process)->SecureRangeCount > 0);
             RemoveEntryList(Entry);
             InterlockedDecrement(&MI_PROCESS_OF(Target->Process)->SecureRangeCount);
             Found = TRUE;
@@ -935,6 +944,9 @@ MmSecureVirtualMemory(
     Range->Mode = Mode;
 
     KeAcquireSpinLock(&MiSecureRangeLock, &OldIrql);
+    ASSERT(MI_PROCESS_OF(Range->Process) != NULL);
+    ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount >= 0);
+    ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount < MAXLONG);
     InsertTailList(&MiSecureRanges, &Range->Link);
     InterlockedIncrement(&MI_PROCESS_OF(Range->Process)->SecureRangeCount);
     KeReleaseSpinLock(&MiSecureRangeLock, OldIrql);
@@ -952,6 +964,9 @@ MmSecureVirtualMemory(
             return NULL;
         }
 
+        ASSERT(Info.BaseAddress <= Va);
+        ASSERT(Info.RegionSize > Va - Info.BaseAddress);
+        ASSERT(Info.BaseAddress + Info.RegionSize > Va);
         Va = Info.BaseAddress + Info.RegionSize;
     }
 
