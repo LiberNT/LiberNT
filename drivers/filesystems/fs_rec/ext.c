@@ -33,7 +33,8 @@ FsRecExtFsControl(IN PDEVICE_OBJECT DeviceObject,
     PIO_STACK_LOCATION Stack;
     NTSTATUS Status;
     PDEVICE_OBJECT MountDevice;
-    PEXT_SUPER_BLOCK Spb = NULL;
+    PEXT_SUPER_BLOCK Spb;
+    PUCHAR Buffer = NULL;
     ULONG SectorSize;
     LARGE_INTEGER Offset;
     BOOLEAN DeviceError = FALSE;
@@ -53,14 +54,15 @@ FsRecExtFsControl(IN PDEVICE_OBJECT DeviceObject,
             if (FsRecGetDeviceSectorSize(MountDevice, &SectorSize))
             {
                 /* Try to read the superblock */
-                Offset.QuadPart = EXT_SB_OFFSET;
+                Offset.QuadPart = ROUND_DOWN(EXT_SB_OFFSET, SectorSize);
                 if (FsRecReadBlock(MountDevice,
                                    &Offset,
-                                   EXT_SB_SIZE,
+                                   EXT_SB_OFFSET + EXT_SB_SIZE - Offset.LowPart,
                                    SectorSize,
-                                   (PVOID)&Spb,
+                                   (PVOID)&Buffer,
                                    &DeviceError))
                 {
+                    Spb = (PEXT_SUPER_BLOCK)(Buffer + EXT_SB_OFFSET - Offset.LowPart);
                     /* Check if it's an actual EXT volume */
                     if (FsRecIsExtVolume(Spb))
                     {
@@ -70,7 +72,7 @@ FsRecExtFsControl(IN PDEVICE_OBJECT DeviceObject,
                 }
 
                 /* Free the boot sector if we have one */
-                ExFreePool(Spb);
+                if (Buffer) ExFreePool(Buffer);
             }
             else
             {
