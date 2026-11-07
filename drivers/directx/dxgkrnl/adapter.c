@@ -587,7 +587,9 @@ DxgkpShouldRegisterDisplayBridge(
 }
 
 /* Complete the claimant-bound handoff after the complete start state has been
- * published. A successful or non-restartable claimant commits the handoff.
+ * published. A successful claimant commits the handoff. A non-restartable
+ * failure defers the rollback to the claimant's RemoveDevice, when its
+ * hardware is no longer driven.
  * A restartable failure starts the retained BasicDisplay FDO again while the
  * ownership mutex excludes a second claimant. KMUTEX recursion permits the
  * fallback's AcquirePostDisplayOwnership callback on this same thread. */
@@ -623,13 +625,39 @@ DxgkpCompletePostDisplayHandoff(
     FallbackAdapter = Claimant->PostDisplayFallbackAdapter;
     FallbackDeviceObject = Claimant->PostDisplayFallbackDeviceObject;
     FallbackRemoveRundownHeld = Claimant->PostDisplayFallbackRemoveRundownHeld;
-    Claimant->PostDisplayFallbackAdapter = NULL;
-    Claimant->PostDisplayFallbackDeviceObject = NULL;
     Claimant->PostDisplayFallbackRemoveRundownHeld = FALSE;
     ASSERT(FallbackAdapter != NULL);
     ASSERT(FallbackDeviceObject != NULL);
-    ASSERT(FallbackRemoveRundownHeld);
+    if (Action == DxgkPostDisplayCompletionDefer)
+    {
+        KeReleaseMutex(&g_PostDisplayOwnershipMutex, FALSE);
+        DXGKRNL_WARN("POSTDISPLAY_HANDOFF: claimant %p failed 0x%08lX and "
+                     "could not be stopped; BasicDisplay adapter %p restarts "
+                     "when the claimant is removed\n",
+                     Claimant,
+                     StartStatus,
+                     FallbackAdapter);
+        if (FallbackRemoveRundownHeld && FallbackAdapter != NULL)
+            ExReleaseRundownProtection(&FallbackAdapter->RemoveRundownRef);
+        return;
+    }
+    Claimant->PostDisplayFallbackAdapter = NULL;
+    Claimant->PostDisplayFallbackDeviceObject = NULL;
     SuppressFallbackUi = (Action == DxgkPostDisplayCompletionCommit);
+
+    if (Action == DxgkPostDisplayCompletionRollback && FallbackAdapter != NULL &&
+        !FallbackRemoveRundownHeld)
+    {
+        FallbackRemoveRundownHeld = ExAcquireRundownProtection(&FallbackAdapter->RemoveRundownRef);
+        if (!FallbackRemoveRundownHeld)
+        {
+            DXGKRNL_WARN("POSTDISPLAY_ROLLBACK: BasicDisplay adapter %p is "
+                         "being removed; claimant %p leaves no display owner\n",
+                         FallbackAdapter,
+                         Claimant);
+            FallbackAdapter = NULL;
+        }
+    }
 
     if (Action == DxgkPostDisplayCompletionRollback && FallbackAdapter != NULL)
     {
@@ -15869,6 +15897,7 @@ DxgkAdapterRemove(
     (VOID)DxgkCleanupAdapterDevices(Adapter);
     DxgkpReleaseAdapterResources(Adapter);
     DxgkpReleasePostDisplayMapping(Adapter);
+    DxgkpCompletePostDisplayHandoff(Adapter, STATUS_DEVICE_REMOVED, TRUE);
 
     /* Delete all child PDOs. */
     while (!IsListEmpty(&Adapter->ChildListHead))
