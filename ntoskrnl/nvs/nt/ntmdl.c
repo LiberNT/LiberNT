@@ -438,11 +438,14 @@ MmUnmapLockedPages(
     }
 
     ASSERT(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA);
+    ASSERT(Mdl->MappedSystemVa != NULL);
 
     if (Mdl->MdlFlags & MDL_FREE_EXTRA_PTES)
     {
         ULONG Extra = (ULONG)Pages[Count];
 
+        ASSERT(Extra != 0);
+        ASSERT(Extra <= MAXULONG - Count);
         Base -= (ULONG64)Extra << PAGE_SHIFT;
         Count += Extra;
         Mdl->MdlFlags &= ~MDL_FREE_EXTRA_PTES;
@@ -467,13 +470,18 @@ MmAdvanceMdl(
     if (NumberOfBytes >= Mdl->ByteCount)
         return STATUS_INVALID_PARAMETER_2;
 
+    ASSERT(Mdl->ByteOffset < PAGE_SIZE);
+    ASSERT(!(Mdl->MdlFlags & MDL_FREE_EXTRA_PTES) || (Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA));
     NewOffset = Mdl->ByteOffset + NumberOfBytes;
     Skipped = NewOffset >> PAGE_SHIFT;
+    ASSERT(Skipped < Total);
 
     if (Skipped != 0)
     {
         ULONG Extra = (Mdl->MdlFlags & MDL_FREE_EXTRA_PTES) ? (ULONG)Pages[Total] : 0;
 
+        ASSERT(!(Mdl->MdlFlags & MDL_FREE_EXTRA_PTES) || Extra != 0);
+        ASSERT(Extra <= MAXULONG - Skipped);
         if (Mdl->MdlFlags & MDL_PAGES_LOCKED)
         {
             MiUnlockFrames(&MiSystem, (const MI_FRAME_NUMBER *)Pages, Skipped,
