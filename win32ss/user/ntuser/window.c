@@ -2659,6 +2659,8 @@ co_UserCreateWindowEx(CREATESTRUCTW* Cs,
    if ((Cs->style & WS_THICKFRAME) || !(Cs->style & (WS_POPUP | WS_CHILD)))
    {
       co_WinPosGetMinMaxInfo(Window, &MaxSize, &MaxPos, &MinTrack, &MaxTrack);
+      if (Size.cx > MaxTrack.x) Size.cx = MaxTrack.x;
+      if (Size.cy > MaxTrack.y) Size.cy = MaxTrack.y;
       if (Size.cx < MinTrack.x) Size.cx = MinTrack.x;
       if (Size.cy < MinTrack.y) Size.cy = MinTrack.y;
    }
