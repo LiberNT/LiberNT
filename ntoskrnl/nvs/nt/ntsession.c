@@ -62,6 +62,20 @@ MiSessionOfProcess(
 
 static
 VOID
+MiSessionAssertLocked(
+    _In_ PMI_SESSION Session)
+{
+    UNREFERENCED_PARAMETER(Session);
+    ASSERT(Session->ReferenceCount >= Session->ProcessCount && Session->ProcessCount >= 0);
+    ASSERT((Session->ProcessCount == 0) == IsListEmpty(&Session->Processes));
+    ASSERT(Session->Processes.Flink->Blink == &Session->Processes);
+    ASSERT(Session->Processes.Blink->Flink == &Session->Processes);
+    ASSERT(Session->Link.Flink->Blink == &Session->Link);
+    ASSERT(Session->Link.Blink->Flink == &Session->Link);
+}
+
+static
+VOID
 MiSessionJoinLocked(
     _Inout_ PMI_SESSION Session,
     _Inout_ PEPROCESS Process)
@@ -69,12 +83,17 @@ MiSessionJoinLocked(
     PMI_PROCESS Native = MI_PROCESS_OF(Process);
 
     ASSERT(Native != NULL && Native->SessionProcess == NULL && Process->Session == NULL);
+    MiSessionAssertLocked(Session);
+    ASSERT(Session->ReferenceCount < 0x7fffffffL && Session->ProcessCount < 0x7fffffffL);
     Native->SessionProcess = Process;
     InsertTailList(&Session->Processes, &Native->SessionLink);
     Session->ReferenceCount++;
     Session->ProcessCount++;
     Process->Session = (struct _PSP_SESSION_SPACE *)Session;
     PspSetProcessFlag(Process, PSF_PROCESS_IN_SESSION_BIT);
+    ASSERT(Native->SessionLink.Flink->Blink == &Native->SessionLink);
+    ASSERT(Native->SessionLink.Blink->Flink == &Native->SessionLink);
+    MiSessionAssertLocked(Session);
 }
 
 static
@@ -86,13 +105,18 @@ MiSessionLeaveLocked(
     PMI_SESSION Session = MiSessionOfProcess(Process);
 
     ASSERT(Native != NULL && Native->SessionProcess == Process && Session != NULL);
+    MiSessionAssertLocked(Session);
+    ASSERT(Native->SessionLink.Flink->Blink == &Native->SessionLink);
+    ASSERT(Native->SessionLink.Blink->Flink == &Native->SessionLink);
     RemoveEntryList(&Native->SessionLink);
     Native->SessionProcess = NULL;
     Process->Session = NULL;
     InterlockedAnd((PLONG)&Process->Flags, ~PSF_PROCESS_IN_SESSION_BIT);
     ASSERT(Session->ProcessCount > 0 && Session->ReferenceCount > 0);
     Session->ProcessCount--;
-    if (--Session->ReferenceCount != 0)
+    Session->ReferenceCount--;
+    MiSessionAssertLocked(Session);
+    if (Session->ReferenceCount != 0)
         return FALSE;
     ASSERT(IsListEmpty(&Session->Processes));
     RemoveEntryList(&Session->Link);
@@ -107,12 +131,16 @@ MiSessionDereference(
     BOOLEAN Free = FALSE;
 
     MiSessionLockAcquire();
+    MiSessionAssertLocked(Session);
+    ASSERT(Session->ReferenceCount > Session->ProcessCount);
     if (InterlockedDecrement(&Session->ReferenceCount) == 0)
     {
         ASSERT(Session->ProcessCount == 0 && IsListEmpty(&Session->Processes));
         RemoveEntryList(&Session->Link);
         Free = TRUE;
     }
+    else
+        MiSessionAssertLocked(Session);
     KeReleaseGuardedMutex(&MiSessionLock);
 
     if (Free)
@@ -325,9 +353,13 @@ MmGetSessionById(
     {
         PMI_SESSION Session = CONTAINING_RECORD(Entry, MI_SESSION, Link);
 
+        MiSessionAssertLocked(Session);
+        ASSERT(Session->ReferenceCount > 0);
         if (Session->SessionId == SessionId && Session->ProcessCount != 0)
         {
+            ASSERT(Session->ReferenceCount < 0x7fffffffL);
             InterlockedIncrement(&Session->ReferenceCount);
+            MiSessionAssertLocked(Session);
             Found = Session;
             break;
         }
@@ -356,6 +388,8 @@ MmSetProcessSession(
         {
             PMI_SESSION Session = CONTAINING_RECORD(Entry, MI_SESSION, Link);
 
+            MiSessionAssertLocked(Session);
+            ASSERT(Session->ReferenceCount > 0);
             if (Session->SessionId == SessionId && Session->ProcessCount != 0)
             {
                 Target = Session;
@@ -392,11 +426,15 @@ MmAttachSession(
     if (Session == NULL)
         return STATUS_INVALID_PARAMETER;
     MiSessionLockAcquire();
+    MiSessionAssertLocked(Session);
+    ASSERT(Session->ReferenceCount > Session->ProcessCount);
     for (Entry = Session->Processes.Flink; Entry != &Session->Processes; Entry = Entry->Flink)
     {
         PMI_PROCESS Native = CONTAINING_RECORD(Entry, MI_PROCESS, SessionLink);
         PEPROCESS Candidate = Native->SessionProcess;
 
+        ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        ASSERT(Candidate != NULL && MiSessionOfProcess(Candidate) == Session);
         if (Native->SessionLeader || Candidate->AddressSpaceInitialized < 2 ||
             !ExAcquireRundownProtection(&Candidate->RundownProtect))
             continue;
