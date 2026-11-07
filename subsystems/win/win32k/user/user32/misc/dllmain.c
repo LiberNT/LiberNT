@@ -742,6 +742,8 @@ User32CallSetWndIconsFromKernel(PVOID Arguments, ULONG ArgumentLength)
 
   if (!UserGetServerInfo(hIconSmWindows, ROS_SERVERINFO_HICONSMWINDOWS))
   {
+      ULONG Previous = User32BeginSystemDpiContext();
+
       Common->hIconSample    = LoadImageW(0, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
       Common->hIconHand      = LoadImageW(0, IDI_HAND,        IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
       Common->hIconQuestion  = LoadImageW(0, IDI_QUESTION,    IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
@@ -751,6 +753,7 @@ User32CallSetWndIconsFromKernel(PVOID Arguments, ULONG ArgumentLength)
       Common->hIconSmWindows = LoadImageW(0, IDI_WINLOGO, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
       hIconWindows   = Common->hIconWindows;
       hIconSmWindows = Common->hIconSmWindows;
+      User32EndSystemDpiContext(Previous);
   }
   if (!hIconSmWindows || !hIconWindows)
       ERR("System window icons missing: small %p, large %p\n", hIconSmWindows, hIconWindows);
