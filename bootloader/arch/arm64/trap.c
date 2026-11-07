@@ -414,6 +414,36 @@ VOID Arm64DumpContext(PARM64_CONTEXT Context)
     }
 }
 
+VOID (*Arm64TrapScreenRoutine)(PCSTR Text);
+
+static VOID
+TrapScreenDump(
+    _In_ PCSTR Title,
+    _In_ ULONGLONG Esr,
+    _In_ ULONGLONG FaultAddr,
+    _In_ PARM64_CONTEXT Context)
+{
+    CHAR Line[160];
+    ULONG Index;
+
+    if (!Arm64TrapScreenRoutine)
+        return;
+
+    RtlStringCbPrintfA(Line, sizeof(Line), "LiberNT loader %s: ESR %llx FAR %llx ELR %llx SP %llx PSTATE %llx\n",
+                       Title, Esr, FaultAddr, Context->PC, Context->SP, Context->PSTATE);
+    Arm64TrapScreenRoutine(Line);
+    for (Index = 0; Index < 31; Index += 4)
+    {
+        RtlStringCbPrintfA(Line, sizeof(Line), "x%02lu %016llx %016llx %016llx %016llx\n",
+                           Index, Context->X[Index],
+                           (Index + 1 < 31) ? Context->X[Index + 1] : 0,
+                           (Index + 2 < 31) ? Context->X[Index + 2] : 0,
+                           (Index + 3 < 31) ? Context->X[Index + 3] : 0);
+        Arm64TrapScreenRoutine(Line);
+    }
+    Arm64TrapScreenRoutine("halted: the machine stays here until you power it off\n");
+}
+
 VOID Arm64HandleSynchronousException(PARM64_CONTEXT Context, ULONGLONG Esr, ULONGLONG FaultAddr, ULONGLONG PC)
 {
     ULONG ExceptionClass = (Esr >> ESR_ELx_EC_SHIFT) & ESR_ELx_EC_MASK;
@@ -520,6 +550,8 @@ VOID Arm64HandleSynchronousException(PARM64_CONTEXT Context, ULONGLONG Esr, ULON
             break;
     }
     
+    TrapScreenDump("synchronous exception", Esr, FaultAddr, Context);
+
     /* Dump register context */
     Arm64DumpContext(Context);
     TrapDumpBacktrace(Context);
@@ -584,6 +616,7 @@ VOID Arm64HandleSerror(PARM64_CONTEXT Context, ULONGLONG Esr)
                            Context);
 #endif
 
+    TrapScreenDump("SError", Esr, 0, Context);
     ERR("ARM64 System Error (SError) Exception\n");
     ERR("ESR: 0x%016llx\n", Esr);
     

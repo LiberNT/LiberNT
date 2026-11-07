@@ -1433,6 +1433,12 @@ CmpInitializeProcessorClockFromFirmware(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
 CODE_SEG("INIT")
+VOID
+NTAPI
+CmpInitializeSystemBiosInformation(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 CmpGetSmbiosProcessorStrings(

@@ -324,6 +324,7 @@ OslMain(VOID)
     }
 
     AppendBootTimeOptions(Options, sizeof(Options), &OslStartup);
+    FwDebugScreen = OslHasDebugPort(Options, "SCREEN");
 
     Length = strlen(SystemRoot);
     if (Length == 0 || SystemRoot[Length - 1] != '\\')

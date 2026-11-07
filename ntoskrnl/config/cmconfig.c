@@ -112,6 +112,114 @@ CmpSmbiosString(
     return NULL;
 }
 
+typedef struct _CMP_SMBIOS_BIOS_VALUE
+{
+    UCHAR Type;
+    UCHAR Offset;
+    BOOLEAN String;
+    PCWSTR Name;
+} CMP_SMBIOS_BIOS_VALUE;
+
+static const CMP_SMBIOS_BIOS_VALUE CmpSmbiosBiosValues[] =
+{
+    { 2, 0x04, TRUE, L"BaseBoardManufacturer" },
+    { 2, 0x05, TRUE, L"BaseBoardProduct" },
+    { 2, 0x06, TRUE, L"BaseBoardVersion" },
+    { 0, 0x14, FALSE, L"BiosMajorRelease" },
+    { 0, 0x15, FALSE, L"BiosMinorRelease" },
+    { 0, 0x08, TRUE, L"BIOSReleaseDate" },
+    { 0, 0x04, TRUE, L"BIOSVendor" },
+    { 0, 0x05, TRUE, L"BIOSVersion" },
+    { 0, 0x16, FALSE, L"ECFirmwareMajorRelease" },
+    { 0, 0x17, FALSE, L"ECFirmwareMinorRelease" },
+    { 1, 0x1A, TRUE, L"SystemFamily" },
+    { 1, 0x04, TRUE, L"SystemManufacturer" },
+    { 1, 0x05, TRUE, L"SystemProductName" },
+    { 1, 0x19, TRUE, L"SystemSKU" },
+    { 1, 0x06, TRUE, L"SystemVersion" },
+};
+
+static
+CODE_SEG("INIT")
+VOID
+CmpSetSmbiosBiosValue(
+    _In_ HANDLE KeyHandle,
+    _In_ const CMP_SMBIOS_BIOS_VALUE *Value,
+    _In_ PSMBIOS_HEADER Header,
+    _In_ PUCHAR TableEnd)
+{
+    UNICODE_STRING Name;
+    WCHAR Buffer[128];
+    PCSTR String;
+    ULONG Number;
+
+    if (Value->Offset >= Header->Length)
+        return;
+    RtlInitUnicodeString(&Name, Value->Name);
+    if (Value->String)
+    {
+        String = CmpSmbiosString(Header, TableEnd, ((PUCHAR)Header)[Value->Offset]);
+        if (!String || !NT_SUCCESS(RtlStringCbPrintfW(Buffer, sizeof(Buffer), L"%hs", String)))
+            return;
+        NtSetValueKey(KeyHandle, &Name, 0, REG_SZ, Buffer, (ULONG)((wcslen(Buffer) + 1) * sizeof(WCHAR)));
+    }
+    else
+    {
+        Number = ((PUCHAR)Header)[Value->Offset];
+        NtSetValueKey(KeyHandle, &Name, 0, REG_DWORD, &Number, sizeof(Number));
+    }
+}
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+CmpInitializeSystemBiosInformation(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\Hardware\\Description\\System\\BIOS");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    PSMBIOS_HEADER Header;
+    PUCHAR Table, TableEnd, Next;
+    HANDLE KeyHandle;
+    ULONG TableSize, Index;
+    NTSTATUS Status;
+
+    Table = CmpMapSmbiosTable(LoaderBlock, &TableSize);
+    if (Table == NULL)
+        return;
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = NtCreateKey(&KeyHandle, KEY_SET_VALUE, &ObjectAttributes, 0, NULL, REG_OPTION_VOLATILE, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("The BIOS description key could not be created: 0x%lx\n", Status);
+        MmUnmapIoSpace(Table, TableSize);
+        return;
+    }
+
+    Header = (PSMBIOS_HEADER)Table;
+    TableEnd = Table + TableSize;
+    while (((PUCHAR)Header + sizeof(*Header)) <= TableEnd &&
+           Header->Length >= sizeof(*Header) &&
+           (PUCHAR)Header + Header->Length <= TableEnd &&
+           Header->Type != 127)
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(CmpSmbiosBiosValues); ++Index)
+        {
+            if (CmpSmbiosBiosValues[Index].Type == Header->Type)
+                CmpSetSmbiosBiosValue(KeyHandle, &CmpSmbiosBiosValues[Index], Header, TableEnd);
+        }
+        Next = (PUCHAR)Header + Header->Length;
+        while ((Next + 1 < TableEnd) && ((Next[0] != ANSI_NULL) || (Next[1] != ANSI_NULL)))
+            ++Next;
+        if (Next + 1 >= TableEnd)
+            break;
+        Header = (PSMBIOS_HEADER)(Next + 2);
+    }
+
+    NtClose(KeyHandle);
+    MmUnmapIoSpace(Table, TableSize);
+}
+
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI

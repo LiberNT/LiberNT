@@ -16,6 +16,8 @@
 #include <drivers/acpi/acpi.h>
 
 #include <reactos/arm64/early_uart.h>
+#include <Fdt.h>
+#include <reactos/riscv64/fdtlib.h>
 
 /*
  * Global runtime-detected UART state.
@@ -674,9 +676,98 @@ EarlyUartLocateDbg2Address(_Out_opt_ ARM64_UART_INTERFACE *UartInterface)
     return 0;
 }
 
+static UINT64
+EarlyUartLocateDeviceTreeAddress(_Out_ ARM64_UART_INTERFACE *UartInterface)
+{
+    EFI_GUID DeviceTreeGuid = FDT_TABLE_GUID;
+    ARM64_UART_INTERFACE Interface;
+    const VOID *Compatible;
+    const CHAR *Path;
+    ULONGLONG Address;
+    ULONGLONG Size;
+    RISCV_FDT Fdt;
+    ULONG Chosen;
+    ULONG Parent;
+    ULONG Length;
+    ULONG Value;
+    ULONG Node;
+    UINTN Index;
+
+    *UartInterface = Arm64UartUnknown;
+    if (!GlobalSystemTable || !GlobalSystemTable->ConfigurationTable)
+        return 0;
+    for (Index = 0; Index < GlobalSystemTable->NumberOfTableEntries; ++Index)
+    {
+        EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
+
+        if (!memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)) &&
+            RiscvFdtOpen(Entry->VendorTable, RISCV_FDT_MAXIMUM_SIZE, &Fdt))
+        {
+            break;
+        }
+    }
+    if (Index == GlobalSystemTable->NumberOfTableEntries)
+    {
+        EarlyUartDiagPuts("[EUART] FDT: not found\n");
+        return 0;
+    }
+    if (!RiscvFdtFindNode(&Fdt, "/chosen", &Chosen, NULL))
+    {
+        EarlyUartDiagPuts("[EUART] FDT: no /chosen\n");
+        return 0;
+    }
+    Path = RiscvFdtGetProperty(&Fdt, Chosen, "stdout-path", &Length);
+    if (!Path)
+        Path = RiscvFdtGetProperty(&Fdt, Chosen, "linux,stdout-path", &Length);
+    if (!Path || Length == 0 || Path[Length - 1] != '\0' ||
+        !RiscvFdtResolvePath(&Fdt, Path, &Node, &Parent, NULL) || Parent == RISCV_FDT_NO_NODE)
+    {
+        EarlyUartDiagPuts("[EUART] FDT: no resolvable stdout-path\n");
+        return 0;
+    }
+    Compatible = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
+    if (RiscvFdtStringListContains(Compatible, Length, "arm,pl011"))
+    {
+        Interface = Arm64UartPl011;
+    }
+    else if (RiscvFdtStringListContains(Compatible, Length, "ns16550a") ||
+             RiscvFdtStringListContains(Compatible, Length, "ns16550"))
+    {
+        if ((RiscvFdtReadU32(&Fdt, Node, "reg-shift", &Value) && Value != 0) ||
+            (RiscvFdtReadU32(&Fdt, Node, "reg-io-width", &Value) && Value != 1))
+        {
+            EarlyUartDiagPuts("[EUART] FDT: ns16550 register layout not supported\n");
+            return 0;
+        }
+        Interface = Arm64UartNs16550;
+    }
+    else
+    {
+        EarlyUartDiagPuts("[EUART] FDT: stdout-path has no supported compatible\n");
+        return 0;
+    }
+    if (!RiscvFdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) || Address == 0 || Size == 0)
+    {
+        EarlyUartDiagPuts("[EUART] FDT: stdout-path has no usable reg\n");
+        return 0;
+    }
+    EarlyUartDiagPuts("[EUART] FDT: ");
+    EarlyUartDiagPuts(Path);
+    EarlyUartDiagPuts(" addr=0x");
+    EarlyUartDiagHex(Address, 16);
+    EarlyUartDiagPuts(" interface=");
+    EarlyUartDiagPuts(EarlyUartDiagInterfaceName(Interface));
+    EarlyUartDiagPuts("\n");
+    if (!EarlyUartProbeCandidate(Address, Interface))
+        return 0;
+    *UartInterface = Interface;
+    return Address;
+}
+
 ARM64_PLATFORM_ID
 EarlyUartDetectPlatform(VOID)
 {
+    ARM64_PLATFORM_ID PlatformId = Arm64PlatformGenericAcpi;
     ARM64_UART_INTERFACE Interface;
     UINT64 Address;
 
@@ -685,6 +776,11 @@ EarlyUartDetectPlatform(VOID)
     Address = EarlyUartLocateSpcrAddress(&Interface);
     if (Address == 0)
         Address = EarlyUartLocateDbg2Address(&Interface);
+    if (Address == 0)
+    {
+        Address = EarlyUartLocateDeviceTreeAddress(&Interface);
+        PlatformId = Arm64PlatformDeviceTree;
+    }
 
     if (Address == 0)
     {
@@ -697,7 +793,7 @@ EarlyUartDetectPlatform(VOID)
 
     EarlyUartBaseAddress = Address;
     EarlyUartInterface = Interface;
-    EarlyUartPlatformId = Arm64PlatformGenericAcpi;
+    EarlyUartPlatformId = PlatformId;
 
     EarlyUartDiagPuts("[EUART] detect: base=0x");
     EarlyUartDiagHex(EarlyUartBaseAddress, 16);

@@ -63,7 +63,7 @@ KiArm64EarlyVectorHandler(_In_ UINT64 VectorId,
 #define ARM64_L1_MAX_ENTRIES        512
 
 #define ARM64_IDENTITY_L0_ENTRIES   512
-#define ARM64_IDENTITY_L1_ENTRIES   512
+#define ARM64_IDENTITY_L1_ENTRIES   (512 * 8)
 #define ARM64_IDENTITY_L2_ENTRIES   (512 * 512)
 C_ASSERT(ARM64_PTE_TABLE_ATTRS == 0x713ULL);
 
@@ -76,10 +76,13 @@ static UINT64 KiArm64IdentityL2Backing[ARM64_IDENTITY_L2_ENTRIES +
                                        (PAGE_SIZE / sizeof(UINT64))];
 
 extern const UINT64 KiArm64EarlyVectorTable[];
+VOID KiArm64EarlyScreenInitialize(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
 static UINT64 *KiArm64IdentityL0;
 static UINT64 *KiArm64IdentityL1;
 static UINT64 (*KiArm64IdentityL2)[512];
+static USHORT KiArm64IdentityL2Slot[ARM64_IDENTITY_L1_ENTRIES];
+static ULONG KiArm64IdentityL2Used;
 static BOOLEAN KiArm64IdentityMapActive;
 
 typedef struct _ARM64_BOOT_CONTEXT
@@ -124,7 +127,7 @@ static BOOLEAN
 KiArm64IsMappableMemoryType(_In_ TYPE_OF_MEMORY MemoryType);
 
 CODE_SEG("INIT")
-static VOID
+static BOOLEAN
 KiArm64EnsureL1Entry(_In_ UINT64 Index);
 
 CODE_SEG("INIT")
@@ -604,20 +607,35 @@ KiArm64CaptureMmuState(_Out_ PARM64_BOOT_CONTEXT BootContext)
 }
 
 CODE_SEG("INIT")
-static VOID
+static BOOLEAN
 KiArm64EnsureL1Entry(_In_ UINT64 Index)
 {
-    if (Index >= ARM64_L1_MAX_ENTRIES)
-        return;
+    UINT64 Table = Index / ARM64_L1_MAX_ENTRIES;
+
+    if (Index >= ARM64_IDENTITY_L1_ENTRIES)
+        return FALSE;
+
+    if ((KiArm64IdentityL0[Table] & ARM64_PTE_TYPE_TABLE) == 0)
+    {
+        UINT64 L1Physical = KiArm64VirtualToPhysical((ULONG_PTR)&KiArm64IdentityL1[Table * ARM64_L1_MAX_ENTRIES]);
+        KiArm64IdentityL0[Table] = (L1Physical & ~((UINT64)PAGE_SIZE - 1ULL)) |
+                                   ARM64_PTE_TABLE_ATTRS;
+    }
 
     if ((KiArm64IdentityL1[Index] & ARM64_PTE_TYPE_TABLE) == 0)
     {
-        RtlZeroMemory(KiArm64IdentityL2[Index], sizeof(KiArm64IdentityL2[Index]));
+        if (KiArm64IdentityL2Used >= ARM64_IDENTITY_L2_ENTRIES / ARM64_L1_MAX_ENTRIES)
+            return FALSE;
 
-        UINT64 L2Physical = KiArm64VirtualToPhysical((ULONG_PTR)&KiArm64IdentityL2[Index][0]);
+        KiArm64IdentityL2Slot[Index] = (USHORT)KiArm64IdentityL2Used++;
+        RtlZeroMemory(KiArm64IdentityL2[KiArm64IdentityL2Slot[Index]], sizeof(KiArm64IdentityL2[0]));
+
+        UINT64 L2Physical = KiArm64VirtualToPhysical((ULONG_PTR)&KiArm64IdentityL2[KiArm64IdentityL2Slot[Index]][0]);
         KiArm64IdentityL1[Index] = (L2Physical & ~((UINT64)PAGE_SIZE - 1ULL)) |
                                    ARM64_PTE_TABLE_ATTRS;
     }
+
+    return TRUE;
 }
 
 CODE_SEG("INIT")
@@ -626,7 +644,7 @@ KiArm64MapIdentityRange(_In_ UINT64 PhysicalStart,
                         _In_ UINT64 PhysicalEnd,
                         _In_ UINT64 Attributes)
 {
-    const UINT64 PhysicalLimit = 512ULL << ARM64_L1_BLOCK_SHIFT;
+    const UINT64 PhysicalLimit = (UINT64)ARM64_IDENTITY_L1_ENTRIES << ARM64_L1_BLOCK_SHIFT;
 
     if (PhysicalStart >= PhysicalLimit)
         return;
@@ -645,8 +663,9 @@ KiArm64MapIdentityRange(_In_ UINT64 PhysicalStart,
         UINT64 L1Index = PhysicalStart >> ARM64_L1_BLOCK_SHIFT;
         UINT64 L2Index = (PhysicalStart >> ARM64_L2_BLOCK_SHIFT) & 0x1FFULL;
 
-        KiArm64EnsureL1Entry(L1Index);
-        KiArm64IdentityL2[L1Index][L2Index] = PhysicalStart | Attributes;
+        if (!KiArm64EnsureL1Entry(L1Index))
+            return;
+        KiArm64IdentityL2[KiArm64IdentityL2Slot[L1Index]][L2Index] = PhysicalStart | Attributes;
 
         PhysicalStart += ARM64_L2_BLOCK_SIZE;
     }
@@ -857,6 +876,7 @@ KiArm64EnsureIdentityMapping(_Inout_ PARM64_BOOT_CONTEXT BootContext)
     RtlZeroMemory(KiArm64IdentityL1, ARM64_IDENTITY_L1_ENTRIES * sizeof(UINT64));
     RtlZeroMemory(KiArm64IdentityL2,
                   ARM64_IDENTITY_L2_ENTRIES * sizeof(UINT64));
+    KiArm64IdentityL2Used = 0;
 
     BlockAttributes = ARM64_PTE_TYPE_BLOCK |
                       (ARM64_MEM_ATTR_NORMAL_WB << ARM64_PTE_BLOCK_ATTR_INDEX_SHIFT) |
@@ -900,7 +920,7 @@ KiArm64EnsureIdentityMapping(_Inout_ PARM64_BOOT_CONTEXT BootContext)
         KiArm64MapIdentityRange(Start, End, BlockAttributes);
     }
 
-    if ((KiArm64IdentityL1[0] & ARM64_PTE_TYPE_TABLE) == 0)
+    if (KiArm64IdentityL2Used == 0)
     {
         KiArm64MapIdentityRange(0, ARM64_IDENTITY_MIN_BYTES, BlockAttributes);
     }
@@ -930,11 +950,21 @@ KiArm64EnsureIdentityMapping(_Inout_ PARM64_BOOT_CONTEXT BootContext)
     KiArm64IdentityMapActive = TRUE;
 
     KiArm64MapEarlyDeviceRanges(LoaderBlock, DeviceBlockAttrs);
+    if (LoaderBlock && LoaderBlock->Extension &&
+        LoaderBlock->Extension->Size >= FIELD_OFFSET(LOADER_PARAMETER_EXTENSION, GopFramebuffer) +
+                                        sizeof(LOADER_PARAMETER_FRAMEBUFFER))
+    {
+        KiArm64MapIdentityDeviceRange(LoaderBlock,
+                                      LoaderBlock->Extension->GopFramebuffer.FrameBufferBase.QuadPart,
+                                      LoaderBlock->Extension->GopFramebuffer.FrameBufferSize,
+                                      DeviceBlockAttrs);
+    }
 
     ARM64_DSB(ISHST);
     ARM64_TLBI_ALL(VMALLE1IS);
     ARM64_DSB(ISH);
     ARM64_ISB();
+    KiArm64EarlyScreenInitialize(LoaderBlock);
 
 
     /*

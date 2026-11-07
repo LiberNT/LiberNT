@@ -97,7 +97,7 @@ NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device,
         return MAXULONG;
 
     NextTail = (Queue->SqTail + 1) % Queue->Entries;
-    if (NextTail == Queue->SqHead)
+    if (!Device->Transport && NextTail == Queue->SqHead)
         return MAXULONG;
 
     for (Slot = 0; Slot < Queue->Entries; Slot++)
@@ -116,6 +116,11 @@ NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device,
     AdminSlot->Srb = Srb;
 
     Command->CDW0 = (Command->CDW0 & 0xFFFF) | (Slot << 16);
+    if (Device->Transport)
+    {
+        Device->Transport->Submit(Device, Queue, Slot, Command);
+        return Slot;
+    }
     Queue->Sq[Queue->SqTail] = *Command;
     KeMemoryBarrier();
     Queue->SqTail = NextTail;
@@ -128,7 +133,6 @@ NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device,
  * the caller's batch and completed after the lock drops; internal slots are
  * handled in place.
  */
-static
 ULONG
 NvmeProcessAdminCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
                                   _Out_ PNVME_COMPLETED_SRB Batch,
@@ -162,6 +166,8 @@ NvmeProcessAdminCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
         Queue->CqHead = (Queue->CqHead + 1) % Queue->Entries;
         if (Queue->CqHead == 0)
             Queue->Phase ^= 1;
+        if (Device->Transport)
+            Device->Transport->Completed(Device, Queue, CommandId);
 
         if (CommandId < NVME_ADMIN_QUEUE_ENTRIES)
         {
@@ -538,6 +544,8 @@ NvmeStartController(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN FirstStart)
                       ((Device->AdminQueue.Entries - 1) << 16) | (Device->AdminQueue.Entries - 1));
     NvmeWriteRegister64(Device, NVME_REG_ASQ, Device->AdminQueue.SqPhysical);
     NvmeWriteRegister64(Device, NVME_REG_ACQ, Device->AdminQueue.CqPhysical);
+    if (Device->Transport && Device->Transport->ConfigureController)
+        Device->Transport->ConfigureController(Device);
     NvmeWriteRegister(Device, NVME_REG_CC, NVME_CC_CSS_NVM | NVME_CC_IOSQES | NVME_CC_IOCQES | NVME_CC_EN);
     if (!NvmeWaitReady(Device, NVME_CSTS_RDY))
     {

@@ -9,6 +9,7 @@
 #include <halacpi_arm64.h>
 #include <ntifs.h>
 #include <reactos/arm64/acpi.h>
+#include "../halext.h"
 #define NDEBUG
 #include <debug.h>
 
@@ -757,6 +758,13 @@ HalpArm64TranslateGsiToIntId(
         if (Polarity) *Polarity = 0;
         if (TriggerMode) *TriggerMode = 0;
         return HalpSecondaryTranslateGsi(Gsi);
+    }
+
+    if (HalpArm64InterruptController && Gsi >= 32 && Gsi < HalpArm64InterruptController->IntIdLimit)
+    {
+        if (Polarity) *Polarity = 0;
+        if (TriggerMode) *TriggerMode = 3;
+        return Gsi;
     }
 
     /*

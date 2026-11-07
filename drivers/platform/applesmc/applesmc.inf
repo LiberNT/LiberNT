@@ -1,0 +1,51 @@
+; PROJECT:     LiberNT Apple SMC Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 11/06/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%AppleSmc.DeviceDesc% = AppleSmc_Inst,FDT\apple_t8103-smc
+%PowerButton.DeviceDesc% = AppleSmc_Raw_Inst,APPLESMC\POWERBUTTON
+%Lid.DeviceDesc% = AppleSmc_Raw_Inst,APPLESMC\LID
+
+[AppleSmc_Inst.NT]
+CopyFiles = AppleSmc_CopyFiles
+
+[AppleSmc_CopyFiles]
+applesmc.sys
+
+[AppleSmc_Inst.NT.Services]
+AddService = applesmc,0x00000002,AppleSmc_Service
+
+[AppleSmc_Raw_Inst.NT]
+
+[AppleSmc_Raw_Inst.NT.Services]
+AddService = ,0x00000002
+
+[AppleSmc_Service]
+DisplayName = %AppleSmc.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\applesmc.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+AppleSmc.DeviceDesc = "Apple System Management Controller"
+AppleSmc.ServiceDesc = "Apple SMC Driver"
+PowerButton.DeviceDesc = "Apple silicon power button"
+Lid.DeviceDesc = "Apple silicon lid switch"

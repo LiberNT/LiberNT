@@ -334,9 +334,11 @@ NvmeHandleModeSense(_In_ PNVME_DEVICE_EXTENSION Device,
         return;
     }
     if (Ten)
-        Buffer[3] = MODE_DSP_FUA_SUPPORTED;
+        Buffer[3] = MODE_DSP_FUA_SUPPORTED |
+                    (Device->WriteProtected && !Device->WriteWindowValid ? MODE_DSP_WRITE_PROTECT : 0);
     else
-        Buffer[2] = MODE_DSP_FUA_SUPPORTED;
+        Buffer[2] = MODE_DSP_FUA_SUPPORTED |
+                    (Device->WriteProtected && !Device->WriteWindowValid ? MODE_DSP_WRITE_PROTECT : 0);
 
     if (!DisableBlockDescriptors)
     {
@@ -675,6 +677,19 @@ NvmeDecodeLba(_In_ PSCSI_REQUEST_BLOCK Srb, _Out_ PULONGLONG Lba, _Out_ PULONG B
 
 static
 BOOLEAN
+NvmeWriteInWindow(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PSCSI_REQUEST_BLOCK Srb)
+{
+    ULONGLONG Lba;
+    ULONG Blocks;
+
+    if (!Device->WriteWindowValid || !NvmeDecodeLba(Srb, &Lba, &Blocks) || Blocks == 0)
+        return FALSE;
+    return Lba >= Device->WriteWindowFirst && Lba <= Device->WriteWindowLast &&
+           Blocks - 1 <= Device->WriteWindowLast - Lba;
+}
+
+static
+BOOLEAN
 NvmeSubmitReadWrite(_In_ PNVME_DEVICE_EXTENSION Device,
                     _In_ PNVME_NAMESPACE Namespace,
                     _In_ PSCSI_REQUEST_BLOCK Srb)
@@ -1005,6 +1020,11 @@ NvmeHwStartIo(_In_ PVOID DeviceExtension, _In_ PSCSI_REQUEST_BLOCK Srb)
             return NvmeSubmitFlush(Device, Namespace, Srb);
 
         case SCSIOP_UNMAP:
+            if (Device->WriteProtected)
+            {
+                NvmeSetSenseAndComplete(Device, Srb, SCSI_SENSE_DATA_PROTECT, 0x27);
+                return TRUE;
+            }
             NvmeHandleUnmap(Device, Namespace, Srb);
             return TRUE;
 
@@ -1016,6 +1036,20 @@ NvmeHwStartIo(_In_ PVOID DeviceExtension, _In_ PSCSI_REQUEST_BLOCK Srb)
         case SCSIOP_WRITE12:
         case SCSIOP_READ16:
         case SCSIOP_WRITE16:
+            if (Device->WriteProtected &&
+                (Srb->Cdb[0] == SCSIOP_WRITE6 || Srb->Cdb[0] == SCSIOP_WRITE ||
+                 Srb->Cdb[0] == SCSIOP_WRITE12 || Srb->Cdb[0] == SCSIOP_WRITE16) &&
+                !NvmeWriteInWindow(Device, Srb))
+            {
+                static LONG Reported;
+                ULONGLONG Lba = 0;
+                ULONG Blocks = 0;
+
+                if (InterlockedIncrement(&Reported) <= 8 && NvmeDecodeLba(Srb, &Lba, &Blocks))
+                    DPRINT1("stornvme: refused a write of %lu blocks at block %I64u\n", Blocks, Lba);
+                NvmeSetSenseAndComplete(Device, Srb, SCSI_SENSE_DATA_PROTECT, 0x27);
+                return TRUE;
+            }
             if (!NvmeSubmitReadWrite(Device, Namespace, Srb))
                 NvmeSetSenseAndComplete(Device, Srb, SCSI_SENSE_ILLEGAL_REQUEST, 0x20);
             return TRUE;

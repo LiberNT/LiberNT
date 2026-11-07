@@ -787,7 +787,7 @@ MiSegmentAdoptFrame(
     PMI_PTE Proto;
     MI_PTE Pte;
 
-    if (Segment->Kind != MiSegmentPageFileBacked || Frame >= System->Pfn.FrameCount)
+    if (Segment->Kind != MiSegmentPageFileBacked || !MiPfnTracked(&System->Pfn, Frame))
         return STATUS_INVALID_PARAMETER;
 
     MI_MUTEX_ACQUIRE(&Segment->Lock);

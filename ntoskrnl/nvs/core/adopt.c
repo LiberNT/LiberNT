@@ -20,7 +20,7 @@ MiSpaceAdoptCommon(
     const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
     PMI_PFN Root;
 
-    if (RootFrame >= System->Pfn.FrameCount)
+    if (!MiPfnTracked(&System->Pfn, RootFrame))
         return STATUS_INVALID_PARAMETER;
 
     Root = &System->Pfn.Pfn[RootFrame];
@@ -87,7 +87,7 @@ MiAdoptTable(
         MI_PTE Pte = MiArchPteRead(&Table[Index]);
         ULONG64 Child = MiArchPteFrame(Pte);
 
-        if (!MiArchPteIsValid(Pte) || MiArchPteIsBlock(Pte, (ULONG)Level) || Child >= System->Pfn.FrameCount)
+        if (!MiArchPteIsValid(Pte) || MiArchPteIsBlock(Pte, (ULONG)Level) || !MiPfnTracked(&System->Pfn, Child))
             continue;
 
         if (MI_PFN_FLAGS(&System->Pfn.Pfn[Child]) & MI_PFN_FLAG_PAGE_TABLE)
@@ -135,7 +135,7 @@ MiSystemAdoptBootMappings(
             return STATUS_CONFLICTING_ADDRESSES;
         }
 
-        if (!MiArchPteIsBlock(Pte, (ULONG)Top) && MiArchPteFrame(Pte) < System->Pfn.FrameCount &&
+        if (!MiArchPteIsBlock(Pte, (ULONG)Top) && MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) &&
             !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PAGE_TABLE))
         {
             MiAdoptTable(Space, (ULONG)MiArchPteFrame(Pte), Space->RootFrame, Index, Top - 1);

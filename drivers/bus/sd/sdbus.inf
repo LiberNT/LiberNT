@@ -69,8 +69,8 @@ HKR, , SilentInstall,  0, 1
 %Realtek_SD.DeviceDesc%   = sdbus_Inst, PCI\VEN_10EC&DEV_525A
 
 ; Genesys Logic SD controllers
-%GL_SD.DeviceDesc%        = sdbus_Inst, PCI\VEN_17A0&DEV_9750
-%GL_SD.DeviceDesc%        = sdbus_Inst, PCI\VEN_17A0&DEV_9755
+%GL_SD.DeviceDesc%        = sdbus_Msi_Inst, PCI\VEN_17A0&DEV_9750
+%GL_SD.DeviceDesc%        = sdbus_Msi_Inst, PCI\VEN_17A0&DEV_9755
 
 ; Intel SD controllers (Bay Trail, Cherry Trail, Apollo Lake, etc.)
 %Intel_SD.DeviceDesc%     = sdbus_Inst, PCI\VEN_8086&DEV_0F14
@@ -123,6 +123,21 @@ CopyFiles = sdbus_CopyFiles
 
 [sdbus_CopyFiles]
 sdbus.sys,,,1
+
+[sdbus_Msi_Inst]
+CopyFiles = sdbus_CopyFiles
+
+[sdbus_Msi_Inst.HW]
+AddReg = sdbus_Msi_AddReg
+
+[sdbus_Msi_AddReg]
+HKR, "Interrupt Management",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", "MSISupported", %REG_DWORD%, 0x00000001
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", "MessageNumberLimit", %REG_DWORD%, 0x00000001
+
+[sdbus_Msi_Inst.Services]
+AddService = sdbus, %SPSVCINST_ASSOCSERVICE%, sdbus_Service_Inst, sdbus_EventLog_Inst
 
 [sdbus_Inst.Services]
 AddService = sdbus, %SPSVCINST_ASSOCSERVICE%, sdbus_Service_Inst, sdbus_EventLog_Inst

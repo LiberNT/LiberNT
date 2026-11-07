@@ -32,6 +32,8 @@ VOID
 FwFree(
     _In_ PVOID Memory);
 
+extern BOOLEAN FwDebugScreen;
+
 VOID
 FwPrint(
     _In_ PCWSTR Format,

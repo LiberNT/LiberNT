@@ -99,8 +99,17 @@ KdpGetDebugMode(
         KdpDebugMode.File = TRUE;
         if (*p2 == ':')
         {
-            /* TODO: DEBUGPORT=FILE:<path> is ignored; the boot log always goes to lastboot.log at the boot volume root */
-            while (*p2 && *p2 != ' ') ++p2;
+            ULONG Length = 0;
+
+            ++p2;
+            while (p2[Length] && p2[Length] != ' ')
+                ++Length;
+            if (Length && Length < sizeof(KdpBootLogPath))
+            {
+                RtlCopyMemory(KdpBootLogPath, p2, Length);
+                KdpBootLogPath[Length] = ANSI_NULL;
+            }
+            p2 += Length;
         }
     }
     else if (!_strnicmp(p2, "NET", CONST_STR_LEN("NET")))

@@ -2052,6 +2052,7 @@ CmInitSystem1(VOID)
         /* Bugcheck */
         KeBugCheckEx(CONFIG_INITIALIZATION_FAILED, 1, 14, Status, 0);
     }
+    CmpInitializeSystemBiosInformation(KeLoaderBlock);
 
     /* Initialize volatile registry settings */
     Status = CmpSetSystemValues(KeLoaderBlock);

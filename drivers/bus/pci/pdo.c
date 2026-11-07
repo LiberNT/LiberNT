@@ -2590,6 +2590,134 @@ PciPdoAppendBarRequirements(
 }
 
 
+static UCHAR PciPdoExpressPortType(_In_ PPDO_DEVICE_EXTENSION DeviceExtension);
+
+static
+BOOLEAN
+PciPdoSizeSecondaryMemory(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PPCI_COMMON_CONFIG BridgeConfig,
+    _Out_ PULONGLONG WindowLength,
+    _Out_ PULONGLONG WindowAlignment)
+{
+    USHORT Segment = PciPdoGetSegment(DeviceExtension);
+    ULONG Bus = BridgeConfig->u.type1.SecondaryBus;
+    UCHAR PortType = PciPdoExpressPortType(DeviceExtension);
+    ULONG DeviceCount = (PortType == PciExpressRootPort || PortType == PciExpressDownstreamSwitchPort) ? 1 : PCI_MAX_DEVICES;
+    ULONGLONG Total = 0, Largest = 0;
+    PCI_SLOT_NUMBER Slot;
+    ULONG Device, Function, FunctionCount, Offset, Original[2], Probe[2], AllOnes = MAXULONG;
+    USHORT VendorId, Command, Quiet;
+    UCHAR HeaderType;
+    ULONGLONG Size;
+
+    if (Bus == 0 || Bus <= DeviceExtension->PciDevice->BusNumber)
+        return FALSE;
+    Slot.u.AsULONG = 0;
+    for (Device = 0; Device < DeviceCount; ++Device)
+    {
+        FunctionCount = 1;
+        for (Function = 0; Function < FunctionCount; ++Function)
+        {
+            Slot.u.bits.DeviceNumber = Device;
+            Slot.u.bits.FunctionNumber = Function;
+            if (PciHalReadConfig(Segment, Bus, Slot.u.AsULONG, &VendorId, FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID), sizeof(VendorId)) != sizeof(VendorId) ||
+                VendorId == PCI_INVALID_VENDORID || VendorId == 0)
+                continue;
+            if (PciHalReadConfig(Segment, Bus, Slot.u.AsULONG, &HeaderType, FIELD_OFFSET(PCI_COMMON_CONFIG, HeaderType), sizeof(HeaderType)) != sizeof(HeaderType))
+                continue;
+            if (Function == 0 && (HeaderType & PCI_MULTIFUNCTION))
+                FunctionCount = PCI_MAX_FUNCTION;
+            if ((HeaderType & ~PCI_MULTIFUNCTION) != PCI_DEVICE_TYPE)
+            {
+                /* TODO: size the windows of bridges below a bridge whose own window is closed */
+                continue;
+            }
+            if (PciHalReadConfig(Segment, Bus, Slot.u.AsULONG, &Command, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Command)) != sizeof(Command))
+                continue;
+            Quiet = Command & ~(PCI_ENABLE_MEMORY_SPACE | PCI_ENABLE_IO_SPACE);
+            PciHalWriteConfig(Segment, Bus, Slot.u.AsULONG, &Quiet, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Quiet));
+            for (Offset = FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.BaseAddresses);
+                 Offset < FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.CIS);
+                 Offset += sizeof(ULONG))
+            {
+                Original[1] = Probe[1] = 0;
+                PciHalReadConfig(Segment, Bus, Slot.u.AsULONG, &Original[0], Offset, sizeof(ULONG));
+                if (Original[0] & PCI_ADDRESS_IO_SPACE)
+                    continue;
+                PciHalWriteConfig(Segment, Bus, Slot.u.AsULONG, &AllOnes, Offset, sizeof(ULONG));
+                PciHalReadConfig(Segment, Bus, Slot.u.AsULONG, &Probe[0], Offset, sizeof(ULONG));
+                PciHalWriteConfig(Segment, Bus, Slot.u.AsULONG, &Original[0], Offset, sizeof(ULONG));
+                if ((Original[0] & PCI_ADDRESS_MEMORY_TYPE_MASK) == PCI_TYPE_64BIT)
+                {
+                    Offset += sizeof(ULONG);
+                    if (Offset >= FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.CIS))
+                        break;
+                    PciHalReadConfig(Segment, Bus, Slot.u.AsULONG, &Original[1], Offset, sizeof(ULONG));
+                    PciHalWriteConfig(Segment, Bus, Slot.u.AsULONG, &AllOnes, Offset, sizeof(ULONG));
+                    PciHalReadConfig(Segment, Bus, Slot.u.AsULONG, &Probe[1], Offset, sizeof(ULONG));
+                    PciHalWriteConfig(Segment, Bus, Slot.u.AsULONG, &Original[1], Offset, sizeof(ULONG));
+                }
+                else
+                {
+                    Probe[1] = MAXULONG;
+                }
+                Size = (((ULONGLONG)Probe[1] << 32) | Probe[0]) & PCI_ADDRESS_MEMORY_ADDRESS_MASK_64;
+                Size &= ~(Size - 1);
+                if (Size == 0 || Size > 0x80000000ULL)
+                    continue;
+                Total += Size;
+                Largest = max(Largest, Size);
+            }
+            PciHalWriteConfig(Segment, Bus, Slot.u.AsULONG, &Command, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Command));
+        }
+    }
+    if (Total == 0)
+        return FALSE;
+    *WindowAlignment = max(Largest, 0x100000ULL);
+    *WindowLength = (Total + 0xFFFFFULL) & ~0xFFFFFULL;
+    return TRUE;
+}
+
+static
+PIO_RESOURCE_DESCRIPTOR
+PciPdoAppendBridgeWindowRequirements(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _Inout_ PIO_RESOURCE_DESCRIPTOR Descriptor,
+    _In_ PIO_RESOURCE_DESCRIPTOR DescriptorEnd,
+    _In_ ULONGLONG Length,
+    _In_ ULONGLONG Alignment)
+{
+    BOOLEAN Added = FALSE;
+    ULONGLONG Minimum, Maximum;
+    ULONG i;
+
+    for (i = 0; i < FdoExtension->MemoryWindowCount && Descriptor < DescriptorEnd; ++i)
+    {
+        if (FdoExtension->MemoryWindows[i].Prefetchable)
+            continue;
+        Minimum = max(FdoExtension->MemoryWindows[i].Start, 0x100000ULL);
+        Maximum = min(FdoExtension->MemoryWindows[i].End, 0xFFFFFFFFULL);
+        if (Minimum > MAXULONGLONG - (Alignment - 1))
+            continue;
+        Minimum = (Minimum + Alignment - 1) & ~(Alignment - 1);
+        if (Minimum > Maximum || Length - 1 > Maximum - Minimum)
+            continue;
+        RtlZeroMemory(Descriptor, sizeof(*Descriptor));
+        Descriptor->Option = Added ? IO_RESOURCE_ALTERNATIVE : 0;
+        Descriptor->Type = CmResourceTypeMemory;
+        Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+        Descriptor->Flags = CM_RESOURCE_MEMORY_READ_WRITE | CM_RESOURCE_MEMORY_WINDOW_DECODE;
+        Descriptor->u.Memory.Length = (ULONG)Length;
+        Descriptor->u.Memory.Alignment = (ULONG)Alignment;
+        Descriptor->u.Memory.MinimumAddress.QuadPart = (LONGLONG)Minimum;
+        Descriptor->u.Memory.MaximumAddress.QuadPart = (LONGLONG)Maximum;
+        Descriptor++;
+        Added = TRUE;
+    }
+    return Descriptor;
+}
+
 static NTSTATUS
 PdoQueryResourceRequirements(
     IN PDEVICE_OBJECT DeviceObject,
@@ -2621,6 +2749,7 @@ PdoQueryResourceRequirements(
     ULONG BaseDescriptorCount;
     IO_RESOURCE_DESCRIPTOR BaseDescriptors[PCI_MAX_BASE_RESOURCE_DESCRIPTORS];
     ULONG RequirementsBusNumber;
+    ULONGLONG WindowLength, WindowAlignment;
     BOOLEAN MsixOption;
     BOOLEAN MsiOption;
     BOOLEAN LegacyOption;
@@ -2885,6 +3014,12 @@ PdoQueryResourceRequirements(
                 Descriptor->u.Memory.MinimumAddress.QuadPart = 0x100000;
                 Descriptor->u.Memory.MaximumAddress.QuadPart = 0xFFFFFFFF;
                 Descriptor++;
+            }
+            else if (FdoExtension && PciPdoSizeSecondaryMemory(DeviceExtension, &PciConfig, &WindowLength, &WindowAlignment))
+            {
+                Descriptor = PciPdoAppendBridgeWindowRequirements(FdoExtension, Descriptor,
+                                                                  BaseDescriptors + RTL_NUMBER_OF(BaseDescriptors),
+                                                                  WindowLength, WindowAlignment);
             }
         }
 
@@ -4681,6 +4816,52 @@ PciPdoProgramType0Bars(
     return Status;
 }
 
+static
+VOID
+PciPdoProgramBridgeMemoryWindow(
+    _Inout_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PCM_RESOURCE_LIST ResourceList)
+{
+    PCI_COMMON_CONFIG *PciConfig = &DeviceExtension->PciDevice->PciConfig;
+    PCM_FULL_RESOURCE_DESCRIPTOR FullDescriptor;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
+    ULONGLONG Start, End;
+    USHORT Base, Limit;
+    ULONG FullIndex, PartialIndex;
+
+    if (PCI_CONFIGURATION_TYPE(PciConfig) != PCI_BRIDGE_TYPE ||
+        (((ULONG)PciConfig->u.type1.MemoryBase << 16) & 0xFFF00000) <= (((ULONG)PciConfig->u.type1.MemoryLimit << 16) | 0x000FFFFF))
+        return;
+    FullDescriptor = &ResourceList->List[0];
+    for (FullIndex = 0; FullIndex < ResourceList->Count; FullIndex++)
+    {
+        for (PartialIndex = 0; PartialIndex < FullDescriptor->PartialResourceList.Count; PartialIndex++)
+        {
+            Partial = &FullDescriptor->PartialResourceList.PartialDescriptors[PartialIndex];
+            if (Partial->Type != CmResourceTypeMemory || !(Partial->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) ||
+                (Partial->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) || Partial->u.Memory.Length == 0)
+                continue;
+            Start = (ULONGLONG)Partial->u.Memory.Start.QuadPart;
+            End = Start + Partial->u.Memory.Length - 1;
+            if (End > 0xFFFFFFFFULL || (Start & 0xFFFFF) || ((End + 1) & 0xFFFFF))
+                continue;
+            Base = (USHORT)((Start >> 16) & 0xFFF0);
+            Limit = (USHORT)((End >> 16) & 0xFFF0);
+            PciPdoSetBusDataByOffset(DeviceExtension, &Base, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.MemoryBase), sizeof(Base));
+            PciPdoSetBusDataByOffset(DeviceExtension, &Limit, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.MemoryLimit), sizeof(Limit));
+            PciConfig->u.type1.MemoryBase = Base;
+            PciConfig->u.type1.MemoryLimit = Limit;
+            DPRINT1("PCI: bridge %02lx:%02x.%u memory window [0x%I64x-0x%I64x] for bus %u\n",
+                    DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                    DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, Start, End,
+                    PciConfig->u.type1.SecondaryBus);
+            return;
+        }
+        FullDescriptor = (PCM_FULL_RESOURCE_DESCRIPTOR)(FullDescriptor->PartialResourceList.PartialDescriptors +
+                                                         FullDescriptor->PartialResourceList.Count);
+    }
+}
+
 static NTSTATUS
 PdoStartDevice(
     IN PDEVICE_OBJECT DeviceObject,
@@ -4776,6 +4957,7 @@ PdoStartDevice(
     Status = PciPdoProgramType0Bars(DeviceExtension, RawResList);
     if (!NT_SUCCESS(Status))
         return Status;
+    PciPdoProgramBridgeMemoryWindow(DeviceExtension, RawResList);
 
     PciPdoCacheMsiInfo(DeviceExtension);
     PciPdoPublishDeviceProperties(DeviceExtension);

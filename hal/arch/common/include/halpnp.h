@@ -42,4 +42,22 @@ NTAPI
 HalpQueryReservedResources(
     _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptors);
 
+/* The firmware device tree; FALSE when the platform was not booted with one */
+BOOLEAN
+NTAPI
+HalpQueryDeviceTree(
+    _Outptr_result_maybenull_ const VOID **Blob,
+    _Out_ PULONG Size);
+
+/* Global system interrupt of a device-tree interrupt specifier; FALSE when the HAL does not route it */
+BOOLEAN
+NTAPI
+HalpTranslateDeviceTreeInterrupt(
+    _In_reads_bytes_(CompatibleLength) const CHAR *Compatible,
+    _In_ ULONG CompatibleLength,
+    _In_reads_(CellCount) const ULONG *Cells,
+    _In_ ULONG CellCount,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered);
+
 /* EOF */

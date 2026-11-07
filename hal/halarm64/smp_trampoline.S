@@ -101,14 +101,44 @@ HalpArm64ApTrampolineEntry:
     cmp     x0, #2
     b.ne    .Lap_el1_entry
 
+    adr     x0, HalpArm64ApParkVectors
+    msr     vbar_el2, x0
+    isb
     mov     x0, #0x80000000
+    movk    x0, #0x300, lsl #32
     msr     hcr_el2, x0
     isb
+    mrs     x0, midr_el1
+    msr     vpidr_el2, x0
+    mrs     x0, mpidr_el1
+    msr     vmpidr_el2, x0
+    mrs     x5, hcr_el2
+    tbnz    x5, #34, .Lap_el2_vhe
 
     mov     x0, #3
     msr     cnthctl_el2, x0
     msr     cntvoff_el2, xzr
     msr     cptr_el2, xzr
+    b       .Lap_el2_common
+
+.Lap_el2_vhe:
+    mrs     x0, cnthctl_el2
+    orr     x0, x0, #(3 << 10)
+    msr     cnthctl_el2, x0
+    mov     x0, #0x300000
+    msr     cptr_el2, x0
+    mov     x0, #0x0800
+    movk    x0, #0x30d0, lsl #16
+    msr     S3_5_C1_C0_0, x0
+    mrs     x0, midr_el1
+    ubfx    x0, x0, #24, #8
+    cmp     x0, #0x61
+    b.ne    .Lap_el2_common
+    mrs     x0, S3_5_C15_C1_3
+    orr     x0, x0, #3
+    msr     S3_5_C15_C1_3, x0
+
+.Lap_el2_common:
     msr     hstr_el2, xzr
     /* Expose implemented event counters to EL1 instead of reserving all for EL2. */
     mov     x1, xzr
@@ -332,6 +362,14 @@ HalpArm64ApTrampolineEntry:
     .balign 8
 HalpArm64ApDataPhys:
     .quad   0
+
+    .balign 2048
+HalpArm64ApParkVectors:
+    .rept   16
+1:  wfe
+    b       1b
+    .balign 128
+    .endr
 
 /*
  * Trampoline end marker - must be after all embedded data

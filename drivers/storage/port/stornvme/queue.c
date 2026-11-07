@@ -40,6 +40,8 @@ NvmeCreateIoQueues(_In_ PNVME_DEVICE_EXTENSION Device)
         Queue->Phase = 1;
         Queue->SqDoorbell = NVME_SQ_DOORBELL(Device->DoorbellStride, Queue->QueueId);
         Queue->CqDoorbell = NVME_CQ_DOORBELL(Device->DoorbellStride, Queue->QueueId);
+        if (Device->Transport && Device->Transport->PrepareIoQueue)
+            Device->Transport->PrepareIoQueue(Device, Queue);
         RtlZeroMemory(Queue->Sq, Queue->Entries * sizeof(NVME_COMMAND));
         RtlZeroMemory(Queue->Cq, Queue->Entries * sizeof(NVME_COMPLETION));
         RtlZeroMemory(Queue->Outstanding, sizeof(Queue->Outstanding));
@@ -114,7 +116,7 @@ NvmeSubmitIoCommand(_In_ PNVME_DEVICE_EXTENSION Device,
     }
 
     NextTail = (Queue->SqTail + 1) % Queue->Entries;
-    if (NextTail == Queue->SqHead)
+    if (!Device->Transport && NextTail == Queue->SqHead)
         goto Busy;
 
     for (Slot = 0; Slot < Queue->Entries; Slot++)
@@ -129,6 +131,12 @@ NvmeSubmitIoCommand(_In_ PNVME_DEVICE_EXTENSION Device,
     SrbExtension->QueueId = Queue->QueueId;
     SrbExtension->Slot = Slot;
     Queue->Outstanding[Slot] = Srb;
+    if (Device->Transport)
+    {
+        Device->Transport->Submit(Device, Queue, Slot, Command);
+        NvmeReleaseLock(Device, &Lock);
+        return TRUE;
+    }
     Queue->Sq[Queue->SqTail] = *Command;
     KeMemoryBarrier();
     Queue->SqTail = NextTail;
@@ -174,6 +182,8 @@ NvmeProcessIoCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
         Queue->CqHead = (Queue->CqHead + 1) % Queue->Entries;
         if (Queue->CqHead == 0)
             Queue->Phase ^= 1;
+        if (Device->Transport)
+            Device->Transport->Completed(Device, Queue, CommandId);
 
         if (CommandId < Queue->Entries && Queue->Outstanding[CommandId] != NULL)
         {
@@ -190,13 +200,40 @@ NvmeProcessIoCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
     return Collected;
 }
 
+static
+VOID
+NvmeCompleteIoBatch(_In_ PNVME_DEVICE_EXTENSION Device,
+                    _In_ PNVME_QUEUE Queue,
+                    _In_reads_(Collected) PNVME_COMPLETED_SRB Batch,
+                    _In_ ULONG Collected)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Collected; Index++)
+    {
+        if (Batch[Index].Status == 0)
+        {
+            NvmeCompleteSrb(Device, Batch[Index].Srb, SRB_STATUS_SUCCESS);
+        }
+        else
+        {
+            DPRINT1("stornvme: queue %lu command failed, status 0x%04x\n",
+                    Queue->QueueId, Batch[Index].Status);
+            NvmeSetSenseAndComplete(Device, Batch[Index].Srb,
+                                    NVME_STATUS_CODE_TYPE(Batch[Index].Status) == NVME_SCT_MEDIA
+                                        ? SCSI_SENSE_MEDIUM_ERROR
+                                        : SCSI_SENSE_HARDWARE_ERROR,
+                                    0x00);
+        }
+    }
+}
+
 BOOLEAN
 NvmeDrainIoQueue(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue)
 {
     NVME_COMPLETED_SRB Batch[NVME_COMPLETION_BATCH];
     NVME_LOCK Lock;
     ULONG Collected;
-    ULONG Index;
     ULONG Batches = 0;
 
     do
@@ -204,24 +241,7 @@ NvmeDrainIoQueue(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue)
         NvmeAcquireLock(Device, Queue->Vector, &Lock);
         Collected = NvmeProcessIoCompletionsLocked(Device, Queue, Batch, NVME_COMPLETION_BATCH);
         NvmeReleaseLock(Device, &Lock);
-
-        for (Index = 0; Index < Collected; Index++)
-        {
-            if (Batch[Index].Status == 0)
-            {
-                NvmeCompleteSrb(Device, Batch[Index].Srb, SRB_STATUS_SUCCESS);
-            }
-            else
-            {
-                DPRINT1("stornvme: queue %lu command failed, status 0x%04x\n",
-                        Queue->QueueId, Batch[Index].Status);
-                NvmeSetSenseAndComplete(Device, Batch[Index].Srb,
-                                        NVME_STATUS_CODE_TYPE(Batch[Index].Status) == NVME_SCT_MEDIA
-                                            ? SCSI_SENSE_MEDIUM_ERROR
-                                            : SCSI_SENSE_HARDWARE_ERROR,
-                                        0x00);
-            }
-        }
+        NvmeCompleteIoBatch(Device, Queue, Batch, Collected);
     } while (Collected == NVME_COMPLETION_BATCH && ++Batches < NVME_DPC_BATCH_LIMIT);
 
     return Collected == NVME_COMPLETION_BATCH;
@@ -352,6 +372,8 @@ NvmeHwInterrupt(_In_ PVOID DeviceExtension)
 
     if (!Device->InterruptsLive || Device->LineMasked)
         return FALSE;
+    if (Device->Transport)
+        return NvmeServiceQueuesAtInterrupt(Device);
 
     /*
      * A wired interrupt stays asserted until the CQ heads catch up; mask it
@@ -371,4 +393,43 @@ NvmeHwInterrupt(_In_ PVOID DeviceExtension)
     NvmeWriteRegister(Device, NVME_REG_INTMS, 0xFFFFFFFF);
     StorPortIssueDpc(Device, &Device->AdminQueue.Dpc, NULL, NULL);
     return TRUE;
+}
+
+/*
+ * A wired interrupt that the controller cannot mask through INTMS: consume the
+ * completions here, under the interrupt lock the caller already holds, so the
+ * doorbell writes release the line. Storport queues the SRB completions.
+ */
+BOOLEAN
+NvmeServiceQueuesAtInterrupt(_In_ PNVME_DEVICE_EXTENSION Device)
+{
+    NVME_COMPLETED_SRB Batch[NVME_COMPLETION_BATCH];
+    BOOLEAN Handled = FALSE;
+    ULONG Collected;
+    ULONG Index;
+    ULONG Queue;
+
+    do
+    {
+        Collected = NvmeProcessAdminCompletionsLocked(Device, Batch, NVME_COMPLETION_BATCH);
+        Handled |= Collected != 0;
+        for (Index = 0; Index < Collected; Index++)
+        {
+            if (Batch[Index].SlotType == NVME_SLOT_SRB_LOG)
+                NvmeCompleteLogSenseSrb(Device, Batch[Index].Srb, Batch[Index].Status);
+            else
+                NvmeCompleteFeatureSrb(Device, Batch[Index].Srb, Batch[Index].Status);
+        }
+    } while (Collected == NVME_COMPLETION_BATCH);
+
+    for (Queue = 0; Queue < Device->IoQueueCount; Queue++)
+    {
+        do
+        {
+            Collected = NvmeProcessIoCompletionsLocked(Device, &Device->IoQueues[Queue], Batch, NVME_COMPLETION_BATCH);
+            Handled |= Collected != 0;
+            NvmeCompleteIoBatch(Device, &Device->IoQueues[Queue], Batch, Collected);
+        } while (Collected == NVME_COMPLETION_BATCH);
+    }
+    return Handled;
 }
