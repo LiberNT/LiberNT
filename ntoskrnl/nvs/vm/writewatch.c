@@ -40,6 +40,7 @@ MiWriteWatchAttach(
 {
     SIZE_T Bytes = MiWriteWatchBytes(MI_VAD_START(Vad), MI_VAD_END(Vad));
 
+    MI_ASSERT(Vad->WriteWatchBits == NULL && Bytes != 0);
     Vad->WriteWatchBits = MI_ALLOCATE(Bytes);
     if (Vad->WriteWatchBits == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -64,6 +65,7 @@ MiWriteWatchDuplicate(
 
     MiAssertWriteWatchVad(Vad);
     Bytes = MiWriteWatchBytes(Vad->WriteWatchBase, MI_VAD_END(Vad));
+    MI_ASSERT(Bytes != 0);
     Vad->WriteWatchBits = MI_ALLOCATE(Bytes);
     if (Vad->WriteWatchBits == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -79,6 +81,7 @@ MiWriteWatchRelease(
 {
     if (Vad->WriteWatchBits != NULL)
     {
+        MiAssertWriteWatchVad(Vad);
         MI_FREE(Vad->WriteWatchBits);
         Vad->WriteWatchBits = NULL;
     }
@@ -167,6 +170,7 @@ MiWriteWatchResetLocked(
     KIRQL OldIrql;
 
     MiAssertWriteWatchVad(Vad);
+    MI_ASSERT(Space->HasWriteWatch);
     MI_ASSERT((Start & (PAGE_SIZE - 1)) == 0 && (End & (PAGE_SIZE - 1)) == 0);
     MI_ASSERT(Start >= MI_VAD_START(Vad) && Start <= End && End <= MI_VAD_END(Vad));
     for (Va = Start; Va < End; Va += PAGE_SIZE)
@@ -182,8 +186,13 @@ MiWriteWatchResetLocked(
         Pte = MiArchPteRead(Slot);
         if (MiArchPteIsLeafDescriptor(Pte) && MiArchPteIsWritable(Pte) && MiArchPteIsDirty(Pte))
         {
+            MI_PTE Clean = MiArchPteSetDirty(Pte, FALSE);
+
+            MI_ASSERT(MiArchPteFrame(Pte) < Space->System->Pfn.FrameCount);
+            MI_ASSERT(MiArchPteIsLeafDescriptor(Clean) && MiArchPteIsWritable(Clean));
+            MI_ASSERT(!MiArchPteIsDirty(Clean) && MiArchPteFrame(Clean) == MiArchPteFrame(Pte));
             MiPfnSetModified(&Space->System->Pfn, (ULONG)MiArchPteFrame(Pte));
-            MiArchPteWrite(Slot, MiArchPteSetDirty(Pte, FALSE));
+            MiArchPteWrite(Slot, Clean);
             MiArchTlbInvalidate(Va, 1, TRUE);
         }
         MiPfnUnlock(&Space->System->Pfn, TableFrame, OldIrql);
@@ -209,6 +218,9 @@ MiWriteWatchRange(
     if (*Vad == NULL || (*Vad)->WriteWatchBits == NULL || *End > MI_VAD_END(*Vad))
         return STATUS_INVALID_PARAMETER;
 
+    MiAssertWriteWatchVad(*Vad);
+    MI_ASSERT(Space->HasWriteWatch);
+    MI_ASSERT(*Start >= MI_VAD_START(*Vad) && *Start < *End && *End <= MI_VAD_END(*Vad));
     return STATUS_SUCCESS;
 }
 
@@ -240,6 +252,7 @@ MiGetWriteWatch(
                 Addresses[Found++] = Va;
         }
 
+        MI_ASSERT(Found <= *Count && Va >= Start && Va <= End);
         if (Reset)
             MiWriteWatchResetLocked(Space, Vad, Start, Va);
 
