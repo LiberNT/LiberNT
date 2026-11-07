@@ -58,36 +58,6 @@ RcddEnableSurface(
    }
 
    /*
-    * Re-query the mode dxgkrnl actually committed. RcddInitScreenInfo captured
-    * the geometry at EnablePDEV time, BEFORE CommitVidPn ran — if the committed
-    * native mode differs, drawing with the stale stride would shear the
-    * scan-out. Adopt the committed stride; refuse a width/height mismatch
-    * (GDI was already promised the EnablePDEV geometry).
-    */
-   {
-      VIDEO_MODE_INFORMATION CommittedMode;
-
-      RtlZeroMemory(&CommittedMode, sizeof(CommittedMode));
-      if (!EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_QUERY_CURRENT_MODE,
-                              NULL, 0, &CommittedMode, sizeof(CommittedMode),
-                              &ulTemp))
-      {
-         if (ulTemp < sizeof(CommittedMode))
-            return NULL;
-         if (CommittedMode.VisScreenWidth != (ULONG)ppdev->ScreenWidth ||
-             CommittedMode.VisScreenHeight != (ULONG)ppdev->ScreenHeight)
-         {
-            /* Committed native mode differs from what EnablePDEV promised
-             * GDI — a sheared scan-out is worse than no surface. */
-            return NULL;
-         }
-
-         if (CommittedMode.ScreenStride != 0)
-            ppdev->ScreenDelta = CommittedMode.ScreenStride;
-      }
-   }
-
-   /*
     * Map the DOD primary (dxgkrnl's system-memory scan-out surface) into our
     * address space. GDI draws straight into it and RcddPresent scans dirty
     * rectangles out through the miniport's DxgkDdiPresentDisplayOnly.
@@ -105,6 +75,36 @@ RcddEnableSurface(
    ppdev->ScreenPtr = VideoMemoryInfo.FrameBufferBase;
    if (ppdev->ScreenPtr == NULL)
       goto CleanupMapping;
+
+   /*
+    * Re-query the mode dxgkrnl actually committed. RcddInitScreenInfo captured
+    * the geometry at EnablePDEV time, BEFORE CommitVidPn ran — if the committed
+    * native mode differs, drawing with the stale stride would shear the
+    * scan-out. Adopt the committed stride; refuse a width/height mismatch
+    * (GDI was already promised the EnablePDEV geometry).
+    */
+   {
+      VIDEO_MODE_INFORMATION CommittedMode;
+
+      RtlZeroMemory(&CommittedMode, sizeof(CommittedMode));
+      if (!EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_QUERY_CURRENT_MODE,
+                              NULL, 0, &CommittedMode, sizeof(CommittedMode),
+                              &ulTemp))
+      {
+         if (ulTemp < sizeof(CommittedMode))
+            goto CleanupMapping;
+         if (CommittedMode.VisScreenWidth != (ULONG)ppdev->ScreenWidth ||
+             CommittedMode.VisScreenHeight != (ULONG)ppdev->ScreenHeight)
+         {
+            /* Committed native mode differs from what EnablePDEV promised
+             * GDI — a sheared scan-out is worse than no surface. */
+            goto CleanupMapping;
+         }
+
+         if (CommittedMode.ScreenStride != 0)
+            ppdev->ScreenDelta = CommittedMode.ScreenStride;
+      }
+   }
 
    MinimumStride = (((ULONGLONG)ppdev->ScreenWidth * ppdev->BitsPerPixel) + 7) / 8;
    RequiredBytes = (ULONGLONG)ppdev->ScreenDelta * ppdev->ScreenHeight;

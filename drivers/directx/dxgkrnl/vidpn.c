@@ -8167,7 +8167,6 @@ DxgkpVideoModeFromDisplayMode(
     VideoMode->ModeIndex = ModeIndex;
     VideoMode->VisScreenWidth = Entry->Mode.Width;
     VideoMode->VisScreenHeight = Entry->Mode.Height;
-    /* The CDD maps dxgkrnl's packed CPU shadow, not the miniport's pitch. */
     VideoMode->ScreenStride = Entry->Mode.Width * 4;
     VideoMode->NumberOfPlanes = 1;
     VideoMode->BitsPerPlane = 32;
@@ -8282,8 +8281,16 @@ DxgkVidPnQueryVideoModes(
         if (DxgkpDisplayModeSupportsGdi(&Cache->Entries[Index]) &&
             (!CurrentOnly || DxgkpDisplayModesEqual(&Cache->Entries[Index].Mode, &Current.DisplayMode)))
         {
-            DxgkpVideoModeFromDisplayMode(&Modes[Output++], &Cache->Entries[Index],
+            DxgkpVideoModeFromDisplayMode(&Modes[Output], &Cache->Entries[Index],
                                           (Cache->Generation << DXGKP_DISPLAY_MODE_INDEX_BITS) | Index);
+            if (CurrentOnly && Adapter->ShadowFb != NULL && !Adapter->ShadowFbPoolOwned &&
+                Adapter->SharedShadowWidth == Modes[Output].VisScreenWidth &&
+                Adapter->SharedShadowHeight == Modes[Output].VisScreenHeight &&
+                Adapter->ShadowFbPitch >= Modes[Output].ScreenStride)
+            {
+                Modes[Output].ScreenStride = Adapter->ShadowFbPitch;
+            }
+            ++Output;
             if (!CurrentOnly && DxgkpDisplayModeGdiAlias(Cache, Index, &Alias))
             {
                 DxgkpVideoModeFromDisplayMode(&Modes[Output], &Cache->Entries[Index],
