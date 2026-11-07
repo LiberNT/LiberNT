@@ -9,9 +9,11 @@
 #include <apitest.h>
 
 extern void func_MissingSecurity(void);
+extern void func_IndexMetadata(void);
 
 const struct test winetest_testlist[] =
 {
     { "MissingSecurity", func_MissingSecurity },
+    { "IndexMetadata", func_IndexMetadata },
     { 0, 0 }
 };
