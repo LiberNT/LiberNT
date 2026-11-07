@@ -1157,14 +1157,12 @@ static BOOL is_color_attr(HTMLElement *elem, const WCHAR *name)
 
 static HRESULT set_elem_attr_value_by_dispid(HTMLElement *elem, DISPID dispid, VARIANT *v)
 {
-    EXCEPINFO ei;
-
     if(dispid == DISPID_IHTMLELEMENT_STYLE) {
         TRACE("Ignoring call on style attribute\n");
         return S_OK;
     }
 
-    return dispex_prop_put(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, v, &ei, NULL);
+    return dispex_prop_put(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, v, NULL, NULL);
 }
 
 static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttributeName,
@@ -1296,8 +1294,7 @@ done:
 
 HRESULT get_elem_attr_value_by_dispid(HTMLElement *elem, DISPID dispid, VARIANT *ret)
 {
-    EXCEPINFO excep;
-    return dispex_prop_get(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, ret, &excep, NULL);
+    return dispex_prop_get(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, ret, NULL, NULL);
 }
 
 HRESULT attr_value_to_string(VARIANT *v)

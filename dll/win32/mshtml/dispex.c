@@ -1453,6 +1453,17 @@ HRESULT change_type(VARIANT *dst, VARIANT *src, VARTYPE vt, IServiceProvider *ca
     return VariantChangeType(dst, src, 0, vt);
 }
 
+static HRESULT builtin_failure(DispatchEx *This, HRESULT hres, EXCEPINFO *ei, BOOL raw)
+{
+    if(SUCCEEDED(hres) || hres == DISP_E_EXCEPTION || !ei || dispex_compat_mode(This) >= COMPAT_MODE_IE9)
+        return hres;
+
+    memset(ei, 0, sizeof(*ei));
+    ei->scode = hres;
+    /* TODO: fill bstrDescription as Windows does ("Could not get the <name> property. <message>" for properties) */
+    return raw ? hres : DISP_E_EXCEPTION;
+}
+
 static HRESULT builtin_propget(DispatchEx *This, func_info_t *func, DISPPARAMS *dp, VARIANT *res, EXCEPINFO *ei, IServiceProvider *caller)
 {
     IUnknown *iface;
@@ -1461,7 +1472,7 @@ static HRESULT builtin_propget(DispatchEx *This, func_info_t *func, DISPPARAMS *
     if(func->hook) {
         hres = func->hook(This, DISPATCH_PROPERTYGET, dp, res, ei, caller);
         if(hres != S_FALSE)
-            return hres;
+            return builtin_failure(This, hres, ei, FALSE);
     }
 
     if(dp && dp->cArgs) {
@@ -1480,6 +1491,8 @@ static HRESULT builtin_propget(DispatchEx *This, func_info_t *func, DISPPARAMS *
             hres = ((HRESULT (WINAPI*)(IUnknown*,type*))((void**)iface->lpVtbl)[func->get_vtbl_off])(iface,&val); \
             if(SUCCEEDED(hres)) \
                 access(res) = val; \
+            else \
+                hres = builtin_failure(This, hres, ei, FALSE); \
             } \
             break
         BUILTIN_TYPES_SWITCH;
@@ -1489,6 +1502,8 @@ static HRESULT builtin_propget(DispatchEx *This, func_info_t *func, DISPPARAMS *
             hres = E_NOTIMPL;
         }
         IUnknown_Release(iface);
+    }else {
+        hres = builtin_failure(This, hres, ei, TRUE);
     }
 
     if(FAILED(hres))
@@ -1508,7 +1523,7 @@ static HRESULT builtin_propput(DispatchEx *This, func_info_t *func, DISPPARAMS *
     if(func->hook) {
         hres = func->hook(This, DISPATCH_PROPERTYPUT, dp, NULL, ei, caller);
         if(hres != S_FALSE)
-            return hres;
+            return builtin_failure(This, hres, ei, FALSE);
     }
 
     if(dp->cArgs != 1 || (dp->cNamedArgs == 1 && *dp->rgdispidNamedArgs != DISPID_PROPERTYPUT)
@@ -1540,6 +1555,7 @@ static HRESULT builtin_propput(DispatchEx *This, func_info_t *func, DISPPARAMS *
 #define CASE_VT(vt,type,access) \
         case vt: \
             hres = ((HRESULT (WINAPI*)(IUnknown*,type))((void**)iface->lpVtbl)[func->put_vtbl_off])(iface,access(v)); \
+            hres = builtin_failure(This, hres, ei, FALSE); \
             break
         BUILTIN_TYPES_SWITCH;
 #undef CASE_VT
@@ -1549,6 +1565,8 @@ static HRESULT builtin_propput(DispatchEx *This, func_info_t *func, DISPPARAMS *
         }
 
         IUnknown_Release(iface);
+    }else {
+        hres = builtin_failure(This, hres, ei, TRUE);
     }
 
     if(v == &tmpv)
@@ -1567,7 +1585,7 @@ static HRESULT call_builtin_function(DispatchEx *This, func_info_t *func, DISPPA
     if(func->hook) {
         hres = func->hook(This, DISPATCH_METHOD, dp, res, ei, caller);
         if(hres != S_FALSE)
-            return hres;
+            return builtin_failure(This, hres, ei, FALSE);
     }
 
     if(!func->call_vtbl_off)
@@ -1580,7 +1598,7 @@ static HRESULT call_builtin_function(DispatchEx *This, func_info_t *func, DISPPA
 
     hres = IWineJSDispatchHost_QueryInterface(&This->IWineJSDispatchHost_iface, tid_ids[func->tid], (void**)&iface);
     if(FAILED(hres))
-        return hres;
+        return builtin_failure(This, hres, ei, TRUE);
 
     for(i=0; i < func->argc; i++) {
         BOOL own_value = FALSE;
@@ -1654,7 +1672,7 @@ static HRESULT call_builtin_function(DispatchEx *This, func_info_t *func, DISPPA
     if(FAILED(hres))
         return hres;
     if(FAILED(V_ERROR(&vhres)))
-        return V_ERROR(&vhres);
+        return builtin_failure(This, V_ERROR(&vhres), ei, FALSE);
 
     if(res)
         *res = retv;
