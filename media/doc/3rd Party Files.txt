@@ -415,3 +415,11 @@ Path: sdk/include/ddk/d3dkmthk.h
 Used Version: git commit 045831e
 License: MIT (https://spdx.org/licenses/MIT.html)
 URL: https://github.com/microsoft/libdxg
+
+Title: KDE Breeze Light cursors
+Path: win32ss/user/user32/resources/breeze
+Path: win32ss/user/user32/resources/ocr_*.cur
+Path: win32ss/user/user32/resources/ocr_*.ani
+Used Version: git commit 9151be3
+License: LGPL-3.0-or-later (https://spdx.org/licenses/LGPL-3.0-or-later.html)
+URL: https://invent.kde.org/plasma/breeze/-/tree/master/cursors/Breeze_Light
