@@ -53,6 +53,8 @@ static const WCHAR ClassName[] = L"DpiAwarenessTest";
 static DPI_AWARENESS ProcAwareness = DPI_AWARENESS_INVALID;
 static BOOL NcScalingResult;
 static BOOL NcScalingRequested;
+static DWORD NcScalingError;
+static CREATESTRUCTW CbtCreate;
 static POINT MouseMovePoint = {-1, -1}, HitTestPoint = {-1, -1};
 static DWORD MouseMovePos;
 
@@ -78,7 +80,11 @@ TestWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
     {
         case WM_NCCREATE:
             if (NcScalingRequested)
+            {
+                SetLastError(0xdeadbeef);
                 NcScalingResult = pEnableNonClientDpiScaling(hWnd);
+                NcScalingError = GetLastError();
+            }
             break;
         case WM_USER:
             ProcAwareness = ThreadAwareness();
@@ -116,12 +122,12 @@ DispatchPending(void)
 }
 
 static void
-WaitForMouseMove(void)
+WaitForMouseMove(LONG X, LONG Y)
 {
     DWORD Start = GetTickCount();
 
     DispatchPending();
-    while (MouseMovePoint.x < 0 && GetTickCount() - Start < 100)
+    while ((labs(MouseMovePoint.x - X) > 1 || labs(MouseMovePoint.y - Y) > 1) && GetTickCount() - Start < 100)
     {
         MsgWaitForMultipleObjects(0, NULL, FALSE, 20, QS_MOUSEMOVE);
         DispatchPending();
@@ -397,8 +403,9 @@ TestCoordinates(UINT Dpi)
 {
     DPI_AWARENESS_CONTEXT Previous;
     RECT Window, AwareWindow, Client;
-    POINT Origin = {0, 0}, Point, Cursor, AwareCursor;
+    POINT Origin = {0, 0}, Point, Cursor, AwareCursor, DcOrigin;
     HWND Unaware, System;
+    HDC Dc;
 
     Unaware = CreateTestWindow(WS_OVERLAPPEDWINDOW | WS_VISIBLE, 80, 60, 240, 180, NULL);
     SetForegroundWindow(Unaware);
@@ -437,7 +444,7 @@ TestCoordinates(UINT Dpi)
     MouseMovePoint.x = MouseMovePoint.y = -1;
     HitTestPoint.x = HitTestPoint.y = -1;
     SetCursorPos(Origin.x + 20, Origin.y + 30);
-    WaitForMouseMove();
+    WaitForMouseMove(20, 30);
     GetCursorPos(&Cursor);
     Previous = pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
     GetCursorPos(&AwareCursor);
@@ -453,20 +460,71 @@ TestCoordinates(UINT Dpi)
     ok_near(HitTestPoint.x, Origin.x + 20, "[P1] WM_NCHITTEST x");
     ok_near(HitTestPoint.y, Origin.y + 30, "[P1] WM_NCHITTEST y");
 
+    Dc = GetDC(Unaware);
+    ok(GetDCOrgEx(Dc, &DcOrigin), "GetDCOrgEx failed\n");
+    ReleaseDC(Unaware, Dc);
+    ok(DcOrigin.x == Origin.x && DcOrigin.y == Origin.y, "unaware client DC origin %ld,%ld, client %ld,%ld\n",
+       DcOrigin.x, DcOrigin.y, Origin.x, Origin.y);
+    Dc = GetWindowDC(Unaware);
+    ok(GetDCOrgEx(Dc, &DcOrigin), "GetDCOrgEx failed\n");
+    ReleaseDC(Unaware, Dc);
+    ok(DcOrigin.x == Window.left && DcOrigin.y == Window.top, "unaware window DC origin %ld,%ld, window %ld,%ld\n",
+       DcOrigin.x, DcOrigin.y, Window.left, Window.top);
+    Previous = pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+    Dc = GetDC(Unaware);
+    ok(GetDCOrgEx(Dc, &DcOrigin), "GetDCOrgEx failed\n");
+    ReleaseDC(Unaware, Dc);
+    pSetThreadDpiAwarenessContext(Previous);
+    ok(DcOrigin.x == Origin.x && DcOrigin.y == Origin.y, "aware view of the unaware client DC origin %ld,%ld, "
+       "expected the logical %ld,%ld\n", DcOrigin.x, DcOrigin.y, Origin.x, Origin.y);
+
     DestroyWindow(System);
     DestroyWindow(Unaware);
 }
 
+static LRESULT CALLBACK
+CbtHook(int Code, WPARAM wParam, LPARAM lParam)
+{
+    if (Code == HCBT_CREATEWND)
+    {
+        CREATESTRUCTW *Cs = ((CBT_CREATEWNDW *)lParam)->lpcs;
+
+        if (Cs->lpszName && !lstrcmpW(Cs->lpszName, L"cbt"))
+            CbtCreate = *Cs;
+    }
+    return CallNextHookEx(NULL, Code, wParam, lParam);
+}
+
 static void
-CheckCursorAndIcon(const char *Context)
+TestHooks(void)
+{
+    HHOOK Hook = SetWindowsHookExW(WH_CBT, CbtHook, NULL, GetCurrentThreadId());
+    RECT Rect;
+    HWND Wnd;
+
+    ZeroMemory(&CbtCreate, sizeof(CbtCreate));
+    Wnd = CreateWindowExW(0, ClassName, L"cbt", WS_OVERLAPPEDWINDOW, 100, 80, 300, 200, NULL, NULL,
+                          GetModuleHandleW(NULL), NULL);
+    UnhookWindowsHookEx(Hook);
+    ok(CbtCreate.x == 100 && CbtCreate.y == 80 && CbtCreate.cx == 300 && CbtCreate.cy == 200,
+       "HCBT_CREATEWND of an unaware window %d,%d %dx%d, expected 100,80 300x200\n", CbtCreate.x, CbtCreate.y,
+       CbtCreate.cx, CbtCreate.cy);
+    GetWindowRect(Wnd, &Rect);
+    ok(Rect.left == 100 && Rect.top == 80 && Rect.right == 400 && Rect.bottom == 280, "window %ld,%ld,%ld,%ld\n",
+       Rect.left, Rect.top, Rect.right, Rect.bottom);
+    DestroyWindow(Wnd);
+}
+
+static void
+CheckCursorAndIcon(const char *Context, BOOL Unaware)
 {
     LONG Cursor = CursorImageSize(LoadCursorW(NULL, (LPCWSTR)IDC_ARROW));
     LONG Icon = CursorImageSize(LoadIconW(NULL, (LPCWSTR)IDI_APPLICATION));
 
     ok(Cursor == GetSystemMetrics(SM_CXCURSOR), "%s arrow cursor %ld pixels, SM_CXCURSOR %d\n", Context, Cursor,
        GetSystemMetrics(SM_CXCURSOR));
-    ok(Icon == GetSystemMetrics(SM_CXICON), "[P1] %s IDI_APPLICATION %ld pixels, SM_CXICON %d\n", Context, Icon,
-       GetSystemMetrics(SM_CXICON));
+    ok(Unaware ? Icon >= GetSystemMetrics(SM_CXICON) : Icon == GetSystemMetrics(SM_CXICON),
+       "[P1] %s IDI_APPLICATION %ld pixels, SM_CXICON %d\n", Context, Icon, GetSystemMetrics(SM_CXICON));
 }
 
 static void
@@ -476,10 +534,10 @@ TestCursorAndIcons(UINT Dpi)
     INT Cursor;
 
     ok_int(GetSystemMetrics(SM_CXCURSOR), 32);
-    CheckCursorAndIcon("unaware");
+    CheckCursorAndIcon("unaware", TRUE);
     Previous = pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
     Cursor = GetSystemMetrics(SM_CXCURSOR);
-    CheckCursorAndIcon("system aware");
+    CheckCursorAndIcon("system aware", FALSE);
     pSetThreadDpiAwarenessContext(Previous);
     ok(Cursor == pGetSystemMetricsForDpi(SM_CXCURSOR, Dpi), "system aware SM_CXCURSOR %d, ForDpi %d\n", Cursor,
        pGetSystemMetricsForDpi(SM_CXCURSOR, Dpi));
@@ -517,19 +575,37 @@ CheckDefaultWindows(UINT Dpi, UINT SystemDpi, const char *Context)
 {
     RECT Rect, Work;
     HWND Wnd[8];
-    LONG Left[8], ScreenCx = GetSystemMetrics(SM_CXSCREEN), ScreenCy = GetSystemMetrics(SM_CYSCREEN);
-    LONG WorkCy, Margin = pGetSystemMetricsForDpi(SM_CYSMICON, SystemDpi) + 5;
+    LONG Left[8], ScreenCx = GetSystemMetrics(SM_CXSCREEN), ScreenCy = GetSystemMetrics(SM_CYSCREEN), PhysicalCx;
+    DPI_AWARENESS_CONTEXT Previous;
+    static const struct { UINT Dpi; LONG System; LONG Unaware; } Margins[] =
+    {
+        { 96, 21, 21 }, { 144, 29, 29 }, { 168, 34, 34 }, { 192, 37, 37 }, { 216, 42, 43 }, { 240, 46, 46 },
+        { 288, 54, 54 },
+    };
+    LONG WorkCy, Margin = -1;
     INT Step = GetSystemMetrics(SM_CYSIZE) + pGetSystemMetricsForDpi(SM_CYFRAME, Dpi);
     INT i;
 
+    Previous = pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+    PhysicalCx = GetSystemMetrics(SM_CXSCREEN);
+    pSetThreadDpiAwarenessContext(Previous);
+    for (i = 0; i < ARRAYSIZE(Margins); i++)
+    {
+        if (Margins[i].Dpi == SystemDpi)
+            Margin = Dpi == SystemDpi ? Margins[i].System : Margins[i].Unaware;
+    }
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &Work, 0);
     WorkCy = Work.bottom - Work.top;
     Wnd[0] = CreateTestWindow(WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL);
     GetWindowRect(Wnd[0], &Rect);
-    ok(Rect.right - Rect.left == ScreenCx - ScreenCx / 4, "%s default width %ld for screen width %ld\n", Context,
-       Rect.right - Rect.left, ScreenCx);
-    ok(Rect.bottom - Rect.top == WorkCy - WorkCy / 4 - Margin, "%s default height %ld for work height %ld\n", Context,
-       Rect.bottom - Rect.top, WorkCy);
+    ok(Rect.right - Rect.left == MulDiv(PhysicalCx - PhysicalCx / 4, Dpi, SystemDpi),
+       "%s default width %ld for screen width %ld\n", Context, Rect.right - Rect.left, ScreenCx);
+    if (Margin >= 0)
+        ok(Rect.bottom - Rect.top == WorkCy - WorkCy / 4 - Margin, "%s default height %ld for work height %ld\n",
+           Context, Rect.bottom - Rect.top, WorkCy);
+    else
+        ok(Rect.bottom - Rect.top < WorkCy - WorkCy / 4, "%s default height %ld for work height %ld\n", Context,
+           Rect.bottom - Rect.top, WorkCy);
     DestroyWindow(Wnd[0]);
 
     for (i = 0; i < 8; i++)
@@ -559,8 +635,15 @@ CheckDefaultWindows(UINT Dpi, UINT SystemDpi, const char *Context)
 
     Wnd[0] = CreateTestWindow(WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, ScreenCx + 100, 100, NULL);
     GetWindowRect(Wnd[0], &Rect);
-    ok(Rect.left == 0 && Rect.right - Rect.left == ScreenCx + 100, "%s oversized window at %ld,%ld,%ld,%ld\n",
-       Context, Rect.left, Rect.top, Rect.right, Rect.bottom);
+    ok(Rect.left == 0 && Rect.right - Rect.left == min(ScreenCx + 100, GetSystemMetrics(SM_CXMAXTRACK)),
+       "%s oversized window at %ld,%ld,%ld,%ld\n", Context, Rect.left, Rect.top, Rect.right, Rect.bottom);
+    DestroyWindow(Wnd[0]);
+
+    Wnd[0] = CreateTestWindow(WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 100, 3 * ScreenCy, NULL);
+    GetWindowRect(Wnd[0], &Rect);
+    ok(Rect.top == 0 && Rect.bottom - Rect.top == GetSystemMetrics(SM_CYMAXTRACK),
+       "%s window taller than the maximum tracking size at %ld,%ld,%ld,%ld, SM_CYMAXTRACK %d\n", Context, Rect.left,
+       Rect.top, Rect.right, Rect.bottom, GetSystemMetrics(SM_CYMAXTRACK));
     DestroyWindow(Wnd[0]);
 }
 
@@ -573,6 +656,25 @@ TestDefaultWindow(UINT Dpi)
     Previous = pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
     CheckDefaultWindows(Dpi, Dpi, "system aware");
     pSetThreadDpiAwarenessContext(Previous);
+}
+
+static void
+CheckNcScaling(DPI_AWARENESS_CONTEXT Context, BOOL Expected, const char *Name)
+{
+    DPI_AWARENESS_CONTEXT Previous = pSetThreadDpiAwarenessContext(Context);
+    HWND Wnd;
+
+    NcScalingRequested = TRUE;
+    NcScalingResult = !Expected;
+    Wnd = CreateTestWindow(WS_OVERLAPPEDWINDOW, 10, 10, 100, 100, NULL);
+    NcScalingRequested = FALSE;
+    pSetThreadDpiAwarenessContext(Previous);
+    ok(NcScalingResult == Expected, "EnableNonClientDpiScaling in WM_NCCREATE of a %s window returned %d\n", Name,
+       NcScalingResult);
+    if (!Expected)
+        ok(NcScalingError == 0xdeadbeef, "EnableNonClientDpiScaling of a %s window set error %lu\n", Name,
+           NcScalingError);
+    DestroyWindow(Wnd);
 }
 
 static void
@@ -596,7 +698,17 @@ TestNonClient(UINT Dpi)
     ok(NcScalingResult, "[P1] EnableNonClientDpiScaling failed in WM_NCCREATE\n");
     ok_int(WindowAwareness(Wnd), DPI_AWARENESS_PER_MONITOR_AWARE);
     ok(pGetDpiForWindow(Wnd) == Dpi, "[P5] per monitor window DPI %u, expected %u\n", pGetDpiForWindow(Wnd), Dpi);
+    SetLastError(0xdeadbeef);
+    ok(!pEnableNonClientDpiScaling(Wnd), "EnableNonClientDpiScaling succeeded after WM_NCCREATE\n");
+    ok_err(0xdeadbeef);
     DestroyWindow(Wnd);
+
+    CheckNcScaling(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, TRUE, "per monitor v2");
+    CheckNcScaling(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE, FALSE, "system aware");
+    CheckNcScaling(DPI_AWARENESS_CONTEXT_UNAWARE, FALSE, "unaware");
+    SetLastError(0xdeadbeef);
+    ok(!pEnableNonClientDpiScaling(NULL), "EnableNonClientDpiScaling succeeded for NULL\n");
+    ok_err(ERROR_INVALID_WINDOW_HANDLE);
 }
 
 static BOOL
@@ -660,10 +772,9 @@ START_TEST(DpiAwareness)
     }
     Dpi = GetAwareSystemDpi();
     trace("System DPI %u\n", Dpi);
-    ok(!IsProcessDPIAware(), "An unaware process is DPI aware at %u DPI\n", Dpi);
     if (IsProcessDPIAware())
     {
-        skip("The test process is DPI aware\n");
+        skip("The test process is DPI aware at %u DPI (XP-style scaling)\n", Dpi);
         return;
     }
     RegisterTestClass();
@@ -676,6 +787,7 @@ START_TEST(DpiAwareness)
     TestCursorAndIcons(Dpi);
     TestDefaultWindow(Dpi);
     TestNonClient(Dpi);
+    TestHooks();
 }
 
 START_TEST(DpiProcessDefault)
