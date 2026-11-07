@@ -3588,6 +3588,10 @@ static HRESULT HostObject_prop_get(jsdisp_t *jsdisp, unsigned idx, jsval_t *r)
                                            &jsdisp->ctx->jscaller->IServiceProvider_iface);
     if(hres == DISP_E_EXCEPTION)
         handle_dispatch_exception(jsdisp->ctx, &ei);
+#ifdef __REACTOS__
+    else if(FAILED(hres))
+        hres = throw_host_object_error(jsdisp->ctx, This->host_iface, hres);
+#endif
     if(FAILED(hres))
         return hres;
 
@@ -3611,6 +3615,10 @@ static HRESULT HostObject_prop_put(jsdisp_t *jsdisp, unsigned idx, jsval_t v)
                                            &jsdisp->ctx->jscaller->IServiceProvider_iface);
     if(hres == DISP_E_EXCEPTION)
         handle_dispatch_exception(jsdisp->ctx, &ei);
+#ifdef __REACTOS__
+    else if(FAILED(hres))
+        hres = throw_host_object_error(jsdisp->ctx, This->host_iface, hres);
+#endif
     VariantClear(&var);
     return hres;
 }

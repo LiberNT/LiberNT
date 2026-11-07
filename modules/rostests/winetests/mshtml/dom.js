@@ -507,7 +507,6 @@ sync_test("style_properties", function() {
         current_style.zIndex = 1;
         ok(false, "expected exception");
     }catch(e) {
-        todo_wine.
         ok(e.name === "NoModificationAllowedError", "setting current_style.zIndex threw " + e.name);
     }
 
@@ -515,7 +514,6 @@ sync_test("style_properties", function() {
         computed_style.zIndex = 1;
         ok(false, "expected exception");
     }catch(e) {
-        todo_wine.
         ok(e.name === "NoModificationAllowedError", "setting computed_style.zIndex threw " + e.name);
     }
 
@@ -524,7 +522,6 @@ sync_test("style_properties", function() {
         current_style.perspective = 1;
         ok(false, "expected exception");
     }catch(e) {
-        todo_wine.
         ok(e.name === "NoModificationAllowedError", "setting current_style.perspective threw " + e.name);
     }
 
@@ -532,7 +529,6 @@ sync_test("style_properties", function() {
         computed_style.perspective = 1;
         ok(false, "expected exception");
     }catch(e) {
-        todo_wine.
         ok(e.name === "NoModificationAllowedError", "setting computed_style.perspective threw " + e.name);
     }
 

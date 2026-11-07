@@ -4506,7 +4506,7 @@ static HRESULT WINAPI DocumentSelector_querySelector(IDocumentSelector *iface, B
 
     if(NS_FAILED(nsres)) {
         WARN("QuerySelector failed: %08lx\n", nsres);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     if(!nselem) {
@@ -4550,7 +4550,7 @@ static HRESULT WINAPI DocumentSelector_querySelectorAll(IDocumentSelector *iface
         WARN("QuerySelectorAll failed: %08lx\n", nsres);
         if(node_list)
             nsIDOMNodeList_Release(node_list);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     hres = create_child_collection(node_list, &This->node.event_target.dispex, pel);

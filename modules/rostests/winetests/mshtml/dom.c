@@ -12202,6 +12202,247 @@ static void test_selector_version_libernt(IHTMLDocument2 *doc)
     IHTMLDocument2_Release(node);
 }
 
+static IDispatch *get_thrown_dom_exception_libernt(IHTMLWindow2 *window, const WCHAR *code)
+{
+    IDispatchEx *dispex;
+    DISPPARAMS dp = {0};
+    BSTR str, lang;
+    IDispatch *ret = NULL;
+    DISPID id;
+    HRESULT hres;
+    VARIANT v;
+
+    str = SysAllocString(code);
+    lang = SysAllocString(L"JScript");
+    V_VT(&v) = VT_EMPTY;
+    hres = IHTMLWindow2_execScript(window, str, lang, &v);
+    ok(hres == S_OK, "execScript(%s) failed: %08lx\n", wine_dbgstr_w(code), hres);
+    VariantClear(&v);
+    SysFreeString(lang);
+    SysFreeString(str);
+
+    hres = IHTMLWindow2_QueryInterface(window, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "QueryInterface(IID_IDispatchEx) failed: %08lx\n", hres);
+    str = SysAllocString(L"winetest_exception");
+    hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &id);
+    ok(hres == S_OK, "GetDispID(winetest_exception) failed: %08lx\n", hres);
+    SysFreeString(str);
+    V_VT(&v) = VT_EMPTY;
+    if(SUCCEEDED(hres)) {
+        hres = IDispatchEx_InvokeEx(dispex, id, 0, DISPATCH_PROPERTYGET, &dp, &v, NULL, NULL);
+        ok(hres == S_OK, "InvokeEx(winetest_exception) failed: %08lx\n", hres);
+    }
+    ok(V_VT(&v) == VT_DISPATCH, "V_VT(winetest_exception) = %u\n", V_VT(&v));
+    if(V_VT(&v) == VT_DISPATCH)
+        ret = V_DISPATCH(&v);
+    else
+        VariantClear(&v);
+    IDispatchEx_Release(dispex);
+    return ret;
+}
+
+static void test_dom_exception_name_libernt(IDispatch *disp, BOOL has_name, const WCHAR *expected)
+{
+    DISPPARAMS dp = {0};
+    IDispatchEx *dispex;
+    DISPID id;
+    HRESULT hres;
+    VARIANT v;
+    BSTR str;
+
+    hres = IDispatch_QueryInterface(disp, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "QueryInterface(IID_IDispatchEx) failed: %08lx\n", hres);
+    str = SysAllocString(L"name");
+    hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &id);
+    SysFreeString(str);
+    if(!has_name) {
+        ok(hres == DISP_E_UNKNOWNNAME, "GetDispID(name) returned %08lx\n", hres);
+    }else {
+        ok(hres == S_OK, "GetDispID(name) failed: %08lx\n", hres);
+        V_VT(&v) = VT_EMPTY;
+        hres = IDispatchEx_InvokeEx(dispex, id, 0, DISPATCH_PROPERTYGET, &dp, &v, NULL, NULL);
+        ok(hres == S_OK, "InvokeEx(name) failed: %08lx\n", hres);
+        ok(V_VT(&v) == VT_BSTR && !wcscmp(V_BSTR(&v), expected), "name = %s, expected %s\n",
+           wine_dbgstr_variant(&v), wine_dbgstr_w(expected));
+        VariantClear(&v);
+    }
+    str = SysAllocString(L"number");
+    hres = IDispatchEx_GetDispID(dispex, str, fdexNameCaseSensitive, &id);
+    ok(hres == DISP_E_UNKNOWNNAME, "GetDispID(number) returned %08lx\n", hres);
+    SysFreeString(str);
+    IDispatchEx_Release(dispex);
+}
+
+static void test_dom_exception_libernt(IHTMLDocument2 *doc)
+{
+    static const struct {
+        LONG put;
+        LONG code;
+        const WCHAR *message;
+    } codes[] = {
+        {0, 0, L"UnknownError"},
+        {1, 1, L"IndexSizeError"},
+        {2, 2, L"DOMStringSizeError"},
+        {3, 3, L"HierarchyRequestError"},
+        {4, 4, L"WrongDocumentError"},
+        {5, 5, L"InvalidCharacterError"},
+        {6, 6, L"NoDataAllowedError"},
+        {7, 7, L"NoModificationAllowedError"},
+        {8, 8, L"NotFoundError"},
+        {9, 9, L"NotSupportedError"},
+        {10, 10, L"InuseAttributeError"},
+        {11, 11, L"InvalidStateError"},
+        {12, 12, L"SyntaxError"},
+        {13, 13, L"InvalidModificationError"},
+        {14, 14, L"NamespaceError"},
+        {15, 15, L"InvalidAccessError"},
+        {16, 16, L"ValidationError"},
+        {17, 17, L"TypeMismatchError"},
+        {18, 18, L"SecurityError"},
+        {19, 19, L"NetworkError"},
+        {20, 20, L"AbortError"},
+        {21, 21, L"UrlMismatchError"},
+        {22, 22, L"QuotaExceededError"},
+        {23, 23, L"TimeoutError"},
+        {24, 24, L"InvalidNodeTypeError"},
+        {25, 25, L"DataCloneError"},
+        {26, 0, L"ConstraintError"},
+        {27, 0, L"DataError"},
+        {81, 0, L"DataError"},
+        {-1, 0, L"DataError"},
+        {0x7fffffff, 0, L"DataError"},
+    };
+    IHTMLDocument2 *node = get_doc_node(doc);
+    IHTMLElement *body = doc_get_body(doc);
+    IDocumentSelector *doc_selector;
+    IElementSelector *selector;
+    IHTMLDOMChildrenCollection *col;
+    IHTMLDocument6 *doc6;
+    IHTMLElement6 *elem6;
+    IHTMLElement *elem;
+    IHTMLWindow2 *window;
+    IDOMException *exception;
+    IDispatch *disp;
+    IUnknown *unk;
+    VARIANT_BOOL vb;
+    unsigned mode = 0, i;
+    HRESULT hres, expected;
+    VARIANT v;
+    LONG code;
+    BSTR str;
+
+    hres = IHTMLDocument2_QueryInterface(doc, &IID_IHTMLDocument6, (void**)&doc6);
+    ok(hres == S_OK, "QueryInterface(IID_IHTMLDocument6) failed: %08lx\n", hres);
+    V_VT(&v) = VT_EMPTY;
+    hres = IHTMLDocument6_get_documentMode(doc6, &v);
+    ok(hres == S_OK && V_VT(&v) == VT_R4, "get_documentMode failed: %08lx\n", hres);
+    mode = V_R4(&v);
+    IHTMLDocument6_Release(doc6);
+    expected = mode < 9 ? E_INVALIDARG : 0x8070000c;
+
+    hres = IHTMLElement_QueryInterface(body, &IID_IElementSelector, (void**)&selector);
+    ok(hres == S_OK, "QueryInterface(IID_IElementSelector) failed: %08lx\n", hres);
+    str = SysAllocString(L"##");
+    elem = (void*)0xdeadbeef;
+    hres = IElementSelector_querySelector(selector, str, &elem);
+    ok(hres == expected, "[%u] querySelector(##) returned %08lx\n", mode, hres);
+    col = NULL;
+    hres = IElementSelector_querySelectorAll(selector, str, &col);
+    ok(hres == expected, "[%u] querySelectorAll(##) returned %08lx\n", mode, hres);
+    if(SUCCEEDED(hres) && col)
+        IHTMLDOMChildrenCollection_Release(col);
+    SysFreeString(str);
+    IElementSelector_Release(selector);
+
+    hres = IHTMLDocument2_QueryInterface(node, &IID_IDocumentSelector, (void**)&doc_selector);
+    ok(hres == S_OK, "QueryInterface(IID_IDocumentSelector) failed: %08lx\n", hres);
+    str = SysAllocString(L",");
+    elem = (void*)0xdeadbeef;
+    hres = IDocumentSelector_querySelector(doc_selector, str, &elem);
+    ok(hres == expected, "[%u] document querySelector(,) returned %08lx\n", mode, hres);
+    SysFreeString(str);
+    IDocumentSelector_Release(doc_selector);
+
+    if(mode >= 9) {
+        hres = IHTMLElement_QueryInterface(body, &IID_IHTMLElement6, (void**)&elem6);
+        ok(hres == S_OK, "QueryInterface(IID_IHTMLElement6) failed: %08lx\n", hres);
+        str = SysAllocString(L"*,");
+        hres = IHTMLElement6_msMatchesSelector(elem6, str, &vb);
+        ok(hres == 0x8070000c, "msMatchesSelector(*,) returned %08lx\n", hres);
+        SysFreeString(str);
+        IHTMLElement6_Release(elem6);
+    }
+
+    hres = IHTMLDocument2_get_parentWindow(doc, &window);
+    ok(hres == S_OK, "get_parentWindow failed: %08lx\n", hres);
+    if(mode >= 9) {
+        disp = get_thrown_dom_exception_libernt(window,
+                L"try { document.body.querySelector('##'); } catch(e) { window.winetest_exception = e; }");
+        if(disp) {
+            hres = IDispatch_QueryInterface(disp, &DIID_DispDOMException, (void**)&unk);
+            ok(hres == E_NOINTERFACE, "QueryInterface(DIID_DispDOMException) returned %08lx\n", hres);
+            hres = IDispatch_QueryInterface(disp, &IID_IDOMException, (void**)&exception);
+            ok(hres == S_OK, "QueryInterface(IID_IDOMException) failed: %08lx\n", hres);
+            if(SUCCEEDED(hres)) {
+                code = -1;
+                hres = IDOMException_get_code(exception, &code);
+                ok(hres == S_OK && code == 12, "get_code returned %08lx %ld\n", hres, code);
+                hres = IDOMException_get_message(exception, &str);
+                ok(hres == S_OK && !wcscmp(str, L"SyntaxError"), "get_message returned %08lx %s\n", hres, wine_dbgstr_w(str));
+                SysFreeString(str);
+                test_dom_exception_name_libernt(disp, mode >= 10, L"SyntaxError");
+
+                for(i = 0; i < ARRAY_SIZE(codes); i++) {
+                    hres = IDOMException_put_code(exception, codes[i].put);
+                    ok(hres == S_OK, "put_code(%ld) failed: %08lx\n", codes[i].put, hres);
+                    code = -1;
+                    hres = IDOMException_get_code(exception, &code);
+                    ok(hres == S_OK && code == codes[i].code, "put_code(%ld): get_code returned %08lx %ld\n",
+                       codes[i].put, hres, code);
+                    hres = IDOMException_get_message(exception, &str);
+                    ok(hres == S_OK && !wcscmp(str, codes[i].message), "put_code(%ld): get_message returned %08lx %s\n",
+                       codes[i].put, hres, wine_dbgstr_w(str));
+                    SysFreeString(str);
+                    test_dom_exception_name_libernt(disp, mode >= 10, codes[i].message);
+                }
+                IDOMException_Release(exception);
+            }
+            IDispatch_Release(disp);
+        }
+
+        disp = get_thrown_dom_exception_libernt(window,
+                L"window.winetest_exception = DOMException.prototype;");
+        if(disp) {
+            hres = IDispatch_QueryInterface(disp, &IID_IDOMException, (void**)&unk);
+            ok(hres == E_NOINTERFACE, "prototype QueryInterface(IID_IDOMException) returned %08lx\n", hres);
+            IDispatch_Release(disp);
+        }
+
+        disp = get_thrown_dom_exception_libernt(window,
+                L"try { window.postMessage('m', 'example.org'); } catch(e) { window.winetest_exception = e; }");
+        if(disp) {
+            hres = IDispatch_QueryInterface(disp, &IID_IDOMException, (void**)&exception);
+            if(mode < 10) {
+                ok(hres == E_NOINTERFACE, "postMessage exception QueryInterface(IID_IDOMException) returned %08lx\n", hres);
+            }else {
+                ok(hres == S_OK, "postMessage exception QueryInterface(IID_IDOMException) failed: %08lx\n", hres);
+                if(SUCCEEDED(hres)) {
+                    code = -1;
+                    hres = IDOMException_get_code(exception, &code);
+                    ok(hres == S_OK && code == 12, "postMessage exception get_code returned %08lx %ld\n", hres, code);
+                }
+            }
+            if(SUCCEEDED(hres))
+                IDOMException_Release(exception);
+            IDispatch_Release(disp);
+        }
+    }
+
+    IHTMLWindow2_Release(window);
+    IHTMLElement_Release(body);
+    IHTMLDocument2_Release(node);
+}
+
 static void test_databinding_attr_col_libernt(IHTMLDocument2 *doc)
 {
     static const WCHAR *tags[] = { L"body", L"div" };
@@ -16877,6 +17118,9 @@ START_TEST(dom)
         run_domtest(doc_blank, test_selector_version_libernt);
         run_domtest(doc_blank_ie8, test_selector_version_libernt);
         run_domtest(doc_blank_ie9, test_selector_version_libernt);
+        run_domtest(doc_blank_ie8, test_dom_exception_libernt);
+        run_domtest(doc_blank_ie9, test_dom_exception_libernt);
+        run_domtest(doc_blank_ie11, test_dom_exception_libernt);
         run_domtest(doc_blank, test_databinding_attr_col_libernt);
         run_domtest(doc_blank_ie9, test_databinding_attr_col_libernt);
         run_domtest(doc_blank_ie11, test_databinding_attr_col_libernt);

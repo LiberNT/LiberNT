@@ -442,6 +442,27 @@ interface IWineDOMTokenList : IDispatch
     HRESULT toString([retval, out] BSTR *String);
 }
 
+const long DISPID_IWINEDOMEXCEPTION_NAME = DISPID_DOMEXCEPTION+2;
+const long DISPID_IWINEDOMEXCEPTION_TOSTRING = DISPID_DOMEXCEPTION+3;
+[
+    odl,
+    oleautomation,
+    dual,
+    hidden,
+    uuid(3984d24b-e59c-4053-afc2-aa962fed940d)
+]
+interface IWineDOMException : IDispatch
+{
+    [propget, id(DISPID_IDOMEXCEPTION_CODE)]
+    HRESULT code([retval, out] LONG *p);
+    [propget, id(DISPID_IDOMEXCEPTION_MESSAGE)]
+    HRESULT message([retval, out] BSTR *p);
+    [propget, id(DISPID_IWINEDOMEXCEPTION_NAME)]
+    HRESULT name([retval, out] BSTR *p);
+    [id(DISPID_IWINEDOMEXCEPTION_TOSTRING)]
+    HRESULT toString([retval, out] BSTR *String);
+}
+
 [
     odl,
     oleautomation,

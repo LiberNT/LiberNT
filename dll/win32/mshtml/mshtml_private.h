@@ -79,6 +79,7 @@
 #define MSHTML_E_SYNTAX           0x800a03ea
 #define MSHTML_E_NOT_FUNC         0x800a138a
 #define MSHTML_E_INDEX_SIZE       0x80700001
+#define MSHTML_E_DOM_SYNTAX       0x8070000c
 
 typedef struct HTMLWindow HTMLWindow;
 typedef struct HTMLInnerWindow HTMLInnerWindow;
@@ -110,6 +111,7 @@ struct constructor;
     XDIID(DispDOMStorageEvent) \
     XDIID(DispDOMUIEvent) \
     XDIID(DispDOMDocumentType) \
+    XDIID(DispDOMException) \
     XDIID(DispDOMParser) \
     XDIID(DispHTMLAnchorElement) \
     XDIID(DispHTMLAreaElement) \
@@ -197,6 +199,7 @@ struct constructor;
     XIID(IDOMStorageEvent) \
     XIID(IDOMUIEvent) \
     XIID(IDOMDocumentType) \
+    XIID(IDOMException) \
     XIID(IDOMParser) \
     XIID(IDOMXmlSerializer) \
     XIID(IDocumentEvent) \
@@ -367,6 +370,7 @@ struct constructor;
     XIID(ISVGTextContentElement)
 
 #define PRIVATE_TID_LIST \
+    XIID(IWineDOMException) \
     XIID(IWineDOMTokenList) \
     XIID(IWineHTMLCharacterData) \
     XIID(IWineHTMLDOMNodePrivate) \
@@ -507,6 +511,7 @@ typedef struct {
     X(Console)                             \
     X(Crypto)                              \
     X(CustomEvent)                         \
+    X(DOMException)                        \
     X(DOMImplementation)                   \
     X(DOMParser)                           \
     X(DOMTokenList)                        \
@@ -626,6 +631,12 @@ typedef enum {
     OBJID_LAST,
 } object_id_t;
 
+typedef struct {
+    const WCHAR *name;
+    LONG value;
+    compat_mode_t min_compat_mode;
+} dispex_constant_t;
+
 struct dispex_static_data_t {
     const char *name;
     const dispex_static_data_vtbl_t *vtbl;
@@ -643,6 +654,7 @@ struct dispex_static_data_t {
     compat_mode_t min_compat_mode;
     compat_mode_t max_compat_mode;
     char prototype_name[64];
+    const dispex_constant_t *constants;
 };
 
 #define X(name) extern dispex_static_data_t name ## _dispex;
@@ -1310,6 +1322,7 @@ HRESULT create_performance(HTMLInnerWindow*,IHTMLPerformance**);
 HRESULT create_history(HTMLInnerWindow*,OmHistory**);
 HRESULT create_namespace_collection(HTMLDocumentNode*,IHTMLNamespaceCollection**);
 HRESULT create_dom_implementation(HTMLDocumentNode*,IHTMLDOMImplementation**);
+HRESULT create_dom_exception(DispatchEx*,HRESULT,IDispatch**);
 void detach_dom_implementation(IHTMLDOMImplementation*);
 HRESULT create_html_storage(HTMLInnerWindow*,BOOL,IHTMLStorage**);
 
@@ -1394,6 +1407,7 @@ void nsAString_Finish(nsAString*);
 #define NSSTR_COLOR          0x02
 
 HRESULT map_nsresult(nsresult);
+HRESULT map_selector_nsresult(nsresult,DispatchEx*);
 HRESULT return_nsstr(nsresult,nsAString*,BSTR*);
 HRESULT return_nsstr_variant(nsresult,nsAString*,unsigned,VARIANT*);
 HRESULT variant_to_nsstr(VARIANT*,BOOL,nsAString*);

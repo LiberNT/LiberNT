@@ -3375,7 +3375,6 @@ sync_test("invalid selectors", function() {
             if(v < 9)
                 ok(e.number === 0x70057 - 0x80000000, "body.querySelector(\"" + selectors[i] + "\" threw " + e.number);
             else {
-                todo_wine.
                 ok(e.name === (v < 10 ? undefined : "SyntaxError"), "body.querySelector(\"" + selectors[i] + "\" threw " + e.name);
             }
         }
@@ -3386,7 +3385,6 @@ sync_test("invalid selectors", function() {
             if(v < 9)
                 ok(e.number === 0x70057 - 0x80000000, "body.querySelectorAll(\"" + selectors[i] + "\" threw " + e.number);
             else {
-                todo_wine.
                 ok(e.name === (v < 10 ? undefined : "SyntaxError"), "body.querySelectorAll(\"" + selectors[i] + "\" threw " + e.name);
             }
         }
@@ -3403,11 +3401,131 @@ sync_test("invalid selectors", function() {
             if(v < 9)
                 ok(e.number === 0x70057 - 0x80000000, "body.msMatchesSelector(\"" + selectors[i] + "\" threw " + e.number);
             else {
-                todo_wine.
                 ok(e.name === (v < 10 ? undefined : "SyntaxError"), "body.msMatchesSelector(\"" + selectors[i] + "\" threw " + e.name);
             }
         }
     }
+});
+
+sync_test("DOMException", function() {
+    var v = document.documentMode, D = window.DOMException, P, ex, ex2, d, i, n, r;
+    var consts = [
+        ["INDEX_SIZE_ERR", 1], ["DOMSTRING_SIZE_ERR", 2], ["HIERARCHY_REQUEST_ERR", 3], ["WRONG_DOCUMENT_ERR", 4],
+        ["INVALID_CHARACTER_ERR", 5], ["NO_DATA_ALLOWED_ERR", 6], ["NO_MODIFICATION_ALLOWED_ERR", 7], ["NOT_FOUND_ERR", 8],
+        ["NOT_SUPPORTED_ERR", 9], ["INUSE_ATTRIBUTE_ERR", 10], ["INVALID_STATE_ERR", 11], ["SYNTAX_ERR", 12],
+        ["INVALID_MODIFICATION_ERR", 13], ["NAMESPACE_ERR", 14], ["INVALID_ACCESS_ERR", 15], ["VALIDATION_ERR", 16],
+        ["TYPE_MISMATCH_ERR", 17], ["SECURITY_ERR", 18], ["NETWORK_ERR", 19], ["ABORT_ERR", 20], ["URL_MISMATCH_ERR", 21],
+        ["QUOTA_EXCEEDED_ERR", 22], ["TIMEOUT_ERR", 23, 10], ["INVALID_NODE_TYPE_ERR", 24, 10], ["DATA_CLONE_ERR", 25, 10],
+        ["PARSE_ERR", 81], ["SERIALIZE_ERR", 82]
+    ];
+
+    if(v < 9) {
+        ok(D === undefined, "DOMException = " + D);
+        ok(!("DOMException" in window), "DOMException in window");
+        return;
+    }
+
+    ok(typeof(D) === "object", "typeof(DOMException) = " + typeof(D));
+    ok(Object.prototype.toString.call(D) === "[object DOMException]", "DOMException toString = " + Object.prototype.toString.call(D));
+    ok(Object.getPrototypeOf(D) === Object.prototype, "DOMException prototype is not Object.prototype");
+    try {
+        D();
+        ok(false, "DOMException() did not throw");
+    }catch(e) {
+        ok(e.number === 0xa138a - 0x80000000, "DOMException() threw " + e.number);
+    }
+
+    P = D.prototype;
+    ok(Object.prototype.toString.call(P) === "[object DOMExceptionPrototype]", "prototype toString = " + Object.prototype.toString.call(P));
+    ok(P.constructor === D, "prototype.constructor != DOMException");
+    ok(Object.getPrototypeOf(P) === Object.prototype, "prototype's prototype is not Object.prototype");
+    ok(!(P instanceof Error), "prototype instanceof Error");
+
+    n = 0;
+    for(i = 0; i < consts.length; i++) {
+        if(consts[i][2] && v < consts[i][2]) {
+            ok(!(consts[i][0] in D), consts[i][0] + " in DOMException");
+            ok(!(consts[i][0] in P), consts[i][0] + " in prototype");
+            continue;
+        }
+        n++;
+        ok(D[consts[i][0]] === consts[i][1], "DOMException." + consts[i][0] + " = " + D[consts[i][0]]);
+        ok(P[consts[i][0]] === consts[i][1], "prototype." + consts[i][0] + " = " + P[consts[i][0]]);
+        d = Object.getOwnPropertyDescriptor(D, consts[i][0]);
+        ok(d && !d.writable && d.enumerable && !d.configurable, "DOMException." + consts[i][0] + " descriptor");
+        d = Object.getOwnPropertyDescriptor(P, consts[i][0]);
+        ok(d && !d.writable && d.enumerable && !d.configurable, "prototype." + consts[i][0] + " descriptor");
+    }
+    r = Object.getOwnPropertyNames(D);
+    ok(r.length === n + 1, "DOMException own props " + r.length + ", expected " + (n + 1));
+    ok(r.indexOf("prototype") !== -1, "prototype not an own prop of DOMException");
+
+    var getters = [ "code", "message", "name" ];
+    for(i = 0; i < getters.length; i++) {
+        d = Object.getOwnPropertyDescriptor(P, getters[i]);
+        if(getters[i] === "name" && v < 10) {
+            ok(d === undefined, "prototype has name");
+            continue;
+        }
+        ok(d && typeof(d.get) === "function" && d.set === undefined && d.enumerable && d.configurable, "prototype " + getters[i] + " descriptor");
+        try {
+            d.get.call({});
+            ok(false, getters[i] + " getter on object did not throw");
+        }catch(e) {
+            ok((e.number >>> 0) === 0x8000ffff, getters[i] + " getter on object threw " + e.number);
+        }
+    }
+    d = Object.getOwnPropertyDescriptor(P, "toString");
+    ok(d && typeof(d.value) === "function" && d.writable && d.configurable, "prototype toString descriptor");
+    ok(!("number" in P), "number in prototype");
+    ok(!("description" in P), "description in prototype");
+
+    try {
+        document.body.querySelector("##");
+    }catch(e) {
+        ex = e;
+    }
+    ok(ex instanceof D, "querySelector exception is not a DOMException");
+    ok(!(ex instanceof Error), "querySelector exception is an Error");
+    ok(Object.getPrototypeOf(ex) === P, "exception prototype");
+    ok(Object.prototype.toString.call(ex) === "[object DOMException]", "exception toString = " + Object.prototype.toString.call(ex));
+    ok(Object.getOwnPropertyNames(ex).length === 0, "exception own props " + Object.getOwnPropertyNames(ex));
+    ok(ex.code === 12, "exception code = " + ex.code);
+    ok(ex.message === "SyntaxError", "exception message = " + ex.message);
+    ok(ex.name === (v < 10 ? undefined : "SyntaxError"), "exception name = " + ex.name);
+    ok(ex.number === undefined, "exception number = " + ex.number);
+    ok(ex.SYNTAX_ERR === 12, "exception SYNTAX_ERR = " + ex.SYNTAX_ERR);
+    ok(String(ex) === "SyntaxError", "String(exception) = " + String(ex));
+    ok(P.toString.call(ex) === "SyntaxError", "toString = " + P.toString.call(ex));
+    ex.code = 5;
+    ok(ex.code === 12, "exception code after put = " + ex.code);
+    ok(ex.message === "SyntaxError", "exception message after code put = " + ex.message);
+    try {
+        document.body.querySelector("##");
+    }catch(e) {
+        ex2 = e;
+    }
+    ok(ex2 !== ex, "the same exception object was thrown twice");
+
+    try {
+        window.postMessage("m", "example.org");
+    }catch(e) {
+        ex = e;
+    }
+    if(v < 10) {
+        ok(!(ex instanceof D), "IE9 postMessage exception is a DOMException");
+        ok(ex.number === 0x70057 - 0x80000000, "IE9 postMessage exception number = " + ex.number);
+    }else {
+        ok(ex instanceof D, "postMessage exception is not a DOMException");
+        ok(ex.code === 12, "postMessage exception code = " + ex.code);
+    }
+    try {
+        window.postMessage("m", "");
+    }catch(e) {
+        ex = e;
+    }
+    ok(!(ex instanceof D), "postMessage('') exception is a DOMException");
+    ok(ex.number === 0x70057 - 0x80000000, "postMessage('') exception number = " + ex.number);
 });
 
 sync_test("__proto__", function() {
@@ -3932,10 +4050,8 @@ async_test("postMessage", function() {
             ok(false, "expected exception with targetOrigin " + invalid[i]);
         }catch(ex) {
             var n = ex.number >>> 0;
-            todo_wine_if(v >= 10).
             ok(n === (v < 10 ? 0x80070057 : 0), "postMessage with targetOrigin " + invalid[i] + " threw " + n);
             if(v >= 10)
-                todo_wine.
                 ok(ex.name === "SyntaxError", "postMessage with targetOrigin " + invalid[i] + " threw " + ex.name);
         }
     }
@@ -5769,7 +5885,7 @@ async_test("window own props", function() {
             "BeforeUnloadEvent", ["Blob",10], "BookmarkCollection", "CanvasGradient", "CanvasPattern", "CanvasPixelArray", "CanvasRenderingContext2D", "CDATASection", ["CloseEvent",10],
             "CompositionEvent", "ControlRangeCollection", "Coordinates", ["CryptoOperation",11], "CSSFontFaceRule", "CSSImportRule", ["CSSKeyframeRule",10], ["CSSKeyframesRule",10],
             "CSSMediaRule", "CSSNamespaceRule", "CSSPageRule", "CSSRuleList", "DataTransfer", "Debug", ["DeviceAcceleration",11], ["DeviceMotionEvent",11],
-            ["DeviceOrientationEvent",11], ["DeviceRotationRate",11], ["DOMError",10], "DOMException", ["DOMSettableTokenList",10], ["DOMStringList",10], ["DOMStringMap",11],
+            ["DeviceOrientationEvent",11], ["DeviceRotationRate",11], ["DOMError",10], ["DOMSettableTokenList",10], ["DOMStringList",10], ["DOMStringMap",11],
             "DragEvent", ["ErrorEvent",10], "EventException", ["EXT_texture_filter_anisotropic",11], ["File",10], ["FileList",10], ["FileReader",10],
             "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement",
             "HTMLBGSoundElement", "HTMLCanvasElement", ["HTMLDataListElement",10],
