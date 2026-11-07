@@ -36,6 +36,11 @@
 #define USB_AUDIO_GET_MIN                                0x82
 #define USB_AUDIO_GET_MAX                                0x83
 #define USB_AUDIO_GET_RES                                0x84
+#define USB_AUDIO2_GET_RANGE                             0x82
+#define USB_AUDIO2_CS_SAMPLING_FREQ                      0x01
+#define USB_AUDIO2_CS_CLOCK_VALID                        0x02
+#define USB_AUDIO2_FORMAT_TYPE_I                         0x01
+#define USB_AUDIO2_FORMAT_PCM                            0x00000001
 #define USB_AUDIO_SAMPLING_FREQ_CONTROL                  0x0100
 #define USB_AUDIO_MUTE_CONTROL                           0x0100
 #define USB_AUDIO_VOLUME_CONTROL                         0x0200
@@ -413,6 +418,34 @@ typedef struct
 } USB_AUDIO_STREAMING_ENDPOINT_DESCRIPTOR,
   *PUSB_AUDIO_STREAMING_ENDPOINT_DESCRIPTOR;
 
+/* ── UAC2 Streaming Interface General Descriptor (AS_GENERAL) ───── */
+typedef struct
+{
+    UCHAR  bLength;
+    UCHAR  bDescriptorType;
+    UCHAR  bDescriptorSubtype;
+    UCHAR  bTerminalLink;
+    UCHAR  bmControls;
+    UCHAR  bFormatType;
+    ULONG  bmFormats;
+    UCHAR  bNrChannels;
+    ULONG  bmChannelConfig;
+    UCHAR  iChannelNames;
+} USB_AUDIO2_STREAMING_INTERFACE_DESCRIPTOR,
+  *PUSB_AUDIO2_STREAMING_INTERFACE_DESCRIPTOR;
+
+/* ── UAC2 Format Type I descriptor ──────────────────────────────── */
+typedef struct
+{
+    UCHAR  bLength;
+    UCHAR  bDescriptorType;
+    UCHAR  bDescriptorSubtype;
+    UCHAR  bFormatType;
+    UCHAR  bSubslotSize;
+    UCHAR  bBitResolution;
+} USB_AUDIO2_STREAMING_FORMAT_TYPE_DESCRIPTOR,
+  *PUSB_AUDIO2_STREAMING_FORMAT_TYPE_DESCRIPTOR;
+
 /* ── UAC3 BADD profiles ─────────────────────────────────────────── */
 #define UAC3_FUNCTION_SUBCLASS_UNDEFINED             0x00
 #define UAC3_FUNCTION_SUBCLASS_FULL_ADC_3_0          0x01
@@ -528,6 +561,17 @@ typedef struct _NODE_CONTEXT
     PUSBAUDIO_VOLUME_RANGE_CACHE VolumeRanges;
 } NODE_CONTEXT, *PNODE_CONTEXT;
 
+#define USBAUDIO_MAX_CLOCK_RANGES 4
+
+typedef struct _USBAUDIO_CLOCK_RANGE
+{
+    UCHAR ClockId;
+    BOOLEAN Queried;
+    BOOLEAN Valid;
+    ULONG MinimumRate;
+    ULONG MaximumRate;
+} USBAUDIO_CLOCK_RANGE, *PUSBAUDIO_CLOCK_RANGE;
+
 typedef struct _DEVICE_EXTENSION
 {
     PDEVICE_OBJECT LowerDevice;
@@ -544,6 +588,8 @@ typedef struct _DEVICE_EXTENSION
     BOOLEAN HasMidiInterface;
     BOOLEAN HasFeedbackEndpoint;
     USBD_PIPE_HANDLE FeedbackPipeHandle;         /* async feedback pipe */
+    USBAUDIO_CLOCK_RANGE ClockRanges[USBAUDIO_MAX_CLOCK_RANGES];
+    ULONG ClockRangeCount;
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
 typedef struct _FILTER_CONTEXT
@@ -576,7 +622,17 @@ typedef struct _PIN_CONTEXT
     WORK_QUEUE_ITEM StarvationWorkItem;
     PKSWORKER       StarvationWorker;
     USBD_PIPE_HANDLE DataPipeHandle;            /* correct iso data pipe */
+    USBD_PIPE_HANDLE FeedbackPipeHandle;        /* async feedback pipe */
     ULONG            MaxPacketSize;              /* actual max packet size */
+    ULONG            PacketRate;                 /* iso packets per second */
+    ULONG            FeedbackInterval;           /* feedback pipe interval */
+    ULONG            FeedbackValue;              /* last Q16.16 payload rate */
+    PIRP             FeedbackIrp;                /* pending feedback read */
+    PURB             FeedbackUrb;
+    PVOID            FeedbackBuffer;
+    KEVENT           FeedbackEvent;
+    BOOLEAN          FeedbackPending;
+    UCHAR            ClockId;                    /* UAC2 clock for this pin */
 } PIN_CONTEXT, *PPIN_CONTEXT;
 
 /* ──────────────────────────────────────────────────────────────────
@@ -592,6 +648,31 @@ PUSB_AUDIO_CONTROL_INPUT_TERMINAL_DESCRIPTOR
 UsbAudioGetStreamingTerminalDescriptorByIndex(
     _In_ PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
     _In_ ULONG Index);
+
+PUSB_COMMON_DESCRIPTOR
+UsbAudioFindStreamingClassDescriptor(
+    _In_ PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
+    _In_ PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor,
+    _In_ UCHAR Subtype);
+
+UCHAR
+UsbAudioGetTerminalClockId(
+    _In_ PDEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR TerminalId);
+
+ULONG
+UsbAudioGetStreamingPacketRate(
+    _In_ PUSB_ENDPOINT_DESCRIPTOR EndpointDescriptor);
+
+NTSTATUS
+UsbAudioGetSetProperty(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ UCHAR Request,
+    _In_ USHORT Value,
+    _In_ USHORT Index,
+    _In_ PVOID TransferBuffer,
+    _In_ ULONG TransferBufferLength,
+    _In_ ULONG TransferFlags);
 
 /* ──────────────────────────────────────────────────────────────────
  *  Forward declarations — pool.c
