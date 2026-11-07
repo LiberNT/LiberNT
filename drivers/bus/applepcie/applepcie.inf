@@ -1,0 +1,42 @@
+; PROJECT:     LiberNT Apple Silicon PCIe Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 11/06/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%ApplePcie.DeviceDesc% = ApplePcie_Inst,FDT\apple_t6020-pcie
+
+[ApplePcie_Inst.NT]
+CopyFiles = ApplePcie_CopyFiles
+
+[ApplePcie_CopyFiles]
+applepcie.sys
+
+[ApplePcie_Inst.NT.Services]
+AddService = applepcie,0x00000002,ApplePcie_Service
+
+[ApplePcie_Service]
+DisplayName = %ApplePcie.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\applepcie.sys
+LoadOrderGroup = Boot Bus Extender
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+ApplePcie.DeviceDesc = "Apple silicon PCIe controller"
+ApplePcie.ServiceDesc = "Apple Silicon PCIe Driver"
