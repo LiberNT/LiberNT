@@ -394,10 +394,11 @@ BOOL FASTCALL can_activate_window( PWND Wnd OPTIONAL)
 
 
 BOOL FASTCALL
-co_WinPosActivatePreviousForeground(PWND Wnd)
+co_WinPosActivatePreviousForeground(PWND Wnd, BOOL bDestroy)
 {
-   PWND WndPrev;
+   PWND WndPrev, Owner;
    USER_REFERENCE_ENTRY Ref;
+   UINT Depth;
    BOOL Ret;
 
    if (!gpqForeground || gpqForeground->spwndActive != Wnd ||
@@ -414,6 +415,15 @@ co_WinPosActivatePreviousForeground(PWND Wnd)
        (WndPrev->style & (WS_VISIBLE | WS_DISABLED | WS_MINIMIZE)) != WS_VISIBLE ||
        (WndPrev->ExStyle & WS_EX_NOACTIVATE) || (WndPrev->state & WNDS_DESTROYED))
       return FALSE;
+
+   if (bDestroy)
+   {
+      for (Owner = WndPrev->spwndOwner, Depth = 0; Owner && Depth < 64; Owner = Owner->spwndOwner, Depth++)
+      {
+         if (Owner == Wnd)
+            return FALSE;
+      }
+   }
 
    UserRefObjectCo(WndPrev, &Ref);
    Ret = co_WinPosSetOtherForegroundWindow(WndPrev);
@@ -3546,7 +3556,7 @@ co_WinPosShowWindow(PWND Wnd, INT Cmd)
 
           if (UserIsDesktopWindow(Wnd->spwndParent) && !can_activate_window(Owner))
           {
-              if (!(Cmd == SW_HIDE && co_WinPosActivatePreviousForeground(Wnd)) &&
+              if (!(Cmd == SW_HIDE && co_WinPosActivatePreviousForeground(Wnd, FALSE)) &&
                   !ActivateOtherWindowMin(Wnd))
               {
                 co_WinPosActivateOtherWindow(Wnd);
