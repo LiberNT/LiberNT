@@ -493,6 +493,44 @@ static void Test_DWP_OwnerZOrder()
 
 }
 
+static void Test_DWP_Activate(void)
+{
+    static const struct
+    {
+        int First;
+        UINT FirstFlags;
+        int Second;
+        UINT SecondFlags;
+        int Active;
+    } Tests[] =
+    {
+        { 1, SWP_NOZORDER, 2, SWP_NOZORDER, 1 },
+        { 2, SWP_NOZORDER, 1, SWP_NOZORDER, 2 },
+        { 1, SWP_NOZORDER | SWP_NOACTIVATE, 2, SWP_NOZORDER, 2 },
+        { 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 2, SWP_NOZORDER, 1 },
+        { 1, SWP_NOSIZE, 2, SWP_NOSIZE, 1 },
+    };
+    HWND Windows[] = { NULL, hWnd1, hWnd2, hWnd3, hWnd4 };
+    HDWP hdwp;
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(Tests); i++)
+    {
+        SetActiveWindow(hWnd3);
+        FlushMessages();
+        ok(GetActiveWindow() == hWnd3, "%u: hwnd%d is active before the test\n", i, get_iwnd(GetActiveWindow()));
+        hdwp = BeginDeferWindowPos(2);
+        hdwp = DeferWindowPos(hdwp, Windows[Tests[i].First], NULL, 40 + (i & 1) * 8, 20, 200, 210, Tests[i].FirstFlags);
+        hdwp = DeferWindowPos(hdwp, Windows[Tests[i].Second], NULL, 40 + (i & 1) * 8, 40, 220, 230, Tests[i].SecondFlags);
+        ok(hdwp != NULL, "%u: DeferWindowPos failed\n", i);
+        ok(EndDeferWindowPos(hdwp), "%u: EndDeferWindowPos failed\n", i);
+        FlushMessages();
+        ok(GetActiveWindow() == Windows[Tests[i].Active], "%u: hwnd%d is active, expected hwnd%d\n",
+           i, get_iwnd(GetActiveWindow()), Tests[i].Active);
+    }
+    EMPTY_CACHE();
+}
+
 START_TEST(DeferWindowPos)
 {
     SetCursorPos(0,0);
@@ -520,6 +558,9 @@ START_TEST(DeferWindowPos)
 
     set_default_pos();
     Test_DWP_OwnerZOrder();
+
+    set_default_pos();
+    Test_DWP_Activate();
 
     DestroyWindow(hWnd4);
     DestroyWindow(hWnd3);
