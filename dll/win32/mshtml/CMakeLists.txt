@@ -30,6 +30,7 @@ list(APPEND SOURCE
     htmlimg.c
     htmlinput.c
     htmllink.c
+    htmllist.c
     htmllocation.c
     htmlnode.c
     htmlobject.c

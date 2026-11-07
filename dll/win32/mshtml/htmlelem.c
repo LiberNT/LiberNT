@@ -90,13 +90,13 @@ static const tag_desc_t tag_descs[] = {
     {L"COL",            HTMLTableCol_Create, col_attr_only_names},
     {L"COLGROUP",       HTMLTableCol_Create, col_attr_only_names},
     {L"DATALIST",       HTMLElement_Ctor},
-    {L"DD",             HTMLElement_Ctor},
+    {L"DD",             HTMLDDElement_Create},
     {L"DEL",            HTMLModElement_Create},
     {L"DFN",            HTMLPhraseElement_Create},
-    {L"DIR",            HTMLElement_Ctor},
+    {L"DIR",            HTMLDirectoryElement_Create},
     {L"DIV",            HTMLElement_Ctor, div_attr_only_names},
-    {L"DL",             HTMLElement_Ctor},
-    {L"DT",             HTMLElement_Ctor},
+    {L"DL",             HTMLDListElement_Create},
+    {L"DT",             HTMLDTElement_Create},
     {L"EM",             HTMLPhraseElement_Create},
     {L"EMBED",          HTMLEmbedElement_Create, embed_attr_only_names},
     {L"FIELDSET",       HTMLElement_Ctor},
@@ -125,18 +125,19 @@ static const tag_desc_t tag_descs[] = {
     {L"KBD",            HTMLPhraseElement_Create},
     {L"LABEL",          HTMLLabelElement_Create},
     {L"LEGEND",         HTMLElement_Ctor},
-    {L"LI",             HTMLElement_Ctor},
+    {L"LI",             HTMLLIElement_Create},
     {L"LINK",           HTMLLinkElement_Create},
     {L"LISTING",        HTMLBlockElement_Create},
     {L"MAP",            HTMLElement_Ctor},
     {L"MARK",           HTMLElement_Ctor},
+    {L"MENU",           HTMLMenuElement_Create},
     {L"META",           HTMLMetaElement_Create},
     {L"NAV",            HTMLElement_Ctor},
     {L"NOBR",           HTMLPhraseElement_Create},
     {L"NOFRAMES",       HTMLElement_Ctor},
     {L"NOSCRIPT",       HTMLElement_Ctor},
     {L"OBJECT",         HTMLObjectElement_Create},
-    {L"OL",             HTMLElement_Ctor},
+    {L"OL",             HTMLOListElement_Create},
     {L"OPTGROUP",       HTMLElement_Ctor},
     {L"OPTION",         HTMLOptionElement_Create},
     {L"P",              HTMLParaElement_Create, para_attr_only_names},
@@ -173,7 +174,7 @@ static const tag_desc_t tag_descs[] = {
     {L"TRACK",          HTMLElement_Ctor},
     {L"TT",             HTMLPhraseElement_Create},
     {L"U",              HTMLPhraseElement_Create},
-    {L"UL",             HTMLElement_Ctor},
+    {L"UL",             HTMLUListElement_Create},
     {L"VAR",            HTMLPhraseElement_Create},
     {L"VIDEO",          HTMLElement_Ctor},
     {L"WBR",            HTMLElement_Ctor},
@@ -1208,6 +1209,10 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
 
         if(!is_content_attr_dispid(This, compat_mode, dispid)) {
             hres = set_elem_attr_value_by_dispid(This, dispid, &val);
+            if(V_VT(&val) == VT_BSTR && is_list_attr(This, strAttributeName) &&
+               (hres == E_INVALIDARG || hres == DISP_E_TYPEMISMATCH || hres == DISP_E_OVERFLOW ||
+                hres == CTL_E_INVALIDPROPERTYVALUE))
+                goto set_content;
             goto done;
         }
 
@@ -1237,6 +1242,7 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
         }
     }
 
+set_content:
     hres = variant_to_nsstr(&val, FALSE, &value_str);
     if(FAILED(hres))
         goto done;
@@ -1255,6 +1261,21 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
         }
         if(SUCCEEDED(hres))
             VariantClear(&color);
+    }
+    if(NS_SUCCEEDED(nsres) && compat_mode >= COMPAT_MODE_IE8) {
+        const WCHAR *canon;
+        WCHAR buf[12];
+        BSTR str;
+
+        if(SUCCEEDED(elem_get_attr_string(This, strAttributeName, &str)) && str) {
+            canon = list_canonical_attr(This, strAttributeName, str, buf, ARRAY_SIZE(buf));
+            if(canon && wcscmp(canon, str)) {
+                nsAString_InitDepend(&value_str, canon);
+                nsres = nsIDOMElement_SetAttribute(This->dom_element, &name_str, &value_str);
+                nsAString_Finish(&value_str);
+            }
+            SysFreeString(str);
+        }
     }
     nsAString_Finish(&name_str);
     if(NS_FAILED(nsres))
@@ -1325,7 +1346,8 @@ static HRESULT WINAPI HTMLElement_getAttribute(IHTMLElement *iface, BSTR strAttr
             return (hres == DISP_E_UNKNOWNNAME) ? S_OK : hres;
         }
 
-        if(dispid != DISPID_UNKNOWN && !is_content_attr_dispid(This, compat_mode, dispid)) {
+        if(dispid != DISPID_UNKNOWN && !is_content_attr_dispid(This, compat_mode, dispid) &&
+           !list_attr_is_invalid(This, strAttributeName)) {
             hres = get_elem_attr_value_by_dispid(This, dispid, AttributeValue);
             if(FAILED(hres))
                 return hres;
