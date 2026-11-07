@@ -12,6 +12,17 @@
 #define HELPER L"user32_apitest_fghide.exe"
 
 static HWND hwndThreadControl;
+static HANDLE hSleeping;
+static WNDPROC OwnedProc;
+static UINT OwnedActivations;
+
+static LRESULT CALLBACK
+CountActivationProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM lParam)
+{
+    if (Message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE)
+        OwnedActivations++;
+    return CallWindowProcW(OwnedProc, hWnd, Message, wParam, lParam);
+}
 
 static LRESULT CALLBACK
 ControlProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM lParam)
@@ -30,8 +41,13 @@ ControlProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM lParam)
         case FGHIDE_ACTIVATE:
             return SetForegroundWindow((HWND)wParam);
         case FGHIDE_SLEEP:
+            SetEvent(hSleeping);
             Sleep((DWORD)wParam);
             return 0;
+        case FGHIDE_DISABLE:
+            return EnableWindow((HWND)wParam, FALSE);
+        case FGHIDE_MINIMIZE:
+            return ShowWindow((HWND)wParam, SW_SHOWMINNOACTIVE);
     }
     return DefWindowProcW(hWnd, Message, wParam, lParam);
 }
@@ -154,12 +170,28 @@ TakeForeground(HWND hwndHelper1, HWND hwndHelper2, HWND hwndBelow)
     return hWnd;
 }
 
+static HWND
+CreateOwnedForeground(HWND hwndOwner)
+{
+    HWND hWnd = CreateWindowExW(0, FGHIDE_WINDOW_CLASS, L"ForegroundAfterHide owned", WS_POPUP | WS_CAPTION | WS_SYSMENU,
+                                160, 160, 240, 160, hwndOwner, NULL, GetModuleHandleW(NULL), NULL);
+
+    ShowWindow(hWnd, SW_SHOWNORMAL);
+    SetForegroundWindow(hWnd);
+    Pump(300);
+    ok(GetForegroundWindow() == hWnd, "The owned window did not take the foreground\n");
+    SetForegroundWindow(hwndOwner);
+    Pump(300);
+    ok(GetForegroundWindow() == hwndOwner, "The owner did not take the foreground back\n");
+    return hWnd;
+}
+
 START_TEST(ForegroundAfterHide)
 {
     WCHAR Path[MAX_PATH], *Slash;
     WNDCLASSW Class = { 0 };
     PROCESS_INFORMATION Process1 = { 0 }, Process2 = { 0 };
-    HWND hwndHelper1, hwndHelper2, hWnd, hwndPrev, hwndOther, hwndNext;
+    HWND hwndHelper1, hwndHelper2, hWnd, hwndPrev, hwndOther, hwndNext, hwndOwned;
     HANDLE Ready, Thread;
     DWORD ThreadId;
 
@@ -189,6 +221,7 @@ START_TEST(ForegroundAfterHide)
     hwndHelper1 = StartHelper(Path, L"1", &Process1);
     hwndHelper2 = StartHelper(Path, L"2", &Process2);
     Ready = CreateEventW(NULL, FALSE, FALSE, NULL);
+    hSleeping = CreateEventW(NULL, FALSE, FALSE, NULL);
     Thread = CreateThread(NULL, 0, ControlThread, Ready, 0, &ThreadId);
     if (Thread)
         WaitForSingleObject(Ready, 10000);
@@ -279,11 +312,74 @@ START_TEST(ForegroundAfterHide)
     SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
     Pump(300);
 
+    hwndPrev = CreateIn(hwndHelper2, 300, 300);
+    GiveForeground(hwndHelper2, hwndPrev);
+    hWnd = TakeForeground(hwndHelper1, hwndHelper2, NULL);
+    GiveForeground(hwndHelper2, hwndPrev);
+    AllowBack(hwndHelper1, hwndHelper2);
+    SetForegroundWindow(hWnd);
+    Pump(300);
+    ok(GetForegroundWindow() == hWnd, "The test window did not take the foreground back\n");
+    ShowWindow(hWnd, SW_HIDE);
+    ok(WaitForForeground() == hwndPrev, "Hide after a switch back: the previous foreground window is not the foreground window\n");
+    DestroyWindow(hWnd);
+    SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
+    Pump(300);
+
+    hwndPrev = CreateIn(hwndThreadControl, 300, 300);
+    GiveForeground(hwndThreadControl, hwndPrev);
+    hwndNext = CreateIn(hwndHelper2, 200, 200);
+    hWnd = TakeForeground(hwndHelper1, hwndHelper2, hwndNext);
+    SendMessageW(hwndThreadControl, FGHIDE_DISABLE, (WPARAM)hwndPrev, 0);
+    Pump(200);
+    ShowWindow(hWnd, SW_HIDE);
+    ok(WaitForForeground() == hwndNext, "Hide: the disabled previous foreground window was not skipped\n");
+    DestroyWindow(hWnd);
+    SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndNext, 0);
+    SendMessageW(hwndThreadControl, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
+    Pump(300);
+
+    hwndPrev = CreateIn(hwndThreadControl, 300, 300);
+    GiveForeground(hwndThreadControl, hwndPrev);
+    hwndNext = CreateIn(hwndHelper2, 200, 200);
+    hWnd = TakeForeground(hwndHelper1, hwndHelper2, hwndNext);
+    SendMessageW(hwndThreadControl, FGHIDE_MINIMIZE, (WPARAM)hwndPrev, 0);
+    Pump(300);
+    ShowWindow(hWnd, SW_HIDE);
+    ok(WaitForForeground() == hwndNext, "Hide: the minimized previous foreground window was not skipped\n");
+    DestroyWindow(hWnd);
+    SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndNext, 0);
+    SendMessageW(hwndThreadControl, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
+    Pump(300);
+
+    hwndPrev = CreateIn(hwndHelper2, 300, 300);
+    GiveForeground(hwndHelper2, hwndPrev);
+    hWnd = TakeForeground(hwndHelper1, hwndHelper2, NULL);
+    hwndOwned = CreateOwnedForeground(hWnd);
+    ShowWindow(hWnd, SW_HIDE);
+    ok(WaitForForeground() == hwndOwned, "Hide owner: the owned previous foreground window is not the foreground window\n");
+    ok(GetActiveWindow() == hwndOwned, "Hide owner: the owned previous foreground window is not active\n");
+    DestroyWindow(hWnd);
+    SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
+    Pump(300);
+
+    hwndPrev = CreateIn(hwndHelper2, 300, 300);
+    GiveForeground(hwndHelper2, hwndPrev);
+    hWnd = TakeForeground(hwndHelper1, hwndHelper2, NULL);
+    hwndOwned = CreateOwnedForeground(hWnd);
+    OwnedActivations = 0;
+    OwnedProc = (WNDPROC)SetWindowLongPtrW(hwndOwned, GWLP_WNDPROC, (LONG_PTR)CountActivationProc);
+    DestroyWindow(hWnd);
+    ok(WaitForForeground() == hwndPrev, "Destroy owner: the window below the owner is not the foreground window\n");
+    ok(OwnedActivations == 0, "Destroy owner: the owned window was activated %u times\n", OwnedActivations);
+    SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
+    Pump(300);
+
     hwndPrev = CreateIn(hwndThreadControl, 200, 200);
     GiveForeground(hwndThreadControl, hwndPrev);
     hWnd = TakeForeground(hwndHelper1, hwndHelper2, NULL);
     PostMessageW(hwndThreadControl, FGHIDE_SLEEP, 1500, 0);
-    Sleep(100);
+    ok(WaitForSingleObject(hSleeping, 5000) == WAIT_OBJECT_0, "Busy: the thread did not start sleeping\n");
     ShowWindow(hWnd, SW_HIDE);
     ok(GetForegroundWindow() == NULL, "Busy: there is a foreground window right after the hide\n");
     Pump(300);
@@ -304,6 +400,8 @@ Cleanup:
     }
     if (Ready)
         CloseHandle(Ready);
+    if (hSleeping)
+        CloseHandle(hSleeping);
     if (Process1.hProcess)
     {
         PostThreadMessageW(Process1.dwThreadId, WM_QUIT, 0, 0);
