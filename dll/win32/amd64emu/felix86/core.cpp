@@ -249,7 +249,7 @@ static void set_extensions(u32 mask) {
     Extensions::Zicclsm = mask & FELIX86_NT_EXT_ZICCLSM;
 }
 
-int Felix86NtInitialize(void) {
+const char* Felix86NtInitialize(void) {
     Felix86NtRunConstructors();
 
     g_config.inline_syscalls = false;
@@ -258,14 +258,12 @@ int Felix86NtInitialize(void) {
 
     set_extensions(Felix86NtProbeExtensions());
     if (!Extensions::V || !Extensions::Zba || !Extensions::Zbb || !Extensions::Zbs || !Extensions::Zicond) {
-        Logger::log("felix86 requires rv64gv_zba_zbb_zbs_zicond\n");
-        return -1;
+        return "felix86 requires rv64gv_zba_zbb_zbs_zicond";
     }
 
     Extensions::VLEN = Felix86NtVectorBytes() * 8;
     if (Extensions::VLEN < 128) {
-        Logger::log("felix86 requires a vector length of at least 128 bits\n");
-        return -1;
+        return "felix86 requires a vector length of at least 128 bits";
     }
 
     {
