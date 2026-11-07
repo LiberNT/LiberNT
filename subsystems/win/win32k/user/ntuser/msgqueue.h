@@ -175,6 +175,8 @@ co_MsqWaitForNewMessages(PTHREADINFO pti, PWND WndFilter,
 VOID FASTCALL MsqIncPaintCountQueue(PTHREADINFO);
 VOID FASTCALL MsqDecPaintCountQueue(PTHREADINFO);
 LRESULT FASTCALL co_IntSendMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+LRESULT FASTCALL co_IntSendSystemMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+LRESULT FASTCALL co_IntSendSystemMessageNoWait(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 LRESULT FASTCALL co_IntPostOrSendMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 LRESULT FASTCALL
 co_IntSendMessageTimeout(HWND hWnd,

@@ -606,10 +606,10 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
 
                   if (hittest >= HTLEFT && hittest <= HTBOTTOMRIGHT)
                       wpSizingHit = WMSZ_LEFT + (hittest - HTLEFT);
-                  co_IntSendMessage( UserHMGetHandle(pwnd), WM_SIZING, wpSizingHit, (LPARAM)&newRect );
+                  co_IntSendSystemMessage( UserHMGetHandle(pwnd), WM_SIZING, wpSizingHit, (LPARAM)&newRect );
               }
               else
-                  co_IntSendMessage( UserHMGetHandle(pwnd), WM_MOVING, 0, (LPARAM)&newRect );
+                  co_IntSendSystemMessage( UserHMGetHandle(pwnd), WM_MOVING, 0, (LPARAM)&newRect );
 
               if (!iconic)
               {
@@ -785,7 +785,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
       /* Single click brings up the system menu when iconized */
       if (iconic && !moved && (Style & WS_SYSMENU))
       {
-         co_IntSendMessage(UserHMGetHandle(pwnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, MAKELONG(pt.x, pt.y));
+         co_IntSendSystemMessage(UserHMGetHandle(pwnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, MAKELONG(pt.x, pt.y));
       }
    }
 }
@@ -1160,8 +1160,21 @@ VOID UserDrawCaptionBar(
  * - Drawing of WS_BORDER after scrollbars
  * - Correct drawing of size-box
  */
+static LRESULT
+NC_DoPhysicalNCPaint(PWND pWnd, HDC hDC, INT Flags);
+
 LRESULT
 NC_DoNCPaint(PWND pWnd, HDC hDC, INT Flags)
+{
+   INT DpiLevel = UserDpiBeginPhysicalDrawing(pWnd, hDC);
+   LRESULT Result = NC_DoPhysicalNCPaint(pWnd, hDC, Flags);
+
+   UserDpiEndDrawing(hDC, DpiLevel);
+   return Result;
+}
+
+static LRESULT
+NC_DoPhysicalNCPaint(PWND pWnd, HDC hDC, INT Flags)
 {
    DWORD Style, ExStyle;
    PWND Parent;
@@ -1658,7 +1671,7 @@ NC_DoButton(PWND pWnd, WPARAM wParam, LPARAM lParam)
    IntReleaseCapture();
    UserReleaseDC(pWnd, WindowDC, FALSE);
    if (Pressed)
-      co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SCMsg, SCMsg == SC_CLOSE ? lParam : MAKELONG(Msg.pt.x,Msg.pt.y));
+      co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SCMsg, SCMsg == SC_CLOSE ? lParam : MAKELONG(Msg.pt.x,Msg.pt.y));
 }
 
 
@@ -1684,7 +1697,7 @@ NC_HandleNCLButtonDown(PWND pWnd, WPARAM wParam, LPARAM lParam)
                  //NtUserCallHwndLock(hTopWnd, HWNDLOCK_ROUTINE_SETFOREGROUNDWINDOWMOUSE) ||
                  UserGetActiveWindow() == UserHMGetHandle(TopWnd))
             {
-               co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOVE + HTCAPTION, lParam);
+               co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOVE + HTCAPTION, lParam);
             }
             break;
         }
@@ -1701,23 +1714,23 @@ NC_HandleNCLButtonDown(PWND pWnd, WPARAM wParam, LPARAM lParam)
                 UserDrawSysMenuButton(pWnd, hDC, &rect, TRUE);
                 UserReleaseDC( pWnd, hDC, FALSE );
               }
-	      co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, lParam);
+	      co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTSYSMENU, lParam);
 	  }
 	  break;
         }
         case HTMENU:
         {
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTMENU, lParam);
+            co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_MOUSEMENU + HTMENU, lParam);
             break;
         }
         case HTHSCROLL:
         {
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_HSCROLL + HTHSCROLL, lParam);
+            co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_HSCROLL + HTHSCROLL, lParam);
             break;
         }
         case HTVSCROLL:
         {
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_VSCROLL + HTVSCROLL, lParam);
+            co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_VSCROLL + HTVSCROLL, lParam);
             break;
         }
         case HTMINBUTTON:
@@ -1744,7 +1757,7 @@ NC_HandleNCLButtonDown(PWND pWnd, WPARAM wParam, LPARAM lParam)
             * is easy to differentiate from HTSYSMENU, because HTSYSMENU adds
             * SC_MOUSEMENU into wParam.
             */
-            co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_SIZE + wParam - (HTLEFT - WMSZ_LEFT), lParam);
+            co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_SIZE + wParam - (HTLEFT - WMSZ_LEFT), lParam);
             break;
         }
         case HTBORDER:
@@ -1767,7 +1780,7 @@ NC_HandleNCLButtonDblClk(PWND pWnd, WPARAM wParam, LPARAM lParam)
       /* Maximize/Restore the window */
       if((Style & WS_CAPTION) == WS_CAPTION && (Style & WS_MAXIMIZEBOX))
       {
-        co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, ((Style & (WS_MINIMIZE | WS_MAXIMIZE)) ? SC_RESTORE : SC_MAXIMIZE), 0);
+        co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, ((Style & (WS_MINIMIZE | WS_MAXIMIZE)) ? SC_RESTORE : SC_MAXIMIZE), 0);
       }
       break;
     }
@@ -1780,7 +1793,7 @@ NC_HandleNCLButtonDblClk(PWND pWnd, WPARAM wParam, LPARAM lParam)
       if ((state & (MF_DISABLED | MF_GRAYED)) || (state == 0xFFFFFFFF))
           break;
 
-      co_IntSendMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_CLOSE, lParam);
+      co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SYSCOMMAND, SC_CLOSE, lParam);
       break;
     }
     case HTTOP:
@@ -1841,7 +1854,7 @@ LRESULT NC_HandleNCRButtonDown(PWND pwnd, WPARAM wParam, LPARAM lParam)
       if (hittest == HTCAPTION || hittest == HTSYSMENU || hittest == HTHSCROLL || hittest == HTVSCROLL)
       {
          TRACE("Msg pt %x and Msg.lParam %x and lParam %x\n",MAKELONG(msg.pt.x,msg.pt.y),msg.lParam,lParam);
-         co_IntSendMessage( UserHMGetHandle(pwnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(pwnd), MAKELONG(msg.pt.x,msg.pt.y));
+         co_IntSendSystemMessage( UserHMGetHandle(pwnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(pwnd), MAKELONG(msg.pt.x,msg.pt.y));
       }
       break;
   }

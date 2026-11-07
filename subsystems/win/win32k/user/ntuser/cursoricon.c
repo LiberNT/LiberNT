@@ -957,6 +957,8 @@ NtUserGetCursorInfo(
     SafeCi.hCursor = (CurIcon ? UserHMGetHandle(CurIcon) : NULL);
 
     SafeCi.ptScreenPos = gpsi->ptCursor;
+    if (UserDpiIsVirtualCaller())
+        UserDpiPointToLogical(&SafeCi.ptScreenPos);
 
     _SEH2_TRY
     {
@@ -1068,6 +1070,9 @@ NtUserClipCursor(
     }
 
     UserEnterExclusive();
+
+    if (prcl && UserDpiIsVirtualCaller())
+        UserDpiRectToPhysical((PRECT)prcl);
 
     /* Call the internal function */
     bResult = UserClipCursor(prcl);
@@ -1318,6 +1323,8 @@ NtUserGetClipCursor(
         Rect.right = UserGetSystemMetrics(SM_CXSCREEN);
         Rect.bottom = UserGetSystemMetrics(SM_CYSCREEN);
     }
+    if (UserDpiIsVirtualCaller())
+        UserDpiRectToLogical((PRECT)&Rect);
 
     Status = MmCopyToCaller(lpRect, &Rect, sizeof(RECT));
     if (!NT_SUCCESS(Status))

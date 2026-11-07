@@ -1199,6 +1199,13 @@ NtUserGetScrollBarInfo(HWND hWnd, LONG idObject, PSCROLLBARINFO psbi)
    UserRefObjectCo(Window, &Ref);
    Ret = co_IntGetScrollBarInfo(Window, idObject, &sbi);
    UserDerefObjectCo(Window);
+   if (Ret && UserDpiIsVirtualCaller())
+   {
+      UserDpiRectToLogical(&sbi.rcScrollBar);
+      sbi.dxyLineButton = UserDpiToLogical(sbi.dxyLineButton);
+      sbi.xyThumbTop = UserDpiToLogical(sbi.xyThumbTop);
+      sbi.xyThumbBottom = UserDpiToLogical(sbi.xyThumbBottom);
+   }
 
    Status = MmCopyToCaller(psbi, &sbi, sizeof(SCROLLBARINFO));
    if(!NT_SUCCESS(Status))
