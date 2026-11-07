@@ -24,6 +24,32 @@ MiAssertMdl(
     MI_ASSERT((Mdl->MappedSystemVa & (PAGE_SIZE - 1)) == 0);
 }
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertCopyMapping(
+    _In_ PMI_MDL Mdl)
+{
+    ULONG i;
+
+    MI_ASSERT(Mdl->Locked && Mdl->MappedSystemVa != 0);
+    for (i = 0; i < Mdl->PageCount; i++)
+    {
+        PMI_PTE Slot = MiPtLookup(&Mdl->Space->System->SystemSpace,
+                                  Mdl->MappedSystemVa + (ULONG64)i * PAGE_SIZE, NULL);
+        MI_PTE Pte;
+
+        MI_ASSERT(Slot != NULL);
+        Pte = MiArchPteRead(Slot);
+        MI_ASSERT(MiArchPteIsValid(Pte));
+        MI_ASSERT(MiArchPteFrame(Pte) == Mdl->Frames[i]);
+        MI_ASSERT((MiArchPteIsWritable(Pte) != FALSE) == (Mdl->WriteAccess != FALSE));
+    }
+}
+#else
+#define MiAssertCopyMapping(Mdl) ((void)0)
+#endif
+
 PMI_MDL
 MiMdlAllocate(
     _In_ PMI_ADDRESS_SPACE Space,
@@ -262,6 +288,7 @@ MiProbeAndLockPages(
     if (NT_SUCCESS(Status))
         Mdl->Locked = TRUE;
 
+    MI_ASSERT(Mdl->Locked == (BOOLEAN)NT_SUCCESS(Status));
     return Status;
 }
 
@@ -283,6 +310,7 @@ MiProbeAndLockPagesForCopy(
     if (NT_SUCCESS(Status))
         Mdl->Locked = TRUE;
 
+    MI_ASSERT(Mdl->Locked == (BOOLEAN)NT_SUCCESS(Status));
     return Status;
 }
 
@@ -332,6 +360,10 @@ MiMapPagesForCopy(
             MiUnlockPages(Mdl);
     }
     MI_FREE(CacheFlags);
+    if (NT_SUCCESS(Status))
+        MiAssertCopyMapping(Mdl);
+    else
+        MI_ASSERT(!Mdl->Locked && Mdl->MappedSystemVa == 0);
     return Status;
 }
 
@@ -348,6 +380,8 @@ MiUnlockPages(
 
     MiUnlockFrames(Mdl->Space->System, Mdl->Frames, Mdl->PageCount, Mdl->WriteAccess);
     Mdl->Locked = FALSE;
+    MiAssertMdl(Mdl);
+    MI_ASSERT(Mdl->MappedSystemVa == 0);
 }
 
 NTSTATUS
