@@ -10,8 +10,21 @@
 #include <reactos/drivers/applertkit.h>
 #include <reactos/drivers/applesmc.h>
 #include <reactos/drivers/applespmi.h>
+#include <initguid.h>
+#include <poclass.h>
 
 #define SMC_TAG 'cmSA'
+
+#define SMC_EVENT_BUTTON            0x7201
+#define SMC_EVENT_LID               0x7203
+#define SMC_BUTTON_POWER            0x01
+#define SMC_BUTTON_TOUCHID          0x06
+
+#define SMC_TYPE_DEVICE             0
+#define SMC_TYPE_BATTERY            1
+#define SMC_TYPE_POWER_BUTTON       2
+#define SMC_TYPE_LID                3
+#define SMC_CHILDREN                3
 
 #define SMC_ENDPOINT                0x20
 #define SMC_SHMEM_SIZE              0x1000
@@ -41,6 +54,7 @@
 
 typedef struct _SMC_DEVICE
 {
+    ULONG Type;
     PDEVICE_OBJECT DeviceObject;
     PDEVICE_OBJECT LowerDevice;
     PDEVICE_OBJECT Pdo;
@@ -61,9 +75,15 @@ typedef struct _SMC_DEVICE
     ULONG64 Reply;
     ULONG MessageId;
     ULONG KeyCount;
-    BOOLEAN HasBattery;
-    PDEVICE_OBJECT Battery;
-    BOOLEAN BatteryReported;
+    BOOLEAN Present[SMC_CHILDREN];
+    PDEVICE_OBJECT Children[SMC_CHILDREN];
+    BOOLEAN ChildrenReported;
+
+    KSPIN_LOCK ButtonLock;
+    PIRP ButtonIrp[SMC_CHILDREN];
+    ULONG PowerPresses;
+    LONG LidClosed;
+    LONG LidReported;
 
     PKTHREAD Thread;
     KEVENT StopEvent;
@@ -72,11 +92,28 @@ typedef struct _SMC_DEVICE
 
 typedef struct _SMC_CHILD
 {
+    ULONG Type;
     PDEVICE_OBJECT Self;
     PSMC_DEVICE Parent;
+    UNICODE_STRING Interface;
 } SMC_CHILD, *PSMC_CHILD;
 
-#define SMC_IS_CHILD(DeviceObject) ((DeviceObject)->DeviceType == FILE_DEVICE_BATTERY)
+typedef struct _SMC_CHILD_INFO
+{
+    PCWSTR Id;
+    PCWSTR Description;
+    const GUID *Interface;
+    DEVICE_TYPE DeviceType;
+} SMC_CHILD_INFO;
+
+static const SMC_CHILD_INFO SmcChildInfo[SMC_CHILDREN] =
+{
+    { L"APPLESMC\\BATTERY", L"Apple silicon internal battery", NULL, FILE_DEVICE_BATTERY },
+    { L"APPLESMC\\POWERBUTTON", L"Apple silicon power button", &GUID_DEVICE_SYS_BUTTON, FILE_DEVICE_UNKNOWN },
+    { L"APPLESMC\\LID", L"Apple silicon lid switch", &GUID_DEVICE_LID, FILE_DEVICE_UNKNOWN },
+};
+
+#define SMC_IS_CHILD(DeviceObject) (*(PULONG)(DeviceObject)->DeviceExtension != SMC_TYPE_DEVICE)
 
 static
 NTSTATUS
@@ -130,6 +167,113 @@ SmcShmemSetup(
 }
 
 static
+BOOLEAN
+SmcTakeButtonEvent(
+    _Inout_ PSMC_DEVICE Device,
+    _In_ ULONG Type,
+    _Out_opt_ PULONG Event)
+{
+    if (Type == SMC_TYPE_POWER_BUTTON && Device->PowerPresses)
+    {
+        if (Event)
+        {
+            Device->PowerPresses--;
+            *Event = SYS_BUTTON_POWER;
+        }
+        return TRUE;
+    }
+    if (Type == SMC_TYPE_LID && Device->LidClosed != Device->LidReported)
+    {
+        if (Event)
+        {
+            *Event = SYS_BUTTON_LID | (Device->LidClosed ? SYS_BUTTON_LID_CLOSED : SYS_BUTTON_LID_OPEN) |
+                     (Device->LidReported < 0 ? SYS_BUTTON_LID_INITIAL : SYS_BUTTON_LID_CHANGED);
+            Device->LidReported = Device->LidClosed;
+        }
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static
+VOID
+SmcCompleteButton(
+    _Inout_ PIRP Irp,
+    _In_ NTSTATUS Status,
+    _In_ ULONG Event)
+{
+    Irp->IoStatus.Information = 0;
+    if (NT_SUCCESS(Status))
+    {
+        *(PULONG)Irp->AssociatedIrp.SystemBuffer = Event;
+        Irp->IoStatus.Information = sizeof(ULONG);
+    }
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+static
+VOID
+SmcFinishButtonWaits(
+    _Inout_ PSMC_DEVICE Device,
+    _In_ ULONG FlushMask)
+{
+    ULONG Index, Event = 0;
+    BOOLEAN Flush;
+    KIRQL OldIrql;
+    PIRP Irp;
+
+    for (Index = 0; Index < SMC_CHILDREN; ++Index)
+    {
+        Flush = (FlushMask & (1UL << Index)) != 0;
+        if (FlushMask && !Flush)
+            continue;
+        KeAcquireSpinLock(&Device->ButtonLock, &OldIrql);
+        Irp = Device->ButtonIrp[Index];
+        if (Irp && (Flush || SmcTakeButtonEvent(Device, Index + 1, NULL)) && IoSetCancelRoutine(Irp, NULL))
+        {
+            Device->ButtonIrp[Index] = NULL;
+            if (!Flush)
+                SmcTakeButtonEvent(Device, Index + 1, &Event);
+        }
+        else
+        {
+            Irp = NULL;
+        }
+        KeReleaseSpinLock(&Device->ButtonLock, OldIrql);
+        if (Irp)
+            SmcCompleteButton(Irp, Flush ? STATUS_NO_SUCH_DEVICE : STATUS_SUCCESS, Event);
+    }
+}
+
+static
+VOID
+SmcButtonNotification(
+    _Inout_ PSMC_DEVICE Device,
+    _In_ ULONG Event)
+{
+    UCHAR Data = (UCHAR)(Event >> 8);
+    BOOLEAN Changed = FALSE;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Device->ButtonLock, &OldIrql);
+    if ((Event >> 16) == SMC_EVENT_BUTTON && (Data == SMC_BUTTON_POWER || Data == SMC_BUTTON_TOUCHID) &&
+        (Event & 0xff) && Device->Present[SMC_TYPE_POWER_BUTTON - 1])
+    {
+        Device->PowerPresses = 1;
+        Changed = TRUE;
+    }
+    else if ((Event >> 16) == SMC_EVENT_LID && Device->Present[SMC_TYPE_LID - 1])
+    {
+        Device->LidClosed = (Data != 0);
+        Changed = TRUE;
+    }
+    KeReleaseSpinLock(&Device->ButtonLock, OldIrql);
+    if (Changed)
+        SmcFinishButtonWaits(Device, 0);
+}
+
+static
 VOID
 NTAPI
 SmcReceive(
@@ -158,6 +302,7 @@ SmcReceive(
     if ((Message & 0xff) == SMC_MSG_NOTIFICATION)
     {
         DbgPrint("applesmc: notification %08lx\n", (ULONG)(Message >> 32));
+        SmcButtonNotification(Device, (ULONG)(Message >> 32));
         return;
     }
     Device->Reply = Message;
@@ -533,7 +678,17 @@ SmcStartHardware(
         Device->KeyCount = ((Data & 0xff) << 24) | ((Data & 0xff00) << 8) | ((Data >> 8) & 0xff00) | (Data >> 24);
     DbgPrint("applesmc: SMC is up with %lu keys\n", Device->KeyCount);
     SmcLogKey(Device, APPLE_SMC_KEY('B', 'U', 'I', 'C'), 1);
-    Device->HasBattery = NT_SUCCESS(SmcReadKey(Device, APPLE_SMC_KEY('B', 'U', 'I', 'C'), (PUCHAR)&Data, 1));
+    Device->Present[SMC_TYPE_BATTERY - 1] = NT_SUCCESS(SmcReadKey(Device, APPLE_SMC_KEY('B', 'U', 'I', 'C'),
+                                                                  (PUCHAR)&Data, 1));
+    Device->Present[SMC_TYPE_POWER_BUTTON - 1] = NT_SUCCESS(SmcReadKey(Device, APPLE_SMC_KEY('b', 'H', 'L', 'D'),
+                                                                       (PUCHAR)&Data, sizeof(Data)));
+    Data = 0;
+    Device->Present[SMC_TYPE_LID - 1] = NT_SUCCESS(SmcReadKey(Device, APPLE_SMC_KEY('M', 'S', 'L', 'D'),
+                                                              (PUCHAR)&Data, 1));
+    Device->LidClosed = (Data & 0xff) != 0;
+    Device->LidReported = -1;
+    DbgPrint("applesmc: power button %s, lid %s\n", Device->Present[SMC_TYPE_POWER_BUTTON - 1] ? "present" : "absent",
+             Device->Present[SMC_TYPE_LID - 1] ? (Device->LidClosed ? "closed" : "open") : "absent");
     SmcLogKey(Device, APPLE_SMC_KEY('A', 'C', '-', 'W'), 1);
     SmcSyncClock(Device);
     SmcInitBootState(Device);
@@ -552,6 +707,94 @@ SmcStartHardware(
 }
 
 static
+VOID
+NTAPI
+SmcCancelButtonWait(
+    _Inout_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PSMC_CHILD Child = DeviceObject->DeviceExtension;
+    PSMC_DEVICE Device = Child->Parent;
+    KIRQL OldIrql;
+
+    IoReleaseCancelSpinLock(Irp->CancelIrql);
+    if (Device)
+    {
+        KeAcquireSpinLock(&Device->ButtonLock, &OldIrql);
+        if (Device->ButtonIrp[Child->Type - 1] == Irp)
+            Device->ButtonIrp[Child->Type - 1] = NULL;
+        KeReleaseSpinLock(&Device->ButtonLock, OldIrql);
+    }
+    SmcCompleteButton(Irp, STATUS_CANCELLED, 0);
+}
+
+static
+NTSTATUS
+SmcChildDeviceControl(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PSMC_CHILD Child = DeviceObject->DeviceExtension;
+    PSMC_DEVICE Device = Child->Parent;
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG Code = Stack->Parameters.DeviceIoControl.IoControlCode;
+    ULONG Event;
+    KIRQL OldIrql;
+
+    if (Child->Type == SMC_TYPE_BATTERY || Stack->MajorFunction != IRP_MJ_DEVICE_CONTROL ||
+        (Code != IOCTL_GET_SYS_BUTTON_CAPS && Code != IOCTL_GET_SYS_BUTTON_EVENT))
+    {
+        return SmcCompleteChild(Irp, Irp->IoStatus.Status);
+    }
+    if (Irp->RequestorMode != KernelMode)
+    {
+        Irp->IoStatus.Information = 0;
+        return SmcCompleteChild(Irp, STATUS_SUCCESS);
+    }
+    if (!Device)
+    {
+        SmcCompleteButton(Irp, STATUS_NO_SUCH_DEVICE, 0);
+        return STATUS_NO_SUCH_DEVICE;
+    }
+    if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
+    {
+        SmcCompleteButton(Irp, STATUS_BUFFER_TOO_SMALL, 0);
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    if (Code == IOCTL_GET_SYS_BUTTON_CAPS)
+    {
+        SmcCompleteButton(Irp, STATUS_SUCCESS, (Child->Type == SMC_TYPE_LID) ? SYS_BUTTON_LID : SYS_BUTTON_POWER);
+        return STATUS_SUCCESS;
+    }
+
+    KeAcquireSpinLock(&Device->ButtonLock, &OldIrql);
+    if (SmcTakeButtonEvent(Device, Child->Type, &Event))
+    {
+        KeReleaseSpinLock(&Device->ButtonLock, OldIrql);
+        SmcCompleteButton(Irp, STATUS_SUCCESS, Event);
+        return STATUS_SUCCESS;
+    }
+    if (Device->ButtonIrp[Child->Type - 1])
+    {
+        KeReleaseSpinLock(&Device->ButtonLock, OldIrql);
+        SmcCompleteButton(Irp, STATUS_DEVICE_BUSY, 0);
+        return STATUS_DEVICE_BUSY;
+    }
+    IoMarkIrpPending(Irp);
+    IoSetCancelRoutine(Irp, SmcCancelButtonWait);
+    if (Irp->Cancel && IoSetCancelRoutine(Irp, NULL))
+    {
+        KeReleaseSpinLock(&Device->ButtonLock, OldIrql);
+        SmcCompleteButton(Irp, STATUS_CANCELLED, 0);
+        return STATUS_PENDING;
+    }
+    if (!Irp->Cancel)
+        Device->ButtonIrp[Child->Type - 1] = Irp;
+    KeReleaseSpinLock(&Device->ButtonLock, OldIrql);
+    return STATUS_PENDING;
+}
+
+static
 NTSTATUS
 NTAPI
 SmcDeviceControl(
@@ -567,7 +810,7 @@ SmcDeviceControl(
     NTSTATUS Status = STATUS_INVALID_DEVICE_REQUEST;
 
     if (SMC_IS_CHILD(DeviceObject))
-        return SmcCompleteChild(Irp, Irp->IoStatus.Status);
+        return SmcChildDeviceControl(DeviceObject, Irp);
     Irp->IoStatus.Information = 0;
     if (Irp->RequestorMode != KernelMode && Stack->MajorFunction == IRP_MJ_DEVICE_CONTROL)
         goto Done;
@@ -640,46 +883,87 @@ SmcCompletion(
 
 static
 NTSTATUS
-SmcCopyString(
-    _In_reads_bytes_(Size) const WCHAR *Source,
-    _In_ SIZE_T Size,
+SmcCopyId(
+    _In_z_ PCWSTR Source,
+    _In_ BOOLEAN MultiString,
     _Out_ PULONG_PTR Information)
 {
+    SIZE_T Size = (wcslen(Source) + (MultiString ? 2 : 1)) * sizeof(WCHAR);
     PWCHAR Copy = ExAllocatePoolWithTag(PagedPool, Size, SMC_TAG);
 
     if (!Copy)
         return STATUS_INSUFFICIENT_RESOURCES;
-    RtlCopyMemory(Copy, Source, Size);
+    RtlZeroMemory(Copy, Size);
+    RtlCopyMemory(Copy, Source, wcslen(Source) * sizeof(WCHAR));
     *Information = (ULONG_PTR)Copy;
     return STATUS_SUCCESS;
 }
 
 static
 VOID
-SmcCreateBattery(
+SmcCreateChildren(
     _Inout_ PSMC_DEVICE Device)
 {
     PDEVICE_OBJECT Child;
     PSMC_CHILD Extension;
+    BOOLEAN Created = FALSE;
+    ULONG Index;
     NTSTATUS Status;
 
-    if (!Device->HasBattery || Device->Battery)
-        return;
-    Status = IoCreateDevice(Device->DeviceObject->DriverObject, sizeof(SMC_CHILD), NULL, FILE_DEVICE_BATTERY,
-                            FILE_AUTOGENERATED_DEVICE_NAME | FILE_DEVICE_SECURE_OPEN, FALSE, &Child);
-    if (!NT_SUCCESS(Status))
+    for (Index = 0; Index < SMC_CHILDREN; ++Index)
     {
-        DbgPrint("applesmc: battery device not created: %lx\n", Status);
-        return;
+        if (!Device->Present[Index] || Device->Children[Index])
+            continue;
+        Status = IoCreateDevice(Device->DeviceObject->DriverObject, sizeof(SMC_CHILD), NULL,
+                                SmcChildInfo[Index].DeviceType, FILE_AUTOGENERATED_DEVICE_NAME | FILE_DEVICE_SECURE_OPEN,
+                                FALSE, &Child);
+        if (!NT_SUCCESS(Status))
+        {
+            DbgPrint("applesmc: %S device not created: %lx\n", SmcChildInfo[Index].Id, Status);
+            continue;
+        }
+        Extension = Child->DeviceExtension;
+        RtlZeroMemory(Extension, sizeof(*Extension));
+        Extension->Type = Index + 1;
+        Extension->Self = Child;
+        Extension->Parent = Device;
+        Child->Flags |= DO_POWER_PAGABLE;
+        Child->Flags &= ~DO_DEVICE_INITIALIZING;
+        Device->Children[Index] = Child;
+        Created = TRUE;
     }
-    Extension = Child->DeviceExtension;
-    Extension->Self = Child;
-    Extension->Parent = Device;
-    Child->Flags |= DO_POWER_PAGABLE;
-    Child->Flags &= ~DO_DEVICE_INITIALIZING;
-    Device->Battery = Child;
-    Device->BatteryReported = TRUE;
-    IoInvalidateDeviceRelations(Device->Pdo, BusRelations);
+    if (Created)
+    {
+        Device->ChildrenReported = TRUE;
+        IoInvalidateDeviceRelations(Device->Pdo, BusRelations);
+    }
+}
+
+static
+VOID
+SmcSetChildInterface(
+    _Inout_ PSMC_CHILD Extension,
+    _In_ BOOLEAN Enable)
+{
+    const GUID *Interface = SmcChildInfo[Extension->Type - 1].Interface;
+    NTSTATUS Status;
+
+    if (!Interface)
+        return;
+    if (Enable && !Extension->Interface.Buffer)
+    {
+        Status = IoRegisterDeviceInterface(Extension->Self, Interface, NULL, &Extension->Interface);
+        if (!NT_SUCCESS(Status))
+        {
+            DbgPrint("applesmc: %S interface not registered: %lx\n", SmcChildInfo[Extension->Type - 1].Id, Status);
+            return;
+        }
+    }
+    if (!Extension->Interface.Buffer)
+        return;
+    Status = IoSetDeviceInterfaceState(&Extension->Interface, Enable);
+    if (!NT_SUCCESS(Status))
+        DbgPrint("applesmc: %S interface state %u not set: %lx\n", SmcChildInfo[Extension->Type - 1].Id, Enable, Status);
 }
 
 static
@@ -689,6 +973,7 @@ SmcChildPnp(
     _Inout_ PIRP Irp)
 {
     PSMC_CHILD Extension = DeviceObject->DeviceExtension;
+    const SMC_CHILD_INFO *Info = &SmcChildInfo[Extension->Type - 1];
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     NTSTATUS Status = Irp->IoStatus.Status;
 
@@ -698,23 +983,14 @@ SmcChildPnp(
             switch (Stack->Parameters.QueryId.IdType)
             {
                 case BusQueryDeviceID:
-                {
-                    static const WCHAR Id[] = L"APPLESMC\\BATTERY";
-                    Status = SmcCopyString(Id, sizeof(Id), &Irp->IoStatus.Information);
+                    Status = SmcCopyId(Info->Id, FALSE, &Irp->IoStatus.Information);
                     break;
-                }
                 case BusQueryHardwareIDs:
-                {
-                    static const WCHAR Ids[] = L"APPLESMC\\BATTERY\0";
-                    Status = SmcCopyString(Ids, sizeof(Ids), &Irp->IoStatus.Information);
+                    Status = SmcCopyId(Info->Id, TRUE, &Irp->IoStatus.Information);
                     break;
-                }
                 case BusQueryInstanceID:
-                {
-                    static const WCHAR Id[] = L"0";
-                    Status = SmcCopyString(Id, sizeof(Id), &Irp->IoStatus.Information);
+                    Status = SmcCopyId(L"0", FALSE, &Irp->IoStatus.Information);
                     break;
-                }
                 default:
                     break;
             }
@@ -722,10 +998,7 @@ SmcChildPnp(
 
         case IRP_MN_QUERY_DEVICE_TEXT:
             if (Stack->Parameters.QueryDeviceText.DeviceTextType == DeviceTextDescription)
-            {
-                static const WCHAR Text[] = L"Apple silicon internal battery";
-                Status = SmcCopyString(Text, sizeof(Text), &Irp->IoStatus.Information);
-            }
+                Status = SmcCopyId(Info->Description, FALSE, &Irp->IoStatus.Information);
             break;
 
         case IRP_MN_QUERY_CAPABILITIES:
@@ -738,6 +1011,7 @@ SmcChildPnp(
                 break;
             }
             Capabilities->SilentInstall = TRUE;
+            Capabilities->RawDeviceOK = (Info->Interface != NULL);
             Capabilities->Removable = FALSE;
             Capabilities->SurpriseRemovalOK = FALSE;
             Status = STATUS_SUCCESS;
@@ -763,23 +1037,35 @@ SmcChildPnp(
             break;
 
         case IRP_MN_START_DEVICE:
+            SmcSetChildInterface(Extension, TRUE);
+            Status = STATUS_SUCCESS;
+            break;
+
         case IRP_MN_STOP_DEVICE:
+        case IRP_MN_SURPRISE_REMOVAL:
+            SmcSetChildInterface(Extension, FALSE);
+            Status = STATUS_SUCCESS;
+            break;
+
         case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
         case IRP_MN_QUERY_REMOVE_DEVICE:
         case IRP_MN_CANCEL_REMOVE_DEVICE:
-        case IRP_MN_SURPRISE_REMOVAL:
             Status = STATUS_SUCCESS;
             break;
 
         case IRP_MN_REMOVE_DEVICE:
+            SmcSetChildInterface(Extension, FALSE);
+            if (Extension->Parent)
+                SmcFinishButtonWaits(Extension->Parent, 1UL << (Extension->Type - 1));
             Status = STATUS_SUCCESS;
-            if (!Extension->Parent || !Extension->Parent->BatteryReported)
+            if (!Extension->Parent || !Extension->Parent->ChildrenReported)
             {
                 Irp->IoStatus.Status = Status;
                 IoCompleteRequest(Irp, IO_NO_INCREMENT);
                 if (Extension->Parent)
-                    Extension->Parent->Battery = NULL;
+                    Extension->Parent->Children[Extension->Type - 1] = NULL;
+                RtlFreeUnicodeString(&Extension->Interface);
                 IoDeleteDevice(DeviceObject);
                 return Status;
             }
@@ -804,6 +1090,7 @@ SmcPnp(
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     PDEVICE_OBJECT Lower;
     KEVENT Event;
+    ULONG Index;
     NTSTATUS Status;
 
     if (SMC_IS_CHILD(DeviceObject))
@@ -830,7 +1117,7 @@ SmcPnp(
             Irp->IoStatus.Status = Status;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
             if (NT_SUCCESS(Status))
-                SmcCreateBattery(Device);
+                SmcCreateChildren(Device);
             return Status;
 
         case IRP_MN_QUERY_DEVICE_RELATIONS:
@@ -839,9 +1126,9 @@ SmcPnp(
                 PDEVICE_RELATIONS Previous = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
                 PDEVICE_RELATIONS Relations;
                 ULONG Count = Previous ? Previous->Count : 0;
-                ULONG Extra = (Device->Battery && Device->BatteryReported) ? 1 : 0;
 
-                Relations = ExAllocatePoolWithTag(PagedPool, FIELD_OFFSET(DEVICE_RELATIONS, Objects[Count + Extra + 1]),
+                Relations = ExAllocatePoolWithTag(PagedPool,
+                                                  FIELD_OFFSET(DEVICE_RELATIONS, Objects[Count + SMC_CHILDREN + 1]),
                                                   SMC_TAG);
                 if (!Relations)
                 {
@@ -852,10 +1139,12 @@ SmcPnp(
                 Relations->Count = Count;
                 if (Count)
                     RtlCopyMemory(Relations->Objects, Previous->Objects, Count * sizeof(PDEVICE_OBJECT));
-                if (Extra)
+                for (Index = 0; Index < SMC_CHILDREN && Device->ChildrenReported; ++Index)
                 {
-                    Relations->Objects[Relations->Count++] = Device->Battery;
-                    ObReferenceObject(Device->Battery);
+                    if (!Device->Children[Index])
+                        continue;
+                    Relations->Objects[Relations->Count++] = Device->Children[Index];
+                    ObReferenceObject(Device->Children[Index]);
                 }
                 if (Previous)
                     ExFreePool(Previous);
@@ -877,12 +1166,19 @@ SmcPnp(
             break;
 
         case IRP_MN_REMOVE_DEVICE:
-            Device->BatteryReported = FALSE;
-            if (Device->Battery)
+            Device->ChildrenReported = FALSE;
+            SmcFinishButtonWaits(Device, (1UL << SMC_CHILDREN) - 1);
+            for (Index = 0; Index < SMC_CHILDREN; ++Index)
             {
-                ((PSMC_CHILD)Device->Battery->DeviceExtension)->Parent = NULL;
-                IoDeleteDevice(Device->Battery);
-                Device->Battery = NULL;
+                PSMC_CHILD Child;
+
+                if (!Device->Children[Index])
+                    continue;
+                Child = Device->Children[Index]->DeviceExtension;
+                Child->Parent = NULL;
+                RtlFreeUnicodeString(&Child->Interface);
+                IoDeleteDevice(Device->Children[Index]);
+                Device->Children[Index] = NULL;
             }
             SmcStopHardware(Device);
             Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -978,6 +1274,8 @@ SmcAddDevice(
     Device->DeviceObject = DeviceObject;
     Device->Pdo = Pdo;
     ExInitializeFastMutex(&Device->Lock);
+    KeInitializeSpinLock(&Device->ButtonLock);
+    Device->LidReported = -1;
     Device->LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject, Pdo);
     if (!Device->LowerDevice)
     {

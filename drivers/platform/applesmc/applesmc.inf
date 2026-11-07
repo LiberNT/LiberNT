@@ -17,6 +17,8 @@ DefaultDestDir = 12
 
 [StdMfg]
 %AppleSmc.DeviceDesc% = AppleSmc_Inst,FDT\apple_t8103-smc
+%PowerButton.DeviceDesc% = AppleSmc_Raw_Inst,APPLESMC\POWERBUTTON
+%Lid.DeviceDesc% = AppleSmc_Raw_Inst,APPLESMC\LID
 
 [AppleSmc_Inst.NT]
 CopyFiles = AppleSmc_CopyFiles
@@ -26,6 +28,11 @@ applesmc.sys
 
 [AppleSmc_Inst.NT.Services]
 AddService = applesmc,0x00000002,AppleSmc_Service
+
+[AppleSmc_Raw_Inst.NT]
+
+[AppleSmc_Raw_Inst.NT.Services]
+AddService = ,0x00000002
 
 [AppleSmc_Service]
 DisplayName = %AppleSmc.ServiceDesc%
@@ -40,3 +47,5 @@ LiberNT = "LiberNT Project"
 StdMfg = "(Standard system devices)"
 AppleSmc.DeviceDesc = "Apple System Management Controller"
 AppleSmc.ServiceDesc = "Apple SMC Driver"
+PowerButton.DeviceDesc = "Apple silicon power button"
+Lid.DeviceDesc = "Apple silicon lid switch"
