@@ -331,8 +331,13 @@ system_fallback_config[] =
     { "2D30-2D7F",              L"Noto Sans Tifinagh" },
 
     /* CJK Radicals Supplement - 2E80-2EFF */
+#ifdef __REACTOS__
+
+    { "2E80-2EFF",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "2E80-2EFF",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "2E80-2EFF",              L"Noto Sans CJK TC", L"zh-Hant" },
     { "2E80-2EFF",              L"Noto Sans CJK KR", L"ko" },
 
@@ -340,24 +345,34 @@ system_fallback_config[] =
        Hiragana                    - 3040-309F
        Katakana                    - 30A0-30FF
        Katakana Phonetic Ext.      - 31F0-31FF */
+#ifdef __REACTOS__
+
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK TC", L"zh-Hant" },
     { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK KR", L"ko" },
 #ifdef __REACTOS__
-    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK JP, Noto Sans JP" },
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK JP" },
 #endif
 
     /* CJK Unified Ext A - 3400-4DBF
        CJK Unified       - 4E00-9FFF */
+#ifdef __REACTOS__
+
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK TC", L"zh-Hant" },
     { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK KR", L"ko" },
 #ifdef __REACTOS__
-    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK JP, Noto Sans JP" },
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK JP" },
 #endif
@@ -375,26 +390,41 @@ system_fallback_config[] =
     { "AA00-AA5F",              L"Noto Sans Cham" },
 
     /* CJK Compatibility Ideographs - F900-FAFF */
+#ifdef __REACTOS__
+
+    { "F900-FAFF",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "F900-FAFF",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "F900-FAFF",              L"Noto Sans CJK TC", L"zh-Hant" },
     { "F900-FAFF",              L"Noto Sans CJK KR", L"ko" },
 #ifdef __REACTOS__
-    { "F900-FAFF",              L"Noto Sans CJK JP, Noto Sans JP" },
+    { "F900-FAFF",              L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "F900-FAFF",              L"Noto Sans CJK JP" },
 #endif
 
     /* Vertical Forms - FE10-FE1F */
+#ifdef __REACTOS__
+
+    { "FE10-FE1F",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "FE10-FE1F",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "FE10-FE1F",              L"Noto Sans CJK KR", L"ko" },
     { "FE10-FE1F",              L"Noto Sans CJK TC" },
 
     /* CJK Compatibility Forms - FE30-FE4F
        Small Form Variants     - FE50-FE6F */
+#ifdef __REACTOS__
+
+    { "FE30-FE6F",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "FE30-FE6F",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "FE30-FE6F",              L"Noto Sans CJK KR", L"ko" },
 #ifdef __REACTOS__
     { "FE30-FE6F",              L"Noto Sans CJK JP, Noto Sans JP", L"ja" },
@@ -404,11 +434,15 @@ system_fallback_config[] =
     { "FE30-FE6F",              L"Noto Sans CJK TC" },
 
     /* Halfwidth and Fullwidth Forms */
+#ifdef __REACTOS__
+    { "FF00-FFEF",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
     { "FF00-FFEF",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "FF00-FFEF",              L"Noto Sans CJK TC", L"zh-Hant" },
     { "FF00-FFEF",              L"Noto Sans CJK KR", L"ko" },
 #ifdef __REACTOS__
-    { "FF00-FFEF",              L"Noto Sans CJK JP, Noto Sans JP" },
+    { "FF00-FFEF",              L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "FF00-FFEF",              L"Noto Sans CJK JP" },
 #endif
