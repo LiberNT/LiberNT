@@ -476,11 +476,13 @@ void
 CCabinetWindow::PaintBackground(HDC dc)
 {
     CabinetPalette palette;
-    RECT client;
+    RECT client, clip, hit;
     struct { int Top; int Bottom; COLORREF Color; } bands[5];
 
     CabinetGetPalette(&palette);
     GetClientRect(m_hwnd, &client);
+    if (GetClipBox(dc, &clip) == ERROR)
+        clip = client;
     {
         RECT glass = { 0, 0, client.right, TabStripHeight() };
         FillRect(dc, &glass, ClientCaption() ? (HBRUSH)GetStockObject(BLACK_BRUSH) : GetSysColorBrush(COLOR_3DFACE));
@@ -497,7 +499,7 @@ CCabinetWindow::PaintBackground(HDC dc)
         FillRect(dc, &rc, brush);
         DeleteObject(brush);
     }
-    if (!IsRectEmpty(&m_PanelRect))
+    if (IntersectRect(&hit, &m_PanelRect, &clip))
     {
         RECT outer = m_PanelRect;
         int radius = Scale(8), saved = SaveDC(dc);
@@ -510,28 +512,34 @@ CCabinetWindow::PaintBackground(HDC dc)
         CabinetFillRound(dc, outer, radius - 1, palette.Window);
         RestoreDC(dc, saved);
     }
-    if (IsAppThemed())
+    SetRect(&hit, 0, TabStripHeight(), client.right, AddressBottom() - 1);
+    if (IsAppThemed() && IntersectRect(&hit, &hit, &clip))
     {
-        Gdiplus::Graphics graphics(dc);
-        Gdiplus::LinearGradientBrush shade(Gdiplus::PointF(0.0f, 0.0f),
-                                           Gdiplus::PointF(0.0f, (float)(AddressBottom() - 1) + 1.0f),
-                                           Gdiplus::Color(255, GetRValue(palette.Band), GetGValue(palette.Band),
-                                                          GetBValue(palette.Band)),
-                                           Gdiplus::Color(255, GetRValue(palette.BandShade),
-                                                          GetGValue(palette.BandShade), GetBValue(palette.BandShade)));
+        TRIVERTEX vertex[2] = {
+            { 0, 0, (COLOR16)(GetRValue(palette.Band) << 8), (COLOR16)(GetGValue(palette.Band) << 8),
+              (COLOR16)(GetBValue(palette.Band) << 8), 0xFF00 },
+            { client.right, AddressBottom(), (COLOR16)(GetRValue(palette.BandShade) << 8),
+              (COLOR16)(GetGValue(palette.BandShade) << 8), (COLOR16)(GetBValue(palette.BandShade) << 8), 0xFF00 } };
+        GRADIENT_RECT mesh = { 0, 1 };
+        int saved = SaveDC(dc);
 
-        graphics.FillRectangle(&shade, 0, TabStripHeight(), (INT)client.right, AddressBottom() - 1 - TabStripHeight());
+        IntersectClipRect(dc, hit.left, hit.top, hit.right, hit.bottom);
+        GdiGradientFill(dc, vertex, _countof(vertex), &mesh, 1, GRADIENT_FILL_RECT_V);
+        RestoreDC(dc, saved);
     }
     if (m_Status && IsWindowVisible(m_Status))
     {
         RECT status;
-        int saved = SaveDC(dc);
         GetWindowRect(m_Status, &status);
         MapWindowPoints(NULL, m_hwnd, (POINT *)&status, 2);
-        OffsetWindowOrgEx(dc, -status.left, -status.top, NULL);
-        IntersectClipRect(dc, 0, 0, status.right - status.left, status.bottom - status.top);
-        SendMessageW(m_Status, WM_PRINTCLIENT, (WPARAM)dc, PRF_CLIENT | PRF_ERASEBKGND);
-        RestoreDC(dc, saved);
+        if (IntersectRect(&hit, &status, &clip))
+        {
+            int saved = SaveDC(dc);
+            OffsetWindowOrgEx(dc, -status.left, -status.top, NULL);
+            IntersectClipRect(dc, 0, 0, status.right - status.left, status.bottom - status.top);
+            SendMessageW(m_Status, WM_PRINTCLIENT, (WPARAM)dc, PRF_CLIENT | PRF_ERASEBKGND);
+            RestoreDC(dc, saved);
+        }
     }
     if ((m_DetailsPane || m_PreviewPane) && !IsRectEmpty(&m_PaneRect))
     {

@@ -70,6 +70,56 @@ AddRoundRect(Gdiplus::GraphicsPath &path, const Gdiplus::RectF &rc, float radius
 void
 CabinetFillRound(HDC dc, const RECT &rc, int radius, COLORREF color)
 {
+    int width = rc.right - rc.left, height = rc.bottom - rc.top;
+
+    if (radius > 0 && width > 4 * radius && height > 4 * radius)
+    {
+        HBRUSH solid = CreateSolidBrush(color);
+        RECT middle = { rc.left + radius, rc.top, rc.right - radius, rc.bottom };
+        RECT side = { rc.left, rc.top + radius, rc.left + radius, rc.bottom - radius };
+        int box = 2 * radius + 2;
+        const POINT corner[4] = { { rc.left, rc.top }, { rc.right - box, rc.top },
+                                  { rc.left, rc.bottom - box }, { rc.right - box, rc.bottom - box } };
+        const POINT square[4] = { { rc.left, rc.top }, { rc.right - radius, rc.top },
+                                  { rc.left, rc.bottom - radius }, { rc.right - radius, rc.bottom - radius } };
+        BOOL visible[4], any = FALSE;
+
+        FillRect(dc, &middle, solid);
+        FillRect(dc, &side, solid);
+        OffsetRect(&side, width - radius, 0);
+        FillRect(dc, &side, solid);
+        DeleteObject(solid);
+        for (int i = 0; i < 4; i++)
+        {
+            RECT test = { square[i].x, square[i].y, square[i].x + radius, square[i].y + radius };
+
+            visible[i] = RectVisible(dc, &test);
+            any |= visible[i];
+        }
+        if (!any)
+            return;
+
+        Gdiplus::Graphics graphics(dc);
+        Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        for (int i = 0; i < 4; i++)
+        {
+            if (!visible[i])
+                continue;
+
+            Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+
+            AddRoundRect(path, Gdiplus::RectF((float)corner[i].x, (float)corner[i].y, (float)box, (float)box),
+                         (float)radius);
+            graphics.SetClip(Gdiplus::Rect(square[i].x, square[i].y, radius, radius), Gdiplus::CombineModeIntersect);
+            graphics.FillPath(&brush, &path);
+            graphics.ResetClip();
+        }
+        return;
+    }
+
     Gdiplus::Graphics graphics(dc);
     Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
     Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
