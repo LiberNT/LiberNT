@@ -204,6 +204,9 @@ static void test_LoadIcon_SystemIds(void)
     };
     HINSTANCE hInst = GetModuleHandleW(L"USER32");
     typedef BOOL (WINAPI*SHAIE)(HICON, HICON);
+    typedef DPI_AWARENESS_CONTEXT (WINAPI *PSETTHREADDPIAWARENESSCONTEXT)(DPI_AWARENESS_CONTEXT);
+    PSETTHREADDPIAWARENESSCONTEXT pSetThreadDpiAwarenessContext;
+    DPI_AWARENESS_CONTEXT OldContext = NULL;
     SHAIE pfnSHAreIconsEqual;
     HMODULE hSHLWAPI = LoadLibraryA("SHLWAPI");
     if (!hSHLWAPI)
@@ -219,13 +222,43 @@ static void test_LoadIcon_SystemIds(void)
         return;
     }
 
+    pSetThreadDpiAwarenessContext = (PSETTHREADDPIAWARENESSCONTEXT)GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                                                                "SetThreadDpiAwarenessContext");
+    if (pSetThreadDpiAwarenessContext)
+        OldContext = pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
     for (UINT i = 0; i < _countof(icomap); i++)
     {
         HICON hIcoRes = LoadIconW(hInst, MAKEINTRESOURCEW(icomap[i][0]));
         HICON hIcoSys = LoadIconW(NULL, MAKEINTRESOURCEW(icomap[i][1]));
         ok(hIcoRes && pfnSHAreIconsEqual(hIcoRes, hIcoSys), "SysIcon %d must be resource %d\n", icomap[i][1], icomap[i][0]);
     }
+    if (pSetThreadDpiAwarenessContext && OldContext)
+        pSetThreadDpiAwarenessContext(OldContext);
     FreeLibrary(hSHLWAPI);
+}
+
+static void test_LoadImage_OemShared(void)
+{
+    HANDLE Image;
+
+    SetLastError(0xdeadbeef);
+    Image = LoadImageW(NULL, (LPCWSTR)IDC_ARROW, IMAGE_CURSOR, 0, 0, 0);
+    ok(Image == NULL, "OEM cursor without LR_SHARED loaded\n");
+    ok(GetLastError() == ERROR_RESOURCE_NAME_NOT_FOUND, "OEM cursor error %lu\n", GetLastError());
+    SetLastError(0xdeadbeef);
+    Image = LoadImageW(NULL, (LPCWSTR)IDC_ARROW, IMAGE_CURSOR, 32, 32, LR_DEFAULTSIZE);
+    ok(Image == NULL, "sized OEM cursor without LR_SHARED loaded\n");
+    ok(GetLastError() == ERROR_RESOURCE_NAME_NOT_FOUND, "sized OEM cursor error %lu\n", GetLastError());
+    SetLastError(0xdeadbeef);
+    Image = LoadImageW(NULL, (LPCWSTR)IDI_APPLICATION, IMAGE_ICON, 0, 0, 0);
+    ok(Image == NULL, "OEM icon without LR_SHARED loaded\n");
+    ok(GetLastError() == ERROR_RESOURCE_TYPE_NOT_FOUND, "OEM icon error %lu\n", GetLastError());
+    ok(LoadImageW(NULL, (LPCWSTR)IDC_ARROW, IMAGE_CURSOR, 0, 0, LR_SHARED) != NULL, "shared OEM cursor failed\n");
+    ok(LoadImageW(NULL, (LPCWSTR)IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_SHARED) != NULL, "shared OEM icon failed\n");
+    Image = LoadImageW(NULL, MAKEINTRESOURCEW(32754), IMAGE_BITMAP, 0, 0, 0);
+    ok(Image != NULL, "OEM bitmap without LR_SHARED failed\n");
+    if (Image)
+        DeleteObject(Image);
 }
 
 START_TEST(LoadImage)
@@ -319,4 +352,5 @@ START_TEST(LoadImage)
 
     test_LoadIcon_SystemIds();
     test_LoadImage_1bpp();
+    test_LoadImage_OemShared();
 }
