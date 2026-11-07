@@ -9,6 +9,42 @@
 
 #include <nvs/include/misys.h>
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertKernelStack(
+    _Inout_ PMI_SYSTEM System,
+    _In_ ULONG64 StackTop,
+    _In_ ULONG ReservePages,
+    _In_ ULONG CommittedPages)
+{
+    PMI_SYSTEM_PTES Ptes = System->SystemPtes;
+    ULONG64 TopIndex;
+    ULONG i;
+
+    MI_ASSERT(Ptes != NULL && Ptes->CacheCount != 0 && Ptes->CacheCount <= MI_SYSPTE_CPU_CACHES);
+    MI_ASSERT((StackTop & (PAGE_SIZE - 1)) == 0 && StackTop >= Ptes->Base);
+    TopIndex = (StackTop - Ptes->Base) >> PAGE_SHIFT;
+    MI_ASSERT(ReservePages != 0 && TopIndex >= (ULONG64)ReservePages + 1 && TopIndex <= Ptes->PageCount);
+    MI_ASSERT(CommittedPages != 0 && CommittedPages <= ReservePages);
+
+    for (i = 0; i <= ReservePages; i++)
+    {
+        PMI_PTE Slot = MiPtLookup(&System->SystemSpace, StackTop - ((ULONG64)i + 1) * PAGE_SIZE, NULL);
+        MI_PTE Pte;
+
+        MI_ASSERT(Slot != NULL);
+        Pte = MiArchPteRead(Slot);
+        if (i < CommittedPages)
+            MI_ASSERT(MiArchPteIsValid(Pte) && MiArchPteIsWritable(Pte));
+        else
+            MI_ASSERT(Pte == 0);
+    }
+}
+#else
+#define MiAssertKernelStack(System, StackTop, ReservePages, CommittedPages) ((void)0)
+#endif
+
 static
 NTSTATUS
 MiCommitStackPages(
@@ -83,6 +119,7 @@ MiCreateKernelStack(
             {
                 MI_ASSERT((*StackTop & (PAGE_SIZE - 1)) == 0 && *StackTop > Ptes->Base);
                 MI_ASSERT(((*StackTop - Ptes->Base) >> PAGE_SHIFT) <= Ptes->PageCount);
+                MiAssertKernelStack(System, *StackTop, ReservePages, ReservePages);
                 return STATUS_SUCCESS;
             }
         }
@@ -101,6 +138,7 @@ MiCreateKernelStack(
         return Status;
     }
 
+    MiAssertKernelStack(System, Top, ReservePages, CommitPages);
     *StackTop = Top;
     return STATUS_SUCCESS;
 }
@@ -132,6 +170,7 @@ MiDeleteKernelStack(
     PMI_SYSTEM_PTES Ptes = System->SystemPtes;
     ULONG Committed = MiCommittedStackPages(System, StackTop, ReservePages);
 
+    MiAssertKernelStack(System, StackTop, ReservePages, Committed);
     if (ReservePages == Ptes->DefaultStackPages && Committed == ReservePages)
     {
         PMI_SYSPTE_CPU_CACHE Cache = &Ptes->Cache[MI_CURRENT_CPU() % Ptes->CacheCount];
@@ -167,7 +206,9 @@ MiGrowKernelStack(
     ULONG64 Limit = StackTop - (ULONG64)Committed * PAGE_SIZE;
     ULONG64 Lowest = StackTop - (ULONG64)ReservePages * PAGE_SIZE;
     ULONG Needed;
+    NTSTATUS Status;
 
+    MiAssertKernelStack(System, StackTop, ReservePages, Committed);
     NewLimit &= ~((ULONG64)PAGE_SIZE - 1);
 
     if (NewLimit >= Limit)
@@ -177,5 +218,8 @@ MiGrowKernelStack(
         return STATUS_STACK_OVERFLOW;
 
     Needed = (ULONG)((Limit - NewLimit) >> PAGE_SHIFT);
-    return MiCommitStackPages(System, NewLimit, Needed);
+    MI_ASSERT(Needed != 0 && Needed <= ReservePages - Committed);
+    Status = MiCommitStackPages(System, NewLimit, Needed);
+    MiAssertKernelStack(System, StackTop, ReservePages, NT_SUCCESS(Status) ? Committed + Needed : Committed);
+    return Status;
 }
