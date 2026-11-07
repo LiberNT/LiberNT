@@ -295,4 +295,29 @@ UserGetCallerSystemMetrics(ULONG Index)
     return UserGetSystemMetrics(Index);
 }
 
+LONG
+NTAPI
+UserGetWindowSystemMetrics(PWND Window, ULONG Index)
+{
+    PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
+
+    ASSERT(Index < SM_CMETRICS);
+    if (UserDpiIsVirtualWindow(Window))
+    {
+        return UserDpiToPhysical(UserGetImageMetric(gaiSysMetVirtual, Index,
+                                                    pti && LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA));
+    }
+    return UserGetSystemMetrics(Index);
+}
+
+LONG
+NTAPI
+UserGetCallerUnfoldedSystemMetrics(ULONG Index)
+{
+    ASSERT(Index < SM_CMETRICS);
+    if (UserDpiIsVirtualThread(PsGetCurrentThreadWin32Thread()))
+        return gaiSysMetVirtual[Index];
+    return gpsi->aiSysMet[Index];
+}
+
 /* EOF */
