@@ -52,6 +52,11 @@ BOOL WINAPI User32IsDpiVirtualizationActive(VOID);
 BOOL WINAPI User32IsDpiVirtualThread(VOID);
 UINT WINAPI User32GetSystemDpi(VOID);
 
+DWORD_PTR APIENTRY
+NtUserCallHwnd(HWND hWnd, DWORD Routine);
+
+#define HWND_ROUTINE_ROS_ENABLENCDPISCALING 0x1010
+
 static volatile LONG DpiCacheContextSlot = TLS_OUT_OF_INDEXES;
 static volatile LONG DpiCacheGenerationSlot = TLS_OUT_OF_INDEXES;
 static volatile LONG DpiCacheGeneration = 1;
@@ -983,21 +988,7 @@ WINAPI
 EnableNonClientDpiScaling(
     _In_ HWND hWnd)
 {
-    if (!IsWindow(hWnd))
-    {
-        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
-        return FALSE;
-    }
-
-    if (GetWindowThreadProcessId(hWnd, NULL) != GetCurrentThreadId() ||
-        (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD) ||
-        NTUSER_DPI_CONTEXT_GET_AWARENESS(NtUserGetWindowDpiAwarenessContext(hWnd)) != DPI_AWARENESS_PER_MONITOR_AWARE)
-    {
-        /* FIXME: the error Windows 11 reports for a child or non per-monitor window is not measured */
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
-    return TRUE;
+    return (BOOL)NtUserCallHwnd(hWnd, HWND_ROUTINE_ROS_ENABLENCDPISCALING);
 }
 
 BOOL
