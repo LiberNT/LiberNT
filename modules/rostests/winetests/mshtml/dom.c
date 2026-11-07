@@ -4303,11 +4303,7 @@ static void test_attr_collection_builtins(IHTMLDocument2 *doc)
         L"center",    L"cite", L"clear", L"width", NULL,
         L"code",      L"cite", L"dateTime", NULL,
         L"col",       L"align", L"bgColor", L"ch", L"chOff", L"span", L"vAlign", L"width", NULL,
-        L"dd",        L"noWrap", NULL,
-        L"dir",       L"compact", L"type", NULL,
         L"div",       L"align", L"nofocusrect", L"noWrap", NULL,
-        L"dl",        L"compact", NULL,
-        L"dt",        L"noWrap", NULL,
         L"embed",     L"align", L"codeBase", L"type", NULL,
         L"fieldset",  L"align", NULL,
         L"font",      L"color", L"face", L"size", NULL,
@@ -4322,12 +4318,10 @@ static void test_attr_collection_builtins(IHTMLDocument2 *doc)
         L"input",     L"accept", L"cache", L"dynsrc", L"formaction", L"formenctype", L"formmethod", L"formnovalidate", L"formtarget", L"useMap", NULL,
         L"label",     L"for", NULL,
         L"legend",    L"align", NULL,
-        L"li",        L"type", L"value", NULL,
         L"link",      L"charset", L"hreflang", L"target", NULL,
         L"map",       L"name", NULL,
         L"meta",      L"http-equiv", L"scheme", NULL,
         L"object",    L"alt", L"archive", L"border", L"classid", L"data", L"declare", L"object", L"standby", L"useMap", NULL,
-        L"ol",        L"compact", L"start", L"type", NULL,
         L"option",    L"label", NULL,
         L"p",         L"align", L"cite", L"clear", L"width", NULL,
         L"param",     L"name", L"type", L"value", L"valueType", NULL,
@@ -4339,7 +4333,6 @@ static void test_attr_collection_builtins(IHTMLDocument2 *doc)
         L"tbody",     L"align", L"bgColor", L"ch", L"chOff", L"vAlign", NULL,
         L"td",        L"abbr", L"axis", L"ch", L"chOff", L"headers", L"scope", NULL,
         L"tr",        L"ch", L"chOff", L"height", NULL,
-        L"ul",        L"compact", L"type", NULL,
         NULL
     };
     BOOLEAN found[ARRAY_SIZE(generic_builtins)];
@@ -10950,6 +10943,219 @@ static void test_attr_node(IHTMLDOMAttribute *test_attr, IHTMLDocument2 *doc)
     IHTMLDOMAttribute2_Release(attr);
 }
 
+static HRESULT list_elem_put(IHTMLElement *elem, const WCHAR *prop, VARIANT *v, VARIANT *res)
+{
+    DISPID id, named = DISPID_PROPERTYPUT;
+    DISPPARAMS dp = {v, &named, 1, 1}, dp0 = {0};
+    IDispatchEx *dispex;
+    BSTR name;
+    HRESULT hres;
+
+    hres = IHTMLElement_QueryInterface(elem, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+    name = SysAllocString(prop);
+    hres = IDispatchEx_GetDispID(dispex, name, fdexNameCaseInsensitive, &id);
+    ok(hres == S_OK, "GetDispID(%s) failed: %08lx\n", wine_dbgstr_w(prop), hres);
+    SysFreeString(name);
+    hres = IDispatchEx_InvokeEx(dispex, id, 0, DISPATCH_PROPERTYPUT, &dp, NULL, NULL, NULL);
+    V_VT(res) = VT_EMPTY;
+    IDispatchEx_InvokeEx(dispex, id, 0, DISPATCH_PROPERTYGET, &dp0, res, NULL, NULL);
+    IDispatchEx_Release(dispex);
+    return hres;
+}
+
+static void test_list_elements_libernt(IHTMLDocument2 *doc)
+{
+    static const IID * const list_iids[] = {
+        &IID_IHTMLListElement2, &IID_IHTMLUListElement, &IID_IHTMLOListElement, &IID_IHTMLDListElement,
+        &IID_IHTMLLIElement, &IID_IHTMLDDElement, &IID_IHTMLDTElement,
+    };
+    static const struct {
+        const WCHAR *tag;
+        const char *qi;
+        const IID *diid;
+    } qi_tests[] = {
+        {L"ol",   "1.1....", &DIID_DispHTMLOListElement},
+        {L"ul",   "11.....", &DIID_DispHTMLUListElement},
+        {L"dir",  "11.....", &DIID_DispHTMLUListElement},
+        {L"menu", "11.....", &DIID_DispHTMLUListElement},
+        {L"dl",   "1..1...", &DIID_DispHTMLDListElement},
+        {L"li",   "....1..", &DIID_DispHTMLLIElement},
+        {L"dd",   ".....1.", &DIID_DispHTMLDDElement},
+        {L"dt",   "......1", &DIID_DispHTMLDTElement},
+        {L"div",  ".......", NULL},
+    };
+    static const struct {
+        const WCHAR *tag, *prop;
+        VARTYPE vt;
+        const WCHAR *str;
+        LONG i4;
+        HRESULT hres;
+        LONG get;
+    } put_tests[] = {
+        {L"ol", L"start", VT_BSTR, L"",            0,  S_OK,                       0},
+        {L"ol", L"start", VT_BSTR, L"x",           0,  DISP_E_TYPEMISMATCH,        1},
+        {L"ol", L"start", VT_BSTR, L"2.7",         0,  S_OK,                       3},
+        {L"ol", L"start", VT_BSTR, L"99999999999", 0,  DISP_E_OVERFLOW,            1},
+        {L"ol", L"start", VT_R8,   NULL,           0,  S_OK,                       4},
+        {L"ol", L"start", VT_BOOL, NULL,           -1, S_OK,                       -1},
+        {L"li", L"value", VT_BSTR, L"-1",          0,  CTL_E_INVALIDPROPERTYVALUE, 0},
+        {L"li", L"value", VT_BSTR, L"2.5",         0,  S_OK,                       2},
+        {L"li", L"value", VT_I4,   NULL,           -2, CTL_E_INVALIDPROPERTYVALUE, 0},
+        {L"li", L"value", VT_NULL, NULL,           0,  S_OK,                       0},
+    };
+    IHTMLOListElement *olist;
+    IHTMLUListElement *ulist;
+    IHTMLLIElement *li;
+    IHTMLDDElement *dd;
+    IHTMLElement *elem;
+    ITypeInfo *typeinfo;
+    TYPEATTR *typeattr;
+    IUnknown *unk;
+    VARIANT_BOOL b;
+    VARIANT v, res;
+    HRESULT hres;
+    unsigned i, j;
+    char qi[16];
+    LONG l;
+    BSTR str;
+
+    for(i = 0; i < ARRAY_SIZE(qi_tests); i++) {
+        elem = test_create_elem(doc, qi_tests[i].tag);
+        for(j = 0; j < ARRAY_SIZE(list_iids); j++) {
+            hres = IHTMLElement_QueryInterface(elem, list_iids[j], (void**)&unk);
+            qi[j] = SUCCEEDED(hres) ? '1' : '.';
+            if(SUCCEEDED(hres))
+                IUnknown_Release(unk);
+        }
+        qi[j] = 0;
+        ok(!strcmp(qi, qi_tests[i].qi), "[%s] qi = %s, expected %s\n", wine_dbgstr_w(qi_tests[i].tag), qi, qi_tests[i].qi);
+        if(qi_tests[i].diid) {
+            hres = IHTMLElement_GetTypeInfo(elem, 0, 0, &typeinfo);
+            ok(hres == S_OK, "[%s] GetTypeInfo failed: %08lx\n", wine_dbgstr_w(qi_tests[i].tag), hres);
+            hres = ITypeInfo_GetTypeAttr(typeinfo, &typeattr);
+            ok(hres == S_OK, "[%s] GetTypeAttr failed: %08lx\n", wine_dbgstr_w(qi_tests[i].tag), hres);
+            ok(IsEqualGUID(&typeattr->guid, qi_tests[i].diid), "[%s] typeinfo %s\n", wine_dbgstr_w(qi_tests[i].tag),
+               wine_dbgstr_guid(&typeattr->guid));
+            ITypeInfo_ReleaseTypeAttr(typeinfo, typeattr);
+            ITypeInfo_Release(typeinfo);
+        }
+        IHTMLElement_Release(elem);
+    }
+
+    elem = test_create_elem(doc, L"ol");
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLOListElement, (void**)&olist);
+    ok(hres == S_OK, "Could not get IHTMLOListElement: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+    hres = IHTMLOListElement_get_start(olist, &l);
+    ok(hres == S_OK && l == 1, "get_start = %08lx %ld\n", hres, l);
+    hres = IHTMLOListElement_put_start(olist, -5);
+    ok(hres == S_OK, "put_start failed: %08lx\n", hres);
+    hres = IHTMLOListElement_get_start(olist, &l);
+    ok(hres == S_OK && l == -5, "get_start = %08lx %ld\n", hres, l);
+    str = (void*)0xdeadbeef;
+    hres = IHTMLOListElement_get_type(olist, &str);
+    ok(hres == S_OK && !str, "get_type = %08lx %s\n", hres, wine_dbgstr_w(str));
+    str = SysAllocString(L"x");
+    hres = IHTMLOListElement_put_type(olist, str);
+    ok(hres == E_INVALIDARG, "put_type(x) = %08lx\n", hres);
+    SysFreeString(str);
+    str = SysAllocString(L"Circle");
+    hres = IHTMLOListElement_put_type(olist, str);
+    ok(hres == E_INVALIDARG, "put_type(Circle) = %08lx\n", hres);
+    SysFreeString(str);
+    str = SysAllocString(L"i");
+    hres = IHTMLOListElement_put_type(olist, str);
+    ok(hres == S_OK, "put_type(i) = %08lx\n", hres);
+    SysFreeString(str);
+    hres = IHTMLOListElement_get_type(olist, &str);
+    ok(hres == S_OK && str && !wcscmp(str, L"i"), "get_type = %08lx %s\n", hres, wine_dbgstr_w(str));
+    SysFreeString(str);
+    hres = IHTMLOListElement_put_compact(olist, VARIANT_TRUE);
+    ok(hres == S_OK, "put_compact failed: %08lx\n", hres);
+    hres = IHTMLOListElement_get_compact(olist, &b);
+    ok(hres == S_OK && b == VARIANT_TRUE, "get_compact = %08lx %d\n", hres, b);
+    IHTMLOListElement_Release(olist);
+    IHTMLElement_Release(elem);
+
+    elem = test_create_elem(doc, L"menu");
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLUListElement, (void**)&ulist);
+    ok(hres == S_OK, "Could not get IHTMLUListElement: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+    str = SysAllocString(L"square");
+    hres = IHTMLUListElement_put_type(ulist, str);
+    ok(hres == S_OK, "put_type(square) = %08lx\n", hres);
+    SysFreeString(str);
+    hres = IHTMLUListElement_get_type(ulist, &str);
+    ok(hres == S_OK && str && !wcscmp(str, L"square"), "get_type = %08lx %s\n", hres, wine_dbgstr_w(str));
+    SysFreeString(str);
+    hres = IHTMLUListElement_get_compact(ulist, &b);
+    ok(hres == S_OK && b == VARIANT_FALSE, "get_compact = %08lx %d\n", hres, b);
+    IHTMLUListElement_Release(ulist);
+    IHTMLElement_Release(elem);
+
+    elem = test_create_elem(doc, L"li");
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLLIElement, (void**)&li);
+    ok(hres == S_OK, "Could not get IHTMLLIElement: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+    hres = IHTMLLIElement_get_value(li, &l);
+    ok(hres == S_OK && !l, "get_value = %08lx %ld\n", hres, l);
+    hres = IHTMLLIElement_put_value(li, 0);
+    ok(hres == S_OK, "put_value(0) = %08lx\n", hres);
+    hres = IHTMLLIElement_put_value(li, 7);
+    ok(hres == S_OK, "put_value(7) = %08lx\n", hres);
+    hres = IHTMLLIElement_put_value(li, 0);
+    ok(hres == CTL_E_INVALIDPROPERTYVALUE, "put_value(0) = %08lx\n", hres);
+    hres = IHTMLLIElement_put_value(li, -2);
+    ok(hres == CTL_E_INVALIDPROPERTYVALUE, "put_value(-2) = %08lx\n", hres);
+    hres = IHTMLLIElement_get_value(li, &l);
+    ok(hres == S_OK && l == 7, "get_value = %08lx %ld\n", hres, l);
+    IHTMLLIElement_Release(li);
+    IHTMLElement_Release(elem);
+
+    elem = test_create_elem(doc, L"dd");
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDDElement, (void**)&dd);
+    ok(hres == S_OK, "Could not get IHTMLDDElement: %08lx\n", hres);
+    if(FAILED(hres)) {
+        IHTMLElement_Release(elem);
+        return;
+    }
+    hres = IHTMLDDElement_put_noWrap(dd, VARIANT_TRUE);
+    ok(hres == S_OK, "put_noWrap failed: %08lx\n", hres);
+    hres = IHTMLDDElement_get_noWrap(dd, &b);
+    ok(hres == S_OK && b == VARIANT_TRUE, "get_noWrap = %08lx %d\n", hres, b);
+    IHTMLDDElement_Release(dd);
+    IHTMLElement_Release(elem);
+
+    for(i = 0; i < ARRAY_SIZE(put_tests); i++) {
+        elem = test_create_elem(doc, put_tests[i].tag);
+        V_VT(&v) = put_tests[i].vt;
+        if(put_tests[i].vt == VT_BSTR)
+            V_BSTR(&v) = SysAllocString(put_tests[i].str);
+        else if(put_tests[i].vt == VT_R8)
+            V_R8(&v) = 3.6;
+        else if(put_tests[i].vt == VT_BOOL)
+            V_BOOL(&v) = put_tests[i].i4;
+        else if(put_tests[i].vt == VT_I4)
+            V_I4(&v) = put_tests[i].i4;
+        hres = list_elem_put(elem, put_tests[i].prop, &v, &res);
+        ok(hres == put_tests[i].hres, "[%u] put = %08lx, expected %08lx\n", i, hres, put_tests[i].hres);
+        ok(V_VT(&res) == VT_I4 && V_I4(&res) == put_tests[i].get, "[%u] get = %d %ld, expected %ld\n", i, V_VT(&res), V_I4(&res),
+           put_tests[i].get);
+        VariantClear(&v);
+        IHTMLElement_Release(elem);
+    }
+}
+
 static const char *text_elem_variant_str(const VARIANT *v, char *buf, size_t size)
 {
     switch(V_VT(v)) {
@@ -16177,6 +16383,7 @@ START_TEST(dom)
         run_domtest(doc_blank, test_body_window_events_libernt);
         run_domtest(doc_blank, test_text_elements_libernt);
         run_domtest(doc_blank_ie9, test_text_elements_ie9_libernt);
+        run_domtest(doc_blank, test_list_elements_libernt);
         if(is_ie9plus) {
             compat_mode = COMPAT_IE9;
             run_domtest(doc_blank_ie9, test_doc_open);
