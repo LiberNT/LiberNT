@@ -392,7 +392,7 @@ DxgkDisplayDetachDesktop(
     Size = Adapter->ShadowFbSize;
     if (Size != 0 && Adapter->ShadowFb != NULL)
     {
-        Fb = ExAllocatePoolZero(NonPagedPool, Size, TAG_DXGK_DISPLAY);
+        Fb = ExAllocatePoolZero(NonPagedPoolNx, Size, TAG_DXGK_DISPLAY);
         if (Fb != NULL)
             RtlCopyMemory(Fb, Adapter->ShadowFb, Size);
     }
