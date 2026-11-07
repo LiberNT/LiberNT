@@ -9,6 +9,17 @@
 
 #define MOVE_FLAGS (SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
 
+static HWND hwndCounted;
+static UINT ChangedCount;
+
+static LRESULT CALLBACK
+ColorWindowProc(HWND hWnd, UINT Message, WPARAM wParam, LPARAM lParam)
+{
+    if (Message == WM_WINDOWPOSCHANGED && hWnd == hwndCounted)
+        ChangedCount++;
+    return DefWindowProcW(hWnd, Message, wParam, lParam);
+}
+
 static VOID
 Pump(DWORD Milliseconds)
 {
@@ -28,7 +39,7 @@ CreateColorWindow(PCWSTR ClassName, DWORD ExStyle, COLORREF Color, const RECT *R
 {
     WNDCLASSW Class = { 0 };
 
-    Class.lpfnWndProc = DefWindowProcW;
+    Class.lpfnWndProc = ColorWindowProc;
     Class.hInstance = GetModuleHandleW(NULL);
     Class.hbrBackground = CreateSolidBrush(Color);
     Class.lpszClassName = ClassName;
@@ -36,6 +47,19 @@ CreateColorWindow(PCWSTR ClassName, DWORD ExStyle, COLORREF Color, const RECT *R
     return CreateWindowExW(ExStyle | WS_EX_TOOLWINDOW, ClassName, ClassName, WS_POPUP | WS_VISIBLE,
                            Rect->left, Rect->top, Rect->right - Rect->left, Rect->bottom - Rect->top,
                            NULL, NULL, Class.hInstance, NULL);
+}
+
+static VOID
+DestroyColorWindow(HWND hWnd, PCWSTR ClassName)
+{
+    HBRUSH hbr;
+
+    if (!hWnd)
+        return;
+    hbr = (HBRUSH)GetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND);
+    DestroyWindow(hWnd);
+    UnregisterClassW(ClassName, GetModuleHandleW(NULL));
+    DeleteObject(hbr);
 }
 
 static POINT
@@ -108,7 +132,11 @@ START_TEST(ShellWindowZOrder)
     hwndTopmost = CreateColorWindow(L"ShellWindowZOrderTopmost", WS_EX_TOPMOST, Blue, &TopmostRect);
     ok(hwndTopmost != NULL, "CreateWindowExW failed: %lu\n", GetLastError());
     if (!hwndBottom || !hwndTopmost)
+    {
+        DestroyColorWindow(hwndTopmost, L"ShellWindowZOrderTopmost");
+        DestroyColorWindow(hwndBottom, L"ShellWindowZOrderBottom");
         return;
+    }
     Pump(700);
     ok(RootFromPoint(Center(hwndBottom)) == hwndBottom, "The new window is not under its center\n");
 
@@ -119,10 +147,20 @@ START_TEST(ShellWindowZOrder)
     ok(RootFromPoint(Center(hwndBottom)) == hwndBottom, "HWND_BOTTOM: the window is not under its center\n");
     ok(ScreenShows(Center(hwndBottom), Green), "HWND_BOTTOM: the screen does not show the window\n");
 
+    hwndCounted = hwndBottom;
+    ChangedCount = 0;
     SetWindowPos(hwndBottom, hwndShell, 0, 0, 0, 0, MOVE_FLAGS);
     Pump(300);
     ok(GetWindow(hwndBottom, GW_HWNDNEXT) == hwndShell, "After the shell window: the shell window is not right below the window\n");
     ok(GetWindow(hwndBottom, GW_HWNDLAST) == hwndShell, "After the shell window: the shell window is not the last window\n");
+    ok(ChangedCount == 0, "After the shell window: WM_WINDOWPOSCHANGED was sent %u times\n", ChangedCount);
+
+    ChangedCount = 0;
+    SetWindowPos(hwndBottom, HWND_BOTTOM, 0, 0, 0, 0, MOVE_FLAGS);
+    Pump(300);
+    ok(GetWindow(hwndBottom, GW_HWNDNEXT) == hwndShell, "HWND_BOTTOM again: the shell window is not right below the window\n");
+    ok(ChangedCount == 0, "HWND_BOTTOM again: WM_WINDOWPOSCHANGED was sent %u times\n", ChangedCount);
+    hwndCounted = NULL;
 
     SetWindowPos(hwndTopmost, HWND_BOTTOM, 0, 0, 0, 0, MOVE_FLAGS);
     Pump(700);
@@ -157,10 +195,10 @@ START_TEST(ShellWindowZOrder)
     Pump(300);
     ok(GetWindow(hwndShell, GW_HWNDNEXT) == NULL, "HWND_TOP moved the shell window up\n");
     ok(RootFromPoint(Center(hwndBottom)) == hwndBottom, "The shell window covers the bottom window after HWND_TOP\n");
+    SetWindowPos(hwndShell, HWND_BOTTOM, 0, 0, 0, 0, MOVE_FLAGS);
 
-    if (hwndFull)
-        DestroyWindow(hwndFull);
-    DestroyWindow(hwndTopmost);
-    DestroyWindow(hwndBottom);
+    DestroyColorWindow(hwndFull, L"ShellWindowZOrderFull");
+    DestroyColorWindow(hwndTopmost, L"ShellWindowZOrderTopmost");
+    DestroyColorWindow(hwndBottom, L"ShellWindowZOrderBottom");
     Pump(300);
 }
