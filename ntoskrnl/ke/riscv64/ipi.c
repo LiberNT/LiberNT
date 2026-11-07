@@ -75,12 +75,16 @@ KiRiscvExecuteGenericCall(_In_opt_ PKTRAP_FRAME TrapFrame)
 {
     PKIPI_BROADCAST_WORKER Function;
     ULONG_PTR Argument;
+    LONG Arriving, Remaining;
 
     ASSERT(KeGetCurrentIrql() == IPI_LEVEL);
     KeMemoryBarrier();
     Function = KiRiscvGenericCall.Function;
     Argument = KiRiscvGenericCall.Argument;
-    InterlockedDecrement(&KiRiscvGenericCall.Arriving);
+    ASSERT(Function != NULL && KiRiscvGenericCall.Busy != 0);
+    Arriving = InterlockedDecrement(&KiRiscvGenericCall.Arriving);
+    UNREFERENCED_PARAMETER(Arriving);
+    ASSERT(Arriving >= 0);
     while (InterlockedCompareExchange(&KiRiscvGenericCall.Release, 0, 0) == 0)
         YieldProcessor();
     if (TrapFrame != NULL)
@@ -88,7 +92,9 @@ KiRiscvExecuteGenericCall(_In_opt_ PKTRAP_FRAME TrapFrame)
     Function(Argument);
     if (TrapFrame != NULL)
         _disable();
-    InterlockedDecrement(&KiRiscvGenericCall.Remaining);
+    Remaining = InterlockedDecrement(&KiRiscvGenericCall.Remaining);
+    UNREFERENCED_PARAMETER(Remaining);
+    ASSERT(Remaining >= 0);
 }
 
 BOOLEAN NTAPI
@@ -149,8 +155,11 @@ KeIpiGenericCall(PKIPI_BROADCAST_WORKER Function, ULONG_PTR Argument)
         YieldProcessor();
     }
 
+    ASSERT(KiRiscvGenericCall.Arriving == 0 && KiRiscvGenericCall.Remaining == 0);
     Targets = KeActiveProcessors & ~KeGetCurrentPrcb()->SetMember;
     for (Bits = Targets; Bits; Bits &= Bits - 1) ++Count;
+    ASSERT((Targets & KeGetCurrentPrcb()->SetMember) == 0);
+    ASSERT((Targets == 0) == (Count == 0));
     KiRiscvGenericCall.Function = Function;
     KiRiscvGenericCall.Argument = Argument;
     KiRiscvGenericCall.Arriving = Count;
@@ -168,6 +177,7 @@ KeIpiGenericCall(PKIPI_BROADCAST_WORKER Function, ULONG_PTR Argument)
         KeMemoryBarrier();
     }
 
+    ASSERT(KiRiscvGenericCall.Arriving == 0 && KiRiscvGenericCall.Remaining == Count);
     ExecuteIrql = KfRaiseIrql(IPI_LEVEL);
     /* Release before calling locally: workers may rendezvous themselves. */
     InterlockedExchange(&KiRiscvGenericCall.Release, 1);
@@ -177,6 +187,7 @@ KeIpiGenericCall(PKIPI_BROADCAST_WORKER Function, ULONG_PTR Argument)
         YieldProcessor();
         KeMemoryBarrier();
     }
+    ASSERT(KiRiscvGenericCall.Remaining == 0);
     KfLowerIrql(ExecuteIrql);
     InterlockedExchange(&KiRiscvGenericCall.Busy, 0);
     KfLowerIrql(OldIrql);
