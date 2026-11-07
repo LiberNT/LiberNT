@@ -995,7 +995,11 @@ static BOOL MDI_AugmentFrameMenu( HWND frame, HWND hChild )
     if (!hIcon)
         hIcon = (HICON)GetClassLongPtrW(hChild, GCLP_HICON);
     if (!hIcon)
+#ifdef __REACTOS__
+        hIcon = User32LoadOemImage((LPWSTR)IDI_WINLOGO, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+#else
         hIcon = LoadImageW(0, (LPWSTR)IDI_WINLOGO, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+#endif
                            GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
     if (hIcon)
     {

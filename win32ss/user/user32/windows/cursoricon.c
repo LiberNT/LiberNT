@@ -276,22 +276,22 @@ VOID LoadSystemCursors(VOID)
        ULONG Previous = User32BeginSystemDpiContext();
 
        TRACE("Loading System Cursors\n");
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_ARROW,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_NORMAL);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_IBEAM,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_IBEAM);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_WAIT,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_WAIT);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_CROSS,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_CROSS);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_UPARROW,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_UP);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_ICON,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_ICON);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZE,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZE);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZENWSE,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZENWSE);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZENESW,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZENESW);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZEWE,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZEWE);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZENS,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZENS);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZEALL,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZEALL);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_NO,          IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_NO);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_HAND,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_HAND);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_APPSTARTING, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_APPSTARTING);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_HELP,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_HELP);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_ARROW,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_NORMAL);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_IBEAM,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_IBEAM);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_WAIT,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_WAIT);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_CROSS,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_CROSS);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_UPARROW,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_UP);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_ICON,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_ICON);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZE,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZE);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZENWSE,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZENWSE);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZENESW,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZENESW);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZEWE,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZEWE);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZENS,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZENS);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZEALL,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZEALL);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_NO,          IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_NO);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_HAND,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_HAND);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_APPSTARTING, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_APPSTARTING);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_HELP,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_HELP);
        User32EndSystemDpiContext(Previous);
    }
 }
@@ -351,7 +351,7 @@ VOID LoadUserCursors(VOID)
                 Cursor = LoadImageW(NULL, Expanded, IMAGE_CURSOR, BaseSize, BaseSize, LR_LOADFROMFILE | LR_DEFAULTSIZE);
         }
         if (!Cursor)
-            Cursor = LoadImageW(NULL, UserCursorScheme[i].Resource, IMAGE_CURSOR, BaseSize, BaseSize, LR_DEFAULTSIZE);
+            Cursor = User32LoadOemImage(UserCursorScheme[i].Resource, IMAGE_CURSOR, BaseSize, BaseSize, LR_DEFAULTSIZE);
         if (Cursor && !NtUserSetSystemCursor(Cursor, UserCursorScheme[i].Id))
             DestroyCursor(Cursor);
     }
@@ -3011,12 +3011,29 @@ HANDLE WINAPI LoadImageW(
             return BITMAP_LoadImageW(hinst, lpszName, cxDesired, cyDesired, fuLoad);
         case IMAGE_CURSOR:
         case IMAGE_ICON:
+            if (!hinst && !(fuLoad & (LR_SHARED | LR_LOADFROMFILE)))
+            {
+                SetLastError(uType == IMAGE_ICON ? ERROR_RESOURCE_TYPE_NOT_FOUND : ERROR_RESOURCE_NAME_NOT_FOUND);
+                return NULL;
+            }
             return CURSORICON_LoadImageW(hinst, lpszName, cxDesired, cyDesired, fuLoad, uType == IMAGE_ICON);
         default:
             SetLastError(ERROR_INVALID_PARAMETER);
             break;
     }
     return NULL;
+}
+
+HANDLE
+WINAPI
+User32LoadOemImage(
+  _In_ LPCWSTR lpszName,
+  _In_ UINT uType,
+  _In_ int cxDesired,
+  _In_ int cyDesired,
+  _In_ UINT fuLoad)
+{
+    return CURSORICON_LoadImageW(NULL, lpszName, cxDesired, cyDesired, fuLoad, uType == IMAGE_ICON);
 }
 
 int WINAPI LookupIconIdFromDirectory(
@@ -3481,7 +3498,7 @@ BOOL WINAPI SetSystemCursor(
 {
     if (hcur == NULL)
     {
-       hcur = LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE);
+       hcur = User32LoadOemImage(MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE);
        if (hcur == NULL)
        {
           return FALSE;

@@ -70,6 +70,7 @@ BOOL WINAPI User32IsDpiVirtualizationActive(VOID);
 BOOL WINAPI User32IsDpiVirtualThread(VOID);
 ULONG WINAPI User32BeginSystemDpiContext(VOID);
 VOID WINAPI User32EndSystemDpiContext(ULONG Previous);
+HANDLE WINAPI User32LoadOemImage(LPCWSTR lpszName, UINT uType, int cxDesired, int cyDesired, UINT fuLoad);
 UINT WINAPI User32GetSystemDpi(VOID);
 LONG WINAPI User32DpiToLogical(LONG Value);
 LONG WINAPI User32DpiToPhysical(LONG Value);
