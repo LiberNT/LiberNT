@@ -2435,6 +2435,9 @@ co_UserCreateWindowEx(CREATESTRUCTW* Cs,
    SIZE Size;
    POINT MaxSize, MaxPos, MinTrack, MaxTrack, Position;
    CBT_CREATEWNDW * pCbtCreate;
+   USER_DPI_MESSAGE CbtConv;
+   CREATESTRUCTW CbtLogical;
+   BOOL VirtualCbt;
    LRESULT Result;
    USER_REFERENCE_ENTRY ParentRef, Ref;
    PTHREADINFO pti;
@@ -2602,6 +2605,21 @@ co_UserCreateWindowEx(CREATESTRUCTW* Cs,
 
       pCbtCreate->lpcs = pCsw;
       pCbtCreate->hwndInsertAfter = hwndInsertAfter;
+      VirtualCbt = UserDpiIsVirtualWindow(Window);
+      if (VirtualCbt)
+      {
+         WPARAM wParamCbt = 0;
+         LPARAM lParamCbt = (LPARAM)pCsw;
+
+         if (UserDpiBeginMessage(Window, WM_NCCREATE, &wParamCbt, &lParamCbt, &CbtConv, TRUE))
+         {
+            pCsw->x = CbtConv.Data.Create.x;
+            pCsw->y = CbtConv.Data.Create.y;
+            pCsw->cx = CbtConv.Data.Create.cx;
+            pCsw->cy = CbtConv.Data.Create.cy;
+         }
+         CbtLogical = *pCsw;
+      }
 
       //// Call the WH_CBT hook ////
       Result = co_HOOK_CallHooks(WH_CBT, HCBT_CREATEWND, (WPARAM) hWnd, (LPARAM) pCbtCreate);
@@ -2611,10 +2629,23 @@ co_UserCreateWindowEx(CREATESTRUCTW* Cs,
          goto cleanup;
       }
       // Write back changes.
-      Cs->cx = pCsw->cx;
-      Cs->cy = pCsw->cy;
-      Cs->x = pCsw->x;
-      Cs->y = pCsw->y;
+      if (!VirtualCbt)
+      {
+         Cs->cx = pCsw->cx;
+         Cs->cy = pCsw->cy;
+         Cs->x = pCsw->x;
+         Cs->y = pCsw->y;
+      }
+      else if (pCsw->x != CbtLogical.x || pCsw->y != CbtLogical.y ||
+               pCsw->cx != CbtLogical.cx || pCsw->cy != CbtLogical.cy)
+      {
+         CbtLogical = *pCsw;
+         UserDpiCreateStructToPhysical(&CbtLogical);
+         Cs->cx = CbtLogical.cx;
+         Cs->cy = CbtLogical.cy;
+         Cs->x = CbtLogical.x;
+         Cs->y = CbtLogical.y;
+      }
       hwndInsertAfter = pCbtCreate->hwndInsertAfter;
    }
 
