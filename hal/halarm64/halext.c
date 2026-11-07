@@ -22,6 +22,7 @@
 #include "bcm2711_pci.h"
 #include "bcm2711_vc.h"
 #include "bcm2837.h"
+#include "apple_aic.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -40,6 +41,7 @@ static const HAL_ARM64_PLATFORM HalpArm64Platforms[] =
 {
     { "BCM2711 (Raspberry Pi 4)", Bcm2711PciProbe },
     { "BCM2837 (Raspberry Pi 3)", Bcm2837InterruptProbe },
+    { "Apple silicon (AIC2/AIC3)", AppleAicInterruptProbe },
 };
 
 static BOOLEAN HalpArm64PlatformMatched = FALSE;
@@ -50,6 +52,8 @@ static BOOLEAN HalpArm64PlatformMatched = FALSE;
 
 const HAL_ARM64_INTERRUPT_CONTROLLER *HalpArm64InterruptController = NULL;
 const HAL_ARM64_PCI_CONFIG_BACKEND *HalpArm64PciConfigBackend = NULL;
+const HAL_ARM64_SYSTEM_RESET *HalpArm64SystemReset = NULL;
+const HAL_ARM64_MSI_DOORBELL *HalpArm64MsiDoorbell = NULL;
 
 /* ================================================================== */
 /*  Registration                                                      */
@@ -91,6 +95,39 @@ HalpArm64RegisterPciConfigBackend(
     HalpArm64PciConfigBackend = Backend;
 
     DPRINT1("[arm64][HALEXT] PCI config-space backend: %s\n", Backend->Name);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+HalpArm64RegisterSystemReset(
+    _In_ const HAL_ARM64_SYSTEM_RESET *Reset)
+{
+    if (!Reset || !Reset->Restart)
+        return STATUS_INVALID_PARAMETER;
+
+    if (HalpArm64SystemReset)
+        return STATUS_TOO_LATE;
+
+    HalpArm64SystemReset = Reset;
+
+    DPRINT1("[arm64][HALEXT] System reset: %s\n", Reset->Name);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+HalpArm64RegisterMsiDoorbell(
+    _In_ const HAL_ARM64_MSI_DOORBELL *Doorbell)
+{
+    if (!Doorbell || !Doorbell->VectorCount)
+        return STATUS_INVALID_PARAMETER;
+
+    if (HalpArm64MsiDoorbell)
+        return STATUS_TOO_LATE;
+
+    HalpArm64MsiDoorbell = Doorbell;
+
+    DPRINT1("[arm64][HALEXT] MSI doorbell: %s at 0x%I64x for vectors %lu+%lu\n", Doorbell->Name, Doorbell->Address,
+            Doorbell->FirstVector, Doorbell->VectorCount);
     return STATUS_SUCCESS;
 }
 

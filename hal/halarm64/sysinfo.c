@@ -12,6 +12,7 @@
 #include <hal.h>
 #include <reactos/hal/msi.h>
 #include <reactos/hal/acpi_pci.h>
+#include "halext.h"
 #define NDEBUG
 #include <debug.h>
 
@@ -301,6 +302,12 @@ HalGetMessageRoutingInfo(
         {
             RoutingInfo->MessageAddress.QuadPart = (LONGLONG)MsiAddress;
             RoutingInfo->MessageData = (USHORT)MsiData;
+        }
+        else if (HalpArm64MsiDoorbell && RoutingInfo->Vector >= HalpArm64MsiDoorbell->FirstVector &&
+                 RoutingInfo->Vector - HalpArm64MsiDoorbell->FirstVector < HalpArm64MsiDoorbell->VectorCount)
+        {
+            RoutingInfo->MessageAddress.QuadPart = (LONGLONG)HalpArm64MsiDoorbell->Address;
+            RoutingInfo->MessageData = (USHORT)(RoutingInfo->Vector - HalpArm64MsiDoorbell->FirstVector);
         }
         else
         {
