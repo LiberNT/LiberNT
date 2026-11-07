@@ -17,6 +17,7 @@
 #define OSL_DOWNLOAD_URL_OPTION "HTTPBOOTURL="
 #define OSL_DOWNLOAD_ADDRESS_OPTION "HTTPBOOTIP="
 #define OSL_SYNC_URL_OPTION "HTTPSYNCURL="
+#define OSL_INSTALL_IMAGE_OPTION "INSTALLIMAGE="
 #define OSL_ADDRESS_CHARS 64
 #define OSL_DEBUG_PORT_OPTION "DEBUGPORT="
 #define OSL_DEBUG_MODULE  "kdcom.dll"
@@ -365,6 +366,9 @@ OslMain(VOID)
         }
 
         OslResumeFromHibernation(&OsDevice);
+
+        if (OslGetOption(Options, OSL_INSTALL_IMAGE_OPTION, Url, sizeof(Url)))
+            OslInstallImage(&OsDevice, SystemRoot, Url);
     }
 
     PeSetSystemRoot(SystemRoot);

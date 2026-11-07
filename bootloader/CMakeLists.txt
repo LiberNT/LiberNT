@@ -296,7 +296,8 @@ if(WINLOAD_ASM_SOURCE)
         winload/resume.c
         winload/smbios.c
         winload/startup.c
-        winload/httpsync.c)
+        winload/httpsync.c
+        winload/install.c)
     if(ARCH STREQUAL "ppc")
         bootloader_ofw_application(winload 0x00400000)
     else()
