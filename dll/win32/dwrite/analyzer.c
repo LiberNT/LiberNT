@@ -2599,6 +2599,14 @@ static UINT32 fallback_font_get_supported_length(IDWriteFont3 *font, IDWriteText
     return mapped;
 }
 
+#ifdef __REACTOS__
+static BOOL fallback_is_simplified_chinese(const WCHAR *name)
+{
+    return !wcsicmp(name, L"zh") || !wcsicmp(name, L"zh-CN") || !wcsicmp(name, L"zh-SG") ||
+            !wcsnicmp(name, L"zh-Hans", 7);
+}
+#endif
+
 static HRESULT fallback_map_characters(const struct dwrite_fontfallback *fallback, IDWriteTextAnalysisSource *source,
         UINT32 position, UINT32 text_length, DWRITE_FONT_WEIGHT weight, DWRITE_FONT_STYLE style,
         DWRITE_FONT_STRETCH stretch, IDWriteFont **ret_font, UINT32 *ret_length, float *scale)
@@ -2611,6 +2619,9 @@ static HRESULT fallback_map_characters(const struct dwrite_fontfallback *fallbac
     UINT32 i, length = 0, mapped;
     IDWriteFont3 *font;
     HRESULT hr;
+#ifdef __REACTOS__
+    WCHAR user_locale[LOCALE_NAME_MAX_LENGTH];
+#endif
 
     /* ~0u is a marker for system fallback data */
     data = fallback->data.count == ~0u ? &system_fallback : &fallback->data;
@@ -2622,6 +2633,14 @@ static HRESULT fallback_map_characters(const struct dwrite_fontfallback *fallbac
 
     length = length ? min(length, text_length) : text_length;
     if (!locale_name) locale_name = L"";
+
+#ifdef __REACTOS__
+    if (data == &system_fallback)
+    {
+        if (!*locale_name && GetUserDefaultLocaleName(user_locale, ARRAY_SIZE(user_locale))) locale_name = user_locale;
+        if (fallback_is_simplified_chinese(locale_name)) locale_name = L"zh-Hans";
+    }
+#endif
 
     /* Lookup locale entry once, if specific locale is missing neutral one will be returned. */
     locale = font_fallback_get_locale(&data->locales, locale_name, true);
