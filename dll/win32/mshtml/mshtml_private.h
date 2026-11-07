@@ -123,6 +123,7 @@ struct constructor;
     XDIID(DispHTMLCommentElement) \
     XDIID(DispHTMLCurrentStyle) \
     XDIID(DispHTMLDDElement) \
+    XDIID(DispHTMLDivElement) \
     XDIID(DispHTMLDListElement) \
     XDIID(DispHTMLDocument) \
     XDIID(DispHTMLDOMAttribute) \
@@ -139,6 +140,7 @@ struct constructor;
     XDIID(DispHTMLFrameSetSite) \
     XDIID(DispHTMLHeadElement) \
     XDIID(DispHTMLHeaderElement) \
+    XDIID(DispHTMLHRElement) \
     XDIID(DispHTMLHtmlElement) \
     XDIID(DispHTMLHistory) \
     XDIID(DispHTMLIFrame) \
@@ -159,6 +161,7 @@ struct constructor;
     XDIID(DispHTMLScreen) \
     XDIID(DispHTMLScriptElement) \
     XDIID(DispHTMLSelectElement) \
+    XDIID(DispHTMLSpanElement) \
     XDIID(DispHTMLStyle) \
     XDIID(DispHTMLStyleElement) \
     XDIID(DispHTMLStyleSheet) \
@@ -225,6 +228,7 @@ struct constructor;
     XIID(IHTMLCurrentStyle4) \
     XIID(IHTMLDatabinding) \
     XIID(IHTMLDDElement) \
+    XIID(IHTMLDivElement) \
     XIID(IHTMLDListElement) \
     XIID(IHTMLDTElement) \
     XIID(IHTMLDocument2) \
@@ -269,6 +273,7 @@ struct constructor;
     XIID(IHTMLGenericElement) \
     XIID(IHTMLHeadElement) \
     XIID(IHTMLHeaderElement) \
+    XIID(IHTMLHRElement) \
     XIID(IHTMLHtmlElement) \
     XIID(IHTMLIFrameElement) \
     XIID(IHTMLIFrameElement2) \
@@ -304,6 +309,7 @@ struct constructor;
     XIID(IHTMLSelectElement) \
     XIID(IHTMLSelectionObject) \
     XIID(IHTMLSelectionObject2) \
+    XIID(IHTMLSpanElement) \
     XIID(IHTMLStorage) \
     XIID(IHTMLStyle) \
     XIID(IHTMLStyle2) \
@@ -522,6 +528,7 @@ typedef struct {
     X(HTMLDListElement)                    \
     X(HTMLDTElement)                       \
     X(HTMLDirectoryElement)                \
+    X(HTMLDivElement)                      \
     X(HTMLDocument)                        \
     X(HTMLElement)                         \
     X(HTMLEmbedElement)                    \
@@ -529,6 +536,7 @@ typedef struct {
     X(HTMLFormElement)                     \
     X(HTMLFrameElement)                    \
     X(HTMLFrameSetElement)                 \
+    X(HTMLHRElement)                       \
     X(HTMLHeadElement)                     \
     X(HTMLHeadingElement)                  \
     X(HTMLHtmlElement)                     \
@@ -550,6 +558,7 @@ typedef struct {
     X(HTMLQuoteElement)                    \
     X(HTMLScriptElement)                   \
     X(HTMLSelectElement)                   \
+    X(HTMLSpanElement)                     \
     X(HTMLStyleElement)                    \
     X(HTMLTableCellElement)                \
     X(HTMLTableColElement)                 \
@@ -1499,6 +1508,12 @@ HRESULT HTMLFrameSetElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement*
 HRESULT HTMLHeaderElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLParaElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLPhraseElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLSpanElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLDivElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLHRElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+BOOL is_text_block_attr(HTMLElement*,const WCHAR*);
+const WCHAR *text_block_canonical_attr(HTMLElement*,const WCHAR*,const WCHAR*,WCHAR*,unsigned);
+BOOL text_block_attr_is_invalid(HTMLElement*,const WCHAR*);
 HRESULT HTMLModElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLQuoteElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLPreElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
@@ -1593,6 +1608,8 @@ VARIANT_BOOL element_has_attribute(HTMLElement*,const WCHAR*);
 BOOL is_ie8_attr_specified_default(HTMLElement*,const WCHAR*);
 HRESULT element_remove_attribute(HTMLElement*,const WCHAR*);
 HRESULT elem_get_attr_string(HTMLElement*,const WCHAR*,BSTR*);
+HRESULT elem_put_bool_attr(HTMLElement*,const WCHAR*,VARIANT_BOOL);
+HRESULT elem_get_bool_attr(HTMLElement*,const WCHAR*,VARIANT_BOOL*);
 HRESULT elem_put_color_attr(HTMLElement*,const WCHAR*,VARIANT*);
 HRESULT elem_get_color_attr(HTMLElement*,const WCHAR*,VARIANT*);
 
