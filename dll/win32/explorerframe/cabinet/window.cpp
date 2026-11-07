@@ -1539,15 +1539,17 @@ void
 CCabinetWindow::SavePlacement()
 {
     WINDOWPLACEMENT placement = { sizeof(placement) };
+    WCHAR name[32];
     HKEY key;
 
     if (!GetWindowPlacement(m_hwnd, &placement))
         return;
+    StringCchPrintfW(name, _countof(name), L"Placement%u", GetDpiForWindow(m_hwnd));
     if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\LiberNT\\Explorer", 0, NULL, 0, KEY_SET_VALUE, NULL, &key,
                         NULL) == ERROR_SUCCESS)
     {
         DWORD pane = m_PreviewPane ? 2 : m_DetailsPane ? 1 : 0;
-        RegSetValueExW(key, L"Placement", 0, REG_BINARY, (const BYTE *)&placement, sizeof(placement));
+        RegSetValueExW(key, name, 0, REG_BINARY, (const BYTE *)&placement, sizeof(placement));
         RegSetValueExW(key, L"Pane", 0, REG_DWORD, (const BYTE *)&pane, sizeof(pane));
         RegCloseKey(key);
     }
@@ -1694,6 +1696,7 @@ CCabinetWindow::Open(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd
     WNDCLASSEXW wc = { sizeof(wc) };
     WINDOWPLACEMENT placement = { sizeof(placement) };
     DWORD size = sizeof(placement);
+    WCHAR name[32];
 
     if (!GetClassInfoExW(g_hInstance, CABINET_CLASS, &wc))
     {
@@ -1709,7 +1712,8 @@ CCabinetWindow::Open(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd
     if (!CreateWindowExW(WS_EX_WINDOWEDGE, CABINET_CLASS, L"File Explorer", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                          CW_USEDEFAULT, CW_USEDEFAULT, Scale(1000), Scale(680), NULL, NULL, g_hInstance, this))
         return HRESULT_FROM_WIN32(GetLastError());
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\LiberNT\\Explorer", L"Placement", RRF_RT_REG_BINARY, NULL,
+    StringCchPrintfW(name, _countof(name), L"Placement%u", GetDpiForWindow(m_hwnd));
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\LiberNT\\Explorer", name, RRF_RT_REG_BINARY, NULL,
                      &placement, &size) == ERROR_SUCCESS && size == sizeof(placement) &&
         placement.length == sizeof(placement))
     {
