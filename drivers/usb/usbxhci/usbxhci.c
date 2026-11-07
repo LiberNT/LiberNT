@@ -4560,7 +4560,7 @@ XHCI_PrepareBounceBuffer(
     }
 
     Lowest.QuadPart = 0;
-    Highest.QuadPart = 0xFFFFFFFFull;
+    Highest.QuadPart = XHCI_Requires32BitDma(Extension) ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
     Boundary.QuadPart = 0;
 
     CacheType = XHCI_GetDmaCacheType(Extension);
@@ -4586,7 +4586,7 @@ XHCI_PrepareBounceBuffer(
     if (DataIn)
         RtlZeroMemory(Buffer, Length);
 
-    if ((Transfer->BouncePhysicalAddress.QuadPart >> 32) != 0)
+    if (XHCI_Requires32BitDma(Extension) && (Transfer->BouncePhysicalAddress.QuadPart >> 32) != 0)
     {
         DPRINT1("usbxhci: bounce buffer above 4G (PA=%I64x len=%lu)\n",
                 Transfer->BouncePhysicalAddress.QuadPart,
@@ -4708,7 +4708,7 @@ XHCI_InitBouncePool(
     KeInitializeSpinLock(&Extension->BounceBufferLock);
 
     Low.QuadPart = 0;
-    High.QuadPart = 0xFFFFFFFFull;
+    High.QuadPart = XHCI_Requires32BitDma(Extension) ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
     Boundary.QuadPart = 0;
     CacheType = XHCI_GetDmaCacheType(Extension);
 
@@ -4729,7 +4729,7 @@ XHCI_InitBouncePool(
         }
 
         Physical = MmGetPhysicalAddress(Buffer);
-        if ((Physical.QuadPart >> 32) != 0)
+        if (XHCI_Requires32BitDma(Extension) && (Physical.QuadPart >> 32) != 0)
         {
             DPRINT1("usbxhci: bounce pool entry above 4G (slot=%lu PA=%I64x)\n",
                     Index,
