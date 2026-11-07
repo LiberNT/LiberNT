@@ -393,6 +393,44 @@ BOOL FASTCALL can_activate_window( PWND Wnd OPTIONAL)
 }
 
 
+BOOL FASTCALL
+co_WinPosActivatePreviousForeground(PWND Wnd, BOOL bDestroy)
+{
+   PWND WndPrev, Owner;
+   USER_REFERENCE_ENTRY Ref;
+   UINT Depth;
+   BOOL Ret;
+
+   if (!gpqForeground || gpqForeground->spwndActive != Wnd ||
+       ghwndForeground != UserHMGetHandle(Wnd) || !ghwndForegroundPrev)
+      return FALSE;
+
+   if ((Wnd->style & WS_POPUP) && Wnd->spwndOwner &&
+       can_activate_window(UserGetAncestor(Wnd->spwndOwner, GA_ROOT)))
+      return FALSE;
+
+   WndPrev = ValidateHwndNoErr(ghwndForegroundPrev);
+   if (!WndPrev || WndPrev == Wnd || WndPrev->head.rpdesk != Wnd->head.rpdesk ||
+       !WndPrev->spwndParent || !UserIsDesktopWindow(WndPrev->spwndParent) ||
+       (WndPrev->style & (WS_VISIBLE | WS_DISABLED | WS_MINIMIZE)) != WS_VISIBLE ||
+       (WndPrev->ExStyle & WS_EX_NOACTIVATE) || (WndPrev->state & WNDS_DESTROYED))
+      return FALSE;
+
+   if (bDestroy)
+   {
+      for (Owner = WndPrev->spwndOwner, Depth = 0; Owner && Depth < 64; Owner = Owner->spwndOwner, Depth++)
+      {
+         if (Owner == Wnd)
+            return FALSE;
+      }
+   }
+
+   UserRefObjectCo(WndPrev, &Ref);
+   Ret = co_WinPosSetOtherForegroundWindow(WndPrev);
+   UserDerefObjectCo(WndPrev);
+   return Ret;
+}
+
 /*******************************************************************
  *         WinPosActivateOtherWindow
  *
@@ -3518,7 +3556,8 @@ co_WinPosShowWindow(PWND Wnd, INT Cmd)
 
           if (UserIsDesktopWindow(Wnd->spwndParent) && !can_activate_window(Owner))
           {
-              if (!ActivateOtherWindowMin(Wnd))
+              if (!(Cmd == SW_HIDE && co_WinPosActivatePreviousForeground(Wnd, FALSE)) &&
+                  !ActivateOtherWindowMin(Wnd))
               {
                 co_WinPosActivateOtherWindow(Wnd);
               }

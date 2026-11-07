@@ -13,6 +13,8 @@ DBG_DEFAULT_CHANNEL(UserFocus);
 
 PUSER_MESSAGE_QUEUE gpqForeground = NULL;
 PUSER_MESSAGE_QUEUE gpqForegroundPrev = NULL;
+HWND ghwndForeground = NULL;
+HWND ghwndForegroundPrev = NULL;
 PTHREADINFO gptiForeground = NULL;
 PPROCESSINFO gppiLockSFW = NULL;
 ULONG guSFWLockCount = 0; // Rule #8, No menus are active. So should be zero.
@@ -1242,6 +1244,12 @@ co_IntSetActiveWindow(
 
    /* set the current thread active window */
    ThreadQueue->spwndActive = Wnd;
+
+   if (ThreadQueue == gpqForeground && hWnd != ghwndForeground)
+   {
+      ghwndForegroundPrev = ghwndForeground;
+      ghwndForeground = hWnd;
+   }
 
    // Set state flag to prevent recursions.
    Wnd->state |= WNDS_BEINGACTIVATED;

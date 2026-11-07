@@ -35,6 +35,7 @@ list(APPEND SOURCE
     EmptyClipboard.c
     EnableScrollBar.c
     EnumDisplaySettings.c
+    ForegroundAfterHide.c
     ForegroundRetake.c
     ForegroundRight.c
     ForegroundStartup.c
@@ -145,6 +146,12 @@ set_module_type(user32_apitest_menuui win32gui UNICODE)
 add_importlibs(user32_apitest_menuui user32 msvcrt kernel32)
 add_rostests_file(TARGET user32_apitest_menuui)
 add_dependencies(user32_apitest user32_apitest_menuui)
+
+add_executable(user32_apitest_fghide user32_apitest_fghide.c)
+set_module_type(user32_apitest_fghide win32gui UNICODE)
+add_importlibs(user32_apitest_fghide user32 msvcrt kernel32)
+add_rostests_file(TARGET user32_apitest_fghide)
+add_dependencies(user32_apitest user32_apitest_fghide)
 
 add_rostests_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/verclasstest1.manifest")
 add_rostests_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/verclasstest2.manifest")
