@@ -101,17 +101,17 @@ DefWndHandleWindowPosChanged(PWND pWnd, WINDOWPOS* Pos)
 
    if (!(Pos->flags & SWP_NOCLIENTMOVE))
    {
-      co_IntSendMessage(UserHMGetHandle(pWnd), WM_MOVE, 0, MAKELONG(Rect.left, Rect.top));
+      co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_MOVE, 0, MAKELONG(Rect.left, Rect.top));
    }
 
    if (!(Pos->flags & SWP_NOCLIENTSIZE) || (Pos->flags & SWP_STATECHANGED))
    {
       pWnd->state &= ~WNDS_SENDSIZEMOVEMSGS;
-      if (style & WS_MINIMIZE) co_IntSendMessage(UserHMGetHandle(pWnd), WM_SIZE, SIZE_MINIMIZED, 0 );
+      if (style & WS_MINIMIZE) co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SIZE, SIZE_MINIMIZED, 0 );
       else
       {
          WPARAM wp = (style & WS_MAXIMIZE) ? SIZE_MAXIMIZED : SIZE_RESTORED;
-         co_IntSendMessage(UserHMGetHandle(pWnd), WM_SIZE, wp, MAKELONG(Rect.right - Rect.left, Rect.bottom - Rect.top));
+         co_IntSendSystemMessage(UserHMGetHandle(pWnd), WM_SIZE, wp, MAKELONG(Rect.right - Rect.left, Rect.bottom - Rect.top));
       }
    }
    return 0;
@@ -1035,7 +1035,7 @@ IntDefWindowProc(
             Pt.y = GET_Y_LPARAM(lParam);
             IntClientToScreen(Wnd, &Pt);
             lParam = MAKELPARAM(Pt.x, Pt.y);
-            co_IntSendMessage(UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), lParam);
+            co_IntSendSystemMessage(UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), lParam);
             break;
       }
 
@@ -1116,7 +1116,7 @@ IntDefWindowProc(
 
             if (UserGetKeyState(VK_SHIFT) & 0x8000)
             {
-               co_IntSendMessage(UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), -1);
+               co_IntSendSystemMessage(UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), -1);
             }
          }
          if (g_bWindowSnapEnabled && (IS_KEY_DOWN(gafAsyncKeyState, VK_LWIN) || IS_KEY_DOWN(gafAsyncKeyState, VK_RWIN)))
@@ -1235,7 +1235,7 @@ IntDefWindowProc(
             else if( wParam == VK_F10 )
             {
                 if (UserGetKeyState(VK_SHIFT) & 0x8000)
-                    co_IntSendMessage( UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), -1 );
+                    co_IntSendSystemMessage( UserHMGetHandle(Wnd), WM_CONTEXTMENU, (WPARAM)UserHMGetHandle(Wnd), -1 );
                 pti->MessageQueue->QF_flags |= QF_FF10STATUS; //iF10Key = 1;
             }
             else if( wParam == VK_ESCAPE && (UserGetKeyState(VK_SHIFT) & 0x8000))

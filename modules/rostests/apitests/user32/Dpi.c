@@ -63,12 +63,14 @@ TestSizingApis(
     SourceCaption = GetSystemMetricsForDpiFn(SM_CYCAPTION, SystemDpi);
     TargetCaption = GetSystemMetricsForDpiFn(SM_CYCAPTION, TargetDpi);
     ok(SourceCaption > 0, "GetSystemMetricsForDpi returned an invalid source caption height %d\n", SourceCaption);
-    ok(TargetCaption == (SourceCaption - 1) * 2 + 1, "Caption height %d at %u DPI did not scale from %d at %u DPI\n", TargetCaption, TargetDpi, SourceCaption, SystemDpi);
+    ok(TargetCaption == MulDiv(GetSystemMetricsForDpiFn(SM_CYCAPTION, USER_DEFAULT_SCREEN_DPI) - 1, TargetDpi, USER_DEFAULT_SCREEN_DPI) + 1,
+       "Caption height %d at %u DPI did not scale from the 96 DPI caption\n", TargetCaption, TargetDpi);
 
     SourceFrame = GetSystemMetricsForDpiFn(SM_CXFRAME, SystemDpi);
     TargetFrame = GetSystemMetricsForDpiFn(SM_CXFRAME, TargetDpi);
     ok(SourceFrame >= 3, "GetSystemMetricsForDpi returned an invalid source frame width %d\n", SourceFrame);
-    ok(TargetFrame == (SourceFrame - 3) * 2 + 3, "Frame width %d at %u DPI did not scale from %d at %u DPI\n", TargetFrame, TargetDpi, SourceFrame, SystemDpi);
+    ok(TargetFrame == MulDiv(GetSystemMetricsForDpiFn(SM_CXFRAME, USER_DEFAULT_SCREEN_DPI) - 3, TargetDpi, USER_DEFAULT_SCREEN_DPI) + 3,
+       "Frame width %d at %u DPI did not scale from the 96 DPI frame\n", TargetFrame, TargetDpi);
 
     if (AdjustWindowRectExForDpiFn == NULL)
     {

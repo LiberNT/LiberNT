@@ -1061,7 +1061,12 @@ GetClientRect(HWND hWnd, LPRECT lpRect)
 #ifdef WOW64_I386_RUNTIME
     return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETCLIENTRECT);
 #else
-    PWND Wnd = ValidateHwnd(hWnd);
+    PWND Wnd;
+
+    if (User32IsDpiVirtualThread())
+        return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETCLIENTRECT);
+
+    Wnd = ValidateHwnd(hWnd);
 
     if (!Wnd) return FALSE;
     if ( hWnd != GetDesktopWindow()) // Wnd->fnid != FNID_DESKTOP )
@@ -1294,7 +1299,9 @@ GetWindowInfo(HWND hWnd,
     if ( !pwi || pwi->cbSize != sizeof(WINDOWINFO))
        SetLastError(ERROR_INVALID_PARAMETER); // Just set the error and go!
 
-#ifdef WOW64_I386_RUNTIME
+#ifndef WOW64_I386_RUNTIME
+    if (User32IsDpiVirtualThread())
+#endif
     {
         ROS_WINDOWINFO Info;
 
@@ -1322,7 +1329,6 @@ GetWindowInfo(HWND hWnd,
             pwi->wCreatorVersion = 0x300;
         return TRUE;
     }
-#endif
 
     pWnd = ValidateHwnd(hWnd);
     if (!pWnd)
@@ -1416,8 +1422,12 @@ GetWindowRect(HWND hWnd,
 #ifdef WOW64_I386_RUNTIME
     return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETWINDOWRECT);
 #else
-    PWND Wnd = ValidateHwnd(hWnd);
+    PWND Wnd;
 
+    if (User32IsDpiVirtualThread())
+        return (BOOL)NtUserCallHwndParam(hWnd, (DWORD_PTR)lpRect, HWNDPARAM_ROUTINE_ROS_GETWINDOWRECT);
+
+    Wnd = ValidateHwnd(hWnd);
     if (!Wnd) return FALSE;
     if ( hWnd != GetDesktopWindow()) // Wnd->fnid != FNID_DESKTOP )
     {
@@ -2620,6 +2630,28 @@ GetWindowCompositionAttribute(HWND hWnd, PVOID AttributeData)
     _SEH2_END;
 
     return Result;
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+SetThreadDpiHostingBehavior(_In_ DPI_HOSTING_BEHAVIOR Value)
+{
+    return (DPI_HOSTING_BEHAVIOR)(LONG_PTR)NtUserCallOneParam((DWORD_PTR)(LONG_PTR)Value,
+                                                              ONEPARAM_ROUTINE_ROS_SETTHREADDPIHOSTING);
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetThreadDpiHostingBehavior(VOID)
+{
+    return (DPI_HOSTING_BEHAVIOR)(LONG_PTR)NtUserCallOneParam(0, ONEPARAM_ROUTINE_ROS_GETTHREADDPIHOSTING);
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetWindowDpiHostingBehavior(_In_ HWND hWnd)
+{
+    return (DPI_HOSTING_BEHAVIOR)(LONG_PTR)NtUserCallHwndParam(hWnd, 0, HWNDPARAM_ROUTINE_ROS_GETDPIHOSTINGBEHAVIOR);
 }
 
 /* EOF */

@@ -72,6 +72,7 @@ BOOL OnCreate(HWND hWnd);
 void OnSize(WPARAM nType, int cx, int cy);
 void OnMove(WPARAM nType, int cx, int cy);
 void FillSolidRect(HDC hDC, LPCRECT lpRect, COLORREF clr);
+int TaskManager_GetDpi(void);
 void LoadSettings(void);
 void SaveSettings(void);
 void TaskManager_OnRestoreMainWindow(void);

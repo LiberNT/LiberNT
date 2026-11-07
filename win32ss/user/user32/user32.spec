@@ -408,6 +408,7 @@
 @ stdcall -version=0xA00+ EnableNonClientDpiScaling(ptr)
 @ stdcall -version=0xA00+ AdjustWindowRectExForDpi(ptr long long long long)
 @ stdcall -version=0xA00+ GetThreadDpiAwarenessContext()
+@ stdcall -version=0xA00+ GetThreadDpiHostingBehavior()
 @ stdcall GetTitleBarInfo(long ptr) NtUserGetTitleBarInfo
 @ stdcall GetTopWindow(long)
 @ stdcall -version=0x601+ GetTouchInputInfo(long long ptr long)
@@ -424,6 +425,7 @@
 @ stdcall GetWindowContextHelpId(long)
 @ stdcall GetWindowDC(long) User32GetWindowDC
 @ stdcall -version=0xA00+ GetWindowDpiAwarenessContext(long)
+@ stdcall -version=0xA00+ GetWindowDpiHostingBehavior(ptr)
 @ stdcall -version=0x601+ GetWindowDisplayAffinity(long ptr)
 @ stdcall GetWindowInfo(long ptr)
 @ stdcall GetWindowLongA(long long)
@@ -737,6 +739,7 @@
 @ stdcall SetTaskmanWindow (long)
 @ stdcall SetThreadDesktop(long) NtUserSetThreadDesktop
 @ stdcall -version=0xA00+ SetThreadDpiAwarenessContext(ptr)
+@ stdcall -version=0xA00+ SetThreadDpiHostingBehavior(long)
 @ stdcall SetTimer(long long long ptr) NtUserSetTimer
 @ stdcall SetUserObjectInformationA(long long ptr long) NtUserSetObjectInformation
 @ stdcall SetUserObjectInformationW(long long ptr long) NtUserSetObjectInformation

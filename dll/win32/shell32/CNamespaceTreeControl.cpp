@@ -200,6 +200,7 @@ private:
     };
 
     HWND m_Tree;
+    HFONT m_Font;
     CComPtr<IImageList> m_ImageList;
     CAtlList<RootEntry *> m_Roots;
     CAtlList<EventEntry> m_Events;
@@ -735,7 +736,13 @@ private:
 
         HFONT Font = reinterpret_cast<HFONT>(SendMessageW(::GetParent(m_hWnd), WM_GETFONT, 0, 0));
         if (!Font)
-            Font = reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+        {
+            LOGFONTW IconFont;
+
+            if (SystemParametersInfoW(SPI_GETICONTITLELOGFONT, sizeof(IconFont), &IconFont, 0))
+                m_Font = CreateFontIndirectW(&IconFont);
+            Font = m_Font ? m_Font : reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+        }
         SendMessageW(m_Tree, WM_SETFONT, reinterpret_cast<WPARAM>(Font), TRUE);
         return 0;
     }
@@ -748,6 +755,11 @@ private:
         {
             ::DestroyWindow(m_Tree);
             m_Tree = NULL;
+        }
+        if (m_Font)
+        {
+            DeleteObject(m_Font);
+            m_Font = NULL;
         }
         m_ImageList.Release();
         m_Destroying = FALSE;
@@ -1037,6 +1049,7 @@ private:
 public:
     CNamespaceTreeControl() :
         m_Tree(NULL),
+        m_Font(NULL),
         m_NextCookie(0),
         m_Style((NSTCSTYLE)0),
         m_Style2(NSTCS2_DEFAULT),

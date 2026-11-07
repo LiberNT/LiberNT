@@ -40,6 +40,7 @@ add_dependencies(user32_vista_static psdk)
 
 add_library(user32_vista MODULE
     ${SOURCE}
+    dpivirt.c
     user32_vista.rc
     ${CMAKE_CURRENT_BINARY_DIR}/user32_vista.def)
 

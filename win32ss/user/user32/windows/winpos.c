@@ -213,6 +213,11 @@ MapWindowPoints(HWND hWndFrom, HWND hWndTo, LPPOINT lpPoints, UINT cPoints)
             ExStyleTo = ToWnd->ExStyle;
             HaveTo = TRUE;
         }
+        if (User32IsDpiVirtualThread())
+        {
+            User32DpiRectToLogical(&rcFrom);
+            User32DpiRectToLogical(&rcTo);
+        }
     }
 #endif
 
@@ -285,6 +290,8 @@ ScreenToClient(HWND hWnd, LPPOINT lpPoint)
         return FALSE;
     rcClient = Wnd->rcClient;
     ExStyle = Wnd->ExStyle;
+    if (User32IsDpiVirtualThread())
+        User32DpiRectToLogical(&rcClient);
 #endif
 
     if (hWnd != GetDesktopWindow()) // Wnd->fnid != FNID_DESKTOP )
@@ -320,6 +327,8 @@ ClientToScreen(HWND hWnd, LPPOINT lpPoint)
         return FALSE;
     rcClient = Wnd->rcClient;
     ExStyle = Wnd->ExStyle;
+    if (User32IsDpiVirtualThread())
+        User32DpiRectToLogical(&rcClient);
 #endif
 
     if ( hWnd != GetDesktopWindow()) // Wnd->fnid != FNID_DESKTOP )

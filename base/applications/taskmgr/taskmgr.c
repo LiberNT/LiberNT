@@ -525,6 +525,19 @@ void FillSolidRect(HDC hDC, LPCRECT lpRect, COLORREF clr)
     ExtTextOutW(hDC, 0, 0, ETO_OPAQUE, lpRect, NULL, 0, NULL);
 }
 
+int TaskManager_GetDpi(void)
+{
+    HDC hDC = GetDC(NULL);
+    int nDpi = 96;
+
+    if (hDC)
+    {
+        nDpi = GetDeviceCaps(hDC, LOGPIXELSX);
+        ReleaseDC(NULL, hDC);
+    }
+    return nDpi ? nDpi : 96;
+}
+
 static void SetUpdateSpeed(HWND hWnd)
 {
     /* Setup update speed (pause=fall down) */

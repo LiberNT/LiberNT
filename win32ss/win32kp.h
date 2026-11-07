@@ -87,6 +87,7 @@ typedef struct _DC *PDC;
 #include "user/ntuser/composition.h"
 #include "user/ntuser/security.h"
 #include "user/ntuser/sysparams.h"
+#include "user/ntuser/dpi.h"
 #include "user/ntuser/power.h"
 #include "user/ntuser/prop.h"
 #include "user/ntuser/guicheck.h"

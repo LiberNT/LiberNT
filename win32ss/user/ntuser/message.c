@@ -1212,6 +1212,31 @@ IntDispatchMessage(PMSG pMsg)
     return retval;
 }
 
+static LRESULT
+co_IntCallMessageHook(INT HookId, INT Code, WPARAM wParam, PMSG Msg)
+{
+    MSG Logical = *Msg, Initial;
+    LRESULT Result;
+
+    UserDpiVirtualizeMessage(&Logical);
+    if (RtlEqualMemory(&Logical, Msg, sizeof(MSG)))
+        return co_HOOK_CallHooks(HookId, Code, wParam, (LPARAM)Msg);
+    Initial = Logical;
+    Result = co_HOOK_CallHooks(HookId, Code, wParam, (LPARAM)&Logical);
+    Msg->hwnd = Logical.hwnd;
+    Msg->message = Logical.message;
+    Msg->wParam = Logical.wParam;
+    Msg->time = Logical.time;
+    if (Logical.lParam != Initial.lParam)
+        Msg->lParam = Logical.lParam;
+    if (Logical.pt.x != Initial.pt.x || Logical.pt.y != Initial.pt.y)
+    {
+        Msg->pt = Logical.pt;
+        UserDpiPointToPhysical(&Msg->pt);
+    }
+    return Result;
+}
+
 /*
  * Internal version of PeekMessage() doing all the work
  *
@@ -1536,7 +1561,7 @@ co_IntGetPeekMessage( PMSG pMsg,
            // The WH_GETMESSAGE hook enables an application to monitor messages about to
            // be returned by the GetMessage or PeekMessage function.
 
-           co_HOOK_CallHooks( WH_GETMESSAGE, HC_ACTION, RemoveMsg & PM_REMOVE, (LPARAM)pMsg);
+           co_IntCallMessageHook(WH_GETMESSAGE, HC_ACTION, RemoveMsg & PM_REMOVE, pMsg);
 
            if ( bGMSG || pMsg->message == WM_PAINT) break;
         }
@@ -1734,6 +1759,32 @@ co_IntSendMessage( HWND hWnd,
         return (LRESULT)Result;
     }
     return 0;
+}
+
+LRESULT FASTCALL
+co_IntSendSystemMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    USER_DPI_MESSAGE Conv;
+    LRESULT Result;
+
+    if (!UserDpiBeginMessage(ValidateHwndNoErr(hWnd), Msg, &wParam, &lParam, &Conv, TRUE))
+        return co_IntSendMessage(hWnd, Msg, wParam, lParam);
+    Result = co_IntSendMessage(hWnd, Msg, wParam, lParam);
+    UserDpiEndMessage(&Conv);
+    return Result;
+}
+
+LRESULT FASTCALL
+co_IntSendSystemMessageNoWait(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    USER_DPI_MESSAGE Conv;
+    LRESULT Result;
+
+    if (!UserDpiBeginMessage(ValidateHwndNoErr(hWnd), Msg, &wParam, &lParam, &Conv, TRUE))
+        return co_IntSendMessageNoWait(hWnd, Msg, wParam, lParam);
+    Result = co_IntSendMessageNoWait(hWnd, Msg, wParam, lParam);
+    UserDpiEndMessage(&Conv);
+    return Result;
 }
 
 static LRESULT FASTCALL
@@ -2435,9 +2486,9 @@ IntCallMsgFilter(LPMSG lpmsg, INT code)
 {
     BOOL Ret;
 
-    Ret = co_HOOK_CallHooks(WH_SYSMSGFILTER, code, 0, (LPARAM)lpmsg);
+    Ret = co_IntCallMessageHook(WH_SYSMSGFILTER, code, 0, lpmsg);
     if (!Ret)
-        Ret = co_HOOK_CallHooks(WH_MSGFILTER, code, 0, (LPARAM)lpmsg);
+        Ret = co_IntCallMessageHook(WH_MSGFILTER, code, 0, lpmsg);
 
     return Ret;
 }
@@ -2855,6 +2906,8 @@ NtUserGetMessage(PMSG pMsg,
     RtlZeroMemory(&Msg, sizeof(MSG));
 
     Ret = co_IntGetPeekMessage(&Msg, hWnd, MsgFilterMin, MsgFilterMax, PM_REMOVE, TRUE);
+    if (Ret)
+        UserDpiVirtualizeMessage(&Msg);
 
     UserLeave();
 
@@ -2900,6 +2953,8 @@ NtUserPeekMessage( PMSG pMsg,
     RtlZeroMemory(&Msg, sizeof(MSG));
 
     Ret = co_IntGetPeekMessage(&Msg, hWnd, MsgFilterMin, MsgFilterMax, RemoveMsg, FALSE);
+    if (Ret)
+        UserDpiVirtualizeMessage(&Msg);
 
     UserLeave();
 
@@ -3289,6 +3344,86 @@ IntDoSendMessageAnsi(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
+static SIZE_T
+IntDpiMessageDataSize(UINT Msg, WPARAM wParam)
+{
+    switch (Msg)
+    {
+        case WM_NCCALCSIZE:
+            return wParam ? sizeof(NCCALCSIZE_PARAMS) : sizeof(RECT);
+        case WM_SIZING:
+        case WM_MOVING:
+            return sizeof(RECT);
+        case WM_WINDOWPOSCHANGING:
+        case WM_WINDOWPOSCHANGED:
+            return sizeof(WINDOWPOS);
+        case WM_GETMINMAXINFO:
+            return sizeof(MINMAXINFO);
+    }
+    return 0;
+}
+
+static LRESULT
+co_IntCallDefWindowProc(PWND Window, UINT Msg, WPARAM wParam, LPARAM lParam, BOOL Ansi)
+{
+    USER_DPI_MESSAGE Conv;
+    USER_DPI_MESSAGE_DATA Captured;
+    LPARAM UserParam = lParam;
+    WINDOWPOS *UserPos = NULL;
+    SIZE_T Size;
+    LRESULT Result;
+
+    if (Window == NULL || !UserDpiIsVirtualCaller())
+        return IntDefWindowProc(Window, Msg, wParam, lParam, Ansi);
+
+    Size = IntDpiMessageDataSize(Msg, wParam);
+    if (Size != 0)
+    {
+        if (lParam == 0)
+            return IntDefWindowProc(Window, Msg, wParam, lParam, Ansi);
+        _SEH2_TRY
+        {
+            ProbeForWrite((PVOID)lParam, Size, 1);
+            RtlCopyMemory(&Captured, (PVOID)lParam, Size);
+            if (Msg == WM_NCCALCSIZE && wParam && Captured.NcCalc.Params.lppos != NULL)
+            {
+                UserPos = Captured.NcCalc.Params.lppos;
+                ProbeForWrite(UserPos, sizeof(WINDOWPOS), 1);
+                Captured.NcCalc.Pos = *UserPos;
+                Captured.NcCalc.Params.lppos = &Captured.NcCalc.Pos;
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return 0);
+        }
+        _SEH2_END;
+        lParam = (LPARAM)&Captured;
+    }
+
+    if (!UserDpiBeginMessage(Window, Msg, &wParam, &lParam, &Conv, FALSE))
+        return IntDefWindowProc(Window, Msg, wParam, UserParam, Ansi);
+    Result = IntDefWindowProc(Window, Msg, wParam, lParam, Ansi);
+    UserDpiEndMessage(&Conv);
+
+    if (Size != 0)
+    {
+        if (UserPos != NULL)
+            Captured.NcCalc.Params.lppos = UserPos;
+        _SEH2_TRY
+        {
+            RtlCopyMemory((PVOID)UserParam, &Captured, Size);
+            if (UserPos != NULL)
+                *UserPos = Captured.NcCalc.Pos;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
+    }
+    return Result;
+}
+
 LRESULT APIENTRY
 NtUserMessageCall( HWND hWnd,
                    UINT Msg,
@@ -3369,7 +3504,7 @@ NtUserMessageCall( HWND hWnd,
            }
            UserRefObjectCo(Window, &Ref);
         }
-        lResult = IntDefWindowProc(Window, Msg, wParam, lParam, Ansi);
+        lResult = co_IntCallDefWindowProc(Window, Msg, wParam, lParam, Ansi);
         Ret = TRUE;
         if (hWnd)
             UserDerefObjectCo(Window);

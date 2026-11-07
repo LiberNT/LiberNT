@@ -37,53 +37,30 @@ BOOL FASTCALL UserIsCTFIMEEnabled(VOID)
     return UserIsIMMEnabled();
 }
 
-BOOL
-NTAPI
-InitMetrics(VOID)
+static INT gaiSysMetVirtual[SM_CMETRICS];
+
+static VOID
+IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _In_ ULONG Height, _In_ BOOL Virtual)
 {
-    INT *piSysMet = gpsi->aiSysMet;
-    ULONG Width, Height;
     PMONITOR pPrimary;
 
-    /* Note: used for the SM_CLEANBOOT metric */
-    DWORD dwValue = 0;
-    HKEY hKey = 0;
-
-    /* Clean boot */
-    piSysMet[SM_CLEANBOOT] = 0; // Fallback value of 0 (normal mode)
-    if(NT_SUCCESS(RegOpenKey(L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Control\\SafeBoot\\Option", &hKey)))
-    {
-        if(RegReadDWORD(hKey, L"OptionValue", &dwValue)) piSysMet[SM_CLEANBOOT] = (INT)dwValue;
-        ZwClose(hKey);
-    }
-
-    /* FIXME: HACK, due to missing MDEV on first init */
-    if (!gpmdev)
-    {
-        Width = 640;
-        Height = 480;
-    }
-    else
-    {
-        Width = gpmdev->ppdevGlobal->gdiinfo.ulHorzRes;
-        Height = gpmdev->ppdevGlobal->gdiinfo.ulVertRes;
-    }
-
+#define V(Value) (Virtual ? UserDpiToLogical(Value) : (Value))
+#define D(Value) UserScaleForDpi((Value), Virtual ? USER_SYSTEM_DPI_DEFAULT : UserGetSystemDpi())
     /* Screen sizes */
-    piSysMet[SM_CXSCREEN] = Width;
-    piSysMet[SM_CYSCREEN] = Height;
+    piSysMet[SM_CXSCREEN] = V(Width);
+    piSysMet[SM_CYSCREEN] = V(Height);
     piSysMet[SM_XVIRTUALSCREEN] = 0;
     piSysMet[SM_YVIRTUALSCREEN] = 0;
-    piSysMet[SM_CXVIRTUALSCREEN] = Width;
-    piSysMet[SM_CYVIRTUALSCREEN] = Height;
+    piSysMet[SM_CXVIRTUALSCREEN] = V(Width);
+    piSysMet[SM_CYVIRTUALSCREEN] = V(Height);
 
     /* NC area sizes */
-    piSysMet[SM_CYCAPTION] = gspv.ncm.iCaptionHeight + 1;
-    piSysMet[SM_CYSMCAPTION] = gspv.ncm.iSmCaptionHeight + 1;
-    piSysMet[SM_CXSIZE] = max(gspv.ncm.iCaptionWidth, 8);
-    piSysMet[SM_CYSIZE] = gspv.ncm.iCaptionHeight;              // 18;
-    piSysMet[SM_CXSMSIZE] = gspv.ncm.iSmCaptionWidth;   // 12; XP: piSysMet(SM_CYSMCAPTION) - 1
-    piSysMet[SM_CYSMSIZE] = gspv.ncm.iSmCaptionHeight;  // 14;
+    piSysMet[SM_CYCAPTION] = V(gspv.ncm.iCaptionHeight) + 1;
+    piSysMet[SM_CYSMCAPTION] = V(gspv.ncm.iSmCaptionHeight) + 1;
+    piSysMet[SM_CXSIZE] = max(V(gspv.ncm.iCaptionWidth), 8);
+    piSysMet[SM_CYSIZE] = V(gspv.ncm.iCaptionHeight);              // 18;
+    piSysMet[SM_CXSMSIZE] = V(gspv.ncm.iSmCaptionWidth);   // 12; XP: piSysMet(SM_CYSMCAPTION) - 1
+    piSysMet[SM_CYSMSIZE] = V(gspv.ncm.iSmCaptionHeight);  // 14;
     piSysMet[SM_CXBORDER] = 1;
     piSysMet[SM_CYBORDER] = 1;
     piSysMet[SM_CXFOCUSBORDER] = gspv.uiFocusBorderWidth;
@@ -92,27 +69,27 @@ InitMetrics(VOID)
     piSysMet[SM_CYDLGFRAME] = 3;
     piSysMet[SM_CXEDGE] = 2;
     piSysMet[SM_CYEDGE] = 2;
-    piSysMet[SM_CXFRAME] = piSysMet[SM_CXDLGFRAME] + gspv.ncm.iBorderWidth; // 4
-    piSysMet[SM_CYFRAME] = piSysMet[SM_CYDLGFRAME] + gspv.ncm.iBorderWidth; // 4
+    piSysMet[SM_CXFRAME] = piSysMet[SM_CXDLGFRAME] + V(gspv.ncm.iBorderWidth); // 4
+    piSysMet[SM_CYFRAME] = piSysMet[SM_CYDLGFRAME] + V(gspv.ncm.iBorderWidth); // 4
 #if (_WIN32_WINNT >= 0x0600)
-    piSysMet[SM_CXPADDEDBORDER] = gspv.ncm.iPaddedBorderWidth;
+    piSysMet[SM_CXPADDEDBORDER] = V(gspv.ncm.iPaddedBorderWidth);
 #endif
 
     /* Window sizes */
     TRACE("ncm.iCaptionWidth=%d,GetSystemMetrics(SM_CYSIZE)=%d,GetSystemMetrics(SM_CXFRAME)=%d,avcwCaption=%d \n",
-           gspv.ncm.iCaptionWidth, piSysMet[SM_CYSIZE],piSysMet[SM_CXFRAME], gspv.tmCaptionFont.tmAveCharWidth);
+           V(gspv.ncm.iCaptionWidth), piSysMet[SM_CYSIZE],piSysMet[SM_CXFRAME], V(gspv.tmCaptionFont.tmAveCharWidth));
 
-    piSysMet[SM_CXMIN] = 3 * max(gspv.ncm.iCaptionWidth, 8)
+    piSysMet[SM_CXMIN] = 3 * piSysMet[SM_CYSIZE]
                          + piSysMet[SM_CYSIZE] + 4
-                         + 4 * gspv.tmCaptionFont.tmAveCharWidth
+                         + 4 * V(gspv.tmCaptionFont.tmAveCharWidth)
                          + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     piSysMet[SM_CYMIN] = piSysMet[SM_CYCAPTION] + 2 * (piSysMet[SM_CYFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     pPrimary = UserGetPrimaryMonitor();
     if (pPrimary)
     {
-        piSysMet[SM_CXMAXIMIZED] = pPrimary->rcWork.right - pPrimary->rcWork.left
+        piSysMet[SM_CXMAXIMIZED] = V(pPrimary->rcWork.right) - V(pPrimary->rcWork.left)
                                    + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
-        piSysMet[SM_CYMAXIMIZED] = pPrimary->rcWork.bottom - pPrimary->rcWork.top
+        piSysMet[SM_CYMAXIMIZED] = V(pPrimary->rcWork.bottom) - V(pPrimary->rcWork.top)
                                    + 2 * (piSysMet[SM_CYFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     }
     else
@@ -123,30 +100,32 @@ InitMetrics(VOID)
     piSysMet[SM_CXFULLSCREEN] = piSysMet[SM_CXMAXIMIZED] - 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     piSysMet[SM_CYFULLSCREEN] = piSysMet[SM_CYMAXIMIZED] - piSysMet[SM_CYMIN];
     piSysMet[SM_CYKANJIWINDOW] = 0;
-    piSysMet[SM_CXMINIMIZED] = gspv.mm.iWidth + 6;
+    piSysMet[SM_CXMINIMIZED] = V(gspv.mm.iWidth) + 6;
     piSysMet[SM_CYMINIMIZED] = piSysMet[SM_CYCAPTION] + 5;
-    piSysMet[SM_CXMINSPACING] = piSysMet[SM_CXMINIMIZED] + gspv.mm.iHorzGap;
-    piSysMet[SM_CYMINSPACING] = piSysMet[SM_CYMINIMIZED] + gspv.mm.iVertGap;
+    piSysMet[SM_CXMINSPACING] = piSysMet[SM_CXMINIMIZED] + V(gspv.mm.iHorzGap);
+    piSysMet[SM_CYMINSPACING] = piSysMet[SM_CYMINIMIZED] + V(gspv.mm.iVertGap);
     piSysMet[SM_CXMAXTRACK] = piSysMet[SM_CXVIRTUALSCREEN] + 4
                               + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     piSysMet[SM_CYMAXTRACK] = piSysMet[SM_CYVIRTUALSCREEN] + 4
                               + 2 * (piSysMet[SM_CYFRAME] + piSysMet[SM_CXPADDEDBORDER]);
 
     /* Icon */
-    piSysMet[SM_CXVSCROLL] = gspv.ncm.iScrollWidth;     // 16;
-    piSysMet[SM_CYVTHUMB] = gspv.ncm.iScrollHeight;     // 16;
-    piSysMet[SM_CYHSCROLL] = gspv.ncm.iScrollWidth;     // 16;
-    piSysMet[SM_CXHTHUMB] = gspv.ncm.iScrollHeight;     // 16;
-    piSysMet[SM_CYVSCROLL] = gspv.ncm.iScrollHeight;    // 16
-    piSysMet[SM_CXHSCROLL] = gspv.ncm.iScrollHeight;    // 16;
-    piSysMet[SM_CXICON] = UserScaleForSystemDpi(32);
-    piSysMet[SM_CYICON] = UserScaleForSystemDpi(32);
-    piSysMet[SM_CXSMICON] = UserScaleForSystemDpi(16) & ~1;
-    piSysMet[SM_CYSMICON] = UserScaleForSystemDpi(16) & ~1;
-    piSysMet[SM_CXICONSPACING] = gspv.im.iHorzSpacing;  // 64;
-    piSysMet[SM_CYICONSPACING] = gspv.im.iVertSpacing;  // 64;
-    piSysMet[SM_CXCURSOR] = UserScaleForSystemDpi(32);
-    if (piSysMet[SM_CXCURSOR] >= 64)
+    piSysMet[SM_CXVSCROLL] = V(gspv.ncm.iScrollWidth);     // 16;
+    piSysMet[SM_CYVTHUMB] = V(gspv.ncm.iScrollHeight);     // 16;
+    piSysMet[SM_CYHSCROLL] = V(gspv.ncm.iScrollWidth);     // 16;
+    piSysMet[SM_CXHTHUMB] = V(gspv.ncm.iScrollHeight);     // 16;
+    piSysMet[SM_CYVSCROLL] = V(gspv.ncm.iScrollHeight);    // 16
+    piSysMet[SM_CXHSCROLL] = V(gspv.ncm.iScrollHeight);    // 16;
+    piSysMet[SM_CXICON] = D(32);
+    piSysMet[SM_CYICON] = D(32);
+    piSysMet[SM_CXSMICON] = D(16) & ~1;
+    piSysMet[SM_CYSMICON] = D(16) & ~1;
+    piSysMet[SM_CXICONSPACING] = V(gspv.im.iHorzSpacing);  // 64;
+    piSysMet[SM_CYICONSPACING] = V(gspv.im.iVertSpacing);  // 64;
+    piSysMet[SM_CXCURSOR] = D(32);
+    if (piSysMet[SM_CXCURSOR] >= 96)
+        piSysMet[SM_CXCURSOR] = 96;
+    else if (piSysMet[SM_CXCURSOR] >= 64)
         piSysMet[SM_CXCURSOR] = 64;
     else if (piSysMet[SM_CXCURSOR] >= 48)
         piSysMet[SM_CXCURSOR] = 48;
@@ -160,13 +139,13 @@ InitMetrics(VOID)
     piSysMet[SM_ARRANGE] = gspv.mm.iArrange;            // 8;
 
     /* Menu */
-    piSysMet[SM_CYMENU] = gspv.ncm.iMenuHeight + 1;
+    piSysMet[SM_CYMENU] = V(gspv.ncm.iMenuHeight) + 1;
     piSysMet[SM_MENUDROPALIGNMENT] = gspv.bMenuDropAlign;
-    piSysMet[SM_CXMENUCHECK] = ((1 + gspv.tmMenuFont.tmHeight +
-                                 gspv.tmMenuFont.tmExternalLeading) & ~1) - 1; // 13;
+    piSysMet[SM_CXMENUCHECK] = ((1 + V(gspv.tmMenuFont.tmHeight) +
+                                 V(gspv.tmMenuFont.tmExternalLeading)) & ~1) - 1; // 13;
     piSysMet[SM_CYMENUCHECK] = piSysMet[SM_CXMENUCHECK];
-    piSysMet[SM_CXMENUSIZE] = gspv.ncm.iMenuWidth;      // 18;
-    piSysMet[SM_CYMENUSIZE] = gspv.ncm.iMenuHeight;     // 18;
+    piSysMet[SM_CXMENUSIZE] = V(gspv.ncm.iMenuWidth);      // 18;
+    piSysMet[SM_CYMENUSIZE] = V(gspv.ncm.iMenuHeight);     // 18;
 
     /* Mouse */
     piSysMet[SM_MOUSEPRESENT] = 1;
@@ -209,6 +188,44 @@ InitMetrics(VOID)
 #if (_WIN32_WINNT >= 0x0600)
     piSysMet[90] = 0;
 #endif
+#undef D
+#undef V
+}
+
+BOOL
+NTAPI
+InitMetrics(VOID)
+{
+    INT *piSysMet = gpsi->aiSysMet;
+    ULONG Width, Height;
+
+    /* Note: used for the SM_CLEANBOOT metric */
+    DWORD dwValue = 0;
+    HKEY hKey = 0;
+
+    /* Clean boot */
+    piSysMet[SM_CLEANBOOT] = 0; // Fallback value of 0 (normal mode)
+    if(NT_SUCCESS(RegOpenKey(L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Control\\SafeBoot\\Option", &hKey)))
+    {
+        if(RegReadDWORD(hKey, L"OptionValue", &dwValue)) piSysMet[SM_CLEANBOOT] = (INT)dwValue;
+        ZwClose(hKey);
+    }
+
+    /* FIXME: HACK, due to missing MDEV on first init */
+    if (!gpmdev)
+    {
+        Width = 640;
+        Height = 480;
+    }
+    else
+    {
+        Width = gpmdev->ppdevGlobal->gdiinfo.ulHorzRes;
+        Height = gpmdev->ppdevGlobal->gdiinfo.ulVertRes;
+    }
+
+    IntInitMetricValues(piSysMet, Width, Height, FALSE);
+    IntInitMetricValues(gaiSysMetVirtual, Width, Height, TRUE);
+    gaiSysMetVirtual[SM_CLEANBOOT] = piSysMet[SM_CLEANBOOT];
 
     if (UserIsDBCSEnabled())
         gpsi->dwSRVIFlags |= SRVINFO_DBCSENABLED; /* DBCS Support */
@@ -264,6 +281,56 @@ UserGetSystemMetrics(ULONG Index)
 
     ERR("UserGetSystemMetrics() called with invalid index %lu\n", Index);
     return 0;
+}
+
+LONG
+NTAPI
+UserGetCallerSystemMetrics(ULONG Index)
+{
+    PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
+
+    if (Index < SM_CMETRICS && Index != SM_DBCSENABLED && Index != SM_IMMENABLED &&
+        UserDpiIsVirtualThread(pti))
+    {
+        return UserGetImageMetric(gaiSysMetVirtual, Index, LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA);
+    }
+    return UserGetSystemMetrics(Index);
+}
+
+LONG
+NTAPI
+UserGetWindowViewMetric(PWND Window, ULONG Index)
+{
+    PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
+
+    ASSERT(Index < SM_CMETRICS);
+    if (UserDpiIsVirtualWindow(Window))
+        return UserGetImageMetric(gaiSysMetVirtual, Index, pti && LOWORD(pti->dwExpWinVer) < _WIN32_WINNT_VISTA);
+    return UserGetSystemMetrics(Index);
+}
+
+LONG
+NTAPI
+UserWindowViewToPhysical(PWND Window, LONG Value)
+{
+    return UserDpiIsVirtualWindow(Window) ? UserDpiToPhysical(Value) : Value;
+}
+
+LONG
+NTAPI
+UserGetWindowSystemMetrics(PWND Window, ULONG Index)
+{
+    return UserWindowViewToPhysical(Window, UserGetWindowViewMetric(Window, Index));
+}
+
+LONG
+NTAPI
+UserGetCallerUnfoldedSystemMetrics(ULONG Index)
+{
+    ASSERT(Index < SM_CMETRICS);
+    if (UserDpiIsVirtualThread(PsGetCurrentThreadWin32Thread()))
+        return gaiSysMetVirtual[Index];
+    return gpsi->aiSysMet[Index];
 }
 
 /* EOF */

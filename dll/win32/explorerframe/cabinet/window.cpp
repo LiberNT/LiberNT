@@ -178,7 +178,7 @@ CCabinetWindow::~CCabinetWindow()
 int
 CCabinetWindow::Scale(int value) const
 {
-    return MulDiv(value, m_hwnd ? GetDpiForWindow(m_hwnd) : 96, 96);
+    return MulDiv(value, m_hwnd ? GetDpiForWindow(m_hwnd) : GetDpiForSystem(), 96);
 }
 
 void
@@ -476,11 +476,13 @@ void
 CCabinetWindow::PaintBackground(HDC dc)
 {
     CabinetPalette palette;
-    RECT client;
+    RECT client, clip, hit;
     struct { int Top; int Bottom; COLORREF Color; } bands[5];
 
     CabinetGetPalette(&palette);
     GetClientRect(m_hwnd, &client);
+    if (GetClipBox(dc, &clip) == ERROR)
+        clip = client;
     {
         RECT glass = { 0, 0, client.right, TabStripHeight() };
         FillRect(dc, &glass, ClientCaption() ? (HBRUSH)GetStockObject(BLACK_BRUSH) : GetSysColorBrush(COLOR_3DFACE));
@@ -497,7 +499,7 @@ CCabinetWindow::PaintBackground(HDC dc)
         FillRect(dc, &rc, brush);
         DeleteObject(brush);
     }
-    if (!IsRectEmpty(&m_PanelRect))
+    if (IntersectRect(&hit, &m_PanelRect, &clip))
     {
         RECT outer = m_PanelRect;
         int radius = Scale(8), saved = SaveDC(dc);
@@ -510,28 +512,34 @@ CCabinetWindow::PaintBackground(HDC dc)
         CabinetFillRound(dc, outer, radius - 1, palette.Window);
         RestoreDC(dc, saved);
     }
-    if (IsAppThemed())
+    SetRect(&hit, 0, TabStripHeight(), client.right, AddressBottom() - 1);
+    if (IsAppThemed() && IntersectRect(&hit, &hit, &clip))
     {
-        Gdiplus::Graphics graphics(dc);
-        Gdiplus::LinearGradientBrush shade(Gdiplus::PointF(0.0f, 0.0f),
-                                           Gdiplus::PointF(0.0f, (float)(AddressBottom() - 1) + 1.0f),
-                                           Gdiplus::Color(255, GetRValue(palette.Band), GetGValue(palette.Band),
-                                                          GetBValue(palette.Band)),
-                                           Gdiplus::Color(255, GetRValue(palette.BandShade),
-                                                          GetGValue(palette.BandShade), GetBValue(palette.BandShade)));
+        TRIVERTEX vertex[2] = {
+            { 0, 0, (COLOR16)(GetRValue(palette.Band) << 8), (COLOR16)(GetGValue(palette.Band) << 8),
+              (COLOR16)(GetBValue(palette.Band) << 8), 0xFF00 },
+            { client.right, AddressBottom(), (COLOR16)(GetRValue(palette.BandShade) << 8),
+              (COLOR16)(GetGValue(palette.BandShade) << 8), (COLOR16)(GetBValue(palette.BandShade) << 8), 0xFF00 } };
+        GRADIENT_RECT mesh = { 0, 1 };
+        int saved = SaveDC(dc);
 
-        graphics.FillRectangle(&shade, 0, TabStripHeight(), (INT)client.right, AddressBottom() - 1 - TabStripHeight());
+        IntersectClipRect(dc, hit.left, hit.top, hit.right, hit.bottom);
+        GdiGradientFill(dc, vertex, _countof(vertex), &mesh, 1, GRADIENT_FILL_RECT_V);
+        RestoreDC(dc, saved);
     }
     if (m_Status && IsWindowVisible(m_Status))
     {
         RECT status;
-        int saved = SaveDC(dc);
         GetWindowRect(m_Status, &status);
         MapWindowPoints(NULL, m_hwnd, (POINT *)&status, 2);
-        OffsetWindowOrgEx(dc, -status.left, -status.top, NULL);
-        IntersectClipRect(dc, 0, 0, status.right - status.left, status.bottom - status.top);
-        SendMessageW(m_Status, WM_PRINTCLIENT, (WPARAM)dc, PRF_CLIENT | PRF_ERASEBKGND);
-        RestoreDC(dc, saved);
+        if (IntersectRect(&hit, &status, &clip))
+        {
+            int saved = SaveDC(dc);
+            OffsetWindowOrgEx(dc, -status.left, -status.top, NULL);
+            IntersectClipRect(dc, 0, 0, status.right - status.left, status.bottom - status.top);
+            SendMessageW(m_Status, WM_PRINTCLIENT, (WPARAM)dc, PRF_CLIENT | PRF_ERASEBKGND);
+            RestoreDC(dc, saved);
+        }
     }
     if ((m_DetailsPane || m_PreviewPane) && !IsRectEmpty(&m_PaneRect))
     {
@@ -1531,15 +1539,17 @@ void
 CCabinetWindow::SavePlacement()
 {
     WINDOWPLACEMENT placement = { sizeof(placement) };
+    WCHAR name[32];
     HKEY key;
 
     if (!GetWindowPlacement(m_hwnd, &placement))
         return;
+    StringCchPrintfW(name, _countof(name), L"Placement%u", GetDpiForWindow(m_hwnd));
     if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\LiberNT\\Explorer", 0, NULL, 0, KEY_SET_VALUE, NULL, &key,
                         NULL) == ERROR_SUCCESS)
     {
         DWORD pane = m_PreviewPane ? 2 : m_DetailsPane ? 1 : 0;
-        RegSetValueExW(key, L"Placement", 0, REG_BINARY, (const BYTE *)&placement, sizeof(placement));
+        RegSetValueExW(key, name, 0, REG_BINARY, (const BYTE *)&placement, sizeof(placement));
         RegSetValueExW(key, L"Pane", 0, REG_DWORD, (const BYTE *)&pane, sizeof(pane));
         RegCloseKey(key);
     }
@@ -1686,6 +1696,7 @@ CCabinetWindow::Open(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd
     WNDCLASSEXW wc = { sizeof(wc) };
     WINDOWPLACEMENT placement = { sizeof(placement) };
     DWORD size = sizeof(placement);
+    WCHAR name[32];
 
     if (!GetClassInfoExW(g_hInstance, CABINET_CLASS, &wc))
     {
@@ -1699,9 +1710,10 @@ CCabinetWindow::Open(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd
             return HRESULT_FROM_WIN32(GetLastError());
     }
     if (!CreateWindowExW(WS_EX_WINDOWEDGE, CABINET_CLASS, L"File Explorer", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-                         CW_USEDEFAULT, CW_USEDEFAULT, 1000, 680, NULL, NULL, g_hInstance, this))
+                         CW_USEDEFAULT, CW_USEDEFAULT, Scale(1000), Scale(680), NULL, NULL, g_hInstance, this))
         return HRESULT_FROM_WIN32(GetLastError());
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\LiberNT\\Explorer", L"Placement", RRF_RT_REG_BINARY, NULL,
+    StringCchPrintfW(name, _countof(name), L"Placement%u", GetDpiForWindow(m_hwnd));
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\LiberNT\\Explorer", name, RRF_RT_REG_BINARY, NULL,
                      &placement, &size) == ERROR_SUCCESS && size == sizeof(placement) &&
         placement.length == sizeof(placement))
     {

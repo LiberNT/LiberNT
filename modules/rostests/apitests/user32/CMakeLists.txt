@@ -29,6 +29,9 @@ list(APPEND SOURCE
     DialogDpiChangeBehavior.c
     DM_REPOSITION.c
     Dpi.c
+    DpiAwareness.c
+    DpiScaling.c
+    DpiVirtualization.c
     DrawIconEx.c
     DrawText.c
     desktop.c
