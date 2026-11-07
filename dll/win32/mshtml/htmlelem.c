@@ -3408,6 +3408,11 @@ static HRESULT WINAPI HTMLElement2_put_dir(IHTMLElement2 *iface, BSTR v)
         return S_OK;
     }
 
+    if(v && !wcsicmp(v, L"ltr"))
+        v = (BSTR)L"ltr";
+    else if(v && !wcsicmp(v, L"rtl"))
+        v = (BSTR)L"rtl";
+
     nsAString_InitDepend(&nsstr, v);
     nsres = nsIDOMHTMLElement_SetDir(This->html_element, &nsstr);
     nsAString_Finish(&nsstr);

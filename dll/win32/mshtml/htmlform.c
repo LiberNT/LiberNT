@@ -225,7 +225,7 @@ static HRESULT WINAPI HTMLFormElement_put_method(IHTMLFormElement *iface, BSTR v
         return E_INVALIDARG;
     }
 
-    nsAString_InitDepend(&method_str, v);
+    nsAString_InitDepend(&method_str, lstrcmpiW(v, L"POST") ? L"get" : L"post");
     nsres = nsIDOMHTMLFormElement_SetMethod(This->nsform, &method_str);
     nsAString_Finish(&method_str);
     if(NS_FAILED(nsres))

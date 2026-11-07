@@ -4479,6 +4479,28 @@ sync_test("color props", function() {
     }
 });
 
+sync_test("enumerated attribute put", function() {
+    var i, e, r;
+
+    var cases = [
+        [ "div", "dir", "dir", "RTL", "rtl" ], [ "div", "dir", "dir", "Ltr", "ltr" ],
+        [ "input", "type", "type", "CHECKBOX", "checkbox" ], [ "form", "method", "method", "POST", "post" ],
+        [ "form", "method", "method", "Get", "get" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        var name = cases[i][0] + "." + cases[i][1] + " put(" + cases[i][3] + ")";
+
+        e = document.createElement(cases[i][0]);
+        e[cases[i][1]] = cases[i][3];
+        ok(e[cases[i][1]] === cases[i][4], name + " = " + e[cases[i][1]]);
+        r = e.getAttribute(cases[i][2]);
+        ok(r === cases[i][4], name + " attribute = " + r);
+        r = e.getAttributeNode(cases[i][2]).value;
+        ok(r === cases[i][4], name + " attribute node = " + r);
+    }
+});
+
 sync_test("table section props", function() {
     var v = document.documentMode, i, e, d, s, r;
     if(v < 9)

@@ -78,6 +78,21 @@ static HRESULT WINAPI HTMLInputElement_put_type(IHTMLInputElement *iface, BSTR v
         return E_FAIL;
     }
 
+    nsAString_Init(&type_str, NULL);
+    nsres = nsIDOMHTMLInputElement_GetType(This->nsinput, &type_str);
+    if(NS_SUCCEEDED(nsres)) {
+        const PRUnichar *type;
+
+        nsAString_GetData(&type_str, &type);
+        if(v && !wcsicmp(type, v) && wcscmp(type, v))
+            nsres = nsIDOMHTMLInputElement_SetType(This->nsinput, &type_str);
+    }
+    nsAString_Finish(&type_str);
+    if(NS_FAILED(nsres)) {
+        ERR("SetType failed: %08lx\n", nsres);
+        return E_FAIL;
+    }
+
     return S_OK;
 }
 
