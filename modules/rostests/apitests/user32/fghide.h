@@ -17,3 +17,5 @@
 #define FGHIDE_ACTIVATE (WM_APP + 4)
 #define FGHIDE_SLEEP    (WM_APP + 5)
 #define FGHIDE_HIDE     (WM_APP + 6)
+#define FGHIDE_DISABLE  (WM_APP + 7)
+#define FGHIDE_MINIMIZE (WM_APP + 8)
