@@ -220,6 +220,7 @@ KiIpiServiceRoutine(
             ULONG SpinCount = 0;
 
             SmpDbgGenericCallIpi(Prcb->Number);
+            ASSERT(Function != NULL);
             if (Function != NULL)
             {
                 /*
@@ -229,7 +230,13 @@ KiIpiServiceRoutine(
                  * the whole machine is quiesced while the broadcast routine
                  * runs, which is the contract callers rely on.
                  */
-                InterlockedIncrement(&KiArm64IpiPacket.Arrived);
+                LONG Arrival;
+                LONG Remaining;
+
+                ASSERT(KiArm64IpiPacket.Busy != 0);
+                Arrival = InterlockedIncrement(&KiArm64IpiPacket.Arrived);
+                UNREFERENCED_PARAMETER(Arrival);
+                ASSERT(Arrival > 0 && Arrival < MAXIMUM_PROCESSORS);
                 KiArm64IpiWakeWaiters();
 
                 while (KiArm64IpiPacket.Release == 0)
@@ -243,7 +250,9 @@ KiIpiServiceRoutine(
                 Function(Argument);
                 if (TrapFrame != NULL)
                     _disable();
-                InterlockedDecrement(&KiArm64IpiPacket.TargetCount);
+                Remaining = InterlockedDecrement(&KiArm64IpiPacket.TargetCount);
+                UNREFERENCED_PARAMETER(Remaining);
+                ASSERT(Remaining >= 0);
                 KiArm64IpiWakeWaiters();
             }
         }
@@ -316,6 +325,8 @@ KeIpiGenericCall(
         KiArm64IpiSpinWait(&SpinCount);
     }
 
+    ASSERT(KiArm64IpiPacket.Function == NULL);
+    ASSERT(KiArm64IpiPacket.TargetCount == 0);
     Targets = KeActiveProcessors & ~KeGetCurrentPrcb()->SetMember;
     TargetCount = 0;
     for (KAFFINITY Bit = Targets; Bit != 0; Bit &= (Bit - 1))
@@ -323,6 +334,8 @@ KeIpiGenericCall(
         TargetCount++;
     }
 
+    ASSERT((Targets & KeGetCurrentPrcb()->SetMember) == 0);
+    ASSERT((Targets == 0) == (TargetCount == 0));
     KiArm64IpiPacket.Function = Function;
     KiArm64IpiPacket.Argument = Argument;
     KiArm64IpiPacket.Arrived = 0;
@@ -365,6 +378,7 @@ KeIpiGenericCall(
      * on Release == 0 -> deadlock. The phase-1 quiesce above already guarantees
      * every target is parked, so releasing first does not lose the rendezvous.
      */
+    ASSERT(KiArm64IpiPacket.Arrived == TargetCount);
     KfRaiseIrql(IPI_LEVEL);
     InterlockedExchange(&KiArm64IpiPacket.Release, 1);
     KiArm64IpiWakeWaiters();
@@ -395,6 +409,7 @@ KeIpiGenericCall(
         }
     }
 
+    ASSERT(KiArm64IpiPacket.TargetCount == 0);
     KiArm64IpiPacket.Function = NULL;
     InterlockedExchange(&KiArm64IpiPacket.Busy, 0);
     KiArm64IpiWakeWaiters();
