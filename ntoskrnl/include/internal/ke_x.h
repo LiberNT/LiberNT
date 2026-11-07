@@ -2196,6 +2196,9 @@ _KeAcquireGuardedMutexUnsafe(IN OUT PKGUARDED_MUTEX GuardedMutex)
         KiAcquireGuardedMutex(GuardedMutex);
     }
 
+    ASSERT((GuardedMutex->Count & GM_LOCK_BIT) == 0);
+    ASSERT(GuardedMutex->Owner == NULL);
+
     /* Set the Owner */
     GuardedMutex->Owner = Thread;
 }
@@ -2260,6 +2263,9 @@ _KeAcquireGuardedMutex(IN PKGUARDED_MUTEX GuardedMutex)
         /* The Guarded Mutex was already locked, enter contented case */
         KiAcquireGuardedMutex(GuardedMutex);
     }
+
+    ASSERT((GuardedMutex->Count & GM_LOCK_BIT) == 0);
+    ASSERT(GuardedMutex->Owner == NULL);
 
     /* Set the Owner and Special APC Disable state */
     GuardedMutex->Owner = Thread;
@@ -2328,6 +2334,9 @@ _KeTryToAcquireGuardedMutex(IN OUT PKGUARDED_MUTEX GuardedMutex)
         /* Return failure */
         return FALSE;
     }
+
+    ASSERT((GuardedMutex->Count & GM_LOCK_BIT) == 0);
+    ASSERT(GuardedMutex->Owner == NULL);
 
     /* Set the Owner and APC State */
     GuardedMutex->Owner = Thread;
