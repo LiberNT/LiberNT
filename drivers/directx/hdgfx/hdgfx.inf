@@ -1,4 +1,15 @@
 ; LiberNT display driver for Intel HD Graphics (Gen 5-7)
+;
+; Security: this driver gives every process that can submit GPU work a path into
+; the kernel. There is no PPGTT, so on Gen 6 and 7 user batches run secure after
+; a scan that checks commands and registers but not addresses. A batch can write
+; any GGTT address with MI_STORE_DATA_IMM, a PIPE_CONTROL post-sync write or a
+; render target, including queued DMA buffers and the rings, and a rewritten ring
+; runs privileged commands such as MI_UPDATE_GTT, which maps any physical page.
+; Gen 5 batches run non-secure but also reach the GGTT. Clients can read and
+; overwrite each other's surfaces on every generation. Install it only on
+; machines whose users are trusted with the kernel. It is built only when
+; HDGFX_SUPPORT is set, which is off by default.
 
 [Version]
 Signature="$Windows NT$"
