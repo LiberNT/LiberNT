@@ -15,6 +15,7 @@
 
 typedef PCCERT_CONTEXT (WINAPI *PFN_FIND_ISSUER)(PCCERT_CONTEXT, DWORD, HCERTSTORE *, FILETIME *, DWORD, DWORD *, DWORD *);
 typedef LONG (WINAPI *PFN_FILE_HASH)(LPCWSTR, DWORD, PVOID, BYTE *, DWORD *, ALG_ID *);
+typedef HRESULT (WINAPI *PFN_FIND_CERTS)(PCERT_CHAIN, DWORD *, DWORD *, BYTE *, DWORD, LPCWSTR, DWORD);
 
 #define TEST_CONTAINER L"LiberNT wintrust apitest"
 #define TEST_OS_ATTR L"2:10.0,2:6.3,2:6.1"
@@ -487,6 +488,56 @@ TestImage(const BYTE *Digest, DWORD DigestSize)
 }
 
 static
+VOID
+TestFindCerts(VOID)
+{
+    PFN_FIND_CERTS FindCerts = (PFN_FIND_CERTS)GetProcAddress(GetModuleHandleW(L"wintrust.dll"), "FindCertsByIssuer");
+    PCCERT_CONTEXT Added = NULL;
+    PCERT_CHAIN Chains;
+    DWORD Size = 0, Count = 0;
+    HCERTSTORE My;
+
+    if (!FindCerts)
+        return;
+    My = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, 0, CERT_SYSTEM_STORE_CURRENT_USER, L"My");
+    if (!My || !CertAddCertificateContextToStore(My, Leaf, CERT_STORE_ADD_REPLACE_EXISTING, &Added))
+    {
+        skip("Cannot add the leaf certificate to the My store\n");
+        if (My)
+            CertCloseStore(My, 0);
+        return;
+    }
+
+    ok_hex(FindCerts(NULL, &Size, &Count, Root->pCertInfo->Subject.pbData, Root->pCertInfo->Subject.cbData, NULL,
+                     AT_SIGNATURE), S_OK);
+    ok_long(Count, 1);
+    Chains = HeapAlloc(GetProcessHeap(), 0, Size ? Size : 1);
+    if (Chains && FindCerts(Chains, &Size, &Count, Root->pCertInfo->Subject.pbData, Root->pCertInfo->Subject.cbData,
+                            NULL, AT_SIGNATURE) == S_OK)
+    {
+        ok_long(Chains[0].cCerts, 2);
+        ok(Chains[0].certs[0].cbData == Leaf->cbCertEncoded &&
+           !memcmp(Chains[0].certs[0].pbData, Leaf->pbCertEncoded, Leaf->cbCertEncoded), "first certificate is not the leaf\n");
+        ok(Chains[0].cCerts == 2 && Chains[0].certs[1].cbData == Root->cbCertEncoded &&
+           !memcmp(Chains[0].certs[1].pbData, Root->pbCertEncoded, Root->cbCertEncoded), "second certificate is not the root\n");
+    }
+    HeapFree(GetProcessHeap(), 0, Chains);
+
+    Size = Count = 0xdead;
+    ok_hex(FindCerts(NULL, &Size, &Count, Leaf->pCertInfo->Subject.pbData, Leaf->pCertInfo->Subject.cbData, NULL,
+                     AT_SIGNATURE), CRYPT_E_NOT_FOUND);
+    ok_long(Count, 0);
+
+    Size = 0;
+    ok_hex(FindCerts(NULL, &Size, &Count, Root->pCertInfo->Subject.pbData, Root->pCertInfo->Subject.cbData,
+                     L"CodeSigning", AT_SIGNATURE), S_OK);
+    ok_long(Count, 1);
+
+    CertDeleteCertificateFromStore(Added);
+    CertCloseStore(My, 0);
+}
+
+static
 BOOL
 SetupFixture(VOID)
 {
@@ -560,6 +611,7 @@ START_TEST(SignedCatalog)
     TestCatalogs();
     ok(CreateSignedImage(Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     TestImage(Digest, DigestSize);
+    TestFindCerts();
 
     CleanupFixture();
 }

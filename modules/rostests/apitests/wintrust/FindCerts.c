@@ -43,6 +43,40 @@ CheckLayout(PCERT_CHAIN Chains, DWORD Size, PCCERT_CONTEXT Cert)
     ok_long(Size, ALIGN_PTR(Data + Cert->cbCertEncoded));
 }
 
+static
+VOID
+TestIgnoredPurpose(HCRYPTPROV Provider, HCERTSTORE My, CRYPT_KEY_PROV_INFO *KeyInfo)
+{
+    PFN_FIND_CERTS FindCerts = (PFN_FIND_CERTS)GetProcAddress(GetModuleHandleW(L"wintrust.dll"), "FindCertsByIssuer");
+    LPSTR Usages[] = { (LPSTR)szOID_PKIX_KP_CLIENT_AUTH };
+    CERT_ENHKEY_USAGE Usage = { 1, Usages };
+    BYTE NameData[128], UsageData[64];
+    CERT_NAME_BLOB Name = { sizeof(NameData), NameData };
+    CERT_EXTENSION Extension = { (LPSTR)szOID_ENHANCED_KEY_USAGE, FALSE, { sizeof(UsageData), UsageData } };
+    CERT_EXTENSIONS Extensions = { 1, &Extension };
+    PCCERT_CONTEXT Cert, Added = NULL;
+    DWORD Size = 0, Count = 0;
+
+    if (!CertStrToNameW(X509_ASN_ENCODING, L"CN=LiberNT findcerts client auth", CERT_X500_NAME_STR, NULL, NameData,
+                        &Name.cbData, NULL) ||
+        !CryptEncodeObject(X509_ASN_ENCODING, X509_ENHANCED_KEY_USAGE, &Usage, UsageData, &Extension.Value.cbData) ||
+        !(Cert = CertCreateSelfSignCertificate(Provider, &Name, 0, KeyInfo, NULL, NULL, NULL, &Extensions)))
+    {
+        skip("Cannot create the client authentication certificate\n");
+        return;
+    }
+    if (CertAddCertificateContextToStore(My, Cert, CERT_STORE_ADD_REPLACE_EXISTING, &Added))
+    {
+        ok_hex(FindCerts(NULL, &Size, &Count, Name.pbData, Name.cbData, L"1.3.6.1.5.5.7.3.3", AT_SIGNATURE), S_OK);
+        ok_long(Count, 1);
+        Size = 0;
+        ok_hex(FindCerts(NULL, &Size, &Count, Name.pbData, Name.cbData, L"CodeSigning", AT_SIGNATURE), S_OK);
+        ok_long(Count, 1);
+        CertDeleteCertificateFromStore(Added);
+    }
+    CertFreeCertificateContext(Cert);
+}
+
 START_TEST(FindCerts)
 {
     PFN_FIND_CERTS FindCerts = (PFN_FIND_CERTS)GetProcAddress(GetModuleHandleW(L"wintrust.dll"), "FindCertsByIssuer");
@@ -110,6 +144,8 @@ START_TEST(FindCerts)
         Size = 0;
         ok_hex(FindCerts(NULL, &Size, &Count, Name.pbData, Name.cbData, L"1.3.6.1.5.5.7.3.3", AT_SIGNATURE), S_OK);
         ok_long(Count, 1);
+
+        TestIgnoredPurpose(Provider, My, &KeyInfo);
 
         Added = CertFindCertificateInStore(My, X509_ASN_ENCODING, 0, CERT_FIND_EXISTING, Cert, NULL);
         if (Added)

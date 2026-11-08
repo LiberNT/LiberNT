@@ -1417,29 +1417,6 @@ struct wintrust_issuer_chain
     CRYPT_KEY_PROV_INFO *key;
 };
 
-static BOOL WINTRUST_CertHasUsage(PCCERT_CONTEXT cert, LPCWSTR purpose)
-{
-    CERT_ENHKEY_USAGE *usage;
-    char oid[128];
-    DWORD size = 0, i;
-    BOOL ret = FALSE;
-
-    if (!purpose)
-        return TRUE;
-    /* TODO: INFO_NEEDED: whether Windows 11 maps the "ClientAuth" and "CodeSigning" names; OIDs are matched */
-    if (!WideCharToMultiByte(CP_ACP, 0, purpose, -1, oid, sizeof(oid), NULL, NULL) ||
-        !CertGetEnhancedKeyUsage(cert, 0, NULL, &size) || !(usage = malloc(size)))
-        return FALSE;
-    if (CertGetEnhancedKeyUsage(cert, 0, usage, &size))
-    {
-        ret = !usage->cUsageIdentifier && GetLastError() == CRYPT_E_NOT_FOUND;
-        for (i = 0; !ret && i < usage->cUsageIdentifier; i++)
-            ret = !strcmp(usage->rgpszUsageIdentifier[i], oid);
-    }
-    free(usage);
-    return ret;
-}
-
 static CRYPT_KEY_PROV_INFO *WINTRUST_GetKeyProvInfo(PCCERT_CONTEXT cert)
 {
     CRYPT_KEY_PROV_INFO *info;
@@ -1460,12 +1437,11 @@ static DWORD WINTRUST_IssuerChainLength(PCCERT_CHAIN_CONTEXT chain, CERT_NAME_BL
     PCERT_SIMPLE_CHAIN simple = chain->rgpChain[0];
     DWORD i;
 
-    /* TODO: INFO_NEEDED: which elements Windows 11 returns for a chain of more than one certificate */
     for (i = 0; i < simple->cElement; i++)
     {
         if (CertCompareCertificateName(X509_ASN_ENCODING, &simple->rgpElement[i]->pCertContext->pCertInfo->Issuer,
                                        issuer))
-            return i + 1;
+            return i + 1 < simple->cElement ? i + 2 : i + 1;
     }
     return 0;
 }
@@ -1582,8 +1558,7 @@ HRESULT WINAPI FindCertsByIssuer(PCERT_CHAIN pCertChains, DWORD *pcbCertChains,
             continue;
         chain = NULL;
         length = 0;
-        if (key->dwKeySpec == dwKeySpec && WINTRUST_CertHasUsage(cert, pwszPurpose) &&
-            CertGetCertificateChain(NULL, cert, NULL, NULL, &para, 0, NULL, &chain))
+        if (key->dwKeySpec == dwKeySpec && CertGetCertificateChain(NULL, cert, NULL, NULL, &para, 0, NULL, &chain))
             length = WINTRUST_IssuerChainLength(chain, &issuer);
         if (length && (grown = realloc(found, (count + 1) * sizeof(*found))))
         {
