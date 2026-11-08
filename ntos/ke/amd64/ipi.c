@@ -257,6 +257,7 @@ KeIpiGenericCall(
         KeMemoryBarrier();
 
         IpiTargets = KiIpiQueueRequest(Targets, KI_IPI_GENERIC_CALL);
+        ASSERT(IpiTargets == Targets);
         if (IpiTargets != 0)
             HalRequestIpi(IpiTargets);
 
