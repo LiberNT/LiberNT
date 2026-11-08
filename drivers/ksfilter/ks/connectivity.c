@@ -991,6 +991,7 @@ KsHandleSizedListQuery(
     IN  const VOID* DataItems)
 {
     ULONG Size;
+    ULONG Length;
     PIO_STACK_LOCATION IoStack;
     PKSMULTIPLE_ITEM Item;
 
@@ -1002,53 +1003,36 @@ KsHandleSizedListQuery(
 
     /* get multiple item */
     Item = (PKSMULTIPLE_ITEM)Irp->AssociatedIrp.SystemBuffer;
+    Length = IoStack->Parameters.DeviceIoControl.OutputBufferLength;
 
-    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength == 0)
+    if (Length == 0)
     {
-        /* buffer too small */
         Irp->IoStatus.Information = Size;
-
         return STATUS_BUFFER_OVERFLOW;
     }
 
-    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength == sizeof(ULONG))
+    if (Length < sizeof(KSMULTIPLE_ITEM))
     {
-        /* store just the size */
-        Item->Size = Size;
-        Irp->IoStatus.Information = sizeof(ULONG);
+        if (Length >= sizeof(ULONG))
+            Item->Size = Size;
 
-        return STATUS_SUCCESS;
-    }
-
-
-    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(KSMULTIPLE_ITEM))
-    {
-        /* buffer too small */
+        Irp->IoStatus.Information = Size;
         return STATUS_BUFFER_TOO_SMALL;
     }
 
     Item->Count = DataItemsCount;
     Item->Size = DataItemSize;
 
-    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength == sizeof(KSMULTIPLE_ITEM))
+    if (Length < Size)
     {
-        /* buffer can only hold the length descriptor */
         Irp->IoStatus.Information = sizeof(KSMULTIPLE_ITEM);
-        return STATUS_SUCCESS;
+        return STATUS_BUFFER_OVERFLOW;
     }
 
-    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength >= Size)
-    {
-        /* copy items */
-        RtlMoveMemory((PVOID)(Item + 1), DataItems, DataItemSize * DataItemsCount);
-        /* store result */
-        Irp->IoStatus.Information = Size;
-        /* done */
-        return STATUS_SUCCESS;
-    }
-    else
-    {
-        /* buffer too small */
-        return STATUS_BUFFER_TOO_SMALL;
-    }
+    /* copy items */
+    RtlMoveMemory((PVOID)(Item + 1), DataItems, DataItemSize * DataItemsCount);
+    /* store result */
+    Irp->IoStatus.Information = Size;
+    /* done */
+    return STATUS_SUCCESS;
 }
