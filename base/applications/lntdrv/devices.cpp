@@ -118,7 +118,8 @@ bool IsSpecificId(const std::wstring &id)
     if (upper.empty() || upper[0] == L'*')
         return false;
     if (StartsWith(upper, L"ACPI\\"))
-        return !StartsWith(upper, L"ACPI\\PNP");
+        return !StartsWith(upper, L"ACPI\\PNP") && !StartsWith(upper, L"ACPI\\VEN_PNP&") &&
+               !StartsWith(upper, L"ACPI\\ACPI") && !StartsWith(upper, L"ACPI\\VEN_ACPI&");
     if (upper.find(L"DEV_") != std::wstring::npos || upper.find(L"PID_") != std::wstring::npos)
         return true;
     return (upper.find(L"VEN_") != std::wstring::npos || upper.find(L"VID_") != std::wstring::npos) &&
