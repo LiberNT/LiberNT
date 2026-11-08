@@ -21,8 +21,6 @@
 #define TAG_HTTP 'PTHH'
 #define HTTP_QUEUE_STATE_CLOSING 0x00000001
 #define HTTP_MAX_HEADER_SIZE (64 * 1024)
-#define HTTP_MAX_BODY_SIZE (1024 * 1024)
-#define HTTP_MAX_REQUEST_SIZE (HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
 #define HTTP_MAX_CONNECTIONS 64
 #define HTTP_MAX_HEADERS 128
 #define HTTP_DEFAULT_TIMEOUT_SECONDS 120
@@ -75,6 +73,9 @@ typedef struct _HTTP_REQUEST_QUEUE
     LIST_ENTRY PendingIrpQueue;
     IO_CSQ Csq;
     KSPIN_LOCK PendingIrpLock;
+    LIST_ENTRY PendingBodyIrpQueue;
+    IO_CSQ BodyCsq;
+    KSPIN_LOCK PendingBodyIrpLock;
     FAST_MUTEX Mutex;
     ULONG State;
     ULONG MaxQueueLength;
@@ -108,6 +109,7 @@ typedef struct _HTTP_CONNECTION
     PMDL ReceiveMdl;
     WSK_BUF ReceiveBuffer;
     NTSTATUS ReceiveStatus;
+    ULONG ReceiveOffset;
     ULONG ReceiveLength;
     LONG DeadlineSeconds;
     FAST_MUTEX ResponseMutex;
@@ -121,8 +123,12 @@ typedef struct _HTTP_CONNECTION
     BOOLEAN ResponseStarted;
     BOOLEAN InConnectionList;
     BOOLEAN InListenerList;
-    BOOLEAN ReceiveStarted;
+    BOOLEAN ReceivePending;
+    BOOLEAN ReadingBody;
     BOOLEAN TimedOut;
+    BOOLEAN KeepAlive;
+    BOOLEAN CloseAfterResponse;
+    BOOLEAN Finished;
 
     llhttp_t Parser;
     ULONG MethodOffset;
@@ -134,10 +140,9 @@ typedef struct _HTTP_CONNECTION
     BOOLEAN HostSeen;
     BOOLEAN TransferEncodingSeen;
     BOOLEAN HeadersComplete;
-    BOOLEAN MessageComplete;
     USHORT ErrorStatus;
     HTTP_PARSED_HEADER Headers[HTTP_MAX_HEADERS + 1];
-    ULONG RequestLength;
+    ULONGLONG RequestLength;
     HTTP_VERB Verb;
     HTTP_VERSION Version;
     const char *Url;
@@ -145,7 +150,7 @@ typedef struct _HTTP_CONNECTION
     const char *Host;
     ULONG HostLength;
     ULONG UnknownVerbLength;
-    ULONG ContentLength;
+    ULONGLONG ContentLength;
 } HTTP_CONNECTION, *PHTTP_CONNECTION;
 
 #endif /* _HTTP_SYS_H_ */

@@ -57,6 +57,7 @@ struct http_receive_body_params
 {
     HTTP_REQUEST_ID id;
     ULONG bits;
+    ULONG flags;
 };
 
 #endif

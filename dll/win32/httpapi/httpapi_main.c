@@ -418,6 +418,7 @@ ULONG WINAPI HttpReceiveRequestEntityBody(HANDLE queue, HTTP_REQUEST_ID id, ULON
     {
         .id = id,
         .bits = sizeof(void *) * 8,
+        .flags = flags,
     };
     ULONG ret = ERROR_SUCCESS;
     ULONG local_ret_size;
@@ -426,8 +427,8 @@ ULONG WINAPI HttpReceiveRequestEntityBody(HANDLE queue, HTTP_REQUEST_ID id, ULON
     TRACE("queue %p, id %s, flags %#lx, buffer %p, size %#lx, ret_size %p, ovl %p.\n",
             queue, wine_dbgstr_longlong(id), flags, buffer, size, ret_size, ovl);
 
-    if (flags)
-        FIXME("Ignoring flags %#lx.\n", flags);
+    if (flags & ~HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER)
+        FIXME("Ignoring flags %#lx.\n", flags & ~HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER);
 
     if (!ovl)
     {
@@ -572,8 +573,9 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
             queue, wine_dbgstr_longlong(id), flags, response, cache_policy,
             ret_size, reserved1, reserved2, ovl, log_data);
 
-    if (flags & ~HTTP_SEND_RESPONSE_FLAG_MORE_DATA)
-        FIXME("Unhandled flags %#lx.\n", flags & ~HTTP_SEND_RESPONSE_FLAG_MORE_DATA);
+    if (flags & ~(HTTP_SEND_RESPONSE_FLAG_MORE_DATA | HTTP_SEND_RESPONSE_FLAG_DISCONNECT))
+        FIXME("Unhandled flags %#lx.\n",
+              flags & ~(HTTP_SEND_RESPONSE_FLAG_MORE_DATA | HTTP_SEND_RESPONSE_FLAG_DISCONNECT));
     if (response->s.Flags)
         FIXME("Unhandled response flags %#lx.\n", response->s.Flags);
     if (cache_policy)
@@ -698,8 +700,9 @@ ULONG WINAPI HttpSendResponseEntityBody(HANDLE queue, HTTP_REQUEST_ID id,
     if (!id)
         return ERROR_CONNECTION_INVALID;
 
-    if (flags & ~HTTP_SEND_RESPONSE_FLAG_MORE_DATA)
-        FIXME("Unhandled flags %#lx.\n", flags & ~HTTP_SEND_RESPONSE_FLAG_MORE_DATA);
+    if (flags & ~(HTTP_SEND_RESPONSE_FLAG_MORE_DATA | HTTP_SEND_RESPONSE_FLAG_DISCONNECT))
+        FIXME("Unhandled flags %#lx.\n",
+              flags & ~(HTTP_SEND_RESPONSE_FLAG_MORE_DATA | HTTP_SEND_RESPONSE_FLAG_DISCONNECT));
     if (log_data)
         WARN("Ignoring log_data.\n");
 
