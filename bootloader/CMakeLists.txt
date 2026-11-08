@@ -79,7 +79,8 @@ list(APPEND BOOTLIB_SOURCE
     lib/fs.c
     lib/gpt.c
     lib/libsupp.c
-    lib/ntfs.c)
+    lib/ntfs.c
+    lib/sha256.c)
 
 if(ARCH STREQUAL "ppc")
     add_asm_files(bootlib_asm ofw/ofwgate.S)

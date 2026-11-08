@@ -7,6 +7,7 @@
 
 #include "winload.h"
 #include <ntfsbl.h>
+#include <sha256.h>
 
 #define ISO_BLOCK_SIZE        2048
 #define ISO_DESCRIPTOR_BLOCK  16
@@ -31,6 +32,11 @@
 #define OSL_INSTALL_INVENTORY  "servicing\\LiberNT.files"
 #define OSL_INSTALL_SETUP_INF  "txtsetup.sif"
 #define OSL_INSTALL_IMAGE_LINE "; Image "
+#define OSL_INSTALL_STATUS     "install.log"
+#define OSL_INSTALL_CHUNK      0x100000
+#define OSL_INSTALL_ATTEMPTS   2
+#define OSL_INSTALL_MARGIN     (64ULL * 1024 * 1024)
+#define OSL_INSTALL_RECORD     4096
 
 typedef struct _OSL_NAME
 {
@@ -64,6 +70,14 @@ typedef struct _OSL_COMPUTER_FILE
 typedef struct _OSL_INSTALL
 {
     PVOID Image;
+    ULONGLONG ImageSize;
+    UCHAR Hash[BL_SHA256_SIZE];
+    PUCHAR Buffer;
+    PCSTR Stage;
+    NTSTATUS Result;
+    ULONG ClusterSize;
+    LONGLONG Growth;
+    ULONG Missing;
     CHAR SystemRoot[OSL_INSTALL_PATH_CHARS];
     CHAR InventoryEntry[OSL_INSTALL_PATH_CHARS];
     CHAR InventoryPath[OSL_INSTALL_PATH_CHARS];
@@ -661,6 +675,58 @@ OslAdvance(
 }
 
 static
+NTSTATUS
+OslVerifyVolumeFile(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Target,
+    _In_reads_bytes_(Size) const UCHAR* Data,
+    _In_ ULONG Size)
+{
+    ULONGLONG FileSize;
+    BOOLEAN IsDirectory;
+    PVOID File;
+    ULONG Offset, Chunk, Read;
+    NTSTATUS Status;
+
+    Status = NtfsBlOpenFile(Target, &File, &FileSize, &IsDirectory);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = (IsDirectory || FileSize != Size) ? STATUS_FILE_CORRUPT_ERROR : STATUS_SUCCESS;
+    for (Offset = 0; NT_SUCCESS(Status) && Offset < Size; Offset += Chunk)
+    {
+        Chunk = min(Size - Offset, OSL_INSTALL_CHUNK);
+        Status = NtfsBlReadFileAt(File, Offset, Install->Buffer, Chunk, &Read);
+        if (NT_SUCCESS(Status) && (Read != Chunk || !RtlEqualMemory(Install->Buffer, Data + Offset, Chunk)))
+            Status = STATUS_FILE_CORRUPT_ERROR;
+    }
+    NtfsBlCloseFile(File);
+    return Status;
+}
+
+static
+NTSTATUS
+OslWriteVerified(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Target,
+    _In_reads_bytes_(Size) const UCHAR* Data,
+    _In_ ULONG Size)
+{
+    NTSTATUS Status = STATUS_UNSUCCESSFUL;
+    ULONG Attempt;
+
+    for (Attempt = 0; Attempt < OSL_INSTALL_ATTEMPTS; Attempt++)
+    {
+        Status = NtfsBlWriteFile(Target, Data, Size);
+        if (NT_SUCCESS(Status))
+            Status = OslVerifyVolumeFile(Install, Target, Data, Size);
+        if (NT_SUCCESS(Status))
+            break;
+    }
+    return Status;
+}
+
+static
 VOID
 OslWriteFromImage(
     _Inout_ POSL_INSTALL Install,
@@ -676,7 +742,7 @@ OslWriteFromImage(
         if (File->Size != 0 && !OslReadImage(Install, (ULONGLONG)File->Block * ISO_BLOCK_SIZE, Data, File->Size))
             Status = STATUS_UNEXPECTED_IO_ERROR;
         else
-            Status = NtfsBlWriteFile(Target, Data, File->Size);
+            Status = OslWriteVerified(Install, Target, Data, File->Size);
         FwFreePages(Data, max(File->Size, 1));
     }
 
@@ -688,6 +754,44 @@ OslWriteFromImage(
     }
     FwPrint(L"\r\nINSTALL: %hs could not be written (0x%08lx).\r\n", Target, Status);
     Install->Failed++;
+    if (NT_SUCCESS(Install->Result))
+        Install->Result = Status;
+}
+
+static
+ULONGLONG
+OslClusters(
+    _In_ POSL_INSTALL Install,
+    _In_ ULONGLONG Size)
+{
+    ULONG Cluster = Install->ClusterSize ? Install->ClusterSize : 4096;
+
+    return (Size + Cluster - 1) / Cluster * Cluster;
+}
+
+static
+VOID
+OslPlanFile(
+    _Inout_ POSL_INSTALL Install,
+    _In_ POSL_NAME File,
+    _In_z_ PCSTR Target)
+{
+    ULONGLONG Existing;
+    BOOLEAN IsDirectory;
+    PVOID Handle;
+
+    Install->TotalBytes += File->Size;
+    Install->Growth += (LONGLONG)OslClusters(Install, File->Size);
+    if (NT_SUCCESS(NtfsBlOpenFile(Target, &Handle, &Existing, &IsDirectory)))
+    {
+        if (!IsDirectory)
+            Install->Growth -= (LONGLONG)OslClusters(Install, Existing);
+        NtfsBlCloseFile(Handle);
+    }
+    else
+    {
+        Install->Growth += OSL_INSTALL_RECORD;
+    }
 }
 
 static
@@ -768,7 +872,16 @@ OslInstallFiles(
         {
             Status = Write ? NtfsBlCreateDirectory(Target) : STATUS_SUCCESS;
             if (!NT_SUCCESS(Status))
+            {
                 FwPrint(L"\r\nINSTALL: %hs could not be created (0x%08lx).\r\n", Target, Status);
+                Install->Failed++;
+                if (NT_SUCCESS(Install->Result))
+                    Install->Result = Status;
+            }
+            else if (!Write)
+            {
+                Install->Growth += OSL_INSTALL_RECORD;
+            }
             continue;
         }
 
@@ -778,15 +891,15 @@ OslInstallFiles(
         File = OslFindName(&Install->Files, Name);
         if (!File || File->Directory)
         {
-            if (Write)
-                FwPrint(L"\r\nINSTALL: %hs is listed but missing from the image.\r\n", Name);
+            FwPrint(L"\r\nINSTALL: %hs is listed but missing from the image.\r\n", Name);
+            Install->Missing++;
             continue;
         }
 
         if (Write)
             OslWriteFromImage(Install, File, Target);
         else
-            Install->TotalBytes += File->Size;
+            OslPlanFile(Install, File, Target);
     }
 }
 
@@ -890,6 +1003,7 @@ OslLoadInventories(
         RtlEqualMemory(Install->OldText, Install->NewText, Install->NewSize))
     {
         FwPrint(L"INSTALL: the system already runs this image.\r\n");
+        Install->Stage = "current";
         return FALSE;
     }
 
@@ -923,6 +1037,112 @@ OslInventoryImage(
 }
 
 static
+BOOLEAN
+OslFail(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Stage,
+    _In_ NTSTATUS Status)
+{
+    Install->Stage = Stage;
+    Install->Result = Status;
+    return FALSE;
+}
+
+static
+BOOLEAN
+OslParseHash(
+    _In_z_ PCSTR Text,
+    _Out_writes_bytes_(BL_SHA256_SIZE) PUCHAR Hash)
+{
+    ULONG i, Digit;
+    CHAR Char;
+
+    for (i = 0; i < BL_SHA256_SIZE * 2; i++)
+    {
+        Char = Text[i];
+        if (Char >= '0' && Char <= '9')
+            Digit = Char - '0';
+        else if (Char >= 'a' && Char <= 'f')
+            Digit = Char - 'a' + 10;
+        else if (Char >= 'A' && Char <= 'F')
+            Digit = Char - 'A' + 10;
+        else
+            return FALSE;
+        if (i % 2 == 0)
+            Hash[i / 2] = (UCHAR)(Digit << 4);
+        else
+            Hash[i / 2] |= (UCHAR)Digit;
+    }
+    return Text[i] == ANSI_NULL || Text[i] == ' ';
+}
+
+static
+BOOLEAN
+OslVerifyImage(
+    _Inout_ POSL_INSTALL Install)
+{
+    UCHAR Digest[BL_SHA256_SIZE];
+    BL_SHA256 Context;
+    ULONGLONG Offset;
+    ULONG Chunk, Percent, Shown = MAXULONG;
+
+    BlSha256Init(&Context);
+    for (Offset = 0; Offset < Install->ImageSize; Offset += Chunk)
+    {
+        Chunk = (ULONG)min(Install->ImageSize - Offset, (ULONGLONG)OSL_INSTALL_CHUNK);
+        if (!OslReadImage(Install, Offset, Install->Buffer, Chunk))
+            return FALSE;
+        BlSha256Update(&Context, Install->Buffer, Chunk);
+        Percent = (ULONG)(Offset * 100 / Install->ImageSize);
+        if (Percent != Shown)
+        {
+            Shown = Percent;
+            FwPrint(L"\rChecking the LiberNT update... %lu%%", Percent);
+        }
+    }
+    BlSha256Final(&Context, Digest);
+    FwPrint(L"\r\n");
+    return RtlEqualMemory(Digest, Install->Hash, sizeof(Digest));
+}
+
+static
+BOOLEAN
+OslPreflight(
+    _Inout_ POSL_INSTALL Install)
+{
+    ULONGLONG FreeBytes, Needed;
+    NTSTATUS Status;
+
+    if (!OslVerifyImage(Install))
+    {
+        FwPrint(L"INSTALL: the image does not match its checksum; starting the installed system.\r\n");
+        return OslFail(Install, "checksum", STATUS_FILE_CORRUPT_ERROR);
+    }
+
+    Status = NtfsBlQuerySpace(&FreeBytes, &Install->ClusterSize);
+    if (!NT_SUCCESS(Status))
+        return OslFail(Install, "space", Status);
+
+    OslInstallFiles(Install, FALSE);
+    if (Install->Missing)
+    {
+        FwPrint(L"INSTALL: %lu files of the inventory are missing from the image; starting the installed system.\r\n",
+                Install->Missing);
+        return OslFail(Install, "missing", STATUS_OBJECT_NAME_NOT_FOUND);
+    }
+
+    Needed = (Install->Growth > 0 ? (ULONGLONG)Install->Growth : 0) + OSL_INSTALL_MARGIN;
+    FwPrint(L"INSTALL: %I64u MB to write, %I64u MB needed, %I64u MB free.\r\n",
+            Install->TotalBytes >> 20, Needed >> 20, FreeBytes >> 20);
+    if (FreeBytes < Needed)
+    {
+        FwPrint(L"INSTALL: not enough free space; starting the installed system.\r\n");
+        return OslFail(Install, "space", STATUS_DISK_FULL);
+    }
+    return TRUE;
+}
+
+static
 VOID
 OslInstallOpenedImage(
     _Inout_ POSL_INSTALL Install,
@@ -935,10 +1155,20 @@ OslInstallOpenedImage(
     if (!OslIndexImage(Install))
     {
         FwPrint(L"INSTALL: %hs is not a LiberNT image; starting the installed system.\r\n", ImagePath);
+        OslFail(Install, "image", STATUS_FILE_CORRUPT_ERROR);
         return;
     }
-    if (!OslLoadPolicy(Install) || !OslLoadInventories(Install))
+    if (!OslLoadPolicy(Install))
+    {
+        OslFail(Install, "policy", STATUS_FILE_CORRUPT_ERROR);
         return;
+    }
+    if (!OslLoadInventories(Install))
+    {
+        if (!Install->Stage)
+            OslFail(Install, "inventory", STATUS_FILE_CORRUPT_ERROR);
+        return;
+    }
 
     for (i = 0; i < Install->ComputerCount; i++)
     {
@@ -949,6 +1179,19 @@ OslInstallOpenedImage(
     FwPrint(L"INSTALL: %hs over %hs, %lu image entries, installed inventory %hs.\r\n",
             ImagePath, Install->SystemRoot, Install->Inventory.Count, Install->OldText ? "found" : "missing");
 
+    if (!OslPreflight(Install))
+        return;
+
+    Status = NtfsBlSetDirty(TRUE);
+    if (!NT_SUCCESS(Status))
+    {
+        FwPrint(L"INSTALL: the system volume could not be marked for checking (0x%08lx); starting the installed system.\r\n",
+                Status);
+        OslFail(Install, "volume", Status);
+        return;
+    }
+
+    Install->Stage = "write";
     OslInventoryImage(Install->OldText, OldImage, sizeof(OldImage));
     OslInventoryImage(Install->NewText, NewImage, sizeof(NewImage));
     if (OldImage[0] && _stricmp(OldImage, NewImage) == 0)
@@ -956,24 +1199,61 @@ OslInstallOpenedImage(
     else if (Install->OldText)
         FwPrint(L"INSTALL: the system was installed from image %hs, this is image %hs; nothing is dropped.\r\n",
                 OldImage[0] ? OldImage : "unknown", NewImage[0] ? NewImage : "unknown");
-    OslInstallFiles(Install, FALSE);
     OslInstallFiles(Install, TRUE);
     OslInstallComputerFiles(Install);
 
     if (Install->Failed == 0)
     {
-        Status = NtfsBlWriteFile(Install->InventoryPath, Install->NewText, Install->NewSize);
+        Status = OslWriteVerified(Install, Install->InventoryPath, (const UCHAR*)Install->NewText, Install->NewSize);
         if (!NT_SUCCESS(Status))
         {
             FwPrint(L"\r\nINSTALL: the file inventory could not be written (0x%08lx).\r\n", Status);
             Install->Failed++;
+            Install->Result = Status;
         }
     }
 
     if (Install->Failed == 0)
+    {
+        Status = NtfsBlSetDirty(FALSE);
+        if (!NT_SUCCESS(Status))
+            FwPrint(L"\r\nINSTALL: the system volume stays marked for checking (0x%08lx).\r\n", Status);
+        Install->Stage = "done";
+        /* FIXME: this start still uses the SYSTEM hive of the previous build; a boot driver the new build adds is only registered by the completion step */
         FwPrint(L"\r\nINSTALL: %lu files written, %lu removed.\r\n", Install->Written, Install->Removed);
+    }
     else
-        FwPrint(L"\r\nINSTALL: %lu files could not be written.\r\n", Install->Failed);
+    {
+        FwPrint(L"\r\nINSTALL: %lu files could not be written; the next start tries again.\r\n", Install->Failed);
+    }
+}
+
+static
+VOID
+OslWriteStatus(
+    _In_ POSL_INSTALL Install,
+    _In_z_ PCSTR ImagePath)
+{
+    CHAR Path[OSL_INSTALL_PATH_CHARS], Text[256];
+    PSTR Name;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(RtlStringCbCopyA(Path, sizeof(Path), ImagePath)))
+        return;
+    Name = strrchr(Path, '\\');
+    if (!Name || !NT_SUCCESS(RtlStringCbCopyA(Name + 1, sizeof(Path) - (Name + 1 - Path), OSL_INSTALL_STATUS)))
+        return;
+
+    if (!NT_SUCCESS(RtlStringCbPrintfA(Text, sizeof(Text),
+                                       "[Install]\r\nStage=%s\r\nResult=0x%08lx\r\nWritten=%lu\r\nRemoved=%lu\r\nFailed=%lu\r\n",
+                                       Install->Stage ? Install->Stage : "open", Install->Result, Install->Written,
+                                       Install->Removed, Install->Failed)))
+    {
+        return;
+    }
+    Status = NtfsBlWriteFile(Path, Text, (ULONG)strlen(Text));
+    if (!NT_SUCCESS(Status))
+        FwPrint(L"INSTALL: the install status could not be written (0x%08lx).\r\n", Status);
 }
 
 static
@@ -987,6 +1267,8 @@ OslFreeInstall(
         FwFree(Install->NewText);
     if (Install->OldText)
         FwFree(Install->OldText);
+    if (Install->Buffer)
+        FwFreePages(Install->Buffer, OSL_INSTALL_CHUNK);
     OslFreeNames(&Install->Files);
     OslFreeNames(&Install->Inventory);
     OslFreeNames(&Install->Exclude);
@@ -999,7 +1281,8 @@ VOID
 OslInstallImage(
     _In_ PDK_DEVICE OsDevice,
     _In_z_ PCSTR SystemRoot,
-    _In_z_ PCSTR ImagePath)
+    _In_z_ PCSTR ImagePath,
+    _In_opt_z_ PCSTR ImageHash)
 {
     POSL_INSTALL Install;
     NTSTATUS Status;
@@ -1015,6 +1298,7 @@ OslInstallImage(
     RtlZeroMemory(Install, sizeof(*Install));
     RtlStringCbCopyA(Install->SystemRoot, sizeof(Install->SystemRoot), SystemRoot);
     Install->Percent = MAXULONG;
+    Install->Buffer = FwAllocatePages(OSL_INSTALL_CHUNK);
 
     Status = NtfsBlMount(OsDevice);
     if (!NT_SUCCESS(Status))
@@ -1024,17 +1308,31 @@ OslInstallImage(
         return;
     }
 
-    Status = NtfsBlOpenFile(ImagePath, &Install->Image, NULL, NULL);
-    if (NT_SUCCESS(Status))
+    if (!Install->Buffer)
     {
-        OslInstallOpenedImage(Install, ImagePath);
-        NtfsBlCloseFile(Install->Image);
+        OslFail(Install, "open", STATUS_NO_MEMORY);
+    }
+    else if (!ImageHash || !OslParseHash(ImageHash, Install->Hash))
+    {
+        FwPrint(L"INSTALL: the update has no valid checksum; starting the installed system.\r\n");
+        OslFail(Install, "checksum", STATUS_INVALID_PARAMETER);
     }
     else
     {
-        FwPrint(L"INSTALL: %hs could not be opened (0x%08lx); starting the installed system.\r\n", ImagePath, Status);
+        Status = NtfsBlOpenFile(ImagePath, &Install->Image, &Install->ImageSize, NULL);
+        if (NT_SUCCESS(Status))
+        {
+            OslInstallOpenedImage(Install, ImagePath);
+            NtfsBlCloseFile(Install->Image);
+        }
+        else
+        {
+            FwPrint(L"INSTALL: %hs could not be opened (0x%08lx); starting the installed system.\r\n", ImagePath, Status);
+            OslFail(Install, "open", Status);
+        }
     }
 
+    OslWriteStatus(Install, ImagePath);
     if (!NT_SUCCESS(NtfsBlUnmount()))
         FwPrint(L"INSTALL: the system volume could not be flushed.\r\n");
     OslFreeInstall(Install);
