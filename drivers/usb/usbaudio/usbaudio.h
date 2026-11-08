@@ -16,6 +16,9 @@
 #define USB_AUDIO_CONTROL_TERMINAL_DESCRIPTOR_TYPE       (0x24)
 
 /* ── USB Audio versions ─────────────────────────────────────────── */
+#define USB_AUDIO_PROTOCOL_VERSION_1                     0x00
+#define USB_AUDIO_PROTOCOL_VERSION_2                     0x20
+#define USB_AUDIO_PROTOCOL_VERSION_3                     0x30
 #define USB_AUDIO_VERSION_1                              0x0100
 #define USB_AUDIO_VERSION_2                              0x0200
 #define USB_AUDIO_VERSION_3                              0x0300
