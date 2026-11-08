@@ -12,6 +12,10 @@ add_test(NAME ke.xstate_layout COMMAND ke_xstate_layout)
 
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
     find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME ke.amd64_interrupt COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-interrupt-test.py
+            --source ${REACTOS_HOST_SOURCE_ROOT}/ntos/ke/amd64/interrupt.c --cc ${CMAKE_C_COMPILER})
+    endif()
     find_program(KE_ARM64_CLANG NAMES clang)
     find_program(KE_ARM64_LD NAMES ld.lld)
     find_program(KE_ARM64_QEMU NAMES qemu-aarch64)

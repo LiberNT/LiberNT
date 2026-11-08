@@ -162,6 +162,11 @@ KeConnectInterrupt(IN PKINTERRUPT Interrupt)
 
         /* Get the connected interrupt */
         ConnectedInterrupt = CONTAINING_RECORD(CurrentHandler, KINTERRUPT, DispatchCode);
+        ASSERT(ConnectedInterrupt->Connected);
+        ASSERT(ConnectedInterrupt->Vector == Interrupt->Vector);
+        ASSERT(ConnectedInterrupt->Number == Interrupt->Number);
+        ASSERT(ConnectedInterrupt->InterruptListEntry.Flink->Blink == &ConnectedInterrupt->InterruptListEntry);
+        ASSERT(ConnectedInterrupt->InterruptListEntry.Blink->Flink == &ConnectedInterrupt->InterruptListEntry);
 
         /* Check if sharing is ok */
         if ((Interrupt->ShareVector == 0) ||
@@ -213,6 +218,11 @@ KeDisconnectInterrupt(IN PKINTERRUPT Interrupt)
 
         /* The first interrupt list entry is the interrupt list head */
         HandlerHead = &VectorFirstInterrupt->InterruptListEntry;
+        ASSERT(VectorFirstInterrupt->Connected);
+        ASSERT(VectorFirstInterrupt->Vector == Interrupt->Vector);
+        ASSERT(VectorFirstInterrupt->Number == Interrupt->Number);
+        ASSERT(Interrupt->InterruptListEntry.Flink->Blink == &Interrupt->InterruptListEntry);
+        ASSERT(Interrupt->InterruptListEntry.Blink->Flink == &Interrupt->InterruptListEntry);
 
         /* If the list is empty, this is the only interrupt for this vector */
         if (IsListEmpty(HandlerHead))
