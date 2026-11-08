@@ -20,7 +20,6 @@ add_subdirectory(kdnet)
 add_subdirectory(monitor)
 
 if(NOT ARCH STREQUAL "arm")
-add_subdirectory(nmidebug)
 endif()
 add_subdirectory(null)
 add_subdirectory(werkernel)
