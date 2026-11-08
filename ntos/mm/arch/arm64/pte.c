@@ -254,6 +254,7 @@ MiArchInitializeProcessRoot(_In_ ULONG64 SystemRootFrame, _In_ ULONG64 ProcessRo
     PMI_PTE Process = MiArchMapFrame(ProcessRootFrame);
     ULONG Index;
 
+    MI_ASSERT(SystemRootFrame != ProcessRootFrame);
     for (Index = 256; Index < 512; Index++)
     {
         if (Index != A64_SELF_MAP_INDEX && Index != A64_HYPERSPACE_INDEX)
