@@ -138,10 +138,12 @@ KiGetXStateConfiguration(
             if (ExtStateComponent.Ecx.Bits.Aligned)
             {
                 XStateConfig->AlignedFeatures |= ComponentBit;
-                NextSupervisorOffset = ALIGN_UP(NextSupervisorOffset, 64);
+                NextSupervisorOffset = ALIGN_UP_BY(NextSupervisorOffset, 64);
+                ASSERT((NextSupervisorOffset & 63) == 0);
                 if ((ComponentBit & SupportedUserMask) != 0)
                 {
-                    NextUserOffset = ALIGN_UP(NextUserOffset, 64);
+                    NextUserOffset = ALIGN_UP_BY(NextUserOffset, 64);
+                    ASSERT((NextUserOffset & 63) == 0);
                 }
             }
 
@@ -595,6 +597,7 @@ KeSaveExtendedProcessorState(
     PKTHREAD Thread = KeGetCurrentThread();
     CPUID_EXTENDED_STATE_MAIN_LEAF_REGS ExtStateMain;
 
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
     if (KeFeatureBits & KF_XSTATE)
     {
         FeatureMask = Mask & SharedUserData->XState.EnabledFeatures;
@@ -658,6 +661,9 @@ KeRestoreExtendedProcessorState(
 {
     PVOID Buffer = XStateSave->XStateContext.Buffer;
 
+    ASSERT(XStateSave->Thread == KeGetCurrentThread());
+    ASSERT(XStateSave->Level == KeGetCurrentIrql());
+    ASSERT(XStateSave->Level <= DISPATCH_LEVEL);
     if (Buffer == NULL)
     {
         return;

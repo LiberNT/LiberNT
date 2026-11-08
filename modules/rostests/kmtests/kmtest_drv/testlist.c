@@ -204,6 +204,7 @@ KMT_TESTFUNC Test_KeApcQueueTransitions;
 KMT_TESTFUNC Test_KeDpcQueueTransitions;
 #ifdef _M_AMD64
 KMT_TESTFUNC Test_KeSwitchReaper;
+KMT_TESTFUNC Test_KeXState;
 KMT_TESTFUNC Test_KeSwitchSelfWake;
 KMT_TESTFUNC Test_KeTrapFilterX87;
 KMT_TESTFUNC Test_KeStandbySteal;
@@ -539,6 +540,7 @@ const KMT_TEST TestList[] =
     { "KeDpcQueueTransitions",              Test_KeDpcQueueTransitions },
 #ifdef _M_AMD64
     { "KeSwitchReaper",                     Test_KeSwitchReaper },
+    { "KeXState",                           Test_KeXState },
     { "KeSwitchSelfWake",                   Test_KeSwitchSelfWake },
     { "KeTrapFilterX87",                    Test_KeTrapFilterX87 },
     { "KeStandbySteal",                     Test_KeStandbySteal },
