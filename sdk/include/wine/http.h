@@ -55,6 +55,7 @@ struct http_url_config
     USHORT idle_connection;
     USHORT header_wait;
     USHORT entity_body;
+    ULONG max_connections;
 };
 
 struct http_url_config_params

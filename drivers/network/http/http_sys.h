@@ -21,8 +21,9 @@
 #define TAG_HTTP 'PTHH'
 #define HTTP_QUEUE_STATE_CLOSING 0x00000001
 #define HTTP_QUEUE_STATE_SHUTDOWN 0x00000002
-#define HTTP_MAX_HEADER_SIZE (64 * 1024)
-#define HTTP_MAX_CONNECTIONS 64
+#define HTTP_MAX_HEADER_SIZE (16 * 1024 - 1)
+#define HTTP_MIN_MAX_CONNECTIONS 1024
+#define HTTP_MAX_MAX_CONNECTIONS 2031616
 #define HTTP_MAX_HEADERS 128
 #define HTTP_DEFAULT_TIMEOUT_SECONDS 120
 #define HTTP_ENTITY_BODY_SECONDS 120
@@ -93,7 +94,16 @@ typedef enum _HTTP_UNAVAILABLE_REASON
     HttpUnavailableQueueFull,
     HttpUnavailableOffline,
     HttpUnavailableInactive,
+    HttpUnavailableConnectionLimit,
 } HTTP_UNAVAILABLE_REASON;
+
+typedef struct _HTTP_GROUP_CONNECTIONS
+{
+    LIST_ENTRY Entry;
+    PVOID Queue;
+    HTTP_URL_GROUP_ID Group;
+    ULONG Count;
+} HTTP_GROUP_CONNECTIONS, *PHTTP_GROUP_CONNECTIONS;
 
 typedef struct _HTTP_PARSED_HEADER
 {
@@ -163,6 +173,7 @@ typedef struct _HTTP_CONNECTION
     USHORT ErrorStatus;
     UCHAR UnavailableReason;
     UCHAR UnavailableVerbosity;
+    PHTTP_GROUP_CONNECTIONS GroupConnections;
     HTTP_PARSED_HEADER Headers[HTTP_MAX_HEADERS + 1];
     HTTP_VERB Verb;
     HTTP_VERSION Version;

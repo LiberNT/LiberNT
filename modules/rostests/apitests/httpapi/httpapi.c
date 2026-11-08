@@ -4071,6 +4071,253 @@ cleanup_wsa:
     WSACleanup();
 }
 
+static int http_lm_serve(HANDLE Queue, OVERLAPPED *Overlapped, const char *Text, const char *Server,
+                         char *Response, int Size)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    HTTP_RESPONSE Reply = {0};
+    HTTP_DATA_CHUNK Chunk;
+    HTTP_KA_CLIENT Client;
+    ULONG Result;
+    int State;
+
+    Response[0] = '\0';
+    if (!http_pr_client(&Client, Text))
+        return -1;
+    Result = http_ka_receive(Queue, Overlapped, 0, Request, sizeof(RequestBuffer), 2000);
+    ok(Result == NO_ERROR, "receive returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, Overlapped);
+    else if (Result == NO_ERROR)
+    {
+        Reply.s.StatusCode = 200;
+        Reply.s.pReason = "OK";
+        Reply.s.ReasonLength = 2;
+        if (Server)
+        {
+            Reply.s.Headers.KnownHeaders[HttpHeaderServer].pRawValue = Server;
+            Reply.s.Headers.KnownHeaders[HttpHeaderServer].RawValueLength = (USHORT)strlen(Server);
+        }
+        Chunk.DataChunkType = HttpDataChunkFromMemory;
+        Chunk.FromMemory.pBuffer = "ok";
+        Chunk.FromMemory.BufferLength = 2;
+        Reply.s.EntityChunkCount = 1;
+        Reply.s.pEntityChunks = &Chunk;
+        Result = HttpSendHttpResponse(Queue, Request->s.RequestId, 0, &Reply, NULL, NULL, NULL, 0, NULL, NULL);
+        ok(Result == NO_ERROR, "response returned %lu\n", Result);
+    }
+    State = http_ch_read_all(&Client, Response, Size, 1000);
+    closesocket(Client.Socket);
+    return State;
+}
+
+static BOOL http_lm_has_date(const char *Response)
+{
+    const char *Date = strstr(Response, "\r\nDate: ");
+
+    return Date && strlen(Date) > 39 && !strncmp(Date + 33, " GMT\r\n", 6) && Date[11] == ',';
+}
+
+static void http_lm_check_server(const char *What, int State, const char *Response, const char *Server,
+                                 int Expected)
+{
+    ok(State == Expected, "%s: state %d\n", What, State);
+    ok(strstr(Response, Server) != NULL, "%s: no %s in %s\n", What, Server, Response);
+    ok(http_lm_has_date(Response), "%s: no Date header in %s\n", What, Response);
+}
+
+static void http_lm_limit(HTTP_URL_GROUP_ID Group, ULONG Present, ULONG Max)
+{
+    HTTP_CONNECTION_LIMIT_INFO Limit;
+    HTTP_QOS_SETTING_INFO Qos;
+    ULONG Result;
+
+    Limit.Flags.Present = Present;
+    Limit.MaxConnections = Max;
+    Qos.QosType = HttpQosSettingTypeConnectionLimit;
+    Qos.QosSetting = &Limit;
+    Result = HttpSetUrlGroupProperty(Group, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == NO_ERROR, "limit %lu/%lu returned %lu\n", Present, Max, Result);
+}
+
+static void http_lm_limit_check(HANDLE Queue, HTTP_URL_GROUP_ID Group, OVERLAPPED *Overlapped,
+                                ULONG Present, ULONG Max, BOOL FirstServed, BOOL SecondServed,
+                                const char *Page)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    HTTP_KA_CLIENT First, Second, Idle;
+    char Response[2048];
+    ULONG Result;
+    int State;
+
+    http_lm_limit(Group, Present, Max);
+    ok(http_pr_client(&Idle, NULL), "idle client failed\n");
+    Sleep(200);
+    ok(http_pr_client(&First, http_pr_get), "first client failed\n");
+    Result = http_ka_receive(Queue, Overlapped, 0, Request, sizeof(RequestBuffer), FirstServed ? 1000 : 300);
+    ok(Result == (FirstServed ? NO_ERROR : ERROR_IO_PENDING), "limit %lu/%lu: first receive %lu\n",
+       Present, Max, Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, Overlapped);
+    else if (Result == NO_ERROR)
+        http_ka_respond(Queue, Request->s.RequestId, 0, "first");
+    State = http_ch_read_all(&First, Response, sizeof(Response), 500);
+    ok(State == (FirstServed ? HTTP_KA_OPEN : HTTP_KA_RESET), "limit %lu/%lu: first state %d, %s\n",
+       Present, Max, State, Response);
+
+    ok(http_pr_client(&Second, http_pr_get), "second client failed\n");
+    Result = http_ka_receive(Queue, Overlapped, 0, Request, sizeof(RequestBuffer), SecondServed ? 1000 : 300);
+    ok(Result == (SecondServed ? NO_ERROR : ERROR_IO_PENDING), "limit %lu/%lu: second receive %lu\n",
+       Present, Max, Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, Overlapped);
+    else if (Result == NO_ERROR)
+        http_ka_respond(Queue, Request->s.RequestId, 0, "second");
+    State = http_ch_read_all(&Second, Response, sizeof(Response), 1000);
+    if (Page)
+        ok(State == HTTP_KA_CLOSED && !strncmp(Response, "HTTP/1.1 503 Service Unavailable\r\n", 34) &&
+           strstr(Response, Page), "limit %lu/%lu: second state %d, %s\n", Present, Max, State, Response);
+    else
+        ok(State == (SecondServed ? HTTP_KA_OPEN : HTTP_KA_RESET) && (SecondServed || !Response[0]),
+           "limit %lu/%lu: second state %d, %s\n", Present, Max, State, Response);
+    closesocket(Second.Socket);
+
+    State = http_ka_wait(&First, 1);
+    ok(State == (FirstServed ? HTTP_KA_OPEN : HTTP_KA_RESET), "limit %lu/%lu: first after second %d\n",
+       Present, Max, State);
+    State = http_ka_wait(&Idle, 1);
+    ok(State == HTTP_KA_OPEN, "limit %lu/%lu: idle after second %d\n", Present, Max, State);
+    closesocket(First.Socket);
+    closesocket(Idle.Socket);
+    Sleep(300);
+    if (Max)
+    {
+        State = http_lm_serve(Queue, Overlapped, http_pr_get, NULL, Response, sizeof(Response));
+        ok(State == HTTP_KA_OPEN && !strncmp(Response, "HTTP/1.1 200", 12),
+           "limit %lu/%lu: after close state %d, %s\n", Present, Max, State, Response);
+    }
+}
+
+static void http_lm_header_size(ULONG Size, BOOL TooLong)
+{
+    char *Text = malloc(Size + 64), Response[2048];
+    int Length, State;
+
+    ok(Text != NULL, "out of memory\n");
+    if (!Text)
+        return;
+    Length = sprintf(Text, "GET /other HTTP/1.1\r\nHost: 127.0.0.1:59989\r\nX-Pad: ");
+    memset(Text + Length, 'a', Size - Length - 4);
+    strcpy(Text + Size - 4, "\r\n\r\n");
+    State = http_pr_try(Text, Response, sizeof(Response), 1500);
+    ok(State == HTTP_KA_CLOSED, "%lu header bytes: state %d\n", Size, State);
+    if (TooLong)
+        ok(!strncmp(Response, "HTTP/1.1 400 Bad Request\r\n", 26) &&
+           strstr(Response, "<TITLE>Bad Request</TITLE>") &&
+           strstr(Response, "<BODY><h2>Bad Request - Request Too Long</h2>\r\n"
+                            "<hr><p>HTTP Error 400. The size of the request headers is too long.</p>\r\n"),
+           "%lu header bytes: %s\n", Size, Response);
+    else
+        ok(!strncmp(Response, "HTTP/1.1 404 Not Found\r\n", 24), "%lu header bytes: %s\n", Size, Response);
+    free(Text);
+}
+
+static void test_limits(BOOL Connections)
+{
+    static const WCHAR Url[] = L"http://127.0.0.1:59989/prop/";
+    HTTPAPI_VERSION Version = HTTPAPI_VERSION_2;
+    HTTP_SERVER_SESSION_ID Session = 0;
+    HTTP_URL_GROUP_ID Group = 0;
+    HTTP_BINDING_INFO Binding;
+    OVERLAPPED Overlapped = {0};
+    HANDLE Queue = NULL;
+    WSADATA WsaData;
+    char Response[2048];
+    ULONG Result;
+    int State;
+
+    Result = WSAStartup(MAKEWORD(2, 2), &WsaData);
+    ok(Result == 0, "WSAStartup failed with %lu\n", Result);
+    if (Result)
+        return;
+    Result = HttpInitialize(Version, HTTP_INITIALIZE_SERVER, NULL);
+    ok(Result == NO_ERROR, "HttpInitialize failed with %lu\n", Result);
+    if (Result)
+        goto cleanup_wsa;
+    HttpCreateServerSession(Version, &Session, 0);
+    HttpCreateUrlGroup(Session, &Group, 0);
+    HttpCreateRequestQueue(Version, NULL, NULL, 0, &Queue);
+    if (!Queue || !Group)
+        goto cleanup;
+    Binding.Flags.Present = 1;
+    Binding.RequestQueueHandle = Queue;
+    HttpSetUrlGroupProperty(Group, HttpServerBindingProperty, &Binding, sizeof(Binding));
+    Result = HttpAddUrlToUrlGroup(Group, Url, 0, 0);
+    ok(Result == NO_ERROR, "HttpAddUrlToUrlGroup failed with %lu\n", Result);
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    if (Connections)
+        goto connections;
+    State = http_lm_serve(Queue, &Overlapped, http_pr_get, NULL, Response, sizeof(Response));
+    http_lm_check_server("no server", State, Response, "\r\nServer: Microsoft-HTTPAPI/2.0\r\n", HTTP_KA_OPEN);
+    State = http_lm_serve(Queue, &Overlapped, http_pr_get, "Foo/1.0", Response, sizeof(Response));
+    http_lm_check_server("app server", State, Response, "\r\nServer: Foo/1.0 Microsoft-HTTPAPI/2.0\r\n",
+                         HTTP_KA_OPEN);
+    State = http_lm_serve(Queue, &Overlapped, "GET /prop/a HTTP/1.0\r\nHost: 127.0.0.1:59989\r\n\r\n", NULL,
+                          Response, sizeof(Response));
+    http_lm_check_server("http 1.0", State, Response, "\r\nServer: Microsoft-HTTPAPI/2.0\r\n", HTTP_KA_CLOSED);
+    State = http_pr_try("GET /other HTTP/1.1\r\nHost: 127.0.0.1:59989\r\n\r\n", Response, sizeof(Response), 1500);
+    http_lm_check_server("404", State, Response, "\r\nServer: Microsoft-HTTPAPI/2.0\r\n", HTTP_KA_CLOSED);
+    ok(strstr(Response, "\r\nContent-Length: 315\r\n") &&
+       strstr(Response, "<TITLE>Not Found</TITLE>") && strstr(Response, "<BODY><h2>Not Found</h2>\r\n"
+       "<hr><p>HTTP Error 404. The requested resource is not found.</p>\r\n</BODY></HTML>\r\n"),
+       "404 page %s\n", Response);
+    State = http_pr_try("BAD\r\n\r\n", Response, sizeof(Response), 1500);
+    http_lm_check_server("400", State, Response, "\r\nServer: Microsoft-HTTPAPI/2.0\r\n", HTTP_KA_CLOSED);
+    http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityLimited);
+    http_pr_set(Queue, HttpServerStateProperty, HttpEnabledStateInactive);
+    State = http_pr_try(http_pr_get, Response, sizeof(Response), 1500);
+    http_lm_check_server("503", State, Response, "\r\nServer: Microsoft-HTTPAPI/2.0\r\n", HTTP_KA_CLOSED);
+    http_pr_set(Queue, HttpServerStateProperty, HttpEnabledStateActive);
+    http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityBasic);
+
+    http_lm_header_size(8000, FALSE);
+    http_lm_header_size(16000, FALSE);
+    http_lm_header_size(16384, TRUE);
+    http_lm_header_size(40000, TRUE);
+    goto done;
+
+connections:
+    http_lm_limit_check(Queue, Group, &Overlapped, 1, 1, TRUE, FALSE, NULL);
+    http_lm_limit_check(Queue, Group, &Overlapped, 1, 2, TRUE, TRUE, NULL);
+    http_lm_limit_check(Queue, Group, &Overlapped, 1, 0, FALSE, FALSE, NULL);
+    http_lm_limit_check(Queue, Group, &Overlapped, 0, 1, TRUE, TRUE, NULL);
+    http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityFull);
+    http_lm_limit_check(Queue, Group, &Overlapped, 1, 1, TRUE, FALSE,
+                        "<BODY><h2>Forbidden - Too Many Users</h2>\r\n"
+                        "<hr><p>HTTP Error 503. There are too many outstanding connections.</p>\r\n");
+    http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityBasic);
+    http_lm_limit(Group, 1, HTTP_LIMIT_INFINITE);
+    State = http_lm_serve(Queue, &Overlapped, http_pr_get, NULL, Response, sizeof(Response));
+    ok(State == HTTP_KA_OPEN && !strncmp(Response, "HTTP/1.1 200", 12), "infinite: state %d, %s\n",
+       State, Response);
+
+done:
+    CloseHandle(Overlapped.hEvent);
+cleanup:
+    if (Group)
+        HttpCloseUrlGroup(Group);
+    if (Session)
+        HttpCloseServerSession(Session);
+    if (Queue)
+        HttpCloseRequestQueue(Queue);
+    HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
+cleanup_wsa:
+    WSACleanup();
+}
+
 START_TEST(httpapi)
 {
     test_initialize();
@@ -4101,4 +4348,14 @@ START_TEST(filechunk)
 START_TEST(properties)
 {
     test_properties();
+}
+
+START_TEST(limits)
+{
+    test_limits(FALSE);
+}
+
+START_TEST(connlimit)
+{
+    test_limits(TRUE);
 }

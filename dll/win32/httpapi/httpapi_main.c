@@ -413,7 +413,7 @@ static ULONG add_url(HANDLE queue, const WCHAR *urlW, HTTP_URL_CONTEXT context,
  */
 ULONG WINAPI HttpAddUrl(HANDLE queue, const WCHAR *url, void *reserved)
 {
-    static const struct http_url_config config;
+    static const struct http_url_config config = {FALSE, 0, 0, 0, HTTP_LIMIT_INFINITE};
 
     TRACE("queue %p, url %s, reserved %p.\n", queue, debugstr_w(url), reserved);
 
@@ -814,6 +814,7 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
     struct http_response *buffer;
     ULONGLONG *file_lengths, body_len;
     ULONG ret, memory_len;
+    const HTTP_KNOWN_HEADER *server;
     char *p, dummy[21];
     int len;
     USHORT i;
@@ -843,12 +844,14 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
         return ret;
     }
 
+    server = &response->s.Headers.KnownHeaders[HttpHeaderServer];
     len = 12 + sprintf(dummy, "%hu", response->s.StatusCode) + response->s.ReasonLength;
+    len += 31 + (server->RawValueLength ? server->RawValueLength + 1 : 0) + 37;
     for (i = 0; i < HttpHeaderResponseMaximum; ++i)
     {
-        if (i == HttpHeaderDate)
-            len += 37;
-        else if (response->s.Headers.KnownHeaders[i].RawValueLength)
+        if (i == HttpHeaderDate || i == HttpHeaderServer)
+            continue;
+        if (response->s.Headers.KnownHeaders[i].RawValueLength)
             len += strlen(header_names[i]) + 2 + response->s.Headers.KnownHeaders[i].RawValueLength + 2;
         else if (i == HttpHeaderContentLength && !(flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
             len += strlen(header_names[i]) + 2 + sprintf(dummy, "%I64u", body_len) + 2;
@@ -871,13 +874,19 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
     buffer->len = len;
     sprintf(buffer->buffer, "HTTP/1.1 %u %.*s\r\n", response->s.StatusCode,
             response->s.ReasonLength, response->s.pReason);
+    if (server->RawValueLength)
+        sprintf(buffer->buffer + strlen(buffer->buffer), "Server: %.*s Microsoft-HTTPAPI/2.0\r\n",
+                server->RawValueLength, server->pRawValue);
+    else
+        strcat(buffer->buffer, "Server: Microsoft-HTTPAPI/2.0\r\n");
+    format_date(buffer->buffer);
 
     for (i = 0; i < HttpHeaderResponseMaximum; ++i)
     {
         const HTTP_KNOWN_HEADER *header = &response->s.Headers.KnownHeaders[i];
-        if (i == HttpHeaderDate)
-            format_date(buffer->buffer);
-        else if (header->RawValueLength)
+        if (i == HttpHeaderDate || i == HttpHeaderServer)
+            continue;
+        if (header->RawValueLength)
             sprintf(buffer->buffer + strlen(buffer->buffer), "%s: %.*s\r\n",
                     header_names[i], header->RawValueLength, header->pRawValue);
         else if (i == HttpHeaderContentLength && !(flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
@@ -1139,6 +1148,7 @@ static void get_url_config(const struct url_group *group, struct http_url_config
                                                            : session->timeouts.IdleConnection;
     config->header_wait = own->timeouts.HeaderWait ? own->timeouts.HeaderWait : session->timeouts.HeaderWait;
     config->entity_body = own->timeouts.EntityBody ? own->timeouts.EntityBody : session->timeouts.EntityBody;
+    config->max_connections = own->connections.Flags.Present ? own->connections.MaxConnections : HTTP_LIMIT_INFINITE;
 }
 
 static ULONG add_group_url(struct url_group *group, HANDLE queue, const struct url_registration *registration)
@@ -1423,7 +1433,8 @@ ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY 
             return ERROR_CALL_NOT_IMPLEMENTED;
         default:
             ret = set_object_property(&group->props, TRUE, property, value, length);
-            if (!ret && (property == HttpServerStateProperty || property == HttpServerTimeoutsProperty))
+            if (!ret && (property == HttpServerStateProperty || property == HttpServerTimeoutsProperty ||
+                         property == HttpServerQosProperty))
                 ret = update_url_config(group);
             ReleaseSRWLockExclusive(&url_group_lock);
             return ret;
