@@ -554,11 +554,9 @@ static CRYPTCATATTRIBUTE *cdf_put_attr(struct cdf *cdf, struct cdf_line *line, C
     }
     if (!cdf_attr_data(flags, second + 1, &data, &size))
     {
-        /* TODO: INFO_NEEDED the parse error Windows reports for an attribute value that is not base64 */
-        cdf_report(callback, CRYPTCAT_E_AREA_ATTRIBUTE, CRYPTCAT_E_CDF_ATTR_TYPECOMBO, line->text);
         free(data);
-        free(name);
-        return NULL;
+        data = NULL;
+        size = 0;
     }
 
     if (member)
@@ -674,7 +672,8 @@ static SIP_INDIRECT_DATA *cdf_indirect_data(struct cdf *cdf, const WCHAR *path, 
     return NULL;
 }
 
-static CRYPTCATMEMBER *cdf_add_member(struct cdf *cdf, struct cdf_member *m, PFN_CDF_PARSE_ERROR_CALLBACK callback)
+static CRYPTCATMEMBER *cdf_add_member(struct cdf *cdf, struct cdf_member *m, BOOL hash_tags,
+                                      PFN_CDF_PARSE_ERROR_CALLBACK callback)
 {
     SIP_INDIRECT_DATA *indirect;
     CRYPTCATMEMBER *member;
@@ -700,7 +699,8 @@ static CRYPTCATMEMBER *cdf_add_member(struct cdf *cdf, struct cdf_member *m, PFN
         return NULL;
     }
 
-    if (cdf->version == CRYPTCAT_VERSION_2 || cdf_has_key_prefix(m->line->key, L"<HASH>"))
+    /* FIXME: Windows 11 keeps the literal tags of a version 2 catalog here and then writes no catalog */
+    if (cdf->version == CRYPTCAT_VERSION_2 || (hash_tags && cdf_has_key_prefix(m->line->key, L"<HASH>")))
     {
         if (!cdf_hash_tag(indirect, &tag))
         {
@@ -722,14 +722,15 @@ static CRYPTCATMEMBER *cdf_add_member(struct cdf *cdf, struct cdf_member *m, PFN
     return member;
 }
 
-static struct cdf_member *cdf_process_member(struct cdf *cdf, DWORD index, PFN_CDF_PARSE_ERROR_CALLBACK callback)
+static struct cdf_member *cdf_process_member(struct cdf *cdf, DWORD index, BOOL hash_tags,
+                                             PFN_CDF_PARSE_ERROR_CALLBACK callback)
 {
     struct cdf_member *m = &cdf->members[index];
 
     if (!m->processed)
     {
         m->processed = TRUE;
-        m->member = cdf_add_member(cdf, m, callback);
+        m->member = cdf_add_member(cdf, m, hash_tags, callback);
     }
     return m;
 }
@@ -772,7 +773,7 @@ LPWSTR WINAPI CryptCATCDFEnumMembersByCDFTagEx(CRYPTCATCDF *pCDF, LPWSTR pwszPre
 
     for (; i < cdf->member_count; i++)
     {
-        m = cdf_process_member(cdf, i, pfnParseError);
+        m = cdf_process_member(cdf, i, TRUE, pfnParseError);
         if (m->member)
         {
             *ppMember = m->member;
@@ -812,7 +813,7 @@ CRYPTCATMEMBER * WINAPI CryptCATCDFEnumMembers(CRYPTCATCDF *pCDF, CRYPTCATMEMBER
 
     for (; i < cdf->member_count; i++)
     {
-        m = cdf_process_member(cdf, i, pfnParseError);
+        m = cdf_process_member(cdf, i, FALSE, pfnParseError);
         if (m->member) return m->member;
     }
     SetLastError(ERROR_SUCCESS);
