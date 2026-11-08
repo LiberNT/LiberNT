@@ -50,8 +50,14 @@ KiInitializeContextThread(IN PKTHREAD Thread,
     PVOID InitialStack;
 
     /* Allocate space on the stack for the XSAVE area */
+    ASSERT(Thread->InitialStack != NULL);
+    ASSERT(KeXStateLength >= sizeof(XSAVE_FORMAT));
+    ASSERT((ULONG_PTR)Thread->InitialStack >= Thread->StackLimit);
+    ASSERT(KeXStateLength <= (ULONG_PTR)Thread->InitialStack - Thread->StackLimit);
     InitialStack = (PUCHAR)Thread->InitialStack - KeXStateLength;
     InitialStack = ALIGN_DOWN_POINTER_BY(InitialStack, 64);
+    ASSERT((ULONG_PTR)InitialStack >= Thread->StackLimit);
+    ASSERT((ULONG_PTR)InitialStack - Thread->StackLimit >= (Context ? sizeof(KUINIT_FRAME) : sizeof(KKINIT_FRAME)));
     Thread->InitialStack = InitialStack;
 
     /* Initialize the state save area */
