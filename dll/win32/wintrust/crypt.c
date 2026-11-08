@@ -2539,6 +2539,64 @@ static BOOL sip_hash_cab(const BYTE *data, const struct cab_layout *cab, HCRYPTH
     return CryptHashData(hash, data + cab->rest_offset, cab->cabinet_size - cab->rest_offset, 0);
 }
 
+static void sip_cab_reserve_layout(const BYTE *data, const struct cab_layout *cab, DWORD signature_size, BYTE *out)
+{
+    static const BYTE reserve_magic[] = { 0x00, 0x00, 0x10, 0x00 };
+    DWORD reserve = cab->reserve_size + cab->shift - (cab->has_reserve ? 0 : 4), i;
+    BYTE *p;
+
+    sip_cab_header(data, cab, out);
+    p = out + 36;
+    p[0] = reserve;
+    p[1] = reserve >> 8;
+    if (cab->has_reserve)
+    {
+        p[2] = data[38];
+        p[3] = data[39];
+        memcpy(p + 4, data + 40, cab->reserve_size);
+    }
+    memcpy(p + 4, reserve_magic, sizeof(reserve_magic));
+    sip_put32(p + 8, signature_size ? cab->cabinet_size + cab->shift : 0);
+    sip_put32(p + 12, signature_size);
+    p += 4 + reserve;
+    memcpy(p, data + cab->strings_offset, cab->strings_size);
+    p += cab->strings_size;
+    for (i = 0; i < cab->folders; i++)
+    {
+        const BYTE *entry = data + cab->folders_offset + i * cab->folder_size;
+
+        sip_put32(p, sip_get32(entry) + cab->shift);
+        memcpy(p + 4, entry + 4, cab->folder_size - 4);
+        p += cab->folder_size;
+    }
+    memcpy(p, data + cab->rest_offset, cab->cabinet_size - cab->rest_offset);
+}
+
+static BYTE *sip_cab_prepare(HANDLE file, const BYTE *data, DWORD *size, struct cab_layout *cab)
+{
+    DWORD prepared_size = cab->cabinet_size + cab->shift, written;
+    BYTE *prepared;
+
+    /* TODO: INFO_NEEDED: what Windows 11 writes when it grows a header reserve shorter than 20 bytes */
+    if (!(prepared = calloc(1, prepared_size + *size - cab->cabinet_size)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return NULL;
+    }
+    sip_cab_reserve_layout(data, cab, 0, prepared);
+    memcpy(prepared + prepared_size, data + cab->cabinet_size, *size - cab->cabinet_size);
+    prepared_size += *size - cab->cabinet_size;
+    if (SetFilePointer(file, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER ||
+        !WriteFile(file, prepared, prepared_size, &written, NULL) || written != prepared_size ||
+        !sip_cab_layout(prepared, prepared_size, cab))
+    {
+        free(prepared);
+        return NULL;
+    }
+    *size = prepared_size;
+    return prepared;
+}
+
 static BYTE *sip_der(BYTE tag, const BYTE *data, DWORD len, DWORD *out_len)
 {
     DWORD len_bytes = len < 0x80 ? 1 : len < 0x100 ? 2 : len < 0x10000 ? 3 : len < 0x1000000 ? 4 : 5, i;
@@ -2728,14 +2786,9 @@ static BYTE *sip_pe_image_value(const BYTE *link, DWORD link_len, DWORD *out_len
     return seq;
 }
 
-#endif
-/***********************************************************************
- *      CryptSIPCreateIndirectData  (WINTRUST.@)
- */
-BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIndirectData,
-                                       SIP_INDIRECT_DATA* pIndirectData)
+static BOOL sip_create_indirect_data(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIndirectData,
+                                     SIP_INDIRECT_DATA* pIndirectData, BOOL prepare)
 {
-#ifdef __REACTOS__
     static const GUID peGUID = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
     static const GUID cabGUID = { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
     static const GUID flatGUID = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
@@ -2744,8 +2797,8 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
     enum { SUBJECT_FLAT, SUBJECT_PE, SUBJECT_CAB } kind;
     DWORD value_len = 0, data_oid_len, alg_oid_len, hash_len, len, size, file_size = 0, table_len;
     HANDLE file = INVALID_HANDLE_VALUE, mapping = NULL;
-    BYTE *value = NULL, *table = NULL, *link = NULL, *enhanced = NULL, *p;
-    const BYTE *view = NULL;
+    BYTE *value = NULL, *table = NULL, *link = NULL, *enhanced = NULL, *prepared = NULL, *p;
+    const BYTE *view = NULL, *cab_data = NULL;
     struct cab_layout cab;
     BOOL ret = FALSE, page_hashes = FALSE;
     HCRYPTPROV prov = 0;
@@ -2805,8 +2858,9 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
     {
         if (pSubjectInfo->hFile && pSubjectInfo->hFile != INVALID_HANDLE_VALUE)
             file = pSubjectInfo->hFile;
-        else if ((file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
-                                     OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
+        else if ((file = CreateFileW(pSubjectInfo->pwsFileName,
+                                     kind == SUBJECT_CAB && prepare ? GENERIC_READ | GENERIC_WRITE : GENERIC_READ,
+                                     FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
             goto done;
         file_size = GetFileSize(file, NULL);
         if (!(mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL))) goto done;
@@ -2825,7 +2879,12 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
         }
         if (view)
         {
-            if (!sip_cab_layout(view, file_size, &cab)) goto done;
+            if (!sip_cab_layout(view, file_size, &cab) ||
+                (prepare && cab.shift && !(prepared = sip_cab_prepare(file, view, &file_size, &cab))))
+                goto done;
+            if (!prepare)
+                cab.shift = 0;
+            cab_data = prepared ? prepared : view;
             sip_put32(cabinet_size, cab.cabinet_size + cab.shift);
             if (!CryptCreateHash(prov, alg, 0, 0, &enhanced_hash)) goto done;
             len = hash_len;
@@ -2878,7 +2937,7 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
     }
     else if (kind == SUBJECT_CAB)
     {
-        if (!sip_hash_cab(view, &cab, hash)) goto done;
+        if (!sip_hash_cab(cab_data, &cab, hash)) goto done;
     }
     else if (!CryptHashData(hash, view, file_size, 0))
         goto done;
@@ -2906,12 +2965,24 @@ done:
     free(link);
     free(table);
     free(enhanced);
+    free(prepared);
     if (view) UnmapViewOfFile(view);
     if (mapping) CloseHandle(mapping);
     if (file != INVALID_HANDLE_VALUE && file != pSubjectInfo->hFile) CloseHandle(file);
     if (hash) CryptDestroyHash(hash);
     if (prov != pSubjectInfo->hProv) CryptReleaseContext(prov, 0);
     return ret;
+}
+
+#endif
+/***********************************************************************
+ *      CryptSIPCreateIndirectData  (WINTRUST.@)
+ */
+BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIndirectData,
+                                       SIP_INDIRECT_DATA* pIndirectData)
+{
+#ifdef __REACTOS__
+    return sip_create_indirect_data(pSubjectInfo, pcbIndirectData, pIndirectData, TRUE);
 #else
     FIXME("(%p %p %p) stub\n", pSubjectInfo, pcbIndirectData, pIndirectData);
  
@@ -3340,10 +3411,9 @@ static BOOL WINTRUST_GetSignedMsgFromCatFile(SIP_SUBJECTINFO *pSubjectInfo,
 static BOOL WINTRUST_PutSignedMsgToCabFile(SIP_SUBJECTINFO *pSubjectInfo,
  DWORD *pdwIndex, DWORD cbSignedDataMsg, BYTE *pbSignedDataMsg)
 {
-    static const BYTE reserve_magic[] = { 0x00, 0x00, 0x10, 0x00 };
     struct cab_layout cab;
-    DWORD size, read, written, reserve, out_len, i;
-    BYTE *data = NULL, *out = NULL, *p;
+    DWORD size, read, written, out_len;
+    BYTE *data = NULL, *out = NULL;
     HANDLE file;
     BOOL ret = FALSE;
 
@@ -3369,40 +3439,14 @@ static BOOL WINTRUST_PutSignedMsgToCabFile(SIP_SUBJECTINFO *pSubjectInfo,
         goto done;
     if (!sip_cab_layout(data, size, &cab)) goto done;
 
-    reserve = cab.reserve_size + cab.shift - (cab.has_reserve ? 0 : 4);
     out_len = cab.cabinet_size + cab.shift + cbSignedDataMsg;
     if (!(out = calloc(1, out_len)))
     {
         SetLastError(ERROR_OUTOFMEMORY);
         goto done;
     }
-    sip_cab_header(data, &cab, out);
-    p = out + 36;
-    p[0] = reserve;
-    p[1] = reserve >> 8;
-    if (cab.has_reserve)
-    {
-        p[2] = data[38];
-        p[3] = data[39];
-        memcpy(p + 4, data + 40, cab.reserve_size);
-    }
-    memcpy(p + 4, reserve_magic, sizeof(reserve_magic));
-    sip_put32(p + 8, cab.cabinet_size + cab.shift);
-    sip_put32(p + 12, cbSignedDataMsg);
-    p += 4 + reserve;
-    memcpy(p, data + cab.strings_offset, cab.strings_size);
-    p += cab.strings_size;
-    for (i = 0; i < cab.folders; i++)
-    {
-        const BYTE *entry = data + cab.folders_offset + i * cab.folder_size;
-
-        sip_put32(p, sip_get32(entry) + cab.shift);
-        memcpy(p + 4, entry + 4, cab.folder_size - 4);
-        p += cab.folder_size;
-    }
-    memcpy(p, data + cab.rest_offset, cab.cabinet_size - cab.rest_offset);
-    p += cab.cabinet_size - cab.rest_offset;
-    memcpy(p, pbSignedDataMsg, cbSignedDataMsg);
+    sip_cab_reserve_layout(data, &cab, cbSignedDataMsg, out);
+    memcpy(out + cab.cabinet_size + cab.shift, pbSignedDataMsg, cbSignedDataMsg);
 
     ret = SetFilePointer(file, 0, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
           WriteFile(file, out, out_len, &written, NULL) && written == out_len && SetEndOfFile(file);
@@ -3636,13 +3680,13 @@ BOOL WINAPI CryptSIPVerifyIndirectData(SIP_SUBJECTINFO* pSubjectInfo,
     info = *pSubjectInfo;
     info.DigestAlgorithm = pIndirectData->DigestAlgorithm;
     info.dwFlags = (info.dwFlags & ~SPC_INC_PE_PAGE_HASHES_FLAG) | SPC_EXC_PE_PAGE_HASHES_FLAG;
-    if (!CryptSIPCreateIndirectData(&info, &size, NULL)) return FALSE;
+    if (!sip_create_indirect_data(&info, &size, NULL, FALSE)) return FALSE;
     if (!(computed = malloc(size)))
     {
         SetLastError(ERROR_OUTOFMEMORY);
         return FALSE;
     }
-    ret = CryptSIPCreateIndirectData(&info, &size, computed);
+    ret = sip_create_indirect_data(&info, &size, computed, FALSE);
     if (ret && (computed->Digest.cbData != pIndirectData->Digest.cbData ||
                 memcmp(computed->Digest.pbData, pIndirectData->Digest.pbData, computed->Digest.cbData)))
     {

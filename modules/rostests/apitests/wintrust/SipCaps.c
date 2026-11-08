@@ -171,7 +171,7 @@ VerifyIndirect(const GUID *Subject, const WCHAR *Path, SIP_INDIRECT_DATA *Data, 
 
 static
 BOOL
-WriteTextFile(const WCHAR *Path, const char *Text)
+WriteDataFile(const WCHAR *Path, const void *Data, DWORD Size)
 {
     HANDLE File;
     DWORD Written;
@@ -180,9 +180,146 @@ WriteTextFile(const WCHAR *Path, const char *Text)
     File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     if (File == INVALID_HANDLE_VALUE)
         return FALSE;
-    Ret = WriteFile(File, Text, (DWORD)strlen(Text), &Written, NULL);
+    Ret = WriteFile(File, Data, Size, &Written, NULL);
     CloseHandle(File);
     return Ret;
+}
+
+static
+BOOL
+WriteTextFile(const WCHAR *Path, const char *Text)
+{
+    return WriteDataFile(Path, Text, (DWORD)strlen(Text));
+}
+
+static
+BOOL
+WriteCabinet(const WCHAR *Path, const char *Contents)
+{
+    static const BYTE Header[] = {
+        'M','S','C','F',0,0,0,0,0x63,0,0,0,0,0,0,0,0x2c,0,0,0,0,0,0,0,3,1,1,0,1,0,0,0,0x34,0x12,0,0,
+        0x42,0,0,0,1,0,0,0,0x19,0,0,0,0,0,0,0,0,0,0x21,0x5b,0,0x60,0x20,0,'a','.','t','x','t',0,
+        0,0,0,0,0x19,0,0x19,0 };
+    BYTE Cabinet[sizeof(Header) + 25];
+
+    if (strlen(Contents) != 25)
+        return FALSE;
+    memcpy(Cabinet, Header, sizeof(Header));
+    memcpy(Cabinet + sizeof(Header), Contents, 25);
+    return WriteDataFile(Path, Cabinet, sizeof(Cabinet));
+}
+
+static
+SIP_INDIRECT_DATA *
+CreateCabinetIndirect(const WCHAR *Path, HANDLE File)
+{
+    GUID SubjectType = CabSubject;
+    SIP_SUBJECTINFO Info;
+    SIP_INDIRECT_DATA *Data;
+    DWORD Size = 0;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    Info.pgSubjectType = &SubjectType;
+    Info.pwsFileName = Path;
+    Info.hFile = File;
+    Info.DigestAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    if (!CryptSIPCreateIndirectData(&Info, &Size, NULL) || !(Data = HeapAlloc(GetProcessHeap(), 0, Size)))
+        return NULL;
+    SetLastError(0xdeadbeef);
+    if (CryptSIPCreateIndirectData(&Info, &Size, Data))
+        return Data;
+    HeapFree(GetProcessHeap(), 0, Data);
+    return NULL;
+}
+
+static
+BOOL
+FileMatches(const WCHAR *Path, const BYTE *Expected, DWORD ExpectedSize)
+{
+    HANDLE File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    BYTE Buffer[256];
+    DWORD Read = 0;
+
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    ReadFile(File, Buffer, sizeof(Buffer), &Read, NULL);
+    CloseHandle(File);
+    return Read == ExpectedSize && !memcmp(Buffer, Expected, Read);
+}
+
+static
+VOID
+TestCabinetIndirectData(const WCHAR *Temp)
+{
+    static const BYTE Prepared[] = {
+        0x4d,0x53,0x43,0x46,0x00,0x00,0x00,0x00,0x7b,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x44,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x03,0x01,0x01,0x00,0x01,0x00,0x04,0x00,0x34,0x12,0x00,0x00,0x14,0x00,0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x5a,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x19,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x21,0x5b,0x00,0x60,0x20,0x00,0x61,0x2e,0x74,0x78,0x74,0x00,0x00,0x00,0x00,0x00,0x19,0x00,
+        0x19,0x00,0x63,0x61,0x62,0x20,0x6d,0x65,0x6d,0x62,0x65,0x72,0x20,0x6f,0x6e,0x65,0x20,0x63,0x6f,0x6e,0x74,0x65,0x6e,0x74,
+        0x73,0x0d,0x0a };
+    static const BYTE Digest[] = {
+        0x6e,0xa7,0x05,0xc5,0x13,0xbb,0x9f,0x39,0x2e,0x16,0x9a,0x15,0x94,0x71,0x99,0xb0,
+        0x3e,0xe8,0xa2,0x76,0x6b,0xed,0xce,0x7b,0x7c,0xc4,0xe3,0x37,0x25,0x97,0x0b,0x5a };
+    WCHAR First[MAX_PATH], Copy[MAX_PATH], Second[MAX_PATH];
+    SIP_INDIRECT_DATA *Data;
+    LARGE_INTEGER Zero = { { 0 } }, Position;
+    BYTE Original[256];
+    DWORD OriginalSize = 0;
+    HANDLE File;
+
+    swprintf(First, RTL_NUMBER_OF(First), L"%lslntsipa.cab", Temp);
+    swprintf(Copy, RTL_NUMBER_OF(Copy), L"%lslntsipc.cab", Temp);
+    swprintf(Second, RTL_NUMBER_OF(Second), L"%lslntsipb.cab", Temp);
+    if (!WriteCabinet(First, "cab member one contents\r\n") || !WriteCabinet(Copy, "cab member one contents\r\n") ||
+        !WriteCabinet(Second, "cab member two contents\r\n"))
+    {
+        skip("Cannot write the cabinets\n");
+        return;
+    }
+    File = CreateFileW(First, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ReadFile(File, Original, sizeof(Original), &OriginalSize, NULL);
+    ok(!CreateCabinetIndirect(First, File), "CAB indirect data created through a read-only handle\n");
+    ok_hex(GetLastError(), ERROR_ACCESS_DENIED);
+    CloseHandle(File);
+    ok(FileMatches(First, Original, OriginalSize), "the cabinet changed after a refused creation\n");
+
+    SetFileAttributesW(First, FILE_ATTRIBUTE_READONLY);
+    ok(!CreateCabinetIndirect(First, NULL), "CAB indirect data created for a read-only file\n");
+    ok_hex(GetLastError(), ERROR_ACCESS_DENIED);
+    SetFileAttributesW(First, FILE_ATTRIBUTE_NORMAL);
+
+    File = CreateFileW(First, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    Data = CreateCabinetIndirect(First, File);
+    ok(Data != NULL, "CAB indirect data through a read-write handle failed with %lu\n", GetLastError());
+    ok(SetFilePointerEx(File, Zero, &Position, FILE_CURRENT) && Position.QuadPart == sizeof(Prepared),
+       "handle position %I64d\n", Position.QuadPart);
+    CloseHandle(File);
+    ok(FileMatches(First, Prepared, sizeof(Prepared)), "the cabinet was not prepared for a signature\n");
+    if (Data)
+    {
+        ok(!strcmp(Data->Data.pszObjId, SPC_LINK_OBJID), "data %s\n", Data->Data.pszObjId);
+        ok(Data->Digest.cbData == sizeof(Digest) && !memcmp(Data->Digest.pbData, Digest, sizeof(Digest)),
+           "unexpected digest\n");
+        ok(VerifyIndirect(&CabSubject, First, Data, MSSIP_ADDINFO_NONE, NULL), "CAB verify failed with %lu\n", GetLastError());
+        ok(FileMatches(First, Prepared, sizeof(Prepared)), "the cabinet changed after a verification\n");
+        ok(!VerifyIndirect(&CabSubject, Copy, Data, MSSIP_ADDINFO_NONE, NULL), "CAB verify of the unprepared copy succeeded\n");
+        ok_hex(GetLastError(), TRUST_E_BAD_DIGEST);
+        ok(FileMatches(Copy, Original, OriginalSize), "the unprepared copy changed after a verification\n");
+        ok(!VerifyIndirect(&CabSubject, Second, Data, MSSIP_ADDINFO_NONE, NULL), "CAB verify of another cabinet succeeded\n");
+        ok_hex(GetLastError(), TRUST_E_BAD_DIGEST);
+        HeapFree(GetProcessHeap(), 0, Data);
+    }
+
+    Data = CreateCabinetIndirect(Copy, NULL);
+    ok(Data != NULL, "CAB indirect data by path failed with %lu\n", GetLastError());
+    ok(FileMatches(Copy, Prepared, sizeof(Prepared)), "the cabinet was not prepared by path\n");
+    if (Data)
+        HeapFree(GetProcessHeap(), 0, Data);
+    DeleteFileW(First);
+    DeleteFileW(Copy);
+    DeleteFileW(Second);
 }
 
 static
@@ -237,6 +374,7 @@ TestVerifyIndirectData(VOID)
 
     DeleteFileW(Member);
     DeleteFileW(OtherFlat);
+    TestCabinetIndirectData(Temp);
 }
 
 START_TEST(SipCaps)
