@@ -498,6 +498,53 @@ USBAudioDetectFeedbackEndpoint(
     }
 }
 
+static
+BOOLEAN
+USBAudioIsHighSpeed(
+    IN PDEVICE_OBJECT LowerDevice)
+{
+    USB_BUS_INTERFACE_USBDI_V1 BusInterface;
+    IO_STATUS_BLOCK IoStatus;
+    PIO_STACK_LOCATION IoStack;
+    BOOLEAN HighSpeed = FALSE;
+    NTSTATUS Status;
+    KEVENT Event;
+    PIRP Irp;
+
+    RtlZeroMemory(&BusInterface, sizeof(BusInterface));
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, LowerDevice, NULL, 0, NULL, &Event, &IoStatus);
+    if (!Irp)
+        return FALSE;
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    IoStack = IoGetNextIrpStackLocation(Irp);
+    IoStack->MinorFunction = IRP_MN_QUERY_INTERFACE;
+    IoStack->Parameters.QueryInterface.InterfaceType = &USB_BUS_INTERFACE_USBDI_GUID;
+    IoStack->Parameters.QueryInterface.Size = sizeof(BusInterface);
+    IoStack->Parameters.QueryInterface.Version = USB_BUSIF_USBDI_VERSION_1;
+    IoStack->Parameters.QueryInterface.Interface = (PINTERFACE)&BusInterface;
+    IoStack->Parameters.QueryInterface.InterfaceSpecificData = NULL;
+
+    Status = IoCallDriver(LowerDevice, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("USBAudio: the bus interface is not available (%lx); full speed assumed\n", Status);
+        return FALSE;
+    }
+
+    if (BusInterface.IsDeviceHighSpeed)
+        HighSpeed = BusInterface.IsDeviceHighSpeed(BusInterface.BusContext);
+    if (BusInterface.InterfaceDereference)
+        BusInterface.InterfaceDereference(BusInterface.BusContext);
+    return HighSpeed;
+}
+
 /* ──────────────────────────────────────────────────────────────────
  *  Start device — probe USB descriptors, detect UAC version
  * ────────────────────────────────────────────────────────────────── */
@@ -605,6 +652,7 @@ USBAudioStartDevice(
     DeviceExtension->DeviceDescriptor = DeviceDescriptor;
     DeviceExtension->ConfigurationDescriptor = ConfigurationDescriptor;
     DeviceExtension->AudioVersion = USBAudioDetectVersion(DeviceExtension);
+    DeviceExtension->HighSpeed = USBAudioIsHighSpeed(DeviceExtension->LowerDevice);
     DeviceExtension->QuirkFlags = 0;
     USBAudioDetectFeedbackEndpoint(DeviceExtension);
 
