@@ -24,17 +24,25 @@ PVOID
 MiKmAllocate(
     _In_ SIZE_T Bytes)
 {
-    LONG Size = (LONG)ROUND_UP(Bytes, 16);
-    LONG Offset;
+    LONG Size, Offset;
 
     if (MiPoolReady)
         return ExAllocatePoolWithTag(NonPagedPool, Bytes, MI_CORE_TAG);
 
-    Offset = InterlockedExchangeAdd(&MiBootArenaUsed, Size);
-    if (Offset + Size > MI_BOOT_ARENA_BYTES)
+    if (Bytes > MI_BOOT_ARENA_BYTES)
         return NULL;
 
-    return &MiBootArena[Offset];
+    Size = (LONG)ROUND_UP(Bytes, 16);
+    for (;;)
+    {
+        Offset = InterlockedCompareExchange(&MiBootArenaUsed, 0, 0);
+        ASSERT(Offset >= 0 && Offset <= MI_BOOT_ARENA_BYTES && (Offset & 15) == 0);
+        if (Size > MI_BOOT_ARENA_BYTES - Offset)
+            return NULL;
+
+        if (InterlockedCompareExchange(&MiBootArenaUsed, Offset + Size, Offset) == Offset)
+            return &MiBootArena[Offset];
+    }
 }
 
 VOID
