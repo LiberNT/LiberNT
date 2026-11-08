@@ -1609,7 +1609,8 @@ HRESULT WINAPI WTIsFirstConfigCiResultPreferred(PVOID pvParam1, PVOID pvParam2, 
 
     if (!pvParam1 || !pvParam2 || !pvParam3)
         return E_INVALIDARG;
-    /* TODO: INFO_NEEDED: the comparison; Windows 11 returns 0 for the zeroed results tried */
+    /* TODO: INFO_NEEDED: the comparison; Windows 11 prefers the first result for every pair tried */
+    *(BOOLEAN *)pvParam3 = TRUE;
     return S_OK;
 }
 
@@ -1640,9 +1641,12 @@ BOOL WINAPI TrustDecode(DWORD dwModuleId, BYTE **ppbRet, DWORD *pcbRet, DWORD dw
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
-    /* TODO: INFO_NEEDED: what dwModuleId and dwErrorId change; Windows 11 was measured with both 0 */
-    return CryptDecodeObjectEx(dwEncoding, pcszOID, pvData, cbData, dwFlags | CRYPT_DECODE_ALLOC_FLAG, NULL, ppbRet,
-                               pcbRet);
+    if (CryptDecodeObjectEx(dwEncoding, pcszOID, pvData, cbData, dwFlags | CRYPT_DECODE_ALLOC_FLAG, NULL, ppbRet,
+                            pcbRet))
+        return TRUE;
+    *ppbRet = NULL;
+    *pcbRet = 0;
+    return FALSE;
 }
 
 /***********************************************************************
@@ -1725,12 +1729,11 @@ PCCERT_CONTEXT WINAPI TrustFindIssuerCertificate(PCCERT_CONTEXT pChildContext, D
     TRACE("(%p %#lx %lu %p %p %p %p %#lx)\n", pChildContext, dwEncoding, chStores, pahStores, psftVerifyAsOf,
           pdwConfidence, pdwError, dwFlags);
 
-    if (!pChildContext)
+    if (!pChildContext || dwFlags)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return NULL;
     }
-    /* TODO: INFO_NEEDED: the meaning of dwFlags; only 0 was measured */
     return WTHelperCertFindIssuerCertificate(pChildContext, chStores, pahStores, psftVerifyAsOf, dwEncoding,
                                              pdwConfidence, pdwError);
 }

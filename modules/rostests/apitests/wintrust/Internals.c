@@ -291,6 +291,22 @@ TestFirstPageHash(VOID)
     ok(Size == 20 && !memcmp(Hash, Reference, 20), "unexpected SHA-1 first page hash\n");
     ok_int(FirstPage(L"MD5", Self, Hash, 16), 0);
     ok_int(FirstPage(L"SHA256", NULL, Hash, 32), 0);
+    ok_int(FirstPage(L"sha256", Self, NULL, 0), 0);
+    ok_int(FirstPage(L"Sha1", Self, NULL, 0), 0);
+    ok_int(FirstPage(L"SHA384", Self, NULL, 0), 0);
+    ok_int(FirstPage(L"SHA-256", Self, NULL, 0), 0);
+    SetLastError(0xdeadbeef);
+    ok_int(FirstPage(L"SHA256", Self, Hash, 32), 32);
+    ok_hex(GetLastError(), ERROR_SUCCESS);
+    SetLastError(0xdeadbeef);
+    ok_int(FirstPage(L"SHA256", Self, NULL, 0), 32);
+    ok_hex(GetLastError(), 0xdeadbeef);
+    SetLastError(0xdeadbeef);
+    ok_int(FirstPage(L"SHA256", Self, Hash, 16), 32);
+    ok_hex(GetLastError(), 0xdeadbeef);
+    SetLastError(0xdeadbeef);
+    ok_int(FirstPage(L"MD5", Self, NULL, 0), 0);
+    ok_hex(GetLastError(), 0xdeadbeef);
 }
 
 static
@@ -311,6 +327,18 @@ TestDecode(VOID)
     ok(Out && Size && ((CERT_NAME_INFO *)Out)->cRDN == 1, "unexpected decoded name\n");
     FreeDecode(0, &Out);
     ok(Out == NULL, "TrustFreeDecode kept %p\n", Out);
+    Out = NULL;
+    Size = 0;
+    ok_int(Decode(0x77, &Out, &Size, 0x1234, X509_ASN_ENCODING, X509_NAME, NameData, NameSize, 0), TRUE);
+    ok(Out && Size && ((CERT_NAME_INFO *)Out)->cRDN == 1, "module and error ids changed the decoding\n");
+    FreeDecode(0, &Out);
+    Out = (BYTE *)0x1;
+    Size = 0xdead;
+    SetLastError(0xdeadbeef);
+    ok_int(Decode(0, &Out, &Size, 0x1234, X509_ASN_ENCODING, X509_NAME, NameData, 3, 0), FALSE);
+    ok_hex(GetLastError(), CRYPT_E_ASN1_EOD);
+    ok(Out == NULL, "failed decode kept %p\n", Out);
+    ok_long(Size, 0);
 }
 
 static
@@ -550,7 +578,7 @@ TestFixedResults(VOID)
     PFN_ANY6 PluginInfo = GET(PFN_ANY6, "WTGetPluginSignatureInfo");
     PFN_ANY3 FirstPreferred = GET(PFN_ANY3, "WTIsFirstConfigCiResultPreferred");
     PFN_ANY4 SignerEvent = GET(PFN_ANY4, "WTLogConfigCiSignerEvent");
-    BYTE Buffer[256];
+    BYTE Buffer[256], Out[16];
     HANDLE Handle;
 
     ok(PersonalPages && Compact && AuthSha && FamilyCheck && BioInfo && PluginInfo && FirstPreferred && SignerEvent,
@@ -578,7 +606,14 @@ TestFixedResults(VOID)
     ok_hex((HRESULT)PluginInfo(NULL, NULL, NULL, NULL, NULL, NULL), E_INVALIDARG);
     ok_hex((HRESULT)FirstPreferred(NULL, NULL, NULL), E_INVALIDARG);
     ZeroMemory(Buffer, sizeof(Buffer));
-    ok_hex((HRESULT)FirstPreferred(Buffer, Buffer, Buffer), S_OK);
+    FillMemory(Out, sizeof(Out), 0xcc);
+    ok_hex((HRESULT)FirstPreferred(Buffer, Buffer, Out), S_OK);
+    ok_hex(Out[0], TRUE);
+    ok_hex(Out[1], 0xcc);
+    FillMemory(Buffer, 16, 0xff);
+    FillMemory(Out, sizeof(Out), 0xcc);
+    ok_hex((HRESULT)FirstPreferred(Buffer, Buffer + 64, Out), S_OK);
+    ok_hex(Out[0], TRUE);
     ok_hex((HRESULT)SignerEvent(NULL, NULL, NULL, NULL), E_INVALIDARG);
 }
 
