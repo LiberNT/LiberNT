@@ -1066,24 +1066,6 @@ UsbAudioGetRenderPacketSize(
 
     Feedback = PinContext->FeedbackValue;
 
-    if (Feedback && PinContext->DeviceExtension->HighSpeed)
-    {
-        ULONG NominalFrames = WaveFormat->nSamplesPerSec / PinContext->PacketRate;
-        ULONG FeedbackFrames = (ULONG)(Feedback >> 16);
-        ULONG Capacity = PinContext->MaxPacketSize / WaveFormat->nBlockAlign;
-
-        /* Some devices report samples per 1 ms frame instead of per microframe. */
-        if (NominalFrames && FeedbackFrames > NominalFrames * 2 &&
-            FeedbackFrames <= NominalFrames * 16)
-        {
-            Feedback >>= 3;
-        }
-        else if (!FeedbackFrames || FeedbackFrames > Capacity)
-        {
-            Feedback = 0;
-        }
-    }
-
     if (Feedback)
     {
         ULONGLONG Accumulator = (ULONGLONG)InitialRemainder + Feedback;
@@ -1669,13 +1651,16 @@ UsbAudioFeedbackComplete(
 
         if (Value)
         {
+            Value = UacNormalizeFeedback(PinContext->DeviceExtension->HighSpeed,
+                                         Value,
+                                         PinContext->Feedback.NominalQ16);
             UacFeedbackFeed(&PinContext->Feedback, Value);
 
             if (!PinContext->FeedbackValue)
             {
                 DPRINT1("USBAudio: feedback rate=%lu (Q16.16 frames per interval)\n", Value);
             }
-            PinContext->FeedbackValue = Value;
+            PinContext->FeedbackValue = PinContext->Feedback.CurrentQ16;
         }
     }
 
@@ -1799,6 +1784,7 @@ InitStreamPin(
     KeInitializeEvent(&PinContext->FeedbackEvent, NotificationEvent, FALSE);
     PinContext->FeedbackPending = FALSE;
     PinContext->FeedbackValue = 0;
+    UacFeedbackInit(&PinContext->Feedback, WaveFormatEx->WaveFormatEx.nSamplesPerSec, PinContext->PacketRate);
     PinContext->FeedbackIrp = NULL;
     PinContext->FeedbackUrb = NULL;
     PinContext->FeedbackBuffer = NULL;
