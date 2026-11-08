@@ -451,8 +451,8 @@ UsbAudioGetFeatureUnitControls(
         ControlCount = (Descriptor->bLength - 6) / sizeof(ULONG);
         for (Channel = 0; Channel < ControlCount; Channel++)
         {
-            Controls |= UsbAudioReadLittleEndian32((PUCHAR)Descriptor + 5 +
-                                                   Channel * sizeof(ULONG));
+            Controls |= UacFeatureUnit2Controls(UsbAudioReadLittleEndian32((PUCHAR)Descriptor + 5 +
+                                                                           Channel * sizeof(ULONG)));
         }
         return Controls;
     }
@@ -769,8 +769,9 @@ UsbAudioFeatureUnitHasControl(
 
     if (AudioVersion >= USB_AUDIO_VERSION_2)
     {
-        return (UsbAudioReadLittleEndian32((PUCHAR)FeatureUnitDescriptor + 5 +
-                                           (ULONG)UsbChannel * sizeof(ULONG)) & Control) != 0;
+        return (UacFeatureUnit2Controls(UsbAudioReadLittleEndian32((PUCHAR)FeatureUnitDescriptor + 5 +
+                                                                   (ULONG)UsbChannel * sizeof(ULONG))) &
+                Control) != 0;
     }
 
     Offset = (ULONG)UsbChannel * FeatureUnitDescriptor->bControlSize;
