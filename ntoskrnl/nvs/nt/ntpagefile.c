@@ -130,6 +130,8 @@ MiExtendPagingFileTo(
     IO_STATUS_BLOCK IoStatus;
     ULONG64 Current = PagingFile->Core.SlotCount;
 
+    ASSERT(MiPagingFileExtendThread == KeGetCurrentThread());
+    ASSERT(Current < Target && Target <= PagingFile->MaximumSlots);
     EndOfFile.EndOfFile.QuadPart = (LONGLONG)(Target << PAGE_SHIFT);
     if (!NT_SUCCESS(ZwSetInformationFile(PagingFile->FileHandle, &IoStatus, &EndOfFile, sizeof(EndOfFile),
                                          FileEndOfFileInformation)))
@@ -140,6 +142,7 @@ MiExtendPagingFileTo(
     if (!NT_SUCCESS(MiPageFileExtend(&PagingFile->Core, Target)))
         return FALSE;
 
+    ASSERT(PagingFile->Core.SlotCount == Target);
     MI_ATOMIC_ADD64(&MiSystem.CommitLimit, (LONG64)(Target - Current));
     MmTotalCommitLimit = (SIZE_T)MI_ATOMIC_READ64(&MiSystem.CommitLimit);
     MiFreeSwapPages += (PFN_COUNT)(Target - Current);
@@ -160,10 +163,15 @@ MiExtendPagingFileWorker(
     LONG64 Request;
     LONG64 Wanted;
     ULONG64 Target;
+    LONG WasQueued;
 
+    ASSERT(MI_ATOMIC_READ32(&MiPagingFileExtendQueued) == 1);
+    ASSERT(MiPagingFileExtendThread == NULL);
+    ASSERT(Current <= PagingFile->MaximumSlots);
     MiPagingFileExtendThread = KeGetCurrentThread();
 
     Request = InterlockedExchange64(&MiPagingFileExtendPages, 0);
+    ASSERT(Request >= 0);
     Committed = MI_ATOMIC_READ64(&MiSystem.CommittedPages) + Request;
     Wanted = Committed + Committed / 9 - MI_ATOMIC_READ64(&MiSystem.CommitLimit);
     if (Wanted < (LONG64)MI_PAGEFILE_GROWTH_PAGES)
@@ -172,6 +180,7 @@ MiExtendPagingFileWorker(
     Target = Current + (ULONG64)Wanted;
     if (Target > PagingFile->MaximumSlots)
         Target = PagingFile->MaximumSlots;
+    ASSERT(Target >= Current && Target <= PagingFile->MaximumSlots);
 
     if (Target > Current && !MiExtendPagingFileTo(PagingFile, Target))
     {
@@ -182,8 +191,11 @@ MiExtendPagingFileWorker(
         }
     }
 
+    ASSERT(MiPagingFileExtendThread == KeGetCurrentThread());
     MiPagingFileExtendThread = NULL;
-    InterlockedExchange(&MiPagingFileExtendQueued, 0);
+    WasQueued = InterlockedExchange(&MiPagingFileExtendQueued, 0);
+    ASSERT(WasQueued == 1);
+    UNREFERENCED_PARAMETER(WasQueued);
     KeSetEvent(&MiPagingFileExtendEvent, IO_NO_INCREMENT, FALSE);
 }
 
@@ -311,7 +323,9 @@ MiExpandCommit(
     ULONG64 Deadline;
     LONG64 Pending;
     LONG64 Seen;
+    LONG WasQueued;
 
+    ASSERT(Pages >= 0);
     if (MI_ATOMIC_READ64(&System->CommitLimit) > Limit)
         return TRUE;
 
@@ -341,7 +355,9 @@ MiExpandCommit(
         Pending = Seen;
     }
 
-    if (InterlockedCompareExchange(&MiPagingFileExtendQueued, 1, 0) == 0)
+    WasQueued = InterlockedCompareExchange(&MiPagingFileExtendQueued, 1, 0);
+    ASSERT(WasQueued == 0 || WasQueued == 1);
+    if (WasQueued == 0)
     {
         KeClearEvent(&MiPagingFileExtendEvent);
         ExQueueWorkItem(&MiPagingFileExtendItem, CriticalWorkQueue);
