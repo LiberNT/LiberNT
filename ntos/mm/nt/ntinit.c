@@ -529,6 +529,7 @@ MiInitializePhase0(
     DbgPrint("Kernel address space: system mappings at %p, nonpaged pool at %p (%I64u MB), "
              "paged pool at %p (%I64u MB)\n", (PVOID)(ULONG_PTR)MiSystem.SystemPtes->Base, MmNonPagedPoolStart,
              NonPagedBytes / _1MB, MmPagedPoolStart, PagedBytes / _1MB);
+    ASSERT(!MiPoolReady);
     InitializePool(NonPagedPool, 0);
     InitializePool(PagedPool, 0);
     MiPoolReady = TRUE;

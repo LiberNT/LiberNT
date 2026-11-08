@@ -62,6 +62,7 @@ static BOOLEAN MiMemoryEventReady;
 VOID
 MiMemoryEventInitialize(VOID)
 {
+    ASSERT(!MiMemoryEventReady);
     KeInitializeEvent(&MiMemoryAvailableEvent, NotificationEvent, FALSE);
     MiMemoryEventReady = TRUE;
 }
