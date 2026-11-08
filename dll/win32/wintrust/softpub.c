@@ -25,6 +25,9 @@
 #include "winternl.h"
 #include "wintrust.h"
 #include "mssip.h"
+#ifdef __REACTOS__
+#include "mscat.h"
+#endif
 #include "softpub.h"
 #include "winnls.h"
 #include "wine/debug.h"
@@ -57,6 +60,7 @@ HRESULT WINAPI SoftpubInitialize(CRYPT_PROVIDER_DATA *data)
     return ret;
 }
 
+#ifndef __REACTOS__
 HRESULT WINAPI DriverInitializePolicy(CRYPT_PROVIDER_DATA *data)
 {
     FIXME("stub\n");
@@ -74,6 +78,7 @@ HRESULT WINAPI DriverFinalPolicy(CRYPT_PROVIDER_DATA *data)
     FIXME("stub\n");
     return S_OK;
 }
+#endif
 
 /* Assumes data->pWintrustData->u.pFile exists.  Makes sure a file handle is
  * open for the file.
@@ -316,6 +321,21 @@ static BOOL SOFTPUB_HashPEFile(HANDLE file, HCRYPTHASH hash)
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static DWORD SOFTPUB_VerifySubjectHash(CRYPT_PROVIDER_DATA *data)
+{
+    DWORD err;
+
+    if (!data->pPDSip->pSip || !data->pPDSip->pSip->pfVerify || !data->pPDSip->psSipSubjectInfo)
+        return TRUST_E_SUBJECT_FORM_UNKNOWN;
+    if (data->pPDSip->pSip->pfVerify(data->pPDSip->psSipSubjectInfo,
+                                     (SIP_INDIRECT_DATA *)data->pPDSip->psIndirectData))
+        return ERROR_SUCCESS;
+    err = GetLastError();
+    return err ? err : TRUST_E_BAD_DIGEST;
+}
+
+#endif
 static DWORD SOFTPUB_VerifyImageHash(CRYPT_PROVIDER_DATA *data, HANDLE file)
 {
     SPC_INDIRECT_DATA_CONTENT *indirect = (SPC_INDIRECT_DATA_CONTENT *)data->pPDSip->psIndirectData;
@@ -329,8 +349,12 @@ static DWORD SOFTPUB_VerifyImageHash(CRYPT_PROVIDER_DATA *data, HANDLE file)
     if (((ULONG_PTR)indirect->Data.pszObjId >> 16) == 0 ||
         strcmp(indirect->Data.pszObjId, SPC_PE_IMAGE_DATA_OBJID))
     {
+#ifdef __REACTOS__
+        return SOFTPUB_VerifySubjectHash(data);
+#else
         FIXME("Cannot verify hash for pszObjId=%s\n", debugstr_a(indirect->Data.pszObjId));
         return ERROR_SUCCESS;
+#endif
     }
 
     if (!(algID = CertOIDToAlgId(indirect->DigestAlgorithm.pszObjId)))
@@ -567,6 +591,120 @@ error:
     return err;
 }
 
+#ifdef __REACTOS__
+#define SOFTPUB_SHA1_HASH_SIZE 20
+
+static BOOL SOFTPUB_HexTag(const BYTE *hash, DWORD size, WCHAR *tag)
+{
+    static const WCHAR hex[] = L"0123456789ABCDEF";
+    DWORD i;
+
+    for (i = 0; i < size; i++)
+    {
+        tag[i * 2] = hex[hash[i] >> 4];
+        tag[i * 2 + 1] = hex[hash[i] & 0xf];
+    }
+    tag[size * 2] = 0;
+    return TRUE;
+}
+
+static BOOL SOFTPUB_IsCatalogV2(HANDLE cat)
+{
+    CRYPTCATSTORE *store = CryptCATStoreFromHandle(cat);
+
+    return store && store->dwPublicVersion == CRYPTCAT_VERSION_2;
+}
+
+static DWORD SOFTPUB_VerifyCatalogMemberFile(CRYPT_PROVIDER_DATA *data, HANDLE cat, CRYPTCATMEMBER *member)
+{
+    WINTRUST_CATALOG_INFO *catalog = data->pWintrustData->pCatalog;
+    SIP_DISPATCH_INFO sip = { sizeof(sip) };
+    SIP_INDIRECT_DATA *computed = NULL;
+    SIP_SUBJECTINFO subject;
+    HANDLE file = catalog->hMemberFile;
+    DWORD err = ERROR_SUCCESS, size = 0;
+
+    if (!CryptSIPLoad(&member->gSubjectType, 0, &sip) || !sip.pfCreate)
+        return TRUST_E_SUBJECT_FORM_UNKNOWN;
+    if (!file || file == INVALID_HANDLE_VALUE)
+    {
+        file = CreateFileW(catalog->pcwszMemberFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (file == INVALID_HANDLE_VALUE)
+            return GetLastError();
+    }
+
+    memset(&subject, 0, sizeof(subject));
+    subject.cbSize = sizeof(subject);
+    subject.pgSubjectType = &member->gSubjectType;
+    subject.hFile = file;
+    subject.pwsFileName = catalog->pcwszMemberFilePath;
+    subject.hProv = data->hProv;
+    subject.DigestAlgorithm = member->pIndirectData->DigestAlgorithm;
+    if (SOFTPUB_IsCatalogV2(cat))
+        subject.DigestAlgorithm.pszObjId = (char *)szOID_NIST_sha256;
+    subject.dwFlags = SPC_EXC_PE_PAGE_HASHES_FLAG;
+    if (!sip.pfCreate(&subject, &size, NULL) || !(computed = data->psPfns->pfnAlloc(size)) ||
+        !sip.pfCreate(&subject, &size, computed))
+        err = TRUST_E_BAD_DIGEST;
+    else if (computed->Digest.cbData != member->pIndirectData->Digest.cbData ||
+             memcmp(computed->Digest.pbData, member->pIndirectData->Digest.pbData, computed->Digest.cbData))
+        err = TRUST_E_BAD_DIGEST;
+    if (computed)
+        data->psPfns->pfnFree(computed);
+    if (file != catalog->hMemberFile)
+        CloseHandle(file);
+    return err;
+}
+
+static CRYPTCATMEMBER *SOFTPUB_FindCatalogMember(HANDLE cat, const WINTRUST_CATALOG_INFO *catalog)
+{
+    WCHAR hash_tag[SOFTPUB_SHA1_HASH_SIZE * 2 + 1];
+
+    if (catalog->pbCalculatedFileHash && catalog->cbCalculatedFileHash == SOFTPUB_SHA1_HASH_SIZE)
+    {
+        SOFTPUB_HexTag(catalog->pbCalculatedFileHash, SOFTPUB_SHA1_HASH_SIZE, hash_tag);
+        return CryptCATGetMemberInfo(cat, hash_tag);
+    }
+    if (!catalog->pcwszMemberTag)
+        return NULL;
+    return CryptCATGetMemberInfo(cat, (WCHAR *)catalog->pcwszMemberTag);
+}
+
+static DWORD SOFTPUB_VerifyCatalogMember(CRYPT_PROVIDER_DATA *data)
+{
+    WINTRUST_CATALOG_INFO *catalog = data->pWintrustData->pCatalog;
+    CRYPTCATMEMBER *member;
+    HANDLE cat;
+    DWORD err;
+
+    if (!catalog->pcwszMemberTag && !(catalog->pbCalculatedFileHash && catalog->cbCalculatedFileHash))
+        return TRUST_E_NOSIGNATURE;
+
+    cat = CryptCATOpen((WCHAR *)catalog->pcwszCatalogFilePath, CRYPTCAT_OPEN_EXISTING, data->hProv, 0, 0);
+    if (cat == INVALID_HANDLE_VALUE)
+        return GetLastError();
+
+    member = SOFTPUB_FindCatalogMember(cat, catalog);
+    if (catalog->pbCalculatedFileHash && catalog->cbCalculatedFileHash == SOFTPUB_SHA1_HASH_SIZE)
+        err = member ? ERROR_SUCCESS : TRUST_E_NOSIGNATURE;
+    else if (!member || !member->pIndirectData)
+        err = TRUST_E_NOSIGNATURE;
+    else if (catalog->pbCalculatedFileHash && catalog->cbCalculatedFileHash)
+    {
+        /* Windows 11 refuses a supplied hash that is not SHA-1 sized even when it matches the member */
+        if (catalog->cbCalculatedFileHash != member->pIndirectData->Digest.cbData ||
+            memcmp(catalog->pbCalculatedFileHash, member->pIndirectData->Digest.pbData, catalog->cbCalculatedFileHash))
+            err = TRUST_E_BAD_DIGEST;
+        else
+            err = TRUST_E_NOSIGNATURE;
+    }
+    else
+        err = SOFTPUB_VerifyCatalogMemberFile(data, cat, member);
+    CryptCATClose(cat);
+    return err;
+}
+
+#endif
 static DWORD SOFTPUB_LoadCatalogMessage(CRYPT_PROVIDER_DATA *data)
 {
     DWORD err;
@@ -600,7 +738,12 @@ static DWORD SOFTPUB_LoadCatalogMessage(CRYPT_PROVIDER_DATA *data)
     if (err)
         goto error;
     err = SOFTPUB_DecodeInnerContent(data);
+#ifdef __REACTOS__
+    if (!err)
+        err = SOFTPUB_VerifyCatalogMember(data);
+#else
     /* FIXME: this loads the catalog file, but doesn't validate the member. */
+#endif
 error:
     CloseHandle(catalog);
     return err;
@@ -1714,3 +1857,223 @@ HRESULT WINAPI HTTPSFinalProv(CRYPT_PROVIDER_DATA *data)
     return S_OK;
 #endif
 }
+
+#ifdef __REACTOS__
+static BOOL DRIVER_GetOsAttribute(CRYPT_PROVIDER_DATA *data, WCHAR *value, DWORD count)
+{
+    WINTRUST_CATALOG_INFO *catalog = data->pWintrustData->pCatalog;
+    CRYPTCATATTRIBUTE *attr = NULL;
+    CRYPTCATMEMBER *member;
+    DWORD length = 0;
+    HANDLE cat;
+
+    value[0] = 0;
+    if (!catalog)
+        return FALSE;
+    cat = CryptCATOpen((WCHAR *)catalog->pcwszCatalogFilePath, CRYPTCAT_OPEN_EXISTING, data->hProv, 0, 0);
+    if (cat == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    member = SOFTPUB_FindCatalogMember(cat, catalog);
+    if (member)
+        attr = CryptCATGetAttrInfo(cat, member, (WCHAR *)L"OSAttr");
+    if (!attr)
+        attr = CryptCATGetCatAttrInfo(cat, (WCHAR *)L"OSAttr");
+    if (attr && attr->pbValue)
+    {
+        const WCHAR *text = (const WCHAR *)attr->pbValue;
+
+        while (length < attr->cbValue / sizeof(WCHAR) && length < count - 1 && text[length])
+        {
+            value[length] = text[length];
+            length++;
+        }
+        value[length] = 0;
+    }
+    CryptCATClose(cat);
+    return attr != NULL;
+}
+
+static BOOL DRIVER_ParseNumber(const WCHAR **text, DWORD *number)
+{
+    WCHAR *end;
+
+    *number = wcstoul(*text, &end, 10);
+    if (end == *text)
+        return FALSE;
+    *text = end;
+    return TRUE;
+}
+
+static int DRIVER_CompareVersion(DWORD major, DWORD minor, const DRIVER_VER_MAJORMINOR *bound)
+{
+    if (major != bound->dwMajor)
+        return major < bound->dwMajor ? -1 : 1;
+    if (minor != bound->dwMinor)
+        return minor < bound->dwMinor ? -1 : 1;
+    return 0;
+}
+
+static BOOL DRIVER_OsEntryMatches(const DRIVER_VER_INFO *info, const WCHAR *entry)
+{
+    static const DRIVER_VER_MAJORMINOR none = { 0, 0 };
+    const DRIVER_VER_MAJORMINOR *version_low = &none, *version_high = &none;
+    DWORD platform, major, minor = 0, build = 0, build_low = 0, build_high = 0;
+    BOOL has_build = FALSE;
+    int low, high;
+
+    if (WVT_ISINSTRUCT(DRIVER_VER_INFO, info->cbStruct, sOSVersionHigh))
+    {
+        version_low = &info->sOSVersionLow;
+        version_high = &info->sOSVersionHigh;
+    }
+    if (WVT_ISINSTRUCT(DRIVER_VER_INFO, info->cbStruct, dwBuildNumberHigh))
+    {
+        build_low = info->dwBuildNumberLow;
+        build_high = info->dwBuildNumberHigh;
+    }
+
+    if (!DRIVER_ParseNumber(&entry, &platform) || *entry++ != ':' || !DRIVER_ParseNumber(&entry, &major))
+        return FALSE;
+    if (*entry == '.')
+    {
+        entry++;
+        if (!DRIVER_ParseNumber(&entry, &minor))
+            return FALSE;
+        if (*entry == '.')
+        {
+            entry++;
+            has_build = DRIVER_ParseNumber(&entry, &build);
+        }
+    }
+    if (platform != info->dwPlatform)
+        return FALSE;
+
+    low = DRIVER_CompareVersion(major, minor, version_low);
+    high = DRIVER_CompareVersion(major, minor, version_high);
+    if (low < 0 || high > 0)
+        return FALSE;
+    if (!has_build || (!build_low && !build_high))
+        return TRUE;
+    if (!low && build < build_low)
+        return FALSE;
+    if (!high && build > build_high)
+        return FALSE;
+    return TRUE;
+}
+
+static BOOL DRIVER_MatchOsAttribute(const DRIVER_VER_INFO *info, const WCHAR *os_attr, WCHAR *version)
+{
+    const WCHAR *entry = os_attr, *end;
+
+    while (*entry)
+    {
+        end = wcschr(entry, ',');
+        if (!end)
+            end = entry + wcslen(entry);
+        if (DRIVER_OsEntryMatches(info, entry))
+        {
+            memcpy(version, os_attr, (end - os_attr) * sizeof(WCHAR));
+            version[end - os_attr] = 0;
+            return TRUE;
+        }
+        entry = *end ? end + 1 : end;
+    }
+    return FALSE;
+}
+
+HRESULT WINAPI DriverInitializePolicy(CRYPT_PROVIDER_DATA *data)
+{
+    TRACE("(%p)\n", data);
+
+    return SoftpubInitialize(data);
+}
+
+static DWORD DRIVER_CheckMicrosoftRoot(CRYPT_PROVIDER_DATA *data)
+{
+    CERT_CHAIN_POLICY_STATUS status = { sizeof(status) };
+    CERT_CHAIN_POLICY_PARA para = { sizeof(para) };
+    DWORD i;
+
+    for (i = 0; i < data->csSigners; i++)
+    {
+        if (!data->pasSigners[i].pChainContext ||
+            !CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_MICROSOFT_ROOT, data->pasSigners[i].pChainContext,
+                                              &para, &status))
+            return CERT_E_UNTRUSTEDROOT;
+        if (status.dwError)
+            return status.dwError;
+    }
+    return ERROR_SUCCESS;
+}
+
+HRESULT WINAPI DriverFinalPolicy(CRYPT_PROVIDER_DATA *data)
+{
+    static const DWORD signature_steps[] = { TRUSTERROR_STEP_FINAL_WVTINIT, TRUSTERROR_STEP_FINAL_SIGPROV,
+                                             TRUSTERROR_STEP_FINAL_CERTPROV, TRUSTERROR_STEP_FINAL_CERTCHKPROV };
+    DRIVER_VER_INFO *info = data->pWintrustData->pPolicyCallbackData;
+    WCHAR os_attr[MAX_PATH];
+    PCCERT_CONTEXT signer;
+    HRESULT ret;
+    DWORD err;
+
+    TRACE("(%p)\n", data);
+
+    if (data->hMsg)
+        ret = SOFTPUB_Authenticode(data, signature_steps, ARRAY_SIZE(signature_steps));
+    else
+        ret = SOFTPUB_Authenticode(data, SOFTPUB_PriorSteps, ARRAY_SIZE(SOFTPUB_PriorSteps));
+    if (ret != S_OK)
+        return ret;
+    err = DRIVER_CheckMicrosoftRoot(data);
+    if (!err && info && !WVT_ISINSTRUCT(DRIVER_VER_INFO, info->cbStruct, pcSignerCertContext))
+        err = ERROR_INVALID_PARAMETER;
+    if (err)
+    {
+        data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV] = err;
+        return err;
+    }
+
+    if (info)
+    {
+        info->wszVersion[0] = 0;
+        if (data->csSigners && data->pasSigners[0].csCertChain)
+        {
+            signer = data->pasSigners[0].pasCertChain[0].pCert;
+            CertGetNameStringW(signer, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, info->wszSignedBy, MAX_PATH);
+            info->pcSignerCertContext = CertDuplicateCertificateContext(signer);
+        }
+    }
+    if ((err = data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_OBJPROV]))
+    {
+        data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV] = err;
+        return err;
+    }
+    if (!info)
+        return S_OK;
+
+    if (data->pWintrustData->dwUnionChoice != WTD_CHOICE_CATALOG)
+        return S_OK;
+    if (!DRIVER_GetOsAttribute(data, os_attr, ARRAY_SIZE(os_attr)))
+    {
+        /* TODO: INFO_NEEDED: Windows 11 result for a signed catalog member without OSAttr */
+        return S_OK;
+    }
+    if (!info->dwPlatform)
+    {
+        wcscpy(info->wszVersion, os_attr);
+        return S_OK;
+    }
+    if (DRIVER_MatchOsAttribute(info, os_attr, info->wszVersion))
+        return S_OK;
+    data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV] = ERROR_APP_WRONG_OS;
+    return ERROR_APP_WRONG_OS;
+}
+
+HRESULT WINAPI DriverCleanupPolicy(CRYPT_PROVIDER_DATA *data)
+{
+    TRACE("(%p)\n", data);
+
+    return SoftpubCleanup(data);
+}
+#endif

@@ -229,6 +229,9 @@ static CRYPT_PROVIDER_DATA *WINTRUST_AllocateProviderData(void)
     if (!provData->psPfns)
         goto oom;
     provData->psPfns->cbStruct = sizeof(CRYPT_PROVIDER_FUNCTIONS);
+#ifdef __REACTOS__
+    GetSystemTimeAsFileTime(&provData->sftSystemTime);
+#endif
     return provData;
 
 oom:
