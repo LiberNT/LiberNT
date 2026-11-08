@@ -1011,23 +1011,27 @@ KsHandleSizedListQuery(
         return STATUS_BUFFER_OVERFLOW;
     }
 
-    if (Length < sizeof(KSMULTIPLE_ITEM))
+    if (Length == sizeof(ULONG))
     {
-        if (Length >= sizeof(ULONG))
-            Item->Size = Size;
-
-        Irp->IoStatus.Information = Size;
-        return STATUS_BUFFER_TOO_SMALL;
+        Item->Size = Size;
+        Irp->IoStatus.Information = sizeof(ULONG);
+        return STATUS_SUCCESS;
     }
 
-    Item->Count = DataItemsCount;
-    Item->Size = DataItemSize;
+    if (Length < sizeof(KSMULTIPLE_ITEM))
+        return STATUS_BUFFER_TOO_SMALL;
 
-    if (Length < Size)
+    Item->Size = Size;
+    Item->Count = DataItemsCount;
+
+    if (Length == sizeof(KSMULTIPLE_ITEM))
     {
         Irp->IoStatus.Information = sizeof(KSMULTIPLE_ITEM);
-        return STATUS_BUFFER_OVERFLOW;
+        return STATUS_SUCCESS;
     }
+
+    if (Length < Size)
+        return STATUS_BUFFER_TOO_SMALL;
 
     /* copy items */
     RtlMoveMemory((PVOID)(Item + 1), DataItems, DataItemSize * DataItemsCount);
