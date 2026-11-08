@@ -27,7 +27,9 @@ def body(name):
     return s[a + 1:b - 1]
 
 fixture = r'''
+#define _XOPEN_SOURCE 700
 #include <assert.h>
+#include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -50,14 +52,16 @@ typedef struct _KINTERRUPT {
 static struct { unsigned char _Op_push; unsigned char Pad[15]; } KiUnexpectedRange[256];
 #define KiUnexpectedRangeEnd (KiUnexpectedRange + 256)
 static PVOID Handlers[256];
-static int KeNumberProcessors = 4, Enable = 1, DisableCount;
+static int KeNumberProcessors = 4, Enable = 1, DisableCount, Race;
+static pthread_mutex_t Dispatcher = PTHREAD_MUTEX_INITIALIZER;
+static pthread_barrier_t RaceBarrier;
 static void KiInterruptDispatch(void) {}
 static BOOLEAN KiConnectPassiveInterrupt(PKINTERRUPT I) { (void)I; abort(); }
 static BOOLEAN KiDisconnectPassiveInterrupt(PKINTERRUPT I) { (void)I; abort(); }
 static void KeSetSystemAffinityThread(uint64_t Affinity) { (void)Affinity; }
 static void KeRevertToUserAffinityThread(void) {}
-static KIRQL KiAcquireDispatcherLock(void) { return 0; }
-static void KiReleaseDispatcherLock(KIRQL Old) { (void)Old; }
+static KIRQL KiAcquireDispatcherLock(void) { if (Race) pthread_barrier_wait(&RaceBarrier); assert(pthread_mutex_lock(&Dispatcher)==0); return 0; }
+static void KiReleaseDispatcherLock(KIRQL Old) { (void)Old; assert(pthread_mutex_unlock(&Dispatcher)==0); }
 static PVOID KeQueryInterruptHandler(ULONG Vector) { return Handlers[Vector]; }
 static void KeRegisterInterruptHandler(ULONG Vector, PVOID Handler) { Handlers[Vector] = Handler; }
 static int HalEnableSystemInterrupt(ULONG Vector, KIRQL Irql, int Mode) { (void)Vector; (void)Irql; (void)Mode; return Enable; }
@@ -69,6 +73,7 @@ static void RemoveEntryList(PLIST_ENTRY E) { E->Blink->Flink=E->Flink; E->Flink-
 static PLIST_ENTRY RemoveTailList(PLIST_ENTRY H) { PLIST_ENTRY E=H->Blink; RemoveEntryList(E); return E; }
 static BOOLEAN KeConnectInterrupt(PKINTERRUPT Interrupt) { @CONNECT@ }
 static BOOLEAN KeDisconnectInterrupt(PKINTERRUPT Interrupt) { @DISCONNECT@ }
+static void *RaceConnect(void *Context) { return (void *)(uintptr_t)KeConnectInterrupt(Context); }
 static KINTERRUPT MakeInterrupt(int Share, int Mode) {
     KINTERRUPT I = {0}; I.Vector=0x51; I.Irql=5; I.SynchronizeIrql=5; I.Number=0; I.ShareVector=Share; I.Mode=Mode; return I;
 }
@@ -85,13 +90,35 @@ int main(int argc, char **argv) {
     assert(KeDisconnectInterrupt(&A)); assert(!A.Connected && Handlers[A.Vector]==C.DispatchCode);
     assert(KeDisconnectInterrupt(&C)); assert(!C.Connected && DisableCount==1);
     assert(KeDisconnectInterrupt(&C));
+    {
+        KINTERRUPT Head=MakeInterrupt(1,0), Shared=MakeInterrupt(1,0);
+        pthread_t First, Second;
+        void *FirstResult, *SecondResult;
+        Handlers[Head.Vector] = &KiUnexpectedRange[Head.Vector]._Op_push;
+        assert(KeConnectInterrupt(&Head));
+        assert(pthread_barrier_init(&RaceBarrier,NULL,2)==0);
+        Race=1;
+        assert(pthread_create(&First,NULL,RaceConnect,&Shared)==0);
+        assert(pthread_create(&Second,NULL,RaceConnect,&Shared)==0);
+        assert(pthread_join(First,&FirstResult)==0);
+        assert(pthread_join(Second,&SecondResult)==0);
+        Race=0;
+        assert(pthread_barrier_destroy(&RaceBarrier)==0);
+        assert((uintptr_t)FirstResult==1 && (uintptr_t)SecondResult==1);
+        assert(Head.InterruptListEntry.Flink==&Shared.InterruptListEntry);
+        assert(Head.InterruptListEntry.Blink==&Shared.InterruptListEntry);
+        assert(Shared.InterruptListEntry.Flink==&Head.InterruptListEntry);
+        assert(Shared.InterruptListEntry.Blink==&Head.InterruptListEntry);
+        assert(KeDisconnectInterrupt(&Shared));
+        assert(KeDisconnectInterrupt(&Head));
+    }
     return 0;
 }
 '''.replace('@CONNECT@', body('KeConnectInterrupt')).replace('@DISCONNECT@', body('KeDisconnectInterrupt'))
 with tempfile.TemporaryDirectory(prefix='ke-interrupt-') as d:
     path = pathlib.Path(d)
     (path / 'test.c').write_text(fixture)
-    subprocess.run([args.cc, '-std=c11', str(path / 'test.c'), '-o', str(path / 'test')], check=True)
+    subprocess.run([args.cc, '-std=c11', '-pthread', str(path / 'test.c'), '-o', str(path / 'test')], check=True)
     subprocess.run([str(path / 'test')], check=True)
     def disable_core():
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
