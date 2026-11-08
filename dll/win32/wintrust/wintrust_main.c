@@ -164,6 +164,33 @@ struct wintrust_step
     DWORD              error_index;
 };
 
+#ifdef __REACTOS__
+static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
+ DWORD numSteps, CRYPT_PROVIDER_DATA *provData)
+{
+    DWORD i, err = ERROR_SUCCESS, first = ERROR_SUCCESS;
+    BOOL has_final = FALSE;
+    HRESULT ret;
+
+    for (i = 0; i < numSteps; i++)
+    {
+        ret = steps[i].func(provData);
+        if (steps[i].error_index == TRUSTERROR_STEP_FINAL_WVTINIT && ret != S_OK)
+        {
+            provData->psPfns->pfnCleanupPolicy = NULL;
+            return ret;
+        }
+        if (steps[i].error_index == TRUSTERROR_STEP_FINAL_POLICYPROV)
+        {
+            has_final = TRUE;
+            err = ret;
+        }
+        else if (!first && ret != S_OK)
+            first = provData->padwTrustStepErrors[steps[i].error_index];
+    }
+    return has_final ? err : first;
+}
+#else
 static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
  DWORD numSteps, CRYPT_PROVIDER_DATA *provData)
 {
@@ -177,6 +204,7 @@ static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
     }
     return err;
 }
+#endif
 
 static CRYPT_PROVIDER_DATA *WINTRUST_AllocateProviderData(void)
 {
@@ -265,6 +293,13 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
         return ERROR_OUTOFMEMORY;
 
     ret = WintrustLoadFunctionPointers(actionID, provData->psPfns);
+#ifdef __REACTOS__
+    if (ret && !WINTRUST_AddTrustStepsFromFunctions(verifySteps, provData->psPfns))
+    {
+        SetLastError(TRUST_E_PROVIDER_UNKNOWN);
+        ret = FALSE;
+    }
+#endif
     if (!ret)
     {
         err = GetLastError();
@@ -285,7 +320,8 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
      provData->psPfns);
     err = WINTRUST_ExecuteSteps(verifySteps, numSteps, provData);
 #ifdef __REACTOS__
-    while (err && provData->pSigState && !provData->pSigState->fNoMoreSigs)
+    while (err && provData->pSigState && provData->pSigState->fFirstAttemptMade &&
+           !provData->pSigState->fNoMoreSigs)
     {
         DWORD i, j, first;
 
