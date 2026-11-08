@@ -10,6 +10,8 @@
 #include <usbdlib.h>
 #include <debug.h>
 
+#include "uac/uac_desc_validate.h"
+
 #define USBAUDIO_TAG 'AbsU'
 
 /* ── USB Audio descriptor subtype ──────────────────────────────── */
