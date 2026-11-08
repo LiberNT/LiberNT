@@ -371,6 +371,21 @@ bool BetterDriver(const PackageDriver &candidate, const PackageDriver &current)
     return candidate.Version > current.Version;
 }
 
+bool HasId(const DeviceInfo &device, const std::wstring &id)
+{
+    const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
+
+    for (const std::vector<std::wstring> *list : lists)
+    {
+        for (const std::wstring &own : *list)
+        {
+            if (!id.empty() && _wcsicmp(own.c_str(), id.c_str()) == 0)
+                return true;
+        }
+    }
+    return false;
+}
+
 DWORD RemoveDevice(const std::wstring &instanceId, BOOL &reboot)
 {
     HDEVINFO set = SetupDiCreateDeviceInfoList(NULL, NULL);
@@ -1065,9 +1080,8 @@ const HistoryEntry *CatalogEntryInUse(const DeviceInfo &device, const std::vecto
         return NULL;
     for (const HistoryEntry &entry : history)
     {
-        if (!entry.Result && entry.Action == L"install" &&
-            _wcsicmp(entry.InstanceId.c_str(), device.InstanceId.c_str()) == 0 &&
-            _wcsicmp(entry.Inf.c_str(), device.Inf.c_str()) == 0)
+        if (!entry.Result && entry.Action == L"install" && _wcsicmp(entry.Inf.c_str(), device.Inf.c_str()) == 0 &&
+            (_wcsicmp(entry.InstanceId.c_str(), device.InstanceId.c_str()) == 0 || HasId(device, entry.HardwareId)))
         {
             return &entry;
         }

@@ -56,6 +56,29 @@ static void CheckVersion(const wchar_t *installed, const wchar_t *offered, Drive
        offered, (int)CompareVersionText(device, offered), (int)expected);
 }
 
+static void CheckCatalogSource()
+{
+    const wchar_t *nicIds[] = { L"PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086&REV_03", L"PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086" };
+    DeviceInfo first = Device(L"PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086&REV_03\\3&1D0E7AB&0&1", { nicIds[0], nicIds[1] }, {});
+    DeviceInfo second = Device(L"PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086&REV_03\\3&1D0E7AB&0&2", { nicIds[0], nicIds[1] }, {});
+    DeviceInfo other = Device(L"PCI\\VEN_10EC&DEV_8168&SUBSYS_86771043&REV_15\\3&1D0E7AB&0&3",
+                              { L"PCI\\VEN_10EC&DEV_8168&SUBSYS_86771043&REV_15" }, {});
+    std::vector<HistoryEntry> history(1);
+
+    history[0].Action = L"install";
+    history[0].InstanceId = first.InstanceId;
+    history[0].Inf = L"oem3.inf";
+    history[0].HardwareId = L"pci\\ven_8086&dev_15f3&subsys_00008086";
+    first.Inf = second.Inf = other.Inf = L"oem3.inf";
+    ok(CatalogEntryInUse(first, history) == &history[0], "installed device: no catalog entry\n");
+    ok(CatalogEntryInUse(second, history) == &history[0], "identical device the install also reached: no catalog entry\n");
+    ok(CatalogEntryInUse(other, history) == NULL, "device without the installed hardware ID: catalog entry\n");
+    second.Inf = L"oem4.inf";
+    ok(CatalogEntryInUse(second, history) == NULL, "device on another INF: catalog entry\n");
+    history[0].Result = ERROR_NO_MORE_ITEMS;
+    ok(CatalogEntryInUse(first, history) == NULL, "failed install: catalog entry\n");
+}
+
 START_TEST(DeviceRules)
 {
     CheckQueries(Device(L"ACPI\\VEN_PNP&DEV_0C14\\0", { L"ACPI\\VEN_PNP&DEV_0C14", L"ACPI\\PNP0C14", L"*PNP0C14" }, {}),
@@ -86,4 +109,5 @@ START_TEST(DeviceRules)
     CheckVersion(L"31.0.101.2140", L"32.0.101.2140", DriverOrder::Newer);
     CheckVersion(L"65535.0.0.0", L"1.0.0.0", DriverOrder::Older);
     CheckVersion(L"1.65535.0.0", L"2.0.0.0", DriverOrder::Newer);
+    CheckCatalogSource();
 }
