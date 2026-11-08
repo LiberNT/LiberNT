@@ -57,6 +57,12 @@ public:
     virtual void operator()(ULONGLONG received, ULONGLONG total) = 0;
 };
 
+class ThrottleCallback
+{
+public:
+    virtual void operator()(DWORD seconds) = 0;
+};
+
 class Catalog
 {
 public:
@@ -66,6 +72,7 @@ public:
     Catalog &operator=(const Catalog &) = delete;
 
     void SetCancel(volatile LONG *cancel);
+    void SetThrottleCallback(ThrottleCallback *callback);
     DWORD SearchPage(const std::wstring &query, unsigned page, std::vector<CatalogUpdate> &updates, bool &last);
     DWORD QueryDetails(CatalogUpdate &update);
     DWORD QueryAllDetails(std::vector<CatalogUpdate> &updates);
@@ -84,6 +91,7 @@ private:
     };
 
     bool Cancelled() const;
+    DWORD WaitThrottle(ULONGLONG delay);
     DWORD SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status);
     DWORD Send(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink);
     DWORD Fetch(LPCWSTR verb, const std::wstring &url, const std::string &body, std::string &text);
@@ -94,8 +102,12 @@ private:
     std::map<std::wstring, std::pair<std::vector<CatalogUpdate>, bool>> m_Pages;
     std::wstring m_OtherArchitectures;
     std::wstring m_OtherModel;
+    ThrottleCallback *m_Throttle;
+    ULONGLONG m_WindowStart;
 };
 
+ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now);
+ULONGLONG ThrottleWindowStart(ULONGLONG windowStart, ULONGLONG now);
 std::wstring NativeArchitecture();
 SystemTarget CurrentSystem();
 bool ArchitectureMatches(const std::wstring &architecture);

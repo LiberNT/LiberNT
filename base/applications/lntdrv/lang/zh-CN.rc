@@ -184,4 +184,5 @@ BEGIN
     IDS_SCAN_FOUND "为 %1 个设备找到了更新的驱动程序。"
     IDS_SCAN_NONE "Microsoft 更新目录中没有可为此电脑安装的新内容。"
     IDS_RESULT_UNSIGNED "签名未验证"
+    IDS_SCAN_THROTTLED "搜索将于 %1 继续。Microsoft 更新目录正在限制来自此电脑的搜索。"
 END

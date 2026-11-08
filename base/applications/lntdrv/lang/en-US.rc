@@ -177,4 +177,5 @@ BEGIN
     IDS_SCAN_FOUND "A newer driver was found for %1 device(s)."
     IDS_SCAN_NONE "The Microsoft Update Catalog has nothing new to install for this PC."
     IDS_RESULT_UNSIGNED "signature not verified"
+    IDS_SCAN_THROTTLED "Searching resumes at %1. The Microsoft Update Catalog is limiting searches from this PC."
 END

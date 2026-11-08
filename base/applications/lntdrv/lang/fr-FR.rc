@@ -177,4 +177,5 @@ BEGIN
     IDS_SCAN_FOUND "Un pilote plus récent a été trouvé pour %1 périphérique(s)."
     IDS_SCAN_NONE "Le catalogue Microsoft Update n'a rien de nouveau à installer pour ce PC."
     IDS_RESULT_UNSIGNED "signature non vérifiée"
+    IDS_SCAN_THROTTLED "La recherche reprend à %1. Le catalogue Microsoft Update limite les recherches de ce PC."
 END

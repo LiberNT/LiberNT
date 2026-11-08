@@ -36,6 +36,7 @@ enum : UINT
     WM_APP_ACTION,
     WM_APP_NAME,
     WM_APP_SCAN_DONE,
+    WM_APP_SCAN_WAIT,
 };
 
 enum Page
@@ -553,10 +554,26 @@ public:
 
     void Run()
     {
+        class ScanThrottle : public ThrottleCallback
+        {
+        public:
+            ScanThrottle(HWND hwnd, UINT scan) : m_hwnd(hwnd), m_Scan(scan) {}
+
+            void operator()(DWORD seconds)
+            {
+                PostMessageW(m_hwnd, WM_APP_SCAN_WAIT, m_Scan, seconds);
+            }
+
+        private:
+            HWND m_hwnd;
+            UINT m_Scan;
+        };
         Catalog catalog;
+        ScanThrottle throttle(m_hwnd, m_Scan);
         DWORD failure = ERROR_SUCCESS;
 
         catalog.SetCancel(m_Cancel->Value());
+        catalog.SetThrottleCallback(&throttle);
         for (const DeviceInfo &device : m_Devices)
         {
             FoundMessage *found;
@@ -860,10 +877,18 @@ private:
                 delete name;
                 return TRUE;
             }
+            case WM_APP_SCAN_WAIT:
+                if ((UINT)wParam == m_Scan && m_Scanning)
+                {
+                    m_ScanResume = lParam ? ClockText((DWORD)lParam) : std::wstring();
+                    UpdateScanStatus();
+                }
+                return TRUE;
             case WM_APP_SCAN_DONE:
                 if ((UINT)wParam == m_Scan)
                 {
                     m_Scanning = false;
+                    m_ScanResume.clear();
                     m_ScanError = (DWORD)lParam;
                     m_Resolving.clear();
                     KillTimer(m_hwnd, SpinnerTimer);
@@ -1381,7 +1406,9 @@ private:
     {
         std::wstring text;
 
-        if (m_Scanning)
+        if (m_Scanning && !m_ScanResume.empty())
+            text = FormatText(IDS_SCAN_THROTTLED, m_ScanResume);
+        else if (m_Scanning)
             text = FormatText(IDS_SCAN_PROGRESS, NumberText(std::min(m_Scanned + 1, m_ScanTotal)),
                               NumberText(m_ScanTotal));
         else if (m_ScanError)
@@ -1409,6 +1436,7 @@ private:
         m_Scanned = 0;
         m_ScanTotal = devices.size();
         m_ScanError = ERROR_SUCCESS;
+        m_ScanResume.clear();
         m_Scanning = !devices.empty();
         for (const DeviceInfo &device : devices)
             m_Resolving.insert(device.InstanceId);
@@ -1662,6 +1690,7 @@ private:
     size_t m_Scanned = 0;
     size_t m_ScanTotal = 0;
     DWORD m_ScanError = ERROR_SUCCESS;
+    std::wstring m_ScanResume;
     bool m_Busy = false;
     UINT m_Frame = 0;
     bool m_Filling = false;
@@ -1706,6 +1735,16 @@ public:
     {
         if (percent < 0 || percent % 25 == 0)
             Print(L"  " + text + (percent >= 0 ? L" " + NumberText(percent) + L"%" : std::wstring()));
+    }
+};
+
+class PrintThrottle : public ThrottleCallback
+{
+public:
+    void operator()(DWORD seconds)
+    {
+        if (seconds)
+            Print(L"  " + FormatText(IDS_SCAN_THROTTLED, ClockText(seconds)));
     }
 };
 
@@ -1802,9 +1841,11 @@ int RunCommand(int argc, LPWSTR *argv)
     if (_wcsicmp(command.c_str(), L"scan") == 0)
     {
         Catalog catalog;
+        PrintThrottle throttle;
         std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, false);
         size_t missing = 0;
 
+        catalog.SetThrottleCallback(&throttle);
         for (const std::vector<DeviceInfo> &group : groups)
         {
             std::vector<CatalogUpdate> updates;
@@ -1823,10 +1864,12 @@ int RunCommand(int argc, LPWSTR *argv)
     if (installAll)
     {
         Catalog catalog;
+        PrintThrottle throttle;
         std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, true);
         size_t installed = 0, failed = 0, absent = 0, missing = 0;
         bool restart = false;
 
+        catalog.SetThrottleCallback(&throttle);
         for (const std::vector<DeviceInfo> &group : groups)
             missing += group.size();
         Print(FormatText(IDS_CLI_MISSING_TOTAL, NumberText(missing)));
@@ -1888,11 +1931,13 @@ int RunCommand(int argc, LPWSTR *argv)
     if (_wcsicmp(command.c_str(), L"search") == 0 || install)
     {
         Catalog catalog;
+        PrintThrottle throttle;
         std::vector<CatalogUpdate> updates;
         const CatalogUpdate *update = NULL;
         std::wstring detail;
         BOOL reboot = FALSE;
 
+        catalog.SetThrottleCallback(&throttle);
         if (!device)
         {
             Print(FormatText(IDS_CLI_NO_DEVICE, argc > 2 ? std::wstring(argv[2]) : std::wstring()));
