@@ -367,151 +367,156 @@ GetTokenUserName(
 }
 
 
-VOID
-__stdcall
-SeclCreateProcessWithTokenW(
-    _In_ handle_t hBinding,
-    _In_ DWORD hToken,
-    _In_ SECL_REQUEST *pRequest,
-    _In_ SECL_STARTUPINFO *pStartupInfo,
-    _Out_ SECL_RESPONSE *pResponse)
+typedef struct _SECL_TOKEN_CALL
 {
-    STARTUPINFOEXW StartupInfo;
-    PROCESS_INFORMATION ProcessInfo;
-    PROFILEINFOW ProfileInfo;
-    OBJECT_BASIC_INFORMATION BasicInfo;
-    NTSTATUS Status;
-    HANDLE hProcessForCaller = NULL;
-    HANDLE hThreadForCaller = NULL;
-    HANDLE ahInherit[3];
-    ULONG cInherit = 0;
-    WCHAR szUserName[UNLEN + 1];
-    HANDLE hCallerProcess = NULL;
-    HANDLE hCallerToken = NULL;
-    HANDLE hPrimaryToken = NULL;
-    PVOID pEnvironment = NULL;
-    PPROC_THREAD_ATTRIBUTE_LIST pAttributes = NULL;
-    TOKEN_TYPE Type;
-    SIZE_T cbAttributes = 0;
-    DWORD dwCreationFlags;
-    DWORD dwSessionId;
-    DWORD cbReturned;
     ULONG ClientPid;
+    HANDLE hCallerProcess;
+    HANDLE hCallerToken;
+    HANDLE hPrimaryToken;
+    PVOID pEnvironment;
+    PPROC_THREAD_ATTRIBUTE_LIST pAttributes;
+    HANDLE ahInherit[3];
+    ULONG cInherit;
+    PROFILEINFOW ProfileInfo;
+    PROCESS_INFORMATION ProcessInfo;
+    WCHAR szUserName[UNLEN + 1];
+} SECL_TOKEN_CALL, *PSECL_TOKEN_CALL;
+
+
+static
+DWORD
+CheckTokenRequest(
+    _In_ handle_t hBinding,
+    _In_ SECL_REQUEST *pRequest,
+    _Inout_ PSECL_TOKEN_CALL pCall)
+{
     DWORD dwError;
 
-    TRACE("SeclCreateProcessWithTokenW(%p %lx %p %p %p)\n", hBinding, hToken, pRequest, pStartupInfo, pResponse);
-
-    ZeroMemory(&ProcessInfo, sizeof(ProcessInfo));
-    ZeroMemory(&ProfileInfo, sizeof(ProfileInfo));
-
-    dwError = I_RpcBindingInqLocalClientPID(hBinding, &ClientPid);
+    dwError = I_RpcBindingInqLocalClientPID(hBinding, &pCall->ClientPid);
     if (dwError != RPC_S_OK)
-        goto done;
+        return dwError;
 
     dwError = CheckClientPrivilege(hBinding, SE_IMPERSONATE_NAME);
     if (dwError != ERROR_SUCCESS)
-        goto done;
+        return dwError;
 
     if ((pRequest->dwCreationFlags & (DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS | DETACHED_PROCESS)) ||
         !IsValidEnvironment(pRequest))
     {
-        dwError = ERROR_INVALID_PARAMETER;
-        goto done;
+        return ERROR_INVALID_PARAMETER;
     }
 
-    hCallerProcess = OpenProcess(PROCESS_DUP_HANDLE | PROCESS_CREATE_PROCESS | PROCESS_QUERY_LIMITED_INFORMATION,
-                                 FALSE,
-                                 ClientPid);
-    if (hCallerProcess == NULL)
-    {
-        dwError = GetLastError();
-        goto done;
-    }
+    return ERROR_SUCCESS;
+}
 
-    if (!DuplicateHandle(hCallerProcess,
+
+static
+DWORD
+GetCallerPrimaryToken(
+    _In_ DWORD hToken,
+    _Inout_ PSECL_TOKEN_CALL pCall)
+{
+    OBJECT_BASIC_INFORMATION BasicInfo;
+    NTSTATUS Status;
+    TOKEN_TYPE Type;
+    DWORD dwSessionId;
+    DWORD cbReturned;
+
+    pCall->hCallerProcess = OpenProcess(PROCESS_DUP_HANDLE | PROCESS_CREATE_PROCESS | PROCESS_QUERY_LIMITED_INFORMATION,
+                                        FALSE,
+                                        pCall->ClientPid);
+    if (pCall->hCallerProcess == NULL)
+        return GetLastError();
+
+    if (!DuplicateHandle(pCall->hCallerProcess,
                          LongToHandle(hToken),
                          GetCurrentProcess(),
-                         &hCallerToken,
+                         &pCall->hCallerToken,
                          0,
                          FALSE,
                          DUPLICATE_SAME_ACCESS))
     {
-        dwError = GetLastError();
-        goto done;
+        return GetLastError();
     }
 
-    Status = NtQueryObject(hCallerToken, ObjectBasicInformation, &BasicInfo, sizeof(BasicInfo), NULL);
+    Status = NtQueryObject(pCall->hCallerToken, ObjectBasicInformation, &BasicInfo, sizeof(BasicInfo), NULL);
     if (!NT_SUCCESS(Status))
-    {
-        dwError = RtlNtStatusToDosError(Status);
-        goto done;
-    }
+        return RtlNtStatusToDosError(Status);
     if ((BasicInfo.GrantedAccess & SECL_TOKEN_ACCESS) != SECL_TOKEN_ACCESS)
-    {
-        dwError = ERROR_ACCESS_DENIED;
-        goto done;
-    }
+        return ERROR_ACCESS_DENIED;
 
-    if (!GetTokenInformation(hCallerToken, TokenType, &Type, sizeof(Type), &cbReturned) ||
-        !ProcessIdToSessionId(ClientPid, &dwSessionId))
+    if (!GetTokenInformation(pCall->hCallerToken, TokenType, &Type, sizeof(Type), &cbReturned) ||
+        !ProcessIdToSessionId(pCall->ClientPid, &dwSessionId))
     {
-        dwError = GetLastError();
-        goto done;
+        return GetLastError();
     }
 
     if (Type == TokenPrimary)
     {
-        hPrimaryToken = hCallerToken;
-        hCallerToken = NULL;
+        pCall->hPrimaryToken = pCall->hCallerToken;
+        pCall->hCallerToken = NULL;
     }
-    else if (!DuplicateTokenEx(hCallerToken,
+    else if (!DuplicateTokenEx(pCall->hCallerToken,
                                TOKEN_ALL_ACCESS,
                                NULL,
                                SecurityImpersonation,
                                TokenPrimary,
-                               &hPrimaryToken))
+                               &pCall->hPrimaryToken))
     {
-        dwError = GetLastError();
-        goto done;
+        return GetLastError();
     }
 
-    if (!SetTokenInformation(hPrimaryToken, TokenSessionId, &dwSessionId, sizeof(dwSessionId)))
-    {
-        dwError = GetLastError();
-        goto done;
-    }
+    if (!SetTokenInformation(pCall->hPrimaryToken, TokenSessionId, &dwSessionId, sizeof(dwSessionId)))
+        return GetLastError();
 
+    return ERROR_SUCCESS;
+}
+
+
+static
+DWORD
+PrepareChildEnvironment(
+    _In_ SECL_REQUEST *pRequest,
+    _Inout_ PSECL_TOKEN_CALL pCall)
+{
+    DWORD dwError;
+
+    /* TODO: LOGON_NETCREDENTIALS_ONLY is ignored */
     if (pRequest->dwLogonFlags & LOGON_WITH_PROFILE)
     {
-        dwError = GetTokenUserName(hPrimaryToken, szUserName, ARRAYSIZE(szUserName));
+        dwError = GetTokenUserName(pCall->hPrimaryToken, pCall->szUserName, ARRAYSIZE(pCall->szUserName));
         if (dwError != ERROR_SUCCESS)
-            goto done;
+            return dwError;
 
-        ProfileInfo.dwSize = sizeof(ProfileInfo);
-        ProfileInfo.lpUserName = szUserName;
-        if (!LoadUserProfileW(hPrimaryToken, &ProfileInfo))
-        {
-            dwError = GetLastError();
-            goto done;
-        }
+        pCall->ProfileInfo.dwSize = sizeof(pCall->ProfileInfo);
+        pCall->ProfileInfo.lpUserName = pCall->szUserName;
+        if (!LoadUserProfileW(pCall->hPrimaryToken, &pCall->ProfileInfo))
+            return GetLastError();
     }
 
-    dwCreationFlags = pRequest->dwCreationFlags | EXTENDED_STARTUPINFO_PRESENT;
-    if (pRequest->Environment == NULL)
+    if (pRequest->Environment == NULL &&
+        !CreateEnvironmentBlock(&pCall->pEnvironment, pCall->hPrimaryToken, FALSE))
     {
-        if (!CreateEnvironmentBlock(&pEnvironment, hPrimaryToken, FALSE))
-        {
-            dwError = GetLastError();
-            goto done;
-        }
-        dwCreationFlags |= CREATE_UNICODE_ENVIRONMENT;
+        return GetLastError();
     }
+
+    return ERROR_SUCCESS;
+}
+
+
+static
+DWORD
+CreateChildAttributes(
+    _In_ SECL_STARTUPINFO *pStartupInfo,
+    _Inout_ PSECL_TOKEN_CALL pCall)
+{
+    HANDLE ahStd[3];
+    SIZE_T cbAttributes = 0;
+    DWORD dwError;
+    ULONG i, j;
 
     if (pStartupInfo->dwFlags & STARTF_USESTDHANDLES)
     {
-        HANDLE ahStd[3];
-        ULONG i, j;
-
         ahStd[0] = LongToHandle(pStartupInfo->hStdInput);
         ahStd[1] = LongToHandle(pStartupInfo->hStdOutput);
         ahStd[2] = LongToHandle(pStartupInfo->hStdError);
@@ -519,42 +524,66 @@ SeclCreateProcessWithTokenW(
         {
             if (!ahStd[i] || ahStd[i] == INVALID_HANDLE_VALUE)
                 continue;
-            for (j = 0; j < cInherit && ahInherit[j] != ahStd[i]; j++)
+            for (j = 0; j < pCall->cInherit && pCall->ahInherit[j] != ahStd[i]; j++)
                 ;
-            if (j == cInherit)
-                ahInherit[cInherit++] = ahStd[i];
+            if (j == pCall->cInherit)
+                pCall->ahInherit[pCall->cInherit++] = ahStd[i];
         }
     }
 
     InitializeProcThreadAttributeList(NULL, 2, 0, &cbAttributes);
-    pAttributes = HeapAlloc(GetProcessHeap(), 0, cbAttributes);
-    if (pAttributes == NULL)
+    pCall->pAttributes = HeapAlloc(GetProcessHeap(), 0, cbAttributes);
+    if (pCall->pAttributes == NULL)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    if (!InitializeProcThreadAttributeList(pCall->pAttributes, pCall->cInherit ? 2 : 1, 0, &cbAttributes))
     {
-        dwError = ERROR_NOT_ENOUGH_MEMORY;
-        goto done;
+        dwError = GetLastError();
+        HeapFree(GetProcessHeap(), 0, pCall->pAttributes);
+        pCall->pAttributes = NULL;
+        return dwError;
     }
-    if (!InitializeProcThreadAttributeList(pAttributes, cInherit ? 2 : 1, 0, &cbAttributes) ||
-        !UpdateProcThreadAttribute(pAttributes,
+
+    if (!UpdateProcThreadAttribute(pCall->pAttributes,
                                    0,
                                    PROC_THREAD_ATTRIBUTE_PARENT_PROCESS,
-                                   &hCallerProcess,
-                                   sizeof(hCallerProcess),
+                                   &pCall->hCallerProcess,
+                                   sizeof(pCall->hCallerProcess),
                                    NULL,
                                    NULL) ||
-        (cInherit &&
-         !UpdateProcThreadAttribute(pAttributes,
+        (pCall->cInherit &&
+         !UpdateProcThreadAttribute(pCall->pAttributes,
                                     0,
                                     PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                                    ahInherit,
-                                    cInherit * sizeof(HANDLE),
+                                    pCall->ahInherit,
+                                    pCall->cInherit * sizeof(HANDLE),
                                     NULL,
                                     NULL)))
     {
-        dwError = GetLastError();
-        HeapFree(GetProcessHeap(), 0, pAttributes);
-        pAttributes = NULL;
-        goto done;
+        return GetLastError();
     }
+
+    return ERROR_SUCCESS;
+}
+
+
+static
+DWORD
+CreateChildForCaller(
+    _In_ SECL_REQUEST *pRequest,
+    _In_ SECL_STARTUPINFO *pStartupInfo,
+    _Inout_ PSECL_TOKEN_CALL pCall,
+    _Out_ SECL_RESPONSE *pResponse)
+{
+    STARTUPINFOEXW StartupInfo;
+    HANDLE hProcessForCaller = NULL;
+    HANDLE hThreadForCaller = NULL;
+    DWORD dwCreationFlags;
+    DWORD dwError;
+
+    dwCreationFlags = pRequest->dwCreationFlags | EXTENDED_STARTUPINFO_PRESENT;
+    if (pCall->pEnvironment)
+        dwCreationFlags |= CREATE_UNICODE_ENVIRONMENT;
 
     ZeroMemory(&StartupInfo, sizeof(StartupInfo));
     StartupInfo.StartupInfo.cb = sizeof(StartupInfo);
@@ -572,78 +601,114 @@ SeclCreateProcessWithTokenW(
     StartupInfo.StartupInfo.hStdInput = LongToHandle(pStartupInfo->hStdInput);
     StartupInfo.StartupInfo.hStdOutput = LongToHandle(pStartupInfo->hStdOutput);
     StartupInfo.StartupInfo.hStdError = LongToHandle(pStartupInfo->hStdError);
-    StartupInfo.lpAttributeList = pAttributes;
+    StartupInfo.lpAttributeList = pCall->pAttributes;
 
-    if (!CreateProcessAsUserW(hPrimaryToken,
+    if (!CreateProcessAsUserW(pCall->hPrimaryToken,
                               pRequest->ApplicationName,
                               pRequest->CommandLine,
                               NULL,
                               NULL,
-                              cInherit != 0,
+                              pCall->cInherit != 0,
                               dwCreationFlags,
-                              pEnvironment ? pEnvironment : pRequest->Environment,
+                              pCall->pEnvironment ? pCall->pEnvironment : pRequest->Environment,
                               pRequest->CurrentDirectory,
                               &StartupInfo.StartupInfo,
-                              &ProcessInfo))
+                              &pCall->ProcessInfo))
     {
-        dwError = GetLastError();
-        goto done;
+        return GetLastError();
     }
 
     if (!DuplicateHandle(GetCurrentProcess(),
-                         ProcessInfo.hProcess,
-                         hCallerProcess,
+                         pCall->ProcessInfo.hProcess,
+                         pCall->hCallerProcess,
                          &hProcessForCaller,
                          0,
                          FALSE,
                          DUPLICATE_SAME_ACCESS) ||
         !DuplicateHandle(GetCurrentProcess(),
-                         ProcessInfo.hThread,
-                         hCallerProcess,
+                         pCall->ProcessInfo.hThread,
+                         pCall->hCallerProcess,
                          &hThreadForCaller,
                          0,
                          FALSE,
                          DUPLICATE_SAME_ACCESS))
     {
         dwError = GetLastError();
-        TerminateProcess(ProcessInfo.hProcess, dwError);
+        TerminateProcess(pCall->ProcessInfo.hProcess, dwError);
         if (hProcessForCaller)
-            DuplicateHandle(hCallerProcess, hProcessForCaller, NULL, NULL, 0, FALSE, DUPLICATE_CLOSE_SOURCE);
-        goto done;
+            DuplicateHandle(pCall->hCallerProcess, hProcessForCaller, NULL, NULL, 0, FALSE, DUPLICATE_CLOSE_SOURCE);
+        return dwError;
     }
 
     pResponse->hProcess = HandleToUlong(hProcessForCaller);
     pResponse->hThread = HandleToUlong(hThreadForCaller);
+    pResponse->dwProcessId = pCall->ProcessInfo.dwProcessId;
+    pResponse->dwThreadId = pCall->ProcessInfo.dwThreadId;
 
-    pResponse->dwProcessId = ProcessInfo.dwProcessId;
-    pResponse->dwThreadId = ProcessInfo.dwThreadId;
-
-    if (ProfileInfo.hProfile != NULL &&
-        ReleaseProfileOnExit(ProcessInfo.hProcess, hPrimaryToken, ProfileInfo.hProfile))
+    if (pCall->ProfileInfo.hProfile != NULL &&
+        ReleaseProfileOnExit(pCall->ProcessInfo.hProcess, pCall->hPrimaryToken, pCall->ProfileInfo.hProfile))
     {
-        ProfileInfo.hProfile = NULL;
+        pCall->ProfileInfo.hProfile = NULL;
     }
 
-done:
-    if (ProcessInfo.hThread)
-        CloseHandle(ProcessInfo.hThread);
-    if (ProcessInfo.hProcess)
-        CloseHandle(ProcessInfo.hProcess);
-    if (pAttributes)
+    return ERROR_SUCCESS;
+}
+
+
+static
+VOID
+FreeTokenCall(
+    _Inout_ PSECL_TOKEN_CALL pCall)
+{
+    if (pCall->ProcessInfo.hThread)
+        CloseHandle(pCall->ProcessInfo.hThread);
+    if (pCall->ProcessInfo.hProcess)
+        CloseHandle(pCall->ProcessInfo.hProcess);
+    if (pCall->pAttributes)
     {
-        DeleteProcThreadAttributeList(pAttributes);
-        HeapFree(GetProcessHeap(), 0, pAttributes);
+        DeleteProcThreadAttributeList(pCall->pAttributes);
+        HeapFree(GetProcessHeap(), 0, pCall->pAttributes);
     }
-    if (pEnvironment)
-        DestroyEnvironmentBlock(pEnvironment);
-    if (ProfileInfo.hProfile != NULL)
-        UnloadUserProfile(hPrimaryToken, ProfileInfo.hProfile);
-    if (hPrimaryToken)
-        CloseHandle(hPrimaryToken);
-    if (hCallerToken)
-        CloseHandle(hCallerToken);
-    if (hCallerProcess)
-        CloseHandle(hCallerProcess);
+    if (pCall->pEnvironment)
+        DestroyEnvironmentBlock(pCall->pEnvironment);
+    if (pCall->ProfileInfo.hProfile != NULL)
+        UnloadUserProfile(pCall->hPrimaryToken, pCall->ProfileInfo.hProfile);
+    if (pCall->hPrimaryToken)
+        CloseHandle(pCall->hPrimaryToken);
+    if (pCall->hCallerToken)
+        CloseHandle(pCall->hCallerToken);
+    if (pCall->hCallerProcess)
+        CloseHandle(pCall->hCallerProcess);
+}
+
+
+VOID
+__stdcall
+SeclCreateProcessWithTokenW(
+    _In_ handle_t hBinding,
+    _In_ DWORD hToken,
+    _In_ SECL_REQUEST *pRequest,
+    _In_ SECL_STARTUPINFO *pStartupInfo,
+    _Out_ SECL_RESPONSE *pResponse)
+{
+    SECL_TOKEN_CALL Call;
+    DWORD dwError;
+
+    TRACE("SeclCreateProcessWithTokenW(%p %lx %p %p %p)\n", hBinding, hToken, pRequest, pStartupInfo, pResponse);
+
+    ZeroMemory(&Call, sizeof(Call));
+
+    dwError = CheckTokenRequest(hBinding, pRequest, &Call);
+    if (dwError == ERROR_SUCCESS)
+        dwError = GetCallerPrimaryToken(hToken, &Call);
+    if (dwError == ERROR_SUCCESS)
+        dwError = PrepareChildEnvironment(pRequest, &Call);
+    if (dwError == ERROR_SUCCESS)
+        dwError = CreateChildAttributes(pStartupInfo, &Call);
+    if (dwError == ERROR_SUCCESS)
+        dwError = CreateChildForCaller(pRequest, pStartupInfo, &Call, pResponse);
+
+    FreeTokenCall(&Call);
 
     pResponse->dwError = dwError;
 }
