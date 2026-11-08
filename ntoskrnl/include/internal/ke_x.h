@@ -2041,6 +2041,9 @@ KiSelectReadyThread(IN KPRIORITY Priority,
     Thread = CONTAINING_RECORD(ListEntry, KTHREAD, WaitListEntry);
 
     /* Make sure this thread is here for a reason */
+    ASSERT(Thread != Prcb->IdleThread);
+    ASSERT(Thread->State == Ready && !Thread->ProcessReadyQueue);
+    ASSERT(ListEntry->Flink->Blink == ListEntry && ListEntry->Blink->Flink == ListEntry);
     ASSERT(HighPriority == Thread->Priority);
     ASSERT(KiThreadAffinityMask(Thread) & AFFINITY_MASK(Prcb->Number));
     ASSERT(Thread->NextProcessor == Prcb->Number);

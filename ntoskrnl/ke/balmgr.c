@@ -97,10 +97,14 @@ KiScanReadyQueuesOnPrcb(IN PKPRCB Prcb,
                 if ((ULONG)(TickNow - Thread->WaitTime) >= WaitTicks)
                 {
                     ASSERT(Prcb->ReadySummary & PRIORITY_MASK(Index));
+                    KiAssertReadyQueue(Prcb, Index);
+                    ASSERT(Thread->WaitListEntry.Flink->Blink == &Thread->WaitListEntry);
+                    ASSERT(Thread->WaitListEntry.Blink->Flink == &Thread->WaitListEntry);
                     if (RemoveEntryList(&Thread->WaitListEntry))
                     {
                         Prcb->ReadySummary ^= PRIORITY_MASK(Index);
                     }
+                    KiAssertReadyQueue(Prcb, Index);
 
                     ASSERT((Thread->PriorityDecrement >= 0) &&
                            (Thread->PriorityDecrement <= Thread->Priority));

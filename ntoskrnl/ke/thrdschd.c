@@ -1342,6 +1342,9 @@ KiSetPriorityThread(IN PKTHREAD Thread,
                         /* Sanity check */
                         ASSERT((Prcb->ReadySummary &
                                 PRIORITY_MASK(Thread->Priority)));
+                        KiAssertReadyQueue(Prcb, Thread->Priority);
+                        ASSERT(Thread->WaitListEntry.Flink->Blink == &Thread->WaitListEntry);
+                        ASSERT(Thread->WaitListEntry.Blink->Flink == &Thread->WaitListEntry);
 
                         /* Remove it from the current queue */
                         if (RemoveEntryList(&Thread->WaitListEntry))
@@ -1350,6 +1353,7 @@ KiSetPriorityThread(IN PKTHREAD Thread,
                             Prcb->ReadySummary ^= PRIORITY_MASK(Thread->
                                                                 Priority);
                         }
+                        KiAssertReadyQueue(Prcb, Thread->Priority);
 
                         /* Update priority */
                         Thread->Priority = (SCHAR)Priority;
