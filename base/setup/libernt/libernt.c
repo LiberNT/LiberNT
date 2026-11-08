@@ -685,6 +685,11 @@ PrepareAndDoCopyThread(
             Status = RemoveHostSetupBoot(&pSetupData->USetupData.SystemRootPath);
             DPRINT1("Boot files of Setup started on Windows removed: 0x%08lx\n", Status);
         }
+        if (pSetupData->bUpgrade)
+        {
+            Error = HostSetBootManagerFirst(pSetupData->bWindowsFirst);
+            DPRINT1("%S Boot Manager starts first: %lu\n", pSetupData->bWindowsFirst ? L"Windows" : L"LiberNT", Error);
+        }
     }
 
     Success = TRUE;

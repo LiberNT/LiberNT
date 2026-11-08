@@ -310,8 +310,15 @@ SelectUnattendedUpgrade(
 
 VOID
 DescribeUpgrade(
+    _Inout_ PSETUPDATA pSetupData,
     _Out_writes_(cchText) PWSTR Text,
     _In_ SIZE_T cchText);
+
+VOID
+UpdateBootChoice(
+    _In_ HWND hwndDlg,
+    _In_ PCWSTR WindowsName,
+    _In_ BOOL Show);
 
 INT_PTR
 CALLBACK

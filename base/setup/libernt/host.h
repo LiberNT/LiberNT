@@ -21,6 +21,7 @@
 #define HOST_LIBERNT_MANAGER    L"\\EFI\\LiberNT\\Boot\\bootmgfw.efi"
 #define HOST_LIBERNT_STORE      L"\\EFI\\LiberNT\\Boot\\BCD"
 #define HOST_LIBERNT_DESCRIPTION L"LiberNT Boot Manager"
+#define HOST_WINDOWS_MANAGER    L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
 #define HOST_IMAGE_PATH         L"\\" HOST_STAGE_DIRECTORY L"\\" HOST_STAGE_IMAGE
 #define HOST_SHA256_CHARS       65
 #define HOST_VERSION_CHARS      128
@@ -157,6 +158,14 @@ HostSetBootNext(
 DWORD
 HostRemoveSetupBoot(
     _In_ PHOST_PARTITION SystemPartition);
+
+BOOL
+HostGetBootManagerOrder(
+    _Out_ PBOOL WindowsFirst);
+
+DWORD
+HostSetBootManagerFirst(
+    _In_ BOOL WindowsFirst);
 
 PCWSTR
 HostGetRemovableBootName(

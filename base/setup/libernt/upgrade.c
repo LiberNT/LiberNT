@@ -8,6 +8,7 @@
 #include "libernt.h"
 #include <winver.h>
 
+#include "host.h"
 #include "resource.h"
 
 #define NDEBUG
@@ -30,6 +31,7 @@ static ULONG TargetCount;
 static BOOLEAN Searched;
 static PUPGRADE_TARGET Selected;
 static WCHAR SourceVersion[128];
+static BOOL BootChoice;
 
 BOOL
 ReadInventoryVersion(
@@ -221,8 +223,36 @@ SelectUpgradeTarget(
     InstallPartition = Selected->Partition;
     pSetupData->bUpgrade = TRUE;
     pSetupData->bAlongside = FALSE;
-    pSetupData->bWindowsFirst = FALSE;
+    BootChoice = HostGetBootManagerOrder(&pSetupData->bWindowsFirst);
+    pSetupData->bWindowsFirst = BootChoice && pSetupData->bWindowsFirst;
     return TRUE;
+}
+
+static PCWSTR
+GetWindowsName(
+    _Inout_ PSETUPDATA pSetupData)
+{
+    if (!pSetupData->WindowsName[0])
+        LoadStringW(pSetupData->hInstance, IDS_TYPE_WINDOWS, pSetupData->WindowsName, ARRAYSIZE(pSetupData->WindowsName));
+    return pSetupData->WindowsName;
+}
+
+VOID
+UpdateBootChoice(
+    _In_ HWND hwndDlg,
+    _In_ PCWSTR WindowsName,
+    _In_ BOOL Show)
+{
+    BOOL WindowsFirst = IsDlgButtonChecked(hwndDlg, IDC_UPGRADE_DEFAULT_WINDOWS) == BST_CHECKED;
+    WCHAR Text[512];
+
+    SetDlgItemTextW(hwndDlg, IDC_UPGRADE_DEFAULT_WINDOWS, WindowsName);
+    LoadPrintfW(Text, ARRAYSIZE(Text), IDS_TYPE_WARNING, WindowsName);
+    SetDlgItemTextW(hwndDlg, IDC_UPGRADE_WARNING, Text);
+    ShowDlgItem(hwndDlg, IDC_UPGRADE_DEFAULT_LABEL, Show ? SW_SHOW : SW_HIDE);
+    ShowDlgItem(hwndDlg, IDC_UPGRADE_DEFAULT_LIBERNT, Show ? SW_SHOW : SW_HIDE);
+    ShowDlgItem(hwndDlg, IDC_UPGRADE_DEFAULT_WINDOWS, Show ? SW_SHOW : SW_HIDE);
+    ShowDlgItem(hwndDlg, IDC_UPGRADE_WARNING, (Show && WindowsFirst) ? SW_SHOW : SW_HIDE);
 }
 
 BOOL
@@ -241,10 +271,12 @@ SelectUnattendedUpgrade(
 
 VOID
 DescribeUpgrade(
+    _Inout_ PSETUPDATA pSetupData,
     _Out_writes_(cchText) PWSTR Text,
     _In_ SIZE_T cchText)
 {
     WCHAR Line[512];
+    WCHAR LiberNT[32];
 
     Text[0] = UNICODE_NULL;
     if (!Selected)
@@ -255,6 +287,14 @@ DescribeUpgrade(
     StringCchCatW(Text, cchText, L"\r\n\r\n");
     LoadPrintfW(Line, ARRAYSIZE(Line), IDS_READY_UPGRADE_KEEP);
     StringCchCatW(Text, cchText, Line);
+    if (BootChoice)
+    {
+        LoadStringW(pSetupData->hInstance, IDS_TYPE_LIBERNT, LiberNT, ARRAYSIZE(LiberNT));
+        LoadPrintfW(Line, ARRAYSIZE(Line), IDS_READY_DEFAULTOS,
+                    pSetupData->bWindowsFirst ? GetWindowsName(pSetupData) : LiberNT);
+        StringCchCatW(Text, cchText, L"\r\n\r\n");
+        StringCchCatW(Text, cchText, Line);
+    }
 }
 
 static VOID
@@ -265,9 +305,13 @@ InitUpgradePage(
     HWND hList = GetDlgItem(hwndDlg, IDC_UPGRADE_LIST);
     WCHAR Text[512];
     ULONG Index;
+    BOOL WindowsFirst;
 
     if (ComboBox_GetCount(hList) == 0)
     {
+        BootChoice = HostGetBootManagerOrder(&WindowsFirst);
+        CheckRadioButton(hwndDlg, IDC_UPGRADE_DEFAULT_LIBERNT, IDC_UPGRADE_DEFAULT_WINDOWS,
+                         (BootChoice && WindowsFirst) ? IDC_UPGRADE_DEFAULT_WINDOWS : IDC_UPGRADE_DEFAULT_LIBERNT);
         for (Index = 0; Index < TargetCount; Index++)
         {
             LoadPrintfW(Text, ARRAYSIZE(Text), IDS_UPGRADE_ENTRY, Targets[Index].Region, Targets[Index].Version);
@@ -296,6 +340,7 @@ UpdateUpgradeNote(
     else
         LoadPrintfW(Text, ARRAYSIZE(Text), IDS_UPGRADE_NOTE, SourceVersion);
     SetDlgItemTextW(hwndDlg, IDC_UPGRADE_NOTE, Text);
+    UpdateBootChoice(hwndDlg, GetWindowsName(pSetupData), Keep && BootChoice);
     SetupFrameSetButtons(hwndDlg, FALSE,
                          !Keep || (Index >= 0 && (ULONG)Index < TargetCount && !Targets[Index].Hibernated));
 }
@@ -310,7 +355,11 @@ ApplyUpgradeChoice(
     if (IsDlgButtonChecked(hwndDlg, IDC_UPGRADE_KEEP) == BST_CHECKED)
     {
         Index = ComboBox_GetCurSel(GetDlgItem(hwndDlg, IDC_UPGRADE_LIST));
-        return Index >= 0 && SelectUpgradeTarget(pSetupData, (ULONG)Index);
+        if (Index < 0 || !SelectUpgradeTarget(pSetupData, (ULONG)Index))
+            return FALSE;
+        if (BootChoice)
+            pSetupData->bWindowsFirst = IsDlgButtonChecked(hwndDlg, IDC_UPGRADE_DEFAULT_WINDOWS) == BST_CHECKED;
+        return TRUE;
     }
 
     if (pSetupData->bUpgrade)
@@ -353,6 +402,12 @@ UpgradePageProc(
             if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_UPGRADE_LIST)
             {
                 UpdateUpgradeNote(hwndDlg, pSetupData);
+                return TRUE;
+            }
+            if (HIWORD(wParam) == BN_CLICKED &&
+                (LOWORD(wParam) == IDC_UPGRADE_DEFAULT_LIBERNT || LOWORD(wParam) == IDC_UPGRADE_DEFAULT_WINDOWS))
+            {
+                UpdateBootChoice(hwndDlg, GetWindowsName(pSetupData), BootChoice);
                 return TRUE;
             }
             break;

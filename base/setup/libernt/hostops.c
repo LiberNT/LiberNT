@@ -38,8 +38,6 @@
 #define HOST_UPGRADE_LOADER     L"\\" HOST_STAGE_DIRECTORY L"\\" UPDATE_STAGE_LOADER
 #define HOST_UPDATE_STATE       L"\\EFI\\LiberNT\\Boot\\update.state"
 
-#define EFI_GLOBAL_VARIABLE_GUID    L"{8BE4DF61-93CA-11D2-AA0D-00E098032B8C}"
-#define EFI_VARIABLE_BOOT_ATTRIBUTES 0x00000007
 #define EFI_LOAD_OPTION_ACTIVE      0x00000001
 #define EFI_LOAD_OPTION_HEADER_SIZE 6
 #define EFI_DEVICE_PATH_HEADER_SIZE 4
@@ -1552,7 +1550,7 @@ static BOOL
 IsLoadOptionFor(
     _In_reads_bytes_(Length) const UCHAR* Option,
     _In_ DWORD Length,
-    _In_ PHOST_PARTITION SystemPartition,
+    _In_opt_ PHOST_PARTITION SystemPartition,
     _In_ PCWSTR FilePath)
 {
     DWORD Offset = EFI_LOAD_OPTION_HEADER_SIZE, End, NodeLength, Chars;
@@ -1573,8 +1571,8 @@ IsLoadOptionFor(
         NodeLength = *(const USHORT*)(Option + Offset + 2);
         if (NodeLength < EFI_DEVICE_PATH_HEADER_SIZE || Offset + NodeLength > End)
             return FALSE;
-        if (Option[Offset] == EFI_MEDIA_DEVICE_PATH && Option[Offset + 1] == EFI_MEDIA_HARDDRIVE_DP &&
-            NodeLength >= EFI_HARDDRIVE_NODE_SIZE)
+        if (SystemPartition && Option[Offset] == EFI_MEDIA_DEVICE_PATH &&
+            Option[Offset + 1] == EFI_MEDIA_HARDDRIVE_DP && NodeLength >= EFI_HARDDRIVE_NODE_SIZE)
         {
             SameDisk = memcmp(Option + Offset + 24, &SystemPartition->PartitionId, sizeof(GUID)) == 0;
         }
@@ -1588,7 +1586,7 @@ IsLoadOptionFor(
         }
         Offset += NodeLength;
     }
-    return SameDisk && SameFile;
+    return (!SystemPartition || SameDisk) && SameFile;
 }
 
 static DWORD
@@ -1686,6 +1684,112 @@ RemoveFromBootOrder(
     }
     if (Out != Length / sizeof(USHORT))
         SetFirmwareVariable(L"BootOrder", Order, Out * sizeof(USHORT));
+}
+
+typedef enum _HOST_BOOT_MANAGER
+{
+    HostBootOther,
+    HostBootWindows,
+    HostBootLiberNT
+} HOST_BOOT_MANAGER;
+
+static HOST_BOOT_MANAGER
+GetBootManager(
+    _In_ USHORT Number)
+{
+    UCHAR Option[EFI_LOAD_OPTION_MAX];
+    WCHAR Name[16];
+    DWORD Length;
+
+    StringCchPrintfW(Name, ARRAYSIZE(Name), L"Boot%04X", Number);
+    if (!GetFirmwareVariable(Name, Option, sizeof(Option), &Length))
+        return HostBootOther;
+    if (IsLoadOptionFor(Option, Length, NULL, HOST_WINDOWS_MANAGER))
+        return HostBootWindows;
+    if (IsLoadOptionFor(Option, Length, NULL, HOST_LIBERNT_MANAGER))
+        return HostBootLiberNT;
+    return HostBootOther;
+}
+
+BOOL
+HostGetBootManagerOrder(
+    _Out_ PBOOL WindowsFirst)
+{
+    USHORT Order[EFI_BOOT_ORDER_MAX / sizeof(USHORT)];
+    HOST_BOOT_MANAGER Manager, First = HostBootOther;
+    BOOL Windows = FALSE, LiberNT = FALSE;
+    DWORD Length;
+    ULONG Index;
+    BOOLEAN Enabled;
+
+    *WindowsFirst = FALSE;
+    RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, TRUE, FALSE, &Enabled);
+    if (!GetFirmwareVariable(L"BootOrder", Order, sizeof(Order), &Length))
+        return FALSE;
+    for (Index = 0; Index < Length / sizeof(USHORT); Index++)
+    {
+        Manager = GetBootManager(Order[Index]);
+        if (First == HostBootOther)
+            First = Manager;
+        Windows = Windows || Manager == HostBootWindows;
+        LiberNT = LiberNT || Manager == HostBootLiberNT;
+    }
+    *WindowsFirst = First == HostBootWindows;
+    HostLog(L"Boot order: Windows Boot Manager %s, LiberNT Boot Manager %s, %s first",
+            Windows ? L"present" : L"absent", LiberNT ? L"present" : L"absent",
+            First == HostBootWindows ? L"Windows" : First == HostBootLiberNT ? L"LiberNT" : L"none");
+    return Windows && LiberNT;
+}
+
+DWORD
+HostSetBootManagerFirst(
+    _In_ BOOL WindowsFirst)
+{
+    USHORT Order[EFI_BOOT_ORDER_MAX / sizeof(USHORT)], Sorted[EFI_BOOT_ORDER_MAX / sizeof(USHORT)];
+    USHORT Check[EFI_BOOT_ORDER_MAX / sizeof(USHORT)];
+    HOST_BOOT_MANAGER Manager[EFI_BOOT_ORDER_MAX / sizeof(USHORT)];
+    HOST_BOOT_MANAGER Wanted = WindowsFirst ? HostBootWindows : HostBootLiberNT;
+    DWORD Length, CheckLength;
+    ULONG Count, First, Out = 0, Index;
+    BOOLEAN Enabled;
+
+    RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, TRUE, FALSE, &Enabled);
+    if (!GetFirmwareVariable(L"BootOrder", Order, sizeof(Order), &Length))
+        return GetLastError();
+    Count = Length / sizeof(USHORT);
+    for (First = Count, Index = 0; Index < Count; Index++)
+    {
+        Manager[Index] = GetBootManager(Order[Index]);
+        if (Manager[Index] != HostBootOther && First == Count)
+            First = Index;
+    }
+
+    for (Index = 0; Index < First; Index++)
+        Sorted[Out++] = Order[Index];
+    for (Index = First; Index < Count; Index++)
+    {
+        if (Manager[Index] == Wanted)
+            Sorted[Out++] = Order[Index];
+    }
+    for (Index = First; Index < Count; Index++)
+    {
+        if (Manager[Index] != Wanted)
+            Sorted[Out++] = Order[Index];
+    }
+
+    if (memcmp(Sorted, Order, Count * sizeof(USHORT)) == 0)
+    {
+        HostLog(L"Boot order kept for %s Boot Manager first", WindowsFirst ? L"Windows" : L"LiberNT");
+        return ERROR_SUCCESS;
+    }
+    if (!SetFirmwareVariable(L"BootOrder", Sorted, Count * sizeof(USHORT)) ||
+        !GetFirmwareVariable(L"BootOrder", Check, sizeof(Check), &CheckLength))
+    {
+        return GetLastError();
+    }
+    HostLog(L"Boot order changed so that %s Boot Manager starts first", WindowsFirst ? L"Windows" : L"LiberNT");
+    return (CheckLength == Count * sizeof(USHORT) && memcmp(Check, Sorted, CheckLength) == 0) ?
+           ERROR_SUCCESS : ERROR_INVALID_DATA;
 }
 
 DWORD

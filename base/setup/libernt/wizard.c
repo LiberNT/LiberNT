@@ -93,7 +93,7 @@ FillSummary(
 
     if (pSetupData->bUpgrade)
     {
-        DescribeUpgrade(Text, ARRAYSIZE(Text));
+        DescribeUpgrade(pSetupData, Text, ARRAYSIZE(Text));
         SetDlgItemTextW(hwndDlg, IDC_READY_SUMMARY, Text);
         return;
     }

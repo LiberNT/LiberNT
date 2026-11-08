@@ -73,6 +73,8 @@ typedef struct _HOST_SETUP
     BOOL Upgrade;
     ULONGLONG WindowsBytes;
     BOOL WindowsFirst;
+    BOOL BootChoice;
+    BOOL BootManagerGiven;
     HWND hwndProcess;
     UINT Step;
     DWORD Error;
@@ -386,6 +388,7 @@ CheckComputer(
     _Inout_ PSETUPDATA pSetupData)
 {
     FIRMWARE_TYPE Firmware = FirmwareTypeUnknown;
+    BOOL WindowsFirst;
     DWORD Error;
 
     if (!IsElevated())
@@ -425,7 +428,9 @@ CheckComputer(
 
     Host.LiberNTCount = HostFindLiberNT(Host.Machine, Host.LiberNT, Host.LiberNTVersions, HOST_MAX_LIBERNT);
     Host.Upgrade = Host.LiberNTCount != 0;
-    Host.WindowsFirst = FALSE;
+    Host.BootChoice = HostGetBootManagerOrder(&WindowsFirst);
+    if (!Host.BootManagerGiven)
+        Host.WindowsFirst = Host.BootChoice && WindowsFirst;
     return CheckPreparation(pSetupData);
 }
 
@@ -443,6 +448,7 @@ UpdateStartNote(
     else
         LoadPrintfW(Text, ARRAYSIZE(Text), IDS_HOST_INSTALLNOTE, pSetupData->WindowsName, Host.SourceVersion);
     SetDlgItemTextW(hwndDlg, IDC_UPGRADE_NOTE, Text);
+    UpdateBootChoice(hwndDlg, pSetupData->WindowsName, Upgrade && Host.BootChoice);
 }
 
 static BOOL
@@ -508,6 +514,8 @@ HostStartPageProc(
             LoadPrintfW(Text, ARRAYSIZE(Text), IDS_HOST_INSTALLNEW, pSetupData->WindowsName);
             SetDlgItemTextW(hwndDlg, IDC_UPGRADE_NEW, Text);
             CheckRadioButton(hwndDlg, IDC_UPGRADE_KEEP, IDC_UPGRADE_NEW, IDC_UPGRADE_KEEP);
+            CheckRadioButton(hwndDlg, IDC_UPGRADE_DEFAULT_LIBERNT, IDC_UPGRADE_DEFAULT_WINDOWS,
+                             Host.WindowsFirst ? IDC_UPGRADE_DEFAULT_WINDOWS : IDC_UPGRADE_DEFAULT_LIBERNT);
             return FALSE;
 
         case WM_COMMAND:
@@ -516,6 +524,12 @@ HostStartPageProc(
             {
                 CheckRadioButton(hwndDlg, IDC_UPGRADE_KEEP, IDC_UPGRADE_NEW, LOWORD(wParam));
                 UpdateStartNote(hwndDlg, pSetupData);
+                return TRUE;
+            }
+            if (HIWORD(wParam) == BN_CLICKED &&
+                (LOWORD(wParam) == IDC_UPGRADE_DEFAULT_LIBERNT || LOWORD(wParam) == IDC_UPGRADE_DEFAULT_WINDOWS))
+            {
+                UpdateBootChoice(hwndDlg, pSetupData->WindowsName, Host.BootChoice);
                 return TRUE;
             }
             break;
@@ -531,6 +545,8 @@ HostStartPageProc(
 
         case SPN_WIZNEXT:
             Host.Upgrade = IsDlgButtonChecked(hwndDlg, IDC_UPGRADE_KEEP) == BST_CHECKED;
+            if (Host.Upgrade && Host.BootChoice)
+                Host.WindowsFirst = IsDlgButtonChecked(hwndDlg, IDC_UPGRADE_DEFAULT_WINDOWS) == BST_CHECKED;
             Selected = SendDlgItemMessageW(hwndDlg, IDC_UPGRADE_LIST, CB_GETCURSEL, 0, 0);
             Host.Selected = (Selected >= 0 && (ULONG)Selected < Host.LiberNTCount) ? (ULONG)Selected : 0;
             SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT,
@@ -880,12 +896,15 @@ FillHostSummary(
 
     Text[0] = UNICODE_NULL;
     FormatDiskSize(Host.ImageBytes, Image, ARRAYSIZE(Image));
+    LoadStringW(pSetupData->hInstance, IDS_TYPE_LIBERNT, LiberNT, ARRAYSIZE(LiberNT));
     if (Host.Upgrade)
     {
         DescribePartition(&Host.LiberNT[Host.Selected], Region, ARRAYSIZE(Region));
         AppendLine(Text, ARRAYSIZE(Text), IDS_READY_UPGRADE, Region, Host.LiberNTVersions[Host.Selected],
                    Host.SourceVersion);
         AppendLine(Text, ARRAYSIZE(Text), IDS_READY_UPGRADE_KEEP);
+        if (Host.BootChoice)
+            AppendLine(Text, ARRAYSIZE(Text), IDS_READY_DEFAULTOS, Host.WindowsFirst ? pSetupData->WindowsName : LiberNT);
         StringCchCatW(Text, ARRAYSIZE(Text), L"\r\n");
         AppendLine(Text, ARRAYSIZE(Text), IDS_HOST_READY_UPGRADE, Image);
     }
@@ -910,7 +929,6 @@ FillHostSummary(
         LiberNTBytes = Host.Windows.Length - Host.WindowsBytes + Host.FreeAfterBytes;
         FormatDiskSize(LiberNTBytes, Size, ARRAYSIZE(Size));
         AppendLine(Text, ARRAYSIZE(Text), IDS_HOST_READY_CREATE, Size);
-        LoadStringW(pSetupData->hInstance, IDS_TYPE_LIBERNT, LiberNT, ARRAYSIZE(LiberNT));
         AppendLine(Text, ARRAYSIZE(Text), IDS_READY_DEFAULTOS, Host.WindowsFirst ? pSetupData->WindowsName : LiberNT);
         StringCchCatW(Text, ARRAYSIZE(Text), L"\r\n");
         AppendLine(Text, ARRAYSIZE(Text), IDS_HOST_READY_RESTART, Image);
@@ -1140,6 +1158,8 @@ PrepareUpgrade(VOID)
         Error = HostWriteUpgradeRequest(Target, L"PreviousDefault", PreviousDefault);
     if (Error == ERROR_SUCCESS)
         Error = HostSetCompletionCommand(Target);
+    if (Error == ERROR_SUCCESS && Host.BootChoice)
+        Error = HostSetBootManagerFirst(Host.WindowsFirst);
     if (Error == ERROR_SUCCESS)
         Error = HostSetBootNext(&Host.Store, HOST_LIBERNT_MANAGER, HOST_LIBERNT_DESCRIPTION);
 
@@ -1371,10 +1391,11 @@ ParseCommandLine(
         {
             Host.AutoSizeMb = _wcstoui64(Value, NULL, 10);
         }
-        else if (_wcsicmp(Option, L"/defaultos") == 0 &&
+        else if (_wcsicmp(Option, L"/bootmanager") == 0 &&
                  (_wcsicmp(Value, L"windows") == 0 || _wcsicmp(Value, L"libernt") == 0))
         {
             Host.WindowsFirst = _wcsicmp(Value, L"windows") == 0;
+            Host.BootManagerGiven = TRUE;
         }
         else if (_wcsicmp(Option, L"/unattend") == 0 && Value[0])
         {

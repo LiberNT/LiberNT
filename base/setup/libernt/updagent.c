@@ -1004,7 +1004,17 @@ CheckThread(
 static VOID
 RestartToInstall(VOID)
 {
+    USHORT Current;
     BOOLEAN Enabled;
+
+    RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, TRUE, FALSE, &Enabled);
+    if (GetFirmwareEnvironmentVariableExW(L"BootCurrent", EFI_GLOBAL_VARIABLE_GUID, &Current, sizeof(Current),
+                                          NULL) == sizeof(Current) &&
+        !SetFirmwareEnvironmentVariableExW(L"BootNext", EFI_GLOBAL_VARIABLE_GUID, &Current, sizeof(Current),
+                                           EFI_VARIABLE_BOOT_ATTRIBUTES))
+    {
+        DPRINT1("BootNext Boot%04X not set, error %lu\n", Current, GetLastError());
+    }
 
     RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &Enabled);
     if (!ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OPERATINGSYSTEM | SHTDN_REASON_MINOR_UPGRADE |

@@ -1692,9 +1692,9 @@ InstallFirmwareBootEntry(
     PUCHAR FilePath, Node;
     WCHAR Name[16];
     ULONG DescriptionSize, FileSize, OptionSize, Length, OrderCount, Number = 0, Position = 0, i, j;
-    USHORT FilePathLength;
+    USHORT FilePathLength, Next;
     BOOLEAN Found = FALSE, PrivilegeSet = FALSE;
-    NTSTATUS Status;
+    NTSTATUS Status, NextStatus;
 
     Status = GetPartitionDeviceNumber(SystemRootPath, &DeviceNumber);
     if (!NT_SUCCESS(Status))
@@ -1793,6 +1793,13 @@ InstallFirmwareBootEntry(
         RtlMoveMemory(&Order[Position + 1], &Order[Position], (j - Position) * sizeof(USHORT));
         Order[Position] = (USHORT)Number;
         Status = SetFirmwareVariable(L"BootOrder", Order, (j + 1) * sizeof(USHORT));
+    }
+
+    if (NT_SUCCESS(Status) && AfterWindows)
+    {
+        Next = (USHORT)Number;
+        NextStatus = SetFirmwareVariable(L"BootNext", &Next, sizeof(Next));
+        DPRINT1("Boot%04X starts once after Setup: 0x%08lx\n", Next, NextStatus);
     }
 
     RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, PrivilegeSet, FALSE, &PrivilegeSet);
