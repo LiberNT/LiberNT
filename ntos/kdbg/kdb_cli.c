@@ -9778,6 +9778,59 @@ KdbpPrintVerdictFrame(
     KdbPrintf("\n");
 }
 
+#define KDB_STACK_SYMBOL_SCAN 0x800
+
+static
+VOID
+KdbpAnalyzeStackSymbols(VOID)
+{
+    CONTEXT Context = *KdbCurrentTrapFrame;
+    ULONG_PTR Stack = KeGetContextStackRegister(&Context);
+    ULONG_PTR End = Stack + KDB_STACK_SYMBOL_SCAN;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    ULONG_PTR Address, Value, Displacement, FrameStack;
+    BOOLEAN FirstFrame = TRUE;
+    BOOLEAN Printed = FALSE;
+    CHAR ModuleName[64];
+    CHAR SymbolName[256];
+    ULONG Frame;
+
+    for (Frame = 0; Frame < KDB_MAX_BACKTRACE_FRAMES; Frame++)
+    {
+        if (!GetNextFrame(&Context, FirstFrame))
+            break;
+
+        FirstFrame = FALSE;
+        if (KdbpSymFindModule((PVOID)KeGetContextPc(&Context), -1, &LdrEntry) && KdbpIsCoreModule(LdrEntry))
+        {
+            FrameStack = KeGetContextStackRegister(&Context);
+            if (FrameStack > Stack && FrameStack < End)
+                End = FrameStack;
+            break;
+        }
+    }
+
+    for (Address = Stack; Address < End; Address += sizeof(ULONG_PTR))
+    {
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Value, (PVOID)Address, sizeof(Value))))
+            break;
+
+        if (!KdbSymDescribeAddress((PVOID)Value, ModuleName, sizeof(ModuleName), SymbolName, sizeof(SymbolName),
+                                   &Displacement, NULL, 0, NULL) ||
+            SymbolName[0] == ANSI_NULL)
+        {
+            continue;
+        }
+
+        if (!Printed)
+        {
+            KdbPrintf("SYMBOLS ON THE FAULTING STACK:\n");
+            Printed = TRUE;
+        }
+        KdbPrintf("  [%p] %s!%s+0x%Ix\n", (PVOID)Address, ModuleName, SymbolName, Displacement);
+    }
+}
+
 static
 VOID
 KdbpAnalyzeFaultContext(VOID)
@@ -9812,6 +9865,7 @@ KdbpAnalyzeFaultContext(VOID)
 
         FirstFrame = FALSE;
         KdbpPrintVerdictFrame("CALLED FROM:", &Context);
+        KdbpAnalyzeStackSymbols();
     }
 
     if (!KdbpIsCoreModule(LdrEntry))
