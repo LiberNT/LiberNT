@@ -72,6 +72,8 @@ BEGIN
     IDS_FINISH "&Finish"
     IDS_DEVICES_TITLE "Drivers for this PC"
     IDS_DEVICES_SUBTITLE "Devices without a driver or with a third-party driver that have a newer driver in the Microsoft Update Catalog. Tick the ones to install."
+    IDS_ABOUT_MENU "&About LiberNT Driver Installer..."
+    IDS_ABOUT_TEXT "LiberNT Driver Installer\nCopyright (C) 2026 Ahmed ARIF\nLicensed under the GNU General Public License, version 3 or later.\n\nDrivers are downloaded from the Microsoft Update Catalog, a service of Microsoft Corporation.\nMicrosoft Update Catalog: Copyright (c) Microsoft Corporation. All rights reserved.\nEach driver package belongs to its publisher and is covered by the publisher's license terms."
     IDS_INSTALL_TITLE "Installing drivers"
     IDS_INSTALL_SUBTITLE "Wait until the drivers are installed."
     IDS_DONE_TITLE "Finished"

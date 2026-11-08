@@ -2,6 +2,7 @@
 
 #define IDI_LNTDRV                   100
 #define IDB_WATERMARK                101
+#define IDM_ABOUT                    0x0010
 #define IDD_FRAME                    200
 #define IDD_DEVICES                  201
 #define IDD_PROGRESS                 202
@@ -38,6 +39,8 @@
 #define IDS_FINISH                   2005
 #define IDS_DEVICES_TITLE            2006
 #define IDS_DEVICES_SUBTITLE         2007
+#define IDS_ABOUT_MENU               2008
+#define IDS_ABOUT_TEXT               2009
 #define IDS_INSTALL_TITLE            2012
 #define IDS_INSTALL_SUBTITLE         2013
 #define IDS_DONE_TITLE               2014

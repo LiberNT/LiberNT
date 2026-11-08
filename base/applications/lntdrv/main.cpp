@@ -767,6 +767,13 @@ private:
             case WM_PAINT:
                 PaintColumn();
                 return TRUE;
+            case WM_SYSCOMMAND:
+                if ((wParam & 0xFFF0) == IDM_ABOUT)
+                {
+                    Message(MAKEINTRESOURCEW(IDI_LNTDRV), LoadText(IDS_ABOUT_TEXT));
+                    return TRUE;
+                }
+                break;
             case WM_COMMAND:
                 switch (LOWORD(wParam))
                 {
@@ -1080,12 +1087,18 @@ private:
         NONCLIENTMETRICSW metrics = { sizeof(metrics) };
         MARGINS margins = { 0, 0, 0, 0 };
         HICON icon = LoadIconW(m_Instance, MAKEINTRESOURCEW(IDI_LNTDRV));
+        HMENU systemMenu = GetSystemMenu(m_hwnd, FALSE);
         BITMAP bm;
         RECT rc;
         HDC hdc;
 
         SendMessageW(m_hwnd, WM_SETICON, ICON_BIG, (LPARAM)icon);
         SendMessageW(m_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)icon);
+        if (systemMenu)
+        {
+            AppendMenuW(systemMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuW(systemMenu, MF_STRING, IDM_ABOUT, LoadText(IDS_ABOUT_MENU).c_str());
+        }
         if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0))
         {
             LOGFONTW font = metrics.lfMessageFont;
