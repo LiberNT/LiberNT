@@ -846,7 +846,10 @@ VOID
 MiSegmentReference(
     _Inout_ PMI_SEGMENT Segment)
 {
-    MI_ATOMIC_ADD32(&Segment->ReferenceCount, 1);
+    LONG Previous = MI_ATOMIC_ADD32(&Segment->ReferenceCount, 1);
+
+    MI_ASSERT(Previous > 0 && Previous < 0x7fffffff);
+    UNREFERENCED_PARAMETER(Previous);
 }
 
 BOOLEAN
@@ -860,6 +863,7 @@ MiSegmentTryReference(
     {
         LONG Count = MI_ATOMIC_READ32(&Segment->ReferenceCount);
 
+        MI_ASSERT(Count >= 0 && Count < 0x7fffffff);
         if (Count != 0)
         {
             if (MI_ATOMIC_CAS32(&Segment->ReferenceCount, Count + 1, Count) == Count)
@@ -918,6 +922,7 @@ MiSegmentRelease(
     {
         LONG Count = MI_ATOMIC_READ32(&Segment->ReferenceCount);
 
+        MI_ASSERT(Count > 0);
         if (Count <= 1)
             break;
 
