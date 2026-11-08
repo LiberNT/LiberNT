@@ -314,6 +314,35 @@ VerifyCatalog(GUID *Action, const WCHAR *Member, DRIVER_VER_INFO *Version)
 
 static
 VOID
+TestCatalogFile(VOID)
+{
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO File = { sizeof(File) };
+    WINTRUST_DATA Data = { sizeof(Data) };
+    CRYPT_PROVIDER_DATA *ProvData;
+    DWORD Step;
+
+    File.pcwszFilePath = CatalogPath;
+    Data.dwUIChoice = WTD_UI_NONE;
+    Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    Data.dwUnionChoice = WTD_CHOICE_FILE;
+    Data.pFile = &File;
+    Data.dwStateAction = WTD_STATEACTION_VERIFY;
+    ok_hex(WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data), ERROR_SUCCESS);
+    ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+    ok(ProvData != NULL, "no provider data\n");
+    if (ProvData)
+    {
+        for (Step = 0; Step < ProvData->cdwTrustStepErrors; Step++)
+            ok(!ProvData->padwTrustStepErrors[Step], "step %lu error 0x%lx\n", Step, ProvData->padwTrustStepErrors[Step]);
+        ok_long(ProvData->csSigners, 1);
+    }
+    Data.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+}
+
+static
+VOID
 InitVersion(DRIVER_VER_INFO *Version, DWORD Size, DWORD Platform, DWORD LowMajor, DWORD LowMinor, DWORD HighMajor,
             DWORD HighMinor)
 {
@@ -627,6 +656,7 @@ START_TEST(SignedCatalog)
 
     ok(CreateSignedCatalog(), "Cannot create the signed catalog (%lu)\n", GetLastError());
     TestCatalogs();
+    TestCatalogFile();
     ok(CreateSignedImage(szOID_NIST_sha256, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     TestImage(Digest, DigestSize);
     TestSha1Image();
