@@ -558,4 +558,5 @@ BEGIN
     IDS_HOST_NOTADMIN "Setup needs administrator rights. Start it again and accept the administrator prompt."
     IDS_HOST_LOWSPACE "The LiberNT partition on %s needs %s of free space for the upgrade image."
     IDS_HOST_VOLUMEERRORS "%s has file system errors, so Windows cannot shrink it. Run ""chkdsk %s /f"" as an administrator, restart the computer so that Windows repairs the drive, then start Setup again."
+    IDS_HOST_CHECKINGSIZE "Windows is checking how much space %s can give to LiberNT..."
 END

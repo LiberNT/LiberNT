@@ -449,3 +449,4 @@
 #define IDS_HOST_NOTADMIN            5948
 #define IDS_HOST_LOWSPACE            5949
 #define IDS_HOST_VOLUMEERRORS        5950
+#define IDS_HOST_CHECKINGSIZE        5951

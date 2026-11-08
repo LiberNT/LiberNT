@@ -33,6 +33,7 @@
 #define PM_HOST_STEP            (WM_APP + 0x300)
 #define PM_HOST_PROGRESS        (WM_APP + 0x301)
 #define PM_HOST_DONE            (WM_APP + 0x302)
+#define PM_HOST_SIZES           (WM_APP + 0x303)
 
 typedef enum _HOST_PAGE
 {
@@ -56,7 +57,8 @@ typedef struct _HOST_SETUP
     HOST_PARTITION Prepared;
     HOST_PARTITION Store;
     BOOL HavePrepared;
-    BOOL SizeQueried;
+    volatile LONG SizesReady;
+    HWND hwndType;
     UINT Problem;
     DWORD SizeError;
     ULONGLONG WindowsMb;
@@ -554,9 +556,7 @@ static VOID
 QuerySizes(VOID)
 {
     ULONGLONG MinBytes, MaxBytes;
-    HCURSOR OldCursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
 
-    Host.SizeQueried = TRUE;
     Host.Problem = 0;
     Host.WindowsMb = Host.Windows.Length / HOST_MEGABYTE;
     Host.FreeAfterBytes = HostGetFreeBytesAfter(&Host.Windows);
@@ -583,9 +583,27 @@ QuerySizes(VOID)
     }
     if (!Host.Problem && !HasEspSpace())
         Host.Problem = IDS_HOST_ESPFULL;
-    SetCursor(OldCursor);
     HostLog(L"Windows %I64u MB, %I64u MB free after it, can shrink to %I64u MB: problem %u", Host.WindowsMb,
             Host.FreeAfterBytes / HOST_MEGABYTE, Host.MinWindowsMb, Host.Problem);
+}
+
+static DWORD
+WINAPI
+SizeThread(
+    _In_ LPVOID Parameter)
+{
+    HRESULT hrCom = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    HWND hwndType;
+
+    UNREFERENCED_PARAMETER(Parameter);
+    QuerySizes();
+    if (SUCCEEDED(hrCom))
+        CoUninitialize();
+    InterlockedExchange(&Host.SizesReady, TRUE);
+    hwndType = InterlockedCompareExchangePointer((PVOID*)&Host.hwndType, NULL, NULL);
+    if (hwndType)
+        PostMessageW(hwndType, PM_HOST_SIZES, 0, 0);
+    return 0;
 }
 
 static ULONGLONG
@@ -680,9 +698,6 @@ InitTypePage(
     WCHAR Region[96], Drive[4] = L"", Text[256];
     ULONGLONG Default;
 
-    if (!Host.SizeQueried)
-        QuerySizes();
-
     if (GetSystemWindowsDirectoryW(Text, ARRAYSIZE(Text)))
         StringCchPrintfW(Drive, ARRAYSIZE(Drive), L"%.2s", Text);
     LoadPrintfW(Region, ARRAYSIZE(Region), IDS_DISK_PARTITION_LABEL, Host.Windows.DiskNumber,
@@ -698,6 +713,21 @@ InitTypePage(
     CheckDlgButton(hwndDlg, IDC_TYPE_ALONGSIDE, BST_CHECKED);
     CheckRadioButton(hwndDlg, IDC_TYPE_DEFAULT_LIBERNT, IDC_TYPE_DEFAULT_WINDOWS,
                      Host.WindowsFirst ? IDC_TYPE_DEFAULT_WINDOWS : IDC_TYPE_DEFAULT_LIBERNT);
+
+    if (!InterlockedCompareExchange(&Host.SizesReady, 0, 0))
+    {
+        SetDlgItemTextW(hwndDlg, IDC_TYPE_WINSIZE, L"");
+        SetDlgItemTextW(hwndDlg, IDC_TYPE_LNTSIZE, L"");
+        EnableDlgItem(hwndDlg, IDC_TYPE_SPLIT, FALSE);
+        EnableDlgItem(hwndDlg, IDC_TYPE_DEFAULT_LIBERNT, FALSE);
+        EnableDlgItem(hwndDlg, IDC_TYPE_DEFAULT_WINDOWS, FALSE);
+        ShowDlgItem(hwndDlg, IDC_TYPE_WARNICON, SW_HIDE);
+        ShowDlgItem(hwndDlg, IDC_TYPE_WARNING, SW_HIDE);
+        LoadPrintfW(Text, ARRAYSIZE(Text), IDS_HOST_CHECKINGSIZE, pSetupData->WindowsName);
+        SetDlgItemTextW(hwndDlg, IDC_TYPE_NOTE, Text);
+        SetupFrameSetButtons(hwndDlg, Host.LiberNTCount != 0, FALSE);
+        return;
+    }
 
     if (!Host.Problem)
     {
@@ -736,6 +766,7 @@ HostTypePageProc(
 
             pSetupData = (PSETUPDATA)lParam;
             SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (LONG_PTR)pSetupData);
+            InterlockedExchangePointer((PVOID*)&Host.hwndType, hwndDlg);
             if (SUCCEEDED(LoadIconWithScaleDown(NULL, IDI_WARNING, GetSystemMetrics(SM_CXSMICON),
                                                 GetSystemMetrics(SM_CYSMICON), &Icon)))
             {
@@ -748,10 +779,16 @@ HostTypePageProc(
         {
             HICON Icon = (HICON)SendDlgItemMessageW(hwndDlg, IDC_TYPE_WARNICON, STM_GETICON, 0, 0);
 
+            InterlockedExchangePointer((PVOID*)&Host.hwndType, NULL);
             if (Icon)
                 DestroyIcon(Icon);
             break;
         }
+
+        case PM_HOST_SIZES:
+            if (IsWindowVisible(hwndDlg))
+                InitTypePage(hwndDlg, pSetupData);
+            return TRUE;
 
         case WM_COMMAND:
             if (HIWORD(wParam) == BN_CLICKED &&
@@ -800,7 +837,7 @@ HostTypePageProc(
             return TRUE;
 
         case SPN_WIZNEXT:
-            if (Host.Problem)
+            if (Host.Problem || !InterlockedCompareExchange(&Host.SizesReady, 0, 0))
             {
                 SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
                 return TRUE;
@@ -1400,8 +1437,10 @@ RunHostSetup(
     _In_ PCWSTR CommandLine)
 {
     HRESULT hrCom = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    HANDLE Thread;
 
     ZeroMemory(&Host, sizeof(Host));
+    pSetupData->bWindowsHost = TRUE;
     CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, NULL,
                          EOAC_NONE, NULL);
     HostLog(L"Setup started on Windows: %s", CommandLine);
@@ -1421,7 +1460,15 @@ RunHostSetup(
     }
     else
     {
+        Thread = Host.HavePrepared ? NULL : CreateThread(NULL, 0, SizeThread, NULL, 0, NULL);
+        if (!Thread && !Host.HavePrepared)
+            SizeThread(NULL);
         RunSetupFrame(pSetupData, HostPages, ARRAYSIZE(HostPages));
+        if (Thread)
+        {
+            WaitForSingleObject(Thread, INFINITE);
+            CloseHandle(Thread);
+        }
     }
     HostLog(L"Setup on Windows ends with %lu, restart %d", Host.Error, pSetupData->bMustReboot);
     if (SUCCEEDED(hrCom))

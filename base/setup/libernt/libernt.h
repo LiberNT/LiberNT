@@ -114,6 +114,7 @@ typedef struct _SETUPDATA
     BOOL bAlongside;
     BOOL bWindowsFirst;
     BOOL bPrepared;
+    BOOL bWindowsHost;
     WCHAR WindowsName[32];
 
     /* txtsetup.sif data */
