@@ -4897,6 +4897,288 @@ BOOL WINAPI CryptMsgGetAndVerifySigner(HCRYPTMSG hCryptMsg, DWORD cSignerStore,
     return ret;
 }
 
+#ifdef __REACTOS__
+static BOOL CRYPT_CountersignSignerInfo(const CMSG_SIGNER_INFO *signer,
+ const CMSG_SIGNER_ENCODE_INFO_WITH_CMS *in, CRYPT_DER_BLOB *encoded)
+{
+    static BYTE dataOid[] = { 0x06,0x09,0x2a,0x86,0x48,0x86,0xf7,0x0d,0x01,0x07,0x01 };
+    char contentType[] = szOID_RSA_contentType;
+    CRYPT_DATA_BLOB content = { sizeof(dataOid), dataOid };
+    CRYPT_ATTRIBUTE contentTypeAttr = { contentType, 1, &content };
+    CMSG_CMS_SIGNER_INFO info;
+    CRYPT_SIGNED_INFO signedInfo;
+    CSignedMsgData msgData;
+    HCRYPTPROV prov = in->hCryptProv;
+    DWORD keySpec = in->dwKeySpec, flags = 0;
+    BOOL ret;
+
+    if (!CRYPT_IsValidSigner(in))
+        return FALSE;
+
+    memset(&info, 0, sizeof(info));
+    memset(&signedInfo, 0, sizeof(signedInfo));
+    signedInfo.cSignerInfo = 1;
+    signedInfo.rgSignerInfo = &info;
+    signedInfo.signerKeySpec = &keySpec;
+    msgData.info = &signedInfo;
+    msgData.cSignerHandle = 0;
+    msgData.signerHandles = NULL;
+    msgData.innerOID = NULL;
+
+    ret = CSignerInfo_Construct(&info, in) &&
+     CRYPT_AppendAttribute(&info.AuthAttrs, &contentTypeAttr) &&
+     CSignedMsgData_AllocateHandles(&msgData) &&
+     CSignedMsgData_ConstructSignerHandles(&msgData, 0, &prov, &flags) &&
+     CryptHashData(msgData.signerHandles[0].contentHash, signer->EncryptedHash.pbData,
+     signer->EncryptedHash.cbData, 0) &&
+     CSignedMsgData_AppendMessageDigestAttribute(&msgData, 0) &&
+     CSignedMsgData_UpdateAuthenticatedAttributes(&msgData, Verify) &&
+     CSignedMsgData_Sign(&msgData) &&
+     CryptEncodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, CMS_SIGNER_INFO, &info,
+     CRYPT_ENCODE_ALLOC_FLAG, NULL, &encoded->pbData, &encoded->cbData);
+    CSignedMsgData_CloseHandles(&msgData);
+    CSignerInfo_Free(&info);
+    return ret;
+}
+
+BOOL WINAPI CryptMsgCountersignEncoded(DWORD dwEncodingType, PBYTE pbSignerInfo,
+ DWORD cbSignerInfo, DWORD cCountersigners, PCMSG_SIGNER_ENCODE_INFO rgCountersigners,
+ PBYTE pbCountersignature, PDWORD pcbCountersignature)
+{
+    char counterSign[] = szOID_RSA_counterSign;
+    CRYPT_ATTRIBUTE attr = { counterSign, 0, NULL };
+    CMSG_SIGNER_INFO *signer;
+    DWORD size, i;
+    BOOL ret = TRUE;
+
+    TRACE("(%08lx, %p, %ld, %ld, %p, %p, %p)\n", dwEncodingType, pbSignerInfo,
+     cbSignerInfo, cCountersigners, rgCountersigners, pbCountersignature,
+     pcbCountersignature);
+
+    if (!CryptDecodeObjectEx(dwEncodingType, PKCS7_SIGNER_INFO, pbSignerInfo, cbSignerInfo,
+     CRYPT_DECODE_ALLOC_FLAG, NULL, &signer, &size))
+        return FALSE;
+
+    if (cCountersigners &&
+     !(attr.rgValue = CryptMemAlloc(cCountersigners * sizeof(*attr.rgValue))))
+    {
+        SetLastError(E_OUTOFMEMORY);
+        ret = FALSE;
+    }
+    for (i = 0; ret && i < cCountersigners; i++)
+    {
+        ret = CRYPT_CountersignSignerInfo(signer,
+         (const CMSG_SIGNER_ENCODE_INFO_WITH_CMS *)&rgCountersigners[i], &attr.rgValue[i]);
+        if (ret)
+            attr.cValue++;
+    }
+    if (ret)
+        ret = CryptEncodeObjectEx(dwEncodingType, PKCS_ATTRIBUTE, &attr, 0, NULL,
+         pbCountersignature, pcbCountersignature);
+
+    for (i = 0; i < attr.cValue; i++)
+        LocalFree(attr.rgValue[i].pbData);
+    CryptMemFree(attr.rgValue);
+    LocalFree(signer);
+    return ret;
+}
+
+BOOL WINAPI CryptMsgCountersign(HCRYPTMSG hCryptMsg, DWORD dwIndex,
+ DWORD cCountersigners, PCMSG_SIGNER_ENCODE_INFO rgCountersigners)
+{
+    CMSG_CTRL_ADD_SIGNER_UNAUTH_ATTR_PARA para = { sizeof(para), dwIndex, { 0, NULL } };
+    BYTE *signer = NULL;
+    DWORD size = 0;
+    BOOL ret;
+
+    TRACE("(%p, %ld, %ld, %p)\n", hCryptMsg, dwIndex, cCountersigners, rgCountersigners);
+
+    if (!cCountersigners || !rgCountersigners)
+    {
+        SetLastError(E_INVALIDARG);
+        return FALSE;
+    }
+
+    /* FIXME: Windows 11 then stops reporting the decoded signers and fails a second countersignature with E_INVALIDARG */
+    ret = CryptMsgGetParam(hCryptMsg, CMSG_ENCODED_SIGNER, dwIndex, NULL, &size) &&
+     (signer = CryptMemAlloc(size)) &&
+     CryptMsgGetParam(hCryptMsg, CMSG_ENCODED_SIGNER, dwIndex, signer, &size) &&
+     CryptMsgCountersignEncoded(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, signer, size,
+     cCountersigners, rgCountersigners, NULL, &para.blob.cbData) &&
+     (para.blob.pbData = CryptMemAlloc(para.blob.cbData)) &&
+     CryptMsgCountersignEncoded(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, signer, size,
+     cCountersigners, rgCountersigners, para.blob.pbData, &para.blob.cbData) &&
+     CryptMsgControl(hCryptMsg, 0, CMSG_CTRL_ADD_SIGNER_UNAUTH_ATTR, &para);
+    CryptMemFree(para.blob.pbData);
+    CryptMemFree(signer);
+    return ret;
+}
+
+static LPCWSTR CRYPT_HashAlgIdToCngName(ALG_ID algId)
+{
+    switch (algId)
+    {
+    case CALG_MD5: return BCRYPT_MD5_ALGORITHM;
+    case CALG_SHA1: return BCRYPT_SHA1_ALGORITHM;
+    case CALG_SHA_256: return BCRYPT_SHA256_ALGORITHM;
+    case CALG_SHA_384: return BCRYPT_SHA384_ALGORITHM;
+    case CALG_SHA_512: return BCRYPT_SHA512_ALGORITHM;
+    default: return NULL;
+    }
+}
+
+static BOOL CRYPT_HashCountersignedData(const CMSG_SIGNER_INFO *signer,
+ const CMSG_SIGNER_INFO *counter, BYTE **hash, DWORD *hashSize)
+{
+    ALG_ID algId = CertOIDToAlgId(counter->HashAlgorithm.pszObjId);
+    HCRYPTPROV prov = I_CryptGetDefaultCryptProv(algId);
+    CRYPT_DATA_BLOB *messageDigest = NULL;
+    BYTE *encodedAttrs = NULL;
+    HCRYPTHASH handle;
+    DWORD size, i;
+    BOOL ret;
+
+    *hash = NULL;
+    if (!prov || !CryptCreateHash(prov, algId, 0, 0, &handle))
+        return FALSE;
+    ret = CryptHashData(handle, signer->EncryptedHash.pbData, signer->EncryptedHash.cbData, 0) &&
+     extract_hash(handle, hash, hashSize);
+    CryptDestroyHash(handle);
+    if (!ret || !counter->AuthAttrs.cAttr)
+        return ret;
+
+    for (i = 0; i < counter->AuthAttrs.cAttr; i++)
+        if (!strcmp(counter->AuthAttrs.rgAttr[i].pszObjId, szOID_RSA_messageDigest) &&
+         counter->AuthAttrs.rgAttr[i].cValue)
+            break;
+    /* TODO: INFO_NEEDED the Windows 11 error for authenticated attributes without a message digest */
+    if (i == counter->AuthAttrs.cAttr)
+        SetLastError(CRYPT_E_AUTH_ATTR_MISSING);
+    else if (CryptDecodeObjectEx(X509_ASN_ENCODING, X509_OCTET_STRING,
+     counter->AuthAttrs.rgAttr[i].rgValue[0].pbData, counter->AuthAttrs.rgAttr[i].rgValue[0].cbData,
+     CRYPT_DECODE_ALLOC_FLAG, NULL, &messageDigest, &size))
+    {
+        if (messageDigest->cbData != *hashSize || memcmp(messageDigest->pbData, *hash, *hashSize))
+            SetLastError(CRYPT_E_HASH_VALUE);
+        else if (CryptEncodeObjectEx(X509_ASN_ENCODING, PKCS_ATTRIBUTES, &counter->AuthAttrs,
+         CRYPT_ENCODE_ALLOC_FLAG, NULL, &encodedAttrs, &size) &&
+         CryptCreateHash(prov, algId, 0, 0, &handle))
+        {
+            CryptMemFree(*hash);
+            *hash = NULL;
+            ret = CryptHashData(handle, encodedAttrs, size, 0) && extract_hash(handle, hash, hashSize);
+            CryptDestroyHash(handle);
+            LocalFree(encodedAttrs);
+            LocalFree(messageDigest);
+            return ret;
+        }
+        LocalFree(encodedAttrs);
+        LocalFree(messageDigest);
+    }
+    CryptMemFree(*hash);
+    *hash = NULL;
+    return FALSE;
+}
+
+static BOOL CRYPT_VerifyCountersignatureHash(const CMSG_SIGNER_INFO *counter,
+ CERT_PUBLIC_KEY_INFO *key, BYTE *hash, DWORD hashSize)
+{
+    BCRYPT_PKCS1_PADDING_INFO padding;
+    BCRYPT_KEY_HANDLE handle;
+    NTSTATUS status;
+
+    if (!key)
+    {
+        if (counter->EncryptedHash.cbData == hashSize &&
+         !memcmp(counter->EncryptedHash.pbData, hash, hashSize))
+            return TRUE;
+        SetLastError(NTE_BAD_SIGNATURE);
+        return FALSE;
+    }
+
+    padding.pszAlgId = CRYPT_HashAlgIdToCngName(CertOIDToAlgId(counter->HashAlgorithm.pszObjId));
+    if (!padding.pszAlgId)
+    {
+        SetLastError(NTE_BAD_ALGID);
+        return FALSE;
+    }
+    if (strcmp(key->Algorithm.pszObjId, szOID_RSA_RSA))
+    {
+        FIXME("unsupported countersigner key %s\n", debugstr_a(key->Algorithm.pszObjId));
+        SetLastError(NTE_BAD_ALGID);
+        return FALSE;
+    }
+    if (!CNG_ImportPubKey(key, &handle))
+        return FALSE;
+    status = BCryptVerifySignature(handle, &padding, hash, hashSize, counter->EncryptedHash.pbData,
+     counter->EncryptedHash.cbData, BCRYPT_PAD_PKCS1);
+    BCryptDestroyKey(handle);
+    if (status)
+    {
+        SetLastError(status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL WINAPI CryptMsgVerifyCountersignatureEncodedEx(HCRYPTPROV_LEGACY hCryptProv,
+ DWORD dwEncodingType, PBYTE pbSignerInfo, DWORD cbSignerInfo,
+ PBYTE pbSignerInfoCountersignature, DWORD cbSignerInfoCountersignature,
+ DWORD dwSignerType, void *pvSigner, DWORD dwFlags, void *pvReserved)
+{
+    CMSG_SIGNER_INFO *signer = NULL, *counter = NULL;
+    CERT_PUBLIC_KEY_INFO *key = NULL;
+    BYTE *hash = NULL;
+    DWORD size, hashSize = 0;
+    BOOL ret;
+
+    TRACE("(%08Ix, %08lx, %p, %ld, %p, %ld, %ld, %p, %08lx, %p)\n", hCryptProv,
+     dwEncodingType, pbSignerInfo, cbSignerInfo, pbSignerInfoCountersignature,
+     cbSignerInfoCountersignature, dwSignerType, pvSigner, dwFlags, pvReserved);
+
+    switch (dwSignerType)
+    {
+    case CMSG_VERIFY_SIGNER_PUBKEY:
+        key = pvSigner;
+        break;
+    case CMSG_VERIFY_SIGNER_CERT:
+        key = &((PCCERT_CONTEXT)pvSigner)->pCertInfo->SubjectPublicKeyInfo;
+        break;
+    case CMSG_VERIFY_SIGNER_CHAIN:
+        key = &((PCCERT_CHAIN_CONTEXT)pvSigner)->rgpChain[0]->rgpElement[0]->pCertContext->pCertInfo->SubjectPublicKeyInfo;
+        break;
+    case CMSG_VERIFY_SIGNER_NULL:
+        break;
+    default:
+        SetLastError(E_INVALIDARG);
+        return FALSE;
+    }
+
+    /* TODO: CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG strong signature checks */
+    ret = CryptDecodeObjectEx(dwEncodingType, PKCS7_SIGNER_INFO, pbSignerInfo, cbSignerInfo,
+     CRYPT_DECODE_ALLOC_FLAG, NULL, &signer, &size) &&
+     CryptDecodeObjectEx(dwEncodingType, PKCS7_SIGNER_INFO, pbSignerInfoCountersignature,
+     cbSignerInfoCountersignature, CRYPT_DECODE_ALLOC_FLAG, NULL, &counter, &size) &&
+     CRYPT_HashCountersignedData(signer, counter, &hash, &hashSize) &&
+     CRYPT_VerifyCountersignatureHash(counter, key, hash, hashSize);
+    if (ret)
+        SetLastError(ERROR_SUCCESS);
+    CryptMemFree(hash);
+    LocalFree(counter);
+    LocalFree(signer);
+    return ret;
+}
+
+BOOL WINAPI CryptMsgVerifyCountersignatureEncoded(HCRYPTPROV_LEGACY hCryptProv,
+ DWORD dwEncodingType, BYTE *pbSignerInfo, DWORD cbSignerInfo,
+ PBYTE pbSignerInfoCountersignature, DWORD cbSignerInfoCountersignature,
+ CERT_INFO *pciCountersigner)
+{
+    return CryptMsgVerifyCountersignatureEncodedEx(hCryptProv, dwEncodingType, pbSignerInfo,
+     cbSignerInfo, pbSignerInfoCountersignature, cbSignerInfoCountersignature,
+     CMSG_VERIFY_SIGNER_PUBKEY, &pciCountersigner->SubjectPublicKeyInfo, 0, NULL);
+}
+#else
 BOOL WINAPI CryptMsgVerifyCountersignatureEncoded(HCRYPTPROV_LEGACY hCryptProv,
  DWORD dwEncodingType, BYTE *pbSignerInfo, DWORD cbSignerInfo,
  PBYTE pbSignerInfoCountersignature, DWORD cbSignerInfoCountersignature,
@@ -4918,6 +5200,8 @@ BOOL WINAPI CryptMsgVerifyCountersignatureEncodedEx(HCRYPTPROV_LEGACY hCryptProv
      cbSignerInfoCountersignature, dwSignerType, pvSigner, dwFlags, pvReserved);
     return FALSE;
 }
+
+#endif
 
 BOOL WINAPI CryptMsgEncodeAndSignCTL(DWORD dwMsgEncodingType,
  PCTL_INFO pCtlInfo, PCMSG_SIGNED_ENCODE_INFO pSignInfo, DWORD dwFlags,
