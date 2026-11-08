@@ -82,6 +82,7 @@ list(APPEND SOURCE
     NumaApis.c
     Pipes.c
     PackageNames.c
+    ParentHandleList.c
     PixeloramaCompat.c
     ProcessPreferredUILanguages.c
     PseudoConsoleCtrlC.c
