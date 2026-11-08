@@ -2847,7 +2847,7 @@ KdbpPrintContext(PCONTEXT Context)
         else if (i == 13)
         {
         }
-        else if ((Context->EFlags & (1 << i)) != 0)
+        else if ((Context->EFlags & (1U << i)) != 0)
         {
             KdbpPrint(EflagsBits[i]);
         }
