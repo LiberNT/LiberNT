@@ -401,6 +401,51 @@ TestUnsignedImage(VOID)
 
 static
 VOID
+TestUnusedSip(const WCHAR *Temp)
+{
+    static const BYTE Message[] = { 0x30, 0x03, 0x02, 0x01, 0x01 };
+    GUID Subject = { 0x18B3C141, 0xAE0D, 0x40F9, { 0x94,0x65,0xE5,0x42,0xAF,0xC1,0xAB,0xC7 } };
+    SIP_SUBJECTINFO Info;
+    SIP_INDIRECT_DATA Indirect;
+    WCHAR Path[MAX_PATH], Self[MAX_PATH];
+    DWORD Size = 0, Encoding = 0, Index = 0xdead;
+
+    GetModuleFileNameW(NULL, Self, RTL_NUMBER_OF(Self));
+    swprintf(Path, RTL_NUMBER_OF(Path), L"%lslntsipu.exe", Temp);
+    if (!CopyFileW(Self, Path, FALSE))
+    {
+        skip("Cannot copy the test image\n");
+        return;
+    }
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    Info.pgSubjectType = &Subject;
+    Info.pwsFileName = Path;
+    Info.dwEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    Info.DigestAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    Info.hFile = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    SetLastError(0xdeadbeef);
+    ok(!CryptSIPCreateIndirectData(&Info, &Size, NULL), "indirect data created\n");
+    ok_hex(GetLastError(), 0xdeadbeef);
+    ok(!CryptSIPGetSignedDataMsg(&Info, &Encoding, 0, &Size, NULL), "signed message found\n");
+    ok_hex(GetLastError(), ERROR_INVALID_PARAMETER);
+    SetLastError(0xdeadbeef);
+    ok(!CryptSIPPutSignedDataMsg(&Info, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, &Index, sizeof(Message), (BYTE *)Message),
+       "signed message stored\n");
+    ok_hex(GetLastError(), 0xdeadbeef);
+    ok_hex(Index, 0xdead);
+    ok(!CryptSIPRemoveSignedDataMsg(&Info, 0), "signed message removed\n");
+    ok_hex(GetLastError(), 0xdeadbeef);
+    ZeroMemory(&Indirect, sizeof(Indirect));
+    Indirect.DigestAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    ok(CryptSIPVerifyIndirectData(&Info, &Indirect), "verification failed\n");
+    ok_hex(GetLastError(), 0xdeadbeef);
+    CloseHandle(Info.hFile);
+    DeleteFileW(Path);
+}
+
+static
+VOID
 TestCabinetIndirectData(const WCHAR *Temp)
 {
     static const BYTE Prepared[] = {
@@ -472,6 +517,7 @@ TestCabinetIndirectData(const WCHAR *Temp)
     DeleteFileW(Copy);
     DeleteFileW(Second);
     TestCabinetReserve(Temp, Prepared, sizeof(Prepared), Digest);
+    TestUnusedSip(Temp);
     TestUnsignedImage();
 }
 
