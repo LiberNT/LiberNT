@@ -2982,6 +2982,16 @@ error:
     return ret;
 }
 
+#ifdef __REACTOS__
+static BOOL WINTRUST_IsWritableHandle(HANDLE file)
+{
+    OBJECT_BASIC_INFORMATION info;
+
+    if (NtQueryObject(file, ObjectBasicInformation, &info, sizeof(info), NULL)) return TRUE;
+    return (info.GrantedAccess & FILE_WRITE_DATA) != 0;
+}
+
+#endif
 static BOOL WINTRUST_PutSignedMsgToPEFile(SIP_SUBJECTINFO* pSubjectInfo, DWORD pdwEncodingType,
         DWORD* pdwIndex, DWORD cbSignedDataMsg, BYTE* pbSignedDataMsg)
 {
@@ -2991,7 +3001,16 @@ static BOOL WINTRUST_PutSignedMsgToPEFile(SIP_SUBJECTINFO* pSubjectInfo, DWORD p
     BOOL ret;
 
     if(pSubjectInfo->hFile && pSubjectInfo->hFile!=INVALID_HANDLE_VALUE)
+    {
         file = pSubjectInfo->hFile;
+#ifdef __REACTOS__
+        if (!WINTRUST_IsWritableHandle(file))
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+#endif
+    }
     else
     {
         file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ|GENERIC_WRITE,
