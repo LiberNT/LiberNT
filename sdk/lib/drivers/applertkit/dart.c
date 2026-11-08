@@ -35,7 +35,6 @@
 #define DART_PTE_VALID              0x1ULL
 #define DART_PTE_SUBPAGE_END        (0xfffULL << 40)
 #define DART_PTE_ADDRESS_MASK       0x0000003ffffffc00ULL
-#define DART_TABLES_PER_CHUNK       64
 #define DART_TAG                    'tDpA'
 #define DART_LOW_WINDOW_BASE        0x01000000ULL
 #define DART_LOW_WINDOW_END         0xc0000000ULL
@@ -52,8 +51,6 @@ typedef struct _DART_IDENTITY
     ULONG Levels;
     PDART_TABLE Top;
     ULONG64 TopPhysical;
-    PUCHAR Chunk;
-    ULONG ChunkUsed;
 } DART_IDENTITY, *PDART_IDENTITY;
 
 static DART_IDENTITY AppleDartIdentity;
@@ -90,28 +87,12 @@ AppleDartEntry(
 static
 PDART_TABLE
 AppleDartAllocateTable(
-    _Inout_ PDART_IDENTITY Identity,
     _In_ BOOLEAN Leaf,
     _Out_ PULONG64 Physical)
 {
-    PHYSICAL_ADDRESS Low, High, Boundary, Address;
-    SIZE_T Size = (DART_TABLES_PER_CHUNK + 1) * DART_PAGE_SIZE;
+    PHYSICAL_ADDRESS Low, High, Boundary;
     PDART_TABLE Table;
 
-    if (!Identity->Chunk || Identity->ChunkUsed == DART_TABLES_PER_CHUNK)
-    {
-        Low.QuadPart = 0;
-        High.QuadPart = -1;
-        Boundary.QuadPart = 0;
-        Identity->Chunk = MmAllocateContiguousMemorySpecifyCache(Size, Low, High, Boundary, MmCached);
-        if (!Identity->Chunk)
-            return NULL;
-        RtlZeroMemory(Identity->Chunk, Size);
-        Address = MmGetPhysicalAddress(Identity->Chunk);
-        Identity->ChunkUsed = 0;
-        if ((ULONG64)Address.QuadPart & (DART_PAGE_SIZE - 1))
-            Identity->Chunk += DART_PAGE_SIZE - ((ULONG64)Address.QuadPart & (DART_PAGE_SIZE - 1));
-    }
     Table = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Table), DART_TAG);
     if (!Table)
         return NULL;
@@ -126,7 +107,18 @@ AppleDartAllocateTable(
         }
         RtlZeroMemory(Table->Children, DART_TABLE_ENTRIES * sizeof(PDART_TABLE));
     }
-    Table->Entries = (PULONG64)(Identity->Chunk + Identity->ChunkUsed++ * DART_PAGE_SIZE);
+    Low.QuadPart = 0;
+    High.QuadPart = -1;
+    Boundary.QuadPart = DART_PAGE_SIZE;
+    Table->Entries = MmAllocateContiguousMemorySpecifyCache(DART_PAGE_SIZE, Low, High, Boundary, MmCached);
+    if (!Table->Entries)
+    {
+        if (Table->Children)
+            ExFreePoolWithTag(Table->Children, DART_TAG);
+        ExFreePoolWithTag(Table, DART_TAG);
+        return NULL;
+    }
+    RtlZeroMemory(Table->Entries, DART_PAGE_SIZE);
     *Physical = (ULONG64)MmGetPhysicalAddress(Table->Entries).QuadPart;
     return Table;
 }
@@ -148,7 +140,7 @@ AppleDartMapPage(
         Child = Table->Children[Slot];
         if (!Child)
         {
-            Child = AppleDartAllocateTable(Identity, Level == 2, &TablePhysical);
+            Child = AppleDartAllocateTable(Level == 2, &TablePhysical);
             if (!Child)
                 return STATUS_INSUFFICIENT_RESOURCES;
             Table->Children[Slot] = Child;
@@ -159,6 +151,29 @@ AppleDartMapPage(
     Table->Entries[(Iova >> DART_PAGE_SHIFT) & (DART_TABLE_ENTRIES - 1)] =
         AppleDartEntry(Physical) | DART_PTE_SUBPAGE_END | DART_PTE_VALID;
     return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+AppleDartUnmapPage(
+    _Inout_ PDART_IDENTITY Identity,
+    _In_ ULONG64 Iova)
+{
+    PDART_TABLE Table = Identity->Top;
+    ULONG Level, Slot;
+
+    for (Level = Identity->Levels; Table && Level > 1; --Level)
+    {
+        Slot = (ULONG)(Iova >> (DART_PAGE_SHIFT + (Level - 1) * DART_LEVEL_BITS)) & (DART_TABLE_ENTRIES - 1);
+        Table = Table->Children[Slot];
+    }
+    if (!Table)
+        return FALSE;
+    Slot = (ULONG)(Iova >> DART_PAGE_SHIFT) & (DART_TABLE_ENTRIES - 1);
+    if (!(Table->Entries[Slot] & DART_PTE_VALID))
+        return FALSE;
+    Table->Entries[Slot] = 0;
+    return TRUE;
 }
 
 static
@@ -174,10 +189,16 @@ AppleDartBuildIdentity(
     NTSTATUS Status = STATUS_SUCCESS;
 
     if (InputBits < DART_PAGE_SHIFT + DART_LEVEL_BITS + 1 || InputBits > DART_PAGE_SHIFT + 3 * DART_LEVEL_BITS)
+    {
+        DbgPrint("DART: %lu-bit device addresses are outside the supported table depths\n", InputBits);
         return STATUS_NOT_SUPPORTED;
+    }
     Ranges = MmGetPhysicalMemoryRanges();
     if (!Ranges)
+    {
+        DbgPrint("DART: no physical memory ranges\n");
         return STATUS_INSUFFICIENT_RESOURCES;
+    }
     for (Index = 0; Ranges[Index].NumberOfBytes.QuadPart; ++Index)
     {
         Lowest = min(Lowest, (ULONG64)Ranges[Index].BaseAddress.QuadPart);
@@ -186,12 +207,14 @@ AppleDartBuildIdentity(
     Mask = (1ULL << InputBits) - 1;
     if (!Index || Highest > (1ULL << min(OutputBits, 42)) || ((Lowest ^ (Highest - 1)) & ~Mask))
     {
+        DbgPrint("DART: memory %I64x-%I64x in %lu ranges does not fit %lu-bit input and %lu-bit output addresses\n",
+                 Lowest, Highest, Index, InputBits, OutputBits);
         Status = STATUS_NOT_SUPPORTED;
         goto Done;
     }
     Identity->InputBits = InputBits;
     Identity->Levels = (InputBits > DART_PAGE_SHIFT + 2 * DART_LEVEL_BITS) ? 3 : 2;
-    Identity->Top = AppleDartAllocateTable(Identity, FALSE, &Identity->TopPhysical);
+    Identity->Top = AppleDartAllocateTable(FALSE, &Identity->TopPhysical);
     if (!Identity->Top)
     {
         Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -205,7 +228,10 @@ AppleDartBuildIdentity(
         {
             Status = AppleDartMapPage(Identity, Page & Mask, Page);
             if (!NT_SUCCESS(Status))
+            {
+                DbgPrint("DART: identity table for page %I64x not allocated: %lx\n", Page, Status);
                 goto Done;
+            }
         }
     }
     KeMemoryBarrier();
@@ -425,14 +451,22 @@ AppleDartMapLow(
         Status = STATUS_DEVICE_BUSY;
     if (!NT_SUCCESS(Status))
     {
+        if (Status != STATUS_DEVICE_BUSY)
+            DbgPrint("%s: DART stream %lu of %lu cannot take a low mapping: %lx\n", Owner, Sid, Streams, Status);
         MmUnmapIoSpace(Base, Size);
         return Status;
     }
 
     if (!AppleDartIdentity.Top)
+    {
         Status = AppleDartBuildIdentity(&AppleDartIdentity, InputBits, OutputBits);
+        DbgPrint("%s: DART identity tables for %lu-bit addresses, %lu levels: %lx\n", Owner, InputBits,
+                 AppleDartIdentity.Levels, Status);
+    }
     else if (AppleDartIdentity.InputBits != InputBits)
+    {
         Status = STATUS_NOT_SUPPORTED;
+    }
     First = Physical & ~(DART_PAGE_SIZE - 1);
     Last = (Physical + Length + DART_PAGE_SIZE - 1) & ~(DART_PAGE_SIZE - 1);
     Window = AppleDartLowNext;
@@ -451,6 +485,61 @@ AppleDartMapLow(
         *Iova = Window + (Physical - First);
         DbgPrint("%s: DART stream %lu maps %I64x+%Ix at device address %I64x\n", Owner, Sid, Physical, Length, *Iova);
     }
+    else
+    {
+        DbgPrint("%s: DART stream %lu low mapping of %I64x+%Ix failed: %lx\n", Owner, Sid, Physical, Length, Status);
+    }
+    MmUnmapIoSpace(Base, Size);
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+AppleDartUnmapLow(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Dart,
+    _In_ ULONG Sid,
+    _In_ ULONG64 Iova,
+    _In_ SIZE_T Length,
+    _In_z_ PCSTR Owner)
+{
+    ULONG RegisterLength, Size, Cells;
+    ULONG64 First, Last, Page;
+    const VOID *Compatible;
+    PUCHAR Base;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Dart == RISCV_FDT_NO_NODE || !Length || Iova < DART_LOW_WINDOW_BASE || Iova + Length < Iova ||
+        Iova + Length > DART_LOW_WINDOW_END || !RiscvFdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Dart, "compatible", &RegisterLength);
+    if (!RiscvFdtStringListContains(Compatible, RegisterLength, "apple,t8110-dart"))
+        return STATUS_NOT_SUPPORTED;
+    Base = FdtDriverMapReg(Tree, Dart, 0, NULL, &Size);
+    if (!Base)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    if (Sid >= (AppleDartRead(Base, DART_T8110_PARAMS4) & 0x1ff))
+        Status = STATUS_INVALID_PARAMETER;
+    else if (InterlockedCompareExchange(&AppleDartIdentityBusy, 1, 0) != 0)
+        Status = STATUS_DEVICE_BUSY;
+    if (!NT_SUCCESS(Status))
+    {
+        MmUnmapIoSpace(Base, Size);
+        return Status;
+    }
+
+    First = Iova & ~(DART_PAGE_SIZE - 1);
+    Last = (Iova + Length + DART_PAGE_SIZE - 1) & ~(DART_PAGE_SIZE - 1);
+    for (Page = First; Page < Last; Page += DART_PAGE_SIZE)
+    {
+        if (!AppleDartUnmapPage(&AppleDartIdentity, Page))
+            Status = STATUS_NOT_FOUND;
+    }
+    KeMemoryBarrier();
+    InterlockedExchange(&AppleDartIdentityBusy, 0);
+    AppleDartFlush(Base, Sid, Owner);
     MmUnmapIoSpace(Base, Size);
     return Status;
 }

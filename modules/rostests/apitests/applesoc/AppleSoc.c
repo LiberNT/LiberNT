@@ -60,9 +60,9 @@ typedef struct _SIM_ALLOCATION
     SIZE_T Size;
 } SIM_ALLOCATION;
 
-static SIM_ALLOCATION SimAllocations[64];
+static SIM_ALLOCATION SimAllocations[2048];
 static ULONG SimAllocationCount;
-static PHYSICAL_MEMORY_RANGE SimRam[4];
+static PHYSICAL_MEMORY_RANGE SimRam[16];
 
 static
 PVOID
@@ -78,6 +78,8 @@ MmAllocateContiguousMemorySpecifyCache(SIZE_T Size, PHYSICAL_ADDRESS Low, PHYSIC
     if (!Allocation->Virtual)
         return NULL;
     Allocation->Physical = 0x2000000000ULL + ((ULONG64)SimAllocationCount << 24) + 0x1000;
+    if (Boundary.QuadPart && ((Allocation->Physical ^ (Allocation->Physical + Size - 1)) & ~(ULONG64)(Boundary.QuadPart - 1)))
+        Allocation->Physical &= ~(ULONG64)(Boundary.QuadPart - 1);
     Allocation->Size = Size;
     SimAllocationCount++;
     return Allocation->Virtual;
@@ -792,6 +794,7 @@ static ULONG SimStalledMicroseconds;
 #define WRITE_REGISTER_ULONG(Address, Value) SimWrite(Address, Value)
 #define KeStallExecutionProcessor(Microseconds) (SimStalledMicroseconds += (Microseconds))
 #define KeMemoryBarrier() ((void)0)
+#define KeQueryInterruptTime() ((ULONG64)(SimSleptMs * 10000ULL + SimStalledMicroseconds * 10ULL))
 
 static
 VOID
@@ -1238,6 +1241,67 @@ TestDart(VOID)
 
 static
 VOID
+TestDartLowWindowM3Memory(VOID)
+{
+    static const ULONG64 Runs[][2] =
+    {
+        { 0x10001fa8000ULL, 0x10001faffffULL }, { 0x10001fb2000ULL, 0x10001fbffffULL },
+        { 0x10001fc3000ULL, 0x100037a7fffULL }, { 0x10003b48000ULL, 0x10006713fffULL },
+        { 0x1000673e000ULL, 0x1083bbfffffULL }, { 0x1083bc01000ULL, 0x108d4892fffULL },
+        { 0x108d4894000ULL, 0x108d4897fffULL }, { 0x108d48ba000ULL, 0x108d48c1fffULL },
+        { 0x108d48c3000ULL, 0x108d48c3fffULL }, { 0x108d48e6000ULL, 0x108d595dfffULL },
+        { 0x108d595f000ULL, 0x108d992ffffULL }, { 0x108d9940000ULL, 0x108d9a0ffffULL },
+        { 0x108d9a14000ULL, 0x108d9a17fffULL },
+    };
+    FDT_DRIVER_TREE Tree;
+    ULONG64 Iova, Top;
+    ULONG Dart, Index;
+    NTSTATUS Status;
+
+    ResetSimulation(&Tree);
+    for (Index = 0; Index < SimAllocationCount; Index++)
+        HeapFree(GetProcessHeap(), 0, SimAllocations[Index].Virtual);
+    SimAllocationCount = 0;
+    memset(&AppleDartIdentity, 0, sizeof(AppleDartIdentity));
+    AppleDartLowNext = DART_LOW_WINDOW_BASE;
+    memset(SimRam, 0, sizeof(SimRam));
+    for (Index = 0; Index < RTL_NUMBER_OF(Runs); Index++)
+    {
+        SimRam[Index].BaseAddress.QuadPart = (LONGLONG)Runs[Index][0];
+        SimRam[Index].NumberOfBytes.QuadPart = (LONGLONG)(Runs[Index][1] + 1 - Runs[Index][0]);
+    }
+    Dart = FindNode(&Tree, "apple,t8110-dart");
+    DART(0x04) = 0x30110023;
+    DART(0x08) = 0x2a2a0200;
+    DART(0x0c) = 16;
+    DART(0x1004) = 6;
+
+    Status = AppleDartMapLow(&Tree, Dart, 1, 0x1000673e000ULL, 0x7a000, &Iova, "test");
+    ok_hex(Status, STATUS_SUCCESS);
+    ok(Iova == 0x01002000ULL, "Window mapping at %I64x\n", Iova);
+    ok_int(AppleDartIdentity.Levels, 3);
+    ok_hex(DART(0x1004), 9);
+    Top = ((ULONG64)(DART(0x1404) >> 2)) << 14;
+    for (Index = 0; Index < RTL_NUMBER_OF(Runs); Index++)
+    {
+        ULONG64 Page = Runs[Index][0] & ~0x3fffULL;
+
+        if (WalkDart(Top, 3, Page) != Page)
+        {
+            ok(FALSE, "Run %lu page %I64x maps to %I64x\n", Index, Page, WalkDart(Top, 3, Page));
+            break;
+        }
+    }
+    ok(WalkDart(Top, 3, 0x108d9a14000ULL) == 0x108d9a14000ULL, "Last RAM page maps to %I64x\n",
+       WalkDart(Top, 3, 0x108d9a14000ULL));
+    ok(WalkDart(Top, 3, 0x01000000ULL) == 0x1000673c000ULL, "Window page maps to %I64x\n", WalkDart(Top, 3, 0x01000000ULL));
+    ok(WalkDart(Top, 3, 0x01078000ULL) == 0x100067b4000ULL, "Last window page maps to %I64x\n",
+       WalkDart(Top, 3, 0x01078000ULL));
+    memset(SimRam, 0, sizeof(SimRam));
+}
+
+static
+VOID
 TestDartLowWindow(VOID)
 {
     FDT_DRIVER_TREE Tree;
@@ -1288,6 +1352,21 @@ TestDartLowWindow(VOID)
     ok(WalkDart(Top, 3, 0x01008000ULL) == 0x10000008000ULL, "Second mapping last page %I64x\n", WalkDart(Top, 3, 0x01008000ULL));
     ok_int(SimWriteCount, 1);
     ok(SimWrites[0].Physical == SIM_DART_BASE + 0x80, "A translating stream only needs a flush, wrote %I64x\n", SimWrites[0].Physical);
+
+    SimWriteCount = 0;
+    ok_hex(AppleDartUnmapLow(&Tree, Dart, 1, Iova, 0x200, "test"), STATUS_SUCCESS);
+    ok(WalkDart(Top, 3, 0x01004000ULL) == 0, "Unmapped first page still maps to %I64x\n", WalkDart(Top, 3, 0x01004000ULL));
+    ok(WalkDart(Top, 3, 0x01008000ULL) == 0, "Unmapped last page still maps to %I64x\n", WalkDart(Top, 3, 0x01008000ULL));
+    ok(WalkDart(Top, 3, 0x01000000ULL) == 0x10000004000ULL, "Unmap touched the first mapping: %I64x\n", WalkDart(Top, 3, 0x01000000ULL));
+    ok(WalkDart(Top, 3, 0x10000000000ULL) == 0x10000000000ULL, "Unmap touched the identity: %I64x\n", WalkDart(Top, 3, 0x10000000000ULL));
+    ok_int(SimWriteCount, 1);
+    ok(SimWrites[0].Physical == SIM_DART_BASE + 0x80 && SimWrites[0].Value == 0x101, "Unmap flushed %I64x = %lx\n",
+       SimWrites[0].Physical, SimWrites[0].Value);
+    ok_hex(AppleDartUnmapLow(&Tree, Dart, 1, Iova, 0x200, "test"), STATUS_NOT_FOUND);
+    ok_hex(AppleDartUnmapLow(&Tree, Dart, 1, 0x10000006000ULL, 0x100, "test"), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleDartUnmapLow(&Tree, Dart, 1, DART_LOW_WINDOW_END - 0x100, 0x200, "test"), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleDartUnmapLow(&Tree, Dart, 16, 0x01000000ULL, 0x100, "test"), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleDartUnmapLow(&Tree, Dart, 1, 0x01000000ULL, 0, "test"), STATUS_INVALID_PARAMETER);
 
     ok_hex(AppleDartMapLow(&Tree, Dart, 16, 0x10000006000ULL, 0x100, &Iova, "test"), STATUS_INVALID_PARAMETER);
     ok_hex(AppleDartMapLow(&Tree, Dart, 1, 0x10000006000ULL, 0, &Iova, "test"), STATUS_INVALID_PARAMETER);
@@ -1441,6 +1520,7 @@ TestAtcphy(VOID)
     Status = AppleAtcphyOpen(&Tree, Usb, &Phy);
     ok_hex(Status, STATUS_SUCCESS);
     ok(Phy.Node == FindNode(&Tree, "apple,t8122-atcphy"), "The PHY node is %lx\n", Phy.Node);
+    ok(!Phy.HasAusPllTop, "A t8122 PHY was given the t8103 AUSPLL block\n");
     ok_int(SimMapCount, 4);
     ok_int(Phy.Core.Size, SIM_ATC_CORE_SIZE);
     ok_int(Phy.Axi2af.Size, SIM_ATC_AXI2AF_SIZE);
@@ -1490,8 +1570,8 @@ TestAtcphy(VOID)
     ok_hex(ATC(0x10010), 0x00000200);
     ok_hex(ATC(0x08), 0x0003332a);
     ok_hex(ATC(0x1b0), 0x00000ccc);
-    ok_hex(ATC(0x1014), 0x001fe000);
-    ok_hex(ATC(0x2000), 0x10000000);
+    ok_hex(ATC(0x1014), 0x00000000);
+    ok_hex(ATC(0x2000), 0x00000000);
     ok_hex(ATC(0x2a00), 0x00000022);
     ok_int(Phy.TunableEntries[0], 2);
     ok_int(Phy.TunableEntries[1], 1);
@@ -1515,7 +1595,14 @@ TestAtcphy(VOID)
     ok_hex(PIPE(0x0c), 0x00000022);
     ok_hex(PIPE(0x10), 0x00000000);
     ok_hex(PIPE(0x14), 0x00000000);
-    ok_hex(PIPE(0x20), 0x00001002);
+    ok_hex(PIPE(0x20), 0x00009002);
+
+    AppleAtcphyStopUsb2Host(&Phy);
+    ok_hex(PIPE(0x1c) & 0x11, 0x10);
+    ok_hex(PIPE(0x0c), 0x00000022);
+    ok_hex(USB2PHY(0x00), 0x00000004);
+    ok_hex(USB2PHY(0x04) & 0x0f, 0x0000000b);
+    ok_hex(USB2PHY(0x1c) & 0x60000000, 0x60000000);
 
     SimAtcStuck = TRUE;
     ATC(0x20004) = 0;
@@ -2417,6 +2504,7 @@ START_TEST(AppleSoc)
     TestPmgr();
     TestDart();
     TestDartLowWindow();
+    TestDartLowWindowM3Memory();
     TestSpmi();
     TestAtcphy();
     TestPcie();

@@ -34,3 +34,13 @@ AppleDartMapLow(
     _In_ SIZE_T Length,
     _Out_ PULONG64 Iova,
     _In_z_ PCSTR Owner);
+
+NTSTATUS
+NTAPI
+AppleDartUnmapLow(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Dart,
+    _In_ ULONG Sid,
+    _In_ ULONG64 Iova,
+    _In_ SIZE_T Length,
+    _In_z_ PCSTR Owner);
