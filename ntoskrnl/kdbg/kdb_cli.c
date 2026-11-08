@@ -257,6 +257,9 @@ static LONG KdbSelectedProcessor = -1;
 static VOID
 KdbpDiscardStaleContextRecord(VOID)
 {
+    UNREFERENCED_PARAMETER(KdbFrameBaseValid);
+    UNREFERENCED_PARAMETER(KdbSelectedFrame);
+
     if (KdbContextRecordActive && KdbCurrentTrapFrame != (PKDB_KTRAP_FRAME)&KdbSavedContextRecord)
     {
         KdbContextRecordActive = FALSE;
