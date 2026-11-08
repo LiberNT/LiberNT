@@ -221,7 +221,7 @@ MiClampBytes(
     return (Value < Minimum) ? Minimum : ((Value > Maximum) ? Maximum : Value);
 }
 
-#define MI_DIRECT_CACHE_RUN 64
+#define MI_DIRECT_CACHE_RUN MI_FRAME_CACHE_BATCH
 
 static NTSTATUS
 MiSetDirectRunCache(ULONG Frame, ULONG Count, ULONG Flags)
@@ -311,6 +311,7 @@ MiSetDirectFrameCache(ULONG Frame, ULONG Count, ULONG Flags)
 {
     NTSTATUS Status = STATUS_SUCCESS;
 
+    ASSERT(Count <= MI_FRAME_CACHE_BATCH);
     if (Frame >= MiSystem.Pfn.DirectFrames)
         return STATUS_SUCCESS;
     if (Count > MiSystem.Pfn.DirectFrames - Frame)

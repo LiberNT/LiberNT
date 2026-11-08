@@ -48,6 +48,7 @@ typedef struct _MACHINE
     int *FrameBusy;
     ULONG *FrameCache;
     ULONG FrameCacheCalls;
+    ULONG FrameCacheFailureFramePlusOne;
     ULONG64 FrameCount;
     ULONG64 SystemRoot;
     ULONG CpuCount;

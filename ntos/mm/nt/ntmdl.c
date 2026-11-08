@@ -633,7 +633,9 @@ MmAllocatePagesForMdlEx(
 
     ASSERT(Got <= Wanted);
     if (Got == 0 || ((Flags & MM_ALLOCATE_FULLY_REQUIRED) && Got != Wanted) ||
-        (Chunk != 0 && SkipBytes.QuadPart == 0 && Got != Wanted))
+        (Chunk != 0 && SkipBytes.QuadPart == 0 && Got != Wanted) ||
+        (CacheFlags != 0 && !NT_SUCCESS(MiPfnSetCacheFrames(&MiSystem.Pfn, (const MI_FRAME_NUMBER *)Pages,
+                                                            (ULONG)Got, CacheFlags))))
     {
         while (Got != 0)
         {
@@ -644,9 +646,6 @@ MmAllocatePagesForMdlEx(
         ExFreePoolWithTag(Mdl, TAG_MDL);
         return NULL;
     }
-
-    if (CacheFlags != 0)
-        MiPfnSetCacheFrames(&MiSystem.Pfn, (const MI_FRAME_NUMBER *)Pages, (ULONG)Got, CacheFlags);
 
     if (Got != Wanted)
         Pages[Got] = MI_MDL_PFN_END;

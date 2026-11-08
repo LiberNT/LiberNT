@@ -107,3 +107,15 @@ target_link_options(mm_amd64_asan PRIVATE -fsanitize=address,undefined)
 mm_test_variant(mm_amd64_tsan amd64 MACHINE_AMD64 TEST_LIGHT)
 target_compile_options(mm_amd64_tsan PRIVATE -O1 -fsanitize=thread)
 target_link_options(mm_amd64_tsan PRIVATE -fsanitize=thread)
+
+set(MDL_CACHE_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/mdlcache-generated.c)
+add_custom_command(OUTPUT ${MDL_CACHE_SOURCE}
+    COMMAND ${CMAKE_COMMAND} -DNTMDL_SOURCE=${NVS_ROOT}/nt/ntmdl.c
+            -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/mdlcache-fixture.c.in
+            -DOUTPUT=${MDL_CACHE_SOURCE}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/make-mdlcache.cmake
+    DEPENDS ${NVS_ROOT}/nt/ntmdl.c ${CMAKE_CURRENT_SOURCE_DIR}/mdlcache-fixture.c.in
+            ${CMAKE_CURRENT_SOURCE_DIR}/make-mdlcache.cmake
+    VERBATIM)
+add_executable(nvs_mdlcache ${MDL_CACHE_SOURCE})
+add_test(NAME nvs.mdlcache COMMAND nvs_mdlcache)

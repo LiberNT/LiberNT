@@ -6,6 +6,7 @@
  */
 
 #include "mmharness.h"
+#include <nvs/include/misys.h>
 
 #define HM_FRAMES 2048
 #define HM_DIRECT 1024
@@ -330,6 +331,119 @@ HighMemCacheRuns(void)
     WorldDestroy(&World);
 }
 
+static void
+HighMemCacheFailure(void)
+{
+    static TEST_WORLD World;
+    MI_FRAME_NUMBER Frames[70];
+    PMI_PFN_DATABASE Db;
+    ULONG First, i;
+    ULONG64 Va;
+    NTSTATUS Status;
+
+    WorldCreateZoned(&World, HM_FRAMES, HM_DIRECT, 1, 100000);
+    Db = &World.System.Pfn;
+    WorldAttach(&World, 0, NULL);
+    MI_ASSERT(NT_SUCCESS(MiSystemPtesInitialize(&World.System, 256, 1)));
+    First = MiPfnAllocateContiguous(Db, RTL_NUMBER_OF(Frames), 0, HM_DIRECT - 1, 0);
+    MI_ASSERT(First != MI_FRAME_INVALID);
+    for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
+        Frames[i] = First + i;
+    World.Machine.FrameCacheFailureFramePlusOne = First + 67;
+    Status = MiPfnSetCacheFrames(Db, Frames, RTL_NUMBER_OF(Frames), MI_LEAF_NOCACHE);
+    CHECK(Status == STATUS_NOT_SUPPORTED);
+    for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
+    {
+        CHECK((ULONG)Db->Pfn[Frames[i]].CacheFlags == World.Machine.FrameCache[Frames[i]]);
+        CHECK(World.Machine.FrameCache[Frames[i]] == (i < 66 ? MI_LEAF_NOCACHE : 0));
+    }
+    World.Machine.FrameCacheFailureFramePlusOne = 0;
+    MiPfnSetCacheFrames(Db, Frames, RTL_NUMBER_OF(Frames), 0);
+
+    Va = MiReserveSystemPtes(&World.System, 4);
+    MI_ASSERT(Va != 0);
+    World.Machine.FrameCacheFailureFramePlusOne = First + 3;
+    Status = MiSystemMapFrames(&World.System, Va, Frames, 4, MI_PROT_READWRITE, MI_LEAF_NOCACHE, TRUE);
+    CHECK(Status == STATUS_NOT_SUPPORTED);
+    for (i = 0; i < 4; i++)
+    {
+        PMI_PTE Slot = MiPtLookup(&World.System.SystemSpace, Va + (ULONG64)i * PAGE_SIZE, NULL);
+
+        CHECK(Slot == NULL || !MiArchPteIsValid(MiArchPteRead(Slot)));
+        CHECK((ULONG)Db->Pfn[Frames[i]].CacheFlags == World.Machine.FrameCache[Frames[i]]);
+    }
+    if (NT_SUCCESS(Status))
+        MiSystemUnmap(&World.System, Va, 4, FALSE);
+    World.Machine.FrameCacheFailureFramePlusOne = 0;
+    MiPfnSetCacheFrames(Db, Frames, RTL_NUMBER_OF(Frames), 0);
+    MiReleaseSystemPtes(&World.System, Va, 4);
+    CHECK(NT_SUCCESS(MiPfnSetCache(Db, First + 1, MI_LEAF_NOCACHE)));
+    World.Machine.FrameCacheFailureFramePlusOne = First + 2;
+    MiPfnShareDecrement(Db, First + 1, TRUE);
+    CHECK(Db->Pfn[First + 1].State == MiPageBad);
+    CHECK(Db->Pfn[First + 1].CacheFlags == MI_LEAF_NOCACHE);
+    CHECK(World.Machine.FrameCache[First + 1] == MI_LEAF_NOCACHE);
+    World.Machine.FrameCacheFailureFramePlusOne = 0;
+    CHECK(NT_SUCCESS(MiPfnSetCache(Db, First + 2, MI_LEAF_NOCACHE)));
+    MiPfnShareDecrement(Db, First + 2, FALSE);
+    CHECK(Db->Pfn[First + 2].State == MiPageStandby);
+    World.Machine.FrameCacheFailureFramePlusOne = First + 3;
+    MiPfnPurgeStandby(Db);
+    CHECK(Db->Pfn[First + 2].State == MiPageBad);
+    CHECK(Db->Pfn[First + 2].CacheFlags == MI_LEAF_NOCACHE);
+    World.Machine.FrameCacheFailureFramePlusOne = 0;
+    CHECK(NT_SUCCESS(MiPfnSetCache(Db, First + 3, MI_LEAF_NOCACHE)));
+    MiPfnShareDecrement(Db, First + 3, FALSE);
+    CHECK(Db->Pfn[First + 3].State == MiPageStandby);
+    World.Machine.FrameCacheFailureFramePlusOne = First + 4;
+    CHECK(MiPfnAllocateContiguous(Db, 1, First + 3, First + 3, 0) == MI_FRAME_INVALID);
+    CHECK(Db->Pfn[First + 3].State == MiPageBad);
+    CHECK(Db->Pfn[First + 3].CacheFlags == MI_LEAF_NOCACHE);
+    World.Machine.FrameCacheFailureFramePlusOne = 0;
+    for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
+        if (i < 1 || i > 3)
+            MiPfnShareDecrement(Db, (ULONG)Frames[i], TRUE);
+    MiSystemPtesUninitialize(&World.System);
+    CHECK(MiPfnListCount(Db, MiPageBad) == 3);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    WorldExpectClean(&World, HM_FRAMES - 3);
+    WorldDestroy(&World);
+}
+
+static void
+HighMemCacheFailureOnReclaim(void)
+{
+    static TEST_WORLD World;
+    static ULONG Held[HM_DIRECT];
+    PMI_PFN_DATABASE Db;
+    ULONG Count = 0, Frame, i;
+
+    WorldCreateZoned(&World, HM_FRAMES, HM_DIRECT, 1, 100000);
+    Db = &World.System.Pfn;
+    while ((Frame = MiPfnAllocatePage(Db, MI_ALLOCATE_NO_RECLAIM)) != MI_FRAME_INVALID)
+    {
+        MI_ASSERT(Count < RTL_NUMBER_OF(Held));
+        Held[Count++] = Frame;
+    }
+    MI_ASSERT(Count > 1);
+    Frame = Held[0];
+    CHECK(NT_SUCCESS(MiPfnSetCache(Db, Frame, MI_LEAF_NOCACHE)));
+    MiPfnShareDecrement(Db, Frame, FALSE);
+    MiPfnShareDecrement(Db, Held[1], FALSE);
+    CHECK(Db->Pfn[Frame].State == MiPageStandby);
+    World.Machine.FrameCacheFailureFramePlusOne = Frame + 1;
+    CHECK(MiPfnAllocatePage(Db, 0) == Held[1]);
+    CHECK(Db->Pfn[Frame].State == MiPageBad);
+    CHECK(Db->Pfn[Frame].CacheFlags == MI_LEAF_NOCACHE);
+    World.Machine.FrameCacheFailureFramePlusOne = 0;
+    for (i = 1; i < Count; i++)
+        MiPfnShareDecrement(Db, Held[i], TRUE);
+    CHECK(MiPfnListCount(Db, MiPageBad) == 1);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    WorldExpectClean(&World, HM_FRAMES - 1);
+    WorldDestroy(&World);
+}
+
 void
 TestHighMem(void)
 {
@@ -338,4 +452,6 @@ TestHighMem(void)
     HighMemWindowConcurrent();
     HighMemUser();
     HighMemCacheRuns();
+    HighMemCacheFailure();
+    HighMemCacheFailureOnReclaim();
 }
