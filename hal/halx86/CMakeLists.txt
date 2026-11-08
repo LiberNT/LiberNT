@@ -45,37 +45,12 @@ endfunction()
 include(generic.cmake)
 include(acpi.cmake)
 include(apic.cmake)
-include(up.cmake)
 include(smp.cmake)
 
-if(ARCH STREQUAL "i386")
-    include(legacy.cmake)
-    include(pic.cmake)
-    include(xbox.cmake)
-    include(pc98.cmake)
-    add_subdirectory(minihal)
+if(ARCH STREQUAL "i386" AND (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox"))
+    message(FATAL_ERROR "The SMP HAL does not support ${SARCH}")
+endif()
 
-    remove_definitions(-DSARCH_XBOX)
-    remove_definitions(-DSARCH_PC98)
-
-    # hal
-    add_hal(hal SOURCES pic/halpic.rc COMPONENTS generic legacy up pic)
-    add_hal(halup COMPONENTS generic legacy up pic)
-    add_hal(halacpi SOURCES acpi/halacpi.rc COMPONENTS generic acpi up pic)
-    add_hal(halaacpi SOURCES apic/halaacpi.rc COMPONENTS generic acpi up apic)
-    add_hal(halapic SOURCES apic/halapic.rc COMPONENTS generic legacy up apic)
-    add_hal(halxbox SOURCES xbox/halxbox.rc COMPONENTS xbox up)
-    add_hal(halpc98 SOURCES pc98/halpc98.rc COMPONENTS pc98 up)
-
-    add_hal(halmacpi SOURCES smp/halmacpi.rc COMPONENTS generic acpi smp apic)
-    #add_hal(halmp SOURCES mp/halmp.rc COMPONENTS generic legacy smp apic)
-
-elseif(ARCH STREQUAL "amd64")
-    # The amd64 hal.dll is already an SMP APIC HAL, so there is no separate
-    # halmp.dll -- it was a byte-for-byte duplicate of this target.
-    add_hal(hal SOURCES ${HAL_SOURCE} COMPONENTS generic acpi smp apic)
-
-    # Keep a matching UP APIC HAL for the ntoskrnl.exe boot entries.
-    add_hal(halup SOURCES ${HAL_SOURCE} COMPONENTS generic acpi up apic)
-
+if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
+    add_hal(hal SOURCES smp/halmacpi.rc COMPONENTS generic acpi smp apic)
 endif()

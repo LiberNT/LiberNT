@@ -65,8 +65,6 @@ endif()
 set(NTOSKRNL_SOURCE ${SOURCE})
 set(NTOSKRNL_ASM_SOURCE ${ASM_SOURCE})
 
-set(NTKRNLMP_SOURCE ${SOURCE})
-set(NTKRNLMP_ASM_SOURCE ${ASM_SOURCE})
 
 spec2def(ntoskrnl.exe ntoskrnl.spec ADD_IMPORTLIB)
 
@@ -75,7 +73,15 @@ if (STACK_PROTECTOR)
     target_link_libraries(libntoskrnl INTERFACE gcc_ssp_nt)
 endif()
 
+if(MSVC_IDE)
+    set_source_files_properties(${NTOSKRNL_ASM_SOURCE} PROPERTIES COMPILE_DEFINITIONS "CONFIG_SMP")
+endif()
+
 add_asm_files(ntoskrnl_asm ${NTOSKRNL_ASM_SOURCE})
+
+if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "riscv64")
+    list(APPEND NTOSKRNL_SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/${ARCH}/mproc.c)
+endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     # Clang optimises strcmp calls to memcmp.
@@ -106,6 +112,7 @@ add_executable(ntoskrnl
     ntoskrnl.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ntoskrnl.def)
 set_module_type(ntoskrnl kernel)
+target_compile_definitions(ntoskrnl PRIVATE CONFIG_SMP)
 
 if(ARCH STREQUAL "arm64")
     target_link_libraries(ntoskrnl rtl_kernel_context)
@@ -134,13 +141,11 @@ add_cd_file(TARGET ntoskrnl DESTINATION reactos/system32 NO_CAB FOR all)
 
 add_subdirectory(nvs)
 add_subdirectory(cc)
-add_subdirectory(ntkrnlmp)
 
 add_custom_target(nvs_check_standalone
     COMMAND ${CMAKE_COMMAND} -DNVS_KERNEL_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/nvs/check-standalone.cmake)
 add_dependencies(ntoskrnl nvs_check_standalone)
-add_dependencies(ntkrnlmp nvs_check_standalone)
 
 if(WOW64_I386_RUNTIME AND ARCH STREQUAL "i386")
     set_source_files_properties(ntdll.S ntdll_nt6.S PROPERTIES COMPILE_DEFINITIONS WOW64_I386_RUNTIME)

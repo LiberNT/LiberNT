@@ -36,7 +36,7 @@ function(freeldr_ini_add_http_boot SOURCE OUTPUT URL STATIC_IP DEFAULT_OS OPTION
     string(REPLACE "${_os_marker}"
                    "HttpBoot=\"ReactOS HTTP Boot - Debug\""
                    _contents "${_contents}")
-    set(_http_boot_entry "[HttpBoot]\nBootType=Windows2003\nSystemPath=ramdisk(0)\\Windows\nOptions=/KERNEL=ntkrnlmp.exe /DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200 /SOS /FASTDETECT /MININT /LOADSYMBOLS")
+    set(_http_boot_entry "[HttpBoot]\nBootType=Windows2003\nSystemPath=ramdisk(0)\\Windows\nOptions=/DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200 /SOS /FASTDETECT /MININT /LOADSYMBOLS")
     if(OPTIONS)
         string(APPEND _http_boot_entry " ${OPTIONS}")
     endif()
@@ -110,28 +110,6 @@ if(FREELDR_PREINSTALL_OPTIONS)
     string(REGEX REPLACE "(Options=[^\r\n]*)" "\\1 ${FREELDR_PREINSTALL_OPTIONS}" _contents "${_contents}")
     set(FREELDR_PREINSTALL_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/preinstall_options.ini")
     file(CONFIGURE OUTPUT "${FREELDR_PREINSTALL_INI}" CONTENT "${_contents}" @ONLY)
-endif()
-
-# On x86 hal.dll is the UP PIC HAL, unlike the SMP HAL named hal.dll on
-# amd64. Pair our SMP media entries explicitly without changing other
-# architectures or overriding a HAL explicitly requested by an entry.
-if(ARCH STREQUAL "i386" AND NOT (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox"))
-    foreach(_media BOOTCD PREINSTALL)
-        set(_source "${FREELDR_${_media}_INI}")
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_source}")
-        file(READ "${_source}" _contents)
-        string(REGEX MATCHALL "Options=[^\r\n]*" _options "${_contents}")
-        foreach(_option IN LISTS _options)
-            if(_option MATCHES "/KERNEL=ntkrnlmp\\.exe([ /]|$)" AND
-               NOT _option MATCHES "/HAL=")
-                string(REPLACE "/KERNEL=ntkrnlmp.exe"
-                    "/KERNEL=ntkrnlmp.exe /HAL=halmacpi.dll" _paired "${_option}")
-                string(REPLACE "${_option}" "${_paired}" _contents "${_contents}")
-            endif()
-        endforeach()
-        set(FREELDR_${_media}_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/${_media}_i386.ini")
-        file(CONFIGURE OUTPUT "${FREELDR_${_media}_INI}" CONTENT "${_contents}" @ONLY)
-    endforeach()
 endif()
 
 if(SPACEMIT_K1_SUPPORT)

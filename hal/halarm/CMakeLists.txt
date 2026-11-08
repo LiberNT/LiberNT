@@ -1,3 +1,4 @@
+message(FATAL_ERROR "The ARM32 HAL does not support an SMP kernel")
 
 spec2def(hal.dll ../hal.spec ADD_IMPORTLIB)
 

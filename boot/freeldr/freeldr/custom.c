@@ -96,7 +96,7 @@ static const PCSTR ReactOSOptionsPrompt =
     "/DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200\n"
     "/FASTDETECT /NOGUIBOOT\n"
     "/BASEVIDEO /MAXMEM=64\n"
-    "/KERNEL=NTKRNLMP.EXE /HAL=HALMPS.DLL";
+    "/NUMPROC=1";
 static const PCSTR ReactOSSetupOptionsPrompt =
     "Enter additional load options you want passed to the ReactOS Setup.\n"
     "These options will supplement those obtained from the TXTSETUP.SIF\n"
