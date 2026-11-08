@@ -103,21 +103,17 @@ static
 BOOLEAN
 PiParallelPoolInit(VOID)
 {
-    LONG prev, t, n;
+    LONG prev, t;
 
     prev = InterlockedCompareExchange(&PiParallelPoolState, 1, 0);
     if (prev == 2) return TRUE;
     if (prev != 0) return FALSE; /* init in progress or failed */
 
-    n = (LONG)KeNumberProcessors;
-    if (n > PI_PARALLEL_ENUM_MAX) n = PI_PARALLEL_ENUM_MAX;
-    if (n < 1) n = 1;
-
     InitializeListHead(&PiParallelWorkList);
     KeInitializeSpinLock(&PiParallelWorkLock);
     KeInitializeSemaphore(&PiParallelWorkSem, 0, MAXLONG);
 
-    for (t = 0; t < n; t++)
+    for (t = 0; t < PI_PARALLEL_ENUM_MAX; t++)
     {
         HANDLE handle;
         NTSTATUS st = PsCreateSystemThread(&handle, THREAD_ALL_ACCESS, NULL, NULL, NULL, PiParallelPoolThread, NULL);
