@@ -107,7 +107,7 @@ MiArchPteIsWritable(MI_PTE Pte)
 BOOLEAN
 MiArchPteIsHardwareWritable(MI_PTE Pte)
 {
-    return MiI386PteHas(Pte, MI_I386_PTE_WRITABLE);
+    return MiI386PteHas(Pte, MI_I386_PTE_WRITE);
 }
 
 BOOLEAN
