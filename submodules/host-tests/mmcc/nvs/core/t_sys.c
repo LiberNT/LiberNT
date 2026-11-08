@@ -1189,9 +1189,60 @@ SysDumpUserFrames(void)
     SysWorldDestroy(&World, 1024);
 }
 
+static
+void
+SysContiguousAboveFirstFrame(void)
+{
+    static TEST_WORLD World;
+    static const ULONG Runs[][2] = { { 2048, 2056 }, { 2058, 2072 }, { 2075, 4200 }, { 4210, 16000 }, { 16010, 16384 } };
+    static const ULONG Sizes[] = { 1, 20, 21, 64, 65, 122, 123, 146, 1024 };
+    const ULONG Frames = 16384, FirstFrame = 2048;
+    ULONG64 Va[RTL_NUMBER_OF(Sizes)];
+    ULONG i, Page;
+
+    memset(&World, 0, sizeof(World));
+    MachineCreate(&World.Machine, Frames, 2);
+    World.Machine.StrictTlb = TRUE;
+    World.PfnArray = calloc(Frames - FirstFrame, sizeof(MI_PFN));
+    CHECK(NT_SUCCESS(MiSystemInitialize(&World.System, World.PfnArray, FirstFrame, Frames, 2, 1000000)));
+    for (i = 0; i < RTL_NUMBER_OF(Runs); i++)
+        MiPfnDbAddRange(&World.System.Pfn, Runs[i][0], Runs[i][1] - Runs[i][0]);
+    CHECK(NT_SUCCESS(MiAddressSpaceCreate(&World.System, &World.System.SystemSpace)));
+    World.Machine.SystemRoot = World.System.SystemSpace.RootFrame;
+    WorldEnableFaults(&World);
+    WorldAttach(&World, 0, NULL);
+    CHECK(NT_SUCCESS(MiSystemPtesInitialize(&World.System, SYSPTE_PAGES, 2)));
+
+    for (i = 0; i < RTL_NUMBER_OF(Sizes); i++)
+    {
+        ULONG64 First;
+
+        Va[i] = 0;
+        CHECK(NT_SUCCESS(MiAllocateContiguousMemory(&World.System, Sizes[i] * 4096ULL, 0, ~0ULL, 0, MiCacheNone,
+                                                    MI_PROT_READWRITE, &Va[i])));
+        if (Va[i] == 0)
+            continue;
+        First = MiGetPhysicalAddress(&World.System.SystemSpace, Va[i]);
+        CHECK((First >> PAGE_SHIFT) >= FirstFrame);
+        for (Page = 0; Page < Sizes[i]; Page++)
+        {
+            CHECK(MiGetPhysicalAddress(&World.System.SystemSpace, Va[i] + Page * 4096ULL) == First + Page * 4096ULL);
+            CHECK(NT_SUCCESS(KernelWrite64(&World, 0, Va[i] + Page * 4096ULL, Page)));
+        }
+    }
+    for (i = 0; i < RTL_NUMBER_OF(Sizes); i++)
+    {
+        if (Va[i] != 0)
+            MiFreeContiguousMemory(&World.System, Va[i]);
+    }
+    MiSystemPtesUninitialize(&World.System);
+    WorldDestroy(&World);
+}
+
 void
 TestSys(void)
 {
+    SysContiguousAboveFirstFrame();
     SysSelfMapFault();
     SysBootAdoption();
     SysPteAllocator();
