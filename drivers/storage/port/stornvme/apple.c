@@ -43,6 +43,7 @@
 #define SART_FLAGS_ALLOW            0xff
 
 #define ANS_MAX_BUFFERS             8
+#define ANS_BUFFER_ALIGNMENT        0x4000
 
 #pragma pack(push, 1)
 typedef struct _ANS_TCB
@@ -65,9 +66,12 @@ C_ASSERT(sizeof(ANS_TCB) == 128);
 
 typedef struct _ANS_BUFFER
 {
+    PVOID Allocation;
+    ULONG AllocationSize;
     PVOID Virtual;
     ULONGLONG Physical;
     ULONG Size;
+    ULONG SartIndex;
 } ANS_BUFFER, *PANS_BUFFER;
 
 typedef struct _ANS_CONTEXT
@@ -101,7 +105,8 @@ BOOLEAN
 AnsSartAllow(
     _Inout_ PANS_CONTEXT Ans,
     _In_ ULONGLONG Physical,
-    _In_ ULONG Size)
+    _In_ ULONG Size,
+    _Out_ PULONG Entry)
 {
     ULONG Index;
 
@@ -113,6 +118,7 @@ AnsSartAllow(
         WRITE_REGISTER_ULONG((volatile ULONG *)(Ans->Sart + SART_SIZE(Index)), Size >> 12);
         WRITE_REGISTER_ULONG((volatile ULONG *)(Ans->Sart + SART_CONFIG(Index)), SART_FLAGS_ALLOW);
         DPRINT1("stornvme: ANS may reach %I64x+%lx through SART entry %lu\n", Physical, Size, Index);
+        *Entry = Index;
         return TRUE;
     }
     DPRINT1("stornvme: no free SART entry for the ANS buffer\n");
@@ -133,6 +139,8 @@ AnsShmemSetup(
     PANS_CONTEXT Ans = Context;
     PHYSICAL_ADDRESS Low, High, Boundary;
     PANS_BUFFER Buffer;
+    ULONGLONG Physical;
+    ULONG Skip;
 
     UNREFERENCED_PARAMETER(Endpoint);
     *Virtual = NULL;
@@ -144,15 +152,20 @@ AnsShmemSetup(
     High.QuadPart = -1;
     Boundary.QuadPart = 0;
     Buffer = &Ans->Buffers[Ans->BufferCount];
-    Buffer->Virtual = MmAllocateContiguousMemorySpecifyCache(Size, Low, High, Boundary, MmNonCached);
-    if (!Buffer->Virtual)
+    Buffer->AllocationSize = Size + ANS_BUFFER_ALIGNMENT - PAGE_SIZE;
+    Buffer->Allocation = MmAllocateContiguousMemorySpecifyCache(Buffer->AllocationSize, Low, High, Boundary,
+                                                                MmNonCached);
+    if (!Buffer->Allocation)
         return FALSE;
+    Physical = (ULONGLONG)MmGetPhysicalAddress(Buffer->Allocation).QuadPart;
+    Skip = (ULONG)(((Physical + ANS_BUFFER_ALIGNMENT - 1) & ~(ULONGLONG)(ANS_BUFFER_ALIGNMENT - 1)) - Physical);
+    Buffer->Virtual = (PUCHAR)Buffer->Allocation + Skip;
+    Buffer->Physical = Physical + Skip;
     RtlZeroMemory(Buffer->Virtual, Size);
-    Buffer->Physical = (ULONGLONG)MmGetPhysicalAddress(Buffer->Virtual).QuadPart;
     Buffer->Size = Size;
-    if (!AnsSartAllow(Ans, Buffer->Physical, Size))
+    if (!AnsSartAllow(Ans, Buffer->Physical, Size, &Buffer->SartIndex))
     {
-        MmFreeContiguousMemorySpecifyCache(Buffer->Virtual, Size, MmNonCached);
+        MmFreeContiguousMemorySpecifyCache(Buffer->Allocation, Buffer->AllocationSize, MmNonCached);
         RtlZeroMemory(Buffer, sizeof(*Buffer));
         return FALSE;
     }
@@ -291,9 +304,24 @@ AnsReleaseContext(
     _Inout_ PNVME_DEVICE_EXTENSION Device)
 {
     PANS_CONTEXT Ans = AnsContext(Device);
+    ULONG Index;
 
     if (!Ans)
         return;
+    if (Ans->BufferCount && Ans->Sart)
+    {
+        for (Index = 0; Index < Ans->BufferCount; ++Index)
+        {
+            WRITE_REGISTER_ULONG((volatile ULONG *)(Ans->Sart + SART_CONFIG(Ans->Buffers[Index].SartIndex)), 0);
+            WRITE_REGISTER_ULONG((volatile ULONG *)(Ans->Sart + SART_PADDR(Ans->Buffers[Index].SartIndex)), 0);
+            WRITE_REGISTER_ULONG((volatile ULONG *)(Ans->Sart + SART_SIZE(Ans->Buffers[Index].SartIndex)), 0);
+        }
+        KeMemoryBarrier();
+        for (Index = 0; Index < Ans->BufferCount; ++Index)
+            MmFreeContiguousMemorySpecifyCache(Ans->Buffers[Index].Allocation, Ans->Buffers[Index].AllocationSize,
+                                               MmNonCached);
+        Ans->BufferCount = 0;
+    }
     if (Ans->Coproc)
         MmUnmapIoSpace(Ans->Coproc, Ans->CoprocSize);
     if (Ans->Mailbox)
@@ -400,7 +428,10 @@ AnsFindAdapter(_In_ PVOID DeviceExtension,
     *Again = FALSE;
     AccessRange = &(*ConfigInfo->AccessRanges)[0];
     if (AccessRange->RangeLength == 0 || !AccessRange->RangeInMemory)
+    {
+        DPRINT1("stornvme: ANS has no memory range (%lx bytes)\n", AccessRange->RangeLength);
         return SP_RETURN_NOT_FOUND;
+    }
 
     Ans = ExAllocatePoolZero(NonPagedPool, sizeof(*Ans), ANS_TAG);
     if (!Ans)
@@ -437,7 +468,10 @@ AnsFindAdapter(_In_ PVOID DeviceExtension,
                                                  ConfigInfo->SystemIoBusNumber, AccessRange->RangeStart,
                                                  AccessRange->RangeLength, FALSE);
     if (Device->Bar0 == NULL)
+    {
+        DPRINT1("stornvme: ANS registers at %I64x could not be mapped\n", AccessRange->RangeStart.QuadPart);
         goto Failure;
+    }
     if (!AnsBootCoprocessor(Device, Ans))
         goto Failure;
 
@@ -459,14 +493,20 @@ AnsFindAdapter(_In_ PVOID DeviceExtension,
         ConfigInfo->Dma64BitAddresses = SCSI_DMA64_MINIPORT_FULL64BIT_NO_BOUNDARY_REQ_SUPPORTED;
     Uncached = (PUCHAR)StorPortGetUncachedExtension(Device, ConfigInfo, UncachedSize);
     if (Uncached == NULL)
+    {
+        DPRINT1("stornvme: no %lu byte uncached extension for ANS\n", UncachedSize);
         goto Failure;
+    }
     RtlZeroMemory(Uncached, UncachedSize);
     Device->UncachedBase = Uncached;
     Device->UncachedSize = UncachedSize;
     Physical = StorPortGetPhysicalAddress(Device, NULL, Uncached, &Length);
     Device->UncachedPhysical = (ULONGLONG)Physical.QuadPart;
     if (Device->UncachedPhysical == 0 || (Device->UncachedPhysical & (PAGE_SIZE - 1)) != 0)
+    {
+        DPRINT1("stornvme: ANS uncached extension at physical %I64x is unusable\n", Device->UncachedPhysical);
         goto Failure;
+    }
 
     Offset = 0;
     Device->AdminQueue.Sq = (PNVME_COMMAND)(Uncached + Offset);
