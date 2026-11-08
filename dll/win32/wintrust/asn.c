@@ -2372,3 +2372,124 @@ BOOL WINAPI WVTAsn1SpcFinancialCriteriaInfoDecode(DWORD dwCertEncodingType,
     TRACE("returning %d\n", ret);
     return ret;
 }
+
+#ifdef __REACTOS__
+static const GUID catalog_member_subjects[] =
+{
+    { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+};
+
+#define CAT_MEMBERINFO2_DEFAULT_VERSION 0x200
+#define CAT_MEMBERINFO2_GUID_TAG        (ASN_CONTEXT | 5)
+
+static BOOL WVTAsn1_ReturnEncoded(const BYTE *encoded, DWORD size, BYTE *pbEncoded, DWORD *pcbEncoded)
+{
+    if (!pbEncoded)
+    {
+        *pcbEncoded = size;
+        return TRUE;
+    }
+    if (*pcbEncoded < size)
+    {
+        *pcbEncoded = size;
+        SetLastError(ERROR_MORE_DATA);
+        return FALSE;
+    }
+    memcpy(pbEncoded, encoded, size);
+    *pcbEncoded = size;
+    return TRUE;
+}
+
+/***********************************************************************
+ *      WVTAsn1CatMemberInfo2Encode  (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1CatMemberInfo2Encode(DWORD dwCertEncodingType, LPCSTR lpszStructType, const void *pvStructInfo,
+                                        BYTE *pbEncoded, DWORD *pcbEncoded)
+{
+    const CAT_MEMBERINFO2 *info = pvStructInfo;
+    BYTE encoded[2 + sizeof(GUID) + 8];
+    DWORD size, i;
+
+    TRACE("(0x%08lx, %s, %p, %p, %p)\n", dwCertEncodingType, debugstr_a(lpszStructType), pvStructInfo,
+          pbEncoded, pcbEncoded);
+
+    if (!info || !pcbEncoded)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    for (i = 0; info->dwCertVersion == CAT_MEMBERINFO2_DEFAULT_VERSION && i < ARRAY_SIZE(catalog_member_subjects); i++)
+    {
+        if (!IsEqualGUID(&info->SubjectGuid, &catalog_member_subjects[i])) continue;
+        encoded[0] = ASN_CONTEXT | i;
+        encoded[1] = 0;
+        return WVTAsn1_ReturnEncoded(encoded, 2, pbEncoded, pcbEncoded);
+    }
+
+    encoded[0] = CAT_MEMBERINFO2_GUID_TAG;
+    encoded[1] = sizeof(GUID);
+    memcpy(encoded + 2, &info->SubjectGuid, sizeof(GUID));
+    size = sizeof(encoded) - 2 - sizeof(GUID);
+    if (!CryptEncodeObjectEx(X509_ASN_ENCODING, X509_INTEGER, &info->dwCertVersion, 0, NULL,
+                             encoded + 2 + sizeof(GUID), &size))
+        return FALSE;
+    return WVTAsn1_ReturnEncoded(encoded, 2 + sizeof(GUID) + size, pbEncoded, pcbEncoded);
+}
+
+/***********************************************************************
+ *      WVTAsn1CatMemberInfo2Decode  (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1CatMemberInfo2Decode(DWORD dwCertEncodingType, LPCSTR lpszStructType, const BYTE *pbEncoded,
+                                        DWORD cbEncoded, DWORD dwFlags, void *pvStructInfo, DWORD *pcbStructInfo)
+{
+    CAT_MEMBERINFO2 info;
+    DWORD size;
+
+    TRACE("(0x%08lx, %s, %p, %ld, 0x%08lx, %p, %p)\n", dwCertEncodingType, debugstr_a(lpszStructType), pbEncoded,
+          cbEncoded, dwFlags, pvStructInfo, pcbStructInfo);
+
+    if (!pbEncoded || !pcbStructInfo)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (cbEncoded >= 2 && pbEncoded[1] == 0 && (pbEncoded[0] & ~0x03) == ASN_CONTEXT &&
+        (pbEncoded[0] & 0x03) < ARRAY_SIZE(catalog_member_subjects))
+    {
+        info.SubjectGuid = catalog_member_subjects[pbEncoded[0] & 0x03];
+        info.dwCertVersion = CAT_MEMBERINFO2_DEFAULT_VERSION;
+    }
+    else if (cbEncoded > 2 + sizeof(GUID) && pbEncoded[0] == CAT_MEMBERINFO2_GUID_TAG && pbEncoded[1] == sizeof(GUID))
+    {
+        memcpy(&info.SubjectGuid, pbEncoded + 2, sizeof(GUID));
+        size = sizeof(info.dwCertVersion);
+        if (!CryptDecodeObjectEx(X509_ASN_ENCODING, X509_INTEGER, pbEncoded + 2 + sizeof(GUID),
+                                 cbEncoded - 2 - sizeof(GUID), 0, NULL, &info.dwCertVersion, &size))
+            return FALSE;
+    }
+    else
+    {
+        SetLastError(CRYPT_E_ASN1_BADTAG);
+        return FALSE;
+    }
+
+    if (!pvStructInfo)
+    {
+        *pcbStructInfo = sizeof(info);
+        return TRUE;
+    }
+    if (*pcbStructInfo < sizeof(info))
+    {
+        *pcbStructInfo = sizeof(info);
+        SetLastError(ERROR_MORE_DATA);
+        return FALSE;
+    }
+    memcpy(pvStructInfo, &info, sizeof(info));
+    *pcbStructInfo = sizeof(info);
+    return TRUE;
+}
+#endif

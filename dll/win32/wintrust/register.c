@@ -1011,6 +1011,10 @@ HRESULT WINAPI DllRegisterServer(void)
     static const CHAR CatNameValueDecode[]             = "WVTAsn1CatNameValueDecode";
     static const CHAR CatMemberInfoEncode[]            = "WVTAsn1CatMemberInfoEncode";
     static const CHAR CatMemberInfoDecode[]            = "WVTAsn1CatMemberInfoDecode";
+#ifdef __REACTOS__
+    static const CHAR CatMemberInfo2Encode[]           = "WVTAsn1CatMemberInfo2Encode";
+    static const CHAR CatMemberInfo2Decode[]           = "WVTAsn1CatMemberInfo2Decode";
+#endif
     static const CHAR SpcSpOpusInfoEncode[]            = "WVTAsn1SpcSpOpusInfoEncode";
     static const CHAR SpcSpOpusInfoDecode[]            = "WVTAsn1SpcSpOpusInfoDecode";
     static GUID Unknown1 = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
@@ -1075,6 +1079,10 @@ HRESULT WINAPI DllRegisterServer(void)
     WINTRUST_REGISTEROID(CAT_NAMEVALUE_STRUCT, CatNameValueEncode, CatNameValueDecode);
     WINTRUST_REGISTEROID(CAT_MEMBERINFO_OBJID, CatMemberInfoEncode, CatMemberInfoDecode);
     WINTRUST_REGISTEROID(CAT_MEMBERINFO_STRUCT, CatMemberInfoEncode, CatMemberInfoDecode);
+#ifdef __REACTOS__
+    WINTRUST_REGISTEROID(CAT_MEMBERINFO2_OBJID, CatMemberInfo2Encode, CatMemberInfo2Decode);
+    WINTRUST_REGISTEROID(CAT_MEMBERINFO2_STRUCT, CatMemberInfo2Encode, CatMemberInfo2Decode);
+#endif
     WINTRUST_REGISTEROID(SPC_SP_OPUS_INFO_OBJID, SpcSpOpusInfoEncode, SpcSpOpusInfoDecode);
     WINTRUST_REGISTEROID(SPC_SP_OPUS_INFO_STRUCT, SpcSpOpusInfoEncode,  SpcSpOpusInfoDecode);
 

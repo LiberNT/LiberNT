@@ -109,8 +109,8 @@
 #@ stub WTLogConfigCiScriptEvent
 #@ stub WTLogConfigCiSignerEvent
 #@ stub WTValidateBioSignaturePolicy
-#@ stub WVTAsn1CatMemberInfo2Decode
-#@ stub WVTAsn1CatMemberInfo2Encode
+@ stdcall WVTAsn1CatMemberInfo2Decode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1CatMemberInfo2Encode(long str ptr ptr ptr)
 @ stdcall WVTAsn1CatMemberInfoDecode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1CatMemberInfoEncode(long str ptr ptr ptr)
 @ stdcall WVTAsn1CatNameValueDecode(long str ptr long long ptr ptr)
