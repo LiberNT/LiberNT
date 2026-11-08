@@ -38,4 +38,17 @@ UacFeatureUnit2Controls(
     return Controls;
 }
 
+/* High-speed feedback is Q16.16 frames per microframe; some devices report it per 1 ms frame */
+static __inline
+ULONG
+UacNormalizeFeedback(
+    _In_ BOOLEAN HighSpeed,
+    _In_ ULONG FeedbackQ16,
+    _In_ ULONG NominalQ16)
+{
+    if (HighSpeed && NominalQ16 && FeedbackQ16 > NominalQ16 * 2 && FeedbackQ16 <= NominalQ16 * 16)
+        return FeedbackQ16 >> 3;
+    return FeedbackQ16;
+}
+
 #endif

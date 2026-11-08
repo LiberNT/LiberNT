@@ -48,8 +48,24 @@ TestFeatureUnit2Controls(VOID)
     ok_hex(UacFeatureUnit2Controls(0xFFFFFFFF), 0xFFFF);
 }
 
+static
+VOID
+TestNormalizeFeedback(VOID)
+{
+    /* 48 kHz: 6.0 frames per microframe, 48.0 per 1 ms frame */
+    ok_hex(UacNormalizeFeedback(TRUE, 6 << 16, 6 << 16), 6 << 16);
+    ok_hex(UacNormalizeFeedback(TRUE, (6 << 16) + 0x1000, 6 << 16), (6 << 16) + 0x1000);
+    ok_hex(UacNormalizeFeedback(TRUE, 48 << 16, 6 << 16), 6 << 16);
+    /* full speed and an unknown nominal rate are taken as they come */
+    ok_hex(UacNormalizeFeedback(FALSE, 48 << 16, 48 << 16), 48 << 16);
+    ok_hex(UacNormalizeFeedback(TRUE, 48 << 16, 0), 48 << 16);
+    /* more than 16 times nominal is not a per-frame report */
+    ok_hex(UacNormalizeFeedback(TRUE, 200 << 16, 6 << 16), 200 << 16);
+}
+
 START_TEST(UacStream)
 {
     TestPacketRate();
     TestFeatureUnit2Controls();
+    TestNormalizeFeedback();
 }
