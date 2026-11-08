@@ -205,6 +205,7 @@ KMT_TESTFUNC Test_KeDpcQueueTransitions;
 #ifdef _M_AMD64
 KMT_TESTFUNC Test_KeSwitchReaper;
 KMT_TESTFUNC Test_KeSwitchSelfWake;
+KMT_TESTFUNC Test_KeTrapFilterX87;
 KMT_TESTFUNC Test_KeStandbySteal;
 #endif
 KMT_TESTFUNC Test_KeDeferredReady;
@@ -539,6 +540,7 @@ const KMT_TEST TestList[] =
 #ifdef _M_AMD64
     { "KeSwitchReaper",                     Test_KeSwitchReaper },
     { "KeSwitchSelfWake",                   Test_KeSwitchSelfWake },
+    { "KeTrapFilterX87",                    Test_KeTrapFilterX87 },
     { "KeStandbySteal",                     Test_KeStandbySteal },
 #endif
     { "KeDeferredReady",                    Test_KeDeferredReady },
