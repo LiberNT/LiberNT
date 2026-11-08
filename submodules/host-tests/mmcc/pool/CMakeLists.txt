@@ -70,3 +70,13 @@ foreach(TARGET pool_nt pool_nt_asan)
 endforeach()
 target_compile_options(pool_nt_asan PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
 target_link_options(pool_nt_asan PRIVATE -fsanitize=address,undefined)
+
+option(POOL_EXPANSION_TSAN "Run the pool expansion ThreadSanitizer regression" OFF)
+if(POOL_EXPANSION_TSAN AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME pool.expansion_tsan COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/host/expansion-race-test.py
+            --source ${POOL_ROOT}/ex/exinit.c --cc ${CMAKE_C_COMPILER})
+    endif()
+endif()

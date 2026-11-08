@@ -49,14 +49,19 @@ ExpPoolAttachExpansion(VOID)
     POOL_KM_LAYOUT Layout;
     POOL_BACKING Backing;
     BOOLEAN Attached = FALSE;
+    LONG Pending;
 
-    if (!ExpPoolState.ExpansionPending)
+    Pending = InterlockedCompareExchange(&ExpPoolState.ExpansionPending, 0, 0);
+    POOL_ASSERT(Pending == 0 || Pending == 1);
+    if (!Pending)
         return FALSE;
 
     if (InterlockedCompareExchange(&ExpPoolState.ExpansionAttaching, 1, 0) != 0)
         return FALSE;
 
-    if (ExpPoolState.ExpansionPending)
+    Pending = InterlockedCompareExchange(&ExpPoolState.ExpansionPending, 0, 0);
+    POOL_ASSERT(Pending == 0 || Pending == 1);
+    if (Pending)
     {
         PoolBackQueryLayout(&Layout);
         PoolBackDemandBacking(&Backing, FALSE);
