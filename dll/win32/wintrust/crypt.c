@@ -2953,6 +2953,9 @@ static BYTE *sip_pe_image_value(const BYTE *link, DWORD link_len, DWORD *out_len
     return seq;
 }
 
+/* TODO: INFO_NEEDED: the files Windows 11 handles with this SIP; every call tried on it does nothing */
+static const GUID sip_18b3c141_guid = { 0x18B3C141, 0xAE0D, 0x40F9, { 0x94,0x65,0xE5,0x42,0xAF,0xC1,0xAB,0xC7 } };
+
 static BOOL sip_create_indirect_data(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIndirectData,
                                      SIP_INDIRECT_DATA* pIndirectData, BOOL prepare)
 {
@@ -3003,6 +3006,8 @@ static BOOL sip_create_indirect_data(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIn
         kind = SUBJECT_CAB;
         data_oid = SPC_LINK_OBJID;
     }
+    else if (IsEqualGUID(pSubjectInfo->pgSubjectType, &sip_18b3c141_guid))
+        return FALSE;
     else
     {
         FIXME("unimplemented for subject type %s\n", debugstr_guid(pSubjectInfo->pgSubjectType));
@@ -3706,7 +3711,6 @@ typedef struct _SIP_INFORMATION
  */
 BOOL WINAPI CryptSIPGetInfo(SIP_INFORMATION *pSipInfo)
 {
-    /* FIXME: Windows 11 also reports {18B3C141-AE0D-40F9-9465-E542AFC1ABC7}, a SIP LiberNT does not have */
     static const GUID subjects[] =
     {
         { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
@@ -3714,6 +3718,7 @@ BOOL WINAPI CryptSIPGetInfo(SIP_INFORMATION *pSipInfo)
         { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
         { 0xDE351A43, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
         { 0x9BA61D3F, 0xE73A, 0x11D0, { 0x8C,0xD2,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+        { 0x18B3C141, 0xAE0D, 0x40F9, { 0x94,0x65,0xE5,0x42,0xAF,0xC1,0xAB,0xC7 } },
     };
 
     TRACE("(%p)\n", pSipInfo);
@@ -3797,6 +3802,13 @@ BOOL WINAPI CryptSIPGetSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pdwEn
     else if (!memcmp(pSubjectInfo->pgSubjectType, &catGUID, sizeof(catGUID)))
         ret = WINTRUST_GetSignedMsgFromCatFile(pSubjectInfo, pdwEncodingType,
          dwIndex, pcbSignedDataMsg, pbSignedDataMsg);
+#ifdef __REACTOS__
+    else if (IsEqualGUID(pSubjectInfo->pgSubjectType, &sip_18b3c141_guid))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        ret = FALSE;
+    }
+#endif
     else
     {
         FIXME("unimplemented for subject type %s\n",
@@ -3832,6 +3844,8 @@ BOOL WINAPI CryptSIPPutSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo, DWORD pdwEnc
     else if (!memcmp(pSubjectInfo->pgSubjectType, &cabGUID, sizeof(cabGUID)))
         return WINTRUST_PutSignedMsgToCabFile(pSubjectInfo, pdwIndex,
                 cbSignedDataMsg, pbSignedDataMsg);
+    else if (IsEqualGUID(pSubjectInfo->pgSubjectType, &sip_18b3c141_guid))
+        return FALSE;
 #endif
     else
         FIXME("unimplemented for subject type %s\n",
@@ -3858,7 +3872,8 @@ BOOL WINAPI CryptSIPRemoveSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo,
         return WINTRUST_RemoveSignedMsgFromPEFile(pSubjectInfo, dwIndex);
     if (!memcmp(pSubjectInfo->pgSubjectType, &cabGUID, sizeof(cabGUID)))
         SetLastError(ERROR_SUCCESS);
-    else if (memcmp(pSubjectInfo->pgSubjectType, &catGUID, sizeof(catGUID)))
+    else if (memcmp(pSubjectInfo->pgSubjectType, &catGUID, sizeof(catGUID)) &&
+             !IsEqualGUID(pSubjectInfo->pgSubjectType, &sip_18b3c141_guid))
         FIXME("unimplemented for subject type %s\n", debugstr_guid(pSubjectInfo->pgSubjectType));
     return FALSE;
 #else
@@ -3887,6 +3902,8 @@ BOOL WINAPI CryptSIPVerifyIndirectData(SIP_SUBJECTINFO* pSubjectInfo,
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+    if (IsEqualGUID(pSubjectInfo->pgSubjectType, &sip_18b3c141_guid))
+        return TRUE;
     if (IsEqualGUID(pSubjectInfo->pgSubjectType, &flatGUID))
     {
         /* Windows 11 never verifies a flat image here: catalog members are compared by hash */

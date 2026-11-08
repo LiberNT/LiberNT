@@ -5897,6 +5897,9 @@ HKCR,"Interface\{EC5EC8A9-C395-4314-9C77-54D7A935FF70}\ProxyStubClsid32","",0x00
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","FuncName",0x00000000,"CryptSIPCreateIndirectData"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}",,0x00000010
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","FuncName",0x00000000,"CryptSIPCreateIndirectData"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","Dll",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPCreateIndirectData"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndirectData\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
@@ -5915,6 +5918,9 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllCreateIndire
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetSignedDataMsg"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}",,0x00000010
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","FuncName",0x00000000,"CryptSIPGetSignedDataMsg"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","Dll",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetSignedDataMsg"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
@@ -5933,6 +5939,9 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetSignedDat
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","FuncName",0x00000000,"CryptSIPPutSignedDataMsg"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}",,0x00000010
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","FuncName",0x00000000,"CryptSIPPutSignedDataMsg"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","Dll",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPPutSignedDataMsg"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
@@ -5951,6 +5960,9 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllPutSignedDat
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","FuncName",0x00000000,"CryptSIPRemoveSignedDataMsg"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}",,0x00000010
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","FuncName",0x00000000,"CryptSIPRemoveSignedDataMsg"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","Dll",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPRemoveSignedDataMsg"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSignedDataMsg\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
@@ -5969,6 +5981,9 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllRemoveSigned
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","FuncName",0x00000000,"CryptSIPVerifyIndirectData"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}",,0x00000010
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","FuncName",0x00000000,"CryptSIPVerifyIndirectData"
+HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{18B3C141-AE0D-40F9-9465-E542AFC1ABC7}","Dll",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPVerifyIndirectData"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllVerifyIndirectData\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"

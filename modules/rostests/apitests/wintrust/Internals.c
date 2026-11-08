@@ -183,6 +183,7 @@ TestSipInfo(VOID)
         { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
         { 0xDE351A43, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
         { 0x9BA61D3F, 0xE73A, 0x11D0, { 0x8C,0xD2,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+        { 0x18B3C141, 0xAE0D, 0x40F9, { 0x94,0x65,0xE5,0x42,0xAF,0xC1,0xAB,0xC7 } },
     };
     PFN_SIP_INFO GetInfo = GET(PFN_SIP_INFO, "CryptSIPGetInfo");
     PFN_WORKING_FLAGS WorkingFlags = GET(PFN_WORKING_FLAGS, "CryptSIPGetRegWorkingFlags");
@@ -195,7 +196,7 @@ TestSipInfo(VOID)
     ZeroMemory(&Info, sizeof(Info));
     ok_int(GetInfo(&Info), TRUE);
     ok_long(Info.cbSize, sizeof(Info));
-    ok(Info.cgSubjects >= RTL_NUMBER_OF(Expected), "only %lu subjects\n", Info.cgSubjects);
+    ok_long(Info.cgSubjects, RTL_NUMBER_OF(Expected));
     for (i = 0; Info.pgSubjects && i < RTL_NUMBER_OF(Expected) && i < Info.cgSubjects; i++)
         ok(IsEqualGUID(&Info.pgSubjects[i], &Expected[i]), "subject %lu is %08lx\n", i, Info.pgSubjects[i].Data1);
 
