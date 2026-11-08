@@ -203,7 +203,10 @@ MiSetPrivateRangeProtection(
         LONG Added = 0;
 
         if (Slot == NULL)
+        {
+            MiPtPruneEmpty(Space, Va);
             return STATUS_NO_MEMORY;
+        }
 
         if (TableEnd > End)
             TableEnd = End;
@@ -362,6 +365,8 @@ MiDeleteRange(
     BOOLEAN Deferred;
     BOOLEAN NoClones = Space->CloneRoot.NodeCount == 0;
 
+    MI_ASSERT(Start >= MI_VAD_START(Vad) && End <= MI_VAD_END(Vad) && Start <= End);
+    MI_ASSERT(((Start | End) & (PAGE_SIZE - 1)) == 0);
     if (!Decommit)
         MiPtFlushEmpty(Space);
 
@@ -458,6 +463,7 @@ MiDeleteRange(
 Done:
     Space->TlbBatch->DeferTables = Deferred;
     MiTlbBatchEnd(Space, Owner);
+    MI_ASSERT(Committed >= 0 && (ULONG64)Committed <= (End - Start) >> PAGE_SHIFT);
     return Committed;
 }
 
@@ -888,6 +894,10 @@ MiAllocateVirtualMemoryBounded(
 
     Charged = Vad->CommitCharge == 0 ? (LONG64)((End - Start) >> PAGE_SHIFT)
                                     : MiCountUncommittedPrivate(Space, Vad, Start, End);
+    MI_ASSERT(Vad->CommitCharge >= 0);
+    MI_ASSERT((ULONG64)Vad->CommitCharge <= Vad->Node.EndingVpn - Vad->Node.StartingVpn + 1);
+    MI_ASSERT(Charged >= 0 && (ULONG64)Charged <= (End - Start) >> PAGE_SHIFT);
+    MI_ASSERT((ULONG64)(Vad->CommitCharge + Charged) <= Vad->Node.EndingVpn - Vad->Node.StartingVpn + 1);
 
     if (Charged != 0 && !MiChargeCommit(Space, Charged))
     {
@@ -898,6 +908,14 @@ MiAllocateVirtualMemoryBounded(
     Vad->CommitCharge += Charged;
     Vad->PteTouched = TRUE;
     Status = MiSetPrivateRangeProtection(Space, Start, End, Protection);
+    if (!NT_SUCCESS(Status))
+    {
+        LONG64 Uncommitted = MiCountUncommittedPrivate(Space, Vad, Start, End);
+
+        MI_ASSERT(Uncommitted >= 0 && Uncommitted <= Charged);
+        Vad->CommitCharge -= Uncommitted;
+        MiReturnCommit(Space, Uncommitted);
+    }
 
     *BaseAddress = Start;
     *RegionSize = End - Start;
@@ -1164,6 +1182,7 @@ MiFreeVirtualMemory(
     if (FreeType == MI_MEM_DECOMMIT)
     {
         Returned = MiDeleteRange(Space, Vad, Start, End, TRUE);
+        MI_ASSERT(Returned >= 0 && Returned <= Vad->CommitCharge);
         Vad->CommitCharge -= Returned;
         MiReturnCommit(Space, Returned);
         *BaseAddress = Start;
@@ -1204,6 +1223,8 @@ MiFreeVirtualMemory(
         }
 
         Returned = MiDeleteRange(Space, Vad, Start, End, FALSE);
+        MI_ASSERT(Returned >= 0 && TailCommit >= 0);
+        MI_ASSERT(Returned <= Vad->CommitCharge && TailCommit <= Vad->CommitCharge - Returned);
 
         TailBits = Tail->WriteWatchBits;
         *Tail = *Vad;
@@ -1211,17 +1232,21 @@ MiFreeVirtualMemory(
         MiVadRemove(&Space->VadRoot, &Vad->Node);
         Vad->Node.EndingVpn = (Start >> PAGE_SHIFT) - 1;
         Vad->CommitCharge -= Returned + TailCommit;
+        MI_ASSERT((ULONG64)Vad->CommitCharge <= Vad->Node.EndingVpn - Vad->Node.StartingVpn + 1);
         MiVadInsert(&Space->VadRoot, &Vad->Node);
 
         RtlZeroMemory(&Tail->Node, sizeof(Tail->Node));
         Tail->Node.StartingVpn = End >> PAGE_SHIFT;
         Tail->Node.EndingVpn = OldEndVpn;
         Tail->CommitCharge = TailCommit;
+        MI_ASSERT((ULONG64)Tail->CommitCharge <= Tail->Node.EndingVpn - Tail->Node.StartingVpn + 1);
         MiVadInsert(&Space->VadRoot, &Tail->Node);
     }
     else
     {
         Returned = MiDeleteRange(Space, Vad, Start, End, FALSE);
+        MI_ASSERT(Returned >= 0 && Returned <= Vad->CommitCharge);
+        MI_ASSERT(Start != MI_VAD_START(Vad) || End != MI_VAD_END(Vad) || Returned == Vad->CommitCharge);
         Vad->CommitCharge -= Returned;
 
         MiVadRemove(&Space->VadRoot, &Vad->Node);
@@ -1703,6 +1728,7 @@ MiCleanAddressSpace(
         {
             LONG64 Returned = MiDeleteRange(Space, Vad, MI_VAD_START(Vad), MI_VAD_END(Vad), FALSE);
 
+            MI_ASSERT(Returned == Vad->CommitCharge);
             MiWriteWatchRelease(Vad);
 
             MiReturnCommit(Space, Returned);

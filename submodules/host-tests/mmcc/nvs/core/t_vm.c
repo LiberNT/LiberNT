@@ -1262,9 +1262,84 @@ VmRotateLifecycle(void)
     WorldDestroy(&World);
 }
 
+static BOOLEAN
+VmCommitOwnerCharge(PVOID Context, LONG64 Pages)
+{
+    *(LONG64 *)Context += Pages;
+    return TRUE;
+}
+
+static VOID
+VmCommitOwnerReturn(PVOID Context, LONG64 Pages)
+{
+    *(LONG64 *)Context -= Pages;
+}
+
+static void
+VmCommitTableOutOfMemory(void)
+{
+    ULONG Available, Mode;
+    BOOLEAN SawPartial = FALSE;
+
+    for (Mode = 0; Mode < 2; Mode++)
+    for (Available = 0; Available <= 4; Available++)
+    {
+        TEST_WORLD World;
+        MI_ADDRESS_SPACE Space;
+        MI_MEMORY_INFORMATION Info;
+        ULONG64 Base = 0x40000000ULL, Size = 0x400000, Start, Length;
+        ULONG Held[64], Count = 0, Frame, i, Committed = 0;
+        LONG64 OwnerPages = 0;
+        NTSTATUS Status;
+
+        WorldCreate(&World, 64, 1, 1000);
+        ProcessCreate(&World, &Space);
+        World.System.ChargeOwnerCommit = VmCommitOwnerCharge;
+        World.System.ReturnOwnerCommit = VmCommitOwnerReturn;
+        Space.CommitOwner = &OwnerPages;
+        CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE, MI_PROT_READWRITE)));
+        if (Mode != 0)
+        {
+            Start = Base + 0x200000 - PAGE_SIZE;
+            Length = PAGE_SIZE;
+            CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Start, &Length, MI_MEM_COMMIT, MI_PROT_READWRITE)));
+        }
+        while ((Frame = MiPfnAllocatePage(&World.System.Pfn, MI_ALLOCATE_NO_RECLAIM | TEST_ANY_FRAME)) != MI_FRAME_INVALID)
+            Held[Count++] = Frame;
+        for (i = 0; i < Available; i++)
+            MiPfnFreePage(&World.System.Pfn, Held[--Count]);
+
+        Start = Base + 0x200000 - PAGE_SIZE;
+        Length = 2 * PAGE_SIZE;
+        Status = MiAllocateVirtualMemory(&Space, &Start, &Length, MI_MEM_COMMIT, MI_PROT_READWRITE);
+        CHECK(Status == STATUS_NO_MEMORY || NT_SUCCESS(Status));
+        if (Available == 0)
+            CHECK(Status == STATUS_NO_MEMORY);
+        for (i = 0; i < 2; i++)
+        {
+            CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x200000 - PAGE_SIZE + i * PAGE_SIZE, &Info)));
+            Committed += Info.State == MI_MEM_COMMIT;
+        }
+        CHECK(Space.CommittedPages == Committed);
+        CHECK(World.System.CommittedPages == Committed);
+        CHECK(OwnerPages == Committed);
+        if (Mode == 0 && Status == STATUS_NO_MEMORY && Committed == 1)
+            SawPartial = TRUE;
+        for (i = 0; i < Count; i++)
+            MiPfnFreePage(&World.System.Pfn, Held[i]);
+        CHECK(NT_SUCCESS(Free(&Space, Base, 0, MI_MEM_RELEASE)));
+        CHECK(OwnerPages == 0);
+        ProcessDestroy(&World, &Space);
+        WorldExpectClean(&World, 64);
+        WorldDestroy(&World);
+    }
+    CHECK(SawPartial);
+}
+
 void
 TestVm(void)
 {
+    VmCommitTableOutOfMemory();
     VmRotateLifecycle();
     VmWindowsProtection();
     VmExecutableWriteTracking();
