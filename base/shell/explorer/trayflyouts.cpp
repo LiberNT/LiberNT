@@ -7225,6 +7225,18 @@ TfyCollectAdapterRows(TFYNETCACHE *pCache)
     HeapFree(hProcessHeap, 0, pAddresses);
 }
 
+static BOOL
+TfyWlanRowBetter(const TFYNETROW *pLeft, const TFYNETROW *pRight)
+{
+    if (!pLeft->bConnected != !pRight->bConnected)
+        return pLeft->bConnected;
+    if (pLeft->nSignal != pRight->nSignal)
+        return pLeft->nSignal > pRight->nSignal;
+    if (!pLeft->bHasProfile != !pRight->bHasProfile)
+        return pLeft->bHasProfile;
+    return lstrcmpiW(pLeft->szName, pRight->szName) < 0;
+}
+
 static VOID
 TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
 {
@@ -7290,14 +7302,15 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
         if (pfnList(hWlan, pGuid, 0, NULL, &pNetworks) != ERROR_SUCCESS || !pNetworks)
             continue;
 
-        for (DWORD n = 0;
-             n < pNetworks->dwNumberOfItems && pCache->nWlan < _countof(pCache->Wlan);
-             n++)
+        for (DWORD n = 0; n < pNetworks->dwNumberOfItems; n++)
         {
             WLAN_AVAILABLE_NETWORK *pNet = &pNetworks->Network[n];
             WCHAR szSsid[DOT11_SSID_MAX_LENGTH + 1];
             UINT cch;
             BOOL bDuplicate = FALSE;
+            TFYNETROW Row;
+            TFYNETROW *pRow = &Row;
+            DWORD iWorst = 0;
 
             if (pNet->dot11Ssid.uSSIDLength == 0)
                 continue;
@@ -7330,7 +7343,6 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
             if (bDuplicate)
                 continue;
 
-            TFYNETROW *pRow = &pCache->Wlan[pCache->nWlan++];
             ZeroMemory(pRow, sizeof(*pRow));
             pRow->nType = 2;
             pRow->ifGuid = *pGuid;
@@ -7346,6 +7358,18 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
                 StringCchCopyW(pRow->szProfile, _countof(pRow->szProfile), pNet->strProfileName);
             if (pRow->bConnected)
                 StringCchCopyW(pRow->szStatus, _countof(pRow->szStatus), L"Connected");
+            if (pCache->nWlan < _countof(pCache->Wlan))
+            {
+                pCache->Wlan[pCache->nWlan++] = Row;
+                continue;
+            }
+            for (DWORD r = 1; r < pCache->nWlan; r++)
+            {
+                if (TfyWlanRowBetter(&pCache->Wlan[iWorst], &pCache->Wlan[r]))
+                    iWorst = r;
+            }
+            if (TfyWlanRowBetter(&Row, &pCache->Wlan[iWorst]))
+                pCache->Wlan[iWorst] = Row;
         }
         pfnFree(pNetworks);
     }
@@ -7356,9 +7380,7 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
         {
             TFYNETROW *pLeft = &pCache->Wlan[a];
             TFYNETROW *pRight = &pCache->Wlan[b];
-            if ((pRight->bConnected && !pLeft->bConnected) ||
-                (pRight->bConnected == pLeft->bConnected &&
-                 pRight->nSignal > pLeft->nSignal))
+            if (TfyWlanRowBetter(pRight, pLeft))
             {
                 TFYNETROW tmp = *pLeft;
                 *pLeft = *pRight;
