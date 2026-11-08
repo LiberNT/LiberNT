@@ -245,6 +245,49 @@ TestFileHashUnsigned(HMODULE Wintrust)
     ok_long(Size, 0);
 }
 
+static
+VOID
+TestKnownUsages(VOID)
+{
+    static const struct { const char *Oid; const WCHAR *Name; } Expected[] = {
+        { szOID_PKIX_KP_SERVER_AUTH, L"Server Authentication" },
+        { "1.3.6.1.4.1.311.21.5", L"Private Key Archival" },
+        { "2.5.29.37.0", L"Any Purpose" },
+        { "1.3.6.1.4.1.311.61.1.1", L"Kernel Mode Code Signing" },
+        { "1.3.6.1.4.1.311.92.1.1", L"Windows Hello Recovery Key Encryption" },
+    };
+    typedef BOOL (WINAPI *PFN_KNOWN_USAGES)(DWORD, PCCRYPT_OID_INFO **);
+    PFN_KNOWN_USAGES KnownUsages = (PFN_KNOWN_USAGES)GetProcAddress(GetModuleHandleW(L"wintrust.dll"),
+                                                                    "WTHelperGetKnownUsages");
+    PCCRYPT_OID_INFO *Usages = NULL;
+    DWORD Count, i, j, Found;
+
+    ok(KnownUsages != NULL, "WTHelperGetKnownUsages is not exported\n");
+    if (!KnownUsages)
+        return;
+    ok(KnownUsages(1, &Usages), "WTHelperGetKnownUsages failed %lu\n", GetLastError());
+    if (!Usages)
+        return;
+    for (Count = 0; Usages[Count]; Count++)
+    {
+        ok_long(Usages[Count]->dwGroupId, CRYPT_ENHKEY_USAGE_OID_GROUP_ID);
+        for (j = 0; j < Count; j++)
+            ok(strcmp(Usages[j]->pszOID, Usages[Count]->pszOID), "%s is listed twice\n", Usages[Count]->pszOID);
+    }
+    ok_long(Count, 66);
+    for (i = 0; i < RTL_NUMBER_OF(Expected); i++)
+    {
+        for (j = 0, Found = 0; j < Count; j++)
+            if (!strcmp(Usages[j]->pszOID, Expected[i].Oid))
+            {
+                Found++;
+                ok(!wcscmp(Usages[j]->pwszName, Expected[i].Name), "%s is named %ls\n", Expected[i].Oid, Usages[j]->pwszName);
+            }
+        ok_long(Found, 1);
+    }
+    KnownUsages(2, &Usages);
+}
+
 START_TEST(TrustHelpers)
 {
     HMODULE Wintrust = GetModuleHandleW(L"wintrust.dll");
@@ -254,4 +297,5 @@ START_TEST(TrustHelpers)
     TestDefaultForUsage(Wintrust);
     TestSelfSigned(Wintrust);
     TestFileHashUnsigned(Wintrust);
+    TestKnownUsages();
 }
