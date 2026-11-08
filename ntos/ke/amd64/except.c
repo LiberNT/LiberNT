@@ -66,8 +66,13 @@ KeInitExceptions(VOID)
     {
         ULONG64 Offset;
 
+        ASSERT(j < (int)RTL_NUMBER_OF(KiInterruptInitTable));
+        ASSERT(KiInterruptInitTable[j].ServiceRoutine == NULL || KiInterruptInitTable[j].InterruptId >= i);
         if (KiInterruptInitTable[j].InterruptId == i)
         {
+            ASSERT(KiInterruptInitTable[j].ServiceRoutine != NULL);
+            ASSERT(KiInterruptInitTable[j].Dpl <= 3);
+            ASSERT(KiInterruptInitTable[j].IstIndex <= 7);
             Offset = (ULONG64)KiInterruptInitTable[j].ServiceRoutine;
             KiIdt[i].Dpl = KiInterruptInitTable[j].Dpl;
             KiIdt[i].IstIndex = KiInterruptInitTable[j].IstIndex;
@@ -89,6 +94,8 @@ KeInitExceptions(VOID)
         KiIdt[i].Reserved1 = 0;
     }
 
+    ASSERT(j == (int)RTL_NUMBER_OF(KiInterruptInitTable) - 1);
+    ASSERT(KiInterruptInitTable[j].ServiceRoutine == NULL);
     KeGetPcr()->IdtBase = KiIdt;
     __lidt(&KiIdtDescriptor.Limit);
 }
