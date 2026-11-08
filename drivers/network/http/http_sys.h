@@ -79,7 +79,17 @@ typedef struct _HTTP_REQUEST_QUEUE
     FAST_MUTEX Mutex;
     ULONG State;
     ULONG MaxQueueLength;
+    ULONG EnabledState;
+    ULONG Verbosity;
+    BOOLEAN Version2;
 } HTTP_REQUEST_QUEUE, *PHTTP_REQUEST_QUEUE;
+
+typedef enum _HTTP_UNAVAILABLE_REASON
+{
+    HttpUnavailableNone,
+    HttpUnavailableQueueFull,
+    HttpUnavailableOffline,
+} HTTP_UNAVAILABLE_REASON;
 
 typedef struct _HTTP_PARSED_HEADER
 {
@@ -142,6 +152,8 @@ typedef struct _HTTP_CONNECTION
     BOOLEAN BodyComplete;
     BOOLEAN BodyFailed;
     USHORT ErrorStatus;
+    UCHAR UnavailableReason;
+    UCHAR UnavailableVerbosity;
     HTTP_PARSED_HEADER Headers[HTTP_MAX_HEADERS + 1];
     HTTP_VERB Verb;
     HTTP_VERSION Version;

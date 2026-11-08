@@ -14,7 +14,7 @@
 @ stub HttpFlushResponseCache
 @ stub HttpGetCounters
 @ stdcall HttpInitialize(long long ptr)
-@ stub HttpQueryRequestQueueProperty
+@ stdcall HttpQueryRequestQueueProperty(ptr long ptr long long ptr ptr)
 @ stub HttpQueryServerSessionProperty
 @ stdcall HttpQueryServiceConfiguration(ptr long ptr long ptr long ptr ptr)
 @ stub HttpQueryUrlGroupProperty
