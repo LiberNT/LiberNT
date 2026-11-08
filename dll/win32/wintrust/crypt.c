@@ -1045,6 +1045,19 @@ BOOL WINAPI CryptCATAdminReleaseCatalogContext(HCATADMIN hCatAdmin,
     return TRUE;
 }
 
+#ifdef __REACTOS__
+/***********************************************************************
+ *      CryptCATAdminPauseServiceForBackup (WINTRUST.@)
+ */
+BOOL WINAPI CryptCATAdminPauseServiceForBackup(DWORD dwFlags, BOOL fResume)
+{
+    TRACE("(%#lx %d)\n", dwFlags, fResume);
+
+    SetLastError(ERROR_SUCCESS);
+    return TRUE;
+}
+
+#endif
 /***********************************************************************
  *      CryptCATAdminReleaseContext (WINTRUST.@)
  *

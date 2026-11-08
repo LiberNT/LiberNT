@@ -4,6 +4,7 @@ list(APPEND SOURCE
     CatalogV2.c
     SignedCatalog.c
     SipCaps.c
+    TrustHelpers.c
     TrustSteps.c
     testlist.c)
 
