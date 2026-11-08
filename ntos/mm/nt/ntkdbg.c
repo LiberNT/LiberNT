@@ -252,10 +252,14 @@ ExpKdbgExtVm(
                   MiSystem.SystemPtes->PageCount, MiSystem.SystemPtes->FreePages);
     }
 
-    if (MiSystem.PageFile != NULL)
     {
-        KdbpPrint("pagefile: slots %I64u in use %I64u written %I64d read %I64d\n", MiSystem.PageFile->SlotCount,
-                  MiSystem.PageFile->SlotsInUse, MiSystem.PageFile->PagesWritten, MiSystem.PageFile->PagesRead);
+        PMI_PAGEFILE PageFile = MiSystemGetPageFile(&MiSystem);
+
+        if (PageFile != NULL)
+        {
+            KdbpPrint("pagefile: slots %I64u in use %I64u written %I64d read %I64d\n", PageFile->SlotCount,
+                      PageFile->SlotsInUse, PageFile->PagesWritten, PageFile->PagesRead);
+        }
     }
 
     return TRUE;

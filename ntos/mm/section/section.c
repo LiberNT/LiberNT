@@ -345,8 +345,10 @@ MiSegmentDiscardPage(
 
         if (Kind == MiSoftPageFile)
         {
-            if (System->PageFile != NULL)
-                MiPageFileReleaseSlot(System->PageFile, MiSoftValue(Pte));
+            PMI_PAGEFILE PageFile = MiSystemGetPageFile(System);
+
+            if (PageFile != NULL)
+                MiPageFileReleaseSlot(PageFile, MiSoftValue(Pte));
 
             MiArchPteWrite(Proto, MiSoftMake(MiSoftDemandZero, MiSoftProtection(Pte), 0));
             return;
@@ -1188,16 +1190,18 @@ MiSegmentMaterialize(
     }
     else if (Kind == MiSoftPageFile)
     {
-        if (System->PageFile == NULL)
+        PMI_PAGEFILE PageFile = MiSystemGetPageFile(System);
+
+        if (PageFile == NULL)
         {
             Status = STATUS_IN_PAGE_ERROR;
         }
         else
         {
             Mapping = MiArchMapFrame(Frame);
-            Status = System->PageFile->Ops.Read(System->PageFile->Context, MiSoftValue(Pte), Mapping);
+            Status = PageFile->Ops.Read(PageFile->Context, MiSoftValue(Pte), Mapping);
             MiArchUnmapFrame(Mapping);
-            MI_ATOMIC_ADD64(&System->PageFile->PagesRead, 1);
+            MI_ATOMIC_ADD64(&PageFile->PagesRead, 1);
         }
     }
 

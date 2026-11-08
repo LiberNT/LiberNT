@@ -17,6 +17,7 @@ MiChargeSystemCommit(
 {
     LONG64 Committed;
     LONG64 Limit;
+    PMI_EXPAND_COMMIT ExpandCommit;
 
     for (;;)
     {
@@ -26,12 +27,14 @@ MiChargeSystemCommit(
             break;
 
         MI_ATOMIC_ADD64(&System->CommittedPages, -Pages);
-        if (Pages <= 0 || System->ExpandCommit == NULL || !System->ExpandCommit(System, Pages, Limit, Wait))
+        ExpandCommit = MiSystemGetExpandCommit(System);
+        if (Pages <= 0 || ExpandCommit == NULL || !ExpandCommit(System, Pages, Limit, Wait))
             return FALSE;
     }
 
-    if (Pages > 0 && System->ExpandCommit != NULL && Committed > Limit - Limit / 10)
-        System->ExpandCommit(System, 0, Limit, FALSE);
+    ExpandCommit = MiSystemGetExpandCommit(System);
+    if (Pages > 0 && ExpandCommit != NULL && Committed > Limit - Limit / 10)
+        ExpandCommit(System, 0, Limit, FALSE);
 
     return TRUE;
 }

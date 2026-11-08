@@ -186,7 +186,7 @@ WorldAttachPageFile(TEST_WORLD *World, ULONG64 Slots)
     World->Paging.Store = calloc(Slots, PAGE_SIZE);
     if (!NT_SUCCESS(MiPageFileInitialize(&World->Paging.PageFile, &Ops, &World->Paging, Slots)))
         abort();
-    World->System.PageFile = &World->Paging.PageFile;
+    MI_ATOMIC_WRITE_POINTER(&World->System.PageFile, &World->Paging.PageFile);
 }
 
 void

@@ -100,7 +100,7 @@ NTAPI
 MmIsFileObjectAPagingFile(
     _In_ PFILE_OBJECT FileObject)
 {
-    PMI_NT_PAGEFILE PagingFile = MiPagingFile;
+    PMI_NT_PAGEFILE PagingFile = MI_ATOMIC_READ_POINTER(&MiPagingFile);
 
     return (BOOLEAN)(PagingFile != NULL && PagingFile->FileObject != NULL &&
                      PagingFile->FileObject->SectionObjectPointer == FileObject->SectionObjectPointer);
@@ -114,7 +114,7 @@ MmQueryPagingFileUsage(
     _Out_ PULONG64 PeakPagesInUse,
     _Out_ PUNICODE_STRING Name)
 {
-    PMI_NT_PAGEFILE PagingFile = MiPagingFile;
+    PMI_NT_PAGEFILE PagingFile = MI_ATOMIC_READ_POINTER(&MiPagingFile);
     KIRQL OldIrql;
 
     if (PagingFile == NULL)
@@ -338,7 +338,7 @@ MiExpandCommit(
     _In_ LONG64 Limit,
     _In_ BOOLEAN Wait)
 {
-    PMI_NT_PAGEFILE PagingFile = MiPagingFile;
+    PMI_NT_PAGEFILE PagingFile = MI_ATOMIC_READ_POINTER(&MiPagingFile);
     LARGE_INTEGER Timeout;
     ULONG64 Deadline;
     LONG64 Pending;
@@ -477,7 +477,7 @@ NtCreatePagingFile(
 
     KeAcquireGuardedMutex(&MiPagingFileCreationLock);
 
-    if (MiPagingFile != NULL)
+    if (MI_ATOMIC_READ_POINTER(&MiPagingFile) != NULL)
     {
         KeReleaseGuardedMutex(&MiPagingFileCreationLock);
         ExFreePoolWithTag(Buffer, 'nPmM');
@@ -552,15 +552,15 @@ NtCreatePagingFile(
     KeInitializeEvent(&MiPagingFileExtendEvent, NotificationEvent, FALSE);
     ExInitializeWorkItem(&MiPagingFileExtendItem, MiExtendPagingFileWorker, PagingFile);
 
-    MiPagingFile = PagingFile;
-    MiSystem.PageFile = &PagingFile->Core;
-    MiSystem.CommitLimit += (LONG64)PagingFile->Core.SlotCount;
-    MmTotalCommitLimit = (SIZE_T)MiSystem.CommitLimit;
+    MmTotalCommitLimit = (SIZE_T)(MI_ATOMIC_ADD64(&MiSystem.CommitLimit, (LONG64)PagingFile->Core.SlotCount) +
+                                     (LONG64)PagingFile->Core.SlotCount);
     MmTotalCommitLimitMaximum = MmTotalCommitLimit + (SIZE_T)(PagingFile->MaximumSlots - PagingFile->Core.SlotCount);
     MmtotalCommitLimitMaximum = MmTotalCommitLimitMaximum;
     MiFreeSwapPages = (PFN_COUNT)PagingFile->Core.SlotCount;
     MmNumberOfPagingFiles = 1;
-    MiSystem.ExpandCommit = MiExpandCommit;
+    MI_ATOMIC_WRITE_POINTER(&MiSystem.PageFile, &PagingFile->Core);
+    MI_ATOMIC_WRITE_POINTER(&MiPagingFile, PagingFile);
+    MI_ATOMIC_WRITE_POINTER(&MiSystem.ExpandCommit, (PVOID)MiExpandCommit);
     DbgPrint("Paging file %wZ created, %I64u MB, maximum %I64u MB\n", &PagingFile->Name,
              PagingFile->Core.SlotCount >> (20 - PAGE_SHIFT), PagingFile->MaximumSlots >> (20 - PAGE_SHIFT));
 

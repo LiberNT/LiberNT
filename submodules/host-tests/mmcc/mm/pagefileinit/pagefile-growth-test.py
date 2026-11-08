@@ -50,6 +50,7 @@ typedef int WORK_QUEUE_ITEM;
 #define MI_PAGEFILE_EXTEND_WAIT (30ULL * 1000 * 1000 * 10)
 #define MI_ATOMIC_READ32(p) __atomic_load_n((p),__ATOMIC_SEQ_CST)
 #define MI_ATOMIC_READ64(p) __atomic_load_n((p),__ATOMIC_SEQ_CST)
+#define MI_ATOMIC_READ_POINTER(p) __atomic_load_n((p),__ATOMIC_SEQ_CST)
 static MI_SYSTEM MiSystem;
 static PMI_NT_PAGEFILE MiPagingFile;
 static WORK_QUEUE_ITEM MiPagingFileExtendItem, MiCommitReportItem;

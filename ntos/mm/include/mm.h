@@ -100,6 +100,9 @@ typedef struct _MI_ADDRESS_SPACE
     ULONG64 Granularity;
 } MI_ADDRESS_SPACE, *PMI_ADDRESS_SPACE;
 
+typedef BOOLEAN (*PMI_EXPAND_COMMIT)(_Inout_ struct _MI_SYSTEM *System, _In_ LONG64 Pages,
+                                      _In_ LONG64 Limit, _In_ BOOLEAN Wait);
+
 typedef struct _MI_SYSTEM
 {
     const MI_ARCH_DESCRIPTOR *Arch;
@@ -121,10 +124,23 @@ typedef struct _MI_SYSTEM
     BOOLEAN (*ChargeOwnerCommit)(_In_ PVOID Owner, _In_ LONG64 Pages);
     VOID (*ReturnOwnerCommit)(_In_ PVOID Owner, _In_ LONG64 Pages);
     ULONG64 (*OwnerProcessors)(_In_ PVOID Owner);
-    BOOLEAN (*ExpandCommit)(_Inout_ struct _MI_SYSTEM *System, _In_ LONG64 Pages, _In_ LONG64 Limit,
-                            _In_ BOOLEAN Wait);
+    PMI_EXPAND_COMMIT ExpandCommit;
     VOID (*UnusedSegmentsExceeded)(_Inout_ struct _MI_SYSTEM *System);
 } MI_SYSTEM, *PMI_SYSTEM;
+
+FORCEINLINE
+struct _MI_PAGEFILE *
+MiSystemGetPageFile(_In_ PMI_SYSTEM System)
+{
+    return MI_ATOMIC_READ_POINTER(&System->PageFile);
+}
+
+FORCEINLINE
+PMI_EXPAND_COMMIT
+MiSystemGetExpandCommit(_In_ PMI_SYSTEM System)
+{
+    return (PMI_EXPAND_COMMIT)MI_ATOMIC_READ_POINTER(&System->ExpandCommit);
+}
 
 NTSTATUS MiSystemInitialize(_Out_ PMI_SYSTEM System, _In_ PMI_PFN PfnArray, _In_ ULONG FrameCount,
                             _In_ ULONG CpuCount, _In_ LONG64 CommitLimit);

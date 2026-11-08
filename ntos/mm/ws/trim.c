@@ -483,7 +483,7 @@ MiWritePageFileCluster(
     _In_ const BOOLEAN *Reused,
     _In_ ULONG Count)
 {
-    PMI_PAGEFILE PageFile = System->PageFile;
+    PMI_PAGEFILE PageFile = MiSystemGetPageFile(System);
     NTSTATUS Status;
     PVOID Mapping;
     ULONG i;
@@ -538,7 +538,7 @@ MiWriteModifiedPages(
     _Inout_ PMI_SYSTEM System,
     _In_ ULONG MaximumPages)
 {
-    PMI_PAGEFILE PageFile = System->PageFile;
+    PMI_PAGEFILE PageFile = MiSystemGetPageFile(System);
     ULONG Frames[MI_MAX_FILE_WRITE_PAGES];
     ULONG64 Slots[MI_MAX_FILE_WRITE_PAGES];
     BOOLEAN ClusterReused[MI_MAX_FILE_WRITE_PAGES];

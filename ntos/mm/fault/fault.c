@@ -58,8 +58,10 @@ MiReleaseBackingStore(
     _Inout_ PMI_SYSTEM System,
     _In_ MI_PTE SoftPte)
 {
-    if (System->PageFile != NULL && MiSoftKind(SoftPte) == MiSoftPageFile)
-        MiPageFileReleaseSlot(System->PageFile, MiSoftValue(SoftPte));
+    PMI_PAGEFILE PageFile = MiSystemGetPageFile(System);
+
+    if (PageFile != NULL && MiSoftKind(SoftPte) == MiSoftPageFile)
+        MiPageFileReleaseSlot(PageFile, MiSoftValue(SoftPte));
 }
 
 VOID
@@ -540,10 +542,11 @@ RetryPage:
 
         case MiSoftPageFile:
         {
+            PMI_PAGEFILE PageFile = MiSystemGetPageFile(System);
             LONG64 Generation;
             PVOID Mapping;
 
-            if (System->PageFile == NULL)
+            if (PageFile == NULL)
             {
                 Status = STATUS_IN_PAGE_ERROR;
                 break;
@@ -569,7 +572,7 @@ RetryPage:
             MI_RW_RELEASE_SHARED(&Space->Lock);
 
             Mapping = MiPfnMapFrame(&System->Pfn, Frame);
-            Status = System->PageFile->Ops.Read(System->PageFile->Context, MiSoftValue(Pte), Mapping);
+            Status = PageFile->Ops.Read(PageFile->Context, MiSoftValue(Pte), Mapping);
             MiPfnUnmapFrame(&System->Pfn, Mapping);
             if (!NT_SUCCESS(Status))
             {
@@ -616,13 +619,13 @@ RetryPage:
 
             SlotAddress = MiPtSlotAddress(Slot, TableFrame, PageVa);
             MI_ATOMIC_ADD64(&Space->PageFileGeneration, 1);
-            MI_ATOMIC_ADD64(&System->PageFile->PagesRead, 1);
+            MI_ATOMIC_ADD64(&PageFile->PagesRead, 1);
             MiPfnInitializePage(&System->Pfn, Frame, SlotAddress, TableFrame, Pte, 0);
             Status = MiMakePageValid(Space, PageVa, Slot, TableFrame, Frame, Protection,
                                      (BOOLEAN)(Access == MiFaultWrite));
             if (Access == MiFaultWrite)
             {
-                MiPageFileReleaseSlot(System->PageFile, MiSoftValue(Pte));
+                MiPageFileReleaseSlot(PageFile, MiSoftValue(Pte));
                 System->Pfn.Pfn[Frame].OriginalPte = MiSoftMake(MiSoftDemandZero, Protection, 0);
             }
             MI_ATOMIC_ADD64(&Space->PageFileFaults, 1);
