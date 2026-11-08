@@ -1743,12 +1743,10 @@ SmpInitializeKnownDllsInternal(IN PUNICODE_STRING Directory,
     ASSERT(NT_SUCCESS(Status1));
 
     /* Now loop the known DLLs */
-    NextEntry = SmpKnownDllsList.Flink;
-    while (NextEntry != &SmpKnownDllsList)
+    for (NextEntry = SmpKnownDllsList.Flink; NextEntry != &SmpKnownDllsList; NextEntry = NextEntry->Flink)
     {
-        /* Get the entry and move on */
+        /* Get the entry */
         RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
-        NextEntry = NextEntry->Flink;
 
         DPRINT("Processing known DLL: %wZ-%wZ\n", &RegEntry->Name, &RegEntry->Value);
 
