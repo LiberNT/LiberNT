@@ -78,4 +78,27 @@ if(ARCH STREQUAL "arm64")
 
         message(STATUS "ARM64: RPi boot files validated (${_rpi_file_count} files)")
     endif()
+
+    option(NINTENDO_SWITCH_SUPPORT "Build the Nintendo Switch SD card that boots LiberNT from hekate" OFF)
+
+    if(NINTENDO_SWITCH_SUPPORT)
+        set(NINTENDO_SWITCH_BOOT_DIR "${_ARM64_BOOT_MEDIA_DIR}/nintendo-switch")
+
+        set(NINTENDO_SWITCH_BL33 "${NINTENDO_SWITCH_BOOT_DIR}/bl33.bin")
+        set(NINTENDO_SWITCH_BOOT_SCRIPT "${NINTENDO_SWITCH_BOOT_DIR}/boot.scr")
+        set(NINTENDO_SWITCH_BOOT_SCRIPT_SOURCE "${NINTENDO_SWITCH_BOOT_DIR}/boot.cmd")
+        set(NINTENDO_SWITCH_HEKATE_INI "${NINTENDO_SWITCH_BOOT_DIR}/libernt.ini")
+        set(NINTENDO_SWITCH_README "${NINTENDO_SWITCH_BOOT_DIR}/README.txt")
+        foreach(_switch_file BL33 BOOT_SCRIPT BOOT_SCRIPT_SOURCE HEKATE_INI README)
+            if(NOT EXISTS "${NINTENDO_SWITCH_${_switch_file}}")
+                message(FATAL_ERROR "Nintendo Switch: missing boot file ${NINTENDO_SWITCH_${_switch_file}}")
+            endif()
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${NINTENDO_SWITCH_${_switch_file}}")
+        endforeach()
+
+        set(NINTENDO_SWITCH_SD_START 2048)
+        set(NINTENDO_SWITCH_SD_SECTORS 2097152)
+
+        message(STATUS "ARM64: Nintendo Switch SD card enabled")
+    endif()
 endif()

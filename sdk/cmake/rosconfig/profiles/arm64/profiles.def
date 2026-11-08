@@ -4,6 +4,7 @@ config PROFILE_ARM64
     var ROSCONFIG_PROFILE
     value generic "Generic ARM64"
     value profile_raspberry "Raspberry Pi 3/5"
+    value profile_nintendo_switch "Nintendo Switch (minimal)"
     default generic
     depends ARCH=arm64
     help
@@ -14,3 +15,9 @@ config PROFILE_ARM64
       display, OpenGL and audio. Hardware IDs select the matching driver.
       The pinned Windows 10 BSP source snapshot is included for parity work.
       It also adds the UEFI HTTP boot option in the Boot options menu.
+
+      Nintendo Switch (minimal) builds the SD card image started from
+      hekate's L4T loader through Switchroot's U-Boot with its EFI loader
+      (switchsdimg, LiberNT-switch-sd.img). The system runs from RAM.
+      WoW64, the FEX ARM64EC emulator, FFmpeg, LLVMpipe, Wine Mono, rosapps
+      and the tests are left out.
