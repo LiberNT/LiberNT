@@ -76,6 +76,7 @@ typedef struct _FDO_EXTENSION {
     BOOLEAN RegistersMapped;
     BOOLEAN NonRemovable;
     BOOLEAN DisableWriteProtect;
+    BOOLEAN DwordReadsOnly;
 
     /* Controller register model; the BCM2835 SDHost backend lives in sdhost.c */
     SDBUS_HOST_TYPE HostType;
@@ -138,6 +139,10 @@ typedef struct _FDO_EXTENSION {
     PSDHCI_ADMA2_DESCRIPTOR_32 Adma2Table;
     PHYSICAL_ADDRESS Adma2TablePhysical;
     ULONG Adma2MaxDescriptors;
+    BOOLEAN Adma2Use64;
+    BOOLEAN PciDevice;
+    BOOLEAN Gl9755Pll;
+    BUS_INTERFACE_STANDARD Gl9755Bus;
 
     /* SDMA bounce buffer (fallback when ADMA2 is not available) */
     PVOID DmaBuffer;
@@ -397,6 +402,11 @@ NTSTATUS
 SdBusSetTransferClock(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ PPDO_EXTENSION PdoExtension);
+
+VOID
+SdBusHardwareSetPllClock(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ ULONG TargetClockKhz);
 
 NTSTATUS
 SdBusProgramClock(
@@ -835,6 +845,13 @@ SdBusResetHost(
  * @return The 32-bit register value.
  */
 static __inline ULONG
+SdBusAdma2DescriptorSize(
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    return FdoExtension->Adma2Use64 ? sizeof(SDHCI_ADMA2_DESCRIPTOR_64) : sizeof(SDHCI_ADMA2_DESCRIPTOR_32);
+}
+
+static __inline ULONG
 SdBusReadReg32(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ ULONG Register)
@@ -939,6 +956,8 @@ SdBusReadReg16(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ USHORT Register)
 {
+    if (FdoExtension->DwordReadsOnly)
+        return (USHORT)(SDHCI_READ32(FdoExtension->RegisterBase, Register & ~3) >> ((Register & 3) * 8));
     return SDHCI_READ16(FdoExtension->RegisterBase, Register);
 }
 
@@ -971,6 +990,8 @@ SdBusReadReg8(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ ULONG Register)
 {
+    if (FdoExtension->DwordReadsOnly)
+        return (UCHAR)(SDHCI_READ32(FdoExtension->RegisterBase, Register & ~3) >> ((Register & 3) * 8));
     return SDHCI_READ8(FdoExtension->RegisterBase, Register);
 }
 

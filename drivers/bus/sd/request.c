@@ -637,6 +637,54 @@ SdBusAdma2EncodeLength(
     return (USHORT)Length;
 }
 
+static VOID
+SdBusAdma2SetDescriptor(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ ULONG Index,
+    _In_ ULONG Length,
+    _In_ ULONGLONG Address)
+{
+    if (FdoExtension->Adma2Use64)
+    {
+        PSDHCI_ADMA2_DESCRIPTOR_64 Desc = (PSDHCI_ADMA2_DESCRIPTOR_64)FdoExtension->Adma2Table + Index;
+
+        Desc->Attributes = SDHCI_ADMA2_ACT_TRAN | SDHCI_ADMA2_VALID;
+        Desc->Length = SdBusAdma2EncodeLength(Length);
+        Desc->AddressLow = (ULONG)Address;
+        Desc->AddressHigh = (ULONG)(Address >> 32);
+    }
+    else
+    {
+        PSDHCI_ADMA2_DESCRIPTOR_32 Desc = FdoExtension->Adma2Table + Index;
+
+        Desc->Attributes = SDHCI_ADMA2_ACT_TRAN | SDHCI_ADMA2_VALID;
+        Desc->Length = SdBusAdma2EncodeLength(Length);
+        Desc->Address = (ULONG)Address;
+    }
+}
+
+static VOID
+SdBusAdma2MarkEnd(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ ULONG Index)
+{
+    if (FdoExtension->Adma2Use64)
+        ((PSDHCI_ADMA2_DESCRIPTOR_64)FdoExtension->Adma2Table + Index)->Attributes |= SDHCI_ADMA2_END;
+    else
+        (FdoExtension->Adma2Table + Index)->Attributes |= SDHCI_ADMA2_END;
+}
+
+static BOOLEAN
+SdBusAdma2AddressReachable(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ ULONGLONG Address,
+    _In_ ULONG Length)
+{
+    if (FdoExtension->Adma2Use64)
+        return TRUE;
+    return Address <= (ULONGLONG)0xFFFFFFFF && (ULONGLONG)Length - 1 <= (ULONGLONG)0xFFFFFFFF - Address;
+}
+
 static ULONG
 SdBusAdma2BoundaryCapacity(
     _In_ ULONG PhysicalAddress)
@@ -657,21 +705,16 @@ SdBusBuildAdma2TableForPhysicalBuffer(
     _In_ PHYSICAL_ADDRESS PhysicalAddress,
     _In_ ULONG DataLength)
 {
-    PSDHCI_ADMA2_DESCRIPTOR_32 Desc = FdoExtension->Adma2Table;
-    ULONGLONG PhysAddr64;
-    ULONG PhysAddr;
+    ULONGLONG PhysAddr;
     ULONG Remaining;
     ULONG DescIndex;
 
-    PhysAddr64 = PhysicalAddress.QuadPart;
-    if (DataLength == 0 || PhysAddr64 > (ULONGLONG)0xFFFFFFFF ||
-        (ULONGLONG)DataLength - 1 >
-            (ULONGLONG)0xFFFFFFFF - PhysAddr64)
+    PhysAddr = PhysicalAddress.QuadPart;
+    if (DataLength == 0 || !SdBusAdma2AddressReachable(FdoExtension, PhysAddr, DataLength))
     {
         return 0;
     }
 
-    PhysAddr = (ULONG)PhysAddr64;
     Remaining = DataLength;
     DescIndex = 0;
 
@@ -685,7 +728,7 @@ SdBusBuildAdma2TableForPhysicalBuffer(
             return 0;
         }
 
-        BoundaryCap = SdBusAdma2BoundaryCapacity(PhysAddr);
+        BoundaryCap = SdBusAdma2BoundaryCapacity((ULONG)PhysAddr);
         SegLen = Remaining;
         if (SegLen > BoundaryCap)
         {
@@ -696,9 +739,7 @@ SdBusBuildAdma2TableForPhysicalBuffer(
             SegLen = SDHCI_ADMA2_MAX_LENGTH;
         }
 
-        Desc[DescIndex].Attributes = SDHCI_ADMA2_ACT_TRAN | SDHCI_ADMA2_VALID;
-        Desc[DescIndex].Length = SdBusAdma2EncodeLength(SegLen);
-        Desc[DescIndex].Address = PhysAddr;
+        SdBusAdma2SetDescriptor(FdoExtension, DescIndex, SegLen, PhysAddr);
 
         PhysAddr += SegLen;
         Remaining -= SegLen;
@@ -707,7 +748,7 @@ SdBusBuildAdma2TableForPhysicalBuffer(
 
     if (DescIndex > 0)
     {
-        Desc[DescIndex - 1].Attributes |= SDHCI_ADMA2_END;
+        SdBusAdma2MarkEnd(FdoExtension, DescIndex - 1);
     }
 
     return DescIndex;
@@ -735,7 +776,6 @@ SdBusBuildAdma2Table(
     _In_ ULONG DataLength,
     _Out_opt_ SD_ADMA2_BUILD_STATUS *BuildStatus)
 {
-    PSDHCI_ADMA2_DESCRIPTOR_32 Desc = FdoExtension->Adma2Table;
     PPFN_NUMBER PfnArray;
     ULONG ByteOffset;
     ULONG Remaining;
@@ -759,17 +799,16 @@ SdBusBuildAdma2Table(
 
     while (Remaining > 0 && DescIndex < MaxDesc && PageIndex < PageCount)
     {
-        ULONGLONG PhysAddr64;
-        ULONG PhysAddr;
+        ULONGLONG PhysAddr;
         ULONG Offset;
         ULONG ChunkLen;
 
         /* Physical address of current page + byte offset within page */
         Offset = (PageIndex == 0) ? ByteOffset : 0;
-        PhysAddr64 = ((ULONGLONG)PfnArray[PageIndex] << PAGE_SHIFT) + Offset;
+        PhysAddr = ((ULONGLONG)PfnArray[PageIndex] << PAGE_SHIFT) + Offset;
 
         /* 32-bit ADMA2 can't address above 4 GB */
-        if (PhysAddr64 > (ULONGLONG)0xFFFFFFFF)
+        if (!SdBusAdma2AddressReachable(FdoExtension, PhysAddr, 1))
         {
             if (BuildStatus != NULL)
             {
@@ -778,14 +817,13 @@ SdBusBuildAdma2Table(
             return 0;
         }
 
-        PhysAddr = (ULONG)PhysAddr64;
         ChunkLen = PAGE_SIZE - Offset;
         PageIndex++;
 
         while (PageIndex < PageCount &&
                ChunkLen < Remaining &&
                ChunkLen < SDHCI_ADMA2_MAX_LENGTH &&
-               ChunkLen < SdBusAdma2BoundaryCapacity(PhysAddr))
+               ChunkLen < SdBusAdma2BoundaryCapacity((ULONG)PhysAddr))
         {
             if (PfnArray[PageIndex] != PfnArray[PageIndex - 1] + 1)
             {
@@ -805,7 +843,7 @@ SdBusBuildAdma2Table(
             ULONG SegLen;
             ULONG BoundaryCap;
 
-            BoundaryCap = SdBusAdma2BoundaryCapacity(PhysAddr);
+            BoundaryCap = SdBusAdma2BoundaryCapacity((ULONG)PhysAddr);
             SegLen = ChunkLen;
             if (SegLen > BoundaryCap)
             {
@@ -816,9 +854,7 @@ SdBusBuildAdma2Table(
                 SegLen = SDHCI_ADMA2_MAX_LENGTH;
             }
 
-            Desc[DescIndex].Attributes = SDHCI_ADMA2_ACT_TRAN | SDHCI_ADMA2_VALID;
-            Desc[DescIndex].Length = SdBusAdma2EncodeLength(SegLen);
-            Desc[DescIndex].Address = PhysAddr;
+            SdBusAdma2SetDescriptor(FdoExtension, DescIndex, SegLen, PhysAddr);
 
             PhysAddr += SegLen;
             ChunkLen -= SegLen;
@@ -844,7 +880,7 @@ SdBusBuildAdma2Table(
     /* Set END bit on last descriptor */
     if (DescIndex > 0)
     {
-        Desc[DescIndex - 1].Attributes |= SDHCI_ADMA2_END;
+        SdBusAdma2MarkEnd(FdoExtension, DescIndex - 1);
     }
 
     return DescIndex;
@@ -876,7 +912,6 @@ SdBusBuildAdma2TableFromDmaMapping(
     _Out_ PSCATTER_GATHER_LIST *ScatterGatherList,
     _Out_opt_ SD_ADMA2_BUILD_STATUS *BuildStatus)
 {
-    PSDHCI_ADMA2_DESCRIPTOR_32 Desc = FdoExtension->Adma2Table;
     SD_ADMA2_SG_CONTEXT SgContext;
     NTSTATUS Status;
     ULONG ElementIndex;
@@ -957,7 +992,7 @@ SdBusBuildAdma2TableFromDmaMapping(
                 goto FailReleaseSg;
             }
 
-            if (PhysAddr64 > (ULONGLONG)0xFFFFFFFF)
+            if (!SdBusAdma2AddressReachable(FdoExtension, PhysAddr64, 1))
             {
                 if (BuildStatus != NULL)
                 {
@@ -980,9 +1015,7 @@ SdBusBuildAdma2TableFromDmaMapping(
                 SegLen = SDHCI_ADMA2_MAX_LENGTH;
             }
 
-            Desc[DescIndex].Attributes = SDHCI_ADMA2_ACT_TRAN | SDHCI_ADMA2_VALID;
-            Desc[DescIndex].Length = SdBusAdma2EncodeLength(SegLen);
-            Desc[DescIndex].Address = (ULONG)PhysAddr64;
+            SdBusAdma2SetDescriptor(FdoExtension, DescIndex, SegLen, PhysAddr64);
 
             PhysAddr64 += SegLen;
             ElementLength -= SegLen;
@@ -1000,7 +1033,7 @@ SdBusBuildAdma2TableFromDmaMapping(
         goto FailReleaseSg;
     }
 
-    Desc[DescIndex - 1].Attributes |= SDHCI_ADMA2_END;
+    SdBusAdma2MarkEnd(FdoExtension, DescIndex - 1);
     *DescCount = DescIndex;
     *ScatterGatherList = SgContext.ScatterGatherList;
     return STATUS_SUCCESS;
@@ -1321,13 +1354,14 @@ SdBusSendSdhciCommand(
             /* Select ADMA2 mode in host control register */
             HostCtrl = SdBusReadReg8(FdoExtension, SDHCI_HOST_CONTROL);
             HostCtrl &= ~SDHCI_HC_DMA_SELECT_MASK;
-            HostCtrl |= SDHCI_HC_DMA_SELECT_ADMA2;
+            HostCtrl |= FdoExtension->Adma2Use64 ? SDHCI_HC_DMA_SELECT_ADMA2_64 : SDHCI_HC_DMA_SELECT_ADMA2;
             SdBusWriteReg8(FdoExtension, SDHCI_HOST_CONTROL, HostCtrl);
 
             /* Write ADMA2 descriptor table physical address */
             SdBusWriteReg32(FdoExtension, SDHCI_ADMA_ADDRESS_LOW,
                             FdoExtension->Adma2TablePhysical.LowPart);
-            SdBusWriteReg32(FdoExtension, SDHCI_ADMA_ADDRESS_HIGH, 0);
+            SdBusWriteReg32(FdoExtension, SDHCI_ADMA_ADDRESS_HIGH,
+                            FdoExtension->Adma2Use64 ? (ULONG)FdoExtension->Adma2TablePhysical.HighPart : 0);
         }
         else if (TransferPath == SdTransferPathSdma)
         {

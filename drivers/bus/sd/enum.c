@@ -2191,6 +2191,7 @@ SdBusProgramClock(
     ClockControl &= ~SDHCI_CLK_SD_CLK_ENABLE;
     SdBusWriteReg16(FdoExtension, SDHCI_CLOCK_CONTROL, ClockControl);
     InterlockedExchange(&FdoExtension->CurrentClockKhz, 0);
+    SdBusHardwareSetPllClock(FdoExtension, TargetClockKhz);
 
     if (TargetClockKhz == 0)
     {

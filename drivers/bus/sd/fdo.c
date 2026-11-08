@@ -196,7 +196,10 @@ SdBusReleaseControllerResources(
 
     if (FdoExtension->Adma2Table != NULL)
     {
-        MmFreeContiguousMemory(FdoExtension->Adma2Table);
+        MmFreeContiguousMemorySpecifyCache(FdoExtension->Adma2Table,
+                                           FdoExtension->Adma2MaxDescriptors *
+                                               SdBusAdma2DescriptorSize(FdoExtension),
+                                           MmNonCached);
         FdoExtension->Adma2Table = NULL;
     }
     FdoExtension->UseAdma2 = FALSE;
@@ -356,6 +359,7 @@ SdBusInitializeController(
     BOOLEAN HasMemoryAbove4Gb;
     BOOLEAN NeedDmaMappingForAdma2;
     LARGE_INTEGER Delay;
+    ULONGLONG Deadline;
 
     InterlockedExchange(&FdoExtension->CurrentClockKhz, 0);
 
@@ -380,7 +384,14 @@ SdBusInitializeController(
     Caps = SdBusReadReg32(FdoExtension, SDHCI_CAPABILITIES);
     Caps2 = SdBusReadReg32(FdoExtension, SDHCI_CAPABILITIES2);
     SdBusHardwareGetSlotCapabilities(FdoExtension, &Caps, &Caps2);
-    Caps &= ~SDHCI_CAP_ADMA2_SUPPORT;
+    FdoExtension->Adma2Use64 = (FdoExtension->PciDevice &&
+                                FdoExtension->SpecVersion >= SDHCI_SPEC_300 &&
+                                (Caps & SDHCI_CAP_ADMA2_SUPPORT) &&
+                                (Caps & SDHCI_CAP_64BIT_SYSTEM_BUS));
+    DPRINT1("SDHCI: capabilities %08lx on a %s host, %s\n", Caps, FdoExtension->PciDevice ? "PCI" : "platform",
+            FdoExtension->Adma2Use64 ? "64-bit ADMA2" : "ADMA2 masked");
+    if (!FdoExtension->Adma2Use64)
+        Caps &= ~SDHCI_CAP_ADMA2_SUPPORT;
     FdoExtension->HostCapabilities = Caps;
     FdoExtension->HostCapabilities2 = Caps2;
     FdoExtension->NonRemovable =
@@ -400,7 +411,7 @@ SdBusInitializeController(
            FdoExtension->MaxClockFrequency);
 
     HasMemoryAbove4Gb = SdBusHasMemoryAbove4Gb();
-    NeedDmaMappingForAdma2 = HasMemoryAbove4Gb;
+    NeedDmaMappingForAdma2 = HasMemoryAbove4Gb && !FdoExtension->Adma2Use64;
     FdoExtension->UseDmaMappingForAdma2 = FALSE;
 
     /*
@@ -422,21 +433,16 @@ SdBusInitializeController(
     SdBusWriteReg8(FdoExtension, SDHCI_SOFTWARE_RESET, SDHCI_RESET_ALL);
 
     /* Wait for reset to complete */
-    Timeout = SD_RESET_TIMEOUT_MS;
-    while (Timeout > 0)
+    Deadline = KeQueryInterruptTime() + SD_RESET_TIMEOUT_MS * 10000ULL;
+    Delay.QuadPart = -10000LL;
+    while (SdBusReadReg8(FdoExtension, SDHCI_SOFTWARE_RESET) & SDHCI_RESET_ALL)
     {
-        if (!(SdBusReadReg8(FdoExtension, SDHCI_SOFTWARE_RESET) & SDHCI_RESET_ALL))
+        if (KeQueryInterruptTime() >= Deadline)
         {
-            break;
+            DPRINT1("SDHCI: Software reset timed out\n");
+            return STATUS_IO_TIMEOUT;
         }
-        KeStallExecutionProcessor(1000); /* 1 ms */
-        Timeout--;
-    }
-
-    if (Timeout == 0)
-    {
-        DPRINT1("SDHCI: Software reset timed out\n");
-        return STATUS_IO_TIMEOUT;
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
     }
 
     SdBusHardwareInitializeController(FdoExtension);
@@ -463,16 +469,17 @@ SdBusInitializeController(
         SdBusWriteReg16(FdoExtension, SDHCI_CLOCK_CONTROL, ClockControl);
 
         /* Wait for internal clock to stabilize */
-        Timeout = 200;
-        while (Timeout > 0)
+        Deadline = KeQueryInterruptTime() + 200 * 10000ULL;
+        Delay.QuadPart = -10000LL;
+        Timeout = 1;
+        while (!(SdBusReadReg16(FdoExtension, SDHCI_CLOCK_CONTROL) & SDHCI_CLK_INT_CLK_STABLE))
         {
-            ClockControl = SdBusReadReg16(FdoExtension, SDHCI_CLOCK_CONTROL);
-            if (ClockControl & SDHCI_CLK_INT_CLK_STABLE)
+            if (KeQueryInterruptTime() >= Deadline)
             {
+                Timeout = 0;
                 break;
             }
-            KeStallExecutionProcessor(1000);
-            Timeout--;
+            KeDelayExecutionThread(KernelMode, FALSE, &Delay);
         }
 
         if (Timeout == 0)
@@ -571,14 +578,14 @@ SdBusInitializeController(
         PHYSICAL_ADDRESS LowestAcceptable;
         PHYSICAL_ADDRESS BoundaryMultiple;
 
-        HighestAcceptable.QuadPart = 0xFFFFFFFF; /* 32-bit addressable */
+        HighestAcceptable.QuadPart = FdoExtension->Adma2Use64 ? (LONGLONG)-1 : 0xFFFFFFFF;
         LowestAcceptable.QuadPart = 0;
         BoundaryMultiple.QuadPart = 0;
 
         FdoExtension->Adma2MaxDescriptors = 512;
         FdoExtension->Adma2Table = (PSDHCI_ADMA2_DESCRIPTOR_32)
             MmAllocateContiguousMemorySpecifyCache(
-                FdoExtension->Adma2MaxDescriptors * sizeof(SDHCI_ADMA2_DESCRIPTOR_32),
+                FdoExtension->Adma2MaxDescriptors * SdBusAdma2DescriptorSize(FdoExtension),
                 LowestAcceptable,
                 HighestAcceptable,
                 BoundaryMultiple,
@@ -591,11 +598,13 @@ SdBusInitializeController(
             FdoExtension->UseAdma2 = TRUE;
             FdoExtension->UseDmaMappingForAdma2 = NeedDmaMappingForAdma2;
 
-            DPRINT1("SDHCI: ADMA2 table at VA=%p PA=0x%08lx (%lu descriptors)\n",
+            DPRINT1("SDHCI: %u-bit ADMA2 table at VA=%p PA=0x%I64x (%lu descriptors)\n",
+                    FdoExtension->Adma2Use64 ? 64 : 32,
                     FdoExtension->Adma2Table,
-                    FdoExtension->Adma2TablePhysical.LowPart,
+                    FdoExtension->Adma2TablePhysical.QuadPart,
                     FdoExtension->Adma2MaxDescriptors);
             DPRINT1("SDHCI: ADMA2 path uses %s\n",
+                    FdoExtension->Adma2Use64 ? "direct 64-bit descriptors" :
                     FdoExtension->UseDmaMappingForAdma2 ?
                     "direct descriptors with DMA mapping fallback for >4GB MDLs" :
                     "direct PFN descriptors (<=4GB RAM)");
@@ -646,7 +655,8 @@ SdBusInitializeController(
         }
         else
         {
-            DPRINT1("SDHCI: SDMA buffer allocation failed, using PIO\n");
+            DPRINT1("SDHCI: SDMA buffer allocation failed, %s\n",
+                    FdoExtension->UseAdma2 ? "ADMA2 only" : "using PIO");
             FdoExtension->DmaBufferSize = 0;
         }
     }
