@@ -565,6 +565,76 @@ static void Test_DWP_Activate(void)
     EMPTY_CACHE();
 }
 
+static void Test_DWP_HideActivate(void)
+{
+    static const struct
+    {
+        BOOL Defer;
+        int First;
+        UINT FirstFlags;
+        int Second;
+        UINT SecondFlags;
+        int StartActive;
+        BOOL Hidden;
+        int Active;
+    } Tests[] =
+    {
+        { FALSE, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW, 0, 0, 3, FALSE, 1 },
+        { FALSE, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_HIDEWINDOW, 0, 0, 3, FALSE, 1 },
+        { TRUE, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW, 0, 0, 3, FALSE, 1 },
+        { TRUE, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW, 2, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 3, FALSE, 1 },
+        { TRUE, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW, 2, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 3, TRUE, 1 },
+        { TRUE, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW | SWP_NOACTIVATE, 2, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 3, FALSE, 2 },
+        { TRUE, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW, 2, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 1, FALSE, 1 },
+        { TRUE, 2, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW, 3, FALSE, 2 },
+    };
+    HWND Windows[] = { NULL, hWnd1, hWnd2, hWnd3, hWnd4 };
+    HDWP hdwp;
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(Tests); i++)
+    {
+        SetWindowPos(hWnd1, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetWindowPos(hWnd2, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        if (Tests[i].Hidden)
+            ShowWindow(hWnd1, SW_HIDE);
+        SetActiveWindow(Windows[Tests[i].StartActive]);
+        FlushMessages();
+        ok(GetActiveWindow() == Windows[Tests[i].StartActive], "%u: hwnd%d is active before the test\n",
+           i, get_iwnd(GetActiveWindow()));
+        ZeroMemory(Activations, sizeof(Activations));
+        if (Tests[i].Defer)
+        {
+            hdwp = BeginDeferWindowPos(2);
+            hdwp = DeferWindowPos(hdwp, Windows[Tests[i].First], NULL, 0, 0, 0, 0, Tests[i].FirstFlags);
+            if (Tests[i].Second)
+                hdwp = DeferWindowPos(hdwp, Windows[Tests[i].Second], NULL, 0, 0, 0, 0, Tests[i].SecondFlags);
+            ok(hdwp != NULL, "%u: DeferWindowPos failed\n", i);
+            ok(EndDeferWindowPos(hdwp), "%u: EndDeferWindowPos failed\n", i);
+        }
+        else
+        {
+            ok(SetWindowPos(Windows[Tests[i].First], NULL, 0, 0, 0, 0, Tests[i].FirstFlags), "%u: SetWindowPos failed\n", i);
+        }
+        FlushMessages();
+        ok(!IsWindowVisible(hWnd1), "%u: hwnd1 is visible\n", i);
+        ok(GetActiveWindow() == Windows[Tests[i].Active], "%u: hwnd%d is active, expected hwnd%d\n",
+           i, get_iwnd(GetActiveWindow()), Tests[i].Active);
+        ok(GetForegroundWindow() == Windows[Tests[i].Active], "%u: hwnd%d is the foreground window, expected hwnd%d\n",
+           i, get_iwnd(GetForegroundWindow()), Tests[i].Active);
+        ok(Activations[Tests[i].Active] == (Tests[i].StartActive != Tests[i].Active),
+           "%u: hwnd%d was activated %u times\n", i, Tests[i].Active, Activations[Tests[i].Active]);
+        if (Tests[i].Active == 1)
+        {
+            ok(IsAbove(hWnd4, hWnd1), "%u: hwnd1 is above hwnd4\n", i);
+            ok(IsAbove(hWnd1, hWnd2), "%u: hwnd2 is above hwnd1\n", i);
+        }
+    }
+    SetWindowPos(hWnd1, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    FlushMessages();
+    EMPTY_CACHE();
+}
+
 START_TEST(DeferWindowPos)
 {
     SetCursorPos(0,0);
@@ -595,6 +665,9 @@ START_TEST(DeferWindowPos)
 
     set_default_pos();
     Test_DWP_Activate();
+
+    set_default_pos();
+    Test_DWP_HideActivate();
 
     DestroyWindow(hWnd4);
     DestroyWindow(hWnd3);
