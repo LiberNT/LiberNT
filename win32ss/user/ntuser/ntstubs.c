@@ -1532,7 +1532,10 @@ NtUserSetThreadDpiHostingBehavior(_In_ LONG Behavior)
     LONG Previous = DPI_HOSTING_BEHAVIOR_INVALID;
 
     if (Behavior != DPI_HOSTING_BEHAVIOR_DEFAULT && Behavior != DPI_HOSTING_BEHAVIOR_MIXED)
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
         return DPI_HOSTING_BEHAVIOR_INVALID;
+    }
 
     UserEnterExclusive();
 
@@ -1553,6 +1556,12 @@ NtUserGetWindowDpiHostingBehavior(_In_ HWND hWnd)
 {
     PWND Window;
     LONG Behavior = DPI_HOSTING_BEHAVIOR_INVALID;
+
+    if (!hWnd)
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        return DPI_HOSTING_BEHAVIOR_INVALID;
+    }
 
     UserEnterShared();
 

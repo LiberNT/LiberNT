@@ -49,12 +49,12 @@ START_TEST(DpiHostingBehavior)
 
     SetLastError(0xdeadbeef);
     ok_int(pSetThreadDpiHostingBehavior((DPI_HOSTING_BEHAVIOR)2), DPI_HOSTING_BEHAVIOR_INVALID);
-    trace("invalid behavior: last error %lu\n", GetLastError());
+    ok_int(GetLastError(), ERROR_INVALID_PARAMETER);
     ok_int(pGetThreadDpiHostingBehavior(), DPI_HOSTING_BEHAVIOR_DEFAULT);
 
     SetLastError(0xdeadbeef);
     ok_int(pGetWindowDpiHostingBehavior(NULL), DPI_HOSTING_BEHAVIOR_INVALID);
-    trace("NULL window: last error %lu\n", GetLastError());
+    ok_int(GetLastError(), ERROR_INVALID_PARAMETER);
 
     Previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     ok(Previous != NULL, "SetThreadDpiAwarenessContext failed with %lu\n", GetLastError());
