@@ -80,6 +80,7 @@ KiAssertDpcQueue(
     _In_ PKDPC_DATA DpcData)
 {
     UNREFERENCED_PARAMETER(DpcData);
+    ASSERT((LONG64)DpcData->DpcQueueDepth >= 0);
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ASSERT((DpcData->DpcQueueDepth == 0) == (DpcData->DpcList.ListHead.Next == NULL));
     ASSERT((DpcData->DpcList.ListHead.Next == NULL) == (DpcData->DpcList.LastEntry == NULL));
@@ -88,6 +89,44 @@ KiAssertDpcQueue(
     ASSERT((DpcData->DpcQueueDepth == 0) == IsListEmpty(&DpcData->DpcListHead));
     ASSERT(DpcData->DpcListHead.Flink->Blink == &DpcData->DpcListHead);
     ASSERT(DpcData->DpcListHead.Blink->Flink == &DpcData->DpcListHead);
+#endif
+#if DBG
+    {
+        ULONG Depth = (ULONG)DpcData->DpcQueueDepth;
+        ULONG Seen = 0;
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+        PSINGLE_LIST_ENTRY Entry = DpcData->DpcList.ListHead.Next;
+        PSINGLE_LIST_ENTRY Last = NULL;
+
+        while (Entry != NULL && Seen < Depth && Seen < 8)
+        {
+            PKDPC Dpc = CONTAINING_RECORD(Entry, KDPC, DpcListEntry);
+
+            ASSERT_DPC(Dpc);
+            ASSERT(Dpc->DpcData == DpcData);
+            Last = Entry;
+            Entry = Entry->Next;
+            Seen++;
+        }
+        ASSERT((Seen == Depth) == (Entry == NULL));
+        ASSERT(Entry != NULL || Last == DpcData->DpcList.LastEntry);
+#else
+        PLIST_ENTRY Head = &DpcData->DpcListHead;
+        PLIST_ENTRY Entry = Head->Flink;
+
+        while (Entry != Head && Seen < Depth && Seen < 8)
+        {
+            PKDPC Dpc = CONTAINING_RECORD(Entry, KDPC, DpcListEntry);
+
+            ASSERT_DPC(Dpc);
+            ASSERT(Dpc->DpcData == DpcData);
+            ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+            Entry = Entry->Flink;
+            Seen++;
+        }
+        ASSERT((Seen == Depth) == (Entry == Head));
+#endif
+    }
 #endif
 }
 
