@@ -10,6 +10,7 @@
 #include <usbdlib.h>
 #include <debug.h>
 
+#include "uac/uac_feedback.h"
 #include "uac/uac_desc_validate.h"
 
 #define USBAUDIO_TAG 'AbsU'
@@ -628,6 +629,7 @@ typedef struct _PIN_CONTEXT
     ULONG BufferLength;
     ULONG RenderPacketRemainder;
     ULONG RenderPendingPacketSize;
+    UAC_FEEDBACK_STATE Feedback;
     PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor;
     WORK_QUEUE_ITEM CaptureWorkItem;
     PKSWORKER       CaptureWorker;

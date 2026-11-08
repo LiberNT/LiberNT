@@ -572,8 +572,7 @@ UsbAudioSetFormat(
     {
         UacFeedbackInit(&PinContext->Feedback,
                         PcmFormat.WaveFormat->nSamplesPerSec,
-                        PinContext->PacketRate,
-                        PcmFormat.WaveFormat->nBlockAlign);
+                        PinContext->PacketRate);
 
         SampleRateBuffer[2] = (PcmFormat.WaveFormat->nSamplesPerSec >> 16) & 0xFF;
         SampleRateBuffer[1] = (PcmFormat.WaveFormat->nSamplesPerSec >> 8) & 0xFF;
@@ -2120,7 +2119,6 @@ UsbAudioRenderComplete(
     PKSPIN Pin;
     PPIN_CONTEXT PinContext;
     PKSSTREAM_POINTER StreamPointerClone;
-    NTSTATUS Status;
     PURB Urb;
     PVOID TransferBuffer;
 
@@ -2129,9 +2127,6 @@ UsbAudioRenderComplete(
     /* get pin context */
     Pin = Context;
     PinContext = Pin->Context;
-
-    /* get status */
-    Status = Irp->IoStatus.Status;
 
     /* get streampointer */
     StreamPointerClone = Irp->Tail.Overlay.DriverContext[1];
@@ -2148,16 +2143,6 @@ UsbAudioRenderComplete(
     FreeFunction(Urb);
     if (TransferBuffer)
         FreeFunction(TransferBuffer);
-
-    if (!NT_SUCCESS(Status) && StreamPointerClone)
-    {
-        /* An isochronous failure is an xrun, not a stream failure: drop the
-         * packet and let processing supply the next one. Failing the stream
-         * here leaves the player blocked forever in waveOut. */
-        UacFeedbackXrun(&PinContext->Feedback, Status);
-        DPRINT1("UsbAudioRenderComplete xrun %lu status %lx\n",
-                PinContext->Feedback.XrunCount, Status);
-    }
 
     if (StreamPointerClone)
     {
