@@ -41,6 +41,15 @@ static LONG g_TimeoutWorkQueued;
 static HANDLE g_ParametersKey;
 static LONG g_IdleConnectionSeconds = HTTP_DEFAULT_TIMEOUT_SECONDS;
 static LONG g_HeaderWaitSeconds = HTTP_DEFAULT_TIMEOUT_SECONDS;
+static IO_CSQ g_DisconnectCsq;
+static LIST_ENTRY g_DisconnectIrpQueue;
+static KSPIN_LOCK g_DisconnectIrpLock;
+
+typedef struct _HTTP_DISCONNECT_PEEK
+{
+    PHTTP_CONNECTION Connection;
+    PHTTP_REQUEST_QUEUE Queue;
+} HTTP_DISCONNECT_PEEK, *PHTTP_DISCONNECT_PEEK;
 
 static VOID NTAPI HttpConnectionWorker(PDEVICE_OBJECT DeviceObject, PVOID Context);
 static VOID HttpConnectionCloseSocket(PHTTP_CONNECTION Connection);
@@ -780,6 +789,19 @@ static VOID HttpConnectionReference(PHTTP_CONNECTION Connection)
     InterlockedIncrement(&Connection->RefCount);
 }
 
+static VOID HttpCompleteDisconnectWaits(PHTTP_CONNECTION Connection)
+{
+    HTTP_DISCONNECT_PEEK Peek = { Connection, NULL };
+    PIRP Irp;
+
+    while ((Irp = IoCsqRemoveNextIrp(&g_DisconnectCsq, &Peek)) != NULL)
+    {
+        Irp->IoStatus.Status = Connection->Cancelled ? STATUS_NETWORK_NAME_DELETED : STATUS_SUCCESS;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    }
+}
+
 static VOID HttpConnectionCloseSocket(PHTTP_CONNECTION Connection)
 {
     PWSK_SOCKET Socket;
@@ -791,16 +813,36 @@ static VOID HttpConnectionCloseSocket(PHTTP_CONNECTION Connection)
     Connection->Socket = NULL;
     ExReleaseFastMutex(&Connection->SocketMutex);
 
+    if (!Socket)
+        return;
+
     Status = HttpCloseSocket(Socket, Connection->CloseIrp);
     if (!NT_SUCCESS(Status))
         DPRINT1("HttpConnectionCloseSocket failed with %lx\n", Status);
+    HttpCompleteDisconnectWaits(Connection);
+}
+
+static NTSTATUS HttpDisconnectSocket(PWSK_SOCKET Socket, ULONG Flags, PIRP Irp)
+{
+    PWSK_PROVIDER_CONNECTION_DISPATCH Dispatch = (PWSK_PROVIDER_CONNECTION_DISPATCH)Socket->Dispatch;
+    KEVENT Event;
+    NTSTATUS Status;
+
+    IoReuseIrp(Irp, STATUS_UNSUCCESSFUL);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    IoSetCompletionRoutine(Irp, HttpSyncCompletion, &Event, TRUE, TRUE, TRUE);
+    Status = Dispatch->WskDisconnect(Socket, NULL, Flags, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = Irp->IoStatus.Status;
+    }
+    return Status;
 }
 
 static VOID HttpConnectionResetSocket(PHTTP_CONNECTION Connection)
 {
-    PWSK_PROVIDER_CONNECTION_DISPATCH Dispatch;
     PWSK_SOCKET Socket;
-    KEVENT Event;
     NTSTATUS Status;
 
     ExAcquireFastMutex(&Connection->SocketMutex);
@@ -812,22 +854,14 @@ static VOID HttpConnectionResetSocket(PHTTP_CONNECTION Connection)
     if (!Socket)
         return;
 
-    Dispatch = (PWSK_PROVIDER_CONNECTION_DISPATCH)Socket->Dispatch;
-    IoReuseIrp(Connection->CloseIrp, STATUS_UNSUCCESSFUL);
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    IoSetCompletionRoutine(Connection->CloseIrp, HttpSyncCompletion, &Event, TRUE, TRUE, TRUE);
-    Status = Dispatch->WskDisconnect(Socket, NULL, WSK_FLAG_ABORTIVE, Connection->CloseIrp);
-    if (Status == STATUS_PENDING)
-    {
-        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
-        Status = Connection->CloseIrp->IoStatus.Status;
-    }
+    Status = HttpDisconnectSocket(Socket, WSK_FLAG_ABORTIVE, Connection->CloseIrp);
     if (!NT_SUCCESS(Status))
         DPRINT1("abortive disconnect failed with %lx\n", Status);
 
     Status = HttpCloseSocket(Socket, Connection->CloseIrp);
     if (!NT_SUCCESS(Status))
         DPRINT1("HttpConnectionResetSocket failed with %lx\n", Status);
+    HttpCompleteDisconnectWaits(Connection);
 }
 
 static VOID HttpConnectionDereference(PHTTP_CONNECTION Connection)
@@ -1329,6 +1363,33 @@ static VOID HttpRestartConnection(PHTTP_CONNECTION Connection)
     IoQueueWorkItem(Connection->WorkItem, HttpConnectionWorker, DelayedWorkQueue, Connection);
 }
 
+static VOID HttpConnectionLinger(PHTTP_CONNECTION Connection)
+{
+    PWSK_SOCKET Socket;
+    NTSTATUS Status = STATUS_CONNECTION_DISCONNECTED;
+
+    Connection->Lingering = TRUE;
+    Connection->BufferLength = 0;
+    ExAcquireFastMutex(&Connection->SocketMutex);
+    Socket = Connection->Socket;
+    ExReleaseFastMutex(&Connection->SocketMutex);
+    if (Socket)
+        Status = HttpDisconnectSocket(Socket, 0, Connection->CloseIrp);
+
+    HttpSetDeadline(Connection, Connection->IdleSeconds
+                                ? Connection->IdleSeconds
+                                : InterlockedCompareExchange(&g_IdleConnectionSeconds, 0, 0));
+    if (NT_SUCCESS(Status) && HttpInsertListenerConnection(Connection))
+    {
+        HttpConnectionReference(Connection);
+        if (HttpStartReceive(Connection, Connection->BufferCapacity - 1) == STATUS_PENDING)
+            return;
+        HttpConnectionDereference(Connection);
+        HttpRemoveListenerConnection(Connection);
+    }
+    HttpConnectionCloseSocket(Connection);
+}
+
 static VOID HttpConsumeHeaders(PHTTP_CONNECTION Connection)
 {
     if (!Connection->Available)
@@ -1598,6 +1659,20 @@ static VOID NTAPI HttpConnectionWorker(PDEVICE_OBJECT DeviceObject, PVOID Contex
     if (Connection->ReadingBody)
     {
         HttpBodyReceiveCompleted(Connection);
+        return;
+    }
+
+    if (Connection->Lingering)
+    {
+        Connection->ReceivePending = FALSE;
+        IoFreeMdl(Connection->ReceiveMdl);
+        Connection->ReceiveMdl = NULL;
+        if (NT_SUCCESS(Connection->ReceiveStatus) && Connection->ReceiveLength &&
+            HttpStartReceive(Connection, Connection->BufferCapacity - 1) == STATUS_PENDING)
+            return;
+        HttpRemoveListenerConnection(Connection);
+        HttpConnectionCloseSocket(Connection);
+        HttpConnectionDereference(Connection);
         return;
     }
 
@@ -2128,6 +2203,53 @@ static VOID NTAPI HttpBodyCsqReleaseLock(
     KeReleaseSpinLock(&Queue->PendingBodyIrpLock, Irql);
 }
 
+static VOID NTAPI HttpDisconnectCsqInsertIrp(
+    _In_ PIO_CSQ Csq,
+    _Inout_ PIRP Irp)
+{
+    UNREFERENCED_PARAMETER(Csq);
+    InsertTailList(&g_DisconnectIrpQueue, &Irp->Tail.Overlay.ListEntry);
+}
+
+static PIRP NTAPI HttpDisconnectCsqPeekNextIrp(
+    _In_ PIO_CSQ Csq,
+    _In_opt_ PIRP Irp,
+    _In_opt_ PVOID PeekContext)
+{
+    PHTTP_DISCONNECT_PEEK Peek = PeekContext;
+    PLIST_ENTRY Entry;
+
+    UNREFERENCED_PARAMETER(Csq);
+    for (Entry = Irp ? Irp->Tail.Overlay.ListEntry.Flink : g_DisconnectIrpQueue.Flink;
+         Entry != &g_DisconnectIrpQueue;
+         Entry = Entry->Flink)
+    {
+        PIRP Next = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+        if (!Peek ||
+            Next->Tail.Overlay.DriverContext[0] == Peek->Connection ||
+            Next->Tail.Overlay.DriverContext[1] == Peek->Queue)
+            return Next;
+    }
+
+    return NULL;
+}
+
+static VOID NTAPI HttpDisconnectCsqAcquireLock(
+    _In_ PIO_CSQ Csq,
+    _Out_ PKIRQL Irql)
+{
+    UNREFERENCED_PARAMETER(Csq);
+    KeAcquireSpinLock(&g_DisconnectIrpLock, Irql);
+}
+
+static VOID NTAPI HttpDisconnectCsqReleaseLock(
+    _In_ PIO_CSQ Csq,
+    _In_ KIRQL Irql)
+{
+    UNREFERENCED_PARAMETER(Csq);
+    KeReleaseSpinLock(&g_DisconnectIrpLock, Irql);
+}
+
 static NTSTATUS HttpInitializeRequestQueue(PHTTP_REQUEST_QUEUE Queue)
 {
     NTSTATUS Status;
@@ -2164,6 +2286,12 @@ static NTSTATUS HttpReceiveRequest(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     if (InputLen < sizeof(struct http_receive_request_params))
         return STATUS_INVALID_PARAMETER;
 
+    ExAcquireFastMutex(&Queue->Mutex);
+    Status = (Queue->State & HTTP_QUEUE_STATE_SHUTDOWN) ? STATUS_INVALID_HANDLE : STATUS_SUCCESS;
+    ExReleaseFastMutex(&Queue->Mutex);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     ExAcquireFastMutex(&g_HttpGlobalLock);
 
     if (Params->id != HTTP_NULL_ID)
@@ -2194,11 +2322,12 @@ static NTSTATUS HttpReceiveRequest(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     }
 
     ExAcquireFastMutex(&Queue->Mutex);
-    if (Queue->State & HTTP_QUEUE_STATE_CLOSING)
+    if (Queue->State & (HTTP_QUEUE_STATE_CLOSING | HTTP_QUEUE_STATE_SHUTDOWN))
     {
+        Status = (Queue->State & HTTP_QUEUE_STATE_CLOSING) ? STATUS_FILE_CLOSED : STATUS_INVALID_HANDLE;
         ExReleaseFastMutex(&Queue->Mutex);
         ExReleaseFastMutex(&g_HttpGlobalLock);
-        return STATUS_FILE_CLOSED;
+        return Status;
     }
 
     IoMarkIrpPending(Irp);
@@ -2260,7 +2389,7 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     ULONG ResponseHeaderSize = FIELD_OFFSET(struct http_response, buffer);
     LIST_ENTRY CompleteList;
     PHTTP_CONNECTION Conn;
-    BOOLEAN Finished = FALSE, Removed = FALSE, Close = FALSE, Restart = FALSE, Drain = FALSE;
+    BOOLEAN Finished = FALSE, Removed = FALSE, Close = FALSE, Restart = FALSE, Drain = FALSE, Linger = FALSE;
     ULONG Sent = (ULONG)Response->len;
     NTSTATUS Status;
 
@@ -2356,6 +2485,10 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
                     Restart = TRUE;
                 }
             }
+            else if (!Close && Conn->CloseAfterResponse && !Conn->ReadingBody)
+            {
+                Linger = TRUE;
+            }
             else
             {
                 Close = TRUE;
@@ -2380,6 +2513,8 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
         else
             HttpConnectionCloseSocket(Conn);
     }
+    if (Linger)
+        HttpConnectionLinger(Conn);
     if (Drain)
         HttpConnectionDereference(Conn);
     if (Removed)
@@ -2539,6 +2674,99 @@ static NTSTATUS HttpQueryQueueProperty(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
 
 C_ASSERT(FIELD_OFFSET(struct http_version_ea, name) == FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName));
 
+static NTSTATUS HttpShutdownQueue(PHTTP_REQUEST_QUEUE Queue)
+{
+    LIST_ENTRY CancelList;
+    PIRP Irp;
+
+    InitializeListHead(&CancelList);
+    ExAcquireFastMutex(&Queue->Mutex);
+    Queue->State |= HTTP_QUEUE_STATE_SHUTDOWN;
+    while ((Irp = IoCsqRemoveNextIrp(&Queue->Csq, NULL)) != NULL)
+    {
+        Irp->IoStatus.Status = STATUS_CANCELLED;
+        Irp->IoStatus.Information = 0;
+        InsertTailList(&CancelList, &Irp->Tail.Overlay.ListEntry);
+    }
+    ExReleaseFastMutex(&Queue->Mutex);
+
+    HttpCompleteIrpList(&CancelList);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS HttpCancelRequest(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    LIST_ENTRY CompleteList;
+    PHTTP_CONNECTION Conn;
+    PIRP BodyIrp;
+
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(HTTP_REQUEST_ID))
+        return STATUS_INVALID_PARAMETER;
+
+    InitializeListHead(&CompleteList);
+    ExAcquireFastMutex(&g_HttpGlobalLock);
+    Conn = GetConnectionById(*(HTTP_REQUEST_ID *)Irp->AssociatedIrp.SystemBuffer);
+    if (!Conn || Conn->Queue != Queue || InterlockedCompareExchange(&Conn->Shutdown, 0, 0))
+    {
+        ExReleaseFastMutex(&g_HttpGlobalLock);
+        return STATUS_CONNECTION_INVALID;
+    }
+
+    RemoveEntryList(&Conn->Entry);
+    Conn->InConnectionList = FALSE;
+    Conn->Cancelled = TRUE;
+    InterlockedExchange(&Conn->Shutdown, TRUE);
+    while ((BodyIrp = IoCsqRemoveNextIrp(&Queue->BodyCsq, Conn)) != NULL)
+    {
+        BodyIrp->IoStatus.Status = STATUS_CANCELLED;
+        InsertTailList(&CompleteList, &BodyIrp->Tail.Overlay.ListEntry);
+    }
+    ExReleaseFastMutex(&g_HttpGlobalLock);
+
+    HttpCompleteIrpList(&CompleteList);
+    HttpRemoveListenerConnection(Conn);
+    HttpConnectionResetSocket(Conn);
+    HttpConnectionDereference(Conn);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS HttpWaitDisconnect(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    NTSTATUS Status = STATUS_CONNECTION_INVALID;
+    HTTP_CONNECTION_ID Id;
+    PLIST_ENTRY Entry;
+
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(Id))
+        return STATUS_INVALID_PARAMETER;
+    Id = *(HTTP_CONNECTION_ID *)Irp->AssociatedIrp.SystemBuffer;
+
+    ExAcquireFastMutex(&g_HttpGlobalLock);
+    for (Entry = g_ConnectionsList.Flink; Entry != &g_ConnectionsList; Entry = Entry->Flink)
+    {
+        PHTTP_CONNECTION Conn = CONTAINING_RECORD(Entry, HTTP_CONNECTION, Entry);
+
+        if (Conn->ConnectionId != Id || Conn->Queue != Queue)
+            continue;
+
+        ExAcquireFastMutex(&Queue->Mutex);
+        ExAcquireFastMutex(&Conn->SocketMutex);
+        if (Conn->Socket && !(Queue->State & HTTP_QUEUE_STATE_CLOSING))
+        {
+            Irp->Tail.Overlay.DriverContext[0] = Conn;
+            Irp->Tail.Overlay.DriverContext[1] = Queue;
+            IoCsqInsertIrp(&g_DisconnectCsq, Irp, NULL);
+            Status = STATUS_PENDING;
+        }
+        ExReleaseFastMutex(&Conn->SocketMutex);
+        ExReleaseFastMutex(&Queue->Mutex);
+        break;
+    }
+    ExReleaseFastMutex(&g_HttpGlobalLock);
+    return Status;
+}
+
 static BOOLEAN HttpCreateIsVersion2(PIRP Irp)
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
@@ -2621,12 +2849,15 @@ static NTSTATUS NTAPI HttpDispatchCleanup(
 
     if (Queue)
     {
+        HTTP_DISCONNECT_PEEK Peek = { NULL, Queue };
         PIRP PendingIrp;
         ExAcquireFastMutex(&Queue->Mutex);
         Queue->State |= HTTP_QUEUE_STATE_CLOSING;
         while ((PendingIrp = IoCsqRemoveNextIrp(&Queue->Csq, NULL)) != NULL)
             InsertTailList(&CancelList, &PendingIrp->Tail.Overlay.ListEntry);
         while ((PendingIrp = IoCsqRemoveNextIrp(&Queue->BodyCsq, NULL)) != NULL)
+            InsertTailList(&CancelList, &PendingIrp->Tail.Overlay.ListEntry);
+        while ((PendingIrp = IoCsqRemoveNextIrp(&g_DisconnectCsq, &Peek)) != NULL)
             InsertTailList(&CancelList, &PendingIrp->Tail.Overlay.ListEntry);
         ExReleaseFastMutex(&Queue->Mutex);
 
@@ -2703,7 +2934,10 @@ static NTSTATUS NTAPI HttpDispatchClose(
         {
             Entry = RemoveHeadList(&ConnectionCloseList);
             PHTTP_CONNECTION Connection = CONTAINING_RECORD(Entry, HTTP_CONNECTION, Entry);
-            HttpConnectionCloseSocket(Connection);
+            if (Connection->Available)
+                HttpConnectionResetSocket(Connection);
+            else
+                HttpConnectionCloseSocket(Connection);
             HttpConnectionDereference(Connection);
         }
 
@@ -2760,6 +2994,15 @@ static NTSTATUS NTAPI HttpDispatchDeviceControl(
             break;
         case IOCTL_HTTP_SET_URL_CONFIG:
             Status = HttpIoctlSetUrlConfig(Queue, Irp);
+            break;
+        case IOCTL_HTTP_SHUTDOWN_QUEUE:
+            Status = HttpShutdownQueue(Queue);
+            break;
+        case IOCTL_HTTP_CANCEL_REQUEST:
+            Status = HttpCancelRequest(Queue, Irp);
+            break;
+        case IOCTL_HTTP_WAIT_DISCONNECT:
+            Status = HttpWaitDisconnect(Queue, Irp);
             break;
         default:
             Status = STATUS_INVALID_DEVICE_REQUEST;
@@ -2865,6 +3108,15 @@ NTSTATUS NTAPI DriverEntry(
     InitializeListHead(&g_ListenersList);
     InitializeListHead(&g_ListenerCallbackList);
     KeInitializeSpinLock(&g_ListenerCallbackLock);
+    InitializeListHead(&g_DisconnectIrpQueue);
+    KeInitializeSpinLock(&g_DisconnectIrpLock);
+    IoCsqInitialize(&g_DisconnectCsq,
+                    HttpDisconnectCsqInsertIrp,
+                    HttpCsqRemoveIrp,
+                    HttpDisconnectCsqPeekNextIrp,
+                    HttpDisconnectCsqAcquireLock,
+                    HttpDisconnectCsqReleaseLock,
+                    HttpCsqCompleteCanceledIrp);
     g_RequestIdCounter = 1;
     g_WskClientNpi.ClientContext = NULL;
     g_WskClientNpi.Dispatch = &g_WskClientDispatch;

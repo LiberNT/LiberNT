@@ -3132,6 +3132,8 @@ cleanup_files:
 #define HTTP_PR_PORT 59989
 
 static const char http_pr_get[] = "GET /prop/a HTTP/1.1\r\nHost: 127.0.0.1:59989\r\n\r\n";
+static const char http_pr_post[] =
+    "POST /prop/b HTTP/1.1\r\nHost: 127.0.0.1:59989\r\nContent-Length: 10\r\n\r\nhello";
 
 static ULONG http_pr_query(HANDLE Queue, HTTP_SERVER_PROPERTY Property, ULONG *Value)
 {
@@ -3187,6 +3189,15 @@ static ULONG http_pr_wait(HANDLE Queue, OVERLAPPED *Overlapped, DWORD TimeoutMs)
     if (WaitForSingleObject(Overlapped->hEvent, TimeoutMs) != WAIT_OBJECT_0)
         return ERROR_IO_PENDING;
     return GetOverlappedResult(Queue, Overlapped, &Bytes, FALSE) ? NO_ERROR : GetLastError();
+}
+
+static ULONG http_pr_wait_disconnect(HANDLE Queue, HTTP_CONNECTION_ID Id, BOOL Ex, ULONG Reserved,
+                                     OVERLAPPED *Overlapped)
+{
+    ResetEvent(Overlapped->hEvent);
+    if (Ex)
+        return HttpWaitForDisconnectEx(Queue, Id, Reserved, Overlapped);
+    return HttpWaitForDisconnect(Queue, Id, Overlapped);
 }
 
 static void test_queue_property_validation(HANDLE Queue, HANDLE V1Queue)
@@ -3755,6 +3766,235 @@ static void test_group_timeouts(HANDLE Queue, HTTP_URL_GROUP_ID Group, HTTP_SERV
     CloseHandle(Overlapped.hEvent);
 }
 
+static void test_cancel_and_disconnect(HANDLE Queue)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    OVERLAPPED Overlapped = {0}, Wait = {0}, Body = {0}, Cancel = {0};
+    HTTP_KA_CLIENT Client;
+    HTTP_REQUEST_ID Id;
+    HTTP_CONNECTION_ID ConnectionId;
+    char Data[64], Response[1024];
+    DWORD Elapsed, Bytes;
+    ULONG Result;
+    int State;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Wait.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Body.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Cancel.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    Result = HttpCancelHttpRequest(Queue, HTTP_NULL_ID, NULL);
+    ok(Result == ERROR_CONNECTION_INVALID, "cancel of the null id returned %lu\n", Result);
+    Result = HttpCancelHttpRequest(Queue, 0x123456789ull, NULL);
+    ok(Result == ERROR_CONNECTION_INVALID, "cancel of a bad id returned %lu\n", Result);
+    Result = HttpCancelHttpRequest(NULL, 0x123456789ull, NULL);
+    ok(Result == ERROR_INVALID_HANDLE, "cancel on NULL returned %lu\n", Result);
+    Result = http_pr_wait_disconnect(Queue, HTTP_NULL_ID, FALSE, 0, &Wait);
+    ok(Result == ERROR_CONNECTION_INVALID, "wait on the null id returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Wait);
+    Result = http_pr_wait_disconnect(Queue, 0x123456789ull, FALSE, 0, &Wait);
+    ok(Result == ERROR_CONNECTION_INVALID, "wait on a bad id returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Wait);
+    Result = http_pr_wait_disconnect(NULL, 0x123456789ull, FALSE, 0, &Wait);
+    ok(Result == ERROR_INVALID_HANDLE, "wait on NULL returned %lu\n", Result);
+
+    ok(http_pr_client(&Client, http_pr_post), "cancel client failed\n");
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 2000);
+    ok(Result == NO_ERROR, "receive for cancel returned %lu\n", Result);
+    Id = Request->s.RequestId;
+    ConnectionId = Request->s.ConnectionId;
+    Result = http_pr_wait_disconnect(Queue, ConnectionId, TRUE, 1, &Wait);
+    ok(Result == ERROR_INVALID_PARAMETER, "wait with reserved 1 returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Wait);
+    Result = http_pr_wait_disconnect(Queue, ConnectionId, TRUE, 0, &Wait);
+    ok(Result == ERROR_IO_PENDING, "wait for the cancelled connection returned %lu\n", Result);
+    ResetEvent(Body.hEvent);
+    Result = HttpReceiveRequestEntityBody(Queue, Id, 0, Data, sizeof(Data), NULL, &Body);
+    ok(Result == NO_ERROR || Result == ERROR_IO_PENDING, "first body read returned %lu\n", Result);
+    if (Result == NO_ERROR || Result == ERROR_IO_PENDING)
+        GetOverlappedResult(Queue, &Body, &Bytes, TRUE);
+    ResetEvent(Body.hEvent);
+    Result = HttpReceiveRequestEntityBody(Queue, Id, 0, Data, sizeof(Data), NULL, &Body);
+    ok(Result == ERROR_IO_PENDING, "second body read returned %lu\n", Result);
+    ResetEvent(Cancel.hEvent);
+    Result = HttpCancelHttpRequest(Queue, Id, &Cancel);
+    ok(Result == ERROR_IO_PENDING || Result == NO_ERROR, "overlapped cancel returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING || Result == NO_ERROR)
+    {
+        Result = http_pr_wait(Queue, &Cancel, 2000);
+        ok(Result == NO_ERROR, "overlapped cancel completed with %lu\n", Result);
+    }
+    Result = http_pr_wait(Queue, &Body, 2000);
+    ok(Result == ERROR_OPERATION_ABORTED, "pending body read after cancel completed with %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Body);
+    Result = http_pr_wait(Queue, &Wait, 2000);
+    ok(Result == ERROR_NETNAME_DELETED, "disconnect wait after cancel completed with %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Wait);
+    State = http_pr_wait_end(&Client, 2000, &Elapsed);
+    ok(State == HTTP_KA_RESET, "client after cancel: state %d after %lu ms\n", State, Elapsed);
+    closesocket(Client.Socket);
+    Result = http_ka_respond(Queue, Id, 0, "late");
+    ok(Result == ERROR_CONNECTION_INVALID, "response after cancel returned %lu\n", Result);
+    Result = HttpCancelHttpRequest(Queue, Id, NULL);
+    ok(Result == ERROR_CONNECTION_INVALID, "second cancel returned %lu\n", Result);
+    Result = http_pr_wait_disconnect(Queue, ConnectionId, FALSE, 0, &Wait);
+    ok(Result == ERROR_CONNECTION_INVALID, "wait on a closed connection returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Wait);
+
+    ok(http_pr_client(&Client, http_pr_get), "wait client failed\n");
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 2000);
+    ok(Result == NO_ERROR, "receive for wait returned %lu\n", Result);
+    Id = Request->s.RequestId;
+    ConnectionId = Request->s.ConnectionId;
+    Result = http_pr_wait_disconnect(Queue, ConnectionId, FALSE, 0, &Wait);
+    ok(Result == ERROR_IO_PENDING, "wait returned %lu\n", Result);
+    Result = http_pr_wait_disconnect(Queue, ConnectionId, TRUE, 0, &Cancel);
+    ok(Result == ERROR_IO_PENDING, "second wait returned %lu\n", Result);
+    Result = http_ka_respond(Queue, Id, 0, "body");
+    ok(Result == NO_ERROR, "keep-alive response returned %lu\n", Result);
+    ok(http_ka_read_response(&Client, Response, sizeof(Response), 2000), "no keep-alive response\n");
+    Result = http_pr_wait(Queue, &Wait, 300);
+    ok(Result == ERROR_IO_PENDING, "wait after a keep-alive response completed with %lu\n", Result);
+    CancelIoEx(Queue, &Cancel);
+    Result = http_pr_wait(Queue, &Cancel, 1000);
+    ok(Result == ERROR_OPERATION_ABORTED, "cancelled wait completed with %lu\n", Result);
+    Result = http_pr_wait(Queue, &Wait, 100);
+    ok(Result == ERROR_IO_PENDING, "other wait after CancelIoEx completed with %lu\n", Result);
+    shutdown(Client.Socket, SD_SEND);
+    Result = http_pr_wait(Queue, &Wait, 2000);
+    ok(Result == NO_ERROR, "wait after the client shut down sending completed with %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+    {
+        closesocket(Client.Socket);
+        Result = http_pr_wait(Queue, &Wait, 2000);
+        ok(Result == NO_ERROR, "wait after the client closed completed with %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Wait);
+    }
+    else
+        closesocket(Client.Socket);
+    GetOverlappedResult(Queue, &Wait, &Bytes, FALSE);
+    ok(Bytes == 0, "wait returned %lu bytes\n", Bytes);
+
+    ok(http_pr_client(&Client, http_pr_get), "disconnect client failed\n");
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 2000);
+    ok(Result == NO_ERROR, "receive for disconnect returned %lu\n", Result);
+    Result = http_pr_wait_disconnect(Queue, Request->s.ConnectionId, FALSE, 0, &Wait);
+    ok(Result == ERROR_IO_PENDING, "wait before a disconnect response returned %lu\n", Result);
+    Result = http_ka_respond(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_DISCONNECT, "bye");
+    ok(Result == NO_ERROR, "disconnect response returned %lu\n", Result);
+    State = http_pr_wait_end(&Client, 1000, &Elapsed);
+    ok(State == HTTP_KA_DATA, "client after a disconnect response: state %d\n", State);
+    Client.Length = 0;
+    State = http_pr_wait_end(&Client, 1000, &Elapsed);
+    ok(State == HTTP_KA_CLOSED, "client after a disconnect response body: state %d\n", State);
+    Result = http_pr_wait(Queue, &Wait, 300);
+    ok(Result == ERROR_IO_PENDING, "wait after a disconnect response completed with %lu\n", Result);
+    closesocket(Client.Socket);
+    Result = http_pr_wait(Queue, &Wait, 2000);
+    ok(Result == NO_ERROR, "wait after the client closed completed with %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Wait);
+
+    CloseHandle(Overlapped.hEvent);
+    CloseHandle(Wait.hEvent);
+    CloseHandle(Body.hEvent);
+    CloseHandle(Cancel.hEvent);
+}
+
+static void test_shutdown(HANDLE Queue, HANDLE Idle)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    OVERLAPPED Overlapped = {0}, Wait = {0};
+    HTTP_KA_CLIENT Bound, Queued, Late;
+    HTTP_REQUEST_ID Id;
+    char Response[1024];
+    DWORD Elapsed;
+    ULONG Result, Value;
+    int State;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Wait.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    Result = HttpShutdownRequestQueue(NULL);
+    ok(Result == ERROR_INVALID_HANDLE, "shutdown of NULL returned %lu\n", Result);
+    ResetEvent(Overlapped.hEvent);
+    Result = HttpReceiveHttpRequest(Idle, HTTP_NULL_ID, 0, Request, sizeof(RequestBuffer), NULL, &Overlapped);
+    ok(Result == ERROR_IO_PENDING, "receive on the idle queue returned %lu\n", Result);
+    Result = HttpShutdownRequestQueue(Idle);
+    ok(Result == NO_ERROR, "shutdown returned %lu\n", Result);
+    Result = http_pr_wait(Idle, &Overlapped, 1000);
+    ok(Result == ERROR_OPERATION_ABORTED, "pending receive after shutdown completed with %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Idle, &Overlapped);
+    ResetEvent(Overlapped.hEvent);
+    Result = HttpReceiveHttpRequest(Idle, HTTP_NULL_ID, 0, Request, sizeof(RequestBuffer), NULL, &Overlapped);
+    ok(Result == ERROR_INVALID_HANDLE, "receive after shutdown returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Idle, &Overlapped);
+    Result = http_pr_query(Idle, HttpServerQueueLengthProperty, &Value);
+    ok(Result == NO_ERROR, "query after shutdown returned %lu, %lu\n", Result, Value);
+    Result = http_pr_set(Idle, HttpServerQueueLengthProperty, 10);
+    ok(Result == NO_ERROR, "set after shutdown returned %lu\n", Result);
+    Result = HttpShutdownRequestQueue(Idle);
+    ok(Result == NO_ERROR, "second shutdown returned %lu\n", Result);
+
+    ok(http_pr_client(&Bound, http_pr_get), "bound client failed\n");
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 2000);
+    ok(Result == NO_ERROR, "receive before shutdown returned %lu\n", Result);
+    Id = Request->s.RequestId;
+    Result = http_pr_wait_disconnect(Queue, Request->s.ConnectionId, FALSE, 0, &Wait);
+    ok(Result == ERROR_IO_PENDING, "wait before shutdown returned %lu\n", Result);
+    ok(http_pr_client(&Queued, http_pr_get), "queued client failed\n");
+    Sleep(300);
+    Result = HttpShutdownRequestQueue(Queue);
+    ok(Result == NO_ERROR, "shutdown returned %lu\n", Result);
+    Result = http_pr_wait(Queue, &Wait, 500);
+    ok(Result == ERROR_IO_PENDING, "disconnect wait after shutdown completed with %lu\n", Result);
+    State = http_pr_wait_end(&Bound, 500, &Elapsed);
+    ok(State == HTTP_KA_OPEN, "bound client after shutdown: state %d after %lu ms\n", State, Elapsed);
+    Result = http_ka_respond(Queue, Id, 0, "late");
+    ok(Result == NO_ERROR, "response after shutdown returned %lu\n", Result);
+    ok(http_ka_read_response(&Bound, Response, sizeof(Response), 1000) && !strncmp(Response, "HTTP/1.1 200", 12),
+       "bound client response after shutdown %s\n", Response);
+    State = http_pr_wait_end(&Bound, 500, &Elapsed);
+    ok(State == HTTP_KA_OPEN, "bound client after the response: state %d after %lu ms\n", State, Elapsed);
+    State = http_pr_wait_end(&Queued, 500, &Elapsed);
+    ok(State == HTTP_KA_OPEN, "queued client after shutdown: state %d after %lu ms\n", State, Elapsed);
+    ok(http_pr_client(&Late, http_pr_get), "late client failed\n");
+    State = http_pr_wait_end(&Late, 1000, &Elapsed);
+    ok(State == HTTP_KA_OPEN, "new client after shutdown: state %d after %lu ms, %s\n", State, Elapsed,
+       Late.Buffer);
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 300);
+    ok(Result == ERROR_INVALID_HANDLE, "receive after shutdown returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Overlapped);
+    closesocket(Bound.Socket);
+    Result = http_pr_wait(Queue, &Wait, 1000);
+    ok(Result == NO_ERROR, "disconnect wait after the bound client closed completed with %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Wait);
+
+    CloseHandle(Queue);
+    State = http_pr_wait_end(&Queued, 1000, &Elapsed);
+    ok(State == HTTP_KA_RESET, "queued client after close: state %d after %lu ms\n", State, Elapsed);
+    closesocket(Queued.Socket);
+    State = http_pr_wait_end(&Late, 1000, &Elapsed);
+    ok(State == HTTP_KA_RESET, "new client after close: state %d after %lu ms\n", State, Elapsed);
+    closesocket(Late.Socket);
+
+    CloseHandle(Overlapped.hEvent);
+    CloseHandle(Wait.hEvent);
+}
+
 static void test_properties(void)
 {
     static const WCHAR Url[] = L"http://127.0.0.1:59989/prop/";
@@ -3762,7 +4002,7 @@ static void test_properties(void)
     HTTP_SERVER_SESSION_ID Session = 0;
     HTTP_URL_GROUP_ID Group = 0;
     HTTP_BINDING_INFO Binding;
-    HANDLE Queue = NULL, V1Queue = NULL;
+    HANDLE Queue = NULL, V1Queue = NULL, Idle = NULL;
     WSADATA WsaData;
     ULONG Result;
 
@@ -3780,9 +4020,11 @@ static void test_properties(void)
     ok(Result == NO_ERROR, "HttpCreateUrlGroup failed with %lu\n", Result);
     Result = HttpCreateRequestQueue(Version, NULL, NULL, 0, &Queue);
     ok(Result == NO_ERROR, "HttpCreateRequestQueue failed with %lu\n", Result);
+    Result = HttpCreateRequestQueue(Version, NULL, NULL, 0, &Idle);
+    ok(Result == NO_ERROR, "HttpCreateRequestQueue failed with %lu\n", Result);
     Result = HttpCreateHttpHandle(&V1Queue, 0);
     ok(Result == NO_ERROR, "HttpCreateHttpHandle failed with %lu\n", Result);
-    if (!Queue || !V1Queue || !Group)
+    if (!Queue || !Idle || !V1Queue || !Group)
         goto cleanup;
     Binding.Flags.Present = 1;
     Binding.RequestQueueHandle = Queue;
@@ -3809,6 +4051,9 @@ static void test_properties(void)
     test_queue_limit_and_state(Queue);
     test_group_session_state(Queue, Group, Session);
     test_group_timeouts(Queue, Group, Session);
+    test_cancel_and_disconnect(Queue);
+    test_shutdown(Queue, Idle);
+    Queue = NULL;
 
 cleanup:
     if (Group)
@@ -3817,6 +4062,8 @@ cleanup:
         HttpCloseServerSession(Session);
     if (Queue)
         HttpCloseRequestQueue(Queue);
+    if (Idle)
+        HttpCloseRequestQueue(Idle);
     if (V1Queue)
         CloseHandle(V1Queue);
     HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);

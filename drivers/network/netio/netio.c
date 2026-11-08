@@ -1395,18 +1395,6 @@ WskDisconnect(_In_ PWSK_SOCKET SocketParam, _In_opt_ PWSK_BUF Buffer, _In_ ULONG
 
     FUNCTION_TRACE;
 
-    if (!(Flags & WSK_FLAG_ABORTIVE))
-    {
-        SocketShutdown(Socket);
-
-        IoSetNextIrpStackLocation(Irp);
-
-        Irp->IoStatus.Status = STATUS_SUCCESS;
-        IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
-
-        return STATUS_PENDING;
-    }
-
     IoSetNextIrpStackLocation(Irp);
     if (Buffer || (Flags & ~WSK_FLAG_ABORTIVE))
     {
@@ -1430,7 +1418,8 @@ WskDisconnect(_In_ PWSK_SOCKET SocketParam, _In_opt_ PWSK_BUF Buffer, _In_ ULONG
 
     IoMarkIrpPending(Irp);
     ReferenceSocket(Socket);
-    Status = TdiDisconnect(&TdiIrp, Socket->ConnectionFile, NULL, TDI_DISCONNECT_ABORT,
+    Status = TdiDisconnect(&TdiIrp, Socket->ConnectionFile, NULL,
+                           (Flags & WSK_FLAG_ABORTIVE) ? TDI_DISCONNECT_ABORT : TDI_DISCONNECT_RELEASE,
                            NetioComplete, NetioContext, NULL, NULL);
     if (!NT_SUCCESS(Status))
     {

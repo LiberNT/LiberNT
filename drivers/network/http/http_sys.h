@@ -20,6 +20,7 @@
 
 #define TAG_HTTP 'PTHH'
 #define HTTP_QUEUE_STATE_CLOSING 0x00000001
+#define HTTP_QUEUE_STATE_SHUTDOWN 0x00000002
 #define HTTP_MAX_HEADER_SIZE (64 * 1024)
 #define HTTP_MAX_CONNECTIONS 64
 #define HTTP_MAX_HEADERS 128
@@ -145,6 +146,8 @@ typedef struct _HTTP_CONNECTION
     BOOLEAN KeepAlive;
     BOOLEAN CloseAfterResponse;
     BOOLEAN Finished;
+    BOOLEAN Cancelled;
+    BOOLEAN Lingering;
 
     llhttp_t Parser;
     ULONG MethodOffset;
