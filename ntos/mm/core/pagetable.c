@@ -444,7 +444,11 @@ MiPtWrite(
     PMI_PFN Table;
     MI_PTE Old;
 
-    MI_ASSERT(MiPfnTracked(&Space->System->Pfn, TableFrame));
+    if (!MiPfnTracked(&Space->System->Pfn, TableFrame))
+    {
+        MiArchPteWrite(Slot, Value);
+        return;
+    }
     Table = &Space->System->Pfn.Pfn[TableFrame];
     MI_ASSERT(MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PAGE_TABLE);
     Old = MiArchPteRead(Slot);
