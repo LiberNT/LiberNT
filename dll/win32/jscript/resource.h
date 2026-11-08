@@ -93,6 +93,23 @@
  * conflict with IDS_UNSUPPORTED_ACTION otherwise */
 #define IDS_PROP_DESC_MISMATCH              0x1F00
 
+#ifdef __REACTOS__
+#define IDS_OVERFLOW                        0x0006
+#define IDS_OUT_OF_MEMORY                   0x0007
+#define IDS_ARRAY_LOCKED                    0x000A
+#define IDS_TYPE_MISMATCH                   0x000D
+#define IDS_DISK_FULL                       0x003D
+#define IDS_PERMISSION_DENIED               0x0046
+#define IDS_PATH_NOT_FOUND                  0x004C
+#define IDS_NO_AUTOMATION                   0x01AE
+#define IDS_AUTOMATION_FILE_NOT_FOUND       0x01B0
+#define IDS_NO_NAMED_ARGS                   0x01BE
+#define IDS_NO_LOCALE                       0x01BF
+#define IDS_NAMED_ARG_NOT_FOUND             0x01C0
+#define IDS_WRONG_ARG_COUNT                 0x01C2
+#define IDS_UNSUPPORTED_AUTOMATION_TYPE     0x01CA
+#endif
+
 #define IDS_COMPILATION_ERROR               0x1000
 #define IDS_RUNTIME_ERROR                   0x1001
 #define IDS_UNKNOWN_ERROR                   0x1002

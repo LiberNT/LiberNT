@@ -2057,6 +2057,8 @@ static void *HTMLTable_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLTable2_iface;
     if(IsEqualGUID(&IID_IHTMLTable3, riid))
         return &This->IHTMLTable3_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -2107,6 +2109,8 @@ static void HTMLTableElement_init_dispex_info(dispex_data_t *info, compat_mode_t
     };
     dispex_info_add_interface(info, IHTMLTable_tid, table_hooks);
     dispex_info_add_interface(info, IHTMLTable2_tid, table2_hooks);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }

@@ -33,12 +33,12 @@ then
 fi
 
 "$ntfsinfo" -F /basic.bin "$image" >"$report"
-if [ "$(grep -cF 'Sat Feb  3 04:05:06 2001 UTC' "$report")" -ne 4 ]
+if [ "$(grep -cF 'Sat Feb  3 04:05:06 2001 UTC' "$report")" -ne 8 ]
 then
-    echo "ntfsinfo did not find the four updated standard timestamps" >&2
+    echo "ntfsinfo did not find the updated standard and file-name timestamps" >&2
     exit 1
 fi
-if [ "$(grep -cF '(0x00000023)' "$report")" -ne 1 ]
+if [ "$(grep -cF '(0x00000023)' "$report")" -ne 2 ]
 then
     echo "ntfsinfo did not find the updated basic attributes" >&2
     exit 1

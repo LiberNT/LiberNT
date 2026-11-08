@@ -1296,7 +1296,7 @@ case 3:
     }catch(ex) {
         e = ex;
     }
-    ok(e.name === "RangeError", "e.name = " + e.name);
+    ok(e.name === "Error", "e.name = " + e.name);
     ok(e.number === JS_E_SUBSCRIPT_OUT_OF_RANGE, "e.number = " + e.number);
 
     try {
@@ -1304,8 +1304,74 @@ case 3:
     }catch(ex) {
         e = ex;
     }
-    ok(e.name === "RangeError", "e.name = " + e.name);
+    ok(e.name === "Error", "e.name = " + e.name);
     ok(e.number === JS_E_SUBSCRIPT_OUT_OF_RANGE, "e.number = " + e.number);
+})();
+
+(function() {
+    var i, e;
+    var tests = [
+        [-2147467262 /* E_NOINTERFACE */, -2146827858, "Error", "Class doesn't support Automation"],
+        [-2147467263 /* E_NOTIMPL */, -2146827843, "TypeError", "Object doesn't support this action"],
+        [-2147467259 /* E_FAIL */, -2147467259, "Error", ""],
+        [-2147024882 /* E_OUTOFMEMORY */, -2146828281, "Error", "Out of memory"],
+        [-2147024809 /* E_INVALIDARG */, -2146828283, "TypeError", "Invalid procedure call or argument"],
+        [-2147467261 /* E_POINTER */, -2147467261, "Error", ""],
+        [-2147418113 /* E_UNEXPECTED */, -2147418113, "Error", ""],
+        [-2147024891 /* E_ACCESSDENIED */, -2146828218, "Error", "Permission denied"],
+        [-2147467260 /* E_ABORT */, -2147467260, "Error", ""],
+        [-2147352575 /* DISP_E_UNKNOWNINTERFACE */, -2146827850, "TypeError", "Object doesn't support this property or method"],
+        [-2147352573 /* DISP_E_MEMBERNOTFOUND */, -2146827850, "TypeError", "Object doesn't support this property or method"],
+        [-2147352572 /* DISP_E_PARAMNOTFOUND */, -2146827840, "Error", "Named argument not found"],
+        [-2147352571 /* DISP_E_TYPEMISMATCH */, -2146828275, "TypeError", "Type mismatch"],
+        [-2147352570 /* DISP_E_UNKNOWNNAME */, -2146827850, "TypeError", "Object doesn't support this property or method"],
+        [-2147352569 /* DISP_E_NONAMEDARGS */, -2146827842, "Error", "Object doesn't support named arguments"],
+        [-2147352568 /* DISP_E_BADVARTYPE */, -2146827830, "TypeError", "Variable uses an Automation type not supported in JavaScript"],
+        [-2147352566 /* DISP_E_OVERFLOW */, -2146828282, "RangeError", "Overflow"],
+        [-2147352565 /* DISP_E_BADINDEX */, -2146828279, "RangeError", "Subscript out of range"],
+        [-2147352564 /* DISP_E_UNKNOWNLCID */, -2146827841, "Error", "Object doesn't support current locale setting"],
+        [-2147352563 /* DISP_E_ARRAYISLOCKED */, -2146828278, "Error", "This array is fixed or temporarily locked"],
+        [-2147352562 /* DISP_E_BADPARAMCOUNT */, -2146827838, "TypeError", "Wrong number of arguments or invalid property assignment"],
+        [-2147352561 /* DISP_E_PARAMNOTOPTIONAL */, -2146827839, "TypeError", "Argument not optional"],
+        [-2147352560 /* DISP_E_BADCALLEE */, -2147352560, "Error", ""],
+        [-2147352559 /* DISP_E_NOTACOLLECTION */, -2146827837, "TypeError", "Object not a collection"],
+        [-2147352558 /* DISP_E_DIVBYZERO */, -2147352558, "Error", ""],
+        [-2147221005 /* CO_E_CLASSSTRING */, -2146827859, "Error", "Automation server can't create object"],
+        [-2147221164 /* REGDB_E_CLASSNOTREG */, -2146827859, "Error", "Automation server can't create object"],
+        [-2147221232 /* CLASS_E_NOAGGREGATION */, -2147221232, "Error", ""],
+        [-2147221021 /* MK_E_UNAVAILABLE */, -2146827859, "Error", "Automation server can't create object"],
+        [-2146959355 /* CO_E_SERVER_EXEC_FAILURE */, -2146827859, "Error", "Automation server can't create object"],
+        [-2147287038 /* STG_E_FILENOTFOUND */, -2146827856, "Error", "File name or class name not found during Automation operation"],
+        [-2147287037 /* STG_E_PATHNOTFOUND */, -2146828212, "Error", "Path not found"],
+        [-2147287035 /* STG_E_ACCESSDENIED */, -2146828218, "Error", "Permission denied"],
+        [-2147287032 /* STG_E_INSUFFICIENTMEMORY */, -2146828281, "Error", "Out of memory"],
+        [-2147286928 /* STG_E_MEDIUMFULL */, -2146828227, "Error", "Disk full"],
+        [-2147024894 /* HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) */, -2147024894, "Error", ""],
+        [-2146828281 /* JS_E_OUT_OF_MEMORY */, -2146828281, "Error", "Out of memory"],
+        [-2146828275 /* JS_E_TYPE_MISMATCH */, -2146828275, "Error", "Type mismatch"],
+        [-2146827850 /* JS_E_INVALID_PROPERTY */, -2146827850, "Error", "Object doesn't support this property or method"],
+        [-2146827843 /* JS_E_INVALID_ACTION */, -2146827843, "Error", "Object doesn't support this action"],
+        [-2146827286 /* JS_E_SYNTAX */, -2146827286, "Error", "Syntax error"],
+        [-2146823281 /* JS_E_OBJECT_EXPECTED */, -2146823281, "Error", "Object expected"],
+        [-2146823259 /* JS_E_INVALID_LENGTH */, -2146823259, "Error", "Array length must be a finite positive integer"],
+        [-2146823271 /* JS_E_REGEXP_SYNTAX */, -2146823271, "Error", "Syntax error in regular expression"],
+        [-2146818285 /* MAKE_JSERROR(9999) */, -2146818285, "Error", "Unknown runtime error"],
+        [-2146828288 /* MAKE_JSERROR(0) */, -2146828288, "Error", "Unknown runtime error"]
+    ];
+
+    for(i = 0; i < tests.length; i++) {
+        e = undefined;
+        try {
+            throwInt(tests[i][0]);
+        }catch(ex) {
+            e = ex;
+        }
+        ok(e !== undefined, "[" + i + "] no exception");
+        ok(e.number === tests[i][1], "[" + i + "] e.number = " + e.number);
+        ok(e.name === tests[i][2], "[" + i + "] e.name = " + e.name);
+        ok(e.message === tests[i][3], "[" + i + "] e.message = " + e.message);
+        ok(e.description === tests[i][3], "[" + i + "] e.description = " + e.description);
+    }
 })();
 
 tmp = eval("1");

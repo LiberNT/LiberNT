@@ -31,6 +31,8 @@
 
 #include "wine/debug.h"
 
+#include "activscp.h"
+
 #include "mshtml_private.h"
 #include "htmlevent.h"
 #include "htmlstyle.h"
@@ -62,6 +64,7 @@ static const WCHAR *const input_attr_only_names[] = {
 static const WCHAR *const select_attr_only_names[] = { L"align", NULL };
 static const WCHAR *const span_attr_only_names[] = { L"cite", L"dateTime", L"nofocusrect", NULL };
 
+/* TODO: applet, legend, marquee and optgroup implement IHTMLDatabinding */
 static const tag_desc_t tag_descs[] = {
     {L"A",              HTMLAnchorElement_Create},
     {L"ABBR",           HTMLPhraseElement_Create},
@@ -90,13 +93,13 @@ static const tag_desc_t tag_descs[] = {
     {L"COL",            HTMLTableCol_Create, col_attr_only_names},
     {L"COLGROUP",       HTMLTableCol_Create, col_attr_only_names},
     {L"DATALIST",       HTMLElement_Ctor},
-    {L"DD",             HTMLElement_Ctor},
+    {L"DD",             HTMLDDElement_Create},
     {L"DEL",            HTMLModElement_Create},
     {L"DFN",            HTMLPhraseElement_Create},
-    {L"DIR",            HTMLElement_Ctor},
-    {L"DIV",            HTMLElement_Ctor, div_attr_only_names},
-    {L"DL",             HTMLElement_Ctor},
-    {L"DT",             HTMLElement_Ctor},
+    {L"DIR",            HTMLDirectoryElement_Create},
+    {L"DIV",            HTMLDivElement_Create, div_attr_only_names},
+    {L"DL",             HTMLDListElement_Create},
+    {L"DT",             HTMLDTElement_Create},
     {L"EM",             HTMLPhraseElement_Create},
     {L"EMBED",          HTMLEmbedElement_Create, embed_attr_only_names},
     {L"FIELDSET",       HTMLElement_Ctor},
@@ -115,7 +118,7 @@ static const tag_desc_t tag_descs[] = {
     {L"H6",             HTMLHeaderElement_Create, para_attr_only_names},
     {L"HEAD",           HTMLHeadElement_Create},
     {L"HEADER",         HTMLElement_Ctor},
-    {L"HR",             HTMLElement_Ctor},
+    {L"HR",             HTMLHRElement_Create},
     {L"HTML",           HTMLHtmlElement_Create},
     {L"I",              HTMLPhraseElement_Create},
     {L"IFRAME",         HTMLIFrame_Create},
@@ -125,18 +128,19 @@ static const tag_desc_t tag_descs[] = {
     {L"KBD",            HTMLPhraseElement_Create},
     {L"LABEL",          HTMLLabelElement_Create},
     {L"LEGEND",         HTMLElement_Ctor},
-    {L"LI",             HTMLElement_Ctor},
+    {L"LI",             HTMLLIElement_Create},
     {L"LINK",           HTMLLinkElement_Create},
     {L"LISTING",        HTMLBlockElement_Create},
     {L"MAP",            HTMLElement_Ctor},
     {L"MARK",           HTMLElement_Ctor},
+    {L"MENU",           HTMLMenuElement_Create},
     {L"META",           HTMLMetaElement_Create},
     {L"NAV",            HTMLElement_Ctor},
     {L"NOBR",           HTMLPhraseElement_Create},
     {L"NOFRAMES",       HTMLElement_Ctor},
     {L"NOSCRIPT",       HTMLElement_Ctor},
     {L"OBJECT",         HTMLObjectElement_Create},
-    {L"OL",             HTMLElement_Ctor},
+    {L"OL",             HTMLOListElement_Create},
     {L"OPTGROUP",       HTMLElement_Ctor},
     {L"OPTION",         HTMLOptionElement_Create},
     {L"P",              HTMLParaElement_Create, para_attr_only_names},
@@ -155,7 +159,7 @@ static const tag_desc_t tag_descs[] = {
     {L"SELECT",         HTMLSelectElement_Create, select_attr_only_names},
     {L"SMALL",          HTMLPhraseElement_Create},
     {L"SOURCE",         HTMLElement_Ctor},
-    {L"SPAN",           HTMLElement_Ctor, span_attr_only_names},
+    {L"SPAN",           HTMLSpanElement_Create, span_attr_only_names},
     {L"STRIKE",         HTMLPhraseElement_Create},
     {L"STRONG",         HTMLPhraseElement_Create},
     {L"STYLE",          HTMLStyleElement_Create},
@@ -173,7 +177,7 @@ static const tag_desc_t tag_descs[] = {
     {L"TRACK",          HTMLElement_Ctor},
     {L"TT",             HTMLPhraseElement_Create},
     {L"U",              HTMLPhraseElement_Create},
-    {L"UL",             HTMLElement_Ctor},
+    {L"UL",             HTMLUListElement_Create},
     {L"VAR",            HTMLPhraseElement_Create},
     {L"VIDEO",          HTMLElement_Ctor},
     {L"WBR",            HTMLElement_Ctor},
@@ -1110,7 +1114,8 @@ static const struct {
     { L"FONT", L"color" },           { L"FRAMESET", L"borderColor" }, { L"TABLE", L"bgColor" },
     { L"TABLE", L"borderColor" },    { L"TBODY", L"bgColor" },     { L"TD", L"bgColor" },
     { L"TD", L"borderColor" },       { L"TFOOT", L"bgColor" },     { L"TH", L"bgColor" },
-    { L"TH", L"borderColor" },       { L"THEAD", L"bgColor" },     { L"TR", L"bgColor" }
+    { L"TH", L"borderColor" },       { L"THEAD", L"bgColor" },     { L"TR", L"bgColor" },
+    { L"HR", L"color" }
 };
 
 static int find_tag_attr(HTMLElement *elem, const WCHAR *name, const void *table, unsigned cnt, size_t size)
@@ -1154,14 +1159,12 @@ static BOOL is_color_attr(HTMLElement *elem, const WCHAR *name)
 
 static HRESULT set_elem_attr_value_by_dispid(HTMLElement *elem, DISPID dispid, VARIANT *v)
 {
-    EXCEPINFO ei;
-
     if(dispid == DISPID_IHTMLELEMENT_STYLE) {
         TRACE("Ignoring call on style attribute\n");
         return S_OK;
     }
 
-    return dispex_prop_put(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, v, &ei, NULL);
+    return dispex_prop_put(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, v, NULL, NULL);
 }
 
 static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttributeName,
@@ -1208,6 +1211,12 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
 
         if(!is_content_attr_dispid(This, compat_mode, dispid)) {
             hres = set_elem_attr_value_by_dispid(This, dispid, &val);
+            if(hres == E_NOINTERFACE && This->dom_element)
+                goto set_content;
+            if(V_VT(&val) == VT_BSTR && (is_list_attr(This, strAttributeName) || is_text_block_attr(This, strAttributeName)) &&
+               (hres == E_INVALIDARG || hres == DISP_E_TYPEMISMATCH || hres == DISP_E_OVERFLOW ||
+                hres == CTL_E_INVALIDPROPERTYVALUE))
+                goto set_content;
             goto done;
         }
 
@@ -1237,6 +1246,7 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
         }
     }
 
+set_content:
     hres = variant_to_nsstr(&val, FALSE, &value_str);
     if(FAILED(hres))
         goto done;
@@ -1256,6 +1266,23 @@ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttr
         if(SUCCEEDED(hres))
             VariantClear(&color);
     }
+    if(NS_SUCCEEDED(nsres) && compat_mode >= COMPAT_MODE_IE8) {
+        const WCHAR *canon;
+        WCHAR buf[32];
+        BSTR str;
+
+        if(SUCCEEDED(elem_get_attr_string(This, strAttributeName, &str)) && str) {
+            canon = list_canonical_attr(This, strAttributeName, str, buf, ARRAY_SIZE(buf));
+            if(!canon)
+                canon = text_block_canonical_attr(This, strAttributeName, str, buf, ARRAY_SIZE(buf));
+            if(canon && wcscmp(canon, str)) {
+                nsAString_InitDepend(&value_str, canon);
+                nsres = nsIDOMElement_SetAttribute(This->dom_element, &name_str, &value_str);
+                nsAString_Finish(&value_str);
+            }
+            SysFreeString(str);
+        }
+    }
     nsAString_Finish(&name_str);
     if(NS_FAILED(nsres))
         WARN("SetAttribute failed: %08lx\n", nsres);
@@ -1269,8 +1296,7 @@ done:
 
 HRESULT get_elem_attr_value_by_dispid(HTMLElement *elem, DISPID dispid, VARIANT *ret)
 {
-    EXCEPINFO excep;
-    return dispex_prop_get(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, ret, &excep, NULL);
+    return dispex_prop_get(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, ret, NULL, NULL);
 }
 
 HRESULT attr_value_to_string(VARIANT *v)
@@ -1325,8 +1351,11 @@ static HRESULT WINAPI HTMLElement_getAttribute(IHTMLElement *iface, BSTR strAttr
             return (hres == DISP_E_UNKNOWNNAME) ? S_OK : hres;
         }
 
-        if(dispid != DISPID_UNKNOWN && !is_content_attr_dispid(This, compat_mode, dispid)) {
+        if(dispid != DISPID_UNKNOWN && !is_content_attr_dispid(This, compat_mode, dispid) &&
+           !list_attr_is_invalid(This, strAttributeName) && !text_block_attr_is_invalid(This, strAttributeName)) {
             hres = get_elem_attr_value_by_dispid(This, dispid, AttributeValue);
+            if(hres == E_NOINTERFACE && This->dom_element)
+                goto get_content;
             if(FAILED(hres))
                 return hres;
 
@@ -1346,6 +1375,7 @@ static HRESULT WINAPI HTMLElement_getAttribute(IHTMLElement *iface, BSTR strAttr
         }
     }
 
+get_content:
     nsAString_InitDepend(&name_str, strAttributeName);
     nsAString_InitDepend(&value_str, NULL);
     nsres = nsIDOMElement_GetAttribute(This->dom_element, &name_str, &value_str);
@@ -5369,7 +5399,7 @@ static HRESULT WINAPI HTMLElement6_msMatchesSelector(IHTMLElement6 *iface, BSTR 
     nsAString_Finish(&nsstr);
     if(NS_FAILED(nsres)) {
         WARN("MozMatchesSelector failed: %08lx\n", nsres);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     *pfMatches = b;
@@ -6447,7 +6477,7 @@ static HRESULT WINAPI ElementSelector_querySelector(IElementSelector *iface, BST
     nsAString_Finish(&nsstr);
     if(NS_FAILED(nsres)) {
         WARN("QuerySelector failed: %08lx\n", nsres);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     if(!nselem) {
@@ -6486,7 +6516,7 @@ static HRESULT WINAPI ElementSelector_querySelectorAll(IElementSelector *iface, 
         WARN("QuerySelectorAll failed: %08lx\n", nsres);
         if(node_list)
             nsIDOMNodeList_Release(node_list);
-        return map_nsresult(nsres);
+        return map_selector_nsresult(nsres, &This->node.event_target.dispex);
     }
 
     hres = create_child_collection(node_list, &This->node.event_target.dispex, pel);
@@ -6783,8 +6813,6 @@ void *HTMLElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLElement4_iface;
     if(IsEqualGUID(&IID_IHTMLElement5, riid))
         return &This->IHTMLElement5_iface;
-    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
-        return &This->IHTMLDatabinding_iface;
     if(IsEqualGUID(&IID_IHTMLElement6, riid))
         return &This->IHTMLElement6_iface;
     if(IsEqualGUID(&IID_IHTMLElement7, riid))
@@ -7412,6 +7440,11 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
         {DISPID_UNKNOWN}
     };
     const dispex_hook_t *const elem7_ie10_hooks = elem7_ie11_hooks + 1;
+    static const dispex_hook_t elem_selector_hooks[] = {
+        {DISPID_IELEMENTSELECTOR_QUERYSELECTOR,    .min_script_version = SCRIPTLANGUAGEVERSION_5_8},
+        {DISPID_IELEMENTSELECTOR_QUERYSELECTORALL, .min_script_version = SCRIPTLANGUAGEVERSION_5_8},
+        {DISPID_UNKNOWN}
+    };
     static const dispex_hook_t unique_name_noattr_hooks[] = {
         {DISPID_IHTMLUNIQUENAME_UNIQUENUMBER, .noattr = TRUE},
         {DISPID_IHTMLUNIQUENAME_UNIQUEID,     .noattr = TRUE}
@@ -7422,11 +7455,7 @@ void HTMLElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
     dispex_info_add_interface(info, IHTMLElement2_tid, mode >= COMPAT_MODE_IE11 ? elem2_ie11_hooks :
                                                        mode >= COMPAT_MODE_IE10 ? elem2_ie10_hooks :
                                                        mode >= COMPAT_MODE_IE9  ? elem2_ie9_hooks  : elem2_hooks);
-    if(mode >= COMPAT_MODE_IE8)
-        dispex_info_add_interface(info, IElementSelector_tid, NULL);
-
-    if(mode < COMPAT_MODE_IE11)
-        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
+    dispex_info_add_interface(info, IElementSelector_tid, mode < COMPAT_MODE_IE9 ? elem_selector_hooks : NULL);
 
     /* TODO: IE9+ attribute collections also list role and aria-* without exposing them to script */
     if(mode < COMPAT_MODE_IE9) {
@@ -8379,6 +8408,8 @@ static const WCHAR *const attr_only_names[] = {
     L"aria-orientation", L"aria-sort", L"aria-valuetext", L"implementation", L"x-ms-aria-flowfrom"
 };
 
+static const WCHAR *const databinding_attr_only_names[] = { L"dataFld", L"dataFormatAs", L"dataSrc" };
+
 typedef struct {
     DISPID id;
     const WCHAR *name;
@@ -8390,15 +8421,21 @@ static BOOL is_attr_only_name_listed(HTMLAttributeCollection *This, const WCHAR 
 {
     DISPID id;
 
-    return SUCCEEDED(dispex_get_id(&This->elem->node.event_target.dispex, name, fdexNameCaseInsensitive, &id))
-        && get_dispid_type(id) == DISPEXPROP_BUILTIN && is_valid_attr_dispid(This, id);
+    return SUCCEEDED(dispex_get_chain_builtin_id(&This->elem->node.event_target.dispex, name, fdexNameCaseInsensitive, &id))
+        && is_valid_attr_dispid(This, id);
 }
 
 static const WCHAR *attr_only_name_at(HTMLAttributeCollection *This, unsigned pos)
 {
     if(pos < ARRAY_SIZE(attr_only_names))
         return attr_only_names[pos];
-    return This->tag_attr_only_names ? This->tag_attr_only_names[pos - ARRAY_SIZE(attr_only_names)] : NULL;
+    pos -= ARRAY_SIZE(attr_only_names);
+    if(dispex_compat_mode(&This->elem->node.event_target.dispex) < COMPAT_MODE_IE11) {
+        if(pos < ARRAY_SIZE(databinding_attr_only_names))
+            return databinding_attr_only_names[pos];
+        pos -= ARRAY_SIZE(databinding_attr_only_names);
+    }
+    return This->tag_attr_only_names ? This->tag_attr_only_names[pos] : NULL;
 }
 
 static const WCHAR *find_attr_only_name(HTMLAttributeCollection *This, const WCHAR *name)

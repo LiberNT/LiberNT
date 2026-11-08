@@ -7,6 +7,7 @@
 
 #include "amd64emu.h"
 #include <reactos/wow64shared.h>
+#include "felix86/bridge.h"
 
 #define EMU_PROCESS_UNINITIALIZED 0
 #define EMU_PROCESS_INITIALIZING  1
@@ -23,6 +24,7 @@ EmuFatal(
     _In_ PCSTR Message)
 {
     DbgPrint("AMD64EMU: %s: %08lx\n", Message, Status);
+    Felix86NtReportError(Message, Status);
     NtTerminateProcess(NtCurrentProcess(), Status);
     for (;;) NtYieldExecution();
 }

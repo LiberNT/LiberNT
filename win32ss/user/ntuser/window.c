@@ -1108,6 +1108,12 @@ VOID FASTCALL IntLinkHwnd(PWND Wnd, HWND hWndPrev)
             WndInsertAfter = WndInsertAfter->spwndNext;
         }
 
+        if (!(Wnd->state2 & WNDS2_BOTTOMMOST))
+        {
+            while (WndInsertAfter && (WndInsertAfter->state2 & WNDS2_BOTTOMMOST))
+                WndInsertAfter = WndInsertAfter->spwndPrev;
+        }
+
         IntLinkWindow(Wnd, WndInsertAfter);
         Wnd->ExStyle &= ~WS_EX_TOPMOST;
     }
@@ -1159,6 +1165,12 @@ VOID FASTCALL IntLinkHwnd(PWND Wnd, HWND hWndPrev)
         {
             /* Link in a default position */
             IntLinkHwnd(Wnd, HWND_TOP);
+            return;
+        }
+
+        if ((WndInsertAfter->state2 & WNDS2_BOTTOMMOST) && !(Wnd->state2 & WNDS2_BOTTOMMOST))
+        {
+            IntLinkHwnd(Wnd, HWND_BOTTOM);
             return;
         }
 

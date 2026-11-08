@@ -59,7 +59,7 @@ dll/directx/wine/msvproc        # Synced to Wine-11.21 (LiberNT pixel conversion
 dll/directx/wine/qcap           # Synced to Wine-11.14
 dll/directx/wine/qedit          # Synced to Wine-11.14
 dll/directx/wine/quartz         # Synced to Wine-11.14
-dll/directx/wine/wined3d        # Synced to Wine-11.14
+dll/directx/wine/wined3d        # Synced to Wine-11.14 (LiberNT GLSL fixes under __REACTOS__)
 dll/directx/wine/winegstreamer  # Synced to Wine-11.14 (ReactOS native parser backend)
 
 dll/win32/activeds            # Synced to Wine-11.14

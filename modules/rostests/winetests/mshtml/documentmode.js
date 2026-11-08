@@ -139,15 +139,15 @@ sync_test("builtin_toString", function() {
         [ "colgroup",        "TableCol", -1 ],
         [ "data",            "Unknown" ],
         [ "datalist",        "DataList", 10 ],
-        [ "dd",              "DD", -1 ],
+        [ "dd",              "DD" ],
         [ "del",             "Mod", -1 ],
         [ "details",         "Unknown" ],
         [ "dfn",             "Phrase", -1 ],
         [ "dialog",          "Unknown" ],
-        [ "dir",             "Directory", -1 ],
-        [ "div",             "Div", -1 ],
-        [ "dl",              "DList", -1 ],
-        [ "dt",              "DT", -1 ],
+        [ "dir",             "Directory" ],
+        [ "div",             "Div" ],
+        [ "dl",              "DList" ],
+        [ "dt",              "DT" ],
         [ "em",              "Phrase", -1 ],
         [ "embed",           "Embed" ],
         [ "fieldset",        "FieldSet", -1 ],
@@ -167,7 +167,7 @@ sync_test("builtin_toString", function() {
         [ "h7",              "Unknown" ],
         [ "head",            "Head" ],
         [ "header",          "" ],
-        [ "hr",              "HR", -1 ],
+        [ "hr",              "HR" ],
         [ "html",            "Html" ],
         [ "i",               "Phrase", -1 ],
         [ "iframe",          "IFrame" ],
@@ -177,18 +177,19 @@ sync_test("builtin_toString", function() {
         [ "kbd",             "Phrase", -1 ],
         [ "label",           "Label" ],
         [ "legend",          "Legend", -1 ],
-        [ "li",              "LI", -1 ],
+        [ "li",              "LI" ],
         [ "link",            "Link" ],
         [ "main",            "Unknown" ],
         [ "map",             "Map", -1 ],
         [ "mark",            "" ],
+        [ "menu",            "Menu" ],
         [ "meta",            "Meta" ],
         [ "meter",           "Unknown" ],
         [ "nav",             "" ],
         [ "noframes",        "" ],
         [ "noscript",        "" ],
         [ "object",          "Object" ],
-        [ "ol",              "OList", -1 ],
+        [ "ol",              "OList" ],
         [ "optgroup",        "OptGroup", -1 ],
         [ "option",          "Option" ],
         [ "output",          "Unknown" ],
@@ -208,7 +209,7 @@ sync_test("builtin_toString", function() {
         [ "select",          "Select" ],
         [ "small",           "Phrase", -1 ],
         [ "source",          "Source", -1 ],
-        [ "span",            "Span", -1 ],
+        [ "span",            "Span" ],
         [ "strike",          "Phrase", -1 ],
         [ "strong",          "Phrase", -1 ],
         [ "style",           "Style" ],
@@ -230,7 +231,7 @@ sync_test("builtin_toString", function() {
         [ "track",           "Track", 10 ],
         [ "tt",              "Phrase", -1 ],
         [ "u",               "Phrase", -1 ],
-        [ "ul",              "UList", -1 ],
+        [ "ul",              "UList" ],
         [ "var",             "Phrase", -1 ],
         [ "video",           "Video", -1 ],
         [ "wbr",             "" ],
@@ -3374,7 +3375,6 @@ sync_test("invalid selectors", function() {
             if(v < 9)
                 ok(e.number === 0x70057 - 0x80000000, "body.querySelector(\"" + selectors[i] + "\" threw " + e.number);
             else {
-                todo_wine.
                 ok(e.name === (v < 10 ? undefined : "SyntaxError"), "body.querySelector(\"" + selectors[i] + "\" threw " + e.name);
             }
         }
@@ -3385,7 +3385,6 @@ sync_test("invalid selectors", function() {
             if(v < 9)
                 ok(e.number === 0x70057 - 0x80000000, "body.querySelectorAll(\"" + selectors[i] + "\" threw " + e.number);
             else {
-                todo_wine.
                 ok(e.name === (v < 10 ? undefined : "SyntaxError"), "body.querySelectorAll(\"" + selectors[i] + "\" threw " + e.name);
             }
         }
@@ -3402,11 +3401,131 @@ sync_test("invalid selectors", function() {
             if(v < 9)
                 ok(e.number === 0x70057 - 0x80000000, "body.msMatchesSelector(\"" + selectors[i] + "\" threw " + e.number);
             else {
-                todo_wine.
                 ok(e.name === (v < 10 ? undefined : "SyntaxError"), "body.msMatchesSelector(\"" + selectors[i] + "\" threw " + e.name);
             }
         }
     }
+});
+
+sync_test("DOMException", function() {
+    var v = document.documentMode, D = window.DOMException, P, ex, ex2, d, i, n, r;
+    var consts = [
+        ["INDEX_SIZE_ERR", 1], ["DOMSTRING_SIZE_ERR", 2], ["HIERARCHY_REQUEST_ERR", 3], ["WRONG_DOCUMENT_ERR", 4],
+        ["INVALID_CHARACTER_ERR", 5], ["NO_DATA_ALLOWED_ERR", 6], ["NO_MODIFICATION_ALLOWED_ERR", 7], ["NOT_FOUND_ERR", 8],
+        ["NOT_SUPPORTED_ERR", 9], ["INUSE_ATTRIBUTE_ERR", 10], ["INVALID_STATE_ERR", 11], ["SYNTAX_ERR", 12],
+        ["INVALID_MODIFICATION_ERR", 13], ["NAMESPACE_ERR", 14], ["INVALID_ACCESS_ERR", 15], ["VALIDATION_ERR", 16],
+        ["TYPE_MISMATCH_ERR", 17], ["SECURITY_ERR", 18], ["NETWORK_ERR", 19], ["ABORT_ERR", 20], ["URL_MISMATCH_ERR", 21],
+        ["QUOTA_EXCEEDED_ERR", 22], ["TIMEOUT_ERR", 23, 10], ["INVALID_NODE_TYPE_ERR", 24, 10], ["DATA_CLONE_ERR", 25, 10],
+        ["PARSE_ERR", 81], ["SERIALIZE_ERR", 82]
+    ];
+
+    if(v < 9) {
+        ok(D === undefined, "DOMException = " + D);
+        ok(!("DOMException" in window), "DOMException in window");
+        return;
+    }
+
+    ok(typeof(D) === "object", "typeof(DOMException) = " + typeof(D));
+    ok(Object.prototype.toString.call(D) === "[object DOMException]", "DOMException toString = " + Object.prototype.toString.call(D));
+    ok(Object.getPrototypeOf(D) === Object.prototype, "DOMException prototype is not Object.prototype");
+    try {
+        D();
+        ok(false, "DOMException() did not throw");
+    }catch(e) {
+        ok(e.number === 0xa138a - 0x80000000, "DOMException() threw " + e.number);
+    }
+
+    P = D.prototype;
+    ok(Object.prototype.toString.call(P) === "[object DOMExceptionPrototype]", "prototype toString = " + Object.prototype.toString.call(P));
+    ok(P.constructor === D, "prototype.constructor != DOMException");
+    ok(Object.getPrototypeOf(P) === Object.prototype, "prototype's prototype is not Object.prototype");
+    ok(!(P instanceof Error), "prototype instanceof Error");
+
+    n = 0;
+    for(i = 0; i < consts.length; i++) {
+        if(consts[i][2] && v < consts[i][2]) {
+            ok(!(consts[i][0] in D), consts[i][0] + " in DOMException");
+            ok(!(consts[i][0] in P), consts[i][0] + " in prototype");
+            continue;
+        }
+        n++;
+        ok(D[consts[i][0]] === consts[i][1], "DOMException." + consts[i][0] + " = " + D[consts[i][0]]);
+        ok(P[consts[i][0]] === consts[i][1], "prototype." + consts[i][0] + " = " + P[consts[i][0]]);
+        d = Object.getOwnPropertyDescriptor(D, consts[i][0]);
+        ok(d && !d.writable && d.enumerable && !d.configurable, "DOMException." + consts[i][0] + " descriptor");
+        d = Object.getOwnPropertyDescriptor(P, consts[i][0]);
+        ok(d && !d.writable && d.enumerable && !d.configurable, "prototype." + consts[i][0] + " descriptor");
+    }
+    r = Object.getOwnPropertyNames(D);
+    ok(r.length === n + 1, "DOMException own props " + r.length + ", expected " + (n + 1));
+    ok(r.indexOf("prototype") !== -1, "prototype not an own prop of DOMException");
+
+    var getters = [ "code", "message", "name" ];
+    for(i = 0; i < getters.length; i++) {
+        d = Object.getOwnPropertyDescriptor(P, getters[i]);
+        if(getters[i] === "name" && v < 10) {
+            ok(d === undefined, "prototype has name");
+            continue;
+        }
+        ok(d && typeof(d.get) === "function" && d.set === undefined && d.enumerable && d.configurable, "prototype " + getters[i] + " descriptor");
+        try {
+            d.get.call({});
+            ok(false, getters[i] + " getter on object did not throw");
+        }catch(e) {
+            ok((e.number >>> 0) === 0x8000ffff, getters[i] + " getter on object threw " + e.number);
+        }
+    }
+    d = Object.getOwnPropertyDescriptor(P, "toString");
+    ok(d && typeof(d.value) === "function" && d.writable && d.configurable, "prototype toString descriptor");
+    ok(!("number" in P), "number in prototype");
+    ok(!("description" in P), "description in prototype");
+
+    try {
+        document.body.querySelector("##");
+    }catch(e) {
+        ex = e;
+    }
+    ok(ex instanceof D, "querySelector exception is not a DOMException");
+    ok(!(ex instanceof Error), "querySelector exception is an Error");
+    ok(Object.getPrototypeOf(ex) === P, "exception prototype");
+    ok(Object.prototype.toString.call(ex) === "[object DOMException]", "exception toString = " + Object.prototype.toString.call(ex));
+    ok(Object.getOwnPropertyNames(ex).length === 0, "exception own props " + Object.getOwnPropertyNames(ex));
+    ok(ex.code === 12, "exception code = " + ex.code);
+    ok(ex.message === "SyntaxError", "exception message = " + ex.message);
+    ok(ex.name === (v < 10 ? undefined : "SyntaxError"), "exception name = " + ex.name);
+    ok(ex.number === undefined, "exception number = " + ex.number);
+    ok(ex.SYNTAX_ERR === 12, "exception SYNTAX_ERR = " + ex.SYNTAX_ERR);
+    ok(String(ex) === "SyntaxError", "String(exception) = " + String(ex));
+    ok(P.toString.call(ex) === "SyntaxError", "toString = " + P.toString.call(ex));
+    ex.code = 5;
+    ok(ex.code === 12, "exception code after put = " + ex.code);
+    ok(ex.message === "SyntaxError", "exception message after code put = " + ex.message);
+    try {
+        document.body.querySelector("##");
+    }catch(e) {
+        ex2 = e;
+    }
+    ok(ex2 !== ex, "the same exception object was thrown twice");
+
+    try {
+        window.postMessage("m", "example.org");
+    }catch(e) {
+        ex = e;
+    }
+    if(v < 10) {
+        ok(!(ex instanceof D), "IE9 postMessage exception is a DOMException");
+        ok(ex.number === 0x70057 - 0x80000000, "IE9 postMessage exception number = " + ex.number);
+    }else {
+        ok(ex instanceof D, "postMessage exception is not a DOMException");
+        ok(ex.code === 12, "postMessage exception code = " + ex.code);
+    }
+    try {
+        window.postMessage("m", "");
+    }catch(e) {
+        ex = e;
+    }
+    ok(!(ex instanceof D), "postMessage('') exception is a DOMException");
+    ok(ex.number === 0x70057 - 0x80000000, "postMessage('') exception number = " + ex.number);
 });
 
 sync_test("__proto__", function() {
@@ -3931,10 +4050,8 @@ async_test("postMessage", function() {
             ok(false, "expected exception with targetOrigin " + invalid[i]);
         }catch(ex) {
             var n = ex.number >>> 0;
-            todo_wine_if(v >= 10).
             ok(n === (v < 10 ? 0x80070057 : 0), "postMessage with targetOrigin " + invalid[i] + " threw " + n);
             if(v >= 10)
-                todo_wine.
                 ok(ex.name === "SyntaxError", "postMessage with targetOrigin " + invalid[i] + " threw " + ex.name);
         }
     }
@@ -3965,6 +4082,47 @@ async_test("postMessage", function() {
     window.postMessage(10, (v < 10 ? "*" : { toString: function() { return "*"; } }));
     ok(onmessage_called == (v < 9 ? true : false), "onmessage not called");
     if(v < 9) next_test();
+});
+
+async_test("postMessage targetOrigin", function() {
+    var v = document.documentMode, i, delivered = {}, threw = [];
+    var targets = [
+        [ "about:blank", 0, 0 ], [ "about:", 0, 0 ], [ "file:///c:/x", 0, 0 ], [ "file:", 0, 0 ],
+        [ "file://winetest.example.org/x", 1, 0 ], [ "mailto:a@winetest.example.org", 0, 0 ],
+        [ "javascript:void(0)", 0, 0 ], [ "data:text/plain,x", 0, 0 ], [ "foo:bar", 0, 0 ],
+        [ "foo://winetest.example.org", 1, 0 ], [ "http:", 0, 0 ], [ "http://", 1, 0 ],
+        [ "http:winetest.example.org", 0, 0 ], [ "http:/winetest.example.org", 0, 0 ],
+        [ "HTTP://WINETEST.EXAMPLE.ORG", 1, 1 ], [ "http://winetest.example.org/p?q#f", 1, 1 ],
+        [ "http://winetest.example.org:80", 1, 1 ], [ "http://winetest.example.org:", 1, 1 ],
+        [ "http://u:p@winetest.example.org", 1, 1 ], [ "https://winetest.example.org", 1, 0 ],
+        [ "res://mshtml.dll/x", 1, 0 ], [ "x", 0, 0 ], [ "/", v >= 9 ? 1 : 0, v >= 9 ? 1 : 0 ],
+        [ "//winetest.example.org", 0, 0 ], [ " http://winetest.example.org", 1, 1 ],
+        [ "http://winetest.example.org.", 1, 0 ], [ "http://*", 1, 0 ], [ " *", 0, 0 ], [ "**", 0, 0 ],
+        [ "http://[::1]", 1, 0 ], [ "\\\\winetest.example.org\\x", 0, 0 ], [ "http://winetest%2eexample.org", 1, 1 ]
+    ];
+
+    window.onmessage = function(e) {
+        var data = v < 9 ? window.event.data : e.data;
+        if(data !== "end") {
+            delivered[data] = true;
+            return;
+        }
+        for(i = 0; i < targets.length; i++) {
+            ok(targets[i][1] ? threw[i] === undefined : threw[i] !== undefined && (v >= 10 || threw[i] === 0x80070057),
+               "postMessage with targetOrigin '" + targets[i][0] + "' threw " + threw[i]);
+            ok(!!delivered[i] === !!targets[i][2], "postMessage with targetOrigin '" + targets[i][0] + "' delivered " + !!delivered[i]);
+        }
+        window.onmessage = null;
+        next_test();
+    };
+    for(i = 0; i < targets.length; i++) {
+        try {
+            window.postMessage(String(i), targets[i][0]);
+        }catch(ex) {
+            threw[i] = ex.number >>> 0;
+        }
+    }
+    window.postMessage("end", "*");
 });
 
 sync_test("form", function() {
@@ -4156,6 +4314,28 @@ sync_test("prototypes", function() {
     check(HTMLFontElement.prototype, HTMLElement.prototype, "font elem prototype");
     check(HTMLBaseFontElement.prototype, HTMLElement.prototype, "basefont elem prototype");
     check(HTMLBaseElement.prototype, HTMLElement.prototype, "base elem prototype");
+    check(document.createElement("ol"), HTMLOListElement.prototype, "ol elem");
+    check(HTMLOListElement.prototype, HTMLElement.prototype, "ol elem prototype");
+    check(document.createElement("ul"), HTMLUListElement.prototype, "ul elem");
+    check(HTMLUListElement.prototype, HTMLElement.prototype, "ul elem prototype");
+    check(document.createElement("dl"), HTMLDListElement.prototype, "dl elem");
+    check(HTMLDListElement.prototype, HTMLElement.prototype, "dl elem prototype");
+    check(document.createElement("dir"), HTMLDirectoryElement.prototype, "dir elem");
+    check(HTMLDirectoryElement.prototype, HTMLElement.prototype, "dir elem prototype");
+    check(document.createElement("menu"), HTMLMenuElement.prototype, "menu elem");
+    check(HTMLMenuElement.prototype, HTMLElement.prototype, "menu elem prototype");
+    check(document.createElement("li"), HTMLLIElement.prototype, "li elem");
+    check(HTMLLIElement.prototype, HTMLElement.prototype, "li elem prototype");
+    check(document.createElement("dd"), HTMLDDElement.prototype, "dd elem");
+    check(HTMLDDElement.prototype, HTMLElement.prototype, "dd elem prototype");
+    check(document.createElement("dt"), HTMLDTElement.prototype, "dt elem");
+    check(HTMLDTElement.prototype, HTMLElement.prototype, "dt elem prototype");
+    check(document.createElement("div"), HTMLDivElement.prototype, "div elem");
+    check(HTMLDivElement.prototype, HTMLElement.prototype, "div elem prototype");
+    check(document.createElement("span"), HTMLSpanElement.prototype, "span elem");
+    check(HTMLSpanElement.prototype, HTMLElement.prototype, "span elem prototype");
+    check(document.createElement("hr"), HTMLHRElement.prototype, "hr elem");
+    check(HTMLHRElement.prototype, HTMLElement.prototype, "hr elem prototype");
     check(new DOMParser(), DOMParser.prototype, "dom parser");
     check(DOMParser.prototype, Object.prototype, "dom parser prototype");
     check(DOMParser, Function.prototype, "dom parser constructor");
@@ -4867,6 +5047,289 @@ sync_test("body window event props", function() {
     }
 });
 
+sync_test("list element props", function() {
+    var v = document.documentMode, i, e, r, s, exp;
+    function js(x) { return typeof(x) + ":" + (typeof(x) === "string" ? "'" + x + "'" : String(x)); }
+    function attr(e, n) { return v >= 9 ? js(e.getAttribute(n)) + (e.hasAttribute(n) ? "+" : "-") : js(e.getAttribute(n)); }
+
+    var cases = [
+        [ "ol", "compact", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "ul", "compact", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "dl", "compact", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "dir", "compact", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "menu", "compact", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "ol", "compact", "set", "", "boolean:false boolean:false", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "ul", "compact", "set", "", "boolean:false boolean:false", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dl", "compact", "set", "", "boolean:false boolean:false", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dir", "compact", "set", "", "boolean:false boolean:false", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "menu", "compact", "set", "", "boolean:false boolean:false", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "ol", "compact", "set", "false", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:'false'+" ],
+        [ "ul", "compact", "set", "false", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:'false'+" ],
+        [ "dl", "compact", "set", "false", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:'false'+" ],
+        [ "dir", "compact", "set", "false", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:'false'+" ],
+        [ "menu", "compact", "set", "false", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:'false'+" ],
+        [ "ol", "compact", "put", true, "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "ul", "compact", "put", true, "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dl", "compact", "put", true, "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dir", "compact", "put", true, "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "menu", "compact", "put", true, "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "ol", "compact", "put", false, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "ul", "compact", "put", false, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "dl", "compact", "put", false, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "dir", "compact", "put", false, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "menu", "compact", "put", false, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "ol", "compact", "put", "x", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "ul", "compact", "put", "x", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dl", "compact", "put", "x", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dir", "compact", "put", "x", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "menu", "compact", "put", "x", "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "ol", "compact", "setput", ["x", true], "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "ul", "compact", "setput", ["x", true], "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dl", "compact", "setput", ["x", true], "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dir", "compact", "setput", ["x", true], "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "menu", "compact", "setput", ["x", true], "boolean:true boolean:true", "boolean:true string:'compact'", "boolean:true string:''+" ],
+        [ "dd", "noWrap", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "dt", "noWrap", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "dd", "noWrap", "set", "", "boolean:false boolean:false", "boolean:true string:'nowrap'", "boolean:true string:''+" ],
+        [ "dt", "noWrap", "set", "", "boolean:false boolean:false", "boolean:true string:'nowrap'", "boolean:true string:''+" ],
+        [ "dd", "noWrap", "put", true, "boolean:true boolean:true", "boolean:true string:'nowrap'", "boolean:true string:''+" ],
+        [ "dt", "noWrap", "put", true, "boolean:true boolean:true", "boolean:true string:'nowrap'", "boolean:true string:''+" ],
+        [ "dd", "noWrap", "put", 0, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "dt", "noWrap", "put", 0, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "ol", "type", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "ul", "type", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "dir", "type", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "menu", "type", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "li", "type", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "ol", "type", "set", "1", "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "ul", "type", "set", "1", "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "dir", "type", "set", "1", "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "menu", "type", "set", "1", "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "li", "type", "set", "1", "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "ol", "type", "set", "square", "string:'square' string:'square'", "string:'square' string:'square'", "string:'square' string:'square'+" ],
+        [ "ul", "type", "set", "square", "string:'square' string:'square'", "string:'square' string:'square'", "string:'square' string:'square'+" ],
+        [ "dir", "type", "set", "square", "string:'square' string:'square'", "string:'square' string:'square'", "string:'square' string:'square'+" ],
+        [ "menu", "type", "set", "square", "string:'square' string:'square'", "string:'square' string:'square'", "string:'square' string:'square'+" ],
+        [ "li", "type", "set", "square", "string:'square' string:'square'", "string:'square' string:'square'", "string:'square' string:'square'+" ],
+        [ "ol", "type", "set", "Disc", "string:'' string:'Disc'", "string:'' string:'Disc'", "string:'' string:'Disc'+" ],
+        [ "ul", "type", "set", "Disc", "string:'' string:'Disc'", "string:'' string:'Disc'", "string:'' string:'Disc'+" ],
+        [ "dir", "type", "set", "Disc", "string:'' string:'Disc'", "string:'' string:'Disc'", "string:'' string:'Disc'+" ],
+        [ "menu", "type", "set", "Disc", "string:'' string:'Disc'", "string:'' string:'Disc'", "string:'' string:'Disc'+" ],
+        [ "li", "type", "set", "Disc", "string:'' string:'Disc'", "string:'' string:'Disc'", "string:'' string:'Disc'+" ],
+        [ "ol", "type", "set", " disc", "string:'' string:' disc'", "string:'' string:' disc'", "string:'' string:' disc'+" ],
+        [ "ul", "type", "set", " disc", "string:'' string:' disc'", "string:'' string:' disc'", "string:'' string:' disc'+" ],
+        [ "dir", "type", "set", " disc", "string:'' string:' disc'", "string:'' string:' disc'", "string:'' string:' disc'+" ],
+        [ "menu", "type", "set", " disc", "string:'' string:' disc'", "string:'' string:' disc'", "string:'' string:' disc'+" ],
+        [ "li", "type", "set", " disc", "string:'' string:' disc'", "string:'' string:' disc'", "string:'' string:' disc'+" ],
+        [ "ol", "type", "put", "A", "string:'A' string:'A'", "string:'A' string:'A'", "string:'A' string:'A'+" ],
+        [ "ul", "type", "put", "A", "string:'A' string:'A'", "string:'A' string:'A'", "string:'A' string:'A'+" ],
+        [ "dir", "type", "put", "A", "string:'A' string:'A'", "string:'A' string:'A'", "string:'A' string:'A'+" ],
+        [ "menu", "type", "put", "A", "string:'A' string:'A'", "string:'A' string:'A'", "string:'A' string:'A'+" ],
+        [ "li", "type", "put", "A", "string:'A' string:'A'", "string:'A' string:'A'", "string:'A' string:'A'+" ],
+        [ "ol", "type", "put", "circle", "string:'circle' string:'circle'", "string:'circle' string:'circle'", "string:'circle' string:'circle'+" ],
+        [ "ul", "type", "put", "circle", "string:'circle' string:'circle'", "string:'circle' string:'circle'", "string:'circle' string:'circle'+" ],
+        [ "dir", "type", "put", "circle", "string:'circle' string:'circle'", "string:'circle' string:'circle'", "string:'circle' string:'circle'+" ],
+        [ "menu", "type", "put", "circle", "string:'circle' string:'circle'", "string:'circle' string:'circle'", "string:'circle' string:'circle'+" ],
+        [ "li", "type", "put", "circle", "string:'circle' string:'circle'", "string:'circle' string:'circle'", "string:'circle' string:'circle'+" ],
+        [ "ol", "type", "put", "Circle", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "ul", "type", "put", "Circle", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "dir", "type", "put", "Circle", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "menu", "type", "put", "Circle", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "li", "type", "put", "Circle", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "ol", "type", "put", 1, "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "ul", "type", "put", 1, "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "dir", "type", "put", 1, "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "menu", "type", "put", 1, "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "li", "type", "put", 1, "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "ol", "type", "put", null, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "ul", "type", "put", null, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "dir", "type", "put", null, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "menu", "type", "put", null, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "li", "type", "put", null, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "ol", "type", "setput", ["x", ""], "string:'' string:'x'", "string:'' string:'x'", "string:'' string:'x'+" ],
+        [ "ul", "type", "setput", ["x", ""], "string:'' string:'x'", "string:'' string:'x'", "string:'' string:'x'+" ],
+        [ "dir", "type", "setput", ["x", ""], "string:'' string:'x'", "string:'' string:'x'", "string:'' string:'x'+" ],
+        [ "menu", "type", "setput", ["x", ""], "string:'' string:'x'", "string:'' string:'x'", "string:'' string:'x'+" ],
+        [ "li", "type", "setput", ["x", ""], "string:'' string:'x'", "string:'' string:'x'", "string:'' string:'x'+" ],
+        [ "ol", "start", "unset", undefined, "number:1 number:1", "number:1 object:null", "number:1 object:null-" ],
+        [ "ol", "start", "set", "", "number:0 number:0", "number:1 string:'1'", "number:1 string:'1'+" ],
+        [ "ol", "start", "set", "x", "number:1 string:'x'", "number:1 string:'x'", "number:1 string:'x'+" ],
+        [ "ol", "start", "set", "2.7", "number:3 number:3", "number:2 string:'2'", "number:2 string:'2'+" ],
+        [ "ol", "start", "set", "2.5", "number:2 number:2", "number:2 string:'2'", "number:2 string:'2'+" ],
+        [ "ol", "start", "set", "-2.5", "number:-2 number:-2", "number:-2 string:'-2'", "number:-2 string:'-2'+" ],
+        [ "ol", "start", "set", " 7", "number:7 number:7", "number:7 string:'7'", "number:7 string:'7'+" ],
+        [ "ol", "start", "set", "1e2", "number:100 number:100", "number:1 string:'1e2'", "number:1 string:'1e2'+" ],
+        [ "ol", "start", "set", "4x", "number:1 string:'4x'", "number:1 string:'4x'", "number:1 string:'4x'+" ],
+        [ "ol", "start", "set", "-0", "number:0 number:0", "number:0 string:'0'", "number:0 string:'0'+" ],
+        [ "ol", "start", "set", "99999999999", "number:1 string:'99999999999'", "number:2147483647 string:'2147483647'", "number:2147483647 string:'2147483647'+" ],
+        [ "ol", "start", "put", true, "number:1 number:1", "number:1 object:null", "number:1 object:null-" ],
+        [ "ol", "start", "put", 3.6, "number:3 number:3", "number:3 string:'3'", "number:3 string:'3'+" ],
+        [ "ol", "start", "put", "x", "number:0 number:0", "number:0 string:'0'", "number:0 string:'0'+" ],
+        [ "ol", "start", "put", 10000000000, "number:1410065408 number:1410065408", "number:1410065408 string:'1410065408'", "number:1410065408 string:'1410065408'+" ],
+        [ "ol", "start", "setput", ["x", true], "number:1 string:'x'", "number:1 string:'x'", "number:1 string:'x'+" ],
+        [ "li", "value", "unset", undefined, "number:0 number:0", "number:0 object:null", "number:0 object:null-" ],
+        [ "li", "value", "set", "", "number:0 number:0", "number:1 string:'1'", "number:1 string:'1'+" ],
+        [ "li", "value", "set", "x", "number:0 string:'x'", "number:1 string:'x'", "number:1 string:'x'+" ],
+        [ "li", "value", "set", "-3", "number:0 string:'-3'", "number:0 string:'-3'", "number:0 string:'-3'+" ],
+        [ "li", "value", "set", "2.7", "number:3 number:3", "number:2 string:'2'", "number:2 string:'2'+" ],
+        [ "li", "value", "set", "-0", "number:0 number:0", "number:0 string:'-0'", "number:0 string:'-0'+" ],
+        [ "li", "value", "set", "99999999999", "number:0 string:'99999999999'", "number:2147483647 string:'2147483647'", "number:2147483647 string:'2147483647'+" ],
+        [ "li", "value", "put", true, "number:1 number:1", "number:1 string:'1'", "number:1 string:'1'+" ],
+        [ "li", "value", "put", 0, "number:0 number:0", "number:0 object:null", "number:0 object:null-" ],
+        [ "li", "value", "put", 7, "number:7 number:7", "number:7 string:'7'", "number:7 string:'7'+" ],
+        [ "li", "value", "put", -1, "ex -2146827908 number:0 number:0", "ex -2146827908 number:0 object:null", "ex -2146827908 number:0 object:null-" ],
+        [ "li", "value", "put", 3.6, "number:3 number:3", "number:3 string:'3'", "number:3 string:'3'+" ],
+        [ "li", "value", "setput", ["x", true], null, "number:1 string:'x'", "number:1 string:'x'+" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        r = cases[i];
+        exp = r[v < 8 ? 4 : (v < 9 ? 5 : 6)];
+        if(exp === null)
+            continue;
+        e = document.createElement(r[0]);
+        if(r[2] === "set" || r[2] === "setput")
+            e.setAttribute(r[1], r[2] === "set" ? r[3] : r[3][0]);
+        try {
+            if(r[2] === "put" || r[2] === "setput")
+                e[r[1]] = r[2] === "put" ? r[3] : r[3][1];
+            s = js(e[r[1]]) + " " + attr(e, r[1]);
+        }catch(ex) {
+            s = "ex " + ex.number + " " + js(e[r[1]]) + " " + attr(e, r[1]);
+        }
+        ok(s === exp, r[0] + "." + r[1] + " " + r[2] + " " + String(r[3]) + " = " + s + ", expected " + exp);
+    }
+});
+
+sync_test("databinding props", function() {
+    var v = document.documentMode, i, j, e, ex;
+    var tags = [ "a", "button", "div", "frame", "iframe", "img", "input", "label", "object", "select", "span", "table", "textarea" ];
+    var other_tags = [ "b", "body", "br", "hr", "p", "td" ];
+    var names = [ "dataFld", "dataFormatAs", "dataSrc" ];
+
+    for(i = 0; i < tags.length; i++) {
+        e = document.createElement(tags[i]);
+        for(j = 0; j < names.length; j++) {
+            ok((names[j] in e) === (v < 11), tags[i] + "." + names[j] + " in element = " + (names[j] in e));
+            ok(typeof(e[names[j]]) === (v < 11 ? "string" : "undefined"), "typeof " + tags[i] + "." + names[j] + " = " + typeof(e[names[j]]));
+        }
+        if(v >= 11)
+            continue;
+        e.dataFld = "fld";
+        ok(e.dataFld === "fld", tags[i] + ".dataFld after put = " + e.dataFld);
+        ok(e.getAttribute("dataFld") === "fld", tags[i] + " dataFld attribute after put = " + e.getAttribute("dataFld"));
+        e = document.createElement(tags[i]);
+        e.setAttribute("dataFld", "a1");
+        ok(e.dataFld === "a1", tags[i] + ".dataFld after setAttribute = " + e.dataFld);
+    }
+
+    for(i = 0; i < other_tags.length; i++) {
+        e = document.createElement(other_tags[i]);
+        for(j = 0; j < names.length; j++) {
+            ok(!(names[j] in e), names[j] + " in " + other_tags[i] + " element");
+            ok(typeof(e[names[j]]) === "undefined", "typeof " + other_tags[i] + "." + names[j] + " = " + typeof(e[names[j]]));
+        }
+    }
+
+    e = document.createElement("option");
+    for(j = 0; j < names.length; j++) {
+        ok((names[j] in e) === (v < 11), "option." + names[j] + " in element = " + (names[j] in e));
+        ok(typeof(e[names[j]]) === (v < 9 ? "unknown" : v < 11 ? "string" : "undefined"), "typeof option." + names[j] + " = " + typeof(e[names[j]]));
+    }
+    e.setAttribute("dataFld", "a1");
+    ok(e.getAttribute("dataFld") === "a1", "option dataFld attribute = " + e.getAttribute("dataFld"));
+    ex = undefined;
+    try {
+        ok(e.dataFld === (v < 11 ? "" : undefined), "option.dataFld after setAttribute = " + e.dataFld);
+    }catch(err) {
+        ex = err.number;
+    }
+    ok(ex === (v < 9 ? -2146827858 : undefined), "option.dataFld exception " + ex);
+});
+
+sync_test("text block element props", function() {
+    var v = document.documentMode, i, e, r, s, exp;
+    function js(x) { return typeof(x) + ":" + (typeof(x) === "string" ? "'" + x + "'" : String(x)); }
+    function attr(e, n) { return v >= 9 ? js(e.getAttribute(n)) + (e.hasAttribute(n) ? "+" : "-") : js(e.getAttribute(n)); }
+
+    var cases = [
+        [ "div", "align", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "div", "align", "set", "LEFT", "string:'left' string:'left'", "string:'left' string:'left'", "string:'left' string:'LEFT'+" ],
+        [ "div", "align", "set", "x", "string:'' string:'x'", "string:'' string:'x'", "string:'' string:'x'+" ],
+        [ "div", "align", "put", "CENTER", "string:'center' string:'center'", "string:'center' string:'center'", "string:'center' string:'center'+" ],
+        [ "div", "align", "put", "x", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "div", "align", "put", null, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "div", "align", "setput", ["left", ""], "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "div", "noWrap", "unset", undefined, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "div", "noWrap", "set", "", "boolean:false boolean:false", "boolean:true string:'nowrap'", "boolean:true string:''+" ],
+        [ "div", "noWrap", "set", "false", "boolean:true boolean:true", "boolean:true string:'nowrap'", "boolean:true string:'false'+" ],
+        [ "div", "noWrap", "put", true, "boolean:true boolean:true", "boolean:true string:'nowrap'", "boolean:true string:''+" ],
+        [ "div", "noWrap", "put", 0, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "div", "noWrap", "put", "x", "boolean:true boolean:true", "boolean:true string:'nowrap'", "boolean:true string:''+" ],
+        [ "hr", "align", "set", "right", "string:'right' string:'right'", "string:'right' string:'right'", "string:'right' string:'right'+" ],
+        [ "hr", "align", "put", "justify", "string:'justify' string:'justify'", "string:'justify' string:'justify'", "string:'justify' string:'justify'+" ],
+        [ "hr", "align", "put", "middle", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "hr", "color", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "hr", "color", "set", "red", "string:'#ff0000' string:'#ff0000'", "string:'#ff0000' string:'red'", "string:'red' string:'red'+" ],
+        [ "hr", "color", "set", "x", "string:'#000000' string:'#000000'", "string:'#000000' string:'#0'", "string:'#0' string:'#0'+" ],
+        [ "hr", "color", "set", "123", "string:'#010203' string:'#010203'", "string:'#010203' string:'#123'", "string:'#123' string:'#123'+" ],
+        [ "hr", "color", "put", 255, "string:'#0000ff' string:'#0000ff'", "string:'#0000ff' string:'#0000ff'", "string:'#0000ff' string:'#0000ff'+" ],
+        [ "hr", "color", "put", -1, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "hr", "color", "put", "x", "string:'#000000' string:'#000000'", "string:'#000000' string:'#0'", "string:'#0' string:'#0'+" ],
+        [ "hr", "color", "put", null, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "hr", "noShade", "set", "", "boolean:false boolean:false", "boolean:true string:'noshade'", "boolean:true string:''+" ],
+        [ "hr", "noShade", "put", 7, "boolean:true boolean:true", "boolean:true string:'noshade'", "boolean:true string:''+" ],
+        [ "hr", "noShade", "put", false, "boolean:false boolean:false", "boolean:false string:''", "boolean:false object:null-" ],
+        [ "hr", "width", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "hr", "width", "set", "", "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "hr", "width", "set", "x", "string:'' string:'x'", "string:'' string:'x'", "string:'' string:'x'+" ],
+        [ "hr", "width", "set", "100px", "string:'100' string:'100'", "string:'100' string:'100'", "string:'100' string:'100'+" ],
+        [ "hr", "width", "set", "2.555%", "string:'2.55%' string:'2.55%'", "string:'2.55%' string:'2.55%'", "string:'2.55%' string:'2.55%'+" ],
+        [ "hr", "width", "set", "99999999%", "string:'21474836.47%' string:'21474836.47%'", "string:'21474836.47%' string:'21474836.47%'", "string:'21474836.47%' string:'21474836.47%'+" ],
+        [ "hr", "width", "set", "1e2", "string:'100' string:'100'", "string:'100' string:'100'", "string:'100' string:'100'+" ],
+        [ "hr", "width", "set", " 7", "string:'7' string:'7'", "string:'7' string:'7'", "string:'7' string:'7'+" ],
+        [ "hr", "width", "set", "-2.5", "string:'-2' string:'-2'", "string:'-2' string:'-2'", "string:'-2' string:'-2'+" ],
+        [ "hr", "width", "set", "4x", "string:'4' string:'4'", "string:'4' string:'4'", "string:'4' string:'4'+" ],
+        [ "hr", "width", "set", "0x10", "string:'0' string:'0'", "string:'0' string:'0'", "string:'0' string:'0'+" ],
+        [ "hr", "width", "set", "99999999999", "string:'21474836' string:'21474836'", "string:'21474836' string:'21474836'", "string:'21474836' string:'21474836'+" ],
+        [ "hr", "width", "put", "", "string:'1' string:'1'", "string:'1' string:'1'", "string:'1' string:'1'+" ],
+        [ "hr", "width", "put", "x", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "hr", "width", "put", 3.5, "string:'3' string:'3'", "string:'3' string:'3'", "string:'3' string:'3'+" ],
+        [ "hr", "width", "put", -0.5, "string:'0' string:'0'", "string:'0' string:'0'", "string:'0' string:'0'+" ],
+        [ "hr", "width", "put", NaN, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "hr", "width", "put", null, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "hr", "width", "put", true, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "hr", "width", "put", undefined, "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "hr", "width", "put", "2.5%", "string:'2.5%' string:'2.5%'", "string:'2.5%' string:'2.5%'", "string:'2.5%' string:'2.5%'+" ],
+        [ "hr", "width", "put", 10000000000, "string:'21474836' string:'21474836'", "string:'21474836' string:'21474836'", "string:'21474836' string:'21474836'+" ],
+        [ "hr", "size", "unset", undefined, "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "hr", "size", "set", "", "string:'' string:''", "string:'' object:null", "string:'' string:''+" ],
+        [ "hr", "size", "set", "50%", "string:'50' string:'50'", "string:'50' string:'50'", "string:'50' string:'50'+" ],
+        [ "hr", "size", "set", "5px", "string:'5' string:'5'", "string:'5' string:'5'", "string:'5' string:'5'+" ],
+        [ "hr", "size", "put", "", "string:'' string:''", "string:'' object:null", "string:'' object:null-" ],
+        [ "hr", "size", "put", "2.5%", "string:'2' string:'2'", "string:'2' string:'2'", "string:'2' string:'2'+" ],
+        [ "hr", "size", "put", -21474837, "string:'-21474836' string:'-21474836'", "string:'-21474836' string:'-21474836'", "string:'-21474836' string:'-21474836'+" ],
+        [ "hr", "size", "put", "x", "ex -2147024809 string:'' string:''", "ex -2147024809 string:'' object:null", "ex -2147024809 string:'' object:null-" ],
+        [ "hr", "width", "setput", ["50%", "x"], "ex -2147024809 string:'50%' string:'50%'", "ex -2147024809 string:'50%' string:'50%'", "ex -2147024809 string:'50%' string:'50%'+" ]
+    ];
+
+    for(i = 0; i < cases.length; i++) {
+        r = cases[i];
+        exp = r[v < 8 ? 4 : (v < 9 ? 5 : 6)];
+        e = document.createElement(r[0]);
+        if(r[2] === "set" || r[2] === "setput")
+            e.setAttribute(r[1], r[2] === "set" ? r[3] : r[3][0]);
+        try {
+            if(r[2] === "put" || r[2] === "setput")
+                e[r[1]] = r[2] === "put" ? r[3] : r[3][1];
+            s = js(e[r[1]]) + " " + attr(e, r[1]);
+        }catch(ex) {
+            s = "ex " + ex.number + " " + js(e[r[1]]) + " " + attr(e, r[1]);
+        }
+        ok(s === exp, r[0] + "." + r[1] + " " + r[2] + " " + String(r[3]) + " = " + s + ", expected " + exp);
+    }
+});
+
 sync_test("prototype props", function() {
     var v = document.documentMode;
     if(v < 9)
@@ -5053,6 +5516,11 @@ sync_test("prototype props", function() {
         "scrollIntoView", "setActive", "setCapture", "sourceIndex", ["spellcheck",10], "style", "swapNode", "tabIndex", ["tagUrn",9,9], "title",
         "uniqueID", "uniqueNumber"
     ], [ ["dataset",11], ["draggable",10], ["hidden",11], ["msGetInputContext",11], ["onmscontentzoom",10] ]);
+    check(HTMLDDElement, [ "noWrap" ]);
+    check(HTMLDListElement, [ "compact" ]);
+    check(HTMLDTElement, [ "noWrap" ]);
+    check(HTMLDirectoryElement, [ "compact", "type" ]);
+    check(HTMLDivElement, [ "align", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "noWrap" ]);
     check(HTMLEmbedElement, [
         "getSVGDocument", "height", "hidden", ["msPlayToDisabled",11], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11],
         "name", "palette", "pluginspage", ["readyState",11], "src", "units", "width"
@@ -5074,6 +5542,7 @@ sync_test("prototype props", function() {
         "onerror", "onfocus", "onhashchange", "onload", "onmessage", "onoffline", "ononline", ["onpagehide",11], ["onpageshow",11], "onresize",
         "onstorage", "onunload", "rows"
     ], [ "onblur", "onerror", "onfocus", "onload", ["onpagehide",11], ["onpageshow",11], "onresize" ]);
+    check(HTMLHRElement, [ "align", "color", "noShade", "size", "width" ]);
     check(HTMLHeadElement, [ "profile" ]);
     check(HTMLHeadingElement, [ "align", "clear" ]);
     check(HTMLHtmlElement, [ "version" ]);
@@ -5106,10 +5575,13 @@ sync_test("prototype props", function() {
         ["pattern",10], ["placeholder",10], ["readyState",11], ["required",10], ["step",10], ["stepDown",10], ["stepUp",10], "useMap", ["valueAsNumber",10]
     ]);
     check(HTMLLabelElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "htmlFor" ], [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form" ]);
+    check(HTMLLIElement, [ "type", "value" ]);
     check(HTMLLinkElement, [ "charset", "href", "hreflang", "media", "rel", "rev", "sheet", ["styleSheet",9,10], "target", "type" ],
                            [ "charset", "hreflang", ["onreadystatechange",11], ["readyState",11], "sheet", ["styleSheet",11], "target" ]);
     check(HTMLMetaElement, [ "charset", "content", "httpEquiv", "name", "scheme", "url" ], [ "scheme" ]);
     check(HTMLModElement, [ "cite", "dateTime" ]);
+    check(HTMLMenuElement, [ "compact", "type" ]);
+    check(HTMLOListElement, [ "compact", "start", "type" ]);
     check(HTMLObjectElement, [
         "BaseHref", "align", "alt", "altHtml", "archive", "border", ["checkValidity",10], "classid", "code", "codeBase", "codeType", "contentDocument", "data",
         ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "declare", "form", "getSVGDocument", "height", "hspace", ["msPlayToDisabled",11],
@@ -5125,12 +5597,14 @@ sync_test("prototype props", function() {
     check(HTMLPhraseElement, [ "cite", "dateTime" ]);
     check(HTMLPreElement, [ "cite", "clear", "width" ]);
     check(HTMLQuoteElement, [ "cite", "dateTime" ]);
+    check(HTMLUListElement, [ "compact", "type" ]);
     check(HTMLScriptElement, [ ["async",10], "charset", "defer", "event", "htmlFor", "src", "text", "type" ], [ ["async",10], "charset", ["readyState",11] ], [ "crossOrigin" ]);
     check(HTMLSelectElement, [
         "add", ["autofocus",10], ["checkValidity",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "item", "length",
         "multiple", "name", "namedItem", "options", "remove", ["required",10], "selectedIndex", ["setCustomValidity",10], "size", "tags",
         "type", "urns", ["validationMessage",10], ["validity",10], "value", ["willValidate",10]
     ], [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "namedItem", ["required",10], "urns" ]);
+    check(HTMLSpanElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10] ]);
     check(HTMLStyleElement, [ "media", "sheet", ["styleSheet",9,10], "type" ], [ ["onreadystatechange",11] ]);
     check(HTMLTableCellElement, [
         "abbr", "align", "axis", "background", "bgColor", "borderColor", "borderColorDark", "borderColorLight",
@@ -5411,14 +5885,14 @@ async_test("window own props", function() {
             "BeforeUnloadEvent", ["Blob",10], "BookmarkCollection", "CanvasGradient", "CanvasPattern", "CanvasPixelArray", "CanvasRenderingContext2D", "CDATASection", ["CloseEvent",10],
             "CompositionEvent", "ControlRangeCollection", "Coordinates", ["CryptoOperation",11], "CSSFontFaceRule", "CSSImportRule", ["CSSKeyframeRule",10], ["CSSKeyframesRule",10],
             "CSSMediaRule", "CSSNamespaceRule", "CSSPageRule", "CSSRuleList", "DataTransfer", "Debug", ["DeviceAcceleration",11], ["DeviceMotionEvent",11],
-            ["DeviceOrientationEvent",11], ["DeviceRotationRate",11], ["DOMError",10], "DOMException", ["DOMSettableTokenList",10], ["DOMStringList",10], ["DOMStringMap",11],
+            ["DeviceOrientationEvent",11], ["DeviceRotationRate",11], ["DOMError",10], ["DOMSettableTokenList",10], ["DOMStringList",10], ["DOMStringMap",11],
             "DragEvent", ["ErrorEvent",10], "EventException", ["EXT_texture_filter_anisotropic",11], ["File",10], ["FileList",10], ["FileReader",10],
             "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement",
-            "HTMLBGSoundElement", "HTMLCanvasElement", ["HTMLDataListElement",10], "HTMLDDElement", "HTMLDirectoryElement",
-            "HTMLDivElement", "HTMLDListElement", "HTMLDTElement", "HTMLFieldSetElement", "HTMLHRElement", "HTMLIsIndexElement",
-            "HTMLLegendElement", "HTMLLIElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLMenuElement", "HTMLNextIdElement", "HTMLOListElement",
+            "HTMLBGSoundElement", "HTMLCanvasElement", ["HTMLDataListElement",10],
+            "HTMLFieldSetElement", "HTMLIsIndexElement",
+            "HTMLLegendElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLNextIdElement",
             "HTMLOptGroupElement", "HTMLParamElement", ["HTMLProgressElement",10], "HTMLSourceElement",
-            "HTMLSpanElement", "HTMLTableCaptionElement", "HTMLTableHeaderCellElement", ["HTMLTrackElement",10], "HTMLUListElement",
+            "HTMLTableCaptionElement", "HTMLTableHeaderCellElement", ["HTMLTrackElement",10],
             "HTMLVideoElement", ["IDBCursor",10], ["IDBCursorWithValue",10], ["IDBDatabase",10], ["IDBFactory",10], ["IDBIndex",10], ["IDBKeyRange",10], ["IDBObjectStore",10], ["IDBOpenDBRequest",10],
             ["IDBRequest",10], ["IDBTransaction",10], ["IDBVersionChangeEvent",10], "ImageData", ["Intl",11], ["Key",11], ["KeyOperation",11],
             ["KeyPair",11], "Location", "MediaError", "MediaList", ["MediaSource",11], ["MessageChannel",10], ["MessagePort",10], ["MimeType",11], ["MimeTypeArray",9,10], "MouseWheelEvent",

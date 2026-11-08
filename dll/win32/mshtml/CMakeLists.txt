@@ -12,6 +12,7 @@ spec2def(mshtml.dll mshtml.spec ADD_IMPORTLIB)
 list(APPEND SOURCE
     conpoint.c
     dispex.c
+    domexception.c
     editor.c
     htmlanchor.c
     htmlarea.c
@@ -30,6 +31,7 @@ list(APPEND SOURCE
     htmlimg.c
     htmlinput.c
     htmllink.c
+    htmllist.c
     htmllocation.c
     htmlnode.c
     htmlobject.c
