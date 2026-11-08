@@ -244,7 +244,7 @@ typedef struct _MTP_DEVICE
     UCHAR TouchFingers;
 
     BOOLEAN GpioPending;
-    UCHAR GpioCommand[16];
+    UCHAR GpioCommand[64];
     ULONG GpioCommandLength;
 
     PKTHREAD Thread;
@@ -942,7 +942,7 @@ MtpHandleEvent(
             break;
 
         case DCHID_EVENT_GPIO_CMD:
-            if (Length <= sizeof(Device->GpioCommand) && !Device->GpioPending)
+            if (Length >= 5 && Length <= sizeof(Device->GpioCommand) && !Device->GpioPending)
             {
                 RtlCopyMemory(Device->GpioCommand, Data, Length);
                 Device->GpioCommandLength = Length;
