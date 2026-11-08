@@ -155,8 +155,14 @@ MiVadRebalance(
     {
         PMI_VAD_NODE Parent = Node->Parent;
 
+        MI_ASSERT(Node->StartingVpn <= Node->EndingVpn);
+        MI_ASSERT(Node->Left == NULL ||
+                  (Node->Left->Parent == Node && Node->Left->SubtreeLastVpn < Node->StartingVpn));
+        MI_ASSERT(Node->Right == NULL ||
+                  (Node->Right->Parent == Node && Node->Right->SubtreeFirstVpn > Node->EndingVpn));
         MiVadFix(Node);
         Balance = MiVadBalance(Node);
+        MI_ASSERT(Balance >= -2 && Balance <= 2);
 
         if (Balance > 1)
         {
@@ -200,6 +206,7 @@ MiVadInsert(
     if (Node->StartingVpn > Node->EndingVpn)
         return FALSE;
 
+    MI_ASSERT(MiVadFind(Tree, Node->StartingVpn) != Node);
     Node->Left = NULL;
     Node->Right = NULL;
     Node->Parent = NULL;
@@ -254,6 +261,7 @@ MiVadRemove(
     PMI_VAD_NODE Successor;
 
     MI_ASSERT(Tree->Root != NULL && Tree->NodeCount != 0);
+    MI_ASSERT(MiVadFind(Tree, Node->StartingVpn) == Node);
     MI_ASSERT(Node->Parent != NULL ? Node->Parent->Left == Node || Node->Parent->Right == Node : Tree->Root == Node);
     MI_ASSERT(Node->Left == NULL || Node->Left->Parent == Node);
     MI_ASSERT(Node->Right == NULL || Node->Right->Parent == Node);
@@ -501,9 +509,11 @@ MiVadCheckNode(
         (*Errors)++;
     if (Node->StartingVpn > Node->EndingVpn)
         (*Errors)++;
-    if (Node->Left != NULL && Node->Left->EndingVpn >= Node->StartingVpn)
+    if (Node->Left != NULL && (Node->Left->EndingVpn >= Node->StartingVpn ||
+                               Node->Left->SubtreeLastVpn >= Node->StartingVpn))
         (*Errors)++;
-    if (Node->Right != NULL && Node->Right->StartingVpn <= Node->EndingVpn)
+    if (Node->Right != NULL && (Node->Right->StartingVpn <= Node->EndingVpn ||
+                                Node->Right->SubtreeFirstVpn <= Node->EndingVpn))
         (*Errors)++;
 
     Left = MiVadCheckNode(Node->Left, Node, Errors, Count);
