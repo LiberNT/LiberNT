@@ -921,7 +921,7 @@ typedef struct _ARM64_MAPPING_REQUEST
     ULONGLONG VirtualBase;
     ULONGLONG PhysicalBase;
     ULONGLONG Size;
-    ULONG Attributes;
+    ULONGLONG Attributes;
     BOOLEAN TableOnly;
 } ARM64_MAPPING_REQUEST, *PARM64_MAPPING_REQUEST;
 
@@ -955,7 +955,7 @@ static BOOLEAN Arm64MappingPlanAddMapping(PARM64_MAPPING_PLAN Plan,
                                           ULONGLONG VirtualBase,
                                           ULONGLONG PhysicalBase,
                                           ULONGLONG Size,
-                                          ULONG Attributes,
+                                          ULONGLONG Attributes,
                                           BOOLEAN TableOnly);
 static BOOLEAN Arm64MappingPlanEnsureTables(PARM64_MAPPING_PLAN Plan,
                                             ULONGLONG VirtualBase,
@@ -2030,7 +2030,7 @@ Arm64MappingPlanAddMapping(
     ULONGLONG VirtualBase,
     ULONGLONG PhysicalBase,
     ULONGLONG Size,
-    ULONG Attributes,
+    ULONGLONG Attributes,
     BOOLEAN TableOnly)
 {
     if (Size == 0)
