@@ -2837,7 +2837,11 @@ MmGetSystemRoutineAddress(IN PUNICODE_STRING SystemRoutineName)
             ProcAddress = RtlFindExportedRoutineByName(LdrEntry->DllBase,
                                                        AnsiRoutineName.Buffer);
             if (ProcAddress != NULL && MiIsUnimplementedExport(LdrEntry->DllBase, ProcAddress))
+            {
+                DPRINT1("MmGetSystemRoutineAddress: %wZ!%Z is not implemented (caller %p)\n",
+                        &LdrEntry->BaseDllName, &AnsiRoutineName, _ReturnAddress());
                 ProcAddress = NULL;
+            }
 
             if (ProcAddress) break;
             if (Modules == 2) break;
