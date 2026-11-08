@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     Asn1Codecs.c
     CatalogV2.c
+    FindCerts.c
     Registration.c
     SignedCatalog.c
     SipCaps.c
