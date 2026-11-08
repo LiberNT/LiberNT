@@ -152,6 +152,71 @@ HighMemWindow(void)
     WorldDestroy(&World);
 }
 
+typedef struct _HIGHMEM_WINDOW_WORKER
+{
+    PMI_PFN_DATABASE Db;
+    ULONG Frame;
+    ULONG Cpu;
+    volatile LONG *Ready;
+    volatile LONG *Go;
+} HIGHMEM_WINDOW_WORKER;
+
+static void *
+HighMemWindowWorker(void *Context)
+{
+    HIGHMEM_WINDOW_WORKER *Worker = Context;
+    ULONG i;
+
+    MiHostCpu = Worker->Cpu;
+    MachineCpu = Worker->Cpu;
+    MI_ATOMIC_ADD32(Worker->Ready, 1);
+    while (!MI_ATOMIC_READ32(Worker->Go))
+        sched_yield();
+    for (i = 0; i < 1024; i++)
+    {
+        PUCHAR Mapping = MiPfnMapFrame(Worker->Db, Worker->Frame);
+
+        MI_ASSERT(Mapping != NULL);
+        memset(Mapping, (int)(0x60 + Worker->Cpu), PAGE_SIZE);
+        MiPfnUnmapFrame(Worker->Db, Mapping);
+    }
+    return NULL;
+}
+
+static void
+HighMemWindowConcurrent(void)
+{
+    static TEST_WORLD World;
+    HIGHMEM_WINDOW_WORKER Workers[4];
+    pthread_t Threads[4];
+    volatile LONG Ready = 0, Go = 0;
+    PMI_PFN_DATABASE Db;
+    ULONG i;
+
+    WorldCreateZoned(&World, HM_FRAMES, HM_DIRECT, RTL_NUMBER_OF(Workers), 100000);
+    Db = &World.System.Pfn;
+    for (i = 0; i < RTL_NUMBER_OF(Workers); i++)
+    {
+        Workers[i] = (HIGHMEM_WINDOW_WORKER){ Db, MiPfnAllocatePage(Db, MI_ALLOCATE_HIGH), i, &Ready, &Go };
+        MI_ASSERT(Workers[i].Frame != MI_FRAME_INVALID && Workers[i].Frame >= HM_DIRECT);
+        MI_ASSERT(pthread_create(&Threads[i], NULL, HighMemWindowWorker, &Workers[i]) == 0);
+    }
+    while (MI_ATOMIC_READ32(&Ready) != RTL_NUMBER_OF(Workers))
+        sched_yield();
+    MI_ATOMIC_ADD32(&Go, 1);
+    for (i = 0; i < RTL_NUMBER_OF(Workers); i++)
+    {
+        MI_ASSERT(pthread_join(Threads[i], NULL) == 0);
+        CHECK(FrameIsFilled(&World, Workers[i].Frame, (UCHAR)(0x60 + i)));
+        MiPfnShareDecrement(Db, Workers[i].Frame, TRUE);
+    }
+    CHECK(Db->Window.Busy == 0 && Db->Window.Maps >= 1024 * RTL_NUMBER_OF(Workers));
+    CHECK(Db->Window.Flushes != 0);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    WorldExpectClean(&World, HM_FRAMES);
+    WorldDestroy(&World);
+}
+
 static void
 HighMemUser(void)
 {
@@ -270,6 +335,7 @@ TestHighMem(void)
 {
     HighMemZones();
     HighMemWindow();
+    HighMemWindowConcurrent();
     HighMemUser();
     HighMemCacheRuns();
 }

@@ -1623,7 +1623,20 @@ MiPfnWindowAttach(
     _In_ ULONG SlotCount)
 {
     PMI_PFN_WINDOW Window = &Db->Window;
+#if DBG || defined(MM_HOST_TEST)
+    ULONG Index;
+#endif
 
+    MI_ASSERT(Window->SlotCount == 0);
+    MI_ASSERT(SlotCount != 0 && Slots != NULL && States != NULL);
+    MI_ASSERT((Base & (PAGE_SIZE - 1)) == 0);
+#if DBG || defined(MM_HOST_TEST)
+    for (Index = 0; Index < SlotCount; Index++)
+    {
+        MI_ASSERT(Slots[Index] != NULL);
+        MI_ASSERT(MiArchPteRead(Slots[Index]) == 0);
+    }
+#endif
     MI_SPIN_INIT(&Window->Lock);
     Window->Base = Base;
     Window->Slot = Slots;
@@ -1641,12 +1654,17 @@ MiPfnWindowMap(
     _In_ ULONG Frame)
 {
     PMI_PFN_WINDOW Window = &Db->Window;
-    LONG Cache = (MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE)
-                     ? 0 : MI_ATOMIC_READ32(&Db->Pfn[Frame].CacheFlags);
+    LONG Cache;
     PVOID Mapping;
     KIRQL OldIrql;
     ULONG Index;
+#if DBG || defined(MM_HOST_TEST)
+    ULONG Scanned = 0;
+#endif
 
+    MI_ASSERT(Frame < Db->FrameCount);
+    Cache = (MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE)
+                ? 0 : MI_ATOMIC_READ32(&Db->Pfn[Frame].CacheFlags);
     MI_ASSERT(Window->SlotCount != 0);
     if (Cache == MI_PFN_CACHE_UNASSIGNED)
         Cache = 0;
@@ -1660,12 +1678,28 @@ MiPfnWindowMap(
 
         if (Window->Stale != 0 && Window->Busy + Window->Stale == Window->SlotCount)
         {
+#if DBG || defined(MM_HOST_TEST)
+            ULONG Stale = 0;
+#endif
             MiArchTlbInvalidate(Window->Base, Window->SlotCount, TRUE);
             for (Index = 0; Index < Window->SlotCount; Index++)
             {
+                MI_ASSERT(Window->Slot[Index] != NULL);
+                MI_ASSERT(Window->State[Index] == MI_WINDOW_STALE || Window->State[Index] == MI_WINDOW_BUSY);
                 if (Window->State[Index] == MI_WINDOW_STALE)
+                {
+                    MI_ASSERT(MiArchPteRead(Window->Slot[Index]) == 0);
+#if DBG || defined(MM_HOST_TEST)
+                    Stale++;
+#endif
                     Window->State[Index] = MI_WINDOW_CLEAN;
+                }
+                else
+                {
+                    MI_ASSERT(MiArchPteIsValid(MiArchPteRead(Window->Slot[Index])));
+                }
             }
+            MI_ASSERT(Stale == Window->Stale);
             Window->Stale = 0;
             Window->Flushes++;
         }
@@ -1682,8 +1716,16 @@ MiPfnWindowMap(
 
     Index = Window->Hint;
     while (Window->State[Index] != MI_WINDOW_CLEAN)
+    {
+        MI_ASSERT(Window->State[Index] == MI_WINDOW_BUSY || Window->State[Index] == MI_WINDOW_STALE);
+#if DBG || defined(MM_HOST_TEST)
+        Scanned++;
+        MI_ASSERT(Scanned < Window->SlotCount);
+#endif
         Index = (Index + 1 == Window->SlotCount) ? 0 : Index + 1;
+    }
 
+    MI_ASSERT(Window->Slot[Index] != NULL && MiArchPteRead(Window->Slot[Index]) == 0);
     Window->State[Index] = MI_WINDOW_BUSY;
     Window->Busy++;
     Window->Hint = (Index + 1 == Window->SlotCount) ? 0 : Index + 1;
@@ -1691,6 +1733,8 @@ MiPfnWindowMap(
     MiArchPteWrite(Window->Slot[Index],
                    MiArchPteMakeLeaf(Frame, MI_PROT_READWRITE,
                                      MI_LEAF_GLOBAL | MI_LEAF_DIRTY | ((ULONG)Cache & MI_LEAF_CACHE_MASK)));
+    MI_ASSERT(MiArchPteIsValid(MiArchPteRead(Window->Slot[Index])));
+    MI_ASSERT(MiArchPteFrame(MiArchPteRead(Window->Slot[Index])) == Frame);
     Mapping = MI_WINDOW_POINTER(Window, Index);
     MI_SPIN_RELEASE(&Window->Lock, OldIrql);
     return Mapping;
@@ -1715,6 +1759,9 @@ MiPfnWindowUnmap(
     MI_ASSERT(Window->State[Index] == MI_WINDOW_BUSY);
     MI_ASSERT(Window->Busy != 0 && Window->Busy <= Window->SlotCount);
     MI_ASSERT(Window->Stale <= Window->SlotCount - Window->Busy);
+    MI_ASSERT(Window->Slot[Index] != NULL);
+    MI_ASSERT(MiArchPteIsValid(MiArchPteRead(Window->Slot[Index])));
+    MI_ASSERT(MiArchPteFrame(MiArchPteRead(Window->Slot[Index])) < Db->FrameCount);
     MI_WINDOW_RELEASE(Window, (ULONG)Index);
     MiArchPteWrite(Window->Slot[Index], 0);
     Window->State[Index] = MI_WINDOW_STALE;
