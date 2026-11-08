@@ -51,6 +51,10 @@ if(ARCH STREQUAL "i386" AND (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox"))
     message(FATAL_ERROR "The SMP HAL does not support ${SARCH}")
 endif()
 
+if(ARCH STREQUAL "i386")
+    add_subdirectory(minihal)
+endif()
+
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
     add_hal(hal SOURCES smp/halmacpi.rc COMPONENTS generic acpi smp apic)
 endif()
