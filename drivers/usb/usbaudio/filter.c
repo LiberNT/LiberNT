@@ -218,6 +218,10 @@ UsbAudioGetSetProperty(
     }
 
     /* format urb */
+    RtlZeroMemory(Urb, sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST));
+    if (TransferFlags & USBD_TRANSFER_DIRECTION_IN)
+        TransferFlags |= USBD_SHORT_TRANSFER_OK;
+
     UsbBuildVendorRequest(Urb,
         URB_FUNCTION_CLASS_INTERFACE,
         sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST),
@@ -233,6 +237,10 @@ UsbAudioGetSetProperty(
 
     /* submit urb */
     Status = SubmitUrbSync(DeviceObject, Urb);
+
+
+    if (NT_SUCCESS(Status) && !USBD_SUCCESS(Urb->UrbHeader.Status))
+        Status = STATUS_IO_DEVICE_ERROR;
 
     FreeFunction(Urb);
     return Status;
@@ -252,15 +260,30 @@ UsbAudioGetSetPropertyTimeout(
 {
     PURB Urb;
     PIRP Irp;
-    KEVENT Event;
-    IO_STATUS_BLOCK IoStatus;
+    PKEVENT Event;
+    PIO_STATUS_BLOCK IoStatus;
     LARGE_INTEGER Timeout;
     NTSTATUS Status;
     PIO_STACK_LOCATION IoStack;
+    BOOLEAN Leak;
 
     Urb = AllocFunction(sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST));
-    if (!Urb)
+    Event = AllocFunction(sizeof(KEVENT));
+    IoStatus = AllocFunction(sizeof(IO_STATUS_BLOCK));
+    if (!Urb || !Event || !IoStatus)
+    {
+        if (Urb)
+            FreeFunction(Urb);
+        if (Event)
+            FreeFunction(Event);
+        if (IoStatus)
+            FreeFunction(IoStatus);
         return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    RtlZeroMemory(Urb, sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST));
+    if (TransferFlags & USBD_TRANSFER_DIRECTION_IN)
+        TransferFlags |= USBD_SHORT_TRANSFER_OK;
 
     UsbBuildVendorRequest(Urb,
         URB_FUNCTION_CLASS_INTERFACE,
@@ -275,7 +298,7 @@ UsbAudioGetSetPropertyTimeout(
         TransferBufferLength,
         NULL);
 
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    KeInitializeEvent(Event, NotificationEvent, FALSE);
     Irp = IoBuildDeviceIoControlRequest(IOCTL_INTERNAL_USB_SUBMIT_URB,
                                         DeviceObject,
                                         NULL,
@@ -283,22 +306,25 @@ UsbAudioGetSetPropertyTimeout(
                                         NULL,
                                         0,
                                         TRUE,
-                                        &Event,
-                                        &IoStatus);
+                                        Event,
+                                        IoStatus);
     if (!Irp)
     {
         FreeFunction(Urb);
+        FreeFunction(Event);
+        FreeFunction(IoStatus);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     IoStack = IoGetNextIrpStackLocation(Irp);
     IoStack->Parameters.Others.Argument1 = Urb;
 
+    Leak = FALSE;
     Status = IoCallDriver(DeviceObject, Irp);
     if (Status == STATUS_PENDING)
     {
         Timeout.QuadPart = -((LONGLONG)TimeoutMilliseconds * 10000);
-        Status = KeWaitForSingleObject(&Event,
+        Status = KeWaitForSingleObject(Event,
                                        Executive,
                                        KernelMode,
                                        FALSE,
@@ -306,16 +332,29 @@ UsbAudioGetSetPropertyTimeout(
         if (Status == STATUS_TIMEOUT)
         {
             IoCancelIrp(Irp);
-            KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+            Timeout.QuadPart = -5000000LL;
+            if (KeWaitForSingleObject(Event,
+                                      Executive,
+                                      KernelMode,
+                                      FALSE,
+                                      &Timeout) == STATUS_TIMEOUT)
+            {
+                Leak = TRUE;
+            }
             Status = STATUS_IO_TIMEOUT;
         }
         else
         {
-            Status = IoStatus.Status;
+            Status = IoStatus->Status;
         }
     }
 
+    if (Leak)
+        return STATUS_IO_TIMEOUT;
+
     FreeFunction(Urb);
+    FreeFunction(Event);
+    FreeFunction(IoStatus);
     return Status;
 }
 
@@ -337,6 +376,31 @@ FindNodeContextWithNode(
         }
     }
     return NULL;
+}
+
+static
+ULONG
+UsbAudioGetFeatureUnitControlCount(
+    IN PUSB_AUDIO_CONTROL_FEATURE_UNIT_DESCRIPTOR FeatureUnitDescriptor);
+
+static
+ULONG
+UsbAudioFeatureUnitControlCount(
+    IN PUSB_AUDIO_CONTROL_FEATURE_UNIT_DESCRIPTOR FeatureUnitDescriptor,
+    IN ULONG AudioVersion)
+{
+    if (!FeatureUnitDescriptor)
+        return 0;
+
+    if (AudioVersion >= USB_AUDIO_VERSION_2)
+    {
+        if (FeatureUnitDescriptor->bLength < 10)
+            return 0;
+
+        return (FeatureUnitDescriptor->bLength - 6) / sizeof(ULONG);
+    }
+
+    return UsbAudioGetFeatureUnitControlCount(FeatureUnitDescriptor);
 }
 
 static
@@ -622,6 +686,13 @@ UsbAudioCountOutputChannelsForUnit(
         switch (Bytes[2])
         {
             case USB_AUDIO_INPUT_TERMINAL:
+                if (DeviceExtension->AudioVersion >= USB_AUDIO_VERSION_2)
+                {
+                    if (Descriptor->bLength < 13 || Bytes[8] == 0)
+                        return STATUS_DEVICE_DATA_ERROR;
+                    *ChannelCount = Bytes[8];
+                    return STATUS_SUCCESS;
+                }
                 if (Descriptor->bLength < 12 || Bytes[7] == 0)
                     return STATUS_DEVICE_DATA_ERROR;
                 *ChannelCount = Bytes[7];
@@ -686,14 +757,21 @@ BOOLEAN
 UsbAudioFeatureUnitHasControl(
     IN PUSB_AUDIO_CONTROL_FEATURE_UNIT_DESCRIPTOR FeatureUnitDescriptor,
     IN UCHAR UsbChannel,
-    IN UCHAR Control)
+    IN UCHAR Control,
+    IN ULONG AudioVersion)
 {
     ULONG ControlCount;
     ULONG Offset;
 
-    ControlCount = UsbAudioGetFeatureUnitControlCount(FeatureUnitDescriptor);
+    ControlCount = UsbAudioFeatureUnitControlCount(FeatureUnitDescriptor, AudioVersion);
     if (UsbChannel >= ControlCount)
         return FALSE;
+
+    if (AudioVersion >= USB_AUDIO_VERSION_2)
+    {
+        return (UsbAudioReadLittleEndian32((PUCHAR)FeatureUnitDescriptor + 5 +
+                                           (ULONG)UsbChannel * sizeof(ULONG)) & Control) != 0;
+    }
 
     Offset = (ULONG)UsbChannel * FeatureUnitDescriptor->bControlSize;
     return (FeatureUnitDescriptor->bmaControls[Offset] & Control) != 0;
@@ -706,20 +784,23 @@ UsbAudioMapFeatureUnitChannel(
     IN ULONG ChannelCount,
     IN LONG KsChannel,
     IN UCHAR Control,
+    IN ULONG AudioVersion,
     OUT PUCHAR UsbChannel)
 {
     if (KsChannel < 0 || (ULONG)KsChannel >= ChannelCount)
         return STATUS_INVALID_PARAMETER;
 
+
     if (UsbAudioFeatureUnitHasControl(FeatureUnitDescriptor,
                                       (UCHAR)KsChannel + 1,
-                                      Control))
+                                      Control,
+                                      AudioVersion))
     {
         *UsbChannel = (UCHAR)KsChannel + 1;
         return STATUS_SUCCESS;
     }
 
-    if (UsbAudioFeatureUnitHasControl(FeatureUnitDescriptor, 0, Control))
+    if (UsbAudioFeatureUnitHasControl(FeatureUnitDescriptor, 0, Control, AudioVersion))
     {
         *UsbChannel = 0;
         return STATUS_SUCCESS;
@@ -755,8 +836,6 @@ UsbAudioGetFeatureUnitFromRequest(
         return STATUS_INVALID_PARAMETER;
 
     *DeviceExtension = FilterContext->DeviceExtension;
-    if ((*DeviceExtension)->AudioVersion != USB_AUDIO_VERSION_1)
-        return STATUS_NOT_SUPPORTED;
 
     NodeProperty = (PKSP_NODE)Request;
     NodeContext = FindNodeContextWithNode(FilterContext->DeviceExtension->NodeContext,
@@ -790,18 +869,35 @@ UsbAudioFeatureUnitRequest(
 {
     USHORT Value;
     USHORT Index;
+    NTSTATUS Status;
+
+    if (DeviceExtension->ControlPathBroken)
+        return STATUS_IO_DEVICE_ERROR;
 
     Value = Control | UsbChannel;
     Index = ((USHORT)FeatureUnitDescriptor->bUnitID << 8) |
             DeviceExtension->AudioControlInterfaceNumber;
 
-    return UsbAudioGetSetProperty(DeviceExtension->LowerDevice,
-                                  Request,
-                                  Value,
-                                  Index,
-                                  Data,
-                                  DataLength,
-                                  TransferFlags);
+    if (DeviceExtension->AudioVersion >= USB_AUDIO_VERSION_2 &&
+        (Request == USB_AUDIO_GET_CUR || Request == USB_AUDIO_SET_CUR))
+    {
+        Request = USB_AUDIO2_CUR;
+    }
+
+    Status = UsbAudioGetSetPropertyTimeout(DeviceExtension->LowerDevice,
+                                           Request,
+                                           Value,
+                                           Index,
+                                           Data,
+                                           DataLength,
+                                           TransferFlags,
+                                           1500);
+    if (Status == STATUS_IO_TIMEOUT)
+    {
+        DeviceExtension->ControlPathBroken = TRUE;
+    }
+
+    return Status;
 }
 
 static
@@ -817,38 +913,63 @@ UsbAudioGetVolumeRange(
     SHORT Resolution;
     NTSTATUS Status;
 
-    Status = UsbAudioFeatureUnitRequest(DeviceExtension,
-                                        FeatureUnitDescriptor,
-                                        USB_AUDIO_GET_MIN,
-                                        USB_AUDIO_VOLUME_CONTROL,
-                                        UsbChannel,
-                                        &Minimum,
-                                        sizeof(Minimum),
-                                        USBD_TRANSFER_DIRECTION_IN);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (DeviceExtension->AudioVersion >= USB_AUDIO_VERSION_2)
+    {
+        UCHAR Data[2 + 6];
 
-    Status = UsbAudioFeatureUnitRequest(DeviceExtension,
-                                        FeatureUnitDescriptor,
-                                        USB_AUDIO_GET_MAX,
-                                        USB_AUDIO_VOLUME_CONTROL,
-                                        UsbChannel,
-                                        &Maximum,
-                                        sizeof(Maximum),
-                                        USBD_TRANSFER_DIRECTION_IN);
-    if (!NT_SUCCESS(Status))
-        return Status;
+        Status = UsbAudioFeatureUnitRequest(DeviceExtension,
+                                            FeatureUnitDescriptor,
+                                            USB_AUDIO2_GET_RANGE,
+                                            USB_AUDIO_VOLUME_CONTROL,
+                                            UsbChannel,
+                                            Data,
+                                            sizeof(Data),
+                                            USBD_TRANSFER_DIRECTION_IN);
+        if (!NT_SUCCESS(Status))
+            return Status;
 
-    Status = UsbAudioFeatureUnitRequest(DeviceExtension,
-                                        FeatureUnitDescriptor,
-                                        USB_AUDIO_GET_RES,
-                                        USB_AUDIO_VOLUME_CONTROL,
-                                        UsbChannel,
-                                        &Resolution,
-                                        sizeof(Resolution),
-                                        USBD_TRANSFER_DIRECTION_IN);
-    if (!NT_SUCCESS(Status))
-        return Status;
+        if ((Data[0] | (Data[1] << 8)) == 0)
+            return STATUS_DEVICE_DATA_ERROR;
+
+        Minimum = (SHORT)(Data[2] | (Data[3] << 8));
+        Maximum = (SHORT)(Data[4] | (Data[5] << 8));
+        Resolution = (SHORT)(Data[6] | (Data[7] << 8));
+    }
+    else
+    {
+        Status = UsbAudioFeatureUnitRequest(DeviceExtension,
+                                            FeatureUnitDescriptor,
+                                            USB_AUDIO_GET_MIN,
+                                            USB_AUDIO_VOLUME_CONTROL,
+                                            UsbChannel,
+                                            &Minimum,
+                                            sizeof(Minimum),
+                                            USBD_TRANSFER_DIRECTION_IN);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        Status = UsbAudioFeatureUnitRequest(DeviceExtension,
+                                            FeatureUnitDescriptor,
+                                            USB_AUDIO_GET_MAX,
+                                            USB_AUDIO_VOLUME_CONTROL,
+                                            UsbChannel,
+                                            &Maximum,
+                                            sizeof(Maximum),
+                                            USBD_TRANSFER_DIRECTION_IN);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        Status = UsbAudioFeatureUnitRequest(DeviceExtension,
+                                            FeatureUnitDescriptor,
+                                            USB_AUDIO_GET_RES,
+                                            USB_AUDIO_VOLUME_CONTROL,
+                                            UsbChannel,
+                                            &Resolution,
+                                            sizeof(Resolution),
+                                            USBD_TRANSFER_DIRECTION_IN);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
 
     if (Minimum > Maximum || Resolution <= 0)
         return STATUS_DEVICE_DATA_ERROR;
@@ -901,6 +1022,7 @@ UsbAudioInitializeFeatureUnitCache(
                                                ChannelCount,
                                                Channel,
                                                USB_AUDIO_FU_VOLUME,
+                                               DeviceExtension->AudioVersion,
                                                &UsbChannel);
         if (!NT_SUCCESS(Status))
             continue;
@@ -918,13 +1040,6 @@ UsbAudioInitializeFeatureUnitCache(
         }
         if (VolumeRanges[Channel].Valid)
             continue;
-
-        Status = UsbAudioGetVolumeRange(DeviceExtension,
-                                        FeatureUnitDescriptor,
-                                        UsbChannel,
-                                        &VolumeRanges[Channel].Range);
-        if (NT_SUCCESS(Status))
-            VolumeRanges[Channel].Valid = TRUE;
     }
 
     return STATUS_SUCCESS;
@@ -1018,6 +1133,7 @@ UsbAudioPropertyBasicSupport(
                                                ChannelCount,
                                                Channel,
                                                Control,
+                                               DeviceExtension->AudioVersion,
                                                &UsbChannel);
         if (Status == STATUS_NOT_SUPPORTED)
         {
@@ -1114,9 +1230,11 @@ FilterAudioMuteHandler(
                                            NodeContext->FeatureChannelCount,
                                            Property->Channel,
                                            USB_AUDIO_FU_MUTE,
+                                           DeviceExtension->AudioVersion,
                                            &UsbChannel);
     if (!NT_SUCCESS(Status))
         return Status;
+
 
     if (Property->NodeProperty.Property.Flags & KSPROPERTY_TYPE_GET)
     {
@@ -1220,6 +1338,7 @@ FilterAudioVolumeHandler(
                                            NodeContext->FeatureChannelCount,
                                            Property->Channel,
                                            USB_AUDIO_FU_VOLUME,
+                                           DeviceExtension->AudioVersion,
                                            &UsbChannel);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -1958,7 +2077,6 @@ BuildUSBAudioFilterTopology(
         /* no memory */
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    RtlZeroMemory(NodeContext, sizeof(NODE_CONTEXT) * ControlDescriptorCount);
     DeviceExtension->NodeContextCount = ControlDescriptorCount;
     DescriptorCount = 0;
 
@@ -2110,7 +2228,6 @@ BuildUSBAudioFilterTopology(
                             FilterDescriptor->NodeDescriptorsCount++;
                         }
                         NodeContext[DescriptorCount].Descriptor = CommonDescriptor;
-                        if (DeviceExtension->AudioVersion == USB_AUDIO_VERSION_1)
                         {
                             Status = UsbAudioInitializeFeatureUnitCache(Device,
                                                                         DeviceExtension,
@@ -2856,22 +2973,10 @@ UsbAudioQueryClockRange(
                                            sizeof(Header),
                                            USBD_TRANSFER_DIRECTION_IN,
                                            1500);
-    Cache->Queried = TRUE;
 
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("UsbAudioQueryClockRange: clock %u GET_RANGE count failed %lx\n",
-                ClockId, Status);
-        return Status;
-    }
-
-    Count = Header[0] | ((ULONG)Header[1] << 8);
+    Count = NT_SUCCESS(Status) ? (Header[0] | ((ULONG)Header[1] << 8)) : 1;
     if (!Count || Count > 16)
-    {
-        DPRINT1("UsbAudioQueryClockRange: clock %u reports %lu subranges\n",
-                ClockId, Count);
-        return STATUS_DEVICE_DATA_ERROR;
-    }
+        Count = 1;
 
     Data = AllocFunction(2 + Count * 12);
     if (!Data)
@@ -2885,6 +2990,7 @@ UsbAudioQueryClockRange(
                                            2 + Count * 12,
                                            USBD_TRANSFER_DIRECTION_IN,
                                            1500);
+    Cache->Queried = TRUE;
     if (NT_SUCCESS(Status))
     {
         for (Index = 0; Index < Count; Index++)
@@ -2902,7 +3008,9 @@ UsbAudioQueryClockRange(
     FreeFunction(Data);
 
     if (!NT_SUCCESS(Status) || !Maximum || Minimum > Maximum)
+    {
         return STATUS_DEVICE_DATA_ERROR;
+    }
 
     Cache->Valid = TRUE;
     Cache->MinimumRate = Minimum;
@@ -2941,7 +3049,6 @@ UsbAudioGetDataRangesUac2(
     PUSB_AUDIO2_STREAMING_FORMAT_TYPE_DESCRIPTOR FormatDescriptor;
     PUSB_INTERFACE_DESCRIPTOR Descriptor;
     PUSB_ENDPOINT_DESCRIPTOR EndpointDescriptor;
-    PUCHAR ConfigurationEnd;
     PKSDATARANGE_AUDIO DataRangeAudio;
     PKSDATARANGE *DataRangeAudioArray = NULL;
     ULONG ClockId;
@@ -2950,24 +3057,32 @@ UsbAudioGetDataRangesUac2(
     ULONG MinimumRate;
     ULONG MaximumRate;
     ULONG Rate;
+    ULONG Offset;
 
     *OutDataRanges = NULL;
     *OutDataRangesCount = 0;
 
     ConfigurationDescriptor = DeviceExtension->ConfigurationDescriptor;
-    ConfigurationEnd = (PUCHAR)ConfigurationDescriptor +
-                       ConfigurationDescriptor->wTotalLength;
     ClockId = UsbAudioGetTerminalClockId(DeviceExtension, bTerminalID);
-    DPRINT1("UsbAudioGetDataRangesUac2: terminal %u config=%p total=%lu\n",
-            bTerminalID, ConfigurationDescriptor, ConfigurationDescriptor->wTotalLength);
 
-    for (Descriptor = USBD_ParseConfigurationDescriptorEx(ConfigurationDescriptor, ConfigurationDescriptor, -1, -1, USB_DEVICE_CLASS_AUDIO, 0x02, -1);
-         Descriptor != NULL && (PUCHAR)Descriptor < ConfigurationEnd;
-         Descriptor = USBD_ParseConfigurationDescriptorEx(ConfigurationDescriptor, (PVOID)((ULONG_PTR)Descriptor + Descriptor->bLength), -1, -1, USB_DEVICE_CLASS_AUDIO, 0x02, -1))
+    for (Offset = 0; Offset + sizeof(USB_COMMON_DESCRIPTOR) <= ConfigurationDescriptor->wTotalLength; )
     {
-        if ((PUCHAR)Descriptor + Descriptor->bLength > ConfigurationEnd)
+        Descriptor = (PUSB_INTERFACE_DESCRIPTOR)((PUCHAR)ConfigurationDescriptor + Offset);
+
+        if (Descriptor->bLength < sizeof(USB_COMMON_DESCRIPTOR) ||
+            Offset + Descriptor->bLength > ConfigurationDescriptor->wTotalLength)
             break;
 
+        Offset += Descriptor->bLength;
+
+        if (Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
+        {
+        }
+
+        if (Descriptor->bDescriptorType != USB_INTERFACE_DESCRIPTOR_TYPE ||
+            Descriptor->bInterfaceClass != USB_DEVICE_CLASS_AUDIO ||
+            Descriptor->bInterfaceSubClass != 0x02)
+            continue;
         if (Descriptor->bNumEndpoints == 0)
             continue;
 
@@ -3006,13 +3121,24 @@ UsbAudioGetDataRangesUac2(
     if (!DataRangeAudioArray)
         return;
 
-    for (Descriptor = USBD_ParseConfigurationDescriptorEx(ConfigurationDescriptor, ConfigurationDescriptor, -1, -1, USB_DEVICE_CLASS_AUDIO, 0x02, -1);
-         Descriptor != NULL && Index < Count && (PUCHAR)Descriptor < ConfigurationEnd;
-         Descriptor = USBD_ParseConfigurationDescriptorEx(ConfigurationDescriptor, (PVOID)((ULONG_PTR)Descriptor + Descriptor->bLength), -1, -1, USB_DEVICE_CLASS_AUDIO, 0x02, -1))
+    for (Offset = 0; Offset + sizeof(USB_COMMON_DESCRIPTOR) <= ConfigurationDescriptor->wTotalLength; )
     {
-        if ((PUCHAR)Descriptor + Descriptor->bLength > ConfigurationEnd)
+        Descriptor = (PUSB_INTERFACE_DESCRIPTOR)((PUCHAR)ConfigurationDescriptor + Offset);
+
+        if (Descriptor->bLength < sizeof(USB_COMMON_DESCRIPTOR) ||
+            Offset + Descriptor->bLength > ConfigurationDescriptor->wTotalLength)
             break;
 
+        Offset += Descriptor->bLength;
+
+        if (Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
+        {
+        }
+
+        if (Descriptor->bDescriptorType != USB_INTERFACE_DESCRIPTOR_TYPE ||
+            Descriptor->bInterfaceClass != USB_DEVICE_CLASS_AUDIO ||
+            Descriptor->bInterfaceSubClass != 0x02)
+            continue;
         if (Descriptor->bNumEndpoints == 0)
             continue;
 
@@ -3058,6 +3184,54 @@ UsbAudioGetDataRangesUac2(
             MinimumRate = Rate;
             DPRINT1("UsbAudioGetDataRangesUac2: clock %u range unavailable, using %lu-%lu Hz\n",
                     ClockId, MinimumRate, MaximumRate);
+        }
+
+        /* a data endpoint that cannot carry the rate would starve the ring */
+        {
+            PUSB_ENDPOINT_DESCRIPTOR DataEndpoint = NULL;
+            PUCHAR Cursor = (PUCHAR)Descriptor + Descriptor->bLength;
+            PUCHAR End = (PUCHAR)ConfigurationDescriptor + ConfigurationDescriptor->wTotalLength;
+
+            while (Cursor + sizeof(USB_COMMON_DESCRIPTOR) <= End)
+            {
+                PUSB_COMMON_DESCRIPTOR Common = (PUSB_COMMON_DESCRIPTOR)Cursor;
+
+                if (Common->bLength < sizeof(USB_COMMON_DESCRIPTOR) ||
+                    Cursor + Common->bLength > End)
+                    break;
+
+                if (Common->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
+                    break;
+
+                if (Common->bDescriptorType == USB_ENDPOINT_DESCRIPTOR_TYPE)
+                {
+                    PUSB_ENDPOINT_DESCRIPTOR Endpoint = (PUSB_ENDPOINT_DESCRIPTOR)Common;
+
+                    if ((Endpoint->bmAttributes & 0x03) == 0x01)
+                    {
+                        DataEndpoint = Endpoint;
+                        break;
+                    }
+                }
+
+                Cursor += Common->bLength;
+            }
+
+            if (DataEndpoint)
+            {
+                ULONG MinimumPacket;
+
+                MinimumPacket = UacDescMinDataWMaxPacket(TRUE,
+                                                         DataEndpoint->bInterval,
+                                                         MaximumRate,
+                                                         StreamingInterfaceDescriptor->bNrChannels,
+                                                         FormatDescriptor->bSubslotSize);
+                if (MinimumPacket &&
+                    (ULONG)(DataEndpoint->wMaxPacketSize & 0x07FF) < MinimumPacket)
+                {
+                    continue;
+                }
+            }
         }
 
         if (!MaximumRate || MinimumRate > MaximumRate)
@@ -3734,7 +3908,6 @@ USBAudioCreateFilterContext(
 
     /* lets create the filter */
     Status = KsCreateFilterFactory(Device->FunctionalDeviceObject, FilterDescriptor, ReferenceString, NULL, KSCREATE_ITEM_FREEONSTOP, NULL, NULL, NULL);
-    DPRINT("KsCreateFilterFactory: %x\n", Status);
 
     return Status;
 }
