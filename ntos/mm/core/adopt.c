@@ -65,11 +65,25 @@ MiAdoptTable(
 {
     PMI_SYSTEM System = Space->System;
     const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
-    PMI_PTE Table = MiArchMapFrame(Frame);
-    ULONG Entries = (ULONG)Arch->Level[Level].EntryCount;
-    PMI_PFN Entry = &System->Pfn.Pfn[Frame];
+    PMI_PTE Table;
+    ULONG Entries;
+    PMI_PFN Entry;
     ULONG Index;
 
+    MI_ASSERT(Level >= 0 && (ULONG)Level + 1 < Arch->PagingLevels);
+    MI_ASSERT(Frame < System->Pfn.FrameCount && ParentFrame < System->Pfn.FrameCount);
+    MI_ASSERT(ParentIndex < Arch->Level[Level + 1].EntryCount);
+    MI_ASSERT(System->Pfn.Pfn[ParentFrame].PageTableOwner == Space);
+    MI_ASSERT(MI_PFN_FLAGS(&System->Pfn.Pfn[ParentFrame]) & MI_PFN_FLAG_PAGE_TABLE);
+    MI_ASSERT(!(MI_PFN_FLAGS(&System->Pfn.Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE));
+    MI_ASSERT(MiArchPteIsValid(MiArchPteRead((PMI_PTE)MiArchMapFrame(ParentFrame) + ParentIndex)));
+    MI_ASSERT(!MiArchPteIsBlock(MiArchPteRead((PMI_PTE)MiArchMapFrame(ParentFrame) + ParentIndex),
+                                (ULONG)Level + 1));
+    MI_ASSERT(MiArchPteFrame(MiArchPteRead((PMI_PTE)MiArchMapFrame(ParentFrame) + ParentIndex)) == Frame);
+
+    Table = MiArchMapFrame(Frame);
+    Entries = (ULONG)Arch->Level[Level].EntryCount;
+    Entry = &System->Pfn.Pfn[Frame];
     if (Entry->State == MiPageUnusable)
         MiPfnMarkInUse(&System->Pfn, Frame, 1);
 

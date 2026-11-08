@@ -926,6 +926,8 @@ SysBootAdoption(void)
 
         if (Level == 1)
         {
+            Table[((BootVa >> Arch->Level[1].Shift) & Arch->Level[1].IndexMask) + 1] =
+                MiArchPteMakeTable(Frame + 1, 0);
             Table[(BlockVa >> Arch->Level[1].Shift) & Arch->Level[1].IndexMask] =
                 MiArchPteMakeBlock(512, MI_PROT_READWRITE, MI_LEAF_GLOBAL | MI_LEAF_DIRTY);
         }
@@ -965,7 +967,14 @@ SysBootAdoption(void)
         CHECK((World.PfnArray[i].Flags & (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PINNED)) ==
               (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PINNED));
         CHECK(World.PfnArray[i].PteFrame == i - 1);
+        CHECK(World.PfnArray[i].PageTableOwner == &System->SystemSpace);
+        CHECK(World.PfnArray[i].PteAddress ==
+              ((ULONG64)(i - 1) << PAGE_SHIFT) +
+                  ((BootVa >> Arch->Level[Top - (i - 3)].Shift) &
+                   Arch->Level[Top - (i - 3)].IndexMask) * sizeof(MI_PTE));
     }
+    Table = MiArchMapFrame(Top + 1);
+    Table[((BootVa >> Arch->Level[1].Shift) & Arch->Level[1].IndexMask) + 1] = 0;
     CHECK(MiPtCheck(&System->SystemSpace) == 0);
 
     Value = 0;
