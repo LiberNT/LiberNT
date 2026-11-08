@@ -107,6 +107,8 @@ private:
     ULONGLONG m_WindowStart;
 };
 
+DWORD ParseResults(const std::string &html, const std::wstring &query, std::vector<CatalogUpdate> &updates,
+                   size_t &rows);
 void UseDriverVersion(CatalogUpdate &update);
 ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now);
 ULONGLONG ThrottleWindowStart(ULONGLONG windowStart, ULONGLONG now);
