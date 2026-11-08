@@ -162,7 +162,15 @@ MiSystemMapFrames(
         }
 
         if (LeafFlags & MI_LEAF_PFN_CACHE)
-            PageFlags = MiPfnMappingFlags(&System->Pfn, Frames[i], LeafFlags);
+        {
+            NTSTATUS Status = MiPfnMappingFlags(&System->Pfn, Frames[i], LeafFlags, &PageFlags);
+
+            if (!NT_SUCCESS(Status))
+            {
+                MiSystemUnmap(System, VirtualAddress, i, FALSE);
+                return Status;
+            }
+        }
         if (MI_PROT_IS_WRITABLE(Protection))
             MiPfnExecCleanClear(&System->Pfn, (ULONG)Frames[i]);
 

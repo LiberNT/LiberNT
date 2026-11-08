@@ -304,6 +304,41 @@ MiPfnSetCache(PMI_PFN_DATABASE Db, ULONG Frame, ULONG Flags)
 }
 
 NTSTATUS
+MiPfnMappingFlags(PMI_PFN_DATABASE Db, MI_FRAME_NUMBER Frame, ULONG Flags, PULONG MappingFlags)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    Flags &= ~MI_LEAF_PFN_CACHE;
+    if (Frame < Db->FrameCount && Db->Pfn[Frame].State != MiPageUnusable)
+    {
+        PMI_PFN Entry = &Db->Pfn[Frame];
+        ULONG Cache = (MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PAGE_TABLE) ? 0 :
+                      (ULONG)MI_ATOMIC_CAS32(&Entry->CacheFlags, 0, 0);
+
+        if ((LONG)Cache == MI_PFN_CACHE_UNASSIGNED)
+        {
+            KIRQL OldIrql = MiPfnLock(Db, (ULONG)Frame);
+
+            Cache = (ULONG)MI_ATOMIC_READ32(&Entry->CacheFlags);
+            if ((LONG)Cache == MI_PFN_CACHE_UNASSIGNED)
+            {
+                Cache = Flags & MI_LEAF_CACHE_MASK;
+                if (Cache != 0)
+                    Status = MiPfnSetCache(Db, (ULONG)Frame, Cache);
+                else
+                    MI_ATOMIC_WRITE32(&Entry->CacheFlags, 0);
+            }
+            MiPfnUnlock(Db, (ULONG)Frame, OldIrql);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+        Flags = (Flags & ~MI_LEAF_CACHE_MASK) | (Cache & MI_LEAF_CACHE_MASK);
+    }
+    *MappingFlags = Flags;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 MiPfnSetCacheFrames(PMI_PFN_DATABASE Db, const MI_FRAME_NUMBER *Frames, ULONG Count, ULONG Flags)
 {
     ULONG Index = 0;

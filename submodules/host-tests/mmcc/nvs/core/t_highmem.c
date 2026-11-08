@@ -444,6 +444,76 @@ HighMemCacheFailureOnReclaim(void)
     WorldDestroy(&World);
 }
 
+typedef struct _HIGHMEM_CACHE_WORKER
+{
+    PMI_PFN_DATABASE Db;
+    ULONG Frame;
+    ULONG Cpu;
+    ULONG Requested;
+    ULONG Actual;
+    NTSTATUS Status;
+    volatile LONG *Ready;
+    volatile LONG *Go;
+} HIGHMEM_CACHE_WORKER;
+
+static void *
+HighMemCacheWorker(void *Context)
+{
+    HIGHMEM_CACHE_WORKER *Worker = Context;
+
+    MiHostCpu = Worker->Cpu;
+    MachineCpu = Worker->Cpu;
+    MI_ATOMIC_ADD32(Worker->Ready, 1);
+    while (!MI_ATOMIC_READ32(Worker->Go))
+        sched_yield();
+    Worker->Status = MiPfnMappingFlags(Worker->Db, Worker->Frame, Worker->Requested, &Worker->Actual);
+    return NULL;
+}
+
+static void
+HighMemConcurrentFirstMapping(void)
+{
+    static TEST_WORLD World;
+    HIGHMEM_CACHE_WORKER Workers[4];
+    pthread_t Threads[4];
+    PMI_PFN_DATABASE Db;
+    ULONG Round, Index;
+
+    WorldCreateZoned(&World, HM_FRAMES, HM_DIRECT, RTL_NUMBER_OF(Workers), 100000);
+    Db = &World.System.Pfn;
+    for (Round = 0; Round < 32; Round++)
+    {
+        volatile LONG Ready = 0, Go = 0;
+        ULONG Frame = MiPfnAllocatePage(Db, 0);
+        ULONG Calls = World.Machine.FrameCacheCalls;
+
+        MI_ASSERT(Frame != MI_FRAME_INVALID);
+        Db->Pfn[Frame].CacheFlags = MI_PFN_CACHE_UNASSIGNED;
+        for (Index = 0; Index < RTL_NUMBER_OF(Workers); Index++)
+        {
+            Workers[Index] = (HIGHMEM_CACHE_WORKER){ Db, Frame, Index,
+                (Index & 1) ? MI_LEAF_NOCACHE : MI_LEAF_WRITECOMBINE, 0, 0, &Ready, &Go };
+            MI_ASSERT(pthread_create(&Threads[Index], NULL, HighMemCacheWorker, &Workers[Index]) == 0);
+        }
+        while (MI_ATOMIC_READ32(&Ready) != RTL_NUMBER_OF(Workers))
+            sched_yield();
+        MI_ATOMIC_ADD32(&Go, 1);
+        for (Index = 0; Index < RTL_NUMBER_OF(Workers); Index++)
+            MI_ASSERT(pthread_join(Threads[Index], NULL) == 0);
+        for (Index = 0; Index < RTL_NUMBER_OF(Workers); Index++)
+        {
+            CHECK(NT_SUCCESS(Workers[Index].Status));
+            CHECK(Workers[Index].Actual == (ULONG)MI_ATOMIC_READ32(&Db->Pfn[Frame].CacheFlags));
+        }
+        CHECK((ULONG)MI_ATOMIC_READ32(&Db->Pfn[Frame].CacheFlags) == World.Machine.FrameCache[Frame]);
+        CHECK(World.Machine.FrameCacheCalls == Calls + 1);
+        MiPfnShareDecrement(Db, Frame, TRUE);
+    }
+    CHECK(MiPfnDbCheck(Db) == 0);
+    WorldExpectClean(&World, HM_FRAMES);
+    WorldDestroy(&World);
+}
+
 void
 TestHighMem(void)
 {
@@ -454,4 +524,5 @@ TestHighMem(void)
     HighMemCacheRuns();
     HighMemCacheFailure();
     HighMemCacheFailureOnReclaim();
+    HighMemConcurrentFirstMapping();
 }

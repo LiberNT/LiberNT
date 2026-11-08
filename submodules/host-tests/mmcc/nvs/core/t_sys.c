@@ -1092,6 +1092,7 @@ SysMdlCacheAttributes(void)
         User = 0;
         CHECK(NT_SUCCESS(MiMapFramesUser(&Process, Frames, 1, MI_PROT_READWRITE,
                                          Flags[Requested], TRUE, &User)));
+        CHECK(World.Machine.FrameCache[Frames[0]] == Flags[Requested]);
         CHECK(NT_SUCCESS(MiMapFrames(&World.System, Frames, 1, Types[(Requested + 1) % 3],
                                      MI_PROT_READWRITE, &Kernel)));
         CHECK(MiPtTranslate(&World.System.SystemSpace, Kernel, &Physical, &Pte));
@@ -1101,6 +1102,28 @@ SysMdlCacheAttributes(void)
         MiUnmapFrames(&World.System, Kernel, 1);
         MiPfnShareDecrement(&World.System.Pfn, (ULONG)Frames[0], TRUE);
     }
+
+    Frames[0] = MiPfnAllocatePage(&World.System.Pfn, 0);
+    CHECK(Frames[0] != MI_FRAME_INVALID);
+    World.PfnArray[Frames[0]].CacheFlags = MI_PFN_CACHE_UNASSIGNED;
+    World.Machine.FrameCacheFailureFramePlusOne = (ULONG)Frames[0] + 1;
+    User = 0;
+    Status = MiMapFramesUser(&Process, Frames, 1, MI_PROT_READWRITE, MI_LEAF_NOCACHE, TRUE, &User);
+    CHECK(Status == STATUS_NOT_SUPPORTED);
+    CHECK(World.PfnArray[Frames[0]].CacheFlags == MI_PFN_CACHE_UNASSIGNED);
+    CHECK(World.Machine.FrameCache[Frames[0]] == 0);
+    if (NT_SUCCESS(Status))
+        CHECK(NT_SUCCESS(MiUnmapFramesUser(&Process, User, TRUE)));
+    World.PfnArray[Frames[0]].CacheFlags = MI_PFN_CACHE_UNASSIGNED;
+    Kernel = 0;
+    Status = MiMapFrames(&World.System, Frames, 1, MiCacheNone, MI_PROT_READWRITE, &Kernel);
+    CHECK(Status == STATUS_NOT_SUPPORTED);
+    CHECK(World.PfnArray[Frames[0]].CacheFlags == MI_PFN_CACHE_UNASSIGNED);
+    CHECK(World.Machine.FrameCache[Frames[0]] == 0);
+    if (NT_SUCCESS(Status))
+        MiUnmapFrames(&World.System, Kernel, 1);
+    World.Machine.FrameCacheFailureFramePlusOne = 0;
+    MiPfnShareDecrement(&World.System.Pfn, (ULONG)Frames[0], TRUE);
 
     /* Raw I/O PFNs have no established RAM cache attributes. */
     Frames[0] = World.System.Pfn.FrameCount + 1;

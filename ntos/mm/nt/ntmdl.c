@@ -671,7 +671,10 @@ MmAllocatePagesForMdl(
     {
         PPFN_NUMBER Pages = MmGetMdlPfnArray(Mdl);
         for (i = 0; i < MiMdlPages(Mdl); i++)
+        {
+            ASSERT(MiSystem.Pfn.Pfn[Pages[i]].CacheFlags == 0);
             MiSystem.Pfn.Pfn[Pages[i]].CacheFlags = MI_PFN_CACHE_UNASSIGNED;
+        }
     }
     return Mdl;
 }

@@ -1820,8 +1820,16 @@ MiMapFramesUser(
     {
         ULONG64 Va = Start + (ULONG64)i * PAGE_SIZE;
         ULONG TableFrame;
-        ULONG PageFlags = LockedPages ? MiPfnMappingFlags(&Space->System->Pfn, Frames[i], LeafFlags) : LeafFlags;
-        PMI_PTE Slot = MiPtEnsure(Space, Va, &TableFrame);
+        ULONG PageFlags = LeafFlags;
+        PMI_PTE Slot;
+
+        if (LockedPages)
+        {
+            Status = MiPfnMappingFlags(&Space->System->Pfn, Frames[i], LeafFlags, &PageFlags);
+            if (!NT_SUCCESS(Status))
+                break;
+        }
+        Slot = MiPtEnsure(Space, Va, &TableFrame);
 
         if (Slot == NULL)
         {
