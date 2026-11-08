@@ -83,6 +83,8 @@ _RtlpCaptureContext@4:
     mov dword ptr [ebx+CONTEXT_EDI], 0
 
 CaptureRest:
+    mov dword ptr [ebx+CONTEXT_FLAGS], CONTEXT_FULL
+
     /* Capture the segment registers */
     mov [ebx+CONTEXT_SEGCS], cs
     mov [ebx+CONTEXT_SEGDS], ds

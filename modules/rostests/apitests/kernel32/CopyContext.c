@@ -32,6 +32,8 @@ START_TEST(CopyContext)
 
     RtlCaptureContext(&Source);
     trace("captured ContextFlags %08lx\n", Source.ContextFlags);
+    ok((Source.ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL,
+       "the captured context does not claim its control registers: %08lx\n", Source.ContextFlags);
     ok(CONTEXT_PC(&Source) != 0 && CONTEXT_SP(&Source) != 0, "the captured context has no control registers\n");
 
     RtlZeroMemory(&Destination, sizeof(Destination));
