@@ -254,11 +254,11 @@ LiberNT/
 ├── hal/             # Hardware abstraction layers for x86, Arm, Arm64, PowerPC and RISC-V
 ├── media/           # Fonts, themes, INF files, sounds and branding
 ├── modules/         # Optional applications, tests and wallpapers
-├── ntoskrnl/        # The NT kernel and executive
+├── ntos/            # The NT kernel and executive
 ├── sdk/             # Headers, libraries and build tools
 ├── submodules/      # Recipes and patches for external components
 ├── subsystems/      # CSRSS and the Windows subsystem
-├── win32ss/         # win32k, USER, GDI and display drivers
+│   └── win/win32k/  # win32k, USER, GDI and display drivers
 ├── configure.sh     # Sets up a build on Linux, macOS and WSL2
 └── configure.cmd    # Sets up a build on Windows
 ```

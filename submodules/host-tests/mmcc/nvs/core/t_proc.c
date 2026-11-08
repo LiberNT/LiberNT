@@ -8,7 +8,7 @@
  */
 
 #include "mmharness.h"
-#include <nvs/include/miproc.h>
+#include <mm/include/miproc.h>
 
 static
 NTSTATUS

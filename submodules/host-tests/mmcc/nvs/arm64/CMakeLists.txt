@@ -11,7 +11,7 @@ include(CTest)
 find_package(Threads REQUIRED)
 
 foreach(TARGET mm_arm64_tlb mm_arm64_tlb_asan mm_arm64_tlb_tsan)
-    add_executable(${TARGET} t_tlb.c ${MMCC_KERNEL_ROOT}/nvs/arch/arm64/tlb.c)
+    add_executable(${TARGET} t_tlb.c ${MMCC_KERNEL_ROOT}/mm/arch/arm64/tlb.c)
     target_compile_definitions(${TARGET} PRIVATE MM_HOST_TEST)
     target_include_directories(${TARGET} PRIVATE ${MMCC_KERNEL_ROOT})
     target_compile_options(${TARGET} PRIVATE -Wall -Wextra -Werror -g -O1)

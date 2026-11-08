@@ -16,9 +16,9 @@ Most of the tree is still shared with ReactOS, and the components synchronised w
 
 | Area | In LiberNT | Where |
 |---|---|---|
-| Memory manager | NVS, the NT Virtual Memory Subsystem: a clean-room NT10 memory manager with its own kernel pool. The ReactOS ARM3 memory manager has been removed. | `ntoskrnl/nvs` |
-| Cache manager | A clean-room cache manager. | `ntoskrnl/cc` |
-| ARM64 | The ARM64 port: kernel, HAL and FreeLoader. | `ntoskrnl/ke/arm64`, `hal/halarm64`, `boot/freeldr/freeldr/arch/arm64` |
+| Memory manager | NVS, the NT Virtual Memory Subsystem: a clean-room NT10 memory manager with its own kernel pool. The ReactOS ARM3 memory manager has been removed. | `ntos/mm` |
+| Cache manager | A clean-room cache manager. | `ntos/cc` |
+| ARM64 | The ARM64 port: kernel, HAL and FreeLoader. | `ntos/ke/arm64`, `hal/halarm64`, `boot/freeldr/freeldr/arch/arm64` |
 | RISC-V64 | The HAL of the port in progress. | `hal/halriscv64` |
 | 32-bit applications | WoW64 on every 64-bit target. On ARM64, FEX runs the x86 code, and ARM64EC/CHPE is supported. | `dll/win32/wow64`, `dll/win32/wow64cpu`, `dll/win32/wow64win` |
 | Graphics | A WDDM graphics kernel and DWM desktop composition. | `drivers/directx/dxgkrnl`, `base/system/dwm` |
@@ -178,7 +178,7 @@ To develop this without a second machine, `~/reactos-scripts/kdnet_bench.sh` (se
 
   ```sh
   ninja -C output-Clang-amd64-debug -t compdb > /tmp/compdb.json
-  cppcheck --project=/tmp/compdb.json --file-filter='*/ntoskrnl/alpc/alpcport.c' \
+  cppcheck --project=/tmp/compdb.json --file-filter='*/ntos/alpc/alpcport.c' \
       -D_WIN32 -D_WIN64 -D_M_AMD64 -D__x86_64__ -D__clang__ -D__GNUC__=4 \
       '-D__has_cpp_attribute(x)=0' '-D__has_builtin(x)=0' '-D__has_attribute(x)=0' '-D__has_feature(x)=0' \
       --enable=warning,performance,portability --platform=win64 --inline-suppr --quiet

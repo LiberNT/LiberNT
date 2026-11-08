@@ -1,4 +1,4 @@
-include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl/include)
+include_directories(${REACTOS_SOURCE_DIR}/ntos/include)
 add_library(sonyhid MODULE sonyhid.c sonyhid.rc)
 set_module_type(sonyhid kernelmodedriver)
 add_importlibs(sonyhid ntoskrnl hal hidparse)

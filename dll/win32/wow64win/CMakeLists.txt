@@ -1,8 +1,8 @@
 spec2def(wow64win.dll wow64win.spec ADD_IMPORTLIB)
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${REACTOS_SOURCE_DIR}/win32ss/w32ksvc32.h
-    ${REACTOS_SOURCE_DIR}/win32ss/win32u/win32u.spec
+    ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/w32ksvc32.h
+    ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/win32u/win32u.spec
     ${CMAKE_CURRENT_SOURCE_DIR}/d3dkmt.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gdi.c
     ${CMAKE_CURRENT_SOURCE_DIR}/user.c)
@@ -17,7 +17,7 @@ foreach(_source d3dkmt.c gdi.c user.c)
 endforeach()
 
 set(_wow64win_exports)
-file(STRINGS ${REACTOS_SOURCE_DIR}/win32ss/win32u/win32u.spec _lines REGEX "^@ .*Nt(User|Gdi)")
+file(STRINGS ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/win32u/win32u.spec _lines REGEX "^@ .*Nt(User|Gdi)")
 foreach(_line ${_lines})
     string(REGEX MATCH " (Nt(User|Gdi)[A-Za-z0-9_]+)\\(" _match "${_line}")
     list(APPEND _wow64win_exports ${CMAKE_MATCH_1})
@@ -45,7 +45,7 @@ set(_wow64win_skip FALSE)
 set(_wow64win_missing_service_exports)
 set(_wow64win_missing_service_wrappers)
 
-file(STRINGS ${REACTOS_SOURCE_DIR}/win32ss/w32ksvc32.h _lines)
+file(STRINGS ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/w32ksvc32.h _lines)
 foreach(_line ${_lines})
     string(STRIP "${_line}" _line)
     if(_line STREQUAL "#ifdef _WIN64")

@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/win32ss/printing/include)
+include_directories(${REACTOS_SOURCE_DIR}/subsystems/win/win32k/printing/include)
 
 list(APPEND SOURCE
     fpEnumPrinters.c

@@ -5,7 +5,7 @@
 # so it must build and ship under both display models. That is why the build
 # rules live here rather than in the XPDM-gated miniport directory.
 
-set(VC4OGL_DIR ${REACTOS_SOURCE_DIR}/win32ss/drivers/miniport/rpi5vc4)
+set(VC4OGL_DIR ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/drivers/miniport/rpi5vc4)
 set(RPI5VC4_MESA_V3D_ICD "$ENV{REACTOS_MESA_V3D_ICD}" CACHE FILEPATH
     "Optional modern Mesa V3D WGL ICD to deploy for the Raspberry Pi 5")
 
@@ -13,7 +13,7 @@ include_directories(BEFORE
     ${REACTOS_SOURCE_DIR}/dll/opengl/mesa
     ${REACTOS_SOURCE_DIR}/dll/opengl/opengl32)
 
-spec2def(rpi5vc4ogl.dll ../../../win32ss/drivers/miniport/rpi5vc4/rpi5vc4ogl.spec)
+spec2def(rpi5vc4ogl.dll ../../../subsystems/win/win32k/drivers/miniport/rpi5vc4/rpi5vc4ogl.spec)
 add_library(rpi5vc4ogl MODULE
     ${VC4OGL_DIR}/rpi5vc4ogl.c
     ${VC4OGL_DIR}/rpi5vc4ogl_buffer.c

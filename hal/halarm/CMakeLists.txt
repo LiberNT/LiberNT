@@ -8,7 +8,7 @@ add_definitions(
 
 include_directories(
     include
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/include)
+    ${REACTOS_SOURCE_DIR}/ntos/include)
 
 list(APPEND SOURCES
     omap3/halinit_up.c

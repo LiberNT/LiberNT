@@ -7,7 +7,7 @@
 # table at initialisation time.
 #
 # Build order inside drivers/directx:
-#   1. dxgmms1  (no upstream ReactOS deps beyond ntoskrnl/hal)
+#   1. dxgmms1  (no upstream ReactOS deps beyond ntos/hal)
 #   2. dxgkrnl  (links against dxgmms1 import library)
 
 # dxgmms1 and dxgkrnl exchange WDDM structures by value. Keep both targets on

@@ -4,7 +4,7 @@
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 
 function(rtl_rbtree_variant NAME)
-    add_executable(${NAME} t_rbtree.c ${REACTOS_HOST_SOURCE_ROOT}/ntoskrnl/rtl/rbtree.c)
+    add_executable(${NAME} t_rbtree.c ${REACTOS_HOST_SOURCE_ROOT}/ntos/rtl/rbtree.c)
     target_include_directories(${NAME} PRIVATE include)
     target_compile_features(${NAME} PRIVATE c_std_11)
     target_compile_options(${NAME} PRIVATE -Wall -Wextra -Werror -g)

@@ -8,8 +8,8 @@
  */
 
 #include "tlbshim.h"
-#include <nvs/arch/amd64/tlb.h>
-#include <nvs/arch/amd64/hardware.h>
+#include <mm/arch/amd64/tlb.h>
+#include <mm/arch/amd64/hardware.h>
 #include <pthread.h>
 
 typedef struct _TEST_CPU

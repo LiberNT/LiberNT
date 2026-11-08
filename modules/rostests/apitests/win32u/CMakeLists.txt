@@ -1,6 +1,6 @@
 
 add_definitions(-D_DLL -D__USE_CRTIMP)
-include_directories(${REACTOS_SOURCE_DIR}/win32ss/include ../gditools)
+include_directories(${REACTOS_SOURCE_DIR}/subsystems/win/win32k/include ../gditools)
 
 list(APPEND SOURCE
     ntgdi/NtGdiArcInternal.c

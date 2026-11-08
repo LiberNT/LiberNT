@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <nvs/pool/ex/expool.h>
+#include <mm/pool/ex/expool.h>
 
 #define ARENA_BYTES (128 * 1024 * 1024)
 #define TAG_TEST 0x74507845

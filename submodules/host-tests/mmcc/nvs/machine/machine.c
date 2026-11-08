@@ -8,7 +8,7 @@
  */
 
 #include "machine.h"
-#include <nvs/include/mipfndb.h>
+#include <mm/include/mipfndb.h>
 #include <sched.h>
 
 PMACHINE MachineCurrent;

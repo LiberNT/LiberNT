@@ -1,6 +1,6 @@
 
 add_definitions(-DDEBUG_MODE)
-include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl/include)
+include_directories(${REACTOS_SOURCE_DIR}/ntos/include)
 
 list(APPEND SOURCE
     descriptor.c

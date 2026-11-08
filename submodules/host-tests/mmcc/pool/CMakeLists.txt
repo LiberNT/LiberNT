@@ -10,7 +10,7 @@ project(pool_host_tests LANGUAGES C)
 include(CTest)
 
 set(CMAKE_C_STANDARD 11)
-set(POOL_ROOT ${MMCC_KERNEL_ROOT}/nvs/pool)
+set(POOL_ROOT ${MMCC_KERNEL_ROOT}/mm/pool)
 
 set(POOL_ENGINE
     ${POOL_ROOT}/va/varegion.c

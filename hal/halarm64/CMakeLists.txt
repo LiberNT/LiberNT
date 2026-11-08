@@ -26,8 +26,8 @@ add_definitions(
 include_directories(
     ${HAL_ARM64_SOURCE_DIR}/include
     ${HAL_COMMON_DIR}/include
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/include
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/include/internal
+    ${REACTOS_SOURCE_DIR}/ntos/include
+    ${REACTOS_SOURCE_DIR}/ntos/include/internal
     ${REACTOS_SOURCE_DIR}/sdk/include
     ${HAL_ARM64_SOURCE_DIR}/gic
     ${CMAKE_CURRENT_BINARY_DIR})

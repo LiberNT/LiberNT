@@ -6,7 +6,7 @@ add_subdirectory(ldrfwd)
 include_directories($<TARGET_FILE_DIR:load_notifications>)
 include_directories($<TARGET_FILE_DIR:empty_dll>)
 include_directories($<TARGET_FILE_DIR:ldrfwd_a>)
-include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl/include)
+include_directories(${REACTOS_SOURCE_DIR}/ntos/include)
 spec2def(ntdll_apitest.exe ntdll_apitest.spec)
 
 list(APPEND SOURCE_CRT_TESTS

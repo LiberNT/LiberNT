@@ -10,7 +10,7 @@
 #pragma once
 
 #include "ntpagingshim.h"
-#include <nvs/include/misys.h>
+#include <mm/include/misys.h>
 #include <setjmp.h>
 
 extern PMI_SYSTEM MiMappingTestSystem;

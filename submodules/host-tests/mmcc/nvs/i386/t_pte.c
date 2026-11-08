@@ -1,5 +1,5 @@
-#include <nvs/include/mienv.h>
-#include <nvs/arch/i386/hardware.h>
+#include <mm/include/mienv.h>
+#include <mm/arch/i386/hardware.h>
 
 static ULONG Checks, Failures;
 static MI_PTE Roots[2][1024];

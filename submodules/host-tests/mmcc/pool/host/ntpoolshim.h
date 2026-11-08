@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include <nvs/pool/include/poolenv.h>
+#include <mm/pool/include/poolenv.h>
 
 typedef ULONG POOL_TYPE, EX_POOL_PRIORITY;
 typedef ULONG64 POOL_FLAGS;

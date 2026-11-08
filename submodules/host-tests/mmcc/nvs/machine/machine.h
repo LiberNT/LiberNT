@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include <nvs/include/mienv.h>
+#include <mm/include/mienv.h>
 
 #define MACHINE_MAX_CPUS     8
 #define MACHINE_TLB_ENTRIES  64

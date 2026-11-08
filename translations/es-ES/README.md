@@ -254,11 +254,11 @@ LiberNT/
 ├── hal/             # Capas de abstracción de hardware para x86, Arm, Arm64, PowerPC y RISC-V
 ├── media/           # Fuentes, temas, archivos INF, sonidos e identidad visual
 ├── modules/         # Aplicaciones opcionales, pruebas y fondos de pantalla
-├── ntoskrnl/        # El kernel y el ejecutivo de NT
+├── ntos/            # El kernel y el ejecutivo de NT
 ├── sdk/             # Cabeceras, bibliotecas y herramientas de compilación
 ├── submodules/      # Recetas y parches de componentes externos
 ├── subsystems/      # CSRSS y el subsistema de Windows
-├── win32ss/         # win32k, USER, GDI y controladores de pantalla
+│   └── win/win32k/  # win32k, USER, GDI y controladores de pantalla
 ├── configure.sh     # Prepara una compilación en Linux, macOS y WSL2
 └── configure.cmd    # Prepara una compilación en Windows
 ```

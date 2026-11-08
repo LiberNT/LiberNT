@@ -7,8 +7,8 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <nvs/include/mienv.h>
-#include <nvs/arch/amd64/archdef.h>
+#include <mm/include/mienv.h>
+#include <mm/arch/amd64/archdef.h>
 
 static ULONG Checks, Failures;
 static MI_PTE Roots[2][512];

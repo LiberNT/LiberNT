@@ -417,10 +417,9 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     add_subdirectory(sdk/lib)
     add_subdirectory(media)
     add_subdirectory(modules)
-    add_subdirectory(ntoskrnl)
+    add_subdirectory(ntos)
     add_subdirectory(subsystems)
     add_subdirectory(sdk/tools/wpp)
-    add_subdirectory(win32ss)
 
     if(ARCH STREQUAL "arm64" AND ENABLE_FEX_ARM64EC AND FEX_ARM64EC_AVAILABLE AND NOT ARM64EC_RUNTIME)
         include(sdk/cmake/arm64ec.cmake)

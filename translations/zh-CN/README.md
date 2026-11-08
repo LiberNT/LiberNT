@@ -256,11 +256,11 @@ LiberNT/
 ├── hal/             # x86、Arm、Arm64、PowerPC 与 RISC-V 的硬件抽象层
 ├── media/           # 字体、主题、INF 文件、声音与品牌资源
 ├── modules/         # 可选应用、测试与壁纸
-├── ntoskrnl/        # NT 内核与执行体
+├── ntos/            # NT 内核与执行体
 ├── sdk/             # 头文件、库与构建工具
 ├── submodules/      # 外部组件的配方与补丁
 ├── subsystems/      # CSRSS 与 Windows 子系统
-├── win32ss/         # win32k、USER、GDI 与显示驱动
+│   └── win/win32k/  # win32k、USER、GDI 与显示驱动
 ├── configure.sh     # 在 Linux、macOS 与 WSL2 上配置构建
 └── configure.cmd    # 在 Windows 上配置构建
 ```

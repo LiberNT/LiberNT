@@ -7,8 +7,8 @@
  */
 
     .title "ARM HAL Cache Routines"
-    .include "ntoskrnl/include/internal/arm/kxarm.h"
-    .include "ntoskrnl/include/internal/arm/ksarm.h"
+    .include "ntos/include/internal/arm/kxarm.h"
+    .include "ntos/include/internal/arm/ksarm.h"
 
     NESTED_ENTRY v7_flush_dcache_all
     PROLOG_END v7_flush_dcache_all

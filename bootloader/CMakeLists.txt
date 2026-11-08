@@ -11,7 +11,7 @@ endif()
 
 include_directories(BEFORE include)
 include_directories(
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/include
+    ${REACTOS_SOURCE_DIR}/ntos/include
     ${REACTOS_SOURCE_DIR}/sdk/lib/cmlib
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/edk2)
@@ -281,7 +281,7 @@ if(WINLOAD_ASM_SOURCE)
     add_executable(winload
         ${winload_asm}
         ${WINLOAD_SOURCE}
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmboot.c
+        ${REACTOS_SOURCE_DIR}/ntos/config/cmboot.c
         lib/mm.c
         lib/pe.c
         winload/hw.c
