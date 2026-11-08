@@ -328,16 +328,16 @@ PoolVaAllocateMetadata(
     ULONG_PTR CommitEnd;
     KIRQL OldIrql;
 
-    Bytes = POOL_CACHE_ROUND_UP(Bytes);
-    if (Bytes == 0)
+    if (Bytes == 0 || Bytes > (SIZE_T)-1 - (POOL_CACHE_ALIGNMENT - 1))
         return NULL;
+    Bytes = POOL_CACHE_ROUND_UP(Bytes);
 
     POOL_LOCK_ACQUIRE(&Region->Lock, &OldIrql);
     PoolVaAssertMetadata(Region);
 
-    if (Region->MetadataNext + Bytes > Region->MetadataEnd)
+    if (Bytes > Region->MetadataEnd - Region->MetadataNext)
     {
-        SIZE_T Units = (Bytes + POOL_UNIT_MASK) >> POOL_UNIT_SHIFT;
+        SIZE_T Units = (Bytes >> POOL_UNIT_SHIFT) + ((Bytes & POOL_UNIT_MASK) != 0);
         PVOID Run = PoolVaReserveLocked(Region, Units, PoolUnitMetadata);
 
         if (Run == NULL)
