@@ -206,6 +206,29 @@ static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
 }
 #endif
 
+#ifdef __REACTOS__
+static void WINTRUST_FreeProviderData(CRYPT_PROVIDER_DATA *provData)
+{
+    if (provData->hProv)
+        CryptReleaseContext(provData->hProv, 0);
+    free(provData->padwTrustStepErrors);
+    free(provData->pPDSip);
+    free(provData->psPfns);
+    free(provData);
+}
+
+static void WINTRUST_SetUiFunctions(CRYPT_PROVIDER_DATA *provData)
+{
+    CRYPT_PROVUI_FUNCS *ui = (CRYPT_PROVUI_FUNCS *)(provData->psPfns + 1);
+    CRYPT_PROVUI_DATA *uiData = (CRYPT_PROVUI_DATA *)(ui + 1);
+
+    ui->cbStruct = sizeof(*ui);
+    ui->psUIData = uiData;
+    uiData->cbStruct = sizeof(*uiData);
+    provData->psPfns->psUIpfns = ui;
+}
+
+#endif
 static CRYPT_PROVIDER_DATA *WINTRUST_AllocateProviderData(void)
 {
     CRYPT_PROVIDER_DATA *provData;
@@ -225,12 +248,19 @@ static CRYPT_PROVIDER_DATA *WINTRUST_AllocateProviderData(void)
         goto oom;
     provData->pPDSip->cbStruct = sizeof(PROVDATA_SIP);
 
+#ifdef __REACTOS__
+    provData->psPfns = calloc(1, sizeof(CRYPT_PROVIDER_FUNCTIONS) + sizeof(CRYPT_PROVUI_FUNCS) + sizeof(CRYPT_PROVUI_DATA));
+#else
     provData->psPfns = calloc(1, sizeof(CRYPT_PROVIDER_FUNCTIONS));
+#endif
     if (!provData->psPfns)
         goto oom;
     provData->psPfns->cbStruct = sizeof(CRYPT_PROVIDER_FUNCTIONS);
 #ifdef __REACTOS__
     GetSystemTimeAsFileTime(&provData->sftSystemTime);
+    provData->dwEncoding = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    if (!CryptAcquireContextW(&provData->hProv, NULL, MS_ENH_RSA_AES_PROV_W, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
+        provData->hProv = 0;
 #endif
     return provData;
 
@@ -308,6 +338,9 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
         err = GetLastError();
         goto error;
     }
+#ifdef __REACTOS__
+    WINTRUST_SetUiFunctions(provData);
+#endif
 
     data->hWVTStateData = provData;
     provData->pWintrustData = data;
@@ -318,6 +351,10 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
     provData->hWndParent = hwnd;
     provData->pgActionID = actionID;
     WintrustGetRegPolicyFlags(&provData->dwRegPolicySettings);
+#ifdef __REACTOS__
+    /* TODO: INFO_NEEDED: where Windows 11 reads this value from; it reports 1 for every action measured */
+    provData->dwRegSecuritySettings = 1;
+#endif
 
     numSteps = WINTRUST_AddTrustStepsFromFunctions(verifySteps,
      provData->psPfns);
@@ -355,14 +392,23 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
     {
         err = TRUST_E_NOSIGNATURE;
     }
+    if (provData->pPDSip && provData->pPDSip->pSip)
+    {
+        provData->psPfns->pfnFree(provData->pPDSip->pSip);
+        provData->pPDSip->pSip = NULL;
+    }
 #endif
     goto done;
 
 error:
+#ifdef __REACTOS__
+    WINTRUST_FreeProviderData(provData);
+#else
     free(provData->padwTrustStepErrors);
     free(provData->pPDSip);
     free(provData->psPfns);
     free(provData);
+#endif
 
 done:
     TRACE("returning %08lx\n", err);
@@ -382,10 +428,14 @@ static LONG WINTRUST_DefaultClose(HWND hwnd, GUID *actionID,
         if (provData->psPfns->pfnCleanupPolicy)
             err = provData->psPfns->pfnCleanupPolicy(provData);
 
+#ifdef __REACTOS__
+        WINTRUST_FreeProviderData(provData);
+#else
         free(provData->padwTrustStepErrors);
         free(provData->pPDSip);
         free(provData->psPfns);
         free(provData);
+#endif
         data->hWVTStateData = NULL;
     }
     TRACE("returning %08lx\n", err);
@@ -530,6 +580,9 @@ static LONG WINTRUST_CertVerify(HWND hwnd, GUID *actionID,
         err = GetLastError();
         goto error;
     }
+#ifdef __REACTOS__
+    WINTRUST_SetUiFunctions(provData);
+#endif
     if (!provData->psPfns->pfnObjectTrust)
         provData->psPfns->pfnObjectTrust = WINTRUST_CertVerifyObjTrust;
     /* Not sure why, but native skips the policy check */
@@ -547,10 +600,14 @@ static LONG WINTRUST_CertVerify(HWND hwnd, GUID *actionID,
     goto done;
 
 error:
+#ifdef __REACTOS__
+    WINTRUST_FreeProviderData(provData);
+#else
     free(provData->padwTrustStepErrors);
     free(provData->pPDSip);
     free(provData->psPfns);
     free(provData);
+#endif
 
 done:
     TRACE("returning %08lx\n", err);

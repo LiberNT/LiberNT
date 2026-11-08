@@ -683,6 +683,135 @@ TestConfigCi(VOID)
 
 static
 VOID
+TestProviderData(VOID)
+{
+    static const GUID PeSubject = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO File = { sizeof(File) };
+    WINTRUST_BLOB_INFO Blob = { sizeof(Blob) };
+    WINTRUST_CERT_INFO Cert = { sizeof(Cert) };
+    WINTRUST_DATA Data = { sizeof(Data) };
+    CRYPT_PROVIDER_DATA *ProvData;
+    PCCERT_CONTEXT Context;
+    BYTE *Image;
+    FILETIME Now;
+    DWORD Size, Choice, i;
+    HANDLE Handle;
+
+    Handle = CreateFileW(Self, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    Size = GetFileSize(Handle, NULL);
+    Image = HeapAlloc(GetProcessHeap(), 0, Size);
+    if (!Image || !ReadFile(Handle, Image, Size, &Size, NULL))
+        Size = 0;
+    CloseHandle(Handle);
+    Context = SelfSigned(L"CN=LiberNT provider data", NULL);
+    GetSystemTimeAsFileTime(&Now);
+
+    for (Choice = 0; Choice < 3; Choice++)
+    {
+        ZeroMemory(&Data, sizeof(Data));
+        Data.cbStruct = sizeof(Data);
+        Data.dwUIChoice = WTD_UI_NONE;
+        Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+        Data.dwStateAction = WTD_STATEACTION_VERIFY;
+        if (Choice == 0)
+        {
+            File.pcwszFilePath = Self;
+            Data.dwUnionChoice = WTD_CHOICE_FILE;
+            Data.pFile = &File;
+        }
+        else if (Choice == 1)
+        {
+            Blob.gSubject = PeSubject;
+            Blob.pcwszDisplayName = L"lntwtblob display";
+            Blob.cbMemObject = Size;
+            Blob.pbMemObject = Image;
+            Data.dwUnionChoice = WTD_CHOICE_BLOB;
+            Data.pBlob = &Blob;
+        }
+        else
+        {
+            Cert.psCertContext = (CERT_CONTEXT *)Context;
+            Cert.psftVerifyAsOf = &Now;
+            Data.dwUnionChoice = WTD_CHOICE_CERT;
+            Data.pCert = &Cert;
+        }
+        ok_hex(WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data),
+               Choice == 2 ? CERT_E_UNTRUSTEDROOT : TRUST_E_NOSIGNATURE);
+        ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+        ok(ProvData != NULL, "choice %lu: no provider data\n", Choice);
+        if (ProvData)
+        {
+            ok(ProvData->hProv != 0, "choice %lu: no provider\n", Choice);
+            ok_hex(ProvData->dwRegSecuritySettings, 1);
+            ok_hex(ProvData->dwEncoding, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING);
+            ok(ProvData->pszUsageOID && !strcmp(ProvData->pszUsageOID, szOID_PKIX_KP_CODE_SIGNING),
+               "choice %lu: usage %s\n", Choice, ProvData->pszUsageOID);
+            ok(ProvData->psPfns->psUIpfns && ProvData->psPfns->psUIpfns->cbStruct == sizeof(CRYPT_PROVUI_FUNCS) &&
+               ProvData->psPfns->psUIpfns->psUIData &&
+               ProvData->psPfns->psUIpfns->psUIData->cbStruct == sizeof(CRYPT_PROVUI_DATA),
+               "choice %lu: unexpected UI functions\n", Choice);
+            ok_long(ProvData->cdwTrustStepErrors, TRUSTERROR_MAX_STEPS);
+            ok_hex(ProvData->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV], 0);
+            if (Choice < 2)
+            {
+                DWORD SipError = Choice ? ERROR_FILE_NOT_FOUND : ERROR_INVALID_PARAMETER;
+
+                ok(ProvData->pPDSip && IsEqualGUID(&ProvData->pPDSip->gSubject, &PeSubject) && !ProvData->pPDSip->pSip,
+                   "choice %lu: unexpected SIP data\n", Choice);
+                ok_hex(ProvData->padwTrustStepErrors[TRUSTERROR_STEP_SIP], SipError);
+                ok_hex(ProvData->padwTrustStepErrors[TRUSTERROR_STEP_MSG_SIGNERCOUNT], SipError);
+                for (i = TRUSTERROR_STEP_FINAL_OBJPROV; i <= TRUSTERROR_STEP_FINAL_CERTPROV; i++)
+                    ok_hex(ProvData->padwTrustStepErrors[i], TRUST_E_NOSIGNATURE);
+                ok_long(ProvData->csSigners, 0);
+            }
+            else
+            {
+                ok(!ProvData->pPDSip, "certificate choice has SIP data\n");
+                for (i = 0; i < ProvData->cdwTrustStepErrors; i++)
+                    ok(!ProvData->padwTrustStepErrors[i], "step %lu is %#lx\n", i, ProvData->padwTrustStepErrors[i]);
+                ok(ProvData->csSigners == 1 && !CompareFileTime(&ProvData->pasSigners[0].sftVerifyAsOf, &Now),
+                   "certificate signer time not taken from the caller\n");
+            }
+        }
+        Data.dwStateAction = WTD_STATEACTION_CLOSE;
+        WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+    }
+    {
+        static const struct { GUID Action; const char *Usage; } Actions[] = {
+            { DRIVER_ACTION_VERIFY, szOID_WHQL_CRYPTO },
+            { HTTPSPROV_ACTION, szOID_PKIX_KP_CODE_SIGNING },
+            { WINTRUST_ACTION_GENERIC_CHAIN_VERIFY, szOID_PKIX_KP_CODE_SIGNING },
+        };
+
+        for (i = 0; i < RTL_NUMBER_OF(Actions); i++)
+        {
+            GUID Action = Actions[i].Action;
+
+            ZeroMemory(&Data, sizeof(Data));
+            Data.cbStruct = sizeof(Data);
+            Data.dwUIChoice = WTD_UI_NONE;
+            Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+            Data.dwStateAction = WTD_STATEACTION_VERIFY;
+            File.pcwszFilePath = Self;
+            Data.dwUnionChoice = WTD_CHOICE_FILE;
+            Data.pFile = &File;
+            WinVerifyTrust(INVALID_HANDLE_VALUE, &Action, &Data);
+            ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+            ok(ProvData && ProvData->pszUsageOID && !strcmp(ProvData->pszUsageOID, Actions[i].Usage) &&
+               ProvData->dwRegSecuritySettings == 1 && (!ProvData->pPDSip || !ProvData->pPDSip->pSip),
+               "action %lu: usage %s\n", i, ProvData ? ProvData->pszUsageOID : NULL);
+            Data.dwStateAction = WTD_STATEACTION_CLOSE;
+            WinVerifyTrust(INVALID_HANDLE_VALUE, &Action, &Data);
+        }
+    }
+    if (Context)
+        CertFreeCertificateContext(Context);
+    HeapFree(GetProcessHeap(), 0, Image);
+}
+
+static
+VOID
 WINAPI
 CdfError(DWORD Area, DWORD Local, WCHAR *Line)
 {
@@ -810,6 +939,24 @@ TestCatalogDetails(VOID)
 }
 
 static
+BOOL
+DumpContains(const char *Needle)
+{
+    static char Text[32768];
+    DWORD Read = 0, Length = (DWORD)strlen(Needle), i;
+    HANDLE Handle = CreateFileW(L"C:\\TRUSTPOL.TXT", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+
+    if (Handle == INVALID_HANDLE_VALUE)
+        return FALSE;
+    ReadFile(Handle, Text, sizeof(Text), &Read, NULL);
+    CloseHandle(Handle);
+    for (i = 0; i + Length <= Read; i++)
+        if (!memcmp(Text + i, Needle, Length))
+            return TRUE;
+    return FALSE;
+}
+
+static
 VOID
 TestDump(VOID)
 {
@@ -846,6 +993,12 @@ TestDump(VOID)
             ok(Read == sizeof(Start) - 1 && !memcmp(Buffer, Start, Read), "unexpected dump start\n");
             CloseHandle(Handle);
         }
+        ok(DumpContains("\r\n\0|       |.. hFile:                    0x"), "no file handle line\n");
+        ok(DumpContains("\r\n\0|       +-- pgKnownSubject:           \r\n"), "no known subject line\n");
+        ok(DumpContains("\r\n\0|.. dwRegSecuritySettings:            0x00000001\r\n"), "no security settings line\n");
+        ok(DumpContains("\r\n\0|.. dwEncoding:                       0x00010001\r\n"), "no encoding line\n");
+        ok(DumpContains("\r\n\0|   |.. Step[32]:                     0x800b0100\r\n"), "no lowercase step line\n");
+        ok(DumpContains("\r\n\0|       |.. psUIData:\r\n"), "no UI data block\n");
         ok_hex(Dump(ProvData), S_OK);
         Handle = CreateFileW(L"C:\\TRUSTPOL.TXT", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
         ok_hex(Dump(ProvData), S_FALSE);
@@ -876,5 +1029,6 @@ START_TEST(Internals)
     TestFixedResults();
     TestConfigCi();
     TestCatalogDetails();
+    TestProviderData();
     TestDump();
 }
