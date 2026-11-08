@@ -36,7 +36,7 @@ static WORK_QUEUE_ITEM MiPagingFileExtendItem;
 static KEVENT MiPagingFileExtendEvent;
 static volatile LONG MiPagingFileExtendQueued;
 static volatile LONG64 MiPagingFileExtendPages;
-static ULONG64 MiPagingFileExtendFailTime;
+static volatile LONG64 MiPagingFileExtendFailTime;
 static PKTHREAD MiPagingFileExtendThread;
 static WORK_QUEUE_ITEM MiCommitReportItem;
 static volatile LONG MiCommitReportQueued;
@@ -200,7 +200,7 @@ MiExtendPagingFileWorker(
             if (Request <= 0 || Current + (ULONG64)Request >= Target ||
                 !MiExtendPagingFileTo(PagingFile, Current + (ULONG64)Request))
             {
-                MiPagingFileExtendFailTime = KeQueryInterruptTime();
+                MI_ATOMIC_WRITE64(&MiPagingFileExtendFailTime, (LONG64)KeQueryInterruptTime());
             }
         }
 
@@ -359,10 +359,12 @@ MiExpandCommit(
         return FALSE;
     }
 
-    if (Pages == 0 && MiPagingFileExtendFailTime != 0 &&
-        KeQueryInterruptTime() - MiPagingFileExtendFailTime < MI_PAGEFILE_EXTEND_BACKOFF)
+    if (Pages == 0)
     {
-        return FALSE;
+        ULONG64 LastFailure = (ULONG64)MI_ATOMIC_READ64(&MiPagingFileExtendFailTime);
+
+        if (LastFailure != 0 && KeQueryInterruptTime() - LastFailure < MI_PAGEFILE_EXTEND_BACKOFF)
+            return FALSE;
     }
 
     Pending = MI_ATOMIC_READ64(&MiPagingFileExtendPages);

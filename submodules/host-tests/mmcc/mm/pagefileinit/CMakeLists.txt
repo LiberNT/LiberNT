@@ -11,5 +11,10 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
             --cc ${CMAKE_C_COMPILER})
         add_test(NAME mm.pagefile_growth COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pagefile-growth-test.py
             --source ${MMCC_KERNEL_ROOT}/mm/nt/ntpagefile.c --cc ${CMAKE_C_COMPILER})
+        option(MM_PAGEFILE_TSAN "Run the paging-file backoff ThreadSanitizer regression" OFF)
+        if(MM_PAGEFILE_TSAN)
+            add_test(NAME mm.pagefile_backoff_tsan COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pagefile-growth-test.py
+                --source ${MMCC_KERNEL_ROOT}/mm/nt/ntpagefile.c --cc ${CMAKE_C_COMPILER} --backoff --tsan)
+        endif()
     endif()
 endif()
