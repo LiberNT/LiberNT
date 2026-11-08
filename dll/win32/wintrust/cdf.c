@@ -841,3 +841,28 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATCDFEnumAttributes(CRYPTCATCDF *pCDF, CRYPTCAT
     }
     return cdf_next_attr(cdf, cdf->members[i].attrs, cdf->members[i].attr_count, pMember, pPrevAttr, pfnParseError);
 }
+
+/***********************************************************************
+ *      CryptCATCDFEnumAttributesWithCDFTag  (WINTRUST.@)
+ */
+CRYPTCATATTRIBUTE * WINAPI CryptCATCDFEnumAttributesWithCDFTag(CRYPTCATCDF *pCDF, LPWSTR pwszMemberTag,
+                                                               CRYPTCATMEMBER *pMember,
+                                                               CRYPTCATATTRIBUTE *pPrevAttr,
+                                                               PFN_CDF_PARSE_ERROR_CALLBACK pfnParseError)
+{
+    struct cdf *cdf;
+    DWORD i;
+
+    TRACE("(%p %s %p %p %p)\n", pCDF, debugstr_w(pwszMemberTag), pMember, pPrevAttr, pfnParseError);
+
+    if (!(cdf = cdf_from_public(pCDF))) return NULL;
+    for (i = 0; pwszMemberTag && i < cdf->member_count && cdf->members[i].line->key != pwszMemberTag &&
+                _wcsicmp(cdf->members[i].line->key, pwszMemberTag); i++)
+        ;
+    if (!pwszMemberTag || !pMember || i == cdf->member_count || cdf->members[i].member != pMember)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    return cdf_next_attr(cdf, cdf->members[i].attrs, cdf->members[i].attr_count, pMember, pPrevAttr, pfnParseError);
+}

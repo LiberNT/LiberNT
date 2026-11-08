@@ -17,7 +17,7 @@
 @ stdcall CryptCATAllocSortedMemberInfo(ptr wstr)
 @ stdcall CryptCATCDFClose(ptr)
 @ stdcall CryptCATCDFEnumAttributes(ptr ptr ptr ptr)
-@ stub CryptCATCDFEnumAttributesWithCDFTag
+@ stdcall CryptCATCDFEnumAttributesWithCDFTag(ptr wstr ptr ptr ptr)
 @ stdcall CryptCATCDFEnumCatAttributes(ptr ptr ptr)
 @ stdcall CryptCATCDFEnumMembers(ptr ptr ptr)
 @ stub CryptCATCDFEnumMembersByCDFTag
