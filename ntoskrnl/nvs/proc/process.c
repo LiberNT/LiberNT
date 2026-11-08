@@ -9,6 +9,42 @@
 
 #include <nvs/include/miproc.h>
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertProcessList(
+    _In_ PMI_PROCESS_MANAGER Manager,
+    _In_opt_ PMI_PROCESS Required,
+    _In_opt_ PMI_PROCESS Excluded)
+{
+    PLIST_ENTRY Head = &Manager->ProcessList;
+    PLIST_ENTRY Link = Head->Flink;
+    ULONG Count = 0;
+    BOOLEAN CursorFound = (BOOLEAN)(Manager->TrimCursor == Head);
+    BOOLEAN RequiredFound = (BOOLEAN)(Required == NULL);
+
+    MI_ASSERT(Head->Flink != NULL && Head->Blink != NULL && Manager->TrimCursor != NULL);
+    while (Link != Head && Count < Manager->ProcessCount)
+    {
+        PMI_PROCESS Process;
+
+        MI_ASSERT(Link != NULL && Link->Flink != NULL && Link->Blink != NULL);
+        Process = CONTAINING_RECORD(Link, MI_PROCESS, SystemLink);
+        MI_ASSERT(Link->Flink->Blink == Link && Link->Blink->Flink == Link);
+        MI_ASSERT(Process != Excluded);
+        CursorFound |= (BOOLEAN)(Link == Manager->TrimCursor);
+        RequiredFound |= (BOOLEAN)(Process == Required);
+        Link = Link->Flink;
+        Count++;
+    }
+    MI_ASSERT(Link == Head && Count == Manager->ProcessCount);
+    MI_ASSERT(Head->Flink->Blink == Head && Head->Blink->Flink == Head);
+    MI_ASSERT(CursorFound && RequiredFound);
+}
+#else
+#define MiAssertProcessList(Manager, Required, Excluded) ((VOID)0)
+#endif
+
 NTSTATUS
 MiProcessManagerInitialize(
     _Inout_ PMI_SYSTEM System,
@@ -78,6 +114,7 @@ MiProcessManagerUninitialize(
     _Inout_ PMI_SYSTEM System,
     _Inout_ PMI_PROCESS_MANAGER Manager)
 {
+    MiAssertProcessList(Manager, NULL, NULL);
     MI_ASSERT(IsListEmpty(&Manager->ProcessList));
     MI_ASSERT(Manager->ProcessCount == 0);
     MI_ASSERT(Manager->TrimCursor == &Manager->ProcessList);
@@ -129,10 +166,10 @@ MiProcessCreate(
     }
 
     MI_MUTEX_ACQUIRE(&Manager->Lock);
-    MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
-    MI_ASSERT(Manager->TrimCursor != NULL);
+    MiAssertProcessList(Manager, NULL, Process);
     InsertTailList(&Manager->ProcessList, &Process->SystemLink);
     Manager->ProcessCount++;
+    MiAssertProcessList(Manager, Process, NULL);
     MI_MUTEX_RELEASE(&Manager->Lock);
     return STATUS_SUCCESS;
 }
@@ -155,10 +192,10 @@ MiProcessAdopt(
         return Status;
 
     MI_MUTEX_ACQUIRE(&Manager->Lock);
-    MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
-    MI_ASSERT(Manager->TrimCursor != NULL);
+    MiAssertProcessList(Manager, NULL, Process);
     InsertTailList(&Manager->ProcessList, &Process->SystemLink);
     Manager->ProcessCount++;
+    MiAssertProcessList(Manager, Process, NULL);
     MI_MUTEX_RELEASE(&Manager->Lock);
     return STATUS_SUCCESS;
 }
@@ -169,6 +206,7 @@ MiProcessDelete(
     _Inout_ PMI_PROCESS Process)
 {
     MI_MUTEX_ACQUIRE(&Manager->Lock);
+    MiAssertProcessList(Manager, Process, NULL);
     MI_ASSERT(Manager->ProcessCount != 0 && !IsListEmpty(&Manager->ProcessList));
     MI_ASSERT(Process->SystemLink.Flink->Blink == &Process->SystemLink);
     MI_ASSERT(Process->SystemLink.Blink->Flink == &Process->SystemLink);
@@ -179,6 +217,7 @@ MiProcessDelete(
     Manager->ProcessCount--;
     MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
     MI_ASSERT(Manager->ProcessCount != 0 || Manager->TrimCursor == &Manager->ProcessList);
+    MiAssertProcessList(Manager, NULL, Process);
     MI_MUTEX_RELEASE(&Manager->Lock);
 
     MiCleanAddressSpace(&Process->Space);
@@ -324,8 +363,7 @@ MiBalanceMemory(
     }
 
     MI_MUTEX_ACQUIRE(&Manager->Lock);
-    MI_ASSERT((Manager->ProcessCount == 0) == IsListEmpty(&Manager->ProcessList));
-    MI_ASSERT(Manager->TrimCursor != NULL);
+    MiAssertProcessList(Manager, NULL, NULL);
 
     for (Pass = 0; Pass < 2 && Available + Trimmed < Manager->AvailableHigh; Pass++)
     {
@@ -360,6 +398,7 @@ MiBalanceMemory(
         }
     }
 
+    MiAssertProcessList(Manager, NULL, NULL);
     MI_MUTEX_RELEASE(&Manager->Lock);
 
     if (Available + Trimmed < Manager->AvailableHigh)
@@ -382,8 +421,10 @@ MiRelieveFragmentation(
     ULONG Round;
 
     MI_MUTEX_ACQUIRE(&Manager->Lock);
+    MiAssertProcessList(Manager, NULL, NULL);
     for (Link = Manager->ProcessList.Flink; Link != &Manager->ProcessList; Link = Link->Flink)
         Relieved += MiProcessEmptyWorkingSet(CONTAINING_RECORD(Link, MI_PROCESS, SystemLink));
+    MiAssertProcessList(Manager, NULL, NULL);
     MI_MUTEX_RELEASE(&Manager->Lock);
 
     Relieved += MiTrimAddressSpace(&System->SystemSpace, ~0u, TRUE);
