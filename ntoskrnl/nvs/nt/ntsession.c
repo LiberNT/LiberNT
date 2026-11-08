@@ -60,19 +60,41 @@ MiSessionOfProcess(
     return (PMI_SESSION)Process->Session;
 }
 
+#if DBG || defined(MM_HOST_TEST)
 static
 VOID
 MiSessionAssertLocked(
     _In_ PMI_SESSION Session)
 {
-    UNREFERENCED_PARAMETER(Session);
+    PLIST_ENTRY Head = &Session->Processes;
+    PLIST_ENTRY Entry = Head->Flink;
+    LONG Count = 0;
+
     ASSERT(Session->ReferenceCount >= Session->ProcessCount && Session->ProcessCount >= 0);
-    ASSERT((Session->ProcessCount == 0) == IsListEmpty(&Session->Processes));
-    ASSERT(Session->Processes.Flink->Blink == &Session->Processes);
-    ASSERT(Session->Processes.Blink->Flink == &Session->Processes);
+    ASSERT((Session->ProcessCount == 0) == IsListEmpty(Head));
+    ASSERT(Head->Flink->Blink == Head);
+    ASSERT(Head->Blink->Flink == Head);
     ASSERT(Session->Link.Flink->Blink == &Session->Link);
     ASSERT(Session->Link.Blink->Flink == &Session->Link);
+    while (Entry != Head && Count < Session->ProcessCount)
+    {
+        PMI_PROCESS Native;
+        PEPROCESS Process;
+
+        ASSERT(Entry != NULL && Entry->Flink != NULL && Entry->Blink != NULL);
+        ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        Native = CONTAINING_RECORD(Entry, MI_PROCESS, SessionLink);
+        Process = Native->SessionProcess;
+        ASSERT(Process != NULL && MI_PROCESS_OF(Process) == Native);
+        ASSERT(MiSessionOfProcess(Process) == Session && (Process->Flags & PSF_PROCESS_IN_SESSION_BIT));
+        Entry = Entry->Flink;
+        Count++;
+    }
+    ASSERT(Entry == Head && Count == Session->ProcessCount);
 }
+#else
+#define MiSessionAssertLocked(Session) ((VOID)0)
+#endif
 
 static
 VOID

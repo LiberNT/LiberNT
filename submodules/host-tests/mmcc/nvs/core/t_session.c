@@ -248,9 +248,47 @@ SessionMoveProcess(void)
     MiSessionTestCurrent = NULL;
 }
 
+static void
+SessionMultipleMembers(void)
+{
+    struct _EPROCESS_HOST Leader, Members[12];
+    MI_PROCESS LeaderNative, Native[12];
+    ULONG Id, i;
+    PVOID Session;
+
+    SessionProcessInitialize(&Leader, &LeaderNative);
+    MiSessionTestCurrent = &Leader;
+    CHECK(MmSessionCreate(&Id) == STATUS_SUCCESS);
+    Session = MmGetSessionById(Id);
+    CHECK(Session != NULL);
+    for (i = 0; i < RTL_NUMBER_OF(Members); i++)
+    {
+        SessionProcessInitialize(&Members[i], &Native[i]);
+        MiSessionAddProcess(&Members[i]);
+        CHECK(Members[i].Session == Session && MmGetSessionId(&Members[i]) == Id);
+    }
+    for (i = 1; i < RTL_NUMBER_OF(Members); i += 2)
+    {
+        MiSessionRemoveProcess(&Members[i]);
+        CHECK(Members[i].Session == NULL && !(Members[i].Flags & PSF_PROCESS_IN_SESSION_BIT));
+    }
+    CHECK(MmSessionDelete(Id) == STATUS_SUCCESS);
+    for (i = 0; i < RTL_NUMBER_OF(Members); i += 2)
+    {
+        CHECK(MmGetSessionId(&Members[i]) == Id);
+        MiSessionRemoveProcess(&Members[i]);
+    }
+    CHECK(MmGetSessionById(Id) == NULL);
+    MmQuitNextSession(Session);
+    MiSessionRemoveProcess(&Leader);
+    CHECK(MiSessionTestAllocations == 0);
+    MiSessionTestCurrent = NULL;
+}
+
 void
 TestSession(void)
 {
+    SessionMultipleMembers();
     SessionCreateRace();
     SessionLifecycle();
     SessionAttachRundown();
