@@ -221,6 +221,7 @@ typedef struct _LX_DEVPTS
     ULONG Mode;
     ULONG Uid;
     ULONG Gid;
+    ULONG Max;
     BOOLEAN UidSet;
     BOOLEAN GidSet;
 } LX_DEVPTS, *PLX_DEVPTS;
