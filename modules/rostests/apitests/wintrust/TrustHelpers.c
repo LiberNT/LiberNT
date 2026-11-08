@@ -6,6 +6,7 @@
  */
 
 #include <apitest.h>
+#include <winreg.h>
 #include <wincrypt.h>
 #include <wintrust.h>
 #include <softpub.h>
@@ -79,6 +80,71 @@ TestHttpsUsage(PFN_DEFAULT_USAGE GetDefault, const char *Oid, DWORD AuthType)
     ok(Usage.pDefPolicyCallbackData == Policy, "%s: policy pointer changed\n", Oid);
 }
 
+static LONG UsageAllocCalls, UsageFreeCalls;
+
+__declspec(dllexport)
+BOOL
+WintrustTestUsageAlloc(const char *Oid, CRYPT_PROVIDER_DEFUSAGE *Usage)
+{
+    UsageAllocCalls++;
+    Usage->pDefPolicyCallbackData = (PVOID)(ULONG_PTR)0x1234;
+    return TRUE;
+}
+
+__declspec(dllexport)
+BOOL
+WintrustTestUsageFree(const char *Oid, CRYPT_PROVIDER_DEFUSAGE *Usage)
+{
+    UsageFreeCalls++;
+    return TRUE;
+}
+
+static
+VOID
+TestUsageCallbacks(PFN_DEFAULT_USAGE GetDefault)
+{
+    static const char Oid[] = "1.3.6.1.4.1.99999.7";
+    GUID Action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    CRYPT_PROVIDER_REGDEFUSAGE Register;
+    CRYPT_PROVIDER_DEFUSAGE Usage;
+    WCHAR Self[MAX_PATH];
+    HKEY Key;
+
+    GetModuleFileNameW(NULL, Self, RTL_NUMBER_OF(Self));
+    ZeroMemory(&Register, sizeof(Register));
+    Register.cbStruct = sizeof(Register);
+    Register.pgActionID = &Action;
+    Register.pwszDllName = Self;
+    Register.pwszLoadCallbackDataFunctionName = (char *)"WintrustTestUsageAlloc";
+    Register.pwszFreeCallbackDataFunctionName = (char *)"WintrustTestUsageFree";
+    if (!WintrustAddDefaultForUsage(Oid, &Register))
+    {
+        skip("Cannot register the test usage (%lu)\n", GetLastError());
+        return;
+    }
+
+    ZeroMemory(&Usage, sizeof(Usage));
+    Usage.cbStruct = sizeof(Usage);
+    ok_int(GetDefault(DWACTION_ALLOCANDFILL, Oid, &Usage), TRUE);
+    ok(Usage.pDefPolicyCallbackData == (PVOID)(ULONG_PTR)0x1234, "policy data %p\n", Usage.pDefPolicyCallbackData);
+    ok_long(UsageAllocCalls, 1);
+    ok_long(UsageFreeCalls, 0);
+    ok_int(GetDefault(3, Oid, &Usage), TRUE);
+    ok_int(GetDefault(0, Oid, &Usage), TRUE);
+    ok_long(UsageAllocCalls, 1);
+    ok_long(UsageFreeCalls, 0);
+    ok_int(GetDefault(DWACTION_FREE, Oid, &Usage), TRUE);
+    ok_long(UsageAllocCalls, 1);
+    ok_long(UsageFreeCalls, 1);
+
+    if (!RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography\\Providers\\Trust\\Usages", 0,
+                       KEY_ALL_ACCESS, &Key))
+    {
+        RegDeleteKeyW(Key, L"1.3.6.1.4.1.99999.7");
+        RegCloseKey(Key);
+    }
+}
+
 static
 VOID
 TestDefaultForUsage(HMODULE Wintrust)
@@ -125,6 +191,7 @@ TestDefaultForUsage(HMODULE Wintrust)
     TestHttpsUsage(GetDefault, szOID_PKIX_KP_CLIENT_AUTH, AUTHTYPE_CLIENT);
     TestHttpsUsage(GetDefault, szOID_SERVER_GATED_CRYPTO, AUTHTYPE_SERVER);
     TestHttpsUsage(GetDefault, szOID_SGC_NETSCAPE, AUTHTYPE_SERVER);
+    TestUsageCallbacks(GetDefault);
 }
 
 static
