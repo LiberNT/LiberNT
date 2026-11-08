@@ -17,6 +17,7 @@
 #define KDP_BOOT_LOG_FALLBACK_POLLS 120
 #define KDP_BOOT_LOG_RESERVE_SIZE (128 * 1024)
 #define KDP_BOOT_LOG_STOP_TIMEOUT_MS 5000
+#define KDP_BOOT_LOG_STAGING_SIZE (4 * 1024 * 1024)
 
 typedef struct _KDP_BOOT_LOG_STATE
 {
@@ -57,6 +58,9 @@ static ULONG64 KdpBootLogPosition;
 static ULONG64 KdpBootLogReserveEnd;
 static PRETRIEVAL_POINTERS_BUFFER KdpBootLogExtents;
 static UCHAR KdpBootLogTail[PAGE_SIZE];
+static PCHAR KdpBootLogStaging;
+static ULONG KdpBootLogStaged;
+static ULONG64 KdpBootLogStagingLost;
 
 static NTSTATUS KdpBootLogAppend(_In_reads_bytes_(Length) PCHAR Data, _In_ ULONG Length)
 {
@@ -160,6 +164,47 @@ static VOID KdpBootLogTrim(VOID)
 
 static NTSTATUS KdpBootLogOpen(VOID);
 
+static VOID KdpBootLogStage(VOID)
+{
+    ULONG Length, Copy;
+    ULONG64 Lost;
+
+    if (KdpBootLogStaging == NULL)
+        KdpBootLogStaging = ExAllocatePoolWithTag(NonPagedPool, KDP_BOOT_LOG_STAGING_SIZE, 'gLdK');
+    if (KdpBootLogStaging == NULL)
+        return;
+
+    do
+    {
+        Length = KdpCopyPrintBufferFrom(&KdpBootLogPosition, KdpBootLogBuffer, sizeof(KdpBootLogBuffer), &Lost);
+        Copy = min(Length, KDP_BOOT_LOG_STAGING_SIZE - KdpBootLogStaged);
+        RtlCopyMemory(KdpBootLogStaging + KdpBootLogStaged, KdpBootLogBuffer, Copy);
+        KdpBootLogStaged += Copy;
+        KdpBootLogStagingLost += Lost + (Length - Copy);
+    } while (Length == sizeof(KdpBootLogBuffer));
+}
+
+static VOID KdpBootLogFlushStaging(VOID)
+{
+    CHAR Notice[96];
+
+    if (KdpBootLogStagingLost != 0)
+    {
+        RtlStringCbPrintfA(Notice, sizeof(Notice), "\n[%I64u bytes of log output were lost before they could be written]\n",
+                           KdpBootLogStagingLost);
+        KdpBootLogAppend(Notice, (ULONG)strlen(Notice));
+    }
+    if (KdpBootLogStaging != NULL)
+    {
+        if (KdpBootLogStaged != 0)
+            KdpBootLogAppend(KdpBootLogStaging, KdpBootLogStaged);
+        ExFreePoolWithTag(KdpBootLogStaging, 'gLdK');
+    }
+    KdpBootLogStaging = NULL;
+    KdpBootLogStaged = 0;
+    KdpBootLogStagingLost = 0;
+}
+
 static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
 {
     IO_STATUS_BLOCK IoStatus;
@@ -182,10 +227,15 @@ static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
                 KeSetEvent(&KdpBootLogStopped, IO_NO_INCREMENT, FALSE);
             else if (NT_SUCCESS(KdpBootLogOpen()))
             {
+                KdpBootLogFlushStaging();
                 DPRINT1("KD: Boot log %s opened\n", KdpBootLogName);
                 continue;
             }
-            else if (++KdpBootLogWaitPolls % KDP_BOOT_LOG_REPORT_POLLS == 0)
+            else
+            {
+                KdpBootLogStage();
+            }
+            if (!KdpBootLogStopping && ++KdpBootLogWaitPolls % KDP_BOOT_LOG_REPORT_POLLS == 0)
             {
                 DPRINT1("KD: Boot log %s still not opened after %lu s (0x%08lx)\n", KdpBootLogName,
                         KdpBootLogWaitPolls * KDP_BOOT_LOG_POLL_MS / 1000, KdpBootLogLastStatus);
@@ -456,7 +506,7 @@ static BOOLEAN KdpBootLogResolveGpt(VOID)
     NTSTATUS Status;
 
     if (_strnicmp(KdpBootLogPath, "GPT{", 4) || !(Close = strchr(KdpBootLogPath, '}')) ||
-        Close - KdpBootLogPath - 3 >= (LONG_PTR)RTL_NUMBER_OF(GuidText))
+        Close - KdpBootLogPath - 3 >= (LONG_PTR)RTL_NUMBER_OF(GuidText) - 1)
         return FALSE;
     for (Index = 0; KdpBootLogPath + 3 + Index <= Close; ++Index)
         GuidText[Index] = (WCHAR)KdpBootLogPath[3 + Index];
