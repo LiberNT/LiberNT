@@ -31,6 +31,12 @@ FdtDriverOpenByAddress(
 
 NTSTATUS
 NTAPI
+FdtDriverOpenByCompatible(
+    _In_z_ PCSTR Compatible,
+    _Out_ PFDT_DRIVER_TREE Tree);
+
+NTSTATUS
+NTAPI
 FdtDriverOpenAlias(
     _In_z_ PCSTR PathOrAlias,
     _Out_ PFDT_DRIVER_TREE Tree);

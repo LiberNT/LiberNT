@@ -103,6 +103,34 @@ Done:
 
 NTSTATUS
 NTAPI
+FdtDriverOpenByCompatible(
+    _In_z_ PCSTR Compatible,
+    _Out_ PFDT_DRIVER_TREE Tree)
+{
+    const VOID *List;
+    ULONG Offset, Length;
+    NTSTATUS Status;
+
+    Status = FdtDriverLoadBlob(Tree);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    for (Offset = RiscvFdtRootNode(&Tree->Fdt); Offset != RISCV_FDT_NO_NODE; Offset = RiscvFdtSkipToken(&Tree->Fdt, Offset))
+    {
+        if (RiscvFdtToken(&Tree->Fdt, Offset) != RISCV_FDT_BEGIN_NODE)
+            continue;
+        List = RiscvFdtGetProperty(&Tree->Fdt, Offset, "compatible", &Length);
+        if (List && RiscvFdtStringListContains(List, Length, Compatible))
+        {
+            Tree->Node = Offset;
+            return STATUS_SUCCESS;
+        }
+    }
+    FdtDriverClose(Tree);
+    return STATUS_NOT_FOUND;
+}
+
+NTSTATUS
+NTAPI
 FdtDriverOpenAlias(
     _In_z_ PCSTR PathOrAlias,
     _Out_ PFDT_DRIVER_TREE Tree)
