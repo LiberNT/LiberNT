@@ -55,6 +55,9 @@
 #define IVB_MI_FLUSH_DW_POST_STORE  0x00004000u
 #define IVB_MI_FLUSH_DW_USE_GTT     0x4u
 #define IVB_MI_BATCH_BUFFER_START   0x18800000u
+#define IVB_MI_LOAD_REGISTER_IMM_1  0x11000001u
+#define IVB_MI_STORE_REGISTER_MEM_GGTT 0x12400001u
+#define IVB_PP_DCLV_ALL             0xFFFFFFFFu
 #define IVB_PIPE_CONTROL            0x7A000002u
 #define IVB_PC_GLOBAL_GTT           0x01000000u
 #define IVB_PC_CS_STALL             0x00100000u
@@ -284,6 +287,29 @@ HdgfxIvbEmitInvalidate(
     Dwords[6] = Scratch;
     Dwords[7] = 0;
     return HdgfxRingEmit(Ring, Head, Dwords, 8);
+}
+
+bool
+HdgfxIvbEmitSwitch(
+    HDGFX_RING *Ring,
+    uint32_t Head,
+    uint32_t DirectoryBase)
+{
+    uint32_t Dwords[10];
+
+    if (!HdgfxIvbEmitInvalidate(Ring, Head))
+        return false;
+    Dwords[0] = IVB_MI_LOAD_REGISTER_IMM_1;
+    Dwords[1] = Ring->Base + HDGFX_REG(PP_DCLV, 0);
+    Dwords[2] = IVB_PP_DCLV_ALL;
+    Dwords[3] = IVB_MI_LOAD_REGISTER_IMM_1;
+    Dwords[4] = Ring->Base + HDGFX_REG(PP_DIR_BASE, 0);
+    Dwords[5] = DirectoryBase;
+    Dwords[6] = IVB_MI_STORE_REGISTER_MEM_GGTT;
+    Dwords[7] = Ring->Base + HDGFX_REG(PP_DIR_BASE, 0);
+    Dwords[8] = Ring->StatusAddress + IVB_HWS_FLUSH_INDEX * 4;
+    Dwords[9] = IVB_MI_NOOP;
+    return HdgfxRingEmit(Ring, Head, Dwords, 10);
 }
 
 bool

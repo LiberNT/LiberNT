@@ -760,6 +760,106 @@ TestDpTrainingFailures(void)
 }
 
 static void
+MarkPatched(
+    uint32_t *Patched,
+    uint32_t Index)
+{
+    Patched[Index / 32] |= 1u << (Index % 32);
+}
+
+static void
+TestPpgtt(void)
+{
+    static uint32_t Commands[TEST_RING_DWORDS];
+    HDGFX_PPGTT_LAYOUT Layout;
+    HDGFX_RING Ring;
+    HDGFX_MMIO Mmio;
+    FAKE_SNB *Fake;
+    uint32_t Index;
+
+    CHECK_EQ(HdgfxPpgttLayout(0x80000, 0x10000, &Layout), 1);
+    CHECK_EQ(Layout.Tables, 64);
+    CHECK_EQ(Layout.SlotFirst, 0x10000);
+    CHECK_EQ(Layout.SlotCount, 896);
+    CHECK_EQ(HdgfxPpgttDirectoryEntry(&Layout, 1), 0x10200);
+    CHECK_EQ(HdgfxPpgttDirectoryBase(&Layout, 0), 0x10000000);
+    CHECK_EQ(HdgfxPpgttDirectoryBase(&Layout, 1), 0x10200000);
+    CHECK_EQ(HdgfxPpgttDirectoryBase(&Layout, 895), 0x7FE00000);
+    CHECK_EQ(HdgfxPpgttLayout(0x80000, 0x10001, &Layout), 1);
+    CHECK_EQ(Layout.Tables, 65);
+    CHECK_EQ(Layout.SlotFirst, 0x10200);
+    CHECK_EQ(HdgfxPpgttLayout(0x80000, 0, &Layout), 0);
+    CHECK_EQ(HdgfxPpgttLayout(0x100000, 0x10000, &Layout), 0);
+    CHECK_EQ(HdgfxPpgttLayout(0x10000, 0x10000, &Layout), 0);
+    CHECK_EQ(HdgfxPpgttLayout(0x10200, 0x10000, &Layout), 0);
+    CHECK_EQ(HdgfxPpgttLayout(0x10400, 0x10000, &Layout), 1);
+
+    CHECK_EQ(HdgfxPpgttPde(0x2345678000ull), 0x45678231);
+    CHECK_EQ(HdgfxPpgttPde(0x2345678010ull), 0);
+    CHECK_EQ(HdgfxPpgttPde(1ull << 40), 0);
+
+    RingInit(&Ring, Commands, true);
+    Ring.Base = 0x20000;
+    CHECK_EQ(HdgfxIvbEmitSwitch(&Ring, 0, 0x10200000), 1);
+    CHECK_EQ(Ring.Tail, 14 * 4);
+    CHECK_EQ(Commands[0], 0x13244001);
+    CHECK_EQ(Commands[4], 0x11000001);
+    CHECK_EQ(Commands[5], 0x22220);
+    CHECK_EQ(Commands[6], 0xFFFFFFFF);
+    CHECK_EQ(Commands[7], 0x11000001);
+    CHECK_EQ(Commands[8], 0x22228);
+    CHECK_EQ(Commands[9], 0x10200000);
+    CHECK_EQ(Commands[10], 0x12400001);
+    CHECK_EQ(Commands[11], 0x22228);
+    CHECK_EQ(Commands[12], TEST_STATUS_ADDRESS + 0xC0);
+    CHECK_EQ(Commands[13], 0);
+    RingInit(&Ring, Commands, false);
+    CHECK_EQ(HdgfxIvbEmitSwitch(&Ring, 0, 0x10000000), 1);
+    CHECK_EQ(Ring.Tail, 22 * 4);
+    CHECK_EQ(Commands[12], 0x11000001);
+    CHECK_EQ(Commands[13], 0x2220);
+    CHECK_EQ(Commands[16], 0x2228);
+    CHECK_EQ(Commands[17], 0x10000000);
+    CHECK_EQ(HdgfxIvbEmitSwitch(&Ring, 0, 0x10000000), 1);
+    CHECK_EQ(HdgfxIvbEmitSwitch(&Ring, Ring.Tail + 16, 0x10000000), 0);
+
+    Fake = FakeCreate(&Mmio);
+    *FakeSlot(Fake, HDGFX_REG(GAC_ECO_BITS, 0)) = 0x1;
+    *FakeSlot(Fake, HDGFX_REG(GAM_ECOCHK, 0)) = 0x10000;
+    HdgfxSnbEnablePpgtt(&Mmio, 0x10000000);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(GAC_ECO_BITS, 0)), 0x2301);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(GAB_CTL, 0)), 0x100);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(GAM_ECOCHK, 0)), 0x10418);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(SNB_GFX_MODE, 0)), 0x02000200);
+    for (Index = 0; Index < 3; Index++)
+    {
+        CHECK_EQ(*FakeSlot(Fake, 0x2220 + Index * 0x10000), 0xFFFFFFFF);
+        CHECK_EQ(*FakeSlot(Fake, 0x2228 + Index * 0x10000), 0x10000000);
+        CHECK_EQ(*FakeSlot(Fake, 0x229C + Index * 0x10000), 0);
+    }
+    HdgfxSnbDisablePpgtt(&Mmio);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(SNB_GFX_MODE, 0)), 0x02000000);
+    free(Fake);
+
+    Fake = FakeCreate(&Mmio);
+    *FakeSlot(Fake, HDGFX_REG(GAM_ECOCHK, 0)) = 0x10010;
+    HdgfxIvbEnablePpgtt(&Mmio, 0x10200000);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(GAC_ECO_BITS, 0)), 0x300);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(GAB_CTL, 0)), 0);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(GAM_ECOCHK, 0)), 0x10008);
+    CHECK_EQ(*FakeSlot(Fake, HDGFX_REG(SNB_GFX_MODE, 0)), 0);
+    for (Index = 0; Index < 3; Index++)
+    {
+        CHECK_EQ(*FakeSlot(Fake, 0x2220 + Index * 0x10000), 0xFFFFFFFF);
+        CHECK_EQ(*FakeSlot(Fake, 0x2228 + Index * 0x10000), 0x10200000);
+        CHECK_EQ(*FakeSlot(Fake, 0x229C + Index * 0x10000), 0x02000200);
+    }
+    HdgfxIvbDisablePpgtt(&Mmio);
+    CHECK_EQ(*FakeSlot(Fake, 0x2229C), 0x02000000);
+    free(Fake);
+}
+
+static void
 TestBatchScan(void)
 {
     static const uint32_t InstpmConstants[] = { 0x11000001, 0x20C0, 0x00400040, 0x05000000 };
@@ -795,33 +895,63 @@ TestBatchScan(void)
         0x7B000004, 0, 3, 0, 1, 0,
         0x05000000, 0,
     };
+    static const uint32_t PipeControlFlush[] = { 0x7A000002, 0x00100002, 0, 0, 0x05000000 };
+    static const uint32_t PipeControlGgtt[] = { 0x7A000002, 0x00004000, 0x1004, 0, 0x05000000 };
+    static const uint32_t PipeControlPpgtt[] = { 0x7A000002, 0x00004000, 0x1000, 0, 0x05000000 };
+    static const uint32_t StorePpgtt[] = { 0x10000002, 0, 0x1000, 7, 0x05000000 };
+    static const uint32_t FlushDwWrite[] = { 0x13004001, 0x1000, 0, 0x05000000 };
     static uint32_t Long[0x40];
+    uint32_t Patched[2];
     uint32_t Offending = 0;
 
-    CHECK_EQ(HdgfxIvbCheckBatch(6, InstpmConstants, 4, false, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, Timestamp, 4, false, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, SoPrimitives, 4, false, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, L3Write, 4, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, SoGen7Write, 4, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, L3Read, 4, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, StatisticsLoad, 4, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(7, L3Write, 4, false, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, StoreHighLength, 5, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, SvbIndexWide, 5, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, UrbClear, 3, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, Predicate, 2, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, AppId, 2, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, SoDeclList, 4, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlNotify, 5, false, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDw, 4, true, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDwNotify, 4, true, &Offending), 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, &Offending), 1);
+    memset(Patched, 0, sizeof(Patched));
+    MarkPatched(Patched, 2);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, InstpmConstants, 4, false, NULL, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Timestamp, 4, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Timestamp, 4, false, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, SoPrimitives, 4, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, SoPrimitives, 4, false, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlFlush, 5, false, NULL, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlGgtt, 5, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlGgtt, 5, false, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlPpgtt, 5, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlPpgtt, 5, false, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, PipeControlPpgtt, 5, false, NULL, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, StorePpgtt, 5, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, StorePpgtt, 5, false, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDwWrite, 4, true, Patched, &Offending), 0);
+    memset(Patched, 0, sizeof(Patched));
+    MarkPatched(Patched, 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDwWrite, 4, true, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Timestamp, 4, false, Patched, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, L3Write, 4, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, SoGen7Write, 4, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, L3Read, 4, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, StatisticsLoad, 4, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, L3Write, 4, false, NULL, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, StoreHighLength, 5, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, SvbIndexWide, 5, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, UrbClear, 3, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Predicate, 2, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, AppId, 2, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, SoDeclList, 4, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, PipeControlNotify, 5, false, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDw, 4, true, NULL, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, FlushDwNotify, 4, true, NULL, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, NULL, &Offending), 0);
+    CHECK_EQ(Offending, 40);
+    memset(Patched, 0, sizeof(Patched));
+    MarkPatched(Patched, 42);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, Patched, &Offending), 0);
+    CHECK_EQ(Offending, 44);
+    MarkPatched(Patched, 46);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, Patched, &Offending), 1);
 
     memset(Long, 0, sizeof(Long));
     Long[0] = 0x50C00025;
-    CHECK_EQ(HdgfxIvbCheckBatch(6, Long, 0x40, true, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Long, 0x40, true, NULL, &Offending), 0);
     Long[0] = 0x54300004;
-    CHECK_EQ(HdgfxIvbCheckBatch(6, Long, 0x40, true, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Long, 0x40, true, NULL, &Offending), 1);
 }
 
 static void
@@ -845,6 +975,7 @@ main(void)
     TestRing();
     TestVga();
     TestBatchScan();
+    TestPpgtt();
     TestDpSink();
     TestDpLinux();
     TestDpTakeover();

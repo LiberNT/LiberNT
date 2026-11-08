@@ -51,6 +51,28 @@
 #define HDGFX_MAX_MODES             32UL
 #define HDGFX_BYTES_PER_PIXEL       4UL
 #define HDGFX_STRIDE_ALIGNMENT      64UL
+#define HDGFX_PPGTT_NO_SLOT         0xFFFFFFFFUL
+#define HDGFX_PPGTT_KERNEL_SLOT     0UL
+#define HDGFX_SPACE_COUNT           16UL
+
+typedef struct _HDGFX_USER_RANGE
+{
+    ULONG First;
+    ULONG Count;
+} HDGFX_USER_RANGE, *PHDGFX_USER_RANGE;
+
+typedef struct _HDGFX_SPACE
+{
+    PULONG *Tables;
+    PULONG ScratchTable;
+    PVOID ScratchPage;
+    ULONG ScratchPte;
+    BOOLEAN Busy;
+    BOOLEAN Quarantined;
+    ULONG Fence;
+    ULONG RangeCount;
+    HDGFX_USER_RANGE Ranges[HDGFX_GEN_ALLOCATION_LIST_SIZE + 1];
+} HDGFX_SPACE, *PHDGFX_SPACE;
 
 typedef struct _HDGFX_MODE
 {
@@ -128,6 +150,7 @@ typedef struct _HDGFX_SUBMIT
     ULONG Offset;
     ULONG EndOffset;
     ULONG Fence;
+    ULONG Slot;
 } HDGFX_SUBMIT, *PHDGFX_SUBMIT;
 
 typedef struct _HDGFX_ADAPTER
@@ -210,6 +233,16 @@ typedef struct _HDGFX_ADAPTER
     volatile ULONG CompletedFence;
     ULONG SoftwareFence;
     volatile LONG FenceNotified;
+    BOOLEAN PpgttEnabled;
+    HDGFX_PPGTT_LAYOUT Ppgtt;
+    PULONG PpgttGtt;
+    ULONG PpgttGttEntries;
+    ULONG PpgttSlotsUsed;
+    PULONG PpgttScratchTable;
+    ULONG PpgttScratchPte;
+    PULONG *PpgttKernelTables;
+    PHDGFX_SPACE PpgttSpaces;
+    ULONG RingSlot[HDGFX_RING_COUNT];
 } HDGFX_ADAPTER, *PHDGFX_ADAPTER;
 
 typedef struct _HDGFX_PROCESS
@@ -297,6 +330,52 @@ HdgfxApertureClear(
 
 VOID
 HdgfxRestartRender(
+    _Inout_ PHDGFX_ADAPTER Adapter);
+
+BOOLEAN
+HdgfxSpaceStart(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONGLONG GttBase,
+    _In_ ULONG GttEntries,
+    _In_ ULONG MappedEntries);
+
+VOID
+HdgfxSpaceStop(
+    _Inout_ PHDGFX_ADAPTER Adapter);
+
+VOID
+HdgfxSpaceRestart(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_ const HDGFX_MMIO *Mmio);
+
+VOID
+HdgfxSpaceMirror(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONG First,
+    _In_ ULONG Count,
+    _In_reads_opt_(Count) CONST ULONG *Values,
+    _In_ ULONG Fill);
+
+NTSTATUS
+HdgfxSpaceAcquire(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONG Fence,
+    _In_ ULONG StateFirst,
+    _In_ ULONG StatePages,
+    _In_reads_(RangeCount) CONST HDGFX_USER_RANGE *Ranges,
+    _In_ ULONG RangeCount,
+    _Out_ PULONG Slot);
+
+VOID
+HdgfxSpaceRetire(
+    _Inout_ PHDGFX_ADAPTER Adapter);
+
+VOID
+HdgfxSpaceDrop(
+    _Inout_ PHDGFX_ADAPTER Adapter);
+
+VOID
+HdgfxSpaceQuarantine(
     _Inout_ PHDGFX_ADAPTER Adapter);
 
 VOID

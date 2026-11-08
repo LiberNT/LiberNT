@@ -21,6 +21,8 @@
 #define GEN_PIPE_CONTROL_GGTT   0x4UL
 #define GEN7_PIPE_CONTROL_QWORD 0x7A000003UL
 #define GEN7_PIPE_CONTROL_WRITE 0x01004000UL
+#define GEN_PIPE_CONTROL_QW     0x00004000UL
+#define GEN_ISOLATION_MARK      0xBAD0BAD0UL
 #define GEN_OVERCOMMIT_COUNT    33
 #define GEN_OVERCOMMIT_SIZE     0x800000UL
 #define GEN_OVERCOMMIT_LAST     0x4000000UL
@@ -162,8 +164,9 @@ fail:
     return FALSE;
 }
 
-static NTSTATUS GenSubmit(GEN_CONTEXT *Ctx, const HDGFX_GEN_SUBMIT *Header, const ULONG *Batch, const ULONG *State,
-                          const GEN_PATCH *Patches, UINT PatchCount)
+static NTSTATUS GenSubmitAllocations(GEN_CONTEXT *Ctx, const HDGFX_GEN_SUBMIT *Header, const ULONG *Batch,
+                                     const ULONG *State, const GEN_PATCH *Patches, const UINT *PatchAllocations,
+                                     UINT PatchCount, const D3DKMT_HANDLE *Allocations, UINT AllocationCount)
 {
     D3DKMT_RENDER render = {0};
     NTSTATUS status;
@@ -174,12 +177,16 @@ static NTSTATUS GenSubmit(GEN_CONTEXT *Ctx, const HDGFX_GEN_SUBMIT *Header, cons
     memcpy(Ctx->pCommandBuffer + GEN_BATCH_OFFSET, Batch, Header->BatchLength);
     if (State != NULL)
         memcpy(Ctx->pCommandBuffer + GEN_STATE_OFFSET, State, Header->StateLength);
-    memset(&Ctx->pAllocationList[0], 0, sizeof(Ctx->pAllocationList[0]));
-    Ctx->pAllocationList[0].hAllocation = Ctx->hAlloc;
-    Ctx->pAllocationList[0].WriteOperation = 1;
+    for (i = 0; i < AllocationCount; i++)
+    {
+        memset(&Ctx->pAllocationList[i], 0, sizeof(Ctx->pAllocationList[i]));
+        Ctx->pAllocationList[i].hAllocation = Allocations[i];
+        Ctx->pAllocationList[i].WriteOperation = 1;
+    }
     for (i = 0; i < PatchCount; i++)
     {
         memset(&Ctx->pPatchLocationList[i], 0, sizeof(Ctx->pPatchLocationList[i]));
+        Ctx->pPatchLocationList[i].AllocationIndex = PatchAllocations != NULL ? PatchAllocations[i] : 0;
         Ctx->pPatchLocationList[i].PatchOffset = Patches[i].Offset;
         Ctx->pPatchLocationList[i].AllocationOffset = Patches[i].AllocationOffset;
         Ctx->pPatchLocationList[i].DriverId = Patches[i].DriverId;
@@ -187,7 +194,7 @@ static NTSTATUS GenSubmit(GEN_CONTEXT *Ctx, const HDGFX_GEN_SUBMIT *Header, cons
 
     render.hContext = Ctx->hContext;
     render.CommandLength = GEN_STATE_OFFSET + HDGFX_GEN_MAX_STATE_SIZE;
-    render.AllocationCount = 1;
+    render.AllocationCount = AllocationCount;
     render.PatchLocationCount = PatchCount;
     status = Render(&render);
     if (NT_SUCCESS(status))
@@ -198,6 +205,12 @@ static NTSTATUS GenSubmit(GEN_CONTEXT *Ctx, const HDGFX_GEN_SUBMIT *Header, cons
         Ctx->pPatchLocationList = render.pNewPatchLocationList;
     }
     return status;
+}
+
+static NTSTATUS GenSubmit(GEN_CONTEXT *Ctx, const HDGFX_GEN_SUBMIT *Header, const ULONG *Batch, const ULONG *State,
+                          const GEN_PATCH *Patches, UINT PatchCount)
+{
+    return GenSubmitAllocations(Ctx, Header, Batch, State, Patches, NULL, PatchCount, &Ctx->hAlloc, 1);
 }
 
 static void GenHeader(HDGFX_GEN_SUBMIT *Header, UINT BatchDwords, UINT StateDwords)
@@ -211,14 +224,14 @@ static void GenHeader(HDGFX_GEN_SUBMIT *Header, UINT BatchDwords, UINT StateDwor
     Header->StateLength = StateDwords * sizeof(ULONG);
 }
 
-static BOOL GenRead(GEN_CONTEXT *Ctx, ULONG *Copy)
+static BOOL GenReadAllocation(GEN_CONTEXT *Ctx, D3DKMT_HANDLE hAlloc, ULONG *Copy)
 {
     D3DKMT_LOCK lock = {0};
     D3DKMT_UNLOCK unlock = {0};
     NTSTATUS status;
 
     lock.hDevice = Ctx->hDevice;
-    lock.hAllocation = Ctx->hAlloc;
+    lock.hAllocation = hAlloc;
     status = WaitLock(&lock);
     ok_succeeded(status, "Lock for readback: 0x%08lx\n", status);
     if (!NT_SUCCESS(status))
@@ -226,9 +239,14 @@ static BOOL GenRead(GEN_CONTEXT *Ctx, ULONG *Copy)
     memcpy(Copy, lock.pData, GEN_ALLOCATION_SIZE);
     unlock.hDevice = Ctx->hDevice;
     unlock.NumAllocations = 1;
-    unlock.phAllocations = &Ctx->hAlloc;
+    unlock.phAllocations = &hAlloc;
     WaitUnlock(&unlock);
     return TRUE;
+}
+
+static BOOL GenRead(GEN_CONTEXT *Ctx, ULONG *Copy)
+{
+    return GenReadAllocation(Ctx, Ctx->hAlloc, Copy);
 }
 
 static UINT GenCountMismatches(const ULONG *Words, UINT First, UINT Count, ULONG Expected)
@@ -331,6 +349,15 @@ static BOOL GenBatchesScanned(GEN_CONTEXT *Ctx)
     return GenSubmit(Ctx, &header, probe, NULL, NULL, 0) == STATUS_ILLEGAL_INSTRUCTION;
 }
 
+static BOOL GenIsSandyBridge(GEN_CONTEXT *Ctx)
+{
+    static const ULONG probe[4] = { 0x11000001, 0x5200, 0, GEN_MI_BATCH_END };
+    HDGFX_GEN_SUBMIT header;
+
+    GenHeader(&header, 4, 0);
+    return GenSubmit(Ctx, &header, probe, NULL, NULL, 0) == STATUS_ILLEGAL_INSTRUCTION;
+}
+
 static void Test_PipeControlWrite(GEN_CONTEXT *Ctx, ULONG *Copy)
 {
     HDGFX_GEN_SUBMIT header;
@@ -349,6 +376,11 @@ static void Test_PipeControlWrite(GEN_CONTEXT *Ctx, ULONG *Copy)
         batch[4] = 0xC0FFEE02;
         batch[5] = GEN_MI_BATCH_END;
         patch.Offset = GEN_BATCH_OFFSET + 2 * sizeof(ULONG);
+        if (GenIsSandyBridge(Ctx))
+        {
+            batch[1] = GEN_PIPE_CONTROL_QW;
+            patch.AllocationOffset |= GEN_PIPE_CONTROL_GGTT;
+        }
     }
     else
     {
@@ -368,6 +400,109 @@ static void Test_PipeControlWrite(GEN_CONTEXT *Ctx, ULONG *Copy)
         return;
     ok(Copy[0x8000 / 4] == 0xC0FFEE01 && Copy[0x8000 / 4 + 1] == 0xC0FFEE02,
        "PIPE_CONTROL immediate write: 0x%08lx 0x%08lx\n", Copy[0x8000 / 4], Copy[0x8000 / 4 + 1]);
+}
+
+static void Test_UnpatchedGlobalWrite(GEN_CONTEXT *Ctx)
+{
+    ULONG batch[6] = { GEN7_PIPE_CONTROL_QWORD, GEN7_PIPE_CONTROL_WRITE, 0x8000, 1, 2, GEN_MI_BATCH_END };
+    HDGFX_GEN_SUBMIT header;
+    NTSTATUS status;
+
+    if (!GenBatchesScanned(Ctx))
+    {
+        skip("user batch scan runs on Sandy Bridge and Ivy Bridge\n");
+        return;
+    }
+    if (GenIsSandyBridge(Ctx))
+    {
+        batch[1] = GEN_PIPE_CONTROL_QW;
+        batch[2] |= GEN_PIPE_CONTROL_GGTT;
+    }
+    GenHeader(&header, 6, 0);
+    status = GenSubmit(Ctx, &header, batch, NULL, NULL, 0);
+    ok_hex(status, STATUS_ILLEGAL_INSTRUCTION);
+}
+
+static BOOL GenCreateAllocation(GEN_CONTEXT *Ctx, D3DKMT_HANDLE *hAlloc)
+{
+    UINT size = GEN_ALLOCATION_SIZE;
+    D3DKMT_CREATEALLOCATION ca = {0};
+    D3DDDI_ALLOCATIONINFO ai = {0};
+    D3DKMT_LOCK2 lock = {0};
+    D3DKMT_UNLOCK2 unlock = {0};
+    NTSTATUS status;
+
+    ai.pPrivateDriverData = &size;
+    ai.PrivateDriverDataSize = sizeof(size);
+    ca.hDevice = Ctx->hDevice;
+    ca.NumAllocations = 1;
+    ca.pAllocationInfo = &ai;
+    status = CreateAlloc(&ca);
+    ok_succeeded(status, "CreateAllocation: 0x%08lx\n", status);
+    if (!NT_SUCCESS(status))
+        return FALSE;
+    *hAlloc = ai.hAllocation;
+    lock.hDevice = Ctx->hDevice;
+    lock.hAllocation = *hAlloc;
+    status = Lock(&lock);
+    ok_succeeded(status, "Lock: 0x%08lx\n", status);
+    if (NT_SUCCESS(status))
+    {
+        memset(lock.pData, 0, GEN_ALLOCATION_SIZE);
+        unlock.hDevice = Ctx->hDevice;
+        unlock.hAllocation = *hAlloc;
+        Unlock(&unlock);
+    }
+    return TRUE;
+}
+
+static void Test_AllocationOutsideSubmit(GEN_CONTEXT *Ctx, ULONG *Copy)
+{
+    ULONG learn[6] = { GEN7_PIPE_CONTROL_QWORD, GEN7_PIPE_CONTROL_WRITE, 0, 0, 0, GEN_MI_BATCH_END };
+    ULONG probe[6] = { GEN7_PIPE_CONTROL_QWORD, GEN_PIPE_CONTROL_QW, 0, GEN_ISOLATION_MARK, GEN_ISOLATION_MARK,
+                       GEN_MI_BATCH_END };
+    D3DKMT_DESTROYALLOCATION da = {0};
+    D3DKMT_HANDLE allocations[2];
+    HDGFX_GEN_SUBMIT header;
+    GEN_PATCH patches[2];
+    UINT patchAllocations[2] = { 0, 1 };
+    ULONG address;
+    NTSTATUS status;
+
+    if (!GenBatchesScanned(Ctx) || GenIsSandyBridge(Ctx))
+    {
+        skip("per-process GTT write through an unpatched address runs on Ivy Bridge\n");
+        return;
+    }
+    allocations[0] = Ctx->hAlloc;
+    if (!GenCreateAllocation(Ctx, &allocations[1]))
+        return;
+    patches[0].Offset = GEN_BATCH_OFFSET + 2 * sizeof(ULONG);
+    patches[0].AllocationOffset = 0x8000;
+    patches[0].DriverId = HDGFX_GEN_PATCH_ALLOCATION;
+    patches[1].Offset = GEN_BATCH_OFFSET + 3 * sizeof(ULONG);
+    patches[1].AllocationOffset = 0;
+    patches[1].DriverId = HDGFX_GEN_PATCH_ALLOCATION;
+    GenHeader(&header, 6, 0);
+    status = GenSubmitAllocations(Ctx, &header, learn, NULL, patches, patchAllocations, 2, allocations, 2);
+    ok_succeeded(status, "Render that stores the second allocation's address: 0x%08lx\n", status);
+    if (NT_SUCCESS(status) && GenRead(Ctx, Copy))
+    {
+        address = Copy[0x8000 / 4];
+        ok(address != 0 && address % 0x1000 == 0, "second allocation at GPU address 0x%08lx\n", address);
+        probe[2] = address;
+        status = GenSubmit(Ctx, &header, probe, NULL, NULL, 0);
+        ok_succeeded(status, "Render of a write to an allocation outside the submit: 0x%08lx\n", status);
+        if (NT_SUCCESS(status) && GenRead(Ctx, Copy) && GenReadAllocation(Ctx, allocations[1], Copy))
+        {
+            ok(Copy[0] == 0 && Copy[1] == 0, "allocation outside the submit was written: 0x%08lx 0x%08lx\n",
+               Copy[0], Copy[1]);
+        }
+    }
+    da.hDevice = Ctx->hDevice;
+    da.AllocationCount = 1;
+    da.phAllocationList = &allocations[1];
+    DestroyAlloc(&da);
 }
 
 static void Test_ApertureOvercommit(GEN_CONTEXT *Ctx, ULONG *Copy)
@@ -739,6 +874,8 @@ START_TEST(hdgfx_gen)
         Test_ColorFill(&Ctx, Copy);
         Test_StateCopy(&Ctx, Copy);
         Test_PipeControlWrite(&Ctx, Copy);
+        Test_UnpatchedGlobalWrite(&Ctx);
+        Test_AllocationOutsideSubmit(&Ctx, Copy);
         Test_ApertureOvercommit(&Ctx, Copy);
         Test_ConcurrentPagingOrder();
         Test_MalformedSubmits(&Ctx);

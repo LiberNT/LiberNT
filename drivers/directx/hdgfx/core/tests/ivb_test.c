@@ -404,6 +404,14 @@ TestTrainingRetry(
 }
 
 static void
+MarkPatched(
+    uint32_t *Patched,
+    uint32_t Index)
+{
+    Patched[Index / 32] |= 1u << (Index % 32);
+}
+
+static void
 TestBatchCheck(void)
 {
     static const uint32_t Allowed[] =
@@ -488,30 +496,88 @@ TestBatchCheck(void)
         0x13000001, 0, 0,
         0x05000000, 0,
     };
+    static const uint32_t PpgttWrites[] =
+    {
+        0x7A000002, 0x00004000, 0x1000, 0,            /* PIPE_CONTROL qword write, PPGTT */
+        0x10000002, 0, 0x1000, 7,                     /* MI_STORE_DATA_IMM, PPGTT */
+        0x12000001, 0x2400, 0x1000,                   /* MI_STORE_REGISTER_MEM, PPGTT */
+        0x14800001, 0x5280, 0x1000,                   /* MI_LOAD_REGISTER_MEM, PPGTT */
+        0x05000000, 0,
+    };
+    static const struct
+    {
+        const char *Name;
+        uint32_t Dwords[5];
+        uint32_t Count;
+        uint32_t Address;
+        bool Blitter;
+    } GlobalWrites[] =
+    {
+        { "PIPE_CONTROL GGTT write", { 0x7A000002, 0x01004000, 0x1000, 0, 0x05000000 }, 5, 2, false },
+        { "MI_STORE_DATA_IMM GGTT", { 0x10400002, 0, 0x1000, 7, 0x05000000 }, 5, 2, false },
+        { "MI_STORE_REGISTER_MEM GGTT", { 0x12400001, 0x2400, 0x1000, 0x05000000, 0 }, 4, 2, false },
+        { "MI_LOAD_REGISTER_MEM GGTT", { 0x14C00001, 0x5280, 0x1000, 0x05000000, 0 }, 4, 2, false },
+        { "MI_FLUSH_DW GGTT write", { 0x13004001, 0x1004, 0, 0x05000000, 0 }, 4, 1, true },
+    };
+    uint32_t Patched[(sizeof(Long) / 4 + 31) / 32];
     uint32_t Offending = 0;
     size_t Index;
 
-    CHECK_EQ(HdgfxIvbCheckBatch(7, Allowed, sizeof(Allowed) / 4, false, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, true, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, false, &Offending), 0);
+    memset(Patched, 0, sizeof(Patched));
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Allowed, sizeof(Allowed) / 4, false, NULL, &Offending), 0);
+    CHECK_EQ(Offending, 30);
+    MarkPatched(Patched, 32);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Allowed, sizeof(Allowed) / 4, false, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, true, NULL, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, false, NULL, &Offending), 0);
     CHECK_EQ(Offending, 0);
-    CHECK_EQ(HdgfxIvbCheckBatch(7, Crocus, sizeof(Crocus) / 4, false, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, &Offending), 0);
+    memset(Patched, 0, sizeof(Patched));
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Crocus, sizeof(Crocus) / 4, false, NULL, &Offending), 0);
+    CHECK_EQ(Offending, 22);
+    MarkPatched(Patched, 24);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Crocus, sizeof(Crocus) / 4, false, Patched, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(6, Crocus, sizeof(Crocus) / 4, false, Patched, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, PpgttWrites, sizeof(PpgttWrites) / 4, false, NULL, &Offending), 1);
+
+    for (Index = 0; Index < sizeof(GlobalWrites) / sizeof(GlobalWrites[0]); Index++)
+    {
+        memset(Patched, 0, sizeof(Patched));
+        if (HdgfxIvbCheckBatch(7, GlobalWrites[Index].Dwords, GlobalWrites[Index].Count, GlobalWrites[Index].Blitter,
+                               NULL, &Offending))
+        {
+            fprintf(stderr, "unpatched %s was allowed\n", GlobalWrites[Index].Name);
+            Failures++;
+        }
+        MarkPatched(Patched, GlobalWrites[Index].Address == 1 ? 2 : 1);
+        if (HdgfxIvbCheckBatch(7, GlobalWrites[Index].Dwords, GlobalWrites[Index].Count, GlobalWrites[Index].Blitter,
+                               Patched, &Offending))
+        {
+            fprintf(stderr, "%s with a patched neighbour was allowed\n", GlobalWrites[Index].Name);
+            Failures++;
+        }
+        MarkPatched(Patched, GlobalWrites[Index].Address);
+        if (!HdgfxIvbCheckBatch(7, GlobalWrites[Index].Dwords, GlobalWrites[Index].Count, GlobalWrites[Index].Blitter,
+                                Patched, &Offending))
+        {
+            fprintf(stderr, "patched %s was refused\n", GlobalWrites[Index].Name);
+            Failures++;
+        }
+    }
 
     memset(Long, 0, sizeof(Long));
     Long[0] = 0x79170100;
     Long[2] = 0x18800000;
     Long[258] = 0x05000000;
-    CHECK_EQ(HdgfxIvbCheckBatch(7, Long, 260, false, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Long, 260, false, NULL, &Offending), 1);
 
     memset(Long, 0, sizeof(Long));
     Long[0] = 0x50000043;
-    CHECK_EQ(HdgfxIvbCheckBatch(7, Long, 72, true, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Long, 72, true, NULL, &Offending), 0);
     CHECK_EQ(Offending, 0);
 
     for (Index = 0; Index < sizeof(Refused) / sizeof(Refused[0]); Index++)
     {
-        if (HdgfxIvbCheckBatch(7, Refused[Index].Dwords, Refused[Index].Count, Refused[Index].Blitter, &Offending))
+        if (HdgfxIvbCheckBatch(7, Refused[Index].Dwords, Refused[Index].Count, Refused[Index].Blitter, NULL, &Offending))
         {
             fprintf(stderr, "%s was allowed\n", Refused[Index].Name);
             Failures++;

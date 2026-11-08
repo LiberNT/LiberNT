@@ -38,8 +38,16 @@
 #define IVB_MI_REGISTER_MEM_DWORDS  3u
 #define IVB_PC_FORBIDDEN            0x00A00000u
 #define IVB_PC_NOTIFY               0x00000100u
+#define IVB_PC_GLOBAL_GTT           0x01000000u
+#define SNB_PC_GLOBAL_GTT           0x00000004u
+#define IVB_POST_SYNC_MASK          0x0000C000u
+#define IVB_MI_GLOBAL_GTT           0x00400000u
 #define IVB_FLUSH_DW_STORE_INDEX    0x00200000u
 #define IVB_FLUSH_DW_NOTIFY         0x00000100u
+#define IVB_FLUSH_DW_GLOBAL_GTT     0x00000004u
+#define IVB_STORE_DATA_DWORDS       4u
+#define IVB_POST_SYNC_DWORDS        4u
+#define IVB_FLUSH_DW_POST_DWORDS    3u
 #define IVB_INSTPM_CONSTANT_OFFSET  0x00400040u
 
 typedef struct _IVB_COMMAND
@@ -211,10 +219,30 @@ IvbCommandLength(
 }
 
 static bool
+IvbPatched(
+    const uint32_t *Patched,
+    uint32_t Index)
+{
+    return Patched != NULL && ((Patched[Index / 32] >> (Index % 32)) & 1) != 0;
+}
+
+static bool
+IvbMemoryAccess(
+    uint32_t Gen,
+    bool Global,
+    const uint32_t *Patched,
+    uint32_t Address)
+{
+    return (Gen >= 7 && !Global) || IvbPatched(Patched, Address);
+}
+
+static bool
 IvbCheckMi(
     uint32_t Gen,
     const uint32_t *Dwords,
     uint32_t Length,
+    uint32_t Position,
+    const uint32_t *Patched,
     bool *End)
 {
     uint32_t Header = Dwords[0];
@@ -226,7 +254,14 @@ IvbCheckMi(
             *End = true;
             return true;
         case IVB_MI_FLUSH_DW:
-            return (Header & (IVB_FLUSH_DW_STORE_INDEX | IVB_FLUSH_DW_NOTIFY)) == 0;
+            if ((Header & (IVB_FLUSH_DW_STORE_INDEX | IVB_FLUSH_DW_NOTIFY)) != 0)
+                return false;
+            return (Header & IVB_POST_SYNC_MASK) == 0 ||
+                   (Length >= IVB_FLUSH_DW_POST_DWORDS &&
+                    IvbMemoryAccess(Gen, (Dwords[1] & IVB_FLUSH_DW_GLOBAL_GTT) != 0, Patched, Position + 1));
+        case IVB_MI_STORE_DATA_IMM:
+            return Length >= IVB_STORE_DATA_DWORDS &&
+                   IvbMemoryAccess(Gen, (Header & IVB_MI_GLOBAL_GTT) != 0, Patched, Position + 2);
         case IVB_MI_LOAD_REGISTER_IMM:
             if (Length % 2 == 0)
                 return false;
@@ -241,12 +276,33 @@ IvbCheckMi(
             return true;
         case IVB_MI_STORE_REGISTER_MEM:
             return Length == IVB_MI_REGISTER_MEM_DWORDS &&
-                   (Gen >= 7 ? IvbUserRegister(Dwords[1]) : SnbReadableRegister(Dwords[1]));
+                   (Gen >= 7 ? IvbUserRegister(Dwords[1]) : SnbReadableRegister(Dwords[1])) &&
+                   IvbMemoryAccess(Gen, (Header & IVB_MI_GLOBAL_GTT) != 0, Patched, Position + 2);
         case IVB_MI_LOAD_REGISTER_MEM:
-            return Length == IVB_MI_REGISTER_MEM_DWORDS && IvbUserRegister(Dwords[1]);
+            return Length == IVB_MI_REGISTER_MEM_DWORDS && IvbUserRegister(Dwords[1]) &&
+                   IvbMemoryAccess(Gen, (Header & IVB_MI_GLOBAL_GTT) != 0, Patched, Position + 2);
         default:
             return true;
     }
+}
+
+static bool
+IvbCheckPipeControl(
+    uint32_t Gen,
+    const uint32_t *Dwords,
+    uint32_t Length,
+    uint32_t Position,
+    const uint32_t *Patched)
+{
+    if ((Dwords[1] & (IVB_PC_FORBIDDEN | IVB_PC_NOTIFY)) != 0)
+        return false;
+    if ((Dwords[1] & IVB_POST_SYNC_MASK) == 0)
+        return true;
+    if (Length < IVB_POST_SYNC_DWORDS)
+        return false;
+    return IvbMemoryAccess(Gen,
+                           Gen >= 7 ? (Dwords[1] & IVB_PC_GLOBAL_GTT) != 0 : (Dwords[2] & SNB_PC_GLOBAL_GTT) != 0,
+                           Patched, Position + 2);
 }
 
 bool
@@ -255,6 +311,7 @@ HdgfxIvbCheckBatch(
     const uint32_t *Dwords,
     uint32_t Count,
     bool Blitter,
+    const uint32_t *Patched,
     uint32_t *Offending)
 {
     uint32_t Position = 0;
@@ -273,7 +330,7 @@ HdgfxIvbCheckBatch(
             Command = IvbFindCommand(IvbMiCommands, sizeof(IvbMiCommands) / sizeof(IvbMiCommands[0]),
                                      HDGFX_GET(Header, MI_OPCODE), Gen, Blitter);
             Allowed = IvbCommandLength(Command, Header, Count - Position, &Length) &&
-                      IvbCheckMi(Gen, Dwords + Position, Length, &End);
+                      IvbCheckMi(Gen, Dwords + Position, Length, Position, Patched, &End);
         }
         else if (Client == IVB_CLIENT_GFX)
         {
@@ -281,7 +338,7 @@ HdgfxIvbCheckBatch(
                                      (Header >> 16) & 0x1FFF, Gen, Blitter);
             Allowed = IvbCommandLength(Command, Header, Count - Position, &Length) &&
                       (Command->First != IVB_GFX_PIPE_CONTROL ||
-                       (Dwords[Position + 1] & (IVB_PC_FORBIDDEN | IVB_PC_NOTIFY)) == 0);
+                       IvbCheckPipeControl(Gen, Dwords + Position, Length, Position, Patched));
         }
         else if (Client == IVB_CLIENT_BLT)
         {

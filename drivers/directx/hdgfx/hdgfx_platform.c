@@ -11,6 +11,10 @@
 
 #define HDGFX_PCI_BAR0              0x10UL
 #define HDGFX_PCI_BAR2              0x18UL
+#define HDGFX_PCI_GGC               0x50UL
+#define HDGFX_GGC_GGMS_SHIFT        8U
+#define HDGFX_GGC_GGMS_MASK         0x3U
+#define HDGFX_GGMS_ENTRIES_SHIFT    18U
 #define HDGFX_PCI_ASLS              0xFCUL
 #define HDGFX_MMIO_SIZE             0x200000UL
 #define HDGFX_BLT_RING_BASE         0x20000UL
@@ -677,9 +681,11 @@ HdgfxStopRender(
             return;
         }
         Adapter->RingStarted = FALSE;
+        HdgfxSpaceStop(Adapter);
         if (Adapter->Generation->ForceWakeRelease != NULL)
             Adapter->Generation->ForceWakeRelease(&Mmio);
     }
+    HdgfxSpaceStop(Adapter);
     if (Adapter->GttWindow != NULL)
     {
         for (Index = 0; Index < HDGFX_RENDER_GTT_PAGES; Index++)
@@ -743,6 +749,27 @@ HdgfxStopDma(
     Adapter->DmaMemory = NULL;
     Adapter->DmaPhysical = 0;
     Adapter->DmaBase = 0;
+}
+
+static VOID
+HdgfxStartSpace(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONGLONG Bar0,
+    _In_ ULONG MappedEntries)
+{
+    USHORT Ggc = 0;
+    ULONG Entries;
+
+    if (!NT_SUCCESS(HdgfxReadConfig(&Adapter->DxgkInterface, &Ggc, HDGFX_PCI_GGC, sizeof(Ggc))))
+        return;
+    Entries = (ULONG)((Ggc >> HDGFX_GGC_GGMS_SHIFT) & HDGFX_GGC_GGMS_MASK) << HDGFX_GGMS_ENTRIES_SHIFT;
+    if (Entries == 0 || !HdgfxResourceOwned(&Adapter->DxgkInterface, Bar0 + HDGFX_REG(GTT_PTE, 0),
+                                            Entries * sizeof(ULONG)))
+    {
+        DPRINT1("GGC 0x%04x: no GTT space for per-process tables\n", Ggc);
+        return;
+    }
+    HdgfxSpaceStart(Adapter, Bar0 + HDGFX_REG(GTT_PTE, 0), Entries, MappedEntries);
 }
 
 static VOID
@@ -850,6 +877,7 @@ HdgfxStartRender(
             return;
         }
         Adapter->Generation->InitEngine(&Mmio);
+        HdgfxStartSpace(Adapter, Bar0, Aperture->u.Memory.Length / PAGE_SIZE);
     }
     Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring) &&
                            (Adapter->Generation->Gen < 6 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
@@ -878,6 +906,7 @@ HdgfxApertureClear(
     for (Index = 0; Index < Adapter->ApertureSize / PAGE_SIZE; Index++)
         WRITE_REGISTER_ULONG(&Adapter->ApertureGtt[Index], Entry);
     READ_REGISTER_ULONG(&Adapter->ApertureGtt[Adapter->ApertureSize / PAGE_SIZE - 1]);
+    HdgfxSpaceMirror(Adapter, Adapter->ApertureBase / PAGE_SIZE, Adapter->ApertureSize / PAGE_SIZE, NULL, Entry);
     HdgfxGttFlush(Adapter->Registers, Adapter->Generation);
 }
 
@@ -893,6 +922,7 @@ HdgfxStopAperture(
         for (Index = 0; Index < Pages; Index++)
             WRITE_REGISTER_ULONG(&Adapter->ApertureGtt[Index], 0);
         READ_REGISTER_ULONG(&Adapter->ApertureGtt[Pages - 1]);
+        HdgfxSpaceMirror(Adapter, Adapter->ApertureBase / PAGE_SIZE, Pages, NULL, 0);
         MmUnmapIoSpace(Adapter->ApertureGtt, Pages * sizeof(ULONG));
     }
     if (Adapter->ApertureCpu != NULL)
@@ -1130,6 +1160,7 @@ HdgfxRestartRender(
             if (!Adapter->Generation->ForceWake(&Mmio))
                 DPRINT1("Forcewake failed after reset\n");
             Adapter->Generation->InitEngine(&Mmio);
+            HdgfxSpaceRestart(Adapter, &Mmio);
         }
         Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring) &&
                                (Adapter->Generation->Gen < 6 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
