@@ -83,6 +83,10 @@ KeStartAllProcessors(VOID)
         /* Clone the boot processor's descriptor tables */
         __sgdt(&Gdtr.Limit);
         __sidt(&Idtr.Limit);
+        ASSERT(Gdtr.Base != NULL);
+        ASSERT(Idtr.Base != NULL);
+        ASSERT(Gdtr.Limit < sizeof(APInfo->Gdt));
+        ASSERT(Idtr.Limit < sizeof(APInfo->Idt));
         RtlCopyMemory(APInfo->Gdt, Gdtr.Base, Gdtr.Limit + 1);
         RtlCopyMemory(APInfo->Idt, Idtr.Base, Idtr.Limit + 1);
 
@@ -125,6 +129,7 @@ KeStartAllProcessors(VOID)
         ProcessorState->ContextFrame.EFlags = __readeflags() & ~EFLAGS_INTERRUPT_MASK;
 
         /* Hand the new processor's data to the loader block */
+        ASSERT(KeLoaderBlock->Prcb == 0);
         KeLoaderBlock->KernelStack = (ULONG_PTR)KernelStack;
         KeLoaderBlock->Prcb = (ULONG_PTR)&APInfo->Pcr.Prcb;
         KeLoaderBlock->Thread = (ULONG_PTR)&APInfo->Thread;
