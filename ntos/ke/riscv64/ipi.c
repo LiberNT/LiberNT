@@ -27,6 +27,9 @@ VOID FASTCALL KiIpiSend(KAFFINITY Targets, ULONG Request)
     {
         PKPRCB Prcb = KiProcessorBlock[Number];
 
+        ASSERT(Prcb != NULL);
+        ASSERT(Prcb->Number == Number);
+        ASSERT(Prcb->SetMember == AFFINITY_MASK(Number));
         InterlockedOr(&Prcb->RequestSummary, (LONG)Request);
         Remaining &= ~AFFINITY_MASK(Number);
         if ((Request != IPI_FREEZE) && CONTAINING_RECORD(Prcb, KPCR, Prcb)->IdlePolling)
