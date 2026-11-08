@@ -520,6 +520,192 @@ static void format_date(char *buffer)
             date.wYear, date.wHour, date.wMinute, date.wSecond);
 }
 
+#define FILE_PIECE_SIZE 0x10000
+
+struct response_sender
+{
+    HANDLE queue;
+    HTTP_REQUEST_ID id;
+    HANDLE event;
+    ULONG sent;
+    ULONG size;
+    struct http_response *buffer;
+};
+
+static ULONG send_response_buffer(struct response_sender *sender, ULONG flags, BOOL reset, OVERLAPPED *ovl)
+{
+    OVERLAPPED sync_ovl = {0};
+    ULONG ret = ERROR_SUCCESS;
+    DWORD size = 0;
+
+    sender->buffer->id = sender->id;
+    sender->buffer->response_flags = flags;
+    sender->buffer->sent = sender->sent;
+    sender->buffer->reset = reset;
+    if (!ovl)
+    {
+        sync_ovl.hEvent = (HANDLE)((ULONG_PTR)sender->event | 1);
+        ovl = &sync_ovl;
+    }
+
+    if (!DeviceIoControl(sender->queue, IOCTL_HTTP_SEND_RESPONSE, sender->buffer,
+            FIELD_OFFSET(struct http_response, buffer) + sender->buffer->len, NULL, 0, &size, ovl))
+        ret = GetLastError();
+
+    if (ovl == &sync_ovl)
+    {
+        if (ret == ERROR_IO_PENDING)
+        {
+            ret = ERROR_SUCCESS;
+            if (!GetOverlappedResult(sender->queue, ovl, &size, TRUE))
+                ret = GetLastError();
+        }
+        if (!ret)
+            sender->sent = size;
+    }
+    sender->buffer->len = 0;
+    return ret;
+}
+
+static void reset_response(HANDLE queue, HTTP_REQUEST_ID id)
+{
+    struct response_sender sender = {queue, id};
+    struct http_response buffer;
+
+    buffer.len = 0;
+    sender.buffer = &buffer;
+    if ((sender.event = CreateEventW(NULL, TRUE, FALSE, NULL)))
+    {
+        send_response_buffer(&sender, 0, TRUE, NULL);
+        CloseHandle(sender.event);
+    }
+}
+
+static ULONG get_file_chunk_length(const HTTP_DATA_CHUNK *chunk, ULONGLONG *length)
+{
+    const HTTP_BYTE_RANGE *range = &chunk->FromFileHandle.ByteRange;
+    LARGE_INTEGER size;
+
+    if (!GetFileSizeEx(chunk->FromFileHandle.FileHandle, &size))
+        return GetLastError();
+    if (range->StartingOffset.QuadPart > (ULONGLONG)size.QuadPart)
+        return ERROR_FILE_INVALID;
+    *length = size.QuadPart - range->StartingOffset.QuadPart;
+    if (range->Length.QuadPart != HTTP_BYTE_RANGE_TO_EOF)
+    {
+        if (range->Length.QuadPart > *length)
+            return ERROR_FILE_INVALID;
+        *length = range->Length.QuadPart;
+    }
+    return ERROR_SUCCESS;
+}
+
+static ULONG get_chunk_lengths(USHORT count, const HTTP_DATA_CHUNK *chunks, ULONGLONG **file_lengths,
+        ULONG *memory_len, ULONGLONG *body_len)
+{
+    ULONGLONG length;
+    ULONG ret;
+    USHORT i;
+
+    *file_lengths = NULL;
+    *memory_len = 0;
+    *body_len = 0;
+    for (i = 0; i < count; ++i)
+    {
+        if (chunks[i].DataChunkType == HttpDataChunkFromMemory)
+        {
+            *memory_len += chunks[i].FromMemory.BufferLength;
+            *body_len += chunks[i].FromMemory.BufferLength;
+            continue;
+        }
+        if (chunks[i].DataChunkType != HttpDataChunkFromFileHandle)
+        {
+            FIXME("Unhandled data chunk type %u.\n", chunks[i].DataChunkType);
+            free(*file_lengths);
+            return ERROR_CALL_NOT_IMPLEMENTED;
+        }
+        if (!*file_lengths && !(*file_lengths = calloc(count, sizeof(**file_lengths))))
+            return ERROR_OUTOFMEMORY;
+        if ((ret = get_file_chunk_length(&chunks[i], &length)))
+        {
+            free(*file_lengths);
+            return ret;
+        }
+        (*file_lengths)[i] = length;
+        *body_len += length;
+    }
+    return ERROR_SUCCESS;
+}
+
+static ULONG send_file_chunk(struct response_sender *sender, const HTTP_DATA_CHUNK *chunk, ULONGLONG length)
+{
+    ULONGLONG offset = chunk->FromFileHandle.ByteRange.StartingOffset.QuadPart;
+    OVERLAPPED read_ovl;
+    DWORD size, read;
+    ULONG ret;
+
+    while (length)
+    {
+        if (sender->buffer->len == sender->size &&
+                (ret = send_response_buffer(sender, HTTP_SEND_RESPONSE_FLAG_MORE_DATA, FALSE, NULL)))
+            return ret;
+        size = (DWORD)min(length, sender->size - sender->buffer->len);
+        memset(&read_ovl, 0, sizeof(read_ovl));
+        read_ovl.Offset = (DWORD)offset;
+        read_ovl.OffsetHigh = (DWORD)(offset >> 32);
+        read_ovl.hEvent = (HANDLE)((ULONG_PTR)sender->event | 1);
+        if (!ReadFile(chunk->FromFileHandle.FileHandle, sender->buffer->buffer + sender->buffer->len,
+                size, &read, &read_ovl) &&
+                (GetLastError() != ERROR_IO_PENDING ||
+                 !GetOverlappedResult(chunk->FromFileHandle.FileHandle, &read_ovl, &read, TRUE)))
+            return GetLastError() == ERROR_HANDLE_EOF ? ERROR_FILE_INVALID : GetLastError();
+        if (!read)
+            return ERROR_FILE_INVALID;
+        sender->buffer->len += read;
+        offset += read;
+        length -= read;
+    }
+    return ERROR_SUCCESS;
+}
+
+static ULONG send_response_chunks(struct response_sender *sender, ULONG flags, USHORT count,
+        const HTTP_DATA_CHUNK *chunks, const ULONGLONG *file_lengths, ULONG *ret_size, OVERLAPPED *ovl)
+{
+    ULONG ret = ERROR_SUCCESS;
+    USHORT i;
+
+    if (!(sender->event = CreateEventW(NULL, TRUE, FALSE, NULL)))
+        return GetLastError();
+
+    for (i = 0; i < count && !ret; ++i)
+    {
+        const HTTP_DATA_CHUNK *chunk = &chunks[i];
+
+        if (chunk->DataChunkType == HttpDataChunkFromFileHandle)
+        {
+            if ((ret = send_file_chunk(sender, chunk, file_lengths[i])) && ret != ERROR_CONNECTION_INVALID)
+                send_response_buffer(sender, 0, TRUE, NULL);
+            continue;
+        }
+        if (chunk->FromMemory.BufferLength > sender->size - sender->buffer->len)
+            ret = send_response_buffer(sender, HTTP_SEND_RESPONSE_FLAG_MORE_DATA, FALSE, NULL);
+        if (!ret)
+        {
+            memcpy(sender->buffer->buffer + sender->buffer->len, chunk->FromMemory.pBuffer,
+                    chunk->FromMemory.BufferLength);
+            sender->buffer->len += chunk->FromMemory.BufferLength;
+        }
+    }
+
+    if (!ret)
+        ret = send_response_buffer(sender, flags, FALSE, ovl);
+    if (ret_size && !ovl)
+        *ret_size = ret ? 0 : sender->sent;
+
+    CloseHandle(sender->event);
+    return ret;
+}
+
 /***********************************************************************
  *        HttpSendHttpResponse     (HTTPAPI.@)
  */
@@ -561,11 +747,12 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
         "WWW-Authenticate",
     };
 
+    struct response_sender sender = {queue, id};
     struct http_response *buffer;
-    OVERLAPPED dummy_ovl = {};
-    ULONG ret = ERROR_SUCCESS;
-    int len, body_len = 0;
-    char *p, dummy[12];
+    ULONGLONG *file_lengths, body_len;
+    ULONG ret, memory_len;
+    char *p, dummy[21];
+    int len;
     USHORT i;
 
     TRACE("queue %p, id %s, flags %#lx, response %p, cache_policy %p, "
@@ -583,17 +770,17 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
     if (log_data)
         WARN("Ignoring log_data.\n");
 
-    len = 12 + sprintf(dummy, "%hu", response->s.StatusCode) + response->s.ReasonLength;
-    for (i = 0; i < response->s.EntityChunkCount; ++i)
+    if ((ret = get_chunk_lengths(response->s.EntityChunkCount, response->s.pEntityChunks,
+            &file_lengths, &memory_len, &body_len)))
     {
-        if (response->s.pEntityChunks[i].DataChunkType != HttpDataChunkFromMemory)
-        {
-            FIXME("Unhandled data chunk type %u.\n", response->s.pEntityChunks[i].DataChunkType);
-            return ERROR_CALL_NOT_IMPLEMENTED;
-        }
-        body_len += response->s.pEntityChunks[i].FromMemory.BufferLength;
+        if (ret != ERROR_CALL_NOT_IMPLEMENTED && ret != ERROR_OUTOFMEMORY)
+            reset_response(queue, id);
+        if (ret_size)
+            *ret_size = 0;
+        return ret;
     }
-    len += body_len;
+
+    len = 12 + sprintf(dummy, "%hu", response->s.StatusCode) + response->s.ReasonLength;
     for (i = 0; i < HttpHeaderResponseMaximum; ++i)
     {
         if (i == HttpHeaderDate)
@@ -601,10 +788,7 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
         else if (response->s.Headers.KnownHeaders[i].RawValueLength)
             len += strlen(header_names[i]) + 2 + response->s.Headers.KnownHeaders[i].RawValueLength + 2;
         else if (i == HttpHeaderContentLength && !(flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
-        {
-            char dummy[12];
-            len += strlen(header_names[i]) + 2 + sprintf(dummy, "%d", body_len) + 2;
-        }
+            len += strlen(header_names[i]) + 2 + sprintf(dummy, "%I64u", body_len) + 2;
     }
     for (i = 0; i < response->s.Headers.UnknownHeaderCount; ++i)
     {
@@ -613,10 +797,14 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
     }
     len += 2;
 
-    if (!(buffer = malloc(FIELD_OFFSET(struct http_response, buffer) + len)))
+    sender.size = len + memory_len;
+    if (file_lengths)
+        sender.size = max(sender.size, FILE_PIECE_SIZE);
+    if (!(buffer = malloc(FIELD_OFFSET(struct http_response, buffer) + sender.size)))
+    {
+        free(file_lengths);
         return ERROR_OUTOFMEMORY;
-    buffer->id = id;
-    buffer->response_flags = flags;
+    }
     buffer->len = len;
     sprintf(buffer->buffer, "HTTP/1.1 %u %.*s\r\n", response->s.StatusCode,
             response->s.ReasonLength, response->s.pReason);
@@ -630,7 +818,7 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
             sprintf(buffer->buffer + strlen(buffer->buffer), "%s: %.*s\r\n",
                     header_names[i], header->RawValueLength, header->pRawValue);
         else if (i == HttpHeaderContentLength && !(flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
-            sprintf(buffer->buffer + strlen(buffer->buffer), "Content-Length: %d\r\n", body_len);
+            sprintf(buffer->buffer + strlen(buffer->buffer), "Content-Length: %I64u\r\n", body_len);
     }
     for (i = 0; i < response->s.Headers.UnknownHeaderCount; ++i)
     {
@@ -641,21 +829,12 @@ ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags,
     p = buffer->buffer + strlen(buffer->buffer);
     /* Don't use strcat, because this might be the end of the buffer. */
     memcpy(p, "\r\n", 2);
-    p += 2;
-    for (i = 0; i < response->s.EntityChunkCount; ++i)
-    {
-        const HTTP_DATA_CHUNK *chunk = &response->s.pEntityChunks[i];
-        memcpy(p, chunk->FromMemory.pBuffer, chunk->FromMemory.BufferLength);
-        p += chunk->FromMemory.BufferLength;
-    }
 
-    if (!ovl)
-        ovl = &dummy_ovl;
+    sender.buffer = buffer;
+    ret = send_response_chunks(&sender, flags, response->s.EntityChunkCount, response->s.pEntityChunks,
+            file_lengths, ret_size, ovl);
 
-    if (!DeviceIoControl(queue, IOCTL_HTTP_SEND_RESPONSE, buffer,
-            FIELD_OFFSET(struct http_response, buffer) + len, NULL, 0, NULL, ovl))
-        ret = GetLastError();
-
+    free(file_lengths);
     free(buffer);
     return ret;
 }
@@ -685,12 +864,9 @@ ULONG WINAPI HttpSendResponseEntityBody(HANDLE queue, HTTP_REQUEST_ID id,
        ULONG *ret_size, void *reserved1, ULONG reserved2, OVERLAPPED *ovl,
        HTTP_LOG_DATA *log_data)
 {
-    struct http_response *buffer;
-    OVERLAPPED dummy_ovl = {};
-    ULONG ret = NO_ERROR;
-    int len = 0;
-    char *p;
-    USHORT i;
+    struct response_sender sender = {queue, id};
+    ULONGLONG *file_lengths, body_len;
+    ULONG ret, memory_len;
 
     TRACE("queue %p, id %s, flags %#lx, entity_chunk_count %u, entity_chunks %p, "
             "ret_size %p, reserved1 %p, reserved2 %#lx, ovl %p, log_data %p\n",
@@ -706,43 +882,28 @@ ULONG WINAPI HttpSendResponseEntityBody(HANDLE queue, HTTP_REQUEST_ID id,
     if (log_data)
         WARN("Ignoring log_data.\n");
 
-    /* Compute the length of the body. */
-    for (i = 0; i < entity_chunk_count; ++i)
+    if ((ret = get_chunk_lengths(entity_chunk_count, entity_chunks, &file_lengths, &memory_len, &body_len)))
     {
-        if (entity_chunks[i].DataChunkType != HttpDataChunkFromMemory)
-        {
-            FIXME("Unhandled data chunk type %u.\n", entity_chunks[i].DataChunkType);
-            return ERROR_CALL_NOT_IMPLEMENTED;
-        }
-        len += entity_chunks[i].FromMemory.BufferLength;
-    }
-
-    if (!(buffer = malloc(FIELD_OFFSET(struct http_response, buffer) + len)))
-        return ERROR_OUTOFMEMORY;
-    buffer->id = id;
-    buffer->response_flags = flags;
-    buffer->len = len;
-
-    p = buffer->buffer;
-    for (i = 0; i < entity_chunk_count; ++i)
-    {
-        const HTTP_DATA_CHUNK *chunk = &entity_chunks[i];
-        memcpy(p, chunk->FromMemory.pBuffer, chunk->FromMemory.BufferLength);
-        p += chunk->FromMemory.BufferLength;
-    }
-
-    if (!ovl)
-    {
-        ovl = &dummy_ovl;
+        if (ret != ERROR_CALL_NOT_IMPLEMENTED && ret != ERROR_OUTOFMEMORY)
+            reset_response(queue, id);
         if (ret_size)
-            *ret_size = len;
+            *ret_size = 0;
+        return ret;
     }
 
-    if (!DeviceIoControl(queue, IOCTL_HTTP_SEND_RESPONSE, buffer,
-            FIELD_OFFSET(struct http_response, buffer) + len, NULL, 0, NULL, ovl))
-        ret = GetLastError();
+    sender.size = memory_len;
+    if (file_lengths)
+        sender.size = max(sender.size, FILE_PIECE_SIZE);
+    if (!(sender.buffer = malloc(FIELD_OFFSET(struct http_response, buffer) + sender.size)))
+    {
+        free(file_lengths);
+        return ERROR_OUTOFMEMORY;
+    }
+    sender.buffer->len = 0;
+    ret = send_response_chunks(&sender, flags, entity_chunk_count, entity_chunks, file_lengths, ret_size, ovl);
 
-    free(buffer);
+    free(file_lengths);
+    free(sender.buffer);
     return ret;
 }
 

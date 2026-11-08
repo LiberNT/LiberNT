@@ -50,6 +50,8 @@ struct http_response
     HTTP_REQUEST_ID id;
     ULONG response_flags;
     int len;
+    ULONG sent;
+    BOOL reset;
     char buffer[1];
 };
 

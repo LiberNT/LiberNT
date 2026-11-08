@@ -2742,6 +2742,393 @@ cleanup_wsa:
     WSACleanup();
 }
 
+#define HTTP_FC_PORT 59998
+#define HTTP_FC_SMALL 100
+#define HTTP_FC_BIG (1024 * 1024)
+
+typedef struct _HTTP_FC_RESULT
+{
+    ULONG Result;
+    ULONG BytesSent;
+    ULONG FallbackResult;
+    ULONG TailBytes;
+    int Received;
+    int State;
+    const char *Body;
+    int BodyLength;
+    int ContentLength;
+} HTTP_FC_RESULT;
+
+static char *http_fc_data;
+static WCHAR http_fc_small[MAX_PATH], http_fc_big[MAX_PATH], http_fc_empty[MAX_PATH];
+
+static char http_fc_byte(ULONGLONG Offset)
+{
+    return (char)('a' + Offset % 26);
+}
+
+static BOOL http_fc_create(WCHAR *Path, const WCHAR *Name, ULONG Size)
+{
+    HANDLE File;
+    char *Buffer;
+    DWORD Written = 0;
+    ULONG i;
+
+    GetTempPathW(MAX_PATH, Path);
+    wcscat(Path, Name);
+    Buffer = malloc(Size + 1);
+    if (!Buffer)
+        return FALSE;
+    for (i = 0; i < Size; ++i)
+        Buffer[i] = http_fc_byte(i);
+    File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        WriteFile(File, Buffer, Size, &Written, NULL);
+        CloseHandle(File);
+    }
+    free(Buffer);
+    return File != INVALID_HANDLE_VALUE && Written == Size;
+}
+
+static HANDLE http_fc_open(const WCHAR *Path, DWORD Access, DWORD Flags)
+{
+    return CreateFileW(Path, Access, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                       OPEN_EXISTING, Flags, NULL);
+}
+
+static void http_fc_file_chunk(HTTP_DATA_CHUNK *Chunk, HANDLE File, ULONGLONG Offset, ULONGLONG Length)
+{
+    Chunk->DataChunkType = HttpDataChunkFromFileHandle;
+    Chunk->FromFileHandle.ByteRange.StartingOffset.QuadPart = Offset;
+    Chunk->FromFileHandle.ByteRange.Length.QuadPart = Length;
+    Chunk->FromFileHandle.FileHandle = File;
+}
+
+static void http_fc_memory_chunk(HTTP_DATA_CHUNK *Chunk, const char *Data)
+{
+    Chunk->DataChunkType = HttpDataChunkFromMemory;
+    Chunk->FromMemory.pBuffer = (void *)Data;
+    Chunk->FromMemory.BufferLength = (ULONG)strlen(Data);
+}
+
+typedef struct _HTTP_FC_READER
+{
+    SOCKET Socket;
+    int Received;
+    int State;
+} HTTP_FC_READER;
+
+static DWORD WINAPI http_fc_collect(void *Parameter)
+{
+    HTTP_FC_READER *Reader = Parameter;
+    int TimeoutMs = 2000, Result;
+
+    setsockopt(Reader->Socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&TimeoutMs, sizeof(TimeoutMs));
+    for (;;)
+    {
+        Result = recv(Reader->Socket, http_fc_data + Reader->Received, HTTP_FC_BIG + 4096 - Reader->Received, 0);
+        if (Result > 0)
+        {
+            Reader->Received += Result;
+            if (Reader->Received < HTTP_FC_BIG + 4096)
+                continue;
+            Reader->State = HTTP_KA_DATA;
+        }
+        else if (!Result)
+            Reader->State = HTTP_KA_CLOSED;
+        else
+            Reader->State = WSAGetLastError() == WSAETIMEDOUT ? HTTP_KA_OPEN : HTTP_KA_RESET;
+        return 0;
+    }
+}
+
+static void http_fc_serve(HANDLE Queue, OVERLAPPED *Overlapped, const char *Name, ULONG Flags,
+                          HTTP_DATA_CHUNK *Chunks, USHORT ChunkCount, OVERLAPPED *SendOverlapped,
+                          HTTP_DATA_CHUNK *Tail, USHORT TailCount, HTTP_FC_RESULT *Out)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    HTTP_RESPONSE Response = {0};
+    HTTP_KA_CLIENT Client;
+    HTTP_FC_READER Reader = {0};
+    HANDLE Thread;
+    char Text[256];
+    const char *End, *Length;
+    DWORD Bytes;
+
+    memset(Out, 0, sizeof(*Out));
+    Out->Result = Out->FallbackResult = 0xdead;
+    Out->BytesSent = Out->TailBytes = 0xdeadbeef;
+    Out->ContentLength = -1;
+    if (!http_ka_connect(&Client, HTTP_FC_PORT))
+    {
+        ok(0, "%s: connect failed with %d\n", Name, WSAGetLastError());
+        return;
+    }
+    sprintf(Text, "GET /file/%s HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nConnection: close\r\n\r\n",
+            Name, HTTP_FC_PORT);
+    ok(http_ka_send(&Client, Text), "%s: send failed\n", Name);
+    Out->Result = http_ka_receive(Queue, Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+    ok(Out->Result == NO_ERROR, "%s: HttpReceiveHttpRequest returned %lu\n", Name, Out->Result);
+    if (Out->Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, Overlapped);
+    if (Out->Result != NO_ERROR)
+    {
+        closesocket(Client.Socket);
+        return;
+    }
+
+    Reader.Socket = Client.Socket;
+    Thread = CreateThread(NULL, 0, http_fc_collect, &Reader, 0, NULL);
+    Response.s.StatusCode = 200;
+    Response.s.pReason = "OK";
+    Response.s.ReasonLength = 2;
+    Response.s.EntityChunkCount = ChunkCount;
+    Response.s.pEntityChunks = Chunks;
+    Out->Result = HttpSendHttpResponse(Queue, Request->s.RequestId, Flags, &Response, NULL,
+                                       &Out->BytesSent, NULL, 0, SendOverlapped, NULL);
+    if (SendOverlapped && (Out->Result == ERROR_IO_PENDING || Out->Result == NO_ERROR))
+    {
+        Out->Result = NO_ERROR;
+        if (!GetOverlappedResult(Queue, SendOverlapped, &Bytes, TRUE))
+            Out->Result = GetLastError();
+        Out->BytesSent = Bytes;
+    }
+    if (Out->Result != NO_ERROR || (Flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
+    {
+        HTTP_DATA_CHUNK Fallback;
+
+        http_fc_memory_chunk(&Fallback, "fallback");
+        if (Flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA && Out->Result == NO_ERROR)
+        {
+            Out->FallbackResult = HttpSendResponseEntityBody(Queue, Request->s.RequestId, 0, TailCount, Tail,
+                                                             &Out->TailBytes, NULL, 0, NULL, NULL);
+        }
+        else
+        {
+            Response.s.EntityChunkCount = 1;
+            Response.s.pEntityChunks = &Fallback;
+            Out->FallbackResult = HttpSendHttpResponse(Queue, Request->s.RequestId, 0, &Response, NULL,
+                                                       NULL, NULL, 0, NULL, NULL);
+        }
+    }
+    WaitForSingleObject(Thread, 10000);
+    CloseHandle(Thread);
+    closesocket(Client.Socket);
+    Out->Received = Reader.Received;
+    Out->State = Reader.State;
+
+    http_fc_data[Out->Received] = '\0';
+    End = strstr(http_fc_data, "\r\n\r\n");
+    if (End)
+    {
+        Out->Body = End + 4;
+        Out->BodyLength = Out->Received - (int)(Out->Body - http_fc_data);
+        Length = strstr(http_fc_data, "\r\nContent-Length: ");
+        if (Length && Length < End)
+            Out->ContentLength = atoi(Length + 18);
+    }
+}
+
+static BOOL http_fc_body_is(const HTTP_FC_RESULT *Out, const char *Prefix, ULONGLONG Offset,
+                            int FileLength, const char *Suffix)
+{
+    int PrefixLength = Prefix ? (int)strlen(Prefix) : 0;
+    int SuffixLength = Suffix ? (int)strlen(Suffix) : 0;
+    int i;
+
+    if (!Out->Body || Out->BodyLength != PrefixLength + FileLength + SuffixLength)
+        return FALSE;
+    if (PrefixLength && memcmp(Out->Body, Prefix, PrefixLength))
+        return FALSE;
+    for (i = 0; i < FileLength; ++i)
+    {
+        if (Out->Body[PrefixLength + i] != http_fc_byte(Offset + i))
+            return FALSE;
+    }
+    return !SuffixLength || !memcmp(Out->Body + PrefixLength + FileLength, Suffix, SuffixLength);
+}
+
+static void http_fc_check(const HTTP_FC_RESULT *Out, const char *Name, ULONG Result,
+                          int ContentLength, const char *Prefix, ULONGLONG Offset, int FileLength,
+                          const char *Suffix)
+{
+    ok(Out->Result == Result, "%s: HttpSendHttpResponse returned %lu, expected %lu\n",
+       Name, Out->Result, Result);
+    ok(Out->ContentLength == ContentLength, "%s: Content-Length %d, expected %d\n",
+       Name, Out->ContentLength, ContentLength);
+    ok(http_fc_body_is(Out, Prefix, Offset, FileLength, Suffix), "%s: body of %d bytes [%.*s]\n",
+       Name, Out->BodyLength, Out->BodyLength > 64 ? 64 : Out->BodyLength, Out->Body ? Out->Body : "");
+    ok(Out->BytesSent == (ULONG)Out->Received, "%s: %lu bytes sent, %d received\n",
+       Name, Out->BytesSent, Out->Received);
+    ok(Out->State == HTTP_KA_CLOSED, "%s: connection state %d\n", Name, Out->State);
+}
+
+static void http_fc_check_reset(const HTTP_FC_RESULT *Out, const char *Name, ULONG Result)
+{
+    ok(Out->Result == Result, "%s: HttpSendHttpResponse returned %lu, expected %lu\n",
+       Name, Out->Result, Result);
+    ok(Out->BytesSent == 0, "%s: %lu bytes sent\n", Name, Out->BytesSent);
+    ok(Out->Received == 0, "%s: %d bytes received\n", Name, Out->Received);
+    ok(Out->State == HTTP_KA_RESET, "%s: connection state %d\n", Name, Out->State);
+}
+
+static void test_file_chunks(void)
+{
+    static const WCHAR Url[] = L"http://127.0.0.1:59998/file/";
+    HTTPAPI_VERSION Version = HTTPAPI_VERSION_1;
+    OVERLAPPED Overlapped = {0}, SendOverlapped = {0};
+    HTTP_DATA_CHUNK Chunks[3], Tail[2];
+    HTTP_FC_RESULT Out;
+    LARGE_INTEGER Position, Zero = {{0}};
+    WSADATA WsaData;
+    HANDLE Queue = NULL, Small, Big, Empty, Async, NoRead;
+    ULONG Result;
+
+    http_fc_data = malloc(HTTP_FC_BIG + 4097);
+    ok(http_fc_data != NULL, "out of memory\n");
+    if (!http_fc_data)
+        return;
+    ok(http_fc_create(http_fc_small, L"httpfc_small.bin", HTTP_FC_SMALL) &&
+       http_fc_create(http_fc_big, L"httpfc_big.bin", HTTP_FC_BIG) &&
+       http_fc_create(http_fc_empty, L"httpfc_empty.bin", 0), "creating the files failed\n");
+
+    Result = WSAStartup(MAKEWORD(2, 2), &WsaData);
+    ok(Result == 0, "WSAStartup failed with %lu\n", Result);
+    if (Result != 0)
+        goto cleanup_files;
+    Result = HttpInitialize(Version, HTTP_INITIALIZE_SERVER, NULL);
+    ok(Result == NO_ERROR, "HttpInitialize failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_wsa;
+    Result = HttpCreateHttpHandle(&Queue, 0);
+    ok(Result == NO_ERROR, "HttpCreateHttpHandle failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_http;
+    Result = HttpAddUrl(Queue, Url, NULL);
+    ok(Result == NO_ERROR, "HttpAddUrl(file) failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_queue;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    SendOverlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Small = http_fc_open(http_fc_small, GENERIC_READ, 0);
+    Big = http_fc_open(http_fc_big, GENERIC_READ, 0);
+    Empty = http_fc_open(http_fc_empty, GENERIC_READ, 0);
+    Async = http_fc_open(http_fc_small, GENERIC_READ, FILE_FLAG_OVERLAPPED);
+    NoRead = http_fc_open(http_fc_small, FILE_READ_ATTRIBUTES, 0);
+
+    http_fc_file_chunk(&Chunks[0], Small, 0, HTTP_BYTE_RANGE_TO_EOF);
+    http_fc_serve(Queue, &Overlapped, "whole", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "whole", NO_ERROR, HTTP_FC_SMALL, NULL, 0, HTTP_FC_SMALL, NULL);
+    ok(SetFilePointerEx(Small, Zero, &Position, FILE_CURRENT) && Position.QuadPart == HTTP_FC_SMALL,
+       "whole: file pointer at %I64d\n", Position.QuadPart);
+
+    http_fc_file_chunk(&Chunks[0], Small, 10, 20);
+    http_fc_serve(Queue, &Overlapped, "middle", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "middle", NO_ERROR, 20, NULL, 10, 20, NULL);
+    ok(SetFilePointerEx(Small, Zero, &Position, FILE_CURRENT) && Position.QuadPart == 30,
+       "middle: file pointer at %I64d\n", Position.QuadPart);
+
+    http_fc_file_chunk(&Chunks[0], Small, 90, 20);
+    http_fc_serve(Queue, &Overlapped, "straddle", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check_reset(&Out, "straddle", ERROR_FILE_INVALID);
+
+    http_fc_file_chunk(&Chunks[0], Small, 200, 10);
+    http_fc_serve(Queue, &Overlapped, "past", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check_reset(&Out, "past", ERROR_FILE_INVALID);
+
+    http_fc_file_chunk(&Chunks[0], Small, 200, HTTP_BYTE_RANGE_TO_EOF);
+    http_fc_serve(Queue, &Overlapped, "past-eof", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check_reset(&Out, "past-eof", ERROR_FILE_INVALID);
+
+    http_fc_file_chunk(&Chunks[0], Small, HTTP_FC_SMALL, HTTP_BYTE_RANGE_TO_EOF);
+    http_fc_serve(Queue, &Overlapped, "at-eof", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "at-eof", NO_ERROR, 0, NULL, 0, 0, NULL);
+
+    http_fc_file_chunk(&Chunks[0], Small, 5, 0);
+    http_fc_serve(Queue, &Overlapped, "zero", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "zero", NO_ERROR, 0, NULL, 0, 0, NULL);
+
+    http_fc_file_chunk(&Chunks[0], Empty, 0, HTTP_BYTE_RANGE_TO_EOF);
+    http_fc_serve(Queue, &Overlapped, "empty", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "empty", NO_ERROR, 0, NULL, 0, 0, NULL);
+
+    http_fc_memory_chunk(&Chunks[0], "head:");
+    http_fc_file_chunk(&Chunks[1], Small, 30, 10);
+    http_fc_memory_chunk(&Chunks[2], ":tail");
+    http_fc_serve(Queue, &Overlapped, "mixed", 0, Chunks, 3, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "mixed", NO_ERROR, 20, "head:", 30, 10, ":tail");
+
+    http_fc_file_chunk(&Chunks[0], Big, 0, HTTP_BYTE_RANGE_TO_EOF);
+    http_fc_serve(Queue, &Overlapped, "big", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "big", NO_ERROR, HTTP_FC_BIG, NULL, 0, HTTP_FC_BIG, NULL);
+
+    http_fc_file_chunk(&Chunks[0], Async, 0, HTTP_BYTE_RANGE_TO_EOF);
+    http_fc_serve(Queue, &Overlapped, "async-file", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check(&Out, "async-file", NO_ERROR, HTTP_FC_SMALL, NULL, 0, HTTP_FC_SMALL, NULL);
+
+    http_fc_file_chunk(&Chunks[0], Small, 0, 50);
+    http_fc_serve(Queue, &Overlapped, "async-send", 0, Chunks, 1, &SendOverlapped, NULL, 0, &Out);
+    http_fc_check(&Out, "async-send", NO_ERROR, 50, NULL, 0, 50, NULL);
+
+    http_fc_file_chunk(&Chunks[0], INVALID_HANDLE_VALUE, 0, 10);
+    http_fc_serve(Queue, &Overlapped, "invalid", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check_reset(&Out, "invalid", ERROR_INVALID_HANDLE);
+
+    http_fc_file_chunk(&Chunks[0], NULL, 0, 10);
+    http_fc_serve(Queue, &Overlapped, "null", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check_reset(&Out, "null", ERROR_INVALID_HANDLE);
+
+    http_fc_file_chunk(&Chunks[0], NoRead, 0, 10);
+    http_fc_serve(Queue, &Overlapped, "no-read", 0, Chunks, 1, NULL, NULL, 0, &Out);
+    http_fc_check_reset(&Out, "no-read", ERROR_ACCESS_DENIED);
+
+    http_fc_memory_chunk(&Chunks[0], "head:");
+    http_fc_file_chunk(&Tail[0], Small, 40, 10);
+    http_fc_memory_chunk(&Tail[1], ":tail");
+    http_fc_serve(Queue, &Overlapped, "body", HTTP_SEND_RESPONSE_FLAG_MORE_DATA, Chunks, 1, NULL, Tail, 2, &Out);
+    ok(Out.Result == NO_ERROR, "body: HttpSendHttpResponse returned %lu\n", Out.Result);
+    ok(Out.FallbackResult == NO_ERROR, "body: HttpSendResponseEntityBody returned %lu\n", Out.FallbackResult);
+    ok(Out.TailBytes == 15, "body: HttpSendResponseEntityBody sent %lu bytes\n", Out.TailBytes);
+    ok(Out.ContentLength == -1, "body: Content-Length %d\n", Out.ContentLength);
+    ok(http_fc_body_is(&Out, "head:", 40, 10, ":tail"), "body: body of %d bytes\n", Out.BodyLength);
+
+    http_fc_file_chunk(&Tail[0], Small, 200, 10);
+    http_fc_serve(Queue, &Overlapped, "body-past", HTTP_SEND_RESPONSE_FLAG_MORE_DATA, Chunks, 1, NULL, Tail, 1, &Out);
+    ok(Out.Result == NO_ERROR, "body-past: HttpSendHttpResponse returned %lu\n", Out.Result);
+    ok(Out.FallbackResult == ERROR_FILE_INVALID, "body-past: HttpSendResponseEntityBody returned %lu\n",
+       Out.FallbackResult);
+    ok(Out.TailBytes == 0, "body-past: HttpSendResponseEntityBody sent %lu bytes\n", Out.TailBytes);
+    ok(Out.State == HTTP_KA_RESET, "body-past: connection state %d\n", Out.State);
+
+    if (Small != INVALID_HANDLE_VALUE)
+        CloseHandle(Small);
+    if (Big != INVALID_HANDLE_VALUE)
+        CloseHandle(Big);
+    if (Empty != INVALID_HANDLE_VALUE)
+        CloseHandle(Empty);
+    if (Async != INVALID_HANDLE_VALUE)
+        CloseHandle(Async);
+    if (NoRead != INVALID_HANDLE_VALUE)
+        CloseHandle(NoRead);
+    CloseHandle(Overlapped.hEvent);
+    CloseHandle(SendOverlapped.hEvent);
+    HttpRemoveUrl(Queue, Url);
+cleanup_queue:
+    CloseHandle(Queue);
+cleanup_http:
+    HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
+cleanup_wsa:
+    WSACleanup();
+cleanup_files:
+    DeleteFileW(http_fc_small);
+    DeleteFileW(http_fc_big);
+    DeleteFileW(http_fc_empty);
+    free(http_fc_data);
+}
+
 START_TEST(httpapi)
 {
     test_initialize();
@@ -2762,4 +3149,9 @@ START_TEST(httpapi)
 START_TEST(chunked)
 {
     test_chunked();
+}
+
+START_TEST(filechunk)
+{
+    test_file_chunks();
 }
