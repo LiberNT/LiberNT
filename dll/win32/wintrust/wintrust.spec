@@ -81,7 +81,7 @@
 @ stdcall SoftpubLoadSignature(ptr)
 #@ stub SrpCheckSmartlockerEAandProcessToken
 @ stub TrustDecode
-@ stub TrustFindIssuerCertificate
+@ stdcall TrustFindIssuerCertificate(ptr long long ptr ptr ptr ptr long)
 @ stub TrustFreeDecode
 @ stdcall TrustIsCertificateSelfSigned(ptr)
 @ stub TrustOpenStores
