@@ -2093,6 +2093,7 @@ UsbAudioRenderComplete(
     PKSPIN Pin;
     PPIN_CONTEXT PinContext;
     PKSSTREAM_POINTER StreamPointerClone;
+    NTSTATUS Status;
     PURB Urb;
     PVOID TransferBuffer;
 
@@ -2101,6 +2102,9 @@ UsbAudioRenderComplete(
     /* get pin context */
     Pin = Context;
     PinContext = Pin->Context;
+
+    /* get status */
+    Status = Irp->IoStatus.Status;
 
     /* get streampointer */
     StreamPointerClone = Irp->Tail.Overlay.DriverContext[1];
@@ -2117,6 +2121,13 @@ UsbAudioRenderComplete(
     FreeFunction(Urb);
     if (TransferBuffer)
         FreeFunction(TransferBuffer);
+
+    if (!NT_SUCCESS(Status) && StreamPointerClone)
+    {
+        /* set status code because it failed */
+        KsStreamPointerSetStatusCode(StreamPointerClone, STATUS_DEVICE_DATA_ERROR);
+        DPRINT1("UsbAudioRenderComplete failed with %x\n", Status);
+    }
 
     if (StreamPointerClone)
     {
