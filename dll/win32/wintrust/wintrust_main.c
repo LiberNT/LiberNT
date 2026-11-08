@@ -1246,6 +1246,45 @@ BOOL WINAPI WTHelperCertIsSelfSigned(DWORD dwEncoding, CERT_INFO *pCert)
     return CertCompareCertificateName(dwEncoding, &pCert->Subject, &pCert->Issuer);
 }
 
+static BOOL WINTRUST_AuthorityNamesIssuer(PCCERT_CONTEXT child, PCCERT_CONTEXT issuer)
+{
+    CERT_AUTHORITY_KEY_ID2_INFO *info2;
+    CERT_AUTHORITY_KEY_ID_INFO *info;
+    PCERT_EXTENSION ext;
+    BOOL ret = FALSE;
+    DWORD size, i;
+
+    if ((ext = CertFindExtension(szOID_AUTHORITY_KEY_IDENTIFIER, child->pCertInfo->cExtension,
+                                 child->pCertInfo->rgExtension)) &&
+        CryptDecodeObjectEx(child->dwCertEncodingType, X509_AUTHORITY_KEY_ID, ext->Value.pbData, ext->Value.cbData,
+                            CRYPT_DECODE_ALLOC_FLAG, NULL, &info, &size))
+    {
+        ret = info->CertIssuer.cbData && info->CertSerialNumber.cbData &&
+              CertCompareCertificateName(child->dwCertEncodingType, &info->CertIssuer, &issuer->pCertInfo->Issuer) &&
+              CertCompareIntegerBlob(&info->CertSerialNumber, &issuer->pCertInfo->SerialNumber);
+        LocalFree(info);
+    }
+    if (!ret && (ext = CertFindExtension(szOID_AUTHORITY_KEY_IDENTIFIER2, child->pCertInfo->cExtension,
+                                         child->pCertInfo->rgExtension)) &&
+        CryptDecodeObjectEx(child->dwCertEncodingType, X509_AUTHORITY_KEY_ID2, ext->Value.pbData, ext->Value.cbData,
+                            CRYPT_DECODE_ALLOC_FLAG, NULL, &info2, &size))
+    {
+        if (info2->AuthorityCertSerialNumber.cbData &&
+            CertCompareIntegerBlob(&info2->AuthorityCertSerialNumber, &issuer->pCertInfo->SerialNumber))
+        {
+            for (i = 0; !ret && i < info2->AuthorityCertIssuer.cAltEntry; i++)
+            {
+                ret = info2->AuthorityCertIssuer.rgAltEntry[i].dwAltNameChoice == CERT_ALT_NAME_DIRECTORY_NAME &&
+                      CertCompareCertificateName(child->dwCertEncodingType,
+                                                 &info2->AuthorityCertIssuer.rgAltEntry[i].DirectoryName,
+                                                 &issuer->pCertInfo->Issuer);
+            }
+        }
+        LocalFree(info2);
+    }
+    return ret;
+}
+
 static DWORD WINTRUST_IssuerConfidence(PCCERT_CONTEXT child, PCCERT_CONTEXT issuer, FILETIME *time)
 {
     DWORD confidence = 0;
@@ -1257,7 +1296,12 @@ static DWORD WINTRUST_IssuerConfidence(PCCERT_CONTEXT child, PCCERT_CONTEXT issu
         confidence |= CERT_CONFIDENCE_TIME;
     if (CertVerifyValidityNesting(child->pCertInfo, issuer->pCertInfo))
         confidence |= CERT_CONFIDENCE_TIMENEST;
-    /* TODO: INFO_NEEDED: when Windows 11 sets CERT_CONFIDENCE_AUTHIDEXT and CERT_CONFIDENCE_HYGIENE */
+    if (WINTRUST_AuthorityNamesIssuer(child, issuer))
+    {
+        confidence |= CERT_CONFIDENCE_AUTHIDEXT;
+        if (confidence & CERT_CONFIDENCE_SIG)
+            confidence |= CERT_CONFIDENCE_HYGIENE;
+    }
     return confidence;
 }
 
@@ -1296,8 +1340,28 @@ PCCERT_CONTEXT WINAPI WTHelperCertFindIssuerCertificate(PCCERT_CONTEXT pChildCon
     if (pdwConfidence)
         *pdwConfidence = best_confidence;
     if (pdwError)
-        *pdwError = ERROR_SUCCESS;
+        *pdwError = best && !(best_confidence & CERT_CONFIDENCE_SIG) ? TRUST_E_CERT_SIGNATURE : ERROR_SUCCESS;
     return best;
+}
+
+/***********************************************************************
+ *		TrustFindIssuerCertificate (WINTRUST.@)
+ */
+PCCERT_CONTEXT WINAPI TrustFindIssuerCertificate(PCCERT_CONTEXT pChildContext, DWORD dwEncoding, DWORD chStores,
+                                                 HCERTSTORE *pahStores, FILETIME *psftVerifyAsOf,
+                                                 DWORD *pdwConfidence, DWORD *pdwError, DWORD dwFlags)
+{
+    TRACE("(%p %#lx %lu %p %p %p %p %#lx)\n", pChildContext, dwEncoding, chStores, pahStores, psftVerifyAsOf,
+          pdwConfidence, pdwError, dwFlags);
+
+    if (!pChildContext)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    /* TODO: INFO_NEEDED: the meaning of dwFlags; only 0 was measured */
+    return WTHelperCertFindIssuerCertificate(pChildContext, chStores, pahStores, psftVerifyAsOf, dwEncoding,
+                                             pdwConfidence, pdwError);
 }
 
 /***********************************************************************
