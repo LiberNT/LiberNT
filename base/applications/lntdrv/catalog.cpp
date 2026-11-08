@@ -192,6 +192,8 @@ bool LastPage(const std::string &html)
     return page >= pages;
 }
 
+}
+
 DWORD ParseResults(const std::string &html, const std::wstring &query, std::vector<CatalogUpdate> &updates,
                    size_t &rows)
 {
@@ -257,6 +259,9 @@ DWORD ParseResults(const std::string &html, const std::wstring &query, std::vect
         rows = updates.size() - before;
     return rows ? ERROR_SUCCESS : ERROR_LNTDRV_CATALOG_FORMAT;
 }
+
+namespace
+{
 
 bool AllowedDownloadHost(const std::wstring &host)
 {
