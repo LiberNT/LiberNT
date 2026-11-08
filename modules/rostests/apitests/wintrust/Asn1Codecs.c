@@ -198,6 +198,81 @@ TestMinimalCriteria(VOID)
         ok(Decoded == FALSE, "decoded %d\n", Decoded);
 }
 
+static
+VOID
+TestSealing(VOID)
+{
+    static const BYTE IntentEncoded[] = { 0x30, 0x06, 0x02, 0x01, 0x01, 0x01, 0x01, 0x00 };
+    static const BYTE IntentSealed[] = { 0x30, 0x09, 0x02, 0x04, 0x31, 0xa9, 0x00, 0x28, 0x01, 0x01, 0xff };
+    static const BYTE SignatureEncoded[] = {
+        0x30, 0x10, 0x02, 0x04, 0x31, 0xa9, 0x00, 0x28, 0x02, 0x02, 0x7f, 0xf6, 0x30, 0x02, 0x06, 0x00, 0x04, 0x00 };
+    static const BYTE TimestampEncoded[] = { 0x30, 0x08, 0x02, 0x01, 0x01, 0x02, 0x01, 0x00, 0x04, 0x00 };
+    static const BYTE SignatureAlgorithm[] = {
+        0x30, 0x1a, 0x02, 0x01, 0x01, 0x02, 0x01, 0x00, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d,
+        0x01, 0x01, 0x0b, 0x05, 0x00, 0x04, 0x03, 0x01, 0x02, 0x03 };
+    static const BYTE SignatureEmptyOid[] = {
+        0x30, 0x11, 0x02, 0x01, 0x01, 0x02, 0x01, 0x00, 0x30, 0x04, 0x06, 0x00, 0x05, 0x00, 0x04, 0x03, 0x01, 0x02, 0x03 };
+    static const BYTE Digest[] = { 1, 2, 3 };
+    INTENT_TO_SEAL_ATTRIBUTE Intent, *DecodedIntent;
+    SEALING_SIGNATURE_ATTRIBUTE Signature, *DecodedSignature;
+    SEALING_TIMESTAMP_ATTRIBUTE Timestamp, *DecodedTimestamp;
+    BYTE Buffer[512];
+
+    ZeroMemory(&Intent, sizeof(Intent));
+    Intent.version = 1;
+    FillMemory(Buffer, sizeof(Buffer), 0xcc);
+    DecodedIntent = (INTENT_TO_SEAL_ATTRIBUTE *)Buffer;
+    if (Encode("IntentToSealAttribute", INTENT_TO_SEAL_ATTRIBUTE_STRUCT, &Intent, IntentEncoded, sizeof(IntentEncoded),
+               Buffer, sizeof(Buffer)))
+    {
+        ok(DecodedIntent->version == 1 && DecodedIntent->seal == FALSE, "intent %lu %u\n", DecodedIntent->version,
+           DecodedIntent->seal);
+        ok_hex(Buffer[FIELD_OFFSET(INTENT_TO_SEAL_ATTRIBUTE, seal) + 1], 0xcc);
+    }
+    Intent.version = 0x31a90028;
+    Intent.seal = TRUE;
+    FillMemory(Buffer, sizeof(Buffer), 0xcc);
+    if (Encode("IntentToSealAttribute", INTENT_TO_SEAL_ATTRIBUTE_STRUCT, &Intent, IntentSealed, sizeof(IntentSealed),
+               Buffer, sizeof(Buffer)))
+        ok(DecodedIntent->version == 0x31a90028 && DecodedIntent->seal == TRUE, "sealed intent %#lx %u\n",
+           DecodedIntent->version, DecodedIntent->seal);
+
+    ZeroMemory(&Signature, sizeof(Signature));
+    Signature.version = 0x31a90028;
+    Signature.signerIndex = 0x7ff6;
+    DecodedSignature = (SEALING_SIGNATURE_ATTRIBUTE *)Buffer;
+    if (Encode("SealingSignatureAttribute", SEALING_SIGNATURE_ATTRIBUTE_STRUCT, &Signature, SignatureEncoded,
+               sizeof(SignatureEncoded), Buffer, sizeof(Buffer)))
+        ok(DecodedSignature->version == 0x31a90028 && DecodedSignature->signerIndex == 0x7ff6 &&
+           DecodedSignature->signatureAlgorithm.pszObjId && !DecodedSignature->signatureAlgorithm.pszObjId[0] &&
+           !DecodedSignature->signatureAlgorithm.Parameters.cbData && !DecodedSignature->encryptedDigest.cbData,
+           "unexpected sealing signature\n");
+
+    Signature.version = 1;
+    Signature.signerIndex = 0;
+    Signature.signatureAlgorithm.pszObjId = (LPSTR)szOID_RSA_SHA256RSA;
+    Signature.encryptedDigest.cbData = sizeof(Digest);
+    Signature.encryptedDigest.pbData = (BYTE *)Digest;
+    if (Encode("SealingSignatureAttribute", SEALING_SIGNATURE_ATTRIBUTE_STRUCT, &Signature, SignatureAlgorithm,
+               sizeof(SignatureAlgorithm), Buffer, sizeof(Buffer)))
+        ok(DecodedSignature->signatureAlgorithm.pszObjId &&
+           !strcmp(DecodedSignature->signatureAlgorithm.pszObjId, szOID_RSA_SHA256RSA) &&
+           DecodedSignature->encryptedDigest.cbData == sizeof(Digest) &&
+           !memcmp(DecodedSignature->encryptedDigest.pbData, Digest, sizeof(Digest)), "unexpected algorithm signature\n");
+    Signature.signatureAlgorithm.pszObjId = (LPSTR)"";
+    if (Encode("SealingSignatureAttribute", SEALING_SIGNATURE_ATTRIBUTE_STRUCT, &Signature, SignatureEmptyOid,
+               sizeof(SignatureEmptyOid), Buffer, sizeof(Buffer)))
+        ok(DecodedSignature->signatureAlgorithm.Parameters.cbData == 2, "unexpected parameters\n");
+
+    ZeroMemory(&Timestamp, sizeof(Timestamp));
+    Timestamp.version = 1;
+    DecodedTimestamp = (SEALING_TIMESTAMP_ATTRIBUTE *)Buffer;
+    if (Encode("SealingTimestampAttribute", SEALING_TIMESTAMP_ATTRIBUTE_STRUCT, &Timestamp, TimestampEncoded,
+               sizeof(TimestampEncoded), Buffer, sizeof(Buffer)))
+        ok(DecodedTimestamp->version == 1 && !DecodedTimestamp->signerIndex && !DecodedTimestamp->sealTimeStampToken.cbData,
+           "unexpected sealing timestamp\n");
+}
+
 START_TEST(Asn1Codecs)
 {
     Wintrust = GetModuleHandleW(L"wintrust.dll");
@@ -206,4 +281,5 @@ START_TEST(Asn1Codecs)
     TestStatementType();
     TestSigInfo();
     TestMinimalCriteria();
+    TestSealing();
 }

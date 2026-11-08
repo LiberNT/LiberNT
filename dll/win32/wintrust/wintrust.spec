@@ -115,12 +115,12 @@
 @ stdcall WVTAsn1CatMemberInfoEncode(long str ptr ptr ptr)
 @ stdcall WVTAsn1CatNameValueDecode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1CatNameValueEncode(long str ptr ptr ptr)
-#@ stub WVTAsn1IntentToSealAttributeDecode
-#@ stub WVTAsn1IntentToSealAttributeEncode
-#@ stub WVTAsn1SealingSignatureAttributeDecode
-#@ stub WVTAsn1SealingSignatureAttributeEncode
-#@ stub WVTAsn1SealingTimestampAttributeDecode
-#@ stub WVTAsn1SealingTimestampAttributeEncode
+@ stdcall WVTAsn1IntentToSealAttributeDecode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1IntentToSealAttributeEncode(long str ptr ptr ptr)
+@ stdcall WVTAsn1SealingSignatureAttributeDecode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1SealingSignatureAttributeEncode(long str ptr ptr ptr)
+@ stdcall WVTAsn1SealingTimestampAttributeDecode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1SealingTimestampAttributeEncode(long str ptr ptr ptr)
 @ stdcall WVTAsn1SpcFinancialCriteriaInfoDecode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1SpcFinancialCriteriaInfoEncode(long str ptr ptr ptr)
 @ stdcall WVTAsn1SpcIndirectDataContentDecode(long str ptr long long ptr ptr)
