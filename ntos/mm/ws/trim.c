@@ -30,6 +30,8 @@ MiTrimPage(
     MI_ASSERT(!MI_VAD_IS_DIRECT(Vad));
     MI_ASSERT(MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)));
     Frame = (ULONG)MiArchPteFrame(Pte);
+    if (!MiPfnTracked(&System->Pfn, Frame))
+        return FALSE;
     Entry = &System->Pfn.Pfn[Frame];
 
     if (MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PAGE_TABLE)

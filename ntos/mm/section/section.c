@@ -1565,7 +1565,8 @@ MiReleaseViewPageEx(
     if (Clones && MiCloneDeletePage(Space, VirtualAddress, Slot, TableFrame, NewValue))
         return;
 
-    if (!MiArchPteIsValid(Pte) || !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE))
+    if (!MiArchPteIsValid(Pte) || !MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) ||
+        !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE))
     {
         if (Pte == NewValue)
             return;
@@ -2078,7 +2079,8 @@ MiSetMappedViewProtection(
             continue;
 
         if (Pte == 0 || MiSoftKind(Pte) == MiSoftPrototype ||
-            (MiArchPteIsValid(Pte) && (MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE)))
+            (MiArchPteIsValid(Pte) && MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) &&
+             (MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE)))
         {
             MiReleaseViewPage(Space, Vad, Va, Slot, TableFrame, MiSoftMake(MiSoftPrototype, Protection, 0));
         }
