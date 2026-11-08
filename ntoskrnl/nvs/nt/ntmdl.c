@@ -438,11 +438,14 @@ MmUnmapLockedPages(
     }
 
     ASSERT(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA);
+    ASSERT(Mdl->MappedSystemVa != NULL);
 
     if (Mdl->MdlFlags & MDL_FREE_EXTRA_PTES)
     {
         ULONG Extra = (ULONG)Pages[Count];
 
+        ASSERT(Extra != 0);
+        ASSERT(Extra <= MAXULONG - Count);
         Base -= (ULONG64)Extra << PAGE_SHIFT;
         Count += Extra;
         Mdl->MdlFlags &= ~MDL_FREE_EXTRA_PTES;
@@ -467,13 +470,18 @@ MmAdvanceMdl(
     if (NumberOfBytes >= Mdl->ByteCount)
         return STATUS_INVALID_PARAMETER_2;
 
+    ASSERT(Mdl->ByteOffset < PAGE_SIZE);
+    ASSERT(!(Mdl->MdlFlags & MDL_FREE_EXTRA_PTES) || (Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA));
     NewOffset = Mdl->ByteOffset + NumberOfBytes;
     Skipped = NewOffset >> PAGE_SHIFT;
+    ASSERT(Skipped < Total);
 
     if (Skipped != 0)
     {
         ULONG Extra = (Mdl->MdlFlags & MDL_FREE_EXTRA_PTES) ? (ULONG)Pages[Total] : 0;
 
+        ASSERT(!(Mdl->MdlFlags & MDL_FREE_EXTRA_PTES) || Extra != 0);
+        ASSERT(Extra <= MAXULONG - Skipped);
         if (Mdl->MdlFlags & MDL_PAGES_LOCKED)
         {
             MiUnlockFrames(&MiSystem, (const MI_FRAME_NUMBER *)Pages, Skipped,
@@ -561,6 +569,7 @@ MmAllocatePagesForMdlEx(
     if (Flags & MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS)
         Chunk = (Skip != 0) ? (Skip >> PAGE_SHIFT) : Wanted;
 
+    ASSERT(Chunk == 0 || (Chunk <= Wanted && Wanted % Chunk == 0));
     if (HighFrame >= MiSystem.Pfn.FrameCount)
         HighFrame = MiSystem.Pfn.FrameCount - 1;
 
@@ -582,6 +591,11 @@ MmAllocatePagesForMdlEx(
             break;
         }
 
+        ASSERT(First >= (ULONG)LowFrame && First <= (ULONG)HighFrame);
+        ASSERT(First < MiSystem.Pfn.DirectFrames);
+        ASSERT(Chunk <= MiSystem.Pfn.DirectFrames - First);
+        ASSERT(Chunk - 1 <= (ULONG)HighFrame - First);
+        ASSERT(Chunk <= Wanted - Got);
         for (Index = 0; Index < Chunk; Index++)
         {
             ULONG Frame = First + (ULONG)Index;
@@ -606,6 +620,8 @@ MmAllocatePagesForMdlEx(
             break;
         }
 
+        ASSERT(Frame >= (ULONG)LowFrame && Frame <= (ULONG)HighFrame);
+        ASSERT(Frame < MiSystem.Pfn.DirectFrames);
         if (!(Flags & MM_DONT_ZERO_ALLOCATION))
             MI_ZERO_PAGE(MiArchMapFrame(Frame));
 
@@ -615,6 +631,7 @@ MmAllocatePagesForMdlEx(
         Pages[Got++] = Frame;
     }
 
+    ASSERT(Got <= Wanted);
     if (Got == 0 || ((Flags & MM_ALLOCATE_FULLY_REQUIRED) && Got != Wanted) ||
         (Chunk != 0 && SkipBytes.QuadPart == 0 && Got != Wanted))
     {
@@ -688,7 +705,7 @@ MmFreePagesFromMdl(
     ASSERT(!(Mdl->MdlFlags & MDL_IO_SPACE));
 
     for (i = 0; i < Count && Pages[i] != MI_MDL_PFN_END; i++)
-        ;
+        ASSERT(Pages[i] < MiSystem.Pfn.FrameCount);
     Count = i;
     MiPfnSetCacheFrames(&MiSystem.Pfn, (const MI_FRAME_NUMBER *)Pages, Count, 0);
 
@@ -818,6 +835,10 @@ MiSecureRangeConflict(
     {
         PMI_SECURE_RANGE Range = CONTAINING_RECORD(Entry, MI_SECURE_RANGE, Link);
 
+        ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        ASSERT(Range->Process != NULL && MI_PROCESS_OF(Range->Process) != NULL);
+        ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount > 0);
+        ASSERT(Range->Mode == PAGE_READONLY || Range->Mode == PAGE_READWRITE);
         if (Range->Process != Process || End <= Range->Start || Start >= Range->End)
             continue;
 
@@ -854,6 +875,8 @@ MiSecureRangePurgeProcess(
         Entry = Entry->Flink;
         if (Range->Process == Process)
         {
+            ASSERT(Range->Link.Flink->Blink == &Range->Link && Range->Link.Blink->Flink == &Range->Link);
+            ASSERT(MI_PROCESS_OF(Process)->SecureRangeCount > 0);
             RemoveEntryList(&Range->Link);
             InsertTailList(&Purged, &Range->Link);
             InterlockedDecrement(&MI_PROCESS_OF(Process)->SecureRangeCount);
@@ -881,6 +904,9 @@ MiSecureRangeRemove(
     {
         if (Entry == &Target->Link)
         {
+            ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+            ASSERT(Target->Process != NULL && MI_PROCESS_OF(Target->Process) != NULL);
+            ASSERT(MI_PROCESS_OF(Target->Process)->SecureRangeCount > 0);
             RemoveEntryList(Entry);
             InterlockedDecrement(&MI_PROCESS_OF(Target->Process)->SecureRangeCount);
             Found = TRUE;
@@ -918,6 +944,9 @@ MmSecureVirtualMemory(
     Range->Mode = Mode;
 
     KeAcquireSpinLock(&MiSecureRangeLock, &OldIrql);
+    ASSERT(MI_PROCESS_OF(Range->Process) != NULL);
+    ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount >= 0);
+    ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount < MAXLONG);
     InsertTailList(&MiSecureRanges, &Range->Link);
     InterlockedIncrement(&MI_PROCESS_OF(Range->Process)->SecureRangeCount);
     KeReleaseSpinLock(&MiSecureRangeLock, OldIrql);
@@ -935,6 +964,9 @@ MmSecureVirtualMemory(
             return NULL;
         }
 
+        ASSERT(Info.BaseAddress <= Va);
+        ASSERT(Info.RegionSize > Va - Info.BaseAddress);
+        ASSERT(Info.BaseAddress + Info.RegionSize > Va);
         Va = Info.BaseAddress + Info.RegionSize;
     }
 

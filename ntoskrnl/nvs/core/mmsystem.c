@@ -217,17 +217,44 @@ MiAddressSpaceDestroy(
     Space->RootFrame = 0;
 }
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiValidateVadCache(
+    _In_ PMI_ADDRESS_SPACE Space,
+    _In_opt_ PMI_VAD Exclude)
+{
+    PMI_VAD Vad = Space->FreeVads;
+    ULONG Count = 0;
+
+    MI_ASSERT(Space->FreeVadCount <= MI_VAD_CACHE_SIZE);
+    while (Vad != NULL && Count < MI_VAD_CACHE_SIZE)
+    {
+        MI_ASSERT(Vad != Exclude);
+        MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) != &Vad->Node);
+        Vad = (PMI_VAD)Vad->Node.Left;
+        Count++;
+    }
+    MI_ASSERT(Vad == NULL);
+    MI_ASSERT(Count == Space->FreeVadCount);
+}
+#else
+#define MiValidateVadCache(Space, Exclude) ((VOID)0)
+#endif
+
 PMI_VAD
 MiVadPopFree(PMI_ADDRESS_SPACE Space)
 {
     PMI_VAD Vad = Space->FreeVads;
 
+    MiValidateVadCache(Space, NULL);
     if (Vad != NULL)
     {
         Space->FreeVads = (PMI_VAD)Vad->Node.Left;
         Space->FreeVadCount--;
         RtlZeroMemory(Vad, sizeof(*Vad));
     }
+    MiValidateVadCache(Space, Vad);
     return Vad;
 }
 
@@ -251,17 +278,21 @@ MiVadAllocateAndLock(PMI_ADDRESS_SPACE Space)
 BOOLEAN
 MiVadCacheFree(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
 {
+    MiValidateVadCache(Space, Vad);
+    MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) != &Vad->Node);
     if (Space->FreeVadCount == MI_VAD_CACHE_SIZE)
         return FALSE;
     Vad->Node.Left = (PMI_VAD_NODE)Space->FreeVads;
     Space->FreeVads = Vad;
     Space->FreeVadCount++;
+    MiValidateVadCache(Space, NULL);
     return TRUE;
 }
 
 VOID
 MiVadFlushCache(PMI_ADDRESS_SPACE Space)
 {
+    MiValidateVadCache(Space, NULL);
     while (Space->FreeVads != NULL)
     {
         PMI_VAD Vad = Space->FreeVads;
@@ -271,4 +302,5 @@ MiVadFlushCache(PMI_ADDRESS_SPACE Space)
         MI_FREE(Vad);
     }
     MI_ASSERT(Space->FreeVadCount == 0);
+    MiValidateVadCache(Space, NULL);
 }

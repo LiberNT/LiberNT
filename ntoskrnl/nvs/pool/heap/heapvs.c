@@ -91,6 +91,80 @@ PoolVsRetreat(PPOOL_VS_CHUNK Chunk, ULONG Units)
     return (PPOOL_VS_CHUNK)((ULONG_PTR)Chunk - (SIZE_T)Units * POOL_VS_UNIT);
 }
 
+#if DBG || defined(POOL_HOST_TEST)
+static
+VOID
+PoolVsAssertContext(
+    _In_ PPOOL_HEAP Heap,
+    _In_ PPOOL_VS_CONTEXT Vs,
+    _In_ ULONG Shard)
+{
+    PLIST_ENTRY Head = &Vs->Subsegments;
+    PLIST_ENTRY Entry = Head->Flink;
+    ULONG Subsegments = 0, Bucket;
+    SIZE_T UnitsFree = 0, ListedUnits = 0;
+    ULONG64 FreeChunks = 0, ListedChunks = 0;
+
+    POOL_ASSERT(Head->Flink->Blink == Head && Head->Blink->Flink == Head);
+    while (Entry != Head && Subsegments < Vs->SubsegmentCount)
+    {
+        PPOOL_VS_SUBSEGMENT Subsegment = CONTAINING_RECORD(Entry, POOL_VS_SUBSEGMENT, Link);
+        PPOOL_VS_CHUNK Chunk = PoolVsFirstChunk(Subsegment);
+        ULONG Offset = 0, Previous = 0;
+        BOOLEAN PreviousFree = FALSE;
+
+        POOL_ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        POOL_ASSERT(Subsegment->Signature == POOL_VS_SIGNATURE && Subsegment->Shard == Shard);
+        POOL_ASSERT(Subsegment->TotalUnits == POOL_VS_RUN_UNITS && Subsegment->Pages == POOL_VS_RUN_PAGES);
+        while (Offset < Subsegment->TotalUnits)
+        {
+            POOL_VS_DECODED Decoded;
+
+            PoolVsDecode(Heap, Chunk, &Decoded);
+            POOL_ASSERT(Decoded.Valid && Decoded.Units <= Subsegment->TotalUnits - Offset);
+            POOL_ASSERT(Decoded.PrevUnits == Previous);
+            POOL_ASSERT((Decoded.Last != FALSE) == (Decoded.Units == Subsegment->TotalUnits - Offset));
+            POOL_ASSERT(!PreviousFree || !Decoded.Free);
+            if (Decoded.Free)
+            {
+                UnitsFree += Decoded.Units;
+                FreeChunks++;
+            }
+            Previous = Decoded.Units;
+            PreviousFree = Decoded.Free;
+            Offset += Decoded.Units;
+            Chunk = PoolVsAdvance(Chunk, Decoded.Units);
+        }
+        POOL_ASSERT(Offset == Subsegment->TotalUnits);
+        Subsegments++;
+        Entry = Entry->Flink;
+    }
+    POOL_ASSERT(Entry == Head && Subsegments == Vs->SubsegmentCount);
+    for (Bucket = 0; Bucket < POOL_VS_FREE_LISTS; Bucket++)
+    {
+        Head = &Vs->FreeList[Bucket];
+        Entry = Head->Flink;
+        POOL_ASSERT(Head->Flink->Blink == Head && Head->Blink->Flink == Head);
+        while (Entry != Head && ListedChunks < FreeChunks)
+        {
+            PPOOL_VS_CHUNK Chunk = (PPOOL_VS_CHUNK)Entry - 1;
+            POOL_VS_DECODED Decoded;
+
+            POOL_ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+            PoolVsDecode(Heap, Chunk, &Decoded);
+            POOL_ASSERT(Decoded.Valid && Decoded.Free && PoolVsBucket(Decoded.Units) == Bucket);
+            ListedUnits += Decoded.Units;
+            ListedChunks++;
+            Entry = Entry->Flink;
+        }
+        POOL_ASSERT(Entry == Head);
+    }
+    POOL_ASSERT(ListedChunks == FreeChunks && ListedUnits == UnitsFree && UnitsFree == Vs->UnitsFree);
+}
+#else
+#define PoolVsAssertContext(Heap, Vs, Shard) ((void)0)
+#endif
+
 static
 VOID
 PoolVsInsertFree(
@@ -98,6 +172,7 @@ PoolVsInsertFree(
     _In_ PPOOL_VS_CHUNK Chunk,
     _In_ ULONG Units)
 {
+    POOL_ASSERT(Units >= 2 && Units <= POOL_VS_RUN_UNITS);
     InsertHeadList(&Vs->FreeList[PoolVsBucket(Units)], (PLIST_ENTRY)(Chunk + 1));
     Vs->UnitsFree += Units;
 }
@@ -109,7 +184,11 @@ PoolVsRemoveFree(
     _In_ PPOOL_VS_CHUNK Chunk,
     _In_ ULONG Units)
 {
-    RemoveEntryList((PLIST_ENTRY)(Chunk + 1));
+    PLIST_ENTRY Entry = (PLIST_ENTRY)(Chunk + 1);
+
+    POOL_ASSERT(Units >= 2 && Units <= POOL_VS_RUN_UNITS && Vs->UnitsFree >= Units);
+    POOL_ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+    RemoveEntryList(Entry);
     Vs->UnitsFree -= Units;
 }
 
@@ -178,6 +257,7 @@ PoolVsSkipLead(
     if (Lead == 0)
         return Chunk;
 
+    POOL_ASSERT(Lead >= 2 && Lead <= Decoded->Units - 2);
     Rest = PoolVsAdvance(Chunk, Lead);
 
     PoolVsEncode(Heap, Chunk, Lead, Decoded->PrevUnits, TRUE, FALSE);
@@ -207,6 +287,10 @@ PoolVsCarve(
 {
     ULONG Rest = Decoded->Units - Wanted;
 
+    POOL_ASSERT(Wanted >= 2 && Wanted <= Decoded->Units);
+    POOL_ASSERT(((ULONG_PTR)(Chunk + 1) & (PAGE_SIZE - 1)) != 0);
+    POOL_ASSERT(((ULONG_PTR)(Chunk + 1) >> PAGE_SHIFT) ==
+                (((ULONG_PTR)Chunk + (SIZE_T)Wanted * POOL_VS_UNIT - 1) >> PAGE_SHIFT));
     if (Rest < 2)
     {
         PoolVsEncode(Heap, Chunk, Decoded->Units, Decoded->PrevUnits, FALSE, Decoded->Last);
@@ -268,6 +352,8 @@ PoolVsAllocate(
             Chunk = (PPOOL_VS_CHUNK)Entry - 1;
             PoolVsDecode(Heap, Chunk, &Decoded);
             POOL_ASSERT(Decoded.Valid && Decoded.Free);
+            POOL_ASSERT(PoolVsBucket(Decoded.Units) == Bucket);
+            POOL_ASSERT(Vs->SubsegmentCount != 0);
 
             if (!PoolVsFit(Chunk, Decoded.Units, Wanted, &Lead))
                 continue;
@@ -422,6 +508,12 @@ PoolVsFree(
         return FALSE;
     }
 
+    POOL_ASSERT(Vs->SubsegmentCount != 0 && Subsegment->TotalUnits == POOL_VS_RUN_UNITS);
+    POOL_ASSERT(Decoded.PrevUnits <= ((ULONG_PTR)Chunk - (ULONG_PTR)PoolVsFirstChunk(Subsegment)) / POOL_VS_UNIT);
+    POOL_ASSERT((Decoded.PrevUnits == 0) == (Chunk == PoolVsFirstChunk(Subsegment)));
+    POOL_ASSERT(Decoded.Last ==
+                (((ULONG_PTR)Chunk - (ULONG_PTR)PoolVsFirstChunk(Subsegment)) / POOL_VS_UNIT + Decoded.Units ==
+                 Subsegment->TotalUnits));
     Info->Size = (SIZE_T)(Decoded.Units - 1) * POOL_VS_UNIT;
     Info->Tag = Chunk->Tag;
     Info->Flags = Chunk->Flags;
@@ -460,6 +552,9 @@ PoolVsFree(
         }
     }
 
+    POOL_ASSERT(Decoded.Units <= Subsegment->TotalUnits);
+    POOL_ASSERT(Decoded.Units != Subsegment->TotalUnits ||
+                (Chunk == PoolVsFirstChunk(Subsegment) && Decoded.PrevUnits == 0 && Decoded.Last));
     Vs->Frees++;
 
     if (Decoded.Units == Subsegment->TotalUnits && Vs->SubsegmentCount > 1)
@@ -503,6 +598,7 @@ PoolVsTrim(
 
         InitializeListHead(&Retired);
         POOL_LOCK_ACQUIRE(&Vs->Lock, &OldIrql);
+        PoolVsAssertContext(Heap, Vs, Index);
 
         Entry = Vs->Subsegments.Flink;
         while (Entry != &Vs->Subsegments)
@@ -512,6 +608,8 @@ PoolVsTrim(
             POOL_VS_DECODED Decoded;
 
             Entry = Entry->Flink;
+            POOL_ASSERT(Subsegment->Signature == POOL_VS_SIGNATURE && Subsegment->Shard == Index);
+            POOL_ASSERT(Subsegment->TotalUnits == POOL_VS_RUN_UNITS && Vs->SubsegmentCount != 0);
             PoolVsDecode(Heap, Chunk, &Decoded);
             if (!Decoded.Valid || !Decoded.Free || Decoded.Units != Subsegment->TotalUnits)
                 continue;
@@ -523,6 +621,7 @@ PoolVsTrim(
             Subsegment->Signature = 0;
         }
 
+        PoolVsAssertContext(Heap, Vs, Index);
         POOL_LOCK_RELEASE(&Vs->Lock, OldIrql);
 
         while (!IsListEmpty(&Retired))

@@ -162,6 +162,9 @@ KiInsertQueueApc(IN PKAPC Apc,
         InsertHeadList(NextEntry, &Apc->ApcListEntry);
     }
 
+    ASSERT(Apc->ApcListEntry.Flink->Blink == &Apc->ApcListEntry);
+    ASSERT(Apc->ApcListEntry.Blink->Flink == &Apc->ApcListEntry);
+
     /* Now check if the Apc State Indexes match */
     if (Thread->ApcStateIndex == Apc->ApcStateIndex)
     {
@@ -359,6 +362,8 @@ KiDeliverApc(IN KPROCESSOR_MODE DeliveryMode,
         /* Get the next Entry */
         ApcListEntry = Thread->ApcState.ApcListHead[KernelMode].Flink;
         Apc = CONTAINING_RECORD(ApcListEntry, KAPC, ApcListEntry);
+        ASSERT(Apc->Inserted && Apc->Thread == Thread && Apc->ApcMode == KernelMode);
+        ASSERT(ApcListEntry->Flink->Blink == ApcListEntry && ApcListEntry->Blink->Flink == ApcListEntry);
 
         /* Save Parameters so that it's safe to free the Object in the Kernel Routine*/
         NormalRoutine = Apc->NormalRoutine;
@@ -468,6 +473,8 @@ KiDeliverApc(IN KPROCESSOR_MODE DeliveryMode,
         /* Get the actual APC object */
         ApcListEntry = Thread->ApcState.ApcListHead[UserMode].Flink;
         Apc = CONTAINING_RECORD(ApcListEntry, KAPC, ApcListEntry);
+        ASSERT(Apc->Inserted && Apc->Thread == Thread && Apc->ApcMode == UserMode);
+        ASSERT(ApcListEntry->Flink->Blink == ApcListEntry && ApcListEntry->Blink->Flink == ApcListEntry);
 
         /* Save Parameters so that it's safe to free the Object in the Kernel Routine*/
         NormalRoutine = Apc->NormalRoutine;
@@ -873,6 +880,8 @@ KeFlushQueueApc(IN PKTHREAD Thread,
         {
             /* Get the APC and make it un-inserted */
             Apc = CONTAINING_RECORD(CurrentEntry, KAPC, ApcListEntry);
+            ASSERT(Apc->Inserted && Apc->Thread == Thread && Apc->ApcMode == PreviousMode);
+            ASSERT(CurrentEntry->Flink->Blink == CurrentEntry && CurrentEntry->Blink->Flink == CurrentEntry);
             Apc->Inserted = FALSE;
 
             /* Get the next entry */
@@ -937,6 +946,8 @@ KeRemoveQueueApc(IN PKAPC Apc)
 
         /* Lock the thread and remove it from the list */
         KiAcquireThreadLock(Thread);
+        ASSERT(Apc->ApcListEntry.Flink->Blink == &Apc->ApcListEntry);
+        ASSERT(Apc->ApcListEntry.Blink->Flink == &Apc->ApcListEntry);
         if (RemoveEntryList(&Apc->ApcListEntry))
         {
             /* Set the correct state based on the APC Mode */

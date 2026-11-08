@@ -27,6 +27,8 @@ MiTrimPage(
     if (!MiArchPteIsValid(Pte))
         return FALSE;
 
+    MI_ASSERT(!MI_VAD_IS_DIRECT(Vad));
+    MI_ASSERT(MiArchPteFrame(Pte) < System->Pfn.FrameCount);
     Frame = (ULONG)MiArchPteFrame(Pte);
     Entry = &System->Pfn.Pfn[Frame];
 
@@ -49,6 +51,7 @@ MiTrimPage(
     {
         MI_PTE Transition = MiSoftMake(MiSoftTransition, MiSoftProtection(Entry->OriginalPte), Frame);
 
+        MI_ASSERT(MiArchPteIsValid(Pte) && MiArchPteFrame(Pte) == Frame);
         if (MiArchPteCompareExchange(Slot, Pte, Transition))
             break;
 
@@ -209,6 +212,31 @@ MiTrimRange(
     return Trimmed;
 }
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertLockRangeState(_In_ PMI_ADDRESS_SPACE Space)
+{
+    ULONG64 Pages = 0;
+    ULONG Index;
+
+    MI_ASSERT(Space->LockRangeCount <= Space->LockRangeCapacity);
+    MI_ASSERT((Space->LockRanges == NULL) == (Space->LockRangeCapacity == 0));
+    for (Index = 0; Index < Space->LockRangeCount; Index++)
+    {
+        PMI_LOCK_RANGE Range = &Space->LockRanges[Index];
+
+        MI_ASSERT(Range->Start < Range->End);
+        MI_ASSERT(((Range->Start | Range->End) & (PAGE_SIZE - 1)) == 0);
+        MI_ASSERT(Index == 0 || Space->LockRanges[Index - 1].End < Range->Start);
+        Pages += (Range->End - Range->Start) >> PAGE_SHIFT;
+    }
+    MI_ASSERT(Pages == Space->LockedPages);
+}
+#else
+#define MiAssertLockRangeState(Space) ((VOID)0)
+#endif
+
 static
 ULONG
 MiLockRangeSearch(
@@ -218,10 +246,16 @@ MiLockRangeSearch(
     ULONG Low = 0;
     ULONG High = Space->LockRangeCount;
 
+    MI_ASSERT(Space->LockRangeCount <= Space->LockRangeCapacity);
+    MI_ASSERT(Space->LockRangeCount == 0 || Space->LockRanges != NULL);
     while (Low < High)
     {
         ULONG Middle = Low + (High - Low) / 2;
 
+        MI_ASSERT(Space->LockRanges[Middle].Start < Space->LockRanges[Middle].End);
+        MI_ASSERT(Middle == 0 || Space->LockRanges[Middle - 1].End < Space->LockRanges[Middle].Start);
+        MI_ASSERT(Middle + 1 == Space->LockRangeCount ||
+                  Space->LockRanges[Middle].End < Space->LockRanges[Middle + 1].Start);
         if (Space->LockRanges[Middle].End <= VirtualAddress)
             Low = Middle + 1;
         else
@@ -321,6 +355,8 @@ MiLockRangeAdd(
     ULONG First;
     ULONG Last;
 
+    MI_ASSERT(Start < End && ((Start | End) & (PAGE_SIZE - 1)) == 0);
+    MiAssertLockRangeState(Space);
     if (!MiLockRangeReserve(Space, Space->LockRangeCount + 2))
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -353,7 +389,11 @@ MiLockRangeAdd(
 
     Space->LockRanges[First].Start = Start;
     Space->LockRanges[First].End = End;
+    MI_ASSERT(Start < End);
+    MI_ASSERT(First == 0 || Space->LockRanges[First - 1].End < Start);
+    MI_ASSERT(First + 1 == Space->LockRangeCount || End < Space->LockRanges[First + 1].Start);
     Space->LockedPages += Pages;
+    MiAssertLockRangeState(Space);
     return STATUS_SUCCESS;
 }
 
@@ -363,22 +403,29 @@ MiLockRangeRemove(
     _In_ ULONG64 Start,
     _In_ ULONG64 End)
 {
-    ULONG Index = MiLockRangeSearch(Space, Start);
+    ULONG Index;
 
+    MI_ASSERT(Start <= End && ((Start | End) & (PAGE_SIZE - 1)) == 0);
+    MiAssertLockRangeState(Space);
+    Index = MiLockRangeSearch(Space, Start);
     while (Index < Space->LockRangeCount && Space->LockRanges[Index].Start < End)
     {
         PMI_LOCK_RANGE Range = &Space->LockRanges[Index];
         ULONG64 From = (Range->Start > Start) ? Range->Start : Start;
         ULONG64 To = (Range->End < End) ? Range->End : End;
 
+        MI_ASSERT(From < To);
+        MI_ASSERT(Space->LockedPages >= ((To - From) >> PAGE_SHIFT));
         Space->LockedPages -= (To - From) >> PAGE_SHIFT;
 
         if (Range->Start < Start && Range->End > End)
         {
             if (!MiLockRangeReserve(Space, Space->LockRangeCount + 1))
             {
+                MI_ASSERT(Space->LockedPages >= ((Space->LockRanges[Index].End - End) >> PAGE_SHIFT));
                 Space->LockedPages -= (Space->LockRanges[Index].End - End) >> PAGE_SHIFT;
                 Space->LockRanges[Index].End = Start;
+                MiAssertLockRangeState(Space);
                 return;
             }
 
@@ -387,6 +434,7 @@ MiLockRangeRemove(
             Space->LockRangeCount++;
             Space->LockRanges[Index].End = Start;
             Space->LockRanges[Index + 1].Start = End;
+            MiAssertLockRangeState(Space);
             return;
         }
 
@@ -400,6 +448,7 @@ MiLockRangeRemove(
         if (Range->End > End)
         {
             Range->Start = End;
+            MiAssertLockRangeState(Space);
             return;
         }
 
@@ -407,12 +456,14 @@ MiLockRangeRemove(
                       (Space->LockRangeCount - Index - 1) * sizeof(MI_LOCK_RANGE));
         Space->LockRangeCount--;
     }
+    MiAssertLockRangeState(Space);
 }
 
 VOID
 MiLockRangeReset(
     _Inout_ PMI_ADDRESS_SPACE Space)
 {
+    MiAssertLockRangeState(Space);
     if (Space->LockRanges != NULL)
         MI_FREE(Space->LockRanges);
 
@@ -420,6 +471,7 @@ MiLockRangeReset(
     Space->LockRangeCount = 0;
     Space->LockRangeCapacity = 0;
     Space->LockedPages = 0;
+    MiAssertLockRangeState(Space);
 }
 
 static
@@ -436,13 +488,24 @@ MiWritePageFileCluster(
     PVOID Mapping;
     ULONG i;
 
+    MI_ASSERT(PageFile != NULL);
+    MI_ASSERT(Count != 0 && Count <= MI_MAX_FILE_WRITE_PAGES);
+#if DBG || defined(MM_HOST_TEST)
+    for (i = 0; i < Count; i++)
+    {
+        MI_ASSERT(Frames[i] < System->Pfn.FrameCount);
+        MI_ASSERT(MI_PFN_FLAGS(&System->Pfn.Pfn[Frames[i]]) & MI_PFN_FLAG_IN_FLIGHT);
+        MI_ASSERT(Slots[i] != 0);
+        MI_ASSERT(i == 0 || Slots[i] == Slots[i - 1] + 1);
+    }
+#endif
     if (PageFile->Ops.WriteFrames != NULL)
     {
         Status = PageFile->Ops.WriteFrames(PageFile->Context, Slots[0], Frames, Count);
     }
     else
     {
-        MI_ASSERT(Count == 1);
+        MI_ASSERT(Count == 1 && PageFile->Ops.Write != NULL);
         Mapping = MiPfnMapFrame(&System->Pfn, Frames[0]);
         Status = PageFile->Ops.Write(PageFile->Context, Slots[0], Mapping);
         MiPfnUnmapFrame(&System->Pfn, Mapping);
@@ -495,7 +558,10 @@ MiWriteModifiedPages(
         if (Frame == MI_FRAME_INVALID)
             break;
 
+        MI_ASSERT(Written <= MaximumPages && Count <= MaximumPages - Written && Count < Limit);
+        MI_ASSERT(Frame < System->Pfn.FrameCount);
         Entry = &System->Pfn.Pfn[Frame];
+        MI_ASSERT(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_IN_FLIGHT);
 
         if ((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE) && MiSoftKind(Entry->OriginalPte) == MiSoftSubsection)
         {
@@ -518,6 +584,7 @@ MiWriteModifiedPages(
 
         Reused = (BOOLEAN)(MiSoftKind(Entry->OriginalPte) == MiSoftPageFile);
         Slot = Reused ? MiSoftValue(Entry->OriginalPte) : MiPageFileReserveSlot(PageFile);
+        MI_ASSERT(!Reused || Slot != 0);
         if (Slot == 0)
         {
             MiPfnWriteComplete(&System->Pfn, Frame, 0, FALSE);
@@ -539,6 +606,8 @@ MiWriteModifiedPages(
             Count = 0;
         }
 
+        MI_ASSERT(Count < Limit);
+        MI_ASSERT(Count == 0 || Slot == Slots[Count - 1] + 1);
         Frames[Count] = Frame;
         Slots[Count] = Slot;
         ClusterReused[Count] = Reused;

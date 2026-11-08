@@ -23,6 +23,8 @@ MiArmExecutableWriteRangeLocked(
     ULONG64 TableSpan = 1ULL << (Space->System->Arch->Level[0].Shift +
                                 Space->System->Arch->Level[0].IndexBits);
 
+    MI_ASSERT(Start <= End);
+    MI_ASSERT(TableSpan >= PAGE_SIZE && (TableSpan & (TableSpan - 1)) == 0);
     while (Va < End)
     {
         PMI_VAD Vad = MiVadLocate(Space, Va);
@@ -39,6 +41,7 @@ MiArmExecutableWriteRangeLocked(
         }
 
         VadEnd = MI_VAD_END(Vad);
+        MI_ASSERT(MI_VAD_START(Vad) <= Va && Va < VadEnd);
         if (VadEnd > End)
             VadEnd = End;
         if (Vad->EcCode || Vad->Type == MiVadLarge)
@@ -68,13 +71,22 @@ MiArmExecutableWriteRangeLocked(
             {
                 if (ResetWriteWatch && Vad->WriteWatchBits != NULL)
                 {
-                    ULONG64 Page = (Va - Vad->WriteWatchBase) >> PAGE_SHIFT;
+                    ULONG64 Page;
 
+                    MI_ASSERT((Vad->WriteWatchBase & (PAGE_SIZE - 1)) == 0);
+                    MI_ASSERT(Vad->WriteWatchBase <= MI_VAD_START(Vad));
+                    MI_ASSERT(Va >= MI_VAD_START(Vad) && Va < MI_VAD_END(Vad));
+                    Page = (Va - Vad->WriteWatchBase) >> PAGE_SHIFT;
                     MI_ATOMIC_AND8(&Vad->WriteWatchBits[Page / 8], ~(1u << (Page % 8)));
                 }
                 if (MiArchPteIsDirty(Pte))
                 {
-                    MiArchPteWrite(Slot, MiArchPteSetDirty(Pte, FALSE));
+                    MI_PTE Clean = MiArchPteSetDirty(Pte, FALSE);
+
+                    MI_ASSERT(MiArchPteIsLeafDescriptor(Clean) && MiArchPteIsWritable(Clean));
+                    MI_ASSERT(MiArchPteIsExecutable(Clean, TRUE) && !MiArchPteIsDirty(Clean));
+                    MI_ASSERT(MiArchPteFrame(Clean) == MiArchPteFrame(Pte));
+                    MiArchPteWrite(Slot, Clean);
                     MiArchTlbInvalidate(Va, 1, TRUE);
                 }
             }
@@ -96,6 +108,8 @@ MiRevokeUserExecuteRangeLocked(
     BOOLEAN Changed = FALSE;
     ULONG64 Va = Start;
 
+    MI_ASSERT(Start <= End && ((Start | End) & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(TableSpan >= PAGE_SIZE && (TableSpan & (TableSpan - 1)) == 0);
     while (Va < End)
     {
         ULONG TableFrame;
@@ -120,6 +134,9 @@ MiRevokeUserExecuteRangeLocked(
         {
             Pte = MiArchPteRead(Slot);
             Revoked = MiArchPteRevokeUserExecute(Pte);
+            MI_ASSERT(MiArchPteRevokeUserExecute(Revoked) == Revoked);
+            MI_ASSERT(!MiArchPteIsLeafDescriptor(Pte) ||
+                      (MiArchPteIsLeafDescriptor(Revoked) && MiArchPteFrame(Revoked) == MiArchPteFrame(Pte)));
         } while (Revoked != Pte && !MiArchPteCompareExchange(Slot, Pte, Revoked));
         MiPfnUnlock(&Space->System->Pfn, TableFrame, OldIrql);
 
@@ -217,6 +234,7 @@ MiResetExecutableWriteTracking(
             return STATUS_MEMORY_NOT_ALLOCATED;
         }
 
+        MI_ASSERT(MI_VAD_START(Vad) <= Va && Va < MI_VAD_END(Vad));
         Va = MI_VAD_END(Vad);
         if (Va > End)
             Va = End;

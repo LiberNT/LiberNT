@@ -829,6 +829,17 @@ MiSegmentReleaseAdoptedFrame(
         MiSegmentReleasePage(Segment, Proto, (ULONG)MiSoftValue(Pte));
 }
 
+static
+VOID
+MiAssertUnusedSegments(
+    _In_ PMI_SYSTEM System)
+{
+    UNREFERENCED_PARAMETER(System);
+    MI_ASSERT((System->UnusedSegmentCount == 0) == IsListEmpty(&System->UnusedSegmentList));
+    MI_ASSERT(System->UnusedSegmentList.Flink->Blink == &System->UnusedSegmentList);
+    MI_ASSERT(System->UnusedSegmentList.Blink->Flink == &System->UnusedSegmentList);
+}
+
 VOID
 MiSegmentReference(
     _Inout_ PMI_SEGMENT Segment)
@@ -856,13 +867,19 @@ MiSegmentTryReference(
         }
 
         MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+        MiAssertUnusedSegments(System);
 
         if (Segment->State == MI_SEGMENT_UNUSED)
         {
+            MI_ASSERT(MI_ATOMIC_READ32(&Segment->ReferenceCount) == 0);
+            MI_ASSERT(System->UnusedSegmentCount != 0);
+            MI_ASSERT(Segment->UnusedLink.Flink->Blink == &Segment->UnusedLink);
+            MI_ASSERT(Segment->UnusedLink.Blink->Flink == &Segment->UnusedLink);
             RemoveEntryList(&Segment->UnusedLink);
             System->UnusedSegmentCount--;
             Segment->State = MI_SEGMENT_ACTIVE;
             MI_ATOMIC_ADD32(&Segment->ReferenceCount, 1);
+            MiAssertUnusedSegments(System);
             MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
             MI_ATOMIC_ADD64(&System->UnusedSegmentHits, 1);
             return TRUE;
@@ -907,6 +924,8 @@ MiSegmentRelease(
     }
 
     MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+    MiAssertUnusedSegments(System);
+    MI_ASSERT(MI_ATOMIC_READ32(&Segment->ReferenceCount) > 0);
 
     if (MI_ATOMIC_ADD32(&Segment->ReferenceCount, -1) - 1 != 0)
     {
@@ -914,6 +933,7 @@ MiSegmentRelease(
         return FALSE;
     }
 
+    MI_ASSERT(Segment->State == MI_SEGMENT_ACTIVE);
     if (AllowCache && System->UnusedSegmentLimit != 0 && Segment->Kind != MiSegmentPageFileBacked &&
         Segment->FileOps.Release != NULL)
     {
@@ -929,6 +949,7 @@ MiSegmentRelease(
         Closed = TRUE;
     }
 
+    MiAssertUnusedSegments(System);
     MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
 
     if (Exceeded && System->UnusedSegmentsExceeded != NULL)
@@ -969,13 +990,18 @@ MiSegmentPurgeUnused(
         KIRQL OldIrql;
 
         MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+        MiAssertUnusedSegments(System);
 
         if (!IsListEmpty(&System->UnusedSegmentList))
         {
             Victim = CONTAINING_RECORD(System->UnusedSegmentList.Flink, MI_SEGMENT, UnusedLink);
+            MI_ASSERT(Victim->State == MI_SEGMENT_UNUSED);
+            MI_ASSERT(MI_ATOMIC_READ32(&Victim->ReferenceCount) == 0);
+            MI_ASSERT(System->UnusedSegmentCount != 0);
             RemoveEntryList(&Victim->UnusedLink);
             System->UnusedSegmentCount--;
             Victim->State = MI_SEGMENT_DELETING;
+            MiAssertUnusedSegments(System);
         }
 
         MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
@@ -1002,13 +1028,18 @@ MiSegmentTrimUnused(
         KIRQL OldIrql;
 
         MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+        MiAssertUnusedSegments(System);
 
         if (System->UnusedSegmentCount > System->UnusedSegmentLimit && !IsListEmpty(&System->UnusedSegmentList))
         {
             Victim = CONTAINING_RECORD(System->UnusedSegmentList.Flink, MI_SEGMENT, UnusedLink);
+            MI_ASSERT(Victim->State == MI_SEGMENT_UNUSED);
+            MI_ASSERT(MI_ATOMIC_READ32(&Victim->ReferenceCount) == 0);
+            MI_ASSERT(System->UnusedSegmentCount != 0);
             RemoveEntryList(&Victim->UnusedLink);
             System->UnusedSegmentCount--;
             Victim->State = MI_SEGMENT_DELETING;
+            MiAssertUnusedSegments(System);
         }
 
         MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
@@ -1555,6 +1586,21 @@ MiTlbBatchFlush(
     ULONG First = 0;
     ULONG i;
 
+    MI_ASSERT(Batch != NULL && Batch->Count <= MI_TLB_BATCH_SIZE);
+#if DBG || defined(MM_HOST_TEST)
+    for (i = 0; i < Batch->Count; i++)
+    {
+        PMI_TLB_BATCH_ENTRY Entry = &Batch->Entry[i];
+
+        MI_ASSERT((Entry->Va & (PAGE_SIZE - 1)) == 0);
+        MI_ASSERT(i == 0 || Batch->Entry[i - 1].Va <= Entry->Va);
+        MI_ASSERT(Entry->Frame < System->Pfn.FrameCount);
+        MI_ASSERT(MI_ATOMIC_READ32(&System->Pfn.Pfn[Entry->Frame].ShareCount) > 0);
+        MI_ASSERT((Entry->Segment == NULL) == (Entry->Proto == NULL));
+        MI_ASSERT(Entry->Clone == NULL || (Entry->Segment == NULL && !Entry->Private));
+        MI_ASSERT(Entry->Segment == NULL || !Entry->Private);
+    }
+#endif
     while (First < Batch->Count)
     {
         ULONG Last = First + 1;
@@ -1596,6 +1642,7 @@ MiTlbBatchBegin(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _Out_ PMI_TLB_BATCH Batch)
 {
+    MI_ASSERT(Space->TlbBatch != Batch);
     Batch->Count = 0;
     Batch->DeferTables = FALSE;
 
@@ -1611,6 +1658,7 @@ MiTlbBatchEnd(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _In_ BOOLEAN Owner)
 {
+    MI_ASSERT(Space->TlbBatch != NULL);
     if (!Owner)
         return;
 
@@ -1630,9 +1678,17 @@ MiTlbBatchInsert(
     _In_ BOOLEAN Private)
 {
     PMI_TLB_BATCH Batch = Space->TlbBatch;
-    ULONG Index = Batch->Count++;
+    ULONG Index;
     PMI_TLB_BATCH_ENTRY Entry;
 
+    MI_ASSERT(Batch != NULL && Batch->Count < MI_TLB_BATCH_SIZE);
+    MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(Frame < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MI_ATOMIC_READ32(&Space->System->Pfn.Pfn[Frame].ShareCount) > 0);
+    MI_ASSERT((Segment == NULL) == (Proto == NULL));
+    MI_ASSERT(Clone == NULL || (Segment == NULL && !Private));
+    MI_ASSERT(Segment == NULL || !Private);
+    Index = Batch->Count++;
     while (Index != 0 && Batch->Entry[Index - 1].Va > VirtualAddress)
     {
         Batch->Entry[Index] = Batch->Entry[Index - 1];
@@ -2208,6 +2264,7 @@ MiMapViewInternal(
             MiSegmentDereference(Segment);
             return STATUS_CONFLICTING_ADDRESSES;
         }
+        MiAssertPlaceholderVad(Placeholder);
         MiVadRemove(&Space->VadRoot, &Placeholder->Node);
     }
     else if (Start < Space->LowestVa || Start + Size - 1 > Space->HighestVa || Start + Size < Start ||
@@ -2333,6 +2390,7 @@ MiUnmapViewEx(
         Vad->Protection = MI_PROT_NOACCESS;
         Vad->Type = MiVadPrivate;
         Vad->Placeholder = TRUE;
+        MiAssertPlaceholderVad(Vad);
         MiVadInsert(&Space->VadRoot, &Vad->Node);
         Vad = NULL;
     }
@@ -2782,6 +2840,44 @@ typedef struct _MI_SEGMENT_READ
     ULONG Bytes;
 } MI_SEGMENT_READ, *PMI_SEGMENT_READ;
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertPendingReads(
+    _In_ PMI_SEGMENT Segment)
+{
+    PLIST_ENTRY Link;
+    ULONG Count = 0;
+
+    MI_ASSERT(Segment->PendingReadCount <= MI_MAX_FILE_IO_PAGES);
+    MI_ASSERT((Segment->PendingReadCount == 0) == IsListEmpty(&Segment->PendingReads));
+    MI_ASSERT(Segment->PendingReads.Flink->Blink == &Segment->PendingReads);
+    MI_ASSERT(Segment->PendingReads.Blink->Flink == &Segment->PendingReads);
+    for (Link = Segment->PendingReads.Flink; Link != &Segment->PendingReads; Link = Link->Flink)
+    {
+        PMI_SEGMENT_READ Read = CONTAINING_RECORD(Link, MI_SEGMENT_READ, Link);
+        PLIST_ENTRY OtherLink;
+
+        Count++;
+        MI_ASSERT(Count <= Segment->PendingReadCount);
+        MI_ASSERT(Link->Flink->Blink == Link && Link->Blink->Flink == Link);
+        MI_ASSERT(Read->Segment == Segment && Read->Proto != NULL && Read->Mapping != NULL);
+        MI_ASSERT(MiSoftKind(Read->Original) == MiSoftSubsection);
+        MI_ASSERT(Read->Frame < Segment->System->Pfn.FrameCount && Read->Bytes <= PAGE_SIZE);
+        for (OtherLink = Segment->PendingReads.Flink; OtherLink != Link; OtherLink = OtherLink->Flink)
+        {
+            PMI_SEGMENT_READ Other = CONTAINING_RECORD(OtherLink, MI_SEGMENT_READ, Link);
+
+            MI_ASSERT(Other->Frame != Read->Frame);
+            MI_ASSERT(Other->Proto != Read->Proto || Other->Generation != Read->Generation);
+        }
+    }
+    MI_ASSERT(Count == Segment->PendingReadCount);
+}
+#else
+#define MiAssertPendingReads(Segment) ((VOID)0)
+#endif
+
 VOID
 MiSegmentDrainReads(
     _Inout_ PMI_SEGMENT Segment,
@@ -2789,7 +2885,10 @@ MiSegmentDrainReads(
 {
     BOOLEAN Pending;
 
+    MI_ASSERT(Drain->Complete != NULL);
     MI_MUTEX_ACQUIRE(&Segment->Lock);
+    MiAssertPendingReads(Segment);
+    MI_ASSERT(Segment->PendingReadCount != 0 || IsListEmpty(&Segment->ReadDrains));
     Pending = (BOOLEAN)(Segment->PendingReadCount != 0);
     if (Pending)
         InsertTailList(&Segment->ReadDrains, &Drain->Link);
@@ -2817,8 +2916,12 @@ MiSegmentReadComplete(
     MiArchUnmapFrame(Read->Mapping);
 
     MI_MUTEX_ACQUIRE(&Segment->Lock);
+    MiAssertPendingReads(Segment);
+    MI_ASSERT(Segment->PendingReadCount != 0);
+    MI_ASSERT(Read->Link.Flink->Blink == &Read->Link && Read->Link.Blink->Flink == &Read->Link);
     RemoveEntryList(&Read->Link);
     Segment->PendingReadCount--;
+    MiAssertPendingReads(Segment);
     if (NT_SUCCESS(Status) && Segment->ReadGeneration == Read->Generation &&
         MiArchPteRead(Read->Proto) == Read->Original)
     {
@@ -2885,6 +2988,8 @@ MiSegmentPrefetch(
 
         if (!MI_MUTEX_TRY_ACQUIRE(&Segment->Lock))
             return STATUS_CANT_WAIT;
+        MiAssertPendingReads(Segment);
+        MI_ASSERT(Segment->PendingReadCount != 0 || IsListEmpty(&Segment->ReadDrains));
         if (Page >= MiSegmentPages(Segment))
         {
             MI_MUTEX_RELEASE(&Segment->Lock);
@@ -2936,9 +3041,11 @@ MiSegmentPrefetch(
         Read->Generation = Segment->ReadGeneration;
         Read->Mapping = MiArchMapFrame(Read->Frame);
         Read->Bytes = MiSegmentReadBytes(Segment, Page, FileOffset);
+        MI_ASSERT(Read->Bytes <= PAGE_SIZE);
         MiSegmentReference(Segment);
         InsertTailList(&Segment->PendingReads, &Read->Link);
         Segment->PendingReadCount++;
+        MiAssertPendingReads(Segment);
         MI_MUTEX_RELEASE(&Segment->Lock);
 
         Status = Segment->FileOps.ReadAsync(Segment->FileContext, FileOffset, Read->Frame, Read->Mapping,

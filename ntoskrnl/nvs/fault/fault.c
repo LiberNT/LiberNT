@@ -202,6 +202,7 @@ MiResolveValidFault(
     ULONG Frame = (ULONG)MiArchPteFrame(Pte);
     MI_PTE Updated = Pte;
 
+    MI_ASSERT(MiArchPteIsValid(Pte));
     if (UserMode && !MiArchPteIsUser(Pte))
         return STATUS_ACCESS_VIOLATION;
 
@@ -255,6 +256,13 @@ MiMakePageValid(
 {
     ULONG Flags = (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER) | (Dirty ? MI_LEAF_DIRTY : 0);
 
+    MI_ASSERT(Slot != NULL);
+    MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(TableFrame < Space->System->Pfn.FrameCount);
+    MI_ASSERT(Frame < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MI_ATOMIC_READ32(&Space->System->Pfn.Pfn[Frame].ShareCount) > 0);
+    MI_ASSERT(MI_PROT_IS_ACCESSIBLE(Protection));
+    MI_ASSERT(!MiArchPteIsValid(MiArchPteRead(Slot)));
     if (Dirty)
         MiPfnSetModified(&Space->System->Pfn, Frame);
     if (MI_PROT_IS_EXECUTE(Protection) && Space->System->Arch->RequiresExplicitIcacheSync &&
@@ -271,6 +279,8 @@ MiMakePageValid(
 
     MiPtWrite(Space, VirtualAddress, Slot, TableFrame,
               MiArchPteMakeLeaf(Frame, MI_PROT_IS_GUARD(Protection) ? Protection & ~MI_PROT_GUARD : Protection, Flags));
+    MI_ASSERT(MiArchPteIsValid(MiArchPteRead(Slot)));
+    MI_ASSERT(MiArchPteFrame(MiArchPteRead(Slot)) == Frame);
     MI_ATOMIC_ADD64(&Space->ResidentPages, 1);
     return STATUS_SUCCESS;
 }

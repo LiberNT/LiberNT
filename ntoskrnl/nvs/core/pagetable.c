@@ -376,6 +376,7 @@ MiPtCacheEmpty(PMI_ADDRESS_SPACE Space, ULONG TableFrame, ULONG64 VirtualAddress
 
     if (MI_ATOMIC_READ32(&Table->UsedEntries) != 0 || (MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PINNED))
         return;
+    MI_ASSERT(MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PAGE_TABLE);
     for (i = 0; i < MI_EMPTY_TABLE_CACHE_SIZE; i++)
     {
         Entry = &Space->EmptyTable[i];
@@ -441,9 +442,13 @@ MiPtWrite(
     _In_ ULONG TableFrame,
     _In_ MI_PTE Value)
 {
-    PMI_PFN Table = &Space->System->Pfn.Pfn[TableFrame];
-    MI_PTE Old = MiArchPteRead(Slot);
+    PMI_PFN Table;
+    MI_PTE Old;
 
+    MI_ASSERT(TableFrame < Space->System->Pfn.FrameCount);
+    Table = &Space->System->Pfn.Pfn[TableFrame];
+    MI_ASSERT(MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PAGE_TABLE);
+    Old = MiArchPteRead(Slot);
     MiArchPteWrite(Slot, Value);
 
     if (MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PINNED)
@@ -451,12 +456,17 @@ MiPtWrite(
 
     if (Old == 0 && Value != 0)
     {
-        MI_ATOMIC_ADD32(&Table->UsedEntries, 1);
+        LONG Previous = MI_ATOMIC_ADD32(&Table->UsedEntries, 1);
+
+        MI_ASSERT(Previous >= 0 && (ULONG)Previous < PAGE_SIZE / sizeof(MI_PTE));
+        UNREFERENCED_PARAMETER(Previous);
     }
     else if (Old != 0 && Value == 0)
     {
-        if (MI_ATOMIC_ADD32(&Table->UsedEntries, -1) - 1 == 0 &&
-            (Space->TlbBatch == NULL || !Space->TlbBatch->DeferTables))
+        LONG Previous = MI_ATOMIC_ADD32(&Table->UsedEntries, -1);
+
+        MI_ASSERT(Previous > 0 && (ULONG)Previous <= PAGE_SIZE / sizeof(MI_PTE));
+        if (Previous == 1 && (Space->TlbBatch == NULL || !Space->TlbBatch->DeferTables))
             MiPtReleaseTable(Space, TableFrame, VirtualAddress);
     }
 }

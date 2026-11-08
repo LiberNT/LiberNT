@@ -23,6 +23,8 @@ KeInitializeSemaphore(IN PKSEMAPHORE Semaphore,
                       IN LONG Count,
                       IN LONG Limit)
 {
+    ASSERT(Limit > 0 && Count >= 0 && Count <= Limit);
+
     /* Simply Initialize the Header */
     Semaphore->Header.Type = SemaphoreObject;
     Semaphore->Header.Size = sizeof(KSEMAPHORE) / sizeof(ULONG);
@@ -66,6 +68,7 @@ KeReleaseSemaphore(IN PKSEMAPHORE Semaphore,
     KiAcquireDispatcherObject(&Semaphore->Header);
 
     InitialState = Semaphore->Header.SignalState;
+    ASSERT(InitialState >= 0 && InitialState <= Semaphore->Limit);
     State = InitialState + Adjustment;
 
     if ((Semaphore->Limit < State) || (InitialState > State))
@@ -82,6 +85,8 @@ KeReleaseSemaphore(IN PKSEMAPHORE Semaphore,
         KiWaitTest(Semaphore, Increment);
     }
 
+    ASSERT(Semaphore->Header.SignalState >= 0 &&
+           Semaphore->Header.SignalState <= Semaphore->Limit);
     KiReleaseDispatcherObject(&Semaphore->Header);
 
     if (Wait == FALSE)

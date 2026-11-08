@@ -36,8 +36,11 @@ MmAllocateMappingAddress(
 
     Slot = MiPtLookup(&MiSystem.SystemSpace, Base, NULL);
     TagSlot = MiPtLookup(&MiSystem.SystemSpace, Base + PAGE_SIZE, NULL);
+    ASSERT(Slot != NULL && TagSlot != NULL);
+    ASSERT(MiArchPteRead(Slot) == 0 && MiArchPteRead(TagSlot) == 0);
     MiArchPteWrite(Slot, (MI_PTE)Pages << 1);
     MiArchPteWrite(TagSlot, (MI_PTE)PoolTag << 1);
+    ASSERT(!MiArchPteIsValid(MiArchPteRead(Slot)) && !MiArchPteIsValid(MiArchPteRead(TagSlot)));
     return (PVOID)(ULONG_PTR)(Base + 2 * PAGE_SIZE);
 }
 
@@ -50,8 +53,12 @@ MmFreeMappingAddress(
     ULONG64 Base = (ULONG64)(ULONG_PTR)PAGE_ALIGN(BaseAddress) - 2 * PAGE_SIZE;
     PMI_PTE Slot = MiPtLookup(&MiSystem.SystemSpace, Base, NULL);
     PMI_PTE TagSlot = MiPtLookup(&MiSystem.SystemSpace, Base + PAGE_SIZE, NULL);
-    ULONG Pages = (ULONG)(MiArchPteRead(Slot) >> 1);
+    ULONG Pages;
 
+    ASSERT(Slot != NULL && TagSlot != NULL);
+    ASSERT(!MiArchPteIsValid(MiArchPteRead(Slot)) && !MiArchPteIsValid(MiArchPteRead(TagSlot)));
+    Pages = (ULONG)(MiArchPteRead(Slot) >> 1);
+    ASSERT(Pages != 0 && Pages < 0xFFFFFFFEUL);
     if ((ULONG)(MiArchPteRead(TagSlot) >> 1) != PoolTag)
         KeBugCheckEx(SYSTEM_PTE_MISUSE, 0x101, (ULONG_PTR)BaseAddress, PoolTag, MiArchPteRead(TagSlot) >> 1);
 
@@ -78,6 +85,10 @@ MmMapLockedPagesWithReservedMapping(
     if (Type >= MmMaximumCacheType)
         return NULL;
 
+    ASSERT(Slot != NULL && TagSlot != NULL);
+    ASSERT(!MiArchPteIsValid(MiArchPteRead(Slot)) && !MiArchPteIsValid(MiArchPteRead(TagSlot)));
+    ASSERT((MiArchPteRead(Slot) >> 1) != 0);
+    ASSERT(Mdl->ByteOffset < PAGE_SIZE);
     /* FIXME: MappingAddress must be the reservation start; Windows also takes an address inside it */
     if ((ULONG)(MiArchPteRead(TagSlot) >> 1) != PoolTag)
         KeBugCheckEx(SYSTEM_PTE_MISUSE, 0x104, (ULONG_PTR)MappingAddress, PoolTag, MiArchPteRead(TagSlot) >> 1);
@@ -111,6 +122,8 @@ MmUnmapReservedMapping(
 
     UNREFERENCED_PARAMETER(PoolTag);
 
+    ASSERT(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA);
+    ASSERT(Mdl->MappedSystemVa != NULL);
     MiSystemUnmap(&MiSystem, Base, ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(Mdl), Mdl->ByteCount), FALSE);
     Mdl->MdlFlags &= ~(MDL_MAPPED_TO_SYSTEM_VA | MDL_PARTIAL_HAS_BEEN_MAPPED);
     Mdl->MappedSystemVa = NULL;

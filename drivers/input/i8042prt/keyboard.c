@@ -223,14 +223,7 @@ i8042PacketDpc(
 	if (!FinishIrp)
 		return;
 
-	if (DeviceExtension->CurrentIrp)
-	{
-		DeviceExtension->CurrentIrp->IoStatus.Status = Result;
-		IoCompleteRequest(DeviceExtension->CurrentIrp, IO_NO_INCREMENT);
-		IoStartNextPacket(DeviceExtension->CurrentIrpDevice, FALSE);
-		DeviceExtension->CurrentIrp = NULL;
-		DeviceExtension->CurrentIrpDevice = NULL;
-	}
+	i8042FinishPacket(DeviceExtension, Result);
 }
 
 static VOID NTAPI
@@ -327,6 +320,9 @@ HandlePowerKeys(
 	PKEYBOARD_INPUT_DATA InputData;
 	ULONG KeyPress;
 
+	if (DeviceExtension->KeysInBuffer == 0)
+		return FALSE;
+
 	InputData = DeviceExtension->KeyboardBuffer + DeviceExtension->KeysInBuffer - 1;
 	if (!(InputData->Flags & KEY_E0))
 		return FALSE;
@@ -382,13 +378,12 @@ i8042KbdDpcRoutine(
 	DeviceExtension = DeferredContext;
 	PortDeviceExtension = DeviceExtension->Common.PortDeviceExtension;
 
+	i8042PacketDpc(PortDeviceExtension);
 	if (HandlePowerKeys(DeviceExtension))
 	{
 		DeviceExtension->KeyComplete = FALSE;
 		return;
 	}
-
-	i8042PacketDpc(PortDeviceExtension);
 	if (!DeviceExtension->KeyComplete)
 		return;
 	/* We got the interrupt as it was being enabled, too bad */

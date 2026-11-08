@@ -51,6 +51,7 @@ ExFreePoolWithTag(
     {
         PEPROCESS Process = (PEPROCESS)Info.Trailer;
 
+        POOL_ASSERT(Info.Size >= sizeof(PEPROCESS) && Process != NULL);
         if (Process != NULL)
         {
             PsReturnPoolQuota(Process, ExpPoolClass(HeapIndex), Info.Size);

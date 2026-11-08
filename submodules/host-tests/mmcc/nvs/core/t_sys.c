@@ -345,8 +345,20 @@ SysKernelStacks(void)
         CHECK(MI_ATOMIC_READ64(&World.System.SystemSpace.PageTablePages) == Tables);
         CHECK(MiSystemCommitPinned(&World.System, RegionBase + 0x6000, 4, MI_PROT_READWRITE) ==
               STATUS_CONFLICTING_ADDRESSES);
+        CHECK(MiSystemCommitPinned(&World.System, RegionBase + 0x3000, 4, MI_PROT_READWRITE) ==
+              STATUS_CONFLICTING_ADDRESSES);
+        CHECK(MiArchPteRead(MiPtLookup(&World.System.SystemSpace, RegionBase + 0x3000, NULL)) == 0);
+        CHECK(MiArchPteRead(MiPtLookup(&World.System.SystemSpace, RegionBase + 0x4000, NULL)) == 0);
+        CHECK(MiArchPteIsValid(MiArchPteRead(MiPtLookup(&World.System.SystemSpace, RegionBase + 0x5000, NULL))));
+        CHECK(MI_ATOMIC_READ64(&World.System.CommittedPages) == Commit + 6 + 64);
         CHECK(MiHostIrql == 2);
         MiHostLowerIrql(OldIrql);
+        CHECK(MiSystemCommitPages(&World.System, RegionBase + 0x3000, 4, MI_PROT_READWRITE) ==
+              STATUS_CONFLICTING_ADDRESSES);
+        CHECK(MiArchPteRead(MiPtLookup(&World.System.SystemSpace, RegionBase + 0x3000, NULL)) == 0);
+        CHECK(MiArchPteRead(MiPtLookup(&World.System.SystemSpace, RegionBase + 0x4000, NULL)) == 0);
+        CHECK(MiArchPteIsValid(MiArchPteRead(MiPtLookup(&World.System.SystemSpace, RegionBase + 0x5000, NULL))));
+        CHECK(MI_ATOMIC_READ64(&World.System.CommittedPages) == Commit + 6 + 64);
         CHECK(NT_SUCCESS(KernelWrite64(&World, 0, RegionBase + 0x5000 + 63 * 4096, 0xF00)));
         CHECK(KernelRead64(&World, 0, RegionBase + 0x5000, &Status) == 0 && NT_SUCCESS(Status));
         KernelRead64(&World, 0, RegionBase + 0x4000, &Status);

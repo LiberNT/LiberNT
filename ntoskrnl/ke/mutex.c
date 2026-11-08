@@ -119,6 +119,8 @@ KeReleaseMutant(IN PKMUTANT Mutant,
     KiAcquireDispatcherObject(&Mutant->Header);
 
     PreviousState = Mutant->Header.SignalState;
+    ASSERT(PreviousState <= 1);
+    ASSERT((PreviousState == 1) == (Mutant->OwnerThread == NULL));
 
     if (Abandon == FALSE)
     {
@@ -157,6 +159,8 @@ KeReleaseMutant(IN PKMUTANT Mutant,
         }
     }
 
+    ASSERT(Mutant->Header.SignalState <= 1);
+    ASSERT((Mutant->Header.SignalState == 1) == (Mutant->OwnerThread == NULL));
     KiReleaseDispatcherObject(&Mutant->Header);
 
     if (Wait == FALSE)

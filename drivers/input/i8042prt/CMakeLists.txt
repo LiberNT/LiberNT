@@ -9,6 +9,7 @@ list(APPEND SOURCE
     keyboard.c
     misc.c
     mouse.c
+    packet.c
     pnp.c
     ps2pp.c
     readwrite.c

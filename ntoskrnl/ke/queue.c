@@ -16,6 +16,35 @@
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
+#if DBG
+static VOID
+KiAssertQueueEntries(
+    _In_ PKQUEUE Queue)
+{
+    PLIST_ENTRY Head = &Queue->EntryListHead;
+    PLIST_ENTRY Entry = Head->Flink;
+    LONG Count = 0;
+
+    ASSERT(Queue->Header.SignalState >= 0);
+    ASSERT((Queue->Header.SignalState == 0) == IsListEmpty(Head));
+    ASSERT(Head->Flink->Blink == Head);
+    ASSERT(Head->Blink->Flink == Head);
+    while (Entry != Head && Count < 16)
+    {
+        ASSERT(Entry->Flink != NULL && Entry->Blink != NULL);
+        ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        Count++;
+        Entry = Entry->Flink;
+    }
+    if (Entry == Head)
+        ASSERT(Queue->Header.SignalState == Count);
+    else
+        ASSERT(Queue->Header.SignalState > Count);
+}
+#else
+#define KiAssertQueueEntries(Queue) ((VOID)0)
+#endif
+
 static BOOLEAN
 KiWakeQueueDequeueWaiter(
     _Inout_ PKQUEUE Queue,
@@ -48,7 +77,9 @@ KiWakeQueueDequeueWaiter(
             {
                 RemoveEntryList(QueueEntry);
                 QueueEntry->Flink = NULL;
+                ASSERT(Queue->Header.SignalState > 0);
                 Queue->Header.SignalState--;
+                KiAssertQueueEntries(Queue);
             }
 
             RemoveEntryList(WaitEntry);
@@ -142,6 +173,7 @@ KiInsertQueue(IN PKQUEUE Queue,
     PKTHREAD Thread = KeGetCurrentThread();
     ASSERT_QUEUE(Queue);
 
+    KiAssertQueueEntries(Queue);
     /* Save the old state */
     InitialState = Queue->Header.SignalState;
 
@@ -149,9 +181,12 @@ KiInsertQueue(IN PKQUEUE Queue,
         ((Thread->Queue != Queue) || (Thread->WaitReason != WrQueue)) &&
         KiWakeQueueDequeueWaiter(Queue, Entry, FALSE))
     {
+        ASSERT(Queue->Header.SignalState == InitialState);
+        KiAssertQueueEntries(Queue);
         return InitialState;
     }
 
+    ASSERT(InitialState < MAXLONG);
     /* Increase the Entries */
     Queue->Header.SignalState++;
 
@@ -172,6 +207,7 @@ KiInsertQueue(IN PKQUEUE Queue,
     if ((InitialState == 0) && !IsListEmpty(&Queue->Header.WaitListHead))
         KiWaitTest(Queue, IO_NO_INCREMENT);
 
+    KiAssertQueueEntries(Queue);
     /* Return the previous state */
     return InitialState;
 }
@@ -283,10 +319,15 @@ KiDrainQueueEntries(
     _In_ ULONG Count)
 {
     PLIST_ENTRY QueueEntry;
+    LONG InitialState = Queue->Header.SignalState;
+    ULONG InitialRemoved = EntriesRemoved;
 
+    KiAssertQueueEntries(Queue);
+    ASSERT(Count > EntriesRemoved && !IsListEmpty(&Queue->EntryListHead));
     do
     {
         QueueEntry = Queue->EntryListHead.Flink;
+        ASSERT(Queue->Header.SignalState > 0);
         Queue->Header.SignalState--;
 
         if (!(QueueEntry->Flink) || !(QueueEntry->Blink))
@@ -297,6 +338,11 @@ KiDrainQueueEntries(
         EntryArray[EntriesRemoved++] = QueueEntry;
     } while ((EntriesRemoved < Count) && !IsListEmpty(&Queue->EntryListHead));
 
+    ASSERT(EntriesRemoved > InitialRemoved);
+    ASSERT((ULONG)(InitialState - Queue->Header.SignalState) == EntriesRemoved - InitialRemoved);
+    UNREFERENCED_PARAMETER(InitialState);
+    UNREFERENCED_PARAMETER(InitialRemoved);
+    KiAssertQueueEntries(Queue);
     return EntriesRemoved;
 }
 
@@ -612,6 +658,7 @@ KeRundownQueue(IN PKQUEUE Queue)
     OldIrql = KeRaiseIrqlToSynchLevel();
     KiAcquireDispatcherObject(&Queue->Header);
 
+    KiAssertQueueEntries(Queue);
     /* Check if the list is empty */
     FirstEntry = Queue->EntryListHead.Flink;
     if (FirstEntry == &Queue->EntryListHead)
@@ -650,6 +697,7 @@ KeRundownQueue(IN PKQUEUE Queue)
     /* Dequeue waiters become active as rundown wakes them. */
     Queue->CurrentCount = 0;
     KiRundownQueueWaitersLocked(Queue);
+    KiAssertQueueEntries(Queue);
 
     /* Release the queue object */
     KiReleaseDispatcherObject(&Queue->Header);

@@ -37,6 +37,7 @@ ExAllocatePoolWithQuotaTag(
     PPOOL_HEAP Heap;
     NTSTATUS Status;
     PVOID Block;
+    BOOLEAN Updated;
 
     if (PoolType & POOL_QUOTA_FAIL_INSTEAD_OF_RAISE)
     {
@@ -66,6 +67,9 @@ ExAllocatePoolWithQuotaTag(
     if (Heap == NULL || !PoolHeapQuery(Heap, Block, &Info))
         return Block;
 
+    POOL_ASSERT(Info.Size >= NumberOfBytes + sizeof(PEPROCESS));
+    POOL_ASSERT((Info.Flags & EX_POOL_BLOCK_QUOTA) == 0);
+    POOL_ASSERT(Process != NULL);
     Status = PsChargeProcessPoolQuota(Process, ExpPoolClass(HeapIndex), Info.Size);
     if (!NT_SUCCESS(Status))
     {
@@ -78,7 +82,9 @@ ExAllocatePoolWithQuotaTag(
 
     ObReferenceObject(Process);
     *ExpPoolQuotaSlot(Block, Info.Size) = Process;
-    PoolHeapSetFlags(Heap, Block, Info.Flags | EX_POOL_BLOCK_QUOTA);
+    Updated = PoolHeapSetFlags(Heap, Block, Info.Flags | EX_POOL_BLOCK_QUOTA);
+    POOL_ASSERT(Updated);
+    UNREFERENCED_PARAMETER(Updated);
     return Block;
 }
 
@@ -100,6 +106,7 @@ ExReturnPoolQuota(
     PPOOL_HEAP Heap;
     ULONG HeapIndex;
     PEPROCESS Process;
+    BOOLEAN Updated;
 
     if ((ExpPoolFlags & EX_POOL_FLAG_SPECIAL_POOL) && MmIsSpecialPoolAddress(P))
         return;
@@ -108,9 +115,13 @@ ExReturnPoolQuota(
     if (Heap == NULL || !PoolHeapQuery(Heap, P, &Info) || !(Info.Flags & EX_POOL_BLOCK_QUOTA))
         return;
 
+    POOL_ASSERT(Info.Size >= sizeof(PEPROCESS));
     Process = (PEPROCESS)Info.Trailer;
+    POOL_ASSERT(Process != NULL && Process == *ExpPoolQuotaSlot(P, Info.Size));
     *ExpPoolQuotaSlot(P, Info.Size) = NULL;
-    PoolHeapSetFlags(Heap, P, Info.Flags & ~EX_POOL_BLOCK_QUOTA);
+    Updated = PoolHeapSetFlags(Heap, P, Info.Flags & ~EX_POOL_BLOCK_QUOTA);
+    POOL_ASSERT(Updated);
+    UNREFERENCED_PARAMETER(Updated);
 
     if (Process != NULL)
     {

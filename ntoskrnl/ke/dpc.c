@@ -75,6 +75,61 @@ KiDpcThreadWakeRoutine(
     KeSetEvent(&Prcb->DpcEvent, IO_NO_INCREMENT, FALSE);
 }
 
+static __inline VOID
+KiAssertDpcQueue(
+    _In_ PKDPC_DATA DpcData)
+{
+    UNREFERENCED_PARAMETER(DpcData);
+    ASSERT((LONG64)DpcData->DpcQueueDepth >= 0);
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+    ASSERT((DpcData->DpcQueueDepth == 0) == (DpcData->DpcList.ListHead.Next == NULL));
+    ASSERT((DpcData->DpcList.ListHead.Next == NULL) == (DpcData->DpcList.LastEntry == NULL));
+    ASSERT(DpcData->DpcList.LastEntry == NULL || DpcData->DpcList.LastEntry->Next == NULL);
+#else
+    ASSERT((DpcData->DpcQueueDepth == 0) == IsListEmpty(&DpcData->DpcListHead));
+    ASSERT(DpcData->DpcListHead.Flink->Blink == &DpcData->DpcListHead);
+    ASSERT(DpcData->DpcListHead.Blink->Flink == &DpcData->DpcListHead);
+#endif
+#if DBG
+    {
+        ULONG Depth = (ULONG)DpcData->DpcQueueDepth;
+        ULONG Seen = 0;
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+        PSINGLE_LIST_ENTRY Entry = DpcData->DpcList.ListHead.Next;
+        PSINGLE_LIST_ENTRY Last = NULL;
+
+        while (Entry != NULL && Seen < Depth && Seen < 8)
+        {
+            PKDPC Dpc = CONTAINING_RECORD(Entry, KDPC, DpcListEntry);
+
+            ASSERT_DPC(Dpc);
+            ASSERT(Dpc->DpcData == DpcData);
+            Last = Entry;
+            Entry = Entry->Next;
+            Seen++;
+        }
+        ASSERT((Seen == Depth) == (Entry == NULL));
+        ASSERT(Entry != NULL || Last == DpcData->DpcList.LastEntry);
+#else
+        PLIST_ENTRY Head = &DpcData->DpcListHead;
+        PLIST_ENTRY Entry = Head->Flink;
+
+        while (Entry != Head && Seen < Depth && Seen < 8)
+        {
+            PKDPC Dpc = CONTAINING_RECORD(Entry, KDPC, DpcListEntry);
+
+            ASSERT_DPC(Dpc);
+            ASSERT(Dpc->DpcData == DpcData);
+            ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+            Entry = Entry->Flink;
+            Seen++;
+        }
+        ASSERT((Seen == Depth) == (Entry == Head));
+#endif
+    }
+#endif
+}
+
 static PKDPC
 KiPopThreadedDpc(
     _Inout_ PKDPC_DATA DpcData)
@@ -121,6 +176,7 @@ KiExecuteDpc(
         {
             KeRaiseIrql(HIGH_LEVEL, &OldIrql);
             KiAcquireSpinLock(&DpcData->DpcLock);
+            KiAssertDpcQueue(DpcData);
 
             Dpc = KiPopThreadedDpc(DpcData);
             if (!Dpc)
@@ -131,6 +187,7 @@ KiExecuteDpc(
                 break;
             }
 
+            ASSERT(DpcData->DpcQueueDepth != 0 && Dpc->DpcData == DpcData);
             KiSetDpcThreadActive(Prcb);
             InterlockedOrAffinity((volatile LONG_PTR *)&Dpc->ProcessorHistory, (LONG_PTR)AFFINITY_MASK(Prcb->Number));
             InterlockedExchangePointer(&KiActiveThreadedDpc[Prcb->Number], Dpc);
@@ -140,6 +197,7 @@ KiExecuteDpc(
             SystemArgument1 = Dpc->SystemArgument1;
             SystemArgument2 = Dpc->SystemArgument2;
             DpcData->DpcQueueDepth--;
+            KiAssertDpcQueue(DpcData);
 
             KiReleaseSpinLock(&DpcData->DpcLock);
             KeLowerIrql(OldIrql);
@@ -811,6 +869,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
         {
             /* Lock the DPC data and get the DPC entry*/
             KeAcquireSpinLockAtDpcLevel(&DpcData->DpcLock);
+            KiAssertDpcQueue(DpcData);
 
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
             /* Vista+: KDPC_LIST uses SINGLE_LIST_ENTRY */
@@ -845,6 +904,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
                 Dpc = CONTAINING_RECORD(DpcEntry, KDPC, DpcListEntry);
 #endif
 
+                ASSERT(DpcData->DpcQueueDepth != 0 && Dpc->DpcData == DpcData);
                 /* Clear its DPC data and save its parameters */
                 KiBeginDpcExecution(Prcb, Dpc);
                 Dpc->DpcData = NULL;
@@ -855,6 +915,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
 
                 /* Decrease the queue depth */
                 DpcData->DpcQueueDepth--;
+                KiAssertDpcQueue(DpcData);
 
 #if DBG
                 /* Clear DPC Time */
@@ -1028,6 +1089,7 @@ KeInsertQueueDpc(IN PKDPC Dpc,
 
     /* Acquire the DPC lock */
     KiAcquireSpinLock(&DpcData->DpcLock);
+    KiAssertDpcQueue(DpcData);
 
     /* Get the DPC Data */
     if (!InterlockedCompareExchangePointer(&Dpc->DpcData, DpcData, NULL))
@@ -1130,6 +1192,7 @@ KeInsertQueueDpc(IN PKDPC Dpc,
         }
     }
 
+    KiAssertDpcQueue(DpcData);
     /* Release the lock */
     KiReleaseSpinLock(&DpcData->DpcLock);
 
@@ -1179,10 +1242,12 @@ KiRemoveQueueDpc(IN PKDPC Dpc)
     {
         /* Acquire the DPC lock */
         KiAcquireSpinLock(&DpcData->DpcLock);
+        KiAssertDpcQueue(DpcData);
 
         /* Make sure that the data didn't change */
         if (DpcData == Dpc->DpcData)
         {
+            ASSERT(DpcData->DpcQueueDepth != 0);
             /* Remove the DPC */
             DpcData->DpcQueueDepth--;
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
@@ -1191,6 +1256,7 @@ KiRemoveQueueDpc(IN PKDPC Dpc)
                 PSINGLE_LIST_ENTRY Prev = &DpcData->DpcList.ListHead;
                 PSINGLE_LIST_ENTRY Cur = (PSINGLE_LIST_ENTRY)&Dpc->DpcListEntry;
                 while (Prev->Next && Prev->Next != Cur) Prev = Prev->Next;
+                ASSERT(Prev->Next == Cur);
                 if (Prev->Next == Cur)
                 {
                     Prev->Next = Cur->Next;
@@ -1205,6 +1271,7 @@ KiRemoveQueueDpc(IN PKDPC Dpc)
             Removed = TRUE;
         }
 
+        KiAssertDpcQueue(DpcData);
         /* Release the lock */
         KiReleaseSpinLock(&DpcData->DpcLock);
     }
@@ -1293,6 +1360,7 @@ KeFlushQueuedDpcs(VOID)
     KDPC Dpc;
     KEVENT Event;
     KIRQL OldIrql;
+    BOOLEAN Inserted;
 
     PAGED_CODE();
     KeInitializeEvent(&Event, SynchronizationEvent, FALSE);
@@ -1311,7 +1379,9 @@ KeFlushQueuedDpcs(VOID)
             else
                 KeInitializeDpc(&Dpc, KiFlushDpcQueueRoutine, &Event);
             KeSetTargetProcessorDpc(&Dpc, (CCHAR)ProcessorIndex);
-            KeInsertQueueDpc(&Dpc, NULL, NULL);
+            Inserted = KeInsertQueueDpc(&Dpc, NULL, NULL);
+            ASSERT(Inserted);
+            UNREFERENCED_PARAMETER(Inserted);
 
             if (DpcType == DPC_NORMAL)
             {
@@ -1393,7 +1463,7 @@ KeGenericCallDpc(IN PKDEFERRED_ROUTINE Routine,
     ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
 
     Count = KeNumberProcessors;
-    ASSERT(Count <= RTL_NUMBER_OF(Flags));
+    ASSERT(Count != 0 && Count <= RTL_NUMBER_OF(Flags));
     for (Index = 0; Index < Count; Index++)
         Flags[Index] = 0;
 
@@ -1407,6 +1477,7 @@ KeGenericCallDpc(IN PKDEFERRED_ROUTINE Routine,
 
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
     CurrentPrcb = KeGetCurrentPrcb();
+    ASSERT(CurrentPrcb->Number < Count);
 
     for (Number = 0; Number < (CCHAR)Count; Number++)
     {
@@ -1440,7 +1511,10 @@ KeSignalCallDpcDone(IN PVOID SystemArgument1)
     //
     // Decrement the barrier, which is actually the processor count
     //
-    InterlockedDecrement((PLONG)SystemArgument1);
+    LONG Remaining = InterlockedDecrement((PLONG)SystemArgument1);
+
+    ASSERT(Remaining >= 0);
+    UNREFERENCED_PARAMETER(Remaining);
 }
 
 /*
@@ -1456,10 +1530,13 @@ KeSignalCallDpcSynchronize(IN PVOID SystemArgument2)
     BOOLEAN First;
 
     Total = Sync->Reverse.TotalProcessors;
+    ASSERT(Total != 0 && Total <= MAXIMUM_PROCESSORS && Sync->Flags != NULL);
     if (Total <= 1)
         return TRUE;
 
     Index = KeGetCurrentProcessorNumber();
+    ASSERT(Index < Total);
+    ASSERT((Sync->Flags[Index] & 0x7fffffffL) == 0);
 
     Sync->Flags[Index] ^= (LONG)0x80000000;
     Flag = Sync->Flags[Index];

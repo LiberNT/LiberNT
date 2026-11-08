@@ -435,8 +435,7 @@ StartProcedure(
         }
         if (DeviceExtension->Flags & MOUSE_PRESENT)
         {
-            FlagsToDisable |= CCB_MOUSE_DISAB;
-            FlagsToEnable |= CCB_MOUSE_INT_ENAB;
+            FlagsToEnable |= CCB_MOUSE_DISAB | CCB_MOUSE_INT_ENAB;
         }
 
         Status = EnableInterrupts(DeviceExtension, FlagsToDisable, FlagsToEnable);
@@ -480,6 +479,9 @@ StartProcedure(
         else
         {
             WARN_(I8042PRT, "i8042ConnectMouseInterrupt failed: %lx\n", Status);
+            if (!i8042QuiesceMouse(DeviceExtension))
+                WARN_(I8042PRT, "Unable to quiesce mouse port\n");
+            return Status;
         }
 
         /* Start the mouse */
@@ -682,6 +684,10 @@ i8042RemoveDevice(
 
     if (DeviceExtension->Type == Mouse)
     {
+        if (PortDeviceExtension->DataPort != NULL &&
+            !i8042QuiesceMouse(PortDeviceExtension))
+            WARN_(I8042PRT, "Unable to quiesce mouse port\n");
+
         if (PortDeviceExtension->Flags & MOUSE_INITIALIZED)
         {
             if (PortDeviceExtension->HighestDIRQLInterrupt == PortDeviceExtension->MouseInterrupt.Object)

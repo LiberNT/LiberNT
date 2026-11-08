@@ -55,10 +55,15 @@ KiFindPassiveInterrupt(
 {
     PLIST_ENTRY Entry;
 
+    ASSERT(KiPassiveInterruptList.Flink->Blink == &KiPassiveInterruptList);
+    ASSERT(KiPassiveInterruptList.Blink->Flink == &KiPassiveInterruptList);
     for (Entry = KiPassiveInterruptList.Flink; Entry != &KiPassiveInterruptList; Entry = Entry->Flink)
     {
         PKI_PASSIVE_INTERRUPT Passive = CONTAINING_RECORD(Entry, KI_PASSIVE_INTERRUPT, Link);
 
+        ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        ASSERT(Passive->Interrupt != NULL);
+        ASSERT(Passive->Interrupt->Irql == PASSIVE_LEVEL);
         if (Interrupt != NULL ? Passive->Interrupt == Interrupt : Passive->Interrupt->Vector == Vector)
             return Passive;
     }
@@ -73,18 +78,26 @@ KiPassiveInterruptWorker(
 {
     PKI_PASSIVE_INTERRUPT Passive = Context;
     PKINTERRUPT Interrupt = Passive->Interrupt;
+    LONG Previous;
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Interrupt != NULL && Interrupt->Irql == PASSIVE_LEVEL);
     do
     {
         KeWaitForSingleObject(&Passive->Lock, Executive, KernelMode, FALSE, NULL);
-        while (InterlockedExchange(&Passive->Pending, 0) != 0 && !Passive->Disconnecting)
+        for (;;)
         {
+            Previous = InterlockedExchange(&Passive->Pending, 0);
+            ASSERT(Previous == 0 || Previous == 1);
+            if (Previous == 0 || Passive->Disconnecting)
+                break;
             Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
             if (Interrupt->Mode == LevelSensitive)
                 HalEnableSystemInterrupt(Interrupt->Vector, PASSIVE_LEVEL, LevelSensitive);
         }
         KeSetEvent(&Passive->Lock, IO_NO_INCREMENT, FALSE);
-        InterlockedExchange(&Passive->Queued, 0);
+        Previous = InterlockedExchange(&Passive->Queued, 0);
+        ASSERT(Previous == 1);
         KeMemoryBarrier();
     } while (Passive->Pending != 0 && InterlockedCompareExchange(&Passive->Queued, 1, 0) == 0);
 
@@ -101,16 +114,23 @@ KiPassiveInterruptDpc(
     _In_opt_ PVOID SystemArgument2)
 {
     PKI_PASSIVE_INTERRUPT Passive = DeferredContext;
+    LONG Previous;
 
-    UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (InterlockedCompareExchange(&Passive->Queued, 1, 0) != 0)
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(Passive != NULL && Dpc == &Passive->Dpc);
+    UNREFERENCED_PARAMETER(Dpc);
+    Previous = InterlockedCompareExchange(&Passive->Queued, 1, 0);
+    ASSERT(Previous == 0 || Previous == 1);
+    if (Previous != 0)
         return;
     if (!ExAcquireRundownProtection(&Passive->Rundown))
     {
-        InterlockedExchange(&Passive->Queued, 0);
+        Previous = InterlockedExchange(&Passive->Queued, 0);
+        ASSERT(Previous == 1);
+        UNREFERENCED_PARAMETER(Previous);
         return;
     }
     ExQueueWorkItem(&Passive->WorkItem, CriticalWorkQueue);
@@ -129,6 +149,7 @@ KiConnectPassiveInterrupt(
     Passive = ExAllocatePoolZero(NonPagedPool, sizeof(*Passive), TAG_PASSIVE_INTERRUPT);
     if (Passive == NULL)
         return FALSE;
+    ASSERT(Interrupt->Irql == PASSIVE_LEVEL);
     Passive->Interrupt = Interrupt;
     KeInitializeDpc(&Passive->Dpc, KiPassiveInterruptDpc, Passive);
     ExInitializeWorkItem(&Passive->WorkItem, KiPassiveInterruptWorker, Passive);
@@ -136,12 +157,18 @@ KiConnectPassiveInterrupt(
     ExInitializeRundownProtection(&Passive->Rundown);
 
     OldIrql = KiAcquirePassiveInterruptList();
+    ASSERT(KiPassiveInterruptList.Flink->Blink == &KiPassiveInterruptList);
+    ASSERT(KiPassiveInterruptList.Blink->Flink == &KiPassiveInterruptList);
     InsertTailList(&KiPassiveInterruptList, &Passive->Link);
+    ASSERT(Passive->Link.Flink->Blink == &Passive->Link);
+    ASSERT(Passive->Link.Blink->Flink == &Passive->Link);
     KiReleasePassiveInterruptList(OldIrql);
 
     if (!HalEnableSystemInterrupt(Interrupt->Vector, PASSIVE_LEVEL, Interrupt->Mode))
     {
         OldIrql = KiAcquirePassiveInterruptList();
+        ASSERT(Passive->Link.Flink->Blink == &Passive->Link);
+        ASSERT(Passive->Link.Blink->Flink == &Passive->Link);
         RemoveEntryList(&Passive->Link);
         KiReleasePassiveInterruptList(OldIrql);
         ExFreePoolWithTag(Passive, TAG_PASSIVE_INTERRUPT);
@@ -173,6 +200,8 @@ KiDisconnectPassiveInterrupt(
     HalDisableSystemInterrupt(Interrupt->Vector, PASSIVE_LEVEL);
 
     OldIrql = KiAcquirePassiveInterruptList();
+    ASSERT(Passive->Link.Flink->Blink == &Passive->Link);
+    ASSERT(Passive->Link.Blink->Flink == &Passive->Link);
     RemoveEntryList(&Passive->Link);
     KiReleasePassiveInterruptList(OldIrql);
 
@@ -180,6 +209,10 @@ KiDisconnectPassiveInterrupt(
     KeFlushQueuedDpcs();
     ExWaitForRundownProtectionRelease(&Passive->Rundown);
 
+    ASSERT(Passive->Disconnecting);
+    ASSERT(InterlockedCompareExchange(&Passive->Queued, 0, 0) == 0);
+    ASSERT(InterlockedCompareExchange(&Passive->Pending, 0, 0) == 0 ||
+           InterlockedCompareExchange(&Passive->Pending, 0, 0) == 1);
     ExFreePoolWithTag(Passive, TAG_PASSIVE_INTERRUPT);
     Interrupt->Connected = FALSE;
     return TRUE;

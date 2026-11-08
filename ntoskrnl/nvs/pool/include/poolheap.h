@@ -73,7 +73,7 @@ typedef struct _POOL_HEAP
     BOOLEAN Paged;
     ULONG SlotCount;
     ULONG ShardCount;
-    ULONG RegionCount;
+    volatile ULONG RegionCount;
     ULONG64 EncodeKey;
     PPOOL_VA_REGION Region[POOL_MAX_REGIONS];
     PPOOL_SEGMENT_SHARD Shard;
@@ -83,6 +83,17 @@ typedef struct _POOL_HEAP
     POOL_LFH_CLASS LfhClass[POOL_LFH_CLASS_COUNT];
     volatile LONG LargeCount;
 } POOL_HEAP, *PPOOL_HEAP;
+
+FORCEINLINE
+ULONG
+PoolHeapRegionCount(_In_ PPOOL_HEAP Heap)
+{
+    ULONG Count = POOL_LOAD_ACQUIRE32(&Heap->RegionCount);
+
+    POOL_ASSERT(Heap->Signature == POOL_HEAP_SIGNATURE);
+    POOL_ASSERT(Count != 0 && Count <= POOL_MAX_REGIONS);
+    return Count;
+}
 
 NTSTATUS PoolHeapCreate(_Out_ PPOOL_HEAP *Heap, _In_ PPOOL_VA_REGION Region, _In_ ULONG HeapId,
                         _In_ ULONG ProcessorCount, _In_ ULONG64 EncodeKey, _In_ ULONG Options);
@@ -117,10 +128,12 @@ FORCEINLINE
 PPOOL_VA_REGION
 PoolHeapRegionFromAddress(_In_ PPOOL_HEAP Heap, _In_ PVOID Address)
 {
+    ULONG Count = PoolHeapRegionCount(Heap);
     ULONG i;
 
-    for (i = 0; i < Heap->RegionCount; i++)
+    for (i = 0; i < Count; i++)
     {
+        POOL_ASSERT(Heap->Region[i] != NULL);
         if (PoolVaContains(Heap->Region[i], Address))
             return Heap->Region[i];
     }

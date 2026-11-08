@@ -223,9 +223,10 @@ PoolHeapEnumerate(
     _In_ POOL_ENUMERATE_ROUTINE Routine,
     _In_opt_ PVOID Context)
 {
+    ULONG RegionCount = PoolHeapRegionCount(Heap);
     ULONG RegionIndex;
 
-    for (RegionIndex = 0; RegionIndex < Heap->RegionCount; RegionIndex++)
+    for (RegionIndex = 0; RegionIndex < RegionCount; RegionIndex++)
     {
         PPOOL_VA_REGION Region = Heap->Region[RegionIndex];
         SIZE_T Index;

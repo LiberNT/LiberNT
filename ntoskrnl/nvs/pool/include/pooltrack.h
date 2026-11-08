@@ -36,9 +36,16 @@ typedef struct _POOL_TAG_USAGE
 
 typedef struct _POOL_TAG_TRACKER
 {
-    ULONG TableCount;
+    volatile ULONG TableCount;
     PPOOL_TAG_TABLE Table[POOL_MAX_SLOTS];
 } POOL_TAG_TRACKER, *PPOOL_TAG_TRACKER;
+
+FORCEINLINE
+ULONG
+PoolTagTrackerCount(_In_ PPOOL_TAG_TRACKER Tracker)
+{
+    return POOL_LOAD_ACQUIRE32(&Tracker->TableCount);
+}
 
 VOID PoolTagTrackerInitialize(_Out_ PPOOL_TAG_TRACKER Tracker);
 BOOLEAN PoolTagTrackerAddTable(_Inout_ PPOOL_TAG_TRACKER Tracker, _In_ PPOOL_TAG_TABLE Table);

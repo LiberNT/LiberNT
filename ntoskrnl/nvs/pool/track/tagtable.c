@@ -33,13 +33,25 @@ PoolTagTrackerAddTable(
     _Inout_ PPOOL_TAG_TRACKER Tracker,
     _In_ PPOOL_TAG_TABLE Table)
 {
-    if (Tracker->TableCount >= POOL_MAX_SLOTS)
+    ULONG Count = PoolTagTrackerCount(Tracker);
+#if DBG || defined(POOL_HOST_TEST)
+    ULONG i;
+
+    POOL_ASSERT(Count <= POOL_MAX_SLOTS && Table != NULL);
+    for (i = 0; i < Count; i++)
+    {
+        POOL_ASSERT(Tracker->Table[i] != NULL && Tracker->Table[i] != Table);
+        POOL_ASSERT(POOL_ATOMIC_READ32(&Tracker->Table[i]->Entry[POOL_TAG_TABLE_ENTRIES - 1].Tag) ==
+                    (LONG)POOL_TAG_OVERFLOW);
+    }
+#endif
+    if (Count >= POOL_MAX_SLOTS)
         return FALSE;
 
     RtlZeroMemory(Table, sizeof(*Table));
     Table->Entry[POOL_TAG_TABLE_ENTRIES - 1].Tag = (LONG)POOL_TAG_OVERFLOW;
-    Tracker->Table[Tracker->TableCount] = Table;
-    Tracker->TableCount++;
+    Tracker->Table[Count] = Table;
+    POOL_STORE_RELEASE32(&Tracker->TableCount, Count + 1);
     return TRUE;
 }
 
@@ -53,6 +65,9 @@ PoolTagFind(
     ULONG Index = PoolTagHash(Tag);
     ULONG Probe;
 
+    POOL_ASSERT(Table != NULL);
+    POOL_ASSERT(POOL_ATOMIC_READ32(&Table->Entry[POOL_TAG_TABLE_ENTRIES - 1].Tag) == (LONG)POOL_TAG_OVERFLOW);
+    POOL_ASSERT(Index < POOL_TAG_TABLE_ENTRIES - 1);
     if (Tag == 0 || Tag == POOL_TAG_OVERFLOW)
     {
         PPOOL_TAG_ENTRY Overflow = &Table->Entry[POOL_TAG_TABLE_ENTRIES - 1];
@@ -75,7 +90,10 @@ PoolTagFind(
 
             Current = POOL_ATOMIC_CAS32(&Entry->Tag, (LONG)Tag, 0);
             if (Current == 0 || Current == (LONG)Tag)
+            {
+                POOL_ASSERT(POOL_ATOMIC_READ32(&Entry->Tag) == (LONG)Tag);
                 return Entry;
+            }
         }
 
         Index++;
@@ -94,11 +112,19 @@ PoolTagCharge(
     _In_ SIZE_T Bytes)
 {
     PPOOL_TAG_ENTRY Entry;
+    PPOOL_TAG_TABLE Table;
+    ULONG Count = PoolTagTrackerCount(Tracker);
 
-    if (Tracker->TableCount == 0 || Class >= POOL_TAG_CLASSES)
+    POOL_ASSERT(Count <= POOL_MAX_SLOTS);
+    if (Count == 0 || Class >= POOL_TAG_CLASSES)
         return;
 
-    Entry = PoolTagFind(Tracker->Table[POOL_CURRENT_PROCESSOR() % Tracker->TableCount], Tag, TRUE);
+    Table = Tracker->Table[POOL_CURRENT_PROCESSOR() % Count];
+    POOL_ASSERT(Table != NULL);
+    Entry = PoolTagFind(Table, Tag, TRUE);
+    POOL_ASSERT(Entry != NULL);
+    POOL_ASSERT(Entry == &Table->Entry[POOL_TAG_TABLE_ENTRIES - 1] ||
+                POOL_ATOMIC_READ32(&Entry->Tag) == (LONG)Tag);
     POOL_ATOMIC_ADD32(&Entry->Allocations[Class], 1);
     POOL_ATOMIC_ADD64(&Entry->Bytes[Class], (LONG64)Bytes);
 }
@@ -111,11 +137,19 @@ PoolTagRelease(
     _In_ SIZE_T Bytes)
 {
     PPOOL_TAG_ENTRY Entry;
+    PPOOL_TAG_TABLE Table;
+    ULONG Count = PoolTagTrackerCount(Tracker);
 
-    if (Tracker->TableCount == 0 || Class >= POOL_TAG_CLASSES)
+    POOL_ASSERT(Count <= POOL_MAX_SLOTS);
+    if (Count == 0 || Class >= POOL_TAG_CLASSES)
         return;
 
-    Entry = PoolTagFind(Tracker->Table[POOL_CURRENT_PROCESSOR() % Tracker->TableCount], Tag, TRUE);
+    Table = Tracker->Table[POOL_CURRENT_PROCESSOR() % Count];
+    POOL_ASSERT(Table != NULL);
+    Entry = PoolTagFind(Table, Tag, TRUE);
+    POOL_ASSERT(Entry != NULL);
+    POOL_ASSERT(Entry == &Table->Entry[POOL_TAG_TABLE_ENTRIES - 1] ||
+                POOL_ATOMIC_READ32(&Entry->Tag) == (LONG)Tag);
     POOL_ATOMIC_ADD32(&Entry->Frees[Class], 1);
     POOL_ATOMIC_ADD64(&Entry->Bytes[Class], -(LONG64)Bytes);
 }
@@ -143,12 +177,14 @@ PoolTagQuery(
     _Out_ PPOOL_TAG_USAGE Usage)
 {
     BOOLEAN Found = FALSE;
+    ULONG Count = PoolTagTrackerCount(Tracker);
     ULONG i;
 
     RtlZeroMemory(Usage, sizeof(*Usage));
     Usage->Tag = Tag;
 
-    for (i = 0; i < Tracker->TableCount; i++)
+    POOL_ASSERT(Count <= POOL_MAX_SLOTS);
+    for (i = 0; i < Count; i++)
     {
         PPOOL_TAG_ENTRY Entry = PoolTagFind(Tracker->Table[i], Tag, FALSE);
 
@@ -170,9 +206,11 @@ PoolTagEnumerate(
 {
     ULONG Table = (ULONG)(*Cursor >> 32);
     ULONG Index = (ULONG)*Cursor;
+    ULONG Count = PoolTagTrackerCount(Tracker);
     ULONG Earlier;
 
-    for (; Table < Tracker->TableCount; Table++, Index = 0)
+    POOL_ASSERT(Count <= POOL_MAX_SLOTS);
+    for (; Table < Count; Table++, Index = 0)
     {
         for (; Index < POOL_TAG_TABLE_ENTRIES; Index++)
         {

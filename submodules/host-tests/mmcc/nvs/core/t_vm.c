@@ -1034,6 +1034,40 @@ VmLockRanges(void)
     CHECK(Space.LockRangeCount == 1 && Space.LockedPages == 39);
     MiLockRangeRemove(&Space, 0x40000000ULL, 0x40000000ULL + 40 * PAGE_SIZE);
     CHECK(Space.LockRangeCount == 0 && Space.LockedPages == 0);
+    {
+        UCHAR Expected[64] = {0};
+        ULONG64 Seed = 0xB47C6A21ULL;
+        ULONG Round;
+
+        for (Round = 0; Round < 512; Round++)
+        {
+            ULONG First = (ULONG)(Rng(&Seed) % RTL_NUMBER_OF(Expected));
+            ULONG Last = First + 1 + (ULONG)(Rng(&Seed) % (RTL_NUMBER_OF(Expected) - First));
+            BOOLEAN Add = (BOOLEAN)(Rng(&Seed) & 1);
+            ULONG Count = 0;
+
+            if (Add)
+                CHECK(NT_SUCCESS(MiLockRangeAdd(&Space, 0x40000000ULL + (ULONG64)First * PAGE_SIZE,
+                                                0x40000000ULL + (ULONG64)Last * PAGE_SIZE)));
+            else
+                MiLockRangeRemove(&Space, 0x40000000ULL + (ULONG64)First * PAGE_SIZE,
+                                  0x40000000ULL + (ULONG64)Last * PAGE_SIZE);
+            for (i = First; i < Last; i++)
+                Expected[i] = Add;
+            for (i = 0; i < RTL_NUMBER_OF(Expected); i++)
+            {
+                BOOLEAN Locked = MiLockRangeLocked(&Space, 0x40000000ULL + (ULONG64)i * PAGE_SIZE, &Next);
+
+                CHECK(Locked == (Expected[i] != 0));
+                Count += Expected[i];
+            }
+            CHECK(Space.LockedPages == Count);
+            CHECK(MiLockRangePages(&Space, 0x40000000ULL,
+                                   0x40000000ULL + RTL_NUMBER_OF(Expected) * PAGE_SIZE) == Count);
+        }
+        MiLockRangeRemove(&Space, 0x40000000ULL, 0x40000000ULL + RTL_NUMBER_OF(Expected) * PAGE_SIZE);
+        CHECK(Space.LockRangeCount == 0 && Space.LockedPages == 0);
+    }
     MI_RW_RELEASE_EXCLUSIVE(&Space.Lock);
 
     CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
@@ -1187,9 +1221,126 @@ VmQueryRuns(void)
     WorldDestroy(&World);
 }
 
+static void
+VmRotateLifecycle(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    ULONG64 Base = 0, Reserved = 0;
+    MI_FRAME_NUMBER Mapped[2], Regular[2], Swapped[2], After[2];
+    NTSTATUS Status;
+
+    WorldCreate(&World, 256, 2, 256);
+    World.Machine.StrictTlb = TRUE;
+    ProcessCreate(&World, &Space);
+    WorldAttach(&World, 1, &Space);
+    CHECK(NT_SUCCESS(Alloc(&Space, &Reserved, 2 * PAGE_SIZE, MI_MEM_RESERVE | MI_MEM_ROTATE,
+                           MI_PROT_READWRITE)));
+    CHECK(MiRotateQuery(&Space, Reserved, PAGE_SIZE, Mapped, Regular) == STATUS_INVALID_PAGE_PROTECTION);
+    CHECK(NT_SUCCESS(Free(&Space, Reserved, 0, MI_MEM_RELEASE)));
+    CHECK(NT_SUCCESS(Alloc(&Space, &Base, 2 * PAGE_SIZE, MI_MEM_RESERVE | MI_MEM_COMMIT | MI_MEM_ROTATE,
+                           MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(MiRotateQuery(&Space, Base, 2 * PAGE_SIZE, Mapped, Regular)));
+    CHECK(Mapped[0] == Regular[0] && Mapped[1] == Regular[1] && Regular[0] != Regular[1]);
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base, 0x1234)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + PAGE_SIZE, 0x5678)));
+    Swapped[0] = Regular[1];
+    Swapped[1] = Regular[0];
+    CHECK(NT_SUCCESS(MiRotateApply(&Space, Base, 2 * PAGE_SIZE, Swapped, 0)));
+    CHECK(NT_SUCCESS(MiRotateQuery(&Space, Base, 2 * PAGE_SIZE, Mapped, After)));
+    CHECK(Mapped[0] == Swapped[0] && Mapped[1] == Swapped[1]);
+    CHECK(After[0] == Regular[0] && After[1] == Regular[1]);
+    CHECK(UserRead64(&World, 1, Base, &Status) == 0x5678 && NT_SUCCESS(Status));
+    CHECK(UserRead64(&World, 1, Base + PAGE_SIZE, &Status) == 0x1234 && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(MiRotateApply(&Space, Base, 2 * PAGE_SIZE, NULL, 0)));
+    CHECK(UserRead64(&World, 1, Base, &Status) == 0x1234 && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(Free(&Space, Base, 0, MI_MEM_RELEASE)));
+    CHECK(World.Machine.StaleTlbUses == 0 && World.Machine.BreakBeforeMakeViolations == 0);
+    WorldAttach(&World, 1, NULL);
+    ProcessDestroy(&World, &Space);
+    WorldExpectClean(&World, 256);
+    WorldDestroy(&World);
+}
+
+static BOOLEAN
+VmCommitOwnerCharge(PVOID Context, LONG64 Pages)
+{
+    *(LONG64 *)Context += Pages;
+    return TRUE;
+}
+
+static VOID
+VmCommitOwnerReturn(PVOID Context, LONG64 Pages)
+{
+    *(LONG64 *)Context -= Pages;
+}
+
+static void
+VmCommitTableOutOfMemory(void)
+{
+    ULONG Available, Mode;
+    BOOLEAN SawPartial = FALSE;
+
+    for (Mode = 0; Mode < 2; Mode++)
+    for (Available = 0; Available <= 4; Available++)
+    {
+        TEST_WORLD World;
+        MI_ADDRESS_SPACE Space;
+        MI_MEMORY_INFORMATION Info;
+        ULONG64 Base = 0x40000000ULL, Size = 0x400000, Start, Length;
+        ULONG Held[64], Count = 0, Frame, i, Committed = 0;
+        LONG64 OwnerPages = 0;
+        NTSTATUS Status;
+
+        WorldCreate(&World, 64, 1, 1000);
+        ProcessCreate(&World, &Space);
+        World.System.ChargeOwnerCommit = VmCommitOwnerCharge;
+        World.System.ReturnOwnerCommit = VmCommitOwnerReturn;
+        Space.CommitOwner = &OwnerPages;
+        CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE, MI_PROT_READWRITE)));
+        if (Mode != 0)
+        {
+            Start = Base + 0x200000 - PAGE_SIZE;
+            Length = PAGE_SIZE;
+            CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Start, &Length, MI_MEM_COMMIT, MI_PROT_READWRITE)));
+        }
+        while ((Frame = MiPfnAllocatePage(&World.System.Pfn, MI_ALLOCATE_NO_RECLAIM | TEST_ANY_FRAME)) != MI_FRAME_INVALID)
+            Held[Count++] = Frame;
+        for (i = 0; i < Available; i++)
+            MiPfnFreePage(&World.System.Pfn, Held[--Count]);
+
+        Start = Base + 0x200000 - PAGE_SIZE;
+        Length = 2 * PAGE_SIZE;
+        Status = MiAllocateVirtualMemory(&Space, &Start, &Length, MI_MEM_COMMIT, MI_PROT_READWRITE);
+        CHECK(Status == STATUS_NO_MEMORY || NT_SUCCESS(Status));
+        if (Available == 0)
+            CHECK(Status == STATUS_NO_MEMORY);
+        for (i = 0; i < 2; i++)
+        {
+            CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x200000 - PAGE_SIZE + i * PAGE_SIZE, &Info)));
+            Committed += Info.State == MI_MEM_COMMIT;
+        }
+        CHECK(Space.CommittedPages == Committed);
+        CHECK(World.System.CommittedPages == Committed);
+        CHECK(OwnerPages == Committed);
+        if (Mode == 0 && Status == STATUS_NO_MEMORY && Committed == 1)
+            SawPartial = TRUE;
+        for (i = 0; i < Count; i++)
+            MiPfnFreePage(&World.System.Pfn, Held[i]);
+        CHECK(NT_SUCCESS(Free(&Space, Base, 0, MI_MEM_RELEASE)));
+        CHECK(OwnerPages == 0);
+        ProcessDestroy(&World, &Space);
+        WorldExpectClean(&World, 64);
+        WorldDestroy(&World);
+    }
+    CHECK(SawPartial);
+}
+
 void
 TestVm(void)
 {
+    VmCommitTableOutOfMemory();
+    VmRotateLifecycle();
     VmWindowsProtection();
     VmExecutableWriteTracking();
     VmDynamicCodeEcExemption();
@@ -1750,6 +1901,105 @@ PagingCommitExpansion(void)
     WorldDestroy(&World);
 }
 
+typedef struct _PAGING_GROWTH
+{
+    MI_PAGEFILE PageFile;
+    volatile LONG Ready;
+    volatile LONG Go;
+    volatile LONG Stop;
+    volatile LONG Attempts;
+    volatile LONG Seen[4];
+    volatile LONG Owner[257];
+} PAGING_GROWTH;
+
+typedef struct _PAGING_GROWTH_WORKER
+{
+    PAGING_GROWTH *Growth;
+    ULONG Index;
+} PAGING_GROWTH_WORKER;
+
+static
+void *
+PagingGrowthWorker(void *Argument)
+{
+    PAGING_GROWTH_WORKER *Worker = Argument;
+    PAGING_GROWTH *Growth = Worker->Growth;
+
+    MiHostCpu = Worker->Index;
+    __atomic_add_fetch(&Growth->Ready, 1, __ATOMIC_RELEASE);
+    while (!__atomic_load_n(&Growth->Go, __ATOMIC_ACQUIRE))
+        sched_yield();
+    while (!__atomic_load_n(&Growth->Stop, __ATOMIC_ACQUIRE))
+    {
+        ULONG64 Slot = MiPageFileReserveSlot(&Growth->PageFile);
+
+        if (Slot != 0)
+        {
+            MI_ASSERT(Slot >= 65 && Slot < RTL_NUMBER_OF(Growth->Owner));
+            MI_ASSERT(__atomic_exchange_n(&Growth->Owner[Slot], 1, __ATOMIC_ACQ_REL) == 0);
+            __atomic_store_n(&Growth->Seen[Worker->Index], 1, __ATOMIC_RELEASE);
+            __atomic_store_n(&Growth->Owner[Slot], 0, __ATOMIC_RELEASE);
+            MiPageFileReleaseSlot(&Growth->PageFile, Slot);
+        }
+        __atomic_add_fetch(&Growth->Attempts, 1, __ATOMIC_RELAXED);
+    }
+    return NULL;
+}
+
+static
+void
+PagingConcurrentSlotGrowth(void)
+{
+    PAGING_GROWTH Growth = {0};
+    PAGING_GROWTH_WORKER Workers[4];
+    MI_PAGEFILE_OPS Ops = {0};
+    pthread_t Threads[4];
+    ULONG64 Held[64];
+    double Deadline = NowSeconds() + 30;
+    ULONG i;
+
+    MI_ASSERT(NT_SUCCESS(MiPageFileInitialize(&Growth.PageFile, &Ops, NULL, 65)));
+    for (i = 0; i < RTL_NUMBER_OF(Held); i++)
+    {
+        Held[i] = MiPageFileReserveSlot(&Growth.PageFile);
+        MI_ASSERT(Held[i] == i + 1);
+    }
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+    {
+        Workers[i] = (PAGING_GROWTH_WORKER){ &Growth, i };
+        MI_ASSERT(pthread_create(&Threads[i], NULL, PagingGrowthWorker, &Workers[i]) == 0);
+    }
+    while (__atomic_load_n(&Growth.Ready, __ATOMIC_ACQUIRE) != RTL_NUMBER_OF(Threads))
+    {
+        MI_ASSERT(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    __atomic_store_n(&Growth.Go, 1, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&Growth.Attempts, __ATOMIC_RELAXED) < 1000)
+    {
+        MI_ASSERT(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    MI_ASSERT(NT_SUCCESS(MiPageFileExtend(&Growth.PageFile, 130)));
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+    {
+        while (!__atomic_load_n(&Growth.Seen[i], __ATOMIC_ACQUIRE))
+        {
+            MI_ASSERT(NowSeconds() < Deadline);
+            sched_yield();
+        }
+    }
+    MI_ASSERT(NT_SUCCESS(MiPageFileExtend(&Growth.PageFile, 257)));
+    __atomic_store_n(&Growth.Stop, 1, __ATOMIC_RELEASE);
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+        MI_ASSERT(pthread_join(Threads[i], NULL) == 0);
+    CHECK(Growth.PageFile.SlotCount == 257 && Growth.PageFile.SlotsInUse == RTL_NUMBER_OF(Held));
+    for (i = 0; i < RTL_NUMBER_OF(Held); i++)
+        MiPageFileReleaseSlot(&Growth.PageFile, Held[i]);
+    CHECK(Growth.PageFile.SlotsInUse == 0);
+    MiPageFileUninitialize(&Growth.PageFile);
+}
+
 void
 TestPaging(void)
 {
@@ -1758,4 +2008,5 @@ TestPaging(void)
     PagingInPageError();
     PagingCleanPrivateAccounting();
     PagingCommitExpansion();
+    PagingConcurrentSlotGrowth();
 }

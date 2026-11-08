@@ -80,10 +80,15 @@ KiInsertTimerTable(IN PKTIMER Timer,
     if (!Timer->Period) Timer->Header.SignalState = FALSE;
 
     /* Sanity check */
+    ASSERT(Hand < TIMER_TABLE_SIZE);
+    ASSERT(Timer->Header.Inserted);
+    ASSERT(Timer->Header.Hand == (UCHAR)Hand);
     ASSERT(Hand == KiComputeTimerTableIndex(DueTime));
 
     /* Loop the timer list backwards */
     ListHead = &KiTimerTableListHead[Hand].Entry;
+    ASSERT(ListHead->Flink->Blink == ListHead);
+    ASSERT(ListHead->Blink->Flink == ListHead);
     NextEntry = ListHead->Blink;
     while (NextEntry != ListHead)
     {
@@ -97,8 +102,16 @@ KiInsertTimerTable(IN PKTIMER Timer,
         NextEntry = NextEntry->Blink;
     }
 
+    ASSERT(NextEntry->Flink->Blink == NextEntry);
+    ASSERT(NextEntry == ListHead ||
+           (ULONGLONG)CONTAINING_RECORD(NextEntry, KTIMER, TimerListEntry)->DueTime.QuadPart <= DueTime);
+    ASSERT(NextEntry->Flink == ListHead ||
+           DueTime <= (ULONGLONG)CONTAINING_RECORD(NextEntry->Flink, KTIMER, TimerListEntry)->DueTime.QuadPart);
+
     /* Looped all the list, insert it here and get the interrupt time again */
     InsertHeadList(NextEntry, &Timer->TimerListEntry);
+    ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
+    ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
 
     /* Check if we didn't find it in the list */
     if (NextEntry == ListHead)

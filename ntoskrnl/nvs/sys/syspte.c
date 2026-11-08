@@ -47,6 +47,9 @@ MiSysPteRangeReserve(
     MI_SPIN_ACQUIRE(&Ptes->Lock, &OldIrql);
     if (MiVadFindEmptyRange(&Ptes->Allocations, Count, Alignment, &Index))
     {
+        MI_ASSERT(Count != 0 && Count <= Ptes->PageCount);
+        MI_ASSERT(Index <= Ptes->PageCount - Count);
+        MI_ASSERT(Alignment != 0 && Index % Alignment == 0);
         Node->StartingVpn = Index;
         Node->EndingVpn = Index + Count - 1;
         if (!MiVadInsert(&Ptes->Allocations, Node))
@@ -241,6 +244,7 @@ MiReserveSystemPtesEx(
         Pages = 1ULL << Class;
 
         MI_SPIN_ACQUIRE(&Cache->Lock, &OldIrql);
+        MI_ASSERT(Cache->Depth[Class] <= MI_SYSPTE_CACHE_DEPTH);
         Cache->Reservations++;
         if (Cache->Depth[Class] != 0)
         {
@@ -251,6 +255,9 @@ MiReserveSystemPtesEx(
 
         if (Va != 0)
         {
+            MI_ASSERT(Va >= Ptes->Base && ((Va - Ptes->Base) & (PAGE_SIZE - 1)) == 0);
+            MI_ASSERT(Pages <= Ptes->PageCount && ((Va - Ptes->Base) >> PAGE_SHIFT) <= Ptes->PageCount - Pages);
+            MI_ASSERT((((Va - Ptes->Base) >> PAGE_SHIFT) & (Pages - 1)) == 0);
             *Base = Va;
             return STATUS_SUCCESS;
         }
@@ -270,11 +277,13 @@ MiReserveSystemPtesEx(
          * releases so another CPU's mapping in the same table stays valid and
          * cache hits never need a pageable lock or a table allocation. */
         MI_SPIN_ACQUIRE(&Ptes->PopulateLock, &OldIrql);
+        MI_ASSERT(Ptes->SpareTableCount <= MI_SYSPTE_SPARE_TABLES);
         Status = MiPtPinSystemRange(&System->SystemSpace,
                                     Ptes->Base + (Index << PAGE_SHIFT),
                                     Pages << PAGE_SHIFT,
                                     Ptes->SpareTable,
                                     &Ptes->SpareTableCount);
+        MI_ASSERT(Ptes->SpareTableCount <= MI_SYSPTE_SPARE_TABLES);
         MI_SPIN_RELEASE(&Ptes->PopulateLock, OldIrql);
         if (!NT_SUCCESS(Status))
         {
@@ -307,6 +316,7 @@ MiSystemPtesRefillTables(
             break;
 
         MI_SPIN_ACQUIRE(&Ptes->PopulateLock, &OldIrql);
+        MI_ASSERT(Ptes->SpareTableCount <= MI_SYSPTE_SPARE_TABLES);
         if (Ptes->SpareTableCount < MI_SYSPTE_SPARE_TABLES)
         {
             Ptes->SpareTable[Ptes->SpareTableCount++] = Frame;
@@ -360,6 +370,7 @@ MiReleaseSystemPtes(
         Pages = 1ULL << Class;
 
         MI_SPIN_ACQUIRE(&Cache->Lock, &OldIrql);
+        MI_ASSERT(Cache->Depth[Class] <= MI_SYSPTE_CACHE_DEPTH);
         if (Cache->Depth[Class] < MI_SYSPTE_CACHE_DEPTH)
         {
             Cache->Entry[Class][Cache->Depth[Class]++] = VirtualAddress;

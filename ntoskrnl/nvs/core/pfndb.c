@@ -93,6 +93,11 @@ MiPfnListInsert(
 
     MI_SPIN_ACQUIRE(&Shard->Lock, &OldIrql);
 
+    MI_ASSERT(State < MiPageListCount);
+    MI_ASSERT(Entry->State >= MiPageListCount);
+    MI_ASSERT(Entry->Flink == MI_FRAME_INVALID && Entry->Blink == MI_FRAME_INVALID);
+    MI_ASSERT((List->Count == 0) == (List->Head == MI_FRAME_INVALID));
+    MI_ASSERT((List->Count == 0) == (List->Tail == MI_FRAME_INVALID));
     Entry->State = State;
     if (AtHead)
     {
@@ -140,6 +145,11 @@ MiPfnListRemove(
     }
 
     List = &Shard->List[ExpectedState];
+    MI_ASSERT(List->Count != 0);
+    MI_ASSERT(Entry->Blink == MI_FRAME_INVALID ? List->Head == Frame :
+              Entry->Blink < Db->FrameCount && Db->Pfn[Entry->Blink].Flink == Frame);
+    MI_ASSERT(Entry->Flink == MI_FRAME_INVALID ? List->Tail == Frame :
+              Entry->Flink < Db->FrameCount && Db->Pfn[Entry->Flink].Blink == Frame);
     if (Entry->Blink != MI_FRAME_INVALID)
         Db->Pfn[Entry->Blink].Flink = Entry->Flink;
     else
@@ -151,6 +161,8 @@ MiPfnListRemove(
         List->Tail = Entry->Blink;
 
     List->Count--;
+    MI_ASSERT((List->Count == 0) == (List->Head == MI_FRAME_INVALID));
+    MI_ASSERT((List->Count == 0) == (List->Tail == MI_FRAME_INVALID));
     Entry->State = MiPageTransition;
     Entry->Flink = Entry->Blink = MI_FRAME_INVALID;
     MI_SPIN_RELEASE(&Shard->Lock, OldIrql);
@@ -370,6 +382,9 @@ MiPfnCacheRefillRotated(
                 ULONG Frame = List->Head;
                 PMI_PFN Entry = &Db->Pfn[Frame];
 
+                MI_ASSERT(Frame < Db->DirectFrames);
+                MI_ASSERT(Entry->State == State && Entry->Blink == MI_FRAME_INVALID);
+                MI_ASSERT(List->Count != 0);
                 List->Head = Entry->Flink;
                 if (List->Head != MI_FRAME_INVALID)
                     Db->Pfn[List->Head].Blink = MI_FRAME_INVALID;
@@ -430,6 +445,9 @@ MiPfnCacheRefill(
             ULONG Frame = List->Head;
             PMI_PFN Entry = &Db->Pfn[Frame];
 
+            MI_ASSERT(Frame < Db->DirectFrames);
+            MI_ASSERT(Entry->State == State && Entry->Blink == MI_FRAME_INVALID);
+            MI_ASSERT(List->Count != 0);
             List->Head = Entry->Flink;
             if (List->Head != MI_FRAME_INVALID)
                 Db->Pfn[List->Head].Blink = MI_FRAME_INVALID;
@@ -477,6 +495,11 @@ MiPfnCacheDrain(
                 continue;
             }
 
+            MI_ASSERT(Candidate < Db->DirectFrames);
+            MI_ASSERT(Entry->State == MiPageCached);
+            MI_ASSERT(Entry->Flink == MI_FRAME_INVALID && Entry->Blink == MI_FRAME_INVALID);
+            MI_ASSERT((List->Count == 0) == (List->Head == MI_FRAME_INVALID));
+            MI_ASSERT((List->Count == 0) == (List->Tail == MI_FRAME_INVALID));
             Entry->State = MiPageFree;
             Entry->Blink = MI_FRAME_INVALID;
             Entry->Flink = List->Head;
@@ -966,6 +989,7 @@ MiPfnFreeLocked(
     }
 
     MI_SPIN_ACQUIRE(&Cache->Lock, &OldIrql);
+    MI_ASSERT(Cache->Depth <= MI_PFN_CACHE_DEPTH);
     if (Cache->Depth == MI_PFN_CACHE_DEPTH)
     {
         MiPfnCacheDrain(Db, Cache, MI_PFN_CACHE_DEPTH - MI_PFN_CACHE_BATCH);
@@ -1328,6 +1352,8 @@ MiPfnReferenceLocked(
     _Inout_ PMI_PFN_DATABASE Db,
     _In_ ULONG Frame)
 {
+    MI_ASSERT(MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_LOCK);
+    MI_ASSERT(Db->Pfn[Frame].ReferenceCount != 0xFFFF);
     Db->Pfn[Frame].ReferenceCount++;
 }
 
@@ -1386,6 +1412,7 @@ MiPfnReactivateEx(
     }
 
     Entry->State = MiPageActive;
+    MI_ASSERT(Entry->ReferenceCount != 0xFFFF);
     Entry->ReferenceCount++;
     Entry->ShareCount = 1;
 
@@ -1430,6 +1457,7 @@ MiPfnTakeModified(
         OldIrql = MiPfnLock(Db, Frame);
         if (MiPfnListRemove(Db, Frame, MiPageModified))
         {
+            MI_ASSERT(Db->Pfn[Frame].ReferenceCount != 0xFFFF);
             Db->Pfn[Frame].ReferenceCount++;
             MI_ATOMIC_OR8(&Db->Pfn[Frame].Flags, MI_PFN_FLAG_IN_FLIGHT);
             MI_ATOMIC_AND8(&Db->Pfn[Frame].Flags, (UCHAR)~MI_PFN_FLAG_MODIFIED);
@@ -1464,6 +1492,7 @@ MiPfnWriteComplete(
     KIRQL OldIrql;
 
     OldIrql = MiPfnLock(Db, Frame);
+    MI_ASSERT(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_IN_FLIGHT);
     MI_ATOMIC_AND8(&Entry->Flags, (UCHAR)~MI_PFN_FLAG_IN_FLIGHT);
     Deleted = (BOOLEAN)((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_DELETED) != 0);
 
@@ -1594,7 +1623,20 @@ MiPfnWindowAttach(
     _In_ ULONG SlotCount)
 {
     PMI_PFN_WINDOW Window = &Db->Window;
+#if DBG || defined(MM_HOST_TEST)
+    ULONG Index;
+#endif
 
+    MI_ASSERT(Window->SlotCount == 0);
+    MI_ASSERT(SlotCount != 0 && Slots != NULL && States != NULL);
+    MI_ASSERT((Base & (PAGE_SIZE - 1)) == 0);
+#if DBG || defined(MM_HOST_TEST)
+    for (Index = 0; Index < SlotCount; Index++)
+    {
+        MI_ASSERT(Slots[Index] != NULL);
+        MI_ASSERT(MiArchPteRead(Slots[Index]) == 0);
+    }
+#endif
     MI_SPIN_INIT(&Window->Lock);
     Window->Base = Base;
     Window->Slot = Slots;
@@ -1612,12 +1654,17 @@ MiPfnWindowMap(
     _In_ ULONG Frame)
 {
     PMI_PFN_WINDOW Window = &Db->Window;
-    LONG Cache = (MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE)
-                     ? 0 : MI_ATOMIC_READ32(&Db->Pfn[Frame].CacheFlags);
+    LONG Cache;
     PVOID Mapping;
     KIRQL OldIrql;
     ULONG Index;
+#if DBG || defined(MM_HOST_TEST)
+    ULONG Scanned = 0;
+#endif
 
+    MI_ASSERT(Frame < Db->FrameCount);
+    Cache = (MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE)
+                ? 0 : MI_ATOMIC_READ32(&Db->Pfn[Frame].CacheFlags);
     MI_ASSERT(Window->SlotCount != 0);
     if (Cache == MI_PFN_CACHE_UNASSIGNED)
         Cache = 0;
@@ -1625,21 +1672,43 @@ MiPfnWindowMap(
     for (;;)
     {
         MI_SPIN_ACQUIRE(&Window->Lock, &OldIrql);
+        MI_ASSERT(Window->Busy <= Window->SlotCount);
+        MI_ASSERT(Window->Stale <= Window->SlotCount - Window->Busy);
+        MI_ASSERT(Window->Hint < Window->SlotCount);
 
         if (Window->Stale != 0 && Window->Busy + Window->Stale == Window->SlotCount)
         {
+#if DBG || defined(MM_HOST_TEST)
+            ULONG Stale = 0;
+#endif
             MiArchTlbInvalidate(Window->Base, Window->SlotCount, TRUE);
             for (Index = 0; Index < Window->SlotCount; Index++)
             {
+                MI_ASSERT(Window->Slot[Index] != NULL);
+                MI_ASSERT(Window->State[Index] == MI_WINDOW_STALE || Window->State[Index] == MI_WINDOW_BUSY);
                 if (Window->State[Index] == MI_WINDOW_STALE)
+                {
+                    MI_ASSERT(MiArchPteRead(Window->Slot[Index]) == 0);
+#if DBG || defined(MM_HOST_TEST)
+                    Stale++;
+#endif
                     Window->State[Index] = MI_WINDOW_CLEAN;
+                }
+                else
+                {
+                    MI_ASSERT(MiArchPteIsValid(MiArchPteRead(Window->Slot[Index])));
+                }
             }
+            MI_ASSERT(Stale == Window->Stale);
             Window->Stale = 0;
             Window->Flushes++;
         }
 
         if (Window->Busy != Window->SlotCount)
+        {
+            MI_ASSERT(Window->Busy + Window->Stale < Window->SlotCount);
             break;
+        }
 
         MI_SPIN_RELEASE(&Window->Lock, OldIrql);
         MI_PAUSE();
@@ -1647,8 +1716,16 @@ MiPfnWindowMap(
 
     Index = Window->Hint;
     while (Window->State[Index] != MI_WINDOW_CLEAN)
+    {
+        MI_ASSERT(Window->State[Index] == MI_WINDOW_BUSY || Window->State[Index] == MI_WINDOW_STALE);
+#if DBG || defined(MM_HOST_TEST)
+        Scanned++;
+        MI_ASSERT(Scanned < Window->SlotCount);
+#endif
         Index = (Index + 1 == Window->SlotCount) ? 0 : Index + 1;
+    }
 
+    MI_ASSERT(Window->Slot[Index] != NULL && MiArchPteRead(Window->Slot[Index]) == 0);
     Window->State[Index] = MI_WINDOW_BUSY;
     Window->Busy++;
     Window->Hint = (Index + 1 == Window->SlotCount) ? 0 : Index + 1;
@@ -1656,6 +1733,8 @@ MiPfnWindowMap(
     MiArchPteWrite(Window->Slot[Index],
                    MiArchPteMakeLeaf(Frame, MI_PROT_READWRITE,
                                      MI_LEAF_GLOBAL | MI_LEAF_DIRTY | ((ULONG)Cache & MI_LEAF_CACHE_MASK)));
+    MI_ASSERT(MiArchPteIsValid(MiArchPteRead(Window->Slot[Index])));
+    MI_ASSERT(MiArchPteFrame(MiArchPteRead(Window->Slot[Index])) == Frame);
     Mapping = MI_WINDOW_POINTER(Window, Index);
     MI_SPIN_RELEASE(&Window->Lock, OldIrql);
     return Mapping;
@@ -1678,6 +1757,11 @@ MiPfnWindowUnmap(
 
     MI_SPIN_ACQUIRE(&Window->Lock, &OldIrql);
     MI_ASSERT(Window->State[Index] == MI_WINDOW_BUSY);
+    MI_ASSERT(Window->Busy != 0 && Window->Busy <= Window->SlotCount);
+    MI_ASSERT(Window->Stale <= Window->SlotCount - Window->Busy);
+    MI_ASSERT(Window->Slot[Index] != NULL);
+    MI_ASSERT(MiArchPteIsValid(MiArchPteRead(Window->Slot[Index])));
+    MI_ASSERT(MiArchPteFrame(MiArchPteRead(Window->Slot[Index])) < Db->FrameCount);
     MI_WINDOW_RELEASE(Window, (ULONG)Index);
     MiArchPteWrite(Window->Slot[Index], 0);
     Window->State[Index] = MI_WINDOW_STALE;

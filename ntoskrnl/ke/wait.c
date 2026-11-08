@@ -15,6 +15,16 @@
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
+static
+VOID
+KiAssertWaitListEntry(IN PLIST_ENTRY Entry)
+{
+    UNREFERENCED_PARAMETER(Entry);
+    ASSERT(Entry->Flink != NULL && Entry->Blink != NULL);
+    ASSERT(Entry->Flink->Blink == Entry);
+    ASSERT(Entry->Blink->Flink == Entry);
+}
+
 VOID
 FASTCALL
 KiWaitTest(IN PVOID ObjectPointer,
@@ -29,9 +39,11 @@ KiWaitTest(IN PVOID ObjectPointer,
 
     IsQueue = ((FirstObject->Header.Type & KOBJECT_TYPE_MASK) == QueueObject);
     WaitList = &FirstObject->Header.WaitListHead;
+    KiAssertWaitListEntry(WaitList);
     WaitEntry = WaitList->Flink;
     while ((FirstObject->Header.SignalState > 0) && (WaitEntry != WaitList))
     {
+        KiAssertWaitListEntry(WaitEntry);
         WaitBlock = CONTAINING_RECORD(WaitEntry, KWAIT_BLOCK, WaitListEntry);
         WaitThread = WaitBlock->Thread;
         WaitEntry = WaitEntry->Flink;
@@ -47,8 +59,10 @@ KiWaitTest(IN PVOID ObjectPointer,
         if (IsQueue && (WaitBlock->WaitType == WaitDequeue))
             continue;
 
+        ASSERT(WaitThread != NULL);
         RemoveEntryList(&WaitBlock->WaitListEntry);
         WaitBlock->WaitListEntry.Flink = NULL;
+        KiAssertWaitListEntry(WaitList);
 
         KiAcquireThreadLock(WaitThread);
 
@@ -130,6 +144,7 @@ KiUnlinkThread(IN PKTHREAD Thread,
             KiAcquireWaitLock(WaitPrcb);
             if (Thread->WaitPrcb == WaitPrcb)
             {
+                KiAssertWaitListEntry(&Thread->WaitListEntry);
                 RemoveEntryList(&Thread->WaitListEntry);
                 Thread->WaitListEntry.Flink = NULL;
                 Thread->WaitPrcb = NULL;
@@ -175,7 +190,10 @@ KiUnlinkWaitBlocks(IN PKTHREAD Thread)
         if (WaitBlock->BlockState == WaitBlockActive)
         {
             if (WaitBlock->WaitListEntry.Flink)
+            {
+                KiAssertWaitListEntry(&WaitBlock->WaitListEntry);
                 RemoveEntryList(&WaitBlock->WaitListEntry);
+            }
             WaitBlock->WaitListEntry.Flink = NULL;
             WaitBlock->BlockState = WaitBlockInactive;
         }
@@ -197,6 +215,7 @@ KiUnlinkWaitBlocks(IN PKTHREAD Thread)
             KiAcquireDispatcherObject(Object);
             if (WaitBlock->WaitListEntry.Flink != NULL)
             {
+                KiAssertWaitListEntry(&WaitBlock->WaitListEntry);
                 RemoveEntryList(&WaitBlock->WaitListEntry);
                 WaitBlock->WaitListEntry.Flink = NULL;
                 WaitBlock->BlockState = WaitBlockInactive;
@@ -296,6 +315,8 @@ KiAcquireFastMutex(IN PFAST_MUTEX FastMutex)
 
     for (;;)
     {
+        ASSERT((BitsToRemove == FM_LOCK_BIT && BitsToAdd == FM_LOCK_WAITER_INC) ||
+               (BitsToRemove == (FM_LOCK_BIT | FM_LOCK_WAITER_WOKEN) && BitsToAdd == FM_LOCK_WAITER_WOKEN));
         OldValue = FastMutex->Count;
         for (;;)
         {
@@ -307,11 +328,14 @@ KiAcquireFastMutex(IN PFAST_MUTEX FastMutex)
                 NewValue = InterlockedCompareExchange(&FastMutex->Count, NewValue, OldValue);
                 if (NewValue == OldValue)
                 {
+                    ASSERT((FastMutex->Count & FM_LOCK_BIT) == 0);
+                    ASSERT(FastMutex->Owner == NULL);
                     return;
                 }
             }
             else
             {
+                ASSERT(BitsToAdd != FM_LOCK_WAITER_WOKEN || (OldValue & FM_LOCK_WAITER_WOKEN));
                 NewValue = OldValue + BitsToAdd;
                 NewValue = InterlockedCompareExchange(&FastMutex->Count, NewValue, OldValue);
                 if (NewValue == OldValue)
@@ -358,10 +382,8 @@ KiAcquireGuardedMutex(IN OUT PKGUARDED_MUTEX GuardedMutex)
     for (;;)
     {
         /* Loop sanity checks */
-        ASSERT((BitsToRemove == GM_LOCK_BIT) ||
-               (BitsToRemove == (GM_LOCK_BIT | GM_LOCK_WAITER_WOKEN)));
-        ASSERT((BitsToAdd == GM_LOCK_WAITER_INC) ||
-               (BitsToAdd == GM_LOCK_WAITER_WOKEN));
+        ASSERT((BitsToRemove == GM_LOCK_BIT && BitsToAdd == GM_LOCK_WAITER_INC) ||
+               (BitsToRemove == (GM_LOCK_BIT | GM_LOCK_WAITER_WOKEN) && BitsToAdd == GM_LOCK_WAITER_WOKEN));
 
         /* Get the Count Bits */
         OldValue = GuardedMutex->Count;
@@ -386,6 +408,7 @@ KiAcquireGuardedMutex(IN OUT PKGUARDED_MUTEX GuardedMutex)
             else
             {
                 /* The Guarded Mutex isn't locked, so simply set the bits */
+                ASSERT(BitsToAdd != GM_LOCK_WAITER_WOKEN || (OldValue & GM_LOCK_WAITER_WOKEN));
                 NewValue = OldValue + BitsToAdd;
                 NewValue = InterlockedCompareExchange(&GuardedMutex->Count,
                                                       NewValue,
@@ -996,8 +1019,10 @@ KeWaitForSingleObject(IN PVOID Object,
                 TimerBlock->BlockState = WaitBlockActive;
                 KxPublishTimerWaitBlock();
             }
+            ASSERT(WaitBlock->Thread == Thread && WaitBlock->Object == CurrentObject);
             InsertTailList(&CurrentObject->Header.WaitListHead,
                            &WaitBlock->WaitListEntry);
+            KiAssertWaitListEntry(&WaitBlock->WaitListEntry);
 
             /* Publish the wait and release the thread lock */
             KxCommitThreadWait(Thread, Swappable);
@@ -1026,6 +1051,7 @@ KeWaitForSingleObject(IN PVOID Object,
                     KiAcquireDispatcherObject(&CurrentObject->Header);
                     if (WaitBlock->WaitListEntry.Flink)
                     {
+                        KiAssertWaitListEntry(&WaitBlock->WaitListEntry);
                         RemoveEntryList(&WaitBlock->WaitListEntry);
                         WaitBlock->WaitListEntry.Flink = NULL;
                     }
@@ -1316,9 +1342,12 @@ KeWaitForMultipleObjects(IN ULONG Count,
             for (Index = 0; Index < Count; Index++)
             {
                 CurrentObject = WaitBlockArray[Index].Object;
+                ASSERT(CurrentObject == Object[Index] && WaitBlockArray[Index].Thread == Thread);
+                ASSERT(WaitBlockArray[Index].WaitType == WaitType && WaitBlockArray[Index].WaitKey == Index);
                 WaitBlockArray[Index].BlockState = WaitBlockActive;
                 InsertTailList(&CurrentObject->Header.WaitListHead,
                                &WaitBlockArray[Index].WaitListEntry);
+                KiAssertWaitListEntry(&WaitBlockArray[Index].WaitListEntry);
             }
             if (Timeout)
             {
@@ -1335,6 +1364,7 @@ KeWaitForMultipleObjects(IN ULONG Count,
                 /* Link the Object to this Wait Block */
                 InsertTailList(&CurrentObject->Header.WaitListHead,
                                &WaitBlock->WaitListEntry);
+                KiAssertWaitListEntry(&WaitBlock->WaitListEntry);
 
                 /* Move to the next Wait Block */
                 WaitBlock = WaitBlock->NextWaitBlock;
@@ -1373,6 +1403,7 @@ KeWaitForMultipleObjects(IN ULONG Count,
                     {
                         if (WaitBlockArray[Index].WaitListEntry.Flink)
                         {
+                            KiAssertWaitListEntry(&WaitBlockArray[Index].WaitListEntry);
                             RemoveEntryList(&WaitBlockArray[Index].WaitListEntry);
                             WaitBlockArray[Index].WaitListEntry.Flink = NULL;
                         }

@@ -679,7 +679,11 @@ KeStartThread(IN OUT PKTHREAD Thread)
     Thread->UserIdealProcessor = IdealProcessor;
 
     /* Insert the thread into the process list under the process lock */
+    ASSERT(Process->ThreadListHead.Flink->Blink == &Process->ThreadListHead);
+    ASSERT(Process->ThreadListHead.Blink->Flink == &Process->ThreadListHead);
     InsertTailList(&Process->ThreadListHead, &Thread->ThreadListEntry);
+    ASSERT(Thread->ThreadListEntry.Flink->Blink == &Thread->ThreadListEntry);
+    ASSERT(Thread->ThreadListEntry.Blink->Flink == &Thread->ThreadListEntry);
 
     /* Increase the stack count */
     ASSERT(Process->StackCount != MAXULONG);
@@ -1789,7 +1793,11 @@ KeTerminateThread(IN KPRIORITY Increment)
     KiReleaseDispatcherObject(&Thread->Header);
 
     /* Remove the thread from the list */
+    ASSERT(Thread->ThreadListEntry.Flink->Blink == &Thread->ThreadListEntry);
+    ASSERT(Thread->ThreadListEntry.Blink->Flink == &Thread->ThreadListEntry);
     RemoveEntryList(&Thread->ThreadListEntry);
+    ASSERT(Process->ThreadListHead.Flink->Blink == &Process->ThreadListHead);
+    ASSERT(Process->ThreadListHead.Blink->Flink == &Process->ThreadListHead);
 
     /* Release the process lock */
     KiReleaseProcessLockFromSynchLevel(&LockHandle);
