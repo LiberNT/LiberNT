@@ -503,7 +503,8 @@ NvmeScanNamespaces(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG NamespaceCount
     NVME_COMMAND_SET_OPCODE(&Command, NVME_ADMIN_IDENTIFY, 0);
     Command.PRP1 = Device->IdentifyPhysical;
     Command.CDW10 = NVME_CNS_ACTIVE_NS;
-    if (Device->Version >= NVME_VERSION(1, 1) && NvmeAdminCommandSync(Device, &Command, NULL))
+    if (Device->Version >= NVME_VERSION(1, 1) && !Device->IdentifyCnsLimited &&
+        NvmeAdminCommandSync(Device, &Command, NULL))
     {
         PULONG List = (PULONG)Device->IdentifyBuffer;
 

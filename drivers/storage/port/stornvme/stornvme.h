@@ -150,6 +150,7 @@ typedef struct _NVME_DEVICE_EXTENSION
     BOOLEAN WriteCacheEnabled;
     BOOLEAN WriteProtected;
     BOOLEAN WriteWindowValid;
+    BOOLEAN IdentifyCnsLimited;
     ULONGLONG WriteWindowFirst;
     ULONGLONG WriteWindowLast;
     BOOLEAN MessageInterrupts;

@@ -484,6 +484,7 @@ AnsFindAdapter(_In_ PVOID DeviceExtension,
     Device->IoQueueCount = 1;
     /* TODO: lift the write protection of the Apple internal SSD once its write path is verified on hardware */
     Device->WriteProtected = TRUE;
+    Device->IdentifyCnsLimited = TRUE;
     AnsReadWriteWindow(Device);
 
     UncachedSize = 6 * PAGE_SIZE + 2 * ROUND_TO_PAGES(ANS_QUEUE_DEPTH * sizeof(ANS_TCB));
