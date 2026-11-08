@@ -70,6 +70,7 @@ OslArchMapFirmwareRuntime(
 VOID
 OslArchInitialize(VOID)
 {
+    Arm64DescribeDeviceTreePlatform();
     EarlyUartInitialize(0);
     FwLateDebugPutChar = Arm64LateDebugPutChar;
 }

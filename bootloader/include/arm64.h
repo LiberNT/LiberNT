@@ -35,6 +35,7 @@ VOID Arm64ApplyDeferredPageTableMemoryTypes(VOID);
 VOID Arm64ClearIdentityMappings(VOID);
 BOOLEAN Arm64MapVirtualMemory(ULONGLONG VirtualAddress, ULONGLONG PhysicalAddress, ULONGLONG Size, ULONG Attributes);
 VOID StallExecutionProcessor(ULONG Microseconds);
+VOID Arm64DescribeDeviceTreePlatform(VOID);
 
 /* Mapping attribute helpers */
 #define ARM64_MEM_ATTR_DEVICE_nGnRnE   1U
