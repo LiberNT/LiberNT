@@ -1074,7 +1074,10 @@ add_library(libssl ${SSL_SOURCE})
 
 foreach(_target libcrypto libssl)
     if(NOT MSVC)
-        target_compile_options(${_target} PRIVATE -w -fno-autolink)
+        target_compile_options(${_target} PRIVATE -w)
+    endif()
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(${_target} PRIVATE -fno-autolink)
     endif()
     target_include_directories(${_target} SYSTEM PUBLIC include)
     target_compile_definitions(${_target} PRIVATE

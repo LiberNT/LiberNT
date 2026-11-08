@@ -366,8 +366,10 @@ add_library(freerdp-server ${SERVER_SOURCE})
 
 foreach(_target winpr freerdp freerdp-server)
     if(NOT MSVC)
-        target_compile_options(${_target} PRIVATE -w -std=gnu11 -fno-autolink
-            -Wno-error=incompatible-pointer-types -Wno-error=incompatible-function-pointer-types)
+        target_compile_options(${_target} PRIVATE -w -std=gnu11 -Wno-error=incompatible-pointer-types)
+    endif()
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(${_target} PRIVATE -fno-autolink -Wno-error=incompatible-function-pointer-types)
     endif()
     target_include_directories(${_target} SYSTEM PUBLIC include winpr/include)
     target_compile_definitions(${_target} PRIVATE
