@@ -21,4 +21,21 @@ UacPacketRate(
     return (HighSpeed ? 8000UL : 1000UL) >> Shift;
 }
 
+/* Audio 2.0 feature units give each control two bits (D1..0 mute, D3..2 volume, ...), Audio 1.0 one bit */
+static __inline
+ULONG
+UacFeatureUnit2Controls(
+    _In_ ULONG Bitmap)
+{
+    ULONG Controls = 0;
+    ULONG Index;
+
+    for (Index = 0; Index < 16; Index++)
+    {
+        if ((Bitmap >> (Index * 2)) & 3)
+            Controls |= 1UL << Index;
+    }
+    return Controls;
+}
+
 #endif

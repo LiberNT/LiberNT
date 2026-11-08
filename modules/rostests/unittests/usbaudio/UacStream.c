@@ -27,7 +27,29 @@ TestPacketRate(VOID)
     ok_int(UacPacketRate(TRUE, 16), 1000);
 }
 
+static
+VOID
+TestFeatureUnit2Controls(VOID)
+{
+    ok_hex(UacFeatureUnit2Controls(0), 0);
+    /* mute read-only (01), mute programmable (11) */
+    ok_hex(UacFeatureUnit2Controls(0x1), 0x1);
+    ok_hex(UacFeatureUnit2Controls(0x3), 0x1);
+    /* volume programmable alone is the Audio 1.0 volume bit, not mute or bass */
+    ok_hex(UacFeatureUnit2Controls(0xC), 0x2);
+    ok_hex(UacFeatureUnit2Controls(0x4), 0x2);
+    /* mute and volume programmable */
+    ok_hex(UacFeatureUnit2Controls(0xF), 0x3);
+    /* bass (D5..4) and mid (D7..6) */
+    ok_hex(UacFeatureUnit2Controls(0x30), 0x4);
+    ok_hex(UacFeatureUnit2Controls(0xC0), 0x8);
+    /* loudness (D19..18) is the tenth control, Audio 1.0 bit 9 */
+    ok_hex(UacFeatureUnit2Controls(0xC0000), 0x200);
+    ok_hex(UacFeatureUnit2Controls(0xFFFFFFFF), 0xFFFF);
+}
+
 START_TEST(UacStream)
 {
     TestPacketRate();
+    TestFeatureUnit2Controls();
 }
