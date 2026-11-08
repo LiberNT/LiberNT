@@ -79,6 +79,8 @@ BEGIN
     IDS_FINISH "完了(&F)"
     IDS_DEVICES_TITLE "この PC のドライバー"
     IDS_DEVICES_SUBTITLE "ドライバーがないか、サードパーティ製ドライバーを使用していて、Microsoft Update カタログに新しいドライバーがあるデバイスです。インストールするデバイスにチェックを付けてください。"
+    IDS_ABOUT_MENU "LiberNT ドライバー インストーラーのバージョン情報(&A)..."
+    IDS_ABOUT_TEXT "LiberNT ドライバー インストーラー\nCopyright (C) 2026 Ahmed ARIF\nGNU 一般公衆利用許諾書バージョン 3 以降の条件で配布されています。\n\nドライバーは、Microsoft Corporation のサービスである Microsoft Update カタログからダウンロードされます。\nMicrosoft Update カタログ: Copyright (c) Microsoft Corporation. All rights reserved.\n各ドライバー パッケージは発行元に帰属し、発行元のライセンス条項が適用されます。"
     IDS_INSTALL_TITLE "ドライバーをインストールしています"
     IDS_INSTALL_SUBTITLE "ドライバーのインストールが完了するまでお待ちください。"
     IDS_DONE_TITLE "完了しました"

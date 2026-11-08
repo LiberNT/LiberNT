@@ -415,7 +415,10 @@ int Main(const std::vector<std::string> &arguments)
         std::printf(
             "lntget v%.*s\n"
             "Copyright (C) 2026 Ahmed Arif\n"
-            "License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\n",
+            "License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\n\n"
+            "WinGet community repository and source index:\n"
+            "Copyright (c) Microsoft Corporation. All rights reserved.\n"
+            "Licensed under the MIT License.\n",
             static_cast<int>(sizeof(Version) - 1), Version);
         return 0;
     }

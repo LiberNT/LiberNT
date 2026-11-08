@@ -72,6 +72,8 @@ BEGIN
     IDS_FINISH "&Terminer"
     IDS_DEVICES_TITLE "Pilotes de ce PC"
     IDS_DEVICES_SUBTITLE "Périphériques sans pilote ou avec un pilote tiers pour lesquels le catalogue Microsoft Update a un pilote plus récent. Cochez ceux à installer."
+    IDS_ABOUT_MENU "À &propos de l'Installateur de pilotes LiberNT..."
+    IDS_ABOUT_TEXT "Installateur de pilotes LiberNT\nCopyright (C) 2026 Ahmed ARIF\nDistribué sous la licence publique générale GNU, version 3 ou ultérieure.\n\nLes pilotes sont téléchargés depuis le catalogue Microsoft Update, un service de Microsoft Corporation.\nCatalogue Microsoft Update : Copyright (c) Microsoft Corporation. Tous droits réservés.\nChaque paquet de pilote appartient à son éditeur et reste soumis aux conditions de licence de celui-ci."
     IDS_INSTALL_TITLE "Installation des pilotes"
     IDS_INSTALL_SUBTITLE "Patientez pendant l'installation des pilotes."
     IDS_DONE_TITLE "Terminé"
