@@ -1175,7 +1175,7 @@ LxGenPidStatus(
     LONG64 Spec = -LX_EINVAL;
     PCSTR SpecText;
     ULONG TracerPid = 0;
-    BOOLEAN TraceStopped = FALSE;
+    BOOLEAN TraceStopped = FALSE, NoNewPrivs = FALSE;
     PLIST_ENTRY Entry;
     CHAR Comm[16], List[256];
     LX_CRED Cred;
@@ -1207,6 +1207,7 @@ LxGenPidStatus(
             Affinity &= Thread->Affinity;
             SeccompMode = Thread->SeccompMode;
             SeccompFilters = LxSeccompFilterCount(Thread);
+            NoNewPrivs = Thread->NoNewPrivs;
             Spec = LxSpecCtrlGet(Thread, LX_PR_SPEC_STORE_BYPASS);
             TracerPid = LxPtraceTracerPid(Self, Thread);
             TraceStopped = LxPtraceStopped(Thread);
@@ -1331,7 +1332,7 @@ LxGenPidStatus(
                  "Mems_allowed:\t1\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t0\nnonvoluntary_ctxt_switches:\t0\n",
                  0ULL, (ULONG64)Process->Pending, Blocked, Ignored, Caught, Cred.CapInheritable,
                  Cred.CapPermitted, Cred.CapEffective,
-                 Cred.CapBounding, Cred.CapAmbient, Process->NoNewPrivs ? 1U : 0U, SeccompMode, SeccompFilters,
+                 Cred.CapBounding, Cred.CapAmbient, NoNewPrivs ? 1U : 0U, SeccompMode, SeccompFilters,
                  SpecText, Affinity, List);
     LxProcessDereference(Process);
 }

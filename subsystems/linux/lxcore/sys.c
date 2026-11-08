@@ -1845,7 +1845,7 @@ LxSetid(
                 *Fs = Key[0];
                 if (!Group)
                     LxCredFixSetuid(Process, &Old, TRUE);
-                LxCredCommit(Process, &Old);
+                LxCredCommit(Process, Call->Thread, &Old);
             }
             ExReleaseFastMutex(&Process->Lock);
             return Result;
@@ -1856,7 +1856,7 @@ LxSetid(
         *Fs = New[1];
         if (!Group)
             LxCredFixSetuid(Process, &Old, FALSE);
-        LxCredCommit(Process, &Old);
+        LxCredCommit(Process, Call->Thread, &Old);
     }
     ExReleaseFastMutex(&Process->Lock);
     return Result;
@@ -2342,6 +2342,7 @@ LxCreateThread(
     Thread->Cred = &Thread->OwnCred;
     LxNsThreadInherit(Thread, Call->Thread);
     LxSeccompInherit(Thread, Call->Thread);
+    Thread->NoNewPrivs = Call->Thread->NoNewPrivs;
     Error = LxKeyThreadInherit(Thread, Call->Thread, LX_KEY_INHERIT_THREAD);
     if (Error != 0)
     {
@@ -2441,6 +2442,7 @@ LxForkProcess(
         return -LX_ENOMEM;
     }
     Child->ParentPid = ListParent->Pid;
+    Child->ParentTid = (Request->Flags & LX_CLONE_PARENT) ? Parent->ParentTid : Call->Thread->Tid;
     Child->ExitSignal = Request->ExitSignal;
     Error = LxNsInheritProcess(Child, Parent, Request->Flags);
     if (Error != 0)
@@ -2482,6 +2484,7 @@ LxForkProcess(
     Thread->SpecSsb = Call->Thread->SpecSsb;
     LxSchedInherit(Thread, Call->Thread);
     LxSeccompInherit(Thread, Call->Thread);
+    Thread->NoNewPrivs = Call->Thread->NoNewPrivs;
     if ((Request->Flags & (LX_CLONE_VM | LX_CLONE_VFORK)) != LX_CLONE_VM)
         Thread->AltStack = Call->Thread->AltStack;
     RtlCopyMemory(Thread->Comm, Call->Thread->Comm, sizeof(Thread->Comm));
@@ -2714,6 +2717,8 @@ LxVforkExec(
     Thread->UserAffinity = Borrowed->UserAffinity;
     LxNsThreadInherit(Thread, Borrowed);
     LxSeccompInherit(Thread, Borrowed);
+    Thread->NoNewPrivs = Borrowed->NoNewPrivs;
+    Thread->PdeathSignal = Borrowed->PdeathSignal;
     LxKeyThreadInherit(Thread, Borrowed, LX_KEY_INHERIT_TASK);
     LxPtraceTransfer(Borrowed, Thread);
     KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
@@ -2808,6 +2813,8 @@ LxSharedVmExec(
     Thread->UserAffinity = Current->UserAffinity;
     LxNsThreadInherit(Thread, Current);
     LxSeccompInherit(Thread, Current);
+    Thread->NoNewPrivs = Current->NoNewPrivs;
+    Thread->PdeathSignal = Current->PdeathSignal;
     LxKeyThreadInherit(Thread, Current, LX_KEY_INHERIT_TASK);
     LxPtraceTransfer(Current, Thread);
     KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
@@ -3915,11 +3922,11 @@ LX_SYSCALL(LxSysPrctl)
         case LX_PR_SET_PDEATHSIG:
             if (Arg > LX_NSIG)
                 return -LX_EINVAL;
-            Process->PdeathSignal = (ULONG)Arg;
+            Thread->PdeathSignal = (ULONG)Arg;
             return 0;
 
         case LX_PR_GET_PDEATHSIG:
-            Value = (LONG)Process->PdeathSignal;
+            Value = (LONG)Thread->PdeathSignal;
             return LxCopyToUser(Arg, &Value, sizeof(Value));
 
         case LX_PR_GET_DUMPABLE:
@@ -4054,11 +4061,11 @@ LX_SYSCALL(LxSysPrctl)
         case LX_PR_SET_NO_NEW_PRIVS:
             if (Arg != 1)
                 return -LX_EINVAL;
-            Process->NoNewPrivs = TRUE;
+            Thread->NoNewPrivs = TRUE;
             return 0;
 
         case LX_PR_GET_NO_NEW_PRIVS:
-            return Process->NoNewPrivs;
+            return Thread->NoNewPrivs;
 
         case LX_PR_GET_SPECULATION_CTRL:
             if ((Call->Args[2] | Call->Args[3] | Call->Args[4]) != 0)
@@ -4107,6 +4114,8 @@ LX_SYSCALL(LxSysCapget)
     } Header;
     ULONG Data[6];
     PLX_PROCESS Target;
+    PLX_THREAD Thread;
+    PLIST_ENTRY Entry;
     LX_CRED Cred;
     LONG64 Result;
 
@@ -4128,10 +4137,22 @@ LX_SYSCALL(LxSysCapget)
 
     if ((Header.Pid != 0) && ((ULONG)Header.Pid != LxTidNr(Call->Process, Call->Thread)))
     {
-        Target = LxProcessLookupNr(Call->Process, (ULONG)Header.Pid);
+        Thread = LxThreadLookupNr(Call->Process, (ULONG)Header.Pid, &Target);
+        if (Thread == NULL)
+            Target = LxProcessLookupNr(Call->Process, (ULONG)Header.Pid);
         if (Target == NULL)
             return -LX_ESRCH;
+        ExAcquireFastMutex(&Target->Lock);
         Cred = Target->Cred;
+        for (Entry = Target->Threads.Flink; (Thread != NULL) && (Entry != &Target->Threads); Entry = Entry->Flink)
+        {
+            if (CONTAINING_RECORD(Entry, LX_THREAD, Link) == Thread)
+            {
+                Cred = *Thread->Cred;
+                break;
+            }
+        }
+        ExReleaseFastMutex(&Target->Lock);
         LxProcessDereference(Target);
     }
     else

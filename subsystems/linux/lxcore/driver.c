@@ -278,6 +278,8 @@ LxPicoThreadExit(
 
     Last = LxThreadDetach(Thread);
     Process = Thread->Process;
+    if (!Last)
+        LxProcessThreadExited(Process, Thread->Tid);
     if (Last &&
         (Process->SharedVm || ((Process->Mm == Process) && (Process->VmUsers != 0) && !Process->OwnerGone)))
     {

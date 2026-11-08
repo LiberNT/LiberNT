@@ -662,6 +662,7 @@ LxExecKillOtherThreads(
 {
     PLX_PROCESS Process = Thread->Process;
     PETHREAD Current = PsGetCurrentThread();
+    PLIST_ENTRY ChildEntry;
 
     for (;;)
     {
@@ -704,6 +705,13 @@ LxExecKillOtherThreads(
     }
     if (Thread->Tid != Process->Pid)
     {
+        for (ChildEntry = Process->Children.Flink; ChildEntry != &Process->Children; ChildEntry = ChildEntry->Flink)
+        {
+            PLX_CHILD Child = CONTAINING_RECORD(ChildEntry, LX_CHILD, Link);
+
+            if (Child->Lx->ParentTid == Thread->Tid)
+                Child->Lx->ParentTid = Process->Pid;
+        }
         Thread->Tid = Process->Pid;
         RtlCopyMemory(Thread->NsTid, Process->NsPid, sizeof(Thread->NsTid));
     }
@@ -877,7 +885,7 @@ LxExecImage(
         LxTmpfsInodeAttributes(LxTmpfsFileInode(Main.File), &Mode, &FileUid, &FileGid, &Device);
     if (Error == 0)
         MaySuid = (Main.File->Mount == NULL) || !(Main.File->Mount->Flags & LX_MS_NOSUID);
-    if ((Error == 0) && MaySuid && !Process->NoNewPrivs &&
+    if ((Error == 0) && MaySuid && !Thread->NoNewPrivs &&
         ((LxTmpfsFileInode(Main.File) != NULL) ||
          (LxNtReadLxAttributes(Main.File->Handle, &Mode, &FileUid, &FileGid, &Device) == 0)) && (Mode != MAXULONG) &&
         LxIdsMapped(Process, FileUid, FileGid))
@@ -924,7 +932,7 @@ LxExecImage(
         LxProcessCred(Process)->Uid[1] = FileUid;
     if (SetGid)
         LxProcessCred(Process)->Gid[1] = FileGid;
-    CredFlags = LxCredExec(Process, &Old, &FileCaps);
+    CredFlags = LxCredExec(Process, Thread, &Old, &FileCaps);
     if (SetUid || SetGid || (CredFlags & LX_CRED_EXEC_GAINED))
         Process->Personality &= ~LX_PER_CLEAR_ON_SETID;
     Process->Personality = LxArchExecPersonality(Process->Personality);
