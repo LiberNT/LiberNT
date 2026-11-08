@@ -1579,6 +1579,16 @@ WinPosHasTopmostOwned(PWND Window)
 }
 
 static BOOL FASTCALL
+WinPosActivatesWindow(PWND Window, UINT flags)
+{
+   if (flags & SWP_NOACTIVATE)
+      return FALSE;
+   if (!(flags & SWP_HIDEWINDOW))
+      return TRUE;
+   return Window->head.pti->MessageQueue->spwndActive != Window;
+}
+
+static BOOL FASTCALL
 WinPosIsIgnoredRequest(PWND Window, HWND hwndInsertAfter, UINT flags)
 {
    if (flags & SWP_NOZORDER)
@@ -1640,7 +1650,7 @@ WinPosBatchAddRequest(PWINPOS_BATCH Batch, PWND Window, HWND hwndInsertAfter, IN
    }
 
    if (Window->spwndParent && UserIsDesktopWindow(Window->spwndParent) &&
-       !(flags & (SWP_NOACTIVATE | SWP_HIDEWINDOW)) &&
+       WinPosActivatesWindow(Window, flags) &&
        UserHMGetHandle(Window) != UserGetForegroundWindow() &&
        ((flags & SWP_NOZORDER) ||
         (hwndGroupAfter != HWND_TOPMOST && hwndGroupAfter != HWND_NOTOPMOST && hwndGroupAfter != HWND_BOTTOM)))
@@ -1838,7 +1848,7 @@ WinPosFixupFlags(WINDOWPOS *WinPos, PWND Wnd, BOOL bChained)
    if (!bChained && WinPos->hwnd != UserGetForegroundWindow() && (Wnd->style & (WS_POPUP | WS_CHILD)) != WS_CHILD)
    {
       /* Bring to the top when activating */
-      if (!(WinPos->flags & (SWP_NOACTIVATE|SWP_HIDEWINDOW)) &&
+      if (WinPosActivatesWindow(Wnd, WinPos->flags) &&
            (WinPos->flags & SWP_NOZORDER ||
            (WinPos->hwndInsertAfter != HWND_TOPMOST && WinPos->hwndInsertAfter != HWND_NOTOPMOST &&
             WinPos->hwndInsertAfter != HWND_BOTTOM)))
@@ -2683,17 +2693,15 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
       }
    }
 
-   if (!(WinPos.flags & (SWP_NOACTIVATE|SWP_HIDEWINDOW)))
+   if ((Window->style & (WS_CHILD | WS_POPUP)) == WS_CHILD)
    {
-      if ((Window->style & (WS_CHILD | WS_POPUP)) == WS_CHILD)
-      {
+      if (!(WinPos.flags & (SWP_NOACTIVATE|SWP_HIDEWINDOW)))
          co_IntSendMessageNoWait(WinPos.hwnd, WM_CHILDACTIVATE, 0, 0);
-      }
-      else if (!Entry->bDeferActivate && !Entry->bNoActivate)
-      {
-         //ERR("SetWindowPos Set FG Window!\n");
-         co_WinPosActivateEntry(Window);
-      }
+   }
+   else if (WinPosActivatesWindow(Window, WinPos.flags) && !Entry->bDeferActivate && !Entry->bNoActivate)
+   {
+      //ERR("SetWindowPos Set FG Window!\n");
+      co_WinPosActivateEntry(Window);
    }
 
    if ( !PosChanged &&
@@ -2951,7 +2959,7 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
    {
       Entry = &Batch->Entries[i];
       Entry->bDeferActivate = Batch->Count > 1 && !Entry->bNoActivate &&
-                              !(Entry->WinPos.flags & (SWP_NOACTIVATE | SWP_HIDEWINDOW)) &&
+                              WinPosActivatesWindow(Entry->Window, Entry->WinPos.flags) &&
                               (Entry->Window->style & (WS_CHILD | WS_POPUP)) != WS_CHILD;
       if (Entry->bActive && (!IntIsWindow(Entry->WinPos.hwnd) || !co_WinPosBatchApply(Entry)))
          Entry->bActive = FALSE;
