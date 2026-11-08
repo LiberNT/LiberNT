@@ -16,6 +16,9 @@
 #define USB_AUDIO_CONTROL_TERMINAL_DESCRIPTOR_TYPE       (0x24)
 
 /* ── USB Audio versions ─────────────────────────────────────────── */
+#define USB_AUDIO_PROTOCOL_VERSION_1                     0x00
+#define USB_AUDIO_PROTOCOL_VERSION_2                     0x20
+#define USB_AUDIO_PROTOCOL_VERSION_3                     0x30
 #define USB_AUDIO_VERSION_1                              0x0100
 #define USB_AUDIO_VERSION_2                              0x0200
 #define USB_AUDIO_VERSION_3                              0x0300
@@ -36,7 +39,8 @@
 #define USB_AUDIO_GET_MIN                                0x82
 #define USB_AUDIO_GET_MAX                                0x83
 #define USB_AUDIO_GET_RES                                0x84
-#define USB_AUDIO2_GET_RANGE                             0x82
+#define USB_AUDIO2_GET_RANGE                             0x02
+#define USB_AUDIO2_CUR                                   0x01
 #define USB_AUDIO2_CS_SAMPLING_FREQ                      0x01
 #define USB_AUDIO2_CS_CLOCK_VALID                        0x02
 #define USB_AUDIO2_FORMAT_TYPE_I                         0x01
@@ -589,6 +593,7 @@ typedef struct _DEVICE_EXTENSION
     ULONG AudioVersion;                         /* USB Audio 1.0, 2.0, or 3.0 */
     ULONG BaddProfile;                          /* UAC3 BADD profile or 0 */
     ULONG QuirkFlags;                           /* active quirk flags */
+    BOOLEAN ControlPathBroken;
     volatile LONG StreamingPins;
     BOOLEAN HasMidiInterface;
     BOOLEAN HasFeedbackEndpoint;
