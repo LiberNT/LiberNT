@@ -186,48 +186,10 @@ CreateOwnedForeground(HWND hwndOwner)
     return hWnd;
 }
 
-START_TEST(ForegroundAfterHide)
+static VOID
+RunCases(HWND hwndHelper1, HWND hwndHelper2)
 {
-    WCHAR Path[MAX_PATH], *Slash;
-    WNDCLASSW Class = { 0 };
-    PROCESS_INFORMATION Process1 = { 0 }, Process2 = { 0 };
-    HWND hwndHelper1, hwndHelper2, hWnd, hwndPrev, hwndOther, hwndNext, hwndOwned;
-    HANDLE Ready, Thread;
-    DWORD ThreadId;
-
-    GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path));
-    Slash = wcsrchr(Path, L'\\');
-    if (!Slash || (Slash - Path) + 1 + wcslen(HELPER) >= ARRAYSIZE(Path))
-    {
-        skip("No path for %ls\n", HELPER);
-        return;
-    }
-    StringCchCopyW(Slash + 1, ARRAYSIZE(Path) - (Slash + 1 - Path), HELPER);
-    if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
-    {
-        skip("%ls is missing\n", Path);
-        return;
-    }
-
-    Class.lpfnWndProc = DefWindowProcW;
-    Class.hInstance = GetModuleHandleW(NULL);
-    Class.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    Class.lpszClassName = FGHIDE_WINDOW_CLASS;
-    RegisterClassW(&Class);
-    Class.lpfnWndProc = ControlProc;
-    Class.lpszClassName = FGHIDE_CONTROL_CLASS;
-    RegisterClassW(&Class);
-
-    hwndHelper1 = StartHelper(Path, L"1", &Process1);
-    hwndHelper2 = StartHelper(Path, L"2", &Process2);
-    Ready = CreateEventW(NULL, FALSE, FALSE, NULL);
-    hSleeping = CreateEventW(NULL, FALSE, FALSE, NULL);
-    Thread = CreateThread(NULL, 0, ControlThread, Ready, 0, &ThreadId);
-    if (Thread)
-        WaitForSingleObject(Ready, 10000);
-    ok(hwndHelper1 && hwndHelper2 && hwndThreadControl, "The helpers did not start\n");
-    if (!hwndHelper1 || !hwndHelper2 || !hwndThreadControl)
-        goto Cleanup;
+    HWND hWnd, hwndPrev, hwndOther, hwndNext, hwndOwned;
 
     hwndPrev = CreateIn(hwndHelper2, 300, 300);
     GiveForeground(hwndHelper2, hwndPrev);
@@ -389,8 +351,51 @@ START_TEST(ForegroundAfterHide)
     DestroyWindow(hWnd);
     SendMessageW(hwndThreadControl, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
     Pump(300);
+}
 
-Cleanup:
+START_TEST(ForegroundAfterHide)
+{
+    WCHAR Path[MAX_PATH], *Slash;
+    WNDCLASSW Class = { 0 };
+    PROCESS_INFORMATION Process1 = { 0 }, Process2 = { 0 };
+    HWND hwndHelper1, hwndHelper2;
+    HANDLE Ready, Thread;
+    DWORD ThreadId;
+
+    GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path));
+    Slash = wcsrchr(Path, L'\\');
+    if (!Slash || (Slash - Path) + 1 + wcslen(HELPER) >= ARRAYSIZE(Path))
+    {
+        skip("No path for %ls\n", HELPER);
+        return;
+    }
+    StringCchCopyW(Slash + 1, ARRAYSIZE(Path) - (Slash + 1 - Path), HELPER);
+    if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
+    {
+        skip("%ls is missing\n", Path);
+        return;
+    }
+
+    Class.lpfnWndProc = DefWindowProcW;
+    Class.hInstance = GetModuleHandleW(NULL);
+    Class.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    Class.lpszClassName = FGHIDE_WINDOW_CLASS;
+    RegisterClassW(&Class);
+    Class.lpfnWndProc = ControlProc;
+    Class.lpszClassName = FGHIDE_CONTROL_CLASS;
+    RegisterClassW(&Class);
+
+    hwndHelper1 = StartHelper(Path, L"1", &Process1);
+    hwndHelper2 = StartHelper(Path, L"2", &Process2);
+    Ready = CreateEventW(NULL, FALSE, FALSE, NULL);
+    hSleeping = CreateEventW(NULL, FALSE, FALSE, NULL);
+    Thread = CreateThread(NULL, 0, ControlThread, Ready, 0, &ThreadId);
+    if (Thread)
+        WaitForSingleObject(Ready, 10000);
+    ok(hwndHelper1 && hwndHelper2 && hwndThreadControl, "The helpers did not start\n");
+    if (hwndHelper1 && hwndHelper2 && hwndThreadControl)
+        RunCases(hwndHelper1, hwndHelper2);
+
     if (hwndThreadControl)
         PostMessageW(hwndThreadControl, WM_QUIT, 0, 0);
     if (Thread)
