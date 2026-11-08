@@ -7552,6 +7552,7 @@ public:
     BOOL m_bWlanLoading;
     ULONGLONG m_SpinT0;
     RECT m_rcWlanArea;
+    RECT m_rcWlanThumb;
     BOOL m_bConnecting;
     BOOL m_bTracking;
     int m_nIfaces;
@@ -7595,6 +7596,7 @@ public:
                         m_bFrameStarted(FALSE), m_bReveal(FALSE), m_chPassword(0)
     {
         SetRectEmpty(&m_rcBack);
+        SetRectEmpty(&m_rcWlanThumb);
         ZeroMemory(&m_Pal, sizeof(m_Pal));
         ZeroMemory(&m_rcAnchor, sizeof(m_rcAnchor));
         ZeroMemory(&m_size, sizeof(m_size));
@@ -7889,6 +7891,8 @@ public:
         int nListTop;
         int nWlanTotal = 0;
         int nWlanIdx = 0;
+        int yScrollTop = -1;
+        int yScrollBottom = -1;
 
         m_size.cx = cx;
         m_nVisRows = TFY_NET_WIFIROWS;
@@ -7963,7 +7967,22 @@ public:
                 }
             }
             SetRect(&row.rc, Sc(8), y, cx - Sc(8), yb);
+            if ((int)i >= m_iWlanFirst)
+            {
+                if (yScrollTop < 0)
+                    yScrollTop = y;
+                yScrollBottom = yb;
+            }
             y = yb + Sc(2);
+        }
+        SetRectEmpty(&m_rcWlanThumb);
+        if (nWlanTotal > m_nVisRows && yScrollTop >= 0)
+        {
+            int nTrack = yScrollBottom - yScrollTop;
+            int nThumb = max(Sc(24), MulDiv(nTrack, m_nVisRows, nWlanTotal));
+            int yThumb = yScrollTop + MulDiv(nTrack - nThumb, m_nWlanScroll, nWlanTotal - m_nVisRows);
+
+            SetRect(&m_rcWlanThumb, cx - Sc(6), yThumb, cx - Sc(3), yThumb + nThumb);
         }
         if (y < nListTop + Sc(48) * 3)
             y = nListTop + Sc(48) * 3;
@@ -8717,6 +8736,12 @@ public:
                 DrawButton(hdc, &row.rcButton, RowButtonText(row),
                            m_iHotBtn == 1, !row.bConnected && !IsConnectingRow(row));
             }
+        }
+
+        if (!IsRectEmpty(&m_rcWlanThumb))
+        {
+            TfyFillRound(hdc, &m_rcWlanThumb, (m_rcWlanThumb.right - m_rcWlanThumb.left) / 2,
+                         TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 140), m_Pal.PanelBg);
         }
 
         if (m_bWlanLoading)
