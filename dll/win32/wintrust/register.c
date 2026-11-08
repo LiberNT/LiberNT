@@ -626,6 +626,7 @@ static BOOL WINTRUST_RegisterHttpsProv(void)
     return RegisteredOK;
 }
 
+#ifndef __REACTOS__
 /***************************************************************************
  *              WINTRUST_RegisterOfficeSignVerify
  *
@@ -657,6 +658,7 @@ static BOOL WINTRUST_RegisterOfficeSignVerify(void)
     return TRUE;
 }
 
+#endif
 /***************************************************************************
  *              WINTRUST_RegisterDriverVerify
  *
@@ -1095,7 +1097,6 @@ static GUID WINTRUST_SoftpubActions[] =
     WINTRUST_ACTION_GENERIC_CERT_VERIFY,
     WINTRUST_ACTION_TRUSTPROVIDER_TEST,
     HTTPSPROV_ACTION,
-    OFFICESIGN_ACTION_VERIFY,
     DRIVER_ACTION_VERIFY,
     WINTRUST_ACTION_GENERIC_CHAIN_VERIFY,
 };
@@ -1264,8 +1265,10 @@ add_trust_providers:
         TrustProviderRes = S_FALSE;
     if (!WINTRUST_RegisterHttpsProv())
         TrustProviderRes = S_FALSE;
+#ifndef __REACTOS__
     if (!WINTRUST_RegisterOfficeSignVerify())
         TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterDriverVerify())
         TrustProviderRes = S_FALSE;
     if (!WINTRUST_RegisterGenChainVerify())
@@ -1383,8 +1386,10 @@ HRESULT WINAPI SoftpubDllRegisterServer(void)
         TrustProviderRes = S_FALSE;
     if (!WINTRUST_RegisterHttpsProv())
         TrustProviderRes = S_FALSE;
+#ifndef __REACTOS__
     if (!WINTRUST_RegisterOfficeSignVerify())
         TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterDriverVerify())
         TrustProviderRes = S_FALSE;
     if (!WINTRUST_RegisterGenChainVerify())

@@ -514,6 +514,30 @@ TestChainedToMicrosoft(VOID)
 
 static
 VOID
+TestOfficePolicy(VOID)
+{
+    PFN_PROVIDER OfficeInit = GET(PFN_PROVIDER, "OfficeInitializePolicy");
+    PFN_PROVIDER OfficeCleanup = GET(PFN_PROVIDER, "OfficeCleanupPolicy");
+    GUID Office = OFFICESIGN_ACTION_VERIFY;
+    WINTRUST_FILE_INFO File = { sizeof(File) };
+    WINTRUST_DATA Data = { sizeof(Data) };
+
+    ok(OfficeInit && OfficeCleanup, "an Office policy export is missing\n");
+    if (OfficeInit && OfficeCleanup)
+    {
+        ok_hex(OfficeInit(NULL), E_NOTIMPL);
+        ok_hex(OfficeCleanup(NULL), E_NOTIMPL);
+    }
+    File.pcwszFilePath = Self;
+    Data.dwUIChoice = WTD_UI_NONE;
+    Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    Data.dwUnionChoice = WTD_CHOICE_FILE;
+    Data.pFile = &File;
+    ok_hex(WinVerifyTrust(INVALID_HANDLE_VALUE, &Office, &Data), TRUST_E_PROVIDER_UNKNOWN);
+}
+
+static
+VOID
 TestFixedResults(VOID)
 {
     PFN_ANY3 PersonalPages = GET(PFN_ANY3, "AddPersonalTrustDBPages");
@@ -619,6 +643,7 @@ START_TEST(Internals)
     TestDecode();
     TestAgencyAndUsage();
     TestChainedToMicrosoft();
+    TestOfficePolicy();
     TestFixedResults();
     TestDump();
 }

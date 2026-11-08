@@ -63,8 +63,8 @@
 @ stdcall IsCatalogFile(ptr wstr)
 @ stdcall MsCatConstructHashTag(long ptr ptr)
 @ stdcall MsCatFreeHashTag(ptr)
-@ stub OfficeCleanupPolicy
-@ stub OfficeInitializePolicy
+@ stdcall OfficeCleanupPolicy(ptr)
+@ stdcall OfficeInitializePolicy(ptr)
 @ stdcall OpenPersonalTrustDBDialog(ptr)
 @ stdcall OpenPersonalTrustDBDialogEx(ptr long ptr)
 @ stdcall SoftpubAuthenticode(ptr)

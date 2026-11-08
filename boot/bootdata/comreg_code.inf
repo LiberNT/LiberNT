@@ -3122,9 +3122,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{00AAC56B-CD44-1
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{189A3842-3041-11D1-85E1-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{189A3842-3041-11D1-85E1-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{189A3842-3041-11D1-85E1-00C04FC295EE}","$Function",0x00000000,"SoftpubCheckCert"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$Function",0x00000000,"SoftpubCheckCert"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$Function",0x00000000,"SoftpubCheckCert"
@@ -3149,9 +3146,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{00AAC56B-CD44
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{189A3842-3041-11D1-85E1-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{189A3842-3041-11D1-85E1-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{189A3842-3041-11D1-85E1-00C04FC295EE}","$Function",0x00000000,"WintrustCertificateTrust"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$Function",0x00000000,"WintrustCertificateTrust"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Certificate\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$Function",0x00000000,"HTTPSCertificateTrust"
@@ -3176,9 +3170,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{00AAC56B-CD44-11D
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{189A3842-3041-11D1-85E1-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{189A3842-3041-11D1-85E1-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{189A3842-3041-11D1-85E1-00C04FC295EE}","$Function",0x00000000,"SoftpubCleanup"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$Function",0x00000000,"OfficeCleanupPolicy"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Cleanup\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$Function",0x00000000,"SoftpubCleanup"
@@ -3207,9 +3198,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{00AAC56B-CD44
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{189A3842-3041-11D1-85E1-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{189A3842-3041-11D1-85E1-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{189A3842-3041-11D1-85E1-00C04FC295EE}","$Function",0x00000000,"SoftpubAuthenticode"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$Function",0x00000000,"SoftpubAuthenticode"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\FinalPolicy\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$Function",0x00000000,"HTTPSFinalProv"
@@ -3234,9 +3222,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{00AAC56B-C
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{189A3842-3041-11D1-85E1-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{189A3842-3041-11D1-85E1-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{189A3842-3041-11D1-85E1-00C04FC295EE}","$Function",0x00000000,"SoftpubDefCertInit"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$Function",0x00000000,"OfficeInitializePolicy"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Initialization\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$Function",0x00000000,"SoftpubInitialize"
@@ -3262,9 +3247,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{00AAC56B-CD44-11D
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{189A3842-3041-11D1-85E1-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{189A3842-3041-11D1-85E1-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{189A3842-3041-11D1-85E1-00C04FC295EE}","$Function",0x00000000,"SoftpubLoadMessage"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$Function",0x00000000,"SoftpubLoadMessage"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Message\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$Function",0x00000000,"SoftpubLoadMessage"
@@ -3290,9 +3272,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{00AAC56B-CD44-1
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{189A3842-3041-11D1-85E1-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{189A3842-3041-11D1-85E1-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{189A3842-3041-11D1-85E1-00C04FC295EE}","$Function",0x00000000,"SoftpubLoadSignature"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
-HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}","$Function",0x00000000,"SoftpubLoadSignature"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$DLL",0x00000000,"WINTRUST.DLL"
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\Signature\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}","$Function",0x00000000,"SoftpubLoadSignature"

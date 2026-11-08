@@ -2121,6 +2121,28 @@ BOOL SoftpubFreeDefUsageCallData(const char *pszUsageOID, CRYPT_PROVIDER_DEFUSAG
 #endif
 
 #ifdef __REACTOS__
+/***********************************************************************
+ *		OfficeInitializePolicy (WINTRUST.@)
+ */
+HRESULT WINAPI OfficeInitializePolicy(CRYPT_PROVIDER_DATA *data)
+{
+    TRACE("(%p)\n", data);
+
+    return E_NOTIMPL;
+}
+
+/***********************************************************************
+ *		OfficeCleanupPolicy (WINTRUST.@)
+ */
+HRESULT WINAPI OfficeCleanupPolicy(CRYPT_PROVIDER_DATA *data)
+{
+    TRACE("(%p)\n", data);
+
+    return E_NOTIMPL;
+}
+#endif
+
+#ifdef __REACTOS__
 static void DUMP_Line(HANDLE file, const char *format, ...)
 {
     char line[1024];
