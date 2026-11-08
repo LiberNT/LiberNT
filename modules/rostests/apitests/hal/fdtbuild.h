@@ -43,7 +43,8 @@ static
 VOID
 FdtBytes(const VOID *Data, ULONG Length)
 {
-    memcpy(Builder.Structure + Builder.StructureSize, Data, Length);
+    if (Length)
+        memcpy(Builder.Structure + Builder.StructureSize, Data, Length);
     Builder.StructureSize += Length;
     while (Builder.StructureSize & 3)
         Builder.Structure[Builder.StructureSize++] = 0;
