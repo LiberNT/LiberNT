@@ -94,7 +94,7 @@ OslParseStartup(
 {
     ULONG i;
 
-    RtlZeroMemory(&OslStartup, sizeof(OslStartup));
+    OslStartup.Profile = 0;
 
     for (i = 0; i < Chars && Text[i] >= L'0' && Text[i] <= L'9'; i++)
         OslStartup.Profile = OslStartup.Profile * 10 + (Text[i] - L'0');
@@ -126,6 +126,9 @@ OslSelectEntry(VOID)
         else if (i - Start > OSL_STARTUP_PREFIX_CHARS &&
                  _wcsnicmp(&Options[Start], BM_STARTUP_OPTION, OSL_STARTUP_PREFIX_CHARS) == 0)
             OslParseStartup(&Options[Start + OSL_STARTUP_PREFIX_CHARS], i - Start - OSL_STARTUP_PREFIX_CHARS);
+        else if (i - Start == RTL_NUMBER_OF(BM_UNDO_UPDATE_OPTION) - 1 &&
+                 _wcsnicmp(&Options[Start], BM_UNDO_UPDATE_OPTION, i - Start) == 0)
+            OslStartup.UndoUpdate = TRUE;
     }
 
     if (StorePath[0] != UNICODE_NULL)
@@ -374,7 +377,8 @@ OslMain(VOID)
             OslInstallImage(&OsDevice,
                             SystemRoot,
                             Url,
-                            OslGetOption(Options, OSL_INSTALL_HASH_OPTION, Hash, sizeof(Hash)) ? Hash : NULL);
+                            OslGetOption(Options, OSL_INSTALL_HASH_OPTION, Hash, sizeof(Hash)) ? Hash : NULL,
+                            OslStartup.UndoUpdate);
         }
     }
 
