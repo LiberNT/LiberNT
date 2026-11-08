@@ -62,6 +62,11 @@ struct cryptcat
     DWORD     version;
     DWORD     member_count;
     CRYPTCATMEMBER **members;
+    struct catattrs *cat_attrs;
+    DWORD     entry_attr_count;
+    struct catattrs **entry_attrs;
+    DWORD     found_count;
+    CRYPTCATMEMBER **found;
 #endif
 };
 
@@ -81,6 +86,220 @@ static void catalog_free_member(CRYPTCATMEMBER *member)
         free(cm->attrs[--cm->attr_count]);
     free(cm->attrs);
     free(cm);
+}
+
+BOOL WINAPI WVTAsn1CatNameValueDecode(DWORD, LPCSTR, const BYTE *, DWORD, DWORD, void *, DWORD *);
+
+struct catattrs
+{
+    DWORD count;
+    CRYPTCATATTRIBUTE *attrs;
+    void **values;
+};
+
+static void catalog_free_attrs(struct catattrs *ca)
+{
+    DWORD i;
+
+    if (!ca) return;
+    for (i = 0; i < ca->count; i++)
+        free(ca->values[i]);
+    free(ca->values);
+    free(ca->attrs);
+    free(ca);
+}
+
+static void catalog_free_found_member(CRYPTCATMEMBER *member)
+{
+    free(member->pIndirectData);
+    free(member->pwszReferenceTag);
+    free(member);
+}
+
+static void catalog_free_lookups(struct cryptcat *cc)
+{
+    DWORD i;
+
+    catalog_free_attrs(cc->cat_attrs);
+    for (i = 0; i < cc->entry_attr_count; i++)
+        catalog_free_attrs(cc->entry_attrs[i]);
+    free(cc->entry_attrs);
+    for (i = 0; i < cc->found_count; i++)
+        catalog_free_found_member(cc->found[i]);
+    free(cc->found);
+}
+
+static struct catattrs *catalog_alloc_attrs(DWORD count)
+{
+    struct catattrs *ca;
+
+    if (!(ca = calloc(1, sizeof(*ca))))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return NULL;
+    }
+    if (count && (!(ca->attrs = calloc(count, sizeof(*ca->attrs))) || !(ca->values = calloc(count, sizeof(*ca->values)))))
+    {
+        free(ca->attrs);
+        free(ca);
+        SetLastError(ERROR_OUTOFMEMORY);
+        return NULL;
+    }
+    return ca;
+}
+
+static BOOL catalog_add_name_value(struct cryptcat *cc, struct catattrs *ca, const CRYPT_DATA_BLOB *blob)
+{
+    CRYPTCATATTRIBUTE *attr = &ca->attrs[ca->count];
+    CAT_NAMEVALUE *nv;
+    DWORD size = 0;
+
+    if (!WVTAsn1CatNameValueDecode(cc->encoding, CAT_NAMEVALUE_STRUCT, blob->pbData, blob->cbData, 0, NULL, &size))
+        return FALSE;
+    if (!(nv = malloc(size)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    if (!WVTAsn1CatNameValueDecode(cc->encoding, CAT_NAMEVALUE_STRUCT, blob->pbData, blob->cbData, 0, nv, &size))
+    {
+        free(nv);
+        return FALSE;
+    }
+
+    attr->cbStruct = sizeof(*attr);
+    attr->pwszReferenceTag = nv->pwszTag;
+    attr->dwAttrTypeAndAction = nv->fdwFlags;
+    attr->cbValue = nv->Value.cbData;
+    attr->pbValue = nv->Value.pbData;
+    attr->dwReserved = 0;
+    ca->values[ca->count++] = nv;
+    return TRUE;
+}
+
+static struct catattrs *catalog_cat_attrs(struct cryptcat *cc)
+{
+    struct catattrs *ca;
+    DWORD i, count = cc->inner ? cc->inner->cExtension : 0;
+
+    if (cc->cat_attrs) return cc->cat_attrs;
+    if (!(ca = catalog_alloc_attrs(count))) return NULL;
+    for (i = 0; i < count; i++)
+    {
+        CERT_EXTENSION *ext = &cc->inner->rgExtension[i];
+
+        if (!ext->pszObjId || strcmp(ext->pszObjId, CAT_NAMEVALUE_OBJID)) continue;
+        if (!catalog_add_name_value(cc, ca, &ext->Value))
+        {
+            catalog_free_attrs(ca);
+            return NULL;
+        }
+    }
+    cc->cat_attrs = ca;
+    return ca;
+}
+
+static struct catattrs *catalog_entry_attrs(struct cryptcat *cc, DWORD index)
+{
+    struct catattrs *ca;
+    CTL_ENTRY *entry;
+    DWORD i;
+
+    if (!cc->entry_attrs)
+    {
+        if (!(cc->entry_attrs = calloc(cc->inner->cCTLEntry, sizeof(*cc->entry_attrs))))
+        {
+            SetLastError(ERROR_OUTOFMEMORY);
+            return NULL;
+        }
+        cc->entry_attr_count = cc->inner->cCTLEntry;
+    }
+    if (cc->entry_attrs[index]) return cc->entry_attrs[index];
+
+    entry = &cc->inner->rgCTLEntry[cc->inner->cCTLEntry - index - 1];
+    if (!(ca = catalog_alloc_attrs(entry->cAttribute))) return NULL;
+    for (i = 0; i < entry->cAttribute; i++)
+    {
+        CRYPT_ATTRIBUTE *attr = &entry->rgAttribute[i];
+
+        if (!attr->pszObjId || strcmp(attr->pszObjId, CAT_NAMEVALUE_OBJID) || attr->cValue != 1) continue;
+        if (!catalog_add_name_value(cc, ca, attr->rgValue))
+        {
+            catalog_free_attrs(ca);
+            return NULL;
+        }
+    }
+    cc->entry_attrs[index] = ca;
+    return ca;
+}
+
+static CRYPTCATATTRIBUTE *catalog_next_attr(const struct catattrs *ca, CRYPTCATATTRIBUTE *prev)
+{
+    DWORD next = 0;
+
+    if (prev)
+    {
+        if (prev < ca->attrs || prev >= ca->attrs + ca->count)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return NULL;
+        }
+        next = prev - ca->attrs + 1;
+    }
+    if (next >= ca->count)
+    {
+        SetLastError(CRYPT_E_NOT_FOUND);
+        return NULL;
+    }
+    return &ca->attrs[next];
+}
+
+static struct catmember *catalog_created_member(struct cryptcat *cc, CRYPTCATMEMBER *member)
+{
+    DWORD i;
+
+    for (i = 0; i < cc->member_count; i++)
+    {
+        if (cc->members[i] == member) return (struct catmember *)member;
+    }
+    return NULL;
+}
+
+static CRYPTCATATTRIBUTE *catalog_next_created_attr(struct catmember *cm, CRYPTCATATTRIBUTE *prev)
+{
+    DWORD i = 0;
+
+    if (prev)
+    {
+        for (i = 0; i < cm->attr_count && cm->attrs[i] != prev; i++)
+            ;
+        if (i == cm->attr_count)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return NULL;
+        }
+        i++;
+    }
+    if (i >= cm->attr_count)
+    {
+        SetLastError(CRYPT_E_NOT_FOUND);
+        return NULL;
+    }
+    return cm->attrs[i];
+}
+
+static BOOL catalog_keep_found_member(struct cryptcat *cc, CRYPTCATMEMBER *member)
+{
+    CRYPTCATMEMBER **found;
+
+    if (!(found = realloc(cc->found, (cc->found_count + 1) * sizeof(*found))))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    cc->found = found;
+    cc->found[cc->found_count++] = member;
+    return TRUE;
 }
 #endif
 
@@ -881,6 +1100,7 @@ BOOL WINAPI CryptCATClose(HANDLE hCatalog)
     free(cc->attr);
     free(cc->inner);
 #ifdef __REACTOS__
+    catalog_free_lookups(cc);
     while (cc->member_count)
         catalog_free_member(cc->members[--cc->member_count]);
     free(cc->members);
@@ -899,6 +1119,23 @@ BOOL WINAPI CryptCATClose(HANDLE hCatalog)
 CRYPTCATATTRIBUTE * WINAPI CryptCATGetAttrInfo(HANDLE hCatalog, CRYPTCATMEMBER *member, LPWSTR tag)
 {
     struct cryptcat *cc = hCatalog;
+#ifdef __REACTOS__
+    CRYPTCATATTRIBUTE *attr = NULL;
+
+    TRACE("%p, %p, %s\n", hCatalog, member, debugstr_w(tag));
+
+    if (!hCatalog || hCatalog == INVALID_HANDLE_VALUE || cc->magic != CRYPTCAT_MAGIC || !member || !tag)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    while ((attr = CryptCATEnumerateAttr(hCatalog, member, attr)))
+    {
+        if (attr->pwszReferenceTag && !wcsicmp(attr->pwszReferenceTag, tag)) return attr;
+    }
+    if (GetLastError() == CRYPT_E_NOT_FOUND || GetLastError() == ERROR_SUCCESS) SetLastError(CRYPT_E_NOT_FOUND);
+    return NULL;
+#else
 
     FIXME("%p, %p, %s\n", hCatalog, member, debugstr_w(tag));
 
@@ -909,6 +1146,7 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATGetAttrInfo(HANDLE hCatalog, CRYPTCATMEMBER *
     }
     SetLastError(CRYPT_E_NOT_FOUND);
     return NULL;
+#endif
 }
 
 /***********************************************************************
@@ -917,6 +1155,23 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATGetAttrInfo(HANDLE hCatalog, CRYPTCATMEMBER *
 CRYPTCATATTRIBUTE * WINAPI CryptCATGetCatAttrInfo(HANDLE hCatalog, LPWSTR tag)
 {
     struct cryptcat *cc = hCatalog;
+#ifdef __REACTOS__
+    CRYPTCATATTRIBUTE *attr = NULL;
+
+    TRACE("%p, %s\n", hCatalog, debugstr_w(tag));
+
+    if (!hCatalog || hCatalog == INVALID_HANDLE_VALUE || cc->magic != CRYPTCAT_MAGIC || !tag)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    while ((attr = CryptCATEnumerateCatAttr(hCatalog, attr)))
+    {
+        if (attr->pwszReferenceTag && !wcsicmp(attr->pwszReferenceTag, tag)) return attr;
+    }
+    if (GetLastError() == CRYPT_E_NOT_FOUND || GetLastError() == ERROR_SUCCESS) SetLastError(CRYPT_E_NOT_FOUND);
+    return NULL;
+#else
 
     FIXME("%p, %s\n", hCatalog, debugstr_w(tag));
 
@@ -927,11 +1182,45 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATGetCatAttrInfo(HANDLE hCatalog, LPWSTR tag)
     }
     SetLastError(CRYPT_E_NOT_FOUND);
     return NULL;
+#endif
 }
 
 CRYPTCATMEMBER * WINAPI CryptCATGetMemberInfo(HANDLE hCatalog, LPWSTR tag)
 {
     struct cryptcat *cc = hCatalog;
+#ifdef __REACTOS__
+    CRYPTCATMEMBER *member = NULL;
+    DWORD i;
+
+    TRACE("%p, %s\n", hCatalog, debugstr_w(tag));
+
+    if (!hCatalog || hCatalog == INVALID_HANDLE_VALUE || cc->magic != CRYPTCAT_MAGIC || !tag)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    for (i = 0; i < cc->member_count; i++)
+    {
+        if (cc->members[i]->pwszReferenceTag && !wcsicmp(cc->members[i]->pwszReferenceTag, tag)) return cc->members[i];
+    }
+    for (i = 0; i < cc->found_count; i++)
+    {
+        if (!wcsicmp(cc->found[i]->pwszReferenceTag, tag)) return cc->found[i];
+    }
+    while ((member = CryptCATEnumerateMember(hCatalog, member)))
+    {
+        if (!member->pwszReferenceTag || wcsicmp(member->pwszReferenceTag, tag)) continue;
+        if (!catalog_keep_found_member(cc, member))
+        {
+            catalog_free_found_member(member);
+            return NULL;
+        }
+        return member;
+    }
+    /* TODO: look up members of szOID_CATALOG_LIST_MEMBER2 catalogs once CryptCATEnumerateMember decodes them */
+    SetLastError(CRYPT_E_NOT_FOUND);
+    return NULL;
+#else
 
     FIXME("%p, %s\n", hCatalog, debugstr_w(tag));
 
@@ -942,6 +1231,7 @@ CRYPTCATMEMBER * WINAPI CryptCATGetMemberInfo(HANDLE hCatalog, LPWSTR tag)
     }
     SetLastError(CRYPT_E_NOT_FOUND);
     return NULL;
+#endif
 }
 
 /***********************************************************************
@@ -950,6 +1240,26 @@ CRYPTCATMEMBER * WINAPI CryptCATGetMemberInfo(HANDLE hCatalog, LPWSTR tag)
 CRYPTCATATTRIBUTE * WINAPI CryptCATEnumerateAttr(HANDLE hCatalog, CRYPTCATMEMBER *member, CRYPTCATATTRIBUTE *prev)
 {
     struct cryptcat *cc = hCatalog;
+#ifdef __REACTOS__
+    struct catmember *created;
+    struct catattrs *ca;
+
+    TRACE("%p, %p, %p\n", hCatalog, member, prev);
+
+    if (!hCatalog || hCatalog == INVALID_HANDLE_VALUE || cc->magic != CRYPTCAT_MAGIC || !member)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    if ((created = catalog_created_member(cc, member))) return catalog_next_created_attr(created, prev);
+    if (!cc->inner || member->dwReserved >= cc->inner->cCTLEntry)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    if (!(ca = catalog_entry_attrs(cc, member->dwReserved))) return NULL;
+    return catalog_next_attr(ca, prev);
+#else
 
     FIXME("%p, %p, %p\n", hCatalog, member, prev);
 
@@ -960,6 +1270,7 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATEnumerateAttr(HANDLE hCatalog, CRYPTCATMEMBER
     }
     SetLastError(CRYPT_E_NOT_FOUND);
     return NULL;
+#endif
 }
 
 /***********************************************************************
@@ -968,6 +1279,19 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATEnumerateAttr(HANDLE hCatalog, CRYPTCATMEMBER
 CRYPTCATATTRIBUTE * WINAPI CryptCATEnumerateCatAttr(HANDLE hCatalog, CRYPTCATATTRIBUTE *prev)
 {
     struct cryptcat *cc = hCatalog;
+#ifdef __REACTOS__
+    struct catattrs *ca;
+
+    TRACE("%p, %p\n", hCatalog, prev);
+
+    if (!hCatalog || hCatalog == INVALID_HANDLE_VALUE || cc->magic != CRYPTCAT_MAGIC)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    if (!(ca = catalog_cat_attrs(cc))) return NULL;
+    return catalog_next_attr(ca, prev);
+#else
 
     FIXME("%p, %p\n", hCatalog, prev);
 
@@ -978,6 +1302,7 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATEnumerateCatAttr(HANDLE hCatalog, CRYPTCATATT
     }
     SetLastError(CRYPT_E_NOT_FOUND);
     return NULL;
+#endif
 }
 
 /***********************************************************************
@@ -997,6 +1322,14 @@ CRYPTCATMEMBER * WINAPI CryptCATEnumerateMember(HANDLE hCatalog, CRYPTCATMEMBER 
         SetLastError(ERROR_INVALID_PARAMETER);
         return NULL;
     }
+#ifdef __REACTOS__
+    if (!cc->inner)
+    {
+        /* TODO: enumerate the members added to a catalog opened for creation */
+        SetLastError(ERROR_SUCCESS);
+        return NULL;
+    }
+#endif
 
     /* dumping the contents makes me think that dwReserved is the iteration number */
     if (!member)
