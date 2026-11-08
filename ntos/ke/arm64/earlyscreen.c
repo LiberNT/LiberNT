@@ -33,7 +33,9 @@ KiEarlyScreenTranslates(
 {
     ULONG64 Result;
 
-    __asm__ __volatile__("at s1e1w, %1\n\tisb\n\tmrs %0, par_el1" : "=r"(Result) : "r"(Address) : "memory");
+    ARM64_AT(S1E1W, Address);
+    ARM64_ISB();
+    Result = ARM64_READ_SYSREG(PAR_EL1);
     return (Result & 1) == 0;
 }
 
@@ -230,5 +232,9 @@ KiArm64EarlyScreenInitialize(
                        FrameBuffer->RedMask, FrameBuffer->GreenMask, FrameBuffer->BlueMask);
     KiEarlyScreenPrint("options: %s\n", LoaderBlock->LoadOptions);
     KiEarlyScreenPrint("early screen through the %s mapping\n", KiEarlyScreenAlias ? "kernel alias" : "identity");
+#ifndef _WINKD_
     KdpEarlyScreenRoutine = KiArm64EarlyScreenWrite;
+#else
+    /* TODO: feed the early screen console from the KD64 debug print path */
+#endif
 }

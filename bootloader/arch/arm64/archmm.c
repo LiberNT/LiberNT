@@ -40,9 +40,11 @@ OslFbTranslates(
     ULONG64 Result;
 
     if (((ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3) == 2)
-        __asm__ __volatile__("at s1e2w, %1\n\tisb\n\tmrs %0, par_el1" : "=r"(Result) : "r"(Address) : "memory");
+        ARM64_AT(S1E2W, Address);
     else
-        __asm__ __volatile__("at s1e1w, %1\n\tisb\n\tmrs %0, par_el1" : "=r"(Result) : "r"(Address) : "memory");
+        ARM64_AT(S1E1W, Address);
+    ARM64_ISB();
+    Result = ARM64_READ_SYSREG(PAR_EL1);
     return (Result & 1) == 0;
 }
 
@@ -59,7 +61,7 @@ OslFbFill(
     for (Index = 0; Index < Count; Index++)
         Pixels[Index] = Color;
     for (Line = (ULONG_PTR)Pixels & ~63ULL; Line < (ULONG_PTR)(Pixels + Count); Line += 64)
-        __asm__ __volatile__("dc civac, %0" : : "r"(Line) : "memory");
+        ARM64_DC(CIVAC, Line);
 }
 
 static
@@ -120,12 +122,12 @@ OslFbPuts(
                         Pixels[X * OslFbScale + SubX] = (Bits & (0x80 >> X)) ? OslFbColor : 0;
                 }
                 for (X = 0; X < EARLY_FONT_WIDTH * OslFbScale; X += 16)
-                    __asm__ __volatile__("dc civac, %0" : : "r"((ULONG_PTR)(Pixels + X)) : "memory");
+                    ARM64_DC(CIVAC, (ULONG_PTR)(Pixels + X));
             }
         }
         OslFbColumn++;
     }
-    __asm__ __volatile__("dsb sy" : : : "memory");
+    ARM64_DSB(SY);
 }
 
 static
