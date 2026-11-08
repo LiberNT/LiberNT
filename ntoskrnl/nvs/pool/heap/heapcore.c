@@ -54,7 +54,7 @@ PoolHeapCreate(
     Heap->ShardCount = ShardCount;
     Heap->EncodeKey = EncodeKey ^ (ULONG64)(ULONG_PTR)Heap;
     Heap->Region[0] = Region;
-    Heap->RegionCount = 1;
+    POOL_STORE_RELEASE32(&Heap->RegionCount, 1);
 
     Heap->Shard = PoolVaAllocateMetadata(Region, sizeof(POOL_SEGMENT_SHARD) * ShardCount);
     Heap->Vs = PoolVaAllocateMetadata(Region, sizeof(POOL_VS_CONTEXT) * ShardCount);
@@ -97,11 +97,28 @@ PoolHeapAddRegion(
     _Inout_ PPOOL_HEAP Heap,
     _In_ PPOOL_VA_REGION Region)
 {
-    if (Heap->RegionCount >= POOL_MAX_REGIONS || Region->Paged != Heap->Paged)
+    ULONG Count = PoolHeapRegionCount(Heap);
+#if DBG || defined(POOL_HOST_TEST)
+    ULONG i;
+#endif
+
+    if (Count >= POOL_MAX_REGIONS || Region->Paged != Heap->Paged)
         return STATUS_INVALID_PARAMETER;
 
-    Heap->Region[Heap->RegionCount] = Region;
-    Heap->RegionCount++;
+    POOL_ASSERT(Heap->Signature == POOL_HEAP_SIGNATURE);
+    POOL_ASSERT(Region->Base < Region->End);
+#if DBG || defined(POOL_HOST_TEST)
+    for (i = 0; i < Count; i++)
+    {
+        PPOOL_VA_REGION Existing = Heap->Region[i];
+
+        POOL_ASSERT(Existing != NULL && Existing->Paged == Heap->Paged);
+        POOL_ASSERT(Existing != Region);
+        POOL_ASSERT(Region->End <= Existing->Base || Existing->End <= Region->Base);
+    }
+#endif
+    Heap->Region[Count] = Region;
+    POOL_STORE_RELEASE32(&Heap->RegionCount, Count + 1);
     return STATUS_SUCCESS;
 }
 
@@ -118,6 +135,8 @@ PPOOL_HEAP_CPU
 PoolHeapCpu(
     _In_ PPOOL_HEAP Heap)
 {
+    POOL_ASSERT(Heap->Signature == POOL_HEAP_SIGNATURE);
+    POOL_ASSERT(Heap->SlotCount != 0 && Heap->SlotCount <= POOL_MAX_SLOTS && Heap->Cpu != NULL);
     return &Heap->Cpu[POOL_CURRENT_PROCESSOR() % Heap->SlotCount];
 }
 
@@ -414,6 +433,7 @@ PoolHeapQueryStatistics(
     _In_ PPOOL_HEAP Heap,
     _Out_ PPOOL_HEAP_STATISTICS Statistics)
 {
+    ULONG Count = PoolHeapRegionCount(Heap);
     ULONG i;
 
     RtlZeroMemory(Statistics, sizeof(*Statistics));
@@ -426,8 +446,9 @@ PoolHeapQueryStatistics(
         Statistics->Failures += (ULONG64)Heap->Cpu[i].Failures;
     }
 
-    for (i = 0; i < Heap->RegionCount; i++)
+    for (i = 0; i < Count; i++)
     {
+        POOL_ASSERT(Heap->Region[i] != NULL);
         Statistics->CommittedPages += POOL_ATOMIC_READ64(&Heap->Region[i]->CommittedPages);
         Statistics->PeakCommittedPages += POOL_ATOMIC_READ64(&Heap->Region[i]->PeakCommittedPages);
         Statistics->ReservedUnits += Heap->Region[i]->UnitsInUse;

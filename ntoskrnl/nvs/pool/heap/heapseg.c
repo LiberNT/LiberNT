@@ -225,12 +225,13 @@ PoolSegCreate(
 {
     PPOOL_SEGMENT Segment = NULL;
     ULONG HeaderPages;
+    ULONG RegionCount = PoolHeapRegionCount(Heap);
     ULONG RegionIndex;
     ULONG i;
 
     HeaderPages = (ULONG)((sizeof(POOL_SEGMENT) + PAGE_SIZE - 1) >> PAGE_SHIFT);
 
-    for (RegionIndex = 0; RegionIndex < Heap->RegionCount; RegionIndex++)
+    for (RegionIndex = 0; RegionIndex < RegionCount; RegionIndex++)
     {
         PPOOL_VA_REGION Region = Heap->Region[RegionIndex];
 
@@ -335,7 +336,7 @@ PoolSegAssertShard(
 
         POOL_ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
         POOL_ASSERT(Segment->Signature == POOL_SEGMENT_SIGNATURE && Segment->Heap == Heap);
-        POOL_ASSERT(Segment->Shard == ShardIndex && Segment->RegionIndex < Heap->RegionCount);
+        POOL_ASSERT(Segment->Shard == ShardIndex && Segment->RegionIndex < PoolHeapRegionCount(Heap));
         POOL_ASSERT(Segment->HeaderPages != 0 && Segment->HeaderPages < POOL_SEGMENT_PAGES);
         POOL_ASSERT(Segment->OnAvailable && Segment->FreePages != 0);
         for (i = 0; i < POOL_SEGMENT_PAGES; i++)

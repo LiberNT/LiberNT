@@ -51,6 +51,7 @@ PoolLargeAllocate(
 {
     SIZE_T CommitBytes = (Bytes + PAGE_SIZE - 1) & ~((SIZE_T)PAGE_SIZE - 1);
     SIZE_T Units;
+    ULONG Count = PoolHeapRegionCount(Heap);
     ULONG i;
 
     if (CommitBytes < Bytes || (CommitBytes >> PAGE_SHIFT) > 0xFFFFFFFFULL)
@@ -58,7 +59,7 @@ PoolLargeAllocate(
 
     Units = (CommitBytes + POOL_UNIT_MASK) >> POOL_UNIT_SHIFT;
 
-    for (i = 0; i < Heap->RegionCount; i++)
+    for (i = 0; i < Count; i++)
     {
         PPOOL_VA_REGION Region = Heap->Region[i];
         PPOOL_UNIT Unit;
