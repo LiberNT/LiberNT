@@ -1586,6 +1586,21 @@ MiTlbBatchFlush(
     ULONG First = 0;
     ULONG i;
 
+    MI_ASSERT(Batch != NULL && Batch->Count <= MI_TLB_BATCH_SIZE);
+#if DBG || defined(MM_HOST_TEST)
+    for (i = 0; i < Batch->Count; i++)
+    {
+        PMI_TLB_BATCH_ENTRY Entry = &Batch->Entry[i];
+
+        MI_ASSERT((Entry->Va & (PAGE_SIZE - 1)) == 0);
+        MI_ASSERT(i == 0 || Batch->Entry[i - 1].Va <= Entry->Va);
+        MI_ASSERT(Entry->Frame < System->Pfn.FrameCount);
+        MI_ASSERT(MI_ATOMIC_READ32(&System->Pfn.Pfn[Entry->Frame].ShareCount) > 0);
+        MI_ASSERT((Entry->Segment == NULL) == (Entry->Proto == NULL));
+        MI_ASSERT(Entry->Clone == NULL || (Entry->Segment == NULL && !Entry->Private));
+        MI_ASSERT(Entry->Segment == NULL || !Entry->Private);
+    }
+#endif
     while (First < Batch->Count)
     {
         ULONG Last = First + 1;
@@ -1627,6 +1642,7 @@ MiTlbBatchBegin(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _Out_ PMI_TLB_BATCH Batch)
 {
+    MI_ASSERT(Space->TlbBatch != Batch);
     Batch->Count = 0;
     Batch->DeferTables = FALSE;
 
@@ -1642,6 +1658,7 @@ MiTlbBatchEnd(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _In_ BOOLEAN Owner)
 {
+    MI_ASSERT(Space->TlbBatch != NULL);
     if (!Owner)
         return;
 
@@ -1661,9 +1678,17 @@ MiTlbBatchInsert(
     _In_ BOOLEAN Private)
 {
     PMI_TLB_BATCH Batch = Space->TlbBatch;
-    ULONG Index = Batch->Count++;
+    ULONG Index;
     PMI_TLB_BATCH_ENTRY Entry;
 
+    MI_ASSERT(Batch != NULL && Batch->Count < MI_TLB_BATCH_SIZE);
+    MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
+    MI_ASSERT(Frame < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MI_ATOMIC_READ32(&Space->System->Pfn.Pfn[Frame].ShareCount) > 0);
+    MI_ASSERT((Segment == NULL) == (Proto == NULL));
+    MI_ASSERT(Clone == NULL || (Segment == NULL && !Private));
+    MI_ASSERT(Segment == NULL || !Private);
+    Index = Batch->Count++;
     while (Index != 0 && Batch->Entry[Index - 1].Va > VirtualAddress)
     {
         Batch->Entry[Index] = Batch->Entry[Index - 1];
