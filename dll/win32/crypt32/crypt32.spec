@@ -155,8 +155,8 @@
 @ stdcall CryptMsgCalculateEncodedLength(long long long ptr str long)
 @ stdcall CryptMsgClose(ptr)
 @ stdcall CryptMsgControl(ptr long long ptr)
-@ stub CryptMsgCountersign
-@ stub CryptMsgCountersignEncoded
+@ stdcall CryptMsgCountersign(ptr long long ptr)
+@ stdcall CryptMsgCountersignEncoded(long ptr long long ptr ptr ptr)
 @ stdcall CryptMsgDuplicate(ptr)
 @ stdcall CryptMsgEncodeAndSignCTL(long ptr ptr long ptr ptr)
 @ stdcall CryptMsgGetAndVerifySigner(ptr long ptr long ptr ptr)
