@@ -294,8 +294,10 @@ void CopyDetails(CatalogUpdate &update, const CatalogUpdate &details)
 {
     update.Architecture = details.Architecture;
     update.Model = details.Model;
+    update.DriverVersion = details.DriverVersion;
     update.HardwareIds = details.HardwareIds;
     update.Detailed = true;
+    UseDriverVersion(update);
 }
 
 bool LoadDetails(CatalogUpdate &update)
@@ -305,7 +307,7 @@ bool LoadDetails(CatalogUpdate &update)
     HKEY key;
     LONG error;
     std::wstring text, ids;
-    size_t first, second;
+    size_t first, second, third;
 
     if (RegOpenKeyExW(HKEY_CURRENT_USER, DetailsKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
         return false;
@@ -321,12 +323,14 @@ bool LoadDetails(CatalogUpdate &update)
     text = value.data();
     first = text.find(L'|');
     second = first == std::wstring::npos ? first : text.find(L'|', first + 1);
-    if (second == std::wstring::npos)
+    third = second == std::wstring::npos ? second : text.find(L'|', second + 1);
+    if (third == std::wstring::npos)
         return false;
     update.Architecture = text.substr(0, first);
     update.Model = text.substr(first + 1, second - first - 1);
+    update.DriverVersion = text.substr(third + 1);
     update.HardwareIds.clear();
-    ids = text.substr(second + 1);
+    ids = text.substr(second + 1, third - second - 1);
     for (size_t start = 0; start < ids.size();)
     {
         size_t end = ids.find(L';', start);
@@ -338,6 +342,7 @@ bool LoadDetails(CatalogUpdate &update)
         start = end + 1;
     }
     update.Detailed = true;
+    UseDriverVersion(update);
     return true;
 }
 
@@ -348,6 +353,7 @@ void SaveDetails(const CatalogUpdate &update)
 
     for (size_t i = 0; i < update.HardwareIds.size(); i++)
         text += (i ? L";" : L"") + update.HardwareIds[i];
+    text += L"|" + update.DriverVersion;
     if (RegCreateKeyExW(HKEY_CURRENT_USER, DetailsKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL) != ERROR_SUCCESS)
         return;
     RegSetValueExW(key, update.Id.c_str(), 0, REG_SZ, (const BYTE *)text.c_str(),
@@ -419,6 +425,15 @@ private:
     HINTERNET m_Handle;
 };
 
+}
+
+void UseDriverVersion(CatalogUpdate &update)
+{
+    if ((update.Version.empty() || !iswdigit(update.Version[0])) && !update.DriverVersion.empty() &&
+        iswdigit(update.DriverVersion[0]))
+    {
+        update.Version = update.DriverVersion;
+    }
 }
 
 ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now)
@@ -688,6 +703,7 @@ DWORD Catalog::QueryDetails(CatalogUpdate &update)
     update.Model = models.substr(0, models.find(L','));
     while (!update.Model.empty() && update.Model[update.Model.size() - 1] == L' ')
         update.Model.pop_back();
+    update.DriverVersion = HtmlText(Inner(html, "id=\"ScopedViewHandler_version\"", "</span>"));
     update.HardwareIds.clear();
     pos = html.find("id=\"driverhwIDs\"");
     if (pos != std::string::npos)
@@ -709,6 +725,7 @@ DWORD Catalog::QueryDetails(CatalogUpdate &update)
         }
     }
     update.Detailed = true;
+    UseDriverVersion(update);
     m_Details[update.Id] = update;
     SaveDetails(update);
     return ERROR_SUCCESS;

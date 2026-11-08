@@ -32,6 +32,7 @@ struct CatalogUpdate
     ULONGLONG Bytes = 0;
     std::wstring Architecture;
     std::wstring Model;
+    std::wstring DriverVersion;
     std::vector<std::wstring> HardwareIds;
     std::wstring Query;
     int Fit = 1;
@@ -106,6 +107,7 @@ private:
     ULONGLONG m_WindowStart;
 };
 
+void UseDriverVersion(CatalogUpdate &update);
 ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now);
 ULONGLONG ThrottleWindowStart(ULONGLONG windowStart, ULONGLONG now);
 std::wstring NativeArchitecture();
