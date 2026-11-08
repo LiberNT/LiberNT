@@ -41,7 +41,7 @@
 @ stdcall CryptCATStoreFromHandle(ptr)
 @ stub CryptCATVerifyMember
 @ stdcall CryptSIPCreateIndirectData(ptr ptr ptr)
-#@ stub CryptSIPGetCaps
+@ stdcall CryptSIPGetCaps(ptr ptr)
 @ stub CryptSIPGetInfo
 @ stub CryptSIPGetRegWorkingFlags
 #@ stub CryptSIPGetSealedDigest

@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     Asn1Codecs.c
     CatalogV2.c
+    SipCaps.c
     testlist.c)
 
 add_executable(wintrust_apitest ${SOURCE})

@@ -176,6 +176,7 @@
 @ stdcall -stub CryptRetrieveTimeStamp(wstr long long str ptr ptr long ptr ptr ptr)
 @ stdcall CryptSIPAddProvider(ptr)
 @ stdcall CryptSIPCreateIndirectData(ptr ptr ptr)
+@ stdcall CryptSIPGetCaps(ptr ptr)
 @ stdcall CryptSIPGetSignedDataMsg(ptr ptr long ptr ptr)
 @ stdcall CryptSIPLoad(ptr long ptr)
 @ stdcall CryptSIPPutSignedDataMsg(ptr long ptr long ptr)

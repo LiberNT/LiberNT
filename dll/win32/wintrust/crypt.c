@@ -3461,7 +3461,42 @@ static const GUID cabGUID = { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,
     0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
 static const GUID catGUID = { 0xDE351A43, 0x8E59, 0x11D0, { 0x8C,0x47,
      0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
+#ifdef __REACTOS__
+static const GUID flatGUID = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,
+     0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
+static const GUID storageGUID = { 0x9BA61D3F, 0xE73A, 0x11D0, { 0x8C,0xD2,
+     0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
+#endif
 
+#ifdef __REACTOS__
+/***********************************************************************
+ *      CryptSIPGetCaps  (WINTRUST.@)
+ */
+BOOL WINAPI CryptSIPGetCaps(SIP_SUBJECTINFO *pSubjInfo, SIP_CAP_SET *pCaps)
+{
+    TRACE("(%p %p)\n", pSubjInfo, pCaps);
+
+    if (!pSubjInfo || !WVT_ISINSTRUCT(SIP_SUBJECTINFO, pSubjInfo->cbSize, pgSubjectType) ||
+        !pSubjInfo->pgSubjectType || !pCaps || pCaps->cbSize < sizeof(SIP_CAP_SET) || pCaps->dwFlags)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!IsEqualGUID(pSubjInfo->pgSubjectType, &unknown) && !IsEqualGUID(pSubjInfo->pgSubjectType, &cabGUID) &&
+        !IsEqualGUID(pSubjInfo->pgSubjectType, &flatGUID) && !IsEqualGUID(pSubjInfo->pgSubjectType, &catGUID) &&
+        !IsEqualGUID(pSubjInfo->pgSubjectType, &storageGUID))
+    {
+        SetLastError(TRUST_E_SUBJECT_FORM_UNKNOWN);
+        return FALSE;
+    }
+    pCaps->cbSize = sizeof(SIP_CAP_SET);
+    pCaps->dwVersion = SIP_CAP_SET_CUR_VER;
+    pCaps->isMultiSign = TRUE;
+    pCaps->dwFlags = IsEqualGUID(pSubjInfo->pgSubjectType, &unknown) ? SIP_CAP_FLAG_SEALING : 0;
+    return TRUE;
+}
+
+#endif
 /***********************************************************************
  *      CryptSIPGetSignedDataMsg  (WINTRUST.@)
  */
@@ -3565,7 +3600,47 @@ BOOL WINAPI CryptSIPRemoveSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo,
 BOOL WINAPI CryptSIPVerifyIndirectData(SIP_SUBJECTINFO* pSubjectInfo,
                                        SIP_INDIRECT_DATA* pIndirectData)
 {
+#ifdef __REACTOS__
+    SIP_INDIRECT_DATA *computed;
+    SIP_SUBJECTINFO info;
+    DWORD size = 0;
+    BOOL ret;
+
+    TRACE("(%p %p)\n", pSubjectInfo, pIndirectData);
+
+    if (!pSubjectInfo || !pSubjectInfo->pgSubjectType || !pIndirectData || !pIndirectData->DigestAlgorithm.pszObjId)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (IsEqualGUID(pSubjectInfo->pgSubjectType, &flatGUID))
+    {
+        /* Windows 11 never verifies a flat image here: catalog members are compared by hash */
+        SetLastError(pSubjectInfo->dwUnionChoice == MSSIP_ADDINFO_NONE ? ERROR_INVALID_PARAMETER : ERROR_SUCCESS);
+        return FALSE;
+    }
+
+    info = *pSubjectInfo;
+    info.DigestAlgorithm = pIndirectData->DigestAlgorithm;
+    info.dwFlags = (info.dwFlags & ~SPC_INC_PE_PAGE_HASHES_FLAG) | SPC_EXC_PE_PAGE_HASHES_FLAG;
+    if (!CryptSIPCreateIndirectData(&info, &size, NULL)) return FALSE;
+    if (!(computed = malloc(size)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    ret = CryptSIPCreateIndirectData(&info, &size, computed);
+    if (ret && (computed->Digest.cbData != pIndirectData->Digest.cbData ||
+                memcmp(computed->Digest.pbData, pIndirectData->Digest.pbData, computed->Digest.cbData)))
+    {
+        SetLastError(TRUST_E_BAD_DIGEST);
+        ret = FALSE;
+    }
+    free(computed);
+    return ret;
+#else
     FIXME("(%p %p) stub\n", pSubjectInfo, pIndirectData);
  
     return FALSE;
+#endif
 }
