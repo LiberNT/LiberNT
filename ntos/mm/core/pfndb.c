@@ -35,8 +35,10 @@ MiPfnLockAtDispatch(
     _Inout_ PMI_PFN_DATABASE Db,
     _In_ ULONG Frame)
 {
-    volatile UCHAR *Flags = &Db->Pfn[Frame].Flags;
+    volatile UCHAR *Flags;
 
+    MI_ASSERT(Frame < Db->FrameCount);
+    Flags = &Db->Pfn[Frame].Flags;
     while (MI_ATOMIC_OR8(Flags, MI_PFN_FLAG_LOCK) & MI_PFN_FLAG_LOCK)
     {
         do
@@ -52,6 +54,7 @@ MiPfnUnlockAtDispatch(
     _Inout_ PMI_PFN_DATABASE Db,
     _In_ ULONG Frame)
 {
+    MI_ASSERT(Frame < Db->FrameCount);
     MI_ASSERT(MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_LOCK);
     MI_ATOMIC_AND8(&Db->Pfn[Frame].Flags, (UCHAR)~MI_PFN_FLAG_LOCK);
 }
@@ -685,6 +688,8 @@ MiPfnAllocatePage(
 
     Entry = &Db->Pfn[Frame];
     OldIrql = MiPfnLock(Db, Frame);
+    MI_ASSERT(Entry->State == MiPageCached || Entry->State == MiPageTransition);
+    MI_ASSERT(Entry->ReferenceCount == 0 && Entry->ShareCount == 0);
     Entry->State = MiPageActive;
     Entry->ReferenceCount = 1;
     Entry->ShareCount = 1;
@@ -1089,6 +1094,7 @@ MiPfnListCount(
     ULONG64 Total = 0;
     ULONG i;
 
+    MI_ASSERT(State < MiPageListCount);
     for (i = 0; i < MiPfnShardCount(Db); i++)
     {
         KIRQL OldIrql;
