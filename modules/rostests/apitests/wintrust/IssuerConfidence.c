@@ -192,6 +192,25 @@ START_TEST(IssuerConfidence)
     CheckConfidence("not nested", CreateCert(L"CN=LiberNT leaf", IssuerKey, LeafKey, &Aki1, 20, 365),
                     CERT_CONFIDENCE_SIG | CERT_CONFIDENCE_TIME | CERT_CONFIDENCE_AUTHIDEXT | CERT_CONFIDENCE_HYGIENE, 0);
 
+    {
+        PFN_TRUST_FIND_ISSUER Trust = (PFN_TRUST_FIND_ISSUER)GetProcAddress(GetModuleHandleW(L"wintrust.dll"),
+                                                                            "TrustFindIssuerCertificate");
+        HCERTSTORE Store = CertOpenStore(CERT_STORE_PROV_MEMORY, 0, 0, 0, NULL);
+        DWORD Confidence = 0xdead, Error = 0xdead, Flags[] = { 1, 2, 0x10, 0xffffffff }, i;
+        FILETIME Now;
+
+        GetSystemTimeAsFileTime(&Now);
+        for (i = 0; Trust && i < RTL_NUMBER_OF(Flags); i++)
+        {
+            SetLastError(0xdeadbeef);
+            ok(!Trust(Issuer, X509_ASN_ENCODING, 1, &Store, &Now, &Confidence, &Error, Flags[i]),
+               "flags %#lx accepted\n", Flags[i]);
+            ok_hex(GetLastError(), ERROR_INVALID_PARAMETER);
+            ok(Confidence == 0xdead && Error == 0xdead, "flags %#lx wrote the outputs\n", Flags[i]);
+        }
+        CertCloseStore(Store, 0);
+    }
+
     CertFreeCertificateContext(Issuer);
     CryptReleaseContext(IssuerKey, 0);
     CryptReleaseContext(LeafKey, 0);

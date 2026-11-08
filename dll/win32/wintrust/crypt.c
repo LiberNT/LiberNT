@@ -2864,10 +2864,10 @@ static BOOL sip_pe_header_page_hash(const BYTE *view, DWORD file_size, HCRYPTPRO
  */
 int WINAPI ComputeFirstPageHash(LPCWSTR pwszHashAlg, LPCWSTR pwszFile, PVOID pbHash, int cbHash)
 {
+    DWORD hash_len, size;
     BYTE digest[32], *view = NULL;
     HANDLE file, mapping = NULL;
     HCRYPTPROV prov = 0;
-    DWORD hash_len, size;
     ALG_ID alg;
     int ret = 0;
 
@@ -2875,21 +2875,20 @@ int WINAPI ComputeFirstPageHash(LPCWSTR pwszHashAlg, LPCWSTR pwszFile, PVOID pbH
 
     if (!pwszHashAlg || !pwszFile)
         return 0;
-    if (!_wcsicmp(pwszHashAlg, L"SHA256"))
+    if (!wcscmp(pwszHashAlg, L"SHA256"))
     {
         alg = CALG_SHA_256;
         hash_len = 32;
     }
-    else if (!_wcsicmp(pwszHashAlg, L"SHA1"))
+    else if (!wcscmp(pwszHashAlg, L"SHA1"))
     {
         alg = CALG_SHA1;
         hash_len = 20;
     }
     else
-    {
-        /* TODO: INFO_NEEDED: algorithm names other than SHA256, SHA1 and MD5 (which gives 0) */
         return 0;
-    }
+    if (!pbHash || cbHash != (int)hash_len)
+        return hash_len;
 
     file = CreateFileW(pwszFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (file == INVALID_HANDLE_VALUE)
@@ -2900,8 +2899,7 @@ int WINAPI ComputeFirstPageHash(LPCWSTR pwszHashAlg, LPCWSTR pwszFile, PVOID pbH
         CryptAcquireContextW(&prov, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) &&
         sip_pe_header_page_hash(view, size, prov, alg, digest, hash_len))
     {
-        if (pbHash && cbHash == (int)hash_len)
-            memcpy(pbHash, digest, hash_len);
+        memcpy(pbHash, digest, hash_len);
         ret = hash_len;
     }
     if (prov)
@@ -2911,6 +2909,8 @@ int WINAPI ComputeFirstPageHash(LPCWSTR pwszHashAlg, LPCWSTR pwszFile, PVOID pbH
     if (mapping)
         CloseHandle(mapping);
     CloseHandle(file);
+    if (ret)
+        SetLastError(ERROR_SUCCESS);
     return ret;
 }
 
