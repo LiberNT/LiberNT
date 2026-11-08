@@ -461,6 +461,17 @@ BOOL WINAPI ImageAddCertificate(
 
         if (sd_VirtualAddr == INVALID_SET_FILE_POINTER)
             return FALSE;
+#ifdef __REACTOS__
+
+        if (sd_VirtualAddr % 8)
+        {
+            static const BYTE padding[8];
+
+            if (!WriteFile(FileHandle, padding, 8 - (sd_VirtualAddr % 8), &count, NULL))
+                return FALSE;
+            sd_VirtualAddr += count;
+        }
+#endif
     }
 
     /* Write the certificate to the file */

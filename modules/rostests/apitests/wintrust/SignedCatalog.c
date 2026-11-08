@@ -244,8 +244,67 @@ CreateSignedCatalog(VOID)
 }
 
 static
+DWORD
+ZerosToMisalign(DWORD FileSize, DWORD Misalign)
+{
+    return Misalign ? (Misalign + 8 - FileSize % 8) % 8 : 0;
+}
+
+static
 BOOL
-CreateSignedImage(LPCSTR Algorithm, BYTE *Digest, DWORD *DigestSize)
+AppendZeros(const WCHAR *Path, DWORD Misalign)
+{
+    static const BYTE Zeros[8];
+    HANDLE File;
+    DWORD Count, Written;
+    BOOL Ret;
+
+    File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Count = ZerosToMisalign(GetFileSize(File, NULL), Misalign);
+    Ret = SetFilePointer(File, 0, NULL, FILE_END) != INVALID_SET_FILE_POINTER &&
+          WriteFile(File, Zeros, Count, &Written, NULL) && Written == Count;
+    CloseHandle(File);
+    return Ret;
+}
+
+static
+BOOL
+ImageDigest(const WCHAR *Path, BYTE *Digest, DWORD *DigestSize)
+{
+    SIP_SUBJECTINFO Info;
+    GUID Subject = PeSubject;
+    SIP_INDIRECT_DATA *Indirect = NULL;
+    DWORD Size = 0;
+    BOOL Ret;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    Info.pgSubjectType = &Subject;
+    Info.pwsFileName = Path;
+    Info.DigestAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    Info.dwEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    Info.hFile = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (Info.hFile == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Ret = CryptSIPCreateIndirectData(&Info, &Size, NULL) &&
+          (Indirect = HeapAlloc(GetProcessHeap(), 0, Size)) &&
+          CryptSIPCreateIndirectData(&Info, &Size, Indirect) &&
+          Indirect->Digest.cbData <= *DigestSize;
+    if (Ret)
+    {
+        memcpy(Digest, Indirect->Digest.pbData, Indirect->Digest.cbData);
+        *DigestSize = Indirect->Digest.cbData;
+    }
+    CloseHandle(Info.hFile);
+    HeapFree(GetProcessHeap(), 0, Indirect);
+    return Ret;
+}
+
+static
+BOOL
+CreateSignedImage(LPCSTR Algorithm, DWORD Misalign, BYTE *Digest, DWORD *DigestSize)
 {
     WCHAR Self[MAX_PATH];
     SIP_SUBJECTINFO Info;
@@ -256,7 +315,7 @@ CreateSignedImage(LPCSTR Algorithm, BYTE *Digest, DWORD *DigestSize)
     BOOL Ret = FALSE;
 
     GetModuleFileNameW(NULL, Self, RTL_NUMBER_OF(Self));
-    if (!CopyFileW(Self, ImagePath, FALSE))
+    if (!CopyFileW(Self, ImagePath, FALSE) || !AppendZeros(ImagePath, Misalign))
         return FALSE;
 
     ZeroMemory(&Info, sizeof(Info));
@@ -518,6 +577,56 @@ TestImage(const BYTE *Digest, DWORD DigestSize)
 
 static
 VOID
+TestUnalignedImage(VOID)
+{
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO File = { sizeof(File) };
+    WINTRUST_DATA Data = { sizeof(Data) };
+    WCHAR Self[MAX_PATH], Other[MAX_PATH];
+    BYTE Digest[64], Before[64], After[64], *Image;
+    DWORD DigestSize = sizeof(Digest), BeforeSize = sizeof(Before), AfterSize = sizeof(After), Unsigned, ImageSize;
+    HANDLE Handle;
+    IMAGE_NT_HEADERS *Nt;
+
+    GetModuleFileNameW(NULL, Self, RTL_NUMBER_OF(Self));
+    Handle = CreateFileW(Self, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    Unsigned = GetFileSize(Handle, NULL);
+    CloseHandle(Handle);
+    Unsigned += ZerosToMisalign(Unsigned, 1);
+
+    /* Windows 11 hashes an unaligned image as if it were padded with zeros to 8 bytes */
+    swprintf(Other, RTL_NUMBER_OF(Other), L"%lslntwtpad.exe", TempDir);
+    ok(CopyFileW(Self, Other, FALSE) && AppendZeros(Other, 1), "Cannot copy the image (%lu)\n", GetLastError());
+    ok(ImageDigest(Other, Before, &BeforeSize), "Cannot hash the image (%lu)\n", GetLastError());
+    ok(AppendZeros(Other, 2), "Cannot pad the image (%lu)\n", GetLastError());
+    ok(ImageDigest(Other, After, &AfterSize), "Cannot hash the image (%lu)\n", GetLastError());
+    ok(BeforeSize == AfterSize && !memcmp(Before, After, AfterSize), "padding changed the digest\n");
+    DeleteFileW(Other);
+
+    DeleteFileW(ImagePath);
+    ok(CreateSignedImage(szOID_NIST_sha256, 1, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    AfterSize = sizeof(After);
+    ok(ImageDigest(ImagePath, After, &AfterSize), "Cannot hash the signed image (%lu)\n", GetLastError());
+    ok(AfterSize == DigestSize && !memcmp(After, Digest, DigestSize), "signing changed the digest\n");
+    if (ReadBytes(ImagePath, &Image, &ImageSize))
+    {
+        Nt = (IMAGE_NT_HEADERS *)(Image + ((IMAGE_DOS_HEADER *)Image)->e_lfanew);
+        ok_long(Nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY].VirtualAddress, (Unsigned + 7) & ~7);
+        ok_long(Nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY].VirtualAddress +
+                Nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY].Size, ImageSize);
+        HeapFree(GetProcessHeap(), 0, Image);
+    }
+
+    File.pcwszFilePath = ImagePath;
+    Data.dwUIChoice = WTD_UI_NONE;
+    Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    Data.dwUnionChoice = WTD_CHOICE_FILE;
+    Data.pFile = &File;
+    ok_hex(WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data), ERROR_SUCCESS);
+}
+
+static
+VOID
 TestSha1Image(VOID)
 {
     PFN_FILE_HASH FileHash = (PFN_FILE_HASH)GetProcAddress(GetModuleHandleW(L"wintrust.dll"), "WTHelperGetFileHash");
@@ -526,7 +635,7 @@ TestSha1Image(VOID)
     ALG_ID Algorithm = 0;
 
     DeleteFileW(ImagePath);
-    ok(CreateSignedImage(szOID_OIWSEC_sha1, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    ok(CreateSignedImage(szOID_OIWSEC_sha1, 0, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     if (!FileHash)
         return;
     ok_hex(FileHash(ImagePath, 0, NULL, Hash, &Size, &Algorithm), ERROR_SUCCESS);
@@ -657,9 +766,10 @@ START_TEST(SignedCatalog)
     ok(CreateSignedCatalog(), "Cannot create the signed catalog (%lu)\n", GetLastError());
     TestCatalogs();
     TestCatalogFile();
-    ok(CreateSignedImage(szOID_NIST_sha256, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    ok(CreateSignedImage(szOID_NIST_sha256, 0, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     TestImage(Digest, DigestSize);
     TestSha1Image();
+    TestUnalignedImage();
     TestFindCerts();
 
     CleanupFixture();
