@@ -81,10 +81,13 @@ PoolVaCommit(
 
     Now = POOL_ATOMIC_ADD64(&Region->CommittedPages, (LONG64)(Bytes >> PAGE_SHIFT)) +
           (LONG64)(Bytes >> PAGE_SHIFT);
+    POOL_ASSERT(Now >= (LONG64)(Bytes >> PAGE_SHIFT));
+    POOL_ASSERT((ULONG64)Now <= ((Region->End - Region->Base) >> PAGE_SHIFT));
 
     for (;;)
     {
         Peak = POOL_ATOMIC_READ64(&Region->PeakCommittedPages);
+        POOL_ASSERT(Peak >= 0);
         if (Now <= Peak || POOL_ATOMIC_CAS64(&Region->PeakCommittedPages, Now, Peak) == Peak)
             break;
     }
@@ -98,12 +101,16 @@ PoolVaDecommit(
     _In_ PVOID Base,
     _In_ SIZE_T Bytes)
 {
+    LONG64 Previous;
+
     POOL_ASSERT(Region->Backing.Decommit != NULL);
     POOL_ASSERT(((ULONG_PTR)Base & (PAGE_SIZE - 1)) == 0 && Bytes != 0 && (Bytes & (PAGE_SIZE - 1)) == 0);
     POOL_ASSERT((ULONG_PTR)Base >= Region->Base && (ULONG_PTR)Base <= Region->End &&
                 Bytes <= Region->End - (ULONG_PTR)Base);
     Region->Backing.Decommit(Region->Backing.Context, Base, Bytes);
-    POOL_ATOMIC_ADD64(&Region->CommittedPages, -(LONG64)(Bytes >> PAGE_SHIFT));
+    Previous = POOL_ATOMIC_ADD64(&Region->CommittedPages, -(LONG64)(Bytes >> PAGE_SHIFT));
+    POOL_ASSERT(Previous >= (LONG64)(Bytes >> PAGE_SHIFT));
+    UNREFERENCED_PARAMETER(Previous);
 }
 
 NTSTATUS
