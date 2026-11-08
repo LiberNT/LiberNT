@@ -6,6 +6,7 @@ list(APPEND SOURCE
     filter.c
     pin.c
     guid.c
+    uac/uac_feedback.c
     uac/uac_desc_validate.c)
 
 add_library(usbaudio MODULE

@@ -10,6 +10,9 @@
 #include <usbdlib.h>
 #include <debug.h>
 
+#include "uac/uac_feedback.h"
+#include "uac/uac_desc_validate.h"
+
 #define USBAUDIO_TAG 'AbsU'
 
 /* ── USB Audio descriptor subtype ──────────────────────────────── */
@@ -592,8 +595,8 @@ typedef struct _DEVICE_EXTENSION
     ULONG NodeContextCount;
     ULONG AudioVersion;                         /* USB Audio 1.0, 2.0, or 3.0 */
     ULONG BaddProfile;                          /* UAC3 BADD profile or 0 */
-    BOOLEAN ControlPathBroken;
     ULONG QuirkFlags;                           /* active quirk flags */
+    BOOLEAN ControlPathBroken;
     volatile LONG StreamingPins;
     BOOLEAN HasMidiInterface;
     BOOLEAN HasFeedbackEndpoint;
@@ -626,6 +629,7 @@ typedef struct _PIN_CONTEXT
     ULONG BufferLength;
     ULONG RenderPacketRemainder;
     ULONG RenderPendingPacketSize;
+    UAC_FEEDBACK_STATE Feedback;
     PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor;
     WORK_QUEUE_ITEM CaptureWorkItem;
     PKSWORKER       CaptureWorker;

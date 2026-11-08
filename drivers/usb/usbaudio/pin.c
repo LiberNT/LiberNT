@@ -570,6 +570,10 @@ UsbAudioSetFormat(
 
     if (UsbAudioGetPcmWaveFormat(Pin->ConnectionFormat, &PcmFormat))
     {
+        UacFeedbackInit(&PinContext->Feedback,
+                        PcmFormat.WaveFormat->nSamplesPerSec,
+                        PinContext->PacketRate);
+
         SampleRateBuffer[2] = (PcmFormat.WaveFormat->nSamplesPerSec >> 16) & 0xFF;
         SampleRateBuffer[1] = (PcmFormat.WaveFormat->nSamplesPerSec >> 8) & 0xFF;
         SampleRateBuffer[0] = (PcmFormat.WaveFormat->nSamplesPerSec >> 0) & 0xFF;
@@ -1665,6 +1669,8 @@ UsbAudioFeedbackComplete(
 
         if (Value)
         {
+            UacFeedbackFeed(&PinContext->Feedback, Value);
+
             if (!PinContext->FeedbackValue)
             {
                 DPRINT1("USBAudio: feedback rate=%lu (Q16.16 frames per interval)\n", Value);
@@ -2113,7 +2119,6 @@ UsbAudioRenderComplete(
     PKSPIN Pin;
     PPIN_CONTEXT PinContext;
     PKSSTREAM_POINTER StreamPointerClone;
-    NTSTATUS Status;
     PURB Urb;
     PVOID TransferBuffer;
 
@@ -2122,9 +2127,6 @@ UsbAudioRenderComplete(
     /* get pin context */
     Pin = Context;
     PinContext = Pin->Context;
-
-    /* get status */
-    Status = Irp->IoStatus.Status;
 
     /* get streampointer */
     StreamPointerClone = Irp->Tail.Overlay.DriverContext[1];
@@ -2141,13 +2143,6 @@ UsbAudioRenderComplete(
     FreeFunction(Urb);
     if (TransferBuffer)
         FreeFunction(TransferBuffer);
-
-    if (!NT_SUCCESS(Status) && StreamPointerClone)
-    {
-        /* set status code because it failed */
-        KsStreamPointerSetStatusCode(StreamPointerClone, STATUS_DEVICE_DATA_ERROR);
-        DPRINT1("UsbAudioRenderComplete failed with %x\n", Status);
-    }
 
     if (StreamPointerClone)
     {
