@@ -2989,10 +2989,6 @@ UsbAudioGetDataRangesUac2(
 
         Offset += Descriptor->bLength;
 
-        if (Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
-        {
-        }
-
         if (Descriptor->bDescriptorType != USB_INTERFACE_DESCRIPTOR_TYPE ||
             Descriptor->bInterfaceClass != USB_DEVICE_CLASS_AUDIO ||
             Descriptor->bInterfaceSubClass != 0x02)
@@ -3044,10 +3040,6 @@ UsbAudioGetDataRangesUac2(
             break;
 
         Offset += Descriptor->bLength;
-
-        if (Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
-        {
-        }
 
         if (Descriptor->bDescriptorType != USB_INTERFACE_DESCRIPTOR_TYPE ||
             Descriptor->bInterfaceClass != USB_DEVICE_CLASS_AUDIO ||

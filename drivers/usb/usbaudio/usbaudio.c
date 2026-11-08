@@ -182,7 +182,7 @@ USBAudioSelectConfiguration(
     DeviceExtension = Device->Context;
     DeviceExtension->HasMidiInterface = FALSE;
     InterfaceDescriptorCount = 0;
-    Capacity = ConfigurationDescriptor->bNumInterfaces + 1;
+    Capacity = ConfigurationDescriptor->bNumInterfaces;
 
     /* Audio 1.0 names its streaming interfaces in the audio control header */
     if (DeviceExtension->AudioVersion == USB_AUDIO_VERSION_1)
@@ -204,6 +204,8 @@ USBAudioSelectConfiguration(
         {
             ULONG Index;
 
+            USBAudioAppendInterface(InterfaceList, Capacity, &InterfaceDescriptorCount,
+                                    ControlInterface, DeviceExtension);
             for (Index = 0; Index < Header->bInCollection; Index++)
             {
                 InterfaceDescriptor = USBAudioFindInterfaceDescriptor(ConfigurationDescriptor,
