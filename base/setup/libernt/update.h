@@ -28,14 +28,15 @@ AddBcdUpgradeEntry(
     _In_ PCWSTR Description,
     _In_ PCWSTR LoaderPath,
     _In_ PCWSTR ImagePath,
+    _In_ PCWSTR ImageHash,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR EntryId,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR PreviousDefault);
 
 DWORD
-RemoveBcdUpgradeEntry(
+RemoveBcdUpgradeEntries(
     _In_ HKEY Store,
-    _In_ PCWSTR EntryId,
-    _In_ PCWSTR PreviousDefault);
+    _In_ PCWSTR LoaderPath,
+    _In_opt_ PCWSTR PreviousDefault);
 
 BOOL
 IsLiveSystem(VOID);

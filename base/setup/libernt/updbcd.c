@@ -7,6 +7,8 @@
 
 #include "libernt.h"
 #include <objbase.h>
+#include <winioctl.h>
+#include <ntddstor.h>
 #include <ndk/setypes.h>
 #include <ndk/cmfuncs.h>
 
@@ -30,7 +32,20 @@
 #define BCD_ORDER_MAX           4096
 #define BCD_ELEMENT_MAX         1024
 
+#define BCD_OBJECTS_MAX         128
+#define BCD_ELEMENT_TYPE        0x10
+#define BCD_ELEMENT_PARTITION   0x20
+#define BCD_ELEMENT_STYLE       0x34
+#define BCD_ELEMENT_DISK        0x38
+#define BCD_ELEMENT_PARTITION_SIZE 0x58
+#define BCD_DEVICE_PARTITION    6
+#define BCD_STYLE_GPT           0
+#define BCD_STYLE_MBR           1
+#define LAYOUT_PARTITIONS       128
+#define BCD_OPTIONS_CHARS       512
+
 #define INSTALL_IMAGE_OPTION    L"INSTALLIMAGE="
+#define INSTALL_HASH_OPTION     L"INSTALLSHA256="
 
 static LONG
 OpenElement(
@@ -291,11 +306,12 @@ WriteUpgradeElements(
     _In_ PCWSTR BaseId,
     _In_ PCWSTR Description,
     _In_ PCWSTR LoaderPath,
-    _In_ PCWSTR ImagePath)
+    _In_ PCWSTR ImagePath,
+    _In_ PCWSTR ImageHash)
 {
     BYTE Device[BCD_ELEMENT_MAX];
-    WCHAR Options[512];
-    WCHAR BaseOptions[448];
+    WCHAR Options[BCD_OPTIONS_CHARS];
+    WCHAR BaseOptions[BCD_OPTIONS_CHARS];
     DWORD DeviceSize = sizeof(Device), ParentSize;
     LONG Error;
 
@@ -310,8 +326,8 @@ WriteUpgradeElements(
 
     if (ReadString(Store, BaseId, BCD_LOAD_OPTIONS, BaseOptions, ARRAYSIZE(BaseOptions)) != ERROR_SUCCESS)
         BaseOptions[0] = UNICODE_NULL;
-    if (FAILED(StringCchPrintfW(Options, ARRAYSIZE(Options), BaseOptions[0] ? L"%s %s%s" : L"%s%s%s",
-                                BaseOptions, INSTALL_IMAGE_OPTION, ImagePath)))
+    if (FAILED(StringCchPrintfW(Options, ARRAYSIZE(Options), BaseOptions[0] ? L"%s %s%s %s%s" : L"%s%s%s %s%s",
+                                BaseOptions, INSTALL_IMAGE_OPTION, ImagePath, INSTALL_HASH_OPTION, ImageHash)))
     {
         return ERROR_BUFFER_OVERFLOW;
     }
@@ -326,58 +342,313 @@ WriteUpgradeElements(
     return Error;
 }
 
+static BOOL
+IsStagedEntry(
+    _In_ HKEY Store,
+    _In_ PCWSTR EntryId,
+    _In_ PCWSTR LoaderPath)
+{
+    WCHAR Path[MAX_PATH];
+
+    return ReadString(Store, EntryId, BCD_APPLICATION_PATH, Path, ARRAYSIZE(Path)) == ERROR_SUCCESS &&
+           _wcsicmp(Path, LoaderPath) == 0;
+}
+
+static BOOL
+IsBootEntry(
+    _In_ HKEY Store,
+    _In_ PCWSTR EntryId,
+    _In_ PCWSTR LoaderPath)
+{
+    WCHAR Path[MAX_PATH];
+
+    return EntryId[0] &&
+           ReadString(Store, EntryId, BCD_APPLICATION_PATH, Path, ARRAYSIZE(Path)) == ERROR_SUCCESS &&
+           _wcsicmp(Path, LoaderPath) != 0;
+}
+
+static ULONG
+FindStagedEntries(
+    _In_ HKEY Store,
+    _In_ PCWSTR LoaderPath,
+    _Out_writes_(BCD_OBJECTS_MAX) WCHAR (*Entries)[UPDATE_ID_CHARS])
+{
+    WCHAR Name[UPDATE_ID_CHARS + 8];
+    DWORD Index, Chars;
+    ULONG Count = 0;
+    HKEY Objects;
+
+    if (RegOpenKeyExW(Store, L"Objects", REG_OPTION_BACKUP_RESTORE, KEY_READ, &Objects) != ERROR_SUCCESS)
+        return 0;
+    for (Index = 0; Count < BCD_OBJECTS_MAX; Index++)
+    {
+        Chars = ARRAYSIZE(Name);
+        if (RegEnumKeyExW(Objects, Index, Name, &Chars, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (Chars < UPDATE_ID_CHARS && IsStagedEntry(Store, Name, LoaderPath))
+            StringCchCopyW(Entries[Count++], UPDATE_ID_CHARS, Name);
+    }
+    RegCloseKey(Objects);
+    return Count;
+}
+
+static LONG
+FindInstalledDefault(
+    _In_ HKEY Store,
+    _In_ PCWSTR LoaderPath,
+    _In_opt_ PCWSTR Hint,
+    _Out_writes_(UPDATE_ID_CHARS) PWSTR EntryId)
+{
+    PWSTR Order, Item;
+    DWORD Size = BCD_ORDER_MAX * sizeof(WCHAR);
+    LONG Error;
+
+    if (Hint && IsBootEntry(Store, Hint, LoaderPath))
+        return SUCCEEDED(StringCchCopyW(EntryId, UPDATE_ID_CHARS, Hint)) ? ERROR_SUCCESS : ERROR_BUFFER_OVERFLOW;
+
+    Order = HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, (BCD_ORDER_MAX + 2) * sizeof(WCHAR));
+    if (!Order)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    Error = ReadElement(Store, BCD_BOOTMGR, BCD_DISPLAY_ORDER, REG_MULTI_SZ, Order, &Size);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = ERROR_NOT_FOUND;
+        for (Item = Order; *Item && Item < Order + BCD_ORDER_MAX; Item += wcslen(Item) + 1)
+        {
+            if (IsBootEntry(Store, Item, LoaderPath))
+            {
+                Error = SUCCEEDED(StringCchCopyW(EntryId, UPDATE_ID_CHARS, Item)) ? ERROR_SUCCESS : ERROR_BUFFER_OVERFLOW;
+                break;
+            }
+        }
+    }
+    HeapFree(ProcessHeap, 0, Order);
+    return Error;
+}
+
+typedef struct _RUNNING_PARTITION
+{
+    DWORD Style;
+    ULONGLONG Offset;
+    ULONG Signature;
+    GUID PartitionId;
+} RUNNING_PARTITION, *PRUNNING_PARTITION;
+
+static DWORD
+GetRunningPartition(
+    _Out_ PRUNNING_PARTITION Running)
+{
+    WCHAR Path[MAX_PATH], Drive[MAX_PATH];
+    PARTITION_INFORMATION_EX Partition;
+    STORAGE_DEVICE_NUMBER Number;
+    PDRIVE_LAYOUT_INFORMATION_EX Layout;
+    DWORD Size = FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[LAYOUT_PARTITIONS]), Returned, Error;
+    HANDLE Device;
+
+    ZeroMemory(Running, sizeof(*Running));
+    if (!GetEnvironmentVariableW(L"SystemDrive", Drive, ARRAYSIZE(Drive)) ||
+        FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\\\.\\%s", Drive)))
+    {
+        return ERROR_PATH_NOT_FOUND;
+    }
+
+    Device = CreateFileW(Path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (Device == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    Error = (DeviceIoControl(Device, IOCTL_DISK_GET_PARTITION_INFO_EX, NULL, 0, &Partition, sizeof(Partition),
+                             &Returned, NULL) &&
+             DeviceIoControl(Device, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &Number, sizeof(Number),
+                             &Returned, NULL)) ? ERROR_SUCCESS : GetLastError();
+    CloseHandle(Device);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    Running->Style = Partition.PartitionStyle;
+    Running->Offset = Partition.StartingOffset.QuadPart;
+    Running->PartitionId = Partition.Gpt.PartitionId;
+    if (Partition.PartitionStyle != PARTITION_STYLE_MBR)
+        return Partition.PartitionStyle == PARTITION_STYLE_GPT ? ERROR_SUCCESS : ERROR_NOT_SUPPORTED;
+
+    if (FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\\\.\\PhysicalDrive%lu", Number.DeviceNumber)))
+        return ERROR_PATH_NOT_FOUND;
+    Layout = HeapAlloc(ProcessHeap, 0, Size);
+    if (!Layout)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    Device = CreateFileW(Path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (Device == INVALID_HANDLE_VALUE)
+    {
+        Error = GetLastError();
+    }
+    else
+    {
+        Error = DeviceIoControl(Device, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, Layout, Size, &Returned, NULL)
+            ? ERROR_SUCCESS : GetLastError();
+        CloseHandle(Device);
+    }
+    if (Error == ERROR_SUCCESS)
+        Running->Signature = Layout->Mbr.Signature;
+    HeapFree(ProcessHeap, 0, Layout);
+    return Error;
+}
+
+static BOOL
+IsRunningEntry(
+    _In_ HKEY Store,
+    _In_ PCWSTR EntryId,
+    _In_ PRUNNING_PARTITION Running)
+{
+    BYTE Device[BCD_ELEMENT_MAX];
+    DWORD Size = sizeof(Device);
+
+    if (ReadElement(Store, EntryId, BCD_OS_DEVICE, REG_BINARY, Device, &Size) != ERROR_SUCCESS ||
+        Size < BCD_ELEMENT_PARTITION_SIZE || *(PULONG)(Device + BCD_ELEMENT_TYPE) != BCD_DEVICE_PARTITION)
+    {
+        return FALSE;
+    }
+
+    if (Running->Style == PARTITION_STYLE_GPT)
+    {
+        return *(PULONG)(Device + BCD_ELEMENT_STYLE) == BCD_STYLE_GPT &&
+               memcmp(Device + BCD_ELEMENT_PARTITION, &Running->PartitionId, sizeof(GUID)) == 0;
+    }
+    return *(PULONG)(Device + BCD_ELEMENT_STYLE) == BCD_STYLE_MBR &&
+           *(PULONGLONG)(Device + BCD_ELEMENT_PARTITION) == Running->Offset &&
+           *(PULONG)(Device + BCD_ELEMENT_DISK) == Running->Signature;
+}
+
+static LONG
+FindRunningEntry(
+    _In_ HKEY Store,
+    _In_ PCWSTR LoaderPath,
+    _In_ PCWSTR Default,
+    _Out_writes_(UPDATE_ID_CHARS) PWSTR EntryId)
+{
+    RUNNING_PARTITION Running;
+    PWSTR Order, Item;
+    DWORD Size = BCD_ORDER_MAX * sizeof(WCHAR);
+    LONG Error;
+
+    Error = GetRunningPartition(&Running);
+    if (Error != ERROR_SUCCESS)
+    {
+        DPRINT1("The partition of the running system is unknown (%ld)\n", Error);
+        return Error;
+    }
+
+    if (IsBootEntry(Store, Default, LoaderPath) && IsRunningEntry(Store, Default, &Running))
+        return SUCCEEDED(StringCchCopyW(EntryId, UPDATE_ID_CHARS, Default)) ? ERROR_SUCCESS : ERROR_BUFFER_OVERFLOW;
+
+    Order = HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, (BCD_ORDER_MAX + 2) * sizeof(WCHAR));
+    if (!Order)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    Error = ReadElement(Store, BCD_BOOTMGR, BCD_DISPLAY_ORDER, REG_MULTI_SZ, Order, &Size);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = ERROR_NOT_FOUND;
+        for (Item = Order; *Item && Item < Order + BCD_ORDER_MAX; Item += wcslen(Item) + 1)
+        {
+            if (IsBootEntry(Store, Item, LoaderPath) && IsRunningEntry(Store, Item, &Running))
+            {
+                Error = SUCCEEDED(StringCchCopyW(EntryId, UPDATE_ID_CHARS, Item)) ? ERROR_SUCCESS : ERROR_BUFFER_OVERFLOW;
+                break;
+            }
+        }
+    }
+    HeapFree(ProcessHeap, 0, Order);
+    if (Error != ERROR_SUCCESS)
+        DPRINT1("No boot entry starts the running system (%ld)\n", Error);
+    return Error;
+}
+
+DWORD
+RemoveBcdUpgradeEntries(
+    _In_ HKEY Store,
+    _In_ PCWSTR LoaderPath,
+    _In_opt_ PCWSTR PreviousDefault)
+{
+    WCHAR (*Entries)[UPDATE_ID_CHARS];
+    WCHAR Default[UPDATE_ID_CHARS], Installed[UPDATE_ID_CHARS], Path[64];
+    ULONG Count, Index;
+    LONG Error = ERROR_SUCCESS;
+
+    Entries = HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, BCD_OBJECTS_MAX * sizeof(*Entries));
+    if (!Entries)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    Count = FindStagedEntries(Store, LoaderPath, Entries);
+    if (Count != 0 &&
+        ReadString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, Default, ARRAYSIZE(Default)) == ERROR_SUCCESS &&
+        IsStagedEntry(Store, Default, LoaderPath))
+    {
+        Error = FindInstalledDefault(Store, LoaderPath, PreviousDefault, Installed);
+        if (Error == ERROR_SUCCESS)
+            Error = WriteString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, Installed);
+        DPRINT1("Default boot entry %S restored to %S: %ld\n", Default, Installed, Error);
+    }
+
+    for (Index = 0; Error == ERROR_SUCCESS && Index < Count; Index++)
+    {
+        UpdateDisplayOrder(Store, Entries[Index], FALSE);
+        StringCchPrintfW(Path, ARRAYSIZE(Path), L"Objects\\%s", Entries[Index]);
+        DeleteKeyTree(Store, Path);
+    }
+    RegFlushKey(Store);
+
+    if (Error == ERROR_SUCCESS && FindStagedEntries(Store, LoaderPath, Entries) != 0)
+        Error = ERROR_INVALID_STATE;
+    HeapFree(ProcessHeap, 0, Entries);
+    DPRINT1("%lu staged boot entries removed: %ld\n", Count, Error);
+    return Error;
+}
+
 DWORD
 AddBcdUpgradeEntry(
     _In_ HKEY Store,
     _In_ PCWSTR Description,
     _In_ PCWSTR LoaderPath,
     _In_ PCWSTR ImagePath,
+    _In_ PCWSTR ImageHash,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR EntryId,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR PreviousDefault)
 {
+    WCHAR Check[UPDATE_ID_CHARS], Options[BCD_OPTIONS_CHARS], Running[UPDATE_ID_CHARS];
     LONG Error;
 
     EntryId[0] = UNICODE_NULL;
-    Error = ReadString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, PreviousDefault, UPDATE_ID_CHARS);
+    PreviousDefault[0] = UNICODE_NULL;
+    Error = RemoveBcdUpgradeEntries(Store, LoaderPath, NULL);
+    if (Error == ERROR_SUCCESS)
+        Error = ReadString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, PreviousDefault, UPDATE_ID_CHARS);
+    if (Error == ERROR_SUCCESS && !IsBootEntry(Store, PreviousDefault, LoaderPath))
+        Error = ERROR_INVALID_STATE;
+    if (Error == ERROR_SUCCESS)
+        Error = FindRunningEntry(Store, LoaderPath, PreviousDefault, Running);
     if (Error == ERROR_SUCCESS)
         Error = CreateEntryId(EntryId);
     if (Error == ERROR_SUCCESS)
-        Error = CopyEntry(Store, PreviousDefault, EntryId);
+        Error = CopyEntry(Store, Running, EntryId);
     if (Error == ERROR_SUCCESS)
-        Error = WriteUpgradeElements(Store, EntryId, PreviousDefault, Description, LoaderPath, ImagePath);
+        Error = WriteUpgradeElements(Store, EntryId, Running, Description, LoaderPath, ImagePath, ImageHash);
     if (Error == ERROR_SUCCESS)
         Error = UpdateDisplayOrder(Store, EntryId, TRUE);
     if (Error == ERROR_SUCCESS)
         Error = WriteString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, EntryId);
+    if (Error == ERROR_SUCCESS)
+        Error = RegFlushKey(Store);
+
+    if (Error == ERROR_SUCCESS &&
+        (ReadString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, Check, ARRAYSIZE(Check)) != ERROR_SUCCESS ||
+         _wcsicmp(Check, EntryId) != 0 ||
+         !IsStagedEntry(Store, EntryId, LoaderPath) ||
+         ReadString(Store, EntryId, BCD_LOAD_OPTIONS, Options, ARRAYSIZE(Options)) != ERROR_SUCCESS ||
+         !wcsstr(Options, ImageHash)))
+    {
+        Error = ERROR_INVALID_DATA;
+    }
 
     if (Error != ERROR_SUCCESS && EntryId[0])
-        RemoveBcdUpgradeEntry(Store, EntryId, PreviousDefault);
-    else
-        RegFlushKey(Store);
-    DPRINT1("Upgrade boot entry %S after %S: %ld\n", EntryId, PreviousDefault, Error);
-    return Error;
-}
-
-DWORD
-RemoveBcdUpgradeEntry(
-    _In_ HKEY Store,
-    _In_ PCWSTR EntryId,
-    _In_ PCWSTR PreviousDefault)
-{
-    WCHAR Default[UPDATE_ID_CHARS];
-    WCHAR Path[64];
-    LONG Error = ERROR_SUCCESS;
-
-    if (ReadString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, Default, ARRAYSIZE(Default)) == ERROR_SUCCESS &&
-        _wcsicmp(Default, EntryId) == 0 && PreviousDefault[0])
-    {
-        Error = WriteString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, PreviousDefault);
-    }
-    UpdateDisplayOrder(Store, EntryId, FALSE);
-
-    StringCchPrintfW(Path, ARRAYSIZE(Path), L"Objects\\%s", EntryId);
-    DeleteKeyTree(Store, Path);
-    RegFlushKey(Store);
+        RemoveBcdUpgradeEntries(Store, LoaderPath, PreviousDefault);
+    DPRINT1("Upgrade boot entry %S after %S, cloned from %S: %ld\n", EntryId, PreviousDefault, Running, Error);
     return Error;
 }
 

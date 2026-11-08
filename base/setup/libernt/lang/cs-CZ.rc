@@ -494,4 +494,8 @@ BEGIN
     IDS_UPDATE_COMPLETE_COMPONENTS "Configuring system components"
     IDS_UPDATE_COMPLETE_CLEANUP "Cleaning up"
     IDS_UPDATE_COMPLETE_FAILED "%s could not be installed. LiberNT keeps the version you had."
+    IDS_UPDATE_COMPLETE_RETRYBOOT "LiberNT could not finish installing %s. It tries again when you restart your computer."
+    IDS_UPDATE_COMPLETE_RETRYLOGON "LiberNT could not finish setting up %s. It tries again the next time an administrator signs in."
+    IDS_UPDATE_COMPLETE_NOSPACE "%s could not be installed because the system drive does not have enough free space. LiberNT keeps the version you had and offers the update again."
+    IDS_UPDATE_COMPLETE_DAMAGED "%s could not be installed because the downloaded copy is damaged. LiberNT keeps the version you had and downloads the update again."
 END
