@@ -2100,7 +2100,8 @@ static NTSTATUS HttpReceiveRequest(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
 static NTSTATUS HttpSendResponseHeaders(
     PHTTP_CONNECTION Connection,
     const char *Buffer,
-    ULONG Length)
+    ULONG Length,
+    PULONG Sent)
 {
     const char *Header = NULL;
     PCHAR Response;
@@ -2120,6 +2121,7 @@ static NTSTATUS HttpSendResponseHeaders(
         if (Buffer[StatusLength] == '\r' && Buffer[StatusLength + 1] == '\n')
             break;
     }
+    *Sent = Length;
     if (!Header || StatusLength + 1 >= Length)
         return HttpWskSendAll(Connection, Buffer, Length);
 
@@ -2132,6 +2134,7 @@ static NTSTATUS HttpSendResponseHeaders(
     memcpy(Response, Buffer, StatusLength);
     memcpy(Response + StatusLength, Header, HeaderLength);
     memcpy(Response + StatusLength + HeaderLength, Buffer + StatusLength, Length - StatusLength);
+    *Sent = Length + HeaderLength;
     Status = HttpWskSendAll(Connection, Response, Length + HeaderLength);
     ExFreePoolWithTag(Response, TAG_HTTP);
     return Status;
@@ -2146,6 +2149,7 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     LIST_ENTRY CompleteList;
     PHTTP_CONNECTION Conn;
     BOOLEAN Finished = FALSE, Removed = FALSE, Close = FALSE, Restart = FALSE, Drain = FALSE;
+    ULONG Sent = (ULONG)Response->len;
     NTSTATUS Status;
 
     if (InputLen < ResponseHeaderSize ||
@@ -2185,16 +2189,26 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     {
         Status = STATUS_CONNECTION_INVALID;
     }
+    else if (Response->reset)
+    {
+        Status = STATUS_SUCCESS;
+        Close = TRUE;
+    }
     else
     {
         if (Conn->ResponseStarted)
             Status = HttpWskSendAll(Conn, Response->buffer, (ULONG)Response->len);
         else
-            Status = HttpSendResponseHeaders(Conn, Response->buffer, (ULONG)Response->len);
+            Status = HttpSendResponseHeaders(Conn, Response->buffer, (ULONG)Response->len, &Sent);
         if (NT_SUCCESS(Status))
+        {
             Conn->ResponseStarted = TRUE;
+            Irp->IoStatus.Information = Response->sent + Sent;
+        }
         else
+        {
             Close = TRUE;
+        }
     }
 
     if (Close || !(Response->response_flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
@@ -2249,7 +2263,10 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     if (Close && Removed)
     {
         HttpRemoveListenerConnection(Conn);
-        HttpConnectionCloseSocket(Conn);
+        if (Response->reset)
+            HttpConnectionResetSocket(Conn);
+        else
+            HttpConnectionCloseSocket(Conn);
     }
     if (Drain)
         HttpConnectionDereference(Conn);
