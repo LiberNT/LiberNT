@@ -9307,6 +9307,17 @@ XHCI_DetectHardwareQuirks(
             DPRINT("usbxhci: detected qemu-xhci, enabling QEMU quirks\n");
         }
     }
+    else if (Extension->Resources && Extension->Resources->IoSpaceLength >= XHCI_DWC3_GSNPSID + sizeof(ULONG))
+    {
+        ULONG CoreId = XHCI_READ_REGISTER_ULONG((volatile ULONG *)((PUCHAR)Extension->MmioBase + XHCI_DWC3_GSNPSID));
+
+        if ((CoreId & 0xFFFF0000UL) == 0x55330000UL || (CoreId & 0xFFFF0000UL) == 0x33310000UL ||
+            (CoreId & 0xFFFF0000UL) == 0x33320000UL)
+        {
+            Extension->Quirks |= XHCI_QUIRK_BROKEN_PORT_PED;
+            DPRINT1("usbxhci: Synopsys DWC3 core %08lx, port disable requests leave PED alone\n", CoreId);
+        }
+    }
 
     /*
      * Apply registry overrides for quirk flags.
@@ -9314,9 +9325,7 @@ XHCI_DetectHardwareQuirks(
      * over hardware detection results.
      */
 
-#ifdef _M_ARM64
-    Extension->Quirks |= XHCI_QUIRK_NON_COHERENT_DMA;
-#endif
+    Extension->Quirks |= XHCI_ArchDefaultQuirks();
 
     /* Non-coherent DMA override */
     if (g_XhciNonCoherentDmaOverrideValid)
@@ -16401,7 +16410,7 @@ XHCI_RH_ClearFeaturePortEnable(
     if (!Extension || Port == 0 || Port > XHCI_MAX_PORTS)
         return MP_STATUS_ERROR;
 
-    if (Extension->PortProtocol[Port] >= 3)
+    if (Extension->PortProtocol[Port] >= 3 || (Extension->Quirks & XHCI_QUIRK_BROKEN_PORT_PED))
         return MP_STATUS_SUCCESS;
 
     return XHCI_ModifyPortBits(Extension, Port, XHCI_PORTSC_PED, 0, 0);

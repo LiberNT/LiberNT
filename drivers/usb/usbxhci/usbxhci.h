@@ -54,6 +54,11 @@ typedef struct _XHCI_ISO_PACKET_CONTEXT XHCI_ISO_PACKET_CONTEXT, *PXHCI_ISO_PACK
 #define XHCI_QUIRK_VBOX_POLL_XFERS    0x00000800
 #define XHCI_QUIRK_QEMU_POLL_XFERS    0x00001000
 #define XHCI_QUIRK_IS_QEMU_XHCI       0x00002000
+#define XHCI_QUIRK_BROKEN_PORT_PED    0x00004000
+
+#define XHCI_DWC3_GSNPSID             0xC120
+
+ULONG XHCI_ArchDefaultQuirks(VOID);
 
 /* Mask of quirks that force transfer polling for the fallback event drain.
  * Board-specific controllers must request polling via a registry quirk

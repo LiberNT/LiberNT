@@ -3,6 +3,12 @@ list(APPEND SOURCE
     usbxhci.h
     tt.c)
 
+if(ARCH STREQUAL "arm64")
+    list(APPEND SOURCE arch/arm64/xhciarch.c)
+else()
+    list(APPEND SOURCE arch/generic/xhciarch.c)
+endif()
+
 add_library(usbxhci MODULE
     ${SOURCE}
     guid.c
