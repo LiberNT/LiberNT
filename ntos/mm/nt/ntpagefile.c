@@ -137,7 +137,7 @@ MiExtendPagingFileTo(
 {
     FILE_END_OF_FILE_INFORMATION EndOfFile;
     IO_STATUS_BLOCK IoStatus;
-    ULONG64 Current = PagingFile->Core.SlotCount;
+    ULONG64 Current = MiPageFileSlotCount(&PagingFile->Core);
 
     ASSERT(InterlockedCompareExchangePointer((PVOID volatile *)&MiPagingFileExtendThread, NULL, NULL) ==
            KeGetCurrentThread());
@@ -152,7 +152,7 @@ MiExtendPagingFileTo(
     if (!NT_SUCCESS(MiPageFileExtend(&PagingFile->Core, Target)))
         return FALSE;
 
-    ASSERT(PagingFile->Core.SlotCount == Target);
+    ASSERT(MiPageFileSlotCount(&PagingFile->Core) == Target);
     MI_ATOMIC_ADD64(&MiSystem.CommitLimit, (LONG64)(Target - Current));
     MmTotalCommitLimit = (SIZE_T)MI_ATOMIC_READ64(&MiSystem.CommitLimit);
     MiFreeSwapPages += (PFN_COUNT)(Target - Current);
@@ -180,7 +180,7 @@ MiExtendPagingFileWorker(
         ASSERT(MI_ATOMIC_READ32(&MiPagingFileExtendQueued) == 1);
         ASSERT(InterlockedCompareExchangePointer((PVOID volatile *)&MiPagingFileExtendThread, NULL, NULL) == NULL);
         InterlockedExchangePointer((PVOID volatile *)&MiPagingFileExtendThread, KeGetCurrentThread());
-        Current = PagingFile->Core.SlotCount;
+        Current = MiPageFileSlotCount(&PagingFile->Core);
         ASSERT(Current <= PagingFile->MaximumSlots);
 
         Request = InterlockedExchange64(&MiPagingFileExtendPages, 0);
@@ -349,7 +349,7 @@ MiExpandCommit(
     if (MI_ATOMIC_READ64(&System->CommitLimit) > Limit)
         return TRUE;
 
-    if (PagingFile == NULL || PagingFile->Core.SlotCount >= PagingFile->MaximumSlots)
+    if (PagingFile == NULL || MiPageFileSlotCount(&PagingFile->Core) >= PagingFile->MaximumSlots)
     {
         if (PagingFile != NULL && Pages > 0 && InterlockedCompareExchange(&MiCommitReportQueued, 1, 0) == 0)
         {
@@ -562,7 +562,7 @@ NtCreatePagingFile(
     MI_ATOMIC_WRITE_POINTER(&MiPagingFile, PagingFile);
     MI_ATOMIC_WRITE_POINTER(&MiSystem.ExpandCommit, (PVOID)MiExpandCommit);
     DbgPrint("Paging file %wZ created, %I64u MB, maximum %I64u MB\n", &PagingFile->Name,
-             PagingFile->Core.SlotCount >> (20 - PAGE_SHIFT), PagingFile->MaximumSlots >> (20 - PAGE_SHIFT));
+             MiPageFileSlotCount(&PagingFile->Core) >> (20 - PAGE_SHIFT), PagingFile->MaximumSlots >> (20 - PAGE_SHIFT));
 
     KeReleaseGuardedMutex(&MiPagingFileCreationLock);
 

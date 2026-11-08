@@ -348,6 +348,18 @@ typedef struct _MI_PAGEFILE
     volatile LONG64 PagesRead;
 } MI_PAGEFILE, *PMI_PAGEFILE;
 
+FORCEINLINE
+ULONG64
+MiPageFileSlotCount(_Inout_ PMI_PAGEFILE PageFile)
+{
+    ULONG64 SlotCount;
+
+    MI_ASSERT(PageFile != NULL);
+    SlotCount = (ULONG64)MI_ATOMIC_READ64((volatile LONG64 *)&PageFile->SlotCount);
+    MI_ASSERT(SlotCount != 0);
+    return SlotCount;
+}
+
 BOOLEAN MiSpaceFindEmptyRange(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 PageCount, _In_ ULONG64 Alignment,
                               _In_ ULONG64 LowestVpn, _In_ ULONG64 HighestVpn, _In_ BOOLEAN TopDown,
                               _Out_ PULONG64 StartingVpn);

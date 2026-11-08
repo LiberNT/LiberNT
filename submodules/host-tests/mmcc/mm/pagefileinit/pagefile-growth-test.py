@@ -78,12 +78,13 @@ static void ExInitializeWorkItem(WORK_QUEUE_ITEM *Item,void (*Routine)(void *),v
 static void MiExtendPagingFileWorker(void *Context);
 static void *RunWorker(void *Context) { MiExtendPagingFileWorker(Context); return NULL; }
 static void ExQueueWorkItem(WORK_QUEUE_ITEM *Item,int Queue) { (void)Item;(void)Queue; assert(pthread_create(&Worker,NULL,RunWorker,MiPagingFile)==0); }
+static ULONG64 MiPageFileSlotCount(CORE *PageFile) { return __atomic_load_n(&PageFile->SlotCount,__ATOMIC_SEQ_CST); }
 static BOOLEAN MiExtendPagingFileTo(PMI_NT_PAGEFILE File, ULONG64 Target)
 {
     LONG Calls=__atomic_add_fetch(&ExtendCalls,1,__ATOMIC_SEQ_CST);
     if (Calls==1) { __atomic_store_n(&Entered,1,__ATOMIC_RELEASE); while (!__atomic_load_n(&Resume,__ATOMIC_ACQUIRE)) sched_yield(); }
-    __atomic_add_fetch(&MiSystem.CommitLimit,(LONG64)(Target-File->Core.SlotCount),__ATOMIC_SEQ_CST);
-    File->Core.SlotCount=Target;
+    __atomic_add_fetch(&MiSystem.CommitLimit,(LONG64)(Target-MiPageFileSlotCount(&File->Core)),__ATOMIC_SEQ_CST);
+    __atomic_store_n(&File->Core.SlotCount,Target,__ATOMIC_SEQ_CST);
     return TRUE;
 }
 static void MiExtendPagingFileWorker(void *Context) { @WORKER@ }

@@ -257,7 +257,7 @@ ExpKdbgExtVm(
 
         if (PageFile != NULL)
         {
-            KdbpPrint("pagefile: slots %I64u in use %I64u written %I64d read %I64d\n", PageFile->SlotCount,
+            KdbpPrint("pagefile: slots %I64u in use %I64u written %I64d read %I64d\n", MiPageFileSlotCount(PageFile),
                       PageFile->SlotsInUse, PageFile->PagesWritten, PageFile->PagesRead);
         }
     }

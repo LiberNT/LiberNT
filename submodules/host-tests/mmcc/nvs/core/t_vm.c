@@ -2025,6 +2025,7 @@ typedef struct _PAGING_GROWTH
     volatile LONG Go;
     volatile LONG Stop;
     volatile LONG Attempts;
+    volatile LONG SizeReads;
     volatile LONG Seen[4];
     volatile LONG Owner[257];
 } PAGING_GROWTH;
@@ -2064,13 +2065,31 @@ PagingGrowthWorker(void *Argument)
 }
 
 static
+void *
+PagingSizeReader(void *Argument)
+{
+    PAGING_GROWTH *Growth = Argument;
+
+    while (!__atomic_load_n(&Growth->Go, __ATOMIC_ACQUIRE))
+        sched_yield();
+    while (!__atomic_load_n(&Growth->Stop, __ATOMIC_ACQUIRE))
+    {
+        ULONG64 Size = MiPageFileSlotCount(&Growth->PageFile);
+
+        MI_ASSERT(Size == 65 || Size == 130 || Size == 257);
+        __atomic_add_fetch(&Growth->SizeReads, 1, __ATOMIC_RELAXED);
+    }
+    return NULL;
+}
+
+static
 void
 PagingConcurrentSlotGrowth(void)
 {
     PAGING_GROWTH Growth = {0};
     PAGING_GROWTH_WORKER Workers[4];
     MI_PAGEFILE_OPS Ops = {0};
-    pthread_t Threads[4];
+    pthread_t Threads[4], SizeThread;
     ULONG64 Held[64];
     double Deadline = NowSeconds() + 30;
     ULONG i;
@@ -2091,8 +2110,10 @@ PagingConcurrentSlotGrowth(void)
         MI_ASSERT(NowSeconds() < Deadline);
         sched_yield();
     }
+    MI_ASSERT(pthread_create(&SizeThread, NULL, PagingSizeReader, &Growth) == 0);
     __atomic_store_n(&Growth.Go, 1, __ATOMIC_RELEASE);
-    while (__atomic_load_n(&Growth.Attempts, __ATOMIC_RELAXED) < 1000)
+    while (__atomic_load_n(&Growth.Attempts, __ATOMIC_RELAXED) < 1000 ||
+           __atomic_load_n(&Growth.SizeReads, __ATOMIC_RELAXED) == 0)
     {
         MI_ASSERT(NowSeconds() < Deadline);
         sched_yield();
@@ -2110,6 +2131,7 @@ PagingConcurrentSlotGrowth(void)
     __atomic_store_n(&Growth.Stop, 1, __ATOMIC_RELEASE);
     for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
         MI_ASSERT(pthread_join(Threads[i], NULL) == 0);
+    MI_ASSERT(pthread_join(SizeThread, NULL) == 0);
     CHECK(Growth.PageFile.SlotCount == 257 && Growth.PageFile.SlotsInUse == RTL_NUMBER_OF(Held));
     for (i = 0; i < RTL_NUMBER_OF(Held); i++)
         MiPageFileReleaseSlot(&Growth.PageFile, Held[i]);

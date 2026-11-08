@@ -85,7 +85,7 @@ MiPageFileExtend(
     RtlCopyMemory(Bitmap, PageFile->Bitmap, (SIZE_T)((PageFile->SlotCount + 63) / 64) * sizeof(ULONG64));
     Old = PageFile->Bitmap;
     PageFile->Bitmap = Bitmap;
-    PageFile->SlotCount = SlotCount;
+    MI_ATOMIC_WRITE64((volatile LONG64 *)&PageFile->SlotCount, (LONG64)SlotCount);
     MiAssertPageFile(PageFile);
 
     MI_SPIN_RELEASE(&PageFile->Lock, OldIrql);
