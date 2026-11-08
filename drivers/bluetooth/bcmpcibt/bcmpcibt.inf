@@ -1,0 +1,61 @@
+; PROJECT:     LiberNT Broadcom PCIe Bluetooth transport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Broadcom PCIe Bluetooth transport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=bcmpcibt.cat
+DriverVer=11/08/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=BroadcomMfg,NTarm64
+
+[BroadcomMfg.NTarm64]
+%BCM4378.DeviceDesc%=BCMPCIBT_Inst,PCI\VEN_14E4&DEV_5F69
+%BCM4387.DeviceDesc%=BCMPCIBT_Inst,PCI\VEN_14E4&DEV_5F71
+%BCM4388.DeviceDesc%=BCMPCIBT_Inst,PCI\VEN_14E4&DEV_5F72
+
+[BCMPCIBT_Inst.NT]
+CopyFiles=BCMPCIBT_CopyFiles.NT
+
+[BCMPCIBT_Inst.NT.HW]
+AddReg=BCMPCIBT_Msi_AddReg
+
+[BCMPCIBT_Msi_AddReg]
+HKR,"Interrupt Management",,0x00000010
+HKR,"Interrupt Management\MessageSignaledInterruptProperties",,0x00000010
+HKR,"Interrupt Management\MessageSignaledInterruptProperties","MSISupported",0x00010001,1
+HKR,"Interrupt Management\MessageSignaledInterruptProperties","MessageNumberLimit",0x00010001,1
+
+[BCMPCIBT_CopyFiles.NT]
+bcmpcibt.sys
+
+[BCMPCIBT_Inst.NT.Services]
+AddService=bcmpcibt,0x00000002,BCMPCIBT_Service_Inst
+
+[BCMPCIBT_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\bcmpcibt.sys
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+bcmpcibt.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="Broadcom"
+DiskName="Broadcom PCIe Bluetooth Driver Disk"
+BCM4378.DeviceDesc="Broadcom BCM4378 PCIe Bluetooth transport"
+BCM4387.DeviceDesc="Broadcom BCM4387 PCIe Bluetooth transport"
+BCM4388.DeviceDesc="Broadcom BCM4388 PCIe Bluetooth transport"
