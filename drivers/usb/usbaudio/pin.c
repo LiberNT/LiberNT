@@ -1212,20 +1212,7 @@ PinSetStreaming(
     KIRQL OldLevel;
 
     KeAcquireSpinLock(&PinContext->IrpListLock, &OldLevel);
-
-    if (PinContext->Streaming != Streaming)
-    {
-        PinContext->Streaming = Streaming;
-
-        if (PinContext->DeviceExtension)
-        {
-            if (Streaming)
-                InterlockedIncrement(&PinContext->DeviceExtension->StreamingPins);
-            else
-                InterlockedDecrement(&PinContext->DeviceExtension->StreamingPins);
-        }
-    }
-
+    PinContext->Streaming = Streaming;
     KeReleaseSpinLock(&PinContext->IrpListLock, OldLevel);
 }
 
