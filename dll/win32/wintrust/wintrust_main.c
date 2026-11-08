@@ -207,6 +207,20 @@ static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
 #endif
 
 #ifdef __REACTOS__
+void WINTRUST_FreeSgnr(CRYPT_PROVIDER_DATA *data, CRYPT_PROVIDER_SGNR *sgnr)
+{
+    DWORD i;
+
+    for (i = 0; i < sgnr->csCounterSigners; i++)
+        WINTRUST_FreeSgnr(data, &sgnr->pasCounterSigners[i]);
+    data->psPfns->pfnFree(sgnr->pasCounterSigners);
+    for (i = 0; i < sgnr->csCertChain; i++)
+        CertFreeCertificateContext(sgnr->pasCertChain[i].pCert);
+    data->psPfns->pfnFree(sgnr->pasCertChain);
+    data->psPfns->pfnFree(sgnr->psSigner);
+    CertFreeCertificateChain(sgnr->pChainContext);
+}
+
 static void WINTRUST_FreeProviderData(CRYPT_PROVIDER_DATA *provData)
 {
     if (provData->hProv)
@@ -363,7 +377,7 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
     while (err && provData->pSigState && provData->pSigState->fFirstAttemptMade &&
            !provData->pSigState->fNoMoreSigs)
     {
-        DWORD i, j, first;
+        DWORD i, first;
 
         for (first = 0; first < numSteps; first++)
             if (verifySteps[first].error_index == TRUSTERROR_STEP_FINAL_SIGPROV)
@@ -372,13 +386,7 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
             break;
 
         for (i = 0; i < provData->csSigners; i++)
-        {
-            for (j = 0; j < provData->pasSigners[i].csCertChain; j++)
-                CertFreeCertificateContext(provData->pasSigners[i].pasCertChain[j].pCert);
-            provData->psPfns->pfnFree(provData->pasSigners[i].pasCertChain);
-            provData->psPfns->pfnFree(provData->pasSigners[i].psSigner);
-            CertFreeCertificateChain(provData->pasSigners[i].pChainContext);
-        }
+            WINTRUST_FreeSgnr(provData, &provData->pasSigners[i]);
         provData->psPfns->pfnFree(provData->pasSigners);
         provData->pasSigners = NULL;
         provData->csSigners = 0;
@@ -1129,15 +1137,38 @@ BOOL WINAPI WINTRUST_AddSgnr(CRYPT_PROVIDER_DATA *data,
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+#ifdef __REACTOS__
+    if (fCounterSigner)
+    {
+        CRYPT_PROVIDER_SGNR *signer, *counters;
+
+        if (idxSigner >= data->csSigners)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        signer = &data->pasSigners[idxSigner];
+        counters = realloc(signer->pasCounterSigners, (signer->csCounterSigners + 1) * sizeof(*counters));
+        if (!counters)
+        {
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
+        signer->pasCounterSigners = counters;
+        memset(&counters[signer->csCounterSigners], 0, sizeof(*counters));
+        memcpy(&counters[signer->csCounterSigners], sgnr, sgnr->cbStruct);
+        signer->csCounterSigners++;
+        return TRUE;
+    }
+    if (sgnr->cbStruct != sizeof(CRYPT_PROVIDER_SGNR))
+        idxSigner = data->csSigners;
+#else
     if (fCounterSigner)
     {
         FIXME("unimplemented for counter signers\n");
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
-#ifdef __REACTOS__
-    if (sgnr->cbStruct != sizeof(CRYPT_PROVIDER_SGNR))
-        idxSigner = data->csSigners;
 #endif
     data->pasSigners = realloc(data->pasSigners,
      (data->csSigners + 1) * sizeof(CRYPT_PROVIDER_SGNR));
@@ -1179,11 +1210,40 @@ BOOL WINAPI WINTRUST_AddSgnr(CRYPT_PROVIDER_DATA *data,
 BOOL WINAPI WINTRUST_AddCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,
  BOOL fCounterSigner, DWORD idxCounterSigner, PCCERT_CONTEXT pCert2Add)
 {
+#ifndef __REACTOS__
     BOOL ret = FALSE;
+#endif
 
     TRACE("(%p, %ld, %d, %ld, %p)\n", data, idxSigner, fCounterSigner,
      idxSigner, pCert2Add);
 
+#ifdef __REACTOS__
+    {
+        CRYPT_PROVIDER_SGNR *sgnr;
+        CRYPT_PROVIDER_CERT *chain;
+
+        if (idxSigner >= data->csSigners || (fCounterSigner &&
+         idxCounterSigner >= data->pasSigners[idxSigner].csCounterSigners))
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        sgnr = fCounterSigner ? &data->pasSigners[idxSigner].pasCounterSigners[idxCounterSigner] :
+         &data->pasSigners[idxSigner];
+        chain = realloc(sgnr->pasCertChain, (sgnr->csCertChain + 1) * sizeof(*chain));
+        if (!chain)
+        {
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
+        sgnr->pasCertChain = chain;
+        memset(&chain[sgnr->csCertChain], 0, sizeof(*chain));
+        chain[sgnr->csCertChain].cbStruct = sizeof(CRYPT_PROVIDER_CERT);
+        chain[sgnr->csCertChain].pCert = CertDuplicateCertificateContext(pCert2Add);
+        sgnr->csCertChain++;
+        return TRUE;
+    }
+#else
     if (fCounterSigner)
     {
         FIXME("unimplemented for counter signers\n");
@@ -1208,6 +1268,7 @@ BOOL WINAPI WINTRUST_AddCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,
     else
         SetLastError(ERROR_OUTOFMEMORY);
     return ret;
+#endif
 }
 
 BOOL WINAPI WINTRUST_AddPrivData(CRYPT_PROVIDER_DATA *data,

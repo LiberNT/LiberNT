@@ -28,6 +28,7 @@
 #ifdef __REACTOS__
 #include "mscat.h"
 #include "wininet.h"
+#include "wintrust_priv.h"
 #endif
 #include "softpub.h"
 #include "winnls.h"
@@ -873,6 +874,7 @@ static CMSG_SIGNER_INFO *WINTRUST_GetSigner(CRYPT_PROVIDER_DATA *data,
     return signerInfo;
 }
 
+#ifndef __REACTOS__
 static BOOL WINTRUST_GetTimeFromCounterSigner(
  const CMSG_CMS_SIGNER_INFO *counterSignerInfo, FILETIME *time)
 {
@@ -903,6 +905,7 @@ static BOOL WINTRUST_GetTimeFromCounterSigner(
     }
     return foundTimeStamp;
 }
+#endif
 
 static BOOL WINTRUST_GetTimeFromTimeStampToken(const CRYPT_ATTR_BLOB *token,
  FILETIME *time)
@@ -976,6 +979,7 @@ static FILETIME WINTRUST_GetTimeFromSigner(const CRYPT_PROVIDER_DATA *data,
 
     for (i = 0; !foundTimeStamp && i < signerInfo->UnauthAttrs.cAttr; i++)
     {
+#ifndef __REACTOS__
         if (!strcmp(signerInfo->UnauthAttrs.rgAttr[i].pszObjId,
          szOID_RSA_counterSign))
         {
@@ -1000,7 +1004,9 @@ static FILETIME WINTRUST_GetTimeFromSigner(const CRYPT_PROVIDER_DATA *data,
                 }
             }
         }
-        else if (!strcmp(signerInfo->UnauthAttrs.rgAttr[i].pszObjId,
+        else
+#endif
+        if (!strcmp(signerInfo->UnauthAttrs.rgAttr[i].pszObjId,
          szOID_RFC3161_counterSign))
         {
             const CRYPT_ATTRIBUTE *attr = &signerInfo->UnauthAttrs.rgAttr[i];
@@ -1188,6 +1194,134 @@ static DWORD SOFTPUB_SelectSecondarySignature(CRYPT_PROVIDER_DATA *data, DWORD i
 }
 #endif
 
+#ifdef __REACTOS__
+static BOOL SOFTPUB_GetSigningTime(const CRYPT_ATTRIBUTES *attrs, FILETIME *time)
+{
+    DWORD i, j, size;
+
+    for (i = 0; i < attrs->cAttr; i++)
+    {
+        if (strcmp(attrs->rgAttr[i].pszObjId, szOID_RSA_signingTime))
+            continue;
+        for (j = 0; j < attrs->rgAttr[i].cValue; j++)
+        {
+            size = sizeof(*time);
+            if (CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, X509_CHOICE_OF_TIME,
+             attrs->rgAttr[i].rgValue[j].pbData, attrs->rgAttr[i].rgValue[j].cbData, 0, NULL, time, &size))
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static BOOL SOFTPUB_IsTimeStampCert(PCCERT_CONTEXT cert)
+{
+    CERT_ENHKEY_USAGE *usage;
+    DWORD size = 0, i;
+    BOOL ret = FALSE;
+
+    /* TODO: INFO_NEEDED whether Windows 11 takes a countersigner without an EKU extension as a timestamp */
+    if (!CertGetEnhancedKeyUsage(cert, CERT_FIND_EXT_ONLY_ENHKEY_USAGE_FLAG, NULL, &size) ||
+     !(usage = malloc(size)))
+        return FALSE;
+    if (CertGetEnhancedKeyUsage(cert, CERT_FIND_EXT_ONLY_ENHKEY_USAGE_FLAG, usage, &size))
+        for (i = 0; !ret && i < usage->cUsageIdentifier; i++)
+            ret = !strcmp(usage->rgpszUsageIdentifier[i], szOID_PKIX_KP_TIMESTAMP_SIGNING);
+    free(usage);
+    return ret;
+}
+
+static void *SOFTPUB_DecodeAlloc(CRYPT_PROVIDER_DATA *data, LPCSTR type, const BYTE *encoded, DWORD size)
+{
+    DWORD needed = 0;
+    void *out;
+
+    if (!CryptDecodeObjectEx(data->dwEncoding, type, encoded, size, 0, NULL, NULL, &needed) ||
+     !(out = data->psPfns->pfnAlloc(needed)))
+        return NULL;
+    if (CryptDecodeObjectEx(data->dwEncoding, type, encoded, size, 0, NULL, out, &needed))
+        return out;
+    data->psPfns->pfnFree(out);
+    return NULL;
+}
+
+static DWORD SOFTPUB_SaveCounterSigner(CRYPT_PROVIDER_DATA *data, DWORD signerIdx, BYTE *signer,
+ DWORD signerSize, const CRYPT_ATTR_BLOB *value)
+{
+    CRYPT_PROVIDER_SGNR sgnr = { sizeof(sgnr), { 0 } }, *counter;
+    PCCERT_CONTEXT cert = NULL;
+    CERT_INFO certInfo;
+    FILETIME time;
+    DWORD store, err = ERROR_SUCCESS;
+
+    if (!(sgnr.psSigner = SOFTPUB_DecodeAlloc(data, PKCS7_SIGNER_INFO, value->pbData, value->cbData)))
+        return GetLastError();
+    sgnr.sftVerifyAsOf = data->sftSystemTime;
+    if (!data->psPfns->pfnAddSgnr2Chain(data, TRUE, signerIdx, &sgnr))
+    {
+        err = GetLastError();
+        data->psPfns->pfnFree(sgnr.psSigner);
+        return err;
+    }
+    counter = &data->pasSigners[signerIdx].pasCounterSigners[data->pasSigners[signerIdx].csCounterSigners - 1];
+
+    memset(&certInfo, 0, sizeof(certInfo));
+    certInfo.Issuer = counter->psSigner->Issuer;
+    certInfo.SerialNumber = counter->psSigner->SerialNumber;
+    for (store = 0; !cert && store < data->chStores; store++)
+        cert = CertGetSubjectCertificateFromStore(data->pahStores[store], data->dwEncoding, &certInfo);
+    if (!cert)
+    {
+        /* TODO: INFO_NEEDED the Windows 11 result for a countersigner whose certificate is missing */
+        counter->dwError = TRUST_E_NO_SIGNER_CERT;
+        return TRUST_E_COUNTER_SIGNER;
+    }
+
+    data->psPfns->pfnAddCert2Chain(data, signerIdx, TRUE, data->pasSigners[signerIdx].csCounterSigners - 1, cert);
+    if (!CryptMsgVerifyCountersignatureEncodedEx(0, data->dwEncoding, signer, signerSize, value->pbData,
+     value->cbData, CMSG_VERIFY_SIGNER_CERT, (void *)cert, 0, NULL))
+    {
+        counter->dwError = GetLastError();
+        data->padwTrustStepErrors[TRUSTERROR_STEP_MSG_COUNTERSIGINFO] = counter->dwError;
+        err = TRUST_E_COUNTER_SIGNER;
+    }
+    else if (SOFTPUB_IsTimeStampCert(cert) && SOFTPUB_GetSigningTime(&counter->psSigner->AuthAttrs, &time))
+    {
+        counter->dwSignerType = SGNR_TYPE_TIMESTAMP;
+        counter->sftVerifyAsOf = time;
+        data->pasSigners[signerIdx].sftVerifyAsOf = time;
+    }
+    CertFreeCertificateContext(cert);
+    return err;
+}
+
+static DWORD SOFTPUB_SaveCounterSigners(CRYPT_PROVIDER_DATA *data, DWORD signerIdx)
+{
+    const CRYPT_ATTRIBUTES *attrs = &data->pasSigners[signerIdx].psSigner->UnauthAttrs;
+    BYTE *signer = NULL;
+    DWORD signerSize = 0, i, j, err = ERROR_SUCCESS;
+
+    for (i = 0; !err && i < attrs->cAttr; i++)
+    {
+        if (strcmp(attrs->rgAttr[i].pszObjId, szOID_RSA_counterSign))
+            continue;
+        if (!signer)
+        {
+            if (!CryptMsgGetParam(data->hMsg, CMSG_ENCODED_SIGNER, signerIdx, NULL, &signerSize))
+                err = GetLastError();
+            else if (!(signer = data->psPfns->pfnAlloc(signerSize)))
+                err = ERROR_OUTOFMEMORY;
+            else if (!CryptMsgGetParam(data->hMsg, CMSG_ENCODED_SIGNER, signerIdx, signer, &signerSize))
+                err = GetLastError();
+        }
+        for (j = 0; !err && j < attrs->rgAttr[i].cValue; j++)
+            err = SOFTPUB_SaveCounterSigner(data, signerIdx, signer, signerSize, &attrs->rgAttr[i].rgValue[j]);
+    }
+    data->psPfns->pfnFree(signer);
+    return err;
+}
+
+#endif
 HRESULT WINAPI SoftpubLoadSignature(CRYPT_PROVIDER_DATA *data)
 {
     DWORD err = ERROR_SUCCESS;
@@ -1285,6 +1419,10 @@ HRESULT WINAPI SoftpubLoadSignature(CRYPT_PROVIDER_DATA *data)
             {
                 if (!(err = WINTRUST_SaveSigner(data, i)))
                     err = WINTRUST_VerifySigner(data, i);
+#ifdef __REACTOS__
+                if (!err)
+                    err = SOFTPUB_SaveCounterSigners(data, i);
+#endif
             }
         }
         else
@@ -1322,6 +1460,27 @@ BOOL WINAPI SoftpubCheckCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,
     TRACE("(%p, %ld, %d, %ld)\n", data, idxSigner, fCounterSignerChain,
      idxCounterSigner);
 
+#ifdef __REACTOS__
+    {
+        CRYPT_PROVIDER_SGNR *sgnr = fCounterSignerChain ?
+         &data->pasSigners[idxSigner].pasCounterSigners[idxCounterSigner] : &data->pasSigners[idxSigner];
+        PCERT_SIMPLE_CHAIN simpleChain = sgnr->pChainContext->rgpChain[0];
+        DWORD i;
+
+        ret = TRUE;
+        for (i = 0; i < simpleChain->cElement && i < sgnr->csCertChain; i++)
+        {
+            sgnr->pasCertChain[i].dwConfidence =
+             WINTRUST_TrustStatusToConfidence(simpleChain->rgpElement[i]->TrustStatus.dwErrorStatus);
+            if (!(simpleChain->rgpElement[i]->TrustStatus.dwErrorStatus & CERT_TRUST_IS_UNTRUSTED_ROOT))
+                sgnr->pasCertChain[i].fTrustedRoot = TRUE;
+            if (simpleChain->rgpElement[i]->TrustStatus.dwInfoStatus & CERT_TRUST_IS_SELF_SIGNED)
+                sgnr->pasCertChain[i].fSelfSigned = TRUE;
+            if (simpleChain->rgpElement[i]->TrustStatus.dwErrorStatus & CERT_TRUST_IS_CYCLIC)
+                sgnr->pasCertChain[i].fIsCyclic = TRUE;
+        }
+    }
+#else
     if (fCounterSignerChain)
     {
         FIXME("unimplemented for counter signers\n");
@@ -1352,6 +1511,7 @@ BOOL WINAPI SoftpubCheckCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,
                 data->pasSigners[idxSigner].pasCertChain[i].fIsCyclic = TRUE;
         }
     }
+#endif
     return ret;
 }
 
@@ -1459,6 +1619,43 @@ static void WINTRUST_CreateChainPolicyCreateInfo(
     info->pvReserved = NULL;
 }
 
+#ifdef __REACTOS__
+static DWORD SOFTPUB_CreateChainForCounterSigner(CRYPT_PROVIDER_DATA *data, DWORD signerIdx,
+ DWORD counterIdx, HCERTSTORE store, PWTD_GENERIC_CHAIN_POLICY_CREATE_INFO createInfo)
+{
+    CRYPT_PROVIDER_SGNR *counter = &data->pasSigners[signerIdx].pasCounterSigners[counterIdx];
+    CERT_CHAIN_PARA chainPara;
+    PCERT_SIMPLE_CHAIN simpleChain;
+    DWORD i;
+
+    if (!counter->csCertChain)
+        return ERROR_SUCCESS;
+    /* TODO: INFO_NEEDED the usage Windows 11 requests for a countersigner chain */
+    memset(&chainPara, 0, sizeof(chainPara));
+    chainPara.cbSize = sizeof(chainPara);
+    if (!CertGetCertificateChain(createInfo->hChainEngine, counter->pasCertChain[0].pCert,
+     &counter->sftVerifyAsOf, store, &chainPara, createInfo->dwFlags, createInfo->pvReserved,
+     &counter->pChainContext))
+        return GetLastError();
+
+    simpleChain = counter->pChainContext->rgpChain[0];
+    counter->pasCertChain[0].pChainElement = simpleChain->rgpElement[0];
+    for (i = 1; i < simpleChain->cElement; i++)
+    {
+        if (!data->psPfns->pfnAddCert2Chain(data, signerIdx, TRUE, counterIdx,
+         simpleChain->rgpElement[i]->pCertContext))
+            return GetLastError();
+        counter->pasCertChain[i].pChainElement = simpleChain->rgpElement[i];
+    }
+    counter->pasCertChain[simpleChain->cElement - 1].dwError =
+     WINTRUST_TrustStatusToError(simpleChain->rgpElement[simpleChain->cElement - 1]->TrustStatus.dwErrorStatus);
+    if (data->psPfns->pfnCertCheckPolicy &&
+     !data->psPfns->pfnCertCheckPolicy(data, signerIdx, TRUE, counterIdx))
+        return GetLastError();
+    return ERROR_SUCCESS;
+}
+
+#endif
 static DWORD WINTRUST_CreateChainForSigner(CRYPT_PROVIDER_DATA *data,
  DWORD signer, PWTD_GENERIC_CHAIN_POLICY_CREATE_INFO createInfo,
  PCERT_CHAIN_PARA chainPara)
@@ -1522,6 +1719,14 @@ static DWORD WINTRUST_CreateChainForSigner(CRYPT_PROVIDER_DATA *data,
             else
                 err = GetLastError();
         }
+#ifdef __REACTOS__
+        {
+            DWORD i;
+
+            for (i = 0; !err && i < data->pasSigners[signer].csCounterSigners; i++)
+                err = SOFTPUB_CreateChainForCounterSigner(data, signer, i, store, createInfo);
+        }
+#endif
         CertCloseStore(store, 0);
     }
     return err;
@@ -1731,6 +1936,29 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
                 if (policyStatus.dwError != NO_ERROR)
                     ret = FALSE;
             }
+#ifdef __REACTOS__
+            if (ret)
+            {
+                DWORD j;
+
+                for (j = 0; ret && j < data->pasSigners[i].csCounterSigners; j++)
+                {
+                    CRYPT_PROVIDER_SGNR *counter = &data->pasSigners[i].pasCounterSigners[j];
+                    CERT_CHAIN_POLICY_PARA timePara = { sizeof(timePara), 0 };
+                    CERT_CHAIN_POLICY_STATUS timeStatus = { sizeof(timeStatus), 0 };
+
+                    if (!(counter->dwSignerType & SGNR_TYPE_TIMESTAMP) || !counter->pChainContext)
+                        continue;
+                    CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_BASE, counter->pChainContext,
+                     &timePara, &timeStatus);
+                    if (timeStatus.dwError != NO_ERROR)
+                    {
+                        policyStatus.dwError = TRUST_E_TIME_STAMP;
+                        ret = FALSE;
+                    }
+                }
+            }
+#endif
         }
     }
 #ifdef __REACTOS__
@@ -1860,15 +2088,23 @@ HRESULT WINAPI GenericChainFinalProv(CRYPT_PROVIDER_DATA *data)
 
 HRESULT WINAPI SoftpubCleanup(CRYPT_PROVIDER_DATA *data)
 {
+#ifdef __REACTOS__
+    DWORD i;
+#else
     DWORD i, j;
+#endif
 
     for (i = 0; i < data->csSigners; i++)
     {
+#ifdef __REACTOS__
+        WINTRUST_FreeSgnr(data, &data->pasSigners[i]);
+#else
         for (j = 0; j < data->pasSigners[i].csCertChain; j++)
             CertFreeCertificateContext(data->pasSigners[i].pasCertChain[j].pCert);
         data->psPfns->pfnFree(data->pasSigners[i].pasCertChain);
         data->psPfns->pfnFree(data->pasSigners[i].psSigner);
         CertFreeCertificateChain(data->pasSigners[i].pChainContext);
+#endif
     }
     data->psPfns->pfnFree(data->pasSigners);
 
