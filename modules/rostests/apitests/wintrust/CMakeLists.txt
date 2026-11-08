@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    Asn1Codecs.c
     CatalogV2.c
     testlist.c)
 

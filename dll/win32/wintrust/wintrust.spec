@@ -127,18 +127,18 @@
 @ stdcall WVTAsn1SpcIndirectDataContentEncode(long str ptr ptr ptr)
 @ stdcall WVTAsn1SpcLinkDecode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1SpcLinkEncode(long str ptr ptr ptr)
-@ stub WVTAsn1SpcMinimalCriteriaInfoDecode
-@ stub WVTAsn1SpcMinimalCriteriaInfoEncode
+@ stdcall WVTAsn1SpcMinimalCriteriaInfoDecode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1SpcMinimalCriteriaInfoEncode(long str ptr ptr ptr)
 @ stdcall WVTAsn1SpcPeImageDataDecode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1SpcPeImageDataEncode(long str ptr ptr ptr)
-@ stub WVTAsn1SpcSigInfoDecode
-@ stub WVTAsn1SpcSigInfoEncode
-@ stub WVTAsn1SpcSpAgencyInfoDecode
-@ stub WVTAsn1SpcSpAgencyInfoEncode
+@ stdcall WVTAsn1SpcSigInfoDecode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1SpcSigInfoEncode(long str ptr ptr ptr)
+@ stdcall WVTAsn1SpcSpAgencyInfoDecode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1SpcSpAgencyInfoEncode(long str ptr ptr ptr)
 @ stdcall WVTAsn1SpcSpOpusInfoDecode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1SpcSpOpusInfoEncode(long str ptr ptr ptr)
-@ stub WVTAsn1SpcStatementTypeDecode
-@ stub WVTAsn1SpcStatementTypeEncode
+@ stdcall WVTAsn1SpcStatementTypeDecode(long str ptr long long ptr ptr)
+@ stdcall WVTAsn1SpcStatementTypeEncode(long str ptr ptr ptr)
 @ stdcall WinVerifyTrust(long ptr ptr)
 @ stdcall WinVerifyTrustEx(long ptr ptr)
 @ stdcall WintrustAddActionID(ptr long ptr)
