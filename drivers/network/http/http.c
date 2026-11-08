@@ -33,6 +33,9 @@ static WSK_PROVIDER_NPI g_WskProviderNpi;
 static BOOLEAN g_WskRegistered;
 static BOOLEAN g_WskCaptured;
 static LONG g_ConnectionCount;
+static ULONG g_MaxConnections = MAXULONG;
+static LIST_ENTRY g_GroupConnectionsList;
+static KSPIN_LOCK g_GroupConnectionsLock;
 static llhttp_settings_t g_LlhttpSettings;
 static KTIMER g_TimeoutTimer;
 static KDPC g_TimeoutDpc;
@@ -229,8 +232,78 @@ static LONG HttpHeaderWaitSeconds(PHTTP_CONNECTION Connection)
     return InterlockedCompareExchange(&g_HeaderWaitSeconds, 0, 0);
 }
 
+static VOID HttpReleaseGroupConnection(PHTTP_CONNECTION Connection)
+{
+    PHTTP_GROUP_CONNECTIONS Counter = Connection->GroupConnections;
+    KIRQL Irql;
+
+    if (!Counter)
+        return;
+    Connection->GroupConnections = NULL;
+    KeAcquireSpinLock(&g_GroupConnectionsLock, &Irql);
+    if (--Counter->Count)
+        Counter = NULL;
+    else
+        RemoveEntryList(&Counter->Entry);
+    KeReleaseSpinLock(&g_GroupConnectionsLock, Irql);
+    if (Counter)
+        ExFreePoolWithTag(Counter, TAG_HTTP);
+}
+
+static BOOLEAN HttpCountGroupConnection(PHTTP_CONNECTION Connection, PHTTP_REQUEST_QUEUE Queue,
+                                        PHTTP_URL_ENTRY Url)
+{
+    PHTTP_GROUP_CONNECTIONS Counter = Connection->GroupConnections, New;
+    PLIST_ENTRY Entry;
+    BOOLEAN Counted = FALSE;
+    KIRQL Irql;
+
+    if (Counter && Counter->Queue == Queue && Counter->Group == Url->Group)
+        return TRUE;
+
+    New = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*New), TAG_HTTP);
+    if (!New)
+        return FALSE;
+    New->Queue = Queue;
+    New->Group = Url->Group;
+    New->Count = 0;
+
+    KeAcquireSpinLock(&g_GroupConnectionsLock, &Irql);
+    for (Entry = g_GroupConnectionsList.Flink; Entry != &g_GroupConnectionsList; Entry = Entry->Flink)
+    {
+        Counter = CONTAINING_RECORD(Entry, HTTP_GROUP_CONNECTIONS, Entry);
+        if (Counter->Queue == Queue && Counter->Group == Url->Group)
+            break;
+    }
+    if (Entry == &g_GroupConnectionsList)
+    {
+        Counter = NULL;
+        if (Url->Config.max_connections)
+        {
+            InsertTailList(&g_GroupConnectionsList, &New->Entry);
+            Counter = New;
+            New = NULL;
+        }
+    }
+    if (Counter && Counter->Count < Url->Config.max_connections)
+    {
+        ++Counter->Count;
+        Counted = TRUE;
+    }
+    KeReleaseSpinLock(&g_GroupConnectionsLock, Irql);
+
+    if (New)
+        ExFreePoolWithTag(New, TAG_HTTP);
+    if (!Counted)
+        return FALSE;
+    HttpReleaseGroupConnection(Connection);
+    Connection->GroupConnections = Counter;
+    return TRUE;
+}
+
 static VOID HttpFreeConnection(PHTTP_CONNECTION Connection)
 {
+    HttpReleaseGroupConnection(Connection);
     if (Connection->WorkItem)
         IoFreeWorkItem(Connection->WorkItem);
     if (Connection->ReceiveIrp)
@@ -282,7 +355,7 @@ static NTSTATUS WSKAPI HttpAcceptEvent(
     if (!Listener)
         return STATUS_REQUEST_NOT_ACCEPTED;
 
-    if (InterlockedIncrement(&g_ConnectionCount) > HTTP_MAX_CONNECTIONS)
+    if ((ULONG)InterlockedIncrement(&g_ConnectionCount) > g_MaxConnections)
     {
         InterlockedDecrement(&g_ConnectionCount);
         HttpListenerDereference(Listener);
@@ -1112,6 +1185,8 @@ static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
         Reason = HttpUnavailableInactive;
     else if (HttpQueuedRequestCount(BestQueue) >= BestQueue->MaxQueueLength)
         Reason = HttpUnavailableQueueFull;
+    else if (!HttpCountGroupConnection(Connection, BestQueue, BestUrl))
+        Reason = HttpUnavailableConnectionLimit;
     if (Reason != HttpUnavailableNone)
     {
         Connection->ErrorStatus = 503;
@@ -1135,7 +1210,7 @@ static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
     Connection->IdleSeconds = BestUrl->Config.idle_connection;
     Connection->HeaderWaitSeconds = BestUrl->Config.header_wait;
     Connection->EntityBodySeconds = BestUrl->Config.entity_body;
-    /* TODO: DrainEntityBody, RequestQueue, MinSendRate, bandwidth and connection limits are stored by httpapi only */
+    /* TODO: DrainEntityBody, RequestQueue, MinSendRate and bandwidth limits are stored by httpapi only */
     Connection->Available = TRUE;
     InsertTailList(&g_ConnectionsList, &Connection->Entry);
     Connection->InConnectionList = TRUE;
@@ -1572,10 +1647,40 @@ static VOID HttpBodyReceiveCompleted(PHTTP_CONNECTION Connection)
     HttpConnectionDereference(Connection);
 }
 
+static VOID HttpSendPage(PHTTP_CONNECTION Connection, USHORT StatusCode, const char *Reason,
+                         const char *Heading, const char *Text)
+{
+    static const char Days[7][4] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    static const char Months[12][4] =
+        {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    char Body[512] = "", Response[1024];
+    LARGE_INTEGER Now;
+    TIME_FIELDS Time;
+
+    KeQuerySystemTime(&Now);
+    RtlTimeToTimeFields(&Now, &Time);
+    if ((Heading && !NT_SUCCESS(RtlStringCbPrintfA(Body, sizeof(Body),
+            "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\"\"http://www.w3.org/TR/html4/strict.dtd\">\r\n"
+            "<HTML><HEAD><TITLE>%s</TITLE>\r\n"
+            "<META HTTP-EQUIV=\"Content-Type\" Content=\"text/html; charset=us-ascii\"></HEAD>\r\n"
+            "<BODY><h2>%s</h2>\r\n<hr><p>HTTP Error %u. %s</p>\r\n</BODY></HTML>\r\n",
+            Reason, Heading, StatusCode, Text))) ||
+        !NT_SUCCESS(RtlStringCbPrintfA(Response, sizeof(Response),
+            "HTTP/1.1 %u %s\r\n%sServer: Microsoft-HTTPAPI/2.0\r\n"
+            "Date: %s, %02u %s %u %02u:%02u:%02u GMT\r\nConnection: close\r\nContent-Length: %u\r\n\r\n%s",
+            StatusCode, Reason, Heading ? "Content-Type: text/html; charset=us-ascii\r\n" : "",
+            Days[Time.Weekday], Time.Day, Months[Time.Month - 1], Time.Year, Time.Hour, Time.Minute,
+            Time.Second, (ULONG)strlen(Body), Body)))
+    {
+        HttpConnectionResetSocket(Connection);
+        return;
+    }
+    HttpWskSendAll(Connection, Response, strlen(Response));
+}
+
 static VOID HttpSendUnavailable(PHTTP_CONNECTION Connection)
 {
     const char *Heading = "Service Unavailable", *Text = "The service is unavailable.";
-    char Body[512], Response[768];
 
     if (Connection->UnavailableVerbosity == Http503ResponseVerbosityBasic)
     {
@@ -1594,47 +1699,37 @@ static VOID HttpSendUnavailable(PHTTP_CONNECTION Connection)
             Heading = "Application Offline";
             Text = "The application is offline.";
         }
+        else if (Connection->UnavailableReason == HttpUnavailableConnectionLimit)
+        {
+            Heading = "Forbidden - Too Many Users";
+            Text = "There are too many outstanding connections.";
+        }
     }
 
-    if (!NT_SUCCESS(RtlStringCbPrintfA(Body, sizeof(Body),
-            "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\"\"http://www.w3.org/TR/html4/strict.dtd\">\r\n"
-            "<HTML><HEAD><TITLE>Service Unavailable</TITLE>\r\n"
-            "<META HTTP-EQUIV=\"Content-Type\" Content=\"text/html; charset=us-ascii\"></HEAD>\r\n"
-            "<BODY><h2>%s</h2>\r\n<hr><p>HTTP Error 503. %s</p>\r\n</BODY></HTML>\r\n", Heading, Text)) ||
-        !NT_SUCCESS(RtlStringCbPrintfA(Response, sizeof(Response),
-            "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/html; charset=us-ascii\r\n"
-            "Connection: close\r\nContent-Length: %u\r\n\r\n%s", (ULONG)strlen(Body), Body)))
-    {
-        HttpConnectionResetSocket(Connection);
-        return;
-    }
-    HttpWskSendAll(Connection, Response, strlen(Response));
+    HttpSendPage(Connection, 503, "Service Unavailable", Heading, Text);
 }
 
 static VOID HttpSendErrorResponse(PHTTP_CONNECTION Connection, USHORT StatusCode)
 {
-    const char *Response;
-
     switch (StatusCode)
     {
         case 400:
-            Response = "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+            HttpSendPage(Connection, 400, "Bad Request", NULL, NULL);
             break;
         case 404:
-            Response = "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+            HttpSendPage(Connection, 404, "Not Found", "Not Found", "The requested resource is not found.");
             break;
         case 431:
-            Response = "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+            HttpSendPage(Connection, 400, "Bad Request", "Bad Request - Request Too Long",
+                         "The size of the request headers is too long.");
             break;
         case 503:
             HttpSendUnavailable(Connection);
-            return;
+            break;
         default:
-            Response = "HTTP/1.1 501 Not Implemented\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+            HttpSendPage(Connection, 501, "Not Implemented", NULL, NULL);
             break;
     }
-
-    HttpWskSendAll(Connection, Response, strlen(Response));
 }
 
 static VOID HttpRejectBody(PHTTP_CONNECTION Connection)
@@ -1700,25 +1795,33 @@ static VOID NTAPI HttpConnectionWorker(PDEVICE_OBJECT DeviceObject, PVOID Contex
 
     HttpRemoveListenerConnection(Connection);
     HttpSendErrorResponse(Connection, Connection->ErrorStatus);
+    HttpConnectionLinger(Connection);
     HttpConnectionDereference(Connection);
 }
 
-static LONG HttpQueryTimeout(PCWSTR Name)
+static BOOLEAN HttpQueryParameter(PCWSTR Name, PULONG Result)
 {
     UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
     PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
     UNICODE_STRING ValueName;
-    ULONG Seconds, Length;
+    ULONG Length;
     NTSTATUS Status;
 
     RtlInitUnicodeString(&ValueName, Name);
     Status = ZwQueryValueKey(g_ParametersKey, &ValueName, KeyValuePartialInformation,
                              Value, sizeof(Buffer), &Length);
     if (!NT_SUCCESS(Status) || Value->Type != REG_DWORD || Value->DataLength != sizeof(ULONG))
-        return HTTP_DEFAULT_TIMEOUT_SECONDS;
+        return FALSE;
 
-    Seconds = *(PULONG)Value->Data;
-    if (!Seconds || Seconds > MAXUSHORT)
+    *Result = *(PULONG)Value->Data;
+    return TRUE;
+}
+
+static LONG HttpQueryTimeout(PCWSTR Name)
+{
+    ULONG Seconds;
+
+    if (!HttpQueryParameter(Name, &Seconds) || !Seconds || Seconds > MAXUSHORT)
         return HTTP_DEFAULT_TIMEOUT_SECONDS;
     return (LONG)Seconds;
 }
@@ -1730,6 +1833,15 @@ static VOID HttpLoadTimeouts(VOID)
 
     InterlockedExchange(&g_IdleConnectionSeconds, HttpQueryTimeout(L"IdleConnectionTimeout"));
     InterlockedExchange(&g_HeaderWaitSeconds, HttpQueryTimeout(L"HeaderWaitTimeout"));
+}
+
+static VOID HttpLoadMaxConnections(VOID)
+{
+    ULONG MaxConnections;
+
+    if (g_ParametersKey && HttpQueryParameter(L"MaxConnections", &MaxConnections) &&
+        MaxConnections >= HTTP_MIN_MAX_CONNECTIONS && MaxConnections <= HTTP_MAX_MAX_CONNECTIONS)
+        g_MaxConnections = MaxConnections;
 }
 
 static VOID NTAPI HttpTimeoutWorker(PDEVICE_OBJECT DeviceObject, PVOID Context)
@@ -3110,6 +3222,8 @@ NTSTATUS NTAPI DriverEntry(
     KeInitializeSpinLock(&g_ListenerCallbackLock);
     InitializeListHead(&g_DisconnectIrpQueue);
     KeInitializeSpinLock(&g_DisconnectIrpLock);
+    InitializeListHead(&g_GroupConnectionsList);
+    KeInitializeSpinLock(&g_GroupConnectionsLock);
     IoCsqInitialize(&g_DisconnectCsq,
                     HttpDisconnectCsqInsertIrp,
                     HttpCsqRemoveIrp,
@@ -3206,6 +3320,7 @@ NTSTATUS NTAPI DriverEntry(
             ZwClose(ServiceKey);
         }
         HttpLoadTimeouts();
+        HttpLoadMaxConnections();
     }
 
     KeInitializeTimerEx(&g_TimeoutTimer, NotificationTimer);
