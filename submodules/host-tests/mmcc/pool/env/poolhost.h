@@ -118,6 +118,8 @@ extern _Thread_local ULONG PoolHostProcessor;
 #define POOL_ATOMIC_ADD64(v, d)         __sync_fetch_and_add((v), (d))
 #define POOL_ATOMIC_ADD32(v, d)         __sync_fetch_and_add((v), (d))
 #define POOL_ATOMIC_READ32(v)            __atomic_load_n((v), __ATOMIC_SEQ_CST)
+#define POOL_LOAD_ACQUIRE32(v)          __atomic_load_n((v), __ATOMIC_ACQUIRE)
+#define POOL_STORE_RELEASE32(v, n)       __atomic_store_n((v), (n), __ATOMIC_RELEASE)
 #define POOL_ATOMIC_READ64(v)            __atomic_load_n((v), __ATOMIC_SEQ_CST)
 #define POOL_ATOMIC_CAS64(v, n, o)       __sync_val_compare_and_swap((v), (o), (n))
 #define POOL_CTZ64(x)                   ((ULONG)__builtin_ctzll(x))
