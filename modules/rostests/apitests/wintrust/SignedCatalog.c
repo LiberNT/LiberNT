@@ -245,7 +245,7 @@ CreateSignedCatalog(VOID)
 
 static
 BOOL
-CreateSignedImage(BYTE *Digest, DWORD *DigestSize)
+CreateSignedImage(LPCSTR Algorithm, BYTE *Digest, DWORD *DigestSize)
 {
     WCHAR Self[MAX_PATH];
     SIP_SUBJECTINFO Info;
@@ -263,7 +263,7 @@ CreateSignedImage(BYTE *Digest, DWORD *DigestSize)
     Info.cbSize = sizeof(Info);
     Info.pgSubjectType = &Subject;
     Info.pwsFileName = ImagePath;
-    Info.DigestAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    Info.DigestAlgorithm.pszObjId = (LPSTR)Algorithm;
     Info.dwEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
     Info.hFile = CreateFileW(ImagePath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (Info.hFile == INVALID_HANDLE_VALUE)
@@ -489,6 +489,24 @@ TestImage(const BYTE *Digest, DWORD DigestSize)
 
 static
 VOID
+TestSha1Image(VOID)
+{
+    PFN_FILE_HASH FileHash = (PFN_FILE_HASH)GetProcAddress(GetModuleHandleW(L"wintrust.dll"), "WTHelperGetFileHash");
+    BYTE Digest[64], Hash[64];
+    DWORD DigestSize = sizeof(Digest), Size = sizeof(Hash);
+    ALG_ID Algorithm = 0;
+
+    DeleteFileW(ImagePath);
+    ok(CreateSignedImage(szOID_OIWSEC_sha1, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    if (!FileHash)
+        return;
+    ok_hex(FileHash(ImagePath, 0, NULL, Hash, &Size, &Algorithm), ERROR_SUCCESS);
+    ok_hex(Algorithm, CALG_SHA1);
+    ok(Size == 20 && DigestSize == 20 && !memcmp(Hash, Digest, Size), "unexpected SHA-1 file hash\n");
+}
+
+static
+VOID
 TestFindCerts(VOID)
 {
     PFN_FIND_CERTS FindCerts = (PFN_FIND_CERTS)GetProcAddress(GetModuleHandleW(L"wintrust.dll"), "FindCertsByIssuer");
@@ -609,8 +627,9 @@ START_TEST(SignedCatalog)
 
     ok(CreateSignedCatalog(), "Cannot create the signed catalog (%lu)\n", GetLastError());
     TestCatalogs();
-    ok(CreateSignedImage(Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    ok(CreateSignedImage(szOID_NIST_sha256, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     TestImage(Digest, DigestSize);
+    TestSha1Image();
     TestFindCerts();
 
     CleanupFixture();
