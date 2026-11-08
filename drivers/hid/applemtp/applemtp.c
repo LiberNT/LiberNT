@@ -11,6 +11,7 @@
 #include <reactos/drivers/fdtdrv.h>
 #include <reactos/drivers/applertkit.h>
 #include <reactos/drivers/applesmc.h>
+#include <reactos/drivers/dumpstor.h>
 
 #define MTP_TAG 'pTMA'
 
@@ -258,6 +259,17 @@ typedef struct _MTP_DEVICE
     USHORT ReportLength[MTP_QUEUED_REPORTS];
     ULONG ReportHead;
     ULONG ReportCount;
+
+    ROS_USB_KEYBOARD_INTERFACE DebuggerKeyboard;
+    PCALLBACK_OBJECT DebuggerKeyboardCallback;
+    BOOLEAN DebuggerPolling;
+    BOOLEAN DebuggerReportValid;
+    BOOLEAN DebuggerLayoutKnown;
+    UCHAR DebuggerReportId;
+    UCHAR DebuggerModifierOffset;
+    UCHAR DebuggerKeysOffset;
+    UCHAR DebuggerKeysCount;
+    UCHAR DebuggerReport[ROS_USB_KEYBOARD_BOOT_REPORT_SIZE];
 } MTP_DEVICE, *PMTP_DEVICE;
 
 static
@@ -957,6 +969,38 @@ MtpHandleEvent(
 
 static
 VOID
+MtpCaptureDebuggerKeyboard(
+    _Inout_ PMTP_DEVICE Device)
+{
+    const DCHID_HEADER *Header = (const DCHID_HEADER *)Device->Packet;
+    const DCHID_SUBHEADER *Sub = (const DCHID_SUBHEADER *)(Device->Packet + sizeof(*Header));
+    const UCHAR *Payload = (const UCHAR *)(Sub + 1);
+    ULONG Base = Device->KeyboardUsesReportIds ? 1 : 0;
+    ULONG Index;
+
+    if (MtpChecksum(Device->Packet, sizeof(*Header) + Header->Length + 4) != 0xffffffff ||
+        Header->Channel == DCHID_CHANNEL_CMD || Header->Interface != Device->KeyboardInterface ||
+        Header->Length < sizeof(*Sub) || Sub->Length + sizeof(*Sub) > Header->Length ||
+        (Sub->Flags >> 6) != DCHID_REPORT_INPUT)
+    {
+        return;
+    }
+    if ((Base && (Sub->Length < 1 || Payload[0] != Device->DebuggerReportId)) ||
+        Sub->Length < Base + Device->DebuggerModifierOffset + 1 ||
+        Sub->Length < Base + Device->DebuggerKeysOffset + Device->DebuggerKeysCount)
+    {
+        return;
+    }
+
+    RtlZeroMemory(Device->DebuggerReport, sizeof(Device->DebuggerReport));
+    Device->DebuggerReport[0] = Payload[Base + Device->DebuggerModifierOffset];
+    for (Index = 0; Index < Device->DebuggerKeysCount; ++Index)
+        Device->DebuggerReport[2 + Index] = Payload[Base + Device->DebuggerKeysOffset + Index];
+    Device->DebuggerReportValid = TRUE;
+}
+
+static
+VOID
 MtpHandlePacket(
     _Inout_ PMTP_DEVICE Device)
 {
@@ -1040,16 +1084,22 @@ MtpPollFifo(
 
             if (Header->HeaderLength != sizeof(DCHID_HEADER))
             {
-                DbgPrint("applemtp: bad DockChannel header length %u\n", Header->HeaderLength);
+                if (!Device->DebuggerPolling)
+                    DbgPrint("applemtp: bad DockChannel header length %u\n", Header->HeaderLength);
                 Device->PacketFill = 0;
                 continue;
             }
             Device->PacketNeed = sizeof(DCHID_HEADER) + Header->Length + 4;
             continue;
         }
-        MtpHandlePacket(Device);
+        if (Device->DebuggerPolling)
+            MtpCaptureDebuggerKeyboard(Device);
+        else
+            MtpHandlePacket(Device);
         Device->PacketFill = 0;
         Device->PacketNeed = sizeof(DCHID_HEADER);
+        if (Device->DebuggerPolling && Device->DebuggerReportValid)
+            return;
     }
 }
 
@@ -1442,11 +1492,188 @@ MtpWorker(
 
 static
 VOID
+MtpFindDebuggerKeyboardLayout(
+    _Inout_ PMTP_DEVICE Device)
+{
+    const UCHAR *Descriptor = Device->Interfaces[Device->KeyboardInterface].Descriptor;
+    ULONG Length = Device->Interfaces[Device->KeyboardInterface].DescriptorLength;
+    USHORT InputBits[256] = { 0 };
+    ULONG Offset = 0, Size, Value, Index, Page = 0, ReportSize = 0, ReportCount = 0, UsageMin = 0;
+    UCHAR ReportId = 0, Item;
+    BOOLEAN Modifiers = FALSE, Keys = FALSE;
+
+    Device->DebuggerLayoutKnown = FALSE;
+    while (Descriptor && Offset < Length)
+    {
+        Item = Descriptor[Offset];
+        if (Item == 0xfe)
+        {
+            if (Offset + 2 >= Length)
+                break;
+            Offset += 3 + Descriptor[Offset + 1];
+            continue;
+        }
+        Size = (Item & 3) == 3 ? 4 : (Item & 3);
+        if (Offset + 1 + Size > Length)
+            break;
+        for (Value = 0, Index = 0; Index < Size; ++Index)
+            Value |= (ULONG)Descriptor[Offset + 1 + Index] << (8 * Index);
+        switch (Item & 0xfc)
+        {
+            case 0x04:
+                Page = Value;
+                break;
+            case 0x74:
+                ReportSize = Value;
+                break;
+            case 0x84:
+                ReportId = (UCHAR)Value;
+                break;
+            case 0x94:
+                ReportCount = Value;
+                break;
+            case 0x18:
+                UsageMin = Value;
+                break;
+            case 0x80:
+                if (Page == 0x07 && (Value & 2) && UsageMin == 0xe0 && ReportSize == 1 && ReportCount == 8 &&
+                    !(InputBits[ReportId] % 8) && !Modifiers)
+                {
+                    Device->DebuggerReportId = ReportId;
+                    Device->DebuggerModifierOffset = (UCHAR)(InputBits[ReportId] / 8);
+                    Modifiers = TRUE;
+                }
+                else if (Page == 0x07 && !(Value & 2) && ReportSize == 8 && ReportCount != 0 &&
+                         !(InputBits[ReportId] % 8) && Modifiers && !Keys && ReportId == Device->DebuggerReportId)
+                {
+                    Device->DebuggerKeysOffset = (UCHAR)(InputBits[ReportId] / 8);
+                    Device->DebuggerKeysCount = (UCHAR)min(ReportCount, ROS_USB_KEYBOARD_BOOT_REPORT_SIZE - 2);
+                    Keys = TRUE;
+                }
+                InputBits[ReportId] = (USHORT)min(InputBits[ReportId] + ReportSize * ReportCount, MAXUSHORT);
+                UsageMin = 0;
+                break;
+            case 0x90:
+            case 0xa0:
+            case 0xb0:
+            case 0xc0:
+                UsageMin = 0;
+                break;
+        }
+        Offset += 1 + Size;
+    }
+    Device->DebuggerLayoutKnown = Modifiers && Keys && Device->DebuggerModifierOffset < 64 &&
+                                  Device->DebuggerKeysOffset < 64;
+}
+
+static
+NTSTATUS
+NTAPI
+MtpDebuggerKeyboardPrepare(
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+MtpDebuggerKeyboardPoll(
+    _In_ PVOID Context,
+    _Out_writes_bytes_(Length) PUCHAR Report,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnedLength)
+{
+    PMTP_DEVICE Device = Context;
+
+    *ReturnedLength = 0;
+    if (Length < ROS_USB_KEYBOARD_BOOT_REPORT_SIZE)
+        return STATUS_BUFFER_TOO_SMALL;
+    if (!Device->Started || !Device->Data || !Device->Packet || !Device->DebuggerLayoutKnown)
+        return STATUS_DEVICE_NOT_READY;
+
+    Device->DebuggerReportValid = FALSE;
+    Device->DebuggerPolling = TRUE;
+    MtpPollFifo(Device);
+    Device->DebuggerPolling = FALSE;
+    if (!Device->DebuggerReportValid)
+        return STATUS_NO_DATA_DETECTED;
+
+    RtlCopyMemory(Report, Device->DebuggerReport, ROS_USB_KEYBOARD_BOOT_REPORT_SIZE);
+    *ReturnedLength = ROS_USB_KEYBOARD_BOOT_REPORT_SIZE;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+MtpDebuggerKeyboardRelease(
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+}
+
+static
+VOID
+MtpRegisterDebuggerKeyboard(
+    _Inout_ PMTP_DEVICE Device)
+{
+    UNICODE_STRING CallbackName = RTL_CONSTANT_STRING(ROS_USB_KEYBOARD_CALLBACK_NAME);
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    NTSTATUS Status;
+
+    MtpFindDebuggerKeyboardLayout(Device);
+    if (!Device->DebuggerLayoutKnown)
+    {
+        DbgPrint("applemtp: the keyboard report has no boot keyboard layout for the kernel debugger\n");
+        return;
+    }
+
+    RtlZeroMemory(&Device->DebuggerKeyboard, sizeof(Device->DebuggerKeyboard));
+    Device->DebuggerKeyboard.Version = ROS_USB_KEYBOARD_INTERFACE_VERSION;
+    Device->DebuggerKeyboard.Size = sizeof(Device->DebuggerKeyboard);
+    Device->DebuggerKeyboard.Flags = ROS_USB_KEYBOARD_POLL_WHILE_RUNNING;
+    Device->DebuggerKeyboard.Context = Device;
+    Device->DebuggerKeyboard.Prepare = MtpDebuggerKeyboardPrepare;
+    Device->DebuggerKeyboard.Poll = MtpDebuggerKeyboardPoll;
+    Device->DebuggerKeyboard.Release = MtpDebuggerKeyboardRelease;
+
+    InitializeObjectAttributes(&ObjectAttributes, &CallbackName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ExCreateCallback(&Device->DebuggerKeyboardCallback, &ObjectAttributes, FALSE, TRUE);
+    if (!NT_SUCCESS(Status))
+    {
+        Device->DebuggerKeyboardCallback = NULL;
+        DbgPrint("applemtp: the kernel debugger keyboard callback is missing (0x%08lx)\n", Status);
+        return;
+    }
+    ExNotifyCallback(Device->DebuggerKeyboardCallback, &Device->DebuggerKeyboard, (PVOID)TRUE);
+    DbgPrint("applemtp: kernel debugger keyboard on report %u, modifiers at %u, %u keys at %u\n",
+             Device->DebuggerReportId, Device->DebuggerModifierOffset, Device->DebuggerKeysCount,
+             Device->DebuggerKeysOffset);
+}
+
+static
+VOID
+MtpUnregisterDebuggerKeyboard(
+    _Inout_ PMTP_DEVICE Device)
+{
+    if (!Device->DebuggerKeyboardCallback)
+        return;
+    ExNotifyCallback(Device->DebuggerKeyboardCallback, &Device->DebuggerKeyboard, (PVOID)FALSE);
+    ObDereferenceObject(Device->DebuggerKeyboardCallback);
+    Device->DebuggerKeyboardCallback = NULL;
+}
+
+static
+VOID
 MtpReleaseHardware(
     _Inout_ PMTP_DEVICE Device)
 {
     PIRP Irp;
     KIRQL OldIrql;
+
+    MtpUnregisterDebuggerKeyboard(Device);
 
     if (Device->Thread)
     {
@@ -1695,6 +1922,7 @@ MtpStartHardware(
     Device->Started = TRUE;
     DbgPrint("applemtp: keyboard is up on interface %u with a %lu byte report descriptor\n",
              Device->KeyboardInterface, Device->ReportDescriptorLength);
+    MtpRegisterDebuggerKeyboard(Device);
     return STATUS_SUCCESS;
 }
 
