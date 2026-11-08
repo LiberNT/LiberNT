@@ -2631,7 +2631,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
       {
          co_IntSendMessageNoWait(WinPos.hwnd, WM_CHILDACTIVATE, 0, 0);
       }
-      else if (!Entry->bDeferActivate)
+      else if (!Entry->bDeferActivate && !Entry->bNoActivate)
       {
          //ERR("SetWindowPos Set FG Window!\n");
          co_WinPosActivateEntry(Window);
