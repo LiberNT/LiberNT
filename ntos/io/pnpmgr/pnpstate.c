@@ -698,7 +698,9 @@ PiCollectFunctionDriver(
         /* Only boot drivers run before the system root exists; the device gets another pass */
         if (PnPBootDriversInitialized)
         {
-            PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_DRIVER_ENTRY);
+            PiSetDevNodeProblem(DeviceNode,
+                                Status == STATUS_IMAGE_ALREADY_LOADED ?
+                                CM_PROB_DRIVER_FAILED_PRIOR_UNLOAD : CM_PROB_FAILED_DRIVER_ENTRY);
         }
 
         return Status;
