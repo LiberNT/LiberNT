@@ -1406,14 +1406,228 @@ BOOL WINAPI IsCatalogFile(HANDLE hFile, WCHAR *pwszFileName)
 /***********************************************************************
  *              FindCertsByIssuer
  */
+#ifdef __REACTOS__
+/* TODO: INFO_NEEDED: the 32-bit FindCertsByIssuer layout; only the 64-bit one was measured */
+#define WINTRUST_ALIGN_PTR(x) (((x) + sizeof(DWORD_PTR) - 1) & ~(DWORD_PTR)(sizeof(DWORD_PTR) - 1))
+
+struct wintrust_issuer_chain
+{
+    PCCERT_CHAIN_CONTEXT chain;
+    DWORD cert_count;
+    CRYPT_KEY_PROV_INFO *key;
+};
+
+static BOOL WINTRUST_CertHasUsage(PCCERT_CONTEXT cert, LPCWSTR purpose)
+{
+    CERT_ENHKEY_USAGE *usage;
+    char oid[128];
+    DWORD size = 0, i;
+    BOOL ret = FALSE;
+
+    if (!purpose)
+        return TRUE;
+    /* TODO: INFO_NEEDED: whether Windows 11 maps the "ClientAuth" and "CodeSigning" names; OIDs are matched */
+    if (!WideCharToMultiByte(CP_ACP, 0, purpose, -1, oid, sizeof(oid), NULL, NULL) ||
+        !CertGetEnhancedKeyUsage(cert, 0, NULL, &size) || !(usage = malloc(size)))
+        return FALSE;
+    if (CertGetEnhancedKeyUsage(cert, 0, usage, &size))
+    {
+        ret = !usage->cUsageIdentifier && GetLastError() == CRYPT_E_NOT_FOUND;
+        for (i = 0; !ret && i < usage->cUsageIdentifier; i++)
+            ret = !strcmp(usage->rgpszUsageIdentifier[i], oid);
+    }
+    free(usage);
+    return ret;
+}
+
+static CRYPT_KEY_PROV_INFO *WINTRUST_GetKeyProvInfo(PCCERT_CONTEXT cert)
+{
+    CRYPT_KEY_PROV_INFO *info;
+    DWORD size = 0;
+
+    if (!CertGetCertificateContextProperty(cert, CERT_KEY_PROV_INFO_PROP_ID, NULL, &size) || !(info = malloc(size)))
+        return NULL;
+    if (!CertGetCertificateContextProperty(cert, CERT_KEY_PROV_INFO_PROP_ID, info, &size))
+    {
+        free(info);
+        return NULL;
+    }
+    return info;
+}
+
+static DWORD WINTRUST_IssuerChainLength(PCCERT_CHAIN_CONTEXT chain, CERT_NAME_BLOB *issuer)
+{
+    PCERT_SIMPLE_CHAIN simple = chain->rgpChain[0];
+    DWORD i;
+
+    /* TODO: INFO_NEEDED: which elements Windows 11 returns for a chain of more than one certificate */
+    for (i = 0; i < simple->cElement; i++)
+    {
+        if (CertCompareCertificateName(X509_ASN_ENCODING, &simple->rgpElement[i]->pCertContext->pCertInfo->Issuer,
+                                       issuer))
+            return i + 1;
+    }
+    return 0;
+}
+
+static DWORD_PTR WINTRUST_PackKeyProvInfo(const CRYPT_KEY_PROV_INFO *info, BYTE *base, DWORD_PTR offset)
+{
+    CRYPT_KEY_PROV_INFO *copy = base ? (CRYPT_KEY_PROV_INFO *)(base + offset) : NULL;
+    DWORD_PTR size;
+    DWORD i;
+
+    if (copy)
+        *copy = *info;
+    offset += sizeof(*info);
+    if (info->pwszContainerName)
+    {
+        size = (wcslen(info->pwszContainerName) + 1) * sizeof(WCHAR);
+        if (copy)
+        {
+            memcpy(base + offset, info->pwszContainerName, size);
+            copy->pwszContainerName = (WCHAR *)(base + offset);
+        }
+        offset += size;
+    }
+    if (info->pwszProvName)
+    {
+        size = (wcslen(info->pwszProvName) + 1) * sizeof(WCHAR);
+        if (copy)
+        {
+            memcpy(base + offset, info->pwszProvName, size);
+            copy->pwszProvName = (WCHAR *)(base + offset);
+        }
+        offset += size;
+    }
+    if (info->cProvParam)
+    {
+        offset = WINTRUST_ALIGN_PTR(offset);
+        if (copy)
+            copy->rgProvParam = (CRYPT_KEY_PROV_PARAM *)(base + offset);
+        offset += info->cProvParam * sizeof(CRYPT_KEY_PROV_PARAM);
+        for (i = 0; i < info->cProvParam; i++)
+        {
+            offset = WINTRUST_ALIGN_PTR(offset);
+            if (copy)
+            {
+                copy->rgProvParam[i] = info->rgProvParam[i];
+                copy->rgProvParam[i].pbData = base + offset;
+                memcpy(base + offset, info->rgProvParam[i].pbData, info->rgProvParam[i].cbData);
+            }
+            offset += info->rgProvParam[i].cbData;
+        }
+    }
+    return offset;
+}
+
+static DWORD_PTR WINTRUST_PackIssuerChains(const struct wintrust_issuer_chain *found, DWORD count, BYTE *base)
+{
+    CERT_CHAIN *chains = (CERT_CHAIN *)base;
+    DWORD_PTR offset = count * sizeof(CERT_CHAIN), blobs, key;
+    PCCERT_CONTEXT cert;
+    DWORD i, j;
+
+    for (i = 0; i < count; i++)
+    {
+        blobs = WINTRUST_ALIGN_PTR(offset);
+        key = WINTRUST_ALIGN_PTR(blobs + found[i].cert_count * sizeof(CERT_BLOB));
+        offset = WINTRUST_PackKeyProvInfo(found[i].key, base, key);
+        if (base)
+        {
+            chains[i].cCerts = found[i].cert_count;
+            chains[i].certs = (CERT_BLOB *)(base + blobs);
+            chains[i].keyLocatorInfo = *(CRYPT_KEY_PROV_INFO *)(base + key);
+        }
+        for (j = 0; j < found[i].cert_count; j++)
+        {
+            cert = found[i].chain->rgpChain[0]->rgpElement[j]->pCertContext;
+            offset = WINTRUST_ALIGN_PTR(offset);
+            if (base)
+            {
+                chains[i].certs[j].cbData = cert->cbCertEncoded;
+                chains[i].certs[j].pbData = base + offset;
+                memcpy(base + offset, cert->pbCertEncoded, cert->cbCertEncoded);
+            }
+            offset += cert->cbCertEncoded;
+        }
+    }
+    return WINTRUST_ALIGN_PTR(offset);
+}
+#endif
+
 HRESULT WINAPI FindCertsByIssuer(PCERT_CHAIN pCertChains, DWORD *pcbCertChains,
  DWORD *pcCertChains, BYTE* pbEncodedIssuerName, DWORD cbEncodedIssuerName,
  LPCWSTR pwszPurpose, DWORD dwKeySpec)
 {
+#ifdef __REACTOS__
+    CERT_NAME_BLOB issuer = { cbEncodedIssuerName, pbEncodedIssuerName };
+    CERT_CHAIN_PARA para = { sizeof(para) };
+    struct wintrust_issuer_chain *found = NULL, *grown;
+    PCCERT_CONTEXT cert = NULL;
+    PCCERT_CHAIN_CONTEXT chain;
+    CRYPT_KEY_PROV_INFO *key;
+    DWORD count = 0, length, i;
+    DWORD_PTR size;
+    HCERTSTORE store;
+    HRESULT ret;
+
+    TRACE("(%p, %p, %p, %p, %ld, %s, %ld)\n", pCertChains, pcbCertChains, pcCertChains, pbEncodedIssuerName,
+          cbEncodedIssuerName, debugstr_w(pwszPurpose), dwKeySpec);
+
+    store = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, 0, CERT_SYSTEM_STORE_CURRENT_USER | CERT_STORE_READONLY_FLAG,
+                          L"My");
+    while (store && (cert = CertEnumCertificatesInStore(store, cert)))
+    {
+        if (!(key = WINTRUST_GetKeyProvInfo(cert)))
+            continue;
+        chain = NULL;
+        length = 0;
+        if (key->dwKeySpec == dwKeySpec && WINTRUST_CertHasUsage(cert, pwszPurpose) &&
+            CertGetCertificateChain(NULL, cert, NULL, NULL, &para, 0, NULL, &chain))
+            length = WINTRUST_IssuerChainLength(chain, &issuer);
+        if (length && (grown = realloc(found, (count + 1) * sizeof(*found))))
+        {
+            found = grown;
+            found[count].chain = chain;
+            found[count].cert_count = length;
+            found[count].key = key;
+            count++;
+            continue;
+        }
+        if (chain)
+            CertFreeCertificateChain(chain);
+        free(key);
+    }
+
+    size = count ? WINTRUST_PackIssuerChains(found, count, NULL) : 0;
+    if (!count)
+        ret = CRYPT_E_NOT_FOUND;
+    else if (pCertChains && *pcbCertChains < size)
+        ret = HRESULT_FROM_WIN32(ERROR_BAD_LENGTH);
+    else
+    {
+        if (pCertChains)
+            WINTRUST_PackIssuerChains(found, count, (BYTE *)pCertChains);
+        ret = S_OK;
+    }
+    *pcbCertChains = (DWORD)size;
+    *pcCertChains = count;
+
+    for (i = 0; i < count; i++)
+    {
+        CertFreeCertificateChain(found[i].chain);
+        free(found[i].key);
+    }
+    free(found);
+    if (store)
+        CertCloseStore(store, 0);
+    return ret;
+#else
     FIXME("(%p, %p, %p, %p, %ld, %s, %ld): stub\n", pCertChains, pcbCertChains,
      pcCertChains, pbEncodedIssuerName, cbEncodedIssuerName,
      debugstr_w(pwszPurpose), dwKeySpec);
     return E_FAIL;
+#endif
 }
 
 /***********************************************************************
