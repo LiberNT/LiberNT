@@ -24,6 +24,9 @@ extern "C" {
 #define HDGFX_CURSOR_SIZE 64
 #define HDGFX_CURSOR_POSITION_LIMIT 4095
 
+#define HDGFX_PPGTT_DIRECTORY_ENTRIES 512u
+#define HDGFX_PPGTT_TABLE_ENTRIES 1024u
+
 #define HDGFX_ASLE_LEVEL_MAX 255
 #define HDGFX_OPREGION_EVENT_HOTKEY 0x01
 #define HDGFX_OPREGION_EVENT_LID    0x02
@@ -333,6 +336,8 @@ typedef struct _HDGFX_GENERATION
     bool (*ForceWake)(const HDGFX_MMIO *Mmio);
     void (*ForceWakeRelease)(const HDGFX_MMIO *Mmio);
     void (*InitEngine)(const HDGFX_MMIO *Mmio);
+    void (*EnablePpgtt)(const HDGFX_MMIO *Mmio, uint32_t DirectoryBase);
+    void (*DisablePpgtt)(const HDGFX_MMIO *Mmio);
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
                                         const HDGFX_LVDS_MODE *Mode,
@@ -365,6 +370,14 @@ typedef struct _HDGFX_RING
     uint32_t UserInterrupt;
     bool Blitter;
 } HDGFX_RING, *PHDGFX_RING;
+
+typedef struct _HDGFX_PPGTT_LAYOUT
+{
+    uint32_t MappedEntries;
+    uint32_t Tables;
+    uint32_t SlotFirst;
+    uint32_t SlotCount;
+} HDGFX_PPGTT_LAYOUT;
 
 typedef struct _HDGFX_BLT_SURFACE
 {
@@ -688,7 +701,52 @@ HdgfxIvbCheckBatch(
     const uint32_t *Dwords,
     uint32_t Count,
     bool Blitter,
+    const uint32_t *Patched,
     uint32_t *Offending);
+
+bool
+HdgfxPpgttLayout(
+    uint32_t GttEntries,
+    uint32_t MappedEntries,
+    HDGFX_PPGTT_LAYOUT *Layout);
+
+uint32_t
+HdgfxPpgttDirectoryEntry(
+    const HDGFX_PPGTT_LAYOUT *Layout,
+    uint32_t Slot);
+
+uint32_t
+HdgfxPpgttDirectoryBase(
+    const HDGFX_PPGTT_LAYOUT *Layout,
+    uint32_t Slot);
+
+bool
+HdgfxIvbEmitSwitch(
+    HDGFX_RING *Ring,
+    uint32_t Head,
+    uint32_t DirectoryBase);
+
+uint32_t
+HdgfxPpgttPde(
+    uint64_t Table);
+
+void
+HdgfxSnbEnablePpgtt(
+    const HDGFX_MMIO *Mmio,
+    uint32_t DirectoryBase);
+
+void
+HdgfxSnbDisablePpgtt(
+    const HDGFX_MMIO *Mmio);
+
+void
+HdgfxIvbEnablePpgtt(
+    const HDGFX_MMIO *Mmio,
+    uint32_t DirectoryBase);
+
+void
+HdgfxIvbDisablePpgtt(
+    const HDGFX_MMIO *Mmio);
 
 bool
 HdgfxSnbForceWake(

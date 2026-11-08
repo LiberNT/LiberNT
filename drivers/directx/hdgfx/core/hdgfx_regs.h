@@ -26,9 +26,13 @@
     R(RING_INSTPM,          0x20C0, 0) \
     R(SNB_GT_MODE,          0x20D0, 0) \
     R(SNB_CACHE_MODE_0,     0x2120, 0) \
+    R(PP_DCLV,              0x2220, 0x10000) \
+    R(PP_DIR_BASE,          0x2228, 0x10000) \
     R(RENDER_RING_MODE,     0x229C, 0) \
+    R(RING_MODE_GEN7,       0x229C, 0x10000) \
     R(SNB_GFX_MODE,         0x2520, 0) \
     R(RENDER_HWS_PGA,       0x4080, 0) \
+    R(GAM_ECOCHK,           0x4090, 0) \
     R(BLT_HWS_PGA,          0x4280, 0) \
     R(CACHE_MODE_0,         0x7000, 0) \
     R(CACHE_MODE_1,         0x7004, 0) \
@@ -46,6 +50,8 @@
     R(FORCEWAKE_MT_ACK,     0x130040, 0) \
     R(FORCEWAKE_ACK,        0x130090, 0) \
     R(GT_THREAD_STATUS,     0x13805C, 0) \
+    R(GAC_ECO_BITS,         0x14090, 0) \
+    R(GAB_CTL,              0x24000, 0) \
     R(SNB_BLT_HWS_PGA,      0x24080, 0) \
     R(SOUTH_CHICKEN1,       0xC2000, 0) \
     R(CPU_VGACNTRL,         0x41000, 0) \

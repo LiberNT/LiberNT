@@ -20,6 +20,7 @@
 #define HDGFX_QUEUE_POLL            (-10000LL)
 #define HDGFX_DEAD_CONTEXT_MAGIC    0xDEAD4346UL
 #define HDGFX_APERTURE_CPU          (1ULL << 63)
+#define HDGFX_SWITCH_BYTES          (32UL * sizeof(ULONG))
 
 typedef struct _HDGFX_DMA_RECORD
 {
@@ -32,6 +33,8 @@ typedef struct _HDGFX_USER_BATCH
     ULONG BatchOffset;
     ULONG StateOffset;
     ULONG Flags;
+    ULONG RangeCapacity;
+    ULONG RangeCount;
     ULONG Reserved;
 } HDGFX_USER_BATCH, *PHDGFX_USER_BATCH;
 
@@ -554,6 +557,13 @@ HdgfxGenSection(
            Offset >= sizeof(HDGFX_GEN_SUBMIT) && Offset <= CommandLength && Length <= CommandLength - Offset;
 }
 
+static uint32_t *
+HdgfxAllocatePatched(
+    _In_ ULONG Dwords)
+{
+    return ExAllocatePoolZero(NonPagedPoolNx, (SIZE_T)(Dwords / 32 + 1) * sizeof(uint32_t), HDGFX_TAG);
+}
+
 static NTSTATUS
 HdgfxRenderGen(
     _In_ PHDGFX_DEVICE KmdDevice,
@@ -570,7 +580,9 @@ HdgfxRenderGen(
     ULONG StateOffset;
     ULONG BatchOffset;
     ULONG Size;
+    uint32_t *Patched;
     uint32_t Offending;
+    bool Allowed;
     UINT Index;
     NTSTATUS Status;
 
@@ -596,8 +608,13 @@ HdgfxRenderGen(
         return STATUS_INVALID_PARAMETER;
     }
 
-    StateOffset = (ULONG)(ROUND_TO_PAGES(DmaAddress + sizeof(*Record) + sizeof(*User)) - DmaAddress);
-    BatchOffset = ALIGN_UP_BY(StateOffset + Submit.StateLength, 64);
+    if (pRender->AllocationListSize > HDGFX_GEN_ALLOCATION_LIST_SIZE)
+        return STATUS_INVALID_PARAMETER;
+    if (Adapter->Generation->Gen >= 6 && !Adapter->PpgttEnabled)
+        return STATUS_NOT_SUPPORTED;
+    StateOffset = (ULONG)(ROUND_TO_PAGES(DmaAddress + sizeof(*Record) + sizeof(*User) +
+                                         pRender->AllocationListSize * sizeof(HDGFX_USER_RANGE)) - DmaAddress);
+    BatchOffset = (ULONG)(ROUND_TO_PAGES(DmaAddress + StateOffset + Submit.StateLength) - DmaAddress);
     Size = BatchOffset + Submit.BatchLength + 2 * sizeof(ULONG);
     if (Size > pRender->DmaSize)
         return STATUS_INVALID_PARAMETER;
@@ -636,6 +653,9 @@ HdgfxRenderGen(
             return Status;
     }
 
+    Patched = HdgfxAllocatePatched(Submit.BatchLength / sizeof(ULONG));
+    if (Patched == NULL)
+        return STATUS_NO_MEMORY;
     RtlZeroMemory(Base, BatchOffset);
     Record = (PHDGFX_DMA_RECORD)Base;
     Record->Type = HDGFX_DMA_USER;
@@ -644,6 +664,7 @@ HdgfxRenderGen(
     User->BatchOffset = BatchOffset;
     User->StateOffset = StateOffset;
     User->Flags = Submit.Flags;
+    User->RangeCapacity = pRender->AllocationListSize;
     if (Submit.StateLength != 0)
         RtlCopyMemory(Base + StateOffset, (CONST UCHAR *)pRender->pCommand + Submit.StateOffset, Submit.StateLength);
     RtlCopyMemory(Base + BatchOffset, (CONST UCHAR *)pRender->pCommand + Submit.BatchOffset, Submit.BatchLength);
@@ -671,11 +692,15 @@ HdgfxRenderGen(
         Out->DriverId = HDGFX_PATCH_GTT;
         Out->PatchOffset = Location;
         Out++;
+        if (Location - BatchOffset < Submit.BatchLength)
+            Patched[(Location - BatchOffset) / sizeof(ULONG) / 32] |= 1u << ((Location - BatchOffset) / sizeof(ULONG) % 32);
     }
-    if (Adapter->Generation->Gen >= 6 &&
-        !HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)(Base + BatchOffset),
-                            Submit.BatchLength / sizeof(ULONG),
-                            (Submit.Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
+    Allowed = Adapter->Generation->Gen < 6 ||
+              HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)(Base + BatchOffset),
+                                 Submit.BatchLength / sizeof(ULONG),
+                                 (Submit.Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, Patched, &Offending);
+    ExFreePoolWithTag(Patched, HDGFX_TAG);
+    if (!Allowed)
     {
         DPRINT1("User batch refused at dword %lu: 0x%08lx 0x%08lx\n", Offending,
                 ((PULONG)(Base + BatchOffset))[Offending], ((PULONG)(Base + BatchOffset))[Offending + 1]);
@@ -1092,15 +1117,58 @@ HdgfxDdiBuildPagingBuffer(
     return STATUS_SUCCESS;
 }
 
-static VOID
-HdgfxRecheckUserBatch(
+static BOOLEAN
+HdgfxFillUserRanges(
     _In_ PHDGFX_ADAPTER Adapter,
+    _In_ PHDGFX_DEVICE KmdDevice,
+    _In_ CONST DXGKARG_PATCH *Patch,
+    _In_ PHDGFX_DMA_RECORD Record,
+    _Inout_ PHDGFX_USER_BATCH User)
+{
+    PHDGFX_USER_RANGE Ranges = (PHDGFX_USER_RANGE)(User + 1);
+    CONST DXGK_ALLOCATIONLIST *Allocation;
+    PHDGFX_OPEN Open;
+    ULONGLONG Value;
+    UINT Index;
+
+    User->RangeCount = 0;
+    if (Patch->AllocationListSize > User->RangeCapacity || User->StateOffset > Record->Size ||
+        User->StateOffset < sizeof(*Record) + sizeof(*User) + (ULONGLONG)User->RangeCapacity * sizeof(*Ranges))
+    {
+        return FALSE;
+    }
+    for (Index = 0; Index < Patch->AllocationListSize; Index++)
+    {
+        Allocation = &Patch->pAllocationList[Index];
+        Open = (PHDGFX_OPEN)Allocation->hDeviceSpecificAllocation;
+        if (Allocation->SegmentId == 0 || Open == NULL)
+            continue;
+        if (!NT_SUCCESS(HdgfxValidateOpen(KmdDevice, Open)))
+            return FALSE;
+        if (!NT_SUCCESS(HdgfxPlacement(Adapter, Allocation, Open, 0, HDGFX_PATCH_GTT, &Value)))
+            continue;
+        Ranges[User->RangeCount].First = (ULONG)(Value / PAGE_SIZE);
+        Ranges[User->RangeCount].Count = (ULONG)(ROUND_TO_PAGES(Value % PAGE_SIZE + Open->Size) / PAGE_SIZE);
+        User->RangeCount++;
+    }
+    return TRUE;
+}
+
+static VOID
+HdgfxPatchUserBatch(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ PHDGFX_DEVICE KmdDevice,
     _In_ CONST DXGKARG_PATCH *Patch)
 {
     PHDGFX_DMA_RECORD Record;
     PHDGFX_USER_BATCH User;
     PULONG Batch;
+    ULONG Dwords;
+    ULONG Offset;
+    UINT Index;
+    uint32_t *Patched;
     uint32_t Offending;
+    bool Allowed;
 
     if (Adapter->Generation->Gen < 6 ||
         Patch->DmaBufferSubmissionEndOffset - Patch->DmaBufferSubmissionStartOffset < sizeof(*Record) + sizeof(*User))
@@ -1112,9 +1180,39 @@ HdgfxRecheckUserBatch(
     if (Record->Type != HDGFX_DMA_USER || User->BatchOffset >= Record->Size)
         return;
     Batch = (PULONG)((PUCHAR)Record + User->BatchOffset);
-    if (!HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)Batch,
-                            (Record->Size - User->BatchOffset) / sizeof(ULONG),
-                            (User->Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
+    if (Record->Size > Patch->DmaBufferSubmissionEndOffset - Patch->DmaBufferSubmissionStartOffset ||
+        !HdgfxFillUserRanges(Adapter, KmdDevice, Patch, Record, User))
+    {
+        DPRINT1("User batch allocation list does not fit its record, dropping the batch\n");
+        HdgfxMiBatchEnd((uint32_t *)Batch);
+        return;
+    }
+    if (Patch->PatchLocationListSubmissionLength == 0)
+        return;
+    Dwords = (Record->Size - User->BatchOffset) / sizeof(ULONG);
+    Patched = HdgfxAllocatePatched(Dwords);
+    if (Patched == NULL)
+    {
+        HdgfxMiBatchEnd((uint32_t *)Batch);
+        return;
+    }
+    for (Index = Patch->PatchLocationListSubmissionStart;
+         Index < Patch->PatchLocationListSubmissionStart + Patch->PatchLocationListSubmissionLength;
+         Index++)
+    {
+        CONST D3DDDI_PATCHLOCATIONLIST *Entry = &Patch->pPatchLocationList[Index];
+
+        if (Entry->DriverId != HDGFX_PATCH_GTT)
+            continue;
+        Offset = Entry->PatchOffset - Patch->DmaBufferSubmissionStartOffset;
+        if (Offset % sizeof(ULONG) == 0 && Offset >= User->BatchOffset &&
+            (Offset - User->BatchOffset) / sizeof(ULONG) < Dwords)
+            Patched[(Offset - User->BatchOffset) / sizeof(ULONG) / 32] |= 1u << ((Offset - User->BatchOffset) / sizeof(ULONG) % 32);
+    }
+    Allowed = HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)Batch, Dwords,
+                                 (User->Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, Patched, &Offending);
+    ExFreePoolWithTag(Patched, HDGFX_TAG);
+    if (!Allowed)
     {
         DPRINT1("Patched user batch refused at dword %lu: 0x%08lx\n", Offending, Batch[Offending]);
         HdgfxMiBatchEnd((uint32_t *)Batch);
@@ -1141,7 +1239,15 @@ HdgfxDdiPatch(
         return STATUS_INVALID_HANDLE;
     }
     if (Patch->PatchLocationListSubmissionLength == 0)
+    {
+        if (Patch->pDmaBuffer != NULL && Patch->DmaBufferSubmissionStartOffset <= Patch->DmaBufferSubmissionEndOffset &&
+            Patch->DmaBufferSubmissionEndOffset <= Patch->DmaBufferSize &&
+            (Patch->AllocationListSize == 0 || Patch->pAllocationList != NULL))
+        {
+            HdgfxPatchUserBatch(Adapter, KmdDevice, Patch);
+        }
         return STATUS_SUCCESS;
+    }
     if (Patch->pPatchLocationList == NULL || Patch->pDmaBuffer == NULL || Patch->pAllocationList == NULL ||
         Patch->DmaBufferSubmissionStartOffset > Patch->DmaBufferSubmissionEndOffset ||
         Patch->DmaBufferSubmissionEndOffset > Patch->DmaBufferSize ||
@@ -1188,7 +1294,7 @@ HdgfxDdiPatch(
         else
             *(ULONG UNALIGNED *)Location = (ULONG)Value;
     }
-    HdgfxRecheckUserBatch(Adapter, Patch);
+    HdgfxPatchUserBatch(Adapter, KmdDevice, Patch);
     return STATUS_SUCCESS;
 }
 
@@ -1360,6 +1466,8 @@ HdgfxRunGtt(
     }
     READ_REGISTER_ULONG(&Adapter->ApertureGtt[Update->First - First + Update->Count - 1]);
     HdgfxGttFlush(Adapter->Registers, Adapter->Generation);
+    HdgfxSpaceMirror(Adapter, Update->First, Update->Count, Update->Fill != 0 ? NULL : (CONST ULONG *)(Update + 1),
+                     Update->Fill);
     return HdgfxQueueDone;
 }
 
@@ -1368,13 +1476,16 @@ HdgfxRunBatch(
     _Inout_ PHDGFX_ADAPTER Adapter,
     _In_ ULONG Address,
     _In_ BOOLEAN Secure,
-    _In_ BOOLEAN Blitter)
+    _In_ BOOLEAN Blitter,
+    _In_ ULONG Slot)
 {
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     HDGFX_MMIO Mmio;
     uint32_t Dwords[4];
     BOOLEAN TwoRings = Adapter->Generation->Gen >= 6;
     PHDGFX_RING Ring = TwoRings && Blitter ? &Adapter->BltRing : &Adapter->Ring;
+    ULONG RingIndex = Ring == &Adapter->BltRing ? 1 : 0;
+    BOOLEAN Switch;
     ULONG Count = TwoRings ? HdgfxIvbMiBatchStart(Dwords, Address) :
                   Secure ? HdgfxMiBatchStart(Dwords, Address) : HdgfxMiUserBatchStart(Dwords, Address);
     ULONG Bytes = Count * sizeof(ULONG);
@@ -1401,22 +1512,34 @@ HdgfxRunBatch(
     }
     HdgfxMmioInit(Adapter->Registers, &Mmio);
     Head = HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing);
+    Switch = Adapter->PpgttEnabled && Adapter->RingSlot[RingIndex] != Slot;
     Padding = Adapter->ActiveRing->Size - Adapter->ActiveRing->Tail < Bytes ? Adapter->ActiveRing->Size - Adapter->ActiveRing->Tail : 0;
-    if (HdgfxRingFree(Adapter->ActiveRing, Head) < HDGFX_RING_RESERVE + Padding + Bytes)
+    if (HdgfxRingFree(Adapter->ActiveRing, Head) <
+        HDGFX_RING_RESERVE + Padding + Bytes + (Switch ? HDGFX_SWITCH_BYTES : 0))
     {
         if (Adapter->RingUnfenced)
             HdgfxRingFence(Adapter, &Mmio, Head);
         State = HdgfxQueueRing;
     }
-    else if ((!TwoRings || HdgfxIvbEmitInvalidate(Adapter->ActiveRing, Head)) &&
-             HdgfxRingEmit(Adapter->ActiveRing, Head, Dwords, Count))
+    else if (Switch &&
+             !HdgfxIvbEmitSwitch(Adapter->ActiveRing, Head, HdgfxPpgttDirectoryBase(&Adapter->Ppgtt, Slot)))
     {
-        Adapter->RingUnfenced = TRUE;
-        HdgfxIlkAdvanceRing(&Mmio, Adapter->ActiveRing);
+        DPRINT1("Render ring refused the address space switch for the batch at 0x%lx, dropping it\n", Address);
     }
     else
     {
-        DPRINT1("Render ring refused the batch at 0x%lx, dropping it\n", Address);
+        if (Switch)
+            Adapter->RingSlot[RingIndex] = Slot;
+        if ((!TwoRings || HdgfxIvbEmitInvalidate(Adapter->ActiveRing, Head)) &&
+            HdgfxRingEmit(Adapter->ActiveRing, Head, Dwords, Count))
+        {
+            Adapter->RingUnfenced = TRUE;
+            HdgfxIlkAdvanceRing(&Mmio, Adapter->ActiveRing);
+        }
+        else
+        {
+            DPRINT1("Render ring refused the batch at 0x%lx, dropping it\n", Address);
+        }
     }
     KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
     return State;
@@ -1430,6 +1553,7 @@ HdgfxRunFence(
 {
     uint32_t Flush[2] = { 0, 0 };
     HDGFX_MMIO Mmio;
+    ULONG RingIndex;
     ULONG Head;
 
     *Software = FALSE;
@@ -1454,6 +1578,17 @@ HdgfxRunFence(
         KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
         return HdgfxQueueRing;
     }
+    RingIndex = Adapter->ActiveRing == &Adapter->BltRing ? 1 : 0;
+    if (Adapter->PpgttEnabled && Adapter->RingSlot[RingIndex] != HDGFX_PPGTT_KERNEL_SLOT)
+    {
+        if (!HdgfxIvbEmitSwitch(Adapter->ActiveRing, Head,
+                                HdgfxPpgttDirectoryBase(&Adapter->Ppgtt, HDGFX_PPGTT_KERNEL_SLOT)))
+        {
+            KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
+            return HdgfxQueueRing;
+        }
+        Adapter->RingSlot[RingIndex] = HDGFX_PPGTT_KERNEL_SLOT;
+    }
     HdgfxMiFlush(Flush);
     if ((Adapter->Generation->Gen < 6 && !HdgfxRingEmit(Adapter->ActiveRing, Head, Flush, RTL_NUMBER_OF(Flush))) ||
         !HdgfxRingEmitBreadcrumb(Adapter->ActiveRing, Head, HDGFX_RING_FENCE_INDEX, Fence) ||
@@ -1464,6 +1599,44 @@ HdgfxRunFence(
     }
     KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
     return HdgfxQueueDone;
+}
+
+static HDGFX_QUEUE_STATE
+HdgfxRunUser(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _Inout_ PHDGFX_SUBMIT Submit,
+    _In_ PHDGFX_DMA_RECORD Record,
+    _In_ ULONG Address)
+{
+    PHDGFX_USER_BATCH User = (PHDGFX_USER_BATCH)(Record + 1);
+    BOOLEAN Blitter = (User->Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0;
+    NTSTATUS Status;
+
+    if (Adapter->Generation->Gen < 6)
+        return HdgfxRunBatch(Adapter, Address + User->BatchOffset, FALSE, Blitter, HDGFX_PPGTT_KERNEL_SLOT);
+    if (Submit->Slot == HDGFX_PPGTT_NO_SLOT)
+    {
+        if (!Adapter->PpgttEnabled || User->RangeCount > User->RangeCapacity ||
+            User->StateOffset > User->BatchOffset || (Address + User->StateOffset) % PAGE_SIZE != 0 ||
+            (User->BatchOffset - User->StateOffset) % PAGE_SIZE != 0 ||
+            User->StateOffset < sizeof(*Record) + sizeof(*User) + (ULONGLONG)User->RangeCapacity * sizeof(HDGFX_USER_RANGE))
+        {
+            DPRINT1("User batch at 0x%lx of fence %lu has no address space, skipped\n", Address, Submit->Fence);
+            return HdgfxQueueDone;
+        }
+        Status = HdgfxSpaceAcquire(Adapter, Submit->Fence, (Address + User->StateOffset) / PAGE_SIZE,
+                                   (User->BatchOffset - User->StateOffset) / PAGE_SIZE,
+                                   (CONST HDGFX_USER_RANGE *)(User + 1), User->RangeCount, &Submit->Slot);
+        if (Status == STATUS_DEVICE_BUSY)
+            return HdgfxQueueRing;
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("User batch at 0x%lx of fence %lu: allocations outside the mapped GTT, skipped\n", Address,
+                    Submit->Fence);
+            return HdgfxQueueDone;
+        }
+    }
+    return HdgfxRunBatch(Adapter, Address + User->BatchOffset, FALSE, Blitter, Submit->Slot);
 }
 
 static HDGFX_QUEUE_STATE
@@ -1514,12 +1687,9 @@ HdgfxRunSubmit(
             DPRINT1("Batch at 0x%lx of fence %lu is outside the DMA segment, skipped\n", Submit->Offset, Submit->Fence);
         else if (Record->Type == HDGFX_DMA_BATCH)
             State = HdgfxRunBatch(Adapter, (ULONG)Adapter->DmaBase + Segment + Submit->Offset + sizeof(*Record), TRUE,
-                                  TRUE);
+                                  TRUE, HDGFX_PPGTT_KERNEL_SLOT);
         else if (Record->Type == HDGFX_DMA_USER)
-            State = HdgfxRunBatch(Adapter,
-                                  (ULONG)Adapter->DmaBase + Segment + Submit->Offset +
-                                      ((PHDGFX_USER_BATCH)(Record + 1))->BatchOffset,
-                                  FALSE, (((PHDGFX_USER_BATCH)(Record + 1))->Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0);
+            State = HdgfxRunUser(Adapter, Submit, Record, (ULONG)Adapter->DmaBase + Segment + Submit->Offset);
         else if (Record->Type == HDGFX_DMA_CPU)
             State = HdgfxRunCpu(Adapter, (PSOFTGPU_CMD)(Record + 1));
         else if (Record->Type == HDGFX_DMA_GTT)
@@ -1574,6 +1744,8 @@ HdgfxQueueRoutine(
     if (!ExAcquireRundownProtection(&Adapter->Rundown))
         return;
     KeAcquireSpinLockAtDpcLevel(&Adapter->QueueLock);
+    if (!Adapter->QueueResetting)
+        HdgfxSpaceRetire(Adapter);
     while (!Adapter->QueueStopped && !Adapter->QueueResetting && Adapter->QueueHead != Adapter->QueueTail)
     {
         BOOLEAN Completed;
@@ -1711,6 +1883,7 @@ HdgfxDdiSubmitCommand(
         Submit->Offset = SubmitCommand->Flags.NullRendering ? Submit->EndOffset :
                          SubmitCommand->DmaBufferSubmissionStartOffset;
         Submit->Fence = SubmitCommand->SubmissionFenceId;
+        Submit->Slot = HDGFX_PPGTT_NO_SLOT;
         Adapter->SubmittedFence = Submit->Fence;
         Adapter->QueueTail++;
         KeInsertQueueDpc(&Adapter->QueueDpc, NULL, NULL);
@@ -1786,6 +1959,12 @@ HdgfxDdiResetFromTimeout(
                                                       &Ignored);
     DPRINT1("Timeout reset dropped the queue at fence %lu\n", Adapter->CompletedFence);
     Status = HdgfxResetRender(Adapter);
+    KeAcquireSpinLock(&Adapter->QueueLock, &OldIrql);
+    if (NT_SUCCESS(Status))
+        HdgfxSpaceDrop(Adapter);
+    else
+        HdgfxSpaceQuarantine(Adapter);
+    KeReleaseSpinLock(&Adapter->QueueLock, OldIrql);
     HdgfxApertureClear(Adapter);
     return Status;
 }
