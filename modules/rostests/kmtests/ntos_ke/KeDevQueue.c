@@ -234,6 +234,9 @@ TestInsertByKey(VOID)
     Entry = KeRemoveDeviceQueue(&Queue);
     ok_eq_pointer(Entry, NULL);
     ok_eq_bool(Queue.Busy, FALSE);
+    Result = KeRemoveEntryDeviceQueue(&Queue, &First);
+    ok_eq_bool(Result, FALSE);
+    ok_eq_bool(Queue.Busy, FALSE);
     KeLowerIrql(OldIrql);
 }
 
