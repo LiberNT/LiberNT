@@ -3171,6 +3171,15 @@ static int http_pr_try(const char *Text, char *Response, int Size, int TimeoutMs
     return State;
 }
 
+static int http_pr_wait_end(HTTP_KA_CLIENT *Client, int TimeoutMs, DWORD *Elapsed)
+{
+    DWORD Start = GetTickCount();
+    int State = http_ka_wait(Client, TimeoutMs);
+
+    *Elapsed = GetTickCount() - Start;
+    return State;
+}
+
 static ULONG http_pr_wait(HANDLE Queue, OVERLAPPED *Overlapped, DWORD TimeoutMs)
 {
     DWORD Bytes;
@@ -3332,6 +3341,240 @@ static void test_queue_property_validation(HANDLE Queue, HANDLE V1Queue)
     CloseHandle(Event);
 }
 
+typedef ULONG (WINAPI *HTTP_PR_SET)(HTTP_URL_GROUP_ID, HTTP_SERVER_PROPERTY, void *, ULONG);
+typedef ULONG (WINAPI *HTTP_PR_QUERY)(HTTP_URL_GROUP_ID, HTTP_SERVER_PROPERTY, void *, ULONG, ULONG *);
+
+static void test_object_property_validation(const char *Name, HTTP_URL_GROUP_ID Id, HTTP_PR_SET Set,
+                                            HTTP_PR_QUERY Query, ULONG ConnectionLimitResult)
+{
+    static const HTTP_SERVER_PROPERTY Unsupported[] =
+        { HttpServerQueueLengthProperty, HttpServer503VerbosityProperty, (HTTP_SERVER_PROPERTY)100 };
+    HTTP_TIMEOUT_LIMIT_INFO Timeouts, Got;
+    HTTP_STATE_INFO State, GotState;
+    HTTP_QOS_SETTING_INFO Qos;
+    HTTP_CONNECTION_LIMIT_INFO Connections;
+    HTTP_BANDWIDTH_LIMIT_INFO Bandwidth;
+    ULONG Length, Result, i;
+    BYTE Buffer[64];
+
+    ok(sizeof(HTTP_TIMEOUT_LIMIT_INFO) == 20, "sizeof(HTTP_TIMEOUT_LIMIT_INFO) is %u\n",
+       (UINT)sizeof(HTTP_TIMEOUT_LIMIT_INFO));
+
+    memset(&Got, 0xcc, sizeof(Got));
+    Length = 0xdeadbeef;
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got), &Length);
+    ok(Result == NO_ERROR && Length == sizeof(Got), "%s: default timeouts query returned %lu, length %lu\n",
+       Name, Result, Length);
+    ok(Got.Flags.Present == 0 && Got.EntityBody == 0 && Got.DrainEntityBody == 0 && Got.RequestQueue == 0 &&
+       Got.IdleConnection == 0 && Got.HeaderWait == 0 && Got.MinSendRate == 0,
+       "%s: default timeouts %u %u %u %u %u %u %lu\n", Name, Got.Flags.Present, Got.EntityBody,
+       Got.DrainEntityBody, Got.RequestQueue, Got.IdleConnection, Got.HeaderWait, Got.MinSendRate);
+    Length = 0xdeadbeef;
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got) - 1, &Length);
+    ok(Result == ERROR_MORE_DATA && Length == sizeof(Got), "%s: short timeouts query returned %lu, length %lu\n",
+       Name, Result, Length);
+    Length = 0xdeadbeef;
+    Result = Query(Id, HttpServerTimeoutsProperty, NULL, 0, &Length);
+    ok(Result == ERROR_MORE_DATA && Length == sizeof(Got), "%s: NULL timeouts query returned %lu, length %lu\n",
+       Name, Result, Length);
+    Result = Query(Id, HttpServerTimeoutsProperty, NULL, sizeof(Got), &Length);
+    ok(Result == ERROR_NOACCESS, "%s: NULL timeouts query with length returned %lu\n", Name, Result);
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got), NULL);
+    ok(Result == NO_ERROR, "%s: timeouts query without length returned %lu\n", Name, Result);
+
+    memset(&Timeouts, 0, sizeof(Timeouts));
+    Timeouts.Flags.Present = 1;
+    Timeouts.EntityBody = 10;
+    Timeouts.DrainEntityBody = 11;
+    Timeouts.RequestQueue = 12;
+    Timeouts.IdleConnection = 13;
+    Timeouts.HeaderWait = 14;
+    Timeouts.MinSendRate = 300;
+    Result = Set(Id, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts) - 1);
+    ok(Result == ERROR_INSUFFICIENT_BUFFER, "%s: short timeouts set returned %lu\n", Name, Result);
+    Result = Set(Id, HttpServerTimeoutsProperty, NULL, sizeof(Timeouts));
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: NULL timeouts set returned %lu\n", Name, Result);
+    Result = Set(Id, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    ok(Result == NO_ERROR, "%s: timeouts set returned %lu\n", Name, Result);
+    memset(&Got, 0xcc, sizeof(Got));
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got), &Length);
+    ok(Result == NO_ERROR && !memcmp(&Got, &Timeouts, sizeof(Got)),
+       "%s: timeouts query returned %lu: %u %u %u %u %u %u %lu\n", Name, Result, Got.Flags.Present,
+       Got.EntityBody, Got.DrainEntityBody, Got.RequestQueue, Got.IdleConnection, Got.HeaderWait,
+       Got.MinSendRate);
+
+    Timeouts.MinSendRate = 100;
+    Result = Set(Id, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    ok(Result == NO_ERROR, "%s: MinSendRate 100 returned %lu\n", Name, Result);
+    Timeouts.MinSendRate = HTTP_LIMIT_INFINITE;
+    Timeouts.IdleConnection = 0;
+    Result = Set(Id, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    ok(Result == NO_ERROR, "%s: zero idle timeout returned %lu\n", Name, Result);
+    memset(&Got, 0xcc, sizeof(Got));
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got), &Length);
+    ok(Result == NO_ERROR && Got.IdleConnection == 0 && Got.MinSendRate == HTTP_LIMIT_INFINITE && Got.HeaderWait == 14,
+       "%s: timeouts query returned %lu: %u %u %u %u %u %u %lu\n", Name, Result, Got.Flags.Present,
+       Got.EntityBody, Got.DrainEntityBody, Got.RequestQueue, Got.IdleConnection, Got.HeaderWait,
+       Got.MinSendRate);
+    *(ULONG *)&Timeouts.Flags = 2;
+    Result = Set(Id, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    ok(Result == NO_ERROR, "%s: flags 2 returned %lu\n", Name, Result);
+    memset(&Got, 0xcc, sizeof(Got));
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got), &Length);
+    ok(Result == NO_ERROR && *(ULONG *)&Got.Flags == 0 && Got.HeaderWait == 0 && Got.MinSendRate == 0,
+       "%s: query after flags 2 returned %lu: %#lx %u %u %u %u %u %lu\n", Name, Result, *(ULONG *)&Got.Flags,
+       Got.EntityBody, Got.DrainEntityBody, Got.RequestQueue, Got.IdleConnection, Got.HeaderWait,
+       Got.MinSendRate);
+    Timeouts.MinSendRate = 100;
+    *(ULONG *)&Timeouts.Flags = 1;
+    Result = Set(Id, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    memset(&Got, 0xcc, sizeof(Got));
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got), &Length);
+    ok(Result == NO_ERROR && Got.MinSendRate == 100, "%s: query after MinSendRate 100 returned %lu, %lu\n",
+       Name, Result, Got.MinSendRate);
+    Timeouts.Flags.Present = 0;
+    Result = Set(Id, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    ok(Result == NO_ERROR, "%s: timeouts not present returned %lu\n", Name, Result);
+    memset(&Got, 0xcc, sizeof(Got));
+    Result = Query(Id, HttpServerTimeoutsProperty, &Got, sizeof(Got), &Length);
+    ok(Result == NO_ERROR && Got.Flags.Present == 0 && Got.HeaderWait == 0,
+       "%s: cleared timeouts query returned %lu: %u %u %u %u %u %u %lu\n", Name, Result, Got.Flags.Present,
+       Got.EntityBody, Got.DrainEntityBody, Got.RequestQueue, Got.IdleConnection, Got.HeaderWait,
+       Got.MinSendRate);
+
+    memset(&GotState, 0xcc, sizeof(GotState));
+    Length = 0xdeadbeef;
+    Result = Query(Id, HttpServerStateProperty, &GotState, sizeof(GotState), &Length);
+    ok(Result == NO_ERROR && Length == sizeof(GotState) && GotState.Flags.Present == 1 &&
+       GotState.State == HttpEnabledStateActive, "%s: default state query returned %lu, length %lu, %u %u\n",
+       Name, Result, Length, GotState.Flags.Present, GotState.State);
+    Length = 0xdeadbeef;
+    Result = Query(Id, HttpServerStateProperty, &GotState, sizeof(GotState) - 1, &Length);
+    ok(Result == ERROR_MORE_DATA && Length == sizeof(GotState), "%s: short state query returned %lu, length %lu\n",
+       Name, Result, Length);
+    State.Flags.Present = 1;
+    State.State = HttpEnabledStateInactive + 1;
+    Result = Set(Id, HttpServerStateProperty, &State, sizeof(State));
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: state 2 returned %lu\n", Name, Result);
+    State.State = HttpEnabledStateInactive;
+    Result = Set(Id, HttpServerStateProperty, &State, sizeof(State) - 1);
+    ok(Result == ERROR_INSUFFICIENT_BUFFER, "%s: short state set returned %lu\n", Name, Result);
+    Result = Set(Id, HttpServerStateProperty, &State, sizeof(State));
+    ok(Result == NO_ERROR, "%s: inactive returned %lu\n", Name, Result);
+    memset(&GotState, 0xcc, sizeof(GotState));
+    Result = Query(Id, HttpServerStateProperty, &GotState, sizeof(GotState), &Length);
+    ok(Result == NO_ERROR && GotState.Flags.Present == 1 && GotState.State == HttpEnabledStateInactive,
+       "%s: state query returned %lu, %u %u\n", Name, Result, GotState.Flags.Present, GotState.State);
+    State.Flags.Present = 0;
+    Result = Set(Id, HttpServerStateProperty, &State, sizeof(State));
+    ok(Result == NO_ERROR, "%s: state not present returned %lu\n", Name, Result);
+    memset(&GotState, 0xcc, sizeof(GotState));
+    Result = Query(Id, HttpServerStateProperty, &GotState, sizeof(GotState), &Length);
+    ok(Result == NO_ERROR && GotState.Flags.Present == 1 && GotState.State == HttpEnabledStateInactive,
+       "%s: state query after not present returned %lu, %u %u\n", Name, Result, GotState.Flags.Present,
+       GotState.State);
+    State.Flags.Present = 1;
+    State.State = HttpEnabledStateActive;
+    Result = Set(Id, HttpServerStateProperty, &State, sizeof(State));
+    ok(Result == NO_ERROR, "%s: active returned %lu\n", Name, Result);
+    memset(&GotState, 0xcc, sizeof(GotState));
+    Result = Query(Id, HttpServerStateProperty, &GotState, sizeof(GotState), &Length);
+    ok(Result == NO_ERROR && GotState.Flags.Present == 1 && GotState.State == HttpEnabledStateActive,
+       "%s: final state query returned %lu, %u %u\n", Name, Result, GotState.Flags.Present, GotState.State);
+
+    Connections.Flags.Present = 1;
+    Connections.MaxConnections = 10;
+    Qos.QosType = HttpQosSettingTypeConnectionLimit;
+    Qos.QosSetting = &Connections;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == ConnectionLimitResult, "%s: connection limit returned %lu\n", Name, Result);
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos) - 1);
+    ok(Result == ERROR_INSUFFICIENT_BUFFER, "%s: short QoS returned %lu\n", Name, Result);
+    Connections.MaxConnections = HTTP_LIMIT_INFINITE;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == ConnectionLimitResult, "%s: infinite connection limit returned %lu\n", Name, Result);
+    Connections.MaxConnections = 0;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == ConnectionLimitResult, "%s: connection limit 0 returned %lu\n", Name, Result);
+    Connections.Flags.Present = 0;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == ConnectionLimitResult, "%s: connection limit not present returned %lu\n", Name, Result);
+    Qos.QosSetting = NULL;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == ERROR_NOACCESS, "%s: NULL QoS setting returned %lu\n", Name, Result);
+    Qos.QosType = HttpQosSettingTypeFlowRate + 1;
+    Qos.QosSetting = &Connections;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: QoS type 3 returned %lu\n", Name, Result);
+    Bandwidth.Flags.Present = 1;
+    Bandwidth.MaxBandwidth = HTTP_LIMIT_INFINITE;
+    Qos.QosType = HttpQosSettingTypeBandwidth;
+    Qos.QosSetting = &Bandwidth;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == NO_ERROR, "%s: infinite bandwidth returned %lu\n", Name, Result);
+    Bandwidth.MaxBandwidth = 100;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: bandwidth 100 returned %lu\n", Name, Result);
+    Bandwidth.MaxBandwidth = HTTP_LIMIT_INFINITE;
+    Result = Set(Id, HttpServerQosProperty, &Qos, sizeof(Qos));
+    ok(Result == NO_ERROR, "%s: infinite bandwidth returned %lu\n", Name, Result);
+
+    Length = 0xdeadbeef;
+    Result = Query(Id, HttpServerLoggingProperty, Buffer, sizeof(Buffer), &Length);
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: logging query returned %lu, length %lu\n", Name, Result, Length);
+    for (i = 0; i < ARRAYSIZE(Unsupported); i++)
+    {
+        memset(Buffer, 0, sizeof(Buffer));
+        Result = Query(Id, Unsupported[i], Buffer, sizeof(Buffer), &Length);
+        ok(Result == ERROR_INVALID_PARAMETER, "%s: property %u query returned %lu\n", Name, Unsupported[i], Result);
+        Result = Set(Id, Unsupported[i], Buffer, sizeof(Buffer));
+        ok(Result == ERROR_INVALID_PARAMETER, "%s: property %u set returned %lu\n", Name, Unsupported[i], Result);
+    }
+
+    Result = Query(0, HttpServerTimeoutsProperty, &Got, sizeof(Got), &Length);
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: query on id 0 returned %lu\n", Name, Result);
+    Result = Set(0, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: set on id 0 returned %lu\n", Name, Result);
+    Result = Query(Id + 0x100000, HttpServerStateProperty, &GotState, sizeof(GotState), &Length);
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: query on a bad id returned %lu\n", Name, Result);
+}
+
+static void test_state_present(const char *Name, HTTP_URL_GROUP_ID Id, HTTP_PR_SET Set, HTTP_PR_QUERY Query)
+{
+    static const struct { ULONG Present, State, GotPresent, GotState; } Steps[] =
+    {
+        {0, 1, 0, 1}, {0, 0, 0, 0}, {1, 1, 1, 1}, {0, 1, 1, 1}, {0, 0, 0, 0},
+        {1, 0, 0, 0}, {0, 0, 0, 0}, {2, 1, 2, 1}, {3, 0, 3, 0},
+    };
+    HTTP_STATE_INFO State, Got;
+    ULONG Length, Result, i;
+
+    for (i = 0; i < ARRAYSIZE(Steps); i++)
+    {
+        *(ULONG *)&State.Flags = Steps[i].Present;
+        State.State = Steps[i].State;
+        Result = Set(Id, HttpServerStateProperty, &State, sizeof(State));
+        memset(&Got, 0xcc, sizeof(Got));
+        Query(Id, HttpServerStateProperty, &Got, sizeof(Got), &Length);
+        ok(Result == NO_ERROR && *(ULONG *)&Got.Flags == Steps[i].GotPresent && Got.State == Steps[i].GotState,
+           "%s: step %lu: set returned %lu, query %#lx %u\n", Name, i, Result, *(ULONG *)&Got.Flags, Got.State);
+    }
+    State.Flags.Present = 1;
+    State.State = HttpEnabledStateActive;
+    Set(Id, HttpServerStateProperty, &State, sizeof(State));
+}
+
+static ULONG WINAPI http_pr_set_session(HTTP_URL_GROUP_ID Id, HTTP_SERVER_PROPERTY Property, void *Value, ULONG Length)
+{
+    return HttpSetServerSessionProperty(Id, Property, Value, Length);
+}
+
+static ULONG WINAPI http_pr_query_session(HTTP_URL_GROUP_ID Id, HTTP_SERVER_PROPERTY Property, void *Value,
+                                          ULONG Length, ULONG *ReturnLength)
+{
+    return HttpQueryServerSessionProperty(Id, Property, Value, Length, ReturnLength);
+}
+
 static void http_pr_check_body(int State, const char *Response, const char *Heading, const char *Text,
                                const char *Description)
 {
@@ -3426,6 +3669,92 @@ static void test_queue_limit_and_state(HANDLE Queue)
     CloseHandle(Overlapped.hEvent);
 }
 
+static void test_group_session_state(HANDLE Queue, HTTP_URL_GROUP_ID Group, HTTP_SERVER_SESSION_ID Session)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    OVERLAPPED Overlapped = {0};
+    HTTP_STATE_INFO State;
+    char Response[1024];
+    ULONG Result;
+    int ClientState;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityFull) == NO_ERROR,
+       "verbosity full failed\n");
+    State.Flags.Present = 1;
+    State.State = HttpEnabledStateInactive;
+    ok(HttpSetUrlGroupProperty(Group, HttpServerStateProperty, &State, sizeof(State)) == NO_ERROR,
+       "inactive group failed\n");
+    ResetEvent(Overlapped.hEvent);
+    HttpReceiveHttpRequest(Queue, HTTP_NULL_ID, 0, Request, sizeof(RequestBuffer), NULL, &Overlapped);
+    ClientState = http_pr_try(http_pr_get, Response, sizeof(Response), 1500);
+    http_pr_check_body(ClientState, Response, "Service Unavailable", "The service is unavailable.",
+                       "inactive group");
+    Result = http_pr_wait(Queue, &Overlapped, 100);
+    ok(Result == ERROR_IO_PENDING, "receive with an inactive group returned %lu\n", Result);
+    State.State = HttpEnabledStateActive;
+    HttpSetUrlGroupProperty(Group, HttpServerStateProperty, &State, sizeof(State));
+
+    State.State = HttpEnabledStateInactive;
+    ok(HttpSetServerSessionProperty(Session, HttpServerStateProperty, &State, sizeof(State)) == NO_ERROR,
+       "inactive session failed\n");
+    ClientState = http_pr_try(http_pr_get, Response, sizeof(Response), 1500);
+    http_pr_check_body(ClientState, Response, "Service Unavailable", "The service is unavailable.",
+                       "inactive session");
+    Result = http_pr_wait(Queue, &Overlapped, 100);
+    ok(Result == ERROR_IO_PENDING, "receive with an inactive session returned %lu\n", Result);
+    State.State = HttpEnabledStateActive;
+    HttpSetServerSessionProperty(Session, HttpServerStateProperty, &State, sizeof(State));
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Overlapped);
+    ok(http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityBasic) == NO_ERROR,
+       "verbosity basic failed\n");
+    CloseHandle(Overlapped.hEvent);
+}
+
+static void test_group_timeouts(HANDLE Queue, HTTP_URL_GROUP_ID Group, HTTP_SERVER_SESSION_ID Session)
+{
+    OVERLAPPED Overlapped = {0};
+    HTTP_TIMEOUT_LIMIT_INFO Timeouts = {{0}};
+    HTTP_KA_CLIENT Client;
+    DWORD Elapsed;
+    int State;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Timeouts.Flags.Present = 1;
+    Timeouts.IdleConnection = 2;
+    ok(HttpSetUrlGroupProperty(Group, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts)) == NO_ERROR,
+       "group idle timeout failed\n");
+    ok(http_pr_client(&Client, NULL), "client failed\n");
+    http_ka_exchange(Queue, &Overlapped, &Client, http_pr_get, "/prop/a", 0, NULL, HTTP_KA_OPEN, NULL,
+                     "group idle timeout");
+    http_ka_exchange(Queue, &Overlapped, &Client, http_pr_get, "/prop/a", 0, NULL, HTTP_KA_OPEN, NULL,
+                     "group idle timeout, second request");
+    State = http_pr_wait_end(&Client, 9000, &Elapsed);
+    ok(State == HTTP_KA_RESET && Elapsed >= 1000 && Elapsed <= 9000,
+       "group idle timeout: state %d after %lu ms\n", State, Elapsed);
+    closesocket(Client.Socket);
+
+    Timeouts.Flags.Present = 0;
+    HttpSetUrlGroupProperty(Group, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    Timeouts.Flags.Present = 1;
+    ok(HttpSetServerSessionProperty(Session, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts)) == NO_ERROR,
+       "session idle timeout failed\n");
+    ok(http_pr_client(&Client, NULL), "client failed\n");
+    http_ka_exchange(Queue, &Overlapped, &Client, http_pr_get, "/prop/a", 0, NULL, HTTP_KA_OPEN, NULL,
+                     "session idle timeout");
+    http_ka_exchange(Queue, &Overlapped, &Client, http_pr_get, "/prop/a", 0, NULL, HTTP_KA_OPEN, NULL,
+                     "session idle timeout, second request");
+    State = http_pr_wait_end(&Client, 9000, &Elapsed);
+    ok(State == HTTP_KA_RESET && Elapsed >= 1000 && Elapsed <= 9000,
+       "session idle timeout: state %d after %lu ms\n", State, Elapsed);
+    closesocket(Client.Socket);
+    Timeouts.Flags.Present = 0;
+    HttpSetServerSessionProperty(Session, HttpServerTimeoutsProperty, &Timeouts, sizeof(Timeouts));
+    CloseHandle(Overlapped.hEvent);
+}
+
 static void test_properties(void)
 {
     static const WCHAR Url[] = L"http://127.0.0.1:59989/prop/";
@@ -3463,7 +3792,23 @@ static void test_properties(void)
     ok(Result == NO_ERROR, "HttpAddUrlToUrlGroup failed with %lu\n", Result);
 
     test_queue_property_validation(Queue, V1Queue);
+    test_object_property_validation("group", Group, HttpSetUrlGroupProperty, HttpQueryUrlGroupProperty, NO_ERROR);
+    test_object_property_validation("session", Session, http_pr_set_session, http_pr_query_session,
+                                    ERROR_INVALID_PARAMETER);
+    {
+        HTTP_SERVER_SESSION_ID FreshSession = 0;
+        HTTP_URL_GROUP_ID FreshGroup = 0;
+
+        HttpCreateServerSession(Version, &FreshSession, 0);
+        HttpCreateUrlGroup(FreshSession, &FreshGroup, 0);
+        test_state_present("fresh group", FreshGroup, HttpSetUrlGroupProperty, HttpQueryUrlGroupProperty);
+        test_state_present("fresh session", FreshSession, http_pr_set_session, http_pr_query_session);
+        HttpCloseUrlGroup(FreshGroup);
+        HttpCloseServerSession(FreshSession);
+    }
     test_queue_limit_and_state(Queue);
+    test_group_session_state(Queue, Group, Session);
+    test_group_timeouts(Queue, Group, Session);
 
 cleanup:
     if (Group)

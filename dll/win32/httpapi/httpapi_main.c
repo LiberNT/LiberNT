@@ -309,7 +309,27 @@ ULONG WINAPI HttpCreateHttpHandle(HANDLE *handle, ULONG reserved)
             FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN, FILE_NON_DIRECTORY_FILE, NULL, 0));
 }
 
-static ULONG add_url(HANDLE queue, const WCHAR *urlW, HTTP_URL_CONTEXT context)
+static ULONG queue_ioctl(HANDLE queue, ULONG code, void *in, ULONG in_size, void *out, ULONG out_size)
+{
+    OVERLAPPED ovl = {0};
+    DWORD size;
+    ULONG ret = ERROR_SUCCESS;
+
+    if (!(ovl.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL)))
+        return GetLastError();
+    ovl.hEvent = (HANDLE)((ULONG_PTR)ovl.hEvent | 1);
+    if (!DeviceIoControl(queue, code, in, in_size, out, out_size, &size, &ovl))
+    {
+        ret = GetLastError();
+        if (ret == ERROR_IO_PENDING)
+            ret = GetOverlappedResult(queue, &ovl, &size, TRUE) ? ERROR_SUCCESS : GetLastError();
+    }
+    CloseHandle(ovl.hEvent);
+    return ret;
+}
+
+static ULONG add_url(HANDLE queue, const WCHAR *urlW, HTTP_URL_CONTEXT context,
+        HTTP_URL_GROUP_ID group, const struct http_url_config *config)
 {
     struct http_add_url_params *params;
     ULONG ret = ERROR_SUCCESS;
@@ -330,6 +350,8 @@ static ULONG add_url(HANDLE queue, const WCHAR *urlW, HTTP_URL_CONTEXT context)
         return ERROR_INVALID_PARAMETER;
     }
     params->context = context;
+    params->group = group;
+    params->config = *config;
 
     ovl.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!ovl.hEvent)
@@ -352,11 +374,13 @@ static ULONG add_url(HANDLE queue, const WCHAR *urlW, HTTP_URL_CONTEXT context)
  */
 ULONG WINAPI HttpAddUrl(HANDLE queue, const WCHAR *url, void *reserved)
 {
+    static const struct http_url_config config;
+
     TRACE("queue %p, url %s, reserved %p.\n", queue, debugstr_w(url), reserved);
 
     if (!url || reserved)
         return ERROR_INVALID_PARAMETER;
-    return add_url(queue, url, 0);
+    return add_url(queue, url, 0, 0, &config);
 }
 
 static ULONG remove_url(HANDLE queue, const WCHAR *urlW)
@@ -907,11 +931,21 @@ ULONG WINAPI HttpSendResponseEntityBody(HANDLE queue, HTTP_REQUEST_ID id,
     return ret;
 }
 
+struct object_properties
+{
+    HTTP_STATE_INFO state;
+    HTTP_TIMEOUT_LIMIT_INFO timeouts;
+    HTTP_BANDWIDTH_LIMIT_INFO bandwidth;
+    HTTP_CONNECTION_LIMIT_INFO connections;
+};
+
 struct url_group
 {
     struct list entry, session_entry;
+    struct server_session *session;
     HANDLE queue;
     struct list urls;
+    struct object_properties props;
 };
 
 struct url_registration
@@ -941,7 +975,151 @@ struct server_session
 {
     struct list entry;
     struct list groups;
+    struct object_properties props;
 };
+
+static void init_object_properties(struct object_properties *props)
+{
+    memset(props, 0, sizeof(*props));
+    props->state.Flags.Present = 1;
+    props->state.State = HttpEnabledStateActive;
+}
+
+static ULONG unsupported_object_property(HTTP_SERVER_PROPERTY property)
+{
+    if (property == HttpServerQueueLengthProperty || property == HttpServer503VerbosityProperty ||
+        property > HttpServerProtectionLevelProperty)
+        return ERROR_INVALID_PARAMETER;
+    FIXME("Unhandled property %u.\n", property);
+    return ERROR_CALL_NOT_IMPLEMENTED;
+}
+
+static ULONG set_object_property(struct object_properties *props, BOOL group,
+        HTTP_SERVER_PROPERTY property, const void *value, ULONG length)
+{
+    const HTTP_QOS_SETTING_INFO *qos = value;
+    const HTTP_TIMEOUT_LIMIT_INFO *timeouts = value;
+    const HTTP_STATE_INFO *state = value;
+    const HTTP_BANDWIDTH_LIMIT_INFO *bandwidth;
+
+    switch (property)
+    {
+        case HttpServerStateProperty:
+            if (!value)
+                return ERROR_INVALID_PARAMETER;
+            if (length < sizeof(*state))
+                return ERROR_INSUFFICIENT_BUFFER;
+            if (state->State > HttpEnabledStateInactive)
+                return ERROR_INVALID_PARAMETER;
+            if (state->State != props->state.State)
+                props->state = *state;
+            return ERROR_SUCCESS;
+        case HttpServerTimeoutsProperty:
+            if (!value)
+                return ERROR_INVALID_PARAMETER;
+            if (length < sizeof(*timeouts))
+                return ERROR_INSUFFICIENT_BUFFER;
+            if (timeouts->Flags.Present)
+                props->timeouts = *timeouts;
+            else
+                memset(&props->timeouts, 0, sizeof(props->timeouts));
+            return ERROR_SUCCESS;
+        case HttpServerQosProperty:
+            if (!value)
+                return ERROR_INVALID_PARAMETER;
+            if (length < sizeof(*qos))
+                return ERROR_INSUFFICIENT_BUFFER;
+            if (!qos->QosSetting)
+                return ERROR_NOACCESS;
+            switch (qos->QosType)
+            {
+                case HttpQosSettingTypeBandwidth:
+                    bandwidth = qos->QosSetting;
+                    if (bandwidth->MaxBandwidth != HTTP_LIMIT_INFINITE &&
+                        bandwidth->MaxBandwidth < HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE)
+                        return ERROR_INVALID_PARAMETER;
+                    props->bandwidth = *bandwidth;
+                    return ERROR_SUCCESS;
+                case HttpQosSettingTypeConnectionLimit:
+                    if (!group)
+                        return ERROR_INVALID_PARAMETER;
+                    props->connections = *(const HTTP_CONNECTION_LIMIT_INFO *)qos->QosSetting;
+                    return ERROR_SUCCESS;
+                case HttpQosSettingTypeFlowRate:
+                    /* TODO: flow rate limits */
+                    FIXME("Unhandled flow rate setting.\n");
+                    return ERROR_CALL_NOT_IMPLEMENTED;
+                default:
+                    return ERROR_INVALID_PARAMETER;
+            }
+        default:
+            return unsupported_object_property(property);
+    }
+}
+
+static ULONG query_object_property(const struct object_properties *props, HTTP_SERVER_PROPERTY property,
+        void *value, ULONG length, ULONG *ret_length)
+{
+    const void *data;
+    ULONG size;
+
+    switch (property)
+    {
+        case HttpServerStateProperty:
+            data = &props->state;
+            size = sizeof(props->state);
+            break;
+        case HttpServerTimeoutsProperty:
+            data = &props->timeouts;
+            size = sizeof(props->timeouts);
+            break;
+        case HttpServerLoggingProperty:
+            return ERROR_INVALID_PARAMETER;
+        default:
+            /* TODO: QoS queries */
+            return unsupported_object_property(property);
+    }
+
+    if (!value && length)
+        return ERROR_NOACCESS;
+    if (ret_length)
+        *ret_length = size;
+    if (length < size)
+        return ERROR_MORE_DATA;
+    memcpy(value, data, size);
+    return ERROR_SUCCESS;
+}
+
+static void get_url_config(const struct url_group *group, struct http_url_config *config)
+{
+    const struct object_properties *own = &group->props, *session = &group->session->props;
+
+    config->inactive = own->state.State == HttpEnabledStateInactive ||
+                       session->state.State == HttpEnabledStateInactive;
+    config->idle_connection = own->timeouts.IdleConnection ? own->timeouts.IdleConnection
+                                                           : session->timeouts.IdleConnection;
+    config->header_wait = own->timeouts.HeaderWait ? own->timeouts.HeaderWait : session->timeouts.HeaderWait;
+    config->entity_body = own->timeouts.EntityBody ? own->timeouts.EntityBody : session->timeouts.EntityBody;
+}
+
+static ULONG add_group_url(struct url_group *group, HANDLE queue, const struct url_registration *registration)
+{
+    struct http_url_config config;
+
+    get_url_config(group, &config);
+    return add_url(queue, registration->url, registration->context, (ULONG_PTR)group, &config);
+}
+
+static ULONG update_url_config(struct url_group *group)
+{
+    struct http_url_config_params params;
+
+    if (!group->queue)
+        return ERROR_SUCCESS;
+    params.group = (ULONG_PTR)group;
+    get_url_config(group, &params.config);
+    return queue_ioctl(group->queue, IOCTL_HTTP_SET_URL_CONFIG, &params, sizeof(params), NULL, 0);
+}
 
 static struct list server_sessions = LIST_INIT(server_sessions);
 
@@ -978,6 +1156,7 @@ ULONG WINAPI HttpCreateServerSession(HTTPAPI_VERSION version, HTTP_SERVER_SESSIO
     AcquireSRWLockExclusive(&url_group_lock);
     list_add_tail(&server_sessions, &session->entry);
     list_init(&session->groups);
+    init_object_properties(&session->props);
     ReleaseSRWLockExclusive(&url_group_lock);
 
     *id = (ULONG_PTR)session;
@@ -1067,6 +1246,8 @@ ULONG WINAPI HttpCreateUrlGroup(HTTP_SERVER_SESSION_ID session_id, HTTP_URL_GROU
     list_add_tail(&url_groups, &group->entry);
     list_add_tail(&session->groups, &group->session_entry);
     list_init(&group->urls);
+    group->session = session;
+    init_object_properties(&group->props);
 
     *group_id = (ULONG_PTR)group;
 
@@ -1143,7 +1324,7 @@ ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY 
 
             LIST_FOR_EACH_ENTRY(registration, &group->urls, struct url_registration, entry)
             {
-                if (new_queue && (ret = add_url(new_queue, registration->url, registration->context)))
+                if (new_queue && (ret = add_group_url(group, new_queue, registration)))
                     break;
                 registration->new_added = !!new_queue;
             }
@@ -1175,7 +1356,7 @@ ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY 
                 {
                     if (registration->old_removed)
                     {
-                        add_url(group->queue, registration->url, registration->context);
+                        add_group_url(group, group->queue, registration);
                         registration->old_removed = FALSE;
                     }
                     if (registration->new_added)
@@ -1202,10 +1383,33 @@ ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY 
             ReleaseSRWLockExclusive(&url_group_lock);
             return ERROR_CALL_NOT_IMPLEMENTED;
         default:
-            FIXME("Unhandled property %u.\n", property);
+            ret = set_object_property(&group->props, TRUE, property, value, length);
+            if (!ret && (property == HttpServerStateProperty || property == HttpServerTimeoutsProperty))
+                ret = update_url_config(group);
             ReleaseSRWLockExclusive(&url_group_lock);
-            return ERROR_CALL_NOT_IMPLEMENTED;
+            return ret;
     }
+}
+
+/***********************************************************************
+ *        HttpQueryUrlGroupProperty     (HTTPAPI.@)
+ */
+ULONG WINAPI HttpQueryUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY property,
+        void *value, ULONG length, ULONG *ret_length)
+{
+    struct url_group *group;
+    ULONG ret;
+
+    TRACE("id %s, property %u, value %p, length %lu, ret_length %p.\n",
+            wine_dbgstr_longlong(id), property, value, length, ret_length);
+
+    AcquireSRWLockShared(&url_group_lock);
+    if (!(group = get_url_group(id)))
+        ret = ERROR_INVALID_PARAMETER;
+    else
+        ret = query_object_property(&group->props, property, value, length, ret_length);
+    ReleaseSRWLockShared(&url_group_lock);
+    return ret;
 }
 
 /***********************************************************************
@@ -1251,7 +1455,7 @@ ULONG WINAPI HttpAddUrlToUrlGroup(HTTP_URL_GROUP_ID id, const WCHAR *url,
 
     if (group->queue)
     {
-        ret = add_url(group->queue, registration->url, context);
+        ret = add_group_url(group, group->queue, registration);
         if (ret)
         {
             free(registration->url);
@@ -1379,25 +1583,6 @@ ULONG WINAPI HttpCloseRequestQueue(HANDLE handle)
     return ERROR_SUCCESS;
 }
 
-static ULONG queue_ioctl(HANDLE queue, ULONG code, void *in, ULONG in_size, void *out, ULONG out_size)
-{
-    OVERLAPPED ovl = {0};
-    DWORD size;
-    ULONG ret = ERROR_SUCCESS;
-
-    if (!(ovl.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL)))
-        return GetLastError();
-    ovl.hEvent = (HANDLE)((ULONG_PTR)ovl.hEvent | 1);
-    if (!DeviceIoControl(queue, code, in, in_size, out, out_size, &size, &ovl))
-    {
-        ret = GetLastError();
-        if (ret == ERROR_IO_PENDING)
-            ret = GetOverlappedResult(queue, &ovl, &size, TRUE) ? ERROR_SUCCESS : GetLastError();
-    }
-    CloseHandle(ovl.hEvent);
-    return ret;
-}
-
 static BOOL is_queue_property(HTTP_SERVER_PROPERTY property)
 {
     return property == HttpServerQueueLengthProperty || property == HttpServerStateProperty ||
@@ -1462,26 +1647,49 @@ ULONG WINAPI HttpSetServerSessionProperty(HTTP_SERVER_SESSION_ID id,
         HTTP_SERVER_PROPERTY property, void *value, ULONG length)
 {
     struct server_session *session;
+    struct url_group *group;
+    ULONG ret;
 
     TRACE("id %s, property %u, value %p, length %lu.\n",
             wine_dbgstr_longlong(id), property, value, length);
 
     AcquireSRWLockExclusive(&url_group_lock);
-    session = get_server_session(id);
-    ReleaseSRWLockExclusive(&url_group_lock);
-    if (!session)
-        return ERROR_INVALID_PARAMETER;
-
-    switch (property)
+    if (!(session = get_server_session(id)))
     {
-        case HttpServerQosProperty:
-        {
-            if (!value || length < sizeof(HTTP_QOS_SETTING_INFO))
-                return ERROR_INVALID_PARAMETER;
-            return ERROR_CALL_NOT_IMPLEMENTED;
-        }
-        default:
-            FIXME("Unhandled property %u.\n", property);
-            return ERROR_CALL_NOT_IMPLEMENTED;
+        ReleaseSRWLockExclusive(&url_group_lock);
+        return ERROR_INVALID_PARAMETER;
     }
+
+    ret = set_object_property(&session->props, FALSE, property, value, length);
+    if (!ret && (property == HttpServerStateProperty || property == HttpServerTimeoutsProperty))
+    {
+        LIST_FOR_EACH_ENTRY(group, &session->groups, struct url_group, session_entry)
+        {
+            if ((ret = update_url_config(group)))
+                break;
+        }
+    }
+    ReleaseSRWLockExclusive(&url_group_lock);
+    return ret;
+}
+
+/***********************************************************************
+ *        HttpQueryServerSessionProperty     (HTTPAPI.@)
+ */
+ULONG WINAPI HttpQueryServerSessionProperty(HTTP_SERVER_SESSION_ID id, HTTP_SERVER_PROPERTY property,
+        void *value, ULONG length, ULONG *ret_length)
+{
+    struct server_session *session;
+    ULONG ret;
+
+    TRACE("id %s, property %u, value %p, length %lu, ret_length %p.\n",
+            wine_dbgstr_longlong(id), property, value, length, ret_length);
+
+    AcquireSRWLockShared(&url_group_lock);
+    if (!(session = get_server_session(id)))
+        ret = ERROR_INVALID_PARAMETER;
+    else
+        ret = query_object_property(&session->props, property, value, length, ret_length);
+    ReleaseSRWLockShared(&url_group_lock);
+    return ret;
 }

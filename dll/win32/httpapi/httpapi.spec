@@ -15,9 +15,9 @@
 @ stub HttpGetCounters
 @ stdcall HttpInitialize(long long ptr)
 @ stdcall HttpQueryRequestQueueProperty(ptr long ptr long long ptr ptr)
-@ stub HttpQueryServerSessionProperty
+@ stdcall HttpQueryServerSessionProperty(int64 long ptr long ptr)
 @ stdcall HttpQueryServiceConfiguration(ptr long ptr long ptr long ptr ptr)
-@ stub HttpQueryUrlGroupProperty
+@ stdcall HttpQueryUrlGroupProperty(int64 long ptr long ptr)
 @ stub HttpReadFragmentFromCache
 @ stub HttpReceiveClientCertificate
 @ stdcall HttpReceiveHttpRequest(ptr int64 long ptr long ptr ptr)

@@ -32,6 +32,7 @@
 #define IOCTL_HTTP_RECEIVE_BODY     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, 0)
 #define IOCTL_HTTP_SET_QUEUE_PROPERTY   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x805, METHOD_BUFFERED, 0)
 #define IOCTL_HTTP_QUERY_QUEUE_PROPERTY CTL_CODE(FILE_DEVICE_UNKNOWN, 0x806, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_SET_URL_CONFIG   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x807, METHOD_BUFFERED, 0)
 
 #define HTTP_VERSION_EA_NAME "HttpApiVersion"
 
@@ -45,9 +46,25 @@ struct http_version_ea
     char value[sizeof(HTTPAPI_VERSION)];
 };
 
+struct http_url_config
+{
+    BOOL inactive;
+    USHORT idle_connection;
+    USHORT header_wait;
+    USHORT entity_body;
+};
+
+struct http_url_config_params
+{
+    HTTP_URL_GROUP_ID group;
+    struct http_url_config config;
+};
+
 struct http_add_url_params
 {
     HTTP_URL_CONTEXT context;
+    HTTP_URL_GROUP_ID group;
+    struct http_url_config config;
     char url[1];
 };
 

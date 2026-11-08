@@ -60,6 +60,8 @@ typedef struct _HTTP_URL_ENTRY
     struct _HTTP_LISTENER *Listener;
     IN_ADDR BoundAddress;
     HTTP_URL_CONTEXT Context;
+    HTTP_URL_GROUP_ID Group;
+    struct http_url_config Config;
     HTTP_URL_CATEGORY Category;
     USHORT Port;
     char *Host;
@@ -89,6 +91,7 @@ typedef enum _HTTP_UNAVAILABLE_REASON
     HttpUnavailableNone,
     HttpUnavailableQueueFull,
     HttpUnavailableOffline,
+    HttpUnavailableInactive,
 } HTTP_UNAVAILABLE_REASON;
 
 typedef struct _HTTP_PARSED_HEADER
@@ -122,6 +125,9 @@ typedef struct _HTTP_CONNECTION
     ULONG ReceiveOffset;
     ULONG ReceiveLength;
     LONG DeadlineSeconds;
+    USHORT IdleSeconds;
+    USHORT HeaderWaitSeconds;
+    USHORT EntityBodySeconds;
     FAST_MUTEX ResponseMutex;
     FAST_MUTEX SocketMutex;
     char *Buffer;

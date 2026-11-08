@@ -213,6 +213,13 @@ static VOID HttpSetDeadline(PHTTP_CONNECTION Connection, LONG Seconds)
     InterlockedExchange(&Connection->DeadlineSeconds, HttpCurrentSeconds() + Seconds);
 }
 
+static LONG HttpHeaderWaitSeconds(PHTTP_CONNECTION Connection)
+{
+    if (Connection->HeaderWaitSeconds)
+        return Connection->HeaderWaitSeconds;
+    return InterlockedCompareExchange(&g_HeaderWaitSeconds, 0, 0);
+}
+
 static VOID HttpFreeConnection(PHTTP_CONNECTION Connection)
 {
     if (Connection->WorkItem)
@@ -1067,6 +1074,8 @@ static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
 
     if (BestQueue->EnabledState != HttpEnabledStateActive)
         Reason = HttpUnavailableOffline;
+    else if (BestUrl->Config.inactive)
+        Reason = HttpUnavailableInactive;
     else if (HttpQueuedRequestCount(BestQueue) >= BestQueue->MaxQueueLength)
         Reason = HttpUnavailableQueueFull;
     if (Reason != HttpUnavailableNone)
@@ -1089,6 +1098,10 @@ static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
 
     Connection->Queue = BestQueue;
     Connection->Context = BestUrl->Context;
+    Connection->IdleSeconds = BestUrl->Config.idle_connection;
+    Connection->HeaderWaitSeconds = BestUrl->Config.header_wait;
+    Connection->EntityBodySeconds = BestUrl->Config.entity_body;
+    /* TODO: DrainEntityBody, RequestQueue, MinSendRate, bandwidth and connection limits are stored by httpapi only */
     Connection->Available = TRUE;
     InsertTailList(&g_ConnectionsList, &Connection->Entry);
     Connection->InConnectionList = TRUE;
@@ -1267,7 +1280,7 @@ static NTSTATUS HttpReceiveCompleted(PHTTP_CONNECTION Connection)
 
     OldLength = Connection->BufferLength;
     if (!OldLength)
-        HttpSetDeadline(Connection, InterlockedCompareExchange(&g_HeaderWaitSeconds, 0, 0));
+        HttpSetDeadline(Connection, HttpHeaderWaitSeconds(Connection));
     Connection->BufferLength += Connection->ReceiveLength;
     return HttpParseHeaders(Connection, OldLength);
 }
@@ -1307,9 +1320,12 @@ static VOID HttpResetRequest(PHTTP_CONNECTION Connection)
 static VOID HttpRestartConnection(PHTTP_CONNECTION Connection)
 {
     HttpResetRequest(Connection);
-    HttpSetDeadline(Connection, Connection->BufferLength
-                                ? InterlockedCompareExchange(&g_HeaderWaitSeconds, 0, 0)
-                                : InterlockedCompareExchange(&g_IdleConnectionSeconds, 0, 0));
+    if (Connection->BufferLength)
+        HttpSetDeadline(Connection, HttpHeaderWaitSeconds(Connection));
+    else
+        HttpSetDeadline(Connection, Connection->IdleSeconds
+                                    ? Connection->IdleSeconds
+                                    : InterlockedCompareExchange(&g_IdleConnectionSeconds, 0, 0));
     IoQueueWorkItem(Connection->WorkItem, HttpConnectionWorker, DelayedWorkQueue, Connection);
 }
 
@@ -1411,7 +1427,9 @@ static NTSTATUS HttpStartBodyReceive(PHTTP_CONNECTION Connection)
     NTSTATUS Status;
 
     Connection->ReadingBody = TRUE;
-    HttpSetDeadline(Connection, HTTP_ENTITY_BODY_SECONDS);
+    HttpSetDeadline(Connection, Connection->EntityBodySeconds
+                                ? Connection->EntityBodySeconds
+                                : HTTP_ENTITY_BODY_SECONDS);
     Status = HttpStartReceive(Connection, Length);
     if (Status != STATUS_PENDING)
         Connection->ReadingBody = FALSE;
@@ -1882,6 +1900,8 @@ static NTSTATUS HttpIoctlAddUrl(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     NewEntry->UrlLength = UrlLen;
     NewEntry->PathLength = PathLen;
     NewEntry->Context = Params->context;
+    NewEntry->Group = Params->group;
+    NewEntry->Config = Params->config;
     NewEntry->Category = Category;
     NewEntry->Port = Port;
 
@@ -1973,6 +1993,27 @@ static NTSTATUS HttpIoctlRemoveUrl(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
 
     ExReleaseFastMutex(&g_HttpGlobalLock);
     return STATUS_OBJECT_NAME_NOT_FOUND;
+}
+
+static NTSTATUS HttpIoctlSetUrlConfig(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    const struct http_url_config_params *Params = Irp->AssociatedIrp.SystemBuffer;
+    PLIST_ENTRY Entry;
+
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Params) || !Params->group)
+        return STATUS_INVALID_PARAMETER;
+
+    ExAcquireFastMutex(&g_HttpGlobalLock);
+    for (Entry = Queue->UrlList.Flink; Entry != &Queue->UrlList; Entry = Entry->Flink)
+    {
+        PHTTP_URL_ENTRY UrlEntry = CONTAINING_RECORD(Entry, HTTP_URL_ENTRY, Entry);
+        if (UrlEntry->Group == Params->group)
+            UrlEntry->Config = Params->config;
+    }
+    ExReleaseFastMutex(&g_HttpGlobalLock);
+    Irp->IoStatus.Information = 0;
+    return STATUS_SUCCESS;
 }
 
 static VOID NTAPI HttpCsqInsertIrp(
@@ -2716,6 +2757,9 @@ static NTSTATUS NTAPI HttpDispatchDeviceControl(
             break;
         case IOCTL_HTTP_QUERY_QUEUE_PROPERTY:
             Status = HttpQueryQueueProperty(Queue, Irp);
+            break;
+        case IOCTL_HTTP_SET_URL_CONFIG:
+            Status = HttpIoctlSetUrlConfig(Queue, Irp);
             break;
         default:
             Status = STATUS_INVALID_DEVICE_REQUEST;
