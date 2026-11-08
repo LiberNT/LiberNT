@@ -249,6 +249,116 @@ FileMatches(const WCHAR *Path, const BYTE *Expected, DWORD ExpectedSize)
 }
 
 static
+DWORD
+BuildReservedCabinet(BYTE *Cab, WORD Reserve, BYTE FolderReserve, BOOL Magic, BYTE Fill, DWORD SigOffset, DWORD SigSize)
+{
+    DWORD FileOffset = 36 + 4 + Reserve + 8 + FolderReserve, DataOffset = FileOffset + 16 + 6;
+    DWORD Total = DataOffset + 8 + 25, Value;
+    WORD Word;
+
+    ZeroMemory(Cab, Total);
+    memcpy(Cab, "MSCF", 4);
+    memcpy(Cab + 8, &Total, 4);
+    memcpy(Cab + 16, &FileOffset, 4);
+    Cab[24] = 3;
+    Cab[25] = 1;
+    Cab[26] = 1;
+    Cab[28] = 1;
+    Cab[30] = 4;
+    Cab[32] = 0x34;
+    Cab[33] = 0x12;
+    memcpy(Cab + 36, &Reserve, 2);
+    Cab[38] = FolderReserve;
+    FillMemory(Cab + 40, Reserve, Fill);
+    if (Magic)
+    {
+        Value = 0x00100000;
+        memcpy(Cab + 40, &Value, 4);
+        memcpy(Cab + 44, &SigOffset, 4);
+        memcpy(Cab + 48, &SigSize, 4);
+    }
+    memcpy(Cab + 40 + Reserve, &DataOffset, 4);
+    Cab[40 + Reserve + 4] = 1;
+    Value = 25;
+    memcpy(Cab + FileOffset, &Value, 4);
+    Word = 0x5b21;
+    memcpy(Cab + FileOffset + 10, &Word, 2);
+    Cab[FileOffset + 13] = 0x60;
+    Cab[FileOffset + 14] = 0x20;
+    memcpy(Cab + FileOffset + 16, "a.txt", 6);
+    Cab[DataOffset + 4] = 25;
+    Cab[DataOffset + 6] = 25;
+    memcpy(Cab + DataOffset + 8, "cab member one contents\r\n", 25);
+    return Total;
+}
+
+static
+VOID
+TestCabinetReserve(const WCHAR *Temp, const BYTE *Prepared, DWORD PreparedSize, const BYTE *Digest)
+{
+    static const BYTE FolderDigest[] = {
+        0xbc,0x66,0xef,0x8c,0x36,0x1a,0x8d,0xc8,0x6a,0x85,0x49,0x15,0x16,0x8e,0x52,0x25,
+        0x88,0x85,0xf2,0x72,0x2a,0x50,0x50,0x1b,0x3f,0xba,0xf2,0x6a,0x67,0x8a,0x06,0x80 };
+    static const struct
+    {
+        WORD Reserve;
+        BYTE FolderReserve;
+        BOOL Magic;
+        BYTE Fill;
+        DWORD SigOffset, SigSize;
+        DWORD Error;
+        BOOL Rewritten;
+        BYTE DataReserve;
+    } Tests[] = {
+        { 4, 0, FALSE, 0x41, 0, 0, ERROR_BAD_FORMAT },
+        { 20, 0, FALSE, 0x42, 0, 0, ERROR_BAD_FORMAT },
+        { 24, 0, FALSE, 0x43, 0, 0, ERROR_BAD_FORMAT },
+        { 16, 0, TRUE, 0, 0, 0, ERROR_BAD_FORMAT },
+        { 20, 0, TRUE, 0, 123, 0x40, ERROR_BAD_FORMAT },
+        { 20, 0, TRUE, 0, 0, 0, 0 },
+        { 24, 0, TRUE, 0, 0, 0, 0, TRUE },
+        { 20, 4, TRUE, 0, 0, 0, 0 },
+        { 20, 0, TRUE, 0, 0, 0, ERROR_BAD_FORMAT, FALSE, 4 },
+    };
+    WCHAR Path[MAX_PATH];
+    BYTE Cab[256];
+    SIP_INDIRECT_DATA *Data;
+    DWORD Size, i;
+
+    swprintf(Path, RTL_NUMBER_OF(Path), L"%lslntsipr.cab", Temp);
+    for (i = 0; i < RTL_NUMBER_OF(Tests); i++)
+    {
+        Size = BuildReservedCabinet(Cab, Tests[i].Reserve, Tests[i].FolderReserve, Tests[i].Magic, Tests[i].Fill,
+                                    Tests[i].SigOffset, Tests[i].SigSize);
+        Cab[39] = Tests[i].DataReserve;
+        if (!WriteDataFile(Path, Cab, Size))
+        {
+            skip("Cannot write the cabinet\n");
+            return;
+        }
+        Data = CreateCabinetIndirect(Path, NULL);
+        if (Tests[i].Error)
+        {
+            ok(!Data, "test %lu: indirect data created\n", i);
+            ok_hex(GetLastError(), Tests[i].Error);
+            ok(FileMatches(Path, Cab, Size), "test %lu: the cabinet changed\n", i);
+        }
+        else
+        {
+            ok(Data != NULL, "test %lu: failed with %lu\n", i, GetLastError());
+            ok(Tests[i].Rewritten ? FileMatches(Path, Prepared, PreparedSize) : FileMatches(Path, Cab, Size),
+               "test %lu: unexpected cabinet\n", i);
+            if (Data)
+                ok(Data->Digest.cbData == 32 && !memcmp(Data->Digest.pbData, Tests[i].FolderReserve ? FolderDigest : Digest, 32),
+                   "test %lu: unexpected digest\n", i);
+        }
+        if (Data)
+            HeapFree(GetProcessHeap(), 0, Data);
+    }
+    DeleteFileW(Path);
+}
+
+static
 VOID
 TestUnsignedImage(VOID)
 {
@@ -361,6 +471,7 @@ TestCabinetIndirectData(const WCHAR *Temp)
     DeleteFileW(First);
     DeleteFileW(Copy);
     DeleteFileW(Second);
+    TestCabinetReserve(Temp, Prepared, sizeof(Prepared), Digest);
     TestUnsignedImage();
 }
 

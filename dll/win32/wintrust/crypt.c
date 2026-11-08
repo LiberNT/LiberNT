@@ -2580,11 +2580,6 @@ static BOOL sip_hash_cab(const BYTE *data, const struct cab_layout *cab, HCRYPTH
     DWORD i;
 
     sip_cab_header(data, cab, header);
-    if (cab->has_reserve)
-    {
-        tail[0] = data[38];
-        tail[1] = data[39];
-    }
     if (!CryptHashData(hash, header, 4, 0) || !CryptHashData(hash, header + 8, 28, 0) ||
         !CryptHashData(hash, tail, sizeof(tail), 0) ||
         !CryptHashData(hash, data + cab->strings_offset, cab->strings_size, 0))
@@ -2615,7 +2610,7 @@ static void sip_cab_reserve_layout(const BYTE *data, const struct cab_layout *ca
     {
         p[2] = data[38];
         p[3] = data[39];
-        memcpy(p + 4, data + 40, cab->reserve_size);
+        memcpy(p + 4, data + 40, min(cab->reserve_size, reserve));
     }
     memcpy(p + 4, reserve_magic, sizeof(reserve_magic));
     sip_put32(p + 8, signature_size ? cab->cabinet_size + cab->shift : 0);
@@ -2634,23 +2629,48 @@ static void sip_cab_reserve_layout(const BYTE *data, const struct cab_layout *ca
     memcpy(p, data + cab->rest_offset, cab->cabinet_size - cab->rest_offset);
 }
 
-static BYTE *sip_cab_prepare(HANDLE file, const BYTE *data, DWORD *size, struct cab_layout *cab)
+static BOOL sip_cab_signing_layout(const BYTE *data, DWORD size, struct cab_layout *cab)
+{
+    DWORD offset, length;
+
+    if (!cab->has_reserve)
+        return TRUE;
+    if (cab->reserve_size < 20 || data[39] || sip_get32(data + 40) != 0x00100000)
+    {
+        SetLastError(ERROR_BAD_FORMAT);
+        return FALSE;
+    }
+    offset = sip_get32(data + 44);
+    length = sip_get32(data + 48);
+    if (length && (offset > size || length > size - offset))
+    {
+        SetLastError(ERROR_BAD_FORMAT);
+        return FALSE;
+    }
+    cab->shift = 20 - cab->reserve_size;
+    return TRUE;
+}
+
+static BYTE *sip_cab_prepare(HANDLE file, const BYTE **view, HANDLE *mapping, DWORD *size, struct cab_layout *cab)
 {
     DWORD prepared_size = cab->cabinet_size + cab->shift, written;
     BYTE *prepared;
 
-    /* TODO: INFO_NEEDED: what Windows 11 writes when it grows a header reserve shorter than 20 bytes */
     if (!(prepared = calloc(1, prepared_size + *size - cab->cabinet_size)))
     {
         SetLastError(ERROR_OUTOFMEMORY);
         return NULL;
     }
-    sip_cab_reserve_layout(data, cab, 0, prepared);
-    memcpy(prepared + prepared_size, data + cab->cabinet_size, *size - cab->cabinet_size);
+    sip_cab_reserve_layout(*view, cab, 0, prepared);
+    memcpy(prepared + prepared_size, *view + cab->cabinet_size, *size - cab->cabinet_size);
     prepared_size += *size - cab->cabinet_size;
+    UnmapViewOfFile(*view);
+    *view = NULL;
+    CloseHandle(*mapping);
+    *mapping = NULL;
     if (SetFilePointer(file, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER ||
         !WriteFile(file, prepared, prepared_size, &written, NULL) || written != prepared_size ||
-        !sip_cab_layout(prepared, prepared_size, cab))
+        !SetEndOfFile(file) || !sip_cab_layout(prepared, prepared_size, cab))
     {
         free(prepared);
         return NULL;
@@ -3027,7 +3047,8 @@ static BOOL sip_create_indirect_data(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIn
         if (view)
         {
             if (!sip_cab_layout(view, file_size, &cab) ||
-                (prepare && cab.shift && !(prepared = sip_cab_prepare(file, view, &file_size, &cab))))
+                (prepare && !sip_cab_signing_layout(view, file_size, &cab)) ||
+                (prepare && cab.shift && !(prepared = sip_cab_prepare(file, &view, &mapping, &file_size, &cab))))
                 goto done;
             if (!prepare)
                 cab.shift = 0;
