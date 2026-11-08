@@ -1110,6 +1110,8 @@ static const LPCSTR WINTRUST_CodecOids[] =
     SPC_FINANCIAL_CRITERIA_OBJID, SPC_FINANCIAL_CRITERIA_STRUCT, SPC_STATEMENT_TYPE_OBJID, SPC_STATEMENT_TYPE_STRUCT,
     CAT_NAMEVALUE_OBJID, CAT_NAMEVALUE_STRUCT, CAT_MEMBERINFO_OBJID, CAT_MEMBERINFO_STRUCT,
     CAT_MEMBERINFO2_OBJID, CAT_MEMBERINFO2_STRUCT, SPC_SP_OPUS_INFO_OBJID, SPC_SP_OPUS_INFO_STRUCT,
+    szOID_INTENT_TO_SEAL, INTENT_TO_SEAL_ATTRIBUTE_STRUCT, szOID_SEALING_SIGNATURE, SEALING_SIGNATURE_ATTRIBUTE_STRUCT,
+    szOID_SEALING_TIMESTAMP, SEALING_TIMESTAMP_ATTRIBUTE_STRUCT,
 };
 
 static HRESULT WINTRUST_AddSips(void)
@@ -1164,6 +1166,12 @@ HRESULT WINAPI DllRegisterServer(void)
 #ifdef __REACTOS__
     static const CHAR CatMemberInfo2Encode[]           = "WVTAsn1CatMemberInfo2Encode";
     static const CHAR CatMemberInfo2Decode[]           = "WVTAsn1CatMemberInfo2Decode";
+    static const CHAR IntentToSealEncode[]             = "WVTAsn1IntentToSealAttributeEncode";
+    static const CHAR IntentToSealDecode[]             = "WVTAsn1IntentToSealAttributeDecode";
+    static const CHAR SealingSignatureEncode[]         = "WVTAsn1SealingSignatureAttributeEncode";
+    static const CHAR SealingSignatureDecode[]         = "WVTAsn1SealingSignatureAttributeDecode";
+    static const CHAR SealingTimestampEncode[]         = "WVTAsn1SealingTimestampAttributeEncode";
+    static const CHAR SealingTimestampDecode[]         = "WVTAsn1SealingTimestampAttributeDecode";
 #endif
     static const CHAR SpcSpOpusInfoEncode[]            = "WVTAsn1SpcSpOpusInfoEncode";
     static const CHAR SpcSpOpusInfoDecode[]            = "WVTAsn1SpcSpOpusInfoDecode";
@@ -1234,6 +1242,12 @@ HRESULT WINAPI DllRegisterServer(void)
 #ifdef __REACTOS__
     WINTRUST_REGISTEROID(CAT_MEMBERINFO2_OBJID, CatMemberInfo2Encode, CatMemberInfo2Decode);
     WINTRUST_REGISTEROID(CAT_MEMBERINFO2_STRUCT, CatMemberInfo2Encode, CatMemberInfo2Decode);
+    WINTRUST_REGISTEROID(szOID_INTENT_TO_SEAL, IntentToSealEncode, IntentToSealDecode);
+    WINTRUST_REGISTEROID(INTENT_TO_SEAL_ATTRIBUTE_STRUCT, IntentToSealEncode, IntentToSealDecode);
+    WINTRUST_REGISTEROID(szOID_SEALING_SIGNATURE, SealingSignatureEncode, SealingSignatureDecode);
+    WINTRUST_REGISTEROID(SEALING_SIGNATURE_ATTRIBUTE_STRUCT, SealingSignatureEncode, SealingSignatureDecode);
+    WINTRUST_REGISTEROID(szOID_SEALING_TIMESTAMP, SealingTimestampEncode, SealingTimestampDecode);
+    WINTRUST_REGISTEROID(SEALING_TIMESTAMP_ATTRIBUTE_STRUCT, SealingTimestampEncode, SealingTimestampDecode);
 #endif
     WINTRUST_REGISTEROID(SPC_SP_OPUS_INFO_OBJID, SpcSpOpusInfoEncode, SpcSpOpusInfoDecode);
     WINTRUST_REGISTEROID(SPC_SP_OPUS_INFO_STRUCT, SpcSpOpusInfoEncode,  SpcSpOpusInfoDecode);

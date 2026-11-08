@@ -523,7 +523,11 @@ static BOOL WINAPI CRYPT_AsnEncodeOid(DWORD dwCertEncodingType,
 
     TRACE("%s\n", debugstr_a(pszObjId));
 
+#ifdef __REACTOS__
+    if (pszObjId && *pszObjId)
+#else
     if (pszObjId)
+#endif
     {
         const char *ptr;
         int val1, val2;
@@ -2974,5 +2978,239 @@ BOOL WINAPI WVTAsn1SpcMinimalCriteriaInfoDecode(DWORD dwCertEncodingType, LPCSTR
     }
     return CRYPT_AsnDecodeBool(dwCertEncodingType, lpszStructType, pbEncoded, cbEncoded, dwFlags, pvStructInfo,
                                pcbStructInfo);
+}
+#endif
+
+#ifdef __REACTOS__
+static BOOL WINAPI CRYPT_AsnEncodeBoolean(DWORD dwCertEncodingType, LPCSTR lpszStructType, const void *pvStructInfo,
+                                          BYTE *pbEncoded, DWORD *pcbEncoded)
+{
+    BOOL value = *(const BOOLEAN *)pvStructInfo;
+
+    return CRYPT_AsnEncodeBool(dwCertEncodingType, lpszStructType, &value, pbEncoded, pcbEncoded);
+}
+
+static BOOL WINAPI CRYPT_AsnDecodeBoolean(DWORD dwCertEncodingType, LPCSTR lpszStructType, const BYTE *pbEncoded,
+                                          DWORD cbEncoded, DWORD dwFlags, void *pvStructInfo, DWORD *pcbStructInfo)
+{
+    DWORD size = sizeof(BOOL);
+    BOOL value;
+
+    if (!CRYPT_AsnDecodeBool(dwCertEncodingType, lpszStructType, pbEncoded, cbEncoded, dwFlags, &value, &size))
+        return FALSE;
+    if (pvStructInfo && *pcbStructInfo < sizeof(BOOLEAN))
+    {
+        *pcbStructInfo = sizeof(BOOLEAN);
+        SetLastError(ERROR_MORE_DATA);
+        return FALSE;
+    }
+    *pcbStructInfo = sizeof(BOOLEAN);
+    if (pvStructInfo)
+        *(BOOLEAN *)pvStructInfo = value != FALSE;
+    return TRUE;
+}
+
+/***********************************************************************
+ *		WVTAsn1IntentToSealAttributeEncode (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1IntentToSealAttributeEncode(DWORD dwCertEncodingType, LPCSTR lpszStructType,
+                                               const void *pvStructInfo, BYTE *pbEncoded, DWORD *pcbEncoded)
+{
+    BOOL ret = FALSE;
+
+    TRACE("(0x%08lx, %s, %p, %p, %p)\n", dwCertEncodingType, debugstr_a(lpszStructType), pvStructInfo, pbEncoded,
+          pcbEncoded);
+
+    __TRY
+    {
+        const INTENT_TO_SEAL_ATTRIBUTE *intent = pvStructInfo;
+        struct AsnEncodeSequenceItem items[] = {
+         { &intent->version, CRYPT_AsnEncodeInt, 0 },
+         { &intent->seal, CRYPT_AsnEncodeBoolean, 0 },
+        };
+
+        ret = CRYPT_AsnEncodeSequence(X509_ASN_ENCODING, items, ARRAY_SIZE(items), pbEncoded, pcbEncoded);
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        SetLastError(STATUS_ACCESS_VIOLATION);
+    }
+    __ENDTRY
+    return ret;
+}
+
+/***********************************************************************
+ *		WVTAsn1IntentToSealAttributeDecode (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1IntentToSealAttributeDecode(DWORD dwCertEncodingType, LPCSTR lpszStructType, const BYTE *pbEncoded,
+                                               DWORD cbEncoded, DWORD dwFlags, void *pvStructInfo,
+                                               DWORD *pcbStructInfo)
+{
+    BOOL ret = FALSE;
+
+    TRACE("%p, %ld, %08lx, %p, %ld\n", pbEncoded, cbEncoded, dwFlags, pvStructInfo, *pcbStructInfo);
+
+    __TRY
+    {
+        struct AsnDecodeSequenceItem items[] = {
+         { ASN_INTEGER, offsetof(INTENT_TO_SEAL_ATTRIBUTE, version), CRYPT_AsnDecodeInt,
+           MEMBERSIZE(INTENT_TO_SEAL_ATTRIBUTE, version, seal), FALSE, FALSE, 0, 0 },
+         { ASN_BOOL, offsetof(INTENT_TO_SEAL_ATTRIBUTE, seal), CRYPT_AsnDecodeBoolean,
+           FINALMEMBERSIZE(INTENT_TO_SEAL_ATTRIBUTE, seal), FALSE, FALSE, 0, 0 },
+        };
+        INTENT_TO_SEAL_ATTRIBUTE intent;
+        DWORD size = sizeof(intent);
+
+        ret = CRYPT_AsnDecodeSequence(dwCertEncodingType, items, ARRAY_SIZE(items), pbEncoded, cbEncoded, dwFlags,
+                                      &intent, &size, NULL);
+        if (ret && pvStructInfo && *pcbStructInfo < sizeof(intent))
+        {
+            SetLastError(ERROR_MORE_DATA);
+            ret = FALSE;
+        }
+        else if (ret && pvStructInfo)
+        {
+            ((INTENT_TO_SEAL_ATTRIBUTE *)pvStructInfo)->version = intent.version;
+            ((INTENT_TO_SEAL_ATTRIBUTE *)pvStructInfo)->seal = intent.seal;
+        }
+        if (ret || GetLastError() == ERROR_MORE_DATA)
+            *pcbStructInfo = sizeof(intent);
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        SetLastError(STATUS_ACCESS_VIOLATION);
+    }
+    __ENDTRY
+    return ret;
+}
+
+/***********************************************************************
+ *		WVTAsn1SealingSignatureAttributeEncode (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1SealingSignatureAttributeEncode(DWORD dwCertEncodingType, LPCSTR lpszStructType,
+                                                   const void *pvStructInfo, BYTE *pbEncoded, DWORD *pcbEncoded)
+{
+    BOOL ret = FALSE;
+
+    TRACE("(0x%08lx, %s, %p, %p, %p)\n", dwCertEncodingType, debugstr_a(lpszStructType), pvStructInfo, pbEncoded,
+          pcbEncoded);
+
+    __TRY
+    {
+        const SEALING_SIGNATURE_ATTRIBUTE *signature = pvStructInfo;
+        struct AsnEncodeSequenceItem items[] = {
+         { &signature->version, CRYPT_AsnEncodeInt, 0 },
+         { &signature->signerIndex, CRYPT_AsnEncodeInt, 0 },
+         { &signature->signatureAlgorithm, CRYPT_AsnEncodeAlgorithmIdWithNullParams, 0 },
+         { &signature->encryptedDigest, CRYPT_AsnEncodeOctets, 0 },
+        };
+
+        ret = CRYPT_AsnEncodeSequence(X509_ASN_ENCODING, items, ARRAY_SIZE(items), pbEncoded, pcbEncoded);
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        SetLastError(STATUS_ACCESS_VIOLATION);
+    }
+    __ENDTRY
+    return ret;
+}
+
+/***********************************************************************
+ *		WVTAsn1SealingSignatureAttributeDecode (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1SealingSignatureAttributeDecode(DWORD dwCertEncodingType, LPCSTR lpszStructType,
+                                                   const BYTE *pbEncoded, DWORD cbEncoded, DWORD dwFlags,
+                                                   void *pvStructInfo, DWORD *pcbStructInfo)
+{
+    BOOL ret = FALSE;
+
+    TRACE("%p, %ld, %08lx, %p, %ld\n", pbEncoded, cbEncoded, dwFlags, pvStructInfo, *pcbStructInfo);
+
+    __TRY
+    {
+        struct AsnDecodeSequenceItem items[] = {
+         { ASN_INTEGER, offsetof(SEALING_SIGNATURE_ATTRIBUTE, version), CRYPT_AsnDecodeInt,
+           MEMBERSIZE(SEALING_SIGNATURE_ATTRIBUTE, version, signerIndex), FALSE, FALSE, 0, 0 },
+         { ASN_INTEGER, offsetof(SEALING_SIGNATURE_ATTRIBUTE, signerIndex), CRYPT_AsnDecodeInt,
+           MEMBERSIZE(SEALING_SIGNATURE_ATTRIBUTE, signerIndex, signatureAlgorithm), FALSE, FALSE, 0, 0 },
+         { ASN_SEQUENCEOF, offsetof(SEALING_SIGNATURE_ATTRIBUTE, signatureAlgorithm), CRYPT_AsnDecodeAlgorithmId,
+           sizeof(CRYPT_ALGORITHM_IDENTIFIER), FALSE, TRUE,
+           offsetof(SEALING_SIGNATURE_ATTRIBUTE, signatureAlgorithm.pszObjId), 0 },
+         { ASN_OCTETSTRING, offsetof(SEALING_SIGNATURE_ATTRIBUTE, encryptedDigest), CRYPT_AsnDecodeOctets,
+           sizeof(CRYPT_DIGEST_BLOB), FALSE, TRUE, offsetof(SEALING_SIGNATURE_ATTRIBUTE, encryptedDigest.pbData), 0 },
+        };
+
+        ret = CRYPT_AsnDecodeSequence(dwCertEncodingType, items, ARRAY_SIZE(items), pbEncoded, cbEncoded, dwFlags,
+                                      pvStructInfo, pcbStructInfo, NULL);
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        SetLastError(STATUS_ACCESS_VIOLATION);
+    }
+    __ENDTRY
+    return ret;
+}
+
+/***********************************************************************
+ *		WVTAsn1SealingTimestampAttributeEncode (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1SealingTimestampAttributeEncode(DWORD dwCertEncodingType, LPCSTR lpszStructType,
+                                                   const void *pvStructInfo, BYTE *pbEncoded, DWORD *pcbEncoded)
+{
+    BOOL ret = FALSE;
+
+    TRACE("(0x%08lx, %s, %p, %p, %p)\n", dwCertEncodingType, debugstr_a(lpszStructType), pvStructInfo, pbEncoded,
+          pcbEncoded);
+
+    __TRY
+    {
+        const SEALING_TIMESTAMP_ATTRIBUTE *timestamp = pvStructInfo;
+        struct AsnEncodeSequenceItem items[] = {
+         { &timestamp->version, CRYPT_AsnEncodeInt, 0 },
+         { &timestamp->signerIndex, CRYPT_AsnEncodeInt, 0 },
+         { &timestamp->sealTimeStampToken, CRYPT_AsnEncodeOctets, 0 },
+        };
+
+        ret = CRYPT_AsnEncodeSequence(X509_ASN_ENCODING, items, ARRAY_SIZE(items), pbEncoded, pcbEncoded);
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        SetLastError(STATUS_ACCESS_VIOLATION);
+    }
+    __ENDTRY
+    return ret;
+}
+
+/***********************************************************************
+ *		WVTAsn1SealingTimestampAttributeDecode (WINTRUST.@)
+ */
+BOOL WINAPI WVTAsn1SealingTimestampAttributeDecode(DWORD dwCertEncodingType, LPCSTR lpszStructType,
+                                                   const BYTE *pbEncoded, DWORD cbEncoded, DWORD dwFlags,
+                                                   void *pvStructInfo, DWORD *pcbStructInfo)
+{
+    BOOL ret = FALSE;
+
+    TRACE("%p, %ld, %08lx, %p, %ld\n", pbEncoded, cbEncoded, dwFlags, pvStructInfo, *pcbStructInfo);
+
+    __TRY
+    {
+        struct AsnDecodeSequenceItem items[] = {
+         { ASN_INTEGER, offsetof(SEALING_TIMESTAMP_ATTRIBUTE, version), CRYPT_AsnDecodeInt,
+           MEMBERSIZE(SEALING_TIMESTAMP_ATTRIBUTE, version, signerIndex), FALSE, FALSE, 0, 0 },
+         { ASN_INTEGER, offsetof(SEALING_TIMESTAMP_ATTRIBUTE, signerIndex), CRYPT_AsnDecodeInt,
+           MEMBERSIZE(SEALING_TIMESTAMP_ATTRIBUTE, signerIndex, sealTimeStampToken), FALSE, FALSE, 0, 0 },
+         { ASN_OCTETSTRING, offsetof(SEALING_TIMESTAMP_ATTRIBUTE, sealTimeStampToken), CRYPT_AsnDecodeOctets,
+           sizeof(CRYPT_DATA_BLOB), FALSE, TRUE, offsetof(SEALING_TIMESTAMP_ATTRIBUTE, sealTimeStampToken.pbData), 0 },
+        };
+
+        ret = CRYPT_AsnDecodeSequence(dwCertEncodingType, items, ARRAY_SIZE(items), pbEncoded, cbEncoded, dwFlags,
+                                      pvStructInfo, pcbStructInfo, NULL);
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        SetLastError(STATUS_ACCESS_VIOLATION);
+    }
+    __ENDTRY
+    return ret;
 }
 #endif
