@@ -1243,7 +1243,7 @@ RdpVddDdiRecommendMonitorModes(
     PRDPVDD_ADAPTER Adapter = (PRDPVDD_ADAPTER)hAdapter;
     const DXGK_MONITORSOURCEMODESET_INTERFACE *Interface = pRecommendMonitorModes->pMonitorSourceModeSetInterface;
     D3DKMDT_MONITOR_SOURCE_MODE *Mode;
-    NTSTATUS Status;
+    NTSTATUS Status, ReleaseStatus;
 
     Status = Interface->pfnCreateNewModeInfo(pRecommendMonitorModes->hMonitorSourceModeSet, &Mode);
     if (!NT_SUCCESS(Status))
@@ -1270,9 +1270,9 @@ RdpVddDdiRecommendMonitorModes(
     Status = Interface->pfnAddMode(pRecommendMonitorModes->hMonitorSourceModeSet, Mode);
     if (!NT_SUCCESS(Status))
     {
-        (VOID)Interface->pfnReleaseModeInfo(pRecommendMonitorModes->hMonitorSourceModeSet, Mode);
+        ReleaseStatus = Interface->pfnReleaseModeInfo(pRecommendMonitorModes->hMonitorSourceModeSet, Mode);
         if (Status == STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET)
-            Status = STATUS_SUCCESS;
+            Status = ReleaseStatus;
     }
     return Status;
 }
