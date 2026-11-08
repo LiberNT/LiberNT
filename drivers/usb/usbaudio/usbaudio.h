@@ -39,7 +39,8 @@
 #define USB_AUDIO_GET_MIN                                0x82
 #define USB_AUDIO_GET_MAX                                0x83
 #define USB_AUDIO_GET_RES                                0x84
-#define USB_AUDIO2_GET_RANGE                             0x82
+#define USB_AUDIO2_GET_RANGE                             0x02
+#define USB_AUDIO2_CUR                                   0x01
 #define USB_AUDIO2_CS_SAMPLING_FREQ                      0x01
 #define USB_AUDIO2_CS_CLOCK_VALID                        0x02
 #define USB_AUDIO2_FORMAT_TYPE_I                         0x01
@@ -591,6 +592,7 @@ typedef struct _DEVICE_EXTENSION
     ULONG NodeContextCount;
     ULONG AudioVersion;                         /* USB Audio 1.0, 2.0, or 3.0 */
     ULONG BaddProfile;                          /* UAC3 BADD profile or 0 */
+    BOOLEAN ControlPathBroken;
     ULONG QuirkFlags;                           /* active quirk flags */
     volatile LONG StreamingPins;
     BOOLEAN HasMidiInterface;

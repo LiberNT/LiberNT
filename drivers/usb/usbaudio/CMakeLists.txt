@@ -5,7 +5,8 @@ list(APPEND SOURCE
     pool.c
     filter.c
     pin.c
-    guid.c)
+    guid.c
+    uac/uac_desc_validate.c)
 
 add_library(usbaudio MODULE
     ${SOURCE}
