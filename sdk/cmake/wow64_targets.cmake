@@ -6,6 +6,7 @@ set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES}
     activeds.tlb
     atl100
     d3d8thk
+    difxapi
     dmusic
     dplayx
     dpwsockx
