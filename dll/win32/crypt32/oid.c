@@ -162,7 +162,7 @@ static char *CRYPT_GetKeyName(DWORD dwEncodingType, LPCSTR pszFuncName,
  LPCSTR pszOID)
 {
     static const char szEncodingTypeFmt[] =
-     "Software\\Microsoft\\Cryptography\\OID\\EncodingType %ld\\%s\\%s";
+     "Software\\Microsoft\\Cryptography\\OID\\EncodingType %lu\\%s\\%s";
     UINT len;
     char numericOID[7]; /* enough for "#65535" */
     const char *oid;
