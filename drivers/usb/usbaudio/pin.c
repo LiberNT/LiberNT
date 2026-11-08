@@ -1719,6 +1719,7 @@ UsbAudioSubmitFeedbackRequest(
     IoStack->Parameters.Others.Argument1 = Urb;
     Irp->Tail.Overlay.DriverContext[0] = Urb;
 
+    KeClearEvent(&PinContext->FeedbackEvent);
     PinContext->FeedbackPending = TRUE;
     IoCallDriver(PinContext->LowerDevice, Irp);
 }
@@ -1781,7 +1782,7 @@ InitStreamPin(
         }
     }
 
-    KeInitializeEvent(&PinContext->FeedbackEvent, NotificationEvent, FALSE);
+    KeInitializeEvent(&PinContext->FeedbackEvent, NotificationEvent, TRUE);
     PinContext->FeedbackPending = FALSE;
     PinContext->FeedbackValue = 0;
     UacFeedbackInit(&PinContext->Feedback, WaveFormatEx->WaveFormatEx.nSamplesPerSec, PinContext->PacketRate);
@@ -2078,10 +2079,10 @@ USBAudioPinClose(
             PinContext->StarvationWorker = NULL;
         }
 
-        if (PinContext->FeedbackIrp && PinContext->FeedbackPending)
+        if (PinContext->FeedbackIrp)
         {
-            KeClearEvent(&PinContext->FeedbackEvent);
-            IoCancelIrp(PinContext->FeedbackIrp);
+            if (PinContext->FeedbackPending)
+                IoCancelIrp(PinContext->FeedbackIrp);
             KeWaitForSingleObject(&PinContext->FeedbackEvent,
                                   Executive,
                                   KernelMode,
