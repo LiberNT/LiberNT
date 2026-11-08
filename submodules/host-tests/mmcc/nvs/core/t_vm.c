@@ -1826,6 +1826,105 @@ PagingCommitExpansion(void)
     WorldDestroy(&World);
 }
 
+typedef struct _PAGING_GROWTH
+{
+    MI_PAGEFILE PageFile;
+    volatile LONG Ready;
+    volatile LONG Go;
+    volatile LONG Stop;
+    volatile LONG Attempts;
+    volatile LONG Seen[4];
+    volatile LONG Owner[257];
+} PAGING_GROWTH;
+
+typedef struct _PAGING_GROWTH_WORKER
+{
+    PAGING_GROWTH *Growth;
+    ULONG Index;
+} PAGING_GROWTH_WORKER;
+
+static
+void *
+PagingGrowthWorker(void *Argument)
+{
+    PAGING_GROWTH_WORKER *Worker = Argument;
+    PAGING_GROWTH *Growth = Worker->Growth;
+
+    MiHostCpu = Worker->Index;
+    __atomic_add_fetch(&Growth->Ready, 1, __ATOMIC_RELEASE);
+    while (!__atomic_load_n(&Growth->Go, __ATOMIC_ACQUIRE))
+        sched_yield();
+    while (!__atomic_load_n(&Growth->Stop, __ATOMIC_ACQUIRE))
+    {
+        ULONG64 Slot = MiPageFileReserveSlot(&Growth->PageFile);
+
+        if (Slot != 0)
+        {
+            MI_ASSERT(Slot >= 65 && Slot < RTL_NUMBER_OF(Growth->Owner));
+            MI_ASSERT(__atomic_exchange_n(&Growth->Owner[Slot], 1, __ATOMIC_ACQ_REL) == 0);
+            __atomic_store_n(&Growth->Seen[Worker->Index], 1, __ATOMIC_RELEASE);
+            __atomic_store_n(&Growth->Owner[Slot], 0, __ATOMIC_RELEASE);
+            MiPageFileReleaseSlot(&Growth->PageFile, Slot);
+        }
+        __atomic_add_fetch(&Growth->Attempts, 1, __ATOMIC_RELAXED);
+    }
+    return NULL;
+}
+
+static
+void
+PagingConcurrentSlotGrowth(void)
+{
+    PAGING_GROWTH Growth = {0};
+    PAGING_GROWTH_WORKER Workers[4];
+    MI_PAGEFILE_OPS Ops = {0};
+    pthread_t Threads[4];
+    ULONG64 Held[64];
+    double Deadline = NowSeconds() + 30;
+    ULONG i;
+
+    MI_ASSERT(NT_SUCCESS(MiPageFileInitialize(&Growth.PageFile, &Ops, NULL, 65)));
+    for (i = 0; i < RTL_NUMBER_OF(Held); i++)
+    {
+        Held[i] = MiPageFileReserveSlot(&Growth.PageFile);
+        MI_ASSERT(Held[i] == i + 1);
+    }
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+    {
+        Workers[i] = (PAGING_GROWTH_WORKER){ &Growth, i };
+        MI_ASSERT(pthread_create(&Threads[i], NULL, PagingGrowthWorker, &Workers[i]) == 0);
+    }
+    while (__atomic_load_n(&Growth.Ready, __ATOMIC_ACQUIRE) != RTL_NUMBER_OF(Threads))
+    {
+        MI_ASSERT(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    __atomic_store_n(&Growth.Go, 1, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&Growth.Attempts, __ATOMIC_RELAXED) < 1000)
+    {
+        MI_ASSERT(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    MI_ASSERT(NT_SUCCESS(MiPageFileExtend(&Growth.PageFile, 130)));
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+    {
+        while (!__atomic_load_n(&Growth.Seen[i], __ATOMIC_ACQUIRE))
+        {
+            MI_ASSERT(NowSeconds() < Deadline);
+            sched_yield();
+        }
+    }
+    MI_ASSERT(NT_SUCCESS(MiPageFileExtend(&Growth.PageFile, 257)));
+    __atomic_store_n(&Growth.Stop, 1, __ATOMIC_RELEASE);
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+        MI_ASSERT(pthread_join(Threads[i], NULL) == 0);
+    CHECK(Growth.PageFile.SlotCount == 257 && Growth.PageFile.SlotsInUse == RTL_NUMBER_OF(Held));
+    for (i = 0; i < RTL_NUMBER_OF(Held); i++)
+        MiPageFileReleaseSlot(&Growth.PageFile, Held[i]);
+    CHECK(Growth.PageFile.SlotsInUse == 0);
+    MiPageFileUninitialize(&Growth.PageFile);
+}
+
 void
 TestPaging(void)
 {
@@ -1834,4 +1933,5 @@ TestPaging(void)
     PagingInPageError();
     PagingCleanPrivateAccounting();
     PagingCommitExpansion();
+    PagingConcurrentSlotGrowth();
 }

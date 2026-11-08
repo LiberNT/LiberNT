@@ -9,6 +9,27 @@
 
 #include <nvs/include/mm.h>
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertPageFile(_In_ PMI_PAGEFILE PageFile)
+{
+    ULONG Tail;
+
+    MI_ASSERT(PageFile->Bitmap != NULL && PageFile->SlotCount != 0);
+    MI_ASSERT((PageFile->Bitmap[0] & 1) != 0);
+    MI_ASSERT(PageFile->SlotsInUse < PageFile->SlotCount);
+    MI_ASSERT(PageFile->SlotsInUse <= PageFile->PeakSlotsInUse);
+    MI_ASSERT(PageFile->PeakSlotsInUse < PageFile->SlotCount);
+    MI_ASSERT(PageFile->Hint <= PageFile->SlotCount);
+    Tail = (ULONG)(PageFile->SlotCount & 63);
+    if (Tail != 0)
+        MI_ASSERT((PageFile->Bitmap[PageFile->SlotCount >> 6] >> Tail) == 0);
+}
+#else
+#define MiAssertPageFile(PageFile) ((VOID)0)
+#endif
+
 NTSTATUS
 MiPageFileInitialize(
     _Out_ PMI_PAGEFILE PageFile,
@@ -18,6 +39,7 @@ MiPageFileInitialize(
 {
     SIZE_T Words = (SIZE_T)((SlotCount + 63) / 64);
 
+    MI_ASSERT(SlotCount != 0);
     RtlZeroMemory(PageFile, sizeof(*PageFile));
     PageFile->Bitmap = MI_ALLOCATE(Words * sizeof(ULONG64));
     if (PageFile->Bitmap == NULL)
@@ -30,6 +52,7 @@ MiPageFileInitialize(
     PageFile->Ops = *Ops;
     PageFile->Context = Context;
     MI_SPIN_INIT(&PageFile->Lock);
+    MiAssertPageFile(PageFile);
     return STATUS_SUCCESS;
 }
 
@@ -50,6 +73,7 @@ MiPageFileExtend(
     RtlZeroMemory(Bitmap, Words * sizeof(ULONG64));
 
     MI_SPIN_ACQUIRE(&PageFile->Lock, &OldIrql);
+    MiAssertPageFile(PageFile);
 
     if (SlotCount <= PageFile->SlotCount)
     {
@@ -62,6 +86,7 @@ MiPageFileExtend(
     Old = PageFile->Bitmap;
     PageFile->Bitmap = Bitmap;
     PageFile->SlotCount = SlotCount;
+    MiAssertPageFile(PageFile);
 
     MI_SPIN_RELEASE(&PageFile->Lock, OldIrql);
 
@@ -74,7 +99,10 @@ MiPageFileUninitialize(
     _Inout_ PMI_PAGEFILE PageFile)
 {
     if (PageFile->Bitmap != NULL)
+    {
+        MiAssertPageFile(PageFile);
         MI_FREE(PageFile->Bitmap);
+    }
 
     PageFile->Bitmap = NULL;
 }
@@ -88,10 +116,7 @@ MiPageFileReserveSlot(
     KIRQL OldIrql;
 
     MI_SPIN_ACQUIRE(&PageFile->Lock, &OldIrql);
-    MI_ASSERT(PageFile->SlotCount != 0 && (PageFile->Bitmap[0] & 1) != 0);
-    MI_ASSERT(PageFile->SlotsInUse < PageFile->SlotCount);
-    MI_ASSERT(PageFile->SlotsInUse <= PageFile->PeakSlotsInUse);
-    MI_ASSERT(PageFile->Hint <= PageFile->SlotCount);
+    MiAssertPageFile(PageFile);
 
     for (Scanned = 0; Scanned < PageFile->SlotCount; Scanned++)
     {
@@ -109,6 +134,8 @@ MiPageFileReserveSlot(
         break;
     }
 
+    MI_ASSERT(Slot != 0 || PageFile->SlotsInUse == PageFile->SlotCount - 1);
+    MiAssertPageFile(PageFile);
     MI_SPIN_RELEASE(&PageFile->Lock, OldIrql);
     return Slot;
 }
@@ -120,17 +147,23 @@ MiPageFileReleaseSlot(
 {
     KIRQL OldIrql;
 
-    if (Slot == 0 || Slot >= PageFile->SlotCount)
+    if (Slot == 0)
         return;
 
     MI_SPIN_ACQUIRE(&PageFile->Lock, &OldIrql);
-    MI_ASSERT(PageFile->SlotCount != 0 && (PageFile->Bitmap[0] & 1) != 0);
-    MI_ASSERT(PageFile->SlotsInUse != 0 && PageFile->SlotsInUse < PageFile->SlotCount);
+    MiAssertPageFile(PageFile);
+    if (Slot >= PageFile->SlotCount)
+    {
+        MI_SPIN_RELEASE(&PageFile->Lock, OldIrql);
+        return;
+    }
+    MI_ASSERT(PageFile->SlotsInUse != 0);
     MI_ASSERT(PageFile->SlotsInUse <= PageFile->PeakSlotsInUse);
     MI_ASSERT((PageFile->Bitmap[Slot >> 6] >> (Slot & 63)) & 1);
     PageFile->Bitmap[Slot >> 6] &= ~((ULONG64)1 << (Slot & 63));
     PageFile->SlotsInUse--;
     if (Slot < PageFile->Hint)
         PageFile->Hint = Slot;
+    MiAssertPageFile(PageFile);
     MI_SPIN_RELEASE(&PageFile->Lock, OldIrql);
 }
