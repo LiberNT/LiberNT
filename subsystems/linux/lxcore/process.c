@@ -345,8 +345,8 @@ LxProcessCreate(
     Process->ExitSignal = LX_SIGCHLD;
     Process->LoginUid = MAXULONG;
     Process->SessionId = MAXULONG;
-    Process->CapBounding = LX_CAP_FULL_SET & ~(1ULL << LX_CAP_SYS_TIME);
-    Process->CapPermitted = Process->CapEffective = Process->CapBounding;
+    Process->Cred.CapBounding = LX_CAP_FULL_SET & ~(1ULL << LX_CAP_SYS_TIME);
+    Process->Cred.CapPermitted = Process->Cred.CapEffective = Process->Cred.CapBounding;
     Process->StartTime = (LONG64)KeQueryInterruptTime();
     LxProcessDefaultLimits(Process->Limits);
     LxNsAttachRoot(Process, Instance);
@@ -388,19 +388,8 @@ LxProcessFork(
     RtlCopyMemory(Process->Comm, Parent->Comm, sizeof(Process->Comm));
     RtlCopyMemory(Process->SigAction, Parent->SigAction, sizeof(Process->SigAction));
     RtlCopyMemory(Process->Limits, Parent->Limits, sizeof(Process->Limits));
-    RtlCopyMemory(Process->Uid, Parent->Uid, sizeof(Process->Uid));
-    RtlCopyMemory(Process->Gid, Parent->Gid, sizeof(Process->Gid));
-    Process->Fsuid = Parent->Fsuid;
-    Process->Fsgid = Parent->Fsgid;
-    Process->GroupCount = Parent->GroupCount;
-    RtlCopyMemory(Process->Groups, Parent->Groups, sizeof(Process->Groups));
+    Process->Cred = *LxProcessCred(Parent);
     Process->NoNewPrivs = Parent->NoNewPrivs;
-    Process->SecureBits = Parent->SecureBits;
-    Process->CapInheritable = Parent->CapInheritable;
-    Process->CapPermitted = Parent->CapPermitted;
-    Process->CapEffective = Parent->CapEffective;
-    Process->CapBounding = Parent->CapBounding;
-    Process->CapAmbient = Parent->CapAmbient;
     Process->Dumpable = Parent->Dumpable;
     Process->CoreFilter = Parent->CoreFilter;
     Process->OomScoreAdj = Parent->OomScoreAdj;
@@ -554,6 +543,7 @@ LxThreadCreateCommon(
 
     LxProcessReference(Process);
     Thread->Process = Process;
+    Thread->Cred = &Process->Cred;
     InitializeListHead(&Thread->Link);
     Thread->AltStack.Flags = LX_SS_DISABLE;
     Thread->Sched.UtilMax = 1024;
@@ -994,7 +984,7 @@ LxProcessNotifyParent(
             Info.Child.Status = (Status >> 8) & 0xFF;
         }
         Info.Child.Pid = (LONG)LxPidNr(Parent, Child);
-        Info.Child.Uid = Child->Uid[0];
+        Info.Child.Uid = Child->Cred.Uid[0];
         LxSignalSend(Parent, NULL, (LONG)Child->ExitSignal, &Info);
     }
     LxPollWake(&Parent->ChildPoll, LX_POLLIN);

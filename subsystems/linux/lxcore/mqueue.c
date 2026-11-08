@@ -267,13 +267,14 @@ LxMqAccess(
     _In_ PLX_MQUEUE Queue,
     _In_ ULONG Mask)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     ULONG Bits;
 
     if (LxMqPrivileged(Process, LX_CAP_DAC_OVERRIDE))
         return 0;
-    if (Process->Fsuid == Queue->Uid)
+    if (Cred->Fsuid == Queue->Uid)
         Bits = (Queue->Mode >> 6) & 7;
-    else if (Process->Fsgid == Queue->Gid)
+    else if (Cred->Fsgid == Queue->Gid)
         Bits = (Queue->Mode >> 3) & 7;
     else
         Bits = Queue->Mode & 7;
@@ -314,6 +315,7 @@ LxMqOpenNamed(
     _In_ PCSTR Path,
     _Out_ PLX_FILE *Result)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     ULONG Access = Flags & LX_O_ACCMODE;
     PLX_MQ_NAMESPACE Namespace;
     PLX_MQUEUE Queue, Created = NULL;
@@ -382,8 +384,8 @@ LxMqOpenNamed(
             RtlStringCbCopyA(Created->Name, sizeof(Created->Name), Name);
             Created->Ino = (ULONG64)InterlockedIncrement64(&LxMqInode);
             Created->Mode = Mode & ~Process->Umask & 07777;
-            Created->Uid = Process->Fsuid;
-            Created->Gid = Process->Fsgid;
+            Created->Uid = Cred->Fsuid;
+            Created->Gid = Cred->Fsgid;
             Created->Atime = Created->Mtime = Created->Ctime = Now;
             KeInitializeEvent(&Created->Lock, SynchronizationEvent, TRUE);
             InitializeListHead(&Created->Messages);
@@ -424,7 +426,7 @@ LxMqUnlinkNamed(
     {
         Error = -LX_ENOENT;
     }
-    else if ((Process->Fsuid != Queue->Uid) && !LxMqPrivileged(Process, LX_CAP_FOWNER))
+    else if ((LxProcessCred(Process)->Fsuid != Queue->Uid) && !LxMqPrivileged(Process, LX_CAP_FOWNER))
     {
         Error = -LX_EACCES;
     }
@@ -623,7 +625,7 @@ LxMqDeliver(
     Info.Signo = Notify->Signo;
     Info.Code = LX_SI_MESGQ;
     Info.Child.Pid = (Owner->PidNs != NULL) ? (LONG)LxGlobalToNrIn(Owner->PidNs, Sender->Pid) : (LONG)Sender->Pid;
-    Info.Child.Uid = Sender->Uid[0];
+    Info.Child.Uid = LxProcessCred(Sender)->Uid[0];
     RtlCopyMemory(&Info.Raw[8], &Notify->Value, sizeof(Notify->Value));
     LxSignalSend(Owner, NULL, Notify->Signo, &Info);
 }

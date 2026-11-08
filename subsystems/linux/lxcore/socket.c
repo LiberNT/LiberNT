@@ -180,8 +180,8 @@ LxUnixCreate(
     Socket->RecvLimit = LX_UNIX_DEFAULT_BUFFER;
     Socket->SendLimit = LX_UNIX_DEFAULT_BUFFER;
     Socket->Cred.Pid = Process->Pid;
-    Socket->Cred.Uid = Process->Uid[1];
-    Socket->Cred.Gid = Process->Gid[1];
+    Socket->Cred.Uid = LxProcessCred(Process)->Uid[1];
+    Socket->Cred.Gid = LxProcessCred(Process)->Gid[1];
     Socket->AddressLength = sizeof(USHORT);
     *(PUSHORT)Socket->Address = LX_AF_UNIX;
     LxInstanceReference(Process->Instance);
@@ -1586,10 +1586,10 @@ LxUnixParseControl(
                 }
                 if (((Supplied.Pid != LxPidNr(Process, Process)) &&
                      !LxNsCapable(Process, LxNsOwner(Process->PidNs), LX_CAP_SYS_ADMIN)) ||
-                    ((Supplied.Uid != Process->Uid[0]) && (Supplied.Uid != Process->Uid[1]) &&
-                     (Supplied.Uid != Process->Uid[2]) && !LxNsCapable(Process, NULL, LX_CAP_SETUID)) ||
-                    ((Supplied.Gid != Process->Gid[0]) && (Supplied.Gid != Process->Gid[1]) &&
-                     (Supplied.Gid != Process->Gid[2]) && !LxNsCapable(Process, NULL, LX_CAP_SETGID)))
+                    ((Supplied.Uid != LxProcessCred(Process)->Uid[0]) && (Supplied.Uid != LxProcessCred(Process)->Uid[1]) &&
+                     (Supplied.Uid != LxProcessCred(Process)->Uid[2]) && !LxNsCapable(Process, NULL, LX_CAP_SETUID)) ||
+                    ((Supplied.Gid != LxProcessCred(Process)->Gid[0]) && (Supplied.Gid != LxProcessCred(Process)->Gid[1]) &&
+                     (Supplied.Gid != LxProcessCred(Process)->Gid[2]) && !LxNsCapable(Process, NULL, LX_CAP_SETGID)))
                 {
                     Result = -LX_EPERM;
                     break;
@@ -1668,8 +1668,8 @@ LxUnixSendInternal(
         return Result;
 
     Cred.Pid = Process->Pid;
-    Cred.Uid = Process->Uid[1];
-    Cred.Gid = Process->Gid[1];
+    Cred.Uid = LxProcessCred(Process)->Uid[1];
+    Cred.Gid = LxProcessCred(Process)->Gid[1];
     Result = LxUnixParseControl(Process, Header, &Fds, &FdCount, &Cred);
     if (Result != 0)
     {

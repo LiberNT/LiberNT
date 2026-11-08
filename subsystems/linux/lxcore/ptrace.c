@@ -128,7 +128,7 @@ LxPtraceNotifyTracer(
         RtlZeroMemory(&Info, sizeof(Info));
         Info.Code = Code;
         Info.Child.Pid = (LONG)LxGlobalToNr(Tracer, Tid);
-        Info.Child.Uid = Process->Uid[0];
+        Info.Child.Uid = LxProcessCred(Process)->Uid[0];
         Info.Child.Status = Status;
         LxSignalSend(Tracer, NULL, LX_SIGCHLD, &Info);
     }
@@ -183,7 +183,7 @@ LxPtraceStopCommon(
         Ptrace->Siginfo.Signo = Report & 0x7F;
         Ptrace->Siginfo.Code = Report;
         Ptrace->Siginfo.Child.Pid = (LONG)LxTidNr(Thread->Process, Thread);
-        Ptrace->Siginfo.Child.Uid = Thread->Process->Uid[0];
+        Ptrace->Siginfo.Child.Uid = LxProcessCred(Thread->Process)->Uid[0];
     }
     KeClearEvent(&Ptrace->Resume);
     Ptrace->Stopped = TRUE;
@@ -421,7 +421,7 @@ LxPtraceSignal(
         if (Tracer != NULL)
         {
             Info->Child.Pid = (LONG)LxPidNr(Thread->Process, Tracer);
-            Info->Child.Uid = Tracer->Uid[0];
+            Info->Child.Uid = LxProcessCred(Tracer)->Uid[0];
             LxProcessDereference(Tracer);
         }
     }
@@ -579,7 +579,7 @@ LxPtraceExec(
         RtlZeroMemory(&Info, sizeof(Info));
         Info.Code = LX_SI_USER;
         Info.Child.Pid = (LONG)LxPidNr(Thread->Process, Thread->Process);
-        Info.Child.Uid = Thread->Process->Uid[0];
+        Info.Child.Uid = LxProcessCred(Thread->Process)->Uid[0];
         LxSignalSend(Thread->Process, Thread, LX_SIGTRAP, &Info);
     }
 }
@@ -836,7 +836,7 @@ LxPtraceWaitFind(
     if (Found != NULL)
     {
         *Tid = LxGlobalToNr(Tracer, Found->Tid);
-        *Uid = Found->Process->Uid[0];
+        *Uid = LxProcessCred(Found->Process)->Uid[0];
     }
     ExReleaseFastMutex(&LxPtraceLock);
     if ((Found != NULL) && Found->Exited && Consume && !(Options & LX_WNOWAIT))

@@ -1153,16 +1153,16 @@ LxKeyCredLoad(
     Cred->Thread = Thread;
     Cred->Instance = Process->Instance;
     Cred->UserNs = LxCredUserNs(Process);
-    Cred->Uid = Process->Uid[0];
-    Cred->Euid = Process->Uid[1];
-    Cred->Suid = Process->Uid[2];
-    Cred->Gid = Process->Gid[0];
-    Cred->Egid = Process->Gid[1];
-    Cred->Sgid = Process->Gid[2];
-    Cred->Fsuid = Process->Fsuid;
-    Cred->Fsgid = Process->Fsgid;
-    Cred->GroupCount = min(Process->GroupCount, RTL_NUMBER_OF(Cred->Groups));
-    RtlCopyMemory(Cred->Groups, Process->Groups, Cred->GroupCount * sizeof(ULONG));
+    Cred->Uid = Thread->Cred->Uid[0];
+    Cred->Euid = Thread->Cred->Uid[1];
+    Cred->Suid = Thread->Cred->Uid[2];
+    Cred->Gid = Thread->Cred->Gid[0];
+    Cred->Egid = Thread->Cred->Gid[1];
+    Cred->Sgid = Thread->Cred->Gid[2];
+    Cred->Fsuid = Thread->Cred->Fsuid;
+    Cred->Fsgid = Thread->Cred->Fsgid;
+    Cred->GroupCount = min(Thread->Cred->GroupCount, RTL_NUMBER_OF(Cred->Groups));
+    RtlCopyMemory(Cred->Groups, Thread->Cred->Groups, Cred->GroupCount * sizeof(ULONG));
     Cred->Pid = Process->Pid;
 }
 
@@ -2723,8 +2723,8 @@ LxKeyctlSessionToParent(
         {
             Error = 0;
         }
-        else if ((Parent->Uid[0] == Cred->Euid) && (Parent->Uid[1] == Cred->Euid) && (Parent->Uid[2] == Cred->Euid) &&
-                 (Parent->Gid[0] == Cred->Egid) && (Parent->Gid[1] == Cred->Egid) && (Parent->Gid[2] == Cred->Egid) &&
+        else if ((Parent->Cred.Uid[0] == Cred->Euid) && (Parent->Cred.Uid[1] == Cred->Euid) && (Parent->Cred.Uid[2] == Cred->Euid) &&
+                 (Parent->Cred.Gid[0] == Cred->Egid) && (Parent->Cred.Gid[1] == Cred->Egid) && (Parent->Cred.Gid[2] == Cred->Egid) &&
                  ((Target->SessionKeyring == NULL) || (Target->SessionKeyring->Uid == Cred->Euid)) &&
                  (Keyring->Uid == Cred->Euid))
         {

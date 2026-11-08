@@ -1186,7 +1186,7 @@ LxBpfProgLoad(
     Prog->Type = Type;
     Prog->ExpectedAttachType = ExpectedAttach;
     Prog->InsnCount = Count;
-    Prog->Uid = Call->Process->Uid[1];
+    Prog->Uid = LxProcessCred(Call->Process)->Uid[1];
     Prog->Gpl = (License != NULL) && LxBpfLicenseIsGpl(License);
     Prog->LoadTime = (LONG64)KeQueryInterruptTime() * 100;
     if (Size >= 64)
@@ -1569,7 +1569,7 @@ LxBpfMapCreate(
     Map->ValueSize = ValueSize;
     Map->MaxEntries = MaxEntries;
     Map->Flags = Flags;
-    Map->Uid = Call->Process->Uid[1];
+    Map->Uid = LxProcessCred(Call->Process)->Uid[1];
     Map->LoadTime = (LONG64)KeQueryInterruptTime() * 100;
     ExInitializeFastMutex(&Map->Lock);
     if (Size >= 44)

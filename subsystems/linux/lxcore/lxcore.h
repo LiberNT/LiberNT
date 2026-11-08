@@ -580,6 +580,22 @@ struct _LX_CGROUP
     LONG64 PidsEventsLocal;
 };
 
+typedef struct _LX_CRED
+{
+    ULONG Uid[3];
+    ULONG Gid[3];
+    ULONG Fsuid;
+    ULONG Fsgid;
+    ULONG GroupCount;
+    ULONG Groups[32];
+    ULONG SecureBits;
+    ULONG64 CapInheritable;
+    ULONG64 CapPermitted;
+    ULONG64 CapEffective;
+    ULONG64 CapBounding;
+    ULONG64 CapAmbient;
+} LX_CRED, *PLX_CRED;
+
 struct _LX_PROCESS
 {
     volatile LONG RefCount;
@@ -646,21 +662,10 @@ struct _LX_PROCESS
     LX_POLL_HEAD ExitPoll;
     LX_POLL_HEAD SignalPoll;
     LX_POLL_HEAD ChildPoll;
-    ULONG Uid[3];
-    ULONG Gid[3];
-    ULONG Fsuid;
-    ULONG Fsgid;
-    ULONG GroupCount;
-    ULONG Groups[32];
+    LX_CRED Cred;
     ULONG Dumpable;
     BOOLEAN NoNewPrivs;
     BOOLEAN Execed;
-    ULONG SecureBits;
-    ULONG64 CapInheritable;
-    ULONG64 CapPermitted;
-    ULONG64 CapEffective;
-    ULONG64 CapBounding;
-    ULONG64 CapAmbient;
     ULONG ExitSignal;
     ULONG64 MinFlt;
     LX_USAGE ExitUsage;
@@ -796,6 +801,8 @@ struct _LX_THREAD
     volatile LONG PtraceWork;
     LONG ExitCode;
     ULONG PtraceVforkPid;
+    PLX_CRED Cred;
+    LX_CRED OwnCred;
     PLX_KEY ThreadKeyring;
     PLX_KEY ProcessKeyring;
     PLX_KEY SessionKeyring;
@@ -1515,6 +1522,7 @@ LONG LxUserNsGetMax(_In_ PLX_PROCESS Process);
 LONG LxUserNsSetMax(_In_ PLX_PROCESS Process, _In_ LONG64 Value);
 BOOLEAN LxInGroup(_In_ PLX_PROCESS Process, _In_ ULONG Gid);
 ULONG LxCredMakeId(_In_ PLX_PROCESS Process, _In_ BOOLEAN Group, _In_ ULONG Id);
+PLX_CRED LxProcessCred(_In_ PLX_PROCESS Process);
 VOID LxCredSave(_In_ PLX_PROCESS Process, _Out_ PLX_CRED_SAVE Save);
 VOID LxCredFixSetuid(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old, _In_ BOOLEAN FileSystem);
 VOID LxCredCommit(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old);
