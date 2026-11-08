@@ -9,5 +9,7 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
         add_test(NAME mm.pagefile_init COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pagefile-init-test.py
             --source ${MMCC_KERNEL_ROOT}/mm/nt/ntpagefile.c --init ${MMCC_KERNEL_ROOT}/mm/nt/ntinit.c
             --cc ${CMAKE_C_COMPILER})
+        add_test(NAME mm.pagefile_growth COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pagefile-growth-test.py
+            --source ${MMCC_KERNEL_ROOT}/mm/nt/ntpagefile.c --cc ${CMAKE_C_COMPILER})
     endif()
 endif()
