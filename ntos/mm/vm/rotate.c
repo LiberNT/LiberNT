@@ -81,34 +81,19 @@ MiRotateReleaseLocked(
 }
 
 NTSTATUS
-MiRotatePopulate(
+MiRotatePopulateLocked(
     _Inout_ PMI_ADDRESS_SPACE Space,
-    _In_ ULONG64 BaseAddress,
-    _In_ ULONG64 RegionSize)
+    _Inout_ PMI_VAD Vad,
+    _Inout_ PMI_FRAME_NUMBER Frames)
 {
-    ULONG64 Pages = RegionSize >> PAGE_SHIFT;
+    ULONG64 BaseAddress = Vad->Node.StartingVpn << PAGE_SHIFT;
+    ULONG64 Pages = Vad->Node.EndingVpn - Vad->Node.StartingVpn + 1;
     NTSTATUS Status = STATUS_SUCCESS;
-    PMI_FRAME_NUMBER Frames;
-    PMI_VAD Vad;
     ULONG64 i;
 
-    Frames = MI_ALLOCATE(Pages * sizeof(*Frames));
-    if (Frames == NULL)
-        return STATUS_INSUFFICIENT_RESOURCES;
-
-    RtlZeroMemory(Frames, Pages * sizeof(*Frames));
-    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
-
-    Vad = MiVadLocate(Space, BaseAddress);
-    if (Vad == NULL || Vad->Type != MiVadRotate || Vad->RotateFrames != NULL ||
-        (Vad->Node.StartingVpn << PAGE_SHIFT) != BaseAddress ||
-        ((Vad->Node.EndingVpn + 1) << PAGE_SHIFT) != BaseAddress + RegionSize)
-    {
-        MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
-        MI_FREE(Frames);
-        return STATUS_CONFLICTING_ADDRESSES;
-    }
-
+    MI_ASSERT(Vad->Type == MiVadRotate && Vad->MemCommit);
+    MI_ASSERT(Vad->RotateFrames == NULL && Frames != NULL);
+    MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
     Vad->RotateFrames = Frames;
 
     for (i = 0; i < Pages; i++)
@@ -140,10 +125,6 @@ MiRotatePopulate(
         Frames[i] = Frame;
     }
 
-    if (!NT_SUCCESS(Status))
-        MiRotateReleaseLocked(Space, Vad);
-
-    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     return Status;
 }
 

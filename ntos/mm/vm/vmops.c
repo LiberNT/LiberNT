@@ -562,7 +562,8 @@ MiReserveVirtualMemory(
     _In_ ULONG64 Alignment)
 {
     PMI_VAD Vad = NULL;
-    ULONG64 Start, End;
+    PMI_FRAME_NUMBER RotateFrames = NULL;
+    ULONG64 Start, End, RotatePages = 0;
     ULONG64 Granularity = (Alignment != 0) ? Alignment : Space->Granularity;
     LONG64 Charged = 0;
     NTSTATUS Status = STATUS_SUCCESS;
@@ -574,6 +575,7 @@ MiReserveVirtualMemory(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+SelectRange:
     if (*BaseAddress == 0)
     {
         ULONG64 StartVpn;
@@ -606,6 +608,34 @@ MiReserveVirtualMemory(
             goto Done;
         }
     }
+    MI_ASSERT(RotateFrames == NULL || RotatePages == ((End - Start) >> PAGE_SHIFT));
+    UNREFERENCED_PARAMETER(RotatePages);
+    if ((AllocationType & (MI_MEM_ROTATE | MI_MEM_COMMIT)) == (MI_MEM_ROTATE | MI_MEM_COMMIT) &&
+        RotateFrames == NULL)
+    {
+        ULONG64 Pages = (End - Start) >> PAGE_SHIFT;
+        SIZE_T Bytes;
+
+        if (Pages > (SIZE_T)-1 / sizeof(*RotateFrames))
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+        Bytes = (SIZE_T)Pages * sizeof(*RotateFrames);
+        RotatePages = Pages;
+        MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+        RotateFrames = MI_ALLOCATE(Bytes);
+        if (RotateFrames != NULL)
+            RtlZeroMemory(RotateFrames, Bytes);
+        MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+        if (RotateFrames == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+        goto SelectRange;
+    }
+
     if (AllocationType & MI_MEM_COMMIT)
     {
         Charged = (LONG64)((End - Start) >> PAGE_SHIFT);
@@ -638,15 +668,28 @@ MiReserveVirtualMemory(
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Done;
     }
+    if (RotateFrames != NULL)
+    {
+        Status = MiRotatePopulateLocked(Space, Vad, RotateFrames);
+        RotateFrames = NULL;
+        if (!NT_SUCCESS(Status))
+        {
+            MiRotateReleaseLocked(Space, Vad);
+            Vad = NULL;
+            goto Done;
+        }
+    }
     *BaseAddress = Start;
     *RegionSize = End - Start;
 
 Done:
-    if (!NT_SUCCESS(Status) && MiVadCacheFree(Space, Vad))
+    if (!NT_SUCCESS(Status) && Vad != NULL && MiVadCacheFree(Space, Vad))
         Vad = NULL;
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     if (!NT_SUCCESS(Status) && Vad != NULL)
         MI_FREE(Vad);
+    if (RotateFrames != NULL)
+        MI_FREE(RotateFrames);
     return Status;
 }
 
@@ -810,8 +853,6 @@ MiAllocateVirtualMemoryBounded(
     {
         Status = MiReserveVirtualMemory(Space, BaseAddress, RegionSize, AllocationType, Protection, LowestAddress,
                                         HighestAddress, Alignment);
-        if (NT_SUCCESS(Status) && (AllocationType & MI_MEM_ROTATE) && (AllocationType & MI_MEM_COMMIT))
-            Status = MiRotatePopulate(Space, *BaseAddress, *RegionSize);
         return Status;
     }
 

@@ -360,7 +360,7 @@ NTSTATUS MiQueryWorkingSetEx(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Addre
 NTSTATUS MiQueryWorkingSetList(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PULONG64 Address,
                                _Out_ PMI_WORKING_SET_ENTRY Entries, _In_ ULONG Capacity, _Out_ PULONG Count,
                                _Out_ PBOOLEAN More);
-NTSTATUS MiRotatePopulate(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 BaseAddress, _In_ ULONG64 RegionSize);
+NTSTATUS MiRotatePopulateLocked(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad, _Inout_ PMI_FRAME_NUMBER Frames);
 VOID MiRotateReleaseLocked(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad);
 NTSTATUS MiRotateQuery(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _In_ ULONG64 Size,
                        _Out_ PMI_FRAME_NUMBER Mapped, _Out_ PMI_FRAME_NUMBER Regular);
