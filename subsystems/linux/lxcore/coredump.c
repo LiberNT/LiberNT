@@ -122,6 +122,7 @@ LxCoreExpandPattern(
     _Out_writes_(Size) PSTR Name,
     _In_ ULONG Size)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     CHAR Pattern[sizeof(LxCorePattern)], Number[32];
     LARGE_INTEGER Now;
     ULONG Used = 0, Index;
@@ -147,8 +148,8 @@ LxCoreExpandPattern(
                 case 'P': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", Process->Pid); break;
                 case 'i': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", LxTidNr(Process, Thread)); break;
                 case 'I': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", Thread->Tid); break;
-                case 'u': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", Process->Uid[0]); break;
-                case 'g': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", Process->Gid[0]); break;
+                case 'u': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", Cred->Uid[0]); break;
+                case 'g': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", Cred->Gid[0]); break;
                 case 's': RtlStringCbPrintfA(Number, sizeof(Number), "%ld", Signal); break;
                 case 'd': RtlStringCbPrintfA(Number, sizeof(Number), "%lu", Process->Dumpable); break;
                 case 'c':
@@ -302,6 +303,7 @@ LxCoreDump(
     _In_ LONG Signal)
 {
     PLX_PROCESS Process = Thread->Process, Mm = Process->Mm;
+    PLX_CRED Cred = LxProcessCred(Process);
     ULONG64 Registers[LX_CORE_MAX_REGISTERS], Limit = Process->Limits[LX_RLIMIT_CORE].Cur;
     UCHAR Status[LX_CORE_PRSTATUS_COMMON + sizeof(Registers) + 8];
     UCHAR Info[LX_CORE_PRPSINFO_SIZE];
@@ -369,8 +371,8 @@ LxCoreDump(
     RtlZeroMemory(Info, sizeof(Info));
     Info[0] = 0;
     Info[1] = 'R';
-    *(PULONG)&Info[16] = Process->Uid[0];
-    *(PULONG)&Info[20] = Process->Gid[0];
+    *(PULONG)&Info[16] = Cred->Uid[0];
+    *(PULONG)&Info[20] = Cred->Gid[0];
     *(PULONG)&Info[24] = LxPidNr(Process, Process);
     *(PULONG)&Info[28] = *(PULONG)&Status[36];
     *(PULONG)&Info[32] = *(PULONG)&Status[40];

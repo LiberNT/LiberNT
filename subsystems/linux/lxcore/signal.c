@@ -438,7 +438,7 @@ LxJobctlNotifyParent(
             RtlZeroMemory(&Info, sizeof(Info));
             Info.Code = Why;
             Info.Child.Pid = (LONG)LxPidNr(Parent, Child);
-            Info.Child.Uid = Child->Uid[0];
+            Info.Child.Uid = Child->Cred.Uid[0];
             Info.Child.Status = Status;
             LxSignalSend(Parent, NULL, LX_SIGCHLD, &Info);
         }
@@ -1235,10 +1235,13 @@ LxSignalPermitted(
     _In_ PLX_PROCESS Target,
     _In_ LONG Signal)
 {
+    PLX_CRED Cred;
+
     if (Sender == Target)
         return 0;
-    if ((Sender->Uid[1] == Target->Uid[2]) || (Sender->Uid[1] == Target->Uid[0]) ||
-        (Sender->Uid[0] == Target->Uid[2]) || (Sender->Uid[0] == Target->Uid[0]))
+    Cred = LxProcessCred(Sender);
+    if ((Cred->Uid[1] == Target->Cred.Uid[2]) || (Cred->Uid[1] == Target->Cred.Uid[0]) ||
+        (Cred->Uid[0] == Target->Cred.Uid[2]) || (Cred->Uid[0] == Target->Cred.Uid[0]))
     {
         return 0;
     }
