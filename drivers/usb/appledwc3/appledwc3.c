@@ -13,6 +13,7 @@
 #include <reactos/drivers/applepmgr.h>
 #include <reactos/drivers/appledart.h>
 #include <reactos/drivers/appleatcphy.h>
+#include <reactos/drivers/appleacepd.h>
 
 #define APPLE_DWC3_TAG              '3wDA'
 
@@ -51,9 +52,20 @@ typedef struct _APPLE_DWC3_EXTENSION
     CM_PARTIAL_RESOURCE_DESCRIPTOR Memory;
     CM_PARTIAL_RESOURCE_DESCRIPTOR Interrupt;
     ULONG64 CoreBase;
+    FAST_MUTEX StateLock;
+    PIO_WORKITEM RoleWork;
+    volatile LONG RoleWorkQueued;
+    volatile LONG WantHost;
+    volatile LONG Detach;
+    BOOLEAN HostRunning;
+    BOOLEAN RoleSwitch;
+    PCALLBACK_OBJECT RoleCallback;
+    PVOID RoleRegistration;
 } APPLE_DWC3_EXTENSION, *PAPPLE_DWC3_EXTENSION;
 
 DRIVER_INITIALIZE DriverEntry;
+
+static VOID AppleDwc3QueueRoleWork(_Inout_ PAPPLE_DWC3_EXTENSION Extension);
 
 static
 NTSTATUS
@@ -151,19 +163,15 @@ AppleDwc3SetupGlue(
 
 static
 NTSTATUS
-AppleDwc3PowerUp(
+AppleDwc3Prepare(
     _Inout_ PAPPLE_DWC3_EXTENSION Extension,
     _In_opt_ PCM_RESOURCE_LIST Resources)
 {
     FDT_DRIVER_TREE Tree;
-    APPLE_ATCPHY Phy;
-    PUCHAR Core = NULL;
     ULONG64 Size;
-    ULONG Identifier, Control;
-    NTSTATUS Status, PhyStatus;
-    BOOLEAN HavePhy = FALSE;
+    ULONG Length;
+    NTSTATUS Status;
 
-    RtlZeroMemory(&Phy, sizeof(Phy));
     Status = FdtDriverOpen(Extension->PhysicalDevice, &Tree);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -172,6 +180,7 @@ AppleDwc3PowerUp(
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
         goto Done;
     }
+    Extension->RoleSwitch = RiscvFdtGetProperty(&Tree.Fdt, Tree.Node, "usb-role-switch", &Length) != NULL;
     Status = AppleDwc3FindResources(Extension, Resources);
     if (!NT_SUCCESS(Status))
         goto Done;
@@ -183,10 +192,48 @@ AppleDwc3PowerUp(
     }
     Status = AppleDartMapPhysical(&Tree, Tree.Node, "appledwc3");
     if (!NT_SUCCESS(Status))
-    {
         DbgPrint("appledwc3: %I64x DMA translation is not set up: %lx\n", Extension->CoreBase, Status);
-        goto Done;
+
+Done:
+    FdtDriverClose(&Tree);
+    return Status;
+}
+
+static
+VOID
+AppleDwc3PowerDown(
+    _Inout_ PAPPLE_DWC3_EXTENSION Extension)
+{
+    FDT_DRIVER_TREE Tree;
+    APPLE_ATCPHY Phy;
+
+    if (!NT_SUCCESS(FdtDriverOpen(Extension->PhysicalDevice, &Tree)))
+        return;
+    if (NT_SUCCESS(AppleAtcphyOpen(&Tree, Tree.Node, &Phy)))
+    {
+        AppleAtcphyStopUsb2Host(&Phy);
+        AppleAtcphyClose(&Phy);
     }
+    FdtDriverClose(&Tree);
+    DbgPrint("appledwc3: %I64x controller held in reset, USB2 PHY off\n", Extension->CoreBase);
+}
+
+static
+NTSTATUS
+AppleDwc3PowerUp(
+    _Inout_ PAPPLE_DWC3_EXTENSION Extension)
+{
+    FDT_DRIVER_TREE Tree;
+    APPLE_ATCPHY Phy;
+    PUCHAR Core = NULL;
+    ULONG Identifier, Control;
+    NTSTATUS Status, PhyStatus;
+    BOOLEAN HavePhy = FALSE;
+
+    RtlZeroMemory(&Phy, sizeof(Phy));
+    Status = FdtDriverOpen(Extension->PhysicalDevice, &Tree);
+    if (!NT_SUCCESS(Status))
+        return Status;
     PhyStatus = AppleAtcphyOpen(&Tree, Tree.Node, &Phy);
     if (NT_SUCCESS(PhyStatus))
     {
@@ -457,11 +504,21 @@ AppleDwc3ChildPnp(
             Status = STATUS_SUCCESS;
             if (!Extension->Parent || !Extension->Parent->ChildReported)
             {
+                PAPPLE_DWC3_EXTENSION Parent = Extension->Parent;
+
                 Irp->IoStatus.Status = Status;
                 IoCompleteRequest(Irp, IO_NO_INCREMENT);
-                if (Extension->Parent)
-                    Extension->Parent->Child = NULL;
+                if (Parent)
+                {
+                    ExAcquireFastMutex(&Parent->StateLock);
+                    if (!Parent->HostRunning)
+                        AppleDwc3PowerDown(Parent);
+                    Parent->Child = NULL;
+                    ExReleaseFastMutex(&Parent->StateLock);
+                }
                 IoDeleteDevice(DeviceObject);
+                if (Parent && InterlockedCompareExchange(&Parent->WantHost, 0, 0))
+                    AppleDwc3QueueRoleWork(Parent);
                 return Status;
             }
             break;
@@ -502,6 +559,120 @@ AppleDwc3CreateChild(
 }
 
 static
+VOID
+NTAPI
+AppleDwc3RoleWork(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID Context)
+{
+    PAPPLE_DWC3_EXTENSION Extension = Context;
+    LONG Want, Detach;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    for (;;)
+    {
+        Want = InterlockedCompareExchange(&Extension->WantHost, 0, 0);
+        Detach = InterlockedExchange(&Extension->Detach, 0);
+        ExAcquireFastMutex(&Extension->StateLock);
+        if ((!Want || Detach) && Extension->HostRunning)
+        {
+            DbgPrint("appledwc3: %I64x cable detached, removing the xHCI controller\n", Extension->CoreBase);
+            Extension->HostRunning = FALSE;
+            Extension->ChildReported = FALSE;
+            IoInvalidateDeviceRelations(Extension->PhysicalDevice, BusRelations);
+        }
+        else if (Want && !Extension->HostRunning && !Extension->Child)
+        {
+            Status = AppleDwc3PowerUp(Extension);
+            if (NT_SUCCESS(Status))
+                Status = AppleDwc3CreateChild(Extension);
+            DbgPrint("appledwc3: %I64x cable attached as host, controller start %lx\n", Extension->CoreBase, Status);
+            if (NT_SUCCESS(Status))
+            {
+                Extension->HostRunning = TRUE;
+                IoInvalidateDeviceRelations(Extension->PhysicalDevice, BusRelations);
+            }
+        }
+        ExReleaseFastMutex(&Extension->StateLock);
+        InterlockedExchange(&Extension->RoleWorkQueued, 0);
+        if ((InterlockedCompareExchange(&Extension->WantHost, 0, 0) == Want &&
+             !InterlockedCompareExchange(&Extension->Detach, 0, 0)) ||
+            InterlockedExchange(&Extension->RoleWorkQueued, 1))
+            break;
+    }
+}
+
+static
+VOID
+AppleDwc3QueueRoleWork(
+    _Inout_ PAPPLE_DWC3_EXTENSION Extension)
+{
+    if (Extension->RoleWork && !InterlockedExchange(&Extension->RoleWorkQueued, 1))
+        IoQueueWorkItem(Extension->RoleWork, AppleDwc3RoleWork, DelayedWorkQueue, Extension);
+}
+
+static
+VOID
+NTAPI
+AppleDwc3RoleNotify(
+    _In_opt_ PVOID Context,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    PAPPLE_DWC3_EXTENSION Extension = Context;
+    ULONG_PTR Role = (ULONG_PTR)Argument2;
+
+    if (!Extension || (ULONG64)(ULONG_PTR)Argument1 != Extension->CoreBase ||
+        (Role != APPLE_TYPEC_ROLE_NONE && Role != APPLE_TYPEC_ROLE_HOST))
+        return;
+    if (Role == APPLE_TYPEC_ROLE_NONE)
+        InterlockedExchange(&Extension->Detach, 1);
+    InterlockedExchange(&Extension->WantHost, Role == APPLE_TYPEC_ROLE_HOST);
+    AppleDwc3QueueRoleWork(Extension);
+}
+
+static
+VOID
+AppleDwc3ListenForRole(
+    _Inout_ PAPPLE_DWC3_EXTENSION Extension)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(APPLE_TYPEC_CALLBACK_NAME);
+    OBJECT_ATTRIBUTES Attributes;
+
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_PERMANENT, NULL, NULL);
+    if (!NT_SUCCESS(ExCreateCallback(&Extension->RoleCallback, &Attributes, TRUE, TRUE)))
+    {
+        Extension->RoleCallback = NULL;
+        return;
+    }
+    Extension->RoleRegistration = ExRegisterCallback(Extension->RoleCallback, AppleDwc3RoleNotify, Extension);
+    ExNotifyCallback(Extension->RoleCallback, (PVOID)(ULONG_PTR)Extension->CoreBase, (PVOID)APPLE_TYPEC_QUERY);
+}
+
+static
+VOID
+AppleDwc3StopListening(
+    _Inout_ PAPPLE_DWC3_EXTENSION Extension)
+{
+    LARGE_INTEGER Interval;
+
+    if (Extension->RoleRegistration)
+    {
+        ExUnregisterCallback(Extension->RoleRegistration);
+        Extension->RoleRegistration = NULL;
+    }
+    if (Extension->RoleCallback)
+    {
+        ObDereferenceObject(Extension->RoleCallback);
+        Extension->RoleCallback = NULL;
+    }
+    Interval.QuadPart = -10000LL;
+    while (InterlockedCompareExchange(&Extension->RoleWorkQueued, 0, 0))
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+}
+
+static
 NTSTATUS
 AppleDwc3FdoPnp(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -517,13 +688,24 @@ AppleDwc3FdoPnp(
             Status = IoForwardIrpSynchronously(Extension->LowerDevice, Irp) ? Irp->IoStatus.Status
                                                                              : STATUS_UNSUCCESSFUL;
             if (NT_SUCCESS(Status))
-                Status = AppleDwc3PowerUp(Extension, Stack->Parameters.StartDevice.AllocatedResources);
+                Status = AppleDwc3Prepare(Extension, Stack->Parameters.StartDevice.AllocatedResources);
             if (NT_SUCCESS(Status))
-                Status = AppleDwc3CreateChild(Extension);
-            if (NT_SUCCESS(Status))
-                IoInvalidateDeviceRelations(Extension->PhysicalDevice, BusRelations);
+            {
+                if (Extension->RoleSwitch)
+                {
+                    DbgPrint("appledwc3: %I64x waits for a USB-C data connection\n", Extension->CoreBase);
+                    AppleDwc3ListenForRole(Extension);
+                }
+                else
+                {
+                    InterlockedExchange(&Extension->WantHost, 1);
+                    AppleDwc3QueueRoleWork(Extension);
+                }
+            }
             else
+            {
                 DbgPrint("appledwc3: start failed %lx\n", Status);
+            }
             Irp->IoStatus.Status = Status;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
             return Status;
@@ -560,10 +742,16 @@ AppleDwc3FdoPnp(
             break;
 
         case IRP_MN_REMOVE_DEVICE:
+            AppleDwc3StopListening(Extension);
             Irp->IoStatus.Status = STATUS_SUCCESS;
             IoSkipCurrentIrpStackLocation(Irp);
             Status = IoCallDriver(Extension->LowerDevice, Irp);
             Extension->ChildReported = FALSE;
+            if (Extension->RoleWork)
+            {
+                IoFreeWorkItem(Extension->RoleWork);
+                Extension->RoleWork = NULL;
+            }
             if (Extension->Child)
             {
                 PAPPLE_DWC3_EXTENSION ChildExtension = Extension->Child->DeviceExtension;
@@ -668,6 +856,13 @@ AppleDwc3AddDevice(
     Extension->Type = APPLE_DWC3_FDO;
     Extension->Self = Fdo;
     Extension->PhysicalDevice = PhysicalDeviceObject;
+    ExInitializeFastMutex(&Extension->StateLock);
+    Extension->RoleWork = IoAllocateWorkItem(Fdo);
+    if (!Extension->RoleWork)
+    {
+        IoDeleteDevice(Fdo);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
     Extension->LowerDevice = IoAttachDeviceToDeviceStack(Fdo, PhysicalDeviceObject);
     if (!Extension->LowerDevice)
     {
