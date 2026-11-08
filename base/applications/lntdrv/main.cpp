@@ -1249,7 +1249,7 @@ private:
 
     bool EntryInUse(const HistoryEntry &entry) const
     {
-        for (const DeviceInfo &device : m_Devices)
+        for (const DeviceInfo &device : m_Present)
         {
             if (_wcsicmp(device.InstanceId.c_str(), entry.InstanceId.c_str()) == 0)
                 return !entry.Inf.empty() && _wcsicmp(device.Inf.c_str(), entry.Inf.c_str()) == 0;
@@ -1630,6 +1630,7 @@ private:
         HWND list = GetDlgItem(m_Pages[PageHistory], IDC_HISTORY_LIST);
 
         m_History = LoadHistory();
+        EnumerateDevices(m_Present);
         SendMessageW(list, WM_SETREDRAW, FALSE, 0);
         ListView_DeleteAllItems(list);
         for (const HistoryEntry &entry : m_History)
@@ -1695,6 +1696,7 @@ private:
     UINT m_Frame = 0;
     bool m_Filling = false;
     std::vector<DeviceInfo> m_Devices;
+    std::vector<DeviceInfo> m_Present;
     std::vector<HistoryEntry> m_History;
     std::map<std::wstring, Choice> m_Found;
     std::map<std::wstring, bool> m_Selected;
