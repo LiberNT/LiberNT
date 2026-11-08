@@ -986,6 +986,20 @@ static BOOLEAN HttpUrlMatchesConnection(
            !_strnicmp(Connection->Host, Url->Host, HostLength);
 }
 
+static ULONG HttpQueuedRequestCount(PHTTP_REQUEST_QUEUE Queue)
+{
+    PLIST_ENTRY Entry;
+    ULONG Count = 0;
+
+    for (Entry = g_ConnectionsList.Flink; Entry != &g_ConnectionsList; Entry = Entry->Flink)
+    {
+        PHTTP_CONNECTION Conn = CONTAINING_RECORD(Entry, HTTP_CONNECTION, Entry);
+        if (Conn->Queue == Queue && Conn->Available)
+            Count++;
+    }
+    return Count;
+}
+
 static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
 {
     PLIST_ENTRY QueueEntry, UrlEntry;
@@ -993,8 +1007,10 @@ static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
     PHTTP_REQUEST_QUEUE BestQueue = NULL;
     PHTTP_REQUEST_QUEUE Queue;
     PIRP PendingIrp = NULL;
+    UCHAR Reason = HttpUnavailableNone;
     NTSTATUS Status;
 
+    Connection->ErrorStatus = 404;
     ExAcquireFastMutex(&g_HttpGlobalLock);
     for (QueueEntry = g_RequestQueuesList.Flink;
          QueueEntry != &g_RequestQueuesList;
@@ -1044,6 +1060,20 @@ static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
 
     if (InterlockedCompareExchange(&Connection->Shutdown, 0, 0))
     {
+        ExReleaseFastMutex(&BestQueue->Mutex);
+        ExReleaseFastMutex(&g_HttpGlobalLock);
+        return FALSE;
+    }
+
+    if (BestQueue->EnabledState != HttpEnabledStateActive)
+        Reason = HttpUnavailableOffline;
+    else if (HttpQueuedRequestCount(BestQueue) >= BestQueue->MaxQueueLength)
+        Reason = HttpUnavailableQueueFull;
+    if (Reason != HttpUnavailableNone)
+    {
+        Connection->ErrorStatus = 503;
+        Connection->UnavailableReason = Reason;
+        Connection->UnavailableVerbosity = (UCHAR)BestQueue->Verbosity;
         ExReleaseFastMutex(&BestQueue->Mutex);
         ExReleaseFastMutex(&g_HttpGlobalLock);
         return FALSE;
@@ -1463,6 +1493,45 @@ static VOID HttpBodyReceiveCompleted(PHTTP_CONNECTION Connection)
     HttpConnectionDereference(Connection);
 }
 
+static VOID HttpSendUnavailable(PHTTP_CONNECTION Connection)
+{
+    const char *Heading = "Service Unavailable", *Text = "The service is unavailable.";
+    char Body[512], Response[768];
+
+    if (Connection->UnavailableVerbosity == Http503ResponseVerbosityBasic)
+    {
+        HttpConnectionResetSocket(Connection);
+        return;
+    }
+    if (Connection->UnavailableVerbosity == Http503ResponseVerbosityFull)
+    {
+        if (Connection->UnavailableReason == HttpUnavailableQueueFull)
+        {
+            Heading = "Application Request Queue Full";
+            Text = "The application request queue is full.";
+        }
+        else if (Connection->UnavailableReason == HttpUnavailableOffline)
+        {
+            Heading = "Application Offline";
+            Text = "The application is offline.";
+        }
+    }
+
+    if (!NT_SUCCESS(RtlStringCbPrintfA(Body, sizeof(Body),
+            "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\"\"http://www.w3.org/TR/html4/strict.dtd\">\r\n"
+            "<HTML><HEAD><TITLE>Service Unavailable</TITLE>\r\n"
+            "<META HTTP-EQUIV=\"Content-Type\" Content=\"text/html; charset=us-ascii\"></HEAD>\r\n"
+            "<BODY><h2>%s</h2>\r\n<hr><p>HTTP Error 503. %s</p>\r\n</BODY></HTML>\r\n", Heading, Text)) ||
+        !NT_SUCCESS(RtlStringCbPrintfA(Response, sizeof(Response),
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/html; charset=us-ascii\r\n"
+            "Connection: close\r\nContent-Length: %u\r\n\r\n%s", (ULONG)strlen(Body), Body)))
+    {
+        HttpConnectionResetSocket(Connection);
+        return;
+    }
+    HttpWskSendAll(Connection, Response, strlen(Response));
+}
+
 static VOID HttpSendErrorResponse(PHTTP_CONNECTION Connection, USHORT StatusCode)
 {
     const char *Response;
@@ -1478,6 +1547,9 @@ static VOID HttpSendErrorResponse(PHTTP_CONNECTION Connection, USHORT StatusCode
         case 431:
             Response = "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
             break;
+        case 503:
+            HttpSendUnavailable(Connection);
+            return;
         default:
             Response = "HTTP/1.1 501 Not Implemented\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
             break;
@@ -1531,7 +1603,6 @@ static VOID NTAPI HttpConnectionWorker(PDEVICE_OBJECT DeviceObject, PVOID Contex
             HttpConnectionDereference(Connection);
             return;
         }
-        Connection->ErrorStatus = 404;
     }
 
     HttpRemoveListenerConnection(Connection);
@@ -2348,6 +2419,103 @@ static NTSTATUS HttpReceiveBody(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     return STATUS_PENDING;
 }
 
+static NTSTATUS HttpSetQueueProperty(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    const struct http_queue_property *Params = Irp->AssociatedIrp.SystemBuffer;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Params))
+        return STATUS_INVALID_PARAMETER;
+    if (!Queue->Version2)
+        return STATUS_NOT_SUPPORTED;
+
+    ExAcquireFastMutex(&Queue->Mutex);
+    switch (Params->property)
+    {
+        case HttpServerQueueLengthProperty:
+            if (Params->value < HTTP_MIN_SERVER_QUEUE_LENGTH || Params->value > HTTP_MAX_SERVER_QUEUE_LENGTH)
+                Status = STATUS_NOT_SUPPORTED;
+            else
+                Queue->MaxQueueLength = Params->value;
+            break;
+        case HttpServerStateProperty:
+            if (Params->value > 5)
+                Status = STATUS_NOT_SUPPORTED;
+            else
+                Queue->EnabledState = Params->value;
+            break;
+        case HttpServer503VerbosityProperty:
+            if (Params->value > Http503ResponseVerbosityFull)
+                Status = STATUS_NOT_SUPPORTED;
+            else
+                Queue->Verbosity = Params->value;
+            break;
+        default:
+            Status = STATUS_INVALID_PARAMETER;
+            break;
+    }
+    ExReleaseFastMutex(&Queue->Mutex);
+    Irp->IoStatus.Information = 0;
+    return Status;
+}
+
+static NTSTATUS HttpQueryQueueProperty(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PULONG Buffer = Irp->AssociatedIrp.SystemBuffer;
+    ULONG Value;
+
+    Irp->IoStatus.Information = 0;
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG) ||
+        Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
+        return STATUS_INVALID_PARAMETER;
+    if (!Queue->Version2)
+        return STATUS_NOT_SUPPORTED;
+
+    ExAcquireFastMutex(&Queue->Mutex);
+    switch (*Buffer)
+    {
+        case HttpServerQueueLengthProperty:
+            Value = Queue->MaxQueueLength;
+            break;
+        case HttpServerStateProperty:
+            Value = Queue->EnabledState;
+            break;
+        case HttpServer503VerbosityProperty:
+            Value = Queue->Verbosity;
+            break;
+        default:
+            ExReleaseFastMutex(&Queue->Mutex);
+            return STATUS_INVALID_PARAMETER;
+    }
+    ExReleaseFastMutex(&Queue->Mutex);
+
+    *Buffer = Value;
+    Irp->IoStatus.Information = sizeof(ULONG);
+    return STATUS_SUCCESS;
+}
+
+C_ASSERT(FIELD_OFFSET(struct http_version_ea, name) == FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName));
+
+static BOOLEAN HttpCreateIsVersion2(PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PFILE_FULL_EA_INFORMATION Ea = Irp->AssociatedIrp.SystemBuffer;
+    ULONG Length = Stack->Parameters.Create.EaLength;
+    HTTPAPI_VERSION Version;
+
+    if (!Ea || Length < FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) ||
+        Ea->EaNameLength != sizeof(HTTP_VERSION_EA_NAME) - 1 ||
+        Ea->EaValueLength != sizeof(Version) ||
+        Length < FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) + Ea->EaNameLength + 1 + Ea->EaValueLength ||
+        memcmp(Ea->EaName, HTTP_VERSION_EA_NAME, Ea->EaNameLength))
+        return FALSE;
+
+    memcpy(&Version, Ea->EaName + Ea->EaNameLength + 1, sizeof(Version));
+    return Version.HttpApiMajorVersion >= 2;
+}
+
 static NTSTATUS NTAPI HttpDispatchCreate(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Inout_ PIRP Irp)
@@ -2382,6 +2550,9 @@ static NTSTATUS NTAPI HttpDispatchCreate(
         }
     }
     Queue->MaxQueueLength = 1000;
+    Queue->EnabledState = HttpEnabledStateActive;
+    Queue->Verbosity = Http503ResponseVerbosityBasic;
+    Queue->Version2 = HttpCreateIsVersion2(Irp);
 
     ExAcquireFastMutex(&g_HttpGlobalLock);
     InsertTailList(&g_RequestQueuesList, &Queue->Entry);
@@ -2539,6 +2710,12 @@ static NTSTATUS NTAPI HttpDispatchDeviceControl(
             break;
         case IOCTL_HTTP_RECEIVE_BODY:
             Status = HttpReceiveBody(Queue, Irp);
+            break;
+        case IOCTL_HTTP_SET_QUEUE_PROPERTY:
+            Status = HttpSetQueueProperty(Queue, Irp);
+            break;
+        case IOCTL_HTTP_QUERY_QUEUE_PROPERTY:
+            Status = HttpQueryQueueProperty(Queue, Irp);
             break;
         default:
             Status = STATUS_INVALID_DEVICE_REQUEST;

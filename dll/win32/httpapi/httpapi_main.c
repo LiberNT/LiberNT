@@ -1336,6 +1336,7 @@ ULONG WINAPI HttpCreateRequestQueue(HTTPAPI_VERSION version, const WCHAR *name,
     OBJECT_ATTRIBUTES attr = {sizeof(attr)};
     UNICODE_STRING string;
     IO_STATUS_BLOCK iosb;
+    struct http_version_ea ea = {0};
 
     TRACE("version %u.%u, name %s, sa %p, flags %#lx, handle %p.\n",
             version.HttpApiMajorVersion, version.HttpApiMinorVersion,
@@ -1359,8 +1360,12 @@ ULONG WINAPI HttpCreateRequestQueue(HTTPAPI_VERSION version, const WCHAR *name,
     if (sa && sa->bInheritHandle)
         attr.Attributes |= OBJ_INHERIT;
     attr.SecurityDescriptor = sa ? sa->lpSecurityDescriptor : NULL;
+    ea.name_length = sizeof(HTTP_VERSION_EA_NAME) - 1;
+    ea.value_length = sizeof(version);
+    memcpy(ea.name, HTTP_VERSION_EA_NAME, sizeof(HTTP_VERSION_EA_NAME));
+    memcpy(ea.value, &version, sizeof(version));
     return RtlNtStatusToDosError(NtCreateFile(handle, SYNCHRONIZE, &attr, &iosb, NULL,
-            FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN, FILE_NON_DIRECTORY_FILE, NULL, 0));
+            FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN, FILE_NON_DIRECTORY_FILE, &ea, sizeof(ea)));
 }
 
 /***********************************************************************
@@ -1374,15 +1379,80 @@ ULONG WINAPI HttpCloseRequestQueue(HANDLE handle)
     return ERROR_SUCCESS;
 }
 
+static ULONG queue_ioctl(HANDLE queue, ULONG code, void *in, ULONG in_size, void *out, ULONG out_size)
+{
+    OVERLAPPED ovl = {0};
+    DWORD size;
+    ULONG ret = ERROR_SUCCESS;
+
+    if (!(ovl.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL)))
+        return GetLastError();
+    ovl.hEvent = (HANDLE)((ULONG_PTR)ovl.hEvent | 1);
+    if (!DeviceIoControl(queue, code, in, in_size, out, out_size, &size, &ovl))
+    {
+        ret = GetLastError();
+        if (ret == ERROR_IO_PENDING)
+            ret = GetOverlappedResult(queue, &ovl, &size, TRUE) ? ERROR_SUCCESS : GetLastError();
+    }
+    CloseHandle(ovl.hEvent);
+    return ret;
+}
+
+static BOOL is_queue_property(HTTP_SERVER_PROPERTY property)
+{
+    return property == HttpServerQueueLengthProperty || property == HttpServerStateProperty ||
+           property == HttpServer503VerbosityProperty;
+}
+
 /***********************************************************************
  *        HttpSetRequestQueueProperty     (HTTPAPI.@)
  */
 ULONG WINAPI HttpSetRequestQueueProperty(HANDLE queue, HTTP_SERVER_PROPERTY property,
         void *value, ULONG length, ULONG reserved1, void *reserved2)
 {
-    FIXME("queue %p, property %u, value %p, length %lu, reserved1 %#lx, reserved2 %p, stub!\n",
+    struct http_queue_property params;
+
+    TRACE("queue %p, property %u, value %p, length %lu, reserved1 %#lx, reserved2 %p.\n",
             queue, property, value, length, reserved1, reserved2);
-    return ERROR_CALL_NOT_IMPLEMENTED;
+
+    if (reserved1 || reserved2 || !is_queue_property(property) || !value || !length)
+        return ERROR_INVALID_PARAMETER;
+    if (length < sizeof(ULONG))
+        return ERROR_INSUFFICIENT_BUFFER;
+
+    params.property = property;
+    params.value = *(ULONG *)value;
+    return queue_ioctl(queue, IOCTL_HTTP_SET_QUEUE_PROPERTY, &params, sizeof(params), NULL, 0);
+}
+
+/***********************************************************************
+ *        HttpQueryRequestQueueProperty     (HTTPAPI.@)
+ */
+ULONG WINAPI HttpQueryRequestQueueProperty(HANDLE queue, HTTP_SERVER_PROPERTY property,
+        void *value, ULONG length, ULONG reserved1, ULONG *ret_length, void *reserved2)
+{
+    ULONG data = property, ret;
+
+    TRACE("queue %p, property %u, value %p, length %lu, reserved1 %#lx, ret_length %p, reserved2 %p.\n",
+            queue, property, value, length, reserved1, ret_length, reserved2);
+
+    if (reserved1 || reserved2 || !is_queue_property(property))
+        return ERROR_INVALID_PARAMETER;
+    if (!value && length)
+        return ERROR_NOACCESS;
+    if (length < sizeof(ULONG))
+    {
+        if (ret_length)
+            *ret_length = sizeof(ULONG);
+        return ERROR_MORE_DATA;
+    }
+
+    if ((ret = queue_ioctl(queue, IOCTL_HTTP_QUERY_QUEUE_PROPERTY, &data, sizeof(data), &data, sizeof(data))))
+        return ret;
+    *(ULONG *)value = data;
+    if (ret_length)
+        *ret_length = sizeof(ULONG);
+    return ERROR_SUCCESS;
 }
 
 /***********************************************************************

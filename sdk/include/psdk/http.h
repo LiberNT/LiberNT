@@ -480,9 +480,45 @@ typedef struct _HTTP_QOS_SETTING_INFO
     void *QosSetting;
 } HTTP_QOS_SETTING_INFO, *PHTTP_QOS_SETTING_INFO;
 
+#define HTTP_MAX_SERVER_QUEUE_LENGTH 0x7fffffff
+#define HTTP_MIN_SERVER_QUEUE_LENGTH 1
+
+#define HTTP_LIMIT_INFINITE ((ULONG)-1)
+
+typedef struct _HTTP_TIMEOUT_LIMIT_INFO
+{
+    HTTP_PROPERTY_FLAGS Flags;
+    USHORT EntityBody;
+    USHORT DrainEntityBody;
+    USHORT RequestQueue;
+    USHORT IdleConnection;
+    USHORT HeaderWait;
+    ULONG MinSendRate;
+} HTTP_TIMEOUT_LIMIT_INFO, *PHTTP_TIMEOUT_LIMIT_INFO;
+
+typedef enum _HTTP_ENABLED_STATE
+{
+    HttpEnabledStateActive,
+    HttpEnabledStateInactive,
+} HTTP_ENABLED_STATE, *PHTTP_ENABLED_STATE;
+
+typedef struct _HTTP_STATE_INFO
+{
+    HTTP_PROPERTY_FLAGS Flags;
+    HTTP_ENABLED_STATE State;
+} HTTP_STATE_INFO, *PHTTP_STATE_INFO;
+
+typedef enum _HTTP_503_RESPONSE_VERBOSITY
+{
+    Http503ResponseVerbosityBasic,
+    Http503ResponseVerbosityLimited,
+    Http503ResponseVerbosityFull,
+} HTTP_503_RESPONSE_VERBOSITY, *PHTTP_503_RESPONSE_VERBOSITY;
+
 #if !defined(_NTDDK_) && !defined(_NTIFS_)
 ULONG WINAPI HttpAddUrl(HANDLE,PCWSTR,PVOID);
 ULONG WINAPI HttpAddUrlToUrlGroup(HTTP_URL_GROUP_ID id, const WCHAR *url, HTTP_URL_CONTEXT context, ULONG reserved);
+ULONG WINAPI HttpCancelHttpRequest(HANDLE queue, HTTP_REQUEST_ID id, OVERLAPPED *ovl);
 ULONG WINAPI HttpCloseRequestQueue(HANDLE handle);
 ULONG WINAPI HttpCloseServerSession(HTTP_SERVER_SESSION_ID id);
 ULONG WINAPI HttpCloseUrlGroup(HTTP_URL_GROUP_ID id);
@@ -494,14 +530,22 @@ ULONG WINAPI HttpDeleteServiceConfiguration(HANDLE,HTTP_SERVICE_CONFIG_ID,PVOID,
 ULONG WINAPI HttpInitialize(HTTPAPI_VERSION version, ULONG flags, void *reserved);
 ULONG WINAPI HttpTerminate(ULONG flags, void *reserved);
 ULONG WINAPI HttpQueryServiceConfiguration(HANDLE,HTTP_SERVICE_CONFIG_ID,PVOID,ULONG,PVOID,ULONG,PULONG,LPOVERLAPPED);
+ULONG WINAPI HttpQueryRequestQueueProperty(HANDLE queue, HTTP_SERVER_PROPERTY property, void *value, ULONG length, ULONG reserved1, ULONG *ret_length, void *reserved2);
+ULONG WINAPI HttpQueryServerSessionProperty(HTTP_SERVER_SESSION_ID id, HTTP_SERVER_PROPERTY property, void *value, ULONG length, ULONG *ret_length);
+ULONG WINAPI HttpQueryUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY property, void *value, ULONG length, ULONG *ret_length);
 ULONG WINAPI HttpReceiveHttpRequest(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, HTTP_REQUEST *request, ULONG size, ULONG *ret_size, OVERLAPPED *ovl);
 ULONG WINAPI HttpReceiveRequestEntityBody(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, PVOID buffer, ULONG size, ULONG *ret_size, OVERLAPPED *ovl);
 ULONG WINAPI HttpRemoveUrl(HANDLE queue, const WCHAR *url);
 ULONG WINAPI HttpRemoveUrlFromUrlGroup(HTTP_URL_GROUP_ID id, const WCHAR *url, ULONG flags);
 ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, HTTP_RESPONSE *response, HTTP_CACHE_POLICY *cache_policy, ULONG *ret_size, void *reserved1, ULONG reserved2, OVERLAPPED *ovl, HTTP_LOG_DATA *log_data);
 ULONG WINAPI HttpSendResponseEntityBody(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, USHORT entity_chunk_count, HTTP_DATA_CHUNK *entity_chunks, ULONG *ret_size, void *reserved1, ULONG reserved2, OVERLAPPED *ovl, HTTP_LOG_DATA *log_data);
+ULONG WINAPI HttpSetRequestQueueProperty(HANDLE queue, HTTP_SERVER_PROPERTY property, void *value, ULONG length, ULONG reserved1, void *reserved2);
+ULONG WINAPI HttpSetServerSessionProperty(HTTP_SERVER_SESSION_ID id, HTTP_SERVER_PROPERTY property, void *value, ULONG length);
 ULONG WINAPI HttpSetServiceConfiguration(HANDLE,HTTP_SERVICE_CONFIG_ID,PVOID,ULONG,LPOVERLAPPED);
 ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY property, void *value, ULONG length);
+ULONG WINAPI HttpShutdownRequestQueue(HANDLE queue);
+ULONG WINAPI HttpWaitForDisconnect(HANDLE queue, HTTP_CONNECTION_ID id, OVERLAPPED *ovl);
+ULONG WINAPI HttpWaitForDisconnectEx(HANDLE queue, HTTP_CONNECTION_ID id, ULONG reserved, OVERLAPPED *ovl);
 #endif
 
 #ifdef __cplusplus

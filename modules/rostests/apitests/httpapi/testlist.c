@@ -12,11 +12,13 @@
 extern void func_chunked(void);
 extern void func_filechunk(void);
 extern void func_httpapi(void);
+extern void func_properties(void);
 
 const struct test winetest_testlist[] =
 {
     { "chunked", func_chunked },
     { "filechunk", func_filechunk },
     { "httpapi", func_httpapi },
+    { "properties", func_properties },
     { 0, 0 }
 };

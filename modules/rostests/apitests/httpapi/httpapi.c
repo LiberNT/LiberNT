@@ -3129,6 +3129,356 @@ cleanup_files:
     free(http_fc_data);
 }
 
+#define HTTP_PR_PORT 59989
+
+static const char http_pr_get[] = "GET /prop/a HTTP/1.1\r\nHost: 127.0.0.1:59989\r\n\r\n";
+
+static ULONG http_pr_query(HANDLE Queue, HTTP_SERVER_PROPERTY Property, ULONG *Value)
+{
+    ULONG Length;
+
+    *Value = 0xdeadbeef;
+    return HttpQueryRequestQueueProperty(Queue, Property, Value, sizeof(*Value), 0, &Length, NULL);
+}
+
+static ULONG http_pr_set(HANDLE Queue, HTTP_SERVER_PROPERTY Property, ULONG Value)
+{
+    return HttpSetRequestQueueProperty(Queue, Property, &Value, sizeof(Value), 0, NULL);
+}
+
+static BOOL http_pr_client(HTTP_KA_CLIENT *Client, const char *Text)
+{
+    if (!http_ka_connect(Client, HTTP_PR_PORT))
+        return FALSE;
+    if (Text && !http_ka_send(Client, Text))
+    {
+        closesocket(Client->Socket);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static int http_pr_try(const char *Text, char *Response, int Size, int TimeoutMs)
+{
+    HTTP_KA_CLIENT Client;
+    int State;
+
+    Response[0] = '\0';
+    if (!http_pr_client(&Client, Text))
+        return -1;
+    State = http_ch_read_all(&Client, Response, Size, TimeoutMs);
+    closesocket(Client.Socket);
+    return State;
+}
+
+static ULONG http_pr_wait(HANDLE Queue, OVERLAPPED *Overlapped, DWORD TimeoutMs)
+{
+    DWORD Bytes;
+
+    if (WaitForSingleObject(Overlapped->hEvent, TimeoutMs) != WAIT_OBJECT_0)
+        return ERROR_IO_PENDING;
+    return GetOverlappedResult(Queue, Overlapped, &Bytes, FALSE) ? NO_ERROR : GetLastError();
+}
+
+static void test_queue_property_validation(HANDLE Queue, HANDLE V1Queue)
+{
+    static const HTTP_SERVER_PROPERTY Properties[] =
+        { HttpServerQueueLengthProperty, HttpServerStateProperty, HttpServer503VerbosityProperty };
+    static const ULONG Defaults[] = { 1000, HttpEnabledStateActive, Http503ResponseVerbosityBasic };
+    static const HTTP_SERVER_PROPERTY Unsupported[] =
+        { HttpServerAuthenticationProperty, HttpServerLoggingProperty, HttpServerQosProperty,
+          HttpServerTimeoutsProperty, HttpServerBindingProperty, HttpServerExtendedAuthenticationProperty,
+          HttpServerChannelBindProperty, HttpServerProtectionLevelProperty, (HTTP_SERVER_PROPERTY)100 };
+    ULONG Value[2], Length, Result, i;
+    HANDLE Event = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    for (i = 0; i < ARRAYSIZE(Properties); i++)
+    {
+        Value[0] = 0xdeadbeef;
+        Length = 0xdeadbeef;
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG), 0, &Length, NULL);
+        ok(Result == NO_ERROR && Value[0] == Defaults[i] && Length == sizeof(ULONG),
+           "property %u: query returned %lu, value %lu, length %lu\n", Properties[i], Result, Value[0], Length);
+
+        Value[0] = 0xdeadbeef;
+        Length = 0xdeadbeef;
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], Value, sizeof(Value), 0, &Length, NULL);
+        ok(Result == NO_ERROR && Value[0] == Defaults[i] && Length == sizeof(ULONG),
+           "property %u: query with 8 bytes returned %lu, value %lu, length %lu\n",
+           Properties[i], Result, Value[0], Length);
+
+        Length = 0xdeadbeef;
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG) - 1, 0, &Length, NULL);
+        ok(Result == ERROR_MORE_DATA && Length == sizeof(ULONG),
+           "property %u: short query returned %lu, length %lu\n", Properties[i], Result, Length);
+
+        Length = 0xdeadbeef;
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], NULL, 0, 0, &Length, NULL);
+        ok(Result == ERROR_MORE_DATA && Length == sizeof(ULONG),
+           "property %u: NULL query returned %lu, length %lu\n", Properties[i], Result, Length);
+
+        Length = 0xdeadbeef;
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], NULL, sizeof(ULONG), 0, &Length, NULL);
+        ok(Result == ERROR_NOACCESS, "property %u: NULL buffer with length returned %lu, length %lu\n",
+           Properties[i], Result, Length);
+
+        Value[0] = 0xdeadbeef;
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG), 0, NULL, NULL);
+        ok(Result == NO_ERROR && Value[0] == Defaults[i], "property %u: query without length returned %lu, value %lu\n",
+           Properties[i], Result, Value[0]);
+
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], NULL, 0, 0, NULL, NULL);
+        ok(Result == ERROR_MORE_DATA, "property %u: NULL query without length returned %lu\n", Properties[i], Result);
+
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG), 1, &Length, NULL);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: query reserved1 returned %lu\n", Properties[i], Result);
+        Result = HttpQueryRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG), 0, &Length, Value);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: query reserved2 returned %lu\n", Properties[i], Result);
+
+        Value[0] = Defaults[i];
+        Value[1] = 0xdeadbeef;
+        Result = HttpSetRequestQueueProperty(Queue, Properties[i], Value, 0, 0, NULL);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: set with length 0 returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(Queue, Properties[i], NULL, sizeof(ULONG), 0, NULL);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: set NULL returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG) - 1, 0, NULL);
+        ok(Result == ERROR_INSUFFICIENT_BUFFER, "property %u: short set returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(Queue, Properties[i], Value, sizeof(Value), 0, NULL);
+        ok(Result == NO_ERROR, "property %u: set with 8 bytes returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG), 1, NULL);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: set reserved1 returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG), 0, Value);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: set reserved2 returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(Queue, Properties[i], Value, sizeof(ULONG), 0, NULL);
+        ok(Result == NO_ERROR, "property %u: set returned %lu\n", Properties[i], Result);
+
+        Result = HttpQueryRequestQueueProperty(V1Queue, Properties[i], Value, sizeof(ULONG), 0, &Length, NULL);
+        ok(Result == ERROR_NOT_SUPPORTED, "property %u: query on a v1 handle returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(V1Queue, Properties[i], Value, sizeof(ULONG), 0, NULL);
+        ok(Result == ERROR_NOT_SUPPORTED, "property %u: set on a v1 handle returned %lu\n", Properties[i], Result);
+        Result = HttpQueryRequestQueueProperty(NULL, Properties[i], Value, sizeof(ULONG), 0, &Length, NULL);
+        ok(Result == ERROR_INVALID_HANDLE, "property %u: query on NULL returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(NULL, Properties[i], Value, sizeof(ULONG), 0, NULL);
+        ok(Result == ERROR_INVALID_HANDLE, "property %u: set on NULL returned %lu\n", Properties[i], Result);
+        Result = HttpQueryRequestQueueProperty(Event, Properties[i], Value, sizeof(ULONG), 0, &Length, NULL);
+        ok(Result == ERROR_INVALID_HANDLE, "property %u: query on an event returned %lu\n", Properties[i], Result);
+        Result = HttpSetRequestQueueProperty(Event, Properties[i], Value, sizeof(ULONG), 0, NULL);
+        ok(Result == ERROR_INVALID_HANDLE, "property %u: set on an event returned %lu\n", Properties[i], Result);
+    }
+
+    for (i = 0; i < ARRAYSIZE(Unsupported); i++)
+    {
+        BYTE Buffer[64] = {0};
+
+        Length = 0xdeadbeef;
+        Result = HttpQueryRequestQueueProperty(Queue, Unsupported[i], Buffer, sizeof(Buffer), 0, &Length, NULL);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: query returned %lu, length %lu\n",
+           Unsupported[i], Result, Length);
+        Result = HttpSetRequestQueueProperty(Queue, Unsupported[i], Buffer, sizeof(Buffer), 0, NULL);
+        ok(Result == ERROR_INVALID_PARAMETER, "property %u: set returned %lu\n", Unsupported[i], Result);
+    }
+
+    Result = http_pr_set(Queue, HttpServerQueueLengthProperty, 0);
+    ok(Result == ERROR_NOT_SUPPORTED, "queue length 0 returned %lu\n", Result);
+    Result = http_pr_set(Queue, HttpServerQueueLengthProperty, 0x80000000u);
+    ok(Result == ERROR_NOT_SUPPORTED, "queue length 0x80000000 returned %lu\n", Result);
+    Result = http_pr_set(Queue, HttpServerQueueLengthProperty, HTTP_MAX_SERVER_QUEUE_LENGTH);
+    ok(Result == NO_ERROR, "queue length 0x7fffffff returned %lu\n", Result);
+    Result = http_pr_query(Queue, HttpServerQueueLengthProperty, Value);
+    ok(Result == NO_ERROR && Value[0] == HTTP_MAX_SERVER_QUEUE_LENGTH, "queue length query returned %lu, %lu\n",
+       Result, Value[0]);
+    Result = http_pr_set(Queue, HttpServerQueueLengthProperty, HTTP_MIN_SERVER_QUEUE_LENGTH);
+    ok(Result == NO_ERROR, "queue length 1 returned %lu\n", Result);
+    Result = http_pr_query(Queue, HttpServerQueueLengthProperty, Value);
+    ok(Result == NO_ERROR && Value[0] == 1, "queue length query returned %lu, %lu\n", Result, Value[0]);
+    Result = http_pr_set(Queue, HttpServerQueueLengthProperty, 1000);
+    ok(Result == NO_ERROR, "queue length 1000 returned %lu\n", Result);
+
+    Result = http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityFull + 1);
+    ok(Result == ERROR_NOT_SUPPORTED, "verbosity 3 returned %lu\n", Result);
+    Result = http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityFull);
+    ok(Result == NO_ERROR, "verbosity full returned %lu\n", Result);
+    Result = http_pr_query(Queue, HttpServer503VerbosityProperty, Value);
+    ok(Result == NO_ERROR && Value[0] == Http503ResponseVerbosityFull, "verbosity query returned %lu, %lu\n",
+       Result, Value[0]);
+    Result = http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityBasic);
+    ok(Result == NO_ERROR, "verbosity basic returned %lu\n", Result);
+
+    Result = http_pr_set(Queue, HttpServerStateProperty, HttpEnabledStateInactive + 1);
+    ok(Result == NO_ERROR, "state 2 returned %lu\n", Result);
+    Result = http_pr_query(Queue, HttpServerStateProperty, Value);
+    ok(Result == NO_ERROR && Value[0] == 2, "state query after 2 returned %lu, %lu\n", Result, Value[0]);
+    for (i = 3; i <= 5; i++)
+    {
+        Result = http_pr_set(Queue, HttpServerStateProperty, i);
+        ok(Result == NO_ERROR, "state %lu returned %lu\n", i, Result);
+    }
+    Result = http_pr_set(Queue, HttpServerStateProperty, 6);
+    ok(Result == ERROR_NOT_SUPPORTED, "state 6 returned %lu\n", Result);
+    Result = http_pr_set(Queue, HttpServerStateProperty, 0xffffffff);
+    ok(Result == ERROR_NOT_SUPPORTED, "state 0xffffffff returned %lu\n", Result);
+    Result = http_pr_set(Queue, HttpServer503VerbosityProperty, 0xffffffff);
+    ok(Result == ERROR_NOT_SUPPORTED, "verbosity 0xffffffff returned %lu\n", Result);
+    Result = http_pr_query(Queue, HttpServerStateProperty, Value);
+    ok(Result == NO_ERROR && Value[0] == 5, "state query after 6 returned %lu, %lu\n", Result, Value[0]);
+    Result = http_pr_set(Queue, HttpServerStateProperty, HttpEnabledStateInactive);
+    ok(Result == NO_ERROR, "state inactive returned %lu\n", Result);
+    Result = http_pr_query(Queue, HttpServerStateProperty, Value);
+    ok(Result == NO_ERROR && Value[0] == HttpEnabledStateInactive, "state query returned %lu, %lu\n",
+       Result, Value[0]);
+    Result = http_pr_set(Queue, HttpServerStateProperty, HttpEnabledStateActive);
+    ok(Result == NO_ERROR, "state active returned %lu\n", Result);
+
+    CloseHandle(Event);
+}
+
+static void http_pr_check_body(int State, const char *Response, const char *Heading, const char *Text,
+                               const char *Description)
+{
+    char Body[512], Length[32];
+
+    sprintf(Body, "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\"\"http://www.w3.org/TR/html4/strict.dtd\">\r\n"
+                  "<HTML><HEAD><TITLE>Service Unavailable</TITLE>\r\n"
+                  "<META HTTP-EQUIV=\"Content-Type\" Content=\"text/html; charset=us-ascii\"></HEAD>\r\n"
+                  "<BODY><h2>%s</h2>\r\n<hr><p>HTTP Error 503. %s</p>\r\n</BODY></HTML>\r\n", Heading, Text);
+    sprintf(Length, "\r\nContent-Length: %u\r\n", (UINT)strlen(Body));
+    ok(State == HTTP_KA_CLOSED, "%s: state %d\n", Description, State);
+    ok(!strncmp(Response, "HTTP/1.1 503 Service Unavailable\r\n", 34), "%s: response %s\n", Description, Response);
+    ok(strstr(Response, "\r\nContent-Type: text/html; charset=us-ascii\r\n") != NULL &&
+       strstr(Response, "\r\nConnection: close\r\n") != NULL && strstr(Response, Length) != NULL,
+       "%s: headers %s\n", Description, Response);
+    ok(!strcmp(http_ch_body(Response), Body), "%s: body %s\n", Description, http_ch_body(Response));
+}
+
+static void test_queue_limit_and_state(HANDLE Queue)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    OVERLAPPED Overlapped = {0};
+    HTTP_KA_CLIENT First, Second;
+    char Response[1024];
+    HTTP_REQUEST_ID FirstId;
+    ULONG Result;
+    int ClientState;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    ok(http_pr_client(&First, NULL), "sanity client failed\n");
+    http_ka_exchange(Queue, &Overlapped, &First, http_pr_get, "/prop/a", 0, NULL, HTTP_KA_OPEN, NULL, "sanity");
+    closesocket(First.Socket);
+
+    ok(http_pr_set(Queue, HttpServerQueueLengthProperty, 1) == NO_ERROR, "queue length 1 failed\n");
+    ok(http_pr_client(&First, http_pr_get), "first client failed\n");
+    Sleep(300);
+    ClientState = http_ka_wait(&First, 1);
+    ok(ClientState == HTTP_KA_OPEN, "first client state %d, %s\n", ClientState, First.Buffer);
+    ClientState = http_pr_try(http_pr_get, Response, sizeof(Response), 1500);
+    ok(ClientState == HTTP_KA_RESET && !Response[0], "full queue, basic: state %d, response %s\n",
+       ClientState, Response);
+    ok(http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityLimited) == NO_ERROR,
+       "verbosity limited failed\n");
+    ClientState = http_pr_try(http_pr_get, Response, sizeof(Response), 1500);
+    http_pr_check_body(ClientState, Response, "Service Unavailable", "The service is unavailable.",
+                       "full queue, limited");
+    ok(http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityFull) == NO_ERROR,
+       "verbosity full failed\n");
+    ClientState = http_pr_try(http_pr_get, Response, sizeof(Response), 1500);
+    http_pr_check_body(ClientState, Response, "Application Request Queue Full",
+                       "The application request queue is full.", "full queue, full");
+
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 2000);
+    ok(Result == NO_ERROR, "receiving the queued request returned %lu\n", Result);
+    FirstId = Request->s.RequestId;
+    ok(http_pr_client(&Second, http_pr_get), "second client failed\n");
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 2000);
+    ok(Result == NO_ERROR, "receive with one request being served returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Overlapped);
+    else if (Result == NO_ERROR)
+        http_ka_respond(Queue, Request->s.RequestId, 0, "second");
+    http_ka_respond(Queue, FirstId, 0, "first");
+    ok(http_ka_read_response(&First, Response, sizeof(Response), 2000) && !strncmp(Response, "HTTP/1.1 200", 12),
+       "first response %s\n", Response);
+    closesocket(First.Socket);
+    closesocket(Second.Socket);
+    ok(http_pr_set(Queue, HttpServerQueueLengthProperty, 1000) == NO_ERROR, "queue length 1000 failed\n");
+
+    ok(http_pr_set(Queue, HttpServerStateProperty, HttpEnabledStateInactive) == NO_ERROR, "inactive failed\n");
+    ResetEvent(Overlapped.hEvent);
+    Result = HttpReceiveHttpRequest(Queue, HTTP_NULL_ID, 0, Request, sizeof(RequestBuffer), NULL, &Overlapped);
+    ok(Result == ERROR_IO_PENDING, "receive on an inactive queue returned %lu\n", Result);
+    ClientState = http_pr_try(http_pr_get, Response, sizeof(Response), 1500);
+    http_pr_check_body(ClientState, Response, "Application Offline", "The application is offline.",
+                       "inactive queue, full");
+    Result = Result == ERROR_IO_PENDING ? http_pr_wait(Queue, &Overlapped, 300) : Result;
+    ok(Result == ERROR_IO_PENDING, "receive on an inactive queue completed with %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Overlapped);
+    ok(http_pr_set(Queue, HttpServerStateProperty, HttpEnabledStateActive) == NO_ERROR, "active failed\n");
+    Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 300);
+    ok(Result == ERROR_IO_PENDING, "receive after reactivating returned %lu\n", Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, &Overlapped);
+
+    ok(http_pr_set(Queue, HttpServer503VerbosityProperty, Http503ResponseVerbosityBasic) == NO_ERROR,
+       "verbosity basic failed\n");
+
+    CloseHandle(Overlapped.hEvent);
+}
+
+static void test_properties(void)
+{
+    static const WCHAR Url[] = L"http://127.0.0.1:59989/prop/";
+    HTTPAPI_VERSION Version = HTTPAPI_VERSION_2;
+    HTTP_SERVER_SESSION_ID Session = 0;
+    HTTP_URL_GROUP_ID Group = 0;
+    HTTP_BINDING_INFO Binding;
+    HANDLE Queue = NULL, V1Queue = NULL;
+    WSADATA WsaData;
+    ULONG Result;
+
+    Result = WSAStartup(MAKEWORD(2, 2), &WsaData);
+    ok(Result == 0, "WSAStartup failed with %lu\n", Result);
+    if (Result)
+        return;
+    Result = HttpInitialize(Version, HTTP_INITIALIZE_SERVER, NULL);
+    ok(Result == NO_ERROR, "HttpInitialize failed with %lu\n", Result);
+    if (Result)
+        goto cleanup_wsa;
+    Result = HttpCreateServerSession(Version, &Session, 0);
+    ok(Result == NO_ERROR, "HttpCreateServerSession failed with %lu\n", Result);
+    Result = HttpCreateUrlGroup(Session, &Group, 0);
+    ok(Result == NO_ERROR, "HttpCreateUrlGroup failed with %lu\n", Result);
+    Result = HttpCreateRequestQueue(Version, NULL, NULL, 0, &Queue);
+    ok(Result == NO_ERROR, "HttpCreateRequestQueue failed with %lu\n", Result);
+    Result = HttpCreateHttpHandle(&V1Queue, 0);
+    ok(Result == NO_ERROR, "HttpCreateHttpHandle failed with %lu\n", Result);
+    if (!Queue || !V1Queue || !Group)
+        goto cleanup;
+    Binding.Flags.Present = 1;
+    Binding.RequestQueueHandle = Queue;
+    Result = HttpSetUrlGroupProperty(Group, HttpServerBindingProperty, &Binding, sizeof(Binding));
+    ok(Result == NO_ERROR, "binding failed with %lu\n", Result);
+    Result = HttpAddUrlToUrlGroup(Group, Url, 0, 0);
+    ok(Result == NO_ERROR, "HttpAddUrlToUrlGroup failed with %lu\n", Result);
+
+    test_queue_property_validation(Queue, V1Queue);
+    test_queue_limit_and_state(Queue);
+
+cleanup:
+    if (Group)
+        HttpCloseUrlGroup(Group);
+    if (Session)
+        HttpCloseServerSession(Session);
+    if (Queue)
+        HttpCloseRequestQueue(Queue);
+    if (V1Queue)
+        CloseHandle(V1Queue);
+    HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
+cleanup_wsa:
+    WSACleanup();
+}
+
 START_TEST(httpapi)
 {
     test_initialize();
@@ -3154,4 +3504,9 @@ START_TEST(chunked)
 START_TEST(filechunk)
 {
     test_file_chunks();
+}
+
+START_TEST(properties)
+{
+    test_properties();
 }
