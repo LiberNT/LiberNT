@@ -225,6 +225,35 @@ MiSystemUnmapLocal(
     MiSystemUnmapScope(System, VirtualAddress, Count, FALSE, FALSE);
 }
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertOwnedSystemRange(
+    _In_ PMI_SYSTEM System,
+    _In_ ULONG64 VirtualAddress,
+    _In_ ULONG Count)
+{
+    ULONG i;
+
+    MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
+    for (i = 0; i < Count; i++)
+    {
+        PMI_PTE Slot = MiPtLookup(&System->SystemSpace, VirtualAddress + (ULONG64)i * PAGE_SIZE, NULL);
+        MI_PTE Pte;
+        MI_FRAME_NUMBER Frame;
+
+        MI_ASSERT(Slot != NULL);
+        Pte = MiArchPteRead(Slot);
+        MI_ASSERT(MiArchPteIsValid(Pte));
+        Frame = MiArchPteFrame(Pte);
+        MI_ASSERT(Frame < System->Pfn.FrameCount);
+        MI_ASSERT(MI_ATOMIC_READ32(&System->Pfn.Pfn[Frame].ShareCount) > 0);
+    }
+}
+#else
+#define MiAssertOwnedSystemRange(System, VirtualAddress, Count) ((VOID)0)
+#endif
+
 static
 ULONG
 MiSystemDecommitLocked(
@@ -305,7 +334,19 @@ MiSystemCommitPages(
     }
 
     if (!NT_SUCCESS(Status))
-        MiSystemDecommitLocked(System, VirtualAddress, i);
+    {
+        ULONG Freed;
+
+        MiAssertOwnedSystemRange(System, VirtualAddress, i);
+        Freed = MiSystemDecommitLocked(System, VirtualAddress, i);
+        MI_ASSERT(Freed == i);
+        UNREFERENCED_PARAMETER(Freed);
+    }
+    else
+    {
+        MI_ASSERT(i == Count);
+        MiAssertOwnedSystemRange(System, VirtualAddress, Count);
+    }
 
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
 
@@ -444,11 +485,14 @@ MiSystemCommitPinned(
 
     if (!NT_SUCCESS(Status))
     {
+        MiAssertOwnedSystemRange(System, VirtualAddress, i);
         MiSystemUnmap(System, VirtualAddress, i, TRUE);
         MiReturnCommit(Space, Count);
         return Status;
     }
 
+    MI_ASSERT(i == Count);
+    MiAssertOwnedSystemRange(System, VirtualAddress, Count);
     MI_ATOMIC_ADD64(&Space->ResidentPages, Count);
     return STATUS_SUCCESS;
 }
@@ -461,6 +505,7 @@ MiSystemDecommitPinned(
 {
     PMI_ADDRESS_SPACE Space = &System->SystemSpace;
 
+    MiAssertOwnedSystemRange(System, VirtualAddress, Count);
     MiSystemUnmap(System, VirtualAddress, Count, TRUE);
     MiReturnCommit(Space, Count);
     MI_ATOMIC_ADD64(&Space->ResidentPages, -(LONG64)Count);
