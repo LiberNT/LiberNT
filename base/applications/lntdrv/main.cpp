@@ -89,6 +89,8 @@ struct FoundMessage
 {
     std::wstring InstanceId;
     std::vector<CatalogUpdate> Updates;
+    DWORD Error;
+    std::wstring Note;
 };
 
 struct Choice
@@ -231,6 +233,12 @@ bool Updatable(const DeviceInfo &device)
 bool Selectable(ChoiceState state)
 {
     return state == ChoiceState::Missing || state == ChoiceState::Newer;
+}
+
+bool SearchFailed(DWORD error)
+{
+    return error && error != ERROR_NOT_FOUND && error != ERROR_NOT_SUPPORTED && error != ERROR_CANCELLED &&
+           error != ERROR_LNTDRV_OTHER_ARCH && error != ERROR_LNTDRV_OTHER_WINDOWS;
 }
 
 DWORD SearchDevice(Catalog &catalog, const DeviceInfo &device, std::vector<CatalogUpdate> &updates)
@@ -583,10 +591,12 @@ public:
 
             if (IsCancelled(m_Cancel))
                 break;
-            found = new FoundMessage{ device.InstanceId, std::vector<CatalogUpdate>() };
+            found = new FoundMessage{ device.InstanceId, std::vector<CatalogUpdate>(), ERROR_SUCCESS, std::wstring() };
             if (unnamed)
                 name = LocalDeviceName(device);
             error = SearchDevice(catalog, device, found->Updates);
+            found->Error = error;
+            found->Note = CatalogNote(device, found->Updates, error, catalog.OtherArchitectures());
             if (unnamed && name.empty())
                 name = found->Updates.empty() ? catalog.OtherModel() : found->Updates.front().Model;
             if (!name.empty())
@@ -595,8 +605,7 @@ public:
                 Post(m_hwnd, WM_APP_NAME, m_Scan, new NameMessage{ device.InstanceId, name });
             }
             OutputDebugStringW((L"[LNTDRV] " + (name.empty() ? device.Name : name) + L" (" + device.InstanceId +
-                                L"): " + CatalogNote(device, found->Updates, error, catalog.OtherArchitectures()) +
-                                L"\n").c_str());
+                                L"): " + found->Note + L"\n").c_str());
             Post(m_hwnd, WM_APP_FOUND, m_Scan, found);
             if (StopsCatalogScan(error) || error == ERROR_CANCELLED)
             {
@@ -1483,6 +1492,11 @@ private:
                 SetCell(list, (int)i, 2, OfferedVersion(m_Found[device.InstanceId].Update));
                 ListView_SetCheckState(list, (int)i, Ticked(device));
                 m_Filling = false;
+                ListView_RedrawItems(list, (int)i, (int)i);
+            }
+            else if (SearchFailed(found.Error))
+            {
+                SetCell(list, (int)i, 1, found.Note);
                 ListView_RedrawItems(list, (int)i, (int)i);
             }
             else
