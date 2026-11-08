@@ -108,4 +108,47 @@ typedef struct _ARM64_ACPI_MADT_NMI_SOURCE
     ULONG GlobalSystemInterrupt;
 } ARM64_ACPI_MADT_NMI_SOURCE, *PARM64_ACPI_MADT_NMI_SOURCE;
 
+typedef struct _ARM64_ACPI_GTDT
+{
+    DESCRIPTION_HEADER Header;
+    ULONGLONG CounterBlockAddress;
+    ULONG Reserved;
+    ULONG SecureEl1Interrupt;
+    ULONG SecureEl1Flags;
+    ULONG NonSecureEl1Interrupt;
+    ULONG NonSecureEl1Flags;
+    ULONG VirtualTimerInterrupt;
+    ULONG VirtualTimerFlags;
+    ULONG NonSecureEl2Interrupt;
+    ULONG NonSecureEl2Flags;
+    ULONGLONG CounterReadBlockAddress;
+    ULONG PlatformTimerCount;
+    ULONG PlatformTimerOffset;
+} ARM64_ACPI_GTDT, *PARM64_ACPI_GTDT;
+
+typedef struct _ARM64_ACPI_SPCR
+{
+    DESCRIPTION_HEADER Header;
+    UCHAR InterfaceType;
+    UCHAR Reserved[3];
+    GEN_ADDR SerialPort;
+    UCHAR InterruptType;
+    UCHAR PcInterrupt;
+    ULONG Interrupt;
+    UCHAR BaudRate;
+    UCHAR Parity;
+    UCHAR StopBits;
+    UCHAR FlowControl;
+    UCHAR TerminalType;
+    UCHAR Reserved1;
+    USHORT PciDeviceId;
+    USHORT PciVendorId;
+    UCHAR PciBus;
+    UCHAR PciDevice;
+    UCHAR PciFunction;
+    ULONG PciFlags;
+    UCHAR PciSegment;
+    ULONG Reserved2;
+} ARM64_ACPI_SPCR, *PARM64_ACPI_SPCR;
+
 #pragma pack(pop)
