@@ -9,7 +9,7 @@
 @ stdcall CryptCATAdminCalcHashFromFileHandle(long ptr ptr long)
 @ stdcall CryptCATAdminCalcHashFromFileHandle2(ptr ptr ptr ptr long)
 @ stdcall CryptCATAdminEnumCatalogFromHash(long ptr long long ptr)
-@ stub CryptCATAdminPauseServiceForBackup
+@ stdcall CryptCATAdminPauseServiceForBackup(long long)
 @ stdcall CryptCATAdminReleaseCatalogContext(long long long)
 @ stdcall CryptCATAdminReleaseContext(long long)
 @ stdcall CryptCATAdminRemoveCatalog(ptr wstr long)
@@ -66,7 +66,7 @@
 @ stub OfficeCleanupPolicy
 @ stub OfficeInitializePolicy
 @ stdcall OpenPersonalTrustDBDialog(ptr)
-#@ stub OpenPersonalTrustDBDialogEx
+@ stdcall OpenPersonalTrustDBDialogEx(ptr long ptr)
 @ stdcall SoftpubAuthenticode(ptr)
 @ stdcall SoftpubCheckCert(ptr long long long)
 @ stdcall SoftpubCleanup(ptr)
@@ -74,9 +74,9 @@
 @ stdcall SoftpubDllRegisterServer()
 @ stdcall SoftpubDllUnregisterServer()
 @ stub SoftpubDumpStructure
-@ stub SoftpubFreeDefUsageCallData
+@ cdecl SoftpubFreeDefUsageCallData(str ptr)
 @ stdcall SoftpubInitialize(ptr)
-@ stub SoftpubLoadDefUsageCallData
+@ cdecl SoftpubLoadDefUsageCallData(str ptr)
 @ stdcall SoftpubLoadMessage(ptr)
 @ stdcall SoftpubLoadSignature(ptr)
 #@ stub SrpCheckSmartlockerEAandProcessToken
@@ -89,12 +89,12 @@
 #@ stub WTGetPluginSignatureInfo
 @ stdcall WTGetSignatureInfo(wstr ptr long ptr ptr ptr)
 @ stdcall WTHelperCertCheckValidSignature(ptr)
-@ stub WTHelperCertFindIssuerCertificate
-@ stub WTHelperCertIsSelfSigned
+@ stdcall WTHelperCertFindIssuerCertificate(ptr long ptr ptr long ptr ptr)
+@ stdcall WTHelperCertIsSelfSigned(long ptr)
 @ stub WTHelperCheckCertUsage
 @ stub WTHelperGetAgencyInfo
 @ stdcall WTHelperGetFileHandle(ptr)
-#@ stub WTHelperGetFileHash
+@ stdcall WTHelperGetFileHash(wstr long ptr ptr ptr ptr)
 @ stdcall WTHelperGetFileName(ptr)
 @ stdcall WTHelperGetKnownUsages(long ptr)
 @ stdcall WTHelperGetProvCertFromChain(ptr long)
@@ -144,7 +144,7 @@
 @ stdcall WintrustAddActionID(ptr long ptr)
 @ stdcall WintrustAddDefaultForUsage(str ptr)
 @ stdcall WintrustCertificateTrust(ptr)
-@ stub WintrustGetDefaultForUsage
+@ stdcall WintrustGetDefaultForUsage(long str ptr)
 @ stdcall WintrustGetRegPolicyFlags(ptr)
 @ stdcall WintrustLoadFunctionPointers(ptr ptr)
 @ stdcall WintrustRemoveActionID(ptr)

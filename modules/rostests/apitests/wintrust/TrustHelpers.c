@@ -1,0 +1,190 @@
+/*
+ * PROJECT:     LiberNT API tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Test the wintrust helper, default usage and backup pause functions
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <apitest.h>
+#include <wincrypt.h>
+#include <wintrust.h>
+#include <softpub.h>
+#include <mscat.h>
+
+typedef BOOL (WINAPI *PFN_PAUSE)(DWORD, BOOL);
+typedef BOOL (WINAPI *PFN_TRUSTDB_EX)(HWND, DWORD, PVOID *);
+typedef BOOL (WINAPI *PFN_DEFAULT_USAGE)(DWORD, const char *, CRYPT_PROVIDER_DEFUSAGE *);
+typedef BOOL (WINAPI *PFN_SELF_SIGNED)(DWORD, CERT_INFO *);
+typedef LONG (WINAPI *PFN_FILE_HASH)(LPCWSTR, DWORD, PVOID, BYTE *, DWORD *, ALG_ID *);
+
+static
+VOID
+TestPauseServiceForBackup(HMODULE Wintrust)
+{
+    PFN_PAUSE Pause = (PFN_PAUSE)GetProcAddress(Wintrust, "CryptCATAdminPauseServiceForBackup");
+
+    ok(Pause != NULL, "CryptCATAdminPauseServiceForBackup is not exported\n");
+    if (!Pause)
+        return;
+    SetLastError(0xdeadbeef);
+    ok_int(Pause(0, FALSE), TRUE);
+    ok_hex(GetLastError(), ERROR_SUCCESS);
+    SetLastError(0xdeadbeef);
+    ok_int(Pause(0, TRUE), TRUE);
+    ok_hex(GetLastError(), ERROR_SUCCESS);
+    SetLastError(0xdeadbeef);
+    ok_int(Pause(1, FALSE), TRUE);
+    ok_hex(GetLastError(), ERROR_SUCCESS);
+}
+
+static
+VOID
+TestTrustDbDialog(HMODULE Wintrust)
+{
+    PFN_TRUSTDB_EX TrustDb = (PFN_TRUSTDB_EX)GetProcAddress(Wintrust, "OpenPersonalTrustDBDialogEx");
+
+    ok(TrustDb != NULL, "OpenPersonalTrustDBDialogEx is not exported\n");
+    if (!TrustDb)
+        return;
+    SetLastError(0xdeadbeef);
+    ok_int(TrustDb(NULL, WT_TRUSTDBDIALOG_NO_UI_FLAG, NULL), TRUE);
+    ok_hex(GetLastError(), 0xdeadbeef);
+}
+
+static
+VOID
+TestHttpsUsage(PFN_DEFAULT_USAGE GetDefault, const char *Oid, DWORD AuthType)
+{
+    static const GUID HttpsAction = HTTPSPROV_ACTION;
+    CRYPT_PROVIDER_DEFUSAGE Usage;
+    HTTPSPolicyCallbackData *Policy;
+
+    ZeroMemory(&Usage, sizeof(Usage));
+    Usage.cbStruct = sizeof(Usage);
+    SetLastError(0xdeadbeef);
+    ok_int(GetDefault(DWACTION_ALLOCANDFILL, Oid, &Usage), TRUE);
+    ok(IsEqualGUID(&Usage.gActionID, &HttpsAction), "%s: unexpected action %08lx\n", Oid, Usage.gActionID.Data1);
+    ok(Usage.pDefSIPClientData == NULL, "%s: SIP data %p\n", Oid, Usage.pDefSIPClientData);
+    Policy = Usage.pDefPolicyCallbackData;
+    ok(Policy != NULL, "%s: no policy data\n", Oid);
+    if (Policy)
+    {
+        ok_long(Policy->cbStruct, sizeof(*Policy));
+        ok_long(Policy->dwAuthType, AuthType);
+        ok_hex(Policy->fdwChecks, 0x1000);
+        ok(Policy->pwszServerName == NULL, "%s: server name %p\n", Oid, Policy->pwszServerName);
+    }
+    SetLastError(0xdeadbeef);
+    ok_int(GetDefault(DWACTION_FREE, Oid, &Usage), TRUE);
+    ok(Usage.pDefPolicyCallbackData == Policy, "%s: policy pointer changed\n", Oid);
+}
+
+static
+VOID
+TestDefaultForUsage(HMODULE Wintrust)
+{
+    static const GUID GenericVerify = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    PFN_DEFAULT_USAGE GetDefault = (PFN_DEFAULT_USAGE)GetProcAddress(Wintrust, "WintrustGetDefaultForUsage");
+    CRYPT_PROVIDER_DEFUSAGE Usage;
+    PVOID Pattern;
+
+    FillMemory(&Pattern, sizeof(Pattern), 0xcc);
+    ok(GetDefault != NULL, "WintrustGetDefaultForUsage is not exported\n");
+    if (!GetDefault)
+        return;
+
+    FillMemory(&Usage, sizeof(Usage), 0xcc);
+    Usage.cbStruct = sizeof(Usage);
+    SetLastError(0xdeadbeef);
+    ok_int(GetDefault(DWACTION_ALLOCANDFILL, szOID_PKIX_KP_CODE_SIGNING, &Usage), TRUE);
+    ok_hex(GetLastError(), 0xdeadbeef);
+    ok(IsEqualGUID(&Usage.gActionID, &GenericVerify), "unexpected action %08lx\n", Usage.gActionID.Data1);
+    ok(Usage.pDefPolicyCallbackData == Pattern, "policy data %p\n", Usage.pDefPolicyCallbackData);
+    ok(Usage.pDefSIPClientData == Pattern, "SIP data %p\n", Usage.pDefSIPClientData);
+    SetLastError(0xdeadbeef);
+    ok_int(GetDefault(DWACTION_FREE, szOID_PKIX_KP_CODE_SIGNING, &Usage), TRUE);
+    ok_hex(GetLastError(), 0xdeadbeef);
+
+    ZeroMemory(&Usage, sizeof(Usage));
+    Usage.cbStruct = sizeof(Usage);
+    SetLastError(0xdeadbeef);
+    ok_int(GetDefault(DWACTION_ALLOCANDFILL, "1.2.3.4.5", &Usage), FALSE);
+    ok_hex(GetLastError(), 0xdeadbeef);
+
+    Usage.cbStruct = 0;
+    SetLastError(0xdeadbeef);
+    ok_int(GetDefault(DWACTION_ALLOCANDFILL, szOID_PKIX_KP_CODE_SIGNING, &Usage), FALSE);
+    ok_hex(GetLastError(), ERROR_INVALID_PARAMETER);
+
+    Usage.cbStruct = sizeof(Usage);
+    SetLastError(0xdeadbeef);
+    ok_int(GetDefault(3, szOID_PKIX_KP_CODE_SIGNING, &Usage), TRUE);
+    ok_hex(GetLastError(), 0xdeadbeef);
+
+    TestHttpsUsage(GetDefault, szOID_PKIX_KP_SERVER_AUTH, AUTHTYPE_SERVER);
+    TestHttpsUsage(GetDefault, szOID_PKIX_KP_CLIENT_AUTH, AUTHTYPE_CLIENT);
+    TestHttpsUsage(GetDefault, szOID_SERVER_GATED_CRYPTO, AUTHTYPE_SERVER);
+    TestHttpsUsage(GetDefault, szOID_SGC_NETSCAPE, AUTHTYPE_SERVER);
+}
+
+static
+VOID
+TestSelfSigned(HMODULE Wintrust)
+{
+    PFN_SELF_SIGNED SelfSigned = (PFN_SELF_SIGNED)GetProcAddress(Wintrust, "WTHelperCertIsSelfSigned");
+    BYTE NameData[128], IssuerData[128];
+    CERT_NAME_BLOB Name = { sizeof(NameData), NameData }, Issuer = { sizeof(IssuerData), IssuerData };
+    PCCERT_CONTEXT Cert;
+    CERT_INFO Info;
+
+    ok(SelfSigned != NULL, "WTHelperCertIsSelfSigned is not exported\n");
+    if (!SelfSigned)
+        return;
+    if (!CertStrToNameW(X509_ASN_ENCODING, L"CN=LiberNT self signed", CERT_X500_NAME_STR, NULL, NameData, &Name.cbData, NULL) ||
+        !CertStrToNameW(X509_ASN_ENCODING, L"CN=LiberNT issuer", CERT_X500_NAME_STR, NULL, IssuerData, &Issuer.cbData, NULL))
+    {
+        skip("CertStrToNameW failed\n");
+        return;
+    }
+    Cert = CertCreateSelfSignCertificate(0, &Name, 0, NULL, NULL, NULL, NULL, NULL);
+    ok(Cert != NULL, "CertCreateSelfSignCertificate failed with %lu\n", GetLastError());
+    if (!Cert)
+        return;
+
+    ok_int(SelfSigned(X509_ASN_ENCODING, Cert->pCertInfo), TRUE);
+    Info = *Cert->pCertInfo;
+    Info.Issuer = Issuer;
+    ok_int(SelfSigned(X509_ASN_ENCODING, &Info), FALSE);
+    CertFreeCertificateContext(Cert);
+}
+
+static
+VOID
+TestFileHashUnsigned(HMODULE Wintrust)
+{
+    PFN_FILE_HASH FileHash = (PFN_FILE_HASH)GetProcAddress(Wintrust, "WTHelperGetFileHash");
+    WCHAR Path[MAX_PATH];
+    BYTE Hash[64];
+    DWORD Size;
+    ALG_ID Algorithm;
+
+    ok(FileHash != NULL, "WTHelperGetFileHash is not exported\n");
+    if (!FileHash)
+        return;
+
+    GetModuleFileNameW(NULL, Path, RTL_NUMBER_OF(Path));
+    Size = sizeof(Hash);
+    ok_hex(FileHash(Path, 0, NULL, Hash, &Size, &Algorithm), TRUST_E_NOSIGNATURE);
+    ok_long(Size, 0);
+}
+
+START_TEST(TrustHelpers)
+{
+    HMODULE Wintrust = GetModuleHandleW(L"wintrust.dll");
+
+    TestPauseServiceForBackup(Wintrust);
+    TestTrustDbDialog(Wintrust);
+    TestDefaultForUsage(Wintrust);
+    TestSelfSigned(Wintrust);
+    TestFileHashUnsigned(Wintrust);
+}

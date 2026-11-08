@@ -191,6 +191,25 @@ typedef struct _CRYPT_PROVIDER_REGDEFUSAGE
     char  *pwszFreeCallbackDataFunctionName;
 } CRYPT_PROVIDER_REGDEFUSAGE, *PCRYPT_PROVIDER_REGDEFUSAGE;
 
+typedef struct _CRYPT_PROVIDER_DEFUSAGE
+{
+    DWORD  cbStruct;
+    GUID   gActionID;
+    LPVOID pDefPolicyCallbackData;
+    LPVOID pDefSIPClientData;
+} CRYPT_PROVIDER_DEFUSAGE, *PCRYPT_PROVIDER_DEFUSAGE;
+
+typedef BOOL (*PFN_ALLOCANDFILLDEFUSAGE)(const char *pszUsageOID, struct _CRYPT_PROVIDER_DEFUSAGE *psDefUsage);
+typedef BOOL (*PFN_FREEDEFUSAGE)(const char *pszUsageOID, struct _CRYPT_PROVIDER_DEFUSAGE *psDefUsage);
+
+#define DWACTION_ALLOCANDFILL 1
+#define DWACTION_FREE         2
+
+#define WT_TRUSTDBDIALOG_NO_UI_FLAG            0x00000001
+#define WT_TRUSTDBDIALOG_ONLY_PUB_TAB_FLAG     0x00000002
+#define WT_TRUSTDBDIALOG_WRITE_LEGACY_REG_FLAG 0x00000100
+#define WT_TRUSTDBDIALOG_WRITE_IEAK_STORE_FLAG 0x00000200
+
 typedef struct _CRYPT_PROVUI_DATA {
     DWORD cbStruct;
     DWORD dwFinalError;
@@ -462,6 +481,11 @@ BOOL      WINAPI WintrustAddActionID(GUID*,DWORD,CRYPT_REGISTER_ACTIONID*);
 BOOL      WINAPI WintrustRemoveActionID(GUID*);
 BOOL      WINAPI WintrustLoadFunctionPointers(GUID*,CRYPT_PROVIDER_FUNCTIONS*);
 BOOL      WINAPI WintrustAddDefaultForUsage(const char*,CRYPT_PROVIDER_REGDEFUSAGE*);
+BOOL      WINAPI WintrustGetDefaultForUsage(DWORD,const char*,CRYPT_PROVIDER_DEFUSAGE*);
+BOOL      WINAPI OpenPersonalTrustDBDialogEx(HWND,DWORD,PVOID*);
+BOOL      WINAPI OpenPersonalTrustDBDialog(HWND);
+BOOL      WINAPI WTHelperCertIsSelfSigned(DWORD,CERT_INFO*);
+HRESULT   WINAPI WTHelperCertCheckValidSignature(CRYPT_PROVIDER_DATA*);
 void      WINAPI WintrustGetRegPolicyFlags(DWORD*);
 BOOL      WINAPI WintrustSetRegPolicyFlags(DWORD);
 void      WINAPI WintrustSetDefaultIncludePEPageHashes(BOOL);

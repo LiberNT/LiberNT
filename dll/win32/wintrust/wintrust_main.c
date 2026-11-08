@@ -1199,6 +1199,9 @@ BOOL WINAPI WINTRUST_AddPrivData(CRYPT_PROVIDER_DATA *data,
  */
 BOOL WINAPI OpenPersonalTrustDBDialog(HWND hwnd)
 {
+#ifdef __REACTOS__
+    return OpenPersonalTrustDBDialogEx(hwnd, 0, NULL);
+#else
     CRYPTUI_CERT_MGR_STRUCT uiCertMgr;
 
     uiCertMgr.dwSize = sizeof(uiCertMgr);
@@ -1207,8 +1210,174 @@ BOOL WINAPI OpenPersonalTrustDBDialog(HWND hwnd)
     uiCertMgr.pwszTitle = NULL;
     uiCertMgr.pszInitUsageOID = NULL;
     return CryptUIDlgCertMgr(&uiCertMgr);
+#endif
 }
 
+#ifdef __REACTOS__
+/***********************************************************************
+ *		OpenPersonalTrustDBDialogEx (WINTRUST.@)
+ */
+BOOL WINAPI OpenPersonalTrustDBDialogEx(HWND hwnd, DWORD flags, PVOID *reserved)
+{
+    CRYPTUI_CERT_MGR_STRUCT uiCertMgr;
+
+    TRACE("(%p %#lx %p)\n", hwnd, flags, reserved);
+
+    if (flags & WT_TRUSTDBDIALOG_NO_UI_FLAG)
+        return TRUE;
+
+    uiCertMgr.dwSize = sizeof(uiCertMgr);
+    uiCertMgr.hwndParent = hwnd;
+    uiCertMgr.dwFlags = CRYPTUI_CERT_MGR_PUBLISHER_TAB;
+    if (flags & WT_TRUSTDBDIALOG_ONLY_PUB_TAB_FLAG)
+        uiCertMgr.dwFlags |= CRYPTUI_CERT_MGR_SINGLE_TAB_FLAG;
+    uiCertMgr.pwszTitle = NULL;
+    uiCertMgr.pszInitUsageOID = NULL;
+    return CryptUIDlgCertMgr(&uiCertMgr);
+}
+
+/***********************************************************************
+ *		WTHelperCertIsSelfSigned (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperCertIsSelfSigned(DWORD dwEncoding, CERT_INFO *pCert)
+{
+    TRACE("(%#lx %p)\n", dwEncoding, pCert);
+
+    return CertCompareCertificateName(dwEncoding, &pCert->Subject, &pCert->Issuer);
+}
+
+static DWORD WINTRUST_IssuerConfidence(PCCERT_CONTEXT child, PCCERT_CONTEXT issuer, FILETIME *time)
+{
+    DWORD confidence = 0;
+
+    if (CryptVerifyCertificateSignatureEx(0, child->dwCertEncodingType, CRYPT_VERIFY_CERT_SIGN_SUBJECT_CERT,
+                                          (void *)child, CRYPT_VERIFY_CERT_SIGN_ISSUER_CERT, (void *)issuer, 0, NULL))
+        confidence |= CERT_CONFIDENCE_SIG;
+    if (!CertVerifyTimeValidity(time, issuer->pCertInfo))
+        confidence |= CERT_CONFIDENCE_TIME;
+    if (CertVerifyValidityNesting(child->pCertInfo, issuer->pCertInfo))
+        confidence |= CERT_CONFIDENCE_TIMENEST;
+    /* TODO: INFO_NEEDED: when Windows 11 sets CERT_CONFIDENCE_AUTHIDEXT and CERT_CONFIDENCE_HYGIENE */
+    return confidence;
+}
+
+/***********************************************************************
+ *		WTHelperCertFindIssuerCertificate (WINTRUST.@)
+ */
+PCCERT_CONTEXT WINAPI WTHelperCertFindIssuerCertificate(PCCERT_CONTEXT pChildContext, DWORD chStores,
+                                                        HCERTSTORE *pahStores, FILETIME *psftVerifyAsOf,
+                                                        DWORD dwEncoding, DWORD *pdwConfidence, DWORD *pdwError)
+{
+    PCCERT_CONTEXT best = NULL, candidate;
+    DWORD i, confidence, best_confidence = 0;
+
+    TRACE("(%p %lu %p %p %#lx %p %p)\n", pChildContext, chStores, pahStores, psftVerifyAsOf, dwEncoding,
+          pdwConfidence, pdwError);
+
+    if (!chStores || !pahStores)
+        return NULL;
+
+    for (i = 0; i < chStores; i++)
+    {
+        candidate = NULL;
+        while ((candidate = CertFindCertificateInStore(pahStores[i], dwEncoding, 0, CERT_FIND_SUBJECT_NAME,
+                                                       &pChildContext->pCertInfo->Issuer, candidate)))
+        {
+            if (CertCompareCertificate(dwEncoding, candidate->pCertInfo, pChildContext->pCertInfo))
+                continue;
+            confidence = WINTRUST_IssuerConfidence(pChildContext, candidate, psftVerifyAsOf);
+            if (best && confidence <= best_confidence)
+                continue;
+            CertFreeCertificateContext(best);
+            best = CertDuplicateCertificateContext(candidate);
+            best_confidence = confidence;
+        }
+    }
+    if (pdwConfidence)
+        *pdwConfidence = best_confidence;
+    if (pdwError)
+        *pdwError = ERROR_SUCCESS;
+    return best;
+}
+
+/***********************************************************************
+ *		WTHelperGetFileHash (WINTRUST.@)
+ */
+LONG WINAPI WTHelperGetFileHash(LPCWSTR pwszFilename, DWORD dwFlags, PVOID pvReserved, BYTE *pbFileHash,
+                                DWORD *pcbFileHash, ALG_ID *pHashAlgid)
+{
+    GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO file = { sizeof(file) };
+    WINTRUST_DATA data = { sizeof(data) };
+    SPC_INDIRECT_DATA_CONTENT *indirect = NULL;
+    CRYPT_PROVIDER_DATA *prov;
+    const char *oid;
+    LONG ret;
+
+    TRACE("(%s %#lx %p %p %p %p)\n", debugstr_w(pwszFilename), dwFlags, pvReserved, pbFileHash, pcbFileHash,
+          pHashAlgid);
+
+    file.pcwszFilePath = pwszFilename;
+    data.dwUIChoice = WTD_UI_NONE;
+    data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    data.dwUnionChoice = WTD_CHOICE_FILE;
+    data.pFile = &file;
+    data.dwStateAction = WTD_STATEACTION_VERIFY;
+    ret = WinVerifyTrust(INVALID_HANDLE_VALUE, &action, &data);
+    prov = WTHelperProvDataFromStateData(data.hWVTStateData);
+    if (!ret && prov && prov->pPDSip)
+        indirect = (SPC_INDIRECT_DATA_CONTENT *)prov->pPDSip->psIndirectData;
+
+    if (!indirect)
+    {
+        if (pcbFileHash)
+            *pcbFileHash = 0;
+        ret = TRUST_E_NOSIGNATURE;
+    }
+    else
+    {
+        oid = indirect->DigestAlgorithm.pszObjId;
+        if (pHashAlgid)
+        {
+            /* TODO: INFO_NEEDED: Windows 11 ALG_ID for MD5/SHA-1 signatures; only SHA-256 was measured */
+            *pHashAlgid = (!strcmp(oid, szOID_OIWSEC_sha1) || !strcmp(oid, szOID_RSA_MD5)) ?
+                          CertOIDToAlgId(oid) : CALG_OID_INFO_CNG_ONLY;
+        }
+        if (pbFileHash && *pcbFileHash < indirect->Digest.cbData)
+            ret = ERROR_MORE_DATA;
+        else if (pbFileHash)
+            memcpy(pbFileHash, indirect->Digest.pbData, indirect->Digest.cbData);
+        *pcbFileHash = indirect->Digest.cbData;
+    }
+
+    data.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust(INVALID_HANDLE_VALUE, &action, &data);
+    return ret;
+}
+
+/***********************************************************************
+ *		WTHelperCertCheckValidSignature (WINTRUST.@)
+ */
+HRESULT WINAPI WTHelperCertCheckValidSignature(CRYPT_PROVIDER_DATA *pProvData)
+{
+    static const DWORD steps[] =
+    {
+        TRUSTERROR_STEP_FINAL_WVTINIT, TRUSTERROR_STEP_FINAL_INITPROV, TRUSTERROR_STEP_FINAL_OBJPROV,
+        TRUSTERROR_STEP_FINAL_SIGPROV, TRUSTERROR_STEP_FINAL_CERTPROV, TRUSTERROR_STEP_FINAL_CERTCHKPROV,
+        TRUSTERROR_STEP_FINAL_POLICYPROV,
+    };
+    DWORD i;
+
+    TRACE("(%p)\n", pProvData);
+
+    for (i = 0; i < ARRAY_SIZE(steps); i++)
+    {
+        if (steps[i] < pProvData->cdwTrustStepErrors && pProvData->padwTrustStepErrors[steps[i]])
+            return pProvData->padwTrustStepErrors[steps[i]];
+    }
+    return S_OK;
+}
+#else
 /***********************************************************************
  *		WTHelperCertCheckValidSignature
  */
@@ -1217,6 +1386,7 @@ HRESULT WINAPI WTHelperCertCheckValidSignature(CRYPT_PROVIDER_DATA *pProvData)
     FIXME("Stub\n");
     return S_OK;
 }
+#endif
 
 /***********************************************************************
  *              IsCatalogFile

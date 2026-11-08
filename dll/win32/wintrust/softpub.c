@@ -27,6 +27,7 @@
 #include "mssip.h"
 #ifdef __REACTOS__
 #include "mscat.h"
+#include "wininet.h"
 #endif
 #include "softpub.h"
 #include "winnls.h"
@@ -2075,5 +2076,46 @@ HRESULT WINAPI DriverCleanupPolicy(CRYPT_PROVIDER_DATA *data)
     TRACE("(%p)\n", data);
 
     return SoftpubCleanup(data);
+}
+#endif
+
+#ifdef __REACTOS__
+/***********************************************************************
+ *		SoftpubLoadDefUsageCallData (WINTRUST.@)
+ */
+BOOL SoftpubLoadDefUsageCallData(const char *pszUsageOID, CRYPT_PROVIDER_DEFUSAGE *psDefUsage)
+{
+    HTTPSPolicyCallbackData *policy;
+
+    TRACE("(%s %p)\n", debugstr_a(pszUsageOID), psDefUsage);
+
+    if (!pszUsageOID || !psDefUsage)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!(policy = calloc(1, sizeof(*policy))))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    policy->cbStruct = sizeof(*policy);
+    policy->dwAuthType = strcmp(pszUsageOID, szOID_PKIX_KP_CLIENT_AUTH) ? AUTHTYPE_SERVER : AUTHTYPE_CLIENT;
+    policy->fdwChecks = SECURITY_FLAG_IGNORE_CERT_CN_INVALID;
+    psDefUsage->pDefPolicyCallbackData = policy;
+    psDefUsage->pDefSIPClientData = NULL;
+    return TRUE;
+}
+
+/***********************************************************************
+ *		SoftpubFreeDefUsageCallData (WINTRUST.@)
+ */
+BOOL SoftpubFreeDefUsageCallData(const char *pszUsageOID, CRYPT_PROVIDER_DEFUSAGE *psDefUsage)
+{
+    TRACE("(%s %p)\n", debugstr_a(pszUsageOID), psDefUsage);
+
+    if (psDefUsage)
+        free(psDefUsage->pDefPolicyCallbackData);
+    return TRUE;
 }
 #endif

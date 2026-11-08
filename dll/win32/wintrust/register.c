@@ -718,6 +718,93 @@ static BOOL WINTRUST_RegisterGenChainVerify(void)
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static HKEY WINTRUST_OpenUsageKey(const char *usage)
+{
+    WCHAR key[MAX_PATH];
+    HKEY hkey;
+    int len;
+
+    len = swprintf(key, ARRAY_SIZE(key), L"%lsUsages\\", Trust);
+    if (len < 0 || !MultiByteToWideChar(CP_ACP, 0, usage, -1, key + len, ARRAY_SIZE(key) - len))
+        return NULL;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, key, 0, KEY_READ, &hkey))
+        return NULL;
+    return hkey;
+}
+
+static void *WINTRUST_LoadUsageCallback(HKEY hkey, const WCHAR *value, HMODULE *module)
+{
+    WCHAR dll[MAX_PATH], name[MAX_PATH];
+    char name_a[MAX_PATH];
+    DWORD size = sizeof(dll);
+    void *callback;
+
+    *module = NULL;
+    if (RegQueryValueExW(hkey, Dll, NULL, NULL, (BYTE *)dll, &size))
+        return NULL;
+    size = sizeof(name);
+    if (RegQueryValueExW(hkey, value, NULL, NULL, (BYTE *)name, &size) ||
+        !WideCharToMultiByte(CP_ACP, 0, name, -1, name_a, sizeof(name_a), NULL, NULL) ||
+        !(*module = LoadLibraryW(dll)))
+        return NULL;
+    if (!(callback = GetProcAddress(*module, name_a)))
+    {
+        FreeLibrary(*module);
+        *module = NULL;
+    }
+    return callback;
+}
+
+/***********************************************************************
+ *              WintrustGetDefaultForUsage (WINTRUST.@)
+ */
+BOOL WINAPI WintrustGetDefaultForUsage(DWORD dwAction, const char *pszUsageOID, CRYPT_PROVIDER_DEFUSAGE *psUsage)
+{
+    WCHAR guid[39];
+    DWORD size = sizeof(guid);
+    PFN_ALLOCANDFILLDEFUSAGE alloc;
+    PFN_FREEDEFUSAGE free_usage;
+    HMODULE module;
+    BOOL ret = TRUE;
+    HKEY hkey;
+
+    TRACE("(%lu %s %p)\n", dwAction, debugstr_a(pszUsageOID), psUsage);
+
+    if (!pszUsageOID || !psUsage || psUsage->cbStruct < sizeof(CRYPT_PROVIDER_DEFUSAGE))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!(hkey = WINTRUST_OpenUsageKey(pszUsageOID)))
+        return FALSE;
+
+    if (dwAction == DWACTION_ALLOCANDFILL)
+    {
+        ret = !RegQueryValueExW(hkey, DefaultId, NULL, NULL, (BYTE *)guid, &size) && guid[0] == '{' &&
+              wcslen(guid) == ARRAY_SIZE(guid) - 1 && guid[ARRAY_SIZE(guid) - 2] == '}';
+        if (ret)
+        {
+            guid[ARRAY_SIZE(guid) - 2] = 0;
+            ret = UuidFromStringW((RPC_WSTR)(guid + 1), &psUsage->gActionID) == RPC_S_OK;
+        }
+        if (ret && (alloc = WINTRUST_LoadUsageCallback(hkey, L"CallbackAllocFunction", &module)))
+        {
+            ret = alloc(pszUsageOID, psUsage);
+            FreeLibrary(module);
+        }
+    }
+    /* TODO: INFO_NEEDED: whether Windows 11 frees the callback data for actions other than DWACTION_FREE */
+    else if ((free_usage = WINTRUST_LoadUsageCallback(hkey, L"CallbackFreeFunction", &module)))
+    {
+        ret = free_usage(pszUsageOID, psUsage);
+        FreeLibrary(module);
+    }
+    RegCloseKey(hkey);
+    return ret;
+}
+
+#endif
 /***********************************************************************
  *              WintrustAddDefaultForUsage (WINTRUST.@)
  *
