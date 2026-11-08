@@ -1863,10 +1863,11 @@ int RunCommand(int argc, LPWSTR *argv)
 
         catalog.SetThrottleCallback(&throttle);
         for (const std::vector<DeviceInfo> &group : groups)
+            missing += group.size();
+        for (const std::vector<DeviceInfo> &group : groups)
         {
             std::vector<CatalogUpdate> updates;
 
-            missing += group.size();
             error = SearchDevice(catalog, group.front(), updates);
             Print(GroupName(group) + L": " + CatalogNote(group.front(), updates, error, catalog.OtherArchitectures()));
             if (!updates.empty())
