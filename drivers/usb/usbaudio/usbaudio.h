@@ -526,6 +526,10 @@ typedef struct _NODE_CONTEXT
     ULONG Nodes[USBAUDIO_MAX_NODES_PER_CONTEXT];
     ULONG FeatureChannelCount;
     PUSBAUDIO_VOLUME_RANGE_CACHE VolumeRanges;
+    LONG CachedVolume;
+    BOOLEAN VolumeValid;
+    BOOLEAN CachedMute;
+    BOOLEAN MuteValid;
 } NODE_CONTEXT, *PNODE_CONTEXT;
 
 typedef struct _DEVICE_EXTENSION
@@ -541,6 +545,7 @@ typedef struct _DEVICE_EXTENSION
     ULONG AudioVersion;                         /* USB Audio 1.0, 2.0, or 3.0 */
     ULONG BaddProfile;                          /* UAC3 BADD profile or 0 */
     ULONG QuirkFlags;                           /* active quirk flags */
+    volatile LONG StreamingPins;
     BOOLEAN HasMidiInterface;
     BOOLEAN HasFeedbackEndpoint;
     USBD_PIPE_HANDLE FeedbackPipeHandle;         /* async feedback pipe */
