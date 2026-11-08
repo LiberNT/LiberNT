@@ -233,6 +233,13 @@ PciPdoClearConfigBit(
     PciPdoSetBusDataByOffset(DeviceExtension, &Value, Offset, sizeof(Value));
 }
 
+#define PCI_FLR_POLL_MS                     10
+#define PCI_FLR_PENDING_WAIT_MS             100
+#define PCI_FLR_SETTLE_MS                   100
+#define PCI_FLR_READY_WAIT_MS               1000
+#define PCI_EXPRESS_DEVICE_CONTROL2_OFFSET  0x28
+#define PCI_EXPRESS_LINK_CONTROL2_OFFSET    0x30
+
 #define PCI_CAP_PTR_FIRST      0x40
 #define PCI_CAP_MAX_ITERATIONS 48
 #define PCI_PROGIF_USB_XHCI    0x30
@@ -4373,6 +4380,148 @@ PciD3ColdGetLastTransitionStatus(
                                                                 LastDStateTransitionStatusUnknown;
 }
 
+static
+VOID
+PciPdoSleepMs(
+    _In_ ULONG Milliseconds)
+{
+    LARGE_INTEGER Delay;
+
+    Delay.QuadPart = -10000LL * Milliseconds;
+    KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+}
+
+static
+BOOLEAN
+PciPdoSupportsFlr(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _Out_ PUCHAR ExpressOffset)
+{
+    PCI_EXPRESS_DEVICE_CAPABILITIES_REGISTER Capabilities;
+
+    *ExpressOffset = 0;
+    if (!PciPdoFindCapability(DeviceExtension, PCI_CAPABILITY_ID_PCI_EXPRESS, ExpressOffset) ||
+        PciPdoGetBusDataByOffset(DeviceExtension, &Capabilities.AsULONG,
+                                 *ExpressOffset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, DeviceCapabilities),
+                                 sizeof(Capabilities.AsULONG)) != sizeof(Capabilities.AsULONG))
+    {
+        return FALSE;
+    }
+    return Capabilities.FunctionLevelResetCapability != 0;
+}
+
+static
+NTSTATUS
+PciPdoFunctionLevelReset(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR Offset)
+{
+    PCI_EXPRESS_CAPABILITIES_REGISTER Express;
+    PCI_EXPRESS_DEVICE_CONTROL_REGISTER Control, Reset;
+    PCI_EXPRESS_DEVICE_STATUS_REGISTER DeviceStatus;
+    USHORT LinkControl = 0, Control2 = 0, LinkControl2 = 0;
+    BOOLEAN Version2;
+    ULONG Waited, Id = MAXULONG;
+
+    PciPdoGetBusDataByOffset(DeviceExtension, &Express.AsUSHORT, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, ExpressCapabilities),
+                             sizeof(Express.AsUSHORT));
+    Version2 = Express.CapabilityVersion >= 2;
+    PciPdoGetBusDataByOffset(DeviceExtension, &Control.AsUSHORT, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, DeviceControl),
+                             sizeof(Control.AsUSHORT));
+    PciPdoGetBusDataByOffset(DeviceExtension, &LinkControl, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, LinkControl),
+                             sizeof(LinkControl));
+    if (Version2)
+    {
+        PciPdoGetBusDataByOffset(DeviceExtension, &Control2, Offset + PCI_EXPRESS_DEVICE_CONTROL2_OFFSET, sizeof(Control2));
+        PciPdoGetBusDataByOffset(DeviceExtension, &LinkControl2, Offset + PCI_EXPRESS_LINK_CONTROL2_OFFSET,
+                                 sizeof(LinkControl2));
+    }
+    PciSaveDeviceConfig(DeviceExtension->PciDevice);
+    PciSaveMsiState(DeviceExtension);
+
+    for (Waited = 0; Waited < PCI_FLR_PENDING_WAIT_MS; Waited += PCI_FLR_POLL_MS)
+    {
+        if (PciPdoGetBusDataByOffset(DeviceExtension, &DeviceStatus.AsUSHORT,
+                                     Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, DeviceStatus),
+                                     sizeof(DeviceStatus.AsUSHORT)) != sizeof(DeviceStatus.AsUSHORT) ||
+            !DeviceStatus.TransactionsPending)
+        {
+            break;
+        }
+        PciPdoSleepMs(PCI_FLR_POLL_MS);
+    }
+
+    Reset.AsUSHORT = Control.AsUSHORT;
+    Reset.InitiateFunctionLevelReset = 1;
+    PciPdoSetBusDataByOffset(DeviceExtension, &Reset.AsUSHORT, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, DeviceControl),
+                             sizeof(Reset.AsUSHORT));
+    PciPdoSleepMs(PCI_FLR_SETTLE_MS);
+    for (Waited = 0;; Waited += PCI_FLR_POLL_MS)
+    {
+        if (PciPdoGetBusDataByOffset(DeviceExtension, &Id, 0, sizeof(Id)) == sizeof(Id) && Id != MAXULONG && Id != 0)
+            break;
+        if (Waited >= PCI_FLR_READY_WAIT_MS)
+        {
+            DPRINT1("PCI: function %02lx:%02lx.%lx did not return from its function-level reset\n",
+                    DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                    DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber);
+            return STATUS_DEVICE_NOT_CONNECTED;
+        }
+        PciPdoSleepMs(PCI_FLR_POLL_MS);
+    }
+
+    Control.InitiateFunctionLevelReset = 0;
+    PciPdoSetBusDataByOffset(DeviceExtension, &Control.AsUSHORT, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, DeviceControl),
+                             sizeof(Control.AsUSHORT));
+    PciPdoSetBusDataByOffset(DeviceExtension, &LinkControl, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, LinkControl),
+                             sizeof(LinkControl));
+    if (Version2)
+    {
+        PciPdoSetBusDataByOffset(DeviceExtension, &Control2, Offset + PCI_EXPRESS_DEVICE_CONTROL2_OFFSET, sizeof(Control2));
+        PciPdoSetBusDataByOffset(DeviceExtension, &LinkControl2, Offset + PCI_EXPRESS_LINK_CONTROL2_OFFSET,
+                                 sizeof(LinkControl2));
+    }
+    PciRestoreDeviceConfig(DeviceExtension->PciDevice);
+    PciRestoreMsiState(DeviceExtension);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+PciDeviceReset(
+    _In_ PVOID InterfaceContext,
+    _In_ DEVICE_RESET_TYPE ResetType,
+    _In_ ULONG Flags,
+    _In_opt_ PVOID ResetParameters)
+{
+    PPDO_DEVICE_EXTENSION DeviceExtension = ((PDEVICE_OBJECT)InterfaceContext)->DeviceExtension;
+    PFUNCTION_LEVEL_DEVICE_RESET_PARAMETERS Parameters = ResetParameters;
+    PDEVICE_RESET_COMPLETION Completion = NULL;
+    UCHAR Offset;
+    NTSTATUS Status;
+
+    if (ResetType != FunctionLevelDeviceReset)
+        return STATUS_NOT_SUPPORTED;
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (Parameters != NULL && Parameters->Size >= sizeof(*Parameters))
+        Completion = Parameters->DeviceResetCompletion;
+
+    UNREFERENCED_PARAMETER(Flags);
+    if (!DeviceExtension->Started)
+        Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    else if (!PciPdoSupportsFlr(DeviceExtension, &Offset))
+        Status = STATUS_NOT_SUPPORTED;
+    else if (DeviceExtension->Common.DevicePowerState != PowerDeviceD0)
+        Status = STATUS_INVALID_DEVICE_STATE;
+    else
+        Status = PciPdoFunctionLevelReset(DeviceExtension, Offset);
+
+    if (Completion != NULL)
+        Completion(Status, Parameters->CompletionContext);
+    return Status;
+}
+
 static NTSTATUS
 PdoQueryInterface(
     IN PDEVICE_OBJECT DeviceObject,
@@ -4543,6 +4692,33 @@ PdoQueryInterface(
             D3Cold->GetD3ColdCapability = PciD3ColdGetCapability;
             D3Cold->GetBusDriverD3ColdSupport = PciD3ColdGetBusDriverSupport;
             D3Cold->GetLastTransitionStatus = PciD3ColdGetLastTransitionStatus;
+            Status = STATUS_SUCCESS;
+        }
+    }
+    else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
+                              &GUID_DEVICE_RESET_INTERFACE_STANDARD, sizeof(GUID)) == sizeof(GUID))
+    {
+        if (IrpSp->Parameters.QueryInterface.Version < DEVICE_RESET_INTERFACE_VERSION)
+        {
+            Status = STATUS_NOT_SUPPORTED;
+        }
+        else if (IrpSp->Parameters.QueryInterface.Size < RTL_SIZEOF_THROUGH_FIELD(DEVICE_RESET_INTERFACE_STANDARD, Reserved))
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            PDEVICE_RESET_INTERFACE_STANDARD Reset;
+            UCHAR Offset;
+
+            Reset = (PDEVICE_RESET_INTERFACE_STANDARD)IrpSp->Parameters.QueryInterface.Interface;
+            RtlZeroMemory(Reset, min(IrpSp->Parameters.QueryInterface.Size, sizeof(*Reset)));
+            Reset->Size = RTL_SIZEOF_THROUGH_FIELD(DEVICE_RESET_INTERFACE_STANDARD, Reserved);
+            Reset->Version = DEVICE_RESET_INTERFACE_VERSION;
+            Reset->DeviceReset = PciDeviceReset;
+            Reset->SupportedResetTypes =
+                PciPdoSupportsFlr((PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension, &Offset) ?
+                (1UL << FunctionLevelDeviceReset) : 0;
             Status = STATUS_SUCCESS;
         }
     }
@@ -5551,6 +5727,7 @@ PdoPnpControl(
 
         case IRP_MN_START_DEVICE:
             Status = PdoStartDevice(DeviceObject, Irp, IrpSp);
+            DeviceExtension->Started = NT_SUCCESS(Status);
             break;
 
         case IRP_MN_QUERY_STOP_DEVICE:
@@ -5562,12 +5739,14 @@ PdoPnpControl(
 
         case IRP_MN_STOP_DEVICE:
         case IRP_MN_SURPRISE_REMOVAL:
+            DeviceExtension->Started = FALSE;
             PciPdoDisableDecodes(DeviceExtension);
             PciPdoReleaseMessageRoutes(DeviceExtension);
             Status = STATUS_SUCCESS;
             break;
 
         case IRP_MN_REMOVE_DEVICE:
+            DeviceExtension->Started = FALSE;
             PdoCompleteWaitWake(DeviceExtension, STATUS_NO_SUCH_DEVICE);
             PciPdoDisableDecodes(DeviceExtension);
             PciPdoReleaseMessageRoutes(DeviceExtension);
