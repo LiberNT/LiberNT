@@ -1338,11 +1338,8 @@ LONG WINAPI WTHelperGetFileHash(LPCWSTR pwszFilename, DWORD dwFlags, PVOID pvRes
     {
         oid = indirect->DigestAlgorithm.pszObjId;
         if (pHashAlgid)
-        {
-            /* TODO: INFO_NEEDED: Windows 11 ALG_ID for MD5/SHA-1 signatures; only SHA-256 was measured */
             *pHashAlgid = (!strcmp(oid, szOID_OIWSEC_sha1) || !strcmp(oid, szOID_RSA_MD5)) ?
                           CertOIDToAlgId(oid) : CALG_OID_INFO_CNG_ONLY;
-        }
         if (pbFileHash && *pcbFileHash < indirect->Digest.cbData)
             ret = ERROR_MORE_DATA;
         else if (pbFileHash)
