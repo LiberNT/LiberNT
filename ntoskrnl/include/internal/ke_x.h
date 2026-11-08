@@ -1131,9 +1131,9 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
     PKTIMER_TABLE_ENTRY TableEntry;
 
     /* Remove the timer from the timer list and check if it's empty */
-    Hand = Timer->Header.Hand;
+    Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
     ASSERT(Hand < TIMER_TABLE_SIZE);
-    ASSERT(Hand == KiComputeTimerTableIndex(Timer->DueTime.QuadPart));
+    ASSERT(Timer->Header.Hand == (UCHAR)Hand);
     ASSERT(Timer->TimerListEntry.Flink != NULL && Timer->TimerListEntry.Blink != NULL);
     ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
     ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
@@ -1283,7 +1283,7 @@ FORCEINLINE
 BOOLEAN
 KxRemoveTreeTimer(IN PKTIMER Timer)
 {
-    ULONG Hand = Timer->Header.Hand;
+    ULONG Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
     PKSPIN_LOCK_QUEUE LockQueue;
     PKTIMER_TABLE_ENTRY TimerEntry;
     BOOLEAN Removed = FALSE;
@@ -1294,6 +1294,7 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
     /* Only de-table if still inserted; the bucket lock makes this atomic */
     if (Timer->Header.Inserted)
     {
+        ASSERT(Timer->Header.Hand == (UCHAR)Hand);
         /* Set the timer as non-inserted */
         Timer->Header.Inserted = FALSE;
         Removed = TRUE;

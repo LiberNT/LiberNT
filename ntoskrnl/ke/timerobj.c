@@ -82,7 +82,7 @@ KiInsertTimerTable(IN PKTIMER Timer,
     /* Sanity check */
     ASSERT(Hand < TIMER_TABLE_SIZE);
     ASSERT(Timer->Header.Inserted);
-    ASSERT(Timer->Header.Hand == Hand);
+    ASSERT(Timer->Header.Hand == (UCHAR)Hand);
     ASSERT(Hand == KiComputeTimerTableIndex(DueTime));
 
     /* Loop the timer list backwards */
