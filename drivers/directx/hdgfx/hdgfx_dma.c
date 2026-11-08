@@ -1989,6 +1989,19 @@ HdgfxDdiRestartFromTimeout(
     return STATUS_SUCCESS;
 }
 
+static BOOLEAN
+HdgfxCallerOnConsole(VOID)
+{
+    PACCESS_TOKEN Token;
+    PVOID SessionId = NULL;
+    NTSTATUS Status;
+
+    Token = PsReferencePrimaryToken(PsGetCurrentProcess());
+    Status = SeQueryInformationToken(Token, TokenSessionId, &SessionId);
+    PsDereferencePrimaryToken(Token);
+    return NT_SUCCESS(Status) && (ULONG)(ULONG_PTR)SessionId == SharedUserData->ActiveConsoleId;
+}
+
 NTSTATUS
 APIENTRY
 HdgfxDdiCreateContext(
@@ -2021,6 +2034,9 @@ HdgfxDdiCreateContext(
         {
             return STATUS_INVALID_PARAMETER;
         }
+        /* Gen 5 batches reach the whole GGTT, so only the active console session may submit them. */
+        if (KmdDevice->Adapter->Generation->Gen < 6 && !HdgfxCallerOnConsole())
+            return STATUS_ACCESS_DENIED;
         Gen = TRUE;
     }
 
