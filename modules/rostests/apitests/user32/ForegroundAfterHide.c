@@ -288,6 +288,26 @@ RunCases(HWND hwndHelper1, HWND hwndHelper2)
     SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
     Pump(300);
 
+    hwndOther = CreateIn(hwndHelper2, 300, 300);
+    GiveForeground(hwndHelper2, hwndOther);
+    hWnd = TakeForeground(hwndHelper1, hwndHelper2, NULL);
+    hwndPrev = CreateIn(hwndHelper1, 200, 200);
+    GiveForeground(hwndHelper1, hwndPrev);
+    ok(GetForegroundWindow() == hwndPrev, "The window of the first helper did not take the foreground\n");
+    AllowBack(hwndHelper1, hwndHelper2);
+    SetForegroundWindow(hWnd);
+    Pump(300);
+    ok(GetForegroundWindow() == hWnd, "The still active test window did not take the foreground back\n");
+    SetWindowPos(hwndOther, hWnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    Pump(200);
+    ok(NextVisible(hWnd) == hwndOther, "The older foreground window is not right below the test window\n");
+    ShowWindow(hWnd, SW_HIDE);
+    ok(WaitForForeground() == hwndPrev, "Hide after a switch back to the active window: the previous foreground window is not the foreground window\n");
+    DestroyWindow(hWnd);
+    SendMessageW(hwndHelper1, FGHIDE_DESTROY, (WPARAM)hwndPrev, 0);
+    SendMessageW(hwndHelper2, FGHIDE_DESTROY, (WPARAM)hwndOther, 0);
+    Pump(300);
+
     hwndPrev = CreateIn(hwndThreadControl, 300, 300);
     GiveForeground(hwndThreadControl, hwndPrev);
     hwndNext = CreateIn(hwndHelper2, 200, 200);
