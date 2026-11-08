@@ -1340,6 +1340,9 @@ MiPfnShareIncrementIfMapped(
     OldIrql = MiPfnLock(Db, Frame);
     if (MiArchPteRead(Slot) == Expected)
     {
+        MI_ASSERT(Db->Pfn[Frame].State == MiPageActive);
+        MI_ASSERT(Db->Pfn[Frame].ShareCount > 0 && Db->Pfn[Frame].ShareCount < 0x7FFFFFFF);
+        MI_ASSERT(Db->Pfn[Frame].ReferenceCount > 0);
         MI_ATOMIC_ADD32(&Db->Pfn[Frame].ShareCount, 1);
         Taken = TRUE;
     }
