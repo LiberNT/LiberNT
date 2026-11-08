@@ -200,10 +200,8 @@ KdpUsbKeyboardTryGetChar(
     ULONG Length;
     NTSTATUS Status;
     ULONG i;
+    BOOLEAN Stopped = KeBugCheckActive || KdTermCrashMode;
     CHAR c;
-
-    if (!KeBugCheckActive && !KdTermCrashMode)
-        return -1;
 
     c = KdpUsbKeyboardDequeue(ScanCode);
     if (c != -1)
@@ -213,6 +211,8 @@ KdpUsbKeyboardTryGetChar(
     {
         Keyboard = &KdpUsbKeyboards[i];
         if (!InterlockedCompareExchange(&Keyboard->Valid, 0, 0))
+            continue;
+        if (!Stopped && !(Keyboard->Interface.Flags & ROS_USB_KEYBOARD_POLL_WHILE_RUNNING))
             continue;
 
         if (!Keyboard->Prepared)
