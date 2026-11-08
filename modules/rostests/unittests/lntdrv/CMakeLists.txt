@@ -7,6 +7,7 @@ list(APPEND SOURCE
     CatalogRules.cpp
     DeviceRules.cpp
     RemoveDriver.cpp
+    TrustRules.cpp
     ${REACTOS_SOURCE_DIR}/base/applications/lntdrv/catalog.cpp
     ${REACTOS_SOURCE_DIR}/base/applications/lntdrv/devices.cpp
     ${REACTOS_SOURCE_DIR}/base/applications/lntdrv/text.cpp

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Driver Installer - Unit-tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test that removing a catalog driver removes it from every device that uses it
+ * PURPOSE:     Test installing a package driver and removing it from every device that uses it
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -104,6 +104,7 @@ START_TEST(RemoveDriver)
     std::vector<DeviceInfo> devices;
     std::wstring oem;
     HistoryEntry entry;
+    PackageDriver driver;
     BOOL reboot = FALSE;
     HANDLE file;
     DWORD written = 0, error;
@@ -131,9 +132,23 @@ START_TEST(RemoveDriver)
         RemoveTestDevices();
         return;
     }
-    if (!UpdateDriverForPlugAndPlayDevicesW(NULL, TestHardwareId, inf, INSTALLFLAG_FORCE, &reboot))
+    devices = TestDevices();
+    ok(devices.size() == 2, "%u test devices before the install, expected 2\n", (unsigned)devices.size());
+    if (devices.empty())
     {
-        skip("installing the test driver failed with %lu\n", GetLastError());
+        RemoveTestDevices();
+        return;
+    }
+    error = FindPackageDriver(devices[0], std::vector<std::wstring>(1, inf), driver);
+    ok(error == ERROR_SUCCESS, "FindPackageDriver returned %lu\n", error);
+    ok(_wcsicmp(driver.HardwareId.c_str(), TestHardwareId) == 0, "matching ID '%ls'\n", driver.HardwareId.c_str());
+    ok(_wcsicmp(driver.Inf.c_str(), inf) == 0 && driver.Rank == 0, "driver '%ls' rank 0x%lx\n", driver.Inf.c_str(),
+       driver.Rank);
+    ok(driver.Version == 0x0001000000000000ULL, "driver version 0x%I64x\n", driver.Version);
+    error = error ? error : InstallPackageDriver(NULL, driver, false, reboot);
+    ok(error == ERROR_SUCCESS, "InstallPackageDriver returned %lu\n", error);
+    if (error)
+    {
         RemoveTestDevices();
         return;
     }
