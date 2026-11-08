@@ -511,6 +511,17 @@ error:
     return err;
 }
 
+#ifdef __REACTOS__
+static BOOL SOFTPUB_HasIndirectData(CRYPT_PROVIDER_DATA *data)
+{
+    char oid[sizeof(SPC_INDIRECT_DATA_OBJID)];
+    DWORD size = sizeof(oid);
+
+    return CryptMsgGetParam(data->hMsg, CMSG_INNER_CONTENT_TYPE_PARAM, 0, oid, &size) &&
+           !strcmp(oid, SPC_INDIRECT_DATA_OBJID);
+}
+
+#endif
 static DWORD SOFTPUB_LoadCertMessage(CRYPT_PROVIDER_DATA *data)
 {
     DWORD err = ERROR_SUCCESS;
@@ -599,7 +610,12 @@ static DWORD SOFTPUB_LoadFileMessage(CRYPT_PROVIDER_DATA *data)
     err = SOFTPUB_DecodeInnerContent(data);
     if (err)
         goto error;
+#ifdef __REACTOS__
+    if (SOFTPUB_HasIndirectData(data))
+        err = SOFTPUB_VerifyImageHash(data, data->pWintrustData->pFile->hFile);
+#else
     err = SOFTPUB_VerifyImageHash(data, data->pWintrustData->pFile->hFile);
+#endif
 
 error:
     if (err && data->fOpenedFile && data->pWintrustData->pFile)
