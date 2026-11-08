@@ -138,11 +138,11 @@ typedef struct _HTTP_CONNECTION
     ULONG HostOffset;
     ULONG HeaderLength;
     BOOLEAN HostSeen;
-    BOOLEAN TransferEncodingSeen;
     BOOLEAN HeadersComplete;
+    BOOLEAN BodyComplete;
+    BOOLEAN BodyFailed;
     USHORT ErrorStatus;
     HTTP_PARSED_HEADER Headers[HTTP_MAX_HEADERS + 1];
-    ULONGLONG RequestLength;
     HTTP_VERB Verb;
     HTTP_VERSION Version;
     const char *Url;
@@ -150,7 +150,9 @@ typedef struct _HTTP_CONNECTION
     const char *Host;
     ULONG HostLength;
     ULONG UnknownVerbLength;
-    ULONGLONG ContentLength;
+    ULONG BodyOffset;
+    ULONG BodyLength;
+    ULONGLONG BodyReceived;
 } HTTP_CONNECTION, *PHTTP_CONNECTION;
 
 #endif /* _HTTP_SYS_H_ */
