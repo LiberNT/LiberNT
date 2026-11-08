@@ -69,6 +69,7 @@
 #define PIPEHANDLER_NONSELECTED_OVERRIDE    0x20
 #define PIPEHANDLER_NATIVE_POWER_DOWN       0x0FUL
 #define PIPEHANDLER_NATIVE_RESET            (1UL << 12)
+#define PIPEHANDLER_DUMMY_PHY_EN            (1UL << 15)
 #define PIPEHANDLER_SPAN                    0x24
 
 #define USB2PHY_USBCTL                      0x00
@@ -312,6 +313,7 @@ AppleAtcphyOpen(
     _Out_ PAPPLE_ATCPHY Phy)
 {
     const UCHAR *Phys;
+    const VOID *Compatible;
     ULONG Length;
 
     RtlZeroMemory(Phy, sizeof(*Phy));
@@ -321,6 +323,8 @@ AppleAtcphyOpen(
     Phy->Node = FdtDriverFindPhandle(Tree, RiscvFdtReadBigEndian32(Phys));
     if (Phy->Node == RISCV_FDT_NO_NODE)
         return STATUS_NOT_FOUND;
+    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Phy->Node, "compatible", &Length);
+    Phy->HasAusPllTop = !Compatible || !RiscvFdtStringListContains(Compatible, Length, "apple,t8122-atcphy");
     if (!AtcMapRegion(Tree, Phy->Node, "core", ATCPHY_CORE_SPAN, &Phy->Core) ||
         !AtcMapRegion(Tree, Phy->Node, "axi2af", sizeof(ULONG), &Phy->Axi2af) ||
         !AtcMapRegion(Tree, Phy->Node, "usb2phy", USB2PHY_SPAN, &Phy->Usb2Phy) ||
@@ -370,8 +374,11 @@ AppleAtcphyStartUsb2Host(
     Phy->TunableEntries[0] = AtcApplyTunable(Tree, Phy->Node, "apple,tunable-common-a", &Phy->Core);
     Phy->TunableEntries[1] = AtcApplyTunable(Tree, Phy->Node, "apple,tunable-axi2af", &Phy->Axi2af);
     Phy->TunableEntries[2] = AtcApplyTunable(Tree, Phy->Node, "apple,tunable-common-b", &Phy->Core);
-    AtcMask(&Phy->Core, AUSPLL_FSM_CTRL, 0, 0x1FE000);
-    AtcMask(&Phy->Core, AUSPLL_APB_CMD_OVERRIDE, 0, AUSPLL_APB_CMD_OVERRIDE_UNK28);
+    if (Phy->HasAusPllTop)
+    {
+        AtcMask(&Phy->Core, AUSPLL_FSM_CTRL, 0, 0x1FE000);
+        AtcMask(&Phy->Core, AUSPLL_APB_CMD_OVERRIDE, 0, AUSPLL_APB_CMD_OVERRIDE_UNK28);
+    }
     AtcMaskStep(&Phy->Core, ACIOPHY_CFG0, 0, ACIOPHY_CFG0_COMMON_SMALL_OV);
     AtcMaskStep(&Phy->Core, ACIOPHY_CFG0, 0, ACIOPHY_CFG0_COMMON_BIG_OV);
     AtcMaskStep(&Phy->Core, ACIOPHY_CFG0, 0, ACIOPHY_CFG0_COMMON_CLAMP_OV);
@@ -430,5 +437,16 @@ AppleAtcphySelectDummyPipe(
         Locked = FALSE;
     AtcMask(&Phy->PipeHandler, PIPEHANDLER_NONSELECTED_OVERRIDE, PIPEHANDLER_NATIVE_POWER_DOWN, 2);
     AtcMask(&Phy->PipeHandler, PIPEHANDLER_NONSELECTED_OVERRIDE, 0, PIPEHANDLER_NATIVE_RESET);
+    AtcMask(&Phy->PipeHandler, PIPEHANDLER_NONSELECTED_OVERRIDE, 0, PIPEHANDLER_DUMMY_PHY_EN);
     return Locked ? STATUS_SUCCESS : STATUS_IO_TIMEOUT;
+}
+
+VOID
+NTAPI
+AppleAtcphyStopUsb2Host(
+    _Inout_ PAPPLE_ATCPHY Phy)
+{
+    AtcAssertDwc3Reset(Phy);
+    AppleAtcphySelectDummyPipe(Phy);
+    AtcUsb2PowerOff(Phy);
 }

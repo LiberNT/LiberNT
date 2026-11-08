@@ -23,6 +23,7 @@ typedef struct _APPLE_ATCPHY
     APPLE_ATCPHY_REGION Usb2Phy;
     APPLE_ATCPHY_REGION PipeHandler;
     ULONG TunableEntries[3];
+    BOOLEAN HasAusPllTop;
 } APPLE_ATCPHY, *PAPPLE_ATCPHY;
 
 NTSTATUS
@@ -46,4 +47,9 @@ AppleAtcphyStartUsb2Host(
 NTSTATUS
 NTAPI
 AppleAtcphySelectDummyPipe(
+    _Inout_ PAPPLE_ATCPHY Phy);
+
+VOID
+NTAPI
+AppleAtcphyStopUsb2Host(
     _Inout_ PAPPLE_ATCPHY Phy);
