@@ -65,6 +65,9 @@ TrackGrowthWorker(void *Argument)
         PoolTagCharge(&Tracker, 'worG', 0, 64);
         PoolTagRelease(&Tracker, 'worG', 0, 64);
         PoolTagQuery(&Tracker, 'worG', &Usage);
+        PoolTagCharge(&Tracker, POOL_TAG_OVERFLOW, 1, 32);
+        PoolTagQuery(&Tracker, POOL_TAG_OVERFLOW, &Usage);
+        PoolTagRelease(&Tracker, POOL_TAG_OVERFLOW, 1, 32);
         __atomic_add_fetch(&Growth.Operations, 1, __ATOMIC_RELAXED);
     }
     return NULL;
@@ -115,6 +118,10 @@ TestTrackGrowth(POOL_TAG_TABLE *Tables)
     CHECK(Usage.Allocations[0] == (ULONG64)Growth.Operations);
     CHECK(Usage.Frees[0] == Usage.Allocations[0]);
     CHECK(Usage.Bytes[0] == 0);
+    CHECK(PoolTagQuery(&Tracker, POOL_TAG_OVERFLOW, &Usage));
+    CHECK(Usage.Allocations[1] == (ULONG64)Growth.Operations);
+    CHECK(Usage.Frees[1] == Usage.Allocations[1]);
+    CHECK(Usage.Bytes[1] == 0);
 }
 
 void

@@ -72,7 +72,8 @@ PoolTagFind(
     {
         PPOOL_TAG_ENTRY Overflow = &Table->Entry[POOL_TAG_TABLE_ENTRIES - 1];
 
-        return (Insert || Overflow->Allocations[0] != 0 || Overflow->Allocations[1] != 0) ? Overflow : NULL;
+        return (Insert || POOL_ATOMIC_READ32(&Overflow->Allocations[0]) != 0 ||
+                POOL_ATOMIC_READ32(&Overflow->Allocations[1]) != 0) ? Overflow : NULL;
     }
 
     for (Probe = 0; Probe < POOL_TAG_TABLE_ENTRIES - 1; Probe++)
@@ -164,9 +165,9 @@ PoolTagAccumulate(
 
     for (Class = 0; Class < POOL_TAG_CLASSES; Class++)
     {
-        Usage->Allocations[Class] += (ULONG)Entry->Allocations[Class];
-        Usage->Frees[Class] += (ULONG)Entry->Frees[Class];
-        Usage->Bytes[Class] += Entry->Bytes[Class];
+        Usage->Allocations[Class] += (ULONG)POOL_ATOMIC_READ32(&Entry->Allocations[Class]);
+        Usage->Frees[Class] += (ULONG)POOL_ATOMIC_READ32(&Entry->Frees[Class]);
+        Usage->Bytes[Class] += POOL_ATOMIC_READ64(&Entry->Bytes[Class]);
     }
 }
 
