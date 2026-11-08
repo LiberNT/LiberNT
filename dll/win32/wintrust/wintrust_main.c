@@ -1539,6 +1539,44 @@ DWORD WINAPI ConfigCiPackageFamilyNameCheck(PVOID pvParam1, PVOID pvParam2, PVOI
 }
 
 /***********************************************************************
+ *		ConfigCiFinalPolicy (WINTRUST.@)
+ */
+HRESULT WINAPI ConfigCiFinalPolicy(CRYPT_PROVIDER_DATA *pProvData)
+{
+    static const GUID ConfigCiAction = { 0x6078065b, 0x8f22, 0x4b13, { 0xbd,0x9b,0x5b,0x76,0x27,0x76,0xf3,0x86 } };
+
+    TRACE("(%p)\n", pProvData);
+
+    if (!pProvData || !pProvData->pgActionID || !IsEqualGUID(pProvData->pgActionID, &ConfigCiAction))
+        return E_INVALIDARG;
+    /* TODO: INFO_NEEDED: Windows 11 asks the active code integrity policy; LiberNT enforces none and allows the subject */
+    return S_OK;
+}
+
+/***********************************************************************
+ *		SrpCheckSmartlockerEAandProcessToken (WINTRUST.@)
+ */
+BOOL WINAPI SrpCheckSmartlockerEAandProcessToken(HANDLE hFile, HANDLE hToken, PVOID pvResult)
+{
+    TRACE("(%p %p %p)\n", hFile, hToken, pvResult);
+
+    /* TODO: INFO_NEEDED: the result for a file that carries the SmartLocker extended attribute */
+    return FALSE;
+}
+
+/***********************************************************************
+ *		WTValidateBioSignaturePolicy (WINTRUST.@)
+ */
+HRESULT WINAPI WTValidateBioSignaturePolicy(PVOID pvPolicy, BOOLEAN *pfValid)
+{
+    TRACE("(%p %p)\n", pvPolicy, pfValid);
+
+    *pfValid = FALSE;
+    /* TODO: INFO_NEEDED: the policy structure Windows 11 accepts; a zeroed one gives E_INVALIDARG */
+    return E_INVALIDARG;
+}
+
+/***********************************************************************
  *		WTGetBioSignatureInfo (WINTRUST.@)
  */
 HRESULT WINAPI WTGetBioSignatureInfo(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3, PVOID pvParam4, PVOID pvParam5,
