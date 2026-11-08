@@ -213,6 +213,8 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
         DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
     }
 
+    ASSERT(KeMaximumIncrement != 0);
+
     /* Check for full tick */
     OldTick = *(ULONGLONG*)&KeTickCount;
     NewTick = (ULONGLONG)InterruptTime.QuadPart / KeMaximumIncrement;

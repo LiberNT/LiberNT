@@ -562,6 +562,9 @@ KeSetTimeIncrement(IN ULONG MaxIncrement,
     ULONGLONG CyclesPerQuantum;
 #endif
 
+    ASSERT(MinIncrement != 0 && MinIncrement <= MaxIncrement);
+    ASSERT(MaxIncrement <= MAXLONG);
+
     /* Set some Internal Variables */
     KeMaximumIncrement = MaxIncrement;
     KeMinimumIncrement = MinIncrement;
