@@ -388,7 +388,6 @@ RtkitStart(
     _In_ ULONG TimeoutMs,
     _In_ BOOLEAN Wake)
 {
-    ULONG64 Deadline = RtkitNowMs() + TimeoutMs;
     NTSTATUS Status;
 
     DbgPrint("%s: mailbox %08lx/%08lx, %s the coprocessor\n", Rtkit->Name,
@@ -397,21 +396,16 @@ RtkitStart(
     Rtkit->ApAcked = FALSE;
     if (Wake)
         RtkitManagementSend(Rtkit, MGMT_SET_IOP_PWR_STATE, RTKIT_PWR_STATE_INIT);
-    while ((!Rtkit->EpmapDone || !Rtkit->IopAcked) && !Rtkit->Failed)
+    Status = RtkitWaitFor(Rtkit, &Rtkit->EpmapDone, TimeoutMs);
+    if (NT_SUCCESS(Status))
+        Status = RtkitWaitFor(Rtkit, &Rtkit->IopAcked, TimeoutMs);
+    if (Status == STATUS_IO_TIMEOUT)
     {
-        if (!AppleRtkitPoll(Rtkit))
-        {
-            if (RtkitNowMs() > Deadline)
-            {
-                DbgPrint("%s: coprocessor did not boot (endpoints %s, power %s)\n", Rtkit->Name,
-                         Rtkit->EpmapDone ? "known" : "unknown", Rtkit->IopAcked ? "acknowledged" : "silent");
-                return STATUS_IO_TIMEOUT;
-            }
-            RtkitSleepMs(1);
-        }
+        DbgPrint("%s: coprocessor did not boot (endpoints %s, power %s)\n", Rtkit->Name,
+                 Rtkit->EpmapDone ? "known" : "unknown", Rtkit->IopAcked ? "acknowledged" : "silent");
     }
-    if (Rtkit->Failed)
-        return STATUS_DEVICE_HARDWARE_ERROR;
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     RtkitManagementSend(Rtkit, MGMT_SET_AP_PWR_STATE, RTKIT_PWR_STATE_ON);
     Status = RtkitWaitFor(Rtkit, &Rtkit->ApAcked, TimeoutMs);
