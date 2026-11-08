@@ -250,6 +250,47 @@ FileMatches(const WCHAR *Path, const BYTE *Expected, DWORD ExpectedSize)
 
 static
 VOID
+TestUnsignedImage(VOID)
+{
+    typedef BOOL (WINAPI *PFN_CERT_HEADER)(HANDLE, DWORD, LPWIN_CERTIFICATE);
+    PFN_CERT_HEADER CertHeader = (PFN_CERT_HEADER)GetProcAddress(LoadLibraryW(L"imagehlp.dll"), "ImageGetCertificateHeader");
+    GUID Subject = PeSubject;
+    SIP_SUBJECTINFO Info;
+    WIN_CERTIFICATE Header;
+    WCHAR Self[MAX_PATH];
+    DWORD Size = 0, Encoding = 0;
+    BYTE Buffer[64];
+
+    GetModuleFileNameW(NULL, Self, RTL_NUMBER_OF(Self));
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    Info.pgSubjectType = &Subject;
+    Info.pwsFileName = Self;
+    Info.dwEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    Info.hFile = CreateFileW(Self, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (CertHeader)
+    {
+        SetLastError(0xdeadbeef);
+        ok(!CertHeader(Info.hFile, 0, &Header), "certificate found\n");
+        ok_hex(GetLastError(), ERROR_INVALID_PARAMETER);
+    }
+    SetLastError(0xdeadbeef);
+    ok(!CryptSIPGetSignedDataMsg(&Info, &Encoding, 0, &Size, NULL), "signed message found\n");
+    ok_hex(GetLastError(), ERROR_INVALID_PARAMETER);
+    Size = sizeof(Buffer);
+    SetLastError(0xdeadbeef);
+    ok(!CryptSIPGetSignedDataMsg(&Info, &Encoding, 0, &Size, Buffer), "signed message read\n");
+    ok_hex(GetLastError(), ERROR_INVALID_PARAMETER);
+    CloseHandle(Info.hFile);
+    Info.hFile = NULL;
+    Info.pwsFileName = L"lntsip missing";
+    SetLastError(0xdeadbeef);
+    ok(!CryptSIPGetSignedDataMsg(&Info, &Encoding, 0, &Size, NULL), "signed message of a missing file\n");
+    ok_hex(GetLastError(), ERROR_FILE_NOT_FOUND);
+}
+
+static
+VOID
 TestCabinetIndirectData(const WCHAR *Temp)
 {
     static const BYTE Prepared[] = {
@@ -320,6 +361,7 @@ TestCabinetIndirectData(const WCHAR *Temp)
     DeleteFileW(First);
     DeleteFileW(Copy);
     DeleteFileW(Second);
+    TestUnsignedImage();
 }
 
 static
