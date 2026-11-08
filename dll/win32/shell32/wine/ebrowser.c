@@ -1779,11 +1779,25 @@ static HRESULT WINAPI ICommDlgBrowser3_fnOnDefaultCommand(ICommDlgBrowser3 *ifac
             LPIDA pida = GlobalLock(medium.hGlobal);
             LPCITEMIDLIST pidl_child = (LPCITEMIDLIST) ((LPBYTE)pida+pida->aoffset[1]);
 
-            /* Handle folders by browsing to them. */
-            if(_ILIsFolder(pidl_child) || _ILIsDrive(pidl_child) || _ILIsSpecialFolder(pidl_child))
+            IFolderView *folder_view;
+            IShellFolder *folder;
+            SFGAOF attributes = SFGAO_FOLDER;
+
+            if (pida->cidl == 1 &&
+                SUCCEEDED(IShellView_QueryInterface(shv, &IID_IFolderView, (void **)&folder_view)))
             {
-                IExplorerBrowser_BrowseToIDList(&This->IExplorerBrowser_iface, pidl_child, SBSP_RELATIVE);
-                ret = S_OK;
+                hr = IFolderView_GetFolder(folder_view, &IID_IShellFolder, (void **)&folder);
+                IFolderView_Release(folder_view);
+                if (SUCCEEDED(hr))
+                {
+                    hr = IShellFolder_GetAttributesOf(folder, 1, &pidl_child, &attributes);
+                    IShellFolder_Release(folder);
+                    if (SUCCEEDED(hr) && (attributes & SFGAO_FOLDER))
+                    {
+                        IExplorerBrowser_BrowseToIDList(&This->IExplorerBrowser_iface, pidl_child, SBSP_RELATIVE);
+                        ret = S_OK;
+                    }
+                }
             }
             GlobalUnlock(medium.hGlobal);
             GlobalFree(medium.hGlobal);
