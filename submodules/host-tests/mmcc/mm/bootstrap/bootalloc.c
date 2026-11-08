@@ -4,7 +4,7 @@
  * PURPOSE:     Bootstrap allocator boundary and concurrency tests
  * COPYRIGHT:   Copyright 2026 LiberNT contributors
  */
-#include <nvs/nt/mint.h>
+#include <mm/nt/mint.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>

@@ -6,7 +6,7 @@
  */
 
 #include "mmharness.h"
-#include <nvs/include/misys.h>
+#include <mm/include/misys.h>
 
 #define HM_FRAMES 2048
 #define HM_DIRECT 1024
