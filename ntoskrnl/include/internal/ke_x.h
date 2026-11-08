@@ -1132,6 +1132,11 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
 
     /* Remove the timer from the timer list and check if it's empty */
     Hand = Timer->Header.Hand;
+    ASSERT(Hand < TIMER_TABLE_SIZE);
+    ASSERT(Hand == KiComputeTimerTableIndex(Timer->DueTime.QuadPart));
+    ASSERT(Timer->TimerListEntry.Flink != NULL && Timer->TimerListEntry.Blink != NULL);
+    ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
+    ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
     if (RemoveEntryList(&Timer->TimerListEntry))
     {
         /* Get the respective timer table entry */
@@ -1294,6 +1299,12 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
         Removed = TRUE;
 
         /* Remove it from the timer list */
+        ASSERT((Timer->TimerListEntry.Flink == NULL) == (Timer->TimerListEntry.Blink == NULL));
+        if (Timer->TimerListEntry.Flink != NULL)
+        {
+            ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
+            ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
+        }
         if (Timer->TimerListEntry.Flink && RemoveEntryList(&Timer->TimerListEntry))
         {
             /* Get the entry and check if it's empty */
