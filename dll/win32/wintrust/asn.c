@@ -2497,16 +2497,12 @@ static BOOL WINAPI CRYPT_AsnEncodeSPCImage(DWORD dwCertEncodingType, LPCSTR lpsz
                                            BYTE *pbEncoded, DWORD *pcbEncoded)
 {
     const SPC_IMAGE *image = pvStructInfo;
-    struct AsnEncodeSequenceItem items[1] = { { 0 } };
+    const CRYPT_DATA_BLOB *blobs[4] = { &image->Bitmap, &image->Metafile, &image->EnhancedMetafile, &image->GifFile };
+    struct AsnEncodeSequenceItem items[5] = { { 0 } };
+    struct AsnEncodeTagSwappedItem swapped[4];
     struct AsnConstructedItem constructed = { 0 };
-    DWORD cItem = 0;
+    DWORD cItem = 0, i;
 
-    if (image->Bitmap.cbData || image->Metafile.cbData || image->EnhancedMetafile.cbData || image->GifFile.cbData)
-    {
-        /* TODO: INFO_NEEDED the encoding of the SPC_IMAGE bitmap and metafile members */
-        SetLastError(ERROR_NOT_SUPPORTED);
-        return FALSE;
-    }
     if (image->pImageLink)
     {
         constructed.tag = 0;
@@ -2514,6 +2510,17 @@ static BOOL WINAPI CRYPT_AsnEncodeSPCImage(DWORD dwCertEncodingType, LPCSTR lpsz
         constructed.encodeFunc = WVTAsn1SpcLinkEncode;
         items[cItem].pvStructInfo = &constructed;
         items[cItem].encodeFunc = CRYPT_AsnEncodeConstructed;
+        cItem++;
+    }
+    for (i = 0; i < ARRAY_SIZE(blobs); i++)
+    {
+        if (!blobs[i]->cbData)
+            continue;
+        swapped[i].tag = ASN_CONTEXT | (i + 1);
+        swapped[i].pvStructInfo = blobs[i];
+        swapped[i].encodeFunc = CRYPT_AsnEncodeOctets;
+        items[cItem].pvStructInfo = &swapped[i];
+        items[cItem].encodeFunc = CRYPT_AsnEncodeSwapTag;
         cItem++;
     }
     return CRYPT_AsnEncodeSequence(X509_ASN_ENCODING, items, cItem, pbEncoded, pcbEncoded);
@@ -2577,11 +2584,69 @@ BOOL WINAPI WVTAsn1SpcSpAgencyInfoEncode(DWORD dwCertEncodingType, LPCSTR lpszSt
     return CRYPT_AsnEncodeSequence(X509_ASN_ENCODING, items, cItem, pbEncoded, pcbEncoded);
 }
 
+static BOOL CRYPT_AsnDecodeSPCImageItems(DWORD dwCertEncodingType, LPCSTR lpszStructType, const BYTE *content,
+                                         DWORD dataLen, DWORD dwFlags, SPC_IMAGE *image, DWORD *linkSize,
+                                         DWORD *blobSize)
+{
+    CRYPT_DATA_BLOB *blobs[4] = { NULL };
+    DWORD offset, itemLen, itemTotal, tag;
+    BYTE *data = NULL;
+    const BYTE *item;
+
+    if (image)
+    {
+        blobs[0] = &image->Bitmap;
+        blobs[1] = &image->Metafile;
+        blobs[2] = &image->EnhancedMetafile;
+        blobs[3] = &image->GifFile;
+        data = (BYTE *)(image + 1) + *linkSize;
+    }
+    for (offset = 0; offset < dataLen; offset += itemTotal)
+    {
+        item = content + offset;
+        if (dataLen - offset < 2 || !CRYPT_GetLen(item, dataLen - offset, &itemLen))
+            return FALSE;
+        itemTotal = 1 + GET_LEN_BYTES(item[1]) + itemLen;
+        tag = item[0];
+        if (tag == (ASN_CONSTRUCTOR | ASN_CONTEXT))
+        {
+            if (!image && !CRYPT_AsnDecodeSPCLinkPointer(dwCertEncodingType, lpszStructType, item, itemTotal, dwFlags,
+                                                         NULL, linkSize))
+                return FALSE;
+            if (image)
+            {
+                image->pImageLink = (SPC_LINK *)(image + 1);
+                if (!CRYPT_AsnDecodeSPCLinkPointer(dwCertEncodingType, lpszStructType, item, itemTotal, dwFlags,
+                                                   &image->pImageLink, linkSize))
+                    return FALSE;
+            }
+        }
+        else if (tag >= (ASN_CONTEXT | 1) && tag <= (ASN_CONTEXT | 4))
+        {
+            if (!image)
+            {
+                *blobSize += itemLen;
+                continue;
+            }
+            blobs[tag - (ASN_CONTEXT | 1)]->cbData = itemLen;
+            blobs[tag - (ASN_CONTEXT | 1)]->pbData = data;
+            memcpy(data, item + itemTotal - itemLen, itemLen);
+            data += itemLen;
+        }
+        else
+        {
+            SetLastError(CRYPT_E_ASN1_BADTAG);
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
 static BOOL WINAPI CRYPT_AsnDecodeSPCImagePointer(DWORD dwCertEncodingType, LPCSTR lpszStructType,
                                                   const BYTE *pbEncoded, DWORD cbEncoded, DWORD dwFlags,
                                                   void *pvStructInfo, DWORD *pcbStructInfo)
 {
-    DWORD dataLen, linkSize = 0, bytesNeeded;
+    DWORD dataLen, linkSize = 0, blobSize = 0, bytesNeeded;
     const BYTE *content;
     SPC_IMAGE *image;
     BYTE lenBytes;
@@ -2590,24 +2655,11 @@ static BOOL WINAPI CRYPT_AsnDecodeSPCImagePointer(DWORD dwCertEncodingType, LPCS
         return FALSE;
     lenBytes = GET_LEN_BYTES(pbEncoded[1]);
     content = pbEncoded + 1 + lenBytes;
+    if (!CRYPT_AsnDecodeSPCImageItems(dwCertEncodingType, lpszStructType, content, dataLen, dwFlags, NULL, &linkSize,
+                                      &blobSize))
+        return FALSE;
 
-    if (dataLen)
-    {
-        DWORD itemLen;
-
-        if (content[0] != (ASN_CONSTRUCTOR | ASN_CONTEXT) || !CRYPT_GetLen(content, dataLen, &itemLen) ||
-            1 + GET_LEN_BYTES(content[1]) + itemLen != dataLen)
-        {
-            /* TODO: INFO_NEEDED the encoding of the SPC_IMAGE bitmap and metafile members */
-            SetLastError(CRYPT_E_ASN1_BADTAG);
-            return FALSE;
-        }
-        if (!CRYPT_AsnDecodeSPCLinkPointer(dwCertEncodingType, lpszStructType, content, dataLen, dwFlags, NULL,
-                                           &linkSize))
-            return FALSE;
-    }
-
-    bytesNeeded = ALIGN_DWORD_PTR(sizeof(PSPC_IMAGE) + sizeof(SPC_IMAGE) + linkSize);
+    bytesNeeded = ALIGN_DWORD_PTR(sizeof(PSPC_IMAGE) + sizeof(SPC_IMAGE) + linkSize + blobSize);
     if (!pvStructInfo)
     {
         *pcbStructInfo = bytesNeeded;
@@ -2623,11 +2675,8 @@ static BOOL WINAPI CRYPT_AsnDecodeSPCImagePointer(DWORD dwCertEncodingType, LPCS
     *pcbStructInfo = bytesNeeded;
     image = *(SPC_IMAGE **)pvStructInfo;
     memset(image, 0, sizeof(*image));
-    if (!dataLen)
-        return TRUE;
-    image->pImageLink = (SPC_LINK *)(image + 1);
-    return CRYPT_AsnDecodeSPCLinkPointer(dwCertEncodingType, lpszStructType, content, dataLen, dwFlags,
-                                         &image->pImageLink, &linkSize);
+    return CRYPT_AsnDecodeSPCImageItems(dwCertEncodingType, lpszStructType, content, dataLen, dwFlags, image,
+                                        &linkSize, &blobSize);
 }
 
 /***********************************************************************

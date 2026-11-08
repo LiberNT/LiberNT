@@ -54,6 +54,9 @@ TestAgencyInfo(VOID)
     static const BYTE Logo[] = {
         0x30,0x26,0xa2,0x0e,0xa0,0x0c,0x80,0x0a,'h','t','t','p',':','/','/','i','m','g',0xa3,0x14,0xa2,0x12,0x80,
         0x10,0,'l',0,'o',0,'g',0,'o',0,'.',0,'b',0,'m',0,'p' };
+    static const BYTE Blobs[] = {
+        0x30,0x14,0xa2,0x12,0x81,0x03,0x01,0x02,0x03,0x82,0x02,0x04,0x05,0x83,0x01,0x06,0x84,0x04,0x07,0x08,0x09,0x0a };
+    static const BYTE Bitmap[] = { 1, 2, 3 }, Metafile[] = { 4, 5 }, EnhancedMetafile[] = { 6 }, GifFile[] = { 7, 8, 9, 10 };
     SPC_LINK Url = { SPC_URL_LINK_CHOICE }, File = { SPC_FILE_LINK_CHOICE }, ImageUrl = { SPC_URL_LINK_CHOICE };
     SPC_SP_AGENCY_INFO Info, *Decoded;
     SPC_IMAGE Image;
@@ -92,6 +95,35 @@ TestAgencyInfo(VOID)
            "wrong logo image\n");
         ok(Decoded->pLogoLink && Decoded->pLogoLink->dwLinkChoice == SPC_FILE_LINK_CHOICE &&
            !wcscmp(Decoded->pLogoLink->pwszFile, L"logo.bmp"), "wrong logo link\n");
+    }
+
+    memset(&Image, 0, sizeof(Image));
+    Image.Bitmap.cbData = sizeof(Bitmap);
+    Image.Bitmap.pbData = (BYTE *)Bitmap;
+    Image.Metafile.cbData = sizeof(Metafile);
+    Image.Metafile.pbData = (BYTE *)Metafile;
+    Image.EnhancedMetafile.cbData = sizeof(EnhancedMetafile);
+    Image.EnhancedMetafile.pbData = (BYTE *)EnhancedMetafile;
+    Image.GifFile.cbData = sizeof(GifFile);
+    Image.GifFile.pbData = (BYTE *)GifFile;
+    Info.pLogoLink = NULL;
+    if (Encode("SpcSpAgencyInfo", SPC_SP_AGENCY_INFO_STRUCT, &Info, Blobs, sizeof(Blobs), Buffer, sizeof(Buffer)))
+    {
+        SPC_IMAGE *Logo = Decoded->pLogoImage;
+
+        ok(Logo && !Logo->pImageLink, "wrong logo image\n");
+        if (Logo)
+        {
+            ok(Logo->Bitmap.cbData == sizeof(Bitmap) && !memcmp(Logo->Bitmap.pbData, Bitmap, sizeof(Bitmap)),
+               "wrong bitmap\n");
+            ok(Logo->Metafile.cbData == sizeof(Metafile) && !memcmp(Logo->Metafile.pbData, Metafile, sizeof(Metafile)),
+               "wrong metafile\n");
+            ok(Logo->EnhancedMetafile.cbData == sizeof(EnhancedMetafile) &&
+               !memcmp(Logo->EnhancedMetafile.pbData, EnhancedMetafile, sizeof(EnhancedMetafile)),
+               "wrong enhanced metafile\n");
+            ok(Logo->GifFile.cbData == sizeof(GifFile) && !memcmp(Logo->GifFile.pbData, GifFile, sizeof(GifFile)),
+               "wrong gif file\n");
+        }
     }
 }
 
