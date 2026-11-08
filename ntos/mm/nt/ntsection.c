@@ -1421,7 +1421,7 @@ MiDeleteSection(
     else
     {
         if (!Section->Control->Image && Section->Control->FileObject != NULL && !Section->DataScan)
-            MI_ATOMIC_ADD32(&Section->Control->Segment->SectionObjects, -1);
+            MiAdjustSegmentCount(&Section->Control->Segment->SectionObjects, -1);
         MiDereferenceControlArea(Section->Control);
     }
 }
@@ -1754,7 +1754,7 @@ MiCreateSectionWithMode(
     Section->Control = Control;
     Section->DataScan = DataScan;
     if (!Control->Image && Control->FileObject != NULL && !DataScan)
-        MI_ATOMIC_ADD32(&Control->Segment->SectionObjects, 1);
+        MiAdjustSegmentCount(&Control->Segment->SectionObjects, 1);
     Section->SizeOfSection.QuadPart = (LONGLONG)Size;
     Section->InitialProtection = SectionPageProtection;
     Section->Protection = Protection;

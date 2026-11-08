@@ -575,6 +575,19 @@ typedef struct _MI_SEGMENT
     PMI_CHUNK_INDEX ChunkIndex;
 } MI_SEGMENT, *PMI_SEGMENT;
 
+FORCEINLINE
+VOID
+MiAdjustSegmentCount(_Inout_ volatile LONG *Count, _In_ LONG Delta)
+{
+    LONG Previous;
+
+    MI_ASSERT(Delta == 1 || Delta == -1);
+    Previous = MI_ATOMIC_ADD32(Count, Delta);
+    MI_ASSERT(Previous >= (Delta < 0 ? 1 : 0));
+    MI_ASSERT(Delta < 0 || Previous < 0x7fffffff);
+    UNREFERENCED_PARAMETER(Previous);
+}
+
 #define MI_IMAGE_WINDOW_MAXIMUM_SLOTS 0x100000ULL
 
 typedef struct _MI_IMAGE_WINDOW

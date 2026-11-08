@@ -73,10 +73,10 @@ MiReleaseLargePagesLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
     MiVadRemove(&Space->VadRoot, &Vad->Node);
     if (Segment != NULL)
     {
-        MI_ATOMIC_ADD32(&Segment->MappedViews, -1);
-        MI_ATOMIC_ADD32(&Segment->TruncationViews, -1);
+        MiAdjustSegmentCount(&Segment->MappedViews, -1);
+        MiAdjustSegmentCount(&Segment->TruncationViews, -1);
         if (Vad->WritableUser)
-            MI_ATOMIC_ADD32(&Segment->WritableUserViews, -1);
+            MiAdjustSegmentCount(&Segment->WritableUserViews, -1);
     }
     MI_FREE(Vad);
     return Segment;
@@ -171,10 +171,10 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
     if (Segment != NULL)
     {
         MiSegmentReference(Segment);
-        MI_ATOMIC_ADD32(&Segment->MappedViews, 1);
-        MI_ATOMIC_ADD32(&Segment->TruncationViews, 1);
+        MiAdjustSegmentCount(&Segment->MappedViews, 1);
+        MiAdjustSegmentCount(&Segment->TruncationViews, 1);
         if (Vad->WritableUser)
-            MI_ATOMIC_ADD32(&Segment->WritableUserViews, 1);
+            MiAdjustSegmentCount(&Segment->WritableUserViews, 1);
     }
     for (Va = Start; Va < Start + Size; Va += Large)
     {
