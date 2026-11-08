@@ -1120,6 +1120,21 @@ FilterAudioMuteHandler(
 
     if (Property->NodeProperty.Property.Flags & KSPROPERTY_TYPE_GET)
     {
+        if (UsbChannel == 0 && NodeContext->MuteValid)
+        {
+            *(PBOOL)Data = NodeContext->CachedMute;
+            Irp->IoStatus.Information = sizeof(BOOL);
+            return STATUS_SUCCESS;
+        }
+
+        /* a control transfer while a stream runs wedges the endpoint */
+        if (DeviceExtension->StreamingPins > 0)
+        {
+            *(PBOOL)Data = FALSE;
+            Irp->IoStatus.Information = sizeof(BOOL);
+            return STATUS_SUCCESS;
+        }
+
         Status = UsbAudioFeatureUnitRequest(DeviceExtension,
                                             FeatureUnitDescriptor,
                                             USB_AUDIO_GET_CUR,
@@ -1132,11 +1147,29 @@ FilterAudioMuteHandler(
         {
             *(PBOOL)Data = Mute != 0;
             Irp->IoStatus.Information = sizeof(BOOL);
+            if (UsbChannel == 0)
+            {
+                NodeContext->CachedMute = (Mute != 0);
+                NodeContext->MuteValid = TRUE;
+            }
         }
         return Status;
     }
 
     Mute = *(PBOOL)Data ? TRUE : FALSE;
+
+    if (DeviceExtension->StreamingPins > 0)
+    {
+        if (UsbChannel == 0)
+        {
+            NodeContext->CachedMute = (Mute != 0);
+            NodeContext->MuteValid = TRUE;
+        }
+
+        Irp->IoStatus.Information = sizeof(BOOL);
+        return STATUS_SUCCESS;
+    }
+
     Status = UsbAudioFeatureUnitRequest(DeviceExtension,
                                         FeatureUnitDescriptor,
                                         USB_AUDIO_SET_CUR,
@@ -1146,7 +1179,14 @@ FilterAudioMuteHandler(
                                         sizeof(Mute),
                                         USBD_TRANSFER_DIRECTION_OUT);
     if (NT_SUCCESS(Status))
+    {
         Irp->IoStatus.Information = sizeof(BOOL);
+        if (UsbChannel == 0)
+        {
+            NodeContext->CachedMute = (Mute != 0);
+            NodeContext->MuteValid = TRUE;
+        }
+    }
     return Status;
 }
 
@@ -1186,6 +1226,21 @@ FilterAudioVolumeHandler(
 
     if (Property->NodeProperty.Property.Flags & KSPROPERTY_TYPE_GET)
     {
+        if (UsbChannel == 0 && NodeContext->VolumeValid)
+        {
+            *(PLONG)Data = NodeContext->CachedVolume;
+            Irp->IoStatus.Information = sizeof(LONG);
+            return STATUS_SUCCESS;
+        }
+
+        /* a control transfer while a stream runs wedges the endpoint */
+        if (DeviceExtension->StreamingPins > 0)
+        {
+            *(PLONG)Data = 0;
+            Irp->IoStatus.Information = sizeof(LONG);
+            return STATUS_SUCCESS;
+        }
+
         Status = UsbAudioFeatureUnitRequest(DeviceExtension,
                                             FeatureUnitDescriptor,
                                             USB_AUDIO_GET_CUR,
@@ -1198,6 +1253,11 @@ FilterAudioVolumeHandler(
         {
             *(PLONG)Data = (LONG)RawValue * 256;
             Irp->IoStatus.Information = sizeof(LONG);
+            if (UsbChannel == 0)
+            {
+                NodeContext->CachedVolume = (LONG)RawValue * 256;
+                NodeContext->VolumeValid = TRUE;
+            }
         }
         return Status;
     }
@@ -1208,6 +1268,13 @@ FilterAudioVolumeHandler(
     {
         Range = NodeContext->VolumeRanges[Property->Channel].Range;
     }
+    else if (DeviceExtension->StreamingPins > 0)
+    {
+        Range.Bounds.SignedMinimum = -96 * 65536;
+        Range.Bounds.SignedMaximum = 0;
+        Range.SteppingDelta = 65536;
+        Range.Reserved = 0;
+    }
     else
     {
         Status = UsbAudioGetVolumeRange(DeviceExtension,
@@ -1216,6 +1283,14 @@ FilterAudioVolumeHandler(
                                         &Range);
         if (!NT_SUCCESS(Status))
             return Status;
+
+        if ((ULONG)Property->Channel < NodeContext->FeatureChannelCount &&
+            NodeContext->VolumeRanges)
+        {
+            NodeContext->VolumeRanges[Property->Channel].Range = Range;
+            NodeContext->VolumeRanges[Property->Channel].UsbChannel = UsbChannel;
+            NodeContext->VolumeRanges[Property->Channel].Valid = TRUE;
+        }
     }
 
     Value = *(PLONG)Data;
@@ -1231,6 +1306,19 @@ FilterAudioVolumeHandler(
         Value = Range.Bounds.SignedMaximum;
 
     RawValue = (SHORT)(Value / 256);
+
+    if (DeviceExtension->StreamingPins > 0)
+    {
+        if (UsbChannel == 0)
+        {
+            NodeContext->CachedVolume = Value;
+            NodeContext->VolumeValid = TRUE;
+        }
+
+        Irp->IoStatus.Information = sizeof(LONG);
+        return STATUS_SUCCESS;
+    }
+
     Status = UsbAudioFeatureUnitRequest(DeviceExtension,
                                         FeatureUnitDescriptor,
                                         USB_AUDIO_SET_CUR,
@@ -1240,7 +1328,14 @@ FilterAudioVolumeHandler(
                                         sizeof(RawValue),
                                         USBD_TRANSFER_DIRECTION_OUT);
     if (NT_SUCCESS(Status))
+    {
         Irp->IoStatus.Information = sizeof(LONG);
+        if (UsbChannel == 0)
+        {
+            NodeContext->CachedVolume = Value;
+            NodeContext->VolumeValid = TRUE;
+        }
+    }
     return Status;
 }
 
@@ -1863,6 +1958,7 @@ BuildUSBAudioFilterTopology(
         /* no memory */
         return STATUS_INSUFFICIENT_RESOURCES;
     }
+    RtlZeroMemory(NodeContext, sizeof(NODE_CONTEXT) * ControlDescriptorCount);
     DeviceExtension->NodeContextCount = ControlDescriptorCount;
     DescriptorCount = 0;
 
