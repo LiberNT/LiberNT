@@ -121,6 +121,8 @@ HvMarkCellDirty(
     BOOLEAN HoldingLock)
 {
     BOOLEAN LockAcquired = FALSE;
+    PHCELL Cell;
+    ULONG CellSize;
     ULONG CellBlock;
     ULONG CellLastBlock;
 
@@ -138,11 +140,17 @@ HvMarkCellDirty(
         LockAcquired = TRUE;
     }
 
+    Cell = HvpGetCellHeaderLocked(RegistryHive, CellIndex);
+    CellSize = (ULONG)(Cell->Size < 0 ? -(LONGLONG)Cell->Size : Cell->Size);
+    if (CellSize < sizeof(HCELL))
+        CellSize = sizeof(HCELL);
     CellBlock     = HvGetCellBlock(CellIndex);
-    CellLastBlock = HvGetCellBlock(CellIndex + HBLOCK_SIZE - 1);
+    CellLastBlock = HvGetCellBlock(CellIndex + CellSize - 1);
+    if (CellLastBlock >= RegistryHive->DirtyVector.SizeOfBitMap)
+        CellLastBlock = RegistryHive->DirtyVector.SizeOfBitMap - 1;
 
     RtlSetBits(&RegistryHive->DirtyVector,
-               CellBlock, CellLastBlock - CellBlock);
+               CellBlock, CellLastBlock - CellBlock + 1);
     RegistryHive->DirtyCount++;
 
     /*
