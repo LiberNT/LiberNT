@@ -3,6 +3,7 @@ list(APPEND SOURCE
     Asn1Codecs.c
     CatalogV2.c
     FindCerts.c
+    Internals.c
     IssuerConfidence.c
     Registration.c
     SignedCatalog.c

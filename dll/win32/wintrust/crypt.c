@@ -1047,6 +1047,68 @@ BOOL WINAPI CryptCATAdminReleaseCatalogContext(HCATADMIN hCatAdmin,
 
 #ifdef __REACTOS__
 /***********************************************************************
+ *      CryptCATVerifyMember (WINTRUST.@)
+ */
+BOOL WINAPI CryptCATVerifyMember(HANDLE hCatalog, CRYPTCATMEMBER *pCatMember, HANDLE hFileOrMemory)
+{
+    TRACE("(%p %p %p)\n", hCatalog, pCatMember, hFileOrMemory);
+
+    if (!hCatalog || hCatalog == INVALID_HANDLE_VALUE || !pCatMember || !hFileOrMemory ||
+        hFileOrMemory == INVALID_HANDLE_VALUE)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    /* TODO: INFO_NEEDED: when Windows 11 returns TRUE; member files, catalogs and state handles all give FALSE */
+    return FALSE;
+}
+
+#endif
+#ifdef __REACTOS__
+/***********************************************************************
+ *      MsCatConstructHashTag (WINTRUST.@)
+ */
+BOOL WINAPI MsCatConstructHashTag(DWORD cbDigest, const BYTE *pbDigest, LPWSTR *ppwszHashTag)
+{
+    static const WCHAR hex[] = L"0123456789ABCDEF";
+    WCHAR *tag;
+    DWORD i;
+
+    TRACE("(%lu %p %p)\n", cbDigest, pbDigest, ppwszHashTag);
+
+    if (!pbDigest || !ppwszHashTag)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!(tag = malloc((cbDigest * 2 + 1) * sizeof(WCHAR))))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    for (i = 0; i < cbDigest; i++)
+    {
+        tag[i * 2] = hex[pbDigest[i] >> 4];
+        tag[i * 2 + 1] = hex[pbDigest[i] & 0xf];
+    }
+    tag[cbDigest * 2] = 0;
+    *ppwszHashTag = tag;
+    return TRUE;
+}
+
+/***********************************************************************
+ *      MsCatFreeHashTag (WINTRUST.@)
+ */
+VOID WINAPI MsCatFreeHashTag(LPWSTR pwszHashTag)
+{
+    TRACE("(%p)\n", pwszHashTag);
+
+    free(pwszHashTag);
+}
+
+#endif
+#ifdef __REACTOS__
+/***********************************************************************
  *      CryptCATAdminPauseServiceForBackup (WINTRUST.@)
  */
 BOOL WINAPI CryptCATAdminPauseServiceForBackup(DWORD dwFlags, BOOL fResume)
@@ -2682,33 +2744,129 @@ static BOOL sip_hash_page(HCRYPTPROV prov, ALG_ID alg, const BYTE *data, DWORD l
     return ret;
 }
 
-static BYTE *sip_pe_page_hashes(const BYTE *view, DWORD file_size, HCRYPTPROV prov, ALG_ID alg, DWORD hash_len,
-                                DWORD *table_len)
+static const IMAGE_NT_HEADERS *sip_pe_header_layout(const BYTE *view, DWORD file_size, DWORD *checksum,
+                                                    DWORD *security, DWORD *headers)
 {
     const IMAGE_NT_HEADERS *nt;
-    const IMAGE_SECTION_HEADER *section;
-    DWORD checksum, security, headers, count = 2, entry = 4 + hash_len, i, offset, end = 0, len, header_len;
-    BYTE *table, *p, *header;
 
-    if (!(nt = ImageNtHeader((void *)view))) goto bad;
+    if (!(nt = ImageNtHeader((void *)view)))
+        return NULL;
     if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
     {
         const IMAGE_NT_HEADERS64 *nt64 = (const IMAGE_NT_HEADERS64 *)nt;
 
-        checksum = (const BYTE *)&nt64->OptionalHeader.CheckSum - view;
-        security = (const BYTE *)&nt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY] - view;
-        headers = nt64->OptionalHeader.SizeOfHeaders;
+        *checksum = (const BYTE *)&nt64->OptionalHeader.CheckSum - view;
+        *security = (const BYTE *)&nt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY] - view;
+        *headers = nt64->OptionalHeader.SizeOfHeaders;
     }
     else if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
     {
         const IMAGE_NT_HEADERS32 *nt32 = (const IMAGE_NT_HEADERS32 *)nt;
 
-        checksum = (const BYTE *)&nt32->OptionalHeader.CheckSum - view;
-        security = (const BYTE *)&nt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY] - view;
-        headers = nt32->OptionalHeader.SizeOfHeaders;
+        *checksum = (const BYTE *)&nt32->OptionalHeader.CheckSum - view;
+        *security = (const BYTE *)&nt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY] - view;
+        *headers = nt32->OptionalHeader.SizeOfHeaders;
     }
-    else goto bad;
-    if (headers > file_size || security + sizeof(IMAGE_DATA_DIRECTORY) > headers) goto bad;
+    else
+        return NULL;
+    if (*headers > file_size || *security + sizeof(IMAGE_DATA_DIRECTORY) > *headers)
+        return NULL;
+    return nt;
+}
+
+static BOOL sip_pe_header_page_hash(const BYTE *view, DWORD file_size, HCRYPTPROV prov, ALG_ID alg, BYTE *out,
+                                    DWORD hash_len)
+{
+    DWORD checksum, security, headers, header_len = 0;
+    BYTE *header;
+    BOOL ret;
+
+    if (!sip_pe_header_layout(view, file_size, &checksum, &security, &headers))
+    {
+        SetLastError(ERROR_BAD_FORMAT);
+        return FALSE;
+    }
+    if (!(header = malloc(headers)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    memcpy(header, view, checksum);
+    header_len += checksum;
+    memcpy(header + header_len, view + checksum + sizeof(DWORD), security - checksum - sizeof(DWORD));
+    header_len += security - checksum - sizeof(DWORD);
+    memcpy(header + header_len, view + security + sizeof(IMAGE_DATA_DIRECTORY), headers - security - sizeof(IMAGE_DATA_DIRECTORY));
+    header_len += headers - security - sizeof(IMAGE_DATA_DIRECTORY);
+    ret = sip_hash_page(prov, alg, header, header_len,
+                        ((headers + 0xfff) & ~0xfff) - sizeof(DWORD) - sizeof(IMAGE_DATA_DIRECTORY), out, hash_len);
+    free(header);
+    return ret;
+}
+
+/***********************************************************************
+ *      ComputeFirstPageHash  (WINTRUST.@)
+ */
+int WINAPI ComputeFirstPageHash(LPCWSTR pwszHashAlg, LPCWSTR pwszFile, PVOID pbHash, int cbHash)
+{
+    BYTE digest[32], *view = NULL;
+    HANDLE file, mapping = NULL;
+    HCRYPTPROV prov = 0;
+    DWORD hash_len, size;
+    ALG_ID alg;
+    int ret = 0;
+
+    TRACE("(%s %s %p %d)\n", debugstr_w(pwszHashAlg), debugstr_w(pwszFile), pbHash, cbHash);
+
+    if (!pwszHashAlg || !pwszFile)
+        return 0;
+    if (!_wcsicmp(pwszHashAlg, L"SHA256"))
+    {
+        alg = CALG_SHA_256;
+        hash_len = 32;
+    }
+    else if (!_wcsicmp(pwszHashAlg, L"SHA1"))
+    {
+        alg = CALG_SHA1;
+        hash_len = 20;
+    }
+    else
+    {
+        /* TODO: INFO_NEEDED: algorithm names other than SHA256, SHA1 and MD5 (which gives 0) */
+        return 0;
+    }
+
+    file = CreateFileW(pwszFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (file == INVALID_HANDLE_VALUE)
+        return 0;
+    size = GetFileSize(file, NULL);
+    if ((mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL)) &&
+        (view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0)) &&
+        CryptAcquireContextW(&prov, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) &&
+        sip_pe_header_page_hash(view, size, prov, alg, digest, hash_len))
+    {
+        if (pbHash && cbHash == (int)hash_len)
+            memcpy(pbHash, digest, hash_len);
+        ret = hash_len;
+    }
+    if (prov)
+        CryptReleaseContext(prov, 0);
+    if (view)
+        UnmapViewOfFile(view);
+    if (mapping)
+        CloseHandle(mapping);
+    CloseHandle(file);
+    return ret;
+}
+
+static BYTE *sip_pe_page_hashes(const BYTE *view, DWORD file_size, HCRYPTPROV prov, ALG_ID alg, DWORD hash_len,
+                                DWORD *table_len)
+{
+    const IMAGE_NT_HEADERS *nt;
+    const IMAGE_SECTION_HEADER *section;
+    DWORD checksum, security, headers, count = 2, entry = 4 + hash_len, i, offset, end = 0, len;
+    BYTE *table, *p;
+
+    if (!(nt = sip_pe_header_layout(view, file_size, &checksum, &security, &headers))) goto bad;
 
     section = IMAGE_FIRST_SECTION(nt);
     for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
@@ -2719,23 +2877,14 @@ static BYTE *sip_pe_page_hashes(const BYTE *view, DWORD file_size, HCRYPTPROV pr
     }
 
     *table_len = count * entry;
-    if (!(table = calloc(1, *table_len)) || !(header = malloc(headers)))
+    if (!(table = calloc(1, *table_len)))
     {
-        free(table);
         SetLastError(ERROR_OUTOFMEMORY);
         return NULL;
     }
-    header_len = 0;
-    memcpy(header, view, checksum);
-    header_len += checksum;
-    memcpy(header + header_len, view + checksum + sizeof(DWORD), security - checksum - sizeof(DWORD));
-    header_len += security - checksum - sizeof(DWORD);
-    memcpy(header + header_len, view + security + sizeof(IMAGE_DATA_DIRECTORY), headers - security - sizeof(IMAGE_DATA_DIRECTORY));
-    header_len += headers - security - sizeof(IMAGE_DATA_DIRECTORY);
     p = table;
     sip_put32(p, 0);
-    if (!sip_hash_page(prov, alg, header, header_len,
-                       ((headers + 0xfff) & ~0xfff) - sizeof(DWORD) - sizeof(IMAGE_DATA_DIRECTORY), p + 4, hash_len))
+    if (!sip_pe_header_page_hash(view, file_size, prov, alg, p + 4, hash_len))
         goto fail;
     p += entry;
     for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
@@ -2752,11 +2901,9 @@ static BYTE *sip_pe_page_hashes(const BYTE *view, DWORD file_size, HCRYPTPROV pr
         }
     }
     sip_put32(p, end);
-    free(header);
     return table;
 
 fail:
-    free(header);
     free(table);
     return NULL;
 
@@ -3525,6 +3672,55 @@ static const GUID storageGUID = { 0x9BA61D3F, 0xE73A, 0x11D0, { 0x8C,0xD2,
      0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
 #endif
 
+#ifdef __REACTOS__
+typedef struct _SIP_INFORMATION
+{
+    DWORD cbSize;
+    DWORD cgSubjects;
+    const GUID *pgSubjects;
+} SIP_INFORMATION;
+
+/***********************************************************************
+ *      CryptSIPGetInfo  (WINTRUST.@)
+ */
+BOOL WINAPI CryptSIPGetInfo(SIP_INFORMATION *pSipInfo)
+{
+    /* FIXME: Windows 11 also reports {18B3C141-AE0D-40F9-9465-E542AFC1ABC7}, a SIP LiberNT does not have */
+    static const GUID subjects[] =
+    {
+        { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+        { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+        { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+        { 0xDE351A43, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+        { 0x9BA61D3F, 0xE73A, 0x11D0, { 0x8C,0xD2,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    };
+
+    TRACE("(%p)\n", pSipInfo);
+
+    if (!pSipInfo)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    pSipInfo->cbSize = sizeof(*pSipInfo);
+    pSipInfo->cgSubjects = ARRAY_SIZE(subjects);
+    pSipInfo->pgSubjects = subjects;
+    return TRUE;
+}
+
+#endif
+#ifdef __REACTOS__
+/***********************************************************************
+ *      CryptSIPGetRegWorkingFlags  (WINTRUST.@)
+ */
+VOID WINAPI CryptSIPGetRegWorkingFlags(DWORD *pdwState)
+{
+    TRACE("(%p)\n", pdwState);
+
+    WintrustGetRegPolicyFlags(pdwState);
+}
+
+#endif
 #ifdef __REACTOS__
 /***********************************************************************
  *      CryptSIPGetCaps  (WINTRUST.@)

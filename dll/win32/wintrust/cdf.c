@@ -866,3 +866,14 @@ CRYPTCATATTRIBUTE * WINAPI CryptCATCDFEnumAttributesWithCDFTag(CRYPTCATCDF *pCDF
     }
     return cdf_next_attr(cdf, cdf->members[i].attrs, cdf->members[i].attr_count, pMember, pPrevAttr, pfnParseError);
 }
+
+/***********************************************************************
+ *      CryptCATCDFEnumMembersByCDFTag  (WINTRUST.@)
+ */
+LPWSTR WINAPI CryptCATCDFEnumMembersByCDFTag(CRYPTCATCDF *pCDF, LPWSTR pwszPrevCDFTag,
+                                             PFN_CDF_PARSE_ERROR_CALLBACK pfnParseError, CRYPTCATMEMBER **ppMember)
+{
+    TRACE("(%p %s %p %p)\n", pCDF, debugstr_w(pwszPrevCDFTag), pfnParseError, ppMember);
+
+    return CryptCATCDFEnumMembersByCDFTagEx(pCDF, pwszPrevCDFTag, pfnParseError, ppMember, FALSE, NULL);
+}
