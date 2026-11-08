@@ -328,6 +328,45 @@ static ULONG queue_ioctl(HANDLE queue, ULONG code, void *in, ULONG in_size, void
     return ret;
 }
 
+static ULONG queue_ioctl_overlapped(HANDLE queue, ULONG code, void *in, ULONG in_size, OVERLAPPED *ovl)
+{
+    DWORD size;
+
+    if (!ovl)
+        return queue_ioctl(queue, code, in, in_size, NULL, 0);
+    if (!DeviceIoControl(queue, code, in, in_size, NULL, 0, &size, ovl))
+        return GetLastError();
+    return ERROR_SUCCESS;
+}
+
+ULONG WINAPI HttpShutdownRequestQueue(HANDLE queue)
+{
+    TRACE("queue %p.\n", queue);
+
+    return queue_ioctl(queue, IOCTL_HTTP_SHUTDOWN_QUEUE, NULL, 0, NULL, 0);
+}
+
+ULONG WINAPI HttpCancelHttpRequest(HANDLE queue, HTTP_REQUEST_ID id, OVERLAPPED *ovl)
+{
+    TRACE("queue %p, id %s, ovl %p.\n", queue, wine_dbgstr_longlong(id), ovl);
+
+    return queue_ioctl_overlapped(queue, IOCTL_HTTP_CANCEL_REQUEST, &id, sizeof(id), ovl);
+}
+
+ULONG WINAPI HttpWaitForDisconnectEx(HANDLE queue, HTTP_CONNECTION_ID id, ULONG reserved, OVERLAPPED *ovl)
+{
+    TRACE("queue %p, id %s, reserved %#lx, ovl %p.\n", queue, wine_dbgstr_longlong(id), reserved, ovl);
+
+    if (reserved)
+        return ERROR_INVALID_PARAMETER;
+    return queue_ioctl_overlapped(queue, IOCTL_HTTP_WAIT_DISCONNECT, &id, sizeof(id), ovl);
+}
+
+ULONG WINAPI HttpWaitForDisconnect(HANDLE queue, HTTP_CONNECTION_ID id, OVERLAPPED *ovl)
+{
+    return HttpWaitForDisconnectEx(queue, id, 0, ovl);
+}
+
 static ULONG add_url(HANDLE queue, const WCHAR *urlW, HTTP_URL_CONTEXT context,
         HTTP_URL_GROUP_ID group, const struct http_url_config *config)
 {
