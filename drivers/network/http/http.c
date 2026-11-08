@@ -51,6 +51,7 @@ static VOID HttpCloseListener(PHTTP_LISTENER Listener);
 static VOID HttpRemoveListenerConnection(PHTTP_CONNECTION Connection);
 static BOOLEAN HttpWantsBody(PHTTP_CONNECTION Connection);
 static NTSTATUS HttpStartBodyReceive(PHTTP_CONNECTION Connection);
+static VOID HttpRejectBody(PHTTP_CONNECTION Connection);
 
 static VOID HttpReleaseWsk(VOID)
 {
@@ -304,6 +305,7 @@ static NTSTATUS WSKAPI HttpAcceptEvent(
     memcpy(&Connection->LocalAddress, LocalAddress, sizeof(Connection->LocalAddress));
     memcpy(&Connection->RemoteAddress, RemoteAddress, sizeof(Connection->RemoteAddress));
     llhttp_init(&Connection->Parser, LLHTTP_REQUEST, &g_LlhttpSettings);
+    llhttp_set_lenient_chunked_length(&Connection->Parser, 1);
     Connection->Parser.data = Connection;
     Connection->ErrorStatus = 400;
     HttpSetDeadline(Connection, InterlockedCompareExchange(&g_IdleConnectionSeconds, 0, 0));
@@ -616,6 +618,8 @@ static int HttpLlhttpOnHeaderField(llhttp_t *Parser, const char *Data, size_t Le
     PHTTP_CONNECTION Connection = Parser->data;
     PHTTP_PARSED_HEADER Header = &Connection->Headers[Connection->HeaderCount];
 
+    if (Connection->HeadersComplete)
+        return 0;
     return HttpLlhttpAppendSpan(Connection, &Header->NameOffset, &Header->NameLength, Data, Length);
 }
 
@@ -624,6 +628,8 @@ static int HttpLlhttpOnHeaderValue(llhttp_t *Parser, const char *Data, size_t Le
     PHTTP_CONNECTION Connection = Parser->data;
     PHTTP_PARSED_HEADER Header = &Connection->Headers[Connection->HeaderCount];
 
+    if (Connection->HeadersComplete)
+        return 0;
     return HttpLlhttpAppendSpan(Connection, &Header->ValueOffset, &Header->ValueLength, Data, Length);
 }
 
@@ -631,6 +637,8 @@ static int HttpLlhttpOnHeaderFieldComplete(llhttp_t *Parser)
 {
     PHTTP_CONNECTION Connection = Parser->data;
 
+    if (Connection->HeadersComplete)
+        return 0;
     if (Connection->HeaderCount >= HTTP_MAX_HEADERS)
     {
         Connection->ErrorStatus = 431;
@@ -646,6 +654,8 @@ static int HttpLlhttpOnHeaderValueComplete(llhttp_t *Parser)
     PHTTP_PARSED_HEADER Header = &Connection->Headers[Connection->HeaderCount];
     const char *Value = Connection->Buffer + Header->ValueOffset;
 
+    if (Connection->HeadersComplete)
+        return 0;
     while (Header->ValueLength &&
            (Value[Header->ValueLength - 1] == ' ' || Value[Header->ValueLength - 1] == '\t'))
         --Header->ValueLength;
@@ -658,10 +668,6 @@ static int HttpLlhttpOnHeaderValueComplete(llhttp_t *Parser)
         Connection->HostSeen = TRUE;
         Connection->HostOffset = Header->ValueOffset;
         Connection->HostLength = Header->ValueLength;
-    }
-    else if (Header->Id == HttpHeaderTransferEncoding)
-    {
-        Connection->TransferEncodingSeen = TRUE;
     }
 
     ++Connection->HeaderCount;
@@ -677,7 +683,7 @@ static int HttpLlhttpOnHeadersComplete(llhttp_t *Parser)
         return -1;
     if (Parser->http_minor == 1 && !Connection->HostSeen)
         return -1;
-    if (Connection->TransferEncodingSeen || (Parser->flags & (F_CHUNKED | F_TRANSFER_ENCODING)))
+    if ((Parser->flags & F_TRANSFER_ENCODING) && !(Parser->flags & F_CHUNKED))
     {
         Connection->ErrorStatus = 501;
         return -1;
@@ -689,9 +695,26 @@ static int HttpLlhttpOnHeadersComplete(llhttp_t *Parser)
 
     Connection->Version.MajorVersion = Parser->http_major;
     Connection->Version.MinorVersion = Parser->http_minor;
-    Connection->ContentLength = Parser->content_length;
-    Connection->KeepAlive = (BOOLEAN)llhttp_should_keep_alive(Parser);
+    Connection->KeepAlive = llhttp_should_keep_alive(Parser) &&
+                            (~Parser->flags & (F_CHUNKED | F_CONTENT_LENGTH));
     Connection->HeadersComplete = TRUE;
+    return HPE_PAUSED;
+}
+
+static int HttpLlhttpOnBody(llhttp_t *Parser, const char *Data, size_t Length)
+{
+    PHTTP_CONNECTION Connection = Parser->data;
+
+    RtlMoveMemory(Connection->Buffer + Connection->BodyOffset + Connection->BodyLength, Data, Length);
+    Connection->BodyLength += (ULONG)Length;
+    return 0;
+}
+
+static int HttpLlhttpOnMessageComplete(llhttp_t *Parser)
+{
+    PHTTP_CONNECTION Connection = Parser->data;
+
+    Connection->BodyComplete = TRUE;
     return HPE_PAUSED;
 }
 
@@ -1136,7 +1159,6 @@ static NTSTATUS HttpFinishRequest(PHTTP_CONNECTION Connection)
         return STATUS_NOT_SUPPORTED;
     }
 
-    Connection->RequestLength = Connection->HeaderLength + Connection->ContentLength;
     Connection->Verb = parse_verb(Connection->Buffer + Connection->MethodOffset,
                                   (int)Connection->MethodLength);
     Connection->UnknownVerbLength =
@@ -1146,9 +1168,32 @@ static NTSTATUS HttpFinishRequest(PHTTP_CONNECTION Connection)
     return STATUS_SUCCESS;
 }
 
+static VOID HttpParseBody(PHTTP_CONNECTION Connection)
+{
+    ULONG Start = Connection->BodyOffset + Connection->BodyLength;
+    ULONG Length = Connection->BufferLength - Start;
+    ULONG Consumed = Length, End;
+    llhttp_errno_t ParserStatus;
+
+    if (Connection->BodyComplete || Connection->BodyFailed)
+        return;
+
+    ParserStatus = llhttp_execute(&Connection->Parser, Connection->Buffer + Start, Length);
+    if (ParserStatus == HPE_PAUSED && Connection->BodyComplete)
+        Consumed = (ULONG)(llhttp_get_error_pos(&Connection->Parser) - (Connection->Buffer + Start));
+    else if (ParserStatus != HPE_OK)
+        Connection->BodyFailed = TRUE;
+
+    Connection->BodyReceived += Consumed;
+    End = Connection->BodyOffset + Connection->BodyLength;
+    RtlMoveMemory(Connection->Buffer + End, Connection->Buffer + Start + Consumed, Length - Consumed);
+    Connection->BufferLength = End + Length - Consumed;
+}
+
 static NTSTATUS HttpParseHeaders(PHTTP_CONNECTION Connection, ULONG Offset)
 {
     llhttp_errno_t ParserStatus;
+    NTSTATUS Status;
 
     ParserStatus = llhttp_execute(&Connection->Parser,
                                   Connection->Buffer + Offset,
@@ -1157,7 +1202,14 @@ static NTSTATUS HttpParseHeaders(PHTTP_CONNECTION Connection, ULONG Offset)
     {
         Connection->HeaderLength =
             (ULONG)(llhttp_get_error_pos(&Connection->Parser) - Connection->Buffer);
-        return HttpFinishRequest(Connection);
+        Status = HttpFinishRequest(Connection);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        Connection->BodyOffset = Connection->HeaderLength;
+        llhttp_resume(&Connection->Parser);
+        HttpParseBody(Connection);
+        return Connection->BodyFailed ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS;
     }
     if (ParserStatus != HPE_OK)
     {
@@ -1210,14 +1262,16 @@ static VOID HttpResetRequest(PHTTP_CONNECTION Connection)
     Connection->HostLength = 0;
     Connection->HeaderLength = 0;
     Connection->HostSeen = FALSE;
-    Connection->TransferEncodingSeen = FALSE;
     Connection->HeadersComplete = FALSE;
+    Connection->BodyComplete = FALSE;
+    Connection->BodyFailed = FALSE;
     Connection->ErrorStatus = 400;
     Connection->Url = NULL;
     Connection->Host = NULL;
     Connection->UnknownVerbLength = 0;
-    Connection->ContentLength = 0;
-    Connection->RequestLength = 0;
+    Connection->BodyOffset = 0;
+    Connection->BodyLength = 0;
+    Connection->BodyReceived = 0;
 }
 
 static VOID HttpRestartConnection(PHTTP_CONNECTION Connection)
@@ -1237,30 +1291,23 @@ static VOID HttpConsumeHeaders(PHTTP_CONNECTION Connection)
     RtlMoveMemory(Connection->Buffer, Connection->Buffer + Connection->HeaderLength,
                   Connection->BufferLength - Connection->HeaderLength);
     Connection->BufferLength -= Connection->HeaderLength;
+    Connection->BodyOffset = 0;
     Connection->Available = FALSE;
-}
-
-static ULONG HttpBufferedBodyLength(PHTTP_CONNECTION Connection)
-{
-    ULONG Start = Connection->Available ? Connection->HeaderLength : 0;
-
-    return (ULONG)min((ULONGLONG)(Connection->BufferLength - Start), Connection->ContentLength);
 }
 
 static BOOLEAN HttpWantsBody(PHTTP_CONNECTION Connection)
 {
-    return !Connection->ReadingBody &&
-           Connection->ContentLength > HttpBufferedBodyLength(Connection) &&
+    return !Connection->ReadingBody && !Connection->BodyComplete && !Connection->BodyFailed &&
            Connection->BufferLength + 1 < Connection->BufferCapacity;
 }
 
 static VOID HttpDiscardBody(PHTTP_CONNECTION Connection)
 {
-    ULONG Length = HttpBufferedBodyLength(Connection);
+    ULONG Length = Connection->BodyLength;
 
     RtlMoveMemory(Connection->Buffer, Connection->Buffer + Length, Connection->BufferLength - Length);
     Connection->BufferLength -= Length;
-    Connection->ContentLength -= Length;
+    Connection->BodyLength = 0;
 }
 
 static BOOLEAN HttpCopyBody(PHTTP_CONNECTION Connection, PIRP Irp)
@@ -1268,19 +1315,27 @@ static BOOLEAN HttpCopyBody(PHTTP_CONNECTION Connection, PIRP Irp)
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     ULONG OutputLen = Stack->Parameters.DeviceIoControl.OutputBufferLength;
     ULONG Copied = (ULONG)Irp->IoStatus.Information;
-    ULONG Length = min(HttpBufferedBodyLength(Connection), OutputLen - Copied);
+    ULONG Length = min(Connection->BodyLength, OutputLen - Copied);
     ULONG Flags = (ULONG)(ULONG_PTR)Irp->Tail.Overlay.DriverContext[1];
 
     memcpy((PCHAR)Irp->AssociatedIrp.SystemBuffer + Copied, Connection->Buffer, Length);
     RtlMoveMemory(Connection->Buffer, Connection->Buffer + Length, Connection->BufferLength - Length);
     Connection->BufferLength -= Length;
-    Connection->ContentLength -= Length;
+    Connection->BodyLength -= Length;
     Irp->IoStatus.Information = Copied + Length;
 
-    if (!Connection->ContentLength || Irp->IoStatus.Information == OutputLen)
+    if ((Connection->BodyComplete && !Connection->BodyLength) || Connection->BodyFailed ||
+        Irp->IoStatus.Information == OutputLen)
         return TRUE;
     return Irp->IoStatus.Information &&
            !(Flags & HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER);
+}
+
+static NTSTATUS HttpBodyStatus(PHTTP_CONNECTION Connection, PIRP Irp)
+{
+    if (Irp->IoStatus.Information)
+        return STATUS_SUCCESS;
+    return Connection->BodyFailed ? STATUS_INVALID_DEVICE_REQUEST : STATUS_END_OF_FILE;
 }
 
 static VOID HttpDeliverBody(PHTTP_CONNECTION Connection, PLIST_ENTRY CompleteList)
@@ -1295,7 +1350,7 @@ static VOID HttpDeliverBody(PHTTP_CONNECTION Connection, PLIST_ENTRY CompleteLis
             return;
         }
 
-        Irp->IoStatus.Status = Irp->IoStatus.Information ? STATUS_SUCCESS : STATUS_END_OF_FILE;
+        Irp->IoStatus.Status = HttpBodyStatus(Connection, Irp);
         InsertTailList(CompleteList, &Irp->Tail.Overlay.ListEntry);
     }
 }
@@ -1322,12 +1377,8 @@ static VOID HttpCompleteIrpList(PLIST_ENTRY CompleteList)
 
 static NTSTATUS HttpStartBodyReceive(PHTTP_CONNECTION Connection)
 {
-    ULONGLONG Remaining = Connection->ContentLength - HttpBufferedBodyLength(Connection);
     ULONG Length = Connection->BufferCapacity - Connection->BufferLength - 1;
     NTSTATUS Status;
-
-    if (Length > Remaining)
-        Length = (ULONG)Remaining;
 
     Connection->ReadingBody = TRUE;
     HttpSetDeadline(Connection, HTTP_ENTITY_BODY_SECONDS);
@@ -1340,7 +1391,7 @@ static NTSTATUS HttpStartBodyReceive(PHTTP_CONNECTION Connection)
 static VOID HttpBodyReceiveCompleted(PHTTP_CONNECTION Connection)
 {
     LIST_ENTRY CompleteList;
-    BOOLEAN Removed = FALSE, Restart = FALSE;
+    BOOLEAN Removed = FALSE, Restart = FALSE, Reject = FALSE;
     NTSTATUS Status = Connection->ReceiveStatus;
 
     InitializeListHead(&CompleteList);
@@ -1358,12 +1409,20 @@ static VOID HttpBodyReceiveCompleted(PHTTP_CONNECTION Connection)
                       Connection->Buffer + Connection->ReceiveOffset,
                       Connection->ReceiveLength);
         Connection->BufferLength += Connection->ReceiveLength;
+        HttpParseBody(Connection);
         if (Connection->Finished)
             HttpDiscardBody(Connection);
         else if (Connection->InConnectionList)
             HttpDeliverBody(Connection, &CompleteList);
 
-        if (HttpWantsBody(Connection))
+        if (Connection->BodyFailed)
+        {
+            if (Connection->Finished || !Connection->InConnectionList)
+                Status = STATUS_INVALID_PARAMETER;
+            else
+                Reject = TRUE;
+        }
+        else if (HttpWantsBody(Connection))
             Status = HttpStartBodyReceive(Connection);
         else
             Restart = Connection->Finished;
@@ -1392,6 +1451,8 @@ static VOID HttpBodyReceiveCompleted(PHTTP_CONNECTION Connection)
         return;
     }
 
+    if (Reject)
+        HttpRejectBody(Connection);
     if (!NT_SUCCESS(Status))
     {
         HttpRemoveListenerConnection(Connection);
@@ -1423,6 +1484,18 @@ static VOID HttpSendErrorResponse(PHTTP_CONNECTION Connection, USHORT StatusCode
     }
 
     HttpWskSendAll(Connection, Response, strlen(Response));
+}
+
+static VOID HttpRejectBody(PHTTP_CONNECTION Connection)
+{
+    ExAcquireFastMutex(&Connection->ResponseMutex);
+    if (!Connection->ResponseStarted)
+    {
+        Connection->ResponseStarted = TRUE;
+        HttpSendErrorResponse(Connection, 400);
+    }
+    ExReleaseFastMutex(&Connection->ResponseMutex);
+    HttpConnectionCloseSocket(Connection);
 }
 
 static VOID NTAPI HttpConnectionWorker(PDEVICE_OBJECT DeviceObject, PVOID Context)
@@ -2024,39 +2097,17 @@ static NTSTATUS HttpReceiveRequest(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     return STATUS_PENDING;
 }
 
-static BOOLEAN HttpResponseHasHeader(const char *Buffer, ULONG Length, const char *Name)
-{
-    ULONG NameLength = (ULONG)strlen(Name);
-    ULONG i;
-
-    for (i = 0; i + 1 < Length; ++i)
-    {
-        if (Buffer[i] != '\r' || Buffer[i + 1] != '\n')
-            continue;
-        if (i + 3 < Length && Buffer[i + 2] == '\r' && Buffer[i + 3] == '\n')
-            return FALSE;
-        if (Length - (i + 2) >= NameLength && !_strnicmp(Buffer + i + 2, Name, NameLength))
-            return TRUE;
-    }
-
-    return FALSE;
-}
-
 static NTSTATUS HttpSendResponseHeaders(
     PHTTP_CONNECTION Connection,
     const char *Buffer,
-    ULONG Length,
-    ULONG Flags)
+    ULONG Length)
 {
     const char *Header = NULL;
     PCHAR Response;
     ULONG StatusLength, HeaderLength;
     NTSTATUS Status;
 
-    if (!Connection->KeepAlive ||
-        ((Flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA) &&
-         !HttpResponseHasHeader(Buffer, Length, "Content-Length:") &&
-         !HttpResponseHasHeader(Buffer, Length, "Transfer-Encoding:")))
+    if (!Connection->KeepAlive)
         Connection->CloseAfterResponse = TRUE;
 
     if (Connection->CloseAfterResponse)
@@ -2107,6 +2158,16 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     InitializeListHead(&CompleteList);
     ExAcquireFastMutex(&g_HttpGlobalLock);
     Conn = GetConnectionById(Response->id);
+    if (Conn && Conn->Queue == Queue && Conn->BodyFailed)
+    {
+        RemoveEntryList(&Conn->Entry);
+        Conn->InConnectionList = FALSE;
+        HttpFlushBodyIrps(Conn, &CompleteList);
+        ExReleaseFastMutex(&g_HttpGlobalLock);
+        HttpCompleteIrpList(&CompleteList);
+        HttpConnectionDereference(Conn);
+        return STATUS_INVALID_DEVICE_STATE;
+    }
     if (!Conn || Conn->Queue != Queue ||
         InterlockedCompareExchange(&Conn->Shutdown, 0, 0))
     {
@@ -2129,8 +2190,7 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
         if (Conn->ResponseStarted)
             Status = HttpWskSendAll(Conn, Response->buffer, (ULONG)Response->len);
         else
-            Status = HttpSendResponseHeaders(Conn, Response->buffer, (ULONG)Response->len,
-                                             Response->response_flags);
+            Status = HttpSendResponseHeaders(Conn, Response->buffer, (ULONG)Response->len);
         if (NT_SUCCESS(Status))
             Conn->ResponseStarted = TRUE;
         else
@@ -2218,7 +2278,7 @@ static NTSTATUS HttpReceiveBody(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     ExAcquireFastMutex(&g_HttpGlobalLock);
     Conn = GetConnectionById(Params->id);
     if (!Conn || Conn->Queue != Queue ||
-        InterlockedCompareExchange(&Conn->Shutdown, 0, 0))
+        (!Conn->BodyFailed && InterlockedCompareExchange(&Conn->Shutdown, 0, 0)))
     {
         ExReleaseFastMutex(&g_HttpGlobalLock);
         return STATUS_CONNECTION_INVALID;
@@ -2230,7 +2290,7 @@ static NTSTATUS HttpReceiveBody(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     Irp->Tail.Overlay.DriverContext[1] = (PVOID)(ULONG_PTR)Flags;
     if (HttpCopyBody(Conn, Irp))
     {
-        Status = Irp->IoStatus.Information ? STATUS_SUCCESS : STATUS_END_OF_FILE;
+        Status = HttpBodyStatus(Conn, Irp);
         if (HttpWantsBody(Conn))
         {
             HttpConnectionReference(Conn);
@@ -2594,6 +2654,8 @@ NTSTATUS NTAPI DriverEntry(
     g_LlhttpSettings.on_header_field_complete = HttpLlhttpOnHeaderFieldComplete;
     g_LlhttpSettings.on_header_value_complete = HttpLlhttpOnHeaderValueComplete;
     g_LlhttpSettings.on_headers_complete = HttpLlhttpOnHeadersComplete;
+    g_LlhttpSettings.on_body = HttpLlhttpOnBody;
+    g_LlhttpSettings.on_message_complete = HttpLlhttpOnMessageComplete;
 
     InitializeObjectAttributes(&Attr, &DirName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_PERMANENT, NULL, NULL);
     Status = ZwCreateDirectoryObject(&g_HttpDirectoryHandle, DIRECTORY_ALL_ACCESS, &Attr);
