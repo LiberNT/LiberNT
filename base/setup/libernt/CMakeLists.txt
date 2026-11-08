@@ -39,6 +39,7 @@ add_delay_importlibs(libernt setuplib)
 add_importlibs(libernt advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi ole32 oleaut32 version bcrypt msvcrt kernel32 ntdll)
 add_cd_file(TARGET libernt DESTINATION reactos NO_CAB FOR bootcd livecd)
 add_cd_file(TARGET libernt DESTINATION ${ARCH} FOR preinstall)
+add_cd_file(TARGET libernt DESTINATION root NO_CAB NAME_ON_CD setup.exe FOR bootcd)
 
 list(APPEND OOBE_SOURCE
     account.c

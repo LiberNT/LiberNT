@@ -14,8 +14,6 @@ Windows = "\"
 "Windows\SystemTemp" = 1
 "Windows\system32\applaunch.exe" = 1
 "Windows\unattend.inf" = 1
-"Windows\welcome.ini" = 1
-"Windows\welcome" = 1
 
 ; A file listed here keeps its installed copy when Setup upgrades LiberNT,
 ; and is copied only when it is missing.
