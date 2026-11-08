@@ -271,7 +271,8 @@ MiPfnDbAddRange(
 {
     ULONG Frame;
 
-    for (Frame = max(FirstFrame, Db->FirstFrame); Frame < FirstFrame + Count && Frame < Db->FrameCount; Frame++)
+    for (Frame = (FirstFrame > Db->FirstFrame) ? FirstFrame : Db->FirstFrame;
+         Frame < FirstFrame + Count && Frame < Db->FrameCount; Frame++)
     {
         if (Frame == 0 || Db->Pfn[Frame].State != MiPageUnusable)
             continue;
@@ -934,7 +935,8 @@ MiPfnMarkInUse(
 {
     ULONG Frame;
 
-    for (Frame = max(FirstFrame, Db->FirstFrame); Frame < FirstFrame + Count && Frame < Db->FrameCount; Frame++)
+    for (Frame = (FirstFrame > Db->FirstFrame) ? FirstFrame : Db->FirstFrame;
+         Frame < FirstFrame + Count && Frame < Db->FrameCount; Frame++)
     {
         PMI_PFN Entry = &Db->Pfn[Frame];
 
