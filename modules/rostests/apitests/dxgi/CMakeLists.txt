@@ -37,6 +37,7 @@ add_executable(dxgi_apitest
     wait_vblank.cpp
     dwm_render.cpp
     viewport_levels.cpp
+    sampler_default.cpp
     testlist.c)
 
 target_include_directories(dxgi_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/system/dwm)

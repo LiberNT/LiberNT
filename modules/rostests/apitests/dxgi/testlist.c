@@ -42,6 +42,7 @@ extern void func_copy_depth_stencil(void);
 extern void func_volume_readback(void);
 extern void func_viewport_levels(void);
 extern void func_wait_vblank(void);
+extern void func_sampler_default(void);
 
 const struct test winetest_testlist[] =
 {
@@ -86,5 +87,6 @@ const struct test winetest_testlist[] =
     { "volume_readback", func_volume_readback },
     { "viewport_levels", func_viewport_levels },
     { "wait_vblank", func_wait_vblank },
+    { "sampler_default", func_sampler_default },
     { 0, 0 }
 };
