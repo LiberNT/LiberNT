@@ -262,6 +262,7 @@ UsbAudioGetSetPropertyTimeout(
     PIRP Irp;
     PKEVENT Event;
     PIO_STATUS_BLOCK IoStatus;
+    PVOID Buffer;
     LARGE_INTEGER Timeout;
     NTSTATUS Status;
     PIO_STACK_LOCATION IoStack;
@@ -270,7 +271,8 @@ UsbAudioGetSetPropertyTimeout(
     Urb = AllocFunction(sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST));
     Event = AllocFunction(sizeof(KEVENT));
     IoStatus = AllocFunction(sizeof(IO_STATUS_BLOCK));
-    if (!Urb || !Event || !IoStatus)
+    Buffer = AllocFunction(max(TransferBufferLength, 1));
+    if (!Urb || !Event || !IoStatus || !Buffer)
     {
         if (Urb)
             FreeFunction(Urb);
@@ -278,8 +280,12 @@ UsbAudioGetSetPropertyTimeout(
             FreeFunction(Event);
         if (IoStatus)
             FreeFunction(IoStatus);
+        if (Buffer)
+            FreeFunction(Buffer);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
+    if (!(TransferFlags & USBD_TRANSFER_DIRECTION_IN))
+        RtlCopyMemory(Buffer, TransferBuffer, TransferBufferLength);
 
     RtlZeroMemory(Urb, sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST));
     if (TransferFlags & USBD_TRANSFER_DIRECTION_IN)
@@ -293,7 +299,7 @@ UsbAudioGetSetPropertyTimeout(
         Request,
         Value,
         Index,
-        TransferBuffer,
+        Buffer,
         NULL,
         TransferBufferLength,
         NULL);
@@ -313,6 +319,7 @@ UsbAudioGetSetPropertyTimeout(
         FreeFunction(Urb);
         FreeFunction(Event);
         FreeFunction(IoStatus);
+        FreeFunction(Buffer);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
@@ -349,12 +356,19 @@ UsbAudioGetSetPropertyTimeout(
         }
     }
 
+    /* an IRP that ignored the cancel still owns the URB and the buffer */
     if (Leak)
         return STATUS_IO_TIMEOUT;
+
+    if (NT_SUCCESS(Status) && !USBD_SUCCESS(Urb->UrbHeader.Status))
+        Status = STATUS_IO_DEVICE_ERROR;
+    if (NT_SUCCESS(Status) && (TransferFlags & USBD_TRANSFER_DIRECTION_IN))
+        RtlCopyMemory(TransferBuffer, Buffer, TransferBufferLength);
 
     FreeFunction(Urb);
     FreeFunction(Event);
     FreeFunction(IoStatus);
+    FreeFunction(Buffer);
     return Status;
 }
 
