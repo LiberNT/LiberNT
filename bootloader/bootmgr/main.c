@@ -18,6 +18,7 @@
 #define BM_WINDOWS_STORE   L"\\EFI\\Microsoft\\Boot\\BCD"
 #define BM_WINDOWS_TITLE   L"Windows Boot Manager"
 #define BM_LIBERNT_ENTRY   L"{354fa6e5-5e45-49af-91bf-1fd2754e470a}"
+#define BM_INSTALL_IMAGE_OPTION L"INSTALLIMAGE="
 
 static const PCWSTR BmStorePaths[] =
 {
@@ -227,15 +228,52 @@ BmMenuIdle(
 }
 
 static
+BOOLEAN
+BmIsUpdateEntry(
+    _In_ PBM_ENTRY Entry)
+{
+    WCHAR Options[BM_LOAD_OPTIONS_CHARS];
+
+    return !Entry->FirmwareDevice &&
+           BcdGetString(&Entry->Object, BcdLibraryString_LoadOptionsString, Options, RTL_NUMBER_OF(Options)) &&
+           wcsstr(Options, BM_INSTALL_IMAGE_OPTION) != NULL;
+}
+
+static
+PBM_ENTRY
+BmUpdateFallback(
+    _In_ PBM_ENTRY Failed)
+{
+    ULONG i;
+
+    for (i = 0; i < BmCount; i++)
+    {
+        if (&BmEntries[i] != Failed && !BmEntries[i].FirmwareDevice && !BmIsUpdateEntry(&BmEntries[i]))
+            return &BmEntries[i];
+    }
+    return NULL;
+}
+
+static
 VOID
 BmStartSelectedApplication(
     _In_ PBM_ENTRY Entry,
     _In_ PBM_STARTUP Startup)
 {
+    PBM_ENTRY Fallback;
     BOOLEAN Cancelled;
 
     if (BmStartApplication(Entry, BmStorePath, Startup, &Cancelled) || Cancelled)
         return;
+
+    /* FIXME: an update entry whose loader starts and then fails before the system runs is started again on every boot; no boot status is kept to fall back */
+    Fallback = BmIsUpdateEntry(Entry) ? BmUpdateFallback(Entry) : NULL;
+    if (Fallback)
+    {
+        FwPrint(L"\r\nThe update could not be started; starting %s.\r\n", Fallback->Description);
+        if (BmStartApplication(Fallback, BmStorePath, Startup, &Cancelled) || Cancelled)
+            return;
+    }
 
     FwPrint(L"\r\nPress any key to return to the boot menu.\r\n");
     if (FwReadKey() == KEY_EXTENDED)
