@@ -48,6 +48,15 @@ NtUserSetProcessDpiAwarenessContext(ULONG DpiContext, ULONG Flags);
 ULONG APIENTRY
 NtUserSetThreadDpiAwarenessContext(ULONG DpiContext);
 
+LONG APIENTRY
+NtUserGetThreadDpiHostingBehavior(VOID);
+
+LONG APIENTRY
+NtUserSetThreadDpiHostingBehavior(LONG Behavior);
+
+LONG APIENTRY
+NtUserGetWindowDpiHostingBehavior(HWND hWnd);
+
 static volatile LONG DpiCacheContextSlot = TLS_OUT_OF_INDEXES;
 static volatile LONG DpiCacheGenerationSlot = TLS_OUT_OF_INDEXES;
 static volatile LONG DpiCacheGeneration = 1;
@@ -442,6 +451,27 @@ GetWindowDpiAwarenessContext(_In_ HWND hWnd)
 {
     ULONG Context = NtUserGetWindowDpiAwarenessContext(hWnd);
     return Context ? (DPI_AWARENESS_CONTEXT)(ULONG_PTR)Context : NULL;
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetThreadDpiHostingBehavior(VOID)
+{
+    return (DPI_HOSTING_BEHAVIOR)NtUserGetThreadDpiHostingBehavior();
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+SetThreadDpiHostingBehavior(_In_ DPI_HOSTING_BEHAVIOR Value)
+{
+    return (DPI_HOSTING_BEHAVIOR)NtUserSetThreadDpiHostingBehavior((LONG)Value);
+}
+
+DPI_HOSTING_BEHAVIOR
+WINAPI
+GetWindowDpiHostingBehavior(_In_ HWND hWnd)
+{
+    return (DPI_HOSTING_BEHAVIOR)NtUserGetWindowDpiHostingBehavior(hWnd);
 }
 
 UINT

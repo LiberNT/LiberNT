@@ -1507,4 +1507,61 @@ NtUserSetThreadDpiAwarenessContext(_In_ ULONG DpiContext)
     return Previous;
 }
 
+LONG
+APIENTRY
+NtUserGetThreadDpiHostingBehavior(VOID)
+{
+    PTHREADINFO pti;
+    LONG Behavior = DPI_HOSTING_BEHAVIOR_DEFAULT;
+
+    UserEnterShared();
+
+    pti = PsGetCurrentThreadWin32Thread();
+    if (pti)
+        Behavior = pti->DpiHostingBehavior;
+
+    UserLeave();
+    return Behavior;
+}
+
+LONG
+APIENTRY
+NtUserSetThreadDpiHostingBehavior(_In_ LONG Behavior)
+{
+    PTHREADINFO pti;
+    LONG Previous = DPI_HOSTING_BEHAVIOR_INVALID;
+
+    if (Behavior != DPI_HOSTING_BEHAVIOR_DEFAULT && Behavior != DPI_HOSTING_BEHAVIOR_MIXED)
+        return DPI_HOSTING_BEHAVIOR_INVALID;
+
+    UserEnterExclusive();
+
+    pti = PsGetCurrentThreadWin32Thread();
+    if (pti)
+    {
+        Previous = pti->DpiHostingBehavior;
+        pti->DpiHostingBehavior = Behavior;
+    }
+
+    UserLeave();
+    return Previous;
+}
+
+LONG
+APIENTRY
+NtUserGetWindowDpiHostingBehavior(_In_ HWND hWnd)
+{
+    PWND Window;
+    LONG Behavior = DPI_HOSTING_BEHAVIOR_INVALID;
+
+    UserEnterShared();
+
+    Window = UserGetWindowObject(hWnd);
+    if (Window)
+        Behavior = Window->DpiHostingBehavior;
+
+    UserLeave();
+    return Behavior;
+}
+
 /* EOF */

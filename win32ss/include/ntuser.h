@@ -836,6 +836,7 @@ typedef struct _WND
 
     PVOID DialogPointer;
     ULONG DpiContext; /* Awareness context captured from the creating thread. */
+    ULONG DpiHostingBehavior; /* DPI_HOSTING_BEHAVIOR of the creating thread. */
     ULONG DialogDpiChangeBehavior;
     ULONG DialogControlDpiChangeBehavior;
 } WND, *PWND;
@@ -2871,6 +2872,14 @@ ULONG
 NTAPI
 NtUserGetWindowDpiAwarenessContext(_In_ HWND hWnd);
 
+LONG
+NTAPI
+NtUserGetThreadDpiHostingBehavior(VOID);
+
+LONG
+NTAPI
+NtUserGetWindowDpiHostingBehavior(_In_ HWND hWnd);
+
 HANDLE
 NTAPI
 NtUserGetProp(
@@ -2890,6 +2899,10 @@ NtUserSetProcessDpiAwarenessContext(
 ULONG
 NTAPI
 NtUserSetThreadDpiAwarenessContext(_In_ ULONG DpiContext);
+
+LONG
+NTAPI
+NtUserSetThreadDpiHostingBehavior(_In_ LONG Behavior);
 
 BOOL
 NTAPI

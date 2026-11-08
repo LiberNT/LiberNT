@@ -900,3 +900,6 @@
     SVC_(DCompositionProcessChannelBatchBuffer, 4)
     SVC_(DCompositionCommitChannel, 8)
     SVC_(UserGetUpdatedClipboardFormats, 3)
+    SVC_(UserGetThreadDpiHostingBehavior, 0)
+    SVC_(UserSetThreadDpiHostingBehavior, 1)
+    SVC_(UserGetWindowDpiHostingBehavior, 1)

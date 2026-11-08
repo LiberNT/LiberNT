@@ -3268,6 +3268,18 @@ NTSTATUS WINAPI wow64_NtUserGetWindowDpiAwarenessContext( UINT *args )
     return NtUserGetWindowDpiAwarenessContext( hwnd );
 }
 
+NTSTATUS WINAPI wow64_NtUserGetThreadDpiHostingBehavior( UINT *args )
+{
+    return NtUserGetThreadDpiHostingBehavior();
+}
+
+NTSTATUS WINAPI wow64_NtUserGetWindowDpiHostingBehavior( UINT *args )
+{
+    HWND hwnd = get_handle( &args );
+
+    return NtUserGetWindowDpiHostingBehavior( hwnd );
+}
+
 NTSTATUS WINAPI wow64_NtUserGetProcessWindowStation( UINT *args )
 {
     return HandleToUlong( NtUserGetProcessWindowStation() );
@@ -5240,6 +5252,13 @@ NTSTATUS WINAPI wow64_NtUserSetThreadDpiAwarenessContext( UINT *args )
     ULONG context = get_ulong( &args );
 
     return NtUserSetThreadDpiAwarenessContext( context );
+}
+
+NTSTATUS WINAPI wow64_NtUserSetThreadDpiHostingBehavior( UINT *args )
+{
+    LONG behavior = get_ulong( &args );
+
+    return NtUserSetThreadDpiHostingBehavior( behavior );
 }
 
 NTSTATUS WINAPI wow64_NtUserSetProcessWindowStation( UINT *args )

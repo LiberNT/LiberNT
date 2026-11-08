@@ -2098,7 +2098,8 @@ PWND FASTCALL IntCreateWindow(CREATESTRUCTW* Cs,
    pWnd->fnid = 0;
    if (pdeskCreated)
       pWnd->DpiContext = NTUSER_DPI_PER_MONITOR_AWARE;
-   else if (ParentWindow && !UserIsDesktopWindow(ParentWindow) && !UserIsMessageWindow(ParentWindow))
+   else if (ParentWindow && !UserIsDesktopWindow(ParentWindow) && !UserIsMessageWindow(ParentWindow) &&
+            ParentWindow->DpiHostingBehavior != DPI_HOSTING_BEHAVIOR_MIXED)
       pWnd->DpiContext = ParentWindow->DpiContext;
    else if (pti->DpiContext)
       pWnd->DpiContext = pti->DpiContext;
@@ -2106,6 +2107,7 @@ PWND FASTCALL IntCreateWindow(CREATESTRUCTW* Cs,
       pWnd->DpiContext = pti->ppi->DpiContext;
    else
       pWnd->DpiContext = NTUSER_DPI_UNAWARE;
+   pWnd->DpiHostingBehavior = pti->DpiHostingBehavior;
    WndSetLastActive(pWnd, pWnd);
    // Ramp up compatible version sets.
    if ( dwVer >= WINVER_WIN31 )
