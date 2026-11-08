@@ -41,6 +41,15 @@ static PKTHREAD MiPagingFileExtendThread;
 static WORK_QUEUE_ITEM MiCommitReportItem;
 static volatile LONG MiCommitReportQueued;
 
+CODE_SEG("INIT")
+VOID
+MiPageFileCreationInitialize(VOID)
+{
+    ASSERT(!MiPagingFileLockReady);
+    KeInitializeGuardedMutex(&MiPagingFileCreationLock);
+    MiPagingFileLockReady = TRUE;
+}
+
 static
 NTSTATUS
 MiPageFileRead(
@@ -401,11 +410,7 @@ NtCreatePagingFile(
     UNREFERENCED_PARAMETER(Reserved);
     PAGED_CODE();
 
-    if (!MiPagingFileLockReady)
-    {
-        KeInitializeGuardedMutex(&MiPagingFileCreationLock);
-        MiPagingFileLockReady = TRUE;
-    }
+    ASSERT(MiPagingFileLockReady);
 
     if (PreviousMode != KernelMode && !SeSinglePrivilegeCheck(SeCreatePagefilePrivilege, PreviousMode))
         return STATUS_PRIVILEGE_NOT_HELD;

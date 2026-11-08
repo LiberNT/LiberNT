@@ -395,6 +395,7 @@ MiInitializePhase0(
     MmHighestUserAddress = (PVOID)MI_HIGHEST_USER_ADDRESS;
     MmCriticalSectionTimeout.QuadPart = -(LONGLONG)MmCritsectTimeoutSeconds * 10000000LL;
     KeInitializeMutant(&MmSystemLoadLock, FALSE);
+    MiPageFileCreationInitialize();
 
     DbgPrint("Memory manager: starting\n");
     Largest = MiScanMemoryDescriptors(LoaderBlock, &LargestEnd);
