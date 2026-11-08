@@ -82,7 +82,9 @@ MiKmAcquireExclusive(PMI_RWLOCK Lock)
 #define MI_ATOMIC_READ8(v)              (*(volatile UCHAR *)(v))
 #define MI_ATOMIC_READ32(v)             (*(volatile LONG *)(v))
 #define MI_ATOMIC_WRITE32(v, n)          ((VOID)InterlockedExchange((v), (n)))
-#define MI_ATOMIC_READ64(v)             (*(volatile LONG64 *)(v))
+#define MI_ATOMIC_READ64(v)             ((sizeof(PVOID) == sizeof(LONG64)) ? \
+                                         ReadAcquire64((const volatile LONG64 *)(v)) : \
+                                         InterlockedCompareExchange64((volatile LONG64 *)(v), 0, 0))
 #define MI_ATOMIC_WRITE64(v, n)          ((VOID)InterlockedExchange64((v), (n)))
 #define MI_ATOMIC_CAS32(v, n, o)        InterlockedCompareExchange((v), (n), (o))
 #define MI_ATOMIC_OR8(v, m)             InterlockedOr8((volatile CHAR *)(v), (CHAR)(m))
