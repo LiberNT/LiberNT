@@ -30,6 +30,20 @@
 #define IOCTL_HTTP_RECEIVE_REQUEST  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, 0)
 #define IOCTL_HTTP_SEND_RESPONSE    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, 0)
 #define IOCTL_HTTP_RECEIVE_BODY     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_SET_QUEUE_PROPERTY   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x805, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_QUERY_QUEUE_PROPERTY CTL_CODE(FILE_DEVICE_UNKNOWN, 0x806, METHOD_BUFFERED, 0)
+
+#define HTTP_VERSION_EA_NAME "HttpApiVersion"
+
+struct http_version_ea
+{
+    ULONG next_entry_offset;
+    UCHAR flags;
+    UCHAR name_length;
+    USHORT value_length;
+    char name[sizeof(HTTP_VERSION_EA_NAME)];
+    char value[sizeof(HTTPAPI_VERSION)];
+};
 
 struct http_add_url_params
 {
@@ -53,6 +67,12 @@ struct http_response
     ULONG sent;
     BOOL reset;
     char buffer[1];
+};
+
+struct http_queue_property
+{
+    ULONG property;
+    ULONG value;
 };
 
 struct http_receive_body_params
