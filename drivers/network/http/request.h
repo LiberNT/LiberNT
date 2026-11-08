@@ -86,7 +86,7 @@ static NTSTATUS complete_irp(PHTTP_CONNECTION conn, PIRP irp)
 {
     const struct http_receive_request_params params
             = *(struct http_receive_request_params *)irp->AssociatedIrp.SystemBuffer;
-    ULONG cooked_len, host_len, abs_path_len, query_len, chunk_len = 0, offset, processed;
+    ULONG cooked_len, host_len, abs_path_len, query_len, chunk_len = 0, body_len, offset, processed;
     PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(irp);
     const ULONG output_len = stack->Parameters.DeviceIoControl.OutputBufferLength;
     struct http_request *req = (struct http_request *)irp->AssociatedIrp.SystemBuffer;
@@ -241,9 +241,10 @@ static NTSTATUS complete_irp(PHTTP_CONNECTION conn, PIRP irp)
         }
     }
     p = conn->Buffer + conn->HeaderLength;
+    body_len = (ULONG)min((ULONGLONG)(conn->BufferLength - conn->HeaderLength), conn->ContentLength);
 
     if (irp_size + sizeof(*chunk) < output_len && (params.flags & HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY))
-        chunk_len = min(conn->ContentLength, output_len - (irp_size + (ULONG)sizeof(*chunk)));
+        chunk_len = min(body_len, output_len - (irp_size + (ULONG)sizeof(*chunk)));
     if (chunk_len)
     {
         req->EntityChunkCount = 1;
@@ -265,7 +266,7 @@ static NTSTATUS complete_irp(PHTTP_CONNECTION conn, PIRP irp)
     req->BytesReceived = conn->RequestLength;
 
     conn->Available = FALSE;
-    processed = conn->RequestLength - (conn->ContentLength - chunk_len);
+    processed = conn->HeaderLength + chunk_len;
     RtlMoveMemory(conn->Buffer, conn->Buffer + processed, conn->BufferLength - processed);
     conn->ContentLength -= chunk_len;
     conn->BufferLength -= processed;

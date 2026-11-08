@@ -49,6 +49,8 @@ static VOID HttpConnectionDereference(PHTTP_CONNECTION Connection);
 static VOID HttpListenerDereference(PHTTP_LISTENER Listener);
 static VOID HttpCloseListener(PHTTP_LISTENER Listener);
 static VOID HttpRemoveListenerConnection(PHTTP_CONNECTION Connection);
+static BOOLEAN HttpWantsBody(PHTTP_CONNECTION Connection);
+static NTSTATUS HttpStartBodyReceive(PHTTP_CONNECTION Connection);
 
 static VOID HttpReleaseWsk(VOID)
 {
@@ -680,11 +682,6 @@ static int HttpLlhttpOnHeadersComplete(llhttp_t *Parser)
         Connection->ErrorStatus = 501;
         return -1;
     }
-    if (Parser->content_length > HTTP_MAX_BODY_SIZE)
-    {
-        Connection->ErrorStatus = 413;
-        return -1;
-    }
     if (!Connection->MethodLength || Connection->MethodLength > MAXUSHORT ||
         !Connection->UrlLength || Connection->UrlLength > MAXUSHORT ||
         Connection->HostLength > MAXUSHORT)
@@ -692,61 +689,10 @@ static int HttpLlhttpOnHeadersComplete(llhttp_t *Parser)
 
     Connection->Version.MajorVersion = Parser->http_major;
     Connection->Version.MinorVersion = Parser->http_minor;
-    Connection->ContentLength = (ULONG)Parser->content_length;
+    Connection->ContentLength = Parser->content_length;
+    Connection->KeepAlive = (BOOLEAN)llhttp_should_keep_alive(Parser);
     Connection->HeadersComplete = TRUE;
-    return 0;
-}
-
-static int HttpLlhttpOnMessageComplete(llhttp_t *Parser)
-{
-    PHTTP_CONNECTION Connection = Parser->data;
-    Connection->MessageComplete = TRUE;
     return HPE_PAUSED;
-}
-
-static ULONG HttpFindHeaderEnd(const char *Buffer, ULONG Length)
-{
-    ULONG i;
-
-    for (i = 0; i + 3 < Length; ++i)
-    {
-        if (Buffer[i] == '\r' && Buffer[i + 1] == '\n' &&
-            Buffer[i + 2] == '\r' && Buffer[i + 3] == '\n')
-            return i + 4;
-    }
-
-    return 0;
-}
-
-static NTSTATUS HttpEnsureConnectionCapacity(PHTTP_CONNECTION Connection, ULONG Required)
-{
-    PCHAR NewBuffer;
-    ULONG NewCapacity;
-
-    if (Required > HTTP_MAX_REQUEST_SIZE + 1)
-        return STATUS_BUFFER_TOO_SMALL;
-    if (Required <= Connection->BufferCapacity)
-        return STATUS_SUCCESS;
-
-    NewCapacity = Connection->BufferCapacity;
-    while (NewCapacity < Required)
-    {
-        if (NewCapacity > (HTTP_MAX_REQUEST_SIZE + 1) / 2)
-        {
-            NewCapacity = HTTP_MAX_REQUEST_SIZE + 1;
-            break;
-        }
-        NewCapacity *= 2;
-    }
-
-    NewBuffer = ExAllocatePoolZero(NonPagedPoolNx, NewCapacity, TAG_HTTP);
-    if (!NewBuffer)
-        return STATUS_INSUFFICIENT_RESOURCES;
-    memcpy(NewBuffer, Connection->Buffer, Connection->BufferLength);
-    ExFreePoolWithTag(Connection->Buffer, TAG_HTTP);
-    Connection->Buffer = NewBuffer;
-    Connection->BufferCapacity = NewCapacity;
-    return STATUS_SUCCESS;
 }
 
 #define http_unknown_header http_unknown_header_64
@@ -895,12 +841,28 @@ static VOID HttpRemoveListenerConnection(PHTTP_CONNECTION Connection)
         Connection->InListenerList = FALSE;
         Removed = TRUE;
     }
-    Connection->Listener = NULL;
     KeReleaseSpinLock(&Listener->PendingConnectionLock, Irql);
 
     if (Removed)
         HttpConnectionDereference(Connection);
-    HttpListenerDereference(Listener);
+}
+
+static BOOLEAN HttpInsertListenerConnection(PHTTP_CONNECTION Connection)
+{
+    PHTTP_LISTENER Listener = Connection->Listener;
+    BOOLEAN Inserted = FALSE;
+    KIRQL Irql;
+
+    KeAcquireSpinLock(&Listener->PendingConnectionLock, &Irql);
+    if (!Listener->Closing && !InterlockedCompareExchange(&Connection->Shutdown, 0, 0))
+    {
+        InsertTailList(&Listener->PendingConnections, &Connection->ListenerEntry);
+        Connection->InListenerList = TRUE;
+        HttpConnectionReference(Connection);
+        Inserted = TRUE;
+    }
+    KeReleaseSpinLock(&Listener->PendingConnectionLock, Irql);
+    return Inserted;
 }
 
 static VOID HttpCloseListener(PHTTP_LISTENER Listener)
@@ -1078,6 +1040,12 @@ static BOOLEAN HttpQueueConnection(PHTTP_CONNECTION Connection)
     InsertTailList(&g_ConnectionsList, &Connection->Entry);
     Connection->InConnectionList = TRUE;
     HttpConnectionReference(Connection);
+    if (HttpWantsBody(Connection))
+    {
+        HttpConnectionReference(Connection);
+        if (HttpStartBodyReceive(Connection) != STATUS_PENDING)
+            HttpConnectionDereference(Connection);
+    }
 
     PendingIrp = IoCsqRemoveNextIrp(&BestQueue->Csq, NULL);
     if (PendingIrp)
@@ -1112,40 +1080,20 @@ static NTSTATUS NTAPI HttpReceiveComplete(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static NTSTATUS HttpStartReceive(PHTTP_CONNECTION Connection)
+static NTSTATUS HttpStartReceive(PHTTP_CONNECTION Connection, ULONG Length)
 {
     PWSK_PROVIDER_CONNECTION_DISPATCH Dispatch;
     PWSK_SOCKET Socket;
-    ULONG Available;
-    NTSTATUS Status;
-
-    if (!Connection->HeadersComplete && Connection->BufferLength >= HTTP_MAX_HEADER_SIZE)
-    {
-        Connection->ErrorStatus = 431;
-        return STATUS_BUFFER_TOO_SMALL;
-    }
-
-    Status = HttpEnsureConnectionCapacity(Connection, Connection->BufferLength + 2);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    Available = Connection->BufferCapacity - Connection->BufferLength - 1;
-    if (Connection->HeadersComplete)
-    {
-        if (Connection->BufferLength >= Connection->RequestLength)
-            return STATUS_INVALID_PARAMETER;
-        Available = min(Available, Connection->RequestLength - Connection->BufferLength);
-    }
 
     Connection->ReceiveMdl = IoAllocateMdl(Connection->Buffer + Connection->BufferLength,
-                                           Available, FALSE, FALSE, NULL);
+                                           Length, FALSE, FALSE, NULL);
     if (!Connection->ReceiveMdl)
         return STATUS_INSUFFICIENT_RESOURCES;
     MmBuildMdlForNonPagedPool(Connection->ReceiveMdl);
 
     Connection->ReceiveBuffer.Mdl = Connection->ReceiveMdl;
     Connection->ReceiveBuffer.Offset = 0;
-    Connection->ReceiveBuffer.Length = Available;
+    Connection->ReceiveBuffer.Length = Length;
     IoReuseIrp(Connection->ReceiveIrp, STATUS_UNSUCCESSFUL);
     IoSetCompletionRoutine(Connection->ReceiveIrp, HttpReceiveComplete, Connection, TRUE, TRUE, TRUE);
 
@@ -1159,10 +1107,23 @@ static NTSTATUS HttpStartReceive(PHTTP_CONNECTION Connection)
         return STATUS_CONNECTION_DISCONNECTED;
     }
 
+    Connection->ReceivePending = TRUE;
+    Connection->ReceiveOffset = Connection->BufferLength;
     Dispatch = (PWSK_PROVIDER_CONNECTION_DISPATCH)Socket->Dispatch;
     Dispatch->WskReceive(Socket, &Connection->ReceiveBuffer, 0, Connection->ReceiveIrp);
     ExReleaseFastMutex(&Connection->SocketMutex);
     return STATUS_PENDING;
+}
+
+static NTSTATUS HttpReceiveHeaders(PHTTP_CONNECTION Connection)
+{
+    if (Connection->BufferLength >= HTTP_MAX_HEADER_SIZE)
+    {
+        Connection->ErrorStatus = 431;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    return HttpStartReceive(Connection, Connection->BufferCapacity - Connection->BufferLength - 1);
 }
 
 static NTSTATUS HttpFinishRequest(PHTTP_CONNECTION Connection)
@@ -1176,25 +1137,43 @@ static NTSTATUS HttpFinishRequest(PHTTP_CONNECTION Connection)
     }
 
     Connection->RequestLength = Connection->HeaderLength + Connection->ContentLength;
-    if (Connection->BufferLength < Connection->RequestLength)
-        return STATUS_CONNECTION_DISCONNECTED;
-
     Connection->Verb = parse_verb(Connection->Buffer + Connection->MethodOffset,
                                   (int)Connection->MethodLength);
     Connection->UnknownVerbLength =
         Connection->Verb == HttpVerbUnknown ? Connection->MethodLength : 0;
     Connection->Url = Url;
     Connection->Host = Connection->HostSeen ? Connection->Buffer + Connection->HostOffset : "";
-    Connection->BufferLength = Connection->RequestLength;
-    Connection->Buffer[Connection->BufferLength] = '\0';
     return STATUS_SUCCESS;
+}
+
+static NTSTATUS HttpParseHeaders(PHTTP_CONNECTION Connection, ULONG Offset)
+{
+    llhttp_errno_t ParserStatus;
+
+    ParserStatus = llhttp_execute(&Connection->Parser,
+                                  Connection->Buffer + Offset,
+                                  Connection->BufferLength - Offset);
+    if (ParserStatus == HPE_PAUSED && Connection->HeadersComplete)
+    {
+        Connection->HeaderLength =
+            (ULONG)(llhttp_get_error_pos(&Connection->Parser) - Connection->Buffer);
+        return HttpFinishRequest(Connection);
+    }
+    if (ParserStatus != HPE_OK)
+    {
+        if (Connection->ErrorStatus == 431)
+            return STATUS_BUFFER_TOO_SMALL;
+        if (Connection->ErrorStatus == 501)
+            return STATUS_NOT_SUPPORTED;
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    return HttpReceiveHeaders(Connection);
 }
 
 static NTSTATUS HttpReceiveCompleted(PHTTP_CONNECTION Connection)
 {
-    llhttp_errno_t ParserStatus;
     ULONG OldLength;
-    NTSTATUS Status;
 
     IoFreeMdl(Connection->ReceiveMdl);
     Connection->ReceiveMdl = NULL;
@@ -1208,48 +1187,219 @@ static NTSTATUS HttpReceiveCompleted(PHTTP_CONNECTION Connection)
     if (!OldLength)
         HttpSetDeadline(Connection, InterlockedCompareExchange(&g_HeaderWaitSeconds, 0, 0));
     Connection->BufferLength += Connection->ReceiveLength;
-    ParserStatus = llhttp_execute(&Connection->Parser,
-                                  Connection->Buffer + OldLength,
-                                  Connection->ReceiveLength);
+    return HttpParseHeaders(Connection, OldLength);
+}
 
-    if (Connection->HeadersComplete && !Connection->HeaderLength)
+static VOID HttpResetRequest(PHTTP_CONNECTION Connection)
+{
+    llhttp_reset(&Connection->Parser);
+    Connection->RequestId = InterlockedIncrement64((LONG64 *)&g_RequestIdCounter);
+    Connection->Context = 0;
+    Connection->Queue = NULL;
+    Connection->ResponseStarted = FALSE;
+    Connection->KeepAlive = FALSE;
+    Connection->CloseAfterResponse = FALSE;
+    Connection->Finished = FALSE;
+    Connection->MethodOffset = 0;
+    Connection->MethodLength = 0;
+    Connection->UrlOffset = 0;
+    Connection->UrlLength = 0;
+    Connection->HeaderCount = 0;
+    RtlZeroMemory(&Connection->Headers[0], sizeof(Connection->Headers[0]));
+    Connection->HostOffset = 0;
+    Connection->HostLength = 0;
+    Connection->HeaderLength = 0;
+    Connection->HostSeen = FALSE;
+    Connection->TransferEncodingSeen = FALSE;
+    Connection->HeadersComplete = FALSE;
+    Connection->ErrorStatus = 400;
+    Connection->Url = NULL;
+    Connection->Host = NULL;
+    Connection->UnknownVerbLength = 0;
+    Connection->ContentLength = 0;
+    Connection->RequestLength = 0;
+}
+
+static VOID HttpRestartConnection(PHTTP_CONNECTION Connection)
+{
+    HttpResetRequest(Connection);
+    HttpSetDeadline(Connection, Connection->BufferLength
+                                ? InterlockedCompareExchange(&g_HeaderWaitSeconds, 0, 0)
+                                : InterlockedCompareExchange(&g_IdleConnectionSeconds, 0, 0));
+    IoQueueWorkItem(Connection->WorkItem, HttpConnectionWorker, DelayedWorkQueue, Connection);
+}
+
+static VOID HttpConsumeHeaders(PHTTP_CONNECTION Connection)
+{
+    if (!Connection->Available)
+        return;
+
+    RtlMoveMemory(Connection->Buffer, Connection->Buffer + Connection->HeaderLength,
+                  Connection->BufferLength - Connection->HeaderLength);
+    Connection->BufferLength -= Connection->HeaderLength;
+    Connection->Available = FALSE;
+}
+
+static ULONG HttpBufferedBodyLength(PHTTP_CONNECTION Connection)
+{
+    ULONG Start = Connection->Available ? Connection->HeaderLength : 0;
+
+    return (ULONG)min((ULONGLONG)(Connection->BufferLength - Start), Connection->ContentLength);
+}
+
+static BOOLEAN HttpWantsBody(PHTTP_CONNECTION Connection)
+{
+    return !Connection->ReadingBody &&
+           Connection->ContentLength > HttpBufferedBodyLength(Connection) &&
+           Connection->BufferLength + 1 < Connection->BufferCapacity;
+}
+
+static VOID HttpDiscardBody(PHTTP_CONNECTION Connection)
+{
+    ULONG Length = HttpBufferedBodyLength(Connection);
+
+    RtlMoveMemory(Connection->Buffer, Connection->Buffer + Length, Connection->BufferLength - Length);
+    Connection->BufferLength -= Length;
+    Connection->ContentLength -= Length;
+}
+
+static BOOLEAN HttpCopyBody(PHTTP_CONNECTION Connection, PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG OutputLen = Stack->Parameters.DeviceIoControl.OutputBufferLength;
+    ULONG Copied = (ULONG)Irp->IoStatus.Information;
+    ULONG Length = min(HttpBufferedBodyLength(Connection), OutputLen - Copied);
+    ULONG Flags = (ULONG)(ULONG_PTR)Irp->Tail.Overlay.DriverContext[1];
+
+    memcpy((PCHAR)Irp->AssociatedIrp.SystemBuffer + Copied, Connection->Buffer, Length);
+    RtlMoveMemory(Connection->Buffer, Connection->Buffer + Length, Connection->BufferLength - Length);
+    Connection->BufferLength -= Length;
+    Connection->ContentLength -= Length;
+    Irp->IoStatus.Information = Copied + Length;
+
+    if (!Connection->ContentLength || Irp->IoStatus.Information == OutputLen)
+        return TRUE;
+    return Irp->IoStatus.Information &&
+           !(Flags & HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER);
+}
+
+static VOID HttpDeliverBody(PHTTP_CONNECTION Connection, PLIST_ENTRY CompleteList)
+{
+    PIRP Irp;
+
+    while ((Irp = IoCsqRemoveNextIrp(&Connection->Queue->BodyCsq, Connection)) != NULL)
     {
-        Connection->HeaderLength = HttpFindHeaderEnd(Connection->Buffer, Connection->BufferLength);
-        if (!Connection->HeaderLength)
-            return STATUS_INVALID_PARAMETER;
-        if (Connection->ContentLength > HTTP_MAX_REQUEST_SIZE - Connection->HeaderLength)
+        if (!HttpCopyBody(Connection, Irp))
         {
-            Connection->ErrorStatus = 413;
-            return STATUS_BUFFER_TOO_SMALL;
+            IoCsqInsertIrpEx(&Connection->Queue->BodyCsq, Irp, NULL, Irp);
+            return;
         }
-        Connection->RequestLength = Connection->HeaderLength + Connection->ContentLength;
-        Status = HttpEnsureConnectionCapacity(Connection, Connection->RequestLength + 1);
-        if (!NT_SUCCESS(Status))
-            return Status;
-        HttpSetDeadline(Connection, HTTP_ENTITY_BODY_SECONDS);
+
+        Irp->IoStatus.Status = Irp->IoStatus.Information ? STATUS_SUCCESS : STATUS_END_OF_FILE;
+        InsertTailList(CompleteList, &Irp->Tail.Overlay.ListEntry);
     }
-    else if (Connection->HeadersComplete)
+}
+
+static VOID HttpFlushBodyIrps(PHTTP_CONNECTION Connection, PLIST_ENTRY CompleteList)
+{
+    PIRP Irp;
+
+    while ((Irp = IoCsqRemoveNextIrp(&Connection->Queue->BodyCsq, Connection)) != NULL)
     {
-        HttpSetDeadline(Connection, HTTP_ENTITY_BODY_SECONDS);
+        Irp->IoStatus.Status = Irp->IoStatus.Information ? STATUS_SUCCESS : STATUS_CONNECTION_INVALID;
+        InsertTailList(CompleteList, &Irp->Tail.Overlay.ListEntry);
+    }
+}
+
+static VOID HttpCompleteIrpList(PLIST_ENTRY CompleteList)
+{
+    while (!IsListEmpty(CompleteList))
+    {
+        PIRP Irp = CONTAINING_RECORD(RemoveHeadList(CompleteList), IRP, Tail.Overlay.ListEntry);
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    }
+}
+
+static NTSTATUS HttpStartBodyReceive(PHTTP_CONNECTION Connection)
+{
+    ULONGLONG Remaining = Connection->ContentLength - HttpBufferedBodyLength(Connection);
+    ULONG Length = Connection->BufferCapacity - Connection->BufferLength - 1;
+    NTSTATUS Status;
+
+    if (Length > Remaining)
+        Length = (ULONG)Remaining;
+
+    Connection->ReadingBody = TRUE;
+    HttpSetDeadline(Connection, HTTP_ENTITY_BODY_SECONDS);
+    Status = HttpStartReceive(Connection, Length);
+    if (Status != STATUS_PENDING)
+        Connection->ReadingBody = FALSE;
+    return Status;
+}
+
+static VOID HttpBodyReceiveCompleted(PHTTP_CONNECTION Connection)
+{
+    LIST_ENTRY CompleteList;
+    BOOLEAN Removed = FALSE, Restart = FALSE;
+    NTSTATUS Status = Connection->ReceiveStatus;
+
+    InitializeListHead(&CompleteList);
+    IoFreeMdl(Connection->ReceiveMdl);
+    Connection->ReceiveMdl = NULL;
+    if (NT_SUCCESS(Status) && !Connection->ReceiveLength)
+        Status = STATUS_CONNECTION_DISCONNECTED;
+
+    ExAcquireFastMutex(&g_HttpGlobalLock);
+    Connection->ReceivePending = FALSE;
+    Connection->ReadingBody = FALSE;
+    if (NT_SUCCESS(Status))
+    {
+        RtlMoveMemory(Connection->Buffer + Connection->BufferLength,
+                      Connection->Buffer + Connection->ReceiveOffset,
+                      Connection->ReceiveLength);
+        Connection->BufferLength += Connection->ReceiveLength;
+        if (Connection->Finished)
+            HttpDiscardBody(Connection);
+        else if (Connection->InConnectionList)
+            HttpDeliverBody(Connection, &CompleteList);
+
+        if (HttpWantsBody(Connection))
+            Status = HttpStartBodyReceive(Connection);
+        else
+            Restart = Connection->Finished;
     }
 
-    if (ParserStatus == HPE_PAUSED && Connection->MessageComplete)
-        return HttpFinishRequest(Connection);
-    if (ParserStatus != HPE_OK)
+    if (!NT_SUCCESS(Status))
     {
-        if (Connection->ErrorStatus == 413 || Connection->ErrorStatus == 431)
-            return STATUS_BUFFER_TOO_SMALL;
-        if (Connection->ErrorStatus == 501)
-            return STATUS_NOT_SUPPORTED;
-        return STATUS_INVALID_PARAMETER;
+        InterlockedExchange(&Connection->Shutdown, TRUE);
+        if (Connection->InConnectionList)
+        {
+            HttpFlushBodyIrps(Connection, &CompleteList);
+            RemoveEntryList(&Connection->Entry);
+            Connection->InConnectionList = FALSE;
+            Removed = TRUE;
+        }
     }
-    if (!Connection->HeadersComplete && Connection->BufferLength > HTTP_MAX_HEADER_SIZE)
+    ExReleaseFastMutex(&g_HttpGlobalLock);
+
+    HttpCompleteIrpList(&CompleteList);
+    if (Status == STATUS_PENDING)
+        return;
+
+    if (Restart)
     {
-        Connection->ErrorStatus = 431;
-        return STATUS_BUFFER_TOO_SMALL;
+        HttpRestartConnection(Connection);
+        return;
     }
 
-    return HttpStartReceive(Connection);
+    if (!NT_SUCCESS(Status))
+    {
+        HttpRemoveListenerConnection(Connection);
+        HttpConnectionCloseSocket(Connection);
+    }
+    if (Removed)
+        HttpConnectionDereference(Connection);
+    HttpConnectionDereference(Connection);
 }
 
 static VOID HttpSendErrorResponse(PHTTP_CONNECTION Connection, USHORT StatusCode)
@@ -1263,9 +1413,6 @@ static VOID HttpSendErrorResponse(PHTTP_CONNECTION Connection, USHORT StatusCode
             break;
         case 404:
             Response = "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
-            break;
-        case 413:
-            Response = "HTTP/1.1 413 Content Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
             break;
         case 431:
             Response = "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
@@ -1285,14 +1432,20 @@ static VOID NTAPI HttpConnectionWorker(PDEVICE_OBJECT DeviceObject, PVOID Contex
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    if (!Connection->ReceiveStarted)
+    if (Connection->ReadingBody)
     {
-        Connection->ReceiveStarted = TRUE;
-        Status = HttpStartReceive(Connection);
+        HttpBodyReceiveCompleted(Connection);
+        return;
+    }
+
+    if (Connection->ReceivePending)
+    {
+        Connection->ReceivePending = FALSE;
+        Status = HttpReceiveCompleted(Connection);
     }
     else
     {
-        Status = HttpReceiveCompleted(Connection);
+        Status = HttpParseHeaders(Connection, 0);
     }
 
     if (Status == STATUS_PENDING)
@@ -1376,6 +1529,16 @@ static VOID NTAPI HttpTimeoutWorker(PDEVICE_OBJECT DeviceObject, PVOID Context)
             InsertTailList(&ExpiredList, &Connection->TimeoutEntry);
         }
         KeReleaseSpinLock(&Listener->PendingConnectionLock, Irql);
+    }
+    for (Entry = g_ConnectionsList.Flink; Entry != &g_ConnectionsList; Entry = Entry->Flink)
+    {
+        PHTTP_CONNECTION Connection = CONTAINING_RECORD(Entry, HTTP_CONNECTION, Entry);
+        if (!Connection->ReadingBody || Connection->TimedOut ||
+            Now - InterlockedCompareExchange(&Connection->DeadlineSeconds, 0, 0) < 0)
+            continue;
+        Connection->TimedOut = TRUE;
+        HttpConnectionReference(Connection);
+        InsertTailList(&ExpiredList, &Connection->TimeoutEntry);
     }
     ExReleaseFastMutex(&g_HttpGlobalLock);
 
@@ -1728,16 +1891,81 @@ static VOID NTAPI HttpCsqCompleteCanceledIrp(
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
+static NTSTATUS NTAPI HttpBodyCsqInsertIrp(
+    _In_ PIO_CSQ Csq,
+    _In_ PIRP Irp,
+    _In_ PVOID InsertContext)
+{
+    PHTTP_REQUEST_QUEUE Queue = CONTAINING_RECORD(Csq, HTTP_REQUEST_QUEUE, BodyCsq);
+
+    if (InsertContext)
+        InsertHeadList(&Queue->PendingBodyIrpQueue, &Irp->Tail.Overlay.ListEntry);
+    else
+        InsertTailList(&Queue->PendingBodyIrpQueue, &Irp->Tail.Overlay.ListEntry);
+    return STATUS_SUCCESS;
+}
+
+static PIRP NTAPI HttpBodyCsqPeekNextIrp(
+    _In_ PIO_CSQ Csq,
+    _In_opt_ PIRP Irp,
+    _In_opt_ PVOID PeekContext)
+{
+    PHTTP_REQUEST_QUEUE Queue = CONTAINING_RECORD(Csq, HTTP_REQUEST_QUEUE, BodyCsq);
+    PLIST_ENTRY Entry;
+
+    for (Entry = Irp ? Irp->Tail.Overlay.ListEntry.Flink : Queue->PendingBodyIrpQueue.Flink;
+         Entry != &Queue->PendingBodyIrpQueue;
+         Entry = Entry->Flink)
+    {
+        PIRP Next = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+        if (!PeekContext || Next->Tail.Overlay.DriverContext[0] == PeekContext)
+            return Next;
+    }
+
+    return NULL;
+}
+
+static VOID NTAPI HttpBodyCsqAcquireLock(
+    _In_ PIO_CSQ Csq,
+    _Out_ PKIRQL Irql)
+{
+    PHTTP_REQUEST_QUEUE Queue = CONTAINING_RECORD(Csq, HTTP_REQUEST_QUEUE, BodyCsq);
+
+    KeAcquireSpinLock(&Queue->PendingBodyIrpLock, Irql);
+}
+
+static VOID NTAPI HttpBodyCsqReleaseLock(
+    _In_ PIO_CSQ Csq,
+    _In_ KIRQL Irql)
+{
+    PHTTP_REQUEST_QUEUE Queue = CONTAINING_RECORD(Csq, HTTP_REQUEST_QUEUE, BodyCsq);
+
+    KeReleaseSpinLock(&Queue->PendingBodyIrpLock, Irql);
+}
+
 static NTSTATUS HttpInitializeRequestQueue(PHTTP_REQUEST_QUEUE Queue)
 {
+    NTSTATUS Status;
+
     KeInitializeSpinLock(&Queue->PendingIrpLock);
-    return IoCsqInitialize(&Queue->Csq,
-                           HttpCsqInsertIrp,
-                           HttpCsqRemoveIrp,
-                           HttpCsqPeekNextIrp,
-                           HttpCsqAcquireLock,
-                           HttpCsqReleaseLock,
-                           HttpCsqCompleteCanceledIrp);
+    KeInitializeSpinLock(&Queue->PendingBodyIrpLock);
+    Status = IoCsqInitialize(&Queue->Csq,
+                             HttpCsqInsertIrp,
+                             HttpCsqRemoveIrp,
+                             HttpCsqPeekNextIrp,
+                             HttpCsqAcquireLock,
+                             HttpCsqReleaseLock,
+                             HttpCsqCompleteCanceledIrp);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return IoCsqInitializeEx(&Queue->BodyCsq,
+                             HttpBodyCsqInsertIrp,
+                             HttpCsqRemoveIrp,
+                             HttpBodyCsqPeekNextIrp,
+                             HttpBodyCsqAcquireLock,
+                             HttpBodyCsqReleaseLock,
+                             HttpCsqCompleteCanceledIrp);
 }
 
 static NTSTATUS HttpReceiveRequest(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
@@ -1796,22 +2024,87 @@ static NTSTATUS HttpReceiveRequest(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     return STATUS_PENDING;
 }
 
+static BOOLEAN HttpResponseHasHeader(const char *Buffer, ULONG Length, const char *Name)
+{
+    ULONG NameLength = (ULONG)strlen(Name);
+    ULONG i;
+
+    for (i = 0; i + 1 < Length; ++i)
+    {
+        if (Buffer[i] != '\r' || Buffer[i + 1] != '\n')
+            continue;
+        if (i + 3 < Length && Buffer[i + 2] == '\r' && Buffer[i + 3] == '\n')
+            return FALSE;
+        if (Length - (i + 2) >= NameLength && !_strnicmp(Buffer + i + 2, Name, NameLength))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static NTSTATUS HttpSendResponseHeaders(
+    PHTTP_CONNECTION Connection,
+    const char *Buffer,
+    ULONG Length,
+    ULONG Flags)
+{
+    const char *Header = NULL;
+    PCHAR Response;
+    ULONG StatusLength, HeaderLength;
+    NTSTATUS Status;
+
+    if (!Connection->KeepAlive ||
+        ((Flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA) &&
+         !HttpResponseHasHeader(Buffer, Length, "Content-Length:") &&
+         !HttpResponseHasHeader(Buffer, Length, "Transfer-Encoding:")))
+        Connection->CloseAfterResponse = TRUE;
+
+    if (Connection->CloseAfterResponse)
+        Header = "Connection: close\r\n";
+    else if (!Connection->Version.MinorVersion)
+        Header = "Connection: keep-alive\r\n";
+
+    for (StatusLength = 0; StatusLength + 1 < Length; ++StatusLength)
+    {
+        if (Buffer[StatusLength] == '\r' && Buffer[StatusLength + 1] == '\n')
+            break;
+    }
+    if (!Header || StatusLength + 1 >= Length)
+        return HttpWskSendAll(Connection, Buffer, Length);
+
+    StatusLength += 2;
+    HeaderLength = (ULONG)strlen(Header);
+    Response = ExAllocatePoolWithTag(NonPagedPoolNx, Length + HeaderLength, TAG_HTTP);
+    if (!Response)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    memcpy(Response, Buffer, StatusLength);
+    memcpy(Response + StatusLength, Header, HeaderLength);
+    memcpy(Response + StatusLength + HeaderLength, Buffer + StatusLength, Length - StatusLength);
+    Status = HttpWskSendAll(Connection, Response, Length + HeaderLength);
+    ExFreePoolWithTag(Response, TAG_HTTP);
+    return Status;
+}
+
 static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     const struct http_response *Response = Irp->AssociatedIrp.SystemBuffer;
     ULONG InputLen = Stack->Parameters.DeviceIoControl.InputBufferLength;
     ULONG ResponseHeaderSize = FIELD_OFFSET(struct http_response, buffer);
+    LIST_ENTRY CompleteList;
     PHTTP_CONNECTION Conn;
-    BOOLEAN RemoveConnection = FALSE;
+    BOOLEAN Finished = FALSE, Removed = FALSE, Close = FALSE, Restart = FALSE, Drain = FALSE;
     NTSTATUS Status;
 
     if (InputLen < ResponseHeaderSize ||
         Response->len < 0 ||
         (ULONG)Response->len > InputLen - ResponseHeaderSize ||
-        (Response->response_flags & ~HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
+        (Response->response_flags &
+         ~(HTTP_SEND_RESPONSE_FLAG_MORE_DATA | HTTP_SEND_RESPONSE_FLAG_DISCONNECT)))
         return STATUS_INVALID_PARAMETER;
 
+    InitializeListHead(&CompleteList);
     ExAcquireFastMutex(&g_HttpGlobalLock);
     Conn = GetConnectionById(Response->id);
     if (!Conn || Conn->Queue != Queue ||
@@ -1825,48 +2118,82 @@ static NTSTATUS HttpSendResponse(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     ExReleaseFastMutex(&g_HttpGlobalLock);
 
     ExAcquireFastMutex(&Conn->ResponseMutex);
+    if (Response->response_flags & HTTP_SEND_RESPONSE_FLAG_DISCONNECT)
+        Conn->CloseAfterResponse = TRUE;
     if (InterlockedCompareExchange(&Conn->Shutdown, 0, 0))
     {
         Status = STATUS_CONNECTION_INVALID;
     }
     else
     {
-        Status = HttpWskSendAll(Conn, Response->buffer, (ULONG)Response->len);
-        if (NT_SUCCESS(Status))
-        {
-            Conn->ResponseStarted = TRUE;
-        }
+        if (Conn->ResponseStarted)
+            Status = HttpWskSendAll(Conn, Response->buffer, (ULONG)Response->len);
         else
-        {
-            RemoveConnection = TRUE;
-        }
+            Status = HttpSendResponseHeaders(Conn, Response->buffer, (ULONG)Response->len,
+                                             Response->response_flags);
+        if (NT_SUCCESS(Status))
+            Conn->ResponseStarted = TRUE;
+        else
+            Close = TRUE;
     }
 
-    if (NT_SUCCESS(Status) &&
-        !(Response->response_flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
-    {
-        RemoveConnection = TRUE;
-    }
+    if (Close || !(Response->response_flags & HTTP_SEND_RESPONSE_FLAG_MORE_DATA))
+        Finished = TRUE;
 
-    if (RemoveConnection)
+    if (Finished)
     {
         ExAcquireFastMutex(&g_HttpGlobalLock);
         if (Conn->InConnectionList)
         {
             RemoveEntryList(&Conn->Entry);
             Conn->InConnectionList = FALSE;
-            InterlockedExchange(&Conn->Shutdown, TRUE);
-        }
-        else
-        {
-            RemoveConnection = FALSE;
+            Removed = TRUE;
+            HttpFlushBodyIrps(Conn, &CompleteList);
+
+            if (!Close && !Conn->CloseAfterResponse && HttpInsertListenerConnection(Conn))
+            {
+                Conn->Finished = TRUE;
+                HttpConsumeHeaders(Conn);
+                HttpDiscardBody(Conn);
+                if (HttpWantsBody(Conn))
+                {
+                    HttpConnectionReference(Conn);
+                    Drain = TRUE;
+                    if (HttpStartBodyReceive(Conn) == STATUS_PENDING)
+                        Drain = FALSE;
+                    else
+                        Close = TRUE;
+                }
+                else if (!Conn->ReadingBody)
+                {
+                    HttpConnectionReference(Conn);
+                    Restart = TRUE;
+                }
+            }
+            else
+            {
+                Close = TRUE;
+            }
+
+            if (Close)
+                InterlockedExchange(&Conn->Shutdown, TRUE);
         }
         ExReleaseFastMutex(&g_HttpGlobalLock);
     }
 
     ExReleaseFastMutex(&Conn->ResponseMutex);
+    HttpCompleteIrpList(&CompleteList);
 
-    if (RemoveConnection)
+    if (Restart)
+        HttpRestartConnection(Conn);
+    if (Close && Removed)
+    {
+        HttpRemoveListenerConnection(Conn);
+        HttpConnectionCloseSocket(Conn);
+    }
+    if (Drain)
+        HttpConnectionDereference(Conn);
+    if (Removed)
         HttpConnectionDereference(Conn);
     HttpConnectionDereference(Conn);
     return Status;
@@ -1877,13 +2204,17 @@ static NTSTATUS HttpReceiveBody(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     const struct http_receive_body_params *Params = Irp->AssociatedIrp.SystemBuffer;
     ULONG InputLen = Stack->Parameters.DeviceIoControl.InputBufferLength;
-    ULONG OutputLen = Stack->Parameters.DeviceIoControl.OutputBufferLength;
+    LIST_ENTRY CompleteList;
     PHTTP_CONNECTION Conn;
+    BOOLEAN Failed = FALSE;
     NTSTATUS Status;
+    ULONG Flags;
 
     if (InputLen < sizeof(struct http_receive_body_params))
         return STATUS_INVALID_PARAMETER;
 
+    Flags = Params->flags;
+    InitializeListHead(&CompleteList);
     ExAcquireFastMutex(&g_HttpGlobalLock);
     Conn = GetConnectionById(Params->id);
     if (!Conn || Conn->Queue != Queue ||
@@ -1893,27 +2224,51 @@ static NTSTATUS HttpReceiveBody(PHTTP_REQUEST_QUEUE Queue, PIRP Irp)
         return STATUS_CONNECTION_INVALID;
     }
 
-    if (Conn->ContentLength > 0 && Conn->BufferLength > 0)
+    HttpConsumeHeaders(Conn);
+    Irp->IoStatus.Information = 0;
+    Irp->Tail.Overlay.DriverContext[0] = Conn;
+    Irp->Tail.Overlay.DriverContext[1] = (PVOID)(ULONG_PTR)Flags;
+    if (HttpCopyBody(Conn, Irp))
     {
-        ULONG ToCopy = min(Conn->ContentLength, OutputLen);
-        if (ToCopy > Conn->BufferLength)
-            ToCopy = Conn->BufferLength;
-
-        memcpy(Irp->AssociatedIrp.SystemBuffer, Conn->Buffer, ToCopy);
-        RtlMoveMemory(Conn->Buffer, Conn->Buffer + ToCopy, Conn->BufferLength - ToCopy);
-        Conn->ContentLength -= ToCopy;
-        Conn->BufferLength -= ToCopy;
-
-        Irp->IoStatus.Information = ToCopy;
-        Status = STATUS_SUCCESS;
+        Status = Irp->IoStatus.Information ? STATUS_SUCCESS : STATUS_END_OF_FILE;
+        if (HttpWantsBody(Conn))
+        {
+            HttpConnectionReference(Conn);
+            Failed = HttpStartBodyReceive(Conn) != STATUS_PENDING;
+        }
+        ExReleaseFastMutex(&g_HttpGlobalLock);
+        if (Failed)
+            HttpConnectionDereference(Conn);
+        return Status;
     }
-    else
+
+    ExAcquireFastMutex(&Queue->Mutex);
+    if (Queue->State & HTTP_QUEUE_STATE_CLOSING)
     {
-        Status = STATUS_END_OF_FILE;
+        ExReleaseFastMutex(&Queue->Mutex);
+        ExReleaseFastMutex(&g_HttpGlobalLock);
+        Irp->IoStatus.Information = 0;
+        return STATUS_FILE_CLOSED;
     }
+    IoCsqInsertIrp(&Queue->BodyCsq, Irp, NULL);
+    ExReleaseFastMutex(&Queue->Mutex);
 
+    if (HttpWantsBody(Conn))
+    {
+        HttpConnectionReference(Conn);
+        Status = HttpStartBodyReceive(Conn);
+        if (Status != STATUS_PENDING)
+        {
+            Failed = TRUE;
+            HttpFlushBodyIrps(Conn, &CompleteList);
+        }
+    }
     ExReleaseFastMutex(&g_HttpGlobalLock);
-    return Status;
+
+    HttpCompleteIrpList(&CompleteList);
+    if (Failed)
+        HttpConnectionDereference(Conn);
+    return STATUS_PENDING;
 }
 
 static NTSTATUS NTAPI HttpDispatchCreate(
@@ -1936,6 +2291,7 @@ static NTSTATUS NTAPI HttpDispatchCreate(
 
     InitializeListHead(&Queue->UrlList);
     InitializeListHead(&Queue->PendingIrpQueue);
+    InitializeListHead(&Queue->PendingBodyIrpQueue);
     ExInitializeFastMutex(&Queue->Mutex);
     {
         NTSTATUS Status = HttpInitializeRequestQueue(Queue);
@@ -1980,6 +2336,8 @@ static NTSTATUS NTAPI HttpDispatchCleanup(
         ExAcquireFastMutex(&Queue->Mutex);
         Queue->State |= HTTP_QUEUE_STATE_CLOSING;
         while ((PendingIrp = IoCsqRemoveNextIrp(&Queue->Csq, NULL)) != NULL)
+            InsertTailList(&CancelList, &PendingIrp->Tail.Overlay.ListEntry);
+        while ((PendingIrp = IoCsqRemoveNextIrp(&Queue->BodyCsq, NULL)) != NULL)
             InsertTailList(&CancelList, &PendingIrp->Tail.Overlay.ListEntry);
         ExReleaseFastMutex(&Queue->Mutex);
 
@@ -2236,7 +2594,6 @@ NTSTATUS NTAPI DriverEntry(
     g_LlhttpSettings.on_header_field_complete = HttpLlhttpOnHeaderFieldComplete;
     g_LlhttpSettings.on_header_value_complete = HttpLlhttpOnHeaderValueComplete;
     g_LlhttpSettings.on_headers_complete = HttpLlhttpOnHeadersComplete;
-    g_LlhttpSettings.on_message_complete = HttpLlhttpOnMessageComplete;
 
     InitializeObjectAttributes(&Attr, &DirName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_PERMANENT, NULL, NULL);
     Status = ZwCreateDirectoryObject(&g_HttpDirectoryHandle, DIRECTORY_ALL_ACCESS, &Attr);
