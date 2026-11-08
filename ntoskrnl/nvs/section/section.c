@@ -2840,17 +2840,43 @@ typedef struct _MI_SEGMENT_READ
     ULONG Bytes;
 } MI_SEGMENT_READ, *PMI_SEGMENT_READ;
 
+#if DBG || defined(MM_HOST_TEST)
 static
 VOID
 MiAssertPendingReads(
     _In_ PMI_SEGMENT Segment)
 {
-    UNREFERENCED_PARAMETER(Segment);
+    PLIST_ENTRY Link;
+    ULONG Count = 0;
+
     MI_ASSERT(Segment->PendingReadCount <= MI_MAX_FILE_IO_PAGES);
     MI_ASSERT((Segment->PendingReadCount == 0) == IsListEmpty(&Segment->PendingReads));
     MI_ASSERT(Segment->PendingReads.Flink->Blink == &Segment->PendingReads);
     MI_ASSERT(Segment->PendingReads.Blink->Flink == &Segment->PendingReads);
+    for (Link = Segment->PendingReads.Flink; Link != &Segment->PendingReads; Link = Link->Flink)
+    {
+        PMI_SEGMENT_READ Read = CONTAINING_RECORD(Link, MI_SEGMENT_READ, Link);
+        PLIST_ENTRY OtherLink;
+
+        Count++;
+        MI_ASSERT(Count <= Segment->PendingReadCount);
+        MI_ASSERT(Link->Flink->Blink == Link && Link->Blink->Flink == Link);
+        MI_ASSERT(Read->Segment == Segment && Read->Proto != NULL && Read->Mapping != NULL);
+        MI_ASSERT(MiSoftKind(Read->Original) == MiSoftSubsection);
+        MI_ASSERT(Read->Frame < Segment->System->Pfn.FrameCount && Read->Bytes <= PAGE_SIZE);
+        for (OtherLink = Segment->PendingReads.Flink; OtherLink != Link; OtherLink = OtherLink->Flink)
+        {
+            PMI_SEGMENT_READ Other = CONTAINING_RECORD(OtherLink, MI_SEGMENT_READ, Link);
+
+            MI_ASSERT(Other->Frame != Read->Frame);
+            MI_ASSERT(Other->Proto != Read->Proto || Other->Generation != Read->Generation);
+        }
+    }
+    MI_ASSERT(Count == Segment->PendingReadCount);
 }
+#else
+#define MiAssertPendingReads(Segment) ((VOID)0)
+#endif
 
 VOID
 MiSegmentDrainReads(
@@ -2859,6 +2885,7 @@ MiSegmentDrainReads(
 {
     BOOLEAN Pending;
 
+    MI_ASSERT(Drain->Complete != NULL);
     MI_MUTEX_ACQUIRE(&Segment->Lock);
     MiAssertPendingReads(Segment);
     MI_ASSERT(Segment->PendingReadCount != 0 || IsListEmpty(&Segment->ReadDrains));

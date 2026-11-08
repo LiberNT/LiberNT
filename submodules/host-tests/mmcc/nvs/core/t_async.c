@@ -368,7 +368,8 @@ TestAsync(void)
         ULONG Completions = 0;
         ULONG i;
 
-        CHECK(NT_SUCCESS(MiSegmentPrefetch(Segment, 20 * PAGE_SIZE, PAGE_SIZE)));
+        CHECK(NT_SUCCESS(MiSegmentPrefetch(Segment, 20 * PAGE_SIZE, 2 * PAGE_SIZE)));
+        CHECK(File.RequestCount == 2 && Segment->PendingReadCount == 2);
         for (i = 0; i < RTL_NUMBER_OF(Drains); i++)
         {
             Drains[i] = (ASYNC_DRAIN){ .Segment = Segment, .Completions = &Completions };
@@ -377,7 +378,23 @@ TestAsync(void)
             MiSegmentReference(Segment);
             MiSegmentDrainReads(Segment, &Drains[i].Drain);
         }
-        CHECK(Completions == 0 && Segment->ReferenceCount == 5);
+        CHECK(Completions == 0 && Segment->ReferenceCount == 6);
+        AsyncCompleteIrp(File.Request[1], &File);
+        File.RequestCount = 1;
+        {
+            PWORK_QUEUE_ITEM Work = AsyncWork;
+
+            CHECK(Work != NULL);
+            if (Work != NULL)
+            {
+                CHECK(Work->Next == NULL);
+                AsyncWork = Work->Next;
+                Work->Routine(Work->Context);
+            }
+        }
+        CHECK(Segment->PendingReadCount == 1 && Completions == 0 && Segment->ReferenceCount == 5);
+        CHECK(MiSegmentIsResident(Segment, 21 * PAGE_SIZE, PAGE_SIZE));
+        CHECK(!MiSegmentIsResident(Segment, 20 * PAGE_SIZE, PAGE_SIZE));
         AsyncDrain(&File);
         CHECK(Completions == 2 && Segment->ReferenceCount == 2);
         MiSegmentReference(Segment);
