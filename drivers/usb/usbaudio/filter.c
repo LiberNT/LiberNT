@@ -3022,18 +3022,10 @@ UsbAudioQueryClockRange(
 
 ULONG
 UsbAudioGetStreamingPacketRate(
+    IN PDEVICE_EXTENSION DeviceExtension,
     IN PUSB_ENDPOINT_DESCRIPTOR EndpointDescriptor)
 {
-    ULONG Interval = EndpointDescriptor->bInterval;
-
-    if (Interval == 0)
-        Interval = 1;
-
-    /* High-speed isochronous endpoints are served once per microframe. */
-    if (Interval == 1)
-        return 8000;
-
-    return 8000 / (1UL << min(Interval - 1, 3));
+    return UacPacketRate(DeviceExtension->HighSpeed, EndpointDescriptor->bInterval);
 }
 
 static
@@ -3177,7 +3169,7 @@ UsbAudioGetDataRangesUac2(
             if (!EndpointDescriptor)
                 continue;
 
-            Rate = UsbAudioGetStreamingPacketRate(EndpointDescriptor);
+            Rate = UsbAudioGetStreamingPacketRate(DeviceExtension, EndpointDescriptor);
             MaximumRate = (EndpointDescriptor->wMaxPacketSize /
                            (FormatDescriptor->bSubslotSize * StreamingInterfaceDescriptor->bNrChannels)) *
                           Rate;
@@ -3221,7 +3213,7 @@ UsbAudioGetDataRangesUac2(
             {
                 ULONG MinimumPacket;
 
-                MinimumPacket = UacDescMinDataWMaxPacket(TRUE,
+                MinimumPacket = UacDescMinDataWMaxPacket(DeviceExtension->HighSpeed,
                                                          DataEndpoint->bInterval,
                                                          MaximumRate,
                                                          StreamingInterfaceDescriptor->bNrChannels,

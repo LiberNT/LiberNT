@@ -699,7 +699,7 @@ UsbAudioInitializePinStreaming(
                                                        Pin->DataFlow);
     if (EndpointDescriptor)
     {
-        PinContext->PacketRate = UsbAudioGetStreamingPacketRate(EndpointDescriptor);
+        PinContext->PacketRate = UsbAudioGetStreamingPacketRate(DeviceExtension, EndpointDescriptor);
         PinContext->FeedbackInterval = EndpointDescriptor->bInterval;
     }
 
@@ -1066,7 +1066,7 @@ UsbAudioGetRenderPacketSize(
 
     Feedback = PinContext->FeedbackValue;
 
-    if (Feedback && PinContext->PacketRate >= 8000)
+    if (Feedback && PinContext->DeviceExtension->HighSpeed)
     {
         ULONG NominalFrames = WaveFormat->nSamplesPerSec / PinContext->PacketRate;
         ULONG FeedbackFrames = (ULONG)(Feedback >> 16);
@@ -1651,7 +1651,7 @@ UsbAudioFeedbackComplete(
 
             Buffer = (PUCHAR)PinContext->FeedbackBuffer + Packet->Offset;
 
-            if (PinContext->PacketRate >= 8000)
+            if (PinContext->DeviceExtension->HighSpeed)
             {
                 Value = ((ULONG)Buffer[0]) |
                         ((ULONG)Buffer[1] << 8) |
@@ -1703,7 +1703,7 @@ UsbAudioSubmitFeedbackRequest(
     }
 
     Urb = PinContext->FeedbackUrb;
-    Length = (PinContext->PacketRate >= 8000) ? 4 : 3;
+    Length = PinContext->DeviceExtension->HighSpeed ? 4 : 3;
 
     RtlZeroMemory(Urb, GET_ISO_URB_SIZE(FEEDBACK_PACKET_COUNT));
     Urb->UrbIsochronousTransfer.Hdr.Function = URB_FUNCTION_ISOCH_TRANSFER;

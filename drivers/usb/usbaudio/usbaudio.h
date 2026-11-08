@@ -12,6 +12,7 @@
 
 #include "uac/uac_feedback.h"
 #include "uac/uac_desc_validate.h"
+#include "uac/uac_stream.h"
 
 #define USBAUDIO_TAG 'AbsU'
 
@@ -598,6 +599,7 @@ typedef struct _DEVICE_EXTENSION
     ULONG QuirkFlags;                           /* active quirk flags */
     BOOLEAN ControlPathBroken;
     volatile LONG StreamingPins;
+    BOOLEAN HighSpeed;
     BOOLEAN HasMidiInterface;
     BOOLEAN HasFeedbackEndpoint;
     USBD_PIPE_HANDLE FeedbackPipeHandle;         /* async feedback pipe */
@@ -676,6 +678,7 @@ UsbAudioGetTerminalClockId(
 
 ULONG
 UsbAudioGetStreamingPacketRate(
+    _In_ PDEVICE_EXTENSION DeviceExtension,
     _In_ PUSB_ENDPOINT_DESCRIPTOR EndpointDescriptor);
 
 NTSTATUS
