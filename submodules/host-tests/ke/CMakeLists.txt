@@ -9,3 +9,18 @@ add_custom_command(OUTPUT ${XSTATE_TEST_SOURCE}
     VERBATIM)
 add_executable(ke_xstate_layout ${XSTATE_TEST_SOURCE})
 add_test(NAME ke.xstate_layout COMMAND ke_xstate_layout)
+
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    find_program(KE_ARM64_CLANG NAMES clang)
+    find_program(KE_ARM64_LD NAMES ld.lld)
+    find_program(KE_ARM64_QEMU NAMES qemu-aarch64)
+    find_program(KE_ARM64_NM NAMES llvm-nm)
+    find_program(KE_ARM64_OBJDUMP NAMES llvm-objdump)
+    if(Python3_Interpreter_FOUND AND KE_ARM64_CLANG AND KE_ARM64_LD AND KE_ARM64_QEMU AND KE_ARM64_NM AND KE_ARM64_OBJDUMP)
+        add_test(NAME ke.arm64_atomic COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/arm64-atomic-test.py
+            --source ${REACTOS_HOST_SOURCE_ROOT}/ntoskrnl/ke/arm64/rtlshim.c
+            --clang ${KE_ARM64_CLANG} --ld ${KE_ARM64_LD} --qemu ${KE_ARM64_QEMU}
+            --nm ${KE_ARM64_NM} --objdump ${KE_ARM64_OBJDUMP})
+    endif()
+endif()

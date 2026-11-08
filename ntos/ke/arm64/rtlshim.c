@@ -49,14 +49,18 @@ __atomic_load_16(
     _In_ int MemoryOrder)
 {
     ULONGLONG Low, High;
+    ULONG Status;
 
     UNREFERENCED_PARAMETER(MemoryOrder);
 
-    __asm__ __volatile__("ldaxp %0, %1, [%2]"
-                         : "=&r"(Low), "=&r"(High)
-                         : "r"(Source)
-                         : "memory");
-    __asm__ __volatile__("clrex" ::: "memory");
+    do
+    {
+        __asm__ __volatile__("ldaxp %0, %1, [%3]\n\t"
+                             "stlxp %w2, %0, %1, [%3]"
+                             : "=&r"(Low), "=&r"(High), "=&r"(Status)
+                             : "r"(Source)
+                             : "memory");
+    } while (Status != 0);
 
     return ((__uint128_t)High << 64) | (__uint128_t)Low;
 }
@@ -74,52 +78,37 @@ __atomic_compare_exchange_16(
     ULONGLONG DesiredLow, DesiredHigh;
     ULONGLONG OldLow, OldHigh;
     ULONG Status;
-    ULONG Retries = 1 << 20; /* bounded retries to avoid livelock on MMIO/shared lines */
 
     UNREFERENCED_PARAMETER(Weak);
     UNREFERENCED_PARAMETER(SuccessOrder);
     UNREFERENCED_PARAMETER(FailureOrder);
 
-    /* Match GCC's libatomic semantics (strong CAS); always use acq-rel here. */
     ExpectedLow = ((volatile ULONGLONG *)Expected)[0];
     ExpectedHigh = ((volatile ULONGLONG *)Expected)[1];
-
     DesiredLow = (ULONGLONG)Desired;
     DesiredHigh = (ULONGLONG)(Desired >> 64);
 
     for (;;)
     {
-        __asm__ __volatile__("ldaxp %0, %1, [%2]"
-                             : "=&r"(OldLow), "=&r"(OldHigh)
-                             : "r"(Destination)
-                             : "memory");
-
-        if ((OldLow != ExpectedLow) || (OldHigh != ExpectedHigh))
-        {
-            ((volatile ULONGLONG *)Expected)[0] = OldLow;
-            ((volatile ULONGLONG *)Expected)[1] = OldHigh;
-            __asm__ __volatile__("clrex" ::: "memory");
-            return 0;
-        }
-
-        __asm__ __volatile__("stlxp %w0, %1, %2, [%3]"
-                             : "=&r"(Status)
-                             : "r"(DesiredLow), "r"(DesiredHigh), "r"(Destination)
-                             : "memory");
-
-        if (Status == 0)
-        {
+        __asm__ __volatile__("ldaxp %0, %1, [%3]\n\t"
+                             "cmp %0, %4\n\t"
+                             "ccmp %1, %5, #0, eq\n\t"
+                             "b.ne 1f\n\t"
+                             "stlxp %w2, %6, %7, [%3]\n\t"
+                             "b 2f\n"
+                             "1: stlxp %w2, %0, %1, [%3]\n"
+                             "2:"
+                             : "=&r"(OldLow), "=&r"(OldHigh), "=&r"(Status)
+                             : "r"(Destination), "r"(ExpectedLow), "r"(ExpectedHigh),
+                               "r"(DesiredLow), "r"(DesiredHigh)
+                             : "cc", "memory");
+        if (Status != 0)
+            continue;
+        if (OldLow == ExpectedLow && OldHigh == ExpectedHigh)
             return 1;
-        }
-
-        if (--Retries == 0)
-        {
-            __asm__ __volatile__("clrex" ::: "memory");
-            DPRINT1("__atomic_compare_exchange_16: retry budget exhausted for %p\n", Destination);
-            ((volatile ULONGLONG *)Expected)[0] = OldLow;
-            ((volatile ULONGLONG *)Expected)[1] = OldHigh;
-            return 0;
-        }
+        ((volatile ULONGLONG *)Expected)[0] = OldLow;
+        ((volatile ULONGLONG *)Expected)[1] = OldHigh;
+        return 0;
     }
 }
 #endif
