@@ -37,6 +37,32 @@
 #define OSL_INSTALL_ATTEMPTS   2
 #define OSL_INSTALL_MARGIN     (64ULL * 1024 * 1024)
 #define OSL_INSTALL_RECORD     4096
+#define OSL_INSTALL_UNDO_DIR   "Rollback\\"
+#define OSL_INSTALL_UNDO_LIST  "Rollback\\rollback.lst"
+#define OSL_INSTALL_UNDO_HEAD  "; LiberNT rollback "
+#define OSL_INSTALL_UNDO_END   "; end"
+#define OSL_INSTALL_UNDO_LINE  (OSL_INSTALL_PATH_CHARS + 16)
+#define OSL_INSTALL_UNDO_GROW  0x10000
+#define OSL_INSTALL_UNDONE     "rolledback"
+#define OSL_INSTALL_STAGE_KEY  "Stage="
+
+typedef enum _OSL_INSTALL_PASS
+{
+    OslPassPlan,
+    OslPassBackup,
+    OslPassWrite
+} OSL_INSTALL_PASS;
+
+static const PCSTR OslInstallHives[] =
+{
+    "system32\\config\\SYSTEM",
+    "system32\\config\\SOFTWARE",
+    "system32\\config\\DEFAULT",
+    "system32\\config\\SAM",
+    "system32\\config\\SECURITY"
+};
+
+static const PCSTR OslInstallHiveLogs[] = { "", ".LOG1", ".LOG2" };
 
 typedef struct _OSL_NAME
 {
@@ -100,9 +126,19 @@ typedef struct _OSL_INSTALL
     ULONGLONG TotalBytes;
     ULONGLONG DoneBytes;
     ULONG Percent;
+    PCWSTR Activity;
     ULONG Written;
     ULONG Removed;
     ULONG Failed;
+    CHAR StageRoot[OSL_INSTALL_PATH_CHARS];
+    OSL_NAME_SET Backups;
+    PSTR Undo;
+    ULONG UndoLength;
+    ULONG UndoCapacity;
+    ULONG BackupCount;
+    ULONGLONG BackupBytes;
+    BOOLEAN DropObsolete;
+    BOOLEAN UndoReady;
 } OSL_INSTALL, *POSL_INSTALL;
 
 static
@@ -670,7 +706,7 @@ OslAdvance(
     if (Percent != Install->Percent)
     {
         Install->Percent = Percent;
-        FwPrint(L"\rInstalling LiberNT... %lu%%", Percent);
+        FwPrint(L"\r%s... %lu%%", Install->Activity, Percent);
     }
 }
 
@@ -759,6 +795,339 @@ OslWriteFromImage(
 }
 
 static
+BOOLEAN
+OslFail(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Stage,
+    _In_ NTSTATUS Status)
+{
+    Install->Stage = Stage;
+    Install->Result = Status;
+    return FALSE;
+}
+
+static
+BOOLEAN
+OslIsAbsent(
+    _In_ NTSTATUS Status)
+{
+    return Status == STATUS_NOT_FOUND || Status == STATUS_OBJECT_NAME_NOT_FOUND ||
+           Status == STATUS_OBJECT_PATH_NOT_FOUND;
+}
+
+static
+NTSTATUS
+OslLoadVolumeFile(
+    _In_z_ PCSTR Path,
+    _Outptr_result_maybenull_ PUCHAR* Data,
+    _Out_ PULONG Size)
+{
+    ULONGLONG FileSize;
+    BOOLEAN IsDirectory;
+    PVOID File;
+    ULONG Offset, Chunk, Read;
+    NTSTATUS Status;
+
+    *Data = NULL;
+    *Size = 0;
+    Status = NtfsBlOpenFile(Path, &File, &FileSize, &IsDirectory);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (IsDirectory)
+        Status = STATUS_FILE_IS_A_DIRECTORY;
+    else if (FileSize > MAXULONG)
+        Status = STATUS_FILE_TOO_LARGE;
+    else if (!(*Data = FwAllocatePages(max((ULONG)FileSize, 1))))
+        Status = STATUS_NO_MEMORY;
+
+    for (Offset = 0; NT_SUCCESS(Status) && Offset < (ULONG)FileSize; Offset += Chunk)
+    {
+        Chunk = min((ULONG)FileSize - Offset, OSL_INSTALL_CHUNK);
+        Status = NtfsBlReadFileAt(File, Offset, *Data + Offset, Chunk, &Read);
+        if (NT_SUCCESS(Status) && Read != Chunk)
+            Status = STATUS_END_OF_FILE;
+    }
+    NtfsBlCloseFile(File);
+
+    if (!NT_SUCCESS(Status) && *Data)
+    {
+        FwFreePages(*Data, max((ULONG)FileSize, 1));
+        *Data = NULL;
+    }
+    if (NT_SUCCESS(Status))
+        *Size = (ULONG)FileSize;
+    return Status;
+}
+
+static
+BOOLEAN
+OslStagePath(
+    _In_ POSL_INSTALL Install,
+    _In_z_ PCSTR Relative,
+    _Out_writes_z_(OSL_INSTALL_PATH_CHARS) PSTR Path)
+{
+    return NT_SUCCESS(RtlStringCchPrintfA(Path, OSL_INSTALL_PATH_CHARS, "%s%s", Install->StageRoot, Relative));
+}
+
+static
+BOOLEAN
+OslBackupPath(
+    _In_ POSL_INSTALL Install,
+    _In_ ULONG Index,
+    _Out_writes_z_(OSL_INSTALL_PATH_CHARS) PSTR Path)
+{
+    return NT_SUCCESS(RtlStringCchPrintfA(Path, OSL_INSTALL_PATH_CHARS, "%s%s%08lu",
+                                          Install->StageRoot, OSL_INSTALL_UNDO_DIR, Index));
+}
+
+static
+VOID
+OslUndoHead(
+    _In_ POSL_INSTALL Install,
+    _Out_writes_z_(OSL_INSTALL_UNDO_LINE) PSTR Head)
+{
+    static const CHAR Digits[] = "0123456789abcdef";
+    SIZE_T Length;
+    ULONG i;
+
+    RtlStringCchCopyA(Head, OSL_INSTALL_UNDO_LINE, OSL_INSTALL_UNDO_HEAD);
+    Length = strlen(Head);
+    for (i = 0; i < BL_SHA256_SIZE; i++)
+    {
+        Head[Length++] = Digits[Install->Hash[i] >> 4];
+        Head[Length++] = Digits[Install->Hash[i] & 0xF];
+    }
+    Head[Length] = ANSI_NULL;
+}
+
+static
+BOOLEAN
+OslAppendUndo(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Line)
+{
+    ULONG Length = (ULONG)strlen(Line), Needed, Capacity;
+    PSTR Text;
+
+    Needed = Install->UndoLength + Length + 3;
+    if (Needed > Install->UndoCapacity)
+    {
+        Capacity = max(max(Install->UndoCapacity * 2, Needed), OSL_INSTALL_UNDO_GROW);
+        Text = FwAllocate(Capacity);
+        if (!Text)
+            return FALSE;
+        if (Install->Undo)
+        {
+            RtlCopyMemory(Text, Install->Undo, Install->UndoLength);
+            FwFree(Install->Undo);
+        }
+        Install->Undo = Text;
+        Install->UndoCapacity = Capacity;
+    }
+
+    RtlCopyMemory(Install->Undo + Install->UndoLength, Line, Length);
+    Install->UndoLength += Length;
+    Install->Undo[Install->UndoLength++] = '\r';
+    Install->Undo[Install->UndoLength++] = '\n';
+    Install->Undo[Install->UndoLength] = ANSI_NULL;
+    return TRUE;
+}
+
+static
+BOOLEAN
+OslRecordBackup(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Target,
+    _In_ ULONG Index)
+{
+    CHAR Line[OSL_INSTALL_UNDO_LINE];
+    POSL_NAME Name;
+    NTSTATUS Status;
+
+    if (Index)
+        Status = RtlStringCbPrintfA(Line, sizeof(Line), "R %08lu %s", Index, Target);
+    else
+        Status = RtlStringCbPrintfA(Line, sizeof(Line), "D %s", Target);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Name = OslAddName(&Install->Backups, Target);
+    if (!Name)
+        return FALSE;
+    Name->Block = Index;
+    return OslAppendUndo(Install, Line);
+}
+
+static
+BOOLEAN
+OslParseUndoLine(
+    _In_z_ PCSTR Line,
+    _Out_ PULONG Index,
+    _Out_ PCSTR* Target)
+{
+    ULONG i, Value = 0;
+
+    if (Line[0] == 'D' && Line[1] == ' ' && Line[2] != ANSI_NULL)
+    {
+        *Index = 0;
+        *Target = Line + 2;
+        return TRUE;
+    }
+    if (Line[0] != 'R' || Line[1] != ' ')
+        return FALSE;
+
+    for (i = 2; i < 10; i++)
+    {
+        if (Line[i] < '0' || Line[i] > '9')
+            return FALSE;
+        Value = Value * 10 + (Line[i] - '0');
+    }
+    if (Value == 0 || Line[10] != ' ' || Line[11] == ANSI_NULL)
+        return FALSE;
+
+    *Index = Value;
+    *Target = Line + 11;
+    return TRUE;
+}
+
+static
+BOOLEAN
+OslLoadUndo(
+    _Inout_ POSL_INSTALL Install)
+{
+    CHAR Path[OSL_INSTALL_PATH_CHARS], Line[OSL_INSTALL_UNDO_LINE], Head[OSL_INSTALL_UNDO_LINE];
+    BOOLEAN Valid, Ended = FALSE;
+    PCSTR Cursor, Target;
+    POSL_NAME Name;
+    ULONG Index, Size;
+    PSTR Text;
+
+    if (!OslStagePath(Install, OSL_INSTALL_UNDO_LIST, Path))
+        return FALSE;
+    Text = OslReadVolumeFile(Path, &Size);
+    if (!Text)
+        return FALSE;
+
+    OslUndoHead(Install, Head);
+    Cursor = Text;
+    Valid = OslReadLine(&Cursor, Line, sizeof(Line)) && strcmp(Line, Head) == 0;
+    while (Valid && !Ended && OslReadLine(&Cursor, Line, sizeof(Line)))
+    {
+        if (strcmp(Line, OSL_INSTALL_UNDO_END) == 0)
+        {
+            Ended = TRUE;
+        }
+        else if (!OslParseUndoLine(Line, &Index, &Target) || !(Name = OslAddName(&Install->Backups, Target)))
+        {
+            Valid = FALSE;
+        }
+        else
+        {
+            Name->Block = Index;
+            Install->BackupCount = max(Install->BackupCount, Index);
+        }
+    }
+
+    if (!Valid || !Ended)
+    {
+        FwFree(Text);
+        OslFreeNames(&Install->Backups);
+        Install->BackupCount = 0;
+        return FALSE;
+    }
+
+    if (Install->Undo)
+        FwFree(Install->Undo);
+    Install->Undo = Text;
+    Install->UndoLength = Size;
+    Install->UndoCapacity = Size + 1;
+    return TRUE;
+}
+
+static
+VOID
+OslBackupTarget(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Target)
+{
+    CHAR Path[OSL_INSTALL_PATH_CHARS];
+    PUCHAR Data;
+    ULONG Size;
+    NTSTATUS Status;
+
+    if (OslFindName(&Install->Backups, Target))
+        return;
+
+    Status = OslLoadVolumeFile(Target, &Data, &Size);
+    if (OslIsAbsent(Status))
+    {
+        Status = OslRecordBackup(Install, Target, 0) ? STATUS_SUCCESS : STATUS_NO_MEMORY;
+    }
+    else if (Status == STATUS_FILE_IS_A_DIRECTORY)
+    {
+        return;
+    }
+    else if (NT_SUCCESS(Status))
+    {
+        if (!OslBackupPath(Install, Install->BackupCount + 1, Path))
+            Status = STATUS_NAME_TOO_LONG;
+        else
+            Status = OslWriteVerified(Install, Path, Data, Size);
+        if (NT_SUCCESS(Status) && !OslRecordBackup(Install, Target, ++Install->BackupCount))
+            Status = STATUS_NO_MEMORY;
+        FwFreePages(Data, max(Size, 1));
+        OslAdvance(Install, Size);
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        FwPrint(L"\r\nINSTALL: %hs could not be saved (0x%08lx).\r\n", Target, Status);
+        Install->Failed++;
+        if (NT_SUCCESS(Install->Result))
+            Install->Result = Status;
+    }
+}
+
+static
+BOOLEAN
+OslHivePath(
+    _In_ POSL_INSTALL Install,
+    _In_ ULONG Index,
+    _Out_writes_z_(OSL_INSTALL_PATH_CHARS) PSTR Path)
+{
+    return NT_SUCCESS(RtlStringCchPrintfA(Path, OSL_INSTALL_PATH_CHARS, "%s%s%s", Install->SystemRoot,
+                                          OslInstallHives[Index / RTL_NUMBER_OF(OslInstallHiveLogs)],
+                                          OslInstallHiveLogs[Index % RTL_NUMBER_OF(OslInstallHiveLogs)]));
+}
+
+static
+BOOLEAN
+OslOriginalPath(
+    _In_ POSL_INSTALL Install,
+    _In_z_ PCSTR Path,
+    _Out_writes_z_(OSL_INSTALL_PATH_CHARS) PSTR Original)
+{
+    POSL_NAME Name = OslFindName(&Install->Backups, Path);
+
+    if (!Name)
+        return NT_SUCCESS(RtlStringCchCopyA(Original, OSL_INSTALL_PATH_CHARS, Path));
+    return Name->Block != 0 && OslBackupPath(Install, Name->Block, Original);
+}
+
+static
+BOOLEAN
+OslSameOriginalFiles(
+    _In_ POSL_INSTALL Install,
+    _In_z_ PCSTR First,
+    _In_z_ PCSTR Second)
+{
+    CHAR A[OSL_INSTALL_PATH_CHARS], B[OSL_INSTALL_PATH_CHARS];
+
+    return OslOriginalPath(Install, First, A) && OslOriginalPath(Install, Second, B) && OslSameVolumeFiles(A, B);
+}
+
+static
 ULONGLONG
 OslClusters(
     _In_ POSL_INSTALL Install,
@@ -785,13 +1154,40 @@ OslPlanFile(
     if (NT_SUCCESS(NtfsBlOpenFile(Target, &Handle, &Existing, &IsDirectory)))
     {
         if (!IsDirectory)
+        {
             Install->Growth -= (LONGLONG)OslClusters(Install, Existing);
+            if (!Install->UndoReady)
+            {
+                Install->TotalBytes += Existing;
+                Install->BackupBytes += OslClusters(Install, Existing) + OSL_INSTALL_RECORD;
+            }
+        }
         NtfsBlCloseFile(Handle);
     }
     else
     {
         Install->Growth += OSL_INSTALL_RECORD;
     }
+}
+
+static
+VOID
+OslPlanBackup(
+    _Inout_ POSL_INSTALL Install,
+    _In_z_ PCSTR Target)
+{
+    ULONGLONG Existing;
+    BOOLEAN IsDirectory;
+    PVOID Handle;
+
+    if (Install->UndoReady || !NT_SUCCESS(NtfsBlOpenFile(Target, &Handle, &Existing, &IsDirectory)))
+        return;
+    if (!IsDirectory)
+    {
+        Install->TotalBytes += Existing;
+        Install->BackupBytes += OslClusters(Install, Existing) + OSL_INSTALL_RECORD;
+    }
+    NtfsBlCloseFile(Handle);
 }
 
 static
@@ -812,7 +1208,8 @@ OslCountLines(
 static
 VOID
 OslRemoveObsolete(
-    _Inout_ POSL_INSTALL Install)
+    _Inout_ POSL_INSTALL Install,
+    _In_ OSL_INSTALL_PASS Pass)
 {
     CHAR Line[OSL_INSTALL_PATH_CHARS], Name[OSL_INSTALL_PATH_CHARS], Target[OSL_INSTALL_PATH_CHARS];
     PCSTR Cursor = Install->OldText, Start, *Lines;
@@ -839,6 +1236,19 @@ OslRemoveObsolete(
             continue;
         }
 
+        if (Pass == OslPassPlan)
+        {
+            if (!Directory)
+                OslPlanBackup(Install, Target);
+            continue;
+        }
+        if (Pass == OslPassBackup)
+        {
+            if (!Directory)
+                OslBackupTarget(Install, Target);
+            continue;
+        }
+
         Status = NtfsBlDeleteFile(Target, Directory);
         if (NT_SUCCESS(Status))
             Install->Removed++;
@@ -852,7 +1262,7 @@ static
 VOID
 OslInstallFiles(
     _Inout_ POSL_INSTALL Install,
-    _In_ BOOLEAN Write)
+    _In_ OSL_INSTALL_PASS Pass)
 {
     CHAR Line[OSL_INSTALL_PATH_CHARS], Name[OSL_INSTALL_PATH_CHARS], Target[OSL_INSTALL_PATH_CHARS];
     PCSTR Cursor = Install->NewText;
@@ -870,7 +1280,8 @@ OslInstallFiles(
 
         if (Directory)
         {
-            Status = Write ? NtfsBlCreateDirectory(Target) : STATUS_SUCCESS;
+            /* TODO: directories the update creates are kept when the update is rolled back */
+            Status = Pass == OslPassWrite ? NtfsBlCreateDirectory(Target) : STATUS_SUCCESS;
             if (!NT_SUCCESS(Status))
             {
                 FwPrint(L"\r\nINSTALL: %hs could not be created (0x%08lx).\r\n", Target, Status);
@@ -878,7 +1289,7 @@ OslInstallFiles(
                 if (NT_SUCCESS(Install->Result))
                     Install->Result = Status;
             }
-            else if (!Write)
+            else if (Pass == OslPassPlan)
             {
                 Install->Growth += OSL_INSTALL_RECORD;
             }
@@ -896,8 +1307,10 @@ OslInstallFiles(
             continue;
         }
 
-        if (Write)
+        if (Pass == OslPassWrite)
             OslWriteFromImage(Install, File, Target);
+        else if (Pass == OslPassBackup)
+            OslBackupTarget(Install, Target);
         else
             OslPlanFile(Install, File, Target);
     }
@@ -906,7 +1319,8 @@ OslInstallFiles(
 static
 VOID
 OslInstallComputerFiles(
-    _Inout_ POSL_INSTALL Install)
+    _Inout_ POSL_INSTALL Install,
+    _In_ OSL_INSTALL_PASS Pass)
 {
     POSL_COMPUTER_FILE Computer;
     POSL_NAME File;
@@ -918,9 +1332,205 @@ OslInstallComputerFiles(
         File = Computer->Installed ? OslFindName(&Install->Files, Computer->Media) : NULL;
         if (!File || File->Directory)
             continue;
+        if (Pass == OslPassPlan)
+        {
+            OslPlanFile(Install, File, Computer->Target);
+            continue;
+        }
+        if (Pass == OslPassBackup)
+        {
+            OslBackupTarget(Install, Computer->Target);
+            continue;
+        }
         FwPrint(L"\r\nINSTALL: %hs from %hs\r\n", Computer->Target, Computer->Media);
         OslWriteFromImage(Install, File, Computer->Target);
     }
+}
+
+static
+VOID
+OslBackupSystem(
+    _Inout_ POSL_INSTALL Install,
+    _In_ OSL_INSTALL_PASS Pass)
+{
+    CHAR Path[OSL_INSTALL_PATH_CHARS];
+    ULONG i;
+
+    if (Install->DropObsolete)
+        OslRemoveObsolete(Install, Pass);
+    OslInstallFiles(Install, Pass);
+    OslInstallComputerFiles(Install, Pass);
+
+    for (i = 0; i < RTL_NUMBER_OF(OslInstallHives) * RTL_NUMBER_OF(OslInstallHiveLogs); i++)
+    {
+        if (!OslHivePath(Install, i, Path))
+            continue;
+        if (Pass == OslPassPlan)
+            OslPlanBackup(Install, Path);
+        else
+            OslBackupTarget(Install, Path);
+    }
+    if (Pass == OslPassPlan)
+        OslPlanBackup(Install, Install->InventoryPath);
+    else
+        OslBackupTarget(Install, Install->InventoryPath);
+}
+
+static
+BOOLEAN
+OslSaveUndo(
+    _Inout_ POSL_INSTALL Install)
+{
+    CHAR Path[OSL_INSTALL_PATH_CHARS], Head[OSL_INSTALL_UNDO_LINE];
+    NTSTATUS Status;
+
+    OslFreeNames(&Install->Backups);
+    Install->BackupCount = 0;
+    Install->UndoLength = 0;
+    Install->Stage = "backup";
+    OslUndoHead(Install, Head);
+    if (!OslStagePath(Install, OSL_INSTALL_UNDO_LIST, Path) || !OslAppendUndo(Install, Head))
+        return OslFail(Install, "backup", STATUS_NO_MEMORY);
+
+    OslBackupSystem(Install, OslPassBackup);
+    if (Install->Failed)
+    {
+        FwPrint(L"\r\nINSTALL: %lu files of the installed system could not be saved; starting the installed system.\r\n",
+                Install->Failed);
+        return FALSE;
+    }
+
+    if (!OslAppendUndo(Install, OSL_INSTALL_UNDO_END))
+        return OslFail(Install, "backup", STATUS_NO_MEMORY);
+    Status = OslWriteVerified(Install, Path, (const UCHAR*)Install->Undo, Install->UndoLength);
+    if (!NT_SUCCESS(Status))
+    {
+        FwPrint(L"\r\nINSTALL: the list of saved files could not be written (0x%08lx); starting the installed system.\r\n",
+                Status);
+        return OslFail(Install, "backup", Status);
+    }
+
+    Install->UndoReady = TRUE;
+    FwPrint(L"\r\nINSTALL: %lu files of the installed system saved for a rollback.\r\n", Install->BackupCount);
+    return TRUE;
+}
+
+static
+VOID
+OslRestoreFiles(
+    _Inout_ POSL_INSTALL Install)
+{
+    CHAR Line[OSL_INSTALL_UNDO_LINE], Path[OSL_INSTALL_PATH_CHARS];
+    PCSTR Cursor, Target;
+    PUCHAR Data;
+    ULONG Index, Size;
+    NTSTATUS Status;
+
+    for (Cursor = Install->Undo; OslReadLine(&Cursor, Line, sizeof(Line)); )
+    {
+        if (!OslParseUndoLine(Line, &Index, &Target))
+            continue;
+
+        if (Index == 0)
+        {
+            Status = NtfsBlDeleteFile(Target, FALSE);
+            if (NT_SUCCESS(Status))
+                Install->Removed++;
+            else if (OslIsAbsent(Status))
+                Status = STATUS_SUCCESS;
+        }
+        else if (!OslBackupPath(Install, Index, Path))
+        {
+            Status = STATUS_NAME_TOO_LONG;
+        }
+        else
+        {
+            Status = OslLoadVolumeFile(Path, &Data, &Size);
+            if (NT_SUCCESS(Status))
+            {
+                Status = OslWriteVerified(Install, Target, Data, Size);
+                FwFreePages(Data, max(Size, 1));
+            }
+            if (NT_SUCCESS(Status))
+                Install->Written++;
+        }
+
+        OslAdvance(Install, 1);
+        if (!NT_SUCCESS(Status))
+        {
+            FwPrint(L"\r\nINSTALL: %hs could not be restored (0x%08lx).\r\n", Target, Status);
+            Install->Failed++;
+            if (NT_SUCCESS(Install->Result))
+                Install->Result = Status;
+        }
+    }
+}
+
+static
+VOID
+OslUndoInstall(
+    _Inout_ POSL_INSTALL Install)
+{
+    NTSTATUS Status;
+
+    if (!OslLoadUndo(Install))
+    {
+        FwPrint(L"INSTALL: the update changed no file of the installed system; starting it.\r\n");
+        Install->Stage = OSL_INSTALL_UNDONE;
+        return;
+    }
+
+    Status = NtfsBlSetDirty(TRUE);
+    if (!NT_SUCCESS(Status))
+    {
+        FwPrint(L"INSTALL: the system volume could not be marked for checking (0x%08lx).\r\n", Status);
+        OslFail(Install, "rollback", Status);
+        return;
+    }
+
+    FwPrint(L"INSTALL: the update did not finish; restoring the %lu files it changed.\r\n", Install->Backups.Count);
+    Install->Stage = "rollback";
+    Install->Activity = L"Restoring the previous LiberNT";
+    Install->TotalBytes = Install->Backups.Count;
+    OslRestoreFiles(Install);
+
+    if (Install->Failed == 0)
+    {
+        Status = NtfsBlSetDirty(FALSE);
+        if (!NT_SUCCESS(Status))
+            FwPrint(L"\r\nINSTALL: the system volume stays marked for checking (0x%08lx).\r\n", Status);
+        Install->Stage = OSL_INSTALL_UNDONE;
+        FwPrint(L"\r\nINSTALL: the previous system was restored, %lu files written, %lu removed.\r\n",
+                Install->Written, Install->Removed);
+    }
+    else
+    {
+        FwPrint(L"\r\nINSTALL: %lu files could not be restored; the next start tries again.\r\n", Install->Failed);
+    }
+}
+
+static
+BOOLEAN
+OslWasUndone(
+    _In_ POSL_INSTALL Install)
+{
+    CHAR Path[OSL_INSTALL_PATH_CHARS], Line[OSL_INSTALL_NAME_CHARS];
+    BOOLEAN Undone = FALSE;
+    PCSTR Cursor;
+    PSTR Text;
+    ULONG Size;
+
+    if (!OslStagePath(Install, OSL_INSTALL_STATUS, Path))
+        return FALSE;
+    Text = OslReadVolumeFile(Path, &Size);
+    for (Cursor = Text; Cursor && OslReadLine(&Cursor, Line, sizeof(Line)); )
+    {
+        if (_stricmp(Line, OSL_INSTALL_STAGE_KEY OSL_INSTALL_UNDONE) == 0)
+            Undone = TRUE;
+    }
+    if (Text)
+        FwFree(Text);
+    return Undone;
 }
 
 static
@@ -1038,18 +1648,6 @@ OslInventoryImage(
 
 static
 BOOLEAN
-OslFail(
-    _Inout_ POSL_INSTALL Install,
-    _In_z_ PCSTR Stage,
-    _In_ NTSTATUS Status)
-{
-    Install->Stage = Stage;
-    Install->Result = Status;
-    return FALSE;
-}
-
-static
-BOOLEAN
 OslParseHash(
     _In_z_ PCSTR Text,
     _Out_writes_bytes_(BL_SHA256_SIZE) PUCHAR Hash)
@@ -1123,7 +1721,7 @@ OslPreflight(
     if (!NT_SUCCESS(Status))
         return OslFail(Install, "space", Status);
 
-    OslInstallFiles(Install, FALSE);
+    OslBackupSystem(Install, OslPassPlan);
     if (Install->Missing)
     {
         FwPrint(L"INSTALL: %lu files of the inventory are missing from the image; starting the installed system.\r\n",
@@ -1131,7 +1729,7 @@ OslPreflight(
         return OslFail(Install, "missing", STATUS_OBJECT_NAME_NOT_FOUND);
     }
 
-    Needed = (Install->Growth > 0 ? (ULONGLONG)Install->Growth : 0) + OSL_INSTALL_MARGIN;
+    Needed = (Install->Growth > 0 ? (ULONGLONG)Install->Growth : 0) + Install->BackupBytes + OSL_INSTALL_MARGIN;
     FwPrint(L"INSTALL: %I64u MB to write, %I64u MB needed, %I64u MB free.\r\n",
             Install->TotalBytes >> 20, Needed >> 20, FreeBytes >> 20);
     if (FreeBytes < Needed)
@@ -1170,14 +1768,21 @@ OslInstallOpenedImage(
         return;
     }
 
+    Install->UndoReady = OslLoadUndo(Install);
     for (i = 0; i < Install->ComputerCount; i++)
     {
-        Install->ComputerFiles[i].Installed = OslSameVolumeFiles(Install->ComputerFiles[i].Source,
-                                                                 Install->ComputerFiles[i].Target);
+        Install->ComputerFiles[i].Installed = OslSameOriginalFiles(Install,
+                                                                   Install->ComputerFiles[i].Source,
+                                                                   Install->ComputerFiles[i].Target);
     }
 
-    FwPrint(L"INSTALL: %hs over %hs, %lu image entries, installed inventory %hs.\r\n",
-            ImagePath, Install->SystemRoot, Install->Inventory.Count, Install->OldText ? "found" : "missing");
+    OslInventoryImage(Install->OldText, OldImage, sizeof(OldImage));
+    OslInventoryImage(Install->NewText, NewImage, sizeof(NewImage));
+    Install->DropObsolete = OldImage[0] && _stricmp(OldImage, NewImage) == 0;
+
+    FwPrint(L"INSTALL: %hs over %hs, %lu image entries, installed inventory %hs, saved files %hs.\r\n",
+            ImagePath, Install->SystemRoot, Install->Inventory.Count, Install->OldText ? "found" : "missing",
+            Install->UndoReady ? "found" : "missing");
 
     if (!OslPreflight(Install))
         return;
@@ -1191,16 +1796,17 @@ OslInstallOpenedImage(
         return;
     }
 
+    if (!Install->UndoReady && !OslSaveUndo(Install))
+        return;
+
     Install->Stage = "write";
-    OslInventoryImage(Install->OldText, OldImage, sizeof(OldImage));
-    OslInventoryImage(Install->NewText, NewImage, sizeof(NewImage));
-    if (OldImage[0] && _stricmp(OldImage, NewImage) == 0)
-        OslRemoveObsolete(Install);
+    if (Install->DropObsolete)
+        OslRemoveObsolete(Install, OslPassWrite);
     else if (Install->OldText)
         FwPrint(L"INSTALL: the system was installed from image %hs, this is image %hs; nothing is dropped.\r\n",
                 OldImage[0] ? OldImage : "unknown", NewImage[0] ? NewImage : "unknown");
-    OslInstallFiles(Install, TRUE);
-    OslInstallComputerFiles(Install);
+    OslInstallFiles(Install, OslPassWrite);
+    OslInstallComputerFiles(Install, OslPassWrite);
 
     if (Install->Failed == 0)
     {
@@ -1219,7 +1825,7 @@ OslInstallOpenedImage(
         if (!NT_SUCCESS(Status))
             FwPrint(L"\r\nINSTALL: the system volume stays marked for checking (0x%08lx).\r\n", Status);
         Install->Stage = "done";
-        /* FIXME: this start still uses the SYSTEM hive of the previous build; a boot driver the new build adds is only registered by the completion step */
+        /* FIXME: this start still uses the SYSTEM hive of the previous build; an update that needs a boot driver the previous build lacks is rolled back */
         FwPrint(L"\r\nINSTALL: %lu files written, %lu removed.\r\n", Install->Written, Install->Removed);
     }
     else
@@ -1231,17 +1837,12 @@ OslInstallOpenedImage(
 static
 VOID
 OslWriteStatus(
-    _In_ POSL_INSTALL Install,
-    _In_z_ PCSTR ImagePath)
+    _In_ POSL_INSTALL Install)
 {
     CHAR Path[OSL_INSTALL_PATH_CHARS], Text[256];
-    PSTR Name;
     NTSTATUS Status;
 
-    if (!NT_SUCCESS(RtlStringCbCopyA(Path, sizeof(Path), ImagePath)))
-        return;
-    Name = strrchr(Path, '\\');
-    if (!Name || !NT_SUCCESS(RtlStringCbCopyA(Name + 1, sizeof(Path) - (Name + 1 - Path), OSL_INSTALL_STATUS)))
+    if (!Install->StageRoot[0] || !OslStagePath(Install, OSL_INSTALL_STATUS, Path))
         return;
 
     if (!NT_SUCCESS(RtlStringCbPrintfA(Text, sizeof(Text),
@@ -1274,6 +1875,9 @@ OslFreeInstall(
     OslFreeNames(&Install->Exclude);
     OslFreeNames(&Install->Preserve);
     OslFreeNames(&Install->Computers);
+    OslFreeNames(&Install->Backups);
+    if (Install->Undo)
+        FwFree(Install->Undo);
     FwFree(Install);
 }
 
@@ -1282,9 +1886,11 @@ OslInstallImage(
     _In_ PDK_DEVICE OsDevice,
     _In_z_ PCSTR SystemRoot,
     _In_z_ PCSTR ImagePath,
-    _In_opt_z_ PCSTR ImageHash)
+    _In_opt_z_ PCSTR ImageHash,
+    _In_ BOOLEAN Undo)
 {
     POSL_INSTALL Install;
+    PCSTR Name;
     NTSTATUS Status;
 
     while (*ImagePath == '\\')
@@ -1297,7 +1903,11 @@ OslInstallImage(
         return;
     RtlZeroMemory(Install, sizeof(*Install));
     RtlStringCbCopyA(Install->SystemRoot, sizeof(Install->SystemRoot), SystemRoot);
+    Name = strrchr(ImagePath, '\\');
+    if (Name)
+        RtlStringCbCopyNA(Install->StageRoot, sizeof(Install->StageRoot), ImagePath, Name + 1 - ImagePath);
     Install->Percent = MAXULONG;
+    Install->Activity = L"Installing LiberNT";
     Install->Buffer = FwAllocatePages(OSL_INSTALL_CHUNK);
 
     Status = NtfsBlMount(OsDevice);
@@ -1312,10 +1922,24 @@ OslInstallImage(
     {
         OslFail(Install, "open", STATUS_NO_MEMORY);
     }
+    else if (!Install->StageRoot[0])
+    {
+        FwPrint(L"INSTALL: %hs is not in a staging folder; starting the installed system.\r\n", ImagePath);
+        OslFail(Install, "open", STATUS_OBJECT_PATH_INVALID);
+    }
     else if (!ImageHash || !OslParseHash(ImageHash, Install->Hash))
     {
         FwPrint(L"INSTALL: the update has no valid checksum; starting the installed system.\r\n");
         OslFail(Install, "checksum", STATUS_INVALID_PARAMETER);
+    }
+    else if (OslWasUndone(Install))
+    {
+        FwPrint(L"INSTALL: the update was rolled back at an earlier start; starting the installed system.\r\n");
+        Install->Stage = OSL_INSTALL_UNDONE;
+    }
+    else if (Undo)
+    {
+        OslUndoInstall(Install);
     }
     else
     {
@@ -1332,7 +1956,7 @@ OslInstallImage(
         }
     }
 
-    OslWriteStatus(Install, ImagePath);
+    OslWriteStatus(Install);
     if (!NT_SUCCESS(NtfsBlUnmount()))
         FwPrint(L"INSTALL: the system volume could not be flushed.\r\n");
     OslFreeInstall(Install);

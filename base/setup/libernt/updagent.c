@@ -42,7 +42,9 @@
 #define STAGE_IMAGE_PATH        L"\\" UPDATE_STAGE_DIRECTORY L"\\" UPDATE_STAGE_IMAGE
 #define STAGE_STATUS            L"install.log"
 #define STAGE_STATUS_SECTION    L"Install"
+#define STAGE_BACKUP            L"Rollback"
 #define STAGE_MISSED_STARTS     2
+#define BOOT_UPDATE_STATE       L"EFI\\LiberNT\\Boot\\update.state"
 #define SETUP_KEY               L"SYSTEM\\Setup"
 #define RUN_KEY                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
 #define COMPLETE_VALUE          L"LiberNTUpdateComplete"
@@ -570,6 +572,19 @@ SetCompletionCommand(
 }
 
 static BOOL
+GetSystemPartitionPath(
+    _In_ PCWSTR Relative,
+    _Out_writes_(MAX_PATH) PWSTR Path)
+{
+    WCHAR SystemPartition[MAX_PATH];
+    DWORD Size = sizeof(SystemPartition);
+
+    return RegGetValueW(HKEY_LOCAL_MACHINE, SETUP_KEY, L"SystemPartition", RRF_RT_REG_SZ, NULL, SystemPartition,
+                        &Size) == ERROR_SUCCESS &&
+           SUCCEEDED(StringCchPrintfW(Path, MAX_PATH, L"\\\\?\\GLOBALROOT%s\\%s", SystemPartition, Relative));
+}
+
+static BOOL
 IsStageIntact(VOID)
 {
     static const PCWSTR Files[] = { UPDATE_STAGE_LOADER, UPDATE_STAGE_IMAGE, UPDATE_STAGE_REQUEST };
@@ -584,6 +599,32 @@ IsStageIntact(VOID)
     }
     StagePath(UPDATE_STAGE_REQUEST, Path);
     return GetPrivateProfileIntW(UPDATE_STAGE_SECTION, L"Completed", 0, Path) == 0;
+}
+
+static VOID
+RemoveStagedBackup(VOID)
+{
+    WCHAR Directory[MAX_PATH], Path[MAX_PATH];
+    WIN32_FIND_DATAW Find;
+    HANDLE hFind;
+
+    StagePath(STAGE_BACKUP L"\\*", Path);
+    hFind = FindFirstFileW(Path, &Find);
+    StagePath(STAGE_BACKUP, Directory);
+    if (hFind != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            if (!(Find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+                SUCCEEDED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%s\\%s", Directory, Find.cFileName)))
+            {
+                SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
+                DeleteFileW(Path);
+            }
+        } while (FindNextFileW(hFind, &Find));
+        FindClose(hFind);
+    }
+    RemoveDirectoryW(Directory);
 }
 
 static DWORD
@@ -636,9 +677,12 @@ RemoveStage(VOID)
         SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
         DeleteFileW(Path);
     }
+    RemoveStagedBackup();
     StagePath(NULL, Path);
     SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
     RemoveDirectoryW(Path);
+    if (GetSystemPartitionPath(BOOT_UPDATE_STATE, Path))
+        DeleteFileW(Path);
     SetCompletionCommand(FALSE);
     return ERROR_SUCCESS;
 }
@@ -1926,7 +1970,7 @@ RunComplete(VOID)
         }
     }
 
-    if (_wcsicmp(Stage, L"write") == 0)
+    if (_wcsicmp(Stage, L"write") == 0 || _wcsicmp(Stage, L"rollback") == 0)
     {
         ShowCompleteMessage(IDS_UPDATE_COMPLETE_RETRYBOOT, TD_WARNING_ICON);
         return ERROR_RETRY;

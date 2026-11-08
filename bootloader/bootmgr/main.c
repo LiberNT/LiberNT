@@ -19,6 +19,10 @@
 #define BM_WINDOWS_TITLE   L"Windows Boot Manager"
 #define BM_LIBERNT_ENTRY   L"{354fa6e5-5e45-49af-91bf-1fd2754e470a}"
 #define BM_INSTALL_IMAGE_OPTION L"INSTALLIMAGE="
+#define BM_UPDATE_STATE    L"\\EFI\\LiberNT\\Boot\\update.state"
+#define BM_UPDATE_STARTS   3
+#define BM_UPDATE_UNDO_STARTS (BM_UPDATE_STARTS * 2)
+#define BM_UPDATE_STATE_CHARS 160
 
 static const PCWSTR BmStorePaths[] =
 {
@@ -255,19 +259,86 @@ BmUpdateFallback(
 }
 
 static
+ULONG
+BmReadUpdateStarts(
+    _In_ PBM_ENTRY Entry)
+{
+    CHAR Text[BM_UPDATE_STATE_CHARS], Id[BCD_ID_CHARS];
+    PCSTR Starts;
+    PUCHAR Data;
+    ULONG Size, Length, Count = 0, i;
+
+    for (i = 0; i < BCD_ID_CHARS - 1 && Entry->Id[i] != UNICODE_NULL; i++)
+        Id[i] = (CHAR)Entry->Id[i];
+    Id[i] = ANSI_NULL;
+
+    Data = FwReadBootFile(BM_UPDATE_STATE, &Size);
+    if (!Data)
+        return 0;
+
+    Length = min(Size, sizeof(Text) - 1);
+    RtlCopyMemory(Text, Data, Length);
+    Text[Length] = ANSI_NULL;
+    FwFreePages(Data, Size);
+
+    Starts = strstr(Text, "Starts=");
+    if (strstr(Text, Id) && Starts)
+        Count = strtoul(Starts + 7, NULL, 10);
+    return Count;
+}
+
+static
+BOOLEAN
+BmWriteUpdateStarts(
+    _In_ PBM_ENTRY Entry,
+    _In_ ULONG Count)
+{
+    CHAR Text[BM_UPDATE_STATE_CHARS];
+
+    return NT_SUCCESS(RtlStringCbPrintfA(Text, sizeof(Text), "Entry=%ls\r\nStarts=%lu\r\n", Entry->Id, Count)) &&
+           FwWriteBootFile(BM_UPDATE_STATE, Text, (ULONG)strlen(Text));
+}
+
+static
 VOID
 BmStartSelectedApplication(
     _In_ PBM_ENTRY Entry,
     _In_ PBM_STARTUP Startup)
 {
-    PBM_ENTRY Fallback;
+    PBM_STARTUP EntryStartup = Startup;
+    PBM_ENTRY Fallback = NULL;
+    BM_STARTUP Undo;
     BOOLEAN Cancelled;
+    ULONG Starts;
 
-    if (BmStartApplication(Entry, BmStorePath, Startup, &Cancelled) || Cancelled)
+    if (BmIsUpdateEntry(Entry))
+    {
+        Fallback = BmUpdateFallback(Entry);
+        Starts = BmReadUpdateStarts(Entry);
+        if (Starts >= BM_UPDATE_UNDO_STARTS && Fallback)
+        {
+            FwPrint(L"\r\nThe update did not finish in %lu starts; starting %s.\r\n", Starts, Fallback->Description);
+            Entry = Fallback;
+            Fallback = NULL;
+        }
+        else
+        {
+            if (Starts >= BM_UPDATE_STARTS)
+            {
+                /* FIXME: starts are counted until the completion step removes the update, so a working update restarted 3 times before an administrator signs in is rolled back */
+                FwPrint(L"\r\nThe update did not finish in %lu starts; rolling it back.\r\n", Starts);
+                Undo = *Startup;
+                Undo.UndoUpdate = TRUE;
+                EntryStartup = &Undo;
+            }
+            if (!BmWriteUpdateStarts(Entry, Starts + 1))
+                FwPrint(L"\r\nThe starts of the update cannot be counted on this boot volume.\r\n");
+        }
+    }
+
+    if (BmStartApplication(Entry, BmStorePath, EntryStartup, &Cancelled) || Cancelled)
         return;
 
-    /* FIXME: an update entry whose loader starts and then fails before the system runs is started again on every boot; no boot status is kept to fall back */
-    Fallback = BmIsUpdateEntry(Entry) ? BmUpdateFallback(Entry) : NULL;
     if (Fallback)
     {
         FwPrint(L"\r\nThe update could not be started; starting %s.\r\n", Fallback->Description);
