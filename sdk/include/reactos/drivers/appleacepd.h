@@ -37,6 +37,11 @@
 
 #define APPLE_ACE_POWER_STATE_S0            0x00
 
+#define APPLE_TYPEC_CALLBACK_NAME           L"\\Callback\\AppleTypeCDataRole"
+#define APPLE_TYPEC_ROLE_NONE               0
+#define APPLE_TYPEC_ROLE_HOST               1
+#define APPLE_TYPEC_QUERY                   0x10
+
 typedef struct _APPLE_ACE_PD
 {
     PAPPLE_SPMI Spmi;

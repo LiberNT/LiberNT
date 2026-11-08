@@ -13,6 +13,7 @@
 #define APPLE_PD_TAG            'dPpA'
 #define APPLE_PD_MAX_PORTS      4
 #define APPLE_PD_POLL_MS        500
+#define APPLE_PD_DEBOUNCE_MS    500
 #define APPLE_PD_LABEL          32
 
 typedef struct _APPLE_PD_PORT
@@ -21,6 +22,11 @@ typedef struct _APPLE_PD_PORT
     CHAR Label[APPLE_PD_LABEL];
     BOOLEAN Ready;
     APPLE_ACE_PD_STATE Last;
+    ULONG64 UsbController;
+    ULONG Role;
+    ULONGLONG LastChange;
+    BOOLEAN PlugCycled;
+    volatile LONG RoleQueried;
 } APPLE_PD_PORT, *PAPPLE_PD_PORT;
 
 typedef struct _APPLE_PD_DEVICE
@@ -38,6 +44,8 @@ typedef struct _APPLE_PD_DEVICE
     PIO_WORKITEM WorkItem;
     volatile LONG WorkQueued;
     volatile LONG Running;
+    PCALLBACK_OBJECT RoleCallback;
+    PVOID RoleRegistration;
 } APPLE_PD_DEVICE, *PAPPLE_PD_DEVICE;
 
 static
@@ -56,6 +64,124 @@ ApplePdLog(
              (Data & APPLE_ACE_DATA_USB3) ? " USB3" : "", (Data & APPLE_ACE_DATA_DP) ? " DP" : "",
              (Data & APPLE_ACE_DATA_USB_DEVICE_ROLE) ? "device" : "host",
              (State->Status & APPLE_ACE_STATUS_UPSIDE_DOWN) ? "B" : "A", State->PowerStatus, State->Events);
+}
+
+static
+ULONG
+ApplePdDataRole(
+    _In_ PAPPLE_ACE_PD_STATE State)
+{
+    ULONG Data = State->DataStatus;
+
+    if ((State->Status & APPLE_ACE_STATUS_PLUG_PRESENT) && (Data & APPLE_ACE_DATA_CONNECTION) &&
+        (Data & (APPLE_ACE_DATA_USB2 | APPLE_ACE_DATA_USB3)) && !(Data & APPLE_ACE_DATA_USB_DEVICE_ROLE))
+        return APPLE_TYPEC_ROLE_HOST;
+    return APPLE_TYPEC_ROLE_NONE;
+}
+
+static
+VOID
+ApplePdReportRole(
+    _In_ PAPPLE_PD_DEVICE Device,
+    _Inout_ PAPPLE_PD_PORT Port,
+    _In_ PAPPLE_ACE_PD_STATE State)
+{
+    ULONG Role = ApplePdDataRole(State);
+    LONG Queried;
+
+    if (!Device->RoleCallback || !Port->UsbController)
+        return;
+    Queried = InterlockedExchange(&Port->RoleQueried, 0);
+    if (KeQueryInterruptTime() - Port->LastChange >= APPLE_PD_DEBOUNCE_MS * 10000ULL)
+    {
+        if (Port->PlugCycled && Port->Role != APPLE_TYPEC_ROLE_NONE && Role == Port->Role)
+        {
+            DbgPrint("applepd: %s was unplugged and plugged again, restarting the USB controller at %I64x\n",
+                     Port->Label, Port->UsbController);
+            ExNotifyCallback(Device->RoleCallback, (PVOID)(ULONG_PTR)Port->UsbController,
+                             (PVOID)(ULONG_PTR)APPLE_TYPEC_ROLE_NONE);
+            Queried = TRUE;
+        }
+        Port->PlugCycled = FALSE;
+        if (Role != Port->Role)
+        {
+            Port->Role = Role;
+            Queried = TRUE;
+        }
+    }
+    if (!Queried)
+        return;
+    Role = Port->Role;
+    DbgPrint("applepd: %s data role for the USB controller at %I64x is %s\n", Port->Label, Port->UsbController,
+             Role == APPLE_TYPEC_ROLE_HOST ? "host" : "none");
+    ExNotifyCallback(Device->RoleCallback, (PVOID)(ULONG_PTR)Port->UsbController, (PVOID)(ULONG_PTR)Role);
+}
+
+static
+VOID
+NTAPI
+ApplePdRoleQuery(
+    _In_opt_ PVOID Context,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    PAPPLE_PD_DEVICE Device = Context;
+    ULONG Index;
+
+    if (!Device || (ULONG_PTR)Argument2 != APPLE_TYPEC_QUERY)
+        return;
+    for (Index = 0; Index < Device->PortCount; ++Index)
+    {
+        if (Device->Ports[Index].UsbController == (ULONG64)(ULONG_PTR)Argument1)
+            InterlockedExchange(&Device->Ports[Index].RoleQueried, 1);
+    }
+}
+
+static
+ULONG
+ApplePdFindNamedChild(
+    _In_ PAPPLE_PD_DEVICE Device,
+    _In_ ULONG Node,
+    _In_z_ PCSTR Name)
+{
+    const CHAR *Text;
+    ULONG Child, Length, NameLength = (ULONG)strlen(Name);
+
+    for (Child = RiscvFdtFirstChild(&Device->Tree.Fdt, Node); Child != RISCV_FDT_NO_NODE;
+         Child = RiscvFdtNextSibling(&Device->Tree.Fdt, Child))
+    {
+        Text = RiscvFdtNodeName(&Device->Tree.Fdt, Child, &Length);
+        if (Text && Length >= NameLength && !memcmp(Text, Name, NameLength) &&
+            (Length == NameLength || Text[NameLength] == '\0'))
+            return Child;
+    }
+    return RISCV_FDT_NO_NODE;
+}
+
+static
+ULONG64
+ApplePdFindUsbController(
+    _In_ PAPPLE_PD_DEVICE Device,
+    _In_ ULONG PortNode)
+{
+    ULONG Node, Depth, Phandle;
+    ULONG64 Base = 0, Size;
+
+    Node = FdtDriverFindChild(&Device->Tree, PortNode, "usb-c-connector");
+    if (Node != RISCV_FDT_NO_NODE)
+        Node = ApplePdFindNamedChild(Device, Node, "ports");
+    if (Node != RISCV_FDT_NO_NODE)
+        Node = ApplePdFindNamedChild(Device, Node, "port@0");
+    if (Node != RISCV_FDT_NO_NODE)
+        Node = ApplePdFindNamedChild(Device, Node, "endpoint");
+    if (Node == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Device->Tree.Fdt, Node, "remote-endpoint", &Phandle))
+        return 0;
+    Node = FdtDriverFindPhandle(&Device->Tree, Phandle);
+    for (Depth = 0; Depth < 3 && Node != RISCV_FDT_NO_NODE; ++Depth)
+        Node = FdtDriverFindParentNode(&Device->Tree, Node);
+    if (Node == RISCV_FDT_NO_NODE || !FdtDriverReadReg(&Device->Tree, Node, 0, &Base, &Size))
+        return 0;
+    return Base;
 }
 
 static
@@ -81,8 +207,17 @@ ApplePdPollPorts(
             continue;
         }
         if (State.Events || State.Status != Port->Last.Status || State.DataStatus != Port->Last.DataStatus)
+        {
             ApplePdLog(Port, "changed", &State);
+            Port->LastChange = KeQueryInterruptTime();
+            if ((State.Events & APPLE_ACE_INT_PLUG_EVENT) ||
+                ((State.Status ^ Port->Last.Status) & APPLE_ACE_STATUS_PLUG_PRESENT))
+            {
+                Port->PlugCycled = TRUE;
+            }
+        }
         Port->Last = State;
+        ApplePdReportRole(Device, Port, &State);
     }
 }
 
@@ -186,6 +321,16 @@ ApplePdStopHardware(
     InterlockedExchange(&Device->Running, 0);
     KeCancelTimer(&Device->Timer);
     KeFlushQueuedDpcs();
+    if (Device->RoleRegistration)
+    {
+        ExUnregisterCallback(Device->RoleRegistration);
+        Device->RoleRegistration = NULL;
+    }
+    if (Device->RoleCallback)
+    {
+        ObDereferenceObject(Device->RoleCallback);
+        Device->RoleCallback = NULL;
+    }
     Interval.QuadPart = -10000LL;
     while (InterlockedCompareExchange(&Device->WorkQueued, 0, 0))
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
@@ -229,6 +374,8 @@ ApplePdStartHardware(
         Port->Pd.Sid = (UCHAR)(RiscvFdtReadBigEndian32(Reg) & 0x0f);
         Port->Pd.WakeInterrupt = ApplePdFindInterrupt(Device, Child, "wake");
         ApplePdReadLabel(Device, Child, Port->Label);
+        Port->UsbController = ApplePdFindUsbController(Device, Child);
+        Port->RoleQueried = 1;
     }
     if (!Device->PortCount)
         return STATUS_SUCCESS;
@@ -241,12 +388,21 @@ ApplePdStartHardware(
         DbgPrint("applepd: SPMI controller with %lu port controllers is not usable: %lx\n", Device->PortCount, Status);
         return Status;
     }
+    {
+        UNICODE_STRING Name = RTL_CONSTANT_STRING(APPLE_TYPEC_CALLBACK_NAME);
+        OBJECT_ATTRIBUTES Attributes;
+
+        InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_PERMANENT,
+                                   NULL, NULL);
+        if (NT_SUCCESS(ExCreateCallback(&Device->RoleCallback, &Attributes, TRUE, TRUE)))
+            Device->RoleRegistration = ExRegisterCallback(Device->RoleCallback, ApplePdRoleQuery, Device);
+    }
     for (Child = 0; Child < Device->PortCount; ++Child)
     {
         Port = &Device->Ports[Child];
         Status = AppleAcePdInitialize(&Port->Pd, &Previous);
-        DbgPrint("applepd: %s at SID %u was in power state %u, set to S0: %lx\n", Port->Label, Port->Pd.Sid, Previous,
-                 Status);
+        DbgPrint("applepd: %s at SID %u (USB controller %I64x) was in power state %u, set to S0: %lx\n", Port->Label,
+                 Port->Pd.Sid, Port->UsbController, Previous, Status);
         if (!NT_SUCCESS(Status))
             continue;
         Status = AppleAcePdPoll(&Port->Pd, &State);
@@ -256,8 +412,10 @@ ApplePdStartHardware(
             continue;
         }
         Port->Last = State;
+        Port->LastChange = KeQueryInterruptTime();
         Port->Ready = TRUE;
         ApplePdLog(Port, "is up", &State);
+        ApplePdReportRole(Device, Port, &State);
     }
     InterlockedExchange(&Device->Running, 1);
     DueTime.QuadPart = -10000LL * APPLE_PD_POLL_MS;

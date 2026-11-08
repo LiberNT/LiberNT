@@ -27,6 +27,56 @@ CallbackFunction(
     InterlockedIncrement(&CallbackHits);
 }
 
+static
+VOID
+TestNamedCallbackSharing(VOID)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING SharedName = RTL_CONSTANT_STRING(L"\\Callback\\KmtExCallbackShared");
+    UNICODE_STRING TemporaryName = RTL_CONSTANT_STRING(L"\\Callback\\KmtExCallbackTemporary");
+    PCALLBACK_OBJECT First = NULL, Second = NULL;
+    PVOID Registration;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, &SharedName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_PERMANENT,
+                               NULL, NULL);
+    Status = ExCreateCallback(&First, &ObjectAttributes, TRUE, TRUE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    Status = ExCreateCallback(&Second, &ObjectAttributes, FALSE, TRUE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok_eq_pointer(Second, First);
+        Registration = ExRegisterCallback(First, CallbackFunction, (PVOID)(ULONG_PTR)0xC0DE);
+        ok(Registration != NULL, "register on the first reference failed\n");
+        CallbackHits = 0;
+        ExNotifyCallback(Second, (PVOID)(ULONG_PTR)0x3333, (PVOID)(ULONG_PTR)0x4444);
+        ok_eq_long(CallbackHits, 1L);
+        ok_eq_pointer(ObservedArg1, (PVOID)(ULONG_PTR)0x3333);
+        ok_eq_pointer(ObservedArg2, (PVOID)(ULONG_PTR)0x4444);
+        if (Registration) ExUnregisterCallback(Registration);
+        ObDereferenceObject(Second);
+    }
+    ObMakeTemporaryObject(First);
+    ObDereferenceObject(First);
+
+    First = NULL;
+    Second = NULL;
+    InitializeObjectAttributes(&ObjectAttributes, &TemporaryName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ExCreateCallback(&First, &ObjectAttributes, TRUE, TRUE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    Status = ExCreateCallback(&Second, &ObjectAttributes, FALSE, TRUE);
+    ok(!NT_SUCCESS(Status), "a temporary named callback object was opened by name after its handle closed: %lx\n",
+       Status);
+    if (NT_SUCCESS(Status))
+        ObDereferenceObject(Second);
+    ObDereferenceObject(First);
+}
+
 START_TEST(ExCallbackExtra)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -65,4 +115,6 @@ START_TEST(ExCallbackExtra)
     ok_eq_long(CallbackHits, 0L);
 
     ObDereferenceObject(CallbackObject);
+
+    TestNamedCallbackSharing();
 }
