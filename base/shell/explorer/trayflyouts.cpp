@@ -8652,15 +8652,15 @@ public:
 
             cyMid = row.rc.top + nHeadH / 2;
             SetRect(&rcIcon, row.rc.left + Sc(12), cyMid - Sc(10), row.rc.left + Sc(32), cyMid + Sc(10));
-            nWifi = row.nSignal >= 75 ? IDI_FLU_WIFI1 :
-                    row.nSignal >= 50 ? IDI_FLU_WIFI2 :
-                    row.nSignal >= 25 ? IDI_FLU_WIFI3 : IDI_FLU_WIFI4;
-            TfyDrawFluent(hdc, &rcIcon, nWifi);
             if (row.bSecure)
-            {
-                RECT rcLock = { rcIcon.right - Sc(7), rcIcon.bottom - Sc(9), rcIcon.right + Sc(3), rcIcon.bottom + Sc(1) };
-                TfyDrawFluent(hdc, &rcLock, IDI_FLU_LOCK);
-            }
+                nWifi = row.nSignal >= 75 ? IDI_FLU_WIFI1_LOCK :
+                        row.nSignal >= 50 ? IDI_FLU_WIFI2_LOCK :
+                        row.nSignal >= 25 ? IDI_FLU_WIFI3_LOCK : IDI_FLU_WIFI4_LOCK;
+            else
+                nWifi = row.nSignal >= 75 ? IDI_FLU_WIFI1 :
+                        row.nSignal >= 50 ? IDI_FLU_WIFI2 :
+                        row.nSignal >= 25 ? IDI_FLU_WIFI3 : IDI_FLU_WIFI4;
+            TfyDrawFluent(hdc, &rcIcon, nWifi);
 
             SetRect(&rcName, row.rc.left + Sc(44), row.rc.top, row.bConnected ? row.rcInfo.left - Sc(8) : row.rc.right - Sc(12),
                     row.rc.top + nHeadH);
