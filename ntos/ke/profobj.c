@@ -33,6 +33,9 @@ KeInitializeProfile(PKPROFILE Profile,
                     KPROFILE_SOURCE ProfileSource,
                     KAFFINITY Affinity)
 {
+    ASSERT(BucketSize >= 2 && BucketSize <= 31);
+    ASSERT(ImageSize <= ~(ULONG_PTR)0 - (ULONG_PTR)ImageBase);
+
     /* Initialize the Header */
     Profile->Type = ProfileObject;
     Profile->Size = sizeof(KPROFILE);
@@ -346,6 +349,9 @@ KiParseProfileList(IN PKTRAP_FRAME TrapFrame,
         ASSERT(NextEntry->Flink->Blink == NextEntry);
         ASSERT(NextEntry->Blink->Flink == NextEntry);
         ASSERT(Profile->Type == ProfileObject && Profile->Started);
+        ASSERT(Profile->BucketShift <= 29);
+        ASSERT((ULONG_PTR)Profile->RangeBase <= (ULONG_PTR)Profile->RangeLimit);
+        ASSERT(Profile->Buffer != NULL);
 
         /* Check if the source is good, and if it's within the range */
         if ((Profile->Source != Source) ||
