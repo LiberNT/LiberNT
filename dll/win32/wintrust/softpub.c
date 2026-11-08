@@ -57,6 +57,10 @@ HRESULT WINAPI SoftpubInitialize(CRYPT_PROVIDER_DATA *data)
     if (data->padwTrustStepErrors &&
      !data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_WVTINIT])
         ret = S_OK;
+#ifdef __REACTOS__
+    if (!data->pszUsageOID)
+        data->pszUsageOID = (char *)szOID_PKIX_KP_CODE_SIGNING;
+#endif
     TRACE("returning %08lx\n", ret);
     return ret;
 }
@@ -199,7 +203,13 @@ static DWORD SOFTPUB_GetMessageFromFile(CRYPT_PROVIDER_DATA *data, HANDLE file,
     ret = data->pPDSip->pSip->pfGet(data->pPDSip->psSipSubjectInfo,
      &data->dwEncoding, 0, &size, 0);
     if (!ret)
+    {
+#ifdef __REACTOS__
+        data->padwTrustStepErrors[TRUSTERROR_STEP_SIP] = GetLastError();
+        data->padwTrustStepErrors[TRUSTERROR_STEP_MSG_SIGNERCOUNT] = GetLastError();
+#endif
         return TRUST_E_NOSIGNATURE;
+    }
 
     buf = data->psPfns->pfnAlloc(size);
     if (!buf)
@@ -521,7 +531,11 @@ static DWORD SOFTPUB_LoadCertMessage(CRYPT_PROVIDER_DATA *data)
             if (WVT_ISINSTRUCT(WINTRUST_CERT_INFO,
              data->pWintrustData->pCert->cbStruct, psftVerifyAsOf) &&
              data->pWintrustData->pCert->psftVerifyAsOf)
+#ifdef __REACTOS__
+                signer.sftVerifyAsOf = *data->pWintrustData->pCert->psftVerifyAsOf;
+#else
                 data->sftSystemTime = signer.sftVerifyAsOf;
+#endif
             else
             {
                 SYSTEMTIME sysTime;
@@ -563,6 +577,13 @@ static DWORD SOFTPUB_LoadFileMessage(CRYPT_PROVIDER_DATA *data)
     if (err)
         goto error;
     err = SOFTPUB_GetFileSubject(data);
+#ifdef __REACTOS__
+    if (err)
+    {
+        data->padwTrustStepErrors[TRUSTERROR_STEP_SIP] = err;
+        data->padwTrustStepErrors[TRUSTERROR_STEP_MSG_SIGNERCOUNT] = err;
+    }
+#endif
     if (err)
         goto error;
     err = SOFTPUB_GetSIP(data);
@@ -593,6 +614,23 @@ error:
 }
 
 #ifdef __REACTOS__
+static DWORD SOFTPUB_LoadBlobMessage(CRYPT_PROVIDER_DATA *data)
+{
+    WINTRUST_BLOB_INFO *blob = data->pWintrustData->pBlob;
+    DWORD err;
+
+    if (!blob || !WVT_ISINSTRUCT(WINTRUST_BLOB_INFO, blob->cbStruct, pbMemObject))
+        return ERROR_INVALID_PARAMETER;
+    data->pPDSip->gSubject = blob->gSubject;
+    if ((err = SOFTPUB_GetSIP(data)))
+        return err;
+    if ((err = SOFTPUB_GetMessageFromFile(data, NULL, blob->pcwszDisplayName)))
+        return err;
+    if ((err = SOFTPUB_CreateStoreFromMessage(data)))
+        return err;
+    return SOFTPUB_DecodeInnerContent(data);
+}
+
 #define SOFTPUB_SHA1_HASH_SIZE 20
 
 static BOOL SOFTPUB_HexTag(const BYTE *hash, DWORD size, WCHAR *tag)
@@ -763,6 +801,10 @@ HRESULT WINAPI SoftpubLoadMessage(CRYPT_PROVIDER_DATA *data)
     {
     case WTD_CHOICE_CERT:
         err = SOFTPUB_LoadCertMessage(data);
+#ifdef __REACTOS__
+        free(data->pPDSip);
+        data->pPDSip = NULL;
+#endif
         break;
     case WTD_CHOICE_FILE:
         err = SOFTPUB_LoadFileMessage(data);
@@ -770,6 +812,11 @@ HRESULT WINAPI SoftpubLoadMessage(CRYPT_PROVIDER_DATA *data)
     case WTD_CHOICE_CATALOG:
         err = SOFTPUB_LoadCatalogMessage(data);
         break;
+#ifdef __REACTOS__
+    case WTD_CHOICE_BLOB:
+        err = SOFTPUB_LoadBlobMessage(data);
+        break;
+#endif
     default:
         FIXME("unimplemented for %ld\n", data->pWintrustData->dwUnionChoice);
         err = ERROR_INVALID_PARAMETER;
@@ -1227,6 +1274,10 @@ HRESULT WINAPI SoftpubLoadSignature(CRYPT_PROVIDER_DATA *data)
         else
             err = TRUST_E_NOSIGNATURE;
     }
+#ifdef __REACTOS__
+    else if (!err && data->pWintrustData->dwUnionChoice != WTD_CHOICE_CERT)
+        err = TRUST_E_NOSIGNATURE;
+#endif
 
     if (err)
         data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_SIGPROV] = err;
@@ -1666,14 +1717,15 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
             }
         }
     }
+#ifdef __REACTOS__
+    TRACE("returning %08lx\n", ret ? S_OK : policyStatus.dwError);
+    return ret ? S_OK : policyStatus.dwError;
+#else
     if (!ret)
         data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV] =
          policyStatus.dwError;
     TRACE("returning %ld (%08lx)\n", ret ? S_OK : S_FALSE,
      data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV]);
-#ifdef __REACTOS__
-    return ret ? S_OK : policyStatus.dwError;
-#else
     return ret ? S_OK : S_FALSE;
 #endif
 }
@@ -1987,6 +2039,8 @@ HRESULT WINAPI DriverInitializePolicy(CRYPT_PROVIDER_DATA *data)
 {
     TRACE("(%p)\n", data);
 
+    if (!data->pszUsageOID)
+        data->pszUsageOID = (char *)szOID_WHQL_CRYPTO;
     return SoftpubInitialize(data);
 }
 
@@ -2165,7 +2219,7 @@ static const char *DUMP_Time(const FILETIME *time, char *buffer, DWORD size)
 
     if (!FileTimeToSystemTime(time, &st))
         st = (SYSTEMTIME){ 0 };
-    snprintf(buffer, size, "%u/%u/%u - %02u:%02u:%02u %s", st.wMonth, st.wDay, st.wYear, st.wHour, st.wMinute,
+    snprintf(buffer, size, "%u/%u/%u - %u:%02u:%02u %s", st.wMonth, st.wDay, st.wYear, st.wHour, st.wMinute,
              st.wSecond, st.wHour < 12 ? "AM" : "PM");
     return buffer;
 }
@@ -2196,7 +2250,7 @@ static void DUMP_Certificate(HANDLE file, const CRYPT_PROVIDER_CERT *cert, const
     DUMP_Line(file, "%s|   |.. pCert:                0x%p", indent, cert->pCert);
     if (cert->pCert)
     {
-        DUMP_Line(file, "%s|   |   |.. dwCertEncoding:   0x%08lX", indent, cert->pCert->dwCertEncodingType);
+        DUMP_Line(file, "%s|   |   |.. dwCertEncoding:   0x%08lx", indent, cert->pCert->dwCertEncodingType);
         DUMP_Line(file, "%s|   |   |.. pCertInfo:", indent);
         DUMP_Line(file, "%s|   |   |   |.. Issuer:       %s", indent, issuer);
         DUMP_Line(file, "%s|   |   |   |.. NotBefore:    %s", indent,
@@ -2210,13 +2264,13 @@ static void DUMP_Certificate(HANDLE file, const CRYPT_PROVIDER_CERT *cert, const
     DUMP_Line(file, "%s|   |.. fTrustedRoot:         %s", indent, cert->fTrustedRoot ? "True" : "False");
     DUMP_Line(file, "%s|   |.. fSelfSigned:          %s", indent, cert->fSelfSigned ? "True" : "False");
     DUMP_Line(file, "%s|   |.. fTestCert:            %s", indent, cert->fTestCert ? "True" : "False");
-    DUMP_Line(file, "%s|   |.. dwRevokedReason:      0x%08lX", indent, cert->dwRevokedReason);
-    DUMP_Line(file, "%s|   |.. dwConfidence:         0x%08lX", indent, cert->dwConfidence);
+    DUMP_Line(file, "%s|   |.. dwRevokedReason:      0x%08lx", indent, cert->dwRevokedReason);
+    DUMP_Line(file, "%s|   |.. dwConfidence:         0x%08lx", indent, cert->dwConfidence);
     DUMP_Line(file, "%s|   |.. pTrustListContext:    0x%p", indent, cert->pTrustListContext);
     if (last)
-        DUMP_Line(file, "|   |   +-- +.. dwError:              0x%08lX", cert->dwError);
+        DUMP_Line(file, "|   |   +-- +.. dwError:              0x%08lx", cert->dwError);
     else
-        DUMP_Line(file, "%s|   +.. dwError:              0x%08lX", indent, cert->dwError);
+        DUMP_Line(file, "%s|   +.. dwError:              0x%08lx", indent, cert->dwError);
 }
 
 static void DUMP_Signer(HANDLE file, const CRYPT_PROVIDER_SGNR *signer)
@@ -2226,7 +2280,7 @@ static void DUMP_Signer(HANDLE file, const CRYPT_PROVIDER_SGNR *signer)
 
     DUMP_Line(file, "|   |.. cbStruct:                     %lu", signer->cbStruct);
     DUMP_Line(file, "|   |.. sftVerifyAsOf:                %s", DUMP_Time(&signer->sftVerifyAsOf, time, sizeof(time)));
-    DUMP_Line(file, "|   |.. dwSignerType:                 0x%08lX", signer->dwSignerType);
+    DUMP_Line(file, "|   |.. dwSignerType:                 0x%08lx", signer->dwSignerType);
     DUMP_Line(file, "|   |.. csCertChain:                  %lu", signer->csCertChain);
     for (i = 0; i < signer->csCertChain; i++)
     {
@@ -2234,7 +2288,7 @@ static void DUMP_Signer(HANDLE file, const CRYPT_PROVIDER_SGNR *signer)
         DUMP_Certificate(file, &signer->pasCertChain[i], "|   |   ", i + 1 == signer->csCertChain);
     }
     DUMP_Line(file, "|   |.. psSigner:                     0x%p", signer->psSigner);
-    DUMP_Line(file, "|   |.. dwError:                      0x%08lX", signer->dwError);
+    DUMP_Line(file, "|   |.. dwError:                      0x%08lx", signer->dwError);
     DUMP_Line(file, "|   +.. csCounterSigners:             %lu", signer->csCounterSigners);
 }
 
@@ -2286,20 +2340,45 @@ HRESULT WINAPI SoftpubDumpStructure(CRYPT_PROVIDER_DATA *data)
         }
         else if (trust->dwUnionChoice == WTD_CHOICE_FILE && trust->pFile)
         {
-            /* TODO: INFO_NEEDED: the layout Windows 11 uses for the other union choices; the catalog one was measured */
             DUMP_Line(file, "|   +-- pFile:");
             DUMP_Line(file, "|       |.. cbStruct:                 %lu", trust->pFile->cbStruct);
             DUMP_Line(file, "|       |.. pcwszFilePath:            %ls", trust->pFile->pcwszFilePath ? trust->pFile->pcwszFilePath : L"(null)");
-            DUMP_Line(file, "|       +-- hFile:                    0x%p", trust->pFile->hFile);
+            DUMP_Line(file, "|       |.. hFile:                    0x%p", trust->pFile->hFile);
+            DUMP_Line(file, "|       +-- pgKnownSubject:           %s",
+                      trust->pFile->pgKnownSubject ? DUMP_Guid(trust->pFile->pgKnownSubject, text, sizeof(text)) : "");
         }
+        else if (trust->dwUnionChoice == WTD_CHOICE_BLOB && trust->pBlob)
+        {
+            DUMP_Line(file, "|   +-- pBlob:");
+            DUMP_Line(file, "|       |.. cbStruct:                 %lu", trust->pBlob->cbStruct);
+            DUMP_Line(file, "        |.. gSubject:                 %s", DUMP_Guid(&trust->pBlob->gSubject, text, sizeof(text)));
+            DUMP_Line(file, "|       |.. pcwszDisplayName:         %ls", trust->pBlob->pcwszDisplayName ? trust->pBlob->pcwszDisplayName : L"(null)");
+            DUMP_Line(file, "|       |.. cbMemObject:              %lu", trust->pBlob->cbMemObject);
+            DUMP_Line(file, "|       |.. cbMemSignedMsg:           %lu", trust->pBlob->cbMemSignedMsg);
+            DUMP_Line(file, "|       +.. pbMemSignedMsg:           0x%p", trust->pBlob->pbMemSignedMsg);
+        }
+        else if (trust->dwUnionChoice == WTD_CHOICE_CERT && trust->pCert)
+        {
+            DUMP_Line(file, "|   +-- pCert:");
+            DUMP_Line(file, "|       |.. cbStruct:                 %lu", trust->pCert->cbStruct);
+            DUMP_Line(file, "|       |.. pcwszDisplayName:         %ls", trust->pCert->pcwszDisplayName ? trust->pCert->pcwszDisplayName : L"(null)");
+            DUMP_Line(file, "|       |.. psCertContext:            0x%p", trust->pCert->psCertContext);
+            DUMP_Line(file, "|       |.. chStores:                 %lu", trust->pCert->chStores);
+            for (i = 0; trust->pCert->pahStores && i < trust->pCert->chStores; i++)
+                DUMP_Line(file, "|       |.. pahStores[%02lu]:        0x%p", i, trust->pCert->pahStores[i]);
+            DUMP_Line(file, "|       |.. dwFlags:                  0x%08lx", trust->pCert->dwFlags);
+            DUMP_Line(file, "|       |-- psftVerifyAsOf:               %s",
+                      trust->pCert->psftVerifyAsOf ? DUMP_Time(trust->pCert->psftVerifyAsOf, text, sizeof(text)) : "");
+        }
+        /* TODO: INFO_NEEDED: the layout Windows 11 uses for the signer union choice */
     }
     DUMP_Line(file, "|.. WndParent:                        0x%p", data->hWndParent);
     DUMP_Line(file, "|.. pgActionID:                       %s", DUMP_Guid(data->pgActionID, text, sizeof(text)));
     DUMP_Line(file, "|.. hProv:                            0x%Iu", data->hProv);
-    DUMP_Line(file, "|.. dwError:                          0x%08lX", data->dwError);
-    DUMP_Line(file, "|.. dwRegSecuritySettings:            0x%08lX", data->dwRegSecuritySettings);
-    DUMP_Line(file, "|.. dwRegPolicySettings:              0x%08lX", data->dwRegPolicySettings);
-    DUMP_Line(file, "|.. dwEncoding:                       0x%08lX", data->dwEncoding);
+    DUMP_Line(file, "|.. dwError:                          0x%08lx", data->dwError);
+    DUMP_Line(file, "|.. dwRegSecuritySettings:            0x%08lx", data->dwRegSecuritySettings);
+    DUMP_Line(file, "|.. dwRegPolicySettings:              0x%08lx", data->dwRegPolicySettings);
+    DUMP_Line(file, "|.. dwEncoding:                       0x%08lx", data->dwEncoding);
     DUMP_Line(file, "|.. psPfns:");
     if (data->psPfns)
     {
@@ -2330,7 +2409,7 @@ HRESULT WINAPI SoftpubDumpStructure(CRYPT_PROVIDER_DATA *data)
             if (ui->psUIData)
             {
                 DUMP_Line(file, "|       |   |.. cbStruct:             %lu", ui->psUIData->cbStruct);
-                DUMP_Line(file, "|       |   |.. dwFinalError:         0x%08lX", ui->psUIData->dwFinalError);
+                DUMP_Line(file, "|       |   |.. dwFinalError:         0x%08lx", ui->psUIData->dwFinalError);
                 DUMP_Line(file, "|       |   |.. pYesButtonText:       %ls", ui->psUIData->pYesButtonText ? ui->psUIData->pYesButtonText : L"(null)");
                 DUMP_Line(file, "|       |   |.. pNoButtonText:        %ls", ui->psUIData->pNoButtonText ? ui->psUIData->pNoButtonText : L"(null)");
                 DUMP_Line(file, "|       |   |.. pMoreInfoButtonText:  %ls", ui->psUIData->pMoreInfoButtonText ? ui->psUIData->pMoreInfoButtonText : L"(null)");
@@ -2347,8 +2426,8 @@ HRESULT WINAPI SoftpubDumpStructure(CRYPT_PROVIDER_DATA *data)
     }
     DUMP_Line(file, "|.. padwTrustStepErrors:");
     for (i = 0; data->padwTrustStepErrors && i < data->cdwTrustStepErrors; i++)
-        DUMP_Line(file, i + 1 < data->cdwTrustStepErrors ? "|   |.. Step[%02lu]:                     0x%08lX" :
-                  "|   +.. Step[%02lu]:                     0x%08lX", i, data->padwTrustStepErrors[i]);
+        DUMP_Line(file, i + 1 < data->cdwTrustStepErrors ? "|   |.. Step[%02lu]:                     0x%08lx" :
+                  "|   +.. Step[%02lu]:                     0x%08lx", i, data->padwTrustStepErrors[i]);
     DUMP_Line(file, "|.. pahStores:");
     for (i = 0; i < data->chStores; i++)
         DUMP_Line(file, i + 1 < data->chStores ? "|   |.. Store[%02lu]:                    0x%p" :
