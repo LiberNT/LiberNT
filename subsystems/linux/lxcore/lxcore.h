@@ -1259,6 +1259,7 @@ LONG LxVfsTruncate(_In_ PLX_NODE Node, _In_ LONG64 Length);
 LONG LxVfsReadlink(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _Out_ PSTR *Target);
 LONG LxNtStatHandleType(_In_ HANDLE Handle, _Out_ PLX_STAT Stat);
 LONG LxFifoOpen(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Flags, _Out_ PLX_FILE *Result);
+LONG LxFifoLookupNode(_In_ PLX_PROCESS Process, _In_ PLX_FILE File, _Out_ PLX_NODE Node);
 LONG LxPipeCreatePair(_In_opt_ PLX_PROCESS Process, _In_ ULONG Flags, _Out_ PLX_FILE *ReadEnd, _Out_ PLX_FILE *WriteEnd);
 LONG LxPipeSetSize(_In_ PLX_FILE File, _In_ ULONG Size);
 LONG LxPipeGetSize(_In_ PLX_FILE File);

@@ -252,15 +252,87 @@ LxPipePoll(
 
 static
 LONG
+LxFifoNodeId(
+    _In_ PLX_NODE Node,
+    _Out_ PLONG64 Id)
+{
+    FILE_INTERNAL_INFORMATION Internal;
+    IO_STATUS_BLOCK Iosb;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    if (Node->Mount->Kind == LxFsTmpfs)
+    {
+        PLX_TMPFS_INODE Inode;
+        LONG Error = LxTmpfsLookup(Node->Mount, Node->Relative, &Inode);
+
+        if (Error != 0)
+            return Error;
+        *Id = (LONG64)LxTmpfsInodeId(Inode);
+        LxTmpfsInodeDereference(Inode);
+        return 0;
+    }
+    InitializeObjectAttributes(&ObjectAttributes, &Node->NtPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenFile(&Handle, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT);
+    if (!NT_SUCCESS(Status))
+        return -LxStatusToErrno(Status);
+    Status = ZwQueryInformationFile(Handle, &Iosb, &Internal, sizeof(Internal), FileInternalInformation);
+    ZwClose(Handle);
+    if (!NT_SUCCESS(Status))
+        return -LxStatusToErrno(Status);
+    *Id = Internal.IndexNumber.QuadPart;
+    return 0;
+}
+
+LONG
+LxFifoLookupNode(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_FILE File,
+    _Out_ PLX_NODE Node)
+{
+    PLX_PIPE Pipe;
+    LONG64 Id;
+    LONG Error;
+
+    if (!LxFileIsPipe(File) || (File->Path == NULL))
+        return -LX_ENOENT;
+    Pipe = File->Object;
+    if (Pipe->FifoMount == NULL)
+        return -LX_ENOENT;
+    Error = LxLookup(Process, LX_AT_FDCWD, File->Path, 0, Node);
+    if (Error != 0)
+        return Error;
+    if ((Node->Mount != Pipe->FifoMount) || (LxFifoNodeId(Node, &Id) != 0) || (Id != Pipe->FifoId))
+    {
+        LxNodeFree(Node);
+        return -LX_ENOENT;
+    }
+    return 0;
+}
+
+static
+LONG
 LxPipeStat(
     _In_ PLX_FILE File,
     _Out_ PLX_STAT Stat)
 {
     PLX_PIPE Pipe = File->Object;
+    PLX_THREAD Thread = LxCurrentThread();
     LX_TIMESPEC Now;
     LARGE_INTEGER System;
+    LX_NODE Node;
+    LONG Error;
 
-    /* TODO: fstat of a FIFO reports the pipe, not the node it was opened from */
+    if ((Pipe->FifoMount != NULL) && (Thread != NULL) && (LxFifoLookupNode(Thread->Process, File, &Node) == 0))
+    {
+        Error = LxVfsStatNode(Thread->Process, &Node, Stat);
+        LxNodeFree(&Node);
+        return Error;
+    }
+    /* FIXME: a FIFO whose path no longer leads to the node it was opened from reports the pipe */
     RtlZeroMemory(Stat, sizeof(*Stat));
     LxPipeLock(Pipe);
     Stat->Mode = LX_S_IFIFO | Pipe->Mode;
@@ -592,44 +664,20 @@ LxFifoOpen(
     _In_ ULONG Flags,
     _Out_ PLX_FILE *Result)
 {
-    FILE_INTERNAL_INFORMATION Internal;
-    IO_STATUS_BLOCK Iosb;
-    OBJECT_ATTRIBUTES ObjectAttributes;
     PLX_PIPE Pipe = NULL, Created = NULL;
     PLIST_ENTRY Entry;
     ULONG Access = Flags & LX_O_ACCMODE;
-    HANDLE Handle;
-    NTSTATUS Status;
+    LONG64 Id;
     PLX_FILE File;
     KIRQL Irql;
+    LONG Error;
 
     UNREFERENCED_PARAMETER(Process);
 
     *Result = NULL;
-    if (Node->Mount->Kind == LxFsTmpfs)
-    {
-        PLX_TMPFS_INODE Inode;
-        LONG Error = LxTmpfsLookup(Node->Mount, Node->Relative, &Inode);
-
-        if (Error != 0)
-            return Error;
-        Internal.IndexNumber.QuadPart = (LONG64)LxTmpfsInodeId(Inode);
-        LxTmpfsInodeDereference(Inode);
-    }
-    else
-    {
-        InitializeObjectAttributes(&ObjectAttributes, &Node->NtPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL,
-                                   NULL);
-        Status = ZwOpenFile(&Handle, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                            FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT);
-        if (!NT_SUCCESS(Status))
-            return -LxStatusToErrno(Status);
-        Status = ZwQueryInformationFile(Handle, &Iosb, &Internal, sizeof(Internal), FileInternalInformation);
-        ZwClose(Handle);
-        if (!NT_SUCCESS(Status))
-            return -LxStatusToErrno(Status);
-    }
+    Error = LxFifoNodeId(Node, &Id);
+    if (Error != 0)
+        return Error;
 
     for (;;)
     {
@@ -638,7 +686,7 @@ LxFifoOpen(
         {
             PLX_PIPE Candidate = CONTAINING_RECORD(Entry, LX_PIPE, FifoLink);
 
-            if ((Candidate->FifoMount == Node->Mount) && (Candidate->FifoId == Internal.IndexNumber.QuadPart))
+            if ((Candidate->FifoMount == Node->Mount) && (Candidate->FifoId == Id))
             {
                 InterlockedIncrement(&Candidate->RefCount);
                 Pipe = Candidate;
@@ -648,7 +696,7 @@ LxFifoOpen(
         if ((Pipe == NULL) && (Created != NULL))
         {
             Created->FifoMount = Node->Mount;
-            Created->FifoId = Internal.IndexNumber.QuadPart;
+            Created->FifoId = Id;
             InsertTailList(&LxFifoList, &Created->FifoLink);
             Pipe = Created;
             Created = NULL;
