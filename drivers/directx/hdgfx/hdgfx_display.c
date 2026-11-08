@@ -356,27 +356,27 @@ HdgfxPinnedSourceMode(
     if (ModeSet == NULL)
     {
         Status = STATUS_GRAPHICS_INVALID_VIDPN_SOURCEMODESET;
-        goto ReleaseModeSet;
+    }
+    else
+    {
+        Status = ModeSet->pfnAcquirePinnedModeInfo(hModeSet, &Pinned);
+        if (NT_SUCCESS(Status))
+        {
+            if (Pinned == NULL)
+                *Supported = !Required;
+            else
+                *Supported = HdgfxSourceModeMatches(Scanout, Pinned, ModeIndex);
+            if (Required && Pinned == NULL)
+                Status = STATUS_GRAPHICS_MODE_NOT_PINNED;
+        }
+        if (Pinned != NULL)
+        {
+            ReleaseStatus = ModeSet->pfnReleaseModeInfo(hModeSet, Pinned);
+            if (NT_SUCCESS(Status) && !NT_SUCCESS(ReleaseStatus))
+                Status = ReleaseStatus;
+        }
     }
 
-    Status = ModeSet->pfnAcquirePinnedModeInfo(hModeSet, &Pinned);
-    if (NT_SUCCESS(Status))
-    {
-        if (Pinned == NULL)
-            *Supported = !Required;
-        else
-            *Supported = HdgfxSourceModeMatches(Scanout, Pinned, ModeIndex);
-        if (Required && Pinned == NULL)
-            Status = STATUS_GRAPHICS_MODE_NOT_PINNED;
-    }
-    if (Pinned != NULL)
-    {
-        ReleaseStatus = ModeSet->pfnReleaseModeInfo(hModeSet, Pinned);
-        if (NT_SUCCESS(Status) && !NT_SUCCESS(ReleaseStatus))
-            Status = ReleaseStatus;
-    }
-
-ReleaseModeSet:
     ReleaseStatus = VidPn->pfnReleaseSourceModeSet(hVidPn, hModeSet);
     if (NT_SUCCESS(Status) && !NT_SUCCESS(ReleaseStatus))
         Status = ReleaseStatus;
@@ -406,27 +406,27 @@ HdgfxPinnedTargetMode(
     if (ModeSet == NULL)
     {
         Status = STATUS_GRAPHICS_INVALID_VIDPN_TARGETMODESET;
-        goto ReleaseModeSet;
+    }
+    else
+    {
+        Status = ModeSet->pfnAcquirePinnedModeInfo(hModeSet, &Pinned);
+        if (NT_SUCCESS(Status))
+        {
+            if (Pinned == NULL)
+                *Supported = !Required;
+            else
+                *Supported = HdgfxTargetModeMatches(Scanout, TargetId, Pinned, ModeIndex);
+            if (Required && Pinned == NULL)
+                Status = STATUS_GRAPHICS_MODE_NOT_PINNED;
+        }
+        if (Pinned != NULL)
+        {
+            ReleaseStatus = ModeSet->pfnReleaseModeInfo(hModeSet, Pinned);
+            if (NT_SUCCESS(Status) && !NT_SUCCESS(ReleaseStatus))
+                Status = ReleaseStatus;
+        }
     }
 
-    Status = ModeSet->pfnAcquirePinnedModeInfo(hModeSet, &Pinned);
-    if (NT_SUCCESS(Status))
-    {
-        if (Pinned == NULL)
-            *Supported = !Required;
-        else
-            *Supported = HdgfxTargetModeMatches(Scanout, TargetId, Pinned, ModeIndex);
-        if (Required && Pinned == NULL)
-            Status = STATUS_GRAPHICS_MODE_NOT_PINNED;
-    }
-    if (Pinned != NULL)
-    {
-        ReleaseStatus = ModeSet->pfnReleaseModeInfo(hModeSet, Pinned);
-        if (NT_SUCCESS(Status) && !NT_SUCCESS(ReleaseStatus))
-            Status = ReleaseStatus;
-    }
-
-ReleaseModeSet:
     ReleaseStatus = VidPn->pfnReleaseTargetModeSet(hVidPn, hModeSet);
     if (NT_SUCCESS(Status) && !NT_SUCCESS(ReleaseStatus))
         Status = ReleaseStatus;
@@ -459,6 +459,54 @@ HdgfxQueryVidPn(
     return *Topology == NULL ? STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY : STATUS_SUCCESS;
 }
 
+static NTSTATUS
+HdgfxIsSupportedVidPnLocked(
+    _In_ PHDGFX_SCANOUT Scanout,
+    _Inout_ PDXGKARG_ISSUPPORTEDVIDPN IsSupportedVidPn,
+    _In_ CONST DXGK_VIDPN_INTERFACE *VidPn,
+    _In_ CONST DXGK_VIDPNTOPOLOGY_INTERFACE *Topology,
+    _In_ D3DKMDT_HVIDPNTOPOLOGY hTopology)
+{
+    HDGFX_PATH_SET Paths;
+    BOOLEAN Supported;
+    ULONG Index;
+    NTSTATUS Status;
+
+    Status = HdgfxCollectPaths(Topology, hTopology, &Paths);
+    if (!NT_SUCCESS(Status) || Paths.Count == 0)
+    {
+        IsSupportedVidPn->IsVidPnSupported = NT_SUCCESS(Status);
+        return Status;
+    }
+    if (!HdgfxPathTargetsValid(Scanout, &Paths))
+        return Status;
+    for (Index = 0; Index < Paths.Count; Index++)
+    {
+        if ((Paths.Paths[Index].Scaling != D3DKMDT_VPPS_IDENTITY &&
+             Paths.Paths[Index].Scaling != D3DKMDT_VPPS_UNPINNED &&
+             Paths.Paths[Index].Scaling != D3DKMDT_VPPS_NOTSPECIFIED) ||
+            (Paths.Paths[Index].Rotation != D3DKMDT_VPPR_IDENTITY &&
+             Paths.Paths[Index].Rotation != D3DKMDT_VPPR_UNPINNED &&
+             Paths.Paths[Index].Rotation != D3DKMDT_VPPR_NOTSPECIFIED))
+        {
+            return Status;
+        }
+    }
+
+    Status = HdgfxPinnedSourceMode(Scanout, IsSupportedVidPn->hDesiredVidPn, VidPn, FALSE, &Supported, NULL);
+    if (!NT_SUCCESS(Status) || !Supported)
+        return Status;
+    for (Index = 0; Index < Paths.Count; Index++)
+    {
+        Status = HdgfxPinnedTargetMode(Scanout, IsSupportedVidPn->hDesiredVidPn, Paths.Paths[Index].TargetId, VidPn,
+                                       FALSE, &Supported, NULL);
+        if (!NT_SUCCESS(Status) || !Supported)
+            return Status;
+    }
+    IsSupportedVidPn->IsVidPnSupported = TRUE;
+    return Status;
+}
+
 NTSTATUS
 APIENTRY
 HdgfxDdiIsSupportedVidPn(
@@ -469,9 +517,6 @@ HdgfxDdiIsSupportedVidPn(
     CONST DXGK_VIDPN_INTERFACE *VidPn;
     D3DKMDT_HVIDPNTOPOLOGY hTopology = 0;
     CONST DXGK_VIDPNTOPOLOGY_INTERFACE *Topology;
-    HDGFX_PATH_SET Paths;
-    BOOLEAN Supported;
-    ULONG Index;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -490,40 +535,7 @@ HdgfxDdiIsSupportedVidPn(
         return Status;
 
     HdgfxLockOutputs(Scanout);
-    Status = HdgfxCollectPaths(Topology, hTopology, &Paths);
-    if (!NT_SUCCESS(Status) || Paths.Count == 0)
-    {
-        IsSupportedVidPn->IsVidPnSupported = NT_SUCCESS(Status);
-        goto Unlock;
-    }
-    if (!HdgfxPathTargetsValid(Scanout, &Paths))
-        goto Unlock;
-    for (Index = 0; Index < Paths.Count; Index++)
-    {
-        if ((Paths.Paths[Index].Scaling != D3DKMDT_VPPS_IDENTITY &&
-             Paths.Paths[Index].Scaling != D3DKMDT_VPPS_UNPINNED &&
-             Paths.Paths[Index].Scaling != D3DKMDT_VPPS_NOTSPECIFIED) ||
-            (Paths.Paths[Index].Rotation != D3DKMDT_VPPR_IDENTITY &&
-             Paths.Paths[Index].Rotation != D3DKMDT_VPPR_UNPINNED &&
-             Paths.Paths[Index].Rotation != D3DKMDT_VPPR_NOTSPECIFIED))
-        {
-            goto Unlock;
-        }
-    }
-
-    Status = HdgfxPinnedSourceMode(Scanout, IsSupportedVidPn->hDesiredVidPn, VidPn, FALSE, &Supported, NULL);
-    if (!NT_SUCCESS(Status) || !Supported)
-        goto Unlock;
-    for (Index = 0; Index < Paths.Count; Index++)
-    {
-        Status = HdgfxPinnedTargetMode(Scanout, IsSupportedVidPn->hDesiredVidPn, Paths.Paths[Index].TargetId, VidPn,
-                                       FALSE, &Supported, NULL);
-        if (!NT_SUCCESS(Status) || !Supported)
-            goto Unlock;
-    }
-    IsSupportedVidPn->IsVidPnSupported = TRUE;
-
-Unlock:
+    Status = HdgfxIsSupportedVidPnLocked(Scanout, IsSupportedVidPn, VidPn, Topology, hTopology);
     HdgfxUnlockOutputs(Scanout);
     return Status;
 }
@@ -766,6 +778,97 @@ HdgfxUpdatePathSupport(
     return Topology->pfnUpdatePathSupportInfo(hTopology, &Updated);
 }
 
+static NTSTATUS
+HdgfxEnumCofuncModalityLocked(
+    _In_ PHDGFX_SCANOUT Scanout,
+    _In_ CONST DXGKARG_ENUMVIDPNCOFUNCMODALITY *EnumCofuncModality,
+    _In_ D3DKMDT_HVIDPN hVidPn,
+    _In_ CONST DXGK_VIDPN_INTERFACE *VidPn,
+    _In_ CONST DXGK_VIDPNTOPOLOGY_INTERFACE *Topology,
+    _In_ D3DKMDT_HVIDPNTOPOLOGY hTopology)
+{
+    CONST D3DKMDT_VIDPN_PRESENT_PATH *Path = NULL;
+    CONST D3DKMDT_VIDPN_PRESENT_PATH *NextPath;
+    HDGFX_PATH_SET Paths;
+    ULONG SourceWidth;
+    ULONG SourceHeight;
+    ULONG Index;
+    NTSTATUS Status;
+
+    Status = HdgfxCollectPaths(Topology, hTopology, &Paths);
+    if (!NT_SUCCESS(Status) || Paths.Count == 0)
+        return Status;
+    if (Paths.Overflow)
+    {
+        return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
+    }
+    for (Index = 0; Index < Paths.Count; Index++)
+    {
+        HdgfxPinnedTargetSize(hVidPn, VidPn, Paths.Paths[Index].TargetId, &Paths.Paths[Index].PinnedWidth,
+                              &Paths.Paths[Index].PinnedHeight);
+    }
+
+    Status = Topology->pfnAcquireFirstPathInfo(hTopology, &Path);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Path == NULL)
+    {
+        return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
+    }
+
+    while (Path != NULL)
+    {
+        HdgfxPinnedSourceSize(hVidPn, VidPn, Path->VidPnSourceId, &SourceWidth, &SourceHeight);
+        if (!HdgfxTargetKnown(Scanout, Path->VidPnTargetId))
+        {
+            return HdgfxReleasePath(Topology, hTopology, Path, STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET);
+        }
+        if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNSOURCE &&
+              EnumCofuncModality->EnumPivot.VidPnSourceId == Path->VidPnSourceId))
+        {
+            Status = HdgfxUpdateSourceModeSet(Scanout, hVidPn, VidPn, Path->VidPnSourceId, &Paths);
+            if (!NT_SUCCESS(Status))
+            {
+                return HdgfxReleasePath(Topology, hTopology, Path, Status);
+            }
+        }
+        if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNTARGET &&
+              EnumCofuncModality->EnumPivot.VidPnTargetId == Path->VidPnTargetId))
+        {
+            Status = HdgfxUpdateTargetModeSet(Scanout, hVidPn, VidPn, Path->VidPnTargetId, SourceWidth, SourceHeight);
+            if (!NT_SUCCESS(Status))
+            {
+                return HdgfxReleasePath(Topology, hTopology, Path, Status);
+            }
+        }
+        Status = HdgfxUpdatePathSupport(EnumCofuncModality, Topology, hTopology, Path);
+        if (!NT_SUCCESS(Status))
+        {
+            return HdgfxReleasePath(Topology, hTopology, Path, Status);
+        }
+
+        NextPath = NULL;
+        Status = Topology->pfnAcquireNextPathInfo(hTopology, Path, &NextPath);
+        if (Status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET)
+        {
+            return HdgfxReleasePath(Topology, hTopology, Path, STATUS_SUCCESS);
+        }
+        if (!NT_SUCCESS(Status) || NextPath == NULL)
+        {
+            return HdgfxReleasePath(Topology, hTopology, Path,
+                                    NT_SUCCESS(Status) ? STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY : Status);
+        }
+        Status = Topology->pfnReleasePathInfo(hTopology, Path);
+        if (!NT_SUCCESS(Status))
+        {
+            Topology->pfnReleasePathInfo(hTopology, NextPath);
+            return Status;
+        }
+        Path = NextPath;
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 APIENTRY
 HdgfxDdiEnumVidPnCofuncModality(
@@ -776,13 +879,7 @@ HdgfxDdiEnumVidPnCofuncModality(
     CONST DXGK_VIDPN_INTERFACE *VidPn;
     D3DKMDT_HVIDPNTOPOLOGY hTopology = 0;
     CONST DXGK_VIDPNTOPOLOGY_INTERFACE *Topology;
-    CONST D3DKMDT_VIDPN_PRESENT_PATH *Path = NULL;
-    CONST D3DKMDT_VIDPN_PRESENT_PATH *NextPath;
     D3DKMDT_HVIDPN hVidPn;
-    HDGFX_PATH_SET Paths;
-    ULONG SourceWidth;
-    ULONG SourceHeight;
-    ULONG Index;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -796,88 +893,7 @@ HdgfxDdiEnumVidPnCofuncModality(
         return Status;
 
     HdgfxLockOutputs(Scanout);
-    Status = HdgfxCollectPaths(Topology, hTopology, &Paths);
-    if (!NT_SUCCESS(Status) || Paths.Count == 0)
-        goto Unlock;
-    if (Paths.Overflow)
-    {
-        Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-        goto Unlock;
-    }
-    for (Index = 0; Index < Paths.Count; Index++)
-    {
-        HdgfxPinnedTargetSize(hVidPn, VidPn, Paths.Paths[Index].TargetId, &Paths.Paths[Index].PinnedWidth,
-                              &Paths.Paths[Index].PinnedHeight);
-    }
-
-    Status = Topology->pfnAcquireFirstPathInfo(hTopology, &Path);
-    if (!NT_SUCCESS(Status))
-        goto Unlock;
-    if (Path == NULL)
-    {
-        Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-        goto Unlock;
-    }
-
-    while (Path != NULL)
-    {
-        HdgfxPinnedSourceSize(hVidPn, VidPn, Path->VidPnSourceId, &SourceWidth, &SourceHeight);
-        if (!HdgfxTargetKnown(Scanout, Path->VidPnTargetId))
-        {
-            Status = HdgfxReleasePath(Topology, hTopology, Path, STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET);
-            goto Unlock;
-        }
-        if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNSOURCE &&
-              EnumCofuncModality->EnumPivot.VidPnSourceId == Path->VidPnSourceId))
-        {
-            Status = HdgfxUpdateSourceModeSet(Scanout, hVidPn, VidPn, Path->VidPnSourceId, &Paths);
-            if (!NT_SUCCESS(Status))
-            {
-                Status = HdgfxReleasePath(Topology, hTopology, Path, Status);
-                goto Unlock;
-            }
-        }
-        if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNTARGET &&
-              EnumCofuncModality->EnumPivot.VidPnTargetId == Path->VidPnTargetId))
-        {
-            Status = HdgfxUpdateTargetModeSet(Scanout, hVidPn, VidPn, Path->VidPnTargetId, SourceWidth, SourceHeight);
-            if (!NT_SUCCESS(Status))
-            {
-                Status = HdgfxReleasePath(Topology, hTopology, Path, Status);
-                goto Unlock;
-            }
-        }
-        Status = HdgfxUpdatePathSupport(EnumCofuncModality, Topology, hTopology, Path);
-        if (!NT_SUCCESS(Status))
-        {
-            Status = HdgfxReleasePath(Topology, hTopology, Path, Status);
-            goto Unlock;
-        }
-
-        NextPath = NULL;
-        Status = Topology->pfnAcquireNextPathInfo(hTopology, Path, &NextPath);
-        if (Status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET)
-        {
-            Status = HdgfxReleasePath(Topology, hTopology, Path, STATUS_SUCCESS);
-            goto Unlock;
-        }
-        if (!NT_SUCCESS(Status) || NextPath == NULL)
-        {
-            Status = HdgfxReleasePath(Topology, hTopology, Path,
-                                      NT_SUCCESS(Status) ? STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY : Status);
-            goto Unlock;
-        }
-        Status = Topology->pfnReleasePathInfo(hTopology, Path);
-        if (!NT_SUCCESS(Status))
-        {
-            Topology->pfnReleasePathInfo(hTopology, NextPath);
-            goto Unlock;
-        }
-        Path = NextPath;
-    }
-    Status = STATUS_SUCCESS;
-
-Unlock:
+    Status = HdgfxEnumCofuncModalityLocked(Scanout, EnumCofuncModality, hVidPn, VidPn, Topology, hTopology);
     HdgfxUnlockOutputs(Scanout);
     return Status;
 }
@@ -1017,13 +1033,12 @@ HdgfxDdiCommitVidPn(
     return Status;
 }
 
-NTSTATUS
-APIENTRY
-HdgfxDdiSetTimingsFromVidPn(
-    _In_ PVOID MiniportDeviceContext,
+static NTSTATUS
+HdgfxSetTimingsFromVidPnLocked(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ PHDGFX_SCANOUT Scanout,
     IN_OUT_PDXGKARG_SETTIMINGSFROMVIDPN SetTimings)
 {
-    PHDGFX_SCANOUT Scanout = HdgfxScanoutOf(MiniportDeviceContext);
     DXGK_SET_TIMING_PATH_INFO *PathInfo;
     HDGFX_PATH_SET Paths;
     ULONG SourceMode;
@@ -1032,21 +1047,10 @@ HdgfxDdiSetTimingsFromVidPn(
     ULONG Other;
     NTSTATUS Status;
 
-    PAGED_CODE();
-
-    if (Scanout == NULL || SetTimings == NULL || SetTimings->pResultsFlags == NULL ||
-        SetTimings->SetFlags.Value != 0 || SetTimings->PathCount > HDGFX_CHILD_COUNT ||
-        (SetTimings->PathCount != 0 && SetTimings->pSetTimingPathInfo == NULL))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    SetTimings->pResultsFlags->Value = 0;
-    HdgfxLockOutputs(Scanout);
-    Status = HdgfxValidateFunctionalVidPn(MiniportDeviceContext, Scanout, SetTimings->hFunctionalVidPn, &Paths,
+    Status = HdgfxValidateFunctionalVidPn(Adapter, Scanout, SetTimings->hFunctionalVidPn, &Paths,
                                           &SourceMode);
     if (!NT_SUCCESS(Status))
-        goto Unlock;
+        return Status;
 
     for (Index = 0; Index < SetTimings->PathCount; Index++)
     {
@@ -1055,15 +1059,13 @@ HdgfxDdiSetTimingsFromVidPn(
         PathInfo = &SetTimings->pSetTimingPathInfo[Index];
         if (!HdgfxTargetKnown(Scanout, PathInfo->VidPnTargetId) || (PathInfo->InputFlags & ~0x1FUL) != 0)
         {
-            Status = STATUS_INVALID_PARAMETER;
-            goto Unlock;
+            return STATUS_INVALID_PARAMETER;
         }
         for (Other = 0; Other < Index; Other++)
         {
             if (SetTimings->pSetTimingPathInfo[Other].VidPnTargetId == PathInfo->VidPnTargetId)
             {
-                Status = STATUS_INVALID_PARAMETER;
-                goto Unlock;
+                return STATUS_INVALID_PARAMETER;
             }
         }
 
@@ -1072,15 +1074,13 @@ HdgfxDdiSetTimingsFromVidPn(
         {
             if (InTopology || PathInfo->Input.Active != 0)
             {
-                Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-                goto Unlock;
+                return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
             }
             continue;
         }
         if (!InTopology)
         {
-            Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            goto Unlock;
+            return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
         }
         if (PathInfo->OutputWireColorSpace != D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709 ||
             PathInfo->SelectedWireFormat.Preference != 0 ||
@@ -1088,20 +1088,18 @@ HdgfxDdiSetTimingsFromVidPn(
             PathInfo->SelectedWireFormat.YCbCr444 != 0 || PathInfo->SelectedWireFormat.YCbCr422 != 0 ||
             PathInfo->SelectedWireFormat.YCbCr420 != 0 || PathInfo->SelectedWireFormat.Intensity != 0)
         {
-            Status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
-            goto Unlock;
+            return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
         }
         Timed++;
     }
     if (Timed != Paths.Count)
     {
-        Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-        goto Unlock;
+        return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
     }
 
-    Status = HdgfxApplyPaths(MiniportDeviceContext, Scanout, &Paths, SourceMode);
+    Status = HdgfxApplyPaths(Adapter, Scanout, &Paths, SourceMode);
     if (!NT_SUCCESS(Status))
-        goto Unlock;
+        return Status;
 
     for (Index = 0; Index < SetTimings->PathCount; Index++)
     {
@@ -1126,8 +1124,30 @@ HdgfxDdiSetTimingsFromVidPn(
         PathInfo->GlitchEffect = DXGK_GLITCH_EFFECT_SEAMLESS;
         PathInfo->GlitchDuration = DXGK_GLITCH_DURATION_NONE;
     }
+    return Status;
+}
 
-Unlock:
+NTSTATUS
+APIENTRY
+HdgfxDdiSetTimingsFromVidPn(
+    _In_ PVOID MiniportDeviceContext,
+    IN_OUT_PDXGKARG_SETTIMINGSFROMVIDPN SetTimings)
+{
+    PHDGFX_SCANOUT Scanout = HdgfxScanoutOf(MiniportDeviceContext);
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Scanout == NULL || SetTimings == NULL || SetTimings->pResultsFlags == NULL ||
+        SetTimings->SetFlags.Value != 0 || SetTimings->PathCount > HDGFX_CHILD_COUNT ||
+        (SetTimings->PathCount != 0 && SetTimings->pSetTimingPathInfo == NULL))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    SetTimings->pResultsFlags->Value = 0;
+    HdgfxLockOutputs(Scanout);
+    Status = HdgfxSetTimingsFromVidPnLocked(MiniportDeviceContext, Scanout, SetTimings);
     HdgfxUnlockOutputs(Scanout);
     return Status;
 }

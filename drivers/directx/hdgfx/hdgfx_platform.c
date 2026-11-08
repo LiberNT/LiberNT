@@ -2568,6 +2568,49 @@ HdgfxDdiAddDevice(
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS
+HdgfxStartOutputs(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ PDXGK_INTERFACE DxgkInterface)
+{
+    DXGK_DISPLAY_INFORMATION PostDisplay;
+    PHDGFX_SCANOUT Scanout;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&PostDisplay, sizeof(PostDisplay));
+    Status = DxgkInterface->DxgkCbAcquirePostDisplayOwnership(DxgkInterface->DeviceHandle, &PostDisplay);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Scanout = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Scanout), HDGFX_TAG);
+    if (Scanout == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    KeInitializeMutex(&Scanout->OutputLock, 0);
+    KeInitializeMutex(&Scanout->Lock, 0);
+    Scanout->LvdsActive = TRUE;
+    Status = HdgfxScanoutStart(&Adapter->DxgkInterface, Scanout);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Scan-out setup failed 0x%08lx\n", Status);
+        HdgfxScanoutFree(Scanout);
+        return Status;
+    }
+    Adapter->Scanout = Scanout;
+    HdgfxCrtStart(Scanout);
+    if (!Scanout->PanelPresent)
+    {
+        Scanout->LvdsActive = FALSE;
+        Status = HdgfxSetOutputs(Scanout, &Scanout->Modes[0], FALSE, TRUE);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+
+    Status = HdgfxSlabStart(Adapter, &Scanout->Modes[0]);
+    if (NT_SUCCESS(Status))
+        Status = HdgfxDirectScanoutStart(Adapter, Scanout);
+    return Status;
+}
+
 NTSTATUS
 APIENTRY
 HdgfxDdiStartDevice(
@@ -2578,7 +2621,6 @@ HdgfxDdiStartDevice(
     _Out_ PULONG NumberOfChildren)
 {
     PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
-    DXGK_DISPLAY_INFORMATION PostDisplay;
     PHDGFX_SCANOUT Scanout;
     NTSTATUS Status;
 
@@ -2604,42 +2646,15 @@ HdgfxDdiStartDevice(
     RtlCopyMemory(&Adapter->DxgkInterface, DxgkInterface,
                   min((SIZE_T)DxgkInterface->Size, sizeof(Adapter->DxgkInterface)));
 
-    RtlZeroMemory(&PostDisplay, sizeof(PostDisplay));
-    Status = DxgkInterface->DxgkCbAcquirePostDisplayOwnership(DxgkInterface->DeviceHandle, &PostDisplay);
-    if (!NT_SUCCESS(Status))
-        goto Failed;
-
-    Scanout = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Scanout), HDGFX_TAG);
-    if (Scanout == NULL)
-    {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto Failed;
-    }
-    KeInitializeMutex(&Scanout->OutputLock, 0);
-    KeInitializeMutex(&Scanout->Lock, 0);
-    Scanout->LvdsActive = TRUE;
-    Status = HdgfxScanoutStart(&Adapter->DxgkInterface, Scanout);
+    Status = HdgfxStartOutputs(Adapter, DxgkInterface);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("Scan-out setup failed 0x%08lx\n", Status);
-        HdgfxScanoutFree(Scanout);
-        goto Failed;
+        HdgfxScanoutStop(Adapter);
+        HdgfxSlabStop(Adapter);
+        RtlZeroMemory(&Adapter->DxgkInterface, sizeof(Adapter->DxgkInterface));
+        return Status;
     }
-    Adapter->Scanout = Scanout;
-    HdgfxCrtStart(Scanout);
-    if (!Scanout->PanelPresent)
-    {
-        Scanout->LvdsActive = FALSE;
-        Status = HdgfxSetOutputs(Scanout, &Scanout->Modes[0], FALSE, TRUE);
-        if (!NT_SUCCESS(Status))
-            goto Failed;
-    }
-
-    Status = HdgfxSlabStart(Adapter, &Scanout->Modes[0]);
-    if (NT_SUCCESS(Status))
-        Status = HdgfxDirectScanoutStart(Adapter, Scanout);
-    if (!NT_SUCCESS(Status))
-        goto Failed;
+    Scanout = Adapter->Scanout;
 
     HdgfxQueryPanelChild(Adapter);
     Adapter->VsyncTargetId = Scanout->PanelPresent ? HDGFX_PANEL_CHILD_UID : HDGFX_CRT_CHILD_UID;
@@ -2659,12 +2674,6 @@ HdgfxDdiStartDevice(
     *NumberOfVideoPresentSources = 1;
     *NumberOfChildren = (Scanout->PanelPresent ? 1 : 0) + (Scanout->CrtSupported ? 1 : 0);
     return STATUS_SUCCESS;
-
-Failed:
-    HdgfxScanoutStop(Adapter);
-    HdgfxSlabStop(Adapter);
-    RtlZeroMemory(&Adapter->DxgkInterface, sizeof(Adapter->DxgkInterface));
-    return Status;
 }
 
 NTSTATUS
