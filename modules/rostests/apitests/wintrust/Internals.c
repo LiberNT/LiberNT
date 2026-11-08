@@ -583,6 +583,134 @@ TestFixedResults(VOID)
 
 static
 VOID
+WINAPI
+CdfError(DWORD Area, DWORD Local, WCHAR *Line)
+{
+    ok(FALSE, "unexpected CDF error %#lx %#lx on '%ls'\n", Area, Local, Line);
+}
+
+static
+VOID
+TestCatalogDetails(VOID)
+{
+    static const WCHAR Value[] = L"second";
+    WCHAR Cdf[MAX_PATH], Cat[MAX_PATH], M1[MAX_PATH], M2[MAX_PATH], New[MAX_PATH];
+    char Text[4096];
+    CRYPTCATCDF *Catalog;
+    CRYPTCATMEMBER *Member = NULL;
+    CRYPTCATATTRIBUTE *Attr = NULL;
+    CRYPTCATSTORE *Store;
+    SIP_INDIRECT_DATA Indirect;
+    GUID Flat = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
+    BYTE Digest[20] = { 1, 2, 3 }, FlatValue[] = { 0xa2, 0x02, 0x80, 0x00 };
+    HCATADMIN Admin = NULL;
+    HANDLE Handle;
+    DWORD Count;
+
+    SetLastError(0xdeadbeef);
+    ok(CryptCATAdminAcquireContext(&Admin, NULL, 0), "CryptCATAdminAcquireContext failed\n");
+    ok_hex(GetLastError(), 0xdeadbeef);
+    if (Admin)
+        CryptCATAdminReleaseContext(Admin, 0);
+
+    swprintf(Cdf, RTL_NUMBER_OF(Cdf), L"%lslntwtcd.cdf", TempDir);
+    swprintf(Cat, RTL_NUMBER_OF(Cat), L"%lslntwtcd.cat", TempDir);
+    swprintf(M1, RTL_NUMBER_OF(M1), L"%lslntwtcd-m1.txt", TempDir);
+    swprintf(M2, RTL_NUMBER_OF(M2), L"%lslntwtcd-m2.txt", TempDir);
+    snprintf(Text, sizeof(Text), "[CatalogHeader]\r\nName=lntwtcd.cat\r\nResultDir=%ls\r\nPublicVersion=0x0000005\r\n"
+             "EncodingType=0x00010001\r\nCATATTR1=0x10010001:Note:first\r\nCATATTR2=0x10020001:Bad:!!!notbase64\r\n"
+             "[CatalogFiles]\r\nm1=%ls\r\n<HASH>m2=%ls\r\n", TempDir, M1, M2);
+    DeleteFileW(Cat);
+    if (!WriteText(M1, "member one\r\n") || !WriteText(M2, "member two\r\n") || !WriteText(Cdf, Text) ||
+        !(Catalog = CryptCATCDFOpen(Cdf, CdfError)))
+    {
+        skip("Cannot open the CDF\n");
+        return;
+    }
+    while ((Attr = CryptCATCDFEnumCatAttributes(Catalog, Attr, CdfError)))
+        if (!wcscmp(Attr->pwszReferenceTag, L"Bad"))
+            ok(Attr->cbValue == 0, "invalid base64 gave %lu bytes\n", Attr->cbValue);
+    Member = CryptCATCDFEnumMembers(Catalog, NULL, CdfError);
+    ok(Member && !wcscmp(Member->pwszReferenceTag, L"m1"), "first member %ls\n", Member ? Member->pwszReferenceTag : NULL);
+    Member = CryptCATCDFEnumMembers(Catalog, Member, CdfError);
+    ok(Member && !wcscmp(Member->pwszReferenceTag, L"<HASH>m2"), "second member %ls\n",
+       Member ? Member->pwszReferenceTag : NULL);
+    ok_int(CryptCATCDFClose(Catalog), TRUE);
+
+    Handle = CryptCATOpen(Cat, CRYPTCAT_OPEN_EXISTING | CRYPTCAT_OPEN_EXCLUDE_PAGE_HASHES, 0, 0, 0);
+    ok(Handle != INVALID_HANDLE_VALUE, "CryptCATOpen failed %lu\n", GetLastError());
+    if (Handle != INVALID_HANDLE_VALUE)
+    {
+        Store = CryptCATStoreFromHandle(Handle);
+        ok(Store && Store->dwPublicVersion == CRYPTCAT_VERSION_1 && Store->fdwStoreFlags == CRYPTCAT_OPEN_EXCLUDE_PAGE_HASHES,
+           "store version %#lx flags %#lx\n", Store ? Store->dwPublicVersion : 0, Store ? Store->fdwStoreFlags : 0);
+        SetLastError(0xdeadbeef);
+        Attr = CryptCATPutCatAttrInfo(Handle, (WCHAR *)L"Note", CRYPTCAT_ATTR_AUTHENTICATED | CRYPTCAT_ATTR_NAMEASCII |
+                                      CRYPTCAT_ATTR_DATAASCII | CRYPTCAT_ATTR_DATAREPLACE, sizeof(Value), (BYTE *)Value);
+        ok(Attr != NULL, "DATAREPLACE failed %lu\n", GetLastError());
+        for (Count = 0, Attr = NULL; (Attr = CryptCATEnumerateCatAttr(Handle, Attr));)
+            if (!wcscmp(Attr->pwszReferenceTag, L"Note"))
+            {
+                Count++;
+                ok(Attr->cbValue == sizeof(Value) && !memcmp(Attr->pbValue, Value, sizeof(Value)), "Note was not replaced\n");
+            }
+        ok_long(Count, 1);
+        ok_int(CryptCATPersistStore(Handle), TRUE);
+        CryptCATClose(Handle);
+    }
+    Handle = CryptCATOpen(Cat, CRYPTCAT_OPEN_EXISTING, 0, 0, 0);
+    if (Handle != INVALID_HANDLE_VALUE)
+    {
+        for (Count = 0, Attr = NULL; (Attr = CryptCATEnumerateCatAttr(Handle, Attr));)
+            if (!wcscmp(Attr->pwszReferenceTag, L"Note"))
+            {
+                Count++;
+                ok(Attr->cbValue == sizeof(Value) && !memcmp(Attr->pbValue, Value, sizeof(Value)),
+                   "Note was not written back\n");
+            }
+        ok_long(Count, 1);
+        CryptCATClose(Handle);
+    }
+
+    swprintf(New, RTL_NUMBER_OF(New), L"%lslntwtcn.cat", TempDir);
+    DeleteFileW(New);
+    Handle = CryptCATOpen(New, CRYPTCAT_OPEN_CREATENEW, 0, 0, 0);
+    ok(Handle != INVALID_HANDLE_VALUE, "CryptCATOpen for creation failed %lu\n", GetLastError());
+    if (Handle != INVALID_HANDLE_VALUE)
+    {
+        Store = CryptCATStoreFromHandle(Handle);
+        ok(Store && Store->dwPublicVersion == CRYPTCAT_VERSION_1 && !Store->fdwStoreFlags, "new store %#lx %#lx\n",
+           Store ? Store->dwPublicVersion : 0, Store ? Store->fdwStoreFlags : 0);
+        ZeroMemory(&Indirect, sizeof(Indirect));
+        Indirect.Data.pszObjId = (LPSTR)SPC_CAB_DATA_OBJID;
+        Indirect.Data.Value.cbData = sizeof(FlatValue);
+        Indirect.Data.Value.pbData = FlatValue;
+        Indirect.DigestAlgorithm.pszObjId = (LPSTR)szOID_OIWSEC_sha1;
+        Indirect.Digest.cbData = sizeof(Digest);
+        Indirect.Digest.pbData = Digest;
+        ok(CryptCATPutMemberInfo(Handle, (WCHAR *)L"fa.txt", (WCHAR *)L"0102030000000000000000000000000000000000", &Flat,
+                                 1, sizeof(Indirect), (BYTE *)&Indirect) != NULL, "first member %lu\n", GetLastError());
+        Digest[0] = 9;
+        ok(CryptCATPutMemberInfo(Handle, (WCHAR *)L"fb.txt", (WCHAR *)L"0902030000000000000000000000000000000000", &Flat,
+                                 1, sizeof(Indirect), (BYTE *)&Indirect) != NULL, "second member %lu\n", GetLastError());
+        SetLastError(0xdeadbeef);
+        Member = CryptCATEnumerateMember(Handle, NULL);
+        ok(Member && !wcscmp(Member->pwszReferenceTag, L"0902030000000000000000000000000000000000"), "newest member first\n");
+        Member = Member ? CryptCATEnumerateMember(Handle, Member) : NULL;
+        ok(Member && !wcscmp(Member->pwszReferenceTag, L"0102030000000000000000000000000000000000"), "oldest member last\n");
+        ok(!(Member ? CryptCATEnumerateMember(Handle, Member) : NULL), "a third member\n");
+        ok_hex(GetLastError(), 0xdeadbeef);
+        CryptCATClose(Handle);
+    }
+    DeleteFileW(New);
+    DeleteFileW(Cdf);
+    DeleteFileW(Cat);
+    DeleteFileW(M1);
+    DeleteFileW(M2);
+}
+
+static
+VOID
 TestDump(VOID)
 {
     static const char Start[] = "CRYPT_PROVIDER_DATA:\r\n\0+======================================================\r\n";
@@ -646,5 +774,6 @@ START_TEST(Internals)
     TestChainedToMicrosoft();
     TestOfficePolicy();
     TestFixedResults();
+    TestCatalogDetails();
     TestDump();
 }
