@@ -1,8 +1,8 @@
-@ stub AddPersonalTrustDBPages
-@ stub CatalogCompactHashDatabase
-#@ stub ComputeFirstPageHash
+@ stdcall AddPersonalTrustDBPages(ptr long ptr)
+@ stdcall CatalogCompactHashDatabase(ptr ptr ptr long)
+@ stdcall ComputeFirstPageHash(wstr wstr ptr long)
 #@ stub ConfigCiFinalPolicy
-#@ stub ConfigCiPackageFamilyNameCheck
+@ stdcall ConfigCiPackageFamilyNameCheck(ptr ptr ptr)
 @ stdcall CryptCATAdminAcquireContext(ptr ptr long)
 @ stdcall CryptCATAdminAcquireContext2(ptr ptr wstr ptr long)
 @ stdcall CryptCATAdminAddCatalog(long wstr wstr long)
@@ -20,7 +20,7 @@
 @ stdcall CryptCATCDFEnumAttributesWithCDFTag(ptr wstr ptr ptr ptr)
 @ stdcall CryptCATCDFEnumCatAttributes(ptr ptr ptr)
 @ stdcall CryptCATCDFEnumMembers(ptr ptr ptr)
-@ stub CryptCATCDFEnumMembersByCDFTag
+@ stdcall CryptCATCDFEnumMembersByCDFTag(ptr wstr ptr ptr)
 @ stdcall CryptCATCDFEnumMembersByCDFTagEx(ptr wstr ptr ptr long ptr)
 @ stdcall CryptCATCDFOpen(wstr ptr)
 @ stdcall CryptCATCatalogInfoFromContext(ptr ptr long)
@@ -39,11 +39,11 @@
 @ stdcall CryptCATPutCatAttrInfo(ptr wstr long long ptr)
 @ stdcall CryptCATPutMemberInfo(ptr wstr wstr ptr long long ptr)
 @ stdcall CryptCATStoreFromHandle(ptr)
-@ stub CryptCATVerifyMember
+@ stdcall CryptCATVerifyMember(ptr ptr ptr)
 @ stdcall CryptSIPCreateIndirectData(ptr ptr ptr)
 @ stdcall CryptSIPGetCaps(ptr ptr)
-@ stub CryptSIPGetInfo
-@ stub CryptSIPGetRegWorkingFlags
+@ stdcall CryptSIPGetInfo(ptr)
+@ stdcall CryptSIPGetRegWorkingFlags(ptr)
 #@ stub CryptSIPGetSealedDigest
 @ stdcall CryptSIPGetSignedDataMsg(ptr ptr long ptr ptr)
 @ stdcall CryptSIPPutSignedDataMsg(ptr long ptr long ptr)
@@ -57,12 +57,12 @@
 @ stdcall FindCertsByIssuer(ptr ptr ptr ptr long wstr long)
 @ stdcall GenericChainCertificateTrust(ptr)
 @ stdcall GenericChainFinalProv(ptr)
-#@ stub GetAuthenticodeSha256Hash
+@ stdcall GetAuthenticodeSha256Hash(ptr ptr ptr)
 @ stdcall HTTPSCertificateTrust(ptr)
 @ stdcall HTTPSFinalProv(ptr)
 @ stdcall IsCatalogFile(ptr wstr)
-@ stub MsCatConstructHashTag
-@ stub MsCatFreeHashTag
+@ stdcall MsCatConstructHashTag(long ptr ptr)
+@ stdcall MsCatFreeHashTag(ptr)
 @ stub OfficeCleanupPolicy
 @ stub OfficeInitializePolicy
 @ stdcall OpenPersonalTrustDBDialog(ptr)
@@ -73,26 +73,26 @@
 @ stdcall SoftpubDefCertInit(ptr)
 @ stdcall SoftpubDllRegisterServer()
 @ stdcall SoftpubDllUnregisterServer()
-@ stub SoftpubDumpStructure
+@ stdcall SoftpubDumpStructure(ptr)
 @ cdecl SoftpubFreeDefUsageCallData(str ptr)
 @ stdcall SoftpubInitialize(ptr)
 @ cdecl SoftpubLoadDefUsageCallData(str ptr)
 @ stdcall SoftpubLoadMessage(ptr)
 @ stdcall SoftpubLoadSignature(ptr)
 #@ stub SrpCheckSmartlockerEAandProcessToken
-@ stub TrustDecode
+@ stdcall TrustDecode(long ptr ptr long long str ptr long long)
 @ stdcall TrustFindIssuerCertificate(ptr long long ptr ptr ptr ptr long)
-@ stub TrustFreeDecode
+@ stdcall TrustFreeDecode(long ptr)
 @ stdcall TrustIsCertificateSelfSigned(ptr)
-@ stub TrustOpenStores
-#@ stub WTGetBioSignatureInfo
-#@ stub WTGetPluginSignatureInfo
+@ stdcall TrustOpenStores(long ptr ptr long)
+@ stdcall WTGetBioSignatureInfo(ptr ptr ptr ptr ptr ptr)
+@ stdcall WTGetPluginSignatureInfo(ptr ptr ptr ptr ptr ptr)
 @ stdcall WTGetSignatureInfo(wstr ptr long ptr ptr ptr)
 @ stdcall WTHelperCertCheckValidSignature(ptr)
 @ stdcall WTHelperCertFindIssuerCertificate(ptr long ptr ptr long ptr ptr)
 @ stdcall WTHelperCertIsSelfSigned(long ptr)
-@ stub WTHelperCheckCertUsage
-@ stub WTHelperGetAgencyInfo
+@ stdcall WTHelperCheckCertUsage(ptr str)
+@ stdcall WTHelperGetAgencyInfo(ptr ptr ptr)
 @ stdcall WTHelperGetFileHandle(ptr)
 @ stdcall WTHelperGetFileHash(wstr long ptr ptr ptr ptr)
 @ stdcall WTHelperGetFileName(ptr)
@@ -100,14 +100,14 @@
 @ stdcall WTHelperGetProvCertFromChain(ptr long)
 @ stdcall WTHelperGetProvPrivateDataFromChain(ptr ptr)
 @ stdcall WTHelperGetProvSignerFromChain(ptr long long long)
-#@ stub WTHelperIsChainedToMicrosoft
-#@ stub WTHelperIsChainedToMicrosoftFromStateData
-@ stub WTHelperIsInRootStore
-@ stub WTHelperOpenKnownStores
+@ stdcall WTHelperIsChainedToMicrosoft(ptr ptr long)
+@ stdcall WTHelperIsChainedToMicrosoftFromStateData(ptr long)
+@ stdcall WTHelperIsInRootStore(ptr ptr)
+@ stdcall WTHelperOpenKnownStores(ptr)
 @ stdcall WTHelperProvDataFromStateData(ptr)
-#@ stub WTIsFirstConfigCiResultPreferred
+@ stdcall WTIsFirstConfigCiResultPreferred(ptr ptr ptr)
 #@ stub WTLogConfigCiScriptEvent
-#@ stub WTLogConfigCiSignerEvent
+@ stdcall WTLogConfigCiSignerEvent(ptr ptr ptr ptr)
 #@ stub WTValidateBioSignaturePolicy
 @ stdcall WVTAsn1CatMemberInfo2Decode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1CatMemberInfo2Encode(long str ptr ptr ptr)

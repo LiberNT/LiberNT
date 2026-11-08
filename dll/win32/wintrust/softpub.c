@@ -2119,3 +2119,245 @@ BOOL SoftpubFreeDefUsageCallData(const char *pszUsageOID, CRYPT_PROVIDER_DEFUSAG
     return TRUE;
 }
 #endif
+
+#ifdef __REACTOS__
+static void DUMP_Line(HANDLE file, const char *format, ...)
+{
+    char line[1024];
+    DWORD written;
+    va_list args;
+    int len;
+
+    va_start(args, format);
+    len = vsnprintf(line, sizeof(line) - 3, format, args);
+    va_end(args);
+    if (len < 0 || len > (int)sizeof(line) - 3)
+        len = sizeof(line) - 3;
+    memcpy(line + len, "\r\n", 3);
+    WriteFile(file, line, len + 3, &written, NULL);
+}
+
+static const char *DUMP_Time(const FILETIME *time, char *buffer, DWORD size)
+{
+    SYSTEMTIME st;
+
+    if (!FileTimeToSystemTime(time, &st))
+        st = (SYSTEMTIME){ 0 };
+    snprintf(buffer, size, "%u/%u/%u - %02u:%02u:%02u %s", st.wMonth, st.wDay, st.wYear, st.wHour, st.wMinute,
+             st.wSecond, st.wHour < 12 ? "AM" : "PM");
+    return buffer;
+}
+
+static const char *DUMP_Guid(const GUID *guid, char *buffer, DWORD size)
+{
+    static const GUID zero;
+
+    if (!guid)
+        guid = &zero;
+    snprintf(buffer, size, "{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}", guid->Data1, guid->Data2,
+             guid->Data3, guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3], guid->Data4[4],
+             guid->Data4[5], guid->Data4[6], guid->Data4[7]);
+    return buffer;
+}
+
+static void DUMP_Certificate(HANDLE file, const CRYPT_PROVIDER_CERT *cert, const char *indent, BOOL last)
+{
+    char issuer[256] = "", subject[256] = "", before[64], after[64];
+
+    if (cert->pCert)
+    {
+        CertGetNameStringA(cert->pCert, CERT_NAME_SIMPLE_DISPLAY_TYPE, CERT_NAME_ISSUER_FLAG, NULL, issuer,
+                           sizeof(issuer));
+        CertGetNameStringA(cert->pCert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, subject, sizeof(subject));
+    }
+    DUMP_Line(file, "%s|   |.. cbStruct:             %lu", indent, cert->cbStruct);
+    DUMP_Line(file, "%s|   |.. pCert:                0x%p", indent, cert->pCert);
+    if (cert->pCert)
+    {
+        DUMP_Line(file, "%s|   |   |.. dwCertEncoding:   0x%08lX", indent, cert->pCert->dwCertEncodingType);
+        DUMP_Line(file, "%s|   |   |.. pCertInfo:", indent);
+        DUMP_Line(file, "%s|   |   |   |.. Issuer:       %s", indent, issuer);
+        DUMP_Line(file, "%s|   |   |   |.. NotBefore:    %s", indent,
+                  DUMP_Time(&cert->pCert->pCertInfo->NotBefore, before, sizeof(before)));
+        DUMP_Line(file, "%s|   |   |   |.. NotAfter:     %s", indent,
+                  DUMP_Time(&cert->pCert->pCertInfo->NotAfter, after, sizeof(after)));
+        DUMP_Line(file, "%s|   |   |   +.. Subject:      %s", indent, subject);
+        DUMP_Line(file, "%s|   |   +.. hCertStore:       0x%p", indent, cert->pCert->hCertStore);
+    }
+    DUMP_Line(file, "%s|   |.. fCommercial:          %s", indent, cert->fCommercial ? "True" : "False");
+    DUMP_Line(file, "%s|   |.. fTrustedRoot:         %s", indent, cert->fTrustedRoot ? "True" : "False");
+    DUMP_Line(file, "%s|   |.. fSelfSigned:          %s", indent, cert->fSelfSigned ? "True" : "False");
+    DUMP_Line(file, "%s|   |.. fTestCert:            %s", indent, cert->fTestCert ? "True" : "False");
+    DUMP_Line(file, "%s|   |.. dwRevokedReason:      0x%08lX", indent, cert->dwRevokedReason);
+    DUMP_Line(file, "%s|   |.. dwConfidence:         0x%08lX", indent, cert->dwConfidence);
+    DUMP_Line(file, "%s|   |.. pTrustListContext:    0x%p", indent, cert->pTrustListContext);
+    if (last)
+        DUMP_Line(file, "|   |   +-- +.. dwError:              0x%08lX", cert->dwError);
+    else
+        DUMP_Line(file, "%s|   +.. dwError:              0x%08lX", indent, cert->dwError);
+}
+
+static void DUMP_Signer(HANDLE file, const CRYPT_PROVIDER_SGNR *signer)
+{
+    char time[64];
+    DWORD i;
+
+    DUMP_Line(file, "|   |.. cbStruct:                     %lu", signer->cbStruct);
+    DUMP_Line(file, "|   |.. sftVerifyAsOf:                %s", DUMP_Time(&signer->sftVerifyAsOf, time, sizeof(time)));
+    DUMP_Line(file, "|   |.. dwSignerType:                 0x%08lX", signer->dwSignerType);
+    DUMP_Line(file, "|   |.. csCertChain:                  %lu", signer->csCertChain);
+    for (i = 0; i < signer->csCertChain; i++)
+    {
+        DUMP_Line(file, i + 1 < signer->csCertChain ? "|   |   |.. casCertChain[%lu]:" : "|   |   +.. casCertChain[%lu]:", i);
+        DUMP_Certificate(file, &signer->pasCertChain[i], "|   |   ", i + 1 == signer->csCertChain);
+    }
+    DUMP_Line(file, "|   |.. psSigner:                     0x%p", signer->psSigner);
+    DUMP_Line(file, "|   |.. dwError:                      0x%08lX", signer->dwError);
+    DUMP_Line(file, "|   +.. csCounterSigners:             %lu", signer->csCounterSigners);
+}
+
+/***********************************************************************
+ *		SoftpubDumpStructure (WINTRUST.@)
+ */
+HRESULT WINAPI SoftpubDumpStructure(CRYPT_PROVIDER_DATA *data)
+{
+    WINTRUST_DATA *trust;
+    char text[128], hash[129];
+    DWORD i, j;
+    HANDLE file;
+
+    TRACE("(%p)\n", data);
+
+    if (!data)
+        return S_FALSE;
+    file = CreateFileW(L"C:\\TRUSTPOL.TXT", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE)
+        return S_FALSE;
+
+    trust = data->pWintrustData;
+    DUMP_Line(file, "CRYPT_PROVIDER_DATA:");
+    DUMP_Line(file, "+======================================================");
+    DUMP_Line(file, "+-- pWintrustData:");
+    if (trust)
+    {
+        DUMP_Line(file, "|   |.. cbStruct:                     %lu", trust->cbStruct);
+        DUMP_Line(file, "|   |.. pPolicyCallbackData:          %p", trust->pPolicyCallbackData);
+        DUMP_Line(file, "|   |.. dwUIChoice:                   %lu", trust->dwUIChoice);
+        DUMP_Line(file, "|   |.. fdRevocationChecks:           %lu", trust->fdwRevocationChecks);
+        DUMP_Line(file, "|   |.. dwUnionChoice:                %lu", trust->dwUnionChoice);
+        if (trust->dwUnionChoice == WTD_CHOICE_CATALOG && trust->pCatalog)
+        {
+            WINTRUST_CATALOG_INFO *catalog = trust->pCatalog;
+
+            hash[0] = 0;
+            for (i = 0; catalog->pbCalculatedFileHash && i < catalog->cbCalculatedFileHash && i < 64; i++)
+                snprintf(hash + i * 2, 3, "%02X", catalog->pbCalculatedFileHash[i]);
+            DUMP_Line(file, "|   +-- pCatalog:");
+            DUMP_Line(file, "|       |.. cbStruct:                 %lu", catalog->cbStruct);
+            DUMP_Line(file, "|       |.. dwCatalogVersion:         0x%lx", catalog->dwCatalogVersion);
+            DUMP_Line(file, "|       |.. pcwszCatalogFilePath:     %ls", catalog->pcwszCatalogFilePath ? catalog->pcwszCatalogFilePath : L"(null)");
+            DUMP_Line(file, "|       |.. pcwszMemberTag:           %ls", catalog->pcwszMemberTag ? catalog->pcwszMemberTag : L"(null)");
+            DUMP_Line(file, "|       |.. pcwszMemberFilePath:      %ls", catalog->pcwszMemberFilePath ? catalog->pcwszMemberFilePath : L"(null)");
+            DUMP_Line(file, "|       |.. hMemberFile:              0x%p", catalog->hMemberFile);
+            DUMP_Line(file, "|       |.. pbCaclulatedFileHash:     %s", hash);
+            DUMP_Line(file, "|       +-- cbCaclulatedFileHash:     %lu", catalog->cbCalculatedFileHash);
+        }
+        else if (trust->dwUnionChoice == WTD_CHOICE_FILE && trust->pFile)
+        {
+            /* TODO: INFO_NEEDED: the layout Windows 11 uses for the other union choices; the catalog one was measured */
+            DUMP_Line(file, "|   +-- pFile:");
+            DUMP_Line(file, "|       |.. cbStruct:                 %lu", trust->pFile->cbStruct);
+            DUMP_Line(file, "|       |.. pcwszFilePath:            %ls", trust->pFile->pcwszFilePath ? trust->pFile->pcwszFilePath : L"(null)");
+            DUMP_Line(file, "|       +-- hFile:                    0x%p", trust->pFile->hFile);
+        }
+    }
+    DUMP_Line(file, "|.. WndParent:                        0x%p", data->hWndParent);
+    DUMP_Line(file, "|.. pgActionID:                       %s", DUMP_Guid(data->pgActionID, text, sizeof(text)));
+    DUMP_Line(file, "|.. hProv:                            0x%Iu", data->hProv);
+    DUMP_Line(file, "|.. dwError:                          0x%08lX", data->dwError);
+    DUMP_Line(file, "|.. dwRegSecuritySettings:            0x%08lX", data->dwRegSecuritySettings);
+    DUMP_Line(file, "|.. dwRegPolicySettings:              0x%08lX", data->dwRegPolicySettings);
+    DUMP_Line(file, "|.. dwEncoding:                       0x%08lX", data->dwEncoding);
+    DUMP_Line(file, "|.. psPfns:");
+    if (data->psPfns)
+    {
+        const CRYPT_PROVIDER_FUNCTIONS *f = data->psPfns;
+
+        DUMP_Line(file, "|   |.. cbStruct:                     %lu", f->cbStruct);
+        DUMP_Line(file, "|   |.. pfnAlloc:                     0x%p", f->pfnAlloc);
+        DUMP_Line(file, "|   |.. pfnFree:                      0x%p", f->pfnFree);
+        DUMP_Line(file, "|   |.. pfnAddStore2Chain:            0x%p", f->pfnAddStore2Chain);
+        DUMP_Line(file, "|   |.. pfnAddSgnr2Chain:             0x%p", f->pfnAddSgnr2Chain);
+        DUMP_Line(file, "|   |.. pfnAddCert2Chain:             0x%p", f->pfnAddCert2Chain);
+        DUMP_Line(file, "|   |.. pfnAddPrivData2Chain:         0x%p", f->pfnAddPrivData2Chain);
+        DUMP_Line(file, "|   |.. pfnInitialize:                0x%p", f->pfnInitialize);
+        DUMP_Line(file, "|   |.. pfnObjectTrust:               0x%p", f->pfnObjectTrust);
+        DUMP_Line(file, "|   |.. pfnSignatureTrust:            0x%p", f->pfnSignatureTrust);
+        DUMP_Line(file, "|   |.. pfnCertificateTrust:          0x%p", f->pfnCertificateTrust);
+        DUMP_Line(file, "|   |.. pfnFinalPolicy:               0x%p", f->pfnFinalPolicy);
+        DUMP_Line(file, "|   |.. pfnCertCheckPolicy:           0x%p", f->pfnCertCheckPolicy);
+        DUMP_Line(file, "|   |.. pfnTestFinalPolicy:           0x%p", f->pfnTestFinalPolicy);
+        DUMP_Line(file, "|   |.. pfnCleanupPolicy:             0x%p", f->pfnCleanupPolicy);
+        DUMP_Line(file, "|   +.. psUIpfns:");
+        if (f->psUIpfns)
+        {
+            const CRYPT_PROVUI_FUNCS *ui = f->psUIpfns;
+
+            DUMP_Line(file, "|       |.. cbStruct:                 %lu", ui->cbStruct);
+            DUMP_Line(file, "|       |.. psUIData:");
+            if (ui->psUIData)
+            {
+                DUMP_Line(file, "|       |   |.. cbStruct:             %lu", ui->psUIData->cbStruct);
+                DUMP_Line(file, "|       |   |.. dwFinalError:         0x%08lX", ui->psUIData->dwFinalError);
+                DUMP_Line(file, "|       |   |.. pYesButtonText:       %ls", ui->psUIData->pYesButtonText ? ui->psUIData->pYesButtonText : L"(null)");
+                DUMP_Line(file, "|       |   |.. pNoButtonText:        %ls", ui->psUIData->pNoButtonText ? ui->psUIData->pNoButtonText : L"(null)");
+                DUMP_Line(file, "|       |   |.. pMoreInfoButtonText:  %ls", ui->psUIData->pMoreInfoButtonText ? ui->psUIData->pMoreInfoButtonText : L"(null)");
+                DUMP_Line(file, "|       |   |.. pAdvancedLinkText:    %ls", ui->psUIData->pAdvancedLinkText ? ui->psUIData->pAdvancedLinkText : L"(null)");
+                DUMP_Line(file, "|       |   |.. pCopyActionText:      %ls", ui->psUIData->pCopyActionText ? ui->psUIData->pCopyActionText : L"(null)");
+                DUMP_Line(file, "|       |   |.. pCopyActionTextNoTS:  %ls", ui->psUIData->pCopyActionTextNoTS ? ui->psUIData->pCopyActionTextNoTS : L"(null)");
+                DUMP_Line(file, "|       |   |.. pCopyActionTextNotSigned:  %ls", ui->psUIData->pCopyActionTextNotSigned ? ui->psUIData->pCopyActionTextNotSigned : L"(null)");
+            }
+            DUMP_Line(file, "|       |.. pfnOnMoreInfoClick:       0x%p", ui->pfnOnMoreInfoClick);
+            DUMP_Line(file, "|       |.. pfnOnMoreInfoClickDefault:0x%p", ui->pfnOnMoreInfoClickDefault);
+            DUMP_Line(file, "|       |.. pfnOnAdvancedClick:       0x%p", ui->pfnOnAdvancedClick);
+            DUMP_Line(file, "|       +.. pfnOnAdvancedClickDefault:0x%p", ui->pfnOnAdvancedClickDefault);
+        }
+    }
+    DUMP_Line(file, "|.. padwTrustStepErrors:");
+    for (i = 0; data->padwTrustStepErrors && i < data->cdwTrustStepErrors; i++)
+        DUMP_Line(file, i + 1 < data->cdwTrustStepErrors ? "|   |.. Step[%02lu]:                     0x%08lX" :
+                  "|   +.. Step[%02lu]:                     0x%08lX", i, data->padwTrustStepErrors[i]);
+    DUMP_Line(file, "|.. pahStores:");
+    for (i = 0; i < data->chStores; i++)
+        DUMP_Line(file, i + 1 < data->chStores ? "|   |.. Store[%02lu]:                    0x%p" :
+                  "|   +.. Store[%02lu]:                    0x%p", i, data->pahStores[i]);
+    DUMP_Line(file, "|.. hMsg:                             0x%p", data->hMsg);
+    DUMP_Line(file, "|.. pPDSip:");
+    if (data->pPDSip)
+    {
+        DUMP_Line(file, "|   |.. gSubject:                     %s", DUMP_Guid(&data->pPDSip->gSubject, text, sizeof(text)));
+        DUMP_Line(file, "|   |.. pSip:                         0x%p", data->pPDSip->pSip);
+        DUMP_Line(file, "|   |.. pCATSip:                      0x%p", data->pPDSip->pCATSip);
+        DUMP_Line(file, "|   |.. psSipSubjectInfo:             0x%p", data->pPDSip->psSipSubjectInfo);
+        DUMP_Line(file, "|   |.. psSipCATSubjectInfo:          0x%p", data->pPDSip->psSipCATSubjectInfo);
+        DUMP_Line(file, "|   +.. psIndirectData:               0x%p", data->pPDSip->psIndirectData);
+    }
+    DUMP_Line(file, "|.. csSigners:                        %lu", data->csSigners);
+    for (i = 0; i < data->csSigners; i++)
+    {
+        DUMP_Line(file, "|.. pasSigners[%lu]:", i);
+        DUMP_Signer(file, &data->pasSigners[i]);
+        for (j = 0; j < data->pasSigners[i].csCounterSigners; j++)
+        {
+            DUMP_Line(file, "|.. pasSigners[%lu] - CounterSigner[%lu]:", i, j);
+            DUMP_Signer(file, &data->pasSigners[i].pasCounterSigners[j]);
+        }
+    }
+    DUMP_Line(file, "|.. pszUsageOID:                      %p", data->pszUsageOID);
+    DUMP_Line(file, "|.. fRecallWithState:                 %s", data->fRecallWithState ? "TRUE" : "FALSE");
+    DUMP_Line(file, "|.. sftSystemTime:                    %s", DUMP_Time(&data->sftSystemTime, text, sizeof(text)));
+    DUMP_Line(file, "+======================================================");
+    CloseHandle(file);
+    return S_OK;
+}
+#endif
