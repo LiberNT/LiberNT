@@ -8,6 +8,7 @@
 #include "precomp.h"
 
 static HWND hWnd1, hWnd2, hWnd3, hWnd4;
+static UINT Activations[5];
 
 /* FIXME: test for HWND_TOP, etc...*/
 static int get_iwnd(HWND hWnd)
@@ -22,6 +23,9 @@ static int get_iwnd(HWND hWnd)
 LRESULT CALLBACK DWPTestProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     int iwnd = get_iwnd(hWnd);
+
+    if (message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE)
+        Activations[iwnd]++;
 
     if(message > WM_USER || !iwnd || IsDWmMsg(message) || IseKeyMsg(message))
         return DefWindowProc(hWnd, message, wParam, lParam);
@@ -540,10 +544,17 @@ static void Test_DWP_Activate(void)
         hdwp = DeferWindowPos(hdwp, Windows[Tests[i].First], NULL, 40 + (i & 1) * 8, 20, 200, 210, Tests[i].FirstFlags);
         hdwp = DeferWindowPos(hdwp, Windows[Tests[i].Second], NULL, 40 + (i & 1) * 8, 40, 220, 230, Tests[i].SecondFlags);
         ok(hdwp != NULL, "%u: DeferWindowPos failed\n", i);
+        ZeroMemory(Activations, sizeof(Activations));
         ok(EndDeferWindowPos(hdwp), "%u: EndDeferWindowPos failed\n", i);
         FlushMessages();
         ok(GetActiveWindow() == Windows[Tests[i].Active], "%u: hwnd%d is active, expected hwnd%d\n",
            i, get_iwnd(GetActiveWindow()), Tests[i].Active);
+        if (Tests[i].First != Tests[i].Active)
+            ok(Activations[Tests[i].First] == 0, "%u: hwnd%d was activated %u times\n",
+               i, Tests[i].First, Activations[Tests[i].First]);
+        if (Tests[i].Second != Tests[i].Active)
+            ok(Activations[Tests[i].Second] == 0, "%u: hwnd%d was activated %u times\n",
+               i, Tests[i].Second, Activations[Tests[i].Second]);
         if (Tests[i].Second != Tests[i].Active &&
             GetWindow(Windows[Tests[i].Second], GW_OWNER) != Windows[Tests[i].Active])
         {
