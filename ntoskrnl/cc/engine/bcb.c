@@ -23,6 +23,14 @@ CcBcbFind(
     {
         PCC_BCB Bcb = CONTAINING_RECORD(Entry, CC_BCB, Link);
 
+        CC_ASSERT(Bcb->Map == Map);
+        CC_ASSERT(Bcb->Length != 0 && Bcb->BeyondLastByte > Bcb->FileOffset);
+        CC_ASSERT(Bcb->BeyondLastByte - Bcb->FileOffset == Bcb->Length);
+        CC_ASSERT(Bcb->ReferenceCount >= 0);
+        CC_ASSERT(Bcb->ReferenceCount != 0 || Bcb->Dirty);
+        CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
+        CC_ASSERT(Bcb->PinCount == 0 || Bcb->Pinned);
+
         if (Bcb->Pinned == Pinned && Bcb->FileOffset <= FileOffset &&
             Bcb->BeyondLastByte >= FileOffset + Length)
         {
@@ -41,6 +49,8 @@ CcBcbDestroy(
     PCC_MAP Map = Bcb->Map;
 
     CC_ASSERT(Bcb->ReferenceCount == 0 && Bcb->PinCount == 0);
+    CC_ASSERT(!Bcb->Dirty);
+    CC_ASSERT((Bcb->OwnBase != NULL) != (Bcb->View != NULL));
 
     if (Bcb->OwnBase != NULL)
         Map->Ops.UnmapView(Map->Context, Bcb->OwnBase);
@@ -80,7 +90,10 @@ CcBcbAcquire(
     CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
     Existing = CcBcbFind(Map, FileOffset, Length, Pinned);
     if (Existing != NULL)
+    {
+        CC_ASSERT(Existing->ReferenceCount < 0x7fffffffL);
         Existing->ReferenceCount++;
+    }
     CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
 
     if (Existing != NULL)
@@ -149,7 +162,10 @@ CcBcbAcquire(
     CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
     Existing = CcBcbFind(Map, FileOffset, Length, Pinned);
     if (Existing != NULL)
+    {
+        CC_ASSERT(Existing->ReferenceCount < 0x7fffffffL);
         Existing->ReferenceCount++;
+    }
     else
         InsertTailList(&Map->BcbList, &Bcb->Link);
     CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
@@ -172,6 +188,7 @@ CcBcbAddress(
     _In_ PCC_BCB Bcb,
     _In_ ULONG64 FileOffset)
 {
+    CC_ASSERT(FileOffset >= Bcb->FileOffset && FileOffset < Bcb->BeyondLastByte);
     return (PUCHAR)Bcb->BaseAddress + (SIZE_T)(FileOffset - Bcb->FileOffset);
 }
 
@@ -182,6 +199,8 @@ CcBcbReference(
     KIRQL OldIrql;
 
     CC_LOCK_ACQUIRE(&Bcb->Map->BcbLock, &OldIrql);
+    CC_ASSERT(Bcb->ReferenceCount > 0 && Bcb->ReferenceCount < 0x7fffffffL);
+    CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
     Bcb->ReferenceCount++;
     CC_LOCK_RELEASE(&Bcb->Map->BcbLock, OldIrql);
 }
@@ -197,6 +216,7 @@ CcBcbDereference(
     CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
     CC_ASSERT(Bcb->ReferenceCount > 0);
     Bcb->ReferenceCount--;
+    CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
     if (Bcb->ReferenceCount == 0 && !Bcb->Dirty)
     {
         RemoveEntryList(&Bcb->Link);
@@ -215,6 +235,9 @@ CcBcbPin(
     KIRQL OldIrql;
 
     CC_LOCK_ACQUIRE(&Bcb->Map->BcbLock, &OldIrql);
+    CC_ASSERT(Bcb->Pinned);
+    CC_ASSERT(Bcb->ReferenceCount > 0);
+    CC_ASSERT(Bcb->PinCount < (ULONG)Bcb->ReferenceCount);
     Bcb->PinCount++;
     CC_LOCK_RELEASE(&Bcb->Map->BcbLock, OldIrql);
 }
@@ -226,7 +249,8 @@ CcBcbUnpin(
     KIRQL OldIrql;
 
     CC_LOCK_ACQUIRE(&Bcb->Map->BcbLock, &OldIrql);
-    CC_ASSERT(Bcb->PinCount > 0);
+    CC_ASSERT(Bcb->Pinned && Bcb->PinCount > 0);
+    CC_ASSERT(Bcb->ReferenceCount > 0 && Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
     Bcb->PinCount--;
     CC_LOCK_RELEASE(&Bcb->Map->BcbLock, OldIrql);
 }
@@ -274,6 +298,8 @@ CcBcbSetDirty(
     KIRQL OldIrql;
 
     CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
+    CC_ASSERT(Bcb->ReferenceCount > 0);
+    CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
     Bcb->Dirty = TRUE;
     Bcb->DirtyGeneration = ++Map->BcbGeneration;
     if (Lsn != 0)
@@ -322,6 +348,10 @@ CcBcbCompleteFlush(
         PCC_BCB Bcb = CONTAINING_RECORD(Entry, CC_BCB, Link);
 
         Next = Entry->Flink;
+        CC_ASSERT(Bcb->Map == Map && Bcb->ReferenceCount >= 0);
+        CC_ASSERT(Bcb->ReferenceCount != 0 || Bcb->Dirty);
+        CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
+        CC_ASSERT(Bcb->PinCount == 0 || Bcb->Pinned);
         if (Bcb->FileOffset < Start || Bcb->FileOffset + Bcb->Length > End)
             continue;
 
