@@ -62,6 +62,7 @@ list(APPEND SOURCE
     d3dkmt_teardown.c
     d3dkmt_renderpath.c
     d3dkmt_hdgfx_gen.c
+    d3dkmt_hdgfx_session.c
     d3dkmt_capsaudit.c
     d3dkmt_umdabi.c
     d3dkmt_abifreeze.c
@@ -95,6 +96,7 @@ if(REACTOS_USE_WDDM AND (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000))
 endif()
 
 list(APPEND PCH_SKIP_SOURCE
+    ../advapi32/svchlp.c
     testlist.c)
 
 add_executable(d3dkmt_apitest
