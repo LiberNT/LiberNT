@@ -347,6 +347,7 @@ BcmBtEnqueue(
 {
     PBCMBT_TRANSFER_RING Ring;
     LARGE_INTEGER Timeout;
+    ULONGLONG Start;
     KEVENT Event;
     KIRQL OldIrql;
     USHORT Head, Next;
@@ -394,8 +395,14 @@ BcmBtEnqueue(
     if (!Wait)
         return STATUS_SUCCESS;
 
-    Timeout.QuadPart = -10000LL * BCMBT_CONTROL_TIMEOUT_MS;
-    Status = KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, &Timeout);
+    Start = KeQueryInterruptTime();
+    Timeout.QuadPart = -10000LL * 10;
+    do
+    {
+        BcmBtPollCompletions(Dev);
+        Status = KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, &Timeout);
+    } while (Status == STATUS_TIMEOUT && !Dev->StopThread &&
+             KeQueryInterruptTime() - Start < 10000ULL * BCMBT_CONTROL_TIMEOUT_MS);
     KeAcquireSpinLock(&Dev->RingLock, &OldIrql);
     Ring->Waiters[Slot] = NULL;
     KeReleaseSpinLock(&Dev->RingLock, OldIrql);

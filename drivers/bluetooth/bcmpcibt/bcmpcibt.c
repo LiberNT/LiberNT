@@ -319,6 +319,13 @@ BcmBtEvtD0EntryPostInterruptsEnabled(
 
     UNREFERENCED_PARAMETER(PreviousState);
     Dev->StopThread = FALSE;
+    {
+        LARGE_INTEGER Due;
+
+        /* FIXME: the rings are polled because the controller's interrupts never arrive on all-core boots */
+        Due.QuadPart = -10000LL * BCMBT_POLL_INTERVAL_MS;
+        KeSetTimerEx(&Dev->PollTimer, Due, BCMBT_POLL_INTERVAL_MS, &Dev->PollDpc);
+    }
     Status = PsCreateSystemThread(&Thread, THREAD_ALL_ACCESS, NULL, NULL, NULL, BcmBtThread, Dev);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -346,6 +353,8 @@ BcmBtEvtD0ExitPreInterruptsDisabled(
         ObDereferenceObject(Dev->Thread);
         Dev->Thread = NULL;
     }
+    KeCancelTimer(&Dev->PollTimer);
+    KeFlushQueuedDpcs();
     if (Dev->Booted && TargetState == WdfPowerDeviceD3Final)
     {
         BcmBtDestroyRings(Dev);
@@ -374,14 +383,9 @@ BcmBtEvtIsr(
 
 static
 VOID
-NTAPI
-BcmBtEvtDpc(
-    _In_ WDFINTERRUPT Interrupt,
-    _In_ WDFOBJECT AssociatedObject)
+BcmBtService(
+    _In_ PBCMBT_DEVICE Dev)
 {
-    PBCMBT_DEVICE Dev = BcmBtGetDevice(WdfInterruptGetDevice(Interrupt));
-
-    UNREFERENCED_PARAMETER(AssociatedObject);
     if (BcmBtUpdateState(Dev))
     {
         if (Dev->RtiStatus > 2)
@@ -391,6 +395,32 @@ BcmBtEvtDpc(
     BcmBtPollCompletions(Dev);
     if (Dev->Ready)
         BcmBtDeliverPackets(Dev);
+}
+
+static
+VOID
+NTAPI
+BcmBtEvtDpc(
+    _In_ WDFINTERRUPT Interrupt,
+    _In_ WDFOBJECT AssociatedObject)
+{
+    UNREFERENCED_PARAMETER(AssociatedObject);
+    BcmBtService(BcmBtGetDevice(WdfInterruptGetDevice(Interrupt)));
+}
+
+static
+VOID
+NTAPI
+BcmBtPollDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID Context,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+    BcmBtService((PBCMBT_DEVICE)Context);
 }
 
 VOID
@@ -788,6 +818,8 @@ BcmBtEvtDeviceAdd(
     InitializeListHead(&Dev->RxPackets);
     KeInitializeEvent(&Dev->StateEvent, SynchronizationEvent, FALSE);
     KeInitializeEvent(&Dev->RxEvent, SynchronizationEvent, FALSE);
+    KeInitializeTimer(&Dev->PollTimer);
+    KeInitializeDpc(&Dev->PollDpc, BcmBtPollDpc, Dev);
 
     WDF_INTERRUPT_CONFIG_INIT(&InterruptConfig, BcmBtEvtIsr, BcmBtEvtDpc);
     return WdfInterruptCreate(Device, &InterruptConfig, WDF_NO_OBJECT_ATTRIBUTES, &Dev->Interrupt);

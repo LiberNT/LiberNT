@@ -19,6 +19,7 @@
 
 #define BCMBT_TAG                       'tBcB'
 #define BCMBT_CONTROL_TIMEOUT_MS        1000
+#define BCMBT_POLL_INTERVAL_MS          10
 #define BCMBT_BOOT_TIMEOUT_MS           5000
 #define BCMBT_COMMAND_TIMEOUT_MS        2000
 #define BCMBT_RESET_SETTLE_MS           100
@@ -98,6 +99,8 @@ typedef struct _BCMBT_DEVICE
     ULONG RxPacketCount;
     KEVENT RxEvent;
     volatile LONG DeliverPending;
+    KTIMER PollTimer;
+    KDPC PollDpc;
     WDFQUEUE EventQueue;
     WDFQUEUE AclQueue;
     WDFDEVICE Child;

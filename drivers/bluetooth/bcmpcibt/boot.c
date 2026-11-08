@@ -305,6 +305,7 @@ BcmBtHciCommand(
     {
         PBCMBT_PACKET Packet;
 
+        BcmBtPollCompletions(Dev);
         while ((Packet = BcmBtTakePacket(Dev)) != NULL)
         {
             const UCHAR *Event = Packet->Data;
