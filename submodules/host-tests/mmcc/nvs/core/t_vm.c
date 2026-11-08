@@ -1034,6 +1034,40 @@ VmLockRanges(void)
     CHECK(Space.LockRangeCount == 1 && Space.LockedPages == 39);
     MiLockRangeRemove(&Space, 0x40000000ULL, 0x40000000ULL + 40 * PAGE_SIZE);
     CHECK(Space.LockRangeCount == 0 && Space.LockedPages == 0);
+    {
+        UCHAR Expected[64] = {0};
+        ULONG64 Seed = 0xB47C6A21ULL;
+        ULONG Round;
+
+        for (Round = 0; Round < 512; Round++)
+        {
+            ULONG First = (ULONG)(Rng(&Seed) % RTL_NUMBER_OF(Expected));
+            ULONG Last = First + 1 + (ULONG)(Rng(&Seed) % (RTL_NUMBER_OF(Expected) - First));
+            BOOLEAN Add = (BOOLEAN)(Rng(&Seed) & 1);
+            ULONG Count = 0;
+
+            if (Add)
+                CHECK(NT_SUCCESS(MiLockRangeAdd(&Space, 0x40000000ULL + (ULONG64)First * PAGE_SIZE,
+                                                0x40000000ULL + (ULONG64)Last * PAGE_SIZE)));
+            else
+                MiLockRangeRemove(&Space, 0x40000000ULL + (ULONG64)First * PAGE_SIZE,
+                                  0x40000000ULL + (ULONG64)Last * PAGE_SIZE);
+            for (i = First; i < Last; i++)
+                Expected[i] = Add;
+            for (i = 0; i < RTL_NUMBER_OF(Expected); i++)
+            {
+                BOOLEAN Locked = MiLockRangeLocked(&Space, 0x40000000ULL + (ULONG64)i * PAGE_SIZE, &Next);
+
+                CHECK(Locked == (Expected[i] != 0));
+                Count += Expected[i];
+            }
+            CHECK(Space.LockedPages == Count);
+            CHECK(MiLockRangePages(&Space, 0x40000000ULL,
+                                   0x40000000ULL + RTL_NUMBER_OF(Expected) * PAGE_SIZE) == Count);
+        }
+        MiLockRangeRemove(&Space, 0x40000000ULL, 0x40000000ULL + RTL_NUMBER_OF(Expected) * PAGE_SIZE);
+        CHECK(Space.LockRangeCount == 0 && Space.LockedPages == 0);
+    }
     MI_RW_RELEASE_EXCLUSIVE(&Space.Lock);
 
     CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));

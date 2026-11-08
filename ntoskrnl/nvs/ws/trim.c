@@ -212,6 +212,31 @@ MiTrimRange(
     return Trimmed;
 }
 
+#if DBG || defined(MM_HOST_TEST)
+static
+VOID
+MiAssertLockRangeState(_In_ PMI_ADDRESS_SPACE Space)
+{
+    ULONG64 Pages = 0;
+    ULONG Index;
+
+    MI_ASSERT(Space->LockRangeCount <= Space->LockRangeCapacity);
+    MI_ASSERT((Space->LockRanges == NULL) == (Space->LockRangeCapacity == 0));
+    for (Index = 0; Index < Space->LockRangeCount; Index++)
+    {
+        PMI_LOCK_RANGE Range = &Space->LockRanges[Index];
+
+        MI_ASSERT(Range->Start < Range->End);
+        MI_ASSERT(((Range->Start | Range->End) & (PAGE_SIZE - 1)) == 0);
+        MI_ASSERT(Index == 0 || Space->LockRanges[Index - 1].End < Range->Start);
+        Pages += (Range->End - Range->Start) >> PAGE_SHIFT;
+    }
+    MI_ASSERT(Pages == Space->LockedPages);
+}
+#else
+#define MiAssertLockRangeState(Space) ((VOID)0)
+#endif
+
 static
 ULONG
 MiLockRangeSearch(
@@ -330,6 +355,8 @@ MiLockRangeAdd(
     ULONG First;
     ULONG Last;
 
+    MI_ASSERT(Start < End && ((Start | End) & (PAGE_SIZE - 1)) == 0);
+    MiAssertLockRangeState(Space);
     if (!MiLockRangeReserve(Space, Space->LockRangeCount + 2))
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -366,6 +393,7 @@ MiLockRangeAdd(
     MI_ASSERT(First == 0 || Space->LockRanges[First - 1].End < Start);
     MI_ASSERT(First + 1 == Space->LockRangeCount || End < Space->LockRanges[First + 1].Start);
     Space->LockedPages += Pages;
+    MiAssertLockRangeState(Space);
     return STATUS_SUCCESS;
 }
 
@@ -375,8 +403,11 @@ MiLockRangeRemove(
     _In_ ULONG64 Start,
     _In_ ULONG64 End)
 {
-    ULONG Index = MiLockRangeSearch(Space, Start);
+    ULONG Index;
 
+    MI_ASSERT(Start <= End && ((Start | End) & (PAGE_SIZE - 1)) == 0);
+    MiAssertLockRangeState(Space);
+    Index = MiLockRangeSearch(Space, Start);
     while (Index < Space->LockRangeCount && Space->LockRanges[Index].Start < End)
     {
         PMI_LOCK_RANGE Range = &Space->LockRanges[Index];
@@ -394,6 +425,7 @@ MiLockRangeRemove(
                 MI_ASSERT(Space->LockedPages >= ((Space->LockRanges[Index].End - End) >> PAGE_SHIFT));
                 Space->LockedPages -= (Space->LockRanges[Index].End - End) >> PAGE_SHIFT;
                 Space->LockRanges[Index].End = Start;
+                MiAssertLockRangeState(Space);
                 return;
             }
 
@@ -402,6 +434,7 @@ MiLockRangeRemove(
             Space->LockRangeCount++;
             Space->LockRanges[Index].End = Start;
             Space->LockRanges[Index + 1].Start = End;
+            MiAssertLockRangeState(Space);
             return;
         }
 
@@ -415,6 +448,7 @@ MiLockRangeRemove(
         if (Range->End > End)
         {
             Range->Start = End;
+            MiAssertLockRangeState(Space);
             return;
         }
 
@@ -422,12 +456,14 @@ MiLockRangeRemove(
                       (Space->LockRangeCount - Index - 1) * sizeof(MI_LOCK_RANGE));
         Space->LockRangeCount--;
     }
+    MiAssertLockRangeState(Space);
 }
 
 VOID
 MiLockRangeReset(
     _Inout_ PMI_ADDRESS_SPACE Space)
 {
+    MiAssertLockRangeState(Space);
     if (Space->LockRanges != NULL)
         MI_FREE(Space->LockRanges);
 
@@ -435,6 +471,7 @@ MiLockRangeReset(
     Space->LockRangeCount = 0;
     Space->LockRangeCapacity = 0;
     Space->LockedPages = 0;
+    MiAssertLockRangeState(Space);
 }
 
 static
