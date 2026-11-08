@@ -5151,6 +5151,12 @@ DxgkpRemoveDeviceMapEntry(
                                 sizeof(NewMax));
 }
 
+static NTSTATUS
+DxgkpDisplayCreateVideoDevice(
+    _Out_ PULONG Number,
+    _Out_writes_(DeviceBufferCount) PWCHAR DeviceBuffer,
+    _In_ SIZE_T DeviceBufferCount);
+
 /* ========================================================================
  * DxgkDisplayRegister
  *
@@ -5175,7 +5181,6 @@ DxgkDisplayRegister(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     NTSTATUS        Status;
-    UNICODE_STRING  DeviceName;
     OBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING  KeyName;
     HANDLE          hVideoMap = NULL;
@@ -5220,72 +5225,14 @@ DxgkDisplayRegister(
                             L"\\Device\\Video%lu", DeviceNumber);
         DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p takes over the detached desktop on %ls\n",
                      Adapter, DeviceBuffer);
-        goto PublishDevice;
     }
-
-    /* ---- Step 1: Find a free \Device\VideoN name ---- */
-
-    /*
-     * MaxObjectNumber is an enumeration bound, not an allocation cursor.
-     * Always probe from Video0 and let the object manager identify names
-     * that are still live.  A stopped basic-display adapter may have been
-     * Video0 even though its former MaxObjectNumber was observed earlier.
-     */
-    DeviceNumber = 0;
-
-    /*
-     * Try to create \Device\VideoN.  If the name is already taken
-     * (STATUS_OBJECT_NAME_COLLISION), try the next number.  Limit the
-     * search to avoid an infinite loop on pathological setups.
-     */
-    Status = STATUS_OBJECT_NAME_COLLISION;
-    for (; DeviceNumber < 16 && Status == STATUS_OBJECT_NAME_COLLISION;
-         DeviceNumber++)
+    else
     {
-        RtlStringCchPrintfW(DeviceBuffer,
-                            RTL_NUMBER_OF(DeviceBuffer),
-                            L"\\Device\\Video%lu", DeviceNumber);
-        RtlInitUnicodeString(&DeviceName, DeviceBuffer);
-
-        Status = IoCreateDevice(
-                     GDxgControlDeviceObject->DriverObject,
-                     sizeof(PVOID),  /* DeviceExtension stores adapter pointer */
-                     &DeviceName,
-                     FILE_DEVICE_VIDEO,  /* Match videoprt device type */
-                     FILE_DEVICE_SECURE_OPEN,
-                     FALSE,
-                     &g_DisplayDeviceObject);
-
-        if (NT_SUCCESS(Status))
-        {
-            /* Success -- we own this device number. */
-            DXGKRNL_TRACE("DxgkDisplayRegister: created \\Device\\Video%lu at %p\n",
-                          DeviceNumber, g_DisplayDeviceObject);
-            break;
-        }
-
-        if (Status == STATUS_OBJECT_NAME_COLLISION)
-        {
-            DXGKRNL_TRACE("DxgkDisplayRegister: \\Device\\Video%lu already "
-                          "exists (owned by another driver), trying next\n",
-                          DeviceNumber);
-            continue;
-        }
-
-        /* Some other failure -- bail out. */
-        DXGKRNL_ERR("DxgkDisplayRegister: IoCreateDevice(\\Device\\Video%lu) "
-                     "failed 0x%08lX\n", DeviceNumber, Status);
-        return Status;
+        Status = DxgkpDisplayCreateVideoDevice(&DeviceNumber, DeviceBuffer, RTL_NUMBER_OF(DeviceBuffer));
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
 
-    if (!NT_SUCCESS(Status))
-    {
-        DXGKRNL_ERR("DxgkDisplayRegister: could not find a free VideoN "
-                     "device name (tried up to Video15)\n");
-        return Status;
-    }
-
-PublishDevice:
     /* Store the device number we actually got. */
     g_DisplayDeviceNumber = DeviceNumber;
     g_DisplayInitialModePending = TRUE;
@@ -5523,6 +5470,82 @@ Cleanup:
     }
 
     return Status;
+}
+
+static NTSTATUS
+DxgkpDisplayCreateVideoDevice(
+    _Out_ PULONG Number,
+    _Out_writes_(DeviceBufferCount) PWCHAR DeviceBuffer,
+    _In_ SIZE_T DeviceBufferCount)
+{
+    NTSTATUS        Status;
+    UNICODE_STRING  DeviceName;
+    ULONG           DeviceNumber;
+
+    /* ---- Step 1: Find a free \Device\VideoN name ---- */
+
+    /*
+     * MaxObjectNumber is an enumeration bound, not an allocation cursor.
+     * Always probe from Video0 and let the object manager identify names
+     * that are still live.  A stopped basic-display adapter may have been
+     * Video0 even though its former MaxObjectNumber was observed earlier.
+     */
+    DeviceNumber = 0;
+
+    /*
+     * Try to create \Device\VideoN.  If the name is already taken
+     * (STATUS_OBJECT_NAME_COLLISION), try the next number.  Limit the
+     * search to avoid an infinite loop on pathological setups.
+     */
+    Status = STATUS_OBJECT_NAME_COLLISION;
+    for (; DeviceNumber < 16 && Status == STATUS_OBJECT_NAME_COLLISION;
+         DeviceNumber++)
+    {
+        RtlStringCchPrintfW(DeviceBuffer,
+                            DeviceBufferCount,
+                            L"\\Device\\Video%lu", DeviceNumber);
+        RtlInitUnicodeString(&DeviceName, DeviceBuffer);
+
+        Status = IoCreateDevice(
+                     GDxgControlDeviceObject->DriverObject,
+                     sizeof(PVOID),  /* DeviceExtension stores adapter pointer */
+                     &DeviceName,
+                     FILE_DEVICE_VIDEO,  /* Match videoprt device type */
+                     FILE_DEVICE_SECURE_OPEN,
+                     FALSE,
+                     &g_DisplayDeviceObject);
+
+        if (NT_SUCCESS(Status))
+        {
+            /* Success -- we own this device number. */
+            DXGKRNL_TRACE("DxgkDisplayRegister: created \\Device\\Video%lu at %p\n",
+                          DeviceNumber, g_DisplayDeviceObject);
+            break;
+        }
+
+        if (Status == STATUS_OBJECT_NAME_COLLISION)
+        {
+            DXGKRNL_TRACE("DxgkDisplayRegister: \\Device\\Video%lu already "
+                          "exists (owned by another driver), trying next\n",
+                          DeviceNumber);
+            continue;
+        }
+
+        /* Some other failure -- bail out. */
+        DXGKRNL_ERR("DxgkDisplayRegister: IoCreateDevice(\\Device\\Video%lu) "
+                     "failed 0x%08lX\n", DeviceNumber, Status);
+        return Status;
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_ERR("DxgkDisplayRegister: could not find a free VideoN "
+                     "device name (tried up to Video15)\n");
+        return Status;
+    }
+
+    *Number = DeviceNumber;
+    return STATUS_SUCCESS;
 }
 
 /* ========================================================================

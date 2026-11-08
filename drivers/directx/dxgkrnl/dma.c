@@ -473,11 +473,12 @@ DxgkRender(
             ReferencedCount = 0;
             TrackCount = 0;
             Status = DxgkVidMmMakeResident(Reference, Adapter);
-            DxgkVidMmDereferenceAllocation(Reference);
-            if (!NT_SUCCESS(Status))
-                goto Cleanup;
-            Index = (UINT)-1;
-            continue;
+            if (NT_SUCCESS(Status))
+            {
+                DxgkVidMmDereferenceAllocation(Reference);
+                Index = (UINT)-1;
+                continue;
+            }
         }
         if (!NT_SUCCESS(Status))
         {
