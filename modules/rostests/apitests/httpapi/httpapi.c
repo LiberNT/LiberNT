@@ -1509,6 +1509,426 @@ cleanup_wsa:
     WSACleanup();
 }
 
+typedef struct _HTTP_KA_CLIENT
+{
+    SOCKET Socket;
+    char Buffer[4096];
+    int Length;
+} HTTP_KA_CLIENT;
+
+enum
+{
+    HTTP_KA_OPEN,
+    HTTP_KA_CLOSED,
+    HTTP_KA_RESET,
+    HTTP_KA_DATA,
+};
+
+static BOOL http_ka_connect(HTTP_KA_CLIENT *Client, USHORT Port)
+{
+    struct sockaddr_in Address;
+
+    Client->Length = 0;
+    Client->Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (Client->Socket == INVALID_SOCKET)
+        return FALSE;
+
+    memset(&Address, 0, sizeof(Address));
+    Address.sin_family = AF_INET;
+    Address.sin_port = htons(Port);
+    Address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (connect(Client->Socket, (struct sockaddr *)&Address, sizeof(Address)) == SOCKET_ERROR)
+    {
+        closesocket(Client->Socket);
+        Client->Socket = INVALID_SOCKET;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL http_ka_send(HTTP_KA_CLIENT *Client, const char *Data)
+{
+    int Length = (int)strlen(Data);
+
+    return send(Client->Socket, Data, Length, 0) == Length;
+}
+
+static int http_ka_wait(HTTP_KA_CLIENT *Client, int TimeoutMs)
+{
+    int Result, Error;
+
+    if (Client->Length)
+        return HTTP_KA_DATA;
+    setsockopt(Client->Socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&TimeoutMs, sizeof(TimeoutMs));
+    Result = recv(Client->Socket, Client->Buffer, sizeof(Client->Buffer) - 1, 0);
+    if (Result > 0)
+    {
+        Client->Length = Result;
+        Client->Buffer[Client->Length] = '\0';
+        return HTTP_KA_DATA;
+    }
+    if (!Result)
+        return HTTP_KA_CLOSED;
+    Error = WSAGetLastError();
+    return Error == WSAETIMEDOUT ? HTTP_KA_OPEN : HTTP_KA_RESET;
+}
+
+static BOOL http_ka_read_response(HTTP_KA_CLIENT *Client, char *Response, int ResponseSize, int TimeoutMs)
+{
+    const char *End, *Length;
+    int Total, Received;
+
+    setsockopt(Client->Socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&TimeoutMs, sizeof(TimeoutMs));
+    for (;;)
+    {
+        Client->Buffer[Client->Length] = '\0';
+        End = strstr(Client->Buffer, "\r\n\r\n");
+        if (End)
+        {
+            Length = strstr(Client->Buffer, "Content-Length:");
+            Total = (int)(End + 4 - Client->Buffer);
+            if (Length && Length < End)
+                Total += atoi(Length + 15);
+            if (Client->Length >= Total && Total < ResponseSize)
+            {
+                memcpy(Response, Client->Buffer, Total);
+                Response[Total] = '\0';
+                memmove(Client->Buffer, Client->Buffer + Total, Client->Length - Total);
+                Client->Length -= Total;
+                return TRUE;
+            }
+        }
+        if (Client->Length >= (int)sizeof(Client->Buffer) - 1)
+            return FALSE;
+        Received = recv(Client->Socket, Client->Buffer + Client->Length,
+                        (int)sizeof(Client->Buffer) - 1 - Client->Length, 0);
+        if (Received <= 0)
+            return FALSE;
+        Client->Length += Received;
+    }
+}
+
+static ULONG http_ka_receive(HANDLE Queue, OVERLAPPED *Overlapped, ULONG Flags,
+                             HTTP_REQUEST *Request, ULONG Size, DWORD TimeoutMs)
+{
+    DWORD BytesReturned;
+    ULONG Result;
+
+    ResetEvent(Overlapped->hEvent);
+    memset(Request, 0, Size);
+    Result = HttpReceiveHttpRequest(Queue, HTTP_NULL_ID, Flags, Request, Size, NULL, Overlapped);
+    if (Result != ERROR_IO_PENDING)
+        return Result;
+    if (WaitForSingleObject(Overlapped->hEvent, TimeoutMs) != WAIT_OBJECT_0)
+        return ERROR_IO_PENDING;
+    if (!GetOverlappedResult(Queue, Overlapped, &BytesReturned, FALSE))
+        return GetLastError();
+    return NO_ERROR;
+}
+
+static void http_ka_cancel(HANDLE Queue, OVERLAPPED *Overlapped)
+{
+    DWORD BytesReturned;
+
+    CancelIoEx(Queue, Overlapped);
+    GetOverlappedResult(Queue, Overlapped, &BytesReturned, TRUE);
+}
+
+static ULONG http_ka_respond(HANDLE Queue, HTTP_REQUEST_ID RequestId, ULONG Flags, const char *Body)
+{
+    HTTP_RESPONSE Response = {0};
+    HTTP_DATA_CHUNK Chunk;
+
+    Response.s.StatusCode = 200;
+    Response.s.pReason = "OK";
+    Response.s.ReasonLength = 2;
+    if (Body)
+    {
+        Chunk.DataChunkType = HttpDataChunkFromMemory;
+        Chunk.FromMemory.pBuffer = (void *)Body;
+        Chunk.FromMemory.BufferLength = (ULONG)strlen(Body);
+        Response.s.EntityChunkCount = 1;
+        Response.s.pEntityChunks = &Chunk;
+    }
+    return HttpSendHttpResponse(Queue, RequestId, Flags, &Response, NULL, NULL, NULL, 0, NULL, NULL);
+}
+
+static BOOL http_ka_path_is(HTTP_REQUEST *Request, const char *Path)
+{
+    return Request->s.RawUrlLength == strlen(Path) &&
+           !memcmp(Request->s.pRawUrl, Path, Request->s.RawUrlLength);
+}
+
+static void http_ka_exchange(HANDLE Queue, OVERLAPPED *Overlapped, HTTP_KA_CLIENT *Client,
+                             const char *RequestText, const char *Path, ULONG ResponseFlags,
+                             const char *ExpectedConnection, int ExpectedState,
+                             HTTP_CONNECTION_ID *ConnectionId, const char *Description)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    char Response[1024], Header[64];
+    ULONG Result;
+    int State;
+
+    ok(http_ka_send(Client, RequestText), "%s: send failed with %d\n", Description, WSAGetLastError());
+    Result = http_ka_receive(Queue, Overlapped, 0, Request, sizeof(RequestBuffer), 5000);
+    ok(Result == NO_ERROR, "%s: HttpReceiveHttpRequest returned %lu\n", Description, Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, Overlapped);
+    if (Result != NO_ERROR)
+        return;
+
+    ok(http_ka_path_is(Request, Path), "%s: received %.*s\n", Description,
+       Request->s.RawUrlLength, Request->s.pRawUrl);
+    if (ConnectionId)
+    {
+        if (*ConnectionId != HTTP_NULL_ID)
+            ok(Request->s.ConnectionId == *ConnectionId, "%s: connection id changed\n", Description);
+        *ConnectionId = Request->s.ConnectionId;
+    }
+
+    Result = http_ka_respond(Queue, Request->s.RequestId, ResponseFlags, "body");
+    ok(Result == NO_ERROR, "%s: HttpSendHttpResponse returned %lu\n", Description, Result);
+    ok(http_ka_read_response(Client, Response, sizeof(Response), 3000),
+       "%s: no complete response\n", Description);
+    ok(!strncmp(Response, "HTTP/1.1 200", 12), "%s: response %s\n", Description, Response);
+    if (ExpectedConnection)
+    {
+        sprintf(Header, "\r\nConnection: %s\r\n", ExpectedConnection);
+        ok(strstr(Response, Header) != NULL, "%s: no Connection: %s in %s\n",
+           Description, ExpectedConnection, Response);
+    }
+    else
+    {
+        ok(strstr(Response, "\r\nConnection:") == NULL, "%s: unexpected Connection header in %s\n",
+           Description, Response);
+    }
+    State = http_ka_wait(Client, 300);
+    ok(State == ExpectedState, "%s: connection state %d after the response, expected %d\n",
+       Description, State, ExpectedState);
+}
+
+static void test_keep_alive(void)
+{
+    static const WCHAR Url[] = L"http://127.0.0.1:59997/keep/";
+    static const char Get[] = "GET /keep/a HTTP/1.1\r\nHost: 127.0.0.1:59997\r\n\r\n";
+    static const char GetB[] = "GET /keep/b HTTP/1.1\r\nHost: 127.0.0.1:59997\r\n\r\n";
+    static const char Pipelined[] =
+        "GET /keep/p1 HTTP/1.1\r\nHost: 127.0.0.1:59997\r\n\r\n"
+        "GET /keep/p2 HTTP/1.1\r\nHost: 127.0.0.1:59997\r\n\r\n";
+    static const char Close[] =
+        "GET /keep/close HTTP/1.1\r\nHost: 127.0.0.1:59997\r\nConnection: close\r\n\r\n";
+    static const char Get10[] = "GET /keep/10 HTTP/1.0\r\n\r\n";
+    static const char Get10KeepAlive[] =
+        "GET /keep/10ka HTTP/1.0\r\nConnection: Keep-Alive\r\n\r\n";
+    static const char UnreadBody[] =
+        "POST /keep/unread HTTP/1.1\r\nHost: 127.0.0.1:59997\r\nContent-Length: 5\r\n\r\nhello";
+    static const char PartialBody[] =
+        "POST /keep/partial HTTP/1.1\r\nHost: 127.0.0.1:59997\r\nContent-Length: 10\r\n\r\n012";
+    static const char Unrouted[] =
+        "POST /elsewhere HTTP/1.1\r\nHost: 127.0.0.1:59997\r\nContent-Length: 10\r\n\r\n";
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    char DECLSPEC_ALIGN(8) SecondBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    HTTP_REQUEST *Second = (HTTP_REQUEST *)SecondBuffer;
+    HTTPAPI_VERSION Version = HTTPAPI_VERSION_1;
+    HTTP_CONNECTION_ID ConnectionId;
+    HTTP_REQUEST_ID FirstRequestId;
+    HTTP_KA_CLIENT Client;
+    OVERLAPPED Overlapped = {0}, SecondOverlapped = {0}, BodyOverlapped = {0};
+    char Response[1024], Body[64];
+    DWORD BytesReturned;
+    WSADATA WsaData;
+    HANDLE Queue = NULL;
+    ULONG Result;
+    int State;
+
+    Result = WSAStartup(MAKEWORD(2, 2), &WsaData);
+    ok(Result == 0, "WSAStartup failed with %lu\n", Result);
+    if (Result != 0)
+        return;
+
+    Result = HttpInitialize(Version, HTTP_INITIALIZE_SERVER, NULL);
+    ok(Result == NO_ERROR, "HttpInitialize failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_wsa;
+
+    Result = HttpCreateHttpHandle(&Queue, 0);
+    ok(Result == NO_ERROR, "HttpCreateHttpHandle failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_http;
+    Result = HttpAddUrl(Queue, Url, NULL);
+    ok(Result == NO_ERROR, "HttpAddUrl(keep) failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_queue;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    SecondOverlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    BodyOverlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    if (http_ka_connect(&Client, 59997))
+    {
+        ConnectionId = HTTP_NULL_ID;
+        http_ka_exchange(Queue, &Overlapped, &Client, Get, "/keep/a", 0, NULL, HTTP_KA_OPEN,
+                         &ConnectionId, "first keep-alive request");
+        http_ka_exchange(Queue, &Overlapped, &Client, GetB, "/keep/b", 0, NULL, HTTP_KA_OPEN,
+                         &ConnectionId, "second keep-alive request");
+        http_ka_exchange(Queue, &Overlapped, &Client, Get, "/keep/a",
+                         HTTP_SEND_RESPONSE_FLAG_DISCONNECT, "close", HTTP_KA_CLOSED,
+                         &ConnectionId, "response with DISCONNECT");
+        closesocket(Client.Socket);
+    }
+    else
+        ok(0, "keep-alive client failed to connect with %d\n", WSAGetLastError());
+
+    if (http_ka_connect(&Client, 59997))
+    {
+        http_ka_exchange(Queue, &Overlapped, &Client, Close, "/keep/close", 0, "close", HTTP_KA_CLOSED,
+                         NULL, "Connection: close");
+        closesocket(Client.Socket);
+    }
+    if (http_ka_connect(&Client, 59997))
+    {
+        http_ka_exchange(Queue, &Overlapped, &Client, Get10, "/keep/10", 0, "close", HTTP_KA_CLOSED,
+                         NULL, "HTTP/1.0");
+        closesocket(Client.Socket);
+    }
+    if (http_ka_connect(&Client, 59997))
+    {
+        ConnectionId = HTTP_NULL_ID;
+        http_ka_exchange(Queue, &Overlapped, &Client, Get10KeepAlive, "/keep/10ka", 0,
+                         "keep-alive", HTTP_KA_OPEN, &ConnectionId, "HTTP/1.0 keep-alive");
+        http_ka_exchange(Queue, &Overlapped, &Client, Get, "/keep/a", 0, NULL, HTTP_KA_OPEN,
+                         &ConnectionId, "request after HTTP/1.0 keep-alive");
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59997))
+    {
+        ok(http_ka_send(&Client, Pipelined), "pipelined send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 5000);
+        ok(Result == NO_ERROR, "first pipelined request returned %lu\n", Result);
+        if (Result == NO_ERROR)
+        {
+            ok(http_ka_path_is(Request, "/keep/p1"), "first pipelined request has the wrong path\n");
+            FirstRequestId = Request->s.RequestId;
+            ConnectionId = Request->s.ConnectionId;
+            Result = http_ka_receive(Queue, &SecondOverlapped, 0, Second, sizeof(SecondBuffer), 300);
+            ok(Result == ERROR_IO_PENDING,
+               "second pipelined request before the first response returned %lu\n", Result);
+            ok(http_ka_respond(Queue, FirstRequestId, 0, "one") == NO_ERROR,
+               "first pipelined response failed\n");
+            if (Result == ERROR_IO_PENDING)
+            {
+                Result = WaitForSingleObject(SecondOverlapped.hEvent, 5000) == WAIT_OBJECT_0 &&
+                         GetOverlappedResult(Queue, &SecondOverlapped, &BytesReturned, FALSE)
+                         ? NO_ERROR : ERROR_IO_PENDING;
+                if (Result == ERROR_IO_PENDING)
+                    http_ka_cancel(Queue, &SecondOverlapped);
+            }
+            ok(Result == NO_ERROR, "second pipelined request returned %lu\n", Result);
+            if (Result == NO_ERROR)
+            {
+                ok(http_ka_path_is(Second, "/keep/p2"), "second pipelined request has the wrong path\n");
+                ok(Second->s.ConnectionId == ConnectionId, "pipelined connection id changed\n");
+                ok(Second->s.RequestId != FirstRequestId, "pipelined request id was reused\n");
+                ok(http_ka_respond(Queue, Second->s.RequestId, 0, "two") == NO_ERROR,
+                   "second pipelined response failed\n");
+            }
+            ok(http_ka_read_response(&Client, Response, sizeof(Response), 3000) &&
+               strstr(Response, "\r\n\r\none"), "first pipelined response: %s\n", Response);
+            ok(http_ka_read_response(&Client, Response, sizeof(Response), 3000) &&
+               strstr(Response, "\r\n\r\ntwo"), "second pipelined response: %s\n", Response);
+        }
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59997))
+    {
+        ConnectionId = HTTP_NULL_ID;
+        http_ka_exchange(Queue, &Overlapped, &Client, UnreadBody, "/keep/unread", 0, NULL, HTTP_KA_OPEN,
+                         &ConnectionId, "unread request body");
+        http_ka_exchange(Queue, &Overlapped, &Client, Get, "/keep/a", 0, NULL, HTTP_KA_OPEN,
+                         &ConnectionId, "request after an unread body");
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59997))
+    {
+        ok(http_ka_send(&Client, PartialBody), "partial body send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY,
+                                 Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "request with a partial body returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ok(Request->s.Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS,
+               "partial body: MORE_ENTITY_BODY_EXISTS not set\n");
+            ok(Request->s.EntityChunkCount == 1, "partial body: %u entity chunks\n",
+               Request->s.EntityChunkCount);
+            if (Request->s.EntityChunkCount == 1)
+                ok(Request->s.pEntityChunks->FromMemory.BufferLength == 3 &&
+                   !memcmp(Request->s.pEntityChunks->FromMemory.pBuffer, "012", 3),
+                   "partial body: copied %lu bytes\n",
+                   Request->s.pEntityChunks->FromMemory.BufferLength);
+
+            ResetEvent(BodyOverlapped.hEvent);
+            BytesReturned = 0;
+            memset(Body, 0, sizeof(Body));
+            Result = HttpReceiveRequestEntityBody(Queue, Request->s.RequestId, 0, Body,
+                                                  sizeof(Body), NULL, &BodyOverlapped);
+            ok(Result == ERROR_IO_PENDING, "body read before the body arrived returned %lu\n", Result);
+            if (Result == ERROR_IO_PENDING)
+            {
+                ok(WaitForSingleObject(BodyOverlapped.hEvent, 300) == WAIT_TIMEOUT,
+                   "body read completed before the body arrived\n");
+                ok(http_ka_send(&Client, "3456789"), "body send failed\n");
+                Result = WaitForSingleObject(BodyOverlapped.hEvent, 3000) == WAIT_OBJECT_0 &&
+                         GetOverlappedResult(Queue, &BodyOverlapped, &BytesReturned, FALSE)
+                         ? NO_ERROR : ERROR_IO_PENDING;
+                if (Result == ERROR_IO_PENDING)
+                    http_ka_cancel(Queue, &BodyOverlapped);
+                ok(Result == NO_ERROR, "pending body read did not complete\n");
+                ok(BytesReturned == 7 && !memcmp(Body, "3456789", 7),
+                   "pending body read returned %lu bytes: %s\n", BytesReturned, Body);
+            }
+            Result = HttpReceiveRequestEntityBody(Queue, Request->s.RequestId, 0, Body,
+                                                  sizeof(Body), &BytesReturned, NULL);
+            ok(Result == ERROR_HANDLE_EOF, "body read after the body returned %lu\n", Result);
+            ok(http_ka_respond(Queue, Request->s.RequestId, 0, "body") == NO_ERROR,
+               "partial body response failed\n");
+            ok(http_ka_read_response(&Client, Response, sizeof(Response), 3000),
+               "partial body: no response\n");
+            State = http_ka_wait(&Client, 300);
+            ok(State == HTTP_KA_OPEN, "partial body: connection state %d after the response\n", State);
+        }
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59997))
+    {
+        ok(http_ka_send(&Client, Unrouted), "unrouted send failed\n");
+        ok(http_ka_read_response(&Client, Response, sizeof(Response), 3000),
+           "unrouted request without its body: no response\n");
+        ok(!strncmp(Response, "HTTP/1.1 404", 12), "unrouted request: %s\n", Response);
+        State = http_ka_wait(&Client, 1000);
+        ok(State == HTTP_KA_CLOSED, "unrouted request: connection state %d after the 404\n", State);
+        closesocket(Client.Socket);
+    }
+
+    CloseHandle(Overlapped.hEvent);
+    CloseHandle(SecondOverlapped.hEvent);
+    CloseHandle(BodyOverlapped.hEvent);
+    HttpRemoveUrl(Queue, Url);
+cleanup_queue:
+    CloseHandle(Queue);
+cleanup_http:
+    HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
+cleanup_wsa:
+    WSACleanup();
+}
+
 static ULONG http_set_timeout(HTTP_SERVICE_CONFIG_TIMEOUT_KEY Key, USHORT Seconds, ULONG Length)
 {
     HTTP_SERVICE_CONFIG_TIMEOUT_SET Set;
@@ -1599,6 +2019,7 @@ static void test_service_config_timeout(void)
     HTTP_SERVICE_CONFIG_TIMEOUT_SET Set;
     HTTP_SERVICE_CONFIG_TIMEOUT_PARAM Seconds;
     SOCKET Partial, Idle;
+    HTTP_KA_CLIENT Client;
     WSADATA WsaData;
     HANDLE Queue = NULL;
     ULONG Result, Returned;
@@ -1703,6 +2124,18 @@ static void test_service_config_timeout(void)
         http_check_open(Partial, "started request under IdleConnectionTimeout");
         closesocket(Partial);
     }
+    if (http_ka_connect(&Client, 59996))
+    {
+        OVERLAPPED Overlapped = {0};
+
+        Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+        http_ka_exchange(Queue, &Overlapped, &Client,
+                         "GET /timeout/kept HTTP/1.1\r\nHost: 127.0.0.1:59996\r\n\r\n",
+                         "/timeout/kept", 0, NULL, HTTP_KA_OPEN, NULL, "kept-alive connection");
+        http_check_reset(Client.Socket, GetTickCount() - 1000, "kept-alive connection after a response");
+        closesocket(Client.Socket);
+        CloseHandle(Overlapped.hEvent);
+    }
     http_delete_timeout(IdleConnectionTimeout);
 
     HttpRemoveUrl(Queue, Url);
@@ -1729,5 +2162,6 @@ START_TEST(httpapi)
     test_loopback_http_server();
     test_stalled_connection_teardown();
     test_stalled_clients_do_not_delay_requests();
+    test_keep_alive();
     test_service_config_timeout();
 }
