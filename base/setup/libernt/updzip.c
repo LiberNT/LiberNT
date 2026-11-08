@@ -355,6 +355,8 @@ ExtractZipImage(
             Error = CopyEntryData(Zip, Out, &Entry,
                                   Entry.Offset + ZIP_LOCAL_SIZE + Le16(Local + 26) + Le16(Local + 28),
                                   Progress, Context);
+            if (Error == ERROR_SUCCESS && !FlushFileBuffers(Out))
+                Error = GetLastError();
             CloseHandle(Out);
             if (Error != ERROR_SUCCESS)
                 DeleteFileW(OutPath);
@@ -437,6 +439,36 @@ FindIsoRecord(
     return Found;
 }
 
+static DWORD
+VerifyWrittenFile(
+    _In_ PCWSTR Path,
+    _In_reads_bytes_(Length) const BYTE* Data,
+    _In_ ULONG Length)
+{
+    LARGE_INTEGER Size;
+    PBYTE Copy;
+    HANDLE File;
+    DWORD Read = 0, Error;
+
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return GetLastError();
+
+    Copy = HeapAlloc(ProcessHeap, 0, max(Length, 1));
+    if (!Copy)
+        Error = ERROR_NOT_ENOUGH_MEMORY;
+    else if (!GetFileSizeEx(File, &Size) || Size.QuadPart != Length ||
+             !ReadFile(File, Copy, Length, &Read, NULL) || Read != Length || memcmp(Copy, Data, Length) != 0)
+        Error = ERROR_CRC;
+    else
+        Error = ERROR_SUCCESS;
+
+    if (Copy)
+        HeapFree(ProcessHeap, 0, Copy);
+    CloseHandle(File);
+    return Error;
+}
+
 DWORD
 ExtractImageFile(
     _In_ PCWSTR ImagePath,
@@ -489,9 +521,11 @@ ExtractImageFile(
             Out = CreateFileW(OutPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
             if (Out != INVALID_HANDLE_VALUE)
             {
-                Error = (WriteFile(Out, Data, Length, &Written, NULL) && Written == Length) ? ERROR_SUCCESS
-                                                                                            : GetLastError();
+                Error = (WriteFile(Out, Data, Length, &Written, NULL) && Written == Length &&
+                         FlushFileBuffers(Out)) ? ERROR_SUCCESS : GetLastError();
                 CloseHandle(Out);
+                if (Error == ERROR_SUCCESS)
+                    Error = VerifyWrittenFile(OutPath, Data, Length);
             }
             else
             {

@@ -11,6 +11,7 @@
 #include <shlwapi.h>
 #include <objbase.h>
 #include <ndk/setypes.h>
+#include <ndk/exfuncs.h>
 #include <bits.h>
 #include <bcrypt.h>
 
@@ -36,6 +37,12 @@
 #define BITS_POLL               500
 #define BITS_NO_PROGRESS        (120 * 1000)
 #define STAGE_SPACE_MARGIN      (64ULL * 1024 * 1024)
+#define SHA256_CHARS            65
+#define STAGE_LOADER_PATH       L"\\" UPDATE_STAGE_DIRECTORY L"\\" UPDATE_STAGE_LOADER
+#define STAGE_IMAGE_PATH        L"\\" UPDATE_STAGE_DIRECTORY L"\\" UPDATE_STAGE_IMAGE
+#define STAGE_STATUS            L"install.log"
+#define STAGE_STATUS_SECTION    L"Install"
+#define STAGE_MISSED_STARTS     2
 #define SETUP_KEY               L"SYSTEM\\Setup"
 #define RUN_KEY                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
 #define COMPLETE_VALUE          L"LiberNTUpdateComplete"
@@ -562,26 +569,70 @@ SetCompletionCommand(
     RegCloseKey(hKey);
 }
 
-static VOID
-RemoveStage(VOID)
+static BOOL
+IsStageIntact(VOID)
 {
-    WCHAR Path[MAX_PATH], EntryId[UPDATE_ID_CHARS], PreviousDefault[UPDATE_ID_CHARS];
-    ULONG TagId;
-    HKEY Store;
-    static const PCWSTR Files[] = { UPDATE_STAGE_REQUEST, UPDATE_STAGE_IMAGE, UPDATE_STAGE_LOADER, L"update.zip",
-                                    L"inventory.tmp", L"setup.sif", L"stub.inf", L"registry.tmp", L"bootmgr.tmp" };
+    static const PCWSTR Files[] = { UPDATE_STAGE_LOADER, UPDATE_STAGE_IMAGE, UPDATE_STAGE_REQUEST };
+    WCHAR Path[MAX_PATH];
     ULONG Index;
-
-    if (ReadStagedRequest(&TagId, EntryId, PreviousDefault) &&
-        OpenBcdStore(&Store) == ERROR_SUCCESS)
-    {
-        RemoveBcdUpgradeEntry(Store, EntryId, PreviousDefault);
-        RegCloseKey(Store);
-    }
 
     for (Index = 0; Index < ARRAYSIZE(Files); Index++)
     {
         StagePath(Files[Index], Path);
+        if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
+            return FALSE;
+    }
+    StagePath(UPDATE_STAGE_REQUEST, Path);
+    return GetPrivateProfileIntW(UPDATE_STAGE_SECTION, L"Completed", 0, Path) == 0;
+}
+
+static DWORD
+RemoveStage(VOID)
+{
+    static const PCWSTR WorkFiles[] = { L"update.zip", L"inventory.tmp", L"setup.sif", L"stub.inf", L"registry.tmp",
+                                        L"bootmgr.tmp" };
+    static const PCWSTR BootFiles[] = { UPDATE_STAGE_LOADER, UPDATE_STAGE_IMAGE, STAGE_STATUS, UPDATE_STAGE_REQUEST };
+    WCHAR Path[MAX_PATH], EntryId[UPDATE_ID_CHARS], PreviousDefault[UPDATE_ID_CHARS];
+    ULONG TagId, Index;
+    HKEY Store;
+    DWORD Error;
+
+    for (Index = 0; Index < ARRAYSIZE(WorkFiles); Index++)
+    {
+        StagePath(WorkFiles[Index], Path);
+        SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
+        DeleteFileW(Path);
+    }
+
+    StagePath(NULL, Path);
+    if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
+    {
+        SetCompletionCommand(FALSE);
+        return ERROR_SUCCESS;
+    }
+
+    ReadStagedRequest(&TagId, EntryId, PreviousDefault);
+    Error = OpenBcdStore(&Store);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = RemoveBcdUpgradeEntries(Store, STAGE_LOADER_PATH, PreviousDefault);
+        RegCloseKey(Store);
+    }
+    else
+    {
+        StagePath(UPDATE_STAGE_LOADER, Path);
+        if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
+            Error = ERROR_SUCCESS;
+    }
+    if (Error != ERROR_SUCCESS)
+    {
+        DPRINT1("The staged boot entry could not be removed (%lu); the staged update is kept\n", Error);
+        return Error;
+    }
+
+    for (Index = 0; Index < ARRAYSIZE(BootFiles); Index++)
+    {
+        StagePath(BootFiles[Index], Path);
         SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
         DeleteFileW(Path);
     }
@@ -589,6 +640,21 @@ RemoveStage(VOID)
     SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
     RemoveDirectoryW(Path);
     SetCompletionCommand(FALSE);
+    return ERROR_SUCCESS;
+}
+
+static BOOL
+IsSha256(
+    _In_ PCWSTR Text)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < SHA256_CHARS - 1; Index++)
+    {
+        if (!iswxdigit(Text[Index]))
+            return FALSE;
+    }
+    return Text[Index] == UNICODE_NULL;
 }
 
 static DWORD
@@ -633,10 +699,13 @@ CheckForUpdate(
     CopyJsonString(Json, "sha256", Info->Sha256, ARRAYSIZE(Info->Sha256));
     Info->Notes = JsonString(Json, "notes", UPDATE_NOTES_MAX);
     Info->Available = JsonBoolean(Json, "available") && Info->TagId != 0 && Info->Url[0] &&
+                      Info->Size != 0 && IsSha256(Info->Sha256) &&
                       (LocalBuild == 0 || Info->Build > LocalBuild);
+    if (JsonBoolean(Json, "available") && !Info->Available && (!IsSha256(Info->Sha256) || Info->Size == 0))
+        DPRINT1("The update server offered tag %lu without a size or SHA-256; it is not offered\n", Info->TagId);
     HeapFree(ProcessHeap, 0, Json);
 
-    Info->Staged = Info->Available && ReadStagedRequest(&StagedTag, EntryId, PreviousDefault) &&
+    Info->Staged = Info->Available && IsStageIntact() && ReadStagedRequest(&StagedTag, EntryId, PreviousDefault) &&
                    StagedTag == Info->TagId;
 
     Now = CurrentTime();
@@ -652,19 +721,19 @@ CheckForUpdate(
 }
 
 static BOOL
-HashMatches(
+HashFile(
     _In_ PCWSTR Path,
-    _In_ PCWSTR Expected)
+    _Out_writes_(SHA256_CHARS) PWSTR Text)
 {
     BCRYPT_ALG_HANDLE hAlgorithm = NULL;
     BCRYPT_HASH_HANDLE hHash = NULL;
     BYTE Hash[32];
-    WCHAR Text[ARRAYSIZE(Hash) * 2 + 1];
     PBYTE Buffer;
     HANDLE File;
     DWORD Read, Index;
     BOOL Hashed = FALSE;
 
+    Text[0] = UNICODE_NULL;
     File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
     if (File == INVALID_HANDLE_VALUE)
         return FALSE;
@@ -675,8 +744,21 @@ HashMatches(
         BCRYPT_SUCCESS(BCryptCreateHash(hAlgorithm, &hHash, NULL, 0, NULL, 0, 0)))
     {
         Hashed = TRUE;
-        while (Hashed && ReadFile(File, Buffer, 0x100000, &Read, NULL) && Read != 0)
-            Hashed = BCRYPT_SUCCESS(BCryptHashData(hHash, Buffer, Read, 0));
+        for (;;)
+        {
+            if (!ReadFile(File, Buffer, 0x100000, &Read, NULL))
+            {
+                Hashed = FALSE;
+                break;
+            }
+            if (Read == 0)
+                break;
+            if (!BCRYPT_SUCCESS(BCryptHashData(hHash, Buffer, Read, 0)))
+            {
+                Hashed = FALSE;
+                break;
+            }
+        }
         Hashed = Hashed && BCRYPT_SUCCESS(BCryptFinishHash(hHash, Hash, sizeof(Hash), 0));
     }
 
@@ -692,6 +774,18 @@ HashMatches(
 
     for (Index = 0; Index < ARRAYSIZE(Hash); Index++)
         StringCchPrintfW(&Text[Index * 2], 3, L"%02x", Hash[Index]);
+    return TRUE;
+}
+
+static BOOL
+HashMatches(
+    _In_ PCWSTR Path,
+    _In_ PCWSTR Expected)
+{
+    WCHAR Text[SHA256_CHARS];
+
+    if (!HashFile(Path, Text))
+        return FALSE;
     DPRINT1("%S has SHA-256 %S, expected %S\n", Path, Text, Expected);
     return _wcsicmp(Text, Expected) == 0;
 }
@@ -715,22 +809,39 @@ StageProgress(
 }
 
 static DWORD
-WriteStagedRequest(
-    _In_ PCWSTR EntryId,
-    _In_ PCWSTR PreviousDefault)
+WriteStagedValue(
+    _In_ PCWSTR Name,
+    _In_ PCWSTR Value)
 {
-    WCHAR Path[MAX_PATH], Number[16];
+    WCHAR Path[MAX_PATH];
 
     StagePath(UPDATE_STAGE_REQUEST, Path);
+    return WritePrivateProfileStringW(UPDATE_STAGE_SECTION, Name, Value, Path) ? ERROR_SUCCESS : GetLastError();
+}
+
+static DWORD
+WriteStagedRequest(
+    _In_ PCWSTR ImageHash,
+    _In_opt_ PCWSTR EntryId,
+    _In_opt_ PCWSTR PreviousDefault)
+{
+    WCHAR Number[16];
+    DWORD Error;
+
     StringCchPrintfW(Number, ARRAYSIZE(Number), L"%lu", Update.TagId);
-    if (!WritePrivateProfileStringW(UPDATE_STAGE_SECTION, L"TagId", Number, Path))
-        return GetLastError();
-    WritePrivateProfileStringW(UPDATE_STAGE_SECTION, L"TagName", Update.TagName, Path);
+    Error = WriteStagedValue(L"TagId", Number);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteStagedValue(L"TagName", Update.TagName);
     StringCchPrintfW(Number, ARRAYSIZE(Number), L"%lu", Update.Build);
-    WritePrivateProfileStringW(UPDATE_STAGE_SECTION, L"Build", Number, Path);
-    WritePrivateProfileStringW(UPDATE_STAGE_SECTION, L"Entry", EntryId, Path);
-    WritePrivateProfileStringW(UPDATE_STAGE_SECTION, L"PreviousDefault", PreviousDefault, Path);
-    return ERROR_SUCCESS;
+    if (Error == ERROR_SUCCESS)
+        Error = WriteStagedValue(L"Build", Number);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteStagedValue(L"ImageSha256", ImageHash);
+    if (Error == ERROR_SUCCESS && EntryId)
+        Error = WriteStagedValue(L"Entry", EntryId);
+    if (Error == ERROR_SUCCESS && PreviousDefault)
+        Error = WriteStagedValue(L"PreviousDefault", PreviousDefault);
+    return Error;
 }
 
 static DWORD
@@ -738,13 +849,19 @@ StageUpdate(
     _Inout_ PSTAGE_CONTEXT Context)
 {
     WCHAR Zip[MAX_PATH], Image[MAX_PATH], Loader[MAX_PATH], Path[MAX_PATH];
-    WCHAR EntryId[UPDATE_ID_CHARS], PreviousDefault[UPDATE_ID_CHARS];
+    WCHAR EntryId[UPDATE_ID_CHARS], PreviousDefault[UPDATE_ID_CHARS], ImageHash[SHA256_CHARS];
+    WIN32_FILE_ATTRIBUTE_DATA Attributes;
     ULARGE_INTEGER FreeBytes;
     HKEY Store;
     HRESULT hr;
     DWORD Error;
 
-    RemoveStage();
+    if (!IsSha256(Update.Sha256) || Update.Size == 0)
+        return ERROR_INVALID_DATA;
+
+    Error = RemoveStage();
+    if (Error != ERROR_SUCCESS)
+        return Error;
     StagePath(NULL, Path);
     if (!CreateDirectoryW(Path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
         return GetLastError();
@@ -766,7 +883,13 @@ StageUpdate(
 
     Context->Step = StageVerify;
     StageProgress(Context, 0, 0);
-    if (Update.Sha256[0] && !HashMatches(Zip, Update.Sha256))
+    if (!GetFileAttributesExW(Zip, GetFileExInfoStandard, &Attributes) ||
+        (((ULONGLONG)Attributes.nFileSizeHigh << 32) | Attributes.nFileSizeLow) != Update.Size)
+    {
+        DPRINT1("The downloaded package does not have the announced size %I64u\n", Update.Size);
+        return ERROR_INVALID_DATA;
+    }
+    if (!HashMatches(Zip, Update.Sha256))
         return ERROR_INVALID_DATA;
 
     Context->Step = StageExtract;
@@ -777,7 +900,12 @@ StageUpdate(
 
     Context->Step = StagePrepare;
     StageProgress(Context, 0, 0);
+    if (!HashFile(Image, ImageHash))
+        return ERROR_READ_FAULT;
+    DPRINT1("The staged image has SHA-256 %S\n", ImageHash);
     Error = ExtractImageFile(Image, UPDATE_IMAGE_LOADER, Loader);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteStagedRequest(ImageHash, NULL, NULL);
     if (Error != ERROR_SUCCESS)
         return Error;
 
@@ -785,15 +913,11 @@ StageUpdate(
     Error = OpenBcdStore(&Store);
     if (Error != ERROR_SUCCESS)
         return Error;
-    Error = AddBcdUpgradeEntry(Store, UPDATE_DESCRIPTION,
-                               L"\\" UPDATE_STAGE_DIRECTORY L"\\" UPDATE_STAGE_LOADER,
-                               L"\\" UPDATE_STAGE_DIRECTORY L"\\" UPDATE_STAGE_IMAGE,
+    Error = AddBcdUpgradeEntry(Store, UPDATE_DESCRIPTION, STAGE_LOADER_PATH, STAGE_IMAGE_PATH, ImageHash,
                                EntryId, PreviousDefault);
     RegCloseKey(Store);
-    if (Error != ERROR_SUCCESS)
-        return Error;
-
-    Error = WriteStagedRequest(EntryId, PreviousDefault);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteStagedRequest(ImageHash, EntryId, PreviousDefault);
     if (Error == ERROR_SUCCESS)
         SetCompletionCommand(TRUE);
     return Error;
@@ -1511,6 +1635,23 @@ GetRemovableBootName(VOID)
     }
 }
 
+static BOOL
+ReplaceVerified(
+    _In_ PCWSTR Source,
+    _In_ PCWSTR Target)
+{
+    WCHAR Temporary[MAX_PATH];
+    BOOL Replaced;
+
+    if (FAILED(StringCchPrintfW(Temporary, ARRAYSIZE(Temporary), L"%s.new", Target)))
+        return FALSE;
+    Replaced = CopyFileW(Source, Temporary, FALSE) && SameFileContents(Source, Temporary) &&
+               MoveFileExW(Temporary, Target, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    if (!Replaced)
+        DeleteFileW(Temporary);
+    return Replaced;
+}
+
 static VOID
 RefreshBootManager(
     _In_ PCWSTR Image)
@@ -1536,8 +1677,8 @@ RefreshBootManager(
     {
         FallbackIsOurs = SameFileContents(Manager, Fallback);
         DPRINT1("Boot manager refreshed: %d, fallback %d\n",
-                CopyFileW(Extracted, Manager, FALSE),
-                FallbackIsOurs && CopyFileW(Extracted, Fallback, FALSE));
+                ReplaceVerified(Extracted, Manager),
+                FallbackIsOurs && ReplaceVerified(Extracted, Fallback));
     }
     DeleteFileW(Extracted);
 }
@@ -1558,7 +1699,7 @@ CompleteUpdate(
     hSetup = OpenImageSetupInf(Image, SystemMedia);
     if (hSetup == INVALID_HANDLE_VALUE || !SystemMedia[0] || !IsImageInstalled(Image, SystemMedia))
     {
-        DPRINT1("The staged image %S was not installed by the boot loader\n", Image);
+        DPRINT1("The staged image %S is not the installed one\n", Image);
         Error = ERROR_INSTALL_FAILURE;
     }
 
@@ -1575,14 +1716,21 @@ CompleteUpdate(
             PostMessageW(hwndNotify, PM_COMPLETE_STEP, IDS_UPDATE_COMPLETE_COMPONENTS, 0);
         Error = RunTargetConfiguration();
         DPRINT1("Upgrade component configuration finished with %lu\n", Error);
+    }
+    if (Error == ERROR_SUCCESS)
+    {
         RefreshBootManager(Image);
+        Error = WriteStagedValue(L"Completed", L"1");
     }
     if (hSetup != INVALID_HANDLE_VALUE)
         SetupCloseInfFile(hSetup);
 
-    if (hwndNotify)
-        PostMessageW(hwndNotify, PM_COMPLETE_STEP, IDS_UPDATE_COMPLETE_CLEANUP, 0);
-    RemoveStage();
+    if (Error == ERROR_SUCCESS)
+    {
+        if (hwndNotify)
+            PostMessageW(hwndNotify, PM_COMPLETE_STEP, IDS_UPDATE_COMPLETE_CLEANUP, 0);
+        DPRINT1("Update staging removed with %lu\n", RemoveStage());
+    }
     DPRINT1("Update completion finished with %lu\n", Error);
     return Error;
 }
@@ -1633,8 +1781,8 @@ CompletePageProc(
             SendMessageW(hProgress, PBM_SETMARQUEE, FALSE, 0);
             if (wParam != ERROR_SUCCESS)
             {
-                LoadPrintfW(Text, ARRAYSIZE(Text), IDS_UPDATE_COMPLETE_FAILED, Update.TagName);
-                SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_CLOSE_BUTTON, IDCLOSE, NULL, Text);
+                LoadPrintfW(Text, ARRAYSIZE(Text), IDS_UPDATE_COMPLETE_RETRYLOGON, Update.TagName);
+                SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_CLOSE_BUTTON, IDCLOSE, NULL, Text);
             }
             EndDialog(GetParent(hwndDlg), wParam == ERROR_SUCCESS ? IDOK : IDCANCEL);
             return TRUE;
@@ -1667,11 +1815,80 @@ IsAdministrator(VOID)
     return Member;
 }
 
+static BOOL
+IsStagedImageInstalled(VOID)
+{
+    WCHAR Image[MAX_PATH], SystemMedia[MAX_PATH];
+    BOOL Installed;
+    HINF hSetup;
+
+    StagePath(UPDATE_STAGE_IMAGE, Image);
+    hSetup = OpenImageSetupInf(Image, SystemMedia);
+    if (hSetup == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Installed = SystemMedia[0] && IsImageInstalled(Image, SystemMedia);
+    SetupCloseInfFile(hSetup);
+    return Installed;
+}
+
+static BOOL
+WasStartedByUpdate(VOID)
+{
+    WCHAR Options[1024];
+    DWORD Size = sizeof(Options);
+
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control", L"SystemStartOptions",
+                     RRF_RT_REG_SZ, NULL, Options, &Size) != ERROR_SUCCESS)
+    {
+        return FALSE;
+    }
+    _wcsupr(Options);
+    return wcsstr(Options, L"INSTALLIMAGE=") != NULL;
+}
+
+static ULONG
+CountMissedStart(VOID)
+{
+    SYSTEM_TIMEOFDAY_INFORMATION TimeOfDay;
+    WCHAR Path[MAX_PATH], Boot[32], Seen[32];
+    ULONG Missed;
+
+    StagePath(UPDATE_STAGE_REQUEST, Path);
+    Missed = GetPrivateProfileIntW(UPDATE_STAGE_SECTION, L"MissedStarts", 0, Path);
+    if (!NT_SUCCESS(NtQuerySystemInformation(SystemTimeOfDayInformation, &TimeOfDay, sizeof(TimeOfDay), NULL)) ||
+        FAILED(StringCchPrintfW(Boot, ARRAYSIZE(Boot), L"%I64u", TimeOfDay.BootTime.QuadPart)))
+    {
+        return Missed;
+    }
+
+    GetPrivateProfileStringW(UPDATE_STAGE_SECTION, L"LastStart", L"", Seen, ARRAYSIZE(Seen), Path);
+    if (wcscmp(Seen, Boot) != 0)
+    {
+        Missed++;
+        StringCchPrintfW(Seen, ARRAYSIZE(Seen), L"%lu", Missed);
+        WriteStagedValue(L"MissedStarts", Seen);
+        WriteStagedValue(L"LastStart", Boot);
+    }
+    return Missed;
+}
+
+static VOID
+ShowCompleteMessage(
+    _In_ UINT MessageId,
+    _In_ PCWSTR Icon)
+{
+    WCHAR Text[512];
+
+    LoadPrintfW(Text, ARRAYSIZE(Text), MessageId, Update.TagName);
+    SetupMessage(NULL, Icon, TDCBF_CLOSE_BUTTON, IDCLOSE, NULL, Text);
+}
+
 static INT
 RunComplete(VOID)
 {
-    WCHAR Path[MAX_PATH];
+    WCHAR Path[MAX_PATH], Stage[32];
     INT_PTR Result;
+    UINT MessageId;
 
     if (!IsAdministrator())
     {
@@ -1682,15 +1899,56 @@ RunComplete(VOID)
     StagePath(UPDATE_STAGE_REQUEST, Path);
     GetPrivateProfileStringW(UPDATE_STAGE_SECTION, L"TagName", L"", Update.TagName, ARRAYSIZE(Update.TagName), Path);
     if (GetPrivateProfileIntW(UPDATE_STAGE_SECTION, L"TagId", 0, Path) == 0)
+        return RemoveStage() == ERROR_SUCCESS ? ERROR_NOT_FOUND : ERROR_RETRY;
+    if (GetPrivateProfileIntW(UPDATE_STAGE_SECTION, L"Completed", 0, Path) != 0)
+        return RemoveStage();
+
+    StagePath(STAGE_STATUS, Path);
+    GetPrivateProfileStringW(STAGE_STATUS_SECTION, L"Stage", L"", Stage, ARRAYSIZE(Stage), Path);
+    DPRINT1("The boot loader left the update at stage '%S'\n", Stage);
+    if (Stage[0] == UNICODE_NULL && IsStagedImageInstalled())
+        StringCchCopyW(Stage, ARRAYSIZE(Stage), L"done");
+    if (Stage[0] == UNICODE_NULL)
     {
-        SetCompletionCommand(FALSE);
-        return ERROR_NOT_FOUND;
+        if (WasStartedByUpdate())
+        {
+            DPRINT1("The update entry started but left no install status\n");
+            StringCchCopyW(Stage, ARRAYSIZE(Stage), L"open");
+        }
+        else if (CountMissedStart() >= STAGE_MISSED_STARTS)
+        {
+            DPRINT1("The update entry did not run at %u starts\n", STAGE_MISSED_STARTS);
+            StringCchCopyW(Stage, ARRAYSIZE(Stage), L"start");
+        }
+        else
+        {
+            return ERROR_RETRY;
+        }
+    }
+
+    if (_wcsicmp(Stage, L"write") == 0)
+    {
+        ShowCompleteMessage(IDS_UPDATE_COMPLETE_RETRYBOOT, TD_WARNING_ICON);
+        return ERROR_RETRY;
+    }
+
+    if (_wcsicmp(Stage, L"done") != 0 && _wcsicmp(Stage, L"current") != 0)
+    {
+        if (_wcsicmp(Stage, L"space") == 0)
+            MessageId = IDS_UPDATE_COMPLETE_NOSPACE;
+        else if (_wcsicmp(Stage, L"checksum") == 0 || _wcsicmp(Stage, L"image") == 0)
+            MessageId = IDS_UPDATE_COMPLETE_DAMAGED;
+        else
+            MessageId = IDS_UPDATE_COMPLETE_FAILED;
+        DPRINT1("Update staging removed with %lu\n", RemoveStage());
+        ShowCompleteMessage(MessageId, TD_ERROR_ICON);
+        return ERROR_INSTALL_FAILURE;
     }
 
     Result = RunSetupFrame(&SetupData, CompletePages, ARRAYSIZE(CompletePages));
     if (Result == IDOK)
         RestartToInstall();
-    return Result == IDOK ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return Result == IDOK ? ERROR_SUCCESS : ERROR_RETRY;
 }
 
 static VOID
