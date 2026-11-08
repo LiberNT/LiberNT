@@ -3910,7 +3910,6 @@ VidSchSubmitCommandTrackedMeasured(
         Packet->HoldsContextReference = TRUE;
     }
 
-    /* Paging submits outside the KMD transaction, so mint through admission is the only order. */
     VidSchpAcquireSubmissionOrder(Adapter);
     Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
     if (Packet->SubmissionFenceId == 0)

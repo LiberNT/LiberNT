@@ -1776,6 +1776,63 @@ Cleanup:
     return Status;
 }
 
+static NTSTATUS
+DxgkpLockPresentSource(
+    _In_ PBYTE Source,
+    _In_ SIZE_T Length,
+    _Out_ PMDL *Mdl,
+    _Out_ PBYTE *SystemVa)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    PMDL SourceMdl;
+    PBYTE MappedVa;
+
+    *Mdl = NULL;
+    *SystemVa = Source;
+    if ((ULONG_PTR)Source >= (ULONG_PTR)MmSystemRangeStart)
+        return STATUS_SUCCESS;
+    if (Length > MAXULONG)
+        return STATUS_INVALID_BUFFER_SIZE;
+
+    SourceMdl = IoAllocateMdl(Source, (ULONG)Length, FALSE, FALSE, NULL);
+    if (SourceMdl == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    _SEH2_TRY
+    {
+        MmProbeAndLockPages(SourceMdl, KernelMode, IoReadAccess);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    if (!NT_SUCCESS(Status))
+    {
+        IoFreeMdl(SourceMdl);
+        return Status;
+    }
+    MappedVa = MmGetSystemAddressForMdlSafe(SourceMdl, NormalPagePriority | MdlMappingNoExecute);
+    if (MappedVa == NULL)
+    {
+        MmUnlockPages(SourceMdl);
+        IoFreeMdl(SourceMdl);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    *Mdl = SourceMdl;
+    *SystemVa = MappedVa;
+    return STATUS_SUCCESS;
+}
+
+static VOID
+DxgkpUnlockPresentSource(
+    _In_opt_ PMDL Mdl)
+{
+    if (Mdl == NULL)
+        return;
+    MmUnlockPages(Mdl);
+    IoFreeMdl(Mdl);
+}
+
 NTSTATUS
 DxgkpPresentDisplayOnlyToSharedPrimary(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -1787,7 +1844,7 @@ DxgkpPresentDisplayOnlyToSharedPrimary(
     PDXGKRNL_DEVICE_WORK PresentWork = NULL;
     D3DKMT_DESTROYDEVICE DestroyDevice;
     KAPC_STATE ApcState;
-    BOOLEAN Attached = FALSE;
+    BOOLEAN Attached;
     BOOLEAN DestroyCdd;
     PBYTE DestinationVa;
     PBYTE SourceVa;
@@ -1852,51 +1909,21 @@ DxgkpPresentDisplayOnlyToSharedPrimary(
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
+    Status = DxgkpLockPresentSource((PBYTE)PresentDisplayOnly->pSource,
+                                    ((SIZE_T)(Height - 1) * SourcePitch) +
+                                        ((SIZE_T)Width * sizeof(ULONG)),
+                                    &SourceMdl,
+                                    &SourceVa);
+    if (!NT_SUCCESS(Status))
+        return Status;
     if (!DxgkpAcquirePresentQueues(Adapter))
+    {
+        DxgkpUnlockPresentSource(SourceMdl);
         return STATUS_DELETE_PENDING;
+    }
     KeWaitForSingleObject(&Adapter->CddPresentMutex, Executive, KernelMode, FALSE, NULL);
     RtlZeroMemory(&Entry, sizeof(Entry));
     DestroyCdd = FALSE;
-
-    SourceVa = (PBYTE)PresentDisplayOnly->pSource;
-    if ((ULONG_PTR)SourceVa < (ULONG_PTR)MmSystemRangeStart)
-    {
-        SourceMdl = IoAllocateMdl(SourceVa,
-                                  (ULONG)(((SIZE_T)(Height - 1) * SourcePitch) +
-                                          ((SIZE_T)Width * sizeof(ULONG))),
-                                  FALSE,
-                                  FALSE,
-                                  NULL);
-        if (SourceMdl == NULL)
-        {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
-            goto CleanupCdd;
-        }
-        Status = STATUS_SUCCESS;
-        _SEH2_TRY
-        {
-            MmProbeAndLockPages(SourceMdl, KernelMode, IoReadAccess);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-        if (!NT_SUCCESS(Status))
-        {
-            IoFreeMdl(SourceMdl);
-            SourceMdl = NULL;
-            goto CleanupCdd;
-        }
-        SourceVa = MmGetSystemAddressForMdlSafe(SourceMdl,
-                                                NormalPagePriority |
-                                                MdlMappingNoExecute);
-        if (SourceVa == NULL)
-        {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
-            goto CleanupCdd;
-        }
-    }
 
     Attached = PsGetCurrentProcess() != PsInitialSystemProcess;
     if (Attached)
@@ -2081,14 +2108,9 @@ CleanupCdd:
     }
     if (Attached)
         KeUnstackDetachProcess(&ApcState);
-    if (SourceMdl != NULL)
-    {
-        if (SourceMdl->MdlFlags & MDL_PAGES_LOCKED)
-            MmUnlockPages(SourceMdl);
-        IoFreeMdl(SourceMdl);
-    }
     KeReleaseMutex(&Adapter->CddPresentMutex, FALSE);
     DxgkpReleasePresentQueues(Adapter);
+    DxgkpUnlockPresentSource(SourceMdl);
     return Status;
 }
 
