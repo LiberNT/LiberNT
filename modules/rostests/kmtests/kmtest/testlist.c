@@ -55,6 +55,7 @@ KMT_TESTFUNC Test_KdPullRemoteFile;
 KMT_TESTFUNC Test_KeContextSegments;
 KMT_TESTFUNC Test_KeNonCanonicalReturn;
 KMT_TESTFUNC Test_KeSystemCallInt2E;
+KMT_TESTFUNC Test_IoRemoveChild;
 KMT_TESTFUNC Test_MmMapLockedPagesSpecifyCache;
 KMT_TESTFUNC Test_NtCreateSection;
 KMT_TESTFUNC Test_NtSystemDebugControl;
@@ -144,6 +145,7 @@ const KMT_TEST TestList[] =
     { "KdDebugService",               Test_KdDebugService },
     { "KdLiveDump",                   Test_KdLiveDump },
     { "KdPullRemoteFile",             Test_KdPullRemoteFile },
+    { "IoRemoveChild",                Test_IoRemoveChild },
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },
     { "NdisSgDma",                    Test_NdisSgDma },
