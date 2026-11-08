@@ -1390,7 +1390,34 @@ end:
     return !err ? S_OK : S_FALSE;
 }
 
+#ifdef __REACTOS__
+static DWORD SOFTPUB_FirstStepError(const CRYPT_PROVIDER_DATA *data, const DWORD *steps, DWORD count)
+{
+    DWORD i;
+
+    for (i = 0; i < count; i++)
+    {
+        if (data->padwTrustStepErrors[steps[i]])
+            return data->padwTrustStepErrors[steps[i]];
+    }
+    return ERROR_SUCCESS;
+}
+
+static const DWORD SOFTPUB_PriorSteps[] = { TRUSTERROR_STEP_FINAL_WVTINIT, TRUSTERROR_STEP_FINAL_OBJPROV,
+                                            TRUSTERROR_STEP_FINAL_SIGPROV, TRUSTERROR_STEP_FINAL_CERTPROV,
+                                            TRUSTERROR_STEP_FINAL_CERTCHKPROV };
+
+static DWORD SOFTPUB_PriorStepError(const CRYPT_PROVIDER_DATA *data)
+{
+    return SOFTPUB_FirstStepError(data, SOFTPUB_PriorSteps, ARRAY_SIZE(SOFTPUB_PriorSteps));
+}
+
+#endif
+#ifdef __REACTOS__
+static HRESULT SOFTPUB_Authenticode(CRYPT_PROVIDER_DATA *data, const DWORD *prior_steps, DWORD prior_count)
+#else
 HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
+#endif
 {
     BOOL ret;
     CERT_CHAIN_POLICY_STATUS policyStatus = { sizeof(policyStatus), 0 };
@@ -1400,6 +1427,11 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
     if (data->pWintrustData->dwUIChoice != WTD_UI_NONE)
         FIXME("unimplemented for UI choice %ld\n",
          data->pWintrustData->dwUIChoice);
+#ifdef __REACTOS__
+    if ((policyStatus.dwError = SOFTPUB_FirstStepError(data, prior_steps, prior_count)))
+        ret = FALSE;
+    else
+#endif
     if (!data->csSigners)
     {
         ret = FALSE;
@@ -1495,8 +1527,19 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
          policyStatus.dwError;
     TRACE("returning %ld (%08lx)\n", ret ? S_OK : S_FALSE,
      data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV]);
+#ifdef __REACTOS__
+    return ret ? S_OK : policyStatus.dwError;
+#else
     return ret ? S_OK : S_FALSE;
+#endif
 }
+
+#ifdef __REACTOS__
+HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
+{
+    return SOFTPUB_Authenticode(data, SOFTPUB_PriorSteps, ARRAY_SIZE(SOFTPUB_PriorSteps));
+}
+#endif
 
 static HRESULT WINAPI WINTRUST_DefaultPolicy(CRYPT_PROVIDER_DATA *pProvData,
  DWORD dwStepError, DWORD dwRegPolicySettings, DWORD cSigner,
@@ -1537,6 +1580,12 @@ HRESULT WINAPI GenericChainFinalProv(CRYPT_PROVIDER_DATA *data)
     if (data->pWintrustData->dwUIChoice != WTD_UI_NONE)
         FIXME("unimplemented for UI choice %ld\n",
          data->pWintrustData->dwUIChoice);
+#ifdef __REACTOS__
+    err = SOFTPUB_PriorStepError(data);
+    if (err)
+        TRACE("earlier step failed with %08lx\n", err);
+    else
+#endif
     if (!data->csSigners)
         err = TRUST_E_NOSIGNATURE;
     else
@@ -1590,7 +1639,11 @@ HRESULT WINAPI GenericChainFinalProv(CRYPT_PROVIDER_DATA *data)
         data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV] = err;
     TRACE("returning %ld (%08lx)\n", err == NO_ERROR ? S_OK : S_FALSE,
      data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV]);
+#ifdef __REACTOS__
+    return err;
+#else
     return err == NO_ERROR ? S_OK : S_FALSE;
+#endif
 }
 
 HRESULT WINAPI SoftpubCleanup(CRYPT_PROVIDER_DATA *data)
@@ -1649,6 +1702,15 @@ HRESULT WINAPI HTTPSCertificateTrust(CRYPT_PROVIDER_DATA *data)
 
 HRESULT WINAPI HTTPSFinalProv(CRYPT_PROVIDER_DATA *data)
 {
+#ifdef __REACTOS__
+    DWORD err;
+
+    FIXME("(%p)\n", data);
+    if ((err = SOFTPUB_PriorStepError(data)))
+        data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV] = err;
+    return err;
+#else
     FIXME("(%p)\n", data);
     return S_OK;
+#endif
 }
