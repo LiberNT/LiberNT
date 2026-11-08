@@ -16,16 +16,34 @@
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
-static __inline VOID
+#if DBG
+static VOID
 KiAssertQueueEntries(
     _In_ PKQUEUE Queue)
 {
-    UNREFERENCED_PARAMETER(Queue);
+    PLIST_ENTRY Head = &Queue->EntryListHead;
+    PLIST_ENTRY Entry = Head->Flink;
+    LONG Count = 0;
+
     ASSERT(Queue->Header.SignalState >= 0);
-    ASSERT((Queue->Header.SignalState == 0) == IsListEmpty(&Queue->EntryListHead));
-    ASSERT(Queue->EntryListHead.Flink->Blink == &Queue->EntryListHead);
-    ASSERT(Queue->EntryListHead.Blink->Flink == &Queue->EntryListHead);
+    ASSERT((Queue->Header.SignalState == 0) == IsListEmpty(Head));
+    ASSERT(Head->Flink->Blink == Head);
+    ASSERT(Head->Blink->Flink == Head);
+    while (Entry != Head && Count < 16)
+    {
+        ASSERT(Entry->Flink != NULL && Entry->Blink != NULL);
+        ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
+        Count++;
+        Entry = Entry->Flink;
+    }
+    if (Entry == Head)
+        ASSERT(Queue->Header.SignalState == Count);
+    else
+        ASSERT(Queue->Header.SignalState > Count);
 }
+#else
+#define KiAssertQueueEntries(Queue) ((VOID)0)
+#endif
 
 static BOOLEAN
 KiWakeQueueDequeueWaiter(
@@ -163,9 +181,12 @@ KiInsertQueue(IN PKQUEUE Queue,
         ((Thread->Queue != Queue) || (Thread->WaitReason != WrQueue)) &&
         KiWakeQueueDequeueWaiter(Queue, Entry, FALSE))
     {
+        ASSERT(Queue->Header.SignalState == InitialState);
+        KiAssertQueueEntries(Queue);
         return InitialState;
     }
 
+    ASSERT(InitialState < MAXLONG);
     /* Increase the Entries */
     Queue->Header.SignalState++;
 
@@ -298,6 +319,8 @@ KiDrainQueueEntries(
     _In_ ULONG Count)
 {
     PLIST_ENTRY QueueEntry;
+    LONG InitialState = Queue->Header.SignalState;
+    ULONG InitialRemoved = EntriesRemoved;
 
     KiAssertQueueEntries(Queue);
     ASSERT(Count > EntriesRemoved && !IsListEmpty(&Queue->EntryListHead));
@@ -315,6 +338,10 @@ KiDrainQueueEntries(
         EntryArray[EntriesRemoved++] = QueueEntry;
     } while ((EntriesRemoved < Count) && !IsListEmpty(&Queue->EntryListHead));
 
+    ASSERT(EntriesRemoved > InitialRemoved);
+    ASSERT((ULONG)(InitialState - Queue->Header.SignalState) == EntriesRemoved - InitialRemoved);
+    UNREFERENCED_PARAMETER(InitialState);
+    UNREFERENCED_PARAMETER(InitialRemoved);
     KiAssertQueueEntries(Queue);
     return EntriesRemoved;
 }
