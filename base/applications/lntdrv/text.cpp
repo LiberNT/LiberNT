@@ -83,6 +83,24 @@ std::wstring NumberText(ULONGLONG value)
     return text;
 }
 
+std::wstring ClockText(DWORD seconds)
+{
+    FILETIME now, local;
+    ULARGE_INTEGER time;
+    SYSTEMTIME system;
+    WCHAR text[64] = L"";
+
+    GetSystemTimeAsFileTime(&now);
+    time.LowPart = now.dwLowDateTime;
+    time.HighPart = now.dwHighDateTime;
+    time.QuadPart += (ULONGLONG)seconds * 10000000;
+    now.dwLowDateTime = time.LowPart;
+    now.dwHighDateTime = time.HighPart;
+    if (FileTimeToLocalFileTime(&now, &local) && FileTimeToSystemTime(&local, &system))
+        GetTimeFormatW(LOCALE_USER_DEFAULT, 0, &system, NULL, text, _countof(text));
+    return text;
+}
+
 bool IsOfflineError(DWORD error)
 {
     return error == ERROR_INTERNET_NAME_NOT_RESOLVED || error == ERROR_INTERNET_CANNOT_CONNECT ||

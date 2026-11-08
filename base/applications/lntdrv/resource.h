@@ -144,3 +144,4 @@
 #define IDS_SCAN_NONE                2128
 #define IDS_RESULT_UNSIGNED          2129
 #define IDS_ERROR_THROTTLED          2130
+#define IDS_SCAN_THROTTLED           2131

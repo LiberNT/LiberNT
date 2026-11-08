@@ -31,6 +31,10 @@ const unsigned DetailWorkers = 6;
 const WCHAR DetailsKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog";
 const unsigned MaximumAttempts = 3;
 const size_t RowsPerPage = 25;
+const ULONGLONG ThrottleWindow = 300 * 1000;
+const ULONGLONG ThrottleMargin = 10 * 1000;
+const ULONGLONG ThrottlePoll = 30 * 1000;
+const ULONGLONG MaximumThrottleWait = 2 * (ThrottleWindow + ThrottleMargin);
 
 std::string Utf8(const std::wstring &text)
 {
@@ -417,7 +421,19 @@ private:
 
 }
 
-Catalog::Catalog() : m_Cancel(NULL)
+ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now)
+{
+    if (windowStart && now - windowStart < ThrottleWindow + ThrottleMargin)
+        return ThrottleWindow + ThrottleMargin - (now - windowStart);
+    return ThrottlePoll;
+}
+
+ULONGLONG ThrottleWindowStart(ULONGLONG windowStart, ULONGLONG now)
+{
+    return !windowStart || now - windowStart >= ThrottleWindow ? now : windowStart;
+}
+
+Catalog::Catalog() : m_Cancel(NULL), m_Throttle(NULL), m_WindowStart(0)
 {
     DWORD timeout = 30000;
 
@@ -441,9 +457,27 @@ void Catalog::SetCancel(volatile LONG *cancel)
     m_Cancel = cancel;
 }
 
+void Catalog::SetThrottleCallback(ThrottleCallback *callback)
+{
+    m_Throttle = callback;
+}
+
 bool Catalog::Cancelled() const
 {
     return m_Cancel && InterlockedCompareExchange(m_Cancel, 0, 0) != 0;
+}
+
+DWORD Catalog::WaitThrottle(ULONGLONG delay)
+{
+    ULONGLONG end = GetTickCount64() + delay;
+
+    if (m_Throttle)
+        (*m_Throttle)((DWORD)((delay + 999) / 1000));
+    while (!Cancelled() && GetTickCount64() < end)
+        Sleep(100);
+    if (m_Throttle)
+        (*m_Throttle)(0);
+    return Cancelled() ? ERROR_CANCELLED : ERROR_SUCCESS;
 }
 
 DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status)
@@ -584,6 +618,7 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
                        L"&scol=DateComputed&sdir=desc" + (page ? L"&p=" + NumberText(page) : std::wstring());
     std::string html;
     size_t rows = 0;
+    ULONGLONG waited = 0;
     DWORD error;
 
     updates.clear();
@@ -594,11 +629,26 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
         last = cached->second.second;
         return ERROR_SUCCESS;
     }
-    error = Fetch(L"GET", url, std::string(), html);
-    if (!error)
-        error = ParseResults(html, query, updates, rows);
+    for (;;)
+    {
+        ULONGLONG delay;
+
+        error = Fetch(L"GET", url, std::string(), html);
+        if (!error)
+            error = ParseResults(html, query, updates, rows);
+        if (error != ERROR_LNTDRV_CATALOG_THROTTLED)
+            break;
+        delay = ThrottleDelay(m_WindowStart, GetTickCount64());
+        if (waited + delay > MaximumThrottleWait)
+            return error;
+        error = WaitThrottle(delay);
+        if (error)
+            return error;
+        waited += delay;
+    }
     if (error)
         return error;
+    m_WindowStart = ThrottleWindowStart(m_WindowStart, GetTickCount64());
     last = rows < RowsPerPage || LastPage(html);
     m_Pages[key] = std::make_pair(updates, last);
     return ERROR_SUCCESS;

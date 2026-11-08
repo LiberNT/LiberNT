@@ -184,4 +184,5 @@ BEGIN
     IDS_SCAN_FOUND "%1 個のデバイスで新しいドライバーが見つかりました。"
     IDS_SCAN_NONE "Microsoft Update カタログには、この PC にインストールする新しいものはありません。"
     IDS_RESULT_UNSIGNED "署名は検証されていません"
+    IDS_SCAN_THROTTLED "検索は %1 に再開します。Microsoft Update カタログがこの PC からの検索を制限しています。"
 END
