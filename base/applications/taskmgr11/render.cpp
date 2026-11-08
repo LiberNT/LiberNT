@@ -186,8 +186,10 @@ static void DrawGraphContent(GraphPaint& paint,
     /* grid: vertical lines scroll conceptually; static 10x4 grid reads the same */
     if (gs.grid)
     {
-        Pen grid(GP(gs.line, g_t.dark ? 46 : 36), scale);
-        int cols = 10, rows = 4;
+        COLORREF gridColor = gs.neutralGrid ? g_t.textSec : gs.line;
+        Pen grid(GP(gridColor, g_t.dark ? 46 : 36), scale);
+        int cols = gs.gridColumns ? gs.gridColumns : 10;
+        int rows = gs.gridRows ? gs.gridRows : 4;
         for (int i = 1; i < cols; i++)
         {
             int x = r.left + MulDiv(w, i, cols);
@@ -258,7 +260,7 @@ static void DrawGraphContent(GraphPaint& paint,
 
     if (gs.border)
     {
-        COLORREF border = Blend(bg, gs.line,
+        COLORREF border = Blend(bg, gs.neutralGrid ? g_t.textSec : gs.line,
                                 (g_t.dark ? 140 : 120) * 100 / 255);
         SolidBrush brush(GP(border));
         g.FillRectangle((Brush*)&brush, r.left, r.top, w, 1);

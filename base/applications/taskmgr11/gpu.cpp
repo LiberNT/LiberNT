@@ -115,6 +115,7 @@ static void EngineName(const DXGK_NODEMETADATA& meta, int ordinal,
 
     CopyMemory(friendly, meta.FriendlyName, sizeof(meta.FriendlyName));
     friendly[DXGK_MAX_METADATA_NAME_LENGTH] = 0;
+    TmTrimHardwareText(friendly);
     if (friendly[0])
         StringCchCopyW(buf, cch, friendly);
     else
@@ -296,6 +297,7 @@ static void ResolveAdapterIdentity(void)
                 description[0])
             {
                 StringCchCopyW(gpu->name, _countof(gpu->name), description);
+                TmTrimHardwareText(gpu->name);
             }
 
             driverKey = SetupDiOpenDevRegKey(devInfo, &devData, DICS_FLAG_GLOBAL, 0,
@@ -309,6 +311,7 @@ static void ResolveAdapterIdentity(void)
                     description[0])
                 {
                     StringCchCopyW(gpu->name, _countof(gpu->name), description);
+                    TmTrimHardwareText(gpu->name);
                 }
                 cb = sizeof(gpu->driverVersion);
                 if (RegQueryValueExW(driverKey, L"DriverVersion", NULL, NULL,
@@ -396,6 +399,7 @@ static void ResolveDriverDetailsByDescription(GpuSnapshot* gpu)
         {
             continue;
         }
+        TmTrimHardwareText(description);
         if (lstrcmpiW(description, gpu->name) != 0)
             continue;
         matches++;
@@ -867,7 +871,10 @@ static void CollectAdapter(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter)
         info.pPrivateDriverData = &registry;
         info.PrivateDriverDataSize = sizeof(registry);
         if (NT_SUCCESS(pQueryAdapterInfo(&info)) && registry.AdapterString[0])
+        {
             StringCchCopyW(gpu->name, _countof(gpu->name), registry.AdapterString);
+            TmTrimHardwareText(gpu->name);
+        }
     }
 
     if (!gpu->location[0])

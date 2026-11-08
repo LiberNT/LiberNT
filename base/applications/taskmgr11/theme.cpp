@@ -73,7 +73,8 @@ static const WCHAR* PickFace(void)
 void Theme_Free(void)
 {
     HFONT* fonts[] = { &g_t.fCaption, &g_t.fTitle, &g_t.fBody, &g_t.fBodySemi,
-                       &g_t.fSmall, &g_t.fSmallSemi, &g_t.fMed, &g_t.fMedSemi, &g_t.fBig };
+                       &g_t.fSmall, &g_t.fSmallSemi, &g_t.fMed, &g_t.fMedSemi, &g_t.fBig,
+                       &g_t.fPerfTitle, &g_t.fPerfHardware, &g_t.fPerfValue };
     for (int i = 0; i < (int)_countof(fonts); i++)
     {
         if (*fonts[i]) DeleteObject(*fonts[i]);
@@ -170,6 +171,9 @@ void Theme_Apply(BOOL dark, int dpi)
     g_t.fMed       = MakeFont(12, FW_NORMAL,   face);
     g_t.fMedSemi   = MakeFont(12, FW_SEMIBOLD, face);
     g_t.fBig       = MakeFont(20, FW_LIGHT,    face);
+    g_t.fPerfTitle = MakeFont(24, FW_NORMAL,   face);
+    g_t.fPerfHardware = MakeFont(14, FW_NORMAL, face);
+    g_t.fPerfValue = MakeFont(18, FW_NORMAL, face);
 }
 
 /* ------------------------------------------------------------------ */
