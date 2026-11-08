@@ -1,7 +1,7 @@
 @ stdcall AddPersonalTrustDBPages(ptr long ptr)
 @ stdcall CatalogCompactHashDatabase(ptr ptr ptr long)
 @ stdcall ComputeFirstPageHash(wstr wstr ptr long)
-#@ stub ConfigCiFinalPolicy
+@ stdcall ConfigCiFinalPolicy(ptr)
 @ stdcall ConfigCiPackageFamilyNameCheck(ptr ptr ptr)
 @ stdcall CryptCATAdminAcquireContext(ptr ptr long)
 @ stdcall CryptCATAdminAcquireContext2(ptr ptr wstr ptr long)
@@ -79,7 +79,7 @@
 @ cdecl SoftpubLoadDefUsageCallData(str ptr)
 @ stdcall SoftpubLoadMessage(ptr)
 @ stdcall SoftpubLoadSignature(ptr)
-#@ stub SrpCheckSmartlockerEAandProcessToken
+@ stdcall SrpCheckSmartlockerEAandProcessToken(ptr ptr ptr)
 @ stdcall TrustDecode(long ptr ptr long long str ptr long long)
 @ stdcall TrustFindIssuerCertificate(ptr long long ptr ptr ptr ptr long)
 @ stdcall TrustFreeDecode(long ptr)
@@ -106,9 +106,9 @@
 @ stdcall WTHelperOpenKnownStores(ptr)
 @ stdcall WTHelperProvDataFromStateData(ptr)
 @ stdcall WTIsFirstConfigCiResultPreferred(ptr ptr ptr)
-#@ stub WTLogConfigCiScriptEvent
+@ stub WTLogConfigCiScriptEvent
 @ stdcall WTLogConfigCiSignerEvent(ptr ptr ptr ptr)
-#@ stub WTValidateBioSignaturePolicy
+@ stdcall WTValidateBioSignaturePolicy(ptr ptr)
 @ stdcall WVTAsn1CatMemberInfo2Decode(long str ptr long long ptr ptr)
 @ stdcall WVTAsn1CatMemberInfo2Encode(long str ptr ptr ptr)
 @ stdcall WVTAsn1CatMemberInfoDecode(long str ptr long long ptr ptr)

@@ -58,6 +58,9 @@ static CRYPT_TRUST_REG_ENTRY OfficeCleanupPolicy;
 static CRYPT_TRUST_REG_ENTRY DriverInitializePolicy;
 static CRYPT_TRUST_REG_ENTRY DriverFinalPolicy;
 static CRYPT_TRUST_REG_ENTRY DriverCleanupPolicy;
+#ifdef __REACTOS__
+static CRYPT_TRUST_REG_ENTRY ConfigCiFinalPolicy;
+#endif
 
 static CRYPT_TRUST_REG_ENTRY GenericChainCertificateTrust;
 static CRYPT_TRUST_REG_ENTRY GenericChainFinalProv;
@@ -111,6 +114,9 @@ static void WINTRUST_InitRegStructs(void)
     WINTRUST_INITREGENTRY(DriverInitializePolicy, SP_POLICY_PROVIDER_DLL_NAME, DRIVER_INITPROV_FUNCTION)
     WINTRUST_INITREGENTRY(DriverFinalPolicy, SP_POLICY_PROVIDER_DLL_NAME, DRIVER_FINALPOLPROV_FUNCTION)
     WINTRUST_INITREGENTRY(DriverCleanupPolicy, SP_POLICY_PROVIDER_DLL_NAME, DRIVER_CLEANUPPOLICY_FUNCTION)
+#ifdef __REACTOS__
+    WINTRUST_INITREGENTRY(ConfigCiFinalPolicy, SP_POLICY_PROVIDER_DLL_NAME, L"ConfigCiFinalPolicy")
+#endif
     WINTRUST_INITREGENTRY(GenericChainCertificateTrust, SP_POLICY_PROVIDER_DLL_NAME, GENERIC_CHAIN_CERTTRUST_FUNCTION)
     WINTRUST_INITREGENTRY(GenericChainFinalProv, SP_POLICY_PROVIDER_DLL_NAME, GENERIC_CHAIN_FINALPOLICY_FUNCTION)
 
@@ -145,6 +151,9 @@ static void WINTRUST_FreeRegStructs(void)
     WINTRUST_FREEREGENTRY(DriverInitializePolicy);
     WINTRUST_FREEREGENTRY(DriverFinalPolicy);
     WINTRUST_FREEREGENTRY(DriverCleanupPolicy);
+#ifdef __REACTOS__
+    WINTRUST_FREEREGENTRY(ConfigCiFinalPolicy);
+#endif
     WINTRUST_FREEREGENTRY(GenericChainCertificateTrust);
     WINTRUST_FREEREGENTRY(GenericChainFinalProv);
 
@@ -690,6 +699,26 @@ static BOOL WINTRUST_RegisterDriverVerify(void)
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static GUID WINTRUST_ConfigCiAction = { 0x6078065b, 0x8f22, 0x4b13, { 0xbd,0x9b,0x5b,0x76,0x27,0x76,0xf3,0x86 } };
+
+static BOOL WINTRUST_RegisterConfigCiVerify(void)
+{
+    CRYPT_REGISTER_ACTIONID ProvInfo;
+
+    ProvInfo.cbStruct                   = sizeof(CRYPT_REGISTER_ACTIONID);
+    ProvInfo.sInitProvider              = DriverInitializePolicy;
+    ProvInfo.sObjectProvider            = SoftpubMessage;
+    ProvInfo.sSignatureProvider         = SoftpubSignature;
+    ProvInfo.sCertificateProvider       = SoftpubCertificate;
+    ProvInfo.sCertificatePolicyProvider = SoftpubCertCheck;
+    ProvInfo.sFinalPolicyProvider       = ConfigCiFinalPolicy;
+    ProvInfo.sTestPolicyProvider        = NullCTRE;
+    ProvInfo.sCleanupProvider           = DriverCleanupPolicy;
+    return WintrustAddActionID(&WINTRUST_ConfigCiAction, 0, &ProvInfo);
+}
+
+#endif
 /***************************************************************************
  *              WINTRUST_RegisterGenChainVerify
  *
@@ -1100,6 +1129,9 @@ static GUID WINTRUST_SoftpubActions[] =
     HTTPSPROV_ACTION,
     DRIVER_ACTION_VERIFY,
     WINTRUST_ACTION_GENERIC_CHAIN_VERIFY,
+#ifdef __REACTOS__
+    { 0x6078065b, 0x8f22, 0x4b13, { 0xbd,0x9b,0x5b,0x76,0x27,0x76,0xf3,0x86 } },
+#endif
 };
 
 static const LPCSTR WINTRUST_CodecOids[] =
@@ -1286,6 +1318,10 @@ add_trust_providers:
 #endif
     if (!WINTRUST_RegisterDriverVerify())
         TrustProviderRes = S_FALSE;
+#ifdef __REACTOS__
+    if (!WINTRUST_RegisterConfigCiVerify())
+        TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterGenChainVerify())
         TrustProviderRes = S_FALSE;
 
@@ -1407,6 +1443,10 @@ HRESULT WINAPI SoftpubDllRegisterServer(void)
 #endif
     if (!WINTRUST_RegisterDriverVerify())
         TrustProviderRes = S_FALSE;
+#ifdef __REACTOS__
+    if (!WINTRUST_RegisterConfigCiVerify())
+        TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterGenChainVerify())
         TrustProviderRes = S_FALSE;
 

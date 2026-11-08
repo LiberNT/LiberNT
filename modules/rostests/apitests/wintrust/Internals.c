@@ -33,6 +33,7 @@ typedef HRESULT (WINAPI *PFN_PROVIDER)(CRYPT_PROVIDER_DATA *);
 typedef ULONG_PTR (WINAPI *PFN_ANY3)(PVOID, PVOID, PVOID);
 typedef ULONG_PTR (WINAPI *PFN_ANY4)(PVOID, PVOID, PVOID, PVOID);
 typedef ULONG_PTR (WINAPI *PFN_ANY6)(PVOID, PVOID, PVOID, PVOID, PVOID, PVOID);
+typedef HRESULT (WINAPI *PFN_BIO_POLICY)(PVOID, BOOLEAN *);
 
 static HMODULE Wintrust;
 static WCHAR TempDir[MAX_PATH], Self[MAX_PATH];
@@ -583,6 +584,70 @@ TestFixedResults(VOID)
 
 static
 VOID
+TestConfigCi(VOID)
+{
+    static const GUID ConfigCiAction = { 0x6078065b, 0x8f22, 0x4b13, { 0xbd,0x9b,0x5b,0x76,0x27,0x76,0xf3,0x86 } };
+    PFN_PROVIDER Final = GET(PFN_PROVIDER, "ConfigCiFinalPolicy");
+    PFN_ANY3 Srp = GET(PFN_ANY3, "SrpCheckSmartlockerEAandProcessToken");
+    PFN_BIO_POLICY BioPolicy = GET(PFN_BIO_POLICY, "WTValidateBioSignaturePolicy");
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2, Action = ConfigCiAction;
+    WINTRUST_FILE_INFO File = { sizeof(File) };
+    WINTRUST_DATA Data = { sizeof(Data) };
+    CRYPT_PROVIDER_DATA *ProvData;
+    WCHAR Text[MAX_PATH];
+    BYTE Buffer[256], Out[16];
+    HANDLE Handle, Token = NULL;
+
+    ok(Final && Srp && BioPolicy && GetProcAddress(Wintrust, "WTLogConfigCiScriptEvent"),
+       "a Config CI export is missing\n");
+    if (!Final || !Srp || !BioPolicy)
+        return;
+
+    File.pcwszFilePath = Self;
+    Data.dwUIChoice = WTD_UI_NONE;
+    Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    Data.dwUnionChoice = WTD_CHOICE_FILE;
+    Data.pFile = &File;
+    Data.dwStateAction = WTD_STATEACTION_VERIFY;
+    WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+    ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+    ok(ProvData != NULL, "no provider data\n");
+    if (ProvData)
+        ok_hex(Final(ProvData), E_INVALIDARG);
+    Data.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+
+    swprintf(Text, RTL_NUMBER_OF(Text), L"%lslntwtci.txt", TempDir);
+    if (WriteText(Text, "text\r\n"))
+    {
+        File.pcwszFilePath = Text;
+        Data.dwStateAction = WTD_STATEACTION_IGNORE;
+        Data.hWVTStateData = NULL;
+        ok_hex(WinVerifyTrust(INVALID_HANDLE_VALUE, &Action, &Data), ERROR_SUCCESS);
+        DeleteFileW(Text);
+    }
+
+    Handle = CreateFileW(Self, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &Token);
+    FillMemory(Out, sizeof(Out), 0xcc);
+    SetLastError(0xdeadbeef);
+    ok_int((int)Srp(Handle, Token, Out), 0);
+    ok_hex(GetLastError(), 0xdeadbeef);
+    ok_hex(Out[0], 0xcc);
+    ok_int((int)Srp(Handle, NULL, Out), 0);
+    if (Token)
+        CloseHandle(Token);
+    CloseHandle(Handle);
+
+    ZeroMemory(Buffer, sizeof(Buffer));
+    FillMemory(Out, sizeof(Out), 0xcc);
+    ok_hex(BioPolicy(Buffer, (BOOLEAN *)Out), E_INVALIDARG);
+    ok_hex(Out[0], FALSE);
+    ok_hex(Out[1], 0xcc);
+}
+
+static
+VOID
 WINAPI
 CdfError(DWORD Area, DWORD Local, WCHAR *Line)
 {
@@ -774,6 +839,7 @@ START_TEST(Internals)
     TestChainedToMicrosoft();
     TestOfficePolicy();
     TestFixedResults();
+    TestConfigCi();
     TestCatalogDetails();
     TestDump();
 }
