@@ -1316,7 +1316,7 @@ LxSeccompSetFilter(
         return Result;
     if ((Program.Length == 0) || (Program.Length > LX_CBPF_MAXINSNS))
         return -LX_EINVAL;
-    if (!Process->NoNewPrivs && !LxCapable(Process, LX_CAP_SYS_ADMIN))
+    if (!Thread->NoNewPrivs && !LxCapable(Process, LX_CAP_SYS_ADMIN))
         return -LX_EACCES;
 
     Size = FIELD_OFFSET(LX_SECCOMP_FILTER, Insns) + (SIZE_T)Program.Length * sizeof(LX_SOCK_FILTER);
@@ -1419,6 +1419,8 @@ LxSeccompSetFilter(
             LxSeccompGetUser(Filter);
             Old = (PLX_SECCOMP_FILTER)InterlockedExchangePointer((PVOID volatile *)&Other->Seccomp, Filter);
             Other->SeccompMode = LX_SECCOMP_MODE_FILTER;
+            if (Thread->NoNewPrivs)
+                Other->NoNewPrivs = TRUE;
             LxSeccompPutUser(Old);
         }
     }

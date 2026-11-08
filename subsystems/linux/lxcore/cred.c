@@ -383,6 +383,7 @@ LxCredFixSetuid(
 VOID
 LxCredCommit(
     _Inout_ PLX_PROCESS Process,
+    _Inout_ PLX_THREAD Thread,
     _In_ PLX_CRED_SAVE Old)
 {
     PLX_CRED Cred = LxProcessCred(Process);
@@ -391,7 +392,7 @@ LxCredCommit(
         (Cred->Fsgid != Old->Fsgid) || (Cred->CapPermitted & ~Old->CapPermitted))
     {
         Process->Dumpable = LX_SUID_DUMPABLE;
-        Process->PdeathSignal = 0;
+        Thread->PdeathSignal = 0;
     }
 }
 
@@ -415,6 +416,7 @@ LxCredRootOwnsNs(
 ULONG
 LxCredExec(
     _Inout_ PLX_PROCESS Process,
+    _Inout_ PLX_THREAD Thread,
     _In_ PLX_CRED_SAVE Old,
     _In_ PLX_FILE_CAPS FileCaps)
 {
@@ -441,7 +443,7 @@ LxCredExec(
     if (Gained)
         Result |= LX_CRED_EXEC_GAINED;
     IdChanged = (Cred->Uid[1] != Old->Uid[1]) || !LxInGroup(Process, Cred->Gid[1]);
-    if ((IdChanged || Gained) && Process->NoNewPrivs)
+    if ((IdChanged || Gained) && Thread->NoNewPrivs)
         Permitted &= Old->CapPermitted;
 
     Cred->Uid[2] = Cred->Fsuid = Cred->Uid[1];
@@ -461,7 +463,7 @@ LxCredExec(
     if ((Result & LX_CRED_EXEC_SECURE) || Gained || (Cred->Uid[1] != Old->Uid[1]) ||
         (Cred->Gid[1] != Old->Gid[1]) || (Cred->Fsuid != Old->Fsuid) || (Cred->Fsgid != Old->Fsgid))
     {
-        Process->PdeathSignal = 0;
+        Thread->PdeathSignal = 0;
     }
     Process->Dumpable = ((Cred->Uid[1] == Cred->Uid[0]) && (Cred->Gid[1] == Cred->Gid[0]) && !Gained) ?
                         1 : LX_SUID_DUMPABLE;
