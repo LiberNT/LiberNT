@@ -794,8 +794,8 @@ BOOL WINAPI WintrustGetDefaultForUsage(DWORD dwAction, const char *pszUsageOID, 
             FreeLibrary(module);
         }
     }
-    /* TODO: INFO_NEEDED: whether Windows 11 frees the callback data for actions other than DWACTION_FREE */
-    else if ((free_usage = WINTRUST_LoadUsageCallback(hkey, L"CallbackFreeFunction", &module)))
+    else if (dwAction == DWACTION_FREE &&
+             (free_usage = WINTRUST_LoadUsageCallback(hkey, L"CallbackFreeFunction", &module)))
     {
         ret = free_usage(pszUsageOID, psUsage);
         FreeLibrary(module);
