@@ -61,6 +61,15 @@ NtfsBlDeleteFile(
     _In_ PCSTR Path,
     _In_ BOOLEAN IsDirectory);
 
+NTSTATUS
+NtfsBlSetDirty(
+    _In_ BOOLEAN Dirty);
+
+NTSTATUS
+NtfsBlQuerySpace(
+    _Out_ PULONGLONG FreeBytes,
+    _Out_ PULONG ClusterSize);
+
 #ifdef __cplusplus
 }
 #endif

@@ -512,4 +512,41 @@ NtfsBlDeleteFile(
         : Status;
 }
 
+NTSTATUS
+NtfsBlQuerySpace(
+    _Out_ PULONGLONG FreeBytes,
+    _Out_ PULONG ClusterSize)
+{
+    NtfsVolumeInformation Information;
+    NTSTATUS Status;
+
+    *FreeBytes = 0;
+    *ClusterSize = 0;
+    if (!NtfsBlVolume)
+        return STATUS_DEVICE_NOT_READY;
+
+    Status = NtfsVolumeQueryInformation(NtfsBlVolume, &Information);
+    if (NT_SUCCESS(Status))
+    {
+        *FreeBytes = Information.FreeClusters * Information.BytesPerCluster;
+        *ClusterSize = Information.BytesPerCluster;
+    }
+    return Status;
+}
+
+NTSTATUS
+NtfsBlSetDirty(
+    _In_ BOOLEAN Dirty)
+{
+    NTSTATUS Status;
+
+    if (!NtfsBlVolume)
+        return STATUS_DEVICE_NOT_READY;
+
+    Status = NtfsVolumeSetFlags(NtfsBlVolume, Dirty ? VOL_DIRTY : 0, Dirty ? 0 : VOL_DIRTY);
+    if (NT_SUCCESS(Status) && !DkFlush(NtfsBlDevice))
+        Status = STATUS_UNEXPECTED_IO_ERROR;
+    return Status;
+}
+
 }

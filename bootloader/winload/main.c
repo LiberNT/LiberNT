@@ -18,7 +18,9 @@
 #define OSL_DOWNLOAD_ADDRESS_OPTION "HTTPBOOTIP="
 #define OSL_SYNC_URL_OPTION "HTTPSYNCURL="
 #define OSL_INSTALL_IMAGE_OPTION "INSTALLIMAGE="
+#define OSL_INSTALL_HASH_OPTION "INSTALLSHA256="
 #define OSL_ADDRESS_CHARS 64
+#define OSL_HASH_CHARS    80
 #define OSL_DEBUG_PORT_OPTION "DEBUGPORT="
 #define OSL_DEBUG_MODULE  "kdcom.dll"
 #define OSL_NETWORK_DEBUG_FILE "kdnet.dll"
@@ -303,7 +305,7 @@ VOID
 OslMain(VOID)
 {
     CHAR SystemRoot[OSL_PATH_CHARS], Directory[OSL_PATH_CHARS], Options[OSL_OPTIONS_CHARS];
-    CHAR Url[OSL_PATH_CHARS], Address[OSL_ADDRESS_CHARS];
+    CHAR Url[OSL_PATH_CHARS], Address[OSL_ADDRESS_CHARS], Hash[OSL_HASH_CHARS];
     PVOID Image = NULL;
     ULONG ImageSize = 0;
     PLOADER_PARAMETER_BLOCK LoaderBlock;
@@ -368,7 +370,12 @@ OslMain(VOID)
         OslResumeFromHibernation(&OsDevice);
 
         if (OslGetOption(Options, OSL_INSTALL_IMAGE_OPTION, Url, sizeof(Url)))
-            OslInstallImage(&OsDevice, SystemRoot, Url);
+        {
+            OslInstallImage(&OsDevice,
+                            SystemRoot,
+                            Url,
+                            OslGetOption(Options, OSL_INSTALL_HASH_OPTION, Hash, sizeof(Hash)) ? Hash : NULL);
+        }
     }
 
     PeSetSystemRoot(SystemRoot);
