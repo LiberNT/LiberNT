@@ -2223,10 +2223,7 @@ static BOOL WINAPI CRYPT_AsnDecodeInt(DWORD dwCertEncodingType,
             else
                 val = 0;
             for (i = 0; i < dataLen; i++)
-            {
-                val <<= 8;
-                val |= pbEncoded[1 + lenBytes + i];
-            }
+                val = (int)(((unsigned int)val << 8) | pbEncoded[1 + lenBytes + i]);
             memcpy(pvStructInfo, &val, sizeof(int));
         }
     }
