@@ -1036,6 +1036,44 @@ if(STARFIVE_JH7110_SUPPORT)
     add_dependencies(liberntimg jh7110sdimg)
 endif()
 
+if(NINTENDO_SWITCH_SUPPORT)
+    set(_switch_media_dir ${REACTOS_BINARY_DIR}/bootloader/image/mediawim)
+    set(_switch_partition_file ${CMAKE_CURRENT_BINARY_DIR}/switch-sd.fat)
+    set(_switch_sd_image_file ${REACTOS_BINARY_DIR}/LiberNT-switch-sd.img)
+    add_custom_target(switchsdimg
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${_switch_partition_file} ${_switch_sd_image_file}
+        COMMAND native-fatten ${_switch_partition_file}
+            -format ${NINTENDO_SWITCH_SD_SECTORS} fat32 LIBERNT
+            -mkdir bootloader
+            -mkdir bootloader/ini
+            -mkdir switchroot
+            -mkdir switchroot/libernt
+            -mkdir EFI
+            -mkdir EFI/BOOT
+            -mkdir EFI/LiberNT
+            -mkdir EFI/LiberNT/Boot
+            -add ${NINTENDO_SWITCH_HEKATE_INI} bootloader/ini/libernt.ini
+            -add ${NINTENDO_SWITCH_BL33} switchroot/libernt/bl33.bin
+            -add ${NINTENDO_SWITCH_BOOT_SCRIPT} switchroot/libernt/boot.scr
+            -add ${NINTENDO_SWITCH_BOOT_SCRIPT_SOURCE} switchroot/libernt/boot.cmd
+            -add ${NINTENDO_SWITCH_README} switchroot/libernt/README.txt
+            -add $<TARGET_FILE:bootmgfw> EFI/BOOT/BOOTAA64.EFI
+            -add $<TARGET_FILE:winload> EFI/LiberNT/Boot/winload.efi
+            -add ${_switch_media_dir}/BCD EFI/LiberNT/Boot/BCD
+            -add ${_switch_media_dir}/boot.wim boot.wim
+        COMMAND native-mkdiskimg
+            -o ${_switch_sd_image_file}
+            -partition ${_switch_partition_file}
+            -start ${NINTENDO_SWITCH_SD_START}
+            -type 0c
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${_switch_partition_file}
+        DEPENDS native-fatten native-mkdiskimg
+            ${NINTENDO_SWITCH_BL33} ${NINTENDO_SWITCH_BOOT_SCRIPT} ${NINTENDO_SWITCH_BOOT_SCRIPT_SOURCE}
+            ${NINTENDO_SWITCH_HEKATE_INI} ${NINTENDO_SWITCH_README}
+        VERBATIM)
+    add_dependencies(switchsdimg bootloaderwimcd)
+endif()
+
 set(_liberntvhd_layout_args
     ${_liberntimg_mbr_args}
     ${_liberntimg_leading_args}

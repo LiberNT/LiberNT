@@ -1,0 +1,173 @@
+From f8a07df643f7974cba101ebb0280b0315c421d7f Mon Sep 17 00:00:00 2001
+From: Ahmed ARIF <arif.ing@outlook.com>
+Date: Sun, 8 Nov 2026 18:46:05 +0100
+Subject: [PATCH 1/3] efi_loader: fixes needed to boot PE images built with a
+ preferred base
+
+- Apply PE base relocations as (load address - ImageBase); the delta assumed
+  an ImageBase of 0, which breaks images linked at e.g. 0x140000000.
+- Register the simple file system protocol with the interface pointer, not
+  with the address of the field that holds it.
+- Allow 16 configuration tables; two slots (device tree, SMBIOS) left no room
+  for a table installed by an EFI application.
+
+(cherry picked from commit 14db758492aac809ad2c99008789d653d4a5e631)
+---
+ lib/efi_loader/efi_boottime.c     |  2 +-
+ lib/efi_loader/efi_disk.c         |  2 +-
+ lib/efi_loader/efi_image_loader.c | 11 ++++++++---
+ 3 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/lib/efi_loader/efi_boottime.c b/lib/efi_loader/efi_boottime.c
+index b90bd0b..f9ff8af 100644
+--- a/lib/efi_loader/efi_boottime.c
++++ b/lib/efi_loader/efi_boottime.c
+@@ -42,7 +42,7 @@ static bool efi_is_direct_boot = true;
+  * In most cases we want to pass an FDT to the payload, so reserve one slot of
+  * config table space for it. The pointer gets populated by do_bootefi_exec().
+  */
+-static struct efi_configuration_table __efi_runtime_data efi_conf_table[2];
++static struct efi_configuration_table __efi_runtime_data efi_conf_table[16];
+ 
+ #ifdef CONFIG_ARM
+ /*
+diff --git a/lib/efi_loader/efi_disk.c b/lib/efi_loader/efi_disk.c
+index d299fc8..85b4a14 100644
+--- a/lib/efi_loader/efi_disk.c
++++ b/lib/efi_loader/efi_disk.c
+@@ -242,7 +242,7 @@ static void efi_disk_add_dev(const char *name,
+ 							 diskobj->dp);
+ 		ret = efi_add_protocol(diskobj->parent.handle,
+ 				       &efi_simple_file_system_protocol_guid,
+-				       &diskobj->volume);
++				       diskobj->volume);
+ 		if (ret != EFI_SUCCESS)
+ 			goto out_of_memory;
+ 	}
+diff --git a/lib/efi_loader/efi_image_loader.c b/lib/efi_loader/efi_image_loader.c
+index af29cc4..ffe84d6 100644
+--- a/lib/efi_loader/efi_image_loader.c
++++ b/lib/efi_loader/efi_image_loader.c
+@@ -23,7 +23,8 @@ const efi_guid_t efi_simple_file_system_protocol_guid =
+ const efi_guid_t efi_file_info_guid = EFI_FILE_INFO_GUID;
+ 
+ static efi_status_t efi_loader_relocate(const IMAGE_BASE_RELOCATION *rel,
+-			unsigned long rel_size, void *efi_reloc)
++			unsigned long rel_size, void *efi_reloc,
++			unsigned long pref_address)
+ {
+ 	const IMAGE_BASE_RELOCATION *end;
+ 	int i;
+@@ -36,7 +37,8 @@ static efi_status_t efi_loader_relocate(const IMAGE_BASE_RELOCATION *rel,
+ 			uint32_t offset = (uint32_t)(*relocs & 0xfff) +
+ 					  rel->VirtualAddress;
+ 			int type = *relocs >> EFI_PAGE_SHIFT;
+-			unsigned long delta = (unsigned long)efi_reloc;
++			unsigned long delta = (unsigned long)efi_reloc -
++					      pref_address;
+ 			uint64_t *x64 = efi_reloc + offset;
+ 			uint32_t *x32 = efi_reloc + offset;
+ 			uint16_t *x16 = efi_reloc + offset;
+@@ -85,6 +87,7 @@ void *efi_load_pe(void *efi, struct efi_loaded_image *loaded_image_info)
+ 	IMAGE_SECTION_HEADER *sections;
+ 	int num_sections;
+ 	void *efi_reloc;
++	unsigned long pref_address = 0;
+ 	int i;
+ 	const IMAGE_BASE_RELOCATION *rel;
+ 	unsigned long rel_size;
+@@ -141,6 +144,7 @@ void *efi_load_pe(void *efi, struct efi_loaded_image *loaded_image_info)
+ 		rel_size = opt->DataDirectory[rel_idx].Size;
+ 		rel = efi_reloc + opt->DataDirectory[rel_idx].VirtualAddress;
+ 		image_type = opt->Subsystem;
++		pref_address = opt->ImageBase;
+ 	} else if (can_run_nt32 &&
+ 		   (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)) {
+ 		IMAGE_OPTIONAL_HEADER32 *opt = &nt->OptionalHeader;
+@@ -155,6 +159,7 @@ void *efi_load_pe(void *efi, struct efi_loaded_image *loaded_image_info)
+ 		rel_size = opt->DataDirectory[rel_idx].Size;
+ 		rel = efi_reloc + opt->DataDirectory[rel_idx].VirtualAddress;
+ 		image_type = opt->Subsystem;
++		pref_address = opt->ImageBase;
+ 	} else {
+ 		printf("%s: Invalid optional header magic %x\n", __func__,
+ 		       nt->OptionalHeader.Magic);
+@@ -191,7 +196,7 @@ void *efi_load_pe(void *efi, struct efi_loaded_image *loaded_image_info)
+ 	}
+ 
+ 	/* Run through relocations */
+-	if (efi_loader_relocate(rel, rel_size, efi_reloc) != EFI_SUCCESS) {
++	if (efi_loader_relocate(rel, rel_size, efi_reloc, pref_address) != EFI_SUCCESS) {
+ 		efi_free_pages((uintptr_t) efi_reloc,
+ 			       (virt_size + EFI_PAGE_MASK) >> EFI_PAGE_SHIFT);
+ 		return NULL;
+
+From 97119bb9e981e7ab05187bb3c350b75f76f17e5d Mon Sep 17 00:00:00 2001
+From: Ahmed ARIF <arif.ing@outlook.com>
+Date: Sun, 8 Nov 2026 18:46:06 +0100
+Subject: [PATCH 2/3] nintendo-switch: enable the EFI loader
+
+---
+ configs/nintendo-switch_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configs/nintendo-switch_defconfig b/configs/nintendo-switch_defconfig
+index 608e5be..44899dc 100644
+--- a/configs/nintendo-switch_defconfig
++++ b/configs/nintendo-switch_defconfig
+@@ -37,7 +37,7 @@ CONFIG_CMD_DTIMG=y
+ CONFIG_FAT_FAST=y
+ CONFIG_FAT_EXFAT=y
+ # CONFIG_ISO_PARTITION is not set
+-# CONFIG_EFI_LOADER is not set
++CONFIG_EFI_LOADER=y
+ CONFIG_PARTITION_TYPE_GUID=y
+ CONFIG_OF_LIVE=y
+ CONFIG_OF_LIBFDT_OVERLAY=y
+
+From bea0a688afff4c3e962709a50eb7fe13e3de24ed Mon Sep 17 00:00:00 2001
+From: Ahmed ARIF <arif.ing@outlook.com>
+Date: Sun, 8 Nov 2026 18:59:57 +0100
+Subject: [PATCH 3/3] kbuild: escape # through a variable for GNU make 4.3 and
+ later
+
+GNU make 4.3 keeps the backslash of \# inside function calls, so the generated device tree sources began with a literal \#include and failed to compile.
+---
+ scripts/Kbuild.include | 3 ++-
+ scripts/Makefile.lib   | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/Kbuild.include b/scripts/Kbuild.include
+index 2c7918a..4345fc4 100644
+--- a/scripts/Kbuild.include
++++ b/scripts/Kbuild.include
+@@ -2,6 +2,7 @@
+ # kbuild: Generic definitions
+ 
+ # Convenient variables
++pound := \#
+ comma   := ,
+ quote   := "
+ squote  := '
+@@ -246,7 +247,7 @@ endif
+ # (needed for make)
+ # Replace >'< with >'\''< to be able to enclose the whole string in '...'
+ # (needed for the shell)
+-make-cmd = $(call escsq,$(subst \#,\\\#,$(subst $$,$$$$,$(cmd_$(1)))))
++make-cmd = $(call escsq,$(subst $(pound),\$(pound),$(subst $$,$$$$,$(cmd_$(1)))))
+ 
+ # Find any prerequisites that is newer than target or that does not exist.
+ # PHONY targets skipped in both cases.
+diff --git a/scripts/Makefile.lib b/scripts/Makefile.lib
+index 8f19b2d..9ee8fe1 100644
+--- a/scripts/Makefile.lib
++++ b/scripts/Makefile.lib
+@@ -318,7 +318,7 @@ quiet_cmd_dtc = DTC     $@
+ # Modified for U-Boot
+ # Bring in any U-Boot-specific include at the end of the file
+ cmd_dtc = mkdir -p $(dir ${dtc-tmp}) ; \
+-	(cat $<; $(if $(u_boot_dtsi),echo '\#include "$(u_boot_dtsi)"')) > $(pre-tmp); \
++	(cat $<; $(if $(u_boot_dtsi),echo '$(pound)include "$(u_boot_dtsi)"')) > $(pre-tmp); \
+ 	$(CPP) $(dtc_cpp_flags) -x assembler-with-cpp -o $(dtc-tmp) $(pre-tmp) ; \
+ 	$(DTC) -O dtb -o $@ -b 0 \
+ 		-i $(dir $<) $(DTC_FLAGS) \
