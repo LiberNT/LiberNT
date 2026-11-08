@@ -5,6 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
+#define WIN32_NO_STATUS
 #include <apitest.h>
 #include <wincrypt.h>
 #include <wintrust.h>
@@ -12,6 +13,8 @@
 #include <mssip.h>
 #include <mscat.h>
 #include <stdio.h>
+#undef WIN32_NO_STATUS
+#include <ntstatus.h>
 
 typedef PCCERT_CONTEXT (WINAPI *PFN_FIND_ISSUER)(PCCERT_CONTEXT, DWORD, HCERTSTORE *, FILETIME *, DWORD, DWORD *, DWORD *);
 typedef LONG (WINAPI *PFN_FILE_HASH)(LPCWSTR, DWORD, PVOID, BYTE *, DWORD *, ALG_ID *);
@@ -23,7 +26,7 @@ typedef HRESULT (WINAPI *PFN_FIND_CERTS)(PCERT_CHAIN, DWORD *, DWORD *, BYTE *, 
 static const GUID PeSubject = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
 
 static HCRYPTPROV Provider;
-static PCCERT_CONTEXT Root, Leaf;
+static PCCERT_CONTEXT Root, Leaf, Tsa, CodeSigner, RogueTsa;
 static HCERTSTORE MachineRoot;
 static WCHAR TempDir[MAX_PATH], CatalogPath[MAX_PATH], MemberPath[MAX_PATH], OtherPath[MAX_PATH], ImagePath[MAX_PATH];
 
@@ -64,24 +67,29 @@ ReadBytes(const WCHAR *Path, BYTE **Data, DWORD *Size)
 
 static
 PCCERT_CONTEXT
-CreateCertificate(const WCHAR *Subject, PCCERT_CONTEXT Issuer, BOOL CertificateAuthority)
+CreateCertificate(const WCHAR *Subject, PCCERT_CONTEXT Issuer, BOOL CertificateAuthority, LPCSTR Usage)
 {
     CERT_BASIC_CONSTRAINTS2_INFO Constraints = { CertificateAuthority, FALSE, 0 };
-    BYTE NameData[128], SerialData[8], ConstraintsData[16], *Encoded = NULL;
+    CERT_ENHKEY_USAGE UsageInfo = { 1, (LPSTR *)&Usage };
+    BYTE NameData[128], SerialData[8], ConstraintsData[16], UsageData[64], *Encoded = NULL;
     CERT_NAME_BLOB Name = { sizeof(NameData), NameData };
     CRYPT_ALGORITHM_IDENTIFIER Algorithm = { (LPSTR)szOID_RSA_SHA256RSA };
     CRYPT_KEY_PROV_INFO KeyInfo = { (LPWSTR)TEST_CONTAINER, (LPWSTR)MS_ENH_RSA_AES_PROV_W, PROV_RSA_AES, 0, 0, NULL, AT_SIGNATURE };
-    CERT_EXTENSION Extension = { (LPSTR)szOID_BASIC_CONSTRAINTS2, TRUE, { sizeof(ConstraintsData), ConstraintsData } };
-    CERT_EXTENSIONS Extensions = { 1, &Extension };
+    CERT_EXTENSION Extension[2] = { { (LPSTR)szOID_BASIC_CONSTRAINTS2, TRUE, { sizeof(ConstraintsData), ConstraintsData } },
+                                    { (LPSTR)szOID_ENHANCED_KEY_USAGE, FALSE, { sizeof(UsageData), UsageData } } };
+    CERT_EXTENSIONS Extensions = { Usage ? 2 : 1, Extension };
     CERT_PUBLIC_KEY_INFO *PublicKey = NULL;
     PCCERT_CONTEXT Cert = NULL;
+    static BYTE Sequence;
     SYSTEMTIME Time;
     CERT_INFO Info;
     DWORD Size = 0;
 
     if (!CertStrToNameW(X509_ASN_ENCODING, Subject, CERT_X500_NAME_STR, NULL, NameData, &Name.cbData, NULL) ||
         !CryptEncodeObject(X509_ASN_ENCODING, X509_BASIC_CONSTRAINTS2, &Constraints, ConstraintsData,
-                           &Extension.Value.cbData))
+                           &Extension[0].Value.cbData) ||
+        (Usage && !CryptEncodeObject(X509_ASN_ENCODING, X509_ENHANCED_KEY_USAGE, &UsageInfo, UsageData,
+                                     &Extension[1].Value.cbData)))
         return NULL;
 
     if (!Issuer)
@@ -106,7 +114,7 @@ CreateCertificate(const WCHAR *Subject, PCCERT_CONTEXT Issuer, BOOL CertificateA
     memcpy(SerialData + 3, &Time.wSecond, sizeof(Time.wSecond));
     SerialData[5] = 0x54;
     SerialData[6] = 0x01;
-    SerialData[7] = 0x02;
+    SerialData[7] = ++Sequence;
     Info.SerialNumber.cbData = sizeof(SerialData);
     Info.SerialNumber.pbData = SerialData;
     Info.SignatureAlgorithm = Algorithm;
@@ -116,8 +124,8 @@ CreateCertificate(const WCHAR *Subject, PCCERT_CONTEXT Issuer, BOOL CertificateA
     Info.NotAfter = Info.NotBefore;
     ((ULARGE_INTEGER *)&Info.NotAfter)->QuadPart += 300ULL * 24 * 3600 * 10000000;
     Info.Subject = Name;
-    Info.cExtension = 1;
-    Info.rgExtension = &Extension;
+    Info.cExtension = Extensions.cExtension;
+    Info.rgExtension = Extension;
     if (CryptExportPublicKeyInfo(Provider, AT_SIGNATURE, X509_ASN_ENCODING, NULL, &Size) &&
         (PublicKey = HeapAlloc(GetProcessHeap(), 0, Size)) &&
         CryptExportPublicKeyInfo(Provider, AT_SIGNATURE, X509_ASN_ENCODING, PublicKey, &Size))
@@ -142,14 +150,15 @@ CreateCertificate(const WCHAR *Subject, PCCERT_CONTEXT Issuer, BOOL CertificateA
 
 static
 BOOL
-SignContent(LPCSTR ContentType, const BYTE *Content, DWORD ContentSize, BYTE **Signed, DWORD *SignedSize)
+SignContent(LPCSTR ContentType, const BYTE *Content, DWORD ContentSize, PCCERT_CONTEXT Extra, BYTE **Signed,
+            DWORD *SignedSize)
 {
     static const BYTE OpusInfo[] = { 0x30, 0x00 };
     CRYPT_ATTR_BLOB OpusBlob = { sizeof(OpusInfo), (BYTE *)OpusInfo };
     CRYPT_ATTRIBUTE Attribute = { (LPSTR)SPC_SP_OPUS_INFO_OBJID, 1, &OpusBlob };
     CMSG_SIGNER_ENCODE_INFO Signer;
     CMSG_SIGNED_ENCODE_INFO SignedInfo;
-    CERT_BLOB Certs[2];
+    CERT_BLOB Certs[3];
     HCRYPTMSG Msg;
     BOOL Ret;
 
@@ -165,11 +174,16 @@ SignContent(LPCSTR ContentType, const BYTE *Content, DWORD ContentSize, BYTE **S
     Certs[0].pbData = Leaf->pbCertEncoded;
     Certs[1].cbData = Root->cbCertEncoded;
     Certs[1].pbData = Root->pbCertEncoded;
+    if (Extra)
+    {
+        Certs[2].cbData = Extra->cbCertEncoded;
+        Certs[2].pbData = Extra->pbCertEncoded;
+    }
     ZeroMemory(&SignedInfo, sizeof(SignedInfo));
     SignedInfo.cbSize = sizeof(SignedInfo);
     SignedInfo.cSigners = 1;
     SignedInfo.rgSigners = &Signer;
-    SignedInfo.cCertEncoded = 2;
+    SignedInfo.cCertEncoded = Extra ? 3 : 2;
     SignedInfo.rgCertEncoded = Certs;
 
     *Signed = NULL;
@@ -230,7 +244,7 @@ CreateSignedCatalog(VOID)
         CryptMsgGetParam(Msg, CMSG_CONTENT_PARAM, 0, NULL, &ContentSize) &&
         (Content = HeapAlloc(GetProcessHeap(), 0, ContentSize)) &&
         CryptMsgGetParam(Msg, CMSG_CONTENT_PARAM, 0, Content, &ContentSize) &&
-        SignContent(szOID_CTL, Content, ContentSize, &Signed, &SignedSize))
+        SignContent(szOID_CTL, Content, ContentSize, NULL, &Signed, &SignedSize))
     {
         Ret = WriteBytes(CatalogPath, Signed, SignedSize);
     }
@@ -335,7 +349,7 @@ CreateSignedImage(LPCSTR Algorithm, DWORD Misalign, BYTE *Digest, DWORD *DigestS
         CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, NULL, &EncodedSize) &&
         (Encoded = HeapAlloc(GetProcessHeap(), 0, EncodedSize)) &&
         CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, Encoded, &EncodedSize) &&
-        SignContent(SPC_INDIRECT_DATA_OBJID, Encoded, EncodedSize, &Signed, &SignedSize))
+        SignContent(SPC_INDIRECT_DATA_OBJID, Encoded, EncodedSize, NULL, &Signed, &SignedSize))
     {
         memcpy(Digest, Indirect->Digest.pbData, Indirect->Digest.cbData);
         *DigestSize = Indirect->Digest.cbData;
@@ -716,12 +730,190 @@ SetupFixture(VOID)
         return FALSE;
     CryptDestroyKey(Key);
 
-    Root = CreateCertificate(L"CN=LiberNT wintrust test root", NULL, TRUE);
-    Leaf = Root ? CreateCertificate(L"CN=LiberNT wintrust test leaf", Root, FALSE) : NULL;
-    if (!Leaf)
+    Root = CreateCertificate(L"CN=LiberNT wintrust test root", NULL, TRUE, NULL);
+    Leaf = Root ? CreateCertificate(L"CN=LiberNT wintrust test leaf", Root, FALSE, NULL) : NULL;
+    Tsa = Root ? CreateCertificate(L"CN=LiberNT wintrust test TSA", Root, FALSE, szOID_PKIX_KP_TIMESTAMP_SIGNING) : NULL;
+    CodeSigner = Root ? CreateCertificate(L"CN=LiberNT wintrust test code signer", Root, FALSE, szOID_PKIX_KP_CODE_SIGNING) : NULL;
+    RogueTsa = CreateCertificate(L"CN=LiberNT wintrust test rogue TSA", NULL, FALSE, szOID_PKIX_KP_TIMESTAMP_SIGNING);
+    if (!Leaf || !Tsa || !CodeSigner || !RogueTsa)
         return FALSE;
     MachineRoot = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, L"Root");
     return MachineRoot && CertAddCertificateContextToStore(MachineRoot, Root, CERT_STORE_ADD_REPLACE_EXISTING, NULL);
+}
+
+typedef struct _TIMESTAMP_CASE
+{
+    PCCERT_CONTEXT *Countersigner;
+    BOOL Tamper;
+    LONG Result;
+    DWORD CounterError;
+    DWORD SignerType;
+    BOOL SigningTimeUsed;
+    DWORD ChainLength;
+    DWORD LastCertError;
+} TIMESTAMP_CASE;
+
+static
+BOOL
+CreateTimestampedImage(PCCERT_CONTEXT Countersigner, const FILETIME *SigningTime, BOOL Tamper)
+{
+    BYTE TimeData[32], *Encoded = NULL, *Signed = NULL, *Final = NULL;
+    CRYPT_ATTR_BLOB TimeBlob = { sizeof(TimeData), TimeData };
+    CRYPT_ATTRIBUTE TimeAttribute = { (LPSTR)szOID_RSA_signingTime, 1, &TimeBlob };
+    CMSG_SIGNER_ENCODE_INFO Countersign;
+    WCHAR Self[MAX_PATH];
+    SIP_SUBJECTINFO Info;
+    GUID Subject = PeSubject;
+    SIP_INDIRECT_DATA *Indirect = NULL;
+    DWORD Size = 0, EncodedSize = 0, SignedSize = 0, FinalSize = 0, Index = 0, i;
+    HCRYPTMSG Msg = NULL;
+    BOOL Ret = FALSE;
+
+    GetModuleFileNameW(NULL, Self, RTL_NUMBER_OF(Self));
+    if (!CryptEncodeObject(X509_ASN_ENCODING, PKCS_UTC_TIME, SigningTime, TimeData, &TimeBlob.cbData) ||
+        !CopyFileW(Self, ImagePath, FALSE))
+        return FALSE;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    Info.pgSubjectType = &Subject;
+    Info.pwsFileName = ImagePath;
+    Info.DigestAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    Info.dwEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    Info.hFile = CreateFileW(ImagePath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    if (Info.hFile == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    ZeroMemory(&Countersign, sizeof(Countersign));
+    Countersign.cbSize = sizeof(Countersign);
+    Countersign.pCertInfo = Countersigner->pCertInfo;
+    Countersign.hCryptProv = Provider;
+    Countersign.dwKeySpec = AT_SIGNATURE;
+    Countersign.HashAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    Countersign.cAuthAttr = 1;
+    Countersign.rgAuthAttr = &TimeAttribute;
+    if (CryptSIPCreateIndirectData(&Info, &Size, NULL) &&
+        (Indirect = HeapAlloc(GetProcessHeap(), 0, Size)) &&
+        CryptSIPCreateIndirectData(&Info, &Size, Indirect) &&
+        CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, NULL, &EncodedSize) &&
+        (Encoded = HeapAlloc(GetProcessHeap(), 0, EncodedSize)) &&
+        CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, Encoded, &EncodedSize) &&
+        SignContent(SPC_INDIRECT_DATA_OBJID, Encoded, EncodedSize, Countersigner, &Signed, &SignedSize) &&
+        (Msg = CryptMsgOpenToDecode(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, 0, 0, NULL, NULL)) &&
+        CryptMsgUpdate(Msg, Signed, SignedSize, TRUE) &&
+        CryptMsgCountersign(Msg, 0, 1, &Countersign) &&
+        CryptMsgGetParam(Msg, CMSG_ENCODED_MESSAGE, 0, NULL, &FinalSize) &&
+        (Final = HeapAlloc(GetProcessHeap(), 0, FinalSize)) &&
+        CryptMsgGetParam(Msg, CMSG_ENCODED_MESSAGE, 0, Final, &FinalSize))
+    {
+        for (i = FinalSize - 16; Tamper && i > 0; i--)
+        {
+            if (Final[i] == 0x04 && Final[i + 1] == 0x82 && Final[i + 2] == 0x01 && Final[i + 3] == 0x00)
+            {
+                Final[i + 10] ^= 1;
+                break;
+            }
+        }
+        Ret = CryptSIPPutSignedDataMsg(&Info, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, &Index, FinalSize, Final);
+    }
+    if (Msg)
+        CryptMsgClose(Msg);
+    CloseHandle(Info.hFile);
+    HeapFree(GetProcessHeap(), 0, Final);
+    HeapFree(GetProcessHeap(), 0, Signed);
+    HeapFree(GetProcessHeap(), 0, Encoded);
+    HeapFree(GetProcessHeap(), 0, Indirect);
+    return Ret;
+}
+
+static
+VOID
+TestTimestamp(VOID)
+{
+    static const TIMESTAMP_CASE Cases[] =
+    {
+        { &Tsa, FALSE, ERROR_SUCCESS, ERROR_SUCCESS, SGNR_TYPE_TIMESTAMP, TRUE, 2, ERROR_SUCCESS },
+        { &Tsa, TRUE, TRUST_E_COUNTER_SIGNER, STATUS_INVALID_SIGNATURE, 0, FALSE, 2, ERROR_SUCCESS },
+        { &CodeSigner, FALSE, ERROR_SUCCESS, ERROR_SUCCESS, 0, FALSE, 2, ERROR_SUCCESS },
+        { &RogueTsa, FALSE, TRUST_E_TIME_STAMP, ERROR_SUCCESS, SGNR_TYPE_TIMESTAMP, TRUE, 1, CERT_E_UNTRUSTEDROOT },
+    };
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    CRYPT_PROVIDER_DATA *ProvData;
+    CRYPT_PROVIDER_SGNR *Signer, *Counter;
+    FILETIME SigningTime;
+    ULARGE_INTEGER Time;
+    DWORD i, Step;
+    LONG Ret;
+
+    GetSystemTimeAsFileTime(&SigningTime);
+    Time.LowPart = SigningTime.dwLowDateTime;
+    Time.HighPart = SigningTime.dwHighDateTime;
+    Time.QuadPart -= Time.QuadPart % 10000000 + 3600ULL * 10000000;
+    SigningTime.dwLowDateTime = Time.LowPart;
+    SigningTime.dwHighDateTime = Time.HighPart;
+
+    for (i = 0; i < RTL_NUMBER_OF(Cases); i++)
+    {
+        WINTRUST_FILE_INFO File = { sizeof(File) };
+        WINTRUST_DATA Data = { sizeof(Data) };
+
+        winetest_push_context("case %lu", i);
+        DeleteFileW(ImagePath);
+        ok(CreateTimestampedImage(*Cases[i].Countersigner, &SigningTime, Cases[i].Tamper),
+           "Cannot create the image (0x%lx)\n", GetLastError());
+        File.pcwszFilePath = ImagePath;
+        Data.dwUIChoice = WTD_UI_NONE;
+        Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+        Data.dwUnionChoice = WTD_CHOICE_FILE;
+        Data.pFile = &File;
+        Data.dwStateAction = WTD_STATEACTION_VERIFY;
+        Ret = WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+        ok_hex(Ret, Cases[i].Result);
+        ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+        ok(ProvData != NULL, "no provider data\n");
+        if (ProvData)
+        {
+            for (Step = 0; Step < ProvData->cdwTrustStepErrors; Step++)
+            {
+                DWORD Expected = Step == TRUSTERROR_STEP_MSG_COUNTERSIGINFO ? Cases[i].CounterError :
+                                 Step == TRUSTERROR_STEP_FINAL_SIGPROV && Cases[i].Tamper ? TRUST_E_COUNTER_SIGNER : 0;
+                ok(ProvData->padwTrustStepErrors[Step] == Expected, "step %lu error 0x%lx, expected 0x%lx\n", Step,
+                   ProvData->padwTrustStepErrors[Step], Expected);
+            }
+            ok_long(ProvData->csSigners, 1);
+            Signer = ProvData->csSigners ? &ProvData->pasSigners[0] : NULL;
+            if (Signer)
+            {
+                ok_long(Signer->csCertChain, 2);
+                ok((CompareFileTime(&Signer->sftVerifyAsOf, &SigningTime) == 0) == Cases[i].SigningTimeUsed,
+                   "signer verified as of %08lx%08lx\n", Signer->sftVerifyAsOf.dwHighDateTime,
+                   Signer->sftVerifyAsOf.dwLowDateTime);
+                ok_long(Signer->csCounterSigners, 1);
+            }
+            Counter = Signer && Signer->csCounterSigners ? &Signer->pasCounterSigners[0] : NULL;
+            if (Counter)
+            {
+                ok_hex(Counter->dwSignerType, Cases[i].SignerType);
+                ok_hex(Counter->dwError, Cases[i].CounterError);
+                ok((CompareFileTime(&Counter->sftVerifyAsOf, &SigningTime) == 0) == Cases[i].SigningTimeUsed,
+                   "countersigner verified as of %08lx%08lx\n", Counter->sftVerifyAsOf.dwHighDateTime,
+                   Counter->sftVerifyAsOf.dwLowDateTime);
+                ok(Counter->psSigner != NULL, "no countersigner info\n");
+                ok(Counter->pChainContext != NULL, "no countersigner chain\n");
+                ok_long(Counter->csCertChain, Cases[i].ChainLength);
+                if (Counter->csCertChain == Cases[i].ChainLength)
+                {
+                    ok_hex(Counter->pasCertChain[0].dwConfidence,
+                           CERT_CONFIDENCE_SIG | CERT_CONFIDENCE_TIME | CERT_CONFIDENCE_TIMENEST);
+                    ok_hex(Counter->pasCertChain[Cases[i].ChainLength - 1].dwError, Cases[i].LastCertError);
+                }
+                ok(WTHelperGetProvSignerFromChain(ProvData, 0, TRUE, 0) == Counter, "unexpected countersigner\n");
+            }
+        }
+        Data.dwStateAction = WTD_STATEACTION_CLOSE;
+        WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+        winetest_pop_context();
+    }
 }
 
 static
@@ -740,6 +932,12 @@ CleanupFixture(VOID)
         CertCloseStore(MachineRoot, 0);
     if (Leaf)
         CertFreeCertificateContext(Leaf);
+    if (Tsa)
+        CertFreeCertificateContext(Tsa);
+    if (CodeSigner)
+        CertFreeCertificateContext(CodeSigner);
+    if (RogueTsa)
+        CertFreeCertificateContext(RogueTsa);
     if (Root)
         CertFreeCertificateContext(Root);
     if (Provider)
@@ -770,6 +968,7 @@ START_TEST(SignedCatalog)
     TestImage(Digest, DigestSize);
     TestSha1Image();
     TestUnalignedImage();
+    TestTimestamp();
     TestFindCerts();
 
     CleanupFixture();
