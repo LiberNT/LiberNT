@@ -240,8 +240,8 @@ static NTSTATUS complete_irp(PHTTP_CONNECTION conn, PIRP irp)
             buffer[offset++] = 0;
         }
     }
-    p = conn->Buffer + conn->HeaderLength;
-    body_len = (ULONG)min((ULONGLONG)(conn->BufferLength - conn->HeaderLength), conn->ContentLength);
+    p = conn->Buffer + conn->BodyOffset;
+    body_len = conn->BodyLength;
 
     if (irp_size + sizeof(*chunk) < output_len && (params.flags & HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY))
         chunk_len = min(body_len, output_len - (irp_size + (ULONG)sizeof(*chunk)));
@@ -260,16 +260,17 @@ static NTSTATUS complete_irp(PHTTP_CONNECTION conn, PIRP irp)
         irp->IoStatus.Information = irp_size + sizeof(*chunk) + chunk_len;
     }
 
-    if (chunk_len < conn->ContentLength)
+    if (chunk_len < conn->BodyLength || !conn->BodyComplete)
         req->Flags |= HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS;
 
-    req->BytesReceived = conn->RequestLength;
+    req->BytesReceived = conn->HeaderLength + conn->BodyReceived;
 
     conn->Available = FALSE;
     processed = conn->HeaderLength + chunk_len;
     RtlMoveMemory(conn->Buffer, conn->Buffer + processed, conn->BufferLength - processed);
-    conn->ContentLength -= chunk_len;
+    conn->BodyLength -= chunk_len;
     conn->BufferLength -= processed;
+    conn->BodyOffset = 0;
 
     return STATUS_SUCCESS;
 }

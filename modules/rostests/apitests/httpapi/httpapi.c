@@ -1865,6 +1865,8 @@ static void test_keep_alive(void)
         {
             ok(Request->s.Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS,
                "partial body: MORE_ENTITY_BODY_EXISTS not set\n");
+            ok(Request->s.BytesReceived == sizeof(PartialBody) - 1, "partial body: BytesReceived %I64u\n",
+               Request->s.BytesReceived);
             ok(Request->s.EntityChunkCount == 1, "partial body: %u entity chunks\n",
                Request->s.EntityChunkCount);
             if (Request->s.EntityChunkCount == 1)
@@ -1919,6 +1921,597 @@ static void test_keep_alive(void)
 
     CloseHandle(Overlapped.hEvent);
     CloseHandle(SecondOverlapped.hEvent);
+    CloseHandle(BodyOverlapped.hEvent);
+    HttpRemoveUrl(Queue, Url);
+cleanup_queue:
+    CloseHandle(Queue);
+cleanup_http:
+    HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
+cleanup_wsa:
+    WSACleanup();
+}
+
+static ULONG http_ch_read_body(HANDLE Queue, OVERLAPPED *Overlapped, HTTP_REQUEST_ID RequestId,
+                               ULONG Flags, char *Body, ULONG Size, ULONG *Bytes, DWORD TimeoutMs)
+{
+    DWORD BytesReturned = 0;
+    ULONG Result;
+
+    ResetEvent(Overlapped->hEvent);
+    memset(Body, 0, Size);
+    *Bytes = 0;
+    Result = HttpReceiveRequestEntityBody(Queue, RequestId, Flags, Body, Size - 1, NULL, Overlapped);
+    if (Result == ERROR_IO_PENDING)
+    {
+        if (WaitForSingleObject(Overlapped->hEvent, TimeoutMs) != WAIT_OBJECT_0)
+        {
+            http_ka_cancel(Queue, Overlapped);
+            return ERROR_IO_PENDING;
+        }
+        Result = GetOverlappedResult(Queue, Overlapped, &BytesReturned, FALSE) ? NO_ERROR : GetLastError();
+    }
+    else if (Result == NO_ERROR)
+    {
+        GetOverlappedResult(Queue, Overlapped, &BytesReturned, TRUE);
+    }
+    *Bytes = BytesReturned;
+    return Result;
+}
+
+static ULONG http_ch_send_body(HANDLE Queue, HTTP_REQUEST_ID RequestId, ULONG Flags, const char *Body)
+{
+    HTTP_DATA_CHUNK Chunk;
+
+    Chunk.DataChunkType = HttpDataChunkFromMemory;
+    Chunk.FromMemory.pBuffer = (void *)Body;
+    Chunk.FromMemory.BufferLength = Body ? (ULONG)strlen(Body) : 0;
+    return HttpSendResponseEntityBody(Queue, RequestId, Flags, Body ? 1 : 0, Body ? &Chunk : NULL,
+                                      NULL, NULL, 0, NULL, NULL);
+}
+
+static ULONG http_ch_respond(HANDLE Queue, HTTP_REQUEST_ID RequestId, ULONG Flags, const char *Body,
+                             const char *TransferEncoding, const char *ContentLength)
+{
+    HTTP_RESPONSE Response = {0};
+    HTTP_DATA_CHUNK Chunk;
+
+    Response.s.StatusCode = 200;
+    Response.s.pReason = "OK";
+    Response.s.ReasonLength = 2;
+    if (TransferEncoding)
+    {
+        Response.s.Headers.KnownHeaders[HttpHeaderTransferEncoding].pRawValue = TransferEncoding;
+        Response.s.Headers.KnownHeaders[HttpHeaderTransferEncoding].RawValueLength =
+            (USHORT)strlen(TransferEncoding);
+    }
+    if (ContentLength)
+    {
+        Response.s.Headers.KnownHeaders[HttpHeaderContentLength].pRawValue = ContentLength;
+        Response.s.Headers.KnownHeaders[HttpHeaderContentLength].RawValueLength =
+            (USHORT)strlen(ContentLength);
+    }
+    if (Body)
+    {
+        Chunk.DataChunkType = HttpDataChunkFromMemory;
+        Chunk.FromMemory.pBuffer = (void *)Body;
+        Chunk.FromMemory.BufferLength = (ULONG)strlen(Body);
+        Response.s.EntityChunkCount = 1;
+        Response.s.pEntityChunks = &Chunk;
+    }
+    return HttpSendHttpResponse(Queue, RequestId, Flags, &Response, NULL, NULL, NULL, 0, NULL, NULL);
+}
+
+static int http_ch_read_all(HTTP_KA_CLIENT *Client, char *Response, int ResponseSize, int TimeoutMs)
+{
+    int Received, Error, State = HTTP_KA_OPEN;
+
+    setsockopt(Client->Socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&TimeoutMs, sizeof(TimeoutMs));
+    while (Client->Length < (int)sizeof(Client->Buffer) - 1)
+    {
+        Received = recv(Client->Socket, Client->Buffer + Client->Length,
+                        (int)sizeof(Client->Buffer) - 1 - Client->Length, 0);
+        if (Received > 0)
+        {
+            Client->Length += Received;
+            continue;
+        }
+        if (!Received)
+            State = HTTP_KA_CLOSED;
+        else
+        {
+            Error = WSAGetLastError();
+            State = Error == WSAETIMEDOUT ? HTTP_KA_OPEN : HTTP_KA_RESET;
+        }
+        break;
+    }
+
+    Client->Buffer[Client->Length] = '\0';
+    if (Client->Length < ResponseSize)
+        memcpy(Response, Client->Buffer, Client->Length + 1);
+    else
+        Response[0] = '\0';
+    Client->Length = 0;
+    return State;
+}
+
+static const char *http_ch_body(const char *Response)
+{
+    const char *End = strstr(Response, "\r\n\r\n");
+
+    return End ? End + 4 : "";
+}
+
+static void http_ch_check_rejected(HANDLE Queue, OVERLAPPED *Overlapped, const char *RequestText,
+                                   const char *ExpectedStatus, const char *Description)
+{
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    HTTP_KA_CLIENT Client;
+    char Response[1024];
+    ULONG Result;
+    int State;
+
+    if (!http_ka_connect(&Client, 59996))
+    {
+        ok(0, "%s: connect failed with %d\n", Description, WSAGetLastError());
+        return;
+    }
+    ok(http_ka_send(&Client, RequestText), "%s: send failed\n", Description);
+    Result = http_ka_receive(Queue, Overlapped, 0, Request, sizeof(RequestBuffer), 1000);
+    ok(Result == ERROR_IO_PENDING, "%s: HttpReceiveHttpRequest returned %lu\n", Description, Result);
+    if (Result == ERROR_IO_PENDING)
+        http_ka_cancel(Queue, Overlapped);
+    else if (Result == NO_ERROR)
+        http_ka_respond(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_DISCONNECT, NULL);
+
+    State = http_ch_read_all(&Client, Response, sizeof(Response), 1000);
+    ok(!strncmp(Response, ExpectedStatus, strlen(ExpectedStatus)), "%s: response %s\n",
+       Description, Response);
+    ok(strstr(Response, "\r\nConnection: close\r\n") != NULL, "%s: no Connection: close in %s\n",
+       Description, Response);
+    ok(State == HTTP_KA_CLOSED, "%s: connection state %d after the response\n", Description, State);
+    closesocket(Client.Socket);
+}
+
+static void test_chunked(void)
+{
+    static const WCHAR Url[] = L"http://127.0.0.1:59996/chunk/";
+    static const char Get[] = "GET /chunk/next HTTP/1.1\r\nHost: 127.0.0.1:59996\r\n\r\n";
+    static const char Whole[] =
+        "POST /chunk/whole HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: chunked\r\n\r\n"
+        "5\r\nhello\r\n6;name=value\r\n world\r\n0\r\nX-Trailer: t\r\n\r\n";
+    static const char Split[] =
+        "POST /chunk/split HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nab";
+    static const char Unread[] =
+        "POST /chunk/unread HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: chunked\r\n\r\n"
+        "3\r\nabc\r\n0\r\n\r\n";
+    static const char Malformed[] =
+        "POST /chunk/bad HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n";
+    static const char Gzip[] =
+        "POST /chunk/gzip HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: gzip\r\n\r\n";
+    static const char GzipChunked[] =
+        "POST /chunk/gzip HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: gzip, chunked\r\n\r\n"
+        "3\r\nabc\r\n0\r\n\r\n";
+    static const char Both[] =
+        "POST /chunk/both HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nContent-Length: 3\r\n"
+        "Transfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+    static const char Headers[] =
+        "POST /chunk/late HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: chunked\r\n\r\n";
+    static const char Unrouted[] =
+        "POST /elsewhere HTTP/1.1\r\nHost: 127.0.0.1:59996\r\nTransfer-Encoding: chunked\r\n\r\n";
+    static const char Stream[] = "GET /chunk/stream HTTP/1.1\r\nHost: 127.0.0.1:59996\r\n\r\n";
+    static const char Stream10[] = "GET /chunk/stream10 HTTP/1.0\r\n\r\n";
+    char DECLSPEC_ALIGN(8) RequestBuffer[4096];
+    HTTP_REQUEST *Request = (HTTP_REQUEST *)RequestBuffer;
+    HTTPAPI_VERSION Version = HTTPAPI_VERSION_1;
+    HTTP_CONNECTION_ID ConnectionId;
+    HTTP_KA_CLIENT Client;
+    OVERLAPPED Overlapped = {0}, BodyOverlapped = {0};
+    char Response[2048], Body[64];
+    const HTTP_KNOWN_HEADER *TransferEncoding;
+    WSADATA WsaData;
+    HANDLE Queue = NULL;
+    ULONG Result, Bytes;
+    int State;
+
+    Result = WSAStartup(MAKEWORD(2, 2), &WsaData);
+    ok(Result == 0, "WSAStartup failed with %lu\n", Result);
+    if (Result != 0)
+        return;
+
+    Result = HttpInitialize(Version, HTTP_INITIALIZE_SERVER, NULL);
+    ok(Result == NO_ERROR, "HttpInitialize failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_wsa;
+
+    Result = HttpCreateHttpHandle(&Queue, 0);
+    ok(Result == NO_ERROR, "HttpCreateHttpHandle failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_http;
+    Result = HttpAddUrl(Queue, Url, NULL);
+    ok(Result == NO_ERROR, "HttpAddUrl(chunk) failed with %lu\n", Result);
+    if (Result != NO_ERROR)
+        goto cleanup_queue;
+
+    Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    BodyOverlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Whole), "whole chunked send failed\n");
+        Sleep(200);
+        Result = http_ka_receive(Queue, &Overlapped, HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY,
+                                 Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "whole chunked request returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ConnectionId = Request->s.ConnectionId;
+            TransferEncoding = &Request->s.Headers.KnownHeaders[HttpHeaderTransferEncoding];
+            ok(TransferEncoding->RawValueLength == 7 && !memcmp(TransferEncoding->pRawValue, "chunked", 7),
+               "whole chunked: Transfer-Encoding %.*s\n",
+               TransferEncoding->RawValueLength, TransferEncoding->pRawValue);
+            ok(!Request->s.Headers.KnownHeaders[HttpHeaderContentLength].RawValueLength,
+               "whole chunked: Content-Length %.*s\n",
+               Request->s.Headers.KnownHeaders[HttpHeaderContentLength].RawValueLength,
+               Request->s.Headers.KnownHeaders[HttpHeaderContentLength].pRawValue);
+            ok(Request->s.Headers.TrailerCount == 0, "whole chunked: %u trailers\n",
+               Request->s.Headers.TrailerCount);
+            ok(Request->s.Headers.UnknownHeaderCount == 0, "whole chunked: %u unknown headers\n",
+               Request->s.Headers.UnknownHeaderCount);
+            ok(Request->s.EntityChunkCount == 1, "whole chunked: %u entity chunks\n",
+               Request->s.EntityChunkCount);
+            if (Request->s.EntityChunkCount == 1)
+                ok(Request->s.pEntityChunks->FromMemory.BufferLength == 11 &&
+                   !memcmp(Request->s.pEntityChunks->FromMemory.pBuffer, "hello world", 11),
+                   "whole chunked: copied %lu bytes: %.*s\n",
+                   Request->s.pEntityChunks->FromMemory.BufferLength,
+                   (int)Request->s.pEntityChunks->FromMemory.BufferLength,
+                   (const char *)Request->s.pEntityChunks->FromMemory.pBuffer);
+            ok(!(Request->s.Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS),
+               "whole chunked: flags %#lx\n", Request->s.Flags);
+            ok(Request->s.BytesReceived == sizeof(Whole) - 1, "whole chunked: BytesReceived %I64u\n",
+               Request->s.BytesReceived);
+
+            Result = http_ch_read_body(Queue, &BodyOverlapped, Request->s.RequestId, 0,
+                                       Body, sizeof(Body), &Bytes, 1000);
+            ok(Result == ERROR_HANDLE_EOF, "whole chunked: body read returned %lu, %lu bytes: %s\n",
+               Result, Bytes, Body);
+            ok(http_ka_respond(Queue, Request->s.RequestId, 0, "done") == NO_ERROR,
+               "whole chunked: response failed\n");
+            ok(http_ka_read_response(&Client, Response, sizeof(Response), 3000),
+               "whole chunked: no response\n");
+            http_ka_exchange(Queue, &Overlapped, &Client, Get, "/chunk/next", 0, NULL, HTTP_KA_OPEN,
+                             &ConnectionId, "request after a chunked body");
+        }
+        closesocket(Client.Socket);
+    }
+    else
+        ok(0, "chunked client failed to connect with %d\n", WSAGetLastError());
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Split), "split chunked send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "split chunked request returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ConnectionId = Request->s.ConnectionId;
+            ok(Request->s.Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS,
+               "split chunked: flags %#lx\n", Request->s.Flags);
+            ok(Request->s.EntityChunkCount == 0, "split chunked: %u entity chunks\n",
+               Request->s.EntityChunkCount);
+
+            Result = http_ch_read_body(Queue, &BodyOverlapped, Request->s.RequestId, 0,
+                                       Body, sizeof(Body), &Bytes, 1000);
+            ok(Result == NO_ERROR && Bytes == 2 && !memcmp(Body, "ab", 2),
+               "split chunked: first body read returned %lu, %lu bytes: %s\n", Result, Bytes, Body);
+
+            ResetEvent(BodyOverlapped.hEvent);
+            memset(Body, 0, sizeof(Body));
+            Result = HttpReceiveRequestEntityBody(Queue, Request->s.RequestId,
+                                                  HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER,
+                                                  Body, sizeof(Body) - 1, NULL, &BodyOverlapped);
+            ok(Result == ERROR_IO_PENDING, "split chunked: pending body read returned %lu\n", Result);
+            if (Result == ERROR_IO_PENDING)
+            {
+                DWORD BytesReturned = 0;
+
+                ok(WaitForSingleObject(BodyOverlapped.hEvent, 300) == WAIT_TIMEOUT,
+                   "split chunked: body read completed before the rest arrived\n");
+                ok(http_ka_send(&Client, "cd\r\n3\r\nefg\r\n0\r\n\r\n"), "split chunked: send failed\n");
+                Result = WaitForSingleObject(BodyOverlapped.hEvent, 3000) == WAIT_OBJECT_0 &&
+                         GetOverlappedResult(Queue, &BodyOverlapped, &BytesReturned, FALSE)
+                         ? NO_ERROR : ERROR_IO_PENDING;
+                if (Result == ERROR_IO_PENDING)
+                    http_ka_cancel(Queue, &BodyOverlapped);
+                ok(Result == NO_ERROR && BytesReturned == 5 && !memcmp(Body, "cdefg", 5),
+                   "split chunked: FILL_BUFFER read returned %lu, %lu bytes: %s\n",
+                   Result, BytesReturned, Body);
+            }
+            Result = http_ch_read_body(Queue, &BodyOverlapped, Request->s.RequestId, 0,
+                                       Body, sizeof(Body), &Bytes, 1000);
+            ok(Result == ERROR_HANDLE_EOF, "split chunked: last body read returned %lu, %lu bytes\n",
+               Result, Bytes);
+            ok(http_ka_respond(Queue, Request->s.RequestId, 0, "done") == NO_ERROR,
+               "split chunked: response failed\n");
+            ok(http_ka_read_response(&Client, Response, sizeof(Response), 3000),
+               "split chunked: no response\n");
+            http_ka_exchange(Queue, &Overlapped, &Client, Get, "/chunk/next", 0, NULL, HTTP_KA_OPEN,
+                             &ConnectionId, "request after a split chunked body");
+        }
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ConnectionId = HTTP_NULL_ID;
+        http_ka_exchange(Queue, &Overlapped, &Client, Unread, "/chunk/unread", 0, NULL, HTTP_KA_OPEN,
+                         &ConnectionId, "unread chunked body");
+        http_ka_exchange(Queue, &Overlapped, &Client, Get, "/chunk/next", 0, NULL, HTTP_KA_OPEN,
+                         &ConnectionId, "request after an unread chunked body");
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Malformed), "malformed chunk send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 1000);
+        ok(Result == ERROR_IO_PENDING, "malformed chunk: HttpReceiveHttpRequest returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        State = http_ch_read_all(&Client, Response, sizeof(Response), 1000);
+        ok(!strncmp(Response, "HTTP/1.1 400", 12), "malformed chunk: client got %s\n", Response);
+        ok(strstr(Response, "\r\nConnection: close\r\n") != NULL, "malformed chunk: no Connection: close in %s\n",
+           Response);
+        ok(State == HTTP_KA_CLOSED, "malformed chunk: connection state %d\n", State);
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Headers), "late malformed chunk send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "late malformed chunk: HttpReceiveHttpRequest returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ok(Request->s.Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS,
+               "late malformed chunk: flags %#lx\n", Request->s.Flags);
+            ok(Request->s.BytesReceived == sizeof(Headers) - 1, "late malformed chunk: BytesReceived %I64u\n",
+               Request->s.BytesReceived);
+            ResetEvent(BodyOverlapped.hEvent);
+            Result = HttpReceiveRequestEntityBody(Queue, Request->s.RequestId, 0, Body, sizeof(Body) - 1,
+                                                  NULL, &BodyOverlapped);
+            ok(Result == ERROR_IO_PENDING, "late malformed chunk: body read returned %lu\n", Result);
+            ok(http_ka_send(&Client, "2\r\nab\r\nzz\r\n"), "late malformed chunk: send failed\n");
+            if (Result == ERROR_IO_PENDING)
+            {
+                DWORD BytesReturned = 0;
+
+                if (WaitForSingleObject(BodyOverlapped.hEvent, 3000) == WAIT_OBJECT_0)
+                    Result = GetOverlappedResult(Queue, &BodyOverlapped, &BytesReturned, FALSE)
+                             ? NO_ERROR : GetLastError();
+                else
+                    http_ka_cancel(Queue, &BodyOverlapped);
+                ok(Result == NO_ERROR && BytesReturned == 2 && !memcmp(Body, "ab", 2),
+                   "late malformed chunk: first body read returned %lu, %lu bytes\n", Result, BytesReturned);
+            }
+            Result = http_ch_read_body(Queue, &BodyOverlapped, Request->s.RequestId, 0,
+                                       Body, sizeof(Body), &Bytes, 1000);
+            ok(Result == ERROR_INVALID_FUNCTION, "late malformed chunk: body read returned %lu, %lu bytes\n",
+               Result, Bytes);
+            Result = http_ka_respond(Queue, Request->s.RequestId, 0, "done");
+            ok(Result == ERROR_BAD_COMMAND, "late malformed chunk: response returned %lu\n", Result);
+        }
+        State = http_ch_read_all(&Client, Response, sizeof(Response), 1000);
+        ok(!strncmp(Response, "HTTP/1.1 400", 12), "late malformed chunk: client got %s\n", Response);
+        ok(State == HTTP_KA_CLOSED, "late malformed chunk: connection state %d\n", State);
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Both), "Content-Length with chunked send failed\n");
+        Sleep(200);
+        Result = http_ka_receive(Queue, &Overlapped, HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY,
+                                 Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "Content-Length with chunked: HttpReceiveHttpRequest returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            const HTTP_KNOWN_HEADER *ContentLength =
+                &Request->s.Headers.KnownHeaders[HttpHeaderContentLength];
+
+            ok(ContentLength->RawValueLength == 1 && ContentLength->pRawValue[0] == '3',
+               "Content-Length with chunked: Content-Length %.*s\n",
+               ContentLength->RawValueLength, ContentLength->pRawValue);
+            ok(Request->s.EntityChunkCount == 1, "Content-Length with chunked: %u entity chunks\n",
+               Request->s.EntityChunkCount);
+            if (Request->s.EntityChunkCount == 1)
+                ok(Request->s.pEntityChunks->FromMemory.BufferLength == 5 &&
+                   !memcmp(Request->s.pEntityChunks->FromMemory.pBuffer, "hello", 5),
+                   "Content-Length with chunked: copied %lu bytes: %.*s\n",
+                   Request->s.pEntityChunks->FromMemory.BufferLength,
+                   (int)Request->s.pEntityChunks->FromMemory.BufferLength,
+                   (const char *)Request->s.pEntityChunks->FromMemory.pBuffer);
+            ok(!(Request->s.Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS),
+               "Content-Length with chunked: flags %#lx\n", Request->s.Flags);
+            ok(http_ka_respond(Queue, Request->s.RequestId, 0, "done") == NO_ERROR,
+               "Content-Length with chunked: response failed\n");
+        }
+        State = http_ch_read_all(&Client, Response, sizeof(Response), 1000);
+        ok(!strncmp(Response, "HTTP/1.1 200", 12), "Content-Length with chunked: client got %s\n", Response);
+        closesocket(Client.Socket);
+    }
+
+    http_ch_check_rejected(Queue, &Overlapped, Gzip, "HTTP/1.1 501", "Transfer-Encoding: gzip");
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, GzipChunked), "gzip, chunked send failed\n");
+        Sleep(200);
+        Result = http_ka_receive(Queue, &Overlapped, HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY,
+                                 Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "gzip, chunked: HttpReceiveHttpRequest returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ConnectionId = Request->s.ConnectionId;
+            TransferEncoding = &Request->s.Headers.KnownHeaders[HttpHeaderTransferEncoding];
+            ok(TransferEncoding->RawValueLength == 13 && !memcmp(TransferEncoding->pRawValue, "gzip, chunked", 13),
+               "gzip, chunked: Transfer-Encoding %.*s\n",
+               TransferEncoding->RawValueLength, TransferEncoding->pRawValue);
+            ok(Request->s.EntityChunkCount == 1, "gzip, chunked: %u entity chunks\n",
+               Request->s.EntityChunkCount);
+            if (Request->s.EntityChunkCount == 1)
+                ok(Request->s.pEntityChunks->FromMemory.BufferLength == 3 &&
+                   !memcmp(Request->s.pEntityChunks->FromMemory.pBuffer, "abc", 3),
+                   "gzip, chunked: copied %lu bytes\n", Request->s.pEntityChunks->FromMemory.BufferLength);
+            ok(http_ka_respond(Queue, Request->s.RequestId, 0, "done") == NO_ERROR,
+               "gzip, chunked: response failed\n");
+            ok(http_ka_read_response(&Client, Response, sizeof(Response), 3000), "gzip, chunked: no response\n");
+            ok(strstr(Response, "\r\nConnection:") == NULL, "gzip, chunked: Connection header in %s\n", Response);
+            http_ka_exchange(Queue, &Overlapped, &Client, Get, "/chunk/next", 0, NULL, HTTP_KA_OPEN,
+                             &ConnectionId, "request after gzip, chunked");
+        }
+        closesocket(Client.Socket);
+    }
+    http_ch_check_rejected(Queue, &Overlapped, Unrouted, "HTTP/1.1 404", "unrouted chunked request");
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Stream), "stream send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "stream request returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ConnectionId = Request->s.ConnectionId;
+            ok(http_ch_respond(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_MORE_DATA, "ab",
+                               NULL, NULL) == NO_ERROR, "stream: first send failed\n");
+            ok(http_ch_send_body(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_MORE_DATA,
+                                 "0123456789abcdefg") == NO_ERROR, "stream: second send failed\n");
+            ok(http_ch_send_body(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_MORE_DATA, "") ==
+               NO_ERROR, "stream: empty send failed\n");
+            ok(http_ch_send_body(Queue, Request->s.RequestId, 0, "z") == NO_ERROR,
+               "stream: last send failed\n");
+            State = http_ch_read_all(&Client, Response, sizeof(Response), 500);
+            ok(!strncmp(Response, "HTTP/1.1 200", 12), "stream: response %s\n", Response);
+            ok(strstr(Response, "\r\nTransfer-Encoding:") == NULL, "stream: Transfer-Encoding in %s\n", Response);
+            ok(strstr(Response, "\r\nConnection:") == NULL, "stream: Connection header in %s\n", Response);
+            ok(strstr(Response, "\r\nContent-Length:") == NULL, "stream: Content-Length in %s\n", Response);
+            ok(!strcmp(http_ch_body(Response), "ab0123456789abcdefgz"), "stream: body %s\n",
+               http_ch_body(Response));
+            ok(State == HTTP_KA_OPEN, "stream: connection state %d after the response\n", State);
+            http_ka_exchange(Queue, &Overlapped, &Client, Get, "/chunk/next", 0, NULL, HTTP_KA_OPEN,
+                             &ConnectionId, "request after a response without a length");
+        }
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Stream), "empty stream send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "empty stream request returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ok(http_ch_respond(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_MORE_DATA, NULL,
+                               NULL, NULL) == NO_ERROR, "empty stream: first send failed\n");
+            ok(http_ch_send_body(Queue, Request->s.RequestId, 0, NULL) == NO_ERROR,
+               "empty stream: last send failed\n");
+            State = http_ch_read_all(&Client, Response, sizeof(Response), 500);
+            ok(!strncmp(Response, "HTTP/1.1 200", 12), "empty stream: response %s\n", Response);
+            ok(!strcmp(http_ch_body(Response), ""), "empty stream: body %s\n", http_ch_body(Response));
+            ok(State == HTTP_KA_OPEN, "empty stream: connection state %d after the response\n", State);
+        }
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Stream10), "HTTP/1.0 stream send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "HTTP/1.0 stream request returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ok(http_ch_respond(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_MORE_DATA, "ab",
+                               NULL, NULL) == NO_ERROR, "HTTP/1.0 stream: first send failed\n");
+            ok(http_ch_send_body(Queue, Request->s.RequestId, 0, "cd") == NO_ERROR,
+               "HTTP/1.0 stream: last send failed\n");
+            State = http_ch_read_all(&Client, Response, sizeof(Response), 1000);
+            ok(strstr(Response, "\r\nTransfer-Encoding:") == NULL,
+               "HTTP/1.0 stream: Transfer-Encoding in %s\n", Response);
+            ok(strstr(Response, "\r\nConnection: close\r\n") != NULL,
+               "HTTP/1.0 stream: no Connection: close in %s\n", Response);
+            ok(!strcmp(http_ch_body(Response), "abcd"), "HTTP/1.0 stream: body %s\n",
+               http_ch_body(Response));
+            ok(State == HTTP_KA_CLOSED, "HTTP/1.0 stream: connection state %d after the response\n", State);
+        }
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Stream), "application chunked send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "application chunked request returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ok(http_ch_respond(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_MORE_DATA,
+                               "3\r\nabc\r\n", "chunked", NULL) == NO_ERROR,
+               "application chunked: first send failed\n");
+            ok(http_ch_send_body(Queue, Request->s.RequestId, 0, "0\r\n\r\n") == NO_ERROR,
+               "application chunked: last send failed\n");
+            State = http_ch_read_all(&Client, Response, sizeof(Response), 500);
+            ok(strstr(Response, "\r\nTransfer-Encoding: chunked\r\n") != NULL,
+               "application chunked: no Transfer-Encoding in %s\n", Response);
+            ok(!strcmp(http_ch_body(Response), "3\r\nabc\r\n0\r\n\r\n"), "application chunked: body %s\n",
+               http_ch_body(Response));
+            ok(strstr(Response, "\r\nConnection:") == NULL, "application chunked: Connection header in %s\n",
+               Response);
+            ok(State == HTTP_KA_OPEN, "application chunked: connection state %d after the response\n", State);
+        }
+        closesocket(Client.Socket);
+    }
+
+    if (http_ka_connect(&Client, 59996))
+    {
+        ok(http_ka_send(&Client, Stream), "streamed length send failed\n");
+        Result = http_ka_receive(Queue, &Overlapped, 0, Request, sizeof(RequestBuffer), 3000);
+        ok(Result == NO_ERROR, "streamed length request returned %lu\n", Result);
+        if (Result == ERROR_IO_PENDING)
+            http_ka_cancel(Queue, &Overlapped);
+        if (Result == NO_ERROR)
+        {
+            ok(http_ch_respond(Queue, Request->s.RequestId, HTTP_SEND_RESPONSE_FLAG_MORE_DATA, "ab",
+                               NULL, "4") == NO_ERROR, "streamed length: first send failed\n");
+            ok(http_ch_send_body(Queue, Request->s.RequestId, 0, "cd") == NO_ERROR,
+               "streamed length: last send failed\n");
+            State = http_ch_read_all(&Client, Response, sizeof(Response), 500);
+            ok(!strcmp(http_ch_body(Response), "abcd"), "streamed length: body %s\n", http_ch_body(Response));
+            ok(strstr(Response, "\r\nTransfer-Encoding:") == NULL,
+               "streamed length: Transfer-Encoding in %s\n", Response);
+            ok(State == HTTP_KA_OPEN, "streamed length: connection state %d after the response\n", State);
+        }
+        closesocket(Client.Socket);
+    }
+
+    CloseHandle(Overlapped.hEvent);
     CloseHandle(BodyOverlapped.hEvent);
     HttpRemoveUrl(Queue, Url);
 cleanup_queue:
@@ -2164,4 +2757,9 @@ START_TEST(httpapi)
     test_stalled_clients_do_not_delay_requests();
     test_keep_alive();
     test_service_config_timeout();
+}
+
+START_TEST(chunked)
+{
+    test_chunked();
 }
