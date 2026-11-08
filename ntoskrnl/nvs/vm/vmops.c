@@ -617,6 +617,8 @@ MiReserveVirtualMemory(
     Vad->MemCommit = (BOOLEAN)((AllocationType & MI_MEM_COMMIT) != 0);
     Vad->Placeholder = (BOOLEAN)((AllocationType & MI_MEM_RESERVE_PLACEHOLDER) != 0);
     Vad->CommitCharge = Charged;
+    if (Vad->Placeholder)
+        MiAssertPlaceholderVad(Vad);
     if ((AllocationType & MI_MEM_WRITE_WATCH) && !NT_SUCCESS(MiWriteWatchAttach(Space, Vad)))
     {
         MiReturnCommit(Space, Charged);
@@ -668,6 +670,7 @@ MiReplacePlaceholder(
         return STATUS_CONFLICTING_ADDRESSES;
     }
 
+    MiAssertPlaceholderVad(Vad);
     if ((AllocationType & MI_MEM_WRITE_WATCH) && !NT_SUCCESS(MiWriteWatchAttach(Space, Vad)))
     {
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
@@ -915,6 +918,7 @@ MiInsertPlaceholderPiece(
     RtlZeroMemory(&Vad->Node, sizeof(Vad->Node));
     Vad->Node.StartingVpn = Start >> PAGE_SHIFT;
     Vad->Node.EndingVpn = (End >> PAGE_SHIFT) - 1;
+    MiAssertPlaceholderVad(Vad);
     MiVadInsert(&Space->VadRoot, &Vad->Node);
 }
 
@@ -961,6 +965,7 @@ MiFreePlaceholder(
             return STATUS_CONFLICTING_ADDRESSES;
         }
 
+        MiAssertPlaceholderVad(Vad);
         Last = Vad;
         Count = 1;
         while (MI_VAD_END(Last) < End)
@@ -971,6 +976,7 @@ MiFreePlaceholder(
                 MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
                 return STATUS_CONFLICTING_ADDRESSES;
             }
+            MiAssertPlaceholderVad(Next);
             Last = Next;
             Count++;
         }
@@ -987,6 +993,7 @@ MiFreePlaceholder(
             MiVadRemove(&Space->VadRoot, &Next->Node);
             MiVadRemove(&Space->VadRoot, &Vad->Node);
             Vad->Node.EndingVpn = Next->Node.EndingVpn;
+            MiAssertPlaceholderVad(Vad);
             MiVadInsert(&Space->VadRoot, &Vad->Node);
             if (!MiVadCacheFree(Space, Next))
                 MI_FREE(Next);
@@ -994,6 +1001,7 @@ MiFreePlaceholder(
     }
     else if (Vad->Placeholder)
     {
+        MiAssertPlaceholderVad(Vad);
         if (End > VadEnd || (Start == VadStart && End == VadEnd))
         {
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
@@ -1017,6 +1025,7 @@ MiFreePlaceholder(
         MiVadRemove(&Space->VadRoot, &Vad->Node);
         Vad->Node.StartingVpn = Start >> PAGE_SHIFT;
         Vad->Node.EndingVpn = (End >> PAGE_SHIFT) - 1;
+        MiAssertPlaceholderVad(Vad);
         MiVadInsert(&Space->VadRoot, &Vad->Node);
         if (Head != NULL)
             MiInsertPlaceholderPiece(Space, Head, Vad, VadStart, Start);
@@ -1035,6 +1044,7 @@ MiFreePlaceholder(
         Vad->Protection = MI_PROT_NOACCESS;
         Vad->MemCommit = FALSE;
         Vad->EcCode = FALSE;
+        MiAssertPlaceholderVad(Vad);
     }
     else
     {

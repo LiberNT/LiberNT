@@ -2264,6 +2264,7 @@ MiMapViewInternal(
             MiSegmentDereference(Segment);
             return STATUS_CONFLICTING_ADDRESSES;
         }
+        MiAssertPlaceholderVad(Placeholder);
         MiVadRemove(&Space->VadRoot, &Placeholder->Node);
     }
     else if (Start < Space->LowestVa || Start + Size - 1 > Space->HighestVa || Start + Size < Start ||
@@ -2389,6 +2390,7 @@ MiUnmapViewEx(
         Vad->Protection = MI_PROT_NOACCESS;
         Vad->Type = MiVadPrivate;
         Vad->Placeholder = TRUE;
+        MiAssertPlaceholderVad(Vad);
         MiVadInsert(&Space->VadRoot, &Vad->Node);
         Vad = NULL;
     }

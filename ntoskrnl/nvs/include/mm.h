@@ -225,6 +225,18 @@ typedef struct _MI_VAD
     ULONG64 WriteWatchBase;
 } MI_VAD, *PMI_VAD;
 
+FORCEINLINE
+VOID
+MiAssertPlaceholderVad(_In_ PMI_VAD Vad)
+{
+    UNREFERENCED_PARAMETER(Vad);
+    MI_ASSERT(Vad->Placeholder && !Vad->FromPlaceholder);
+    MI_ASSERT(Vad->Type == MiVadPrivate && Vad->Protection == MI_PROT_NOACCESS);
+    MI_ASSERT(!Vad->MemCommit && Vad->CommitCharge == 0);
+    MI_ASSERT(Vad->Segment == NULL && Vad->WriteWatchBits == NULL);
+    MI_ASSERT(Vad->Node.StartingVpn <= Vad->Node.EndingVpn);
+}
+
 #define MI_VAD_IS_DIRECT(v)   ((v)->Type == MiVadSystem || (v)->Type == MiVadPhysical || \
                               (v)->Type == MiVadLarge || (v)->Type == MiVadAwe || (v)->Type == MiVadRotate)
 
