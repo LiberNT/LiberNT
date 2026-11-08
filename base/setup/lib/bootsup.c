@@ -898,6 +898,8 @@ InstallBootloaderFiles(
 #define EFI_BOOT_MANAGER_DESCRIPTION    L"LiberNT Boot Manager"
 #define EFI_BOOT_MANAGER_FILE           L"\\EFI\\LiberNT\\Boot\\bootmgfw.efi"
 #define EFI_WINDOWS_BOOT_MANAGER_FILE   L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
+#define EFI_HOST_SETUP_DIRECTORY        L"EFI\\LiberNT\\Setup"
+#define EFI_HOST_SETUP_MANAGER_FILE     L"\\EFI\\LiberNT\\Setup\\bootmgfw.efi"
 #define GPT_HEADER_ENTRIES_LBA_OFFSET   72
 #define GPT_HEADER_ENTRY_COUNT_OFFSET   80
 #define GPT_HEADER_ENTRY_SIZE_OFFSET    84
@@ -1635,11 +1637,11 @@ IsSameLoadOption(
 
 static
 BOOLEAN
-IsWindowsBootManagerOption(
+IsLoadOptionForFile(
     _In_reads_bytes_(OptionLength) const UCHAR* Option,
-    _In_ ULONG OptionLength)
+    _In_ ULONG OptionLength,
+    _In_ PCWSTR File)
 {
-    static const WCHAR WindowsFile[] = EFI_WINDOWS_BOOT_MANAGER_FILE;
     ULONG Offset = EFI_LOAD_OPTION_HEADER_SIZE, End, NodeLength, Chars;
 
     if (OptionLength < EFI_LOAD_OPTION_HEADER_SIZE)
@@ -1664,8 +1666,8 @@ IsWindowsBootManagerOption(
             Chars = (NodeLength - EFI_DEVICE_PATH_HEADER_SIZE) / sizeof(WCHAR);
             while (Chars && ((const WCHAR*)(Option + Offset + EFI_DEVICE_PATH_HEADER_SIZE))[Chars - 1] == UNICODE_NULL)
                 Chars--;
-            if (Chars == ARRAYSIZE(WindowsFile) - 1 &&
-                _wcsnicmp((const WCHAR*)(Option + Offset + EFI_DEVICE_PATH_HEADER_SIZE), WindowsFile, Chars) == 0)
+            if (Chars == wcslen(File) &&
+                _wcsnicmp((const WCHAR*)(Option + Offset + EFI_DEVICE_PATH_HEADER_SIZE), File, Chars) == 0)
             {
                 return TRUE;
             }
@@ -1782,7 +1784,7 @@ InstallFirmwareBootEntry(
             RtlStringCchPrintfW(Name, ARRAYSIZE(Name), L"Boot%04X", Order[i]);
             Length = sizeof(Existing);
             if (NT_SUCCESS(QueryFirmwareVariable(Name, Existing, &Length)) &&
-                IsWindowsBootManagerOption(Existing, Length))
+                IsLoadOptionForFile(Existing, Length, EFI_WINDOWS_BOOT_MANAGER_FILE))
             {
                 Position = i + 1;
                 break;
@@ -1795,6 +1797,99 @@ InstallFirmwareBootEntry(
 
     RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, PrivilegeSet, FALSE, &PrivilegeSet);
     return Status;
+}
+
+NTSTATUS
+NTAPI
+RemoveHostSetupBoot(
+    _In_ PCUNICODE_STRING SystemRootPath)
+{
+    static const PCWSTR Files[] = { L"bootmgfw.efi", L"winload.efi", L"BCD" };
+    UCHAR Option[EFI_LOAD_OPTION_MAX];
+    USHORT Order[EFI_BOOT_ORDER_MAX / sizeof(USHORT) + 1];
+    FILE_DISPOSITION_INFORMATION Disposition;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    UNICODE_STRING Name;
+    WCHAR Variable[16], Path[MAX_PATH];
+    ULONG Length, OrderCount = 0, Number, i, j;
+    BOOLEAN PrivilegeSet = FALSE, OrderChanged = FALSE;
+    HANDLE Directory;
+    NTSTATUS Status, Result = STATUS_SUCCESS;
+
+    Status = RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, TRUE, FALSE, &PrivilegeSet);
+    if (NT_SUCCESS(Status))
+    {
+        Length = EFI_BOOT_ORDER_MAX;
+        if (NT_SUCCESS(QueryFirmwareVariable(L"BootOrder", Order, &Length)))
+            OrderCount = Length / sizeof(USHORT);
+
+        for (Number = 0; Number < EFI_BOOT_OPTION_SEARCH_MAX; Number++)
+        {
+            RtlStringCchPrintfW(Variable, ARRAYSIZE(Variable), L"Boot%04X", Number);
+            Length = sizeof(Option);
+            if (!NT_SUCCESS(QueryFirmwareVariable(Variable, Option, &Length)) ||
+                !IsLoadOptionForFile(Option, Length, EFI_HOST_SETUP_MANAGER_FILE))
+            {
+                continue;
+            }
+
+            Status = SetFirmwareVariable(Variable, NULL, 0);
+            DPRINT1("Firmware option %S of Setup started on Windows removed: 0x%08lx\n", Variable, Status);
+            if (!NT_SUCCESS(Status) && NT_SUCCESS(Result))
+                Result = Status;
+            for (i = 0, j = 0; i < OrderCount; i++)
+            {
+                if (Order[i] != Number)
+                    Order[j++] = Order[i];
+            }
+            OrderChanged = OrderChanged || j != OrderCount;
+            OrderCount = j;
+        }
+
+        if (OrderChanged)
+        {
+            Status = SetFirmwareVariable(L"BootOrder", Order, OrderCount * sizeof(USHORT));
+            if (!NT_SUCCESS(Status) && NT_SUCCESS(Result))
+                Result = Status;
+        }
+        RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, PrivilegeSet, FALSE, &PrivilegeSet);
+    }
+    else
+    {
+        Result = Status;
+    }
+
+    for (i = 0; i < ARRAYSIZE(Files); i++)
+    {
+        CombinePaths(Path, ARRAYSIZE(Path), 3, SystemRootPath->Buffer, EFI_HOST_SETUP_DIRECTORY, Files[i]);
+        Status = SetupDeleteFile(Path, TRUE);
+        if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_NOT_FOUND &&
+            Status != STATUS_OBJECT_PATH_NOT_FOUND && NT_SUCCESS(Result))
+        {
+            Result = Status;
+        }
+    }
+
+    CombinePaths(Path, ARRAYSIZE(Path), 2, SystemRootPath->Buffer, EFI_HOST_SETUP_DIRECTORY);
+    RtlInitUnicodeString(&Name, Path);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&Directory, DELETE | SYNCHRONIZE, &ObjectAttributes, &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT);
+    if (NT_SUCCESS(Status))
+    {
+        Disposition.DeleteFile = TRUE;
+        Status = NtSetInformationFile(Directory, &IoStatusBlock, &Disposition, sizeof(Disposition),
+                                      FileDispositionInformation);
+        NtClose(Directory);
+    }
+    if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_NOT_FOUND &&
+        Status != STATUS_OBJECT_PATH_NOT_FOUND && NT_SUCCESS(Result))
+    {
+        Result = Status;
+    }
+    return Result;
 }
 
 static

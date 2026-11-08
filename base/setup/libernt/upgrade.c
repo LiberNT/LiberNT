@@ -31,7 +31,7 @@ static BOOLEAN Searched;
 static PUPGRADE_TARGET Selected;
 static WCHAR SourceVersion[128];
 
-static BOOL
+BOOL
 ReadInventoryVersion(
     _In_ PCWSTR Path,
     _Out_writes_(cchVersion) PWSTR Version,
@@ -59,7 +59,7 @@ ReadInventoryVersion(
     return MultiByteToWideChar(CP_UTF8, 0, Line + 2, -1, Version, (int)cchVersion) > 1;
 }
 
-static BOOL
+BOOL
 GetKernelMachine(
     _In_ PCWSTR Path,
     _Out_ PWORD Machine)
@@ -88,7 +88,7 @@ GetKernelMachine(
     return Success;
 }
 
-static BOOL
+BOOL
 IsLiberNtKernel(
     _In_ PCWSTR Path)
 {

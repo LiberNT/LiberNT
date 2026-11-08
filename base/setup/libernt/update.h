@@ -15,6 +15,7 @@
 #define UPDATE_STAGE_SECTION    L"Upgrade"
 #define UPDATE_IMAGE_LOADER     L"Windows\\system32\\winload.efi"
 #define UPDATE_ID_CHARS         39
+#define BCD_DEVICE_ELEMENT_MAX  1024
 
 typedef BOOL (CALLBACK *PUPDATE_PROGRESS)(PVOID Context, ULONGLONG Done, ULONGLONG Total);
 
@@ -29,6 +30,7 @@ AddBcdUpgradeEntry(
     _In_ PCWSTR LoaderPath,
     _In_ PCWSTR ImagePath,
     _In_ PCWSTR ImageHash,
+    _In_opt_ PCWSTR SystemVolume,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR EntryId,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR PreviousDefault);
 
@@ -37,6 +39,37 @@ RemoveBcdUpgradeEntries(
     _In_ HKEY Store,
     _In_ PCWSTR LoaderPath,
     _In_opt_ PCWSTR PreviousDefault);
+
+DWORD
+OpenBcdStoreFile(
+    _In_ PCWSTR Path,
+    _Out_ PHKEY Store);
+
+DWORD
+BuildBcdPartitionDevice(
+    _In_ const GUID* PartitionId,
+    _In_ const GUID* DiskId,
+    _Out_writes_bytes_(*Size) PBYTE Element,
+    _Inout_ PDWORD Size);
+
+DWORD
+BuildBcdRamdiskDevice(
+    _In_ const GUID* PartitionId,
+    _In_ const GUID* DiskId,
+    _In_ PCWSTR ImagePath,
+    _Out_writes_bytes_(*Size) PBYTE Element,
+    _Inout_ PDWORD Size);
+
+DWORD
+WriteSetupBootEntry(
+    _In_ HKEY Store,
+    _In_ PCWSTR ManagerPath,
+    _In_ PCWSTR LoaderPath,
+    _In_ PCWSTR Description,
+    _In_reads_bytes_(SystemSize) const BYTE* SystemDevice,
+    _In_ DWORD SystemSize,
+    _In_reads_bytes_(OsSize) const BYTE* OsDevice,
+    _In_ DWORD OsSize);
 
 BOOL
 IsLiveSystem(VOID);

@@ -178,7 +178,7 @@ ReadyPageProc(
     return FALSE;
 }
 
-static HBITMAP
+HBITMAP
 CreateAlphaLogo(
     _In_ HINSTANCE hInstance,
     _Out_ PSIZE Size)
@@ -249,7 +249,7 @@ Quit:
     return hAlpha;
 }
 
-static VOID
+VOID
 DrawLogo(
     _In_ LPDRAWITEMSTRUCT DrawItem,
     _In_ HBITMAP hLogo,

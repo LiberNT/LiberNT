@@ -113,6 +113,7 @@ typedef struct _SETUPDATA
     BOOL bUpgradeOnly;
     BOOL bAlongside;
     BOOL bWindowsFirst;
+    BOOL bPrepared;
     WCHAR WindowsName[32];
 
     /* txtsetup.sif data */
@@ -209,6 +210,12 @@ PVOL_CREATE_INFO
 FindVolumeFormatPlan(
     _In_ PVOLENTRY Volume);
 
+BOOLEAN
+PlanVolumeFormat(
+    _In_ PVOLENTRY Volume,
+    _In_ PCWSTR FileSystem,
+    _In_opt_ PCWSTR Label);
+
 VOID
 FormatDiskSize(
     _In_ ULONGLONG Bytes,
@@ -255,6 +262,42 @@ PlanAlongsideInstall(
 BOOLEAN
 IsWindowsHibernated(
     _In_ PCWSTR DeviceName);
+
+HBITMAP
+CreateAlphaLogo(
+    _In_ HINSTANCE hInstance,
+    _Out_ PSIZE Size);
+
+VOID
+DrawLogo(
+    _In_ LPDRAWITEMSTRUCT DrawItem,
+    _In_ HBITMAP hLogo,
+    _In_ PSIZE Size);
+
+BOOLEAN
+PlanPreparedInstall(
+    _Inout_ PSETUPDATA pSetupData);
+
+VOID
+PaintSplitChannel(
+    _In_ HWND hTrack,
+    _In_ HDC hdc,
+    _In_ const RECT *Channel);
+
+BOOL
+ReadInventoryVersion(
+    _In_ PCWSTR Path,
+    _Out_writes_(cchVersion) PWSTR Version,
+    _In_ SIZE_T cchVersion);
+
+BOOL
+GetKernelMachine(
+    _In_ PCWSTR Path,
+    _Out_ PWORD Machine);
+
+BOOL
+IsLiberNtKernel(
+    _In_ PCWSTR Path);
 
 ULONG
 FindUpgradeTargets(

@@ -18,6 +18,7 @@
 #include <delayimp.h>
 
 #include "resource.h"
+#include "host.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -678,6 +679,12 @@ PrepareAndDoCopyThread(
             ReportStepFailure(IDS_INSTALL_BOOTLOADER, Status);
             goto Quit;
         }
+
+        if (pSetupData->bPrepared)
+        {
+            Status = RemoveHostSetupBoot(&pSetupData->USetupData.SystemRootPath);
+            DPRINT1("Boot files of Setup started on Windows removed: 0x%08lx\n", Status);
+        }
     }
 
     Success = TRUE;
@@ -1330,6 +1337,14 @@ wWinMain(
     iccx.dwICC = ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS | ICC_UPDOWN_CLASS | ICC_BAR_CLASSES;
     InitCommonControlsEx(&iccx);
 
+    if (HostIsWindows())
+    {
+        Error = (ULONG)RunHostSetup(&SetupData, lpszCmdLine);
+        if (SetupData.bMustReboot)
+            RestartComputer();
+        return (int)Error;
+    }
+
     Error = InitializeSetup(&SetupData.USetupData, NULL, &SpFileExports, &SpInfExports);
     if (Error != ERROR_SUCCESS)
     {
@@ -1341,6 +1356,7 @@ wWinMain(
     SetupData.bUnattend = CheckUnattendedSetup(&SetupData.USetupData);
     if (!LoadSetupData(&SetupData))
         goto Quit;
+    PlanPreparedInstall(&SetupData);
     SetSetupLanguage(SetupData.DefaultLanguage);
 
     if (wcsstr(lpszCmdLine, L"--selftest") || SetupData.USetupData.SelfTest)
