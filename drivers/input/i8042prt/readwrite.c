@@ -208,17 +208,52 @@ i8042Write(
 
 	Counter = DeviceExtension->Settings.PollingIterations;
 
-	while ((KBD_IBF & READ_PORT_UCHAR(DeviceExtension->ControlPort)) &&
-	       (Counter--))
+	while (KBD_IBF & READ_PORT_UCHAR(DeviceExtension->ControlPort))
 	{
+		if (Counter == 0)
+			return FALSE;
+		Counter--;
 		KeStallExecutionProcessor(50);
 	}
 
-	if (Counter)
+	WRITE_PORT_UCHAR(addr, data);
+	INFO_(I8042PRT, "Sent 0x%x to port %p\n", data, addr);
+	return TRUE;
+}
+
+BOOLEAN
+i8042QuiesceMouse(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension)
+{
+	PKINTERRUPT Interrupt = DeviceExtension->HighestDIRQLInterrupt;
+	ULONG Remaining = DeviceExtension->Settings.PollingIterations;
+	KIRQL OldIrql = 0;
+	UCHAR Status;
+	BOOLEAN Result;
+
+	if (Interrupt != NULL)
+		OldIrql = KeAcquireInterruptSpinLock(Interrupt);
+
+	Result = i8042Write(DeviceExtension, DeviceExtension->ControlPort, MOUSE_DISAB);
+	if (Result)
 	{
-		WRITE_PORT_UCHAR(addr, data);
-		INFO_(I8042PRT, "Sent 0x%x to port %p\n", data, addr);
-		return TRUE;
+		for (;;)
+		{
+			Status = READ_PORT_UCHAR(DeviceExtension->ControlPort);
+			if ((Status & (KBD_OBF | MOU_OBF)) != (KBD_OBF | MOU_OBF))
+				break;
+			if (Remaining == 0)
+			{
+				Result = FALSE;
+				break;
+			}
+			Remaining--;
+			(void)READ_PORT_UCHAR(DeviceExtension->DataPort);
+		}
 	}
-	return FALSE;
+
+	if (Interrupt != NULL)
+		KeReleaseInterruptSpinLock(Interrupt, OldIrql);
+
+	return Result;
 }

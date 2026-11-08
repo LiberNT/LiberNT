@@ -374,15 +374,15 @@ i8042StartPacket(
 	DeviceExtension->Packet.CurrentByte++;
 
 done:
-	KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
-
-	if (Status != STATUS_PENDING)
+	if (Status != STATUS_PENDING && DeviceExtension->CurrentIrp == Irp)
 	{
 		DeviceExtension->CurrentIrp = NULL;
 		DeviceExtension->CurrentIrpDevice = NULL;
-		Irp->IoStatus.Status = Status;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	}
+	KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
+
+	if (Status != STATUS_PENDING)
+		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);
 	return Status;
 }
 
