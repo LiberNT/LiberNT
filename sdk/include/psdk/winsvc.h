@@ -522,6 +522,33 @@ DWORD WINAPI NotifyServiceStatusChangeA(_In_ SC_HANDLE, _In_ DWORD, _In_ PSERVIC
 DWORD WINAPI NotifyServiceStatusChangeW(_In_ SC_HANDLE, _In_ DWORD, _In_ PSERVICE_NOTIFYW);
 #endif
 
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+typedef enum _SC_EVENT_TYPE {
+  SC_EVENT_DATABASE_CHANGE,
+  SC_EVENT_PROPERTY_CHANGE,
+  SC_EVENT_STATUS_CHANGE
+} SC_EVENT_TYPE, *PSC_EVENT_TYPE;
+
+typedef VOID CALLBACK SC_NOTIFICATION_CALLBACK(_In_ DWORD dwNotify, _In_opt_ PVOID pCallbackContext);
+typedef SC_NOTIFICATION_CALLBACK *PSC_NOTIFICATION_CALLBACK;
+
+typedef struct _SC_NOTIFICATION_REGISTRATION *PSC_NOTIFICATION_REGISTRATION;
+
+DWORD
+WINAPI
+SubscribeServiceChangeNotifications(
+  _In_ SC_HANDLE hService,
+  _In_ SC_EVENT_TYPE eEventType,
+  _In_ PSC_NOTIFICATION_CALLBACK pCallback,
+  _In_opt_ PVOID pCallbackContext,
+  _Out_ PSC_NOTIFICATION_REGISTRATION *pSubscription);
+
+VOID
+WINAPI
+UnsubscribeServiceChangeNotifications(
+  _In_ PSC_NOTIFICATION_REGISTRATION pSubscription);
+#endif
+
 _Must_inspect_result_
 BOOL
 WINAPI

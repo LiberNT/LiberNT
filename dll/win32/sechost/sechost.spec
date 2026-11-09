@@ -201,8 +201,8 @@
 @ stdcall StartTraceA(ptr str ptr) advapi32.StartTraceA
 @ stdcall StartTraceW(ptr wstr ptr) advapi32.StartTraceW
 @ stdcall StopTraceW(int64 wstr ptr) advapi32.StopTraceW
-@ stub SubscribeServiceChangeNotifications
+@ stdcall SubscribeServiceChangeNotifications(ptr long ptr ptr ptr)
 @ stub TraceQueryInformation
 @ stdcall TraceSetInformation(int64 long ptr long)
-@ stub UnsubscribeServiceChangeNotifications
+@ stdcall UnsubscribeServiceChangeNotifications(ptr)
 @ stub WaitServiceState

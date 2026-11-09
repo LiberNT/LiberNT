@@ -203,6 +203,15 @@ typedef enum _SC_STATUS_TYPE {
   SC_STATUS_PROCESS_INFO      = 0
 } SC_STATUS_TYPE;
 
+typedef enum _SC_EVENT_TYPE {
+  SC_EVENT_DATABASE_CHANGE,
+  SC_EVENT_PROPERTY_CHANGE,
+  SC_EVENT_STATUS_CHANGE
+} SC_EVENT_TYPE, *PSC_EVENT_TYPE;
+
+typedef VOID (CALLBACK *PSC_NOTIFICATION_CALLBACK)(DWORD,VOID*);
+typedef struct _SC_NOTIFICATION_REGISTRATION *PSC_NOTIFICATION_REGISTRATION;
+
 /* Service main function prototype */
 
 typedef VOID (CALLBACK *LPSERVICE_MAIN_FUNCTIONA)(DWORD,LPSTR*);
@@ -449,6 +458,8 @@ WINADVAPI BOOL        WINAPI StartServiceCtrlDispatcherA(const SERVICE_TABLE_ENT
 WINADVAPI BOOL        WINAPI StartServiceCtrlDispatcherW(const SERVICE_TABLE_ENTRYW*);
 #define                      StartServiceCtrlDispatcher WINELIB_NAME_AW(StartServiceCtrlDispatcher)
 WINADVAPI BOOL        WINAPI UnlockServiceDatabase(SC_LOCK);
+DWORD WINAPI SubscribeServiceChangeNotifications(SC_HANDLE,SC_EVENT_TYPE,PSC_NOTIFICATION_CALLBACK,void*,PSC_NOTIFICATION_REGISTRATION*);
+VOID WINAPI UnsubscribeServiceChangeNotifications(PSC_NOTIFICATION_REGISTRATION);
 
 #ifdef __cplusplus
 } /* extern "C" */

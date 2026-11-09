@@ -36,6 +36,7 @@ extern void func_RegQueryValueExW(void);
 extern void func_RtlEncryptMemory(void);
 extern void func_SaferIdentifyLevel(void);
 extern void func_ServiceArgs(void);
+extern void func_ServiceChangeNotify(void);
 extern void func_ServiceCrash(void);
 extern void func_ServiceEnv(void);
 extern void func_TriggerInfo(void);
@@ -79,6 +80,7 @@ const struct test winetest_testlist[] =
     { "RtlEncryptMemory", func_RtlEncryptMemory },
     { "SaferIdentifyLevel", func_SaferIdentifyLevel },
     { "ServiceArgs", func_ServiceArgs },
+    { "ServiceChangeNotify", func_ServiceChangeNotify },
     { "ServiceCrash", func_ServiceCrash },
     { "ServiceEnv", func_ServiceEnv },
     { "TriggerInfo", func_TriggerInfo },
