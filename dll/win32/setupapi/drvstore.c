@@ -343,7 +343,7 @@ StageCabinetCallback(
     }
 }
 
-static VOID
+static BOOL
 StagePackageFile(
     IN PCWSTR SourceRoot,
     IN PCWSTR StoreRoot,
@@ -359,7 +359,7 @@ StagePackageFile(
         !CombinePath(Source, SourceRoot, Relative) ||
         !CombinePath(Target, StoreRoot, Relative))
     {
-        return;
+        return TRUE;
     }
 
     Compressed[0] = UNICODE_NULL;
@@ -370,7 +370,7 @@ StagePackageFile(
         {
             Compressed[0] = UNICODE_NULL;
             if (!Cabinet || GetFileAttributesW(Cabinet) == INVALID_FILE_ATTRIBUTES)
-                return;
+                return TRUE;
         }
         else
         {
@@ -379,6 +379,8 @@ StagePackageFile(
     }
     else
     {
+        if (GetFileAttributesW(Target) != INVALID_FILE_ATTRIBUTES && FilesAreIdentical(Source, Target))
+            return TRUE;
         Cabinet = NULL;
     }
 
@@ -387,7 +389,7 @@ StagePackageFile(
     {
         *Last = UNICODE_NULL;
         if (!CreateDirectoryPath(Target))
-            return;
+            return FALSE;
         *Last = L'\\';
     }
 
@@ -397,21 +399,30 @@ StagePackageFile(
         Stage.FileName = Stage.FileName ? Stage.FileName + 1 : Relative;
         Stage.Target = Target;
         if (!SetupIterateCabinetW(Cabinet, 0, StageCabinetCallback, &Stage))
-            TRACE("Extracting %s from %s failed with error %lu\n", debugstr_w(Relative), debugstr_w(Cabinet), GetLastError());
+        {
+            ERR("Extracting %s from %s failed with error %lu\n", debugstr_w(Relative), debugstr_w(Cabinet), GetLastError());
+            return FALSE;
+        }
     }
     else if (Compressed[0])
     {
         Error = SetupDecompressOrCopyFileW(Compressed, Target, NULL);
         if (Error != ERROR_SUCCESS)
-            TRACE("Expanding %s failed with error %lu\n", debugstr_w(Compressed), Error);
+        {
+            ERR("Expanding %s failed with error %lu\n", debugstr_w(Compressed), Error);
+            SetLastError(Error);
+            return FALSE;
+        }
     }
     else if (!CopyFileW(Source, Target, FALSE))
     {
-        TRACE("Staging %s failed with error %lu\n", debugstr_w(Source), GetLastError());
+        ERR("Staging %s failed with error %lu\n", debugstr_w(Source), GetLastError());
+        return FALSE;
     }
+    return TRUE;
 }
 
-static VOID
+static BOOL
 StageCopyFile(
     IN HINF hInf,
     IN PCWSTR FileName,
@@ -423,11 +434,11 @@ StageCopyFile(
     UINT DiskId;
 
     if (!MarkNameSeen(&Package->Files, FileName))
-        return;
+        return TRUE;
 
     SubDir[0] = UNICODE_NULL;
     if (!SetupGetSourceFileLocationW(hInf, NULL, FileName, &DiskId, SubDir, ARRAY_SIZE(SubDir), NULL))
-        return;
+        return TRUE;
 
     DiskPath[0] = UNICODE_NULL;
     SetupGetSourceInfoW(hInf, DiskId, SRCINFO_PATH, DiskPath, ARRAY_SIZE(DiskPath), NULL);
@@ -437,7 +448,7 @@ StageCopyFile(
     if (!CombinePath(Relative, DiskPath, SubDir) ||
         lstrlenW(Relative) + 1 + lstrlenW(FileName) >= MAX_PATH)
     {
-        return;
+        return TRUE;
     }
     if (Relative[0] && Relative[lstrlenW(Relative) - 1] != L'\\')
         lstrcatW(Relative, L"\\");
@@ -455,10 +466,10 @@ StageCopyFile(
         CabinetPath = Cabinet;
     }
 
-    StagePackageFile(Package->SourceRoot, Package->StoreRoot, Relative, CabinetPath);
+    return StagePackageFile(Package->SourceRoot, Package->StoreRoot, Relative, CabinetPath);
 }
 
-static VOID
+static BOOL
 StageCopyFilesSection(
     IN HINF hInf,
     IN PCWSTR Section,
@@ -468,14 +479,11 @@ StageCopyFilesSection(
     INFCONTEXT Context;
 
     if (Section[0] == L'@')
-    {
-        StageCopyFile(hInf, Section + 1, Package);
-        return;
-    }
+        return StageCopyFile(hInf, Section + 1, Package);
 
     if (!MarkNameSeen(&Package->Sections, Section) ||
         !SetupFindFirstLineW(hInf, Section, NULL, &Context))
-        return;
+        return TRUE;
 
     do
     {
@@ -484,11 +492,13 @@ StageCopyFilesSection(
         if (!SetupGetStringFieldW(&Context, 2, Source, ARRAY_SIZE(Source), NULL) || !Source[0])
             lstrcpyW(Source, Target);
 
-        StageCopyFile(hInf, Source, Package);
+        if (!StageCopyFile(hInf, Source, Package))
+            return FALSE;
     } while (SetupFindNextLine(&Context, &Context));
+    return TRUE;
 }
 
-static VOID
+static BOOL
 StageCopyFiles(
     IN HINF hInf,
     IN OUT PSTAGE_PACKAGE_CONTEXT Package)
@@ -507,14 +517,18 @@ StageCopyFiles(
             FieldCount = SetupGetFieldCount(&Context);
             for (Field = 1; Field <= FieldCount; Field++)
             {
-                if (SetupGetStringFieldW(&Context, Field, Files, ARRAY_SIZE(Files), NULL) && Files[0])
-                    StageCopyFilesSection(hInf, Files, Package);
+                if (SetupGetStringFieldW(&Context, Field, Files, ARRAY_SIZE(Files), NULL) && Files[0] &&
+                    !StageCopyFilesSection(hInf, Files, Package))
+                {
+                    return FALSE;
+                }
             }
         }
     }
+    return TRUE;
 }
 
-static VOID
+static BOOL
 StageCatalogFiles(
     IN HINF hInf,
     IN PCWSTR SourceRoot,
@@ -524,7 +538,7 @@ StageCatalogFiles(
     INFCONTEXT Context;
 
     if (!SetupFindFirstLineW(hInf, VersionSection, NULL, &Context))
-        return;
+        return TRUE;
 
     do
     {
@@ -534,9 +548,13 @@ StageCatalogFiles(
             continue;
         }
 
-        if (SetupGetStringFieldW(&Context, 1, Value, ARRAY_SIZE(Value), NULL) && Value[0])
-            StagePackageFile(SourceRoot, StoreRoot, Value, NULL);
+        if (SetupGetStringFieldW(&Context, 1, Value, ARRAY_SIZE(Value), NULL) && Value[0] &&
+            !StagePackageFile(SourceRoot, StoreRoot, Value, NULL))
+        {
+            return FALSE;
+        }
     } while (SetupFindNextLine(&Context, &Context));
+    return TRUE;
 }
 
 BOOL
@@ -611,7 +629,8 @@ SETUPAPI_StageDriverPackage(
     STAGE_PACKAGE_CONTEXT Package;
     PWSTR BaseName;
     HINF hInf;
-    DWORD Length;
+    DWORD Length, Error;
+    BOOL Staged;
 
     Length = GetFullPathNameW(SourceInfFileName, ARRAY_SIZE(Source), Source, &BaseName);
     if (Length == 0 || Length >= ARRAY_SIZE(Source) || !BaseName)
@@ -633,27 +652,29 @@ SETUPAPI_StageDriverPackage(
         return FALSE;
     }
 
-    if (GetFileAttributesW(Target) != INVALID_FILE_ATTRIBUTES && FilesAreIdentical(Source, Target))
-        return TRUE;
-
     if (!CreateDirectoryPath(Store))
         return FALSE;
 
     hInf = SetupOpenInfFileW(Source, NULL, INF_STYLE_WIN4, NULL);
     if (hInf != INVALID_HANDLE_VALUE)
     {
-        StageCatalogFiles(hInf, SourceRoot, Store);
-
         ZeroMemory(&Package, sizeof(Package));
         Package.SourceRoot = SourceRoot;
         Package.StoreRoot = Store;
-        StageCopyFiles(hInf, &Package);
+        Staged = StageCatalogFiles(hInf, SourceRoot, Store) && StageCopyFiles(hInf, &Package);
+        Error = GetLastError();
         FreeNameList(&Package.Sections);
         FreeNameList(&Package.Files);
-
         SetupCloseInfFile(hInf);
+        if (!Staged)
+        {
+            SetLastError(Error);
+            return FALSE;
+        }
     }
 
+    if (GetFileAttributesW(Target) != INVALID_FILE_ATTRIBUTES && FilesAreIdentical(Source, Target))
+        return TRUE;
     return CopyFileW(Source, Target, FALSE);
 }
 
@@ -927,7 +948,7 @@ CheckStoreRequest(
     if (*ReturnLength < MAX_PATH)
         return E_INVALIDARG;
 
-    GetSystemInfo(&SystemInfo);
+    GetNativeSystemInfo(&SystemInfo);
     if (Architecture != SystemInfo.wProcessorArchitecture)
         return E_INVALIDARG;
 

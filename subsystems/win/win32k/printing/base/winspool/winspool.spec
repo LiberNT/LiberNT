@@ -198,3 +198,9 @@
 297 stub WaitForPrinterChange
 298 stdcall WritePrinter(ptr ptr long ptr)
 299 stdcall XcvDataW(ptr wstr ptr long ptr long ptr ptr)
+@ stdcall -version=0x600+ DeletePrinterDriverPackageA(str str str)
+@ stdcall -version=0x600+ DeletePrinterDriverPackageW(wstr wstr wstr)
+@ stdcall -version=0x600+ InstallPrinterDriverFromPackageA(str str str str long)
+@ stdcall -version=0x600+ InstallPrinterDriverFromPackageW(wstr wstr wstr wstr long)
+@ stdcall -version=0x600+ UploadPrinterDriverPackageA(str str str long ptr ptr ptr)
+@ stdcall -version=0x600+ UploadPrinterDriverPackageW(wstr wstr wstr long ptr ptr ptr)

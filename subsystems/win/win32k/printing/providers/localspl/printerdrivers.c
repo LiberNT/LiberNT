@@ -1010,6 +1010,22 @@ BOOL myAddPrinterDriverEx(DWORD level, LPBYTE pDriverInfo, DWORD dwFileCopyFlags
         SetLastError(lres);
         return FALSE;
     }
+
+    if (level == 8 && di.pszInfPath && *di.pszInfPath)
+    {
+        lres = RegSetValueExW(hdrv, L"InfPath", 0, REG_SZ, (const BYTE*)di.pszInfPath,
+                              (lstrlenW(di.pszInfPath) + 1) * sizeof(WCHAR));
+        if (lres != ERROR_SUCCESS)
+        {
+            ERR("can't record the package of driver %s: %u\n", debugstr_w(di.pName), lres);
+            RegCloseKey(hdrv);
+            if (disposition == REG_CREATED_NEW_KEY)
+                RegDeleteKeyW(hroot, di.pName);
+            RegCloseKey(hroot);
+            SetLastError(lres);
+            return FALSE;
+        }
+    }
     RegCloseKey(hroot);
 
     /* Verified with the Adobe PS Driver, that w2k does not use di.Version */
