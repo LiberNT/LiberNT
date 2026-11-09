@@ -19,6 +19,7 @@ add_library(kernelbase MODULE
     ConsoleLegacy.c
     CpuSets.c
     DllMain.c
+    LibraryLoader.c
     AppModelToken.c
     MemoryApi.c
     PackageFamily.c
@@ -37,7 +38,8 @@ add_library(kernelbase MODULE
 
 set_module_type(kernelbase win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(kernelbase psapi_static kernelbase_static kernel32_shared win32_registry_hkcr wine chkstk uuid)
-add_importlibs(kernelbase kernel32 kernel32_vista ntdll ntdll_vista)
+# ntdll first, so that the Rtl functions kernel32 forwards are imported from ntdll as on Windows
+add_importlibs(kernelbase ntdll kernel32 kernel32_vista ntdll_vista)
 add_dependencies(kernelbase psdk errcodes)
 add_cd_file(TARGET kernelbase DESTINATION reactos/system32 FOR all)
 

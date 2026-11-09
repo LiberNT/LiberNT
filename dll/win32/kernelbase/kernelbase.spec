@@ -478,8 +478,8 @@
 @ stdcall -version=0x601+ GetModuleFileNameExW(long long ptr long) kernel32.K32GetModuleFileNameExW
 @ stdcall GetModuleFileNameW(long ptr long) kernel32.GetModuleFileNameW
 @ stdcall GetModuleHandleA(str) kernel32.GetModuleHandleA
-@ stdcall GetModuleHandleExA(long ptr ptr) kernel32.GetModuleHandleExA
-@ stdcall GetModuleHandleExW(long ptr ptr) kernel32.GetModuleHandleExW
+@ stdcall GetModuleHandleExA(long ptr ptr) KbGetModuleHandleExA
+@ stdcall GetModuleHandleExW(long ptr ptr) KbGetModuleHandleExW
 @ stdcall GetModuleHandleW(wstr) kernel32.GetModuleHandleW
 @ stdcall -version=0x601+ GetModuleInformation(long long ptr long) kernel32.K32GetModuleInformation
 @ stdcall GetNLSVersion(long long ptr)
