@@ -1117,8 +1117,9 @@ ObQueryObjectAuditingByHandle(IN HANDLE Handle,
     NTSTATUS Status = STATUS_SUCCESS;
     PAGED_CODE();
 
-    /* Check if we're dealing with a kernel handle */
-    if (ObpIsKernelHandle(Handle, ExGetPreviousMode()))
+    /* Only a driver can reach this export, so a kernel handle always belongs
+     * to the kernel table whatever mode the current system call came from */
+    if (ObpIsKernelHandle(Handle, KernelMode))
     {
         /* Use the kernel table and convert the handle */
         HandleTable = ObpKernelHandleTable;
@@ -1138,7 +1139,7 @@ ObQueryObjectAuditingByHandle(IN HANDLE Handle,
     if(HandleEntry)
     {
         /* Check if the flag is set */
-        *GenerateOnClose = HandleEntry->ObAttributes & OBJ_AUDIT_OBJECT_CLOSE;
+        *GenerateOnClose = ((HandleEntry->ObAttributes & OBJ_AUDIT_OBJECT_CLOSE) != 0);
 
         /* Unlock the entry */
         ExUnlockHandleTableEntry(HandleTable, HandleEntry);
