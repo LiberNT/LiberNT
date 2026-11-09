@@ -2596,7 +2596,7 @@
 @ stdcall -arch=win64 KeCopyAffinityEx2(ptr ptr)
 @ stdcall -arch=win64 KeCountSetBitsAffinityEx(ptr)
 @ stdcall -arch=win64 KeCountSetBitsGroupAffinity(ptr)
-@ stdcall -arch=win64 KeDeregisterProcessorChangeCallback(ptr)
+@ stdcall KeDeregisterProcessorChangeCallback(ptr)
 @ stdcall KeDispatchSecondaryInterrupt(long long ptr)
 @ stdcall -arch=win64 KeEnumerateNextProcessor(ptr ptr)
 @ stdcall -arch=win64 KeFindFirstSetLeftAffinityEx(ptr)
@@ -2660,7 +2660,7 @@
 @ stub -arch=win64 KeRcuReadLock
 @ stub -arch=win64 KeRcuReadUnlock
 @ stub -arch=win64 KeRcuSynchronize
-@ stdcall -arch=win64 KeRegisterProcessorChangeCallback(ptr ptr long)
+@ stdcall KeRegisterProcessorChangeCallback(ptr ptr long)
 @ stdcall -arch=win64 KeReinitializeAffinityEx(ptr)
 @ stdcall -arch=win64 KeRemoveGroupAffinityEx(ptr long int64)
 @ stdcall -arch=win64 KeRemoveProcessorAffinityEx(ptr long)
@@ -2670,13 +2670,13 @@
 @ stub -arch=win64 KeReportCacheIncoherentDevice
 @ stdcall -arch=win64 KeRestoreExtendedProcessorState(ptr)
 @ stub -arch=arm64 KeRestoreProcessorState
-@ stdcall -arch=win64 KeRevertToUserGroupAffinityThread(ptr)
+@ stdcall KeRevertToUserGroupAffinityThread(ptr)
 @ stdcall -arch=win64 KeSaveExtendedProcessorState(int64 ptr)
 @ stdcall -arch=win64 KeSetActualBasePriorityThread(ptr long)
 @ stdcall -arch=win64 KeSetHardwareCounterConfiguration(ptr long)
 @ stdcall -arch=win64 KeSetHeteroCpuPolicyThread(ptr long long)
 @ stdcall -arch=win64 KeSetSelectedCpuSetsThread(ptr long ptr)
-@ stdcall -arch=win64 KeSetSystemGroupAffinityThread(ptr ptr)
+@ stdcall KeSetSystemGroupAffinityThread(ptr ptr)
 @ stdcall KeSetTargetProcessorDpcEx(ptr ptr)
 @ stdcall -version=0x603+ -arch=arm64 KeSetTimer2(ptr int64 int64 ptr)
 @ stdcall -arch=win64 KeShouldYieldProcessor()
