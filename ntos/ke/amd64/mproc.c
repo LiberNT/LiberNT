@@ -54,7 +54,6 @@ KeStartAllProcessors(VOID)
     PVOID DPCStack = NULL;
     PVOID APInfoBase = NULL;
     PAPINFO APInfo = NULL;
-    BOOLEAN Abandoned = FALSE;
     PKPROCESSOR_STATE ProcessorState;
     KDESCRIPTOR Gdtr, Idtr;
     ULONG ProcessorCount;
@@ -164,12 +163,11 @@ KeStartAllProcessors(VOID)
 
             if (KeLoaderBlock->Prcb != 0)
             {
-                DPRINT1("KeStartAllProcessors: CPU %lu did not report in, stopping\n",
-                        ProcessorCount);
-
-                /* Armed: never free its structures or clear its mailbox */
-                Abandoned = TRUE;
-                break;
+                KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
+                             0,
+                             0,
+                             (ULONG_PTR)&APInfo->Pcr.Prcb,
+                             ProcessorCount);
             }
         }
 
@@ -183,20 +181,28 @@ KeStartAllProcessors(VOID)
     ProcessorCount--;
 
     /* Active publishing happens later: wait for the active set, bounded */
-    if (!Abandoned && ProcessorCount != 0)
+    if (ProcessorCount != 0)
     {
         ULONGLONG StartTime = KeQueryInterruptTime();
 
         for (;;)
         {
-            ULONG Index, Pending = 0;
+            ULONG Index, Pending = 0, FailedIndex = 0;
+            PKPRCB FailedPrcb = NULL;
 
             for (Index = 1; Index <= ProcessorCount; Index++)
             {
                 PKPRCB Prcb = KiProcessorBlock[Index];
 
-                if (Prcb != NULL && (KeActiveProcessors & Prcb->SetMember) == 0)
+                if (Prcb == NULL || (KeActiveProcessors & Prcb->SetMember) == 0)
+                {
+                    if (Pending == 0)
+                    {
+                        FailedIndex = Index;
+                        FailedPrcb = Prcb;
+                    }
                     Pending++;
+                }
             }
 
             if (Pending == 0)
@@ -204,24 +210,23 @@ KeStartAllProcessors(VOID)
 
             if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
             {
-                DPRINT1("KeStartAllProcessors: %lu processor(s) never became active\n",
-                        Pending);
-                break;
+                KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
+                             0,
+                             0,
+                             (ULONG_PTR)FailedPrcb,
+                             FailedIndex);
             }
 
             YieldProcessor();
         }
     }
 
-    if (!Abandoned)
-    {
-        if (APInfoBase)
-            ExFreePoolWithTag(APInfoBase, TAG_KERNEL);
-        if (KernelStack)
-            MmDeleteKernelStack(KernelStack, FALSE);
-        if (DPCStack)
-            MmDeleteKernelStack(DPCStack, FALSE);
-    }
+    if (APInfoBase)
+        ExFreePoolWithTag(APInfoBase, TAG_KERNEL);
+    if (KernelStack)
+        MmDeleteKernelStack(KernelStack, FALSE);
+    if (DPCStack)
+        MmDeleteKernelStack(DPCStack, FALSE);
 
     DPRINT1("KeStartAllProcessors: started %lu processor(s)\n", ProcessorCount);
 }

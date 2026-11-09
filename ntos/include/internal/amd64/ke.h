@@ -599,6 +599,12 @@ NTAPI
 KiFreezeIfRequested(
     VOID);
 
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiPublishActiveProcessor(
+    _In_ PKPRCB Prcb);
+
 VOID
 NTAPI
 KiInitializeXStateConfiguration(
