@@ -138,6 +138,60 @@ CmpCompareInIndex(IN PHHIVE Hive,
     return Result;
 }
 
+typedef enum _CM_LEAF_PLACE
+{
+    CmLeafHolds,
+    CmLeafBelow,
+    CmLeafAbove,
+    CmLeafUnreadable
+} CM_LEAF_PLACE;
+
+static
+CM_LEAF_PLACE
+NTAPI
+CmpPlaceNameInLeaf(IN PHHIVE Hive,
+                   IN HCELL_INDEX LeafCell,
+                   IN PCUNICODE_STRING SearchName,
+                   IN BOOLEAN AboveFirstRequired)
+{
+    PCM_KEY_INDEX Leaf;
+    HCELL_INDEX Child;
+    CM_LEAF_PLACE Place;
+    LONG Order;
+
+    Leaf = (PCM_KEY_INDEX)HvGetCell(Hive, LeafCell);
+    if (!Leaf) return CmLeafUnreadable;
+
+    ASSERT((Leaf->Signature == CM_KEY_INDEX_LEAF) ||
+           (Leaf->Signature == CM_KEY_FAST_LEAF) ||
+           (Leaf->Signature == CM_KEY_HASH_LEAF));
+    ASSERT(Leaf->Count != 0);
+
+    Order = CmpCompareInIndex(Hive, SearchName, Leaf->Count - 1, Leaf, &Child);
+    if (Order == 2)
+    {
+        Place = CmLeafUnreadable;
+    }
+    else if (Order > 0)
+    {
+        Place = CmLeafAbove;
+    }
+    else if ((Order == 0) || !AboveFirstRequired)
+    {
+        Place = CmLeafHolds;
+    }
+    else
+    {
+        Order = CmpCompareInIndex(Hive, SearchName, 0, Leaf, &Child);
+        if (Order == 2) Place = CmLeafUnreadable;
+        else if (Order >= 0) Place = CmLeafHolds;
+        else Place = CmLeafBelow;
+    }
+
+    HvReleaseCell(Hive, LeafCell);
+    return Place;
+}
+
 ULONG
 NTAPI
 CmpFindSubKeyInRoot(IN PHHIVE Hive,
@@ -145,212 +199,45 @@ CmpFindSubKeyInRoot(IN PHHIVE Hive,
                     IN PCUNICODE_STRING SearchName,
                     IN PHCELL_INDEX SubKey)
 {
-    ULONG High, Low = 0, i = 0, ReturnIndex;
-    HCELL_INDEX LeafCell;
-    PCM_KEY_INDEX Leaf;
-    LONG Result;
+    ULONG Low, High, Probe;
+    CM_LEAF_PLACE Place;
 
-    /* Verify Index for validity */
     ASSERT(Index->Count != 0);
     ASSERT(Index->Signature == CM_KEY_INDEX_ROOT);
 
-    /* Set high limit and loop */
-    High = Index->Count - 1;
-    while (TRUE)
-    {
-        /* Choose next entry */
-        i = ((High - Low) / 2) + Low;
-
-        /* Get the leaf cell and then the leaf itself */
-        LeafCell = Index->List[i];
-        Leaf = (PCM_KEY_INDEX)HvGetCell(Hive, LeafCell);
-        if (Leaf)
-        {
-            /* Make sure the leaf is valid */
-            ASSERT((Leaf->Signature == CM_KEY_INDEX_LEAF) ||
-                   (Leaf->Signature == CM_KEY_FAST_LEAF) ||
-                   (Leaf->Signature == CM_KEY_HASH_LEAF));
-            ASSERT(Leaf->Count != 0);
-
-            /* Do the compare */
-            Result = CmpCompareInIndex(Hive,
-                                       SearchName,
-                                       Leaf->Count - 1,
-                                       Leaf,
-                                       SubKey);
-            if (Result == 2) goto Big;
-
-            /* Check if we found the leaf */
-            if (!Result)
-            {
-                /* We found the leaf */
-                *SubKey = LeafCell;
-                ReturnIndex = i;
-                goto Return;
-            }
-
-            /* Check for negative result */
-            if (Result < 0)
-            {
-                /* If we got here, we should be at -1 */
-                ASSERT(Result == -1);
-
-                /* Do another lookup, since we might still be in the right leaf */
-                Result = CmpCompareInIndex(Hive,
-                                           SearchName,
-                                           0,
-                                           Leaf,
-                                           SubKey);
-                if (Result == 2) goto Big;
-
-                /* Check if it's not below */
-                if (Result >= 0)
-                {
-                    /*
-                     * If the name was first below, and now it is above,
-                     * then this means that it is somewhere in this leaf.
-                     * Make sure we didn't get some weird result
-                     */
-                    ASSERT((Result == 1) || (Result == 0));
-
-                    /* Return it */
-                    *SubKey = LeafCell;
-                    ReturnIndex = i;
-                    goto Return;
-                }
-
-                /* Update the limit to this index, since we know it's not higher. */
-                High = i;
-            }
-            else
-            {
-                /* Update the base to this index, since we know it's not lower. */
-                Low = i;
-            }
-        }
-        else
-        {
-Big:
-            /* This was some sort of special key */
-            ReturnIndex = INVALID_INDEX;
-            goto ReturnFailure;
-        }
-
-        /* Check if there is only one entry left */
-        if ((High - Low) <= 1) break;
-
-        /* Release the leaf cell */
-        HvReleaseCell(Hive, LeafCell);
-    }
-
-    /* Make sure we got here for the right reasons */
-    ASSERT((High - Low == 1) || (High == Low));
-
-    /* Get the leaf cell and the leaf */
-    LeafCell = Index->List[Low];
-    Leaf = (PCM_KEY_INDEX)HvGetCell(Hive, LeafCell);
-    if (!Leaf) goto Big;
-
-    /* Do the compare */
-    Result = CmpCompareInIndex(Hive,
-                               SearchName,
-                               Leaf->Count-1,
-                               Leaf,
-                               SubKey);
-    if (Result == 2) goto Big;
-
-    /* Check if we found it */
-    if (!Result)
-    {
-        /* We got lucky... return it */
-        *SubKey = LeafCell;
-        ReturnIndex = Low;
-        goto Return;
-    }
-
-    /* It's below, so could still be in this leaf */
-    if (Result < 0)
-    {
-        /* Make sure we're -1 */
-        ASSERT(Result == -1);
-
-        /* Do a search from the bottom */
-        Result = CmpCompareInIndex(Hive, SearchName, 0, Leaf, SubKey);
-        if (Result == 2) goto Big;
-
-        /*
-         * Check if it's above, which means that it's within the ranges of our
-         * leaf (since we were below before).
-         */
-        if (Result >= 0)
-        {
-            /* Sanity check */
-            ASSERT((Result == 1) || (Result == 0));
-
-            /* Yep, so we're in the right leaf; return it. */
-            *SubKey = LeafCell;
-            ReturnIndex = Low;
-            goto Return;
-        }
-
-        /* It's still below us, so fail */
-        ReturnIndex = Low;
-        goto ReturnFailure;
-    }
-
-    /* Release the leaf cell */
-    HvReleaseCell(Hive, LeafCell);
-
-    /* Well the low didn't work too well, so try the high. */
-    LeafCell = Index->List[High];
-    Leaf = (PCM_KEY_INDEX)HvGetCell(Hive, LeafCell);
-    if (!Leaf) goto Big;
-
-    /* Do the compare */
-    Result = CmpCompareInIndex(Hive,
-                               SearchName,
-                               Leaf->Count - 1,
-                               Leaf,
-                               SubKey);
-    if (Result == 2) goto Big;
-
-    /* Check if we found it */
-    if (Result == 0)
-    {
-        /* We got lucky... return it */
-        *SubKey = LeafCell;
-        ReturnIndex = High;
-        goto Return;
-    }
-
-    /* Check if we are too high */
-    if (Result < 0)
-    {
-        /* Make sure we're -1 */
-        ASSERT(Result == -1);
-
-        /*
-         * Once again... since we were first too low and now too high, then
-         * this means we are within the range of this leaf... return it.
-         */
-        *SubKey = LeafCell;
-        ReturnIndex = High;
-        goto Return;
-    }
-
-    /* If we got here, then we are too low, again. */
-    ReturnIndex = High;
-
-    /* Failure path */
-ReturnFailure:
     *SubKey = HCELL_NIL;
 
-    /* Return path...check if we have a leaf to free */
-Return:
-    if (Leaf) HvReleaseCell(Hive, LeafCell);
+    Low = 0;
+    High = Index->Count - 1;
+    while ((High - Low) > 1)
+    {
+        Probe = Low + ((High - Low) / 2);
 
-    /* Return the index */
-    return ReturnIndex;
+        Place = CmpPlaceNameInLeaf(Hive, Index->List[Probe], SearchName, TRUE);
+        if (Place == CmLeafUnreadable) return INVALID_INDEX;
+        if (Place == CmLeafHolds)
+        {
+            *SubKey = Index->List[Probe];
+            return Probe;
+        }
+
+        if (Place == CmLeafBelow) High = Probe;
+        else Low = Probe;
+    }
+
+    Place = CmpPlaceNameInLeaf(Hive, Index->List[Low], SearchName, TRUE);
+    if (Place == CmLeafUnreadable) return INVALID_INDEX;
+    if (Place != CmLeafAbove)
+    {
+        if (Place == CmLeafHolds) *SubKey = Index->List[Low];
+        return Low;
+    }
+
+    /* Past the lower leaf the upper one takes the name wherever it falls in it */
+    Place = CmpPlaceNameInLeaf(Hive, Index->List[High], SearchName, FALSE);
+    if (Place == CmLeafUnreadable) return INVALID_INDEX;
+    if (Place == CmLeafHolds) *SubKey = Index->List[High];
+    return High;
 }
 
 ULONG
@@ -360,94 +247,36 @@ CmpFindSubKeyInLeaf(IN PHHIVE Hive,
                     IN PCUNICODE_STRING SearchName,
                     IN PHCELL_INDEX SubKey)
 {
-    ULONG High, Low = 0, i;
-    LONG Result;
+    ULONG Low, High, Probe;
+    LONG Order;
 
-    /* Verify Index for validity */
     ASSERT((Index->Signature == CM_KEY_INDEX_LEAF) ||
            (Index->Signature == CM_KEY_FAST_LEAF) ||
            (Index->Signature == CM_KEY_HASH_LEAF));
 
-    /* Get the upper bound and middle entry */
+    *SubKey = HCELL_NIL;
+    if (Index->Count == 0) return 0;
+
+    Low = 0;
     High = Index->Count - 1;
-    i = High / 2;
-
-    /* Check if we don't actually have any entries */
-    if (!Index->Count)
+    while ((High - Low) > 1)
     {
-        /* Return failure */
-        *SubKey = HCELL_NIL;
-        return 0;
+        Probe = Low + ((High - Low) / 2);
+
+        Order = CmpCompareInIndex(Hive, SearchName, Probe, Index, SubKey);
+        if (Order == 2) return INVALID_INDEX;
+        if (Order == 0) return Probe;
+
+        if (Order < 0) High = Probe;
+        else Low = Probe;
     }
 
-    /* Start compare loop */
-    while (TRUE)
-    {
-        /* Do the actual comparison and check the result */
-        Result = CmpCompareInIndex(Hive, SearchName, i, Index, SubKey);
-        if (Result == 2)
-        {
-            /* Fail with special value */
-            *SubKey = HCELL_NIL;
-            return INVALID_INDEX;
-        }
+    Order = CmpCompareInIndex(Hive, SearchName, Low, Index, SubKey);
+    if (Order == 2) return INVALID_INDEX;
+    if (Order <= 0) return Low;
 
-        /* Check if we got lucky and found it */
-        if (!Result) return i;
-
-        /* Check if the result is below us */
-        if (Result < 0)
-        {
-            /* Set the new bound; it can't be higher then where we are now. */
-            ASSERT(Result == -1);
-            High = i;
-        }
-        else
-        {
-            /* Set the new bound... it can't be lower then where we are now. */
-            ASSERT(Result == 1);
-            Low = i;
-        }
-
-        /* Check if this is the last entry, if so, break out and handle it */
-        if ((High - Low) <= 1) break;
-
-        /* Set the new index */
-        i = ((High - Low) / 2) + Low;
-    }
-
-    Result = CmpCompareInIndex(Hive, SearchName, Low, Index, SubKey);
-    if (Result == 2)
-    {
-        /* Fail with special value */
-        *SubKey = HCELL_NIL;
-        return INVALID_INDEX;
-    }
-
-    /* Check if we got lucky and found it */
-    if (!Result) return Low;
-
-    /* Check if the result is below us */
-    if (Result < 0)
-    {
-        /* Return the low entry */
-        ASSERT(Result == -1);
-        return Low;
-    }
-
-    /*
-     * If we got here, then just check the high and return it no matter what
-     * the result is (since we're a leaf, it has to be near there anyway).
-     */
-    Result = CmpCompareInIndex(Hive, SearchName, High, Index, SubKey);
-    if (Result == 2)
-    {
-        /* Fail with special value */
-        *SubKey = HCELL_NIL;
-        return INVALID_INDEX;
-    }
-
-    /* Return the high */
+    Order = CmpCompareInIndex(Hive, SearchName, High, Index, SubKey);
+    if (Order == 2) return INVALID_INDEX;
     return High;
 }
 
