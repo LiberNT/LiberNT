@@ -15,6 +15,7 @@ extern void func_ConsoleDbcsCells(void);
 extern void func_ConsoleProcessInheritance(void);
 extern void func_ConsoleVirtualTerminal(void);
 extern void func_CopyContext(void);
+extern void func_CopyFileExStop(void);
 extern void func_CreateAfterMissingName(void);
 extern void func_CreateDirectoryRoot(void);
 extern void func_CreateProcess(void);
@@ -133,6 +134,7 @@ const struct test winetest_testlist[] =
     { "ConsoleProcessInheritance",   func_ConsoleProcessInheritance },
     { "ConsoleVirtualTerminal",      func_ConsoleVirtualTerminal },
     { "CopyContext",                 func_CopyContext },
+    { "CopyFileExStop",              func_CopyFileExStop },
     { "CreateAfterMissingName",      func_CreateAfterMissingName },
     { "CreateDirectoryRoot",         func_CreateDirectoryRoot },
     { "CreateProcess",               func_CreateProcess },

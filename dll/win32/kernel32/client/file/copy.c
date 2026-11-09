@@ -29,8 +29,7 @@ CopyLoop (
     LARGE_INTEGER		SourceFileSize,
     LPPROGRESS_ROUTINE	lpProgressRoutine,
     LPVOID			lpData,
-    BOOL			*pbCancel,
-    BOOL                 *KeepDest
+    BOOL			*pbCancel
 )
 {
     NTSTATUS errCode;
@@ -42,7 +41,6 @@ CopyLoop (
     DWORD ProgressResult;
     BOOL EndOfFileFound;
 
-    *KeepDest = FALSE;
     errCode = NtAllocateVirtualMemory(NtCurrentProcess(),
                                       (PVOID *)&lpBuffer,
                                       0,
@@ -77,9 +75,9 @@ CopyLoop (
                     errCode = STATUS_REQUEST_ABORTED;
                     break;
                 case PROGRESS_STOP:
+                    /* Windows 11 deletes the destination as on cancel; only a restartable network copy keeps it */
                     TRACE("Progress callback requested stop\n");
                     errCode = STATUS_REQUEST_ABORTED;
-                    *KeepDest = TRUE;
                     break;
                 case PROGRESS_QUIET:
                     lpProgressRoutine = NULL;
@@ -257,7 +255,6 @@ BasepCopyFileExW(IN LPCWSTR lpExistingFileName,
     FILE_STANDARD_INFORMATION FileStandard;
     FILE_BASIC_INFORMATION FileBasic;
     BOOL RC = FALSE;
-    BOOL KeepDestOnError = FALSE;
     BOOL NoDeleteAccess = FALSE;
     DWORD SystemError;
 
@@ -326,8 +323,7 @@ BasepCopyFileExW(IN LPCWSTR lpExistingFileName,
                                        FileStandard.EndOfFile,
                                        lpProgressRoutine,
                                        lpData,
-                                       pbCancel,
-                                       &KeepDestOnError);
+                                       pbCancel);
                     if (!NT_SUCCESS(errCode))
                     {
                         BaseSetLastNTError(errCode);
@@ -348,7 +344,7 @@ BasepCopyFileExW(IN LPCWSTR lpExistingFileName,
                         }
                     }
                     NtClose(FileHandleDest);
-                    if (! RC && ! KeepDestOnError && ! NoDeleteAccess)
+                    if (! RC && ! NoDeleteAccess)
                     {
                         SystemError = GetLastError();
                         SetFileAttributesW(lpNewFileName, FILE_ATTRIBUTE_NORMAL);
