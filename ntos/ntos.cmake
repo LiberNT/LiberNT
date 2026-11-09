@@ -280,7 +280,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/se/seobjtype.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seprivilege.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sd.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/sddl.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/sesddl.c
     ${REACTOS_SOURCE_DIR}/ntos/se/semgr.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesid.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seqos.c
