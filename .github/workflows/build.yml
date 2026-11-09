@@ -168,11 +168,6 @@ jobs:
     - name: Source checkout
       uses: actions/checkout@v6
 
-    - name: Set up the MSVC build environment
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: ${{ matrix.arch == 'i386' && 'amd64_x86' || matrix.arch == 'arm64' && 'amd64_arm64' || 'amd64' }}
-
     - name: Install host build tools
       shell: pwsh
       env:
@@ -197,6 +192,11 @@ jobs:
         Copy-Item "$tools\win_flex.exe" "$tools\flex.exe" -Force
         Copy-Item "$tools\win_bison.exe" "$tools\bison.exe" -Force
         echo "$tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Set up the MSVC build environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.arch == 'i386' && 'amd64_x86' || matrix.arch == 'arm64' && 'amd64_arm64' || 'amd64' }}
 
     - name: Configure
       id: configure
