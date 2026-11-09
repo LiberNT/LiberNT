@@ -1605,6 +1605,14 @@ static void WINTRUST_CreateChainPolicyCreateInfo(
     chainPara->cbSize = sizeof(CERT_CHAIN_PARA);
     if (data->pRequestUsage)
         chainPara->RequestedUsage = *data->pRequestUsage;
+#ifdef __REACTOS__
+    else if (data->pszUsageOID)
+    {
+        chainPara->RequestedUsage.dwType = USAGE_MATCH_TYPE_AND;
+        chainPara->RequestedUsage.Usage.cUsageIdentifier = 1;
+        chainPara->RequestedUsage.Usage.rgpszUsageIdentifier = (LPSTR *)&data->pszUsageOID;
+    }
+#endif
     else
     {
         chainPara->RequestedUsage.dwType = 0;
@@ -1619,8 +1627,21 @@ static void WINTRUST_CreateChainPolicyCreateInfo(
         info->dwFlags = CERT_CHAIN_REVOCATION_CHECK_CHAIN;
     else if (data->dwProvFlags & CPD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT)
         info->dwFlags = CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT;
+#ifdef __REACTOS__
+    else if (data->dwProvFlags & WTD_REVOCATION_CHECK_NONE)
+        info->dwFlags = 0;
+    else if (data->dwProvFlags & WTD_REVOCATION_CHECK_END_CERT)
+        info->dwFlags = CERT_CHAIN_REVOCATION_CHECK_END_CERT;
+    else if (data->dwProvFlags & WTD_REVOCATION_CHECK_CHAIN)
+        info->dwFlags = CERT_CHAIN_REVOCATION_CHECK_CHAIN;
+    else
+        info->dwFlags = CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT;
+    if (data->dwProvFlags & WTD_CACHE_ONLY_URL_RETRIEVAL)
+        info->dwFlags |= CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL;
+#else
     else
         info->dwFlags = 0;
+#endif
     info->pvReserved = NULL;
 }
 
@@ -1631,15 +1652,21 @@ static DWORD SOFTPUB_CreateChainForCounterSigner(CRYPT_PROVIDER_DATA *data, DWOR
     CRYPT_PROVIDER_SGNR *counter = &data->pasSigners[signerIdx].pasCounterSigners[counterIdx];
     CERT_CHAIN_PARA chainPara;
     PCERT_SIMPLE_CHAIN simpleChain;
-    DWORD i;
+    DWORD i, flags;
 
     if (!counter->csCertChain)
         return TRUST_E_COUNTER_SIGNER;
-    /* TODO: INFO_NEEDED the usage Windows 11 requests for a countersigner chain */
     memset(&chainPara, 0, sizeof(chainPara));
     chainPara.cbSize = sizeof(chainPara);
+    flags = createInfo->dwFlags;
+    if ((counter->dwSignerType & SGNR_TYPE_TIMESTAMP) && (data->dwRegPolicySettings & WTPF_IGNOREREVOCATIONONTS) &&
+     data->pWintrustData->fdwRevocationChecks != WTD_REVOKE_WHOLECHAIN &&
+     !(data->dwProvFlags & (WTD_REVOCATION_CHECK_END_CERT | WTD_REVOCATION_CHECK_CHAIN |
+     WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT)))
+        flags &= ~(CERT_CHAIN_REVOCATION_CHECK_END_CERT | CERT_CHAIN_REVOCATION_CHECK_CHAIN |
+         CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT);
     if (!CertGetCertificateChain(createInfo->hChainEngine, counter->pasCertChain[0].pCert,
-     &counter->sftVerifyAsOf, store, &chainPara, createInfo->dwFlags, createInfo->pvReserved,
+     &counter->sftVerifyAsOf, store, &chainPara, flags, createInfo->pvReserved,
      &counter->pChainContext))
         return GetLastError();
 
@@ -1936,6 +1963,10 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
                      CERT_CHAIN_POLICY_IGNORE_CTL_SIGNER_REV_UNKNOWN_FLAG |
                      CERT_CHAIN_POLICY_IGNORE_CA_REV_UNKNOWN_FLAG |
                      CERT_CHAIN_POLICY_IGNORE_ROOT_REV_UNKNOWN_FLAG;
+#ifdef __REACTOS__
+                if (data->dwRegPolicySettings & (WTPF_OFFLINEOK_IND | WTPF_OFFLINEOK_COM))
+                    policyPara.dwFlags |= CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS;
+#endif
                 CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_AUTHENTICODE,
                  data->pasSigners[i].pChainContext, &policyPara, &policyStatus);
                 if (policyStatus.dwError != NO_ERROR)
@@ -1949,7 +1980,9 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
                 for (j = 0; ret && j < data->pasSigners[i].csCounterSigners; j++)
                 {
                     CRYPT_PROVIDER_SGNR *counter = &data->pasSigners[i].pasCounterSigners[j];
-                    CERT_CHAIN_POLICY_PARA timePara = { sizeof(timePara), 0 };
+                    CERT_CHAIN_POLICY_PARA timePara = { sizeof(timePara),
+                     (data->dwRegPolicySettings & (WTPF_OFFLINEOK_IND | WTPF_OFFLINEOK_COM)) ?
+                     CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS : 0 };
                     CERT_CHAIN_POLICY_STATUS timeStatus = { sizeof(timeStatus), 0 };
 
                     if (!(counter->dwSignerType & SGNR_TYPE_TIMESTAMP) || !counter->pChainContext)
@@ -2329,14 +2362,13 @@ HRESULT WINAPI DriverFinalPolicy(CRYPT_PROVIDER_DATA *data)
     HRESULT ret;
     DWORD err;
 
+    const DWORD *steps = data->hMsg ? signature_steps : SOFTPUB_PriorSteps;
+    DWORD count = data->hMsg ? ARRAY_SIZE(signature_steps) : ARRAY_SIZE(SOFTPUB_PriorSteps);
+
     TRACE("(%p)\n", data);
 
-    if (data->hMsg)
-        ret = SOFTPUB_Authenticode(data, signature_steps, ARRAY_SIZE(signature_steps));
-    else
-        ret = SOFTPUB_Authenticode(data, SOFTPUB_PriorSteps, ARRAY_SIZE(SOFTPUB_PriorSteps));
-    if (ret != S_OK)
-        return ret;
+    if ((err = SOFTPUB_FirstStepError(data, steps, count)))
+        return err;
     err = DRIVER_CheckMicrosoftRoot(data);
     if (!err && info && !WVT_ISINSTRUCT(DRIVER_VER_INFO, info->cbStruct, pcSignerCertContext))
         err = ERROR_INVALID_PARAMETER;
@@ -2345,6 +2377,8 @@ HRESULT WINAPI DriverFinalPolicy(CRYPT_PROVIDER_DATA *data)
         data->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV] = err;
         return err;
     }
+    if ((ret = SOFTPUB_Authenticode(data, steps, count)) != S_OK)
+        return ret;
 
     if (info)
     {

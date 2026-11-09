@@ -366,6 +366,9 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
     provData->pgActionID = actionID;
     WintrustGetRegPolicyFlags(&provData->dwRegPolicySettings);
 #ifdef __REACTOS__
+    provData->dwProvFlags = CPD_USE_NT5_CHAIN_FLAG;
+    if (WVT_ISINSTRUCT(WINTRUST_DATA, data->cbStruct, dwProvFlags))
+        provData->dwProvFlags |= data->dwProvFlags;
     /* TODO: INFO_NEEDED: where Windows 11 reads this value from; it reports 1 for every action measured */
     provData->dwRegSecuritySettings = 1;
 #endif

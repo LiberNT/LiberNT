@@ -26,7 +26,7 @@ typedef HRESULT (WINAPI *PFN_FIND_CERTS)(PCERT_CHAIN, DWORD *, DWORD *, BYTE *, 
 static const GUID PeSubject = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
 
 static HCRYPTPROV Provider;
-static PCCERT_CONTEXT Root, Leaf, Tsa, CodeSigner, RogueTsa;
+static PCCERT_CONTEXT Root, Leaf, Tsa, CodeSigner, RogueTsa, SigningCert;
 static HCERTSTORE MachineRoot;
 static WCHAR TempDir[MAX_PATH], CatalogPath[MAX_PATH], MemberPath[MAX_PATH], OtherPath[MAX_PATH], ImagePath[MAX_PATH];
 
@@ -164,14 +164,14 @@ SignContent(LPCSTR ContentType, const BYTE *Content, DWORD ContentSize, PCCERT_C
 
     ZeroMemory(&Signer, sizeof(Signer));
     Signer.cbSize = sizeof(Signer);
-    Signer.pCertInfo = Leaf->pCertInfo;
+    Signer.pCertInfo = (SigningCert ? SigningCert : Leaf)->pCertInfo;
     Signer.hCryptProv = Provider;
     Signer.dwKeySpec = AT_SIGNATURE;
     Signer.HashAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
     Signer.cAuthAttr = 1;
     Signer.rgAuthAttr = &Attribute;
-    Certs[0].cbData = Leaf->cbCertEncoded;
-    Certs[0].pbData = Leaf->pbCertEncoded;
+    Certs[0].cbData = (SigningCert ? SigningCert : Leaf)->cbCertEncoded;
+    Certs[0].pbData = (SigningCert ? SigningCert : Leaf)->pbCertEncoded;
     Certs[1].cbData = Root->cbCertEncoded;
     Certs[1].pbData = Root->pbCertEncoded;
     if (Extra)
@@ -969,6 +969,147 @@ TestTimestamp(VOID)
 }
 
 static
+DWORD
+ElementError(PCCERT_CHAIN_CONTEXT Chain, DWORD Element)
+{
+    if (!Chain || Element >= Chain->rgpChain[0]->cElement)
+        return 0xdeadbeef;
+    return Chain->rgpChain[0]->rgpElement[Element]->TrustStatus.dwErrorStatus;
+}
+
+static
+LONG
+VerifyImage(GUID *Action, DWORD RevocationChecks, DWORD ProvFlags, WINTRUST_DATA *Data, WINTRUST_FILE_INFO *File)
+{
+    ZeroMemory(Data, sizeof(*Data));
+    ZeroMemory(File, sizeof(*File));
+    Data->cbStruct = sizeof(*Data);
+    File->cbStruct = sizeof(*File);
+    File->pcwszFilePath = ImagePath;
+    Data->dwUIChoice = WTD_UI_NONE;
+    Data->fdwRevocationChecks = RevocationChecks;
+    Data->dwUnionChoice = WTD_CHOICE_FILE;
+    Data->pFile = File;
+    Data->dwStateAction = WTD_STATEACTION_VERIFY;
+    Data->dwProvFlags = ProvFlags;
+    return WinVerifyTrust(INVALID_HANDLE_VALUE, Action, Data);
+}
+
+static
+VOID
+CloseImage(GUID *Action, WINTRUST_DATA *Data)
+{
+    Data->dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust(INVALID_HANDLE_VALUE, Action, Data);
+}
+
+static
+VOID
+CheckRevocation(DWORD RevocationChecks, DWORD ProvFlags, DWORD Leaf0, DWORD Counter0, ULONG Line)
+{
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO File;
+    WINTRUST_DATA Data;
+    CRYPT_PROVIDER_DATA *ProvData;
+    LONG Ret;
+
+    Ret = VerifyImage(&Generic, RevocationChecks, ProvFlags, &Data, &File);
+    ok_(__FILE__, Line)(Ret == ERROR_SUCCESS, "WinVerifyTrust returned 0x%lx\n", Ret);
+    ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+    ok_(__FILE__, Line)(ProvData != NULL, "no provider data\n");
+    if (ProvData && ProvData->csSigners)
+    {
+        ok_(__FILE__, Line)(ProvData->dwProvFlags == (CPD_USE_NT5_CHAIN_FLAG | ProvFlags), "provider flags 0x%lx\n",
+                            ProvData->dwProvFlags);
+        ok_(__FILE__, Line)(ElementError(ProvData->pasSigners[0].pChainContext, 0) == Leaf0, "signer leaf 0x%lx\n",
+                            ElementError(ProvData->pasSigners[0].pChainContext, 0));
+        ok_(__FILE__, Line)(ElementError(ProvData->pasSigners[0].pChainContext, 1) == 0, "signer root 0x%lx\n",
+                            ElementError(ProvData->pasSigners[0].pChainContext, 1));
+        if (ProvData->pasSigners[0].csCounterSigners)
+            ok_(__FILE__, Line)(ElementError(ProvData->pasSigners[0].pasCounterSigners[0].pChainContext, 0) == Counter0,
+                                "countersigner leaf 0x%lx\n",
+                                ElementError(ProvData->pasSigners[0].pasCounterSigners[0].pChainContext, 0));
+    }
+    CloseImage(&Generic, &Data);
+}
+
+static
+VOID
+TestRevocation(VOID)
+{
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2, Driver = DRIVER_ACTION_VERIFY;
+    WINTRUST_FILE_INFO File;
+    WINTRUST_DATA Data;
+    CRYPT_PROVIDER_DATA *ProvData;
+    FILETIME SigningTime;
+    ULARGE_INTEGER Time;
+    DWORD Saved = 0;
+    LONG Ret;
+
+    GetSystemTimeAsFileTime(&SigningTime);
+    Time.LowPart = SigningTime.dwLowDateTime;
+    Time.HighPart = SigningTime.dwHighDateTime;
+    Time.QuadPart -= Time.QuadPart % 10000000 + 3600ULL * 10000000;
+    SigningTime.dwLowDateTime = Time.LowPart;
+    SigningTime.dwHighDateTime = Time.HighPart;
+
+    /* The test certificates have no CRL distribution point, so a checked certificate is of unknown status */
+    DeleteFileW(ImagePath);
+    ok(CreateTimestampedImage(Tsa, &SigningTime, FALSE, FALSE), "Cannot create the image (0x%lx)\n", GetLastError());
+    CheckRevocation(WTD_REVOKE_NONE, 0, CERT_TRUST_REVOCATION_STATUS_UNKNOWN, 0, __LINE__);
+    CheckRevocation(WTD_REVOKE_NONE, WTD_REVOCATION_CHECK_NONE, 0, 0, __LINE__);
+    CheckRevocation(WTD_REVOKE_NONE, WTD_REVOCATION_CHECK_END_CERT, CERT_TRUST_REVOCATION_STATUS_UNKNOWN,
+                    CERT_TRUST_REVOCATION_STATUS_UNKNOWN, __LINE__);
+    CheckRevocation(WTD_REVOKE_NONE, WTD_CACHE_ONLY_URL_RETRIEVAL, CERT_TRUST_REVOCATION_STATUS_UNKNOWN, 0, __LINE__);
+    CheckRevocation(WTD_REVOKE_WHOLECHAIN, 0, CERT_TRUST_REVOCATION_STATUS_UNKNOWN, CERT_TRUST_REVOCATION_STATUS_UNKNOWN,
+                    __LINE__);
+
+    WintrustGetRegPolicyFlags(&Saved);
+    ok_hex(Saved, WTPF_IGNOREREVOCATIONONTS | WTPF_OFFLINEOK_IND | WTPF_OFFLINEOK_COM | WTPF_OFFLINEOKNBU_IND |
+                  WTPF_OFFLINEOKNBU_COM);
+    ok(WintrustSetRegPolicyFlags(0), "WintrustSetRegPolicyFlags failed\n");
+    Ret = VerifyImage(&Generic, WTD_REVOKE_NONE, 0, &Data, &File);
+    ok_hex(Ret, CERT_E_REVOCATION_FAILURE);
+    ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+    if (ProvData && ProvData->csSigners && ProvData->pasSigners[0].csCounterSigners)
+        ok_hex(ElementError(ProvData->pasSigners[0].pasCounterSigners[0].pChainContext, 0),
+               CERT_TRUST_REVOCATION_STATUS_UNKNOWN);
+    CloseImage(&Generic, &Data);
+    ok(WintrustSetRegPolicyFlags(WTPF_OFFLINEOK_IND), "WintrustSetRegPolicyFlags failed\n");
+    ok_hex(VerifyImage(&Generic, WTD_REVOKE_NONE, 0, &Data, &File), ERROR_SUCCESS);
+    CloseImage(&Generic, &Data);
+    ok(WintrustSetRegPolicyFlags(WTPF_OFFLINEOKNBU_IND | WTPF_OFFLINEOKNBU_COM), "WintrustSetRegPolicyFlags failed\n");
+    ok_hex(VerifyImage(&Generic, WTD_REVOKE_NONE, 0, &Data, &File), CERT_E_REVOCATION_FAILURE);
+    CloseImage(&Generic, &Data);
+    WintrustSetRegPolicyFlags(Saved);
+
+    /* Only timestamp countersigners skip revocation checking by default */
+    DeleteFileW(ImagePath);
+    ok(CreateTimestampedImage(CodeSigner, &SigningTime, FALSE, FALSE), "Cannot create the image (0x%lx)\n", GetLastError());
+    CheckRevocation(WTD_REVOKE_NONE, 0, CERT_TRUST_REVOCATION_STATUS_UNKNOWN, CERT_TRUST_REVOCATION_STATUS_UNKNOWN,
+                    __LINE__);
+
+    /* The chain asks for the usage of the action */
+    DeleteFileW(ImagePath);
+    SigningCert = Tsa;
+    ok(CreateTimestampedImage(Tsa, &SigningTime, FALSE, FALSE), "Cannot create the image (0x%lx)\n", GetLastError());
+    SigningCert = NULL;
+    Ret = VerifyImage(&Generic, WTD_REVOKE_NONE, 0, &Data, &File);
+    ok_hex(Ret, CERT_E_WRONG_USAGE);
+    ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+    if (ProvData && ProvData->csSigners)
+        ok_hex(ElementError(ProvData->pasSigners[0].pChainContext, 0),
+               CERT_TRUST_IS_NOT_VALID_FOR_USAGE | CERT_TRUST_REVOCATION_STATUS_UNKNOWN);
+    CloseImage(&Generic, &Data);
+    Ret = VerifyImage(&Driver, WTD_REVOKE_NONE, 0, &Data, &File);
+    ok_hex(Ret, CERT_E_UNTRUSTEDROOT);
+    ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+    if (ProvData)
+        ok_hex(ProvData->padwTrustStepErrors[TRUSTERROR_STEP_FINAL_POLICYPROV], CERT_E_UNTRUSTEDROOT);
+    CloseImage(&Driver, &Data);
+}
+
+static
 VOID
 CleanupFixture(VOID)
 {
@@ -1022,6 +1163,7 @@ START_TEST(SignedCatalog)
     TestUnalignedImage();
     TestDigestAlgorithm();
     TestTimestamp();
+    TestRevocation();
     TestFindCerts();
 
     CleanupFixture();
