@@ -1108,7 +1108,22 @@ HRESULT CNotifyToolbar::GetIconRect(IN CONST NOTIFYICONIDENTIFIER *Identifier, O
         if (!Matches)
             continue;
 
-        if ((Data->dwState & NIS_HIDDEN) || !GetItemRect(Index, IconRect))
+        if (Data->dwState & NIS_HIDDEN)
+            return E_FAIL;
+
+        if (!IsItemVisible(Data))
+        {
+            HWND hwndChevron;
+
+            if (TrayOverflow_GetIconRect(Data->hWnd, Data->uID, IconRect))
+                return S_OK;
+            hwndChevron = ::FindWindowExW(::GetParent(GetParent()), NULL, L"TrayChevronButton", NULL);
+            if (!hwndChevron || !::IsWindowVisible(hwndChevron) || !::GetWindowRect(hwndChevron, IconRect))
+                return E_FAIL;
+            return S_OK;
+        }
+
+        if (!GetItemRect(Index, IconRect))
             return E_FAIL;
 
         ClientToScreen(IconRect);

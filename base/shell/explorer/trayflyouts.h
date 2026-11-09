@@ -29,6 +29,7 @@ BOOL TrayNotifications_IsHidden(VOID);
 
 VOID TrayOverflow_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor, IN HWND hwndPager);
 BOOL TrayOverflow_IsOpen(VOID);
+BOOL TrayOverflow_GetIconRect(IN HWND hWnd, IN UINT uID, OUT RECT *prcIcon);
 VOID TrayOverflow_Refresh(VOID);
 
 VOID TrayQuickSettings_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
