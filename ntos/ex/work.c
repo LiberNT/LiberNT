@@ -533,6 +533,20 @@ ExpWorkerThreadBalanceManager(IN PVOID Context)
     }
 }
 
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializeWorkerQueues(VOID)
+{
+    ULONG WorkQueueType;
+
+    for (WorkQueueType = 0; WorkQueueType < MaximumWorkQueue; WorkQueueType++)
+        KeInitializeQueue(&ExWorkerQueue[WorkQueueType].WorkerQueue, 0);
+
+    KeInitializeEvent(&ExpThreadSetManagerEvent, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&ExpThreadSetManagerShutdownEvent, NotificationEvent, FALSE);
+}
+
 /*++
  * @name ExpInitializeWorkerThreads
  *
@@ -582,22 +596,14 @@ ExpInitializeWorkerThreads(VOID)
     ExpStaticWorkerCounts[DelayedWorkQueue] = DelayedThreads;
     ExpStaticWorkerCounts[HyperCriticalWorkQueue] = EX_HYPERCRITICAL_WORK_THREADS;
 
-    /* Initialize the Array */
     for (WorkQueueType = 0; WorkQueueType < MaximumWorkQueue; WorkQueueType++)
     {
-        /* Clear the structure and initialize the queue */
-        RtlZeroMemory(&ExWorkerQueue[WorkQueueType], sizeof(EX_WORK_QUEUE));
-        KeInitializeQueue(&ExWorkerQueue[WorkQueueType].WorkerQueue, 0);
+        InterlockedExchange((PLONG)&ExWorkerQueue[WorkQueueType].WorkerQueue.MaximumCount,
+                            (LONG)KeNumberProcessors);
     }
 
     /* Only the critical queue uses dynamic threads for load scaling */
     ExWorkerQueue[CriticalWorkQueue].Info.MakeThreadsAsNecessary = TRUE;
-
-    /* Initialize the balance set manager events */
-    KeInitializeEvent(&ExpThreadSetManagerEvent, SynchronizationEvent, FALSE);
-    KeInitializeEvent(&ExpThreadSetManagerShutdownEvent,
-                      NotificationEvent,
-                      FALSE);
 
     /* Create the built-in worker threads for the critical queue */
     for (i = 0; i < CriticalThreads; i++)
@@ -761,14 +767,6 @@ ExQueueWorkItem(IN PWORK_QUEUE_ITEM WorkItem,
     PEX_WORK_QUEUE WorkQueue = &ExWorkerQueue[QueueType];
     ASSERT(QueueType < MaximumWorkQueue);
     ASSERT(WorkItem->List.Flink == NULL);
-
-    /* APs can queue before phase 1 initialises ExWorkerQueue[]: drop the item */
-    if (WorkQueue->WorkerQueue.Header.Type != QueueObject)
-    {
-        DPRINT1("EX: queue %lu not initialized yet, dropping work item\n",
-                (ULONG)QueueType);
-        return;
-    }
 
     /* Don't try to trick us */
     if ((ULONG_PTR)WorkItem->WorkerRoutine < MmUserProbeAddress)

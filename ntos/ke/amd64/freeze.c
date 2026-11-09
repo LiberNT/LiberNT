@@ -36,6 +36,7 @@
 /* NOT INCLUDES ANYMORE ******************************************************/
 
 PKPRCB KiFreezeOwner;
+static PKPRCB KiFreezeActiveSetOwner;
 
 static VOID KiFreezeWaitForThaw(_In_ PKPRCB CurrentPrcb);
 
@@ -181,6 +182,72 @@ KiFreezeIfRequested(
     KeRestoreInterrupts(Enable);
 }
 
+static
+BOOLEAN
+KiAcquireFreezeActiveSet(
+    _In_ PKPRCB Prcb)
+{
+    ASSERT(Prcb != NULL);
+    ASSERT(Prcb == KeGetCurrentPrcb());
+
+    if (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner,
+                                          NULL,
+                                          NULL) == Prcb)
+        return FALSE;
+
+    while (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner,
+                                             Prcb,
+                                             NULL) != NULL)
+    {
+        YieldProcessor();
+    }
+
+    return TRUE;
+}
+
+static
+VOID
+KiReleaseFreezeActiveSet(
+    _In_ PKPRCB Prcb,
+    _In_ BOOLEAN Acquired)
+{
+    ASSERT(Prcb == KeGetCurrentPrcb());
+    ASSERT(KiFreezeActiveSetOwner == Prcb);
+
+    if (Acquired)
+        InterlockedExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner, NULL);
+}
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiPublishActiveProcessor(
+    _In_ PKPRCB Prcb)
+{
+    BOOLEAN Acquired;
+
+    ASSERT(Prcb != NULL);
+    ASSERT(Prcb == KeGetCurrentPrcb());
+
+    for (;;)
+    {
+        Acquired = KiAcquireFreezeActiveSet(Prcb);
+        ASSERT(Acquired);
+
+        if (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeOwner,
+                                              NULL,
+                                              NULL) == NULL)
+        {
+            KeActiveProcessors |= Prcb->SetMember;
+            KiReleaseFreezeActiveSet(Prcb, Acquired);
+            break;
+        }
+
+        KiReleaseFreezeActiveSet(Prcb, Acquired);
+        YieldProcessor();
+    }
+}
+
 /* Mark, send to and wait for one snapshot of the published, active processors */
 static
 KAFFINITY
@@ -206,14 +273,13 @@ KiFreezeTargetSet(
     return Targets;
 }
 
-#define KI_FREEZE_WAIT_SPINS 0x40000000
-
 VOID
 NTAPI
 KxFreezeExecution(
     VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
+    BOOLEAN ReacquireActiveSet = FALSE;
 
     /* Avoid blocking on recursive debug action */
     if (KiFreezeOwner == CurrentPrcb)
@@ -224,6 +290,15 @@ KxFreezeExecution(
     /* Try to acquire the freeze owner */
     while (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeOwner, CurrentPrcb, NULL))
     {
+        if (!ReacquireActiveSet &&
+            InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner,
+                                              NULL,
+                                              NULL) == CurrentPrcb)
+        {
+            InterlockedExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner, NULL);
+            ReacquireActiveSet = TRUE;
+        }
+
         /* Someone else was faster. We expect an NMI to freeze any time.
            Spin here until the freeze owner is available, completing the
            freeze ourselves if that NMI never arrives. */
@@ -239,7 +314,10 @@ KxFreezeExecution(
     CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
 
     {
+    BOOLEAN Acquired = KiAcquireFreezeActiveSet(CurrentPrcb);
     KAFFINITY Targets = KiFreezeTargetSet(CurrentPrcb);
+
+    KiReleaseFreezeActiveSet(CurrentPrcb, Acquired && !ReacquireActiveSet);
 
     /* Mark exactly the snapshot */
     for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
@@ -262,34 +340,20 @@ KxFreezeExecution(
     if (Targets != 0)
         KiIpiSend(Targets, IPI_FREEZE);
 
-    /* Bounded: a target that did not take the request must not hang the machine */
     for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        ULONG Spins = 0;
 
         if (TargetPrcb == NULL || (Targets & TargetPrcb->SetMember) == 0)
             continue;
 
         while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN)
         {
-            if (++Spins >= KI_FREEZE_WAIT_SPINS)
-            {
-                DPRINT1("KxFreezeExecution: CPU %lu never froze, continuing\n",
-                        (ULONG)TargetPrcb->Number);
-
-                /* Clear the mark so the next freeze does not wait for it */
-                TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_RUNNING;
-                break;
-            }
-
             YieldProcessor();
             KeMemoryBarrier();
         }
     }
     }
-
-    /* All targets are frozen (or reported), we can continue */
 }
 
 VOID
@@ -317,24 +381,15 @@ KxThawExecution(
         TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_THAW;
     }
 
-    /* Wait for those to be running, bounded */
     for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        ULONG Spins = 0;
 
         if (TargetPrcb == NULL || TargetPrcb == CurrentPrcb)
             continue;
 
         while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_RUNNING)
         {
-            if (++Spins >= KI_FREEZE_WAIT_SPINS)
-            {
-                DPRINT1("KxThawExecution: CPU %lu never thawed, continuing\n",
-                        (ULONG)TargetPrcb->Number);
-                break;
-            }
-
             YieldProcessor();
             KeMemoryBarrier();
         }

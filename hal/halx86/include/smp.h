@@ -52,7 +52,7 @@ HalpBroadcastClockIpi(
 
 /* APIC specific functions inside apic/apicsmp.c */
 
-BOOLEAN
+VOID
 ApicStartApplicationProcessor(
     _In_ ULONG NTProcessorNumber,
     _In_ PHYSICAL_ADDRESS StartupLoc);

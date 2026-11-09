@@ -17,7 +17,6 @@ extern ULONG_PTR MainSSDT[];
 extern UCHAR MainSSPT[];
 
 extern BOOLEAN RtlpUse16ByteSLists;
-extern KSPIN_LOCK KiFreezeExecutionLock;
 
 /* FUNCTIONS *****************************************************************/
 
@@ -226,12 +225,7 @@ KiSystemStartupBootStack(VOID)
     /* Active means it can answer an IPI: publish after interrupts are enabled */
     if (Prcb->Number != 0)
     {
-        while (InterlockedBitTestAndSet64((PLONG64)&KiFreezeExecutionLock, 0))
-        {
-            while ((*(volatile KSPIN_LOCK*)&KiFreezeExecutionLock) & 1);
-        }
-        KeActiveProcessors |= Prcb->SetMember;
-        InterlockedAnd64((PLONG64)&KiFreezeExecutionLock, 0);
+        KiPublishActiveProcessor(Prcb);
     }
 
     /* Set the right wait IRQL */
