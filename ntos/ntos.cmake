@@ -226,7 +226,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/oblink.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obns.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obname.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/obref.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/obreference.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsdcache.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsecurity.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsync.c
