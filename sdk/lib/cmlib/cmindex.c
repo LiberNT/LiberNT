@@ -416,10 +416,6 @@ CmpFindSubKeyInLeaf(IN PHHIVE Hive,
         i = ((High - Low) / 2) + Low;
     }
 
-    /*
-     * If we get here, High - Low = 1 or High == Low
-     * Simply look first at Low, then at High
-     */
     Result = CmpCompareInIndex(Hive, SearchName, Low, Index, SubKey);
     if (Result == 2)
     {
