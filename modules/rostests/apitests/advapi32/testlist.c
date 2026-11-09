@@ -6,6 +6,7 @@ extern void func_AddMandatoryAce(void);
 extern void func_ControlServiceEx(void);
 extern void func_CopySid(void);
 extern void func_CreateService(void);
+extern void func_CryptCreateHash(void);
 extern void func_DuplicateTokenEx(void);
 extern void func_EnableTraceEx(void);
 extern void func_EnumerateTraceGuidsEx(void);
@@ -49,6 +50,7 @@ const struct test winetest_testlist[] =
     { "ControlServiceEx", func_ControlServiceEx },
     { "CopySid", func_CopySid },
     { "CreateService", func_CreateService },
+    { "CryptCreateHash", func_CryptCreateHash },
     { "DuplicateTokenEx", func_DuplicateTokenEx },
     { "EnableTraceEx", func_EnableTraceEx },
     { "EnumerateTraceGuidsEx", func_EnumerateTraceGuidsEx },
