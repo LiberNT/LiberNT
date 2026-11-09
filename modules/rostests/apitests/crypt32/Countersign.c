@@ -859,6 +859,86 @@ TestMissingAttributes(BYTE *SignerInfo, DWORD SignerInfoSize, CRYPT_DATA_BLOB *C
 
 static
 VOID
+CheckModifiedSigner(HCRYPTMSG Msg, DWORD ExpectedCount, ULONG Line)
+{
+    CMSG_SIGNER_INFO *Info;
+    BYTE *Buffer;
+    DWORD Size;
+
+    SetLastError(0xdeadbeef);
+    Buffer = GetParam(Msg, CMSG_SIGNER_UNAUTH_ATTR_PARAM, 0, &Size);
+    ok_(__FILE__, Line)(Buffer == NULL, "got the unauthenticated attributes of a modified signer\n");
+    ok_(__FILE__, Line)(GetLastError() == CRYPT_E_ATTRIBUTES_MISSING, "error 0x%lx\n", GetLastError());
+    HeapFree(GetProcessHeap(), 0, Buffer);
+    SetLastError(0xdeadbeef);
+    Buffer = GetParam(Msg, CMSG_ENCODED_SIGNER, 0, &Size);
+    ok_(__FILE__, Line)(Buffer == NULL, "got the encoded modified signer\n");
+    ok_(__FILE__, Line)(GetLastError() == E_INVALIDARG, "error 0x%lx\n", GetLastError());
+    HeapFree(GetProcessHeap(), 0, Buffer);
+    Info = (CMSG_SIGNER_INFO *)GetParam(Msg, CMSG_SIGNER_INFO_PARAM, 0, &Size);
+    ok_(__FILE__, Line)(Info != NULL, "no signer info (0x%lx)\n", GetLastError());
+    if (Info)
+        ok_(__FILE__, Line)(Info->UnauthAttrs.cAttr == ExpectedCount, "%lu unauthenticated attributes\n",
+                            Info->UnauthAttrs.cAttr);
+    HeapFree(GetProcessHeap(), 0, Info);
+}
+
+static
+VOID
+TestUnauthControls(const BYTE *Message, DWORD MessageSize, BYTE *SignerInfo, DWORD SignerInfoSize)
+{
+    CMSG_CTRL_ADD_SIGNER_UNAUTH_ATTR_PARA Add = { sizeof(Add), 0, { 0, NULL } };
+    CMSG_CTRL_DEL_SIGNER_UNAUTH_ATTR_PARA Del = { sizeof(Del), 0, 0 };
+    CMSG_SIGNER_ENCODE_INFO Countersigner;
+    HCRYPTMSG Msg;
+    BYTE *Encoded;
+    DWORD Size;
+
+    Msg = Decode(Message, MessageSize);
+    ok(Msg != NULL, "Cannot decode the message\n");
+    if (Msg)
+    {
+        SetLastError(0xdeadbeef);
+        ok(!CryptMsgControl(Msg, 0, CMSG_CTRL_DEL_SIGNER_UNAUTH_ATTR, &Del), "deleted a missing attribute\n");
+        ok_err(CRYPT_E_INVALID_INDEX);
+        CheckModifiedSigner(Msg, 0, __LINE__);
+        CryptMsgClose(Msg);
+    }
+
+    InitSigner(&Countersigner, Tsa, TsaProv, szOID_NIST_sha256);
+    if (!CryptMsgCountersignEncoded(ENCODING, SignerInfo, SignerInfoSize, 1, &Countersigner, NULL, &Add.blob.cbData) ||
+        !(Add.blob.pbData = HeapAlloc(GetProcessHeap(), 0, Add.blob.cbData)) ||
+        !CryptMsgCountersignEncoded(ENCODING, SignerInfo, SignerInfoSize, 1, &Countersigner, Add.blob.pbData, &Add.blob.cbData))
+    {
+        ok(FALSE, "Cannot countersign (0x%lx)\n", GetLastError());
+        HeapFree(GetProcessHeap(), 0, Add.blob.pbData);
+        return;
+    }
+    Msg = Decode(Message, MessageSize);
+    ok(Msg != NULL, "Cannot decode the message\n");
+    if (Msg)
+    {
+        ok(CryptMsgControl(Msg, 0, CMSG_CTRL_ADD_SIGNER_UNAUTH_ATTR, &Add), "add failed (0x%lx)\n", GetLastError());
+        CheckModifiedSigner(Msg, 1, __LINE__);
+        Encoded = GetParam(Msg, CMSG_ENCODED_MESSAGE, 0, &Size);
+        ok(Encoded && Size == 3300 && HashIs(Encoded, Size, CountersignedPrefix, sizeof(CountersignedPrefix)),
+           "unexpected message after the add (%lu)\n", Encoded ? Size : 0);
+        HeapFree(GetProcessHeap(), 0, Encoded);
+        ok(CryptMsgControl(Msg, 0, CMSG_CTRL_DEL_SIGNER_UNAUTH_ATTR, &Del), "del failed (0x%lx)\n", GetLastError());
+        CheckModifiedSigner(Msg, 0, __LINE__);
+        Encoded = GetParam(Msg, CMSG_ENCODED_MESSAGE, 0, &Size);
+        ok(Encoded && Size == MessageSize && !memcmp(Encoded, Message, Size), "unexpected message after the del\n");
+        HeapFree(GetProcessHeap(), 0, Encoded);
+        SetLastError(0xdeadbeef);
+        ok(!CryptMsgCountersign(Msg, 0, 1, &Countersigner), "countersigned a modified signer\n");
+        ok_err(E_INVALIDARG);
+        CryptMsgClose(Msg);
+    }
+    HeapFree(GetProcessHeap(), 0, Add.blob.pbData);
+}
+
+static
+VOID
 TestCountersign(HCRYPTMSG Msg, CRYPT_DATA_BLOB *Countersignature)
 {
     CMSG_SIGNER_ENCODE_INFO Countersigner;
@@ -895,6 +975,10 @@ TestCountersign(HCRYPTMSG Msg, CRYPT_DATA_BLOB *Countersignature)
             CryptMsgClose(Decoded);
         HeapFree(GetProcessHeap(), 0, Encoded);
     }
+    CheckModifiedSigner(Msg, 1, __LINE__);
+    SetLastError(0xdeadbeef);
+    ok(!CryptMsgCountersign(Msg, 0, 1, &Countersigner), "countersigned twice\n");
+    ok_err(E_INVALIDARG);
 
     SetLastError(0xdeadbeef);
     ok(!CryptMsgCountersign(Msg, 5, 1, &Countersigner), "succeeded for a missing signer\n");
@@ -950,6 +1034,7 @@ START_TEST(Countersign)
         TestMissingAttributes(SignerInfo, SignerInfoSize, &Countersignature);
     }
     TestCountersign(Msg, &Countersignature);
+    TestUnauthControls(Message, MessageSize, SignerInfo, SignerInfoSize);
 
     HeapFree(GetProcessHeap(), 0, Countersignature.pbData);
     HeapFree(GetProcessHeap(), 0, SignerInfo);

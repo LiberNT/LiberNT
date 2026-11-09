@@ -3847,6 +3847,10 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
         {
             if (dwIndex >= msg->u.signed_data.info->cSignerInfo)
                 SetLastError(CRYPT_E_INVALID_INDEX);
+#ifdef __REACTOS__
+            else if (msg->unauth_owned && msg->unauth_owned[dwIndex])
+                SetLastError(E_INVALIDARG);
+#endif
             else
                 ret = CryptEncodeObjectEx(
                  X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, CMS_SIGNER_INFO,
@@ -3904,7 +3908,12 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
         {
             if (dwIndex >= msg->u.signed_data.info->cSignerInfo)
                 SetLastError(CRYPT_E_INVALID_INDEX);
+#ifdef __REACTOS__
+            else if (!msg->u.signed_data.info->rgSignerInfo[dwIndex].UnauthAttrs.cAttr ||
+             (msg->unauth_owned && msg->unauth_owned[dwIndex]))
+#else
             else if (!msg->u.signed_data.info->rgSignerInfo[dwIndex].UnauthAttrs.cAttr)
+#endif
                 SetLastError(CRYPT_E_ATTRIBUTES_MISSING);
             else
                 ret = CRYPT_CopyAttr(pvData, pcbData,
@@ -4999,7 +5008,7 @@ BOOL WINAPI CryptMsgCountersign(HCRYPTMSG hCryptMsg, DWORD dwIndex,
         return FALSE;
     }
 
-    /* FIXME: Windows 11 then stops reporting the decoded signers and fails a second countersignature with E_INVALIDARG */
+    /* FIXME: after two CMSG_CTRL_ADD_SIGNER_UNAUTH_ATTR calls Windows 11 fails here without setting an error */
     ret = CryptMsgGetParam(hCryptMsg, CMSG_ENCODED_SIGNER, dwIndex, NULL, &size) &&
      (signer = CryptMemAlloc(size)) &&
      CryptMsgGetParam(hCryptMsg, CMSG_ENCODED_SIGNER, dwIndex, signer, &size) &&
