@@ -5044,14 +5044,13 @@ static BOOL CRYPT_HashCountersignedData(const CMSG_SIGNER_INFO *signer,
     ret = CryptHashData(handle, signer->EncryptedHash.pbData, signer->EncryptedHash.cbData, 0) &&
      extract_hash(handle, hash, hashSize);
     CryptDestroyHash(handle);
-    if (!ret || !counter->AuthAttrs.cAttr)
-        return ret;
+    if (!ret)
+        return FALSE;
 
     for (i = 0; i < counter->AuthAttrs.cAttr; i++)
         if (!strcmp(counter->AuthAttrs.rgAttr[i].pszObjId, szOID_RSA_messageDigest) &&
          counter->AuthAttrs.rgAttr[i].cValue)
             break;
-    /* TODO: INFO_NEEDED the Windows 11 error for authenticated attributes without a message digest */
     if (i == counter->AuthAttrs.cAttr)
         SetLastError(CRYPT_E_AUTH_ATTR_MISSING);
     else if (CryptDecodeObjectEx(X509_ASN_ENCODING, X509_OCTET_STRING,
@@ -5115,7 +5114,38 @@ static BOOL CRYPT_VerifyCountersignatureHash(const CMSG_SIGNER_INFO *counter,
     BCryptDestroyKey(handle);
     if (status)
     {
-        SetLastError(status);
+        /* TODO: INFO_NEEDED the mismatch error Windows 11 reports for the MD5 hash */
+        SetLastError(CertOIDToAlgId(counter->HashAlgorithm.pszObjId) == CALG_SHA1 ? NTE_BAD_SIGNATURE : status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL CRYPT_IsStrongSignPara(const CERT_STRONG_SIGN_PARA *para)
+{
+    if (para->cbSize < sizeof(*para))
+    {
+        SetLastError(E_INVALIDARG);
+        return FALSE;
+    }
+    /* TODO: CERT_STRONG_SIGN_SERIALIZED_INFO_CHOICE parameters */
+    if (para->dwInfoChoice != CERT_STRONG_SIGN_OID_INFO_CHOICE || !para->pszOID ||
+     strcmp(para->pszOID, szOID_CERT_STRONG_SIGN_OS_1))
+    {
+        SetLastError(ERROR_NOT_SUPPORTED);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL CRYPT_IsStrongCountersigner(const CMSG_SIGNER_INFO *counter, CERT_PUBLIC_KEY_INFO *key)
+{
+    ALG_ID hash = CertOIDToAlgId(counter->HashAlgorithm.pszObjId);
+
+    if ((hash != CALG_SHA_256 && hash != CALG_SHA_384 && hash != CALG_SHA_512) ||
+     (key && !strcmp(key->Algorithm.pszObjId, szOID_RSA_RSA) && CertGetPublicKeyLength(X509_ASN_ENCODING, key) < 2047))
+    {
+        SetLastError(NTE_BAD_ALGID);
         return FALSE;
     }
     return TRUE;
@@ -5126,6 +5156,7 @@ BOOL WINAPI CryptMsgVerifyCountersignatureEncodedEx(HCRYPTPROV_LEGACY hCryptProv
  PBYTE pbSignerInfoCountersignature, DWORD cbSignerInfoCountersignature,
  DWORD dwSignerType, void *pvSigner, DWORD dwFlags, void *pvReserved)
 {
+    const CERT_STRONG_SIGN_PARA *strong = (dwFlags & CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG) ? pvReserved : NULL;
     CMSG_SIGNER_INFO *signer = NULL, *counter = NULL;
     CERT_PUBLIC_KEY_INFO *key = NULL;
     BYTE *hash = NULL;
@@ -5154,13 +5185,17 @@ BOOL WINAPI CryptMsgVerifyCountersignatureEncodedEx(HCRYPTPROV_LEGACY hCryptProv
         return FALSE;
     }
 
-    /* TODO: CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG strong signature checks */
+    if (strong && !CRYPT_IsStrongSignPara(strong))
+        return FALSE;
+
     ret = CryptDecodeObjectEx(dwEncodingType, PKCS7_SIGNER_INFO, pbSignerInfo, cbSignerInfo,
      CRYPT_DECODE_ALLOC_FLAG, NULL, &signer, &size) &&
      CryptDecodeObjectEx(dwEncodingType, PKCS7_SIGNER_INFO, pbSignerInfoCountersignature,
      cbSignerInfoCountersignature, CRYPT_DECODE_ALLOC_FLAG, NULL, &counter, &size) &&
      CRYPT_HashCountersignedData(signer, counter, &hash, &hashSize) &&
      CRYPT_VerifyCountersignatureHash(counter, key, hash, hashSize);
+    if (ret && strong)
+        ret = CRYPT_IsStrongCountersigner(counter, key);
     if (ret)
         SetLastError(ERROR_SUCCESS);
     CryptMemFree(hash);
