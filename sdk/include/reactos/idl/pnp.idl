@@ -552,6 +552,10 @@ interface pnp
     cpp_quote("#define PNP_DEVINST_ENABLE      0x4")
     cpp_quote("#define PNP_DEVINST_DISABLE     0x5")
     cpp_quote("#define PNP_DEVINST_REENUMERATE 0x7")
+    cpp_quote("#ifdef __REACTOS__")
+    cpp_quote("#define PNP_DEVINST_REMOVE_SOFTWARE 0x100")
+    cpp_quote("#define PNP_DEVINST_WATCH_SOFTWARE  0x101")
+    cpp_quote("#endif")
     DWORD
     __stdcall
     PNP_DeviceInstanceAction(

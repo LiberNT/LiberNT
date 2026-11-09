@@ -12,6 +12,7 @@ list(APPEND SOURCE
     devobject.c
     notification.c
     rpc.c
+    swdevice.c
     ${CMAKE_CURRENT_BINARY_DIR}/pnp_c.c
     cfgmgr32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/cfgmgr32_stubs.c

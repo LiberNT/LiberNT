@@ -80,6 +80,8 @@ extern BOOL CfgmgrIsValidMachine( HMACHINE machine );
 extern WCHAR *CfgmgrGetPresentInterfaceList( GUID *class );
 extern CONFIGRET CfgmgrGetDevNodeRegistryPropertyW( DEVINST node, ULONG property, ULONG *type, void *buffer, ULONG *len, ULONG flags, HMACHINE machine );
 extern CONFIGRET CfgmgrGetDevNodeRegistryPropertyA( DEVINST node, ULONG property, ULONG *type, void *buffer, ULONG *len, ULONG flags, HMACHINE machine );
+extern CONFIGRET CfgmgrRemoveSoftwareDevice( PCWSTR instance_id );
+extern CONFIGRET CfgmgrWatchSoftwareDevice( PCWSTR instance_id, DWORD process_id );
 
 #endif
 struct device_interface
