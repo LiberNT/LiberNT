@@ -535,12 +535,12 @@ SeFastTraverseCheck(
  * rights the caller should have mapped itself, then the token, then the
  * descriptor, then the list.
  */
-static
 NTSTATUS
 SepAccessCheckByType(
     _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor,
     _In_opt_ PSID PrincipalSelfSid,
-    _In_ HANDLE ClientToken,
+    _In_opt_ HANDLE ClientToken,
+    _In_opt_ PTOKEN EffectiveToken,
     _In_ ACCESS_MASK DesiredAccess,
     _In_opt_ POBJECT_TYPE_LIST ObjectTypeList,
     _In_ ULONG ObjectTypeListLength,
@@ -620,20 +620,30 @@ SepAccessCheckByType(
 
     SeCaptureSubjectContext(&SubjectContext);
 
-    Status = ObReferenceObjectByHandle(ClientToken,
-                                       TOKEN_QUERY,
-                                       SeTokenObjectType,
-                                       PreviousMode,
-                                       (PVOID *)&Context.Token,
-                                       NULL);
-    if (NT_SUCCESS(Status))
+    if (EffectiveToken != NULL)
     {
-        /* Only a token taken from somebody else answers for them, and only
-         * one taken at a level that may be acted on */
-        if (Context.Token->TokenType != TokenImpersonation)
-            Status = STATUS_NO_IMPERSONATION_TOKEN;
-        else if (Context.Token->ImpersonationLevel < SecurityIdentification)
-            Status = STATUS_BAD_IMPERSONATION_LEVEL;
+        /* A caller asking in its own name is answered for by what it acts
+         * with, whichever kind of token that is */
+        Context.Token = EffectiveToken;
+        ObReferenceObject(Context.Token);
+    }
+    else
+    {
+        Status = ObReferenceObjectByHandle(ClientToken,
+                                           TOKEN_QUERY,
+                                           SeTokenObjectType,
+                                           PreviousMode,
+                                           (PVOID *)&Context.Token,
+                                           NULL);
+        if (NT_SUCCESS(Status))
+        {
+            /* Only a token taken from somebody else answers for them, and
+             * only one taken at a level that may be acted on */
+            if (Context.Token->TokenType != TokenImpersonation)
+                Status = STATUS_NO_IMPERSONATION_TOKEN;
+            else if (Context.Token->ImpersonationLevel < SecurityIdentification)
+                Status = STATUS_BAD_IMPERSONATION_LEVEL;
+        }
     }
 
     if (NT_SUCCESS(Status))
@@ -814,6 +824,7 @@ NtAccessCheck(
     return SepAccessCheckByType(SecurityDescriptor,
                                 NULL,
                                 ClientToken,
+                                NULL,
                                 DesiredAccess,
                                 NULL,
                                 0,
@@ -845,6 +856,7 @@ NtAccessCheckByType(
     return SepAccessCheckByType(SecurityDescriptor,
                                 PrincipalSelfSid,
                                 ClientToken,
+                                NULL,
                                 DesiredAccess,
                                 ObjectTypeList,
                                 ObjectTypeListLength,
@@ -876,6 +888,7 @@ NtAccessCheckByTypeResultList(
     return SepAccessCheckByType(SecurityDescriptor,
                                 PrincipalSelfSid,
                                 ClientToken,
+                                NULL,
                                 DesiredAccess,
                                 ObjectTypeList,
                                 ObjectTypeListLength,

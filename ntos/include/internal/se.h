@@ -743,6 +743,39 @@ SepInitSystemDacls(VOID);
 extern ERESOURCE SepSubjectContextLock;
 
 NTSTATUS
+SepAccessCheckByType(
+    _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_opt_ PSID PrincipalSelfSid,
+    _In_opt_ HANDLE ClientToken,
+    _In_opt_ PTOKEN EffectiveToken,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_TYPE_LIST ObjectTypeList,
+    _In_ ULONG ObjectTypeListLength,
+    _In_ PGENERIC_MAPPING GenericMapping,
+    _Out_ PPRIVILEGE_SET PrivilegeSet,
+    _Inout_ PULONG PrivilegeSetLength,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PNTSTATUS AccessStatus,
+    _In_ BOOLEAN ResultList);
+
+VOID
+NTAPI
+SeCloseObjectAuditAlarm(
+    _In_ PVOID Object,
+    _In_ HANDLE Handle,
+    _In_ BOOLEAN GenerateOnClose);
+
+VOID
+NTAPI
+SePrivilegeObjectAuditAlarm(
+    _In_ HANDLE Handle,
+    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ PPRIVILEGE_SET Privileges,
+    _In_ BOOLEAN AccessGranted,
+    _In_ KPROCESSOR_MODE CurrentMode);
+
+NTSTATUS
 NTAPI
 SepCreateImpersonationTokenDacl(
     _In_ PTOKEN Token,
@@ -874,7 +907,7 @@ SeInitializeProcessAuditName(
 BOOLEAN
 NTAPI
 SeDetailedAuditingWithToken(
-    _In_ PTOKEN Token);
+    _In_opt_ PTOKEN Token);
 
 VOID
 NTAPI
@@ -883,7 +916,7 @@ SeAuditProcessExit(
 
 VOID
 NTAPI
-SeAuditProcessCreate(
+SeAuditProcessCreation(
     _In_ PEPROCESS Process);
 
 VOID
