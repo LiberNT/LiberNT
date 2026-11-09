@@ -120,7 +120,7 @@ endif()
 
 source_group(TREE ${REACTOS_SOURCE_DIR}/ntos PREFIX "Source Files" FILES ${NTOSKRNL_SOURCE})
 
-target_link_libraries(ntoskrnl ntoskrnl_vista cportlib csq ${PSEH_LIB} apisets arblib cmlib ntlsalib rtl cryptlib symz libcntpr setjmp wdmguid poguid ioevent)
+target_link_libraries(ntoskrnl cportlib csq ${PSEH_LIB} apisets arblib cmlib ntlsalib rtl cryptlib symz libcntpr setjmp wdmguid poguid ioevent)
 
 if(KDBG AND (ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64"))
     target_link_libraries(ntoskrnl kdb_zydis)

@@ -363,7 +363,7 @@
 @ stdcall IoAcquireRemoveLockEx(ptr ptr str long long)
 @ stdcall IoAcquireVpbSpinLock(ptr)
 @ extern IoAdapterObjectType
-@ stdcall IoAllocateAdapterChannel(ptr ptr long ptr ptr)
+@ stdcall IoAllocateAdapterChannel(ptr ptr long ptr ptr) IopAllocateAdapterChannel
 @ stdcall IoAllocateController(ptr ptr ptr ptr)
 @ stdcall IoAllocateDriverObjectExtension(ptr ptr long ptr)
 @ stdcall IoAllocateErrorLogEntry(ptr long)
@@ -2282,7 +2282,7 @@
 @ stub -arch=win64 ExUnregisterExtension
 @ stdcall -arch=win64 ExUnsubscribeWnfStateChange(ptr)
 @ stub -arch=win64 ExUpdateLicenseData
-@ stub -arch=win64 ExfTryAcquirePushLockShared
+@ fastcall -arch=win64 ExfTryAcquirePushLockShared(ptr)
 @ cdecl FirstEntrySList(ptr)
 @ stdcall FsRtlAcknowledgeEcp(ptr)
 @ stub -arch=win64 FsRtlAcquireEofLock

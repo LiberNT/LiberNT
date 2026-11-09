@@ -235,7 +235,11 @@ SepInitializationPhase0(VOID)
 
     ExInitializeResource(&SepSubjectContextLock);
 
-    SepInitializeTokenImplementation();
+    if (!SepInitializeTokenImplementation())
+    {
+        DPRINT1("SE: could not make the type a token is\n");
+        return FALSE;
+    }
 
     if (!SepRmInitializeSessions())
     {
@@ -252,6 +256,9 @@ SepInitializationPhase0(VOID)
     }
 
     ObInitializeFastReference(&PsGetCurrentProcess()->Token, SystemToken);
+
+    /* The process manager hands this same token to the first process it builds */
+    PspBootAccessToken = SystemToken;
 
     SeAnonymousLogonToken = SepCreateSystemAnonymousLogonToken();
     SeAnonymousLogonTokenNoEveryone =

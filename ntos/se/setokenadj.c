@@ -343,14 +343,14 @@ NtAdjustPrivilegesToken(
             if (!Changes[Entry].Remove || Changes[Entry].Index != Index - 1)
                 continue;
 
-            SepRemovePrivilegeToken(Token, Index - 1);
+            SepDropTokenPrivilege(Token, Index - 1);
             break;
         }
     }
 
     if (ChangeCount != 0)
     {
-        SepUpdatePrivilegeFlagsToken(Token);
+        SepNoteTokenPrivilegeFlags(Token);
 
         /* Anything that captured this token's identity has to see it changed */
         ExAllocateLocallyUniqueId(&Token->ModifiedId);
@@ -647,7 +647,7 @@ NtAdjustGroupsToken(
     if (ChangeCount != 0)
     {
         /* Which groups are on decides what the token may traverse */
-        SepUpdatePrivilegeFlagsToken(Token);
+        SepNoteTokenPrivilegeFlags(Token);
         ExAllocateLocallyUniqueId(&Token->ModifiedId);
     }
 
