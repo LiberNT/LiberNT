@@ -1,0 +1,44 @@
+Source: Microsoft Fluent UI System Icons
+Repository: https://github.com/microsoft/fluentui-system-icons
+Revision: 4d685f77b2cb8f3f412a74ec8d920c8c91149528
+License: MIT (see LICENSE)
+
+Files used, copied unmodified and rasterized by ../render-icons.py:
+- assets/Document/SVG/ic_fluent_document_16_regular.svg
+- assets/Document/SVG/ic_fluent_document_20_regular.svg
+- assets/Document/SVG/ic_fluent_document_24_regular.svg
+- assets/Document/SVG/ic_fluent_document_28_regular.svg
+- assets/Document/SVG/ic_fluent_document_32_regular.svg
+- assets/Document/SVG/ic_fluent_document_48_regular.svg
+- assets/Folder/SVG/ic_fluent_folder_16_regular.svg
+- assets/Folder/SVG/ic_fluent_folder_20_regular.svg
+- assets/Folder/SVG/ic_fluent_folder_24_regular.svg
+- assets/Folder/SVG/ic_fluent_folder_28_regular.svg
+- assets/Folder/SVG/ic_fluent_folder_32_regular.svg
+- assets/Folder/SVG/ic_fluent_folder_48_regular.svg
+- assets/Folder Zip/SVG/ic_fluent_folder_zip_16_regular.svg
+- assets/Folder Zip/SVG/ic_fluent_folder_zip_20_regular.svg
+- assets/Folder Zip/SVG/ic_fluent_folder_zip_24_regular.svg
+- assets/Plug Disconnected/SVG/ic_fluent_plug_disconnected_16_regular.svg
+- assets/Plug Disconnected/SVG/ic_fluent_plug_disconnected_20_regular.svg
+- assets/Plug Disconnected/SVG/ic_fluent_plug_disconnected_24_regular.svg
+- assets/Plug Disconnected/SVG/ic_fluent_plug_disconnected_28_regular.svg
+- assets/Plug Disconnected/SVG/ic_fluent_plug_disconnected_48_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_16_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_20_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_24_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_28_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_32_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_48_regular.svg
+- assets/Shield/SVG/ic_fluent_shield_16_regular.svg
+- assets/Shield/SVG/ic_fluent_shield_20_regular.svg
+- assets/Shield/SVG/ic_fluent_shield_24_regular.svg
+- assets/Shield/SVG/ic_fluent_shield_28_regular.svg
+- assets/Shield/SVG/ic_fluent_shield_32_regular.svg
+- assets/Shield/SVG/ic_fluent_shield_48_regular.svg
+- assets/Shield Checkmark/SVG/ic_fluent_shield_checkmark_16_regular.svg
+- assets/Shield Checkmark/SVG/ic_fluent_shield_checkmark_20_regular.svg
+- assets/Shield Checkmark/SVG/ic_fluent_shield_checkmark_24_regular.svg
+- assets/Shield Checkmark/SVG/ic_fluent_shield_checkmark_28_regular.svg
+- assets/Shield Checkmark/SVG/ic_fluent_shield_checkmark_32_regular.svg
+- assets/Shield Checkmark/SVG/ic_fluent_shield_checkmark_48_regular.svg

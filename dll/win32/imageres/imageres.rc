@@ -1,0 +1,20 @@
+/*
+ * PROJECT:     LiberNT Image Resources
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Icons that applications load from imageres.dll by resource ID
+ * COPYRIGHT:   Copyright 2026 LuRy <lury@lury.cz>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION "Windows Image Resource"
+#define REACTOS_STR_INTERNAL_NAME "imageres"
+#define REACTOS_STR_ORIGINAL_FILENAME "imageres.dll"
+#include <reactos/version.rc>
+
+2 ICON "res/2.ico"
+3 ICON "res/3.ico"
+31 ICON "res/31.ico"
+106 ICON "res/106.ico"
+114 ICON "res/114.ico"
+174 ICON "res/174.ico"
+1028 ICON "res/1028.ico"
