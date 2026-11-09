@@ -220,7 +220,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obcallback.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obdevmap.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obdirectory.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/obhandle.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/obhandles.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obstartup.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/oblifetime.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsymlink.c
