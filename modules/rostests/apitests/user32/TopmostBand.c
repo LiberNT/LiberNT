@@ -201,6 +201,67 @@ Test_BandOrderAfterActivation(void)
     DestroyWindow(hTop);
 }
 
+static BOOL CALLBACK
+FindImeWindowProc(_In_ HWND hwnd, _In_ LPARAM lParam)
+{
+    WCHAR szClass[16];
+
+    if (GetClassNameW(hwnd, szClass, _countof(szClass)) && !lstrcmpW(szClass, L"IME"))
+    {
+        *(HWND *)lParam = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static DWORD WINAPI
+DefaultImeOfTopmostOwnerThread(_In_ LPVOID Param)
+{
+    HWND hTop = (HWND)Param, hOwner, hIme = NULL;
+
+    hOwner = CreateWindowExW(WS_EX_TOPMOST, s_ClassName, L"TopmostBandTest", WS_POPUP,
+                             40, 40, 120, 90, NULL, NULL, GetModuleHandleW(NULL), NULL);
+    ok(hOwner != NULL, "creation failed\n");
+    EnumThreadWindows(GetCurrentThreadId(), FindImeWindowProc, (LPARAM)&hIme);
+    if (!hIme)
+    {
+        skip("no default IME window\n");
+    }
+    else
+    {
+        trace("default IME z=%d topmost %d, owner z=%d, other topmost z=%d\n",
+              ZIndexOf(hIme), IsTopmost(hIme), ZIndexOf(hOwner), ZIndexOf(hTop));
+        ok(IsTopmost(hIme) || ZIndexOf(hIme) > ZIndexOf(hTop),
+           "default IME window %p is not topmost but above topmost %p\n", hIme, hTop);
+    }
+    DestroyWindow(hOwner);
+    return 0;
+}
+
+static void
+Test_DefaultImeOfTopmostOwner(void)
+{
+    HWND hTop;
+    HANDLE hThread;
+
+    hTop = CreateTestWindow(WS_EX_TOPMOST, NULL, 0);
+    ok(hTop != NULL, "creation failed\n");
+    hThread = CreateThread(NULL, 0, DefaultImeOfTopmostOwnerThread, hTop, 0, NULL);
+    ok(hThread != NULL, "CreateThread failed\n");
+    if (hThread)
+    {
+        MSG msg;
+
+        while (MsgWaitForMultipleObjects(1, &hThread, FALSE, INFINITE, QS_ALLINPUT) != WAIT_OBJECT_0)
+        {
+            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+                DispatchMessageW(&msg);
+        }
+        CloseHandle(hThread);
+    }
+    DestroyWindow(hTop);
+}
+
 START_TEST(TopmostBand)
 {
     WNDCLASSW wc;
@@ -216,6 +277,7 @@ START_TEST(TopmostBand)
     Test_TopmostToggle();
     Test_OwnedOfTopmostOwner();
     Test_BandOrderAfterActivation();
+    Test_DefaultImeOfTopmostOwner();
 
     UnregisterClassW(s_ClassName, GetModuleHandleW(NULL));
 }
