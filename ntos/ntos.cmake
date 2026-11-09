@@ -273,7 +273,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/rtl/unicode.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/wddm.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seaccess.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/accesschk.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/seaccesschk.c
     ${REACTOS_SOURCE_DIR}/ntos/se/acl.c
     ${REACTOS_SOURCE_DIR}/ntos/se/audit.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seclient.c
