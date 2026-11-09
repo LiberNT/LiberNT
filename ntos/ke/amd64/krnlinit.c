@@ -157,8 +157,6 @@ KiSystemStartupBootStack(VOID)
     PKPROCESS Process = Thread->ApcState.Process;
     PVOID KernelStack = (PVOID)KeLoaderBlock->KernelStack;
 
-    KdpStageSet(Prcb->Number, KDP_STAGE_AP_ENTRY);
-
     /* Set Node Data */
     Prcb->ParentNode = KeNodeBlock[0];
     Prcb->ParentNode->ProcessorMask |= Prcb->SetMember;
@@ -215,7 +213,6 @@ KiSystemStartupBootStack(VOID)
     /* The mailbox only says "exists"; it does not say "can take an IPI" */
     KfRaiseIrql(HIGH_LEVEL);
     KeMemoryBarrier();
-    KdpStageSet(Prcb->Number, KDP_STAGE_AP_MAILBOX_RELEASE);
     LoaderBlock->Prcb = 0;
 
     /* Set the priority of this thread to 0 */
@@ -225,7 +222,6 @@ KiSystemStartupBootStack(VOID)
     /* Force interrupts enabled and lower IRQL back to DISPATCH_LEVEL */
     _enable();
     KeLowerIrql(DISPATCH_LEVEL);
-    KdpStageSet(Prcb->Number, KDP_STAGE_AP_IRQ_READY);
 
     /* Active means it can answer an IPI: publish after interrupts are enabled */
     if (Prcb->Number != 0)
@@ -235,7 +231,6 @@ KiSystemStartupBootStack(VOID)
             while ((*(volatile KSPIN_LOCK*)&KiFreezeExecutionLock) & 1);
         }
         KeActiveProcessors |= Prcb->SetMember;
-        KdpStageSet(Prcb->Number, KDP_STAGE_AP_ACTIVE);
         InterlockedAnd64((PLONG64)&KiFreezeExecutionLock, 0);
     }
 

@@ -13,9 +13,6 @@
 #define NDEBUG
 #include <debug.h>
 
-/* How long an AP may take to report in before a diagnostic is printed */
-#define AP_START_REPORT_SPINS 20000000ULL
-
 /* 5 s in 100ns units */
 #define AP_START_WAIT_TIME (5 * 10000000ULL)
 
@@ -69,16 +66,6 @@ KeStartAllProcessors(VOID)
     if (KeBootprocSpecified)
         MaximumProcessors = min(MaximumProcessors, KeBootprocSpecified);
 
-    KdpFbPrintString("LiberNT: KeStartAllProcessors entered (ap-fix 6)\r\n");
-    {
-        CHAR Line[96];
-
-        RtlStringCbPrintfA(Line, sizeof(Line),
-                           "LiberNT: APICBASE now = %08I64lx\r\n",
-                           (ULONG64)__readmsr(0x1B));
-        KdpFbPrintString(Line);
-    }
-
     /* Start at 1, the boot processor is already running */
     for (ProcessorCount = 1; ProcessorCount < MaximumProcessors; ++ProcessorCount)
     {
@@ -86,19 +73,7 @@ KeStartAllProcessors(VOID)
         DPCStack = NULL;
         APInfoBase = NULL;
 
-        /* Three allocations precede the "starting CPU n" line */
-        {
-            CHAR Line[96];
-
-            RtlStringCbPrintfA(Line, sizeof(Line),
-                               "LiberNT: CPU %lu step: APINFO alloc\r\n",
-                               ProcessorCount);
-            KdpFbPrintString(Line);
-        }
-
         /* APINFO holds a page aligned IDT and GDT; the pool only promises natural alignment */
-        KdpStageSet(0, KDP_STAGE_ALLOC_BEGIN);
-
         APInfoBase = ExAllocatePoolZero(NonPagedPool,
                                         sizeof(*APInfo) + PAGE_SIZE,
                                         TAG_KERNEL);
@@ -107,29 +82,10 @@ KeStartAllProcessors(VOID)
 
         APInfo = (PAPINFO)ALIGN_UP_BY((ULONG_PTR)APInfoBase, PAGE_SIZE);
         ASSERT(ALIGN_DOWN_POINTER_BY(APInfo, PAGE_SIZE) == APInfo);
-        KdpStageSet(0, KDP_STAGE_ALLOC_END);
-
-        {
-            CHAR Line[96];
-
-            RtlStringCbPrintfA(Line, sizeof(Line),
-                               "LiberNT: CPU %lu step: kernel stack\r\n",
-                               ProcessorCount);
-            KdpFbPrintString(Line);
-        }
 
         KernelStack = MmCreateKernelStack(FALSE, 0);
         if (!KernelStack)
             break;
-
-        {
-            CHAR Line[96];
-
-            RtlStringCbPrintfA(Line, sizeof(Line),
-                               "LiberNT: CPU %lu step: DPC stack\r\n",
-                               ProcessorCount);
-            KdpFbPrintString(Line);
-        }
 
         DPCStack = MmCreateKernelStack(FALSE, 0);
         if (!DPCStack)
@@ -190,43 +146,17 @@ KeStartAllProcessors(VOID)
         KeLoaderBlock->Thread = (ULONG_PTR)&APInfo->Thread;
 
         DPRINT1("KeStartAllProcessors: starting CPU %lu\n", ProcessorCount);
-        {
-            CHAR Line[64];
-
-            RtlStringCbPrintfA(Line, sizeof(Line), "LiberNT: starting CPU %lu\r\n", ProcessorCount);
-            KdpFbPrintString(Line);
-        }
-        KdpStageSet(0, KDP_STAGE_HAL_CALL);
         if (!HalStartNextProcessor(KeLoaderBlock, ProcessorState))
             break;
-        KdpStageSet(0, KDP_STAGE_HAL_RETURN);
 
         /* Bounded: an AP that never reports in used to hang the boot processor */
         {
             ULONGLONG StartTime = KeQueryInterruptTime();
-            ULONG64 Spins = 0, NextReport = AP_START_REPORT_SPINS;
-
-            KdpStageSet(0, KDP_STAGE_WAIT_ENTER);
 
             while (KeLoaderBlock->Prcb != 0)
             {
                 KeMemoryBarrier();
                 YieldProcessor();
-
-                if (++Spins == NextReport)
-                {
-                    CHAR Line[96];
-
-                    DPRINT1("KeStartAllProcessors: CPU %lu has not reported in\n",
-                            ProcessorCount);
-                    RtlStringCbPrintfA(Line,
-                                       sizeof(Line),
-                                       "LiberNT: CPU %lu not reporting (%lu s)\r\n",
-                                       ProcessorCount,
-                                       (ULONG)((KeQueryInterruptTime() - StartTime) / 10000000ULL));
-                    KdpFbPrintString(Line);
-                    NextReport = Spins * 2;
-                }
 
                 if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
                     break;
@@ -234,37 +164,26 @@ KeStartAllProcessors(VOID)
 
             if (KeLoaderBlock->Prcb != 0)
             {
-                CHAR Line[96];
-
                 DPRINT1("KeStartAllProcessors: CPU %lu did not report in, stopping\n",
                         ProcessorCount);
-                RtlStringCbPrintfA(Line,
-                                   sizeof(Line),
-                                   "LiberNT: CPU %lu did not report in\r\n",
-                                   ProcessorCount);
-                KdpFbCheckpoint(Line);
 
                 /* Armed: never free its structures or clear its mailbox */
-                KdpStageSet(0, KDP_STAGE_TIMEOUT);
-                KdpStageDump("stage");
                 Abandoned = TRUE;
                 break;
             }
         }
 
-        KdpStageSet(0, KDP_STAGE_ACK);
         APInfo = NULL;
         APInfoBase = NULL;
         KernelStack = NULL;
         DPCStack = NULL;
     }
 
-
     /* The last allocation belongs to a CPU that did not start */
     ProcessorCount--;
 
     /* Active publishing happens later: wait for the active set, bounded */
-    if (!Abandoned)
+    if (!Abandoned && ProcessorCount != 0)
     {
         ULONGLONG StartTime = KeQueryInterruptTime();
 
@@ -274,7 +193,9 @@ KeStartAllProcessors(VOID)
 
             for (Index = 1; Index <= ProcessorCount; Index++)
             {
-                if (KdpStageQuery(Index) != KDP_STAGE_AP_ACTIVE)
+                PKPRCB Prcb = KiProcessorBlock[Index];
+
+                if (Prcb != NULL && (KeActiveProcessors & Prcb->SetMember) == 0)
                     Pending++;
             }
 
@@ -283,14 +204,8 @@ KeStartAllProcessors(VOID)
 
             if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
             {
-                CHAR Line[96];
-
-                RtlStringCbPrintfA(Line,
-                                   sizeof(Line),
-                                   "LiberNT: %lu AP(s) never became active\r\n",
-                                   Pending);
-                KdpFbCheckpoint(Line);
-                KdpStageDump("active-timeout");
+                DPRINT1("KeStartAllProcessors: %lu processor(s) never became active\n",
+                        Pending);
                 break;
             }
 

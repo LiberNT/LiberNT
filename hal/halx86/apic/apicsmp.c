@@ -18,9 +18,6 @@
 
 extern PPROCESSOR_IDENTITY HalpProcessorIdentity;
 
-/* Progress line on the loader's framebuffer (hal/halx86/smp/amd64/spinup.c) */
-extern VOID HalpApTrace(PCSTR Text);
-
 /* A delivery status bit that survives this many MMIO reads is stuck */
 #define APIC_ICR_POLL_LIMIT 1000000
 
@@ -112,7 +109,7 @@ ApicRequestGlobalInterruptLevel(
         {
             DPRINT1("APIC: ICR still busy before send to LAPIC %lu"
                     " (type %lu, vector %lu), ignoring\n",
-                    DestinationProcessor, MessageType, Vector);
+                    (ULONG)DestinationProcessor, (ULONG)MessageType, (ULONG)Vector);
             Accepted = FALSE;
             break;
         }
@@ -132,7 +129,7 @@ ApicRequestGlobalInterruptLevel(
         {
             DPRINT1("APIC: delivery to LAPIC %lu not accepted"
                     " (type %lu, vector %lu)\n",
-                    DestinationProcessor, MessageType, Vector);
+                    (ULONG)DestinationProcessor, (ULONG)MessageType, (ULONG)Vector);
             Accepted = FALSE;
             break;
         }
@@ -183,30 +180,18 @@ ApicStartApplicationProcessor(
     LapicId = HalpProcessorIdentity[NTProcessorNumber].LapicId;
     StartupVector = (UCHAR)((StartupLoc.LowPart) >> 12);
 
-    /* Name the failing step: a lost INIT and a lost STARTUP look identical */
     if (!ApicRequestGlobalInterruptLevel(LapicId, 0,
             APIC_MT_INIT, APIC_TGM_Level, APIC_DSH_Destination, 1))
     {
         Accepted = FALSE;
-        HalpApTrace("AP: INIT assert NOT accepted");
     }
 
-    KeStallExecutionProcessor(200);
+    KeStallExecutionProcessor(10000);
 
     if (!ApicRequestGlobalInterruptLevel(LapicId, 0,
             APIC_MT_INIT, APIC_TGM_Level, APIC_DSH_Destination, 0))
     {
         Accepted = FALSE;
-        HalpApTrace("AP: INIT deassert NOT accepted");
-    }
-
-    KeStallExecutionProcessor(10000);
-
-    if (!ApicRequestGlobalInterrupt(LapicId, StartupVector,
-            APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination))
-    {
-        Accepted = FALSE;
-        HalpApTrace("AP: first STARTUP NOT accepted");
     }
 
     KeStallExecutionProcessor(200);
@@ -215,11 +200,15 @@ ApicStartApplicationProcessor(
             APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination))
     {
         Accepted = FALSE;
-        HalpApTrace("AP: second STARTUP NOT accepted");
     }
 
-    if (Accepted)
-        HalpApTrace("AP: INIT+2 STARTUP accepted");
+    KeStallExecutionProcessor(200);
+
+    if (!ApicRequestGlobalInterrupt(LapicId, StartupVector,
+            APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination))
+    {
+        Accepted = FALSE;
+    }
 
     return Accepted;
 }
