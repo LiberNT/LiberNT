@@ -93,6 +93,10 @@ STRINGTABLE
 
     IDS_ERR_INSERTDISK "Please insert the disk: [2]"
     IDS_ERR_CABNOTFOUND "Source file not found{{(cabinet)}}: [2]. Verify that the file exists and that you can access it."
+#ifdef __REACTOS__
+    IDS_ERR_RESTARTSUSPENDED "Configuring [2] cannot be completed until you restart your system. To restart now and resume configuration click Yes, or click No to stop this configuration."
+    IDS_ERR_RESTARTREQUIRED "For the configuration changes made to [2] to take effect you must restart your system. To restart now click Yes, or click No if you plan to manually restart at a later time."
+#endif
 }
 
 /* Standard action description strings */
