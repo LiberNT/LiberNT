@@ -56,10 +56,11 @@ void do_InitialDesktop_child(int i)
     HDESK hdesktop;
     HWINSTA hwinsta;
     WCHAR buffer[100];
-    DWORD size;
+    DWORD size, session = 0;
     BOOL ret;
 
-    if (i == 1 && IsLocalSystem())
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    if (i == 1 && IsLocalSystem() && session == 0)
         TestResults[i].ExpectedWinsta = L"Service-0x0-3e7$";
 
     if (TestResults[i].ExpectedWinsta == NULL)

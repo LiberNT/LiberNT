@@ -557,11 +557,13 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
  * - Rules for the choice of the default window station, when none is specified
  *   in the desktop path:
  *
- *   1. By default, a SYSTEM process connects to a non-interactive window
- *      station, either the Service-0x0-3e7$ (from the SYSTEM LUID) station,
- *      or one that has been inherited and that is non-interactive.
+ *   1. By default, a SYSTEM process in session 0 connects to a non-interactive
+ *      window station, either the Service-0x0-3e7$ (from the SYSTEM LUID)
+ *      station, or one that has been inherited and that is non-interactive.
  *      Only when the interactive window station WinSta0 is specified that
  *      the process can connect to it (e.g. the case of interactive services).
+ *      In the other sessions, which have no services, a SYSTEM process
+ *      connects to WinSta0 by default.
  *
  *   2. An interactive process, i.e. a process whose LUID is the same as the
  *      one assigned to WinSta0 by Winlogon on user logon, connects by default
@@ -1008,7 +1010,9 @@ IntResolveDesktop(
 
             // TODO: Check also that we compare wrt. window station WinSta0
             // which is the only one that can be interactive on the system.
-            if (((!bUseDefaultWinSta || bInherit) && RtlEqualLuid(&ProcessLuid, &SystemLuid)) ||
+            /* Outside session 0 a SYSTEM process uses WinSta0 by default, like on Windows */
+            if ((RtlEqualLuid(&ProcessLuid, &SystemLuid) &&
+                 (!bUseDefaultWinSta || bInherit || PsGetProcessSessionId(Process) != 0)) ||
                  RtlEqualLuid(&ProcessLuid, &WinStaObject->luidUser))
             {
                 /* We are interactive on this window station */
