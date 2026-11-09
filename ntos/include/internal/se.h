@@ -947,12 +947,12 @@ SeReleaseObjectTypeList(
 NTSTATUS
 NTAPI
 SeCreateAccessStateEx(
-    _In_ PETHREAD Thread,
+    _In_opt_ PETHREAD Thread,
     _In_ PEPROCESS Process,
-    _In_ OUT PACCESS_STATE AccessState,
+    _Inout_ PACCESS_STATE AccessState,
     _In_ PAUX_ACCESS_DATA AuxData,
     _In_ ACCESS_MASK Access,
-    _In_ PGENERIC_MAPPING GenericMapping);
+    _In_opt_ PGENERIC_MAPPING GenericMapping);
 
 NTSTATUS
 NTAPI
