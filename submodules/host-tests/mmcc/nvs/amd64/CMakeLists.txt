@@ -32,6 +32,15 @@ endforeach()
 target_compile_options(mm_amd64_pte_asan PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
 target_link_options(mm_amd64_pte_asan PRIVATE -fsanitize=address,undefined)
 
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mm_amd64.tlb_nmi_reentrancy
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tlb-nmi-reentrancy-test.py
+                    --root ${MMCC_KERNEL_ROOT}/.. --cc ${CMAKE_C_COMPILER})
+    endif()
+endif()
+
 find_package(Threads REQUIRED)
 foreach(TARGET mm_amd64_tlb mm_amd64_tlb_asan mm_amd64_tlb_tsan)
     add_executable(${TARGET} t_tlb.c ${MMCC_KERNEL_ROOT}/mm/arch/amd64/tlb.c)

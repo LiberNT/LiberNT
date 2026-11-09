@@ -18,6 +18,19 @@
 /* Freeze data */
 KIRQL KiOldIrql;
 ULONG KiFreezeFlag;
+static volatile LONG KiFreezeFailure;
+
+VOID
+KiSetFreezeFailure(VOID)
+{
+    InterlockedExchange(&KiFreezeFailure, TRUE);
+}
+
+BOOLEAN
+KiHasFreezeFailure(VOID)
+{
+    return InterlockedCompareExchange(&KiFreezeFailure, FALSE, FALSE) != FALSE;
+}
 
 /* FUNCTIONS ******************************************************************/
 
@@ -64,9 +77,16 @@ VOID
 NTAPI
 KeThawExecution(IN BOOLEAN Enable)
 {
+    if (KiHasFreezeFailure())
+    {
+        if (!KiIsBugCheckEntryOwner(KeGetCurrentPrcb()))
+            for (;;) HalHaltSystem();
+        return;
+    }
 #ifdef CONFIG_SMP
     /* Architecture specific thaw code */
     KxThawExecution();
+    if (KiHasFreezeFailure()) return;
 #endif
 
     /* Clear the freeze flag */

@@ -149,6 +149,10 @@ extern USHORT KeProcessorRevision;
 extern ULONG64 KeFeatureBits;
 extern KAFFINITY KeActiveProcessors;
 extern ULONG KeBugCheckActive;
+BOOLEAN KiClaimBugCheckEntry(PKPRCB Prcb);
+BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb);
+VOID KiSetFreezeFailure(VOID);
+BOOLEAN KiHasFreezeFailure(VOID);
 extern PKPRCB KiProcessorBlock[];
 #ifdef KI_CORE_PARKING
 extern KSCHEDULER_SUBNODE KiNode0SubNode;

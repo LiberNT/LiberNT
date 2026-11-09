@@ -244,9 +244,14 @@ KdpAcquireLock(
     /* Acquire the spinlock without waiting at raised IRQL */
     while (TRUE)
     {
+        if (KiHasFreezeFailure())
+            for (;;) HalHaltSystem();
+
         /* Loop until the spinlock becomes available */
         while (!KeTestSpinLock(SpinLock))
         {
+            if (KiHasFreezeFailure())
+                for (;;) HalHaltSystem();
             /* During a bugcheck the other processors are frozen and can never
              * release a lock they hold. Break the lock after a bounded spin so
              * the bugcheck path can keep printing and write the crash dump. */
@@ -575,6 +580,7 @@ KdpCommandString(IN PSTRING NameString,
 
     /* Enter the debugger */
     Enable = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure()) return;
 
     /* Save the CPU Control State and save the context */
     KiSaveProcessorControlState(&Prcb->ProcessorState);
@@ -619,6 +625,7 @@ KdpSymbol(IN PSTRING DllPath,
 
     /* Enter the debugger */
     Enable = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure()) return;
 
     /* Save the CPU Control State and save the context */
     KiSaveProcessorControlState(&Prcb->ProcessorState);
@@ -735,6 +742,7 @@ KdpPrompt(
 
     /* Enter the debugger */
     Enable = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure()) return 0;
 
     /* Enter prompt loop */
     do

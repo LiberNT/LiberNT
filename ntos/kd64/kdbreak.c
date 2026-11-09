@@ -124,6 +124,7 @@ KdSetOwedBreakpoints(VOID)
 
     /* Enter the debugger */
     Enable = KdEnterDebugger(NULL, NULL);
+    if (KiHasFreezeFailure()) return;
 
     /*
      * Suppose we succeed in setting all the breakpoints.
