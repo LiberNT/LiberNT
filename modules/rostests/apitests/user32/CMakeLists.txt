@@ -135,6 +135,7 @@ list(APPEND SOURCE
     WindowBand.c
     WindowStationErrors.c
     WindowStationSecurity.c
+    WindowPosInsertAfter.c
     WndProc.c
     wsprintf.c)
 
