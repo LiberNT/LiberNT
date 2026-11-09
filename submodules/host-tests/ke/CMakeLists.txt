@@ -13,6 +13,16 @@ add_test(NAME ke.xstate_layout COMMAND ke_xstate_layout)
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME ke.time_adjustment COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/time-adjustment-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ke.timer_expired_list COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/timer-expired-list-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ke.timer_insertion COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/timer-insertion-test.py
+            --source ${REACTOS_HOST_SOURCE_ROOT}/ntos/include/internal/ke_x.h --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ke.timer_setter COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/timer-setter-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ke.wait_timer_cleanup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/wait-timer-cleanup-test.py
+            --source ${REACTOS_HOST_SOURCE_ROOT}/ntos/ke/wait.c --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.amd64_interrupt COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-interrupt-test.py
             --source ${REACTOS_HOST_SOURCE_ROOT}/ntos/ke/amd64/interrupt.c --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.amd64_smp COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-smp-test.py

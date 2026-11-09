@@ -1155,6 +1155,20 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
 #endif
 }
 
+FORCEINLINE
+VOID
+KiAcquireTimerAdjustmentLock(VOID)
+{
+    KeAcquireSpinLockAtDpcLevel(&KiTimerAdjustmentLock);
+}
+
+FORCEINLINE
+VOID
+KiReleaseTimerAdjustmentLock(VOID)
+{
+    KeReleaseSpinLockFromDpcLevel(&KiTimerAdjustmentLock);
+}
+
 //
 // Called by Wait and Queue code to insert a timer for dispatching.
 // Also called by KeSetTimerEx to insert a timer from the caller.
@@ -1169,6 +1183,7 @@ KxInsertTimer(IN PKTIMER Timer,
 
     /* The caller owns the timer object; acquire its table lock second */
     LockQueue = KiAcquireTimerLock(Hand);
+    KiReleaseTimerAdjustmentLock();
 
     if (!Timer->Header.Inserted)
     {
@@ -1186,36 +1201,6 @@ KxInsertTimer(IN PKTIMER Timer,
     else
     {
         /* The timer is table-owned; release both locks */
-        KiReleaseTimerLock(LockQueue);
-        KiReleaseDispatcherObject(&Timer->Header);
-    }
-}
-
-FORCEINLINE
-VOID
-KxInsertTimerNoRelease(IN PKTIMER Timer,
-                       IN ULONG Hand)
-{
-    PKSPIN_LOCK_QUEUE LockQueue;
-    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
-
-    /* Establish the same object-to-table lock order as timer setters */
-    KiAcquireDispatcherObject(&Timer->Header);
-    LockQueue = KiAcquireTimerLock(Hand);
-
-    if (!Timer->Header.Inserted)
-    {
-        KiReleaseTimerLock(LockQueue);
-        KiReleaseDispatcherObject(&Timer->Header);
-        return;
-    }
-
-    if (KiInsertTimerTable(Timer, Hand))
-    {
-        KiCompleteTimer(Timer, LockQueue);
-    }
-    else
-    {
         KiReleaseTimerLock(LockQueue);
         KiReleaseDispatcherObject(&Timer->Header);
     }
@@ -1279,14 +1264,18 @@ KiComputeDueTime(IN PKTIMER Timer,
 // Also called by timer code when canceling an inserted timer.
 // Removes a timer from it's tree.
 //
+
 FORCEINLINE
 BOOLEAN
 KxRemoveTreeTimer(IN PKTIMER Timer)
 {
-    ULONG Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
+    ULONG Hand;
     PKSPIN_LOCK_QUEUE LockQueue;
     PKTIMER_TABLE_ENTRY TimerEntry;
     BOOLEAN Removed = FALSE;
+
+    KiAcquireTimerAdjustmentLock();
+    Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
 
     /* Acquire timer lock */
     LockQueue = KiAcquireTimerLock(Hand);
@@ -1322,6 +1311,7 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
 
     /* Release the timer lock */
     KiReleaseTimerLock(LockQueue);
+    KiReleaseTimerAdjustmentLock();
     return Removed;
 }
 
@@ -1388,6 +1378,60 @@ KxSetTimerForThreadWait(IN PKTIMER Timer,
     /* Calculate the timer handle */
     *Hand = KiComputeTimerTableIndex(DueTime);
     Timer->Header.Hand = (UCHAR)*Hand;
+}
+
+FORCEINLINE
+BOOLEAN
+KxIsThreadWaitTimerExpired(IN PKTIMER Timer,
+                           IN PLARGE_INTEGER Interval,
+                           IN KPROCESSOR_MODE WaitMode,
+                           IN OUT PULONG Hand)
+{
+    BOOLEAN Absolute = (Interval->QuadPart >= 0);
+    BOOLEAN Expired;
+
+    if (Absolute)
+    {
+        KiAcquireTimerAdjustmentLock();
+        KxSetTimerForThreadWait(Timer, *Interval, WaitMode, Hand);
+    }
+
+    Expired = (KeQueryInterruptTime() >= Timer->DueTime.QuadPart);
+    if (Absolute) KiReleaseTimerAdjustmentLock();
+    return Expired;
+}
+FORCEINLINE
+VOID
+KxInsertTimerNoRelease(IN PKTIMER Timer,
+                       IN ULONG Hand,
+                       IN PLARGE_INTEGER Interval,
+                       IN KPROCESSOR_MODE WaitMode)
+{
+    PKSPIN_LOCK_QUEUE LockQueue;
+    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
+
+    KiAcquireDispatcherObject(&Timer->Header);
+    KiAcquireTimerAdjustmentLock();
+    if (!Timer->Header.Inserted)
+    {
+        KiReleaseTimerAdjustmentLock();
+        KiReleaseDispatcherObject(&Timer->Header);
+        return;
+    }
+
+    if (Interval->QuadPart >= 0)
+        KxSetTimerForThreadWait(Timer, *Interval, WaitMode, &Hand);
+
+    LockQueue = KiAcquireTimerLock(Hand);
+    KiReleaseTimerAdjustmentLock();
+
+    if (KiInsertTimerTable(Timer, Hand))
+        KiCompleteTimer(Timer, LockQueue);
+    else
+    {
+        KiReleaseTimerLock(LockQueue);
+        KiReleaseDispatcherObject(&Timer->Header);
+    }
 }
 
 //

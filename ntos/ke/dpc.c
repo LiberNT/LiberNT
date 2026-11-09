@@ -577,115 +577,34 @@ FASTCALL
 KiTimerListExpire(IN PLIST_ENTRY ExpiredListHead,
                   IN KIRQL OldIrql)
 {
-    ULARGE_INTEGER SystemTime;
-    LARGE_INTEGER Interval;
-    LONG i;
-    ULONG DpcCalls = 0;
-    PKTIMER Timer;
-    PKDPC TimerDpc;
-    ULONG Period;
-    DPC_QUEUE_ENTRY DpcEntry[MAX_TIMER_DPCS];
     PKPRCB Prcb = KeGetCurrentPrcb();
+    BOOLEAN RequestInterrupt = FALSE;
 
-    /* Query system */
-    KeQuerySystemTime((PLARGE_INTEGER)&SystemTime);
-
-    /* Loop expired list */
-    while (ExpiredListHead->Flink != ExpiredListHead)
+    while (!IsListEmpty(ExpiredListHead))
     {
-        /* Get the current timer */
-        Timer = CONTAINING_RECORD(ExpiredListHead->Flink, KTIMER, TimerListEntry);
+        PKTIMER Timer = CONTAINING_RECORD(ExpiredListHead->Flink, KTIMER, TimerListEntry);
 
-        /* Remove it */
+        if (!KiTryAcquireDispatcherObject(&Timer->Header))
+        {
+            KiReleaseTimerAdjustmentLock();
+            YieldProcessor();
+            KiAcquireTimerAdjustmentLock();
+            continue;
+        }
+
         RemoveEntryList(&Timer->TimerListEntry);
-
-        /* Not inserted */
+        Timer->TimerListEntry.Flink = NULL;
+        Timer->TimerListEntry.Blink = NULL;
         Timer->Header.Inserted = FALSE;
-
-        /* Get the DPC and period */
-        TimerDpc = Timer->Dpc;
-        Period = Timer->Period;
-
-        /* Signal it and wake waiters under the timer object lock */
-        KiAcquireDispatcherObject(&Timer->Header);
-        Timer->Header.SignalState = 1;
-        if (!IsListEmpty(&Timer->Header.WaitListHead))
-        {
-            KiWaitTest(Timer, IO_NO_INCREMENT);
-        }
+        KiReleaseTimerAdjustmentLock();
+        if (KiSignalTimer(Timer)) RequestInterrupt = TRUE;
         KiReleaseDispatcherObject(&Timer->Header);
-
-        /* Check if we have a period */
-        if (Period)
-        {
-            /* Calculate the interval and insert the timer */
-            Interval.QuadPart = Int32x32To64(Period, -10000);
-            while (!KiInsertTreeTimer(Timer, Interval));
-        }
-
-        /* Check if we have a DPC */
-        if (TimerDpc)
-        {
-#ifdef CONFIG_SMP
-            /*
-             * If the DPC is targeted to another processor,
-             * then insert it into that processor's DPC queue
-             * instead of delivering it now.
-             * If the DPC is a threaded DPC, and the current CPU
-             * has threaded DPCs enabled (KiExecuteDpc is actively parsing DPCs),
-             * then also insert it into the DPC queue for threaded delivery,
-             * instead of doing it here.
-             */
-            if (((TimerDpc->Number >= KI_DPC_TARGET_PROCESSOR_OFFSET) &&
-                ((TimerDpc->Number - KI_DPC_TARGET_PROCESSOR_OFFSET) != Prcb->Number)) ||
-                ((TimerDpc->Type == ThreadedDpcObject) && (Prcb->ThreadDpcEnable)))
-            {
-                /* Queue it */
-                KeInsertQueueDpc(TimerDpc,
-                                 UlongToPtr(SystemTime.LowPart),
-                                 UlongToPtr(SystemTime.HighPart));
-            }
-            else
-#endif
-            {
-                /* Setup the DPC Entry */
-                DpcEntry[DpcCalls].Dpc = TimerDpc;
-                DpcEntry[DpcCalls].Routine = TimerDpc->DeferredRoutine;
-                DpcEntry[DpcCalls].Context = TimerDpc->DeferredContext;
-                DpcCalls++;
-                ASSERT(DpcCalls < MAX_TIMER_DPCS);
-            }
-        }
+        KiAcquireTimerAdjustmentLock();
     }
 
-    /* Check if we still have DPC entries */
-    if (DpcCalls)
-    {
-        /* Exit the dispatcher while doing DPCs */
-        KiExitDispatcher(DISPATCH_LEVEL);
-
-        /* Start looping all DPC Entries */
-        for (i = 0; DpcCalls; DpcCalls--, i++)
-        {
-#if DBG
-            /* Clear DPC Time */
-            KiResetDebugDpcTime(Prcb);
-#endif
-
-            /* Call the DPC */
-            KiBeginDpcExecution(Prcb, DpcEntry[i].Dpc);
-            DpcEntry[i].Routine(DpcEntry[i].Dpc, DpcEntry[i].Context, UlongToPtr(SystemTime.LowPart), UlongToPtr(SystemTime.HighPart));
-            KiEndDpcExecution(Prcb, DpcEntry[i].Dpc);
-        }
-
-        /* Lower IRQL */
-        KeLowerIrql(OldIrql);
-    }
-    else
-    {
-        /* Exit the dispatcher */
-        KiExitDispatcher(OldIrql);
-    }
+    KiReleaseTimerAdjustmentLock();
+    if (RequestInterrupt) KiRequestDispatchInterrupt(Prcb);
+    KiExitDispatcher(OldIrql);
 }
 
 _Requires_lock_not_held_(Prcb->PrcbLock)
