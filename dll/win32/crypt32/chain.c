@@ -2687,8 +2687,12 @@ typedef struct _CERT_CHAIN_PARA_NO_EXTRA_FIELDS {
     CERT_USAGE_MATCH RequestedUsage;
 } CERT_CHAIN_PARA_NO_EXTRA_FIELDS;
 
-static void CRYPT_VerifyChainRevocation(PCERT_CHAIN_CONTEXT chain,
- LPFILETIME pTime, HCERTSTORE hAdditionalStore,
+#ifdef __REACTOS__
+#define CHAIN_DEFAULT_ACCUMULATIVE_URL_TIMEOUT 20000
+#endif
+
+static void CRYPT_VerifyChainRevocation(const CertificateChainEngine *engine,
+ PCERT_CHAIN_CONTEXT chain, LPFILETIME pTime, HCERTSTORE hAdditionalStore,
  const CERT_CHAIN_PARA *pChainPara, DWORD chainFlags)
 {
     DWORD cContext;
@@ -2740,6 +2744,13 @@ static void CRYPT_VerifyChainRevocation(PCERT_CHAIN_CONTEXT chain,
             revocationPara.dwFreshnessTime =
              pChainPara->dwRevocationFreshnessTime;
         }
+#ifdef __REACTOS__
+        /* FIXME: Windows 11 spends 27-28 s on a single unreachable CRL URL of a chain built without a timeout; LiberNT spends the 15 s per-URL default */
+        if (!revocationPara.dwUrlRetrievalTimeout)
+            revocationPara.dwUrlRetrievalTimeout = engine->dwUrlRetrievalTimeout;
+        if (!revocationPara.dwUrlRetrievalTimeout && (chainFlags & CERT_CHAIN_REVOCATION_ACCUMULATIVE_TIMEOUT))
+            revocationPara.dwUrlRetrievalTimeout = CHAIN_DEFAULT_ACCUMULATIVE_URL_TIMEOUT;
+#endif
         for (i = 0, iContext = 0; iContext < cContext && i < chain->cChain; i++)
         {
             for (j = 0; iContext < cContext &&
@@ -2994,7 +3005,7 @@ BOOL WINAPI CertGetCertificateChain(HCERTCHAINENGINE hChainEngine,
         if (!(dwFlags & CERT_CHAIN_RETURN_LOWER_QUALITY_CONTEXTS))
             CRYPT_FreeLowerQualityChains(chain);
         pChain = (PCERT_CHAIN_CONTEXT)chain;
-        CRYPT_VerifyChainRevocation(pChain, pTime, hAdditionalStore,
+        CRYPT_VerifyChainRevocation(engine, pChain, pTime, hAdditionalStore,
          pChainPara, dwFlags);
         CRYPT_CheckUsages(pChain, pChainPara);
         TRACE_(chain)("error status: %08lx\n",
