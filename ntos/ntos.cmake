@@ -222,7 +222,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obdirobj.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obhandle.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obstart.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/oblife.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/oblifetime.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsymlink.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obns.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obnamespace.c
