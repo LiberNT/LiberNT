@@ -820,6 +820,53 @@ TestStrongSignature(BYTE *SignerInfo, DWORD SignerInfoSize, CRYPT_DATA_BLOB *Cou
 
 static
 VOID
+TestHashAlgorithms(BYTE *SignerInfo, DWORD SignerInfoSize)
+{
+    static const struct
+    {
+        LPCSTR Oid;
+        DWORD WrongCertError;
+        DWORD TamperError;
+        BOOL Strong;
+    } Hashes[] =
+    {
+        { szOID_RSA_MD2, NTE_BAD_SIGNATURE, NTE_BAD_SIGNATURE, FALSE },
+        { szOID_RSA_MD4, NTE_BAD_SIGNATURE, NTE_BAD_SIGNATURE, FALSE },
+        { szOID_RSA_MD5, NTE_BAD_SIGNATURE, NTE_BAD_SIGNATURE, FALSE },
+        { szOID_OIWSEC_sha1, NTE_BAD_SIGNATURE, NTE_BAD_SIGNATURE, FALSE },
+        { szOID_NIST_sha256, STATUS_INVALID_SIGNATURE, STATUS_INVALID_SIGNATURE, TRUE },
+        /* these signatures exceed the modulus of the wrong certificate */
+        { szOID_NIST_sha384, STATUS_INVALID_PARAMETER, STATUS_INVALID_SIGNATURE, TRUE },
+        { szOID_NIST_sha512, STATUS_INVALID_PARAMETER, STATUS_INVALID_SIGNATURE, TRUE },
+    };
+    CMSG_SIGNER_ENCODE_INFO Countersigner;
+    CRYPT_DATA_BLOB Signature;
+    DWORD i;
+
+    for (i = 0; i < RTL_NUMBER_OF(Hashes); i++)
+    {
+        winetest_push_context("%s", Hashes[i].Oid);
+        InitSigner(&Countersigner, Tsa, TsaProv, Hashes[i].Oid);
+        ok(GetCountersignature(SignerInfo, SignerInfoSize, &Countersigner, &Signature), "Cannot countersign\n");
+        if (Signature.pbData)
+        {
+            CheckVerify(SignerInfo, SignerInfoSize, Signature.pbData, Signature.cbData, CMSG_VERIFY_SIGNER_CERT, (void *)Tsa,
+                        0, TRUE, ERROR_SUCCESS, __LINE__);
+            CheckVerify(SignerInfo, SignerInfoSize, Signature.pbData, Signature.cbData, CMSG_VERIFY_SIGNER_CERT,
+                        (void *)Signer, 0, FALSE, Hashes[i].WrongCertError, __LINE__);
+            CheckStrong(SignerInfo, SignerInfoSize, &Signature, Tsa, FALSE, Hashes[i].Strong,
+                        Hashes[i].Strong ? ERROR_SUCCESS : NTE_BAD_ALGID, __LINE__);
+            Signature.pbData[Signature.cbData - 1] ^= 1;
+            CheckVerify(SignerInfo, SignerInfoSize, Signature.pbData, Signature.cbData, CMSG_VERIFY_SIGNER_CERT, (void *)Tsa,
+                        0, FALSE, Hashes[i].TamperError, __LINE__);
+            HeapFree(GetProcessHeap(), 0, Signature.pbData);
+        }
+        winetest_pop_context();
+    }
+}
+
+static
+VOID
 TestMissingAttributes(BYTE *SignerInfo, DWORD SignerInfoSize, CRYPT_DATA_BLOB *Countersignature)
 {
     CMSG_SIGNER_INFO *Info;
@@ -1031,6 +1078,7 @@ START_TEST(Countersign)
     {
         TestVerify(SignerInfo, SignerInfoSize, &Countersignature);
         TestStrongSignature(SignerInfo, SignerInfoSize, &Countersignature);
+        TestHashAlgorithms(SignerInfo, SignerInfoSize);
         TestMissingAttributes(SignerInfo, SignerInfoSize, &Countersignature);
     }
     TestCountersign(Msg, &Countersignature);
