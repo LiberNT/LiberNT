@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #define NDEBUG
 #include <debug.h>
+#include <aux_klib.h>
 
 /* GLOBALS ********************************************************************/
 
@@ -630,6 +631,11 @@ ExpQueryModuleInformation(
     return ExpQueryModuleInformationWorker(Modules, Length, ReturnLength);
 }
 
+/*
+ * The loaded modules as a driver asks for them: one entry per module, either
+ * the base alone or the base with the size and the path it was loaded from.
+ * A caller with no buffer is told how much room the whole answer needs.
+ */
 NTSTATUS
 NTAPI
 RtlQueryModuleInformation(
@@ -637,19 +643,89 @@ RtlQueryModuleInformation(
     _In_ ULONG EntrySize,
     _Out_opt_ PVOID Buffer)
 {
-    ULONG Needed = 0;
-    NTSTATUS Status;
+    PAUX_MODULE_EXTENDED_INFO Entry;
+    PLDR_DATA_TABLE_ENTRY Module;
+    PLIST_ENTRY ListEntry;
+    ANSI_STRING Ansi;
+    ULONG Count = 0;
+    ULONG Needed;
+    ULONG Index = 0;
 
-    if (EntrySize != sizeof(RTL_PROCESS_MODULE_INFORMATION))
+    PAGED_CODE();
+
+    if ((EntrySize != sizeof(AUX_MODULE_BASIC_INFO)) &&
+        (EntrySize != sizeof(AUX_MODULE_EXTENDED_INFO)))
     {
-        return STATUS_INFO_LENGTH_MISMATCH;
+        return STATUS_INVALID_PARAMETER_2;
     }
 
-    Status = ExpQueryModuleInformationWorker(Buffer, *BufferSize, &Needed);
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PsLoadedModuleResource, TRUE);
+
+    for (ListEntry = PsLoadedModuleList.Flink;
+         ListEntry != &PsLoadedModuleList;
+         ListEntry = ListEntry->Flink)
+    {
+        Count++;
+    }
+
+    Needed = Count * EntrySize;
+
+    if (Buffer == NULL)
+    {
+        ExReleaseResourceLite(&PsLoadedModuleResource);
+        KeLeaveCriticalRegion();
+
+        *BufferSize = Needed;
+        return STATUS_SUCCESS;
+    }
+
+    if (*BufferSize < Needed)
+    {
+        ExReleaseResourceLite(&PsLoadedModuleResource);
+        KeLeaveCriticalRegion();
+
+        *BufferSize = Needed;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    for (ListEntry = PsLoadedModuleList.Flink;
+         ListEntry != &PsLoadedModuleList;
+         ListEntry = ListEntry->Flink, Index++)
+    {
+        Module = CONTAINING_RECORD(ListEntry,
+                                   LDR_DATA_TABLE_ENTRY,
+                                   InLoadOrderLinks);
+
+        Entry = (PAUX_MODULE_EXTENDED_INFO)((PUCHAR)Buffer + Index * EntrySize);
+
+        RtlZeroMemory(Entry, EntrySize);
+        Entry->BasicInfo.ImageBase = Module->DllBase;
+
+        if (EntrySize != sizeof(AUX_MODULE_EXTENDED_INFO)) continue;
+
+        Entry->ImageSize = Module->SizeOfImage;
+
+        Ansi.Buffer = Entry->FullPathName;
+        Ansi.Length = 0;
+        Ansi.MaximumLength = (USHORT)sizeof(Entry->FullPathName);
+
+        if (NT_SUCCESS(RtlUnicodeStringToAnsiString(&Ansi,
+                                                    &Module->FullDllName,
+                                                    FALSE)))
+        {
+            PCHAR Separator = strrchr(Entry->FullPathName, '\\');
+
+            Entry->FileNameOffset = (Separator != NULL) ?
+                (USHORT)(Separator - Entry->FullPathName + 1) : 0;
+        }
+    }
+
+    ExReleaseResourceLite(&PsLoadedModuleResource);
+    KeLeaveCriticalRegion();
 
     *BufferSize = Needed;
-
-    return Status;
+    return STATUS_SUCCESS;
 }
 
 ULONG
