@@ -867,6 +867,86 @@ TestHashAlgorithms(BYTE *SignerInfo, DWORD SignerInfoSize)
 
 static
 VOID
+TestSerializedStrongSignature(BYTE *SignerInfo, DWORD SignerInfoSize, CRYPT_DATA_BLOB *Countersignature)
+{
+    static const struct
+    {
+        LPCWSTR Algorithms;
+        LPCWSTR MinBits;
+        DWORD Flags;
+        BOOL Sha256;
+        BOOL Sha1;
+        BOOL WeakKey;
+    } Cases[] =
+    {
+        { L"RSA/SHA256", NULL, 0, TRUE, FALSE, TRUE },
+        { L"RSA/SHA256", L"RSA/2048", 0, TRUE, FALSE, FALSE },
+        { L"RSA/SHA1", NULL, 0, FALSE, TRUE, FALSE },
+        { L"RSA/SHA256", L"RSA/4096", 0, FALSE, FALSE, FALSE },
+        { NULL, NULL, 0, FALSE, FALSE, FALSE },
+        { NULL, L"RSA/2048", 0, FALSE, FALSE, FALSE },
+        { L"RSA/SHA1;RSA/SHA256", NULL, 0, TRUE, TRUE, TRUE },
+        { L"ECDSA/SHA256", NULL, 0, FALSE, FALSE, FALSE },
+        { L"", NULL, 0, FALSE, FALSE, FALSE },
+        { L"garbage", NULL, 0, FALSE, FALSE, FALSE },
+        { L"RSA/SHA256", NULL, CERT_STRONG_SIGN_ENABLE_CRL_CHECK | CERT_STRONG_SIGN_ENABLE_OCSP_CHECK, TRUE, FALSE, TRUE },
+        { L"RSA/SHA256", L"garbage", 0, FALSE, FALSE, FALSE },
+        { L"RSA/SHA256", L"ECDSA/256", 0, FALSE, FALSE, FALSE },
+        { L"rsa/sha256", NULL, 0, TRUE, FALSE, TRUE },
+    };
+    CERT_STRONG_SIGN_SERIALIZED_INFO Info;
+    CERT_STRONG_SIGN_PARA Para = { sizeof(Para), CERT_STRONG_SIGN_SERIALIZED_INFO_CHOICE, { &Info } };
+    CERT_STRONG_SIGN_PARA Bad;
+    CMSG_SIGNER_ENCODE_INFO Countersigner;
+    CRYPT_DATA_BLOB Sha1 = { 0, NULL }, WeakSignature = { 0, NULL };
+    DWORD i;
+
+    InitSigner(&Countersigner, Tsa, TsaProv, szOID_OIWSEC_sha1);
+    GetCountersignature(SignerInfo, SignerInfoSize, &Countersigner, &Sha1);
+    InitSigner(&Countersigner, Weak, WeakProv, szOID_NIST_sha256);
+    GetCountersignature(SignerInfo, SignerInfoSize, &Countersigner, &WeakSignature);
+    for (i = 0; i < RTL_NUMBER_OF(Cases); i++)
+    {
+        winetest_push_context("case %lu", i);
+        Info.dwFlags = Cases[i].Flags;
+        Info.pwszCNGSignHashAlgids = (LPWSTR)Cases[i].Algorithms;
+        Info.pwszCNGPubKeyMinBitLengths = (LPWSTR)Cases[i].MinBits;
+        CheckVerifyEx(SignerInfo, SignerInfoSize, Countersignature->pbData, Countersignature->cbData, CMSG_VERIFY_SIGNER_CERT,
+                      (void *)Tsa, CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG, &Para, Cases[i].Sha256,
+                      Cases[i].Sha256 ? ERROR_SUCCESS : NTE_BAD_ALGID, __LINE__);
+        if (Sha1.pbData)
+            CheckVerifyEx(SignerInfo, SignerInfoSize, Sha1.pbData, Sha1.cbData, CMSG_VERIFY_SIGNER_CERT, (void *)Tsa,
+                          CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG, &Para, Cases[i].Sha1,
+                          Cases[i].Sha1 ? ERROR_SUCCESS : NTE_BAD_ALGID, __LINE__);
+        if (WeakSignature.pbData)
+            CheckVerifyEx(SignerInfo, SignerInfoSize, WeakSignature.pbData, WeakSignature.cbData, CMSG_VERIFY_SIGNER_CERT,
+                          (void *)Weak, CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG, &Para, Cases[i].WeakKey,
+                          Cases[i].WeakKey ? ERROR_SUCCESS : NTE_BAD_ALGID, __LINE__);
+        winetest_pop_context();
+    }
+
+    Bad = Para;
+    Bad.dwInfoChoice = 0;
+    CheckVerifyEx(SignerInfo, SignerInfoSize, Countersignature->pbData, Countersignature->cbData, CMSG_VERIFY_SIGNER_CERT,
+                  (void *)Tsa, CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG, &Bad, FALSE, E_INVALIDARG, __LINE__);
+    Bad.dwInfoChoice = 3;
+    CheckVerifyEx(SignerInfo, SignerInfoSize, Countersignature->pbData, Countersignature->cbData, CMSG_VERIFY_SIGNER_CERT,
+                  (void *)Tsa, CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG, &Bad, FALSE, E_INVALIDARG, __LINE__);
+    Bad.dwInfoChoice = CERT_STRONG_SIGN_OID_INFO_CHOICE;
+    Bad.pszOID = (LPSTR)szOID_CERT_STRONG_SIGN_OS_1;
+    Bad.cbSize = sizeof(Bad) + 8;
+    CheckVerifyEx(SignerInfo, SignerInfoSize, Countersignature->pbData, Countersignature->cbData, CMSG_VERIFY_SIGNER_CERT,
+                  (void *)Tsa, CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG, &Bad, FALSE, E_INVALIDARG, __LINE__);
+    Bad.cbSize = sizeof(Bad);
+    Bad.pszOID = (LPSTR)"1.3.6.1.4.1.311.72.1.2";
+    CheckVerifyEx(SignerInfo, SignerInfoSize, Countersignature->pbData, Countersignature->cbData, CMSG_VERIFY_SIGNER_CERT,
+                  (void *)Tsa, CMSG_VERIFY_COUNTER_SIGN_ENABLE_STRONG_FLAG, &Bad, FALSE, ERROR_NOT_SUPPORTED, __LINE__);
+    HeapFree(GetProcessHeap(), 0, Sha1.pbData);
+    HeapFree(GetProcessHeap(), 0, WeakSignature.pbData);
+}
+
+static
+VOID
 TestMissingAttributes(BYTE *SignerInfo, DWORD SignerInfoSize, CRYPT_DATA_BLOB *Countersignature)
 {
     CMSG_SIGNER_INFO *Info;
@@ -1078,6 +1158,7 @@ START_TEST(Countersign)
     {
         TestVerify(SignerInfo, SignerInfoSize, &Countersignature);
         TestStrongSignature(SignerInfo, SignerInfoSize, &Countersignature);
+        TestSerializedStrongSignature(SignerInfo, SignerInfoSize, &Countersignature);
         TestHashAlgorithms(SignerInfo, SignerInfoSize);
         TestMissingAttributes(SignerInfo, SignerInfoSize, &Countersignature);
     }
