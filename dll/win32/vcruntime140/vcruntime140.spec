@@ -4,7 +4,7 @@
 # string functions in its CRT sources, __CxxFrameHandler3 as its frame
 # handler, and __C_specific_handler onward to ntdll).
 
-@ cdecl __C_specific_handler(ptr long ptr ptr) ucrtbase.__C_specific_handler
+@ cdecl -arch=!i386 __C_specific_handler(ptr long ptr ptr) ucrtbase.__C_specific_handler
 @ cdecl __CxxFrameHandler3(ptr ptr ptr ptr) ucrtbase.__CxxFrameHandler3
 @ cdecl __current_exception() ucrtbase.__current_exception
 @ cdecl __current_exception_context() ucrtbase.__current_exception_context
