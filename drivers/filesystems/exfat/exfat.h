@@ -207,6 +207,7 @@ struct _EXFAT_VCB
     ULONG StreamCacheCount;
     UCHAR StreamCacheMode;
     PMDL ActiveReadMdl;
+    PUCHAR ActiveReadBase;
     ULONG ActiveReadLength;
     LBA_t PreReadSector;
     ULONG PreReadCount;
@@ -250,7 +251,7 @@ NTSTATUS ExFatMapResult(FRESULT Result);
 PVOID ExFatGetUserBuffer(PIRP Irp, BOOLEAN PagingIo);
 PVOID ExFatGetDirectIoBuffer(PIRP Irp);
 ULONG ExFatWindowOffset(PEXFAT_VCB Vcb, PVOID Buffer, ULONG Length);
-VOID ExFatBeginDataRead(PEXFAT_VCB Vcb, PMDL Mdl, ULONG Length);
+VOID ExFatBeginDataRead(PEXFAT_VCB Vcb, PMDL Mdl, PVOID Buffer, ULONG Length);
 VOID ExFatEndDataRead(PEXFAT_VCB Vcb);
 NTSTATUS ExFatLockUserBuffer(PIRP Irp, ULONG Length, LOCK_OPERATION Operation);
 NTSTATUS ExFatReadWriteDevice(PDEVICE_OBJECT DeviceObject, UCHAR MajorFunction, PVOID Buffer, ULONG Length, PLARGE_INTEGER Offset, BOOLEAN OverrideVerify);
