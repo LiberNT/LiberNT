@@ -520,12 +520,14 @@ VOID
 ExFatBeginDataRead(
     PEXFAT_VCB Vcb,
     PMDL Mdl,
+    PVOID Buffer,
     ULONG Length)
 {
     NT_ASSERT(Vcb->ActiveReadMdl == NULL);
     if (!Mdl)
         return;
     Vcb->ActiveReadMdl = Mdl;
+    Vcb->ActiveReadBase = Buffer;
     Vcb->ActiveReadLength = Length;
 }
 
@@ -534,6 +536,7 @@ ExFatEndDataRead(
     PEXFAT_VCB Vcb)
 {
     Vcb->ActiveReadMdl = NULL;
+    Vcb->ActiveReadBase = NULL;
     Vcb->ActiveReadLength = 0;
     Vcb->PreReadSector = 0;
     Vcb->PreReadCount = 0;
@@ -556,7 +559,7 @@ ExFatWindowOffset(
 
     if (!Vcb->ActiveReadMdl || !Length)
         return EXFAT_WINDOW_NONE;
-    WindowBase = (ULONG_PTR)MmGetMdlVirtualAddress(Vcb->ActiveReadMdl);
+    WindowBase = (ULONG_PTR)Vcb->ActiveReadBase;
     if ((ULONG_PTR)Buffer < WindowBase)
         return EXFAT_WINDOW_NONE;
     Offset = (ULONG_PTR)Buffer - WindowBase;

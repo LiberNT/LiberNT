@@ -85,6 +85,7 @@ list(APPEND SOURCE
     NtCreateKeyCached.c
     NtCreateProfile.c
     NtCreateSection.c
+    NtCreateSection_CachedRead.c
     NtCreateSection_ConcurrentImage.c
     NtCreateThread.c
     NtDeleteKey.c

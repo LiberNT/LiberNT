@@ -42,10 +42,7 @@ ExFatReadFileData(
     if (Result != FR_OK)
         return Result;
 
-    /* The window is keyed on the MDL's address, which is where FatFs writes. */
-    NT_ASSERT(!Irp || !Irp->MdlAddress ||
-              Buffer == MmGetMdlVirtualAddress(Irp->MdlAddress));
-    ExFatBeginDataRead(Fcb->Vcb, Irp ? Irp->MdlAddress : NULL, Length);
+    ExFatBeginDataRead(Fcb->Vcb, Irp ? Irp->MdlAddress : NULL, Buffer, Length);
     Result = f_read(&Fcb->FatFile, Buffer, Length, &Bytes);
     ExFatEndDataRead(Fcb->Vcb);
     *BytesRead += Bytes;
@@ -281,7 +278,7 @@ ExFatRead(
                                         TRUE);
             ExFatAcquireFatFs(Vcb);
             Result = ExFatReadFileData(Fcb,
-                                       PagingIo ? NULL : Irp,
+                                       Irp,
                                        Buffer,
                                        (ULONGLONG)Offset.QuadPart,
                                        Length,
