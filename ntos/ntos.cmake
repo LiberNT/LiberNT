@@ -227,7 +227,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obns.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obname.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obref.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/obsdcach.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/obsdcache.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsecure.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obwait.c
     ${REACTOS_SOURCE_DIR}/ntos/po/events.c
