@@ -229,7 +229,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obref.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsdcache.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsecure.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/obwait.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/obsync.c
     ${REACTOS_SOURCE_DIR}/ntos/po/events.c
     ${REACTOS_SOURCE_DIR}/ntos/po/poshtdwn.c
     ${REACTOS_SOURCE_DIR}/ntos/po/povolume.c
