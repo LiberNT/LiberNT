@@ -1558,7 +1558,6 @@ Phase1InitializationDiscard(IN PVOID Context)
     /* Setup the boot video driver */
     InbvEnableBootDriver(!NoGuiBoot);
     InbvDriverInitialize(LoaderBlock, IDB_MAX_RESOURCES);
-    KdpFbPrintString("LiberNT: boot video driver ready\r\n");
 
     /* Check if GUI boot is enabled */
     if (!NoGuiBoot)
@@ -1566,7 +1565,6 @@ Phase1InitializationDiscard(IN PVOID Context)
         /* It is, display the boot logo and enable printing strings */
         InbvEnableDisplayString(FALSE);
         DisplayBootBitmap();
-        KdpFbPrintString("LiberNT: boot logo drawn\r\n");
     }
     else
     {
@@ -1591,7 +1589,6 @@ Phase1InitializationDiscard(IN PVOID Context)
                                   InLoadOrderLinks);
     /* Initialize Power Subsystem in Phase 0 */
     if (!PoInitSystem(0)) KeBugCheck(INTERNAL_POWER_ERROR);
-    KdpFbPrintString("LiberNT: power subsystem ready\r\n");
 
     /* Check for Y2K hack */
     Y2KHackRequired = CommandLine ? strstr(CommandLine, "YEAR") : NULL;
@@ -1662,38 +1659,20 @@ Phase1InitializationDiscard(IN PVOID Context)
         }
 
         /* An unrepresentable boot time would trip the assertion prompt forever */
-        {
-            CHAR Candidate[192];
-
-            RtlStringCbPrintfA(Candidate,
-                               sizeof(Candidate),
-                               "LiberNT: boot time candidate %08lx:%08lx (loader=%lu cmos=%lu sane=%lu)\r\n",
-                               UniversalBootTime.HighPart,
-                               UniversalBootTime.LowPart,
-                               (ULONG)LoaderTimeAvailable,
-                               (ULONG)TimeAvailable,
-                               (ULONG)ExCmosClockIsSane);
-            KdpFbPrintString(Candidate);
-        }
-
         if ((UniversalBootTime.HighPart & 0xF0000000) != 0)
         {
-            KdpFbPrintString("LiberNT: boot time rejected\r\n");
+            DPRINT1("EX: boot time %08lx:%08lx is outside the representable range, keeping the kernel clock\n",
+                    (ULONG)UniversalBootTime.HighPart, (ULONG)UniversalBootTime.LowPart);
         }
         else
         {
-            KdpFbPrintString("LiberNT: setting the system time\r\n");
-
             /* Update the system time and notify the system */
             KeSetSystemTime(&UniversalBootTime, &OldTime, FALSE, NULL);
-            KdpFbPrintString("LiberNT: KeSetSystemTime returned\r\n");
             PoNotifySystemTimeSet();
-            KdpFbPrintString("LiberNT: system time notified\r\n");
 
             /* Remember this as the boot time */
             KeBootTime = UniversalBootTime;
             KeBootTimeBias = 0;
-            KdpFbPrintString("LiberNT: system time initialized\r\n");
         }
     }
 
@@ -1734,40 +1713,22 @@ Phase1InitializationDiscard(IN PVOID Context)
     }
 
     /* Start Application Processors */
-    {
-        CHAR Limits[112];
-
-        RtlStringCbPrintfA(Limits,
-                           sizeof(Limits),
-                           "LiberNT: processor limits applied (max=%lu numproc=%lu bootproc=%lu)\r\n",
-                           KeMaximumProcessors,
-                           KeNumprocSpecified,
-                           KeBootprocSpecified);
-        KdpFbPrintString(Limits);
-    }
-    KdpFbPrintString("LiberNT: starting application processors\r\n");
     KeStartAllProcessors();
-    KdpFbPrintString("LiberNT: application processors done\r\n");
 
     KiExpandInitialProcessAffinities();
-    KdpFbCheckpoint("LiberNT: checkpoint: APs started\r\n");
 #endif
 
     /* Initialize all processors */
     if (!HalAllProcessorsStarted()) KeBugCheck(HAL1_INITIALIZATION_FAILED);
-    KdpFbCheckpoint("LiberNT: checkpoint: HAL all processors\r\n");
 
     /* Call OB initialization again */
     if (!ObInitSystem()) KeBugCheck(OBJECT1_INITIALIZATION_FAILED);
-    KdpFbCheckpoint("LiberNT: checkpoint: ObInitSystem\r\n");
 
     /* Initialize Basic System Objects and Worker Threads */
     if (!ExInitSystem()) KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, 0, 0, 1, 0);
-    KdpFbCheckpoint("LiberNT: checkpoint: ExInitSystem\r\n");
 
     /* Initialize the later stages of the kernel */
     if (!KeInitSystem()) KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, 0, 0, 2, 0);
-    KdpFbCheckpoint("LiberNT: checkpoint: KeInitSystem\r\n");
 
     /* Call KD Providers at Phase 1 */
     if (!KdInitSystem(ExpInitializationPhase, KeLoaderBlock))
@@ -1778,7 +1739,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Initialize the SRM in Phase 1 */
     if (!SeInitSystem()) KeBugCheck(SECURITY1_INITIALIZATION_FAILED);
-    KdpFbCheckpoint("LiberNT: checkpoint: SeInitSystem\r\n");
 
     /* Create SystemRoot Link */
     Status = ExpCreateSystemRootLink(LoaderBlock);
@@ -1790,23 +1750,17 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Set up Region Maps, Sections and the Paging File */
     if (!MmInitSystem(1, LoaderBlock)) KeBugCheck(MEMORY1_INITIALIZATION_FAILED);
-    KdpFbCheckpoint("LiberNT: checkpoint: MmInitSystem 1\r\n");
 
     /* Create NLS section */
     ExpInitNls(LoaderBlock);
 
     /* Initialize Cache Views */
     if (!CcInitializeCacheManager()) KeBugCheck(CACHE_INITIALIZATION_FAILED);
-    KdpFbCheckpoint("LiberNT: checkpoint: cache manager\r\n");
 
     if (!TmpInitSystem()) KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, STATUS_UNSUCCESSFUL, 9, 0, 0);
 
     /* Initialize the Registry */
     if (!CmInitSystem1()) KeBugCheck(CONFIG_INITIALIZATION_FAILED);
-    KdpFbCheckpoint("LiberNT: checkpoint: CmInitSystem1\r\n");
-
-    /* From here the display belongs to the OS */
-    KdpFbStreamStop();
 
     /* Initialize Prefetcher */
     CcPfInitializePrefetcher();

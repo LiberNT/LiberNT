@@ -154,7 +154,7 @@ MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
         MiAmd64FlushLocal(Address, Pages);
     Remaining = Remote;
     {
-        /* Bound the wait and name the processors that did not answer */
+        /* Bound the wait: a wedged target must not hang the flush */
         ULONG64 Spins = 0;
 
         while (Remaining != 0)
@@ -173,16 +173,7 @@ MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
                 break;
 
             if (++Spins >= 0x40000000ULL)
-            {
-                CHAR Text[96];
-
-                RtlStringCbPrintfA(Text,
-                                   sizeof(Text),
-                                   "LiberNT: TLB shootdown unanswered %08I64lx\r\n",
-                                   Remaining);
-                KdpFbCheckpoint(Text);
                 break;
-            }
 
             MiAmd64TlbPoll();
             MiAmd64TlbPause();

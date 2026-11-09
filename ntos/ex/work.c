@@ -759,7 +759,6 @@ ExQueueWorkItem(IN PWORK_QUEUE_ITEM WorkItem,
                 IN WORK_QUEUE_TYPE QueueType)
 {
     PEX_WORK_QUEUE WorkQueue = &ExWorkerQueue[QueueType];
-
     ASSERT(QueueType < MaximumWorkQueue);
     ASSERT(WorkItem->List.Flink == NULL);
 
@@ -767,7 +766,7 @@ ExQueueWorkItem(IN PWORK_QUEUE_ITEM WorkItem,
     if (WorkQueue->WorkerQueue.Header.Type != QueueObject)
     {
         DPRINT1("EX: queue %lu not initialized yet, dropping work item\n",
-                QueueType);
+                (ULONG)QueueType);
         return;
     }
 
