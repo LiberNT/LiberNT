@@ -277,7 +277,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/se/acl.c
     ${REACTOS_SOURCE_DIR}/ntos/se/audit.c
     ${REACTOS_SOURCE_DIR}/ntos/se/client.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/objtype.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/seobjtype.c
     ${REACTOS_SOURCE_DIR}/ntos/se/priv.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sd.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sddl.c
