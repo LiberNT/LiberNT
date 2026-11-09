@@ -1433,6 +1433,7 @@ typedef struct _WINPOS_ENTRY
    UINT Flags;
    HWND hwndBand;
    HWND hwndChainAfter;
+   HWND hwndReportedAfter;
    WINDOWPOS WinPos;
    RECTL NewWindowRect;
    RECTL NewClientRect;
@@ -1586,6 +1587,40 @@ WinPosActivatesWindow(PWND Window, UINT flags)
    if (!(flags & SWP_HIDEWINDOW))
       return TRUE;
    return Window->head.pti->MessageQueue->spwndActive != Window;
+}
+
+static HWND FASTCALL
+WinPosReportedInsertAfter(PWND Window, const WINDOWPOS *WinPos)
+{
+   HWND hwndAfter = WinPos->hwndInsertAfter;
+   PWND Child, LastTopmost = NULL;
+
+   if (WinPos->flags & SWP_NOZORDER)
+      return hwndAfter;
+
+   if (hwndAfter == (HWND)0xffff)
+      hwndAfter = HWND_TOPMOST;
+   else if (hwndAfter == (HWND)0xfffe)
+      hwndAfter = HWND_NOTOPMOST;
+
+   if ((hwndAfter != HWND_TOP && hwndAfter != HWND_TOPMOST && hwndAfter != HWND_NOTOPMOST) ||
+       !Window->spwndParent || !UserIsDesktopWindow(Window->spwndParent))
+   {
+      return WinPos->hwndInsertAfter;
+   }
+
+   if (hwndAfter == HWND_TOPMOST || (hwndAfter == HWND_TOP && (Window->ExStyle & WS_EX_TOPMOST)))
+      return HWND_TOP;
+
+   if (hwndAfter == HWND_NOTOPMOST && !(Window->ExStyle & WS_EX_TOPMOST))
+      return Window->spwndPrev ? UserHMGetHandle(Window->spwndPrev) : HWND_TOP;
+
+   for (Child = Window->spwndParent->spwndChild; Child && (Child->ExStyle & WS_EX_TOPMOST); Child = Child->spwndNext)
+   {
+      if (Child != Window)
+         LastTopmost = Child;
+   }
+   return LastTopmost ? UserHMGetHandle(LastTopmost) : HWND_TOP;
 }
 
 static BOOL FASTCALL
@@ -2834,6 +2869,7 @@ co_WinPosBatchChanged(PWINPOS_ENTRY Entry)
       WinPos.y = NewWindowRect.top;
       WinPos.cx = NewWindowRect.right - NewWindowRect.left;
       WinPos.cy = NewWindowRect.bottom - NewWindowRect.top;
+      WinPos.hwndInsertAfter = Entry->hwndReportedAfter;
       if (Window && (Window->style & WS_CHILD) && Window->spwndParent)
       {
          WinPos.x -= Window->spwndParent->rcClient.left;
@@ -2887,6 +2923,7 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
 {
    PWINPOS_ENTRY Entry;
    RECTL ValidRects[2];
+   HWND hwndInsertAfter;
    BOOL Ret = TRUE;
    UINT i;
 
@@ -2910,11 +2947,19 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
 
       if (Entry->bSilent)
          Entry->WinPos.flags |= SWP_NOSENDCHANGING;
+      hwndInsertAfter = Entry->hwndChainAfter ? Entry->hwndChainAfter : Entry->WinPos.hwndInsertAfter;
+      Entry->hwndReportedAfter = Entry->hwndChainAfter ? HWND_TOP : WinPosReportedInsertAfter(Entry->Window, &Entry->WinPos);
+      Entry->WinPos.hwndInsertAfter = Entry->hwndReportedAfter;
       co_WinPosDoWinPosChanging(Entry->Window, &Entry->WinPos, &Entry->NewWindowRect, &Entry->NewClientRect);
-      if (Entry->hwndChainAfter && Entry->WinPos.hwndInsertAfter == HWND_TOP)
-         Entry->WinPos.hwndInsertAfter = Entry->hwndChainAfter;
+      if (Entry->WinPos.hwndInsertAfter == Entry->hwndReportedAfter)
+      {
+         Entry->WinPos.hwndInsertAfter = hwndInsertAfter;
+      }
       else
+      {
+         Entry->hwndReportedAfter = Entry->WinPos.hwndInsertAfter;
          Entry->hwndChainAfter = NULL;
+      }
 
       if (!IntIsWindow(Entry->WinPos.hwnd))
       {
@@ -2928,7 +2973,10 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
          continue;
       }
 
+      hwndInsertAfter = Entry->WinPos.hwndInsertAfter;
       WinPosFixupFlags(&Entry->WinPos, Entry->Window, Entry->bChained || Entry->bNoActivate);
+      if (Entry->WinPos.hwndInsertAfter != hwndInsertAfter && !Entry->hwndChainAfter)
+         Entry->hwndReportedAfter = WinPosReportedInsertAfter(Entry->Window, &Entry->WinPos);
 
       if (Entry->bSilent)
       {
