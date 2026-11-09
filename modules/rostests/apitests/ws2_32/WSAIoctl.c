@@ -260,8 +260,53 @@ Test_WSAIoctl_BaseHandle(void)
     WSACleanup();
 }
 
+static void Test_WSAIoctl_UdpReset(DWORD Code, PCSTR Name)
+{
+    SOCKET Udp, Tcp;
+    BOOL Value = FALSE;
+    DWORD BytesReturned;
+    int Result;
+
+    Udp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    Tcp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Udp != INVALID_SOCKET && Tcp != INVALID_SOCKET, "socket failed with %d\n", WSAGetLastError());
+    if (Udp == INVALID_SOCKET || Tcp == INVALID_SOCKET)
+        goto done;
+
+    Result = WSAIoctl(Udp, Code, &Value, sizeof(Value), NULL, 0, &BytesReturned, NULL, NULL);
+    ok(Result == 0, "%s FALSE failed with %d\n", Name, WSAGetLastError());
+    Value = TRUE;
+    Result = WSAIoctl(Udp, Code, &Value, sizeof(Value), NULL, 0, &BytesReturned, NULL, NULL);
+    ok(Result == 0, "%s TRUE failed with %d\n", Name, WSAGetLastError());
+    /* Windows 11 reads no more than it gets */
+    Result = WSAIoctl(Udp, Code, &Value, 2, NULL, 0, &BytesReturned, NULL, NULL);
+    ok(Result == 0, "%s with 2 bytes failed with %d\n", Name, WSAGetLastError());
+    WSASetLastError(0xdeadbeef);
+    Result = WSAIoctl(Udp, Code, NULL, 0, NULL, 0, &BytesReturned, NULL, NULL);
+    ok(Result == SOCKET_ERROR && WSAGetLastError() == WSAEFAULT, "%s without input returned %d (%d)\n", Name,
+       Result, WSAGetLastError());
+    WSASetLastError(0xdeadbeef);
+    Result = WSAIoctl(Tcp, Code, &Value, sizeof(Value), NULL, 0, &BytesReturned, NULL, NULL);
+    ok(Result == SOCKET_ERROR && WSAGetLastError() == WSAEINVAL, "%s on TCP returned %d (%d)\n", Name, Result,
+       WSAGetLastError());
+
+done:
+    if (Udp != INVALID_SOCKET)
+        closesocket(Udp);
+    if (Tcp != INVALID_SOCKET)
+        closesocket(Tcp);
+}
+
 START_TEST(WSAIoctl)
 {
+    WSADATA WsaData;
+
     Test_WSAIoctl_GetInterfaceList();
     Test_WSAIoctl_BaseHandle();
+
+    if (WSAStartup(MAKEWORD(2, 2), &WsaData) != 0)
+        return;
+    Test_WSAIoctl_UdpReset(SIO_UDP_CONNRESET, "SIO_UDP_CONNRESET");
+    Test_WSAIoctl_UdpReset(SIO_UDP_NETRESET, "SIO_UDP_NETRESET");
+    WSACleanup();
 }

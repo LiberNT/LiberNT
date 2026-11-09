@@ -3089,6 +3089,22 @@ WSPIoctl(IN  SOCKET Handle,
             Errno = NO_ERROR;
             Ret = NO_ERROR;
             break;
+        case SIO_UDP_CONNRESET:
+        case SIO_UDP_NETRESET:
+            if (Socket->SharedData->SocketType != SOCK_DGRAM)
+            {
+                Errno = WSAEINVAL;
+                break;
+            }
+            if (lpvInBuffer == NULL)
+            {
+                Errno = WSAEFAULT;
+                break;
+            }
+            /* FIXME: the value is not kept; tcpip reports no ICMP unreachable to UDP sockets */
+            Errno = NO_ERROR;
+            Ret = NO_ERROR;
+            break;
         case SIO_GET_EXTENSION_FUNCTION_POINTER:
             if (cbOutBuffer == 0)
             {
