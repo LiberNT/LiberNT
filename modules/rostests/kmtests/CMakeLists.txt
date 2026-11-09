@@ -264,6 +264,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ob/ObOpenByPointer.c
     ntos_ob/ObQuery.c
     ntos_ob/ObReference.c
+    ntos_ob/ObSdCache.c
     ntos_ob/ObSecurity.c
     ntos_ob/ObSecurityDescKM.c
     ntos_ob/ObSymbolicLink.c

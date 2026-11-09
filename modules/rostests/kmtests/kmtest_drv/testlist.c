@@ -345,6 +345,7 @@ KMT_TESTFUNC Test_SmcLib;
 KMT_TESTFUNC Test_SmcLibRemove;
 KMT_TESTFUNC Test_KeCriticalRegionKM;
 KMT_TESTFUNC Test_ObOpenByPointer;
+KMT_TESTFUNC Test_ObSdCache;
 KMT_TESTFUNC Test_ObSecurityDescKM;
 KMT_TESTFUNC Test_PsNotifyKM;
 KMT_TESTFUNC Test_RtlBitmapKM;
@@ -635,6 +636,7 @@ const KMT_TEST TestList[] =
     { "ObOpenByPointer",                    Test_ObOpenByPointer },
     { "ObQuery",                            Test_ObQuery },
     { "ObReference",                        Test_ObReference },
+    { "ObSdCache",                          Test_ObSdCache },
     { "ObSecurity",                         Test_ObSecurity },
     { "ObSecurityDescKM",                   Test_ObSecurityDescKM },
     { "ObSymbolicLink",                     Test_ObSymbolicLink },
