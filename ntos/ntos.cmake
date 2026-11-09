@@ -221,7 +221,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obdevmap.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obdir.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obhandle.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/obinit.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/obstartup.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/oblife.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/oblink.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obns.c
