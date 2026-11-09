@@ -890,7 +890,7 @@ SePrivilegedServiceAuditAlarm(
 VOID
 NTAPI
 SeCaptureSubjectContextEx(
-    _In_ PETHREAD Thread,
+    _In_opt_ PETHREAD Thread,
     _In_ PEPROCESS Process,
     _Out_ PSECURITY_SUBJECT_CONTEXT SubjectContext);
 
