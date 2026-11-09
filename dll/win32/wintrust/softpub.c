@@ -1226,7 +1226,6 @@ static BOOL SOFTPUB_IsTimeStampCert(PCCERT_CONTEXT cert)
     DWORD size = 0, i;
     BOOL ret = FALSE;
 
-    /* TODO: INFO_NEEDED whether Windows 11 takes a countersigner without an EKU extension as a timestamp */
     if (!CertGetEnhancedKeyUsage(cert, CERT_FIND_EXT_ONLY_ENHKEY_USAGE_FLAG, NULL, &size) ||
      !(usage = malloc(size)))
         return FALSE;
@@ -1278,8 +1277,8 @@ static DWORD SOFTPUB_SaveCounterSigner(CRYPT_PROVIDER_DATA *data, DWORD signerId
         cert = CertGetSubjectCertificateFromStore(data->pahStores[store], data->dwEncoding, &certInfo);
     if (!cert)
     {
-        /* TODO: INFO_NEEDED the Windows 11 result for a countersigner whose certificate is missing */
         counter->dwError = TRUST_E_NO_SIGNER_CERT;
+        data->padwTrustStepErrors[TRUSTERROR_STEP_MSG_COUNTERSIGCERT] = CRYPT_E_NOT_FOUND;
         return TRUST_E_COUNTER_SIGNER;
     }
 
@@ -1635,7 +1634,7 @@ static DWORD SOFTPUB_CreateChainForCounterSigner(CRYPT_PROVIDER_DATA *data, DWOR
     DWORD i;
 
     if (!counter->csCertChain)
-        return ERROR_SUCCESS;
+        return TRUST_E_COUNTER_SIGNER;
     /* TODO: INFO_NEEDED the usage Windows 11 requests for a countersigner chain */
     memset(&chainPara, 0, sizeof(chainPara));
     chainPara.cbSize = sizeof(chainPara);
