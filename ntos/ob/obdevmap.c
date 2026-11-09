@@ -13,6 +13,7 @@
 
 #define TAG_OB_DEVICE_MAP 'mDbO'
 
+PDEVICE_MAP ObSystemDeviceMap = NULL;
 ULONG ObpLUIDDeviceMapsDisabled;
 ULONG ObpLUIDDeviceMapsEnabled;
 
