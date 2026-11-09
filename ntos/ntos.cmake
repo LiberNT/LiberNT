@@ -285,7 +285,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/se/sid.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seqos.c
     ${REACTOS_SOURCE_DIR}/ntos/se/srm.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/subject.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/sesubject.c
     ${REACTOS_SOURCE_DIR}/ntos/se/token.c
     ${REACTOS_SOURCE_DIR}/ntos/se/tokenadj.c
     ${REACTOS_SOURCE_DIR}/ntos/se/tokencls.c
