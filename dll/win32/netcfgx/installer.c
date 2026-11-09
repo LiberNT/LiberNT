@@ -945,6 +945,67 @@ ReinstallNetDevice(
 }
 
 static
+BOOL
+GetSuggestedInstanceId(
+    _In_ HDEVINFO DeviceInfoSet,
+    _In_ PSP_DEVINFO_DATA DeviceInfoData,
+    _Out_ UUID *Uuid)
+{
+    WCHAR Suggested[40], SubKey[MAX_PATH], Existing[40];
+    DWORD Index, cchSubKey, dwType, dwSize = sizeof(*Uuid);
+    HKEY hKey, hClassKey, hAdapterKey;
+    BOOL Used = FALSE;
+    LONG rc;
+
+    hKey = SetupDiOpenDevRegKey(DeviceInfoSet, DeviceInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
+    if (hKey == INVALID_HANDLE_VALUE)
+        return FALSE;
+    rc = RegQueryValueExW(hKey, L"SuggestedInstanceId", NULL, &dwType, (LPBYTE)Uuid, &dwSize);
+    RegCloseKey(hKey);
+    if (rc != ERROR_SUCCESS || dwType != REG_BINARY || dwSize != sizeof(*Uuid) ||
+        !StringFromGUID2(Uuid, Suggested, ARRAYSIZE(Suggested)))
+    {
+        return FALSE;
+    }
+
+    hClassKey = SetupDiOpenClassRegKey(&GUID_DEVCLASS_NET, KEY_ENUMERATE_SUB_KEYS);
+    if (hClassKey == INVALID_HANDLE_VALUE)
+        return FALSE;
+    for (Index = 0; !Used; Index++)
+    {
+        cchSubKey = ARRAYSIZE(SubKey);
+        rc = RegEnumKeyExW(hClassKey, Index, SubKey, &cchSubKey, NULL, NULL, NULL, NULL);
+        if (rc == ERROR_NO_MORE_ITEMS)
+            break;
+        /* An adapter that cannot be read might own the GUID */
+        if (rc == ERROR_SUCCESS)
+            rc = RegOpenKeyExW(hClassKey, SubKey, 0, KEY_QUERY_VALUE, &hAdapterKey);
+        if (rc != ERROR_SUCCESS)
+        {
+            WARN("Cannot check adapter %lu (error %ld)\n", Index, rc);
+            Used = TRUE;
+            break;
+        }
+        dwSize = sizeof(Existing) - sizeof(WCHAR);
+        ZeroMemory(Existing, sizeof(Existing));
+        rc = RegQueryValueExW(hAdapterKey, L"NetCfgInstanceId", NULL, &dwType, (LPBYTE)Existing, &dwSize);
+        RegCloseKey(hAdapterKey);
+        if (rc == ERROR_FILE_NOT_FOUND)
+            continue;
+        if (rc != ERROR_SUCCESS || dwType != REG_SZ || _wcsicmp(Existing, Suggested) == 0)
+        {
+            WARN("Adapter %S has the instance ID %S or cannot be read (error %ld)\n", SubKey, Existing, rc);
+            Used = TRUE;
+        }
+    }
+    RegCloseKey(hClassKey);
+
+    if (Used)
+        WARN("Suggested instance ID %S is in use or cannot be checked\n", Suggested);
+    return !Used;
+}
+
+static
 DWORD
 InstallNetClient(VOID)
 {
@@ -991,8 +1052,9 @@ NetClassInstaller(
     LPWSTR UuidRpcString = NULL;
     LPWSTR UuidString = NULL;
     HKEY hDriverKey;
+    HANDLE hInstanceIdLock = NULL;
     LONG rc;
-    DWORD dwLength;
+    DWORD dwLength, dwWait;
 
     if (InstallFunction != DIF_INSTALLDEVICE)
         return ERROR_DI_DO_DEFAULT;
@@ -1112,13 +1174,34 @@ NetClassInstaller(
         }
     }
 
-    /* Create a new UUID */
-    RpcStatus = UuidCreate(&Uuid);
-    if (RpcStatus != RPC_S_OK && RpcStatus != RPC_S_UUID_LOCAL_ONLY)
+    /* Two installs must not pick the same suggested GUID before InstallNetDevice publishes it */
+    if (IsEqualIID(&DeviceInfoData->ClassGuid, &GUID_DEVCLASS_NET))
     {
-        ERR("UuidCreate() failed with RPC status 0x%lx\n", RpcStatus);
-        rc = ERROR_GEN_FAILURE;
-        goto cleanup;
+        hInstanceIdLock = CreateMutexW(NULL, FALSE, L"Global\\NetCfgxInstanceId");
+        if (hInstanceIdLock)
+        {
+            dwWait = WaitForSingleObject(hInstanceIdLock, INFINITE);
+            if (dwWait != WAIT_OBJECT_0 && dwWait != WAIT_ABANDONED)
+            {
+                CloseHandle(hInstanceIdLock);
+                hInstanceIdLock = NULL;
+            }
+        }
+        if (!hInstanceIdLock)
+            WARN("Cannot lock the instance IDs (error %lu)\n", GetLastError());
+    }
+
+    /* Use the suggested UUID of the adapter or create a new one */
+    if (!hInstanceIdLock ||
+        !GetSuggestedInstanceId(DeviceInfoSet, DeviceInfoData, &Uuid))
+    {
+        RpcStatus = UuidCreate(&Uuid);
+        if (RpcStatus != RPC_S_OK && RpcStatus != RPC_S_UUID_LOCAL_ONLY)
+        {
+            ERR("UuidCreate() failed with RPC status 0x%lx\n", RpcStatus);
+            rc = ERROR_GEN_FAILURE;
+            goto cleanup;
+        }
     }
 
     RpcStatus = UuidToStringW(&Uuid, &UuidRpcString);
@@ -1158,6 +1241,11 @@ NetClassInstaller(
     }
 
 cleanup:
+    if (hInstanceIdLock)
+    {
+        ReleaseMutex(hInstanceIdLock);
+        CloseHandle(hInstanceIdLock);
+    }
     if (hInf != INVALID_HANDLE_VALUE)
         SetupCloseInfFile(hInf);
     if (UuidRpcString != NULL)
