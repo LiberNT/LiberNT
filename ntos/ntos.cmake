@@ -221,7 +221,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obcallback.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obdirobj.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obhandle.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/obinit.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/obstart.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/oblife.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/oblink.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obns.c
