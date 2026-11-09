@@ -15,6 +15,7 @@
 /* GLOBALS *******************************************************************/
 
 KTIMER_TABLE_ENTRY KiTimerTableListHead[TIMER_TABLE_SIZE];
+KSPIN_LOCK KiTimerAdjustmentLock;
 LARGE_INTEGER KiTimeIncrementReciprocal;
 UCHAR KiTimeIncrementShiftCount;
 BOOLEAN KiEnableTimerWatchdog = FALSE;
@@ -32,10 +33,12 @@ KiInsertTreeTimer(IN PKTIMER Timer,
     DPRINT("KiInsertTreeTimer(): Timer %p, Interval: %I64d\n", Timer, Interval.QuadPart);
 
     /* Setup the timer's due time */
+    KiAcquireTimerAdjustmentLock();
     if (KiComputeDueTime(Timer, Interval, &Hand))
     {
         /* Acquire the lock */
         LockQueue = KiAcquireTimerLock(Hand);
+        KiReleaseTimerAdjustmentLock();
 
         if (!Timer->Header.Inserted)
         {
@@ -58,6 +61,10 @@ KiInsertTreeTimer(IN PKTIMER Timer,
 
         /* Release the lock */
         KiReleaseTimerLock(LockQueue);
+    }
+    else
+    {
+        KiReleaseTimerAdjustmentLock();
     }
 
     /* Release the lock and return insert status */
@@ -319,8 +326,10 @@ KeSetTimerEx(IN OUT PKTIMER Timer,
     /* Set Default Timer Data */
     Timer->Dpc = Dpc;
     Timer->Period = Period;
+    KiAcquireTimerAdjustmentLock();
     if (!KiComputeDueTime(Timer, DueTime, &Hand))
     {
+        KiReleaseTimerAdjustmentLock();
         /* Signal the timer */
         RequestInterrupt = KiSignalTimer(Timer);
 

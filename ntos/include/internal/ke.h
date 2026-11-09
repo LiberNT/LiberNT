@@ -225,6 +225,7 @@ extern ULONG KiServiceLimit;
 extern LIST_ENTRY KeBugcheckCallbackListHead, KeBugcheckReasonCallbackListHead;
 extern KSPIN_LOCK BugCheckCallbackLock;
 extern KDPC KiTimerExpireDpc;
+extern KSPIN_LOCK KiTimerAdjustmentLock;
 extern KTIMER_TABLE_ENTRY KiTimerTableListHead[TIMER_TABLE_SIZE];
 extern FAST_MUTEX KiGenericCallDpcMutex;
 extern LIST_ENTRY KiProfileListHead, KiProfileSourceListHead;
@@ -435,6 +436,10 @@ FASTCALL
 KiSelectNextThread(
     IN PKPRCB Prcb
 );
+
+BOOLEAN
+FASTCALL
+KiSignalTimer(IN PKTIMER Timer);
 
 BOOLEAN
 FASTCALL

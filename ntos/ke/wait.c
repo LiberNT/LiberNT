@@ -106,21 +106,7 @@ KiUnlinkThread(IN PKTHREAD Thread,
 #if (NTDDI_VERSION >= NTDDI_WIN8) || defined(KERNEL_LAYOUT_WIN11_ARM64)
     {
         if (Thread->TimerActive)
-        {
-            if (KxRemoveTreeTimer(&Thread->Timer))
-            {
-                InitializeListHead(&Thread->Timer.Header.WaitListHead);
-                Thread->WaitBlock[TIMER_WAIT_BLOCK].WaitListEntry.Flink = NULL;
-                Thread->WaitBlock[TIMER_WAIT_BLOCK].WaitListEntry.Blink = NULL;
-            }
-            /* Expiration may already have removed the timer from its table
-             * while still waiting for the timer object and this thread lock.
-             * In that case KxRemoveTreeTimer returns FALSE, but the timer block
-             * still belongs to the completed wait and must not wake a later
-             * wait that reuses this KTHREAD. */
-            Thread->WaitBlock[TIMER_WAIT_BLOCK].BlockState = WaitBlockInactive;
-            Thread->TimerActive = FALSE;
-        }
+            KxRemoveTreeTimer(&Thread->Timer);
         WaitBlock = Thread->WaitBlockList;
         DBG_UNREFERENCED_LOCAL_VARIABLE(WaitBlock);
     }
@@ -179,9 +165,8 @@ KiUnlinkWaitBlocks(IN PKTHREAD Thread)
          * on x86 (and Ucb on x64). It is not an object pointer. A delay
          * interrupted by an APC still has an active timer block to unlink. */
         if (WaitBlock == &Thread->WaitBlock[TIMER_WAIT_BLOCK])
-            Object = &Thread->Timer.Header;
-        else
-            Object = (PDISPATCHER_HEADER)WaitBlock->Object;
+            continue;
+        Object = (PDISPATCHER_HEADER)WaitBlock->Object;
 
         if (!Object) continue;
         if (WaitBlock->BlockState != WaitBlockActive) continue;
@@ -198,6 +183,22 @@ KiUnlinkWaitBlocks(IN PKTHREAD Thread)
             WaitBlock->BlockState = WaitBlockInactive;
         }
         KiReleaseDispatcherObject(Object);
+    }
+
+    if (Thread->TimerActive || WaitBlockArray == &Thread->WaitBlock[TIMER_WAIT_BLOCK])
+    {
+        PKWAIT_BLOCK TimerBlock = &Thread->WaitBlock[TIMER_WAIT_BLOCK];
+
+        KiAcquireDispatcherObject(&Thread->Timer.Header);
+        if (TimerBlock->BlockState == WaitBlockActive && TimerBlock->WaitListEntry.Flink)
+        {
+            KiAssertWaitListEntry(&TimerBlock->WaitListEntry);
+            RemoveEntryList(&TimerBlock->WaitListEntry);
+        }
+        TimerBlock->WaitListEntry.Flink = NULL;
+        TimerBlock->BlockState = WaitBlockInactive;
+        Thread->TimerActive = FALSE;
+        KiReleaseDispatcherObject(&Thread->Timer.Header);
     }
 #else
     PKWAIT_BLOCK FirstWaitBlock, WaitBlock, NextWaitBlock;
@@ -565,7 +566,7 @@ KeDelayExecutionThread(IN KPROCESSOR_MODE WaitMode,
     NTSTATUS WaitStatus;
     BOOLEAN Swappable;
     PLARGE_INTEGER OriginalDueTime;
-    LARGE_INTEGER DueTime, NewDueTime, InterruptTime;
+    LARGE_INTEGER DueTime, NewDueTime;
     ULONG Hand = 0;
 
     if (Thread->WaitNext)
@@ -617,8 +618,7 @@ KeDelayExecutionThread(IN KPROCESSOR_MODE WaitMode,
             if (WaitStatus != STATUS_WAIT_0) break;
 
             /* Check if the timer expired */
-            InterruptTime.QuadPart = KeQueryInterruptTime();
-            if ((ULONGLONG)InterruptTime.QuadPart >= Timer->DueTime.QuadPart)
+            if (KxIsThreadWaitTimerExpired(Timer, Interval, WaitMode, &Hand))
             {
                 /* It did, so we don't need to wait */
                 goto NoWait;
@@ -646,7 +646,7 @@ KeDelayExecutionThread(IN KPROCESSOR_MODE WaitMode,
 
             /* Insert the timer and swap the thread */
             KiReleaseDispatcherObject(&Timer->Header);
-            KxInsertTimerNoRelease(Timer, Hand);
+            KxInsertTimerNoRelease(Timer, Hand, Interval, WaitMode);
             KxActivateWaiterQueue(Thread);
             WaitStatus = (NTSTATUS)KiSwapThread(Thread, KeGetCurrentPrcb(), TRUE);
 
@@ -730,7 +730,7 @@ KeWaitForAlertByThreadId(IN PVOID Address,
     BOOLEAN AlertedByThreadId;
     BOOLEAN Swappable;
     PLARGE_INTEGER OriginalDueTime = Timeout;
-    LARGE_INTEGER DueTime = {{0}}, NewDueTime, InterruptTime;
+    LARGE_INTEGER DueTime = {{0}}, NewDueTime;
     ULONG Hand = 0;
 
     /* The Address argument is a user-mode cookie that Windows records only for
@@ -811,8 +811,7 @@ WaitStart:
             /* If a timeout was given, check whether it already expired */
             if (Timeout)
             {
-                InterruptTime.QuadPart = KeQueryInterruptTime();
-                if ((ULONGLONG)InterruptTime.QuadPart >= Timer->DueTime.QuadPart)
+                if (KxIsThreadWaitTimerExpired(Timer, Timeout, WaitMode, &Hand))
                 {
                     /* Timed out with nothing to wait for */
                     WaitStatus = STATUS_TIMEOUT;
@@ -854,7 +853,7 @@ WaitStart:
 
             /* Release the timer lock and insert the timer if we armed one */
             KiReleaseDispatcherObject(&Timer->Header);
-            if (Timeout) KxInsertTimerNoRelease(Timer, Hand);
+            if (Timeout) KxInsertTimerNoRelease(Timer, Hand, Timeout, WaitMode);
             KxActivateWaiterQueue(Thread);
 
             /* Swap the thread out */
@@ -909,7 +908,7 @@ KeWaitForSingleObject(IN PVOID Object,
     PKTIMER Timer = &Thread->Timer;
     NTSTATUS WaitStatus;
     BOOLEAN Swappable;
-    LARGE_INTEGER DueTime = {{0}}, NewDueTime, InterruptTime;
+    LARGE_INTEGER DueTime = {{0}}, NewDueTime;
     PLARGE_INTEGER OriginalDueTime = Timeout;
     ULONG Hand = 0;
 
@@ -984,9 +983,7 @@ KeWaitForSingleObject(IN PVOID Object,
             if (Timeout)
             {
                 /* Check if the timer expired */
-                InterruptTime.QuadPart = KeQueryInterruptTime();
-                if ((ULONGLONG)InterruptTime.QuadPart >=
-                    Timer->DueTime.QuadPart)
+                if (KxIsThreadWaitTimerExpired(Timer, Timeout, WaitMode, &Hand))
                 {
                     /* It did, so we don't need to wait */
                     WaitStatus = STATUS_TIMEOUT;
@@ -1035,7 +1032,7 @@ KeWaitForSingleObject(IN PVOID Object,
             if (Timeout)
             {
                 /* Insert it */
-                KxInsertTimerNoRelease(Timer, Hand);
+                KxInsertTimerNoRelease(Timer, Hand, Timeout, WaitMode);
             }
             KxActivateWaiterQueue(Thread);
 
@@ -1112,7 +1109,7 @@ KeWaitForMultipleObjects(IN ULONG Count,
     NTSTATUS WaitStatus = STATUS_SUCCESS;
     BOOLEAN Swappable;
     PLARGE_INTEGER OriginalDueTime = Timeout;
-    LARGE_INTEGER DueTime = {{0}}, NewDueTime, InterruptTime;
+    LARGE_INTEGER DueTime = {{0}}, NewDueTime;
     ULONG Index, Hand = 0;
     UCHAR LockOrder[MAXIMUM_WAIT_OBJECTS];
 
@@ -1301,9 +1298,7 @@ KeWaitForMultipleObjects(IN ULONG Count,
             if (Timeout)
             {
                 /* Check if the timer expired */
-                InterruptTime.QuadPart = KeQueryInterruptTime();
-                if ((ULONGLONG)InterruptTime.QuadPart >=
-                    Timer->DueTime.QuadPart)
+                if (KxIsThreadWaitTimerExpired(Timer, Timeout, WaitMode, &Hand))
                 {
                     /* It did, so we don't need to wait */
                     WaitStatus = STATUS_TIMEOUT;
@@ -1381,7 +1376,7 @@ KeWaitForMultipleObjects(IN ULONG Count,
             /* Check if we have a timer */
             if (Timeout)
             {
-                KxInsertTimerNoRelease(Timer, Hand);
+                KxInsertTimerNoRelease(Timer, Hand, Timeout, WaitMode);
             }
             KxActivateWaiterQueue(Thread);
 

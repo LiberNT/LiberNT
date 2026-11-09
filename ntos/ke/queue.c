@@ -374,7 +374,7 @@ KiRemoveQueueExInternal(
     PKTIMER Timer = &Thread->Timer;
     BOOLEAN Swappable;
     PLARGE_INTEGER OriginalDueTime = Timeout;
-    LARGE_INTEGER DueTime = {{0}}, NewDueTime, InterruptTime;
+    LARGE_INTEGER DueTime = {{0}}, NewDueTime;
     ULONG Hand = 0;
     ULONG EntriesRemoved = 0;
     ASSERT_QUEUE(Queue);
@@ -470,8 +470,7 @@ KiRemoveQueueExInternal(
                 if (Timeout)
                 {
                     /* Check if the timer expired */
-                    InterruptTime.QuadPart = KeQueryInterruptTime();
-                    if ((ULONG64)InterruptTime.QuadPart >= Timer->DueTime.QuadPart)
+                    if (KxIsThreadWaitTimerExpired(Timer, Timeout, WaitMode, &Hand))
                     {
                         /* It did, so we don't need to wait */
                         EntryArray[0] = (PLIST_ENTRY)(ULONG_PTR)STATUS_TIMEOUT;
@@ -524,7 +523,7 @@ KiRemoveQueueExInternal(
                 if (Timeout)
                 {
                     /* Insert it */
-                    KxInsertTimerNoRelease(Timer, Hand);
+                    KxInsertTimerNoRelease(Timer, Hand, Timeout, WaitMode);
                 }
 
                 /* Do the actual swap */

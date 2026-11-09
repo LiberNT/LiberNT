@@ -365,6 +365,7 @@ KeSetSystemTime(IN PLARGE_INTEGER NewTime,
     /* Set affinity to this CPU and raise IRQL to synchronization level */
     KeSetSystemAffinityThread(1);
     OldIrql = KeRaiseIrqlToSynchLevel();
+    KiAcquireTimerAdjustmentLock();
     KeRaiseIrql(HIGH_LEVEL, &OldIrql2);
 
     /* Query the system time now */
