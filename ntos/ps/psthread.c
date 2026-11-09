@@ -96,6 +96,12 @@ PspSystemThreadStartup(
 {
     PETHREAD Thread = PsGetCurrentThread();
 
+    /*
+     * The dispatcher hands a thread its first turn with the processor still
+     * raised; what the thread runs expects to own it, so it is lowered here.
+     */
+    KeLowerIrql(PASSIVE_LEVEL);
+
     /* A thread killed before it ever ran must not call anything */
     if (!Thread->Terminated)
     {
@@ -127,6 +133,9 @@ PspUserThreadStartup(
 {
     PETHREAD Thread = PsGetCurrentThread();
     PEPROCESS Process = THREAD_TO_PROCESS(Thread);
+
+    /* As for a system thread: the processor is the new thread's from here */
+    KeLowerIrql(PASSIVE_LEVEL);
 
     UNREFERENCED_PARAMETER(StartRoutine);
     UNREFERENCED_PARAMETER(StartContext);
