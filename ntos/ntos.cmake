@@ -315,7 +315,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/alpc/alpclpc.c)
 
 if(DBG)
-    list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/se/debug.c)
+    list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/se/sedebug.c)
     if(KDBG)
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdwatchdog.c)
     endif()
