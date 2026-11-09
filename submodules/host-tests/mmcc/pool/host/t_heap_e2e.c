@@ -20,7 +20,7 @@
 #endif
 
 #define E2E_SLOTS          8192
-#define SMP_THREADS        8
+#define SMP_THREADS        32
 #define SMP_LOCAL_SLOTS    512
 #define SMP_MAILBOXES      256
 
@@ -541,7 +541,7 @@ TestSmp(void)
 
     ArenaCreate(&Arena, 1024 * POOL_UNIT_SIZE);
     CHECK(PoolVaRegionInitialize(&Region, Arena.Base, Arena.Bytes, FALSE, &Arena.Backing) == STATUS_SUCCESS);
-    CHECK(PoolHeapCreate(&Heap, &Region, 0, SMP_THREADS, 42, POOL_HEAP_POISON_ON_FREE) == STATUS_SUCCESS);
+    CHECK(PoolHeapCreate(&Heap, &Region, 0, 16, 42, POOL_HEAP_POISON_ON_FREE) == STATUS_SUCCESS);
 
     for (i = 0; i <= SMP_THREADS; i++)
     {
@@ -554,10 +554,11 @@ TestSmp(void)
     }
 
     Start = NowSeconds();
-    pthread_create(&Trimmer, NULL, SmpTrimmer, &Contexts[SMP_THREADS]);
+    i = pthread_create(&Trimmer, NULL, SmpTrimmer, &Contexts[SMP_THREADS]);
+    CHECK(i == 0);
     RunThreads(SMP_THREADS, SmpWorker, Args);
     __atomic_store_n(&Stop, 1, __ATOMIC_SEQ_CST);
-    pthread_join(Trimmer, NULL);
+    if (i == 0) CHECK(pthread_join(Trimmer, NULL) == 0);
 
     for (i = 0; i < SMP_MAILBOXES; i++)
     {
