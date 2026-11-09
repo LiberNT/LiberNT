@@ -185,6 +185,7 @@ extern void func_RtlVirtualUnwind(void);
 extern void func_RtlVirtualUnwindChainedHandler(void);
 extern void func_RtlxUnicodeStringToAnsiSize(void);
 extern void func_RtlxUnicodeStringToOemSize(void);
+extern void func_NtProcessDeviceMap(void);
 extern void func_NtWaitForObjects(void);
 extern void func_SatisfiedWait(void);
 extern void func_StackOverflow(void);
@@ -382,6 +383,7 @@ const struct test winetest_testlist[] =
     { "RtlValidateUnicodeString",       func_RtlValidateUnicodeString },
     { "RtlWaitOnAddress",               func_RtlWaitOnAddress },
     { "RtlWaitOnAddressPriority",       func_RtlWaitOnAddressPriority },
+    { "NtProcessDeviceMap",                func_NtProcessDeviceMap },
     { "NtWaitForObjects",                  func_NtWaitForObjects },
     { "SatisfiedWait",                  func_SatisfiedWait },
     { "StackOverflow",                  func_StackOverflow },

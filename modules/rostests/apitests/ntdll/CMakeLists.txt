@@ -100,6 +100,7 @@ list(APPEND SOURCE
     NtMapViewOfSection_ImageZeroBits.c
     NtKeDispatcherTransitions.c
     NtKeHandoff.c
+    NtProcessDeviceMap.c
     NtWaitForObjects.c
     NtMutant.c
     NtNotifyChangeMultipleKeys.c
