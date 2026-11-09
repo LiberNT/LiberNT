@@ -27,6 +27,7 @@ static _Thread_local ULONG CurrentCpu;
 static ULONG64 ActiveCpus;
 static ULONG Checks, Failures, Finished;
 static ULONG64 Ipis;
+static ULONG DelayWait, DelayPolls, DelayReturned;
 
 #define CHECK(e) do { __atomic_fetch_add(&Checks, 1, __ATOMIC_RELAXED); if (!(e)) { if (__atomic_fetch_add(&Failures, 1, __ATOMIC_RELAXED) < 20) fprintf(stderr, "cpu%u %u: %s\n", CurrentCpu, __LINE__, #e); } } while (0)
 
@@ -149,7 +150,12 @@ VOID MiAmd64TlbLowerIrql(KIRQL Previous)
     Cpus[CurrentCpu].Irql = Previous;
 }
 
-VOID MiAmd64TlbPause(VOID) { sched_yield(); }
+VOID MiAmd64TlbPause(VOID)
+{
+    if (__atomic_load_n(&DelayWait, __ATOMIC_RELAXED))
+        __atomic_fetch_add(&DelayPolls, 1, __ATOMIC_RELEASE);
+    sched_yield();
+}
 
 VOID KiSendMemoryIpi(ULONG64 Targets)
 {
@@ -379,6 +385,47 @@ static VOID TargetCase(VOID)
     CHECK(Cpus[3].PageFlushes == Pages[3] && Cpus[3].FullFlushes == Full[3]);
 }
 
+static VOID *DelayedFlush(PVOID Argument)
+{
+    (void)Argument;
+    CurrentCpu = 0;
+    MiAmd64FlushTargets(2, 0x12345000, 1);
+    __atomic_store_n(&DelayReturned, 1, __ATOMIC_RELEASE);
+    return NULL;
+}
+
+static VOID DelayedTargetCase(VOID)
+{
+    pthread_t Thread;
+    ULONG64 BeforePages;
+    int Error;
+
+    ActiveCpus = 3;
+    SeedCpu(0);
+    SeedCpu(1);
+    Cpus[0].Pending = Cpus[1].Pending = 0;
+    BeforePages = Cpus[1].PageFlushes;
+    DelayPolls = DelayReturned = 0;
+    __atomic_store_n(&DelayWait, 1, __ATOMIC_RELEASE);
+    Error = pthread_create(&Thread, NULL, DelayedFlush, NULL);
+    CHECK(Error == 0);
+    if (Error != 0)
+    {
+        __atomic_store_n(&DelayWait, 0, __ATOMIC_RELEASE);
+        return;
+    }
+    while (__atomic_load_n(&DelayPolls, __ATOMIC_ACQUIRE) < 128 &&
+           !__atomic_load_n(&DelayReturned, __ATOMIC_ACQUIRE))
+        sched_yield();
+    CHECK(!__atomic_load_n(&DelayReturned, __ATOMIC_ACQUIRE));
+    CurrentCpu = 1;
+    MiAmd64TlbPoll();
+    CHECK(pthread_join(Thread, NULL) == 0);
+    __atomic_store_n(&DelayWait, 0, __ATOMIC_RELEASE);
+    CHECK(Cpus[1].PageFlushes == BeforePages + 1);
+    CHECK(DelayReturned == 1);
+}
+
 int main(void)
 {
     CHECK(MiAmd64SelfMapSlotAddress(0, 0) == 0xfffff68000000000ULL);
@@ -387,6 +434,7 @@ int main(void)
     CHECK(MiAmd64SelfMapSlotAddress(0, 3) == 0xfffff6fb7dbed000ULL);
     LocalCases();
     TargetCase();
+    DelayedTargetCase();
     SmpCase(2);
     SmpCase(4);
     SmpCase(8);
