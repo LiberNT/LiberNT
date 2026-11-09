@@ -17,6 +17,9 @@
  */
 
 #include <stdarg.h>
+#ifdef __REACTOS__
+#include <wchar.h>
+#endif
 
 #include "windef.h"
 #include "winbase.h"
