@@ -531,8 +531,31 @@ void Test_ExtCreatePen_Params2()
 
 }
 
+static void Test_ExtCreatePen_CosmeticNull(void)
+{
+    LOGBRUSH logbrush;
+    HPEN hPen;
+
+    logbrush.lbStyle = BS_NULL;
+    logbrush.lbColor = RGB(1, 2, 3);
+    logbrush.lbHatch = 0;
+    hPen = ExtCreatePen(PS_COSMETIC | PS_NULL, 1, &logbrush, 0, NULL);
+    ok(hPen == GetStockObject(NULL_PEN), "Expected the null pen for BS_NULL, got %p\n", hPen);
+
+    logbrush.lbStyle = BS_HATCHED;
+    logbrush.lbHatch = HS_CROSS;
+    hPen = ExtCreatePen(PS_COSMETIC | PS_NULL, 1, &logbrush, 0, NULL);
+    ok(hPen == GetStockObject(NULL_PEN), "Expected the null pen for BS_HATCHED, got %p\n", hPen);
+
+    /* Any other cosmetic style still needs a solid brush */
+    hPen = ExtCreatePen(PS_COSMETIC | PS_SOLID, 1, &logbrush, 0, NULL);
+    ok(hPen == NULL, "Expected no pen for a hatched cosmetic pen, got %p\n", hPen);
+    if (hPen) DeleteObject(hPen);
+}
+
 START_TEST(ExtCreatePen)
 {
     Test_ExtCreatePen_Params();
     //Test_ExtCreatePen_Params2();
+    Test_ExtCreatePen_CosmeticNull();
 }

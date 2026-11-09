@@ -423,6 +423,12 @@ NtGdiExtCreatePen(
         return 0;
     }
 
+    /* A null pen is returned before the brush is checked, also for a cosmetic pen */
+    if ((dwPenStyle & PS_STYLE_MASK) == PS_NULL)
+    {
+        return StockObjects[NULL_PEN];
+    }
+
     if (((dwPenStyle & PS_TYPE_MASK) == PS_COSMETIC) &&
         (ulBrushStyle != BS_SOLID))
     {
@@ -430,8 +436,7 @@ NtGdiExtCreatePen(
         return 0;
     }
 
-    if (((dwPenStyle & PS_STYLE_MASK) == PS_NULL) ||
-        (ulBrushStyle == BS_NULL))
+    if (ulBrushStyle == BS_NULL)
     {
         return StockObjects[NULL_PEN];
     }
