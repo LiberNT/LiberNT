@@ -10,6 +10,8 @@ set(ICU_PAYLOAD_RELEASE "72.1-1")
 set(ICU_PAYLOAD_SHA256_arm64 "9d5d74e3f85066116953d168303d0577e2a218bfc48ed12b003fb9339906e8c8")
 set(ICU_PAYLOAD "" CACHE FILEPATH "Local ICU payload .zip used instead of downloading the release asset")
 
+include("${CMAKE_CURRENT_LIST_DIR}/payload-download.cmake")
+
 if(ARM64EC_RUNTIME)
     return()
 endif()
@@ -30,24 +32,12 @@ else()
         return()
     endif()
     set(_payload_zip "${_payload_dir}/${_payload_name}")
-    set(_payload_have_hash "")
-    if(EXISTS "${_payload_zip}")
-        file(SHA256 "${_payload_zip}" _payload_have_hash)
-    endif()
-    if(NOT _payload_have_hash STREQUAL _payload_hash)
-        set(_payload_url "https://github.com/LiberNT/LiberNT/releases/download/icu-${ICU_PAYLOAD_RELEASE}/${_payload_name}")
-        message(STATUS "Downloading ${_payload_url}")
-        file(DOWNLOAD "${_payload_url}" "${_payload_zip}"
-            EXPECTED_HASH SHA256=${_payload_hash}
-            TLS_VERIFY ON
-            STATUS _payload_status)
-        list(GET _payload_status 0 _payload_code)
-        if(NOT _payload_code EQUAL 0)
-            file(REMOVE "${_payload_zip}")
-            message(STATUS "ICU: downloading the payload failed (${_payload_status}); "
-                "the second-stage icu.dll will not be cataloged.")
-            return()
-        endif()
+    libernt_download_payload(LiberNT/LiberNT "icu-${ICU_PAYLOAD_RELEASE}" "${_payload_name}"
+        "${_payload_zip}" "${_payload_hash}" _payload_error)
+    if(NOT _payload_error STREQUAL "")
+        message(STATUS "ICU: downloading the payload failed (${_payload_error}); "
+            "the second-stage icu.dll will not be cataloged.")
+        return()
     endif()
 endif()
 
