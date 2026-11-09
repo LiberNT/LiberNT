@@ -1695,6 +1695,18 @@ static DWORD verify_cert_revocation_with_crl_online(const CERT_CONTEXT *cert,
     return ERROR_SUCCESS;
 }
 
+#ifdef __REACTOS__
+#define REVOCATION_DEFAULT_URL_TIMEOUT 15000
+
+static DWORD revocation_url_timeout(const CERT_REVOCATION_PARA *params)
+{
+    if (params && params->cbSize >= RTL_SIZEOF_THROUGH_FIELD(CERT_REVOCATION_PARA, dwUrlRetrievalTimeout) &&
+        params->dwUrlRetrievalTimeout)
+        return params->dwUrlRetrievalTimeout;
+    return REVOCATION_DEFAULT_URL_TIMEOUT;
+}
+#endif
+
 /* Try to retrieve a CRL from any one of the specified distribution points. */
 static const CRL_CONTEXT *retrieve_crl_from_dist_points(const CRYPT_URL_ARRAY *array,
         DWORD verify_flags, DWORD timeout)
@@ -1754,8 +1766,12 @@ static DWORD verify_cert_revocation_from_dist_points_ext(const CRYPT_DATA_BLOB *
         return GetLastError();
     }
 
+#ifdef __REACTOS__
+    timeout = revocation_url_timeout(params);
+#else
     if (params && params->cbSize >= RTL_SIZEOF_THROUGH_FIELD(CERT_REVOCATION_PARA, dwUrlRetrievalTimeout))
         timeout = params->dwUrlRetrievalTimeout;
+#endif
 
     if (!(crl = retrieve_crl_from_dist_points(url_array, flags, timeout)))
     {
@@ -2056,6 +2072,9 @@ static DWORD verify_cert_revocation_with_ocsp(const CERT_CONTEXT *cert, const WC
     DWORD flags = INTERNET_FLAG_KEEP_CONNECTION;
     URL_COMPONENTSW comp;
     WCHAR *url = NULL;
+#ifdef __REACTOS__
+    DWORD timeout;
+#endif
 
     if (!revpara || !revpara->pIssuerCert)
     {
@@ -2100,6 +2119,12 @@ static DWORD verify_cert_revocation_with_ocsp(const CERT_CONTEXT *cert, const WC
         ret = GetLastError();
         goto done;
     }
+#ifdef __REACTOS__
+    timeout = revocation_url_timeout(revpara);
+    InternetSetOptionW(ses, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionW(ses, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionW(ses, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+#endif
     comp.lpszHostName[comp.dwHostNameLength] = 0;
     if (!(con = InternetConnectW(ses, comp.lpszHostName, comp.nPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0)))
     {
@@ -2240,6 +2265,7 @@ static DWORD verify_cert_revocation(const CERT_CONTEXT *cert, FILETIME *pTime,
     FILETIME next_update = {0};
     PCERT_EXTENSION ext;
 
+    /* TODO: INFO_NEEDED: how long Windows 11 answers a repeated check of an unreachable URL at once; it does right after the failure, no longer 30 s later */
     if (find_cached_revocation_status(cert, pRevPara, pTime, pRevStatus))
     {
         if (pRevStatus->dwError == ERROR_SUCCESS || pRevStatus->dwError == CRYPT_E_REVOKED)
@@ -2263,7 +2289,11 @@ static DWORD verify_cert_revocation(const CERT_CONTEXT *cert, FILETIME *pTime,
         TRACE("verify_cert_revocation_from_dist_points_ext() returned %08lx\n", error);
         if (error == ERROR_SUCCESS || error == CRYPT_E_REVOKED) goto done;
     }
+#ifdef __REACTOS__
+    if (!ext && error != CRYPT_E_REVOCATION_OFFLINE)
+#else
     if (!ext)
+#endif
     {
         if (pRevPara && pRevPara->hCrlStore && pRevPara->pIssuerCert)
         {
