@@ -5026,6 +5026,8 @@ static LPCWSTR CRYPT_HashAlgIdToCngName(ALG_ID algId)
 {
     switch (algId)
     {
+    case CALG_MD2: return BCRYPT_MD2_ALGORITHM;
+    case CALG_MD4: return BCRYPT_MD4_ALGORITHM;
     case CALG_MD5: return BCRYPT_MD5_ALGORITHM;
     case CALG_SHA1: return BCRYPT_SHA1_ALGORITHM;
     case CALG_SHA_256: return BCRYPT_SHA256_ALGORITHM;
@@ -5162,14 +5164,15 @@ static BOOL CRYPT_VerifyCountersignatureHash(const CMSG_SIGNER_INFO *counter,
 
 static BOOL CRYPT_IsStrongSignPara(const CERT_STRONG_SIGN_PARA *para)
 {
-    if (para->cbSize < sizeof(*para))
+    /* Windows 11 dereferences a NULL OID or serialized info */
+    if (para->cbSize != sizeof(*para) || !para->pvInfo ||
+     (para->dwInfoChoice != CERT_STRONG_SIGN_SERIALIZED_INFO_CHOICE &&
+     para->dwInfoChoice != CERT_STRONG_SIGN_OID_INFO_CHOICE))
     {
         SetLastError(E_INVALIDARG);
         return FALSE;
     }
-    /* TODO: CERT_STRONG_SIGN_SERIALIZED_INFO_CHOICE parameters */
-    if (para->dwInfoChoice != CERT_STRONG_SIGN_OID_INFO_CHOICE || !para->pszOID ||
-     strcmp(para->pszOID, szOID_CERT_STRONG_SIGN_OS_1))
+    if (para->dwInfoChoice == CERT_STRONG_SIGN_OID_INFO_CHOICE && strcmp(para->pszOID, szOID_CERT_STRONG_SIGN_OS_1))
     {
         SetLastError(ERROR_NOT_SUPPORTED);
         return FALSE;
@@ -5177,17 +5180,59 @@ static BOOL CRYPT_IsStrongSignPara(const CERT_STRONG_SIGN_PARA *para)
     return TRUE;
 }
 
-static BOOL CRYPT_IsStrongCountersigner(const CMSG_SIGNER_INFO *counter, CERT_PUBLIC_KEY_INFO *key)
+static LPCWSTR CRYPT_StrongSignKeyName(const CERT_PUBLIC_KEY_INFO *key)
+{
+    if (!strcmp(key->Algorithm.pszObjId, szOID_RSA_RSA))
+        return BCRYPT_RSA_ALGORITHM;
+    if (!strcmp(key->Algorithm.pszObjId, szOID_ECC_PUBLIC_KEY))
+        return CERT_STRONG_SIGN_ECDSA_ALGORITHM;
+    return NULL;
+}
+
+/* Finds "<first>/<second>" in a list of pairs separated by semicolons */
+static const WCHAR *CRYPT_FindStrongSignPair(const WCHAR *list, LPCWSTR first, LPCWSTR second)
+{
+    size_t firstLen = lstrlenW(first), secondLen = second ? lstrlenW(second) : 0;
+    const WCHAR *entry, *end;
+
+    for (entry = list; entry && *entry; entry = *end ? end + 1 : end)
+    {
+        if (!(end = wcschr(entry, ';')))
+            end = entry + lstrlenW(entry);
+        if ((size_t)(end - entry) > firstLen && !_wcsnicmp(entry, first, firstLen) && entry[firstLen] == '/' &&
+         (!second || ((size_t)(end - entry) == firstLen + 1 + secondLen &&
+         !_wcsnicmp(entry + firstLen + 1, second, secondLen))))
+            return entry + firstLen + 1;
+    }
+    return NULL;
+}
+
+static BOOL CRYPT_IsStrongCountersigner(const CERT_STRONG_SIGN_PARA *para, const CMSG_SIGNER_INFO *counter,
+ CERT_PUBLIC_KEY_INFO *key)
 {
     ALG_ID hash = CertOIDToAlgId(counter->HashAlgorithm.pszObjId);
+    const CERT_STRONG_SIGN_SERIALIZED_INFO *info = para->pSerializedInfo;
+    LPCWSTR keyName = key ? CRYPT_StrongSignKeyName(key) : NULL;
+    const WCHAR *bits;
+    BOOL ret;
 
-    if ((hash != CALG_SHA_256 && hash != CALG_SHA_384 && hash != CALG_SHA_512) ||
-     (key && !strcmp(key->Algorithm.pszObjId, szOID_RSA_RSA) && CertGetPublicKeyLength(X509_ASN_ENCODING, key) < 2047))
+    if (para->dwInfoChoice == CERT_STRONG_SIGN_OID_INFO_CHOICE)
+        ret = (hash == CALG_SHA_256 || hash == CALG_SHA_384 || hash == CALG_SHA_512) &&
+         !(key && !strcmp(key->Algorithm.pszObjId, szOID_RSA_RSA) &&
+         CertGetPublicKeyLength(X509_ASN_ENCODING, key) < 2047);
+    else
     {
-        SetLastError(NTE_BAD_ALGID);
-        return FALSE;
+        ret = keyName && info->pwszCNGSignHashAlgids &&
+         CRYPT_FindStrongSignPair(info->pwszCNGSignHashAlgids, keyName, CRYPT_HashAlgIdToCngName(hash));
+        if (ret && info->pwszCNGPubKeyMinBitLengths)
+        {
+            bits = CRYPT_FindStrongSignPair(info->pwszCNGPubKeyMinBitLengths, keyName, NULL);
+            ret = bits && CertGetPublicKeyLength(X509_ASN_ENCODING, key) >= wcstoul(bits, NULL, 10);
+        }
     }
-    return TRUE;
+    if (!ret)
+        SetLastError(NTE_BAD_ALGID);
+    return ret;
 }
 
 BOOL WINAPI CryptMsgVerifyCountersignatureEncodedEx(HCRYPTPROV_LEGACY hCryptProv,
@@ -5234,7 +5279,7 @@ BOOL WINAPI CryptMsgVerifyCountersignatureEncodedEx(HCRYPTPROV_LEGACY hCryptProv
      CRYPT_HashCountersignedData(signer, counter, &hash, &hashSize) &&
      CRYPT_VerifyCountersignatureHash(counter, key, hash, hashSize);
     if (ret && strong)
-        ret = CRYPT_IsStrongCountersigner(counter, key);
+        ret = CRYPT_IsStrongCountersigner(strong, counter, key);
     if (ret)
         SetLastError(ERROR_SUCCESS);
     CryptMemFree(hash);
