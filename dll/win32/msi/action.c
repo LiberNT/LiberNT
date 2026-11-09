@@ -91,6 +91,23 @@ static void ui_actioninfo(MSIPACKAGE *package, const WCHAR *action, BOOL start, 
     if (!start) package->LastActionResult = rc;
 }
 
+#ifdef __REACTOS__
+static INT action_result(UINT rc)
+{
+    switch (rc)
+    {
+    case ERROR_FUNCTION_NOT_CALLED: return 0;
+    case ERROR_SUCCESS: return 1;
+    case ERROR_INSTALL_USEREXIT: return 2;
+    case ERROR_INSTALL_SUSPEND: return 4;
+    case ERROR_INVALID_HANDLE_STATE: return 6;
+    case ERROR_INVALID_DATA: return 7;
+    case ERROR_INSTALL_ALREADY_RUNNING: return 8;
+    default: return 3;
+    }
+}
+#endif
+
 enum parse_state
 {
     state_whitespace,
@@ -530,7 +547,11 @@ static UINT ACTION_HandleCustomAction(MSIPACKAGE *package, LPCWSTR action)
         return ERROR_INSTALL_USEREXIT;
     ui_actioninfo(package, action, TRUE, 0);
     arc = ACTION_CustomAction(package, action);
+#ifdef __REACTOS__
+    uirc = action_result(arc);
+#else
     uirc = !arc;
+#endif
 
     if (arc == ERROR_FUNCTION_NOT_CALLED && needs_ui_sequence(package))
     {
@@ -5623,7 +5644,11 @@ static UINT ACTION_ExecuteAction(MSIPACKAGE *package)
         rc = ACTION_ProcessExecSequence(package, exec_sequence);
 
         /* Send return value and INSTALLEND. */
+#ifdef __REACTOS__
+        ui_actioninfo(package, action, FALSE, action_result(rc));
+#else
         ui_actioninfo(package, action, FALSE, !rc);
+#endif
         uirow = MSI_CreateRecord(3);
         if (!uirow)
         {
@@ -5633,7 +5658,11 @@ static UINT ACTION_ExecuteAction(MSIPACKAGE *package)
         MSI_RecordSetStringW(uirow, 0, NULL);
         MSI_RecordSetStringW(uirow, 1, productname);
         MSI_RecordSetStringW(uirow, 2, package->ProductCode);
+#ifdef __REACTOS__
+        MSI_RecordSetInteger(uirow, 3, action_result(rc));
+#else
         MSI_RecordSetInteger(uirow, 3, !rc);
+#endif
         MSI_ProcessMessage(package, INSTALLMESSAGE_INSTALLEND, uirow);
         msiobj_release(&uirow->hdr);
     }
@@ -7982,7 +8011,11 @@ static UINT ACTION_HandleStandardAction(MSIPACKAGE *package, LPCWSTR action)
             {
                 ui_actioninfo( package, action, TRUE, 0 );
                 rc = StandardActions[i].handler( package );
+#ifdef __REACTOS__
+                ui_actioninfo( package, action, FALSE, action_result( rc ) );
+#else
                 ui_actioninfo( package, action, FALSE, !rc );
+#endif
 #ifdef __REACTOS__
                 if (rc == ERROR_FUNCTION_NOT_CALLED)
                     rc = ERROR_SUCCESS;
