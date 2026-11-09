@@ -1193,8 +1193,8 @@ VOID FASTCALL IntLinkHwnd(PWND Wnd, HWND hWndPrev)
         }
         else
         {
-            if (WndInsertAfter->spwndNext &&
-                (WndInsertAfter->spwndNext->ExStyle & WS_EX_TOPMOST))
+            if (Wnd->spwndNext &&
+                (Wnd->spwndNext->ExStyle & WS_EX_TOPMOST))
             {
                 Wnd->ExStyle |= WS_EX_TOPMOST;
             }
