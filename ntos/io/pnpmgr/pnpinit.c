@@ -331,6 +331,7 @@ IopInitializePlugPlayServices(VOID)
     KeInitializeSpinLock(&IopDeviceTreeLock);
     KeInitializeSpinLock(&IopDeviceActionLock);
     InitializeListHead(&IopDeviceActionRequestList);
+    InitializeListHead(&IopDeviceActionInFlightList);
     KeInitializeEvent(&PiEnumerationFinished, NotificationEvent, TRUE);
 
     /* Get the default interface */

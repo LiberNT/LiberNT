@@ -51,6 +51,7 @@ IopCheckSafeBootDriver(
 /* DATA **********************************************************************/
 
 LIST_ENTRY IopDeviceActionRequestList;
+LIST_ENTRY IopDeviceActionInFlightList;
 WORK_QUEUE_ITEM IopDeviceActionWorkItem;
 BOOLEAN IopDeviceActionInProgress;
 KSPIN_LOCK IopDeviceActionLock;
@@ -1690,6 +1691,81 @@ PiRetryDuplicateInstances(VOID)
 }
 
 static
+BOOLEAN
+PipIsSubtreeRemoveAction(
+    _In_ DEVICE_ACTION Action)
+{
+    switch (Action)
+    {
+        case PiActionQueryRemoveDevice:
+        case PiActionRemoveDevice:
+        case PiActionCloseRemovedDevice:
+        case PiActionEjectDevice:
+            return TRUE;
+        default:
+            return FALSE;
+    }
+}
+
+static
+BOOLEAN
+PipIsDevNodeRetirePending(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PLIST_ENTRY ListHead, Entry;
+    PDEVICE_ACTION_REQUEST Request;
+    PDEVICE_NODE Target, Node;
+    KIRQL OldIrql;
+    ULONG i;
+
+    if (DeviceNode->State == DeviceNodeAwaitingQueuedRemoval ||
+        DeviceNode->State == DeviceNodeAwaitingQueuedDeletion)
+    {
+        return TRUE;
+    }
+
+    if (DeviceNode->Parent != NULL &&
+        (DeviceNode->Parent->Flags & DNF_REENUMERATE))
+    {
+        return TRUE;
+    }
+
+    KeAcquireSpinLock(&IopDeviceActionLock, &OldIrql);
+    for (i = 0; i < 2; i++)
+    {
+        ListHead = (i == 0) ? &IopDeviceActionRequestList : &IopDeviceActionInFlightList;
+        for (Entry = ListHead->Flink; Entry != ListHead; Entry = Entry->Flink)
+        {
+            Request = CONTAINING_RECORD(Entry, DEVICE_ACTION_REQUEST, RequestListEntry);
+            Target = IopGetDeviceNode(Request->DeviceObject);
+            if (Target == NULL)
+                continue;
+
+            if (Request->Action == PiActionEnumDeviceTree ||
+                Request->Action == PiActionEnumRootDevices)
+            {
+                if (Target == DeviceNode->Parent)
+                    goto Found;
+            }
+            else if (PipIsSubtreeRemoveAction(Request->Action))
+            {
+                for (Node = DeviceNode; Node != NULL; Node = Node->Parent)
+                {
+                    if (Node == Target)
+                        goto Found;
+                }
+            }
+        }
+    }
+    KeReleaseSpinLock(&IopDeviceActionLock, OldIrql);
+    return FALSE;
+
+Found:
+    KeReleaseSpinLock(&IopDeviceActionLock, OldIrql);
+    return TRUE;
+}
+
+static
 VOID
 PiResetRemovedDevNode(
     _In_ PDEVICE_NODE DeviceNode)
@@ -1786,6 +1862,17 @@ PiInitializeDevNode(
         }
         else if (OldDeviceGone)
         {
+            ObDereferenceObject(OldDeviceObject);
+            ExReleaseResourceLite(&IopDeviceTreeResource);
+            KeLeaveCriticalRegion();
+            RtlFreeUnicodeString(&InstancePathU);
+            return STATUS_DEVICE_BUSY;
+        }
+        else if (PipIsDevNodeRetirePending(OldDeviceNode))
+        {
+            DPRINT1("Device instance '%wZ' held by a node whose removal is pending, deferring\n", &InstancePathU);
+            InterlockedExchange(&PiDuplicateInstancePending, 1);
+            KeMemoryBarrier();
             ObDereferenceObject(OldDeviceObject);
             ExReleaseResourceLite(&IopDeviceTreeResource);
             KeLeaveCriticalRegion();
@@ -3639,6 +3726,7 @@ PipRunDeviceActionRequest(
     PDEVICE_ACTION_REQUEST Request = Item;
     PDEVICE_NODE deviceNode;
     NTSTATUS status;
+    KIRQL OldIrql;
 
     ASSERT(Request->DeviceObject);
 
@@ -3755,6 +3843,10 @@ PipRunDeviceActionRequest(
             break;
     }
 
+    KeAcquireSpinLock(&IopDeviceActionLock, &OldIrql);
+    RemoveEntryList(&Request->RequestListEntry);
+    KeReleaseSpinLock(&IopDeviceActionLock, OldIrql);
+
     if (Request->CompletionStatus)
     {
         *Request->CompletionStatus = status;
@@ -3796,6 +3888,7 @@ PipDeviceActionWorker(
     while (!IsListEmpty(&IopDeviceActionRequestList))
     {
         ListEntry = RemoveHeadList(&IopDeviceActionRequestList);
+        InsertTailList(&IopDeviceActionInFlightList, ListEntry);
         Batch[0] = CONTAINING_RECORD(ListEntry, DEVICE_ACTION_REQUEST, RequestListEntry);
         count = 1;
 
@@ -3812,6 +3905,7 @@ PipDeviceActionWorker(
                     break;
 
                 RemoveHeadList(&IopDeviceActionRequestList);
+                InsertTailList(&IopDeviceActionInFlightList, &next->RequestListEntry);
                 Batch[count++] = next;
             }
         }
