@@ -399,31 +399,16 @@ OslArchPrepareHandoff(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     WinLdrSetupMachineDependent(LoaderBlock);
-    FwPrint(L"LiberNT: machine-dependent setup done\r\n");
 
     if (!Amd64Ready || !WinLdrSetupMemoryLayout(LoaderBlock))
         return FALSE;
 
-    FwPrint(L"LiberNT: kernel memory layout done\r\n");
-
-    /* Loader block may hold KSEG0 pointers; write through the physical address */
-    FwLateScreenInitialize(VaToPa(LoaderBlock->Extension));
-
-    FwPrint(L"LiberNT: exiting boot services\r\n");
     FwExitBootServices();
-    FwPrint(L"LiberNT: boot services exited\r\n");
     Amd64SaveFirmwareIdentity();
-    FwPrint(L"LiberNT: firmware identity saved\r\n");
     WinLdrSetProcessorContext(OSL_NT_VERSION);
-    FwPrint(L"LiberNT: processor context set\r\n");
     Amd64UseFirmwareIdentity(TRUE);
     FwSetVirtualAddressMap();
     Amd64UseFirmwareIdentity(FALSE);
-    if (LoaderBlock->FirmwareInformation.FirmwareTypeEfi &&
-        !NT_SUCCESS(LoaderBlock->FirmwareInformation.u.EfiInformation.SetVirtualAddressMapStatus))
-        FwPrint(L"LiberNT: virtual address map FAILED\r\n");
-    else
-        FwPrint(L"LiberNT: virtual address map set\r\n");
     return TRUE;
 }
 

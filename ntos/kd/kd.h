@@ -78,12 +78,6 @@ KdpNetInit(
     _In_ struct _KD_DISPATCH_TABLE *DispatchTable,
     _In_ ULONG BootPhase);
 
-NTSTATUS
-NTAPI
-KdpFbInit(
-    _In_ struct _KD_DISPATCH_TABLE *DispatchTable,
-    _In_ ULONG BootPhase);
-
 BOOLEAN
 KdpNetGetByte(
     _Out_ PUCHAR Byte);
@@ -137,9 +131,9 @@ KdpInfoState(VOID);
 // #define KdSerial    1
 #ifdef KDBG
 // #define KdKdbg      2
-#define KdMax       5   /* screen, serial, kdbg, net, framebuffer */
+#define KdMax       4
 #else
-#define KdMax       4   /* screen, serial, net, framebuffer */
+#define KdMax       3
 #endif
 
 /* KD Private Debug Modes */

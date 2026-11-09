@@ -34,14 +34,6 @@
 #define TRACE(Format, ...) do { if (0) DbgPrint(Format, ##__VA_ARGS__); } while (0)
 #define BugCheck(Format, ...) do { DbgPrint(Format, ##__VA_ARGS__); FwHalt(); } while (0)
 
-typedef
-VOID
-(*PFW_LATE_SCREEN_WRITE)(
-    _In_ UCHAR Character);
-
-/* Set by the OS loader; FwPrint() writes here once the firmware console is gone */
-extern PFW_LATE_SCREEN_WRITE FwLateScreenWriter;
-
 #ifndef IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION
 #define IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION 16
 #endif
