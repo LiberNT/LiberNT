@@ -228,6 +228,8 @@ typedef struct _WLSESSION
     BOOL TaskManHotkey;
     BOOL LockWkStaHotkey;
     HWND SASWindow;
+    HANDLE SoftwareSasEvent;
+    HANDLE SoftwareSasWait;
     HWINSTA InteractiveWindowStation;
     PWSTR InteractiveWindowStationName;
     PWSTR UserName;
