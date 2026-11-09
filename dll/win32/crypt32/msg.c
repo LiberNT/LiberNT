@@ -5008,7 +5008,6 @@ BOOL WINAPI CryptMsgCountersign(HCRYPTMSG hCryptMsg, DWORD dwIndex,
         return FALSE;
     }
 
-    /* FIXME: after two CMSG_CTRL_ADD_SIGNER_UNAUTH_ATTR calls Windows 11 fails here without setting an error */
     ret = CryptMsgGetParam(hCryptMsg, CMSG_ENCODED_SIGNER, dwIndex, NULL, &size) &&
      (signer = CryptMemAlloc(size)) &&
      CryptMsgGetParam(hCryptMsg, CMSG_ENCODED_SIGNER, dwIndex, signer, &size) &&
@@ -5088,9 +5087,39 @@ static BOOL CRYPT_HashCountersignedData(const CMSG_SIGNER_INFO *signer,
     return FALSE;
 }
 
+static BOOL CRYPT_IsLegacyHash(ALG_ID algId)
+{
+    return algId == CALG_MD2 || algId == CALG_MD4 || algId == CALG_MD5 || algId == CALG_SHA1;
+}
+
+static BOOL CRYPT_VerifyLegacyCountersignature(const CMSG_SIGNER_INFO *counter, ALG_ID algId,
+ CERT_PUBLIC_KEY_INFO *key, BYTE *hash)
+{
+    HCRYPTPROV prov = I_CryptGetDefaultCryptProv(algId);
+    CRYPT_HASH_BLOB reversed;
+    HCRYPTHASH handle = 0;
+    HCRYPTKEY pubKey = 0;
+    BOOL ret;
+
+    if (!prov || !CRYPT_ConstructBlob(&reversed, &counter->EncryptedHash))
+        return FALSE;
+    CRYPT_ReverseBytes(&reversed);
+    ret = CryptCreateHash(prov, algId, 0, 0, &handle) &&
+     CryptSetHashParam(handle, HP_HASHVAL, hash, 0) &&
+     CryptImportPublicKeyInfo(prov, X509_ASN_ENCODING, key, &pubKey) &&
+     CryptVerifySignatureW(handle, reversed.pbData, reversed.cbData, pubKey, NULL, 0);
+    if (pubKey)
+        CryptDestroyKey(pubKey);
+    if (handle)
+        CryptDestroyHash(handle);
+    CryptMemFree(reversed.pbData);
+    return ret;
+}
+
 static BOOL CRYPT_VerifyCountersignatureHash(const CMSG_SIGNER_INFO *counter,
  CERT_PUBLIC_KEY_INFO *key, BYTE *hash, DWORD hashSize)
 {
+    ALG_ID algId = CertOIDToAlgId(counter->HashAlgorithm.pszObjId);
     BCRYPT_PKCS1_PADDING_INFO padding;
     BCRYPT_KEY_HANDLE handle;
     NTSTATUS status;
@@ -5116,6 +5145,8 @@ static BOOL CRYPT_VerifyCountersignatureHash(const CMSG_SIGNER_INFO *counter,
         SetLastError(NTE_BAD_ALGID);
         return FALSE;
     }
+    if (CRYPT_IsLegacyHash(algId))
+        return CRYPT_VerifyLegacyCountersignature(counter, algId, key, hash);
     if (!CNG_ImportPubKey(key, &handle))
         return FALSE;
     status = BCryptVerifySignature(handle, &padding, hash, hashSize, counter->EncryptedHash.pbData,
@@ -5123,8 +5154,7 @@ static BOOL CRYPT_VerifyCountersignatureHash(const CMSG_SIGNER_INFO *counter,
     BCryptDestroyKey(handle);
     if (status)
     {
-        /* TODO: INFO_NEEDED the mismatch error Windows 11 reports for the MD5 hash */
-        SetLastError(CertOIDToAlgId(counter->HashAlgorithm.pszObjId) == CALG_SHA1 ? NTE_BAD_SIGNATURE : status);
+        SetLastError(status);
         return FALSE;
     }
     return TRUE;
