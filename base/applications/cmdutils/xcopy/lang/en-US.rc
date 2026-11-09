@@ -26,7 +26,7 @@ STRINGTABLE
 \n\
 Syntax:\n\
 XCOPY source [destination] [/I] [/S] [/Q] [/F] [/L] [/W] [/T] [/N] [/U]\n\
-\t     [/R] [/H] [/C] [/P] [/A] [/M] [/E] [/D] [/Y] [/-Y] [/K]\n\
+\t     [/R] [/H] [/C] [/P] [/A] [/M] [/E] [/D] [/Y] [/-Y] [/K] [/Z]\n\
 \n\
 Where:\n\
 \n\
@@ -51,6 +51,7 @@ Where:\n\
 [/M]  Only copy files with archive attribute set, removes the\n\
 \tarchive attribute.\n\
 [/K]  Copy file attributes, without this attributes are not preserved.\n\
+[/Z]  Accepted for compatibility, files are copied normally.\n\
 [/D | /D:m-d-y] Copy new files or those modified after the supplied date.\n\
 \t\tIf no date is supplied, only copy if destination is older\n\
 \t\tthan source.\n\n"

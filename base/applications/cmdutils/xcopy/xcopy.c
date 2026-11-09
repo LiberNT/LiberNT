@@ -787,6 +787,9 @@ static int XCOPY_ParseCommandLine(WCHAR *suppliedsource,
                 case 'U': flags |= OPT_MUSTEXIST;     break;
                 case 'R': flags |= OPT_REPLACEREAD;   break;
                 case 'K': flags |= OPT_KEEPATTRS;     break;
+#ifdef __REACTOS__
+                case 'Z': WINE_FIXME("ignoring /Z\n"); break;
+#endif
                 case 'H': flags |= OPT_COPYHIDSYS;    break;
                 case 'C': flags |= OPT_IGNOREERRORS;  break;
                 case 'P': flags |= OPT_SRCPROMPT;     break;
