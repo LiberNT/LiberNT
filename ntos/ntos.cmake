@@ -275,7 +275,6 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/se/seaccess.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seaccesschk.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seacl.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/audit.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seclient.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seobjtype.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seprivilege.c

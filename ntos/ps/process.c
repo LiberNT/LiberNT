@@ -802,7 +802,7 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
     Process->ObjectTable->UniqueProcessId = PtrToUlong(Process->UniqueProcessId);
 
     /* Check if we need to audit */
-    if (SeDetailedAuditingWithToken(NULL)) SeAuditProcessCreate(Process);
+    if (SeDetailedAuditingWithToken(NULL)) SeAuditProcessCreation(Process);
 
     if (Parent && Parent->Job)
     {
