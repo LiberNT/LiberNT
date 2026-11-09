@@ -77,6 +77,7 @@ Most of the tree is still shared with ReactOS, and the components synchronised w
 - When Windows 11 has something LiberNT lacks, record the gap. Do not silently rewrite Windows-mirrored headers.
 - Parity is not a clean build, a boot or a passing LiberNT test; those tests check their own constants.
 - Use the correct calling conventions and annotations, follow the existing error handling (`NTSTATUS`, `EFI_STATUS`), and respect IRQL, locking and paging constraints in kernel code.
+- In all kernel-mode projects, add as many meaningful assertions as needed to strictly verify every invariant and implicit state machine: check preconditions, postconditions, valid states and transitions, ownership, lifetimes, IRQL and locking assumptions at the points where they must hold. Keep assertions side-effect-free and retain runtime validation and error handling for external or otherwise untrusted inputs.
 
 ## Architecture neutrality
 
