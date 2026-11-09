@@ -276,7 +276,6 @@ extern const LUID SeDelegateSessionUserImpersonatePrivilege;
 extern PACL SePublicDefaultUnrestrictedDacl;
 extern PACL SePublicOpenDacl;
 extern PACL SePublicOpenUnrestrictedDacl;
-extern PACL SeUnrestrictedDacl;
 extern PACL SeSystemAnonymousLogonDacl;
 
 //
@@ -287,8 +286,6 @@ extern PSECURITY_DESCRIPTOR SePublicDefaultUnrestrictedSd;
 extern PSECURITY_DESCRIPTOR SePublicOpenSd;
 extern PSECURITY_DESCRIPTOR SePublicOpenUnrestrictedSd;
 extern PSECURITY_DESCRIPTOR SeSystemDefaultSd;
-extern PSECURITY_DESCRIPTOR SeUnrestrictedSd;
-extern PSECURITY_DESCRIPTOR SeSystemAnonymousLogonSd;
 
 //
 // Anonymous Logon Tokens
@@ -731,7 +728,7 @@ SeReleaseSidAndAttributesArray(
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-SepInitDACLs(VOID);
+SepInitSystemDacls(VOID);
 
 NTSTATUS
 NTAPI
@@ -792,7 +789,7 @@ SepSelectAcl(
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-SepInitSDs(VOID);
+SepInitSystemSds(VOID);
 
 NTSTATUS
 NTAPI
