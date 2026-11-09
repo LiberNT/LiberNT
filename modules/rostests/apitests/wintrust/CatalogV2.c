@@ -182,10 +182,181 @@ TestVersion2Catalog(VOID)
     DeleteFileW(Member);
 }
 
+static
+BOOL
+WriteText(PCWSTR Path, const char *Text)
+{
+    HANDLE File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    DWORD Written;
+    BOOL Ret;
+
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Ret = WriteFile(File, Text, (DWORD)strlen(Text), &Written, NULL);
+    CloseHandle(File);
+    return Ret;
+}
+
+static
+DWORD
+FileSize(PCWSTR Path)
+{
+    HANDLE File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    DWORD Size;
+
+    if (File == INVALID_HANDLE_VALUE)
+        return 0;
+    Size = GetFileSize(File, NULL);
+    CloseHandle(File);
+    return Size;
+}
+
+static
+CRYPTCATCDF *
+OpenDefinition(PCWSTR Cdf, PCWSTR Cat, PCWSTR Member1, PCWSTR Member2, const char *Header)
+{
+    WCHAR Directory[MAX_PATH];
+    char Text[2048];
+
+    GetTempPathW(RTL_NUMBER_OF(Directory), Directory);
+    DeleteFileW(Cat);
+    snprintf(Text, sizeof(Text), "[CatalogHeader]\r\nName=lntwtv2.cat\r\nResultDir=%ls\r\n%sEncodingType=0x00010001\r\n"
+             "CATATTR1=0x10010001:Note:first\r\n[CatalogFiles]\r\nm1=%ls\r\nm1ATTR1=0x10010001:MemberNote:mine\r\n"
+             "<HASH>m2=%ls\r\n", Directory, Header, Member1, Member2);
+    if (!WriteText(Cdf, Text))
+        return NULL;
+    return CryptCATCDFOpen((LPWSTR)Cdf, NULL);
+}
+
+static
+VOID
+CheckWrittenVersion2(PCWSTR Cat, DWORD ExpectedSize)
+{
+    CRYPTCATSTORE *Store;
+    HANDLE Handle;
+
+    ok_long(FileSize(Cat), ExpectedSize);
+    Handle = CryptCATOpen((LPWSTR)Cat, CRYPTCAT_OPEN_EXISTING, 0, 0, 0);
+    ok(Handle != INVALID_HANDLE_VALUE, "CryptCATOpen failed %lu\n", GetLastError());
+    if (Handle == INVALID_HANDLE_VALUE)
+        return;
+    Store = CryptCATStoreFromHandle(Handle);
+    ok(Store && Store->dwPublicVersion == CRYPTCAT_VERSION_2, "store version %#lx\n", Store ? Store->dwPublicVersion : 0);
+    ok(CryptCATEnumerateMember(Handle, NULL) == NULL, "the catalog has members\n");
+    CryptCATClose(Handle);
+}
+
+static
+VOID
+TestVersion2Definition(VOID)
+{
+    WCHAR Directory[MAX_PATH], Cdf[MAX_PATH], Cat[MAX_PATH], Member1[MAX_PATH], Member2[MAX_PATH];
+    CRYPTCATATTRIBUTE *Attribute;
+    CRYPTCATMEMBER *Member;
+    CRYPTCATCDF *Definition;
+    LPWSTR Tag;
+
+    GetTempPathW(RTL_NUMBER_OF(Directory), Directory);
+    swprintf(Cdf, RTL_NUMBER_OF(Cdf), L"%lslntwtv2.cdf", Directory);
+    swprintf(Cat, RTL_NUMBER_OF(Cat), L"%lslntwtv2.cat", Directory);
+    swprintf(Member1, RTL_NUMBER_OF(Member1), L"%lslntwtv2-m1.txt", Directory);
+    swprintf(Member2, RTL_NUMBER_OF(Member2), L"%lslntwtv2-m2.txt", Directory);
+    ok(WriteText(Member1, "member one\r\n") && WriteText(Member2, "member two\r\n"), "Cannot write the members\n");
+
+    SetLastError(0xdeadbeef);
+    ok(OpenDefinition(Cdf, Cat, Member1, Member2, "CatalogVersion=2\r\n") == NULL, "opened without HashAlgorithms\n");
+    ok_err(ERROR_INVALID_PARAMETER);
+
+    /* The old member API hands out the literal tags of a version 2 definition, then writes no catalog */
+    Definition = OpenDefinition(Cdf, Cat, Member1, Member2, "CatalogVersion=2\r\nHashAlgorithms=SHA256\r\n");
+    ok(Definition != NULL, "CryptCATCDFOpen failed %lu\n", GetLastError());
+    if (Definition)
+    {
+        SetLastError(0xdeadbeef);
+        Member = CryptCATCDFEnumMembers(Definition, NULL, NULL);
+        ok(Member && !wcscmp(Member->pwszReferenceTag, L"m1"), "first member %ls\n", Member ? Member->pwszReferenceTag : NULL);
+        ok_err(ERROR_SUCCESS);
+        SetLastError(0xdeadbeef);
+        Attribute = Member ? CryptCATCDFEnumAttributes(Definition, Member, NULL, NULL) : NULL;
+        ok(Attribute && !wcscmp(Attribute->pwszReferenceTag, L"MemberNote"), "member attribute %ls\n",
+           Attribute ? Attribute->pwszReferenceTag : NULL);
+        ok_err(0xdeadbeef);
+        ok(!Attribute || !CryptCATCDFEnumAttributes(Definition, Member, Attribute, NULL), "second member attribute\n");
+        ok_err(0xdeadbeef);
+        Member = Member ? CryptCATCDFEnumMembers(Definition, Member, NULL) : NULL;
+        ok(Member && !wcscmp(Member->pwszReferenceTag, L"<HASH>m2"), "second member %ls\n",
+           Member ? Member->pwszReferenceTag : NULL);
+        SetLastError(0xdeadbeef);
+        ok(!Member || !CryptCATCDFEnumMembers(Definition, Member, NULL), "third member\n");
+        ok_err(ERROR_SUCCESS);
+        SetLastError(0xdeadbeef);
+        ok_int(CryptCATCDFClose(Definition), FALSE);
+        ok_err(ERROR_SUCCESS);
+        ok(GetFileAttributesW(Cat) != INVALID_FILE_ATTRIBUTES, "the empty catalog was removed\n");
+        ok_long(FileSize(Cat), 0);
+    }
+
+    Definition = OpenDefinition(Cdf, Cat, Member1, Member2, "CatalogVersion=2\r\nHashAlgorithms=SHA256\r\n");
+    ok(Definition != NULL, "CryptCATCDFOpen failed %lu\n", GetLastError());
+    if (Definition)
+    {
+        Member = (CRYPTCATMEMBER *)0xdeadbeef;
+        SetLastError(0xdeadbeef);
+        ok(CryptCATCDFEnumMembersByCDFTagEx(Definition, NULL, NULL, &Member, TRUE, NULL) == NULL, "got a tag\n");
+        ok_err(ERROR_INVALID_PARAMETER);
+        SetLastError(0xdeadbeef);
+        ok_int(CryptCATCDFClose(Definition), TRUE);
+        ok_err(ERROR_SUCCESS);
+        CheckWrittenVersion2(Cat, 104);
+    }
+
+    Definition = OpenDefinition(Cdf, Cat, Member1, Member2, "CatalogVersion=2\r\nHashAlgorithms=SHA256\r\n");
+    ok(Definition != NULL, "CryptCATCDFOpen failed %lu\n", GetLastError());
+    if (Definition)
+    {
+        SetLastError(0xdeadbeef);
+        Attribute = CryptCATCDFEnumCatAttributes(Definition, NULL, NULL);
+        ok(Attribute && !wcscmp(Attribute->pwszReferenceTag, L"Note"), "catalog attribute %ls\n",
+           Attribute ? Attribute->pwszReferenceTag : NULL);
+        ok_err(0xdeadbeef);
+        ok(!Attribute || !CryptCATCDFEnumCatAttributes(Definition, Attribute, NULL), "second catalog attribute\n");
+        ok_err(0xdeadbeef);
+        ok(CryptCATCDFEnumMembersByCDFTagEx(Definition, NULL, NULL, &Member, TRUE, NULL) == NULL, "got a tag\n");
+        ok_int(CryptCATCDFClose(Definition), TRUE);
+        CheckWrittenVersion2(Cat, 160);
+    }
+
+    Definition = OpenDefinition(Cdf, Cat, Member1, Member2, "PublicVersion=0x0000001\r\n");
+    ok(Definition != NULL, "CryptCATCDFOpen failed %lu\n", GetLastError());
+    if (Definition)
+    {
+        Member = NULL;
+        SetLastError(0xdeadbeef);
+        Tag = CryptCATCDFEnumMembersByCDFTagEx(Definition, NULL, NULL, &Member, TRUE, NULL);
+        ok(Tag && !wcscmp(Tag, L"m1"), "first tag %ls\n", Tag);
+        ok_err(ERROR_SUCCESS);
+        SetLastError(0xdeadbeef);
+        Attribute = Tag ? CryptCATCDFEnumAttributesWithCDFTag(Definition, Tag, Member, NULL, NULL) : NULL;
+        ok(Attribute && !wcscmp(Attribute->pwszReferenceTag, L"MemberNote"), "member attribute %ls\n",
+           Attribute ? Attribute->pwszReferenceTag : NULL);
+        ok_err(0xdeadbeef);
+        ok(!Attribute || !CryptCATCDFEnumAttributesWithCDFTag(Definition, Tag, Member, Attribute, NULL),
+           "second member attribute\n");
+        ok_err(0xdeadbeef);
+        CryptCATCDFClose(Definition);
+    }
+
+    DeleteFileW(Cdf);
+    DeleteFileW(Cat);
+    DeleteFileW(Member1);
+    DeleteFileW(Member2);
+}
+
 START_TEST(CatalogV2)
 {
     HMODULE Wintrust = GetModuleHandleW(L"wintrust.dll");
 
     TestMemberInfo2Encoding(Wintrust);
     TestVersion2Catalog();
+    TestVersion2Definition();
 }

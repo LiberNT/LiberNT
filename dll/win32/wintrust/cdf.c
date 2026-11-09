@@ -17,6 +17,7 @@
 #include "mscat.h"
 #include "mssip.h"
 #include "winternl.h"
+#include "wintrust_priv.h"
 
 #include "wine/debug.h"
 
@@ -46,6 +47,7 @@ struct cdf_member
     struct cdf_attr *attrs;
     DWORD attr_count;
     CRYPTCATMEMBER *member;
+    BOOL owned;
     BOOL processed;
 };
 
@@ -60,6 +62,7 @@ struct cdf
     struct cdf_member *members;
     DWORD member_count;
     DWORD version;
+    BOOL literal_v2_members;
     DWORD sip_flags;
     const char *hash_oid;
 };
@@ -316,10 +319,18 @@ static BOOL cdf_collect(struct cdf *cdf, BOOL *has_header)
 
 static void cdf_free(struct cdf *cdf)
 {
-    DWORD i;
+    DWORD i, j;
 
     for (i = 0; i < cdf->member_count; i++)
+    {
+        if (cdf->members[i].owned)
+        {
+            for (j = 0; j < cdf->members[i].attr_count; j++)
+                free(cdf->members[i].attrs[j].attr);
+            free(cdf->members[i].member);
+        }
         free(cdf->members[i].attrs);
+    }
     free(cdf->members);
     free(cdf->cat_attrs);
     for (i = 0; i < cdf->line_count; i++)
@@ -459,6 +470,12 @@ CRYPTCATCDF * WINAPI CryptCATCDFOpen(LPWSTR pwszFilePath, PFN_CDF_PARSE_ERROR_CA
 
     cdf->version = cdf_header_number(cdf, L"CatalogVersion", 1) == 2 ? CRYPTCAT_VERSION_2 : CRYPTCAT_VERSION_1;
     hash = cdf_header_value(cdf, L"HashAlgorithms");
+    if (cdf->version == CRYPTCAT_VERSION_2 && (!hash || !hash[0]))
+    {
+        cdf_free(cdf);
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
     if (hash && hash[0])
         cdf->hash_oid = !_wcsicmp(hash, L"SHA256") ? szOID_NIST_sha256 : szOID_OIWSEC_sha1;
     else
@@ -497,6 +514,14 @@ BOOL WINAPI CryptCATCDFClose(CRYPTCATCDF *pCDF)
 
     if (!(cdf = cdf_from_public(pCDF))) return FALSE;
 
+    if (cdf->literal_v2_members)
+    {
+        CryptCATClose(cdf->public.hCATStore);
+        cdf_free(cdf);
+        SetLastError(ERROR_SUCCESS);
+        return FALSE;
+    }
+
     ret = CryptCATPersistStore(cdf->public.hCATStore);
     error = GetLastError();
     CryptCATClose(cdf->public.hCATStore);
@@ -519,6 +544,16 @@ static BOOL cdf_attr_data(DWORD flags, const WCHAR *text, BYTE **data, DWORD *si
     if (!CryptStringToBinaryW(text, 0, CRYPT_STRING_BASE64, NULL, size, NULL, NULL)) return FALSE;
     if (!(*data = malloc(*size ? *size : 1))) return FALSE;
     return CryptStringToBinaryW(text, 0, CRYPT_STRING_BASE64, *data, size, NULL, NULL);
+}
+
+static BOOL cdf_is_literal_member(struct cdf *cdf, CRYPTCATMEMBER *member)
+{
+    DWORD i;
+
+    for (i = 0; i < cdf->member_count; i++)
+        if (cdf->members[i].member == member)
+            return cdf->members[i].owned;
+    return FALSE;
 }
 
 static CRYPTCATATTRIBUTE *cdf_put_attr(struct cdf *cdf, struct cdf_line *line, CRYPTCATMEMBER *member,
@@ -559,7 +594,9 @@ static CRYPTCATATTRIBUTE *cdf_put_attr(struct cdf *cdf, struct cdf_line *line, C
         size = 0;
     }
 
-    if (member)
+    if (member && cdf_is_literal_member(cdf, member))
+        attr = catalog_alloc_attribute(name, flags, size, data);
+    else if (member)
         attr = CryptCATPutAttrInfo(cdf->public.hCATStore, member, name, flags, size, data);
     else
         attr = CryptCATPutCatAttrInfo(cdf->public.hCATStore, name, flags, size, data);
@@ -594,7 +631,6 @@ static CRYPTCATATTRIBUTE *cdf_next_attr(struct cdf *cdf, struct cdf_attr *attrs,
         }
         if (attrs[i].attr) return attrs[i].attr;
     }
-    SetLastError(ERROR_SUCCESS);
     return NULL;
 }
 
@@ -672,6 +708,41 @@ static SIP_INDIRECT_DATA *cdf_indirect_data(struct cdf *cdf, const WCHAR *path, 
     return NULL;
 }
 
+static void cdf_relocate(void *field, const void *old_base, DWORD size, void *new_base)
+{
+    BYTE **ptr = field;
+
+    if (*ptr >= (const BYTE *)old_base && *ptr < (const BYTE *)old_base + size)
+        *ptr = (BYTE *)new_base + (*ptr - (const BYTE *)old_base);
+}
+
+static CRYPTCATMEMBER *cdf_literal_member(const WCHAR *tag, const WCHAR *path, const GUID *subject,
+                                          const SIP_INDIRECT_DATA *indirect, DWORD size)
+{
+    DWORD tag_size = (wcslen(tag) + 1) * sizeof(WCHAR), path_size = (wcslen(path) + 1) * sizeof(WCHAR);
+    CRYPTCATMEMBER *member;
+    BYTE *p;
+
+    if (!(member = calloc(1, sizeof(*member) + tag_size + path_size + size)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return NULL;
+    }
+    p = (BYTE *)(member + 1);
+    member->cbStruct = sizeof(*member);
+    member->pwszReferenceTag = memcpy(p, tag, tag_size);
+    member->pwszFileName = memcpy(p + tag_size, path, path_size);
+    member->gSubjectType = *subject;
+    member->pIndirectData = memcpy(p + tag_size + path_size, indirect, size);
+    cdf_relocate(&member->pIndirectData->Data.pszObjId, indirect, size, member->pIndirectData);
+    cdf_relocate(&member->pIndirectData->Data.Value.pbData, indirect, size, member->pIndirectData);
+    cdf_relocate(&member->pIndirectData->DigestAlgorithm.pszObjId, indirect, size, member->pIndirectData);
+    cdf_relocate(&member->pIndirectData->DigestAlgorithm.Parameters.pbData, indirect, size, member->pIndirectData);
+    cdf_relocate(&member->pIndirectData->Digest.pbData, indirect, size, member->pIndirectData);
+    member->dwCertVersion = CDF_CERT_VERSION;
+    return member;
+}
+
 static CRYPTCATMEMBER *cdf_add_member(struct cdf *cdf, struct cdf_member *m, BOOL hash_tags,
                                       PFN_CDF_PARSE_ERROR_CALLBACK callback)
 {
@@ -699,8 +770,7 @@ static CRYPTCATMEMBER *cdf_add_member(struct cdf *cdf, struct cdf_member *m, BOO
         return NULL;
     }
 
-    /* FIXME: Windows 11 keeps the literal tags of a version 2 catalog here and then writes no catalog */
-    if (cdf->version == CRYPTCAT_VERSION_2 || (hash_tags && cdf_has_key_prefix(m->line->key, L"<HASH>")))
+    if (hash_tags && cdf_has_key_prefix(m->line->key, L"<HASH>"))
     {
         if (!cdf_hash_tag(indirect, &tag))
         {
@@ -712,9 +782,16 @@ static CRYPTCATMEMBER *cdf_add_member(struct cdf *cdf, struct cdf_member *m, BOO
     else
         tag = NULL;
 
-    /* TODO: INFO_NEEDED the member certificate version Windows writes into version 2 catalogs */
-    member = CryptCATPutMemberInfo(cdf->public.hCATStore, path, tag ? tag : m->line->key, &subject,
-                                   CDF_CERT_VERSION, size, (BYTE *)indirect);
+    if (cdf->version == CRYPTCAT_VERSION_2)
+    {
+        /* Windows 11 hands out the literal tags of a version 2 definition and then writes no catalog */
+        member = cdf_literal_member(m->line->key, path, &subject, indirect, size);
+        m->owned = member != NULL;
+        cdf->literal_v2_members |= m->owned;
+    }
+    else
+        member = CryptCATPutMemberInfo(cdf->public.hCATStore, path, tag ? tag : m->line->key, &subject,
+                                       CDF_CERT_VERSION, size, (BYTE *)indirect);
     free(tag);
     free(indirect);
     if (!member)
@@ -751,7 +828,7 @@ LPWSTR WINAPI CryptCATCDFEnumMembersByCDFTagEx(CRYPTCATCDF *pCDF, LPWSTR pwszPre
           fContinueOnError, pvReserved);
 
     if (!(cdf = cdf_from_public(pCDF))) return NULL;
-    if (!ppMember)
+    if (!ppMember || cdf->version == CRYPTCAT_VERSION_2)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return NULL;

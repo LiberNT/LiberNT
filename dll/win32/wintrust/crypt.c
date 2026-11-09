@@ -148,7 +148,7 @@ static void catalog_init_store(struct cryptcat *cc, DWORD flags, HCRYPTPROV prov
         cc->store.hCryptMsg = cc->msg;
 }
 
-static CRYPTCATATTRIBUTE *catalog_alloc_attribute(const WCHAR *name, DWORD flags, DWORD size, const BYTE *data)
+CRYPTCATATTRIBUTE *catalog_alloc_attribute(const WCHAR *name, DWORD flags, DWORD size, const BYTE *data)
 {
     DWORD name_len = (lstrlenW(name) + 1) * sizeof(WCHAR);
     CRYPTCATATTRIBUTE *attr;
@@ -2436,7 +2436,7 @@ HANDLE WINAPI CryptCATOpen(WCHAR *filename, DWORD flags, HCRYPTPROV hProv,
     {
         cc->filename = (WCHAR *)(cc + 1);
         lstrcpyW(cc->filename, filename);
-        cc->version = dwPublicVersion ? dwPublicVersion : CRYPTCAT_VERSION_1;
+        cc->version = dwPublicVersion;
     }
     else
 #else
@@ -2454,6 +2454,8 @@ HANDLE WINAPI CryptCATOpen(WCHAR *filename, DWORD flags, HCRYPTPROV hProv,
     {
         cc->magic = CRYPTCAT_MAGIC;
 #ifdef __REACTOS__
+        if (!cc->version)
+            cc->version = CRYPTCAT_VERSION_1;
         catalog_init_store(cc, flags, hProv);
 #endif
         SetLastError(ERROR_SUCCESS);
@@ -2517,6 +2519,8 @@ HANDLE WINAPI CryptCATOpen(WCHAR *filename, DWORD flags, HCRYPTPROV hProv,
             else if (!strcmp(cc->inner->SubjectAlgorithm.pszObjId, szOID_CATALOG_LIST_MEMBER2))
                 cc->version = CRYPTCAT_VERSION_2;
         }
+        if (!cc->version)
+            cc->version = CRYPTCAT_VERSION_1;
         catalog_init_store(cc, flags, hProv);
 #endif
         cc->magic = CRYPTCAT_MAGIC;
