@@ -1681,6 +1681,7 @@ NtCreateToken(
     LUID LocalAuthenticationId;
     TOKEN_SOURCE LocalTokenSource;
     SECURITY_QUALITY_OF_SERVICE LocalSecurityQos = {0};
+    PSECURITY_QUALITY_OF_SERVICE CapturedQos;
     PLUID_AND_ATTRIBUTES CapturedPrivileges = NULL;
     PSID_AND_ATTRIBUTES CapturedUser = NULL;
     PSID_AND_ATTRIBUTES CapturedGroups = NULL;
@@ -1705,7 +1706,14 @@ NtCreateToken(
                 ProbeForRead(ObjectAttributes,
                              sizeof(OBJECT_ATTRIBUTES),
                              sizeof(ULONG));
-                LocalSecurityQos = *(SECURITY_QUALITY_OF_SERVICE*)ObjectAttributes->SecurityQualityOfService;
+                CapturedQos = ObjectAttributes->SecurityQualityOfService;
+                if (CapturedQos != NULL)
+                {
+                    ProbeForRead(CapturedQos,
+                                 sizeof(SECURITY_QUALITY_OF_SERVICE),
+                                 sizeof(ULONG));
+                    LocalSecurityQos = *CapturedQos;
+                }
             }
 
             ProbeForRead(AuthenticationId,
@@ -1772,7 +1780,7 @@ NtCreateToken(
     }
     else
     {
-        if (ObjectAttributes != NULL)
+        if (ObjectAttributes != NULL && ObjectAttributes->SecurityQualityOfService != NULL)
             LocalSecurityQos = *(SECURITY_QUALITY_OF_SERVICE*)ObjectAttributes->SecurityQualityOfService;
         LocalAuthenticationId = *AuthenticationId;
         LocalExpirationTime = *ExpirationTime;
