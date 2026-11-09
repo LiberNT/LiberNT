@@ -5,6 +5,7 @@ add_subdirectory(redirptest)
 add_message_headers(ANSI FormatMessage.mc)
 
 list(APPEND SOURCE
+    ActCtxDependencyVersions.c
     ConsoleAlias.c
     ApiSetCoreSynch.c
     BaseSetLastNTError.c

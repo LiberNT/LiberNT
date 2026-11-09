@@ -3,6 +3,7 @@
 #include <apitest.h>
 
 extern void func_ActCtxWithXmlNamespaces(void);
+extern void func_ActCtxDependencyVersions(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_BaseSetLastNTError(void);
 extern void func_BaseThreadInitThunk(void);
@@ -121,6 +122,7 @@ const struct test winetest_testlist[] =
 {
     { "SetFileAllocationInfo", func_SetFileAllocationInfo },
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
+    { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "BaseSetLastNTError",          func_BaseSetLastNTError },
     { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
