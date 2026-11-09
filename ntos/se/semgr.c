@@ -136,8 +136,8 @@ SepInitializationPhase0(VOID)
 
     if (!ExLuidInitialization()) return FALSE;
     if (!SepInitSecurityIDs()) return FALSE;
-    if (!SepInitDACLs()) return FALSE;
-    if (!SepInitSDs()) return FALSE;
+    if (!SepInitSystemDacls()) return FALSE;
+    if (!SepInitSystemSds()) return FALSE;
     SepInitPrivileges();
     if (!SepInitExports()) return FALSE;
 
