@@ -282,7 +282,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/se/sd.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sddl.c
     ${REACTOS_SOURCE_DIR}/ntos/se/semgr.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/sid.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/sesid.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seqos.c
     ${REACTOS_SOURCE_DIR}/ntos/se/srm.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesubject.c
