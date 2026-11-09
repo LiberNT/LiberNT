@@ -177,7 +177,6 @@ KiSystemStartupBootStack(VOID)
     Prcb->NextThread = NULL;
     Prcb->IdleThread = Thread;
 
-    /* Initialize PRCB pool lookaside pointers */
     ExInitPoolLookasidePointers();
 
     /* Lower to APC_LEVEL */
