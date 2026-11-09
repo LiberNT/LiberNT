@@ -501,6 +501,29 @@ NetShellUpdateTimer(LANSTATUSUI_CONTEXT *pContext)
     }
 }
 
+/* An adapter that is removed and added again, such as a tunnel, gets a new interface index */
+static BOOL
+NetShellRefreshAdapterIndex(LANSTATUSUI_CONTEXT *pContext)
+{
+    NETCON_PROPERTIES *pProps = NULL;
+    NET_LUID Luid;
+    NET_IFINDEX IfIndex;
+    BOOL bChanged = FALSE;
+
+    if (pContext->pNet->GetProperties(&pProps) != S_OK || !pProps)
+        return FALSE;
+    if (!ConvertInterfaceGuidToLuid(&pProps->guidId, &Luid) &&
+        !ConvertInterfaceLuidToIndex(&Luid, &IfIndex) &&
+        IfIndex != pContext->dwAdapterIndex)
+    {
+        pContext->dwAdapterIndex = IfIndex;
+        pContext->Status = (UINT)-1;
+        bChanged = TRUE;
+    }
+    NcFreeNetconProperties(pProps);
+    return bChanged;
+}
+
 VOID
 UpdateLanStatus(HWND hwndDlg, LANSTATUSUI_CONTEXT * pContext)
 {
@@ -510,10 +533,17 @@ UpdateLanStatus(HWND hwndDlg, LANSTATUSUI_CONTEXT * pContext)
     NETCON_PROPERTIES * pProperties = NULL;
     NLM_CONNECTIVITY Conn;
     int nQuality;
+    DWORD dwError;
 
     ZeroMemory(&IfEntry, sizeof(IfEntry));
     IfEntry.dwIndex = pContext->dwAdapterIndex;
-    if (GetIfEntry(&IfEntry) != NO_ERROR)
+    dwError = GetIfEntry(&IfEntry);
+    if (dwError != NO_ERROR && NetShellRefreshAdapterIndex(pContext))
+    {
+        IfEntry.dwIndex = pContext->dwAdapterIndex;
+        dwError = GetIfEntry(&IfEntry);
+    }
+    if (dwError != NO_ERROR)
     {
         NetShellClearTrayRank(pContext->uID, pContext->hwndStatusDlg);
         return;
@@ -1062,14 +1092,14 @@ LANStatusUiDlg(
             {
                 if (pContext)
                 {
-                    ShowNetConnectionProperties(pContext->pNet, GetParent(pContext->hwndDlg));
+                    ShowNetConnectionProperties(CComPtr<INetConnection>(pContext->pNet), GetParent(pContext->hwndDlg));
                     BringWindowToTop(GetParent(pContext->hwndDlg));
                 }
                 break;
             }
             else if (LOWORD(wParam) == IDC_ENDISABLE)
             {
-                DisableNetworkAdapter(pContext->pNet, pContext, hwndDlg);
+                DisableNetworkAdapter(CComPtr<INetConnection>(pContext->pNet), pContext, hwndDlg);
                 break;
             }
         case WM_NOTIFY:
@@ -1211,7 +1241,7 @@ ShowStatusPropertyDialog(
         else if (pProperties->Status == NCS_MEDIA_DISCONNECTED || pProperties->Status == NCS_DISCONNECTED ||
                  pProperties->Status == NCS_HARDWARE_DISABLED)
         {
-            ShowNetConnectionProperties(pContext->pNet, pContext->hwndDlg);
+            ShowNetConnectionProperties(CComPtr<INetConnection>(pContext->pNet), pContext->hwndDlg);
         }
 
         NcFreeNetconProperties(pProperties);
@@ -1520,11 +1550,11 @@ LANStatusDlg(
                     break;
 
                 case IDM_NETICON_REPAIR:
-                    RepairConnection(pContext->pNet, hwndDlg);
+                    RepairConnection(CComPtr<INetConnection>(pContext->pNet), hwndDlg);
                     break;
 
                 case IDM_NETICON_PROPERTIES:
-                    ShowNetConnectionProperties(pContext->pNet, hwndDlg);
+                    ShowNetConnectionProperties(CComPtr<INetConnection>(pContext->pNet), hwndDlg);
                     break;
 
                 case IDM_NETICON_OPEN_CONNECTIONS:
@@ -1554,19 +1584,17 @@ CLanStatus::EnumerateTrayConnections()
 
     TRACE("InitializeNetTaskbarNotifications\n");
 
-    if (m_pHead)
+    Index = 1;
+    for (pItem = m_pHead; pItem; pItem = pItem->pNext)
     {
-       pItem = m_pHead;
-       while (pItem)
-       {
-           pContext = reinterpret_cast<LANSTATUSUI_CONTEXT *>(
-               GetWindowLongPtrW(pItem->hwndDlg, DWLP_USER));
-           if (pContext)
-               UpdateLanStatus(NULL, pContext);
-           pItem = pItem->pNext;
-       }
-       return S_OK;
+        pContext = reinterpret_cast<LANSTATUSUI_CONTEXT *>(GetWindowLongPtrW(pItem->hwndDlg, DWLP_USER));
+        if (pContext)
+            UpdateLanStatus(NULL, pContext);
+        pLast = pItem;
+        if (pItem->uID >= Index)
+            Index = pItem->uID + 1;
     }
+
     /* get an instance to of IConnectionManager */
     hr = CNetConnectionManager_CreateInstance(IID_PPV_ARG(INetConnectionManager, &pNetConMan));
     if (FAILED_UNEXPECTEDLY(hr))
@@ -1576,13 +1604,38 @@ CLanStatus::EnumerateTrayConnections()
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    Index = 1;
     while (TRUE)
     {
         pNetCon.Release();
         hr = pEnumCon->Next(1, &pNetCon, &Count);
         if (hr != S_OK)
             break;
+
+        if (FAILED(pNetCon->GetProperties(&pProps)))
+            continue;
+        for (pItem = m_pHead; pItem && !IsEqualGUID(pItem->guidItem, pProps->guidId); pItem = pItem->pNext)
+            ;
+        NcFreeNetconProperties(pProps);
+        if (pItem)
+        {
+            pContext = reinterpret_cast<LANSTATUSUI_CONTEXT *>(GetWindowLongPtrW(pItem->hwndDlg, DWLP_USER));
+            pNetCon.p->AddRef();
+            pItem->pNet->Release();
+            pItem->pNet = pNetCon;
+            if (pContext)
+            {
+                NET_LUID Luid;
+                NET_IFINDEX IfIndex;
+
+                pContext->pNet = pNetCon;
+                if (!ConvertInterfaceGuidToLuid(&pItem->guidItem, &Luid) &&
+                    !ConvertInterfaceLuidToIndex(&Luid, &IfIndex))
+                {
+                    pContext->dwAdapterIndex = IfIndex;
+                }
+            }
+            continue;
+        }
 
         TRACE("new connection\n");
         pItem = static_cast<NOTIFICATION_ITEM*>(CoTaskMemAlloc(sizeof(NOTIFICATION_ITEM)));
@@ -1705,15 +1758,15 @@ CLanStatus::ShowStatusDialogByCLSID(const GUID *pguidCmdGroup)
 {
     NOTIFICATION_ITEM *pItem;
 
-    pItem = m_pHead;
-    while (pItem)
+    /* Takes connections that appeared or came back since the last enumeration */
+    EnumerateTrayConnections();
+
+    for (pItem = m_pHead; pItem && !IsEqualGUID(pItem->guidItem, *pguidCmdGroup); pItem = pItem->pNext)
+        ;
+    if (pItem)
     {
-        if (IsEqualGUID(pItem->guidItem, *pguidCmdGroup))
-        {
-            SendMessageW(pItem->hwndDlg, WM_SHOWSTATUSDLG, 0, WM_LBUTTONDBLCLK);
-            return S_OK;
-        }
-        pItem = pItem->pNext;
+        SendMessageW(pItem->hwndDlg, WM_SHOWSTATUSDLG, 0, WM_LBUTTONDBLCLK);
+        return S_OK;
     }
 
     ERR("not found\n");
