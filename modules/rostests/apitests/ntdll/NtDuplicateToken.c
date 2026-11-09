@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include <tlhelp32.h>
 
 static
 HANDLE
@@ -162,7 +163,288 @@ DuplicateTokenAsEffective(VOID)
     CloseHandle(DuplicatedTokenHandle);
 }
 
+static
+PVOID
+QueryToken(
+    _In_ HANDLE Token,
+    _In_ TOKEN_INFORMATION_CLASS Class)
+{
+    NTSTATUS Status;
+    ULONG Size = 0;
+    PVOID Buffer;
+
+    Status = NtQueryInformationToken(Token, Class, NULL, 0, &Size);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+    {
+        trace("Querying the size of class %d failed (Status 0x%lx)\n", Class, Status);
+        return NULL;
+    }
+    Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, Size);
+    if (!Buffer)
+        return NULL;
+    Status = NtQueryInformationToken(Token, Class, Buffer, Size, &Size);
+    if (!NT_SUCCESS(Status))
+    {
+        trace("Querying class %d failed (Status 0x%lx)\n", Class, Status);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
+        Buffer = NULL;
+    }
+    return Buffer;
+}
+
+static
+VOID
+DuplicateTokenAsEffectiveKeepsLabel(VOID)
+{
+    NTSTATUS Status;
+    HANDLE ProcessToken, Token = NULL, EffectiveToken;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    PTOKEN_GROUPS Groups, EffectiveGroups;
+    PTOKEN_MANDATORY_LABEL Label, EffectiveLabel;
+    SID_AND_ATTRIBUTES Disable;
+    PSID Disabled = NULL;
+    ULONG Index, LabelIndex = MAXULONG;
+    BOOLEAN LabelFound = FALSE, DenyOnlyFound = FALSE;
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+    ProcessToken = OpenTokenFromProcess();
+    if (!ProcessToken)
+        return;
+
+    Groups = QueryToken(ProcessToken, TokenGroups);
+    Label = QueryToken(ProcessToken, TokenIntegrityLevel);
+    if (!Groups || !Label)
+    {
+        skip("The token has no groups or no integrity label\n");
+        goto Cleanup;
+    }
+    for (Index = 0; Index < Groups->GroupCount; Index++)
+    {
+        if (Groups->Groups[Index].Attributes & SE_GROUP_INTEGRITY)
+        {
+            LabelIndex = Index;
+            break;
+        }
+    }
+    for (Index = 0; Index < LabelIndex && Index < Groups->GroupCount; Index++)
+    {
+        if (Groups->Groups[Index].Attributes & SE_GROUP_ENABLED)
+        {
+            Disabled = Groups->Groups[Index].Sid;
+            break;
+        }
+    }
+    if (!Disabled)
+    {
+        skip("No enabled group precedes the integrity label\n");
+        goto Cleanup;
+    }
+
+    /* A group made deny only is no longer enabled */
+    Disable.Sid = Disabled;
+    Disable.Attributes = 0;
+    if (!CreateRestrictedToken(ProcessToken, 0, 1, &Disable, 0, NULL, 0, NULL, &Token))
+    {
+        skip("CreateRestrictedToken failed (%lu)\n", GetLastError());
+        Token = NULL;
+        goto Cleanup;
+    }
+
+    Status = NtDuplicateToken(Token, TOKEN_QUERY, &ObjectAttributes, TRUE, TokenPrimary, &EffectiveToken);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+
+    EffectiveGroups = QueryToken(EffectiveToken, TokenGroups);
+    EffectiveLabel = QueryToken(EffectiveToken, TokenIntegrityLevel);
+    ok(EffectiveGroups != NULL && EffectiveLabel != NULL, "Querying the effective token failed\n");
+    if (EffectiveGroups && EffectiveLabel)
+    {
+        for (Index = 0; Index < EffectiveGroups->GroupCount; Index++)
+        {
+            if (EqualSid(EffectiveGroups->Groups[Index].Sid, Disabled) &&
+                (EffectiveGroups->Groups[Index].Attributes & SE_GROUP_USE_FOR_DENY_ONLY))
+                DenyOnlyFound = TRUE;
+            if ((EffectiveGroups->Groups[Index].Attributes & SE_GROUP_INTEGRITY) &&
+                EqualSid(EffectiveGroups->Groups[Index].Sid, Label->Label.Sid))
+                LabelFound = TRUE;
+        }
+        ok(DenyOnlyFound, "The group for deny only was removed\n");
+        ok(LabelFound, "The integrity label was removed\n");
+        ok(EqualSid(EffectiveLabel->Label.Sid, Label->Label.Sid), "The integrity level differs\n");
+    }
+    if (EffectiveGroups) RtlFreeHeap(RtlGetProcessHeap(), 0, EffectiveGroups);
+    if (EffectiveLabel) RtlFreeHeap(RtlGetProcessHeap(), 0, EffectiveLabel);
+    CloseHandle(EffectiveToken);
+
+Cleanup:
+    if (Groups) RtlFreeHeap(RtlGetProcessHeap(), 0, Groups);
+    if (Label) RtlFreeHeap(RtlGetProcessHeap(), 0, Label);
+    if (Token) CloseHandle(Token);
+    CloseHandle(ProcessToken);
+}
+
+static SID SystemSid = { SID_REVISION, 1, { SECURITY_NT_AUTHORITY }, { SECURITY_LOCAL_SYSTEM_RID } };
+static SID WorldSid = { SID_REVISION, 1, { SECURITY_WORLD_SID_AUTHORITY }, { SECURITY_WORLD_RID } };
+static SID LocalSid = { SID_REVISION, 1, { SECURITY_LOCAL_SID_AUTHORITY }, { SECURITY_LOCAL_RID } };
+static SID InteractiveSid = { SID_REVISION, 1, { SECURITY_NT_AUTHORITY }, { SECURITY_INTERACTIVE_RID } };
+static SID MediumSid = { SID_REVISION, 1, { SECURITY_MANDATORY_LABEL_AUTHORITY }, { SECURITY_MANDATORY_MEDIUM_RID } };
+static SID AuthenticatedSid = { SID_REVISION, 1, { SECURITY_NT_AUTHORITY }, { SECURITY_AUTHENTICATED_USER_RID } };
+static SID NetworkSid = { SID_REVISION, 1, { SECURITY_NT_AUTHORITY }, { SECURITY_NETWORK_RID } };
+static SID ServiceSid = { SID_REVISION, 1, { SECURITY_NT_AUTHORITY }, { SECURITY_SERVICE_RID } };
+
+static
+VOID
+DuplicateCreatedTokenAsEffective(
+    _In_ PSID Owner,
+    _In_ PSID ExpectedOwner)
+{
+    static PSID const Kept[] = { &WorldSid, &ServiceSid, &AuthenticatedSid, &MediumSid };
+    NTSTATUS Status;
+    HANDLE Token, EffectiveToken;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    SECURITY_QUALITY_OF_SERVICE Qos = { sizeof(Qos), SecurityImpersonation, SECURITY_STATIC_TRACKING, FALSE };
+    LUID AuthenticationId = SYSTEM_LUID;
+    LARGE_INTEGER Expiration = { .QuadPart = MAXLONGLONG };
+    TOKEN_USER User = { { &SystemSid, 0 } };
+    struct
+    {
+        ULONG GroupCount;
+        SID_AND_ATTRIBUTES Groups[7];
+    } Groups;
+    TOKEN_PRIVILEGES Privileges = { 0 };
+    TOKEN_OWNER OwnerInfo = { Owner };
+    TOKEN_PRIMARY_GROUP PrimaryGroup = { &WorldSid };
+    TOKEN_SOURCE Source = { "apitest" };
+    PTOKEN_GROUPS EffectiveGroups;
+    PTOKEN_MANDATORY_LABEL EffectiveLabel;
+    PTOKEN_OWNER EffectiveOwner;
+    ULONG Index;
+
+    Groups.GroupCount = 7;
+    Groups.Groups[0].Sid = &WorldSid;
+    Groups.Groups[0].Attributes = SE_GROUP_MANDATORY | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_ENABLED;
+    Groups.Groups[1].Sid = &LocalSid;
+    Groups.Groups[1].Attributes = 0;
+    Groups.Groups[2].Sid = &InteractiveSid;
+    Groups.Groups[2].Attributes = 0;
+    Groups.Groups[3].Sid = &MediumSid;
+    Groups.Groups[3].Attributes = SE_GROUP_INTEGRITY | SE_GROUP_INTEGRITY_ENABLED;
+    Groups.Groups[4].Sid = &AuthenticatedSid;
+    Groups.Groups[4].Attributes = SE_GROUP_OWNER | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_ENABLED;
+    Groups.Groups[5].Sid = &NetworkSid;
+    Groups.Groups[5].Attributes = SE_GROUP_OWNER;
+    Groups.Groups[6].Sid = &ServiceSid;
+    Groups.Groups[6].Attributes = SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_ENABLED;
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+    ObjectAttributes.SecurityQualityOfService = &Qos;
+    Status = NtCreateToken(&Token, TOKEN_DUPLICATE | TOKEN_QUERY, &ObjectAttributes, TokenPrimary,
+                           &AuthenticationId, &Expiration, &User, (PTOKEN_GROUPS)&Groups, &Privileges, &OwnerInfo,
+                           &PrimaryGroup, NULL, &Source);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Status = NtDuplicateToken(Token, TOKEN_QUERY, &ObjectAttributes, TRUE, TokenPrimary, &EffectiveToken);
+    ok_hex(Status, STATUS_SUCCESS);
+    CloseHandle(Token);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    EffectiveGroups = QueryToken(EffectiveToken, TokenGroups);
+    EffectiveLabel = QueryToken(EffectiveToken, TokenIntegrityLevel);
+    EffectiveOwner = QueryToken(EffectiveToken, TokenOwner);
+    ok(EffectiveGroups && EffectiveLabel && EffectiveOwner, "Querying the effective token failed\n");
+    if (EffectiveGroups)
+    {
+        ok(EffectiveGroups->GroupCount == ARRAYSIZE(Kept), "The copy has %lu groups, expected %u\n",
+           EffectiveGroups->GroupCount, (UINT)ARRAYSIZE(Kept));
+        for (Index = 0; Index < EffectiveGroups->GroupCount && Index < ARRAYSIZE(Kept); Index++)
+        {
+            WCHAR Text[64];
+            UNICODE_STRING SidText = { 0, sizeof(Text), Text };
+
+            RtlConvertSidToUnicodeString(&SidText, EffectiveGroups->Groups[Index].Sid, FALSE);
+            ok(EqualSid(EffectiveGroups->Groups[Index].Sid, Kept[Index]), "Group %lu is %s\n", Index,
+               wine_dbgstr_wn(SidText.Buffer, SidText.Length / sizeof(WCHAR)));
+        }
+    }
+    if (EffectiveLabel)
+        ok(EqualSid(EffectiveLabel->Label.Sid, &MediumSid), "The integrity level is not the label of the token\n");
+    if (EffectiveOwner)
+        ok(EqualSid(EffectiveOwner->Owner, ExpectedOwner), "The owner is not the expected SID\n");
+
+    if (EffectiveGroups) RtlFreeHeap(RtlGetProcessHeap(), 0, EffectiveGroups);
+    if (EffectiveLabel) RtlFreeHeap(RtlGetProcessHeap(), 0, EffectiveLabel);
+    if (EffectiveOwner) RtlFreeHeap(RtlGetProcessHeap(), 0, EffectiveOwner);
+    CloseHandle(EffectiveToken);
+}
+
+static
+BOOL
+ImpersonateLsass(VOID)
+{
+    PROCESSENTRY32W Entry = { sizeof(Entry) };
+    HANDLE Snapshot, Process, Token, Duplicate;
+    BOOL Found, Done = FALSE;
+
+    Snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (Snapshot == INVALID_HANDLE_VALUE)
+        return FALSE;
+    for (Found = Process32FirstW(Snapshot, &Entry); Found; Found = Process32NextW(Snapshot, &Entry))
+    {
+        if (!_wcsicmp(Entry.szExeFile, L"lsass.exe"))
+            break;
+    }
+    CloseHandle(Snapshot);
+    if (!Found)
+        return FALSE;
+
+    Process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, Entry.th32ProcessID);
+    if (!Process)
+        return FALSE;
+    if (OpenProcessToken(Process, TOKEN_DUPLICATE | TOKEN_QUERY, &Token))
+    {
+        if (DuplicateTokenEx(Token, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation, TokenImpersonation, &Duplicate))
+        {
+            Done = SetThreadToken(NULL, Duplicate);
+            CloseHandle(Duplicate);
+        }
+        CloseHandle(Token);
+    }
+    CloseHandle(Process);
+    return Done;
+}
+
 START_TEST(NtDuplicateToken)
 {
+    NTSTATUS Status;
+    BOOLEAN WasEnabled, Impersonating = FALSE;
+
     DuplicateTokenAsEffective();
+    DuplicateTokenAsEffectiveKeepsLabel();
+
+    /* Windows 11 grants SeCreateTokenPrivilege to lsass.exe only */
+    Status = RtlAdjustPrivilege(SE_CREATE_TOKEN_PRIVILEGE, TRUE, FALSE, &WasEnabled);
+    if (!NT_SUCCESS(Status) && ImpersonateLsass())
+    {
+        Impersonating = TRUE;
+        Status = RtlAdjustPrivilege(SE_CREATE_TOKEN_PRIVILEGE, TRUE, TRUE, &WasEnabled);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        skip("Cannot create tokens (Status 0x%lx)\n", Status);
+        if (Impersonating)
+            RevertToSelf();
+        return;
+    }
+    /* An owner after removed groups moves down with them */
+    DuplicateCreatedTokenAsEffective(&AuthenticatedSid, &AuthenticatedSid);
+    /* An owner that the copy removes falls back to the user */
+    DuplicateCreatedTokenAsEffective(&NetworkSid, &SystemSid);
+    if (Impersonating)
+        RevertToSelf();
+    else
+        RtlAdjustPrivilege(SE_CREATE_TOKEN_PRIVILEGE, WasEnabled, FALSE, &WasEnabled);
 }

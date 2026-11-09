@@ -542,7 +542,7 @@ SepDuplicateToken(
     ULONG PrimaryGroupIndex;
     ULONG VariableLength;
     ULONG DynamicPartSize, TotalSize;
-    ULONG PrivilegesIndex, GroupsIndex;
+    ULONG PrivilegesIndex, GroupsIndex, LastIndex;
 
     PAGED_CODE();
 
@@ -816,18 +816,28 @@ SepDuplicateToken(
              * group (that is, the group has SE_GROUP_MANDATORY attribute)
              * by standards it's always enabled and no one can disable it.
              */
-            if (AccessToken->UserAndGroups[GroupsIndex].Attributes == 0 ||
-                (AccessToken->UserAndGroups[GroupsIndex].Attributes & SE_GROUP_ENABLED) == 0)
+            if ((AccessToken->UserAndGroups[GroupsIndex].Attributes &
+                 (SE_GROUP_ENABLED | SE_GROUP_INTEGRITY | SE_GROUP_USE_FOR_DENY_ONLY)) == 0)
             {
                 /*
                  * A group is not enabled, it's time to remove
                  * from the token and update the groups index
                  * accordingly and continue with the next group.
                  */
-                SepRemoveUserGroupToken(AccessToken, GroupsIndex);
+                LastIndex = AccessToken->UserAndGroupCount - 1;
+
+                /* Windows 11 moves the last group into the place of the removed one */
+                AccessToken->UserAndGroups[GroupsIndex] = AccessToken->UserAndGroups[LastIndex];
+                AccessToken->UserAndGroupCount--;
+                if (AccessToken->DefaultOwnerIndex == GroupsIndex)
+                    AccessToken->DefaultOwnerIndex = 0;
+                else if (AccessToken->DefaultOwnerIndex == LastIndex)
+                    AccessToken->DefaultOwnerIndex = GroupsIndex;
                 GroupsIndex--;
             }
         }
+
+        AccessToken->IntegrityLevelIndex = SepFindIntegrityGroupIndex(AccessToken);
 
         /* Begin querying the privileges and search for disabled ones */
         for (PrivilegesIndex = 0; PrivilegesIndex < AccessToken->PrivilegeCount; PrivilegesIndex++)
