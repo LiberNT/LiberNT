@@ -784,7 +784,12 @@ typedef struct _TIMESTAMP_CASE
 {
     PCCERT_CONTEXT *Countersigner;
     BOOL Tamper;
+    BOOL OmitCert;
     LONG Result;
+    DWORD CounterInfoStep;
+    DWORD CounterCertStep;
+    DWORD SignatureStep;
+    DWORD CertificateStep;
     DWORD CounterError;
     DWORD SignerType;
     BOOL SigningTimeUsed;
@@ -794,7 +799,7 @@ typedef struct _TIMESTAMP_CASE
 
 static
 BOOL
-CreateTimestampedImage(PCCERT_CONTEXT Countersigner, const FILETIME *SigningTime, BOOL Tamper)
+CreateTimestampedImage(PCCERT_CONTEXT Countersigner, const FILETIME *SigningTime, BOOL Tamper, BOOL OmitCert)
 {
     BYTE TimeData[32], *Encoded = NULL, *Signed = NULL, *Final = NULL;
     CRYPT_ATTR_BLOB TimeBlob = { sizeof(TimeData), TimeData };
@@ -837,7 +842,7 @@ CreateTimestampedImage(PCCERT_CONTEXT Countersigner, const FILETIME *SigningTime
         CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, NULL, &EncodedSize) &&
         (Encoded = HeapAlloc(GetProcessHeap(), 0, EncodedSize)) &&
         CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, Encoded, &EncodedSize) &&
-        SignContent(SPC_INDIRECT_DATA_OBJID, Encoded, EncodedSize, Countersigner, &Signed, &SignedSize) &&
+        SignContent(SPC_INDIRECT_DATA_OBJID, Encoded, EncodedSize, OmitCert ? NULL : Countersigner, &Signed, &SignedSize) &&
         (Msg = CryptMsgOpenToDecode(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, 0, 0, NULL, NULL)) &&
         CryptMsgUpdate(Msg, Signed, SignedSize, TRUE) &&
         CryptMsgCountersign(Msg, 0, 1, &Countersign) &&
@@ -871,10 +876,15 @@ TestTimestamp(VOID)
 {
     static const TIMESTAMP_CASE Cases[] =
     {
-        { &Tsa, FALSE, ERROR_SUCCESS, ERROR_SUCCESS, SGNR_TYPE_TIMESTAMP, TRUE, 2, ERROR_SUCCESS },
-        { &Tsa, TRUE, TRUST_E_COUNTER_SIGNER, STATUS_INVALID_SIGNATURE, 0, FALSE, 2, ERROR_SUCCESS },
-        { &CodeSigner, FALSE, ERROR_SUCCESS, ERROR_SUCCESS, 0, FALSE, 2, ERROR_SUCCESS },
-        { &RogueTsa, FALSE, TRUST_E_TIME_STAMP, ERROR_SUCCESS, SGNR_TYPE_TIMESTAMP, TRUE, 1, CERT_E_UNTRUSTEDROOT },
+        { &Tsa, FALSE, FALSE, ERROR_SUCCESS, 0, 0, 0, 0, ERROR_SUCCESS, SGNR_TYPE_TIMESTAMP, TRUE, 2, ERROR_SUCCESS },
+        { &Tsa, TRUE, FALSE, TRUST_E_COUNTER_SIGNER, STATUS_INVALID_SIGNATURE, 0, TRUST_E_COUNTER_SIGNER, 0,
+          STATUS_INVALID_SIGNATURE, 0, FALSE, 2, ERROR_SUCCESS },
+        { &CodeSigner, FALSE, FALSE, ERROR_SUCCESS, 0, 0, 0, 0, ERROR_SUCCESS, 0, FALSE, 2, ERROR_SUCCESS },
+        { &Leaf, FALSE, FALSE, ERROR_SUCCESS, 0, 0, 0, 0, ERROR_SUCCESS, 0, FALSE, 2, ERROR_SUCCESS },
+        { &RogueTsa, FALSE, FALSE, TRUST_E_TIME_STAMP, 0, 0, 0, 0, ERROR_SUCCESS, SGNR_TYPE_TIMESTAMP, TRUE, 1,
+          CERT_E_UNTRUSTEDROOT },
+        { &Tsa, FALSE, TRUE, TRUST_E_COUNTER_SIGNER, 0, CRYPT_E_NOT_FOUND, TRUST_E_COUNTER_SIGNER, TRUST_E_COUNTER_SIGNER,
+          TRUST_E_NO_SIGNER_CERT, 0, FALSE, 0, ERROR_SUCCESS },
     };
     GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
     CRYPT_PROVIDER_DATA *ProvData;
@@ -898,7 +908,7 @@ TestTimestamp(VOID)
 
         winetest_push_context("case %lu", i);
         DeleteFileW(ImagePath);
-        ok(CreateTimestampedImage(*Cases[i].Countersigner, &SigningTime, Cases[i].Tamper),
+        ok(CreateTimestampedImage(*Cases[i].Countersigner, &SigningTime, Cases[i].Tamper, Cases[i].OmitCert),
            "Cannot create the image (0x%lx)\n", GetLastError());
         File.pcwszFilePath = ImagePath;
         Data.dwUIChoice = WTD_UI_NONE;
@@ -914,8 +924,10 @@ TestTimestamp(VOID)
         {
             for (Step = 0; Step < ProvData->cdwTrustStepErrors; Step++)
             {
-                DWORD Expected = Step == TRUSTERROR_STEP_MSG_COUNTERSIGINFO ? Cases[i].CounterError :
-                                 Step == TRUSTERROR_STEP_FINAL_SIGPROV && Cases[i].Tamper ? TRUST_E_COUNTER_SIGNER : 0;
+                DWORD Expected = Step == TRUSTERROR_STEP_MSG_COUNTERSIGINFO ? Cases[i].CounterInfoStep :
+                                 Step == TRUSTERROR_STEP_MSG_COUNTERSIGCERT ? Cases[i].CounterCertStep :
+                                 Step == TRUSTERROR_STEP_FINAL_SIGPROV ? Cases[i].SignatureStep :
+                                 Step == TRUSTERROR_STEP_FINAL_CERTPROV ? Cases[i].CertificateStep : 0;
                 ok(ProvData->padwTrustStepErrors[Step] == Expected, "step %lu error 0x%lx, expected 0x%lx\n", Step,
                    ProvData->padwTrustStepErrors[Step], Expected);
             }
@@ -938,9 +950,10 @@ TestTimestamp(VOID)
                    "countersigner verified as of %08lx%08lx\n", Counter->sftVerifyAsOf.dwHighDateTime,
                    Counter->sftVerifyAsOf.dwLowDateTime);
                 ok(Counter->psSigner != NULL, "no countersigner info\n");
-                ok(Counter->pChainContext != NULL, "no countersigner chain\n");
+                ok((Counter->pChainContext != NULL) == (Cases[i].ChainLength != 0), "countersigner chain %p\n",
+                   Counter->pChainContext);
                 ok_long(Counter->csCertChain, Cases[i].ChainLength);
-                if (Counter->csCertChain == Cases[i].ChainLength)
+                if (Cases[i].ChainLength && Counter->csCertChain == Cases[i].ChainLength)
                 {
                     ok_hex(Counter->pasCertChain[0].dwConfidence,
                            CERT_CONFIDENCE_SIG | CERT_CONFIDENCE_TIME | CERT_CONFIDENCE_TIMENEST);
