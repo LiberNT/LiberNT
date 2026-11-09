@@ -508,6 +508,53 @@ static void interface_zones(const MIB_IPINTERFACE_ROW *Row, const MIB_IPINTERFAC
     }
 }
 
+static HKEY ip4_interface_key(NET_IFINDEX Index, REGSAM Access)
+{
+    WCHAR Path[128];
+    NET_LUID Luid;
+    GUID Guid;
+    HKEY Key;
+    LSTATUS Error;
+
+    if (ConvertInterfaceIndexToLuid(Index, &Luid) != NO_ERROR || ConvertInterfaceLuidToGuid(&Luid, &Guid) != NO_ERROR)
+        return NULL;
+    _snwprintf(Path, ARRAYSIZE(Path),
+               L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\"
+               L"{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+               Guid.Data1, Guid.Data2, Guid.Data3, Guid.Data4[0], Guid.Data4[1], Guid.Data4[2],
+               Guid.Data4[3], Guid.Data4[4], Guid.Data4[5], Guid.Data4[6], Guid.Data4[7]);
+    Path[ARRAYSIZE(Path) - 1] = UNICODE_NULL;
+    if (Access & KEY_SET_VALUE)
+        Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE, Path, 0, NULL, 0, Access, NULL, &Key, NULL);
+    else
+        Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, Path, 0, Access, &Key);
+    return Error == ERROR_SUCCESS ? Key : NULL;
+}
+
+static BOOLEAN ip4_dhcpv6_flag(HKEY Key, PCWSTR Name)
+{
+    DWORD Value = TRUE, Size = sizeof(Value);
+
+    if (Key)
+        RegGetValueW(Key, NULL, Name, RRF_RT_REG_DWORD, NULL, &Value, &Size);
+    return Value != 0;
+}
+
+static DWORD ip4_set_dhcpv6_flags(NET_IFINDEX Index, BOOLEAN Managed, BOOLEAN Other)
+{
+    DWORD ManagedValue = Managed, OtherValue = Other;
+    HKEY Key = ip4_interface_key(Index, KEY_SET_VALUE);
+    LSTATUS Error;
+
+    if (!Key)
+        return ERROR_ACCESS_DENIED;
+    Error = RegSetValueExW(Key, L"ManagedAddressConfiguration", 0, REG_DWORD, (BYTE *)&ManagedValue, sizeof(DWORD));
+    if (Error == ERROR_SUCCESS)
+        Error = RegSetValueExW(Key, L"OtherStatefulConfiguration", 0, REG_DWORD, (BYTE *)&OtherValue, sizeof(DWORD));
+    RegCloseKey(Key);
+    return Error;
+}
+
 DWORD WINAPI SetIpInterfaceEntry(PMIB_IPINTERFACE_ROW Row)
 {
     MIB_IPINTERFACE_ROW Current;
@@ -549,8 +596,8 @@ DWORD WINAPI SetIpInterfaceEntry(PMIB_IPINTERFACE_ROW Row)
     Other = interface_flag(Row->OtherStatefulConfigurationSupported, Current.OtherStatefulConfigurationSupported);
     if (Row->Family == AF_INET && Advertising)
         return ERROR_INVALID_PARAMETER;
-    if ((Managed != Current.ManagedAddressConfigurationSupported || Other != Current.OtherStatefulConfigurationSupported) &&
-        (Row->Family == AF_INET || (!Advertising && !Current.AdvertisingEnabled)))
+    if (Row->Family == AF_INET6 && !Advertising && !Current.AdvertisingEnabled &&
+        (Managed != Current.ManagedAddressConfigurationSupported || Other != Current.OtherStatefulConfigurationSupported))
         return ERROR_INVALID_PARAMETER;
 
     Automatic = interface_flag(Row->UseAutomaticMetric, Current.UseAutomaticMetric);
@@ -585,6 +632,11 @@ DWORD WINAPI SetIpInterfaceEntry(PMIB_IPINTERFACE_ROW Row)
         Set.DisableDefaultRoutes = interface_flag(Row->DisableDefaultRoutes, Current.DisableDefaultRoutes);
         Set.AdvertiseDefaultRoute = interface_flag(Row->AdvertiseDefaultRoute, Current.AdvertiseDefaultRoute);
         Error = ip4_interface_set(&Set);
+        if (Error == NO_ERROR &&
+            (Managed != Current.ManagedAddressConfigurationSupported || Other != Current.OtherStatefulConfigurationSupported))
+        {
+            Error = ip4_set_dhcpv6_flags(Index, Managed, Other);
+        }
     }
     else
     {
@@ -865,9 +917,13 @@ VOID ip_interface_extras(ADDRESS_FAMILY Family, MIB_IPINTERFACE_ROW *Row)
     }
     else if (Family == AF_INET && ip4_interface_info(Row->InterfaceIndex, &Info4))
     {
+        HKEY Key = ip4_interface_key(Row->InterfaceIndex, KEY_QUERY_VALUE);
+
         Row->UseAutomaticMetric = Info4.UseAutomaticMetric;
-        Row->ManagedAddressConfigurationSupported = TRUE;
-        Row->OtherStatefulConfigurationSupported = TRUE;
+        Row->ManagedAddressConfigurationSupported = ip4_dhcpv6_flag(Key, L"ManagedAddressConfiguration");
+        Row->OtherStatefulConfigurationSupported = ip4_dhcpv6_flag(Key, L"OtherStatefulConfiguration");
+        if (Key)
+            RegCloseKey(Key);
         Row->ForwardingEnabled = Info4.Forwarding;
         Row->WeakHostSend = Info4.WeakHostSend;
         Row->WeakHostReceive = Info4.WeakHostReceive;
