@@ -369,8 +369,14 @@ static DWORD SOFTPUB_VerifyImageHash(CRYPT_PROVIDER_DATA *data, HANDLE file)
 #endif
     }
 
+#ifdef __REACTOS__
+    algID = CertOIDToAlgId(indirect->DigestAlgorithm.pszObjId);
+    if (GET_ALG_CLASS(algID) != ALG_CLASS_HASH)
+        return TRUST_E_BAD_DIGEST;
+#else
     if (!(algID = CertOIDToAlgId(indirect->DigestAlgorithm.pszObjId)))
         return TRUST_E_SYSTEM_ERROR; /* FIXME */
+#endif
 
     if (!prov)
     {

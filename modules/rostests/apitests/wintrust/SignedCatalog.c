@@ -318,7 +318,7 @@ ImageDigest(const WCHAR *Path, BYTE *Digest, DWORD *DigestSize)
 
 static
 BOOL
-CreateSignedImage(LPCSTR Algorithm, DWORD Misalign, BYTE *Digest, DWORD *DigestSize)
+CreateSignedImage(LPCSTR Algorithm, DWORD Misalign, LPCSTR DigestOid, BYTE *Digest, DWORD *DigestSize)
 {
     WCHAR Self[MAX_PATH];
     SIP_SUBJECTINFO Info;
@@ -346,6 +346,7 @@ CreateSignedImage(LPCSTR Algorithm, DWORD Misalign, BYTE *Digest, DWORD *DigestS
         (Indirect = HeapAlloc(GetProcessHeap(), 0, Size)) &&
         CryptSIPCreateIndirectData(&Info, &Size, Indirect) &&
         Indirect->Digest.cbData <= *DigestSize &&
+        (!DigestOid || (Indirect->DigestAlgorithm.pszObjId = (LPSTR)DigestOid)) &&
         CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, NULL, &EncodedSize) &&
         (Encoded = HeapAlloc(GetProcessHeap(), 0, EncodedSize)) &&
         CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, Encoded, &EncodedSize) &&
@@ -618,7 +619,7 @@ TestUnalignedImage(VOID)
     DeleteFileW(Other);
 
     DeleteFileW(ImagePath);
-    ok(CreateSignedImage(szOID_NIST_sha256, 1, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    ok(CreateSignedImage(szOID_NIST_sha256, 1, NULL, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     AfterSize = sizeof(After);
     ok(ImageDigest(ImagePath, After, &AfterSize), "Cannot hash the signed image (%lu)\n", GetLastError());
     ok(AfterSize == DigestSize && !memcmp(After, Digest, DigestSize), "signing changed the digest\n");
@@ -641,6 +642,44 @@ TestUnalignedImage(VOID)
 
 static
 VOID
+TestDigestAlgorithm(VOID)
+{
+    static const LPCSTR Oids[] = { "1.2.3.4", szOID_RSA_RSA };
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    CRYPT_PROVIDER_DATA *ProvData;
+    BYTE Digest[64];
+    DWORD DigestSize, i, Step;
+
+    for (i = 0; i < RTL_NUMBER_OF(Oids); i++)
+    {
+        WINTRUST_FILE_INFO File = { sizeof(File) };
+        WINTRUST_DATA Data = { sizeof(Data) };
+
+        winetest_push_context("%s", Oids[i]);
+        DeleteFileW(ImagePath);
+        DigestSize = sizeof(Digest);
+        ok(CreateSignedImage(szOID_NIST_sha256, 0, Oids[i], Digest, &DigestSize), "Cannot sign the image (%lu)\n",
+           GetLastError());
+        File.pcwszFilePath = ImagePath;
+        Data.dwUIChoice = WTD_UI_NONE;
+        Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+        Data.dwUnionChoice = WTD_CHOICE_FILE;
+        Data.pFile = &File;
+        Data.dwStateAction = WTD_STATEACTION_VERIFY;
+        ok_hex(WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data), TRUST_E_BAD_DIGEST);
+        ProvData = WTHelperProvDataFromStateData(Data.hWVTStateData);
+        ok(ProvData != NULL, "no provider data\n");
+        for (Step = 0; ProvData && Step < ProvData->cdwTrustStepErrors; Step++)
+            ok(ProvData->padwTrustStepErrors[Step] == (Step == TRUSTERROR_STEP_FINAL_OBJPROV ? TRUST_E_BAD_DIGEST : 0),
+               "step %lu error 0x%lx\n", Step, ProvData->padwTrustStepErrors[Step]);
+        Data.dwStateAction = WTD_STATEACTION_CLOSE;
+        WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+        winetest_pop_context();
+    }
+}
+
+static
+VOID
 TestSha1Image(VOID)
 {
     PFN_FILE_HASH FileHash = (PFN_FILE_HASH)GetProcAddress(GetModuleHandleW(L"wintrust.dll"), "WTHelperGetFileHash");
@@ -649,7 +688,7 @@ TestSha1Image(VOID)
     ALG_ID Algorithm = 0;
 
     DeleteFileW(ImagePath);
-    ok(CreateSignedImage(szOID_OIWSEC_sha1, 0, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    ok(CreateSignedImage(szOID_OIWSEC_sha1, 0, NULL, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     if (!FileHash)
         return;
     ok_hex(FileHash(ImagePath, 0, NULL, Hash, &Size, &Algorithm), ERROR_SUCCESS);
@@ -964,10 +1003,11 @@ START_TEST(SignedCatalog)
     ok(CreateSignedCatalog(), "Cannot create the signed catalog (%lu)\n", GetLastError());
     TestCatalogs();
     TestCatalogFile();
-    ok(CreateSignedImage(szOID_NIST_sha256, 0, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
+    ok(CreateSignedImage(szOID_NIST_sha256, 0, NULL, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     TestImage(Digest, DigestSize);
     TestSha1Image();
     TestUnalignedImage();
+    TestDigestAlgorithm();
     TestTimestamp();
     TestFindCerts();
 
