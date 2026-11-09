@@ -35,6 +35,7 @@ list(APPEND SOURCE
     desktop.c
     EmptyClipboard.c
     EnableScrollBar.c
+    EnumDisplayDevices.c
     EnumDisplaySettings.c
     ForegroundRetake.c
     ForegroundRight.c

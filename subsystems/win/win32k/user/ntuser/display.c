@@ -414,6 +414,7 @@ NtUserEnumDisplayDevices(
     TRACE("Enter NtUserEnumDisplayDevices(%wZ, %lu)\n",
           pustrDevice, iDevNum);
 
+    RtlZeroMemory(&dispdev, sizeof(dispdev));
     dispdev.cb = sizeof(dispdev);
 
     if (pustrDevice)
