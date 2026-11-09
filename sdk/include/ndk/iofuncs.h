@@ -671,8 +671,8 @@ NTAPI
 NtSetIoCompletionEx(
     _In_ HANDLE IoCompletionPortHandle,
     _In_ HANDLE IoCompletionReserveHandle,
-    _In_ ULONG_PTR CompletionKey,
-    _In_ ULONG_PTR CompletionContext,
+    _In_ PVOID CompletionKey,
+    _In_ PVOID CompletionContext,
     _In_ NTSTATUS CompletionStatus,
     _In_ SIZE_T CompletionInformation
 );

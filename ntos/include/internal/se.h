@@ -294,25 +294,6 @@ extern PTOKEN SeAnonymousLogonToken;
 extern PTOKEN SeAnonymousLogonTokenNoEveryone;
 
 
-//
-// Token lock management macros
-//
-#define SepAcquireTokenLockExclusive(Token)                                    \
-{                                                                              \
-    KeEnterCriticalRegion();                                                   \
-    ExAcquireResourceExclusiveLite(((PTOKEN)Token)->TokenLock, TRUE);          \
-}
-#define SepAcquireTokenLockShared(Token)                                       \
-{                                                                              \
-    KeEnterCriticalRegion();                                                   \
-    ExAcquireResourceSharedLite(((PTOKEN)Token)->TokenLock, TRUE);             \
-}
-
-#define SepReleaseTokenLock(Token)                                             \
-{                                                                              \
-    ExReleaseResourceLite(((PTOKEN)Token)->TokenLock);                         \
-    KeLeaveCriticalRegion();                                                   \
-}
 
 #if DBG
 //
@@ -343,7 +324,7 @@ SepDumpAccessAndStatusList(
 // Token Functions
 //
 CODE_SEG("INIT")
-VOID
+BOOLEAN
 NTAPI
 SepInitializeTokenImplementation(VOID);
 
@@ -360,44 +341,8 @@ CODE_SEG("INIT")
 PTOKEN
 SepCreateSystemAnonymousLogonTokenNoEveryone(VOID);
 
-VOID
-NTAPI
-SepRefreshTokenProcUnique(
-    _Inout_ PTOKEN Token);
 
-NTSTATUS
-NTAPI
-SepDuplicateToken(
-    _In_ PTOKEN Token,
-    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
-    _In_ BOOLEAN EffectiveOnly,
-    _In_ TOKEN_TYPE TokenType,
-    _In_ SECURITY_IMPERSONATION_LEVEL Level,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _Out_ PTOKEN* NewAccessToken);
 
-NTSTATUS
-NTAPI
-SepCreateToken(
-    _Out_ PHANDLE TokenHandle,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _In_ ACCESS_MASK DesiredAccess,
-    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
-    _In_ TOKEN_TYPE TokenType,
-    _In_ SECURITY_IMPERSONATION_LEVEL ImpersonationLevel,
-    _In_ PLUID AuthenticationId,
-    _In_ PLARGE_INTEGER ExpirationTime,
-    _In_ PSID_AND_ATTRIBUTES User,
-    _In_ ULONG GroupCount,
-    _In_ PSID_AND_ATTRIBUTES Groups,
-    _In_ ULONG GroupsLength,
-    _In_ ULONG PrivilegeCount,
-    _In_ PLUID_AND_ATTRIBUTES Privileges,
-    _In_opt_ PSID Owner,
-    _In_ PSID PrimaryGroup,
-    _In_opt_ PACL DefaultDacl,
-    _In_ PTOKEN_SOURCE TokenSource,
-    _In_ BOOLEAN SystemToken);
 
 BOOLEAN
 NTAPI
@@ -406,55 +351,15 @@ SepTokenIsOwner(
     _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
     _In_ BOOLEAN TokenLocked);
 
-NTSTATUS
-SepCreateTokenLock(
-    _Inout_ PTOKEN Token);
 
-VOID
-SepDeleteTokenLock(
-    _Inout_ PTOKEN Token);
 
-VOID
-SepUpdatePrivilegeFlagsToken(
-    _Inout_ PTOKEN Token);
 
-NTSTATUS
-SepFindPrimaryGroupAndDefaultOwner(
-    _In_ PTOKEN Token,
-    _In_ PSID PrimaryGroup,
-    _In_opt_ PSID DefaultOwner,
-    _Out_opt_ PULONG PrimaryGroupIndex,
-    _Out_opt_ PULONG DefaultOwnerIndex);
 
-VOID
-SepUpdateSinglePrivilegeFlagToken(
-    _Inout_ PTOKEN Token,
-    _In_ ULONG Index);
 
-VOID
-SepUpdatePrivilegeFlagsToken(
-    _Inout_ PTOKEN Token);
 
-VOID
-SepRemovePrivilegeToken(
-    _Inout_ PTOKEN Token,
-    _In_ ULONG Index);
 
-VOID
-SepRemoveUserGroupToken(
-    _Inout_ PTOKEN Token,
-    _In_ ULONG Index);
 
-ULONG
-SepComputeAvailableDynamicSpace(
-    _In_ ULONG DynamicCharged,
-    _In_ PSID PrimaryGroup,
-    _In_opt_ PACL DefaultDacl);
 
-NTSTATUS
-SepRebuildDynamicPartOfToken(
-    _In_ PTOKEN Token,
-    _In_ ULONG NewDynamicPartSize);
 
 BOOLEAN
 NTAPI
@@ -514,10 +419,6 @@ NTAPI
 SeTokenIsInert(
     _In_ PTOKEN Token);
 
-ULONG
-RtlLengthSidAndAttributes(
-    _In_ ULONG Count,
-    _In_ PSID_AND_ATTRIBUTES Src);
 
 //
 // Security Manager (SeMgr) functions
@@ -684,21 +585,8 @@ NTAPI
 SepGetTokenIntegrityRid(
     _In_ PACCESS_TOKEN Token);
 
-PSID
-NTAPI
-SepMandatorySidFromRid(
-    _In_ ULONG Rid);
 
-NTSTATUS
-NTAPI
-SepCopyLowBoxInfo(
-    _In_ PSEP_LOWBOX_INFO Source,
-    _Out_ PSEP_LOWBOX_INFO *Destination);
 
-VOID
-NTAPI
-SepFreeLowBoxInfo(
-    _In_ PSEP_LOWBOX_INFO LowBox);
 
 NTSTATUS
 NTAPI
@@ -741,6 +629,48 @@ NTAPI
 SepInitSystemDacls(VOID);
 
 extern ERESOURCE SepSubjectContextLock;
+
+VOID
+SepAcquireTokenLockShared(
+    _Inout_ PTOKEN Token);
+
+VOID
+SepAcquireTokenLockExclusive(
+    _Inout_ PTOKEN Token);
+
+VOID
+SepReleaseTokenLock(
+    _Inout_ PTOKEN Token);
+
+VOID
+SepNoteTokenPrivilegeFlags(
+    _Inout_ PTOKEN Token);
+
+VOID
+SepDropTokenPrivilege(
+    _Inout_ PTOKEN Token,
+    _In_ ULONG Index);
+
+VOID
+SepDropTokenGroup(
+    _Inout_ PTOKEN Token,
+    _In_ ULONG Index);
+
+NTSTATUS
+SepGrowChangeablePart(
+    _Inout_ PTOKEN Token,
+    _In_ ULONG Needed);
+
+VOID
+NTAPI
+SepDeleteToken(
+    _In_ PVOID ObjectBody);
+
+VOID
+NTAPI
+SeAssignPrimaryToken(
+    _In_ PEPROCESS Process,
+    _In_ PTOKEN Token);
 
 NTSTATUS
 SepAccessCheckByType(

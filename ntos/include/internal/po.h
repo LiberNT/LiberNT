@@ -599,6 +599,32 @@ PopFlushVolumes(
     IN BOOLEAN ShuttingDown
 );
 
+NTSTATUS
+NTAPI
+PoRequestShutdownWait(
+    _In_ PETHREAD Thread
+);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+PopInitializeDevicePower(
+    VOID
+);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+PopInitializeVolumes(
+    VOID
+);
+
+PDEVICE_OBJECT_POWER_EXTENSION
+NTAPI
+PopGetDope(
+    _In_ PDEVICE_OBJECT DeviceObject
+);
+
 //
 // Global data inside the Power Manager
 //

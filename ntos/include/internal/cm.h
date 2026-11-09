@@ -217,7 +217,7 @@ typedef struct _CACHED_CHILD_LIST
     ULONG Count;
     union
     {
-        ULONG ValueList;
+        ULONG_PTR ValueList;
         struct _CM_KEY_CONTROL_BLOCK *RealKcb;
     };
 } CACHED_CHILD_LIST, *PCACHED_CHILD_LIST;

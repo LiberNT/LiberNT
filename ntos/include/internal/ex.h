@@ -23,6 +23,7 @@ extern FIRMWARE_TYPE ExpFirmwareType;
 extern BOOLEAN ExpIsWinPEMode;
 extern ULONG ExpResourceTimeoutCount;
 extern LIST_ENTRY ExpSystemResourcesList;
+extern KSPIN_LOCK ExpResourceSpinLock;
 extern ULONG ExpAnsiCodePageDataOffset, ExpOemCodePageDataOffset;
 extern ULONG ExpUnicodeCaseTableDataOffset;
 extern PVOID ExpNlsSectionPointer;
@@ -305,6 +306,11 @@ CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 ExpInitializeCallbacks(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExpInitializeCallbackObjects(VOID);
 
 CODE_SEG("INIT")
 BOOLEAN

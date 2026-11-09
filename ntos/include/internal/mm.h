@@ -23,6 +23,7 @@ extern PFN_NUMBER MmAvailablePages;
 extern PFN_NUMBER MmResidentAvailablePages;
 extern ULONG MmThrottleTop;
 extern ULONG MmThrottleBottom;
+extern ULONG MmReadClusterSize;
 
 extern LIST_ENTRY MmLoadedUserImageList;
 
@@ -822,6 +823,13 @@ MmBuildMdlFromPages(
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
+MmArmInitSystem(
+    _In_ ULONG Phase,
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
 MmInitSystem(IN ULONG Phase,
              IN PLOADER_PARAMETER_BLOCK LoaderBlock);
 
@@ -835,11 +843,6 @@ MmAllocSwapPage(VOID);
 VOID
 NTAPI
 MmFreeSwapPage(SWAPENTRY Entry);
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-MmInitPagingFile(VOID);
 
 BOOLEAN
 NTAPI

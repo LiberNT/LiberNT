@@ -4003,6 +4003,14 @@ RtlDeleteTimerQueue(HANDLE TimerQueue);
 //
 // SList functions
 //
+_Must_inspect_result_
+NTSYSAPI
+PSLIST_ENTRY
+NTAPI
+RtlFirstEntrySList(
+    _In_ const SLIST_HEADER *ListHead
+);
+
 PSLIST_ENTRY
 FASTCALL
 InterlockedPushListSList(

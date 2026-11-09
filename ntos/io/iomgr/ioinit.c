@@ -1,0 +1,682 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     How the I/O manager comes up and what it owns
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ntoskrnl.h>
+#include "../ioint.h"
+#define NDEBUG
+#include <debug.h>
+
+/* GLOBALS ********************************************************************/
+
+POBJECT_TYPE IoAdapterObjectType = NULL;
+POBJECT_TYPE IoControllerObjectType = NULL;
+POBJECT_TYPE IoDeviceHandlerObjectType = NULL;
+POBJECT_TYPE IoDeviceObjectType = NULL;
+POBJECT_TYPE IoDriverObjectType = NULL;
+POBJECT_TYPE IoFileObjectType = NULL;
+POBJECT_TYPE IoCompletionType = NULL;
+POBJECT_TYPE IoCompletionObjectType = NULL;
+POBJECT_TYPE IopWaitCompletionPacketType = NULL;
+
+ULONG IoDeviceHandlerObjectSize = sizeof(DEVICE_OBJECT);
+
+ERESOURCE IopDatabaseResource;
+ERESOURCE IopSecurityResource;
+ERESOURCE IopDriverLoadResource;
+ERESOURCE IopDeviceTreeResource;
+KSPIN_LOCK IopDeviceTreeLock;
+KMUTEX IopServiceEnumLocks[IOP_SERVICE_ENUM_LOCK_COUNT];
+
+KSPIN_LOCK IoStatisticsLock;
+ULONG IoReadOperationCount = 0;
+ULONG IoWriteOperationCount = 0;
+ULONG IoOtherOperationCount = 0;
+LARGE_INTEGER IoReadTransferCount = {{0, 0}};
+LARGE_INTEGER IoWriteTransferCount = {{0, 0}};
+LARGE_INTEGER IoOtherTransferCount = {{0, 0}};
+BOOLEAN IoCountOperations = TRUE;
+
+ULONG IopTraceLevel = 0;
+ULONG IopAutoReboot = 0;
+ULONG IopDeviceObjectNumber = 0;
+PLOADER_PARAMETER_BLOCK IopLoaderBlock = NULL;
+
+GENERIC_MAPPING IopFileMapping =
+{
+    FILE_GENERIC_READ,
+    FILE_GENERIC_WRITE,
+    FILE_GENERIC_EXECUTE,
+    FILE_ALL_ACCESS
+};
+
+GENERIC_MAPPING IopCompletionMapping =
+{
+    STANDARD_RIGHTS_READ | IO_COMPLETION_QUERY_STATE,
+    STANDARD_RIGHTS_WRITE | IO_COMPLETION_MODIFY_STATE,
+    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE,
+    IO_COMPLETION_ALL_ACCESS
+};
+
+PWSTR IopHardwareDatabaseKey =
+    L"\\REGISTRY\\MACHINE\\HARDWARE\\DESCRIPTION\\SYSTEM";
+
+/* PRIVATE DATA ***************************************************************/
+
+static PSECURITY_DESCRIPTOR IopRestrictedPublicSd = NULL;
+static PSECURITY_DESCRIPTOR IopUnrestrictedPublicSd = NULL;
+static PSECURITY_DESCRIPTOR IopRestrictedPublicOpenSd = NULL;
+static PSECURITY_DESCRIPTOR IopUnrestrictedPublicOpenSd = NULL;
+static PSECURITY_DESCRIPTOR IopSystemDefaultSd = NULL;
+
+typedef struct _IOP_SD_ENTRY
+{
+    PSID *Sid;
+    ACCESS_MASK Access;
+} IOP_SD_ENTRY;
+
+#define IOP_READ_WRITE_EXECUTE \
+    (GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE)
+
+static const IOP_SD_ENTRY IopRestrictedPublicAces[] =
+{
+    {&SeLocalSystemSid, GENERIC_ALL},
+    {&SeAliasAdminsSid, GENERIC_ALL},
+    {&SeWorldSid, GENERIC_READ | GENERIC_EXECUTE}
+};
+
+static const IOP_SD_ENTRY IopUnrestrictedPublicAces[] =
+{
+    {&SeLocalSystemSid, GENERIC_ALL},
+    {&SeAliasAdminsSid, GENERIC_ALL},
+    {&SeWorldSid, GENERIC_ALL}
+};
+
+static const IOP_SD_ENTRY IopRestrictedPublicOpenAces[] =
+{
+    {&SeLocalSystemSid, GENERIC_ALL},
+    {&SeAliasAdminsSid, GENERIC_ALL},
+    {&SeWorldSid, IOP_READ_WRITE_EXECUTE},
+    {&SeRestrictedSid, GENERIC_READ | GENERIC_EXECUTE}
+};
+
+static const IOP_SD_ENTRY IopUnrestrictedPublicOpenAces[] =
+{
+    {&SeLocalSystemSid, GENERIC_ALL},
+    {&SeAliasAdminsSid, GENERIC_ALL},
+    {&SeWorldSid, GENERIC_ALL},
+    {&SeRestrictedSid, GENERIC_ALL}
+};
+
+static const IOP_SD_ENTRY IopSystemDefaultAces[] =
+{
+    {&SeLocalSystemSid, GENERIC_ALL},
+    {&SeAliasAdminsSid, GENERIC_ALL},
+    {&SeWorldSid, GENERIC_READ | GENERIC_EXECUTE}
+};
+
+/* PRIVATE FUNCTIONS **********************************************************/
+
+CODE_SEG("INIT")
+VOID
+IopInitLookasideLists(VOID)
+{
+    USHORT SmallSize;
+    USHORT LargeSize;
+    ULONG Depth;
+
+    SmallSize = IoSizeOfIrp(1);
+    LargeSize = IoSizeOfIrp(IOP_FIXED_STACK_SIZE);
+
+    Depth = (MmQuerySystemSize() == MmLargeSystem) ? 512 : 128;
+
+    ExInitializeSystemLookasideList(&IoSmallIrpLookaside,
+                                    NonPagedPool,
+                                    SmallSize,
+                                    TAG_IRP,
+                                    (USHORT)Depth,
+                                    &ExSystemLookasideListHead);
+
+    ExInitializeSystemLookasideList(&IoLargeIrpLookaside,
+                                    NonPagedPool,
+                                    LargeSize,
+                                    TAG_IRP,
+                                    (USHORT)(Depth / 4),
+                                    &ExSystemLookasideListHead);
+
+    ExInitializeSystemLookasideList(&IoCompletionPacketLookaside,
+                                    NonPagedPool,
+                                    sizeof(IOP_MINI_COMPLETION_PACKET),
+                                    TAG_IO,
+                                    (USHORT)Depth,
+                                    &ExSystemLookasideListHead);
+
+    ExInitializeSystemLookasideList(&IopMdlLookasideList,
+                                    NonPagedPool,
+                                    (USHORT)(sizeof(MDL) +
+                                             sizeof(PFN_NUMBER) * 23),
+                                    TAG_MDL,
+                                    (USHORT)Depth,
+                                    &ExSystemLookasideListHead);
+}
+
+static
+CODE_SEG("INIT")
+NTSTATUS
+IopCreateOneObjectType(
+    _In_ PCWSTR Name,
+    _In_ POBJECT_TYPE_INITIALIZER Initializer,
+    _Out_ POBJECT_TYPE *ObjectType)
+{
+    UNICODE_STRING TypeName;
+
+    RtlInitUnicodeString(&TypeName, Name);
+    Initializer->Length = sizeof(*Initializer);
+
+    return ObCreateObjectType(&TypeName, Initializer, NULL, ObjectType);
+}
+
+CODE_SEG("INIT")
+BOOLEAN
+IopCreateObjectTypes(VOID)
+{
+    OBJECT_TYPE_INITIALIZER Initializer;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Initializer, sizeof(Initializer));
+    Initializer.PoolType = NonPagedPool;
+    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.ValidAccessMask = FILE_ALL_ACCESS;
+    Initializer.GenericMapping = IopFileMapping;
+    Initializer.CaseInsensitive = TRUE;
+    Initializer.UseDefaultObject = TRUE;
+    Initializer.ParseProcedure = IopParseDevice;
+    Initializer.ParseProcedureEx = IopParseDeviceEx;
+    Initializer.DeleteProcedure = IopDeleteDevice;
+    Initializer.SecurityProcedure = IopGetSetSecurityObject;
+    Initializer.UseExtendedParameters = TRUE;
+
+    Status = IopCreateOneObjectType(L"Device", &Initializer, &IoDeviceObjectType);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    RtlZeroMemory(&Initializer, sizeof(Initializer));
+    Initializer.PoolType = NonPagedPool;
+    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
+    Initializer.ValidAccessMask = FILE_ALL_ACCESS;
+    Initializer.GenericMapping = IopFileMapping;
+    Initializer.CaseInsensitive = TRUE;
+    Initializer.DeleteProcedure = IopDeleteDriver;
+
+    Status = IopCreateOneObjectType(L"Driver", &Initializer, &IoDriverObjectType);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    RtlZeroMemory(&Initializer, sizeof(Initializer));
+    Initializer.PoolType = NonPagedPool;
+    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
+    Initializer.ValidAccessMask = FILE_ALL_ACCESS;
+    Initializer.GenericMapping = IopFileMapping;
+    Initializer.UnnamedObjectsOnly = TRUE;
+
+    Status = IopCreateOneObjectType(L"Adapter", &Initializer, &IoAdapterObjectType);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = IopCreateOneObjectType(L"Controller",
+                                    &Initializer,
+                                    &IoControllerObjectType);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = IopCreateOneObjectType(L"DeviceHandler",
+                                    &Initializer,
+                                    &IoDeviceHandlerObjectType);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    RtlZeroMemory(&Initializer, sizeof(Initializer));
+    Initializer.PoolType = NonPagedPool;
+    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
+    Initializer.ValidAccessMask = FILE_ALL_ACCESS;
+    Initializer.GenericMapping = IopFileMapping;
+    Initializer.MaintainHandleCount = TRUE;
+    Initializer.CaseInsensitive = TRUE;
+    Initializer.SecurityRequired = TRUE;
+    Initializer.DefaultNonPagedPoolCharge = IO_FILE_OBJECT_NON_PAGED_POOL_CHARGE;
+    Initializer.DefaultPagedPoolCharge = IO_FILE_OBJECT_PAGED_POOL_CHARGE;
+    Initializer.ParseProcedure = IopParseFile;
+    Initializer.ParseProcedureEx = IopParseFileEx;
+    Initializer.DeleteProcedure = IopDeleteFile;
+    Initializer.CloseProcedure = IopCloseFile;
+    Initializer.SecurityProcedure = IopGetSetSecurityObject;
+    Initializer.QueryNameProcedure = IopQueryName;
+    Initializer.UseExtendedParameters = TRUE;
+
+    Status = IopCreateOneObjectType(L"File", &Initializer, &IoFileObjectType);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    RtlZeroMemory(&Initializer, sizeof(Initializer));
+    Initializer.PoolType = NonPagedPool;
+    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.ValidAccessMask = IO_COMPLETION_ALL_ACCESS;
+    Initializer.GenericMapping = IopCompletionMapping;
+    Initializer.CaseInsensitive = TRUE;
+    Initializer.UseDefaultObject = TRUE;
+    Initializer.MaintainHandleCount = TRUE;
+    Initializer.DeleteProcedure = IopDeleteIoCompletion;
+    Initializer.CloseProcedure = IopCloseIoCompletion;
+
+    Status = IopCreateOneObjectType(L"IoCompletion",
+                                    &Initializer,
+                                    &IoCompletionType);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    IoCompletionObjectType = IoCompletionType;
+
+    return IopInitializeWaitCompletionPacketType();
+}
+
+static
+CODE_SEG("INIT")
+BOOLEAN
+IopCreateOneDirectory(
+    _In_ PCWSTR Name,
+    _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING DirectoryName;
+    NTSTATUS Status;
+    HANDLE Handle;
+
+    RtlInitUnicodeString(&DirectoryName, Name);
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &DirectoryName,
+                               OBJ_CASE_INSENSITIVE | OBJ_PERMANENT |
+                                   OBJ_KERNEL_HANDLE,
+                               NULL,
+                               SecurityDescriptor);
+
+    Status = NtCreateDirectoryObject(&Handle,
+                                     DIRECTORY_ALL_ACCESS,
+                                     &ObjectAttributes);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    NtClose(Handle);
+    return TRUE;
+}
+
+CODE_SEG("INIT")
+BOOLEAN
+IopCreateRootDirectories(VOID)
+{
+    if (!IopCreateOneDirectory(L"\\Device", IopSystemDefaultSd)) return FALSE;
+    if (!IopCreateOneDirectory(L"\\Driver", IopSystemDefaultSd)) return FALSE;
+    if (!IopCreateOneDirectory(L"\\FileSystem", IopSystemDefaultSd)) return FALSE;
+    if (!IopCreateOneDirectory(L"\\FileSystem\\Filters", IopSystemDefaultSd))
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+CODE_SEG("INIT")
+static
+NTSTATUS
+IopBuildSecurityDescriptor(
+    _In_reads_(Count) const IOP_SD_ENTRY *Aces,
+    _In_ ULONG Count,
+    _Out_ PSECURITY_DESCRIPTOR *Descriptor)
+{
+    PSECURITY_DESCRIPTOR Absolute;
+    PSECURITY_DESCRIPTOR Relative;
+    NTSTATUS Status;
+    ULONG AclLength;
+    ULONG Length;
+    PACL Dacl;
+    ULONG i;
+
+    AclLength = sizeof(ACL);
+    for (i = 0; i < Count; i++)
+    {
+        AclLength += (ULONG)sizeof(ACCESS_ALLOWED_ACE) -
+                     (ULONG)sizeof(ULONG) +
+                     RtlLengthSid(*Aces[i].Sid);
+    }
+
+    Absolute = ExAllocatePoolZero(PagedPool,
+                                  sizeof(SECURITY_DESCRIPTOR) + AclLength,
+                                  TAG_SD);
+    if (Absolute == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Dacl = (PACL)((PUCHAR)Absolute + sizeof(SECURITY_DESCRIPTOR));
+
+    Status = RtlCreateSecurityDescriptor(Absolute,
+                                         SECURITY_DESCRIPTOR_REVISION);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Absolute, TAG_SD);
+        return Status;
+    }
+
+    Status = RtlCreateAcl(Dacl, AclLength, ACL_REVISION);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Absolute, TAG_SD);
+        return Status;
+    }
+
+    for (i = 0; i < Count; i++)
+    {
+        Status = RtlAddAccessAllowedAce(Dacl,
+                                        ACL_REVISION,
+                                        Aces[i].Access,
+                                        *Aces[i].Sid);
+        if (!NT_SUCCESS(Status))
+        {
+            ExFreePoolWithTag(Absolute, TAG_SD);
+            return Status;
+        }
+    }
+
+    Status = RtlSetDaclSecurityDescriptor(Absolute, TRUE, Dacl, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Absolute, TAG_SD);
+        return Status;
+    }
+
+    Status = RtlSetOwnerSecurityDescriptor(Absolute, SeLocalSystemSid, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Absolute, TAG_SD);
+        return Status;
+    }
+
+    Length = 0;
+    Status = RtlAbsoluteToSelfRelativeSD(Absolute, NULL, &Length);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+    {
+        ExFreePoolWithTag(Absolute, TAG_SD);
+        return NT_SUCCESS(Status) ? STATUS_UNSUCCESSFUL : Status;
+    }
+
+    Relative = ExAllocatePoolZero(NonPagedPool, Length, TAG_SD);
+    if (Relative == NULL)
+    {
+        ExFreePoolWithTag(Absolute, TAG_SD);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = RtlAbsoluteToSelfRelativeSD(Absolute, Relative, &Length);
+    ExFreePoolWithTag(Absolute, TAG_SD);
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Relative, TAG_SD);
+        return Status;
+    }
+
+    *Descriptor = Relative;
+    return STATUS_SUCCESS;
+}
+
+CODE_SEG("INIT")
+static
+BOOLEAN
+IopCreateSecurityDescriptors(VOID)
+{
+    NTSTATUS Status;
+
+    Status = IopBuildSecurityDescriptor(IopRestrictedPublicAces,
+                                        RTL_NUMBER_OF(IopRestrictedPublicAces),
+                                        &IopRestrictedPublicSd);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = IopBuildSecurityDescriptor(IopUnrestrictedPublicAces,
+                                        RTL_NUMBER_OF(IopUnrestrictedPublicAces),
+                                        &IopUnrestrictedPublicSd);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = IopBuildSecurityDescriptor(IopRestrictedPublicOpenAces,
+                                        RTL_NUMBER_OF(IopRestrictedPublicOpenAces),
+                                        &IopRestrictedPublicOpenSd);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = IopBuildSecurityDescriptor(IopUnrestrictedPublicOpenAces,
+                                        RTL_NUMBER_OF(IopUnrestrictedPublicOpenAces),
+                                        &IopUnrestrictedPublicOpenSd);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = IopBuildSecurityDescriptor(IopSystemDefaultAces,
+                                        RTL_NUMBER_OF(IopSystemDefaultAces),
+                                        &IopSystemDefaultSd);
+    return NT_SUCCESS(Status);
+}
+
+NTSTATUS
+IopCreateSecurityDescriptorPerType(
+    _In_ SECURITY_DESCRIPTOR_TYPE Type,
+    _Out_ PSECURITY_DESCRIPTOR *Descriptor)
+{
+    switch (Type)
+    {
+        case RestrictedPublic:
+            *Descriptor = IopRestrictedPublicSd;
+            break;
+
+        case UnrestrictedPublic:
+            *Descriptor = IopUnrestrictedPublicSd;
+            break;
+
+        case RestrictedPublicOpen:
+            *Descriptor = IopRestrictedPublicOpenSd;
+            break;
+
+        case UnrestrictedPublicOpen:
+            *Descriptor = IopUnrestrictedPublicOpenSd;
+            break;
+
+        case SystemDefault:
+            *Descriptor = IopSystemDefaultSd;
+            break;
+
+        default:
+            *Descriptor = NULL;
+            return STATUS_INVALID_PARAMETER;
+    }
+
+    if (*Descriptor == NULL) return STATUS_UNSUCCESSFUL;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+IopCreateDefaultDeviceSecurityDescriptor(
+    _In_ DEVICE_TYPE DeviceType,
+    _In_ ULONG DeviceCharacteristics,
+    _In_ BOOLEAN HasName,
+    _Out_writes_bytes_(SIZE_OF_SUBSET_SD) PVOID Buffer,
+    _Out_opt_ PBOOLEAN DefaultSdPresent,
+    _Out_ PSECURITY_DESCRIPTOR *Descriptor)
+{
+    SECURITY_DESCRIPTOR_TYPE Type;
+    PSECURITY_DESCRIPTOR Source;
+    NTSTATUS Status;
+    ULONG Length;
+
+    UNREFERENCED_PARAMETER(Buffer);
+
+    if (DefaultSdPresent != NULL) *DefaultSdPresent = FALSE;
+    *Descriptor = NULL;
+
+    if (DeviceType == FILE_DEVICE_DISK ||
+        DeviceType == FILE_DEVICE_VIRTUAL_DISK ||
+        DeviceType == FILE_DEVICE_CD_ROM ||
+        DeviceType == FILE_DEVICE_TAPE ||
+        DeviceType == FILE_DEVICE_DISK_FILE_SYSTEM ||
+        DeviceType == FILE_DEVICE_CD_ROM_FILE_SYSTEM ||
+        DeviceType == FILE_DEVICE_TAPE_FILE_SYSTEM)
+    {
+        Type = (DeviceCharacteristics & FILE_FLOPPY_DISKETTE) ?
+                   UnrestrictedPublicOpen : RestrictedPublicOpen;
+    }
+    else if (DeviceType == FILE_DEVICE_SERIAL_PORT ||
+             DeviceType == FILE_DEVICE_PARALLEL_PORT ||
+             DeviceType == FILE_DEVICE_MODEM ||
+             DeviceType == FILE_DEVICE_SERIAL_MOUSE_PORT)
+    {
+        Type = UnrestrictedPublic;
+    }
+    else if (!HasName)
+    {
+        Type = SystemDefault;
+    }
+    else
+    {
+        Type = RestrictedPublic;
+    }
+
+    Status = IopCreateSecurityDescriptorPerType(Type, &Source);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Length = RtlLengthSecurityDescriptor(Source);
+    if (Length > SIZE_OF_SUBSET_SD) return STATUS_BUFFER_TOO_SMALL;
+
+    *Descriptor = Source;
+    if (DefaultSdPresent != NULL) *DefaultSdPresent = TRUE;
+
+    return STATUS_SUCCESS;
+}
+
+/* PUBLIC FUNCTIONS ***********************************************************/
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+IoInitSystem(
+    IN PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    ANSI_STRING NtBootPath;
+    NTSTATUS Status;
+    ULONG i;
+
+    IopLoaderBlock = LoaderBlock;
+
+    KeInitializeSpinLock(&IoStatisticsLock);
+    KeInitializeSpinLock(&IopDeviceTreeLock);
+    KeInitializeSpinLock(&IopVpbSpinLock);
+    KeInitializeSpinLock(&IopLogListLock);
+    KeInitializeSpinLock(&ShutdownListLock);
+    KeInitializeSpinLock(&DriverReinitListLock);
+    KeInitializeSpinLock(&DriverBootReinitListLock);
+
+    InitializeListHead(&ShutdownListHead);
+    InitializeListHead(&LastChanceShutdownListHead);
+    InitializeListHead(&DriverReinitListHead);
+    InitializeListHead(&DriverBootReinitListHead);
+    InitializeListHead(&IopErrorLogListHead);
+    InitializeListHead(&IopDiskFileSystemQueueHead);
+    InitializeListHead(&IopCdRomFileSystemQueueHead);
+    InitializeListHead(&IopTapeFileSystemQueueHead);
+    InitializeListHead(&IopNetworkFileSystemQueueHead);
+    InitializeListHead(&IopFsNotifyChangeQueueHead);
+    InitializeListHead(&IopFsRegistrationOps);
+    InitializeListHead(&IopDeviceActionRequestList);
+    InitializeListHead(&IopDeviceInterfaceListHead);
+
+    DriverReinitTailEntry = NULL;
+    DriverBootReinitTailEntry = NULL;
+
+    KeInitializeGuardedMutex(&IopDeviceInterfaceLock);
+
+    ExInitializeResourceLite(&IopDatabaseResource);
+    ExInitializeResourceLite(&IopSecurityResource);
+    ExInitializeResourceLite(&IopDriverLoadResource);
+    ExInitializeResourceLite(&IopDeviceTreeResource);
+
+    for (i = 0; i < IOP_SERVICE_ENUM_LOCK_COUNT; i++)
+    {
+        KeInitializeMutex(&IopServiceEnumLocks[i], 0);
+    }
+
+    if (!IopCreateSecurityDescriptors())
+    {
+        DPRINT1("I/O: no room for the standard security descriptors\n");
+        return FALSE;
+    }
+
+    if (!IopCreateObjectTypes())
+    {
+        DPRINT1("I/O: the object types could not be made\n");
+        return FALSE;
+    }
+
+    if (!IopCreateRootDirectories())
+    {
+        DPRINT1("I/O: the object directories could not be made\n");
+        return FALSE;
+    }
+
+    IopInitLookasideLists();
+
+    if (!IopInitializeReserveIrp(&IopReserveIrpAllocator))
+    {
+        DPRINT1("I/O: the reserve IRP could not be made\n");
+        return FALSE;
+    }
+
+    IoInitCancelHandling();
+    IopInitBootLog(FALSE);
+    IopInitTimerImplementation();
+    IopInitErrorLog();
+    IoInitShutdownNotification();
+    IoInitVpbImplementation();
+    IoInitFileSystemImplementation();
+    IopInitDriverImplementation();
+    IopInitDriverLoadSlots();
+    IopResDbInitialize();
+
+    IopInitializeSystemResourceMap(LoaderBlock);
+
+    if (!PpInitSystem())
+    {
+        DPRINT1("I/O: the PnP manager could not come up\n");
+        return FALSE;
+    }
+
+    Status = IopInitializeArbiters();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: the arbiters could not come up (%lx)\n", Status);
+        return FALSE;
+    }
+
+    Status = RawFsDriverEntry(NULL, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: the raw file system could not come up (%lx)\n", Status);
+        return FALSE;
+    }
+
+    IopInitializeBootDrivers();
+
+    Status = IopCreateArcNames(LoaderBlock);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: the ARC names could not be made (%lx)\n", Status);
+        return FALSE;
+    }
+
+    Status = IopReassignSystemRoot(LoaderBlock, &NtBootPath);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: the system root could not be resolved (%lx)\n", Status);
+        return FALSE;
+    }
+
+    if (!IoInitializeCrashDumpCore(LoaderBlock))
+    {
+        DPRINT("I/O: no crash dump on this boot\n");
+    }
+
+    return TRUE;
+}

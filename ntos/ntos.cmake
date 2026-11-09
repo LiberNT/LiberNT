@@ -18,8 +18,8 @@ set_source_files_properties(${REACTOS_SOURCE_DIR}/ntos/kd64/kdwatchdog.c PROPERT
 # KiBugCheckDebugBreak relies on native SEH catching the deliberate breakpoint.
 # Clang otherwise only models synchronous exceptions at selected instructions.
 if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STREQUAL "Clang" AND NOT USE_DUMMY_PSEH)
-    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/bug.c PROPERTY SKIP_PRECOMPILE_HEADERS ON)
-    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/bug.c APPEND PROPERTY COMPILE_OPTIONS -Xclang -fasync-exceptions)
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/crash.c PROPERTY SKIP_PRECOMPILE_HEADERS ON)
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/crash.c APPEND PROPERTY COMPILE_OPTIONS -Xclang -fasync-exceptions)
 endif()
 
 if(ARCH STREQUAL "arm64")
@@ -28,181 +28,213 @@ if(ARCH STREQUAL "arm64")
 endif()
 
 list(APPEND SOURCE
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmalloc.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmapi.c
     ${REACTOS_SOURCE_DIR}/ntos/config/cmboot.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmconfig.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmcontrl.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmdata.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmdelay.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmhook.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmhvlist.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cminit.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmkcbncb.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmlazy.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmmapvw.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmnotify.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmparse.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmquota.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmse.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmsecach.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmsysini.c
     ${REACTOS_SOURCE_DIR}/ntos/config/cmtrans.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmvalche.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/cmwraprs.c
-    ${REACTOS_SOURCE_DIR}/ntos/config/ntapi.c
-    ${REACTOS_SOURCE_DIR}/ntos/dbgk/dbgkobj.c
-    ${REACTOS_SOURCE_DIR}/ntos/dbgk/dbgkutil.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/atom.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/callback.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/dbgctrl.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/efi.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/event.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/evtpair.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/exintrin.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/fmutex.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/handle.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/harderr.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/hdlsterm.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/init.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/interlocked.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/keyedevt.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmapphive.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmbackend.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmbigdata.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmcompact.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmcontrolset.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmdelayclose.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmfilter.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmflusher.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmhiveload.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmhivemgr.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmhwtree.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmkcbpool.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmkeyapi.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmkeycache.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmkeyobject.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmkeysecurity.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmmerge.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmnamespace.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmregistry.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmsecurecache.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmselfheal.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmstartup.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmsubkey.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmsystemcalls.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmvaluecache.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmwatch.c
+    ${REACTOS_SOURCE_DIR}/ntos/dbgk/dbgobject.c
+    ${REACTOS_SOURCE_DIR}/ntos/dbgk/dbgreport.c
     ${REACTOS_SOURCE_DIR}/ntos/ex/license.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/locale.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/lookas.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/mutant.c
     ${REACTOS_SOURCE_DIR}/ntos/ex/partition.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/profile.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/pushlock.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/resource.c
     ${REACTOS_SOURCE_DIR}/ntos/ex/reserve.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/rundown.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/sem.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/shutdown.c
     ${REACTOS_SOURCE_DIR}/ntos/ex/spinlock.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/sysinfo.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/time.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/timer.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/uuid.c
     ${REACTOS_SOURCE_DIR}/ntos/ex/wddm.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/win32k.c
     ${REACTOS_SOURCE_DIR}/ntos/ex/wnf.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/work.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/xipdisp.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/zone.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/dbcsname.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fastio.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/faulttol.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exatom.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/excallback.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exdbgctrl.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exevent.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exfastmutex.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exfastresource.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exfirmware.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exhandle.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exharderror.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exheadless.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exinit.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exinterlocked.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exintrinsics.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exlocale.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exlookaside.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exprofile.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/expushlock.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exresource.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exrundown.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exsemaphore.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exshutdown.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exsyshandle.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exsysinfo.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exsysperf.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exsysproc.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exsysset.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/extime.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/extimer.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exuuid.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exwin32.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exworker.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exxip.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/exzone.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/bytelock.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/cancelwait.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/filter.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/filtrctx.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fsfilter.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fsrtlpc.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/largemcb.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/mcb.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/name.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/notify.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/oplock.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/pnp.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/stackovf.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/tunnel.c
-    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/unc.c
-    ${REACTOS_SOURCE_DIR}/ntos/fstub/disksup.c
-    ${REACTOS_SOURCE_DIR}/ntos/fstub/fstubex.c
-    ${REACTOS_SOURCE_DIR}/ntos/fstub/halstub.c
-    ${REACTOS_SOURCE_DIR}/ntos/fstub/translate.c
-    ${REACTOS_SOURCE_DIR}/ntos/inbv/bootanim.c
-    ${REACTOS_SOURCE_DIR}/ntos/inbv/inbv.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/ansiname.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/charclass.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/datascan.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/deepstack.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/dirnotify.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/ecp.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/ecpirp.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/exception.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fastpath.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/filesize.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fsfilterctrl.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fsinit.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/ftvolume.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/lockquery.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/mupreg.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/oplockex.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/oplockpkg.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/pathdots.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/poolsup.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/reparse.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/runmap.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/streamctx.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/tunnelcache.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/unicodename.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/volnotify.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/volstartup.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/bootdisk.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/bustranslate.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/diskio.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/disklayout.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/gpt.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/haldispatch.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/mbr.c
+    ${REACTOS_SOURCE_DIR}/ntos/fstub/mbrlegacy.c
     ${REACTOS_SOURCE_DIR}/ntos/inbv/inbvgop.c
-    ${REACTOS_SOURCE_DIR}/ntos/inbv/inbvport.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/adapter.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/arcname.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/bootlog.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/controller.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/device.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/deviface.c
+    ${REACTOS_SOURCE_DIR}/ntos/inbv/bootlogo.c
+    ${REACTOS_SOURCE_DIR}/ntos/inbv/display.c
+    ${REACTOS_SOURCE_DIR}/ntos/inbv/serialport.c
     ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/bootcb.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/driver.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/error.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/file.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iocomp.c
     ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/waitcomp.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioevent.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iofunc.c
     ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iommu.c
     ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ksr.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iomdl.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iomgr.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iorsrce.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iotimer.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iowork.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/irp.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/irq.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ramdisk.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/rawfs.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/remlock.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/symlink.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/util.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/volume.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/devobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/devqueue.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/devtimer.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/drvinit.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/drvobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/fileobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioadapter.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioarcname.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iobootlog.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iobuild.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iocall.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iocancel.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iocomplete.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iocompport.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iocreate.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioctrl.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iodump.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioecp.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioerrlog.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioevents.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iofileinfo.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioinit.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iointr.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iomisc.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iopacket.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioparse.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioramdisk.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iorawfs.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iordwr.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iorsrc.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/ioshutdown.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iosymlink.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/iovolume.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/removelock.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/shareacc.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/iomgr/workitem.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/rootarb.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/dif.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/devaction.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/devnode.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/plugplay.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpdma.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpinit.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpirp.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpmap.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpmgr.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpnotify.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpreport.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnppar.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpres.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpresdb.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnproot.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnputil.c
-    ${REACTOS_SOURCE_DIR}/ntos/io/debug.c
-    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdapi.c
-    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdbreak.c
-    ${REACTOS_SOURCE_DIR}/ntos/kd64/kddata.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/devinterface.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/devprop.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpdetect.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpevent.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpnode.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpnotif.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpquery.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpregutil.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpresource.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnprootbus.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpstart.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpstate.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpdbg.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdbreakpoint.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdcontrolspace.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdenable.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdengine.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdexception.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdfilter.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdglobals.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdmemory.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdoutput.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdport.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdregisters.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdstartup.c
     ${REACTOS_SOURCE_DIR}/ntos/kd64/kddump.c
     ${REACTOS_SOURCE_DIR}/ntos/kd64/kdfile.c
-    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdinit.c
-    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdlock.c
     ${REACTOS_SOURCE_DIR}/ntos/kd64/kdlog.c
-    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdprint.c
-    ${REACTOS_SOURCE_DIR}/ntos/kd64/kdtrap.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/apc.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/balmgr.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/bug.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/clock.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/config.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/devqueue.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/dpc.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/eventobj.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/except.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/freeze.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/gate.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/gmutex.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/ipi.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/passint.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/krnlinit.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/mutex.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/procgrp.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/processor.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/procinfo.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/procobj.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/profobj.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/queue.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/semphobj.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/smpdbg.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/thrdobj.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/thrdschd.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/time.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/timerobj.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/wait.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/apcobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/arcconfig.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/balance.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/clockint.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/cpuctrl.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/crash.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/dispatch.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/dpcobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/exceptsvc.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/freezecpu.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/ioqueue.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/kernmain.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/ktimer.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/lockprim.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/procctrl.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/profile.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/schedule.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/syncobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/thrdctrl.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/waitobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/workqueue.c
     ${REACTOS_SOURCE_DIR}/ntos/kse/kse.c
     ${REACTOS_SOURCE_DIR}/ntos/mm/pool/va/varegion.c
     ${REACTOS_SOURCE_DIR}/ntos/mm/pool/heap/heapcore.c
@@ -230,36 +262,45 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsdcache.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsecurity.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsync.c
-    ${REACTOS_SOURCE_DIR}/ntos/po/events.c
-    ${REACTOS_SOURCE_DIR}/ntos/po/poshtdwn.c
-    ${REACTOS_SOURCE_DIR}/ntos/po/povolume.c
     ${REACTOS_SOURCE_DIR}/ntos/po/pep.c
     ${REACTOS_SOURCE_DIR}/ntos/po/pofx.c
-    ${REACTOS_SOURCE_DIR}/ntos/po/power.c
     ${REACTOS_SOURCE_DIR}/ntos/po/powerlimit.c
     ${REACTOS_SOURCE_DIR}/ntos/po/hiber.c
     ${REACTOS_SOURCE_DIR}/ntos/po/sleep.c
     ${REACTOS_SOURCE_DIR}/ntos/po/standby.c
     ${REACTOS_SOURCE_DIR}/ntos/po/thermal.c
     ${REACTOS_SOURCE_DIR}/ntos/po/ttm.c
+    ${REACTOS_SOURCE_DIR}/ntos/po/podevice.c
+    ${REACTOS_SOURCE_DIR}/ntos/po/poshutdown.c
+    ${REACTOS_SOURCE_DIR}/ntos/po/posystem.c
+    ${REACTOS_SOURCE_DIR}/ntos/po/povolumes.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/apiset.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/apphelp.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/debug.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/energy.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/job.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/kill.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/pico.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/process.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/property.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/psmgr.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/psnotify.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/query.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/quota.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/security.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/state.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/thread.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/tls.c
-    ${REACTOS_SOURCE_DIR}/ntos/ps/win32.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psaccessors.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/pscallback.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/pscid.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/pscpuset.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psexit.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/pshandletrace.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psinfoprocess.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psinfoprocessset.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psinfothread.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psinfothreadset.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psjob.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/pslivedump.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psprocess.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psquota.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/pssecurity.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psshimcache.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psstartup.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psstate.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psthread.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psthreadctx.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psuserprocess.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/psw32callout.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/avltree.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/rbtree.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/cmresource.c
@@ -287,23 +328,26 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/se/seqos.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesrm.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesubject.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/token.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/setoken.c
     ${REACTOS_SOURCE_DIR}/ntos/se/setokenadj.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/tokencls.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/tokenlif.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/setokenquery.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/setokenbind.c
     ${REACTOS_SOURCE_DIR}/ntos/tm/enlist.c
     ${REACTOS_SOURCE_DIR}/ntos/tm/rm.c
     ${REACTOS_SOURCE_DIR}/ntos/tm/tm.c
     ${REACTOS_SOURCE_DIR}/ntos/tm/tx.c
-    ${REACTOS_SOURCE_DIR}/ntos/vf/driver.c
+    ${REACTOS_SOURCE_DIR}/ntos/vf/vfddi.c
     ${REACTOS_SOURCE_DIR}/ntos/wmi/etwlog.c
     ${REACTOS_SOURCE_DIR}/ntos/wmi/etwreg.c
-    ${REACTOS_SOURCE_DIR}/ntos/wmi/guidobj.c
     ${REACTOS_SOURCE_DIR}/ntos/wmi/pcw.c
     ${REACTOS_SOURCE_DIR}/ntos/wmi/provider.c
-    ${REACTOS_SOURCE_DIR}/ntos/wmi/smbios.c
-    ${REACTOS_SOURCE_DIR}/ntos/wmi/wmi.c
-    ${REACTOS_SOURCE_DIR}/ntos/wmi/wmidrv.c)
+    ${REACTOS_SOURCE_DIR}/ntos/wmi/etwprovider.c
+    ${REACTOS_SOURCE_DIR}/ntos/wmi/guidobject.c
+    ${REACTOS_SOURCE_DIR}/ntos/wmi/smbiostable.c
+    ${REACTOS_SOURCE_DIR}/ntos/wmi/tracecontrol.c
+    ${REACTOS_SOURCE_DIR}/ntos/wmi/wmiblock.c
+    ${REACTOS_SOURCE_DIR}/ntos/wmi/wmidevice.c
+    ${REACTOS_SOURCE_DIR}/ntos/wmi/wmiguids.c)
 
 list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/alpc/alpchelp.c
@@ -325,6 +369,7 @@ endif()
 list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/ex/zw.S)
 
 if(ARCH STREQUAL "i386")
+    # TODO: i386 has no interprocessor request file; the other targets use ke/<arch>/ipi.c
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/fastinterlck_asm.S
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/ioport.S
@@ -335,6 +380,7 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/i386/prefetch.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
+        ${REACTOS_SOURCE_DIR}/ntos/ex/i386/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/i386/kdx86.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/abios.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/cpu.c
@@ -363,7 +409,7 @@ elseif(ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/zeropage.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd64/kdcontrol.c
+        ${REACTOS_SOURCE_DIR}/ntos/ex/amd64/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/amd64/kdx64.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/cpu.c
@@ -376,7 +422,7 @@ elseif(ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/krnlinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/thrdini.c
-        ${REACTOS_SOURCE_DIR}/ntos/ps/amd64/psctx.c
+    ${REACTOS_SOURCE_DIR}/ntos/ps/amd64/psarchctx.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/stubs.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/traphandler.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/usercall.c
@@ -402,7 +448,6 @@ elseif(ARCH STREQUAL "arm")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/arm/rtlexcpt.c)
 elseif(ARCH STREQUAL "arm64")
     include_directories(${REACTOS_SOURCE_DIR}/ntos/arch/arm64/include)
-    list(REMOVE_ITEM SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/ipi.c)
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/chkstk.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/earlyvec.S
@@ -423,8 +468,7 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/config/arm64/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/init.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/probe.c
-        ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/ioport.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd64/kdcontrol.c
+    ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/exioport.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/arm64/kdarm64.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/atomics.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/boot.c
@@ -455,7 +499,6 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/arm64/rtlexcpt.c
         ${REACTOS_SOURCE_DIR}/ntos/rtl/arm64/rtlstubs.c)
 elseif(ARCH STREQUAL "riscv64")
-    list(REMOVE_ITEM SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/ipi.c)
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/ctxswitch.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/entry.S
@@ -497,7 +540,6 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/rtlexcpt.c
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/slist.c)
 elseif(ARCH STREQUAL "ppc")
-    list(REMOVE_ITEM SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/ipi.c)
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/ctxswitch.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/entry.S
@@ -540,13 +582,13 @@ endif()
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/i386/kdserial.c)
         if(KDBG)
             list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/i386-dis.c)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/i386-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/kdbregs.c)
         endif()
     elseif(ARCH STREQUAL "amd64")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/i386/kdserial.c)
         if(KDBG)
             list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/amd64/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/i386-dis.c)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/i386-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/amd64/kdbregs.c)
         endif()
     elseif(ARCH STREQUAL "arm")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/arm/kdserial.c)
@@ -554,7 +596,7 @@ endif()
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/arm64/kdserial.c)
         if(KDBG)
             list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/arm64/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/arm64/arm64-dis.c)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/arm64/arm64-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/arm64/kdbregs.c)
         endif()
     elseif(ARCH STREQUAL "ppc")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/ppc/kdserial.c)
@@ -562,32 +604,35 @@ endif()
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/riscv64/kdserial.c)
         if(KDBG)
             list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/riscv64-dis.c)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/riscv64-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/kdbregs.c)
         endif()
     endif()
 
     if(KDBG)
         list(APPEND SOURCE
-            ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbg.c
             ${REACTOS_SOURCE_DIR}/ntos/mm/pool/debug/poolkdbg.c
-            ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb.c
-            ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb_cli.c
-            ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb_cmdhist.c
-            ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb_expr.c
-            ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb_print.c
-            ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb_symbols.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbcli.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbcore.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbexpr.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbhistory.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbio.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbshim.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbsymbols.c
             ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb_symz.c)
     endif()
 
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/kd/kdinfo.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd/kdio.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd/kdmain.c
         ${REACTOS_SOURCE_DIR}/ntos/kd/kdnetio.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd/kdprompt.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd/kdps2kbd.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd/kdserial.c
-        ${REACTOS_SOURCE_DIR}/ntos/kd/kdterminal.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdcomport.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdcomterm.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdconsole.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdkeyboard.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdlifecycle.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdlineedit.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdproviders.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdscreen.c
+    ${REACTOS_SOURCE_DIR}/ntos/kd/kdtransport.c
         ${REACTOS_SOURCE_DIR}/ntos/kd/kdusbkbd.c)
 
 else()

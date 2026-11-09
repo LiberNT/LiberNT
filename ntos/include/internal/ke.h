@@ -1461,6 +1461,27 @@ private:
 
 }
 
+
+//
+// Processor group queries the kernel exports. The published headers declare
+// these only under SINGLE_GROUP_LEGACY_API, which this build does not define,
+// so they are declared here against the published prototypes.
+//
+ULONG
+NTAPI
+KeQueryActiveProcessorCount(
+    _Out_opt_ PKAFFINITY ActiveProcessors);
+
+USHORT
+NTAPI
+KeQueryHighestNodeNumber(
+    VOID);
+
+USHORT
+NTAPI
+KeGetCurrentNodeNumber(
+    VOID);
+
 #endif
 
 #include "ke_x.h"

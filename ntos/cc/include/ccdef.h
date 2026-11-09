@@ -9,6 +9,10 @@
 
 #pragma once
 
+/* The most a copy into the cache may be and still take the fast path,
+ * which is the limit the pre-Win7 header states as its own rule */
+#define CC_COPY_WRITE_WONT_FLUSH_LIMIT 0x10000
+
 #define CC_VIEW_SHIFT               18
 #define CC_VIEW_SIZE                ((ULONG)1 << CC_VIEW_SHIFT)
 #define CC_VIEW_MASK                (CC_VIEW_SIZE - 1)
