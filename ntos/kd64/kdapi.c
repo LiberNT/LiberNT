@@ -1977,6 +1977,13 @@ KdEnterDebugger(IN PKTRAP_FRAME TrapFrame,
 {
     BOOLEAN Enable;
 
+    if (KiHasFreezeFailure())
+    {
+        if (!KiIsBugCheckEntryOwner(KeGetCurrentPrcb()))
+            for (;;) HalHaltSystem();
+        return FALSE;
+    }
+
     if (KdEnteredDebugger || KdpDebuggerLockOwnedByCurrentThread())
     {
         InterlockedIncrement(&KdpDebuggerNestedDepth);
@@ -2002,6 +2009,7 @@ KdEnterDebugger(IN PKTRAP_FRAME TrapFrame,
 
     /* Freeze all CPUs, raising also the IRQL to HIGH_LEVEL */
     Enable = KeFreezeExecution(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure()) return Enable;
     if (!(KiFreezeFlag & 2))
         KiFreezeInterruptTime();
 
@@ -2037,6 +2045,13 @@ KdExitDebugger(IN BOOLEAN Enable)
 {
     ULONG TimeSlip;
 
+    if (KiHasFreezeFailure())
+    {
+        if (!KiIsBugCheckEntryOwner(KeGetCurrentPrcb()))
+            for (;;) HalHaltSystem();
+        return;
+    }
+
     if (KdpDebuggerNestedDepth > 0)
     {
         InterlockedDecrement(&KdpDebuggerNestedDepth);
@@ -2057,6 +2072,7 @@ KdExitDebugger(IN BOOLEAN Enable)
     /* Unfreeze the CPUs, restoring also the IRQL */
     KiThawInterruptTime();
     KeThawExecution(Enable);
+    if (KiHasFreezeFailure()) return;
 
     /* Compare time with the one from KdEnterDebugger */
     if (!KdTimerStop.QuadPart)
@@ -2787,6 +2803,7 @@ KdRefreshDebuggerNotPresent(VOID)
 
     /* Enter the debugger */
     Enable = KdEnterDebugger(NULL, NULL);
+    if (KiHasFreezeFailure()) return TRUE;
 
     /*
      * Attempt to send a string to the debugger

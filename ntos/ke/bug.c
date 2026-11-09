@@ -35,6 +35,19 @@ ULONG KeBugCheckCount = 1;
 ULONG KiHardwareTrigger;
 PUNICODE_STRING KiBugCheckDriver;
 ULONG_PTR KiBugCheckData[5];
+static PVOID volatile KiBugCheckEntryOwner;
+
+BOOLEAN
+KiClaimBugCheckEntry(PKPRCB Prcb)
+{
+    return InterlockedCompareExchangePointer(&KiBugCheckEntryOwner, Prcb, NULL) == NULL;
+}
+
+BOOLEAN
+KiIsBugCheckEntryOwner(PKPRCB Prcb)
+{
+    return InterlockedCompareExchangePointer(&KiBugCheckEntryOwner, NULL, NULL) == Prcb;
+}
 
 PKNMI_HANDLER_CALLBACK KiNmiCallbackListHead = NULL;
 KSPIN_LOCK KiNmiCallbackListLock;
@@ -1439,9 +1452,11 @@ KiDisplayBlueScreen(IN ULONG MessageId,
     KiDisplayAndLogBugCheckString(AnsiName);
 
     KiDisplayBugCheckRegisters(TrapFrame, Context);
-    KiDisplayBugCheckBackTrace(TrapFrame, Context);
+    if (!KiHasFreezeFailure())
+        KiDisplayBugCheckBackTrace(TrapFrame, Context);
 #ifndef _WINKD_
-    KiDisplayBugCheckTransport();
+    if (!KiHasFreezeFailure())
+        KiDisplayBugCheckTransport();
 #endif
 }
 
@@ -1469,6 +1484,21 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     PULONG_PTR HardErrorParameters;
     NTSTATUS DumpStatus;
     KIRQL OldIrql;
+
+    if (!KiClaimBugCheckEntry(Prcb))
+        for (;;) HalHaltSystem();
+
+    if (KiHasFreezeFailure())
+    {
+        KeBugCheckActive = TRUE;
+        KiBugCheckData[0] = BugCheckCode;
+        KiBugCheckData[1] = BugCheckParameter1;
+        KiBugCheckData[2] = BugCheckParameter2;
+        KiBugCheckData[3] = BugCheckParameter3;
+        KiBugCheckData[4] = BugCheckParameter4;
+        _disable();
+        for (;;) HalHaltSystem();
+    }
 
     IsDoubleFault = (BugCheckCode == UNEXPECTED_KERNEL_MODE_TRAP) && (BugCheckParameter1 == EXCEPTION_DOUBLE_FAULT);
 
@@ -1810,7 +1840,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         FatalErrorPrinted = TRUE;
 
         /* Check if the debugger isn't currently connected */
-        if (!KdDebuggerNotPresent && !IsDoubleFault)
+        if (!KdDebuggerNotPresent && !IsDoubleFault && !KiHasFreezeFailure())
         {
             /* Check if we have a driver to blame */
             if (KiBugCheckDriver)
@@ -1834,6 +1864,9 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         }
     }
 
+    if (KiHasFreezeFailure())
+        for (;;) HalHaltSystem();
+
     /* Raise IRQL to HIGH_LEVEL */
     _disable();
     KeRaiseIrql(HIGH_LEVEL, &OldIrql);
@@ -1848,6 +1881,9 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
         /* Freeze the other CPUs */
         KxFreezeExecution();
 #endif
+
+        if (KiHasFreezeFailure())
+            for (;;) HalHaltSystem();
 
         /* Display the BSOD */
         KiDisplayBlueScreen(MessageId, IsHardError, HardErrCaption, HardErrMessage, TrapFrame, &Context);

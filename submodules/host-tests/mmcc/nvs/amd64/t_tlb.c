@@ -11,6 +11,7 @@
 #include <mm/arch/amd64/tlb.h>
 #include <mm/arch/amd64/hardware.h>
 #include <pthread.h>
+#include <setjmp.h>
 
 typedef struct _TEST_CPU
 {
@@ -28,6 +29,43 @@ static ULONG64 ActiveCpus;
 static ULONG Checks, Failures, Finished;
 static ULONG64 Ipis;
 static ULONG DelayWait, DelayPolls, DelayReturned;
+static ULONG WatchdogMode, WatchdogPolls, WatchdogBugchecks, WatchdogInjected, WatchdogEpochReads;
+static ULONG64 WatchdogTime, WatchdogEpoch, WatchdogFrequency, WatchdogNow, WatchdogBaseline;
+static jmp_buf WatchdogJump;
+
+BOOLEAN MiAmd64TlbWatchdogEnabled(VOID) { return WatchdogMode != 0 && WatchdogMode != 5; }
+BOOLEAN MiAmd64TlbWatchdogFreezeActive(VOID) { return WatchdogMode == 2 && WatchdogPolls < 16000; }
+ULONG64 MiAmd64TlbWatchdogEpoch(VOID)
+{
+    if (WatchdogMode == 8 && WatchdogPolls >= 10240 && ++WatchdogEpochReads == 3)
+        WatchdogEpoch++;
+    return WatchdogEpoch;
+}
+ULONG64 MiAmd64TlbWatchdogNow(PULONG64 Frequency)
+{
+    *Frequency = 1;
+    if (WatchdogMode == 7 && WatchdogPolls >= 10240 && !WatchdogInjected)
+    {
+        WatchdogInjected = 1;
+        CurrentCpu = 1;
+        MiAmd64ProcessTlbRequest(0);
+        CurrentCpu = 0;
+    }
+    if (WatchdogMode == 6 && WatchdogPolls >= 1024 && WatchdogEpoch == 0)
+    {
+        WatchdogEpoch++;
+        WatchdogTime += 100;
+    }
+    return WatchdogTime;
+}
+VOID MiAmd64TlbWatchdogBugcheck(ULONG64 Frequency, ULONG64 Now, ULONG64 Baseline)
+{
+    WatchdogFrequency = Frequency;
+    WatchdogNow = Now;
+    WatchdogBaseline = Baseline;
+    WatchdogBugchecks++;
+    longjmp(WatchdogJump, 1);
+}
 
 #define CHECK(e) do { __atomic_fetch_add(&Checks, 1, __ATOMIC_RELAXED); if (!(e)) { if (__atomic_fetch_add(&Failures, 1, __ATOMIC_RELAXED) < 20) fprintf(stderr, "cpu%u %u: %s\n", CurrentCpu, __LINE__, #e); } } while (0)
 
@@ -173,7 +211,35 @@ VOID KiSendMemoryIpi(ULONG64 Targets)
 
 VOID MiAmd64TlbPoll(VOID)
 {
-    ULONG64 Sources = __atomic_exchange_n(&Cpus[CurrentCpu].Pending, 0, __ATOMIC_ACQUIRE);
+    ULONG64 Sources;
+
+    if (WatchdogMode != 0)
+    {
+        WatchdogPolls++;
+        WatchdogTime = WatchdogPolls / 1024 + (WatchdogEpoch ? 100 : 0);
+        if (WatchdogMode == 3 && WatchdogPolls == 4000)
+            WatchdogEpoch++;
+        if (WatchdogMode == 7 && WatchdogPolls == 12000)
+        {
+            CurrentCpu = 2;
+            MiAmd64ProcessTlbRequest(0);
+            CurrentCpu = 0;
+        }
+        if ((WatchdogMode == 2 && WatchdogPolls == 17000) ||
+            (WatchdogMode == 3 && WatchdogPolls == 8000) ||
+            (WatchdogMode == 4 && WatchdogPolls == 2000) ||
+            (WatchdogMode == 5 && WatchdogPolls == 17000) ||
+            (WatchdogMode == 6 && WatchdogPolls == 8000) ||
+            (WatchdogMode == 8 && WatchdogPolls == 12000))
+        {
+            if (WatchdogMode == 4)
+                WatchdogTime += 100;
+            CurrentCpu = 1;
+            MiAmd64ProcessTlbRequest(0);
+            CurrentCpu = 0;
+        }
+    }
+    Sources = __atomic_exchange_n(&Cpus[CurrentCpu].Pending, 0, __ATOMIC_ACQUIRE);
     while (Sources)
     {
         MiAmd64ProcessTlbRequest((ULONG)__builtin_ctzll(Sources));
@@ -426,6 +492,46 @@ static VOID DelayedTargetCase(VOID)
     CHECK(DelayReturned == 1);
 }
 
+static VOID WatchdogCases(VOID)
+{
+    ULONG Mode;
+    ActiveCpus = 7;
+    SeedCpu(0);
+    SeedCpu(1);
+    SeedCpu(2);
+    for (Mode = 1; Mode <= 8; Mode++)
+    {
+        WatchdogMode = Mode;
+        WatchdogPolls = WatchdogBugchecks = WatchdogInjected = WatchdogEpochReads = 0;
+        WatchdogTime = WatchdogEpoch = 0;
+        WatchdogFrequency = WatchdogNow = WatchdogBaseline = 0;
+        Cpus[0].Pending = Cpus[1].Pending = Cpus[2].Pending = 0;
+        CurrentCpu = 0;
+        if (setjmp(WatchdogJump) == 0)
+        {
+            MiAmd64FlushTargets(Mode == 7 ? 6 : 2, 0x12345000, 1);
+            CHECK(Mode != 1);
+        }
+        else
+        {
+            CHECK(Mode == 1);
+            CHECK(WatchdogBugchecks == 1);
+            CHECK(WatchdogFrequency == 1);
+            CHECK(WatchdogNow - WatchdogBaseline >= 10);
+            CurrentCpu = 1;
+            MiAmd64TlbPoll();
+            CHECK(Cpus[0].Irql == 12);
+            Cpus[0].Irql = 0;
+        }
+        if (Mode == 8)
+            CHECK(WatchdogEpoch == 1);
+        if (Mode == 7)
+            CHECK(WatchdogInjected == 1);
+        if (Mode != 1)
+            CHECK(WatchdogBugchecks == 0);
+        WatchdogMode = 0;
+    }
+}
 int main(void)
 {
     CHECK(MiAmd64SelfMapSlotAddress(0, 0) == 0xfffff68000000000ULL);
@@ -435,6 +541,7 @@ int main(void)
     LocalCases();
     TargetCase();
     DelayedTargetCase();
+    WatchdogCases();
     SmpCase(2);
     SmpCase(4);
     SmpCase(8);

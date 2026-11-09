@@ -135,6 +135,7 @@ KdpReport(IN PKTRAP_FRAME TrapFrame,
 
     /* Enter the debugger */
     Enable = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure()) return TRUE;
 
     /*
      * Get the KPRCB and save the CPU Control State manually instead of
@@ -192,6 +193,7 @@ KdpReport(IN PKTRAP_FRAME TrapFrame,
 
     /* Exit the debugger and clear the CTRL-C state */
     KdExitDebugger(Enable);
+    if (KiHasFreezeFailure()) return TRUE;
     KdpControlCPressed = FALSE;
     return Handled;
 }

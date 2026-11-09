@@ -25,6 +25,7 @@ KdpSendFileIo(
     BOOLEAN Enable;
 
     Enable = KdEnterDebugger(NULL, NULL);
+    if (KiHasFreezeFailure()) return FALSE;
 
     do
     {

@@ -61,6 +61,8 @@ typedef struct { unsigned Number; KAFFINITY SetMember; volatile long IpiFrozen; 
 static KPRCB Cpus[2] = {{.Number=0,.SetMember=1},{.Number=1,.SetMember=2}};
 static PKPRCB KiProcessorBlock[2] = {&Cpus[0], &Cpus[1]}, KiFreezeOwner;
 static PKPRCB KiFreezeActiveSetOwner __attribute__((unused));
+typedef struct { int Valid; } KI_FREEZE_WAIT;
+static volatile LONG64 KiFreezeEpoch;
 static ULONG KeNumberProcessors = 2;
 static KAFFINITY KeActiveProcessors = 1;
 static KSPIN_LOCK KiFreezeExecutionLock __attribute__((unused));
@@ -99,6 +101,13 @@ static int __attribute__((unused)) InterlockedBitTestAndSet64(PLONG64 p, int bit
     return (__sync_fetch_and_or(p, 1LL << bit) & (1LL << bit)) != 0;
 }
 static LONG64 __attribute__((unused)) InterlockedAnd64(PLONG64 p, LONG64 value) { return __sync_fetch_and_and(p, value); }
+static LONG64 InterlockedIncrement64(volatile LONG64 *p) { return __sync_add_and_fetch(p, 1); }
+static void KiNoteFreezeEpoch(void) { @NOTE@ }
+static BOOLEAN KiHasFreezeFailure(void) { return FALSE; }
+static void __attribute__((noreturn)) HalHaltSystem(void) { __builtin_trap(); }
+static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
+static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
 static void KiFreezeIfRequested(void) {
     if (__atomic_load_n(&Cpus[CurrentCpu].IpiFrozen, __ATOMIC_ACQUIRE) == IPI_FROZEN_STATE_TARGET_FREEZE) {
         __atomic_store_n(&Cpus[CurrentCpu].IpiFrozen, IPI_FROZEN_STATE_FROZEN, __ATOMIC_RELEASE);
@@ -214,7 +223,7 @@ for name, signature in [
     if '\n' + name + '(' in freeze_source:
         helpers += signature + ' {' + body(freeze_source, name) + '}\n'
 fixture = fixture.replace('@HELPERS@', helpers)
-for marker, name in [('TARGETS', 'KiFreezeTargetSet'), ('FREEZE', 'KxFreezeExecution'), ('THAW', 'KxThawExecution')]:
+for marker, name in [('NOTE', 'KiNoteFreezeEpoch'), ('TARGETS', 'KiFreezeTargetSet'), ('FREEZE', 'KxFreezeExecution'), ('THAW', 'KxThawExecution')]:
     fixture = fixture.replace('@' + marker + '@', body(freeze_source, name))
 fixture = fixture.replace('@PUBLISH@', init_source[start:end])
 

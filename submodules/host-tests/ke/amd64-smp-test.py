@@ -125,6 +125,8 @@ freeze = r'''
 #include <string.h>
 typedef unsigned long ULONG;
 typedef unsigned long long KAFFINITY;
+typedef int64_t LONG64;
+typedef uint64_t ULONG64;
 typedef unsigned char BOOLEAN;
 typedef void *PVOID;
 typedef struct { int ContextFrame; } PROCESSOR_STATE;
@@ -149,6 +151,8 @@ typedef struct { unsigned Number; KAFFINITY SetMember; volatile long IpiFrozen; 
 static KPRCB Cpus[2] = {{.Number=0,.SetMember=1},{.Number=1,.SetMember=2}};
 static PKPRCB KiProcessorBlock[2] = {&Cpus[0], &Cpus[1]}, KiFreezeOwner;
 static PKPRCB KiFreezeActiveSetOwner;
+typedef struct { int Valid; } KI_FREEZE_WAIT;
+static volatile LONG64 KiFreezeEpoch;
 static ULONG KeNumberProcessors = 2;
 static int Yields;
 static KAFFINITY KeActiveProcessors = 3;
@@ -157,6 +161,14 @@ static PVOID InterlockedCompareExchangePointer(PVOID volatile *p, PVOID v, PVOID
     return __sync_val_compare_and_swap(p,old,v);
 }
 static PVOID InterlockedExchangePointer(PVOID volatile *p, PVOID v) { return __sync_lock_test_and_set(p,v); }
+static LONG64 InterlockedIncrement64(volatile LONG64 *p) { return __sync_add_and_fetch(p, 1); }
+static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 v, LONG64 old) { return __sync_val_compare_and_swap(p, old, v); }
+static void KiNoteFreezeEpoch(void) { @NOTE@ }
+static ULONG64 KiQueryFreezeEpoch(void) { @EPOCH@ }
+static BOOLEAN KiIsFreezeActive(void) { @ACTIVE@ }
+static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
+static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
 static void KiFreezeIfRequested(void) { assert(0); }
 static void KiIpiSend(KAFFINITY targets, int type) {
     assert(targets == 2 && type == IPI_FREEZE);
@@ -176,22 +188,25 @@ static KAFFINITY KiFreezeTargetSet(PKPRCB CurrentPrcb) { @TARGETS@ }
 static void KxFreezeExecution(void) { @FREEZE@ }
 static void KxThawExecution(void) { @THAW@ }
 int main(void) {
+    assert(KiQueryFreezeEpoch() == 0 && !KiIsFreezeActive());
     KxFreezeExecution();
+    assert(KiQueryFreezeEpoch() == 1 && KiIsFreezeActive());
     assert(Cpus[1].IpiFrozen == IPI_FROZEN_STATE_FROZEN && Yields >= 16);
     Yields = 0;
     KxThawExecution();
     assert(Cpus[1].IpiFrozen == IPI_FROZEN_STATE_RUNNING && Yields >= 16);
-    assert(KiFreezeOwner == 0);
+    assert(KiFreezeOwner == 0 && !KiIsFreezeActive());
+    assert(KiQueryFreezeEpoch() == 1);
     KeNumberProcessors = 1;
     KeActiveProcessors = 1;
     Yields = 0;
     KxFreezeExecution();
     KxThawExecution();
-    assert(Yields == 0 && KiFreezeOwner == 0);
+    assert(Yields == 0 && KiFreezeOwner == 0 && KiQueryFreezeEpoch() == 2);
     return 0;
 }
 '''
-for marker, name in [('ACQUIRE', 'KiAcquireFreezeActiveSet'), ('RELEASE', 'KiReleaseFreezeActiveSet'), ('TARGETS', 'KiFreezeTargetSet'), ('FREEZE', 'KxFreezeExecution'), ('THAW', 'KxThawExecution')]:
+for marker, name in [('NOTE', 'KiNoteFreezeEpoch'), ('EPOCH', 'KiQueryFreezeEpoch'), ('ACTIVE', 'KiIsFreezeActive'), ('ACQUIRE', 'KiAcquireFreezeActiveSet'), ('RELEASE', 'KiReleaseFreezeActiveSet'), ('TARGETS', 'KiFreezeTargetSet'), ('FREEZE', 'KxFreezeExecution'), ('THAW', 'KxThawExecution')]:
     freeze = freeze.replace('@' + marker + '@', body('ntos/ke/amd64/freeze.c', name))
 
 startup = r'''
