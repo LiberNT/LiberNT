@@ -2769,8 +2769,15 @@ static void CRYPT_VerifyChainRevocation(PCERT_CHAIN_CONTEXT chain,
 
                     switch (revocationStatus.dwError)
                     {
-                    case CRYPT_E_REVOCATION_OFFLINE:
+#ifdef __REACTOS__
                     case CRYPT_E_NO_REVOCATION_CHECK:
+                        error = CERT_TRUST_REVOCATION_STATUS_UNKNOWN;
+                        break;
+#endif
+                    case CRYPT_E_REVOCATION_OFFLINE:
+#ifndef __REACTOS__
+                    case CRYPT_E_NO_REVOCATION_CHECK:
+#endif
                     case CRYPT_E_NO_REVOCATION_DLL:
                     case CRYPT_E_NOT_IN_REVOCATION_DATABASE:
                         /* If the revocation status is unknown, it's assumed
@@ -3069,6 +3076,39 @@ static BOOL find_chain_first_element_with_error(PCCERT_CHAIN_CONTEXT chain, DWOR
     return FALSE;
 }
 
+#ifdef __REACTOS__
+static void find_unknown_revocation(PCCERT_CHAIN_CONTEXT chain, DWORD checks,
+ PCERT_CHAIN_POLICY_STATUS status)
+{
+    DWORD i, j, ignore;
+
+    for (i = 0; i < chain->cChain; i++)
+    {
+        for (j = 0; j < chain->rgpChain[i]->cElement; j++)
+        {
+            DWORD error = chain->rgpChain[i]->rgpElement[j]->TrustStatus.dwErrorStatus;
+
+            if (!(error & CERT_TRUST_REVOCATION_STATUS_UNKNOWN))
+                continue;
+            if (!j)
+                ignore = i ? CERT_CHAIN_POLICY_IGNORE_CTL_SIGNER_REV_UNKNOWN_FLAG :
+                 CERT_CHAIN_POLICY_IGNORE_END_REV_UNKNOWN_FLAG;
+            else if (j == chain->rgpChain[i]->cElement - 1)
+                ignore = CERT_CHAIN_POLICY_IGNORE_ROOT_REV_UNKNOWN_FLAG;
+            else
+                ignore = CERT_CHAIN_POLICY_IGNORE_CA_REV_UNKNOWN_FLAG;
+            if (checks & ignore)
+                continue;
+            status->dwError = (error & CERT_TRUST_IS_OFFLINE_REVOCATION) ?
+             CRYPT_E_REVOCATION_OFFLINE : CRYPT_E_NO_REVOCATION_CHECK;
+            status->lChainIndex = i;
+            status->lElementIndex = j;
+            return;
+        }
+    }
+}
+
+#endif
 static BOOL WINAPI verify_base_policy(LPCSTR szPolicyOID,
  PCCERT_CHAIN_CONTEXT pChainContext, PCERT_CHAIN_POLICY_PARA pPolicyPara,
  PCERT_CHAIN_POLICY_STATUS pPolicyStatus)
@@ -3144,6 +3184,11 @@ static BOOL WINAPI verify_base_policy(LPCSTR szPolicyOID,
          CERT_TRUST_HAS_NOT_SUPPORTED_CRITICAL_EXT, &pPolicyStatus->lChainIndex,
          &pPolicyStatus->lElementIndex);
     }
+#ifdef __REACTOS__
+    if (!pPolicyStatus->dwError &&
+     pChainContext->TrustStatus.dwErrorStatus & CERT_TRUST_REVOCATION_STATUS_UNKNOWN)
+        find_unknown_revocation(pChainContext, checks, pPolicyStatus);
+#endif
     return TRUE;
 }
 
@@ -3210,6 +3255,19 @@ static BOOL WINAPI verify_authenticode_policy(LPCSTR szPolicyOID,
         if (isMSTestRoot)
             pPolicyStatus->dwError = CERT_E_UNTRUSTEDTESTROOT;
     }
+#ifdef __REACTOS__
+    if (ret && (pPolicyStatus->dwError == CRYPT_E_NO_REVOCATION_CHECK ||
+     pPolicyStatus->dwError == CRYPT_E_REVOCATION_OFFLINE))
+    {
+        if (!pPolicyStatus->lChainIndex && !pPolicyStatus->lElementIndex)
+            pPolicyStatus->dwError = CERT_E_REVOCATION_FAILURE;
+        else
+        {
+            pPolicyStatus->dwError = NO_ERROR;
+            pPolicyStatus->lChainIndex = pPolicyStatus->lElementIndex = -1;
+        }
+    }
+#endif
     return ret;
 }
 
