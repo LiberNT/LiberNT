@@ -527,6 +527,16 @@ BOOLEAN
 NTAPI
 SeInitSystem(VOID);
 
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+SepInitializationPhase0(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+SepInitializationPhase1(VOID);
+
 NTSTATUS
 NTAPI
 SeDefaultObjectMethod(
@@ -730,6 +740,8 @@ BOOLEAN
 NTAPI
 SepInitSystemDacls(VOID);
 
+extern ERESOURCE SepSubjectContextLock;
+
 NTSTATUS
 NTAPI
 SepCreateImpersonationTokenDacl(
@@ -807,9 +819,10 @@ SeComputeQuotaInformationSize(
 //
 // Security Reference Monitor (SeRm) functions
 //
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-SeRmInitPhase0(VOID);
+SepRmInitializeSessions(VOID);
 
 BOOLEAN
 NTAPI

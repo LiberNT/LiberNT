@@ -298,7 +298,7 @@ SepRmCommandServerThread(
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-SeRmInitPhase0(VOID)
+SepRmInitializeSessions(VOID)
 {
     PAGED_CODE();
 

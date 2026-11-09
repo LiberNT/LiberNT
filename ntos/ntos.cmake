@@ -281,7 +281,9 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/se/seprivilege.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesd.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesddl.c
-    ${REACTOS_SOURCE_DIR}/ntos/se/semgr.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/seaudit.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/seinit.c
+    ${REACTOS_SOURCE_DIR}/ntos/se/seobject.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesid.c
     ${REACTOS_SOURCE_DIR}/ntos/se/seqos.c
     ${REACTOS_SOURCE_DIR}/ntos/se/sesrm.c
