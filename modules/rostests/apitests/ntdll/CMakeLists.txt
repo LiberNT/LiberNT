@@ -101,6 +101,7 @@ list(APPEND SOURCE
     NtKeDispatcherTransitions.c
     NtKeHandoff.c
     NtProcessDeviceMap.c
+    NtQueryDirectoryObject.c
     NtWaitForObjects.c
     NtMutant.c
     NtNotifyChangeMultipleKeys.c

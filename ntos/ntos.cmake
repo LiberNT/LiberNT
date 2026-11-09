@@ -219,7 +219,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/mm/pool/ex/exquery.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obdevmap.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obcallback.c
-    ${REACTOS_SOURCE_DIR}/ntos/ob/obdir.c
+    ${REACTOS_SOURCE_DIR}/ntos/ob/obdirobj.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obhandle.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obinit.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/oblife.c
