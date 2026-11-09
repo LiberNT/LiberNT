@@ -70,12 +70,6 @@ MmSetMemoryType(
     SIZE_T MemorySize,
     TYPE_OF_MEMORY NewType);
 
-BOOLEAN
-MempSetupPaging(
-    _In_ PFN_NUMBER StartPage,
-    _In_ PFN_NUMBER NumberOfPages,
-    _In_ BOOLEAN KernelMapping);
-
 PPAGE_LOOKUP_TABLE_ITEM
 MmGetMemoryMap(
     PFN_NUMBER *NoEntries);

@@ -50,21 +50,6 @@ typedef struct _LOADER_PARAMETER_FRAMEBUFFER_TRANSFORM
 } LOADER_PARAMETER_FRAMEBUFFER_TRANSFORM,
  *PLOADER_PARAMETER_FRAMEBUFFER_TRANSFORM;
 
-
-/* Optional early console handoff from the OS loader; valid only when Magic matches */
-#define LOADER_EARLY_CONSOLE_MAGIC 0x4C4E5443 /* 'LNTC' */
-
-typedef struct _LOADER_PARAMETER_EARLY_CONSOLE
-{
-    ULONG Magic;
-    ULONG Size;
-    LARGE_INTEGER Base;     /* Kernel virtual address of the framebuffer */
-    ULONG Width;            /* Visible pixels per line */
-    ULONG Height;           /* Visible lines */
-    ULONG Pitch;            /* Pixels per scan line */
-    ULONG BitsPerPixel;
-} LOADER_PARAMETER_EARLY_CONSOLE, *PLOADER_PARAMETER_EARLY_CONSOLE;
-
 #define LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT 96
 #define LOADER_PARAMETER_FRAMEBUFFER_DPI_MIN     96
 #define LOADER_PARAMETER_FRAMEBUFFER_DPI_MAX     480
