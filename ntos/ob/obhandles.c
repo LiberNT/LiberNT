@@ -1778,9 +1778,12 @@ ObOpenObjectByName(
 
     *Handle = NULL;
 
-    /* Both the attributes that name the object and its type are required */
-    if (ObjectAttributes == NULL || ObjectType == NULL)
-        return STATUS_INVALID_PARAMETER;
+    /*
+     * The attributes that name the object are required; the type is not,
+     * because a caller that will take whatever the name resolves to, as the
+     * I/O manager does for a device or a file, names no type at all.
+     */
+    if (ObjectAttributes == NULL) return STATUS_INVALID_PARAMETER;
 
     /* The lookup needs a context, an access state and the create information
      * at once, so they travel in one allocation */
