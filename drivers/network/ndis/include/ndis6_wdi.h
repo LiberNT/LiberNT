@@ -52,6 +52,8 @@
 #define WDI_TLV_BAND_CHANNEL                        0x2C
 #define WDI_TLV_BANDID                              0x39
 #define WDI_TLV_BSS_ENTRY_CHANNEL_INFO              0x3A
+#define WDI_TLV_CHANNEL_NUMBER                      0x121
+#define WDI_TLV_6_GHZ_BAND_CHANNEL                  0x16D
 #define WDI_TLV_SSID                                0x3B
 #define WDI_TLV_AUTH_ALGO_LIST                      0x3C
 #define WDI_TLV_MULTICAST_CIPHER_ALGO_LIST          0x3D
@@ -145,6 +147,7 @@
 #define WDI_ASSOC_STATUS_DISASSOCIATE_BY_DEVICE_RESET 60
 
 #define NDIS6_WDI_MAX_BSS           64
+#define NDIS6_WDI_MAX_6GHZ_TARGETS  16
 #define NDIS6_WDI_MAX_CANDIDATES    8
 #define NDIS6_WDI_MAX_ALGO_PAIRS    32
 #define NDIS6_WDI_MAX_PHY_TYPES     8

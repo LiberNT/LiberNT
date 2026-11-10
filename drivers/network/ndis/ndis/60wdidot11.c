@@ -6,6 +6,7 @@
  */
 
 #include "ndis6_wdi.h"
+#include "ndis6_rnr.h"
 
 #define NDIS6_WDI_BSS_LIFETIME      (120ULL * 10000000ULL)
 #define NDIS6_WDI_BEACON_PERIOD     100
@@ -1376,6 +1377,86 @@ Ndis6WdiScanComplete(
     Ndis6WdiIndicateStatusUp(Wdi, NDIS_STATUS_DOT11_SCAN_CONFIRM, &Confirm, sizeof(Confirm));
 }
 
+typedef struct _NDIS6_WDI_6GHZ_TARGET
+{
+    NDIS6_RNR_AP Ap;
+    ULONG ColocatedChannel;
+    ULONG ColocatedBand;
+} NDIS6_WDI_6GHZ_TARGET;
+
+static
+BOOLEAN
+Ndis6WdiBandEnabled(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ ULONG BandId)
+{
+    ULONG i;
+
+    for (i = 0; i < Wdi->BandCount; i++)
+    {
+        if (Wdi->Bands[i].BandId == BandId && Wdi->Bands[i].Enabled)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
+VOID
+Ndis6WdiAdd6GhzTargets(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _Inout_ PNDIS6_WDI_TLV_BUILDER Tlvs)
+{
+    NDIS6_WDI_6GHZ_TARGET Targets[NDIS6_WDI_MAX_6GHZ_TARGETS];
+    ULONG Count = 0;
+    PLIST_ENTRY Link;
+    KIRQL OldIrql;
+    ULONG i;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    for (Link = Wdi->BssList.Flink; Link != &Wdi->BssList && Count < NDIS6_WDI_MAX_6GHZ_TARGETS; Link = Link->Flink)
+    {
+        PNDIS6_WDI_BSS Bss = CONTAINING_RECORD(Link, NDIS6_WDI_BSS, Link);
+        NDIS6_RNR_AP Aps[NDIS6_WDI_MAX_6GHZ_TARGETS];
+        ULONG Found;
+        ULONG Ap;
+
+        if (Bss->BandId == WDI_BAND_ID_6000 || Bss->Ies == NULL)
+            continue;
+
+        Found = Ndis6RnrCollect6Ghz(Bss->Ies, Bss->IesLength, Aps, RTL_NUMBER_OF(Aps));
+        ASSERT(Found <= RTL_NUMBER_OF(Aps));
+        for (Ap = 0; Ap < Found && Count < NDIS6_WDI_MAX_6GHZ_TARGETS; Ap++)
+        {
+            BOOLEAN Known = FALSE;
+
+            for (i = 0; i < Count && !Known; i++)
+                Known = RtlEqualMemory(Targets[i].Ap.Bssid, Aps[Ap].Bssid, sizeof(DOT11_MAC_ADDRESS));
+            if (Known)
+                continue;
+
+            Targets[Count].Ap = Aps[Ap];
+            Targets[Count].ColocatedChannel = Bss->Channel;
+            Targets[Count].ColocatedBand = Bss->BandId;
+            Count++;
+        }
+    }
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    for (i = 0; i < Count; i++)
+    {
+        ULONG Offset = Ndis6WdiTlvOpen(Tlvs, WDI_TLV_6_GHZ_BAND_CHANNEL);
+        ULONG Inner;
+
+        Ndis6WdiTlvAdd(Tlvs, WDI_TLV_BSSID, Targets[i].Ap.Bssid, sizeof(DOT11_MAC_ADDRESS));
+        Ndis6WdiTlvAdd(Tlvs, WDI_TLV_CHANNEL_NUMBER, &Targets[i].Ap.Channel, sizeof(UCHAR));
+        Inner = Ndis6WdiTlvOpen(Tlvs, WDI_TLV_BSS_ENTRY_CHANNEL_INFO);
+        Ndis6WdiTlvAppend32(Tlvs, Targets[i].ColocatedChannel);
+        Ndis6WdiTlvAppend32(Tlvs, Targets[i].ColocatedBand);
+        Ndis6WdiTlvClose(Tlvs, Inner);
+        Ndis6WdiTlvClose(Tlvs, Offset);
+    }
+}
+
 static
 VOID
 Ndis6WdiBuildScanTlvs(
@@ -1428,7 +1509,8 @@ Ndis6WdiBuildScanTlvs(
         Ndis6WdiTlvClose(Tlvs, Offset);
     }
 
-    /* TODO: WDI 1.1.10+ 6 GHz targets (WDI_TLV_6_GHZ_BAND_CHANNEL: BSSID, channel, co-located AP) are never sent, so a 6 GHz-only BSS is not discovered; which targets Windows 11 sends needs a black-box capture. */
+    if (Wdi->Wdi->WdiVersion >= WDI_VERSION_1_1_10 && Ndis6WdiBandEnabled(Wdi, WDI_BAND_ID_6000))
+        Ndis6WdiAdd6GhzTargets(Wdi, Tlvs);
 }
 
 static
