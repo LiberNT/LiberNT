@@ -88,6 +88,198 @@ CheckUlong(
     ok(Value == Expected, "Attribute %08lx is %lu, expected %lu\n", Id, Value, Expected);
 }
 
+static const BYTE TestAtr[] = { 0x3b, 0x02, 0x14, 0x50 };
+
+static
+VOID
+TraceBytes(
+    LPCSTR Name,
+    LONG Result,
+    const BYTE *Bytes,
+    DWORD Length)
+{
+    CHAR Text[3 * 64 + 1];
+    DWORD Index;
+
+    Text[0] = 0;
+    for (Index = 0; Result == SCARD_S_SUCCESS && Index < Length && Index < 64; ++Index)
+        sprintf(Text + 3 * Index, "%02x ", Bytes[Index]);
+    trace("%s: %08lx length %lu %s\n", Name, Result, Length, Text);
+}
+
+static
+VOID
+CheckTransmit(
+    SCARDHANDLE Card,
+    LPCSCARD_IO_REQUEST Pci,
+    const BYTE *Apdu,
+    DWORD ApduLength,
+    DWORD Size,
+    LONG ExpectedResult,
+    const BYTE *Expected,
+    DWORD ExpectedLength,
+    LPCSTR Name)
+{
+    BYTE Response[64];
+    DWORD Length = Size;
+    LONG Result;
+
+    Result = SCardTransmit(Card, Pci, Apdu, ApduLength, NULL, Response, &Length);
+    TraceBytes(Name, Result, Response, Length);
+    ok(Result == ExpectedResult, "%s gave %08lx, expected %08lx\n", Name, Result, ExpectedResult);
+    if (Result == SCARD_S_SUCCESS)
+    {
+        ok(Length == ExpectedLength && !memcmp(Response, Expected, ExpectedLength), "%s answered %lu bytes\n", Name,
+           Length);
+    }
+    else if (Expected)
+    {
+        ok(Length == ExpectedLength, "%s reported %lu bytes, expected %lu\n", Name, Length, ExpectedLength);
+    }
+}
+
+static
+LONG
+WaitForState(
+    SCARDCONTEXT Context,
+    LPCWSTR Reader,
+    DWORD Wanted,
+    DWORD *Event)
+{
+    SCARD_READERSTATEW State = { 0 };
+    ULONG Changes;
+    LONG Result;
+
+    State.szReader = Reader;
+    State.dwCurrentState = SCARD_STATE_UNAWARE;
+    Result = SCardGetStatusChangeW(Context, 0, &State, 1);
+    for (Changes = 0; Result == SCARD_S_SUCCESS && !(State.dwEventState & Wanted) && Changes < 8; ++Changes)
+    {
+        State.dwCurrentState = State.dwEventState & ~SCARD_STATE_CHANGED;
+        Result = SCardGetStatusChangeW(Context, 10000, &State, 1);
+    }
+    trace("The reader is %08lx: %08lx\n", State.dwEventState, Result);
+    *Event = State.dwEventState;
+    return Result;
+}
+
+static
+VOID
+CheckRemoved(
+    SCARDHANDLE Card)
+{
+    static const BYTE GetData[] = { 0x80, 0xca, 0x00, 0x00, 0x04 };
+    WCHAR Name[256];
+    BYTE Atr[36];
+    DWORD NameLength = RTL_NUMBER_OF(Name), AtrLength = sizeof(Atr), CardState, CardProtocol, Protocol;
+
+    CheckTransmit(Card, SCARD_PCI_T0, GetData, sizeof(GetData), 64, SCARD_W_REMOVED_CARD, NULL, 0,
+                  "GET DATA after removal");
+    ok_hex(SCardStatusW(Card, Name, &NameLength, &CardState, &CardProtocol, Atr, &AtrLength), SCARD_W_REMOVED_CARD);
+    ok_hex(SCardReconnect(Card, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD, &Protocol),
+           SCARD_W_REMOVED_CARD);
+    ok_hex(SCardBeginTransaction(Card), SCARD_W_REMOVED_CARD);
+    ok_hex(SCardDisconnect(Card, SCARD_LEAVE_CARD), SCARD_S_SUCCESS);
+}
+
+static
+VOID
+TestCard(
+    SCARDCONTEXT Context,
+    LPCWSTR Reader)
+{
+    static const BYTE Select[] = { 0x00, 0xa4, 0x04, 0x00, 0x05, 0xf0, 0x01, 0x02, 0x03, 0x04 };
+    static const BYTE GetData[] = { 0x80, 0xca, 0x00, 0x00, 0x04 };
+    static const BYTE Echo[] = { 0x80, 0x10, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03, 0x00 };
+    static const BYTE Unknown[] = { 0x80, 0x99, 0x00, 0x00 };
+    static const BYTE Remove[] = { 0x80, 0xf0, 0x00, 0x0a };
+    static const BYTE Ok[] = { 0x90, 0x00 };
+    static const BYTE Data[] = { 0xde, 0xad, 0xbe, 0xef, 0x90, 0x00 };
+    static const BYTE Echoed[] = { 0x01, 0x02, 0x03, 0x90, 0x00 };
+    static const BYTE NotSupported[] = { 0x6d, 0x00 };
+    BYTE Value[64], Atr[36];
+    WCHAR Name[256];
+    SCARDHANDLE Card = 0, Second = 0;
+    DWORD Protocol = 0xdeadbeef, Length, NameLength, AtrLength, CardState, CardProtocol, Event, Before;
+
+    ok_hex(SCardConnectW(Context, Reader, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1, &Card,
+                         &Protocol), SCARD_S_SUCCESS);
+    ok_hex(Protocol, SCARD_PROTOCOL_T0);
+    if (!Card)
+        return;
+
+    NameLength = RTL_NUMBER_OF(Name);
+    AtrLength = sizeof(Atr);
+    CardState = CardProtocol = 0xdeadbeef;
+    ok_hex(SCardStatusW(Card, Name, &NameLength, &CardState, &CardProtocol, Atr, &AtrLength), SCARD_S_SUCCESS);
+    ok_hex(CardState, SCARD_SPECIFIC);
+    ok_hex(CardProtocol, SCARD_PROTOCOL_T0);
+    ok(AtrLength == sizeof(TestAtr) && !memcmp(Atr, TestAtr, sizeof(TestAtr)), "Status ATR length %lu\n", AtrLength);
+
+    Length = sizeof(Atr);
+    ok_hex(SCardGetAttrib(Card, SCARD_ATTR_ATR_STRING, Atr, &Length), SCARD_S_SUCCESS);
+    ok(Length == sizeof(TestAtr) && !memcmp(Atr, TestAtr, sizeof(TestAtr)), "ATR attribute length %lu\n", Length);
+    CheckUlong(Card, SCARD_ATTR_CURRENT_PROTOCOL_TYPE, SCARD_PROTOCOL_T0);
+    Length = sizeof(Value);
+    ok_hex(SCardGetAttrib(Card, SCARD_ATTR_ICC_PRESENCE, Value, &Length), SCARD_S_SUCCESS);
+    ok(Length == 1 && Value[0] == 2, "Card presence %u, length %lu\n", Value[0], Length);
+    Length = sizeof(Value);
+    ok_hex(SCardGetAttrib(Card, SCARD_ATTR_ICC_INTERFACE_STATUS, Value, &Length), SCARD_S_SUCCESS);
+    ok(Length == 1 && Value[0] == 0xff, "Card interface status %u, length %lu\n", Value[0], Length);
+    Length = sizeof(Value);
+    ok_hex(SCardGetAttrib(Card, SCARD_ATTR_ICC_TYPE_PER_ATR, Value, &Length), SCARD_S_SUCCESS);
+    ok(Length == 1 && Value[0] == 1, "Card type %u, length %lu\n", Value[0], Length);
+
+    CheckTransmit(Card, SCARD_PCI_T0, Select, sizeof(Select), 64, SCARD_S_SUCCESS, Ok, sizeof(Ok), "SELECT");
+    CheckTransmit(Card, SCARD_PCI_T0, GetData, sizeof(GetData), 64, SCARD_S_SUCCESS, Data, sizeof(Data), "GET DATA");
+    CheckTransmit(Card, SCARD_PCI_T0, Echo, sizeof(Echo), 64, SCARD_S_SUCCESS, Echoed, sizeof(Echoed), "ECHO");
+    CheckTransmit(Card, SCARD_PCI_T0, Unknown, sizeof(Unknown), 64, SCARD_S_SUCCESS, NotSupported,
+                  sizeof(NotSupported), "UNKNOWN");
+    CheckTransmit(Card, SCARD_PCI_T0, GetData, sizeof(GetData), 3, SCARD_E_INSUFFICIENT_BUFFER, Data, sizeof(Data),
+                  "GET DATA into 3 bytes");
+    CheckTransmit(Card, SCARD_PCI_T1, GetData, sizeof(GetData), 64, ERROR_BAD_COMMAND, NULL, 0, "GET DATA as T=1");
+    CheckTransmit(Card, SCARD_PCI_T0, GetData, 3, 64, ERROR_INVALID_PARAMETER, NULL, 0, "3-byte APDU");
+
+    ok_hex(SCardBeginTransaction(Card), SCARD_S_SUCCESS);
+    ok_hex(SCardEndTransaction(Card, SCARD_LEAVE_CARD), SCARD_S_SUCCESS);
+    ok_hex(SCardConnectW(Context, Reader, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, &Second, &Protocol), SCARD_S_SUCCESS);
+    ok_hex(Protocol, SCARD_PROTOCOL_T0);
+    if (Second)
+        SCardDisconnect(Second, SCARD_LEAVE_CARD);
+    Second = 0;
+    ok_hex(SCardConnectW(Context, Reader, SCARD_SHARE_EXCLUSIVE, SCARD_PROTOCOL_T0, &Second, &Protocol),
+           SCARD_E_SHARING_VIOLATION);
+    if (Second)
+        SCardDisconnect(Second, SCARD_LEAVE_CARD);
+
+    Protocol = 0xdeadbeef;
+    ok_hex(SCardReconnect(Card, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, SCARD_RESET_CARD, &Protocol), SCARD_S_SUCCESS);
+    ok_hex(Protocol, SCARD_PROTOCOL_T0);
+    CheckTransmit(Card, SCARD_PCI_T0, GetData, sizeof(GetData), 64, SCARD_S_SUCCESS, Data, sizeof(Data),
+                  "GET DATA after reset");
+
+    WaitForState(Context, Reader, SCARD_STATE_PRESENT, &Before);
+    CheckTransmit(Card, SCARD_PCI_T0, Remove, sizeof(Remove), 64, SCARD_S_SUCCESS, Ok, sizeof(Ok), "REMOVE");
+    ok_hex(WaitForState(Context, Reader, SCARD_STATE_EMPTY, &Event), SCARD_S_SUCCESS);
+    ok(Event & SCARD_STATE_EMPTY, "The card was not removed: %08lx\n", Event);
+    ok((Event >> 16) > (Before >> 16), "Removing the card left the event count at %lu\n", Event >> 16);
+    CheckRemoved(Card);
+
+    Before = Event;
+    ok_hex(WaitForState(Context, Reader, SCARD_STATE_PRESENT, &Event), SCARD_S_SUCCESS);
+    ok((Event & (SCARD_STATE_PRESENT | SCARD_STATE_UNPOWERED)) == SCARD_STATE_PRESENT,
+       "The card was not inserted again and powered: %08lx\n", Event);
+    ok((Event >> 16) > (Before >> 16), "Inserting the card left the event count at %lu\n", Event >> 16);
+    Card = 0;
+    ok_hex(SCardConnectW(Context, Reader, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, &Card, &Protocol), SCARD_S_SUCCESS);
+    ok_hex(Protocol, SCARD_PROTOCOL_T0);
+    if (!Card)
+        return;
+    CheckTransmit(Card, SCARD_PCI_T0, GetData, sizeof(GetData), 64, SCARD_S_SUCCESS, Data, sizeof(Data),
+                  "GET DATA after insertion");
+    ok_hex(SCardDisconnect(Card, SCARD_UNPOWER_CARD), SCARD_S_SUCCESS);
+}
+
 static
 VOID
 TestReader(
@@ -103,7 +295,7 @@ TestReader(
     BYTE Atr[36];
     DWORD NameLength, AtrLength, CardState, CardProtocol;
     SCARDHANDLE Second;
-    BOOLEAN Qemu;
+    BOOLEAN Qemu, TestAtrPresent;
     WAITER Waiter;
     HANDLE Thread;
     LONG Result;
@@ -118,6 +310,9 @@ TestReader(
     Present = State.dwEventState & SCARD_STATE_PRESENT;
     ok(!Present != !(State.dwEventState & SCARD_STATE_EMPTY), "Reader '%S' state %08lx is neither empty nor present\n",
        Reader, State.dwEventState);
+
+    TraceBytes("Reader ATR", SCARD_S_SUCCESS, State.rgbAtr, State.cbAtr);
+    TestAtrPresent = Present && State.cbAtr == sizeof(TestAtr) && !memcmp(State.rgbAtr, TestAtr, sizeof(TestAtr));
 
     State.dwCurrentState = State.dwEventState & ~SCARD_STATE_CHANGED;
     ok_hex(SCardGetStatusChangeW(Context, 20, &State, 1), SCARD_E_TIMEOUT);
@@ -141,7 +336,8 @@ TestReader(
     Card = 0;
     Protocol = 0xdeadbeef;
     ok_hex(SCardConnectW(Context, Reader, SCARD_SHARE_DIRECT, 0, &Card, &Protocol), SCARD_S_SUCCESS);
-    ok_hex(Protocol, 0);
+    if (!Present)
+        ok_hex(Protocol, 0);
     if (!Card)
         return;
 
@@ -248,6 +444,8 @@ TestReader(
         if (Result == SCARD_S_SUCCESS)
             SCardDisconnect(Card, SCARD_LEAVE_CARD);
     }
+    if (TestAtrPresent)
+        TestCard(Context, Reader);
 }
 
 START_TEST(SmartCard)
