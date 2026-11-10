@@ -779,6 +779,10 @@ KeBugCheckWithTf(
     /* Hold every other processor where it is */
     KeFreezeExecution(TrapFrame, NULL);
 
+    /* Nothing else prints now, so a print this crash interrupted does not get
+     * to keep the lock the report needs */
+    KdpResetPrintLock();
+
     /*
      * The register state, as a context record. A trap frame is the better
      * source where there is one: it is the state at the fault rather than the
