@@ -3379,16 +3379,16 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
                 UserHasWindowEdge(w->style, w->ExStyle))
             {
                 lf |= DWM_WINDOW_NC_SHADOW;
-                if (gpqForeground != NULL &&
-                    gpqForeground->spwndActive == w)
-                {
-                    lf |= DWM_WINDOW_ACTIVE;
-                }
-                if (AtomDwmDarkMode != 0 &&
-                    UserGetProp(w, AtomDwmDarkMode, FALSE) != NULL)
-                {
-                    lf |= DWM_WINDOW_DARK;
-                }
+            }
+            if (gpqForeground != NULL &&
+                gpqForeground->spwndActive == w)
+            {
+                lf |= DWM_WINDOW_ACTIVE;
+            }
+            if (AtomDwmDarkMode != 0 &&
+                UserGetProp(w, AtomDwmDarkMode, FALSE) != NULL)
+            {
+                lf |= DWM_WINDOW_DARK;
             }
             g_DwmFrameWindows[count].Alpha = alpha;
             g_DwmFrameWindows[count].ColorKey = (ULONG)key;
