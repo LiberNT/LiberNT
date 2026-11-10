@@ -2195,6 +2195,49 @@ ObpCloseSourceHandle(
     if (Attached) KeUnstackDetachProcess(&ApcState);
 }
 
+/*
+ * Makes the entry a handle already has into the duplicate of itself: the
+ * granted access and the attributes are replaced and the handle value stays.
+ */
+static
+NTSTATUS
+ObpReuseHandleForDuplicate(
+    _In_ HANDLE Handle,
+    _In_ ACCESS_MASK GrantedAccess,
+    _In_ ULONG HandleAttributes,
+    _In_ KPROCESSOR_MODE AccessMode)
+{
+    PHANDLE_TABLE HandleTable = PsGetCurrentProcess()->ObjectTable;
+    PHANDLE_TABLE_ENTRY Entry;
+    HANDLE TableHandle = Handle;
+
+    PAGED_CODE();
+
+    if (ObpIsKernelHandle(Handle, AccessMode))
+    {
+        HandleTable = ObpKernelHandleTable;
+        TableHandle = ObKernelHandleToHandle(Handle);
+    }
+
+    KeEnterCriticalRegion();
+
+    Entry = ExMapHandleToPointer(HandleTable, TableHandle);
+    if (Entry == NULL)
+    {
+        KeLeaveCriticalRegion();
+        return STATUS_INVALID_HANDLE;
+    }
+
+    Entry->GrantedAccess = GrantedAccess;
+    Entry->ObAttributes &= ~OBJ_HANDLE_ATTRIBUTES;
+    Entry->ObAttributes |= (HandleAttributes & OBJ_HANDLE_ATTRIBUTES);
+
+    ExUnlockHandleTableEntry(HandleTable, Entry);
+    KeLeaveCriticalRegion();
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 ObDuplicateObject(
@@ -2217,6 +2260,7 @@ ObDuplicateObject(
     ACCESS_STATE AccessState;
     AUX_ACCESS_DATA AuxData;
     BOOLEAN Attached = FALSE;
+    BOOLEAN KernelHandle = FALSE;
     KAPC_STATE ApcState;
     NTSTATUS Status;
     HANDLE NewHandle;
@@ -2257,11 +2301,45 @@ ObDuplicateObject(
         return STATUS_SUCCESS;
     }
 
-    TargetTable = ObReferenceProcessHandleTable(TargetProcess);
-    if (TargetTable == NULL)
+    /* A handle the kernel asks for of its own goes in the kernel's table,
+     * wherever the target process is */
+    TargetTable = ObpTableForNewHandle(HandleAttributes,
+                                       PreviousMode,
+                                       &KernelHandle);
+
+    /*
+     * A duplicate that closes its source in the same table asks for no rights
+     * the source did not have: the entry it already has becomes the duplicate,
+     * so the handle value the caller gets back is the one it gave.
+     */
+    if ((Options & DUPLICATE_CLOSE_SOURCE) &&
+        (SourceProcess == TargetProcess) &&
+        ((Granted & ~SourceAccess) == 0) &&
+        (ObpIsKernelHandle(SourceHandle, PreviousMode) == KernelHandle))
     {
-        ObDereferenceObject(Object);
-        return STATUS_PROCESS_IS_TERMINATING;
+        Status = ObpReuseHandleForDuplicate(SourceHandle,
+                                            Granted,
+                                            HandleAttributes,
+                                            PreviousMode);
+        if (NT_SUCCESS(Status))
+        {
+            *TargetHandle = SourceHandle;
+            ObDereferenceObject(Object);
+            return STATUS_SUCCESS;
+        }
+    }
+
+    /* The source is closed first and whatever becomes of the duplicate, so its place in the table is free for the new handle */
+    if (Options & DUPLICATE_CLOSE_SOURCE)
+        ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
+    if (!KernelHandle)
+    {
+        TargetTable = ObReferenceProcessHandleTable(TargetProcess);
+        if (TargetTable == NULL)
+        {
+            ObDereferenceObject(Object);
+            return STATUS_PROCESS_IS_TERMINATING;
+        }
     }
 
     Status = SeCreateAccessState(&AccessState,
@@ -2270,7 +2348,7 @@ ObDuplicateObject(
                                  &ObjectType->TypeInfo.GenericMapping);
     if (!NT_SUCCESS(Status))
     {
-        ObDereferenceProcessHandleTable(TargetProcess);
+        if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
         ObDereferenceObject(Object);
         return Status;
     }
@@ -2287,7 +2365,7 @@ ObDuplicateObject(
     if (!NT_SUCCESS(Status))
     {
         SeDeleteAccessState(&AccessState);
-        ObDereferenceProcessHandleTable(TargetProcess);
+        if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
         ObDereferenceObject(Object);
         return Status;
     }
@@ -2317,8 +2395,16 @@ ObDuplicateObject(
         NewEntry.ObAttributes |= (HandleAttributes & OBJ_HANDLE_ATTRIBUTES);
         NewEntry.GrantedAccess = AccessState.PreviouslyGrantedAccess;
 
-        /* The handle has to be made in the target's own table */
-        if (TargetProcess != PsGetCurrentProcess())
+        /* The handle has to be made in the context the table belongs to */
+        if (KernelHandle)
+        {
+            if (PsGetCurrentProcess() != PsInitialSystemProcess)
+            {
+                KeStackAttachProcess(&PsInitialSystemProcess->Pcb, &ApcState);
+                Attached = TRUE;
+            }
+        }
+        else if (TargetProcess != PsGetCurrentProcess())
         {
             KeStackAttachProcess(&TargetProcess->Pcb, &ApcState);
             Attached = TRUE;
@@ -2353,10 +2439,7 @@ ObDuplicateObject(
                           AccessState.PreviouslyGrantedAccess : 0);
 
     SeDeleteAccessState(&AccessState);
-    ObDereferenceProcessHandleTable(TargetProcess);
-
-    if (NT_SUCCESS(Status) && (Options & DUPLICATE_CLOSE_SOURCE))
-        ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
+    if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
 
     /* The reference the source handle lent us belongs to the new handle */
     if (!NT_SUCCESS(Status)) ObDereferenceObject(Object);
