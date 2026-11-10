@@ -95,6 +95,8 @@ static ULONG CmpGlobalFlagLength = sizeof(ULONG);
 static ULONG CmpGlobalQuotaLength = sizeof(ULONG);
 static ULONG CmpTsAppCompatLength = sizeof(ULONG);
 static ULONG CmpIgnoredLength = sizeof(ULONG);
+static ULONG CmpProtectionModeLength = sizeof(ULONG);
+static ULONG CmpCaseInsensitiveLength = sizeof(ULONG);
 
 /* GLOBALS ********************************************************************/
 
@@ -112,6 +114,28 @@ CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         L"RegistrySizeLimit",
         &CmpGlobalQuota,
         &CmpGlobalQuotaLength,
+        &DummyData
+    },
+    /* TODO: the memory, I/O, power and kernel settings Windows reads here are not wired yet */
+    {
+        L"Session Manager",
+        L"ProtectionMode",
+        &ObpProtectionMode,
+        &CmpProtectionModeLength,
+        &DummyData
+    },
+    {
+        L"Session Manager\\kernel",
+        L"ObCaseInsensitive",
+        &ObpCaseInsensitive,
+        &CmpCaseInsensitiveLength,
+        &DummyData
+    },
+    {
+        L"Session Manager\\kernel",
+        L"ObUnsecureGlobalNames",
+        ObpUnsecureGlobalNamesBuffer,
+        &ObpUnsecureGlobalNamesLength,
         &DummyData
     },
     {

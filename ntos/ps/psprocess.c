@@ -130,6 +130,8 @@ PspUnlinkProcess(
 NTSTATUS
 NTAPI
 PspAllocateProcess(
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ KPROCESSOR_MODE PreviousMode,
     _In_opt_ PEPROCESS Parent,
     _In_opt_ PVOID Section,
     _In_opt_ PACCESS_TOKEN Token,
@@ -148,10 +150,11 @@ PspAllocateProcess(
 
     *NewProcess = NULL;
 
-    Status = ObCreateObject(KernelMode,
+    /* The caller's attributes carry the handle's attributes and any descriptor it asked for */
+    Status = ObCreateObject(PreviousMode,
                             PsProcessType,
-                            NULL,
-                            KernelMode,
+                            ObjectAttributes,
+                            PreviousMode,
                             NULL,
                             sizeof(EPROCESS),
                             0,
@@ -257,6 +260,17 @@ PspAllocateProcess(
 
     Process->SeAuditProcessCreationInfo.ImageFileName = AuditName;
     Process->HasAddressSpace = TRUE;
+
+    /* Every process with an image of its own gets the native DLL its threads start in */
+    if (Section != NULL)
+    {
+        Status = PspMapSystemDll(Process, NULL, FALSE);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(Process);
+            return Status;
+        }
+    }
 
     *NewProcess = Process;
     return STATUS_SUCCESS;
@@ -415,10 +429,19 @@ PspAttachCreateOperands(
 
     PAGED_CODE();
 
+    /* TODO: a cloned process takes neither the section nor the image file of its parent */
     if (Operands->Section != NULL)
     {
+        PFILE_OBJECT ImageFile = MmGetFileObjectForSection(Operands->Section);
+
         ObReferenceObject(Operands->Section);
         Process->SectionObject = Operands->Section;
+
+        if (ImageFile != NULL)
+        {
+            ObReferenceObject(ImageFile);
+            Process->ImageFilePointer = ImageFile;
+        }
     }
 
     if (Operands->DebugObject != NULL)
@@ -650,9 +673,105 @@ PspAllocateUserStack(
 }
 
 /*
- * The whole of making a process. Up to the point the process is inserted a
- * failure drops it; after that a caller can already see it, so a failure has
- * to terminate it the way a running process is terminated.
+ * The whole of making a process from what is already held. Up to the point
+ * the process is inserted a failure drops it; after that a caller can already
+ * see it, so a failure has to terminate it the way a running process is
+ * terminated. The references in the operands are consumed either way.
+ */
+static
+NTSTATUS
+PspCreateProcessFromOperands(
+    _Out_ PHANDLE ProcessHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ ULONG Flags,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Inout_ PPSP_CREATE_OPERANDS Operands,
+    _In_opt_ const HANDLE *HandleList,
+    _In_ SIZE_T HandleCount)
+{
+    INITIAL_PEB InitialPeb;
+    PEPROCESS Process;
+    HANDLE Handle;
+    NTSTATUS Status;
+    PPEB Peb;
+
+    PAGED_CODE();
+
+    Status = PspAllocateProcess(ObjectAttributes,
+                                PreviousMode,
+                                Operands->Parent,
+                                Operands->Section,
+                                NULL,
+                                Flags,
+                                &Process);
+    if (!NT_SUCCESS(Status))
+    {
+        PspReleaseCreateOperands(Operands);
+        return Status;
+    }
+
+    Status = PspAttachCreateOperands(Process,
+                                     Operands,
+                                     Flags,
+                                     HandleList,
+                                     HandleCount);
+    if (!NT_SUCCESS(Status))
+    {
+        PspUnlinkProcess(Process);
+        ObDereferenceObject(Process);
+        PspReleaseCreateOperands(Operands);
+        return Status;
+    }
+
+    Status = PspInsertProcess(Process);
+    if (!NT_SUCCESS(Status))
+    {
+        PspUnlinkProcess(Process);
+        ObDereferenceObject(Process);
+        PspReleaseCreateOperands(Operands);
+        return Status;
+    }
+
+    /* A process without an image has no user-mode state to describe */
+    if (Operands->Section != NULL)
+    {
+        RtlZeroMemory(&InitialPeb, sizeof(InitialPeb));
+        InitialPeb.Mutant = (HANDLE)-1;
+        InitialPeb.ImageUsesLargePages =
+            ((Flags & PROCESS_CREATE_FLAGS_LARGE_PAGES) != 0);
+
+        Status = MmCreatePeb(Process, &InitialPeb, &Peb);
+        if (NT_SUCCESS(Status)) Process->Peb = Peb;
+    }
+
+    /*
+     * Inserting the object gives it the descriptor it is created with and the
+     * caller its handle. The creation reference goes to the handle, so one is
+     * taken here for what follows.
+     */
+    if (NT_SUCCESS(Status))
+    {
+        ObReferenceObject(Process);
+        Status = ObInsertObject(Process, NULL, DesiredAccess, 0, NULL, &Handle);
+    }
+
+    PspReleaseCreateOperands(Operands);
+
+    if (!NT_SUCCESS(Status))
+    {
+        PspTerminateProcess(Process, Status);
+        ObDereferenceObject(Process);
+        return Status;
+    }
+
+    *ProcessHandle = Handle;
+    ObDereferenceObject(Process);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * The whole of making a process from the handles a caller names.
  */
 NTSTATUS
 NTAPI
@@ -671,11 +790,7 @@ PspCreateProcess(
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PSP_CREATE_OPERANDS Operands;
-    INITIAL_PEB InitialPeb;
-    PEPROCESS Process;
-    HANDLE Handle;
     NTSTATUS Status;
-    PPEB Peb;
 
     PAGED_CODE();
 
@@ -700,76 +815,61 @@ PspCreateProcess(
                                       &Operands);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = PspAllocateProcess(Operands.Parent,
-                                Operands.Section,
-                                NULL,
-                                Flags,
-                                &Process);
-    if (!NT_SUCCESS(Status))
-    {
-        PspReleaseCreateOperands(&Operands);
-        return Status;
-    }
+    return PspCreateProcessFromOperands(ProcessHandle,
+                                        DesiredAccess,
+                                        ObjectAttributes,
+                                        Flags,
+                                        PreviousMode,
+                                        &Operands,
+                                        HandleList,
+                                        HandleCount);
+}
 
-    Status = PspAttachCreateOperands(Process,
-                                     &Operands,
-                                     Flags,
-                                     HandleList,
-                                     HandleCount);
-    if (!NT_SUCCESS(Status))
-    {
-        PspUnlinkProcess(Process);
-        ObDereferenceObject(Process);
-        PspReleaseCreateOperands(&Operands);
-        return Status;
-    }
+/*
+ * As above, for an image section the kernel opened itself. The caller's
+ * handles are taken in its own mode; the section is not one of them.
+ */
+NTSTATUS
+NTAPI
+PspCreateImageProcess(
+    _Out_ PHANDLE ProcessHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ HANDLE ParentProcess,
+    _In_ ULONG Flags,
+    _In_ PVOID Section,
+    _In_opt_ HANDLE DebugPort,
+    _In_opt_ const HANDLE *HandleList,
+    _In_ SIZE_T HandleCount)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PSP_CREATE_OPERANDS Operands;
+    NTSTATUS Status;
 
-    Status = PspInsertProcess(Process);
-    if (!NT_SUCCESS(Status))
-    {
-        PspUnlinkProcess(Process);
-        ObDereferenceObject(Process);
-        PspReleaseCreateOperands(&Operands);
-        return Status;
-    }
+    PAGED_CODE();
 
-    /* A process without an image has no user-mode state to describe */
-    if (Operands.Section != NULL)
-    {
-        RtlZeroMemory(&InitialPeb, sizeof(InitialPeb));
-        InitialPeb.Mutant = (HANDLE)-1;
-        InitialPeb.ImageUsesLargePages =
-            ((Flags & PROCESS_CREATE_FLAGS_LARGE_PAGES) != 0);
+    if ((Flags & ~PROCESS_CREATE_FLAGS_LEGAL_MASK) != 0)
+        return STATUS_INVALID_PARAMETER;
 
-        Status = MmCreatePeb(Process, &InitialPeb, &Peb);
-        if (NT_SUCCESS(Status)) Process->Peb = Peb;
-    }
+    Status = PspCaptureCreateOperands(ParentProcess,
+                                      NULL,
+                                      DebugPort,
+                                      NULL,
+                                      PreviousMode,
+                                      &Operands);
+    if (!NT_SUCCESS(Status)) return Status;
 
-    if (NT_SUCCESS(Status))
-    {
-        Status = ObOpenObjectByPointer(Process,
-                                       (ObjectAttributes != NULL) ?
-                                           ObjectAttributes->Attributes :
-                                           OBJ_KERNEL_HANDLE,
-                                       NULL,
-                                       DesiredAccess,
-                                       PsProcessType,
-                                       PreviousMode,
-                                       &Handle);
-    }
+    ObReferenceObject(Section);
+    Operands.Section = Section;
 
-    PspReleaseCreateOperands(&Operands);
-
-    if (!NT_SUCCESS(Status))
-    {
-        PspTerminateProcess(Process, Status);
-        ObDereferenceObject(Process);
-        return Status;
-    }
-
-    *ProcessHandle = Handle;
-    ObDereferenceObject(Process);
-    return STATUS_SUCCESS;
+    return PspCreateProcessFromOperands(ProcessHandle,
+                                        DesiredAccess,
+                                        ObjectAttributes,
+                                        Flags,
+                                        PreviousMode,
+                                        &Operands,
+                                        HandleList,
+                                        HandleCount);
 }
 
 /*
@@ -796,6 +896,44 @@ PsCreateSystemProcess(
                             FALSE,
                             NULL,
                             0);
+}
+
+/*
+ * The process that asked for a new one is told where the new one's environment
+ * block landed through a pointer its own thread block keeps for whatever the
+ * system wants to put there, because the call has no output of its own for it.
+ */
+static
+VOID
+PspReportNewProcessPeb(
+    _In_ HANDLE ProcessHandle)
+{
+    PTEB Teb = PsGetCurrentThread()->Tcb.Teb;
+    PEPROCESS Process;
+
+    if (Teb == NULL) return;
+
+    if (!NT_SUCCESS(ObReferenceObjectByHandle(ProcessHandle,
+                                              0,
+                                              PsProcessType,
+                                              KernelMode,
+                                              (PVOID*)&Process,
+                                              NULL)))
+    {
+        return;
+    }
+
+    _SEH2_TRY
+    {
+        Teb->NtTib.ArbitraryUserPointer = Process->Peb;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        NOTHING;
+    }
+    _SEH2_END;
+
+    ObDereferenceObject(Process);
 }
 
 /* SYSTEM CALLS ***************************************************************/
@@ -847,6 +985,8 @@ NtCreateProcessEx(
 
     if (PreviousMode != KernelMode)
     {
+        PspReportNewProcessPeb(Handle);
+
         _SEH2_TRY
         {
             *ProcessHandle = Handle;
@@ -916,6 +1056,8 @@ NtOpenProcess(
     CLIENT_ID SafeCid = { NULL, NULL };
     BOOLEAN HasCid = FALSE;
     BOOLEAN HasName;
+    ACCESS_STATE AccessState;
+    AUX_ACCESS_DATA AuxData;
     PEPROCESS Process;
     PETHREAD Thread;
     HANDLE Handle;
@@ -953,6 +1095,14 @@ NtOpenProcess(
 
     if (HasCid == HasName) return STATUS_INVALID_PARAMETER_MIX;
 
+    Status = PspCreateOpenAccessState(&AccessState,
+                                      &AuxData,
+                                      DesiredAccess,
+                                      PsProcessType,
+                                      PROCESS_ALL_ACCESS,
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
     if (HasCid)
     {
         if (SafeCid.UniqueThread != NULL)
@@ -965,13 +1115,17 @@ NtOpenProcess(
             Status = PsLookupProcessByProcessId(SafeCid.UniqueProcess, &Process);
         }
 
-        if (!NT_SUCCESS(Status)) return Status;
+        if (!NT_SUCCESS(Status))
+        {
+            SeDeleteAccessState(&AccessState);
+            return Status;
+        }
 
         Status = ObOpenObjectByPointer(Process,
                                        (ObjectAttributes != NULL) ?
                                            ObjectAttributes->Attributes : 0,
-                                       NULL,
-                                       DesiredAccess,
+                                       &AccessState,
+                                       0,
                                        PsProcessType,
                                        PreviousMode,
                                        &Handle);
@@ -982,11 +1136,13 @@ NtOpenProcess(
         Status = ObOpenObjectByName(ObjectAttributes,
                                     PsProcessType,
                                     PreviousMode,
-                                    NULL,
-                                    DesiredAccess,
+                                    &AccessState,
+                                    0,
                                     NULL,
                                     &Handle);
     }
+
+    SeDeleteAccessState(&AccessState);
 
     if (!NT_SUCCESS(Status)) return Status;
 

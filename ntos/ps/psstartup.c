@@ -46,9 +46,10 @@ GENERIC_MAPPING PspProcessMapping =
     STANDARD_RIGHTS_READ | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
     STANDARD_RIGHTS_WRITE | PROCESS_CREATE_PROCESS | PROCESS_CREATE_THREAD |
         PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_DUP_HANDLE |
-        PROCESS_TERMINATE | PROCESS_SET_QUOTA | PROCESS_SET_INFORMATION |
+        PROCESS_SET_QUOTA | PROCESS_SET_INFORMATION |
         PROCESS_SUSPEND_RESUME,
-    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE,
+    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE | PROCESS_TERMINATE |
+        PROCESS_QUERY_LIMITED_INFORMATION,
     PROCESS_ALL_ACCESS
 };
 
@@ -56,9 +57,10 @@ GENERIC_MAPPING PspThreadMapping =
 {
     STANDARD_RIGHTS_READ | THREAD_QUERY_INFORMATION | THREAD_GET_CONTEXT,
     STANDARD_RIGHTS_WRITE | THREAD_SET_CONTEXT | THREAD_SET_INFORMATION |
-        THREAD_SET_THREAD_TOKEN | THREAD_SUSPEND_RESUME | THREAD_TERMINATE |
-        THREAD_IMPERSONATE | THREAD_DIRECT_IMPERSONATION,
-    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE,
+        THREAD_SET_LIMITED_INFORMATION | THREAD_SUSPEND_RESUME |
+        THREAD_TERMINATE | THREAD_ALERT,
+    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION |
+        THREAD_RESUME,
     THREAD_ALL_ACCESS
 };
 
@@ -78,10 +80,13 @@ PspProcessOpen(
     UNREFERENCED_PARAMETER(AccessMode);
     UNREFERENCED_PARAMETER(Process);
     UNREFERENCED_PARAMETER(ObjectBody);
-    UNREFERENCED_PARAMETER(GrantedAccess);
     UNREFERENCED_PARAMETER(HandleCount);
 
     PAGED_CODE();
+
+    /* A handle that may query everything may also query the limited subset */
+    if (*GrantedAccess & PROCESS_QUERY_INFORMATION)
+        *GrantedAccess |= PROCESS_QUERY_LIMITED_INFORMATION;
 
     /* TODO: hold a reference on the process's session space while handles live */
     return STATUS_SUCCESS;
@@ -117,10 +122,16 @@ PspThreadOpen(
     UNREFERENCED_PARAMETER(AccessMode);
     UNREFERENCED_PARAMETER(Process);
     UNREFERENCED_PARAMETER(ObjectBody);
-    UNREFERENCED_PARAMETER(GrantedAccess);
     UNREFERENCED_PARAMETER(HandleCount);
 
     PAGED_CODE();
+
+    /* The full query and set rights each bring their limited subset */
+    if (*GrantedAccess & THREAD_QUERY_INFORMATION)
+        *GrantedAccess |= THREAD_QUERY_LIMITED_INFORMATION;
+
+    if (*GrantedAccess & THREAD_SET_INFORMATION)
+        *GrantedAccess |= THREAD_SET_LIMITED_INFORMATION;
 
     return STATUS_SUCCESS;
 }
@@ -157,52 +168,63 @@ static
 BOOLEAN
 PspCreateObjectTypes(VOID)
 {
-    OBJECT_TYPE_INITIALIZER Initializer;
+    /* The two masks that follow the initializer are what its longer length announces */
+    struct
+    {
+        OBJECT_TYPE_INITIALIZER Initializer;
+        ULONG SeMandatoryLabelMask;
+        ULONG SeTrustConstraintMask;
+    } Extended;
+    POBJECT_TYPE_INITIALIZER Initializer = &Extended.Initializer;
     UNICODE_STRING Name;
 
     PAGED_CODE();
 
-    RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_PERMANENT | OBJ_OPENLINK;
-    Initializer.GenericMapping = PspProcessMapping;
-    Initializer.PoolType = NonPagedPool;
-    Initializer.ValidAccessMask = PROCESS_ALL_ACCESS;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(EPROCESS);
-    Initializer.MaintainHandleCount = TRUE;
-    Initializer.SecurityRequired = TRUE;
-    Initializer.OpenProcedure = PspProcessOpen;
-    Initializer.CloseProcedure = PspProcessClose;
-    Initializer.DeleteProcedure = PspDeleteProcess;
-    Initializer.QueryNameProcedure = PspQueryObjectName;
-    Initializer.SecurityProcedure = SeDefaultObjectMethod;
+    RtlZeroMemory(&Extended, sizeof(Extended));
+    Extended.SeMandatoryLabelMask = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP |
+                                    SYSTEM_MANDATORY_LABEL_NO_READ_UP;
+    Initializer->Length = sizeof(Extended);
+    Initializer->InvalidAttributes = OBJ_PERMANENT | OBJ_EXCLUSIVE | OBJ_OPENIF;
+    Initializer->GenericMapping = PspProcessMapping;
+    Initializer->PoolType = NonPagedPoolNx;
+    Initializer->ValidAccessMask = PROCESS_ALL_ACCESS;
+    Initializer->DefaultNonPagedPoolCharge = sizeof(EPROCESS);
+    Initializer->SecurityRequired = TRUE;
+    Initializer->SupportsObjectCallbacks = TRUE;
+    Initializer->OpenProcedure = PspProcessOpen;
+    Initializer->CloseProcedure = PspProcessClose;
+    Initializer->DeleteProcedure = PspDeleteProcess;
+    Initializer->QueryNameProcedure = PspQueryObjectName;
+    Initializer->SecurityProcedure = SeDefaultObjectMethod;
 
     RtlInitUnicodeString(&Name, L"Process");
     if (!NT_SUCCESS(ObCreateObjectType(&Name,
-                                       &Initializer,
+                                       Initializer,
                                        NULL,
                                        &PsProcessType)))
     {
         return FALSE;
     }
 
-    RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_PERMANENT | OBJ_OPENLINK;
-    Initializer.GenericMapping = PspThreadMapping;
-    Initializer.PoolType = NonPagedPool;
-    Initializer.ValidAccessMask = THREAD_ALL_ACCESS;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(ETHREAD);
-    Initializer.MaintainHandleCount = TRUE;
-    Initializer.SecurityRequired = TRUE;
-    Initializer.OpenProcedure = PspThreadOpen;
-    Initializer.DeleteProcedure = PspDeleteThread;
-    Initializer.QueryNameProcedure = PspQueryObjectName;
-    Initializer.SecurityProcedure = SeDefaultObjectMethod;
+    RtlZeroMemory(&Extended, sizeof(Extended));
+    Extended.SeMandatoryLabelMask = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP |
+                                    SYSTEM_MANDATORY_LABEL_NO_READ_UP;
+    Initializer->Length = sizeof(Extended);
+    Initializer->InvalidAttributes = OBJ_PERMANENT | OBJ_EXCLUSIVE | OBJ_OPENIF;
+    Initializer->GenericMapping = PspThreadMapping;
+    Initializer->PoolType = NonPagedPoolNx;
+    Initializer->ValidAccessMask = THREAD_ALL_ACCESS;
+    Initializer->DefaultNonPagedPoolCharge = sizeof(ETHREAD);
+    Initializer->SecurityRequired = TRUE;
+    Initializer->SupportsObjectCallbacks = TRUE;
+    Initializer->OpenProcedure = PspThreadOpen;
+    Initializer->DeleteProcedure = PspDeleteThread;
+    Initializer->QueryNameProcedure = PspQueryObjectName;
+    Initializer->SecurityProcedure = SeDefaultObjectMethod;
 
     RtlInitUnicodeString(&Name, L"Thread");
     if (!NT_SUCCESS(ObCreateObjectType(&Name,
-                                       &Initializer,
+                                       Initializer,
                                        NULL,
                                        &PsThreadType)))
     {
@@ -234,6 +256,7 @@ PspAdoptIdleProcess(VOID)
     ExInitializeRundownProtection(&PsIdleProcess->RundownProtect);
 
     PsIdleProcess->UniqueProcessId = 0;
+    PsIdleProcess->Machine = IMAGE_FILE_MACHINE_NATIVE;
     PsIdleProcess->Pcb.BasePriority = 0;
     PsIdleProcess->Pcb.QuantumReset = 6;
     PsIdleProcess->ActiveThreads = 1;
@@ -280,6 +303,9 @@ PspBuildSystemProcess(VOID)
     ExInitializeRundownProtection(&Process->RundownProtect);
     Process->QuotaBlock = &PspDefaultQuotaBlock;
 
+    /* A process that has not exited reports its exit as still pending */
+    Process->ExitStatus = STATUS_PENDING;
+
     Status = MmInitializeHandBuiltProcess(Process, DirectoryTableBase);
     if (!NT_SUCCESS(Status))
     {
@@ -295,6 +321,7 @@ PspBuildSystemProcess(VOID)
     Process->Pcb.QuantumReset = 6;
     Process->PriorityClass = PROCESS_PRIORITY_CLASS_NORMAL;
     Process->SystemProcess = TRUE;
+    Process->Machine = IMAGE_FILE_MACHINE_NATIVE;
     Process->DefaultHardErrorProcessing = SEM_FAILCRITICALERRORS;
     RtlCopyMemory(Process->ImageFileName, "System", sizeof("System"));
     KeQuerySystemTime(&Process->CreateTime);
@@ -306,15 +333,17 @@ PspBuildSystemProcess(VOID)
         return FALSE;
     }
 
-    /* The booting thread leaves Idle and becomes the system process's own */
-    RemoveEntryList(&Thread->ThreadListEntry);
-    InitializeListHead(&PsIdleProcess->ThreadListHead);
-    PsIdleProcess->ActiveThreads = 0;
-
+    /* The booting thread becomes the first processor's idle thread, which is
+     * Idle's and no object, so it never joins the system process's list */
+    /* FIXME: phase 0 runs in the system process's context; Windows keeps the boot thread in Idle */
     Thread->Tcb.ApcState.Process = &Process->Pcb;
-    Process->ActiveThreads = 1;
-    InsertTailList(&Process->ThreadListHead, &Thread->ThreadListEntry);
-    Thread->ThreadInserted = TRUE;
+
+    Status = PspInsertCid(Process, &Process->UniqueProcessId);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(Process);
+        return FALSE;
+    }
 
     /*
      * The table the object manager built while booting becomes this process's
@@ -373,6 +402,9 @@ PspInitPhase0(
      */
     PspCidTable = ExCreateHandleTable(NULL, FALSE);
     if (PspCidTable == NULL) return FALSE;
+
+    /* Dead threads are handed to this item once nothing runs on their stacks */
+    ExInitializeWorkItem(&PspReaperWorkItem, PspReapRoutine, NULL);
 
     PspAdoptIdleProcess();
     if (!PspBuildSystemProcess()) return FALSE;
@@ -526,9 +558,9 @@ PspInitializeSystemDll(VOID)
     NtHeaders = RtlImageNtHeader(PspSystemDllBase);
     if (NtHeaders == NULL) return STATUS_INVALID_IMAGE_FORMAT;
 
+    /* A new thread's first user APC goes to the loader, not to an image entry */
     PspSystemDllEntryPoint =
-        (PVOID)((ULONG_PTR)PspSystemDllBase +
-                NtHeaders->OptionalHeader.AddressOfEntryPoint);
+        RtlFindExportedRoutineByName(PspSystemDllBase, "LdrInitializeThunk");
 
     KeUserApcDispatcher =
         RtlFindExportedRoutineByName(PspSystemDllBase, "KiUserApcDispatcher");
@@ -556,7 +588,8 @@ PspInitializeSystemDll(VOID)
         RtlFindExportedRoutineByName(PspSystemDllBase,
                                      "RtlpInterlockedPopEntrySListResume");
 
-    if (KeUserApcDispatcher == NULL ||
+    if (PspSystemDllEntryPoint == NULL ||
+        KeUserApcDispatcher == NULL ||
         KeUserExceptionDispatcher == NULL ||
         KeUserCallbackDispatcher == NULL ||
         KeRaiseUserExceptionDispatcher == NULL ||

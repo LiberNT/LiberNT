@@ -72,6 +72,55 @@ ExpDebuggerWorker(
     }
 }
 
+static
+NTSTATUS
+ExpReadDebugOption(
+    _In_ PVOID Value,
+    _In_ ULONG ValueLength,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength,
+    _Out_ PULONG Length)
+{
+    if (OutputBufferLength != ValueLength) return STATUS_INFO_LENGTH_MISMATCH;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(OutputBuffer, Value, ValueLength);
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    *Length = ValueLength;
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+ExpCaptureDebugOption(
+    _Out_writes_bytes_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength)
+{
+    if (InputBufferLength != ValueLength) return STATUS_INFO_LENGTH_MISMATCH;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Value, InputBuffer, ValueLength);
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 NtSystemDebugControl(
@@ -83,6 +132,9 @@ NtSystemDebugControl(
     _Out_opt_ PULONG ReturnLength)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    UNICODE_STRING FileName;
+    BOOLEAN Flag = FALSE;
+    ULONG Size = 0;
     ULONG Length = 0;
     NTSTATUS Status;
 
@@ -92,45 +144,9 @@ NtSystemDebugControl(
      * Some of these read or write any address in the machine, so the whole call
      * is behind the one privilege that stands for being trusted with it.
      */
-    switch (Command)
+    if (!SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
     {
-        case SysDbgQueryModuleInformation:
-        case SysDbgBreakPoint:
-        case SysDbgQueryVersion:
-        case SysDbgReadVirtual:
-        case SysDbgWriteVirtual:
-        case SysDbgReadPhysical:
-        case SysDbgWritePhysical:
-        case SysDbgReadControlSpace:
-        case SysDbgWriteControlSpace:
-        case SysDbgReadIoSpace:
-        case SysDbgWriteIoSpace:
-        case SysDbgReadMsr:
-        case SysDbgWriteMsr:
-        case SysDbgReadBusData:
-        case SysDbgWriteBusData:
-        case SysDbgCheckLowMemory:
-        case SysDbgEnableKernelDebugger:
-        case SysDbgDisableKernelDebugger:
-        case SysDbgGetAutoKdEnable:
-        case SysDbgSetAutoKdEnable:
-        case SysDbgGetPrintBufferSize:
-        case SysDbgSetPrintBufferSize:
-        case SysDbgGetKdUmExceptionEnable:
-        case SysDbgSetKdUmExceptionEnable:
-        case SysDbgGetKdBlockEnable:
-        case SysDbgSetKdBlockEnable:
-        {
-            if (!SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
-            {
-                return STATUS_ACCESS_DENIED;
-            }
-
-            break;
-        }
-
-        default:
-            return STATUS_INVALID_INFO_CLASS;
+        return STATUS_ACCESS_DENIED;
     }
 
     if (PreviousMode != KernelMode)
@@ -159,35 +175,223 @@ NtSystemDebugControl(
         _SEH2_END;
     }
 
-    Status = KdSystemDebugControl(Command,
-                                  InputBuffer,
-                                  InputBufferLength,
-                                  OutputBuffer,
-                                  OutputBufferLength,
-                                  &Length,
-                                  PreviousMode);
+    /* The two dump requests are served by the system itself; every other one needs a debugger */
+    if (Command == SysDbgGetTriageDump)
+    {
+        if (InputBufferLength != sizeof(SYSDBG_TRIAGE_DUMP))
+        {
+            return STATUS_INFO_LENGTH_MISMATCH;
+        }
+
+        /* TODO: a triage dump of a running system is not written */
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (Command == SysDbgGetLiveKernelDump)
+    {
+        if (InputBufferLength != sizeof(SYSDBG_LIVEDUMP_CONTROL))
+        {
+            return STATUS_INFO_LENGTH_MISMATCH;
+        }
+
+        /* TODO: a live kernel dump is not written */
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (!KdDebuggerEnabled || KdPitchDebugger || KdDebuggerNotPresent)
+    {
+        return STATUS_DEBUGGER_INACTIVE;
+    }
+
+    switch ((ULONG)Command)
+    {
+        case SysDbgQueryModuleInformation:
+        case SysDbgQueryTraceInformation:
+        case SysDbgSetTracepoint:
+        case SysDbgSetSpecialCall:
+        case SysDbgClearSpecialCalls:
+        case SysDbgQuerySpecialCalls:
+
+            /* TODO: the call tracing requests of the debugger are not served */
+            Status = STATUS_NOT_IMPLEMENTED;
+            break;
+
+        case SysDbgBreakPoint:
+
+            DbgBreakPointWithStatus(DBG_STATUS_DEBUG_CONTROL);
+            Status = STATUS_SUCCESS;
+            break;
+
+        case SysDbgQueryVersion:
+        case SysDbgReadVirtual:
+        case SysDbgWriteVirtual:
+        case SysDbgReadPhysical:
+        case SysDbgWritePhysical:
+        case SysDbgReadControlSpace:
+        case SysDbgWriteControlSpace:
+        case SysDbgReadIoSpace:
+        case SysDbgWriteIoSpace:
+        case SysDbgReadMsr:
+        case SysDbgWriteMsr:
+        case SysDbgReadBusData:
+        case SysDbgWriteBusData:
+        case SysDbgCheckLowMemory:
+
+            Status = KdSystemDebugControl(Command,
+                                          InputBuffer,
+                                          InputBufferLength,
+                                          OutputBuffer,
+                                          OutputBufferLength,
+                                          &Length,
+                                          PreviousMode);
+            break;
+
+        case SysDbgEnableKernelDebugger:
+
+            Status = KdEnableDebugger();
+            break;
+
+        case SysDbgDisableKernelDebugger:
+
+            Status = KdDisableDebugger();
+            break;
+
+        case SysDbgGetAutoKdEnable:
+
+            Flag = KdAutoEnableOnEvent;
+            Status = ExpReadDebugOption(&Flag,
+                                        sizeof(Flag),
+                                        OutputBuffer,
+                                        OutputBufferLength,
+                                        &Length);
+            break;
+
+        case SysDbgSetAutoKdEnable:
+
+            Status = ExpCaptureDebugOption(&Flag,
+                                           sizeof(Flag),
+                                           InputBuffer,
+                                           InputBufferLength);
+            if (NT_SUCCESS(Status)) KdAutoEnableOnEvent = (Flag != FALSE);
+            break;
+
+        case SysDbgGetPrintBufferSize:
+
+            Size = KdPrintBufferSize;
+            Status = ExpReadDebugOption(&Size,
+                                        sizeof(Size),
+                                        OutputBuffer,
+                                        OutputBufferLength,
+                                        &Length);
+            break;
+
+        case SysDbgSetPrintBufferSize:
+
+            Status = ExpCaptureDebugOption(&Size,
+                                           sizeof(Size),
+                                           InputBuffer,
+                                           InputBufferLength);
+
+            /* TODO: the print buffer keeps the size it was given at start-up */
+            if (NT_SUCCESS(Status)) Status = STATUS_NOT_IMPLEMENTED;
+            break;
+
+        case SysDbgGetKdUmExceptionEnable:
+
+            Flag = !KdIgnoreUmExceptions;
+            Status = ExpReadDebugOption(&Flag,
+                                        sizeof(Flag),
+                                        OutputBuffer,
+                                        OutputBufferLength,
+                                        &Length);
+            break;
+
+        case SysDbgSetKdUmExceptionEnable:
+
+            Status = ExpCaptureDebugOption(&Flag,
+                                           sizeof(Flag),
+                                           InputBuffer,
+                                           InputBufferLength);
+            if (NT_SUCCESS(Status)) KdIgnoreUmExceptions = (Flag == FALSE);
+            break;
+
+        case SysDbgGetKdBlockEnable:
+
+            Flag = KdBlockEnable;
+            Status = ExpReadDebugOption(&Flag,
+                                        sizeof(Flag),
+                                        OutputBuffer,
+                                        OutputBufferLength,
+                                        &Length);
+            break;
+
+        case SysDbgSetKdBlockEnable:
+
+            Status = ExpCaptureDebugOption(&Flag,
+                                           sizeof(Flag),
+                                           InputBuffer,
+                                           InputBufferLength);
+            if (NT_SUCCESS(Status))
+            {
+                Status = KdChangeOption(KD_OPTION_SET_BLOCK_ENABLE,
+                                        sizeof(Flag),
+                                        &Flag,
+                                        0,
+                                        NULL,
+                                        NULL);
+            }
+            break;
+
+        case SysDbgRegisterForUmBreakInfo:
+        case SysDbgGetUmBreakPid:
+        case SysDbgClearUmBreakPid:
+        case SysDbgGetUmAttachPid:
+        case SysDbgClearUmAttachPid:
+
+            /* TODO: the user-mode break and attach bookkeeping is not kept */
+            Status = STATUS_NOT_IMPLEMENTED;
+            break;
+
+        case SysDbgKdPullRemoteFile:
+
+            if (InputBufferLength != sizeof(SYSDBG_KD_PULL_REMOTE_FILE))
+            {
+                Status = STATUS_INFO_LENGTH_MISMATCH;
+                break;
+            }
+
+            Status = ProbeAndCaptureUnicodeString(
+                &FileName,
+                PreviousMode,
+                &((PSYSDBG_KD_PULL_REMOTE_FILE)InputBuffer)->ImageFileName);
+            if (!NT_SUCCESS(Status)) break;
+
+            Status = KdPullRemoteFile(&FileName);
+
+            ReleaseCapturedUnicodeString(&FileName, PreviousMode);
+            break;
+
+        default:
+
+            Status = STATUS_INVALID_INFO_CLASS;
+            break;
+    }
 
     if (ReturnLength == NULL)
     {
         return Status;
     }
 
-    if (PreviousMode != KernelMode)
+    _SEH2_TRY
     {
-        _SEH2_TRY
-        {
-            *ReturnLength = Length;
-        }
-        _SEH2_EXCEPT(ExSystemExceptionFilter())
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-
-        return Status;
+        *ReturnLength = Length;
     }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
 
-    *ReturnLength = Length;
     return Status;
 }
 

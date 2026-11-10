@@ -248,6 +248,9 @@ CmpOpenOrCreateKey(
 
     PAGED_CODE();
 
+    /* The WoW64 bits pick a registry view, which the WoW64 layer has done; they are not rights */
+    DesiredAccess &= ~KEY_WOW64_RES;
+
     if (Create)
     {
         if ((Options & ~REG_LEGAL_OPTION) != 0) return STATUS_INVALID_PARAMETER;
@@ -300,7 +303,7 @@ CmpOpenOrCreateKey(
             return Status;
         }
 
-        Status = CmpTransCheckActive(Transaction);
+        Status = CmpTransEnlist(Transaction);
         if (!NT_SUCCESS(Status))
         {
             ObDereferenceObject(Transaction);
@@ -320,6 +323,27 @@ CmpOpenOrCreateKey(
     ParseContext.ChildHive.KeyCell = HCELL_NIL;
     ParseContext.Transaction = Transaction;
     ParseContext.EffectiveTransaction = Transaction;
+
+    if (Create && CmpCallBackCount != 0)
+    {
+        CM_PARSE_CONTEXT OpenContext = ParseContext;
+        HANDLE Existing = NULL;
+
+        OpenContext.CreateOperation = FALSE;
+        OpenContext.CreateOptions = Options & REG_OPEN_LEGAL_OPTION;
+
+        Status = ObOpenObjectByName(ObjectAttributes,
+                                    CmpKeyObjectType,
+                                    PreviousMode,
+                                    NULL,
+                                    DesiredAccess,
+                                    &OpenContext,
+                                    &Existing);
+        if (Status == STATUS_SUCCESS && Existing != NULL)
+        {
+            ObCloseHandle(Existing, PreviousMode);
+        }
+    }
 
     Status = ObOpenObjectByName(ObjectAttributes,
                                 CmpKeyObjectType,
@@ -389,6 +413,8 @@ NtCreateKeyTransacted(
     _In_ HANDLE TransactionHandle,
     _Out_opt_ PULONG Disposition)
 {
+    if (TransactionHandle == NULL) return STATUS_INVALID_HANDLE;
+
     return CmpOpenOrCreateKey(KeyHandle,
                               DesiredAccess,
                               ObjectAttributes,
@@ -445,6 +471,8 @@ NtOpenKeyTransacted(
     _In_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_ HANDLE TransactionHandle)
 {
+    if (TransactionHandle == NULL) return STATUS_INVALID_HANDLE;
+
     return CmpOpenOrCreateKey(KeyHandle,
                               DesiredAccess,
                               ObjectAttributes,
@@ -465,6 +493,8 @@ NtOpenKeyTransactedEx(
     _In_ ULONG OpenOptions,
     _In_ HANDLE TransactionHandle)
 {
+    if (TransactionHandle == NULL) return STATUS_INVALID_HANDLE;
+
     return CmpOpenOrCreateKey(KeyHandle,
                               DesiredAccess,
                               ObjectAttributes,
@@ -517,7 +547,11 @@ NtDeleteKey(
     }
     else
     {
-        Status = CmDeleteKey(KeyBody->KeyControlBlock);
+        Status = CmpTransPrepareWrite(KeyBody);
+        if (NT_SUCCESS(Status))
+        {
+            Status = CmDeleteKey(KeyBody->KeyControlBlock);
+        }
     }
 
     CmpUnlockRegistry();
@@ -1084,11 +1118,15 @@ NtSetValueKey(
     }
     else
     {
-        Status = CmSetValueKey(KeyBody->KeyControlBlock,
-                               &Captured.Name,
-                               Type,
-                               Copy,
-                               DataSize);
+        Status = CmpTransPrepareWrite(KeyBody);
+        if (NT_SUCCESS(Status))
+        {
+            Status = CmSetValueKey(KeyBody->KeyControlBlock,
+                                   &Captured.Name,
+                                   Type,
+                                   Copy,
+                                   DataSize);
+        }
     }
 
     CmpUnlockRegistry();
@@ -1166,7 +1204,11 @@ NtDeleteValueKey(
     }
     else
     {
-        Status = CmDeleteValueKey(KeyBody->KeyControlBlock, Captured.Name);
+        Status = CmpTransPrepareWrite(KeyBody);
+        if (NT_SUCCESS(Status))
+        {
+            Status = CmDeleteValueKey(KeyBody->KeyControlBlock, Captured.Name);
+        }
     }
 
     CmpUnlockRegistry();

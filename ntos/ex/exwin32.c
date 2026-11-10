@@ -261,12 +261,13 @@ ExpWin32kInit(VOID)
     RtlZeroMemory(&Initializer, sizeof(Initializer));
 
     Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_EXCLUSIVE | OBJ_PERMANENT;
     Initializer.ValidAccessMask = STANDARD_RIGHTS_REQUIRED |
                                   GENERIC_READ | GENERIC_WRITE |
                                   GENERIC_EXECUTE;
     Initializer.GenericMapping = ExpWindowStationMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
+    Initializer.MaintainHandleCount = TRUE;
     Initializer.SecurityRequired = TRUE;
     Initializer.OpenProcedure = ExpWindowStationOpen;
     Initializer.OkayToCloseProcedure = ExpWindowStationOkToClose;
@@ -287,12 +288,13 @@ ExpWin32kInit(VOID)
     RtlZeroMemory(&Initializer, sizeof(Initializer));
 
     Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_EXCLUSIVE | OBJ_PERMANENT;
     Initializer.ValidAccessMask = STANDARD_RIGHTS_REQUIRED |
                                   GENERIC_READ | GENERIC_WRITE |
                                   GENERIC_EXECUTE;
     Initializer.GenericMapping = ExpDesktopMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
+    Initializer.MaintainHandleCount = TRUE;
     Initializer.SecurityRequired = TRUE;
     Initializer.OpenProcedure = ExpDesktopOpen;
     Initializer.OkayToCloseProcedure = ExpDesktopOkToClose;

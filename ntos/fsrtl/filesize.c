@@ -28,7 +28,6 @@ FsRtlpFileSizeComplete(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static
 NTSTATUS
 FsRtlpQueryStandardInformation(
     _In_ PFILE_OBJECT FileObject,

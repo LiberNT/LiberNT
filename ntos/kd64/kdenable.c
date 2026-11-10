@@ -322,6 +322,11 @@ KdSystemDebugControl(
     NTSTATUS Status;
     ULONG Length = 0;
 
+    if (!KdDebuggerEnabled || KdPitchDebugger || KdDebuggerNotPresent)
+    {
+        return STATUS_DEBUGGER_INACTIVE;
+    }
+
     switch ((ULONG)Command)
     {
         case SysDbgQueryVersion:
@@ -530,7 +535,7 @@ KdSystemDebugControl(
         default:
             /* TODO: 'CsoR', the system-call hook registration, has no
              * architecture-neutral home and is not served */
-            Status = STATUS_NOT_IMPLEMENTED;
+            Status = STATUS_INVALID_INFO_CLASS;
             break;
     }
 

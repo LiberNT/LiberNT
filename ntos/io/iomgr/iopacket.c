@@ -175,13 +175,21 @@ IoAllocateIrp(
 
     PacketSize = IoSizeOfIrp(StackSize);
 
+    /* A packet charged to its caller comes from the pool, but in the same two sizes as any other */
+    if (StackSize <= IOP_FIXED_STACK_SIZE)
+    {
+        PacketSize = (StackSize <= 1) ? IoSizeOfIrp(1)
+                                      : IoSizeOfIrp(IOP_FIXED_STACK_SIZE);
+        AllocationFlags = IRP_ALLOCATED_FIXED_SIZE;
+    }
+
     if (ChargeQuota)
     {
         Irp = ExAllocatePoolWithQuotaTag(NonPagedPool | POOL_QUOTA_FAIL_INSTEAD_OF_RAISE,
                                          PacketSize,
                                          TAG_IRP);
         if (Irp == NULL) return NULL;
-        AllocationFlags = IRP_QUOTA_CHARGED;
+        AllocationFlags |= IRP_QUOTA_CHARGED;
     }
     else
     {
@@ -237,6 +245,7 @@ IoReuseIrp(
     UCHAR AllocationFlags;
     USHORT PacketSize;
     CCHAR StackSize;
+    PVOID Extension;
 
     ASSERT(Irp != NULL);
     ASSERT(Irp->Type == IO_TYPE_IRP);
@@ -244,11 +253,12 @@ IoReuseIrp(
     AllocationFlags = Irp->AllocationFlags;
     PacketSize = Irp->Size;
     StackSize = Irp->StackCount;
-
-    if (Irp->Tail.Overlay.IrpExtension != NULL) IopFreeIrpExtension(Irp);
+    Extension = Irp->Tail.Overlay.IrpExtension;
 
     IoInitializeIrp(Irp, PacketSize, StackSize);
 
+    /* What the packet carries beside its stack goes on to its next use */
+    Irp->Tail.Overlay.IrpExtension = Extension;
     Irp->AllocationFlags = AllocationFlags;
     Irp->IoStatus.Status = Status;
 }
@@ -415,8 +425,6 @@ IoAllocateMdl(
     PMDL Tail;
 
     PageCount = ADDRESS_AND_SIZE_TO_SPAN_PAGES(VirtualAddress, Length);
-    if (PageCount == 0) return NULL;
-    if (PageCount > (MAXUSHORT - sizeof(MDL)) / sizeof(PFN_NUMBER)) return NULL;
 
     Size = (ULONG)(sizeof(MDL) + PageCount * sizeof(PFN_NUMBER));
 
@@ -480,8 +488,10 @@ IoFreeMdl(
     _In_ PMDL Mdl)
 {
     ASSERT(Mdl != NULL);
-    ASSERT(!(Mdl->MdlFlags & MDL_PAGES_LOCKED));
-    ASSERT(!(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA));
+
+    /* Only a partial MDL's own mapping is released here; any other one is its owner's to release */
+    ASSERT(!(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA) ||
+           (Mdl->MdlFlags & MDL_PARTIAL_HAS_BEEN_MAPPED));
 
     if (Mdl->MdlFlags & MDL_PARTIAL_HAS_BEEN_MAPPED)
     {
@@ -662,9 +672,12 @@ IoSetActivityIdIrp(
         {
             Extension->TypesAllocated &= ~IOP_IRP_EXTENSION_ACTIVITY_ID;
             RtlZeroMemory(&Extension->ActivityId, sizeof(GUID));
+
+            if (Extension->TypesAllocated == 0) IopFreeIrpExtension(Irp);
         }
 
-        return STATUS_SUCCESS;
+        /* FIXME: the identifier of the caller's thread is never taken; the packet is left without one, as Windows 11 leaves it where measured */
+        return STATUS_NOT_SUPPORTED;
     }
 
     Extension = IopGetIrpExtension(Irp, TRUE);
@@ -713,12 +726,12 @@ IoPropagateActivityIdToThread(
     _Outptr_ LPCGUID *OriginalId)
 {
     NTSTATUS Status;
+    GUID Stored;
 
-    *OriginalId = NULL;
-
-    Status = IoGetActivityIdIrp(Irp, PropagatedId);
+    Status = IoGetActivityIdIrp(Irp, &Stored);
     if (!NT_SUCCESS(Status)) return Status;
 
+    *PropagatedId = Stored;
     *OriginalId = IoSetActivityIdThread(PropagatedId);
 
     return STATUS_SUCCESS;

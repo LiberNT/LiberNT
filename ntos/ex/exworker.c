@@ -265,11 +265,12 @@ ExpWorkerThreadEntryPoint(
          * The item is handed back to whoever queued it before it runs, because
          * the routine is free to reuse or free the item itself.
          */
+        WorkItem->List.Flink = NULL;
         WorkItem->WorkerRoutine(WorkItem->Parameter);
 
         if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         {
-            KeBugCheckEx(IRQL_NOT_LESS_OR_EQUAL,
+            KeBugCheckEx(WORKER_THREAD_RETURNED_AT_BAD_IRQL,
                          (ULONG_PTR)WorkItem->WorkerRoutine,
                          KeGetCurrentIrql(),
                          (ULONG_PTR)WorkItem->Parameter,

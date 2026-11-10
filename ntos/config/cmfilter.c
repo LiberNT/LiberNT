@@ -14,6 +14,7 @@
 /* GLOBALS ********************************************************************/
 
 ULONG CmpCallBackCount = 0;
+LIST_ENTRY CmpContextListHead;
 
 /* PRIVATE DATA ***************************************************************/
 
@@ -47,14 +48,101 @@ CmpFindCallbackByCookie(
     return NULL;
 }
 
-/* Highest altitude first, so the outermost filter sees a call first */
+/*
+ * The filter whose callback the thread is running. The registry work a filter
+ * does for itself is told to the filters below it, never to itself or to one
+ * above it, so a filter cannot be called about its own work.
+ */
+#define CMP_CALLBACK_SCOPE_MAX 16
+
+typedef struct _CMP_CALLBACK_SCOPE
+{
+    PETHREAD Thread;
+    PCUNICODE_STRING Altitude;
+} CMP_CALLBACK_SCOPE;
+
+static CMP_CALLBACK_SCOPE CmpCallbackScopes[CMP_CALLBACK_SCOPE_MAX];
+static KSPIN_LOCK CmpCallbackScopeLock;
+
 static
-VOID
+PCUNICODE_STRING
+CmpQueryCallbackScope(VOID)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    PCUNICODE_STRING Altitude = NULL;
+    KIRQL OldIrql;
+    ULONG Index;
+
+    KeAcquireSpinLock(&CmpCallbackScopeLock, &OldIrql);
+
+    for (Index = 0; Index < CMP_CALLBACK_SCOPE_MAX; Index++)
+    {
+        if (CmpCallbackScopes[Index].Thread == Thread)
+        {
+            Altitude = CmpCallbackScopes[Index].Altitude;
+            break;
+        }
+    }
+
+    KeReleaseSpinLock(&CmpCallbackScopeLock, OldIrql);
+
+    return Altitude;
+}
+
+static
+PCUNICODE_STRING
+CmpSetCallbackScope(
+    _In_opt_ PCUNICODE_STRING Altitude)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    PCUNICODE_STRING Previous = NULL;
+    KIRQL OldIrql;
+    ULONG Index;
+    ULONG Free = CMP_CALLBACK_SCOPE_MAX;
+
+    KeAcquireSpinLock(&CmpCallbackScopeLock, &OldIrql);
+
+    for (Index = 0; Index < CMP_CALLBACK_SCOPE_MAX; Index++)
+    {
+        if (CmpCallbackScopes[Index].Thread == Thread)
+        {
+            Previous = CmpCallbackScopes[Index].Altitude;
+
+            CmpCallbackScopes[Index].Altitude = Altitude;
+            if (Altitude == NULL) CmpCallbackScopes[Index].Thread = NULL;
+
+            KeReleaseSpinLock(&CmpCallbackScopeLock, OldIrql);
+            return Previous;
+        }
+
+        if (CmpCallbackScopes[Index].Thread == NULL &&
+            Free == CMP_CALLBACK_SCOPE_MAX)
+        {
+            Free = Index;
+        }
+    }
+
+    /* TODO: past this many threads at once the inner work is told to every filter */
+    if (Altitude != NULL && Free != CMP_CALLBACK_SCOPE_MAX)
+    {
+        CmpCallbackScopes[Free].Thread = Thread;
+        CmpCallbackScopes[Free].Altitude = Altitude;
+    }
+
+    KeReleaseSpinLock(&CmpCallbackScopeLock, OldIrql);
+
+    return NULL;
+}
+
+/* Highest altitude first, so the outermost filter sees a call first; no two filters share one */
+static
+NTSTATUS
 CmpInsertCallbackInListByAltitude(
     _In_ PCM_CALLBACK_ENTRY New)
 {
     PCM_CALLBACK_ENTRY Entry;
     PLIST_ENTRY ListEntry;
+    LONG Order;
 
     for (ListEntry = CmpCallbackListHead.Flink;
          ListEntry != &CmpCallbackListHead;
@@ -62,16 +150,22 @@ CmpInsertCallbackInListByAltitude(
     {
         Entry = CONTAINING_RECORD(ListEntry, CM_CALLBACK_ENTRY, ListEntry);
 
-        if (RtlCompareUnicodeString(&New->Altitude,
-                                    &Entry->Altitude,
-                                    FALSE) > 0)
+        Order = RtlCompareUnicodeString(&New->Altitude, &Entry->Altitude, FALSE);
+
+        if (Order == 0 && !Entry->Legacy)
+        {
+            return STATUS_FLT_INSTANCE_ALTITUDE_COLLISION;
+        }
+
+        if (Order > 0)
         {
             InsertTailList(ListEntry, &New->ListEntry);
-            return;
+            return STATUS_SUCCESS;
         }
     }
 
     InsertTailList(&CmpCallbackListHead, &New->ListEntry);
+    return STATUS_SUCCESS;
 }
 
 static
@@ -105,6 +199,60 @@ CmpGetCallbackObjectContext(
     return Value;
 }
 
+/*
+ * The notes a filter left on keys that are still open go with the filter: it
+ * is told about each one so it can let go of whatever the note stands for.
+ */
+static
+VOID
+CmpCleanupFilterContexts(
+    _In_ PCM_CALLBACK_ENTRY Entry)
+{
+    REG_CALLBACK_CONTEXT_CLEANUP_INFORMATION Cleanup;
+    PCM_CALLBACK_OBJECT_CONTEXT Context;
+    PLIST_ENTRY ListEntry;
+
+    for (;;)
+    {
+        Context = NULL;
+
+        ExAcquirePushLockExclusive(&CmpContextListLock);
+
+        for (ListEntry = CmpContextListHead.Flink;
+             ListEntry != &CmpContextListHead;
+             ListEntry = ListEntry->Flink)
+        {
+            Context = CONTAINING_RECORD(ListEntry,
+                                        CM_CALLBACK_OBJECT_CONTEXT,
+                                        FilterListEntry);
+
+            if (Context->Cookie == Entry->Cookie) break;
+
+            Context = NULL;
+        }
+
+        if (Context != NULL)
+        {
+            RemoveEntryList(&Context->FilterListEntry);
+            RemoveEntryList(&Context->ListEntry);
+        }
+
+        ExReleasePushLockExclusive(&CmpContextListLock);
+
+        if (Context == NULL) return;
+
+        RtlZeroMemory(&Cleanup, sizeof(Cleanup));
+        Cleanup.Object = Context->KeyBody;
+        Cleanup.ObjectContext = Context->Context;
+
+        Entry->Function(Entry->Context,
+                        (PVOID)(ULONG_PTR)RegNtCallbackObjectContextCleanup,
+                        &Cleanup);
+
+        ExFreePool(Context);
+    }
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 CODE_SEG("INIT")
@@ -113,7 +261,9 @@ NTAPI
 CmpInitCallback(VOID)
 {
     InitializeListHead(&CmpCallbackListHead);
+    InitializeListHead(&CmpContextListHead);
     InitializeListHead(&CmpMachineHiveNotifyListHead);
+    KeInitializeSpinLock(&CmpCallbackScopeLock);
     ExInitializePushLock(&CmpCallbackListLock);
     ExInitializePushLock(&CmpContextListLock);
     ExInitializePushLock(&CmpMachineHiveNotifyLock);
@@ -140,6 +290,8 @@ CmpPreCallbacks(
     _In_opt_ PVOID *ResultObject,
     _Out_ PNTSTATUS Status)
 {
+    PCUNICODE_STRING Scope;
+    PCUNICODE_STRING Saved;
     PCM_CALLBACK_ENTRY Entry;
     PLIST_ENTRY ListEntry;
     PCMP_CALLBACK_ITEM Items;
@@ -149,6 +301,7 @@ CmpPreCallbacks(
     ULONG i;
 
     Call->Count = 0;
+    Call->PostCount = 0;
     Call->PostClass = PostClass;
     Call->PreInformation = PreInformation;
     Call->CallContext = CallContext;
@@ -160,6 +313,8 @@ CmpPreCallbacks(
     *Status = STATUS_SUCCESS;
 
     if (!CmpCallbackInited || CmpCallBackCount == 0) return TRUE;
+
+    Scope = CmpQueryCallbackScope();
 
     ExAcquirePushLockShared(&CmpCallbackListLock);
 
@@ -179,6 +334,12 @@ CmpPreCallbacks(
          ListEntry = ListEntry->Flink)
     {
         Entry = CONTAINING_RECORD(ListEntry, CM_CALLBACK_ENTRY, ListEntry);
+
+        if (Scope != NULL &&
+            RtlCompareUnicodeString(&Entry->Altitude, Scope, FALSE) >= 0)
+        {
+            continue;
+        }
 
         if (!ExAcquireRundownProtection(&Entry->Rundown)) continue;
 
@@ -202,27 +363,36 @@ CmpPreCallbacks(
                                                          Entry->Cookie);
         }
 
+        Saved = CmpSetCallbackScope(&Entry->Altitude);
+
         Result = Entry->Function(Entry->Context,
                                  (PVOID)(ULONG_PTR)PreClass,
                                  PreInformation);
 
+        CmpSetCallbackScope(Saved);
+
         if (CallContext != NULL) Call->Items[i].CallContext = *CallContext;
 
+        /*
+         * A filter that answers the call itself, or refuses it, is not told
+         * the result of what it did not let happen; the filters above it are.
+         */
         if (Result == STATUS_CALLBACK_BYPASS)
         {
             *Status = STATUS_SUCCESS;
-            Call->PostClass = MaxRegNtNotifyClass;
+            Call->PostCount = i;
             return FALSE;
         }
 
         if (!NT_SUCCESS(Result))
         {
             *Status = Result;
-            Call->PostClass = MaxRegNtNotifyClass;
+            Call->PostCount = i;
             return FALSE;
         }
     }
 
+    Call->PostCount = Count;
     return TRUE;
 }
 
@@ -242,7 +412,9 @@ CmpPostCallbacks(
     NTSTATUS Result;
     ULONG i;
 
-    if (Call->PostClass != MaxRegNtNotifyClass && Call->Count != 0)
+    if (Call->CallContext != NULL) *Call->CallContext = NULL;
+
+    if (Call->PostClass != MaxRegNtNotifyClass && Call->PostCount != 0)
     {
         RtlZeroMemory(&Post, sizeof(Post));
 
@@ -256,8 +428,10 @@ CmpPostCallbacks(
             Post.Object = *Call->ResultObject;
         }
 
-        for (i = Call->Count; i > 0; i--)
+        for (i = Call->PostCount; i > 0; i--)
         {
+            PCUNICODE_STRING Saved;
+
             Entry = Call->Items[i - 1].Entry;
 
             Post.CallContext = Call->Items[i - 1].CallContext;
@@ -266,9 +440,13 @@ CmpPostCallbacks(
             Post.ReturnStatus = Final;
             Post.Status = Final;
 
+            Saved = CmpSetCallbackScope(&Entry->Altitude);
+
             Result = Entry->Function(Entry->Context,
                                      (PVOID)(ULONG_PTR)Call->PostClass,
                                      &Post);
+
+            CmpSetCallbackScope(Saved);
 
             if (Result == STATUS_CALLBACK_BYPASS) Final = Post.ReturnStatus;
             else if (!NT_SUCCESS(Result)) Final = Result;
@@ -298,6 +476,7 @@ CmRegisterCallbackEx(
     _Reserved_ PVOID Reserved)
 {
     PCM_CALLBACK_ENTRY Entry;
+    NTSTATUS Status;
     PWCHAR Buffer;
 
     UNREFERENCED_PARAMETER(Reserved);
@@ -340,10 +519,18 @@ CmRegisterCallbackEx(
     ExAcquirePushLockExclusive(&CmpCallbackListLock);
 
     Entry->Cookie = ++CmpCallbackCookie;
-    CmpInsertCallbackInListByAltitude(Entry);
-    CmpCallBackCount++;
+
+    Status = CmpInsertCallbackInListByAltitude(Entry);
+    if (NT_SUCCESS(Status)) CmpCallBackCount++;
 
     ExReleasePushLockExclusive(&CmpCallbackListLock);
+
+    if (!NT_SUCCESS(Status))
+    {
+        if (Entry->Altitude.Buffer != NULL) ExFreePool(Entry->Altitude.Buffer);
+        ExFreePool(Entry);
+        return Status;
+    }
 
     Cookie->QuadPart = (LONGLONG)Entry->Cookie;
     return STATUS_SUCCESS;
@@ -408,6 +595,8 @@ CmUnRegisterCallback(
     ExReleasePushLockExclusive(&CmpCallbackListLock);
 
     ExWaitForRundownProtectionRelease(&Entry->Rundown);
+
+    CmpCleanupFilterContexts(Entry);
 
     if (Entry->LastName != NULL) ExFreePool(Entry->LastName);
     if (Entry->Altitude.Buffer != NULL) ExFreePool(Entry->Altitude.Buffer);
@@ -477,6 +666,8 @@ CmSetCallbackObjectContext(
 
     Context->Cookie = (ULONGLONG)Cookie->QuadPart;
     Context->Context = NewContext;
+    Context->KeyBody = KeyBody;
+    InsertTailList(&CmpContextListHead, &Context->FilterListEntry);
     InsertTailList(&KeyBody->ContextListHead, &Context->ListEntry);
 
     ExReleasePushLockExclusive(&CmpContextListLock);
@@ -511,11 +702,14 @@ CmpCleanupKeyBodyContexts(
         }
 
         ListEntry = RemoveHeadList(&KeyBody->ContextListHead);
-        ExReleasePushLockExclusive(&CmpContextListLock);
 
         Context = CONTAINING_RECORD(ListEntry,
                                     CM_CALLBACK_OBJECT_CONTEXT,
                                     ListEntry);
+
+        RemoveEntryList(&Context->FilterListEntry);
+
+        ExReleasePushLockExclusive(&CmpContextListLock);
 
         RtlZeroMemory(&Cleanup, sizeof(Cleanup));
         Cleanup.Object = KeyBody;

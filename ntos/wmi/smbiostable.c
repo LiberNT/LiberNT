@@ -106,7 +106,8 @@ WmipCaptureFrom20EntryPoint(
         return FALSE;
     }
 
-    if (Header->Length < sizeof(SMBIOS_TABLE_HEADER)) return FALSE;
+    /* The 2.1 entry point ends at its Revision byte; the structure's size carries alignment padding beyond it */
+    if (Header->Length < FIELD_OFFSET(SMBIOS_TABLE_HEADER, Revision) + sizeof(Header->Revision)) return FALSE;
 
     if (!WmipChecksumIsZero((const UCHAR *)Header, Header->Length)) return FALSE;
 

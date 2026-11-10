@@ -217,7 +217,6 @@ IopCheckVpbMounted(
 NTSTATUS
 IopMountInitializeVpb(
     _In_ PDEVICE_OBJECT DeviceObject,
-    _In_ PDEVICE_OBJECT AttachedDevice,
     _In_ BOOLEAN Raw)
 {
     PVPB Vpb;
@@ -235,8 +234,14 @@ IopMountInitializeVpb(
     Vpb->Flags |= VPB_MOUNTED;
     if (Raw) Vpb->Flags |= VPB_RAW_MOUNT;
 
-    Vpb->DeviceObject = AttachedDevice;
+    /* The file system named its volume device in the VPB while mounting */
     Vpb->ReferenceCount++;
+
+    /* From the volume device the way back to the storage device goes through the same VPB */
+    if (Vpb->DeviceObject != NULL)
+    {
+        IoGetDevObjExtension(Vpb->DeviceObject)->Vpb = Vpb;
+    }
 
     DeviceObject->Characteristics |= FILE_DEVICE_IS_MOUNTED;
 
@@ -401,7 +406,6 @@ IopMountVolume(
     KeReleaseSpinLock(&IopVpbSpinLock, OldIrql);
 
     QueueHead = IopFileSystemQueueForDevice(DeviceObject);
-
     while (TRUE)
     {
         PDEVICE_OBJECT NeedsDriver = NULL;
@@ -437,9 +441,7 @@ IopMountVolume(
 
                 ExReleaseResourceLite(&IopDatabaseResource);
 
-                Status = IopMountInitializeVpb(DeviceObject,
-                                               AttachedDevice,
-                                               Raw);
+                Status = IopMountInitializeVpb(DeviceObject, Raw);
                 if (NT_SUCCESS(Status)) *Vpb = DeviceObject->Vpb;
 
                 if (!DeviceIsLocked)
@@ -467,7 +469,7 @@ IopMountVolume(
 
         Retried = TRUE;
 
-        IopLoadFileSystemDriver(NeedsDriver);
+        Status = IopLoadFileSystemDriver(NeedsDriver);
     }
 
     if (!DeviceIsLocked)
@@ -824,6 +826,12 @@ IoGetDiskDeviceObject(
     {
         KeReleaseSpinLock(&IopVpbSpinLock, OldIrql);
         return STATUS_INVALID_PARAMETER;
+    }
+
+    if (!(Vpb->Flags & VPB_MOUNTED))
+    {
+        KeReleaseSpinLock(&IopVpbSpinLock, OldIrql);
+        return STATUS_VOLUME_DISMOUNTED;
     }
 
     ObReferenceObject(Vpb->RealDevice);

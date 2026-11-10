@@ -301,6 +301,7 @@ SepOpenThreadToken(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     SECURITY_IMPERSONATION_LEVEL Level;
     SE_IMPERSONATION_STATE Lending;
+    BOOLEAN Disabled;
     BOOLEAN CopyOnOpen;
     BOOLEAN EffectiveOnly;
     PACCESS_TOKEN Worn;
@@ -342,13 +343,19 @@ SepOpenThreadToken(
         return STATUS_NO_TOKEN;
     }
 
+    /* An anonymous token names nobody, so there is nothing to hand out */
+    if (Level == SecurityAnonymous)
+    {
+        PsDereferenceImpersonationToken(Worn);
+        ObDereferenceObject(Thread);
+        return STATUS_CANT_OPEN_ANONYMOUS;
+    }
+
+    Status = STATUS_SUCCESS;
     if (CopyOnOpen)
     {
-        /* The thread was lent this token, so the caller is given a copy and
-         * the lending ends here */
+        /* The thread keeps wearing its token; the caller gets a copy it cannot share */
         Status = SeCopyClientToken(Worn, Level, PreviousMode, (PACCESS_TOKEN *)&Opened);
-
-        if (NT_SUCCESS(Status)) PsDisableImpersonation(Thread, &Lending);
     }
     else
     {
@@ -361,16 +368,18 @@ SepOpenThreadToken(
 
     if (!NT_SUCCESS(Status)) return Status;
 
-    /* Whoever opens on its own behalf is judged as itself, not as what it
-     * is wearing */
+    /* Opening as self is judged against the caller's process, not what the caller is wearing */
+    Disabled = OpenAsSelf && PsDisableImpersonation(PsGetCurrentThread(), &Lending);
+
     Status = ObOpenObjectByPointer(Opened,
-                                   HandleAttributes |
-                                       (OpenAsSelf ? OBJ_FORCE_ACCESS_CHECK : 0),
+                                   HandleAttributes,
                                    NULL,
                                    DesiredAccess,
                                    SeTokenObjectType,
                                    PreviousMode,
                                    &Handle);
+
+    if (Disabled) PsRestoreImpersonation(PsGetCurrentThread(), &Lending);
 
     ObDereferenceObject(Opened);
 

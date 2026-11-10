@@ -518,12 +518,7 @@ RtlpGetStackLimits(
 {
     PKTHREAD CurrentThread = KeGetCurrentThread();
     *LowLimit = (ULONG_PTR)CurrentThread->StackLimit;
-#ifdef _M_IX86
-    *HighLimit = (ULONG_PTR)CurrentThread->InitialStack -
-        sizeof(FX_SAVE_AREA);
-#else
-    *HighLimit = (ULONG_PTR)CurrentThread->InitialStack;
-#endif
+    *HighLimit = (ULONG_PTR)CurrentThread->StackBase;
 }
 
 /* RTL Atom Tables ************************************************************/

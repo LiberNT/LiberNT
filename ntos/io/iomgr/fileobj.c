@@ -82,6 +82,19 @@ IopAllocateFileObjectExtension(
 /* OBJECT MANAGER METHODS *****************************************************/
 
 VOID
+IopCloseLocalFileObject(
+    _Inout_ PDUMMY_FILE_OBJECT LocalFileObject)
+{
+    PFILE_OBJECT FileObject = (PFILE_OBJECT)&LocalFileObject->FileObjectBody;
+
+    /* Nothing may keep a reference to an object that lives on its opener's stack */
+    ASSERT(LocalFileObject->ObjectHeader.PointerCount == 1);
+
+    FileObject->Flags &= ~FO_HANDLE_CREATED;
+    IopDeleteFile(FileObject);
+}
+
+VOID
 NTAPI
 IopDeleteFile(
     IN PVOID ObjectBody)
@@ -90,29 +103,24 @@ IopDeleteFile(
     PDEVICE_OBJECT DeviceObject;
     PVPB Vpb;
 
-    if (FileObject->DeviceObject == NULL) return;
-
-    if (!(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
+    /* A file object the driver never opened names no device; its creator gave everything back */
+    if (FileObject->DeviceObject != NULL)
     {
         DeviceObject = IoGetRelatedDeviceObject(FileObject);
-    }
-    else
-    {
-        DeviceObject = FileObject->DeviceObject;
-    }
 
-    if (DeviceObject == NULL) return;
+        /* A file object that never had a handle never had its cleanup either */
+        if (!(FileObject->Flags & FO_HANDLE_CREATED))
+        {
+            IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLEANUP);
+        }
 
-    if (!(FileObject->Flags & FO_HANDLE_CREATED) ||
-        (FileObject->Flags & FO_FILE_OPEN_CANCELLED))
-    {
         IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLOSE);
-    }
 
-    Vpb = FileObject->Vpb;
-    if (Vpb != NULL && !(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
-    {
-        IopDereferenceVpbAndFree(Vpb);
+        Vpb = FileObject->Vpb;
+        if (Vpb != NULL && !(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
+        {
+            IopDereferenceVpbAndFree(Vpb);
+        }
     }
 
     if (FileObject->FileName.Buffer != NULL)
@@ -140,7 +148,10 @@ IopDeleteFile(
         if (Extension != NULL) ExFreePoolWithTag(Extension, TAG_IO);
     }
 
-    IopDecrementDeviceObjectRef(DeviceObject, FALSE);
+    if (FileObject->DeviceObject != NULL)
+    {
+        IopDecrementDeviceObjectRef(FileObject->DeviceObject, FALSE);
+    }
 }
 
 VOID
@@ -159,14 +170,8 @@ IopCloseFile(
 
     if (SystemHandleCount != 1) return;
     if (FileObject->DeviceObject == NULL) return;
-    if (FileObject->Flags & FO_DIRECT_DEVICE_OPEN)
-    {
-        DeviceObject = FileObject->DeviceObject;
-    }
-    else
-    {
-        DeviceObject = IoGetRelatedDeviceObject(FileObject);
-    }
+
+    DeviceObject = IoGetRelatedDeviceObject(FileObject);
 
     if (DeviceObject == NULL) return;
 
@@ -257,7 +262,9 @@ IopQueryNameInternal(
         if (DeviceName != NULL) ExFreePoolWithTag(DeviceName, TAG_IO_NAME);
         if (DosNameUsed) ExFreePool(DosName.Buffer);
 
-        return STATUS_INFO_LENGTH_MISMATCH;
+        /* Room for the header but not the name is an overflow, not a wrong length */
+        return (Length < sizeof(OBJECT_NAME_INFORMATION)) ? STATUS_INFO_LENGTH_MISMATCH
+                                                           : STATUS_BUFFER_OVERFLOW;
     }
 
     Cursor = (PWCHAR)(ObjectNameInfo + 1);
@@ -425,15 +432,7 @@ IopGetSetSecurityObject(
 
     FileObject = ObjectBody;
 
-    if (!(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
-    {
-        DeviceObject = IoGetRelatedDeviceObject(FileObject);
-    }
-    else
-    {
-        DeviceObject = FileObject->DeviceObject;
-    }
-
+    DeviceObject = IoGetRelatedDeviceObject(FileObject);
     if (DeviceObject == NULL) return STATUS_INVALID_DEVICE_REQUEST;
 
     KeInitializeEvent(&Event, SynchronizationEvent, FALSE);

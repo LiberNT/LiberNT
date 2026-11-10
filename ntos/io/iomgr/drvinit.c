@@ -436,6 +436,7 @@ IopInitializeDriverModule(
     UNICODE_STRING DriverName;
     UNICODE_STRING ServiceName;
     UNICODE_STRING RegistryPath;
+    PUNICODE_STRING GivenPath;
     PDRIVER_OBJECT Created;
     NTSTATUS Status;
     ULONG TotalSize;
@@ -507,6 +508,11 @@ IopInitializeDriverModule(
     Created->DriverSection = ModuleObject;
     Created->DriverInit = (PDRIVER_INITIALIZE)ModuleObject->EntryPoint;
     Created->DriverName = DriverName;
+    Created->DriverName.MaximumLength = DriverName.Length;
+    Created->HardwareDatabase = &IopHardwareDatabaseName;
+
+    /* A driver is a legacy one until it shows it has an AddDevice routine */
+    Created->Flags = DRVO_LEGACY_DRIVER;
 
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; Index++)
     {
@@ -547,11 +553,31 @@ IopInitializeDriverModule(
 
     if (HoldPnpUnloadBarrier) IopAcquirePnpUnloadBarrier(Created);
 
-    *DriverEntryStatus = Created->DriverInit(Created, &RegistryPath);
+    GivenPath = IopBuildDriverRegistryPath(ServiceHandle);
+
+    *DriverEntryStatus = Created->DriverInit(
+        Created,
+        (GivenPath != NULL) ? GivenPath : &RegistryPath);
+
+    if (GivenPath != NULL) ExFreePoolWithTag(GivenPath, TAG_IO);
 
     if (RegistryPath.Buffer != NULL)
     {
         ExFreePoolWithTag(RegistryPath.Buffer, TAG_IO);
+    }
+
+    if (IoGetDrvObjExtension(Created)->AddDevice != NULL)
+    {
+        Created->Flags &= ~DRVO_LEGACY_DRIVER;
+    }
+
+    /* A request the driver named no routine for is refused, never called */
+    for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; Index++)
+    {
+        if (Created->MajorFunction[Index] == NULL)
+        {
+            Created->MajorFunction[Index] = IopInvalidDeviceRequest;
+        }
     }
 
     if (!NT_SUCCESS(*DriverEntryStatus))
@@ -567,6 +593,8 @@ IopInitializeDriverModule(
 
     IopReadyDeviceObjects(Created);
 
+    /* The driver keeps the reference it was made with; the caller gets one of its own, as it does for a driver found already loaded */
+    ObReferenceObject(Created);
     *DriverObject = Created;
 
     return STATUS_SUCCESS;
@@ -688,7 +716,8 @@ IopLoadServiceModule(
         return Status;
     }
 
-    IopReleasePnpUnloadBarrier(*DriverObject);
+    /* A driver library owns no driver object of its own */
+    if (*DriverObject != NULL) IopReleasePnpUnloadBarrier(*DriverObject);
 
     return STATUS_SUCCESS;
 }
@@ -855,6 +884,12 @@ IopInitializeSystemDrivers(VOID)
         return;
     }
 
+    /*
+     * A driver has to be there before the drivers that import it, so the
+     * order is the one the registry lays down: the groups of
+     * ServiceGroupOrder, and inside a group the tags of its GroupOrderList,
+     * with whatever carries no tag of its own last.
+     */
     for (Index = 0; ; Index++)
     {
         ULONG Returned = 0;

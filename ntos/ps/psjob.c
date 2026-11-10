@@ -19,8 +19,7 @@ GENERIC_MAPPING PspJobMapping =
 {
     STANDARD_RIGHTS_READ | JOB_OBJECT_QUERY,
     STANDARD_RIGHTS_WRITE | JOB_OBJECT_ASSIGN_PROCESS |
-        JOB_OBJECT_SET_ATTRIBUTES | JOB_OBJECT_TERMINATE |
-        JOB_OBJECT_SET_SECURITY_ATTRIBUTES,
+        JOB_OBJECT_SET_ATTRIBUTES | JOB_OBJECT_TERMINATE,
     STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE,
     JOB_OBJECT_ALL_ACCESS
 };
@@ -182,7 +181,12 @@ VOID
 NTAPI
 PspInitializeJobStructures(VOID)
 {
-    OBJECT_TYPE_INITIALIZER Initializer;
+    struct
+    {
+        OBJECT_TYPE_INITIALIZER Initializer;
+        ULONG SeMandatoryLabelMask;
+        ULONG SeTrustConstraintMask;
+    } Extended;
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"Job");
 
     PAGED_CODE();
@@ -190,20 +194,19 @@ PspInitializeJobStructures(VOID)
     InitializeListHead(&PspJobList);
     ExInitializeResourceLite(&PspJobListLock);
 
-    RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK;
-    Initializer.GenericMapping = PspJobMapping;
-    Initializer.PoolType = NonPagedPool;
-    Initializer.ValidAccessMask = JOB_OBJECT_ALL_ACCESS;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(EJOB);
-    Initializer.MaintainHandleCount = TRUE;
-    Initializer.SecurityRequired = TRUE;
-    Initializer.CloseProcedure = PspCloseJob;
-    Initializer.DeleteProcedure = PspDeleteJob;
-    Initializer.SecurityProcedure = SeDefaultObjectMethod;
+    RtlZeroMemory(&Extended, sizeof(Extended));
+    Extended.SeMandatoryLabelMask = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP;
+    Extended.Initializer.Length = sizeof(Extended);
+    Extended.Initializer.GenericMapping = PspJobMapping;
+    Extended.Initializer.PoolType = NonPagedPoolNx;
+    Extended.Initializer.ValidAccessMask = JOB_OBJECT_ALL_ACCESS;
+    Extended.Initializer.DefaultNonPagedPoolCharge = sizeof(EJOB);
+    Extended.Initializer.SecurityRequired = TRUE;
+    Extended.Initializer.CloseProcedure = PspCloseJob;
+    Extended.Initializer.DeleteProcedure = PspDeleteJob;
+    Extended.Initializer.SecurityProcedure = SeDefaultObjectMethod;
 
-    ObCreateObjectType(&Name, &Initializer, NULL, &PsJobType);
+    ObCreateObjectType(&Name, &Extended.Initializer, NULL, &PsJobType);
 }
 
 /*
@@ -243,7 +246,10 @@ PspCloseJob(
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
 
-    PspInvokeW32JobCallout(Job, PsW32JobCalloutTerminate, NULL);
+    if (Job->UIRestrictionsClass != 0)
+    {
+        PspInvokeW32JobCallout(Job, PsW32JobCalloutTerminate, NULL);
+    }
 
     if ((Job->LimitFlags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) != 0)
         PspTerminateJobObject(Job, KernelMode, STATUS_SUCCESS);
@@ -372,7 +378,12 @@ PspAssignProcessToJob(
 
     ExReleaseRundownProtection(&Process->RundownProtect);
 
-    PspInvokeW32JobCallout(Job, PsW32JobCalloutAddProcess, Process);
+    if (PsGetProcessWin32Process(Process) != NULL)
+    {
+        PspInvokeW32JobCallout(Job,
+                               PsW32JobCalloutAddProcess,
+                               PsGetProcessWin32Process(Process));
+    }
 
     return Status;
 }
@@ -614,7 +625,9 @@ PsSetJobUIRestrictionsClass(
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
 
-    PspInvokeW32JobCallout(Job, PsW32JobCalloutSetInformation, NULL);
+    PspInvokeW32JobCallout(Job,
+                           PsW32JobCalloutSetInformation,
+                           (PVOID)(ULONG_PTR)UIRestrictionsClass);
 }
 
 /* SYSTEM CALLS ***************************************************************/

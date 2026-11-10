@@ -45,13 +45,13 @@ IopCreateSymbolicLink(
                                NULL,
                                Descriptor);
 
-    Status = NtCreateSymbolicLinkObject(&Handle,
+    Status = ZwCreateSymbolicLinkObject(&Handle,
                                         SYMBOLIC_LINK_ALL_ACCESS,
                                         &ObjectAttributes,
                                         DeviceName);
     if (!NT_SUCCESS(Status)) return Status;
 
-    NtClose(Handle);
+    ZwClose(Handle);
 
     return STATUS_SUCCESS;
 }
@@ -93,12 +93,12 @@ IoDeleteSymbolicLink(
                                NULL,
                                NULL);
 
-    Status = NtOpenSymbolicLinkObject(&Handle, DELETE, &ObjectAttributes);
+    Status = ZwOpenSymbolicLinkObject(&Handle, DELETE, &ObjectAttributes);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = NtMakeTemporaryObject(Handle);
+    Status = ZwMakeTemporaryObject(Handle);
 
-    NtClose(Handle);
+    ZwClose(Handle);
 
     return Status;
 }

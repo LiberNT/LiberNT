@@ -558,10 +558,10 @@ EtwWriteTransfer(
     Event.Header.Class.Level = EventDescriptor->Level;
     Event.Header.Class.Version = EventDescriptor->Id;
 
-    return NtTraceEvent((HANDLE)(ULONG_PTR)LoggerId,
-                        ETW_NT_FLAGS_TRACE_HEADER,
-                        Size,
-                        &Event.Header);
+    return EtwpTraceClassicEvent((HANDLE)(ULONG_PTR)LoggerId,
+                                 Size,
+                                 &Event.Header,
+                                 KernelMode);
 }
 
 /* Writes an event that belongs to no activity in particular */

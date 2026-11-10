@@ -535,47 +535,42 @@ PiGetDeviceRegistryProperty(
     return STATUS_SUCCESS;
 }
 
+/*
+ * The part a child's instance identifier is given when its bus cannot promise
+ * the identifier is unique: how deep the parent sits, a digest of the parent's
+ * own instance path, and an index, each followed by a separator.
+ */
 NTSTATUS
 IopGetParentIdPrefix(
     _In_ PDEVICE_NODE DeviceNode,
     _Out_ PUNICODE_STRING Prefix)
 {
-    UNICODE_STRING Separator;
+    PDEVICE_NODE Parent = DeviceNode->Parent;
+    UNICODE_STRING Upcased;
+    ULONG Digest;
     PWCHAR Buffer;
-    USHORT Length;
-    USHORT Index;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
     RtlInitEmptyUnicodeString(Prefix, NULL, 0);
 
-    if (DeviceNode->Parent == NULL) return STATUS_NOT_FOUND;
-    if (DeviceNode->Parent->InstancePath.Length == 0) return STATUS_NOT_FOUND;
+    if (Parent == NULL || Parent->InstancePath.Length == 0) return STATUS_NOT_FOUND;
 
-    Length = DeviceNode->Parent->InstancePath.Length + sizeof(WCHAR);
+    Status = RtlUpcaseUnicodeString(&Upcased, &Parent->InstancePath, TRUE);
+    if (!NT_SUCCESS(Status)) return Status;
 
-    Buffer = ExAllocatePoolZero(PagedPool, Length + sizeof(WCHAR), TAG_IO);
+    /* FIXME: the digest names the parent uniquely but is not the value Windows computes */
+    Digest = RtlComputeCrc32(0, (PUCHAR)Upcased.Buffer, Upcased.Length);
+    RtlFreeUnicodeString(&Upcased);
+
+    Buffer = ExAllocatePoolZero(PagedPool, 32 * sizeof(WCHAR), TAG_IO);
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    Prefix->Buffer = Buffer;
-    Prefix->Length = 0;
-    Prefix->MaximumLength = Length + sizeof(WCHAR);
+    RtlInitEmptyUnicodeString(Prefix, Buffer, 32 * sizeof(WCHAR));
 
-    RtlAppendUnicodeStringToString(Prefix,
-                                   &DeviceNode->Parent->InstancePath);
-
-    for (Index = 0; Index < Prefix->Length / sizeof(WCHAR); Index++)
-    {
-        if (Prefix->Buffer[Index] == OBJ_NAME_PATH_SEPARATOR)
-        {
-            Prefix->Buffer[Index] = L'&';
-        }
-    }
-
-    RtlInitUnicodeString(&Separator, L"&");
-    RtlAppendUnicodeStringToString(Prefix, &Separator);
-
-    return STATUS_SUCCESS;
+    /* TODO: the prefix is not recorded as the parent's ParentIdPrefix value */
+    return RtlUnicodeStringPrintf(Prefix, L"%lx&%lx&0", Parent->Level + 1, Digest);
 }
 
 NTSTATUS
@@ -629,10 +624,20 @@ IopSetDeviceInstanceData(
                       sizeof(Value));
     }
 
+    /* A device seen for the first time starts with no configuration flags; one seen before keeps its own */
     RtlInitUnicodeString(&ValueName, L"ConfigFlags");
 
-    Value = 0;
-    ZwSetValueKey(InstanceKey, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
+    Status = ZwQueryValueKey(InstanceKey,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             NULL,
+                             0,
+                             &Value);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+    {
+        Value = 0;
+        ZwSetValueKey(InstanceKey, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
+    }
 
     return STATUS_SUCCESS;
 }
@@ -965,6 +970,38 @@ IoGetDeviceProperty(
             ValueName = L"UINumber";
             ValueType = REG_DWORD;
             break;
+
+        case DevicePropertyContainerID:
+            ValueName = L"ContainerID";
+            ValueType = REG_SZ;
+            break;
+
+        case DevicePropertyResourceRequirements:
+            if (DeviceNode->ResourceRequirements == NULL) return STATUS_SUCCESS;
+
+            *ResultLength = DeviceNode->ResourceRequirements->ListSize;
+
+            if (BufferLength < *ResultLength) return STATUS_BUFFER_TOO_SMALL;
+
+            RtlCopyMemory(PropertyBuffer,
+                          DeviceNode->ResourceRequirements,
+                          *ResultLength);
+
+            return STATUS_SUCCESS;
+
+        case DevicePropertyAllocatedResources:
+            if (DeviceNode->ResourceList == NULL) return STATUS_SUCCESS;
+
+            *ResultLength =
+                PnpDetermineResourceListSize(DeviceNode->ResourceList);
+
+            if (BufferLength < *ResultLength) return STATUS_BUFFER_TOO_SMALL;
+
+            RtlCopyMemory(PropertyBuffer,
+                          DeviceNode->ResourceList,
+                          *ResultLength);
+
+            return STATUS_SUCCESS;
 
         case DevicePropertyBootConfiguration:
             if (DeviceNode->BootResources == NULL)

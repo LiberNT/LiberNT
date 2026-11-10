@@ -100,6 +100,8 @@ NTAPI
 CmpQueryKeyData(
     _In_ PHHIVE Hive,
     _In_ PCM_KEY_NODE Node,
+    _In_opt_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_opt_ PVOID Transaction,
     _In_ KEY_INFORMATION_CLASS KeyInformationClass,
     _Out_writes_bytes_opt_(Length) PVOID KeyInformation,
     _In_ ULONG Length,
@@ -192,6 +194,13 @@ CmpQueryKeyData(
             Answer->MaxNameLen = Node->MaxNameLen;
             Answer->MaxClassLen = Node->MaxClassLen;
             Answer->Values = Node->ValueList.Count;
+            if (Kcb != NULL)
+            {
+                CmpTransAdjustKeyCounts(Kcb,
+                                        Transaction,
+                                        &Answer->SubKeys,
+                                        &Answer->Values);
+            }
             Answer->MaxValueNameLen = Node->MaxValueNameLen;
             Answer->MaxValueDataLen = Node->MaxValueDataLen;
 
@@ -284,6 +293,13 @@ CmQueryKey(
                               Node->SubKeyCounts[Volatile];
             Answer->MaxNameLen = Node->MaxNameLen;
             Answer->Values = Node->ValueList.Count;
+            if (Kcb != NULL)
+            {
+                CmpTransAdjustKeyCounts(Kcb,
+                                        Transaction,
+                                        &Answer->SubKeys,
+                                        &Answer->Values);
+            }
             Answer->MaxValueNameLen = Node->MaxValueNameLen;
             Answer->MaxValueDataLen = Node->MaxValueDataLen;
             Answer->NameLength = CmpKeyNodeNameSize(Node);
@@ -345,6 +361,8 @@ CmQueryKey(
 
     Status = CmpQueryKeyData(Hive,
                              Node,
+                             Kcb,
+                             Transaction,
                              KeyInformationClass,
                              KeyInformation,
                              Length,
@@ -394,6 +412,8 @@ CmEnumerateKey(
 
     Status = CmpQueryKeyData(Hive,
                              Child,
+                             NULL,
+                             NULL,
                              KeyInformationClass,
                              KeyInformation,
                              Length,
@@ -529,6 +549,13 @@ CmpSetValueKeyNew(
     HCELL_INDEX ValueCell;
     NTSTATUS Status;
     USHORT NameSize;
+
+    /* The list is rewritten in its own cell or moved out of it, so it changes either way */
+    if (Parent->ValueList.Count != 0 &&
+        !HvMarkCellDirty(Hive, Parent->ValueList.List, FALSE))
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     NameSize = CmpNameSize(Hive, ValueName);
 
@@ -747,8 +774,11 @@ CmDeleteValueKey(
     PHHIVE Hive = Kcb->KeyHive;
     PCM_CACHED_VALUE *CachedValue;
     BOOLEAN ValueIsCached;
+    HCELL_INDEX ValueCell;
     PCM_KEY_VALUE Value;
     PCM_KEY_NODE Node;
+    PCELL_DATA List;
+    BOOLEAN Dirty;
     NTSTATUS Status;
     ULONG Index;
 
@@ -773,7 +803,36 @@ CmDeleteValueKey(
     Node = (PCM_KEY_NODE)HvGetCell(Hive, Kcb->KeyCell);
     if (Node == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    if (!HvMarkCellDirty(Hive, Kcb->KeyCell, FALSE))
+    ASSERT(Index < Node->ValueList.Count);
+
+    /* The value is the one the list holds at Index; the cache only found it */
+    List = HvGetCell(Hive, Node->ValueList.List);
+    if (List == NULL)
+    {
+        HvReleaseCell(Hive, Kcb->KeyCell);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    ValueCell = List->u.KeyList[Index];
+    HvReleaseCell(Hive, Node->ValueList.List);
+
+    Value = (PCM_KEY_VALUE)HvGetCell(Hive, ValueCell);
+    if (Value == NULL)
+    {
+        HvReleaseCell(Hive, Kcb->KeyCell);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    /* Every cell the removal rewrites or frees has to reach the hive file */
+    Dirty = HvMarkCellDirty(Hive, Kcb->KeyCell, FALSE) &&
+            HvMarkCellDirty(Hive, Node->ValueList.List, FALSE) &&
+            HvMarkCellDirty(Hive, ValueCell, FALSE) &&
+            (CmpIsKeyValueBig(Hive, Value->DataLength) ?
+                 CmpMarkBigValueDataDirty(Hive, Value->Data) :
+                 CmpMarkValueDataDirty(Hive, Value));
+    HvReleaseCell(Hive, ValueCell);
+
+    if (!Dirty)
     {
         HvReleaseCell(Hive, Kcb->KeyCell);
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -786,9 +845,9 @@ CmDeleteValueKey(
         return Status;
     }
 
-    CmpReleaseValueData(Hive, CellToRelease);
+    CmpReleaseValueData(Hive, ValueCell);
 
-    if (!CmpFreeValue(Hive, CellToRelease))
+    if (!CmpFreeValue(Hive, ValueCell))
     {
         HvReleaseCell(Hive, Kcb->KeyCell);
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -1019,7 +1078,7 @@ CmRenameKey(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    if (NameSize > ParentNode->MaxNameLen) ParentNode->MaxNameLen = NameSize;
+    if (NewName->Length > ParentNode->MaxNameLen) ParentNode->MaxNameLen = NewName->Length;
 
     HvReleaseCell(Hive, Kcb->KeyCell);
     HvFreeCell(Hive, Kcb->KeyCell);

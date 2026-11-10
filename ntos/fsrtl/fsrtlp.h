@@ -22,4 +22,10 @@ NTAPI
 FsRtlAcquireFileForCcFlush(
     _In_ PFILE_OBJECT FileObject);
 
+NTSTATUS
+FsRtlpQueryStandardInformation(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Out_ PFILE_STANDARD_INFORMATION Information);
+
 /* EOF */

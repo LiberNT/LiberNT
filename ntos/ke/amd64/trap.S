@@ -930,6 +930,34 @@ PUBLIC KiRetireDpcListInDpcStack
     ret
 .ENDP
 
+/*
+ * VOID
+ * KiCallOnKernelStack(
+ *     PVOID Context,
+ *     PVOID StackTop);
+ */
+PUBLIC KiCallOnKernelStack
+.PROC KiCallOnKernelStack
+    push rbp
+    .pushreg rbp
+    mov rbp, rsp
+    .setframe rbp, 0
+    .endprolog
+
+    /* Switch to the given stack; rcx still holds the context */
+    mov rsp, rdx
+
+    /* The stack is 16 byte aligned, allocate 32 bytes home space */
+    sub rsp, 32
+
+    call KiRunStackCallout
+
+    /* Restore stack, cleanup and return */
+    mov rsp, rbp
+    pop rbp
+    ret
+.ENDP
+
 PUBLIC KiDpcInterrupt
 .PROC KiDpcInterrupt
    /* No error code */

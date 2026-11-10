@@ -124,6 +124,9 @@ ExpFindWaitBlockChainTail(
     }
 
     Tail = Block->Last;
+    ASSERT(Tail != NULL);
+    ASSERT(Tail->Last == Tail);
+    ASSERT(Tail->Next == NULL);
     Head->Last = Tail;
     return Tail;
 }
@@ -193,14 +196,11 @@ ExpReleaseWaitChain(
         }
         else
         {
+            ASSERT(Previous->Next == Wake);
             Previous->Next = NULL;
             Previous->Last = Previous;
-            NewValue.Value = (ULONG_PTR)Head | EX_PUSH_LOCK_WAITING |
-                             EX_PUSH_LOCK_LOCK;
-            if (Head == Previous)
-            {
-                Head->Last = Previous;
-            }
+            Head->Last = Previous;
+            NewValue.Value = (ULONG_PTR)Head | EX_PUSH_LOCK_WAITING;
         }
 
         if (ExpChangePushlock(PushLock, NewValue.Ptr, OldValue.Ptr) !=
@@ -210,6 +210,7 @@ ExpReleaseWaitChain(
             {
                 Previous->Next = Wake;
                 Previous->Last = NULL;
+                Head->Last = Tail;
             }
 
             continue;
@@ -246,10 +247,18 @@ ExpLinkWaitBlock(
     {
         WaitBlock->Last = NULL;
         WaitBlock->Next = ExpPushLockChain(OldValue);
+        ASSERT(WaitBlock->Next != NULL);
         NewValue.Value = (ULONG_PTR)WaitBlock | EX_PUSH_LOCK_WAITING |
-                         (OldValue.Value & (EX_PUSH_LOCK_LOCK |
-                                            EX_PUSH_LOCK_WAKING |
-                                            EX_PUSH_LOCK_MULTIPLE_SHARED));
+                         (OldValue.Value & EX_PUSH_LOCK_WAKING);
+        if (KeepLocked)
+        {
+            NewValue.Value |= OldValue.Value & (EX_PUSH_LOCK_LOCK |
+                                                EX_PUSH_LOCK_MULTIPLE_SHARED);
+        }
+        else
+        {
+            ASSERT(!OldValue.MultipleShared);
+        }
     }
     else
     {
@@ -337,6 +346,8 @@ ExfAcquirePushLockExclusive(
             continue;
         }
 
+        ASSERT(OldValue.Locked);
+
         ExpSleepOnWaitBlock(&WaitBlock, NULL);
     }
 }
@@ -392,6 +403,13 @@ ExfAcquirePushLockShared(
         if (!ExpLinkWaitBlock(PushLock, &WaitBlock, OldValue, TRUE))
         {
             continue;
+        }
+
+        /* Queued behind waiters on a free lock that nobody is waking */
+        if (!OldValue.Locked && !OldValue.Waking)
+        {
+            ASSERT(OldValue.Waiting);
+            ExfTryToWakePushLock(PushLock);
         }
 
         ExpSleepOnWaitBlock(&WaitBlock, NULL);
@@ -539,7 +557,20 @@ ExfReleasePushLockShared(
             return;
         }
 
-        if (!OldValue.Waking)
+        /* The last shared owner gives the lock up before the waiters are told */
+        for (;;)
+        {
+            OldValue.Value = (ULONG_PTR)ReadPointerNoFence(&PushLock->Ptr);
+            NewValue.Value = OldValue.Value &
+                             ~(EX_PUSH_LOCK_LOCK | EX_PUSH_LOCK_MULTIPLE_SHARED);
+            if (ExpChangePushlock(PushLock, NewValue.Ptr, OldValue.Ptr) ==
+                OldValue.Ptr)
+            {
+                break;
+            }
+        }
+
+        if (!NewValue.Waking)
         {
             ExfTryToWakePushLock(PushLock);
         }
@@ -559,7 +590,16 @@ ExfReleasePushLock(
 
     ASSERT(OldValue.Locked);
 
-    if (!OldValue.Waiting && (OldValue.Shared != 0))
+    /* A waker may be rewriting the chain unless shared owners keep it out */
+    if (OldValue.Waiting)
+    {
+        if (OldValue.MultipleShared)
+        {
+            ExfReleasePushLockShared(PushLock);
+            return;
+        }
+    }
+    else if (OldValue.Shared != 0)
     {
         ExfReleasePushLockShared(PushLock);
         return;

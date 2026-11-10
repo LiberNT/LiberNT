@@ -162,6 +162,33 @@ IopCleanupAfterException(
 
 /* COMPLETION APC *************************************************************/
 
+static
+VOID
+NTAPI
+IopUserCompletion(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    IoFreeIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
+}
+
+static
+VOID
+NTAPI
+IopUserRundown(
+    _In_ PKAPC Apc)
+{
+    IoFreeIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
+}
+
 VOID
 NTAPI
 IopCompleteRequest(
@@ -178,7 +205,7 @@ IopCompleteRequest(
     BOOLEAN Is32Bit;
     PVOID Port = NULL;
     PVOID Key = NULL;
-    BOOLEAN SignaledEvent = FALSE;
+    BOOLEAN Deliver;
 
     UNREFERENCED_PARAMETER(NormalRoutine);
     UNREFERENCED_PARAMETER(NormalContext);
@@ -190,7 +217,17 @@ IopCompleteRequest(
 
     Is32Bit = IopIs32BitFileIo(FileObject, Irp->RequestorMode);
 
-    if (NT_SUCCESS(Irp->IoStatus.Status) &&
+    /*
+     * An error the driver gave straight back from its dispatch routine reaches
+     * the caller as the return value of the call and as nothing else: the
+     * status block is left as it was and nothing is signalled. An error on a
+     * request the driver had pended has no other way to be heard.
+     */
+    Deliver = (BOOLEAN)(!NT_ERROR(Irp->IoStatus.Status) || Irp->PendingReturned);
+
+    /* A warning such as STATUS_BUFFER_OVERFLOW still returns the bytes it reports; a volume to verify returned none */
+    if (!NT_ERROR(Irp->IoStatus.Status) &&
+        Irp->IoStatus.Status != STATUS_VERIFY_REQUIRED &&
         (Irp->Flags & (IRP_BUFFERED_IO | IRP_INPUT_OPERATION)) ==
             (IRP_BUFFERED_IO | IRP_INPUT_OPERATION))
     {
@@ -223,17 +260,11 @@ IopCompleteRequest(
         IoFreeMdl(Mdl);
     }
 
-    if (Irp->Tail.Overlay.AuxiliaryBuffer != NULL)
-    {
-        ExFreePool(Irp->Tail.Overlay.AuxiliaryBuffer);
-        Irp->Tail.Overlay.AuxiliaryBuffer = NULL;
-    }
-
     Status = Irp->IoStatus.Status;
 
     if (FileObject != NULL) FileObject->FinalStatus = Status;
 
-    if (Irp->UserIosb != NULL)
+    if (Deliver && Irp->UserIosb != NULL)
     {
         if (Irp->RequestorMode == KernelMode)
         {
@@ -253,7 +284,8 @@ IopCompleteRequest(
         }
     }
 
-    if (FileObject != NULL &&
+    if (Deliver &&
+        FileObject != NULL &&
         FileObject->CompletionContext != NULL &&
         Irp->Overlay.AsynchronousParameters.UserApcRoutine == NULL &&
         !(Irp->Flags & IRP_CREATE_OPERATION))
@@ -264,19 +296,21 @@ IopCompleteRequest(
 
     if (Irp->UserEvent != NULL)
     {
-        KeSetEvent(Irp->UserEvent, 0, FALSE);
-        SignaledEvent = TRUE;
+        if (Deliver) KeSetEvent(Irp->UserEvent, 0, FALSE);
 
-        if (FileObject != NULL &&
-            !(FileObject->Flags & FO_SYNCHRONOUS_IO))
+        /* An event named by the caller's handle was referenced; the I/O manager's own APIs wait on a stack event */
+        if (FileObject != NULL && !(Irp->Flags & IRP_SYNCHRONOUS_API))
         {
             ObDereferenceObject(Irp->UserEvent);
         }
     }
-    else if (FileObject != NULL && (FileObject->Flags & FO_SYNCHRONOUS_IO))
+
+    /* The file is the wait object of synchronous I/O and of I/O issued without an event */
+    if (Deliver &&
+        FileObject != NULL &&
+        ((FileObject->Flags & FO_SYNCHRONOUS_IO) || Irp->UserEvent == NULL))
     {
         KeSetEvent(&FileObject->Event, 0, FALSE);
-        SignaledEvent = TRUE;
     }
 
     if (Port != NULL)
@@ -296,26 +330,48 @@ IopCompleteRequest(
         }
     }
 
-    if (Irp->Overlay.AsynchronousParameters.UserApcRoutine != NULL)
-    {
-        *NormalRoutine =
-            (PKNORMAL_ROUTINE)Irp->Overlay.AsynchronousParameters.UserApcRoutine;
-        *NormalContext =
-            Irp->Overlay.AsynchronousParameters.UserApcContext;
-        *SystemArgument1 = Irp->UserIosb;
-        *SystemArgument2 = NULL;
-    }
-    else
-    {
-        *SystemArgument1 = NULL;
-        *SystemArgument2 = NULL;
-    }
-
-    UNREFERENCED_PARAMETER(SignaledEvent);
+    *SystemArgument1 = NULL;
+    *SystemArgument2 = NULL;
 
     if (FileObject != NULL) ObDereferenceObject(FileObject);
 
+    /* The caller's routine runs in user mode; the packet lives until it is delivered */
+    if (Deliver && Irp->Overlay.AsynchronousParameters.UserApcRoutine != NULL)
+    {
+        KeInitializeApc(&Irp->Tail.Apc,
+                        KeGetCurrentThread(),
+                        CurrentApcEnvironment,
+                        IopUserCompletion,
+                        IopUserRundown,
+                        (PKNORMAL_ROUTINE)Irp->Overlay.AsynchronousParameters.UserApcRoutine,
+                        UserMode,
+                        Irp->Overlay.AsynchronousParameters.UserApcContext);
+
+        if (KeInsertQueueApc(&Irp->Tail.Apc, Irp->UserIosb, NULL, IO_NO_INCREMENT)) return;
+    }
+
     IoFreeIrp(Irp);
+}
+
+/* Finishes in the requestor's context a packet whose driver did not pend it */
+VOID
+IopCompleteDeferredIrp(
+    _In_ PIRP Irp,
+    _In_opt_ PFILE_OBJECT FileObject)
+{
+    PKNORMAL_ROUTINE NormalRoutine = NULL;
+    PVOID NormalContext = NULL;
+    PVOID SystemArgument1 = FileObject;
+    PVOID SystemArgument2 = NULL;
+    KIRQL OldIrql;
+
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+    IopCompleteRequest(&Irp->Tail.Apc,
+                       &NormalRoutine,
+                       &NormalContext,
+                       &SystemArgument1,
+                       &SystemArgument2);
+    KeLowerIrql(OldIrql);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -446,6 +502,13 @@ IofCompleteRequest(
 
     FileObject = Irp->Tail.Overlay.OriginalFileObject;
 
+    /* The completion APC overlays the auxiliary buffer pointer */
+    if (Irp->Tail.Overlay.AuxiliaryBuffer != NULL)
+    {
+        ExFreePool(Irp->Tail.Overlay.AuxiliaryBuffer);
+        Irp->Tail.Overlay.AuxiliaryBuffer = NULL;
+    }
+
     if (Irp->Flags & IRP_DEFER_IO_COMPLETION && !Irp->PendingReturned) return;
 
     KeInitializeApc(&Irp->Tail.Apc,
@@ -492,6 +555,8 @@ IopPerformSynchronousRequest(
     if (Deferred) Irp->Flags |= IRP_DEFER_IO_COMPLETION;
 
     Status = IoCallDriver(DeviceObject, Irp);
+
+    if (Deferred && Status != STATUS_PENDING) IopCompleteDeferredIrp(Irp, FileObject);
 
     if (!SynchIo) return Status;
 

@@ -208,6 +208,15 @@ MmAccessFaultEx(
 
         Space = &MiSystem.SystemSpace;
         Process = NULL;
+
+        if (MmIsSessionAddress(Address))
+        {
+            Space = MiSessionSpaceOfProcess(PsGetCurrentProcess());
+            if (Space == NULL)
+                return STATUS_ACCESS_VIOLATION;
+            ASSERT(Space->IsSession && Space->IsSystem);
+            ASSERT((ULONG64)(ULONG_PTR)Address >= Space->LowestVa && (ULONG64)(ULONG_PTR)Address <= Space->HighestVa);
+        }
     }
     else
     {

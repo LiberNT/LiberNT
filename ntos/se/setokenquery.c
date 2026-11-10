@@ -102,6 +102,20 @@ SepRoomForHolders(
 }
 
 /*
+ * An answer may be built in one place and handed over in another, so every
+ * pointer in it is written as the address the spot will have once it is there.
+ */
+static
+PVOID
+SepPlaced(
+    _In_ PVOID Buffer,
+    _In_ ULONG_PTR Placed,
+    _In_ PVOID Spot)
+{
+    return (PVOID)(Placed + (ULONG_PTR)((PUCHAR)Spot - (PUCHAR)Buffer));
+}
+
+/*
  * Writes holders into the caller's own room, the headers where the caller
  * expects them and the holders after, each header pointing at its own.
  */
@@ -111,7 +125,9 @@ SepAnswerWithHolders(
     _Out_writes_(Count) PSID_AND_ATTRIBUTES Headers,
     _In_ ULONG Count,
     _In_reads_opt_(Count) PSID_AND_ATTRIBUTES Holders,
-    _In_ PUCHAR Bodies)
+    _In_ PUCHAR Bodies,
+    _In_ PVOID Buffer,
+    _In_ ULONG_PTR Placed)
 {
     ULONG Length;
     ULONG i;
@@ -128,7 +144,7 @@ SepAnswerWithHolders(
 
         Length = RtlLengthSid(Holders[i].Sid);
         RtlCopyMemory(Bodies, Holders[i].Sid, Length);
-        Headers[i].Sid = (PSID)Bodies;
+        Headers[i].Sid = SepPlaced(Buffer, Placed, Bodies);
         Bodies += Length;
     }
 
@@ -141,6 +157,7 @@ ULONG
 SepAnswerWithOneHolder(
     _Out_opt_ PVOID Buffer,
     _In_ ULONG Length,
+    _In_ ULONG_PTR Placed,
     _In_opt_ PSID Sid,
     _Out_ PNTSTATUS Status)
 {
@@ -161,8 +178,8 @@ SepAnswerWithOneHolder(
         return Room;
     }
 
-    *Named = (PSID)((PUCHAR)Buffer + sizeof(PSID));
-    RtlCopyMemory(*Named, Sid, RtlLengthSid(Sid));
+    RtlCopyMemory((PUCHAR)Buffer + sizeof(PSID), Sid, RtlLengthSid(Sid));
+    *Named = SepPlaced(Buffer, Placed, (PUCHAR)Buffer + sizeof(PSID));
 
     return Room;
 }
@@ -178,6 +195,7 @@ SepAnswerAboutToken(
     _In_ TOKEN_INFORMATION_CLASS Class,
     _Out_writes_bytes_opt_(Length) PVOID Buffer,
     _In_ ULONG Length,
+    _In_ ULONG_PTR Placed,
     _Out_ PULONG Needed)
 {
     NTSTATUS Status = STATUS_SUCCESS;
@@ -211,7 +229,7 @@ SepAnswerAboutToken(
             SepAnswerWithHolders(&Answer->User,
                                  1,
                                  Token->UserAndGroups,
-                                 (PUCHAR)Buffer + sizeof(TOKEN_USER));
+                                 (PUCHAR)Buffer + sizeof(TOKEN_USER), Buffer, Placed);
             break;
         }
 
@@ -232,7 +250,7 @@ SepAnswerAboutToken(
                                  Count,
                                  &Token->UserAndGroups[1],
                                  (PUCHAR)Answer->Groups +
-                                     Count * sizeof(SID_AND_ATTRIBUTES));
+                                     Count * sizeof(SID_AND_ATTRIBUTES), Buffer, Placed);
             break;
         }
 
@@ -253,7 +271,7 @@ SepAnswerAboutToken(
                                  Token->RestrictedSids,
                                  (PUCHAR)Answer->Groups +
                                      Token->RestrictedSidCount *
-                                         sizeof(SID_AND_ATTRIBUTES));
+                                         sizeof(SID_AND_ATTRIBUTES), Buffer, Placed);
             break;
         }
 
@@ -292,6 +310,7 @@ SepAnswerAboutToken(
             *Needed = SepAnswerWithOneHolder(
                 Buffer,
                 Length,
+                Placed,
                 Token->UserAndGroups[Token->DefaultOwnerIndex].Sid,
                 &Status);
             break;
@@ -299,6 +318,7 @@ SepAnswerAboutToken(
         case TokenPrimaryGroup:
             *Needed = SepAnswerWithOneHolder(Buffer,
                                              Length,
+                                             Placed,
                                              Token->PrimaryGroup,
                                              &Status);
             break;
@@ -309,6 +329,7 @@ SepAnswerAboutToken(
 
             *Needed = SepAnswerWithOneHolder(Buffer,
                                              Length,
+                                             Placed,
                                              (Box != NULL) ? Box->PackageSid : NULL,
                                              &Status);
             break;
@@ -349,7 +370,7 @@ SepAnswerAboutToken(
                                  1,
                                  &Token->UserAndGroups[i],
                                  (PUCHAR)Answer->Groups +
-                                     sizeof(SID_AND_ATTRIBUTES));
+                                     sizeof(SID_AND_ATTRIBUTES), Buffer, Placed);
             break;
         }
 
@@ -376,9 +397,12 @@ SepAnswerAboutToken(
 
             Answer->Label.Attributes =
                 Token->UserAndGroups[Token->IntegrityLevelIndex].Attributes;
-            Answer->Label.Sid = (PSID)((PUCHAR)Buffer +
-                                       sizeof(TOKEN_MANDATORY_LABEL));
-            RtlCopyMemory(Answer->Label.Sid, Label, RtlLengthSid(Label));
+            RtlCopyMemory((PUCHAR)Buffer + sizeof(TOKEN_MANDATORY_LABEL),
+                          Label,
+                          RtlLengthSid(Label));
+            Answer->Label.Sid = SepPlaced(Buffer,
+                                          Placed,
+                                          (PUCHAR)Buffer + sizeof(TOKEN_MANDATORY_LABEL));
             break;
         }
 
@@ -398,11 +422,12 @@ SepAnswerAboutToken(
                 break;
             }
 
-            Answer->DefaultDacl = (PACL)((PUCHAR)Buffer +
-                                         sizeof(TOKEN_DEFAULT_DACL));
-            RtlCopyMemory(Answer->DefaultDacl,
+            RtlCopyMemory((PUCHAR)Buffer + sizeof(TOKEN_DEFAULT_DACL),
                           Token->DefaultDacl,
                           Token->DefaultDacl->AclSize);
+            Answer->DefaultDacl = SepPlaced(Buffer,
+                                            Placed,
+                                            (PUCHAR)Buffer + sizeof(TOKEN_DEFAULT_DACL));
             break;
         }
 
@@ -410,6 +435,7 @@ SepAnswerAboutToken(
         {
             PTOKEN_GROUPS_AND_PRIVILEGES Answer = Buffer;
             ULONG Groups = Token->UserAndGroupCount - 1;
+            PSID_AND_ATTRIBUTES Headers;
             PUCHAR Bodies;
 
             Room = (ULONG)sizeof(TOKEN_GROUPS_AND_PRIVILEGES);
@@ -428,34 +454,36 @@ SepAnswerAboutToken(
             Bodies = (PUCHAR)Buffer + sizeof(TOKEN_GROUPS_AND_PRIVILEGES);
 
             Answer->SidCount = Groups;
-            Answer->Sids = (PSID_AND_ATTRIBUTES)Bodies;
+            Headers = (PSID_AND_ATTRIBUTES)Bodies;
+            Answer->Sids = SepPlaced(Buffer, Placed, Headers);
             Bodies += Groups * sizeof(SID_AND_ATTRIBUTES);
-            Bodies = SepAnswerWithHolders(Answer->Sids,
+            Bodies = SepAnswerWithHolders(Headers,
                                           Groups,
                                           &Token->UserAndGroups[1],
-                                          Bodies);
-            Answer->SidLength = (ULONG)(Bodies - (PUCHAR)Answer->Sids);
+                                          Bodies, Buffer, Placed);
+            Answer->SidLength = (ULONG)(Bodies - (PUCHAR)Headers);
 
             Answer->RestrictedSidCount = Token->RestrictedSidCount;
             if (Token->RestrictedSidCount != 0)
             {
-                Answer->RestrictedSids = (PSID_AND_ATTRIBUTES)Bodies;
+                Headers = (PSID_AND_ATTRIBUTES)Bodies;
+                Answer->RestrictedSids = SepPlaced(Buffer, Placed, Headers);
                 Bodies += Token->RestrictedSidCount * sizeof(SID_AND_ATTRIBUTES);
-                Bodies = SepAnswerWithHolders(Answer->RestrictedSids,
+                Bodies = SepAnswerWithHolders(Headers,
                                               Token->RestrictedSidCount,
                                               Token->RestrictedSids,
-                                              Bodies);
+                                              Bodies, Buffer, Placed);
                 Answer->RestrictedSidLength =
-                    (ULONG)(Bodies - (PUCHAR)Answer->RestrictedSids);
+                    (ULONG)(Bodies - (PUCHAR)Headers);
             }
 
             Answer->PrivilegeCount = Token->PrivilegeCount;
             if (Token->PrivilegeCount != 0)
             {
-                Answer->Privileges = (PLUID_AND_ATTRIBUTES)Bodies;
-                RtlCopyMemory(Answer->Privileges,
+                RtlCopyMemory(Bodies,
                               Token->Privileges,
                               Token->PrivilegeCount * sizeof(LUID_AND_ATTRIBUTES));
+                Answer->Privileges = SepPlaced(Buffer, Placed, Bodies);
                 Answer->PrivilegeLength =
                     Token->PrivilegeCount * (ULONG)sizeof(LUID_AND_ATTRIBUTES);
             }
@@ -586,10 +614,10 @@ SepAnswerAboutToken(
             }
 
             Answer->IsolationEnabled = TRUE;
-            Answer->IsolationPrefix = (PWSTR)((PUCHAR)Buffer + sizeof(*Answer));
-            RtlCopyMemory(Answer->IsolationPrefix,
+            RtlCopyMemory((PUCHAR)Buffer + sizeof(*Answer),
                           Token->BnoIsolationPrefix.Buffer,
                           Token->BnoIsolationPrefix.Length);
+            Answer->IsolationPrefix = SepPlaced(Buffer, Placed, (PUCHAR)Buffer + sizeof(*Answer));
             break;
         }
 
@@ -745,16 +773,40 @@ SeQueryInformationToken(
     PVOID Answer;
     ULONG Needed = 0;
     NTSTATUS Status;
+    PSID Label;
 
     PAGED_CODE();
 
     *TokenInformation = NULL;
+
+    /* A driver may ask for fewer things than the system call answers */
+    switch (TokenInformationClass)
+    {
+        case TokenUser:
+        case TokenGroups:
+        case TokenPrivileges:
+        case TokenOwner:
+        case TokenPrimaryGroup:
+        case TokenDefaultDacl:
+        case TokenSource:
+        case TokenType:
+        case TokenImpersonationLevel:
+        case TokenStatistics:
+        case TokenSessionId:
+        case TokenGroupsAndPrivileges:
+        case TokenIntegrityLevel:
+            break;
+
+        default:
+            return STATUS_INVALID_INFO_CLASS;
+    }
 
     SepAcquireTokenLockShared(Real);
 
     Status = SepAnswerAboutToken(Real,
                                  TokenInformationClass,
                                  NULL,
+                                 0,
                                  0,
                                  &Needed);
     if (Status != STATUS_BUFFER_TOO_SMALL && !NT_SUCCESS(Status))
@@ -774,6 +826,7 @@ SeQueryInformationToken(
                                  TokenInformationClass,
                                  Answer,
                                  Needed,
+                                 (ULONG_PTR)Answer,
                                  &Needed);
 
     SepReleaseTokenLock(Real);
@@ -782,6 +835,22 @@ SeQueryInformationToken(
     {
         ExFreePoolWithTag(Answer, TAG_SE);
         return Status;
+    }
+
+    /* The session and the integrity level are handed back as the value itself, in place of the pointer */
+    if (TokenInformationClass == TokenSessionId)
+    {
+        *TokenInformation = UlongToPtr(*(PULONG)Answer);
+        ExFreePoolWithTag(Answer, TAG_SE);
+        return STATUS_SUCCESS;
+    }
+
+    if (TokenInformationClass == TokenIntegrityLevel)
+    {
+        Label = ((PTOKEN_MANDATORY_LABEL)Answer)->Label.Sid;
+        *TokenInformation = UlongToPtr(*RtlSubAuthoritySid(Label, *RtlSubAuthorityCountSid(Label) - 1));
+        ExFreePoolWithTag(Answer, TAG_SE);
+        return STATUS_SUCCESS;
     }
 
     *TokenInformation = Answer;
@@ -861,6 +930,7 @@ NtQueryInformationToken(
                                  TokenInformationClass,
                                  Room,
                                  TokenInformationLength,
+                                 (ULONG_PTR)TokenInformation,
                                  &Needed);
 
     SepReleaseTokenLock(Token);

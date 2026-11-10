@@ -1051,7 +1051,7 @@ NTSTATUS
 NTAPI
 IopReassignSystemRoot(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock,
-    OUT PANSI_STRING NtBootPath
+    OUT PANSI_STRING NtDeviceName
 );
 
 CODE_SEG("INIT")
@@ -1395,6 +1395,10 @@ VOID
 PnpRootRetireDevice(
     _In_ PDEVICE_OBJECT DeviceObject);
 
+NTSTATUS
+PnpRootCreateInstance(
+    _In_ PCUNICODE_STRING InstancePath);
+
 VOID
 PnpRootInitializeDevExtension(VOID);
 
@@ -1469,15 +1473,6 @@ IopInitializeDriverModule(
     _Out_ PDRIVER_OBJECT *DriverObject,
     _Out_ NTSTATUS *DriverEntryStatus,
     _In_ BOOLEAN HoldPnpUnloadBarrier);
-
-NTSTATUS
-FASTCALL
-IopAttachFilterDrivers(
-    IN PDEVICE_NODE DeviceNode,
-    IN HANDLE EnumSubKey,
-    IN HANDLE ClassKey,
-    IN BOOLEAN Lower
-);
 
 VOID
 NTAPI
@@ -1662,14 +1657,6 @@ IoChangeFileObjectFilterContext(
     IN PFILE_OBJECT FileObject,
     IN PVOID FilterContext,
     IN BOOLEAN Define
-);
-
-VOID
-NTAPI
-IopDoNameTransmogrify(
-    IN PIRP Irp,
-    IN PFILE_OBJECT FileObject,
-    IN PREPARSE_DATA_BUFFER DataBuffer
 );
 
 NTSTATUS

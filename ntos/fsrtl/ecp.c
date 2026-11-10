@@ -301,11 +301,7 @@ FsRtlAllocateExtraCreateParameter(
 
     if (PoolType == NonPagedPool) Header->Flags |= FSRTL_ECP_FLAG_NONPAGED;
 
-    /* TODO: no page says who marks an ECP as coming from user mode, so the mode of whoever allocated it is what the file system is told */
-    if (ExGetPreviousMode() == UserMode)
-    {
-        Header->Flags |= FSRTL_ECP_FLAG_USER_MODE;
-    }
+    /* TODO: nothing marks an ECP as coming from user mode, as no create carries a list in from there */
 
     *EcpContext = FsRtlpEcpContextOf(Header);
 
@@ -360,10 +356,6 @@ FsRtlAllocateExtraCreateParameterFromLookasideList(
         Header->Flags |= FSRTL_ECP_FLAG_NONPAGED;
     }
 
-    if (ExGetPreviousMode() == UserMode)
-    {
-        Header->Flags |= FSRTL_ECP_FLAG_USER_MODE;
-    }
 
     *EcpContext = FsRtlpEcpContextOf(Header);
 
@@ -449,9 +441,10 @@ FsRtlInsertExtraCreateParameter(
         return STATUS_INVALID_PARAMETER;
     }
 
+    /* Two parameters of one kind in one list is the caller's mistake */
     if (FsRtlpFindEcp(EcpList, &Header->EcpType) != NULL)
     {
-        return STATUS_OBJECT_NAME_COLLISION;
+        return STATUS_INVALID_PARAMETER;
     }
 
     InsertTailList(&EcpList->EcpList, &Header->Links);

@@ -128,6 +128,9 @@ PsSetCreateProcessNotifyRoutine(
 {
     PAGED_CODE();
 
+    /* Nothing is a routine nobody may register */
+    if (!Remove && NotifyRoutine == NULL) return STATUS_ACCESS_DENIED;
+
     return PspChangeNotifyRoutine(PspProcessNotifyRoutine,
                                   PSP_MAX_CREATE_PROCESS_NOTIFY,
                                   &PspProcessNotifyRoutineCount,
@@ -147,6 +150,8 @@ PsSetCreateProcessNotifyRoutineEx(
     _In_ BOOLEAN Remove)
 {
     PAGED_CODE();
+
+    if (!Remove && NotifyRoutine == NULL) return STATUS_ACCESS_DENIED;
 
     /* TODO: refuse an unsigned caller with STATUS_ACCESS_DENIED once image
      * signing is enforced on the kernel's own callers */

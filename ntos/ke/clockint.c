@@ -57,6 +57,14 @@ PKPRCB KiClockOwnerPrcb;
    in cycles rather than ticks. */
 ULONG KiCyclesPerClockQuantum = 1;
 
+/* The clock periods the cycle counter is timed over before a turn is given its real length */
+#define KI_QUANTUM_CALIBRATION_PERIODS 32
+
+static ULONG64 KiCalibrationCycles;
+static ULONGLONG KiCalibrationTime;
+static BOOLEAN KiCalibrationStarted;
+static BOOLEAN KiQuantumCalibrated;
+
 /* PRIVATE DATA ***************************************************************/
 
 /*
@@ -70,6 +78,7 @@ static volatile KSYSTEM_TIME KiSystemTimeValue;
 /* How much interrupt time has been left out of the bias-free reading, which is
    what a caller measuring elapsed time while the machine slept has to exclude. */
 static ULONGLONG KiInterruptTimeBias;
+static volatile LONG64 KiCounterInterruptBias = -1;
 
 /* Interrupt time stops moving while the debugger has the machine. */
 static BOOLEAN KiInterruptTimeFrozen;
@@ -223,6 +232,40 @@ KeQueryTickCount(
 }
 
 /*
+ * How far into the current clock period the counter says the time is. The
+ * counter runs from when the processor was reset and the interrupt time from
+ * when the clock started, so the gap between them is taken once and kept; the
+ * answer is held inside one period so that a time read from it is never behind
+ * the clock nor ahead of the next tick.
+ */
+static
+ULONGLONG
+KiCounterOffsetInPeriod(
+    _In_ ULONGLONG Interrupt,
+    _In_ LARGE_INTEGER Counter,
+    _In_ LARGE_INTEGER Frequency)
+{
+    ULONGLONG Elapsed;
+    LONG64 Bias;
+
+    Elapsed = (ULONGLONG)Counter.QuadPart * 10000000ULL /
+              (ULONGLONG)Frequency.QuadPart;
+
+    Bias = KiCounterInterruptBias;
+    if (Bias < 0)
+    {
+        Bias = (Elapsed > Interrupt) ? (LONG64)(Elapsed - Interrupt) : 0;
+        InterlockedCompareExchange64(&KiCounterInterruptBias, Bias, -1);
+        Bias = KiCounterInterruptBias;
+    }
+
+    Elapsed -= min(Elapsed, (ULONGLONG)Bias);
+    if (Elapsed <= Interrupt) return 0;
+
+    return min(Elapsed - Interrupt, (ULONGLONG)KeMaximumIncrement);
+}
+
+/*
  * The system time, to the resolution the clock actually has rather than to the
  * resolution of the last tick. Where the platform offers a counter finer than
  * the clock, the time between ticks is interpolated from it.
@@ -233,7 +276,7 @@ KeQuerySystemTimePrecise(
     _Out_ PLARGE_INTEGER CurrentTime)
 {
     LARGE_INTEGER Counter, Frequency;
-    ULONGLONG Interrupt, System, Elapsed;
+    ULONGLONG Interrupt, System;
 
     /*
      * Both clocks are read, and then the counter, so that the interpolation is
@@ -256,15 +299,7 @@ KeQuerySystemTimePrecise(
         return;
     }
 
-    /*
-     * The counter reading is turned into hundreds of nanoseconds and the part
-     * of it that the last tick already accounted for is dropped.
-     */
-    Elapsed = (ULONGLONG)Counter.QuadPart * 10000000ULL /
-              (ULONGLONG)Frequency.QuadPart;
-
-    if (Elapsed > Interrupt)
-        System += (Elapsed - Interrupt);
+    System += KiCounterOffsetInPeriod(Interrupt, Counter, Frequency);
 
     CurrentTime->QuadPart = (LONGLONG)System;
 }
@@ -281,7 +316,7 @@ KiQueryInterruptTimePrecise(
     _In_ BOOLEAN Unbiased)
 {
     LARGE_INTEGER Counter, Frequency;
-    ULONGLONG Interrupt, Elapsed;
+    ULONGLONG Interrupt;
 
     for (;;)
     {
@@ -297,11 +332,7 @@ KiQueryInterruptTimePrecise(
 
     if ((Frequency.QuadPart != 0) && !KiInterruptTimeFrozen)
     {
-        Elapsed = (ULONGLONG)Counter.QuadPart * 10000000ULL /
-                  (ULONGLONG)Frequency.QuadPart;
-
-        if (Elapsed > Interrupt)
-            Interrupt = Elapsed;
+        Interrupt += KiCounterOffsetInPeriod(Interrupt, Counter, Frequency);
     }
 
     if (Unbiased && (Interrupt > KiInterruptTimeBias))
@@ -381,6 +412,59 @@ KiUpdateSharedTime(
 }
 
 /*
+ * A counter the processor reads for itself where there is one; otherwise the
+ * platform's performance counter, which is slower but is the only monotonic
+ * reading available. It is the counter a thread's turn is charged in.
+ */
+static
+ULONG64
+KiReadCycleCounter(VOID)
+{
+#ifdef ReadTimeStampCounter
+    return ReadTimeStampCounter();
+#else
+    return (ULONG64)KeQueryPerformanceCounter(NULL).QuadPart;
+#endif
+}
+
+/*
+ * Times the cycle counter against the clock, once, so that a quantum unit is
+ * the third of a clock period it is defined as whatever the counter's rate.
+ */
+static
+VOID
+KiCalibrateCycleQuantum(
+    _In_ ULONGLONG InterruptTime)
+{
+    ULONG64 Cycles;
+    ULONGLONG Elapsed, PerUnit;
+
+    if (KiQuantumCalibrated)
+        return;
+
+    Cycles = KiReadCycleCounter();
+
+    if (!KiCalibrationStarted || (Cycles <= KiCalibrationCycles))
+    {
+        KiCalibrationCycles = Cycles;
+        KiCalibrationTime = InterruptTime;
+        KiCalibrationStarted = TRUE;
+        return;
+    }
+
+    Elapsed = InterruptTime - KiCalibrationTime;
+    if (Elapsed < (ULONGLONG)KI_QUANTUM_CALIBRATION_PERIODS * KeMaximumIncrement)
+        return;
+
+    PerUnit = ((Cycles - KiCalibrationCycles) / Elapsed) * KeMaximumIncrement +
+              (((Cycles - KiCalibrationCycles) % Elapsed) * KeMaximumIncrement) / Elapsed;
+    PerUnit /= CLOCK_QUANTUM_DECREMENT;
+
+    KiCyclesPerClockQuantum = (ULONG)min(max(PerUnit, 1ULL), (ULONGLONG)MAXULONG);
+    KiQuantumCalibrated = TRUE;
+}
+
+/*
  * The clock tick. Every processor arrives here from its own clock interrupt,
  * charges the period to whatever it was doing, and the one that owns the clock
  * also moves the time on and looks for timers that have come due.
@@ -429,6 +513,8 @@ KeUpdateSystemTime(
     if (KeMaximumIncrement == 0)
         return;
 
+    KiCalibrateCycleQuantum(InterruptTime);
+
     /*
      * One bucket of the timer table covers one default-length period, so the
      * clock only has to look at the buckets it has moved past since last time.
@@ -447,9 +533,13 @@ KeUpdateSystemTime(
         }
     }
 
+    /*
+     * The current bucket can still hold timers due later in this period, so the
+     * hand stays on it and the next tick looks at it again.
+     */
     if (!Due)
     {
-        KiTimerScanHand = (Hand + 1) & (TIMER_TABLE_SIZE - 1);
+        KiTimerScanHand = Hand;
         return;
     }
 
@@ -464,7 +554,7 @@ KeUpdateSystemTime(
                          UlongToPtr(KiTimerScanHand),
                          UlongToPtr(Span)))
     {
-        KiTimerScanHand = (Hand + 1) & (TIMER_TABLE_SIZE - 1);
+        KiTimerScanHand = Hand;
     }
 }
 
@@ -515,6 +605,16 @@ KiUpdateRunTime(
             Process->KernelTime += Ticks;
     }
 
+    /* DPCs queued here without an interrupt of their own are drained on the tick */
+    if ((Prcb->DpcData[DPC_NORMAL].DpcQueueDepth != 0) &&
+        !Prcb->DpcRoutineActive &&
+        !Prcb->DpcInterruptRequested)
+    {
+        /* TODO: adapt MaximumDpcQueueDepth to IdealDpcRate and AdjustDpcThreshold */
+        Prcb->DpcInterruptRequested = TRUE;
+        HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+    }
+
     /* The idle thread has no turn to use up */
     if (Thread == Prcb->IdleThread)
         return;
@@ -529,9 +629,13 @@ KiUpdateRunTime(
         if (!KiDecrementThreadQuantum(Thread, CLOCK_QUANTUM_DECREMENT * Ticks))
             return;
     }
-    else if (!KiIsThreadQuantumExpired(Thread))
+    else
     {
-        return;
+        /* A turn in progress is otherwise only charged at the next switch */
+        KiChargeThreadCycleTime(Prcb, Thread);
+
+        if (!KiIsThreadQuantumExpired(Thread))
+            return;
     }
 
     /* Asking for it rather than doing it here: this is above the dispatcher */
@@ -565,16 +669,7 @@ KiChargeThreadCycleTime(
     ULONG64 Cycles;
     ULONG64 Charge;
 
-    /*
-     * A counter the processor reads for itself where there is one; otherwise
-     * the platform's performance counter, which is slower but is the only
-     * monotonic reading available.
-     */
-#ifdef ReadTimeStampCounter
-    Cycles = ReadTimeStampCounter();
-#else
-    Cycles = (ULONG64)KeQueryPerformanceCounter(NULL).QuadPart;
-#endif
+    Cycles = KiReadCycleCounter();
 
     if (Cycles <= Prcb->StartCycles)
     {
@@ -587,6 +682,9 @@ KiChargeThreadCycleTime(
 
     Thread->CycleTime += Charge;
     Prcb->CycleTime += Charge;
+
+    if (Thread->ApcState.Process != NULL)
+        InterlockedExchangeAdd64((PLONG64)&Thread->ApcState.Process->CycleTime, (LONG64)Charge);
 
     if (SmpDbgEnabled)
         SmpDbgCycleCharge(Prcb->Number, Charge, FALSE);

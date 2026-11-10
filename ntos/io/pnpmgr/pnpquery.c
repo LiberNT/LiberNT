@@ -43,6 +43,21 @@ IopInvalidDeviceRequest(
     return STATUS_INVALID_DEVICE_REQUEST;
 }
 
+static
+NTSTATUS
+NTAPI
+IopSynchronousCallComplete(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+
+    KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
 NTSTATUS
 IopSynchronousCall(
     IN PDEVICE_OBJECT DeviceObject,
@@ -58,6 +73,9 @@ IopSynchronousCall(
 
     PAGED_CODE();
 
+    /* Plug and Play requests are dispatched at PASSIVE_LEVEL */
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
     TopDevice = IoGetAttachedDeviceReference(DeviceObject);
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
@@ -72,7 +90,6 @@ IopSynchronousCall(
     Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
     Irp->IoStatus.Information = 0;
     Irp->UserIosb = &IoStatusBlock;
-    Irp->UserEvent = &Event;
     Irp->Flags = IRP_SYNCHRONOUS_API;
     Irp->RequestorMode = KernelMode;
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
@@ -84,18 +101,38 @@ IopSynchronousCall(
     StackPtr->MajorFunction = IRP_MJ_PNP;
     StackPtr->DeviceObject = TopDevice;
 
+    /*
+     * The packet is finished by this routine rather than by a completion APC,
+     * which a caller with APCs held off would only get after returning.
+     */
+    IoSetCompletionRoutine(Irp, IopSynchronousCallComplete, &Event, TRUE, TRUE, TRUE);
+
     Status = IoCallDriver(TopDevice, Irp);
     if (Status == STATUS_PENDING)
     {
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
-        Status = IoStatusBlock.Status;
+    }
+    else if (KeReadStateEvent(&Event) == 0)
+    {
+        /* The packet still belongs to a driver that answered without completing it */
+        DPRINT1("PnP: %wZ answered minor %x with %lx without completing the request\n",
+                &TopDevice->DriverObject->DriverName,
+                IoStackLocation->MinorFunction,
+                Status);
+        ASSERT(KeReadStateEvent(&Event) != 0);
+
+        if (Information != NULL) *Information = NULL;
+        ObDereferenceObject(TopDevice);
+        return Status;
     }
 
+    Status = Irp->IoStatus.Status;
     if (Information != NULL)
     {
-        *Information = (PVOID)IoStatusBlock.Information;
+        *Information = (PVOID)Irp->IoStatus.Information;
     }
 
+    IoFreeIrp(Irp);
     ObDereferenceObject(TopDevice);
 
     return Status;
@@ -149,7 +186,7 @@ PiIrpStartDevice(
 
     PAGED_CODE();
 
-    ASSERT(DeviceNode->State == DeviceNodeResourcesAssigned);
+    ASSERT(DeviceNode->State == DeviceNodeStartPending);
 
     RtlZeroMemory(&StackLocation, sizeof(StackLocation));
 
@@ -422,6 +459,7 @@ PiQueryRemoveDevice(
     _Out_ PPI_QUERY_REMOVE_DATA RemoveData)
 {
     IO_STACK_LOCATION StackLocation;
+    PDEVICE_NODE DeviceNode;
     PVOID Information = NULL;
     NTSTATUS Status;
 

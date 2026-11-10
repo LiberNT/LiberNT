@@ -400,10 +400,12 @@ KiDeliverApc(
     PKNORMAL_ROUTINE NormalRoutine;
     PVOID NormalContext, SystemArgument1, SystemArgument2;
 
-    ASSERT(Thread->ApcState.KernelApcPending ||
-           !IsListEmpty(&State->ApcListHead[KernelMode]) ||
-           (DeliveryMode == UserMode));
+    /* The interrupt may arrive after another path already ran the APCs it was asked for */
     ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
+    /* A guarded region holds back every APC; leaving it delivers what is queued */
+    if (Thread->SpecialApcDisable != 0)
+        return;
 
     /*
      * Say the pending kernel APCs are being taken care of before looking at
@@ -550,8 +552,7 @@ KeAreApcsDisabled(VOID)
 {
     PKTHREAD Thread = KeGetCurrentThread();
 
-    return (Thread->CombinedApcDisable != 0) ||
-           (KeGetCurrentIrql() >= APC_LEVEL);
+    return (Thread->CombinedApcDisable != 0);
 }
 
 /*

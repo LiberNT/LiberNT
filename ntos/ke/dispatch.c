@@ -237,6 +237,7 @@ KiExitDispatcher(
     PKTHREAD Thread, NextThread;
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(((ULONG_PTR)Prcb->LockQueue[LockQueueDispatcherLock].Lock & KX_LOCK_QUEUE_OWNER) == 0);
 
     KiCheckDeferredReadyList(Prcb);
 
@@ -286,7 +287,12 @@ KiExitDispatcher(
     Thread->NextProcessor = Prcb->Number;
     KxQueueReadyThread(Thread, Prcb);
 
-    KiSwapContext(OldIrql, Thread);
+    if (KiSwapContext(OldIrql, Thread))
+    {
+        ASSERT(OldIrql == PASSIVE_LEVEL);
+        KeLowerIrql(APC_LEVEL);
+        KiDeliverApc(KernelMode, NULL, NULL);
+    }
 
     KeLowerIrql(OldIrql);
 }

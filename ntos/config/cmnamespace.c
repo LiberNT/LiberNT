@@ -294,6 +294,9 @@ CmpDoCreate(
     HSTORAGE_TYPE StorageType;
     PCM_KEY_NODE ParentNode;
     PCM_KEY_NODE Node;
+    HSTORAGE_TYPE CellStorage;
+    PVOID Transaction;
+    PVOID Conflict;
     HCELL_INDEX NewCell;
     HCELL_INDEX ClassCell = HCELL_NIL;
     PCELL_DATA ClassData;
@@ -305,13 +308,35 @@ CmpDoCreate(
 
     if (Hive->ReadOnly) return STATUS_ACCESS_DENIED;
 
+    Transaction = Context->EffectiveTransaction;
+
+    /* A key another transaction is taking away cannot be made again until that is settled */
+    Status = CmpTransCheckCreate(ParentKcb, Transaction, &Conflict);
+    if (Conflict != NULL)
+    {
+        CmpTransResolveConflict(Conflict);
+        Status = STATUS_SUCCESS;
+    }
+
+    if (!NT_SUCCESS(Status)) return Status;
+
     StorageType = (Context->CreateOptions & REG_OPTION_VOLATILE) ? Volatile
                                                                  : Stable;
 
-    if (HvGetCellType(Cell) == Volatile && StorageType == Stable)
+    StorageType = CmpTransParentStorage(ParentKcb, Transaction, StorageType);
+
+    if (HvGetCellType(Cell) == Volatile && StorageType == Stable &&
+        CmpTransParentStorage(ParentKcb, Transaction, Volatile) != Stable)
     {
         return STATUS_CHILD_MUST_BE_VOLATILE;
     }
+
+    /*
+     * Until the transaction commits the key is only this transaction's, so it
+     * is made in volatile storage: the commit copies it into the storage the
+     * caller asked for and the volatile one goes.
+     */
+    CellStorage = (Transaction != NULL) ? Volatile : StorageType;
 
     if (Context->CreateOptions & REG_OPTION_CREATE_LINK)
     {
@@ -339,7 +364,7 @@ CmpDoCreate(
 
     NewCell = HvAllocateCell(Hive,
                              FIELD_OFFSET(CM_KEY_NODE, Name) + NameSize,
-                             StorageType,
+                             CellStorage,
                              Cell);
     if (NewCell == HCELL_NIL)
     {
@@ -375,7 +400,7 @@ CmpDoCreate(
     {
         ClassCell = HvAllocateCell(Hive,
                                    Context->Class.Length,
-                                   StorageType,
+                                   CellStorage,
                                    NewCell);
         if (ClassCell == HCELL_NIL)
         {
@@ -414,7 +439,8 @@ CmpDoCreate(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    if (NameSize > ParentNode->MaxNameLen) ParentNode->MaxNameLen = NameSize;
+    /* The parent records the longest child name as its Unicode size, whatever the child stores */
+    if (Name->Length > ParentNode->MaxNameLen) ParentNode->MaxNameLen = Name->Length;
     if (Context->Class.Length > ParentNode->MaxClassLen)
     {
         ParentNode->MaxClassLen = Context->Class.Length;
@@ -445,6 +471,19 @@ CmpDoCreate(
         if (ClassCell != HCELL_NIL) HvFreeCell(Hive, ClassCell);
         HvFreeCell(Hive, NewCell);
         return Status;
+    }
+
+    if (Transaction != NULL)
+    {
+        Status = CmpTransAddKey(Kcb, Transaction, StorageType);
+        if (!NT_SUCCESS(Status))
+        {
+            CmpDereferenceKeyControlBlock(Kcb);
+            CmpRemoveSubKey(Hive, Cell, NewCell);
+            if (ClassCell != HCELL_NIL) HvFreeCell(Hive, ClassCell);
+            HvFreeCell(Hive, NewCell);
+            return Status;
+        }
     }
 
     Status = CmpCreateKeyBody(Kcb, AccessMode, Context, Object);
@@ -483,6 +522,7 @@ CmpCreateLinkNode(
     PCM_KEY_NODE Node;
     PCM_KEY_NODE RootNode;
     HCELL_INDEX LinkCell;
+    BOOLEAN Unsecured;
     NTSTATUS Status;
     USHORT NameSize;
 
@@ -556,7 +596,7 @@ CmpCreateLinkNode(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    if (NameSize > ParentNode->MaxNameLen) ParentNode->MaxNameLen = NameSize;
+    if (Name.Length > ParentNode->MaxNameLen) ParentNode->MaxNameLen = Name.Length;
     KeQuerySystemTime(&ParentNode->LastWriteTime);
     HvReleaseCell(Hive, Cell);
 
@@ -568,6 +608,9 @@ CmpCreateLinkNode(
         HvFreeCell(Hive, LinkCell);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
+
+    /* A hive that comes with its own root descriptor keeps it; only a root that has none is given one */
+    Unsecured = (BOOLEAN)(RootNode->Security == HCELL_NIL);
 
     if (HvMarkCellDirty(Context->ChildHive.KeyHive,
                         Context->ChildHive.KeyCell,
@@ -597,7 +640,8 @@ CmpCreateLinkNode(
 
     if (!NT_SUCCESS(Status)) return Status;
 
-    if (AccessState != NULL && AccessState->SecurityDescriptor != NULL)
+    if (Unsecured &&
+        AccessState != NULL && AccessState->SecurityDescriptor != NULL)
     {
         CmpAssignSecurityDescriptor(Kcb, AccessState->SecurityDescriptor);
     }
@@ -613,9 +657,9 @@ CmpCreateLinkNode(
  * hive, every key passed through gets a control block, and a link met on the
  * way sends the whole lookup back to the object manager with a new name.
  */
+static
 NTSTATUS
-NTAPI
-CmpParseKeyEx(
+CmpParseKeyWorker(
     _In_ PVOID ParseObject,
     _In_ PVOID ObjectType,
     _Inout_ PACCESS_STATE AccessState,
@@ -639,6 +683,8 @@ CmpParseKeyEx(
     HCELL_INDEX ChildCell;
     HCELL_INDEX Cell;
     PHHIVE Hive;
+    PVOID Transaction;
+    BOOLEAN Hidden = FALSE;
     BOOLEAN Create;
     BOOLEAN OpenLink;
     BOOLEAN Last;
@@ -653,6 +699,16 @@ CmpParseKeyEx(
     if (ParseKey->Type != CM_KEY_BODY_TYPE) return STATUS_OBJECT_TYPE_MISMATCH;
 
     Create = (ParseContext != NULL) && ParseContext->CreateOperation;
+
+    /* A key opened under a transaction hands that transaction to what is opened through it */
+    if (ParseContext != NULL && ParseContext->Transaction == NULL)
+    {
+        ParseContext->EffectiveTransaction =
+            (PVOID)((ULONG_PTR)ParseKey->Trans.TransPtr & ~(ULONG_PTR)1);
+    }
+
+    Transaction = (ParseContext != NULL) ? ParseContext->EffectiveTransaction
+                                         : NULL;
 
     if (Create)
     {
@@ -726,11 +782,21 @@ CmpParseKeyEx(
             ChildCell = HCELL_NIL;
         }
 
+        /* A key another transaction made, or one this transaction took away, is not there */
+        Hidden = FALSE;
+        if (ChildCell != HCELL_NIL &&
+            !CmpTransIsCellVisible(Hive, ChildCell, Transaction))
+        {
+            ChildCell = HCELL_NIL;
+            Hidden = TRUE;
+        }
+
         if (ChildCell == HCELL_NIL)
         {
             HvReleaseCell(Hive, Cell);
 
-            if (!Last || !Create)
+            /* The name a transaction holds cannot be taken by anyone else, and asking does not settle that transaction */
+            if (!Last || !Create || Hidden)
             {
                 Status = STATUS_OBJECT_NAME_NOT_FOUND;
                 break;
@@ -848,6 +914,135 @@ CmpParseKeyEx(
 
     if (!NT_SUCCESS(Status) && Status != STATUS_REPARSE) *Object = NULL;
     return Status;
+}
+
+/*
+ * Every look-up for a key, whether it ends in an open or in a new key, is told
+ * to the registry filters before and after it happens. A filter may refuse the
+ * call, or answer it itself with a key of its own choosing.
+ */
+NTSTATUS
+NTAPI
+CmpParseKeyEx(
+    _In_ PVOID ParseObject,
+    _In_ PVOID ObjectType,
+    _Inout_ PACCESS_STATE AccessState,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_ ULONG Attributes,
+    _Inout_ PUNICODE_STRING CompleteName,
+    _Inout_ PUNICODE_STRING RemainingName,
+    _Inout_opt_ PVOID Context,
+    _In_opt_ PSECURITY_QUALITY_OF_SERVICE SecurityQos,
+    _In_opt_ POB_EXTENDED_PARSE_PARAMETERS ExtendedParameters,
+    _Out_ PVOID *Object)
+{
+    REG_CREATE_KEY_INFORMATION_V1 Information;
+    PCM_PARSE_CONTEXT ParseContext = Context;
+    UNICODE_STRING Relative = *RemainingName;
+    CMP_CALLBACK_CALL Call;
+    PVOID ResultObject = NULL;
+    ULONG Disposition = REG_OPENED_EXISTING_KEY;
+    BOOLEAN Create;
+    NTSTATUS Status;
+    NTSTATUS Final;
+
+    PAGED_CODE();
+
+    *Object = NULL;
+
+    Create = (ParseContext != NULL) && ParseContext->CreateOperation;
+
+    if (Relative.Length != 0 && Relative.Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
+    {
+        Relative.Buffer++;
+        Relative.Length -= sizeof(WCHAR);
+        Relative.MaximumLength = Relative.Length;
+    }
+
+    RtlZeroMemory(&Information, sizeof(Information));
+
+    Information.CompleteName = CompleteName;
+    Information.RootObject = ParseObject;
+    Information.ObjectType = ObjectType;
+    if (ParseContext != NULL) Information.Class = &ParseContext->Class;
+    Information.Options = (ParseContext != NULL) ? ParseContext->CreateOptions : 0;
+    Information.SecurityQualityOfService = SecurityQos;
+    Information.Disposition = &Disposition;
+    Information.ResultObject = &ResultObject;
+    Information.Transaction = (ParseContext != NULL) ? ParseContext->Transaction : NULL;
+    Information.Version = 1;
+    Information.RemainingName = &Relative;
+    Information.Attributes = Attributes;
+    Information.CheckAccessMode = AccessMode;
+
+    /* TODO: the note a filter left on the root key is not reported as RootObjectContext */
+
+    if (AccessState != NULL)
+    {
+        Information.SecurityDescriptor = AccessState->SecurityDescriptor;
+        Information.DesiredAccess = AccessState->RemainingDesiredAccess |
+                                    AccessState->PreviouslyGrantedAccess;
+    }
+
+    if (CmpPreCallbacks(&Call,
+                        Create ? RegNtPreCreateKeyEx : RegNtPreOpenKeyEx,
+                        Create ? RegNtPostCreateKeyEx : RegNtPostOpenKeyEx,
+                        &Information,
+                        &Information.CallContext,
+                        NULL,
+                        NULL,
+                        &ResultObject,
+                        &Status))
+    {
+        Status = CmpParseKeyWorker(ParseObject,
+                                   ObjectType,
+                                   AccessState,
+                                   AccessMode,
+                                   Attributes,
+                                   CompleteName,
+                                   RemainingName,
+                                   Context,
+                                   SecurityQos,
+                                   ExtendedParameters,
+                                   Object);
+
+        if (NT_SUCCESS(Status) && Status != STATUS_REPARSE)
+        {
+            ResultObject = *Object;
+            if (ParseContext != NULL) Disposition = ParseContext->Disposition;
+        }
+    }
+
+    Final = CmpPostCallbacks(&Call, Status);
+
+    /* A filter has made the call end otherwise than the registry did */
+    if (!NT_SUCCESS(Final) || Final == STATUS_REPARSE)
+    {
+        if (*Object != NULL && Final != Status)
+        {
+            ObDereferenceObject(*Object);
+            *Object = NULL;
+        }
+
+        return Final;
+    }
+
+    if (*Object != NULL) return Final;
+
+    /* The key a filter answered with takes the place of the one the walk would have found */
+    if (ResultObject == NULL) return Final;
+
+    *Object = ResultObject;
+
+    if (ParseContext != NULL) ParseContext->Disposition = Disposition;
+
+    if (AccessState != NULL && Information.GrantedAccess != 0)
+    {
+        AccessState->PreviouslyGrantedAccess |= Information.GrantedAccess;
+        AccessState->RemainingDesiredAccess = 0;
+    }
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS

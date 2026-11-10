@@ -6,6 +6,7 @@
  */
 
 #include <ntoskrnl.h>
+#include "fsrtlp.h"
 #define NDEBUG
 #include <debug.h>
 
@@ -25,8 +26,11 @@ FsRtlCreateSectionForDataScan(
     _In_ ULONG AllocationAttributes,
     _In_ ULONG Flags)
 {
+    FILE_STANDARD_INFORMATION Information;
     LARGE_INTEGER FileSize;
     LARGE_INTEGER SectionSize;
+    PDEVICE_OBJECT DeviceObject;
+    ULONG HandleAttributes = 0;
     PVOID Section;
     HANDLE Handle;
     NTSTATUS Status;
@@ -42,32 +46,58 @@ FsRtlCreateSectionForDataScan(
     *SectionHandle = NULL;
     *SectionObject = NULL;
 
+    /* A scanner reads, and may write back what it repaired; nothing else is a scan */
+    if ((SectionPageProtection != PAGE_READONLY) &&
+        (SectionPageProtection != PAGE_READWRITE))
+    {
+        return STATUS_INVALID_PARAMETER_8;
+    }
+
+    if ((AllocationAttributes & ~(ULONG)SEC_FILE) != SEC_COMMIT)
+    {
+        return STATUS_INVALID_PARAMETER_9;
+    }
+
+    DeviceObject = IoGetRelatedDeviceObject(FileObject);
+    if (DeviceObject == NULL) return STATUS_INVALID_DEVICE_REQUEST;
+
+    Status = FsRtlpQueryStandardInformation(FileObject,
+                                            DeviceObject,
+                                            &Information);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Information.Directory) return STATUS_FILE_IS_A_DIRECTORY;
+
     if (FileObject->SectionObjectPointer == NULL)
     {
         return STATUS_INVALID_DEVICE_REQUEST;
     }
 
-    Status = FsRtlGetFileSize(FileObject, &FileSize);
-    if (!NT_SUCCESS(Status)) return Status;
+    FileSize = Information.EndOfFile;
 
     if (FileSize.QuadPart == 0) return STATUS_END_OF_FILE;
 
     SectionSize = (MaximumSize != NULL) ? *MaximumSize : FileSize;
 
-    /* TODO: Mm does not yet offer a section create that skips the file system's section synchronisation, so a scanner called from a create callback can still recurse into the file system */
-    Status = MmCreateSection(&Section,
-                             DesiredAccess,
-                             ObjectAttributes,
-                             &SectionSize,
-                             SectionPageProtection,
-                             AllocationAttributes,
-                             NULL,
-                             FileObject);
+    /* TODO: the file system's section synchronisation is still taken, so a scanner called from a create callback can recurse into it */
+    Status = MmCreateSectionForDataScan(&Section,
+                                        DesiredAccess,
+                                        ObjectAttributes,
+                                        &SectionSize,
+                                        SectionPageProtection,
+                                        AllocationAttributes,
+                                        FileObject);
 
     if (!NT_SUCCESS(Status)) return Status;
 
+    /* The handle is the caller's kind: a kernel one only where the caller asked for it */
+    if (ObjectAttributes != NULL)
+    {
+        HandleAttributes = ObjectAttributes->Attributes & OBJ_KERNEL_HANDLE;
+    }
+
     Status = ObOpenObjectByPointer(Section,
-                                   OBJ_KERNEL_HANDLE,
+                                   HandleAttributes,
                                    NULL,
                                    DesiredAccess,
                                    MmSectionObjectType,

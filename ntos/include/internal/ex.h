@@ -11,9 +11,22 @@ extern RTL_TIME_ZONE_INFORMATION ExpTimeZoneInfo;
 extern LARGE_INTEGER ExpTimeZoneBias;
 extern ULONG ExpTimeZoneId;
 extern ULONG ExpTickCountMultiplier;
+
+ULONG
+NTAPI
+ExComputeTickCountMultiplier(
+    _In_ ULONG TimeIncrement);
+
+NTSTATUS
+NTAPI
+ExGetSystemFirmwareTable(
+    _In_ ULONG FirmwareTableProviderSignature,
+    _In_ ULONG FirmwareTableID,
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID FirmwareTableBuffer,
+    _In_ ULONG BufferLength,
+    _Out_opt_ PULONG ReturnLength);
 extern ULONG ExpLastTimeZoneBias;
 extern BOOLEAN ExpRealTimeIsUniversal;
-extern POBJECT_TYPE ExEventPairObjectType;
 extern POBJECT_TYPE _ExEventObjectType, _ExSemaphoreObjectType;
 extern FAST_MUTEX ExpEnvironmentLock;
 extern ERESOURCE ExpFirmwareTableResource;
@@ -27,6 +40,7 @@ extern KSPIN_LOCK ExpResourceSpinLock;
 extern ULONG ExpAnsiCodePageDataOffset, ExpOemCodePageDataOffset;
 extern ULONG ExpUnicodeCaseTableDataOffset;
 extern PVOID ExpNlsSectionPointer;
+extern EX_WORK_QUEUE ExWorkerQueue[MaximumWorkQueue];
 extern ULONG NtGlobalFlag;
 extern UNICODE_STRING NtSystemRoot;
 extern ULONG ExpInitializationPhase;
@@ -43,6 +57,7 @@ extern ULONG ExDelayedWorkerThreads;
 
 extern PVOID ExpDefaultErrorPort;
 extern PEPROCESS ExpDefaultErrorPortProcess;
+extern BOOLEAN ExReadyForErrors;
 
 /*
  * NT/Cm Version Info variables
@@ -89,6 +104,12 @@ ExpDebuggerWorker(
 #define SIG_ACPI 0x41435049
 #define SIG_FIRM 0x4649524D
 #define SIG_RSMB 0x52534D42
+
+NTSTATUS
+NTAPI
+WmipQueryRawSMBiosTables(
+    _Inout_ ULONG *InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer);
 
 NTSTATUS
 NTAPI
@@ -383,11 +404,6 @@ CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 ExpInitializeKeyedEventImplementation(VOID);
-
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-ExpInitializeEventPairImplementation(VOID);
 
 CODE_SEG("INIT")
 BOOLEAN

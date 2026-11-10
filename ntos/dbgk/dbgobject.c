@@ -432,10 +432,10 @@ DbgkInitialize(VOID)
     RtlZeroMemory(&Initializer, sizeof(Initializer));
 
     Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
     Initializer.ValidAccessMask = DEBUG_OBJECT_ALL_ACCESS;
     Initializer.GenericMapping = DbgkpDebugObjectMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.SecurityRequired = TRUE;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(DEBUG_OBJECT);
     Initializer.CloseProcedure = DbgkpCloseObject;
     Initializer.DeleteProcedure = DbgkpDeleteObject;

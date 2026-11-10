@@ -140,11 +140,8 @@ PsArchInitializeUserThreadContext(
     Context->Rcx = (ULONG64)(ULONG_PTR)StartRoutine;
     Context->Rdx = (ULONG64)(ULONG_PTR)Argument;
 
-    /*
-     * The stack is left so that the first push lands on a sixteen-byte
-     * boundary, which is what the calling convention promises a callee.
-     */
-    Context->Rsp = ((ULONG64)(ULONG_PTR)StackBase & ~15ULL) - 8;
+    /* Aligned; the kernel reserves the home area and return slot when it builds the frame */
+    Context->Rsp = ((ULONG64)(ULONG_PTR)StackBase - 2 * sizeof(PVOID)) & ~15ULL;
 
     Context->SegCs = KGDT64_R3_CODE | RPL_MASK;
     Context->SegSs = KGDT64_R3_DATA | RPL_MASK;
@@ -158,9 +155,10 @@ PsArchInitializeUserThreadContext(
 }
 
 /*
- * Where a user thread's first return to user mode is aimed: at the native
- * image's entry, which is given the image base so it can set itself up
- * before the thread's own entry is reached.
+ * Where a user thread's first return to user mode is aimed: at the loader in
+ * the native image. The context the thread was created with is placed on its
+ * stack and handed to the loader, which continues into it once the process is
+ * set up; the image base comes along so the loader can find itself.
  */
 VOID
 NTAPI
@@ -168,12 +166,31 @@ PspArchInitializeUserThreadStartup(
     _In_ PKEXCEPTION_FRAME ExceptionFrame,
     _Inout_ PKTRAP_FRAME TrapFrame)
 {
-    KiInitializeUserApc(ExceptionFrame,
-                        TrapFrame,
-                        PspSystemDllEntryPoint,
-                        NULL,
-                        PspSystemDllBase,
-                        NULL);
+    CONTEXT Context;
+    PCONTEXT UserContext;
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    Context.ContextFlags = CONTEXT_FULL;
+    KeTrapFrameToContext(TrapFrame, ExceptionFrame, &Context);
+
+    UserContext = (PCONTEXT)ALIGN_DOWN_BY(TrapFrame->Rsp - sizeof(CONTEXT), 16);
+
+    _SEH2_TRY
+    {
+        ProbeForWrite(UserContext, sizeof(CONTEXT), 16);
+        RtlCopyMemory(UserContext, &Context, sizeof(CONTEXT));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ZwTerminateThread(NtCurrentThread(), _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    /* Entered as if called: the slot below the context stands for a return address */
+    TrapFrame->Rsp = (ULONG64)UserContext - sizeof(ULONG64);
+    TrapFrame->Rip = (ULONG64)PspSystemDllEntryPoint;
+    TrapFrame->Rcx = (ULONG64)UserContext;
+    TrapFrame->Rdx = (ULONG64)PspSystemDllBase;
 }
 
 /*

@@ -97,6 +97,8 @@ IopAllocateFileObject(
 
     if (OpenPacket->QueryOnly || OpenPacket->DeleteOnly)
     {
+        RtlZeroMemory(&OpenPacket->LocalFileObject->ObjectHeader, sizeof(OBJECT_HEADER));
+        OpenPacket->LocalFileObject->ObjectHeader.PointerCount = 1;
         FileObject = (PFILE_OBJECT)&OpenPacket->LocalFileObject->FileObjectBody;
         RtlZeroMemory(FileObject, sizeof(FILE_OBJECT));
         *Status = STATUS_SUCCESS;
@@ -179,6 +181,7 @@ IopAllocateFileObject(
         {
             if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly)
             {
+                FileObject->DeviceObject = NULL;
                 ObDereferenceObject(FileObject);
             }
 
@@ -218,48 +221,331 @@ IopSetFileObjectAccess(
     FileObject->SharedDelete = (ShareAccess & FILE_SHARE_DELETE) != 0;
 }
 
-VOID
-NTAPI
-IopDoNameTransmogrify(
-    IN PIRP Irp,
-    IN PFILE_OBJECT FileObject,
-    IN PREPARSE_DATA_BUFFER DataBuffer)
+typedef struct _IOP_NAME_PIECE
 {
-    PWCHAR Buffer;
-    USHORT Length;
+    const VOID *Buffer;
+    ULONG Length;
+} IOP_NAME_PIECE, *PIOP_NAME_PIECE;
+
+/*
+ * Gives the lookup a new complete name made of the pieces handed in. A piece
+ * may lie inside the name being replaced, so the new buffer is filled before
+ * the old one goes.
+ */
+static
+NTSTATUS
+IopReplaceCompleteName(
+    _Inout_ PUNICODE_STRING CompleteName,
+    _In_reads_(Count) const IOP_NAME_PIECE *Pieces,
+    _In_ ULONG Count)
+{
+    ULONG Length = 0;
+    ULONG Maximum;
+    PUCHAR Buffer;
+    ULONG Offset = 0;
+    ULONG Index;
+
+    for (Index = 0; Index < Count; Index++) Length += Pieces[Index].Length;
+
+    if (Length > MAXUSHORT - sizeof(UNICODE_NULL)) return STATUS_NAME_TOO_LONG;
+
+    /* The name buffer is freed by its length, so it must not come out the size the lookaside hands out */
+    Maximum = Length + sizeof(UNICODE_NULL);
+    if (Maximum == OBP_NAME_LOOKASIDE_MAX_SIZE) Maximum += sizeof(UNICODE_NULL);
+
+    Buffer = ExAllocatePoolWithTag(PagedPool, Maximum, OB_NAME_TAG);
+    if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        RtlCopyMemory(&Buffer[Offset],
+                      Pieces[Index].Buffer,
+                      Pieces[Index].Length);
+        Offset += Pieces[Index].Length;
+    }
+
+    *(PWCHAR)&Buffer[Length] = UNICODE_NULL;
+
+    ObpFreeObjectNameBuffer(CompleteName);
+
+    CompleteName->Buffer = (PWCHAR)Buffer;
+    CompleteName->Length = (USHORT)Length;
+    CompleteName->MaximumLength = (USHORT)Maximum;
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+IopQueryObjectPath(
+    _In_ PVOID Object,
+    _Out_ POBJECT_NAME_INFORMATION *NameInfo)
+{
+    POBJECT_NAME_INFORMATION Info;
+    ULONG Length = 512;
+    ULONG ReturnLength;
+    NTSTATUS Status;
+
+    *NameInfo = NULL;
+
+    for (;;)
+    {
+        Info = ExAllocatePoolWithTag(PagedPool, Length, TAG_IO_NAME);
+        if (Info == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        Status = ObQueryNameString(Object, Info, Length, &ReturnLength);
+        if (NT_SUCCESS(Status))
+        {
+            *NameInfo = Info;
+            return STATUS_SUCCESS;
+        }
+
+        ExFreePoolWithTag(Info, TAG_IO_NAME);
+
+        if ((Status != STATUS_INFO_LENGTH_MISMATCH &&
+             Status != STATUS_BUFFER_OVERFLOW) ||
+            ReturnLength <= Length)
+        {
+            return Status;
+        }
+
+        Length = ReturnLength;
+    }
+}
+
+/*
+ * A relative symbolic link is read from the directory that holds it. The
+ * lookup can only start again from the top, so the name it is given is the
+ * whole path of that directory with the link's own text after it, and the
+ * dots are then walked away within the volume: a link cannot climb out of it.
+ */
+static
+NTSTATUS
+IopResolveRelativeSymbolicLink(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ POPEN_PACKET OpenPacket,
+    _In_ const IOP_NAME_PIECE *Substitute,
+    _In_ ULONG TailLength,
+    _Inout_ PUNICODE_STRING CompleteName)
+{
+    PFILE_OBJECT RelatedFileObject = OpenPacket->RelatedFileObject;
+    POBJECT_NAME_INFORMATION RelatedPath = NULL;
+    POBJECT_NAME_INFORMATION DevicePath = NULL;
+    const WCHAR *Link = FileObject->FileName.Buffer;
+    ULONG LinkLength = FileObject->FileName.Length - TailLength;
+    IOP_NAME_PIECE Pieces[5];
+    ULONG Count = 0;
+    ULONG VolumeOffset;
+    USHORT NewLength;
+    NTSTATUS Status;
+
+    /* What stays of the link's own name is the directory part, separator included */
+    while (LinkLength != 0 &&
+           Link[LinkLength / sizeof(WCHAR) - 1] != OBJ_NAME_PATH_SEPARATOR)
+    {
+        LinkLength -= sizeof(WCHAR);
+    }
+
+    if (RelatedFileObject == NULL)
+    {
+        if (CompleteName->Length < FileObject->FileName.Length)
+        {
+            return STATUS_IO_REPARSE_DATA_INVALID;
+        }
+
+        VolumeOffset = CompleteName->Length - FileObject->FileName.Length;
+
+        Pieces[Count].Buffer = CompleteName->Buffer;
+        Pieces[Count].Length = VolumeOffset + LinkLength;
+        Count++;
+    }
+    else
+    {
+        Status = IopQueryObjectPath(RelatedFileObject, &RelatedPath);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        Status = IopQueryObjectPath(RelatedFileObject->DeviceObject,
+                                    &DevicePath);
+        if (!NT_SUCCESS(Status))
+        {
+            ExFreePoolWithTag(RelatedPath, TAG_IO_NAME);
+            return Status;
+        }
+
+        VolumeOffset = DevicePath->Name.Length;
+        ExFreePoolWithTag(DevicePath, TAG_IO_NAME);
+
+        if (RelatedPath->Name.Length < VolumeOffset)
+        {
+            ExFreePoolWithTag(RelatedPath, TAG_IO_NAME);
+            return STATUS_IO_REPARSE_DATA_INVALID;
+        }
+
+        Pieces[Count].Buffer = RelatedPath->Name.Buffer;
+        Pieces[Count].Length = RelatedPath->Name.Length;
+        Count++;
+
+        if (RelatedPath->Name.Length == VolumeOffset ||
+            RelatedPath->Name.Buffer[RelatedPath->Name.Length / sizeof(WCHAR) - 1] !=
+                OBJ_NAME_PATH_SEPARATOR)
+        {
+            Pieces[Count].Buffer = L"\\";
+            Pieces[Count].Length = sizeof(WCHAR);
+            Count++;
+        }
+
+        Pieces[Count].Buffer = Link;
+        Pieces[Count].Length = LinkLength;
+        Count++;
+    }
+
+    Pieces[Count++] = *Substitute;
+
+    Pieces[Count].Buffer = (PUCHAR)FileObject->FileName.Buffer +
+                           FileObject->FileName.Length - TailLength;
+    Pieces[Count].Length = TailLength;
+    Count++;
+
+    Status = IopReplaceCompleteName(CompleteName, Pieces, Count);
+
+    if (RelatedPath != NULL) ExFreePoolWithTag(RelatedPath, TAG_IO_NAME);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = FsRtlRemoveDotsFromPath(
+                 &CompleteName->Buffer[VolumeOffset / sizeof(WCHAR)],
+                 (USHORT)(CompleteName->Length - VolumeOffset),
+                 &NewLength);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    CompleteName->Length = (USHORT)(VolumeOffset + NewLength);
+
+    return STATUS_SUCCESS;
+}
+
+/*
+ * A file system that meets a reparse point it does not follow itself completes
+ * the create with STATUS_REPARSE and says why. A name it rewrote, or a volume
+ * to mount again, only needs the lookup started over. A mount point or a
+ * symbolic link comes with its reparse data, and the name to start over with
+ * is what the data stands for followed by the part of the name the file system
+ * had not read yet.
+ */
+static
+NTSTATUS
+IopResolveReparse(
+    _In_ PIRP Irp,
+    _In_ PFILE_OBJECT FileObject,
+    _In_ POPEN_PACKET OpenPacket,
+    _Inout_ PUNICODE_STRING CompleteName)
+{
+    PREPARSE_DATA_BUFFER Reparse;
+    ULONG_PTR Tag = Irp->IoStatus.Information;
+    IOP_NAME_PIECE Pieces[2];
+    ULONG PathLength, Offset, Length;
+    ULONG TailLength;
+    BOOLEAN Relative = FALSE;
+    PUCHAR Path;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
-    ASSERT(Irp->IoStatus.Status == STATUS_REPARSE);
-    ASSERT(Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT);
+    Reparse = (PREPARSE_DATA_BUFFER)Irp->Tail.Overlay.AuxiliaryBuffer;
+    Irp->Tail.Overlay.AuxiliaryBuffer = NULL;
 
-    if (DataBuffer == NULL) return;
-
-    Length = DataBuffer->MountPointReparseBuffer.SubstituteNameLength;
-    if (Length == 0 || Length > MAXIMUM_FILENAME_LENGTH) return;
-
-    Buffer = ExAllocatePoolUninitialized(PagedPool,
-                                         Length + sizeof(WCHAR),
-                                         TAG_IO_NAME);
-    if (Buffer == NULL) return;
-
-    RtlCopyMemory(Buffer,
-                  (PUCHAR)DataBuffer->MountPointReparseBuffer.PathBuffer +
-                      DataBuffer->MountPointReparseBuffer.SubstituteNameOffset,
-                  Length);
-    Buffer[Length / sizeof(WCHAR)] = UNICODE_NULL;
-
-    if (FileObject->FileName.Buffer != NULL)
+    if (Tag == IO_REMOUNT)
     {
-        ExFreePool(FileObject->FileName.Buffer);
+        if (Reparse != NULL) ExFreePool(Reparse);
+        return STATUS_REPARSE;
     }
 
-    FileObject->FileName.Buffer = Buffer;
-    FileObject->FileName.Length = Length;
-    FileObject->FileName.MaximumLength = Length + sizeof(WCHAR);
+    if (Tag == IO_REPARSE)
+    {
+        if (Reparse != NULL) ExFreePool(Reparse);
 
-    ExFreePool(DataBuffer);
-    Irp->Tail.Overlay.AuxiliaryBuffer = NULL;
+        Pieces[0].Buffer = FileObject->FileName.Buffer;
+        Pieces[0].Length = FileObject->FileName.Length;
+
+        Status = IopReplaceCompleteName(CompleteName, Pieces, 1);
+
+        return NT_SUCCESS(Status) ? STATUS_REPARSE : Status;
+    }
+
+    if (Reparse == NULL) return STATUS_IO_REPARSE_DATA_INVALID;
+
+    if (Tag != IO_REPARSE_TAG_MOUNT_POINT && Tag != IO_REPARSE_TAG_SYMLINK)
+    {
+        ExFreePool(Reparse);
+        return STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+    }
+
+    if (OpenPacket->Options & IO_STOP_ON_SYMLINK)
+    {
+        /* The caller asked to be shown the reparse data and frees it */
+        OpenPacket->Information = (ULONG_PTR)Reparse;
+        return STATUS_STOPPED_ON_SYMLINK;
+    }
+
+    if (Tag == IO_REPARSE_TAG_SYMLINK)
+    {
+        PathLength = FIELD_OFFSET(REPARSE_DATA_BUFFER,
+                                  SymbolicLinkReparseBuffer.PathBuffer) -
+                     REPARSE_DATA_BUFFER_HEADER_SIZE;
+        Path = (PUCHAR)Reparse->SymbolicLinkReparseBuffer.PathBuffer;
+        Offset = Reparse->SymbolicLinkReparseBuffer.SubstituteNameOffset;
+        Length = Reparse->SymbolicLinkReparseBuffer.SubstituteNameLength;
+    }
+    else
+    {
+        PathLength = FIELD_OFFSET(REPARSE_DATA_BUFFER,
+                                  MountPointReparseBuffer.PathBuffer) -
+                     REPARSE_DATA_BUFFER_HEADER_SIZE;
+        Path = (PUCHAR)Reparse->MountPointReparseBuffer.PathBuffer;
+        Offset = Reparse->MountPointReparseBuffer.SubstituteNameOffset;
+        Length = Reparse->MountPointReparseBuffer.SubstituteNameLength;
+    }
+
+    TailLength = Reparse->Reserved;
+
+    if (Reparse->ReparseDataLength < PathLength ||
+        Offset + Length > Reparse->ReparseDataLength - PathLength ||
+        Length == 0 ||
+        ((Offset | Length | TailLength) & 1) != 0 ||
+        TailLength > FileObject->FileName.Length)
+    {
+        ExFreePool(Reparse);
+        return STATUS_IO_REPARSE_DATA_INVALID;
+    }
+
+    if (Tag == IO_REPARSE_TAG_SYMLINK)
+    {
+        Relative = BooleanFlagOn(Reparse->SymbolicLinkReparseBuffer.Flags,
+                                 SYMLINK_FLAG_RELATIVE);
+    }
+
+    Pieces[0].Buffer = Path + Offset;
+    Pieces[0].Length = Length;
+
+    if (Relative)
+    {
+        Status = IopResolveRelativeSymbolicLink(FileObject,
+                                                OpenPacket,
+                                                &Pieces[0],
+                                                TailLength,
+                                                CompleteName);
+    }
+    else
+    {
+        Pieces[1].Buffer = (PUCHAR)FileObject->FileName.Buffer +
+                           FileObject->FileName.Length - TailLength;
+        Pieces[1].Length = TailLength;
+
+        Status = IopReplaceCompleteName(CompleteName, Pieces, 2);
+    }
+
+    ExFreePool(Reparse);
+
+    return NT_SUCCESS(Status) ? STATUS_REPARSE : Status;
 }
 
 NTSTATUS
@@ -440,6 +726,78 @@ IopSendCreateIrp(
 
 static
 NTSTATUS
+NTAPI
+IopQueryOnlyComplete(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+
+    KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+/* The packet is finished here, so no completion APC touches the stack file object */
+static
+NTSTATUS
+IopQueryOpenedFile(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ POPEN_PACKET OpenPacket)
+{
+    PIO_STACK_LOCATION StackPtr;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PDEVICE_OBJECT DeviceObject;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    PAGED_CODE();
+
+    ASSERT(OpenPacket->QueryOnly);
+    ASSERT(OpenPacket->FileInformation != NULL);
+    ASSERT(FileObject == (PFILE_OBJECT)&OpenPacket->LocalFileObject->FileObjectBody);
+
+    DeviceObject = IoGetRelatedDeviceObject(FileObject);
+    if (DeviceObject == NULL) return STATUS_NO_SUCH_DEVICE;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+
+    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
+    if (Irp == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Irp->AssociatedIrp.SystemBuffer = OpenPacket->FileInformation;
+    Irp->UserIosb = &IoStatusBlock;
+    Irp->RequestorMode = KernelMode;
+    Irp->Flags = IRP_SYNCHRONOUS_API | IRP_BUFFERED_IO;
+    Irp->Tail.Overlay.Thread = PsGetCurrentThread();
+    Irp->Tail.Overlay.OriginalFileObject = FileObject;
+
+    StackPtr = IoGetNextIrpStackLocation(Irp);
+    StackPtr->MajorFunction = IRP_MJ_QUERY_INFORMATION;
+    StackPtr->FileObject = FileObject;
+    StackPtr->DeviceObject = DeviceObject;
+    StackPtr->Parameters.QueryFile.Length = OpenPacket->FileInformationLength;
+    StackPtr->Parameters.QueryFile.FileInformationClass =
+        OpenPacket->FileInformationClass;
+
+    IoSetCompletionRoutine(Irp, IopQueryOnlyComplete, &Event, TRUE, TRUE, TRUE);
+
+    Status = IoCallDriver(DeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+    }
+
+    Status = Irp->IoStatus.Status;
+    IoFreeIrp(Irp);
+
+    return Status;
+}
+
+static
+NTSTATUS
 IopCompleteCreate(
     _In_ PIRP Irp,
     _In_ PFILE_OBJECT FileObject,
@@ -462,23 +820,10 @@ IopCompleteCreate(
 
     if (Status == STATUS_REPARSE)
     {
-        PREPARSE_DATA_BUFFER Reparse;
+        Status = IopResolveReparse(Irp, FileObject, OpenPacket, CompleteName);
 
-        if (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT)
-        {
-            Reparse = (PREPARSE_DATA_BUFFER)Irp->Tail.Overlay.AuxiliaryBuffer;
-            IopDoNameTransmogrify(Irp, FileObject, Reparse);
-        }
-
-        if (FileObject->FileName.Length != 0 &&
-            CompleteName->MaximumLength >= FileObject->FileName.Length)
-        {
-            RtlCopyMemory(CompleteName->Buffer,
-                          FileObject->FileName.Buffer,
-                          FileObject->FileName.Length);
-            CompleteName->Length = FileObject->FileName.Length;
-        }
-
+        /* The lookup starts over from the top, so nothing it opens next is relative to a file */
+        OpenPacket->RelatedFileObject = NULL;
         OpenPacket->FileObject = NULL;
         *Object = NULL;
 
@@ -486,10 +831,13 @@ IopCompleteCreate(
 
         if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly)
         {
+            FileObject->DeviceObject = NULL;
             ObDereferenceObject(FileObject);
         }
 
-        return STATUS_REPARSE;
+        if (Status != STATUS_REPARSE) OpenPacket->FinalStatus = Status;
+
+        return Status;
     }
 
     IoFreeIrp(Irp);
@@ -502,9 +850,21 @@ IopCompleteCreate(
 
         if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly)
         {
+            FileObject->DeviceObject = NULL;
             ObDereferenceObject(FileObject);
         }
 
+        return Status;
+    }
+
+    /* The opened file answers the query and is closed; the open itself stays a success */
+    if (OpenPacket->QueryOnly)
+    {
+        OpenPacket->FinalStatus = IopQueryOpenedFile(FileObject, OpenPacket);
+        IopCloseLocalFileObject(OpenPacket->LocalFileObject);
+        OpenPacket->FileObject = NULL;
+        OpenPacket->ParseCheck = 1;
+        *Object = NULL;
         return Status;
     }
 
@@ -514,8 +874,9 @@ IopCompleteCreate(
     OpenPacket->FinalStatus = Status;
     OpenPacket->ParseCheck = 1;
 
-    if (OpenPacket->QueryOnly || OpenPacket->DeleteOnly)
+    if (OpenPacket->DeleteOnly)
     {
+        /* TODO: a delete-only open marks the file for deletion and closes it */
         *Object = NULL;
         return Status;
     }
@@ -525,7 +886,27 @@ IopCompleteCreate(
     return Status;
 }
 
+static
+PVPB
+IopReferenceRelatedVpb(
+    _In_ PFILE_OBJECT RelatedFileObject)
+{
+    KIRQL OldIrql;
+    PVPB Vpb;
+
+    KeAcquireSpinLock(&IopVpbSpinLock, &OldIrql);
+
+    Vpb = RelatedFileObject->Vpb;
+    if (Vpb != NULL) Vpb->ReferenceCount++;
+
+    KeReleaseSpinLock(&IopVpbSpinLock, OldIrql);
+
+    return Vpb;
+}
+
 /* PARSE METHODS **************************************************************/
+
+#define IOP_DIRECT_DEVICE_OPEN_ACCESS (SYNCHRONIZE | FILE_READ_ATTRIBUTES)
 
 NTSTATUS
 NTAPI
@@ -567,18 +948,18 @@ IopParseDeviceEx(
         AccessMode = KernelMode;
     }
 
-    DeviceOnlyOpen = (RemainingName->Length == 0);
+    /* The name was opened without a type, so generic rights become a file's rights only here */
+    RtlMapGenericMask(&AccessState->RemainingDesiredAccess, &IopFileMapping);
 
-    if (!DeviceOnlyOpen && RemainingName->Buffer[0] != OBJ_NAME_PATH_SEPARATOR)
+    /* A name opened relative to a file is the file system's to read, whatever it holds */
+    DeviceOnlyOpen = (RemainingName->Length == 0) &&
+                     (OpenPacket->RelatedFileObject == NULL);
+
+    if (OpenPacket->RelatedFileObject == NULL &&
+        RemainingName->Length != 0 &&
+        RemainingName->Buffer[0] != OBJ_NAME_PATH_SEPARATOR)
     {
         return STATUS_OBJECT_PATH_NOT_FOUND;
-    }
-
-    if (DeviceOnlyOpen &&
-        (OpenPacket->RelatedFileObject == NULL) &&
-        (OpenPacket->CreateOptions & FILE_DIRECTORY_FILE))
-    {
-        return STATUS_NOT_A_DIRECTORY;
     }
 
     if (!IopCheckDeviceAndDriver(OpenPacket, DeviceObject))
@@ -603,6 +984,31 @@ IopParseDeviceEx(
                                        OpenPacket);
         if (!NT_SUCCESS(Status)) return Status;
     }
+    else if (DeviceOnlyOpen &&
+             (OpenPacket->RelatedFileObject == NULL) &&
+             !(OpenPacket->CreateOptions & FILE_DIRECTORY_FILE) &&
+             !((AccessState->RemainingDesiredAccess |
+                AccessState->PreviouslyGrantedAccess) & ~IOP_DIRECT_DEVICE_OPEN_ACCESS))
+    {
+        /* A device opened only to query its attributes is not accessed, so nothing is mounted on it */
+        TargetDevice = IoGetAttachedDevice(DeviceObject);
+        DirectOpen = TRUE;
+    }
+    else if (OpenPacket->RelatedFileObject != NULL)
+    {
+        /* The new file lives on the volume the file it is relative to was opened on */
+        Vpb = IopReferenceRelatedVpb(OpenPacket->RelatedFileObject);
+
+        if (Vpb != NULL)
+        {
+            TargetDevice = IoGetAttachedDevice(Vpb->DeviceObject);
+        }
+        else
+        {
+            TargetDevice = IoGetAttachedDevice(DeviceObject);
+            DirectOpen = TRUE;
+        }
+    }
     else
     {
         Vpb = IopCheckVpbMounted(OpenPacket,
@@ -622,7 +1028,8 @@ IopParseDeviceEx(
         }
     }
 
-    Status = IopReferenceDeviceObject(TargetDevice);
+    /* The file object names the device that was opened; requests go to the top of what serves it */
+    Status = IopReferenceDeviceObject(DeviceObject);
     if (!NT_SUCCESS(Status))
     {
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
@@ -630,14 +1037,14 @@ IopParseDeviceEx(
     }
 
     FileObject = IopAllocateFileObject(OpenPacket,
-                                       TargetDevice,
+                                       DeviceObject,
                                        RemainingName,
                                        Attributes,
                                        AccessMode,
                                        &Status);
     if (FileObject == NULL)
     {
-        IopDecrementDeviceObjectRef(TargetDevice, FALSE);
+        IopDecrementDeviceObjectRef(DeviceObject, FALSE);
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
         return Status;
     }
@@ -674,10 +1081,11 @@ IopParseDeviceEx(
     {
         if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly)
         {
+            FileObject->DeviceObject = NULL;
             ObDereferenceObject(FileObject);
         }
 
-        IopDecrementDeviceObjectRef(TargetDevice, FALSE);
+        IopDecrementDeviceObjectRef(DeviceObject, FALSE);
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
 
         return Status;
@@ -690,9 +1098,10 @@ IopParseDeviceEx(
                                CompleteName,
                                Object);
 
-    if (!NT_SUCCESS(Status) && Status != STATUS_REPARSE)
+    /* A create the driver did not complete leaves the device and volume to this routine */
+    if (!NT_SUCCESS(Status) || Status == STATUS_REPARSE)
     {
-        IopDecrementDeviceObjectRef(TargetDevice, FALSE);
+        IopDecrementDeviceObjectRef(DeviceObject, FALSE);
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
     }
 
@@ -742,14 +1151,17 @@ IopParseFileEx(
     OUT PVOID *Object)
 {
     PFILE_OBJECT FileObject = ParseObject;
-    PDEVICE_OBJECT DeviceObject;
+    POPEN_PACKET OpenPacket = Context;
 
     PAGED_CODE();
 
-    DeviceObject = IoGetRelatedDeviceObject(FileObject);
-    if (DeviceObject == NULL) return STATUS_NO_SUCH_DEVICE;
+    if (!IopValidateOpenPacket(OpenPacket)) return STATUS_OBJECT_TYPE_MISMATCH;
 
-    return IopParseDeviceEx(DeviceObject,
+    if (FileObject->DeviceObject == NULL) return STATUS_NO_SUCH_DEVICE;
+
+    OpenPacket->RelatedFileObject = FileObject;
+
+    return IopParseDeviceEx(FileObject->DeviceObject,
                             ObjectType,
                             AccessState,
                             AccessMode,

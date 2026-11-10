@@ -36,6 +36,7 @@ IopCancelIrpsOnList(
     KIRQL OldIrql;
     PIRP Irp;
 
+    /* FIXME: cancel routines run at DISPATCH_LEVEL under the list lock, above where a file system may take its locks */
     KeAcquireSpinLock(ListLock, &OldIrql);
 
     Entry = ListHead->Flink;
@@ -57,6 +58,40 @@ IopCancelIrpsOnList(
     if (Found != NULL) *Found = Any;
 
     return Any;
+}
+
+/*
+ * The list belongs to the calling thread and changes only in its context, so
+ * holding off its completion APCs keeps every entry in place, and the cancel
+ * routines run at APC_LEVEL, below which a file system may take its locks.
+ */
+static
+VOID
+IopCancelThreadIrpsForFile(
+    _In_ PFILE_OBJECT FileObject)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+    PIRP Irp;
+
+    ASSERT(KeGetCurrentIrql() < APC_LEVEL);
+
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+
+    Entry = Thread->IrpList.Flink;
+    while (Entry != &Thread->IrpList)
+    {
+        Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
+        Entry = Entry->Flink;
+
+        ASSERT(Irp->Tail.Overlay.Thread == Thread);
+        if (Irp->Tail.Overlay.OriginalFileObject != FileObject) continue;
+
+        IoCancelIrp(Irp);
+    }
+
+    KeLowerIrql(OldIrql);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -261,10 +296,7 @@ NtCancelIoFile(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    IopCancelIrpsOnList(&PsGetCurrentThread()->IrpList,
-                        &FileObject->IrpListLock,
-                        NULL,
-                        NULL);
+    IopCancelThreadIrpsForFile(FileObject);
 
     IopCancelIrpsOnList(&FileObject->IrpList,
                         &FileObject->IrpListLock,
@@ -334,6 +366,7 @@ NtCancelIoFileEx(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
+    /* FIXME: requests on other threads' lists are not looked at, so a request the process issued is reported not found */
     IopCancelIrpsOnList(&FileObject->IrpList,
                         &FileObject->IrpListLock,
                         IoRequestToCancel,

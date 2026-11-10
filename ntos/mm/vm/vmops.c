@@ -295,7 +295,7 @@ MiSetPrivatePageProtectionAt(
     {
         ULONG Frame = (ULONG)MiArchPteFrame(Pte);
         PMI_PFN Entry = &System->Pfn.Pfn[Frame];
-        ULONG Flags = (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER) |
+        ULONG Flags = MI_SPACE_LEAF_OWNER(Space) |
                       (MiArchPteIsDirty(Pte) ? MI_LEAF_DIRTY : 0);
 
         if (MiArchPteIsDirty(Pte))
@@ -1882,7 +1882,7 @@ MiMapFramesUser(
             MiPfnExecCleanClear(&Space->System->Pfn, (ULONG)Frames[i]);
         MiPtWrite(Space, Va, Slot, TableFrame,
                   MiArchPteMakeLeaf(Frames[i], Protection,
-                                    PageFlags | MI_LEAF_DIRTY | (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER)));
+                                    PageFlags | MI_LEAF_DIRTY | MI_SPACE_LEAF_OWNER(Space)));
     }
 
     if (!NT_SUCCESS(Status))

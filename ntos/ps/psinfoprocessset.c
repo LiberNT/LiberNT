@@ -23,13 +23,16 @@
  */
 static
 NTSTATUS
-PspCaptureSetInformation(
+PspCaptureSetInformationAligned(
     _In_reads_bytes_(Length) PVOID Information,
     _In_ ULONG Length,
     _In_ KPROCESSOR_MODE PreviousMode,
     _Out_writes_bytes_(Expected) PVOID Captured,
-    _In_ ULONG Expected)
+    _In_ ULONG Expected,
+    _In_ ULONG Alignment)
 {
+    ASSERT((Alignment == sizeof(UCHAR)) || (Alignment == sizeof(ULONG)));
+
     if (Length != Expected) return STATUS_INFO_LENGTH_MISMATCH;
 
     if (PreviousMode == KernelMode)
@@ -40,7 +43,7 @@ PspCaptureSetInformation(
 
     _SEH2_TRY
     {
-        ProbeForRead(Information, Expected, sizeof(ULONG));
+        ProbeForRead(Information, Expected, Alignment);
         RtlCopyMemory(Captured, Information, Expected);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -50,6 +53,19 @@ PspCaptureSetInformation(
     _SEH2_END;
 
     return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+PspCaptureSetInformation(
+    _In_reads_bytes_(Length) PVOID Information,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_writes_bytes_(Expected) PVOID Captured,
+    _In_ ULONG Expected)
+{
+    return PspCaptureSetInformationAligned(Information, Length, PreviousMode,
+                                           Captured, Expected, sizeof(ULONG));
 }
 
 /*
@@ -382,11 +398,12 @@ NtSetInformationProcess(
             break;
 
         case ProcessPriorityClass:
-            Status = PspCaptureSetInformation(ProcessInformation,
-                                              ProcessInformationLength,
-                                              PreviousMode,
-                                              &PriorityClass,
-                                              sizeof(PriorityClass));
+            Status = PspCaptureSetInformationAligned(ProcessInformation,
+                                                     ProcessInformationLength,
+                                                     PreviousMode,
+                                                     &PriorityClass,
+                                                     sizeof(PriorityClass),
+                                                     sizeof(UCHAR));
             if (!NT_SUCCESS(Status)) break;
 
             Status = PspSetProcessPriorityClass(Process,
@@ -406,11 +423,12 @@ NtSetInformationProcess(
             break;
 
         case ProcessForegroundInformation:
-            Status = PspCaptureSetInformation(ProcessInformation,
-                                              ProcessInformationLength,
-                                              PreviousMode,
-                                              &Foreground,
-                                              sizeof(Foreground));
+            Status = PspCaptureSetInformationAligned(ProcessInformation,
+                                                     ProcessInformationLength,
+                                                     PreviousMode,
+                                                     &Foreground,
+                                                     sizeof(Foreground),
+                                                     sizeof(UCHAR));
             if (!NT_SUCCESS(Status)) break;
 
             PsSetProcessPriorityByClass(Process,
@@ -532,11 +550,12 @@ NtSetInformationProcess(
             break;
 
         case ProcessEnableAlignmentFaultFixup:
-            Status = PspCaptureSetInformation(ProcessInformation,
-                                              ProcessInformationLength,
-                                              PreviousMode,
-                                              &Boolean,
-                                              sizeof(Boolean));
+            Status = PspCaptureSetInformationAligned(ProcessInformation,
+                                                     ProcessInformationLength,
+                                                     PreviousMode,
+                                                     &Boolean,
+                                                     sizeof(Boolean),
+                                                     sizeof(UCHAR));
             if (!NT_SUCCESS(Status)) break;
 
             KeSetAutoAlignmentProcess(&Process->Pcb, Boolean);

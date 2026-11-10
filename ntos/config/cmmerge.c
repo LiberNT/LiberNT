@@ -527,9 +527,9 @@ CmpCreateNamedKeyCell(
 
     if (ParentNode != NULL)
     {
-        if (NameSize > ParentNode->MaxNameLen)
+        if (Name->Length > ParentNode->MaxNameLen)
         {
-            ParentNode->MaxNameLen = NameSize;
+            ParentNode->MaxNameLen = Name->Length;
         }
 
         KeQuerySystemTime(&ParentNode->LastWriteTime);

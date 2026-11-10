@@ -30,8 +30,6 @@ static const UNICODE_STRING IopDriverDirectory =
     RTL_CONSTANT_STRING(L"\\Driver");
 static const UNICODE_STRING IopFileSystemDirectory =
     RTL_CONSTANT_STRING(L"\\FileSystem");
-static const UNICODE_STRING IopServicesPath = RTL_CONSTANT_STRING(
-    L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\");
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -116,6 +114,13 @@ IopDeleteDriver(
     {
         ExFreePool(DriverObject->DriverName.Buffer);
         DriverObject->DriverName.Buffer = NULL;
+    }
+
+    /* The last thing the driver object holds is the image it was made from */
+    if (DriverObject->DriverSection != NULL)
+    {
+        MmUnloadSystemImage(DriverObject->DriverSection);
+        DriverObject->DriverSection = NULL;
     }
 }
 
@@ -473,10 +478,16 @@ IopTryUnloadDriver(
     _In_ BOOLEAN Force)
 {
     PEXTENDED_DRIVER_EXTENSION Extension = IoGetDrvObjExtension(DriverObject);
+    PDEVICE_OBJECT DeviceObject;
+    BOOLEAN Busy = FALSE;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
     if (DriverObject->DriverUnload == NULL) return STATUS_INVALID_DEVICE_REQUEST;
+
+    /* The unload routine deletes the driver's devices, which leads back here; it is run once */
+    if (DriverObject->Flags & DRVO_UNLOAD_INVOKED) return STATUS_SUCCESS;
 
     if (Extension->PnpUnloadBarrier != 0 && !Force)
     {
@@ -484,9 +495,40 @@ IopTryUnloadDriver(
         return STATUS_PENDING;
     }
 
-    if (DriverObject->DeviceObject != NULL && !Force)
+    if (!Force)
     {
-        return STATUS_DEVICE_BUSY;
+        /*
+         * A driver goes once nothing holds any of its devices: no open file,
+         * no device attached on top. Until then its devices are marked, and
+         * the last reference to go brings the unload back.
+         */
+        KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+
+        for (DeviceObject = DriverObject->DeviceObject;
+             DeviceObject != NULL;
+             DeviceObject = DeviceObject->NextDevice)
+        {
+            if (DeviceObject->ReferenceCount != 0 ||
+                DeviceObject->AttachedDevice != NULL)
+            {
+                Busy = TRUE;
+            }
+        }
+
+        if (Busy)
+        {
+            for (DeviceObject = DriverObject->DeviceObject;
+                 DeviceObject != NULL;
+                 DeviceObject = DeviceObject->NextDevice)
+            {
+                IoGetDevObjExtension(DeviceObject)->ExtensionFlags |=
+                    DOE_UNLOAD_PENDING;
+            }
+        }
+
+        KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+        if (Busy) return STATUS_SUCCESS;
     }
 
     DriverObject->Flags |= DRVO_UNLOAD_INVOKED;
@@ -498,7 +540,7 @@ IopTryUnloadDriver(
     return STATUS_SUCCESS;
 }
 
-VOID
+NTSTATUS
 IopUnloadDriver(
     _In_ PUNICODE_STRING DriverServiceName,
     _In_ BOOLEAN UnloadPnpDrivers)
@@ -506,53 +548,38 @@ IopUnloadDriver(
     PDRIVER_OBJECT DriverObject;
     OBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING DriverName;
-    UNICODE_STRING KeyPath;
     NTSTATUS Status;
     HANDLE ServiceHandle;
-    PWCHAR Buffer;
-    USHORT Length;
 
     PAGED_CODE();
 
-    Length = IopServicesPath.Length + DriverServiceName->Length +
-             sizeof(WCHAR);
-
-    Buffer = ExAllocatePoolZero(PagedPool, Length, TAG_IO);
-    if (Buffer == NULL) return;
-
-    KeyPath.Buffer = Buffer;
-    KeyPath.Length = 0;
-    KeyPath.MaximumLength = Length;
-
-    RtlAppendUnicodeStringToString(&KeyPath, &IopServicesPath);
-    RtlAppendUnicodeStringToString(&KeyPath, DriverServiceName);
-
+    /* The caller names the service by the full path of its key */
     InitializeObjectAttributes(&ObjectAttributes,
-                               &KeyPath,
+                               DriverServiceName,
                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
 
     Status = ZwOpenKey(&ServiceHandle, KEY_READ, &ObjectAttributes);
-    ExFreePoolWithTag(Buffer, TAG_IO);
-
-    if (!NT_SUCCESS(Status)) return;
+    if (!NT_SUCCESS(Status)) return Status;
 
     RtlInitEmptyUnicodeString(&DriverName, NULL, 0);
 
     Status = IopGetDriverNames(ServiceHandle, &DriverName, NULL);
     ZwClose(ServiceHandle);
 
-    if (!NT_SUCCESS(Status)) return;
+    if (!NT_SUCCESS(Status)) return Status;
 
     Status = IopReferenceDriverObject(&DriverName, &DriverObject);
     ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
 
-    if (!NT_SUCCESS(Status)) return;
+    if (!NT_SUCCESS(Status)) return Status;
 
-    IopTryUnloadDriver(DriverObject, UnloadPnpDrivers);
+    Status = IopTryUnloadDriver(DriverObject, UnloadPnpDrivers);
 
     ObDereferenceObject(DriverObject);
+
+    return Status;
 }
 
 NTSTATUS
@@ -568,6 +595,29 @@ IopDoLoadUnloadDriver(
     }
 
     return STATUS_INVALID_PARAMETER;
+}
+
+static
+BOOLEAN
+IopIsServiceDriverLoaded(
+    _In_ HANDLE ServiceHandle)
+{
+    UNICODE_STRING DriverName;
+    PDRIVER_OBJECT DriverObject;
+    NTSTATUS Status;
+
+    RtlInitEmptyUnicodeString(&DriverName, NULL, 0);
+
+    Status = IopGetDriverNames(ServiceHandle, &DriverName, NULL);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = IopReferenceDriverObject(&DriverName, &DriverObject);
+    ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
+
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    ObDereferenceObject(DriverObject);
+    return TRUE;
 }
 
 NTSTATUS
@@ -599,6 +649,18 @@ IopLoadDriverForPnp(
         }
 
         return STATUS_SUCCESS;
+    }
+
+    /* Until the system root exists only the drivers the loader brought can run */
+    if (!PnPBootDriversInitialized)
+    {
+        ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
+        if (ServiceName.Buffer != NULL)
+        {
+            ExFreePoolWithTag(ServiceName.Buffer, TAG_IO_DRIVER_NAME);
+        }
+
+        return STATUS_DRIVER_UNABLE_TO_LOAD;
     }
 
     if (!IopCheckSafeBootDriver(ServiceHandle, &ServiceName))
@@ -701,6 +763,7 @@ IoCreateDriver(
     DriverObject->Size = sizeof(DRIVER_OBJECT);
     DriverObject->Flags = DRVO_BUILTIN_DRIVER;
     DriverObject->DriverInit = InitializationFunction;
+    DriverObject->HardwareDatabase = &IopHardwareDatabaseName;
     DriverObject->DriverExtension = (PDRIVER_EXTENSION)(DriverObject + 1);
 
     Extension = IoGetDrvObjExtension(DriverObject);
@@ -975,11 +1038,8 @@ NtLoadDriver(
     UNICODE_STRING CapturedName;
     PDRIVER_OBJECT DriverObject;
     OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING KeyPath;
     NTSTATUS Status;
     HANDLE ServiceHandle;
-    PWCHAR Buffer;
-    USHORT Length;
 
     PAGED_CODE();
 
@@ -1061,11 +1121,11 @@ NtUnloadDriver(
 
     ExAcquireResourceExclusiveLite(&IopDriverLoadResource, TRUE);
 
-    IopUnloadDriver(&CapturedName, FALSE);
+    Status = IopUnloadDriver(&CapturedName, FALSE);
 
     ExReleaseResourceLite(&IopDriverLoadResource);
 
     ReleaseCapturedUnicodeString(&CapturedName, PreviousMode);
 
-    return STATUS_SUCCESS;
+    return Status;
 }

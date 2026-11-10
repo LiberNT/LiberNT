@@ -11,6 +11,7 @@
 	.global KiSwapContextInternal
 	.extern KfLowerIrql
 	.extern KiRetireDpcList
+	.extern KiRunStackCallout
 	.extern KiTrapReturn
 	.extern KiSaveVfpState
 	.extern KiRestoreVfpState
@@ -36,6 +37,24 @@ KiRetireDpcListInDpcStack:
     bl      KiRetireDpcList
 
 .Lretire_dpc_done:
+    ldp     x29, x30, [sp], #16
+    ret
+    .seh_endproc
+
+    .global KiCallOnKernelStack
+    .seh_proc KiCallOnKernelStack
+KiCallOnKernelStack:
+    stp     x29, x30, [sp, #-16]!
+    .seh_save_fplr_x 16
+    mov     x29, sp
+    .seh_set_fp
+    .seh_endprologue
+
+    mov     sp, x1
+    sub     sp, sp, #16
+    bl      KiRunStackCallout
+    mov     sp, x29
+
     ldp     x29, x30, [sp], #16
     ret
     .seh_endproc

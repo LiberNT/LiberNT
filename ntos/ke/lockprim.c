@@ -146,7 +146,7 @@ FASTCALL
 KeTestSpinLock(
     _In_ PKSPIN_LOCK SpinLock)
 {
-    return !(*(volatile KSPIN_LOCK *)SpinLock & 1);
+    return (BOOLEAN)(*(volatile KSPIN_LOCK *)SpinLock == 0);
 }
 
 /*
@@ -427,15 +427,60 @@ FASTCALL
 KiAcquireFastMutex(
     _Inout_ PFAST_MUTEX FastMutex)
 {
+    LONG OldValue, NewValue;
+    BOOLEAN Registered = FALSE;
+
     ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
 
     FastMutex->Contention++;
 
-    KeWaitForSingleObject(&FastMutex->Event,
-                          WrMutex,
-                          KernelMode,
-                          FALSE,
-                          NULL);
+    for (;;)
+    {
+        OldValue = FastMutex->Count;
+
+        if (OldValue & FM_LOCK_BIT)
+        {
+            NewValue = OldValue - FM_LOCK_BIT;
+            if (Registered)
+            {
+                ASSERT(NewValue >= FM_LOCK_WAITER_INC);
+                NewValue -= FM_LOCK_WAITER_INC;
+            }
+
+            if (InterlockedCompareExchange(&FastMutex->Count,
+                                           NewValue,
+                                           OldValue) == OldValue)
+            {
+                return;
+            }
+
+            continue;
+        }
+
+        if (!Registered)
+        {
+            NewValue = OldValue + FM_LOCK_WAITER_INC;
+            if (InterlockedCompareExchange(&FastMutex->Count,
+                                           NewValue,
+                                           OldValue) != OldValue)
+            {
+                continue;
+            }
+
+            Registered = TRUE;
+        }
+
+        KeWaitForSingleObject(&FastMutex->Event,
+                              WrMutex,
+                              KernelMode,
+                              FALSE,
+                              NULL);
+
+        /* The release took our waiter count off and left the woken mark for us to clear */
+        OldValue = InterlockedExchangeAdd(&FastMutex->Count, -FM_LOCK_WAITER_WOKEN);
+        ASSERT(OldValue & FM_LOCK_WAITER_WOKEN);
+        Registered = FALSE;
+    }
 }
 
 /* EOF */

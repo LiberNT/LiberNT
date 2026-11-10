@@ -194,11 +194,31 @@ KiApplyThreadAdjustment(
  * whole core is idle is preferred: its siblings are not paying for the choice.
  */
 static
+KAFFINITY
+KiProcessorsRunningDpcs(
+    _In_ KAFFINITY Set)
+{
+    KAFFINITY Busy = 0;
+    ULONG Processor;
+
+    for (Processor = 0; Processor < (ULONG)KeNumberProcessors; Processor++)
+    {
+        if ((Set & AFFINITY_MASK(Processor)) &&
+            KiProcessorBlock[Processor]->DpcRoutineActive)
+        {
+            Busy |= AFFINITY_MASK(Processor);
+        }
+    }
+
+    return Busy;
+}
+
+static
 ULONG
 KiSelectTargetProcessor(
     _In_ PKTHREAD Thread)
 {
-    KAFFINITY Affinity, IdleSet;
+    KAFFINITY Affinity, IdleSet, QuietSet;
     KAFFINITY IdealMask;
 
     Affinity = KiThreadRunnableSet(Thread);
@@ -213,6 +233,11 @@ KiSelectTargetProcessor(
     IdleSet = Affinity & KiIdleSummary;
     if (IdleSet != 0)
     {
+        /* A processor in the middle of a DPC is idle only in name: a thread sent there waits for the routine to end */
+        QuietSet = IdleSet & ~KiProcessorsRunningDpcs(IdleSet);
+        if (QuietSet != 0)
+            IdleSet = QuietSet;
+
         if (IdleSet & IdealMask)
             return Thread->IdealProcessor;
 
@@ -448,10 +473,75 @@ KiSelectNextThread(
 }
 
 /*
+ * Takes the highest-priority thread on another processor's ready queues that
+ * may run on this one. An idle processor does this so that work queued while
+ * every processor was busy does not wait for its own processor to come free.
+ * The other processor's lock is only tried, because this one's is held.
+ */
+_Requires_lock_held_(Prcb->PrcbLock)
+static
+PKTHREAD
+KiStealReadyThread(
+    _Inout_ PKPRCB Prcb)
+{
+    ULONG Offset, Index;
+    KAFFINITY Self = AFFINITY_MASK(Prcb->Number);
+
+    for (Offset = 1; Offset < (ULONG)KeNumberProcessors; Offset++)
+    {
+        PKPRCB Remote;
+        ULONG Summary;
+        LONG Priority;
+
+        Index = (Prcb->Number + Offset) % (ULONG)KeNumberProcessors;
+        Remote = KiProcessorBlock[Index];
+        if ((Remote == NULL) || (ReadNoFence((PLONG)&Remote->ReadySummary) == 0))
+            continue;
+
+        if (InterlockedExchange((PLONG)&Remote->PrcbLock, 1) != 0)
+            continue;
+
+        for (Summary = Remote->ReadySummary; Summary != 0; Summary &= ~PRIORITY_MASK(Priority))
+        {
+            PLIST_ENTRY Head, Entry;
+
+            BitScanReverse((PULONG)&Priority, Summary);
+            KiAssertReadyQueue(Remote, Priority);
+            Head = &Remote->DispatcherReadyListHead[Priority];
+
+            for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
+            {
+                PKTHREAD Thread = CONTAINING_RECORD(Entry, KTHREAD, WaitListEntry);
+
+                ASSERT(Thread->State == Ready);
+                ASSERT(Thread != Remote->IdleThread);
+                if ((KiThreadAffinityMask(Thread) & Self) == 0)
+                    continue;
+
+                if (RemoveEntryList(&Thread->WaitListEntry))
+                    Remote->ReadySummary ^= PRIORITY_MASK(Priority);
+
+                /* Off that queue for good before its lock goes: nothing may unlink it again there */
+                Thread->NextProcessor = Prcb->Number;
+                Thread->State = Standby;
+
+                KiAssertReadyQueue(Remote, Priority);
+                KiReleasePrcbLock(Remote);
+                return Thread;
+            }
+        }
+
+        KiReleasePrcbLock(Remote);
+    }
+
+    return NULL;
+}
+
+/*
  * What the idle loop asks for once it has been told there is work. Answers the
- * thread to run, or NULL when the work turned out to belong somewhere else.
+ * ready thread to run, or the idle thread itself when none is ready.
  *
- * Entered with the PRCB lock held; the lock is released before return.
+ * Entered and left with the PRCB lock held; the idle loop makes the thread current.
  */
 _Requires_lock_held_(Prcb->PrcbLock)
 PKTHREAD
@@ -465,25 +555,19 @@ KiIdleSchedule(
 
     Prcb->IdleSchedule = FALSE;
 
-    Thread = Prcb->NextThread;
-    if (Thread != NULL)
+    Thread = KiSelectReadyThread(0, Prcb);
+    if (Thread == NULL)
     {
-        Prcb->NextThread = NULL;
-    }
-    else
-    {
-        Thread = KiSelectReadyThread(0, Prcb);
+        Thread = KiStealReadyThread(Prcb);
+
+        /* It may have been queued while still switching off its last processor */
+        if (Thread != NULL)
+            KiWaitForThreadSwapOut(Thread);
     }
 
-    if (Thread != NULL)
-    {
-        KiMarkProcessorBusy(Prcb);
-        Thread->NextProcessor = Prcb->Number;
-        Thread->State = Running;
-        Prcb->CurrentThread = Thread;
-    }
+    if (Thread == NULL) return Prcb->IdleThread;
 
-    KiReleasePrcbLock(Prcb);
+    Thread->NextProcessor = Prcb->Number;
     return Thread;
 }
 
@@ -537,17 +621,30 @@ KiSwapThread(
     }
 
     ASSERT(NextThread != NULL);
-    ASSERT(NextThread != Thread);
 
-    NextThread->State = Running;
-    Prcb->CurrentThread = NextThread;
+    if (NextThread == Thread)
+    {
+        /* Another processor ended the wait and placed the thread here before it could leave */
+        ASSERT(Prcb->CurrentThread == Thread);
+        Thread->State = Running;
+        KiReleasePrcbLock(Prcb);
 
-    KiReleasePrcbLock(Prcb);
+        ApcPending = Thread->ApcState.KernelApcPending &&
+                     (Thread->SpecialApcDisable == 0) &&
+                     (WaitIrql == PASSIVE_LEVEL);
+    }
+    else
+    {
+        NextThread->State = Running;
+        Prcb->CurrentThread = NextThread;
 
-    /* The incoming thread must be off whatever processor last ran it */
-    KiWaitForThreadSwapOut(NextThread);
+        KiReleasePrcbLock(Prcb);
 
-    ApcPending = KiSwapContext(WaitIrql, Thread);
+        /* The incoming thread must be off whatever processor last ran it */
+        KiWaitForThreadSwapOut(NextThread);
+
+        ApcPending = KiSwapContext(WaitIrql, Thread);
+    }
 
     /*
      * Back on this thread's own stack. A kernel APC that came in while it was
@@ -826,6 +923,54 @@ KiAdjustQuantumThread(
 }
 
 /*
+ * Gives the processor to the thread standing by for it. The architecture's
+ * dispatch interrupt asks for a turn to be ended and expects the switch to have
+ * happened when that returns; the outgoing thread queues behind its peers.
+ */
+static
+VOID
+KiSwitchToStandbyThread(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD Thread)
+{
+    PKTHREAD NextThread;
+    KIRQL OldIrql;
+
+    if (Prcb->NextThread == NULL)
+        return;
+
+    /* The idle loop takes a standby thread itself, and the idle thread is never put on a queue */
+    if (Thread == Prcb->IdleThread)
+        return;
+
+    OldIrql = KeRaiseIrqlToSynchLevel();
+    KiAcquirePrcbLock(Prcb);
+
+    NextThread = Prcb->NextThread;
+    if ((NextThread == NULL) || KiConsumeSelfNextThread(Prcb, Thread))
+    {
+        KiReleasePrcbLock(Prcb);
+        KeLowerIrql(OldIrql);
+        return;
+    }
+
+    Prcb->NextThread = NULL;
+    Prcb->CurrentThread = NextThread;
+    NextThread->State = Running;
+
+    Thread->WaitReason = WrQuantumEnd;
+    Thread->NextProcessor = Prcb->Number;
+    KxQueueReadyThread(Thread, Prcb);
+
+    /* A thread placed here by another processor may still be leaving it */
+    KiWaitForThreadSwapOut(NextThread);
+
+    KiSwapContext(APC_LEVEL, Thread);
+
+    KeLowerIrql(OldIrql);
+}
+
+/*
  * The end of a thread's turn, reached from the clock interrupt by way of a
  * dispatch interrupt. The thread keeps running only if nothing of its priority
  * or better is waiting for this processor.
@@ -845,6 +990,13 @@ KiQuantumEnd(VOID)
         SmpDbgQuantumEnd(Prcb->Number);
 
     Prcb->QuantumEnd = FALSE;
+
+    /* The thread working through threaded DPCs gives the processor up when its queue is empty, not when the clock says so */
+    if (KiIsDpcThreadBusy(Prcb, Thread))
+    {
+        KiSetThreadQuantum(Thread, Thread->QuantumReset);
+        return;
+    }
 
     /*
      * A preemption that was deferred is honoured here. This is the point the
@@ -888,6 +1040,7 @@ KiQuantumEnd(VOID)
             }
         }
         KiReleasePrcbLock(Prcb);
+        KiSwitchToStandbyThread(Prcb, Thread);
         return;
     }
 
@@ -925,6 +1078,8 @@ KiQuantumEnd(VOID)
 
     /* A balance pass is cheap here and keeps one processor from hoarding work */
     KiBalanceReadyQueues(Prcb, KiBalanceQuantum);
+
+    KiSwitchToStandbyThread(Prcb, Thread);
 }
 
 /*
@@ -955,9 +1110,19 @@ KiQueueThreadForReaping(
                                                EThread,
                                                Next) != Next);
 
-    /* Only the thread that found the list empty owes the reaper a wake-up */
+    /*
+     * Only the thread that found the list empty owes the reaper a wake-up. This
+     * runs at SYNCH_LEVEL right after a switch, so the work item goes into the
+     * worker queue under the dispatcher lock rather than through ExQueueWorkItem.
+     */
     if (Head == NULL)
-        ExQueueWorkItem(&PspReaperWorkItem, CriticalWorkQueue);
+    {
+        KiAcquireDispatcherLockAtSynchLevel();
+        KiInsertQueue(&ExWorkerQueue[CriticalWorkQueue].WorkerQueue,
+                      &PspReaperWorkItem.List,
+                      FALSE);
+        KiReleaseDispatcherLockFromSynchLevel();
+    }
 }
 
 /*

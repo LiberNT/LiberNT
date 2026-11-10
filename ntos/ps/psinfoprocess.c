@@ -79,6 +79,35 @@ PspReturnInformation(
     return STATUS_SUCCESS;
 }
 
+/* The extended device map query carries its flags in, behind the answer */
+static
+NTSTATUS
+PspReadDeviceMapFlags(
+    _In_ PVOID Buffer,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PULONG Flags)
+{
+    PPROCESS_DEVICEMAP_INFORMATION_EX Extended = Buffer;
+
+    if (PreviousMode == KernelMode)
+    {
+        *Flags = Extended->Flags;
+        return STATUS_SUCCESS;
+    }
+
+    _SEH2_TRY
+    {
+        *Flags = Extended->Flags;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return STATUS_SUCCESS;
+}
+
 /*
  * Writes a counted string whose characters follow the structure itself, which
  * is the shape every path and name class uses.
@@ -1029,15 +1058,37 @@ NtQueryInformationProcess(
              * also says which identity the map was looked up under.
              */
             RtlZeroMemory(&DeviceMap, sizeof(DeviceMap));
+            Value = 0;
 
-            Status = ObQueryDeviceMapInformation(Process, &DeviceMap, 0);
+            if (ProcessInformationLength == sizeof(PROCESS_DEVICEMAP_INFORMATION_EX))
+            {
+                Length = sizeof(PROCESS_DEVICEMAP_INFORMATION_EX);
+                Status = PspReadDeviceMapFlags(ProcessInformation, PreviousMode, &Value);
+                if (!NT_SUCCESS(Status)) break;
+
+                if ((Value & ~PROCESS_LUID_DOSDEVICES_ONLY) != 0)
+                {
+                    Status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+            }
+            else if (ProcessInformationLength != sizeof(DeviceMap.Query))
+            {
+                Length = sizeof(DeviceMap.Query);
+                Status = STATUS_INFO_LENGTH_MISMATCH;
+                break;
+            }
+
+            Status = ObQueryDeviceMapInformation(Process, &DeviceMap, Value);
             if (NT_SUCCESS(Status))
             {
                 Status = PspReturnInformation(ProcessInformation,
                                               ProcessInformationLength,
-                                              &DeviceMap,
-                                              sizeof(DeviceMap),
+                                              &DeviceMap.Query,
+                                              sizeof(DeviceMap.Query),
                                               &Length);
+                if (ProcessInformationLength == sizeof(PROCESS_DEVICEMAP_INFORMATION_EX))
+                    Length = sizeof(PROCESS_DEVICEMAP_INFORMATION_EX);
             }
             break;
 

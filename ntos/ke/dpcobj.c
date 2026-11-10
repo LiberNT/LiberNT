@@ -52,6 +52,10 @@ FAST_MUTEX KiGenericCallDpcMutex;
    KPRCB member for it on this layout, so it is kept beside the kernel. */
 static PKTHREAD KiDpcThread[MAXIMUM_PROCESSORS];
 
+/* What wakes that thread: an ordinary DPC, because a processor only looks at
+   its ordinary queue when it is interrupted for one. */
+static KDPC KiDpcThreadWakeDpc[MAXIMUM_PROCESSORS];
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 FORCEINLINE
@@ -84,39 +88,43 @@ KiSelectDpcQueue(
 }
 
 /*
- * Whether queueing this DPC should cost an interrupt right away. A high
- * importance DPC always does; a medium one does while the processor is not
- * already busy with DPCs; a low one only once the queue has grown past the
- * depth the processor is willing to carry.
+ * Whether queueing this DPC should cost an interrupt right away. On the
+ * processor that queued it only a low importance DPC waits, until the queue
+ * is deep or DPCs are rare; on another processor nothing but a full queue is
+ * worth an interrupt unless that processor is idle. Whatever is left waiting
+ * is drained at that processor's next clock tick.
  */
 static
 BOOLEAN
 KiDpcNeedsInterrupt(
     _In_ PKPRCB Prcb,
     _In_ PKDPC_DATA DpcData,
-    _In_ PKDPC Dpc)
+    _In_ PKDPC Dpc,
+    _In_ BOOLEAN Local)
 {
+    BOOLEAN DeepQueue;
+
     if (Prcb->DpcRoutineActive)
         return FALSE;
 
-    switch (Dpc->Importance)
+    DeepQueue = (DpcData->DpcQueueDepth >= Prcb->MaximumDpcQueueDepth);
+
+    if (Local)
     {
-        case HighImportance:
+        if (Dpc->Importance != LowImportance)
             return TRUE;
 
-        case MediumHighImportance:
-            return TRUE;
-
-        case MediumImportance:
-            if (Prcb->DpcRequestRate < Prcb->MinimumDpcRate)
-                return TRUE;
-            break;
-
-        default:
-            break;
+        return DeepQueue || (Prcb->DpcRequestRate < Prcb->MinimumDpcRate);
     }
 
-    return DpcData->DpcQueueDepth >= Prcb->MaximumDpcQueueDepth;
+    if (Prcb->CurrentThread == Prcb->IdleThread)
+        return TRUE;
+
+    if ((Dpc->Importance == LowImportance) || (Dpc->Importance == MediumImportance))
+        return DeepQueue;
+
+    /* Anything more urgent is worth interrupting the other processor for */
+    return TRUE;
 }
 
 /*
@@ -192,8 +200,12 @@ KiDpcThreadRoutine(
     PKDPC_DATA DpcData = &Prcb->DpcData[DPC_THREADED];
     PKDEFERRED_ROUTINE Routine;
     PVOID DeferredContext, SystemArgument1, SystemArgument2;
+    BOOLEAN Empty;
     PKDPC Dpc;
     KIRQL OldIrql;
+
+    /* A threaded DPC is still a DPC to whoever wrote it: no APC of any kind interrupts one */
+    KeEnterGuardedRegion();
 
     for (;;)
     {
@@ -203,34 +215,74 @@ KiDpcThreadRoutine(
                               FALSE,
                               NULL);
 
-        Prcb->DpcThreadActive = TRUE;
-
-        for (;;)
+        do
         {
-            OldIrql = KeRaiseIrqlToDpcLevel();
-            Dpc = KiPopDpc(DpcData,
-                           &Routine,
-                           &DeferredContext,
-                           &SystemArgument1,
-                           &SystemArgument2);
+            Prcb->DpcThreadActive = TRUE;
+
+            for (;;)
+            {
+                OldIrql = KeRaiseIrqlToDpcLevel();
+                Dpc = KiPopDpc(DpcData,
+                               &Routine,
+                               &DeferredContext,
+                               &SystemArgument1,
+                               &SystemArgument2);
+                KeLowerIrql(OldIrql);
+
+                if (Dpc == NULL)
+                    break;
+
+                /* A threaded DPC runs where it may block, unlike an ordinary one */
+                Routine(Dpc, DeferredContext, SystemArgument1, SystemArgument2);
+            }
+
+            /*
+             * Whoever queues while the thread says it is active does not wake
+             * it. The claim is withdrawn under the queue lock, and the queue is
+             * looked at once more under it, so nothing queued in between is
+             * left behind.
+             */
+            OldIrql = KfRaiseIrql(HIGH_LEVEL);
+            KeAcquireSpinLockAtDpcLevel(KiDpcQueueLock(DpcData));
+            Prcb->DpcThreadActive = FALSE;
+            Prcb->DpcThreadRequested = FALSE;
+            Empty = (BOOLEAN)(DpcData->DpcQueueDepth == 0);
+            KeReleaseSpinLockFromDpcLevel(KiDpcQueueLock(DpcData));
             KeLowerIrql(OldIrql);
-
-            if (Dpc == NULL)
-                break;
-
-            /* A threaded DPC runs where it may block, unlike an ordinary one */
-            Routine(Dpc, DeferredContext, SystemArgument1, SystemArgument2);
-        }
-
-        Prcb->DpcThreadActive = FALSE;
-        Prcb->DpcThreadRequested = FALSE;
+        } while (!Empty);
     }
 }
 
-/*
- * Signals that this generic call has finished on one processor. Nothing more
- * than a count: the caller watches it fall to zero.
- */
+static
+VOID
+NTAPI
+KiDpcThreadWakeRoutine(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PKPRCB Prcb = (PKPRCB)DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    KeSetEvent(&Prcb->DpcEvent, 0, FALSE);
+}
+
+/* Says whether a thread is the one working through this processor's threaded DPCs right now */
+BOOLEAN
+FASTCALL
+KiIsDpcThreadBusy(
+    _In_ PKPRCB Prcb,
+    _In_ PKTHREAD Thread)
+{
+    return (BOOLEAN)(Prcb->DpcThreadActive &&
+                     (KiDpcThread[Prcb->Number] == Thread));
+}
+
+/* What a flush leaves at the back of a queue: it says the queue got that far */
 static
 VOID
 NTAPI
@@ -241,10 +293,10 @@ KiFlushDpcBarrierRoutine(
     _In_opt_ PVOID SystemArgument2)
 {
     UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(DeferredContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    KeSignalCallDpcDone(SystemArgument1);
+    KeSetEvent((PKEVENT)DeferredContext, 0, FALSE);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -268,9 +320,6 @@ KiInitializeDpc(
     Dpc->DeferredContext = DeferredContext;
     Dpc->DpcData = NULL;
     Dpc->ProcessorHistory = 0;
-    Dpc->SystemArgument1 = NULL;
-    Dpc->SystemArgument2 = NULL;
-    Dpc->DpcListEntry.Next = NULL;
 }
 
 VOID
@@ -413,7 +462,7 @@ KeInsertQueueDpc(
             }
         }
         else if (!Prcb->DpcInterruptRequested &&
-                 KiDpcNeedsInterrupt(Prcb, DpcData, Dpc))
+                 KiDpcNeedsInterrupt(Prcb, DpcData, Dpc, (BOOLEAN)(Prcb == CurrentPrcb)))
         {
             Prcb->DpcInterruptRequested = TRUE;
             NeedInterrupt = TRUE;
@@ -426,9 +475,8 @@ KeInsertQueueDpc(
 
     if (NeedThread)
     {
-        /* The event is signalled below DISPATCH_LEVEL by the thread path */
-        Prcb->DpcSetEventRequest = TRUE;
-        NeedInterrupt = TRUE;
+        /* The thread is woken from a DPC of its own processor, which is where its event may be signalled */
+        KeInsertQueueDpc(&KiDpcThreadWakeDpc[Processor], NULL, NULL);
     }
 
     if (NeedInterrupt)
@@ -516,13 +564,13 @@ KeRemoveQueueDpcEx(
 
     KeLowerIrql(OldIrql);
 
-    if (WaitIfActive && !Enqueued)
+    /*
+     * It was not queued; it may still be running. Draining every processor's
+     * queue is what makes the answer good. A caller at DISPATCH_LEVEL or above
+     * cannot wait for that, and may be the routine itself: it is told at once.
+     */
+    if (WaitIfActive && !Enqueued && (KeGetCurrentIrql() < DISPATCH_LEVEL))
     {
-        /*
-         * It was not queued; it may still be running. Draining every
-         * processor's queue is what makes the answer good.
-         */
-        ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
         KeFlushQueuedDpcs();
     }
 
@@ -531,16 +579,43 @@ KeRemoveQueueDpcEx(
 
 /*
  * Waits until every DPC queued before this call has run, on every processor.
- * A DPC queued now on each processor can only run after the ones already
- * there, so waiting for ours is waiting for theirs.
+ * A marker is put at the back of each processor's two queues and waited for:
+ * whatever was queued ahead of it has run by the time it does. The marker asks
+ * for the processor's attention itself, so one that was only keeping low
+ * importance work for later is made to get on with it.
  */
 VOID
 NTAPI
 KeFlushQueuedDpcs(VOID)
 {
+    KAFFINITY Active = KeActiveProcessors;
+    ULONG Processor, Pass;
+    KEVENT Done;
+    KDPC Dpc;
+
     ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
 
-    KeGenericCallDpc(KiFlushDpcBarrierRoutine, NULL);
+    for (Processor = 0; Processor < MAXIMUM_PROCESSORS; Processor++)
+    {
+        if ((Active & AFFINITY_MASK(Processor)) == 0)
+            continue;
+
+        for (Pass = 0; Pass < 2; Pass++)
+        {
+            KeInitializeEvent(&Done, NotificationEvent, FALSE);
+
+            if (Pass == 0)
+                KeInitializeDpc(&Dpc, KiFlushDpcBarrierRoutine, &Done);
+            else
+                KeInitializeThreadedDpc(&Dpc, KiFlushDpcBarrierRoutine, &Done);
+
+            KeSetTargetProcessorDpc(&Dpc, (CCHAR)Processor);
+            KeSetImportanceDpc(&Dpc, MediumHighImportance);
+            KeInsertQueueDpc(&Dpc, NULL, NULL);
+
+            KeWaitForSingleObject(&Done, Executive, KernelMode, FALSE, NULL);
+        }
+    }
 }
 
 /*
@@ -591,9 +666,12 @@ NTAPI
 KeQueryDpcWatchdogInformation(
     _Out_ PKDPC_WATCHDOG_INFORMATION WatchdogInformation)
 {
-    PKPRCB Prcb = KeGetCurrentPrcb();
+    PKPRCB Prcb;
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    /* Below DISPATCH_LEVEL there is no one processor to answer for */
+    if (KeGetCurrentIrql() < DISPATCH_LEVEL) return STATUS_UNSUCCESSFUL;
+
+    Prcb = KeGetCurrentPrcb();
 
     WatchdogInformation->DpcTimeLimit = Prcb->DpcTimeLimit;
     WatchdogInformation->DpcTimeCount = Prcb->DpcTimeCount;
@@ -680,15 +758,6 @@ KiRetireDpcList(
                             Prcb->DpcRequestRate) / 2;
     Prcb->DpcLastCount = DpcData->DpcCount;
 
-    /*
-     * Waking the threaded DPC thread needs the dispatcher, which cannot be
-     * entered from inside the DPC pass. It is done on the way out instead.
-     */
-    if (Prcb->DpcSetEventRequest)
-    {
-        Prcb->DpcSetEventRequest = FALSE;
-        KeSetEvent(&Prcb->DpcEvent, 0, FALSE);
-    }
 }
 
 /*
@@ -865,6 +934,13 @@ KiStartDpcThreads(VOID)
 
         KeSetPriorityThread(&Thread->Tcb, Priority);
         KeSetAffinityThread(&Thread->Tcb, AFFINITY_MASK(Processor));
+
+        KeInitializeDpc(&KiDpcThreadWakeDpc[Processor],
+                        KiDpcThreadWakeRoutine,
+                        Prcb);
+        KeSetTargetProcessorDpc(&KiDpcThreadWakeDpc[Processor],
+                                (CCHAR)Processor);
+        KeSetImportanceDpc(&KiDpcThreadWakeDpc[Processor], HighImportance);
 
         KiDpcThread[Processor] = &Thread->Tcb;
         Prcb->ThreadDpcEnable = TRUE;

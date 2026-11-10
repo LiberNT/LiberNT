@@ -165,20 +165,16 @@ SeImpersonateClientEx(
 
     if (ServerThread == NULL) ServerThread = PsGetCurrentThread();
 
+    /* The server gets the level the client asked for, which creation checked against the client's token */
+    Level = ClientContext->SecurityQos.ImpersonationLevel;
+
     if (ClientContext->DirectlyAccessClientToken)
     {
-        /*
-         * The token belongs to the client, so the level it is at now is what
-         * the server gets, and opening it has to yield a copy rather than the
-         * client's own token.
-         */
-        Level = SeTokenImpersonationLevel(ClientContext->ClientToken);
+        /* The token is the client's own, so opening it has to yield a copy */
         EffectiveOnly = ClientContext->DirectAccessEffectiveOnly;
     }
     else
     {
-        /* The snapshot is already fixed at the level it was taken for */
-        Level = ClientContext->SecurityQos.ImpersonationLevel;
         EffectiveOnly = ClientContext->SecurityQos.EffectiveOnly;
     }
 

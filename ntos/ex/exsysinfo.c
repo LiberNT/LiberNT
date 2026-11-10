@@ -352,7 +352,8 @@ NTSTATUS NTAPI ExpSetPrioritySeparation(_In_ PULONG, _In_ ULONG);
 NTSTATUS NTAPI ExpSetTimeSlipEvent(_In_ PHANDLE, _In_ ULONG);
 NTSTATUS NTAPI ExpSetObjectSecurityMode(_In_ PULONG, _In_ ULONG);
 NTSTATUS NTAPI ExpExtendServiceTable(
-    _In_ PSYSTEM_GDI_DRIVER_INFORMATION, _In_ ULONG);
+    _In_ PUNICODE_STRING ImageName,
+    _In_ ULONG Length);
 NTSTATUS NTAPI ExpUnloadGdiDriver(_In_ PVOID *, _In_ ULONG);
 NTSTATUS NTAPI ExpSetLoadGdiDriver(
     _Inout_ PSYSTEM_GDI_DRIVER_INFORMATION, _In_ ULONG, _In_ BOOLEAN);
@@ -547,6 +548,21 @@ ExpGetRawSMBiosTable(
     PAGED_CODE();
 
     *OutSize = 0;
+
+    /* The table the loader handed over is the firmware's own; a copy a driver kept in the registry is the fallback */
+    Length = 0;
+    Status = WmipQueryRawSMBiosTables(&Length, NULL);
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        *OutSize = Length;
+        if (Buffer == NULL) return STATUS_SUCCESS;
+        if (BufferSize < Length) return STATUS_BUFFER_TOO_SMALL;
+
+        Status = WmipQueryRawSMBiosTables(&Length, Buffer);
+        ASSERT(!NT_SUCCESS(Status) || (Length == *OutSize));
+        return Status;
+    }
+    Length = 0;
 
     InitializeObjectAttributes(&ObjectAttributes,
                                &KeyName,
@@ -1238,6 +1254,65 @@ NtQuerySystemInformation(
                 break;
             }
 
+            case SystemFirmwareTableInformation:
+            {
+                PSYSTEM_FIRMWARE_TABLE_INFORMATION Request = SystemInformation;
+                const ULONG Header = FIELD_OFFSET(SYSTEM_FIRMWARE_TABLE_INFORMATION, TableBuffer);
+                ULONG TableLength = 0;
+                ULONG Room;
+
+                if (Length < Header)
+                {
+                    ResultLength = Header;
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* The caller names the provider, the action and the table, and has the rest of its buffer for the answer */
+                Room = Length - Header;
+
+                if (Request->Action == SystemFirmwareTable_Get)
+                {
+                    Status = ExGetSystemFirmwareTable(Request->ProviderSignature,
+                                                      Request->TableID,
+                                                      Request->TableBuffer,
+                                                      Room,
+                                                      &TableLength);
+                }
+                else if (Request->Action == SystemFirmwareTable_Enumerate)
+                {
+                    /* TODO: only the raw SMBIOS provider exists, and it has the one table */
+                    if (Request->ProviderSignature != SIG_RSMB)
+                    {
+                        Status = STATUS_NOT_IMPLEMENTED;
+                        break;
+                    }
+
+                    TableLength = sizeof(ULONG);
+                    if (Room < TableLength)
+                    {
+                        Status = STATUS_BUFFER_TOO_SMALL;
+                    }
+                    else
+                    {
+                        *(PULONG)Request->TableBuffer = 0;
+                        Status = STATUS_SUCCESS;
+                    }
+                }
+                else
+                {
+                    Status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+
+                if (NT_SUCCESS(Status) || (Status == STATUS_BUFFER_TOO_SMALL))
+                {
+                    Request->TableBufferLength = TableLength;
+                    ResultLength = Header + TableLength;
+                }
+                break;
+            }
+
             default:
             {
                 /*
@@ -1447,7 +1522,7 @@ NtSetSystemInformation(
             {
                 Status = ExpSetLoadGdiDriver(SystemInformation,
                                              Length,
-                                             FALSE);
+                                             TRUE);
                 break;
             }
 
@@ -1455,7 +1530,7 @@ NtSetSystemInformation(
             {
                 Status = ExpSetLoadGdiDriver(SystemInformation,
                                              Length,
-                                             TRUE);
+                                             FALSE);
                 break;
             }
 
@@ -1519,6 +1594,8 @@ NtSetSystemInformation(
             case SystemSessionCreate:
             case SystemSessionDetach:
             {
+                ULONG SessionId;
+
                 if (Length != sizeof(ULONG))
                 {
                     Status = STATUS_INFO_LENGTH_MISMATCH;
@@ -1531,9 +1608,19 @@ NtSetSystemInformation(
                     break;
                 }
 
-                /* TODO: a session of its own address space is not created by
-                   the memory manager yet. */
-                Status = STATUS_NOT_IMPLEMENTED;
+                if (SystemInformationClass == SystemSessionDetach)
+                {
+                    Status = MmSessionDelete(*(PULONG)SystemInformation);
+                    break;
+                }
+
+                /* The new session's identifier comes back in the same word */
+                if (PreviousMode != KernelMode)
+                    ProbeForWriteUlong((PULONG)SystemInformation);
+
+                Status = MmSessionCreate(&SessionId);
+                if (NT_SUCCESS(Status))
+                    *(PULONG)SystemInformation = SessionId;
                 break;
             }
 

@@ -37,6 +37,24 @@ KiRetireDpcListInDpcStack:
     mv sp, t0
     ret
 
+    .section .text$KiCallOnKernelStack, "xr"
+    .balign 4
+    .global KiCallOnKernelStack
+/*
+ * VOID KiCallOnKernelStack(PVOID Context <a0>, PVOID StackTop <a1>)
+ */
+KiCallOnKernelStack:
+    mv t0, sp
+    mv sp, a1
+    addi sp, sp, -16
+    sd t0, 0(sp)
+    sd ra, 8(sp)
+    call KiRunStackCallout
+    ld t0, 0(sp)
+    ld ra, 8(sp)
+    mv sp, t0
+    ret
+
     .section .text$KiSwapContext, "xr"
     .balign 4
     .global KiSwapContext

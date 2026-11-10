@@ -202,6 +202,7 @@ IopUnloadDevice(
 {
     PEXTENDED_DEVOBJ_EXTENSION Extension = IoGetDevObjExtension(DeviceObject);
     PDRIVER_OBJECT DriverObject = DeviceObject->DriverObject;
+    BOOLEAN UnloadWaiting;
     PVPB Vpb;
     KIRQL OldIrql;
 
@@ -215,12 +216,15 @@ IopUnloadDevice(
         return;
     }
 
+    UnloadWaiting = BooleanFlagOn(Extension->ExtensionFlags, DOE_UNLOAD_PENDING);
+
     Vpb = Extension->Vpb;
     Extension->Vpb = NULL;
 
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
-    if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
+    /* Only the storage device owns its VPB; a volume device merely points at the one it was mounted on */
+    if (Vpb != NULL && DeviceObject->Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
 
     if (DeviceObject->Timer != NULL)
     {
@@ -232,12 +236,14 @@ IopUnloadDevice(
     if (Extension->ExtensionFlags & DOE_DELETE_PENDING)
     {
         IopEditDeviceList(DriverObject, DeviceObject, IopRemove);
+        ObMakeTemporaryObject(DeviceObject);
         ObDereferenceObject(DeviceObject);
     }
 
-    if (DriverObject->DeviceObject == NULL &&
-        (IoGetDrvObjExtension(DriverObject)->PnpUnloadPending ||
-         DriverObject->DriverUnload != NULL))
+    /* A driver is taken away only where that was asked for and had to wait for this device */
+    if (UnloadWaiting ||
+        (DriverObject->DeviceObject == NULL &&
+         IoGetDrvObjExtension(DriverObject)->PnpUnloadPending))
     {
         IopTryUnloadDriver(DriverObject, FALSE);
     }
@@ -337,7 +343,7 @@ IopGetDeviceObjectPointer(
                                        NULL);
     if (!NT_SUCCESS(Status))
     {
-        NtClose(Handle);
+        ZwClose(Handle);
         return Status;
     }
 
@@ -345,11 +351,11 @@ IopGetDeviceObjectPointer(
     if (LocalDevice == NULL)
     {
         ObDereferenceObject(LocalFileObject);
-        NtClose(Handle);
+        ZwClose(Handle);
         return STATUS_NO_SUCH_DEVICE;
     }
 
-    NtClose(Handle);
+    ZwClose(Handle);
 
     *FileObject = LocalFileObject;
     *DeviceObject = LocalDevice;
@@ -382,10 +388,11 @@ IopCreateDeviceObject(
 
     *DeviceObject = NULL;
 
-    if (DeviceExtensionSize > MAXUSHORT - sizeof(DEVICE_OBJECT) -
-                                  sizeof(EXTENDED_DEVOBJ_EXTENSION))
+    /* The size is not limited, but it has to leave room for the object around it */
+    if (DeviceExtensionSize > MAXULONG - sizeof(DEVICE_OBJECT) -
+                                  sizeof(EXTENDED_DEVOBJ_EXTENSION) - 2 * sizeof(LONGLONG))
     {
-        return STATUS_INVALID_PARAMETER;
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     Status = IopCreateDefaultDeviceSecurityDescriptor(DeviceType,
@@ -429,6 +436,9 @@ IopCreateDeviceObject(
     CreatedDevice->DeviceType = DeviceType;
     CreatedDevice->Characteristics = DeviceCharacteristics;
     CreatedDevice->DriverObject = DriverObject;
+
+    /* The device's delete routine gives this back on every path from here */
+    ObReferenceObject(DriverObject);
     CreatedDevice->StackSize = 1;
     CreatedDevice->AlignmentRequirement = FILE_BYTE_ALIGNMENT;
     CreatedDevice->SectorSize = 0;
@@ -449,11 +459,6 @@ IopCreateDeviceObject(
     DeviceExtension->Size = 0;
     DeviceExtension->DeviceObject = CreatedDevice;
     CreatedDevice->DeviceObjectExtension = (PDEVOBJ_EXTENSION)DeviceExtension;
-
-    if (DefaultSdPresent)
-    {
-        DeviceExtension->ExtensionFlags |= DOE_DEFAULT_SD_PRESENT;
-    }
 
     KeInitializeDeviceQueue(&CreatedDevice->DeviceQueue);
     KeInitializeEvent(&CreatedDevice->DeviceLock, SynchronizationEvent, TRUE);
@@ -484,7 +489,13 @@ IopCreateDeviceObject(
                             NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    ObReferenceObject(DriverObject);
+    /* Naming the device assigned it the descriptor, which is the one the system keeps for this kind of device */
+    if (DefaultSdPresent)
+    {
+        IoGetDevObjExtension(CreatedDevice)->ExtensionFlags |=
+            DOE_DEFAULT_SD_PRESENT;
+    }
+
     IopEditDeviceList(DriverObject, CreatedDevice, IopAdd);
 
     InterlockedIncrement((PLONG)&IopDeviceObjectNumber);
@@ -610,7 +621,8 @@ IoDeleteDevice(
     DriverObject = DeviceObject->DriverObject;
     Extension->ExtensionFlags |= DOE_DELETE_PENDING;
 
-    if (DeviceObject->ReferenceCount != 0)
+    if (DeviceObject->ReferenceCount != 0 ||
+        DeviceObject->AttachedDevice != NULL)
     {
         KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
         return;
@@ -621,15 +633,15 @@ IoDeleteDevice(
 
     if (DriverObject->DeviceObject == DeviceObject &&
         DeviceObject->NextDevice == NULL &&
-        (IoGetDrvObjExtension(DriverObject)->PnpUnloadPending ||
-         (DriverObject->Flags & DRVO_UNLOAD_INVOKED)))
+        IoGetDrvObjExtension(DriverObject)->PnpUnloadPending)
     {
         Unload = TRUE;
     }
 
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
-    if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
+    /* Only the storage device owns its VPB; a volume device merely points at the one it was mounted on */
+    if (Vpb != NULL && DeviceObject->Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
 
     if (DeviceObject->Timer != NULL)
     {
@@ -640,6 +652,8 @@ IoDeleteDevice(
 
     IopEditDeviceList(DriverObject, DeviceObject, IopRemove);
 
+    /* A device object has no handle, so its name goes when the I/O manager says so */
+    ObMakeTemporaryObject(DeviceObject);
     ObDereferenceObject(DeviceObject);
 
     if (Unload) IopTryUnloadDriver(DriverObject, FALSE);
@@ -734,12 +748,6 @@ IoGetRelatedDeviceObject(
     {
         DeviceObject = FileObject->Vpb->DeviceObject;
     }
-    else if (FileObject->RelatedFileObject != NULL &&
-             FileObject->RelatedFileObject->Vpb != NULL &&
-             FileObject->RelatedFileObject->Vpb->DeviceObject != NULL)
-    {
-        DeviceObject = FileObject->RelatedFileObject->Vpb->DeviceObject;
-    }
     else
     {
         DeviceObject = FileObject->DeviceObject;
@@ -747,12 +755,7 @@ IoGetRelatedDeviceObject(
 
     if (DeviceObject == NULL) return NULL;
 
-    if (!(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
-    {
-        return IoGetAttachedDevice(DeviceObject);
-    }
-
-    return DeviceObject;
+    return IoGetAttachedDevice(DeviceObject);
 }
 
 NTSTATUS
@@ -816,16 +819,18 @@ IoAttachDeviceToDeviceStackSafe(
 
     TargetExtension = IoGetDevObjExtension(Top);
 
-    if ((TargetExtension->ExtensionFlags & (DOE_UNLOAD_PENDING |
-                                            DOE_DELETE_PENDING |
-                                            DOE_REMOVE_PENDING |
-                                            DOE_REMOVE_PROCESSED)) ||
-        (Top->Flags & DO_DEVICE_INITIALIZING))
+    if (TargetExtension->ExtensionFlags & (DOE_UNLOAD_PENDING |
+                                           DOE_DELETE_PENDING |
+                                           DOE_REMOVE_PENDING |
+                                           DOE_REMOVE_PROCESSED))
     {
         KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
         *AttachedToDeviceObject = NULL;
         return STATUS_NO_SUCH_DEVICE;
     }
+
+    /* What sits on a device keeps it, so it cannot go while the stack stands */
+    ObReferenceObject(Top);
 
     Top->AttachedDevice = SourceDevice;
 
@@ -884,9 +889,6 @@ IoDetachDevice(
 
     TargetDevice->AttachedDevice = NULL;
 
-    ASSERT(TargetDevice->ReferenceCount > 0);
-    TargetDevice->ReferenceCount--;
-
     Extension = IoGetDevObjExtension(TargetDevice);
 
     if (TargetDevice->ReferenceCount == 0 &&
@@ -894,11 +896,16 @@ IoDetachDevice(
                                       DOE_UNLOAD_PENDING)))
     {
         KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
         IopUnloadDevice(TargetDevice);
+        ObDereferenceObject(TargetDevice);
         return;
     }
 
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    /* The reference the attachment held */
+    ObDereferenceObject(TargetDevice);
 }
 
 VOID

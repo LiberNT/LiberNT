@@ -166,7 +166,10 @@ ExpQueryHandleInformation(
 
         Walk.UniqueProcessId = HandleTable->UniqueProcessId;
 
-        ExSweepHandleTable(HandleTable, ExpWriteHandleEntry, &Walk);
+        /* FIXME: nothing keeps a table on this list while it is being read */
+        KeEnterCriticalRegion();
+        ExEnumHandleTable(HandleTable, ExpWriteHandleEntry, &Walk, NULL);
+        KeLeaveCriticalRegion();
     }
 
     *ReturnLength = Header + Walk.Used;

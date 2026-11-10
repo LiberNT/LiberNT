@@ -111,7 +111,7 @@ IoGetStackLimits(
     PKTHREAD Thread = KeGetCurrentThread();
 
     *LowLimit = (ULONG_PTR)Thread->StackLimit;
-    *HighLimit = (ULONG_PTR)Thread->InitialStack;
+    *HighLimit = (ULONG_PTR)Thread->StackBase;
 }
 
 LOGICAL
@@ -126,7 +126,6 @@ IoWithinStackLimits(
     IoGetStackLimits(&LowLimit, &HighLimit);
 
     if (RegionStart < LowLimit) return FALSE;
-    if (RegionStart + RegionSize < RegionStart) return FALSE;
     if (RegionStart + RegionSize > HighLimit) return FALSE;
 
     return TRUE;
@@ -238,6 +237,13 @@ IoOpenDriverRegistryKey(
 
     if (Flags != 0) return STATUS_INVALID_PARAMETER;
 
+    /* TODO: the state shared between the drivers of one device has no key of its own here */
+    if (RegKeyType != DriverRegKeyParameters &&
+        RegKeyType != DriverRegKeyPersistentState)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
     *DriverRegKey = NULL;
 
     Extension = IoGetDrvObjExtension(DriverObject);
@@ -252,15 +258,9 @@ IoOpenDriverRegistryKey(
     {
         Length += ParametersName.Length;
     }
-    else if (RegKeyType == DriverRegKeyPersistentState)
-    {
-        Length += PersistentName.Length;
-    }
     else
     {
-        /* TODO: the state shared between the drivers of one device has no
-           key of its own here. */
-        return STATUS_INVALID_PARAMETER;
+        Length += PersistentName.Length;
     }
 
     Buffer = ExAllocatePoolZero(PagedPool,

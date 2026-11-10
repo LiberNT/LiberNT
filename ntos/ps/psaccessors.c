@@ -625,10 +625,9 @@ PsAdjustWin32kPriorityFloor(
     _Inout_ PETHREAD Thread,
     _In_ LONG PriorityFloor)
 {
-    CHAR Previous = Thread->Win32kPriorityFloor;
-
-    Thread->Win32kPriorityFloor = (CHAR)PriorityFloor;
-    return Previous;
+    return KeExchangePriorityFloorThread(&Thread->Tcb,
+                                         &Thread->Win32kPriorityFloor,
+                                         PriorityFloor);
 }
 
 /*

@@ -39,28 +39,62 @@ static BOOLEAN CmpDelayDerefEngineRunning = FALSE;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+/*
+ * Closes the oldest entry for good. The entry leaves the table and its key
+ * stops counting as delay-closed in one step, under the key's lock and the
+ * table lock together, so a lookup that revives the key cannot also take the
+ * entry out. Answers FALSE when the table is empty.
+ */
 static
-PCM_DELAYED_CLOSE_ENTRY
-CmpTakeOldestDelayedClose(VOID)
+BOOLEAN
+CmpCloseOldestDelayedClose(VOID)
 {
     PCM_DELAYED_CLOSE_ENTRY Entry;
-    PLIST_ENTRY ListEntry;
+    PCM_KEY_CONTROL_BLOCK Kcb;
+    ULONG ConvKey;
 
-    KeAcquireGuardedMutex(&CmpDelayedCloseTableLock);
-
-    if (IsListEmpty(&CmpDelayedCloseListHead))
+    for (;;)
     {
+        KeAcquireGuardedMutex(&CmpDelayedCloseTableLock);
+
+        if (IsListEmpty(&CmpDelayedCloseListHead))
+        {
+            KeReleaseGuardedMutex(&CmpDelayedCloseTableLock);
+            return FALSE;
+        }
+
+        Entry = CONTAINING_RECORD(CmpDelayedCloseListHead.Flink,
+                                  CM_DELAYED_CLOSE_ENTRY,
+                                  DelayedLRUList);
+        Kcb = Entry->KeyControlBlock;
+        ConvKey = Kcb->ConvKey;
+
+        /* The key's lock ranks above the table's, so here it can only be tried */
+        if (CmpTryToAcquireKcbLockExclusiveByKey(ConvKey))
+            break;
+
         KeReleaseGuardedMutex(&CmpDelayedCloseTableLock);
-        return NULL;
+
+        CmpAcquireKcbLockExclusiveByKey(ConvKey);
+        CmpReleaseKcbLockByKey(ConvKey);
     }
 
-    ListEntry = RemoveHeadList(&CmpDelayedCloseListHead);
-    CmpDelayedCloseElements--;
+    ASSERT(Kcb->InDelayClose != 0);
+    ASSERT(Kcb->DelayCloseEntry == Entry);
 
+    RemoveEntryList(&Entry->DelayedLRUList);
+    CmpDelayedCloseElements--;
     KeReleaseGuardedMutex(&CmpDelayedCloseTableLock);
 
-    Entry = CONTAINING_RECORD(ListEntry, CM_DELAYED_CLOSE_ENTRY, DelayedLRUList);
-    return Entry;
+    Kcb->InDelayClose = 0;
+    Kcb->DelayCloseEntry = NULL;
+
+    if (Kcb->RefCount == 0)
+        CmpCleanUpKcbCacheWithLock(Kcb, TRUE);
+
+    CmpReleaseKcbLockByKey(ConvKey);
+    CmpFreeDelayItem(Entry);
+    return TRUE;
 }
 
 /* Lets go of the oldest entries until the table is back inside its budget */
@@ -69,32 +103,10 @@ VOID
 CmpDrainDelayedClose(
     _In_ ULONG Budget)
 {
-    PCM_DELAYED_CLOSE_ENTRY Entry;
-    PCM_KEY_CONTROL_BLOCK Kcb;
-    ULONG ConvKey;
-
     while (CmpDelayedCloseElements > Budget)
     {
-        Entry = CmpTakeOldestDelayedClose();
-        if (Entry == NULL) return;
-
-        Kcb = Entry->KeyControlBlock;
-        ConvKey = Kcb->ConvKey;
-
-        CmpAcquireKcbLockExclusiveByKey(ConvKey);
-
-        if (Kcb->InDelayClose != 0 && Kcb->RefCount == 0)
-        {
-            Kcb->InDelayClose = 0;
-            Kcb->DelayCloseEntry = NULL;
-            CmpFreeDelayItem(Entry);
-            CmpCleanUpKcbCacheWithLock(Kcb, TRUE);
-            CmpReleaseKcbLockByKey(ConvKey);
-            continue;
-        }
-
-        CmpReleaseKcbLockByKey(ConvKey);
-        CmpFreeDelayItem(Entry);
+        if (!CmpCloseOldestDelayedClose())
+            return;
     }
 }
 
@@ -105,7 +117,10 @@ CmpDelayCloseWorker(
 {
     UNREFERENCED_PARAMETER(Parameter);
 
+    /* A forced unload walks the key cache under the exclusive registry lock */
+    CmpLockRegistry();
     CmpDrainDelayedClose(0);
+    CmpUnlockRegistry();
     CmpDelayCloseWorkItemActive = FALSE;
 
     if (CmpDelayedCloseElements != 0) CmpArmDelayedCloseTimer();
@@ -280,6 +295,8 @@ CmpRemoveFromDelayedClose(
     _In_ PCM_KEY_CONTROL_BLOCK Kcb)
 {
     PCM_DELAYED_CLOSE_ENTRY Entry;
+
+    ASSERT(CmpIsKcbLockedExclusive(Kcb) || CmpTestRegistryLockExclusive());
 
     if (Kcb->InDelayClose == 0) return;
 

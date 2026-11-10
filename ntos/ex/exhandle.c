@@ -312,6 +312,11 @@ ExpLookupEntry(
     PHANDLE_TABLE_ENTRY **HighTable;
     ULONG Index = (ULONG)Handle.Index;
 
+    if (Handle.KernelFlag != 0)
+    {
+        return NULL;
+    }
+
     /* The first entry of each page belongs to the page, not to a caller. */
     if ((Index % LOW_LEVEL_ENTRIES) == 0)
     {
@@ -782,9 +787,9 @@ ExpFreeHandleTableLevels(
 }
 
 /*
- * Walks every entry that names something, handing each to the caller. The entry
- * is locked while the caller looks at it unless the table is being torn down,
- * when nobody else can reach it any more.
+ * Walks every entry that names something, handing each to the caller. A sweep
+ * visits them all and leaves each entry to the callback, which destroys it or
+ * unlocks it; otherwise the callback only looks, and its TRUE ends the walk.
  */
 static
 BOOLEAN
@@ -793,6 +798,7 @@ ExpWalkHandleTable(
     _In_ PEX_SWEEP_HANDLE_CALLBACK Callback,
     _In_opt_ PVOID Context,
     _In_ BOOLEAN Locked,
+    _In_ BOOLEAN Sweep,
     _Out_opt_ PHANDLE FoundHandle)
 {
     EXHANDLE Handle;
@@ -812,6 +818,12 @@ ExpWalkHandleTable(
 
         if (Locked && !ExpLockHandleTableEntry(HandleTable, Entry))
         {
+            continue;
+        }
+
+        if (Sweep)
+        {
+            Callback(Entry, Handle.GenericHandleOverlay, Context);
             continue;
         }
 
@@ -1021,6 +1033,7 @@ ExDestroyHandleTable(
                            (PEX_SWEEP_HANDLE_CALLBACK)DestroyHandleProcedure,
                            HandleTable,
                            FALSE,
+                           TRUE,
                            NULL);
     }
 
@@ -1253,7 +1266,7 @@ ExSweepHandleTable(
     _In_ PEX_SWEEP_HANDLE_CALLBACK EnumHandleProcedure,
     _In_opt_ PVOID Context)
 {
-    ExpWalkHandleTable(HandleTable, EnumHandleProcedure, Context, FALSE, NULL);
+    ExpWalkHandleTable(HandleTable, EnumHandleProcedure, Context, TRUE, TRUE, NULL);
 }
 
 BOOLEAN
@@ -1268,6 +1281,7 @@ ExEnumHandleTable(
                               (PEX_SWEEP_HANDLE_CALLBACK)EnumHandleProcedure,
                               Context,
                               TRUE,
+                              FALSE,
                               Handle);
 }
 
@@ -1338,19 +1352,14 @@ ExDupHandleTable(
                               EXHANDLE_TABLE_ENTRY_LOCK_BIT);
         Copy.HighValue = Entry->HighValue;
 
+        /* The procedure unlocks the source entry before it does work that may block */
         if (!DupHandleProcedure(Process, HandleTable, Entry, &Copy))
         {
-            ExUnlockHandleTableEntry(HandleTable, Entry);
             continue;
         }
-
-        ExUnlockHandleTableEntry(HandleTable, Entry);
 
         NewEntry = ExpLookupEntry(NewTable, Handle);
-        if (NewEntry == NULL)
-        {
-            continue;
-        }
+        ASSERT(NewEntry != NULL);
 
         NewEntry->HighValue = Copy.HighValue;
         NewEntry->Object = (PVOID)((ULONG_PTR)Copy.Object |
@@ -1458,7 +1467,7 @@ ExpKdbgExtHandle(
                   HandleTable,
                   ExpGetHandleCount(HandleTable));
 
-        ExSweepHandleTable(HandleTable, ExpKdbgPrintHandle, &Walk);
+        ExpWalkHandleTable(HandleTable, ExpKdbgPrintHandle, &Walk, FALSE, FALSE, NULL);
 
         if ((Walk.Wanted != NULL) && (Walk.Found != 0))
         {

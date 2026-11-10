@@ -201,7 +201,6 @@ IoConnectInterrupt(
     for (Processor = 0; Processor < MAXIMUM_PROCESSORS; Processor++)
     {
         PKINTERRUPT Interrupt;
-        NTSTATUS Status;
 
         if (!(Affinity & AFFINITY_MASK(Processor))) continue;
 
@@ -233,12 +232,11 @@ IoConnectInterrupt(
                               (CCHAR)Processor,
                               FloatingSave);
 
-        Status = KeConnectInterrupt(Interrupt);
-        if (!NT_SUCCESS(Status))
+        if (!KeConnectInterrupt(Interrupt))
         {
             if (Count != 0) ExFreePoolWithTag(Interrupt, TAG_IO_INTERRUPT);
             IoDisconnectInterrupt(&IoInterrupt->FirstInterrupt);
-            return Status;
+            return STATUS_INVALID_PARAMETER;
         }
 
         IoInterrupt->Interrupt[Processor] = Interrupt;

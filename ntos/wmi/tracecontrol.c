@@ -37,7 +37,7 @@ WmipLoggerRequest(
         return STATUS_INVALID_PARAMETER;
     }
 
-    return NtTraceControl(FunctionCode,
+    return ZwTraceControl(FunctionCode,
                           LoggerInformation,
                           sizeof(WMI_LOGGER_INFORMATION),
                           LoggerInformation,
@@ -164,10 +164,10 @@ WmiTraceFastEvent(
         return STATUS_INVALID_PARAMETER;
     }
 
-    return NtTraceEvent((HANDLE)(ULONG_PTR)Wnode->HistoricalContext,
-                        ETW_NT_FLAGS_TRACE_HEADER,
-                        Wnode->BufferSize,
-                        (PEVENT_TRACE_HEADER)Wnode);
+    return EtwpTraceClassicEvent((HANDLE)(ULONG_PTR)Wnode->HistoricalContext,
+                                 Wnode->BufferSize,
+                                 Wnode,
+                                 KernelMode);
 }
 
 NTSTATUS
@@ -208,10 +208,10 @@ WmiTraceMessageVa(
     /* TODO: carry the message flags through to the logger's message grouping */
     UNREFERENCED_PARAMETER(MessageFlags);
 
-    return NtTraceEvent((HANDLE)(ULONG_PTR)LoggerHandle,
-                        ETW_NT_FLAGS_TRACE_HEADER,
-                        Size,
-                        &Message.Header);
+    return EtwpTraceClassicEvent((HANDLE)(ULONG_PTR)LoggerHandle,
+                                 Size,
+                                 &Message.Header,
+                                 KernelMode);
 }
 
 /* The same, for a caller that has its arguments to hand rather than a list */

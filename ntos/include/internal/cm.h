@@ -275,6 +275,7 @@ typedef struct _CMP_CALLBACK_ITEM
 typedef struct _CMP_CALLBACK_CALL
 {
     ULONG Count;
+    ULONG PostCount;
     REG_NOTIFY_CLASS PostClass;
     PVOID PreInformation;
     PVOID *CallContext;

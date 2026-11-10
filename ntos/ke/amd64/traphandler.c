@@ -103,6 +103,10 @@ KiDpcInterruptHandler(VOID)
             OldThread->WaitReason = WrDispatchInt;
 
             KxQueueReadyThread(OldThread, Prcb);
+
+            /* A thread placed here by another processor may still be leaving it */
+            KiWaitForThreadSwapOut(NewThread);
+
             KiSwapContext(APC_LEVEL, OldThread);
         }
     }

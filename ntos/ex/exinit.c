@@ -6,6 +6,7 @@
  */
 
 #include <ntoskrnl.h>
+#include <ntos/inbv/logo.h>
 #define NDEBUG
 #include <debug.h>
 #include <reactos/buildno.h>
@@ -365,11 +366,70 @@ ExpCreateSystemRootLink(
 
     ZwClose(Handle);
 
-    /* Everything after this point may say \SystemRoot and be understood. */
-    NtSystemRoot.Length = 0;
-    RtlAppendUnicodeToString(&NtSystemRoot, L"\\SystemRoot");
-
     return TRUE;
+}
+
+/*
+ * The machine whose images this system runs natively, read from the kernel's
+ * own image so that it names whatever processor the kernel was built for.
+ */
+CODE_SEG("INIT")
+static
+VOID
+ExpInitializeImageNumbers(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PLDR_DATA_TABLE_ENTRY Kernel;
+    PIMAGE_NT_HEADERS Headers;
+
+    Kernel = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
+                               LDR_DATA_TABLE_ENTRY,
+                               InLoadOrderLinks);
+
+    Headers = RtlImageNtHeader(Kernel->DllBase);
+    if (Headers == NULL) KeBugCheck(PHASE0_INITIALIZATION_FAILED);
+
+    SharedUserData->ImageNumberLow = Headers->FileHeader.Machine;
+    SharedUserData->ImageNumberHigh = Headers->FileHeader.Machine;
+}
+
+/*
+ * The system directory as programs name it. Its volume has no letter until
+ * the I/O manager gives it one, so the first letter stands in until then.
+ */
+CODE_SEG("INIT")
+static
+VOID
+ExpInitializeSystemRoot(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    ANSI_STRING BootPath;
+    UNICODE_STRING Path;
+
+    NtSystemRoot.Length = 0;
+    RtlAppendUnicodeToString(&NtSystemRoot, L"C:");
+
+    if (LoaderBlock->NtBootPathName != NULL)
+    {
+        RtlInitAnsiString(&BootPath, LoaderBlock->NtBootPathName);
+
+        while (BootPath.Length != 0 && BootPath.Buffer[BootPath.Length - 1] == '\\')
+        {
+            BootPath.Length--;
+        }
+
+        Path.Buffer = &NtSystemRoot.Buffer[NtSystemRoot.Length / sizeof(WCHAR)];
+        Path.Length = 0;
+        Path.MaximumLength = NtSystemRoot.MaximumLength - NtSystemRoot.Length - sizeof(WCHAR);
+
+        if (NT_SUCCESS(RtlAnsiStringToUnicodeString(&Path, &BootPath, FALSE)))
+        {
+            NtSystemRoot.Length += Path.Length;
+        }
+    }
+
+    RtlCopyMemory(SharedUserData->NtSystemRoot, NtSystemRoot.Buffer, NtSystemRoot.Length);
+    SharedUserData->NtSystemRoot[NtSystemRoot.Length / sizeof(WCHAR)] = UNICODE_NULL;
 }
 
 /*
@@ -430,6 +490,216 @@ ExpInitNls(
 }
 
 /*
+ * The loader's copy of the tables goes away with the loader block, so phase 1
+ * moves them to pool for the kernel and into a section every process maps.
+ */
+CODE_SEG("INIT")
+static
+BOOLEAN
+ExpInitNlsSection(VOID)
+{
+    LARGE_INTEGER SectionSize;
+    PVOID SectionBase = NULL;
+    SIZE_T ViewSize = 0;
+    PUCHAR Tables;
+    NTSTATUS Status;
+
+    if (ExpNlsTableBase == NULL || ExpNlsTableSize == 0) return FALSE;
+
+    Tables = ExAllocatePoolWithTag(NonPagedPool, ExpNlsTableSize, TAG_INIT);
+    if (Tables == NULL) return FALSE;
+
+    RtlCopyMemory(Tables, ExpNlsTableBase, ExpNlsTableSize);
+    ExpNlsTableBase = Tables;
+
+    RtlInitNlsTables((PUSHORT)(Tables + ExpAnsiCodePageDataOffset),
+                     (PUSHORT)(Tables + ExpOemCodePageDataOffset),
+                     (PUSHORT)(Tables + ExpUnicodeCaseTableDataOffset),
+                     &ExpNlsTableInfo);
+    RtlResetRtlTranslations(&ExpNlsTableInfo);
+
+    SectionSize.QuadPart = ExpNlsTableSize;
+
+    Status = MmCreateSection(&ExpNlsSectionPointer,
+                             SECTION_ALL_ACCESS,
+                             NULL,
+                             &SectionSize,
+                             PAGE_READWRITE,
+                             SEC_COMMIT,
+                             NULL,
+                             NULL);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = MmMapViewInSystemSpace(ExpNlsSectionPointer, &SectionBase, &ViewSize);
+    if (!NT_SUCCESS(Status)) return FALSE;
+
+    RtlCopyMemory(SectionBase, Tables, ExpNlsTableSize);
+
+    MmUnmapViewInSystemSpace(SectionBase);
+
+    return TRUE;
+}
+
+/* The current directory buffer a user-mode parameter block carries: MAX_PATH characters */
+#define EXP_CURRENT_DIRECTORY_LENGTH (260 * sizeof(WCHAR))
+
+/*
+ * Places one string of the parameter block at the cursor and moves the cursor
+ * past the room it was given.
+ */
+CODE_SEG("INIT")
+static
+VOID
+ExpPlaceParameterString(
+    _Inout_ PUCHAR *Cursor,
+    _Out_ PUNICODE_STRING Destination,
+    _In_opt_ PCUNICODE_STRING Source,
+    _In_ USHORT MaximumLength)
+{
+    Destination->Length = (Source != NULL) ? Source->Length : 0;
+    Destination->MaximumLength = MaximumLength;
+    Destination->Buffer = (MaximumLength != 0) ? (PWCHAR)*Cursor : NULL;
+
+    if (Destination->Length != 0)
+        RtlCopyMemory(Destination->Buffer, Source->Buffer, Destination->Length);
+
+    if (MaximumLength >= Destination->Length + sizeof(WCHAR))
+        Destination->Buffer[Destination->Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    *Cursor += ALIGN_UP_BY(MaximumLength, sizeof(PVOID));
+}
+
+/*
+ * The parameter block of the first process. There is no process heap here, so
+ * it is laid out in pool the way a user-mode caller would get it: normalized,
+ * strings after the header, the current directory given a MAX_PATH buffer.
+ */
+CODE_SEG("INIT")
+static
+PRTL_USER_PROCESS_PARAMETERS
+ExpCreateInitialProcessParameters(
+    _In_ PCUNICODE_STRING ImagePathName,
+    _In_ PCUNICODE_STRING CurrentDirectory)
+{
+    PRTL_USER_PROCESS_PARAMETERS Parameters;
+    PUNICODE_STRING DosPath;
+    PUCHAR Cursor;
+    ULONG Length;
+
+    if (CurrentDirectory->Length + 2 * sizeof(WCHAR) > EXP_CURRENT_DIRECTORY_LENGTH)
+        return NULL;
+
+    Length = sizeof(RTL_USER_PROCESS_PARAMETERS) +
+             EXP_CURRENT_DIRECTORY_LENGTH +
+             ALIGN_UP_BY(CurrentDirectory->Length + sizeof(WCHAR), sizeof(PVOID)) +
+             2 * ALIGN_UP_BY(ImagePathName->Length + sizeof(WCHAR), sizeof(PVOID)) +
+             3 * ALIGN_UP_BY(sizeof(WCHAR), sizeof(PVOID));
+
+    Parameters = ExAllocatePoolZero(PagedPool, Length, TAG_INIT);
+    if (Parameters == NULL) return NULL;
+
+    Parameters->MaximumLength = Length;
+    Parameters->Length = Length;
+    Parameters->Flags = RTL_USER_PROCESS_PARAMETERS_NORMALIZED;
+
+    Cursor = (PUCHAR)(Parameters + 1);
+
+    ExpPlaceParameterString(&Cursor,
+                            &Parameters->CurrentDirectory.DosPath,
+                            CurrentDirectory,
+                            EXP_CURRENT_DIRECTORY_LENGTH);
+
+    DosPath = &Parameters->CurrentDirectory.DosPath;
+    if (DosPath->Length != 0 &&
+        DosPath->Buffer[DosPath->Length / sizeof(WCHAR) - 1] != OBJ_NAME_PATH_SEPARATOR)
+    {
+        DosPath->Buffer[DosPath->Length / sizeof(WCHAR)] = OBJ_NAME_PATH_SEPARATOR;
+        DosPath->Buffer[DosPath->Length / sizeof(WCHAR) + 1] = UNICODE_NULL;
+        DosPath->Length += sizeof(WCHAR);
+    }
+
+    /* The loader searches the system directory for what the first process imports */
+    ExpPlaceParameterString(&Cursor, &Parameters->DllPath, CurrentDirectory,
+                            CurrentDirectory->Length + sizeof(WCHAR));
+    ExpPlaceParameterString(&Cursor, &Parameters->ImagePathName, ImagePathName,
+                            ImagePathName->Length + sizeof(WCHAR));
+    ExpPlaceParameterString(&Cursor, &Parameters->CommandLine, ImagePathName,
+                            ImagePathName->Length + sizeof(WCHAR));
+    ExpPlaceParameterString(&Cursor, &Parameters->WindowTitle, NULL, sizeof(WCHAR));
+    ExpPlaceParameterString(&Cursor, &Parameters->DesktopInfo, NULL, sizeof(WCHAR));
+    ExpPlaceParameterString(&Cursor, &Parameters->ShellInfo, NULL, sizeof(WCHAR));
+    ExpPlaceParameterString(&Cursor, &Parameters->RuntimeData, NULL, 0);
+
+    return Parameters;
+}
+
+/*
+ * The environment the first process starts with: where the system lives and
+ * where to look for programs, the two things it needs before it reads the
+ * rest from the registry. It is built in the address space of the current
+ * process, where the code that copies it into the new one can measure it.
+ */
+CODE_SEG("INIT")
+static
+NTSTATUS
+ExpCreateInitialEnvironment(
+    _Out_ PVOID *Environment,
+    _Out_ PSIZE_T EnvironmentSize)
+{
+    UNICODE_STRING Block;
+    PVOID Base = NULL;
+    SIZE_T Size = PAGE_SIZE;
+    NTSTATUS Status;
+
+    Status = ZwAllocateVirtualMemory(NtCurrentProcess(),
+                                     &Base,
+                                     0,
+                                     &Size,
+                                     MEM_RESERVE | MEM_COMMIT,
+                                     PAGE_READWRITE);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    /* The memory comes zeroed: skipping a character leaves a terminator, two end the block */
+    Block.Buffer = Base;
+    Block.Length = 0;
+    Block.MaximumLength = (USHORT)min(Size - 2 * sizeof(WCHAR), MAXUSHORT - 1);
+
+    Status = RtlAppendUnicodeToString(&Block, L"Path=");
+    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeStringToString(&Block, &NtSystemRoot);
+    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeToString(&Block, L"\\System32");
+    if (NT_SUCCESS(Status))
+    {
+        UNICODE_STRING Drive;
+
+        /* The system root starts with its drive letter and colon */
+        ASSERT(NtSystemRoot.Length >= 2 * sizeof(WCHAR) && NtSystemRoot.Buffer[1] == L':');
+        Drive.Buffer = NtSystemRoot.Buffer;
+        Drive.Length = Drive.MaximumLength = 2 * sizeof(WCHAR);
+
+        Block.Length += sizeof(WCHAR);
+        Status = RtlAppendUnicodeToString(&Block, L"SystemDrive=");
+        if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeStringToString(&Block, &Drive);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Block.Length += sizeof(WCHAR);
+        Status = RtlAppendUnicodeToString(&Block, L"SystemRoot=");
+    }
+    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeStringToString(&Block, &NtSystemRoot);
+
+    if (!NT_SUCCESS(Status))
+    {
+        Size = 0;
+        ZwFreeVirtualMemory(NtCurrentProcess(), &Base, &Size, MEM_RELEASE);
+        return Status;
+    }
+
+    *Environment = Base;
+    *EnvironmentSize = Size;
+    return STATUS_SUCCESS;
+}
+
+/*
  * Starts the one process the system starts for itself. Everything else that
  * runs is started by it, so if this fails there is nothing more to do.
  */
@@ -439,39 +709,38 @@ VOID
 ExpLoadInitialProcess(
     _Out_ PRTL_USER_PROCESS_INFORMATION ProcessInformation)
 {
-    PRTL_USER_PROCESS_PARAMETERS Parameters = NULL;
+    PRTL_USER_PROCESS_PARAMETERS Parameters;
     UNICODE_STRING ImageName;
-    UNICODE_STRING CommandLine;
     UNICODE_STRING SystemDirectory =
         RTL_CONSTANT_STRING(L"\\SystemRoot\\System32");
-    ANSI_STRING AnsiCommandLine;
+    ANSI_STRING AnsiImageName;
+    PVOID Environment = NULL;
+    SIZE_T EnvironmentSize = 0;
     NTSTATUS Status;
 
-    RtlInitAnsiString(&AnsiCommandLine, NtInitialUserProcessBuffer);
+    RtlInitAnsiString(&AnsiImageName, NtInitialUserProcessBuffer);
 
-    Status = RtlAnsiStringToUnicodeString(&CommandLine, &AnsiCommandLine, TRUE);
+    Status = RtlAnsiStringToUnicodeString(&ImageName, &AnsiImageName, TRUE);
     if (!NT_SUCCESS(Status))
     {
         KeBugCheckEx(SESSION1_INITIALIZATION_FAILED, Status, 0, 0, 0);
     }
 
-    ImageName = CommandLine;
+    Parameters = ExpCreateInitialProcessParameters(&ImageName, &SystemDirectory);
+    if (Parameters == NULL)
+    {
+        RtlFreeUnicodeString(&ImageName);
+        KeBugCheckEx(SESSION1_INITIALIZATION_FAILED, STATUS_INSUFFICIENT_RESOURCES, 0, 0, 0);
+    }
 
-    Status = RtlCreateProcessParameters(&Parameters,
-                                        &ImageName,
-                                        NULL,
-                                        &SystemDirectory,
-                                        &CommandLine,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL);
+    Status = ExpCreateInitialEnvironment(&Environment, &EnvironmentSize);
     if (!NT_SUCCESS(Status))
     {
-        RtlFreeUnicodeString(&CommandLine);
         KeBugCheckEx(SESSION1_INITIALIZATION_FAILED, Status, 0, 0, 0);
     }
+
+    Parameters->Environment = Environment;
+    Parameters->EnvironmentSize = EnvironmentSize;
 
     Status = RtlCreateUserProcess(&ImageName,
                                   OBJ_CASE_INSENSITIVE,
@@ -484,8 +753,11 @@ ExpLoadInitialProcess(
                                   NULL,
                                   ProcessInformation);
 
-    RtlDestroyProcessParameters(Parameters);
-    RtlFreeUnicodeString(&CommandLine);
+    ExFreePoolWithTag(Parameters, TAG_INIT);
+    RtlFreeUnicodeString(&ImageName);
+
+    EnvironmentSize = 0;
+    ZwFreeVirtualMemory(NtCurrentProcess(), &Environment, &EnvironmentSize, MEM_RELEASE);
 
     if (!NT_SUCCESS(Status))
     {
@@ -508,11 +780,6 @@ ExpInitSystemPhase0(VOID)
     ExpInitializeSystemInformation();
 
     if (!ExpInitializeEventImplementation())
-    {
-        return FALSE;
-    }
-
-    if (!ExpInitializeEventPairImplementation())
     {
         return FALSE;
     }
@@ -568,6 +835,11 @@ ExpInitSystemPhase1(VOID)
     ExpInitializeWorkerThreads();
 
     if (!ExpInitializeCallbackObjects())
+    {
+        return FALSE;
+    }
+
+    if (!ExpWnfInitialization())
     {
         return FALSE;
     }
@@ -652,6 +924,8 @@ ExpInitializeExecutive(
     }
 
     ExpReadLoadOptions(LoaderBlock);
+    ExpInitializeSystemRoot(LoaderBlock);
+    ExpInitializeImageNumbers(LoaderBlock);
 
     SharedUserData->NtProductType = NtProductWinNt;
     SharedUserData->ProductTypeIsValid = TRUE;
@@ -662,6 +936,11 @@ ExpInitializeExecutive(
     {
         KeBugCheck(HAL_INITIALIZATION_FAILED);
     }
+
+    /* The platform has given the clock period; the shared page turns ticks into milliseconds with it */
+    ASSERT(KeMaximumIncrement != 0);
+    ExpTickCountMultiplier = ExComputeTickCountMultiplier(KeMaximumIncrement);
+    SharedUserData->TickCountMultiplier = ExpTickCountMultiplier;
 
     ExArchPostHalInitSystemPhase0();
 
@@ -688,6 +967,13 @@ ExpInitializeExecutive(
     {
         KeBugCheck(PHASE0_INITIALIZATION_FAILED);
     }
+
+    /* TODO: the images the loader brought are not announced to the debugger, nor checked for multiprocessor use */
+    KiInitializeBugCheck();
+
+    /* What the registry holds for the kernel is read from the hive the loader left in memory */
+    CmGetSystemControlValues(LoaderBlock->RegistryBase, CmControlVector);
+    NtGlobalFlag |= CmNtGlobalFlag;
 
     if (!ExpInitNls(LoaderBlock))
     {
@@ -741,10 +1027,38 @@ ExpInitializeExecutive(
     ObCloseHandle(Handle, KernelMode);
 }
 
+
+/* What the screen shows while the system starts: nothing, or the logo with its progress */
+CODE_SEG("INIT")
+static
+VOID
+ExpStartBootDisplay(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PCSTR Options = LoaderBlock->LoadOptions;
+
+    if (!InbvIsBootDriverInstalled()) return;
+
+    if (ExpFindLoadOption(Options, "NOGUIBOOT") != NULL)
+    {
+        InbvEnableBootDriver(FALSE);
+        return;
+    }
+
+    DisplayBootBitmap();
+
+    /* TODO: SOS only enables the status text; nothing names the drivers as they load */
+    if (ExpFindLoadOption(Options, "SOS") != NULL)
+    {
+        InbvEnableDisplayString(TRUE);
+    }
+}
+
 /*
  * The second phase, which runs on a thread and may therefore wait. Everything
  * the system has that a user can reach is set up here.
  */
+
 CODE_SEG("INIT")
 VOID
 NTAPI
@@ -766,10 +1080,23 @@ Phase1InitializationDiscard(
 
     ExArchPostHalInitSystemPhase1();
 
+    /* The firmware's framebuffer stays the display until a display driver takes it over */
+    InbvDriverInitialize(LoaderBlock, 0);
+    ExpStartBootDisplay(LoaderBlock);
+
     if (!PoInitSystem(1))
     {
         KeBugCheck(PHASE1_INITIALIZATION_FAILED);
     }
+
+    KeStartAllProcessors();
+
+    if (!HalAllProcessorsStarted())
+    {
+        KeBugCheck(HAL1_INITIALIZATION_FAILED);
+    }
+
+    KiExpandInitialProcessAffinities();
 
     /*
      * The namespace comes before anything that names what it makes, which is
@@ -820,6 +1147,18 @@ Phase1InitializationDiscard(
         KeBugCheck(LPC_INITIALIZATION_FAILED);
     }
 
+    /* The reference monitor serves its command port, so it starts once ports exist */
+    if (!SeRmInitPhase1())
+    {
+        KeBugCheck(SECURITY_INITIALIZATION_FAILED);
+    }
+
+    /* The registry keeps its transactions with the transaction manager, whose objects come first */
+    if (!TmpInitSystem())
+    {
+        KeBugCheck(PHASE1_INITIALIZATION_FAILED);
+    }
+
     if (!CmInitSystem1())
     {
         KeBugCheck(CONFIG_INITIALIZATION_FAILED);
@@ -835,15 +1174,23 @@ Phase1InitializationDiscard(
         KeBugCheck(CACHE_INITIALIZATION_FAILED);
     }
 
-    if (!IoInitSystem(LoaderBlock))
-    {
-        KeBugCheck(IO1_INITIALIZATION_FAILED);
-    }
-
-    /* The device names the link is built from only exist once Io has run. */
+    /* The link names the ARC boot device; Io reassigns it once that device exists. */
     if (!ExpCreateSystemRootLink(LoaderBlock))
     {
         KeBugCheck(SYMBOLIC_INITIALIZATION_FAILED);
+    }
+
+    /* What the HAL holds for itself is on record before any driver asks for resources */
+    RtlInitializeRangeListPackage();
+    HalReportResourceUsage();
+    KdDebuggerInitialize1(LoaderBlock);
+
+    /* TODO: the SMP debug watchdog is not started; the load option that enabled it is not known */
+    KseInitialize();
+
+    if (!IoInitSystem(LoaderBlock))
+    {
+        KeBugCheck(IO1_INITIALIZATION_FAILED);
     }
 
     ExRefreshTimeZoneInformation(&BootTime);
@@ -858,12 +1205,22 @@ Phase1InitializationDiscard(
         KeBugCheck(PHASE1_INITIALIZATION_FAILED);
     }
 
+    if (!ExpInitNlsSection())
+    {
+        KeBugCheck(PHASE1_INITIALIZATION_FAILED);
+    }
+
     if (!NT_SUCCESS(PsLocateSystemDll()))
     {
         KeBugCheck(PROCESS1_INITIALIZATION_FAILED);
     }
 
     ExpLoadInitialProcess(&ProcessInformation);
+
+    /* The first process is created with its thread held; it starts here */
+    ZwResumeThread(ProcessInformation.ThreadHandle, NULL);
+
+    FinalizeBootLogo();
 
     if (!PoInitSystem(3))
     {
@@ -877,6 +1234,7 @@ Phase1InitializationDiscard(
 
     ExpInitializationPhase = 2;
 }
+
 
 CODE_SEG("INIT")
 VOID

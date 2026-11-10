@@ -95,7 +95,8 @@ IopBuildInterfaceName(
     RtlAppendUnicodeToString(Name, L"#");
     RtlAppendUnicodeStringToString(Name, &GuidString);
 
-    if (ReferenceString != NULL && ReferenceString->Length != 0)
+    /* In the registry the reference string names a subkey, not part of this key */
+    if (!RegistryForm && ReferenceString != NULL && ReferenceString->Length != 0)
     {
         RtlAppendUnicodeToString(Name, L"\\");
         RtlAppendUnicodeStringToString(Name, ReferenceString);
@@ -104,6 +105,61 @@ IopBuildInterfaceName(
     RtlFreeUnicodeString(&GuidString);
 
     return STATUS_SUCCESS;
+}
+
+/*
+ * The subkey of an interface's key that belongs to one reference string: the
+ * string behind a '#', or the '#' alone when there is none. A suffix may be
+ * appended to reach a key below it.
+ */
+static
+NTSTATUS
+IopBuildReferenceKeyName(
+    _In_opt_ PCUNICODE_STRING ReferenceString,
+    _In_opt_ PCWSTR Suffix,
+    _Out_ PUNICODE_STRING Name)
+{
+    USHORT Length;
+    PWCHAR Buffer;
+
+    Length = (USHORT)sizeof(WCHAR) +
+             ((ReferenceString != NULL) ? ReferenceString->Length : 0) +
+             (USHORT)((Suffix != NULL) ? wcslen(Suffix) * sizeof(WCHAR) : 0) +
+             (USHORT)sizeof(WCHAR);
+
+    Buffer = ExAllocatePoolZero(PagedPool, Length, TAG_IO_NAME);
+    if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlInitEmptyUnicodeString(Name, Buffer, Length);
+    RtlAppendUnicodeToString(Name, L"#");
+    if (ReferenceString != NULL) RtlAppendUnicodeStringToString(Name, ReferenceString);
+    if (Suffix != NULL) RtlAppendUnicodeToString(Name, Suffix);
+
+    return STATUS_SUCCESS;
+}
+
+/* The reference string a symbolic link carries after its class identifier */
+static
+VOID
+IopReferenceFromLinkName(
+    _In_ PCUNICODE_STRING SymbolicLinkName,
+    _Out_ PUNICODE_STRING ReferenceString)
+{
+    USHORT Count = SymbolicLinkName->Length / sizeof(WCHAR);
+    USHORT Index;
+
+    RtlInitEmptyUnicodeString(ReferenceString, NULL, 0);
+
+    for (Index = Count; Index != 0; Index--)
+    {
+        if (SymbolicLinkName->Buffer[Index - 1] == L'}') break;
+    }
+
+    if (Index == 0 || Index >= Count || SymbolicLinkName->Buffer[Index] != OBJ_NAME_PATH_SEPARATOR) return;
+
+    ReferenceString->Buffer = &SymbolicLinkName->Buffer[Index + 1];
+    ReferenceString->Length = (USHORT)((Count - Index - 1) * sizeof(WCHAR));
+    ReferenceString->MaximumLength = ReferenceString->Length;
 }
 
 NTSTATUS
@@ -278,14 +334,18 @@ IoRegisterDeviceInterface(
                   DeviceNode->InstancePath.Buffer,
                   DeviceNode->InstancePath.Length + sizeof(WCHAR));
 
-    RtlInitUnicodeString(&ValueName, L"#");
+    Status = IopBuildReferenceKeyName(ReferenceString, NULL, &ValueName);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopCreateRegistryKeyEx(&ControlKey,
+                                        InstanceKey,
+                                        &ValueName,
+                                        KEY_ALL_ACCESS,
+                                        REG_OPTION_NON_VOLATILE,
+                                        NULL);
+        ExFreePoolWithTag(ValueName.Buffer, TAG_IO_NAME);
+    }
 
-    Status = IopCreateRegistryKeyEx(&ControlKey,
-                                    InstanceKey,
-                                    &ValueName,
-                                    KEY_ALL_ACCESS,
-                                    REG_OPTION_NON_VOLATILE,
-                                    NULL);
     if (NT_SUCCESS(Status))
     {
         RtlInitUnicodeString(&ValueName, L"SymbolicLink");
@@ -406,9 +466,6 @@ IoSetDeviceInterfaceState(
 
         if (!NT_SUCCESS(Status))
         {
-            DPRINT("PnP: the interface link %wZ was not made (%lx)\n",
-                   SymbolicLinkName,
-                   Status);
         }
 
         PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_ARRIVAL,
@@ -583,6 +640,7 @@ IoOpenDeviceInterfaceRegistryKey(
     PIOP_DEVICE_INTERFACE Interface;
     UNICODE_STRING RegistryName;
     UNICODE_STRING DeviceParams;
+    UNICODE_STRING Reference;
     PDEVICE_NODE DeviceNode;
     NTSTATUS Status;
     HANDLE ClassKey;
@@ -636,14 +694,19 @@ IoOpenDeviceInterfaceRegistryKey(
 
     if (!NT_SUCCESS(Status)) return Status;
 
-    RtlInitUnicodeString(&DeviceParams, L"#\\Device Parameters");
+    IopReferenceFromLinkName(SymbolicLinkName, &Reference);
 
-    Status = IopCreateRegistryKeyEx(DeviceInterfaceKey,
-                                    InstanceKey,
-                                    &DeviceParams,
-                                    DesiredAccess,
-                                    REG_OPTION_NON_VOLATILE,
-                                    NULL);
+    Status = IopBuildReferenceKeyName(&Reference, L"\\Device Parameters", &DeviceParams);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopCreateRegistryKeyEx(DeviceInterfaceKey,
+                                        InstanceKey,
+                                        &DeviceParams,
+                                        DesiredAccess,
+                                        REG_OPTION_NON_VOLATILE,
+                                        NULL);
+        ExFreePoolWithTag(DeviceParams.Buffer, TAG_IO_NAME);
+    }
 
     ZwClose(InstanceKey);
 

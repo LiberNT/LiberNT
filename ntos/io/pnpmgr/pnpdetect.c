@@ -153,10 +153,18 @@ IoReportDetectedDevice(
 
     if (ResourceAssigned && ResourceList != NULL)
     {
+        PCM_RESOURCE_LIST Raw;
+
         IopResDbReserve(Node, ResourceList, NULL);
 
-        Node->ResourceList = Node->BootResources;
-        Node->ResourceListTranslated = Node->BootResources;
+        Size = PnpDetermineResourceListSize(ResourceList);
+
+        Raw = ExAllocatePoolZero(PagedPool, Size, TAG_IO_RESOURCE);
+        if (Raw != NULL)
+        {
+            RtlCopyMemory(Raw, ResourceList, Size);
+            IopSetDeviceResources(Node, Raw);
+        }
     }
 
     Status = PnpDeviceObjectToDeviceInstance(Pdo,
@@ -215,6 +223,9 @@ IoReportDetectedDevice(
 
     PiSetDevNodeState(Node, DeviceNodeStarted);
 
+    /* A device reported as started is asked for its children like any other */
+    if (Created) PiSetDevNodeFlag(Node, DNF_REENUMERATE);
+
     if (Created) IopQueueDeviceInstallEvent(&GUID_DEVICE_ARRIVAL,
                                             &Node->InstancePath);
 
@@ -237,7 +248,7 @@ IoReportRootDevice(
     Status = IopCreateDetectedDeviceNode(DriverObject, &Pdo, &Node);
     if (!NT_SUCCESS(Status)) return Status;
 
-    PiSetDevNodeFlag(Node, DNF_NO_RESOURCE_REQUIRED);
+    PiSetDevNodeFlag(Node, DNF_NO_RESOURCE_REQUIRED | DNF_REENUMERATE);
     PiSetDevNodeState(Node, DeviceNodeStarted);
 
     IopQueueDeviceInstallEvent(&GUID_DEVICE_ARRIVAL, &Node->InstancePath);

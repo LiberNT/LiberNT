@@ -147,6 +147,7 @@
 #define TAG_QUOTA_BLOCK         'bQsP'
 #define TAG_THREAD_NAME         'mNhT'
 #define TAG_PS_TLS              'slTP'
+#define TAG_PS_PROCESS_PARAMETERS 'pPsP'
 #define TAG_PS_API_SET          'sApP'
 #define TAG_WOW64_PROCESS       '46WP'
 #define TAG_PS_ENERGY           'nEsP'

@@ -17,10 +17,10 @@ KMUTANT ExpProfileMutex;
 
 GENERIC_MAPPING ExpProfileMapping =
 {
-    STANDARD_RIGHTS_READ,
-    STANDARD_RIGHTS_WRITE,
-    STANDARD_RIGHTS_EXECUTE,
-    STANDARD_RIGHTS_ALL
+    STANDARD_RIGHTS_READ | PROFILE_CONTROL,
+    STANDARD_RIGHTS_WRITE | PROFILE_CONTROL,
+    STANDARD_RIGHTS_EXECUTE | PROFILE_CONTROL,
+    PROFILE_ALL_ACCESS
 };
 
 /* PRIVATE DATA ***************************************************************/
@@ -79,10 +79,10 @@ ExpInitializeProfileImplementation(VOID)
     RtlZeroMemory(&Initializer, sizeof(Initializer));
 
     Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
-    Initializer.ValidAccessMask = STANDARD_RIGHTS_ALL;
+    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.ValidAccessMask = PROFILE_ALL_ACCESS;
     Initializer.GenericMapping = ExpProfileMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(EPROFILE);
     Initializer.DeleteProcedure = ExpDeleteProfile;
 

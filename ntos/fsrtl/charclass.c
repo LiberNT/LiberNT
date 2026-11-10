@@ -18,14 +18,14 @@
 
 static const UCHAR LegalAnsiCharacterArray[128] =
 {
-    0,          0,          0,          0,
-    0,          0,          0,          0,
-    0,          0,          0,          0,
-    0,          0,          0,          0,
-    0,          0,          0,          0,
-    0,          0,          0,          0,
-    0,          0,          0,          0,
-    0,          0,          0,          0,
+    0,               FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
+    FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
+    FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
+    FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
+    FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
+    FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
+    FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
+    FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL, FSRTL_OLE_LEGAL,
 
     FS_ANY,                 /* 0x20 ' ' */
     FS_NO_OLE,          /* 0x21 '!' */
@@ -41,7 +41,7 @@ static const UCHAR LegalAnsiCharacterArray[128] =
     FS_NO_FAT,              /* 0x2B '+' */
     FS_NO_FAT,              /* 0x2C ',' */
     FS_ANY,                 /* 0x2D '-' */
-    FS_ANY,                 /* 0x2E '.' */
+    FS_NO_OLE,              /* 0x2E '.' */
     0,                      /* 0x2F '/' */
 
     FS_ANY,                 /* 0x30 '0' */
@@ -54,7 +54,7 @@ static const UCHAR LegalAnsiCharacterArray[128] =
     FS_ANY,                 /* 0x37 '7' */
     FS_ANY,                 /* 0x38 '8' */
     FS_ANY,                 /* 0x39 '9' */
-    0,                      /* 0x3A ':' */
+    FSRTL_NTFS_LEGAL,       /* 0x3A ':' */
     FS_NO_FAT,              /* 0x3B ';' */
     FS_WILD,             /* 0x3C '<' DOS_STAR */
     FS_NO_FAT,              /* 0x3D '=' */
@@ -130,7 +130,6 @@ static const UCHAR LegalAnsiCharacterArray[128] =
     FS_ANY                  /* 0x7F DEL */
 };
 
-/* TODO: FSRTL_OLE_LEGAL is set from the documented NTFS stream-name rule (no \ / :) only; no in-tree caller tests the bit on its own */
 const UCHAR * const FsRtlLegalAnsiCharacterArray = LegalAnsiCharacterArray;
 
 /* EOF */

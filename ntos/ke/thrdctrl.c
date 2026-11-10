@@ -59,7 +59,13 @@ KiReleaseThreadSuspension(
     if ((Thread->SuspendCount != 0) || (Thread->FreezeCount != 0))
         return;
 
-    KeSetEvent(&Thread->SuspendEvent, KI_RESUME_BOOST, FALSE);
+    /* Callers hold the APC lock at SYNCH_LEVEL, so the event is signalled the
+     * way the dispatcher does it and the caller leaves the dispatcher */
+    KiAcquireDispatcherLockAtSynchLevel();
+    Thread->SuspendEvent.Header.SignalState = 1;
+    if (!IsListEmpty(&Thread->SuspendEvent.Header.WaitListHead))
+        KiWaitTest(&Thread->SuspendEvent, KI_RESUME_BOOST);
+    KiReleaseDispatcherLockFromSynchLevel();
 }
 
 /*
@@ -140,7 +146,6 @@ KeInitThread(
     Thread->Header.Type = ThreadObject;
     Thread->Header.Signalling = FALSE;
     Thread->Header.Size = (UCHAR)(sizeof(KTHREAD) / sizeof(LONG));
-    Thread->Header.Hand = 0;
     Thread->Header.Inserted = FALSE;
     Thread->Header.DebugActive = FALSE;
     Thread->Header.SignalState = 0;
@@ -365,7 +370,7 @@ KeStartThread(
     }
 
     InsertTailList(&Process->ThreadListHead, &Thread->ThreadListEntry);
-    Process->StackCount++;
+    InterlockedIncrement((PLONG)&Process->StackCount);
 
     KiReleaseProcessLock(&ProcessLock);
 }
@@ -393,7 +398,15 @@ KeTerminateThread(
     KiAcquireDispatcherLockAtSynchLevel();
 
     RemoveEntryList(&Thread->ThreadListEntry);
-    Process->StackCount--;
+    InterlockedDecrement((PLONG)&Process->StackCount);
+
+    /* A thread leaving a queue no longer counts against it, so a waiter may take its place */
+    if (Thread->Queue != NULL)
+    {
+        RemoveEntryList(&Thread->QueueListEntry);
+        KiActivateWaiterQueue(Thread->Queue);
+        Thread->Queue = NULL;
+    }
 
     Thread->Header.SignalState = TRUE;
     if (!IsListEmpty(&Thread->Header.WaitListHead))
@@ -702,7 +715,8 @@ KeThawAllThreads(VOID)
         KiReleaseApcLockFromSynchLevel(&ApcLock);
     }
 
-    KiReleaseProcessLock(&ProcessLock);
+    KiReleaseProcessLockFromSynchLevel(&ProcessLock);
+    KiExitDispatcher(ProcessLock.OldIrql);
     KeLeaveCriticalRegion();
 }
 
@@ -929,7 +943,9 @@ KeSetPriorityThread(
 
     OldPriority = Thread->Priority;
 
-    /* An explicit priority replaces any boost rather than adding to it */
+    /* An explicit priority replaces any boost, and the thread decays back to it */
+    Thread->BasePriority = (SCHAR)Priority;
+    Thread->Saturation = 0;
     Thread->PriorityDecrement = 0;
     KiSetThreadQuantum(Thread, Thread->QuantumReset);
     KiSetPriorityThread(Thread, Priority);
@@ -1123,6 +1139,46 @@ KeQueryBasePriorityThread(
     KiReleaseDispatcherLock(OldIrql);
 
     return Increment;
+}
+
+/*
+ * Replaces one of the floors a thread's priority is held above and answers the
+ * floor it replaces. The caller keeps the floor's value in a byte of its own;
+ * the thread only counts how many holders ask for each level. A request for a
+ * level no floor can have is a question: the floor is reported and left alone.
+ */
+CHAR
+NTAPI
+KeExchangePriorityFloorThread(
+    _Inout_ PKTHREAD Thread,
+    _Inout_ PCHAR StoredFloor,
+    _In_ LONG NewFloor)
+{
+    KPRIORITY Unfloored;
+    CHAR Previous;
+    KIRQL OldIrql;
+
+    ASSERT_THREAD(Thread);
+
+    OldIrql = KiAcquireDispatcherLock();
+    KiAcquireThreadLock(Thread);
+
+    Previous = *StoredFloor;
+
+    if ((ULONG)NewFloor <= LOW_REALTIME_PRIORITY)
+    {
+        Unfloored = KiGetUnflooredPriority(Thread);
+
+        KiUpdatePriorityFloor(Thread, Previous, NewFloor);
+        *StoredFloor = (CHAR)NewFloor;
+
+        KiSetPriorityThread(Thread, Unfloored);
+    }
+
+    KiReleaseThreadLock(Thread);
+    KiReleaseDispatcherLock(OldIrql);
+
+    return Previous;
 }
 
 /*

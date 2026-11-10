@@ -68,6 +68,7 @@ KiContinuePreviousModeUser(
 {
     CONTEXT LocalContext;
 
+
     _SEH2_TRY
     {
         ProbeForRead(Context, sizeof(CONTEXT), TYPE_ALIGNMENT(CONTEXT));
@@ -83,6 +84,57 @@ KiContinuePreviousModeUser(
 }
 
 /*
+ * Puts the thread in the state a context describes and leaves the service
+ * through the path that restores all of it. A system service normally returns
+ * through one that rebuilds only part of the state, which would lose the
+ * registers the context set.
+ */
+static
+NTSTATUS
+KiContinueService(
+    _In_ PCONTEXT Context,
+    _In_ BOOLEAN TestAlert,
+    _In_ BOOLEAN DeliverApc)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    KPROCESSOR_MODE PreviousMode = Thread->PreviousMode;
+    PKTRAP_FRAME TrapFrame = Thread->TrapFrame;
+    KI_SERVICE_EXCEPTION_STATE ServiceState;
+    PKEXCEPTION_FRAME ExceptionFrame;
+    NTSTATUS Status;
+
+    if (TrapFrame == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    ExceptionFrame = KiEnterServiceException(Thread,
+                                             TrapFrame,
+                                             Context,
+                                             PreviousMode,
+                                             NULL,
+                                             &ServiceState);
+
+    if (PreviousMode != KernelMode)
+        Status = KiContinuePreviousModeUser(Context, ExceptionFrame, TrapFrame);
+    else
+        Status = KiContinue(Context, ExceptionFrame, TrapFrame);
+
+    if (!NT_SUCCESS(Status))
+    {
+        KiAbortServiceException(TrapFrame, ExceptionFrame, &ServiceState);
+        return Status;
+    }
+
+    if (TestAlert)
+        KeTestAlertThread(PreviousMode);
+
+    if (DeliverApc)
+        Thread->ApcState.UserApcPending = TRUE;
+
+    KiLeaveServiceException(Thread, TrapFrame);
+    KiExceptionExit(TrapFrame, ExceptionFrame);
+}
+
+/*
  * Carries on from a context the caller supplies, optionally consuming a
  * pending alert on the way out. The alert is tested after the state is in
  * place, so a handler that is about to run sees the alert it was given.
@@ -93,24 +145,7 @@ NtContinue(
     _In_ PCONTEXT Context,
     _In_ BOOLEAN TestAlert)
 {
-    PKTHREAD Thread = KeGetCurrentThread();
-    NTSTATUS Status;
-
-    if (Thread->TrapFrame == NULL)
-        return STATUS_INVALID_PARAMETER;
-
-    if (Thread->PreviousMode != KernelMode)
-        Status = KiContinuePreviousModeUser(Context, NULL, Thread->TrapFrame);
-    else
-        Status = KiContinue(Context, NULL, Thread->TrapFrame);
-
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    if (TestAlert)
-        KeTestAlertThread(Thread->PreviousMode);
-
-    return STATUS_SUCCESS;
+    return KiContinueService(Context, TestAlert, FALSE);
 }
 
 /*
@@ -124,15 +159,10 @@ NtContinueEx(
     _In_ PCONTEXT Context,
     _In_opt_ PKCONTINUE_ARGUMENT ContinueArgument)
 {
-    PKTHREAD Thread = KeGetCurrentThread();
     KCONTINUE_ARGUMENT LocalArgument;
-    KPROCESSOR_MODE PreviousMode = Thread->PreviousMode;
+    KPROCESSOR_MODE PreviousMode = KeGetCurrentThread()->PreviousMode;
     BOOLEAN TestAlert = FALSE;
     BOOLEAN DeliverApc = FALSE;
-    NTSTATUS Status;
-
-    if (Thread->TrapFrame == NULL)
-        return STATUS_INVALID_PARAMETER;
 
     /*
      * A value of zero or one in place of a pointer is the older interface,
@@ -174,21 +204,7 @@ NtContinueEx(
                       KCONTINUE_FLAG_DELIVER_APC) != 0;
     }
 
-    if (PreviousMode != KernelMode)
-        Status = KiContinuePreviousModeUser(Context, NULL, Thread->TrapFrame);
-    else
-        Status = KiContinue(Context, NULL, Thread->TrapFrame);
-
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    if (TestAlert)
-        KeTestAlertThread(PreviousMode);
-
-    if (DeliverApc)
-        Thread->ApcState.UserApcPending = TRUE;
-
-    return STATUS_SUCCESS;
+    return KiContinueService(Context, TestAlert, DeliverApc);
 }
 
 /*

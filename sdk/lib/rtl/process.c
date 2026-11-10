@@ -377,6 +377,10 @@ RtlCreateUserProcess(IN PUNICODE_STRING ImageFileName,
             return Status;
         }
 
+        /* The image's file and section come back as our handles; nothing here keeps them */
+        if (CreateInfo.SuccessState.FileHandle) NtClose(CreateInfo.SuccessState.FileHandle);
+        if (CreateInfo.SuccessState.SectionHandle) NtClose(CreateInfo.SuccessState.SectionHandle);
+
         return STATUS_SUCCESS;
     }
 #else

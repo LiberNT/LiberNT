@@ -462,11 +462,27 @@ PspQueryQuotaLimits(
 
     RtlZeroMemory(&Limits, sizeof(Limits));
 
+    /* A block that sets no limit is reported as the largest limit there is */
+    Limits.PagedPoolLimit = MAXSIZE_T;
+    Limits.NonPagedPoolLimit = MAXSIZE_T;
+    Limits.PagefileLimit = MAXSIZE_T;
+
     if (Block != NULL)
     {
-        Limits.PagedPoolLimit = Block->QuotaEntry[PsPagedPool].Limit;
-        Limits.NonPagedPoolLimit = Block->QuotaEntry[PsNonPagedPool].Limit;
-        Limits.PagefileLimit = Block->QuotaEntry[PsPageFile].Limit;
+        if (Block->QuotaEntry[PsPagedPool].Limit != 0)
+        {
+            Limits.PagedPoolLimit = Block->QuotaEntry[PsPagedPool].Limit;
+        }
+
+        if (Block->QuotaEntry[PsNonPagedPool].Limit != 0)
+        {
+            Limits.NonPagedPoolLimit = Block->QuotaEntry[PsNonPagedPool].Limit;
+        }
+
+        if (Block->QuotaEntry[PsPageFile].Limit != 0)
+        {
+            Limits.PagefileLimit = Block->QuotaEntry[PsPageFile].Limit;
+        }
     }
 
     Limits.MinimumWorkingSetSize = Process->Vm.Instance.MinimumWorkingSetSize;

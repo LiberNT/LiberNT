@@ -128,6 +128,8 @@ IopCreateFile(
     LARGE_INTEGER SafeAllocationSize;
     PVOID CapturedEaBuffer = NULL;
     OPEN_PACKET OpenPacket;
+    ACCESS_STATE AccessState;
+    AUX_ACCESS_DATA AuxData;
     NTSTATUS Status;
     HANDLE Handle = NULL;
 
@@ -173,7 +175,8 @@ IopCreateFile(
         SafeAllocationSize.QuadPart = 0;
     }
 
-    if (!(Options & IO_NO_PARAMETER_CHECKING))
+    /* A caller in the kernel is taken at its word unless it asks to be checked like any other */
+    if (AccessMode != KernelMode || (Options & IO_CHECK_CREATE_PARAMETERS))
     {
         if (Disposition > FILE_MAXIMUM_DISPOSITION)
         {
@@ -262,13 +265,23 @@ IopCreateFile(
         OpenPacket.DriverCreateContext = *DriverContext;
     }
 
-    Status = ObOpenObjectByName(ObjectAttributes,
-                                NULL,
-                                AccessMode,
-                                NULL,
-                                DesiredAccess,
-                                &OpenPacket,
-                                &Handle);
+    /* The name may resolve to a device or a file, so no type is named and the rights are mapped as a file's */
+    Status = SeCreateAccessState(&AccessState,
+                                 &AuxData,
+                                 DesiredAccess,
+                                 &IoFileObjectType->TypeInfo.GenericMapping);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObOpenObjectByName(ObjectAttributes,
+                                    NULL,
+                                    AccessMode,
+                                    &AccessState,
+                                    DesiredAccess,
+                                    &OpenPacket,
+                                    &Handle);
+
+        SeDeleteAccessState(&AccessState);
+    }
 
     if (CapturedEaBuffer != NULL)
     {
@@ -283,14 +296,18 @@ IopCreateFile(
     {
         Status = OpenPacket.FinalStatus;
     }
-
+    /* An open that ends in an error leaves the caller's status block as it was; one that fails leaves the handle too */
     if (AccessMode != KernelMode)
     {
         _SEH2_TRY
         {
-            IoStatusBlock->Status = Status;
-            IoStatusBlock->Information = OpenPacket.Information;
-            *FileHandle = NT_SUCCESS(Status) ? Handle : NULL;
+            if (!NT_ERROR(Status))
+            {
+                IoStatusBlock->Status = Status;
+                IoStatusBlock->Information = OpenPacket.Information;
+            }
+
+            if (NT_SUCCESS(Status)) *FileHandle = Handle;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -300,9 +317,13 @@ IopCreateFile(
     }
     else
     {
-        IoStatusBlock->Status = Status;
-        IoStatusBlock->Information = OpenPacket.Information;
-        *FileHandle = NT_SUCCESS(Status) ? Handle : NULL;
+        if (!NT_ERROR(Status))
+        {
+            IoStatusBlock->Status = Status;
+            IoStatusBlock->Information = OpenPacket.Information;
+        }
+
+        if (NT_SUCCESS(Status)) *FileHandle = Handle;
     }
 
     return Status;

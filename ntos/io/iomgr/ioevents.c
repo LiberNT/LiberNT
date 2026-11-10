@@ -25,16 +25,16 @@ IopCreateEvent(
     InitializeObjectAttributes(&ObjectAttributes,
                                EventName,
                                OBJ_OPENIF | OBJ_CASE_INSENSITIVE |
-                                   OBJ_PERMANENT | OBJ_KERNEL_HANDLE,
+                                   OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
 
-    return NtCreateEvent(EventHandle,
+    return ZwCreateEvent(EventHandle,
                          EVENT_ALL_ACCESS,
                          &ObjectAttributes,
                          ManualReset ? NotificationEvent
                                      : SynchronizationEvent,
-                         FALSE);
+                         TRUE);
 }
 
 VOID
@@ -68,7 +68,7 @@ IopResolveNamedEvent(
                                        NULL);
     if (!NT_SUCCESS(Status))
     {
-        NtClose(Handle);
+        ZwClose(Handle);
         return NULL;
     }
 

@@ -268,6 +268,9 @@ IopQueryDeviceInformation(
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
     Irp->Tail.Overlay.OriginalFileObject = FileObject;
 
+    /* Completion releases the packet's reference on the file */
+    ObReferenceObject(FileObject);
+
     StackPtr = IoGetNextIrpStackLocation(Irp);
     StackPtr->FileObject = FileObject;
     StackPtr->DeviceObject = DeviceObject;
@@ -344,6 +347,8 @@ IopQueryAttributesFile(
 {
     DUMMY_FILE_OBJECT LocalFileObject;
     OPEN_PACKET OpenPacket;
+    ACCESS_STATE AccessState;
+    AUX_ACCESS_DATA AuxData;
     NTSTATUS Status;
     HANDLE Handle;
 
@@ -375,13 +380,21 @@ IopQueryAttributesFile(
         OpenPacket.NetworkInformation = FileInformation;
     }
 
+    Status = SeCreateAccessState(&AccessState,
+                                 &AuxData,
+                                 FILE_READ_ATTRIBUTES,
+                                 &IoFileObjectType->TypeInfo.GenericMapping);
+    if (!NT_SUCCESS(Status)) return Status;
+
     Status = ObOpenObjectByName(ObjectAttributes,
                                 NULL,
                                 AccessMode,
-                                NULL,
+                                &AccessState,
                                 FILE_READ_ATTRIBUTES,
                                 &OpenPacket,
                                 &Handle);
+
+    SeDeleteAccessState(&AccessState);
 
     if (OpenPacket.ParseCheck == 0)
     {
@@ -604,6 +617,9 @@ IoSetInformation(
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
     Irp->Tail.Overlay.OriginalFileObject = FileObject;
 
+    /* Completion releases the packet's reference on the file */
+    ObReferenceObject(FileObject);
+
     StackPtr = IoGetNextIrpStackLocation(Irp);
     StackPtr->MajorFunction = IRP_MJ_SET_INFORMATION;
     StackPtr->FileObject = FileObject;
@@ -642,6 +658,11 @@ NtQueryInformationFile(
     NTSTATUS Status;
     PVOID Buffer;
     PIRP Irp;
+    BOOLEAN Deferred;
+    FILE_ACCESS_INFORMATION AllAccess;
+    FILE_MODE_INFORMATION AllMode;
+    FILE_ALIGNMENT_INFORMATION AllAlignment;
+    PFILE_ALL_INFORMATION All = FileInformation;
 
     PAGED_CODE();
 
@@ -744,6 +765,32 @@ NtQueryInformationFile(
         return Status;
     }
 
+    /* What the I/O manager adds to a full answer is worked out while the file object is still ours */
+    if (FileInformationClass == FileAllInformation)
+    {
+        IopAnswerFromFileObject(FileObject,
+                                DeviceObject,
+                                FileAccessInformation,
+                                HandleInfo.GrantedAccess,
+                                &AllAccess,
+                                &ReturnedLength,
+                                &Answered);
+        IopAnswerFromFileObject(FileObject,
+                                DeviceObject,
+                                FileModeInformation,
+                                HandleInfo.GrantedAccess,
+                                &AllMode,
+                                &ReturnedLength,
+                                &Answered);
+        IopAnswerFromFileObject(FileObject,
+                                DeviceObject,
+                                FileAlignmentInformation,
+                                HandleInfo.GrantedAccess,
+                                &AllAlignment,
+                                &ReturnedLength,
+                                &Answered);
+    }
+
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
@@ -793,11 +840,16 @@ NtQueryInformationFile(
 
     UNREFERENCED_PARAMETER(KernelIosb);
 
+    KeClearEvent(&FileObject->Event);
     IopQueueIrpToThread(Irp);
 
     IopUpdateOperationCount(IopOtherTransfer);
 
+    Deferred = BooleanFlagOn(Irp->Flags, IRP_DEFER_IO_COMPLETION);
+
     Status = IoCallDriver(DeviceObject, Irp);
+
+    if (Deferred && Status != STATUS_PENDING) IopCompleteDeferredIrp(Irp, FileObject);
 
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
@@ -818,6 +870,23 @@ NtQueryInformationFile(
         }
 
         if (Locked) IopUnlockFileObject(FileObject);
+    }
+
+    /* FIXME: an answer that arrives after this call has returned does not get the three members added */
+    if (FileInformationClass == FileAllInformation &&
+        Status != STATUS_PENDING && !NT_ERROR(Status))
+    {
+        _SEH2_TRY
+        {
+            All->AccessInformation = AllAccess;
+            All->ModeInformation = AllMode;
+            All->AlignmentInformation = AllAlignment;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
     }
 
     return Status;
@@ -841,6 +910,7 @@ NtSetInformationFile(
     NTSTATUS Status;
     PVOID Buffer;
     PIRP Irp;
+    BOOLEAN Deferred;
 
     PAGED_CODE();
 
@@ -1088,11 +1158,16 @@ NtSetInformationFile(
         StackPtr->Parameters.SetFile.DeleteHandle = TargetHandle;
     }
 
+    KeClearEvent(&FileObject->Event);
     IopQueueIrpToThread(Irp);
 
     IopUpdateOperationCount(IopOtherTransfer);
 
+    Deferred = BooleanFlagOn(Irp->Flags, IRP_DEFER_IO_COMPLETION);
+
     Status = IoCallDriver(DeviceObject, Irp);
+
+    if (Deferred && Status != STATUS_PENDING) IopCompleteDeferredIrp(Irp, FileObject);
 
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
@@ -1120,6 +1195,51 @@ NtSetInformationFile(
     return Status;
 }
 
+/*
+ * What kind of device a handle reaches is the device object's to say, so the
+ * I/O manager answers it without asking the driver behind the handle.
+ */
+static
+NTSTATUS
+IopQueryFsDeviceInformation(
+    _In_ PFILE_OBJECT FileObject,
+    _Out_ PIO_STATUS_BLOCK IoStatusBlock,
+    _Out_ PVOID FsInformation,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    FILE_FS_DEVICE_INFORMATION Information;
+    PDEVICE_OBJECT DeviceObject = FileObject->DeviceObject;
+    PVPB Vpb = DeviceObject->Vpb;
+
+    Information.DeviceType = DeviceObject->DeviceType;
+    Information.Characteristics = DeviceObject->Characteristics;
+
+    if (Vpb != NULL && (Vpb->Flags & VPB_MOUNTED))
+        Information.Characteristics |= FILE_DEVICE_IS_MOUNTED;
+
+    if (PreviousMode == KernelMode)
+    {
+        *(PFILE_FS_DEVICE_INFORMATION)FsInformation = Information;
+        IoStatusBlock->Status = STATUS_SUCCESS;
+        IoStatusBlock->Information = sizeof(Information);
+        return STATUS_SUCCESS;
+    }
+
+    _SEH2_TRY
+    {
+        *(PFILE_FS_DEVICE_INFORMATION)FsInformation = Information;
+        IoStatusBlock->Status = STATUS_SUCCESS;
+        IoStatusBlock->Information = sizeof(Information);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 NtQueryVolumeInformationFile(
@@ -1137,6 +1257,7 @@ NtQueryVolumeInformationFile(
     NTSTATUS Status;
     PVOID Buffer;
     PIRP Irp;
+    BOOLEAN Deferred;
 
     PAGED_CODE();
 
@@ -1178,6 +1299,13 @@ NtQueryVolumeInformationFile(
         (PVOID *)&FileObject,
         NULL);
     if (!NT_SUCCESS(Status)) return Status;
+
+    if (FsInformationClass == FileFsDeviceInformation)
+    {
+        Status = IopQueryFsDeviceInformation(FileObject, IoStatusBlock, FsInformation, PreviousMode);
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
 
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
     if (DeviceObject == NULL)
@@ -1233,11 +1361,16 @@ NtQueryVolumeInformationFile(
     StackPtr->Parameters.QueryVolume.Length = Length;
     StackPtr->Parameters.QueryVolume.FsInformationClass = FsInformationClass;
 
+    KeClearEvent(&FileObject->Event);
     IopQueueIrpToThread(Irp);
 
     IopUpdateOperationCount(IopOtherTransfer);
 
+    Deferred = BooleanFlagOn(Irp->Flags, IRP_DEFER_IO_COMPLETION);
+
     Status = IoCallDriver(DeviceObject, Irp);
+
+    if (Deferred && Status != STATUS_PENDING) IopCompleteDeferredIrp(Irp, FileObject);
 
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
@@ -1280,6 +1413,7 @@ NtSetVolumeInformationFile(
     NTSTATUS Status;
     PVOID Buffer;
     PIRP Irp;
+    BOOLEAN Deferred;
 
     PAGED_CODE();
 
@@ -1394,11 +1528,16 @@ NtSetVolumeInformationFile(
     StackPtr->Parameters.SetVolume.Length = Length;
     StackPtr->Parameters.SetVolume.FsInformationClass = FsInformationClass;
 
+    KeClearEvent(&FileObject->Event);
     IopQueueIrpToThread(Irp);
 
     IopUpdateOperationCount(IopOtherTransfer);
 
+    Deferred = BooleanFlagOn(Irp->Flags, IRP_DEFER_IO_COMPLETION);
+
     Status = IoCallDriver(DeviceObject, Irp);
+
+    if (Deferred && Status != STATUS_PENDING) IopCompleteDeferredIrp(Irp, FileObject);
 
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {

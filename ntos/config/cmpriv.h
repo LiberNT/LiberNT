@@ -19,7 +19,7 @@
 #define CMP_LAZY_FLUSH_HIVES     7
 
 #define CMP_CALLBACK_MAJOR       1
-#define CMP_CALLBACK_MINOR       3
+#define CMP_CALLBACK_MINOR       1
 
 typedef struct _CM_CALLBACK_ENTRY
 {
@@ -56,9 +56,13 @@ typedef struct _CM_MACHINE_HIVE_LOADED_NOTIFICATION
 typedef struct _CM_CALLBACK_OBJECT_CONTEXT
 {
     LIST_ENTRY ListEntry;
+    LIST_ENTRY FilterListEntry;
+    struct _CM_KEY_BODY *KeyBody;
     ULONGLONG Cookie;
     PVOID Context;
 } CM_CALLBACK_OBJECT_CONTEXT, *PCM_CALLBACK_OBJECT_CONTEXT;
+
+extern LIST_ENTRY CmpContextListHead;
 
 extern ULONG InitSafeBootMode;
 
@@ -221,6 +225,8 @@ NTAPI
 CmpQueryKeyData(
     _In_ PHHIVE Hive,
     _In_ PCM_KEY_NODE Node,
+    _In_opt_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_opt_ PVOID Transaction,
     _In_ KEY_INFORMATION_CLASS KeyInformationClass,
     _Out_writes_bytes_opt_(Length) PVOID KeyInformation,
     _In_ ULONG Length,

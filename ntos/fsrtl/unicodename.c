@@ -16,10 +16,8 @@
 #define FSRTL_STACK_STATES 64
 
 /*
- * One run of the matcher: the expression, the name and the four state sets the
- * sweep needs. Pending holds the states a DOS_STAR hands to the position just
- * past the name's final period, Trailing the ones it hands to the end of the
- * name.
+ * One run of the matcher: the expression, the name and the two state sets the
+ * sweep needs.
  */
 typedef struct _FSRTL_MATCH_RUN
 {
@@ -32,8 +30,6 @@ typedef struct _FSRTL_MATCH_RUN
     const WCHAR *UpcaseTable;
     PUCHAR Current;
     PUCHAR Next;
-    PUCHAR Pending;
-    PUCHAR Trailing;
 } FSRTL_MATCH_RUN, *PFSRTL_MATCH_RUN;
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -84,21 +80,10 @@ FsRtlpCloseStates(
             continue;
         }
 
+        /* DOS_STAR may always stop here, matching nothing more */
         if (Character == DOS_STAR)
         {
-            if ((Run->LastDot >= 0) && (NamePosition <= (ULONG)Run->LastDot))
-            {
-                Run->Pending[i + 1] = TRUE;
-            }
-            else if (NamePosition == Run->NameLength)
-            {
-                Run->Current[i + 1] = TRUE;
-            }
-            else
-            {
-                Run->Trailing[i + 1] = TRUE;
-            }
-
+            Run->Current[i + 1] = TRUE;
             continue;
         }
 
@@ -125,25 +110,6 @@ FsRtlpCloseStates(
 }
 
 static
-VOID
-FsRtlpMergeStates(
-    _Inout_ PUCHAR Target,
-    _Inout_ PUCHAR Source,
-    _In_ ULONG Count)
-{
-    ULONG i;
-
-    for (i = 0; i < Count; i++)
-    {
-        if (Source[i])
-        {
-            Target[i] = TRUE;
-            Source[i] = FALSE;
-        }
-    }
-}
-
-static
 BOOLEAN
 FsRtlpSweepExpression(
     _In_ PFSRTL_MATCH_RUN Run)
@@ -152,8 +118,6 @@ FsRtlpSweepExpression(
     ULONG Position;
 
     RtlZeroMemory(Run->Current, States);
-    RtlZeroMemory(Run->Pending, States);
-    RtlZeroMemory(Run->Trailing, States);
     Run->Current[0] = TRUE;
 
     for (Position = 0; ; Position++)
@@ -161,16 +125,6 @@ FsRtlpSweepExpression(
         ULONG i;
         WCHAR Wanted;
         PUCHAR Swap;
-
-        if ((Run->LastDot >= 0) && (Position == (ULONG)Run->LastDot + 1))
-        {
-            FsRtlpMergeStates(Run->Current, Run->Pending, States);
-        }
-
-        if (Position == Run->NameLength)
-        {
-            FsRtlpMergeStates(Run->Current, Run->Trailing, States);
-        }
 
         FsRtlpCloseStates(Run, Position);
 
@@ -205,7 +159,9 @@ FsRtlpSweepExpression(
             }
             else if (Character == DOS_STAR)
             {
-                continue;
+                /* It takes characters up to and including the name's final period, never past it */
+                if ((Run->LastDot < 0) || (Position <= (ULONG)Run->LastDot))
+                    Run->Next[i] = TRUE;
             }
             else if (FsRtlpUpcaseChar(Run, Character) == Wanted)
             {
@@ -266,7 +222,7 @@ FsRtlpMatchName(
     _In_ BOOLEAN IgnoreCase,
     _In_opt_ const WCHAR *UpcaseTable)
 {
-    UCHAR StackStates[4 * FSRTL_STACK_STATES];
+    UCHAR StackStates[2 * FSRTL_STACK_STATES];
     FSRTL_MATCH_RUN Run;
     PUCHAR Buffer;
     ULONG States;
@@ -317,14 +273,12 @@ FsRtlpMatchName(
     }
     else
     {
-        Buffer = ExAllocatePoolWithTag(PagedPool, 4 * States, FSRTL_NAME_TAG);
+        Buffer = ExAllocatePoolWithTag(PagedPool, 2 * States, FSRTL_NAME_TAG);
         if (Buffer == NULL) ExRaiseStatus(STATUS_NO_MEMORY);
     }
 
     Run.Current = Buffer;
     Run.Next = Buffer + States;
-    Run.Pending = Buffer + 2 * States;
-    Run.Trailing = Buffer + 3 * States;
 
     Matched = FsRtlpSweepExpression(&Run);
 
@@ -342,6 +296,8 @@ FsRtlDissectName(
     _Out_ PUNICODE_STRING FirstPart,
     _Out_ PUNICODE_STRING RemainingPart)
 {
+    USHORT Count;
+    USHORT Start;
     USHORT Offset;
 
     PAGED_CODE();
@@ -355,24 +311,25 @@ FsRtlDissectName(
 
     if ((Name.Length == 0) || (Name.Buffer == NULL)) return;
 
-    for (Offset = 0; Offset < Name.Length / sizeof(WCHAR); Offset++)
+    Count = Name.Length / sizeof(WCHAR);
+
+    /* A leading separator belongs to neither part */
+    Start = (Name.Buffer[0] == L'\\') ? 1 : 0;
+
+    for (Offset = Start; Offset < Count; Offset++)
     {
         if (Name.Buffer[Offset] == L'\\') break;
     }
 
-    FirstPart->Length = (USHORT)(Offset * sizeof(WCHAR));
+    FirstPart->Buffer = Name.Buffer + Start;
+    FirstPart->Length = (USHORT)((Offset - Start) * sizeof(WCHAR));
     FirstPart->MaximumLength = FirstPart->Length;
-    FirstPart->Buffer = Name.Buffer;
 
-    if (FirstPart->Length == Name.Length) return;
+    if (Offset == Count) return;
 
     RemainingPart->Buffer = Name.Buffer + Offset + 1;
-    RemainingPart->Length =
-        (USHORT)(Name.Length - (Offset + 1) * sizeof(WCHAR));
-    RemainingPart->MaximumLength =
-        (Name.MaximumLength > (Offset + 1) * sizeof(WCHAR)) ?
-        (USHORT)(Name.MaximumLength - (Offset + 1) * sizeof(WCHAR)) :
-        RemainingPart->Length;
+    RemainingPart->Length = (USHORT)((Count - Offset - 1) * sizeof(WCHAR));
+    RemainingPart->MaximumLength = RemainingPart->Length;
 }
 
 BOOLEAN

@@ -12,7 +12,6 @@
 /* GLOBALS ********************************************************************/
 
 POBJECT_TYPE ExEventObjectType = NULL;
-POBJECT_TYPE ExEventPairObjectType = NULL;
 POBJECT_TYPE ExKeyedEventObjectType = NULL;
 
 PVOID ExpCritSecOutOfMemoryEvent = NULL;
@@ -25,14 +24,6 @@ GENERIC_MAPPING ExpEventMapping =
     EVENT_ALL_ACCESS
 };
 
-GENERIC_MAPPING ExEventPairMapping =
-{
-    STANDARD_RIGHTS_READ,
-    STANDARD_RIGHTS_WRITE,
-    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE,
-    EVENT_PAIR_ALL_ACCESS
-};
-
 /* PRIVATE DATA ***************************************************************/
 
 #define EXP_KEYED_EVENT_HASH_SIZE 23
@@ -42,7 +33,7 @@ static GENERIC_MAPPING ExpKeyedEventMapping =
 {
     STANDARD_RIGHTS_READ | KEYEDEVENT_WAIT,
     STANDARD_RIGHTS_WRITE | KEYEDEVENT_WAKE,
-    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE,
+    STANDARD_RIGHTS_EXECUTE,
     KEYEDEVENT_ALL_ACCESS
 };
 
@@ -223,7 +214,7 @@ ExpInitializeEventImplementation(VOID)
     Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = EVENT_ALL_ACCESS;
     Initializer.GenericMapping = ExpEventMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(KEVENT);
 
     if (!NT_SUCCESS(ObCreateObjectType(&Name,
@@ -675,33 +666,7 @@ NtQueryEvent(
 
 /* EVENT PAIRS ****************************************************************/
 
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-ExpInitializeEventPairImplementation(VOID)
-{
-    OBJECT_TYPE_INITIALIZER Initializer;
-    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"EventPair");
-
-    RtlZeroMemory(&Initializer, sizeof(Initializer));
-
-    Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK;
-    Initializer.ValidAccessMask = EVENT_PAIR_ALL_ACCESS;
-    Initializer.GenericMapping = ExEventPairMapping;
-    Initializer.PoolType = NonPagedPool;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(KEVENT_PAIR);
-
-    if (!NT_SUCCESS(ObCreateObjectType(&Name,
-                                       &Initializer,
-                                       NULL,
-                                       &ExEventPairObjectType)))
-    {
-        return FALSE;
-    }
-
-    return TRUE;
-}
+/* Windows 11 keeps the services and answers each of them that there is no such thing */
 
 NTSTATUS
 NTAPI
@@ -710,71 +675,11 @@ NtCreateEventPair(
     _In_ ACCESS_MASK DesiredAccess,
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes)
 {
-    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    PKEVENT_PAIR EventPair;
-    HANDLE Handle;
-    NTSTATUS Status;
+    UNREFERENCED_PARAMETER(EventPairHandle);
+    UNREFERENCED_PARAMETER(DesiredAccess);
+    UNREFERENCED_PARAMETER(ObjectAttributes);
 
-    PAGED_CODE();
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            ProbeForWriteHandle(EventPairHandle);
-        }
-        _SEH2_EXCEPT(ExSystemExceptionFilter())
-        {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
-    }
-
-    Status = ObCreateObject(PreviousMode,
-                            ExEventPairObjectType,
-                            ObjectAttributes,
-                            PreviousMode,
-                            NULL,
-                            sizeof(KEVENT_PAIR),
-                            0,
-                            0,
-                            (PVOID *)&EventPair);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-
-    KeInitializeEvent(&EventPair->LowEvent, SynchronizationEvent, FALSE);
-    KeInitializeEvent(&EventPair->HighEvent, SynchronizationEvent, FALSE);
-
-    Status = ObInsertObject(EventPair,
-                            NULL,
-                            DesiredAccess,
-                            0,
-                            NULL,
-                            &Handle);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            *EventPairHandle = Handle;
-        }
-        _SEH2_EXCEPT(ExSystemExceptionFilter())
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-
-        return Status;
-    }
-
-    *EventPairHandle = Handle;
-    return Status;
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -784,134 +689,11 @@ NtOpenEventPair(
     _In_ ACCESS_MASK DesiredAccess,
     _In_ POBJECT_ATTRIBUTES ObjectAttributes)
 {
-    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    HANDLE Handle;
-    NTSTATUS Status;
+    UNREFERENCED_PARAMETER(EventPairHandle);
+    UNREFERENCED_PARAMETER(DesiredAccess);
+    UNREFERENCED_PARAMETER(ObjectAttributes);
 
-    PAGED_CODE();
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            ProbeForWriteHandle(EventPairHandle);
-        }
-        _SEH2_EXCEPT(ExSystemExceptionFilter())
-        {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
-    }
-
-    Status = ObOpenObjectByName(ObjectAttributes,
-                                ExEventPairObjectType,
-                                PreviousMode,
-                                NULL,
-                                DesiredAccess,
-                                NULL,
-                                &Handle);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            *EventPairHandle = Handle;
-        }
-        _SEH2_EXCEPT(ExSystemExceptionFilter())
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-
-        return Status;
-    }
-
-    *EventPairHandle = Handle;
-    return Status;
-}
-
-static
-NTSTATUS
-ExpOperateOnEventPair(
-    _In_ HANDLE EventPairHandle,
-    _In_ BOOLEAN SetHigh,
-    _In_ BOOLEAN Wait)
-{
-    PKEVENT_PAIR EventPair;
-    PKEVENT Set, WaitOn;
-    NTSTATUS Status;
-
-    PAGED_CODE();
-
-    Status = ObReferenceObjectByHandle(EventPairHandle,
-                                       SYNCHRONIZE,
-                                       ExEventPairObjectType,
-                                       ExGetPreviousMode(),
-                                       (PVOID *)&EventPair,
-                                       NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-
-    Set = SetHigh ? &EventPair->HighEvent : &EventPair->LowEvent;
-    WaitOn = SetHigh ? &EventPair->LowEvent : &EventPair->HighEvent;
-
-    if (!Wait)
-    {
-        KeSetEvent(Set, EVENT_INCREMENT, FALSE);
-        ObDereferenceObject(EventPair);
-        return STATUS_SUCCESS;
-    }
-
-    Status = KeSetEvent(Set, EVENT_INCREMENT, TRUE);
-    Status = KeWaitForSingleObject(WaitOn,
-                                   WrEventPair,
-                                   ExGetPreviousMode(),
-                                   FALSE,
-                                   NULL);
-
-    ObDereferenceObject(EventPair);
-
-    return Status;
-}
-
-static
-NTSTATUS
-ExpWaitOnEventPair(
-    _In_ HANDLE EventPairHandle,
-    _In_ BOOLEAN High)
-{
-    PKEVENT_PAIR EventPair;
-    NTSTATUS Status;
-
-    PAGED_CODE();
-
-    Status = ObReferenceObjectByHandle(EventPairHandle,
-                                       SYNCHRONIZE,
-                                       ExEventPairObjectType,
-                                       ExGetPreviousMode(),
-                                       (PVOID *)&EventPair,
-                                       NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
-
-    Status = KeWaitForSingleObject(High ? &EventPair->HighEvent :
-                                          &EventPair->LowEvent,
-                                   WrEventPair,
-                                   ExGetPreviousMode(),
-                                   FALSE,
-                                   NULL);
-
-    ObDereferenceObject(EventPair);
-
-    return Status;
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -919,7 +701,9 @@ NTAPI
 NtSetHighEventPair(
     _In_ HANDLE EventPairHandle)
 {
-    return ExpOperateOnEventPair(EventPairHandle, TRUE, FALSE);
+    UNREFERENCED_PARAMETER(EventPairHandle);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -927,7 +711,9 @@ NTAPI
 NtSetLowEventPair(
     _In_ HANDLE EventPairHandle)
 {
-    return ExpOperateOnEventPair(EventPairHandle, FALSE, FALSE);
+    UNREFERENCED_PARAMETER(EventPairHandle);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -935,7 +721,9 @@ NTAPI
 NtSetHighWaitLowEventPair(
     _In_ HANDLE EventPairHandle)
 {
-    return ExpOperateOnEventPair(EventPairHandle, TRUE, TRUE);
+    UNREFERENCED_PARAMETER(EventPairHandle);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -943,7 +731,9 @@ NTAPI
 NtSetLowWaitHighEventPair(
     _In_ HANDLE EventPairHandle)
 {
-    return ExpOperateOnEventPair(EventPairHandle, FALSE, TRUE);
+    UNREFERENCED_PARAMETER(EventPairHandle);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -951,7 +741,9 @@ NTAPI
 NtWaitHighEventPair(
     _In_ HANDLE EventPairHandle)
 {
-    return ExpWaitOnEventPair(EventPairHandle, TRUE);
+    UNREFERENCED_PARAMETER(EventPairHandle);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -959,7 +751,9 @@ NTAPI
 NtWaitLowEventPair(
     _In_ HANDLE EventPairHandle)
 {
-    return ExpWaitOnEventPair(EventPairHandle, FALSE);
+    UNREFERENCED_PARAMETER(EventPairHandle);
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 /* KEYED EVENTS ***************************************************************/
@@ -992,7 +786,6 @@ ExpInitializeKeyedEventImplementation(VOID)
     RtlZeroMemory(&Initializer, sizeof(Initializer));
 
     Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = KEYEDEVENT_ALL_ACCESS;
     Initializer.GenericMapping = ExpKeyedEventMapping;
     Initializer.UseDefaultObject = TRUE;

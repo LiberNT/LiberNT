@@ -504,25 +504,6 @@ PopAddRemoveSysCapsCallback(
     return STATUS_SUCCESS;
 }
 
-NTSTATUS
-NTAPI
-PopSetPowerSettingValue(
-    _In_ LPCGUID SettingGuid,
-    _In_ SYSTEM_POWER_CONDITION PowerCondition,
-    _In_reads_bytes_(ValueLength) PVOID Value,
-    _In_ ULONG ValueLength)
-{
-    PAGED_CODE();
-
-    UNREFERENCED_PARAMETER(SettingGuid);
-    UNREFERENCED_PARAMETER(PowerCondition);
-    UNREFERENCED_PARAMETER(Value);
-    UNREFERENCED_PARAMETER(ValueLength);
-
-    /* TODO: no setting is kept, so nobody is told one changed */
-    return STATUS_NOT_FOUND;
-}
-
 /*
  * Remembers which request brought the machine back, so that whoever asks can
  * tell a wake from an ordinary power request. No published flag in a request

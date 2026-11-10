@@ -142,6 +142,8 @@ NtAdjustPrivilegesToken(
     ULONG Needed;
     ULONG Index;
     ULONG Entry;
+
+
     PTOKEN Token;
 
     PAGED_CODE();

@@ -9,22 +9,80 @@
 #include "../ioint.h"
 #define INITGUID
 #include <devpkey.h>
+#include <cfg.h>
 #define NDEBUG
 #include <debug.h>
 
 /* PRIVATE DATA ***************************************************************/
 
-/* One registry value carries both the declared type and the caller's bytes */
-typedef struct _IOP_PROPERTY_VALUE
-{
-    DEVPROPTYPE Type;
-    UCHAR Data[ANYSIZE_ARRAY];
-} IOP_PROPERTY_VALUE, *PIOP_PROPERTY_VALUE;
-
-#define IOP_PROPERTY_HEADER_SIZE \
-    ((ULONG)FIELD_OFFSET(IOP_PROPERTY_VALUE, Data))
+/* A stored property is the default value of its own key, and the registry type of that value carries the property type */
+#define IOP_PROPERTY_TYPE_MARK 0xFFFF0000UL
 
 #define IOP_PROPERTY_MAXIMUM_SIZE (64 * 1024)
+
+#define IOP_PROPERTY_STACK_LIMIT 32
+
+/* A device property that is a value of the device instance key, or of the key of the driver installed for it */
+typedef struct _IOP_REGISTRY_PROPERTY
+{
+    CONST DEVPROPKEY *Key;
+    DEVPROPTYPE Type;
+    PCWSTR ValueName;
+    BOOLEAN DriverKey;
+    BOOLEAN Writable;
+} IOP_REGISTRY_PROPERTY;
+typedef CONST IOP_REGISTRY_PROPERTY *PCIOP_REGISTRY_PROPERTY;
+
+static const IOP_REGISTRY_PROPERTY IopRegistryProperties[] =
+{
+    { &DEVPKEY_Device_DeviceDesc, DEVPROP_TYPE_STRING, L"DeviceDesc", FALSE, TRUE },
+    { &DEVPKEY_Device_HardwareIds, DEVPROP_TYPE_STRING_LIST, L"HardwareID", FALSE, TRUE },
+    { &DEVPKEY_Device_CompatibleIds, DEVPROP_TYPE_STRING_LIST, L"CompatibleIDs", FALSE, TRUE },
+    { &DEVPKEY_Device_Service, DEVPROP_TYPE_STRING, L"Service", FALSE, FALSE },
+    { &DEVPKEY_Device_Class, DEVPROP_TYPE_STRING, L"Class", FALSE, FALSE },
+    { &DEVPKEY_Device_ClassGuid, DEVPROP_TYPE_GUID, L"ClassGUID", FALSE, FALSE },
+    { &DEVPKEY_Device_Driver, DEVPROP_TYPE_STRING, L"Driver", FALSE, FALSE },
+    { &DEVPKEY_Device_ConfigFlags, DEVPROP_TYPE_UINT32, L"ConfigFlags", FALSE, TRUE },
+    { &DEVPKEY_Device_Manufacturer, DEVPROP_TYPE_STRING, L"Mfg", FALSE, TRUE },
+    { &DEVPKEY_Device_FriendlyName, DEVPROP_TYPE_STRING, L"FriendlyName", FALSE, TRUE },
+    { &DEVPKEY_Device_LocationInfo, DEVPROP_TYPE_STRING, L"LocationInformation", FALSE, TRUE },
+    { &DEVPKEY_Device_Capabilities, DEVPROP_TYPE_UINT32, L"Capabilities", FALSE, FALSE },
+    { &DEVPKEY_Device_UINumber, DEVPROP_TYPE_UINT32, L"UINumber", FALSE, FALSE },
+    { &DEVPKEY_Device_UpperFilters, DEVPROP_TYPE_STRING_LIST, L"UpperFilters", FALSE, TRUE },
+    { &DEVPKEY_Device_LowerFilters, DEVPROP_TYPE_STRING_LIST, L"LowerFilters", FALSE, TRUE },
+    { &DEVPKEY_Device_ContainerId, DEVPROP_TYPE_GUID, L"ContainerID", FALSE, FALSE },
+    { &DEVPKEY_Device_DriverDate, DEVPROP_TYPE_FILETIME, L"DriverDateData", TRUE, FALSE },
+    { &DEVPKEY_Device_DriverVersion, DEVPROP_TYPE_STRING, L"DriverVersion", TRUE, FALSE },
+    { &DEVPKEY_Device_DriverDesc, DEVPROP_TYPE_STRING, L"DriverDesc", TRUE, FALSE },
+    { &DEVPKEY_Device_DriverInfPath, DEVPROP_TYPE_STRING, L"InfPath", TRUE, FALSE },
+    { &DEVPKEY_Device_DriverInfSection, DEVPROP_TYPE_STRING, L"InfSection", TRUE, FALSE },
+    { &DEVPKEY_Device_DriverInfSectionExt, DEVPROP_TYPE_STRING, L"InfSectionExt", TRUE, FALSE },
+    { &DEVPKEY_Device_MatchingDeviceId, DEVPROP_TYPE_STRING, L"MatchingDeviceId", TRUE, FALSE },
+    { &DEVPKEY_Device_DriverProvider, DEVPROP_TYPE_STRING, L"ProviderName", TRUE, FALSE },
+};
+
+/* A device property the device node answers through the older property call */
+typedef struct _IOP_LEGACY_PROPERTY
+{
+    CONST DEVPROPKEY *Key;
+    DEVPROPTYPE Type;
+    DEVICE_REGISTRY_PROPERTY Property;
+} IOP_LEGACY_PROPERTY;
+
+static const IOP_LEGACY_PROPERTY IopLegacyProperties[] =
+{
+    { &DEVPKEY_Device_PDOName, DEVPROP_TYPE_STRING, DevicePropertyPhysicalDeviceObjectName },
+    { &DEVPKEY_Device_BusTypeGuid, DEVPROP_TYPE_GUID, DevicePropertyBusTypeGuid },
+    { &DEVPKEY_Device_LegacyBusType, DEVPROP_TYPE_UINT32, DevicePropertyLegacyBusType },
+    { &DEVPKEY_Device_BusNumber, DEVPROP_TYPE_UINT32, DevicePropertyBusNumber },
+    { &DEVPKEY_Device_EnumeratorName, DEVPROP_TYPE_STRING, DevicePropertyEnumeratorName },
+    { &DEVPKEY_Device_Address, DEVPROP_TYPE_UINT32, DevicePropertyAddress },
+    { &DEVPKEY_Device_RemovalPolicy, DEVPROP_TYPE_UINT32, DevicePropertyRemovalPolicy },
+    { &DEVPKEY_Device_InstallState, DEVPROP_TYPE_UINT32, DevicePropertyInstallState },
+};
+
+static const UNICODE_STRING IopControlClassKeyName = RTL_CONSTANT_STRING(
+    L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
 
 static const UNICODE_STRING IopPropertiesKeyName =
     RTL_CONSTANT_STRING(L"Properties");
@@ -134,47 +192,74 @@ IopCheckPropertyArguments(
     return STATUS_SUCCESS;
 }
 
-/* The value name a property identifier is kept under: its eight hex digits */
+static
+BOOLEAN
+IopIsSamePropertyKey(
+    _In_ CONST DEVPROPKEY *First,
+    _In_ CONST DEVPROPKEY *Second)
+{
+    return (First->pid == Second->pid) &&
+           RtlEqualMemory(&First->fmtid, &Second->fmtid, sizeof(GUID));
+}
+
+static
+BOOLEAN
+IopIsNotFoundStatus(
+    _In_ NTSTATUS Status)
+{
+    return (Status == STATUS_OBJECT_NAME_NOT_FOUND) ||
+           (Status == STATUS_OBJECT_PATH_NOT_FOUND) ||
+           (Status == STATUS_UNSUCCESSFUL);
+}
+
+/* Nothing is written for the caller until there is a value to tell about */
 static
 NTSTATUS
-IopPropertyValueName(
-    _In_ DEVPROPID PropertyId,
-    _Out_writes_(9) PWCHAR Buffer,
-    _Out_ PUNICODE_STRING Name)
+IopReturnPropertyData(
+    _In_ DEVPROPTYPE ValueType,
+    _In_reads_bytes_opt_(ValueSize) CONST VOID *Value,
+    _In_ ULONG ValueSize,
+    _In_ ULONG Size,
+    _Out_writes_bytes_to_opt_(Size, *RequiredSize) PVOID Data,
+    _Out_ PULONG RequiredSize,
+    _Out_ PDEVPROPTYPE Type)
 {
-    static const WCHAR Digits[] = L"0123456789abcdef";
-    ULONG Index;
+    *Type = ValueType;
+    *RequiredSize = ValueSize;
 
-    for (Index = 0; Index < 8; Index++)
-    {
-        Buffer[Index] = Digits[(PropertyId >> ((7 - Index) * 4)) & 0xF];
-    }
+    if (ValueSize > Size) return STATUS_BUFFER_TOO_SMALL;
+    if (ValueSize == 0) return STATUS_SUCCESS;
+    if (Data == NULL) return STATUS_INVALID_PARAMETER;
 
-    Buffer[8] = UNICODE_NULL;
-
-    Name->Buffer = Buffer;
-    Name->Length = 8 * sizeof(WCHAR);
-    Name->MaximumLength = 9 * sizeof(WCHAR);
+    RtlCopyMemory(Data, Value, ValueSize);
 
     return STATUS_SUCCESS;
 }
 
-/* The levels on the way down are made only when the caller is writing */
+/*
+ * The key of one stored property: Properties\{format}\<identifier>, the
+ * identifier in four hex digits. The levels on the way down are made only when
+ * the caller is writing.
+ */
 static
 NTSTATUS
-IopOpenPropertySetKey(
+IopOpenPropertyKey(
     _In_ HANDLE OwnerKey,
     _In_ CONST DEVPROPKEY *PropertyKey,
     _In_ BOOLEAN Create,
-    _Out_ PHANDLE SetKey)
+    _In_ ACCESS_MASK DesiredAccess,
+    _Out_ PHANDLE PropertyHandle)
 {
     UNICODE_STRING FormatName;
+    UNICODE_STRING IdName;
+    WCHAR IdBuffer[9];
     NTSTATUS Status;
     HANDLE Properties;
+    HANDLE Format;
 
     PAGED_CODE();
 
-    *SetKey = NULL;
+    *PropertyHandle = NULL;
 
     if (Create)
     {
@@ -202,9 +287,11 @@ IopOpenPropertySetKey(
         return Status;
     }
 
+    RtlDowncaseUnicodeString(&FormatName, &FormatName, FALSE);
+
     if (Create)
     {
-        Status = IopCreateRegistryKeyEx(SetKey,
+        Status = IopCreateRegistryKeyEx(&Format,
                                         Properties,
                                         &FormatName,
                                         KEY_ALL_ACCESS,
@@ -213,7 +300,7 @@ IopOpenPropertySetKey(
     }
     else
     {
-        Status = IopOpenRegistryKeyEx(SetKey,
+        Status = IopOpenRegistryKeyEx(&Format,
                                       Properties,
                                       &FormatName,
                                       KEY_READ);
@@ -221,6 +308,39 @@ IopOpenPropertySetKey(
 
     RtlFreeUnicodeString(&FormatName);
     ZwClose(Properties);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = RtlStringCbPrintfW(IdBuffer,
+                                sizeof(IdBuffer),
+                                L"%04X",
+                                PropertyKey->pid);
+    if (!NT_SUCCESS(Status))
+    {
+        ZwClose(Format);
+        return Status;
+    }
+
+    RtlInitUnicodeString(&IdName, IdBuffer);
+
+    if (Create)
+    {
+        Status = IopCreateRegistryKeyEx(PropertyHandle,
+                                        Format,
+                                        &IdName,
+                                        KEY_ALL_ACCESS,
+                                        REG_OPTION_NON_VOLATILE,
+                                        NULL);
+    }
+    else
+    {
+        Status = IopOpenRegistryKeyEx(PropertyHandle,
+                                      Format,
+                                      &IdName,
+                                      DesiredAccess);
+    }
+
+    ZwClose(Format);
 
     return Status;
 }
@@ -235,102 +355,49 @@ IopReadPropertyData(
     _Out_ PULONG RequiredSize,
     _Out_ PDEVPROPTYPE Type)
 {
-    PKEY_VALUE_PARTIAL_INFORMATION Information;
-    PIOP_PROPERTY_VALUE Value;
-    UNICODE_STRING ValueName;
-    WCHAR NameBuffer[9];
+    PKEY_VALUE_FULL_INFORMATION Information;
     NTSTATUS Status;
-    ULONG Available;
-    ULONG Length = 0;
-    HANDLE SetKey;
+    HANDLE PropertyHandle;
 
     PAGED_CODE();
 
-    *RequiredSize = 0;
-    *Type = DEVPROP_TYPE_EMPTY;
-
-    Status = IopOpenPropertySetKey(OwnerKey, PropertyKey, FALSE, &SetKey);
+    Status = IopOpenPropertyKey(OwnerKey,
+                                PropertyKey,
+                                FALSE,
+                                KEY_READ,
+                                &PropertyHandle);
     if (!NT_SUCCESS(Status))
     {
-        return (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
-                Status == STATUS_OBJECT_PATH_NOT_FOUND)
-                   ? STATUS_OBJECT_NAME_NOT_FOUND
-                   : Status;
+        return IopIsNotFoundStatus(Status) ? STATUS_OBJECT_NAME_NOT_FOUND
+                                           : Status;
     }
 
-    IopPropertyValueName(PropertyKey->pid, NameBuffer, &ValueName);
-
-    Status = ZwQueryValueKey(SetKey,
-                             &ValueName,
-                             KeyValuePartialInformation,
-                             NULL,
-                             0,
-                             &Length);
-    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_BUFFER_OVERFLOW)
-    {
-        ZwClose(SetKey);
-
-        if (NT_SUCCESS(Status)) return STATUS_OBJECT_NAME_NOT_FOUND;
-
-        return (Status == STATUS_OBJECT_NAME_NOT_FOUND)
-                   ? STATUS_OBJECT_NAME_NOT_FOUND
-                   : Status;
-    }
-
-    Information = ExAllocatePoolZero(PagedPool, Length, TAG_IO);
-    if (Information == NULL)
-    {
-        ZwClose(SetKey);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    Status = ZwQueryValueKey(SetKey,
-                             &ValueName,
-                             KeyValuePartialInformation,
-                             Information,
-                             Length,
-                             &Length);
-    ZwClose(SetKey);
+    Status = IopGetRegistryValue(PropertyHandle, L"", &Information);
+    ZwClose(PropertyHandle);
 
     if (!NT_SUCCESS(Status))
     {
-        ExFreePoolWithTag(Information, TAG_IO);
-        return Status;
+        return IopIsNotFoundStatus(Status) ? STATUS_OBJECT_NAME_NOT_FOUND
+                                           : Status;
     }
 
-    if (Information->Type != REG_BINARY ||
-        Information->DataLength < IOP_PROPERTY_HEADER_SIZE)
+    if ((Information->Type & IOP_PROPERTY_TYPE_MARK) != IOP_PROPERTY_TYPE_MARK)
     {
         ExFreePoolWithTag(Information, TAG_IO);
         return STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
-    Value = (PIOP_PROPERTY_VALUE)Information->Data;
-    Available = Information->DataLength - IOP_PROPERTY_HEADER_SIZE;
-
-    *Type = Value->Type;
-    *RequiredSize = Available;
-
-    if (Available > Size)
-    {
-        ExFreePoolWithTag(Information, TAG_IO);
-        return STATUS_BUFFER_TOO_SMALL;
-    }
-
-    if (Available != 0)
-    {
-        if (Data == NULL)
-        {
-            ExFreePoolWithTag(Information, TAG_IO);
-            return STATUS_INVALID_PARAMETER;
-        }
-
-        RtlCopyMemory(Data, Value->Data, Available);
-    }
+    Status = IopReturnPropertyData(Information->Type & ~IOP_PROPERTY_TYPE_MARK,
+                                   (PUCHAR)Information + Information->DataOffset,
+                                   Information->DataLength,
+                                   Size,
+                                   Data,
+                                   RequiredSize,
+                                   Type);
 
     ExFreePoolWithTag(Information, TAG_IO);
 
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 static
@@ -342,14 +409,11 @@ IopWritePropertyData(
     _In_ ULONG Size,
     _In_reads_bytes_opt_(Size) PVOID Data)
 {
-    PIOP_PROPERTY_VALUE Value;
-    UNICODE_STRING ValueName;
-    WCHAR NameBuffer[9];
+    UNICODE_STRING DefaultName = RTL_CONSTANT_STRING(L"");
     BOOLEAN Delete;
     NTSTATUS Status;
     ULONG Fixed;
-    ULONG Total;
-    HANDLE SetKey;
+    HANDLE PropertyHandle;
 
     PAGED_CODE();
 
@@ -387,116 +451,677 @@ IopWritePropertyData(
         return STATUS_INVALID_PARAMETER;
     }
 
-    Status = IopOpenPropertySetKey(OwnerKey, PropertyKey, !Delete, &SetKey);
+    Status = IopOpenPropertyKey(OwnerKey,
+                                PropertyKey,
+                                !Delete,
+                                KEY_ALL_ACCESS,
+                                &PropertyHandle);
     if (!NT_SUCCESS(Status))
     {
         if (!Delete) return Status;
 
-        return (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
-                Status == STATUS_OBJECT_PATH_NOT_FOUND)
-                   ? STATUS_SUCCESS
-                   : Status;
+        return IopIsNotFoundStatus(Status) ? STATUS_SUCCESS : Status;
     }
-
-    IopPropertyValueName(PropertyKey->pid, NameBuffer, &ValueName);
 
     if (Delete)
     {
-        Status = ZwDeleteValueKey(SetKey, &ValueName);
-        ZwClose(SetKey);
+        Status = ZwDeleteKey(PropertyHandle);
+        ZwClose(PropertyHandle);
 
-        return (Status == STATUS_OBJECT_NAME_NOT_FOUND) ? STATUS_SUCCESS
-                                                        : Status;
+        return Status;
     }
 
-    Total = IOP_PROPERTY_HEADER_SIZE + Size;
-
-    Value = ExAllocatePoolZero(PagedPool, Total, TAG_IO);
-    if (Value == NULL)
-    {
-        ZwClose(SetKey);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    Value->Type = Type;
-    RtlCopyMemory(Value->Data, Data, Size);
-
-    Status = ZwSetValueKey(SetKey,
-                           &ValueName,
+    Status = ZwSetValueKey(PropertyHandle,
+                           &DefaultName,
                            0,
-                           REG_BINARY,
-                           Value,
-                           Total);
+                           IOP_PROPERTY_TYPE_MARK | Type,
+                           Data,
+                           Size);
 
-    ExFreePoolWithTag(Value, TAG_IO);
-    ZwClose(SetKey);
+    ZwClose(PropertyHandle);
 
     return Status;
 }
 
-/* An interface's registry name is its link with \??\ swapped for ##?# */
+/* SYSTEM PROPERTIES **********************************************************/
+
+static
+PCIOP_REGISTRY_PROPERTY
+IopFindRegistryProperty(
+    _In_ CONST DEVPROPKEY *PropertyKey)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(IopRegistryProperties); Index++)
+    {
+        if (IopIsSamePropertyKey(IopRegistryProperties[Index].Key, PropertyKey))
+        {
+            return &IopRegistryProperties[Index];
+        }
+    }
+
+    return NULL;
+}
+
+/* The key of the driver installed for a device, named by the Driver value of its instance key */
+static
+NTSTATUS
+IopOpenInstalledDriverKey(
+    _In_ HANDLE InstanceKey,
+    _Out_ PHANDLE DriverKey)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    UNICODE_STRING DriverName;
+    NTSTATUS Status;
+    HANDLE ClassKey;
+    PWCHAR Name;
+    ULONG Count;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    *DriverKey = NULL;
+
+    Status = IopGetRegistryValue(InstanceKey, L"Driver", &Information);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Information->Type != REG_SZ)
+    {
+        ExFreePoolWithTag(Information, TAG_IO);
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    Name = (PWCHAR)((PUCHAR)Information + Information->DataOffset);
+    Count = Information->DataLength / sizeof(WCHAR);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Name[Index] == UNICODE_NULL) break;
+    }
+
+    if (Index == 0 || Index * sizeof(WCHAR) > MAXUSHORT)
+    {
+        ExFreePoolWithTag(Information, TAG_IO);
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    DriverName.Buffer = Name;
+    DriverName.Length = (USHORT)(Index * sizeof(WCHAR));
+    DriverName.MaximumLength = DriverName.Length;
+
+    Status = IopOpenRegistryKeyEx(&ClassKey,
+                                  NULL,
+                                  (PUNICODE_STRING)&IopControlClassKeyName,
+                                  KEY_READ);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopOpenRegistryKeyEx(DriverKey,
+                                      ClassKey,
+                                      &DriverName,
+                                      KEY_READ);
+        ZwClose(ClassKey);
+    }
+
+    ExFreePoolWithTag(Information, TAG_IO);
+
+    return Status;
+}
+
+static
+NTSTATUS
+IopReadRegistryProperty(
+    _In_ PDEVICE_OBJECT Pdo,
+    _In_ PCIOP_REGISTRY_PROPERTY Property,
+    _In_ ULONG Size,
+    _Out_writes_bytes_to_opt_(Size, *RequiredSize) PVOID Data,
+    _Out_ PULONG RequiredSize,
+    _Out_ PDEVPROPTYPE Type)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    UNICODE_STRING GuidString;
+    NTSTATUS Status;
+    HANDLE InstanceKey;
+    HANDLE ValueKey;
+    PUCHAR Bytes;
+    ULONG Length;
+    ULONG Count;
+    ULONG Index;
+    GUID Guid;
+
+    PAGED_CODE();
+
+    Status = PnpDeviceObjectToDeviceInstance(Pdo, &InstanceKey, KEY_READ);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    ValueKey = InstanceKey;
+
+    if (Property->DriverKey)
+    {
+        Status = IopOpenInstalledDriverKey(InstanceKey, &ValueKey);
+        ZwClose(InstanceKey);
+
+        if (!NT_SUCCESS(Status)) return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    Status = IopGetRegistryValue(ValueKey,
+                                 (PWSTR)Property->ValueName,
+                                 &Information);
+    ZwClose(ValueKey);
+
+    if (!NT_SUCCESS(Status))
+    {
+        return IopIsNotFoundStatus(Status) ? STATUS_OBJECT_NAME_NOT_FOUND
+                                           : Status;
+    }
+
+    Bytes = (PUCHAR)Information + Information->DataOffset;
+    Length = Information->DataLength;
+    Status = STATUS_OBJECT_NAME_NOT_FOUND;
+
+    switch (Property->Type)
+    {
+        case DEVPROP_TYPE_STRING:
+        case DEVPROP_TYPE_GUID:
+
+            if (Information->Type != REG_SZ &&
+                Information->Type != REG_EXPAND_SZ)
+            {
+                break;
+            }
+
+            Count = Length / sizeof(WCHAR);
+
+            for (Index = 0; Index < Count; Index++)
+            {
+                if (((PWCHAR)Bytes)[Index] == UNICODE_NULL) break;
+            }
+
+            if (Index * sizeof(WCHAR) > MAXUSHORT - sizeof(WCHAR)) break;
+
+            if (Property->Type == DEVPROP_TYPE_GUID)
+            {
+                GuidString.Buffer = (PWCHAR)Bytes;
+                GuidString.Length = (USHORT)(Index * sizeof(WCHAR));
+                GuidString.MaximumLength = GuidString.Length;
+
+                if (!NT_SUCCESS(RtlGUIDFromString(&GuidString, &Guid))) break;
+
+                Status = IopReturnPropertyData(DEVPROP_TYPE_GUID,
+                                               &Guid,
+                                               sizeof(Guid),
+                                               Size,
+                                               Data,
+                                               RequiredSize,
+                                               Type);
+                break;
+            }
+
+            /* The string is given with one terminator, whatever the value holds past it */
+            *Type = DEVPROP_TYPE_STRING;
+            *RequiredSize = (ULONG)((Index + 1) * sizeof(WCHAR));
+
+            if (*RequiredSize > Size)
+            {
+                Status = STATUS_BUFFER_TOO_SMALL;
+                break;
+            }
+
+            if (Data == NULL)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            RtlCopyMemory(Data, Bytes, Index * sizeof(WCHAR));
+            ((PWCHAR)Data)[Index] = UNICODE_NULL;
+            Status = STATUS_SUCCESS;
+            break;
+
+        case DEVPROP_TYPE_STRING_LIST:
+
+            if (Information->Type != REG_MULTI_SZ || Length == 0) break;
+
+            Status = IopReturnPropertyData(DEVPROP_TYPE_STRING_LIST,
+                                           Bytes,
+                                           Length,
+                                           Size,
+                                           Data,
+                                           RequiredSize,
+                                           Type);
+            break;
+
+        case DEVPROP_TYPE_UINT32:
+
+            if (Information->Type != REG_DWORD || Length < sizeof(ULONG)) break;
+
+            Status = IopReturnPropertyData(DEVPROP_TYPE_UINT32,
+                                           Bytes,
+                                           sizeof(ULONG),
+                                           Size,
+                                           Data,
+                                           RequiredSize,
+                                           Type);
+            break;
+
+        case DEVPROP_TYPE_FILETIME:
+
+            if (Information->Type != REG_BINARY || Length < sizeof(LARGE_INTEGER))
+            {
+                break;
+            }
+
+            Status = IopReturnPropertyData(DEVPROP_TYPE_FILETIME,
+                                           Bytes,
+                                           sizeof(LARGE_INTEGER),
+                                           Size,
+                                           Data,
+                                           RequiredSize,
+                                           Type);
+            break;
+
+        default:
+            break;
+    }
+
+    ExFreePoolWithTag(Information, TAG_IO);
+
+    return Status;
+}
+
+/* A property the registry holds as an instance value is written there, where the setup interfaces read it */
+static
+NTSTATUS
+IopWriteRegistryProperty(
+    _In_ HANDLE InstanceKey,
+    _In_ PCIOP_REGISTRY_PROPERTY Property,
+    _In_ DEVPROPTYPE Type,
+    _In_ ULONG Size,
+    _In_reads_bytes_opt_(Size) PVOID Data)
+{
+    UNICODE_STRING ValueName;
+    NTSTATUS Status;
+    ULONG ValueType;
+
+    PAGED_CODE();
+
+    RtlInitUnicodeString(&ValueName, Property->ValueName);
+
+    if (Data == NULL || Size == 0 ||
+        (Type & DEVPROP_MASK_TYPE) == DEVPROP_TYPE_EMPTY)
+    {
+        Status = ZwDeleteValueKey(InstanceKey, &ValueName);
+
+        return IopIsNotFoundStatus(Status) ? STATUS_SUCCESS : Status;
+    }
+
+    if (Type != Property->Type) return STATUS_INVALID_PARAMETER;
+
+    switch (Property->Type)
+    {
+        case DEVPROP_TYPE_STRING:
+
+            if ((Size % sizeof(WCHAR)) != 0 ||
+                ((PWCHAR)Data)[Size / sizeof(WCHAR) - 1] != UNICODE_NULL)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            ValueType = REG_SZ;
+            break;
+
+        case DEVPROP_TYPE_STRING_LIST:
+
+            if ((Size % sizeof(WCHAR)) != 0 ||
+                ((PWCHAR)Data)[Size / sizeof(WCHAR) - 1] != UNICODE_NULL)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            ValueType = REG_MULTI_SZ;
+            break;
+
+        case DEVPROP_TYPE_UINT32:
+
+            if (Size != sizeof(ULONG)) return STATUS_INVALID_PARAMETER;
+
+            ValueType = REG_DWORD;
+            break;
+
+        default:
+            return STATUS_INVALID_PARAMETER;
+    }
+
+    return ZwSetValueKey(InstanceKey, &ValueName, 0, ValueType, Data, Size);
+}
+
+/* The drivers of a device stack by name, from the device on top down to the one the bus made */
+static
+NTSTATUS
+IopReadStackProperty(
+    _In_ PDEVICE_OBJECT Pdo,
+    _In_ ULONG Size,
+    _Out_writes_bytes_to_opt_(Size, *RequiredSize) PVOID Data,
+    _Out_ PULONG RequiredSize,
+    _Out_ PDEVPROPTYPE Type)
+{
+    PDEVICE_OBJECT Devices[IOP_PROPERTY_STACK_LIMIT];
+    PDEVICE_OBJECT Current;
+    PUNICODE_STRING Name;
+    NTSTATUS Status;
+    PWCHAR Cursor;
+    ULONG Length = sizeof(WCHAR);
+    ULONG Count = 0;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    Current = IoGetAttachedDeviceReference(Pdo);
+
+    while (Current != NULL && Count < IOP_PROPERTY_STACK_LIMIT)
+    {
+        Devices[Count++] = Current;
+        Current = IoGetLowerDeviceObject(Current);
+    }
+
+    if (Current != NULL) ObDereferenceObject(Current);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        Length += Devices[Index]->DriverObject->DriverName.Length +
+                  sizeof(WCHAR);
+    }
+
+    *Type = DEVPROP_TYPE_STRING_LIST;
+    *RequiredSize = Length;
+
+    if (Length > Size)
+    {
+        Status = STATUS_BUFFER_TOO_SMALL;
+    }
+    else if (Data == NULL)
+    {
+        Status = STATUS_INVALID_PARAMETER;
+    }
+    else
+    {
+        Cursor = Data;
+
+        for (Index = 0; Index < Count; Index++)
+        {
+            Name = &Devices[Index]->DriverObject->DriverName;
+
+            RtlCopyMemory(Cursor, Name->Buffer, Name->Length);
+            Cursor += Name->Length / sizeof(WCHAR);
+            *Cursor++ = UNICODE_NULL;
+        }
+
+        *Cursor = UNICODE_NULL;
+        Status = STATUS_SUCCESS;
+    }
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        ObDereferenceObject(Devices[Index]);
+    }
+
+    return Status;
+}
+
+/* What the device node itself knows; Answered tells whether the key is one of those */
+static
+NTSTATUS
+IopReadDeviceNodeProperty(
+    _In_ PDEVICE_OBJECT Pdo,
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ CONST DEVPROPKEY *PropertyKey,
+    _In_ ULONG Size,
+    _Out_writes_bytes_to_opt_(Size, *RequiredSize) PVOID Data,
+    _Out_ PULONG RequiredSize,
+    _Out_ PDEVPROPTYPE Type,
+    _Out_ PBOOLEAN Answered)
+{
+    PDEVICE_NODE Parent;
+    DEVPROP_BOOLEAN Flag;
+    NTSTATUS Status;
+    PWCHAR Text;
+    ULONG DeviceStatus;
+    ULONG Problem;
+    ULONG Length;
+    ULONG Value;
+
+    PAGED_CODE();
+
+    *Answered = TRUE;
+
+    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_InstanceId) ||
+        IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_Parent))
+    {
+        if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_Parent))
+        {
+            Parent = DeviceNode->Parent;
+            if (Parent == NULL) return STATUS_OBJECT_NAME_NOT_FOUND;
+
+            DeviceNode = Parent;
+        }
+
+        if (DeviceNode->InstancePath.Length == 0)
+        {
+            return STATUS_OBJECT_NAME_NOT_FOUND;
+        }
+
+        Length = DeviceNode->InstancePath.Length + sizeof(WCHAR);
+
+        Text = ExAllocatePoolZero(PagedPool, Length, TAG_IO);
+        if (Text == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        RtlCopyMemory(Text,
+                      DeviceNode->InstancePath.Buffer,
+                      DeviceNode->InstancePath.Length);
+
+        Status = IopReturnPropertyData(DEVPROP_TYPE_STRING,
+                                       Text,
+                                       Length,
+                                       Size,
+                                       Data,
+                                       RequiredSize,
+                                       Type);
+
+        ExFreePoolWithTag(Text, TAG_IO);
+
+        return Status;
+    }
+
+    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_DevNodeStatus) ||
+        IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_ProblemCode) ||
+        IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_HasProblem))
+    {
+        PiQueryDevNodeStatus(DeviceNode, &DeviceStatus, &Problem);
+
+        if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_HasProblem))
+        {
+            Flag = (DeviceStatus & DN_HAS_PROBLEM) ? DEVPROP_TRUE
+                                                   : DEVPROP_FALSE;
+
+            return IopReturnPropertyData(DEVPROP_TYPE_BOOLEAN,
+                                         &Flag,
+                                         sizeof(Flag),
+                                         Size,
+                                         Data,
+                                         RequiredSize,
+                                         Type);
+        }
+
+        /* The flags a user-mode decision sets are left to the user-mode status query */
+        Value = IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_ProblemCode)
+                    ? Problem
+                    : (DeviceStatus & ~(DN_DISABLEABLE | DN_REMOVABLE |
+                                        DN_WILL_BE_REMOVED | DN_NEED_RESTART |
+                                        DN_NO_SHOW_IN_DM));
+
+        return IopReturnPropertyData(DEVPROP_TYPE_UINT32,
+                                     &Value,
+                                     sizeof(Value),
+                                     Size,
+                                     Data,
+                                     RequiredSize,
+                                     Type);
+    }
+
+    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_IsPresent))
+    {
+        Flag = DEVPROP_TRUE;
+
+        return IopReturnPropertyData(DEVPROP_TYPE_BOOLEAN,
+                                     &Flag,
+                                     sizeof(Flag),
+                                     Size,
+                                     Data,
+                                     RequiredSize,
+                                     Type);
+    }
+
+    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_Numa_Node))
+    {
+        Value = DeviceNode->NumaNodeIndex;
+
+        return IopReturnPropertyData(DEVPROP_TYPE_UINT32,
+                                     &Value,
+                                     sizeof(Value),
+                                     Size,
+                                     Data,
+                                     RequiredSize,
+                                     Type);
+    }
+
+    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_Stack))
+    {
+        return IopReadStackProperty(Pdo, Size, Data, RequiredSize, Type);
+    }
+
+    /* TODO: Children, Siblings and the relation lists are not answered */
+    *Answered = FALSE;
+
+    return STATUS_OBJECT_NAME_NOT_FOUND;
+}
+
+/* The last answer for a key no store holds: what the older property call says about the device node */
+static
+NTSTATUS
+IopReadLegacyProperty(
+    _In_ PDEVICE_OBJECT Pdo,
+    _In_ CONST DEVPROPKEY *PropertyKey,
+    _In_ ULONG Size,
+    _Out_writes_bytes_to_opt_(Size, *RequiredSize) PVOID Data,
+    _Out_ PULONG RequiredSize,
+    _Out_ PDEVPROPTYPE Type)
+{
+    NTSTATUS Status;
+    ULONG Length = 0;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    for (Index = 0; Index < RTL_NUMBER_OF(IopLegacyProperties); Index++)
+    {
+        if (!IopIsSamePropertyKey(IopLegacyProperties[Index].Key, PropertyKey))
+        {
+            continue;
+        }
+
+        Status = IoGetDeviceProperty(Pdo,
+                                     IopLegacyProperties[Index].Property,
+                                     Size,
+                                     Data,
+                                     &Length);
+        if (NT_SUCCESS(Status) || Status == STATUS_BUFFER_TOO_SMALL)
+        {
+            *Type = IopLegacyProperties[Index].Type;
+            *RequiredSize = Length;
+
+            return Status;
+        }
+
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    return STATUS_OBJECT_NAME_NOT_FOUND;
+}
+
+/*
+ * An interface's registry name is its link up to the end of the class
+ * identifier, with \??\ swapped for ##?#. What follows the identifier is the
+ * reference string, which names a key below.
+ */
 NTSTATUS
 IopInterfaceLinkToRegistryName(
     _In_ PUNICODE_STRING SymbolicLinkName,
     _Out_ LPGUID ClassGuid,
-    _Out_ PUNICODE_STRING RegistryName)
+    _Out_ PUNICODE_STRING RegistryName,
+    _Out_ PUNICODE_STRING ReferenceString)
 {
     UNICODE_STRING GuidString;
     NTSTATUS Status;
     PWCHAR Buffer;
+    USHORT Count = SymbolicLinkName->Length / sizeof(WCHAR);
     USHORT Index;
     USHORT Open = 0;
+    USHORT Close = 0;
     BOOLEAN Found = FALSE;
 
     PAGED_CODE();
 
     RtlInitEmptyUnicodeString(RegistryName, NULL, 0);
+    RtlInitEmptyUnicodeString(ReferenceString, NULL, 0);
 
-    if (SymbolicLinkName->Length < 4 * sizeof(WCHAR))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
+    if (Count < 4) return STATUS_INVALID_PARAMETER;
 
-    for (Index = 0; Index < SymbolicLinkName->Length / sizeof(WCHAR); Index++)
+    for (Index = 0; Index < Count; Index++)
     {
-        if (SymbolicLinkName->Buffer[Index] == L'{')
+        if (SymbolicLinkName->Buffer[Index] == L'{' && !Found)
         {
             Open = Index;
             Found = TRUE;
         }
+        else if (SymbolicLinkName->Buffer[Index] == L'}' && Found)
+        {
+            Close = Index;
+            break;
+        }
     }
 
-    if (!Found) return STATUS_INVALID_PARAMETER;
+    if (!Found || Close == 0) return STATUS_INVALID_PARAMETER;
 
     GuidString.Buffer = SymbolicLinkName->Buffer + Open;
-    GuidString.Length = 0;
-    GuidString.MaximumLength = 0;
-
-    for (Index = Open; Index < SymbolicLinkName->Length / sizeof(WCHAR);
-         Index++)
-    {
-        GuidString.Length += sizeof(WCHAR);
-
-        if (SymbolicLinkName->Buffer[Index] == L'}') break;
-    }
-
+    GuidString.Length = (USHORT)((Close - Open + 1) * sizeof(WCHAR));
     GuidString.MaximumLength = GuidString.Length;
 
     Status = RtlGUIDFromString(&GuidString, ClassGuid);
     if (!NT_SUCCESS(Status)) return Status;
 
+    if (Close + 1 < Count)
+    {
+        if (SymbolicLinkName->Buffer[Close + 1] != OBJ_NAME_PATH_SEPARATOR)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        ReferenceString->Buffer = &SymbolicLinkName->Buffer[Close + 2];
+        ReferenceString->Length = (USHORT)((Count - Close - 2) * sizeof(WCHAR));
+        ReferenceString->MaximumLength = ReferenceString->Length;
+    }
+
     Buffer = ExAllocatePoolZero(PagedPool,
-                                SymbolicLinkName->Length + sizeof(WCHAR),
+                                (Close + 2) * sizeof(WCHAR),
                                 TAG_IO_NAME);
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     RtlCopyMemory(Buffer,
                   SymbolicLinkName->Buffer,
-                  SymbolicLinkName->Length);
+                  (Close + 1) * sizeof(WCHAR));
 
     RegistryName->Buffer = Buffer;
-    RegistryName->Length = SymbolicLinkName->Length;
-    RegistryName->MaximumLength = SymbolicLinkName->Length + sizeof(WCHAR);
+    RegistryName->Length = (USHORT)((Close + 1) * sizeof(WCHAR));
+    RegistryName->MaximumLength = (USHORT)((Close + 2) * sizeof(WCHAR));
 
     if (Buffer[0] == L'\\' && Buffer[1] == L'?' && Buffer[2] == L'?' &&
         Buffer[3] == L'\\')
@@ -510,17 +1135,22 @@ IopInterfaceLinkToRegistryName(
     return STATUS_SUCCESS;
 }
 
+/* The key an interface's properties hang from: the one of its reference string, which only registering the interface makes */
 static
 NTSTATUS
 IopOpenInterfaceOwnerKey(
     _In_ PUNICODE_STRING SymbolicLinkName,
-    _In_ BOOLEAN Create,
+    _In_ ACCESS_MASK DesiredAccess,
     _Out_ PHANDLE OwnerKey)
 {
     UNICODE_STRING RegistryName;
+    UNICODE_STRING Reference;
+    UNICODE_STRING ReferenceKeyName;
     GUID ClassGuid;
     NTSTATUS Status;
     HANDLE ClassKey;
+    HANDLE InterfaceKey;
+    PWCHAR Buffer;
 
     PAGED_CODE();
 
@@ -528,35 +1158,53 @@ IopOpenInterfaceOwnerKey(
 
     Status = IopInterfaceLinkToRegistryName(SymbolicLinkName,
                                             &ClassGuid,
-                                            &RegistryName);
+                                            &RegistryName,
+                                            &Reference);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = IopOpenInterfaceClassKey(&ClassGuid, Create, &ClassKey);
+    Status = IopOpenInterfaceClassKey(&ClassGuid, FALSE, &ClassKey);
     if (!NT_SUCCESS(Status))
     {
         ExFreePoolWithTag(RegistryName.Buffer, TAG_IO_NAME);
         return Status;
     }
 
-    if (Create)
-    {
-        Status = IopCreateRegistryKeyEx(OwnerKey,
-                                        ClassKey,
-                                        &RegistryName,
-                                        KEY_ALL_ACCESS,
-                                        REG_OPTION_NON_VOLATILE,
-                                        NULL);
-    }
-    else
-    {
-        Status = IopOpenRegistryKeyEx(OwnerKey,
-                                      ClassKey,
-                                      &RegistryName,
-                                      KEY_READ);
-    }
+    Status = IopOpenRegistryKeyEx(&InterfaceKey,
+                                  ClassKey,
+                                  &RegistryName,
+                                  KEY_READ);
 
     ZwClose(ClassKey);
     ExFreePoolWithTag(RegistryName.Buffer, TAG_IO_NAME);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Buffer = ExAllocatePoolZero(PagedPool,
+                                Reference.Length + 2 * sizeof(WCHAR),
+                                TAG_IO_NAME);
+    if (Buffer == NULL)
+    {
+        ZwClose(InterfaceKey);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Buffer[0] = L'#';
+    if (Reference.Length != 0)
+    {
+        RtlCopyMemory(&Buffer[1], Reference.Buffer, Reference.Length);
+    }
+
+    ReferenceKeyName.Buffer = Buffer;
+    ReferenceKeyName.Length = Reference.Length + sizeof(WCHAR);
+    ReferenceKeyName.MaximumLength = Reference.Length + 2 * sizeof(WCHAR);
+
+    Status = IopOpenRegistryKeyEx(OwnerKey,
+                                  InterfaceKey,
+                                  &ReferenceKeyName,
+                                  DesiredAccess);
+
+    ExFreePoolWithTag(Buffer, TAG_IO_NAME);
+    ZwClose(InterfaceKey);
 
     return Status;
 }
@@ -575,6 +1223,9 @@ IoGetDevicePropertyData(
     _Out_ PULONG RequiredSize,
     _Out_ PDEVPROPTYPE Type)
 {
+    PCIOP_REGISTRY_PROPERTY RegistryProperty;
+    PDEVICE_NODE DeviceNode;
+    BOOLEAN Answered;
     NTSTATUS Status;
     HANDLE InstanceKey;
 
@@ -585,13 +1236,35 @@ IoGetDevicePropertyData(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *RequiredSize = 0;
-    *Type = DEVPROP_TYPE_EMPTY;
-
     Status = IopCheckPropertyArguments(PropertyKey, Lcid, Flags, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Size != 0 && Data == NULL) return STATUS_INVALID_PARAMETER;
+
+    DeviceNode = IopGetDeviceNode(Pdo);
+    if (DeviceNode == NULL) return STATUS_INVALID_DEVICE_REQUEST;
+
+    RegistryProperty = IopFindRegistryProperty(PropertyKey);
+    if (RegistryProperty != NULL)
+    {
+        Status = IopReadRegistryProperty(Pdo,
+                                         RegistryProperty,
+                                         Size,
+                                         Data,
+                                         RequiredSize,
+                                         Type);
+        if (Status != STATUS_OBJECT_NAME_NOT_FOUND) return Status;
+    }
+
+    Status = IopReadDeviceNodeProperty(Pdo,
+                                       DeviceNode,
+                                       PropertyKey,
+                                       Size,
+                                       Data,
+                                       RequiredSize,
+                                       Type,
+                                       &Answered);
+    if (Answered) return Status;
 
     Status = PnpDeviceObjectToDeviceInstance(Pdo, &InstanceKey, KEY_READ);
     if (!NT_SUCCESS(Status)) return Status;
@@ -605,7 +1278,14 @@ IoGetDevicePropertyData(
 
     ZwClose(InstanceKey);
 
-    return Status;
+    if (Status != STATUS_OBJECT_NAME_NOT_FOUND) return Status;
+
+    return IopReadLegacyProperty(Pdo,
+                                 PropertyKey,
+                                 Size,
+                                 Data,
+                                 RequiredSize,
+                                 Type);
 }
 
 NTSTATUS
@@ -619,6 +1299,7 @@ IoSetDevicePropertyData(
     _In_ ULONG Size,
     _In_opt_ PVOID Data)
 {
+    PCIOP_REGISTRY_PROPERTY RegistryProperty;
     NTSTATUS Status;
     HANDLE InstanceKey;
 
@@ -634,11 +1315,33 @@ IoSetDevicePropertyData(
                                              KEY_ALL_ACCESS);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = IopWritePropertyData(InstanceKey,
-                                  PropertyKey,
-                                  Type,
-                                  Size,
-                                  Data);
+    RegistryProperty = IopFindRegistryProperty(PropertyKey);
+    if (RegistryProperty != NULL && RegistryProperty->Writable)
+    {
+        Status = IopWriteRegistryProperty(InstanceKey,
+                                          RegistryProperty,
+                                          Type,
+                                          Size,
+                                          Data);
+
+        /* A copy an earlier system kept in the property store would only go stale */
+        if (NT_SUCCESS(Status))
+        {
+            IopWritePropertyData(InstanceKey,
+                                 PropertyKey,
+                                 DEVPROP_TYPE_EMPTY,
+                                 0,
+                                 NULL);
+        }
+    }
+    else
+    {
+        Status = IopWritePropertyData(InstanceKey,
+                                      PropertyKey,
+                                      Type,
+                                      Size,
+                                      Data);
+    }
 
     ZwClose(InstanceKey);
 
@@ -667,16 +1370,19 @@ IoGetDeviceInterfacePropertyData(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *RequiredSize = 0;
-    *Type = DEVPROP_TYPE_EMPTY;
-
     Status = IopCheckPropertyArguments(PropertyKey, Lcid, Flags, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Size != 0 && Data == NULL) return STATUS_INVALID_PARAMETER;
 
-    Status = IopOpenInterfaceOwnerKey(SymbolicLinkName, FALSE, &OwnerKey);
-    if (!NT_SUCCESS(Status)) return Status;
+    /* A name that is no interface's, well formed or not, is an interface that is not there */
+    Status = IopOpenInterfaceOwnerKey(SymbolicLinkName, KEY_READ, &OwnerKey);
+    if (!NT_SUCCESS(Status))
+    {
+        return (Status == STATUS_INSUFFICIENT_RESOURCES)
+                   ? Status
+                   : STATUS_OBJECT_NAME_NOT_FOUND;
+    }
 
     Status = IopReadPropertyData(OwnerKey,
                                  PropertyKey,
@@ -711,8 +1417,15 @@ IoSetDeviceInterfacePropertyData(
     Status = IopCheckPropertyArguments(PropertyKey, Lcid, Flags, TRUE);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = IopOpenInterfaceOwnerKey(SymbolicLinkName, TRUE, &OwnerKey);
-    if (!NT_SUCCESS(Status)) return Status;
+    Status = IopOpenInterfaceOwnerKey(SymbolicLinkName,
+                                      KEY_ALL_ACCESS,
+                                      &OwnerKey);
+    if (!NT_SUCCESS(Status))
+    {
+        return (Status == STATUS_INSUFFICIENT_RESOURCES)
+                   ? Status
+                   : STATUS_OBJECT_NAME_NOT_FOUND;
+    }
 
     Status = IopWritePropertyData(OwnerKey,
                                   PropertyKey,
@@ -724,3 +1437,4 @@ IoSetDeviceInterfacePropertyData(
 
     return Status;
 }
+

@@ -46,7 +46,7 @@ ExpInitializeSemaphoreImplementation(VOID)
     Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = SEMAPHORE_ALL_ACCESS;
     Initializer.GenericMapping = ExSemaphoreMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(KSEMAPHORE);
 
     return NT_SUCCESS(ObCreateObjectType(&Name,
@@ -357,7 +357,7 @@ ExpInitializeMutantImplementation(VOID)
     Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = MUTANT_ALL_ACCESS;
     Initializer.GenericMapping = ExpMutantMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(KMUTANT);
     Initializer.DeleteProcedure = ExpDeleteMutant;
 

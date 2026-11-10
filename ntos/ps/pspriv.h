@@ -68,6 +68,29 @@ typedef struct _PSP_CREATE_ATTRIBUTES
 
 NTSTATUS
 NTAPI
+PspCreateImageProcess(
+    _Out_ PHANDLE ProcessHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ HANDLE ParentProcess,
+    _In_ ULONG Flags,
+    _In_ PVOID Section,
+    _In_opt_ HANDLE DebugPort,
+    _In_opt_ const HANDLE *HandleList,
+    _In_ SIZE_T HandleCount);
+
+NTSTATUS
+NTAPI
+PspCreateOpenAccessState(
+    _Out_ PACCESS_STATE AccessState,
+    _Out_ PAUX_ACCESS_DATA AuxData,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_TYPE ObjectType,
+    _In_ ACCESS_MASK AllAccess,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+NTSTATUS
+NTAPI
 PspCaptureAttributes(
     _In_opt_ PPS_ATTRIBUTE_LIST AttributeList,
     _In_ KPROCESSOR_MODE PreviousMode,
@@ -174,6 +197,8 @@ PspSetProcessPriorityClass(
 NTSTATUS
 NTAPI
 PspAllocateProcess(
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ KPROCESSOR_MODE PreviousMode,
     _In_opt_ PEPROCESS Parent,
     _In_opt_ PVOID Section,
     _In_opt_ PACCESS_TOKEN Token,

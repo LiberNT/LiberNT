@@ -378,6 +378,7 @@ ExpHandOverResource(
         Resource->OwnerEntry.OwnerThread = 0;
         Resource->OwnerEntry.OwnerCount = 1;
         Resource->ActiveCount = 1;
+        Resource->ActiveEntries = 1;
         Resource->NumberOfExclusiveWaiters--;
 
         KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
@@ -390,7 +391,8 @@ ExpHandOverResource(
         Count = Resource->NumberOfSharedWaiters;
 
         Resource->Flag &= ~ResourceOwnedExclusive;
-        Resource->ActiveCount = (SHORT)Count;
+        Resource->ActiveCount = 1;
+        Resource->ActiveEntries = Count;
         Resource->NumberOfSharedWaiters = 0;
 
         KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
@@ -410,7 +412,7 @@ ExpHandOverResource(
 
 /*
  * A reader that was woken by a hand-over has already been counted in
- * ActiveCount, so it only claims a slot.
+ * ActiveEntries, so it only claims a slot.
  */
 static
 VOID
@@ -437,14 +439,13 @@ ExpClaimSharedEntry(
         {
             Entry->OwnerThread = Thread;
             Entry->OwnerCount = 1;
-            Resource->ActiveEntries++;
             break;
         }
 
         if (!ExpExpandResourceOwnerTable(Resource, &OldIrql))
         {
             /* FIXME: no slot can be recorded, so the reader is counted in
-               ActiveCount without a name; its release cannot find it. */
+               ActiveEntries without a name; its release cannot find it. */
             DPRINT1("Resource %p has no room for a shared owner\n", Resource);
             break;
         }
@@ -509,7 +510,6 @@ ExpAcquireResourceShared(
 
             Entry->OwnerThread = Thread;
             Entry->OwnerCount = 1;
-            Resource->ActiveCount++;
             Resource->ActiveEntries++;
             KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
             return TRUE;
@@ -568,6 +568,14 @@ ExInitializeResourceLite(
     RtlZeroMemory(Resource, sizeof(ERESOURCE));
 
     KeInitializeSpinLock(&Resource->SpinLock);
+
+    /* A session resource has its address only inside its session, so no system-wide list can hold it */
+    if (MmIsSessionAddress(Resource))
+    {
+        /* TODO: keep session resources on a per-session list so lock queries report them */
+        InitializeListHead(&Resource->SystemResourcesList);
+        return STATUS_SUCCESS;
+    }
 
     KeAcquireSpinLock(&ExpResourceSpinLock, &OldIrql);
     InsertTailList(&ExpSystemResourcesList, &Resource->SystemResourcesList);
@@ -628,9 +636,16 @@ ExDeleteResourceLite(
     ASSERT(Resource->NumberOfSharedWaiters == 0);
     ASSERT(Resource->NumberOfExclusiveWaiters == 0);
 
-    KeAcquireSpinLock(&ExpResourceSpinLock, &OldIrql);
-    RemoveEntryList(&Resource->SystemResourcesList);
-    KeReleaseSpinLock(&ExpResourceSpinLock, OldIrql);
+    if (MmIsSessionAddress(Resource))
+    {
+        ASSERT(IsListEmpty(&Resource->SystemResourcesList));
+    }
+    else
+    {
+        KeAcquireSpinLock(&ExpResourceSpinLock, &OldIrql);
+        RemoveEntryList(&Resource->SystemResourcesList);
+        KeReleaseSpinLock(&ExpResourceSpinLock, OldIrql);
+    }
 
     if (Resource->OwnerTable != NULL)
     {
@@ -808,11 +823,10 @@ ExReleaseResourceForThreadLite(
     }
 
     Entry->OwnerThread = 0;
-    Resource->ActiveEntries--;
 
-    ASSERT(Resource->ActiveCount > 0);
+    ASSERT(Resource->ActiveEntries > 0);
 
-    if (--Resource->ActiveCount != 0)
+    if (--Resource->ActiveEntries != 0)
     {
         KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
         return;
@@ -853,7 +867,7 @@ ExConvertExclusiveToSharedLite(
         return;
     }
 
-    Resource->ActiveCount = (SHORT)(Resource->ActiveCount + Count);
+    Resource->ActiveEntries += Count;
     Resource->NumberOfSharedWaiters = 0;
 
     KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
@@ -980,7 +994,7 @@ ExEnterCriticalRegionAndAcquireResourceExclusive(
 {
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(Resource, TRUE);
-    return Resource;
+    return KeGetCurrentThread()->Win32Thread;
 }
 
 PVOID
@@ -990,7 +1004,7 @@ ExEnterCriticalRegionAndAcquireResourceShared(
 {
     KeEnterCriticalRegion();
     ExAcquireResourceSharedLite(Resource, TRUE);
-    return Resource;
+    return KeGetCurrentThread()->Win32Thread;
 }
 
 PVOID
@@ -1000,7 +1014,7 @@ ExEnterCriticalRegionAndAcquireSharedWaitForExclusive(
 {
     KeEnterCriticalRegion();
     ExAcquireSharedWaitForExclusive(Resource, TRUE);
-    return Resource;
+    return KeGetCurrentThread()->Win32Thread;
 }
 
 VOID

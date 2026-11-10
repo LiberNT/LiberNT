@@ -130,16 +130,20 @@ PsConvertToGuiThread(VOID)
 
     if (Thread->Tcb.GuiThread) return STATUS_ALREADY_WIN32;
 
-    NewStack = MmCreateKernelStack(TRUE, 0);
-    if (NewStack == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+    /* The architecture's entry path may already have moved the thread to a large stack */
+    if (!Thread->Tcb.LargeStack)
+    {
+        NewStack = MmCreateKernelStack(TRUE, 0);
+        if (NewStack == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    /*
-     * The switch does not return on the old stack, so nothing that lives on
-     * it may be used after this point.
-     */
-    OldStack = KeSwitchKernelStack(NewStack,
-                                   (PCHAR)NewStack - KERNEL_LARGE_STACK_COMMIT);
-    MmDeleteKernelStack(OldStack, FALSE);
+        /*
+         * The switch does not return on the old stack, so nothing that lives
+         * on it may be used after this point.
+         */
+        OldStack = KeSwitchKernelStack(NewStack,
+                                       (PCHAR)NewStack - KERNEL_LARGE_STACK_COMMIT);
+        MmDeleteKernelStack(OldStack, FALSE);
+    }
 
     /*
      * The thread's process is told first: the windowing kernel keeps state

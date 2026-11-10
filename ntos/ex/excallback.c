@@ -21,9 +21,9 @@ PCALLBACK_OBJECT ProcessorAddCallback = NULL;
 GENERIC_MAPPING ExpCallbackMapping =
 {
     STANDARD_RIGHTS_READ,
-    STANDARD_RIGHTS_WRITE,
-    STANDARD_RIGHTS_EXECUTE,
-    STANDARD_RIGHTS_ALL
+    STANDARD_RIGHTS_WRITE | CALLBACK_MODIFY_STATE,
+    STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE,
+    CALLBACK_ALL_ACCESS
 };
 
 KEVENT ExpCallbackEvent;
@@ -262,10 +262,11 @@ ExpInitializeCallbacks(VOID)
     RtlZeroMemory(&Initializer, sizeof(Initializer));
 
     Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
-    Initializer.ValidAccessMask = STANDARD_RIGHTS_ALL;
+    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.ValidAccessMask = CALLBACK_ALL_ACCESS;
     Initializer.GenericMapping = ExpCallbackMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.UseDefaultObject = TRUE;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(CALLBACK_OBJECT);
     Initializer.DeleteProcedure = ExpDeleteCallback;
 
@@ -307,7 +308,7 @@ ExpInitializeCallbackObjects(VOID)
                                OBJ_CASE_INSENSITIVE | OBJ_PERMANENT |
                                    OBJ_KERNEL_HANDLE,
                                NULL,
-                               SePublicDefaultUnrestrictedSd);
+                               SePublicDefaultSd);
 
     Status = ZwCreateDirectoryObject(&DirectoryHandle,
                                      DIRECTORY_ALL_ACCESS,
@@ -408,10 +409,11 @@ ExCreateCallback(
     KeInitializeSpinLock(&Callback->Lock);
     InitializeListHead(&Callback->RegisteredCallbacks);
 
+    /* The pointer handed back holds a reference of its own once the handle is closed */
     Status = ObInsertObject(Callback,
                             NULL,
                             FILE_READ_DATA,
-                            0,
+                            1,
                             (PVOID *)&Callback,
                             &Handle);
     if (!NT_SUCCESS(Status))

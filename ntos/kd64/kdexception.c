@@ -245,6 +245,16 @@ KdpTrap(
             break;
     }
 
+    /* A first chance goes to the handlers unless the global flag asks to stop on exceptions */
+    if (!SecondChanceException &&
+        (ExceptionRecord->ExceptionCode != STATUS_BREAKPOINT) &&
+        (ExceptionRecord->ExceptionCode != STATUS_SINGLE_STEP) &&
+        (!(NtGlobalFlag & FLG_STOP_ON_EXCEPTION) ||
+         (ExceptionRecord->ExceptionCode == STATUS_PORT_DISCONNECTED)))
+    {
+        return FALSE;
+    }
+
     return KdpReport(TrapFrame,
                      ExceptionFrame,
                      ExceptionRecord,

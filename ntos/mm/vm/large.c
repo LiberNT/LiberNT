@@ -206,7 +206,7 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
         }
         MiPtWrite(Space, Va, Slot, Table, MI_PROT_IS_ACCESSIBLE(Protection)
             ? MiArchPteMakeBlock(Frame, Protection,
-                (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER) | MI_LEAF_DIRTY)
+                MI_SPACE_LEAF_OWNER(Space) | MI_LEAF_DIRTY)
             : MiSoftMake(MiSoftResident, Protection, Frame));
         if (Segment == NULL)
             MI_ATOMIC_ADD64(&Space->PrivatePages, Pages);
@@ -325,7 +325,7 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
                                                   : MiSoftProtection(Pte);
         Value = MI_PROT_IS_ACCESSIBLE(Protection)
             ? MiArchPteMakeBlock(MiLargeFrame(Pte), Protection,
-                (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER) | MI_LEAF_DIRTY)
+                MI_SPACE_LEAF_OWNER(Space) | MI_LEAF_DIRTY)
             : MiSoftMake(MiSoftResident, Protection, MiLargeFrame(Pte));
         MiArchPteWrite(Slot, Value);
         MiArchTlbInvalidate(Va, Large >> PAGE_SHIFT, TRUE);

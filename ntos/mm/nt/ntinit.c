@@ -452,7 +452,14 @@ MiInitializePhase0(
              (ULONG)MiSystem.SystemSpace.VadRoot.NodeCount, MiPfnAvailablePages(&MiSystem.Pfn) >> (20 - PAGE_SHIFT));
     Status = MiSystemReserveTopLevelHole(&MiSystem);
     if (NT_SUCCESS(Status))
+        Status = MiSystemReserveSessionRange(&MiSystem);
+    if (NT_SUCCESS(Status))
         Status = MiSystemPopulateTopLevel(&MiSystem);
+    if (NT_SUCCESS(Status) && MiSystem.SessionEnd > MiSystem.SessionStart)
+    {
+        MmSessionBase = (PVOID)(ULONG_PTR)MiSystem.SessionStart;
+        MmSessionSize = (SIZE_T)(MiSystem.SessionEnd - MiSystem.SessionStart + 1);
+    }
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(MEMORY_MANAGEMENT, 0x544F504C, (ULONG_PTR)Status, 0, 0);
 

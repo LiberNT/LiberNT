@@ -183,3 +183,10 @@ EtwpGetTraceGuidInfo(
     _In_ ULONG OutBufferLen,
     _Out_opt_ PULONG ReturnSize,
     _In_ KPROCESSOR_MODE PreviousMode);
+
+NTSTATUS
+EtwpTraceClassicEvent(
+    _In_opt_ HANDLE TraceHandle,
+    _In_ ULONG FieldSize,
+    _In_ PVOID Fields,
+    _In_ KPROCESSOR_MODE PreviousMode);

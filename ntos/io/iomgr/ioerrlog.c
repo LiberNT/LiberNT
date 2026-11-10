@@ -371,6 +371,63 @@ IoWriteErrorLogEntry(
 
 /* HARD ERRORS ****************************************************************/
 
+/* FIXME: Microsoft documents that too many queued boxes are refused without giving the number; this one is arbitrary */
+#define IOP_MAXIMUM_INFORMATIONAL_ERRORS 25
+
+typedef struct _IOP_INFORMATIONAL_ERROR
+{
+    WORK_QUEUE_ITEM WorkItem;
+    LIST_ENTRY ListEntry;
+    NTSTATUS ErrorStatus;
+    UNICODE_STRING String;
+} IOP_INFORMATIONAL_ERROR, *PIOP_INFORMATIONAL_ERROR;
+
+static LIST_ENTRY IopInformationalErrorList =
+{
+    &IopInformationalErrorList,
+    &IopInformationalErrorList
+};
+static KSPIN_LOCK IopInformationalErrorLock;
+static ULONG IopInformationalErrorCount;
+
+/*
+ * Shows one queued box. The box is told about from a system thread, so the
+ * driver that reported the error never waits for anyone to read it.
+ */
+static
+VOID
+NTAPI
+IopInformationalErrorWorker(
+    _In_ PVOID Context)
+{
+    PIOP_INFORMATIONAL_ERROR Error = Context;
+    ULONG_PTR Parameters[1];
+    ULONG Response;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    /* Before anybody listens for errors there is nobody to show this one to */
+    if (ExReadyForErrors)
+    {
+        Parameters[0] = (ULONG_PTR)&Error->String;
+
+        ExRaiseHardError(Error->ErrorStatus,
+                         (Error->String.Length != 0) ? 1 : 0,
+                         (Error->String.Length != 0) ? 1 : 0,
+                         Parameters,
+                         OptionOkNoWait,
+                         &Response);
+    }
+
+    KeAcquireSpinLock(&IopInformationalErrorLock, &OldIrql);
+    RemoveEntryList(&Error->ListEntry);
+    IopInformationalErrorCount--;
+    KeReleaseSpinLock(&IopInformationalErrorLock, OldIrql);
+
+    ExFreePoolWithTag(Error, TAG_ERROR_LOG);
+}
+
 BOOLEAN
 NTAPI
 IoRaiseInformationalHardError(
@@ -378,26 +435,74 @@ IoRaiseInformationalHardError(
     _In_opt_ PUNICODE_STRING String,
     _In_opt_ PKTHREAD Thread)
 {
-    ULONG_PTR Parameters[1];
-    ULONG Response = 0;
-    NTSTATUS Status;
+    PIOP_INFORMATIONAL_ERROR Error, Pending;
+    PLIST_ENTRY Entry;
+    USHORT Length;
+    KIRQL OldIrql;
 
-    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
 
-    if (Thread != NULL && Thread != KeGetCurrentThread()) return FALSE;
+    /* A service notification carries what it says in its parameters, which this routine has no room for */
+    if (ErrorStatus == STATUS_SERVICE_NOTIFICATION) return FALSE;
 
-    if (PsGetCurrentThread()->HardErrorsAreDisabled) return FALSE;
+    if (Thread == NULL) Thread = KeGetCurrentThread();
 
-    Parameters[0] = (ULONG_PTR)String;
+    if (CONTAINING_RECORD(Thread, ETHREAD, Tcb)->HardErrorsAreDisabled)
+    {
+        return FALSE;
+    }
 
-    Status = ExRaiseHardError(ErrorStatus,
-                              (String != NULL) ? 1 : 0,
-                              (String != NULL) ? 1 : 0,
-                              Parameters,
-                              OptionOk,
-                              &Response);
+    Length = (String != NULL) ? String->Length : 0;
 
-    return NT_SUCCESS(Status);
+    Error = ExAllocatePoolWithTag(NonPagedPool,
+                                  sizeof(*Error) + Length,
+                                  TAG_ERROR_LOG);
+    if (Error == NULL) return FALSE;
+
+    Error->ErrorStatus = ErrorStatus;
+    Error->String.Buffer = (PWCHAR)(Error + 1);
+    Error->String.Length = Length;
+    Error->String.MaximumLength = Length;
+
+    if (Length != 0) RtlCopyMemory(Error->String.Buffer, String->Buffer, Length);
+
+    KeAcquireSpinLock(&IopInformationalErrorLock, &OldIrql);
+
+    if (IopInformationalErrorCount >= IOP_MAXIMUM_INFORMATIONAL_ERRORS)
+    {
+        KeReleaseSpinLock(&IopInformationalErrorLock, OldIrql);
+        ExFreePoolWithTag(Error, TAG_ERROR_LOG);
+        return FALSE;
+    }
+
+    /* The same thing is not said twice while the first box is still waiting */
+    for (Entry = IopInformationalErrorList.Flink;
+         Entry != &IopInformationalErrorList;
+         Entry = Entry->Flink)
+    {
+        Pending = CONTAINING_RECORD(Entry, IOP_INFORMATIONAL_ERROR, ListEntry);
+
+        if (Pending->ErrorStatus == ErrorStatus &&
+            Pending->String.Length == Length &&
+            RtlCompareMemory(Pending->String.Buffer,
+                             Error->String.Buffer,
+                             Length) == Length)
+        {
+            KeReleaseSpinLock(&IopInformationalErrorLock, OldIrql);
+            ExFreePoolWithTag(Error, TAG_ERROR_LOG);
+            return FALSE;
+        }
+    }
+
+    InsertTailList(&IopInformationalErrorList, &Error->ListEntry);
+    IopInformationalErrorCount++;
+
+    KeReleaseSpinLock(&IopInformationalErrorLock, OldIrql);
+
+    ExInitializeWorkItem(&Error->WorkItem, IopInformationalErrorWorker, Error);
+    ExQueueWorkItem(&Error->WorkItem, DelayedWorkQueue);
+
+    return TRUE;
 }
 
 VOID

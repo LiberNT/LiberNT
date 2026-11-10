@@ -136,9 +136,7 @@ KiAttachProcess(
         Thread->ApcStateIndex = AttachedApcEnvironment;
     }
 
-    KiAcquireDispatcherLockAtSynchLevel();
-    Process->StackCount++;
-    KiReleaseDispatcherLockFromSynchLevel();
+    InterlockedIncrement((PLONG)&Process->StackCount);
 
     KiReleaseApcLockFromSynchLevel(ApcLock);
 
@@ -146,6 +144,31 @@ KiAttachProcess(
     KiSwapProcess(Process, OldProcess);
 
     KiExitDispatcher(ApcLock->OldIrql);
+}
+
+/*
+ * Puts a process on, or takes it off, the list of every process the kernel
+ * knows. The first one is put there while the processor is still above the
+ * level the list's lock is taken at, so the level is only ever raised.
+ */
+static
+VOID
+KiLinkProcess(
+    _Inout_ PKPROCESS Process,
+    _In_ BOOLEAN Link)
+{
+    KIRQL OldIrql = KeGetCurrentIrql();
+
+    if (OldIrql < SYNCH_LEVEL) KeRaiseIrql(SYNCH_LEVEL, &OldIrql);
+    KiAcquireDispatcherLockAtSynchLevel();
+
+    if (Link)
+        InsertTailList(&KiProcessListHead, &Process->ProcessListEntry);
+    else
+        RemoveEntryList(&Process->ProcessListEntry);
+
+    KiReleaseDispatcherLockFromSynchLevel();
+    if (OldIrql < SYNCH_LEVEL) KeLowerIrql(OldIrql);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -167,7 +190,6 @@ KeInitializeProcess(
     Process->Header.Type = ProcessObject;
     Process->Header.Signalling = FALSE;
     Process->Header.Size = sizeof(KPROCESS) / sizeof(LONG);
-    Process->Header.Hand = 0;
     Process->Header.Inserted = FALSE;
     Process->Header.DebugActive = FALSE;
     Process->Header.SignalState = 0;
@@ -200,7 +222,23 @@ KeInitializeProcess(
     KPROCESS_DTB0(Process) = DirectoryTableBase[0];
     KPROCESS_DTB1(Process) = DirectoryTableBase[1];
 
-    InsertTailList(&KiProcessListHead, &Process->ProcessListEntry);
+    KiLinkProcess(Process, TRUE);
+}
+
+/*
+ * Undoes the kernel's half of a process before its memory goes back. A
+ * process whose kernel half was never built is not on the list.
+ */
+VOID
+NTAPI
+KeUninitializeProcess(
+    _Inout_ struct _KPROCESS *Process)
+{
+    if (Process->ProcessListEntry.Flink == NULL) return;
+
+    KiLinkProcess(Process, FALSE);
+    Process->ProcessListEntry.Flink = NULL;
+    Process->ProcessListEntry.Blink = NULL;
 }
 
 /*
@@ -675,9 +713,7 @@ KeUnstackDetachProcess(
         KiRequestApcInterrupt(TRUE, (UCHAR)Thread->NextProcessor);
     }
 
-    KiAcquireDispatcherLockAtSynchLevel();
-    Process->StackCount--;
-    KiReleaseDispatcherLockFromSynchLevel();
+    InterlockedDecrement((PLONG)&Process->StackCount);
 
     KiReleaseApcLockFromSynchLevel(&ApcLock);
 
@@ -758,10 +794,14 @@ KeAddSystemServiceTable(
     if (Index >= SSDT_MAX_ENTRIES)
         return FALSE;
 
+    /* Every session's window manager names the same table at the same session address */
     if ((KeServiceDescriptorTableShadow[Index].Limit != 0) ||
         (KeServiceDescriptorTableShadow[Index].Base != NULL))
     {
-        return FALSE;
+        return (BOOLEAN)((KeServiceDescriptorTableShadow[Index].Base == Base) &&
+                         (KeServiceDescriptorTableShadow[Index].Count == Count) &&
+                         (KeServiceDescriptorTableShadow[Index].Limit == Limit) &&
+                         (KeServiceDescriptorTableShadow[Index].Number == Number));
     }
 
     KeServiceDescriptorTableShadow[Index].Base = Base;

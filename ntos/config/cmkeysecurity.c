@@ -358,6 +358,9 @@ CmpSetSecurityDescriptor(
 
     if (Kcb == NULL) return STATUS_KEY_DELETED;
     if (Kcb->Delete) return STATUS_KEY_DELETED;
+
+    Status = CmpTransPrepareWrite(KeyBody);
+    if (!NT_SUCCESS(Status)) return Status;
     if (Kcb->KeyHive->ReadOnly) return STATUS_ACCESS_DENIED;
 
     Status = CmpGetKeySecurityDescriptor(Kcb, &Current);
@@ -466,53 +469,86 @@ CmpSecurityMethod(
 }
 
 /*
- * The descriptor a hive's own root carries before anything in the hive has
- * had anything to say about access: the system and the administrators may do
- * anything, everybody else may read.
+ * The descriptor a root key carries when nothing stored says otherwise. The
+ * system owns it; the system and the administrators may do anything, and
+ * everybody else, packaged applications holding the registry read capability
+ * included, may read. Every entry is handed down to the keys made below.
  */
 PSECURITY_DESCRIPTOR
 NTAPI
 CmpHiveRootSecurityDescriptor(VOID)
 {
+    static SID_IDENTIFIER_AUTHORITY PackageAuthority =
+        SECURITY_APP_PACKAGE_AUTHORITY;
+    static const ULONG RegistryReadCapability[] =
+    {
+        SECURITY_CAPABILITY_BASE_RID, SECURITY_CAPABILITY_APP_RID,
+        1065365936UL, 1281604716UL, 3511738428UL, 1654721687UL,
+        432734479UL, 3232135806UL, 4053264122UL, 3456934681UL
+    };
+    UCHAR CapabilityBuffer[FIELD_OFFSET(SID, SubAuthority) +
+                           sizeof(RegistryReadCapability)];
+    PSID CapabilitySid = (PSID)CapabilityBuffer;
+    struct
+    {
+        PSID Sid;
+        ACCESS_MASK Mask;
+    } Entries[6];
     SECURITY_DESCRIPTOR Absolute;
     PSECURITY_DESCRIPTOR Relative;
     NTSTATUS Status;
     ULONG AclSize;
     ULONG Length;
+    ULONG Index;
     PACL Dacl;
 
     if (CmpRootSecurityDescriptor != NULL) return CmpRootSecurityDescriptor;
 
-    AclSize = (ULONG)sizeof(ACL) +
-              4 * (ULONG)(sizeof(ACCESS_ALLOWED_ACE) - sizeof(ULONG)) +
-              RtlLengthSid(SeLocalSystemSid) +
-              RtlLengthSid(SeAliasAdminsSid) +
-              RtlLengthSid(SeWorldSid) +
-              RtlLengthSid(SeAllAppPackagesSid);
+    RtlInitializeSid(CapabilitySid,
+                     &PackageAuthority,
+                     RTL_NUMBER_OF(RegistryReadCapability));
+    for (Index = 0; Index < RTL_NUMBER_OF(RegistryReadCapability); Index++)
+    {
+        *RtlSubAuthoritySid(CapabilitySid, Index) =
+            RegistryReadCapability[Index];
+    }
+
+    Entries[0].Sid = SeLocalSystemSid;      Entries[0].Mask = KEY_ALL_ACCESS;
+    Entries[1].Sid = SeAliasAdminsSid;      Entries[1].Mask = KEY_ALL_ACCESS;
+    Entries[2].Sid = SeWorldSid;            Entries[2].Mask = KEY_READ;
+    Entries[3].Sid = SeRestrictedSid;       Entries[3].Mask = KEY_READ;
+    Entries[4].Sid = SeAllAppPackagesSid;   Entries[4].Mask = KEY_READ;
+    Entries[5].Sid = CapabilitySid;         Entries[5].Mask = KEY_READ;
+
+    AclSize = (ULONG)sizeof(ACL);
+    for (Index = 0; Index < RTL_NUMBER_OF(Entries); Index++)
+    {
+        AclSize += (ULONG)(sizeof(ACCESS_ALLOWED_ACE) - sizeof(ULONG)) +
+                   RtlLengthSid(Entries[Index].Sid);
+    }
 
     Dacl = ExAllocatePoolZero(PagedPool, AclSize, TAG_CMSD);
     if (Dacl == NULL) return NULL;
 
     Status = RtlCreateAcl(Dacl, AclSize, ACL_REVISION);
-    if (!NT_SUCCESS(Status))
+
+    for (Index = 0;
+         NT_SUCCESS(Status) && Index < RTL_NUMBER_OF(Entries);
+         Index++)
     {
-        ExFreePool(Dacl);
-        return NULL;
+        Status = RtlAddAccessAllowedAceEx(Dacl,
+                                          ACL_REVISION,
+                                          CONTAINER_INHERIT_ACE,
+                                          Entries[Index].Mask,
+                                          Entries[Index].Sid);
     }
 
-    RtlAddAccessAllowedAce(Dacl,
-                           ACL_REVISION,
-                           KEY_ALL_ACCESS,
-                           SeLocalSystemSid);
-    RtlAddAccessAllowedAce(Dacl,
-                           ACL_REVISION,
-                           KEY_ALL_ACCESS,
-                           SeAliasAdminsSid);
-    RtlAddAccessAllowedAce(Dacl, ACL_REVISION, KEY_READ, SeWorldSid);
-    RtlAddAccessAllowedAce(Dacl, ACL_REVISION, KEY_READ, SeAllAppPackagesSid);
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlCreateSecurityDescriptor(&Absolute,
+                                             SECURITY_DESCRIPTOR_REVISION);
+    }
 
-    Status = RtlCreateSecurityDescriptor(&Absolute,
-                                         SECURITY_DESCRIPTOR_REVISION);
     if (!NT_SUCCESS(Status))
     {
         ExFreePool(Dacl);
@@ -520,7 +556,7 @@ CmpHiveRootSecurityDescriptor(VOID)
     }
 
     RtlSetDaclSecurityDescriptor(&Absolute, TRUE, Dacl, FALSE);
-    RtlSetOwnerSecurityDescriptor(&Absolute, SeAliasAdminsSid, FALSE);
+    RtlSetOwnerSecurityDescriptor(&Absolute, SeLocalSystemSid, FALSE);
     RtlSetGroupSecurityDescriptor(&Absolute, SeLocalSystemSid, FALSE);
 
     Length = 0;

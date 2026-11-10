@@ -130,7 +130,7 @@ NTAPI
 PspReapRoutine(
     _In_ PVOID Context)
 {
-    PETHREAD *Link;
+    PETHREAD Thread;
 
     UNREFERENCED_PARAMETER(Context);
 
@@ -138,20 +138,20 @@ PspReapRoutine(
 
     /*
      * The whole chain is taken at once, which also leaves the head empty so
-     * that the next thread to be reaped queues this work item again.
+     * that the next thread to be reaped queues this work item again. The chain
+     * holds the threads themselves, each naming the next in its reaper link.
      */
-    Link = (PETHREAD*)InterlockedExchangePointer((PVOID*)&PspReaperListHead.Flink,
-                                                 NULL);
+    Thread = (PETHREAD)InterlockedExchangePointer((PVOID*)&PspReaperListHead.Flink,
+                                                  NULL);
 
-    while (Link != NULL)
+    while (Thread != NULL)
     {
-        PETHREAD Thread = CONTAINING_RECORD(Link, ETHREAD, ReaperLink);
-        PETHREAD *Next = (PETHREAD*)(*Link);
+        PETHREAD Next = Thread->ReaperLink;
 
         KeUninitThread(&Thread->Tcb);
         ObDereferenceObject(Thread);
 
-        Link = Next;
+        Thread = Next;
     }
 }
 
@@ -209,11 +209,15 @@ PspExitThread(
     PspSendTerminationMessages(Thread);
     LpcExitThread(Thread);
 
-    if (!Thread->SystemThread) PspRunCreateThreadNotifyRoutines(Thread, FALSE);
+    PspRunCreateThreadNotifyRoutines(Thread, FALSE);
 
     if (Thread->PicoNotifyExit) PspPicoThreadExit(Thread);
 
     if (!Thread->HideFromDebugger) DbgkExitThread(ExitStatus);
+
+    /* The windowing kernel takes its per-thread state down while the thread can still run */
+    if ((Thread->Tcb.Win32Thread != NULL) && (PspW32ThreadCallout != NULL))
+        PspW32ThreadCallout(Thread, PsW32ThreadCalloutExit);
 
     PspTlsThreadCleanup(Thread);
     PspRundownPropertySet(&Thread->PropertySet);
@@ -223,6 +227,10 @@ PspExitThread(
      * because what the process does on its way out needs its address space
      * and this is the last thread that can still reach it.
      */
+    /* Its per-process state goes before the handles and the address space it refers to */
+    if (LastThread && (Process->Win32Process != NULL) && (PspW32ProcessCallout != NULL))
+        PspW32ProcessCallout(Process, FALSE);
+
     if (LastThread) PspExitProcess(TRUE, Process);
 
     KeEnterCriticalRegion();
@@ -307,6 +315,9 @@ PspExitProcess(
     }
     ExReleasePushLockExclusive(&PspActiveProcessLock);
     KeLeaveCriticalRegion();
+
+    /* Waiters on the process wake once its handles and address space are gone */
+    KeSetProcess(&Process->Pcb, 0, FALSE);
 }
 
 /*
@@ -635,6 +646,8 @@ PspDeleteProcess(
         MmDeleteProcessAddressSpace(Process);
         Process->HasAddressSpace = FALSE;
     }
+
+    KeUninitializeProcess(&Process->Pcb);
 
     PspReturnQuotasOnDestroy(Process);
     PspDereferenceQuotaBlock(Process, Process->QuotaBlock);

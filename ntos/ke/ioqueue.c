@@ -108,8 +108,6 @@ KeInsertDeviceQueue(
 
     KiAcquireDeviceQueueLock(DeviceQueue, &DeviceLock);
 
-    DeviceQueueEntry->SortKey = 0;
-
     if (!DeviceQueue->Busy)
     {
         Inserted = FALSE;

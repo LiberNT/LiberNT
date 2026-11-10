@@ -28,8 +28,6 @@ typedef struct _FSRTL_DBCS_MATCH_RUN
     LONG LastDot;
     PUCHAR Current;
     PUCHAR Next;
-    PUCHAR Pending;
-    PUCHAR Trailing;
 } FSRTL_DBCS_MATCH_RUN, *PFSRTL_DBCS_MATCH_RUN;
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -102,18 +100,8 @@ FsRtlpCloseDbcsStates(
         }
         else if (Character == ANSI_DOS_STAR)
         {
-            if ((Run->LastDot >= 0) && (NamePosition <= (ULONG)Run->LastDot))
-            {
-                Run->Pending[i + 1] = TRUE;
-            }
-            else if (NamePosition == Run->NameLength)
-            {
-                Run->Current[i + 1] = TRUE;
-            }
-            else
-            {
-                Run->Trailing[i + 1] = TRUE;
-            }
+            /* DOS_STAR may always stop here, matching nothing more */
+            Run->Current[i + 1] = TRUE;
         }
         else if (Character == ANSI_DOS_QM)
         {
@@ -138,25 +126,6 @@ FsRtlpCloseDbcsStates(
 }
 
 static
-VOID
-FsRtlpMergeDbcsStates(
-    _Inout_ PUCHAR Target,
-    _Inout_ PUCHAR Source,
-    _In_ ULONG Count)
-{
-    ULONG i;
-
-    for (i = 0; i < Count; i++)
-    {
-        if (Source[i])
-        {
-            Target[i] = TRUE;
-            Source[i] = FALSE;
-        }
-    }
-}
-
-static
 BOOLEAN
 FsRtlpSweepDbcsExpression(
     _In_ PFSRTL_DBCS_MATCH_RUN Run)
@@ -165,8 +134,6 @@ FsRtlpSweepDbcsExpression(
     ULONG Position = 0;
 
     RtlZeroMemory(Run->Current, States);
-    RtlZeroMemory(Run->Pending, States);
-    RtlZeroMemory(Run->Trailing, States);
     Run->Current[0] = TRUE;
 
     for (;;)
@@ -174,16 +141,6 @@ FsRtlpSweepDbcsExpression(
         ULONG NameSize;
         ULONG i;
         PUCHAR Swap;
-
-        if ((Run->LastDot >= 0) && (Position == (ULONG)Run->LastDot + 1))
-        {
-            FsRtlpMergeDbcsStates(Run->Current, Run->Pending, States);
-        }
-
-        if (Position == Run->NameLength)
-        {
-            FsRtlpMergeDbcsStates(Run->Current, Run->Trailing, States);
-        }
 
         FsRtlpCloseDbcsStates(Run, Position);
 
@@ -225,7 +182,9 @@ FsRtlpSweepDbcsExpression(
             }
             else if ((Size == 1) && (Character == ANSI_DOS_STAR))
             {
-                NOTHING;
+                /* It takes characters up to and including the name's final period, never past it */
+                if ((Run->LastDot < 0) || (Position <= (ULONG)Run->LastDot))
+                    Run->Next[i] = TRUE;
             }
             else if ((Size == NameSize) &&
                      (RtlCompareMemory(&Run->Expression[i],
@@ -250,6 +209,23 @@ FsRtlpSweepDbcsExpression(
 
 static
 BOOLEAN
+FsRtlpIsDbcsDotName(
+    _In_reads_bytes_(Length) const UCHAR *Component,
+    _In_ ULONG Length)
+{
+    if ((Length == 1) && (Component[0] == '.')) return TRUE;
+
+    return (BOOLEAN)((Length == 2) && (Component[0] == '.') &&
+                     (Component[1] == '.'));
+}
+
+/*
+ * A name that holds a wildcard is a pattern, not a file name, and a pattern is
+ * held only to the characters it may use: the 8.3 shape is what the names it
+ * is matched against have to keep.
+ */
+static
+BOOLEAN
 FsRtlpValidateFatComponent(
     _In_reads_bytes_(Length) const UCHAR *Component,
     _In_ ULONG Length,
@@ -257,16 +233,14 @@ FsRtlpValidateFatComponent(
 {
     ULONG NameBytes = 0;
     ULONG ExtensionBytes = 0;
-    BOOLEAN SeenDot = FALSE;
+    ULONG Dots = 0;
+    BOOLEAN Shaped = TRUE;
+    BOOLEAN Wild = FALSE;
     ULONG Index = 0;
 
     if (Length == 0) return FALSE;
 
-    if ((Length == 1) && (Component[0] == '.')) return TRUE;
-    if ((Length == 2) && (Component[0] == '.') && (Component[1] == '.'))
-    {
-        return TRUE;
-    }
+    if (FsRtlpIsDbcsDotName(Component, Length)) return WildCardsPermissible;
 
     while (Index < Length)
     {
@@ -279,35 +253,40 @@ FsRtlpValidateFatComponent(
 
         if ((Size == 1) && (Component[Index] == '.'))
         {
-            if (SeenDot) return FALSE;
-            if (NameBytes == 0) return FALSE;
-            if (Component[Index - 1] == ' ') return FALSE;
+            if ((NameBytes == 0) || (Component[Index - 1] == ' '))
+            {
+                Shaped = FALSE;
+            }
 
-            SeenDot = TRUE;
+            Dots++;
             Index++;
             continue;
         }
 
-        if ((Size == 1) &&
-            !FsRtlIsAnsiCharacterLegalFat(Component[Index],
-                                          WildCardsPermissible))
+        if ((Size == 1) && FsRtlIsAnsiCharacterWild(Component[Index]))
+        {
+            if (!WildCardsPermissible) return FALSE;
+
+            Wild = TRUE;
+        }
+        else if ((Size == 1) &&
+                 !FsRtlIsAnsiCharacterLegalFat(Component[Index], FALSE))
         {
             return FALSE;
         }
 
-        if (SeenDot) ExtensionBytes += Size; else NameBytes += Size;
+        if (Dots != 0) ExtensionBytes += Size; else NameBytes += Size;
 
         Index += Size;
     }
 
+    if (Wild) return TRUE;
+
+    if (!Shaped || (Dots > 1)) return FALSE;
     if (Component[Length - 1] == ' ') return FALSE;
     if ((NameBytes == 0) || (NameBytes > FSRTL_FAT_NAME_BYTES)) return FALSE;
     if (ExtensionBytes > FSRTL_FAT_EXTENSION_BYTES) return FALSE;
-
-    if (SeenDot && (ExtensionBytes == 0) && !WildCardsPermissible)
-    {
-        return FALSE;
-    }
+    if ((Dots != 0) && (ExtensionBytes == 0)) return FALSE;
 
     return TRUE;
 }
@@ -324,11 +303,7 @@ FsRtlpValidateHpfsComponent(
     if (Length == 0) return FALSE;
     if (Length > FSRTL_HPFS_NAME_BYTES) return FALSE;
 
-    if ((Length == 1) && (Component[0] == '.')) return TRUE;
-    if ((Length == 2) && (Component[0] == '.') && (Component[1] == '.'))
-    {
-        return TRUE;
-    }
+    if (FsRtlpIsDbcsDotName(Component, Length)) return WildCardsPermissible;
 
     while (Index < Length)
     {
@@ -350,12 +325,16 @@ FsRtlpValidateHpfsComponent(
     }
 
     if (Component[Length - 1] == ' ') return FALSE;
-
-    if ((Component[Length - 1] == '.') && !WildCardsPermissible) return FALSE;
+    if (Component[Length - 1] == '.') return FALSE;
 
     return TRUE;
 }
 
+/*
+ * A path is names with one separator between each two. The separator in
+ * front, and the one a path may end with, are not names: a lone backslash is
+ * the root and needs only the leading separator to be allowed.
+ */
 static
 BOOLEAN
 FsRtlpIsDbcsPathLegal(
@@ -376,7 +355,7 @@ FsRtlpIsDbcsPathLegal(
         if (!LeadingBackslashPermissible) return FALSE;
 
         Index = 1;
-        if (Index == Length) return FALSE;
+        if (Index == Length) return TRUE;
     }
 
     for (;;)
@@ -416,7 +395,7 @@ FsRtlpIsDbcsPathLegal(
         if (!PathNamePermissible) return FALSE;
 
         Index++;
-        if (Index == Length) return FALSE;
+        if (Index == Length) return TRUE;
     }
 }
 
@@ -430,7 +409,8 @@ FsRtlDissectDbcs(
     _Out_ PANSI_STRING RemainingPart)
 {
     const UCHAR *Buffer = (const UCHAR *)Name.Buffer;
-    ULONG Index = 0;
+    ULONG Start;
+    ULONG Index;
 
     PAGED_CODE();
 
@@ -443,6 +423,10 @@ FsRtlDissectDbcs(
 
     if ((Name.Length == 0) || (Buffer == NULL)) return;
 
+    /* A leading separator belongs to neither part */
+    Start = (Buffer[0] == '\\') ? 1 : 0;
+
+    Index = Start;
     while (Index < Name.Length)
     {
         ULONG Size = FsRtlpDbcsCharSize(&Buffer[Index], Name.Length - Index);
@@ -452,16 +436,17 @@ FsRtlDissectDbcs(
         Index += Size;
     }
 
-    FirstPart->Length = (USHORT)Index;
-    FirstPart->MaximumLength = (USHORT)Index;
-    FirstPart->Buffer = Name.Buffer;
+    ASSERT(Index <= Name.Length);
+
+    FirstPart->Buffer = Name.Buffer + Start;
+    FirstPart->Length = (USHORT)(Index - Start);
+    FirstPart->MaximumLength = FirstPart->Length;
 
     if (Index == Name.Length) return;
 
     RemainingPart->Buffer = Name.Buffer + Index + 1;
     RemainingPart->Length = (USHORT)(Name.Length - Index - 1);
-    RemainingPart->MaximumLength = (Name.MaximumLength > Index + 1) ?
-        (USHORT)(Name.MaximumLength - Index - 1) : RemainingPart->Length;
+    RemainingPart->MaximumLength = RemainingPart->Length;
 }
 
 BOOLEAN
@@ -492,7 +477,7 @@ FsRtlIsDbcsInExpression(
     _In_ PANSI_STRING Expression,
     _In_ PANSI_STRING Name)
 {
-    UCHAR StackStates[4 * FSRTL_STACK_STATES];
+    UCHAR StackStates[2 * FSRTL_STACK_STATES];
     FSRTL_DBCS_MATCH_RUN Run;
     PUCHAR Buffer;
     ULONG States;
@@ -529,14 +514,12 @@ FsRtlIsDbcsInExpression(
     }
     else
     {
-        Buffer = ExAllocatePoolWithTag(PagedPool, 4 * States, FSRTL_DBCS_TAG);
+        Buffer = ExAllocatePoolWithTag(PagedPool, 2 * States, FSRTL_DBCS_TAG);
         if (Buffer == NULL) ExRaiseStatus(STATUS_NO_MEMORY);
     }
 
     Run.Current = Buffer;
     Run.Next = Buffer + States;
-    Run.Pending = Buffer + 2 * States;
-    Run.Trailing = Buffer + 3 * States;
 
     Matched = FsRtlpSweepDbcsExpression(&Run);
 

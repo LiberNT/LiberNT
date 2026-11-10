@@ -122,6 +122,84 @@ MiFreeSystemImage(
     MiReleaseSystemPtes(&MiSystem, (ULONG64)(ULONG_PTR)ImageBase, Pages);
 }
 
+static volatile LONG64 MiSessionImageCursor;
+
+static
+NTSTATUS
+MiSessionImageReserve(
+    _In_ ULONG Pages,
+    _Out_ PULONG64 Base)
+{
+    ULONG64 Bytes = (((ULONG64)Pages << PAGE_SHIFT) + MI_ALLOCATION_GRANULARITY - 1) &
+                    ~(MI_ALLOCATION_GRANULARITY - 1);
+    ULONG64 Limit;
+    ULONG64 Offset;
+
+    *Base = 0;
+
+    if (MiSystem.SessionEnd <= MiSystem.SessionStart || Pages == 0)
+        return STATUS_NOT_SUPPORTED;
+
+    Limit = (MiSystem.SessionEnd - MiSystem.SessionStart + 1) / 4;
+    Offset = (ULONG64)InterlockedExchangeAdd64(&MiSessionImageCursor, (LONG64)Bytes);
+    if (Offset + Bytes > Limit || Offset + Bytes < Offset)
+        return STATUS_NO_MEMORY;
+
+    /* TODO: the range of an image no session holds any more is never handed out again */
+    *Base = MiSystem.SessionStart + Offset;
+
+    ASSERT((*Base & (MI_ALLOCATION_GRANULARITY - 1)) == 0);
+    ASSERT(MmIsSessionAddress((PVOID)(ULONG_PTR)*Base));
+    ASSERT(MmIsSessionAddress((PVOID)(ULONG_PTR)(*Base + Bytes - 1)));
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+MiSessionImageCommit(
+    _In_ ULONG64 Base,
+    _In_ ULONG Pages)
+{
+    PMI_ADDRESS_SPACE Space = MiSessionSpaceOfProcess(PsGetCurrentProcess());
+    ULONG64 Address = Base;
+    ULONG64 Size = (ULONG64)Pages << PAGE_SHIFT;
+    NTSTATUS Status;
+
+    ASSERT(Pages != 0 && (Base & (PAGE_SIZE - 1)) == 0);
+    ASSERT(MmIsSessionAddress((PVOID)(ULONG_PTR)Base));
+
+    if (Space == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    ASSERT(Space->IsSession && Space->IsSystem);
+    ASSERT(Base >= Space->LowestVa && Base + Size - 1 <= Space->HighestVa);
+
+    Status = MiAllocateVirtualMemory(Space, &Address, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT,
+                                     MI_PROT_EXECUTE_READWRITE);
+    ASSERT(!NT_SUCCESS(Status) || (Address == Base && Size >= ((ULONG64)Pages << PAGE_SHIFT)));
+    return Status;
+}
+
+static
+VOID
+MiSessionImageRelease(
+    _In_ PVOID ImageBase)
+{
+    PMI_ADDRESS_SPACE Space = MiSessionSpaceOfProcess(PsGetCurrentProcess());
+    ULONG64 Address = (ULONG64)(ULONG_PTR)ImageBase;
+    ULONG64 Size = 0;
+    NTSTATUS Status;
+
+    ASSERT(MmIsSessionAddress(ImageBase));
+    ASSERT(Space != NULL && Space->IsSession);
+
+    if (Space == NULL)
+        return;
+
+    Status = MiFreeVirtualMemory(Space, &Address, &Size, MI_MEM_RELEASE);
+    ASSERT(NT_SUCCESS(Status));
+}
+
 NTSTATUS
 NTAPI
 MiLoadImageSection(_Inout_ PSECTION *SectionPtr,
@@ -135,14 +213,17 @@ MiLoadImageSection(_Inout_ PSECTION *SectionPtr,
     PVOID View = NULL;
     SIZE_T ViewSize = 0;
     NTSTATUS Status;
+    ULONG64 SessionBase;
     ULONG Pages;
 
     PAGED_CODE();
     UNREFERENCED_PARAMETER(FileName);
-    UNREFERENCED_PARAMETER(LdrEntry);
 
-    if (SessionLoad)
-        return STATUS_NOT_IMPLEMENTED;
+    ASSERT(Section != NULL);
+    ASSERT(SessionLoad || LdrEntry == NULL);
+    ASSERT(!SessionLoad || PsGetCurrentProcess()->ProcessInSession);
+
+    *ImageBase = NULL;
 
     Status = MmGetSectionImageInformation(Section, &ImageInformation);
     if (!NT_SUCCESS(Status))
@@ -157,9 +238,35 @@ MiLoadImageSection(_Inout_ PSECTION *SectionPtr,
 
     Pages = (ULONG)(ROUND_TO_PAGES(ViewSize) >> PAGE_SHIFT);
 
-    Status = MiAllocateSystemImage(Pages, ImageBase);
+    if (!SessionLoad)
+    {
+        Status = MiAllocateSystemImage(Pages, ImageBase);
+    }
+    else
+    {
+        if (LdrEntry != NULL)
+        {
+            ASSERT(MmIsSessionAddress(LdrEntry->DllBase));
+            ASSERT((ULONG)(ROUND_TO_PAGES(LdrEntry->SizeOfImage) >> PAGE_SHIFT) == Pages);
+            SessionBase = (ULONG64)(ULONG_PTR)LdrEntry->DllBase;
+            Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            Status = MiSessionImageReserve(Pages, &SessionBase);
+        }
+
+        if (NT_SUCCESS(Status))
+            Status = MiSessionImageCommit(SessionBase, Pages);
+
+        if (NT_SUCCESS(Status))
+            *ImageBase = (PVOID)(ULONG_PTR)SessionBase;
+    }
+
     if (NT_SUCCESS(Status))
     {
+        ASSERT(*ImageBase != NULL);
+        ASSERT(SessionLoad == MmIsSessionAddress(*ImageBase));
         RtlCopyMemory(*ImageBase, View, ViewSize);
         KeSweepICache(*ImageBase, ViewSize);
     }
@@ -1857,9 +1964,22 @@ MiWriteProtectSystemImage(
     PIMAGE_NT_HEADERS NtHeaders;
     PUCHAR PageProtection;
     ULONG Pages, Page, i;
+    PMI_ADDRESS_SPACE SessionSpace = NULL;
 
-    if (!MmEnforceWriteProtection || !MiIsLoadedSystemImage(ImageBase))
+    if (!MmEnforceWriteProtection)
         return;
+
+    if (MmIsSessionAddress(ImageBase))
+    {
+        SessionSpace = MiSessionSpaceOfProcess(PsGetCurrentProcess());
+        ASSERT(SessionSpace != NULL && SessionSpace->IsSession);
+        if (SessionSpace == NULL)
+            return;
+    }
+    else if (!MiIsLoadedSystemImage(ImageBase))
+    {
+        return;
+    }
 
     NtHeaders = RtlImageNtHeader(ImageBase);
     if (NtHeaders == NULL)
@@ -1911,8 +2031,22 @@ MiWriteProtectSystemImage(
         else
             Protection = (Flags & 4) ? MI_PROT_EXECUTE_READ : MI_PROT_READONLY;
 
-        MiSystemProtect(&MiSystem, (ULONG64)(ULONG_PTR)ImageBase + ((ULONG64)Page << PAGE_SHIFT), Run - Page,
-                        Protection);
+        if (SessionSpace != NULL)
+        {
+            ULONG64 Address = (ULONG64)(ULONG_PTR)ImageBase + ((ULONG64)Page << PAGE_SHIFT);
+            ULONG64 Size = (ULONG64)(Run - Page) << PAGE_SHIFT;
+            ULONG OldProtection;
+            NTSTATUS Status;
+
+            Status = MiProtectVirtualMemory(SessionSpace, &Address, &Size, Protection, &OldProtection);
+            ASSERT(NT_SUCCESS(Status));
+            UNREFERENCED_PARAMETER(Status);
+        }
+        else
+        {
+            MiSystemProtect(&MiSystem, (ULONG64)(ULONG_PTR)ImageBase + ((ULONG64)Page << PAGE_SHIFT),
+                            Run - Page, Protection);
+        }
         Page = Run;
     }
 
@@ -2211,6 +2345,95 @@ Failure:
     return Status;
 }
 
+
+static
+NTSTATUS
+MiSessionLoadExistingImage(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PUNICODE_STRING BaseDirectory,
+    _In_ PCHAR Buffer)
+{
+    PEPROCESS Process = PsGetCurrentProcess();
+    PLOAD_IMPORTS LoadedImports = MM_SYSLDR_NO_IMPORTS;
+    PWCHAR MissingDriverName = NULL;
+    PCHAR MissingApiName = Buffer;
+    PSECTION Section;
+    PVOID ImageBase;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    ASSERT(Process->ProcessInSession);
+    ASSERT(LdrEntry != NULL && LdrEntry->DllBase != NULL);
+    ASSERT(!(LdrEntry->Flags & LDRP_LOAD_IN_PROGRESS));
+
+    if (!MmIsSessionAddress(LdrEntry->DllBase))
+        return STATUS_IMAGE_ALREADY_LOADED;
+
+    if (MiSessionHasImage(Process, LdrEntry))
+        return STATUS_IMAGE_ALREADY_LOADED;
+
+    Section = LdrEntry->SectionPointer;
+    ASSERT(Section != NULL);
+    if (Section == NULL)
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    Status = MiSessionAddImage(Process, LdrEntry);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = MiLoadImageSection(&Section, &ImageBase, NULL, TRUE, LdrEntry);
+    if (!NT_SUCCESS(Status))
+    {
+        MiSessionRemoveImage(Process, LdrEntry);
+        return Status;
+    }
+
+    ASSERT(ImageBase == LdrEntry->DllBase);
+    ASSERT(Section == LdrEntry->SectionPointer);
+
+    Status = LdrRelocateImageWithBias(ImageBase,
+                                      0,
+                                      "SYSLDR",
+                                      STATUS_SUCCESS,
+                                      STATUS_CONFLICTING_ADDRESSES,
+                                      STATUS_INVALID_IMAGE_FORMAT);
+    if (NT_SUCCESS(Status))
+    {
+        Status = MiResolveImageReferences(ImageBase,
+                                          BaseDirectory,
+                                          NULL,
+                                          &MissingApiName,
+                                          &MissingDriverName,
+                                          &LoadedImports);
+        if (!NT_SUCCESS(Status) && ((ULONG_PTR)MissingDriverName & 1))
+        {
+            ExFreePoolWithTag((PVOID)((ULONG_PTR)MissingDriverName & ~1), TAG_LDR_WSTR);
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("MM: %wZ could not be placed in this session (0x%lx)\n", &LdrEntry->BaseDllName, Status);
+        MiSessionImageRelease(ImageBase);
+        MiSessionRemoveImage(Process, LdrEntry);
+        return Status;
+    }
+
+    if ((LoadedImports != MM_SYSLDR_NO_IMPORTS) && (LoadedImports != MM_SYSLDR_BOOT_LOADED))
+    {
+        MiDereferenceImports(LoadedImports);
+        if (!((ULONG_PTR)LoadedImports & MM_SYSLDR_SINGLE_ENTRY))
+            ExFreePoolWithTag(LoadedImports, TAG_LDR_IMPORTS);
+    }
+
+    MiWriteProtectSystemImage(ImageBase);
+    LdrpInitSecurityCookie(LdrEntry);
+
+    ASSERT(MiSessionHasImage(Process, LdrEntry));
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 MmLoadSystemImageEx(
@@ -2362,15 +2585,14 @@ LoaderScan:
         }
 
         if (!Flags)
+            Status = STATUS_IMAGE_ALREADY_LOADED;
+        else
+            Status = MiSessionLoadExistingImage(LdrEntry, &BaseDirectory, Buffer);
+
+        if (NT_SUCCESS(Status) || Status == STATUS_IMAGE_ALREADY_LOADED)
         {
             *ModuleObject = LdrEntry;
             *ImageBaseAddress = LdrEntry->DllBase;
-            Status = STATUS_IMAGE_ALREADY_LOADED;
-        }
-        else
-        {
-            UNIMPLEMENTED_DBGBREAK("Unsupported Session-Load!\n");
-            Status = STATUS_NOT_IMPLEMENTED;
         }
 
         goto Quickie;
@@ -2399,12 +2621,6 @@ LoaderScan:
             Section = Image.Section;
         }
 
-        if (Flags)
-        {
-            UNIMPLEMENTED_DBGBREAK("Unsupported Session-Load!\n");
-            goto Quickie;
-        }
-
         goto LoaderScan;
     }
     else
@@ -2415,7 +2631,7 @@ LoaderScan:
     Status = MiLoadImageSection(&Section,
                                 &ModuleLoadBase,
                                 FileName,
-                                FALSE,
+                                (BOOLEAN)(Flags != 0),
                                 NULL);
     ASSERT(Status != STATUS_ALREADY_COMMITTED);
 
@@ -2457,6 +2673,7 @@ LoaderScan:
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("LdrRelocateImageWithBias failed with status 0x%x\n", Status);
+        if (Flags) MiSessionImageRelease(ModuleLoadBase);
         goto Quickie;
     }
 
@@ -2491,6 +2708,9 @@ LoaderScan:
     LdrEntry->CheckSum = NtHeader->OptionalHeader.CheckSum;
     LdrEntry->SectionPointer = Section;
 
+    ASSERT(Flags ? (Section != NULL && MmIsSessionAddress(ModuleLoadBase)) : (Section == NULL));
+    Section = NULL;
+
     LdrEntry->BaseDllName.Buffer = (PVOID)(LdrEntry + 1);
     LdrEntry->BaseDllName.Length = BaseName.Length;
     LdrEntry->BaseDllName.MaximumLength = BaseName.Length;
@@ -2518,6 +2738,21 @@ LoaderScan:
                       PrefixName.Buffer,
                       PrefixName.Length);
         LdrEntry->FullDllName.Buffer[PrefixName.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+
+    if (Flags)
+    {
+        Status = MiSessionAddImage(PsGetCurrentProcess(), LdrEntry);
+        if (!NT_SUCCESS(Status))
+        {
+            MiSessionImageRelease(ModuleLoadBase);
+            ObDereferenceObject(LdrEntry->SectionPointer);
+            if (LdrEntry->FullDllName.Buffer)
+                ExFreePoolWithTag(LdrEntry->FullDllName.Buffer, TAG_LDR_WSTR);
+            ExFreePoolWithTag(LdrEntry, TAG_MODULE_OBJECT);
+            LdrEntry = NULL;
+            goto Quickie;
+        }
     }
 
     MiProcessLoaderEntry(LdrEntry, TRUE);
@@ -2551,6 +2786,14 @@ LoaderScan:
 
         MiProcessLoaderEntry(LdrEntry, FALSE);
 
+        if (Flags)
+        {
+            MiSessionRemoveImage(PsGetCurrentProcess(), LdrEntry);
+            MiSessionImageRelease(ModuleLoadBase);
+            ObDereferenceObject(LdrEntry->SectionPointer);
+            LdrEntry->SectionPointer = NULL;
+        }
+
         if (LdrEntry->FullDllName.Buffer)
         {
             ExFreePoolWithTag(LdrEntry->FullDllName.Buffer, TAG_LDR_WSTR);
@@ -2570,6 +2813,8 @@ LoaderScan:
     MiWriteProtectSystemImage(LdrEntry->DllBase);
 
     LdrpInitSecurityCookie(LdrEntry);
+
+    ASSERT(!Flags || MiSessionHasImage(PsGetCurrentProcess(), LdrEntry));
 
     if (PsImageNotifyEnabled)
     {

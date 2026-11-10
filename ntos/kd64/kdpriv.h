@@ -287,6 +287,13 @@ KdpFilterAllows(
     _In_ ULONG ComponentId,
     _In_ ULONG Level);
 
+NTSTATUS
+NTAPI
+KdpSetFilterState(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_ BOOLEAN State);
+
 /* kdoutput.c */
 
 VOID

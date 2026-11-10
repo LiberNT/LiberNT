@@ -597,11 +597,6 @@ IoReportHalResourceUsage(
 
     ZwClose(KeyHandle);
 
-    if (NT_SUCCESS(Status))
-    {
-        IopResDbReserve(NULL, RawResourceList, NULL);
-    }
-
     return Status;
 }
 

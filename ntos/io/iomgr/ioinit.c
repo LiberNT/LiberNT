@@ -65,6 +65,9 @@ GENERIC_MAPPING IopCompletionMapping =
 PWSTR IopHardwareDatabaseKey =
     L"\\REGISTRY\\MACHINE\\HARDWARE\\DESCRIPTION\\SYSTEM";
 
+UNICODE_STRING IopHardwareDatabaseName = RTL_CONSTANT_STRING(
+    L"\\REGISTRY\\MACHINE\\HARDWARE\\DESCRIPTION\\SYSTEM");
+
 /* PRIVATE DATA ***************************************************************/
 
 static PSECURITY_DESCRIPTOR IopRestrictedPublicSd = NULL;
@@ -185,10 +188,11 @@ BOOLEAN
 IopCreateObjectTypes(VOID)
 {
     OBJECT_TYPE_INITIALIZER Initializer;
+    UNICODE_STRING TypeName;
     NTSTATUS Status;
 
     RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = FILE_ALL_ACCESS;
     Initializer.GenericMapping = IopFileMapping;
@@ -204,21 +208,23 @@ IopCreateObjectTypes(VOID)
     if (!NT_SUCCESS(Status)) return FALSE;
 
     RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.PoolType = NonPagedPool;
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
+    Initializer.PoolType = NonPagedPoolNx;
+    Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = FILE_ALL_ACCESS;
     Initializer.GenericMapping = IopFileMapping;
     Initializer.CaseInsensitive = TRUE;
+    Initializer.UseDefaultObject = TRUE;
     Initializer.DeleteProcedure = IopDeleteDriver;
 
     Status = IopCreateOneObjectType(L"Driver", &Initializer, &IoDriverObjectType);
     if (!NT_SUCCESS(Status)) return FALSE;
 
     RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.PoolType = NonPagedPool;
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
+    Initializer.PoolType = NonPagedPoolNx;
+    Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = FILE_ALL_ACCESS;
     Initializer.GenericMapping = IopFileMapping;
+    Initializer.UseDefaultObject = TRUE;
     Initializer.UnnamedObjectsOnly = TRUE;
 
     Status = IopCreateOneObjectType(L"Adapter", &Initializer, &IoAdapterObjectType);
@@ -229,19 +235,13 @@ IopCreateObjectTypes(VOID)
                                     &IoControllerObjectType);
     if (!NT_SUCCESS(Status)) return FALSE;
 
-    Status = IopCreateOneObjectType(L"DeviceHandler",
-                                    &Initializer,
-                                    &IoDeviceHandlerObjectType);
-    if (!NT_SUCCESS(Status)) return FALSE;
-
     RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.PoolType = NonPagedPool;
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
+    Initializer.PoolType = NonPagedPoolNx;
+    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_EXCLUSIVE | OBJ_PERMANENT;
     Initializer.ValidAccessMask = FILE_ALL_ACCESS;
     Initializer.GenericMapping = IopFileMapping;
     Initializer.MaintainHandleCount = TRUE;
     Initializer.CaseInsensitive = TRUE;
-    Initializer.SecurityRequired = TRUE;
     Initializer.DefaultNonPagedPoolCharge = IO_FILE_OBJECT_NON_PAGED_POOL_CHARGE;
     Initializer.DefaultPagedPoolCharge = IO_FILE_OBJECT_PAGED_POOL_CHARGE;
     Initializer.ParseProcedure = IopParseFile;
@@ -251,18 +251,26 @@ IopCreateObjectTypes(VOID)
     Initializer.SecurityProcedure = IopGetSetSecurityObject;
     Initializer.QueryNameProcedure = IopQueryName;
     Initializer.UseExtendedParameters = TRUE;
+    Initializer.WaitObjectFlagMask = FO_INDIRECT_WAIT_OBJECT;
+    Initializer.WaitObjectFlagOffset = FIELD_OFFSET(FILE_OBJECT, Flags);
+    Initializer.WaitObjectPointerOffset = FIELD_OFFSET(FILE_OBJECT, FsContext2);
+    Initializer.Length = sizeof(Initializer);
 
-    Status = IopCreateOneObjectType(L"File", &Initializer, &IoFileObjectType);
+    /* A wait on a file handle is a wait on the event its I/O completes, unless the file names another object to wait on */
+    RtlInitUnicodeString(&TypeName, L"File");
+    Status = ObCreateObjectTypeEx(&TypeName,
+                                  &Initializer,
+                                  NULL,
+                                  FIELD_OFFSET(FILE_OBJECT, Event) + 3,
+                                  &IoFileObjectType);
     if (!NT_SUCCESS(Status)) return FALSE;
 
     RtlZeroMemory(&Initializer, sizeof(Initializer));
-    Initializer.PoolType = NonPagedPool;
-    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.PoolType = NonPagedPoolNx;
+    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
     Initializer.ValidAccessMask = IO_COMPLETION_ALL_ACCESS;
     Initializer.GenericMapping = IopCompletionMapping;
     Initializer.CaseInsensitive = TRUE;
-    Initializer.UseDefaultObject = TRUE;
-    Initializer.MaintainHandleCount = TRUE;
     Initializer.DeleteProcedure = IopDeleteIoCompletion;
     Initializer.CloseProcedure = IopCloseIoCompletion;
 
@@ -309,13 +317,15 @@ CODE_SEG("INIT")
 BOOLEAN
 IopCreateRootDirectories(VOID)
 {
-    if (!IopCreateOneDirectory(L"\\Device", IopSystemDefaultSd)) return FALSE;
-    if (!IopCreateOneDirectory(L"\\Driver", IopSystemDefaultSd)) return FALSE;
-    if (!IopCreateOneDirectory(L"\\FileSystem", IopSystemDefaultSd)) return FALSE;
-    if (!IopCreateOneDirectory(L"\\FileSystem\\Filters", IopSystemDefaultSd))
+    /* Anybody may look a device up; only the system and its administrators name drivers */
+    if (!IopCreateOneDirectory(L"\\Device", SePublicDefaultUnrestrictedSd)) return FALSE;
+    if (!IopCreateOneDirectory(L"\\Driver", SeSystemDefaultSd)) return FALSE;
+    if (!IopCreateOneDirectory(L"\\FileSystem", SeSystemDefaultSd)) return FALSE;
+    if (!IopCreateOneDirectory(L"\\FileSystem\\Filters", SeSystemDefaultSd))
     {
         return FALSE;
     }
+    if (!IopCreateOneDirectory(L"\\ArcName", SePublicDefaultUnrestrictedSd)) return FALSE;
 
     return TRUE;
 }
@@ -548,6 +558,24 @@ IopCreateDefaultDeviceSecurityDescriptor(
     return STATUS_SUCCESS;
 }
 
+/*
+ * Once the boot volume has its letter, the system directory is known by the
+ * path programs use, and everything that reports it is brought up to date.
+ */
+CODE_SEG("INIT")
+static
+VOID
+IopPublishSystemRoot(
+    _In_ PSTRING SystemPath)
+{
+    if (SystemPath->Length < 2 || SystemPath->Buffer[1] != ':') return;
+
+    if (!NT_SUCCESS(RtlAnsiStringToUnicodeString(&NtSystemRoot, SystemPath, FALSE))) return;
+
+    RtlCopyMemory(SharedUserData->NtSystemRoot, NtSystemRoot.Buffer, NtSystemRoot.Length);
+    SharedUserData->NtSystemRoot[NtSystemRoot.Length / sizeof(WCHAR)] = UNICODE_NULL;
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 CODE_SEG("INIT")
@@ -556,7 +584,9 @@ NTAPI
 IoInitSystem(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    ANSI_STRING NtBootPath;
+    ANSI_STRING NtDeviceName;
+    CHAR SystemPath[256];
+    STRING SystemPathString;
     NTSTATUS Status;
     ULONG i;
 
@@ -645,9 +675,25 @@ IoInitSystem(
 
     IopInitializeSystemResourceMap(LoaderBlock);
 
+    /* The HAL sets up its buses and records what it owns before any device is given resources */
+    HalReportResourceUsage();
+
+    if (!WmiInitialize())
+    {
+        DPRINT1("I/O: WMI could not come up\n");
+        return FALSE;
+    }
+
     if (!PpInitSystem())
     {
         DPRINT1("I/O: the PnP manager could not come up\n");
+        return FALSE;
+    }
+
+    Status = HalInitPnpDriver();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: the HAL could not report its device (%lx)\n", Status);
         return FALSE;
     }
 
@@ -674,12 +720,20 @@ IoInitSystem(
         return FALSE;
     }
 
-    Status = IopReassignSystemRoot(LoaderBlock, &NtBootPath);
+    IopMarkBootPartition(LoaderBlock);
+
+    Status = IopReassignSystemRoot(LoaderBlock, &NtDeviceName);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("I/O: the system root could not be resolved (%lx)\n", Status);
         return FALSE;
     }
+
+    IoAssignDriveLetters(LoaderBlock, &NtDeviceName, (PUCHAR)SystemPath, &SystemPathString);
+    RtlFreeAnsiString(&NtDeviceName);
+    IopPublishSystemRoot(&SystemPathString);
+
+    IopInitializeSystemDrivers();
 
     if (!IoInitializeCrashDumpCore(LoaderBlock))
     {

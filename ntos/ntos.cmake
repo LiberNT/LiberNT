@@ -185,6 +185,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/devinterface.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/devprop.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpdetect.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpcontrol.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpevent.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpnode.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpnotif.c
@@ -193,6 +194,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpresource.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnprootbus.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpstart.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpdrvdb.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpstate.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpdbg.c
     ${REACTOS_SOURCE_DIR}/ntos/kd64/kdbreakpoint.c

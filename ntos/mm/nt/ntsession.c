@@ -23,7 +23,16 @@ typedef struct _MI_SESSION
     LCID LocaleId;
     LIST_ENTRY Link;
     LIST_ENTRY Processes;
+    LIST_ENTRY Images;
+    BOOLEAN HasSpace;
+    MI_ADDRESS_SPACE Space;
 } MI_SESSION, *PMI_SESSION;
+
+typedef struct _MI_SESSION_IMAGE
+{
+    LIST_ENTRY Link;
+    PVOID LdrEntry;
+} MI_SESSION_IMAGE, *PMI_SESSION_IMAGE;
 
 PVOID MmSessionBase;
 SIZE_T MmSessionSize;
@@ -58,6 +67,44 @@ MiSessionOfProcess(
     _In_ PEPROCESS Process)
 {
     return (PMI_SESSION)Process->Session;
+}
+
+static
+VOID
+MiSessionFree(
+    _Inout_ PMI_SESSION Session)
+{
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Session->ReferenceCount == 0 && Session->ProcessCount == 0);
+    ASSERT(IsListEmpty(&Session->Processes));
+    ASSERT(!Session->HasSpace || MmSessionSize != 0);
+    ASSERT(!Session->HasSpace || (Session->Space.IsSession && Session->Space.RootFrame != 0));
+
+    while (!IsListEmpty(&Session->Images))
+    {
+        PMI_SESSION_IMAGE Image = CONTAINING_RECORD(RemoveHeadList(&Session->Images), MI_SESSION_IMAGE, Link);
+
+        ExFreePoolWithTag(Image, 'iSmM');
+    }
+
+    if (Session->HasSpace)
+        MiSessionSpaceDestroy(&Session->Space);
+
+    ExFreePoolWithTag(Session, 'eSmM');
+}
+
+PMI_ADDRESS_SPACE
+MiSessionSpaceOfProcess(
+    _In_ PEPROCESS Process)
+{
+    PMI_SESSION Session = MiSessionOfProcess(Process);
+
+    if (Session == NULL || !Session->HasSpace)
+        return NULL;
+
+    ASSERT(Session->Space.IsSession && Session->Space.RootFrame != 0);
+    ASSERT(Session->ProcessCount > 0 && Session->ReferenceCount >= Session->ProcessCount);
+    return &Session->Space;
 }
 
 #if DBG || defined(MM_HOST_TEST)
@@ -113,6 +160,10 @@ MiSessionJoinLocked(
     Session->ProcessCount++;
     Process->Session = (struct _PSP_SESSION_SPACE *)Session;
     PspSetProcessFlag(Process, PSF_PROCESS_IN_SESSION_BIT);
+    ASSERT(Native->Space.RootFrame != 0);
+    ASSERT(Session->HasSpace || MmSessionSize == 0);
+    if (Session->HasSpace)
+        MiSessionSpaceLink(&Session->Space, &Native->Space, TRUE);
     ASSERT(Native->SessionLink.Flink->Blink == &Native->SessionLink);
     ASSERT(Native->SessionLink.Blink->Flink == &Native->SessionLink);
     MiSessionAssertLocked(Session);
@@ -130,6 +181,8 @@ MiSessionLeaveLocked(
     MiSessionAssertLocked(Session);
     ASSERT(Native->SessionLink.Flink->Blink == &Native->SessionLink);
     ASSERT(Native->SessionLink.Blink->Flink == &Native->SessionLink);
+    if (Session->HasSpace && Native->Space.RootFrame != 0)
+        MiSessionSpaceLink(&Session->Space, &Native->Space, FALSE);
     RemoveEntryList(&Native->SessionLink);
     Native->SessionProcess = NULL;
     Process->Session = NULL;
@@ -166,7 +219,7 @@ MiSessionDereference(
     KeReleaseGuardedMutex(&MiSessionLock);
 
     if (Free)
-        ExFreePoolWithTag(Session, 'eSmM');
+        MiSessionFree(Session);
 }
 
 VOID
@@ -212,7 +265,7 @@ MiSessionRemoveProcess(
     KeReleaseGuardedMutex(&MiSessionLock);
 
     if (Free)
-        ExFreePoolWithTag(Session, 'eSmM');
+        MiSessionFree(Session);
 }
 
 NTSTATUS
@@ -237,6 +290,19 @@ MmSessionCreate(
     Session->GlobalVirtualAddress = Session;
     Session->Flags = 1;
     InitializeListHead(&Session->Processes);
+    InitializeListHead(&Session->Images);
+
+    Status = MiSessionSpaceCreate(&MiSystem, &Session->Space);
+    ASSERT(NT_SUCCESS(Status) || Status == STATUS_NO_MEMORY || Status == STATUS_NOT_SUPPORTED);
+    ASSERT((Status == STATUS_NOT_SUPPORTED) == (MmSessionSize == 0));
+    if (NT_SUCCESS(Status))
+        Session->HasSpace = TRUE;
+    else if (Status != STATUS_NOT_SUPPORTED)
+    {
+        ExFreePoolWithTag(Session, 'eSmM');
+        return Status;
+    }
+    Status = STATUS_SUCCESS;
 
     MiSessionLockAcquire();
     if ((Process->Flags & PSF_PROCESS_IN_SESSION_BIT) || Process->Session != NULL)
@@ -258,7 +324,101 @@ MmSessionCreate(
     KeReleaseGuardedMutex(&MiSessionLock);
 
     if (!NT_SUCCESS(Status))
-        ExFreePoolWithTag(Session, 'eSmM');
+        MiSessionFree(Session);
+    return Status;
+}
+
+VOID
+MiSessionRemoveImage(
+    _In_ PEPROCESS Process,
+    _In_ PVOID LdrEntry)
+{
+    PMI_SESSION_IMAGE Found = NULL;
+    PMI_SESSION Session;
+    PLIST_ENTRY Entry;
+
+    MiSessionLockAcquire();
+    Session = MiSessionOfProcess(Process);
+    ASSERT(Session != NULL);
+    if (Session != NULL)
+    {
+        for (Entry = Session->Images.Flink; Entry != &Session->Images; Entry = Entry->Flink)
+        {
+            PMI_SESSION_IMAGE Image = CONTAINING_RECORD(Entry, MI_SESSION_IMAGE, Link);
+
+            if (Image->LdrEntry == LdrEntry)
+            {
+                RemoveEntryList(&Image->Link);
+                Found = Image;
+                break;
+            }
+        }
+    }
+    KeReleaseGuardedMutex(&MiSessionLock);
+
+    ASSERT(Found != NULL);
+    if (Found != NULL)
+        ExFreePoolWithTag(Found, 'iSmM');
+}
+
+BOOLEAN
+MiSessionHasImage(
+    _In_ PEPROCESS Process,
+    _In_ PVOID LdrEntry)
+{
+    PMI_SESSION Session;
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+
+    MiSessionLockAcquire();
+    Session = MiSessionOfProcess(Process);
+    if (Session != NULL)
+    {
+        for (Entry = Session->Images.Flink; Entry != &Session->Images; Entry = Entry->Flink)
+        {
+            if (CONTAINING_RECORD(Entry, MI_SESSION_IMAGE, Link)->LdrEntry == LdrEntry)
+            {
+                Found = TRUE;
+                break;
+            }
+        }
+    }
+    KeReleaseGuardedMutex(&MiSessionLock);
+    return Found;
+}
+
+NTSTATUS
+MiSessionAddImage(
+    _In_ PEPROCESS Process,
+    _In_ PVOID LdrEntry)
+{
+    PMI_SESSION_IMAGE Image;
+    PMI_SESSION Session;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    Image = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Image), 'iSmM');
+    if (Image == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Image->LdrEntry = LdrEntry;
+    ASSERT(LdrEntry != NULL);
+
+    MiSessionLockAcquire();
+    Session = MiSessionOfProcess(Process);
+    if (Session == NULL)
+        Status = STATUS_NOT_FOUND;
+    else
+    {
+        PLIST_ENTRY Entry;
+
+        for (Entry = Session->Images.Flink; Entry != &Session->Images; Entry = Entry->Flink)
+            ASSERT(CONTAINING_RECORD(Entry, MI_SESSION_IMAGE, Link)->LdrEntry != LdrEntry);
+        InsertTailList(&Session->Images, &Image->Link);
+    }
+    KeReleaseGuardedMutex(&MiSessionLock);
+
+    if (!NT_SUCCESS(Status))
+        ExFreePoolWithTag(Image, 'iSmM');
     return Status;
 }
 
@@ -282,7 +442,7 @@ MmSessionDelete(
         Free = MiSessionLeaveLocked(Process);
     KeReleaseGuardedMutex(&MiSessionLock);
     if (Free)
-        ExFreePoolWithTag(Session, 'eSmM');
+        MiSessionFree(Session);
     return Status;
 }
 
@@ -430,7 +590,7 @@ MmSetProcessSession(
     KeReleaseGuardedMutex(&MiSessionLock);
 
     if (Free)
-        ExFreePoolWithTag(Current, 'eSmM');
+        MiSessionFree(Current);
     return Status;
 }
 

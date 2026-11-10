@@ -10,6 +10,7 @@
 #include "kdb.h"
 #include "kdbpriv.h"
 #include "../kd/kdterminal.h"
+#include "../kd64/kdpriv.h"
 #define NDEBUG
 #include <debug.h>
 
@@ -1426,9 +1427,9 @@ KdbpCmdFilter(
 
     State = (_stricmp(Argv[3], "on") == 0);
 
-    if (!NT_SUCCESS(NtSetDebugFilterState((ULONG)Component,
-                                          (ULONG)Level,
-                                          State)))
+    if (!NT_SUCCESS(KdpSetFilterState((ULONG)Component,
+                                      (ULONG)Level,
+                                      State)))
     {
         KdbPuts("That component has no filter of its own\n");
     }

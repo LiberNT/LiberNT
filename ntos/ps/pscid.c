@@ -30,8 +30,6 @@ PspLookupCidObject(
 
     PAGED_CODE();
 
-    *Object = NULL;
-
     KeEnterCriticalRegion();
 
     Entry = ExMapHandleToPointer(PspCidTable, Cid);

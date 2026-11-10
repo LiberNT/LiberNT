@@ -709,6 +709,18 @@ KeSwitchKernelStack(
     IN PVOID StackLimit
 );
 
+/* Each architecture runs KiRunStackCallout(Context) with its stack pointer moved to StackTop */
+VOID
+FASTCALL
+KiCallOnKernelStack(
+    _In_ PVOID Context,
+    _In_ PVOID StackTop);
+
+VOID
+FASTCALL
+KiRunStackCallout(
+    _In_ PVOID Context);
+
 VOID
 NTAPI
 KeRundownThread(VOID);
@@ -819,6 +831,12 @@ KeInitializeProcess(
     KAFFINITY Affinity,
     PULONG_PTR DirectoryTableBase,
     IN BOOLEAN Enable
+);
+
+VOID
+NTAPI
+KeUninitializeProcess(
+    _Inout_ struct _KPROCESS *Process
 );
 
 VOID
@@ -1352,6 +1370,21 @@ VOID
 FASTCALL
 KiRetireDpcList(
     IN PKPRCB Prcb
+);
+
+CHAR
+NTAPI
+KeExchangePriorityFloorThread(
+    _Inout_ PKTHREAD Thread,
+    _Inout_ PCHAR StoredFloor,
+    _In_ LONG NewFloor
+);
+
+BOOLEAN
+FASTCALL
+KiIsDpcThreadBusy(
+    _In_ PKPRCB Prcb,
+    _In_ PKTHREAD Thread
 );
 
 VOID

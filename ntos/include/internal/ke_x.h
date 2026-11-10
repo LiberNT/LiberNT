@@ -1206,6 +1206,66 @@ KxInsertTimer(IN PKTIMER Timer,
     }
 }
 
+/*
+ * Arms a thread's own wait timer. A deadline that passes before the timer is
+ * in the table is not signalled here, because its thread has not started to
+ * wait yet: the timer is taken back out and the thread reports the timeout.
+ */
+FORCEINLINE
+BOOLEAN
+KxInsertThreadWaitTimer(IN PKTIMER Timer,
+                        IN ULONG Hand)
+{
+    PKSPIN_LOCK_QUEUE LockQueue;
+    BOOLEAN Armed = TRUE;
+
+    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
+    ASSERT(Timer->Header.Inserted);
+
+    LockQueue = KiAcquireTimerLock(Hand);
+
+    if (KiInsertTimerTable(Timer, Hand))
+    {
+        KiRemoveEntryTimer(Timer);
+        Timer->Header.Inserted = FALSE;
+        Armed = FALSE;
+    }
+
+    KiReleaseTimerLock(LockQueue);
+    KiReleaseDispatcherObject(&Timer->Header);
+    return Armed;
+}
+
+FORCEINLINE
+VOID
+KxInsertTimerNoRelease(IN PKTIMER Timer,
+                       IN ULONG Hand)
+{
+    PKSPIN_LOCK_QUEUE LockQueue;
+    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
+
+    /* Establish the same object-to-table lock order as timer setters */
+    KiAcquireDispatcherObject(&Timer->Header);
+    LockQueue = KiAcquireTimerLock(Hand);
+
+    if (!Timer->Header.Inserted)
+    {
+        KiReleaseTimerLock(LockQueue);
+        KiReleaseDispatcherObject(&Timer->Header);
+        return;
+    }
+
+    if (KiInsertTimerTable(Timer, Hand))
+    {
+        KiCompleteTimer(Timer, LockQueue);
+    }
+    else
+    {
+        KiReleaseTimerLock(LockQueue);
+        KiReleaseDispatcherObject(&Timer->Header);
+    }
+}
+
 //
 // Called by KeSetTimerEx and KiInsertTreeTimer to calculate Due Time
 // See the Windows HPI Blog for more information
@@ -1519,7 +1579,8 @@ KxTryBeginThreadWait(IN PKTHREAD Thread)
 }
 
 //
-// Leaves the dispatcher on the way back to the top of a wait loop. When the
+// Releases the dispatcher database and leaves the dispatcher on the way back
+// to the top of a wait loop. When the
 // loop retries for a deliverable kernel APC, the APC interrupt was requested
 // while IRQL masked it and fires as IRQL drops. A hypervisor that does not
 // see the guest lower CR8 (VirtualBox on Hyper-V) injects it only at the next
@@ -1532,7 +1593,7 @@ KxExitDispatcherForRetry(IN PKTHREAD Thread)
 {
     KIRQL WaitIrql = Thread->WaitIrql;
 
-    KiExitDispatcher(WaitIrql);
+    KiReleaseDispatcherLock(WaitIrql);
     if (KiIsKernelApcDeliverable(Thread, WaitIrql))
         HalRequestSoftwareInterrupt(APC_LEVEL);
 }
@@ -1918,7 +1979,10 @@ KiWaitForThreadSwapOut(IN PKTHREAD Thread)
         YieldProcessor();
     }
 #elif KI_THREAD_HANDOFF_USES_RUNNING
-    ASSERT(!Thread->Running);
+    while (Thread->Running)
+    {
+        YieldProcessor();
+    }
 #else
     UNREFERENCED_PARAMETER(Thread);
 #endif
@@ -2066,47 +2130,53 @@ KiSelectReadyThread(IN KPRIORITY Priority,
     ULONG PrioritySet;
     LONG HighPriority;
     PLIST_ENTRY ListEntry;
-    PKTHREAD Thread = NULL;
+    PKTHREAD Thread;
 
-    /* Save the current mask and get the priority set for the CPU */
-    PrioritySet = Prcb->ReadySummary >> Priority;
-    if (!PrioritySet) goto Quickie;
-
-    /* Get the highest priority possible */
-    BitScanReverse((PULONG)&HighPriority, PrioritySet);
-    ASSERT((PrioritySet & PRIORITY_MASK(HighPriority)) != 0);
-    HighPriority += Priority;
-
-    /* Make sure the list isn't empty at the highest priority */
-    ASSERT(IsListEmpty(&Prcb->DispatcherReadyListHead[HighPriority]) == FALSE);
-    KiAssertReadyQueue(Prcb, HighPriority);
-
-    /* Get the first thread on the list */
-    ListEntry = Prcb->DispatcherReadyListHead[HighPriority].Flink;
-    Thread = CONTAINING_RECORD(ListEntry, KTHREAD, WaitListEntry);
-
-    /* Make sure this thread is here for a reason */
-    ASSERT(Thread != Prcb->IdleThread);
-    ASSERT(Thread->State == Ready && !Thread->ProcessReadyQueue);
-    ASSERT(ListEntry->Flink->Blink == ListEntry && ListEntry->Blink->Flink == ListEntry);
-    ASSERT(HighPriority == Thread->Priority);
-    ASSERT(KiThreadAffinityMask(Thread) & AFFINITY_MASK(Prcb->Number));
-    ASSERT(Thread->NextProcessor == Prcb->Number);
-
-    /* Remove it from the list */
-    if (RemoveEntryList(&Thread->WaitListEntry))
+    for (;;)
     {
-        /* The list is empty now, reset the ready summary */
-        Prcb->ReadySummary ^= PRIORITY_MASK(HighPriority);
-    }
-    KiAssertReadyQueue(Prcb, HighPriority);
+        /* Save the current mask and get the priority set for the CPU */
+        PrioritySet = Prcb->ReadySummary >> Priority;
+        if (!PrioritySet) return NULL;
 
-    /* Sanity check and return the thread */
-Quickie:
-    ASSERT((Thread == NULL) ||
-           (Thread->BasePriority == 0) ||
-           (Thread->Priority != 0));
-    return Thread;
+        /* Get the highest priority possible */
+        BitScanReverse((PULONG)&HighPriority, PrioritySet);
+        ASSERT((PrioritySet & PRIORITY_MASK(HighPriority)) != 0);
+        HighPriority += Priority;
+
+        /* Make sure the list isn't empty at the highest priority */
+        ASSERT(IsListEmpty(&Prcb->DispatcherReadyListHead[HighPriority]) == FALSE);
+        KiAssertReadyQueue(Prcb, HighPriority);
+
+        /* Get the first thread on the list */
+        ListEntry = Prcb->DispatcherReadyListHead[HighPriority].Flink;
+        Thread = CONTAINING_RECORD(ListEntry, KTHREAD, WaitListEntry);
+
+        /* Make sure this thread is here for a reason */
+        ASSERT(Thread != Prcb->IdleThread);
+        ASSERT(Thread->State == Ready && !Thread->ProcessReadyQueue);
+        ASSERT(ListEntry->Flink->Blink == ListEntry && ListEntry->Blink->Flink == ListEntry);
+        ASSERT(HighPriority == Thread->Priority);
+        ASSERT(Thread->NextProcessor == Prcb->Number);
+
+        /* Remove it from the list */
+        if (RemoveEntryList(&Thread->WaitListEntry))
+        {
+            /* The list is empty now, reset the ready summary */
+            Prcb->ReadySummary ^= PRIORITY_MASK(HighPriority);
+        }
+        KiAssertReadyQueue(Prcb, HighPriority);
+
+        /* An affinity narrowed while the thread was on its way here is honoured by placing it again */
+        if (!(KiThreadAffinityMask(Thread) & AFFINITY_MASK(Prcb->Number)))
+        {
+            KiInsertDeferredReadyList(Thread);
+            continue;
+        }
+
+        /* Sanity check and return the thread */
+        ASSERT((Thread->BasePriority == 0) || (Thread->Priority != 0));
+        return Thread;
+    }
 }
 
 //

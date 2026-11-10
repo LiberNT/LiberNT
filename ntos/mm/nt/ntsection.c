@@ -1778,8 +1778,28 @@ MmCreateSection(
     _In_opt_ HANDLE FileHandle,
     _In_opt_ PFILE_OBJECT FileObject)
 {
-    return MiCreateSectionWithMode(SectionObject, ExGetPreviousMode(), FALSE, DesiredAccess, ObjectAttributes,
+    /* Whatever the thread was doing before, what this caller passes is the kernel's own */
+    return MiCreateSectionWithMode(SectionObject, KernelMode, FALSE, DesiredAccess, ObjectAttributes,
                                    MaximumSize, SectionPageProtection, AllocationAttributes, FileHandle, FileObject);
+}
+
+/*
+ * The same, for a scanner that only reads the file: the file stays free to be
+ * renamed, overwritten or deleted while such a section is open.
+ */
+NTSTATUS
+NTAPI
+MmCreateSectionForDataScan(
+    _Out_ PVOID *SectionObject,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _Inout_ PLARGE_INTEGER MaximumSize,
+    _In_ ULONG SectionPageProtection,
+    _In_ ULONG AllocationAttributes,
+    _In_ PFILE_OBJECT FileObject)
+{
+    return MiCreateSectionWithMode(SectionObject, KernelMode, TRUE, DesiredAccess, ObjectAttributes,
+                                   MaximumSize, SectionPageProtection, AllocationAttributes, NULL, FileObject);
 }
 
 BOOLEAN

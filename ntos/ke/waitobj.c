@@ -108,7 +108,15 @@ KiArmThreadWaitTimer(
     KxPublishTimerWaitBlock();
 
     /* Hands the timer to its table bucket and drops the object lock */
-    KxInsertTimer(Timer, Hand);
+    if (!KxInsertThreadWaitTimer(Timer, Hand))
+    {
+        ASSERT(TimerBlock->WaitListEntry.Flink != NULL);
+        RemoveEntryList(&TimerBlock->WaitListEntry);
+        TimerBlock->WaitListEntry.Flink = NULL;
+        TimerBlock->WaitListEntry.Blink = NULL;
+        return FALSE;
+    }
+
     return TRUE;
 }
 
@@ -154,7 +162,7 @@ KeWaitForSingleObject(
     NTSTATUS Status;
     LONG_PTR WaitStatus;
 
-    ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
+    ASSERT(Thread->WaitNext || (KeGetCurrentIrql() <= DISPATCH_LEVEL));
 
     DueTime.QuadPart = 0;
 
@@ -303,7 +311,7 @@ KeWaitForMultipleObjects(
     LONG_PTR WaitStatus;
     ULONG Index;
 
-    ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
+    ASSERT(Thread->WaitNext || (KeGetCurrentIrql() <= DISPATCH_LEVEL));
 
     if (Count == 0)
         return STATUS_INVALID_PARAMETER;
@@ -495,7 +503,7 @@ KeDelayExecutionThread(
     NTSTATUS Status;
     LONG_PTR WaitStatus;
 
-    ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
+    ASSERT(Thread->WaitNext || (KeGetCurrentIrql() <= DISPATCH_LEVEL));
 
     DueTime.QuadPart = 0;
 
@@ -558,6 +566,10 @@ KeDelayExecutionThread(
 
         WaitStatus = KiSwapThread(Thread, KeGetCurrentPrcb(), TRUE);
         Thread->WaitBlockList = NULL;
+
+        /* The time running out is what a delay is for, so it is not reported as a timeout */
+        if (WaitStatus == STATUS_TIMEOUT)
+            return STATUS_SUCCESS;
 
         if (WaitStatus != STATUS_KERNEL_APC)
             return (NTSTATUS)WaitStatus;

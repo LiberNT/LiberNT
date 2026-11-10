@@ -15,6 +15,7 @@ SYSTEM_POWER_CAPABILITIES PopCapabilities;
 POP_POWER_ACTION PopAction;
 PDEVICE_NODE PopSystemPowerDeviceNode = NULL;
 ULONG PopFlushPolicy = 0;
+PKWIN32_POWEREVENT_CALLOUT PopEventCallout = NULL;
 
 /* PRIVATE DATA ***************************************************************/
 
@@ -26,10 +27,23 @@ typedef struct _POP_SETTING_WATCHER
     PPOWER_SETTING_CALLBACK Callback;
     PVOID Context;
     PDEVICE_OBJECT DeviceObject;
+    BOOLEAN Unregistered;
 } POP_SETTING_WATCHER, *PPOP_SETTING_WATCHER;
+
+/* What one setting is worth on each power source */
+typedef struct _POP_CACHED_SETTING
+{
+    GUID Setting;
+    ULONG Length[PoConditionMaximum];
+    PVOID Value[PoConditionMaximum];
+} POP_CACHED_SETTING, *PPOP_CACHED_SETTING;
 
 static LIST_ENTRY PopSettingWatchers;
 static KGUARDED_MUTEX PopSettingLock;
+static POP_CACHED_SETTING PopCachedSettings[POP_MAX_CACHED_POWER_SETTINGS];
+static ULONG PopCachedSettingCount;
+static SYSTEM_POWER_CONDITION PopPowerSource = PoAc;
+static ULONG PopSettingWalks;
 static ULONG PopVideoTimeout = 0;
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -232,6 +246,275 @@ PoSetHiberRange(
     return STATUS_SUCCESS;
 }
 
+/* SETTINGS *******************************************************************/
+
+static
+PPOP_CACHED_SETTING
+PopFindCachedSetting(
+    _In_ LPCGUID Setting)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < PopCachedSettingCount; Index++)
+    {
+        if (IsEqualGUIDAligned(&PopCachedSettings[Index].Setting, Setting))
+        {
+            return &PopCachedSettings[Index];
+        }
+    }
+
+    return NULL;
+}
+
+/*
+ * A walk lets go of the lock around every callback, and a callback may take
+ * its own registration away. Nothing is unlinked while a walk is under way:
+ * a registration that went is only marked, and the last walk to finish frees
+ * the marked ones.
+ */
+static
+VOID
+PopEndSettingWalk(VOID)
+{
+    PPOP_SETTING_WATCHER Watcher;
+    PLIST_ENTRY Entry, Next;
+
+    if (--PopSettingWalks != 0) return;
+
+    for (Entry = PopSettingWatchers.Flink;
+         Entry != &PopSettingWatchers;
+         Entry = Next)
+    {
+        Next = Entry->Flink;
+        Watcher = CONTAINING_RECORD(Entry, POP_SETTING_WATCHER, Entry);
+
+        if (!Watcher->Unregistered) continue;
+
+        RemoveEntryList(&Watcher->Entry);
+        ExFreePoolWithTag(Watcher, 'cPoP');
+    }
+}
+
+/* Tells everyone watching one setting what it is worth now */
+static
+VOID
+PopNotifySettingWatchers(
+    _In_ LPCGUID Setting,
+    _In_reads_bytes_(Length) PVOID Value,
+    _In_ ULONG Length)
+{
+    PPOP_SETTING_WATCHER Watcher;
+    PLIST_ENTRY Entry;
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+    PopSettingWalks++;
+
+    for (Entry = PopSettingWatchers.Flink;
+         Entry != &PopSettingWatchers;
+         Entry = Entry->Flink)
+    {
+        Watcher = CONTAINING_RECORD(Entry, POP_SETTING_WATCHER, Entry);
+
+        if (Watcher->Unregistered) continue;
+        if (!IsEqualGUIDAligned(&Watcher->Setting, Setting)) continue;
+
+        KeReleaseGuardedMutex(&PopSettingLock);
+        Watcher->Callback(Setting, Value, Length, Watcher->Context);
+        KeAcquireGuardedMutex(&PopSettingLock);
+    }
+
+    PopEndSettingWalk();
+    KeReleaseGuardedMutex(&PopSettingLock);
+}
+
+/* Copies what a setting is worth on the source in use; the caller frees it */
+static
+PVOID
+PopCopyCurrentSettingValue(
+    _In_ LPCGUID Setting,
+    _Out_ PULONG Length)
+{
+    PPOP_CACHED_SETTING Cached;
+    PVOID Copy = NULL;
+
+    *Length = 0;
+
+    Cached = PopFindCachedSetting(Setting);
+    if (Cached == NULL || Cached->Value[PopPowerSource] == NULL) return NULL;
+
+    Copy = ExAllocatePoolWithTag(NonPagedPool,
+                                 Cached->Length[PopPowerSource],
+                                 'vPoP');
+    if (Copy == NULL) return NULL;
+
+    RtlCopyMemory(Copy,
+                  Cached->Value[PopPowerSource],
+                  Cached->Length[PopPowerSource]);
+    *Length = Cached->Length[PopPowerSource];
+
+    return Copy;
+}
+
+static
+NTSTATUS
+PopStoreSettingValue(
+    _In_ LPCGUID Setting,
+    _In_ SYSTEM_POWER_CONDITION PowerCondition,
+    _In_reads_bytes_(Length) PVOID Value,
+    _In_ ULONG Length)
+{
+    PPOP_CACHED_SETTING Cached;
+    PVOID Copy;
+
+    Copy = ExAllocatePoolWithTag(NonPagedPool, Length, 'vPoP');
+    if (Copy == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Copy, Value, Length);
+
+    Cached = PopFindCachedSetting(Setting);
+    if (Cached == NULL)
+    {
+        if (PopCachedSettingCount == POP_MAX_CACHED_POWER_SETTINGS)
+        {
+            ExFreePoolWithTag(Copy, 'vPoP');
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        Cached = &PopCachedSettings[PopCachedSettingCount++];
+        RtlZeroMemory(Cached, sizeof(*Cached));
+        Cached->Setting = *Setting;
+    }
+
+    if (Cached->Value[PowerCondition] != NULL)
+    {
+        ExFreePoolWithTag(Cached->Value[PowerCondition], 'vPoP');
+    }
+
+    Cached->Value[PowerCondition] = Copy;
+    Cached->Length[PowerCondition] = Length;
+
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Changing the power source changes what every setting is worth, so each
+ * setting that has a value for the new source is told about again, whether or
+ * not the two values differ.
+ */
+static
+VOID
+PopSwitchPowerSource(
+    _In_ SYSTEM_POWER_CONDITION PowerCondition)
+{
+    GUID Settings[POP_MAX_CACHED_POWER_SETTINGS];
+    ULONG Count, Index, Length;
+    PVOID Value;
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+
+    if (PopPowerSource == PowerCondition)
+    {
+        KeReleaseGuardedMutex(&PopSettingLock);
+        return;
+    }
+
+    PopPowerSource = PowerCondition;
+
+    Count = PopCachedSettingCount;
+    for (Index = 0; Index < Count; Index++)
+    {
+        Settings[Index] = PopCachedSettings[Index].Setting;
+    }
+
+    KeReleaseGuardedMutex(&PopSettingLock);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        KeAcquireGuardedMutex(&PopSettingLock);
+        Value = PopCopyCurrentSettingValue(&Settings[Index], &Length);
+        KeReleaseGuardedMutex(&PopSettingLock);
+
+        if (Value == NULL) continue;
+
+        PopNotifySettingWatchers(&Settings[Index], Value, Length);
+        ExFreePoolWithTag(Value, 'vPoP');
+    }
+}
+
+NTSTATUS
+NTAPI
+PopSetPowerSettingValue(
+    _In_ LPCGUID SettingGuid,
+    _In_ SYSTEM_POWER_CONDITION PowerCondition,
+    _In_reads_bytes_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength)
+{
+    BOOLEAN Current;
+    NTSTATUS Status;
+    ULONG Source;
+
+    PAGED_CODE();
+
+    if (PowerCondition >= PoConditionMaximum) return STATUS_INVALID_PARAMETER;
+    if (ValueLength == 0) return STATUS_INVALID_PARAMETER;
+    if (ValueLength > POP_MAX_POWER_SETTING_VALUE_LENGTH)
+    {
+        return STATUS_INVALID_BUFFER_SIZE;
+    }
+
+    if (IsEqualGUIDAligned(SettingGuid,
+                           &GUID_PROCESSOR_PERF_ENERGY_PERFORMANCE_PREFERENCE))
+    {
+        if (ValueLength != sizeof(ULONG) || *(PULONG)Value > 100)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
+
+    if (IsEqualGUIDAligned(SettingGuid, &GUID_ACDC_POWER_SOURCE))
+    {
+        if (ValueLength != sizeof(ULONG)) return STATUS_INVALID_PARAMETER;
+
+        Source = *(PULONG)Value;
+        if (Source != PoAc && Source != PoDc) return STATUS_INVALID_PARAMETER;
+
+        /* The source in use is one value, whichever source it is filed under */
+        KeAcquireGuardedMutex(&PopSettingLock);
+        Status = PopStoreSettingValue(SettingGuid, PoAc, Value, ValueLength);
+        if (NT_SUCCESS(Status))
+        {
+            Status = PopStoreSettingValue(SettingGuid,
+                                          PoDc,
+                                          Value,
+                                          ValueLength);
+        }
+        KeReleaseGuardedMutex(&PopSettingLock);
+
+        if (!NT_SUCCESS(Status)) return Status;
+
+        PopSwitchPowerSource((SYSTEM_POWER_CONDITION)Source);
+        return STATUS_SUCCESS;
+    }
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+    Status = PopStoreSettingValue(SettingGuid,
+                                  PowerCondition,
+                                  Value,
+                                  ValueLength);
+    Current = (BOOLEAN)(PowerCondition == PopPowerSource);
+    KeReleaseGuardedMutex(&PopSettingLock);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    /* A value filed for the source not in use changes nothing anyone sees yet */
+    if (!Current) return STATUS_SUCCESS;
+
+    PopApplyProcessorPowerSetting(SettingGuid, Value, ValueLength);
+    PopNotifySettingWatchers(SettingGuid, Value, ValueLength);
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 PoRegisterPowerSettingCallback(
@@ -242,6 +525,8 @@ PoRegisterPowerSettingCallback(
     _Outptr_opt_ PVOID *Handle)
 {
     PPOP_SETTING_WATCHER Watcher;
+    ULONG Length;
+    PVOID Value;
 
     PAGED_CODE();
 
@@ -255,12 +540,32 @@ PoRegisterPowerSettingCallback(
     Watcher->Callback = Callback;
     Watcher->Context = Context;
     Watcher->DeviceObject = DeviceObject;
-
-    KeAcquireGuardedMutex(&PopSettingLock);
-    InsertTailList(&PopSettingWatchers, &Watcher->Entry);
-    KeReleaseGuardedMutex(&PopSettingLock);
+    Watcher->Unregistered = FALSE;
 
     if (Handle != NULL) *Handle = Watcher;
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+
+    InsertTailList(&PopSettingWatchers, &Watcher->Entry);
+
+    /* Whoever starts watching is told at once what the setting is worth */
+    Value = PopCopyCurrentSettingValue(SettingGuid, &Length);
+    if (Value == NULL)
+    {
+        KeReleaseGuardedMutex(&PopSettingLock);
+        return STATUS_SUCCESS;
+    }
+
+    PopSettingWalks++;
+    KeReleaseGuardedMutex(&PopSettingLock);
+
+    Callback(SettingGuid, Value, Length, Context);
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+    PopEndSettingWalk();
+    KeReleaseGuardedMutex(&PopSettingLock);
+
+    ExFreePoolWithTag(Value, 'vPoP');
 
     return STATUS_SUCCESS;
 }
@@ -270,13 +575,40 @@ NTAPI
 PoUnregisterPowerSettingCallback(
     _Inout_ PVOID Handle)
 {
-    PPOP_SETTING_WATCHER Watcher = Handle;
+    PPOP_SETTING_WATCHER Watcher = NULL;
+    PLIST_ENTRY Entry;
 
     PAGED_CODE();
 
-    if (Watcher == NULL) return STATUS_INVALID_PARAMETER;
+    if (Handle == NULL) return STATUS_INVALID_PARAMETER;
 
+    /* A handle is only what it says it is while its registration is still on the list */
     KeAcquireGuardedMutex(&PopSettingLock);
+
+    for (Entry = PopSettingWatchers.Flink;
+         Entry != &PopSettingWatchers;
+         Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, POP_SETTING_WATCHER, Entry) == Handle)
+        {
+            Watcher = Handle;
+            break;
+        }
+    }
+
+    if (Watcher == NULL || Watcher->Unregistered)
+    {
+        KeReleaseGuardedMutex(&PopSettingLock);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (PopSettingWalks != 0)
+    {
+        Watcher->Unregistered = TRUE;
+        KeReleaseGuardedMutex(&PopSettingLock);
+        return STATUS_SUCCESS;
+    }
+
     RemoveEntryList(&Watcher->Entry);
     KeReleaseGuardedMutex(&PopSettingLock);
 
@@ -303,41 +635,27 @@ VOID
 NTAPI
 PopInitializeEventSupport(VOID)
 {
+    ULONG Preference = 50;
+    ULONG Source = PoAc;
+    ULONG Condition;
+
     PAGED_CODE();
 
     InitializeListHead(&PopSettingWatchers);
     KeInitializeGuardedMutex(&PopSettingLock);
-}
 
-/* What the system says to whoever asked to hear about power events */
-NTSTATUS
-NTAPI
-PopEventCallout(
-    _In_ LPCGUID Setting,
-    _In_reads_bytes_(ValueLength) PVOID Value,
-    _In_ ULONG ValueLength)
-{
-    PPOP_SETTING_WATCHER Watcher;
-    PLIST_ENTRY Entry;
-
-    PAGED_CODE();
-
-    KeAcquireGuardedMutex(&PopSettingLock);
-
-    for (Entry = PopSettingWatchers.Flink;
-         Entry != &PopSettingWatchers;
-         Entry = Entry->Flink)
+    /* FIXME: the energy preference of the power plan in use is not sourced from Windows 11; the middle of the range stands in */
+    for (Condition = PoAc; Condition <= PoDc; Condition++)
     {
-        Watcher = CONTAINING_RECORD(Entry, POP_SETTING_WATCHER, Entry);
-
-        if (!IsEqualGUIDAligned(&Watcher->Setting, Setting)) continue;
-
-        Watcher->Callback(Setting, Value, ValueLength, Watcher->Context);
+        PopStoreSettingValue(&GUID_PROCESSOR_PERF_ENERGY_PERFORMANCE_PREFERENCE,
+                             (SYSTEM_POWER_CONDITION)Condition,
+                             &Preference,
+                             sizeof(Preference));
+        PopStoreSettingValue(&GUID_ACDC_POWER_SOURCE,
+                             (SYSTEM_POWER_CONDITION)Condition,
+                             &Source,
+                             sizeof(Source));
     }
-
-    KeReleaseGuardedMutex(&PopSettingLock);
-
-    return STATUS_SUCCESS;
 }
 
 /* What a processor does when it has nothing to do */
@@ -425,7 +743,7 @@ PoInitSystem(
         PopReadShutdownPolicy();
         PopInitializeStandby();
         PopHiberInitialize();
-        PopAoAc = PopDetectAoAc();
+        PopInitializeSleepSupport();
 
         return TRUE;
     }
@@ -613,6 +931,69 @@ NtSetThreadExecutionState(
  * Answers what the machine can do about power, and takes what it is told to
  * do differently. Only what is asked for is answered.
  */
+/*
+ * Takes a setting a caller hands in. The value is copied out of the caller's
+ * buffer before it is looked at, and the copy is what is kept.
+ */
+static
+NTSTATUS
+PopSetPowerSettingValueFromCaller(
+    _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength)
+{
+    PSET_POWER_SETTING_VALUE Setting = InputBuffer;
+    SET_POWER_SETTING_VALUE Header;
+    NTSTATUS Status;
+    PVOID Value;
+
+    if (InputBuffer == NULL ||
+        InputBufferLength < FIELD_OFFSET(SET_POWER_SETTING_VALUE, Data))
+    {
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    RtlCopyMemory(&Header,
+                  Setting,
+                  FIELD_OFFSET(SET_POWER_SETTING_VALUE, Data));
+
+    if (Header.Version != POWER_SETTING_VALUE_VERSION)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (Header.PowerCondition >= PoConditionMaximum)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (Header.DataLength == 0) return STATUS_INVALID_PARAMETER;
+
+    if (Header.DataLength > POP_MAX_POWER_SETTING_VALUE_LENGTH)
+    {
+        return STATUS_INVALID_BUFFER_SIZE;
+    }
+
+    if (Header.DataLength >
+        InputBufferLength - FIELD_OFFSET(SET_POWER_SETTING_VALUE, Data))
+    {
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    Value = ExAllocatePoolWithTag(PagedPool, Header.DataLength, 'vPoP');
+    if (Value == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Value, Setting->Data, Header.DataLength);
+
+    Status = PopSetPowerSettingValue(&Header.Guid,
+                                     Header.PowerCondition,
+                                     Value,
+                                     Header.DataLength);
+
+    ExFreePoolWithTag(Value, 'vPoP');
+
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 NtPowerInformation(
@@ -660,9 +1041,15 @@ NtPowerInformation(
                     break;
                 }
 
+                /* TODO: no battery is asked; only which source is in use is reported */
                 RtlZeroMemory(&BatteryState, sizeof(BatteryState));
-                BatteryState.AcOnLine = TRUE;
+                BatteryState.AcOnLine = (BOOLEAN)(PopPowerSource == PoAc);
                 RtlCopyMemory(OutputBuffer, &BatteryState, sizeof(BatteryState));
+                break;
+
+            case SetPowerSettingValue:
+                Status = PopSetPowerSettingValueFromCaller(InputBuffer,
+                                                          InputBufferLength);
                 break;
 
             case SystemExecutionState:

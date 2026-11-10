@@ -33,6 +33,22 @@ LEAF_ENTRY(KiRetireDpcListInDpcStack)
 LEAF_END(KiRetireDpcListInDpcStack)
 
 /*
+ * VOID KiCallOnKernelStack(PVOID Context <r3>, PVOID StackTop <r4>)
+ */
+LEAF_ENTRY(KiCallOnKernelStack)
+    mflr 0
+    stw 0, 8(1)
+    mr 11, 1
+    subi 1, 4, C_FRAME
+    stw 11, 0(1)
+    bl ..KiRunStackCallout
+    lwz 1, 0(1)
+    lwz 0, 8(1)
+    mtlr 0
+    blr
+LEAF_END(KiCallOnKernelStack)
+
+/*
  * BOOLEAN KiSwapContext(KIRQL WaitIrql <r3>, PKTHREAD OldThread <r4>)
  *
  * The scheduler has already stored the target in Prcb.CurrentThread.

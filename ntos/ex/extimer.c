@@ -245,7 +245,7 @@ ExpInitializeTimerImplementation(VOID)
     Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = TIMER_ALL_ACCESS;
     Initializer.GenericMapping = ExpTimerMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(ETIMER);
     Initializer.DeleteProcedure = ExpDeleteTimer;
 
@@ -528,7 +528,8 @@ NtSetTimer(
     /* Whatever the timer was told to do before is forgotten. */
     ExpCancelTimerApc(Timer);
 
-    State = KeCancelTimer(&Timer->KeTimer);
+    State = KeReadStateTimer(&Timer->KeTimer);
+    KeCancelTimer(&Timer->KeTimer);
 
     Timer->SetSequence++;
     Timer->Period = Period;
@@ -636,7 +637,8 @@ NtCancelTimer(
         Dereference = TRUE;
     }
 
-    State = KeCancelTimer(&Timer->KeTimer);
+    KeCancelTimer(&Timer->KeTimer);
+    State = KeReadStateTimer(&Timer->KeTimer);
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
 

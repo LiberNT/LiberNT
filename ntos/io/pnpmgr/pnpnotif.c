@@ -7,6 +7,7 @@
 
 #include <ntoskrnl.h>
 #include "../ioint.h"
+#include <wdmguid.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -52,6 +53,11 @@ PiReferenceNotifyEntry(
     InterlockedIncrement(&Entry->ReferenceCount);
 }
 
+/*
+ * Called with the lock of the entry's list held. An unregistered entry stays
+ * linked until its last reference goes, so a walk that let go of the lock to
+ * call it can still step from it to the next one.
+ */
 static
 VOID
 PiDereferenceNotifyEntry(
@@ -59,11 +65,91 @@ PiDereferenceNotifyEntry(
 {
     if (InterlockedDecrement(&Entry->ReferenceCount) != 0) return;
 
+    ASSERT(Entry->Unregistered);
+    RemoveEntryList(&Entry->ListEntry);
+
     if (Entry->FileObject != NULL) ObDereferenceObject(Entry->FileObject);
     if (Entry->DeviceObject != NULL) ObDereferenceObject(Entry->DeviceObject);
     if (Entry->DriverObject != NULL) ObDereferenceObject(Entry->DriverObject);
+    if (Entry->Session != NULL) MmQuitNextSession(Entry->Session);
 
     ExFreePoolWithTag(Entry, TAG_PNP_NOTIFY);
+}
+
+/* A routine a session driver registered runs inside that driver's session */
+static
+VOID
+PiInvokeNotifyEntry(
+    _In_ PIOP_PNP_NOTIFY_ENTRY Entry,
+    _In_ PVOID NotificationStructure)
+{
+    KAPC_STATE ApcState;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Entry->Session == NULL)
+    {
+        ASSERT(!MmIsSessionAddress((PVOID)Entry->CallbackRoutine));
+        Entry->CallbackRoutine(NotificationStructure, Entry->Context);
+        return;
+    }
+
+    Status = MmAttachSession(Entry->Session, &ApcState);
+    if (!NT_SUCCESS(Status))
+    {
+        /* The session is ending, and its drivers with it */
+        DPRINT1("PnP: notification %p skipped, its session is going (%lx)\n", Entry, Status);
+        return;
+    }
+
+    Entry->CallbackRoutine(NotificationStructure, Entry->Context);
+
+    MmDetachSession(Entry->Session, &ApcState);
+}
+
+static
+NTSTATUS
+PiBindNotifySession(
+    _Inout_ PIOP_PNP_NOTIFY_ENTRY Entry)
+{
+    if (!MmIsSessionAddress((PVOID)Entry->CallbackRoutine)) return STATUS_SUCCESS;
+
+    Entry->Session = MmGetSessionById(MmGetSessionId(PsGetCurrentProcess()));
+    ASSERT(Entry->Session != NULL);
+
+    return (Entry->Session != NULL) ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+}
+
+static
+VOID
+PiReportExistingInterfaces(
+    _In_ PIOP_PNP_NOTIFY_ENTRY Entry)
+{
+    DEVICE_INTERFACE_CHANGE_NOTIFICATION Notification;
+    UNICODE_STRING Name;
+    PZZWSTR List;
+    PWSTR Link;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IoGetDeviceInterfaces(&Entry->ClassGuid, NULL, 0, &List))) return;
+
+    for (Link = List; *Link != UNICODE_NULL; Link += wcslen(Link) + 1)
+    {
+        RtlInitUnicodeString(&Name, Link);
+
+        RtlZeroMemory(&Notification, sizeof(Notification));
+        Notification.Version = 1;
+        Notification.Size = sizeof(Notification);
+        Notification.Event = GUID_DEVICE_INTERFACE_ARRIVAL;
+        Notification.InterfaceClassGuid = Entry->ClassGuid;
+        Notification.SymbolicLinkName = &Name;
+
+        PiInvokeNotifyEntry(Entry, &Notification);
+    }
+
+    ExFreePool(List);
 }
 
 static
@@ -92,9 +178,8 @@ PiRunNotifyList(
 
         if (Entry->Unregistered) continue;
 
+        /* Asking for the existing interfaces too does not widen the class registered for */
         if (ClassGuid != NULL &&
-            !(Entry->EventCategoryFlags &
-              PNPNOTIFY_DEVICE_INTERFACE_INCLUDE_EXISTING_INTERFACES) &&
             RtlCompareMemory(&Entry->ClassGuid,
                              ClassGuid,
                              sizeof(GUID)) != sizeof(GUID))
@@ -111,10 +196,11 @@ PiRunNotifyList(
 
         KeReleaseGuardedMutex(Lock);
 
-        Entry->CallbackRoutine(NotificationStructure, Entry->Context);
+        PiInvokeNotifyEntry(Entry, NotificationStructure);
 
         KeAcquireGuardedMutex(Lock);
 
+        ListEntry = Entry->ListEntry.Flink;
         PiDereferenceNotifyEntry(Entry);
     }
 
@@ -229,10 +315,11 @@ PiNotifyTargetDeviceChange(
 
         KeReleaseGuardedMutex(&PiNotifyTargetDeviceLock);
 
-        Entry->CallbackRoutine(Payload, Entry->Context);
+        PiInvokeNotifyEntry(Entry, Payload);
 
         KeAcquireGuardedMutex(&PiNotifyTargetDeviceLock);
 
+        ListEntry = Entry->ListEntry.Flink;
         PiDereferenceNotifyEntry(Entry);
     }
 
@@ -361,6 +448,15 @@ IoRegisterPlugPlayNotification(
             Entry->DeviceObject = DeviceNode->PhysicalDeviceObject;
             ObReferenceObject(Entry->DeviceObject);
 
+            if (!NT_SUCCESS(PiBindNotifySession(Entry)))
+            {
+                ObDereferenceObject(Entry->DeviceObject);
+                ObDereferenceObject(Entry->FileObject);
+                ObDereferenceObject(DriverObject);
+                ExFreePoolWithTag(Entry, TAG_PNP_NOTIFY);
+                return STATUS_INVALID_PARAMETER;
+            }
+
             KeAcquireGuardedMutex(&PiNotifyTargetDeviceLock);
             InsertTailList(&DeviceNode->TargetDeviceNotify,
                            &Entry->ListEntry);
@@ -376,11 +472,24 @@ IoRegisterPlugPlayNotification(
             return STATUS_INVALID_PARAMETER;
     }
 
+    if (!NT_SUCCESS(PiBindNotifySession(Entry)))
+    {
+        ObDereferenceObject(DriverObject);
+        ExFreePoolWithTag(Entry, TAG_PNP_NOTIFY);
+        return STATUS_INVALID_PARAMETER;
+    }
+
     KeAcquireGuardedMutex(Lock);
     InsertTailList(ListHead, &Entry->ListEntry);
     KeReleaseGuardedMutex(Lock);
 
     *NotificationEntry = Entry;
+
+    if ((EventCategory == EventCategoryDeviceInterfaceChange) &&
+        (EventCategoryFlags & PNPNOTIFY_DEVICE_INTERFACE_INCLUDE_EXISTING_INTERFACES))
+    {
+        PiReportExistingInterfaces(Entry);
+    }
 
     return STATUS_SUCCESS;
 }
@@ -415,15 +524,14 @@ IoUnregisterPlugPlayNotification(
 
     KeAcquireGuardedMutex(Lock);
 
+    /* The registration's own reference goes; the entry leaves its list with the last one */
     if (!Entry->Unregistered)
     {
         Entry->Unregistered = TRUE;
-        RemoveEntryList(&Entry->ListEntry);
+        PiDereferenceNotifyEntry(Entry);
     }
 
     KeReleaseGuardedMutex(Lock);
-
-    PiDereferenceNotifyEntry(Entry);
 
     return STATUS_SUCCESS;
 }

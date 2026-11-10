@@ -256,7 +256,7 @@ MiMakePageValid(
     _In_ ULONG Protection,
     _In_ BOOLEAN Dirty)
 {
-    ULONG Flags = (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER) | (Dirty ? MI_LEAF_DIRTY : 0);
+    ULONG Flags = MI_SPACE_LEAF_OWNER(Space) | (Dirty ? MI_LEAF_DIRTY : 0);
 
     MI_ASSERT(Slot != NULL);
     MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);

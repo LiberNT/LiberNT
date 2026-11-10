@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #include "../ioint.h"
 #include "../pnpio.h"
+#include <reactos/hal/msi.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -146,6 +147,46 @@ IopAdvanceCandidate(
     }
 }
 
+/* A message interrupt is a block of vectors the HAL hands out; the requirement's
+ * range below the message token gives the number of messages */
+static
+NTSTATUS
+IopAllocateMessageInterrupt(
+    _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
+    _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
+{
+    HAL_MESSAGE_ROUTING_INFO RoutingInfo;
+    ULONG MessageCount = 1;
+    NTSTATUS Status;
+
+    if (Requirement->u.Interrupt.MaximumVector == CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN &&
+        Requirement->u.Interrupt.MinimumVector <= CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN)
+    {
+        MessageCount = CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN -
+                       Requirement->u.Interrupt.MinimumVector + 1;
+    }
+
+    RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
+    RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
+    RoutingInfo.Flags = HAL_MSI_ROUTING_ALLOCATE_VECTOR;
+    RoutingInfo.MessageCount = MessageCount;
+    RoutingInfo.TargetProcessors = Requirement->u.Interrupt.TargetedProcessors;
+
+    /* TODO: the i386 HAL does not export the message router yet */
+    Status = HalpGetMessageRoutingInfo(&RoutingInfo);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    RtlZeroMemory(Descriptor, sizeof(*Descriptor));
+    Descriptor->Type = CmResourceTypeInterrupt;
+    Descriptor->ShareDisposition = Requirement->ShareDisposition;
+    Descriptor->Flags = Requirement->Flags;
+    Descriptor->u.MessageInterrupt.Raw.MessageCount = (USHORT)MessageCount;
+    Descriptor->u.MessageInterrupt.Raw.Vector = RoutingInfo.Vector;
+    Descriptor->u.MessageInterrupt.Raw.Affinity = RoutingInfo.TargetProcessors;
+
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 IopPickOneDescriptor(
@@ -154,6 +195,12 @@ IopPickOneDescriptor(
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
     ULONG Attempts = 0;
+
+    if (Requirement->Type == CmResourceTypeInterrupt &&
+        (Requirement->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
+    {
+        return IopAllocateMessageInterrupt(Requirement, Descriptor);
+    }
 
     IopDescribeFromRequirement(Requirement, Descriptor);
 
@@ -166,20 +213,24 @@ IopPickOneDescriptor(
 
     while (Attempts < 0x10000)
     {
-        if (IopResDbCheckDescriptor(Descriptor, DeviceNode, NULL))
+        if (!IopResDbCheckDescriptor(Descriptor, DeviceNode, NULL))
         {
             return STATUS_SUCCESS;
         }
 
-        if (!IopAdvanceCandidate(Requirement, Descriptor))
-        {
-            return STATUS_CONFLICTING_ADDRESSES;
-        }
+        if (!IopAdvanceCandidate(Requirement, Descriptor)) break;
 
         Attempts++;
     }
 
-    return STATUS_CONFLICTING_ADDRESSES;
+    /* The resource database records overlaps without refusing them, so the
+     * preferred setting is kept when nothing in the range is free */
+    DPRINT1("PnP: no free setting for a type %u requirement of %wZ, the preferred one is shared\n",
+            Requirement->Type,
+            DeviceNode != NULL ? &DeviceNode->InstancePath : NULL);
+
+    IopDescribeFromRequirement(Requirement, Descriptor);
+    return STATUS_SUCCESS;
 }
 
 static
@@ -213,8 +264,11 @@ IopFixupResourceListWithRequirements(
     PIO_RESOURCE_LIST List;
     NTSTATUS Status = STATUS_CONFLICTING_ADDRESSES;
     ULONG Alternative;
+    ULONG Choice;
+    ULONG Count;
     ULONG Size;
     ULONG Index;
+    ULONG Next;
 
     PAGED_CODE();
 
@@ -248,19 +302,34 @@ IopFixupResourceListWithRequirements(
             Allocated->List[0].PartialResourceList.PartialDescriptors;
 
         Status = STATUS_SUCCESS;
+        Count = 0;
 
-        for (Index = 0; Index < List->Count; Index++)
+        for (Index = 0; Index < List->Count; Index = Next)
         {
-            if (List->Descriptors[Index].Option & IO_RESOURCE_ALTERNATIVE)
+            /* A descriptor and the alternatives after it describe one resource */
+            Next = Index + 1;
+            while (Next < List->Count &&
+                   (List->Descriptors[Next].Option & IO_RESOURCE_ALTERNATIVE))
             {
-                continue;
+                Next++;
             }
 
-            Status = IopPickOneDescriptor(&List->Descriptors[Index],
-                                          DeviceNode,
-                                          &Partial[Index]);
+            if (List->Descriptors[Index].Type == CmResourceTypeConfigData) continue;
+
+            Status = STATUS_CONFLICTING_ADDRESSES;
+            for (Choice = Index; Choice < Next && !NT_SUCCESS(Status); Choice++)
+            {
+                Status = IopPickOneDescriptor(&List->Descriptors[Choice],
+                                              DeviceNode,
+                                              &Partial[Count]);
+            }
+
             if (!NT_SUCCESS(Status)) break;
+
+            Count++;
         }
+
+        Allocated->List[0].PartialResourceList.Count = Count;
 
         if (NT_SUCCESS(Status))
         {
@@ -268,6 +337,7 @@ IopFixupResourceListWithRequirements(
             return STATUS_SUCCESS;
         }
 
+        IopReleaseMessageTokens(Allocated);
         ExFreePoolWithTag(Allocated, TAG_IO_RESOURCE);
     }
 
@@ -362,6 +432,147 @@ IopUpdateControlKeyWithResources(
     return Status;
 }
 
+/* Turns the bus-relative list into the one the processor uses, a copy of its own */
+static
+NTSTATUS
+IopTranslateResourceList(
+    _In_ PCM_RESOURCE_LIST Raw,
+    _Out_ PCM_RESOURCE_LIST *Translated)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    PCM_FULL_RESOURCE_DESCRIPTOR Full;
+    PHYSICAL_ADDRESS Address;
+    PCM_RESOURCE_LIST List;
+    KAFFINITY Affinity;
+    ULONG AddressSpace;
+    ULONG ListIndex;
+    ULONG Index;
+    ULONG Vector;
+    ULONG Size;
+    KIRQL Irql;
+
+    PAGED_CODE();
+
+    *Translated = NULL;
+
+    Size = PnpDetermineResourceListSize(Raw);
+
+    List = ExAllocatePoolZero(PagedPool, Size, TAG_IO_RESOURCE);
+    if (List == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(List, Raw, Size);
+
+    Full = &List->List[0];
+    for (ListIndex = 0; ListIndex < List->Count; ListIndex++)
+    {
+        Descriptor = Full->PartialResourceList.PartialDescriptors;
+
+        for (Index = 0; Index < Full->PartialResourceList.Count; Index++)
+        {
+            switch (Descriptor->Type)
+            {
+                case CmResourceTypeInterrupt:
+                    if (Descriptor->Flags & CM_RESOURCE_INTERRUPT_MESSAGE)
+                    {
+                        HAL_MESSAGE_ROUTING_INFO RoutingInfo;
+
+                        RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
+                        RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
+                        RoutingInfo.MessageCount = Descriptor->u.MessageInterrupt.Raw.MessageCount;
+                        RoutingInfo.Vector = Descriptor->u.MessageInterrupt.Raw.Vector;
+                        RoutingInfo.TargetProcessors = Descriptor->u.MessageInterrupt.Raw.Affinity;
+
+                        if (!NT_SUCCESS(HalpGetMessageRoutingInfo(&RoutingInfo)))
+                        {
+                            ExFreePoolWithTag(List, TAG_IO_RESOURCE);
+                            return STATUS_UNSUCCESSFUL;
+                        }
+
+                        Descriptor->u.MessageInterrupt.Translated.Level = RoutingInfo.Irql;
+                        Descriptor->u.MessageInterrupt.Translated.Vector = RoutingInfo.Vector;
+                        Descriptor->u.MessageInterrupt.Translated.Affinity = RoutingInfo.TargetProcessors;
+                        break;
+                    }
+
+                    Vector = HalGetInterruptVector(Full->InterfaceType,
+                                                   Full->BusNumber,
+                                                   Descriptor->u.Interrupt.Level,
+                                                   Descriptor->u.Interrupt.Vector,
+                                                   &Irql,
+                                                   &Affinity);
+                    if (Vector == 0)
+                    {
+                        ExFreePoolWithTag(List, TAG_IO_RESOURCE);
+                        return STATUS_UNSUCCESSFUL;
+                    }
+
+                    Descriptor->u.Interrupt.Level = Irql;
+                    Descriptor->u.Interrupt.Vector = Vector;
+                    Descriptor->u.Interrupt.Affinity = Affinity;
+                    break;
+
+                case CmResourceTypePort:
+                case CmResourceTypeMemory:
+                    AddressSpace = (Descriptor->Type == CmResourceTypePort) ? 1 : 0;
+
+                    if (!HalTranslateBusAddress(Full->InterfaceType,
+                                                Full->BusNumber,
+                                                Descriptor->u.Generic.Start,
+                                                &AddressSpace,
+                                                &Address))
+                    {
+                        ExFreePoolWithTag(List, TAG_IO_RESOURCE);
+                        return STATUS_UNSUCCESSFUL;
+                    }
+
+                    Descriptor->u.Generic.Start = Address;
+
+                    if (Descriptor->Type == CmResourceTypePort && AddressSpace == 0)
+                    {
+                        Descriptor->Type = CmResourceTypeMemory;
+                        Descriptor->Flags = CM_RESOURCE_MEMORY_READ_WRITE;
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+
+            Descriptor = PipGetNextCmPartialDescriptor(Descriptor);
+        }
+
+        Full = (PCM_FULL_RESOURCE_DESCRIPTOR)Descriptor;
+    }
+
+    *Translated = List;
+    return STATUS_SUCCESS;
+}
+
+/* Takes ownership of Raw and gives the node its raw and translated lists */
+NTSTATUS
+IopSetDeviceResources(
+    _Inout_ PDEVICE_NODE DeviceNode,
+    _In_ PCM_RESOURCE_LIST Raw)
+{
+    PCM_RESOURCE_LIST Translated;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = IopTranslateResourceList(Raw, &Translated);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Raw, TAG_IO_RESOURCE);
+        return Status;
+    }
+
+    DeviceNode->ResourceList = Raw;
+    DeviceNode->ResourceListTranslated = Translated;
+
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 IopAssignDeviceResources(
@@ -421,7 +632,6 @@ IopAssignDeviceResources(
                                  DeviceNode->BootResources,
                                  &Conflict);
         if (!NT_SUCCESS(Status)) return Status;
-        if (Conflict) return STATUS_CONFLICTING_ADDRESSES;
 
         Assigned = ExAllocatePoolZero(
             PagedPool,
@@ -434,8 +644,12 @@ IopAssignDeviceResources(
                       PnpDetermineResourceListSize(
                           DeviceNode->BootResources));
 
-        DeviceNode->ResourceList = Assigned;
-        DeviceNode->ResourceListTranslated = Assigned;
+        Status = IopSetDeviceResources(DeviceNode, Assigned);
+        if (!NT_SUCCESS(Status))
+        {
+            IopResDbRelease(DeviceNode);
+            return Status;
+        }
 
         IopUpdateControlKeyWithResources(DeviceNode);
 
@@ -455,14 +669,18 @@ IopAssignDeviceResources(
     }
 
     Status = IopResDbReserve(DeviceNode, Assigned, &Conflict);
-    if (!NT_SUCCESS(Status) || Conflict)
+    if (!NT_SUCCESS(Status))
     {
         ExFreePoolWithTag(Assigned, TAG_IO_RESOURCE);
-        return NT_SUCCESS(Status) ? STATUS_CONFLICTING_ADDRESSES : Status;
+        return Status;
     }
 
-    DeviceNode->ResourceList = Assigned;
-    DeviceNode->ResourceListTranslated = Assigned;
+    Status = IopSetDeviceResources(DeviceNode, Assigned);
+    if (!NT_SUCCESS(Status))
+    {
+        IopResDbRelease(DeviceNode);
+        return Status;
+    }
 
     IopUpdateControlKeyWithResources(DeviceNode);
 
@@ -475,6 +693,8 @@ IopReleaseNewMessageVectors(
     _In_ ULONG OldCount)
 {
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    HAL_MESSAGE_ROUTING_INFO RoutingInfo;
+    ULONG Message;
     ULONG Seen = 0;
     ULONG Index;
 
@@ -494,11 +714,17 @@ IopReleaseNewMessageVectors(
         {
             Seen++;
 
-            if (Seen > OldCount)
+            for (Message = 0;
+                 Seen > OldCount && Message < Descriptor->u.MessageInterrupt.Raw.MessageCount;
+                 Message++)
             {
-                /* TODO: no message-vector pool to give the vector back to */
-                DPRINT("PnP: message vector %lu is dropped\n",
-                       Descriptor->u.MessageInterrupt.Translated.Vector);
+                RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
+                RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
+                RoutingInfo.Flags = HAL_MSI_ROUTING_RELEASE_VECTOR;
+                RoutingInfo.MessageCount = 1;
+                RoutingInfo.Vector = Descriptor->u.MessageInterrupt.Raw.Vector + Message;
+
+                HalpGetMessageRoutingInfo(&RoutingInfo);
             }
         }
 

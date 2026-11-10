@@ -545,8 +545,8 @@ KeReadStateTimer(
  *
  * Entered at SYNCH_LEVEL with the dispatcher database held; it is released
  * here, because a timer routine must not run under it. The first routines are
- * called directly rather than queued: this already runs at DISPATCH_LEVEL on
- * the right processor, so queueing them would only cost another round trip.
+ * called directly rather than queued, once back at DISPATCH_LEVEL on the right
+ * processor, since queueing them would only cost another round trip.
  */
 VOID
 FASTCALL
@@ -586,7 +586,10 @@ KiTimerListExpire(
         if (Dpc == NULL)
             continue;
 
-        if (DpcCount < MAX_TIMER_DPCS)
+        if (DpcCount < MAX_TIMER_DPCS &&
+            Dpc->Type == DpcObject &&
+            (Dpc->Number == 0 ||
+             Dpc->Number == MAXIMUM_PROCESSORS + KeGetCurrentProcessorNumber()))
         {
             DpcEntries[DpcCount].Dpc = Dpc;
             DpcEntries[DpcCount].Routine = Dpc->DeferredRoutine;
@@ -603,8 +606,14 @@ KiTimerListExpire(
 
     KiReleaseDispatcherLockFromSynchLevel();
 
+    /* A timer routine is a DPC routine and runs at DISPATCH_LEVEL like one */
+    KeLowerIrql(DISPATCH_LEVEL);
+
     for (Index = 0; Index < DpcCount; Index++)
     {
+        DpcEntries[Index].Dpc->ProcessorHistory |=
+            AFFINITY_MASK(KeGetCurrentProcessorNumber());
+
         DpcEntries[Index].Routine(DpcEntries[Index].Dpc,
                                   DpcEntries[Index].Context,
                                   UlongToPtr(SystemTime.LowPart),

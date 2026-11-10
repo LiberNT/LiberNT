@@ -109,7 +109,7 @@ KiDequeueOrWait(
     ULONG Hand;
 
     ASSERT_QUEUE(Queue);
-    ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
+    ASSERT(Thread->WaitNext || (KeGetCurrentIrql() <= DISPATCH_LEVEL));
 
     DueTime.QuadPart = 0;
     *Status = STATUS_SUCCESS;
@@ -222,7 +222,17 @@ KiDequeueOrWait(
             Timer->TimerListEntry.Flink = NULL;
             Timer->TimerListEntry.Blink = NULL;
             KxPublishTimerWaitBlock();
-            KxInsertTimer(Timer, Hand);
+            if (!KxInsertThreadWaitTimer(Timer, Hand))
+            {
+                ASSERT(TimerBlock->WaitListEntry.Flink != NULL);
+                RemoveEntryList(&TimerBlock->WaitListEntry);
+                Thread->TimerActive = FALSE;
+                Thread->WaitBlockList = NULL;
+                KiIncrementQueueCurrentCount(Queue);
+                KiReleaseDispatcherLock(Thread->WaitIrql);
+                *Status = STATUS_TIMEOUT;
+                return NULL;
+            }
         }
         else
         {
@@ -301,7 +311,6 @@ KeInitializeQueue(
     Queue->Header.Type = QueueObject;
     Queue->Header.Signalling = FALSE;
     Queue->Header.Size = sizeof(KQUEUE) / sizeof(ULONG);
-    Queue->Header.Hand = 0;
     Queue->Header.Inserted = FALSE;
     Queue->Header.DebugActive = FALSE;
     Queue->Header.SignalState = 0;
@@ -523,7 +532,14 @@ KeRundownQueue(
     }
 
     Queue->Header.SignalState = 0;
+    Queue->Header.Abandoned = TRUE;
 
+    /*
+     * A thread that asked the queue for work is told there will be none. One
+     * that only waits on the queue as an object is let go as if it had been
+     * signalled, unless it waits for all of several objects: that one looks at
+     * its whole set again and finds the queue has nothing for it.
+     */
     while (!IsListEmpty(&Queue->Header.WaitListHead))
     {
         PKWAIT_BLOCK WaitBlock =
@@ -534,10 +550,19 @@ KeRundownQueue(
         if (WaitBlock->WaitType == WaitDpc)
         {
             IopSignalWaitCompletionPacket(WaitBlock);
-            continue;
         }
-
-        KiUnwaitThread(WaitBlock->Thread, STATUS_ABANDONED, 0);
+        else if (WaitBlock->WaitType == WaitDequeue)
+        {
+            KiUnwaitThread(WaitBlock->Thread, STATUS_ABANDONED, 0);
+        }
+        else if (WaitBlock->WaitType == WaitAny)
+        {
+            KiUnwaitThread(WaitBlock->Thread, WaitBlock->WaitKey, 0);
+        }
+        else
+        {
+            KiUnwaitThread(WaitBlock->Thread, STATUS_KERNEL_APC, 0);
+        }
     }
 
     while (!IsListEmpty(&Queue->ThreadListHead))

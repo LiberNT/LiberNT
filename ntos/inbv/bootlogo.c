@@ -147,24 +147,8 @@ VOID
 NTAPI
 FinalizeBootLogo(VOID)
 {
-    VID_DISPLAY_INFO DisplayInfo;
-
+    /* The logo stays up, turning, until a display driver takes the screen */
     InbvGopLogoComplete();
-
-    if (!InbvIsBootDriverInstalled()) return;
-
-    if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED &&
-        InbvQueryDisplayInfo(&DisplayInfo) &&
-        DisplayInfo.Width != 0 && DisplayInfo.Height != 0)
-    {
-        InbvSolidColorFill(0,
-                           0,
-                           DisplayInfo.Width - 1,
-                           DisplayInfo.Height - 1,
-                           BV_COLOR_BLACK);
-    }
-
-    InbvEnableDisplayString(FALSE);
 }
 
 VOID

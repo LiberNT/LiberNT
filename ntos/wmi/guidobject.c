@@ -16,12 +16,9 @@ POBJECT_TYPE WmipGuidObjectType = NULL;
 
 GENERIC_MAPPING WmipGenericMapping =
 {
-    STANDARD_RIGHTS_READ | WMIGUID_QUERY | WMIGUID_NOTIFICATION |
-        WMIGUID_READ_DESCRIPTION | TRACELOG_ACCESS_REALTIME,
-    STANDARD_RIGHTS_WRITE | WMIGUID_SET | TRACELOG_CREATE_REALTIME |
-        TRACELOG_CREATE_ONDISK | TRACELOG_GUID_ENABLE | TRACELOG_LOG_EVENT |
-        TRACELOG_REGISTER_GUIDS | TRACELOG_JOIN_GROUP,
-    STANDARD_RIGHTS_EXECUTE | WMIGUID_EXECUTE | TRACELOG_ACCESS_KERNEL_LOGGER,
+    WMIGUID_QUERY,
+    WMIGUID_SET,
+    WMIGUID_EXECUTE,
     WMIGUID_ALL_ACCESS
 };
 
@@ -171,10 +168,11 @@ WmipCreateGuidObject(
     InitializeListHead(&GuidObject->IrpLink);
     InitializeListHead(&GuidObject->NotificationLink);
 
+    /* The caller is given the object as well as the handle, so it gets a reference of its own */
     Status = ObInsertObject(GuidObject,
                             NULL,
                             DesiredAccess,
-                            0,
+                            1,
                             OutGuidObject,
                             &Handle);
     if (!NT_SUCCESS(Status)) return Status;
@@ -201,11 +199,10 @@ WmipInitializeGuidObjectType(VOID)
     Initializer.Length = sizeof(Initializer);
     Initializer.UnnamedObjectsOnly = TRUE;
     Initializer.SecurityRequired = TRUE;
-    Initializer.MaintainHandleCount = TRUE;
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
-    Initializer.ValidAccessMask = WMIGUID_ALL_ACCESS;
+    Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Initializer.ValidAccessMask = STANDARD_RIGHTS_ALL | WMIGUID_ALL_ACCESS;
     Initializer.GenericMapping = WmipGenericMapping;
-    Initializer.PoolType = NonPagedPool;
+    Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(WMIP_GUID_OBJECT);
     Initializer.CloseProcedure = WmipCloseMethod;
     Initializer.DeleteProcedure = WmipDeleteMethod;

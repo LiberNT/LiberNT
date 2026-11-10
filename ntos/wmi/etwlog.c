@@ -1065,7 +1065,6 @@ EtwpReturnString(
     *(PWCHAR)((PUCHAR)UserBuffer + Source->Length) = UNICODE_NULL;
 }
 
-static
 NTSTATUS
 EtwpTraceClassicEvent(
     _In_opt_ HANDLE TraceHandle,

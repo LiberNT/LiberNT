@@ -29,7 +29,8 @@ BOOLEAN
 CmpCarveAllocPage(
     _In_ PLIST_ENTRY FreeList,
     _In_ ULONG ItemSize,
-    _In_ ULONG ItemsPerPage)
+    _In_ ULONG ItemsPerPage,
+    _In_ ULONG LinkOffset)
 {
     PCM_ALLOC_PAGE Page;
     PLIST_ENTRY Item;
@@ -48,7 +49,7 @@ CmpCarveAllocPage(
 
     for (i = 0; i < ItemsPerPage; i++)
     {
-        Item = (PLIST_ENTRY)((PUCHAR)&Page->AllocPage + i * ItemSize);
+        Item = (PLIST_ENTRY)((PUCHAR)&Page->AllocPage + i * ItemSize + LinkOffset);
         InsertTailList(FreeList, Item);
     }
 
@@ -61,14 +62,15 @@ VOID
 CmpReleaseAllocPage(
     _In_ PCM_ALLOC_PAGE Page,
     _In_ ULONG ItemSize,
-    _In_ ULONG ItemsPerPage)
+    _In_ ULONG ItemsPerPage,
+    _In_ ULONG LinkOffset)
 {
     PLIST_ENTRY Item;
     ULONG i;
 
     for (i = 0; i < ItemsPerPage; i++)
     {
-        Item = (PLIST_ENTRY)((PUCHAR)&Page->AllocPage + i * ItemSize);
+        Item = (PLIST_ENTRY)((PUCHAR)&Page->AllocPage + i * ItemSize + LinkOffset);
         RemoveEntryList(Item);
     }
 
@@ -124,7 +126,8 @@ CmpAllocateKeyControlBlock(VOID)
     if (IsListEmpty(&CmpFreeKCBListHead) &&
         !CmpCarveAllocPage(&CmpFreeKCBListHead,
                            sizeof(CM_KEY_CONTROL_BLOCK),
-                           CM_KCBS_PER_PAGE))
+                           CM_KCBS_PER_PAGE,
+                           FIELD_OFFSET(CM_KEY_CONTROL_BLOCK, FreeListEntry)))
     {
         KeReleaseGuardedMutex(&CmpAllocBucketLock);
         return NULL;
@@ -166,7 +169,8 @@ CmpFreeKeyControlBlock(
     {
         CmpReleaseAllocPage(Page,
                             sizeof(CM_KEY_CONTROL_BLOCK),
-                            CM_KCBS_PER_PAGE);
+                            CM_KCBS_PER_PAGE,
+                            FIELD_OFFSET(CM_KEY_CONTROL_BLOCK, FreeListEntry));
     }
 
     KeReleaseGuardedMutex(&CmpAllocBucketLock);
@@ -185,7 +189,8 @@ CmpAllocateDelayItem(VOID)
     if (IsListEmpty(&CmpFreeDelayItemsListHead) &&
         !CmpCarveAllocPage(&CmpFreeDelayItemsListHead,
                            sizeof(CM_DELAY_ALLOC),
-                           CM_DELAYS_PER_PAGE))
+                           CM_DELAYS_PER_PAGE,
+                           FIELD_OFFSET(CM_DELAY_ALLOC, ListEntry)))
     {
         KeReleaseGuardedMutex(&CmpDelayAllocBucketLock);
         return NULL;
@@ -221,7 +226,8 @@ CmpFreeDelayItem(
     {
         CmpReleaseAllocPage(Page,
                             sizeof(CM_DELAY_ALLOC),
-                            CM_DELAYS_PER_PAGE);
+                            CM_DELAYS_PER_PAGE,
+                            FIELD_OFFSET(CM_DELAY_ALLOC, ListEntry));
     }
 
     KeReleaseGuardedMutex(&CmpDelayAllocBucketLock);

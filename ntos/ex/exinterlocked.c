@@ -9,6 +9,9 @@
 #define NDEBUG
 #include <debug.h>
 
+/* What a checked kernel leaves in the links of an entry it has taken off a list */
+#define EXP_FREED_LIST_POINTER ((PVOID)(ULONG_PTR)0xBADDD0FFBADDD0FFULL)
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -95,6 +98,10 @@ ExInterlockedRemoveHeadList(
     if (!IsListEmpty(ListHead))
     {
         Entry = RemoveHeadList(ListHead);
+#if DBG
+        Entry->Flink = EXP_FREED_LIST_POINTER;
+        Entry->Blink = EXP_FREED_LIST_POINTER;
+#endif
     }
 
     ExpUnlockAtAnyIrql(Lock, Enabled);
@@ -134,6 +141,9 @@ ExInterlockedPopEntryList(
     Enabled = ExpLockAtAnyIrql(Lock);
 
     Entry = PopEntryList(ListHead);
+#if DBG
+    if (Entry != NULL) Entry->Next = EXP_FREED_LIST_POINTER;
+#endif
 
     ExpUnlockAtAnyIrql(Lock, Enabled);
 

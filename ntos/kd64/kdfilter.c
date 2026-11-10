@@ -88,22 +88,15 @@ NtQueryDebugFilterState(
     return KdpFilterAllows(ComponentId, Level) ? (NTSTATUS)TRUE : (NTSTATUS)FALSE;
 }
 
-/*
- * Turns one component's output at one level on or off. Only a caller that may
- * debug the machine gets to change what the machine says.
- */
 NTSTATUS
 NTAPI
-NtSetDebugFilterState(
+KdpSetFilterState(
     _In_ ULONG ComponentId,
     _In_ ULONG Level,
     _In_ BOOLEAN State)
 {
     PULONG ComponentMask;
     ULONG Mask;
-
-    if (!SeSinglePrivilegeCheck(SeDebugPrivilege, ExGetPreviousMode()))
-        return STATUS_ACCESS_DENIED;
 
     ComponentMask = KdpComponentMask(ComponentId);
     if (ComponentMask == NULL)
@@ -117,6 +110,23 @@ NtSetDebugFilterState(
         *ComponentMask &= ~Mask;
 
     return STATUS_SUCCESS;
+}
+
+/*
+ * Turns one component's output at one level on or off. Only a caller that may
+ * debug the machine gets to change what the machine says.
+ */
+NTSTATUS
+NTAPI
+NtSetDebugFilterState(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_ BOOLEAN State)
+{
+    if (!SeSinglePrivilegeCheck(SeDebugPrivilege, ExGetPreviousMode()))
+        return STATUS_ACCESS_DENIED;
+
+    return KdpSetFilterState(ComponentId, Level, State);
 }
 
 /* EOF */

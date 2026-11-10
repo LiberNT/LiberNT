@@ -278,8 +278,9 @@ SepRmCommandServerThread(
         Answer = &Reply.Header;
         Length = 0;
 
+        ASSERT(Reply.Header.MessageId != 0);
         Status = NtAlpcSendWaitReceivePort(SepRmCommandPort,
-                                           0,
+                                           ALPC_MSGFLG_REPLY_MESSAGE,
                                            Answer,
                                            NULL,
                                            NULL,

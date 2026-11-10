@@ -596,6 +596,69 @@ PspApplyCreateAttributes(
 }
 
 /*
+ * The image's file and section were opened by the kernel for itself; the
+ * caller gets them back as handles of its own, in its own table unless it
+ * runs in kernel mode.
+ */
+static
+NTSTATUS
+PspHandOutImageHandles(
+    _In_ PVOID Section,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Inout_ PHANDLE FileHandle,
+    _Out_ PHANDLE SectionHandle)
+{
+    ULONG HandleAttributes = (PreviousMode == KernelMode) ? OBJ_KERNEL_HANDLE : 0;
+    OBJECT_HANDLE_INFORMATION HandleInformation;
+    PFILE_OBJECT FileObject;
+    HANDLE File;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *SectionHandle = NULL;
+
+    Status = ObReferenceObjectByHandle(*FileHandle,
+                                       0,
+                                       IoFileObjectType,
+                                       KernelMode,
+                                       (PVOID*)&FileObject,
+                                       &HandleInformation);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObOpenObjectByPointer(FileObject,
+                                       HandleAttributes,
+                                       NULL,
+                                       HandleInformation.GrantedAccess,
+                                       IoFileObjectType,
+                                       KernelMode,
+                                       &File);
+        ObDereferenceObject(FileObject);
+    }
+
+    ZwClose(*FileHandle);
+    *FileHandle = NULL;
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ObOpenObjectByPointer(Section,
+                                   HandleAttributes,
+                                   NULL,
+                                   SECTION_ALL_ACCESS,
+                                   MmSectionObjectType,
+                                   KernelMode,
+                                   SectionHandle);
+    if (!NT_SUCCESS(Status))
+    {
+        ObCloseHandle(File, KernelMode);
+        return Status;
+    }
+
+    *FileHandle = File;
+    return STATUS_SUCCESS;
+}
+
+/*
  * Opens the image and makes a section of it. Which step failed is reported
  * back in the creation state, because a caller tells a missing file from a
  * file that is not an image by that and nothing else.
@@ -611,6 +674,7 @@ PspOpenImageSection(
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
+    HANDLE SectionHandle;
     HANDLE Handle;
     NTSTATUS Status;
 
@@ -639,14 +703,27 @@ PspOpenImageSection(
         return Status;
     }
 
-    Status = MmCreateSection(Section,
+    /* The file handle is the kernel's own, so the section is made from kernel mode */
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+
+    Status = ZwCreateSection(&SectionHandle,
                              SECTION_ALL_ACCESS,
-                             NULL,
+                             &ObjectAttributes,
                              NULL,
                              PAGE_EXECUTE,
                              SEC_IMAGE,
-                             Handle,
-                             NULL);
+                             Handle);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObReferenceObjectByHandle(SectionHandle,
+                                           SECTION_ALL_ACCESS,
+                                           MmSectionObjectType,
+                                           KernelMode,
+                                           Section,
+                                           NULL);
+        ZwClose(SectionHandle);
+    }
+
     if (!NT_SUCCESS(Status))
     {
         /*
@@ -669,20 +746,58 @@ PspOpenImageSection(
 }
 
 /*
+ * Turns one string of a normalized block into an offset from the block, which
+ * is what a block placed somewhere else has to carry. A string that does not
+ * lie inside the block cannot be carried, so the block is refused.
+ */
+static
+BOOLEAN
+PspDenormalizeParameterString(
+    _Inout_ PUNICODE_STRING String,
+    _In_ ULONG_PTR Block,
+    _In_ SIZE_T Length)
+{
+    ULONG_PTR Offset;
+
+    if (String->Buffer == NULL) return TRUE;
+
+    Offset = (ULONG_PTR)String->Buffer - Block;
+    if ((ULONG_PTR)String->Buffer < Block ||
+        Offset > Length ||
+        String->MaximumLength > Length - Offset ||
+        String->Length > String->MaximumLength)
+    {
+        return FALSE;
+    }
+
+    String->Buffer = (PWSTR)Offset;
+    return TRUE;
+}
+
+/*
  * Writes the process parameters into the new process, so that the loader
- * finds its command line and environment where the block says they are.
+ * finds its command line and environment where the block says they are. The
+ * block is taken from the caller first, because once the new process is
+ * attached the caller's memory is out of reach; it is written denormalized,
+ * and the loader in the new process normalizes it at its new address.
  */
 static
 NTSTATUS
 PspWriteProcessParameters(
     _In_ PEPROCESS Process,
     _In_ PRTL_USER_PROCESS_PARAMETERS Parameters,
+    _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PVOID *Remote)
 {
+    PRTL_USER_PROCESS_PARAMETERS Captured = NULL;
+    PWCHAR Environment = NULL;
+    SIZE_T EnvironmentSize = 0;
+    PVOID EnvironmentBase = NULL;
     KAPC_STATE ApcState;
-    SIZE_T Length;
+    SIZE_T AllocationSize;
+    SIZE_T Length = 0;
     PVOID Base = NULL;
-    NTSTATUS Status;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
@@ -690,55 +805,136 @@ PspWriteProcessParameters(
 
     if (Parameters == NULL) return STATUS_SUCCESS;
 
-    Length = Parameters->Length;
-    if (Length < sizeof(RTL_USER_PROCESS_PARAMETERS))
-        return STATUS_INVALID_PARAMETER;
-
-    KeStackAttachProcess(&Process->Pcb, &ApcState);
-
-    Status = ZwAllocateVirtualMemory(NtCurrentProcess(),
-                                     &Base,
-                                     0,
-                                     &Length,
-                                     MEM_COMMIT | MEM_RESERVE,
-                                     PAGE_READWRITE);
-    if (NT_SUCCESS(Status))
+    _SEH2_TRY
     {
-        _SEH2_TRY
+        if (PreviousMode != KernelMode)
+            ProbeForRead(Parameters, sizeof(RTL_USER_PROCESS_PARAMETERS), sizeof(ULONG));
+
+        Length = Parameters->Length;
+        if (Length < sizeof(RTL_USER_PROCESS_PARAMETERS))
+            _SEH2_YIELD(return STATUS_INVALID_PARAMETER);
+
+        if (PreviousMode != KernelMode)
+            ProbeForRead(Parameters, Length, sizeof(ULONG));
+
+        Captured = ExAllocatePoolWithTag(PagedPool, Length, TAG_PS_PROCESS_PARAMETERS);
+        if (Captured == NULL)
+            _SEH2_YIELD(return STATUS_INSUFFICIENT_RESOURCES);
+
+        RtlCopyMemory(Captured, Parameters, Length);
+
+        if (Captured->Environment != NULL)
         {
-            RtlCopyMemory(Base, Parameters, Parameters->Length);
-            ((PRTL_USER_PROCESS_PARAMETERS)Base)->MaximumLength =
-                (ULONG)Length;
+            PWCHAR Cursor = Captured->Environment;
+
+            if (PreviousMode != KernelMode)
+                ProbeForRead(Cursor, sizeof(WCHAR), sizeof(WCHAR));
+
+            /* The block ends at the empty string after the last variable */
+            while (*Cursor != UNICODE_NULL)
+            {
+                Cursor += wcslen(Cursor) + 1;
+            }
+
+            EnvironmentSize = ((PUCHAR)(Cursor + 1)) - (PUCHAR)Captured->Environment;
+
+            if (PreviousMode != KernelMode)
+                ProbeForRead(Captured->Environment, EnvironmentSize, sizeof(WCHAR));
+
+            Environment = ExAllocatePoolWithTag(PagedPool,
+                                                EnvironmentSize,
+                                                TAG_PS_PROCESS_PARAMETERS);
+            if (Environment == NULL)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+            }
+            else
+            {
+                RtlCopyMemory(Environment, Captured->Environment, EnvironmentSize);
+            }
         }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (NT_SUCCESS(Status) && (Captured->Flags & RTL_USER_PROCESS_PARAMETERS_NORMALIZED))
+    {
+        ULONG_PTR Block = (ULONG_PTR)Parameters;
+
+        if (!PspDenormalizeParameterString(&Captured->CurrentDirectory.DosPath, Block, Length) ||
+            !PspDenormalizeParameterString(&Captured->DllPath, Block, Length) ||
+            !PspDenormalizeParameterString(&Captured->ImagePathName, Block, Length) ||
+            !PspDenormalizeParameterString(&Captured->CommandLine, Block, Length) ||
+            !PspDenormalizeParameterString(&Captured->WindowTitle, Block, Length) ||
+            !PspDenormalizeParameterString(&Captured->DesktopInfo, Block, Length) ||
+            !PspDenormalizeParameterString(&Captured->ShellInfo, Block, Length) ||
+            !PspDenormalizeParameterString(&Captured->RuntimeData, Block, Length))
         {
-            Status = _SEH2_GetExceptionCode();
+            Status = STATUS_INVALID_PARAMETER;
         }
-        _SEH2_END;
+
+        Captured->Flags &= ~RTL_USER_PROCESS_PARAMETERS_NORMALIZED;
     }
 
-    KeUnstackDetachProcess(&ApcState);
-
-    if (!NT_SUCCESS(Status)) return Status;
-
-    *Remote = Base;
-
-    if (Process->Peb != NULL)
+    if (NT_SUCCESS(Status))
     {
         KeStackAttachProcess(&Process->Pcb, &ApcState);
 
-        _SEH2_TRY
+        if (Environment != NULL)
         {
-            Process->Peb->ProcessParameters = Base;
+            AllocationSize = EnvironmentSize;
+            Status = ZwAllocateVirtualMemory(NtCurrentProcess(),
+                                             &EnvironmentBase,
+                                             0,
+                                             &AllocationSize,
+                                             MEM_COMMIT | MEM_RESERVE,
+                                             PAGE_READWRITE);
         }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+
+        if (NT_SUCCESS(Status))
         {
-            Status = _SEH2_GetExceptionCode();
+            AllocationSize = Length;
+            Status = ZwAllocateVirtualMemory(NtCurrentProcess(),
+                                             &Base,
+                                             0,
+                                             &AllocationSize,
+                                             MEM_COMMIT | MEM_RESERVE,
+                                             PAGE_READWRITE);
         }
-        _SEH2_END;
+
+        if (NT_SUCCESS(Status))
+        {
+            Captured->MaximumLength = (ULONG)AllocationSize;
+            Captured->Environment = EnvironmentBase;
+            Captured->EnvironmentSize = EnvironmentSize;
+
+            _SEH2_TRY
+            {
+                if (Environment != NULL)
+                    RtlCopyMemory(EnvironmentBase, Environment, EnvironmentSize);
+
+                RtlCopyMemory(Base, Captured, Length);
+
+                if (Process->Peb != NULL)
+                    Process->Peb->ProcessParameters = Base;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
 
         KeUnstackDetachProcess(&ApcState);
     }
+
+    if (Environment != NULL) ExFreePoolWithTag(Environment, TAG_PS_PROCESS_PARAMETERS);
+    if (Captured != NULL) ExFreePoolWithTag(Captured, TAG_PS_PROCESS_PARAMETERS);
+
+    if (NT_SUCCESS(Status)) *Remote = Base;
 
     return Status;
 }
@@ -857,37 +1053,20 @@ NtCreateUserProcess(
         return Status;
     }
 
-    Status = ObOpenObjectByPointer(Section,
-                                   OBJ_KERNEL_HANDLE,
-                                   NULL,
-                                   SECTION_ALL_ACCESS,
-                                   MmSectionObjectType,
-                                   KernelMode,
-                                   &SectionHandle);
-    ObDereferenceObject(Section);
-
+    Status = PspCreateImageProcess(&NewProcess,
+                                   ProcessDesiredAccess,
+                                   ProcessObjectAttributes,
+                                   (Attributes.ParentProcess != NULL)
+                                       ? Attributes.ParentProcess
+                                       : NtCurrentProcess(),
+                                   ProcessFlags,
+                                   Section,
+                                   Attributes.DebugPort,
+                                   Attributes.HandleList,
+                                   Attributes.HandleCount);
     if (!NT_SUCCESS(Status))
     {
-        ZwClose(FileHandle);
-        return Status;
-    }
-
-    Status = PspCreateProcess(&NewProcess,
-                              ProcessDesiredAccess,
-                              ProcessObjectAttributes,
-                              (Attributes.ParentProcess != NULL)
-                                  ? Attributes.ParentProcess
-                                  : NtCurrentProcess(),
-                              ProcessFlags,
-                              SectionHandle,
-                              Attributes.DebugPort,
-                              NULL,
-                              FALSE,
-                              Attributes.HandleList,
-                              Attributes.HandleCount);
-    if (!NT_SUCCESS(Status))
-    {
-        ZwClose(SectionHandle);
+        ObDereferenceObject(Section);
         ZwClose(FileHandle);
         return Status;
     }
@@ -928,6 +1107,7 @@ NtCreateUserProcess(
         {
             Status = PspWriteProcessParameters(Process,
                                                ProcessParameters,
+                                               PreviousMode,
                                                &RemoteParameters);
         }
     }
@@ -952,10 +1132,11 @@ NtCreateUserProcess(
     if (NT_SUCCESS(Status))
     {
         RtlZeroMemory(&Context, sizeof(Context));
+        /* The first thread's entry is given the process environment block */
         PsArchInitializeUserThreadContext(&Context,
                                           PspRtlUserThreadStart,
                                           ImageInformation.TransferAddress,
-                                          NULL,
+                                          Process->Peb,
                                           InitialTeb.StackBase);
 
         Status = PspCreateThread(&NewThread,
@@ -1048,9 +1229,22 @@ NtCreateUserProcess(
             ObDereferenceObject(Process);
         }
 
+        if (NewThread != NULL) ZwClose(NewThread);
         ZwClose(NewProcess);
-        ZwClose(SectionHandle);
+        ObDereferenceObject(Section);
         ZwClose(FileHandle);
+        return Status;
+    }
+
+    /* The image's file and section go back as handles of the caller's own */
+    Status = PspHandOutImageHandles(Section, PreviousMode, &FileHandle, &SectionHandle);
+    ObDereferenceObject(Section);
+    if (!NT_SUCCESS(Status))
+    {
+        PspTerminateProcess(Process, Status);
+        ObDereferenceObject(Process);
+        ZwClose(NewThread);
+        ZwClose(NewProcess);
         return Status;
     }
 

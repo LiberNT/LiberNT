@@ -74,9 +74,6 @@ KeInitializeEvent(
     Event->Header.Type = (UCHAR)Type;
     Event->Header.Signalling = FALSE;
     Event->Header.Size = sizeof(KEVENT) / sizeof(LONG);
-    Event->Header.Hand = 0;
-    Event->Header.Inserted = FALSE;
-    Event->Header.DebugActive = FALSE;
     Event->Header.SignalState = State ? 1 : 0;
     InitializeListHead(&Event->Header.WaitListHead);
 }
@@ -294,7 +291,6 @@ KeInitializeSemaphore(
     Semaphore->Header.Type = SemaphoreObject;
     Semaphore->Header.Signalling = FALSE;
     Semaphore->Header.Size = sizeof(KSEMAPHORE) / sizeof(LONG);
-    Semaphore->Header.Hand = 0;
     Semaphore->Header.Inserted = FALSE;
     Semaphore->Header.DebugActive = FALSE;
     Semaphore->Header.SignalState = Count;
@@ -324,14 +320,15 @@ KeReleaseSemaphore(
     OldIrql = KiAcquireDispatcherLock();
 
     PreviousState = Semaphore->Header.SignalState;
-    NewState = PreviousState + Adjustment;
 
-    /* Both an overflow and a pass over the limit are the same mistake */
-    if ((NewState > Semaphore->Limit) || (NewState < PreviousState))
+    /* Room is measured below the limit, so a count near the top of the range cannot wrap */
+    if (Adjustment > Semaphore->Limit - PreviousState)
     {
         KiReleaseDispatcherLock(OldIrql);
         ExRaiseStatus(STATUS_SEMAPHORE_LIMIT_EXCEEDED);
     }
+
+    NewState = PreviousState + Adjustment;
 
     Semaphore->Header.SignalState = NewState;
 
@@ -388,11 +385,10 @@ KeInitializeMutant(
     PKTHREAD Thread;
     KIRQL OldIrql;
 
-    Mutant->Header.Type = MutantObject;
-    Mutant->Header.Signalling = FALSE;
-    Mutant->Header.Size = sizeof(KMUTANT) / sizeof(LONG);
-    Mutant->Header.Inserted = FALSE;
-    Mutant->Header.DebugActive = FALSE;
+    /* A mutant's header carries nothing but its type: the size byte stays clear on Windows 10 and later */
+    Mutant->Header.Lock = MutantObject;
+    Mutant->MutantListEntry.Flink = NULL;
+    Mutant->MutantListEntry.Blink = NULL;
     Mutant->Abandoned = FALSE;
     Mutant->ApcDisable = 0;
     InitializeListHead(&Mutant->Header.WaitListHead);
@@ -425,11 +421,9 @@ KeInitializeMutex(
 {
     UNREFERENCED_PARAMETER(Level);
 
-    Mutex->Header.Type = MutantObject;
-    Mutex->Header.Signalling = FALSE;
-    Mutex->Header.Size = sizeof(KMUTEX) / sizeof(LONG);
-    Mutex->Header.Inserted = FALSE;
-    Mutex->Header.DebugActive = FALSE;
+    Mutex->Header.Lock = MutantObject;
+    Mutex->MutantListEntry.Flink = NULL;
+    Mutex->MutantListEntry.Blink = NULL;
     Mutex->Header.SignalState = 1;
     Mutex->OwnerThread = NULL;
     Mutex->Abandoned = FALSE;
@@ -538,7 +532,6 @@ KeInitializeGate(
     Gate->Header.Type = GateObject;
     Gate->Header.Signalling = FALSE;
     Gate->Header.Size = sizeof(KGATE) / sizeof(LONG);
-    Gate->Header.Hand = 0;
     Gate->Header.Inserted = FALSE;
     Gate->Header.DebugActive = FALSE;
     Gate->Header.SignalState = 0;
@@ -657,7 +650,8 @@ KeWaitForGate(
         KiSetThreadSwapBusy(Thread);
         KiReleaseThreadLock(Thread);
 
-        WaitStatus = KiSwapThread(Thread, KeGetCurrentPrcb(), FALSE);
+        /* Its wake counts it back into its queue, so blocking here has to count it out */
+        WaitStatus = KiSwapThread(Thread, KeGetCurrentPrcb(), TRUE);
         Thread->WaitBlockList = NULL;
 
         if (WaitStatus != STATUS_KERNEL_APC)

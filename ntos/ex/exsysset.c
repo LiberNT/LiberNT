@@ -26,7 +26,7 @@ extern ULONG ExpRegistryQuotaUsed;
  * part of the address space the window manager's own session owns, and it is
  * entered as a driver rather than called.
  */
-#define EXP_GDI_DRIVER_FLAGS 0
+#define EXP_LOAD_IMAGE_IN_SESSION 1
 
 NTSTATUS
 NTAPI
@@ -60,8 +60,6 @@ ExpLoadGdiDriver(
 
     PAGED_CODE();
 
-    UNREFERENCED_PARAMETER(InSessionSpace);
-
     Status = ExpCaptureUnicodeString(&Name, &Information->DriverName);
     if (!NT_SUCCESS(Status))
     {
@@ -71,7 +69,7 @@ ExpLoadGdiDriver(
     Status = MmLoadSystemImage(&Name,
                                NULL,
                                NULL,
-                               EXP_GDI_DRIVER_FLAGS,
+                               InSessionSpace ? EXP_LOAD_IMAGE_IN_SESSION : 0,
                                &ModuleObject,
                                &ImageBase);
 
@@ -83,6 +81,8 @@ ExpLoadGdiDriver(
     }
 
     Entry = ModuleObject;
+    ASSERT(Entry->DllBase == ImageBase);
+    ASSERT(!InSessionSpace || MmIsSessionAddress(ImageBase));
 
     Information->ImageAddress = ImageBase;
     Information->SectionPointer = ModuleObject;
@@ -369,22 +369,27 @@ ExpSetObjectSecurityMode(
 }
 
 /*
- * Adds the window manager's own service table to the ones a call from user mode
- * may be dispatched through. It is the second table, and it may only be added
- * once, because the table it names has to outlive every call made through it.
+ * Brings in the window manager, named by its image, and starts it. It puts its
+ * own service table in place as it starts, by calling the kernel back, so
+ * nothing more is done with the table here.
  */
 NTSTATUS
 NTAPI
 ExpExtendServiceTable(
-    _In_ PSYSTEM_GDI_DRIVER_INFORMATION Information,
+    _In_ PUNICODE_STRING ImageName,
     _In_ ULONG Length)
 {
-    SYSTEM_GDI_DRIVER_INFORMATION Captured;
+    PKTHREAD Thread = KeGetCurrentThread();
+    KPROCESSOR_MODE CallerMode;
+    PLDR_DATA_TABLE_ENTRY Entry;
+    PVOID ModuleObject = NULL;
+    PVOID ImageBase = NULL;
+    UNICODE_STRING Name;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    if (Length != sizeof(SYSTEM_GDI_DRIVER_INFORMATION))
+    if (Length != sizeof(UNICODE_STRING))
     {
         return STATUS_INFO_LENGTH_MISMATCH;
     }
@@ -394,21 +399,43 @@ ExpExtendServiceTable(
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
-    Captured = *Information;
-
-    Status = ExpLoadGdiDriver(&Captured, TRUE);
+    Status = ExpCaptureUnicodeString(&Name, ImageName);
     if (!NT_SUCCESS(Status))
     {
         return Status;
     }
 
-    /*
-     * The driver puts its own table in place as it starts, by calling the
-     * kernel back, so nothing more is done with it here.
-     */
-    *Information = Captured;
+    /* TODO: load it into the session's own space, once per session */
+    Status = MmLoadSystemImage(&Name,
+                               NULL,
+                               NULL,
+                               EXP_LOAD_IMAGE_IN_SESSION,
+                               &ModuleObject,
+                               &ImageBase);
 
-    return STATUS_SUCCESS;
+    ExpFreeCapturedUnicodeString(&Name);
+
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    Entry = ModuleObject;
+    ASSERT(Entry->DllBase == ImageBase);
+    ASSERT(MmIsSessionAddress(ImageBase));
+
+    /* A driver starts as a call from the kernel, though the session's process asked for it */
+    CallerMode = Thread->PreviousMode;
+    Thread->PreviousMode = KernelMode;
+    Status = IoCreateDriver(NULL, (PDRIVER_INITIALIZE)Entry->EntryPoint);
+    Thread->PreviousMode = CallerMode;
+
+    if (!NT_SUCCESS(Status))
+    {
+        MmUnloadSystemImage(ModuleObject);
+    }
+
+    return Status;
 }
 
 NTSTATUS

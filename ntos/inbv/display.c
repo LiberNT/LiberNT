@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #include <ntimage.h>
 #include "inbvp.h"
+#include "inbvgop.h"
 #define NDEBUG
 #include <debug.h>
 
@@ -275,6 +276,14 @@ NTAPI
 InbvNotifyDisplayOwnershipLost(
     _In_ INBV_RESET_DISPLAY_PARAMETERS Callback)
 {
+    /* The boot screen is finished and kept for whoever puts it up next */
+    if (KeGetCurrentIrql() == PASSIVE_LEVEL)
+    {
+        InbvGopLogoStop();
+        InbvGopClearStatus();
+        InbvGopCaptureScreen();
+    }
+
     InbvAcquireLock();
 
     InbvResetDisplayCallback = Callback;

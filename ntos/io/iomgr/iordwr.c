@@ -192,13 +192,22 @@ IopIssueRequest(
     _In_ PIOP_REQUEST Request,
     _In_ IOP_TRANSFER_TYPE TransferType)
 {
+    BOOLEAN Deferred;
     NTSTATUS Status;
 
+    KeClearEvent(&Request->FileObject->Event);
     IopQueueIrpToThread(Request->Irp);
 
     IopUpdateOperationCount(TransferType);
 
+    Deferred = BooleanFlagOn(Request->Irp->Flags, IRP_DEFER_IO_COMPLETION);
+
     Status = IoCallDriver(Request->DeviceObject, Request->Irp);
+
+    if (Deferred && Status != STATUS_PENDING)
+    {
+        IopCompleteDeferredIrp(Request->Irp, Request->FileObject);
+    }
 
     if (!Request->SynchIo) return Status;
 
@@ -223,6 +232,106 @@ IopIssueRequest(
     return Status;
 }
 
+/*
+ * A file its file system keeps in the cache can often be read or written with
+ * no packet at all. The file system is asked first; when it does not take the
+ * request, or takes it without finishing it, the packet goes down as usual.
+ */
+static
+BOOLEAN
+IopTryFastIo(
+    _In_ PIOP_REQUEST Request,
+    _In_ BOOLEAN Write,
+    _In_ PLARGE_INTEGER ByteOffset,
+    _In_ ULONG Length,
+    _In_ ULONG Key,
+    _In_ PVOID Buffer,
+    _Out_ PIO_STATUS_BLOCK IoStatus)
+{
+    PFILE_OBJECT FileObject = Request->FileObject;
+    PFAST_IO_DISPATCH FastIo;
+
+    /* TODO: a file opened for asynchronous I/O always gets a packet */
+    if (!Request->SynchIo || FileObject->PrivateCacheMap == NULL) return FALSE;
+
+    FastIo = Request->DeviceObject->DriverObject->FastIoDispatch;
+    if (FastIo == NULL) return FALSE;
+
+    /* The two oldest members of the table are read without asking its size, which a driver need not have set */
+    if (Write)
+    {
+        if (FastIo->FastIoWrite == NULL) return FALSE;
+
+        if (!FastIo->FastIoWrite(FileObject,
+                                 ByteOffset,
+                                 Length,
+                                 TRUE,
+                                 Key,
+                                 Buffer,
+                                 IoStatus,
+                                 Request->DeviceObject))
+        {
+            return FALSE;
+        }
+
+        return (BOOLEAN)(IoStatus->Status == STATUS_SUCCESS);
+    }
+
+    if (FastIo->FastIoRead == NULL) return FALSE;
+
+    if (!FastIo->FastIoRead(FileObject,
+                            ByteOffset,
+                            Length,
+                            TRUE,
+                            Key,
+                            Buffer,
+                            IoStatus,
+                            Request->DeviceObject))
+    {
+        return FALSE;
+    }
+
+    return (BOOLEAN)(IoStatus->Status == STATUS_SUCCESS ||
+                     IoStatus->Status == STATUS_BUFFER_OVERFLOW ||
+                     IoStatus->Status == STATUS_END_OF_FILE);
+}
+
+/* Ends a request the file system finished without a packet */
+static
+NTSTATUS
+IopFinishFastIo(
+    _In_ PIOP_REQUEST Request,
+    _In_ PIO_STATUS_BLOCK IoStatus,
+    _Out_ PIO_STATUS_BLOCK UserIosb,
+    _In_ IOP_TRANSFER_TYPE TransferType)
+{
+    NTSTATUS Status = IoStatus->Status;
+
+    IopUpdateOperationCount(TransferType);
+
+    _SEH2_TRY
+    {
+        IopWriteIoStatusBlock(UserIosb,
+                              IoStatus,
+                              IopIs32BitFileIo(Request->FileObject,
+                                               Request->PreviousMode));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (Request->EventObject != NULL)
+    {
+        KeSetEvent(Request->EventObject, 0, FALSE);
+    }
+
+    IopAbortRequest(Request);
+
+    return Status;
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 NTSTATUS
@@ -239,6 +348,7 @@ NtReadFile(
     _In_opt_ PULONG Key)
 {
     LARGE_INTEGER CapturedOffset;
+    IO_STATUS_BLOCK FastIoStatus;
     IOP_REQUEST Request;
     ULONG CapturedKey = 0;
     NTSTATUS Status;
@@ -304,13 +414,32 @@ NtReadFile(
         (CapturedOffset.HighPart == -1 &&
          CapturedOffset.LowPart == FILE_USE_FILE_POINTER_POSITION))
     {
-        if (!(Request.FileObject->Flags & FO_SYNCHRONOUS_IO))
+        /* Pipes and mailslots have no position, so they need no offset */
+        if (!(Request.FileObject->Flags &
+              (FO_SYNCHRONOUS_IO | FO_NAMED_PIPE | FO_MAILSLOT)))
         {
             IopAbortRequest(&Request);
             return STATUS_INVALID_PARAMETER;
         }
 
         CapturedOffset = Request.FileObject->CurrentByteOffset;
+    }
+
+    if (IopTryFastIo(&Request,
+                     FALSE,
+                     &CapturedOffset,
+                     Length,
+                     CapturedKey,
+                     Buffer,
+                     &FastIoStatus))
+    {
+        Request.FileObject->CurrentByteOffset.QuadPart =
+            CapturedOffset.QuadPart + FastIoStatus.Information;
+
+        return IopFinishFastIo(&Request,
+                               &FastIoStatus,
+                               IoStatusBlock,
+                               IopReadTransfer);
     }
 
     Irp->Flags = IRP_READ_OPERATION | IRP_DEFER_IO_COMPLETION;
@@ -400,6 +529,7 @@ NtWriteFile(
     _In_opt_ PULONG Key)
 {
     LARGE_INTEGER CapturedOffset;
+    IO_STATUS_BLOCK FastIoStatus;
     ACCESS_MASK DesiredAccess;
     IOP_REQUEST Request;
     ULONG CapturedKey = 0;
@@ -479,13 +609,37 @@ NtWriteFile(
         (CapturedOffset.HighPart == -1 &&
          CapturedOffset.LowPart == FILE_USE_FILE_POINTER_POSITION))
     {
-        if (!(Request.FileObject->Flags & FO_SYNCHRONOUS_IO))
+        /* Pipes and mailslots have no position, so they need no offset */
+        if (!(Request.FileObject->Flags &
+              (FO_SYNCHRONOUS_IO | FO_NAMED_PIPE | FO_MAILSLOT)))
         {
             IopAbortRequest(&Request);
             return STATUS_INVALID_PARAMETER;
         }
 
         CapturedOffset = Request.FileObject->CurrentByteOffset;
+    }
+
+    if (IopTryFastIo(&Request,
+                     TRUE,
+                     &CapturedOffset,
+                     Length,
+                     CapturedKey,
+                     Buffer,
+                     &FastIoStatus))
+    {
+        /* A write to the end of the file has no offset to count from; the file system moved the position itself */
+        if (!(CapturedOffset.HighPart == -1 &&
+              CapturedOffset.LowPart == FILE_WRITE_TO_END_OF_FILE))
+        {
+            Request.FileObject->CurrentByteOffset.QuadPart =
+                CapturedOffset.QuadPart + FastIoStatus.Information;
+        }
+
+        return IopFinishFastIo(&Request,
+                               &FastIoStatus,
+                               IoStatusBlock,
+                               IopWriteTransfer);
     }
 
     Irp->Flags = IRP_WRITE_OPERATION | IRP_DEFER_IO_COMPLETION;
@@ -852,7 +1006,7 @@ NtLockFile(
         CapturedLength = *Length;
     }
 
-    Request.Irp->Flags = IRP_SYNCHRONOUS_API;
+    Request.Irp->Flags = 0;
     Request.StackPtr->MinorFunction = IRP_MN_LOCK;
     Request.StackPtr->Flags = 0;
 
@@ -1278,6 +1432,8 @@ IopNotifyChangeDirectory(
             IRP_MN_NOTIFY_CHANGE_DIRECTORY_EX;
     }
 
+    Irp->UserBuffer = Buffer;
+
     if (BufferSize != 0)
     {
         Mdl = IoAllocateMdl(Buffer, BufferSize, FALSE, TRUE, Irp);
@@ -1444,6 +1600,8 @@ IopQueryDirectoryFile(
         (FileName != NULL) ? &CapturedName : NULL;
     Request.StackPtr->Parameters.QueryDirectory.FileIndex = 0;
 
+    Irp->UserBuffer = FileInformation;
+
     if (Length != 0)
     {
         Mdl = IoAllocateMdl(FileInformation, Length, FALSE, TRUE, Irp);
@@ -1609,6 +1767,8 @@ NtQueryEaFile(
     Request.StackPtr->Parameters.QueryEa.EaListLength = EaListLength;
     Request.StackPtr->Parameters.QueryEa.EaIndex = CapturedIndex;
 
+    Irp->UserBuffer = Buffer;
+
     if (Length != 0)
     {
         Mdl = IoAllocateMdl(Buffer, Length, FALSE, TRUE, Irp);
@@ -1666,6 +1826,8 @@ NtSetEaFile(
     Irp->Flags = IRP_BUFFERED_IO | IRP_SYNCHRONOUS_API;
 
     Request.StackPtr->Parameters.SetEa.Length = EaBufferSize;
+
+    Irp->UserBuffer = EaBuffer;
 
     if (EaBufferSize != 0)
     {
@@ -1738,6 +1900,8 @@ NtQueryQuotaInformationFile(
     Request.StackPtr->Parameters.QueryQuota.SidListLength = SidListLength;
     Request.StackPtr->Parameters.QueryQuota.StartSid = StartSid;
 
+    Irp->UserBuffer = Buffer;
+
     if (Length != 0)
     {
         Mdl = IoAllocateMdl(Buffer, Length, FALSE, TRUE, Irp);
@@ -1795,6 +1959,8 @@ NtSetQuotaInformationFile(
     Irp->Flags = IRP_BUFFERED_IO | IRP_SYNCHRONOUS_API;
 
     Request.StackPtr->Parameters.SetQuota.Length = BufferLength;
+
+    Irp->UserBuffer = Buffer;
 
     if (BufferLength != 0)
     {

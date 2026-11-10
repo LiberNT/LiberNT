@@ -1007,6 +1007,8 @@ KiEnterServiceException(
                                            KiArm64ContextNeedsNonvolatiles(Context, PreviousMode));
     }
 
+    if (ExceptionFrame == NULL) ExceptionFrame = &State->ExceptionFrame;
+
     *ExceptionFrame = *((PKEXCEPTION_FRAME)TrapFrame - 1);
     return ExceptionFrame;
 }

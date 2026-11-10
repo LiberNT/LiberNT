@@ -862,3 +862,41 @@ NtImpersonateThread(
 
     return Status;
 }
+
+/*
+ * The access an open by identifier or name starts from. A caller holding the
+ * debug privilege is given what it asks for, whatever the object's descriptor
+ * says; everyone else goes through the descriptor.
+ */
+NTSTATUS
+NTAPI
+PspCreateOpenAccessState(
+    _Out_ PACCESS_STATE AccessState,
+    _Out_ PAUX_ACCESS_DATA AuxData,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_TYPE ObjectType,
+    _In_ ACCESS_MASK AllAccess,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = SeCreateAccessState(AccessState,
+                                 AuxData,
+                                 DesiredAccess,
+                                 &ObjectType->TypeInfo.GenericMapping);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
+    {
+        if (AccessState->RemainingDesiredAccess & MAXIMUM_ALLOWED)
+            AccessState->PreviouslyGrantedAccess |= AllAccess;
+        else
+            AccessState->PreviouslyGrantedAccess |= AccessState->RemainingDesiredAccess;
+
+        AccessState->RemainingDesiredAccess = 0;
+    }
+
+    return STATUS_SUCCESS;
+}

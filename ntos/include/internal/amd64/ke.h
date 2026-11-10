@@ -207,7 +207,7 @@ KiGetLinkedTrapFrame(PKTRAP_FRAME TrapFrame)
 
 typedef struct _KI_SERVICE_EXCEPTION_STATE
 {
-    UCHAR Reserved;
+    KEXCEPTION_FRAME ExceptionFrame;
 } KI_SERVICE_EXCEPTION_STATE, *PKI_SERVICE_EXCEPTION_STATE;
 
 FORCEINLINE
@@ -222,8 +222,16 @@ KiEnterServiceException(
 {
     UNREFERENCED_PARAMETER(Context);
     UNREFERENCED_PARAMETER(PreviousMode);
-    UNREFERENCED_PARAMETER(State);
     Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
+
+    /* A system service has no frame of nonvolatiles; the state carries one */
+    if (ExceptionFrame == NULL)
+    {
+        /* FIXME: nonvolatiles a partial context leaves out are zeroed, not kept */
+        RtlZeroMemory(&State->ExceptionFrame, sizeof(State->ExceptionFrame));
+        ExceptionFrame = &State->ExceptionFrame;
+    }
+
     return ExceptionFrame;
 }
 

@@ -244,13 +244,14 @@ CmpAttachHiveFile(
     HANDLE Log = NULL;
     NTSTATUS Status;
 
+    /* The hive is already in memory, so only its log may be missing and made */
     Status = CmpOpenHiveFiles(FileName,
                               NULL,
                               &Primary,
                               &Log,
                               &PrimaryDisposition,
                               &LogDisposition,
-                              FALSE,
+                              TRUE,
                               TRUE,
                               FALSE,
                               NULL);

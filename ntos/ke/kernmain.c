@@ -81,11 +81,44 @@ KSPIN_LOCK AfdWorkQueueSpinLock;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+typedef struct _KI_STACK_CALLOUT
+{
+    PEXPAND_STACK_CALLOUT Callout;
+    PVOID Parameter;
+    SIZE_T Size;
+    NTSTATUS Status;
+    BOOLEAN InterruptsEnabled;
+} KI_STACK_CALLOUT, *PKI_STACK_CALLOUT;
+
 /*
- * Runs a callout on a stack of its own. The thread's own stack pointer is
- * moved to the new stack for the duration and put back afterwards, so the
- * callout sees a stack as deep as it asked for without every thread in the
- * system having to carry one.
+ * Entered on the new stack with interrupts off and the thread's limits already
+ * naming that stack, and left the same way, so an interrupt never sees a stack
+ * pointer outside the limits.
+ */
+VOID
+FASTCALL
+KiRunStackCallout(
+    _In_ PVOID Context)
+{
+    PKI_STACK_CALLOUT Request = Context;
+    PKTHREAD Thread = KeGetCurrentThread();
+
+    ASSERT((ULONG_PTR)&Request >= Thread->StackLimit);
+    ASSERT((ULONG_PTR)&Request < (ULONG_PTR)Thread->StackBase);
+
+    KeRestoreInterrupts(Request->InterruptsEnabled);
+
+    Request->Status = MmGrowKernelStackEx(&Request, (ULONG)Request->Size);
+    if (NT_SUCCESS(Request->Status)) Request->Callout(Request->Parameter);
+
+    (VOID)KeDisableInterrupts();
+}
+
+/*
+ * Runs a callout on a stack of its own. Only the stack pointer moves: the
+ * frames already on the thread's stack stay where they are, so whatever points
+ * into them, such as an event or a status block a pending request names, stays
+ * valid while the callout runs.
  */
 static
 NTSTATUS
@@ -95,36 +128,38 @@ KiCalloutOnNewStack(
     _In_ SIZE_T Size)
 {
     PKTHREAD Thread = KeGetCurrentThread();
-    PVOID NewStack, OldStack;
-    PVOID OldInitialStack, OldStackBase;
+    KI_STACK_CALLOUT Request;
     ULONG_PTR OldStackLimit;
+    PVOID OldStackBase;
+    PVOID NewStack;
 
-    UNREFERENCED_PARAMETER(Size);
+    ASSERT(Size <= KERNEL_LARGE_STACK_SIZE);
 
     NewStack = MmCreateKernelStack(TRUE, (UCHAR)Thread->IdealProcessor);
-    if (NewStack == NULL)
-        return STATUS_NO_MEMORY;
+    if (NewStack == NULL) return STATUS_NO_MEMORY;
 
-    OldInitialStack = Thread->InitialStack;
+    Request.Callout = Callout;
+    Request.Parameter = Parameter;
+    Request.Size = Size;
+    Request.Status = STATUS_SUCCESS;
+
     OldStackBase = Thread->StackBase;
     OldStackLimit = Thread->StackLimit;
 
-    OldStack = KeSwitchKernelStack(NewStack,
-                                   (PVOID)((ULONG_PTR)NewStack -
-                                           KERNEL_LARGE_STACK_SIZE));
+    Request.InterruptsEnabled = KeDisableInterrupts();
+    Thread->StackBase = NewStack;
+    Thread->StackLimit = (ULONG_PTR)NewStack - KERNEL_LARGE_STACK_COMMIT;
 
-    Callout(Parameter);
+    KiCallOnKernelStack(&Request, NewStack);
 
-    KeSwitchKernelStack(OldStack,
-                        (PVOID)((ULONG_PTR)OldInitialStack -
-                                KERNEL_STACK_SIZE));
-
-    Thread->InitialStack = OldInitialStack;
+    /* FIXME: an exception the callout does not handle cannot unwind past this frame to the old stack */
+    ASSERT(Thread->StackBase == NewStack);
     Thread->StackBase = OldStackBase;
     Thread->StackLimit = OldStackLimit;
+    KeRestoreInterrupts(Request.InterruptsEnabled);
 
     MmDeleteKernelStack(NewStack, TRUE);
-    return STATUS_SUCCESS;
+    return Request.Status;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/

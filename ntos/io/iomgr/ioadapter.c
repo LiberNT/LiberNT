@@ -42,13 +42,21 @@ IopAllocateAdapterChannel(
     _In_ PDRIVER_CONTROL ExecutionRoutine,
     _In_ PVOID Context)
 {
-    PDMA_OPERATIONS Operations = DmaAdapter->DmaOperations;
+    PWAIT_CONTEXT_BLOCK Wcb = &DeviceObject->Queue.Wcb;
 
-    return Operations->AllocateAdapterChannel(DmaAdapter,
-                                              DeviceObject,
-                                              NumberOfMapRegisters,
-                                              ExecutionRoutine,
-                                              Context);
+    /*
+     * The device object carries the block a request for the adapter waits
+     * in, one request at a time. The HAL's own table sends drivers here, so
+     * the HAL is called directly rather than through that table.
+     */
+    Wcb->DeviceObject = DeviceObject;
+    Wcb->CurrentIrp = DeviceObject->CurrentIrp;
+    Wcb->DeviceContext = Context;
+
+    return HalAllocateAdapterChannel((PADAPTER_OBJECT)DmaAdapter,
+                                     Wcb,
+                                     NumberOfMapRegisters,
+                                     ExecutionRoutine);
 }
 
 BOOLEAN

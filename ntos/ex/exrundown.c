@@ -111,11 +111,12 @@ ExfAcquireRundownProtection(
     return ExfAcquireRundownProtectionEx(RunRef, 1);
 }
 
+static
 VOID
-FASTCALL
-ExfReleaseRundownProtectionEx(
+ExpReleaseRundown(
     _Inout_ PEX_RUNDOWN_REF RunRef,
-    _In_ ULONG Count)
+    _In_ ULONG Count,
+    _In_ BOOLEAN PerProcessorSlot)
 {
     ULONG_PTR Value, NewValue;
     PEX_RUNDOWN_WAIT_BLOCK WaitBlock;
@@ -144,7 +145,8 @@ ExfReleaseRundownProtectionEx(
             return;
         }
 
-        ASSERT(Value >= (ULONG_PTR)Count * EX_RUNDOWN_COUNT_INC);
+        /* A per-processor slot may give back what another slot took, so it can go below zero */
+        ASSERT(PerProcessorSlot || Value >= (ULONG_PTR)Count * EX_RUNDOWN_COUNT_INC);
 
         NewValue = Value - (ULONG_PTR)Count * EX_RUNDOWN_COUNT_INC;
 
@@ -153,6 +155,15 @@ ExfReleaseRundownProtectionEx(
             return;
         }
     }
+}
+
+VOID
+FASTCALL
+ExfReleaseRundownProtectionEx(
+    _Inout_ PEX_RUNDOWN_REF RunRef,
+    _In_ ULONG Count)
+{
+    ExpReleaseRundown(RunRef, Count, FALSE);
 }
 
 VOID
@@ -347,7 +358,7 @@ ExfReleaseRundownProtectionCacheAwareEx(
     RunRef = ExGetRunRefForGivenProcessor(RunRefCacheAware,
                                           KeGetCurrentProcessorNumber());
 
-    ExfReleaseRundownProtectionEx(RunRef, Count);
+    ExpReleaseRundown(RunRef, Count, TRUE);
 }
 
 VOID
@@ -404,8 +415,8 @@ ExfWaitForRundownProtectionReleaseCacheAware(
         if (Value != 0)
         {
             InterlockedExchangeAddSizeT((PSIZE_T)&WaitBlock.Count,
-                                        (SSIZE_T)(Value /
-                                                  EX_RUNDOWN_COUNT_INC));
+                                        (SSIZE_T)Value /
+                                        (SSIZE_T)EX_RUNDOWN_COUNT_INC);
         }
     }
 

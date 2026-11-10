@@ -156,14 +156,8 @@ IoBuildAsynchronousFsdRequest(
         return Irp;
     }
 
-    if (MajorFunction == IRP_MJ_FLUSH_BUFFERS ||
-        MajorFunction == IRP_MJ_SHUTDOWN)
-    {
-        return Irp;
-    }
-
-    IoFreeIrp(Irp);
-    return NULL;
+    /* FIXME: Microsoft documents five major functions; the others in-tree drivers pass get a bare packet, unverified on Windows 11 */
+    return Irp;
 }
 
 PIRP
@@ -361,6 +355,8 @@ IoPageRead(
     Irp->UserIosb = IoStatusBlock;
     Irp->UserEvent = Event;
     Irp->MdlAddress = Mdl;
+    /* A file system splitting the transfer builds its partial MDLs from this address */
+    Irp->UserBuffer = MmGetMdlVirtualAddress(Mdl);
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
     Irp->Tail.Overlay.OriginalFileObject = FileObject;
 
@@ -397,6 +393,7 @@ IoSynchronousPageWrite(
     Irp->UserIosb = IoStatusBlock;
     Irp->UserEvent = Event;
     Irp->MdlAddress = Mdl;
+    Irp->UserBuffer = MmGetMdlVirtualAddress(Mdl);
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
     Irp->Tail.Overlay.OriginalFileObject = FileObject;
 

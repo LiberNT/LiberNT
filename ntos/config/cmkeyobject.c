@@ -24,7 +24,7 @@ static GENERIC_MAPPING CmpKeyMapping =
         KEY_NOTIFY,
     STANDARD_RIGHTS_WRITE | KEY_SET_VALUE | KEY_CREATE_SUB_KEY,
     STANDARD_RIGHTS_EXECUTE | KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS |
-        KEY_NOTIFY,
+        KEY_NOTIFY | KEY_CREATE_LINK,
     KEY_ALL_ACCESS
 };
 
@@ -45,7 +45,6 @@ CmpCreateObjectTypes(VOID)
     Initializer.CaseInsensitive = TRUE;
     Initializer.UseDefaultObject = TRUE;
     Initializer.SecurityRequired = TRUE;
-    Initializer.MaintainHandleCount = TRUE;
     Initializer.InvalidAttributes = OBJ_EXCLUSIVE | OBJ_PERMANENT;
     Initializer.GenericMapping = CmpKeyMapping;
     Initializer.ValidAccessMask = KEY_ALL_ACCESS;
