@@ -685,8 +685,20 @@ attribute
         | tCOMPOSABLE '(' composable_attr ')'   { $$ = attr_ptr( @$, ATTR_COMPOSABLE, $3 ); }
         | tCOMMSTATUS                           { $$ = attr_int( @$, ATTR_COMMSTATUS, 0 ); }
         | tCONTEXTHANDLE                        { $$ = attr_int( @$, ATTR_CONTEXTHANDLE, 0 ); }
-        | tCONTEXTHANDLENOSERIALIZE             { $$ = attr_int( @$, ATTR_CONTEXTHANDLE, 0 ); /* RPC_CONTEXT_HANDLE_DONT_SERIALIZE */ }
-        | tCONTEXTHANDLESERIALIZE               { $$ = attr_int( @$, ATTR_CONTEXTHANDLE, 0 ); /* RPC_CONTEXT_HANDLE_SERIALIZE */ }
+        | tCONTEXTHANDLENOSERIALIZE             {
+#ifdef __REACTOS__
+                                                  $$ = attr_int( @$, ATTR_CONTEXTHANDLE, NDR_CONTEXT_HANDLE_NOSERIALIZE );
+#else
+                                                  $$ = attr_int( @$, ATTR_CONTEXTHANDLE, 0 ); /* RPC_CONTEXT_HANDLE_DONT_SERIALIZE */
+#endif
+                                                }
+        | tCONTEXTHANDLESERIALIZE               {
+#ifdef __REACTOS__
+                                                  $$ = attr_int( @$, ATTR_CONTEXTHANDLE, NDR_CONTEXT_HANDLE_SERIALIZE );
+#else
+                                                  $$ = attr_int( @$, ATTR_CONTEXTHANDLE, 0 ); /* RPC_CONTEXT_HANDLE_SERIALIZE */
+#endif
+                                                }
         | tCONTRACT '(' contract_req ')'        { $$ = attr_ptr( @$, ATTR_CONTRACT, $3 ); }
         | tCONTRACTVERSION '(' contract_ver ')' { $$ = attr_ptr( @$, ATTR_CONTRACTVERSION, $3 ); }
         | tCONTROL                              { $$ = attr_int( @$, ATTR_CONTROL, 0 ); }

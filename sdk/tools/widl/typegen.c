@@ -502,6 +502,25 @@ static unsigned char get_contexthandle_flags( const type_t *iface, const attr_li
     int is_out;
 
     if (is_attr(iface->attrs, ATTR_STRICTCONTEXTHANDLE)) flags |= NDR_STRICT_CONTEXT_HANDLE;
+#ifdef __REACTOS__
+    {
+        const type_t *t = type;
+
+        flags |= get_attrv( attrs, ATTR_CONTEXTHANDLE ) & (NDR_CONTEXT_HANDLE_SERIALIZE | NDR_CONTEXT_HANDLE_NOSERIALIZE);
+        for (;;)
+        {
+            if (is_attr( t->attrs, ATTR_CONTEXTHANDLE ))
+            {
+                flags |= get_attrv( t->attrs, ATTR_CONTEXTHANDLE ) &
+                         (NDR_CONTEXT_HANDLE_SERIALIZE | NDR_CONTEXT_HANDLE_NOSERIALIZE);
+                break;
+            }
+            if (type_is_alias( t )) t = type_alias_get_aliasee_type( t );
+            else if (type_is_ptr( t )) t = type_pointer_get_ref_type( t );
+            else break;
+        }
+    }
+#endif
 
     if (is_ptr(type) &&
         !is_attr( type->attrs, ATTR_CONTEXTHANDLE ) &&
