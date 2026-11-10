@@ -52,7 +52,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_TITLE,          "フォント代替エディタ"
+    IDS_TITLE,          "フォント代替エディター"
     IDS_FONTNAME,       "フォント名"
     IDS_SUBSTITUTE,     "代替名"
     IDS_ENTERNAME,      "(フォント名を入力して下さい...)"

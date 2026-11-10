@@ -6,7 +6,7 @@ CAPTION "設定"
 FONT 9, "MS UI Gothic"
 BEGIN
     GROUPBOX "デフォルトの入力言語(&L)", -1, 5, 5, 246, 55
-    LTEXT "コンピュータ起動時に使う、インストール済みの入力言語の一つを選択して下さい。", -1, 15, 15, 230, 23
+    LTEXT "コンピューター起動時に使う、インストール済みの入力言語の一つを選択して下さい。", -1, 15, 15, 230, 23
     COMBOBOX IDC_DEFAULT_LANGUAGE, 15, 40, 230, 300, CBS_HASSTRINGS | CBS_AUTOHSCROLL | CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     GROUPBOX "インストール済みのサービス(&I)", -1, 5, 65, 246, 125
     LTEXT "リストで示されている各入力言語にご希望のサービスを選択して下さい。リストを変更するには、追加または削除ボタンをお使いください。", -1, 15, 78, 230, 25

@@ -7,7 +7,7 @@ FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの追加ウィザードへようこそ", IDC_FINISHTITLE, 114, 8, 203, 24
     LTEXT "このウィザードでは次の操作をお手伝いします：", -1, 114, 40, 182, 8
-    LTEXT "1) お使いのコンピュータへの新しいデバイスドライバのインストール。", -1, 121, 56, 184, 16
+    LTEXT "1) お使いのコンピューターへの新しいデバイスドライバーのインストール。", -1, 121, 56, 184, 16
     LTEXT "2) 問題が発生しているデバイスのトラブルシューティング。", -1, 121, 78, 185, 16
     ICON IDI_WARNINGICON, IDC_WARNINGICON, 124, 109, 20, 20
     LTEXT "もしあなたのハードウェアにインストール CD が付いていれば、キャンセルをクリックしてこのウィザードを閉じて、製造元の CD を使ってインストールすることをお勧めします。", 503, 150, 106, 155, 50
@@ -28,7 +28,7 @@ STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYS
 CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
-    LTEXT "このハードウェアはあなたのコンピュータに以前すでに接続しましたか?", -1, 20, 11, 275, 8
+    LTEXT "このハードウェアはあなたのコンピューターに以前すでに接続しましたか?", -1, 20, 11, 275, 8
     AUTORADIOBUTTON "はい(&Y)、すでにハードウェアに接続しました", IDC_CONNECTED, 29, 23, 266, 8, WS_GROUP
     AUTORADIOBUTTON "いいえ(&N)、まだこのハードウェアを追加していません", IDC_NOTCONNECTED, 29, 35, 266, 8
 END
@@ -127,8 +127,8 @@ CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの追加を続行できません", IDC_FINISHTITLE, 114, 8, 203, 28
-    LTEXT "続けるには、このハードウェアをあなたのコンピュータに接続して下さい。", -1, 114, 40, 193, 16
-    AUTOCHECKBOX "ハードウェアを接続するために、完了をクリックしたときにコンピュータの電源を切ります(&T)", IDC_TURNOFFCHECKBOX, 114, 64, 203, 20, BS_TOP | BS_MULTILINE
+    LTEXT "続けるには、このハードウェアをあなたのコンピューターに接続して下さい。", -1, 114, 40, 193, 16
+    AUTOCHECKBOX "ハードウェアを接続するために、完了をクリックしたときにコンピューターの電源を切ります(&T)", IDC_TURNOFFCHECKBOX, 114, 64, 203, 20, BS_TOP | BS_MULTILINE
     LTEXT "多くの場合、LiberNT は自動的に接続したハードウェアをインストールします。もし LiberNT が見つけられなければ、サポートされているソフトウェアをインストールするために、このウィザードを開き直すことができます。", -1, 114, 98, 193, 32
     LTEXT "このウィザードを閉じるには、キャンセルをクリックして下さい。", IDC_STATUSTEXT, 114, 166, 193, 8
 END
@@ -159,11 +159,11 @@ END
 STRINGTABLE
 BEGIN
     IDS_CPLNAME "ハードウェアの追加"
-    IDS_CPLDESCRIPTION "コンピュータにハードウェアを追加します。"
+    IDS_CPLDESCRIPTION "コンピューターにハードウェアを追加します。"
     IDS_SEARCHTITLE "ウィザードが検索中です。お待ち下さい..."
     IDS_SEARCHTEXT "このウィザードは最近接続したハードウェアを検索していますが、まだインストールされていません。"
     IDS_ISCONNECTED "ハードウェアは接続済みですか?"
-    IDS_PROBELISTTITLE "以下のハードウェアはあなたのコンピュータにすでにインストール済みです"
+    IDS_PROBELISTTITLE "以下のハードウェアはあなたのコンピューターにすでにインストール済みです"
     IDS_ADDNEWDEVICE "新しいハードウェア デバイスを追加"
     IDS_SELECTWAYTITLE "このウィザードは、他のハードウェアのインストールを助けます"
     IDS_NOTFOUNDTITLE "このコンピューターで新しいハードウェアは見つかりませんでした"

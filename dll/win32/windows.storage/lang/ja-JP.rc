@@ -14,7 +14,7 @@ BEGIN
     IDS_OPEN_VERB "開く(&O)"
     IDS_OPENFILELOCATION "ファイルの場所を開く(&I)"
     IDS_RUNAS_VERB "別のユーザーとして実行..."
-    IDS_SYSTEMFOLDER "システムフォルダ"
+    IDS_SYSTEMFOLDER "システムフォルダー"
     IDS_DRIVE_FIXED "ローカル ディスク"
     IDS_DRIVE_REMOVABLE "リムーバブル ディスク"
     IDS_DRIVE_NETWORK "ネットワーク ディスク"

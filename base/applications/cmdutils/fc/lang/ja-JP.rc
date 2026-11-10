@@ -31,7 +31,7 @@ FC /B [ドライブ1:][パス1]ファイル名1 [ドライブ2:][パス2]ファ�
     IDS_OUT_OF_MEMORY "FC: メモリ不足\n"
     IDS_CANNOT_READ "FC: %ls から読み取れません\n"
     IDS_INVALID_SWITCH "FC: 無効なスイッチ\n"
-    IDS_CANNOT_OPEN "FC: %ls を開けません - そのようなファイルまたはフォルダはありません\n"
+    IDS_CANNOT_OPEN "FC: %ls を開けません - そのようなファイルまたはフォルダーはありません\n"
     IDS_NEEDS_FILES "FC: ファイル指定が必要です\n"
     IDS_CANT_USE_WILDCARD "ワイルドカード（「*」と「?」）はまだサポートされていません\n"
     IDS_DIFFERENT "FC: ファイル %ls と %ls は異なります\n"

@@ -8,18 +8,18 @@ CAPTION "電源設定"
 FONT 9, "MS UI Gothic"
 BEGIN
     ICON IDI_ACDC, IDI_ACDC, 7, 7, 0, 0
-    LTEXT "このコンピュータに最も適した電源設定を選択してください。下の設定を変更すると、選択された電源設定も変更される点に注意してください。", IDC_STATIC, 37, 6, 208, 36
+    LTEXT "このコンピューターに最も適した電源設定を選択してください。下の設定を変更すると、選択された電源設定も変更される点に注意してください。", IDC_STATIC, 37, 6, 208, 36
     GROUPBOX "電源設定(&O)", IDC_STATIC, 6, 43, 240, 50
     COMBOBOX IDC_ENERGYLIST, 14, 54, 224, 92, CBS_DROPDOWNLIST | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP
     PUSHBUTTON "名前を付けて保存(&S)...", IDC_SAVEAS_BTN, 85, 72, 80, 14, WS_DISABLED
     PUSHBUTTON "削除(&D)", IDC_DELETE_BTN, 173, 72, 64, 14, WS_DISABLED
     GROUPBOX "", IDC_GRPDETAIL, 6, 95, 240, 119
-    LTEXT "コンピュータの状態:", IDC_SAT, 12, 110, 60, 15
+    LTEXT "コンピューターの状態:", IDC_SAT, 12, 110, 66, 15
     LTEXT "電源に接続", IDC_SAC, 100, 110, 50, 15
     ICON IDI_AC, IDC_IAC, 141, 122, 0, 0
     LTEXT "バッテリ使用", IDC_SDC, 173, 110, 50, 15
     ICON IDI_DC, IDC_IDC, 218, 122, 0, 0
-    LTEXT "モニタの電源を切る(&M):", IDC_MONITOR, 13, 148, 85, 10
+    LTEXT "モニターの電源を切る(&M):", IDC_MONITOR, 13, 148, 85, 10
     COMBOBOX IDC_MONITORACLIST, 100, 145, 65, 150, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     COMBOBOX IDC_MONITORDCLIST, 173, 145, 65, 150, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT "ハードディスクの電源を切る(&I):", IDC_DISK, 13, 163, 85, 10
@@ -39,13 +39,13 @@ CAPTION "電源設定"
 FONT 9, "MS UI Gothic"
 BEGIN
     ICON IDI_ACDC, IDI_ACDC, 7, 7, 0, 0
-    LTEXT "このコンピュータに最も適した電源設定を選択してください。下の設定を変更すると、選択された電源設定も変更される点に注意してください。", IDC_STATIC, 37, 6, 208, 36
+    LTEXT "このコンピューターに最も適した電源設定を選択してください。下の設定を変更すると、選択された電源設定も変更される点に注意してください。", IDC_STATIC, 37, 6, 208, 36
     GROUPBOX "電源設定(&O)", IDC_STATIC, 6, 43, 240, 50
     COMBOBOX IDC_ENERGYLIST, 14, 54, 224, 92, CBS_DROPDOWNLIST | CBS_AUTOHSCROLL | WS_VSCROLL
     PUSHBUTTON "名前を付けて保存(&S)...", IDC_SAVEAS_BTN, 85, 72, 80, 14, WS_DISABLED
     PUSHBUTTON "削除(&D)", IDC_DELETE_BTN, 173, 72, 64, 14, WS_DISABLED
     GROUPBOX "", IDC_GRPDETAIL, 6, 95, 240, 119
-    LTEXT "モニタの電源を切る(&M):", IDC_MONITOR, 13, 148, 85, 10
+    LTEXT "モニターの電源を切る(&M):", IDC_MONITOR, 13, 148, 85, 10
     COMBOBOX IDC_MONITORACLIST, 100, 145, 140, 150, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT "ハードディスクの電源を切る(&I):", IDC_DISK, 13, 163, 85, 10
     COMBOBOX IDC_DISKACLIST, 100, 160, 140, 150, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
@@ -96,11 +96,11 @@ BEGIN
     AUTOCHECKBOX "スタンバイから回復するときにパスワードの入力を求める(&P)", IDC_PASSWORDLOGON, 17, 60, 220, 10
     AUTOCHECKBOX "バッテリを使用するときは、薄暗く表示する(&D)", IDC_VIDEODIMDISPLAY, 17, 78, 220, 10
     GROUPBOX "電源ボタン", IDC_STATIC, 6, 101, 240, 110
-    LTEXT "ポータブル コンピュータを閉じたとき(&W):", IDC_SLIDCLOSE, 15, 115, 222, 10
+    LTEXT "ポータブル コンピューターを閉じたとき(&W):", IDC_SLIDCLOSE, 15, 115, 222, 10
     COMBOBOX IDC_LIDCLOSE, 15, 127, 220, 90, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT "コンピュータの電源ボタンを押したとき(&E):", IDC_SPOWERBUTTON, 15, 145, 222, 10
+    LTEXT "コンピューターの電源ボタンを押したとき(&E):", IDC_SPOWERBUTTON, 15, 145, 222, 10
     COMBOBOX IDC_POWERBUTTON, 15, 157, 220, 90, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT "コンピュータのスリープ ボタンを押したとき(&N):", IDC_SSLEEPBUTTON, 15, 175, 222, 10
+    LTEXT "コンピューターのスリープ ボタンを押したとき(&N):", IDC_SSLEEPBUTTON, 15, 175, 222, 10
     COMBOBOX IDC_SLEEPBUTTON, 15, 187, 220, 90, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
 END
 
@@ -110,7 +110,7 @@ CAPTION "休止状態"
 FONT 9, "MS UI Gothic"
 BEGIN
     ICON IDI_HIBERNATE, IDI_HIBERNATE, 7, 7, 0, 0
-    LTEXT "休止状態になると、コンピュータはメモリ上にあるものをすべてハード ディスクに格納してからシャットダウンします。休止状態が解除されると、コンピュータは以前の状態に戻ります。", IDC_STATIC, 37, 6, 208, 35
+    LTEXT "休止状態になると、コンピューターはメモリ上にあるものをすべてハード ディスクに格納してからシャットダウンします。休止状態が解除されると、コンピューターは以前の状態に戻ります。", IDC_STATIC, 37, 6, 208, 35
     GROUPBOX "休止状態", IDC_STATIC, 6, 41, 240, 32
     AUTOCHECKBOX "休止状態を有効にする(&H)", IDC_HIBERNATEFILE, 17, 55, 210, 10
     GROUPBOX "休止のためのディスク領域", IDC_STATIC, 6, 80, 240, 76
@@ -214,7 +214,7 @@ END
 STRINGTABLE
 BEGIN
     IDS_CPLNAME "電源オプション"
-    IDS_CPLDESCRIPTION "コンピュータの省電力設定を構成します。"
+    IDS_CPLDESCRIPTION "コンピューターの省電力設定を構成します。"
     IDS_PERCENT "%i%%"
     IDS_SOUND "音"
     IDS_TEXT "テキスト"

@@ -49,7 +49,7 @@ BEGIN
     //Keyboard-Mouse related strings
     IDS_KEYS_STICKY "スティッキー キー"
     IDS_KEYS_MOUSE "マウス キー"
-    IDS_KEYS_FILTER "フィルタ キー"
+    IDS_KEYS_FILTER "フィルター キー"
     IDS_BT_DEVICES "Bluetooth デバイス"
     IDS_BT_SHOW "Bluetooth デバイスの表示(&D)"
     IDS_BT_SETTINGS "設定を開く(&S)"

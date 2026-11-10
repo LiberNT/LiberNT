@@ -2,8 +2,8 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 
 STRINGTABLE
 BEGIN
-    IDS_PRINTERS_FOLDER    "プリンタ"
-    IDS_PRINTERS_INFOTIP   "インストール済みのプリンタや FAX プリンタを表示し、新しいのを追加するのを助けます。"
+    IDS_PRINTERS_FOLDER    "プリンター"
+    IDS_PRINTERS_INFOTIP   "インストール済みのプリンターや FAX プリンターを表示し、新しいのを追加するのを助けます。"
     IDS_COLUMN_NAME        "作成者"
     IDS_COLUMN_DOCUMENTS   "ドキュメント"
     IDS_COLUMN_STATUS      "状態"

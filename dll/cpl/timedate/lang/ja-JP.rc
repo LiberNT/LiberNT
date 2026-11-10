@@ -40,7 +40,7 @@ BEGIN
     PUSHBUTTON "今すぐ更新", IDC_UPDATEBUTTON, 187, 22, 49, 14
     LTEXT "", IDC_SUCSYNC, 16, 54, 214, 23
     LTEXT "", IDC_NEXTSYNC, 12, 96, 137, 12
-    LTEXT "コンピュータがインターネットに接続している場合にのみ同期は行われます。", -1, 12, 114, 225, 25
+    LTEXT "コンピューターがインターネットに接続している場合にのみ同期は行われます。", -1, 12, 114, 225, 25
 END
 
 STRINGTABLE
@@ -54,6 +54,6 @@ BEGIN
     IDS_INETTIMENEXTSYNC "次回の同期: %s %s"
     IDS_INETTIMESYNCING "LiberNTが %s と同期する間、お待ちください"
     IDS_INETTIMEERROR "LiberNTが %s と同期中にエラーが発生しました"
-    IDS_INETTIMESUCFILL "時刻を同期するための NTP サーバ名を入力して下さい"
-    IDS_INETTIMEWELCOME "コンピュータの時刻を同期するための NTP サーバをリストから選択するか、NTP サーバ名を入力して下さい"
+    IDS_INETTIMESUCFILL "時刻を同期するための NTP サーバー名を入力して下さい"
+    IDS_INETTIMEWELCOME "コンピューターの時刻を同期するための NTP サーバーをリストから選択するか、NTP サーバー名を入力して下さい"
 END

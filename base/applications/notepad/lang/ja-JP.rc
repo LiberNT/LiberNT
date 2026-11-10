@@ -103,7 +103,7 @@ BEGIN
     PUSHBUTTON "ヘルプ(H)", IDHELP, 8, 170, 50, 14
     DEFPUSHBUTTON "OK", IDOK, 198, 170, 50, 14, BS_PUSHBUTTON
     PUSHBUTTON "キャンセル", IDCANCEL, 254, 170, 50, 14
-    PUSHBUTTON "プリンタ(&R)...", psh3, 310, 170, 50, 14
+    PUSHBUTTON "プリンター(&R)...", psh3, 310, 170, 50, 14
 END
 
 /* Dialog 'Encoding' */
@@ -153,7 +153,7 @@ BEGIN
     STRING_ALL_FILES "すべてのファイル (*.*)"
     STRING_TEXT_FILES_TXT "テキスト ファイル (*.txt)"
     STRING_TOOLARGE "ファイル '%s' のサイズは大きすぎるため、メモ帳では編集できません。\n\
-別のエディタを使用して下さい。"
+別のエディターを使用して下さい。"
     STRING_NOTEXT "何も入力されていません。\
 \n何か入力してから実行して下さい。"
     STRING_DOESNOTEXIST "ファイル '%s'\nは存在しません\n\n\
@@ -174,7 +174,7 @@ BEGIN
     STRING_LF "Unix (LF)"
     STRING_CR "Mac (CR)"
     STRING_LINE_COLUMN "%d 行、%d 列"
-    STRING_PRINTERROR "ファイル '%s'を印刷できません。\n\nプリンタがオンになっていて、正しく設定されているか確認して下さい。"
+    STRING_PRINTERROR "ファイル '%s'を印刷できません。\n\nプリンターがオンになっていて、正しく設定されているか確認して下さい。"
     STRING_DEFAULTFONT "ＭＳ ゴシック" /* MS Gothic */
     STRING_LINE_NUMBER_OUT_OF_RANGE "指定された行番号は範囲外です。"
     STRING_NOWPRINTING "印刷中..."

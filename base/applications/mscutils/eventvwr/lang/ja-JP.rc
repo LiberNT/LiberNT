@@ -96,7 +96,7 @@ BEGIN
     EDITTEXT IDC_EVENTIDSTATIC, 140, 25, 82, 8, ES_LEFT | ES_READONLY | NOT WS_BORDER | NOT WS_TABSTOP | ES_AUTOHSCROLL
     LTEXT "ユーザー(&U):", IDC_STATIC, 8, 35, 36, 8
     EDITTEXT IDC_EVENTUSERSTATIC, 46, 35, 152, 8, ES_LEFT | ES_READONLY | NOT WS_BORDER | NOT WS_TABSTOP | ES_AUTOHSCROLL
-    LTEXT "コンピュータ(&C):", IDC_STATIC, 8, 45, 36, 8
+    LTEXT "コンピューター(&C):", IDC_STATIC, 8, 45, 36, 8
     EDITTEXT IDC_EVENTCOMPUTERSTATIC, 46, 45, 152, 8, ES_LEFT | ES_READONLY | NOT WS_BORDER | NOT WS_TABSTOP | ES_AUTOHSCROLL
 
     PUSHBUTTON "", IDC_PREVIOUS, 230, 5, 28, 14, BS_ICON
@@ -156,7 +156,7 @@ END
 STRINGTABLE
 BEGIN
     IDS_COPYRIGHT "Copyright (C) 2007 Marc Piulachs (marc.piulachs@codexchange.net)"
-    IDS_APP_TITLE "イベント ビューア"
+    IDS_APP_TITLE "イベント ビューアー"
     IDS_APP_TITLE_EX "%s - %s Log on \\\\"
     IDS_STATUS_MSG "%s には %lu 個のイベントがあります (総数: %lu)"
     IDS_LOADING_WAIT "イベント ログを読み込んでいます。お待ちください..."
@@ -167,7 +167,7 @@ BEGIN
     IDS_SAVE_FILTER "イベントログ (*.evt)\0*.evt\0"
     IDS_CLEAREVENTS_MSG "このイベントをクリアする前に保存したいですか？"
     IDS_RESTOREDEFAULTS "すべての設定をデフォルトに戻しますか？"
-    IDS_EVENTSTRINGIDNOTFOUND "イベント ID (%lu) (ソース %s 内) に関する説明が見つかりませんでした。 リモート コンピュータからメッセージを表示するために必要なレジストリ情報またはメッセージ DLL ファイルがローカル コンピュータにない可能性があります。\n\n次の情報はイベントの一部です:\n\n"
+    IDS_EVENTSTRINGIDNOTFOUND "イベント ID (%lu) (ソース %s 内) に関する説明が見つかりませんでした。 リモート コンピューターからメッセージを表示するために必要なレジストリ情報またはメッセージ DLL ファイルがローカル コンピューターにない可能性があります。\n\n次の情報はイベントの一部です:\n\n"
     IDS_CONTFROMBEGINNING "イベント ログの最後に到達しました。最初から続けますか？"
     IDS_CONTFROMEND "イベント ログの先頭に到達しました。最後から続けますか？"
 END
@@ -175,7 +175,7 @@ END
 STRINGTABLE
 BEGIN
 /* Please note that explicit TAB characters '\t' are used to fix the alignment of the message in the MessageBox */
-    IDS_USAGE "LiberNT イベント ビュア\n\
+    IDS_USAGE "LiberNT イベント ビューアー\n\
 \n\
 EventVwr [コンピューター名] [/L:<イベント ログ ファイル>] [/?]\n\
 \n\

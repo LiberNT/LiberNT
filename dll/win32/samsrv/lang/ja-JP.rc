@@ -19,9 +19,9 @@ BEGIN
     IDS_ALIAS_POWER_USERS_COMMENT "パワーユーザーは、いくつかの制限付きでほとんどの管理権限を持ちます。"
     IDS_ALIAS_USERS_NAME "ユーザー"
     IDS_ALIAS_USERS_COMMENT "ユーザーは、システム規模の変更をすることができません。"
-    IDS_ALIAS_PRINT_OPS_NAME "印刷オペレータ"
+    IDS_ALIAS_PRINT_OPS_NAME "印刷オペレーター"
     IDS_ALIAS_PRINT_OPS_COMMENT "メンバーはドメインプリンターを管理できます。"
-    IDS_ALIAS_BACKUP_OPS_NAME "バックアップ オペレータ"
+    IDS_ALIAS_BACKUP_OPS_NAME "バックアップ オペレーター"
     IDS_ALIAS_BACKUP_OPS_COMMENT "バックアップ オペレーターは、ファイルのバックアップまたはリストアのみを目的として、セキュリティ制限を無効にすることができます。"
     IDS_ALIAS_REPLICATOR_NAME "レプリケーター"
     IDS_ALIAS_REPLICATOR_COMMENT "ドメイン内のファイルレプリケーションをサポートします。"
@@ -30,16 +30,16 @@ BEGIN
     IDS_ALIAS_NETWORK_CONFIGURATION_OPS_NAME "ネットワーク構成オペレーター"
     IDS_ALIAS_NETWORK_CONFIGURATION_OPS_COMMENT "このグループのメンバーは、ネットワーク機能の設定を管理するための管理者権限を持つことができます。"
     IDS_ALIAS_MONITORING_USERS_NAME "パフォーマンス監視ユーザー"
-    IDS_ALIAS_MONITORING_USERS_COMMENT "このグループのメンバーは、このコンピュータを監視するためのリモートアクセスを持っています。"
+    IDS_ALIAS_MONITORING_USERS_COMMENT "このグループのメンバーは、このコンピューターを監視するためのリモートアクセスを持っています。"
     IDS_ALIAS_LOGGING_USERS_NAME "パフォーマンス ログ ユーザー"
-    IDS_ALIAS_LOGGING_USERS_COMMENT "このグループのメンバーは、このコンピュータのパフォーマンス カウンタのロギングをスケジュールするためのリモートアクセスが可能です。"
+    IDS_ALIAS_LOGGING_USERS_COMMENT "このグループのメンバーは、このコンピューターのパフォーマンス カウンターのロギングをスケジュールするためのリモートアクセスが可能です。"
     /*
      * ATTENTION:
      *   If you translate the administrator account name, keep IDS_USER_ADMINISTRATOR_NAME and
      *   syssetup.dll:IDS_ADMINISTRATOR_NAME synchronized.
      */
     IDS_USER_ADMINISTRATOR_NAME "Administrator"
-    IDS_USER_ADMINISTRATOR_COMMENT "コンピュータやドメインを管理するのに使われる組み込みのアカウントです。"
+    IDS_USER_ADMINISTRATOR_COMMENT "コンピューターやドメインを管理するのに使われる組み込みのアカウントです。"
     IDS_USER_GUEST_NAME "Guest"
     IDS_USER_GUEST_COMMENT "コンピューターかドメインへゲストでアクセスするための組み込みのアカウントです。"
 END

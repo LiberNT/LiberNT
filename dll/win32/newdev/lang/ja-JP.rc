@@ -6,12 +6,12 @@ CAPTION "デバイスのインストール"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ようこそ", IDC_WELCOMETITLE, 120, 8, 195, 16
-    LTEXT "このウィザードでは、以下の新しいデバイス ドライバをインストールします:", IDC_STATIC, 120, 21, 195, 16
+    LTEXT "このウィザードでは、以下の新しいデバイス ドライバーをインストールします:", IDC_STATIC, 120, 21, 195, 16
     LTEXT "続行するには、[次へ] をクリックしてください。", IDC_STATIC, 120, 169, 195, 16
     LTEXT "不明なデバイス", IDC_DEVICE, 148, 36, 147, 17
-    LTEXT "警告! カスタム デバイスをインストールすると、コンピュータがフリーズしたり、起動不能になる可能性があります!", IDC_STATIC, 120, 67, 195, 16
-    CONTROL "ドライバを自動的にインストールする", IDC_RADIO_AUTO, "Button", BS_AUTORADIOBUTTON, 120, 112, 195, 12
-    CONTROL "ドライバを特定の場所からインストールする", IDC_RADIO_MANUAL, "Button", BS_AUTORADIOBUTTON, 120, 133, 195, 12
+    LTEXT "警告! カスタム デバイスをインストールすると、コンピューターがフリーズしたり、起動不能になる可能性があります!", IDC_STATIC, 120, 67, 195, 16
+    CONTROL "ドライバーを自動的にインストールする", IDC_RADIO_AUTO, "Button", BS_AUTORADIOBUTTON, 120, 112, 195, 12
+    CONTROL "ドライバーを特定の場所からインストールする", IDC_RADIO_MANUAL, "Button", BS_AUTORADIOBUTTON, 120, 133, 195, 12
 END
 
 IDD_NODRIVER DIALOGEX 0, 0, 317, 193
@@ -20,8 +20,8 @@ CAPTION "デバイスのインストール"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "インストール失敗", IDC_FINISHTITLE, 120, 8, 195, 16
-    LTEXT "ドライバが見つからなかったため、デバイスはインストールされませんでした。", IDC_STATIC, 120, 32, 195, 16
-    LTEXT "ドライバのディスクを持っていたり、ドライバへのパスを知っている場合は、[戻る] をクリックしてください。", IDC_STATIC, 120, 98, 195, 16
+    LTEXT "ドライバーが見つからなかったため、デバイスはインストールされませんでした。", IDC_STATIC, 120, 32, 195, 16
+    LTEXT "ドライバーのディスクを持っていたり、ドライバーへのパスを知っている場合は、[戻る] をクリックしてください。", IDC_STATIC, 120, 98, 195, 16
     CONTROL "このダイアログを今後表示しない", IDC_DONOTSHOWDLG, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 120, 170, 195, 12
 END
 
@@ -41,7 +41,7 @@ CAPTION "デバイスのインストール"
 FONT 9, "MS UI Gothic"
 BEGIN
     CONTROL "次の場所を検索する", IDC_RADIO_SEARCHHERE, "Button", BS_AUTORADIOBUTTON, 27, 11, 239, 12
-    CONTROL "手動でドライバを選択する", IDC_RADIO_CHOOSE, "Button", BS_AUTORADIOBUTTON, 27, 98, 171, 12
+    CONTROL "手動でドライバーを選択する", IDC_RADIO_CHOOSE, "Button", BS_AUTORADIOBUTTON, 27, 98, 171, 12
     CONTROL "リムーバブル メディアを検索", IDC_CHECK_MEDIA, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 47, 33, 163, 12
     CONTROL "次のパスを含める", IDC_CHECK_PATH, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 47, 54, 162, 12
     PUSHBUTTON "参照", IDC_BROWSE, 248, 70, 50, 14
@@ -81,7 +81,7 @@ CAPTION "デバイスのインストール"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "インストール完了", IDC_FINISHTITLE, 120, 8, 195, 12
-    LTEXT "ウィザードは以下のドライバのインストールを完了しました:", IDC_STATIC, 120, 32, 195, 16
+    LTEXT "ウィザードは以下のドライバーのインストールを完了しました:", IDC_STATIC, 120, 32, 195, 16
     LTEXT "[完了] をクリックするとウィザードを閉じます。", IDC_STATIC, 120, 174, 195, 12
     LTEXT "不明なデバイス", IDC_DEVICE, 148, 53, 147, 17
 END
@@ -89,9 +89,9 @@ END
 STRINGTABLE
 BEGIN
     IDS_INSTALLWIZARDTITLE "新しいハードウェアのウィザード"
-    IDS_UPDATEWIZARDTITLE "ドライバ更新のウィザード"
+    IDS_UPDATEWIZARDTITLE "ドライバー更新のウィザード"
     IDS_CHSOURCE_TITLE "検索対象とインストール オプションを選んで下さい。"
     IDS_SEARCHDRV_TITLE "検索中..."
     IDS_INSTALLDRV_TITLE "インストール中..."
-    IDS_BROWSE_FOR_FOLDER_TITLE "このハードウェアに対する適切なドライバを含むフォルダを選択して下さい。"
+    IDS_BROWSE_FOR_FOLDER_TITLE "このハードウェアに対する適切なドライバーを含むフォルダーを選択して下さい。"
 END
