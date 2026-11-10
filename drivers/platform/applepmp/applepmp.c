@@ -16,6 +16,18 @@
 #define PMP_CPU_CONTROL_RUN          0x10
 #define PMP_BOOT_TIMEOUT_MS         2000
 #define PMP_REPLY_TIMEOUT_MS        2000
+#define PMP_MAX_SHARED              4
+#define PMP_SHARED_PAGE_SIZE        0x4000
+#define PMP_SHARED_ADDRESS_BITS     44
+
+typedef struct _PMP_SHARED
+{
+    PVOID Allocation;
+    SIZE_T AllocationSize;
+    PVOID Virtual;
+    ULONG64 Physical;
+    ULONG Size;
+} PMP_SHARED, *PPMP_SHARED;
 
 typedef struct _APPLE_PMP
 {
@@ -31,6 +43,8 @@ typedef struct _APPLE_PMP
     PUCHAR Sram;
     ULONG64 SramBase;
     ULONG SramSize;
+    PMP_SHARED Shared[PMP_MAX_SHARED];
+    ULONG SharedCount;
     APPLE_RTKIT Rtkit;
     FAST_MUTEX Lock;
     BOOLEAN Running;
@@ -38,6 +52,58 @@ typedef struct _APPLE_PMP
     volatile BOOLEAN Acknowledged;
     volatile BOOLEAN Lost;
 } APPLE_PMP, *PAPPLE_PMP;
+
+/* The processor reaches memory without an IOMMU, so the address it is given is a physical one. */
+static
+PPMP_SHARED
+PmpAllocateShared(
+    _Inout_ PAPPLE_PMP Pmp,
+    _In_ ULONG Size)
+{
+    PHYSICAL_ADDRESS Low, High, Boundary;
+    PPMP_SHARED Shared;
+    ULONG64 Physical;
+    SIZE_T Rounded;
+    ULONG Skip;
+
+    if (Pmp->SharedCount == PMP_MAX_SHARED || !Size)
+        return NULL;
+    Shared = &Pmp->Shared[Pmp->SharedCount];
+    Rounded = ((SIZE_T)Size + PMP_SHARED_PAGE_SIZE - 1) & ~(SIZE_T)(PMP_SHARED_PAGE_SIZE - 1);
+    Low.QuadPart = 0;
+    High.QuadPart = (LONGLONG)((1ULL << PMP_SHARED_ADDRESS_BITS) - 1);
+    Boundary.QuadPart = 0;
+    Shared->AllocationSize = Rounded + PMP_SHARED_PAGE_SIZE - PAGE_SIZE;
+    Shared->Allocation = MmAllocateContiguousMemorySpecifyCache(Shared->AllocationSize, Low, High, Boundary,
+                                                                MmNonCached);
+    if (!Shared->Allocation)
+        return NULL;
+    Physical = (ULONG64)MmGetPhysicalAddress(Shared->Allocation).QuadPart;
+    Skip = (ULONG)(((Physical + PMP_SHARED_PAGE_SIZE - 1) & ~(ULONG64)(PMP_SHARED_PAGE_SIZE - 1)) - Physical);
+    Shared->Virtual = (PUCHAR)Shared->Allocation + Skip;
+    Shared->Physical = Physical + Skip;
+    Shared->Size = (ULONG)Rounded;
+    RtlZeroMemory(Shared->Virtual, Rounded);
+    Pmp->SharedCount++;
+    return Shared;
+}
+
+static
+VOID
+PmpFreeShared(
+    _Inout_ PAPPLE_PMP Pmp)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Pmp->SharedCount; ++Index)
+    {
+        if (Pmp->Shared[Index].Allocation)
+            MmFreeContiguousMemorySpecifyCache(Pmp->Shared[Index].Allocation, Pmp->Shared[Index].AllocationSize,
+                                               MmNonCached);
+    }
+    RtlZeroMemory(Pmp->Shared, sizeof(Pmp->Shared));
+    Pmp->SharedCount = 0;
+}
 
 static
 BOOLEAN
@@ -51,13 +117,31 @@ PmpShmemSetup(
     _Out_ PBOOLEAN Preassigned)
 {
     PAPPLE_PMP Pmp = Context;
+    PPMP_SHARED Shared;
 
-    UNREFERENCED_PARAMETER(Endpoint);
     *Virtual = NULL;
     *Preassigned = TRUE;
-    if (!*Iova || !Pmp->Sram || *Iova < Pmp->SramBase || *Iova + Size > Pmp->SramBase + Pmp->SramSize)
+    if (*Iova)
+    {
+        if (!Pmp->Sram || *Iova < Pmp->SramBase || *Iova + Size > Pmp->SramBase + Pmp->SramSize)
+        {
+            DbgPrint("applepmp: endpoint %u asked for %lu bytes at %I64x, outside its own memory\n", Endpoint, Size,
+                     *Iova);
+            return FALSE;
+        }
+        *Virtual = Pmp->Sram + (*Iova - Pmp->SramBase);
+        return TRUE;
+    }
+    Shared = PmpAllocateShared(Pmp, Size);
+    if (!Shared)
+    {
+        DbgPrint("applepmp: endpoint %u asked for %lu bytes that could not be allocated\n", Endpoint, Size);
         return FALSE;
-    *Virtual = Pmp->Sram + (*Iova - Pmp->SramBase);
+    }
+    *Iova = Shared->Physical;
+    *Virtual = Shared->Virtual;
+    *Preassigned = FALSE;
+    DbgPrint("applepmp: endpoint %u gets %lu bytes at %I64x\n", Endpoint, Shared->Size, Shared->Physical);
     return TRUE;
 }
 
@@ -142,6 +226,7 @@ PmpStop(
     _Inout_ PAPPLE_PMP Pmp)
 {
     Pmp->Running = FALSE;
+    PmpFreeShared(Pmp);
     if (Pmp->Sram)
         MmUnmapIoSpace(Pmp->Sram, Pmp->SramSize);
     Pmp->Sram = NULL;
