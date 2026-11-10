@@ -930,3 +930,22 @@ AppleAgxBuildRender(
     _In_ const APPLE_AGX_RENDER_STATE *Render,
     _In_ ULONG Context,
     _In_ ULONG64 Ordinal);
+
+#define APPLE_AGX_G15_VERSION_CODE      0x07
+#define APPLE_AGX_VARIANT_S_CODE        0x03
+#define APPLE_AGX_CLUSTER_CORE_BITS     10
+#define APPLE_AGX_USER_VA_START         0x4000ULL
+#define APPLE_AGX_USER_VA_END           0x2ffffff8000ULL
+#define APPLE_AGX_KERNEL_VA_MIN         0x20000000ULL
+#define APPLE_AGX_MAX_COMMANDS          64
+#define APPLE_AGX_TIMESTAMP_HZ          1000000000ULL
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeParams(
+    _In_ ULONG Version,
+    _In_ ULONG Clusters,
+    _In_ ULONG64 CoreWord,
+    _In_ ULONG ChipId,
+    _In_ ULONG MaxKilohertz,
+    _Out_ PDRM_ASAHI_PARAMS_GLOBAL Params);

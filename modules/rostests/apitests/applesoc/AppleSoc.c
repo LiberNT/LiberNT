@@ -4291,6 +4291,43 @@ TestAgxBuildRender(VOID)
 
 static
 VOID
+TestAgxParams(VOID)
+{
+    DRM_ASAHI_PARAMS_GLOBAL Params;
+
+    ok_int(sizeof(DRM_ASAHI_PARAMS_GLOBAL), 0x250);
+    RtlFillMemory(&Params, sizeof(Params), 0x5a);
+    ok_hex(AppleAgxDescribeParams(0x07031100, 2, 0xffffeULL, 0x6030, 1398000, &Params), STATUS_SUCCESS);
+    ok(Params.Features == 0, "The features are %I64x\n", Params.Features);
+    ok_int(Params.GpuGeneration, 15);
+    ok_int(Params.GpuVariant, 'S');
+    ok_hex(Params.GpuRevision, 0x11);
+    ok_hex(Params.ChipId, 0x6030);
+    ok_int(Params.NumDies, 1);
+    ok_int(Params.NumClustersTotal, 2);
+    ok_int(Params.NumCoresPerCluster, 10);
+    ok_int(Params.MaxFrequencyKhz, 1398000);
+    ok(Params.CoreMasks[0] == 0x3fe, "The first cluster's cores are %I64x\n", Params.CoreMasks[0]);
+    ok(Params.CoreMasks[1] == 0x3ff, "The second cluster's cores are %I64x\n", Params.CoreMasks[1]);
+    ok(Params.CoreMasks[2] == 0, "A third cluster has cores %I64x\n", Params.CoreMasks[2]);
+    ok(Params.CoreMasks[DRM_ASAHI_MAX_CLUSTERS - 1] == 0, "The last cluster has cores %I64x\n",
+       Params.CoreMasks[DRM_ASAHI_MAX_CLUSTERS - 1]);
+    ok(Params.VmStart == 0x4000, "The user range starts at %I64x\n", Params.VmStart);
+    ok(Params.VmEnd == 0x2ffffff8000ULL, "The user range ends at %I64x\n", Params.VmEnd);
+    ok(Params.VmKernelMinSize == 0x20000000, "The kernel range takes at least %I64x\n", Params.VmKernelMinSize);
+    ok_int(Params.MaxCommandsPerSubmission, 64);
+    ok_int(Params.MaxAttachments, 16);
+    ok(Params.CommandTimestampFrequencyHz == 1000000000ULL, "Timestamps tick at %I64u Hz\n",
+       Params.CommandTimestampFrequencyHz);
+
+    ok_hex(AppleAgxDescribeParams(0x07021100, 1, 0x3ff, 0x8122, 1000000, &Params), STATUS_NOT_SUPPORTED);
+    ok_hex(AppleAgxDescribeParams(0x06031100, 2, 0xfffff, 0x6030, 1000000, &Params), STATUS_NOT_SUPPORTED);
+    ok_hex(AppleAgxDescribeParams(0x07031100, 0, 0, 0x6030, 1000000, &Params), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeParams(0x07031100, 7, 0, 0x6030, 1000000, &Params), STATUS_INVALID_PARAMETER);
+}
+
+static
+VOID
 TestAgxParameterBuffer(VOID)
 {
     APPLE_AGX_PARAMETER_BUFFER Buffer;
@@ -5521,6 +5558,7 @@ START_TEST(AppleSoc)
     TestAgxScene();
     TestAgxTranslateRender();
     TestAgxBuildRender();
+    TestAgxParams();
     TestSpmi();
     TestAtcphy();
     TestPcie();

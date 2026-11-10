@@ -1887,3 +1887,43 @@ AppleAgxBuildRender(
     return AppleAgxEncodeBarrier(Job->FragmentBarrier, Job->FirmwareStamp[0], VertexStamp, APPLE_AGX_EVENT_VERTEX,
                                  FragmentStamp, APPLE_AGX_FRAGMENT_UUID, FALSE);
 }
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeParams(
+    _In_ ULONG Version,
+    _In_ ULONG Clusters,
+    _In_ ULONG64 CoreWord,
+    _In_ ULONG ChipId,
+    _In_ ULONG MaxKilohertz,
+    _Out_ PDRM_ASAHI_PARAMS_GLOBAL Params)
+{
+    const ULONG64 Mask = (1ULL << APPLE_AGX_CLUSTER_CORE_BITS) - 1;
+    ULONG Cluster;
+
+    if (!Params || !Clusters || Clusters * APPLE_AGX_CLUSTER_CORE_BITS > 64)
+        return STATUS_INVALID_PARAMETER;
+    if (((Version >> 24) & 0xff) != APPLE_AGX_G15_VERSION_CODE ||
+        ((Version >> 16) & 0xff) != APPLE_AGX_VARIANT_S_CODE)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    RtlZeroMemory(Params, sizeof(*Params));
+    Params->GpuGeneration = 15;
+    Params->GpuVariant = 'S';
+    Params->GpuRevision = (Version >> 8) & 0xff;
+    Params->ChipId = ChipId;
+    Params->NumDies = 1;
+    Params->NumClustersTotal = Clusters;
+    Params->NumCoresPerCluster = APPLE_AGX_CLUSTER_CORE_BITS;
+    Params->MaxFrequencyKhz = MaxKilohertz;
+    for (Cluster = 0; Cluster < Clusters; ++Cluster)
+        Params->CoreMasks[Cluster] = (CoreWord >> (Cluster * APPLE_AGX_CLUSTER_CORE_BITS)) & Mask;
+    Params->VmStart = APPLE_AGX_USER_VA_START;
+    Params->VmEnd = APPLE_AGX_USER_VA_END;
+    Params->VmKernelMinSize = APPLE_AGX_KERNEL_VA_MIN;
+    Params->MaxCommandsPerSubmission = APPLE_AGX_MAX_COMMANDS;
+    Params->MaxAttachments = APPLE_AGX_MAX_ATTACHMENTS;
+    Params->CommandTimestampFrequencyHz = APPLE_AGX_TIMESTAMP_HZ;
+    return STATUS_SUCCESS;
+}

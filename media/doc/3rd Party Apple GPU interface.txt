@@ -45,7 +45,11 @@ The render commands the driver accepts follow Mesa's copy of the same driver's u
 include/drm-uapi/asahi_drm.h (SPDX-License-Identifier: MIT; Copyright (C) The Asahi Linux
 Contributors, 2018-2023 Collabora Ltd., 2014-2018 Broadcom), mirrored with NT types in
 sdk/include/reactos/drivers/appleagxuapi.h so that Mesa's Apple drivers can submit to it. Its
-layout was measured by compiling Mesa's header, and the mirror asserts every offset.
+layout was measured by compiling Mesa's header, and the mirror asserts every offset. The global
+parameters it answers take the G15S user address range, the kernel range minimum, the command and
+attachment limits and the timestamp rate from g15/hw.rs, g15/params.rs and file.rs of the same
+driver (dual-licensed, MIT taken); the generation, revision, clusters and core masks are read
+from the machine.
 
 Not every file of that driver offers the MIT option. m3/agx_render.rs and m3/agx_render_state.rs
 are GPL-2.0-only; nothing was taken from them. The same frame geometry and compact-pointer rule
