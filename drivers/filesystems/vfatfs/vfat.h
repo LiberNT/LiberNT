@@ -670,7 +670,7 @@ vfatReportChange(
 
 #define vfatAddToStat(Vcb, Stat, Inc)                                                                         \
 {                                                                                                             \
-    PSTATISTICS Stats = &(Vcb)->Statistics[KeGetCurrentProcessorNumber() % VfatGlobalData->NumberProcessors]; \
+    PSTATISTICS Stats = &(Vcb)->Statistics[KeGetCurrentProcessorIndex() % VfatGlobalData->NumberProcessors]; \
     Stats->Stat += Inc;                                                                                       \
 }
 
