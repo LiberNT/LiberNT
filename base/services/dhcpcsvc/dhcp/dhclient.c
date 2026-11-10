@@ -1232,7 +1232,7 @@ dhcpoffer(struct packet *packet)
 	/* If the selecting interval has expired, go immediately to
 	   state_selecting().  Otherwise, time out into
 	   state_selecting at the select interval. */
-	if (stop_selecting <= 0)
+	if (stop_selecting <= cur_time)
 		state_selecting(ip);
 	else {
 		add_timeout(stop_selecting, state_selecting, ip);
