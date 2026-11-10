@@ -36,6 +36,14 @@ What was taken is the description of the interface:
       - the register selectors of each engine: 22 for compute, 72 for vertex, 79 for fragment
       - the fifteen register windows and the operating-point selections
       - the tiler's parameter buffer, its block list and its control
+      - the vertex and fragment sequences, their timed packets and the work items' tails
+      - the vertex and fragment work items: their register values, state and parameter blocks
+      - the tiling parameters of a frame (queue/render.rs), the compact-pointer window
+        (g15/encode.rs, g15/hw.rs), the ISP macrotile size and the scene object
+
+Not every file of that driver offers the MIT option. m3/agx_render.rs and m3/agx_render_state.rs
+are GPL-2.0-only; nothing was taken from them. The same frame geometry and compact-pointer rule
+were taken from the dual-licensed files named above instead.
 
 What was NOT taken, deliberately: that driver also carries generated board data - the hardware,
 globals and power images of one firmware build, captured from a running system rather than
