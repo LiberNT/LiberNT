@@ -215,7 +215,7 @@ Parameters:\n\n\
     IDS_DUMP_IP_FOOTER    "# End of Interface IP Configuration\n"
 
     IDS_ERROR_INVALID_INTERFACE  "\nInvalid interface %1!s! specified.\n"
-    IDS_ERROR_BAD_VALUE "\n%1!s! is not an acceptable value for %1!s!.\n"
+    IDS_ERROR_BAD_VALUE "\n%1!s! is not an acceptable value for %2!s!.\n"
     IDS_ERROR_ALREADY_DHCP "\nDhcp is already enabled on this interface.\n"
     IDS_ERROR_GET_PROPERTIES "\nError obtaining configuration for interface %1!s!.\n"
 
