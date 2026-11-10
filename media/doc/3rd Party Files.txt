@@ -422,3 +422,13 @@ Path: sdk/include/ddk/d3dkmthk.h
 Used Version: git commit 045831e
 License: MIT (https://spdx.org/licenses/MIT.html)
 URL: https://github.com/microsoft/libdxg
+
+Title: Apple graphics driver of aurora-silicon/linux - firmware interface description only
+Path: sdk/lib/drivers/applertkit/agxinit.c
+Path: sdk/include/reactos/drivers/appleagxinit.h
+Used Version: git commit c880586
+License: MIT (https://spdx.org/licenses/MIT.html), offered as GPL-2.0-only OR MIT
+URL: https://github.com/aurora-silicon/linux
+Notes: Structure layouts, the initial data's layout magic, register selectors, register windows
+Notes: and operating-point selections only; no code, and none of that driver's generated board
+Notes: data. See "3rd Party Apple GPU interface.txt" in this directory.

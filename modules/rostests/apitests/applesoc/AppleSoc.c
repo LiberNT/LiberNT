@@ -3433,6 +3433,91 @@ TestAgxRenderRegisters(VOID)
     ok_hex(AppleAgxWriteRegisters(AgxRenderWork, 2, Value), STATUS_INVALID_PARAMETER);
 }
 
+static UCHAR AgxPbManager[APPLE_AGX_PB_MANAGER_SIZE];
+static UCHAR AgxBlockControl[APPLE_AGX_BLOCK_CONTROL_SIZE];
+static UCHAR AgxMisc[APPLE_AGX_MISC_SIZE];
+
+static
+VOID
+TestAgxParameterBuffer(VOID)
+{
+    APPLE_AGX_PARAMETER_BUFFER Buffer;
+    ULONG64 Value;
+    ULONG Word;
+
+    RtlZeroMemory(&Buffer, sizeof(Buffer));
+    Buffer.PageList = 0xfffffc2d01000000ULL;
+    Buffer.BlockList = 0xfffffc2d02000000ULL;
+    Buffer.BlockControl = 0xfffffc2100028000ULL;
+    Buffer.Counter = 0xfffffc210002c000ULL;
+    Buffer.Pages = APPLE_AGX_PB_PAGES;
+    Buffer.Blocks = APPLE_AGX_PB_BLOCKS;
+    Buffer.BlockBytes = 0x4000;
+
+    RtlFillMemory(AgxPbManager, sizeof(AgxPbManager), 0x5a);
+    ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_SUCCESS);
+    RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_PAGE_LIST, sizeof(Value));
+    ok(Value == Buffer.PageList, "The page list is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_PAGE_LIST_BYTES, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_PAGES * 4);
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_PAGE_COUNT, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_PAGES);
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_RECORDS, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_LIST_RECORDS);
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_BLOCK_COUNT, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_BLOCKS);
+    RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_BLOCK_LIST, sizeof(Value));
+    ok(Value == Buffer.BlockList, "The block list is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_BLOCK_CONTROL, sizeof(Value));
+    ok(Value == Buffer.BlockControl, "The block control is at %I64x\n", Value);
+    /* The last page is named by index, not by count. */
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_LAST_PAGE, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_PAGES - 1);
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_BLOCK_BYTES, sizeof(Word));
+    ok_hex(Word, 0x4000);
+    RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_COUNTER, sizeof(Value));
+    ok(Value == Buffer.Counter, "The counter is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_MAX_PAGES_A, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_PAGES);
+    RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_MAX_PAGES_B, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_PAGES);
+
+    /* A buffer larger than the firmware's own bound, or with nothing to record on, is refused. */
+    Buffer.Pages = APPLE_AGX_PB_PAGES + 1;
+    ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_INVALID_PARAMETER);
+    Buffer.Pages = APPLE_AGX_PB_PAGES;
+    Buffer.Blocks = APPLE_AGX_PB_BLOCKS + 1;
+    ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_INVALID_PARAMETER);
+    Buffer.Blocks = APPLE_AGX_PB_BLOCKS;
+    Buffer.BlockList = 0;
+    ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_INVALID_PARAMETER);
+
+    /* A block's record cycles through the list. */
+    ok_int(AppleAgxBlockRecord(0), 0);
+    ok_int(AppleAgxBlockRecord(1), 8);
+    ok_int(AppleAgxBlockRecord(APPLE_AGX_PB_LIST_RECORDS - 1), 8 * (APPLE_AGX_PB_LIST_RECORDS - 1));
+    ok_int(AppleAgxBlockRecord(APPLE_AGX_PB_LIST_RECORDS), 0);
+    ok_int(AppleAgxBlockRecord(APPLE_AGX_PB_LIST_RECORDS + 3), 24);
+
+    /* The block control starts with every block free and the producer at the start. */
+    RtlFillMemory(AgxBlockControl, sizeof(AgxBlockControl), 0x5a);
+    RtlFillMemory(AgxMisc, sizeof(AgxMisc), 0x5a);
+    ok_hex(AppleAgxDescribeBlockControl(AgxBlockControl, AgxMisc, APPLE_AGX_PB_BLOCKS), STATUS_SUCCESS);
+    RtlCopyMemory(&Word, AgxBlockControl + APPLE_AGX_BLOCK_CONTROL_BLOCKS, sizeof(Word));
+    ok_int(Word, APPLE_AGX_PB_BLOCKS);
+    RtlCopyMemory(&Word, AgxBlockControl + APPLE_AGX_BLOCK_CONTROL_PRODUCER, sizeof(Word));
+    ok_int(Word, 0);
+    RtlCopyMemory(&Word, AgxMisc + APPLE_AGX_MISC_ENABLE, sizeof(Word));
+    ok_int(Word, 1);
+    RtlCopyMemory(&Word, AgxMisc, sizeof(Word));
+    ok_int(Word, 0);
+    ok_hex(AppleAgxDescribeBlockControl(AgxBlockControl, AgxMisc, 0), STATUS_INVALID_PARAMETER);
+
+    /* The scene list is cycled by draw, so its slot count bounds the ordinal. */
+    ok_int(APPLE_AGX_SCENE_LIST_SLOTS, 48);
+    ok_int(APPLE_AGX_RENDER_POOLS, 8);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -4576,6 +4661,7 @@ START_TEST(AppleSoc)
     TestAgxEncodeCompute();
     TestAgxComputeWork();
     TestAgxRenderRegisters();
+    TestAgxParameterBuffer();
     TestSpmi();
     TestAtcphy();
     TestPcie();

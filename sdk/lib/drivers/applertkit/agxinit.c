@@ -3,6 +3,12 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Initial data the Apple silicon graphics firmware is started with
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ *              The firmware interface described here is taken, under its MIT option, from the
+ *              Apple graphics driver of aurora-silicon/linux, at git commit c880586:
+ *              Copyright (C) 2026 Eryk Wieliczko
+ *              Copyright (C) 2026 The Gravity Linux Contributors
+ *              SPDX-License-Identifier: GPL-2.0-only OR MIT
+ *              See media/doc/3rd Party Apple GPU interface.txt for what was and was not taken.
  */
 
 #ifndef UNIT_TEST
@@ -1043,6 +1049,61 @@ AppleAgxWriteRegisters(
         AgxWriteLong(Work, At + APPLE_AGX_REGISTER_RECORD * Index, Selector[Index]);
         AgxWriteQuad(Work, At + APPLE_AGX_REGISTER_RECORD * Index + 4, Value[Index]);
     }
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+/* A block's record cycles through the list, so the list need not be as long as the buffer. */
+ULONG
+NTAPI
+AppleAgxBlockRecord(
+    _In_ ULONG Block)
+{
+    return APPLE_AGX_PB_RECORD * (Block % APPLE_AGX_PB_LIST_RECORDS);
+}
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeParameterBuffer(
+    _Out_writes_bytes_(APPLE_AGX_PB_MANAGER_SIZE) PVOID Manager,
+    _In_ const APPLE_AGX_PARAMETER_BUFFER *Buffer)
+{
+    if (!Manager || !Buffer->PageList || !Buffer->BlockList || !Buffer->BlockControl ||
+        !Buffer->Counter || !Buffer->Pages || !Buffer->Blocks || !Buffer->BlockBytes ||
+        Buffer->Pages > APPLE_AGX_PB_PAGES || Buffer->Blocks > APPLE_AGX_PB_BLOCKS)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlZeroMemory(Manager, APPLE_AGX_PB_MANAGER_SIZE);
+    AgxWriteQuad(Manager, APPLE_AGX_PB_PAGE_LIST, Buffer->PageList);
+    AgxWriteLong(Manager, APPLE_AGX_PB_PAGE_LIST_BYTES, Buffer->Pages * (ULONG)sizeof(ULONG));
+    AgxWriteLong(Manager, APPLE_AGX_PB_PAGE_COUNT, Buffer->Pages);
+    AgxWriteLong(Manager, APPLE_AGX_PB_RECORDS, APPLE_AGX_PB_LIST_RECORDS);
+    AgxWriteLong(Manager, APPLE_AGX_PB_BLOCK_COUNT, Buffer->Blocks);
+    AgxWriteQuad(Manager, APPLE_AGX_PB_BLOCK_LIST, Buffer->BlockList);
+    AgxWriteQuad(Manager, APPLE_AGX_PB_BLOCK_CONTROL, Buffer->BlockControl);
+    AgxWriteLong(Manager, APPLE_AGX_PB_LAST_PAGE, Buffer->Pages - 1);
+    AgxWriteLong(Manager, APPLE_AGX_PB_BLOCK_BYTES, Buffer->BlockBytes);
+    AgxWriteQuad(Manager, APPLE_AGX_PB_COUNTER, Buffer->Counter);
+    AgxWriteLong(Manager, APPLE_AGX_PB_MAX_PAGES_A, APPLE_AGX_PB_PAGES);
+    AgxWriteLong(Manager, APPLE_AGX_PB_MAX_PAGES_B, APPLE_AGX_PB_PAGES);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeBlockControl(
+    _Out_writes_bytes_(APPLE_AGX_BLOCK_CONTROL_SIZE) PVOID Control,
+    _Out_writes_bytes_(APPLE_AGX_MISC_SIZE) PVOID Misc,
+    _In_ ULONG Blocks)
+{
+    if (!Control || !Misc || !Blocks || Blocks > APPLE_AGX_PB_BLOCKS)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(Control, APPLE_AGX_BLOCK_CONTROL_SIZE);
+    RtlZeroMemory(Misc, APPLE_AGX_MISC_SIZE);
+    AgxWriteLong(Control, APPLE_AGX_BLOCK_CONTROL_BLOCKS, Blocks);
+    AgxWriteLong(Misc, APPLE_AGX_MISC_ENABLE, 1);
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }

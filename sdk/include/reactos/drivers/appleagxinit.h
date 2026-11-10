@@ -3,6 +3,12 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Initial data the Apple silicon graphics firmware is started with
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ *              The firmware interface described here is taken, under its MIT option, from the
+ *              Apple graphics driver of aurora-silicon/linux, at git commit c880586:
+ *              Copyright (C) 2026 Eryk Wieliczko
+ *              Copyright (C) 2026 The Gravity Linux Contributors
+ *              SPDX-License-Identifier: GPL-2.0-only OR MIT
+ *              See media/doc/3rd Party Apple GPU interface.txt for what was and was not taken.
  */
 
 #pragma once
@@ -555,3 +561,62 @@ AppleAgxWriteRegisters(
     _Inout_ PVOID Work,
     _In_ ULONG WorkType,
     _In_ const ULONG64 *Value);
+
+/* The tiler's parameter buffer: pages the firmware hands out in blocks, the list it records them
+ * on and the control it keeps the live producer in. */
+#define APPLE_AGX_PB_PAGES              16384
+#define APPLE_AGX_PB_BLOCKS             4096
+#define APPLE_AGX_PB_LIST_RECORDS       4096
+#define APPLE_AGX_PB_RECORD             8
+#define APPLE_AGX_PB_MANAGER_SIZE       0xac
+#define APPLE_AGX_PB_PAGE_LIST          0x1c
+#define APPLE_AGX_PB_PAGE_LIST_BYTES    0x24
+#define APPLE_AGX_PB_PAGE_COUNT         0x28
+#define APPLE_AGX_PB_RECORDS            0x2c
+#define APPLE_AGX_PB_BLOCK_COUNT        0x30
+#define APPLE_AGX_PB_BLOCK_LIST         0x38
+#define APPLE_AGX_PB_BLOCK_CONTROL      0x40
+#define APPLE_AGX_PB_LAST_PAGE          0x48
+#define APPLE_AGX_PB_BLOCK_BYTES        0x4c
+#define APPLE_AGX_PB_COUNTER            0x58
+#define APPLE_AGX_PB_MAX_PAGES_A        0x70
+#define APPLE_AGX_PB_MAX_PAGES_B        0x74
+
+#define APPLE_AGX_BLOCK_CONTROL_SIZE    0x40
+#define APPLE_AGX_BLOCK_CONTROL_BLOCKS  0x00
+#define APPLE_AGX_BLOCK_CONTROL_PRODUCER 0x04
+#define APPLE_AGX_MISC_SIZE             0x40
+#define APPLE_AGX_MISC_ENABLE           0x20
+#define APPLE_AGX_COUNTER_SIZE          0x40
+#define APPLE_AGX_SCENE_SIZE            0x80
+#define APPLE_AGX_SCENE_LIST_SLOTS      48
+#define APPLE_AGX_RENDER_POOLS          8
+
+typedef struct _APPLE_AGX_PARAMETER_BUFFER
+{
+    ULONG64 PageList;
+    ULONG64 BlockList;
+    ULONG64 BlockControl;
+    ULONG64 Counter;
+    ULONG Pages;
+    ULONG Blocks;
+    ULONG BlockBytes;
+} APPLE_AGX_PARAMETER_BUFFER, *PAPPLE_AGX_PARAMETER_BUFFER;
+
+ULONG
+NTAPI
+AppleAgxBlockRecord(
+    _In_ ULONG Block);
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeParameterBuffer(
+    _Out_writes_bytes_(APPLE_AGX_PB_MANAGER_SIZE) PVOID Manager,
+    _In_ const APPLE_AGX_PARAMETER_BUFFER *Buffer);
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeBlockControl(
+    _Out_writes_bytes_(APPLE_AGX_BLOCK_CONTROL_SIZE) PVOID Control,
+    _Out_writes_bytes_(APPLE_AGX_MISC_SIZE) PVOID Misc,
+    _In_ ULONG Blocks);

@@ -1,0 +1,50 @@
+# LiberNT third-party reference: the Apple silicon graphics firmware interface
+# Update this file if more of this interface is taken, or if any of it is replaced.
+
+The Apple graphics processor is driven by a firmware the machine's boot chain loads, and that
+firmware has a private interface: structure layouts, a layout magic, register selectors, register
+windows and operating-point selections. Apple publishes none of it, and no hardware specification
+for it exists.
+
+LiberNT's description of that interface is taken from the Apple graphics driver of
+aurora-silicon/linux, at drivers/gpu/drm/asahi, which offers it under either of two licences:
+
+    Copyright (C) 2026 Eryk Wieliczko
+    Copyright (C) 2026 The Gravity Linux Contributors
+    SPDX-License-Identifier: GPL-2.0-only OR MIT
+
+    Repository:   https://github.com/aurora-silicon/linux
+    Read at:      git commit c880586efacb808b1cf5406d6079b76bf07d8722 (2026-11-10)
+
+LiberNT takes the MIT option. MIT asks only that the notice travel with the material, which is
+why the files below carry it in their own headers as well as being listed here. The GPL-2.0-only
+option was equally available and would also be compatible should LiberNT ever move to
+GPL-2.0-or-later; nothing here depends on which arm is chosen, and taking MIT keeps the material
+usable under both.
+
+What was taken is the description of the interface:
+
+  sdk/lib/drivers/applertkit/agxinit.c
+  sdk/include/reactos/drivers/appleagxinit.h
+      - the initial data's objects and the addresses the firmware looks for them at
+      - the root object's layout and its magic, 0x0c08e21e83800490, which names one firmware build
+      - the address-table geometry and level descriptors
+      - the ring protocol's state offsets and the submission record
+      - the work queues, the notifier, the job list and the scheduling context
+      - the allocator, its pools and its freelist seeding
+      - the compute, vertex and fragment work images, their sequences and their opcodes
+      - the register selectors of each engine: 22 for compute, 72 for vertex, 79 for fragment
+      - the fifteen register windows and the operating-point selections
+      - the tiler's parameter buffer, its block list and its control
+
+What was NOT taken, deliberately: that driver also carries generated board data - the hardware,
+globals and power images of one firmware build, captured from a running system rather than
+derived. LiberNT does not use it. Those objects of the initial data are therefore left empty, and
+the firmware is expected to object to that; what it says is the evidence the next work is built
+from.
+
+No code was taken. The implementation in LiberNT was written for LiberNT, in C, to NT's
+conventions, with its own structures and error handling. Where the machine itself can answer
+instead of the reference, it does: the graphics regions, the loaded firmware segments and the
+performance states are read from the Apple device tree the boot loader exports, and thirteen of
+the fifteen register windows were checked against the ranges this machine reports.
