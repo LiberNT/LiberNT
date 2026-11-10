@@ -596,6 +596,80 @@ done:
 }
 
 
+static
+BOOL
+ScmSystemProfileHiveExists(VOID)
+{
+    WCHAR szRawPath[MAX_PATH];
+    WCHAR szHivePath[MAX_PATH];
+    DWORD dwSize = sizeof(szRawPath);
+    DWORD dwType;
+    DWORD cch;
+    HKEY hKey;
+    LONG Error;
+
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\S-1-5-18",
+                          0,
+                          KEY_QUERY_VALUE,
+                          &hKey);
+    if (Error != ERROR_SUCCESS)
+        return FALSE;
+
+    Error = RegQueryValueExW(hKey, L"ProfileImagePath", NULL, &dwType, (LPBYTE)szRawPath, &dwSize);
+    RegCloseKey(hKey);
+    if (Error != ERROR_SUCCESS || (dwType != REG_SZ && dwType != REG_EXPAND_SZ) ||
+        dwSize < sizeof(WCHAR) || dwSize > sizeof(szRawPath))
+    {
+        return FALSE;
+    }
+    szRawPath[ARRAYSIZE(szRawPath) - 1] = UNICODE_NULL;
+
+    cch = ExpandEnvironmentStringsW(szRawPath, szHivePath, ARRAYSIZE(szHivePath));
+    if (cch == 0 || cch > ARRAYSIZE(szHivePath) ||
+        FAILED(StringCchCatW(szHivePath, ARRAYSIZE(szHivePath), L"\\ntuser.dat")))
+    {
+        return FALSE;
+    }
+
+    return GetFileAttributesW(szHivePath) != INVALID_FILE_ATTRIBUTES;
+}
+
+
+/* The hive is made by setup from the default profile, so it is only loaded, never made here */
+VOID
+ScmLoadSystemProfile(VOID)
+{
+    PROFILEINFOW ProfileInfo;
+    HANDLE hToken;
+
+    if (!ScmSystemProfileHiveExists())
+        return;
+
+    if (!OpenProcessToken(GetCurrentProcess(),
+                          TOKEN_QUERY | TOKEN_IMPERSONATE | TOKEN_DUPLICATE | TOKEN_ADJUST_PRIVILEGES,
+                          &hToken))
+    {
+        DPRINT1("OpenProcessToken() failed (Error %lu)\n", GetLastError());
+        return;
+    }
+
+    ZeroMemory(&ProfileInfo, sizeof(ProfileInfo));
+    ProfileInfo.dwSize = sizeof(ProfileInfo);
+    ProfileInfo.dwFlags = PI_NOUI;
+    ProfileInfo.lpUserName = L"SYSTEM";
+
+    ScmEnableBackupRestorePrivileges(hToken, TRUE);
+    if (!LoadUserProfileW(hToken, &ProfileInfo))
+        DPRINT1("LoadUserProfileW() for the system account failed (Error %lu)\n", GetLastError());
+    else
+        RegCloseKey(ProfileInfo.hProfile);
+    ScmEnableBackupRestorePrivileges(hToken, FALSE);
+
+    CloseHandle(hToken);
+}
+
+
 static DWORD
 ScmCreateOrReferenceServiceImage(PSERVICE pService)
 {

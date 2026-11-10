@@ -363,6 +363,8 @@ wWinMain(HINSTANCE hInstance,
      */
     SetProcessShutdownParameters(480, SHUTDOWN_NORETRY);
 
+    ScmLoadSystemProfile();
+
     /* Start auto-start services */
     ScmAutoStartServices();
 

@@ -1215,6 +1215,28 @@ EndSystemSetup(VOID)
 }
 
 static
+VOID
+LoadSystemProfile(VOID)
+{
+    PROFILEINFOW ProfileInfo;
+    HANDLE hToken;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_IMPERSONATE | TOKEN_DUPLICATE, &hToken))
+        return;
+
+    ZeroMemory(&ProfileInfo, sizeof(ProfileInfo));
+    ProfileInfo.dwSize = sizeof(ProfileInfo);
+    ProfileInfo.dwFlags = PI_NOUI;
+    ProfileInfo.lpUserName = L"SYSTEM";
+    if (LoadUserProfileW(hToken, &ProfileInfo))
+        RegCloseKey(ProfileInfo.hProfile);
+    else
+        DPRINT1("LoadUserProfileW() for the system account failed (Error %lu)\n", GetLastError());
+
+    CloseHandle(hToken);
+}
+
+static
 DWORD
 InstallLiveCD(VOID)
 {
@@ -1242,8 +1264,9 @@ InstallLiveCD(VOID)
         if (!InitializeProfiles())
             goto error;
         InitializeDefaultUserLocale();
-        if (SaveDefaultUserHive() != ERROR_SUCCESS)
+        if (SaveDefaultUserHive() != ERROR_SUCCESS || !CopySystemProfile(0))
             goto error;
+        LoadSystemProfile();
         if (!GetComputerNameW(ComputerName, &cchComputerName))
             goto error;
         Status = SetAccountsDomainSid(NULL, ComputerName);

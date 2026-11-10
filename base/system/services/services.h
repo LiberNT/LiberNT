@@ -199,6 +199,7 @@ DWORD ScmCreateServiceDatabase(VOID);
 VOID ScmShutdownServiceDatabase(VOID);
 VOID ScmGetBootAndSystemDriverState(VOID);
 VOID ScmAutoStartServices(VOID);
+VOID ScmLoadSystemProfile(VOID);
 VOID ScmAutoShutdownServices(VOID);
 DWORD ScmStartService(PSERVICE Service,
                       DWORD argc,
