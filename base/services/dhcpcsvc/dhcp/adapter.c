@@ -528,6 +528,7 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
                         add_protocol(Adapter->DhclientInfo.name,
                                      Adapter->DhclientInfo.rfdesc,
                                      got_one, &Adapter->DhclientInfo);
+                        Adapter->DhclientInfo.client->discover_cycle = 0;
                         state_init(&Adapter->DhclientInfo);
 
                         SetEvent(hAdapterStateChangedEvent);
@@ -623,6 +624,7 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
                                      Adapter->DhclientInfo.rfdesc,
                                      got_one, &Adapter->DhclientInfo);
 
+                        Adapter->DhclientInfo.client->discover_cycle = 0;
                         state_init(&Adapter->DhclientInfo);
                     }
 

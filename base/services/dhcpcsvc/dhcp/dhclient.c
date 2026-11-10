@@ -181,6 +181,8 @@ state_reboot(void *ipp)
 	struct interface_info *ip = ipp;
 	ULONG foo = (ULONG) GetTickCount();
 
+	ip->client->discover_cycle = 0;
+
 	/* If we don't remember an active lease, go straight to INIT. */
 	if (!ip->client->active || ip->client->active->is_bootp) {
 		state_init(ip);
@@ -197,7 +199,6 @@ state_reboot(void *ipp)
 
 	/* Make a DHCPREQUEST packet, and set appropriate per-interface
 	   flags. */
-	ip->client->discover_cycle = 0;
 	make_request(ip, ip->client->active);
 	ip->client->destination = iaddr_broadcast;
 	ip->client->first_sending = GetMonotonicTime();
@@ -230,7 +231,6 @@ state_init(void *ipp)
 
 	/* Make a DHCPDISCOVER packet, and set appropriate per-interface
 	   flags. */
-	ip->client->discover_cycle = 0;
 	make_discover(ip, ip->client->active);
 	ip->client->xid = ip->client->packet.xid;
 	ip->client->destination = iaddr_broadcast;
@@ -314,6 +314,7 @@ freeit:
 	/* If we just tossed all the leases we were offered, go back
 	   to square one. */
 	if (!picked) {
+		ip->client->discover_cycle = 0;
 		ip->client->state = S_INIT;
 		state_init(ip);
 		return;
@@ -341,6 +342,7 @@ freeit:
 	ip->client->state = S_REQUESTING;
 	ip->client->first_sending = cur_time;
 	ip->client->interval = 0;
+	ip->client->request_sends = 0;
 
 	/* Make a DHCPREQUEST packet from the lease we picked. */
 	make_request(ip, picked);
@@ -1059,6 +1061,19 @@ unbind_lease(struct interface_info *ip)
     }
 }
 
+static void
+start_renew_attempt(struct interface_info *ip)
+{
+	ULONG seed = (ULONG)GetTickCount();
+
+	ip->client->state = GetMonotonicTime() < ip->client->active->rebind ?
+	    S_RENEWING : S_REBINDING;
+	ip->client->xid = RtlRandom(&seed);
+	make_request(ip, ip->client->active);
+	ip->client->first_sending = GetMonotonicTime();
+	ip->client->request_sends = 0;
+}
+
 /*
  * state_bound is called when we've successfully bound to a particular
  * lease, but the renewal time on that lease has expired.   We are
@@ -1073,9 +1088,6 @@ state_bound(void *ipp)
 	ASSERT_STATE(state, S_BOUND);
 
 	/* T1 has expired. */
-	make_request(ip, ip->client->active);
-	ip->client->xid = ip->client->packet.xid;
-
 	if (ip->client->active->options[DHO_DHCP_SERVER_IDENTIFIER].len == 4) {
 		memcpy(ip->client->destination.iabuf, ip->client->active->
 		    options[DHO_DHCP_SERVER_IDENTIFIER].data, 4);
@@ -1083,9 +1095,7 @@ state_bound(void *ipp)
 	} else
 		ip->client->destination = iaddr_broadcast;
 
-	ip->client->first_sending = GetMonotonicTime();
-	ip->client->interval = ip->client->config->initial_interval;
-	ip->client->state = S_RENEWING;
+	start_renew_attempt(ip);
 
 	/* Send the first packet immediately. */
 	send_request(ip);
@@ -1393,6 +1403,7 @@ dhcpnak(struct packet *packet)
 	/* Stop sending DHCPREQUEST packets... */
 	cancel_timeout(send_request, ip);
 
+	ip->client->discover_cycle = 0;
 	ip->client->state = S_INIT;
 	state_init(ip);
 }
@@ -1709,9 +1720,14 @@ send_request(void *ipp)
 	   us a new address, but we could also have successfully
 	   reused our old address.  In the former case, we're hosed
 	   anyway.  This is not a win-prone situation. */
-	if ((ip->client->state == S_REBOOTING ||
-	    ip->client->state == S_REQUESTING) &&
-	    interval > ip->client->config->reboot_timeout) {
+	if ((ip->client->state == S_REBOOTING &&
+	    interval > ip->client->config->reboot_timeout) ||
+	    (ip->client->state == S_REQUESTING &&
+	    ip->client->request_sends == DHCP_REQUEST_SENDS)) {
+		if (ip->client->state == S_REQUESTING)
+			ip->client->discover_cycle++;
+		else
+			ip->client->discover_cycle = 0;
 		ip->client->state = S_INIT;
 		cancel_timeout(send_request, ip);
 		state_init(ip);
@@ -1748,56 +1764,57 @@ send_request(void *ipp)
                 set_dhcp_router_discovery(Adapter, FALSE);
             }
 
+            /* TODO: Windows 11 first sends DHCPREQUESTs for the expired address and starts DHCPDISCOVER 6 s later */
+            ip->client->discover_cycle = 0;
             ip->client->state = S_INIT;
             state_init(ip);
             return;
 	}
 
-	/* TODO: RFC 2131 4.4.5 RENEWING/REBINDING retransmission (half the time left to T2 or expiry, at least 60 s) */
-	/* Do the exponential backoff... */
-	if (ip->client->state == S_REQUESTING ||
-	    ip->client->state == S_REBOOTING)
+	now = GetTickCount64();
+	if (ip->client->state == S_RENEWING ||
+	    ip->client->state == S_REBINDING) {
+		ULONGLONG rebind = (ULONGLONG)ip->client->active->rebind * 1000;
+		ULONGLONG expiry = (ULONGLONG)ip->client->active->expiry * 1000;
+
+		/* RFC 2131 4.4.5: the next attempt waits half the time left to T2, or to the expiry after T2 */
+		if (ip->client->request_sends == DHCP_RENEW_SENDS) {
+			ip->client->request_sends++;
+			add_timeout_ms(dhcp_renew_next_attempt_ms(now,
+			    now < rebind ? rebind : expiry), send_request, ip);
+			return;
+		}
+		if (ip->client->request_sends > DHCP_RENEW_SENDS) {
+			start_renew_attempt(ip);
+			interval = 0;
+		}
+	}
+
+	if (ip->client->state == S_REBOOTING) {
 		ip->client->interval =
 		    dhcp_retransmit_interval(ip->client->interval);
-	else if (!ip->client->interval)
-		ip->client->interval = ip->client->config->initial_interval;
-	else
-		ip->client->interval += ((rand() >> 2) %
-		    (2 * ip->client->interval));
-
-	/* Don't backoff past cutoff. */
-	if (ip->client->interval >
-	    ip->client->config->backoff_cutoff)
-		ip->client->interval =
-		    ((ip->client->config->backoff_cutoff / 2) +
-		    ((rand() >> 2) % ip->client->interval));
-
-	if (ip->client->state == S_REQUESTING ||
-	    ip->client->state == S_REBOOTING)
 		delay = dhcp_retransmit_delay_ms(ip->client->interval,
 		    RtlRandom(&seed));
-	else
-		delay = (ULONG)ip->client->interval * 1000;
+	} else
+		delay = dhcp_request_timeout_ms(ip->client->request_sends,
+		    RtlRandom(&seed));
 
 	/* If the backoff would take us to the expiry time, just set the
 	   timeout to the expiry time. */
-	now = GetTickCount64();
 	if (ip->client->state != S_REQUESTING) {
-		deadline = (ULONGLONG)(ip->client->active->expiry + 1) * 1000;
+		deadline = ((ULONGLONG)ip->client->active->expiry + 1) * 1000;
 		if (now + delay > deadline)
 			delay = (ULONG)(deadline > now ? deadline - now : 0);
 	}
 
-	/* If the lease T2 time has elapsed, or if we're not yet bound,
-	   broadcast the DHCPREQUEST rather than unicasting. */
-	if (ip->client->state == S_REQUESTING ||
-	    ip->client->state == S_REBOOTING ||
-	    cur_time > ip->client->active->rebind)
-		destination.sin_addr.s_addr = INADDR_BROADCAST;
-	else
+	/* Windows 11 broadcasts the last DHCPREQUEST of each RENEWING attempt */
+	if (ip->client->state == S_RENEWING &&
+	    ip->client->request_sends < DHCP_RENEW_UNICAST_SENDS)
 		memcpy(&destination.sin_addr.s_addr,
 		    ip->client->destination.iabuf,
 		    sizeof(destination.sin_addr.s_addr));
+	else
+		destination.sin_addr.s_addr = INADDR_BROADCAST;
 	destination.sin_port = htons(REMOTE_PORT);
 	destination.sin_family = AF_INET;
 //	destination.sin_len = sizeof(destination);
@@ -1825,6 +1842,8 @@ send_request(void *ipp)
 	(void) send_packet(ip, &ip->client->packet, ip->client->packet_length,
 	    from, &destination, NULL);
 
+	if (ip->client->state != S_REBOOTING)
+		ip->client->request_sends++;
 	add_timeout_ms(now + delay, send_request, ip);
 }
 
