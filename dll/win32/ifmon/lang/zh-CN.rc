@@ -208,7 +208,7 @@ BEGIN
     IDS_DUMP_IP_FOOTER    "# 接口 IP 配置结束\n"
 
     IDS_ERROR_INVALID_INTERFACE  "\n指定的接口 %1!s! 无效。\n"
-    IDS_ERROR_BAD_VALUE "\n%1!s! 不是 %1!s! 可接受的值。\n"
+    IDS_ERROR_BAD_VALUE "\n%1!s! 不是 %2!s! 可接受的值。\n"
     IDS_ERROR_ALREADY_DHCP "\n此接口上已启用 DHCP。\n"
     IDS_ERROR_GET_PROPERTIES "\n获取接口 %1!s! 的配置时出错。\n"
 

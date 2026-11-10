@@ -219,7 +219,7 @@ BEGIN
     IDS_DUMP_IP_FOOTER    "# インターフェイス IP 構成の終わり\n"
 
     IDS_ERROR_INVALID_INTERFACE  "\n無効なインターフェイス %1!s! が指定されました。\n"
-    IDS_ERROR_BAD_VALUE "\n%1!s! は %1!s! に使用できる値ではありません。\n"
+    IDS_ERROR_BAD_VALUE "\n%1!s! は %2!s! に使用できる値ではありません。\n"
     IDS_ERROR_ALREADY_DHCP "\nこのインターフェイスでは DHCP が既に有効です。\n"
     IDS_ERROR_GET_PROPERTIES "\nインターフェイス %1!s! の構成の取得中にエラーが発生しました。\n"
 
