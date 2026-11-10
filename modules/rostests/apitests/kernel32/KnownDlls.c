@@ -96,8 +96,8 @@ TestKnownDllPath(PCWSTR Directory, PCWSTR ExpectedPath)
     if (NT_SUCCESS(Status))
     {
         RtlInitUnicodeString(&Expected, ExpectedPath);
-        ok(RtlEqualUnicodeString(&Target, &Expected, TRUE), "%ls\\KnownDllPath is '%wZ', expected '%ls'\n",
-           Directory, &Target, ExpectedPath);
+        ok(RtlEqualUnicodeString(&Target, &Expected, TRUE), "%ls\\KnownDllPath is '%.*ls', expected '%ls'\n",
+           Directory, (int)(Target.Length / sizeof(WCHAR)), Target.Buffer, ExpectedPath);
     }
 
     NtClose(Link);
