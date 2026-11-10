@@ -41,6 +41,17 @@ ExAllocatePoolWithTag(ULONG PoolType, SIZE_T NumberOfBytes, ULONG Tag)
 }
 
 static
+PVOID
+ExAllocatePoolZero(ULONG PoolType, SIZE_T NumberOfBytes, ULONG Tag)
+{
+    PVOID Memory = ExAllocatePoolWithTag(PoolType, NumberOfBytes, Tag);
+
+    if (Memory)
+        memset(Memory, 0, NumberOfBytes);
+    return Memory;
+}
+
+static
 VOID
 ExFreePoolWithTag(PVOID Memory, ULONG Tag)
 {
@@ -4608,6 +4619,85 @@ TestDcpNativeMode(VOID)
     ok_int(DcpNativeMode(Mode, 0, &Width, &Height), FALSE);
 }
 
+static UCHAR RtkitCrashImage[0x600];
+
+static
+ULONG
+RtkitCrashSection(
+    _In_ ULONG At,
+    _In_ const char *Type,
+    _In_ ULONG Length)
+{
+    RtlCopyMemory(RtkitCrashImage + At, Type, 4);
+    RtlCopyMemory(RtkitCrashImage + At + 12, &Length, sizeof(Length));
+    return At + Length;
+}
+
+static
+VOID
+TestRtkitCrashlog(VOID)
+{
+    APPLE_RTKIT_CRASH Crash;
+    ULONG At, Total, Value;
+    ULONG64 Quad;
+
+    RtlZeroMemory(RtkitCrashImage, sizeof(RtkitCrashImage));
+    RtlCopyMemory(RtkitCrashImage, "CLHE", 4);
+    At = 0x20;
+    At = RtkitCrashSection(At, "Cver", 0x10 + 0x10 + 16);
+    RtlCopyMemory(RtkitCrashImage + 0x20 + 0x20, "RTKit-2419.40", 14);
+    Value = At;
+    At = RtkitCrashSection(At, "Cstr", 0x10 + 4 + 28);
+    RtlCopyMemory(RtkitCrashImage + Value + 0x14, "panic: bad init data\nmore", 25);
+    Value = At;
+    At = RtkitCrashSection(At, "Crg8", 0x10 + 0x350);
+    Quad = 0x1000a4c0ULL;
+    RtlCopyMemory(RtkitCrashImage + Value + 0x10 + 0x108, &Quad, 8);
+    Quad = 0x1000a400ULL;
+    RtlCopyMemory(RtkitCrashImage + Value + 0x10 + 0xf8, &Quad, 8);
+    Quad = 0xffffff8000123450ULL;
+    RtlCopyMemory(RtkitCrashImage + Value + 0x10 + 0x100, &Quad, 8);
+    Quad = 0xdead0000ULL;
+    RtlCopyMemory(RtkitCrashImage + Value + 0x10 + 0x330, &Quad, 8);
+    Quad = 0x96000045ULL;
+    RtlCopyMemory(RtkitCrashImage + Value + 0x10 + 0x340, &Quad, 8);
+    Value = At;
+    At = RtkitCrashSection(At, "Ccst", 0x10 + 8 + 4 * 8);
+    Quad = 0x10001000ULL;
+    RtlCopyMemory(RtkitCrashImage + Value + 0x18, &Quad, 8);
+    Quad = 0x10002000ULL;
+    RtlCopyMemory(RtkitCrashImage + Value + 0x20, &Quad, 8);
+    RtlCopyMemory(RtkitCrashImage + At, "CLHE", 4);
+    Total = At + 0x20;
+    RtlCopyMemory(RtkitCrashImage + 8, &Total, sizeof(Total));
+
+    ok_int(AppleRtkitParseCrashlog(RtkitCrashImage, sizeof(RtkitCrashImage), &Crash), TRUE);
+    ok(!strcmp(Crash.Version, "RTKit-2419.40"), "The version is '%s'\n", Crash.Version);
+    ok(!strcmp(Crash.Message, "panic: bad init data.more"), "The message is '%s'\n", Crash.Message);
+    ok_int(Crash.Registers, TRUE);
+    ok(Crash.Pc == 0x1000a4c0ULL, "The pc is %I64x\n", Crash.Pc);
+    ok(Crash.Lr == 0x1000a400ULL, "The lr is %I64x\n", Crash.Lr);
+    ok(Crash.Sp == 0xffffff8000123450ULL, "The sp is %I64x\n", Crash.Sp);
+    ok(Crash.Far == 0xdead0000ULL, "The far is %I64x\n", Crash.Far);
+    ok(Crash.Esr == 0x96000045ULL, "The esr is %I64x\n", Crash.Esr);
+    ok_int(Crash.StackDepth, 2);
+    ok(Crash.Stack[1] == 0x10002000ULL, "The second frame is %I64x\n", Crash.Stack[1]);
+
+    Value = 0x20;
+    RtlCopyMemory(RtkitCrashImage + 0x20 + 12, &Value, sizeof(Value));
+    ok_int(AppleRtkitParseCrashlog(RtkitCrashImage, sizeof(RtkitCrashImage), &Crash), TRUE);
+    ok_int(Crash.Registers, FALSE);
+    ok_int(Crash.Version[0], 0);
+    Value = 0x10000;
+    RtlCopyMemory(RtkitCrashImage + 0x20 + 12, &Value, sizeof(Value));
+    ok_int(AppleRtkitParseCrashlog(RtkitCrashImage, sizeof(RtkitCrashImage), &Crash), TRUE);
+    ok_int(Crash.Version[0], 0);
+    ok_int(Crash.Registers, FALSE);
+    ok_int(AppleRtkitParseCrashlog(RtkitCrashImage, 0x1f, &Crash), FALSE);
+    RtkitCrashImage[0] = 'X';
+    ok_int(AppleRtkitParseCrashlog(RtkitCrashImage, sizeof(RtkitCrashImage), &Crash), FALSE);
+}
+
 static
 VOID
 TestAgxParameterBuffer(VOID)
@@ -5844,6 +5934,7 @@ START_TEST(AppleSoc)
     TestAgxMemoryCalls();
     TestAgxBindings();
     TestDcpNativeMode();
+    TestRtkitCrashlog();
     TestSpmi();
     TestAtcphy();
     TestPcie();

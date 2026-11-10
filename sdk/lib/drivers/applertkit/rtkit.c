@@ -170,6 +170,11 @@ RtkitBufferRequest(
         Rtkit->SyslogBuffer = Virtual;
         Rtkit->SyslogBufferSize = Size;
     }
+    if (Endpoint == RTKIT_EP_CRASHLOG)
+    {
+        Rtkit->CrashlogBuffer = Virtual;
+        Rtkit->CrashlogBufferSize = Size;
+    }
     if (Preassigned)
         return;
     if (Endpoint == RTKIT_EP_OSLOG)
@@ -302,6 +307,142 @@ RtkitManagement(
     }
 }
 
+static
+VOID
+RtkitCrashString(
+    _Out_writes_z_(Capacity) PCHAR Out,
+    _In_ ULONG Capacity,
+    _In_reads_bytes_(Length) const UCHAR *Text,
+    _In_ ULONG Length)
+{
+    ULONG Used = (ULONG)strlen(Out), Index;
+
+    if (Used && Used + 3 < Capacity)
+    {
+        Out[Used++] = ' ';
+        Out[Used++] = '|';
+        Out[Used++] = ' ';
+    }
+    for (Index = 0; Index < Length && Text[Index] && Used + 1 < Capacity; ++Index)
+        Out[Used++] = (Text[Index] >= 0x20 && Text[Index] < 0x7f) ? (CHAR)Text[Index] : '.';
+    Out[Used] = '\0';
+}
+
+static
+ULONG64
+RtkitCrashQuad(
+    _In_ const UCHAR *At)
+{
+    ULONG64 Value;
+
+    RtlCopyMemory(&Value, At, sizeof(Value));
+    return Value;
+}
+
+BOOLEAN
+NTAPI
+AppleRtkitParseCrashlog(
+    _In_reads_bytes_(Size) const VOID *Log,
+    _In_ ULONG Size,
+    _Out_ PAPPLE_RTKIT_CRASH Crash)
+{
+    const UCHAR *Bytes = Log;
+    ULONG Total, Offset, Length, Payload;
+
+    RtlZeroMemory(Crash, sizeof(*Crash));
+    if (!Log || Size < 0x20 || RtlCompareMemory(Bytes, "CLHE", 4) != 4)
+        return FALSE;
+    RtlCopyMemory(&Total, Bytes + 8, sizeof(Total));
+    if (Total < 0x20 || Total > Size)
+        Total = Size;
+    for (Offset = 0x20; Offset + 0x10 <= Total; Offset += Length)
+    {
+        if (RtlCompareMemory(Bytes + Offset, "CLHE", 4) == 4)
+            break;
+        RtlCopyMemory(&Length, Bytes + Offset + 12, sizeof(Length));
+        if (Length < 0x10 || Length > Total - Offset)
+            break;
+        Payload = Length - 0x10;
+        if (RtlCompareMemory(Bytes + Offset, "Cver", 4) == 4 && Payload > 0x10)
+        {
+            Crash->Version[0] = '\0';
+            RtkitCrashString(Crash->Version, sizeof(Crash->Version), Bytes + Offset + 0x20, Payload - 0x10);
+        }
+        else if (RtlCompareMemory(Bytes + Offset, "Cstr", 4) == 4 && Payload > 4)
+        {
+            RtkitCrashString(Crash->Message, sizeof(Crash->Message), Bytes + Offset + 0x14, Payload - 4);
+        }
+        else if (RtlCompareMemory(Bytes + Offset, "Crg8", 4) == 4 && Payload >= 0x348)
+        {
+            const UCHAR *Regs = Bytes + Offset + 0x10;
+
+            Crash->Registers = TRUE;
+            Crash->Lr = RtkitCrashQuad(Regs + 0xf8);
+            Crash->Sp = RtkitCrashQuad(Regs + 0x100);
+            Crash->Pc = RtkitCrashQuad(Regs + 0x108);
+            Crash->Psr = RtkitCrashQuad(Regs + 0x110);
+            Crash->Far = RtkitCrashQuad(Regs + 0x330);
+            Crash->Esr = RtkitCrashQuad(Regs + 0x340);
+        }
+        else if (RtlCompareMemory(Bytes + Offset, "Ccst", 4) == 4 && Payload > 8)
+        {
+            ULONG At;
+
+            for (At = 8; At + 8 <= Payload && Crash->StackDepth < APPLE_RTKIT_CRASH_STACK; At += 8)
+            {
+                ULONG64 Frame = RtkitCrashQuad(Bytes + Offset + 0x10 + At);
+
+                if (!Frame)
+                    break;
+                Crash->Stack[Crash->StackDepth++] = Frame;
+            }
+        }
+    }
+    return TRUE;
+}
+
+#define RTKIT_CRASHLOG_MAX          0x10000
+
+static
+VOID
+RtkitReportCrash(
+    _Inout_ PAPPLE_RTKIT Rtkit)
+{
+    APPLE_RTKIT_CRASH Crash;
+    PUCHAR Copy;
+    ULONG Size, Index;
+
+    if (!Rtkit->CrashlogBuffer || !Rtkit->CrashlogBufferSize)
+    {
+        DbgPrint("%s: the coprocessor gave no crash log buffer\n", Rtkit->Name);
+        return;
+    }
+    Size = min(Rtkit->CrashlogBufferSize, RTKIT_CRASHLOG_MAX);
+    Copy = ExAllocatePoolZero(NonPagedPool, Size, 'cRpA');
+    if (!Copy)
+        return;
+    for (Index = 0; Index < Size; ++Index)
+        Copy[Index] = READ_REGISTER_UCHAR((volatile UCHAR *)Rtkit->CrashlogBuffer + Index);
+    if (!AppleRtkitParseCrashlog(Copy, Size, &Crash))
+    {
+        DbgPrint("%s: the crash log is not readable (%02x %02x %02x %02x)\n", Rtkit->Name, Copy[0], Copy[1], Copy[2],
+                 Copy[3]);
+    }
+    else
+    {
+        DbgPrint("%s: crash in firmware %s: %s\n", Rtkit->Name, Crash.Version[0] ? Crash.Version : "?",
+                 Crash.Message[0] ? Crash.Message : "(no message)");
+        if (Crash.Registers)
+        {
+            DbgPrint("%s: crash at pc %I64x lr %I64x sp %I64x psr %I64x far %I64x esr %I64x\n", Rtkit->Name,
+                     Crash.Pc, Crash.Lr, Crash.Sp, Crash.Psr, Crash.Far, Crash.Esr);
+        }
+        for (Index = 0; Index < Crash.StackDepth; ++Index)
+            DbgPrint("%s: crash stack %lu: %I64x\n", Rtkit->Name, Index, Crash.Stack[Index]);
+    }
+    ExFreePoolWithTag(Copy, 'cRpA');
+}
+
 BOOLEAN
 NTAPI
 AppleRtkitPoll(
@@ -331,6 +472,7 @@ AppleRtkitPoll(
                 else
                 {
                     DbgPrint("%s: the coprocessor crashed (%I64x)\n", Rtkit->Name, Message);
+                    RtkitReportCrash(Rtkit);
                     Rtkit->Failed = TRUE;
                 }
                 break;

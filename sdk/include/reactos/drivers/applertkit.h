@@ -60,7 +60,34 @@ struct _APPLE_RTKIT
     ULONG SyslogBufferSize;
     ULONG SyslogEntries;
     ULONG SyslogMessageSize;
+
+    PVOID CrashlogBuffer;
+    ULONG CrashlogBufferSize;
 };
+
+#define APPLE_RTKIT_CRASH_STACK     8
+
+typedef struct _APPLE_RTKIT_CRASH
+{
+    CHAR Version[64];
+    CHAR Message[192];
+    BOOLEAN Registers;
+    ULONG64 Pc;
+    ULONG64 Lr;
+    ULONG64 Sp;
+    ULONG64 Psr;
+    ULONG64 Far;
+    ULONG64 Esr;
+    ULONG StackDepth;
+    ULONG64 Stack[APPLE_RTKIT_CRASH_STACK];
+} APPLE_RTKIT_CRASH, *PAPPLE_RTKIT_CRASH;
+
+BOOLEAN
+NTAPI
+AppleRtkitParseCrashlog(
+    _In_reads_bytes_(Size) const VOID *Log,
+    _In_ ULONG Size,
+    _Out_ PAPPLE_RTKIT_CRASH Crash);
 
 BOOLEAN
 NTAPI
