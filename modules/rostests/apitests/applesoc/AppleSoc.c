@@ -2930,6 +2930,109 @@ TestAgxStates(VOID)
     AgxInitBuffers[APPLE_AGX_OBJECT_HWDATA] = NULL;
 }
 
+static UCHAR AgxQueueInfo[APPLE_AGX_QINFO_SIZE];
+static UCHAR AgxQueueState[APPLE_AGX_QSTATE_SIZE];
+static ULONG64 AgxQueueRing[16];
+
+static
+VOID
+TestAgxQueue(VOID)
+{
+    UCHAR Record[APPLE_AGX_SUBMIT_RECORD];
+    APPLE_AGX_QUEUE Queue;
+    ULONG64 Value;
+    USHORT Head;
+    ULONG Index, Read, Kind;
+
+    RtlZeroMemory(&Queue, sizeof(Queue));
+    Queue.Info = 0xfffffc2100000000ULL;
+    Queue.State = 0xfffffc2100004000ULL;
+    Queue.Ring = 0xfffffc2100008000ULL;
+    Queue.JobList = 0xfffffc210000c000ULL;
+    Queue.Scratch = 0xfffffc2100010000ULL;
+    Queue.SchedContext = 0xfffffc2100014000ULL;
+    Queue.InfoVirtual = AgxQueueInfo;
+    Queue.StateVirtual = AgxQueueState;
+    Queue.RingVirtual = AgxQueueRing;
+    Queue.Entries = RTL_NUMBER_OF(AgxQueueRing);
+
+    /* A queue tells the firmware where everything of its own is. */
+    ok_hex(AppleAgxQueueDescribe(&Queue), STATUS_SUCCESS);
+    RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_STATE, sizeof(Value));
+    ok(Value == Queue.State, "The queue state is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_RING, sizeof(Value));
+    ok(Value == Queue.Ring, "The work ring is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_JOB_LIST, sizeof(Value));
+    ok(Value == Queue.JobList, "The job list is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_SCRATCH, sizeof(Value));
+    ok(Value == Queue.Scratch, "The scratch is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_SCHED_CONTEXT, sizeof(Value));
+    ok(Value == Queue.SchedContext, "The scheduling context is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_UNKNOWN_AC, sizeof(Value));
+    ok(Value == APPLE_AGX_QINFO_UNKNOWN_AC_VALUE, "The queue carries %I64x\n", Value);
+    RtlCopyMemory(&Read, AgxQueueState + APPLE_AGX_QSTATE_CAPACITY, sizeof(Read));
+    ok_int(Read, RTL_NUMBER_OF(AgxQueueRing));
+
+    /* Work goes into the ring at the host's cursor and the cursor names the head to run to. */
+    ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140000000ULL, &Head), STATUS_SUCCESS);
+    ok_int(Head, 1);
+    ok(AgxQueueRing[0] == 0xfffffc2140000000ULL, "The first work is at %I64x\n", AgxQueueRing[0]);
+    RtlCopyMemory(&Read, AgxQueueState + APPLE_AGX_QSTATE_WRITE, sizeof(Read));
+    ok_int(Read, 1);
+    ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140004000ULL, &Head), STATUS_SUCCESS);
+    ok_int(Head, 2);
+    ok(AgxQueueRing[1] == 0xfffffc2140004000ULL, "The second work is at %I64x\n", AgxQueueRing[1]);
+
+    /* The ring fills and does not write over work the firmware has not read. */
+    for (Index = 2; Index < RTL_NUMBER_OF(AgxQueueRing) - 1; ++Index)
+        ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140000000ULL + Index, &Head), STATUS_SUCCESS);
+    ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140000000ULL, &Head), STATUS_DEVICE_BUSY);
+    Read = 4;
+    RtlCopyMemory(AgxQueueState + APPLE_AGX_QSTATE_READ, &Read, sizeof(Read));
+    ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140008000ULL, &Head), STATUS_SUCCESS);
+    ok_int(Head, 0);
+    ok(AgxQueueRing[RTL_NUMBER_OF(AgxQueueRing) - 1] == 0xfffffc2140008000ULL, "The last slot holds %I64x\n",
+       AgxQueueRing[RTL_NUMBER_OF(AgxQueueRing) - 1]);
+
+    /* A cursor the firmware could not have written is refused, and so is nothing to run. */
+    Read = 99;
+    RtlCopyMemory(AgxQueueState + APPLE_AGX_QSTATE_READ, &Read, sizeof(Read));
+    ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140000000ULL, &Head), STATUS_DEVICE_DATA_ERROR);
+    Read = 0;
+    RtlCopyMemory(AgxQueueState + APPLE_AGX_QSTATE_READ, &Read, sizeof(Read));
+    ok_hex(AppleAgxQueuePost(&Queue, 0, &Head), STATUS_INVALID_PARAMETER);
+
+    /* What the firmware reports as finished. */
+    Read = 7;
+    RtlCopyMemory(AgxQueueState + APPLE_AGX_QSTATE_DONE, &Read, sizeof(Read));
+    ok_int(AppleAgxQueueDone(&Queue), 7);
+
+    /* The record a submission carries: the queue, what to run, and how far. */
+    for (Kind = APPLE_AGX_WORK_VERTEX; Kind <= APPLE_AGX_WORK_COMPUTE; ++Kind)
+    {
+        ULONG Written = 0;
+        USHORT At = 0;
+
+        AppleAgxSubmitRecord(Record, Queue.Info, Kind, (USHORT)(300 + Kind), 5, Kind == APPLE_AGX_WORK_COMPUTE);
+        RtlCopyMemory(&Value, Record + APPLE_AGX_SUBMIT_QUEUE, sizeof(Value));
+        ok(Value == Queue.Info, "The record names the queue at %I64x\n", Value);
+        RtlCopyMemory(&Written, Record + APPLE_AGX_SUBMIT_KIND, sizeof(Written));
+        ok_int(Written, Kind);
+        RtlCopyMemory(&At, Record + APPLE_AGX_SUBMIT_HEAD, sizeof(At));
+        ok_int(At, 300 + Kind);
+        ok_int(Record[APPLE_AGX_SUBMIT_EVENT], 5);
+        ok_int(Record[APPLE_AGX_SUBMIT_NEW_QUEUE], Kind == APPLE_AGX_WORK_COMPUTE ? 1 : 0);
+        RtlCopyMemory(&Value, Record, sizeof(Value));
+        ok(Value == 0, "The record's first word is %I64x\n", Value);
+    }
+
+    /* A queue with nothing of its own is refused rather than described. */
+    RtlZeroMemory(&Queue, sizeof(Queue));
+    ok_hex(AppleAgxQueueDescribe(&Queue), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140000000ULL, &Head), STATUS_INVALID_PARAMETER);
+    ok_int(AppleAgxQueueDone(&Queue), 0);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -4068,6 +4171,7 @@ START_TEST(AppleSoc)
     TestAgxRing();
     TestAgxRegisters();
     TestAgxStates();
+    TestAgxQueue();
     TestSpmi();
     TestAtcphy();
     TestPcie();

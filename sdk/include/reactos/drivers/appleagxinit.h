@@ -304,3 +304,85 @@ AppleAgxWriteStates(
     _Inout_ PAPPLE_AGX_INIT Init,
     _In_ const APPLE_AGX_DESCRIPTION *Description,
     _Out_ PULONG TopKilohertz);
+
+/* A work queue the firmware runs: its description, its cursors and a ring of work addresses.
+ * A submission on a channel names the queue and the head of its ring to run to. */
+#define APPLE_AGX_QINFO_SIZE            0xb4
+#define APPLE_AGX_QINFO_STATE           0x00
+#define APPLE_AGX_QINFO_RING            0x08
+#define APPLE_AGX_QINFO_JOB_LIST        0x10
+#define APPLE_AGX_QINFO_SCRATCH         0x18
+#define APPLE_AGX_QINFO_UUID            0x50
+#define APPLE_AGX_QINFO_SCHED_CONTEXT   0xa4
+#define APPLE_AGX_QINFO_UNKNOWN_AC      0xac
+#define APPLE_AGX_QINFO_UNKNOWN_AC_VALUE 4
+
+#define APPLE_AGX_QSTATE_SIZE           0x60
+#define APPLE_AGX_QSTATE_DONE           0x00
+#define APPLE_AGX_QSTATE_READ           0x30
+#define APPLE_AGX_QSTATE_WRITE          0x40
+#define APPLE_AGX_QSTATE_CAPACITY       0x50
+
+#define APPLE_AGX_SCHED_CONTEXT_SIZE    0x40
+#define APPLE_AGX_NOTIFIER_SIZE         0x108
+#define APPLE_AGX_NOTIFIER_THRESHOLD    0x00
+#define APPLE_AGX_NOTIFIER_UNKNOWN_10   0x10
+#define APPLE_AGX_NOTIFIER_UNKNOWN_10_VALUE 0x50
+#define APPLE_AGX_NOTIFIER_MASK         0xa8
+#define APPLE_AGX_JOB_LIST_SIZE         0x18
+#define APPLE_AGX_JOB_LIST_SELF         0x08
+#define APPLE_AGX_WORK_ENTRY            8
+
+/* What the firmware is asked to run. */
+#define APPLE_AGX_WORK_VERTEX           0
+#define APPLE_AGX_WORK_FRAGMENT         1
+#define APPLE_AGX_WORK_COMPUTE          3
+
+/* The record a submission carries on a channel. */
+#define APPLE_AGX_SUBMIT_QUEUE          0x08
+#define APPLE_AGX_SUBMIT_KIND           0x10
+#define APPLE_AGX_SUBMIT_HEAD           0x14
+#define APPLE_AGX_SUBMIT_EVENT          0x16
+#define APPLE_AGX_SUBMIT_NEW_QUEUE      0x17
+
+typedef struct _APPLE_AGX_QUEUE
+{
+    ULONG64 Info;
+    ULONG64 State;
+    ULONG64 Ring;
+    ULONG64 JobList;
+    ULONG64 Scratch;
+    ULONG64 SchedContext;
+    PVOID InfoVirtual;
+    PVOID StateVirtual;
+    PVOID RingVirtual;
+    ULONG Entries;
+    ULONG Write;
+} APPLE_AGX_QUEUE, *PAPPLE_AGX_QUEUE;
+
+NTSTATUS
+NTAPI
+AppleAgxQueueDescribe(
+    _Inout_ PAPPLE_AGX_QUEUE Queue);
+
+NTSTATUS
+NTAPI
+AppleAgxQueuePost(
+    _Inout_ PAPPLE_AGX_QUEUE Queue,
+    _In_ ULONG64 Work,
+    _Out_ PUSHORT Head);
+
+ULONG
+NTAPI
+AppleAgxQueueDone(
+    _In_ PAPPLE_AGX_QUEUE Queue);
+
+VOID
+NTAPI
+AppleAgxSubmitRecord(
+    _Out_writes_bytes_(APPLE_AGX_SUBMIT_RECORD) PVOID Record,
+    _In_ ULONG64 Queue,
+    _In_ ULONG Kind,
+    _In_ USHORT Head,
+    _In_ UCHAR Event,
+    _In_ BOOLEAN NewQueue);

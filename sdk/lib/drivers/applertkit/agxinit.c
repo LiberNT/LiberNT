@@ -633,3 +633,90 @@ AppleAgxWriteStates(
     *TopKilohertz = Top * 1000;
     return STATUS_SUCCESS;
 }
+
+/* The queue tells the firmware where its cursors, its ring of work and its scratch are. */
+NTSTATUS
+NTAPI
+AppleAgxQueueDescribe(
+    _Inout_ PAPPLE_AGX_QUEUE Queue)
+{
+    if (!Queue->InfoVirtual || !Queue->StateVirtual || !Queue->RingVirtual || !Queue->Entries ||
+        !Queue->State || !Queue->Ring)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlZeroMemory(Queue->InfoVirtual, APPLE_AGX_QINFO_SIZE);
+    RtlZeroMemory(Queue->StateVirtual, APPLE_AGX_QSTATE_SIZE);
+    AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_STATE, Queue->State);
+    AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_RING, Queue->Ring);
+    AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_JOB_LIST, Queue->JobList);
+    AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_SCRATCH, Queue->Scratch);
+    AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_SCHED_CONTEXT, Queue->SchedContext);
+    AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_UNKNOWN_AC, APPLE_AGX_QINFO_UNKNOWN_AC_VALUE);
+    AgxWriteLong(Queue->StateVirtual, APPLE_AGX_QSTATE_CAPACITY, Queue->Entries);
+    Queue->Write = 0;
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+/* A work address goes into the ring at the host's cursor, which then names the head the firmware
+ * is asked to run to. The entry the firmware has not read yet is never written over. */
+NTSTATUS
+NTAPI
+AppleAgxQueuePost(
+    _Inout_ PAPPLE_AGX_QUEUE Queue,
+    _In_ ULONG64 Work,
+    _Out_ PUSHORT Head)
+{
+    ULONG Read = 0, Next;
+
+    *Head = 0;
+    if (!Queue->RingVirtual || !Queue->StateVirtual || !Queue->Entries || !Work)
+        return STATUS_INVALID_PARAMETER;
+    KeMemoryBarrier();
+    RtlCopyMemory(&Read, (PUCHAR)Queue->StateVirtual + APPLE_AGX_QSTATE_READ, sizeof(Read));
+    if (Read >= Queue->Entries)
+        return STATUS_DEVICE_DATA_ERROR;
+    Next = (Queue->Write + 1) % Queue->Entries;
+    if (Next == Read)
+        return STATUS_DEVICE_BUSY;
+    AgxWriteQuad(Queue->RingVirtual, Queue->Write * APPLE_AGX_WORK_ENTRY, Work);
+    KeMemoryBarrier();
+    Queue->Write = Next;
+    AgxWriteLong(Queue->StateVirtual, APPLE_AGX_QSTATE_WRITE, Queue->Write);
+    KeMemoryBarrier();
+    *Head = (USHORT)Queue->Write;
+    return STATUS_SUCCESS;
+}
+
+ULONG
+NTAPI
+AppleAgxQueueDone(
+    _In_ PAPPLE_AGX_QUEUE Queue)
+{
+    ULONG Done = 0;
+
+    if (!Queue->StateVirtual)
+        return 0;
+    KeMemoryBarrier();
+    RtlCopyMemory(&Done, (PUCHAR)Queue->StateVirtual + APPLE_AGX_QSTATE_DONE, sizeof(Done));
+    return Done;
+}
+
+VOID
+NTAPI
+AppleAgxSubmitRecord(
+    _Out_writes_bytes_(APPLE_AGX_SUBMIT_RECORD) PVOID Record,
+    _In_ ULONG64 Queue,
+    _In_ ULONG Kind,
+    _In_ USHORT Head,
+    _In_ UCHAR Event,
+    _In_ BOOLEAN NewQueue)
+{
+    RtlZeroMemory(Record, APPLE_AGX_SUBMIT_RECORD);
+    AgxWriteQuad(Record, APPLE_AGX_SUBMIT_QUEUE, Queue);
+    AgxWriteLong(Record, APPLE_AGX_SUBMIT_KIND, Kind);
+    RtlCopyMemory((PUCHAR)Record + APPLE_AGX_SUBMIT_HEAD, &Head, sizeof(Head));
+    ((PUCHAR)Record)[APPLE_AGX_SUBMIT_EVENT] = Event;
+    ((PUCHAR)Record)[APPLE_AGX_SUBMIT_NEW_QUEUE] = NewQueue ? 1 : 0;
+}
