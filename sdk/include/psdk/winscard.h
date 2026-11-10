@@ -28,6 +28,17 @@
 #define WINSCARDAPI DECLSPEC_IMPORT
 #endif
 
+#ifdef __REACTOS__
+#ifndef WINSCARDDATA
+#define WINSCARDDATA DECLSPEC_IMPORT
+#endif
+
+WINSCARDDATA extern const SCARD_IO_REQUEST g_rgSCardT0Pci, g_rgSCardT1Pci, g_rgSCardRawPci;
+#define SCARD_PCI_T0  (&g_rgSCardT0Pci)
+#define SCARD_PCI_T1  (&g_rgSCardT1Pci)
+#define SCARD_PCI_RAW (&g_rgSCardRawPci)
+#endif
+
 /* Valid scopes for contexts */
 #define SCARD_SCOPE_USER     0
 #define SCARD_SCOPE_TERMINAL 1

@@ -19,6 +19,9 @@
 
 #include <stdarg.h>
 #define WINSCARDAPI
+#ifdef __REACTOS__
+#define WINSCARDDATA
+#endif
 #include "windef.h"
 #include "winbase.h"
 #include "winscard.h"
