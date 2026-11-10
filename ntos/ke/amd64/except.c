@@ -792,6 +792,7 @@ KiGeneralProtectionFaultHandler(
     IN PKTRAP_FRAME TrapFrame)
 {
     PUCHAR Instructions;
+    ULONG Offset;
 
     /* Check for user-mode GPF */
     if (TrapFrame->SegCs & 3)
@@ -833,15 +834,37 @@ KiGeneralProtectionFaultHandler(
         return STATUS_ACCESS_VIOLATION;
     }
 
+    /* Rbx, Rsi and Rdi are not in the trap frame, only in the exception frame */
     DPRINT1("KiGeneralProtectionFaultHandler: unhandled kernel GPF at RIP=%p\n"
             "  Instruction bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n"
-            "  RAX=%p RCX=%p RDX=%p\n"
-            "  ErrorCode=%p\n",
+            "  ErrorCode=%p EFlags=%lx Cs=%x process %s\n"
+            "  RAX=%p RCX=%p RDX=%p R8=%p\n"
+            "  R9=%p R10=%p R11=%p RBP=%p RSP=%p\n",
             (PVOID)TrapFrame->Rip,
             Instructions[0], Instructions[1], Instructions[2], Instructions[3],
             Instructions[4], Instructions[5], Instructions[6], Instructions[7],
+            (PVOID)(ULONG_PTR)TrapFrame->ErrorCode, TrapFrame->EFlags,
+            TrapFrame->SegCs, PsGetProcessImageFileName(PsGetCurrentProcess()),
             (PVOID)TrapFrame->Rax, (PVOID)TrapFrame->Rcx, (PVOID)TrapFrame->Rdx,
-            (PVOID)(ULONG_PTR)TrapFrame->ErrorCode);
+            (PVOID)TrapFrame->R8, (PVOID)TrapFrame->R9, (PVOID)TrapFrame->R10,
+            (PVOID)TrapFrame->R11, (PVOID)TrapFrame->Rbp, (PVOID)TrapFrame->Rsp);
+
+    for (Offset = 0; Offset < 24 * sizeof(ULONG64); Offset += 4 * sizeof(ULONG64))
+    {
+        PULONG64 Words = (PULONG64)(TrapFrame->Rsp + Offset);
+
+        if ((TrapFrame->Rsp < (ULONG64)MM_SYSTEM_RANGE_START) ||
+            !MmIsAddressValid(Words) ||
+            !MmIsAddressValid(&Words[3]))
+        {
+            break;
+        }
+
+        DPRINT1("  Stack+%02lx: %p %p %p %p\n",
+                Offset, (PVOID)Words[0], (PVOID)Words[1],
+                (PVOID)Words[2], (PVOID)Words[3]);
+    }
+
     return STATUS_ACCESS_VIOLATION;
 }
 
