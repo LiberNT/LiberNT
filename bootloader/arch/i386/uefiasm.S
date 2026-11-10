@@ -50,13 +50,8 @@ _I386TransferStart:
     lgdt lXdtPrefix [eax]
     mov eax, dword ptr [esp + 16]
     lidt lXdtPrefix [eax]
-    call I386TransferBase
-I386TransferBase:
-    pop eax
-    add eax, I386TransferSegments - I386TransferBase
     push KGDT_R0_CODE
-    push eax
-    .byte HEX(CB)
+    call I386TransferFarReturn
 I386TransferSegments:
     mov ax, KGDT_R0_DATA
     mov ds, ax
@@ -76,6 +71,8 @@ I386TransferSegments:
 I386TransferHalt:
     hlt
     jmp I386TransferHalt
+I386TransferFarReturn:
+    .byte HEX(CB)
 PUBLIC _I386TransferEnd
 _I386TransferEnd:
 
