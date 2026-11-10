@@ -105,6 +105,7 @@
 #define APPLE_AGX_STATS_RING_SIZE       0x4000
 #define APPLE_AGX_FWCTL_RING_SIZE       0x1800
 #define APPLE_AGX_TIMESTAMPS_SIZE       0x4000000
+#define APPLE_AGX_TIMESTAMP_ARENA       0xfffffc2ffc000000ULL
 
 /* How a page of the initial data may be reached. */
 #define APPLE_AGX_CLASS_FIRMWARE        0
@@ -599,6 +600,7 @@ AppleAgxSeedPools(
 #define APPLE_AGX_COMPUTE_END_AT        0x2b4
 #define APPLE_AGX_COMPUTE_TIMESTAMP_START 0x1bc
 #define APPLE_AGX_COMPUTE_TIMESTAMP_END 0x1fc
+#define APPLE_AGX_COMPUTE_TAIL          0x810
 #define APPLE_AGX_COMPUTE_UUID          0xc10000
 #define APPLE_AGX_MAX_ATTACHMENTS       16
 #define APPLE_AGX_ATTACHMENT_GRAIN      128
@@ -622,6 +624,7 @@ typedef struct _APPLE_AGX_COMPUTE_REFS
     ULONG64 Tail;
     ULONG64 Preempt;
     ULONG64 StreamEnd;
+    ULONG64 UserTimestamps[2];
 } APPLE_AGX_COMPUTE_REFS, *PAPPLE_AGX_COMPUTE_REFS;
 
 typedef struct _APPLE_AGX_ATTACHMENT
@@ -714,6 +717,7 @@ AppleAgxWriteRegisters(
 #define APPLE_AGX_FRAGMENT_SCRATCH_MIN      0x10000
 #define APPLE_AGX_TAIL_PAIR                 0x08
 #define APPLE_AGX_TAIL_END                  0x10
+#define APPLE_AGX_TAIL_USER                 0x18
 #define APPLE_AGX_TAIL_REQUEST              0x50
 #define APPLE_AGX_TAIL_COMPLETE             0x58
 
@@ -730,6 +734,7 @@ typedef struct _APPLE_AGX_RENDER_REFS
     ULONG64 FirmwareStamp;
     ULONG64 Scratch;
     ULONG64 ScratchBytes;
+    BOOLEAN Requested;
 } APPLE_AGX_RENDER_REFS, *PAPPLE_AGX_RENDER_REFS;
 
 NTSTATUS

@@ -3347,6 +3347,35 @@ TestAgxEncodeCompute(VOID)
     RtlCopyMemory(&Word, AgxSequence + 0x1f8, sizeof(Word));
     ok_int(Word, 1);
 
+    /* Both timestamp records are written over the work's cells; no user pair is named. */
+    RtlCopyMemory(&Word, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_START, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_OP_TIMESTAMP);
+    RtlCopyMemory(&Word, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_END, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_OP_TIMESTAMP_END);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_START + 0x04, sizeof(Value));
+    ok(Value == Refs.Work + 0x810, "The start record's cells are at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_START + 0x14, sizeof(Value));
+    ok(Value == Refs.Work + 0x818, "The start record selects %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_END + 0x14, sizeof(Value));
+    ok(Value == Refs.Work + 0x820, "The end record selects %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_END + 0x1c, sizeof(Value));
+    ok(Value == Refs.Queue, "The end record names queue %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_START + 0x24, sizeof(Value));
+    ok(Value == 0, "The start record names a user pair at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_END + 0x2c, sizeof(Value));
+    ok(Value == Refs.Work + 0x810 + 0x58, "The end record completes at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_END + 0x34, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_COMPUTE_UUID);
+
+    /* A command that asks for timestamps has both records name the user pair. */
+    Refs.UserTimestamps[1] = 0xfffffc2ffc000008ULL;
+    ok_hex(AppleAgxEncodeCompute(AgxSequence, &Refs, Attachment, 2, 7, 0x1234, TRUE), STATUS_SUCCESS);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_START + 0x24, sizeof(Value));
+    ok(Value == Refs.Work + 0x810 + 0x18, "The start record names the user pair at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_TIMESTAMP_END + 0x24, sizeof(Value));
+    ok(Value == Refs.Work + 0x810 + 0x18, "The end record names the user pair at %I64x\n", Value);
+    Refs.UserTimestamps[1] = 0;
+
     /* The finalize step, and the end of the sequence. */
     RtlCopyMemory(&Word, AgxSequence + Final, sizeof(Word));
     ok_hex(Word, APPLE_AGX_OP_COMPUTE_FINALIZE);
@@ -3465,6 +3494,18 @@ TestAgxComputeWork(VOID)
     ok(Value == Refs.Tail, "The tail is at %I64x\n", Value);
     RtlCopyMemory(&Word, AgxWork + 0x7e0, sizeof(Word));
     ok_hex(Word, 0xffffffff);
+    RtlCopyMemory(&Value, AgxWork + 0x828, sizeof(Value));
+    ok(Value == 0, "The user start time goes to %I64x\n", Value);
+
+    /* The times a command asks for are written where it named them. */
+    Refs.UserTimestamps[0] = 0xfffffc2ffc000000ULL;
+    Refs.UserTimestamps[1] = 0xfffffc2ffc000008ULL;
+    ok_hex(AppleAgxEncodeComputeWork(AgxWork, &Refs, Register, 7, 3, 0x1234), STATUS_SUCCESS);
+    RtlCopyMemory(&Value, AgxWork + 0x828, sizeof(Value));
+    ok(Value == 0xfffffc2ffc000000ULL, "The user start time goes to %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxWork + 0x830, sizeof(Value));
+    ok(Value == 0xfffffc2ffc000008ULL, "The user end time goes to %I64x\n", Value);
+    Refs.UserTimestamps[0] = Refs.UserTimestamps[1] = 0;
 
     /* Work that names nothing to run is refused. */
     Refs.Sequence = 0;
@@ -4420,6 +4461,23 @@ TestAgxBuildRender(VOID)
     Bad = Job;
     Bad.SceneList = 0;
     ok_hex(AppleAgxBuildRender(&Bad, &Render, 5, 5), STATUS_INVALID_PARAMETER);
+
+    /* A render that asks for timestamps names the user pair in its records and its tails. */
+    ok(BufQuad(AgxJobSequence[0], APPLE_AGX_VERTEX_TIMESTAMP_START + 0x24) == 0,
+       "The vertex record names a user pair at %I64x\n", BufQuad(AgxJobSequence[0], APPLE_AGX_VERTEX_TIMESTAMP_START + 0x24));
+    Job.UserTimestamps[1][1] = 0xfffffc2ffc000018ULL;
+    ok_hex(AppleAgxBuildRender(&Job, &Render, 5, 5), STATUS_SUCCESS);
+    ok(BufQuad(AgxJobSequence[0], APPLE_AGX_VERTEX_TIMESTAMP_START + 0x24) == 0,
+       "The vertex record names a user pair at %I64x\n", BufQuad(AgxJobSequence[0], APPLE_AGX_VERTEX_TIMESTAMP_START + 0x24));
+    ok(BufQuad(AgxJobSequence[1], APPLE_AGX_FRAGMENT_TIMESTAMP_START + 0x24) == Job.FragmentWorkAddress + 0xbf0 + 0x18,
+       "The fragment record names the user pair at %I64x\n",
+       BufQuad(AgxJobSequence[1], APPLE_AGX_FRAGMENT_TIMESTAMP_START + 0x24));
+    ok(BufQuad(AgxJobSequence[1], APPLE_AGX_FRAGMENT_TIMESTAMP_END + 0x24) == Job.FragmentWorkAddress + 0xbf0 + 0x18,
+       "The fragment end record names the user pair at %I64x\n",
+       BufQuad(AgxJobSequence[1], APPLE_AGX_FRAGMENT_TIMESTAMP_END + 0x24));
+    ok(BufQuad(AgxFragmentWork, 0xbf0 + 0x20) == 0xfffffc2ffc000018ULL, "The fragment end time goes to %I64x\n",
+       BufQuad(AgxFragmentWork, 0xbf0 + 0x20));
+    Job.UserTimestamps[1][1] = 0;
 
     /* The scene list cycles through its slots with the render's number. */
     ok_hex(AppleAgxBuildRender(&Job, &Render, 5, 50), STATUS_SUCCESS);

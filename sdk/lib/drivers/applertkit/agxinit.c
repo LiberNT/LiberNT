@@ -880,6 +880,17 @@ AgxWriteWord(
 
 /* The sequence starts the work, names everything it reaches, finalizes it and ends. The firmware
  * walks it as an instruction stream, so every address it names is written at its own offset. */
+static
+VOID
+AgxWriteTimestamps(
+    _Inout_ PVOID Sequence,
+    _In_ ULONG Start,
+    _In_ ULONG End,
+    _In_ ULONG64 Tail,
+    _In_ ULONG64 Queue,
+    _In_ ULONG Uuid,
+    _In_ BOOLEAN Requested);
+
 NTSTATUS
 NTAPI
 AppleAgxEncodeCompute(
@@ -930,8 +941,9 @@ AppleAgxEncodeCompute(
     AgxWriteQuad(Sequence, 0x19c, Refs->Scratch[4]);
     AgxWriteQuad(Sequence, 0x1a4, Refs->Work + 0x880);
     AgxWriteQuad(Sequence, 0x1b4, Refs->Notifier + APPLE_AGX_NOTIFIER_MASK);
-    /* FIXME: the start and end timestamp records are left empty; no timestamp is asked for. */
-    AgxWriteLong(Sequence, 0x1f8, 1);
+    AgxWriteTimestamps(Sequence, APPLE_AGX_COMPUTE_TIMESTAMP_START, APPLE_AGX_COMPUTE_TIMESTAMP_END,
+                       Refs->Work + APPLE_AGX_COMPUTE_TAIL, Refs->Queue, APPLE_AGX_COMPUTE_UUID,
+                       Refs->UserTimestamps[0] || Refs->UserTimestamps[1]);
     AgxWriteLong(Sequence, Final, APPLE_AGX_OP_COMPUTE_FINALIZE);
     AgxWriteQuad(Sequence, Final + 0x04, Refs->Hwdata + APPLE_AGX_COMPUTE_HWDATA);
     AgxWriteQuad(Sequence, Final + 0x0c, Refs->Queue);
@@ -1015,6 +1027,8 @@ AppleAgxEncodeComputeWork(
     AgxWriteLong(Work, 0x80c, Ordinal - 1);
     AgxWriteQuad(Work, 0x818, Refs->Timestamps);
     AgxWriteQuad(Work, 0x820, Refs->Timestamps + 8);
+    AgxWriteQuad(Work, 0x828, Refs->UserTimestamps[0]);
+    AgxWriteQuad(Work, 0x830, Refs->UserTimestamps[1]);
     AgxWriteQuad(Work, 0x83e, Refs->Manager);
     AgxWriteQuad(Work, 0x847, 0xad0000ULL);
     AgxWriteQuad(Work, 0x84f, 0x1600000ULL);
@@ -1282,6 +1296,8 @@ AgxRenderRefsValid(
            Refs->Scene && Refs->Manager && Refs->Pool && Refs->FirmwareStamp && Refs->Scratch;
 }
 
+/* Both records name the work's own cells; the user pair is named only when the command asked
+ * for timestamps. */
 static
 VOID
 AgxWriteTimestamps(
@@ -1290,7 +1306,8 @@ AgxWriteTimestamps(
     _In_ ULONG End,
     _In_ ULONG64 Tail,
     _In_ ULONG64 Queue,
-    _In_ ULONG Uuid)
+    _In_ ULONG Uuid,
+    _In_ BOOLEAN Requested)
 {
     const ULONG At[2] = { Start, End };
     const ULONG Opcode[2] = { APPLE_AGX_OP_TIMESTAMP, APPLE_AGX_OP_TIMESTAMP_END };
@@ -1304,6 +1321,7 @@ AgxWriteTimestamps(
         AgxWriteQuad(Sequence, At[Index] + 0x0c, Tail + APPLE_AGX_TAIL_PAIR);
         AgxWriteQuad(Sequence, At[Index] + 0x14, Selected[Index]);
         AgxWriteQuad(Sequence, At[Index] + 0x1c, Queue);
+        AgxWriteQuad(Sequence, At[Index] + 0x24, Requested ? Tail + APPLE_AGX_TAIL_USER : 0);
         AgxWriteQuad(Sequence, At[Index] + 0x2c, Tail + APPLE_AGX_TAIL_COMPLETE);
         AgxWriteLong(Sequence, At[Index] + 0x34, Uuid);
     }
@@ -1344,7 +1362,7 @@ AppleAgxEncodeVertexSequence(
     AgxWriteQuad(Sequence, 0x1b4, 1);
     AgxWriteQuad(Sequence, 0x1bc, Refs->Notifier + APPLE_AGX_NOTIFIER_MASK);
     AgxWriteTimestamps(Sequence, APPLE_AGX_VERTEX_TIMESTAMP_START, APPLE_AGX_VERTEX_TIMESTAMP_END, Tail,
-                       Refs->Queue, APPLE_AGX_VERTEX_UUID);
+                       Refs->Queue, APPLE_AGX_VERTEX_UUID, Refs->Requested);
     AgxWriteLong(Sequence, Final, APPLE_AGX_OP_VERTEX_FINALIZE);
     AgxWriteQuad(Sequence, Final + 0x04, Refs->Scene);
     AgxWriteQuad(Sequence, Final + 0x0c, Refs->Manager);
@@ -1406,7 +1424,7 @@ AppleAgxEncodeFragmentSequence(
     AgxWriteQuad(Sequence, 0x1bc, Refs->Scratch);
     AgxWriteQuad(Sequence, 0x1d4, Refs->Notifier + APPLE_AGX_NOTIFIER_MASK);
     AgxWriteTimestamps(Sequence, APPLE_AGX_FRAGMENT_TIMESTAMP_START, APPLE_AGX_FRAGMENT_TIMESTAMP_END, Tail,
-                       Refs->Queue, APPLE_AGX_FRAGMENT_UUID);
+                       Refs->Queue, APPLE_AGX_FRAGMENT_UUID, Refs->Requested);
     AgxWriteLong(Sequence, Final, APPLE_AGX_OP_FRAGMENT_FINALIZE);
     AgxWriteLong(Sequence, Final + 0x04, APPLE_AGX_FRAGMENT_UUID);
     AgxWriteQuad(Sequence, Final + 0x0c, Refs->FirmwareStamp);
@@ -2039,6 +2057,7 @@ AppleAgxBuildRender(
     Refs.Queue = Job->Queue[0];
     Refs.FirmwareStamp = Job->FirmwareStamp[0];
     Refs.Scratch = Job->VertexScratch;
+    Refs.Requested = Job->UserTimestamps[0][0] || Job->UserTimestamps[0][1];
     Status = AppleAgxEncodeVertexSequence(Job->VertexSequence, &Refs, Context, VertexStamp);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -2049,6 +2068,7 @@ AppleAgxBuildRender(
     Refs.FirmwareStamp = Job->FirmwareStamp[1];
     Refs.Scratch = Job->FragmentScratch;
     Refs.ScratchBytes = Job->FragmentScratchBytes;
+    Refs.Requested = Job->UserTimestamps[1][0] || Job->UserTimestamps[1][1];
     Status = AppleAgxEncodeFragmentSequence(Job->FragmentSequence, &Refs, Context, FragmentStamp,
                                             Job->QueueCommands);
     if (!NT_SUCCESS(Status))

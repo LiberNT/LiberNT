@@ -183,7 +183,8 @@ AppleAgxObjectZero(
 }
 
 /* The objects of the initial data sit at the addresses this firmware build was linked to look for
- * them at, each one contiguous for the processor however many pages it spans. */
+ * them at, each one contiguous for the processor however many pages it spans. The timestamp arena
+ * is only named: the clients' timestamp buffers are mapped into it when they are bound. */
 NTSTATUS
 NTAPI
 AppleAgxInitCreate(
@@ -210,6 +211,8 @@ AppleAgxInitCreate(
             AppleAgxInitRelease(Init);
             return STATUS_INVALID_PARAMETER;
         }
+        if (Object == APPLE_AGX_OBJECT_TIMESTAMPS)
+            continue;
         RtlZeroMemory(&Request, sizeof(Request));
         Request.At = Layout.Address;
         Request.Size = Layout.Size;
