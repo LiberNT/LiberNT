@@ -3346,6 +3346,93 @@ TestAgxComputeWork(VOID)
     ok_hex(AppleAgxEncodeComputeWork(AgxWork, &Refs, Register, 0, 1, 0), STATUS_SUCCESS);
 }
 
+static UCHAR AgxRenderWork[APPLE_AGX_FRAGMENT_WORK_SIZE];
+
+static
+VOID
+TestAgxRenderRegisters(VOID)
+{
+    static const ULONG Offsets[3] = { APPLE_AGX_VERTEX_REGISTERS, APPLE_AGX_FRAGMENT_REGISTERS,
+                                      APPLE_AGX_COMPUTE_REGISTERS };
+    static const ULONG Kinds[3] = { APPLE_AGX_WORK_VERTEX, APPLE_AGX_WORK_FRAGMENT,
+                                    APPLE_AGX_WORK_COMPUTE };
+    static const ULONG Counts[3] = { APPLE_AGX_VERTEX_REGISTER_COUNT, APPLE_AGX_FRAGMENT_REGISTER_COUNT,
+                                     APPLE_AGX_COMPUTE_REGISTER_COUNT };
+    ULONG64 Value[APPLE_AGX_FRAGMENT_REGISTER_COUNT];
+    ULONG64 Read;
+    ULONG Kind, Index, Count, Word;
+
+    /* Each engine has its own register set, and each set is a different size. */
+    for (Kind = 0; Kind < 3; ++Kind)
+    {
+        ok(AppleAgxSelectors(Kinds[Kind], &Count) != NULL, "Work kind %lu has no registers\n", Kinds[Kind]);
+        ok_int(Count, Counts[Kind]);
+    }
+    ok(AppleAgxSelectors(2, &Count) == NULL, "An unknown work kind had registers\n");
+    ok_int(Count, 0);
+    ok_hex(AppleAgxSelectors(APPLE_AGX_WORK_VERTEX, &Count)[0], 0x01748);
+    ok_hex(AppleAgxSelectors(APPLE_AGX_WORK_VERTEX, &Count)[APPLE_AGX_VERTEX_REGISTER_COUNT - 1], 0x1c910);
+    ok_hex(AppleAgxSelectors(APPLE_AGX_WORK_FRAGMENT, &Count)[0], 0x01739);
+    ok_hex(AppleAgxSelectors(APPLE_AGX_WORK_FRAGMENT, &Count)[APPLE_AGX_FRAGMENT_REGISTER_COUNT - 1], 0x0d429);
+    /* The register that asks for the initial parameter buffer. */
+    ok_hex(AppleAgxSelectors(APPLE_AGX_WORK_VERTEX, &Count)[APPLE_AGX_VERTEX_PARAMETER_REQUEST], 0x1c9a8);
+
+    /* No selector repeats inside a set, which would make a register unreachable. */
+    for (Kind = 0; Kind < 3; ++Kind)
+    {
+        const ULONG *Selector = AppleAgxSelectors(Kinds[Kind], &Count);
+        ULONG Repeats = 0, Other;
+
+        for (Index = 0; Index < Count; ++Index)
+        {
+            for (Other = Index + 1; Other < Count; ++Other)
+            {
+                if (Selector[Index] == Selector[Other])
+                    ++Repeats;
+            }
+        }
+        ok_int(Repeats, 0);
+    }
+
+    /* Every engine's registers are written at its own offset, in records of selector and value. */
+    for (Kind = 0; Kind < 3; ++Kind)
+    {
+        const ULONG *Selector = AppleAgxSelectors(Kinds[Kind], &Count);
+
+        for (Index = 0; Index < Count; ++Index)
+            Value[Index] = 0x5000ULL * (Index + 1) + Kind;
+        RtlZeroMemory(AgxRenderWork, sizeof(AgxRenderWork));
+        ok_hex(AppleAgxWriteRegisters(AgxRenderWork, Kinds[Kind], Value), STATUS_SUCCESS);
+        for (Index = 0; Index < Count; ++Index)
+        {
+            ULONG At = Offsets[Kind] + APPLE_AGX_REGISTER_RECORD * Index;
+
+            RtlCopyMemory(&Word, AgxRenderWork + At, sizeof(Word));
+            ok(Word == Selector[Index], "Kind %lu register %lu selects %lx\n", Kinds[Kind], Index, Word);
+            RtlCopyMemory(&Read, AgxRenderWork + At + 4, sizeof(Read));
+            ok(Read == Value[Index], "Kind %lu register %lu carries %I64x\n", Kinds[Kind], Index, Read);
+        }
+        /* The records stop where the count says they do. */
+        RtlCopyMemory(&Word, AgxRenderWork + Offsets[Kind] + APPLE_AGX_REGISTER_RECORD * Count, sizeof(Word));
+        ok_int(Word, 0);
+    }
+
+    /* The work images are large enough to hold their own registers and tails. */
+    ok(APPLE_AGX_VERTEX_REGISTERS + APPLE_AGX_REGISTER_RECORD * APPLE_AGX_VERTEX_REGISTER_COUNT <
+       APPLE_AGX_VERTEX_TAIL, "The vertex registers run into its tail\n");
+    ok(APPLE_AGX_FRAGMENT_REGISTERS + APPLE_AGX_REGISTER_RECORD * APPLE_AGX_FRAGMENT_REGISTER_COUNT <
+       APPLE_AGX_FRAGMENT_TAIL, "The fragment registers run into its tail\n");
+    ok(APPLE_AGX_VERTEX_TAIL < APPLE_AGX_VERTEX_WORK_SIZE &&
+       APPLE_AGX_FRAGMENT_TAIL < APPLE_AGX_FRAGMENT_WORK_SIZE, "A tail lies past its work image\n");
+    ok(APPLE_AGX_VERTEX_END_AT < APPLE_AGX_VERTEX_SEQUENCE_SIZE &&
+       APPLE_AGX_FRAGMENT_END_AT < APPLE_AGX_FRAGMENT_SEQUENCE_SIZE &&
+       APPLE_AGX_COMPUTE_END_AT < APPLE_AGX_COMPUTE_SEQUENCE_SIZE,
+       "A sequence ends past its own length\n");
+
+    ok_hex(AppleAgxWriteRegisters(NULL, APPLE_AGX_WORK_VERTEX, Value), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxWriteRegisters(AgxRenderWork, 2, Value), STATUS_INVALID_PARAMETER);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -4488,6 +4575,7 @@ START_TEST(AppleSoc)
     TestAgxPools();
     TestAgxEncodeCompute();
     TestAgxComputeWork();
+    TestAgxRenderRegisters();
     TestSpmi();
     TestAtcphy();
     TestPcie();

@@ -520,3 +520,38 @@ AppleAgxEncodeComputeWork(
     _In_ ULONG Context,
     _In_ ULONG Ordinal,
     _In_ ULONG Stamp);
+
+/* The vertex and fragment halves of the render path: their work images, the sequences that run
+ * them and the registers each is given. */
+#define APPLE_AGX_VERTEX_WORK_SIZE      0x92b
+#define APPLE_AGX_VERTEX_SEQUENCE_SIZE  0x2d8
+#define APPLE_AGX_VERTEX_REGISTERS      0x40
+#define APPLE_AGX_VERTEX_REGISTER_COUNT 72
+#define APPLE_AGX_VERTEX_HWDATA         0x1884
+#define APPLE_AGX_VERTEX_TAIL           0x8a8
+#define APPLE_AGX_VERTEX_FINALIZE_AT    0x248
+#define APPLE_AGX_VERTEX_END_AT         0x2d4
+#define APPLE_AGX_VERTEX_PARAMETER_REQUEST 32
+
+#define APPLE_AGX_FRAGMENT_WORK_SIZE    0xc73
+#define APPLE_AGX_FRAGMENT_SEQUENCE_SIZE 0x310
+#define APPLE_AGX_FRAGMENT_REGISTERS    0x80
+#define APPLE_AGX_FRAGMENT_REGISTER_COUNT 79
+#define APPLE_AGX_FRAGMENT_HWDATA       0x24c8
+#define APPLE_AGX_FRAGMENT_TAIL         0xbf0
+#define APPLE_AGX_FRAGMENT_FINALIZE_AT  0x258
+#define APPLE_AGX_FRAGMENT_END_AT       0x30c
+#define APPLE_AGX_TIMESTAMP_RECORD      0x3c
+
+const ULONG *
+NTAPI
+AppleAgxSelectors(
+    _In_ ULONG WorkType,
+    _Out_ PULONG Count);
+
+NTSTATUS
+NTAPI
+AppleAgxWriteRegisters(
+    _Inout_ PVOID Work,
+    _In_ ULONG WorkType,
+    _In_ const ULONG64 *Value);

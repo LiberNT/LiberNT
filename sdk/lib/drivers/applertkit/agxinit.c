@@ -969,3 +969,80 @@ AppleAgxEncodeComputeWork(
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
+
+/* The registers a vertex command is run with. */
+static const ULONG AgxVertexSelectors[APPLE_AGX_VERTEX_REGISTER_COUNT] =
+{
+    0x01748, 0x10141, 0x1c039, 0x1c9c8, 0x1c041, 0x1c9d0, 0x1c0a1, 0x1c031, 0x1c9c0, 0x1c051,
+    0x1c061, 0x10149, 0x10139, 0x10111, 0x1c9b0, 0x10119, 0x1c9b8, 0x1c958, 0x1c950, 0x1c930,
+    0x1c880, 0x1c898, 0x1c948, 0x1c888, 0x1c890, 0x1c918, 0x1c079, 0x1c9d8, 0x1c089, 0x1c9e0,
+    0x16c41, 0x1ca40, 0x1c9a8, 0x1c920, 0x10151, 0x1c199, 0x1c1a1, 0x1c1a9, 0x1c1b1, 0x1c1b9,
+    0x1c8f8, 0x1c0b1, 0x1c850, 0x10131, 0x10121, 0x10129, 0x101b9, 0x1c069, 0x1c071, 0x1c081,
+    0x1c0a9, 0x10171, 0x10169, 0x12099, 0x101e1, 0x1c9e8, 0x1a099, 0x1a0a1, 0x1a069, 0x1a071,
+    0x1a0c9, 0x1a0d1, 0x101c9, 0x0d471, 0x1a0f1, 0x10799, 0x0a5a1, 0x0d419, 0x1c830, 0x1ca30,
+    0x16c39, 0x1c910,
+};
+
+/* The registers a fragment command is run with. */
+static const ULONG AgxFragmentSelectors[APPLE_AGX_FRAGMENT_REGISTER_COUNT] =
+{
+    0x01739, 0x10009, 0x15379, 0x15381, 0x15369, 0x15371, 0x15131, 0x15139, 0x100a1, 0x15069,
+    0x15071, 0x16058, 0x10019, 0x100b1, 0x16030, 0x100d9, 0x10791, 0x16098, 0x15109, 0x15101,
+    0x15021, 0x15211, 0x15049, 0x10051, 0x15321, 0x15301, 0x15309, 0x15311, 0x15319, 0x15349,
+    0x15351, 0x15329, 0x15331, 0x15339, 0x15341, 0x15231, 0x15221, 0x15239, 0x15229, 0x15401,
+    0x15421, 0x15409, 0x15429, 0x153c1, 0x15411, 0x153c9, 0x15431, 0x153d1, 0x15419, 0x153d9,
+    0x15439, 0x16429, 0x16060, 0x16431, 0x10039, 0x16020, 0x16451, 0x15359, 0x100b8, 0x16461,
+    0x16090, 0x120a1, 0x101e9, 0x160a8, 0x16068, 0x160b8, 0x1a0a9, 0x1a0b1, 0x1a079, 0x1a081,
+    0x1a0d9, 0x1a0e1, 0x101c1, 0x0d469, 0x1a0f9, 0x1c838, 0x1ca28, 0x0a5a9, 0x0d429,
+};
+
+const ULONG *
+NTAPI
+AppleAgxSelectors(
+    _In_ ULONG WorkType,
+    _Out_ PULONG Count)
+{
+    switch (WorkType)
+    {
+        case APPLE_AGX_WORK_VERTEX:
+            *Count = APPLE_AGX_VERTEX_REGISTER_COUNT;
+            return AgxVertexSelectors;
+        case APPLE_AGX_WORK_FRAGMENT:
+            *Count = APPLE_AGX_FRAGMENT_REGISTER_COUNT;
+            return AgxFragmentSelectors;
+        case APPLE_AGX_WORK_COMPUTE:
+            *Count = APPLE_AGX_COMPUTE_REGISTER_COUNT;
+            return AgxComputeSelectors;
+        default:
+            *Count = 0;
+            return NULL;
+    }
+}
+
+/* Every engine's work image carries its registers the same way, at its own offset. */
+NTSTATUS
+NTAPI
+AppleAgxWriteRegisters(
+    _Inout_ PVOID Work,
+    _In_ ULONG WorkType,
+    _In_ const ULONG64 *Value)
+{
+    ULONG Count = 0, Index, At;
+    const ULONG *Selector = AppleAgxSelectors(WorkType, &Count);
+
+    if (!Work || !Value || !Selector)
+        return STATUS_INVALID_PARAMETER;
+    switch (WorkType)
+    {
+        case APPLE_AGX_WORK_VERTEX: At = APPLE_AGX_VERTEX_REGISTERS; break;
+        case APPLE_AGX_WORK_FRAGMENT: At = APPLE_AGX_FRAGMENT_REGISTERS; break;
+        default: At = APPLE_AGX_COMPUTE_REGISTERS; break;
+    }
+    for (Index = 0; Index < Count; ++Index)
+    {
+        AgxWriteLong(Work, At + APPLE_AGX_REGISTER_RECORD * Index, Selector[Index]);
+        AgxWriteQuad(Work, At + APPLE_AGX_REGISTER_RECORD * Index + 4, Value[Index]);
+    }
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
