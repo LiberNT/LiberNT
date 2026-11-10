@@ -58,6 +58,7 @@ typedef char *caddr_t;
 typedef u_int32_t uintTIME;
 #define TIME uintTIME
 #include "dhcpd.h"
+#include "retransmit.h"
 
 #define INLINE inline
 #define PROTO(x) x

@@ -412,6 +412,7 @@ AdapterRemove(
     if (proto)
         remove_protocol(proto);
     cancel_timeout(send_discover, &Adapter->DhclientInfo);
+    cancel_timeout(discover_panic, &Adapter->DhclientInfo);
     cancel_timeout(send_request, &Adapter->DhclientInfo);
     cancel_timeout(state_selecting, &Adapter->DhclientInfo);
     cancel_timeout(state_bound, &Adapter->DhclientInfo);
