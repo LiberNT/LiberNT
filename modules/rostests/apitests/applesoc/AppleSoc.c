@@ -1000,6 +1000,7 @@ UatSleepMs(ULONG Milliseconds)
 #include "../../../../sdk/lib/drivers/applertkit/dart.c"
 #include "../../../../sdk/lib/drivers/applertkit/uat.c"
 #include "../../../../sdk/lib/drivers/applertkit/adt.c"
+#include "../../../../sdk/lib/drivers/applertkit/agxinit.c"
 #include "../../../../sdk/lib/drivers/applertkit/rtkit.c"
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
@@ -2433,6 +2434,207 @@ TestRtkitBoot(VOID)
     ok(!Rtkit.EpmapDone, "A coprocessor that stopped announced its endpoints\n");
 }
 
+static PVOID AgxInitBuffers[APPLE_AGX_OBJECTS];
+
+static
+ULONG64
+AgxQuad(
+    _In_ ULONG Object,
+    _In_ ULONG Offset)
+{
+    ULONG64 Value = 0;
+
+    RtlCopyMemory(&Value, (PUCHAR)AgxInitBuffers[Object] + Offset, sizeof(Value));
+    return Value;
+}
+
+static
+ULONG
+AgxLong(
+    _In_ ULONG Object,
+    _In_ ULONG Offset)
+{
+    ULONG Value = 0;
+
+    RtlCopyMemory(&Value, (PUCHAR)AgxInitBuffers[Object] + Offset, sizeof(Value));
+    return Value;
+}
+
+static
+APPLE_AGX_LAYOUT
+AgxLayoutOf(
+    _In_ ULONG Object)
+{
+    APPLE_AGX_LAYOUT Layout;
+
+    AppleAgxLayout(Object, &Layout);
+    return Layout;
+}
+
+static
+VOID
+TestAgxInitLayout(VOID)
+{
+    APPLE_UAT_PROTECTION Protection;
+    APPLE_AGX_LAYOUT Layout;
+    ULONG Index, Pages = 0;
+
+    /* The addresses this firmware build was linked to look for its objects at. */
+    ok(AgxLayoutOf(APPLE_AGX_OBJECT_ROOT).Address == 0xfffffc204062ff40ULL, "The root is at %I64x\n",
+       AgxLayoutOf(APPLE_AGX_OBJECT_ROOT).Address);
+    ok_int(AgxLayoutOf(APPLE_AGX_OBJECT_ROOT).Size, 0xc0);
+    ok(AgxLayoutOf(APPLE_AGX_OBJECT_RUNTIME).Address == 0xfffffc20406b7b4dULL, "The runtime is at %I64x\n",
+       AgxLayoutOf(APPLE_AGX_OBJECT_RUNTIME).Address);
+    ok_int(AgxLayoutOf(APPLE_AGX_OBJECT_RUNTIME).Size, 0x4b3);
+    ok_int(AgxLayoutOf(APPLE_AGX_OBJECT_HWDATA).Size, 35332);
+    ok_int(AgxLayoutOf(APPLE_AGX_OBJECT_GLOBALS).Size, 15868);
+    ok_int(AgxLayoutOf(APPLE_AGX_OBJECT_POWER).Size, 2292);
+    ok(AgxLayoutOf(APPLE_AGX_OBJECT_TIMESTAMPS).Size == 0x4000000, "The timestamps are %lx bytes\n",
+       AgxLayoutOf(APPLE_AGX_OBJECT_TIMESTAMPS).Size);
+    ok(!AppleAgxLayout(APPLE_AGX_OBJECTS, &Layout), "An object past the last one was described\n");
+
+    /* The twelve submit channels follow one another by the stride of this firmware. */
+    Layout = AgxLayoutOf(APPLE_AGX_FIXED_OBJECTS);
+    ok(Layout.Address == 0xfffffc2040003fd0ULL, "Channel 0 keeps its state at %I64x\n", Layout.Address);
+    Layout = AgxLayoutOf(APPLE_AGX_FIXED_OBJECTS + 1);
+    ok(Layout.Address == 0xfffffc2000002800ULL, "Channel 0 keeps its ring at %I64x\n", Layout.Address);
+    Layout = AgxLayoutOf(APPLE_AGX_FIXED_OBJECTS + 2 * 11);
+    ok(Layout.Address == 0xfffffc2040003fd0ULL + 11 * 0x44000ULL, "Channel 11 keeps its state at %I64x\n",
+       Layout.Address);
+    ok_int(Layout.Size, 0x30);
+
+    /* Who may reach each kind of page. */
+    AppleAgxClassProtection(APPLE_AGX_CLASS_FIRMWARE, &Protection);
+    ok(Protection.Access == APPLE_UAT_ACCESS_FIRMWARE && Protection.Memory == APPLE_UAT_MEMORY_UNCACHED &&
+       !Protection.Read && Protection.Write, "A firmware page is %u/%u/%u/%u\n", Protection.Access,
+       Protection.Memory, Protection.Read, Protection.Write);
+    AppleAgxClassProtection(APPLE_AGX_CLASS_FIRMWARE_CACHED, &Protection);
+    ok(Protection.Access == APPLE_UAT_ACCESS_FIRMWARE && Protection.Memory == APPLE_UAT_MEMORY_CACHED,
+       "A cached firmware page is %u/%u\n", Protection.Access, Protection.Memory);
+    AppleAgxClassProtection(APPLE_AGX_CLASS_SHARED, &Protection);
+    ok(Protection.Access == APPLE_UAT_ACCESS_BOTH && Protection.Memory == APPLE_UAT_MEMORY_UNCACHED &&
+       Protection.Read && Protection.Write, "A shared page is %u/%u/%u/%u\n", Protection.Access,
+       Protection.Memory, Protection.Read, Protection.Write);
+
+    /* The initial data needs this much memory, and the doorbell carries the root's low bits. */
+    for (Index = 0; Index < APPLE_AGX_OBJECTS; ++Index)
+    {
+        Layout = AgxLayoutOf(Index);
+        Pages += AgxPageCount(Layout.Address, Layout.Size);
+    }
+    ok(Pages > 4096 && Pages < 8192, "The initial data needs %lu pages\n", Pages);
+    ok(AppleAgxInitMessage() == (0x0081ULL << 48 | 0xc204062ff40ULL), "The doorbell is %I64x\n",
+       AppleAgxInitMessage());
+}
+
+static
+VOID
+TestAgxInitWrite(VOID)
+{
+    APPLE_UAT_ADOPTED Adopted;
+    APPLE_AGX_INIT Init;
+    ULONG Index, Level;
+
+    RtlZeroMemory(&Adopted, sizeof(Adopted));
+    Adopted.KernelRootPhysical = 0x108fff78000ULL;
+    RtlZeroMemory(&Init, sizeof(Init));
+    Init.Adopted = &Adopted;
+    Init.Owner = "test";
+    for (Index = 0; Index < APPLE_AGX_OBJECTS; ++Index)
+    {
+        ULONG Size = AgxLayoutOf(Index).Size;
+
+        /* The arena is only pointed at, never written, so a stand-in page is enough. */
+        if (Index == APPLE_AGX_OBJECT_TIMESTAMPS || Index == APPLE_AGX_OBJECT_LOG_RING)
+            Size = 0x4000;
+        AgxInitBuffers[Index] = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size);
+        Init.Virtual[Index] = AgxInitBuffers[Index];
+    }
+    ok(Init.Virtual[APPLE_AGX_OBJECT_ROOT] != NULL, "The objects were not simulated\n");
+    if (!Init.Virtual[APPLE_AGX_OBJECT_ROOT])
+        return;
+
+    ok_hex(AppleAgxInitWrite(&Init), STATUS_SUCCESS);
+
+    /* The root names the layout it was built for, the shape of the tables and every object. */
+    ok(AgxQuad(APPLE_AGX_OBJECT_ROOT, 0) == 0x0c08e21e83800490ULL, "The root magic is %I64x\n",
+       AgxQuad(APPLE_AGX_OBJECT_ROOT, 0));
+    ok(AgxQuad(APPLE_AGX_OBJECT_ROOT, APPLE_AGX_ROOT_RUNTIME) == 0xfffffc20406b7b4dULL,
+       "The root points at the runtime at %I64x\n", AgxQuad(APPLE_AGX_OBJECT_ROOT, APPLE_AGX_ROOT_RUNTIME));
+    ok(AgxQuad(APPLE_AGX_OBJECT_ROOT, APPLE_AGX_ROOT_GLOBALS) == 0xfffffc20407cc204ULL,
+       "The root points at the globals at %I64x\n", AgxQuad(APPLE_AGX_OBJECT_ROOT, APPLE_AGX_ROOT_GLOBALS));
+    ok_int(AgxLong(APPLE_AGX_OBJECT_ROOT, APPLE_AGX_ROOT_ENABLE), 1);
+    ok_hex(AgxLong(APPLE_AGX_OBJECT_ROOT, APPLE_AGX_ROOT_GEOMETRY), 0x030e4000);
+
+    /* One descriptor per level: the entry size, the page shift, this level's index shift, its
+     * entry count, the page size, then the leaf address mask and the index mask. */
+    for (Level = 0; Level < 3; ++Level)
+    {
+        ULONG At = APPLE_AGX_ROOT_LEVELS + Level * APPLE_AGX_ROOT_LEVEL_STRIDE;
+        static const UCHAR Shift[3] = { 36, 25, 14 };
+        static const USHORT Entries[3] = { 64, 2048, 2048 };
+        const UCHAR *Bytes = (const UCHAR *)AgxInitBuffers[APPLE_AGX_OBJECT_ROOT] + At;
+
+        ok(Bytes[0] == 8 && Bytes[1] == 14 && Bytes[2] == 14 && Bytes[3] == Shift[Level],
+           "Level %lu is described as %u/%u/%u/%u\n", Level, Bytes[0], Bytes[1], Bytes[2], Bytes[3]);
+        ok((USHORT)(Bytes[4] | (Bytes[5] << 8)) == Entries[Level], "Level %lu has %u entries\n", Level,
+           (USHORT)(Bytes[4] | (Bytes[5] << 8)));
+        ok((USHORT)(Bytes[6] | (Bytes[7] << 8)) == 0x4000, "Level %lu uses %u byte pages\n", Level,
+           (USHORT)(Bytes[6] | (Bytes[7] << 8)));
+        ok(AgxQuad(APPLE_AGX_OBJECT_ROOT, At + 8) == 1, "Level %lu carries %I64x\n", Level,
+           AgxQuad(APPLE_AGX_OBJECT_ROOT, At + 8));
+        ok(AgxQuad(APPLE_AGX_OBJECT_ROOT, At + 0x10) == 0x3ffffffc000ULL, "Level %lu masks %I64x\n", Level,
+           AgxQuad(APPLE_AGX_OBJECT_ROOT, At + 0x10));
+        ok(AgxQuad(APPLE_AGX_OBJECT_ROOT, At + 0x18) == ((ULONG64)(Entries[Level] - 1) << Shift[Level]),
+           "Level %lu indexes %I64x\n", Level, AgxQuad(APPLE_AGX_OBJECT_ROOT, At + 0x18));
+    }
+
+    /* The runtime names the hardware description, every submit channel and every receive ring. */
+    ok(AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_HWDATA) == 0xfffffc20406fb5fcULL,
+       "The runtime points at the description at %I64x\n",
+       AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_HWDATA));
+    for (Index = 0; Index < APPLE_AGX_SUBMIT_CHANNELS; ++Index)
+    {
+        ULONG At = APPLE_AGX_RUNTIME_CHANNELS + Index * APPLE_AGX_RUNTIME_CHANNEL_STRIDE;
+        ULONG64 State = 0xfffffc2040003fd0ULL + (ULONG64)Index * 0x44000ULL;
+        ULONG64 Ring = 0xfffffc2000002800ULL + (ULONG64)Index * 0x44000ULL;
+
+        ok(AgxQuad(APPLE_AGX_OBJECT_RUNTIME, At) == State &&
+           AgxQuad(APPLE_AGX_OBJECT_RUNTIME, At + 8) == State + 0x10 &&
+           AgxQuad(APPLE_AGX_OBJECT_RUNTIME, At + 16) == State + 0x20 &&
+           AgxQuad(APPLE_AGX_OBJECT_RUNTIME, At + 24) == Ring, "Channel %lu is described wrongly\n", Index);
+    }
+    ok(AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_RX) == 0xfffffc2040377fd0ULL,
+       "The event ring state is at %I64x\n", AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_RX));
+    ok(AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_RX + 8) == 0xfffffc20403b8800ULL,
+       "The event ring is at %I64x\n", AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_RX + 8));
+    ok(AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_RX + 3 * APPLE_AGX_RUNTIME_RX_STRIDE + 8) ==
+       0xfffffc20405a4000ULL, "The statistics ring is at %I64x\n",
+       AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_RX + 3 * APPLE_AGX_RUNTIME_RX_STRIDE + 8));
+    ok_int(AgxLong(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_UNKNOWN_2D0), 4);
+    ok_hex(AgxLong(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_UNKNOWN_3B0), 0xff);
+    ok(AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_TA_ACTIVITY) == 0xfffffc20406fb5fcULL + 0x1880,
+       "The vertex activity is at %I64x\n", AgxQuad(APPLE_AGX_OBJECT_RUNTIME, APPLE_AGX_RUNTIME_TA_ACTIVITY));
+
+    /* The firmware is enabled through both control words and has not announced readiness. */
+    ok_int(AgxLong(APPLE_AGX_OBJECT_CONTROL, APPLE_AGX_CONTROL_ENABLE), 1);
+    ok_int(AgxLong(APPLE_AGX_OBJECT_CONTROL, APPLE_AGX_CONTROL_ENABLE2), 1);
+    ok(AgxQuad(APPLE_AGX_OBJECT_CONTROL, APPLE_AGX_CONTROL_FWCTL_RING) == 0xfffffc2000376c00ULL,
+       "The firmware control ring is at %I64x\n",
+       AgxQuad(APPLE_AGX_OBJECT_CONTROL, APPLE_AGX_CONTROL_FWCTL_RING));
+    ok(AgxQuad(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_TIMESTAMPS) == 0xfffffc2ffc000000ULL,
+       "The timestamp arena is at %I64x\n", AgxQuad(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_TIMESTAMPS));
+    ok(AgxQuad(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_TTBAT) == 0x108fff78000ULL,
+       "The address table root is %I64x\n", AgxQuad(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_TTBAT));
+
+    ok(!AppleAgxInitReady(&Init), "The firmware announced readiness before it ran\n");
+    AgxWriteLong(AgxInitBuffers[APPLE_AGX_OBJECT_RUNTIME], APPLE_AGX_RUNTIME_READY, 0xabcdabcdUL);
+    ok(AppleAgxInitReady(&Init), "The readiness the firmware writes was not seen\n");
+
+    for (Index = 0; Index < APPLE_AGX_OBJECTS; ++Index)
+        HeapFree(GetProcessHeap(), 0, AgxInitBuffers[Index]);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -3566,6 +3768,8 @@ START_TEST(AppleSoc)
     TestAdt();
     TestAgxDescribe();
     TestRtkitBoot();
+    TestAgxInitLayout();
+    TestAgxInitWrite();
     TestSpmi();
     TestAtcphy();
     TestPcie();

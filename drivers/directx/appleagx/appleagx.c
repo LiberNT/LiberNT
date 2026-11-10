@@ -11,6 +11,7 @@
 #include <reactos/drivers/applepmp.h>
 #include <reactos/drivers/applertkit.h>
 #include <reactos/drivers/appleuat.h>
+#include <reactos/drivers/appleagxinit.h>
 #include <reactos/drivers/fdtdrv.h>
 
 #define AGX_TAG                     'xgAA'
@@ -36,6 +37,7 @@
 #define AGX_REGIONS                 6
 #define AGX_BOOT_TIMEOUT_MS         2000
 #define AGX_LISTEN_MS               500
+#define AGX_READY_TIMEOUT_MS        3000
 #define AGX_MAX_SHARED              8
 #define AGX_SHARED_ALIGN            0x1000
 #define AGX_ADT_MAX_LENGTH          0x200000
@@ -67,6 +69,8 @@ typedef struct _APPLE_AGX
     ULONG64 RegionSize[AGX_REGIONS];
     APPLE_UAT_ADOPTED Adopted;
     BOOLEAN Owned;
+    APPLE_AGX_INIT Init;
+    BOOLEAN Initialised;
     PVOID AdtCopy;
     ULONG AdtLength;
     APPLE_ADT Adt;
@@ -397,6 +401,67 @@ AgxFreeShared(
     Agx->SharedCount = 0;
 }
 
+static
+VOID
+AgxListen(
+    _Inout_ PAPPLE_AGX Agx,
+    _In_ ULONG Milliseconds)
+{
+    LARGE_INTEGER Interval;
+    ULONG Waited;
+
+    Interval.QuadPart = -10000LL;
+    for (Waited = 0; Waited < Milliseconds; ++Waited)
+    {
+        AppleRtkitPoll(&Agx->Rtkit);
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    }
+}
+
+/* The firmware is given the addresses of everything it must reach, then told where to find them.
+ * It answers by writing its readiness word, which is what the next line of the log reports. */
+static
+NTSTATUS
+AgxHandInitialData(
+    _Inout_ PAPPLE_AGX Agx)
+{
+    ULONG Waited;
+    NTSTATUS Status;
+
+    Status = AppleAgxInitCreate(&Agx->Init, &Agx->Adopted, "appleagx");
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("appleagx: the initial data needed %lu pages that were not available: %lx\n",
+                 Agx->Init.Pages, Status);
+        return Status;
+    }
+    Agx->Initialised = TRUE;
+    Status = AppleAgxInitWrite(&Agx->Init);
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("appleagx: the initial data was not written: %lx\n", Status);
+        return Status;
+    }
+    DbgPrint("appleagx: initial data of %lu pages written, root at %I64x\n", Agx->Init.Allocations,
+             AppleAgxInitMessage() & APPLE_AGX_MESSAGE_ADDRESS_MASK);
+    if (!AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_EP_FIRMWARE, AppleAgxInitMessage()))
+    {
+        DbgPrint("appleagx: the firmware was not told where its initial data is\n");
+        return STATUS_IO_TIMEOUT;
+    }
+    for (Waited = 0; Waited < AGX_READY_TIMEOUT_MS; Waited += 10)
+    {
+        AgxListen(Agx, 10);
+        if (AppleAgxInitReady(&Agx->Init))
+        {
+            DbgPrint("appleagx: the firmware is ready after %lu ms\n", Waited);
+            return STATUS_SUCCESS;
+        }
+    }
+    DbgPrint("appleagx: the firmware did not become ready in %lu ms\n", AGX_READY_TIMEOUT_MS);
+    return STATUS_DEVICE_NOT_READY;
+}
+
 /* The firmware is started cold and says over the mailbox what it needs; the log keeps its answer. */
 static
 NTSTATUS
@@ -418,20 +483,13 @@ AgxBootFirmware(
     DbgPrint("appleagx: firmware boot %lx, RTKit %lu, endpoints %08lx %08lx, control %08lx\n", Status,
              Agx->Rtkit.Version, Agx->Rtkit.Endpoints[0], Agx->Rtkit.Endpoints[1],
              READ_REGISTER_ULONG((volatile ULONG *)(Agx->Asc + AGX_ASC_CONTROL)));
-    if (NT_SUCCESS(Status) && AppleRtkitHasEndpoint(&Agx->Rtkit, RTKIT_EP_APP_START))
-    {
-        LARGE_INTEGER Interval;
-        ULONG Waited;
-
-        AppleRtkitStartEndpoint(&Agx->Rtkit, RTKIT_EP_APP_START);
-        Interval.QuadPart = -10000LL;
-        for (Waited = 0; Waited < AGX_LISTEN_MS; ++Waited)
-        {
-            AppleRtkitPoll(&Agx->Rtkit);
-            KeDelayExecutionThread(KernelMode, FALSE, &Interval);
-        }
-    }
-    return Status;
+    if (!NT_SUCCESS(Status) || !AppleRtkitHasEndpoint(&Agx->Rtkit, APPLE_AGX_EP_FIRMWARE))
+        return NT_SUCCESS(Status) ? STATUS_DEVICE_PROTOCOL_ERROR : Status;
+    AppleRtkitStartEndpoint(&Agx->Rtkit, APPLE_AGX_EP_FIRMWARE);
+    if (AppleRtkitHasEndpoint(&Agx->Rtkit, APPLE_AGX_EP_DOORBELL))
+        AppleRtkitStartEndpoint(&Agx->Rtkit, APPLE_AGX_EP_DOORBELL);
+    AgxListen(Agx, AGX_LISTEN_MS);
+    return AgxHandInitialData(Agx);
 }
 
 /* The firmware walks its own tables, so they are built before it is allowed to run. */
@@ -468,6 +526,9 @@ VOID
 AgxStop(
     _Inout_ PAPPLE_AGX Agx)
 {
+    if (Agx->Initialised)
+        AppleAgxInitRelease(&Agx->Init);
+    Agx->Initialised = FALSE;
     AgxFreeShared(Agx);
     if (Agx->Owned)
         AppleUatAdoptedRelease(&Agx->Adopted);
