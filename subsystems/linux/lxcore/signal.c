@@ -961,7 +961,7 @@ LxSignalTakeAction(
     if (Info != NULL)
         *Info = Process->PendingInfo[Signal - 1];
     if ((Action->Flags & LX_SA_RESETHAND) && (Action->Handler > LX_SIG_IGN))
-        RtlZeroMemory(&Process->SigAction[Signal - 1], sizeof(LX_SIGACTION));
+        Process->SigAction[Signal - 1].Handler = LX_SIG_DFL;
     ExReleaseFastMutex(&Process->Lock);
 }
 
