@@ -374,11 +374,11 @@ ExitProcessCallback(PEPROCESS Process)
     IntCompositionCleanupProcess(Process);
     IntDCompositionCleanupProcess(ppiCurrent);
 
+    /* Cleanup USER info, which still uses the GDI objects of its windows */
+    UserProcessDestroy(Process);
+
     /* Cleanup GDI info */
     GdiProcessDestroy(Process);
-
-    /* Cleanup USER info */
-    UserProcessDestroy(Process);
 
     /* The process is dying */
     PsSetProcessWin32Process(Process, NULL, ppiCurrent);
