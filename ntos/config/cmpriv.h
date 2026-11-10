@@ -183,6 +183,7 @@ VOID NTAPI CmpInvalidateSecurityCacheEntry(_In_ PCMHIVE Hive,
                                            _In_ HCELL_INDEX Cell);
 HCELL_INDEX NTAPI CmpFindSecurityCellByDescriptor(
     _In_ PCMHIVE Hive,
+    _In_ HSTORAGE_TYPE StorageType,
     _In_reads_bytes_(Length) PVOID Descriptor,
     _In_ ULONG Length);
 VOID NTAPI CmpPopulateSecurityCache(_In_ PCMHIVE Hive,

@@ -342,6 +342,7 @@ HCELL_INDEX
 NTAPI
 CmpFindSecurityCellByDescriptor(
     _In_ PCMHIVE Hive,
+    _In_ HSTORAGE_TYPE StorageType,
     _In_reads_bytes_(Length) PVOID Descriptor,
     _In_ ULONG Length)
 {
@@ -358,6 +359,7 @@ CmpFindSecurityCellByDescriptor(
         Cached = CONTAINING_RECORD(Entry, CM_KEY_SECURITY_CACHE, List);
 
         if (Cached->ConvKey != ConvKey) continue;
+        if (HvGetCellType(Cached->Cell) != (ULONG)StorageType) continue;
         if (Cached->DescriptorLength != Length) continue;
         if (RtlCompareMemory(&Cached->Descriptor,
                              Descriptor,

@@ -36,7 +36,7 @@ CmpFindOrCreateSecurityCell(
     HCELL_INDEX NewCell;
     HCELL_INDEX Cell;
 
-    Cell = CmpFindSecurityCellByDescriptor(CmHive, Descriptor, Length);
+    Cell = CmpFindSecurityCellByDescriptor(CmHive, StorageType, Descriptor, Length);
 
     if (Cell != HCELL_NIL)
     {
@@ -56,6 +56,11 @@ CmpFindOrCreateSecurityCell(
         }
 
         CmpInvalidateSecurityCacheEntry(CmHive, Cell);
+    }
+
+    if (Anchor != HCELL_NIL && HvGetCellType(Anchor) != (ULONG)StorageType)
+    {
+        Anchor = HCELL_NIL;
     }
 
     NewCell = HvAllocateCell(Hive,
