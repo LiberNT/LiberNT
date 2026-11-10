@@ -23,7 +23,16 @@ typedef struct _APPLE_DCP_CONTEXT
     ULONG Height;
     ULONG Pitch;
     BOOLEAN Accelerated;
+    DCP_LAYER Layer;
+    WORK_QUEUE_ITEM ScanoutWork;
+    KEVENT ScanoutDone;
+    volatile LONG ScanoutState;
 } APPLE_DCP_CONTEXT, *PAPPLE_DCP_CONTEXT;
+
+#define DCP_SCANOUT_PENDING     0
+#define DCP_SCANOUT_QUEUED      1
+#define DCP_SCANOUT_DONE        2
+#define DCP_SCANOUT_CANCELLED   3
 
 static
 VOID
@@ -114,6 +123,11 @@ VOID
 DcpPlatformRelease(
     _In_ PAPPLE_DCP_CONTEXT Context)
 {
+    if (InterlockedCompareExchange(&Context->ScanoutState, DCP_SCANOUT_CANCELLED, DCP_SCANOUT_PENDING) ==
+        DCP_SCANOUT_QUEUED)
+    {
+        KeWaitForSingleObject(&Context->ScanoutDone, Executive, KernelMode, FALSE, NULL);
+    }
     if (Context->Dcp)
         DcpClose(Context->Dcp);
     if (Context->SurfaceAllocation && !Context->SurfaceIova)
@@ -208,13 +222,28 @@ DcpPlatformStart(
     Layer.SurfaceFormat = DCP_SURFACE_FORMAT_BGRA;
     Layer.Colorspace = DCP_COLORSPACE_SRGB;
     Layer.Eotf = DCP_EOTF_GAMMA_SDR;
-    Status = DcpSetSurface(Context->Dcp, &Layer);
-    if (!NT_SUCCESS(Status))
-        Status = DcpSwapLayer(Context->Dcp, &Layer);
+    Context->Layer = Layer;
     Context->Accelerated = DcpPlatformGraphicsReady();
-    DbgPrint("appledcp: %lux%lu BGRA surface at %I64x (device address %I64x) on the panel: %lx\n", Context->Width,
-             Context->Height, Context->SurfacePhysical.QuadPart, Context->SurfaceIova, Status);
-    return Status;
+    DbgPrint("appledcp: %lux%lu BGRA surface at %I64x (device address %I64x), on the panel at the first frame\n",
+             Context->Width, Context->Height, Context->SurfacePhysical.QuadPart, Context->SurfaceIova);
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+DcpPlatformScanoutWork(
+    _In_ PVOID Parameter)
+{
+    PAPPLE_DCP_CONTEXT Context = Parameter;
+    NTSTATUS Status;
+
+    Status = DcpSetSurface(Context->Dcp, &Context->Layer);
+    if (!NT_SUCCESS(Status))
+        Status = DcpSwapLayer(Context->Dcp, &Context->Layer);
+    DbgPrint("appledcp: the panel shows the %lux%lu surface: %lx\n", Context->Width, Context->Height, Status);
+    InterlockedExchange(&Context->ScanoutState, DCP_SCANOUT_DONE);
+    KeSetEvent(&Context->ScanoutDone, IO_NO_INCREMENT, FALSE);
 }
 
 NTSTATUS
@@ -244,6 +273,8 @@ SoftGpuPlatformQueryStart(
         Context = ExAllocatePoolZero(NonPagedPool, sizeof(*Context), APPLE_DCP_TAG);
         if (!Context)
             return STATUS_INSUFFICIENT_RESOURCES;
+        KeInitializeEvent(&Context->ScanoutDone, NotificationEvent, FALSE);
+        ExInitializeWorkItem(&Context->ScanoutWork, DcpPlatformScanoutWork, Context);
         Status = DcpPlatformStart(Context, DxgkInterface);
         if (!NT_SUCCESS(Status))
         {
@@ -348,9 +379,16 @@ SoftGpuPlatformScanoutWritten(
     _Inout_ PSOFTGPU_DEVICE Device,
     _In_ const RECT *Rect)
 {
-    UNREFERENCED_PARAMETER(Device);
+    PAPPLE_DCP_CONTEXT Context = Device->PlatformContext;
+
     UNREFERENCED_PARAMETER(Rect);
     KeMemoryBarrier();
+    if (Context &&
+        InterlockedCompareExchange(&Context->ScanoutState, DCP_SCANOUT_QUEUED, DCP_SCANOUT_PENDING) ==
+            DCP_SCANOUT_PENDING)
+    {
+        ExQueueWorkItem(&Context->ScanoutWork, DelayedWorkQueue);
+    }
 }
 
 VOID
