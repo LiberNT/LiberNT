@@ -301,7 +301,7 @@ struct d2d_device_context
     ID3DDeviceContextState *d3d_state;
     ID3DDeviceContextState *prev_state;
     BOOL state_in;
-    struct
+    struct d2d_shadow_state
     {
         BOOL valid;
         ID3D11InputLayout *il;

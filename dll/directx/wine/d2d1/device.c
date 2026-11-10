@@ -220,7 +220,7 @@ static void d2d_device_context_draw_real(struct d2d_device_context *render_targe
     ID3D11Device1 *device = render_target->d3d_device;
     ID3D11DeviceContext1 *context;
     UINT ib_offset;
-    typeof(render_target->sh) *sh;
+    struct d2d_shadow_state *sh;
     ID3D11Buffer *vs_cb = render_target->vs_cb, *ps_cb = render_target->ps_cb;
     D3D11_RECT scissor_rect;
     unsigned int offset;
