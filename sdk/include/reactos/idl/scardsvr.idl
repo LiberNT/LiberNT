@@ -134,7 +134,8 @@ interface scardsvr
         [out, size_is(ReceiveSize), length_is(*Received)] BYTE *Receive,
         [out] DWORD *Received,
         [out] DWORD *ReceiveProtocol,
-        [out] DWORD *ReceivePciLength);
+        [out] DWORD *ReceivePciLength,
+        [out] DWORD *Needed);
 
     LONG ScControl(
         [in] SCARDSVR_SESSION Session,

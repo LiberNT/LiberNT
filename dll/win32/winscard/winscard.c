@@ -905,6 +905,12 @@ LONG WINAPI SCardTransmit( SCARDHANDLE connect, const SCARD_IO_REQUEST *send, co
         }
         *recv_buflen = recv_buflen64;
     }
+#ifdef __REACTOS__
+    else if (ret == SCARD_E_INSUFFICIENT_BUFFER)
+    {
+        *recv_buflen = recv_buflen64;
+    }
+#endif
 
     TRACE( "returning %#lx\n", ret );
     return ret;

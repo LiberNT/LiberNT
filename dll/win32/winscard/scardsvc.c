@@ -319,7 +319,7 @@ LONG
 ScardTransmit(
     _Inout_ struct scard_transmit_params *Params)
 {
-    DWORD Received = 0, Protocol = 0, PciLength = 0;
+    DWORD Received = 0, Protocol = 0, PciLength = 0, Needed = 0;
     DWORD Size = (DWORD)min(*Params->recv_buflen, SCARDSVR_MAX_BUFFER);
     BYTE Empty = 0;
     LONG Result;
@@ -330,12 +330,16 @@ ScardTransmit(
         Size = 0;
     SCARD_RPC(ScTransmit(Current, Params->handle, (DWORD)Params->send->protocol, (DWORD)Params->send->pci_len,
                          (DWORD)Params->send_buflen, Params->send_buf ? (BYTE *)Params->send_buf : &Empty, Size,
-                         Params->recv_buf ? Params->recv_buf : &Empty, &Received, &Protocol, &PciLength));
+                         Params->recv_buf ? Params->recv_buf : &Empty, &Received, &Protocol, &PciLength, &Needed));
     if (Result == SCARD_S_SUCCESS)
     {
         Params->recv->protocol = Protocol;
         Params->recv->pci_len = PciLength;
         *Params->recv_buflen = Received;
+    }
+    else if (Result == SCARD_E_INSUFFICIENT_BUFFER)
+    {
+        *Params->recv_buflen = Needed;
     }
     return Result;
 }

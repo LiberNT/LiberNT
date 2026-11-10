@@ -897,7 +897,8 @@ ScTransmit(
     BYTE *Receive,
     DWORD *Received,
     DWORD *ReceiveProtocol,
-    DWORD *ReceivePciLength)
+    DWORD *ReceivePciLength,
+    DWORD *Needed)
 {
     SCARD_IO_REQUEST *Request, *Reply;
     SC_CARD *Card;
@@ -906,7 +907,7 @@ ScTransmit(
     LONG Result;
 
     UNREFERENCED_PARAMETER(SendPciLength);
-    *Received = *ReceiveProtocol = *ReceivePciLength = 0;
+    *Received = *ReceiveProtocol = *ReceivePciLength = *Needed = 0;
     Result = ScWaitTransaction(Session, Id);
     if (Result != SCARD_S_SUCCESS)
         return Result;
@@ -926,7 +927,7 @@ ScTransmit(
     }
 
     Request = HeapAlloc(GetProcessHeap(), 0, sizeof(*Request) + SendLength);
-    Reply = HeapAlloc(GetProcessHeap(), 0, sizeof(*Reply) + ReceiveSize);
+    Reply = HeapAlloc(GetProcessHeap(), 0, sizeof(*Reply) + SCARDSVR_MAX_BUFFER);
     if (!Request || !Reply)
     {
         Result = SCARD_E_NO_MEMORY;
@@ -938,11 +939,16 @@ ScTransmit(
         memcpy(Request + 1, Send, SendLength);
         EnterCriticalSection(&Reader->IoLock);
         Error = ScIoctl(Reader, IOCTL_SMARTCARD_TRANSMIT, Request, sizeof(*Request) + SendLength, Reply,
-                        sizeof(*Reply) + ReceiveSize, &Returned);
+                        sizeof(*Reply) + SCARDSVR_MAX_BUFFER, &Returned);
         LeaveCriticalSection(&Reader->IoLock);
         Result = ScMapError(Error);
         if (Result == SCARD_S_SUCCESS && Returned < sizeof(*Reply))
             Result = SCARD_F_COMM_ERROR;
+        if (Result == SCARD_S_SUCCESS && Returned - sizeof(*Reply) > ReceiveSize)
+        {
+            *Needed = Returned - sizeof(*Reply);
+            Result = SCARD_E_INSUFFICIENT_BUFFER;
+        }
         if (Result == SCARD_S_SUCCESS)
         {
             *Received = Returned - sizeof(*Reply);
