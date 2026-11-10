@@ -638,6 +638,28 @@ set_dhcp_router_discovery(PDHCP_ADAPTER Adapter, BOOLEAN Enable)
 }
 
 static void
+mark_dhcp_address(PDHCP_ADAPTER Adapter, ULONG Address)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\Ip");
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK Iosb;
+    IP4_ADDRESS_INFO Info = { 0 };
+    HANDLE File;
+
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (!NT_SUCCESS(NtOpenFile(&File, SYNCHRONIZE, &Attributes, &Iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               FILE_SYNCHRONOUS_IO_NONALERT)))
+        return;
+
+    Info.Index = Adapter->IfMib.dwIndex;
+    Info.Address = Address;
+    Info.Origin = IpPrefixOriginDhcp;
+    NtDeviceIoControlFile(File, NULL, NULL, NULL, &Iosb, IOCTL_IP_SET_ADDRESS,
+                          &Info, sizeof(Info), &Info, sizeof(Info));
+    NtClose(File);
+}
+
+static void
 set_route_lifetime(const MIB_IPFORWARDROW *Route, ULONG Lifetime)
 {
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\Ip");
@@ -839,7 +861,10 @@ void setup_adapter( PDHCP_ADAPTER Adapter, struct client_lease *new_lease ) {
                   &Adapter->NteContext,
                   &Adapter->NteInstance );
             if (err == NO_ERROR)
+            {
                 Adapter->NteNetmask = NewMask;
+                mark_dhcp_address(Adapter, NewAddress);
+            }
         }
         if (hkey && err == NO_ERROR) {
             RegSetValueExA(hkey, "DhcpIPAddress", 0, REG_SZ, (LPBYTE)piaddr(new_lease->address), strlen(piaddr(new_lease->address))+1);

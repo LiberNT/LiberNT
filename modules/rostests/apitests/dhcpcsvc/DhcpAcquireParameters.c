@@ -13,6 +13,7 @@
 #include <ws2ipdef.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
+#include <icmpapi.h>
 #include <stdio.h>
 
 typedef DWORD (WINAPI *PFN_DHCP_CAPI_INITIALIZE)(LPDWORD Version);
@@ -84,6 +85,34 @@ IsAddressPreferred(DWORD Index, PCSTR Address)
 }
 
 static BOOL
+PingGateway(DWORD Index)
+{
+    PIP_ADAPTER_INFO Info, Adapter;
+    UCHAR Reply[sizeof(ICMP_ECHO_REPLY) + 32 + 8];
+    CHAR Data[32] = { 0 };
+    IPAddr Gateway = INADDR_NONE;
+    HANDLE Icmp;
+    BOOL Reached = FALSE;
+
+    Info = QueryAdapters();
+    for (Adapter = Info; Adapter; Adapter = Adapter->Next)
+    {
+        if (Adapter->Index == Index)
+            Gateway = inet_addr(Adapter->GatewayList.IpAddress.String);
+    }
+    if (Info)
+        HeapFree(GetProcessHeap(), 0, Info);
+    if (Gateway == INADDR_NONE || Gateway == 0)
+        return FALSE;
+
+    Icmp = IcmpCreateFile();
+    if (IcmpSendEcho(Icmp, Gateway, Data, sizeof(Data), NULL, Reply, sizeof(Reply), 1000) != 0)
+        Reached = ((PICMP_ECHO_REPLY)Reply)->Status == IP_SUCCESS;
+    IcmpCloseHandle(Icmp);
+    return Reached;
+}
+
+static BOOL
 FindLeasedAdapter(PDWORD Index, PWSTR Name, INT NameCount, PSTR Address, INT AddressSize)
 {
     PIP_ADAPTER_INFO Info, Adapter;
@@ -113,7 +142,7 @@ START_TEST(DhcpAcquireParameters)
     PFN_DHCP_ADAPTER_REQUEST pDhcpAcquireParameters;
     WCHAR Name[MAX_ADAPTER_NAME_LENGTH + 4];
     CHAR Address[16];
-    ULONGLONG Start;
+    ULONGLONG Start, Elapsed;
     HMODULE Module;
     DWORD Index, Version, Status;
 
@@ -160,8 +189,11 @@ START_TEST(DhcpAcquireParameters)
     ok(QueryAdapterAddress(Index, Address, sizeof(Address)), "Adapter %lu is gone after acquire\n", Index);
     ok(IsLeaseAddress(Address), "Address when DhcpAcquireParameters returned after %lu ms is %s\n",
        (ULONG)(GetTickCount64() - Start), Address);
+    Elapsed = GetTickCount64() - Start;
     ok(IsAddressPreferred(Index, Address), "Address %s is not preferred when DhcpAcquireParameters returned\n", Address);
-    trace("DhcpAcquireParameters took %lu ms, address %s\n", (ULONG)(GetTickCount64() - Start), Address);
+    ok(PingGateway(Index), "The gateway of %s does not answer when DhcpAcquireParameters returned\n", Address);
+    ok(Elapsed < 3000, "DhcpAcquireParameters waited %lu ms, past duplicate address detection\n", (ULONG)Elapsed);
+    trace("DhcpAcquireParameters took %lu ms, address %s\n", (ULONG)Elapsed, Address);
 
     pDhcpCApiCleanup();
     FreeLibrary(Module);

@@ -21,6 +21,8 @@ ULONG NextDefaultAdapter = 0;
 
 #define NTE_DAD_FIRST_PROBE 500
 #define NTE_DAD_INTERVAL    1000
+#define NTE_DAD_ANNOUNCE_INTERVAL 2000
+#define NTE_DAD_ANNOUNCE_COUNT    2
 #define NTE_DAD_BATCH       16
 
 static PIP_NTE NteFindAddress(
@@ -693,6 +695,7 @@ NTSTATUS IPAddInterfaceAddress(PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Address
     if (Interface != Loopback && Interface->DadTransmits)
     {
         Nte->DadState = IpDadStateTentative;
+        Nte->DadActive = TRUE;
         Nte->DadNext = KeQueryInterruptTime() + (ULONGLONG)NTE_DAD_FIRST_PROBE * 10000;
     }
     else
@@ -968,6 +971,7 @@ VOID NteDadTimeout(VOID)
         PIP_INTERFACE Interface;
         IPv4_RAW_ADDRESS Address;
         BOOLEAN Announce;
+        BOOLEAN Promoted;
     } Pending[NTE_DAD_BATCH];
     ULONGLONG Now = KeQueryInterruptTime();
     PLIST_ENTRY Entry;
@@ -978,19 +982,31 @@ VOID NteDadTimeout(VOID)
     {
         PIP_NTE Nte = CONTAINING_RECORD(Entry, IP_NTE, ListEntry);
 
-        if (Nte->DadState != IpDadStateTentative || Now < Nte->DadNext || !IPReferenceInterface(Nte->Interface))
+        if (!Nte->DadActive || Now < Nte->DadNext || !IPReferenceInterface(Nte->Interface))
             continue;
 
+        ASSERT(Nte->DadState == IpDadStateTentative || Nte->DadState == IpDadStatePreferred);
+        ASSERT(Nte->DadAnnounces < NTE_DAD_ANNOUNCE_COUNT);
         Pending[Count].Interface = Nte->Interface;
         Pending[Count].Address = Nte->Unicast.Address.IPv4Address;
-        Pending[Count].Announce = Nte->DadProbes >= Nte->Interface->DadTransmits;
+        Pending[Count].Announce = Nte->DadAnnounces != 0 || Nte->DadProbes >= Nte->Interface->DadTransmits;
+        Pending[Count].Promoted = FALSE;
         if (Pending[Count].Announce)
         {
-            Nte->DadState = IpDadStatePreferred;
-            NteRefreshInterface(Nte->Interface);
+            if (Nte->DadState == IpDadStateTentative)
+            {
+                Nte->DadState = IpDadStatePreferred;
+                NteRefreshInterface(Nte->Interface);
+                Pending[Count].Promoted = TRUE;
+            }
+            if (++Nte->DadAnnounces == NTE_DAD_ANNOUNCE_COUNT)
+                Nte->DadActive = FALSE;
+            else
+                Nte->DadNext = Now + (ULONGLONG)NTE_DAD_ANNOUNCE_INTERVAL * 10000;
         }
         else
         {
+            ASSERT(Nte->DadAnnounces == 0);
             Nte->DadProbes++;
             Nte->DadNext = Now + (ULONGLONG)NTE_DAD_INTERVAL * 10000;
         }
@@ -1001,7 +1017,7 @@ VOID NteDadTimeout(VOID)
     for (i = 0; i < Count; i++)
     {
         ARPTransmitDad(Pending[i].Interface, Pending[i].Address, Pending[i].Announce);
-        if (Pending[i].Announce)
+        if (Pending[i].Promoted)
         {
             RdiscStart(Pending[i].Interface);
             TiSignalChange();
@@ -1025,11 +1041,16 @@ VOID NteDadConflict(PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Sender, IPv4_RAW_A
         PIP_NTE Nte = CONTAINING_RECORD(Entry, IP_NTE, ListEntry);
         IPv4_RAW_ADDRESS Address = Nte->Unicast.Address.IPv4Address;
 
-        if (Nte->Interface != Interface || Nte->DadState != IpDadStateTentative)
+        if (Nte->Interface != Interface || !Nte->DadActive || Nte->DadAnnounces != 0)
             continue;
         if (Sender == Address || (Sender == 0 && Target == Address))
         {
+            BOOLEAN WasPreferred = (BOOLEAN)(Nte->DadState == IpDadStatePreferred);
+
             Nte->DadState = IpDadStateDuplicate;
+            Nte->DadActive = FALSE;
+            if (WasPreferred)
+                NteRefreshInterface(Interface);
             Changed = TRUE;
             TI_DbgPrint(MIN_TRACE, ("Duplicate address %lx on interface %lu\n", DN2H(Address), Interface->Index));
         }
@@ -1037,6 +1058,47 @@ VOID NteDadConflict(PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Sender, IPv4_RAW_A
     TcpipReleaseSpinLock(&NetTableListLock, OldIrql);
     if (Changed)
         TiSignalChange();
+}
+
+NTSTATUS IPSetAddressV4(PIP4_ADDRESS_INFO Info)
+{
+    NTSTATUS Status = STATUS_NOT_FOUND;
+    PIP_INTERFACE Promoted = NULL;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    if (Info->Origin != IpPrefixOriginDhcp)
+        return STATUS_INVALID_PARAMETER;
+
+    TcpipAcquireSpinLock(&NetTableListLock, &OldIrql);
+    for (Entry = NetTableListHead.Flink; Entry != &NetTableListHead; Entry = Entry->Flink)
+    {
+        PIP_NTE Nte = CONTAINING_RECORD(Entry, IP_NTE, ListEntry);
+
+        if (Nte->Interface->Index != Info->Index || Nte->Unicast.Address.IPv4Address != Info->Address)
+            continue;
+
+        if (Nte->DadState == IpDadStateTentative && IPReferenceInterface(Nte->Interface))
+        {
+            ASSERT(Nte->DadActive && Nte->DadAnnounces == 0);
+            Nte->DadState = IpDadStatePreferred;
+            NteRefreshInterface(Nte->Interface);
+            Promoted = Nte->Interface;
+        }
+        Info->DadState = Nte->DadState;
+        Status = STATUS_SUCCESS;
+        break;
+    }
+    TcpipReleaseSpinLock(&NetTableListLock, OldIrql);
+
+    if (Promoted)
+    {
+        RdiscStart(Promoted);
+        TiSignalChange();
+        IPDereferenceInterface(Promoted);
+    }
+
+    return Status;
 }
 
 NTSTATUS IPQueryAddressV4(PIP4_ADDRESS_INFO Info)
