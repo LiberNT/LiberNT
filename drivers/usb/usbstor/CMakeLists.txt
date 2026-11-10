@@ -11,6 +11,7 @@ list(APPEND SOURCE
     queue.c
     error.c
     scsi.c
+    uas.c
     usbstor.c)
 
 list(APPEND PCH_SKIP_SOURCE

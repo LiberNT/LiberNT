@@ -147,6 +147,7 @@ USBSTOR_FdoHandleRemoveDevice(
         IoFreeWorkItem(DeviceExtension->ResetDeviceWorkItem);
     if (DeviceExtension->SerialNumber)
         ExFreePoolWithTag(DeviceExtension->SerialNumber, USB_STOR_TAG);
+    USBSTOR_UasStop(DeviceExtension);
     if (DeviceExtension->CurrentIrpContext.CbwAllocation)
         ExFreePoolWithTag(DeviceExtension->CurrentIrpContext.CbwAllocation, USB_STOR_TAG);
     if (DeviceExtension->CurrentIrpContext.CswAllocation)
@@ -224,8 +225,17 @@ USBSTOR_FdoHandleStartDevice(
     DPRINT("bInterfaceSubClass %x\n", InterfaceDesc->bInterfaceSubClass);
     if (InterfaceDesc->bInterfaceProtocol != USB_PROTOCOL_BULK)
     {
-        DPRINT1("USB Device is not a bulk only device and is not currently supported\n");
-        return STATUS_NOT_SUPPORTED;
+        PUSB_INTERFACE_DESCRIPTOR UasInterface;
+
+        if (!USBSTOR_UasScanConfiguration(DeviceExtension->ConfigurationDescriptor, &UasInterface,
+                                          DeviceExtension->UasEndpoint, &DeviceExtension->UasStreams))
+        {
+            DPRINT1("USB Device is neither a bulk only nor a UAS device and is not supported\n");
+            return STATUS_NOT_SUPPORTED;
+        }
+        DeviceExtension->Uas = TRUE;
+        DPRINT1("USBSTOR: UAS interface setting %u, streams %u\n", UasInterface->bAlternateSetting,
+                DeviceExtension->UasStreams);
     }
 
     if (InterfaceDesc->bInterfaceSubClass == USB_SUBCLASS_UFI)
@@ -251,11 +261,25 @@ USBSTOR_FdoHandleStartDevice(
         return Status;
     }
 
-    Status = USBSTOR_GetMaxLUN(DeviceExtension->LowerDeviceObject, DeviceExtension);
-    if (!NT_SUCCESS(Status))
+    if (DeviceExtension->Uas)
     {
-        DPRINT1("USBSTOR_FdoHandleStartDevice failed to get max lun %x\n", Status);
-        return Status;
+        Status = USBSTOR_UasStart(DeviceExtension);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("USBSTOR_FdoHandleStartDevice failed to start the UAS transport %x\n", Status);
+            return Status;
+        }
+        /* TODO: a UAS device's logical units come from REPORT LUNS; only LUN 0 is exposed. */
+        DeviceExtension->MaxLUN = 0;
+    }
+    else
+    {
+        Status = USBSTOR_GetMaxLUN(DeviceExtension->LowerDeviceObject, DeviceExtension);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("USBSTOR_FdoHandleStartDevice failed to get max lun %x\n", Status);
+            return Status;
+        }
     }
 
     // now create for each LUN a device object, 1 minimum
