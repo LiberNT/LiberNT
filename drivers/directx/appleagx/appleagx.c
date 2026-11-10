@@ -827,7 +827,7 @@ AgxGetParams(
     NTSTATUS Status;
 
     *Written = 0;
-    if (Agx->Reported.State < APPLE_AGX_STATE_IDENTIFIED)
+    if (Agx->Reported.State < APPLE_AGX_STATE_READY)
         return STATUS_DEVICE_NOT_READY;
     KeMemoryBarrier();
     if (InputLength >= sizeof(ULONG) && *(PULONG)Buffer != 0)
