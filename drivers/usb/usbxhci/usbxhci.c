@@ -2922,10 +2922,11 @@ XHCI_ResetEndpointRing(
                 StreamId <= Endpoint->StreamRingCount)
             {
                 PXHCI_STREAM_CONTEXT StreamCtx = &Endpoint->StreamContexts[StreamId];
-                StreamCtx->StreamInfo = XHCI_STREAM_CTX_TYPE_PRIMARY;
                 StreamCtx->TrDequeuePointer =
                     (RingPtr->PhysicalAddress.QuadPart & ~0xFULL) |
+                    ((ULONGLONG)XHCI_STREAM_CTX_TYPE_PRIMARY << XHCI_STREAM_CTX_TYPE_SHIFT) |
                     (RingPtr->CycleState & 0x1);
+                StreamCtx->StoppedEdtla = 0;
             }
         }
     }
@@ -2952,6 +2953,18 @@ XHCI_GetMaxStreamId(
 }
 
 static
+ULONG
+XHCI_MaxPStreams(
+    _In_ USHORT MaxStreamId)
+{
+    ULONG MaxPStreams = 1;
+
+    while ((2UL << MaxPStreams) < (ULONG)MaxStreamId + 1)
+        MaxPStreams++;
+    return MaxPStreams;
+}
+
+static
 MPSTATUS
 XHCI_AllocateStreamResources(
     _In_ PXHCI_EXTENSION Extension,
@@ -2968,7 +2981,7 @@ XHCI_AllocateStreamResources(
         return MP_STATUS_ERROR;
 
     StreamRingCount = (SIZE_T)MaxStreamId + 1;
-    ContextSize = sizeof(XHCI_STREAM_CONTEXT) * StreamRingCount;
+    ContextSize = sizeof(XHCI_STREAM_CONTEXT) * ((SIZE_T)2 << XHCI_MaxPStreams(MaxStreamId));
     AllocationSize = XHCI_ALIGN_UP(ContextSize, 64);
 
     {
@@ -2977,14 +2990,7 @@ XHCI_AllocateStreamResources(
         PHYSICAL_ADDRESS BoundaryAddress;
 
         LowAddress.QuadPart = 0;
-        /*
-         * xHCI spec requires Stream Context Array to be 64-byte aligned.
-         * Use BoundaryAddress (alignment constraint) instead of SkipBytes.
-         * MmAllocateContiguousMemorySpecifyCache with BoundaryAddress ensures
-         * the allocation doesn't cross a boundary of that size, effectively
-         * guaranteeing alignment to 64 bytes when the size is a multiple of 64.
-         */
-        BoundaryAddress.QuadPart = 64;
+        BoundaryAddress.QuadPart = 0;
         if (Extension && Extension->Supports64Bit &&
             !(Extension->Quirks & XHCI_QUIRK_FORCE_32BIT_DMA))
         {
@@ -3599,15 +3605,7 @@ XHCI_ConfigureSlotEndpoint(
      */
     if (Endpoint->StreamsEnabled && Endpoint->MaxStreamId != 0)
     {
-        ULONG MaxPStreams = 0;
-        USHORT StreamCount = Endpoint->MaxStreamId;
-
-        /* Calculate log2(StreamCount + 1) - StreamCount is already validated as power of 2 */
-        while (StreamCount > 0)
-        {
-            MaxPStreams++;
-            StreamCount >>= 1;
-        }
+        ULONG MaxPStreams = XHCI_MaxPStreams(Endpoint->MaxStreamId);
 
         EpCtx->EpInfo |= ((MaxPStreams & 0x1F) << XHCI_EPCTX_MAX_PSTREAMS_SHIFT);
         EpCtx->EpInfo |= XHCI_EPCTX_LSA_FLAG;
