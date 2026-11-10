@@ -14,6 +14,7 @@
 #include "composition.h"
 #include "dcomposition.h"
 #include <reactos/dwmframe.h>
+#include "captioncache.h"
 #if defined(REACTOS_GRAPHICS_DRIVER_MODEL_WDDM)
 #include "drivers/wddm/wddm_bridge.h"
 #endif
@@ -40,6 +41,7 @@ typedef struct _REDIRECT_ENTRY
 {
     PWND         Wnd;
     WND_REDIRECT Redirect;
+    DWM_CAPTION_CACHE FrontCaption;
     RECTL        WindowRect;   /* last position submitted to the compositor    */
     BOOL         WindowRectValid;
     LONG         PaintCount;   /* BeginPaint..EndPaint depth on this tree      */
@@ -3480,6 +3482,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             }
         }
         IntCompositionReadFrameExtension(w, &g_DwmFrameWindows[count]);
+        IntCompositionCaptionCache(&e->FrontCaption, Held, e->Redirect.Generation,
+                                   &g_DwmFrameWindows[count]);
         if (e->Redirect.FrontGlobalShare != 0)
         {
             SURFACE_ShareLockByPointer(e->Redirect.psurfFront);

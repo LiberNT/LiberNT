@@ -1,7 +1,7 @@
 # Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-add_executable(dwmstack_apitest client_format.c dwmstack.c event_poll.c gpu_retry.c mode_switch.c pointer_image.c scene_cache.c testlist.c)
+add_executable(dwmstack_apitest caption_cache.c client_format.c dwmstack.c event_poll.c gpu_retry.c mode_switch.c pointer_image.c scene_cache.c testlist.c)
 set_module_type(dwmstack_apitest win32cui)
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     target_link_options(dwmstack_apitest PRIVATE
