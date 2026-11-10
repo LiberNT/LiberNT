@@ -3353,10 +3353,17 @@ MiWritePrototypePage(
 
         if (NT_SUCCESS(Status))
         {
-            MI_MUTEX_ACQUIRE(&Segment->FlushLock);
-            Status = MiSegmentWritePage(Segment, Page, Frame, Entry->OriginalPte);
-            MiPfnWriteComplete(&System->Pfn, Frame, Entry->OriginalPte, (BOOLEAN)NT_SUCCESS(Status));
-            MI_MUTEX_RELEASE(&Segment->FlushLock);
+            if (MI_MUTEX_TRY_ACQUIRE(&Segment->FlushLock))
+            {
+                Status = MiSegmentWritePage(Segment, Page, Frame, Entry->OriginalPte);
+                MiPfnWriteComplete(&System->Pfn, Frame, Entry->OriginalPte, (BOOLEAN)NT_SUCCESS(Status));
+                MI_MUTEX_RELEASE(&Segment->FlushLock);
+            }
+            else
+            {
+                Status = STATUS_CANT_WAIT;
+                MiPfnWriteComplete(&System->Pfn, Frame, Entry->OriginalPte, FALSE);
+            }
 
             if (Segment->FileOps.ReleaseForModWrite != NULL)
                 Segment->FileOps.ReleaseForModWrite(Segment->FileContext, ModWriteToken);
