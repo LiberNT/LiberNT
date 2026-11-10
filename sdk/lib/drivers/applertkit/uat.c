@@ -71,6 +71,15 @@ UatInvalidateAsid(
 }
 #endif
 
+#ifndef UNIT_TEST
+VOID
+NTAPI
+AppleUatInvalidateAll(VOID)
+{
+    __asm__ __volatile__(".arch armv8.4-a\n\tdsb sy\n\ttlbi vmalle1os\n\tdsb sy\n\tisb" : : : "memory");
+}
+#endif
+
 struct _APPLE_UAT_TABLE
 {
     PULONG64 Entries;
@@ -417,7 +426,7 @@ AppleUatAdopt(
         AppleUatAdoptedRelease(Adopted);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    Status = AppleUatCreate(&Adopted->Lower, TRUE, Owner);
+    Status = AppleUatCreate(&Adopted->Lower, FALSE, Owner);
     if (!NT_SUCCESS(Status))
     {
         AppleUatAdoptedRelease(Adopted);

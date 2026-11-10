@@ -161,6 +161,10 @@ AppleUatAdoptedBindSlot(
     _In_ ULONG Slot,
     _In_ ULONG64 RootPhysical);
 
+VOID
+NTAPI
+AppleUatInvalidateAll(VOID);
+
 NTSTATUS
 NTAPI
 AppleUatAdoptedUnbindSlot(

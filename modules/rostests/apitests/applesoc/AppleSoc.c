@@ -16,6 +16,7 @@
 #define UNIT_TEST
 
 typedef struct _DEVICE_OBJECT DEVICE_OBJECT, *PDEVICE_OBJECT;
+typedef struct _MDL MDL, *PMDL;
 
 typedef enum _MEMORY_CACHING_TYPE
 {
@@ -2563,11 +2564,27 @@ TestAgxInitLayout(VOID)
        Protection.Read && Protection.Write, "A shared page is %u/%u/%u/%u\n", Protection.Access,
        Protection.Memory, Protection.Read, Protection.Write);
 
+    AppleAgxClassProtection(APPLE_AGX_CLASS_SHARED_CACHED, &Protection);
+    ok(Protection.Access == APPLE_UAT_ACCESS_BOTH && Protection.Memory == APPLE_UAT_MEMORY_CACHED &&
+       Protection.Read && Protection.Write, "A cached shared page is %u/%u/%u/%u\n", Protection.Access,
+       Protection.Memory, Protection.Read, Protection.Write);
+
     /* The initial data needs this much memory, and the doorbell carries the root's low bits. */
     for (Index = 0; Index < APPLE_AGX_OBJECTS; ++Index)
     {
+        APPLE_AGX_REQUEST Request;
+        APPLE_AGX_HEAP Heap;
+        ULONG64 Page;
+        SIZE_T Bytes;
+
         Layout = AgxLayoutOf(Index);
-        Pages += AgxPageCount(Layout.Address, Layout.Size);
+        RtlZeroMemory(&Request, sizeof(Request));
+        RtlZeroMemory(&Heap, sizeof(Heap));
+        Request.At = Layout.Address;
+        Request.Size = Layout.Size;
+        ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_SUCCESS);
+        ok(Page == (Layout.Address & ~(APPLE_UAT_PAGE_SIZE - 1)), "Object %lu starts at page %I64x\n", Index, Page);
+        Pages += (ULONG)(Bytes / APPLE_UAT_PAGE_SIZE);
     }
     ok(Pages > 4096 && Pages < 8192, "The initial data needs %lu pages\n", Pages);
     ok(AppleAgxInitMessage() == (0x0081ULL << 48 | 0xc204062ff40ULL), "The doorbell is %I64x\n",
@@ -2676,7 +2693,11 @@ TestAgxInitWrite(VOID)
 
     ok(!AppleAgxInitReady(&Init), "The firmware announced readiness before it ran\n");
     AgxWriteLong(AgxInitBuffers[APPLE_AGX_OBJECT_RUNTIME], APPLE_AGX_RUNTIME_READY, 0xabcdabcdUL);
+    ok(!AppleAgxInitReady(&Init), "The magic alone was taken for readiness\n");
+    AgxWriteLong(AgxInitBuffers[APPLE_AGX_OBJECT_FLAGS], APPLE_AGX_FLAGS_READY, 1);
     ok(AppleAgxInitReady(&Init), "The readiness the firmware writes was not seen\n");
+    AgxWriteLong(AgxInitBuffers[APPLE_AGX_OBJECT_RUNTIME], APPLE_AGX_RUNTIME_READY, 0);
+    ok(!AppleAgxInitReady(&Init), "The flag alone was taken for readiness\n");
 
     for (Index = 0; Index < APPLE_AGX_OBJECTS; ++Index)
         HeapFree(GetProcessHeap(), 0, AgxInitBuffers[Index]);
@@ -3002,9 +3023,26 @@ TestAgxQueue(VOID)
     Queue.StateVirtual = AgxQueueState;
     Queue.RingVirtual = AgxQueueRing;
     Queue.Entries = RTL_NUMBER_OF(AgxQueueRing);
+    Queue.Uuid = APPLE_AGX_VERTEX_UUID;
 
-    /* A queue tells the firmware where everything of its own is. */
+    /* A queue tells the firmware where everything of its own is, and the scheduling row it is in. */
     ok_hex(AppleAgxQueueDescribe(&Queue), STATUS_SUCCESS);
+    RtlCopyMemory(&Read, AgxQueueInfo + APPLE_AGX_QINFO_UNKNOWN_2C, sizeof(Read));
+    ok_hex(Read, 0xffffffff);
+    RtlCopyMemory(&Read, AgxQueueInfo + APPLE_AGX_QINFO_CLASS, sizeof(Read));
+    ok_int(Read, 2);
+    RtlCopyMemory(&Read, AgxQueueInfo + APPLE_AGX_QINFO_CLASS_B, sizeof(Read));
+    ok_int(Read, 2);
+    RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_MASK, sizeof(Value));
+    ok(Value == 0xffff000000000000ULL, "The queue mask is %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxQueueInfo + 0x40, sizeof(Value));
+    ok(Value == 0, "The row carries %I64x at +0x40\n", Value);
+    RtlCopyMemory(&Read, AgxQueueInfo + APPLE_AGX_QINFO_UNKNOWN_48, sizeof(Read));
+    ok_int(Read, 2);
+    RtlCopyMemory(&Read, AgxQueueInfo + APPLE_AGX_QINFO_UNKNOWN_4C, sizeof(Read));
+    ok_hex(Read, 0xffffffff);
+    RtlCopyMemory(&Read, AgxQueueInfo + APPLE_AGX_QINFO_UUID, sizeof(Read));
+    ok_hex(Read, 0x7a0000);
     RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_STATE, sizeof(Value));
     ok(Value == Queue.State, "The queue state is at %I64x\n", Value);
     RtlCopyMemory(&Value, AgxQueueInfo + APPLE_AGX_QINFO_RING, sizeof(Value));
@@ -3104,7 +3142,10 @@ TestAgxQueue(VOID)
             if (Context[Index])
                 ++Read;
         }
-        ok_int(Read, 0);
+        ok_int(Read, 5);
+        ok(Context[0] == 0xff && Context[1] == 0xff && Context[5] == 1 && Context[0x1e] == 0xff && Context[0x23] == 2,
+           "The scheduling context starts %02x %02x %02x %02x %02x\n", Context[0], Context[1], Context[5],
+           Context[0x1e], Context[0x23]);
         ok_hex(AppleAgxDescribeGraph(NULL, 1, List, 1, Context), STATUS_INVALID_PARAMETER);
         ok_hex(AppleAgxDescribeGraph(Notifier, 0, List, 1, Context), STATUS_INVALID_PARAMETER);
     }
@@ -3115,9 +3156,25 @@ TestAgxQueue(VOID)
     ok_hex(APPLE_AGX_OP_END, 0x40000002);
     ok_hex(APPLE_AGX_OP_TIMESTAMP, 0x80000003);
 
+    /* Work appended together is published with one move of the cursor. */
+    RtlZeroMemory(AgxQueueState, sizeof(AgxQueueState));
+    Queue.Write = 0;
+    ok_hex(AppleAgxQueueAppend(&Queue, 0xfffffc2150000000ULL), STATUS_SUCCESS);
+    ok_hex(AppleAgxQueueAppend(&Queue, 0xfffffc2150004000ULL), STATUS_SUCCESS);
+    RtlCopyMemory(&Read, AgxQueueState + APPLE_AGX_QSTATE_WRITE, sizeof(Read));
+    ok_int(Read, 0);
+    AppleAgxQueuePublish(&Queue, &Head);
+    ok_int(Head, 2);
+    RtlCopyMemory(&Read, AgxQueueState + APPLE_AGX_QSTATE_WRITE, sizeof(Read));
+    ok_int(Read, 2);
+    ok(AgxQueueRing[1] == 0xfffffc2150004000ULL, "The second appended work is %I64x\n", AgxQueueRing[1]);
+    Queue.Uuid = 0;
+    ok_hex(AppleAgxQueueDescribe(&Queue), STATUS_INVALID_PARAMETER);
+
     /* A queue with nothing of its own is refused rather than described. */
     RtlZeroMemory(&Queue, sizeof(Queue));
     ok_hex(AppleAgxQueueDescribe(&Queue), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxQueueAppend(&Queue, 0xfffffc2140000000ULL), STATUS_INVALID_PARAMETER);
     ok_hex(AppleAgxQueuePost(&Queue, 0xfffffc2140000000ULL, &Head), STATUS_INVALID_PARAMETER);
     ok_int(AppleAgxQueueDone(&Queue), 0);
 }
@@ -3130,66 +3187,90 @@ static
 VOID
 TestAgxPools(VOID)
 {
-    const ULONG64 First = 0xfffffc2d00000000ULL;
-    ULONG64 Value;
+    ULONG64 Pool[APPLE_AGX_POOLS], Value;
     ULONG Index, Seeds = 0, Word;
 
-    /* The allocator names its freelist, its pool table and its counter. */
+    /* The allocator names its identity, its freelist, its pool table and its counter. */
     RtlFillMemory(AgxManager, sizeof(AgxManager), 0x5a);
-    ok_hex(AppleAgxDescribeManager(AgxManager, 0xfffffc2d10000000ULL, 0xfffffc2d20000000ULL,
-                                   0xfffffc2100020000ULL), STATUS_SUCCESS);
+    ok_hex(AppleAgxDescribeManager(AgxManager, APPLE_AGX_MANAGER_COMPUTE_ID, APPLE_AGX_MANAGER_COMPUTE_INDEX,
+                                   APPLE_AGX_FREELIST_SEEDS, APPLE_AGX_CLIENT_FREELIST, APPLE_AGX_CLIENT_POOL_TABLE +
+                                   APPLE_AGX_POOL_TABLE_OFFSET, 0xfffffc2100020000ULL), STATUS_SUCCESS);
     RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_ID, sizeof(Word));
-    ok_int(Word, APPLE_AGX_MANAGER_COMPUTE_ID);
+    ok_int(Word, 3);
     RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_INDEX, sizeof(Word));
-    ok_int(Word, APPLE_AGX_MANAGER_COMPUTE_INDEX);
+    ok_int(Word, 2);
     RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_ONE, sizeof(Word));
     ok_int(Word, 1);
     RtlCopyMemory(&Value, AgxManager + APPLE_AGX_MANAGER_FREELIST, sizeof(Value));
-    ok(Value == 0xfffffc2d10000000ULL, "The freelist is at %I64x\n", Value);
+    ok(Value == 0x7005858000ULL, "The freelist is at %I64x\n", Value);
     RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_UNKNOWN_1C, sizeof(Word));
     ok_hex(Word, APPLE_AGX_MANAGER_UNKNOWN_1C_VALUE);
     RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_SEEDS_A, sizeof(Word));
-    ok_int(Word, APPLE_AGX_FREELIST_SEEDS);
+    ok_int(Word, 22528);
     RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_SEEDS_B, sizeof(Word));
-    ok_int(Word, APPLE_AGX_FREELIST_SEEDS);
+    ok_int(Word, 22528);
     RtlCopyMemory(&Value, AgxManager + APPLE_AGX_MANAGER_POOL_TABLE, sizeof(Value));
-    ok(Value == 0xfffffc2d20000000ULL, "The pool table is at %I64x\n", Value);
+    ok(Value == 0x7005c5f000ULL, "The pool table is at %I64x\n", Value);
     RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_UNKNOWN_44, sizeof(Word));
     ok_hex(Word, APPLE_AGX_MANAGER_UNKNOWN_44_VALUE);
     RtlCopyMemory(&Value, AgxManager + APPLE_AGX_MANAGER_COUNTER, sizeof(Value));
     ok(Value == 0xfffffc2100020000ULL, "The counter is at %I64x\n", Value);
-    ok_hex(AppleAgxDescribeManager(AgxManager, 0, 1, 1), STATUS_INVALID_PARAMETER);
+    RtlCopyMemory(&Value, AgxManager + 0x50, sizeof(Value));
+    ok(Value == 0, "The manager carries %I64x past its counter\n", Value);
+    ok_hex(AppleAgxDescribeManager(AgxManager, 0, 0, 1, 1, 1, 1), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeManager(AgxManager, 1, 0, 0, 1, 1, 1), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeManager(AgxManager, 1, 0, APPLE_AGX_FREELIST_SEEDS + 1, 1, 1, 1), STATUS_INVALID_PARAMETER);
 
-    /* Every pool is named with its valid bit, and only the first eight are broken into units. */
-    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, First, &Seeds), STATUS_SUCCESS);
-    ok_int(Seeds, APPLE_AGX_FREELIST_SEEDS);
+    /* A render engine's allocator is engine + 1, at index engine. */
+    ok_hex(AppleAgxDescribeManager(AgxManager, 2, 1, APPLE_AGX_UMA_SEEDS, APPLE_AGX_CLIENT_UMA_FREELIST(1),
+                                   APPLE_AGX_CLIENT_UMA_TABLE(1) + APPLE_AGX_POOL_TABLE_OFFSET, 0xfffffc2100024000ULL),
+           STATUS_SUCCESS);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_ID, sizeof(Word));
+    ok_int(Word, 2);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_INDEX, sizeof(Word));
+    ok_int(Word, 1);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_SEEDS_A, sizeof(Word));
+    ok_int(Word, 8192);
+    RtlCopyMemory(&Value, AgxManager + APPLE_AGX_MANAGER_FREELIST, sizeof(Value));
+    ok(Value == 0x7014490000ULL, "The second render freelist is at %I64x\n", Value);
+
+    /* Every pool is named with its valid bit and broken into units for the freelist. */
+    for (Index = 0; Index < APPLE_AGX_POOLS; ++Index)
+        Pool[Index] = APPLE_AGX_CLIENT_POOL(Index);
+    ok(Pool[1] == 0x7000404000ULL && Pool[21] == 0x7005454000ULL, "The pools are at %I64x %I64x\n", Pool[1],
+       Pool[21]);
+    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, Pool, APPLE_AGX_POOLS, &Seeds), STATUS_SUCCESS);
+    ok_int(Seeds, 22528);
     for (Index = 0; Index < APPLE_AGX_POOLS; ++Index)
     {
         RtlCopyMemory(&Value, AgxPoolTable + Index * APPLE_AGX_POOL_STRIDE, sizeof(Value));
-        ok(Value == ((First + (ULONG64)Index * APPLE_AGX_POOL_SIZE) | APPLE_AGX_POOL_VALID),
-           "Pool %lu is %I64x\n", Index, Value);
+        ok(Value == (Pool[Index] | (1ULL << 62)), "Pool %lu is %I64x\n", Index, Value);
     }
-    /* The rest of a row is left alone. */
     RtlCopyMemory(&Value, AgxPoolTable + 8, sizeof(Value));
     ok(Value == 0, "A pool row carries %I64x past its address\n", Value);
-
-    /* The freelist walks every unit of each seeded pool in turn. */
-    ok(AgxFreelist[0] == First, "The first unit is %I64x\n", AgxFreelist[0]);
-    ok(AgxFreelist[1] == First + APPLE_AGX_POOL_UNIT, "The second unit is %I64x\n", AgxFreelist[1]);
-    ok(AgxFreelist[1023] == First + 1023 * APPLE_AGX_POOL_UNIT, "The last unit of the first pool is %I64x\n",
+    ok(AgxFreelist[0] == Pool[0], "The first unit is %I64x\n", AgxFreelist[0]);
+    ok(AgxFreelist[1] == Pool[0] + 0x1000, "The second unit is %I64x\n", AgxFreelist[1]);
+    ok(AgxFreelist[1023] == Pool[0] + 1023 * 0x1000ULL, "The last unit of the first pool is %I64x\n",
        AgxFreelist[1023]);
-    ok(AgxFreelist[1024] == First + APPLE_AGX_POOL_SIZE, "The first unit of the second pool is %I64x\n",
-       AgxFreelist[1024]);
-    ok(AgxFreelist[APPLE_AGX_FREELIST_SEEDS - 1] ==
-       First + (APPLE_AGX_SEEDED_POOLS - 1) * (ULONG64)APPLE_AGX_POOL_SIZE +
-           1023 * APPLE_AGX_POOL_UNIT, "The last seed is %I64x\n",
-       AgxFreelist[APPLE_AGX_FREELIST_SEEDS - 1]);
-    /* The seeded pools are exactly the memory the firmware may hand out. */
-    ok_int(APPLE_AGX_SEEDED_POOLS * (APPLE_AGX_POOL_SIZE / APPLE_AGX_POOL_UNIT), APPLE_AGX_FREELIST_SEEDS);
+    ok(AgxFreelist[1024] == Pool[1], "The first unit of the second pool is %I64x\n", AgxFreelist[1024]);
+    ok(AgxFreelist[22527] == Pool[21] + 1023 * 0x1000ULL, "The last seed is %I64x\n", AgxFreelist[22527]);
 
-    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, First + 1, &Seeds), STATUS_INVALID_PARAMETER);
+    /* The render pools are eight, spaced apart with a gap, each engine's own. */
+    for (Index = 0; Index < APPLE_AGX_UMA_POOLS; ++Index)
+        Pool[Index] = APPLE_AGX_CLIENT_UMA(0, Index);
+    ok(Pool[1] == 0x7010408000ULL && APPLE_AGX_CLIENT_UMA(1, 0) == 0x7012450000ULL, "The render pools are at %I64x %I64x\n",
+       Pool[1], APPLE_AGX_CLIENT_UMA(1, 0));
+    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, Pool, APPLE_AGX_UMA_POOLS, &Seeds), STATUS_SUCCESS);
+    ok_int(Seeds, 8192);
+    ok(AgxFreelist[8191] == Pool[7] + 1023 * 0x1000ULL, "The last render seed is %I64x\n", AgxFreelist[8191]);
+
+    Pool[3] += 1;
+    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, Pool, APPLE_AGX_UMA_POOLS, &Seeds), STATUS_INVALID_PARAMETER);
     ok_int(Seeds, 0);
-    ok_hex(AppleAgxSeedPools(NULL, AgxFreelist, First, &Seeds), STATUS_INVALID_PARAMETER);
+    Pool[3] -= 1;
+    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, Pool, 0, &Seeds), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, Pool, APPLE_AGX_POOLS + 1, &Seeds), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxSeedPools(NULL, AgxFreelist, Pool, 1, &Seeds), STATUS_INVALID_PARAMETER);
 }
 
 static UCHAR AgxSequence[APPLE_AGX_COMPUTE_SEQUENCE_SIZE];
@@ -4250,9 +4331,10 @@ TestAgxBuildRender(VOID)
     Job.Notifier = 0xfffffc2100018000ULL;
     Job.Empty = 0xfffffc2100034000ULL;
     Job.Manager = 0xfffffc2100024000ULL;
-    Job.ManagerEntry = 0xfffffc2100024c00ULL;
+    Job.SceneList = 0xfffffc2100024c00ULL;
     Job.ManagerMisc = 0xfffffc2100025000ULL;
-    Job.Pool = 0xfffffc2100040000ULL;
+    Job.Pool[0] = 0xfffffc2100040000ULL;
+    Job.Pool[1] = 0xfffffc2100044000ULL;
     Job.Queue[0] = 0xfffffc2100000000ULL;
     Job.Queue[1] = 0xfffffc2100000100ULL;
     Job.UserStamp[0] = 0xfffffc210001c000ULL;
@@ -4279,7 +4361,15 @@ TestAgxBuildRender(VOID)
     Job.QueueCommands = 2;
 
     ok_hex(AppleAgxBuildRender(&Job, &Render, 5, 5), STATUS_SUCCESS);
-    ok(BufQuad(AgxJobScene, 0x00) == Job.ManagerEntry, "The scene names entry %I64x\n", BufQuad(AgxJobScene, 0));
+    ok(BufQuad(AgxJobScene, 0x00) == Job.SceneList + 4 * 5, "The scene names entry %I64x\n", BufQuad(AgxJobScene, 0));
+    ok(BufQuad(AgxJobScene, 0x08) == Job.SceneList + 4 * 5, "The scene names entry %I64x\n", BufQuad(AgxJobScene, 8));
+    ok(BufQuad(AgxJobSequence[0], 0x18c) == Job.Pool[0], "The vertex pool is %I64x\n", BufQuad(AgxJobSequence[0], 0x18c));
+    ok(BufQuad(AgxJobSequence[1], 0x1a4) == Job.Pool[1], "The fragment pool is %I64x\n",
+       BufQuad(AgxJobSequence[1], 0x1a4));
+    ok(BufQuad(AgxVertexWork, 0x8a8 + 0x2e) == Job.Pool[0], "The vertex tail names pool %I64x\n",
+       BufQuad(AgxVertexWork, 0x8a8 + 0x2e));
+    ok(BufQuad(AgxFragmentWork, 0xbf0 + 0x2e) == Job.Pool[1], "The fragment tail names pool %I64x\n",
+       BufQuad(AgxFragmentWork, 0xbf0 + 0x2e));
     ok(BufQuad(AgxJobScene, 0x40) == Job.ManagerMisc, "The scene names state %I64x\n", BufQuad(AgxJobScene, 0x40));
     ok(BufQuad(AgxVertexWork, 0x02c) == Job.SceneAddress, "The vertex work names scene %I64x\n", BufQuad(AgxVertexWork, 0x2c));
     ok(BufQuad(AgxVertexWork, 0x770) == Job.VertexSequenceAddress, "The vertex work runs %I64x\n",
@@ -4289,7 +4379,7 @@ TestAgxBuildRender(VOID)
     ok_hex(BufLong(AgxVertexWork, 0x780), VertexStamp);
     ok(BufQuad(AgxVertexWork, 0x784 + 0xe0) == Job.UserStamp[0], "The vertex user stamp is %I64x\n",
        BufQuad(AgxVertexWork, 0x784 + 0xe0));
-    ok(BufQuad(AgxVertexWork, 0x40 + 12 * 71 + 4) == (0xa000000000ULL | (Job.ManagerEntry & 0xfffffffffULL) | 1),
+    ok(BufQuad(AgxVertexWork, 0x40 + 12 * 71 + 4) == (0xa000000000ULL | ((Job.SceneList + 4) & 0xfffffffffULL) | 1),
        "The initial scene entry is %I64x\n", BufQuad(AgxVertexWork, 0x40 + 12 * 71 + 4));
     ok(BufQuad(AgxVertexWork, 0x8a8 + 0x08) == Job.Timestamps[0][0], "The vertex timestamp is %I64x\n",
        BufQuad(AgxVertexWork, 0x8a8 + 0x08));
@@ -4327,6 +4417,15 @@ TestAgxBuildRender(VOID)
     Bad = Job;
     Bad.FragmentBarrier = NULL;
     ok_hex(AppleAgxBuildRender(&Bad, &Render, 5, 5), STATUS_INVALID_PARAMETER);
+    Bad = Job;
+    Bad.SceneList = 0;
+    ok_hex(AppleAgxBuildRender(&Bad, &Render, 5, 5), STATUS_INVALID_PARAMETER);
+
+    /* The scene list cycles through its slots with the render's number. */
+    ok_hex(AppleAgxBuildRender(&Job, &Render, 5, 50), STATUS_SUCCESS);
+    ok(BufQuad(AgxJobScene, 0x00) == Job.SceneList + 4 * 2, "Render 50 names entry %I64x\n", BufQuad(AgxJobScene, 0));
+    ok(BufQuad(AgxVertexWork, 0x40 + 12 * 71 + 4) == (0xa000000000ULL | ((Job.SceneList + 4) & 0xfffffffffULL) | 1),
+       "Render 50 starts from entry %I64x\n", BufQuad(AgxVertexWork, 0x40 + 12 * 71 + 4));
     Bad = Job;
     Bad.FragmentScratchBytes = 0x8000;
     ok_hex(AppleAgxBuildRender(&Bad, &Render, 5, 5), STATUS_INVALID_PARAMETER);
@@ -4698,58 +4797,65 @@ TestRtkitCrashlog(VOID)
     ok_int(AppleRtkitParseCrashlog(RtkitCrashImage, sizeof(RtkitCrashImage), &Crash), FALSE);
 }
 
+static ULONG AgxPbPages[APPLE_AGX_PB_PAGE_LIST_SIZE / sizeof(ULONG)];
+static ULONG64 AgxPbBlocks[APPLE_AGX_PB_BLOCK_LIST_SIZE / sizeof(ULONG64)];
+
 static
 VOID
 TestAgxParameterBuffer(VOID)
 {
     APPLE_AGX_PARAMETER_BUFFER Buffer;
+    APPLE_AGX_GROWTH Growth;
+    ULONG Request[APPLE_AGX_RECORD_WORDS], Reply[APPLE_AGX_RECORD_WORDS];
+    UCHAR Record[APPLE_AGX_INIT_BM_SIZE], C1[APPLE_AGX_C1_RECORD];
     ULONG64 Value;
-    ULONG Word;
+    ULONG Word, First, Count;
 
     RtlZeroMemory(&Buffer, sizeof(Buffer));
-    Buffer.PageList = 0xfffffc2d01000000ULL;
-    Buffer.BlockList = 0xfffffc2d02000000ULL;
+    Buffer.PageList = APPLE_AGX_CLIENT_PB_PAGE_LIST;
+    Buffer.BlockList = APPLE_AGX_CLIENT_PB_BLOCK_LIST;
     Buffer.BlockControl = 0xfffffc2100028000ULL;
     Buffer.Counter = 0xfffffc210002c000ULL;
-    Buffer.Pages = APPLE_AGX_PB_PAGES;
-    Buffer.Blocks = APPLE_AGX_PB_BLOCKS;
-    Buffer.BlockBytes = 0x4000;
+    Buffer.Blocks = 64;
+    Buffer.MaxBlocks = 3072;
 
+    /* The manager names the lists by their full size, the initial blocks and the growth bound. */
     RtlFillMemory(AgxPbManager, sizeof(AgxPbManager), 0x5a);
     ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_SUCCESS);
     RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_PAGE_LIST, sizeof(Value));
-    ok(Value == Buffer.PageList, "The page list is at %I64x\n", Value);
+    ok(Value == 0x1074000000ULL, "The page list is at %I64x\n", Value);
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_PAGE_LIST_BYTES, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_PAGES * 4);
+    ok_hex(Word, 0x28000);
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_PAGE_COUNT, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_PAGES);
+    ok_int(Word, 256);
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_RECORDS, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_LIST_RECORDS);
+    ok_int(Word, 4096);
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_BLOCK_COUNT, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_BLOCKS);
+    ok_int(Word, 64);
     RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_BLOCK_LIST, sizeof(Value));
-    ok(Value == Buffer.BlockList, "The block list is at %I64x\n", Value);
+    ok(Value == 0x70f0000000ULL, "The block list is at %I64x\n", Value);
     RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_BLOCK_CONTROL, sizeof(Value));
     ok(Value == Buffer.BlockControl, "The block control is at %I64x\n", Value);
-    /* The last page is named by index, not by count. */
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_LAST_PAGE, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_PAGES - 1);
+    ok_int(Word, 255);
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_BLOCK_BYTES, sizeof(Word));
-    ok_hex(Word, 0x4000);
+    ok_hex(Word, 0x20000);
     RtlCopyMemory(&Value, AgxPbManager + APPLE_AGX_PB_COUNTER, sizeof(Value));
     ok(Value == Buffer.Counter, "The counter is at %I64x\n", Value);
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_MAX_PAGES_A, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_PAGES);
+    ok_int(Word, 4 * 3072);
     RtlCopyMemory(&Word, AgxPbManager + APPLE_AGX_PB_MAX_PAGES_B, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_PAGES);
+    ok_int(Word, 4 * 3072);
+    RtlCopyMemory(&Word, AgxPbManager + 0x78, sizeof(Word));
+    ok_int(Word, 0);
 
-    /* A buffer larger than the firmware's own bound, or with nothing to record on, is refused. */
-    Buffer.Pages = APPLE_AGX_PB_PAGES + 1;
+    /* More initial blocks than the bound, a bound past the list, or nothing to record on are refused. */
+    Buffer.Blocks = 3073;
     ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_INVALID_PARAMETER);
-    Buffer.Pages = APPLE_AGX_PB_PAGES;
-    Buffer.Blocks = APPLE_AGX_PB_BLOCKS + 1;
+    Buffer.Blocks = 64;
+    Buffer.MaxBlocks = APPLE_AGX_PB_BLOCKS;
     ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_INVALID_PARAMETER);
-    Buffer.Blocks = APPLE_AGX_PB_BLOCKS;
+    Buffer.MaxBlocks = 3072;
     Buffer.BlockList = 0;
     ok_hex(AppleAgxDescribeParameterBuffer(AgxPbManager, &Buffer), STATUS_INVALID_PARAMETER);
 
@@ -4760,23 +4866,247 @@ TestAgxParameterBuffer(VOID)
     ok_int(AppleAgxBlockRecord(APPLE_AGX_PB_LIST_RECORDS), 0);
     ok_int(AppleAgxBlockRecord(APPLE_AGX_PB_LIST_RECORDS + 3), 24);
 
-    /* The block control starts with every block free and the producer at the start. */
+    /* The block control starts with the initial blocks posted, producer included. */
     RtlFillMemory(AgxBlockControl, sizeof(AgxBlockControl), 0x5a);
     RtlFillMemory(AgxMisc, sizeof(AgxMisc), 0x5a);
-    ok_hex(AppleAgxDescribeBlockControl(AgxBlockControl, AgxMisc, APPLE_AGX_PB_BLOCKS), STATUS_SUCCESS);
+    ok_hex(AppleAgxDescribeBlockControl(AgxBlockControl, AgxMisc, 64), STATUS_SUCCESS);
     RtlCopyMemory(&Word, AgxBlockControl + APPLE_AGX_BLOCK_CONTROL_BLOCKS, sizeof(Word));
-    ok_int(Word, APPLE_AGX_PB_BLOCKS);
+    ok_int(Word, 64);
     RtlCopyMemory(&Word, AgxBlockControl + APPLE_AGX_BLOCK_CONTROL_PRODUCER, sizeof(Word));
-    ok_int(Word, 0);
+    ok_int(Word, 64);
     RtlCopyMemory(&Word, AgxMisc + APPLE_AGX_MISC_ENABLE, sizeof(Word));
     ok_int(Word, 1);
     RtlCopyMemory(&Word, AgxMisc, sizeof(Word));
     ok_int(Word, 0);
     ok_hex(AppleAgxDescribeBlockControl(AgxBlockControl, AgxMisc, 0), STATUS_INVALID_PARAMETER);
 
+    /* The lists name pages and blocks by their compact address in page units. */
+    RtlFillMemory(AgxPbPages, sizeof(AgxPbPages), 0x5a);
+    RtlZeroMemory(AgxPbBlocks, sizeof(AgxPbBlocks));
+    ok_hex(AppleAgxWriteBlocks(AgxPbPages, AgxPbBlocks, APPLE_AGX_CLIENT_PB_HEAP, 0, 64), STATUS_SUCCESS);
+    ok_hex(AgxPbPages[0], (ULONG)((0x70c0000000ULL - 0x1000000000ULL) >> 15));
+    ok_hex(AgxPbPages[1], AgxPbPages[0] + 1);
+    ok_hex(AgxPbPages[255], AgxPbPages[0] + 255);
+    ok_hex(AgxPbPages[256], 0x5a5a5a5a);
+    ok(AgxPbBlocks[0] == AgxPbPages[0], "Block 0 is %I64x\n", AgxPbBlocks[0]);
+    ok(AgxPbBlocks[63] == AgxPbPages[0] + 63 * 4ULL, "Block 63 is %I64x\n", AgxPbBlocks[63]);
+    ok(AgxPbBlocks[64] == 0, "Block 64 is %I64x\n", AgxPbBlocks[64]);
+    ok_hex(AppleAgxWriteBlocks(NULL, AgxPbBlocks, APPLE_AGX_CLIENT_PB_HEAP, 64, 10), STATUS_SUCCESS);
+    ok(AgxPbBlocks[73] == AgxPbPages[0] + 73 * 4ULL, "Block 73 is %I64x\n", AgxPbBlocks[73]);
+    ok_hex(AgxPbPages[256], 0x5a5a5a5a);
+    ok_hex(AppleAgxWriteBlocks(AgxPbPages, AgxPbBlocks, APPLE_AGX_CLIENT_PB_HEAP + 0x8000, 0, 1),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxWriteBlocks(AgxPbPages, AgxPbBlocks, 0x9000000000ULL, 0, 1), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxWriteBlocks(AgxPbPages, AgxPbBlocks, APPLE_AGX_CLIENT_PB_HEAP, 4090, 7), STATUS_INVALID_PARAMETER);
+
+    /* C1 carries the initial pages; InitBM resets the buffer before the first render. */
+    AppleAgxC1Record(C1, 64);
+    RtlCopyMemory(&Word, C1, sizeof(Word));
+    ok_hex(Word, 0x07400000);
+    RtlCopyMemory(&Word, C1 + 4, sizeof(Word));
+    ok_int(Word, 256);
+    ok_hex(AppleAgxEncodeInitBm(Record, 3, 64, 0xfffffc2d00010000ULL, 0x7a000100), STATUS_SUCCESS);
+    RtlCopyMemory(&Word, Record, sizeof(Word));
+    ok_int(Word, 6);
+    RtlCopyMemory(&Word, Record + 4, sizeof(Word));
+    ok_int(Word, 3);
+    RtlCopyMemory(&Word, Record + 0x10, sizeof(Word));
+    ok_int(Word, 64);
+    RtlCopyMemory(&Value, Record + 0x14, sizeof(Value));
+    ok(Value == 0xfffffc2d00010000ULL, "InitBM names manager %I64x\n", Value);
+    RtlCopyMemory(&Word, Record + 0x1c, sizeof(Word));
+    ok_hex(Word, 0x7a000100);
+    ok_hex(AppleAgxEncodeInitBm(Record, 0, 64, 1, 1), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxEncodeInitBm(Record, 64, 64, 1, 1), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxEncodeInitBm(Record, 3, 0, 1, 1), STATUS_INVALID_PARAMETER);
+
+    /* Growth gives ten blocks a request, echoes what the request named, and refuses at the bound. */
+    RtlZeroMemory(&Growth, sizeof(Growth));
+    Growth.Posted = 64;
+    Growth.Backed = 512;
+    Growth.Max = 80;
+    RtlZeroMemory(Request, sizeof(Request));
+    Request[0] = 7;
+    Request[1] = 3;
+    Request[3] = 0;
+    Request[4] = 0x1234;
+    Request[5] = 0;
+    Request[6] = 0xabcd;
+    ok_hex(AppleAgxAnswerGrowth(&Growth, Request, 3, Reply, &First, &Count), STATUS_SUCCESS);
+    ok_int(First, 64);
+    ok_int(Count, 10);
+    ok_int(Growth.Posted, 74);
+    ok_int(Reply[0], 7);
+    ok_int(Reply[1], 1);
+    ok_int(Reply[2], 0);
+    ok_int(Reply[3], 3);
+    ok_int(Reply[4], 0);
+    ok_hex(Reply[5], 0x1234);
+    ok_hex(Reply[7], 0xabcd);
+    Request[3] = 1;
+    ok_hex(AppleAgxAnswerGrowth(&Growth, Request, 3, Reply, &First, &Count), STATUS_SUCCESS);
+    ok_int(First, 74);
+    ok_int(Count, 6);
+    Request[3] = 2;
+    ok_hex(AppleAgxAnswerGrowth(&Growth, Request, 3, Reply, &First, &Count), STATUS_SUCCESS);
+    ok_int(Count, 0);
+    ok_int(Reply[1], 0);
+    ok_int(Growth.Refused, 1);
+    Request[3] = 1;
+    ok_hex(AppleAgxAnswerGrowth(&Growth, Request, 3, Reply, &First, &Count), STATUS_INVALID_PARAMETER);
+    Request[3] = 3;
+    ok_hex(AppleAgxAnswerGrowth(&Growth, Request, 4, Reply, &First, &Count), STATUS_INVALID_PARAMETER);
+    Request[2] = 1;
+    ok_hex(AppleAgxAnswerGrowth(&Growth, Request, 3, Reply, &First, &Count), STATUS_INVALID_PARAMETER);
+    Request[2] = 0;
+    Request[0] = 1;
+    ok_hex(AppleAgxAnswerGrowth(&Growth, Request, 3, Reply, &First, &Count), STATUS_INVALID_PARAMETER);
+
     /* The scene list is cycled by draw, so its slot count bounds the ordinal. */
     ok_int(APPLE_AGX_SCENE_LIST_SLOTS, 48);
     ok_int(APPLE_AGX_RENDER_POOLS, 8);
+}
+
+static
+VOID
+TestAgxClient(VOID)
+{
+    APPLE_UAT_PROTECTION Protection;
+    APPLE_AGX_REQUEST Request;
+    APPLE_AGX_HEAP Heap;
+    ULONG64 Page, Register[APPLE_AGX_COMPUTE_REGISTER_COUNT];
+    DRM_ASAHI_CMD_COMPUTE Compute;
+    APPLE_AGX_COMMAND Command;
+    UCHAR Stream[64];
+    DRM_ASAHI_CMD_HEADER Header;
+    SIZE_T Bytes;
+    ULONG Offset;
+
+    /* The client leaves: uncached and cached for the graphics processor, both ways for the lists. */
+    AppleAgxLeafProtection(APPLE_AGX_LEAF_UNCACHED, &Protection);
+    ok(Protection.Access == APPLE_UAT_ACCESS_GPU && Protection.Memory == APPLE_UAT_MEMORY_UNCACHED &&
+       !Protection.Read && Protection.Write, "An uncached client page is %u/%u/%u/%u\n", Protection.Access,
+       Protection.Memory, Protection.Read, Protection.Write);
+    ok(AppleUatEntry(0x40000ULL, &Protection, FALSE) == 0x00c0000000040c8bULL, "The leaf is %I64x\n", AppleUatEntry(0x40000ULL, &Protection, FALSE));
+    AppleAgxLeafProtection(APPLE_AGX_LEAF_CACHED, &Protection);
+    ok(AppleUatEntry(0x40000ULL, &Protection, FALSE) == 0x00c0000000040c83ULL, "The leaf is %I64x\n", AppleUatEntry(0x40000ULL, &Protection, FALSE));
+    AppleAgxLeafProtection(APPLE_AGX_LEAF_PB_LIST, &Protection);
+    ok(AppleUatEntry(0x40000ULL, &Protection, FALSE) == 0x00e0000000040c03ULL, "The leaf is %I64x\n", AppleUatEntry(0x40000ULL, &Protection, FALSE));
+    AppleAgxClassProtection(APPLE_AGX_CLASS_SHARED_CACHED, &Protection);
+    ok(AppleUatEntry(0x40000ULL, &Protection, TRUE) == 0x00e0000000040403ULL, "The leaf is %I64x\n", AppleUatEntry(0x40000ULL, &Protection, TRUE));
+    AppleAgxClassProtection(APPLE_AGX_CLASS_FIRMWARE, &Protection);
+    ok(AppleUatEntry(0x40000ULL, &Protection, TRUE) == 0x00c000000004044bULL, "The leaf is %I64x\n", AppleUatEntry(0x40000ULL, &Protection, TRUE));
+
+    /* What clients may not bind over. */
+    ok_int(AppleAgxClientReserved(0x7000000000ULL, 0x4000), TRUE);
+    ok_int(AppleAgxClientReserved(0x6fffffc000ULL, 0x8000), TRUE);
+    ok_int(AppleAgxClientReserved(0x6fffffc000ULL, 0x4000), FALSE);
+    ok_int(AppleAgxClientReserved(0x7100000000ULL, 0x4000), FALSE);
+    ok_int(AppleAgxClientReserved(0x1006080000ULL + 16 * 0x118000ULL - 0x4000, 0x4000), TRUE);
+    ok_int(AppleAgxClientReserved(0x1006080000ULL + 16 * 0x118000ULL, 0x4000), FALSE);
+    ok_int(AppleAgxClientReserved(0x1074020000ULL, 0x4000), TRUE);
+    ok_int(AppleAgxClientReserved(0x1074028000ULL, 0x4000), FALSE);
+    ok_int(AppleAgxClientReserved(0xffffffffffffc000ULL, 0x8000), TRUE);
+
+    /* Objects take the next pages of the window and leave one page unmapped after themselves. */
+    RtlZeroMemory(&Heap, sizeof(Heap));
+    Heap.Next = APPLE_AGX_HEAP_BASE;
+    Heap.End = APPLE_AGX_HEAP_END;
+    RtlZeroMemory(&Request, sizeof(Request));
+    Request.Size = APPLE_AGX_VERTEX_WORK_SIZE;
+    Request.Offset = APPLE_AGX_CLIENT_TA_WORK_OFFSET;
+    Request.Class = APPLE_AGX_CLASS_SHARED_CACHED;
+    Request.Leaf = APPLE_AGX_LEAF_UNCACHED;
+    Request.Lower = TRUE;
+    Request.Client = APPLE_AGX_CLIENT_TA_WORK;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_SUCCESS);
+    ok(Page == APPLE_AGX_HEAP_BASE, "The first object is at %I64x\n", Page);
+    ok_int((ULONG)Bytes, 0x4000);
+    ok(Heap.Next == APPLE_AGX_HEAP_BASE + 0x8000, "The next object goes to %I64x\n", Heap.Next);
+    Request.Client = 0x7020004000ULL - 0x8000;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_SUCCESS);
+    Request.Client = APPLE_AGX_CLIENT_APERTURE_END - 0x4000;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_SUCCESS);
+    Request.Client = APPLE_AGX_CLIENT_APERTURE_END;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_INVALID_PARAMETER);
+    Request.Size = 0x4000;
+    Request.Client = APPLE_AGX_CLIENT_APERTURE_END - 0x4000;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_INVALID_PARAMETER);
+    Request.Size = APPLE_AGX_VERTEX_WORK_SIZE;
+    Request.Client = APPLE_AGX_CLIENT_TA_WORK + 1;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_INVALID_PARAMETER);
+    Request.Client = 0;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_INVALID_PARAMETER);
+    Request.Lower = FALSE;
+    Request.Leaf = APPLE_AGX_LEAF_NONE;
+    Request.Offset = APPLE_UAT_PAGE_SIZE;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_INVALID_PARAMETER);
+    Request.Offset = 0;
+    Request.CachedBytes = 0x2000;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_INVALID_PARAMETER);
+    Request.CachedBytes = 0;
+    Heap.Next = APPLE_AGX_HEAP_END - 0x4000;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_NO_MEMORY);
+
+    /* An object only clients reach takes no window pages. */
+    RtlZeroMemory(&Request, sizeof(Request));
+    Request.Size = APPLE_AGX_PB_CHUNK_SIZE;
+    Request.Leaf = APPLE_AGX_LEAF_CACHED;
+    Request.Hidden = TRUE;
+    Request.Client = APPLE_AGX_CLIENT_PB_HEAP + APPLE_AGX_PB_CHUNK_SIZE;
+    Heap.Next = APPLE_AGX_HEAP_BASE;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_SUCCESS);
+    ok(Page == 0 && Bytes == APPLE_AGX_PB_CHUNK_SIZE && Heap.Next == APPLE_AGX_HEAP_BASE,
+       "A hidden object took %I64x+%Ix, next %I64x\n", Page, Bytes, Heap.Next);
+    Request.Client = 0;
+    ok_hex(AppleAgxObjectPlace(&Heap, &Request, &Page, &Bytes), STATUS_INVALID_PARAMETER);
+
+    /* The compute registers: the preemption buffer, the stream, and the saved state at its tail. */
+    RtlZeroMemory(&Compute, sizeof(Compute));
+    Compute.CdmCtrlStreamBase = 0x1500000000ULL;
+    Compute.CdmCtrlStreamEnd = 0x1500000400ULL;
+    ok_hex(AppleAgxComputeRegisters(&Compute, APPLE_AGX_CLIENT_PREEMPT, Register), STATUS_SUCCESS);
+    ok(Register[0] == 0x7005c64000ULL, "The preemption buffer is %I64x\n", Register[0]);
+    ok(Register[1] == 0x1500000000ULL, "The stream is %I64x\n", Register[1]);
+    ok(Register[2] == 0x7005c64000ULL + 0x1480 && Register[5] == 0x7005c64000ULL + 0x1480 + 24,
+       "The saved state is at %I64x..%I64x\n", Register[2], Register[5]);
+    ok(Register[6] == 0x154024201ULL && Register[7] == 0x10c08860ULL, "The fixed words are %I64x %I64x\n",
+       Register[6], Register[7]);
+    ok(Register[8] == 0x1c && Register[9] == 0x1c && Register[10] == 0 && Register[17] == 0,
+       "The saved-state words are %I64x %I64x\n", Register[8], Register[9]);
+    ok(Register[18] == 8 && Register[19] == 0xff0000 && Register[20] == 0x13200400020ULL &&
+       Register[21] == 0x200000001ULL, "The tail registers are %I64x %I64x %I64x %I64x\n", Register[18],
+       Register[19], Register[20], Register[21]);
+    Compute.CdmCtrlStreamEnd = Compute.CdmCtrlStreamBase;
+    ok_hex(AppleAgxComputeRegisters(&Compute, APPLE_AGX_CLIENT_PREEMPT, Register), STATUS_INVALID_PARAMETER);
+    Compute.CdmCtrlStreamEnd = 0x1500000400ULL;
+    Compute.Flags = 1;
+    ok_hex(AppleAgxComputeRegisters(&Compute, APPLE_AGX_CLIENT_PREEMPT, Register), STATUS_INVALID_PARAMETER);
+
+    /* A command buffer is walked header by header; a payload past the end is refused. */
+    RtlZeroMemory(Stream, sizeof(Stream));
+    Header.CmdType = DRM_ASAHI_CMD_TYPE_COMPUTE;
+    Header.Size = 16;
+    Header.VdmBarrier = DRM_ASAHI_BARRIER_NONE;
+    Header.CdmBarrier = 0;
+    RtlCopyMemory(Stream, &Header, sizeof(Header));
+    Header.CmdType = DRM_ASAHI_SET_COMPUTE_ATTACHMENTS;
+    Header.Size = sizeof(DRM_ASAHI_ATTACHMENT);
+    RtlCopyMemory(Stream + 24, &Header, sizeof(Header));
+    Offset = 0;
+    ok_hex(AppleAgxNextCommand(Stream, 56, &Offset, &Command), STATUS_SUCCESS);
+    ok_int(Command.Header.CmdType, DRM_ASAHI_CMD_TYPE_COMPUTE);
+    ok_int(Command.Size, 16);
+    ok(Command.Payload == Stream + 8, "The payload is at +%Id\n", Command.Payload - Stream);
+    ok_int(Offset, 24);
+    ok_hex(AppleAgxNextCommand(Stream, 56, &Offset, &Command), STATUS_SUCCESS);
+    ok_int(Command.Header.CmdType, DRM_ASAHI_SET_COMPUTE_ATTACHMENTS);
+    ok_int(Offset, 56);
+    ok_hex(AppleAgxNextCommand(Stream, 56, &Offset, &Command), STATUS_NO_MORE_ENTRIES);
+    Offset = 24;
+    ok_hex(AppleAgxNextCommand(Stream, 50, &Offset, &Command), STATUS_INVALID_PARAMETER);
+    Offset = 52;
+    ok_hex(AppleAgxNextCommand(Stream, 56, &Offset, &Command), STATUS_INVALID_PARAMETER);
 }
 
 static
@@ -5923,6 +6253,7 @@ START_TEST(AppleSoc)
     TestAgxComputeWork();
     TestAgxRenderRegisters();
     TestAgxParameterBuffer();
+    TestAgxClient();
     TestAgxRenderSequences();
     TestAgxGeometry();
     TestAgxVertexWork();

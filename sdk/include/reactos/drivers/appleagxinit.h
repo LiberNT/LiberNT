@@ -110,6 +110,7 @@
 #define APPLE_AGX_CLASS_FIRMWARE        0
 #define APPLE_AGX_CLASS_FIRMWARE_CACHED 1
 #define APPLE_AGX_CLASS_SHARED          2
+#define APPLE_AGX_CLASS_SHARED_CACHED   3
 
 /* Every object of the initial data, in the order this library keeps them. */
 #define APPLE_AGX_OBJECT_ROOT           0
@@ -148,12 +149,39 @@ typedef struct _APPLE_AGX_LAYOUT
     UCHAR Class;
 } APPLE_AGX_LAYOUT, *PAPPLE_AGX_LAYOUT;
 
+/* A firmware object: its pages mapped once for the processor and once in the firmware's window,
+ * and, when the graphics processor reaches it through a client address space, the address it has
+ * there. */
+typedef struct _APPLE_AGX_OBJECT
+{
+    ULONG64 Address;
+    ULONG64 Client;
+    PVOID Virtual;
+    PMDL Mdl;
+    PVOID Mapping;
+    ULONG64 Page;
+    ULONG64 ClientPage;
+    SIZE_T Bytes;
+    UCHAR Class;
+    UCHAR Leaf;
+    BOOLEAN Lower;
+} APPLE_AGX_OBJECT, *PAPPLE_AGX_OBJECT;
+
+typedef struct _APPLE_AGX_HEAP
+{
+    PAPPLE_UAT_ADOPTED Adopted;
+    ULONG64 Next;
+    ULONG64 End;
+    ULONG Pages;
+    PCSTR Owner;
+} APPLE_AGX_HEAP, *PAPPLE_AGX_HEAP;
+
 typedef struct _APPLE_AGX_INIT
 {
     PAPPLE_UAT_ADOPTED Adopted;
     PVOID Virtual[APPLE_AGX_OBJECTS];
+    APPLE_AGX_OBJECT Object[APPLE_AGX_OBJECTS];
     ULONG Pages;
-    PVOID *Allocation;
     ULONG Allocations;
     PCSTR Owner;
 } APPLE_AGX_INIT, *PAPPLE_AGX_INIT;
@@ -186,6 +214,71 @@ BOOLEAN
 NTAPI
 AppleAgxInitReady(
     _In_ PAPPLE_AGX_INIT Init);
+
+/* The window the host places its own firmware objects in, each followed by an unmapped page. */
+#define APPLE_AGX_HEAP_BASE             0xfffffc2d00000000ULL
+#define APPLE_AGX_HEAP_END              0xfffffc2e00000000ULL
+
+/* How a client address space maps the firmware objects aliased into it. */
+#define APPLE_AGX_LEAF_NONE             0
+#define APPLE_AGX_LEAF_UNCACHED         1
+#define APPLE_AGX_LEAF_CACHED           2
+#define APPLE_AGX_LEAF_PB_LIST          3
+
+typedef struct _APPLE_AGX_REQUEST
+{
+    SIZE_T Size;
+    ULONG Offset;
+    UCHAR Class;
+    UCHAR Leaf;
+    BOOLEAN Lower;
+    BOOLEAN Cpu;
+    BOOLEAN Hidden;
+    ULONG64 At;
+    ULONG64 Client;
+    ULONG CachedBytes;
+} APPLE_AGX_REQUEST, *PAPPLE_AGX_REQUEST;
+
+VOID
+NTAPI
+AppleAgxLeafProtection(
+    _In_ UCHAR Leaf,
+    _Out_ PAPPLE_UAT_PROTECTION Protection);
+
+NTSTATUS
+NTAPI
+AppleAgxObjectPlace(
+    _Inout_ PAPPLE_AGX_HEAP Heap,
+    _In_ const APPLE_AGX_REQUEST *Request,
+    _Out_ PULONG64 Page,
+    _Out_ PSIZE_T Bytes);
+
+NTSTATUS
+NTAPI
+AppleAgxObjectCreate(
+    _Inout_ PAPPLE_AGX_HEAP Heap,
+    _In_ const APPLE_AGX_REQUEST *Request,
+    _Out_ PAPPLE_AGX_OBJECT Object);
+
+NTSTATUS
+NTAPI
+AppleAgxObjectAlias(
+    _In_ const APPLE_AGX_OBJECT *Object,
+    _Inout_ PAPPLE_UAT Uat,
+    _In_ ULONG64 Address);
+
+VOID
+NTAPI
+AppleAgxObjectFree(
+    _Inout_ PAPPLE_AGX_OBJECT Object);
+
+VOID
+NTAPI
+AppleAgxObjectZero(
+    _In_ const APPLE_AGX_OBJECT *Object,
+    _In_ SIZE_T Offset,
+    _In_ SIZE_T Length,
+    _In_ UCHAR Fill);
 
 ULONG64
 NTAPI
@@ -320,7 +413,17 @@ AppleAgxWriteStates(
 #define APPLE_AGX_QINFO_RING            0x08
 #define APPLE_AGX_QINFO_JOB_LIST        0x10
 #define APPLE_AGX_QINFO_SCRATCH         0x18
+#define APPLE_AGX_QINFO_UNKNOWN_2C      0x2c
+#define APPLE_AGX_QINFO_CLASS           0x30
+#define APPLE_AGX_QINFO_CLASS_B         0x34
+#define APPLE_AGX_QINFO_MASK            0x38
+#define APPLE_AGX_QINFO_MASK_VALUE      0xffff000000000000ULL
+#define APPLE_AGX_QINFO_UNKNOWN_48      0x48
+#define APPLE_AGX_QINFO_UNKNOWN_4C      0x4c
 #define APPLE_AGX_QINFO_UUID            0x50
+#define APPLE_AGX_QUEUE_CLASS           2
+#define APPLE_AGX_QUEUE_ENTRIES         0x500
+#define APPLE_AGX_QUEUE_SCRATCH_SIZE    0x40000
 #define APPLE_AGX_QINFO_SCHED_CONTEXT   0xa4
 #define APPLE_AGX_QINFO_UNKNOWN_AC      0xac
 #define APPLE_AGX_QINFO_UNKNOWN_AC_VALUE 4
@@ -332,6 +435,10 @@ AppleAgxWriteStates(
 #define APPLE_AGX_QSTATE_CAPACITY       0x50
 
 #define APPLE_AGX_SCHED_CONTEXT_SIZE    0x40
+#define APPLE_AGX_LEGACY_EMPTY_SIZE     0x40
+#define APPLE_AGX_COMPUTE_LEGACY_SIZE   0x4000
+#define APPLE_AGX_THRESHOLD_SIZE        4
+#define APPLE_AGX_STAMP_SIZE            4
 #define APPLE_AGX_NOTIFIER_SIZE         0x108
 #define APPLE_AGX_NOTIFIER_THRESHOLD    0x00
 #define APPLE_AGX_NOTIFIER_UNKNOWN_10   0x10
@@ -366,6 +473,7 @@ typedef struct _APPLE_AGX_QUEUE
     PVOID RingVirtual;
     ULONG Entries;
     ULONG Write;
+    ULONG Uuid;
 } APPLE_AGX_QUEUE, *PAPPLE_AGX_QUEUE;
 
 NTSTATUS
@@ -378,6 +486,18 @@ NTAPI
 AppleAgxQueuePost(
     _Inout_ PAPPLE_AGX_QUEUE Queue,
     _In_ ULONG64 Work,
+    _Out_ PUSHORT Head);
+
+NTSTATUS
+NTAPI
+AppleAgxQueueAppend(
+    _Inout_ PAPPLE_AGX_QUEUE Queue,
+    _In_ ULONG64 Work);
+
+VOID
+NTAPI
+AppleAgxQueuePublish(
+    _Inout_ PAPPLE_AGX_QUEUE Queue,
     _Out_ PUSHORT Head);
 
 ULONG
@@ -401,6 +521,7 @@ AppleAgxSubmitRecord(
 #define APPLE_AGX_OP_VERTEX_FINALIZE    6
 #define APPLE_AGX_OP_FRAGMENT_START     7
 #define APPLE_AGX_OP_FRAGMENT_FINALIZE  8
+#define APPLE_AGX_OP_INIT_BM            6
 #define APPLE_AGX_OP_COMPUTE_START      0x0b
 #define APPLE_AGX_OP_COMPUTE_FINALIZE   0x0c
 #define APPLE_AGX_OP_TIMESTAMP_END      3
@@ -439,13 +560,21 @@ AppleAgxDescribeGraph(
 #define APPLE_AGX_POOL_STRIDE           0x40
 #define APPLE_AGX_POOL_VALID            (1ULL << 62)
 #define APPLE_AGX_POOL_UNIT             0x1000
-#define APPLE_AGX_SEEDED_POOLS          8
-#define APPLE_AGX_FREELIST_SEEDS        8192
+#define APPLE_AGX_POOL_UNITS            (APPLE_AGX_POOL_SIZE / APPLE_AGX_POOL_UNIT)
+#define APPLE_AGX_FREELIST_SEEDS        (APPLE_AGX_POOLS * APPLE_AGX_POOL_UNITS)
+#define APPLE_AGX_FREELIST_SIZE         0x400000
+#define APPLE_AGX_POOL_TABLE_SIZE       0x1000
+#define APPLE_AGX_POOL_TABLE_OFFSET     0x3000
+#define APPLE_AGX_UMA_POOLS             8
+#define APPLE_AGX_UMA_SEEDS             (APPLE_AGX_UMA_POOLS * APPLE_AGX_POOL_UNITS)
 
 NTSTATUS
 NTAPI
 AppleAgxDescribeManager(
     _Out_writes_bytes_(APPLE_AGX_MANAGER_SIZE) PVOID Manager,
+    _In_ ULONG Id,
+    _In_ ULONG Index,
+    _In_ ULONG Seeds,
     _In_ ULONG64 Freelist,
     _In_ ULONG64 PoolTable,
     _In_ ULONG64 Counter);
@@ -453,9 +582,10 @@ AppleAgxDescribeManager(
 NTSTATUS
 NTAPI
 AppleAgxSeedPools(
-    _Out_writes_bytes_(APPLE_AGX_POOLS *APPLE_AGX_POOL_STRIDE) PVOID PoolTable,
-    _Out_writes_bytes_(APPLE_AGX_FREELIST_SEEDS * 8) PVOID Freelist,
-    _In_ ULONG64 FirstPool,
+    _Out_writes_bytes_(Pools * APPLE_AGX_POOL_STRIDE) PVOID PoolTable,
+    _Out_writes_bytes_(Pools * APPLE_AGX_POOL_UNITS * 8) PVOID Freelist,
+    _In_reads_(Pools) const ULONG64 *Pool,
+    _In_ ULONG Pools,
     _Out_ PULONG Seeds);
 
 /* A compute work item and the sequence the firmware interprets to run it. */
@@ -772,6 +902,17 @@ AppleAgxEncodeVertexWork(
 #define APPLE_AGX_PB_BLOCKS             4096
 #define APPLE_AGX_PB_LIST_RECORDS       4096
 #define APPLE_AGX_PB_RECORD             8
+#define APPLE_AGX_PB_PAGE_BYTES         0x8000
+#define APPLE_AGX_PB_PAGES_PER_BLOCK    4
+#define APPLE_AGX_PB_BLOCK_SIZE         0x20000
+#define APPLE_AGX_PB_PAGE_LIST_SIZE     0x28000
+#define APPLE_AGX_PB_BLOCK_LIST_SIZE    0x8000
+#define APPLE_AGX_PB_GROW_STEP          10
+#define APPLE_AGX_PB_INITIAL_BLOCKS     64
+#define APPLE_AGX_PB_MAX_BLOCKS         (APPLE_AGX_PB_BLOCKS - 1)
+#define APPLE_AGX_PB_CHUNK_BLOCKS       128
+#define APPLE_AGX_PB_CHUNK_SIZE         (APPLE_AGX_PB_CHUNK_BLOCKS * APPLE_AGX_PB_BLOCK_SIZE)
+#define APPLE_AGX_SCENE_LIST_SIZE       0xc0
 #define APPLE_AGX_PB_MANAGER_SIZE       0xac
 #define APPLE_AGX_PB_PAGE_LIST          0x1c
 #define APPLE_AGX_PB_PAGE_LIST_BYTES    0x24
@@ -805,9 +946,8 @@ typedef struct _APPLE_AGX_PARAMETER_BUFFER
     ULONG64 BlockList;
     ULONG64 BlockControl;
     ULONG64 Counter;
-    ULONG Pages;
     ULONG Blocks;
-    ULONG BlockBytes;
+    ULONG MaxBlocks;
 } APPLE_AGX_PARAMETER_BUFFER, *PAPPLE_AGX_PARAMETER_BUFFER;
 
 ULONG
@@ -827,6 +967,66 @@ AppleAgxDescribeBlockControl(
     _Out_writes_bytes_(APPLE_AGX_BLOCK_CONTROL_SIZE) PVOID Control,
     _Out_writes_bytes_(APPLE_AGX_MISC_SIZE) PVOID Misc,
     _In_ ULONG Blocks);
+
+NTSTATUS
+NTAPI
+AppleAgxWriteBlocks(
+    _Inout_updates_bytes_opt_(APPLE_AGX_PB_PAGE_LIST_SIZE) PVOID PageList,
+    _Inout_updates_bytes_(APPLE_AGX_PB_BLOCK_LIST_SIZE) PVOID BlockList,
+    _In_ ULONG64 Heap,
+    _In_ ULONG First,
+    _In_ ULONG Count);
+
+#define APPLE_AGX_C1_RECORD             16
+#define APPLE_AGX_C1_TAG                0x07400000
+
+VOID
+NTAPI
+AppleAgxC1Record(
+    _Out_writes_bytes_(APPLE_AGX_C1_RECORD) PVOID Record,
+    _In_ ULONG Blocks);
+
+#define APPLE_AGX_INIT_BM_SIZE          0x20
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeInitBm(
+    _Out_writes_bytes_(APPLE_AGX_INIT_BM_SIZE) PVOID Record,
+    _In_ ULONG Context,
+    _In_ ULONG Blocks,
+    _In_ ULONG64 Manager,
+    _In_ ULONG Stamp);
+
+/* What the firmware reports on its event ring, and the growth of the parameter buffer it asks
+ * for there. */
+#define APPLE_AGX_EVENT_FAULT           0
+#define APPLE_AGX_EVENT_STAGE           1
+#define APPLE_AGX_EVENT_TIMEOUT         4
+#define APPLE_AGX_EVENT_GROW            7
+#define APPLE_AGX_EVENT_CHANNEL_ERROR   8
+#define APPLE_AGX_DEVCTL_GROW_REPLY     7
+#define APPLE_AGX_DEVCTL_IMPORT_GLOBALS 0x13
+#define APPLE_AGX_DEVCTL_START          9
+#define APPLE_AGX_RECORD_WORDS          14
+
+typedef struct _APPLE_AGX_GROWTH
+{
+    ULONG Posted;
+    ULONG Backed;
+    ULONG Max;
+    ULONG Counter;
+    ULONG Refused;
+} APPLE_AGX_GROWTH, *PAPPLE_AGX_GROWTH;
+
+NTSTATUS
+NTAPI
+AppleAgxAnswerGrowth(
+    _Inout_ PAPPLE_AGX_GROWTH Growth,
+    _In_reads_(APPLE_AGX_RECORD_WORDS) const ULONG *Request,
+    _In_ ULONG Context,
+    _Out_writes_(APPLE_AGX_RECORD_WORDS) PULONG Reply,
+    _Out_ PULONG First,
+    _Out_ PULONG Count);
 
 NTSTATUS
 NTAPI
@@ -901,9 +1101,9 @@ typedef struct _APPLE_AGX_RENDER_JOB
     ULONG64 Notifier;
     ULONG64 Empty;
     ULONG64 Manager;
-    ULONG64 ManagerEntry;
+    ULONG64 SceneList;
     ULONG64 ManagerMisc;
-    ULONG64 Pool;
+    ULONG64 Pool[2];
     ULONG64 Queue[2];
     ULONG64 UserStamp[2];
     ULONG64 FirmwareStamp[2];
@@ -1018,3 +1218,97 @@ NTAPI
 AppleAgxBindingFind(
     _In_ const APPLE_AGX_BINDINGS *Bindings,
     _In_ ULONG64 Address);
+
+/* Where the firmware objects the graphics processor reaches through a client address space are
+ * aliased in every one of them. Clients bind nothing there. */
+#define APPLE_AGX_CLIENT_APERTURE       0x7000000000ULL
+#define APPLE_AGX_CLIENT_APERTURE_END   0x7100000000ULL
+#define APPLE_AGX_CLIENT_POOL(k)        (0x7000000000ULL + (ULONG64)(k) * 0x404000ULL)
+#define APPLE_AGX_CLIENT_FREELIST       0x7005858000ULL
+#define APPLE_AGX_CLIENT_POOL_TABLE     0x7005c5c000ULL
+#define APPLE_AGX_CLIENT_PREEMPT        0x7005c64000ULL
+#define APPLE_AGX_CLIENT_PREEMPT_STRIDE 0x10000ULL
+#define APPLE_AGX_CLIENT_WORK           0x7021000000ULL
+#define APPLE_AGX_CLIENT_WORK_OFFSET    0x3760
+#define APPLE_AGX_CLIENT_WORK_STRIDE    0x4000ULL
+#define APPLE_AGX_CLIENT_FS_WORK        0x7020000000ULL
+#define APPLE_AGX_CLIENT_FS_WORK_OFFSET 0x3380
+#define APPLE_AGX_CLIENT_TA_WORK        0x7020010000ULL
+#define APPLE_AGX_CLIENT_TA_WORK_OFFSET 0x36c0
+#define APPLE_AGX_CLIENT_PASS_WORK_STRIDE 0x20000ULL
+#define APPLE_AGX_CLIENT_UMA(e, k)      (0x7010000000ULL + (ULONG64)(e) * 0x2450000ULL + (ULONG64)(k) * 0x408000ULL)
+#define APPLE_AGX_CLIENT_UMA_FREELIST(e) (0x7012040000ULL + (ULONG64)(e) * 0x2450000ULL)
+#define APPLE_AGX_CLIENT_UMA_TABLE(e)   (0x7012448000ULL + (ULONG64)(e) * 0x2450000ULL)
+#define APPLE_AGX_CLIENT_AUX            0x70148a0000ULL
+#define APPLE_AGX_CLIENT_AUX_STRIDE     0x98000ULL
+#define APPLE_AGX_CLIENT_TPC            0x7040000000ULL
+#define APPLE_AGX_CLIENT_TPC_SIZE       0x1000000ULL
+#define APPLE_AGX_CLIENT_TILEMAP        0x7042000000ULL
+#define APPLE_AGX_CLIENT_TILEMAP_SIZE   0x800000ULL
+#define APPLE_AGX_CLIENT_TPC_STRIDE     0x4000000ULL
+#define APPLE_AGX_CLIENT_PB_HEAP        0x70c0000000ULL
+#define APPLE_AGX_CLIENT_PB_HEAP_SIZE   0x20000000ULL
+#define APPLE_AGX_CLIENT_PB_BLOCK_LIST  0x70f0000000ULL
+#define APPLE_AGX_CLIENT_PRE0           0x1006080000ULL
+#define APPLE_AGX_CLIENT_PRE1           0x1006098000ULL
+#define APPLE_AGX_CLIENT_PRE2           0x10060b0000ULL
+#define APPLE_AGX_CLIENT_HEAP_META      0x1006140000ULL
+#define APPLE_AGX_CLIENT_SCENE_USER     0x1006158000ULL
+#define APPLE_AGX_CLIENT_FS_SCRATCH     0x1006178000ULL
+#define APPLE_AGX_CLIENT_PASS_STRIDE    0x118000ULL
+#define APPLE_AGX_CLIENT_PASS_SLOTS     16
+#define APPLE_AGX_CLIENT_PB_PAGE_LIST   0x1074000000ULL
+
+#define APPLE_AGX_PRE_RECORDS           2
+#define APPLE_AGX_PRE0_RECORD           0x540
+#define APPLE_AGX_PRE1_RECORD           0x280
+#define APPLE_AGX_PRE2_RECORD           0x40
+#define APPLE_AGX_PRE0_OFFSET           0x3580
+#define APPLE_AGX_PRE1_OFFSET           0x3b00
+#define APPLE_AGX_PRE2_OFFSET           0x3f80
+#define APPLE_AGX_HEAP_META_SIZE        0x1000
+#define APPLE_AGX_HEAP_META_OFFSET      0x3000
+#define APPLE_AGX_AUX_SIZE              0x20000
+#define APPLE_AGX_PASS_BUFFER_SIZE      0x10000
+#define APPLE_AGX_PREEMPT_SIZE          0x10000
+#define APPLE_AGX_PREEMPT_FILL          0xcc
+#define APPLE_AGX_COMPUTE_SCRATCHES     5
+#define APPLE_AGX_STAMP_CELLS           32
+#define APPLE_AGX_COMPUTE_CELLS         16
+
+BOOLEAN
+NTAPI
+AppleAgxClientReserved(
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Range);
+
+/* What the compute work of this processor is given: its preemption buffer, the stream it runs and
+ * the saved state the firmware keeps at the tail of that buffer. */
+#define APPLE_AGX_COMPUTE_PREEMPT_TAIL  0x1480
+#define APPLE_AGX_COMPUTE_PTC           0x13200400020ULL
+#define APPLE_AGX_COMPUTE_DUPM          0x200000001ULL
+#define APPLE_AGX_COMPUTE_REG_1A0E9     8
+
+NTSTATUS
+NTAPI
+AppleAgxComputeRegisters(
+    _In_ const DRM_ASAHI_CMD_COMPUTE *Command,
+    _In_ ULONG64 Preempt,
+    _Out_writes_(APPLE_AGX_COMPUTE_REGISTER_COUNT) PULONG64 Register);
+
+/* A submission's command buffer is walked one header at a time; the payload of each command is
+ * copied out, shorter payloads zero-extended. */
+typedef struct _APPLE_AGX_COMMAND
+{
+    DRM_ASAHI_CMD_HEADER Header;
+    const UCHAR *Payload;
+    ULONG Size;
+} APPLE_AGX_COMMAND, *PAPPLE_AGX_COMMAND;
+
+NTSTATUS
+NTAPI
+AppleAgxNextCommand(
+    _In_reads_bytes_(Length) const VOID *Buffer,
+    _In_ ULONG Length,
+    _Inout_ PULONG Offset,
+    _Out_ PAPPLE_AGX_COMMAND Command);

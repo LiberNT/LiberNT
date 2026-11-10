@@ -18,7 +18,6 @@
 #include <reactos/drivers/appleuat.h>
 #include <reactos/drivers/appleagxinit.h>
 
-#define AGX_INIT_TAG                'iGpA'
 #define AGX_CHANNEL_STATE_BASE      0xfffffc2040003fd0ULL
 #define AGX_CHANNEL_RING_BASE       0xfffffc2000002800ULL
 #define AGX_CHANNEL_STRIDE          0x44000ULL
@@ -101,111 +100,142 @@ AppleAgxClassProtection(
     _In_ UCHAR Class,
     _Out_ PAPPLE_UAT_PROTECTION Protection)
 {
-    Protection->Access = (Class == APPLE_AGX_CLASS_SHARED) ? APPLE_UAT_ACCESS_BOTH : APPLE_UAT_ACCESS_FIRMWARE;
-    Protection->Memory = (Class == APPLE_AGX_CLASS_FIRMWARE_CACHED) ? APPLE_UAT_MEMORY_CACHED
-                                                                    : APPLE_UAT_MEMORY_UNCACHED;
-    Protection->Read = Class == APPLE_AGX_CLASS_SHARED;
+    BOOLEAN Shared = Class == APPLE_AGX_CLASS_SHARED || Class == APPLE_AGX_CLASS_SHARED_CACHED;
+
+    Protection->Access = Shared ? APPLE_UAT_ACCESS_BOTH : APPLE_UAT_ACCESS_FIRMWARE;
+    Protection->Memory = (Class == APPLE_AGX_CLASS_FIRMWARE_CACHED || Class == APPLE_AGX_CLASS_SHARED_CACHED)
+                             ? APPLE_UAT_MEMORY_CACHED
+                             : APPLE_UAT_MEMORY_UNCACHED;
+    Protection->Read = Shared;
     Protection->Write = TRUE;
 }
 
-static
-ULONG
-AgxPageCount(
+VOID
+NTAPI
+AppleAgxLeafProtection(
+    _In_ UCHAR Leaf,
+    _Out_ PAPPLE_UAT_PROTECTION Protection)
+{
+    Protection->Access = (Leaf == APPLE_AGX_LEAF_PB_LIST) ? APPLE_UAT_ACCESS_BOTH : APPLE_UAT_ACCESS_GPU;
+    Protection->Memory = (Leaf == APPLE_AGX_LEAF_UNCACHED) ? APPLE_UAT_MEMORY_UNCACHED : APPLE_UAT_MEMORY_CACHED;
+    Protection->Read = Leaf == APPLE_AGX_LEAF_PB_LIST;
+    Protection->Write = TRUE;
+}
+
+typedef struct _AGX_CLIENT_RANGE
+{
+    ULONG64 Start;
+    ULONG64 End;
+} AGX_CLIENT_RANGE;
+
+static const AGX_CLIENT_RANGE AgxClientRanges[] =
+{
+    { APPLE_AGX_CLIENT_APERTURE, APPLE_AGX_CLIENT_APERTURE_END },
+    { APPLE_AGX_CLIENT_PRE0, APPLE_AGX_CLIENT_PRE0 + APPLE_AGX_CLIENT_PASS_SLOTS * APPLE_AGX_CLIENT_PASS_STRIDE },
+    { APPLE_AGX_CLIENT_PB_PAGE_LIST, APPLE_AGX_CLIENT_PB_PAGE_LIST + APPLE_AGX_PB_PAGE_LIST_SIZE },
+};
+
+BOOLEAN
+NTAPI
+AppleAgxClientReserved(
     _In_ ULONG64 Address,
-    _In_ ULONG Size)
+    _In_ ULONG64 Range)
 {
-    ULONG64 First = Address & ~(APPLE_UAT_PAGE_SIZE - 1);
-    ULONG64 Last = (Address + Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
+    ULONG64 End = Address + Range;
+    ULONG Index;
 
-    return (ULONG)((Last - First) / APPLE_UAT_PAGE_SIZE);
-}
-
-/* The objects are mapped a page at a time: nothing here needs physically neighbouring pages, and
- * the largest of them is far too big to ask for as one block. */
-static
-NTSTATUS
-AgxMapObject(
-    _Inout_ PAPPLE_AGX_INIT Init,
-    _In_ ULONG Object,
-    _Out_ PVOID *Virtual)
-{
-    APPLE_AGX_LAYOUT Layout;
-    APPLE_UAT_PROTECTION Protection;
-    PHYSICAL_ADDRESS Low, High, Boundary;
-    ULONG64 Page, Cached;
-    ULONG Index, Count;
-    PVOID Allocation;
-    NTSTATUS Status;
-
-    *Virtual = NULL;
-    if (!AppleAgxLayout(Object, &Layout) || !Layout.Size)
-        return STATUS_INVALID_PARAMETER;
-    Page = Layout.Address & ~(APPLE_UAT_PAGE_SIZE - 1);
-    Count = AgxPageCount(Layout.Address, Layout.Size);
-    Cached = (Object == APPLE_AGX_OBJECT_HWDATA) ? Layout.Address + APPLE_AGX_HWDATA_CACHED : 0;
-    Low.QuadPart = 0;
-    High.QuadPart = -1;
-    Boundary.QuadPart = APPLE_UAT_PAGE_SIZE;
-    for (Index = 0; Index < Count; ++Index)
+    if (End < Address)
+        return TRUE;
+    for (Index = 0; Index < RTL_NUMBER_OF(AgxClientRanges); ++Index)
     {
-        ULONG64 At = Page + (ULONG64)Index * APPLE_UAT_PAGE_SIZE;
-
-        if (Init->Allocations == Init->Pages)
-            return STATUS_INSUFFICIENT_RESOURCES;
-        Allocation = MmAllocateContiguousMemorySpecifyCache(APPLE_UAT_PAGE_SIZE, Low, High, Boundary, MmNonCached);
-        if (!Allocation)
-            return STATUS_INSUFFICIENT_RESOURCES;
-        RtlZeroMemory(Allocation, APPLE_UAT_PAGE_SIZE);
-        AppleAgxClassProtection(Cached && At < Cached ? APPLE_AGX_CLASS_FIRMWARE_CACHED : Layout.Class,
-                                &Protection);
-        Status = AppleUatAdoptedMap(Init->Adopted, At, (ULONG64)MmGetPhysicalAddress(Allocation).QuadPart,
-                                    APPLE_UAT_PAGE_SIZE, &Protection);
-        if (!NT_SUCCESS(Status))
-        {
-            MmFreeContiguousMemorySpecifyCache(Allocation, APPLE_UAT_PAGE_SIZE, MmNonCached);
-            return Status;
-        }
-        Init->Allocation[Init->Allocations++] = Allocation;
-        if (Index == 0)
-            *Virtual = (PUCHAR)Allocation + (Layout.Address - Page);
+        if (Address < AgxClientRanges[Index].End && End > AgxClientRanges[Index].Start)
+            return TRUE;
     }
-    return STATUS_SUCCESS;
+    return FALSE;
 }
 
+static
+BOOLEAN
+AgxClientInside(
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Range)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(AgxClientRanges); ++Index)
+    {
+        if (Address >= AgxClientRanges[Index].Start && Address < AgxClientRanges[Index].End &&
+            Range <= AgxClientRanges[Index].End - Address)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* An object at a fixed address starts at that address's page; any other object takes the next
+ * free pages of the host's window and leaves one unmapped page after itself. */
 NTSTATUS
 NTAPI
-AppleAgxInitCreate(
-    _Out_ PAPPLE_AGX_INIT Init,
-    _In_ PAPPLE_UAT_ADOPTED Adopted,
-    _In_z_ PCSTR Owner)
+AppleAgxObjectPlace(
+    _Inout_ PAPPLE_AGX_HEAP Heap,
+    _In_ const APPLE_AGX_REQUEST *Request,
+    _Out_ PULONG64 Page,
+    _Out_ PSIZE_T Bytes)
 {
-    ULONG Object, Pages = 0;
-    NTSTATUS Status;
+    ULONG64 Offset, Length, Base;
 
-    RtlZeroMemory(Init, sizeof(*Init));
-    Init->Adopted = Adopted;
-    Init->Owner = Owner;
-    for (Object = 0; Object < APPLE_AGX_OBJECTS; ++Object)
+    *Page = 0;
+    *Bytes = 0;
+    if (!Request->Size || Request->Size > APPLE_UAT_HOST_SIZE)
+        return STATUS_INVALID_PARAMETER;
+    if (Request->Hidden)
     {
-        APPLE_AGX_LAYOUT Layout;
-
-        if (AppleAgxLayout(Object, &Layout))
-            Pages += AgxPageCount(Layout.Address, Layout.Size);
-    }
-    Init->Pages = Pages;
-    Init->Allocation = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Pages * sizeof(PVOID), AGX_INIT_TAG);
-    if (!Init->Allocation)
-        return STATUS_INSUFFICIENT_RESOURCES;
-    RtlZeroMemory(Init->Allocation, (SIZE_T)Pages * sizeof(PVOID));
-    for (Object = 0; Object < APPLE_AGX_OBJECTS; ++Object)
-    {
-        Status = AgxMapObject(Init, Object, &Init->Virtual[Object]);
-        if (!NT_SUCCESS(Status))
+        Length = (Request->Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
+        if (Request->At || Request->Offset || Request->Lower || Request->CachedBytes || !Request->Client ||
+            (Request->Client & (APPLE_UAT_PAGE_SIZE - 1)) || Request->Leaf == APPLE_AGX_LEAF_NONE ||
+            Request->Leaf > APPLE_AGX_LEAF_PB_LIST || !AgxClientInside(Request->Client, Length))
         {
-            AppleAgxInitRelease(Init);
-            return Status;
+            return STATUS_INVALID_PARAMETER;
         }
+        *Bytes = (SIZE_T)Length;
+        return STATUS_SUCCESS;
     }
+    if (Request->At)
+    {
+        if (Request->Offset)
+            return STATUS_INVALID_PARAMETER;
+        Offset = Request->At & (APPLE_UAT_PAGE_SIZE - 1);
+        Base = Request->At - Offset;
+    }
+    else
+    {
+        if (Request->Offset >= APPLE_UAT_PAGE_SIZE)
+            return STATUS_INVALID_PARAMETER;
+        Offset = Request->Offset;
+        Base = Heap->Next;
+    }
+    Length = (Offset + Request->Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
+    if (Base < APPLE_UAT_HOST_BASE || Base - APPLE_UAT_HOST_BASE >= APPLE_UAT_HOST_SIZE ||
+        Length > APPLE_UAT_HOST_SIZE - (Base - APPLE_UAT_HOST_BASE))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (!Request->At && (Base < Heap->Next || Heap->End < Base || Heap->End - Base < Length + APPLE_UAT_PAGE_SIZE))
+        return STATUS_NO_MEMORY;
+    if ((Request->CachedBytes & (APPLE_UAT_PAGE_SIZE - 1)) || Request->CachedBytes >= Length)
+        return STATUS_INVALID_PARAMETER;
+    if (Request->Client && ((Request->Client & (APPLE_UAT_PAGE_SIZE - 1)) || Request->Leaf == APPLE_AGX_LEAF_NONE ||
+                            Request->Leaf > APPLE_AGX_LEAF_PB_LIST || !AgxClientInside(Request->Client, Length)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (!Request->Client && (Request->Leaf != APPLE_AGX_LEAF_NONE || Request->Lower))
+        return STATUS_INVALID_PARAMETER;
+    if (!Request->At)
+        Heap->Next = Base + Length + APPLE_UAT_PAGE_SIZE;
+    *Page = Base;
+    *Bytes = (SIZE_T)Length;
     return STATUS_SUCCESS;
 }
 
@@ -346,12 +376,15 @@ AppleAgxInitReady(
 {
     ULONG Value;
 
-    if (!Init->Virtual[APPLE_AGX_OBJECT_RUNTIME])
+    ULONG Flag;
+
+    if (!Init->Virtual[APPLE_AGX_OBJECT_RUNTIME] || !Init->Virtual[APPLE_AGX_OBJECT_FLAGS])
         return FALSE;
     KeMemoryBarrier();
     RtlCopyMemory(&Value, (PUCHAR)Init->Virtual[APPLE_AGX_OBJECT_RUNTIME] + APPLE_AGX_RUNTIME_READY,
                   sizeof(Value));
-    return Value == APPLE_AGX_RUNTIME_READY_MAGIC;
+    RtlCopyMemory(&Flag, (PUCHAR)Init->Virtual[APPLE_AGX_OBJECT_FLAGS] + APPLE_AGX_FLAGS_READY, sizeof(Flag));
+    return Value == APPLE_AGX_RUNTIME_READY_MAGIC && Flag == 1;
 }
 
 ULONG64
@@ -360,25 +393,6 @@ AppleAgxInitMessage(VOID)
 {
     return APPLE_AGX_MESSAGE_INITDATA |
            (AgxFixed[APPLE_AGX_OBJECT_ROOT].Address & APPLE_AGX_MESSAGE_ADDRESS_MASK);
-}
-
-VOID
-NTAPI
-AppleAgxInitRelease(
-    _Inout_ PAPPLE_AGX_INIT Init)
-{
-    ULONG Index;
-
-    if (Init->Allocation)
-    {
-        for (Index = 0; Index < Init->Allocations; ++Index)
-        {
-            if (Init->Allocation[Index])
-                MmFreeContiguousMemorySpecifyCache(Init->Allocation[Index], APPLE_UAT_PAGE_SIZE, MmNonCached);
-        }
-        ExFreePoolWithTag(Init->Allocation, AGX_INIT_TAG);
-    }
-    RtlZeroMemory(Init, sizeof(*Init));
 }
 
 VOID
@@ -647,7 +661,7 @@ AppleAgxQueueDescribe(
     _Inout_ PAPPLE_AGX_QUEUE Queue)
 {
     if (!Queue->InfoVirtual || !Queue->StateVirtual || !Queue->RingVirtual || !Queue->Entries ||
-        !Queue->State || !Queue->Ring)
+        !Queue->State || !Queue->Ring || !Queue->Uuid)
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -657,6 +671,13 @@ AppleAgxQueueDescribe(
     AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_RING, Queue->Ring);
     AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_JOB_LIST, Queue->JobList);
     AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_SCRATCH, Queue->Scratch);
+    AgxWriteLong(Queue->InfoVirtual, APPLE_AGX_QINFO_UNKNOWN_2C, 0xffffffffUL);
+    AgxWriteLong(Queue->InfoVirtual, APPLE_AGX_QINFO_CLASS, APPLE_AGX_QUEUE_CLASS);
+    AgxWriteLong(Queue->InfoVirtual, APPLE_AGX_QINFO_CLASS_B, APPLE_AGX_QUEUE_CLASS);
+    AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_MASK, APPLE_AGX_QINFO_MASK_VALUE);
+    AgxWriteLong(Queue->InfoVirtual, APPLE_AGX_QINFO_UNKNOWN_48, APPLE_AGX_QUEUE_CLASS);
+    AgxWriteLong(Queue->InfoVirtual, APPLE_AGX_QINFO_UNKNOWN_4C, 0xffffffffUL);
+    AgxWriteLong(Queue->InfoVirtual, APPLE_AGX_QINFO_UUID, Queue->Uuid);
     AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_SCHED_CONTEXT, Queue->SchedContext);
     AgxWriteQuad(Queue->InfoVirtual, APPLE_AGX_QINFO_UNKNOWN_AC, APPLE_AGX_QINFO_UNKNOWN_AC_VALUE);
     AgxWriteLong(Queue->StateVirtual, APPLE_AGX_QSTATE_CAPACITY, Queue->Entries);
@@ -674,10 +695,26 @@ AppleAgxQueuePost(
     _In_ ULONG64 Work,
     _Out_ PUSHORT Head)
 {
-    ULONG Read = 0, Next;
+    NTSTATUS Status;
 
     *Head = 0;
-    if (!Queue->RingVirtual || !Queue->StateVirtual || !Queue->Entries || !Work)
+    Status = AppleAgxQueueAppend(Queue, Work);
+    if (NT_SUCCESS(Status))
+        AppleAgxQueuePublish(Queue, Head);
+    return Status;
+}
+
+/* Work is appended behind the host's cursor without moving it; the cursor moves once for all of
+ * it, so the firmware never sees half of what belongs together. */
+NTSTATUS
+NTAPI
+AppleAgxQueueAppend(
+    _Inout_ PAPPLE_AGX_QUEUE Queue,
+    _In_ ULONG64 Work)
+{
+    ULONG Read = 0, Next;
+
+    if (!Queue->RingVirtual || !Queue->StateVirtual || !Queue->Entries || !Work || Queue->Write >= Queue->Entries)
         return STATUS_INVALID_PARAMETER;
     KeMemoryBarrier();
     RtlCopyMemory(&Read, (PUCHAR)Queue->StateVirtual + APPLE_AGX_QSTATE_READ, sizeof(Read));
@@ -687,12 +724,20 @@ AppleAgxQueuePost(
     if (Next == Read)
         return STATUS_DEVICE_BUSY;
     AgxWriteQuad(Queue->RingVirtual, Queue->Write * APPLE_AGX_WORK_ENTRY, Work);
-    KeMemoryBarrier();
     Queue->Write = Next;
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+AppleAgxQueuePublish(
+    _Inout_ PAPPLE_AGX_QUEUE Queue,
+    _Out_ PUSHORT Head)
+{
+    KeMemoryBarrier();
     AgxWriteLong(Queue->StateVirtual, APPLE_AGX_QSTATE_WRITE, Queue->Write);
     KeMemoryBarrier();
     *Head = (USHORT)Queue->Write;
-    return STATUS_SUCCESS;
 }
 
 ULONG
@@ -750,6 +795,11 @@ AppleAgxDescribeGraph(
     RtlZeroMemory(JobList, APPLE_AGX_JOB_LIST_SIZE);
     AgxWriteQuad(JobList, APPLE_AGX_JOB_LIST_SELF, JobListAddress);
     RtlZeroMemory(SchedContext, APPLE_AGX_SCHED_CONTEXT_SIZE);
+    ((PUCHAR)SchedContext)[0x00] = 0xff;
+    ((PUCHAR)SchedContext)[0x01] = 0xff;
+    ((PUCHAR)SchedContext)[0x05] = 0x01;
+    ((PUCHAR)SchedContext)[0x1e] = 0xff;
+    ((PUCHAR)SchedContext)[0x23] = 0x02;
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
@@ -758,20 +808,23 @@ NTSTATUS
 NTAPI
 AppleAgxDescribeManager(
     _Out_writes_bytes_(APPLE_AGX_MANAGER_SIZE) PVOID Manager,
+    _In_ ULONG Id,
+    _In_ ULONG Index,
+    _In_ ULONG Seeds,
     _In_ ULONG64 Freelist,
     _In_ ULONG64 PoolTable,
     _In_ ULONG64 Counter)
 {
-    if (!Manager || !Freelist || !PoolTable || !Counter)
+    if (!Manager || !Freelist || !PoolTable || !Counter || !Id || !Seeds || Seeds > APPLE_AGX_FREELIST_SEEDS)
         return STATUS_INVALID_PARAMETER;
     RtlZeroMemory(Manager, APPLE_AGX_MANAGER_SIZE);
-    AgxWriteLong(Manager, APPLE_AGX_MANAGER_ID, APPLE_AGX_MANAGER_COMPUTE_ID);
-    AgxWriteLong(Manager, APPLE_AGX_MANAGER_INDEX, APPLE_AGX_MANAGER_COMPUTE_INDEX);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_ID, Id);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_INDEX, Index);
     AgxWriteLong(Manager, APPLE_AGX_MANAGER_ONE, 1);
     AgxWriteQuad(Manager, APPLE_AGX_MANAGER_FREELIST, Freelist);
     AgxWriteLong(Manager, APPLE_AGX_MANAGER_UNKNOWN_1C, APPLE_AGX_MANAGER_UNKNOWN_1C_VALUE);
-    AgxWriteLong(Manager, APPLE_AGX_MANAGER_SEEDS_A, APPLE_AGX_FREELIST_SEEDS);
-    AgxWriteLong(Manager, APPLE_AGX_MANAGER_SEEDS_B, APPLE_AGX_FREELIST_SEEDS);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_SEEDS_A, Seeds);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_SEEDS_B, Seeds);
     AgxWriteQuad(Manager, APPLE_AGX_MANAGER_POOL_TABLE, PoolTable);
     AgxWriteLong(Manager, APPLE_AGX_MANAGER_UNKNOWN_44, APPLE_AGX_MANAGER_UNKNOWN_44_VALUE);
     AgxWriteQuad(Manager, APPLE_AGX_MANAGER_COUNTER, Counter);
@@ -779,46 +832,40 @@ AppleAgxDescribeManager(
     return STATUS_SUCCESS;
 }
 
-/* Every pool is named in the table; only the first few are broken into units for the freelist,
- * which is what a large workgroup's memory comes out of. */
+/* Every pool is named in the table and broken into units for the freelist, which is what a large
+ * workgroup's memory comes out of. */
 NTSTATUS
 NTAPI
 AppleAgxSeedPools(
-    _Out_writes_bytes_(APPLE_AGX_POOLS *APPLE_AGX_POOL_STRIDE) PVOID PoolTable,
-    _Out_writes_bytes_(APPLE_AGX_FREELIST_SEEDS * 8) PVOID Freelist,
-    _In_ ULONG64 FirstPool,
+    _Out_writes_bytes_(Pools * APPLE_AGX_POOL_STRIDE) PVOID PoolTable,
+    _Out_writes_bytes_(Pools * APPLE_AGX_POOL_UNITS * 8) PVOID Freelist,
+    _In_reads_(Pools) const ULONG64 *Pool,
+    _In_ ULONG Pools,
     _Out_ PULONG Seeds)
 {
-    ULONG Pool, Unit, Index = 0;
-    ULONG Units = APPLE_AGX_POOL_SIZE / APPLE_AGX_POOL_UNIT;
+    ULONG Index, Unit, Seed = 0;
 
     *Seeds = 0;
-    if (!PoolTable || !Freelist || !FirstPool || (FirstPool & (APPLE_AGX_POOL_UNIT - 1)))
+    if (!PoolTable || !Freelist || !Pool || !Pools || Pools > APPLE_AGX_POOLS)
         return STATUS_INVALID_PARAMETER;
-    RtlZeroMemory(PoolTable, APPLE_AGX_POOLS * APPLE_AGX_POOL_STRIDE);
-    RtlZeroMemory(Freelist, (SIZE_T)APPLE_AGX_FREELIST_SEEDS * sizeof(ULONG64));
-    for (Pool = 0; Pool < APPLE_AGX_POOLS; ++Pool)
+    for (Index = 0; Index < Pools; ++Index)
     {
-        ULONG64 At = FirstPool + (ULONG64)Pool * APPLE_AGX_POOL_SIZE;
-
-        AgxWriteQuad(PoolTable, Pool * APPLE_AGX_POOL_STRIDE, At | APPLE_AGX_POOL_VALID);
+        if (!Pool[Index] || (Pool[Index] & (APPLE_AGX_POOL_UNIT - 1)) || (Pool[Index] & APPLE_AGX_POOL_VALID))
+            return STATUS_INVALID_PARAMETER;
     }
-    for (Pool = 0; Pool < APPLE_AGX_SEEDED_POOLS; ++Pool)
+    RtlZeroMemory(PoolTable, (SIZE_T)Pools * APPLE_AGX_POOL_STRIDE);
+    for (Index = 0; Index < Pools; ++Index)
     {
-        ULONG64 At = FirstPool + (ULONG64)Pool * APPLE_AGX_POOL_SIZE;
-
-        for (Unit = 0; Unit < Units; ++Unit)
+        AgxWriteQuad(PoolTable, Index * APPLE_AGX_POOL_STRIDE, Pool[Index] | APPLE_AGX_POOL_VALID);
+        for (Unit = 0; Unit < APPLE_AGX_POOL_UNITS; ++Unit)
         {
-            if (Index == APPLE_AGX_FREELIST_SEEDS)
-                return STATUS_INVALID_PARAMETER;
-            AgxWriteQuad(Freelist, Index * (ULONG)sizeof(ULONG64),
-                         At + (ULONG64)Unit * APPLE_AGX_POOL_UNIT);
-            ++Index;
+            AgxWriteQuad(Freelist, Seed * (ULONG)sizeof(ULONG64), Pool[Index] + (ULONG64)Unit * APPLE_AGX_POOL_UNIT);
+            ++Seed;
         }
     }
     KeMemoryBarrier();
-    *Seeds = Index;
-    return Index == APPLE_AGX_FREELIST_SEEDS ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+    *Seeds = Seed;
+    return STATUS_SUCCESS;
 }
 
 static
@@ -1068,25 +1115,26 @@ AppleAgxDescribeParameterBuffer(
     _Out_writes_bytes_(APPLE_AGX_PB_MANAGER_SIZE) PVOID Manager,
     _In_ const APPLE_AGX_PARAMETER_BUFFER *Buffer)
 {
-    if (!Manager || !Buffer->PageList || !Buffer->BlockList || !Buffer->BlockControl ||
-        !Buffer->Counter || !Buffer->Pages || !Buffer->Blocks || !Buffer->BlockBytes ||
-        Buffer->Pages > APPLE_AGX_PB_PAGES || Buffer->Blocks > APPLE_AGX_PB_BLOCKS)
+    ULONG Pages = APPLE_AGX_PB_PAGES_PER_BLOCK * Buffer->Blocks;
+
+    if (!Manager || !Buffer->PageList || !Buffer->BlockList || !Buffer->BlockControl || !Buffer->Counter ||
+        !Buffer->Blocks || Buffer->Blocks > Buffer->MaxBlocks || Buffer->MaxBlocks > APPLE_AGX_PB_MAX_BLOCKS)
     {
         return STATUS_INVALID_PARAMETER;
     }
     RtlZeroMemory(Manager, APPLE_AGX_PB_MANAGER_SIZE);
     AgxWriteQuad(Manager, APPLE_AGX_PB_PAGE_LIST, Buffer->PageList);
-    AgxWriteLong(Manager, APPLE_AGX_PB_PAGE_LIST_BYTES, Buffer->Pages * (ULONG)sizeof(ULONG));
-    AgxWriteLong(Manager, APPLE_AGX_PB_PAGE_COUNT, Buffer->Pages);
+    AgxWriteLong(Manager, APPLE_AGX_PB_PAGE_LIST_BYTES, APPLE_AGX_PB_PAGE_LIST_SIZE);
+    AgxWriteLong(Manager, APPLE_AGX_PB_PAGE_COUNT, Pages);
     AgxWriteLong(Manager, APPLE_AGX_PB_RECORDS, APPLE_AGX_PB_LIST_RECORDS);
     AgxWriteLong(Manager, APPLE_AGX_PB_BLOCK_COUNT, Buffer->Blocks);
     AgxWriteQuad(Manager, APPLE_AGX_PB_BLOCK_LIST, Buffer->BlockList);
     AgxWriteQuad(Manager, APPLE_AGX_PB_BLOCK_CONTROL, Buffer->BlockControl);
-    AgxWriteLong(Manager, APPLE_AGX_PB_LAST_PAGE, Buffer->Pages - 1);
-    AgxWriteLong(Manager, APPLE_AGX_PB_BLOCK_BYTES, Buffer->BlockBytes);
+    AgxWriteLong(Manager, APPLE_AGX_PB_LAST_PAGE, Pages - 1);
+    AgxWriteLong(Manager, APPLE_AGX_PB_BLOCK_BYTES, APPLE_AGX_PB_BLOCK_SIZE);
     AgxWriteQuad(Manager, APPLE_AGX_PB_COUNTER, Buffer->Counter);
-    AgxWriteLong(Manager, APPLE_AGX_PB_MAX_PAGES_A, APPLE_AGX_PB_PAGES);
-    AgxWriteLong(Manager, APPLE_AGX_PB_MAX_PAGES_B, APPLE_AGX_PB_PAGES);
+    AgxWriteLong(Manager, APPLE_AGX_PB_MAX_PAGES_A, APPLE_AGX_PB_PAGES_PER_BLOCK * Buffer->MaxBlocks);
+    AgxWriteLong(Manager, APPLE_AGX_PB_MAX_PAGES_B, APPLE_AGX_PB_PAGES_PER_BLOCK * Buffer->MaxBlocks);
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
@@ -1103,8 +1151,125 @@ AppleAgxDescribeBlockControl(
     RtlZeroMemory(Control, APPLE_AGX_BLOCK_CONTROL_SIZE);
     RtlZeroMemory(Misc, APPLE_AGX_MISC_SIZE);
     AgxWriteLong(Control, APPLE_AGX_BLOCK_CONTROL_BLOCKS, Blocks);
+    AgxWriteLong(Control, APPLE_AGX_BLOCK_CONTROL_PRODUCER, Blocks);
     AgxWriteLong(Misc, APPLE_AGX_MISC_ENABLE, 1);
     KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+/* The lists name the parameter buffer's pages and blocks by their compact address in units of a
+ * page. Growth only adds blocks: the firmware takes their pages itself. */
+NTSTATUS
+NTAPI
+AppleAgxWriteBlocks(
+    _Inout_updates_bytes_opt_(APPLE_AGX_PB_PAGE_LIST_SIZE) PVOID PageList,
+    _Inout_updates_bytes_(APPLE_AGX_PB_BLOCK_LIST_SIZE) PVOID BlockList,
+    _In_ ULONG64 Heap,
+    _In_ ULONG First,
+    _In_ ULONG Count)
+{
+    ULONG Block, Page;
+
+    if (!BlockList || !Count || First > APPLE_AGX_PB_BLOCKS || Count > APPLE_AGX_PB_BLOCKS - First ||
+        (Heap & (APPLE_AGX_PB_BLOCK_SIZE - 1)) || Heap < APPLE_AGX_COMPACT_BASE ||
+        Heap + (ULONG64)APPLE_AGX_PB_BLOCKS * APPLE_AGX_PB_BLOCK_SIZE > APPLE_AGX_COMPACT_END)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    for (Block = First; Block < First + Count; ++Block)
+    {
+        ULONG64 At = Heap - APPLE_AGX_COMPACT_BASE + (ULONG64)Block * APPLE_AGX_PB_BLOCK_SIZE;
+
+        AgxWriteQuad(BlockList, AppleAgxBlockRecord(Block), At / APPLE_AGX_PB_PAGE_BYTES);
+        if (!PageList)
+            continue;
+        for (Page = 0; Page < APPLE_AGX_PB_PAGES_PER_BLOCK; ++Page)
+        {
+            AgxWriteLong(PageList, (Block * APPLE_AGX_PB_PAGES_PER_BLOCK + Page) * (ULONG)sizeof(ULONG),
+                         (ULONG)((At + (ULONG64)Page * APPLE_AGX_PB_PAGE_BYTES) / APPLE_AGX_PB_PAGE_BYTES));
+        }
+    }
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+AppleAgxC1Record(
+    _Out_writes_bytes_(APPLE_AGX_C1_RECORD) PVOID Record,
+    _In_ ULONG Blocks)
+{
+    RtlZeroMemory(Record, APPLE_AGX_C1_RECORD);
+    AgxWriteLong(Record, 0, APPLE_AGX_C1_TAG);
+    AgxWriteLong(Record, 4, APPLE_AGX_PB_PAGES_PER_BLOCK * Blocks);
+}
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeInitBm(
+    _Out_writes_bytes_(APPLE_AGX_INIT_BM_SIZE) PVOID Record,
+    _In_ ULONG Context,
+    _In_ ULONG Blocks,
+    _In_ ULONG64 Manager,
+    _In_ ULONG Stamp)
+{
+    if (!Record || !Manager || !Blocks || Blocks > APPLE_AGX_PB_MAX_BLOCKS || !Context ||
+        Context >= APPLE_UAT_CONTEXTS)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlZeroMemory(Record, APPLE_AGX_INIT_BM_SIZE);
+    AgxWriteLong(Record, 0x00, APPLE_AGX_OP_INIT_BM);
+    AgxWriteLong(Record, 0x04, Context);
+    AgxWriteLong(Record, 0x10, Blocks);
+    AgxWriteQuad(Record, 0x14, Manager);
+    AgxWriteLong(Record, 0x1c, Stamp);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+/* A request names the render's context, the parameter buffer's only slot and the next request
+ * number. It is granted up to ten blocks of what is backed below the maximum; past that it is
+ * refused, which leaves the firmware without new pages. */
+NTSTATUS
+NTAPI
+AppleAgxAnswerGrowth(
+    _Inout_ PAPPLE_AGX_GROWTH Growth,
+    _In_reads_(APPLE_AGX_RECORD_WORDS) const ULONG *Request,
+    _In_ ULONG Context,
+    _Out_writes_(APPLE_AGX_RECORD_WORDS) PULONG Reply,
+    _Out_ PULONG First,
+    _Out_ PULONG Count)
+{
+    ULONG Limit, Grant;
+
+    RtlZeroMemory(Reply, APPLE_AGX_RECORD_WORDS * sizeof(ULONG));
+    *First = 0;
+    *Count = 0;
+    if (Request[0] != APPLE_AGX_EVENT_GROW || Request[1] != Context || Request[2] != 0 ||
+        Request[3] < Growth->Counter || Growth->Posted > Growth->Max || Growth->Max > APPLE_AGX_PB_MAX_BLOCKS)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Limit = min(Growth->Max, Growth->Backed);
+    Grant = (Limit > Growth->Posted) ? min(Limit - Growth->Posted, APPLE_AGX_PB_GROW_STEP) : 0;
+    Reply[0] = APPLE_AGX_DEVCTL_GROW_REPLY;
+    Reply[1] = Grant ? 1 : 0;
+    Reply[2] = Request[2];
+    Reply[3] = Request[1];
+    Reply[4] = Request[3];
+    Reply[5] = Request[4];
+    Reply[6] = Request[5];
+    Reply[7] = Request[6];
+    Growth->Counter = Request[3] + 1;
+    if (!Grant)
+    {
+        ++Growth->Refused;
+        return STATUS_SUCCESS;
+    }
+    *First = Growth->Posted;
+    *Count = Grant;
+    Growth->Posted += Grant;
     return STATUS_SUCCESS;
 }
 
@@ -1792,11 +1957,14 @@ AppleAgxBuildRender(
     ULONG VertexStamp, FragmentStamp, Index;
     NTSTATUS Status;
 
+    ULONG64 SceneEntry;
+
     if (!Job || !Render || !Job->VertexWork || !Job->VertexSequence || !Job->FragmentWork ||
-        !Job->FragmentSequence || !Job->Scene || !Job->FragmentBarrier || !Job->SceneAddress)
+        !Job->FragmentSequence || !Job->Scene || !Job->FragmentBarrier || !Job->SceneAddress || !Job->SceneList)
     {
         return STATUS_INVALID_PARAMETER;
     }
+    SceneEntry = Job->SceneList + sizeof(ULONG) * (Ordinal % APPLE_AGX_SCENE_LIST_SLOTS);
     VertexStamp = AppleAgxStamp(APPLE_AGX_SEED_VERTEX, Ordinal);
     FragmentStamp = AppleAgxStamp(APPLE_AGX_SEED_FRAGMENT, Ordinal);
 
@@ -1807,7 +1975,7 @@ AppleAgxBuildRender(
     Vertex.Empty = Job->Empty;
     Vertex.WorkClient = Job->VertexWorkClient;
     Vertex.Sequence = Job->VertexSequenceAddress;
-    Vertex.Pool = Job->Pool;
+    Vertex.Pool = Job->Pool[0];
     Vertex.Scratch = Job->VertexScratch;
     Vertex.Stamp = Job->UserStamp[0];
     Vertex.FirmwareStamp = Job->FirmwareStamp[0];
@@ -1815,7 +1983,7 @@ AppleAgxBuildRender(
     Vertex.Tpc = Job->Tpc;
     Vertex.Heap = Job->Heap;
     Vertex.SceneUser = Job->SceneUser;
-    Vertex.InitialSceneEntry = Job->ManagerEntry;
+    Vertex.InitialSceneEntry = Job->SceneList + sizeof(ULONG);
     Vertex.Vdm = Render->Vdm;
     Vertex.Multisample = Render->Multisample;
     Vertex.Ppp = Render->Ppp;
@@ -1835,7 +2003,7 @@ AppleAgxBuildRender(
     Fragment.Scene = Job->SceneAddress;
     Fragment.Empty = Job->Empty;
     Fragment.Sequence = Job->FragmentSequenceAddress;
-    Fragment.Pool = Job->Pool;
+    Fragment.Pool = Job->Pool[1];
     Fragment.Stamp = Job->UserStamp[1];
     Fragment.FirmwareStamp = Job->FirmwareStamp[1];
     Fragment.WorkClient = Job->FragmentWorkClient;
@@ -1851,7 +2019,7 @@ AppleAgxBuildRender(
         Fragment.UserTimestamps[Index] = Job->UserTimestamps[1][Index];
     }
 
-    Status = AppleAgxDescribeScene(Job->Scene, Job->ManagerEntry, Job->ManagerMisc, Job->SceneUser,
+    Status = AppleAgxDescribeScene(Job->Scene, SceneEntry, Job->ManagerMisc, Job->SceneUser,
                                    Job->SceneUserBytes);
     if (NT_SUCCESS(Status))
         Status = AppleAgxEncodeVertexWork(Job->VertexWork, &Vertex, &Render->Geometry, Context, VertexStamp);
@@ -1865,7 +2033,7 @@ AppleAgxBuildRender(
     Refs.Notifier = Job->Notifier;
     Refs.Scene = Job->SceneAddress;
     Refs.Manager = Job->Manager;
-    Refs.Pool = Job->Pool;
+    Refs.Pool = Job->Pool[0];
     Refs.Work = Job->VertexWorkAddress;
     Refs.Sequence = Job->VertexSequenceAddress;
     Refs.Queue = Job->Queue[0];
@@ -1874,6 +2042,7 @@ AppleAgxBuildRender(
     Status = AppleAgxEncodeVertexSequence(Job->VertexSequence, &Refs, Context, VertexStamp);
     if (!NT_SUCCESS(Status))
         return Status;
+    Refs.Pool = Job->Pool[1];
     Refs.Work = Job->FragmentWorkAddress;
     Refs.Sequence = Job->FragmentSequenceAddress;
     Refs.Queue = Job->Queue[1];
@@ -2128,4 +2297,57 @@ AppleAgxBindingFind(
             return Entry;
     }
     return NULL;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxComputeRegisters(
+    _In_ const DRM_ASAHI_CMD_COMPUTE *Command,
+    _In_ ULONG64 Preempt,
+    _Out_writes_(APPLE_AGX_COMPUTE_REGISTER_COUNT) PULONG64 Register)
+{
+    ULONG64 Saved = Preempt + APPLE_AGX_COMPUTE_PREEMPT_TAIL;
+    ULONG Index;
+
+    RtlZeroMemory(Register, APPLE_AGX_COMPUTE_REGISTER_COUNT * sizeof(ULONG64));
+    if (!Preempt || Command->Flags || Command->CdmCtrlStreamEnd <= Command->CdmCtrlStreamBase ||
+        Command->CdmCtrlStreamBase < APPLE_AGX_USER_VA_START || Command->CdmCtrlStreamEnd > APPLE_AGX_USER_VA_END)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Register[0] = Preempt;
+    Register[1] = Command->CdmCtrlStreamBase;
+    for (Index = 0; Index < 4; ++Index)
+        Register[2 + Index] = Saved + 8 * Index;
+    Register[6] = 0x154024201ULL;
+    Register[7] = 0x10c08860ULL;
+    Register[8] = 0x1c;
+    Register[9] = 0x1c;
+    Register[18] = APPLE_AGX_COMPUTE_REG_1A0E9;
+    Register[19] = 0xff0000;
+    Register[20] = APPLE_AGX_COMPUTE_PTC;
+    Register[21] = APPLE_AGX_COMPUTE_DUPM;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxNextCommand(
+    _In_reads_bytes_(Length) const VOID *Buffer,
+    _In_ ULONG Length,
+    _Inout_ PULONG Offset,
+    _Out_ PAPPLE_AGX_COMMAND Command)
+{
+    RtlZeroMemory(Command, sizeof(*Command));
+    if (*Offset == Length)
+        return STATUS_NO_MORE_ENTRIES;
+    if (*Offset > Length || Length - *Offset < sizeof(DRM_ASAHI_CMD_HEADER))
+        return STATUS_INVALID_PARAMETER;
+    RtlCopyMemory(&Command->Header, (const UCHAR *)Buffer + *Offset, sizeof(Command->Header));
+    if (Command->Header.Size > Length - *Offset - sizeof(DRM_ASAHI_CMD_HEADER))
+        return STATUS_INVALID_PARAMETER;
+    Command->Payload = (const UCHAR *)Buffer + *Offset + sizeof(DRM_ASAHI_CMD_HEADER);
+    Command->Size = Command->Header.Size;
+    *Offset += sizeof(DRM_ASAHI_CMD_HEADER) + Command->Header.Size;
+    return STATUS_SUCCESS;
 }
