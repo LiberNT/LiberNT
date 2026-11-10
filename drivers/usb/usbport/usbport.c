@@ -1100,6 +1100,17 @@ USBPORT_SoftInterrupt(IN PDEVICE_OBJECT FdoDevice)
                &FdoExtension->SoftInterruptDpc);
 }
 
+static
+BOOLEAN
+USBPORT_IsControllerPolled(IN PUSBPORT_DEVICE_EXTENSION FdoExtension)
+{
+    PUSBPORT_DUMP_CONTEXT DumpContext = FdoExtension->Aux.DumpContext;
+    PUSBPORT_DUMP_CONTEXT KeyboardContext = FdoExtension->Aux.KeyboardContext;
+
+    return ((DumpContext != NULL) && DumpContext->DumpMode) ||
+           ((KeyboardContext != NULL) && KeyboardContext->DumpMode);
+}
+
 VOID
 NTAPI
 USBPORT_InvalidateControllerHandler(IN PDEVICE_OBJECT FdoDevice,
@@ -1131,6 +1142,10 @@ USBPORT_InvalidateControllerHandler(IN PDEVICE_OBJECT FdoDevice,
             break;
 
         case USBPORT_INVALIDATE_CONTROLLER_SOFT_INTERRUPT:
+            /* The crash dump and the debugger poll the controller at HIGH_LEVEL, where no timer or DPC runs. */
+            if (USBPORT_IsControllerPolled(FdoExtension))
+                break;
+
             if (InterlockedIncrement(&FdoExtension->IsrDpcCounter))
             {
                 InterlockedDecrement(&FdoExtension->IsrDpcCounter);

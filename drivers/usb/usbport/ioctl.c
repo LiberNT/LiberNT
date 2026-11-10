@@ -37,6 +37,7 @@ static NTSTATUS USBPORT_DumpStart(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ P
     PUSBPORT_REGISTRATION_PACKET Packet;
     PUSBPORT_TRANSFER Transfer;
     MPSTATUS MpStatus;
+    ULONG Retry;
 
     if ((Endpoint == NULL) || (Length > PAGE_SIZE) || ((Length != 0) && !UsePhysicalAddress && (Buffer == NULL)) || (UsePhysicalAddress && DirectionIn))
     {
@@ -92,7 +93,17 @@ static NTSTATUS USBPORT_DumpStart(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ P
     InterlockedExchange(&DumpContext->Completed, 0);
     KeMemoryBarrier();
 
-    MpStatus = Packet->SubmitTransfer(FdoExtension->MiniPortExt, Endpoint + 1, &Transfer->TransferParameters, Transfer->MiniportTransfer, &Transfer->SgList);
+    for (Retry = 0; Retry < ROS_DUMP_POLL_ITERATIONS; Retry++)
+    {
+        MpStatus = Packet->SubmitTransfer(FdoExtension->MiniPortExt, Endpoint + 1, &Transfer->TransferParameters, Transfer->MiniportTransfer, &Transfer->SgList);
+        if (MpStatus != MP_STATUS_BUSY)
+            break;
+
+        KeStallExecutionProcessor(1);
+    }
+
+    if (MpStatus == MP_STATUS_BUSY)
+        return STATUS_IO_TIMEOUT;
     if (MpStatus != MP_STATUS_SUCCESS)
         return STATUS_IO_DEVICE_ERROR;
 
