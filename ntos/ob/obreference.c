@@ -513,7 +513,7 @@ ObReferenceObjectByHandle(
         return STATUS_ACCESS_DENIED;
     }
 
-    InterlockedIncrementSizeT(&ObjectHeader->PointerCount);
+    ObpReferenceObjectByHandleEntry(Table, Handle, Entry, ObjectHeader);
 
     if (HandleInformation != NULL)
     {
