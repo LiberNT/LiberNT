@@ -3145,6 +3145,108 @@ TestAgxPools(VOID)
     ok_hex(AppleAgxSeedPools(NULL, AgxFreelist, First, &Seeds), STATUS_INVALID_PARAMETER);
 }
 
+static UCHAR AgxSequence[APPLE_AGX_COMPUTE_SEQUENCE_SIZE];
+
+static
+VOID
+TestAgxEncodeCompute(VOID)
+{
+    APPLE_AGX_ATTACHMENT Attachment[2];
+    APPLE_AGX_COMPUTE_REFS Refs;
+    ULONG64 Value;
+    ULONG Word, Final = APPLE_AGX_COMPUTE_FINALIZE_AT, Index;
+    USHORT Half;
+
+    RtlZeroMemory(&Refs, sizeof(Refs));
+    Refs.Hwdata = 0xfffffc20406fb5fcULL;
+    Refs.Notifier = 0xfffffc2100018000ULL;
+    Refs.Queue = 0xfffffc2100000000ULL;
+    Refs.FirmwareStamp = 0xfffffc210001c000ULL;
+    Refs.Manager = 0xfffffc2100024000ULL;
+    Refs.Work = 0xfffffc2140000000ULL;
+    for (Index = 0; Index < 5; ++Index)
+        Refs.Scratch[Index] = 0xfffffc2140100000ULL + Index * 0x1000;
+    /* An attachment is named by the grain its memory falls in, not by its own bounds. */
+    Attachment[0].Pointer = 0xfffffc2d00000040ULL;
+    Attachment[0].Size = 0x200;
+    Attachment[1].Pointer = 0xfffffc2d00010000ULL;
+    Attachment[1].Size = 0x80;
+
+    RtlFillMemory(AgxSequence, sizeof(AgxSequence), 0x5a);
+    ok_hex(AppleAgxEncodeCompute(AgxSequence, &Refs, Attachment, 2, 7, 0x1234, TRUE), STATUS_SUCCESS);
+
+    /* The sequence starts the work and names what it runs from. */
+    RtlCopyMemory(&Word, AgxSequence + 0x00, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_OP_COMPUTE_START);
+    RtlCopyMemory(&Value, AgxSequence + 0x14, sizeof(Value));
+    ok(Value == Refs.Work + APPLE_AGX_COMPUTE_REGISTERS, "The registers are at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + 0x1c, sizeof(Value));
+    ok(Value == Refs.Hwdata + APPLE_AGX_COMPUTE_HWDATA, "The activity record is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + 0x24, sizeof(Value));
+    ok(Value == Refs.Queue, "The queue is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxSequence + 0x2c, sizeof(Word));
+    ok_int(Word, 7);
+    RtlCopyMemory(&Word, AgxSequence + 0x30, sizeof(Word));
+    ok_int(Word, 1);
+    RtlCopyMemory(&Word, AgxSequence + 0x50, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_COMPUTE_UUID);
+
+    /* Both attachments, rounded out to their grain. */
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_ATTACHMENTS, sizeof(Value));
+    ok(Value == 0xfffffc2d00000000ULL, "The first attachment starts at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxSequence + APPLE_AGX_COMPUTE_ATTACHMENTS + 8, sizeof(Word));
+    /* 0x40 + 0x200 rounds up to 0x280, which is five grains from the grain it starts in. */
+    ok_int(Word, 5);
+    RtlCopyMemory(&Half, AgxSequence + APPLE_AGX_COMPUTE_ATTACHMENTS + 0x0c, sizeof(Half));
+    ok_hex(Half, 0x17);
+    RtlCopyMemory(&Half, AgxSequence + APPLE_AGX_COMPUTE_ATTACHMENTS + 0x0e, sizeof(Half));
+    ok_int(Half, 1);
+    RtlCopyMemory(&Value, AgxSequence + APPLE_AGX_COMPUTE_ATTACHMENTS +
+                              APPLE_AGX_COMPUTE_ATTACHMENT_STRIDE, sizeof(Value));
+    ok(Value == 0xfffffc2d00010000ULL, "The second attachment starts at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxSequence + 0x154, sizeof(Word));
+    ok_int(Word, 2);
+
+    /* The allocator, the scratch and the mask the firmware signals through. */
+    RtlCopyMemory(&Value, AgxSequence + 0x15c, sizeof(Value));
+    ok(Value == Refs.Manager, "The allocator is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + 0x174, sizeof(Value));
+    ok(Value == Refs.Scratch[0], "The first scratch is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + 0x19c, sizeof(Value));
+    ok(Value == Refs.Scratch[4], "The last scratch is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + 0x1b4, sizeof(Value));
+    ok(Value == Refs.Notifier + APPLE_AGX_NOTIFIER_MASK, "The notifier mask is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxSequence + 0x1f8, sizeof(Word));
+    ok_int(Word, 1);
+
+    /* The finalize step, and the end of the sequence. */
+    RtlCopyMemory(&Word, AgxSequence + Final, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_OP_COMPUTE_FINALIZE);
+    RtlCopyMemory(&Value, AgxSequence + Final + 0x0c, sizeof(Value));
+    ok(Value == Refs.Queue, "The finalize names the queue at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxSequence + Final + 0x28, sizeof(Value));
+    ok(Value == Refs.FirmwareStamp, "The stamp is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxSequence + Final + 0x30, sizeof(Word));
+    ok_hex(Word, 0x1234);
+    RtlCopyMemory(&Word, AgxSequence + Final + 0x60, sizeof(Word));
+    ok_hex(Word, (ULONG)(0u - APPLE_AGX_COMPUTE_FINALIZE_AT));
+    RtlCopyMemory(&Value, AgxSequence + Final + 0x6d, sizeof(Value));
+    ok(Value == Refs.Work + 0x860, "The finalize names %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxSequence + APPLE_AGX_COMPUTE_END_AT, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_OP_END);
+
+    /* Work with nothing to run, or more attachments than a sequence holds, is refused. */
+    ok_hex(AppleAgxEncodeCompute(AgxSequence, &Refs, Attachment, APPLE_AGX_MAX_ATTACHMENTS + 1, 0, 0, FALSE),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxEncodeCompute(AgxSequence, &Refs, NULL, 1, 0, 0, FALSE), STATUS_INVALID_PARAMETER);
+    Refs.Work = 0;
+    ok_hex(AppleAgxEncodeCompute(AgxSequence, &Refs, Attachment, 1, 0, 0, FALSE), STATUS_INVALID_PARAMETER);
+    Refs.Work = 0xfffffc2140000000ULL;
+    ok_hex(AppleAgxEncodeCompute(AgxSequence, &Refs, NULL, 0, 0, 0, FALSE), STATUS_SUCCESS);
+    RtlCopyMemory(&Word, AgxSequence + 0x154, sizeof(Word));
+    ok_int(Word, 0);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -4285,6 +4387,7 @@ START_TEST(AppleSoc)
     TestAgxStates();
     TestAgxQueue();
     TestAgxPools();
+    TestAgxEncodeCompute();
     TestSpmi();
     TestAtcphy();
     TestPcie();

@@ -814,3 +814,84 @@ AppleAgxSeedPools(
     *Seeds = Index;
     return Index == APPLE_AGX_FREELIST_SEEDS ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
 }
+
+static
+VOID
+AgxWriteWord(
+    _In_ PVOID Base,
+    _In_ ULONG Offset,
+    _In_ USHORT Value)
+{
+    RtlCopyMemory((PUCHAR)Base + Offset, &Value, sizeof(Value));
+}
+
+/* The sequence starts the work, names everything it reaches, finalizes it and ends. The firmware
+ * walks it as an instruction stream, so every address it names is written at its own offset. */
+NTSTATUS
+NTAPI
+AppleAgxEncodeCompute(
+    _Out_writes_bytes_(APPLE_AGX_COMPUTE_SEQUENCE_SIZE) PVOID Sequence,
+    _In_ const APPLE_AGX_COMPUTE_REFS *Refs,
+    _In_reads_opt_(Attachments) const APPLE_AGX_ATTACHMENT *Attachment,
+    _In_ ULONG Attachments,
+    _In_ ULONG Context,
+    _In_ ULONG Stamp,
+    _In_ BOOLEAN Faults)
+{
+    ULONG Final = APPLE_AGX_COMPUTE_FINALIZE_AT;
+    ULONG Index;
+
+    if (!Sequence || !Refs->Work || !Refs->Queue || !Refs->Hwdata || !Refs->Notifier ||
+        !Refs->Manager || !Refs->FirmwareStamp || Attachments > APPLE_AGX_MAX_ATTACHMENTS ||
+        (Attachments && !Attachment))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlZeroMemory(Sequence, APPLE_AGX_COMPUTE_SEQUENCE_SIZE);
+    AgxWriteLong(Sequence, 0x00, APPLE_AGX_OP_COMPUTE_START);
+    AgxWriteQuad(Sequence, 0x14, Refs->Work + APPLE_AGX_COMPUTE_REGISTERS);
+    AgxWriteQuad(Sequence, 0x1c, Refs->Hwdata + APPLE_AGX_COMPUTE_HWDATA);
+    AgxWriteQuad(Sequence, 0x24, Refs->Queue);
+    AgxWriteLong(Sequence, 0x2c, Context);
+    AgxWriteLong(Sequence, 0x30, Faults ? 1 : 0);
+    AgxWriteQuad(Sequence, 0x44, Refs->Work + 0x76c);
+    AgxWriteLong(Sequence, 0x50, APPLE_AGX_COMPUTE_UUID);
+    for (Index = 0; Index < Attachments; ++Index)
+    {
+        ULONG64 Base = Attachment[Index].Pointer & ~(ULONG64)(APPLE_AGX_ATTACHMENT_GRAIN - 1);
+        ULONG64 End = (Attachment[Index].Pointer + Attachment[Index].Size +
+                       APPLE_AGX_ATTACHMENT_GRAIN - 1) & ~(ULONG64)(APPLE_AGX_ATTACHMENT_GRAIN - 1);
+        ULONG At = APPLE_AGX_COMPUTE_ATTACHMENTS + APPLE_AGX_COMPUTE_ATTACHMENT_STRIDE * Index;
+
+        AgxWriteQuad(Sequence, At, Base);
+        AgxWriteLong(Sequence, At + 8, (ULONG)((End - Base) / APPLE_AGX_ATTACHMENT_GRAIN));
+        AgxWriteWord(Sequence, At + 0x0c, 0x17);
+        AgxWriteWord(Sequence, At + 0x0e, 1);
+    }
+    AgxWriteLong(Sequence, 0x154, Attachments);
+    AgxWriteQuad(Sequence, 0x15c, Refs->Manager);
+    AgxWriteQuad(Sequence, 0x174, Refs->Scratch[0]);
+    AgxWriteQuad(Sequence, 0x184, Refs->Scratch[1]);
+    AgxWriteQuad(Sequence, 0x18c, Refs->Scratch[2]);
+    AgxWriteQuad(Sequence, 0x194, Refs->Scratch[3]);
+    AgxWriteQuad(Sequence, 0x19c, Refs->Scratch[4]);
+    AgxWriteQuad(Sequence, 0x1a4, Refs->Work + 0x880);
+    AgxWriteQuad(Sequence, 0x1b4, Refs->Notifier + APPLE_AGX_NOTIFIER_MASK);
+    /* FIXME: the start and end timestamp records are left empty; no timestamp is asked for. */
+    AgxWriteLong(Sequence, 0x1f8, 1);
+    AgxWriteLong(Sequence, Final, APPLE_AGX_OP_COMPUTE_FINALIZE);
+    AgxWriteQuad(Sequence, Final + 0x04, Refs->Hwdata + APPLE_AGX_COMPUTE_HWDATA);
+    AgxWriteQuad(Sequence, Final + 0x0c, Refs->Queue);
+    AgxWriteLong(Sequence, Final + 0x14, Context);
+    AgxWriteQuad(Sequence, Final + 0x18, Refs->Work + 0x76c);
+    AgxWriteLong(Sequence, Final + 0x24, APPLE_AGX_COMPUTE_UUID);
+    AgxWriteQuad(Sequence, Final + 0x28, Refs->FirmwareStamp);
+    AgxWriteLong(Sequence, Final + 0x30, Stamp);
+    AgxWriteQuad(Sequence, Final + 0x58, Refs->Work + 0x83e);
+    AgxWriteLong(Sequence, Final + 0x60, (ULONG)(0u - Final));
+    AgxWriteQuad(Sequence, Final + 0x65, Refs->Work + 0x880);
+    AgxWriteQuad(Sequence, Final + 0x6d, Refs->Work + 0x860);
+    AgxWriteLong(Sequence, APPLE_AGX_COMPUTE_END_AT, APPLE_AGX_OP_END);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}

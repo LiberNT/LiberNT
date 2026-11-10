@@ -449,3 +449,46 @@ AppleAgxSeedPools(
     _Out_writes_bytes_(APPLE_AGX_FREELIST_SEEDS * 8) PVOID Freelist,
     _In_ ULONG64 FirstPool,
     _Out_ PULONG Seeds);
+
+/* A compute work item and the sequence the firmware interprets to run it. */
+#define APPLE_AGX_COMPUTE_WORK_SIZE     0x893
+#define APPLE_AGX_COMPUTE_SEQUENCE_SIZE 0x2b8
+#define APPLE_AGX_COMPUTE_REGISTERS     0x20
+#define APPLE_AGX_COMPUTE_HWDATA        0x3740
+#define APPLE_AGX_COMPUTE_ATTACHMENTS   0x54
+#define APPLE_AGX_COMPUTE_ATTACHMENT_STRIDE 16
+#define APPLE_AGX_COMPUTE_FINALIZE_AT   0x238
+#define APPLE_AGX_COMPUTE_END_AT        0x2b4
+#define APPLE_AGX_COMPUTE_TIMESTAMP_START 0x1bc
+#define APPLE_AGX_COMPUTE_TIMESTAMP_END 0x1fc
+#define APPLE_AGX_COMPUTE_UUID          0xc10000
+#define APPLE_AGX_MAX_ATTACHMENTS       16
+#define APPLE_AGX_ATTACHMENT_GRAIN      128
+
+typedef struct _APPLE_AGX_COMPUTE_REFS
+{
+    ULONG64 Hwdata;
+    ULONG64 Notifier;
+    ULONG64 Queue;
+    ULONG64 FirmwareStamp;
+    ULONG64 Manager;
+    ULONG64 Work;
+    ULONG64 Scratch[5];
+} APPLE_AGX_COMPUTE_REFS, *PAPPLE_AGX_COMPUTE_REFS;
+
+typedef struct _APPLE_AGX_ATTACHMENT
+{
+    ULONG64 Pointer;
+    ULONG64 Size;
+} APPLE_AGX_ATTACHMENT, *PAPPLE_AGX_ATTACHMENT;
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeCompute(
+    _Out_writes_bytes_(APPLE_AGX_COMPUTE_SEQUENCE_SIZE) PVOID Sequence,
+    _In_ const APPLE_AGX_COMPUTE_REFS *Refs,
+    _In_reads_opt_(Attachments) const APPLE_AGX_ATTACHMENT *Attachment,
+    _In_ ULONG Attachments,
+    _In_ ULONG Context,
+    _In_ ULONG Stamp,
+    _In_ BOOLEAN Faults);
