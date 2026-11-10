@@ -1028,7 +1028,10 @@ LxSignalCheckPending(
             if (LxSignalStopsByDefault(Signal))
             {
                 if ((Signal == LX_SIGSTOP) || !LxPgrpOrphaned(Process->Instance, Process->Pgid, NULL))
+                {
                     LxJobctlStop(Thread, Signal, Generation, TrapFrame, ExceptionFrame);
+                    Shared = TRUE;
+                }
                 continue;
             }
             if (LxSignalDumpsCore(Signal) && LxCoreDump(Thread, TrapFrame, ExceptionFrame, Signal))
