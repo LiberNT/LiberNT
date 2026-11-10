@@ -113,6 +113,10 @@ _SEH3$_Unregister(
             CurrentFrame = CurrentFrame->Next;
         }
 
+        /* The except handler unregisters a frame before jumping to its __except block, the auto cleanup does it again */
+        if (CurrentFrame->EndOfChain == Frame->Next)
+            return;
+
         /* Make sure the head frame points to our frame */
         ASSERT(CurrentFrame->EndOfChain == Frame);
 
