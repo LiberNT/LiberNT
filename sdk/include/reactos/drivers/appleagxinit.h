@@ -617,6 +617,82 @@ AppleAgxEncodeFragmentSequence(
     _In_ ULONG Stamp,
     _In_ ULONG QueueCommands);
 
+#define APPLE_AGX_TILE_PIXELS               32
+#define APPLE_AGX_MACROTILES                4
+#define APPLE_AGX_MAX_DIMENSION             16384
+#define APPLE_AGX_MAX_LAYERS                2048
+#define APPLE_AGX_REGION_ENTRY              5
+#define APPLE_AGX_TPC_ENTRY                 8
+
+#define APPLE_AGX_COMPACT_BASE              0x1000000000ULL
+#define APPLE_AGX_COMPACT_END               0x9000000000ULL
+#define APPLE_AGX_VDM_LIMIT                 0x8000000000ULL
+#define APPLE_AGX_GPU_ADDRESS_BITS          42
+
+typedef struct _APPLE_AGX_GEOMETRY
+{
+    ULONG Layers;
+    ULONG Tiles;
+    ULONG Pixels;
+    ULONG Screen;
+    ULONG XBlocks;
+    ULONG YBlocks;
+    ULONG Blocks;
+    ULONG RegionStride;
+    ULONG TpcStride;
+    ULONG64 UtileConfig;
+    ULONG64 TilemapBytes;
+    ULONG64 TpcBytes;
+} APPLE_AGX_GEOMETRY, *PAPPLE_AGX_GEOMETRY;
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeGeometry(
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG UtileWidth,
+    _In_ ULONG UtileHeight,
+    _In_ ULONG Samples,
+    _In_ ULONG Layers,
+    _In_ ULONG Clusters,
+    _Out_ PAPPLE_AGX_GEOMETRY Geometry);
+
+typedef struct _APPLE_AGX_VERTEX_INPUT
+{
+    ULONG64 Notifier;
+    ULONG64 Manager;
+    ULONG64 Scene;
+    ULONG64 Empty;
+    ULONG64 WorkClient;
+    ULONG64 Sequence;
+    ULONG64 Pool;
+    ULONG64 Scratch;
+    ULONG64 Stamp;
+    ULONG64 FirmwareStamp;
+    ULONG64 Timestamps[2];
+    ULONG64 UserTimestamps[2];
+    ULONG64 Preempt[3];
+    ULONG64 Tilemap;
+    ULONG64 Tpc;
+    ULONG64 Heap;
+    ULONG64 SceneUser;
+    ULONG64 InitialSceneEntry;
+    ULONG64 Vdm;
+    ULONG64 Multisample;
+    ULONG Ppp;
+    ULONG PageCount;
+    BOOLEAN ProcessEmptyTiles;
+} APPLE_AGX_VERTEX_INPUT, *PAPPLE_AGX_VERTEX_INPUT;
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeVertexWork(
+    _Out_writes_bytes_(APPLE_AGX_VERTEX_WORK_SIZE) PVOID Work,
+    _In_ const APPLE_AGX_VERTEX_INPUT *Input,
+    _In_ const APPLE_AGX_GEOMETRY *Geometry,
+    _In_ ULONG Context,
+    _In_ ULONG StampValue);
+
 /* The tiler's parameter buffer: pages the firmware hands out in blocks, the list it records them
  * on and the control it keeps the live producer in. */
 #define APPLE_AGX_PB_PAGES              16384

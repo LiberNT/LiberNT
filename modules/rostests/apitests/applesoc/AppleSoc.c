@@ -3590,6 +3590,242 @@ TestAgxRenderSequences(VOID)
     ok_hex(AppleAgxEncodeVertexSequence(AgxRenderSequence, &Bad, 0, 0), STATUS_SUCCESS);
 }
 
+static UCHAR AgxVertexWork[APPLE_AGX_VERTEX_WORK_SIZE];
+
+static
+ULONG64
+BufQuad(
+    _In_ const VOID *Buffer,
+    _In_ ULONG Offset)
+{
+    ULONG64 Value;
+
+    RtlCopyMemory(&Value, (const UCHAR *)Buffer + Offset, sizeof(Value));
+    return Value;
+}
+
+static
+ULONG
+BufLong(
+    _In_ const VOID *Buffer,
+    _In_ ULONG Offset)
+{
+    ULONG Value;
+
+    RtlCopyMemory(&Value, (const UCHAR *)Buffer + Offset, sizeof(Value));
+    return Value;
+}
+
+static
+USHORT
+BufWord(
+    _In_ const VOID *Buffer,
+    _In_ ULONG Offset)
+{
+    USHORT Value;
+
+    RtlCopyMemory(&Value, (const UCHAR *)Buffer + Offset, sizeof(Value));
+    return Value;
+}
+
+static
+VOID
+TestAgxGeometry(VOID)
+{
+    APPLE_AGX_GEOMETRY Geometry;
+
+    ok_hex(AppleAgxDescribeGeometry(1920, 1080, 32, 32, 1, 1, 2, &Geometry), STATUS_SUCCESS);
+    ok_int(Geometry.Layers, 1);
+    ok_int(Geometry.Tiles, 60 * 34);
+    ok_hex(Geometry.Pixels, 0x0437077f);
+    ok_hex(Geometry.Screen, 0x2103b);
+    ok_hex(Geometry.XBlocks, 0x404030);
+    ok_hex(Geometry.YBlocks, 0x303024);
+    ok_int(Geometry.Blocks, 192);
+    ok_int(Geometry.RegionStride, 240);
+    ok_int(Geometry.TpcStride, 384);
+    ok(Geometry.UtileConfig == 0xa000, "The utile configuration is %I64x\n", Geometry.UtileConfig);
+    ok(Geometry.TilemapBytes == 0x3c00, "The tilemap takes %I64x bytes\n", Geometry.TilemapBytes);
+    ok(Geometry.TpcBytes == 0xc000, "The TPC takes %I64x bytes\n", Geometry.TpcBytes);
+
+    ok_hex(AppleAgxDescribeGeometry(100, 50, 16, 16, 4, 3, 1, &Geometry), STATUS_SUCCESS);
+    ok_hex(Geometry.Pixels, 0x00310063);
+    ok_hex(Geometry.Screen, 0x1003);
+    ok_hex(Geometry.XBlocks, 0x10100c);
+    ok_hex(Geometry.YBlocks, 0x10100c);
+    ok_int(Geometry.Blocks, 16);
+    ok_int(Geometry.RegionStride, 80);
+    ok_int(Geometry.TpcStride, 128);
+    ok(Geometry.UtileConfig == 0x5002, "The utile configuration is %I64x\n", Geometry.UtileConfig);
+    ok(Geometry.TilemapBytes == 15360, "The tilemap takes %I64u bytes\n", Geometry.TilemapBytes);
+    ok(Geometry.TpcBytes == 24576, "The TPC takes %I64u bytes\n", Geometry.TpcBytes);
+
+    ok_hex(AppleAgxDescribeGeometry(16384, 16384, 32, 16, 2, 2048, 2, &Geometry), STATUS_SUCCESS);
+    ok_hex(Geometry.Pixels, 0x3fff3fff);
+    ok(Geometry.UtileConfig == 0x6001, "The utile configuration is %I64x\n", Geometry.UtileConfig);
+
+    ok_hex(AppleAgxDescribeGeometry(64, 64, 16, 32, 1, 1, 1, &Geometry), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeGeometry(64, 64, 32, 32, 3, 1, 1, &Geometry), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeGeometry(0, 64, 32, 32, 1, 1, 1, &Geometry), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeGeometry(16385, 64, 32, 32, 1, 1, 1, &Geometry), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeGeometry(64, 64, 32, 32, 1, 0, 1, &Geometry), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeGeometry(64, 64, 32, 32, 1, 2049, 1, &Geometry), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeGeometry(64, 64, 32, 32, 1, 1, 0, &Geometry), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeGeometry(16384, 16384, 16, 16, 4, 2048, 0xffffffff, &Geometry), STATUS_INVALID_PARAMETER);
+}
+
+static
+VOID
+TestAgxVertexWork(VOID)
+{
+    APPLE_AGX_GEOMETRY Geometry;
+    APPLE_AGX_VERTEX_INPUT Input, Bad;
+    const ULONG Tail = 0x8a8, State = 0x784, Records = 0x40;
+    ULONG Count;
+    const ULONG *Selector = AppleAgxSelectors(APPLE_AGX_WORK_VERTEX, &Count);
+
+    ok_hex(AppleAgxDescribeGeometry(1920, 1080, 32, 32, 1, 1, 2, &Geometry), STATUS_SUCCESS);
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.Notifier = 0xfffffc2100018000ULL;
+    Input.Manager = 0xfffffc2100024000ULL;
+    Input.Scene = 0xfffffc2100030000ULL;
+    Input.Empty = 0xfffffc2100034000ULL;
+    Input.WorkClient = 0x0000001500000000ULL;
+    Input.Sequence = 0xfffffc2140010000ULL;
+    Input.Pool = 0xfffffc2100040000ULL;
+    Input.Scratch = 0xfffffc2140100000ULL;
+    Input.Stamp = 0xfffffc210001c000ULL;
+    Input.FirmwareStamp = 0xfffffc210001c008ULL;
+    Input.Timestamps[0] = 0xfffffc2100050000ULL;
+    Input.Timestamps[1] = 0xfffffc2100050008ULL;
+    Input.UserTimestamps[0] = 0xfffffc2100060000ULL;
+    Input.UserTimestamps[1] = 0xfffffc2100060008ULL;
+    Input.Preempt[0] = 0x1006080000ULL;
+    Input.Preempt[1] = 0x1006098000ULL;
+    Input.Preempt[2] = 0x10060b0000ULL;
+    Input.Tilemap = 0x1100000000ULL;
+    Input.Tpc = 0x1200000000ULL;
+    Input.Heap = 0x1300000000ULL;
+    Input.SceneUser = 0x1400000000ULL;
+    Input.InitialSceneEntry = 0xfffffc2123456780ULL;
+    Input.Vdm = 0x0040001000ULL;
+    Input.Multisample = 0x11;
+    Input.Ppp = 0xffffffff;
+    Input.PageCount = 0x400;
+
+    RtlFillMemory(AgxVertexWork, sizeof(AgxVertexWork), 0x5a);
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Input, &Geometry, 11, 0x99), STATUS_SUCCESS);
+    ok_hex(BufLong(AgxVertexWork, 0x000), 0);
+    ok(BufQuad(AgxVertexWork, 0x004) == 1, "The command counter is %I64x\n", BufQuad(AgxVertexWork, 4));
+    ok_int(BufLong(AgxVertexWork, 0x00c), 11);
+    ok(BufQuad(AgxVertexWork, 0x014) == Input.Notifier, "The notifier is %I64x\n", BufQuad(AgxVertexWork, 0x14));
+    ok(BufQuad(AgxVertexWork, 0x024) == Input.Manager, "The manager is %I64x\n", BufQuad(AgxVertexWork, 0x24));
+    ok(BufQuad(AgxVertexWork, 0x02c) == Input.Scene, "The scene is %I64x\n", BufQuad(AgxVertexWork, 0x2c));
+    ok(BufQuad(AgxVertexWork, 0x034) == Input.Empty, "The empty object is %I64x\n", BufQuad(AgxVertexWork, 0x34));
+    ok_hex(BufLong(AgxVertexWork, Records), Selector[0]);
+    ok_hex(BufLong(AgxVertexWork, Records + 12 * 71), 0x1c910);
+    ok(BufQuad(AgxVertexWork, Records + 12 * 2 + 4) == 0x100000000ULL, "The tilemap register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 2 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 6 + 4) == 0x200000000ULL, "The TPC register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 6 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 7 + 4) == (0x300000000ULL | (1ULL << 63)), "The heap register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 7 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 18 + 4) == (0x60b0000ULL | (1ULL << 50)), "The third preemption register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 18 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 20 + 4) == Input.Vdm, "The VDM register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 20 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 26 + 4) == 0x300000000ULL, "The layer metadata register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 26 + 4));
+    ok_hex(BufLong(AgxVertexWork, Records + 12 * 32), 0x1c9a8);
+    ok(BufQuad(AgxVertexWork, Records + 12 * 32 + 4) == 0x400, "The parameter request is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 32 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 41 + 4) == 240, "The region stride is %I64u\n",
+       BufQuad(AgxVertexWork, Records + 12 * 41 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 44 + 4) == 0x203, "The PPP control is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 44 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 45 + 4) == 0x0437077f, "The pixel bounds are %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 45 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 52 + 4) == 0x8000, "The layer mode is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 52 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 69 + 4) == 0x400000040ULL, "The scene user register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 69 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 71 + 4) == 0xa123456781ULL, "The initial scene entry is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 71 + 4));
+    ok(BufQuad(AgxVertexWork, 0x740) == Input.WorkClient + Records, "The register list is at %I64x\n",
+       BufQuad(AgxVertexWork, 0x740));
+    ok_int(BufWord(AgxVertexWork, 0x748), 72);
+    ok_int(BufWord(AgxVertexWork, 0x74a), 72 * 12);
+    ok(BufQuad(AgxVertexWork, 0x760) == Input.Tpc, "The TPC is at %I64x\n", BufQuad(AgxVertexWork, 0x760));
+    ok(BufQuad(AgxVertexWork, 0x768) == 0xc000, "The TPC takes %I64x bytes\n", BufQuad(AgxVertexWork, 0x768));
+    ok(BufQuad(AgxVertexWork, 0x770) == Input.Sequence, "The sequence is at %I64x\n", BufQuad(AgxVertexWork, 0x770));
+    ok_hex(BufLong(AgxVertexWork, 0x778), 0x2d8);
+    ok_int(BufLong(AgxVertexWork, 0x77c), 1);
+    ok_hex(BufLong(AgxVertexWork, 0x780), 0x99);
+    ok(BufQuad(AgxVertexWork, State + 0x24) == 0x6080000ULL, "The first preemption buffer is %I64x\n",
+       BufQuad(AgxVertexWork, State + 0x24));
+    ok_hex(BufLong(AgxVertexWork, State + 0xbc), 0x67);
+    ok_hex(BufLong(AgxVertexWork, State + 0xc4), 0xffffffff);
+    ok_int(BufLong(AgxVertexWork, State + 0xd0), 1);
+    ok(BufQuad(AgxVertexWork, State + 0xe0) == Input.Stamp, "The stamp is at %I64x\n", BufQuad(AgxVertexWork, State + 0xe0));
+    ok(BufQuad(AgxVertexWork, State + 0xe8) == Input.FirmwareStamp, "The firmware stamp is at %I64x\n",
+       BufQuad(AgxVertexWork, State + 0xe8));
+    ok_hex(BufLong(AgxVertexWork, State + 0xf0), 0x99);
+    ok_int(BufLong(AgxVertexWork, State + 0xfc), 1);
+    ok_hex(BufLong(AgxVertexWork, State + 0x100), 0x7a0000);
+    ok(BufQuad(AgxVertexWork, Tail + 0x08) == Input.Timestamps[0], "The first timestamp is at %I64x\n",
+       BufQuad(AgxVertexWork, Tail + 0x08));
+    ok(BufQuad(AgxVertexWork, Tail + 0x20) == Input.UserTimestamps[1], "The second user timestamp is at %I64x\n",
+       BufQuad(AgxVertexWork, Tail + 0x20));
+    ok(BufQuad(AgxVertexWork, Tail + 0x2e) == Input.Pool, "The pool is at %I64x\n", BufQuad(AgxVertexWork, Tail + 0x2e));
+    ok_int(AgxVertexWork[Tail + 0x36], 1);
+    ok(BufQuad(AgxVertexWork, Tail + 0x37) == 0xad0000, "The first tail constant is %I64x\n", BufQuad(AgxVertexWork, Tail + 0x37));
+    ok(BufQuad(AgxVertexWork, Tail + 0x3f) == 0x1600000, "The second tail constant is %I64x\n", BufQuad(AgxVertexWork, Tail + 0x3f));
+    ok(BufQuad(AgxVertexWork, Tail + 0x47) == Input.Scratch, "The scratch is at %I64x\n", BufQuad(AgxVertexWork, Tail + 0x47));
+    ok_int(AgxVertexWork[Tail + 0x4f], 1);
+    ok_int(AgxVertexWork[APPLE_AGX_VERTEX_WORK_SIZE - 1], 0);
+
+    ok_hex(AppleAgxDescribeGeometry(256, 256, 32, 32, 1, 4, 2, &Geometry), STATUS_SUCCESS);
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Input, &Geometry, 11, 0x99), STATUS_SUCCESS);
+    ok(BufQuad(AgxVertexWork, Records + 12 * 52 + 4) == 0xd003, "The layered mode is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 52 + 4));
+    ok(BufQuad(AgxVertexWork, Records + 12 * 26 + 4) == 0x300000200ULL, "The layer metadata register is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 26 + 4));
+    Bad = Input;
+    Bad.ProcessEmptyTiles = TRUE;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 11, 0x99), STATUS_SUCCESS);
+    ok(BufQuad(AgxVertexWork, Records + 12 * 52 + 4) == 0xe003, "The layered mode is %I64x\n",
+       BufQuad(AgxVertexWork, Records + 12 * 52 + 4));
+
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Input, &Geometry, 64, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Tilemap = 0x0fffffffffULL;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Heap = 0x9000000000ULL;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Vdm = 0x8000000000ULL;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Vdm = 0x1002;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Vdm = 0;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_SUCCESS);
+    Bad = Input;
+    Bad.WorkClient = 0x0000001500000002ULL;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.WorkClient = (1ULL << 42) - 0x900;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.PageCount = 0;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Preempt[1] = 0;
+    ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+}
+
 static
 VOID
 TestAgxParameterBuffer(VOID)
@@ -4816,6 +5052,8 @@ START_TEST(AppleSoc)
     TestAgxRenderRegisters();
     TestAgxParameterBuffer();
     TestAgxRenderSequences();
+    TestAgxGeometry();
+    TestAgxVertexWork();
     TestSpmi();
     TestAtcphy();
     TestPcie();

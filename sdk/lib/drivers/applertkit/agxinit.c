@@ -1264,3 +1264,197 @@ AppleAgxEncodeFragmentSequence(
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeGeometry(
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG UtileWidth,
+    _In_ ULONG UtileHeight,
+    _In_ ULONG Samples,
+    _In_ ULONG Layers,
+    _In_ ULONG Clusters,
+    _Out_ PAPPLE_AGX_GEOMETRY Geometry)
+{
+    ULONG TilesX, TilesY, MacroX, MacroY, UtilesPerTile, SamplesLog2;
+    ULONG64 PerCluster;
+
+    if (!Geometry || !Width || !Height || Width > APPLE_AGX_MAX_DIMENSION || Height > APPLE_AGX_MAX_DIMENSION ||
+        !Layers || Layers > APPLE_AGX_MAX_LAYERS || !Clusters)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (!(UtileWidth == 32 && (UtileHeight == 32 || UtileHeight == 16)) && !(UtileWidth == 16 && UtileHeight == 16))
+        return STATUS_INVALID_PARAMETER;
+    switch (Samples)
+    {
+        case 1: SamplesLog2 = 0; break;
+        case 2: SamplesLog2 = 1; break;
+        case 4: SamplesLog2 = 2; break;
+        default: return STATUS_INVALID_PARAMETER;
+    }
+    UtilesPerTile = (APPLE_AGX_TILE_PIXELS / UtileWidth) * (APPLE_AGX_TILE_PIXELS / UtileHeight);
+    TilesX = (Width + APPLE_AGX_TILE_PIXELS - 1) / APPLE_AGX_TILE_PIXELS;
+    TilesY = (Height + APPLE_AGX_TILE_PIXELS - 1) / APPLE_AGX_TILE_PIXELS;
+    MacroX = (((TilesX + APPLE_AGX_MACROTILES - 1) / APPLE_AGX_MACROTILES) + 3) & ~3u;
+    MacroY = (((TilesY + APPLE_AGX_MACROTILES - 1) / APPLE_AGX_MACROTILES) + 3) & ~3u;
+    Geometry->Layers = Layers;
+    Geometry->Tiles = TilesX * TilesY;
+    Geometry->Pixels = (Width - 1) | ((Height - 1) << 16);
+    Geometry->Screen = (TilesX - 1) | ((TilesY - 1) << 12);
+    Geometry->XBlocks = 3 * MacroX | ((2 * MacroX) << 9) | (MacroX << 18);
+    Geometry->YBlocks = 3 * MacroY | ((2 * MacroY) << 9) | (MacroY << 18);
+    Geometry->Blocks = MacroX * MacroY;
+    Geometry->RegionStride = ((APPLE_AGX_REGION_ENTRY * Geometry->Blocks * UtilesPerTile + 3) & ~3u) / 4;
+    Geometry->TpcStride = APPLE_AGX_TPC_ENTRY * UtilesPerTile * Geometry->Blocks / 4;
+    Geometry->UtileConfig = ((UtileWidth / 16) << 12) | ((UtileHeight / 16) << 14) | SamplesLog2;
+    Geometry->TilemapBytes = (ULONG64)4 * Geometry->RegionStride * APPLE_AGX_MACROTILES * APPLE_AGX_MACROTILES * Layers;
+    PerCluster = (ULONG64)4 * Geometry->TpcStride * APPLE_AGX_MACROTILES * APPLE_AGX_MACROTILES * Layers;
+    if (PerCluster > MAXULONG64 / Clusters)
+        return STATUS_INVALID_PARAMETER;
+    Geometry->TpcBytes = PerCluster * Clusters;
+    return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+AgxGpuAddressValid(
+    _In_ ULONG64 Address)
+{
+    return Address && !(Address & 3) && Address < (1ULL << APPLE_AGX_GPU_ADDRESS_BITS);
+}
+
+static
+BOOLEAN
+AgxCompact(
+    _In_ ULONG64 Address,
+    _Out_ PULONG64 Compact)
+{
+    if (Address < APPLE_AGX_COMPACT_BASE || Address >= APPLE_AGX_COMPACT_END)
+        return FALSE;
+    *Compact = Address - APPLE_AGX_COMPACT_BASE;
+    return TRUE;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeVertexWork(
+    _Out_writes_bytes_(APPLE_AGX_VERTEX_WORK_SIZE) PVOID Work,
+    _In_ const APPLE_AGX_VERTEX_INPUT *Input,
+    _In_ const APPLE_AGX_GEOMETRY *Geometry,
+    _In_ ULONG Context,
+    _In_ ULONG StampValue)
+{
+    const ULONG Tail = APPLE_AGX_VERTEX_TAIL, State = APPLE_AGX_VERTEX_STATE;
+    ULONG64 Value[APPLE_AGX_VERTEX_REGISTER_COUNT];
+    ULONG64 Tilemap, Tpc, Heap, Preempt[3], User, LayerMetadata, LayerMode;
+    ULONG Index;
+
+    if (!Work || !Input || !Geometry || Context >= APPLE_UAT_CONTEXTS || !Input->PageCount ||
+        !Geometry->TpcBytes || !Geometry->Layers || !AgxGpuAddressValid(Input->WorkClient) ||
+        !AgxGpuAddressValid(Input->WorkClient + APPLE_AGX_VERTEX_WORK_SIZE - 3) || !Input->Notifier ||
+        !Input->Manager || !Input->Scene || !Input->Empty || !Input->Sequence || !Input->Pool ||
+        !Input->Scratch || !Input->Stamp || !Input->FirmwareStamp || Input->Vdm >= APPLE_AGX_VDM_LIMIT ||
+        (Input->Vdm & 3) || !AgxCompact(Input->Tilemap, &Tilemap) || !AgxCompact(Input->Tpc, &Tpc) ||
+        !AgxCompact(Input->Heap, &Heap) ||
+        !AgxCompact(Input->Heap + (Geometry->Layers > 1 ? 0x200 : 0), &LayerMetadata) ||
+        !AgxCompact(Input->SceneUser + 0x40, &User))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    for (Index = 0; Index < 3; ++Index)
+    {
+        if (!AgxCompact(Input->Preempt[Index], &Preempt[Index]))
+            return STATUS_INVALID_PARAMETER;
+    }
+    if (Geometry->Layers > 1)
+        LayerMode = 0xc000 | (Input->ProcessEmptyTiles ? 0x2000 : 0x1000) | (Geometry->Layers - 1);
+    else
+        LayerMode = 0x8000;
+
+    RtlZeroMemory(Value, sizeof(Value));
+    Value[0] = 1;
+    Value[1] = 0x200;
+    Value[2] = Tilemap;
+    Value[3] = Tilemap;
+    Value[6] = Tpc;
+    Value[7] = Heap | (1ULL << 63);
+    Value[8] = Heap | (1ULL << 63);
+    Value[9] = 0x003a0012006b0003ULL;
+    Value[10] = 1;
+    Value[11] = Geometry->UtileConfig;
+    Value[12] = Input->Multisample;
+    Value[13] = Preempt[0];
+    Value[14] = Preempt[0];
+    Value[15] = Preempt[1];
+    Value[16] = Preempt[1];
+    Value[17] = 1;
+    Value[18] = Preempt[2] | (1ULL << 50);
+    Value[20] = Input->Vdm;
+    Value[24] = 1;
+    Value[26] = LayerMetadata;
+    Value[27] = LayerMetadata;
+    Value[32] = Input->PageCount;
+    Value[40] = 0x8860;
+    Value[41] = Geometry->RegionStride;
+    Value[42] = Geometry->RegionStride;
+    Value[43] = 0x88;
+    Value[44] = 2 | (Input->Ppp & 0x201);
+    Value[45] = Geometry->Pixels;
+    Value[46] = Geometry->Screen;
+    Value[47] = Geometry->XBlocks;
+    Value[48] = Geometry->YBlocks;
+    Value[49] = Geometry->Blocks;
+    Value[50] = Geometry->TpcStride;
+    Value[51] = 0x100;
+    Value[52] = LayerMode;
+    Value[53] = 0x1c;
+    Value[54] = 0x1c;
+    Value[64] = 8;
+    Value[65] = 0xff0000;
+    Value[66] = 0x7f00400020ULL;
+    Value[67] = 0x200000001ULL;
+    Value[69] = User;
+    Value[70] = User;
+    Value[71] = 0xa000000000ULL | (Input->InitialSceneEntry & 0xfffffffffULL) | 1;
+
+    RtlZeroMemory(Work, APPLE_AGX_VERTEX_WORK_SIZE);
+    AgxWriteQuad(Work, 0x004, 1);
+    AgxWriteLong(Work, 0x00c, Context);
+    AgxWriteQuad(Work, 0x014, Input->Notifier);
+    AgxWriteQuad(Work, 0x024, Input->Manager);
+    AgxWriteQuad(Work, 0x02c, Input->Scene);
+    AgxWriteQuad(Work, 0x034, Input->Empty);
+    AppleAgxWriteRegisters(Work, APPLE_AGX_WORK_VERTEX, Value);
+    AgxWriteQuad(Work, 0x740, Input->WorkClient + APPLE_AGX_VERTEX_REGISTERS);
+    AgxWriteWord(Work, 0x748, APPLE_AGX_VERTEX_REGISTER_COUNT);
+    AgxWriteWord(Work, 0x74a, APPLE_AGX_VERTEX_REGISTER_COUNT * APPLE_AGX_REGISTER_RECORD);
+    AgxWriteQuad(Work, 0x760, Input->Tpc);
+    AgxWriteQuad(Work, 0x768, Geometry->TpcBytes);
+    AgxWriteQuad(Work, 0x770, Input->Sequence);
+    AgxWriteLong(Work, 0x778, APPLE_AGX_VERTEX_SEQUENCE_SIZE);
+    AgxWriteLong(Work, 0x77c, 1);
+    AgxWriteLong(Work, 0x780, StampValue);
+    AgxWriteQuad(Work, State + 0x24, Preempt[0]);
+    AgxWriteLong(Work, State + 0xbc, 0x67);
+    AgxWriteLong(Work, State + 0xc4, 0xffffffff);
+    AgxWriteLong(Work, State + 0xd0, 1);
+    AgxWriteQuad(Work, State + 0xe0, Input->Stamp);
+    AgxWriteQuad(Work, State + 0xe8, Input->FirmwareStamp);
+    AgxWriteLong(Work, State + 0xf0, StampValue);
+    AgxWriteLong(Work, State + 0xfc, 1);
+    AgxWriteLong(Work, State + 0x100, APPLE_AGX_VERTEX_UUID);
+    AgxWriteQuad(Work, Tail + 0x08, Input->Timestamps[0]);
+    AgxWriteQuad(Work, Tail + 0x10, Input->Timestamps[1]);
+    AgxWriteQuad(Work, Tail + 0x18, Input->UserTimestamps[0]);
+    AgxWriteQuad(Work, Tail + 0x20, Input->UserTimestamps[1]);
+    AgxWriteQuad(Work, Tail + 0x2e, Input->Pool);
+    ((PUCHAR)Work)[Tail + 0x36] = 1;
+    AgxWriteQuad(Work, Tail + 0x37, 0xad0000);
+    AgxWriteQuad(Work, Tail + 0x3f, 0x1600000);
+    AgxWriteQuad(Work, Tail + 0x47, Input->Scratch);
+    ((PUCHAR)Work)[Tail + 0x4f] = 1;
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
