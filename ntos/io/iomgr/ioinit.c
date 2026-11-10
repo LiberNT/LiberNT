@@ -617,6 +617,13 @@ IoInitSystem(
         return FALSE;
     }
 
+    Status = MmCreatePhysicalMemorySection();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: \\Device\\PhysicalMemory could not be made (%lx)\n", Status);
+        return FALSE;
+    }
+
     IopInitLookasideLists();
 
     if (!IopInitializeReserveIrp(&IopReserveIrpAllocator))

@@ -1426,9 +1426,10 @@ MiDeleteSection(
     }
 }
 
-static
+CODE_SEG("INIT")
 NTSTATUS
-MiCreatePhysicalMemorySection(VOID)
+NTAPI
+MmCreatePhysicalMemorySection(VOID)
 {
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\PhysicalMemory");
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -1529,7 +1530,6 @@ MiSectionInitialize(VOID)
     if (!NT_SUCCESS(Status))
         return Status;
 
-    MiCreatePhysicalMemorySection();
     return STATUS_SUCCESS;
 }
 
