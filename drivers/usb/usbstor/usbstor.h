@@ -65,6 +65,22 @@
 #define MAX_LUN 0xF
 #define USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH (256 * 1024)
 
+#define UAS_PIPE_USAGE_DESCRIPTOR_TYPE 0x24
+#define UAS_PIPE_COMMAND        0
+#define UAS_PIPE_STATUS         1
+#define UAS_PIPE_DATA_IN        2
+#define UAS_PIPE_DATA_OUT       3
+#define UAS_PIPES               4
+#define UAS_IU_COMMAND          0x01
+#define UAS_IU_SENSE            0x03
+#define UAS_IU_RESPONSE         0x04
+#define UAS_IU_READ_READY       0x06
+#define UAS_IU_WRITE_READY      0x07
+#define UAS_COMMAND_IU_SIZE     32
+#define UAS_STATUS_IU_SIZE      (16 + 252)
+#define UAS_SENSE_IU_HEADER     16
+#define UAS_TAG                 1
+
 #define CBW_SIGNATURE 0x43425355
 #define CSW_SIGNATURE 0x53425355
 
@@ -160,6 +176,22 @@ typedef struct
     BOOLEAN RequestTimerDpcRunning;
     BOOLEAN RequestTimedOut;
     BOOLEAN DeferredCompletionReset;
+    BOOLEAN Uas;
+    BOOLEAN UasStreams;
+    UCHAR UasEndpoint[UAS_PIPES];
+    UCHAR UasPipe[UAS_PIPES];
+    USBD_STREAM_INFORMATION UasStream[UAS_PIPES];
+    PUCHAR UasCommand;
+    PUCHAR UasStatus;
+    PVOID UasCommandAllocation;
+    PVOID UasStatusAllocation;
+    PIRP UasCommandIrp;
+    PIRP UasDataIrp;
+    URB UasCommandUrb;
+    URB UasDataUrb;
+    PMDL UasDataMdl;
+    volatile LONG UasOutstanding;
+    volatile LONG UasState;
 }FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 typedef struct
@@ -209,6 +241,47 @@ typedef struct _STORAGE_ADAPTER_DESCRIPTOR_WIN8 {
     UCHAR AddressType;
 } STORAGE_ADAPTER_DESCRIPTOR_WIN8, *PSTORAGE_ADAPTER_DESCRIPTOR_WIN8;
 
+
+BOOLEAN
+USBSTOR_UasScanConfiguration(
+    IN PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
+    OUT PUSB_INTERFACE_DESCRIPTOR *InterfaceDescriptor,
+    OUT PUCHAR EndpointAddress,
+    OUT PBOOLEAN Streams);
+
+NTSTATUS
+USBSTOR_UasStart(
+    IN PFDO_DEVICE_EXTENSION DeviceExtension);
+
+VOID
+USBSTOR_UasStop(
+    IN PFDO_DEVICE_EXTENSION DeviceExtension);
+
+NTSTATUS
+USBSTOR_UasExecute(
+    IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
+    IN PIRP Irp);
+
+NTSTATUS
+USBSTOR_SrbStatusToNtStatus(
+    IN PSCSI_REQUEST_BLOCK Srb);
+
+VOID
+USBSTOR_SetResetRecoveryStatus(
+    IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
+    IN PIRP Irp,
+    IN PSCSI_REQUEST_BLOCK Request);
+
+NTSTATUS
+USBSTOR_IssueBulkOrInterruptRequest(
+    IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
+    IN PIRP Irp,
+    IN USBD_PIPE_HANDLE PipeHandle,
+    IN ULONG TransferFlags,
+    IN ULONG TransferBufferLength,
+    IN PVOID TransferBuffer,
+    IN PMDL TransferBufferMDL,
+    IN PIO_COMPLETION_ROUTINE CompletionRoutine);
 
 //---------------------------------------------------------------------
 //

@@ -15,7 +15,6 @@
 #include <debug.h>
 
 
-static
 NTSTATUS
 USBSTOR_SrbStatusToNtStatus(
     IN PSCSI_REQUEST_BLOCK Srb)
@@ -55,7 +54,6 @@ USBSTOR_SrbStatusToNtStatus(
     }
 }
 
-static
 VOID
 USBSTOR_SetResetRecoveryStatus(
     IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
@@ -76,7 +74,6 @@ USBSTOR_SetResetRecoveryStatus(
     }
 }
 
-static
 NTSTATUS
 USBSTOR_IssueBulkOrInterruptRequest(
     IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
@@ -656,6 +653,9 @@ USBSTOR_HandleExecuteSCSI(
     DPRINT("USBSTOR_HandleExecuteSCSI Operation Code %x, Length %lu\n", SrbGetCdb(Request)->CDB10.OperationCode, Request->DataTransferLength);
 
     USBSTOR_StartRequestTimer(FDODeviceExtension, Irp, Request->TimeOutValue);
+
+    if (FDODeviceExtension->Uas)
+        return USBSTOR_UasExecute(FDODeviceExtension, Irp);
 
     return USBSTOR_SendCBWRequest(FDODeviceExtension, Irp);
 }
