@@ -854,3 +854,79 @@ AppleAgxTranslateRender(
     _In_ ULONG64 UscBase,
     _In_ ULONG Clusters,
     _Out_ PAPPLE_AGX_RENDER_STATE Render);
+
+#define APPLE_AGX_BARRIER_SIZE          0x3e
+#define APPLE_AGX_SEED_COMPUTE          0xc1000000
+#define APPLE_AGX_SEED_VERTEX           0x7a000000
+#define APPLE_AGX_SEED_FRAGMENT         0x3d000000
+#define APPLE_AGX_STAMP_STEP            0x100
+#define APPLE_AGX_EVENT_VERTEX          0
+#define APPLE_AGX_EVENT_FRAGMENT        1
+#define APPLE_AGX_EVENT_COMPUTE         2
+#define APPLE_AGX_RENDER_WAIT_UUID      0x3d420
+
+ULONG
+NTAPI
+AppleAgxStamp(
+    _In_ ULONG Seed,
+    _In_ ULONG64 Ordinal);
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeBarrier(
+    _Out_writes_bytes_(APPLE_AGX_BARRIER_SIZE) PVOID Barrier,
+    _In_ ULONG64 StampAddress,
+    _In_ ULONG Wait,
+    _In_ ULONG Event,
+    _In_ ULONG Own,
+    _In_ ULONG Uuid,
+    _In_ BOOLEAN Hold);
+
+typedef struct _APPLE_AGX_RENDER_JOB
+{
+    PVOID VertexWork;
+    PVOID VertexSequence;
+    PVOID FragmentWork;
+    PVOID FragmentSequence;
+    PVOID Scene;
+    PVOID FragmentBarrier;
+    ULONG64 VertexWorkAddress;
+    ULONG64 VertexWorkClient;
+    ULONG64 VertexSequenceAddress;
+    ULONG64 FragmentWorkAddress;
+    ULONG64 FragmentWorkClient;
+    ULONG64 FragmentSequenceAddress;
+    ULONG64 SceneAddress;
+    ULONG64 Hwdata;
+    ULONG64 Notifier;
+    ULONG64 Empty;
+    ULONG64 Manager;
+    ULONG64 ManagerEntry;
+    ULONG64 ManagerMisc;
+    ULONG64 Pool;
+    ULONG64 Queue[2];
+    ULONG64 UserStamp[2];
+    ULONG64 FirmwareStamp[2];
+    ULONG64 Timestamps[2][2];
+    ULONG64 UserTimestamps[2][2];
+    ULONG64 VertexScratch;
+    ULONG64 FragmentScratch;
+    ULONG64 FragmentScratchBytes;
+    ULONG64 Tilemap;
+    ULONG64 Tpc;
+    ULONG64 Heap;
+    ULONG64 Auxiliary;
+    ULONG64 SceneUser;
+    ULONG64 SceneUserBytes;
+    ULONG64 Preempt[3];
+    ULONG PageCount;
+    ULONG QueueCommands;
+} APPLE_AGX_RENDER_JOB, *PAPPLE_AGX_RENDER_JOB;
+
+NTSTATUS
+NTAPI
+AppleAgxBuildRender(
+    _In_ const APPLE_AGX_RENDER_JOB *Job,
+    _In_ const APPLE_AGX_RENDER_STATE *Render,
+    _In_ ULONG Context,
+    _In_ ULONG64 Ordinal);

@@ -1742,3 +1742,148 @@ AppleAgxTranslateRender(
     State->ProcessEmptyTiles = Render->ProcessEmptyTiles;
     return STATUS_SUCCESS;
 }
+
+ULONG
+NTAPI
+AppleAgxStamp(
+    _In_ ULONG Seed,
+    _In_ ULONG64 Ordinal)
+{
+    return Seed + (ULONG)Ordinal * APPLE_AGX_STAMP_STEP;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeBarrier(
+    _Out_writes_bytes_(APPLE_AGX_BARRIER_SIZE) PVOID Barrier,
+    _In_ ULONG64 StampAddress,
+    _In_ ULONG Wait,
+    _In_ ULONG Event,
+    _In_ ULONG Own,
+    _In_ ULONG Uuid,
+    _In_ BOOLEAN Hold)
+{
+    if (!Barrier || !StampAddress || Event > APPLE_AGX_EVENT_COMPUTE)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(Barrier, APPLE_AGX_BARRIER_SIZE);
+    AgxWriteLong(Barrier, 0x00, APPLE_AGX_OP_BARRIER);
+    AgxWriteQuad(Barrier, 0x04, StampAddress);
+    AgxWriteQuad(Barrier, 0x0c, StampAddress);
+    AgxWriteLong(Barrier, 0x14, Wait);
+    AgxWriteLong(Barrier, 0x18, Event);
+    AgxWriteLong(Barrier, 0x1c, Own);
+    AgxWriteLong(Barrier, 0x20, Uuid);
+    AgxWriteLong(Barrier, 0x2a, Hold ? 1 : 0);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxBuildRender(
+    _In_ const APPLE_AGX_RENDER_JOB *Job,
+    _In_ const APPLE_AGX_RENDER_STATE *Render,
+    _In_ ULONG Context,
+    _In_ ULONG64 Ordinal)
+{
+    APPLE_AGX_RENDER_REFS Refs;
+    APPLE_AGX_VERTEX_INPUT Vertex;
+    APPLE_AGX_FRAGMENT_INPUT Fragment;
+    ULONG VertexStamp, FragmentStamp, Index;
+    NTSTATUS Status;
+
+    if (!Job || !Render || !Job->VertexWork || !Job->VertexSequence || !Job->FragmentWork ||
+        !Job->FragmentSequence || !Job->Scene || !Job->FragmentBarrier || !Job->SceneAddress)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    VertexStamp = AppleAgxStamp(APPLE_AGX_SEED_VERTEX, Ordinal);
+    FragmentStamp = AppleAgxStamp(APPLE_AGX_SEED_FRAGMENT, Ordinal);
+
+    RtlZeroMemory(&Vertex, sizeof(Vertex));
+    Vertex.Notifier = Job->Notifier;
+    Vertex.Manager = Job->Manager;
+    Vertex.Scene = Job->SceneAddress;
+    Vertex.Empty = Job->Empty;
+    Vertex.WorkClient = Job->VertexWorkClient;
+    Vertex.Sequence = Job->VertexSequenceAddress;
+    Vertex.Pool = Job->Pool;
+    Vertex.Scratch = Job->VertexScratch;
+    Vertex.Stamp = Job->UserStamp[0];
+    Vertex.FirmwareStamp = Job->FirmwareStamp[0];
+    Vertex.Tilemap = Job->Tilemap;
+    Vertex.Tpc = Job->Tpc;
+    Vertex.Heap = Job->Heap;
+    Vertex.SceneUser = Job->SceneUser;
+    Vertex.InitialSceneEntry = Job->ManagerEntry;
+    Vertex.Vdm = Render->Vdm;
+    Vertex.Multisample = Render->Multisample;
+    Vertex.Ppp = Render->Ppp;
+    Vertex.PageCount = Job->PageCount;
+    Vertex.ProcessEmptyTiles = Render->ProcessEmptyTiles;
+    for (Index = 0; Index < 2; ++Index)
+    {
+        Vertex.Timestamps[Index] = Job->Timestamps[0][Index];
+        Vertex.UserTimestamps[Index] = Job->UserTimestamps[0][Index];
+    }
+    for (Index = 0; Index < 3; ++Index)
+        Vertex.Preempt[Index] = Job->Preempt[Index];
+
+    RtlZeroMemory(&Fragment, sizeof(Fragment));
+    Fragment.Notifier = Job->Notifier;
+    Fragment.Manager = Job->Manager;
+    Fragment.Scene = Job->SceneAddress;
+    Fragment.Empty = Job->Empty;
+    Fragment.Sequence = Job->FragmentSequenceAddress;
+    Fragment.Pool = Job->Pool;
+    Fragment.Stamp = Job->UserStamp[1];
+    Fragment.FirmwareStamp = Job->FirmwareStamp[1];
+    Fragment.WorkClient = Job->FragmentWorkClient;
+    Fragment.Tilemap = Job->Tilemap;
+    Fragment.Heap = Job->Heap;
+    Fragment.Auxiliary = Job->Auxiliary;
+    Fragment.SceneUser = Job->SceneUser;
+    Fragment.Scratch = Job->FragmentScratch;
+    Fragment.State = Render->Fragment;
+    for (Index = 0; Index < 2; ++Index)
+    {
+        Fragment.Timestamps[Index] = Job->Timestamps[1][Index];
+        Fragment.UserTimestamps[Index] = Job->UserTimestamps[1][Index];
+    }
+
+    Status = AppleAgxDescribeScene(Job->Scene, Job->ManagerEntry, Job->ManagerMisc, Job->SceneUser,
+                                   Job->SceneUserBytes);
+    if (NT_SUCCESS(Status))
+        Status = AppleAgxEncodeVertexWork(Job->VertexWork, &Vertex, &Render->Geometry, Context, VertexStamp);
+    if (NT_SUCCESS(Status))
+        Status = AppleAgxEncodeFragmentWork(Job->FragmentWork, &Fragment, &Render->Geometry, Context, FragmentStamp);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Refs, sizeof(Refs));
+    Refs.Hwdata = Job->Hwdata;
+    Refs.Notifier = Job->Notifier;
+    Refs.Scene = Job->SceneAddress;
+    Refs.Manager = Job->Manager;
+    Refs.Pool = Job->Pool;
+    Refs.Work = Job->VertexWorkAddress;
+    Refs.Sequence = Job->VertexSequenceAddress;
+    Refs.Queue = Job->Queue[0];
+    Refs.FirmwareStamp = Job->FirmwareStamp[0];
+    Refs.Scratch = Job->VertexScratch;
+    Status = AppleAgxEncodeVertexSequence(Job->VertexSequence, &Refs, Context, VertexStamp);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Refs.Work = Job->FragmentWorkAddress;
+    Refs.Sequence = Job->FragmentSequenceAddress;
+    Refs.Queue = Job->Queue[1];
+    Refs.FirmwareStamp = Job->FirmwareStamp[1];
+    Refs.Scratch = Job->FragmentScratch;
+    Refs.ScratchBytes = Job->FragmentScratchBytes;
+    Status = AppleAgxEncodeFragmentSequence(Job->FragmentSequence, &Refs, Context, FragmentStamp,
+                                            Job->QueueCommands);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return AppleAgxEncodeBarrier(Job->FragmentBarrier, Job->FirmwareStamp[0], VertexStamp, APPLE_AGX_EVENT_VERTEX,
+                                 FragmentStamp, APPLE_AGX_FRAGMENT_UUID, FALSE);
+}

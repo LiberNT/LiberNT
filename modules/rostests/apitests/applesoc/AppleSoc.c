@@ -4141,6 +4141,154 @@ TestAgxTranslateRender(VOID)
     ok_hex(AppleAgxTranslateRender(&Command, 0, 2, &Render), STATUS_INVALID_PARAMETER);
 }
 
+static UCHAR AgxJobSequence[2][APPLE_AGX_SEQUENCE_STORAGE];
+static UCHAR AgxJobScene[APPLE_AGX_SCENE_SIZE];
+static UCHAR AgxJobBarrier[APPLE_AGX_BARRIER_SIZE];
+
+static
+VOID
+TestAgxBuildRender(VOID)
+{
+    DRM_ASAHI_CMD_RENDER Command;
+    APPLE_AGX_RENDER_STATE Render;
+    APPLE_AGX_RENDER_JOB Job, Bad;
+    const ULONG VertexStamp = 0x7a000500, FragmentStamp = 0x3d000500;
+
+    ok_hex(AppleAgxStamp(APPLE_AGX_SEED_VERTEX, 0), 0x7a000000);
+    ok_hex(AppleAgxStamp(APPLE_AGX_SEED_FRAGMENT, 3), 0x3d000300);
+    ok_hex(AppleAgxStamp(APPLE_AGX_SEED_VERTEX, 0x860000), 0);
+    ok_hex(AppleAgxStamp(APPLE_AGX_SEED_COMPUTE, 0x1000000), 0xc1000000);
+
+    RtlFillMemory(AgxJobBarrier, sizeof(AgxJobBarrier), 0x5a);
+    ok_hex(AppleAgxEncodeBarrier(AgxJobBarrier, 0xfffffc210001c010ULL, 0x1234, APPLE_AGX_EVENT_COMPUTE, 0x5678,
+                                 APPLE_AGX_RENDER_WAIT_UUID, TRUE), STATUS_SUCCESS);
+    ok_hex(BufLong(AgxJobBarrier, 0x00), 4);
+    ok(BufQuad(AgxJobBarrier, 0x04) == 0xfffffc210001c010ULL, "The barrier waits on %I64x\n", BufQuad(AgxJobBarrier, 4));
+    ok(BufQuad(AgxJobBarrier, 0x0c) == 0xfffffc210001c010ULL, "The barrier repeats %I64x\n", BufQuad(AgxJobBarrier, 0xc));
+    ok_hex(BufLong(AgxJobBarrier, 0x14), 0x1234);
+    ok_int(BufLong(AgxJobBarrier, 0x18), 2);
+    ok_hex(BufLong(AgxJobBarrier, 0x1c), 0x5678);
+    ok_hex(BufLong(AgxJobBarrier, 0x20), 0x3d420);
+    ok_int(BufLong(AgxJobBarrier, 0x2a), 1);
+    ok_int(BufWord(AgxJobBarrier, 0x3c), 0);
+    ok_hex(AppleAgxEncodeBarrier(AgxJobBarrier, 0, 0, 0, 0, 0, FALSE), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxEncodeBarrier(AgxJobBarrier, 0xfffffc210001c010ULL, 0, 3, 0, 0, FALSE), STATUS_INVALID_PARAMETER);
+
+    RtlZeroMemory(&Command, sizeof(Command));
+    Command.VdmCtrlStreamBase = 0x1040001000ULL;
+    Command.WidthPx = 1920;
+    Command.HeightPx = 1080;
+    Command.Layers = 1;
+    Command.UtileWidthPx = 32;
+    Command.UtileHeightPx = 32;
+    Command.Samples = 1;
+    Command.SampleSizeB = 8;
+    ok_hex(AppleAgxTranslateRender(&Command, 0x1d00000000ULL, 2, &Render), STATUS_SUCCESS);
+
+    RtlZeroMemory(&Job, sizeof(Job));
+    Job.VertexWork = AgxVertexWork;
+    Job.VertexSequence = AgxJobSequence[0];
+    Job.FragmentWork = AgxFragmentWork;
+    Job.FragmentSequence = AgxJobSequence[1];
+    Job.Scene = AgxJobScene;
+    Job.FragmentBarrier = AgxJobBarrier;
+    Job.VertexWorkAddress = 0xfffffc2140000000ULL;
+    Job.VertexWorkClient = 0x0000001500000000ULL;
+    Job.VertexSequenceAddress = 0xfffffc2140010000ULL;
+    Job.FragmentWorkAddress = 0xfffffc2140020000ULL;
+    Job.FragmentWorkClient = 0x0000001500001000ULL;
+    Job.FragmentSequenceAddress = 0xfffffc2140030000ULL;
+    Job.SceneAddress = 0xfffffc2140040000ULL;
+    Job.Hwdata = 0xfffffc20406f0000ULL;
+    Job.Notifier = 0xfffffc2100018000ULL;
+    Job.Empty = 0xfffffc2100034000ULL;
+    Job.Manager = 0xfffffc2100024000ULL;
+    Job.ManagerEntry = 0xfffffc2100024c00ULL;
+    Job.ManagerMisc = 0xfffffc2100025000ULL;
+    Job.Pool = 0xfffffc2100040000ULL;
+    Job.Queue[0] = 0xfffffc2100000000ULL;
+    Job.Queue[1] = 0xfffffc2100000100ULL;
+    Job.UserStamp[0] = 0xfffffc210001c000ULL;
+    Job.UserStamp[1] = 0xfffffc210001c008ULL;
+    Job.FirmwareStamp[0] = 0xfffffc210001c010ULL;
+    Job.FirmwareStamp[1] = 0xfffffc210001c018ULL;
+    Job.Timestamps[0][0] = 0xfffffc2100050000ULL;
+    Job.Timestamps[0][1] = 0xfffffc2100050008ULL;
+    Job.Timestamps[1][0] = 0xfffffc2100050010ULL;
+    Job.Timestamps[1][1] = 0xfffffc2100050018ULL;
+    Job.VertexScratch = 0xfffffc2140100000ULL;
+    Job.FragmentScratch = 0x1600000000ULL;
+    Job.FragmentScratchBytes = 0x10000;
+    Job.Tilemap = 0x1100000000ULL;
+    Job.Tpc = 0x1200000000ULL;
+    Job.Heap = 0x1300000000ULL;
+    Job.Auxiliary = 0x1500000000ULL;
+    Job.SceneUser = 0x1040100000ULL;
+    Job.SceneUserBytes = 0x1000;
+    Job.Preempt[0] = 0x1006080000ULL;
+    Job.Preempt[1] = 0x1006098000ULL;
+    Job.Preempt[2] = 0x10060b0000ULL;
+    Job.PageCount = 0x400;
+    Job.QueueCommands = 2;
+
+    ok_hex(AppleAgxBuildRender(&Job, &Render, 5, 5), STATUS_SUCCESS);
+    ok(BufQuad(AgxJobScene, 0x00) == Job.ManagerEntry, "The scene names entry %I64x\n", BufQuad(AgxJobScene, 0));
+    ok(BufQuad(AgxJobScene, 0x40) == Job.ManagerMisc, "The scene names state %I64x\n", BufQuad(AgxJobScene, 0x40));
+    ok(BufQuad(AgxVertexWork, 0x02c) == Job.SceneAddress, "The vertex work names scene %I64x\n", BufQuad(AgxVertexWork, 0x2c));
+    ok(BufQuad(AgxVertexWork, 0x770) == Job.VertexSequenceAddress, "The vertex work runs %I64x\n",
+       BufQuad(AgxVertexWork, 0x770));
+    ok(BufQuad(AgxVertexWork, 0x740) == Job.VertexWorkClient + 0x40, "The vertex registers are at %I64x\n",
+       BufQuad(AgxVertexWork, 0x740));
+    ok_hex(BufLong(AgxVertexWork, 0x780), VertexStamp);
+    ok(BufQuad(AgxVertexWork, 0x784 + 0xe0) == Job.UserStamp[0], "The vertex user stamp is %I64x\n",
+       BufQuad(AgxVertexWork, 0x784 + 0xe0));
+    ok(BufQuad(AgxVertexWork, 0x40 + 12 * 71 + 4) == (0xa000000000ULL | (Job.ManagerEntry & 0xfffffffffULL) | 1),
+       "The initial scene entry is %I64x\n", BufQuad(AgxVertexWork, 0x40 + 12 * 71 + 4));
+    ok(BufQuad(AgxVertexWork, 0x8a8 + 0x08) == Job.Timestamps[0][0], "The vertex timestamp is %I64x\n",
+       BufQuad(AgxVertexWork, 0x8a8 + 0x08));
+    ok(BufQuad(AgxJobSequence[0], 0x14) == Job.VertexWorkAddress + 0x40, "The vertex sequence reads %I64x\n",
+       BufQuad(AgxJobSequence[0], 0x14));
+    ok(BufQuad(AgxJobSequence[0], 0x34) == Job.Queue[0], "The vertex sequence queue is %I64x\n",
+       BufQuad(AgxJobSequence[0], 0x34));
+    ok(BufQuad(AgxJobSequence[0], 0x248 + 0x44) == Job.FirmwareStamp[0], "FinalizeTA stamps %I64x\n",
+       BufQuad(AgxJobSequence[0], 0x248 + 0x44));
+    ok_hex(BufLong(AgxJobSequence[0], 0x248 + 0x4c), VertexStamp);
+    ok(BufQuad(AgxFragmentWork, 0x014) == Job.FragmentSequenceAddress, "The fragment work runs %I64x\n",
+       BufQuad(AgxFragmentWork, 0x14));
+    ok(BufQuad(AgxFragmentWork, 0x780) == Job.FragmentWorkClient + 0x80, "The fragment registers are at %I64x\n",
+       BufQuad(AgxFragmentWork, 0x780));
+    ok_hex(BufLong(AgxFragmentWork, 0xbac + 0x10), FragmentStamp);
+    ok(BufQuad(AgxFragmentWork, 0xbac + 0x08) == Job.FirmwareStamp[1], "The fragment firmware stamp is %I64x\n",
+       BufQuad(AgxFragmentWork, 0xbac + 0x08));
+    ok(BufQuad(AgxFragmentWork, 0xbf0 + 0x10) == Job.Timestamps[1][1], "The fragment timestamp is %I64x\n",
+       BufQuad(AgxFragmentWork, 0xbf0 + 0x10));
+    ok(BufQuad(AgxJobSequence[1], 0x4c) == Job.FragmentWorkAddress, "The fragment sequence runs %I64x\n",
+       BufQuad(AgxJobSequence[1], 0x4c));
+    ok(BufQuad(AgxJobSequence[1], 0x44) == Job.Queue[1], "The fragment sequence queue is %I64x\n",
+       BufQuad(AgxJobSequence[1], 0x44));
+    ok(BufQuad(AgxJobSequence[1], 0x68) == 2, "The fragment queue holds %I64u commands\n", BufQuad(AgxJobSequence[1], 0x68));
+    ok_hex(BufLong(AgxJobSequence[1], 0x258 + 0x14), FragmentStamp);
+    ok(BufQuad(AgxJobSequence[1], 0x1bc) == Job.FragmentScratch, "The fragment scratch is %I64x\n",
+       BufQuad(AgxJobSequence[1], 0x1bc));
+    ok(BufQuad(AgxJobBarrier, 0x04) == Job.FirmwareStamp[0], "The fragment waits on %I64x\n", BufQuad(AgxJobBarrier, 4));
+    ok_hex(BufLong(AgxJobBarrier, 0x14), VertexStamp);
+    ok_int(BufLong(AgxJobBarrier, 0x18), 0);
+    ok_hex(BufLong(AgxJobBarrier, 0x1c), FragmentStamp);
+    ok_hex(BufLong(AgxJobBarrier, 0x20), 0x3d0000);
+    ok_int(BufLong(AgxJobBarrier, 0x2a), 0);
+
+    Bad = Job;
+    Bad.FragmentBarrier = NULL;
+    ok_hex(AppleAgxBuildRender(&Bad, &Render, 5, 5), STATUS_INVALID_PARAMETER);
+    Bad = Job;
+    Bad.FragmentScratchBytes = 0x8000;
+    ok_hex(AppleAgxBuildRender(&Bad, &Render, 5, 5), STATUS_INVALID_PARAMETER);
+    Bad = Job;
+    Bad.SceneUser = 0x1400000000ULL;
+    ok_hex(AppleAgxBuildRender(&Bad, &Render, 5, 5), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxBuildRender(&Job, &Render, 64, 5), STATUS_INVALID_PARAMETER);
+}
+
 static
 VOID
 TestAgxParameterBuffer(VOID)
@@ -5372,6 +5520,7 @@ START_TEST(AppleSoc)
     TestAgxFragmentWork();
     TestAgxScene();
     TestAgxTranslateRender();
+    TestAgxBuildRender();
     TestSpmi();
     TestAtcphy();
     TestPcie();
