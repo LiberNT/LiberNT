@@ -1427,6 +1427,8 @@ Ndis6WdiBuildScanTlvs(
         Ndis6WdiTlvClose(Tlvs, Inner);
         Ndis6WdiTlvClose(Tlvs, Offset);
     }
+
+    /* TODO: WDI 1.1.10+ 6 GHz targets (WDI_TLV_6_GHZ_BAND_CHANNEL: BSSID, channel, co-located AP) are never sent, so a 6 GHz-only BSS is not discovered; which targets Windows 11 sends needs a black-box capture. */
 }
 
 static
