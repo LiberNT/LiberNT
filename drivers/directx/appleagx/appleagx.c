@@ -24,6 +24,7 @@
 #define AGX_ID_CLUSTERS             0x1c
 #define AGX_CORE_MASKS              0x1500
 #define AGX_MAX_CORE_MASKS          3
+#define AGX_REGIONS                 4
 
 typedef struct _APPLE_AGX
 {
@@ -40,7 +41,11 @@ typedef struct _APPLE_AGX
     ULONG IdSize;
     PUCHAR Core;
     ULONG CoreSize;
+    ULONG64 RegionBase[AGX_REGIONS];
+    ULONG64 RegionSize[AGX_REGIONS];
 } APPLE_AGX, *PAPPLE_AGX;
+
+static const CHAR *const AgxRegionNames[AGX_REGIONS] = { "ttbs", "pagetables", "handoff", "pagetables-l2" };
 
 static
 PCSTR
@@ -111,6 +116,57 @@ AgxPowerVote(
         Status = IoStatus.Status;
     }
     return Status;
+}
+
+/* The firmware's own regions: the boot loader reserves them and their addresses never move. */
+static
+VOID
+AgxReadRegions(
+    _Inout_ PAPPLE_AGX Agx)
+{
+    const VOID *Regions;
+    ULONG Length, Index, Node;
+    ULONG64 Phandle, Base, Size;
+
+    Regions = RiscvFdtGetProperty(&Agx->Tree.Fdt, Agx->Tree.Node, "memory-region", &Length);
+    if (!Regions)
+        return;
+    for (Index = 0; Index < AGX_REGIONS; ++Index)
+    {
+        if (!RiscvFdtReadCells(Regions, Length, Index, 1, &Phandle))
+            break;
+        Node = FdtDriverFindPhandle(&Agx->Tree, (ULONG)Phandle);
+        if (Node == RISCV_FDT_NO_NODE || !RiscvFdtReadReg(&Agx->Tree.Fdt, Node, Agx->Tree.Node, 0, &Base, &Size))
+            continue;
+        Agx->RegionBase[Index] = Base;
+        Agx->RegionSize[Index] = Size;
+        DbgPrint("appleagx: firmware region %s at %I64x+%I64x\n", AgxRegionNames[Index], Base, Size);
+    }
+}
+
+/* The firmware may only be started cold, which its address table page shows by being all zero. */
+static
+VOID
+AgxReportColdState(
+    _In_ PAPPLE_AGX Agx)
+{
+    PHYSICAL_ADDRESS Address;
+    PULONG64 Table;
+    ULONG64 Used = 0;
+    ULONG Index, Count;
+
+    if (!Agx->RegionBase[0] || Agx->RegionSize[0] < sizeof(ULONG64))
+        return;
+    Address.QuadPart = (LONGLONG)Agx->RegionBase[0];
+    Count = (ULONG)min(Agx->RegionSize[0], 0x4000) / sizeof(ULONG64);
+    Table = MmMapIoSpace(Address, (SIZE_T)Count * sizeof(ULONG64), MmNonCached);
+    if (!Table)
+        return;
+    for (Index = 0; Index < Count; ++Index)
+        Used |= Table[Index];
+    MmUnmapIoSpace(Table, (SIZE_T)Count * sizeof(ULONG64));
+    DbgPrint("appleagx: the firmware address table is %s, so the processor is %s\n", Used ? "in use" : "empty",
+             Used ? "already owned" : "cold and startable");
 }
 
 static
@@ -218,6 +274,8 @@ AgxStart(
              CoresPerCluster, Active, Masks[0], Masks[1], Masks[2]);
     DbgPrint("appleagx: coprocessor control %08lx (%s), firmware not started\n", Control,
              (Control & AGX_ASC_CONTROL_RUN) ? "running" : "halted");
+    AgxReadRegions(Agx);
+    AgxReportColdState(Agx);
     return STATUS_SUCCESS;
 }
 
