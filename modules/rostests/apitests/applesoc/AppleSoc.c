@@ -2673,38 +2673,38 @@ TestAgxRing(VOID)
     ok_int(Ring.Producer, 0);
 
     /* A record lands in the producer's slot and the producer moves on. */
-    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_SUCCESS);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE, NULL), STATUS_SUCCESS);
     ok_int(AgxRingRecords[0], 0x5a);
     ok_int(AgxRingRecords[APPLE_AGX_SUBMIT_RECORD - 1], 0xa5);
     ok_int(Ring.Producer, 1);
     ok_int(AppleAgxRingIndex(&Ring, APPLE_AGX_STATE_WRITE), 1);
 
     /* Without the record being consumed, a second one may not follow it. */
-    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_DEVICE_BUSY);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE, NULL), STATUS_DEVICE_BUSY);
     AgxRingSetIndex(APPLE_AGX_STATE_READ, 1);
-    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_SUCCESS);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE, NULL), STATUS_SUCCESS);
     ok_int(Ring.Producer, 2);
 
     /* Behind unconsumed records it goes only while fewer than the allowed number are out. */
     AgxRingSetIndex(APPLE_AGX_STATE_READ, 2);
     for (Index = 0; Index < APPLE_AGX_RING_AHEAD; ++Index)
-        ok_hex(AppleAgxRingPost(&Ring, Record, TRUE), STATUS_SUCCESS);
-    ok_hex(AppleAgxRingPost(&Ring, Record, TRUE), STATUS_DEVICE_BUSY);
+        ok_hex(AppleAgxRingPost(&Ring, Record, TRUE, NULL), STATUS_SUCCESS);
+    ok_hex(AppleAgxRingPost(&Ring, Record, TRUE, NULL), STATUS_DEVICE_BUSY);
     AgxRingSetIndex(APPLE_AGX_STATE_READ, 3);
-    ok_hex(AppleAgxRingPost(&Ring, Record, TRUE), STATUS_SUCCESS);
+    ok_hex(AppleAgxRingPost(&Ring, Record, TRUE, NULL), STATUS_SUCCESS);
 
     /* The producer wraps at the end of the ring rather than running past it. */
     RtlZeroMemory(AgxRingState, sizeof(AgxRingState));
     AgxRingSetIndex(APPLE_AGX_STATE_WRITE, APPLE_AGX_RING_SLOTS - 1);
     AgxRingSetIndex(APPLE_AGX_STATE_READ, APPLE_AGX_RING_SLOTS - 1);
     AppleAgxRingBind(&Ring, AgxRingState, AgxRingRecords, APPLE_AGX_SUBMIT_RECORD);
-    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_SUCCESS);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE, NULL), STATUS_SUCCESS);
     ok_int(Ring.Producer, 0);
     ok_int(AgxRingRecords[(APPLE_AGX_RING_SLOTS - 1) * APPLE_AGX_SUBMIT_RECORD], 0x5a);
 
     /* A state block that disagrees with the host's own producer is not written to. */
     AgxRingSetIndex(APPLE_AGX_STATE_WRITE, 42);
-    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_DEVICE_DATA_ERROR);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE, NULL), STATUS_DEVICE_DATA_ERROR);
 
     /* On a receive ring the firmware produces: every waiting record is taken, then none. */
     RtlZeroMemory(AgxRingState, sizeof(AgxRingState));
@@ -2729,8 +2729,22 @@ TestAgxRing(VOID)
 
     /* A ring with nowhere to put a record refuses rather than writing somewhere. */
     RtlZeroMemory(&Ring, sizeof(Ring));
-    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_INVALID_DEVICE_STATE);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE, NULL), STATUS_INVALID_DEVICE_STATE);
     ok(!AppleAgxRingTake(&Ring, Taken), "A ring with no memory gave a record\n");
+
+    /* A posted record is done only once both the consumer and the completion index pass it. */
+    RtlZeroMemory(AgxRingState, sizeof(AgxRingState));
+    AppleAgxRingBind(&Ring, AgxRingState, AgxRingRecords, APPLE_AGX_DEVCTL_RECORD);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE, &Index), STATUS_SUCCESS);
+    ok_int(Index, 1);
+    ok(!AppleAgxRingDone(&Ring, Index), "A record was done before the firmware read it\n");
+    AgxRingSetIndex(APPLE_AGX_STATE_READ, 1);
+    ok(!AppleAgxRingDone(&Ring, Index), "A record was done before it completed\n");
+    AgxRingSetIndex(APPLE_AGX_STATE_READ, 0);
+    AgxRingSetIndex(APPLE_AGX_STATE_COMPLETION, 1);
+    ok(!AppleAgxRingDone(&Ring, Index), "A record was done before it was read\n");
+    AgxRingSetIndex(APPLE_AGX_STATE_READ, 1);
+    ok(AppleAgxRingDone(&Ring, Index), "A read and completed record was not done\n");
 
     /* The doorbells: one per submit channel, and the device control ring's own. */
     ok(AppleAgxRingDoorbell(2) == 0x0083000000000002ULL, "Channel 2 rings %I64x\n",

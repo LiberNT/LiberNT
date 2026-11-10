@@ -428,6 +428,44 @@ AgxReceive(
     DbgPrint("appleagx: endpoint %#x sent %I64x\n", Endpoint, Message);
 }
 
+/* A request is posted, the firmware is rung, and the record is waited for until it has been both
+ * read and completed. A halted firmware is not posted to at all. */
+static
+NTSTATUS
+AgxSubmit(
+    _Inout_ PAPPLE_AGX Agx,
+    _Inout_ PAPPLE_AGX_RING Ring,
+    _In_ ULONG Channel,
+    _In_ const VOID *Record,
+    _In_ ULONG Timeout)
+{
+    LARGE_INTEGER Interval;
+    ULONG Next, Waited;
+    NTSTATUS Status;
+
+    if (!Agx->Bound)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL] &&
+        *(volatile ULONG *)((PUCHAR)Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL] + APPLE_AGX_CONTROL_HALTED))
+    {
+        return STATUS_DEVICE_POWERED_OFF;
+    }
+    Status = AppleAgxRingPost(Ring, Record, FALSE, &Next);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_EP_DOORBELL, AppleAgxRingDoorbell(Channel)))
+        return STATUS_IO_TIMEOUT;
+    Interval.QuadPart = -10000LL;
+    for (Waited = 0; Waited < Timeout; ++Waited)
+    {
+        AppleRtkitPoll(&Agx->Rtkit);
+        if (AppleAgxRingDone(Ring, Next))
+            return STATUS_SUCCESS;
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    }
+    return STATUS_IO_TIMEOUT;
+}
+
 /* The rings live inside the initial data, so they are bound once it is in place. */
 static
 VOID
@@ -515,8 +553,12 @@ AgxHandInitialData(
         AgxListen(Agx, 10);
         if (AppleAgxInitReady(&Agx->Init))
         {
+            UCHAR Request[APPLE_AGX_DEVCTL_RECORD] = { 0 };
+
             AgxDrainRings(Agx);
             DbgPrint("appleagx: the firmware is ready after %lu ms, %lu records read\n", Waited, Agx->Drained);
+            DbgPrint("appleagx: the device control ring answers an empty request: %lx\n",
+                     AgxSubmit(Agx, &Agx->DevCtl, APPLE_AGX_DOORBELL_DEVCTL, Request, AGX_LISTEN_MS));
             return STATUS_SUCCESS;
         }
     }

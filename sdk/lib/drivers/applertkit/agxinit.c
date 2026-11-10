@@ -411,10 +411,13 @@ NTAPI
 AppleAgxRingPost(
     _Inout_ PAPPLE_AGX_RING Ring,
     _In_reads_bytes_(Ring->Record) const VOID *Record,
-    _In_ BOOLEAN Ahead)
+    _In_ BOOLEAN Ahead,
+    _Out_opt_ PULONG Next)
 {
     ULONG Consumer, Outstanding;
 
+    if (Next)
+        *Next = 0;
     if (!Ring->State || !Ring->Ring || !Ring->Record)
         return STATUS_INVALID_DEVICE_STATE;
     if (AppleAgxRingIndex(Ring, APPLE_AGX_STATE_WRITE) != Ring->Producer)
@@ -428,7 +431,21 @@ AppleAgxRingPost(
     Ring->Producer = (Ring->Producer + 1) % APPLE_AGX_RING_SLOTS;
     RtlCopyMemory((PUCHAR)Ring->State + APPLE_AGX_STATE_WRITE, &Ring->Producer, sizeof(Ring->Producer));
     KeMemoryBarrier();
+    if (Next)
+        *Next = Ring->Producer;
     return STATUS_SUCCESS;
+}
+
+/* A posted record is done once the firmware's consumer and its completion index have both
+ * reached the slot after it. */
+BOOLEAN
+NTAPI
+AppleAgxRingDone(
+    _In_ PAPPLE_AGX_RING Ring,
+    _In_ ULONG Next)
+{
+    return Ring->State && AppleAgxRingIndex(Ring, APPLE_AGX_STATE_READ) == Next &&
+           AppleAgxRingIndex(Ring, APPLE_AGX_STATE_COMPLETION) == Next;
 }
 
 /* On a receive ring the firmware is the producer, so a record is taken while one is waiting. */

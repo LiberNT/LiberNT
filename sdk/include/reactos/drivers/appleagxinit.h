@@ -227,7 +227,14 @@ NTAPI
 AppleAgxRingPost(
     _Inout_ PAPPLE_AGX_RING Ring,
     _In_reads_bytes_(Ring->Record) const VOID *Record,
-    _In_ BOOLEAN Ahead);
+    _In_ BOOLEAN Ahead,
+    _Out_opt_ PULONG Next);
+
+BOOLEAN
+NTAPI
+AppleAgxRingDone(
+    _In_ PAPPLE_AGX_RING Ring,
+    _In_ ULONG Next);
 
 BOOLEAN
 NTAPI
