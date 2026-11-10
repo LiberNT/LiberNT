@@ -490,6 +490,9 @@ PLX_FILE LxFdGet(_In_ PLX_PROCESS Process, _In_ LONG Fd);
 LONG64 LxFileReadKernel(_In_ PLX_FILE File, _Out_writes_bytes_(Length) PVOID Buffer, _In_ ULONG Length, _In_ ULONG64 Offset);
 VOID LxIpcShmVmaOpen(_In_ PVOID Section);
 VOID LxIpcShmVmaClose(_In_ PVOID Section);
+BOOLEAN LxDrmIsFile(_In_ PLX_FILE File);
+LONG64 LxDrmMmap(_In_ PLX_PROCESS Process, _In_ PLX_FILE File, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot,
+                 _In_ ULONG Flags, _In_ ULONG64 Offset);
 
 LONG64 LxMmMap(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot, _In_ ULONG Flags, _In_opt_ PLX_FILE File, _In_ ULONG64 Offset);
 LONG64 LxMmUnmap(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length);
