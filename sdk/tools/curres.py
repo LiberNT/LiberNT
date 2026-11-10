@@ -11,7 +11,12 @@ of each file as an RT_CURSOR resource (hotspot followed by the image) and each
 name as an RT_GROUP_CURSOR directory, and writes the resource script that
 includes them. Names that use the same file share its images.
 
-    curres.py <list> <source dir> <output .rc>
+rc.exe also reserves the resource types below 256 for its own statements, so
+it cannot take those resources from files either. Given an output .res and a
+header defining the symbolic names, the tool writes them to that compiled
+resource file for the linker instead, and the resource script stays empty.
+
+    curres.py <list> <source dir> <output .rc> [<output .res> <names header>]
 """
 
 import os
@@ -21,6 +26,8 @@ import sys
 
 RT_CURSOR = 1
 RT_GROUP_CURSOR = 12
+RES_CURSOR_FLAGS = 0x1010
+RES_GROUP_CURSOR_FLAGS = 0x1030
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 PNG_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 LINE = re.compile(r'^\s*(\S+)\s+CURSOR\s+"([^"]+)"\s*$')
@@ -70,11 +77,36 @@ def read_list(path):
     return entries
 
 
+def read_names(path):
+    names = {}
+    for text in open(path, errors="replace"):
+        match = re.match(r"^\s*#\s*define\s+(\w+)\s+(\d+)\s*$", text)
+        if match:
+            names[match.group(1)] = int(match.group(2))
+    return names
+
+
+def name_id(name, names):
+    if name.isdigit():
+        return int(name)
+    if name not in names:
+        sys.exit("%s: no numeric value for this resource name" % name)
+    return names[name]
+
+
+def res_entry(kind, ident, data, flags):
+    header = struct.pack("<IIHHHHIHHII", len(data), 32, 0xFFFF, kind, 0xFFFF, ident, 0, flags, 0, 0, 0)
+    return header + data + b"\0" * (-len(data) % 4)
+
+
 def main():
-    if len(sys.argv) != 4:
-        sys.exit("usage: curres.py <list> <source dir> <output .rc>")
+    if len(sys.argv) not in (4, 6):
+        sys.exit("usage: curres.py <list> <source dir> <output .rc> [<output .res> <names header>]")
     entries = read_list(sys.argv[1])
     source, output = sys.argv[2], sys.argv[3]
+    res_output = sys.argv[4] if len(sys.argv) == 6 else None
+    names = read_names(sys.argv[5]) if res_output else {}
+    res = [struct.pack("<IIHHHHIHHII", 0, 32, 0xFFFF, 0, 0xFFFF, 0, 0, 0, 0, 0, 0)]
     folder = os.path.splitext(output)[0]
     os.makedirs(folder, exist_ok=True)
 
@@ -91,6 +123,7 @@ def main():
                 target = os.path.join(folder, "%s.%d.bin" % (stem, index))
                 open(target, "wb").write(resource)
                 lines.append('%d %d "%s"' % (next_id, RT_CURSOR, target.replace("\\", "/")))
+                res.append(res_entry(RT_CURSOR, next_id, resource, RES_CURSOR_FLAGS))
                 directory += struct.pack("<HHHHIH", width, height * 2, planes, bits, len(resource), next_id)
                 next_id += 1
                 count += 1
@@ -99,7 +132,13 @@ def main():
             open(target, "wb").write(directory)
             groups[file] = target.replace("\\", "/")
         lines.append('%s %d "%s"' % (name, RT_GROUP_CURSOR, groups[file]))
+        if res_output:
+            res.append(res_entry(RT_GROUP_CURSOR, name_id(name, names), open(groups[file], "rb").read(),
+                                 RES_GROUP_CURSOR_FLAGS))
 
+    if res_output:
+        open(res_output, "wb").write(b"".join(res))
+        lines = lines[:1]
     open(output, "w").write("\n".join(lines) + "\n")
 
 
