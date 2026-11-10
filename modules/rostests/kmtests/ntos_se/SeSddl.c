@@ -195,7 +195,7 @@ TestRefusedStrings(VOID)
     Sd = NULL;
     Status = SeConvertStringSecurityDescriptorToSecurityDescriptor(
                  L"D:(A;;GA;;;SY)", 2, &Sd, NULL);
-    ok_eq_hex(Status, STATUS_UNKNOWN_REVISION);
+    ok_eq_hex(Status, NTSTATUS_FROM_WIN32(1305));
     if (NT_SUCCESS(Status) && Sd != NULL) ExFreePool(Sd);
 }
 
