@@ -1988,6 +1988,31 @@ LX_SYSCALL(LxSysGetsid)
     return LxProcessIds(Call, TRUE);
 }
 
+static
+BOOLEAN
+LxPgrpInSession(
+    _In_ PLX_INSTANCE Instance,
+    _In_ ULONG Pgid,
+    _In_ ULONG Sid)
+{
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+
+    ExAcquireFastMutex(&LxProcessListLock);
+    for (Entry = LxProcessList.Flink; Entry != &LxProcessList; Entry = Entry->Flink)
+    {
+        PLX_PROCESS Member = CONTAINING_RECORD(Entry, LX_PROCESS, GlobalLink);
+
+        if ((Member->Instance == Instance) && (Member->Pgid == Pgid) && (Member->Sid == Sid))
+        {
+            Found = TRUE;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&LxProcessListLock);
+    return Found;
+}
+
 LX_SYSCALL(LxSysSetpgid)
 {
     PLX_PROCESS Process = Call->Process, Target;
@@ -2032,6 +2057,8 @@ LX_SYSCALL(LxSysSetpgid)
 
     if ((Target->Sid != Process->Sid) || (Target->Sid == Target->Pid))
         Result = (Target->Sid == Target->Pid) && (Target->Pgid == (ULONG)Pgid) ? 0 : -LX_EPERM;
+    else if (((ULONG)Pgid != Target->Pid) && !LxPgrpInSession(Process->Instance, (ULONG)Pgid, Target->Sid))
+        Result = -LX_EPERM;
     else
         Target->Pgid = (ULONG)Pgid;
 
