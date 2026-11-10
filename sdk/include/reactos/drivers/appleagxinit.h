@@ -187,3 +187,60 @@ VOID
 NTAPI
 AppleAgxInitRelease(
     _Inout_ PAPPLE_AGX_INIT Init);
+
+/* A ring and its state block: the consumer's index, the completion index and the producer's. */
+#define APPLE_AGX_RING_SLOTS            256
+#define APPLE_AGX_RING_AHEAD            64
+#define APPLE_AGX_STATE_READ            0x00
+#define APPLE_AGX_STATE_COMPLETION      0x10
+#define APPLE_AGX_STATE_WRITE           0x20
+#define APPLE_AGX_SUBMIT_RECORD         0x18
+#define APPLE_AGX_DEVCTL_RECORD         0x38
+#define APPLE_AGX_EVENT_RECORD          0x38
+#define APPLE_AGX_DOORBELL_BASE         (0x0083ULL << 48)
+#define APPLE_AGX_DOORBELL_DEVCTL       0x11
+
+typedef struct _APPLE_AGX_RING
+{
+    PVOID State;
+    PVOID Ring;
+    ULONG Record;
+    ULONG Producer;
+} APPLE_AGX_RING, *PAPPLE_AGX_RING;
+
+VOID
+NTAPI
+AppleAgxRingBind(
+    _Out_ PAPPLE_AGX_RING Ring,
+    _In_ PVOID State,
+    _In_ PVOID Records,
+    _In_ ULONG Record);
+
+ULONG
+NTAPI
+AppleAgxRingIndex(
+    _In_ PAPPLE_AGX_RING Ring,
+    _In_ ULONG Offset);
+
+NTSTATUS
+NTAPI
+AppleAgxRingPost(
+    _Inout_ PAPPLE_AGX_RING Ring,
+    _In_reads_bytes_(Ring->Record) const VOID *Record,
+    _In_ BOOLEAN Ahead);
+
+BOOLEAN
+NTAPI
+AppleAgxRingTake(
+    _Inout_ PAPPLE_AGX_RING Ring,
+    _Out_writes_bytes_(Ring->Record) PVOID Record);
+
+VOID
+NTAPI
+AppleAgxRingConsume(
+    _Inout_ PAPPLE_AGX_RING Ring);
+
+ULONG64
+NTAPI
+AppleAgxRingDoorbell(
+    _In_ ULONG Channel);

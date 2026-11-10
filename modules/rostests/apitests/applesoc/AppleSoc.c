@@ -2635,6 +2635,110 @@ TestAgxInitWrite(VOID)
         HeapFree(GetProcessHeap(), 0, AgxInitBuffers[Index]);
 }
 
+static UCHAR AgxRingState[0x30];
+static UCHAR AgxRingRecords[APPLE_AGX_RING_SLOTS * APPLE_AGX_DEVCTL_RECORD];
+
+static
+VOID
+AgxRingSetIndex(
+    _In_ ULONG Offset,
+    _In_ ULONG Value)
+{
+    RtlCopyMemory(AgxRingState + Offset, &Value, sizeof(Value));
+}
+
+static
+VOID
+TestAgxRing(VOID)
+{
+    APPLE_AGX_RING Ring;
+    UCHAR Record[APPLE_AGX_DEVCTL_RECORD];
+    UCHAR Taken[APPLE_AGX_DEVCTL_RECORD];
+    ULONG Index;
+
+    RtlZeroMemory(AgxRingState, sizeof(AgxRingState));
+    RtlZeroMemory(AgxRingRecords, sizeof(AgxRingRecords));
+    RtlZeroMemory(Record, sizeof(Record));
+    Record[0] = 0x5a;
+    Record[APPLE_AGX_SUBMIT_RECORD - 1] = 0xa5;
+
+    /* A ring takes the producer the state block already carries. */
+    AgxRingSetIndex(APPLE_AGX_STATE_WRITE, 7);
+    AppleAgxRingBind(&Ring, AgxRingState, AgxRingRecords, APPLE_AGX_SUBMIT_RECORD);
+    ok_int(Ring.Producer, 7);
+    ok_int(AppleAgxRingIndex(&Ring, APPLE_AGX_STATE_WRITE), 7);
+
+    RtlZeroMemory(AgxRingState, sizeof(AgxRingState));
+    AppleAgxRingBind(&Ring, AgxRingState, AgxRingRecords, APPLE_AGX_SUBMIT_RECORD);
+    ok_int(Ring.Producer, 0);
+
+    /* A record lands in the producer's slot and the producer moves on. */
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_SUCCESS);
+    ok_int(AgxRingRecords[0], 0x5a);
+    ok_int(AgxRingRecords[APPLE_AGX_SUBMIT_RECORD - 1], 0xa5);
+    ok_int(Ring.Producer, 1);
+    ok_int(AppleAgxRingIndex(&Ring, APPLE_AGX_STATE_WRITE), 1);
+
+    /* Without the record being consumed, a second one may not follow it. */
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_DEVICE_BUSY);
+    AgxRingSetIndex(APPLE_AGX_STATE_READ, 1);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_SUCCESS);
+    ok_int(Ring.Producer, 2);
+
+    /* Behind unconsumed records it goes only while fewer than the allowed number are out. */
+    AgxRingSetIndex(APPLE_AGX_STATE_READ, 2);
+    for (Index = 0; Index < APPLE_AGX_RING_AHEAD; ++Index)
+        ok_hex(AppleAgxRingPost(&Ring, Record, TRUE), STATUS_SUCCESS);
+    ok_hex(AppleAgxRingPost(&Ring, Record, TRUE), STATUS_DEVICE_BUSY);
+    AgxRingSetIndex(APPLE_AGX_STATE_READ, 3);
+    ok_hex(AppleAgxRingPost(&Ring, Record, TRUE), STATUS_SUCCESS);
+
+    /* The producer wraps at the end of the ring rather than running past it. */
+    RtlZeroMemory(AgxRingState, sizeof(AgxRingState));
+    AgxRingSetIndex(APPLE_AGX_STATE_WRITE, APPLE_AGX_RING_SLOTS - 1);
+    AgxRingSetIndex(APPLE_AGX_STATE_READ, APPLE_AGX_RING_SLOTS - 1);
+    AppleAgxRingBind(&Ring, AgxRingState, AgxRingRecords, APPLE_AGX_SUBMIT_RECORD);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_SUCCESS);
+    ok_int(Ring.Producer, 0);
+    ok_int(AgxRingRecords[(APPLE_AGX_RING_SLOTS - 1) * APPLE_AGX_SUBMIT_RECORD], 0x5a);
+
+    /* A state block that disagrees with the host's own producer is not written to. */
+    AgxRingSetIndex(APPLE_AGX_STATE_WRITE, 42);
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_DEVICE_DATA_ERROR);
+
+    /* On a receive ring the firmware produces: every waiting record is taken, then none. */
+    RtlZeroMemory(AgxRingState, sizeof(AgxRingState));
+    RtlZeroMemory(AgxRingRecords, sizeof(AgxRingRecords));
+    for (Index = 0; Index < 3; ++Index)
+        AgxRingRecords[Index * APPLE_AGX_EVENT_RECORD] = (UCHAR)(0x10 + Index);
+    AgxRingSetIndex(APPLE_AGX_STATE_WRITE, 3);
+    AppleAgxRingBind(&Ring, AgxRingState, AgxRingRecords, APPLE_AGX_EVENT_RECORD);
+    for (Index = 0; Index < 3; ++Index)
+    {
+        ok(AppleAgxRingTake(&Ring, Taken), "Record %lu was not waiting\n", Index);
+        ok_int(Taken[0], 0x10 + Index);
+    }
+    ok(!AppleAgxRingTake(&Ring, Taken), "An empty receive ring gave a record\n");
+    ok_int(AppleAgxRingIndex(&Ring, APPLE_AGX_STATE_READ), 3);
+
+    /* A ring may also be consumed whole, which is how the log and statistics rings are read. */
+    AgxRingSetIndex(APPLE_AGX_STATE_WRITE, 200);
+    AppleAgxRingConsume(&Ring);
+    ok_int(AppleAgxRingIndex(&Ring, APPLE_AGX_STATE_READ), 200);
+    ok(!AppleAgxRingTake(&Ring, Taken), "A consumed ring still gave a record\n");
+
+    /* A ring with nowhere to put a record refuses rather than writing somewhere. */
+    RtlZeroMemory(&Ring, sizeof(Ring));
+    ok_hex(AppleAgxRingPost(&Ring, Record, FALSE), STATUS_INVALID_DEVICE_STATE);
+    ok(!AppleAgxRingTake(&Ring, Taken), "A ring with no memory gave a record\n");
+
+    /* The doorbells: one per submit channel, and the device control ring's own. */
+    ok(AppleAgxRingDoorbell(2) == 0x0083000000000002ULL, "Channel 2 rings %I64x\n",
+       AppleAgxRingDoorbell(2));
+    ok(AppleAgxRingDoorbell(APPLE_AGX_DOORBELL_DEVCTL) == 0x0083000000000011ULL,
+       "The device control ring rings %I64x\n", AppleAgxRingDoorbell(APPLE_AGX_DOORBELL_DEVCTL));
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -3770,6 +3874,7 @@ START_TEST(AppleSoc)
     TestRtkitBoot();
     TestAgxInitLayout();
     TestAgxInitWrite();
+    TestAgxRing();
     TestSpmi();
     TestAtcphy();
     TestPcie();

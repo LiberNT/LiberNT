@@ -373,3 +373,105 @@ AppleAgxInitRelease(
     }
     RtlZeroMemory(Init, sizeof(*Init));
 }
+
+VOID
+NTAPI
+AppleAgxRingBind(
+    _Out_ PAPPLE_AGX_RING Ring,
+    _In_ PVOID State,
+    _In_ PVOID Records,
+    _In_ ULONG Record)
+{
+    RtlZeroMemory(Ring, sizeof(*Ring));
+    Ring->State = State;
+    Ring->Ring = Records;
+    Ring->Record = Record;
+    Ring->Producer = AppleAgxRingIndex(Ring, APPLE_AGX_STATE_WRITE);
+}
+
+ULONG
+NTAPI
+AppleAgxRingIndex(
+    _In_ PAPPLE_AGX_RING Ring,
+    _In_ ULONG Offset)
+{
+    ULONG Value = 0;
+
+    if (!Ring->State)
+        return 0;
+    KeMemoryBarrier();
+    RtlCopyMemory(&Value, (PUCHAR)Ring->State + Offset, sizeof(Value));
+    return Value % APPLE_AGX_RING_SLOTS;
+}
+
+/* A record is never written over one the firmware has not consumed; behind unconsumed records it
+ * goes only while fewer than the allowed number are outstanding. */
+NTSTATUS
+NTAPI
+AppleAgxRingPost(
+    _Inout_ PAPPLE_AGX_RING Ring,
+    _In_reads_bytes_(Ring->Record) const VOID *Record,
+    _In_ BOOLEAN Ahead)
+{
+    ULONG Consumer, Outstanding;
+
+    if (!Ring->State || !Ring->Ring || !Ring->Record)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (AppleAgxRingIndex(Ring, APPLE_AGX_STATE_WRITE) != Ring->Producer)
+        return STATUS_DEVICE_DATA_ERROR;
+    Consumer = AppleAgxRingIndex(Ring, APPLE_AGX_STATE_READ);
+    Outstanding = (Ring->Producer + APPLE_AGX_RING_SLOTS - Consumer) % APPLE_AGX_RING_SLOTS;
+    if (Ahead ? Outstanding >= APPLE_AGX_RING_AHEAD : Consumer != Ring->Producer)
+        return STATUS_DEVICE_BUSY;
+    RtlCopyMemory((PUCHAR)Ring->Ring + (SIZE_T)Ring->Producer * Ring->Record, Record, Ring->Record);
+    KeMemoryBarrier();
+    Ring->Producer = (Ring->Producer + 1) % APPLE_AGX_RING_SLOTS;
+    RtlCopyMemory((PUCHAR)Ring->State + APPLE_AGX_STATE_WRITE, &Ring->Producer, sizeof(Ring->Producer));
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+/* On a receive ring the firmware is the producer, so a record is taken while one is waiting. */
+BOOLEAN
+NTAPI
+AppleAgxRingTake(
+    _Inout_ PAPPLE_AGX_RING Ring,
+    _Out_writes_bytes_(Ring->Record) PVOID Record)
+{
+    ULONG Read;
+
+    if (!Ring->State || !Ring->Ring || !Ring->Record)
+        return FALSE;
+    Read = AppleAgxRingIndex(Ring, APPLE_AGX_STATE_READ);
+    if (Read == AppleAgxRingIndex(Ring, APPLE_AGX_STATE_WRITE))
+        return FALSE;
+    RtlCopyMemory(Record, (PUCHAR)Ring->Ring + (SIZE_T)Read * Ring->Record, Ring->Record);
+    Read = (Read + 1) % APPLE_AGX_RING_SLOTS;
+    KeMemoryBarrier();
+    RtlCopyMemory((PUCHAR)Ring->State + APPLE_AGX_STATE_READ, &Read, sizeof(Read));
+    KeMemoryBarrier();
+    return TRUE;
+}
+
+VOID
+NTAPI
+AppleAgxRingConsume(
+    _Inout_ PAPPLE_AGX_RING Ring)
+{
+    ULONG Write;
+
+    if (!Ring->State)
+        return;
+    Write = AppleAgxRingIndex(Ring, APPLE_AGX_STATE_WRITE);
+    KeMemoryBarrier();
+    RtlCopyMemory((PUCHAR)Ring->State + APPLE_AGX_STATE_READ, &Write, sizeof(Write));
+    KeMemoryBarrier();
+}
+
+ULONG64
+NTAPI
+AppleAgxRingDoorbell(
+    _In_ ULONG Channel)
+{
+    return APPLE_AGX_DOORBELL_BASE | Channel;
+}

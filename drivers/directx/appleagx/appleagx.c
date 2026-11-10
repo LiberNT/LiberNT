@@ -71,6 +71,12 @@ typedef struct _APPLE_AGX
     BOOLEAN Owned;
     APPLE_AGX_INIT Init;
     BOOLEAN Initialised;
+    APPLE_AGX_RING Event;
+    APPLE_AGX_RING Trace;
+    APPLE_AGX_RING Stats;
+    APPLE_AGX_RING DevCtl;
+    BOOLEAN Bound;
+    ULONG Drained;
     PVOID AdtCopy;
     ULONG AdtLength;
     APPLE_ADT Adt;
@@ -373,6 +379,37 @@ AgxShmemSetup(
     return TRUE;
 }
 
+/* The firmware produces on the receive rings and asks over the mailbox for them to be drained. */
+static
+VOID
+AgxDrainRings(
+    _Inout_ PAPPLE_AGX Agx)
+{
+    UCHAR Record[APPLE_AGX_EVENT_RECORD];
+    ULONG Taken = 0;
+
+    if (!Agx->Bound)
+        return;
+    while (AppleAgxRingTake(&Agx->Event, Record) && Taken < APPLE_AGX_RING_SLOTS)
+    {
+        ULONG64 Head;
+
+        RtlCopyMemory(&Head, Record, sizeof(Head));
+        DbgPrint("appleagx: event %I64x\n", Head);
+        ++Taken;
+    }
+    while (AppleAgxRingTake(&Agx->Stats, Record) && Taken < 2 * APPLE_AGX_RING_SLOTS)
+    {
+        ULONG64 Head;
+
+        RtlCopyMemory(&Head, Record, sizeof(Head));
+        DbgPrint("appleagx: statistic %I64x\n", Head);
+        ++Taken;
+    }
+    AppleAgxRingConsume(&Agx->Trace);
+    Agx->Drained += Taken;
+}
+
 static
 VOID
 NTAPI
@@ -381,8 +418,31 @@ AgxReceive(
     _In_ UCHAR Endpoint,
     _In_ ULONG64 Message)
 {
-    UNREFERENCED_PARAMETER(Context);
+    PAPPLE_AGX Agx = Context;
+
+    if (Endpoint == APPLE_AGX_EP_FIRMWARE && (Message & ~0xffffffffffffULL) == APPLE_AGX_MESSAGE_RING_SERVICE)
+    {
+        AgxDrainRings(Agx);
+        return;
+    }
     DbgPrint("appleagx: endpoint %#x sent %I64x\n", Endpoint, Message);
+}
+
+/* The rings live inside the initial data, so they are bound once it is in place. */
+static
+VOID
+AgxBindRings(
+    _Inout_ PAPPLE_AGX Agx)
+{
+    AppleAgxRingBind(&Agx->Event, Agx->Init.Virtual[APPLE_AGX_OBJECT_EVENT_STATE],
+                     Agx->Init.Virtual[APPLE_AGX_OBJECT_EVENT_RING], APPLE_AGX_EVENT_RECORD);
+    AppleAgxRingBind(&Agx->Trace, Agx->Init.Virtual[APPLE_AGX_OBJECT_TRACE_STATE],
+                     Agx->Init.Virtual[APPLE_AGX_OBJECT_TRACE_RING], APPLE_AGX_EVENT_RECORD);
+    AppleAgxRingBind(&Agx->Stats, Agx->Init.Virtual[APPLE_AGX_OBJECT_STATS_STATE],
+                     Agx->Init.Virtual[APPLE_AGX_OBJECT_STATS_RING], APPLE_AGX_EVENT_RECORD);
+    AppleAgxRingBind(&Agx->DevCtl, Agx->Init.Virtual[APPLE_AGX_OBJECT_DEVCTL_STATE],
+                     Agx->Init.Virtual[APPLE_AGX_OBJECT_DEVCTL_RING], APPLE_AGX_DEVCTL_RECORD);
+    Agx->Bound = TRUE;
 }
 
 static
@@ -442,6 +502,7 @@ AgxHandInitialData(
         DbgPrint("appleagx: the initial data was not written: %lx\n", Status);
         return Status;
     }
+    AgxBindRings(Agx);
     DbgPrint("appleagx: initial data of %lu pages written, root at %I64x\n", Agx->Init.Allocations,
              AppleAgxInitMessage() & APPLE_AGX_MESSAGE_ADDRESS_MASK);
     if (!AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_EP_FIRMWARE, AppleAgxInitMessage()))
@@ -454,11 +515,18 @@ AgxHandInitialData(
         AgxListen(Agx, 10);
         if (AppleAgxInitReady(&Agx->Init))
         {
-            DbgPrint("appleagx: the firmware is ready after %lu ms\n", Waited);
+            AgxDrainRings(Agx);
+            DbgPrint("appleagx: the firmware is ready after %lu ms, %lu records read\n", Waited, Agx->Drained);
             return STATUS_SUCCESS;
         }
     }
-    DbgPrint("appleagx: the firmware did not become ready in %lu ms\n", AGX_READY_TIMEOUT_MS);
+    AgxDrainRings(Agx);
+    DbgPrint("appleagx: the firmware did not become ready in %lu ms, %lu records read, halted %lu\n",
+             AGX_READY_TIMEOUT_MS, Agx->Drained,
+             Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL]
+                 ? *(volatile ULONG *)((PUCHAR)Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL] +
+                                       APPLE_AGX_CONTROL_HALTED)
+                 : 0);
     return STATUS_DEVICE_NOT_READY;
 }
 
@@ -526,6 +594,7 @@ VOID
 AgxStop(
     _Inout_ PAPPLE_AGX Agx)
 {
+    Agx->Bound = FALSE;
     if (Agx->Initialised)
         AppleAgxInitRelease(&Agx->Init);
     Agx->Initialised = FALSE;
