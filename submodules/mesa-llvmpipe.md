@@ -4,7 +4,7 @@
 # Modern Mesa in the ReactOS build
 
 The vendored `submodules/mesa` source comes from
-https://github.com/eotics-com/reactos-mesa.git at commit
+https://github.com/LiberNT/libernt-mesa.git at commit
 `44504d1036b6f2355445404f63c4248bc01249d6`. Its upstream base is Mesa
 **26.2.2**, commit `3281a69a8bfd9f997e91c15ed0e6290cae12dd32`, released
 2026-09-02.
