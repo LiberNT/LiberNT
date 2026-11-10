@@ -94,8 +94,8 @@ STRINGTABLE
 BEGIN
     IDS_DNSNORECORD         "\t種類 %ls のレコードはありません\n\n"
     IDS_DNSNONAME           "\t名前が存在しません。\n\n"
-    IDS_DNSFLUSHERROR       "DNSリゾルバ キャッシュをフラッシュできませんでした: "
-    IDS_DNSFLUSHSUCCESS     "DNSリゾルバ キャッシュは正常にフラッシュされました。\n"
+    IDS_DNSFLUSHERROR       "DNSリゾルバー キャッシュをフラッシュできませんでした: "
+    IDS_DNSFLUSHSUCCESS     "DNSリゾルバー キャッシュは正常にフラッシュされました。\n"
     IDS_DHCPNOTCONNECTED    "メディアが未接続の間は %ls での処理は実行できません\n"
     IDS_DHCPNOTENABLED      "アダプター %ls は DHCP に対して有効になっていません。\n"
     IDS_DHCPNOADAPTER       "アダプターがこの操作を許可する状態にないため、操作は失敗しました。\n"
@@ -125,9 +125,9 @@ BEGIN
     /all            すべての設定情報を表示します。\n\
     /release        指定したアダプターの IPv4 アドレスを解放します。\n\
     /renew          指定したアダプターの IPv4 アドレスを更新します。\n\
-    /flushdns       DNS リゾルバ キャッシュをフラッシュします。\n\
+    /flushdns       DNS リゾルバー キャッシュをフラッシュします。\n\
     /registerdns    すべてのDHCPリースを更新し、DNS名を再登録します。\n\
-    /displaydns     DNS リゾルバ キャッシュの内容を表示します。\n\
+    /displaydns     DNS リゾルバー キャッシュの内容を表示します。\n\
     /showclassid    アダプターで許可されているすべての DHCP クラス ID を表示します。\n\
     /setclassid     DHCP クラスIDを変更します。\n\
 \n\

@@ -32,7 +32,7 @@ END
 /* Topic descriptions */
 STRINGTABLE
 BEGIN
-    IDS_TOPIC_DESC0 "コンピュータに新しく LiberNT をインストールしたり、既存の LiberNT をアップグレードします。"
+    IDS_TOPIC_DESC0 "コンピューターに新しく LiberNT をインストールしたり、既存の LiberNT をアップグレードします。"
     IDS_TOPIC_DESC1 "CD の内容を参照します。"
     IDS_TOPIC_DESC2 "クリックするとこのアプリケーションを終了します。"
 END

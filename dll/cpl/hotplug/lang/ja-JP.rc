@@ -47,7 +47,7 @@ END
 STRINGTABLE
 BEGIN
     IDS_CPLNAME "安全なハードウェアの取り外し"
-    IDS_CPLDESCRIPTION "コンピュータからデバイスを安全に取り外しできます。"
+    IDS_CPLDESCRIPTION "コンピューターからデバイスを安全に取り外しできます。"
     IDS_UNKNOWN_DEVICE "未知のデバイス"
     IDS_EJECT_ERROR_FORMAT "デバイス (0x%x) の取り外しに失敗\0"
 END

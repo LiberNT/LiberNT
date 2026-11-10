@@ -52,7 +52,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_APP_TITLE "サウンド レコーダ"
+    IDS_APP_TITLE "サウンド レコーダー"
     IDC_REACTOS_SNDREC32 "REACTOS_SNDREC32"
 END
 
@@ -60,7 +60,7 @@ STRINGTABLE
 BEGIN
     IDS_STRPOS "位置: %.2f 秒"
     IDS_STRDUR "長さ: %.2f 秒"
-    IDS_STRBUF "バッファ: %.2f kb"
+    IDS_STRBUF "バッファー: %.2f kb"
     IDS_STRFMT "%.1f kHz %u ビット"
     IDS_STRMONO "モノラル"
     IDS_STRSTEREO "ステレオ"

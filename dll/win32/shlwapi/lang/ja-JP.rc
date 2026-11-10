@@ -37,7 +37,7 @@ STRINGTABLE
     IDS_RESTRICTIONS "システムの制限"
     IDS_ANY_FILE "%s ファイル"
     IDS_FILE "ファイル"
-    IDS_FOLDER "フォルダ"
+    IDS_FOLDER "フォルダー"
 #endif
 }
 

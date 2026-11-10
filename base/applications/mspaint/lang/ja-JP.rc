@@ -20,7 +20,7 @@ BEGIN
         MENUITEM "上書き保存(&S)\tCtrl+S", IDM_FILESAVE
         MENUITEM "名前を付けて保存(&A)...", IDM_FILESAVEAS
         MENUITEM SEPARATOR
-        MENUITEM "スキャナまたはカメラから...", IDM_FILEFROMSCANNERORCAMERA
+        MENUITEM "スキャナーまたはカメラから...", IDM_FILEFROMSCANNERORCAMERA
         MENUITEM SEPARATOR
         MENUITEM "ページ ビュー", IDM_FILEPAGEVIEW
         MENUITEM "ページ設定...", IDM_FILEPAGESETUP

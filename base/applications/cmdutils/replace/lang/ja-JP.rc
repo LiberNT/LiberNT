@@ -42,7 +42,7 @@ REPLACE [ドライブ1:][パス1]ファイル名 [ドライブ2:][パス2] [/P] 
     STRING_REPLACE_ERROR1 "無効なスイッチ - %s\n"
     STRING_REPLACE_ERROR2 "パスが見つかりません - %s\n"
     STRING_REPLACE_ERROR3 "ファイル名、ディレクトリ名、ボリュームラベルの文法が不正です。\n"
-    STRING_REPLACE_ERROR4 "無効なパラメータの組み合わせです。\n"
+    STRING_REPLACE_ERROR4 "無効なパラメーターの組み合わせです。\n"
     STRING_REPLACE_ERROR5 "アクセスが拒否されました - %s\n"
     STRING_REPLACE_ERROR6 "ファイルが見つかりませんでした - %s\n"
     STRING_REPLACE_ERROR7 "拡張エラー 32\n"

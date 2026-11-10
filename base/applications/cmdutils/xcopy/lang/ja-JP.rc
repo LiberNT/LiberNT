@@ -2,8 +2,8 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 
 STRINGTABLE
 {
-    STRING_INVPARMS, "パラメータの数が違います。xcopy /? で使い方を表示します\n"
-    STRING_INVPARM,  "無効なパラメータ '%1' です。xcopy /? で使い方を表示します\n"
+    STRING_INVPARMS, "パラメーターの数が違います。xcopy /? で使い方を表示します\n"
+    STRING_INVPARM,  "無効なパラメーター '%1' です。xcopy /? で使い方を表示します\n"
     STRING_PAUSE,    "コピーを開始するには <enter> を押してください\n"
     STRING_SIMCOPY,  "%1!d! ファイルがコピーされる見込みです。\n"
     STRING_COPY,     "%1!d! ファイルをコピーしました\n"

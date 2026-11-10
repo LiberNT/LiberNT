@@ -32,7 +32,7 @@ END
 
 STRINGTABLE
 BEGIN
-    STRING_CLIPBOARD "クリップボード ビュア"
+    STRING_CLIPBOARD "クリップボード ビューアー"
     STRING_CLIPFILE  "クリップボードの要素"
     STRING_DELETE_MSG "クリップボードの内容をクリアしますか?"
     STRING_DELETE_TITLE "クリップボードのクリア"
