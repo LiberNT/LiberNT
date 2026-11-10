@@ -44,6 +44,8 @@
 #define AGX_SHARED_ALIGN            0x1000
 #define AGX_ADT_MAX_LENGTH          0x200000
 #define AGX_PART                    "gpu,t6030"
+#define AGX_PMP_WAIT_MS             10000
+#define AGX_PMP_POLL_MS             100
 
 #define AGX_CLIENT_TAG              'cGxA'
 #define AGX_MAX_VMS                 16
@@ -115,6 +117,8 @@ typedef struct _APPLE_AGX
     ULONG IdVersion;
     ULONG64 CoreWord;
     ULONG ChipId;
+    KEVENT StopEvent;
+    PKTHREAD StartThread;
     PVOID AdtCopy;
     ULONG AdtLength;
     APPLE_ADT Adt;
@@ -699,6 +703,13 @@ VOID
 AgxStop(
     _Inout_ PAPPLE_AGX Agx)
 {
+    KeSetEvent(&Agx->StopEvent, IO_NO_INCREMENT, FALSE);
+    if (Agx->StartThread)
+    {
+        KeWaitForSingleObject(Agx->StartThread, Executive, KernelMode, FALSE, NULL);
+        ObDereferenceObject(Agx->StartThread);
+        Agx->StartThread = NULL;
+    }
     Agx->Bound = FALSE;
     if (Agx->Initialised)
         AppleAgxInitRelease(&Agx->Init);
@@ -756,7 +767,8 @@ AgxStart(
     ULONG64 AscBase, AscLength, SgxBase, SgxLength;
     ULONG Version, Counts1, Clusters, Control, Index, Mask, MailboxPhandle, MailboxNode;
     ULONG Masks[AGX_MAX_CORE_MASKS] = { 0 };
-    ULONG CoresPerCluster, ClusterCount, Active = 0;
+    ULONG CoresPerCluster, ClusterCount, Active = 0, Waited;
+    LARGE_INTEGER Timeout;
     NTSTATUS Status;
 
     Status = FdtDriverOpen(Agx->Pdo, &Agx->Tree);
@@ -777,12 +789,24 @@ AgxStart(
         DbgPrint("appleagx: the graphics power domain did not turn on: %lx\n", Status);
         return Status;
     }
-    Status = AgxPowerVote(Agx, TRUE);
+    for (Waited = 0;; Waited += AGX_PMP_POLL_MS)
+    {
+        Status = AgxPowerVote(Agx, TRUE);
+        if (NT_SUCCESS(Status) || (Status != STATUS_DEVICE_NOT_READY && Status != STATUS_OBJECT_NAME_NOT_FOUND) ||
+            Waited >= AGX_PMP_WAIT_MS)
+        {
+            break;
+        }
+        Timeout.QuadPart = -10000LL * AGX_PMP_POLL_MS;
+        if (KeWaitForSingleObject(&Agx->StopEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_SUCCESS)
+            return STATUS_CANCELLED;
+    }
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint("appleagx: the power processor did not vote for the graphics block: %lx\n", Status);
+        DbgPrint("appleagx: the power processor did not vote for the graphics block in %lu ms: %lx\n", Waited, Status);
         return Status;
     }
+    DbgPrint("appleagx: the power processor voted for the graphics block after %lu ms\n", Waited);
 
     Agx->AscSize = AGX_SGX_WINDOW_SIZE;
     Agx->IdSize = AGX_SGX_WINDOW_SIZE;
@@ -820,6 +844,7 @@ AgxStart(
              CoresPerCluster, Active, Masks[0], Masks[1], Masks[2]);
     Agx->IdVersion = Version;
     Agx->CoreWord = Masks[0] | ((ULONG64)Masks[1] << 32);
+    KeMemoryBarrier();
     Agx->Reported.State = APPLE_AGX_STATE_IDENTIFIED;
     Agx->Reported.Generation = (Version >> 24) & 0xff;
     Agx->Reported.Variant = (Version >> 16) & 0xff;
@@ -860,6 +885,7 @@ AgxGetParams(
     *Written = 0;
     if (Agx->Reported.State < APPLE_AGX_STATE_IDENTIFIED)
         return STATUS_DEVICE_NOT_READY;
+    KeMemoryBarrier();
     if (InputLength >= sizeof(ULONG) && *(PULONG)Buffer != 0)
         return STATUS_INVALID_PARAMETER;
     if (Agx->Described)
@@ -1438,6 +1464,21 @@ AgxDeviceControl(
 }
 
 static
+VOID
+NTAPI
+AgxStartThread(
+    _In_ PVOID Context)
+{
+    PAPPLE_AGX Agx = Context;
+    NTSTATUS Status;
+
+    Status = AgxStart(Agx);
+    if (!NT_SUCCESS(Status))
+        DbgPrint("appleagx: the graphics processor was not identified: %lx\n", Status);
+    PsTerminateSystemThread(Status);
+}
+
+static
 NTSTATUS
 NTAPI
 AgxPnp(
@@ -1454,11 +1495,15 @@ AgxPnp(
             Status = IoForwardIrpSynchronously(Agx->Lower, Irp) ? Irp->IoStatus.Status : STATUS_UNSUCCESSFUL;
             if (NT_SUCCESS(Status))
             {
-                Status = AgxStart(Agx);
-                if (!NT_SUCCESS(Status))
+                HANDLE Thread;
+
+                KeClearEvent(&Agx->StopEvent);
+                Status = PsCreateSystemThread(&Thread, THREAD_ALL_ACCESS, NULL, NULL, NULL, AgxStartThread, Agx);
+                if (NT_SUCCESS(Status))
                 {
-                    DbgPrint("appleagx: the graphics processor was not identified: %lx\n", Status);
-                    AgxStop(Agx);
+                    Status = ObReferenceObjectByHandle(Thread, SYNCHRONIZE, *PsThreadType, KernelMode,
+                                                       (PVOID *)&Agx->StartThread, NULL);
+                    ZwClose(Thread);
                 }
             }
             Irp->IoStatus.Status = Status;
@@ -1544,6 +1589,7 @@ AgxAddDevice(
     RtlZeroMemory(Agx, sizeof(*Agx));
     Agx->Self = Fdo;
     Agx->Pdo = Pdo;
+    KeInitializeEvent(&Agx->StopEvent, NotificationEvent, FALSE);
     Agx->Lower = IoAttachDeviceToDeviceStack(Fdo, Pdo);
     if (!Agx->Lower)
     {
