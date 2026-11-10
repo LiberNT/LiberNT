@@ -197,6 +197,7 @@ state_reboot(void *ipp)
 
 	/* Make a DHCPREQUEST packet, and set appropriate per-interface
 	   flags. */
+	ip->client->discover_cycle = 0;
 	make_request(ip, ip->client->active);
 	ip->client->destination = iaddr_broadcast;
 	ip->client->first_sending = GetMonotonicTime();
@@ -229,6 +230,7 @@ state_init(void *ipp)
 
 	/* Make a DHCPDISCOVER packet, and set appropriate per-interface
 	   flags. */
+	ip->client->discover_cycle = 0;
 	make_discover(ip, ip->client->active);
 	ip->client->xid = ip->client->packet.xid;
 	ip->client->destination = iaddr_broadcast;
@@ -1422,6 +1424,7 @@ send_discover(void *ipp)
         cur_time = GetMonotonicTime();
 
 	if (dhcp_discover_restarts(ip->client->interval)) {
+		ip->client->discover_cycle++;
 		make_discover(ip, ip->client->active);
 		ip->client->xid = ip->client->packet.xid;
 		ip->client->first_sending = cur_time;
@@ -1929,8 +1932,7 @@ make_discover(struct interface_info *ip, struct client_lease *lease)
 	ip->client->packet.hops = 0;
 	ip->client->packet.xid = RtlRandom(&foo);
 	ip->client->packet.secs = 0; /* filled in by send_discover. */
-	/* FIXME: Windows 11 sends the first discovery cycle without BOOTP_BROADCAST and toggles it on each restart; tcpip cannot take unicast replies before an address is configured */
-	ip->client->packet.flags = htons(BOOTP_BROADCAST);
+	ip->client->packet.flags = dhcp_discover_broadcast(ip->client->discover_cycle) ? htons(BOOTP_BROADCAST) : 0;
 
 	memset(&(ip->client->packet.ciaddr),
 	    0, sizeof(ip->client->packet.ciaddr));
@@ -2033,7 +2035,7 @@ make_request(struct interface_info *ip, struct client_lease * lease)
 	} else {
 		memset(&ip->client->packet.ciaddr, 0,
 		    sizeof(ip->client->packet.ciaddr));
-		ip->client->packet.flags = htons(BOOTP_BROADCAST);
+		ip->client->packet.flags = dhcp_discover_broadcast(ip->client->discover_cycle) ? htons(BOOTP_BROADCAST) : 0;
 	}
 
 	memset(&ip->client->packet.yiaddr, 0,

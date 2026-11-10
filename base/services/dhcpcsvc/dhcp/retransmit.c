@@ -42,3 +42,9 @@ dhcp_discover_restarts(time_t interval)
 
     return interval >= DHCP_DISCOVER_RESTART;
 }
+
+int
+dhcp_discover_broadcast(unsigned int cycle)
+{
+    return (cycle & 1) != 0;
+}
