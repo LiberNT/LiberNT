@@ -14489,6 +14489,32 @@ XHCI_EnableInterrupts(PVOID MiniPortExtension)
 
 /* ========================= Safe stub implementations ========================= */
 
+static
+VOID
+XHCI_ResetDisabledEndpointRings(
+    _In_ PXHCI_EXTENSION Extension,
+    _Inout_ PXHCI_ENDPOINT Endpoint)
+{
+    PXHCI_ENDPOINT_CONTEXT EpCtx;
+    KIRQL OldIrql;
+
+    ASSERT(Endpoint->Slot);
+    if (Endpoint->UsesStaticRing || !Endpoint->Slot->DeviceContext.VirtualAddress)
+        return;
+
+    EpCtx = XHCI_GetDeviceEndpointContextVa(Extension,
+                                            Endpoint->Slot->DeviceContext.VirtualAddress,
+                                            Endpoint->EndpointId - 1);
+    KeAcquireSpinLock(&Endpoint->Lock, &OldIrql);
+    if (EpCtx &&
+        (EpCtx->EpInfo & XHCI_EPCTX_STATE_MASK) == XHCI_EPCTX_STATE_DISABLED &&
+        !XHCI_HasActiveTransfersLocked(Endpoint))
+    {
+        XHCI_ResetEndpointRing(Endpoint);
+    }
+    KeReleaseSpinLock(&Endpoint->Lock, OldIrql);
+}
+
 static MPSTATUS NTAPI
 XHCI_ReopenEndpoint(PVOID MiniPortExtension,
                     PUSBPORT_ENDPOINT_PROPERTIES EndpointProperties,
@@ -14523,24 +14549,7 @@ XHCI_ReopenEndpoint(PVOID MiniPortExtension,
         Endpoint->MaxStreamId = 0;
         Endpoint->StreamsEnabled = FALSE;
 
-        if (!Endpoint->UsesStaticRing && Endpoint->Slot->DeviceContext.VirtualAddress)
-        {
-            PXHCI_ENDPOINT_CONTEXT EpCtx;
-            KIRQL OldIrql;
-
-            EpCtx = XHCI_GetDeviceEndpointContextVa(Extension,
-                                                    Endpoint->Slot->DeviceContext.VirtualAddress,
-                                                    Endpoint->EndpointId - 1);
-            KeAcquireSpinLock(&Endpoint->Lock, &OldIrql);
-            if (EpCtx &&
-                (EpCtx->EpInfo & XHCI_EPCTX_STATE_MASK) == XHCI_EPCTX_STATE_DISABLED &&
-                !XHCI_HasActiveTransfersLocked(Endpoint))
-            {
-                XHCI_ResetEndpointRing(Endpoint);
-            }
-            KeReleaseSpinLock(&Endpoint->Lock, OldIrql);
-        }
-
+        XHCI_ResetDisabledEndpointRings(Extension, Endpoint);
         return XHCI_ConfigureSlotEndpoint(Extension,
                                           Endpoint->Slot,
                                           Endpoint,
@@ -14550,6 +14559,16 @@ XHCI_ReopenEndpoint(PVOID MiniPortExtension,
 
     if (EndpointProperties->TransferType != USBPORT_TRANSFER_TYPE_BULK)
         return MP_STATUS_NOT_SUPPORTED;
+
+    if (Endpoint->StreamsEnabled && Endpoint->MaxStreamId == MaxStreamId)
+    {
+        XHCI_ResetDisabledEndpointRings(Extension, Endpoint);
+        return XHCI_ConfigureSlotEndpoint(Extension,
+                                          Endpoint->Slot,
+                                          Endpoint,
+                                          Endpoint->EndpointId,
+                                          FALSE);
+    }
 
     /*
      * Stream resource allocation uses MmAllocateContiguousMemorySpecifyCache
@@ -14569,15 +14588,6 @@ XHCI_ReopenEndpoint(PVOID MiniPortExtension,
 
     if ((MaxStreamId & (MaxStreamId - 1)) != 0)
         return MP_STATUS_NOT_SUPPORTED;
-
-    if (Endpoint->StreamsEnabled && Endpoint->MaxStreamId == MaxStreamId)
-    {
-        return XHCI_ConfigureSlotEndpoint(Extension,
-                                          Endpoint->Slot,
-                                          Endpoint,
-                                          Endpoint->EndpointId,
-                                          FALSE);
-    }
 
     if (Endpoint->StreamsEnabled)
         XHCI_FreeStreamResources(Endpoint);
