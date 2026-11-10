@@ -161,6 +161,7 @@ typedef struct _BCMBT_COMPLETION_RING
 {
     UCHAR Id;
     BOOLEAN Enabled;
+    BOOLEAN Desynchronised;
     USHORT Entries;
     USHORT FooterSize;
     USHORT Delay;

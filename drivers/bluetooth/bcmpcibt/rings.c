@@ -279,6 +279,18 @@ BcmBtAllocateShared(
 
     if (Dev->BlockCount)
         return STATUS_SUCCESS;
+    {
+        PHYSICAL_ADDRESS Low, High, Boundary;
+        PVOID Probe;
+
+        Low.QuadPart = 0;
+        High.QuadPart = -1;
+        Boundary.QuadPart = 0;
+        Probe = MmAllocateContiguousMemorySpecifyCache(499712, Low, High, Boundary, MmNonCached);
+        DPRINT1("BCMBT: DIAG 499712-byte contiguous probe %p\n", Probe);
+        if (Probe)
+            MmFreeContiguousMemorySpecifyCache(Probe, 499712, MmNonCached);
+    }
     BcmBtConfigureRings(Dev);
     Status = BcmBtLayout(Dev);
     if (!NT_SUCCESS(Status))
@@ -634,10 +646,25 @@ BcmBtPollCompletions(
         PBCMBT_COMPLETION_RING Ring = &Dev->CompletionRings[Index];
         USHORT Tail;
 
+        USHORT Head, Drained;
+
         if (!Ring->Enabled)
             continue;
         Tail = Dev->RingState->CompletionTail[Ring->Id];
-        while (Tail != Dev->RingState->CompletionHead[Ring->Id])
+        Head = Dev->RingState->CompletionHead[Ring->Id];
+        if (Head >= Ring->Entries || Tail >= Ring->Entries)
+        {
+            if (!Ring->Desynchronised)
+            {
+                Ring->Desynchronised = TRUE;
+                DPRINT1("BCMBT: completion ring %u reports %u of %u entries consumed up to %u; it is left alone\n",
+                        Ring->Id, Head, Ring->Entries, Tail);
+            }
+            continue;
+        }
+        /* A ring holds at most its own length, so a longer run means the controller is still filling
+         * it; the rest waits for the next notification rather than holding the processor. */
+        for (Drained = 0; Tail != Head && Drained < Ring->Entries; ++Drained)
         {
             KeMemoryBarrier();
             BcmBtHandleCompletion(Dev, Ring, Tail);
