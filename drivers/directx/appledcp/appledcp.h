@@ -23,57 +23,7 @@
 #define DCP_EOTF_GAMMA_SDR                  1
 #define DCP_ADDRESS_FORMAT_PLANAR           1
 
-#pragma pack(push, 1)
-typedef struct _DCP_TIMING_MODE
-{
-    ULONG Valid;
-    ULONG Width;
-    ULONG Height;
-    USHORT FpsFraction;
-    USHORT FpsInteger;
-    UCHAR Padding[8];
-} DCP_TIMING_MODE, *PDCP_TIMING_MODE;
-
-typedef struct _DCP_COLOR_MODE
-{
-    ULONG Valid;
-    ULONG Colorimetry;
-    ULONG Eotf;
-    ULONG Encoding;
-    ULONG Bpp;
-    UCHAR Padding[4];
-} DCP_COLOR_MODE, *PDCP_COLOR_MODE;
-
-typedef struct _DCP_PLANE
-{
-    ULONG Unknown1;
-    ULONG64 Address;
-    ULONG TileSize;
-    ULONG Stride;
-    ULONG Unknown2[4];
-    ULONG AddressFormat;
-    ULONG Unknown3;
-} DCP_PLANE, *PDCP_PLANE;
-
-typedef struct _DCP_LAYER
-{
-    DCP_PLANE Planes[3];
-    ULONG Unknown;
-    ULONG PlaneCount;
-    ULONG Width;
-    ULONG Height;
-    ULONG SurfaceFormat;
-    ULONG Colorspace;
-    ULONG Eotf;
-    UCHAR Transform;
-    UCHAR Padding[3];
-} DCP_LAYER, *PDCP_LAYER;
-#pragma pack(pop)
-
-C_ASSERT(sizeof(DCP_TIMING_MODE) == 24);
-C_ASSERT(sizeof(DCP_COLOR_MODE) == 24);
-C_ASSERT(sizeof(DCP_PLANE) == 44);
-C_ASSERT(sizeof(DCP_LAYER) == 164);
+#include "dcpwire.h"
 
 typedef struct _DCP_SHARED
 {

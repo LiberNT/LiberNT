@@ -28,7 +28,9 @@ typedef struct _APPLE_DCP_CONTEXT
 static
 VOID
 DcpPlatformLogModes(
-    _Inout_ PAPPLE_DCP Dcp)
+    _Inout_ PAPPLE_DCP Dcp,
+    _Out_ PULONG NativeWidth,
+    _Out_ PULONG NativeHeight)
 {
     DCP_TIMING_MODE Timing[DCP_MAX_TIMING_MODES];
     DCP_COLOR_MODE Color[DCP_MAX_COLOR_MODES];
@@ -40,8 +42,11 @@ DcpPlatformLogModes(
         DbgPrint("appledcp: panel %s, %lu timing modes, %lu color modes\n", Connected ? "connected" : "absent",
                  TimingCount, ColorCount);
     }
+    *NativeWidth = 0;
+    *NativeHeight = 0;
     if (NT_SUCCESS(DcpGetTimingModes(Dcp, Timing, RTL_NUMBER_OF(Timing), &TimingCount)))
     {
+        DcpNativeMode(Timing, min(TimingCount, (ULONG)RTL_NUMBER_OF(Timing)), NativeWidth, NativeHeight);
         for (Index = 0; Index < TimingCount; ++Index)
         {
             DbgPrint("appledcp: timing mode %lu: %lux%lu at %u.%02lu Hz%s\n", Index, Timing[Index].Width,
@@ -126,6 +131,7 @@ DcpPlatformStart(
     DXGK_DEVICE_INFO Information;
     PHYSICAL_ADDRESS Low, High, Boundary;
     ULONGLONG VisibleLength;
+    ULONG NativeWidth, NativeHeight;
     ULONG64 Physical;
     DCP_LAYER Layer;
     SIZE_T Skip;
@@ -142,18 +148,33 @@ DcpPlatformStart(
     Status = DcpStartDisplayService(Context->Dcp);
     if (!NT_SUCCESS(Status))
         return Status;
-    DcpPlatformLogModes(Context->Dcp);
+    DcpPlatformLogModes(Context->Dcp, &NativeWidth, &NativeHeight);
 
     Status = SoftGpuAcquirePostDisplay(DxgkInterface, &PostDisplay, &VisibleLength);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    if (!PostDisplay.Width || !PostDisplay.Height)
+    if (NT_SUCCESS(Status))
+    {
+        DbgPrint("appledcp: boot display %lux%lu, pitch %lu, format %lu at %I64x\n", PostDisplay.Width,
+                 PostDisplay.Height, PostDisplay.Pitch, PostDisplay.ColorFormat, PostDisplay.PhysicAddress.QuadPart);
+    }
+    else
+    {
+        DbgPrint("appledcp: the boot display was not handed over (%lx), the panel's own mode is used\n", Status);
+        RtlZeroMemory(&PostDisplay, sizeof(PostDisplay));
+    }
+    if (NativeWidth && NativeHeight)
+    {
+        Context->Width = NativeWidth;
+        Context->Height = NativeHeight;
+    }
+    else if (PostDisplay.Width && PostDisplay.Height)
+    {
+        Context->Width = PostDisplay.Width;
+        Context->Height = PostDisplay.Height;
+    }
+    else
+    {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
-    DbgPrint("appledcp: boot display %lux%lu, pitch %lu, format %lu at %I64x\n", PostDisplay.Width,
-             PostDisplay.Height, PostDisplay.Pitch, PostDisplay.ColorFormat, PostDisplay.PhysicAddress.QuadPart);
-
-    Context->Width = PostDisplay.Width;
-    Context->Height = PostDisplay.Height;
+    }
     Context->Pitch = Context->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
     Context->SurfaceSize = ((SIZE_T)Context->Pitch * Context->Height + DCP_DART_PAGE_SIZE - 1) &
                            ~(SIZE_T)(DCP_DART_PAGE_SIZE - 1);

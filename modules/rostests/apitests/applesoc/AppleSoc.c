@@ -1012,6 +1012,7 @@ UatInvalidateAsid(ULONG Asid)
 #include "../../../../sdk/lib/drivers/applertkit/uat.c"
 #include "../../../../sdk/lib/drivers/applertkit/adt.c"
 #include "../../../../sdk/lib/drivers/applertkit/agxinit.c"
+#include "../../../../drivers/directx/appledcp/dcpwire.h"
 #include "../../../../sdk/lib/drivers/applertkit/rtkit.c"
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
@@ -4575,6 +4576,40 @@ TestAgxBindings(VOID)
 
 static
 VOID
+TestDcpNativeMode(VOID)
+{
+    DCP_TIMING_MODE Mode[4];
+    ULONG Width, Height;
+
+    RtlZeroMemory(Mode, sizeof(Mode));
+    Mode[0].Valid = 1;
+    Mode[0].Width = 1920;
+    Mode[0].Height = 1080;
+    Mode[1].Valid = 0;
+    Mode[1].Width = 5120;
+    Mode[1].Height = 2880;
+    Mode[2].Valid = 1;
+    Mode[2].Width = 3456;
+    Mode[2].Height = 2234;
+    Mode[3].Valid = 1;
+    Mode[3].Width = 3456;
+    Mode[3].Height = 2234;
+    Mode[3].FpsInteger = 60;
+    ok_int(DcpNativeMode(Mode, 4, &Width, &Height), TRUE);
+    ok_int(Width, 3456);
+    ok_int(Height, 2234);
+    ok_int(DcpNativeMode(Mode, 2, &Width, &Height), TRUE);
+    ok_int(Width, 1920);
+    ok_int(Height, 1080);
+    Mode[0].Valid = 0;
+    ok_int(DcpNativeMode(Mode, 2, &Width, &Height), FALSE);
+    ok_int(Width, 0);
+    ok_int(Height, 0);
+    ok_int(DcpNativeMode(Mode, 0, &Width, &Height), FALSE);
+}
+
+static
+VOID
 TestAgxParameterBuffer(VOID)
 {
     APPLE_AGX_PARAMETER_BUFFER Buffer;
@@ -5808,6 +5843,7 @@ START_TEST(AppleSoc)
     TestAgxParams();
     TestAgxMemoryCalls();
     TestAgxBindings();
+    TestDcpNativeMode();
     TestSpmi();
     TestAtcphy();
     TestPcie();
