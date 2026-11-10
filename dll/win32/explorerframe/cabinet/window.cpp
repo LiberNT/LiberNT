@@ -2207,8 +2207,7 @@ CCabinetWindow::OnViewCreated(IExplorerBrowser *browser, IShellView *view)
 void
 CCabinetWindow::OnSelectionChanged()
 {
-    if ((GetKeyState(VK_LBUTTON) < 0 || GetKeyState(VK_RBUTTON) < 0) &&
-        DeferSelectionUpdate())
+    if (DeferSelectionUpdate())
         return;
 
     UpdateStatus();
