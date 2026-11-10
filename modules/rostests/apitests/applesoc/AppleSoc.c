@@ -3997,6 +3997,40 @@ TestAgxFragmentWork(VOID)
 
 static
 VOID
+TestAgxScene(VOID)
+{
+    UCHAR Scene[APPLE_AGX_SCENE_SIZE + 8];
+
+    RtlFillMemory(Scene, sizeof(Scene), 0x5a);
+    ok_hex(AppleAgxDescribeScene(Scene, 0xfffffc2100024060ULL, 0xfffffc2100025000ULL, 0x1040000000ULL, 0x1000),
+           STATUS_SUCCESS);
+    ok(BufQuad(Scene, 0x00) == 0xfffffc2100024060ULL, "The scene list entry is %I64x\n", BufQuad(Scene, 0));
+    ok(BufQuad(Scene, 0x08) == 0xfffffc2100024060ULL, "The mirrored entry is %I64x\n", BufQuad(Scene, 8));
+    ok(BufQuad(Scene, 0x10) == 0, "The scene holds %I64x after its entries\n", BufQuad(Scene, 0x10));
+    ok(BufQuad(Scene, 0x28) == 0x40000040ULL, "The user header is %I64x\n", BufQuad(Scene, 0x28));
+    ok_hex(BufLong(Scene, 0x30), 0x40000900);
+    ok(BufQuad(Scene, 0x40) == 0xfffffc2100025000ULL, "The manager state is %I64x\n", BufQuad(Scene, 0x40));
+    ok(BufQuad(Scene, 0x78) == 0, "The scene ends with %I64x\n", BufQuad(Scene, 0x78));
+    ok_int(Scene[APPLE_AGX_SCENE_SIZE], 0x5a);
+
+    ok_hex(AppleAgxDescribeScene(Scene, 0xfffffc2100024060ULL, 0xfffffc2100025000ULL, 0x1000000000ULL, 0x904),
+           STATUS_SUCCESS);
+    ok(BufQuad(Scene, 0x28) == 0x40, "The user header is %I64x\n", BufQuad(Scene, 0x28));
+    ok_hex(AppleAgxDescribeScene(Scene, 0xfffffc2100024060ULL, 0xfffffc2100025000ULL, 0x1000000000ULL, 0x903),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeScene(Scene, 0xfffffc2100024060ULL, 0xfffffc2100025000ULL, 0x0fffffffc0ULL, 0x1000),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeScene(Scene, 0xfffffc2100024060ULL, 0xfffffc2100025000ULL, 0x1400000020ULL, 0x1000),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeScene(Scene, 0xfffffc2100024060ULL, 0xfffffc2100025000ULL, 0x10fffff800ULL, 0x1000),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeScene(Scene, 0xfffffc2100024060ULL, 0xfffffc2100025000ULL, 0x1400000000ULL, 0x1000),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribeScene(Scene, 0, 0xfffffc2100025000ULL, 0x1040000000ULL, 0x1000), STATUS_INVALID_PARAMETER);
+}
+
+static
+VOID
 TestAgxParameterBuffer(VOID)
 {
     APPLE_AGX_PARAMETER_BUFFER Buffer;
@@ -5224,6 +5258,7 @@ START_TEST(AppleSoc)
     TestAgxGeometry();
     TestAgxVertexWork();
     TestAgxFragmentWork();
+    TestAgxScene();
     TestSpmi();
     TestAtcphy();
     TestPcie();

@@ -1636,3 +1636,32 @@ AppleAgxEncodeFragmentWork(
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeScene(
+    _Out_writes_bytes_(APPLE_AGX_SCENE_SIZE) PVOID Scene,
+    _In_ ULONG64 ManagerEntry,
+    _In_ ULONG64 ManagerMisc,
+    _In_ ULONG64 UserBuffer,
+    _In_ ULONG64 UserBytes)
+{
+    ULONG64 Base;
+
+    if (!Scene || !ManagerEntry || !ManagerMisc || UserBuffer < APPLE_AGX_COMPACT_BASE || (UserBuffer & 0x3f) ||
+        UserBytes < APPLE_AGX_SCENE_USER_MIN || UserBuffer + UserBytes < UserBuffer)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Base = UserBuffer - APPLE_AGX_COMPACT_BASE;
+    if (Base + APPLE_AGX_SCENE_USER_AUXILIARY > MAXULONG)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(Scene, APPLE_AGX_SCENE_SIZE);
+    AgxWriteQuad(Scene, 0x00, ManagerEntry);
+    AgxWriteQuad(Scene, 0x08, ManagerEntry);
+    AgxWriteQuad(Scene, 0x28, Base + APPLE_AGX_SCENE_USER_HEADER);
+    AgxWriteLong(Scene, 0x30, (ULONG)(Base + APPLE_AGX_SCENE_USER_AUXILIARY));
+    AgxWriteQuad(Scene, 0x40, ManagerMisc);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}

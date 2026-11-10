@@ -792,6 +792,9 @@ AppleAgxEncodeVertexWork(
 #define APPLE_AGX_COUNTER_SIZE          0x40
 #define APPLE_AGX_SCENE_SIZE            0x80
 #define APPLE_AGX_SCENE_LIST_SLOTS      48
+#define APPLE_AGX_SCENE_USER_HEADER     0x40
+#define APPLE_AGX_SCENE_USER_AUXILIARY  0x900
+#define APPLE_AGX_SCENE_USER_MIN        0x904
 #define APPLE_AGX_RENDER_POOLS          8
 
 typedef struct _APPLE_AGX_PARAMETER_BUFFER
@@ -822,3 +825,12 @@ AppleAgxDescribeBlockControl(
     _Out_writes_bytes_(APPLE_AGX_BLOCK_CONTROL_SIZE) PVOID Control,
     _Out_writes_bytes_(APPLE_AGX_MISC_SIZE) PVOID Misc,
     _In_ ULONG Blocks);
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeScene(
+    _Out_writes_bytes_(APPLE_AGX_SCENE_SIZE) PVOID Scene,
+    _In_ ULONG64 ManagerEntry,
+    _In_ ULONG64 ManagerMisc,
+    _In_ ULONG64 UserBuffer,
+    _In_ ULONG64 UserBytes);
