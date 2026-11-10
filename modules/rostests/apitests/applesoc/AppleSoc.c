@@ -3826,6 +3826,175 @@ TestAgxVertexWork(VOID)
     ok_hex(AppleAgxEncodeVertexWork(AgxVertexWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
 }
 
+static UCHAR AgxFragmentWork[APPLE_AGX_FRAGMENT_WORK_SIZE];
+
+static
+ULONG64
+FragRegister(
+    _In_ ULONG Index)
+{
+    return BufQuad(AgxFragmentWork, 0x80 + 12 * Index + 4);
+}
+
+static
+VOID
+TestAgxFragmentWork(VOID)
+{
+    APPLE_AGX_GEOMETRY Geometry;
+    APPLE_AGX_FRAGMENT_INPUT Input, Bad;
+    const ULONG Parameters = 0x790, Meta = 0xbac, Tail = 0xbf0;
+
+    ok_hex(AppleAgxDescribeGeometry(1920, 1080, 32, 32, 1, 1, 2, &Geometry), STATUS_SUCCESS);
+    ok_hex(Geometry.IspBlocks, 0x10000c);
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.Notifier = 0xfffffc2100018000ULL;
+    Input.Manager = 0xfffffc2100024000ULL;
+    Input.Scene = 0xfffffc2100030000ULL;
+    Input.Empty = 0xfffffc2100034000ULL;
+    Input.Sequence = 0xfffffc2140020000ULL;
+    Input.Pool = 0xfffffc2100040000ULL;
+    Input.Stamp = 0xfffffc210001c000ULL;
+    Input.FirmwareStamp = 0xfffffc210001c008ULL;
+    Input.Timestamps[0] = 0xfffffc2100050010ULL;
+    Input.Timestamps[1] = 0xfffffc2100050018ULL;
+    Input.UserTimestamps[0] = 0xfffffc2100060010ULL;
+    Input.UserTimestamps[1] = 0xfffffc2100060018ULL;
+    Input.WorkClient = 0x0000001500001000ULL;
+    Input.Tilemap = 0x1100000000ULL;
+    Input.Heap = 0x1300000000ULL;
+    Input.Auxiliary = 0x1500000000ULL;
+    Input.SceneUser = 0x1400000008ULL;
+    Input.Scratch = 0x1600000000ULL;
+    Input.State.Multisample = 0x22;
+    Input.State.MergeUpper[0] = 0x3f800000;
+    Input.State.MergeUpper[1] = 0x40000000;
+    Input.State.EndOfTile.Address = 0x1700000100ULL;
+    Input.State.EndOfTile.Resources = 0x1700000200ULL;
+    Input.State.Background.Address = 0x1700000300ULL;
+    Input.State.Background.Resources = 0x1700000400ULL;
+    Input.State.PartialEndOfTile.Address = 0x1700000500ULL;
+    Input.State.PartialEndOfTile.Resources = 0x123456789ULL;
+    Input.State.PartialBackground.Address = 0x1700000700ULL;
+    Input.State.PartialBackground.Resources = 0x1700000800ULL;
+    Input.State.Scissor = 0x1800000000ULL;
+    Input.State.DepthBias = 0x1800001000ULL;
+    Input.State.Query = 0x180000201fULL;
+    Input.State.IspControl = 0x11;
+    Input.State.TilebufferControl = 0x21;
+    Input.State.MirrorTilebufferControl = 0x22;
+    Input.State.TileMode = 0x31;
+    Input.State.MirrorTileMode = 0x32;
+    Input.State.Depth.Base = 0x1900000000ULL;
+    Input.State.Depth.Stride = 0x2000;
+    Input.State.Stencil.Base = 0x1a00000000ULL;
+    Input.State.Stencil.Stride = 0x1000;
+    Input.State.DepthCompression.Base = 0x1b00000000ULL;
+    Input.State.DepthCompression.Stride = 0x400;
+    Input.State.StencilCompression.Base = 0x1c00000000ULL;
+    Input.State.StencilCompression.Stride = 0x200;
+    Input.State.ZlsControl = 0x41;
+    Input.State.DepthDimensions = 0x04370777;
+    Input.State.DepthClear = 0x3f800000;
+    Input.State.StencilClear = 0x80;
+    Input.State.SampleSize = 8;
+    Input.State.ProcessEmptyTiles = TRUE;
+
+    RtlFillMemory(AgxFragmentWork, sizeof(AgxFragmentWork), 0x5a);
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Input, &Geometry, 13, 0x77), STATUS_SUCCESS);
+    ok_int(BufLong(AgxFragmentWork, 0x000), 1);
+    ok(BufQuad(AgxFragmentWork, 0x004) == 0, "The work counter is %I64x\n", BufQuad(AgxFragmentWork, 4));
+    ok_int(BufLong(AgxFragmentWork, 0x00c), 13);
+    ok(BufQuad(AgxFragmentWork, 0x014) == Input.Sequence, "The sequence is %I64x\n", BufQuad(AgxFragmentWork, 0x14));
+    ok_hex(BufLong(AgxFragmentWork, 0x01c), 0x310);
+    ok(BufQuad(AgxFragmentWork, 0x020) == Input.Notifier, "The notifier is %I64x\n", BufQuad(AgxFragmentWork, 0x20));
+    ok(BufQuad(AgxFragmentWork, 0x038) == Input.Empty, "The empty object is %I64x\n", BufQuad(AgxFragmentWork, 0x38));
+    ok(BufQuad(AgxFragmentWork, 0x040) == Input.Tilemap, "The tilemap is %I64x\n", BufQuad(AgxFragmentWork, 0x40));
+    ok(BufQuad(AgxFragmentWork, 0x048) == 0x88, "The header constant is %I64x\n", BufQuad(AgxFragmentWork, 0x48));
+    ok_int(BufLong(AgxFragmentWork, 0x050), 1);
+    ok_int(BufWord(AgxFragmentWork, 0x054), 12);
+    ok_int(BufWord(AgxFragmentWork, 0x056), 16);
+    ok_hex(BufLong(AgxFragmentWork, 0x068), 0x3f800000);
+    ok_hex(BufLong(AgxFragmentWork, 0x06c), 0x40000000);
+    ok(BufQuad(AgxFragmentWork, 0x078) == 60 * 34, "The frame has %I64u tiles\n", BufQuad(AgxFragmentWork, 0x78));
+    ok_hex(BufLong(AgxFragmentWork, 0x80), 0x1739);
+    ok(FragRegister(1) == 0xa000, "The utile configuration is %I64x\n", FragRegister(1));
+    ok(FragRegister(2) == Input.State.EndOfTile.Resources, "The end of tile resources are %I64x\n", FragRegister(2));
+    ok(FragRegister(13) == 0x10000c, "The ISP macrotile size is %I64x\n", FragRegister(13));
+    ok(FragRegister(17) == Input.Heap, "The heap is %I64x\n", FragRegister(17));
+    ok(FragRegister(21) == 0x43800000780ULL, "The frame size is %I64x\n", FragRegister(21));
+    ok(FragRegister(27) == 0x1800002010ULL, "The query is %I64x\n", FragRegister(27));
+    ok(FragRegister(51) == Input.Tilemap, "The tilemap register is %I64x\n", FragRegister(51));
+    ok(FragRegister(52) == Input.Heap, "The layer metadata is %I64x\n", FragRegister(52));
+    ok(FragRegister(53) == 0x3c0000000ULL, "The region stride register is %I64x\n", FragRegister(53));
+    ok(FragRegister(59) == Input.Auxiliary, "The auxiliary buffer is %I64x\n", FragRegister(59));
+    ok(FragRegister(64) == 0x423ba2000036011ULL, "The tile configuration is %I64x\n", FragRegister(64));
+    ok(FragRegister(76) == 0x400000040ULL, "The scene user register is %I64x\n", FragRegister(76));
+    ok_hex(BufLong(AgxFragmentWork, 0x80 + 12 * 78), 0xd429);
+    ok(BufQuad(AgxFragmentWork, 0x780) == Input.WorkClient + 0x80, "The register list is at %I64x\n",
+       BufQuad(AgxFragmentWork, 0x780));
+    ok_int(BufWord(AgxFragmentWork, 0x788), 79);
+    ok_int(BufWord(AgxFragmentWork, 0x78a), 79 * 12);
+    ok(BufQuad(AgxFragmentWork, Parameters) == Input.State.DepthBias, "The depth bias is %I64x\n",
+       BufQuad(AgxFragmentWork, Parameters));
+    ok(BufQuad(AgxFragmentWork, Parameters + 0x20) == Input.State.Query, "The mirrored query is %I64x\n",
+       BufQuad(AgxFragmentWork, Parameters + 0x20));
+    ok(BufQuad(AgxFragmentWork, Parameters + 0x1a0) == Input.State.PartialBackground.Address,
+       "The partial background is %I64x\n", BufQuad(AgxFragmentWork, Parameters + 0x1a0));
+    ok_hex(BufLong(AgxFragmentWork, Parameters + 0x1b0), 0x04040404);
+    ok(BufQuad(AgxFragmentWork, Parameters + 0x1e0) == Input.State.DepthCompression.Base,
+       "The depth compression is %I64x\n", BufQuad(AgxFragmentWork, Parameters + 0x1e0));
+    ok(BufQuad(AgxFragmentWork, Parameters + 0x210) == Input.State.StencilCompression.Base,
+       "The stencil compression is %I64x\n", BufQuad(AgxFragmentWork, Parameters + 0x210));
+    ok_hex(BufLong(AgxFragmentWork, Parameters + 0x228), 0x22);
+    ok_int(BufLong(AgxFragmentWork, Parameters + 0x238), 1920);
+    ok_int(BufLong(AgxFragmentWork, Parameters + 0x23c), 1080);
+    ok_hex(BufLong(AgxFragmentWork, Parameters + 0x248), 0x32);
+    ok_hex(BufLong(AgxFragmentWork, Parameters + 0x264), 0x23456789);
+    ok(BufQuad(AgxFragmentWork, Parameters + 0x28c) == Input.State.PartialEndOfTile.Address,
+       "The partial end of tile is %I64x\n", BufQuad(AgxFragmentWork, Parameters + 0x28c));
+    ok_int(BufLong(AgxFragmentWork, Parameters + 0x2a0), 8);
+    ok(BufQuad(AgxFragmentWork, Parameters + 0x2c0) == 0x04370777, "The depth size is %I64x\n",
+       BufQuad(AgxFragmentWork, Parameters + 0x2c0));
+    ok_hex(BufLong(AgxFragmentWork, 0xb88), 0x67);
+    ok_hex(BufLong(AgxFragmentWork, 0xb90), 0xffffffff);
+    ok_int(BufLong(AgxFragmentWork, 0xb94), 1);
+    ok_int(BufLong(AgxFragmentWork, 0xb98), 1);
+    ok(BufQuad(AgxFragmentWork, Meta) == Input.Stamp, "The stamp is at %I64x\n", BufQuad(AgxFragmentWork, Meta));
+    ok_hex(BufLong(AgxFragmentWork, Meta + 0x10), 0x77);
+    ok_int(BufLong(AgxFragmentWork, Meta + 0x14), 1);
+    ok_int(BufLong(AgxFragmentWork, Meta + 0x1c), 1);
+    ok_hex(BufLong(AgxFragmentWork, Meta + 0x20), 0x3d0000);
+    ok_int(BufLong(AgxFragmentWork, 0xbe8), 1);
+    ok(BufQuad(AgxFragmentWork, Tail + 0x10) == Input.Timestamps[1], "The second timestamp is at %I64x\n",
+       BufQuad(AgxFragmentWork, Tail + 0x10));
+    ok(BufQuad(AgxFragmentWork, Tail + 0x47) == Input.Scratch, "The scratch is at %I64x\n",
+       BufQuad(AgxFragmentWork, Tail + 0x47));
+    ok_int(AgxFragmentWork[Tail + 0x4f], 1);
+    ok_int(AgxFragmentWork[APPLE_AGX_FRAGMENT_WORK_SIZE - 1], 0);
+
+    ok_hex(AppleAgxDescribeGeometry(64, 64, 32, 32, 1, 2, 2, &Geometry), STATUS_SUCCESS);
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Input, &Geometry, 13, 0x77), STATUS_SUCCESS);
+    ok(FragRegister(52) == Input.Heap + 0x200, "The layered metadata is %I64x\n", FragRegister(52));
+    ok(FragRegister(64) == (0x36011ULL | (1ULL << 32) | (1ULL << 44) | (1ULL << 53) | 0x2000000000ULL | (0xa000ULL << 28)),
+       "The layered tile configuration is %I64x\n", FragRegister(64));
+
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Input, &Geometry, 64, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.SceneUser = 0x0fffffffc0ULL;
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Bad, &Geometry, 0, 0), STATUS_SUCCESS);
+    Bad.SceneUser = 0x0fffffff00ULL;
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Heap = 0x1300000002ULL;
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.WorkClient = (1ULL << 42) - 0xc00;
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+    Bad = Input;
+    Bad.Sequence = 0;
+    ok_hex(AppleAgxEncodeFragmentWork(AgxFragmentWork, &Bad, &Geometry, 0, 0), STATUS_INVALID_PARAMETER);
+}
+
 static
 VOID
 TestAgxParameterBuffer(VOID)
@@ -5054,6 +5223,7 @@ START_TEST(AppleSoc)
     TestAgxRenderSequences();
     TestAgxGeometry();
     TestAgxVertexWork();
+    TestAgxFragmentWork();
     TestSpmi();
     TestAtcphy();
     TestPcie();

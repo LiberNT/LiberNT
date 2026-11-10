@@ -640,6 +640,7 @@ typedef struct _APPLE_AGX_GEOMETRY
     ULONG Blocks;
     ULONG RegionStride;
     ULONG TpcStride;
+    ULONG IspBlocks;
     ULONG64 UtileConfig;
     ULONG64 TilemapBytes;
     ULONG64 TpcBytes;
@@ -683,6 +684,76 @@ typedef struct _APPLE_AGX_VERTEX_INPUT
     ULONG PageCount;
     BOOLEAN ProcessEmptyTiles;
 } APPLE_AGX_VERTEX_INPUT, *PAPPLE_AGX_VERTEX_INPUT;
+
+typedef struct _APPLE_AGX_PROGRAM
+{
+    ULONG64 Address;
+    ULONG64 Resources;
+} APPLE_AGX_PROGRAM, *PAPPLE_AGX_PROGRAM;
+
+typedef struct _APPLE_AGX_SURFACE
+{
+    ULONG64 Base;
+    ULONG64 Stride;
+} APPLE_AGX_SURFACE, *PAPPLE_AGX_SURFACE;
+
+typedef struct _APPLE_AGX_FRAGMENT_STATE
+{
+    ULONG64 Multisample;
+    ULONG MergeUpper[2];
+    APPLE_AGX_PROGRAM EndOfTile;
+    APPLE_AGX_PROGRAM Background;
+    APPLE_AGX_PROGRAM PartialEndOfTile;
+    APPLE_AGX_PROGRAM PartialBackground;
+    ULONG64 Scissor;
+    ULONG64 DepthBias;
+    ULONG64 Query;
+    ULONG IspControl;
+    ULONG TilebufferControl;
+    ULONG MirrorTilebufferControl;
+    ULONG MirrorTileMode;
+    ULONG64 TileMode;
+    APPLE_AGX_SURFACE Depth;
+    APPLE_AGX_SURFACE Stencil;
+    APPLE_AGX_SURFACE DepthCompression;
+    APPLE_AGX_SURFACE StencilCompression;
+    ULONG64 ZlsControl;
+    ULONG DepthDimensions;
+    ULONG DepthClear;
+    ULONG StencilClear;
+    ULONG SampleSize;
+    BOOLEAN ProcessEmptyTiles;
+} APPLE_AGX_FRAGMENT_STATE, *PAPPLE_AGX_FRAGMENT_STATE;
+
+typedef struct _APPLE_AGX_FRAGMENT_INPUT
+{
+    ULONG64 Notifier;
+    ULONG64 Manager;
+    ULONG64 Scene;
+    ULONG64 Empty;
+    ULONG64 Sequence;
+    ULONG64 Pool;
+    ULONG64 Stamp;
+    ULONG64 FirmwareStamp;
+    ULONG64 Timestamps[2];
+    ULONG64 UserTimestamps[2];
+    ULONG64 WorkClient;
+    ULONG64 Tilemap;
+    ULONG64 Heap;
+    ULONG64 Auxiliary;
+    ULONG64 SceneUser;
+    ULONG64 Scratch;
+    APPLE_AGX_FRAGMENT_STATE State;
+} APPLE_AGX_FRAGMENT_INPUT, *PAPPLE_AGX_FRAGMENT_INPUT;
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeFragmentWork(
+    _Out_writes_bytes_(APPLE_AGX_FRAGMENT_WORK_SIZE) PVOID Work,
+    _In_ const APPLE_AGX_FRAGMENT_INPUT *Input,
+    _In_ const APPLE_AGX_GEOMETRY *Geometry,
+    _In_ ULONG Context,
+    _In_ ULONG StampValue);
 
 NTSTATUS
 NTAPI

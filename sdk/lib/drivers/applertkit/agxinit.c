@@ -1308,6 +1308,8 @@ AppleAgxDescribeGeometry(
     Geometry->Blocks = MacroX * MacroY;
     Geometry->RegionStride = ((APPLE_AGX_REGION_ENTRY * Geometry->Blocks * UtilesPerTile + 3) & ~3u) / 4;
     Geometry->TpcStride = APPLE_AGX_TPC_ENTRY * UtilesPerTile * Geometry->Blocks / 4;
+    Geometry->IspBlocks = (MacroY * (APPLE_AGX_TILE_PIXELS / UtileHeight)) |
+                          ((MacroX * (APPLE_AGX_TILE_PIXELS / UtileWidth)) << 16);
     Geometry->UtileConfig = ((UtileWidth / 16) << 12) | ((UtileHeight / 16) << 14) | SamplesLog2;
     Geometry->TilemapBytes = (ULONG64)4 * Geometry->RegionStride * APPLE_AGX_MACROTILES * APPLE_AGX_MACROTILES * Layers;
     PerCluster = (ULONG64)4 * Geometry->TpcStride * APPLE_AGX_MACROTILES * APPLE_AGX_MACROTILES * Layers;
@@ -1445,6 +1447,182 @@ AppleAgxEncodeVertexWork(
     AgxWriteLong(Work, State + 0xf0, StampValue);
     AgxWriteLong(Work, State + 0xfc, 1);
     AgxWriteLong(Work, State + 0x100, APPLE_AGX_VERTEX_UUID);
+    AgxWriteQuad(Work, Tail + 0x08, Input->Timestamps[0]);
+    AgxWriteQuad(Work, Tail + 0x10, Input->Timestamps[1]);
+    AgxWriteQuad(Work, Tail + 0x18, Input->UserTimestamps[0]);
+    AgxWriteQuad(Work, Tail + 0x20, Input->UserTimestamps[1]);
+    AgxWriteQuad(Work, Tail + 0x2e, Input->Pool);
+    ((PUCHAR)Work)[Tail + 0x36] = 1;
+    AgxWriteQuad(Work, Tail + 0x37, 0xad0000);
+    AgxWriteQuad(Work, Tail + 0x3f, 0x1600000);
+    AgxWriteQuad(Work, Tail + 0x47, Input->Scratch);
+    ((PUCHAR)Work)[Tail + 0x4f] = 1;
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeFragmentWork(
+    _Out_writes_bytes_(APPLE_AGX_FRAGMENT_WORK_SIZE) PVOID Work,
+    _In_ const APPLE_AGX_FRAGMENT_INPUT *Input,
+    _In_ const APPLE_AGX_GEOMETRY *Geometry,
+    _In_ ULONG Context,
+    _In_ ULONG StampValue)
+{
+    const ULONG Parameters = 0x790, Meta = 0xbac, Tail = APPLE_AGX_FRAGMENT_TAIL;
+    ULONG64 Value[APPLE_AGX_FRAGMENT_REGISTER_COUNT];
+    ULONG64 LayerMetadata, User, NativeTiles;
+    const APPLE_AGX_FRAGMENT_STATE *State;
+    ULONG Width, Height, TilesX, TilesY;
+
+    if (!Work || !Input || !Geometry || Context >= APPLE_UAT_CONTEXTS || !Geometry->Layers ||
+        !AgxGpuAddressValid(Input->WorkClient) ||
+        !AgxGpuAddressValid(Input->WorkClient + APPLE_AGX_FRAGMENT_WORK_SIZE - 3) ||
+        !AgxGpuAddressValid(Input->Tilemap) || !AgxGpuAddressValid(Input->Heap) ||
+        !AgxGpuAddressValid(Input->Auxiliary) || !AgxGpuAddressValid(Input->SceneUser) ||
+        !AgxGpuAddressValid(Input->Scratch) || !Input->Notifier || !Input->Manager || !Input->Scene ||
+        !Input->Empty || !Input->Sequence || !Input->Pool || !Input->Stamp || !Input->FirmwareStamp)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    LayerMetadata = Input->Heap + (Geometry->Layers > 1 ? 0x200 : 0);
+    if (!AgxGpuAddressValid(LayerMetadata) || !AgxCompact(Input->SceneUser + 0x40, &User))
+        return STATUS_INVALID_PARAMETER;
+    User &= ~15ULL;
+    State = &Input->State;
+    Width = (Geometry->Pixels & 0xffff) + 1;
+    Height = (Geometry->Pixels >> 16) + 1;
+    TilesX = (Width + APPLE_AGX_TILE_PIXELS - 1) / APPLE_AGX_TILE_PIXELS;
+    TilesY = (Height + APPLE_AGX_TILE_PIXELS - 1) / APPLE_AGX_TILE_PIXELS;
+    NativeTiles = 0x36011 | ((ULONG64)(Geometry->Layers > 1) << 32) | ((ULONG64)(TilesX - 1) << 44) |
+                  ((ULONG64)(TilesY - 1) << 53) | 0x2000000000ULL | ((Geometry->UtileConfig & 0xf000) << 28);
+
+    RtlZeroMemory(Value, sizeof(Value));
+    Value[0] = 1;
+    Value[1] = Geometry->UtileConfig;
+    Value[2] = State->EndOfTile.Resources;
+    Value[3] = State->EndOfTile.Address;
+    Value[4] = State->Background.Resources;
+    Value[5] = State->Background.Address;
+    Value[6] = State->MergeUpper[0];
+    Value[7] = State->MergeUpper[1];
+    Value[12] = State->Multisample;
+    Value[13] = Geometry->IspBlocks;
+    Value[14] = Geometry->IspBlocks;
+    Value[15] = Geometry->Screen;
+    Value[16] = 0xff0200;
+    Value[17] = Input->Heap;
+    Value[18] = State->Scissor;
+    Value[19] = State->DepthBias;
+    Value[20] = State->IspControl;
+    Value[21] = ((ULONG64)Height << 32) | Width;
+    Value[22] = 0x100000;
+    Value[23] = State->TilebufferControl;
+    Value[24] = State->DepthDimensions;
+    Value[25] = State->DepthClear;
+    Value[26] = State->StencilClear;
+    Value[27] = State->Query & ~15ULL;
+    Value[28] = State->ZlsControl;
+    Value[29] = 0x04040404;
+    Value[31] = State->Depth.Base;
+    Value[32] = State->Depth.Base;
+    Value[33] = State->Stencil.Base;
+    Value[34] = State->Stencil.Base;
+    Value[39] = State->Depth.Stride;
+    Value[40] = State->Depth.Stride;
+    Value[41] = State->Stencil.Stride;
+    Value[42] = State->Stencil.Stride;
+    Value[43] = State->DepthCompression.Base;
+    Value[44] = State->DepthCompression.Stride;
+    Value[45] = State->DepthCompression.Base;
+    Value[46] = State->DepthCompression.Stride;
+    Value[47] = State->StencilCompression.Base;
+    Value[48] = State->StencilCompression.Stride;
+    Value[49] = State->StencilCompression.Base;
+    Value[50] = State->StencilCompression.Stride;
+    Value[51] = Input->Tilemap;
+    Value[52] = LayerMetadata;
+    Value[53] = (ULONG64)(4 * Geometry->RegionStride) << 24;
+    Value[54] = State->TileMode;
+    Value[58] = 0x8860;
+    Value[59] = Input->Auxiliary;
+    Value[60] = Input->Auxiliary;
+    Value[61] = 0x1c;
+    Value[62] = 0x1c;
+    Value[64] = NativeTiles;
+    Value[74] = 8;
+    Value[76] = User;
+    Value[77] = 0x6000400020ULL;
+    Value[78] = 0x200000001ULL;
+
+    RtlZeroMemory(Work, APPLE_AGX_FRAGMENT_WORK_SIZE);
+    AgxWriteLong(Work, 0x000, 1);
+    AgxWriteLong(Work, 0x00c, Context);
+    AgxWriteQuad(Work, 0x014, Input->Sequence);
+    AgxWriteLong(Work, 0x01c, APPLE_AGX_FRAGMENT_SEQUENCE_SIZE);
+    AgxWriteQuad(Work, 0x020, Input->Notifier);
+    AgxWriteQuad(Work, 0x028, Input->Manager);
+    AgxWriteQuad(Work, 0x030, Input->Scene);
+    AgxWriteQuad(Work, 0x038, Input->Empty);
+    AgxWriteQuad(Work, 0x040, Input->Tilemap);
+    AgxWriteQuad(Work, 0x048, 0x88);
+    AgxWriteLong(Work, 0x050, 1);
+    AgxWriteWord(Work, 0x054, (USHORT)(Geometry->YBlocks >> 18));
+    AgxWriteWord(Work, 0x056, (USHORT)(Geometry->XBlocks >> 18));
+    AgxWriteLong(Work, 0x068, State->MergeUpper[0]);
+    AgxWriteLong(Work, 0x06c, State->MergeUpper[1]);
+    AgxWriteQuad(Work, 0x078, Geometry->Tiles);
+    AppleAgxWriteRegisters(Work, APPLE_AGX_WORK_FRAGMENT, Value);
+    AgxWriteQuad(Work, 0x780, Input->WorkClient + APPLE_AGX_FRAGMENT_REGISTERS);
+    AgxWriteWord(Work, 0x788, APPLE_AGX_FRAGMENT_REGISTER_COUNT);
+    AgxWriteWord(Work, 0x78a, APPLE_AGX_FRAGMENT_REGISTER_COUNT * APPLE_AGX_REGISTER_RECORD);
+    AgxWriteQuad(Work, Parameters + 0x000, State->DepthBias);
+    AgxWriteQuad(Work, Parameters + 0x010, State->Scissor);
+    AgxWriteQuad(Work, Parameters + 0x020, State->Query);
+    AgxWriteQuad(Work, Parameters + 0x168, State->PartialBackground.Resources);
+    AgxWriteQuad(Work, Parameters + 0x170, State->PartialBackground.Address);
+    AgxWriteQuad(Work, Parameters + 0x198, State->PartialBackground.Resources);
+    AgxWriteQuad(Work, Parameters + 0x1a0, State->PartialBackground.Address);
+    AgxWriteQuad(Work, Parameters + 0x1a8, State->ZlsControl);
+    AgxWriteLong(Work, Parameters + 0x1b0, 0x04040404);
+    AgxWriteQuad(Work, Parameters + 0x1b8, State->Depth.Base);
+    AgxWriteQuad(Work, Parameters + 0x1c0, State->Depth.Stride);
+    AgxWriteQuad(Work, Parameters + 0x1c8, State->DepthCompression.Stride);
+    AgxWriteQuad(Work, Parameters + 0x1d0, State->Depth.Base);
+    AgxWriteQuad(Work, Parameters + 0x1d8, State->Depth.Base);
+    AgxWriteQuad(Work, Parameters + 0x1e0, State->DepthCompression.Base);
+    AgxWriteQuad(Work, Parameters + 0x1e8, State->Stencil.Base);
+    AgxWriteQuad(Work, Parameters + 0x1f0, State->Stencil.Stride);
+    AgxWriteQuad(Work, Parameters + 0x1f8, State->StencilCompression.Stride);
+    AgxWriteQuad(Work, Parameters + 0x200, State->Stencil.Base);
+    AgxWriteQuad(Work, Parameters + 0x208, State->Stencil.Base);
+    AgxWriteQuad(Work, Parameters + 0x210, State->StencilCompression.Base);
+    AgxWriteLong(Work, Parameters + 0x228, State->MirrorTilebufferControl);
+    AgxWriteLong(Work, Parameters + 0x230, State->IspControl);
+    AgxWriteLong(Work, Parameters + 0x238, Width);
+    AgxWriteLong(Work, Parameters + 0x23c, Height);
+    AgxWriteLong(Work, Parameters + 0x240, 0x100000);
+    AgxWriteLong(Work, Parameters + 0x248, State->MirrorTileMode);
+    AgxWriteLong(Work, Parameters + 0x264, (ULONG)State->PartialEndOfTile.Resources);
+    AgxWriteQuad(Work, Parameters + 0x26c, State->PartialEndOfTile.Address);
+    AgxWriteLong(Work, Parameters + 0x284, (ULONG)State->PartialEndOfTile.Resources);
+    AgxWriteQuad(Work, Parameters + 0x28c, State->PartialEndOfTile.Address);
+    AgxWriteLong(Work, Parameters + 0x298, State->DepthClear);
+    AgxWriteLong(Work, Parameters + 0x29c, State->StencilClear);
+    AgxWriteLong(Work, Parameters + 0x2a0, State->SampleSize);
+    AgxWriteQuad(Work, Parameters + 0x2c0, State->DepthDimensions);
+    AgxWriteLong(Work, 0xb88, 0x67);
+    AgxWriteLong(Work, 0xb90, 0xffffffff);
+    AgxWriteLong(Work, 0xb94, State->ProcessEmptyTiles ? 1 : 0);
+    AgxWriteLong(Work, 0xb98, 1);
+    AgxWriteQuad(Work, Meta + 0x00, Input->Stamp);
+    AgxWriteQuad(Work, Meta + 0x08, Input->FirmwareStamp);
+    AgxWriteLong(Work, Meta + 0x10, StampValue);
+    AgxWriteLong(Work, Meta + 0x14, 1);
+    AgxWriteLong(Work, Meta + 0x1c, 1);
+    AgxWriteLong(Work, Meta + 0x20, APPLE_AGX_FRAGMENT_UUID);
+    AgxWriteLong(Work, 0xbe8, 1);
     AgxWriteQuad(Work, Tail + 0x08, Input->Timestamps[0]);
     AgxWriteQuad(Work, Tail + 0x10, Input->Timestamps[1]);
     AgxWriteQuad(Work, Tail + 0x18, Input->UserTimestamps[0]);
