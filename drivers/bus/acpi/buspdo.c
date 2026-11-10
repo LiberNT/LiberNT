@@ -3580,6 +3580,68 @@ Bus_PDO_QueryDeviceCaps(
     return STATUS_SUCCESS;
 }
 
+static
+ULONG
+BuspFormatClassCodeIds(
+    _In_ ACPI_HANDLE Handle,
+    _Out_writes_(BufferLength) PWCHAR Buffer,
+    _In_ ULONG BufferLength)
+{
+    ACPI_DEVICE_INFO *Info = NULL;
+    ULONG Value[3] = { 0 };
+    ULONG Length = 0;
+    ULONG i;
+
+    if (!Handle || BufferLength < 2 * sizeof("ACPI\\CLS_0000&SUBCLS_0000&PI_00") + 1)
+        return 0;
+
+    if (ACPI_FAILURE(AcpiGetObjectInfo(Handle, &Info)) || !Info)
+        return 0;
+
+    if (!(Info->Valid & ACPI_VALID_CLS) || !Info->ClassCode.String || Info->ClassCode.Length < 7)
+    {
+        ACPI_FREE(Info);
+        return 0;
+    }
+
+    for (i = 0; i < 6; i++)
+    {
+        CHAR Digit = Info->ClassCode.String[i];
+        ULONG Nibble;
+
+        if (Digit >= '0' && Digit <= '9')
+            Nibble = Digit - '0';
+        else if (Digit >= 'A' && Digit <= 'F')
+            Nibble = Digit - 'A' + 10;
+        else if (Digit >= 'a' && Digit <= 'f')
+            Nibble = Digit - 'a' + 10;
+        else
+        {
+            ACPI_FREE(Info);
+            return 0;
+        }
+
+        Value[i / 2] = (Value[i / 2] << 4) | Nibble;
+    }
+
+    ACPI_FREE(Info);
+
+    /* TODO: the vendor-qualified _CLS identifiers (ACPI\VEN_vvv&CLS_...) are not reported */
+    Length += (ULONG)swprintf(&Buffer[Length],
+                              BufferLength - Length,
+                              L"ACPI\\CLS_%04lX&SUBCLS_%04lX&PI_%02lX",
+                              Value[0], Value[1], Value[2]);
+    Buffer[Length++] = UNICODE_NULL;
+
+    Length += (ULONG)swprintf(&Buffer[Length],
+                              BufferLength - Length,
+                              L"ACPI\\CLS_%04lX&SUBCLS_%04lX",
+                              Value[0], Value[1]);
+    Buffer[Length++] = UNICODE_NULL;
+
+    return Length;
+}
+
 NTSTATUS
 Bus_PDO_QueryDeviceId(
      PPDO_DEVICE_DATA     DeviceData,
@@ -3767,27 +3829,34 @@ Bus_PDO_QueryDeviceId(
                 temp[length++] = UNICODE_NULL;
                 temp[length++] = UNICODE_NULL;
             }
-            else if (Device->flags.compatible_ids && Device->pnp.cid_list)
-            {
-                for (i = 0; i < Device->pnp.cid_list->Count; i++)
-                {
-                    length += (ULONG)swprintf(&temp[length],
-                                              RTL_NUMBER_OF(temp) - length,
-                                              L"ACPI\\%hs",
-                                              Device->pnp.cid_list->Ids[i].String);
-                    temp[length++] = UNICODE_NULL;
-
-                    length += (ULONG)swprintf(&temp[length],
-                                              RTL_NUMBER_OF(temp) - length,
-                                              L"*%hs",
-                                              Device->pnp.cid_list->Ids[i].String);
-                    temp[length++] = UNICODE_NULL;
-                }
-                temp[length++] = UNICODE_NULL;
-            }
             else
             {
-                break; /* No compatible IDs */
+                length += BuspFormatClassCodeIds(DeviceData->AcpiHandle,
+                                                 &temp[length],
+                                                 RTL_NUMBER_OF(temp) - length);
+
+                if (Device->flags.compatible_ids && Device->pnp.cid_list)
+                {
+                    for (i = 0; i < Device->pnp.cid_list->Count; i++)
+                    {
+                        length += (ULONG)swprintf(&temp[length],
+                                                  RTL_NUMBER_OF(temp) - length,
+                                                  L"ACPI\\%hs",
+                                                  Device->pnp.cid_list->Ids[i].String);
+                        temp[length++] = UNICODE_NULL;
+
+                        length += (ULONG)swprintf(&temp[length],
+                                                  RTL_NUMBER_OF(temp) - length,
+                                                  L"*%hs",
+                                                  Device->pnp.cid_list->Ids[i].String);
+                        temp[length++] = UNICODE_NULL;
+                    }
+                }
+
+                if (length == 0)
+                    break; /* No compatible IDs */
+
+                temp[length++] = UNICODE_NULL;
             }
 
             NT_ASSERT(length * sizeof(WCHAR) <= sizeof(temp));
