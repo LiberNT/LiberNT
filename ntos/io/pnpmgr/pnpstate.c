@@ -805,6 +805,12 @@ PiDevNodeAddDrivers(
 
     ZwClose(InstanceKey);
 
+    /*
+     * A driver that asked to go on initializing is called back once the whole
+     * stack has loaded and seen the device, not before.
+     */
+    if (IopSystemDriversInitialized) IopReinitializeDrivers();
+
     if (NT_SUCCESS(Status) && !(DeviceNode->Flags & DNF_HAS_PROBLEM))
     {
         PiSetDevNodeState(DeviceNode, DeviceNodeDriversAdded);

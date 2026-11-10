@@ -910,16 +910,23 @@ IopRunReinitializationList(
 {
     PDRIVER_REINIT_ITEM Item;
     PLIST_ENTRY Entry;
-    ULONG Count = 0;
     KIRQL OldIrql;
 
     PAGED_CODE();
+
+    /*
+     * Only what is queued when the list is run gets to run: a routine that
+     * registers itself again is called back by the next pass, not this one.
+     */
+    KeAcquireSpinLock(Lock, &OldIrql);
+    *TailEntry = IsListEmpty(ListHead) ? NULL : ListHead->Blink;
+    KeReleaseSpinLock(Lock, OldIrql);
 
     while (TRUE)
     {
         KeAcquireSpinLock(Lock, &OldIrql);
 
-        if (IsListEmpty(ListHead))
+        if (*TailEntry == NULL || IsListEmpty(ListHead))
         {
             *TailEntry = NULL;
             KeReleaseSpinLock(Lock, OldIrql);
@@ -927,13 +934,15 @@ IopRunReinitializationList(
         }
 
         Entry = RemoveHeadList(ListHead);
+        if (Entry == *TailEntry) *TailEntry = NULL;
 
         KeReleaseSpinLock(Lock, OldIrql);
 
         Item = CONTAINING_RECORD(Entry, DRIVER_REINIT_ITEM, ItemEntry);
 
-        Count++;
-        Item->ReinitRoutine(Item->DriverObject, Item->Context, Count);
+        Item->ReinitRoutine(Item->DriverObject,
+                            Item->Context,
+                            ++Item->DriverObject->DriverExtension->Count);
 
         ExFreePoolWithTag(Item, TAG_IO);
     }
@@ -990,44 +999,41 @@ NtLoadDriver(
         return STATUS_INVALID_PARAMETER;
     }
 
-    Length = IopServicesPath.Length + CapturedName.Length + sizeof(WCHAR);
-
-    Buffer = ExAllocatePoolZero(PagedPool, Length, TAG_IO);
-    if (Buffer == NULL)
-    {
-        ReleaseCapturedUnicodeString(&CapturedName, PreviousMode);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    KeyPath.Buffer = Buffer;
-    KeyPath.Length = 0;
-    KeyPath.MaximumLength = Length;
-
-    RtlAppendUnicodeStringToString(&KeyPath, &IopServicesPath);
-    RtlAppendUnicodeStringToString(&KeyPath, &CapturedName);
-
+    /* The caller names the service by the full path of its key */
     InitializeObjectAttributes(&ObjectAttributes,
-                               &KeyPath,
+                               &CapturedName,
                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
 
     Status = ZwOpenKey(&ServiceHandle, KEY_READ, &ObjectAttributes);
 
-    ExFreePoolWithTag(Buffer, TAG_IO);
     ReleaseCapturedUnicodeString(&CapturedName, PreviousMode);
 
     if (!NT_SUCCESS(Status)) return Status;
 
     ExAcquireResourceExclusiveLite(&IopDriverLoadResource, TRUE);
 
-    Status = IopLoadDriverForPnp(ServiceHandle, &DriverObject);
+    /* A caller asking for a driver that is already running is told so */
+    if (IopIsServiceDriverLoaded(ServiceHandle))
+    {
+        Status = STATUS_IMAGE_ALREADY_LOADED;
+    }
+    else
+    {
+        Status = IopLoadDriverForPnp(ServiceHandle, &DriverObject);
+        if (NT_SUCCESS(Status) && DriverObject != NULL)
+        {
+            ObDereferenceObject(DriverObject);
+        }
+    }
 
     ExReleaseResourceLite(&IopDriverLoadResource);
 
     ZwClose(ServiceHandle);
 
-    if (NT_SUCCESS(Status)) ObDereferenceObject(DriverObject);
+    /* A driver with no device to attach still gets to finish initializing */
+    if (IopSystemDriversInitialized) IopReinitializeDrivers();
 
     return Status;
 }
