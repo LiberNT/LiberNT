@@ -56,14 +56,18 @@ typedef struct _SEP_SYSTEM_PRIVILEGE
 
 #define SEP_PRIVILEGE_ON (SE_PRIVILEGE_ENABLED | SE_PRIVILEGE_ENABLED_BY_DEFAULT)
 
+/* A privilege the token holds without it being on: the caller enables it */
+#define SEP_PRIVILEGE_HELD 0
+
 #define SEP_GROUP_ON                                                          \
     (SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_MANDATORY)
 
 static GENERIC_MAPPING SepTokenMapping =
 {
-    TOKEN_READ,
-    TOKEN_WRITE,
-    TOKEN_EXECUTE,
+    STANDARD_RIGHTS_READ | TOKEN_QUERY | TOKEN_QUERY_SOURCE | TOKEN_DUPLICATE,
+    STANDARD_RIGHTS_WRITE | TOKEN_ADJUST_PRIVILEGES | TOKEN_ADJUST_GROUPS |
+        TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID,
+    STANDARD_RIGHTS_EXECUTE | TOKEN_ASSIGN_PRIMARY | TOKEN_IMPERSONATE,
     TOKEN_ALL_ACCESS
 };
 
@@ -567,25 +571,32 @@ BOOLEAN
 NTAPI
 SepInitializeTokenImplementation(VOID)
 {
-    OBJECT_TYPE_INITIALIZER Initializer;
+    struct
+    {
+        OBJECT_TYPE_INITIALIZER Initializer;
+        ULONG SeMandatoryLabelMask;
+        ULONG SeTrustConstraintMask;
+    } Extended;
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"Token");
 
     PAGED_CODE();
 
-    RtlZeroMemory(&Initializer, sizeof(Initializer));
+    RtlZeroMemory(&Extended, sizeof(Extended));
 
-    Initializer.Length = sizeof(Initializer);
-    Initializer.InvalidAttributes = OBJ_OPENLINK | OBJ_PERMANENT;
-    Initializer.ValidAccessMask = TOKEN_ALL_ACCESS;
-    Initializer.GenericMapping = SepTokenMapping;
-    Initializer.UseDefaultObject = TRUE;
-    Initializer.PoolType = PagedPool;
-    Initializer.DefaultPagedPoolCharge = sizeof(TOKEN);
-    Initializer.DeleteProcedure = SepDeleteToken;
-    Initializer.SecurityProcedure = SeDefaultObjectMethod;
+    Extended.SeMandatoryLabelMask = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP;
+    Extended.Initializer.Length = sizeof(Extended);
+    Extended.Initializer.InvalidAttributes = OBJ_OPENLINK;
+    Extended.Initializer.ValidAccessMask = TOKEN_ALL_ACCESS;
+    Extended.Initializer.GenericMapping = SepTokenMapping;
+    Extended.Initializer.UseDefaultObject = TRUE;
+    Extended.Initializer.SecurityRequired = TRUE;
+    Extended.Initializer.PoolType = PagedPool;
+    Extended.Initializer.DefaultPagedPoolCharge = sizeof(TOKEN);
+    Extended.Initializer.DeleteProcedure = SepDeleteToken;
+    Extended.Initializer.SecurityProcedure = SeDefaultObjectMethod;
 
     if (!NT_SUCCESS(ObCreateObjectType(&Name,
-                                       &Initializer,
+                                       &Extended.Initializer,
                                        NULL,
                                        &SeTokenObjectType)))
     {
@@ -658,7 +669,7 @@ SepCreateSystemProcessToken(VOID)
         {&SeIncreaseQuotaPrivilege, SEP_PRIVILEGE_ON},
         {&SeSecurityPrivilege, SEP_PRIVILEGE_ON},
         {&SeTakeOwnershipPrivilege, SEP_PRIVILEGE_ON},
-        {&SeLoadDriverPrivilege, SEP_PRIVILEGE_ON},
+        {&SeLoadDriverPrivilege, SEP_PRIVILEGE_HELD},
         {&SeCreatePagefilePrivilege, SEP_PRIVILEGE_ON},
         {&SeIncreaseBasePriorityPrivilege, SEP_PRIVILEGE_ON},
         {&SeSystemProfilePrivilege, SEP_PRIVILEGE_ON},
@@ -868,6 +879,16 @@ SeFilterToken(
 
     RtlZeroMemory(&Contents, sizeof(Contents));
 
+    /* A restricting identifier carries no attributes of its own */
+    if (RestrictedSids != NULL)
+    {
+        for (i = 0; i < RestrictedSids->GroupCount; i++)
+        {
+            if (RestrictedSids->Groups[i].Attributes != 0)
+                return STATUS_INVALID_PARAMETER;
+        }
+    }
+
     SepAcquireTokenLockShared(Token);
 
     Added = (RestrictedSids != NULL) ? RestrictedSids->GroupCount : 0;
@@ -1016,6 +1037,7 @@ SeSubProcessToken(
 {
     PTOKEN New = NULL;
     NTSTATUS Status;
+    ULONG Index;
 
     PAGED_CODE();
 
@@ -1027,6 +1049,21 @@ SeSubProcessToken(
                            KernelMode,
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
+
+    /*
+     * A new process starts with the privileges its token is meant to have on,
+     * not with whatever its parent had switched on for itself at the moment
+     * it created the process.
+     */
+    for (Index = 0; Index < New->PrivilegeCount; Index++)
+    {
+        if (New->Privileges[Index].Attributes & SE_PRIVILEGE_ENABLED_BY_DEFAULT)
+            New->Privileges[Index].Attributes |= SE_PRIVILEGE_ENABLED;
+        else
+            New->Privileges[Index].Attributes &= ~SE_PRIVILEGE_ENABLED;
+    }
+
+    SepNoteTokenPrivilegeFlags(New);
 
     New->SessionId = SessionId;
     New->TokenInUse = InUse;
