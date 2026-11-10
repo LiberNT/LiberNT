@@ -269,6 +269,129 @@ CURSORICON_ConvertPngToBmpIcon(
 
 /************* USER32 INTERNAL FUNCTIONS **********/
 
+static HCURSOR
+OutlineDefaultIBeam(HCURSOR Cursor)
+{
+    ICONINFO Icon = {0}, Out = {0};
+    BITMAP Bitmap;
+    BITMAPINFO Info = {0};
+    HDC Dc = NULL;
+    HBITMAP Render = NULL, Previous = NULL;
+    BYTE *Source = NULL, *Pixels = NULL, *Mask = NULL, *Rendered = NULL;
+    HCURSOR Result = NULL;
+    INT Width, Height, X, Y, Dx, Dy;
+    SIZE_T Size;
+    BOOL HasAlpha = FALSE;
+
+    if (!Cursor || !GetIconInfo(Cursor, &Icon))
+        return Cursor;
+    if (!Icon.hbmColor || !GetObjectW(Icon.hbmColor, sizeof(Bitmap), &Bitmap) ||
+        Bitmap.bmWidth <= 0 || Bitmap.bmHeight <= 0 ||
+        Bitmap.bmWidth > 1024 || Bitmap.bmHeight > 1024)
+        goto done;
+    Width = Bitmap.bmWidth;
+    Height = Bitmap.bmHeight;
+    Size = (SIZE_T)Width * Height * 4;
+    Source = HeapAlloc(GetProcessHeap(), 0, Size);
+    Dc = CreateCompatibleDC(NULL);
+    if (!Source || !Dc)
+        goto done;
+    Info.bmiHeader.biSize = sizeof(Info.bmiHeader);
+    Info.bmiHeader.biWidth = Width;
+    Info.bmiHeader.biHeight = -Height;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Render = CreateDIBSection(Dc, &Info, DIB_RGB_COLORS, (void **)&Rendered, NULL, 0);
+    if (!Render)
+        goto done;
+    Previous = SelectObject(Dc, Render);
+    if (!Previous)
+        goto done;
+    memset(Rendered, 0xff, Size);
+    if (!DrawIconEx(Dc, 0, 0, Cursor, Width, Height, 0, NULL, DI_NORMAL) || !GdiFlush())
+        goto done;
+    for (Y = 0; Y < Height; ++Y)
+    {
+        for (X = 0; X < Width; ++X)
+        {
+            const BYTE *P = Rendered + ((SIZE_T)Y * Width + X) * 4;
+            BYTE *Q = Source + ((SIZE_T)Y * Width + X) * 4;
+            if (P[0] != P[1] || P[1] != P[2])
+                goto done;
+            Q[0] = Q[1] = Q[2] = 0;
+            Q[3] = 255 - P[0];
+            HasAlpha |= Q[3] != 0;
+        }
+    }
+    if (!HasAlpha)
+        goto done;
+    Info.bmiHeader.biWidth = Width + 2;
+    Info.bmiHeader.biHeight = -(Height + 2);
+    Info.bmiHeader.biSizeImage = 0;
+    Out.hbmColor = CreateDIBSection(Dc, &Info, DIB_RGB_COLORS, (void **)&Pixels, NULL, 0);
+    if (!Out.hbmColor)
+        goto done;
+    ZeroMemory(Pixels, (SIZE_T)(Width + 2) * (Height + 2) * 4);
+    for (Y = -1; Y <= Height; ++Y)
+    {
+        for (X = -1; X <= Width; ++X)
+        {
+            const BYTE *P = X >= 0 && X < Width && Y >= 0 && Y < Height ?
+                            Source + ((SIZE_T)Y * Width + X) * 4 : NULL;
+            BYTE *Q = Pixels + ((SIZE_T)(Y + 1) * (Width + 2) + X + 1) * 4;
+            BOOL Adjacent = FALSE;
+            if (P)
+                memcpy(Q, P, 4);
+            if (P && P[3] >= 128)
+                continue;
+            for (Dy = -1; Dy <= 1 && !Adjacent; ++Dy)
+                for (Dx = -1; Dx <= 1; ++Dx)
+                    if (X + Dx >= 0 && X + Dx < Width && Y + Dy >= 0 && Y + Dy < Height &&
+                        Source[((SIZE_T)(Y + Dy) * Width + X + Dx) * 4 + 3] >= 128)
+                    {
+                        Adjacent = TRUE;
+                        break;
+                    }
+            if (Adjacent)
+            {
+                Q[0] = Q[1] = Q[2] = P ? 255 - P[3] : 255;
+                Q[3] = 255;
+            }
+        }
+    }
+    Mask = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)(((Width + 17) / 16) * 2) * (Height + 2));
+    if (!Mask)
+        goto done;
+    for (Y = 0; Y < Height + 2; ++Y)
+        for (X = 0; X < Width + 2; ++X)
+            if (!Pixels[((SIZE_T)Y * (Width + 2) + X) * 4 + 3])
+                Mask[(SIZE_T)Y * (((Width + 17) / 16) * 2) + X / 8] |= 0x80 >> (X % 8);
+    Out.hbmMask = CreateBitmap(Width + 2, Height + 2, 1, 1, Mask);
+    if (!Out.hbmMask)
+        goto done;
+    Out.fIcon = FALSE;
+    Out.xHotspot = Icon.xHotspot + 1;
+    Out.yHotspot = Icon.yHotspot + 1;
+    Result = CreateIconIndirect(&Out);
+
+done:
+    if (Out.hbmColor) DeleteObject(Out.hbmColor);
+    if (Out.hbmMask) DeleteObject(Out.hbmMask);
+    if (Icon.hbmColor) DeleteObject(Icon.hbmColor);
+    if (Icon.hbmMask) DeleteObject(Icon.hbmMask);
+    if (Previous) SelectObject(Dc, Previous);
+    if (Render) DeleteObject(Render);
+    if (Dc) DeleteDC(Dc);
+    HeapFree(GetProcessHeap(), 0, Source);
+    HeapFree(GetProcessHeap(), 0, Mask);
+    if (Result)
+    {
+        DestroyCursor(Cursor);
+        return Result;
+    }
+    return Cursor;
+}
+
 VOID LoadSystemCursors(VOID)
 {
    if (!UserGetServerInfo(hIconSmWindows, ROS_SERVERINFO_HICONSMWINDOWS))
@@ -276,6 +399,7 @@ VOID LoadSystemCursors(VOID)
        TRACE("Loading System Cursors\n");
        NtUserSetSystemCursor(LoadImageW( 0, IDC_ARROW,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_NORMAL);
        NtUserSetSystemCursor(LoadImageW( 0, IDC_IBEAM,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_IBEAM);
+       NtUserSetSystemCursor(OutlineDefaultIBeam(LoadImageW( 0, IDC_IBEAM, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE )), OCR_IBEAM);
        NtUserSetSystemCursor(LoadImageW( 0, IDC_WAIT,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_WAIT);
        NtUserSetSystemCursor(LoadImageW( 0, IDC_CROSS,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_CROSS);
        NtUserSetSystemCursor(LoadImageW( 0, IDC_UPARROW,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_UP);
@@ -345,7 +469,11 @@ VOID LoadUserCursors(VOID)
                 Cursor = LoadImageW(NULL, Expanded, IMAGE_CURSOR, BaseSize, BaseSize, LR_LOADFROMFILE | LR_DEFAULTSIZE);
         }
         if (!Cursor)
+        {
             Cursor = LoadImageW(NULL, UserCursorScheme[i].Resource, IMAGE_CURSOR, BaseSize, BaseSize, LR_DEFAULTSIZE);
+            if (UserCursorScheme[i].Id == OCR_IBEAM)
+                Cursor = OutlineDefaultIBeam(Cursor);
+        }
         if (Cursor && !NtUserSetSystemCursor(Cursor, UserCursorScheme[i].Id))
             DestroyCursor(Cursor);
     }
