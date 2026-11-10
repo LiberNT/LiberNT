@@ -1316,15 +1316,16 @@ LX_SYSCALL(LxSysSigaltstack)
             return Result;
         if (OnStack)
             return -LX_EPERM;
-        if (New.Flags & LX_SS_DISABLE)
+        /* TODO: SS_AUTODISARM is rejected as on WSL1; Linux 4.7+ accepts it and disarms the stack on delivery. */
+        if ((New.Flags != 0) && (New.Flags != LX_SS_ONSTACK) && (New.Flags != LX_SS_DISABLE))
+            return -LX_EINVAL;
+        if (New.Flags == LX_SS_DISABLE)
         {
             RtlZeroMemory(&Thread->AltStack, sizeof(Thread->AltStack));
             Thread->AltStack.Flags = LX_SS_DISABLE;
         }
         else
         {
-            if (New.Flags & ~LX_SS_ONSTACK)
-                return -LX_EINVAL;
             if (New.Size < LX_MINSIGSTKSZ)
                 return -LX_ENOMEM;
             Thread->AltStack.Sp = New.Sp;
