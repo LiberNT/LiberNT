@@ -265,6 +265,24 @@ PoolVaReserveLocked(
     return (PVOID)(Region->Base + (First << POOL_UNIT_SHIFT));
 }
 
+BOOLEAN
+PoolVaHasRun(
+    _Inout_ PPOOL_VA_REGION Region,
+    _In_ SIZE_T UnitCount)
+{
+    BOOLEAN Found;
+    KIRQL OldIrql;
+
+    POOL_ASSERT(UnitCount != 0);
+
+    POOL_LOCK_ACQUIRE(&Region->Lock, &OldIrql);
+    POOL_ASSERT(Region->UnitsInUse <= Region->UnitCount);
+    Found = (BOOLEAN)(UnitCount <= Region->UnitCount - Region->UnitsInUse &&
+                      PoolVaFindRun(Region, 0, Region->UnitCount, UnitCount) != (SIZE_T)-1);
+    POOL_LOCK_RELEASE(&Region->Lock, OldIrql);
+    return Found;
+}
+
 PVOID
 PoolVaReserve(
     _Inout_ PPOOL_VA_REGION Region,
