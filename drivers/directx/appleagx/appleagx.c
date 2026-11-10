@@ -32,22 +32,19 @@
 #define AGX_REGION_HANDOFF          2
 #define AGX_REGION_HOST_LEVEL       3
 #define AGX_REGION_FIRMWARE_TEXT    4
+#define AGX_REGION_FIRMWARE_DATA    5
 #define AGX_REGIONS                 6
 #define AGX_BOOT_TIMEOUT_MS         2000
 #define AGX_LISTEN_MS               500
 #define AGX_MAX_SHARED              8
-#define AGX_SHARED_WINDOW_OFFSET    0x100000000ULL
-#define AGX_SHARED_WINDOW_SIZE      0x100000000ULL
+#define AGX_SHARED_ALIGN            0x1000
 #define AGX_ADT_MAX_LENGTH          0x200000
 #define AGX_PART                    "gpu,t6030"
 
 typedef struct _AGX_SHARED
 {
-    PVOID Allocation;
-    SIZE_T AllocationSize;
     PVOID Virtual;
     ULONG64 Physical;
-    ULONG64 Address;
     ULONG Size;
 } AGX_SHARED, *PAGX_SHARED;
 
@@ -78,7 +75,6 @@ typedef struct _APPLE_AGX
     APPLE_RTKIT Rtkit;
     AGX_SHARED Shared[AGX_MAX_SHARED];
     ULONG SharedCount;
-    ULONG64 SharedNext;
 } APPLE_AGX, *PAPPLE_AGX;
 
 static const CHAR *const AgxRegionNames[AGX_REGIONS] = {
@@ -242,6 +238,8 @@ AgxReadAdt(
     {
         Agx->RegionBase[AGX_REGION_FIRMWARE_TEXT] = Description.Text.Physical;
         Agx->RegionSize[AGX_REGION_FIRMWARE_TEXT] = Description.Text.Size;
+        Agx->RegionBase[AGX_REGION_FIRMWARE_DATA] = Description.Data.Physical;
+        Agx->RegionSize[AGX_REGION_FIRMWARE_DATA] = Description.Data.Size;
         DbgPrint("appleagx: firmware text at %I64x+%lx and data at %I64x+%lx, mapped at %I64x, %s\n",
                  Description.Text.Physical, Description.Text.Size, Description.Data.Physical,
                  Description.Data.Size, Description.Text.Virtual,
@@ -328,7 +326,8 @@ AgxReportFirmware(
     MmUnmapIoSpace(Image, 2 * sizeof(ULONG));
 }
 
-/* The coprocessor reaches memory through the graphics tables, inside the window left to the host. */
+/* The firmware asks the host to map a buffer it has already placed inside its own data segment,
+ * never to choose one: an address outside that segment is refused. */
 static
 BOOLEAN
 NTAPI
@@ -340,57 +339,33 @@ AgxShmemSetup(
     _Out_ PVOID *Virtual,
     _Out_ PBOOLEAN Preassigned)
 {
-    const APPLE_UAT_PROTECTION Shared = { APPLE_UAT_ACCESS_FIRMWARE, APPLE_UAT_MEMORY_UNCACHED, FALSE, TRUE };
-    PHYSICAL_ADDRESS Low, High, Boundary;
+    PHYSICAL_ADDRESS Physical;
     PAPPLE_AGX Agx = Context;
     PAGX_SHARED Buffer;
-    ULONG64 Physical;
-    SIZE_T Rounded, Skip;
-    NTSTATUS Status;
+    ULONG64 Base = Agx->RegionBase[AGX_REGION_FIRMWARE_DATA];
+    ULONG64 Length = Agx->RegionSize[AGX_REGION_FIRMWARE_DATA];
 
     *Virtual = NULL;
-    *Preassigned = FALSE;
-    if (!Agx->Owned || Agx->SharedCount == AGX_MAX_SHARED || !Size)
+    *Preassigned = TRUE;
+    if (Agx->SharedCount == AGX_MAX_SHARED || !Size || !Base || !Length)
         return FALSE;
-    if (*Address)
+    if (!*Address || ((*Address | Size) & (AGX_SHARED_ALIGN - 1)) || *Address < Base ||
+        Size > Length || *Address - Base > Length - Size)
     {
-        DbgPrint("appleagx: endpoint %u asked to keep its %lu byte buffer at %I64x\n", Endpoint, Size, *Address);
+        DbgPrint("appleagx: endpoint %u asked for %lu bytes at %I64x, outside its data segment %I64x+%I64x\n",
+                 Endpoint, Size, *Address, Base, Length);
         return FALSE;
     }
-    Rounded = ((SIZE_T)Size + APPLE_UAT_PAGE_SIZE - 1) & ~(SIZE_T)(APPLE_UAT_PAGE_SIZE - 1);
-    if (Rounded > AGX_SHARED_WINDOW_SIZE - (Agx->SharedNext - AGX_SHARED_WINDOW_OFFSET))
-        return FALSE;
+    Physical.QuadPart = (LONGLONG)*Address;
     Buffer = &Agx->Shared[Agx->SharedCount];
-    Low.QuadPart = 0;
-    High.QuadPart = -1;
-    Boundary.QuadPart = 0;
-    Buffer->AllocationSize = Rounded + APPLE_UAT_PAGE_SIZE - PAGE_SIZE;
-    Buffer->Allocation = MmAllocateContiguousMemorySpecifyCache(Buffer->AllocationSize, Low, High, Boundary,
-                                                                MmNonCached);
-    if (!Buffer->Allocation)
+    Buffer->Virtual = MmMapIoSpace(Physical, Size, MmWriteCombined);
+    if (!Buffer->Virtual)
         return FALSE;
-    Physical = (ULONG64)MmGetPhysicalAddress(Buffer->Allocation).QuadPart;
-    Skip = (SIZE_T)(((Physical + APPLE_UAT_PAGE_SIZE - 1) & ~(ULONG64)(APPLE_UAT_PAGE_SIZE - 1)) - Physical);
-    Buffer->Virtual = (PUCHAR)Buffer->Allocation + Skip;
-    Buffer->Physical = Physical + Skip;
-    Buffer->Size = (ULONG)Rounded;
-    Buffer->Address = APPLE_UAT_HOST_BASE + Agx->SharedNext;
-    RtlZeroMemory(Buffer->Virtual, Rounded);
-    Status = AppleUatAdoptedMap(&Agx->Adopted, Buffer->Address, Buffer->Physical, Rounded, &Shared);
-    if (!NT_SUCCESS(Status))
-    {
-        DbgPrint("appleagx: the buffer for endpoint %u was not mapped at %I64x: %lx\n", Endpoint, Buffer->Address,
-                 Status);
-        MmFreeContiguousMemorySpecifyCache(Buffer->Allocation, Buffer->AllocationSize, MmNonCached);
-        RtlZeroMemory(Buffer, sizeof(*Buffer));
-        return FALSE;
-    }
-    Agx->SharedNext += Rounded;
+    Buffer->Physical = *Address;
+    Buffer->Size = Size;
     Agx->SharedCount++;
-    *Address = Buffer->Address;
     *Virtual = Buffer->Virtual;
-    DbgPrint("appleagx: endpoint %u gets %lu bytes at %I64x (physical %I64x)\n", Endpoint, Buffer->Size,
-             Buffer->Address, Buffer->Physical);
+    DbgPrint("appleagx: endpoint %u keeps its %lu byte buffer at %I64x\n", Endpoint, Size, *Address);
     return TRUE;
 }
 
@@ -415,13 +390,11 @@ AgxFreeShared(
 
     for (Index = 0; Index < Agx->SharedCount; ++Index)
     {
-        if (Agx->Shared[Index].Allocation)
-            MmFreeContiguousMemorySpecifyCache(Agx->Shared[Index].Allocation, Agx->Shared[Index].AllocationSize,
-                                               MmNonCached);
+        if (Agx->Shared[Index].Virtual)
+            MmUnmapIoSpace(Agx->Shared[Index].Virtual, Agx->Shared[Index].Size);
     }
     RtlZeroMemory(Agx->Shared, sizeof(Agx->Shared));
     Agx->SharedCount = 0;
-    Agx->SharedNext = AGX_SHARED_WINDOW_OFFSET;
 }
 
 /* The firmware is started cold and says over the mailbox what it needs; the log keeps its answer. */
@@ -579,7 +552,6 @@ AgxStart(
     Agx->AscSize = AGX_SGX_WINDOW_SIZE;
     Agx->IdSize = AGX_SGX_WINDOW_SIZE;
     Agx->CoreSize = AGX_SGX_WINDOW_SIZE;
-    Agx->SharedNext = AGX_SHARED_WINDOW_OFFSET;
     if (RiscvFdtReadU32(&Agx->Tree.Fdt, Agx->Tree.Node, "mboxes", &MailboxPhandle) &&
         (MailboxNode = FdtDriverFindPhandle(&Agx->Tree, MailboxPhandle)) != RISCV_FDT_NO_NODE)
     {

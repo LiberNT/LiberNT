@@ -207,6 +207,8 @@ MockIoOpenDeviceRegistryKey(PDEVICE_OBJECT DeviceObject, ULONG KeyType, ACCESS_M
 #define SIM_MCA_SIZE        0x10000
 #define SIM_MCA_SWITCH_BASE 0x28b300000ULL
 #define SIM_MCA_SWITCH_SIZE 0x20000
+#define SIM_MAILBOX_BASE    0x292408000ULL
+#define SIM_MAILBOX_INDEX   16
 #define SIM_I2C_INDEX       11
 #define SIM_NCO_INDEX       12
 #define SIM_ADMAC_INDEX     13
@@ -236,6 +238,7 @@ static ULONG SimNcoData[SIM_NCO_SIZE / sizeof(ULONG)];
 static ULONG SimAdmacData[SIM_ADMAC_SIZE / sizeof(ULONG)];
 static ULONG SimMcaData[SIM_MCA_SIZE / sizeof(ULONG)];
 static ULONG SimMcaSwitchData[SIM_MCA_SWITCH_SIZE / sizeof(ULONG)];
+static ULONG SimMailboxData[SIM_REGION_SIZE / sizeof(ULONG)];
 
 typedef struct _SIM_WRITE
 {
@@ -261,6 +264,7 @@ static SIM_REGION SimRegions[] =
     { SIM_ADMAC_BASE, sizeof(SimAdmacData), SimAdmacData },
     { SIM_MCA_BASE, sizeof(SimMcaData), SimMcaData },
     { SIM_MCA_SWITCH_BASE, sizeof(SimMcaSwitchData), SimMcaSwitchData },
+    { SIM_MAILBOX_BASE, sizeof(SimMailboxData), SimMailboxData },
 };
 static SIM_WRITE SimWrites[256];
 static BOOLEAN SimAtcStuck;
@@ -580,6 +584,153 @@ SimPush(ULONG Value)
     SimFifo[SimFifoTail++ % RTL_NUMBER_OF(SimFifo)] = Value;
 }
 
+
+/* A coprocessor on the other side of the mailbox: it answers the management protocol the way the
+ * real ones do, so the whole boot can be driven without the machine. */
+#define SIM_MBOX_A2I_CONTROL    0x110
+#define SIM_MBOX_A2I_SEND0      0x800
+#define SIM_MBOX_A2I_SEND1      0x808
+#define SIM_MBOX_I2A_CONTROL    0x114
+#define SIM_MBOX_I2A_RECV0      0x830
+#define SIM_MBOX_I2A_RECV1      0x838
+#define SIM_MBOX_EMPTY          0x00020000
+#define SIM_MBOX_QUEUE          32
+
+typedef struct _SIM_MBOX_MESSAGE
+{
+    ULONG64 Message;
+    UCHAR Endpoint;
+} SIM_MBOX_MESSAGE;
+
+static SIM_MBOX_MESSAGE SimMboxOut[SIM_MBOX_QUEUE];
+static ULONG SimMboxOutHead, SimMboxOutTail;
+static SIM_MBOX_MESSAGE SimMboxSeen[SIM_MBOX_QUEUE];
+static ULONG SimMboxSeenCount;
+static ULONG SimMboxControlReads;
+static BOOLEAN SimMboxSilent;
+
+static
+ULONG64 *
+SimMboxWord(
+    _In_ ULONG Offset)
+{
+    return (ULONG64 *)((PUCHAR)SimMailboxData + Offset);
+}
+
+static
+VOID
+SimMboxPush(
+    _In_ UCHAR Endpoint,
+    _In_ ULONG64 Message)
+{
+    if (SimMboxOutTail - SimMboxOutHead >= SIM_MBOX_QUEUE)
+        return;
+    SimMboxOut[SimMboxOutTail % SIM_MBOX_QUEUE].Endpoint = Endpoint;
+    SimMboxOut[SimMboxOutTail % SIM_MBOX_QUEUE].Message = Message;
+    ++SimMboxOutTail;
+}
+
+static
+VOID
+SimMboxReset(
+    _In_ ULONG HelloMin,
+    _In_ ULONG HelloMax)
+{
+    RtlZeroMemory(SimMailboxData, sizeof(SimMailboxData));
+    SimMboxOutHead = 0;
+    SimMboxOutTail = 0;
+    SimMboxSeenCount = 0;
+    SimMboxControlReads = 0;
+    SimMboxSilent = FALSE;
+    if (HelloMax)
+        SimMboxPush(0, (0x01ULL << 52) | ((ULONG64)HelloMax << 16) | HelloMin);
+}
+
+
+/* Takes the message the host just wrote and answers it as the coprocessor would. */
+static
+VOID
+SimMboxConsume(VOID)
+{
+    ULONG64 Message = *SimMboxWord(SIM_MBOX_A2I_SEND0);
+    UCHAR Endpoint = (UCHAR)*SimMboxWord(SIM_MBOX_A2I_SEND1);
+    ULONG Type;
+
+    if (!Message)
+        return;
+    *SimMboxWord(SIM_MBOX_A2I_SEND0) = 0;
+    if (SimMboxSeenCount < SIM_MBOX_QUEUE)
+    {
+        SimMboxSeen[SimMboxSeenCount].Endpoint = Endpoint;
+        SimMboxSeen[SimMboxSeenCount++].Message = Message;
+    }
+    if (SimMboxSilent)
+        return;
+    Type = (ULONG)((Message >> 52) & 0xff);
+    if (Endpoint != 0)
+        return;
+    if (Type == 0x02)
+        SimMboxPush(0, (0x08ULL << 52) | (1ULL << 51) | 0x1f);
+    else if (Type == 0x08)
+        SimMboxPush(0, (0x07ULL << 52) | 0x20);
+    else if (Type == 0x0b)
+        SimMboxPush(0, (0x0bULL << 52) | (Message & 0xffff));
+}
+
+/* The coprocessor only sees a message once the host next looks at the mailbox. */
+static
+VOID
+SimMboxFlush(VOID)
+{
+    SimMboxConsume();
+}
+
+static
+ULONG
+SimMboxRead(
+    _In_ ULONG Offset)
+{
+    SimMboxConsume();
+    if (Offset == SIM_MBOX_A2I_CONTROL)
+        return 0;
+    if (Offset != SIM_MBOX_I2A_CONTROL)
+        return SimMailboxData[Offset / sizeof(ULONG)];
+    /* The boot reads this register once to log it, before it reads anything out of the mailbox. */
+    if (SimMboxControlReads++ == 0)
+        return SIM_MBOX_EMPTY;
+    if (SimMboxOutHead == SimMboxOutTail)
+        return SIM_MBOX_EMPTY;
+    *SimMboxWord(SIM_MBOX_I2A_RECV0) = SimMboxOut[SimMboxOutHead % SIM_MBOX_QUEUE].Message;
+    *SimMboxWord(SIM_MBOX_I2A_RECV1) = SimMboxOut[SimMboxOutHead % SIM_MBOX_QUEUE].Endpoint;
+    ++SimMboxOutHead;
+    return 0;
+}
+
+static
+BOOLEAN
+SimMboxSent(
+    _In_ UCHAR Endpoint,
+    _In_ ULONG Type,
+    _Out_opt_ PULONG64 Message)
+{
+    ULONG Index;
+
+    if (Message)
+        *Message = 0;
+    for (Index = 0; Index < SimMboxSeenCount; ++Index)
+    {
+        if (SimMboxSeen[Index].Endpoint != Endpoint ||
+            (ULONG)((SimMboxSeen[Index].Message >> 52) & 0xff) != Type)
+        {
+            continue;
+        }
+        if (Message)
+            *Message = SimMboxSeen[Index].Message;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static
 ULONG
 SimRead(volatile ULONG *Address)
@@ -589,6 +740,8 @@ SimRead(volatile ULONG *Address)
 
     if (!Region)
         return 0xdeadbeef;
+    if (Region == &SimRegions[SIM_MAILBOX_INDEX])
+        return SimMboxRead(Offset);
     if (Region == &SimRegions[SIM_I2C_INDEX])
         return SimI2cRead(Offset);
     if (Region == &SimRegions[SIM_ADMAC_INDEX])
@@ -818,9 +971,14 @@ SimWrite(volatile ULONG *Address, ULONG Value)
 static ULONG SimStalledMicroseconds;
 
 #define READ_REGISTER_ULONG(Address) SimRead(Address)
+#define READ_REGISTER_UCHAR(Address) (*(Address))
 #define WRITE_REGISTER_ULONG(Address, Value) SimWrite(Address, Value)
 #define KeStallExecutionProcessor(Microseconds) (SimStalledMicroseconds += (Microseconds))
 #define KeMemoryBarrier() ((void)0)
+#define APC_LEVEL 1
+#define KeGetCurrentIrql() 0
+#define KeDelayExecutionThread(Mode, Alertable, Interval) \
+    (SimSleptMs += (ULONG)(-(Interval)->QuadPart / 10000), STATUS_SUCCESS)
 #define KeQueryInterruptTime() ((ULONG64)(SimSleptMs * 10000ULL + SimStalledMicroseconds * 10ULL))
 
 static
@@ -842,6 +1000,7 @@ UatSleepMs(ULONG Milliseconds)
 #include "../../../../sdk/lib/drivers/applertkit/dart.c"
 #include "../../../../sdk/lib/drivers/applertkit/uat.c"
 #include "../../../../sdk/lib/drivers/applertkit/adt.c"
+#include "../../../../sdk/lib/drivers/applertkit/rtkit.c"
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
 #include "../../../../sdk/lib/drivers/applertkit/pcie.c"
@@ -2123,6 +2282,157 @@ TestAgxDescribe(VOID)
     ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_INVALID_PARAMETER);
 }
 
+#define RTKIT_DATA_BASE     0x100018e8000ULL
+#define RTKIT_DATA_SIZE      0x114000
+
+static ULONG64 RtkitBufferAddress;
+static ULONG RtkitBufferSize;
+static ULONG RtkitBufferCount;
+
+/* The graphics firmware places its own buffers inside its data segment and asks the host only to
+ * map them: an address it did not place there, or none at all, is refused. */
+static
+BOOLEAN
+NTAPI
+RtkitTestShmem(
+    _In_ PVOID Context,
+    _In_ UCHAR Endpoint,
+    _In_ ULONG Size,
+    _Inout_ PULONG64 Address,
+    _Out_ PVOID *Virtual,
+    _Out_ PBOOLEAN Preassigned)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Endpoint);
+    *Virtual = NULL;
+    *Preassigned = TRUE;
+    if (!*Address || !Size || ((*Address | Size) & 0xfff) || *Address < RTKIT_DATA_BASE ||
+        Size > RTKIT_DATA_SIZE || *Address - RTKIT_DATA_BASE > RTKIT_DATA_SIZE - Size)
+    {
+        return FALSE;
+    }
+    RtkitBufferAddress = *Address;
+    RtkitBufferSize = Size;
+    ++RtkitBufferCount;
+    *Virtual = SimVirtualForPhysical(*Address);
+    return TRUE;
+}
+
+static
+VOID
+TestRtkitBoot(VOID)
+{
+    ULONG64 Message;
+    APPLE_RTKIT Rtkit;
+    ULONG Endpoint;
+
+    RtkitBufferCount = 0;
+    RtkitBufferAddress = 0;
+    RtkitBufferSize = 0;
+
+    /* A coprocessor that speaks the protocol boots, and the host answers every step of it. */
+    SimMboxReset(11, 12);
+    RtlZeroMemory(&Rtkit, sizeof(Rtkit));
+    Rtkit.Name = "test";
+    Rtkit.Mailbox = (PUCHAR)SimMailboxData;
+    Rtkit.ShmemSetup = RtkitTestShmem;
+    ok_hex(AppleRtkitBoot(&Rtkit, 2000), STATUS_SUCCESS);
+    ok_int(Rtkit.Version, 12);
+    ok_hex(Rtkit.Endpoints[0], 0x1f);
+    ok(Rtkit.EpmapDone && Rtkit.IopAcked && Rtkit.ApAcked, "The boot left %s%s%s unanswered\n",
+       Rtkit.EpmapDone ? "" : "the endpoints ", Rtkit.IopAcked ? "" : "the coprocessor power ",
+       Rtkit.ApAcked ? "" : "the host power");
+    ok_hex(Rtkit.IopState, 0x20);
+    ok_hex(Rtkit.ApState, 0x20);
+
+    ok(SimMboxSent(0, 0x02, &Message) && (Message & 0xffffffff) == ((12 << 16) | 12),
+       "The host greeted the coprocessor with %I64x\n", Message);
+    ok(SimMboxSent(0, 0x08, &Message), "The host did not acknowledge the endpoint map\n");
+    ok(SimMboxSent(0, 0x0b, &Message) && (Message & 0xffff) == 0x20,
+       "The host asked for power state %I64x\n", Message & 0xffff);
+    /* Every endpoint the coprocessor announced is started, and none that it did not. */
+    for (Endpoint = 1; Endpoint <= 4; ++Endpoint)
+    {
+        ULONG Index;
+        BOOLEAN Started = FALSE;
+
+        for (Index = 0; Index < SimMboxSeenCount; ++Index)
+        {
+            if (SimMboxSeen[Index].Endpoint == 0 && ((SimMboxSeen[Index].Message >> 52) & 0xff) == 0x05 &&
+                ((SimMboxSeen[Index].Message >> 32) & 0xff) == Endpoint)
+            {
+                Started = TRUE;
+            }
+        }
+        ok(Started, "Endpoint %lu was announced but never started\n", Endpoint);
+    }
+
+    /* A buffer the firmware placed in its own data segment is taken as it stands, and a buffer
+     * the host would have to choose, or one outside that segment, is refused. */
+    SimMboxPush(RTKIT_EP_CRASHLOG, (1ULL << 52) | (1ULL << 44) | RTKIT_DATA_BASE);
+    ok(AppleRtkitPoll(&Rtkit), "The buffer request was not received\n");
+    SimMboxFlush();
+    ok_int(RtkitBufferCount, 1);
+    ok(RtkitBufferSize == 0x1000, "The coprocessor asked for %lu bytes\n", RtkitBufferSize);
+    ok(RtkitBufferAddress == RTKIT_DATA_BASE, "The buffer is at %I64x\n", RtkitBufferAddress);
+    ok(!SimMboxSent(RTKIT_EP_CRASHLOG, 1, &Message), "A buffer the firmware placed was answered\n");
+
+    Rtkit.CrashlogSeen = FALSE;
+    SimMboxPush(RTKIT_EP_CRASHLOG, (1ULL << 52) | (1ULL << 44));
+    ok(AppleRtkitPoll(&Rtkit), "The second request was not received\n");
+    ok_int(RtkitBufferCount, 1);
+
+    Rtkit.CrashlogSeen = FALSE;
+    SimMboxPush(RTKIT_EP_CRASHLOG, (1ULL << 52) | (1ULL << 44) | (RTKIT_DATA_BASE - 0x1000));
+    ok(AppleRtkitPoll(&Rtkit), "The third request was not received\n");
+    ok_int(RtkitBufferCount, 1);
+
+    Rtkit.CrashlogSeen = FALSE;
+    SimMboxPush(RTKIT_EP_CRASHLOG, (1ULL << 52) | (0xffULL << 44) | (RTKIT_DATA_BASE + RTKIT_DATA_SIZE - 0x1000));
+    ok(AppleRtkitPoll(&Rtkit), "The fourth request was not received\n");
+    ok_int(RtkitBufferCount, 1);
+
+    /* A coprocessor that says nothing is given up on rather than waited for for ever. */
+    SimMboxReset(0, 0);
+    RtlZeroMemory(&Rtkit, sizeof(Rtkit));
+    Rtkit.Name = "test";
+    Rtkit.Mailbox = (PUCHAR)SimMailboxData;
+    SimSleptMs = 0;
+    ok_hex(AppleRtkitBoot(&Rtkit, 100), STATUS_IO_TIMEOUT);
+    ok(SimSleptMs >= 100, "Waited %lu ms for a silent coprocessor\n", SimSleptMs);
+    ok(!Rtkit.EpmapDone, "A silent coprocessor announced its endpoints\n");
+
+    /* A newer protocol is negotiated down to the newest one this host speaks. */
+    SimMboxReset(11, 30);
+    RtlZeroMemory(&Rtkit, sizeof(Rtkit));
+    Rtkit.Name = "test";
+    Rtkit.Mailbox = (PUCHAR)SimMailboxData;
+    ok_hex(AppleRtkitBoot(&Rtkit, 2000), STATUS_SUCCESS);
+    ok_int(Rtkit.Version, 12);
+    SimMboxFlush();
+    ok(SimMboxSent(0, 0x02, &Message) && (Message & 0xffffffff) == ((12 << 16) | 12),
+       "The host answered a newer coprocessor with %I64x\n", Message);
+
+    /* A coprocessor that speaks only a protocol this host does not know is refused. */
+    SimMboxReset(20, 30);
+    RtlZeroMemory(&Rtkit, sizeof(Rtkit));
+    Rtkit.Name = "test";
+    Rtkit.Mailbox = (PUCHAR)SimMailboxData;
+    ok_hex(AppleRtkitBoot(&Rtkit, 100), STATUS_DEVICE_HARDWARE_ERROR);
+    ok(Rtkit.Failed, "A protocol this host cannot speak was accepted\n");
+    ok_int(Rtkit.Version, 0);
+
+    /* A coprocessor that greets the host and then stops is reported, not waited on for ever. */
+    SimMboxReset(11, 12);
+    SimMboxSilent = TRUE;
+    RtlZeroMemory(&Rtkit, sizeof(Rtkit));
+    Rtkit.Name = "test";
+    Rtkit.Mailbox = (PUCHAR)SimMailboxData;
+    ok_hex(AppleRtkitBoot(&Rtkit, 100), STATUS_IO_TIMEOUT);
+    ok_int(Rtkit.Version, 12);
+    ok(!Rtkit.EpmapDone, "A coprocessor that stopped announced its endpoints\n");
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -3255,6 +3565,7 @@ START_TEST(AppleSoc)
     TestUatAdopt();
     TestAdt();
     TestAgxDescribe();
+    TestRtkitBoot();
     TestSpmi();
     TestAtcphy();
     TestPcie();

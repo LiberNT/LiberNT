@@ -5,7 +5,9 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
+#ifndef UNIT_TEST
 #include <ntddk.h>
+#endif
 #include <reactos/drivers/applertkit.h>
 
 #define MBOX_CONTROL_FULL       0x00010000
