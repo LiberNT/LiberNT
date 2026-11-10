@@ -62,7 +62,8 @@ NTSTATUS
 Ext2WriteVolume (IN PEXT2_IRP_CONTEXT IrpContext);
 
 VOID
-Ext2DeferWrite(IN PEXT2_IRP_CONTEXT, PIRP Irp);
+NTAPI
+Ext2DeferWrite(IN PVOID Context1, IN PVOID Context2);
 
 
 /* FUNCTIONS *************************************************************/
@@ -224,9 +225,12 @@ Ext2ZeroData (
 }
 
 VOID
-Ext2DeferWrite(IN PEXT2_IRP_CONTEXT IrpContext, PIRP Irp)
+NTAPI
+Ext2DeferWrite(IN PVOID Context1, IN PVOID Context2)
 {
-    ASSERT(IrpContext->Irp == Irp);
+    PEXT2_IRP_CONTEXT IrpContext = Context1;
+
+    ASSERT(IrpContext->Irp == (PIRP)Context2);
 
     Ext2QueueRequest(IrpContext);
 }
@@ -345,7 +349,7 @@ Ext2WriteVolume (IN PEXT2_IRP_CONTEXT IrpContext)
                 if (NT_SUCCESS(Status)) {
                     SetFlag(IrpContext->Flags, IRP_CONTEXT_FLAG_DEFERRED);
                     CcDeferWrite( FileObject,
-                                  (PCC_POST_DEFERRED_WRITE)Ext2DeferWrite,
+                                  Ext2DeferWrite,
                                   IrpContext,
                                   Irp,
                                   Length,
@@ -889,7 +893,7 @@ Ext2WriteFile(IN PEXT2_IRP_CONTEXT IrpContext)
                 if (NT_SUCCESS(Status)) {
                     SetFlag(IrpContext->Flags, IRP_CONTEXT_FLAG_DEFERRED);
                     CcDeferWrite( FileObject,
-                                  (PCC_POST_DEFERRED_WRITE)Ext2DeferWrite,
+                                  Ext2DeferWrite,
                                   IrpContext,
                                   Irp,
                                   Length,
