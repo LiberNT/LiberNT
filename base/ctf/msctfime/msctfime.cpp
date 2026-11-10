@@ -1075,6 +1075,21 @@ EXTERN_C VOID TFUninitLib(VOID)
     }
 }
 
+HRESULT APIENTRY
+MsCtfImeCoCreateInstance(
+    REFCLSID rclsid,
+    LPUNKNOWN pUnkOuter,
+    DWORD dwClsContext,
+    REFIID iid,
+    LPVOID *ppv)
+{
+    if (IsEqualCLSID(rclsid, CLSID_TF_CategoryMgr))
+        return TF_CreateCategoryMgr((ITfCategoryMgr **)ppv);
+    if (IsEqualCLSID(rclsid, CLSID_TF_DisplayAttributeMgr))
+        return TF_CreateDisplayAttributeMgr((ITfDisplayAttributeMgr **)ppv);
+    return cicRealCoCreateInstance(rclsid, pUnkOuter, dwClsContext, iid, ppv);
+}
+
 /// @implemented
 BOOL ProcessAttach(HINSTANCE hinstDLL)
 {
@@ -1089,7 +1104,7 @@ BOOL ProcessAttach(HINSTANCE hinstDLL)
 
     cicInitUIFLib();
 
-    if (!TFInitLib())
+    if (!TFInitLib(MsCtfImeCoCreateInstance))
         return FALSE;
 
     gfTFInitLib = TRUE;
