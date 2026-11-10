@@ -128,6 +128,7 @@ extern POBJECT_TYPE IoControllerObjectType;
 extern POBJECT_TYPE IoDeviceHandlerObjectType;
 extern BOOLEAN PnPBootDriversLoaded;
 extern BOOLEAN PnPBootDriversInitialized;
+extern BOOLEAN IopSystemDriversInitialized;
 extern ANSI_STRING IoArcBootDeviceName;
 extern ANSI_STRING IoArcHalDeviceName;
 extern PCHAR IoLoaderArcBootDeviceName;

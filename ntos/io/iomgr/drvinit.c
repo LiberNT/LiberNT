@@ -20,6 +20,7 @@ ULONG PiInitGroupOrderTableCount = 0;
 
 BOOLEAN PnPBootDriversLoaded = FALSE;
 BOOLEAN PnPBootDriversInitialized = FALSE;
+BOOLEAN IopSystemDriversInitialized = FALSE;
 
 /* PRIVATE DATA ***************************************************************/
 
@@ -715,4 +716,7 @@ IopInitializeSystemDrivers(VOID)
     ZwClose(ServicesHandle);
 
     IopReinitializeDrivers();
+
+    /* From here on a load stands on its own, so it runs its own list */
+    IopSystemDriversInitialized = TRUE;
 }
