@@ -241,6 +241,187 @@ PipGetDriverTagPriority(
     return Priority;
 }
 
+/* One system-start service and the place the registry gives it in the order */
+typedef struct _IOP_SYSTEM_START_SERVICE
+{
+    UNICODE_STRING Name;
+    USHORT GroupIndex;
+    USHORT TagPriority;
+} IOP_SYSTEM_START_SERVICE, *PIOP_SYSTEM_START_SERVICE;
+
+typedef struct _IOP_SYSTEM_START_ORDER
+{
+    PIOP_SYSTEM_START_SERVICE Services;
+    ULONG Count;
+    ULONG Capacity;
+} IOP_SYSTEM_START_ORDER, *PIOP_SYSTEM_START_ORDER;
+
+static
+CODE_SEG("INIT")
+NTSTATUS
+IopAppendSystemStartService(
+    _Inout_ PIOP_SYSTEM_START_ORDER Order,
+    _In_ PCUNICODE_STRING Name,
+    _In_ USHORT GroupIndex,
+    _In_ USHORT TagPriority)
+{
+    PIOP_SYSTEM_START_SERVICE Services;
+    ULONG Capacity;
+    PWCHAR Buffer;
+
+    PAGED_CODE();
+
+    if (Order->Count == Order->Capacity)
+    {
+        Capacity = Order->Capacity != 0 ? Order->Capacity * 2 : 32;
+
+        Services = ExAllocatePoolZero(PagedPool,
+                                      Capacity * sizeof(*Services),
+                                      TAG_IO);
+        if (Services == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        if (Order->Services != NULL)
+        {
+            RtlCopyMemory(Services,
+                          Order->Services,
+                          Order->Count * sizeof(*Services));
+            ExFreePoolWithTag(Order->Services, TAG_IO);
+        }
+
+        Order->Services = Services;
+        Order->Capacity = Capacity;
+    }
+
+    Buffer = ExAllocatePoolZero(PagedPool, Name->Length, TAG_IO);
+    if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Buffer, Name->Buffer, Name->Length);
+
+    Order->Services[Order->Count].Name.Buffer = Buffer;
+    Order->Services[Order->Count].Name.Length = Name->Length;
+    Order->Services[Order->Count].Name.MaximumLength = Name->Length;
+    Order->Services[Order->Count].GroupIndex = GroupIndex;
+    Order->Services[Order->Count].TagPriority = TagPriority;
+    Order->Count++;
+
+    return STATUS_SUCCESS;
+}
+
+/* Services already in order stay in the order they were read in */
+static
+CODE_SEG("INIT")
+VOID
+IopSortSystemStartServices(
+    _Inout_ PIOP_SYSTEM_START_ORDER Order)
+{
+    IOP_SYSTEM_START_SERVICE Moved;
+    ULONG Index;
+    ULONG Above;
+
+    PAGED_CODE();
+
+    for (Index = 1; Index < Order->Count; Index++)
+    {
+        Moved = Order->Services[Index];
+
+        for (Above = Index; Above != 0; Above--)
+        {
+            PIOP_SYSTEM_START_SERVICE Previous = &Order->Services[Above - 1];
+
+            if (Previous->GroupIndex < Moved.GroupIndex) break;
+            if (Previous->GroupIndex == Moved.GroupIndex &&
+                Previous->TagPriority <= Moved.TagPriority)
+            {
+                break;
+            }
+
+            Order->Services[Above] = *Previous;
+        }
+
+        Order->Services[Above] = Moved;
+    }
+}
+
+static
+CODE_SEG("INIT")
+VOID
+IopFreeSystemStartServices(
+    _Inout_ PIOP_SYSTEM_START_ORDER Order)
+{
+    ULONG Index;
+
+    PAGED_CODE();
+
+    for (Index = 0; Index < Order->Count; Index++)
+    {
+        ExFreePoolWithTag(Order->Services[Index].Name.Buffer, TAG_IO);
+    }
+
+    if (Order->Services != NULL) ExFreePoolWithTag(Order->Services, TAG_IO);
+
+    Order->Services = NULL;
+    Order->Count = 0;
+    Order->Capacity = 0;
+}
+
+/*
+ * The path a driver is handed is the name of its service key as the registry
+ * spells it, in one block with its string header first. A block of a page or
+ * more starts on a page boundary, which is where drivers have always found it.
+ */
+static
+PUNICODE_STRING
+IopBuildDriverRegistryPath(
+    _In_ HANDLE ServiceHandle)
+{
+    PKEY_NAME_INFORMATION Information;
+    PUNICODE_STRING Path;
+    NTSTATUS Status;
+    SIZE_T Size;
+    ULONG Length = 0;
+
+    PAGED_CODE();
+
+    Status = ZwQueryKey(ServiceHandle, KeyNameInformation, NULL, 0, &Length);
+    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_BUFFER_OVERFLOW)
+    {
+        return NULL;
+    }
+
+    Information = ExAllocatePoolZero(PagedPool, Length, TAG_IO);
+    if (Information == NULL) return NULL;
+
+    Status = ZwQueryKey(ServiceHandle,
+                        KeyNameInformation,
+                        Information,
+                        Length,
+                        &Length);
+    if (!NT_SUCCESS(Status) ||
+        Information->NameLength == 0 ||
+        Information->NameLength > MAXUSHORT - sizeof(WCHAR))
+    {
+        ExFreePoolWithTag(Information, TAG_IO);
+        return NULL;
+    }
+
+    Size = sizeof(UNICODE_STRING) + Information->NameLength + sizeof(WCHAR);
+    if (Size < PAGE_SIZE) Size = PAGE_SIZE;
+
+    Path = ExAllocatePoolZero(NonPagedPool, Size, TAG_IO);
+    if (Path != NULL)
+    {
+        Path->Buffer = (PWCHAR)(Path + 1);
+        Path->Length = (USHORT)Information->NameLength;
+        Path->MaximumLength = Path->Length;
+
+        RtlCopyMemory(Path->Buffer, Information->Name, Information->NameLength);
+    }
+
+    ExFreePoolWithTag(Information, TAG_IO);
+
+    return Path;
+}
+
 NTSTATUS
 IopInitializeDriverModule(
     _In_ PLDR_DATA_TABLE_ENTRY ModuleObject,
@@ -613,14 +794,22 @@ IopInitializeBootDrivers(VOID)
             DPRINT1("I/O: the boot driver %wZ did not start (%lx)\n",
                     &BootEntry->FilePath,
                     Status);
+            continue;
         }
+
+        if (DriverObject != NULL) ObDereferenceObject(DriverObject);
     }
 
     PnPBootDriversLoaded = TRUE;
 
-    IopReinitializeBootDrivers();
+    /* The boot drivers now build the device stacks the boot volume sits on */
+    Status = IopInitializePlugPlayServices();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: the boot devices could not be enumerated (%lx)\n", Status);
+    }
 
-    PnPBootDriversInitialized = TRUE;
+    IopReinitializeBootDrivers();
 }
 
 CODE_SEG("INIT")
@@ -630,6 +819,7 @@ IopInitializeSystemDrivers(VOID)
 {
     PKEY_BASIC_INFORMATION Information;
     OBJECT_ATTRIBUTES ObjectAttributes;
+    IOP_SYSTEM_START_ORDER Order = {NULL, 0, 0};
     PDRIVER_OBJECT DriverObject;
     UNICODE_STRING ServiceName;
     HANDLE ServicesHandle;
@@ -639,6 +829,12 @@ IopInitializeSystemDrivers(VOID)
     ULONG Index;
 
     PAGED_CODE();
+
+    /* The system root exists from here on, so every driver can be loaded */
+    PnPBootDriversInitialized = TRUE;
+
+    PiPerformSyncDeviceAction(IopRootDeviceNode->PhysicalDeviceObject,
+                              PiActionEnumDeviceTree);
 
     InitializeObjectAttributes(&ObjectAttributes,
                                (PUNICODE_STRING)&IopServicesKeyName,
@@ -703,17 +899,44 @@ IopInitializeSystemDrivers(VOID)
             continue;
         }
 
-        Status = IopLoadServiceModule(ServiceHandle, &DriverObject);
+        Status = IopAppendSystemStartService(&Order,
+                                             &ServiceName,
+                                             PpInitGetGroupOrderIndex(ServiceHandle),
+                                             PipGetDriverTagPriority(ServiceHandle));
+        ZwClose(ServiceHandle);
 
-        IopBootLog(&ServiceName, NT_SUCCESS(Status));
+        if (!NT_SUCCESS(Status)) break;
+    }
 
-        if (NT_SUCCESS(Status)) ObDereferenceObject(DriverObject);
+    IopSortSystemStartServices(&Order);
+
+    for (Index = 0; Index < Order.Count; Index++)
+    {
+        Status = IopOpenRegistryKeyEx(&ServiceHandle,
+                                      ServicesHandle,
+                                      &Order.Services[Index].Name,
+                                      KEY_READ);
+        if (!NT_SUCCESS(Status)) continue;
+
+        Status = IopLoadDriverForPnp(ServiceHandle, &DriverObject);
+
+        IopBootLog(&Order.Services[Index].Name, NT_SUCCESS(Status));
+
+        if (NT_SUCCESS(Status) && DriverObject != NULL)
+        {
+            ObDereferenceObject(DriverObject);
+        }
 
         ZwClose(ServiceHandle);
     }
 
+    IopFreeSystemStartServices(&Order);
+
     ExFreePoolWithTag(Information, TAG_IO);
     ZwClose(ServicesHandle);
+
+    PiPerformSyncDeviceAction(IopRootDeviceNode->PhysicalDeviceObject,
+                              PiActionEnumDeviceTree);
 
     IopReinitializeDrivers();
 
