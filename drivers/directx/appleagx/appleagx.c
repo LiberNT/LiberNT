@@ -7,6 +7,7 @@
 
 #include <ntddk.h>
 #include <reactos/drivers/applepmgr.h>
+#include <reactos/drivers/appleadt.h>
 #include <reactos/drivers/applepmp.h>
 #include <reactos/drivers/applertkit.h>
 #include <reactos/drivers/appleuat.h>
@@ -37,6 +38,20 @@
 #define AGX_MAX_SHARED              8
 #define AGX_SHARED_WINDOW_OFFSET    0x100000000ULL
 #define AGX_SHARED_WINDOW_SIZE      0x100000000ULL
+#define AGX_ADT_MAX_LENGTH          0x200000
+#define AGX_FIRMWARE_UPPER          0xfffffc0000000000ULL
+#define AGX_PERF_STATE_SIZE         8
+
+typedef struct _AGX_SEGMENT
+{
+    ULONG64 Physical;
+    ULONG64 Virtual;
+    ULONG64 Remap;
+    ULONG Size;
+    ULONG Flags;
+} AGX_SEGMENT, *PAGX_SEGMENT;
+
+C_ASSERT(sizeof(AGX_SEGMENT) == 32);
 
 typedef struct _AGX_SHARED
 {
@@ -67,6 +82,9 @@ typedef struct _APPLE_AGX
     ULONG64 RegionSize[AGX_REGIONS];
     APPLE_UAT_ADOPTED Adopted;
     BOOLEAN Owned;
+    PVOID AdtCopy;
+    ULONG AdtLength;
+    APPLE_ADT Adt;
     PUCHAR Mailbox;
     ULONG MailboxSize;
     APPLE_RTKIT Rtkit;
@@ -77,6 +95,19 @@ typedef struct _APPLE_AGX
 
 static const CHAR *const AgxRegionNames[AGX_REGIONS] = {
     "ttbs", "pagetables", "handoff", "pagetables-l2", "firmware-text", "firmware-data"
+};
+
+/* The exported tree names the regions by what they hold, in the order this driver keeps them. */
+static const CHAR *const AgxAdtRegionNames[4] = {
+    "gpu-region", "gfx-shared-region", "gfx-handoff", "gfx-shared-l2-region"
+};
+
+static const CHAR *const AgxAdtRegionBase[4] = {
+    "gpu-region-base", "gfx-shared-region-base", "gfx-handoff-base", "gfx-shared-l2-region-base"
+};
+
+static const CHAR *const AgxAdtRegionSize[4] = {
+    "gpu-region-size", "gfx-shared-region-size", "gfx-handoff-size", "gfx-shared-l2-region-size"
 };
 
 static
@@ -148,6 +179,161 @@ AgxPowerVote(
         Status = IoStatus.Status;
     }
     return Status;
+}
+
+/* The boot loader exports the machine's own tree as a reserved region labelled "adt". */
+static
+VOID
+AgxOpenAdt(
+    _Inout_ PAPPLE_AGX Agx)
+{
+    ULONG Reserved, Node;
+    ULONG64 Base, Size;
+    PVOID Mapped;
+    PHYSICAL_ADDRESS Address;
+    const VOID *Label, *Compatible;
+    ULONG Length;
+
+    if (!RiscvFdtFindNode(&Agx->Tree.Fdt, "/reserved-memory", &Reserved, NULL))
+        return;
+    for (Node = RiscvFdtFirstChild(&Agx->Tree.Fdt, Reserved); Node != RISCV_FDT_NO_NODE;
+         Node = RiscvFdtNextSibling(&Agx->Tree.Fdt, Node))
+    {
+        Compatible = RiscvFdtGetProperty(&Agx->Tree.Fdt, Node, "compatible", &Length);
+        if (!Compatible || !RiscvFdtStringListContains(Compatible, Length, "phram"))
+            continue;
+        Label = RiscvFdtGetProperty(&Agx->Tree.Fdt, Node, "label", &Length);
+        if (!Label || Length != sizeof("adt") || !RtlEqualMemory(Label, "adt", sizeof("adt")))
+            continue;
+        if (!RiscvFdtReadReg(&Agx->Tree.Fdt, Node, Reserved, 0, &Base, &Size) || !Size ||
+            Size > AGX_ADT_MAX_LENGTH)
+        {
+            continue;
+        }
+        Address.QuadPart = (LONGLONG)Base;
+        Mapped = MmMapIoSpace(Address, (SIZE_T)Size, MmCached);
+        if (!Mapped)
+            return;
+        Agx->AdtCopy = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Size, AGX_TAG);
+        if (Agx->AdtCopy)
+        {
+            RtlCopyMemory(Agx->AdtCopy, Mapped, (SIZE_T)Size);
+            Agx->AdtLength = (ULONG)Size;
+        }
+        MmUnmapIoSpace(Mapped, (SIZE_T)Size);
+        if (!Agx->AdtCopy)
+            return;
+        if (!AppleAdtOpen(&Agx->Adt, Agx->AdtCopy, Agx->AdtLength))
+        {
+            DbgPrint("appleagx: the exported tree at %I64x+%I64x could not be read\n", Base, Size);
+            ExFreePoolWithTag(Agx->AdtCopy, AGX_TAG);
+            Agx->AdtCopy = NULL;
+            Agx->AdtLength = 0;
+            return;
+        }
+        DbgPrint("appleagx: the machine's own tree is at %I64x+%I64x\n", Base, Size);
+        return;
+    }
+}
+
+/* The regions move with the firmware the boot chain loaded, so the machine's tree is asked first. */
+static
+BOOLEAN
+AgxReadAdtRegions(
+    _Inout_ PAPPLE_AGX Agx)
+{
+    ULONG Node, Index, Other;
+    ULONG64 Base, Size;
+    BOOLEAN Complete = TRUE;
+
+    if (!Agx->AdtCopy)
+        return FALSE;
+    Node = AppleAdtPath(&Agx->Adt, "/arm-io/sgx");
+    if (Node == APPLE_ADT_NO_NODE || !AppleAdtIsCompatible(&Agx->Adt, Node, "gpu,t6030"))
+    {
+        DbgPrint("appleagx: the exported tree has no graphics node this driver knows\n");
+        return FALSE;
+    }
+    for (Index = 0; Index < RTL_NUMBER_OF(AgxAdtRegionNames); ++Index)
+    {
+        if (!AppleAdtReadU64(&Agx->Adt, Node, AgxAdtRegionBase[Index], &Base) ||
+            !AppleAdtReadU64(&Agx->Adt, Node, AgxAdtRegionSize[Index], &Size))
+        {
+            Complete = FALSE;
+            continue;
+        }
+        if (!Base || !Size || ((Base | Size) & (APPLE_UAT_PAGE_SIZE - 1)))
+        {
+            DbgPrint("appleagx: region %s at %I64x+%I64x is not page aligned\n", AgxAdtRegionNames[Index], Base,
+                     Size);
+            Complete = FALSE;
+            continue;
+        }
+        Agx->RegionBase[Index] = Base;
+        Agx->RegionSize[Index] = Size;
+        DbgPrint("appleagx: region %s at %I64x+%I64x\n", AgxAdtRegionNames[Index], Base, Size);
+    }
+    for (Index = 0; Complete && Index < 4; ++Index)
+    {
+        for (Other = Index + 1; Other < 4; ++Other)
+        {
+            if (Agx->RegionBase[Index] < Agx->RegionBase[Other] + Agx->RegionSize[Other] &&
+                Agx->RegionBase[Other] < Agx->RegionBase[Index] + Agx->RegionSize[Index])
+            {
+                DbgPrint("appleagx: regions %s and %s overlap\n", AgxAdtRegionNames[Index],
+                         AgxAdtRegionNames[Other]);
+                return FALSE;
+            }
+        }
+    }
+    return Complete;
+}
+
+/* The firmware image is not reserved by the boot loader, so where it lies is worth recording. */
+static
+VOID
+AgxReportAdtFirmware(
+    _Inout_ PAPPLE_AGX Agx)
+{
+    AGX_SEGMENT Segment[2];
+    const VOID *Ranges;
+    ULONG Node, Length, Index, States;
+    const UCHAR *Perf;
+
+    if (!Agx->AdtCopy)
+        return;
+    Node = AppleAdtPath(&Agx->Adt, "/arm-io/gfx-asc/iop-gfx-nub");
+    Ranges = (Node == APPLE_ADT_NO_NODE) ? NULL : AppleAdtGetProperty(&Agx->Adt, Node, "segment-ranges", &Length);
+    if (Ranges && Length >= sizeof(Segment))
+    {
+        RtlCopyMemory(Segment, Ranges, sizeof(Segment));
+        for (Index = 0; Index < RTL_NUMBER_OF(Segment); ++Index)
+        {
+            DbgPrint("appleagx: firmware %s at %I64x+%lx, mapped at %I64x\n", Index ? "data" : "text",
+                     Segment[Index].Physical, Segment[Index].Size, Segment[Index].Virtual);
+        }
+        if (Segment[0].Virtual != AGX_FIRMWARE_UPPER ||
+            Segment[1].Virtual != Segment[0].Virtual + Segment[0].Size)
+        {
+            DbgPrint("appleagx: the firmware segments are not where the processor expects them\n");
+        }
+        Agx->RegionBase[AGX_REGION_FIRMWARE_TEXT] = Segment[0].Physical;
+        Agx->RegionSize[AGX_REGION_FIRMWARE_TEXT] = Segment[0].Size;
+    }
+    Node = AppleAdtPath(&Agx->Adt, "/arm-io/sgx");
+    Perf = (Node == APPLE_ADT_NO_NODE) ? NULL : AppleAdtGetProperty(&Agx->Adt, Node, "perf-states", &Length);
+    if (!Perf || Length < AGX_PERF_STATE_SIZE)
+        return;
+    States = Length / AGX_PERF_STATE_SIZE;
+    for (Index = 0; Index < States; ++Index)
+    {
+        ULONG Frequency, Millivolts;
+
+        RtlCopyMemory(&Frequency, Perf + Index * AGX_PERF_STATE_SIZE, sizeof(Frequency));
+        RtlCopyMemory(&Millivolts, Perf + Index * AGX_PERF_STATE_SIZE + sizeof(Frequency), sizeof(Millivolts));
+        DbgPrint("appleagx: performance state %lu of %lu: %lu kHz at %lu mV\n", Index, States, Frequency / 1000,
+                 Millivolts);
+    }
 }
 
 /* The firmware's own regions: the boot loader reserves them and their addresses never move. */
@@ -411,6 +597,11 @@ AgxStop(
     if (Agx->Asc)
         MmUnmapIoSpace(Agx->Asc, Agx->AscSize);
     Agx->Asc = NULL;
+    if (Agx->AdtCopy)
+        ExFreePoolWithTag(Agx->AdtCopy, AGX_TAG);
+    Agx->AdtCopy = NULL;
+    Agx->AdtLength = 0;
+    RtlZeroMemory(&Agx->Adt, sizeof(Agx->Adt));
     if (Agx->TreeOpen)
         FdtDriverClose(&Agx->Tree);
     Agx->TreeOpen = FALSE;
@@ -502,7 +693,10 @@ AgxStart(
              CoresPerCluster, Active, Masks[0], Masks[1], Masks[2]);
     DbgPrint("appleagx: coprocessor control %08lx (%s), firmware not started\n", Control,
              (Control & AGX_ASC_CONTROL_RUN) ? "running" : "halted");
-    AgxReadRegions(Agx);
+    AgxOpenAdt(Agx);
+    if (!AgxReadAdtRegions(Agx))
+        AgxReadRegions(Agx);
+    AgxReportAdtFirmware(Agx);
     AgxReportFirmware(Agx);
     if ((Control & AGX_ASC_CONTROL_RUN) || !AgxTableIsClear(Agx))
         return STATUS_SUCCESS;
