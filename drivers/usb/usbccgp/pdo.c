@@ -804,8 +804,9 @@ USBCCGP_PDOSelectConfiguration(
     PIO_STACK_LOCATION IoStack;
     PPDO_DEVICE_EXTENSION PDODeviceExtension;
     PURB Urb, NewUrb;
-    PUSBD_INTERFACE_INFORMATION InterfaceInformation;
-    ULONG InterfaceIndex, Length;
+    PUSBD_INTERFACE_INFORMATION InterfaceInformation, SelectedInterface;
+    PUSB_INTERFACE_DESCRIPTOR AltDescriptor;
+    ULONG InterfaceIndex, PipeIndex, InterfaceLength, Length;
     PUSBD_INTERFACE_LIST_ENTRY Entry;
     ULONG NeedSelect, FoundInterface;
     NTSTATUS Status;
@@ -969,12 +970,28 @@ USBCCGP_PDOSelectConfiguration(
             // select interface
             //
             DPRINT("Selecting InterfaceIndex %lu AlternateSetting %lu NumberOfPipes %lu\n", InterfaceInformation->InterfaceNumber, InterfaceInformation->AlternateSetting, InterfaceInformation->NumberOfPipes);
-            ASSERT(InterfaceInformation->Length == Entry->Interface->Length);
+
+            AltDescriptor = USBD_ParseConfigurationDescriptorEx(PDODeviceExtension->ConfigurationDescriptor,
+                                                                PDODeviceExtension->ConfigurationDescriptor,
+                                                                InterfaceInformation->InterfaceNumber,
+                                                                InterfaceInformation->AlternateSetting,
+                                                                -1, -1, -1);
+            if (!AltDescriptor)
+            {
+                DPRINT1("[USBCCGP] Interface %u has no alternate setting %u\n", InterfaceInformation->InterfaceNumber, InterfaceInformation->AlternateSetting);
+                return STATUS_INVALID_PARAMETER;
+            }
+            ASSERT(AltDescriptor->bInterfaceNumber == InterfaceInformation->InterfaceNumber);
+            ASSERT(AltDescriptor->bAlternateSetting == InterfaceInformation->AlternateSetting);
+
+            InterfaceLength = GET_USBD_INTERFACE_SIZE(AltDescriptor->bNumEndpoints);
+            if (InterfaceInformation->Length < InterfaceLength)
+                return STATUS_INVALID_PARAMETER;
 
             //
             // build urb
             //
-            NewUrb = AllocateItem(NonPagedPool, GET_SELECT_INTERFACE_REQUEST_SIZE(InterfaceInformation->NumberOfPipes));
+            NewUrb = AllocateItem(NonPagedPool, GET_SELECT_INTERFACE_REQUEST_SIZE(AltDescriptor->bNumEndpoints));
             if (!NewUrb)
             {
                 //
@@ -986,7 +1003,25 @@ USBCCGP_PDOSelectConfiguration(
             //
             // now prepare interface urb
             //
-            UsbBuildSelectInterfaceRequest(NewUrb, (USHORT)GET_SELECT_INTERFACE_REQUEST_SIZE(InterfaceInformation->NumberOfPipes), PDODeviceExtension->ConfigurationHandle, InterfaceInformation->InterfaceNumber, InterfaceInformation->AlternateSetting);
+            UsbBuildSelectInterfaceRequest(NewUrb, (USHORT)GET_SELECT_INTERFACE_REQUEST_SIZE(AltDescriptor->bNumEndpoints), PDODeviceExtension->ConfigurationHandle, InterfaceInformation->InterfaceNumber, InterfaceInformation->AlternateSetting);
+            NewUrb->UrbSelectInterface.Interface.Length = (USHORT)InterfaceLength;
+            for (PipeIndex = 0; PipeIndex < AltDescriptor->bNumEndpoints; PipeIndex++)
+            {
+                NewUrb->UrbSelectInterface.Interface.Pipes[PipeIndex].MaximumTransferSize = InterfaceInformation->Pipes[PipeIndex].MaximumTransferSize;
+                NewUrb->UrbSelectInterface.Interface.Pipes[PipeIndex].PipeFlags = InterfaceInformation->Pipes[PipeIndex].PipeFlags;
+                NewUrb->UrbSelectInterface.Interface.Pipes[PipeIndex].MaximumPacketSize = InterfaceInformation->Pipes[PipeIndex].MaximumPacketSize;
+            }
+
+            SelectedInterface = NULL;
+            if (Entry->Interface->Length != InterfaceLength)
+            {
+                SelectedInterface = AllocateItem(NonPagedPool, InterfaceLength);
+                if (!SelectedInterface)
+                {
+                    FreeItem(NewUrb);
+                    return STATUS_INSUFFICIENT_RESOURCES;
+                }
+            }
 
             //
             // now select the interface
@@ -999,6 +1034,8 @@ USBCCGP_PDOSelectConfiguration(
                  //
                  // failed
                  //
+                 if (SelectedInterface)
+                     FreeItem(SelectedInterface);
                  FreeItem(NewUrb);
                  return Status;
             }
@@ -1006,9 +1043,16 @@ USBCCGP_PDOSelectConfiguration(
             //
             // update configuration info
             //
-            ASSERT(Entry->Interface->Length >= NewUrb->UrbSelectInterface.Interface.Length);
-            ASSERT(Length >= NewUrb->UrbSelectInterface.Interface.Length);
+            ASSERT(NewUrb->UrbSelectInterface.Interface.Length == InterfaceLength);
+            ASSERT(NewUrb->UrbSelectInterface.Interface.NumberOfPipes == AltDescriptor->bNumEndpoints);
+            if (SelectedInterface)
+            {
+                FreeItem(Entry->Interface);
+                Entry->Interface = SelectedInterface;
+            }
             RtlCopyMemory(Entry->Interface, &NewUrb->UrbSelectInterface.Interface, NewUrb->UrbSelectInterface.Interface.Length);
+            ASSERT(Entry->Interface->Length == InterfaceLength);
+            Entry->InterfaceDescriptor = AltDescriptor;
 
             //
             // update provided interface information
