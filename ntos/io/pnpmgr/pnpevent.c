@@ -379,6 +379,46 @@ IopControlEnumerateDevice(
     return Status;
 }
 
+/*
+ * Writes the name of the device that kept itself into the caller's buffer.
+ * The buffer is the caller's own, so a user-mode caller's is written through
+ * its own rules and a short one simply gets nothing.
+ */
+static
+VOID
+PiReportVetoName(
+    _In_ PPLUGPLAY_CONTROL_QUERY_REMOVE_DATA Data,
+    _In_ PCUNICODE_STRING VetoName,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    ULONG Characters = VetoName->Length / sizeof(WCHAR);
+
+    PAGED_CODE();
+
+    if (Data->VetoName == NULL || Data->NameLength <= Characters) return;
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(Data->VetoName,
+                          (Characters + 1) * sizeof(WCHAR),
+                          sizeof(WCHAR));
+            RtlCopyMemory(Data->VetoName, VetoName->Buffer, VetoName->Length);
+            Data->VetoName[Characters] = UNICODE_NULL;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
+
+        return;
+    }
+
+    RtlCopyMemory(Data->VetoName, VetoName->Buffer, VetoName->Length);
+    Data->VetoName[Characters] = UNICODE_NULL;
+}
+
 NTSTATUS
 NTAPI
 NtPlugPlayControl(
@@ -474,6 +514,7 @@ NtPlugPlayControl(
         case PlugPlayControlQueryAndRemoveDevice:
         {
             PPLUGPLAY_CONTROL_QUERY_REMOVE_DATA Data = Captured;
+            PI_QUERY_REMOVE_DATA RemoveData;
             PDEVICE_OBJECT DeviceObject;
 
             if (BufferSize < sizeof(*Data))
@@ -490,21 +531,45 @@ NtPlugPlayControl(
                 break;
             }
 
-            Status = PiPerformSyncDeviceAction(DeviceObject,
-                                               PiActionQueryRemoveDevice);
+            RtlZeroMemory(&RemoveData, sizeof(RemoveData));
+
+            Status = PiPerformSyncDeviceActionEx(DeviceObject,
+                                                 PiActionQueryRemoveDevice,
+                                                 &RemoveData);
             if (NT_SUCCESS(Status))
             {
                 Status = PiPerformSyncDeviceAction(DeviceObject,
                                                    PiActionRemoveDevice);
+            }
+            else
+            {
+                /* The caller is told what kept the device and which one it was */
+                Data->VetoType = RemoveData.VetoType;
+                PiReportVetoName(Data, &RemoveData.VetoName, PreviousMode);
             }
 
             ObDereferenceObject(DeviceObject);
             break;
         }
 
+        case PlugPlayControlUserResponse:
+            if (BufferSize < sizeof(PLUGPLAY_CONTROL_USER_RESPONSE_DATA))
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            /* The event was taken off the queue when it was read; the answer only acknowledges it */
+            /* TODO: hand the answer to a vetoable event (query-remove) once such events are queued */
+            Status = STATUS_SUCCESS;
+            break;
+
         default:
-            /* TODO: the remaining control classes are served by umpnpmgr */
-            Status = STATUS_NOT_IMPLEMENTED;
+            if (!PiPlugPlayControlDevice(PlugPlayControlClass, Captured, BufferSize, PreviousMode, &Status))
+            {
+                /* TODO: the legacy-device, blocked-driver and halt classes are not served */
+                Status = STATUS_NOT_IMPLEMENTED;
+            }
             break;
     }
 

@@ -1822,6 +1822,20 @@ PiQueryRemoveDevice(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Out_ PPI_QUERY_REMOVE_DATA RemoveData);
 
+VOID
+PiQueueDeviceActionEx(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_ACTION Action,
+    _In_opt_ PKEVENT CompletionEvent,
+    _Out_opt_ NTSTATUS *CompletionStatus,
+    _Out_opt_ PPI_QUERY_REMOVE_DATA RemoveData);
+
+NTSTATUS
+PiPerformSyncDeviceActionEx(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_ACTION Action,
+    _Out_opt_ PPI_QUERY_REMOVE_DATA RemoveData);
+
 //
 // PnP notifications
 //
