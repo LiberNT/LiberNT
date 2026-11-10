@@ -21,16 +21,54 @@
 
 #include <windef.h>
 #include <http.h>
+#ifndef CTL_CODE
 #include <winioctl.h>
+#endif
 
 #define IOCTL_HTTP_ADD_URL          CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, 0)
 #define IOCTL_HTTP_REMOVE_URL       CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, 0)
 #define IOCTL_HTTP_RECEIVE_REQUEST  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, 0)
 #define IOCTL_HTTP_SEND_RESPONSE    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_RECEIVE_BODY     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_SET_QUEUE_PROPERTY   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x805, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_QUERY_QUEUE_PROPERTY CTL_CODE(FILE_DEVICE_UNKNOWN, 0x806, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_SET_URL_CONFIG   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x807, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_SHUTDOWN_QUEUE   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x808, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_CANCEL_REQUEST   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x809, METHOD_BUFFERED, 0)
+#define IOCTL_HTTP_WAIT_DISCONNECT  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80a, METHOD_BUFFERED, 0)
+
+#define HTTP_VERSION_EA_NAME "HttpApiVersion"
+
+struct http_version_ea
+{
+    ULONG next_entry_offset;
+    UCHAR flags;
+    UCHAR name_length;
+    USHORT value_length;
+    char name[sizeof(HTTP_VERSION_EA_NAME)];
+    char value[sizeof(HTTPAPI_VERSION)];
+};
+
+struct http_url_config
+{
+    BOOL inactive;
+    USHORT idle_connection;
+    USHORT header_wait;
+    USHORT entity_body;
+    ULONG max_connections;
+};
+
+struct http_url_config_params
+{
+    HTTP_URL_GROUP_ID group;
+    struct http_url_config config;
+};
 
 struct http_add_url_params
 {
     HTTP_URL_CONTEXT context;
+    HTTP_URL_GROUP_ID group;
+    struct http_url_config config;
     char url[1];
 };
 
@@ -45,8 +83,24 @@ struct http_receive_request_params
 struct http_response
 {
     HTTP_REQUEST_ID id;
+    ULONG response_flags;
     int len;
+    ULONG sent;
+    BOOL reset;
     char buffer[1];
+};
+
+struct http_queue_property
+{
+    ULONG property;
+    ULONG value;
+};
+
+struct http_receive_body_params
+{
+    HTTP_REQUEST_ID id;
+    ULONG bits;
+    ULONG flags;
 };
 
 #endif

@@ -412,6 +412,10 @@ typedef struct _LISTEN_CONTEXT
     PWSK_SOCKET_INTERNAL ListenSocket;
     PWSK_SOCKET_INTERNAL AcceptSocket;
     PTDI_CONNECTION_INFORMATION RequestConnectionInfo, ReturnConnectionInfo;
+    WORK_QUEUE_ITEM WorkItem;
+    SOCKADDR_IN LocalAddress;
+    PSOCKADDR RemoteAddress;
+    BOOLEAN Requeue;
 } LISTEN_CONTEXT, *PLISTEN_CONTEXT;
 
 static NTSTATUS NTAPI
@@ -474,6 +478,120 @@ static void QueueListening(_In_ PWSK_SOCKET_INTERNAL ListenSocket)
     KeSetEvent(&ListenSocket->StartListenEvent, IO_NO_INCREMENT, FALSE);
 }
 
+static NTSTATUS QueryAcceptedLocalAddress(
+    _In_ PWSK_SOCKET_INTERNAL AcceptSocket,
+    _Out_ PSOCKADDR_IN LocalAddress)
+{
+    ULONG BufferSize =
+        FIELD_OFFSET(TDI_ADDRESS_INFO, Address.Address[0].Address) + sizeof(TDI_ADDRESS_IP);
+    PTDI_ADDRESS_INFO AddressInfo;
+    PTDI_ADDRESS_IP TdiAddress;
+    PMDL Mdl;
+    NTSTATUS Status;
+
+    AddressInfo = ExAllocatePoolZero(NonPagedPoolNx, BufferSize, TAG_NETIO);
+    if (!AddressInfo)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Mdl = IoAllocateMdl(AddressInfo, BufferSize, FALSE, FALSE, NULL);
+    if (!Mdl)
+    {
+        ExFreePoolWithTag(AddressInfo, TAG_NETIO);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = STATUS_SUCCESS;
+    _SEH2_TRY
+    {
+        MmProbeAndLockPages(Mdl, KernelMode, IoModifyAccess);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    if (!NT_SUCCESS(Status))
+    {
+        IoFreeMdl(Mdl);
+        ExFreePoolWithTag(AddressInfo, TAG_NETIO);
+        return Status;
+    }
+
+    Status = TdiQueryInformation(AcceptSocket->ConnectionFile, TDI_QUERY_ADDRESS_INFO, Mdl);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(AddressInfo, TAG_NETIO);
+        return Status;
+    }
+
+    if (AddressInfo->Address.TAAddressCount != 1 ||
+        AddressInfo->Address.Address[0].AddressType != TDI_ADDRESS_TYPE_IP ||
+        AddressInfo->Address.Address[0].AddressLength != sizeof(TDI_ADDRESS_IP))
+    {
+        Status = STATUS_INVALID_ADDRESS;
+    }
+    else
+    {
+        TdiAddress = (PTDI_ADDRESS_IP)AddressInfo->Address.Address[0].Address;
+        RtlZeroMemory(LocalAddress, sizeof(*LocalAddress));
+        LocalAddress->sin_family = AF_INET;
+        LocalAddress->sin_port = TdiAddress->sin_port;
+        LocalAddress->sin_addr.s_addr = TdiAddress->in_addr;
+    }
+
+    ExFreePoolWithTag(AddressInfo, TAG_NETIO);
+    return Status;
+}
+
+static VOID NTAPI ListenEventWorker(_In_ PVOID Context)
+{
+    PLISTEN_CONTEXT ListenContext = Context;
+    PWSK_SOCKET_INTERNAL ListenSocket = ListenContext->ListenSocket;
+    PWSK_SOCKET_INTERNAL AcceptSocket = ListenContext->AcceptSocket;
+    PWSK_CLIENT_LISTEN_DISPATCH ListenDispatch =
+        (PWSK_CLIENT_LISTEN_DISPATCH)ListenSocket->ListenDispatch;
+    PSOCKADDR RemoteAddress = ListenContext->RemoteAddress;
+    PVOID AcceptSocketContext;
+    const WSK_CLIENT_CONNECTION_DISPATCH *AcceptSocketDispatch;
+    BOOLEAN Accepted = FALSE;
+    NTSTATUS Status;
+
+    Status = QueryAcceptedLocalAddress(AcceptSocket, &ListenContext->LocalAddress);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("QueryAcceptedLocalAddress failed with status 0x%08x\n", Status);
+    }
+    else
+    {
+        memcpy(&AcceptSocket->LocalAddress, &ListenContext->LocalAddress, sizeof(AcceptSocket->LocalAddress));
+        memcpy(&AcceptSocket->RemoteAddress, RemoteAddress, sizeof(AcceptSocket->RemoteAddress));
+        Status = ListenDispatch->WskAcceptEvent(ListenSocket->user_context,
+                                                0,
+                                                (PSOCKADDR)&ListenContext->LocalAddress,
+                                                RemoteAddress,
+                                                &AcceptSocket->Socket,
+                                                &AcceptSocketContext,
+                                                &AcceptSocketDispatch);
+        if (NT_SUCCESS(Status))
+            Accepted = TRUE;
+        else
+            DPRINT1("ListenDispatch->WskAcceptEvent failed with status 0x%08x\n", Status);
+    }
+
+    if (!Accepted)
+        DereferenceSocket(AcceptSocket);
+
+    if (ListenContext->Requeue)
+        QueueListening(ListenSocket);
+
+    DereferenceSocket(AcceptSocket);
+    DereferenceSocket(ListenSocket);
+
+    ExFreePoolWithTag(ListenContext->ReturnConnectionInfo, TAG_AFD_TDI_CONNECTION_INFORMATION);
+    ExFreePoolWithTag(ListenContext->RequestConnectionInfo, TAG_AFD_TDI_CONNECTION_INFORMATION);
+    ExFreePoolWithTag(ListenContext, TAG_NETIO);
+}
+
 static NTSTATUS NTAPI
 ListenComplete(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIRP Irp, _In_ PVOID Context)
 {
@@ -482,19 +600,15 @@ ListenComplete(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIRP Irp, _In_ PVOID Conte
     PWSK_SOCKET_INTERNAL AcceptSocket = ListenContext->AcceptSocket;
     PWSK_CLIENT_LISTEN_DISPATCH ListenDispatch =
         (PWSK_CLIENT_LISTEN_DISPATCH)ListenSocket->ListenDispatch;
+    BOOLEAN Requeue = Irp->PendingReturned || NT_SUCCESS(Irp->IoStatus.Status);
 
     /* A PTRANSPORT_ADDRESS address field has an additional
      * AddressLength field so the struct sockaddr_in starts
      * at the AddressType (the address family, 2 for AF_INET)
      * field.
      */
-
-    PSOCKADDR RemoteAddress =
+    ListenContext->RemoteAddress =
         (PSOCKADDR)(&((PTRANSPORT_ADDRESS)ListenContext->ReturnConnectionInfo->RemoteAddress)->Address[0].AddressType);
-    PVOID AcceptSocketContext;
-    const WSK_CLIENT_CONNECTION_DISPATCH *AcceptSocketDispatch;
-    BOOLEAN Requeue = Irp->PendingReturned || NT_SUCCESS(Irp->IoStatus.Status);
-    NTSTATUS Status;
 
     FUNCTION_TRACE;
 
@@ -506,22 +620,10 @@ ListenComplete(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIRP Irp, _In_ PVOID Conte
     {
         ListenSocket->ListenIrp = NULL;
 
-        Status = ListenDispatch->WskAcceptEvent(ListenSocket->user_context,
-                                                0,
-                                                &ListenSocket->LocalAddress,
-                                                RemoteAddress,
-                                                &AcceptSocket->Socket,
-                                                &AcceptSocketContext,
-                                                &AcceptSocketDispatch);
-
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("ListenDispatch->WskAcceptEvent returned non-successful status 0x%08x\n", Status);
-        }
-        else
-        {
-            memcpy(&AcceptSocket->RemoteAddress, RemoteAddress, sizeof(AcceptSocket->RemoteAddress));
-        }
+        ListenContext->Requeue = Requeue;
+        ExInitializeWorkItem(&ListenContext->WorkItem, ListenEventWorker, ListenContext);
+        ExQueueWorkItem(&ListenContext->WorkItem, DelayedWorkQueue);
+        return STATUS_SUCCESS;
     }
     else
     {
@@ -877,6 +979,8 @@ WskBind(_In_ PWSK_SOCKET SocketParam, _In_ PSOCKADDR LocalAddress, _Reserved_ UL
                                 ta, AFD_SHARE_REUSE, &Socket->LocalAddressHandle, &Socket->LocalAddressFile);
 
     ExFreePoolWithTag(ta, TAG_NETIO);
+    if (NT_SUCCESS(status))
+        memcpy(&Socket->LocalAddress, LocalAddress, sizeof(Socket->LocalAddress));
 
 err_out:
     Irp->IoStatus.Status = status;
@@ -1285,17 +1389,50 @@ static NTSTATUS WSKAPI
 WskDisconnect(_In_ PWSK_SOCKET SocketParam, _In_opt_ PWSK_BUF Buffer, _In_ ULONG Flags, _Inout_ PIRP Irp)
 {
     PWSK_SOCKET_INTERNAL Socket = CONTAINING_RECORD(SocketParam, WSK_SOCKET_INTERNAL, Socket);
+    PNETIO_CONTEXT NetioContext;
+    PIRP TdiIrp = NULL;
+    NTSTATUS Status;
 
     FUNCTION_TRACE;
 
-    SocketShutdown(Socket);
-
     IoSetNextIrpStackLocation(Irp);
+    if (Buffer || (Flags & ~WSK_FLAG_ABORTIVE))
+    {
+        Status = STATUS_INVALID_PARAMETER;
+        goto err_out;
+    }
+    if (!Socket->ConnectionFile)
+    {
+        Status = STATUS_FILE_FORCED_CLOSED;
+        goto err_out;
+    }
 
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+    NetioContext = ExAllocatePoolZero(NonPagedPool, sizeof(*NetioContext), TAG_NETIO);
+    if (!NetioContext)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto err_out;
+    }
+    NetioContext->socket = Socket;
+    NetioContext->UserIrp = Irp;
 
+    IoMarkIrpPending(Irp);
+    ReferenceSocket(Socket);
+    Status = TdiDisconnect(&TdiIrp, Socket->ConnectionFile, NULL,
+                           (Flags & WSK_FLAG_ABORTIVE) ? TDI_DISCONNECT_ABORT : TDI_DISCONNECT_RELEASE,
+                           NetioComplete, NetioContext, NULL, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DereferenceSocket(Socket);
+        ExFreePoolWithTag(NetioContext, TAG_NETIO);
+        goto err_out;
+    }
     return STATUS_PENDING;
+
+err_out:
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+    return Status;
 }
 
 
