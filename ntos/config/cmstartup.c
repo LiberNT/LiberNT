@@ -655,7 +655,8 @@ CmpInitializeHiveList(VOID)
                                      Entry->HHiveFlags,
                                      &Hive,
                                      &Allocate,
-                                     CM_CHECK_REGISTRY_VALIDATE_HIVE);
+                                     CM_CHECK_REGISTRY_VALIDATE_HIVE |
+                                     CM_CHECK_REGISTRY_PURGE_VOLATILES);
         if (!NT_SUCCESS(Status)) continue;
 
         if (Allocate && !CmpCreateRootNode(&Hive->Hive, L"", &RootCell))

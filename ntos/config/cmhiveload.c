@@ -507,7 +507,8 @@ CmpLoadHiveAtName(
                                                              : 0,
                                  &CmHive,
                                  &Allocate,
-                                 CM_CHECK_REGISTRY_VALIDATE_HIVE);
+                                 CM_CHECK_REGISTRY_VALIDATE_HIVE |
+                                 CM_CHECK_REGISTRY_PURGE_VOLATILES);
     if (!NT_SUCCESS(Status))
     {
         ExReleasePushLockExclusive(&CmpLoadHiveLock);
@@ -957,7 +958,8 @@ CmpRestoreKeyFromFile(
                                NULL,
                                NULL,
                                NULL,
-                               CM_CHECK_REGISTRY_VALIDATE_HIVE);
+                               CM_CHECK_REGISTRY_VALIDATE_HIVE |
+                               CM_CHECK_REGISTRY_PURGE_VOLATILES);
     if (!NT_SUCCESS(Status)) return Status;
 
     SourceRoot = Loaded->Hive.BaseBlock->RootCell;
@@ -1164,7 +1166,8 @@ CmpLoadHiveThread(
                                  ListEntry->HHiveFlags,
                                  &CmHive,
                                  &Allocate,
-                                 CM_CHECK_REGISTRY_VALIDATE_HIVE);
+                                 CM_CHECK_REGISTRY_VALIDATE_HIVE |
+                                 CM_CHECK_REGISTRY_PURGE_VOLATILES);
     if (NT_SUCCESS(Status))
     {
         CmHive->Flags |= ListEntry->CmHiveFlags;
