@@ -11,6 +11,7 @@
 #include <ndk/ntndk.h>
 #include <winreg.h>
 #include <reactos/riscv64/fdtlib.h>
+#include <reactos/drivers/applepmp.h>
 
 #define UNIT_TEST
 
@@ -532,9 +533,17 @@ MmMapIoSpace(PHYSICAL_ADDRESS Physical, SIZE_T Size, MEMORY_CACHING_TYPE Type)
 {
     ULONG Offset;
     SIM_REGION *Region = SimFind((ULONG64)Physical.QuadPart, &Offset);
+    PVOID Allocated;
 
     if (!Region || Offset + Size > Region->Size)
-        return NULL;
+    {
+        /* Memory a coprocessor owns is mapped the same way as a register window. */
+        Allocated = SimVirtualForPhysical((ULONG64)Physical.QuadPart);
+        if (!Allocated)
+            return NULL;
+        SimMapCount++;
+        return Allocated;
+    }
     SimMapCount++;
     return (PUCHAR)Region->Data + Offset;
 }
@@ -1377,6 +1386,156 @@ TestDartLowWindow(VOID)
     ok_hex(AppleDartMapLow(&Tree, Dart, 1, 0x10000006000ULL, 0x4000, &Iova, "test"), STATUS_INSUFFICIENT_RESOURCES);
     ok(AppleDartLowNext == DART_LOW_WINDOW_END - 0x4000, "A failed mapping moved the window to %I64x\n", AppleDartLowNext);
     ok_int(SimMapCount, 0);
+}
+
+
+#define DART_ADOPT_SID      5
+#define DART_ADOPT_PAGE     0x4000ULL
+
+static
+PULONG64
+SimFirmwareTable(ULONG64 *Physical)
+{
+    PHYSICAL_ADDRESS Low, High, Boundary;
+    PULONG64 Table;
+
+    Low.QuadPart = 0;
+    High.QuadPart = -1;
+    Boundary.QuadPart = (LONGLONG)DART_ADOPT_PAGE;
+    Table = MmAllocateContiguousMemorySpecifyCache((SIZE_T)DART_ADOPT_PAGE, Low, High, Boundary, MmCached);
+    if (Table)
+    {
+        memset(Table, 0, (SIZE_T)DART_ADOPT_PAGE);
+        *Physical = (ULONG64)MmGetPhysicalAddress(Table).QuadPart;
+    }
+    return Table;
+}
+
+/* Build the two-level tables a running coprocessor would already have, with one page mapped. */
+static
+ULONG64
+SimFirmwareTables(ULONG64 Iova, ULONG64 Physical)
+{
+    ULONG64 TopPhysical = 0, LeafPhysical = 0;
+    PULONG64 Top = SimFirmwareTable(&TopPhysical);
+    PULONG64 Leaf = SimFirmwareTable(&LeafPhysical);
+
+    if (!Top || !Leaf)
+        return 0;
+    Top[(Iova >> 25) & 2047] = ((LeafPhysical >> 4) & 0x0000003ffffffc00ULL) | 1;
+    Leaf[(Iova >> 14) & 2047] = ((Physical >> 4) & 0x0000003ffffffc00ULL) | (0xfffULL << 40) | 1;
+    return TopPhysical;
+}
+
+static
+VOID
+SimDartAdoptRegisters(ULONG64 TopPhysical, ULONG Tcr)
+{
+    DART(0x08) = (36 << 24) | (36 << 16);
+    DART(0x0c) = 16;
+    DART(0x200) = 0;
+    DART(0x1000 + 4 * DART_ADOPT_SID) = Tcr;
+    DART(0x1400 + 4 * DART_ADOPT_SID) = (ULONG)(((TopPhysical >> 14) << 2) | 1);
+}
+
+static
+VOID
+TestDartAdopt(VOID)
+{
+    const ULONG64 Mapped = 0x00200000ULL, Phys = 0x10000040000ULL;
+    APPLE_DART_ADOPTED Adopted;
+    FDT_DRIVER_TREE Tree;
+    ULONG64 Top, Found, Iova;
+    ULONG Dart;
+    NTSTATUS Status;
+
+    ResetSimulation(&Tree);
+    Dart = FindNode(&Tree, "apple,t8110-dart");
+    Top = SimFirmwareTables(Mapped, Phys);
+    ok(Top != 0, "The firmware tables were not built\n");
+    SimDartAdoptRegisters(Top, 1);
+
+    Status = AppleDartAdopt(&Tree, Dart, DART_ADOPT_SID, 0x10000000ULL, 0x20000000ULL, "test", &Adopted);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_int(Adopted.Levels, 2);
+    ok_int(Adopted.Sid, DART_ADOPT_SID);
+    ok(Adopted.TopPhysical == Top, "Adopted the tables at %I64x, not %I64x\n", Adopted.TopPhysical, Top);
+
+    /* The firmware's own mapping is readable and is never handed out again. */
+    ok(AppleDartAdoptedTranslate(&Adopted, Mapped, &Found), "The firmware mapping was not found\n");
+    ok(Found == Phys, "The firmware mapping resolves to %I64x, not %I64x\n", Found, Phys);
+    ok(AppleDartAdoptedTranslate(&Adopted, Mapped + 0x40, &Found) && Found == Phys + 0x40,
+       "An offset inside the page resolves to %I64x\n", Found);
+    ok(!AppleDartAdoptedTranslate(&Adopted, Mapped + DART_ADOPT_PAGE, &Found), "An unmapped page resolved\n");
+    ok(!AppleDartAdoptedRangeFree(&Adopted, Mapped, 1), "The firmware page is reported free\n");
+    ok(AppleDartAdoptedRangeFree(&Adopted, Mapped + DART_ADOPT_PAGE, 1), "A free page is reported taken\n");
+
+    /* A mapping at a chosen address, and the refusal to overwrite one that exists. */
+    Status = AppleDartAdoptedMapAt(&Adopted, 0x10000000ULL, 0x10000080000ULL, 0x1000);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok(AppleDartAdoptedTranslate(&Adopted, 0x10000000ULL, &Found) && Found == 0x10000080000ULL,
+       "The new mapping resolves to %I64x\n", Found);
+    ok_hex(AppleDartAdoptedMapAt(&Adopted, 0x10000000ULL, 0x100000c0000ULL, 0x1000), STATUS_CONFLICTING_ADDRESSES);
+    ok(AppleDartAdoptedTranslate(&Adopted, 0x10000000ULL, &Found) && Found == 0x10000080000ULL,
+       "The refused mapping changed the address to %I64x\n", Found);
+    ok_hex(AppleDartAdoptedMapAt(&Adopted, 0x10004000ULL, 0x10000080040ULL, 0x1000), STATUS_INVALID_PARAMETER);
+
+    /* The window allocator skips what is taken and keeps the offset inside the page. */
+    Status = AppleDartAdoptedMap(&Adopted, 0x10000100040ULL, 0x80, &Iova);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok((Iova & (DART_ADOPT_PAGE - 1)) == 0x40, "The mapping lost its page offset: %I64x\n", Iova);
+    ok(Iova >= 0x10004000ULL, "The allocator reused the taken page at %I64x\n", Iova);
+    ok(AppleDartAdoptedTranslate(&Adopted, Iova, &Found) && Found == 0x10000100040ULL,
+       "The allocated mapping resolves to %I64x\n", Found);
+
+    /* A window the tables cannot reach, and a stream the firmware did not translate. */
+    AppleDartAdoptedRelease(&Adopted);
+    ok_hex(AppleDartAdopt(&Tree, Dart, DART_ADOPT_SID, 0x10000000ULL, 0x1000000000ULL, "test", &Adopted),
+           STATUS_SUCCESS);
+    AppleDartAdoptedRelease(&Adopted);
+    ok_hex(AppleDartAdopt(&Tree, Dart, DART_ADOPT_SID, 0x10000000ULL, 0x1000004000ULL, "test", &Adopted),
+           STATUS_NOT_SUPPORTED);
+    SimDartAdoptRegisters(Top, 6);
+    ok_hex(AppleDartAdopt(&Tree, Dart, DART_ADOPT_SID, 0x10000000ULL, 0x20000000ULL, "test", &Adopted),
+           STATUS_DEVICE_NOT_READY);
+    SimDartAdoptRegisters(Top, 1);
+    DART(0x1400 + 4 * DART_ADOPT_SID) = 0;
+    ok_hex(AppleDartAdopt(&Tree, Dart, DART_ADOPT_SID, 0x10000000ULL, 0x20000000ULL, "test", &Adopted),
+           STATUS_DEVICE_NOT_READY);
+    SimDartAdoptRegisters(Top, 1);
+    ok_hex(AppleDartAdopt(&Tree, Dart, 64, 0x10000000ULL, 0x20000000ULL, "test", &Adopted),
+           STATUS_DEVICE_NOT_READY);
+    ok_hex(AppleDartAdopt(&Tree, Dart, DART_ADOPT_SID, 0x20000000ULL, 0x10000000ULL, "test", &Adopted),
+           STATUS_INVALID_PARAMETER);
+
+    Status = AppleDartAdopt(&Tree, Dart, DART_ADOPT_SID, 0x10000000ULL, 0x20000000ULL, "test", &Adopted);
+    ok_hex(Status, STATUS_SUCCESS);
+    AppleDartAdoptedRelease(&Adopted);
+    ok_int(SimMapCount, 0);
+}
+
+static
+VOID
+TestPmpPower(VOID)
+{
+    /* The power processor's observed wire values: the graphics vote and its acknowledgement. */
+    ok(ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, TRUE) == 0x0020f50100000000ULL,
+       "The graphics vote encodes as %I64x\n", ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, TRUE));
+    ok(ApplePmpPowerReply(APPLE_PMP_SET_POWER) == 0x0021000000000000ULL, "The acknowledgement is %I64x\n",
+       ApplePmpPowerReply(APPLE_PMP_SET_POWER));
+    ok(ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, FALSE) == 0x0020f50000000000ULL,
+       "Releasing the graphics vote encodes as %I64x\n",
+       ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, FALSE));
+    ok(ApplePmpPowerMessage(APPLE_PMP_SET_POWER, 8, TRUE) == 0x0020f80100000000ULL, "Device 8 encodes as %I64x\n",
+       ApplePmpPowerMessage(APPLE_PMP_SET_POWER, 8, TRUE));
+    /* Every field sits in its own bits, so no device or opcode can forge another's reply. */
+    ok((ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, TRUE) & APPLE_PMP_COMMAND_MARKER) != 0,
+       "The vote lost its marker\n");
+    ok(ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, TRUE) !=
+       ApplePmpPowerReply(APPLE_PMP_SET_POWER), "A request cannot equal its own acknowledgement\n");
+    ok(ApplePmpPowerMessage(0x0e, APPLE_PMP_DEVICE_GRAPHICS, TRUE) !=
+       ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, TRUE), "Two opcodes encode alike\n");
+    ok(ApplePmpPowerReply(0x0e) != ApplePmpPowerReply(APPLE_PMP_SET_POWER), "Two opcodes acknowledge alike\n");
 }
 
 static
@@ -2505,6 +2664,8 @@ START_TEST(AppleSoc)
     TestDart();
     TestDartLowWindow();
     TestDartLowWindowM3Memory();
+    TestDartAdopt();
+    TestPmpPower();
     TestSpmi();
     TestAtcphy();
     TestPcie();
