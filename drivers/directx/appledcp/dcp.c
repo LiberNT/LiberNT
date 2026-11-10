@@ -854,8 +854,8 @@ DcpCommand(
         while (!Done && DcpEpicPeek(Dcp, &Entry))
         {
             Sub = DcpEpicSubHeader(Entry);
-            if (Sub && Entry->Type == EPIC_TYPE_REPLY && Sub->Category == EPIC_CATEGORY_REPLY &&
-                Sub->Type == EPIC_SUBTYPE_STD_SERVICE &&
+            if (Sub && (Entry->Type == EPIC_TYPE_REPLY || Entry->Type == EPIC_TYPE_NOTIFY) &&
+                Sub->Category == EPIC_CATEGORY_REPLY && Sub->Type == EPIC_SUBTYPE_STD_SERVICE &&
                 Entry->Size >= sizeof(EPIC_HEADER) + sizeof(EPIC_SUB_HEADER) + sizeof(EPIC_COMMAND))
             {
                 Reply = (PEPIC_COMMAND)(Sub + 1);
