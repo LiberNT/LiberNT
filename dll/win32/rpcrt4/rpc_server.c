@@ -525,8 +525,17 @@ static RPC_STATUS process_request_packet(RpcConnection *conn, RpcPktRequestHdr *
     RPCRT4_SetThreadCurrentCallHandle(NULL);
 
   /* release any unmarshalled context handles */
+#ifdef __REACTOS__
+  {
+    BOOL locked;
+
+    while ((context_handle = RPCRT4_PopThreadContextHandle(&locked)) != NULL)
+      RpcServerAssoc_ReleaseContextHandle(conn->server_binding->Assoc, context_handle, locked);
+  }
+#else
   while ((context_handle = RPCRT4_PopThreadContextHandle()) != NULL)
     RpcServerAssoc_ReleaseContextHandle(conn->server_binding->Assoc, context_handle, TRUE);
+#endif
 
   if (!exception)
     response = RPCRT4_BuildResponseHeader(msg->DataRepresentation,
