@@ -58,6 +58,7 @@ list(APPEND SOURCES
     ${HAL_ARM64_SOURCE_DIR}/sysinfo.c
     ${HAL_ARM64_SOURCE_DIR}/bcm2711_pci.c
     ${HAL_ARM64_SOURCE_DIR}/bcm2711_vc.c
+    ${HAL_ARM64_SOURCE_DIR}/bcm2712_pci.c
     ${HAL_ARM64_SOURCE_DIR}/bcm2837_intc.c
     ${HAL_ARM64_SOURCE_DIR}/apple_aic.c
     ${HAL_ARM64_SOURCE_DIR}/apple_wdt.c
