@@ -7,7 +7,7 @@
 
 add_library(appleagx MODULE appleagx.c appleagx.rc)
 set_module_type(appleagx kernelmodedriver)
-target_link_libraries(appleagx applertkit fdtdrv)
+target_link_libraries(appleagx applertkit fdtdrv ${PSEH_LIB})
 add_importlibs(appleagx ntoskrnl hal)
 add_cd_file(TARGET appleagx DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(appleagx appleagx.inf)

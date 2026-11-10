@@ -14,6 +14,7 @@
 #include <reactos/drivers/appleagx.h>
 #include <reactos/drivers/appleagxinit.h>
 #include <reactos/drivers/fdtdrv.h>
+#include <pseh/pseh2.h>
 
 #define AGX_TAG                     'xgAA'
 #define AGX_ASC_CONTROL             0x44
@@ -43,6 +44,38 @@
 #define AGX_SHARED_ALIGN            0x1000
 #define AGX_ADT_MAX_LENGTH          0x200000
 #define AGX_PART                    "gpu,t6030"
+
+#define AGX_CLIENT_TAG              'cGxA'
+#define AGX_MAX_VMS                 16
+#define AGX_MAX_OBJECTS             4096
+#define AGX_FIRST_BINDINGS          64
+#define AGX_MAX_BINDINGS            65536
+#define AGX_MAX_BIND_OPS            4096
+
+typedef struct _AGX_OBJECT
+{
+    LONG References;
+    ULONG Flags;
+    ULONG VmId;
+    ULONG64 Size;
+    PMDL Mdl;
+    PVOID UserAddress;
+} AGX_OBJECT, *PAGX_OBJECT;
+
+typedef struct _AGX_VM
+{
+    APPLE_AGX_VM_RANGES Ranges;
+    APPLE_UAT Uat;
+    APPLE_AGX_BINDINGS Bindings;
+} AGX_VM, *PAGX_VM;
+
+typedef struct _AGX_CLIENT
+{
+    FAST_MUTEX Lock;
+    PEPROCESS Process;
+    PAGX_VM Vm[AGX_MAX_VMS];
+    PAGX_OBJECT Object[AGX_MAX_OBJECTS];
+} AGX_CLIENT, *PAGX_CLIENT;
 
 typedef struct _AGX_SHARED
 {
@@ -844,6 +877,519 @@ AgxGetParams(
 }
 
 static
+VOID
+NTAPI
+AgxObjectReference(
+    _In_ PVOID Object,
+    _In_ LONG Delta)
+{
+    PAGX_OBJECT Entry = Object;
+
+    if (InterlockedExchangeAdd(&Entry->References, Delta) + Delta == 0)
+    {
+        MmFreePagesFromMdl(Entry->Mdl);
+        ExFreePool(Entry->Mdl);
+        ExFreePoolWithTag(Entry, AGX_CLIENT_TAG);
+    }
+}
+
+static
+MEMORY_CACHING_TYPE
+AgxObjectCache(
+    _In_ PAGX_OBJECT Object)
+{
+    return (Object->Flags & DRM_ASAHI_GEM_WRITEBACK) ? MmCached : MmWriteCombined;
+}
+
+static
+VOID
+AgxObjectUnmap(
+    _In_ PAGX_CLIENT Client,
+    _Inout_ PAGX_OBJECT Object)
+{
+    /* FIXME: a mapping made by a process that is no longer the caller keeps its object alive until reboot. */
+    if (!Object->UserAddress || PsGetCurrentProcess() != Client->Process)
+        return;
+    MmUnmapLockedPages(Object->UserAddress, Object->Mdl);
+    Object->UserAddress = NULL;
+    AgxObjectReference(Object, -1);
+}
+
+static
+PAGX_VM
+AgxClientVm(
+    _In_ PAGX_CLIENT Client,
+    _In_ ULONG VmId)
+{
+    return (VmId && VmId <= AGX_MAX_VMS) ? Client->Vm[VmId - 1] : NULL;
+}
+
+static
+PAGX_OBJECT
+AgxClientObject(
+    _In_ PAGX_CLIENT Client,
+    _In_ ULONG Handle)
+{
+    return (Handle && Handle <= AGX_MAX_OBJECTS) ? Client->Object[Handle - 1] : NULL;
+}
+
+static
+NTSTATUS
+AgxBindingsGrow(
+    _Inout_ PAGX_VM Vm)
+{
+    ULONG Capacity = Vm->Bindings.Capacity * 2;
+    PAPPLE_AGX_BINDING Entry;
+
+    if (Capacity > AGX_MAX_BINDINGS)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Entry = ExAllocatePoolZero(PagedPool, Capacity * sizeof(*Entry), AGX_CLIENT_TAG);
+    if (!Entry)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(Entry, Vm->Bindings.Entry, Vm->Bindings.Count * sizeof(*Entry));
+    ExFreePoolWithTag(Vm->Bindings.Entry, AGX_CLIENT_TAG);
+    Vm->Bindings.Entry = Entry;
+    Vm->Bindings.Capacity = Capacity;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+AgxVmUnbind(
+    _Inout_ PAGX_VM Vm,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Range)
+{
+    NTSTATUS Status;
+    ULONG Index;
+
+    for (Index = 0; Index < Vm->Bindings.Count; ++Index)
+    {
+        const APPLE_AGX_BINDING *Entry = &Vm->Bindings.Entry[Index];
+        ULONG64 Start = max(Address, Entry->Address), End = min(Address + Range, Entry->Address + Entry->Range);
+
+        if (Start < End)
+        {
+            Status = AppleUatUnmap(&Vm->Uat, Start, (SIZE_T)(End - Start));
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+    }
+    while ((Status = AppleAgxBindingRemove(&Vm->Bindings, Address, Range)) == STATUS_INSUFFICIENT_RESOURCES)
+    {
+        Status = AgxBindingsGrow(Vm);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    return Status;
+}
+
+static
+NTSTATUS
+AgxVmMap(
+    _Inout_ PAGX_VM Vm,
+    _In_ PAGX_OBJECT Object,
+    _In_ const DRM_ASAHI_GEM_BIND_OP *Op,
+    _In_ const APPLE_UAT_PROTECTION *Protection)
+{
+    APPLE_AGX_BINDING Binding;
+    PPFN_NUMBER Frames = MmGetMdlPfnArray(Object->Mdl);
+    ULONG64 Page, At;
+    NTSTATUS Status;
+
+    Binding.Address = Op->Addr;
+    Binding.Range = Op->Range;
+    Binding.Offset = Op->Offset;
+    Binding.Object = Object;
+    Binding.SinglePage = (Op->Flags & DRM_ASAHI_BIND_SINGLE_PAGE) != 0;
+    while ((Status = AppleAgxBindingInsert(&Vm->Bindings, &Binding)) == STATUS_INSUFFICIENT_RESOURCES)
+    {
+        Status = AgxBindingsGrow(Vm);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    if (!NT_SUCCESS(Status))
+        return Status;
+    for (Page = 0; Page < Op->Range; Page += APPLE_UAT_PAGE_SIZE)
+    {
+        At = Op->Offset + (Binding.SinglePage ? 0 : Page);
+        Status = AppleUatMap(&Vm->Uat, Op->Addr + Page, (ULONG64)Frames[At >> PAGE_SHIFT] << PAGE_SHIFT,
+                             APPLE_UAT_PAGE_SIZE, Protection);
+        if (!NT_SUCCESS(Status))
+        {
+            AgxVmUnbind(Vm, Op->Addr, Op->Range);
+            return Status;
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+AgxVmFree(
+    _In_ PAGX_VM Vm)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Vm->Bindings.Count; ++Index)
+        AppleUatUnmap(&Vm->Uat, Vm->Bindings.Entry[Index].Address, (SIZE_T)Vm->Bindings.Entry[Index].Range);
+    while (Vm->Bindings.Count)
+    {
+        Vm->Bindings.Reference(Vm->Bindings.Entry[Vm->Bindings.Count - 1].Object, -1);
+        --Vm->Bindings.Count;
+    }
+    AppleUatDestroy(&Vm->Uat);
+    ExFreePoolWithTag(Vm->Bindings.Entry, AGX_CLIENT_TAG);
+    ExFreePoolWithTag(Vm, AGX_CLIENT_TAG);
+}
+
+static
+NTSTATUS
+AgxVmCreate(
+    _Inout_ PAGX_CLIENT Client,
+    _Inout_ PDRM_ASAHI_VM_CREATE Create)
+{
+    APPLE_AGX_VM_RANGES Ranges;
+    PAGX_VM Vm;
+    ULONG Index;
+    NTSTATUS Status;
+
+    Status = AppleAgxDescribeVm(Create, &Ranges);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    for (Index = 0; Index < AGX_MAX_VMS && Client->Vm[Index]; ++Index)
+        ;
+    if (Index == AGX_MAX_VMS)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Vm = ExAllocatePoolZero(PagedPool, sizeof(*Vm), AGX_CLIENT_TAG);
+    if (!Vm)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Vm->Bindings.Entry = ExAllocatePoolZero(PagedPool, AGX_FIRST_BINDINGS * sizeof(APPLE_AGX_BINDING), AGX_CLIENT_TAG);
+    if (!Vm->Bindings.Entry)
+    {
+        ExFreePoolWithTag(Vm, AGX_CLIENT_TAG);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Vm->Bindings.Capacity = AGX_FIRST_BINDINGS;
+    Vm->Bindings.Reference = AgxObjectReference;
+    Status = AppleUatCreate(&Vm->Uat, FALSE, "appleagx client");
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Vm->Bindings.Entry, AGX_CLIENT_TAG);
+        ExFreePoolWithTag(Vm, AGX_CLIENT_TAG);
+        return Status;
+    }
+    Vm->Ranges = Ranges;
+    Client->Vm[Index] = Vm;
+    Create->VmId = Index + 1;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+AgxGemCreate(
+    _Inout_ PAGX_CLIENT Client,
+    _Inout_ PDRM_ASAHI_GEM_CREATE Create)
+{
+    PHYSICAL_ADDRESS Low, High, Chunk;
+    PAGX_OBJECT Object;
+    ULONG64 Size;
+    ULONG Index;
+    NTSTATUS Status;
+
+    Status = AppleAgxGemSize(Create, &Size);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if ((Create->Flags & DRM_ASAHI_GEM_VM_PRIVATE) && !AgxClientVm(Client, Create->VmId))
+        return STATUS_INVALID_PARAMETER;
+    for (Index = 0; Index < AGX_MAX_OBJECTS && Client->Object[Index]; ++Index)
+        ;
+    if (Index == AGX_MAX_OBJECTS)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Object = ExAllocatePoolZero(NonPagedPool, sizeof(*Object), AGX_CLIENT_TAG);
+    if (!Object)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Object->Flags = Create->Flags;
+    Object->VmId = Create->VmId;
+    Object->Size = Size;
+    Low.QuadPart = 0;
+    High.QuadPart = (LONGLONG)((1ULL << APPLE_UAT_OUTPUT_BITS) - 1);
+    Chunk.QuadPart = APPLE_UAT_PAGE_SIZE;
+    Object->Mdl = MmAllocatePagesForMdlEx(Low, High, Chunk, (SIZE_T)Size, AgxObjectCache(Object),
+                                          MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
+    if (!Object->Mdl || MmGetMdlByteCount(Object->Mdl) != Size)
+    {
+        if (Object->Mdl)
+        {
+            MmFreePagesFromMdl(Object->Mdl);
+            ExFreePool(Object->Mdl);
+        }
+        ExFreePoolWithTag(Object, AGX_CLIENT_TAG);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Object->References = 1;
+    Client->Object[Index] = Object;
+    Create->Handle = Index + 1;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+AgxGemMap(
+    _Inout_ PAGX_CLIENT Client,
+    _Inout_ PAPPLE_AGX_GEM_HANDLE Map)
+{
+    PAGX_OBJECT Object = AgxClientObject(Client, Map->Handle);
+    PVOID Address = NULL;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (!Object || Map->Flags)
+        return STATUS_INVALID_PARAMETER;
+    if (PsGetCurrentProcess() != Client->Process)
+        return STATUS_ACCESS_DENIED;
+    if (!Object->UserAddress)
+    {
+        _SEH2_TRY
+        {
+            Address = MmMapLockedPagesSpecifyCache(Object->Mdl, UserMode, AgxObjectCache(Object), NULL, FALSE,
+                                                   NormalPagePriority | MdlMappingNoExecute);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (!Address)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        Object->UserAddress = Address;
+        AgxObjectReference(Object, 1);
+    }
+    Map->Address = (ULONG64)(ULONG_PTR)Object->UserAddress;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+AgxGemClose(
+    _Inout_ PAGX_CLIENT Client,
+    _In_ ULONG Handle)
+{
+    PAGX_OBJECT Object = AgxClientObject(Client, Handle);
+
+    if (!Object)
+        return STATUS_INVALID_PARAMETER;
+    Client->Object[Handle - 1] = NULL;
+    AgxObjectUnmap(Client, Object);
+    AgxObjectReference(Object, -1);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+AgxVmBind(
+    _Inout_ PAGX_CLIENT Client,
+    _In_reads_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length)
+{
+    const DRM_ASAHI_VM_BIND *Bind = Buffer;
+    DRM_ASAHI_GEM_BIND_OP Op;
+    APPLE_UAT_PROTECTION Protection;
+    PAGX_OBJECT Object;
+    PAGX_VM Vm;
+    ULONG Index, Pass;
+    NTSTATUS Status;
+
+    if (Length < sizeof(*Bind) || Bind->Pad || Bind->Userptr || !Bind->NumBinds || Bind->NumBinds > AGX_MAX_BIND_OPS ||
+        Bind->Stride < sizeof(Op) || (ULONG64)Bind->NumBinds * Bind->Stride > Length - sizeof(*Bind))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Vm = AgxClientVm(Client, Bind->VmId);
+    if (!Vm)
+        return STATUS_INVALID_PARAMETER;
+    for (Pass = 0; Pass < 2; ++Pass)
+    {
+        for (Index = 0; Index < Bind->NumBinds; ++Index)
+        {
+            RtlCopyMemory(&Op, (PUCHAR)(Bind + 1) + (SIZE_T)Index * Bind->Stride, sizeof(Op));
+            Object = NULL;
+            if (!(Op.Flags & DRM_ASAHI_BIND_UNBIND))
+            {
+                Object = AgxClientObject(Client, Op.Handle);
+                if (!Object || ((Object->Flags & DRM_ASAHI_GEM_VM_PRIVATE) && Object->VmId != Bind->VmId))
+                    return STATUS_INVALID_PARAMETER;
+            }
+            Status = AppleAgxCheckBind(&Op, &Vm->Ranges, Object ? Object->Size : 0, &Protection);
+            if (!NT_SUCCESS(Status) || Pass == 0)
+            {
+                if (!NT_SUCCESS(Status))
+                    return Status;
+                continue;
+            }
+            /* FIXME: an operation failing here leaves the ones before it applied. */
+            Status = Object ? AgxVmMap(Vm, Object, &Op, &Protection) : AgxVmUnbind(Vm, Op.Addr, Op.Range);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+AgxClientControl(
+    _Inout_ PAGX_CLIENT Client,
+    _In_ ULONG Code,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG_PTR Written)
+{
+    PAGX_VM Vm;
+    NTSTATUS Status;
+    ULONG Size;
+
+    *Written = 0;
+    switch (Code)
+    {
+        case IOCTL_APPLE_AGX_VM_CREATE: Size = sizeof(DRM_ASAHI_VM_CREATE); break;
+        case IOCTL_APPLE_AGX_VM_DESTROY: Size = sizeof(DRM_ASAHI_VM_DESTROY); break;
+        case IOCTL_APPLE_AGX_GEM_CREATE: Size = sizeof(DRM_ASAHI_GEM_CREATE); break;
+        case IOCTL_APPLE_AGX_GEM_CLOSE:
+        case IOCTL_APPLE_AGX_GEM_MAP: Size = sizeof(APPLE_AGX_GEM_HANDLE); break;
+        case IOCTL_APPLE_AGX_VM_BIND: Size = sizeof(DRM_ASAHI_VM_BIND); break;
+        default: return STATUS_INVALID_DEVICE_REQUEST;
+    }
+    if (InputLength < Size)
+        return STATUS_INVALID_PARAMETER;
+    ExAcquireFastMutex(&Client->Lock);
+    switch (Code)
+    {
+        case IOCTL_APPLE_AGX_VM_CREATE:
+            Status = AgxVmCreate(Client, Buffer);
+            break;
+        case IOCTL_APPLE_AGX_VM_DESTROY:
+            Vm = AgxClientVm(Client, ((PDRM_ASAHI_VM_DESTROY)Buffer)->VmId);
+            Status = (Vm && !((PDRM_ASAHI_VM_DESTROY)Buffer)->Pad) ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+            if (NT_SUCCESS(Status))
+            {
+                Client->Vm[((PDRM_ASAHI_VM_DESTROY)Buffer)->VmId - 1] = NULL;
+                AgxVmFree(Vm);
+            }
+            break;
+        case IOCTL_APPLE_AGX_GEM_CREATE:
+            Status = AgxGemCreate(Client, Buffer);
+            break;
+        case IOCTL_APPLE_AGX_GEM_CLOSE:
+            Status = AgxGemClose(Client, ((PAPPLE_AGX_GEM_HANDLE)Buffer)->Handle);
+            break;
+        case IOCTL_APPLE_AGX_GEM_MAP:
+            Status = AgxGemMap(Client, Buffer);
+            break;
+        default:
+            Status = AgxVmBind(Client, Buffer, InputLength);
+            break;
+    }
+    ExReleaseFastMutex(&Client->Lock);
+    if (NT_SUCCESS(Status) && Code != IOCTL_APPLE_AGX_VM_BIND && Code != IOCTL_APPLE_AGX_VM_DESTROY &&
+        Code != IOCTL_APPLE_AGX_GEM_CLOSE)
+    {
+        *Written = min(OutputLength, Size);
+    }
+    return Status;
+}
+
+static
+NTSTATUS
+NTAPI
+AgxCreate(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PAGX_CLIENT Client;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    Client = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Client), AGX_CLIENT_TAG);
+    if (!Client)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    else
+    {
+        ExInitializeFastMutex(&Client->Lock);
+        Client->Process = PsGetCurrentProcess();
+        ObReferenceObject(Client->Process);
+        Stack->FileObject->FsContext = Client;
+    }
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
+static
+NTSTATUS
+NTAPI
+AgxCleanup(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PAGX_CLIENT Client = IoGetCurrentIrpStackLocation(Irp)->FileObject->FsContext;
+    ULONG Index;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    if (Client)
+    {
+        ExAcquireFastMutex(&Client->Lock);
+        for (Index = 0; Index < AGX_MAX_OBJECTS; ++Index)
+        {
+            if (Client->Object[Index])
+                AgxGemClose(Client, Index + 1);
+        }
+        for (Index = 0; Index < AGX_MAX_VMS; ++Index)
+        {
+            if (Client->Vm[Index])
+            {
+                AgxVmFree(Client->Vm[Index]);
+                Client->Vm[Index] = NULL;
+            }
+        }
+        ExReleaseFastMutex(&Client->Lock);
+    }
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+AgxClose(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PFILE_OBJECT FileObject = IoGetCurrentIrpStackLocation(Irp)->FileObject;
+    PAGX_CLIENT Client = FileObject->FsContext;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    if (Client)
+    {
+        FileObject->FsContext = NULL;
+        ObDereferenceObject(Client->Process);
+        ExFreePoolWithTag(Client, AGX_CLIENT_TAG);
+    }
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
+static
 NTSTATUS
 NTAPI
 AgxDeviceControl(
@@ -862,7 +1408,17 @@ AgxDeviceControl(
                               Stack->Parameters.DeviceIoControl.OutputBufferLength,
                               &Irp->IoStatus.Information);
     }
-    else if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_APPLE_AGX_QUERY_STATE)
+    else if (Stack->Parameters.DeviceIoControl.IoControlCode != IOCTL_APPLE_AGX_QUERY_STATE)
+    {
+        Status = Stack->FileObject && Stack->FileObject->FsContext ?
+                 AgxClientControl(Stack->FileObject->FsContext, Stack->Parameters.DeviceIoControl.IoControlCode,
+                                  Irp->AssociatedIrp.SystemBuffer,
+                                  Stack->Parameters.DeviceIoControl.InputBufferLength,
+                                  Stack->Parameters.DeviceIoControl.OutputBufferLength,
+                                  &Irp->IoStatus.Information) :
+                 STATUS_INVALID_DEVICE_REQUEST;
+    }
+    else
     {
         if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(APPLE_AGX_REPORT))
         {
@@ -923,6 +1479,10 @@ AgxPnp(
             break;
 
         case IRP_MN_REMOVE_DEVICE:
+        {
+            UNICODE_STRING Link = RTL_CONSTANT_STRING(APPLE_AGX_DOS_DEVICE_NAME);
+
+            IoDeleteSymbolicLink(&Link);
             AgxStop(Agx);
             Irp->IoStatus.Status = STATUS_SUCCESS;
             IoSkipCurrentIrpStackLocation(Irp);
@@ -930,6 +1490,7 @@ AgxPnp(
             IoDetachDevice(Agx->Lower);
             IoDeleteDevice(DeviceObject);
             return Status;
+        }
     }
     IoSkipCurrentIrpStackLocation(Irp);
     return IoCallDriver(Agx->Lower, Irp);
@@ -970,6 +1531,7 @@ AgxAddDevice(
     _In_ PDEVICE_OBJECT Pdo)
 {
     UNICODE_STRING Name = RTL_CONSTANT_STRING(APPLE_AGX_DEVICE_NAME);
+    UNICODE_STRING Link = RTL_CONSTANT_STRING(APPLE_AGX_DOS_DEVICE_NAME);
     PAPPLE_AGX Agx;
     PDEVICE_OBJECT Fdo;
     NTSTATUS Status;
@@ -988,6 +1550,13 @@ AgxAddDevice(
         IoDeleteDevice(Fdo);
         return STATUS_NO_SUCH_DEVICE;
     }
+    Status = IoCreateSymbolicLink(&Link, &Name);
+    if (!NT_SUCCESS(Status))
+    {
+        IoDetachDevice(Agx->Lower);
+        IoDeleteDevice(Fdo);
+        return Status;
+    }
     Fdo->Flags |= DO_POWER_PAGABLE;
     Fdo->Flags &= ~DO_DEVICE_INITIALIZING;
     return STATUS_SUCCESS;
@@ -1005,6 +1574,9 @@ DriverEntry(
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; ++Index)
         DriverObject->MajorFunction[Index] = AgxPassThrough;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = AgxDeviceControl;
+    DriverObject->MajorFunction[IRP_MJ_CREATE] = AgxCreate;
+    DriverObject->MajorFunction[IRP_MJ_CLEANUP] = AgxCleanup;
+    DriverObject->MajorFunction[IRP_MJ_CLOSE] = AgxClose;
     DriverObject->MajorFunction[IRP_MJ_PNP] = AgxPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = AgxPower;
     DriverObject->DriverExtension->AddDevice = AgxAddDevice;
