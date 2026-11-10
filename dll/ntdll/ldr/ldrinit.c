@@ -1082,8 +1082,9 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
             LdrpCurrentDllInitializer = OldInitializer;
 
             /* Mark the entry as processed */
+            /* FIXME: a module whose attach fails stays visible to the lock-free LdrLoadDll path until unloaded. */
             if (DllInitCompleted)
-                LdrEntry->Flags |= LDRP_PROCESS_ATTACH_CALLED;
+                InterlockedOr((PLONG)&LdrEntry->Flags, LDRP_PROCESS_ATTACH_CALLED);
 
             /* Fail if DLL init failed */
             if (!DllStatus)

@@ -1264,7 +1264,7 @@ LdrpReferenceLoadedDll(
     _SEH2_TRY
     {
         if (LdrpFindLoadedForwarder(DllPath, DllName, Redirected, &LdrEntry) &&
-            LdrpIsModuleReady(LdrEntry))
+            LdrpIsModuleInitialized(LdrEntry))
         {
             if (*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF)
                 Referenced = TRUE;

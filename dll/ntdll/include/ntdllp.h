@@ -234,6 +234,22 @@ LdrpIsModuleReady(
     return (ReadAcquire((volatile LONG *)&LdrEntry->Flags) & LDRP_ENTRY_PROCESSED) != 0;
 }
 
+FORCEINLINE
+BOOLEAN
+LdrpIsModuleInitialized(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    LONG Flags = ReadAcquire((volatile LONG *)&LdrEntry->Flags);
+    ULONG Size;
+
+    if (!(Flags & LDRP_ENTRY_PROCESSED))
+        return FALSE;
+    if (Flags & LDRP_PROCESS_ATTACH_CALLED)
+        return TRUE;
+    return !LdrEntry->EntryPoint &&
+           !RtlImageDirectoryEntryToData(LdrEntry->DllBase, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &Size);
+}
+
 NTSTATUS NTAPI
 LdrpLoadDll(IN BOOLEAN Redirected,
             IN PWSTR DllPath OPTIONAL,
