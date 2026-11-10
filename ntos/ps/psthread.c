@@ -27,12 +27,8 @@ PspInsertThread(
     _In_ PEPROCESS Process,
     _In_ BOOLEAN FirstThread)
 {
-    NTSTATUS Status;
 
     PAGED_CODE();
-
-    Status = PspInsertCid(Thread, &Thread->Cid.UniqueThread);
-    if (!NT_SUCCESS(Status)) return Status;
 
     KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&Process->ProcessLock);
@@ -102,6 +98,9 @@ PspSystemThreadStartup(
      */
     KeLowerIrql(PASSIVE_LEVEL);
 
+    /* Every thread is announced, whatever it was made for, and on itself */
+    PspRunCreateThreadNotifyRoutines(Thread, TRUE);
+
     /* A thread killed before it ever ran must not call anything */
     if (!Thread->Terminated)
     {
@@ -144,7 +143,7 @@ PspUserThreadStartup(
      * The notifications run on the new thread, in its own process, which is
      * what lets a driver touch the new thread's user address space.
      */
-    if (!Thread->SystemThread) PspRunCreateThreadNotifyRoutines(Thread, TRUE);
+    PspRunCreateThreadNotifyRoutines(Thread, TRUE);
 
     if (!Process->CreateReported)
     {
@@ -161,7 +160,9 @@ PspUserThreadStartup(
         return;
     }
 
-    PspArchInitializeUserThreadStartup(NULL, Thread->Tcb.TrapFrame);
+    /* A new thread's first return to user mode goes through the frames made for it below its stack */
+    PspArchInitializeUserThreadStartup(KeGetExceptionFrame(&Thread->Tcb),
+                                       KeGetTrapFrame(&Thread->Tcb));
 }
 
 /*
@@ -185,7 +186,9 @@ PspCreateThread(
     _In_opt_ PVOID StartContext,
     _In_opt_ PVOID Win32StartAddress)
 {
-    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    /* A thread given a routine is the kernel's own, whoever the calling thread last served */
+    KPROCESSOR_MODE PreviousMode = (StartRoutine != NULL) ? KernelMode
+                                                          : ExGetPreviousMode();
     BOOLEAN FirstThread = FALSE;
     PEPROCESS Process = NULL;
     PETHREAD Thread = NULL;
@@ -240,6 +243,8 @@ PspCreateThread(
     InitializeListHead(&Thread->ActiveTimerListHead);
     InitializeListHead(&Thread->BoostList);
     InitializeListHead(&Thread->DeboostList);
+    InitializeListHead(&Thread->AlpcWaitListEntry);
+    KeInitializeSemaphore(&Thread->AlpcWaitSemaphore, 0, 1);
     KeInitializeSpinLock(&Thread->ActiveTimerListLock);
     ExInitializePushLock(&Thread->ThreadLock);
     ExInitializeRundownProtection(&Thread->RundownProtect);
@@ -247,6 +252,15 @@ PspCreateThread(
     Thread->Cid.UniqueProcess = Process->UniqueProcessId;
     Thread->ReadClusterSize = MmReadClusterSize;
     Thread->ExitStatus = STATUS_PENDING;
+
+    /* The identifier is part of the thread's user block, so it exists first */
+    Status = PspInsertCid(Thread, &Thread->Cid.UniqueThread);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(Thread);
+        ObDereferenceObject(Process);
+        return Status;
+    }
 
     if (StartRoutine != NULL) Thread->SystemThread = TRUE;
     if ((CreateFlags & THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER) != 0)
@@ -679,6 +693,8 @@ NtOpenThread(
     CLIENT_ID SafeCid = { NULL, NULL };
     BOOLEAN HasCid = FALSE;
     BOOLEAN HasName;
+    ACCESS_STATE AccessState;
+    AUX_ACCESS_DATA AuxData;
     PETHREAD Thread;
     HANDLE Handle;
     NTSTATUS Status;
@@ -715,6 +731,14 @@ NtOpenThread(
 
     if (HasCid == HasName) return STATUS_INVALID_PARAMETER_MIX;
 
+    Status = PspCreateOpenAccessState(&AccessState,
+                                      &AuxData,
+                                      DesiredAccess,
+                                      PsThreadType,
+                                      THREAD_ALL_ACCESS,
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
     if (HasCid)
     {
         if (SafeCid.UniqueProcess != NULL)
@@ -726,13 +750,17 @@ NtOpenThread(
             Status = PsLookupThreadByThreadId(SafeCid.UniqueThread, &Thread);
         }
 
-        if (!NT_SUCCESS(Status)) return Status;
+        if (!NT_SUCCESS(Status))
+        {
+            SeDeleteAccessState(&AccessState);
+            return Status;
+        }
 
         Status = ObOpenObjectByPointer(Thread,
                                        (ObjectAttributes != NULL) ?
                                            ObjectAttributes->Attributes : 0,
-                                       NULL,
-                                       DesiredAccess,
+                                       &AccessState,
+                                       0,
                                        PsThreadType,
                                        PreviousMode,
                                        &Handle);
@@ -743,11 +771,13 @@ NtOpenThread(
         Status = ObOpenObjectByName(ObjectAttributes,
                                     PsThreadType,
                                     PreviousMode,
-                                    NULL,
-                                    DesiredAccess,
+                                    &AccessState,
+                                    0,
                                     NULL,
                                     &Handle);
     }
+
+    SeDeleteAccessState(&AccessState);
 
     if (!NT_SUCCESS(Status)) return Status;
 
