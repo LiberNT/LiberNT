@@ -200,7 +200,6 @@ UasRecover(
 {
     PSCSI_REQUEST_BLOCK Request = FDODeviceExtension->ActiveSrb;
 
-    /* FIXME: recovery resets the device the bulk-only way; UAS would abort the task and reset the interface. */
     IoGetCurrentIrpStackLocation(Irp)->Parameters.Scsi.Srb = Request;
     USBSTOR_SetResetRecoveryStatus(FDODeviceExtension, Irp, Request);
     if (!USBSTOR_FinishRequest(FDODeviceExtension, Irp, TRUE))

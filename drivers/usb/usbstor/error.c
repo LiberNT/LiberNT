@@ -128,8 +128,11 @@ USBSTOR_ResetDeviceWorkItemRoutine(
     SingleInterface = (FDODeviceExtension->ConfigurationDescriptor &&
                        FDODeviceExtension->ConfigurationDescriptor->bNumInterfaces == 1);
 
-    if (SingleInterface && InterlockedExchange(&FDODeviceExtension->BotResetPending, 0))
+    if (FDODeviceExtension->Uas ||
+        (SingleInterface && InterlockedExchange(&FDODeviceExtension->BotResetPending, 0)))
+    {
         goto PortReset;
+    }
 
     for (ix = 0; ix < 3; ++ix)
     {
