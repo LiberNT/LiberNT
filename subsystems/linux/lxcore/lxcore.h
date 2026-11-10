@@ -776,6 +776,7 @@ struct _LX_THREAD
     ULONG CurrentSyscall;
     LONG InKernel;
     volatile LONG SignalApc;
+    volatile LONG SharedWake;
     PEX_TIMER SignalRetry;
     ULONG64 CurrentArgs[6];
     ULONG64 RobustList;
@@ -1649,6 +1650,9 @@ BOOLEAN LxThreadDetach(_In_ PLX_THREAD Thread);
 BOOLEAN LxSignalIgnoredByDefault(_In_ LONG Signal);
 BOOLEAN LxSignalStopsByDefault(_In_ LONG Signal);
 VOID LxSignalWakeThread(_In_ PLX_PROCESS Process, _In_ ULONG Tid);
+ULONG64 LxSignalPendingSet(_In_ PLX_THREAD Thread);
+VOID LxSignalRecheck(_In_ PLX_THREAD Base, _In_ PLX_THREAD Thread);
+VOID LxSignalRetarget(_In_ PLX_PROCESS Process, _In_opt_ PLX_THREAD Thread, _In_ ULONG64 Bits);
 VOID LxSignalForce(_In_ PLX_THREAD Thread, _In_ LONG Signal, _In_ PLX_SIGINFO Info);
 ULONG LxSeccompAuditArch(VOID);
 VOID LxPtraceInitialize(VOID);

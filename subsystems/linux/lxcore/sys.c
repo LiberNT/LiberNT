@@ -2272,6 +2272,9 @@ LX_SYSCALL(LxSysRtSigprocmask)
             default:
                 return -LX_EINVAL;
         }
+        InterlockedExchange(&Thread->SharedWake, 1);
+        if (Thread->SigMask & ~Old)
+            LxSignalRetarget(Call->Process, Thread, Thread->SigMask & ~Old);
     }
 
     if (Call->Args[2] != 0)

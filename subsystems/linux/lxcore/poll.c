@@ -144,7 +144,7 @@ LxSignalPending(
 {
     if (Thread == NULL)
         return FALSE;
-    return ((((ULONG64)Thread->Pending | (ULONG64)Thread->Process->Pending) & ~Thread->SigMask) != 0) ||
+    return ((LxSignalPendingSet(Thread) & ~Thread->SigMask) != 0) ||
            Thread->JobctlStop || ((Thread->PtraceWork & LX_PTW_TRAP) != 0);
 }
 
@@ -300,6 +300,7 @@ LxSetWaitMask(
     Thread->SuspendMask = Thread->SigMask;
     Thread->Suspended = TRUE;
     Thread->SigMask = Mask & ~((1ULL << (LX_SIGKILL - 1)) | (1ULL << (LX_SIGSTOP - 1)));
+    InterlockedExchange(&Thread->SharedWake, 1);
 }
 
 typedef struct _LX_FILE_WAITER
