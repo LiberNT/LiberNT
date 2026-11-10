@@ -331,10 +331,13 @@ IopOpenLinkOrRenameTarget(
     TargetName.Length = (USHORT)RenameInfo->FileNameLength;
     TargetName.MaximumLength = (USHORT)RenameInfo->FileNameLength;
 
-    DesiredAccess = (StackPtr->Parameters.SetFile.FileInformationClass ==
-                     FileRenameInformation)
-                        ? DELETE
-                        : FILE_ADD_FILE;
+    /*
+     * The directory is opened only to put a name in it, which is the right
+     * the file system checks the caller against; taking an existing name out
+     * of it is checked against that name's own security, not against this
+     * handle.
+     */
+    DesiredAccess = FILE_ADD_FILE;
 
     InitializeObjectAttributes(&ObjectAttributes,
                                &TargetName,
