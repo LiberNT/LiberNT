@@ -1276,7 +1276,9 @@ ObpQueryBasicInfo(
 
     BasicInfo->GrantedAccess = GrantedAccess;
     BasicInfo->HandleCount = (ULONG)Header->HandleCount;
-    BasicInfo->PointerCount = (ULONG)Header->PointerCount;
+
+    /* The reference the query itself holds is none of the caller's */
+    BasicInfo->PointerCount = (ULONG)Header->PointerCount - 1;
 
     QuotaInfo = OBJECT_HEADER_TO_QUOTA_INFO(Header);
     if (QuotaInfo != NULL)
