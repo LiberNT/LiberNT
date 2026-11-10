@@ -917,8 +917,6 @@ ScTransmit(
         Result = ERROR_INVALID_HANDLE;
     else if (Card->ShareMode == SCARD_SHARE_DIRECT || !Card->Protocol)
         Result = SCARD_E_NOT_READY;
-    else if (SendProtocol != Card->Protocol)
-        Result = SCARD_E_PROTO_MISMATCH;
     LeaveCriticalSection(&ScLock);
     if (Result != SCARD_S_SUCCESS)
     {
