@@ -841,6 +841,7 @@ UatSleepMs(ULONG Milliseconds)
 #include "../../../../sdk/lib/drivers/applertkit/pmgr.c"
 #include "../../../../sdk/lib/drivers/applertkit/dart.c"
 #include "../../../../sdk/lib/drivers/applertkit/uat.c"
+#include "../../../../sdk/lib/drivers/applertkit/adt.c"
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
 #include "../../../../sdk/lib/drivers/applertkit/pcie.c"
@@ -1806,6 +1807,175 @@ TestUatAdopt(VOID)
     ok(Adopted.Handoff == NULL && Adopted.Contexts == NULL && Adopted.KernelRoot == NULL &&
        Adopted.HostLevel == NULL, "The firmware pages are still mapped\n");
     ok(Adopted.Lower.Top == NULL && Adopted.Host.Top == NULL, "The host tables survived the release\n");
+}
+
+static UCHAR AdtImage[4096];
+static ULONG AdtUsed;
+
+static
+VOID
+AdtPut(
+    _In_ const VOID *Data,
+    _In_ ULONG Length)
+{
+    if (AdtUsed + Length <= sizeof(AdtImage))
+        memcpy(AdtImage + AdtUsed, Data, Length);
+    AdtUsed += Length;
+}
+
+static
+VOID
+AdtPutU32(
+    _In_ ULONG Value)
+{
+    AdtPut(&Value, sizeof(Value));
+}
+
+static
+VOID
+AdtPutProperty(
+    _In_z_ PCSTR Name,
+    _In_ const VOID *Value,
+    _In_ ULONG Length)
+{
+    CHAR Padded[APPLE_ADT_NAME_LENGTH] = { 0 };
+    ULONG Align = ((Length + 3) & ~3UL) - Length;
+    static const UCHAR Zero[4] = { 0 };
+
+    strncpy(Padded, Name, sizeof(Padded) - 1);
+    AdtPut(Padded, sizeof(Padded));
+    AdtPutU32(Length);
+    AdtPut(Value, Length);
+    if (Align)
+        AdtPut(Zero, Align);
+}
+
+static
+VOID
+AdtPutName(
+    _In_z_ PCSTR Name)
+{
+    AdtPutProperty("name", Name, (ULONG)strlen(Name) + 1);
+}
+
+/* The exported tree of this machine, cut down to what the graphics driver reads from it. */
+static
+VOID
+AdtBuild(VOID)
+{
+    const ULONG64 HandoffBase = 0x108fff70000ULL, HandoffSize = 0x4000;
+    const ULONG64 TtbsBase = 0x108fffb8000ULL, TtbsSize = 0x4000;
+    const ULONG Perf[4] = { 0x14257880, 0x280, 0x24d5ee80, 0x2a8 };
+
+    AdtUsed = 0;
+    /* root: 1 property, 1 child */
+    AdtPutU32(1);
+    AdtPutU32(1);
+    AdtPutName("device-tree");
+    /* arm-io: 1 property, 2 children */
+    AdtPutU32(1);
+    AdtPutU32(2);
+    AdtPutName("arm-io");
+    /* sgx: name, compatible, four region words, perf states; no children */
+    AdtPutU32(7);
+    AdtPutU32(0);
+    AdtPutName("sgx");
+    AdtPutProperty("compatible", "gpu,t6030", 10);
+    AdtPutProperty("gfx-handoff-base", &HandoffBase, sizeof(HandoffBase));
+    AdtPutProperty("gfx-handoff-size", &HandoffSize, sizeof(HandoffSize));
+    AdtPutProperty("gpu-region-base", &TtbsBase, sizeof(TtbsBase));
+    AdtPutProperty("gpu-region-size", &TtbsSize, sizeof(TtbsSize));
+    AdtPutProperty("perf-states", Perf, sizeof(Perf));
+    /* gfx-asc with its own child */
+    AdtPutU32(2);
+    AdtPutU32(1);
+    AdtPutName("gfx-asc");
+    AdtPutProperty("segment-names", "__TEXT;__DATA", 14);
+    AdtPutU32(2);
+    AdtPutU32(0);
+    AdtPutName("iop-gfx-nub");
+    AdtPutProperty("firmware-name", "GFX", 4);
+}
+
+static
+VOID
+TestAdt(VOID)
+{
+    APPLE_ADT Adt;
+    ULONG Node, Length, Value32;
+    ULONG64 Value64;
+    const VOID *Property;
+
+    AdtBuild();
+    ok(AdtUsed <= sizeof(AdtImage), "The tree needs %lu bytes\n", AdtUsed);
+
+    /* A tree is only accepted whole: a short buffer must not be walked. */
+    ok(!AppleAdtOpen(&Adt, AdtImage, 4), "A tree shorter than a node header was accepted\n");
+    ok(!AppleAdtOpen(&Adt, AdtImage, AdtUsed - 4), "A truncated tree was accepted\n");
+    ok(!AppleAdtOpen(&Adt, NULL, AdtUsed), "A tree with no memory was accepted\n");
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+
+    ok_int(AppleAdtRootNode(&Adt), 0);
+    ok(AppleAdtNodeName(&Adt, 0) && !strcmp(AppleAdtNodeName(&Adt, 0), "device-tree"),
+       "The root is named %s\n", AppleAdtNodeName(&Adt, 0));
+
+    /* The paths the graphics driver uses. */
+    Node = AppleAdtPath(&Adt, "/arm-io/sgx");
+    ok(Node != APPLE_ADT_NO_NODE, "The graphics node was not found\n");
+    ok(AppleAdtIsCompatible(&Adt, Node, "gpu,t6030"), "The graphics node is not the expected part\n");
+    ok(!AppleAdtIsCompatible(&Adt, Node, "gpu,t6031"), "The graphics node matched another part\n");
+    ok(!AppleAdtIsCompatible(&Adt, Node, "gpu"), "A name prefix matched the compatible list\n");
+
+    ok(AppleAdtReadU64(&Adt, Node, "gfx-handoff-base", &Value64) && Value64 == 0x108fff70000ULL,
+       "The handoff page is at %I64x\n", Value64);
+    ok(AppleAdtReadU64(&Adt, Node, "gpu-region-base", &Value64) && Value64 == 0x108fffb8000ULL,
+       "The address table is at %I64x\n", Value64);
+    ok(AppleAdtReadU64(&Adt, Node, "gpu-region-size", &Value64) && Value64 == 0x4000,
+       "The address table is %I64x bytes\n", Value64);
+    ok(!AppleAdtReadU64(&Adt, Node, "gfx-shared-region-base", &Value64),
+       "A property the tree does not carry was read\n");
+    ok(!AppleAdtReadU32(&Adt, Node, "name-of-nothing", &Value32), "A missing property was read\n");
+
+    /* A property shorter than the type asked for is refused rather than read past. */
+    Property = AppleAdtGetProperty(&Adt, Node, "compatible", &Length);
+    ok(Property != NULL && Length == 10, "The compatible list is %lu bytes\n", Length);
+    ok(!AppleAdtReadU64(&Adt, Node, "compatible", &Value64), "A 10 byte property was read as 8 bytes\n");
+
+    /* A property of several values is read whole, never through a typed read of the first one. */
+    Property = AppleAdtGetProperty(&Adt, Node, "perf-states", &Length);
+    ok(Property != NULL && Length == 16, "The performance states are %lu bytes\n", Length);
+    ok(!AppleAdtReadU32(&Adt, Node, "perf-states", &Value32), "A 16 byte property was read as 4 bytes\n");
+    if (Property)
+    {
+        memcpy(&Value32, Property, sizeof(Value32));
+        ok(Value32 == 0x14257880, "The first performance state is %08lx\n", Value32);
+    }
+
+    /* Children and siblings, including a node that has children of its own. */
+    Node = AppleAdtPath(&Adt, "/arm-io/gfx-asc");
+    ok(Node != APPLE_ADT_NO_NODE, "The coprocessor node was not found\n");
+    Property = AppleAdtGetProperty(&Adt, Node, "segment-names", &Length);
+    ok(Property != NULL && Length == 14 && !strcmp(Property, "__TEXT;__DATA"), "The segments are %lu bytes\n",
+       Length);
+    Node = AppleAdtPath(&Adt, "/arm-io/gfx-asc/iop-gfx-nub");
+    ok(Node != APPLE_ADT_NO_NODE, "The firmware node was not found\n");
+    Property = AppleAdtGetProperty(&Adt, Node, "firmware-name", &Length);
+    ok(Property != NULL && !strcmp(Property, "GFX"), "The firmware is named %s\n", (PCSTR)Property);
+
+    ok_hex(AppleAdtPath(&Adt, "/arm-io/missing"), APPLE_ADT_NO_NODE);
+    ok_hex(AppleAdtPath(&Adt, "arm-io"), APPLE_ADT_NO_NODE);
+    ok_hex(AppleAdtPath(&Adt, "/arm-io/sgx/deeper"), APPLE_ADT_NO_NODE);
+    ok_hex(AppleAdtPath(&Adt, "/"), 0);
+
+    /* The two children of the bus follow one another and the walk then ends. */
+    Node = AppleAdtFirstChild(&Adt, AppleAdtPath(&Adt, "/arm-io"));
+    ok(Node != APPLE_ADT_NO_NODE && !strcmp(AppleAdtNodeName(&Adt, Node), "sgx"), "The first child is %s\n",
+       Node != APPLE_ADT_NO_NODE ? AppleAdtNodeName(&Adt, Node) : "absent");
+    Node = AppleAdtNextSibling(&Adt, Node);
+    ok(Node != APPLE_ADT_NO_NODE && !strcmp(AppleAdtNodeName(&Adt, Node), "gfx-asc"), "The second child is %s\n",
+       Node != APPLE_ADT_NO_NODE ? AppleAdtNodeName(&Adt, Node) : "absent");
+    ok_hex(AppleAdtNextSibling(&Adt, Node), APPLE_ADT_NO_NODE);
+    ok_hex(AppleAdtFirstChild(&Adt, AppleAdtPath(&Adt, "/arm-io/sgx")), APPLE_ADT_NO_NODE);
 }
 
 static
@@ -2938,6 +3108,7 @@ START_TEST(AppleSoc)
     TestPmpPower();
     TestUat();
     TestUatAdopt();
+    TestAdt();
     TestSpmi();
     TestAtcphy();
     TestPcie();
