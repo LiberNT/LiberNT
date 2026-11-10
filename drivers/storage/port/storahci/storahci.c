@@ -2384,6 +2384,7 @@ BOOLEAN NTAPI AhciHwResetBus(__in PVOID AdapterExtension, __in ULONG PathId)
 ULONG NTAPI AhciHwFindAdapter(__in PVOID DeviceExtension, __in PVOID HwContext, __in PVOID BusInformation, __in PCHAR ArgumentString, __inout PPORT_CONFIGURATION_INFORMATION ConfigInfo, __in PBOOLEAN Reserved3)
 {
     AHCI_GHC ghc;
+    BOOLEAN isAbar;
     ULONG index, pci_cfg_len;
     PACCESS_RANGE accessRange;
     UCHAR pci_cfg_buf[sizeof(PCI_COMMON_CONFIG)];
@@ -2432,47 +2433,35 @@ ULONG NTAPI AhciHwFindAdapter(__in PVOID DeviceExtension, __in PVOID HwContext, 
                        adapterExtension->VendorID,
                        adapterExtension->DeviceID,
                        adapterExtension->RevisionID);
-
-        // 2.1.11
-        if (ConfigInfo->NumberOfAccessRanges > 0)
-        {
-            accessRange = *(ConfigInfo->AccessRanges);
-            for (index = 0; index < ConfigInfo->NumberOfAccessRanges; index++)
-            {
-                if (accessRange[index].RangeStart.QuadPart == adapterExtension->AhciBaseAddress)
-                {
-                    abar = StorPortGetDeviceBase(adapterExtension,
-                                                 ConfigInfo->AdapterInterfaceType,
-                                                 ConfigInfo->SystemIoBusNumber,
-                                                 accessRange[index].RangeStart,
-                                                 accessRange[index].RangeLength,
-                                                 !accessRange[index].RangeInMemory);
-                    break;
-                }
-            }
-        }
     }
-    else
+
+    // 2.1.11
+    if (ConfigInfo->NumberOfAccessRanges > 0)
     {
-        // An adapter enumerated by ACPI has no PCI header: its first memory resource is the ABAR
-        if (ConfigInfo->NumberOfAccessRanges > 0)
+        accessRange = *(ConfigInfo->AccessRanges);
+        for (index = 0; index < ConfigInfo->NumberOfAccessRanges; index++)
         {
-            accessRange = *(ConfigInfo->AccessRanges);
-            for (index = 0; index < ConfigInfo->NumberOfAccessRanges; index++)
+            if (ConfigInfo->AdapterInterfaceType == PCIBus)
             {
-                if (accessRange[index].RangeInMemory &&
-                    accessRange[index].RangeLength >= FIELD_OFFSET(AHCI_MEMORY_REGISTERS, PortList))
-                {
-                    adapterExtension->AhciBaseAddress = accessRange[index].RangeStart.LowPart;
-                    abar = StorPortGetDeviceBase(adapterExtension,
-                                                 ConfigInfo->AdapterInterfaceType,
-                                                 ConfigInfo->SystemIoBusNumber,
-                                                 accessRange[index].RangeStart,
-                                                 accessRange[index].RangeLength,
-                                                 FALSE);
-                    break;
-                }
+                isAbar = (accessRange[index].RangeStart.QuadPart == adapterExtension->AhciBaseAddress);
             }
+            else
+            {
+                // No PCI header on an ACPI adapter, so no ABAR to match: take the first memory range that fits the host control block
+                isAbar = accessRange[index].RangeInMemory &&
+                         accessRange[index].RangeLength >= FIELD_OFFSET(AHCI_MEMORY_REGISTERS, PortList);
+            }
+
+            if (!isAbar)
+                continue;
+
+            abar = StorPortGetDeviceBase(adapterExtension,
+                                         ConfigInfo->AdapterInterfaceType,
+                                         ConfigInfo->SystemIoBusNumber,
+                                         accessRange[index].RangeStart,
+                                         accessRange[index].RangeLength,
+                                         !accessRange[index].RangeInMemory);
+            break;
         }
     }
 
