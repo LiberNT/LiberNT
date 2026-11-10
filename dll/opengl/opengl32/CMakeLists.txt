@@ -8,7 +8,7 @@ spec2def(opengl32.dll opengl32.spec ADD_IMPORTLIB)
 
 include_directories(
     ../mesa
-    ${REACTOS_SOURCE_DIR}/win32ss/include)
+    ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/include)
 
 add_definitions(
     -D_GDI32_ # prevent gl* being declared __declspec(dllimport) in MS headers

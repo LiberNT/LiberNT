@@ -767,6 +767,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			PackageName = argvW[i];
 			StringListAppend(&property_list, L"ACTION=ADMIN");
 		}
+#ifdef __REACTOS__
+		else if(msi_option_equal(argvW[i], "norestart"))
+		{
+			StringListAppend(&property_list, L"REBOOT=ReallySuppress");
+		}
+		else if(msi_option_equal(argvW[i], "forcerestart"))
+		{
+			StringListAppend(&property_list, L"REBOOT=Force");
+		}
+		else if(msi_option_equal(argvW[i], "promptrestart"))
+		{
+			StringListAppend(&property_list, L"REBOOTPROMPT=\"\"");
+		}
+#endif
 		else if(msi_option_prefix(argvW[i], "f"))
 		{
 			int j;

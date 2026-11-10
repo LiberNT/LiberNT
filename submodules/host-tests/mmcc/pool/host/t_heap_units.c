@@ -21,6 +21,127 @@ MakeHeap(TEST_ARENA *Arena, POOL_VA_REGION *Region, SIZE_T Bytes, ULONG Cpus)
     return Heap;
 }
 
+typedef struct _SEGMENT_ROLLBACK_TEST
+{
+    POOL_BACKING Original;
+    PPOOL_HEAP Heap;
+    volatile int FailNext;
+    volatile int Entered;
+    volatile int Proceed;
+    volatile int Blocked;
+    PVOID Result;
+} SEGMENT_ROLLBACK_TEST;
+
+static
+NTSTATUS
+SegmentRollbackCommit(PVOID Context, PVOID Base, SIZE_T Bytes)
+{
+    SEGMENT_ROLLBACK_TEST *Test = Context;
+
+    if (__sync_bool_compare_and_swap(&Test->FailNext, 1, 0))
+    {
+        __atomic_store_n(&Test->Entered, 1, __ATOMIC_RELEASE);
+        while (!__atomic_load_n(&Test->Proceed, __ATOMIC_ACQUIRE))
+            sched_yield();
+        PoolHostLockBlocked = &Test->Blocked;
+        return STATUS_NO_MEMORY;
+    }
+    return Test->Original.Commit(Test->Original.Context, Base, Bytes);
+}
+
+static
+VOID
+SegmentRollbackDecommit(PVOID Context, PVOID Base, SIZE_T Bytes)
+{
+    SEGMENT_ROLLBACK_TEST *Test = Context;
+
+    Test->Original.Decommit(Test->Original.Context, Base, Bytes);
+}
+
+static
+void *
+SegmentRollbackWorker(void *Context)
+{
+    SEGMENT_ROLLBACK_TEST *Test = Context;
+
+    PoolHostProcessor = 0;
+    Test->Result = PoolSegAllocatePages(Test->Heap, 1, PoolRangeBlock, 0, 0);
+    PoolHostLockBlocked = NULL;
+    return NULL;
+}
+
+static
+BOOLEAN
+SegmentWaitFlag(volatile int *Flag)
+{
+    double Limit = NowSeconds() + 5;
+
+    while (!__atomic_load_n(Flag, __ATOMIC_ACQUIRE) && NowSeconds() < Limit)
+        sched_yield();
+    return (BOOLEAN)(__atomic_load_n(Flag, __ATOMIC_ACQUIRE) != 0);
+}
+
+static
+void
+TestSegmentRollbackLock(void)
+{
+    TEST_ARENA Arena;
+    POOL_VA_REGION Region;
+    SEGMENT_ROLLBACK_TEST Test = {0};
+    PPOOL_HEAP Heap = MakeHeap(&Arena, &Region, 64 * POOL_UNIT_SIZE, 1);
+    PVOID Seed = PoolSegAllocatePages(Heap, 1, PoolRangeBlock, 0, 0);
+    PPOOL_SEGMENT Segment;
+    PPOOL_SEGMENT_SHARD Shard;
+    pthread_t Thread;
+    ULONG Bit;
+    KIRQL OldIrql;
+    BOOLEAN Entered, Blocked;
+
+    CHECK(Seed != NULL);
+    if (Seed == NULL)
+    {
+        ArenaDestroy(&Arena);
+        return;
+    }
+    Segment = PoolSegFromAddress(Seed);
+    Bit = PoolSegPageIndex(Seed);
+    PoolSegFreePages(Heap, Seed);
+    PoolHeapTrim(Heap);
+    CHECK((Segment->CommitMap[Bit >> 6] & ((ULONG64)1 << (Bit & 63))) == 0);
+
+    Test.Original = Region.Backing;
+    Test.Heap = Heap;
+    Test.FailNext = 1;
+    Region.Backing.Commit = SegmentRollbackCommit;
+    Region.Backing.Decommit = SegmentRollbackDecommit;
+    Region.Backing.Context = &Test;
+    if (pthread_create(&Thread, NULL, SegmentRollbackWorker, &Test) != 0)
+    {
+        CHECK(FALSE);
+        ArenaDestroy(&Arena);
+        return;
+    }
+
+    Entered = SegmentWaitFlag(&Test.Entered);
+    CHECK(Entered);
+    Shard = &Heap->Shard[Segment->Shard];
+    POOL_LOCK_ACQUIRE(&Shard->Lock, &OldIrql);
+    if (Entered)
+        CHECK((Segment->CommitMap[Bit >> 6] & ((ULONG64)1 << (Bit & 63))) != 0);
+    __atomic_store_n(&Test.Proceed, 1, __ATOMIC_RELEASE);
+    Blocked = Entered && SegmentWaitFlag(&Test.Blocked);
+    CHECK(Blocked);
+    if (Blocked)
+        CHECK((Segment->CommitMap[Bit >> 6] & ((ULONG64)1 << (Bit & 63))) != 0);
+    POOL_LOCK_RELEASE(&Shard->Lock, OldIrql);
+    pthread_join(Thread, NULL);
+    CHECK(Test.Result == NULL);
+    CHECK((Segment->CommitMap[Bit >> 6] & ((ULONG64)1 << (Bit & 63))) == 0);
+    CHECK(Shard->FreeCommittedPages == 0);
+    CHECK(Arena.Errors == 0);
+    ArenaDestroy(&Arena);
+}
+
 void
 TestSegment(void)
 {
@@ -83,6 +204,7 @@ TestSegment(void)
     CHECK(Region.CommittedPages == Arena.CommittedPages);
     CHECK(Arena.Errors == 0);
     ArenaDestroy(&Arena);
+    TestSegmentRollbackLock();
 }
 
 void

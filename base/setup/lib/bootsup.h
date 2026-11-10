@@ -8,6 +8,7 @@
 #pragma once
 
 #define BOOT_OPTION_AFTER_WINDOWS   0x100
+#define BOOT_OPTION_KEEP_ORDER      0x200
 
 NTSTATUS
 NTAPI

@@ -430,4 +430,123 @@ NtfsBlCreateDirectory(
     return NT_SUCCESS(Status) ? NtfsBlCreate(Name, Chars, TRUE) : Status;
 }
 
+NTSTATUS
+NtfsBlOpenFile(
+    _In_ PCSTR Path,
+    _Out_ PVOID* Handle,
+    _Out_opt_ PULONGLONG Size,
+    _Out_opt_ PBOOLEAN IsDirectory)
+{
+    WCHAR Name[NTFS_BL_PATH_CHARS];
+    PNtfsFileRecord File = NULL;
+    PAttribute Attribute;
+    NTSTATUS Status;
+    ULONG Chars;
+
+    *Handle = NULL;
+    if (!NtfsBlVolume)
+        return STATUS_DEVICE_NOT_READY;
+
+    Status = NtfsBlPath(Path, Name, &Chars);
+    if (NT_SUCCESS(Status))
+        Status = NtfsMasterFileTableGetFileRecordFromQuery(NtfsVolumeGetMft(NtfsBlVolume), Name, &File);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (IsDirectory)
+        *IsDirectory = (NtfsFileRecordGetHeader(File)->Flags & FR_IS_DIRECTORY) ? TRUE : FALSE;
+    if (Size)
+    {
+        Attribute = NtfsFileRecordGetAttribute(File, TypeData, NULL);
+        *Size = Attribute ? GetAttributeDataSize(Attribute) : 0;
+    }
+    *Handle = File;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NtfsBlReadFileAt(
+    _In_ PVOID Handle,
+    _In_ ULONGLONG Offset,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG Read)
+{
+    ULONG Remaining = Length;
+    NTSTATUS Status;
+
+    *Read = 0;
+    Status = NtfsFileRecordCopyData(static_cast<PNtfsFileRecord>(Handle),
+                                    TypeData,
+                                    NULL,
+                                    static_cast<PUCHAR>(Buffer),
+                                    &Remaining,
+                                    Offset);
+    if (NT_SUCCESS(Status))
+        *Read = Length - Remaining;
+    return Status;
+}
+
+VOID
+NtfsBlCloseFile(
+    _In_opt_ PVOID Handle)
+{
+    NtfsFileRecordDestroy(static_cast<PNtfsFileRecord>(Handle));
+}
+
+NTSTATUS
+NtfsBlDeleteFile(
+    _In_ PCSTR Path,
+    _In_ BOOLEAN IsDirectory)
+{
+    WCHAR Name[NTFS_BL_PATH_CHARS];
+    NTSTATUS Status;
+    ULONG Chars;
+
+    if (!NtfsBlVolume)
+        return STATUS_DEVICE_NOT_READY;
+
+    Status = NtfsBlPath(Path, Name, &Chars);
+    return NT_SUCCESS(Status)
+        ? NtfsMasterFileTableDeleteFile(NtfsVolumeGetMft(NtfsBlVolume), Name, Chars, IsDirectory)
+        : Status;
+}
+
+NTSTATUS
+NtfsBlQuerySpace(
+    _Out_ PULONGLONG FreeBytes,
+    _Out_ PULONG ClusterSize)
+{
+    NtfsVolumeInformation Information;
+    NTSTATUS Status;
+
+    *FreeBytes = 0;
+    *ClusterSize = 0;
+    if (!NtfsBlVolume)
+        return STATUS_DEVICE_NOT_READY;
+
+    Status = NtfsVolumeQueryInformation(NtfsBlVolume, &Information);
+    if (NT_SUCCESS(Status))
+    {
+        *FreeBytes = Information.FreeClusters * Information.BytesPerCluster;
+        *ClusterSize = Information.BytesPerCluster;
+    }
+    return Status;
+}
+
+NTSTATUS
+NtfsBlSetDirty(
+    _In_ BOOLEAN Dirty)
+{
+    NTSTATUS Status;
+
+    if (!NtfsBlVolume)
+        return STATUS_DEVICE_NOT_READY;
+
+    Status = NtfsVolumeSetFlags(NtfsBlVolume, Dirty ? VOL_DIRTY : 0, Dirty ? 0 : VOL_DIRTY);
+    if (NT_SUCCESS(Status) && !DkFlush(NtfsBlDevice))
+        Status = STATUS_UNEXPECTED_IO_ERROR;
+    return Status;
+}
+
 }

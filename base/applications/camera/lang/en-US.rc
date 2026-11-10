@@ -1,0 +1,10 @@
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    100 "Camera"
+    101 "Looking for a camera..."
+    102 "No camera found. Connect a camera."
+    103 "The camera stopped sending video."
+    104 "&Format"
+END

@@ -38,6 +38,7 @@ struct HTMLFormElement {
     HTMLElement element;
 
     IHTMLFormElement IHTMLFormElement_iface;
+    IHTMLFormElement2 IHTMLFormElement2_iface;
     IWineHTMLFormPrivate IWineHTMLFormPrivate_iface;
 
     nsIDOMHTMLFormElement *nsform;
@@ -224,7 +225,7 @@ static HRESULT WINAPI HTMLFormElement_put_method(IHTMLFormElement *iface, BSTR v
         return E_INVALIDARG;
     }
 
-    nsAString_InitDepend(&method_str, v);
+    nsAString_InitDepend(&method_str, lstrcmpiW(v, L"POST") ? L"get" : L"post");
     nsres = nsIDOMHTMLFormElement_SetMethod(This->nsform, &method_str);
     nsAString_Finish(&method_str);
     if(NS_FAILED(nsres))
@@ -576,6 +577,74 @@ static const IHTMLFormElementVtbl HTMLFormElementVtbl = {
     HTMLFormElement_tags
 };
 
+static inline HTMLFormElement *impl_from_IHTMLFormElement2(IHTMLFormElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLFormElement, IHTMLFormElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLFormElement2, IHTMLFormElement2,
+                      impl_from_IHTMLFormElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLFormElement2_put_acceptCharset(IHTMLFormElement2 *iface, BSTR v)
+{
+    HTMLFormElement *This = impl_from_IHTMLFormElement2(iface);
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    nsAString_InitDepend(&str, v);
+    nsres = nsIDOMHTMLFormElement_SetAcceptCharset(This->nsform, &str);
+    nsAString_Finish(&str);
+    return map_nsresult(nsres);
+}
+
+static HRESULT WINAPI HTMLFormElement2_get_acceptCharset(IHTMLFormElement2 *iface, BSTR *p)
+{
+    HTMLFormElement *This = impl_from_IHTMLFormElement2(iface);
+    const PRUnichar *val;
+    nsAString str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    if(!element_has_attribute(&This->element, L"accept-charset")) {
+        *p = SysAllocString(L"UNKNOWN");
+        return *p ? S_OK : E_OUTOFMEMORY;
+    }
+
+    nsAString_Init(&str, NULL);
+    nsres = nsIDOMHTMLFormElement_GetAcceptCharset(This->nsform, &str);
+    if(NS_FAILED(nsres)) {
+        nsAString_Finish(&str);
+        return map_nsresult(nsres);
+    }
+    nsAString_GetData(&str, &val);
+    *p = SysAllocString(val);
+    nsAString_Finish(&str);
+    return *p ? S_OK : E_OUTOFMEMORY;
+}
+
+static HRESULT WINAPI HTMLFormElement2_urns(IHTMLFormElement2 *iface, VARIANT urn, IDispatch **p)
+{
+    HTMLFormElement *This = impl_from_IHTMLFormElement2(iface);
+    FIXME("(%p)->(%s %p)\n", This, debugstr_variant(&urn), p);
+    return E_NOTIMPL;
+}
+
+static const IHTMLFormElement2Vtbl HTMLFormElement2Vtbl = {
+    HTMLFormElement2_QueryInterface,
+    HTMLFormElement2_AddRef,
+    HTMLFormElement2_Release,
+    HTMLFormElement2_GetTypeInfoCount,
+    HTMLFormElement2_GetTypeInfo,
+    HTMLFormElement2_GetIDsOfNames,
+    HTMLFormElement2_Invoke,
+    HTMLFormElement2_put_acceptCharset,
+    HTMLFormElement2_get_acceptCharset,
+    HTMLFormElement2_urns
+};
+
 static inline HTMLFormElement *impl_from_IWineHTMLFormPrivateVtbl(IWineHTMLFormPrivate *iface)
 {
     return CONTAINING_RECORD(iface, HTMLFormElement, IWineHTMLFormPrivate_iface);
@@ -651,6 +720,8 @@ static void *HTMLFormElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLFormElement_iface;
     if(IsEqualGUID(&DIID_DispHTMLFormElement, riid))
         return &This->IHTMLFormElement_iface;
+    if(IsEqualGUID(&IID_IHTMLFormElement2, riid))
+        return &This->IHTMLFormElement2_iface;
     if(IsEqualGUID(&IID_IWineHTMLFormPrivate, riid))
         return &This->IWineHTMLFormPrivate_iface;
 
@@ -832,10 +903,14 @@ static void HTMLFormElement_init_dispex_info(dispex_data_t *info, compat_mode_t 
 {
     static const dispex_hook_t hooks[] = {
         {DISPID_IHTMLFORMELEMENT_DIR},
-        {DISPID_IHTMLFORMELEMENT_ENCODING, .noattr = TRUE},
+        {DISPID_IHTMLFORMELEMENT_ENCODING, .attr_name = L"encType"},
         {DISPID_IHTMLFORMELEMENT_ELEMENTS, .noattr = TRUE},
         {DISPID_NEWENUM,                   .noattr = TRUE},
         {DISPID_COLLECTION,                .noattr = TRUE},
+        {DISPID_UNKNOWN}
+    };
+    static const dispex_hook_t form2_hooks[] = {
+        {DISPID_IHTMLFORMELEMENT2_ACCEPTCHARSET, .attr_name = L"accept-charset"},
         {DISPID_UNKNOWN}
     };
     static const dispex_hook_t private_ie9_hooks[] = {
@@ -845,6 +920,7 @@ static void HTMLFormElement_init_dispex_info(dispex_data_t *info, compat_mode_t 
     };
 
     dispex_info_add_interface(info, IHTMLFormElement_tid, hooks);
+    dispex_info_add_interface(info, IHTMLFormElement2_tid, form2_hooks);
     if(mode >= COMPAT_MODE_IE9)
         dispex_info_add_interface(info, IWineHTMLFormPrivate_tid, mode < COMPAT_MODE_IE10 ? private_ie9_hooks : NULL);
 
@@ -887,6 +963,7 @@ HRESULT HTMLFormElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTM
         return E_OUTOFMEMORY;
 
     ret->IHTMLFormElement_iface.lpVtbl = &HTMLFormElementVtbl;
+    ret->IHTMLFormElement2_iface.lpVtbl = &HTMLFormElement2Vtbl;
     ret->IWineHTMLFormPrivate_iface.lpVtbl = &WineHTMLFormPrivateVtbl;
     ret->element.node.vtbl = &HTMLFormElementImplVtbl;
 

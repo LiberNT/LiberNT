@@ -394,11 +394,11 @@ TARGETS = (
     ("legacy:legacy/media-floppy", "modules/rosapps/lib/vfdlib/res/", ("image", "vfd")),
     ("mimetypes/application-x-executable", "modules/rosapps/templates/mdi/res/", ("mdi", "small")),
     ("legacy:legacy/accessories-text-editor", "modules/rosapps/templates/old_wordpad/res/", ("wordpad",)),
-    ("legacy:legacy/dialog-warning", "win32ss/user/user32/resources/", ("oic_bang",)),
-    ("legacy:legacy/dialog-error", "win32ss/user/user32/resources/", ("oic_hand",)),
-    ("legacy:legacy/dialog-information", "win32ss/user/user32/resources/", ("oic_note",)),
-    ("legacy:legacy/dialog-question", "win32ss/user/user32/resources/", ("oic_ques",)),
-    ("mimetypes/application-x-executable", "win32ss/user/user32/resources/", ("oic_sample",)),
+    ("legacy:legacy/dialog-warning", "subsystems/win/win32k/user/user32/resources/", ("oic_bang",)),
+    ("legacy:legacy/dialog-error", "subsystems/win/win32k/user/user32/resources/", ("oic_hand",)),
+    ("legacy:legacy/dialog-information", "subsystems/win/win32k/user/user32/resources/", ("oic_note",)),
+    ("legacy:legacy/dialog-question", "subsystems/win/win32k/user/user32/resources/", ("oic_ques",)),
+    ("mimetypes/application-x-executable", "subsystems/win/win32k/user/user32/resources/", ("oic_sample",)),
 )
 
 

@@ -23,7 +23,7 @@ INK = (0x10, 0x10, 0x10, 0xFF)
 LIGHT_HALO = (0xFF, 0xFF, 0xFF, 0x99)
 LIGHT_GLYPH = (0x19, 0x19, 0x19, 0xFF)
 BASE = ("white", "dim", "dark")
-BADGE = ("red", "yellow")
+BADGE = ("red", "yellow", "lock")
 MARK = ("bwhite", "ink")
 
 
@@ -67,6 +67,15 @@ class Canvas:
         for name in BASE:
             self.px[name] -= cut
         return cut
+
+
+def spread(cov, r, s):
+    out = [0.0] * (s * s)
+    for j in range(s):
+        for i in range(s):
+            out[j * s + i] = max(cov[y * s + x] for y in range(max(0, j - r), min(s, j + r + 1))
+                                 for x in range(max(0, i - r), min(s, i + r + 1)))
+    return out
 
 
 def grow(pts, r, s):
@@ -202,6 +211,19 @@ class Grid:
             box, contours = svg_contours("warning", size)
             over(out, coverage(contours[:1], size / box, min(xs), min(ys), s), INK)
             over(out, coverage(contours, size / box, min(xs), min(ys), s), YELLOW)
+        if c.px["lock"]:
+            xs = [i for i, j in c.px["lock"]]
+            ys = [j for i, j in c.px["lock"]]
+            size = max(xs) - min(xs) + 1
+            box, contours = svg_contours("lock_closed", size)
+            gx = [x for ct in contours for x, y in ct]
+            gy = [y for ct in contours for x, y in ct]
+            k = size / max(max(gx) - min(gx), max(gy) - min(gy))
+            ox = min(xs) + round((size - (max(gx) - min(gx)) * k) / 2) - min(gx) * k
+            oy = min(ys) + round((size - (max(gy) - min(gy)) * k) / 2) - min(gy) * k
+            cov = coverage(contours, k, ox, oy, s)
+            over(out, spread(cov, c.h, s), INK)
+            over(out, cov, WHITE)
         return [tuple(int(round(v)) for v in px[:3]) + (int(round(px[3] * 255)),) for px in out]
 
 
@@ -227,7 +249,7 @@ def prune(c, least, cut):
 
 
 def knock_badge(c):
-    badge = c.px["red"] | c.px["yellow"]
+    badge = set().union(*(c.px[name] for name in BADGE))
     if badge:
         xs = [i for i, j in badge]
         ys = [j for i, j in badge]
@@ -290,6 +312,11 @@ def badge_warn(c, top=False):
     dot = y0 + bs - 1 - d
     c.rect("ink", ex, y0 + round(bs / 3.0), ex + t, dot - d)
     c.rect("ink", ex, dot - d + 1, ex + t, dot + 1)
+
+
+def badge_lock(c, top=False):
+    x0, y0, bs = badge_box(c, top)
+    c.rect("lock", x0, y0, x0 + bs, y0 + bs)
 
 
 def battery_shape(c, x0, bw, level):
@@ -449,6 +476,10 @@ ICONS = (
     (NETSHELL + "wifi_3.ico", Grid(bars(2))),
     (NETSHELL + "wifi_4.ico", Grid(bars(1))),
     (NETSHELL + "wifi_warn.ico", Grid(bars(5, badge_warn))),
+    (NETSHELL + "wifi_1_lock.ico", Grid(bars(5, badge_lock))),
+    (NETSHELL + "wifi_2_lock.ico", Grid(bars(4, badge_lock))),
+    (NETSHELL + "wifi_3_lock.ico", Grid(bars(2, badge_lock))),
+    (NETSHELL + "wifi_4_lock.ico", Grid(bars(1, badge_lock))),
     (NETSHELL + "wifi_x.ico", Grid(bars(0, badge_x))),
     (STOBJECT + "battery_0.ico", battery(0)),
     (STOBJECT + "battery_1.ico", battery(0.25)),

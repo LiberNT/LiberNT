@@ -5,7 +5,7 @@
 ## PROJECT:     ReactOS ISO Remastering Script
 ## LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
 ## PURPOSE:     Allows easy remastering of customized ReactOS ISO images.
-##              Based on the boot/boot_images.cmake script in the ReactOS
+##              Based on the sdk/cmake/boot_images.cmake script in the ReactOS
 ##              source tree. Requires a MKISOFS-compatible utility.
 ## COPYRIGHT:   Copyright 2025 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
 ##
@@ -156,7 +156,7 @@ echo
 
 ## Create a mkisofs sort file to specify an explicit ordering for the boot files
 ## to place them at the beginning of the image (makes ISO image analysis easier).
-## See mkisofs/schilytools/mkisofs/README.sort and boot/boot_images.cmake script
+## See mkisofs/schilytools/mkisofs/README.sort and sdk/cmake/boot_images.cmake script
 ## in the ReactOS source tree for more details.
 
 ## echo ${CMAKE_CURRENT_BINARY_DIR}/empty/boot.catalog 4

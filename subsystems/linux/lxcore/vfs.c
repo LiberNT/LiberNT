@@ -20,6 +20,7 @@
 #define LX_MAGIC_DEVPTS     0x00001CD1ULL
 #define LX_MAGIC_MQUEUE     0x19800202ULL
 #define LX_MAGIC_SQUASHFS   0x73717368ULL
+#define LX_MAGIC_BPF        0xCAFE4A11ULL
 
 LIST_ENTRY LxInstanceList;
 FAST_MUTEX LxInstanceListLock;
@@ -788,7 +789,8 @@ LxInstanceTmpfs(
     _In_ ULONG Mode,
     _Out_opt_ PLX_MOUNT *Out)
 {
-    PLX_MOUNT Mount = LxMountAllocate(Target, FsType, FsType, Flags, LxFsTmpfs, LX_MAGIC_TMPFS);
+    ULONG64 Magic = (strcmp(FsType, "bpf") == 0) ? LX_MAGIC_BPF : LX_MAGIC_TMPFS;
+    PLX_MOUNT Mount = LxMountAllocate(Target, FsType, FsType, Flags, LxFsTmpfs, Magic);
 
     if (Mount == NULL)
         return -LX_ENOMEM;
@@ -2917,6 +2919,11 @@ LxLookupFinish(
     Node->LinkTarget = LinkTarget;
     Node->Mount = LxMountFind(LxProcessNs(Process, LxNsMnt), Path, &Relative);
     Node->Relative = Relative;
+    if ((Node->Mount != NULL) && (Node->Mount->Magic == LX_MAGIC_BPF) && (strchr(Relative, '.') != NULL))
+    {
+        LxNodeFree(Node);
+        return -LX_EPERM;
+    }
     if ((Node->Mount != NULL) && (Node->Mount->Kind == LxFsNt))
     {
         Error = LxNtPath(Node->Mount, Relative, &Node->NtPath);
@@ -3238,6 +3245,11 @@ LxLookupWalk(
         Error = LxNodeQuery(Process, Candidate, &Mount, &Relative, &Type, &LinkTarget, NULL);
         if ((Mount != NULL) && (Mount->Kind != LxFsNt))
             *Synthetic = TRUE;
+        if ((Mount != NULL) && (Mount->Magic == LX_MAGIC_BPF) && (strchr(Component, '.') != NULL))
+        {
+            Error = -LX_EPERM;
+            break;
+        }
         if (Error == -LX_ENOENT)
         {
             if (Last && (Flags & LX_LOOKUP_CREATE))
@@ -5302,6 +5314,56 @@ LxVfsLink(
 }
 
 LONG
+LxApplyAttributes(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Mode,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid,
+    _Inout_ PULONG OldMode,
+    _Inout_ PULONG OldUid,
+    _Inout_ PULONG OldGid)
+{
+    if ((Uid != MAXULONG) && !((Process->Fsuid == *OldUid) && (Uid == *OldUid)) &&
+        !LxCapableWrtIds(Process, *OldUid, *OldGid, LX_CAP_CHOWN))
+    {
+        return -LX_EPERM;
+    }
+    if ((Gid != MAXULONG) && !((Process->Fsuid == *OldUid) && ((Gid == *OldGid) || LxInGroup(Process, Gid))) &&
+        !LxCapableWrtIds(Process, *OldUid, *OldGid, LX_CAP_CHOWN))
+    {
+        return -LX_EPERM;
+    }
+    if ((Mode != MAXULONG) && !LxOwnerOrCapable(Process, *OldUid, *OldGid))
+        return -LX_EPERM;
+    if ((Mode != MAXULONG) && !LxInGroup(Process, (Gid != MAXULONG) ? Gid : *OldGid) &&
+        !LxCapableWrtIds(Process, *OldUid, *OldGid, LX_CAP_FSETID))
+    {
+        Mode &= ~LX_S_ISGID;
+    }
+    if ((Mode == MAXULONG) && ((*OldMode & LX_S_IFMT) != LX_S_IFDIR))
+    {
+        ULONG Kill = *OldMode & LX_S_ISUID;
+
+        if ((*OldMode & LX_S_ISGID) &&
+            ((*OldMode & LX_S_IXGRP) ||
+             (!LxInGroup(Process, *OldGid) && !LxCapableWrtIds(Process, *OldUid, *OldGid, LX_CAP_FSETID))))
+        {
+            Kill |= LX_S_ISGID;
+        }
+        if ((Kill != 0) && !LxOwnerOrCapable(Process, *OldUid, *OldGid))
+            return -LX_EPERM;
+        *OldMode &= ~Kill;
+    }
+    if (Mode != MAXULONG)
+        *OldMode = (*OldMode & LX_S_IFMT) | (Mode & 07777);
+    if (Uid != MAXULONG)
+        *OldUid = Uid;
+    if (Gid != MAXULONG)
+        *OldGid = Gid;
+    return 0;
+}
+
+LONG
 LxVfsSetAttributes(
     _In_ PLX_PROCESS Process,
     _In_ PLX_NODE Node,
@@ -5400,21 +5462,7 @@ LxVfsSetAttributes(
     if (OldGid == MAXULONG)
         OldGid = 0;
 
-    Error = 0;
-    if ((Uid != MAXULONG) && !((Process->Fsuid == OldUid) && (Uid == OldUid)) &&
-        !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_CHOWN))
-    {
-        Error = -LX_EPERM;
-    }
-    else if ((Gid != MAXULONG) && !((Process->Fsuid == OldUid) && ((Gid == OldGid) || LxInGroup(Process, Gid))) &&
-             !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_CHOWN))
-    {
-        Error = -LX_EPERM;
-    }
-    else if ((Mode != MAXULONG) && !LxOwnerOrCapable(Process, OldUid, OldGid))
-    {
-        Error = -LX_EPERM;
-    }
+    Error = LxApplyAttributes(Process, Mode, Uid, Gid, &OldMode, &OldUid, &OldGid);
     if (Error != 0)
     {
         if (Close)
@@ -5424,33 +5472,6 @@ LxVfsSetAttributes(
         if (Tty != NULL)
             LxTtyDereference(Tty);
         return Error;
-    }
-    if ((Mode != MAXULONG) && !LxInGroup(Process, (Gid != MAXULONG) ? Gid : OldGid) &&
-        !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_FSETID))
-    {
-        Mode &= ~LX_S_ISGID;
-    }
-    if ((Mode == MAXULONG) && ((OldMode & LX_S_IFMT) != LX_S_IFDIR))
-    {
-        ULONG Kill = OldMode & LX_S_ISUID;
-
-        if ((OldMode & LX_S_ISGID) &&
-            ((OldMode & LX_S_IXGRP) ||
-             (!LxInGroup(Process, OldGid) && !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_FSETID))))
-        {
-            Kill |= LX_S_ISGID;
-        }
-        if ((Kill != 0) && !LxOwnerOrCapable(Process, OldUid, OldGid))
-        {
-            if (Close)
-                ZwClose(Handle);
-            if (Inode != NULL)
-                LxTmpfsInodeDereference(Inode);
-            if (Tty != NULL)
-                LxTtyDereference(Tty);
-            return -LX_EPERM;
-        }
-        OldMode &= ~Kill;
     }
     if ((Mode == MAXULONG) && ((OldMode & LX_S_IFMT) != LX_S_IFDIR) && ((Inode != NULL) || (Handle != NULL)))
     {
@@ -5464,12 +5485,6 @@ LxVfsSetAttributes(
             return Error;
         }
     }
-    if (Mode != MAXULONG)
-        OldMode = (OldMode & LX_S_IFMT) | (Mode & 07777);
-    if (Uid != MAXULONG)
-        OldUid = Uid;
-    if (Gid != MAXULONG)
-        OldGid = Gid;
 
     if (Inode != NULL)
     {

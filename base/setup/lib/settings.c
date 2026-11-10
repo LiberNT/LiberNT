@@ -276,39 +276,12 @@ GetComputerIdentifier(
     }
 
 #ifdef _M_AMD64
-    /* On x64 we are l33t and use the MP config by default (except when we use KDBG, which is broken) */
-#ifndef KDBG
     ComputerIdentifier = L"X64 MP";
 #else
-    ComputerIdentifier = L"X64 UP";
-#endif
-#else
     if (IsAcpiComputer())
-    {
-        if (pFullInfo->SubKeys == 1)
-        {
-            /* Computer is mono-CPU */
-            ComputerIdentifier = L"ACPI UP";
-        }
-        else
-        {
-            /* Computer is multi-CPUs */
-            ComputerIdentifier = L"ACPI MP";
-        }
-    }
+        ComputerIdentifier = L"ACPI MP";
     else
-    {
-        if (pFullInfo->SubKeys == 1)
-        {
-            /* Computer is mono-CPU */
-            ComputerIdentifier = L"PC UP";
-        }
-        else
-        {
-            /* Computer is multi-CPUs */
-            ComputerIdentifier = L"PC MP";
-        }
-    }
+        ComputerIdentifier = L"PC MP";
 #endif
 
     RtlFreeHeap(RtlGetProcessHeap(), 0, pFullInfo);

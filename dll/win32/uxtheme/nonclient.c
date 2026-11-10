@@ -427,6 +427,16 @@ HRESULT WINAPI ThemeDrawCaptionText(PDRAW_CONTEXT pcontext, RECT* pRect, int iPa
     return S_OK;
 }
 
+static BOOL
+ThemeCaptionIsLight(HTHEME hTheme)
+{
+    COLORREF fill;
+
+    return !hTheme ||
+           FAILED(GetThemeColor(hTheme, WP_CAPTION, FS_ACTIVE, TMT_FILLCOLORHINT, &fill)) ||
+           (GetRValue(fill) * 299 + GetGValue(fill) * 587 + GetBValue(fill) * 114) / 1000 >= 128;
+}
+
 void
 ThemeInitDrawContext(PDRAW_CONTEXT pcontext,
                      HWND hWnd,
@@ -438,16 +448,9 @@ ThemeInitDrawContext(PDRAW_CONTEXT pcontext,
     GetWindowInfo(hWnd, &pcontext->wi);
     pcontext->hWnd = hWnd;
     pcontext->Active = IsWindowActive(hWnd, pcontext->wi.dwExStyle);
-    pcontext->DarkMode = GetPropW(hWnd, immersive_dark_mode_propW) != NULL;
     pcontext->theme = GetNCCaptionTheme(hWnd, pcontext->wi.dwStyle);
-    if (pcontext->DarkMode && pcontext->theme)
-    {
-        COLORREF fill;
-
-        if (SUCCEEDED(GetThemeColor(pcontext->theme, WP_CAPTION, FS_ACTIVE, TMT_FILLCOLORHINT, &fill)) &&
-            (GetRValue(fill) * 299 + GetGValue(fill) * 587 + GetBValue(fill) * 114) / 1000 < 128)
-            pcontext->DarkMode = FALSE;
-    }
+    pcontext->DarkMode = GetPropW(hWnd, immersive_dark_mode_propW) != NULL &&
+                         ThemeCaptionIsLight(pcontext->theme);
     pcontext->scrolltheme = GetNCScrollbarTheme(hWnd, pcontext->wi.dwStyle);
 
     pcontext->CaptionHeight = pcontext->wi.cyWindowBorders;
@@ -1220,8 +1223,11 @@ ThemeDwmDrawCaptionButton(HDC hDC, const RECT *prc, UINT Button, ULONG State, BO
     else
         iState = Active ? BUTTON_NORMAL : BUTTON_INACTIVE;
 
-    if (Dark)
+    hTheme = UXTHEME_OpenNcThemeData(NULL, L"WINDOW", OTD_NONCLIENT);
+    if (Dark && ThemeCaptionIsLight(hTheme))
     {
+        if (hTheme)
+            CloseThemeData(hTheme);
         ZeroMemory(&context, sizeof(context));
         context.hDC = hDC;
         context.Active = Active;
@@ -1245,7 +1251,6 @@ ThemeDwmDrawCaptionButton(HDC hDC, const RECT *prc, UINT Button, ULONG State, BO
         break;
     }
 
-    hTheme = UXTHEME_OpenNcThemeData(NULL, L"WINDOW", OTD_NONCLIENT);
     if (!hTheme)
         return FALSE;
     if (iPart == WP_CLOSEBUTTON &&

@@ -20,6 +20,13 @@ static const GUID processor_minimum = {0x893dee8e, 0x2bef, 0x41e0, {0x89, 0xc6, 
 static const GUID processor_maximum = {0xbc5038f7, 0x23e0, 0x4960, {0x96, 0xda, 0x33, 0xab, 0xaf, 0x59, 0x35, 0xec}};
 static const GUID processor_autonomous = {0x8baa4a8a, 0x14c6, 0x4451, {0x8e, 0x8b, 0x14, 0xbd, 0xbd, 0x19, 0x75, 0x37}};
 static const GUID processor_epp = {0x36687f9e, 0xe3a5, 0x4dbf, {0xb1, 0xdc, 0x15, 0xeb, 0x38, 0x1c, 0x68, 0x63}};
+static const GUID video_subgroup = {0x7516b95f, 0xf776, 0x4464, {0x8c, 0x53, 0x06, 0x16, 0x7f, 0x40, 0xcc, 0x99}};
+static const GUID video_powerdown_timeout = {0x3c0bc021, 0xc8a8, 0x4e07, {0xa9, 0x73, 0x6b, 0x14, 0xcb, 0xcb, 0x2b, 0x7e}};
+static const GUID sleep_subgroup = {0x238c9fa8, 0x0aad, 0x41ed, {0x83, 0xf4, 0x97, 0xbe, 0x24, 0x2c, 0x8f, 0x20}};
+static const GUID standby_timeout = {0x29f6c1db, 0x86da, 0x48c5, {0x9f, 0xdb, 0xf2, 0xb6, 0x7b, 0x1f, 0x44, 0xda}};
+static const GUID hibernate_timeout = {0x9d7815a6, 0x7ee4, 0x497e, {0x88, 0x88, 0x51, 0x5a, 0x05, 0xf0, 0x23, 0x64}};
+static const GUID disk_subgroup = {0x0012ee47, 0x9041, 0x4b5d, {0x9b, 0x77, 0x53, 0x5f, 0xba, 0x8b, 0x14, 0x42}};
+static const GUID disk_powerdown_timeout = {0x6738e2c4, 0xe8a5, 0x4a42, {0xb1, 0x6a, 0xe0, 0x40, 0xe7, 0x69, 0x75, 0x6e}};
 static const GUID unknown_guid = {0xdeadbeef, 0x1234, 0x5678, {0x9a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0x56, 0x78}};
 
 typedef struct
@@ -255,6 +262,196 @@ static void test_write_read_contract(void)
         ok(PowerWriteDCValueIndex(NULL, &balanced_scheme, &processor_subgroup, &processor_minimum, original_dc) == ERROR_SUCCESS, "restoring balanced DC minimum failed\n");
 }
 
+typedef struct
+{
+    const char *name;
+    const GUID *subgroup;
+    const GUID *setting;
+} LEGACY_SETTING;
+
+static const LEGACY_SETTING legacy_settings[] =
+{
+    {"video", &video_subgroup, &video_powerdown_timeout},
+    {"standby", &sleep_subgroup, &standby_timeout},
+    {"hibernate", &sleep_subgroup, &hibernate_timeout},
+    {"disk", &disk_subgroup, &disk_powerdown_timeout},
+};
+
+static void read_legacy_settings(const GUID *scheme, DWORD values[][2])
+{
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(legacy_settings); i++)
+    {
+        values[i][0] = values[i][1] = 0xdeadbeef;
+        PowerReadACValueIndex(NULL, scheme, legacy_settings[i].subgroup, legacy_settings[i].setting, &values[i][0]);
+        PowerReadDCValueIndex(NULL, scheme, legacy_settings[i].subgroup, legacy_settings[i].setting, &values[i][1]);
+    }
+}
+
+static void trace_legacy_policy(const char *name, const POWER_POLICY *policy, DWORD values[][2])
+{
+    UINT i;
+
+    trace("%s legacy video=%lu/%lu idle=%lu/%lu action=%u/%u spindown=%lu/%lu dozes4=%lu/%lu\n", name,
+          policy->user.VideoTimeoutAc, policy->user.VideoTimeoutDc,
+          policy->user.IdleTimeoutAc, policy->user.IdleTimeoutDc,
+          policy->user.IdleAc.Action, policy->user.IdleDc.Action,
+          policy->user.SpindownTimeoutAc, policy->user.SpindownTimeoutDc,
+          policy->mach.DozeS4TimeoutAc, policy->mach.DozeS4TimeoutDc);
+    for (i = 0; i < ARRAYSIZE(legacy_settings); i++)
+        trace("%s scheme %s=%lu/%lu\n", name, legacy_settings[i].name, values[i][0], values[i][1]);
+}
+
+static void check_legacy_policy(const char *name, const POWER_POLICY *expected, const POWER_POLICY *policy)
+{
+    ok(policy->user.VideoTimeoutAc == expected->user.VideoTimeoutAc && policy->user.VideoTimeoutDc == expected->user.VideoTimeoutDc,
+       "%s: legacy video timeout %lu/%lu, expected %lu/%lu\n", name, policy->user.VideoTimeoutAc, policy->user.VideoTimeoutDc,
+       expected->user.VideoTimeoutAc, expected->user.VideoTimeoutDc);
+    ok(policy->user.IdleTimeoutAc == expected->user.IdleTimeoutAc && policy->user.IdleTimeoutDc == expected->user.IdleTimeoutDc,
+       "%s: legacy idle timeout %lu/%lu, expected %lu/%lu\n", name, policy->user.IdleTimeoutAc, policy->user.IdleTimeoutDc,
+       expected->user.IdleTimeoutAc, expected->user.IdleTimeoutDc);
+    ok(policy->user.IdleAc.Action == expected->user.IdleAc.Action && policy->user.IdleDc.Action == expected->user.IdleDc.Action,
+       "%s: legacy idle action %u/%u, expected %u/%u\n", name, policy->user.IdleAc.Action, policy->user.IdleDc.Action,
+       expected->user.IdleAc.Action, expected->user.IdleDc.Action);
+    ok(policy->user.SpindownTimeoutAc == expected->user.SpindownTimeoutAc && policy->user.SpindownTimeoutDc == expected->user.SpindownTimeoutDc,
+       "%s: legacy spindown timeout %lu/%lu, expected %lu/%lu\n", name, policy->user.SpindownTimeoutAc, policy->user.SpindownTimeoutDc,
+       expected->user.SpindownTimeoutAc, expected->user.SpindownTimeoutDc);
+    ok(policy->mach.DozeS4TimeoutAc == expected->mach.DozeS4TimeoutAc && policy->mach.DozeS4TimeoutDc == expected->mach.DozeS4TimeoutDc,
+       "%s: legacy hibernate delay %lu/%lu, expected %lu/%lu\n", name, policy->mach.DozeS4TimeoutAc, policy->mach.DozeS4TimeoutDc,
+       expected->mach.DozeS4TimeoutAc, expected->mach.DozeS4TimeoutDc);
+}
+
+static void check_scheme_values(const char *name, DWORD expected[][2], DWORD values[][2])
+{
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(legacy_settings); i++)
+        ok(values[i][0] == expected[i][0] && values[i][1] == expected[i][1], "%s: scheme %s %lu/%lu, expected %lu/%lu\n",
+           name, legacy_settings[i].name, values[i][0], values[i][1], expected[i][0], expected[i][1]);
+}
+
+static void scheme_values_from_policy(const POWER_POLICY *policy, DWORD values[][2])
+{
+    values[0][0] = policy->user.VideoTimeoutAc;
+    values[0][1] = policy->user.VideoTimeoutDc;
+    values[1][0] = policy->user.IdleAc.Action == PowerActionSleep ? policy->user.IdleTimeoutAc : 0;
+    values[1][1] = policy->user.IdleDc.Action == PowerActionSleep ? policy->user.IdleTimeoutDc : 0;
+    values[2][0] = policy->mach.DozeS4TimeoutAc ? policy->user.IdleTimeoutAc + policy->mach.DozeS4TimeoutAc : 0;
+    values[2][1] = policy->mach.DozeS4TimeoutDc ? policy->user.IdleTimeoutDc + policy->mach.DozeS4TimeoutDc : 0;
+    values[3][0] = policy->user.SpindownTimeoutAc;
+    values[3][1] = policy->user.SpindownTimeoutDc;
+}
+
+static void set_legacy_policy(const char *name, UINT id, const GUID *scheme, const POWER_POLICY *expected)
+{
+    DWORD expected_values[ARRAYSIZE(legacy_settings)][2];
+    DWORD values[ARRAYSIZE(legacy_settings)][2];
+    POWER_POLICY policy = *expected;
+    BOOL result;
+
+    SetLastError(0xdeadbeef);
+    result = SetActivePwrScheme(id, NULL, &policy);
+    ok(result, "%s: SetActivePwrScheme failed, error %lu\n", name, GetLastError());
+    read_legacy_settings(scheme, values);
+    memset(&policy, 0xcc, sizeof(policy));
+    ok(ReadPwrScheme(id, &policy), "%s: ReadPwrScheme failed, error %lu\n", name, GetLastError());
+    trace_legacy_policy(name, &policy, values);
+    check_legacy_policy(name, expected, &policy);
+    scheme_values_from_policy(expected, expected_values);
+    check_scheme_values(name, expected_values, values);
+}
+
+static void test_disk_defaults(void)
+{
+    static const struct
+    {
+        const char *name;
+        const GUID *scheme;
+        DWORD ac, dc;
+    } tests[] =
+    {
+        {"balanced", &balanced_scheme, 1200, 600},
+        {"power-saver", &power_saver_scheme, 1200, 300},
+        {"high-performance", &high_performance_scheme, 1200, 1200},
+    };
+    DWORD ac, dc, ret;
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(tests); i++)
+    {
+        ac = dc = 0xdeadbeef;
+        ret = PowerReadACValueIndex(NULL, tests[i].scheme, &disk_subgroup, &disk_powerdown_timeout, &ac);
+        ok(ret == ERROR_SUCCESS, "%s: reading the AC disk timeout returned %lu\n", tests[i].name, ret);
+        ret = PowerReadDCValueIndex(NULL, tests[i].scheme, &disk_subgroup, &disk_powerdown_timeout, &dc);
+        ok(ret == ERROR_SUCCESS, "%s: reading the DC disk timeout returned %lu\n", tests[i].name, ret);
+        ok(ac == tests[i].ac && dc == tests[i].dc, "%s: disk timeout %lu/%lu, expected %lu/%lu\n",
+           tests[i].name, ac, dc, tests[i].ac, tests[i].dc);
+    }
+}
+
+static void test_legacy_policy_contract(void)
+{
+    DWORD original_values[ARRAYSIZE(legacy_settings)][2];
+    DWORD values[ARRAYSIZE(legacy_settings)][2];
+    POWER_POLICY original, policy;
+    GUID *active = NULL;
+    UINT id, i;
+    DWORD ret;
+
+    ret = PowerGetActiveScheme(NULL, &active);
+    ok(ret == ERROR_SUCCESS, "PowerGetActiveScheme returned %lu\n", ret);
+    if (ret != ERROR_SUCCESS)
+        return;
+    if (!GetActivePwrScheme(&id) || !ReadPwrScheme(id, &original))
+    {
+        skip("no legacy policy for the active scheme\n");
+        LocalFree(active);
+        return;
+    }
+    trace("legacy id=%u\n", id);
+    read_legacy_settings(active, original_values);
+    trace_legacy_policy("before", &original, original_values);
+
+    policy = original;
+    policy.user.VideoTimeoutAc = 120;
+    policy.user.VideoTimeoutDc = 180;
+    policy.user.IdleTimeoutAc = 1500;
+    policy.user.IdleTimeoutDc = 1260;
+    policy.user.IdleAc.Action = PowerActionSleep;
+    policy.user.IdleDc.Action = PowerActionSleep;
+    policy.user.SpindownTimeoutAc = 1140;
+    policy.user.SpindownTimeoutDc = 960;
+    policy.mach.DozeS4TimeoutAc = 3600;
+    policy.mach.DozeS4TimeoutDc = 2700;
+    set_legacy_policy("all", id, active, &policy);
+
+    policy = original;
+    policy.user.VideoTimeoutAc = original.user.VideoTimeoutAc == 420 ? 480 : 420;
+    set_legacy_policy("video", id, active, &policy);
+
+    policy = original;
+    policy.user.IdleTimeoutAc = 1500;
+    policy.user.IdleAc.Action = PowerActionNone;
+    set_legacy_policy("idle-none", id, active, &policy);
+
+    ok(SetActivePwrScheme(id, NULL, &original), "restoring the legacy policy failed, error %lu\n", GetLastError());
+    for (i = 0; i < ARRAYSIZE(legacy_settings); i++)
+    {
+        PowerWriteACValueIndex(NULL, active, legacy_settings[i].subgroup, legacy_settings[i].setting, original_values[i][0]);
+        PowerWriteDCValueIndex(NULL, active, legacy_settings[i].subgroup, legacy_settings[i].setting, original_values[i][1]);
+    }
+    ret = PowerSetActiveScheme(NULL, active);
+    ok(ret == ERROR_SUCCESS, "PowerSetActiveScheme returned %lu\n", ret);
+    read_legacy_settings(active, values);
+    memset(&policy, 0xcc, sizeof(policy));
+    ok(ReadPwrScheme(id, &policy), "ReadPwrScheme failed, error %lu\n", GetLastError());
+    trace_legacy_policy("restored", &policy, values);
+    check_legacy_policy("restored", &original, &policy);
+    check_scheme_values("restored", original_values, values);
+    LocalFree(active);
+}
+
 START_TEST(power_profile)
 {
     GUID *original = NULL;
@@ -269,6 +466,8 @@ START_TEST(power_profile)
     trace_guid("original", original);
     test_argument_contract();
     test_write_read_contract();
+    test_disk_defaults();
+    test_legacy_policy_contract();
     query_scheme_settings("original", original, NULL);
     query_processor_information("original-prime");
     Sleep(500);

@@ -24,6 +24,7 @@ extern void func_DestroyActiveWindow(void);
 extern void func_DestroyWindow(void);
 extern void func_DialogAccelerator(void);
 extern void func_DialogDpiChangeBehavior(void);
+extern void func_DpiHostingBehavior(void);
 extern void func_DM_REPOSITION(void);
 extern void func_Dpi(void);
 extern void func_DrawIconEx(void);
@@ -109,6 +110,7 @@ extern void func_SetWindowPlacement(void);
 extern void func_WindowDisplayAffinity(void);
 extern void func_WindowRegionFrame(void);
 extern void func_ShellWindowQueries(void);
+extern void func_ShellWindowZOrder(void);
 extern void func_ShowWindow(void);
 extern void func_SwitchToThisWindow(void);
 extern void func_SystemParametersInfo(void);
@@ -150,6 +152,7 @@ const struct test winetest_testlist[] =
     { "DestroyWindow", func_DestroyWindow },
     { "DialogAccelerator", func_DialogAccelerator },
     { "DialogDpiChangeBehavior", func_DialogDpiChangeBehavior },
+    { "DpiHostingBehavior", func_DpiHostingBehavior },
     { "DM_REPOSITION", func_DM_REPOSITION },
     { "Dpi", func_Dpi },
     { "DrawIconEx", func_DrawIconEx },
@@ -235,6 +238,7 @@ const struct test winetest_testlist[] =
     { "WindowDisplayAffinity", func_WindowDisplayAffinity },
     { "WindowRegionFrame", func_WindowRegionFrame },
     { "ShellWindowQueries", func_ShellWindowQueries },
+    { "ShellWindowZOrder", func_ShellWindowZOrder },
     { "ShowWindow", func_ShowWindow },
     { "SwitchToThisWindow", func_SwitchToThisWindow },
     { "SystemMenu", func_SystemMenu },

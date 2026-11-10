@@ -11,7 +11,7 @@ endif()
 
 include_directories(BEFORE include)
 include_directories(
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/include
+    ${REACTOS_SOURCE_DIR}/ntos/include
     ${REACTOS_SOURCE_DIR}/sdk/lib/cmlib
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/edk2)
@@ -79,7 +79,8 @@ list(APPEND BOOTLIB_SOURCE
     lib/fs.c
     lib/gpt.c
     lib/libsupp.c
-    lib/ntfs.c)
+    lib/ntfs.c
+    lib/sha256.c)
 
 if(ARCH STREQUAL "ppc")
     add_asm_files(bootlib_asm ofw/ofwgate.S)
@@ -280,7 +281,7 @@ if(WINLOAD_ASM_SOURCE)
     add_executable(winload
         ${winload_asm}
         ${WINLOAD_SOURCE}
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmboot.c
+        ${REACTOS_SOURCE_DIR}/ntos/config/cmboot.c
         lib/mm.c
         lib/pe.c
         winload/hw.c
@@ -296,7 +297,8 @@ if(WINLOAD_ASM_SOURCE)
         winload/resume.c
         winload/smbios.c
         winload/startup.c
-        winload/httpsync.c)
+        winload/httpsync.c
+        winload/install.c)
     if(ARCH STREQUAL "ppc")
         bootloader_ofw_application(winload 0x00400000)
     else()

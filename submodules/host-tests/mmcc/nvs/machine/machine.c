@@ -8,7 +8,7 @@
  */
 
 #include "machine.h"
-#include <nvs/include/mipfndb.h>
+#include <mm/include/mipfndb.h>
 #include <sched.h>
 
 PMACHINE MachineCurrent;
@@ -165,6 +165,10 @@ MiArchSetFrameCache(ULONG Frame, ULONG Count, ULONG Flags)
 
     if (Frame >= MachineCurrent->FrameCount || Count > MachineCurrent->FrameCount - Frame)
         return STATUS_INVALID_PARAMETER;
+    if (MachineCurrent->FrameCacheFailureFramePlusOne != 0 &&
+        MachineCurrent->FrameCacheFailureFramePlusOne - 1 >= Frame &&
+        MachineCurrent->FrameCacheFailureFramePlusOne - 1 - Frame < Count)
+        return STATUS_NOT_SUPPORTED;
     for (Index = 0; Index < Count; Index++)
         __atomic_store_n(&MachineCurrent->FrameCache[Frame + Index], Flags, __ATOMIC_RELEASE);
     __atomic_fetch_add(&MachineCurrent->FrameCacheCalls, 1, __ATOMIC_RELAXED);

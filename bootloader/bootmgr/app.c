@@ -119,11 +119,12 @@ BmStartApplication(
     {
         RtlStringCchPrintfW(Options,
                             RTL_NUMBER_OF(Options),
-                            L"%s %s %s%lu",
+                            L"%s %s %s%lu%s",
                             Entry->Id,
                             StorePath,
                             BM_STARTUP_OPTION,
-                            Startup->Profile);
+                            Startup->Profile,
+                            Startup->UndoUpdate ? L" " BM_UNDO_UPDATE_OPTION : L"");
         Started = FwStartImage(Image, Size, Options, Cancelled);
         if (!Started && !*Cancelled)
             FwPrint(L"%s did not start the operating system.\r\n", Path);

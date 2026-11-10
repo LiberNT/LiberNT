@@ -38,6 +38,92 @@ TrackWorker(void *Argument)
     return NULL;
 }
 
+typedef struct _TRACK_GROWTH
+{
+    volatile LONG Ready;
+    volatile LONG Go;
+    volatile LONG Stop;
+    volatile LONG Operations;
+} TRACK_GROWTH;
+
+static TRACK_GROWTH Growth;
+
+static
+void *
+TrackGrowthWorker(void *Argument)
+{
+    POOL_TAG_USAGE Usage;
+    ULONG Index = (ULONG)(ULONG_PTR)Argument;
+
+    PoolHostProcessor = Index;
+    __atomic_add_fetch(&Growth.Ready, 1, __ATOMIC_RELEASE);
+    while (!__atomic_load_n(&Growth.Go, __ATOMIC_ACQUIRE))
+        sched_yield();
+
+    while (!__atomic_load_n(&Growth.Stop, __ATOMIC_ACQUIRE))
+    {
+        PoolTagCharge(&Tracker, 'worG', 0, 64);
+        PoolTagRelease(&Tracker, 'worG', 0, 64);
+        PoolTagQuery(&Tracker, 'worG', &Usage);
+        PoolTagCharge(&Tracker, POOL_TAG_OVERFLOW, 1, 32);
+        PoolTagQuery(&Tracker, POOL_TAG_OVERFLOW, &Usage);
+        PoolTagRelease(&Tracker, POOL_TAG_OVERFLOW, 1, 32);
+        __atomic_add_fetch(&Growth.Operations, 1, __ATOMIC_RELAXED);
+    }
+    return NULL;
+}
+
+static
+void
+TestTrackGrowth(POOL_TAG_TABLE *Tables)
+{
+    pthread_t Threads[TRACK_THREADS];
+    POOL_TAG_USAGE Usage;
+    double Deadline = NowSeconds() + 30;
+    LONG Target = 1000;
+    ULONG i;
+
+    memset(&Growth, 0, sizeof(Growth));
+    PoolTagTrackerInitialize(&Tracker);
+    CHECK(PoolTagTrackerAddTable(&Tracker, &Tables[0]));
+    for (i = 0; i < TRACK_THREADS; i++)
+        CHECK(pthread_create(&Threads[i], NULL, TrackGrowthWorker, (void *)(ULONG_PTR)i) == 0);
+    while (__atomic_load_n(&Growth.Ready, __ATOMIC_ACQUIRE) != TRACK_THREADS)
+    {
+        CHECK(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    __atomic_store_n(&Growth.Go, 1, __ATOMIC_RELEASE);
+    for (i = 1; i < 4; i++)
+    {
+        while (__atomic_load_n(&Growth.Operations, __ATOMIC_RELAXED) < Target)
+        {
+            CHECK(NowSeconds() < Deadline);
+            sched_yield();
+        }
+        CHECK(PoolTagTrackerAddTable(&Tracker, &Tables[i]));
+        Target = __atomic_load_n(&Growth.Operations, __ATOMIC_RELAXED) + 1000;
+    }
+    while (__atomic_load_n(&Growth.Operations, __ATOMIC_RELAXED) < Target)
+    {
+        CHECK(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    __atomic_store_n(&Growth.Stop, 1, __ATOMIC_RELEASE);
+    for (i = 0; i < TRACK_THREADS; i++)
+        CHECK(pthread_join(Threads[i], NULL) == 0);
+
+    CHECK(PoolTagTrackerCount(&Tracker) == 4);
+    CHECK(PoolTagQuery(&Tracker, 'worG', &Usage));
+    CHECK(Usage.Allocations[0] == (ULONG64)Growth.Operations);
+    CHECK(Usage.Frees[0] == Usage.Allocations[0]);
+    CHECK(Usage.Bytes[0] == 0);
+    CHECK(PoolTagQuery(&Tracker, POOL_TAG_OVERFLOW, &Usage));
+    CHECK(Usage.Allocations[1] == (ULONG64)Growth.Operations);
+    CHECK(Usage.Frees[1] == Usage.Allocations[1]);
+    CHECK(Usage.Bytes[1] == 0);
+}
+
 void
 TestTrack(void)
 {
@@ -72,6 +158,8 @@ TestTrack(void)
         CHECK(Usage[i].Allocations[0] + Usage[i].Allocations[1] == Usage[i].Frees[0] + Usage[i].Frees[1]);
         CHECK(Usage[i].Bytes[0] == 0 && Usage[i].Bytes[1] == 0);
     }
+
+    TestTrackGrowth(Tables);
 
     PoolTagTrackerInitialize(&Tracker);
     CHECK(PoolTagTrackerAddTable(&Tracker, &Tables[0]));

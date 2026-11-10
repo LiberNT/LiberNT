@@ -38,6 +38,7 @@ typedef struct _TARGET_SETTINGS
     DWORD TimeZoneIndex;
     BOOL AutoDaylight;
     BOOL Components;
+    BOOL Upgrade;
 } TARGET_SETTINGS, *PTARGET_SETTINGS;
 
 typedef struct _TARGET_REGISTRATION
@@ -148,6 +149,8 @@ ReadTargetSettings(
             Settings->AutoDaylight = (wcstoul(Value, NULL, 10) != 0);
         else if (!_wcsicmp(Line, L"Components"))
             Settings->Components = (wcstoul(Value, NULL, 10) != 0);
+        else if (!_wcsicmp(Line, L"Upgrade"))
+            Settings->Upgrade = (wcstoul(Value, NULL, 10) != 0);
     }
 
     SecureZeroMemory(Buffer, cbBuffer);
@@ -156,8 +159,8 @@ ReadTargetSettings(
     return Result &&
            *Settings->MachineKey && *Settings->UserKey &&
            *Settings->SystemVolume && *Settings->SystemDrive &&
-           *Settings->SystemRoot && *Settings->ComputerName &&
-           *Settings->UserName;
+           *Settings->SystemRoot &&
+           (Settings->Upgrade || (*Settings->ComputerName && *Settings->UserName));
 }
 
 static NTSTATUS
@@ -287,7 +290,8 @@ ApplyTargetEnvironment(
         DestroyEnvironmentBlock(Environment);
     }
 
-    SetEnvironmentVariableW(L"COMPUTERNAME", Settings->ComputerName);
+    if (*Settings->ComputerName)
+        SetEnvironmentVariableW(L"COMPUTERNAME", Settings->ComputerName);
     SetTargetProfileEnvironment(Settings);
 }
 
@@ -1134,51 +1138,55 @@ CreateTargetBootStatusData(
 }
 
 static DWORD
-ConfigureTargetSystem(VOID)
+ConfigureTargetSystem(
+    _Inout_ PTARGET_SETTINGS Settings)
 {
-    TARGET_SETTINGS Settings;
     WCHAR LiveRoot[MAX_PATH];
     ITEMSDATA ItemsData = { NULL };
     REGISTRATIONNOTIFY Notify;
     NTSTATUS Status;
     DWORD Error;
 
-    if (!ReadTargetSettings(&Settings))
-        return ERROR_INVALID_PARAMETER;
-
     if (!GetWindowsDirectoryW(LiveRoot, ARRAYSIZE(LiveRoot)))
         return GetLastError();
 
-    Error = OpenTargetView(&Settings);
+    Error = OpenTargetView(Settings);
     if (Error != ERROR_SUCCESS)
         return Error;
 
-    Error = MapTargetDrive(&Settings);
+    Error = MapTargetDrive(Settings);
     if (Error != ERROR_SUCCESS)
         return Error;
 
-    SetEnvironmentVariableW(L"SystemDrive", Settings.SystemDrive);
-    SetEnvironmentVariableW(L"SystemRoot", Settings.SystemRoot);
-    SetEnvironmentVariableW(L"windir", Settings.SystemRoot);
-    SetTargetProfileEnvironment(&Settings);
+    SetEnvironmentVariableW(L"SystemDrive", Settings->SystemDrive);
+    SetEnvironmentVariableW(L"SystemRoot", Settings->SystemRoot);
+    SetEnvironmentVariableW(L"windir", Settings->SystemRoot);
+    SetTargetProfileEnvironment(Settings);
 
     ReportTargetPhase(1);
-    CreateTempDir(L"TEMP");
-    CreateTempDir(L"TMP");
+    if (!Settings->Upgrade)
+    {
+        CreateTempDir(L"TEMP");
+        CreateTempDir(L"TMP");
+    }
     if (!InitializeProgramFilesDir())
         return ERROR_GEN_FAILURE;
-    if (!InitializeProfiles())
+    if (!Settings->Upgrade && !InitializeProfiles())
         return GetLastError();
-    ApplyTargetEnvironment(&Settings);
-    InitializeDefaultUserLocale();
-    Error = WriteTargetSystemRoot(&Settings);
+    ApplyTargetEnvironment(Settings);
+    if (!Settings->Upgrade)
+        InitializeDefaultUserLocale();
+    Error = WriteTargetSystemRoot(Settings);
     if (Error != ERROR_SUCCESS)
         return Error;
-    Error = SaveDefaultUserHive();
-    if (Error != ERROR_SUCCESS)
-        return Error;
-    if (!CopySystemProfile(0))
-        return GetLastError();
+    if (!Settings->Upgrade)
+    {
+        Error = SaveDefaultUserHive();
+        if (Error != ERROR_SUCCESS)
+            return Error;
+        if (!CopySystemProfile(0))
+            return GetLastError();
+    }
 
     hSysSetupInf = SetupOpenInfFileW(L"syssetup.inf", NULL, INF_STYLE_WIN4, NULL);
     if (hSysSetupInf == INVALID_HANDLE_VALUE)
@@ -1187,7 +1195,7 @@ ConfigureTargetSystem(VOID)
     ReportTargetPhase(2);
     if (!InstallSysSetupInfDevices())
         return GetLastError();
-    if (!InstallSysSetupInfComponents(SPINST_ALL))
+    if (!InstallSysSetupInfComponents(Settings->Upgrade ? (SPINST_ALL & ~SPINST_FILES) : SPINST_ALL))
         return GetLastError();
     StartWow64Registration();
     Error = EnableTargetPlugPlay();
@@ -1195,21 +1203,27 @@ ConfigureTargetSystem(VOID)
         return Error;
 
     ReportTargetPhase(3);
-    if (!InstallNetworkComponent(L"MS_TCPIP", TRUE) && GetLastError() != ERROR_FILE_NOT_FOUND)
+    if (!Settings->Upgrade &&
+        !InstallNetworkComponent(L"MS_TCPIP", TRUE) && GetLastError() != ERROR_FILE_NOT_FOUND)
+    {
         DPRINT1("InstallNetworkComponent() failed (Error %lu)\n", GetLastError());
+    }
 
     ReportTargetPhase(4);
-    DoWriteInstallationType(INSTALLATION_TYPE_WORKSTATION);
-    WriteOwnerSettings(Settings.UserName, L"");
-    Error = WriteTargetComputerName(&Settings);
-    if (Error != ERROR_SUCCESS)
-        return Error;
-    Error = WriteTargetTimeZone(&Settings);
-    if (Error != ERROR_SUCCESS)
-        DPRINT1("WriteTargetTimeZone() failed (Error %lu)\n", Error);
-    Status = SetAccountsDomainSid(NULL, Settings.ComputerName);
-    if (!NT_SUCCESS(Status))
-        return RtlNtStatusToDosError(Status);
+    if (!Settings->Upgrade)
+    {
+        DoWriteInstallationType(INSTALLATION_TYPE_WORKSTATION);
+        WriteOwnerSettings(Settings->UserName, L"");
+        Error = WriteTargetComputerName(Settings);
+        if (Error != ERROR_SUCCESS)
+            return Error;
+        Error = WriteTargetTimeZone(Settings);
+        if (Error != ERROR_SUCCESS)
+            DPRINT1("WriteTargetTimeZone() failed (Error %lu)\n", Error);
+        Status = SetAccountsDomainSid(NULL, Settings->ComputerName);
+        if (!NT_SUCCESS(Status))
+            return RtlNtStatusToDosError(Status);
+    }
 
     ReportTargetPhase(5);
     RegisterTargetComponents();
@@ -1218,41 +1232,56 @@ ConfigureTargetSystem(VOID)
     InstallStartMenuItems(&ItemsData);
 
     ReportTargetPhase(7);
-    ZeroMemory(&Notify, sizeof(Notify));
-    InstallSecurity(&ItemsData, &Notify);
+    if (!Settings->Upgrade)
+    {
+        ZeroMemory(&Notify, sizeof(Notify));
+        InstallSecurity(&ItemsData, &Notify);
+    }
+    /* FIXME: An upgrade keeps the installed SAM and SECURITY hives; accounts and privileges a newer build adds are not merged. */
 
     ReportTargetPhase(8);
-    Status = CreateTargetAccount(Settings.UserName, Settings.Password);
-    Error = NT_SUCCESS(Status) ? WriteTargetLogon(&Settings) : RtlNtStatusToDosError(Status);
-    SecureZeroMemory(Settings.Password, sizeof(Settings.Password));
-    if (Error != ERROR_SUCCESS)
-        return Error;
+    if (!Settings->Upgrade)
+    {
+        Status = CreateTargetAccount(Settings->UserName, Settings->Password);
+        Error = NT_SUCCESS(Status) ? WriteTargetLogon(Settings) : RtlNtStatusToDosError(Status);
+        SecureZeroMemory(Settings->Password, sizeof(Settings->Password));
+        if (Error != ERROR_SUCCESS)
+            return Error;
+    }
 
     ReportTargetPhase(9);
-    if (Settings.Components)
+    if (Settings->Components && !Settings->Upgrade)
     {
-        Error = ScheduleFirstBootComponents(&Settings);
+        Error = ScheduleFirstBootComponents(Settings);
         if (Error != ERROR_SUCCESS)
             DPRINT1("ScheduleFirstBootComponents() failed (Error %lu)\n", Error);
     }
     SetupCloseInfFile(hSysSetupInf);
     hSysSetupInf = INVALID_HANDLE_VALUE;
-    Error = CreateTargetBootStatusData(&Settings);
+    Error = CreateTargetBootStatusData(Settings);
     if (Error != ERROR_SUCCESS)
         DPRINT1("CreateTargetBootStatusData() failed (Error %lu)\n", Error);
-    RelocateTargetRegistry(LiveRoot, Settings.SystemRoot);
+    RelocateTargetRegistry(LiveRoot, Settings->SystemRoot);
 
-    return SaveTargetSecurityHives(&Settings);
+    if (Settings->Upgrade)
+        return ERROR_SUCCESS;
+    return SaveTargetSecurityHives(Settings);
 }
 
 DWORD
 InstallTargetSystem(VOID)
 {
-    BOOL Saved;
+    TARGET_SETTINGS Settings;
+    BOOL Saved = FALSE;
     DWORD Error;
 
-    Saved = SaveLiveSecurityHives();
-    Error = ConfigureTargetSystem();
+    if (!ReadTargetSettings(&Settings))
+        return ERROR_INVALID_PARAMETER;
+
+    if (!Settings.Upgrade)
+        Saved = SaveLiveSecurityHives();
+    Error = ConfigureTargetSystem(&Settings);
+    SecureZeroMemory(Settings.Password, sizeof(Settings.Password));
     if (Saved)
         ScheduleLiveSecurityRestore();
 

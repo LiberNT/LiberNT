@@ -62,7 +62,8 @@ typedef struct _FELIX86_NT_GUEST
     uint32_t Interrupt;
 } FELIX86_NT_GUEST;
 
-int Felix86NtInitialize(void);
+const char *Felix86NtInitialize(void);
+void Felix86NtReportError(const char *Message, uint32_t Status);
 FELIX86_NT_CPU *Felix86NtCreateCpu(void *Owner, uint64_t Teb);
 void Felix86NtDestroyCpu(FELIX86_NT_CPU *Cpu);
 uint64_t *Felix86NtRegisters(FELIX86_NT_CPU *Cpu);

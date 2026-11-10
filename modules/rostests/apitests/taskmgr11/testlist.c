@@ -9,9 +9,13 @@
 #include <apitest.h>
 
 extern void func_battery(void);
+extern void func_hardware_text(void);
+extern void func_performance_layout(void);
 
 const struct test winetest_testlist[] =
 {
     { "battery", func_battery },
+    { "hardware_text", func_hardware_text },
+    { "performance_layout", func_performance_layout },
     { 0, 0 }
 };

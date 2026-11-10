@@ -206,6 +206,14 @@ FileRecord::UpdateParentIndexEntry(
     ULONG BitmapLength = 0;
     ULONG IndexRecordSize;
     USHORT ParentSequence;
+    IndexSearchKey Key;
+    UNICODE_STRING Name;
+    ULONGLONG ChildVcn;
+    ULONGLONG VisitedVcns[64];
+    ULONG VisitedCount = 0;
+    ULONG EntryOffset;
+    BOOLEAN Descend;
+    BOOLEAN FoundExact;
     NTSTATUS Status;
 
     ParentRecordNumber =
@@ -267,6 +275,36 @@ FileRecord::UpdateParentIndexEntry(
         goto Done;
     }
 
+    Name = NtfsMakeCountedUnicodeString(
+        TargetName->Name,
+        TargetName->NameLength * sizeof(WCHAR));
+    Key.CollationRule = ATTRDEF_COLLATION_FILENAME;
+    Key.Name = &Name;
+    Key.Value = NULL;
+    Key.ValueLength = 0;
+    Key.CaseSensitive = Parent->IsCaseSensitiveDirectory();
+    Status = NtfsFindIndexInsertionPoint(
+        DiskVolume,
+        &IndexRoot->Header,
+        IndexRootAttribute->Resident.DataLength -
+            FIELD_OFFSET(IndexRootEx, Header),
+        &Key,
+        &EntryOffset,
+        &ChildVcn,
+        &Descend,
+        &FoundExact);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    if (!FoundExact)
+    {
+        if (!Descend)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        goto SearchAllocation;
+    }
+
     Status = UpdateIndexNodeInformation(
         &IndexRoot->Header,
         IndexRootAttribute->Resident.DataLength -
@@ -292,15 +330,11 @@ FileRecord::UpdateParentIndexEntry(
             IndexRootOwner);
         goto Done;
     }
-    if (Status != STATUS_NOT_FOUND ||
-        !(IndexRoot->Header.Flags &
-          NTFS_INDEX_HEADER_LARGE))
-    {
-        if (Status == STATUS_NOT_FOUND)
-            Status = STATUS_FILE_CORRUPT_ERROR;
-        goto Done;
-    }
+    if (Status == STATUS_NOT_FOUND)
+        Status = STATUS_FILE_CORRUPT_ERROR;
+    goto Done;
 
+SearchAllocation:
     IndexAllocationAttribute = Parent->GetAttribute(
         TypeIndexAllocation,
         const_cast<PWSTR>(NtfsI30Name));
@@ -347,29 +381,50 @@ FileRecord::UpdateParentIndexEntry(
         goto Done;
     }
 
-    for (ULONGLONG RecordNumber = 0;
-         RecordNumber < (ULONGLONG)BitmapLength * 8;
-         RecordNumber++)
+    while (Descend)
     {
         PIndexBuffer NodeBuffer;
         LARGE_INTEGER WriteOffset;
         ULONGLONG AllocationOffset;
         ULONGLONG ExpectedVCN;
+        ULONGLONG RecordNumber;
         ULONG BytesRemaining;
         ULONG WriteLength;
-        UCHAR Mask =
-            (UCHAR)(1u << (RecordNumber & 7));
+        UCHAR Mask;
 
-        if (!(Bitmap[RecordNumber >> 3] & Mask))
-            continue;
-        if (RecordNumber >
-            ~(ULONGLONG)0 / IndexRecordSize)
+        if (VisitedCount == RTL_NUMBER_OF(VisitedVcns) ||
+            ChildVcn > ~(ULONGLONG)0 / AllocationUnit)
         {
             Status = STATUS_FILE_CORRUPT_ERROR;
             goto Done;
         }
-        AllocationOffset =
-            RecordNumber * IndexRecordSize;
+        for (ULONG Index = 0; Index < VisitedCount; Index++)
+        {
+            if (VisitedVcns[Index] == ChildVcn)
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                goto Done;
+            }
+        }
+        VisitedVcns[VisitedCount++] = ChildVcn;
+        AllocationOffset = ChildVcn * AllocationUnit;
+        if (AllocationOffset % IndexRecordSize != 0)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        RecordNumber = AllocationOffset / IndexRecordSize;
+        if ((RecordNumber >> 3) >= BitmapLength)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        Mask = (UCHAR)(1u << (RecordNumber & 7));
+        if (!(Bitmap[RecordNumber >> 3] & Mask))
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
         if (AllocationOffset > AllocationLength ||
             IndexRecordSize >
                 AllocationLength - AllocationOffset ||
@@ -413,6 +468,25 @@ FileRecord::UpdateParentIndexEntry(
             goto Done;
         }
 
+        Status = NtfsFindIndexInsertionPoint(
+            DiskVolume,
+            &NodeBuffer->IndexHeader,
+            IndexRecordSize - FIELD_OFFSET(IndexBuffer, IndexHeader),
+            &Key,
+            &EntryOffset,
+            &ChildVcn,
+            &Descend,
+            &FoundExact);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        if (!FoundExact)
+        {
+            if (Descend)
+                continue;
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+
         Status = UpdateIndexNodeInformation(
             &NodeBuffer->IndexHeader,
             IndexRecordSize -
@@ -426,7 +500,7 @@ FileRecord::UpdateParentIndexEntry(
             ReparseTag,
             StorageFlags);
         if (Status == STATUS_NOT_FOUND)
-            continue;
+            Status = STATUS_FILE_CORRUPT_ERROR;
         if (!NT_SUCCESS(Status))
             goto Done;
 
@@ -440,6 +514,7 @@ FileRecord::UpdateParentIndexEntry(
         WriteOffset.QuadPart =
             (LONGLONG)AllocationOffset;
         WriteLength = IndexRecordSize;
+        DiskVolume->IndexWorkBufferValid = FALSE;
         Status = Parent->WriteFileData(
             TypeIndexAllocation,
             const_cast<PWSTR>(NtfsI30Name),

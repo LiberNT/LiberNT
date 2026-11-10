@@ -10,7 +10,7 @@ project(pool_host_tests LANGUAGES C)
 include(CTest)
 
 set(CMAKE_C_STANDARD 11)
-set(POOL_ROOT ${MMCC_KERNEL_ROOT}/nvs/pool)
+set(POOL_ROOT ${MMCC_KERNEL_ROOT}/mm/pool)
 
 set(POOL_ENGINE
     ${POOL_ROOT}/va/varegion.c
@@ -70,3 +70,13 @@ foreach(TARGET pool_nt pool_nt_asan)
 endforeach()
 target_compile_options(pool_nt_asan PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
 target_link_options(pool_nt_asan PRIVATE -fsanitize=address,undefined)
+
+option(POOL_EXPANSION_TSAN "Run the pool expansion ThreadSanitizer regression" OFF)
+if(POOL_EXPANSION_TSAN AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME pool.expansion_tsan COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/host/expansion-race-test.py
+            --source ${POOL_ROOT}/ex/exinit.c --cc ${CMAKE_C_COMPILER})
+    endif()
+endif()

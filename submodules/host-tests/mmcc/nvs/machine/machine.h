@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include <nvs/include/mienv.h>
+#include <mm/include/mienv.h>
 
 #define MACHINE_MAX_CPUS     8
 #define MACHINE_TLB_ENTRIES  64
@@ -48,6 +48,7 @@ typedef struct _MACHINE
     int *FrameBusy;
     ULONG *FrameCache;
     ULONG FrameCacheCalls;
+    ULONG FrameCacheFailureFramePlusOne;
     ULONG64 FrameCount;
     ULONG64 SystemRoot;
     ULONG CpuCount;

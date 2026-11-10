@@ -3,6 +3,7 @@ spec2def(wintrust.dll wintrust.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     asn.c
+    cdf.c
     crypt.c
     register.c
     softpub.c

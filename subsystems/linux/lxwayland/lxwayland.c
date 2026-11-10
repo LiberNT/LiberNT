@@ -35,6 +35,7 @@ typedef int32_t LONG;
 #define DRM_IOCTL_PRIME_FD_TO_HANDLE 0xC00C642Eu
 #define DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST 0xC02C6446u
 #define DRM_IOCTL_VIRTGPU_WAIT  0xC0086448u
+#define DRM_IOCTL_VIRTGPU_RESOURCE_INFO 0xC0106445u
 
 #define XDG_STATE_MAXIMIZED     1
 #define XDG_STATE_FULLSCREEN    2
@@ -162,7 +163,9 @@ typedef struct _BUFFER
     int32_t Stride;
     uint32_t Format;
     uint32_t Handle;
+    uint32_t RenderGen;
     bool YInvert;
+    bool Blob;
 } BUFFER;
 
 typedef struct _DMABUF_PARAMS
@@ -206,6 +209,7 @@ typedef struct _SURFACE
     bool PendingSubSet;
     int32_t PendingSubX;
     int32_t PendingSubY;
+    uint32_t KdeMode;
 } SURFACE;
 
 typedef struct _ICON_IMAGE
@@ -356,6 +360,7 @@ static const GLOBAL Globals[] =
     { &wl_data_device_manager_interface, 3 },
     { &xdg_wm_base_interface, 5 },
     { &zxdg_decoration_manager_v1_interface, 1 },
+    { &org_kde_kwin_server_decoration_manager_interface, 1 },
     { &wp_cursor_shape_manager_v1_interface, 1 },
     { &xdg_toplevel_icon_manager_v1_interface, 1 },
     { &zwp_linux_dmabuf_v1_interface, 4 },
@@ -391,6 +396,7 @@ static WINDOW *Windows;
 static uint32_t NextWindow = 1;
 static WL_RESOURCE **Frames;
 static int RenderFd = -1;
+static uint32_t RenderGen;
 static uint32_t *HandleRefs;
 static uint32_t HandleRefCapacity;
 static uint32_t FrameCount;
@@ -556,11 +562,12 @@ PoolRelease(POOL *Pool)
 
 static
 void
-GemRelease(uint32_t Handle)
+GemRelease(uint32_t Handle, uint32_t Gen)
 {
     uint32_t Close[2] = { Handle, 0 };
 
-    if (Handle == 0 || Handle >= HandleRefCapacity || HandleRefs[Handle] == 0 || --HandleRefs[Handle] != 0)
+    if (Gen != RenderGen || Handle == 0 || Handle >= HandleRefCapacity || HandleRefs[Handle] == 0 ||
+        --HandleRefs[Handle] != 0)
         return;
     LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_GEM_CLOSE, (long)Close, 0, 0, 0);
 }
@@ -614,7 +621,7 @@ FreeData(WL_RESOURCE *Resource)
     {
         BUFFER *Buffer = Resource->Data;
 
-        GemRelease(Buffer->Handle);
+        GemRelease(Buffer->Handle, Buffer->RenderGen);
         if (Buffer->Pool != NULL)
             PoolRelease(Buffer->Pool);
     }
@@ -1209,7 +1216,7 @@ SurfaceStore(SURFACE *Surface, const RECT32 *Damage, uint32_t DamageCount)
     }
     if (Surface->Image == NULL)
         return true;
-    if (Buffer->Handle != 0)
+    if (Buffer->Handle != 0 && !Buffer->Blob && Buffer->RenderGen == RenderGen)
         BufferReadback(Buffer, Damage, DamageCount);
     for (Index = 0; Index < (DamageCount != 0 ? DamageCount : 1); Index++)
     {
@@ -2735,6 +2742,16 @@ ServerDestroyResource(WL_RESOURCE *Resource)
             Unref(Toplevel->Resource);
         }
     }
+    else if (Interface == &org_kde_kwin_server_decoration_interface)
+    {
+        WL_RESOURCE *SurfaceResource = Resource->Data;
+
+        if (SurfaceResource != NULL)
+        {
+            Resource->Data = NULL;
+            Unref(SurfaceResource);
+        }
+    }
     else if (Interface == &xdg_toplevel_icon_v1_interface)
     {
         ICON *Icon = Resource->Data;
@@ -2818,6 +2835,11 @@ RegistryBind(WL_RESOURCE *Registry, WL_ARG *Args)
     else if (Global->Interface == &wl_output_interface)
     {
         SendOutput(Resource);
+    }
+    else if (Global->Interface == &org_kde_kwin_server_decoration_manager_interface)
+    {
+        WlSend(Resource, ORG_KDE_KWIN_SERVER_DECORATION_MANAGER_EVENT_DEFAULT_MODE,
+               ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER);
     }
     else if (Global->Interface == &xdg_toplevel_icon_manager_v1_interface)
     {
@@ -2929,10 +2951,43 @@ DmabufRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
 }
 
 static
+long
+RenderPrimeImport(uint32_t *Prime)
+{
+    long Result = -LX_ENODEV;
+    uint32_t Attempt;
+
+    for (Attempt = 0; Attempt < 2 && Result == -LX_ENODEV; Attempt++)
+    {
+        if (RenderFd < 0)
+        {
+            RenderFd = (int)LxSyscall(LX_NR_OPENAT, LX_AT_FDCWD, (long)"/dev/dri/renderD128",
+                                      LX_O_RDWR | LX_O_CLOEXEC, 0, 0, 0);
+            if (RenderFd < 0)
+            {
+                RenderFd = -1;
+                return -LX_ENODEV;
+            }
+        }
+        Result = LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_PRIME_FD_TO_HANDLE, (long)Prime, 0, 0, 0);
+        if (Result == -LX_ENODEV)
+        {
+            CloseFd(RenderFd);
+            RenderFd = -1;
+            if (HandleRefs != NULL)
+                memset(HandleRefs, 0, (size_t)HandleRefCapacity * sizeof(uint32_t));
+            RenderGen++;
+        }
+    }
+    return Result;
+}
+
+static
 BUFFER *
 DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Format, uint32_t Flags, bool *Bounds)
 {
     uint32_t Prime[3] = { 0, 0, (uint32_t)Params->Fd };
+    uint32_t Info[4] = { 0 };
     BUFFER *Buffer;
     POOL *Pool;
     long Size, Map;
@@ -2945,17 +3000,7 @@ DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Form
         *Bounds = true;
         return NULL;
     }
-    if (RenderFd < 0)
-    {
-        RenderFd = (int)LxSyscall(LX_NR_OPENAT, LX_AT_FDCWD, (long)"/dev/dri/renderD128", LX_O_RDWR | LX_O_CLOEXEC,
-                                  0, 0, 0);
-        if (RenderFd < 0)
-        {
-            RenderFd = -1;
-            return NULL;
-        }
-    }
-    if (LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_PRIME_FD_TO_HANDLE, (long)Prime, 0, 0, 0) != 0 || Prime[0] == 0)
+    if (RenderPrimeImport(Prime) != 0 || Prime[0] == 0)
         return NULL;
     if (!Grow((void **)&HandleRefs, &HandleRefCapacity, Prime[0] + 1, sizeof(uint32_t)))
     {
@@ -2976,7 +3021,7 @@ DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Form
         LxFree(Pool);
         if (!(Map < 0 && Map > -4096))
             LxSyscall(LX_NR_MUNMAP, Map, Size, 0, 0, 0, 0);
-        GemRelease(Prime[0]);
+        GemRelease(Prime[0], RenderGen);
         return NULL;
     }
     Pool->Refs = 1;
@@ -2991,7 +3036,11 @@ DmabufImport(DMABUF_PARAMS *Params, int32_t Width, int32_t Height, uint32_t Form
     Buffer->Stride = (int32_t)Params->Stride;
     Buffer->Format = (Format == DRM_FORMAT_XRGB8888) ? WL_SHM_FORMAT_XRGB8888 : 0;
     Buffer->Handle = Prime[0];
+    Buffer->RenderGen = RenderGen;
     Buffer->YInvert = (Flags & ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT) != 0;
+    Info[0] = Prime[0];
+    Buffer->Blob = LxSyscall(LX_NR_IOCTL, RenderFd, DRM_IOCTL_VIRTGPU_RESOURCE_INFO, (long)Info, 0, 0, 0) == 0 &&
+                   Info[3] != 0;
     return Buffer;
 }
 
@@ -3073,7 +3122,7 @@ DmabufParamsRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
                       ClientAddServer(Resource->Client, &wl_buffer_interface, 1);
     if (Created == NULL)
     {
-        GemRelease(Buffer->Handle);
+        GemRelease(Buffer->Handle, Buffer->RenderGen);
         if (Buffer->Pool != NULL)
             PoolRelease(Buffer->Pool);
         LxFree(Buffer);
@@ -3466,7 +3515,11 @@ XdgSurfaceRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
             Xdg->Role = Ref(Role);
             Xdg->RoleType = ROLE_TOPLEVEL;
             if (Xdg->Surface != NULL)
+            {
                 Xdg->Surface->Role = ROLE_TOPLEVEL;
+                if (Xdg->Surface->KdeMode != ORG_KDE_KWIN_SERVER_DECORATION_MODE_NONE)
+                    Toplevel->Decorated = Xdg->Surface->KdeMode == ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER;
+            }
             if (Resource->Version >= 5)
                 WlSend(Role, XDG_TOPLEVEL_EVENT_WM_CAPABILITIES, Capabilities, (uint32_t)sizeof(Capabilities));
             break;
@@ -3623,6 +3676,20 @@ PopupRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
 
 static
 void
+SetToplevelDecorated(TOPLEVEL *Toplevel, bool Decorated)
+{
+    if (Toplevel->Decorated == Decorated)
+        return;
+    Toplevel->Decorated = Decorated;
+    if (Toplevel->Xdg == NULL || Toplevel->Xdg->Window == NULL)
+        return;
+    DismissPopups();
+    Unmap(Toplevel->Xdg);
+    SendToplevelConfigure(Toplevel);
+}
+
+static
+void
 DecorationManagerRequest(WL_RESOURCE *Manager, uint32_t Opcode, WL_ARG *Args)
 {
     WL_RESOURCE *Resource;
@@ -3643,8 +3710,63 @@ DecorationManagerRequest(WL_RESOURCE *Manager, uint32_t Opcode, WL_ARG *Args)
     Ref(Toplevel->Resource);
     Unref(Toplevel->Decoration);
     Toplevel->Decoration = Ref(Resource);
-    Toplevel->Decorated = true;
+    SetToplevelDecorated(Toplevel, true);
     WlSend(Resource, ZXDG_TOPLEVEL_DECORATION_V1_EVENT_CONFIGURE, 2);
+}
+
+static
+void
+KdeDecorationApply(SURFACE *Surface)
+{
+    TOPLEVEL *Toplevel;
+
+    if (Surface->Xdg == NULL || Surface->Xdg->RoleType != ROLE_TOPLEVEL || Surface->Xdg->Role == NULL)
+        return;
+    Toplevel = Surface->Xdg->Role->Data;
+    if (Toplevel != NULL && Toplevel->Decoration == NULL)
+        SetToplevelDecorated(Toplevel, Surface->KdeMode == ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER);
+}
+
+static
+void
+KdeDecorationManagerRequest(WL_RESOURCE *Manager, uint32_t Opcode, WL_ARG *Args)
+{
+    WL_RESOURCE *Resource;
+    SURFACE *Surface;
+
+    if (Opcode != ORG_KDE_KWIN_SERVER_DECORATION_MANAGER_CREATE)
+        return;
+    if (Args[1].O == NULL || Args[1].O->Interface != &wl_surface_interface)
+    {
+        WlError(Manager, 0, "not a surface");
+        return;
+    }
+    Surface = Args[1].O->Data;
+    Resource = ClientAdd(Manager->Client, Args[0].U, &org_kde_kwin_server_decoration_interface, 1);
+    if (Resource == NULL)
+        return;
+    Resource->Data = Ref(Surface->Resource);
+    Surface->KdeMode = ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER;
+    KdeDecorationApply(Surface);
+    WlSend(Resource, ORG_KDE_KWIN_SERVER_DECORATION_EVENT_MODE, ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER);
+}
+
+static
+void
+KdeDecorationRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
+{
+    WL_RESOURCE *SurfaceResource = Resource->Data;
+    SURFACE *Surface;
+
+    if (Opcode != ORG_KDE_KWIN_SERVER_DECORATION_REQUEST_MODE || SurfaceResource == NULL ||
+        Args[0].U > ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER)
+    {
+        return;
+    }
+    Surface = SurfaceResource->Data;
+    Surface->KdeMode = Args[0].U;
+    KdeDecorationApply(Surface);
+    WlSend(Resource, ORG_KDE_KWIN_SERVER_DECORATION_EVENT_MODE, Args[0].U);
 }
 
 static
@@ -3658,11 +3780,11 @@ DecorationRequest(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
     switch (Opcode)
     {
         case ZXDG_TOPLEVEL_DECORATION_V1_SET_MODE:
-            Toplevel->Decorated = Args[0].U == 2;
+            SetToplevelDecorated(Toplevel, Args[0].U == 2);
             WlSend(Resource, ZXDG_TOPLEVEL_DECORATION_V1_EVENT_CONFIGURE, Args[0].U);
             break;
         case ZXDG_TOPLEVEL_DECORATION_V1_UNSET_MODE:
-            Toplevel->Decorated = true;
+            SetToplevelDecorated(Toplevel, true);
             WlSend(Resource, ZXDG_TOPLEVEL_DECORATION_V1_EVENT_CONFIGURE, 2);
             break;
     }
@@ -3986,6 +4108,14 @@ Dispatch(WL_RESOURCE *Resource, uint32_t Opcode, WL_ARG *Args)
     else if (Interface == &zxdg_toplevel_decoration_v1_interface)
     {
         DecorationRequest(Resource, Opcode, Args);
+    }
+    else if (Interface == &org_kde_kwin_server_decoration_manager_interface)
+    {
+        KdeDecorationManagerRequest(Resource, Opcode, Args);
+    }
+    else if (Interface == &org_kde_kwin_server_decoration_interface)
+    {
+        KdeDecorationRequest(Resource, Opcode, Args);
     }
     else if (Interface == &xdg_toplevel_icon_manager_v1_interface)
     {

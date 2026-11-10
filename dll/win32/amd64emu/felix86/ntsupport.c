@@ -68,6 +68,36 @@ static PHANDLE Felix86NtTerminationThreads;
 static ULONG Felix86NtTerminationThreadCount;
 static BOOLEAN Felix86NtTerminationHeapLocked;
 
+void
+Felix86NtReportError(const char *Message, uint32_t Status)
+{
+    static LONG Reported;
+    WCHAR Buffer[512];
+    WCHAR CodeBuffer[16];
+    UNICODE_STRING Text, Code, Caption = RTL_CONSTANT_STRING(L"Emulator error");
+    ANSI_STRING Ansi;
+    ULONG Response = ResponseNotHandled;
+    ULONG_PTR Parameters[4] = { (ULONG_PTR)&Text, (ULONG_PTR)&Caption, 0x10, 0xFFFFFFFF };
+
+    if (_InterlockedCompareExchange(&Reported, 1, 0)) return;
+    RtlInitEmptyUnicodeString(&Text, Buffer, sizeof(Buffer));
+    RtlAppendUnicodeToString(&Text, L"The emulator encountered an error.\r\n\r\n");
+    RtlInitAnsiString(&Ansi, Message);
+    RtlInitEmptyUnicodeString(&Code, CodeBuffer, sizeof(CodeBuffer));
+    if (NT_SUCCESS(RtlAnsiStringToUnicodeString(&Code, &Ansi, TRUE)))
+    {
+        RtlAppendUnicodeStringToString(&Text, &Code);
+        RtlFreeUnicodeString(&Code);
+    }
+    RtlAppendUnicodeToString(&Text, L"\r\n\r\nError status: 0x");
+    RtlInitEmptyUnicodeString(&Code, CodeBuffer, sizeof(CodeBuffer));
+    if (NT_SUCCESS(RtlIntegerToUnicodeString(Status, 16, &Code)))
+        RtlAppendUnicodeStringToString(&Text, &Code);
+    DbgPrint("FELIX86: %s: %08lx\n", Message, (ULONG)Status);
+    NtRaiseHardError(STATUS_SERVICE_NOTIFICATION | HARDERROR_OVERRIDE_ERRORMODE,
+                     RTL_NUMBER_OF(Parameters), 3, Parameters, OptionOk, &Response);
+}
+
 uint32_t
 Felix86NtProbeExtensions(void)
 {

@@ -394,6 +394,7 @@ CopySensorStringProperty(ISensor* sensor, const PROPERTYKEY& key, WCHAR* value, 
             StringCchCopyW(value, cch, property.bstrVal);
     }
     PropVariantClear(&property);
+    TmTrimHardwareText(value);
     return value[0] != 0;
 }
 
@@ -971,6 +972,8 @@ DetectSensorTelemetryDevices(void)
         sensor->GetFriendlyName(&friendlyName);
         StringCchCopyW(device->name, _countof(device->name), friendlyName && friendlyName[0] ? friendlyName : L"Sensor");
         if (friendlyName) SysFreeString(friendlyName);
+        TmTrimHardwareText(device->name);
+        if (!device->name[0]) StringCchCopyW(device->name, _countof(device->name), L"Sensor");
         CopySensorStringProperty(sensor, SENSOR_PROPERTY_MANUFACTURER, manufacturer, _countof(manufacturer));
         CopySensorStringProperty(sensor, SENSOR_PROPERTY_MODEL, model, _countof(model));
         if (manufacturer[0] && model[0]) StringCchPrintfW(device->source, _countof(device->source), L"%s %s", manufacturer, model);
@@ -1113,6 +1116,7 @@ CopyTelemetryDeviceName(HDEVINFO devices, PSP_DEVINFO_DATA deviceData, WCHAR* na
     DWORD propertyType = 0;
 
     if (!SetupDiGetDeviceRegistryPropertyW(devices, deviceData, SPDRP_FRIENDLYNAME, &propertyType, (PBYTE)name, nameCount * sizeof(WCHAR), NULL)) SetupDiGetDeviceRegistryPropertyW(devices, deviceData, SPDRP_DEVICEDESC, &propertyType, (PBYTE)name, nameCount * sizeof(WCHAR), NULL);
+    TmTrimHardwareText(name);
     if (!name[0]) StringCchPrintfW(name, nameCount, L"%s %lu", fallback, index);
 }
 
@@ -1250,6 +1254,7 @@ QueryBatteryString(HANDLE handle, ULONG tag, BATTERY_QUERY_INFORMATION_LEVEL lev
     lastCharacter = returned / sizeof(WCHAR);
     if (lastCharacter >= outputCount) lastCharacter = outputCount - 1;
     output[lastCharacter] = 0;
+    TmTrimHardwareText(output);
     return TRUE;
 }
 
@@ -2196,7 +2201,10 @@ static void CopyDescriptorText(const BYTE* descriptor,
     int converted = MultiByteToWideChar(CP_ACP, 0, text, length,
                                          output, outputCount - 1);
     if (converted > 0)
+    {
         output[converted] = 0;
+        TmTrimHardwareText(output);
+    }
 }
 
 static const WCHAR* StorageBusName(STORAGE_BUS_TYPE bus)
@@ -2548,6 +2556,7 @@ static void RefreshNetworkMetadata(const MIB_IFROW* row, NetSnapshot* net)
             HeapFree(GetProcessHeap(), 0, addresses);
     }
 
+    TmTrimHardwareText(net->adapter);
     if (!net->adapter[0])
     {
         int descriptionLength = row->dwDescrLen;
@@ -2561,6 +2570,8 @@ static void RefreshNetworkMetadata(const MIB_IFROW* row, NetSnapshot* net)
         if (converted > 0)
             net->adapter[converted] = 0;
     }
+    TmTrimHardwareText(net->adapter);
+    TmTrimHardwareText(net->name);
     if (!net->name[0])
         StringCchCopyW(net->name, _countof(net->name), net->type);
 
@@ -2735,6 +2746,8 @@ void Init(void)
     {
         DWORD cb = sizeof(g.cpuName);
         RegQueryValueExW(hk, L"ProcessorNameString", NULL, NULL, (LPBYTE)g.cpuName, &cb);
+        g.cpuName[_countof(g.cpuName) - 1] = 0;
+        TmTrimHardwareText(g.cpuName);
         DWORD mhz = 0; cb = sizeof(mhz);
         if (RegQueryValueExW(hk, L"~MHz", NULL, NULL, (LPBYTE)&mhz, &cb) == ERROR_SUCCESS)
             g.cpuMHz = mhz;

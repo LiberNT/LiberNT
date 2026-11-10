@@ -1,0 +1,137 @@
+/*
+ * PROJECT:     LiberNT host-native tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     AMD64 extended-state layout regression
+ */
+
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
+typedef uint32_t ULONG;
+typedef uint64_t ULONG64;
+typedef void VOID;
+#ifndef _Out_
+#define _Out_
+#endif
+#define MAXIMUM_XSTATE_FEATURES 64
+#define XSTATE_MASK_ALLOWED (~0ULL)
+#define XSTATE_MASK_LARGE_FEATURES 0ULL
+#define XSTATE_MASK_SUPERVISOR (1ULL << 4)
+#define XSTATE_MASK_PERSISTENT 0ULL
+#define XSTATE_MASK_USER_VISIBLE_SUPERVISOR 0ULL
+#define XSTATE_LEGACY_FLOATING_POINT 0
+#define XSTATE_LEGACY_SSE 1
+#define CPUID_EXTENDED_STATE 13
+#define CPUID_EXTENDED_STATE_MAIN_LEAF 0
+#define CPUID_EXTENDED_STATE_SUB_LEAF 1
+#define FIELD_OFFSET(Type, Field) offsetof(Type, Field)
+#define FIELD_SIZE(Type, Field) sizeof(((Type *)0)->Field)
+#define ALIGN_UP_BY(Value, Alignment) (((Value) + (Alignment) - 1) & ~((Alignment) - 1))
+#define ALIGN_UP(Value, Type) ALIGN_UP_BY(Value, sizeof(Type))
+#define max(First, Second) ((First) > (Second) ? (First) : (Second))
+#define ASSERT assert
+#define RtlZeroMemory(Pointer, Bytes) memset(Pointer, 0, Bytes)
+#define __cpuidex FakeCpuid
+
+typedef struct { char Legacy[160]; char XmmRegisters[256]; } XSAVE_FORMAT;
+typedef struct { char Bytes[576]; } XSAVE_AREA;
+typedef struct { ULONG Offset, Size; } FEATURE;
+typedef struct
+{
+    ULONG64 EnabledFeatures, EnabledVolatileFeatures, EnabledSupervisorFeatures;
+    ULONG64 EnabledUserVisibleSupervisorFeatures, AlignedFeatures;
+    ULONG OptimizedSave, CompactionEnabled, ExtendedFeatureDisable, Size, AllFeatureSize;
+    FEATURE Features[64];
+    ULONG AllFeatures[64];
+} XSTATE_CONFIGURATION, *PXSTATE_CONFIGURATION;
+typedef union
+{
+    int AsInt32[4];
+    struct { union { ULONG Uint32; } Eax; ULONG Ebx, Ecx, Edx; };
+} CPUID_EXTENDED_STATE_MAIN_LEAF_REGS;
+typedef union
+{
+    int AsInt32[4];
+    struct
+    {
+        union
+        {
+            ULONG Value;
+            struct { ULONG XSAVEOPT:1, XSAVEC:1, Reserved:1, XSAVES:1, Xfd:1; } Bits;
+        } Eax;
+        ULONG Ebx;
+        union { ULONG Uint32; } Ecx;
+        ULONG Edx;
+    };
+} CPUID_EXTENDED_STATE_SUB_LEAF_REGS;
+typedef union
+{
+    int AsInt32[4];
+    struct
+    {
+        ULONG Size, Offset;
+        union { ULONG Value; struct { ULONG Reserved:1, Aligned:1; } Bits; } Ecx;
+        ULONG Edx;
+    };
+} CPUID_EXTENDED_STATE_SIZE_OFFSET_REGS;
+
+static ULONG UserMask, SupervisorMask, Compacted;
+static ULONG Sizes[64], Offsets[64], Alignments[64];
+
+static void
+FakeCpuid(int *Registers, int Leaf, int Subleaf)
+{
+    (void)Leaf;
+    memset(Registers, 0, 4 * sizeof(*Registers));
+    if (Subleaf == 0)
+        Registers[0] = UserMask;
+    else if (Subleaf == 1)
+    {
+        Registers[0] = (Compacted ? 2 : 0) | (SupervisorMask ? 8 : 0);
+        Registers[2] = SupervisorMask;
+    }
+    else
+    {
+        Registers[0] = Sizes[Subleaf];
+        Registers[1] = Offsets[Subleaf];
+        Registers[2] = Alignments[Subleaf] ? 2 : 0;
+    }
+}
+
+@XSTATE_FUNCTION@
+
+int
+main(void)
+{
+    XSTATE_CONFIGURATION State;
+
+    UserMask = (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3);
+    Sizes[2] = 10;
+    Offsets[2] = 576;
+    Sizes[3] = 16;
+    Offsets[3] = 640;
+    Alignments[3] = 1;
+    Compacted = 1;
+    KiGetXStateConfiguration(&State);
+    if (State.Features[3].Offset != 640 || State.Size != 656 || State.AllFeatureSize != 656)
+        return 1;
+
+    UserMask = (1U << 0) | (1U << 1) | (1U << 2) | (1U << 5);
+    SupervisorMask = 1U << 4;
+    Sizes[3] = 0;
+    Sizes[4] = 20;
+    Sizes[5] = 16;
+    Alignments[5] = 1;
+    KiGetXStateConfiguration(&State);
+    if (State.Features[5].Offset != 640 || State.Size != 656 || State.AllFeatureSize != 656)
+        return 2;
+
+    Compacted = 0;
+    SupervisorMask = 0;
+    UserMask = (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3);
+    Sizes[3] = 16;
+    KiGetXStateConfiguration(&State);
+    return State.Features[3].Offset == 640 && State.Size == 656 && State.AllFeatureSize == 656 ? 0 : 3;
+}

@@ -58,6 +58,9 @@ static CRYPT_TRUST_REG_ENTRY OfficeCleanupPolicy;
 static CRYPT_TRUST_REG_ENTRY DriverInitializePolicy;
 static CRYPT_TRUST_REG_ENTRY DriverFinalPolicy;
 static CRYPT_TRUST_REG_ENTRY DriverCleanupPolicy;
+#ifdef __REACTOS__
+static CRYPT_TRUST_REG_ENTRY ConfigCiFinalPolicy;
+#endif
 
 static CRYPT_TRUST_REG_ENTRY GenericChainCertificateTrust;
 static CRYPT_TRUST_REG_ENTRY GenericChainFinalProv;
@@ -111,6 +114,9 @@ static void WINTRUST_InitRegStructs(void)
     WINTRUST_INITREGENTRY(DriverInitializePolicy, SP_POLICY_PROVIDER_DLL_NAME, DRIVER_INITPROV_FUNCTION)
     WINTRUST_INITREGENTRY(DriverFinalPolicy, SP_POLICY_PROVIDER_DLL_NAME, DRIVER_FINALPOLPROV_FUNCTION)
     WINTRUST_INITREGENTRY(DriverCleanupPolicy, SP_POLICY_PROVIDER_DLL_NAME, DRIVER_CLEANUPPOLICY_FUNCTION)
+#ifdef __REACTOS__
+    WINTRUST_INITREGENTRY(ConfigCiFinalPolicy, SP_POLICY_PROVIDER_DLL_NAME, L"ConfigCiFinalPolicy")
+#endif
     WINTRUST_INITREGENTRY(GenericChainCertificateTrust, SP_POLICY_PROVIDER_DLL_NAME, GENERIC_CHAIN_CERTTRUST_FUNCTION)
     WINTRUST_INITREGENTRY(GenericChainFinalProv, SP_POLICY_PROVIDER_DLL_NAME, GENERIC_CHAIN_FINALPOLICY_FUNCTION)
 
@@ -145,6 +151,9 @@ static void WINTRUST_FreeRegStructs(void)
     WINTRUST_FREEREGENTRY(DriverInitializePolicy);
     WINTRUST_FREEREGENTRY(DriverFinalPolicy);
     WINTRUST_FREEREGENTRY(DriverCleanupPolicy);
+#ifdef __REACTOS__
+    WINTRUST_FREEREGENTRY(ConfigCiFinalPolicy);
+#endif
     WINTRUST_FREEREGENTRY(GenericChainCertificateTrust);
     WINTRUST_FREEREGENTRY(GenericChainFinalProv);
 
@@ -626,6 +635,7 @@ static BOOL WINTRUST_RegisterHttpsProv(void)
     return RegisteredOK;
 }
 
+#ifndef __REACTOS__
 /***************************************************************************
  *              WINTRUST_RegisterOfficeSignVerify
  *
@@ -657,6 +667,7 @@ static BOOL WINTRUST_RegisterOfficeSignVerify(void)
     return TRUE;
 }
 
+#endif
 /***************************************************************************
  *              WINTRUST_RegisterDriverVerify
  *
@@ -688,6 +699,26 @@ static BOOL WINTRUST_RegisterDriverVerify(void)
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static GUID WINTRUST_ConfigCiAction = { 0x6078065b, 0x8f22, 0x4b13, { 0xbd,0x9b,0x5b,0x76,0x27,0x76,0xf3,0x86 } };
+
+static BOOL WINTRUST_RegisterConfigCiVerify(void)
+{
+    CRYPT_REGISTER_ACTIONID ProvInfo;
+
+    ProvInfo.cbStruct                   = sizeof(CRYPT_REGISTER_ACTIONID);
+    ProvInfo.sInitProvider              = DriverInitializePolicy;
+    ProvInfo.sObjectProvider            = SoftpubMessage;
+    ProvInfo.sSignatureProvider         = SoftpubSignature;
+    ProvInfo.sCertificateProvider       = SoftpubCertificate;
+    ProvInfo.sCertificatePolicyProvider = SoftpubCertCheck;
+    ProvInfo.sFinalPolicyProvider       = ConfigCiFinalPolicy;
+    ProvInfo.sTestPolicyProvider        = NullCTRE;
+    ProvInfo.sCleanupProvider           = DriverCleanupPolicy;
+    return WintrustAddActionID(&WINTRUST_ConfigCiAction, 0, &ProvInfo);
+}
+
+#endif
 /***************************************************************************
  *              WINTRUST_RegisterGenChainVerify
  *
@@ -718,6 +749,93 @@ static BOOL WINTRUST_RegisterGenChainVerify(void)
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static HKEY WINTRUST_OpenUsageKey(const char *usage)
+{
+    WCHAR key[MAX_PATH];
+    HKEY hkey;
+    int len;
+
+    len = swprintf(key, ARRAY_SIZE(key), L"%lsUsages\\", Trust);
+    if (len < 0 || !MultiByteToWideChar(CP_ACP, 0, usage, -1, key + len, ARRAY_SIZE(key) - len))
+        return NULL;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, key, 0, KEY_READ, &hkey))
+        return NULL;
+    return hkey;
+}
+
+static void *WINTRUST_LoadUsageCallback(HKEY hkey, const WCHAR *value, HMODULE *module)
+{
+    WCHAR dll[MAX_PATH], name[MAX_PATH];
+    char name_a[MAX_PATH];
+    DWORD size = sizeof(dll);
+    void *callback;
+
+    *module = NULL;
+    if (RegQueryValueExW(hkey, Dll, NULL, NULL, (BYTE *)dll, &size))
+        return NULL;
+    size = sizeof(name);
+    if (RegQueryValueExW(hkey, value, NULL, NULL, (BYTE *)name, &size) ||
+        !WideCharToMultiByte(CP_ACP, 0, name, -1, name_a, sizeof(name_a), NULL, NULL) ||
+        !(*module = LoadLibraryW(dll)))
+        return NULL;
+    if (!(callback = GetProcAddress(*module, name_a)))
+    {
+        FreeLibrary(*module);
+        *module = NULL;
+    }
+    return callback;
+}
+
+/***********************************************************************
+ *              WintrustGetDefaultForUsage (WINTRUST.@)
+ */
+BOOL WINAPI WintrustGetDefaultForUsage(DWORD dwAction, const char *pszUsageOID, CRYPT_PROVIDER_DEFUSAGE *psUsage)
+{
+    WCHAR guid[39];
+    DWORD size = sizeof(guid);
+    PFN_ALLOCANDFILLDEFUSAGE alloc;
+    PFN_FREEDEFUSAGE free_usage;
+    HMODULE module;
+    BOOL ret = TRUE;
+    HKEY hkey;
+
+    TRACE("(%lu %s %p)\n", dwAction, debugstr_a(pszUsageOID), psUsage);
+
+    if (!pszUsageOID || !psUsage || psUsage->cbStruct < sizeof(CRYPT_PROVIDER_DEFUSAGE))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!(hkey = WINTRUST_OpenUsageKey(pszUsageOID)))
+        return FALSE;
+
+    if (dwAction == DWACTION_ALLOCANDFILL)
+    {
+        ret = !RegQueryValueExW(hkey, DefaultId, NULL, NULL, (BYTE *)guid, &size) && guid[0] == '{' &&
+              wcslen(guid) == ARRAY_SIZE(guid) - 1 && guid[ARRAY_SIZE(guid) - 2] == '}';
+        if (ret)
+        {
+            guid[ARRAY_SIZE(guid) - 2] = 0;
+            ret = UuidFromStringW((RPC_WSTR)(guid + 1), &psUsage->gActionID) == RPC_S_OK;
+        }
+        if (ret && (alloc = WINTRUST_LoadUsageCallback(hkey, L"CallbackAllocFunction", &module)))
+        {
+            ret = alloc(pszUsageOID, psUsage);
+            FreeLibrary(module);
+        }
+    }
+    else if (dwAction == DWACTION_FREE &&
+             (free_usage = WINTRUST_LoadUsageCallback(hkey, L"CallbackFreeFunction", &module)))
+    {
+        ret = free_usage(pszUsageOID, psUsage);
+        FreeLibrary(module);
+    }
+    RegCloseKey(hkey);
+    return ret;
+}
+
+#endif
 /***********************************************************************
  *              WintrustAddDefaultForUsage (WINTRUST.@)
  *
@@ -986,6 +1104,73 @@ static BOOL WINTRUST_SIPPAddProvider(GUID* Subject, WCHAR* MagicNumber)
     return Ret;
 }
 
+#ifdef __REACTOS__
+static GUID WINTRUST_Sips[] =
+{
+    { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0xC689AAB9, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0xDE351A43, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0x9BA61D3F, 0xE73A, 0x11D0, { 0x8C,0xD2,0x00,0xC0,0x4F,0xC2,0x95,0xEE } },
+    { 0x18B3C141, 0xAE0D, 0x40F9, { 0x94,0x65,0xE5,0x42,0xAF,0xC1,0xAB,0xC7 } },
+};
+
+static WCHAR *WINTRUST_SipMagicNumbers[] = { NULL, (WCHAR *)L"MSCF", (WCHAR *)L"0x00004550",
+                                             (WCHAR *)L"0xcafebabe", (WCHAR *)L"0xcafebabe", (WCHAR *)L"0xcafebabe", NULL };
+
+static GUID WINTRUST_SoftpubActions[] =
+{
+    WINTRUST_ACTION_GENERIC_VERIFY_V2,
+    WIN_SPUB_ACTION_PUBLISHED_SOFTWARE,
+    WIN_SPUB_ACTION_PUBLISHED_SOFTWARE_NOBADUI,
+    WINTRUST_ACTION_GENERIC_CERT_VERIFY,
+    WINTRUST_ACTION_TRUSTPROVIDER_TEST,
+    HTTPSPROV_ACTION,
+    DRIVER_ACTION_VERIFY,
+    WINTRUST_ACTION_GENERIC_CHAIN_VERIFY,
+#ifdef __REACTOS__
+    { 0x6078065b, 0x8f22, 0x4b13, { 0xbd,0x9b,0x5b,0x76,0x27,0x76,0xf3,0x86 } },
+#endif
+};
+
+static const LPCSTR WINTRUST_CodecOids[] =
+{
+    SPC_PE_IMAGE_DATA_OBJID, SPC_PE_IMAGE_DATA_STRUCT, SPC_CAB_DATA_OBJID, SPC_CAB_DATA_STRUCT,
+    SPC_JAVA_CLASS_DATA_OBJID, SPC_JAVA_CLASS_DATA_STRUCT, SPC_LINK_OBJID, SPC_LINK_STRUCT,
+    SPC_SIGINFO_OBJID, SPC_SIGINFO_STRUCT, SPC_INDIRECT_DATA_OBJID, SPC_INDIRECT_DATA_CONTENT_STRUCT,
+    SPC_SP_AGENCY_INFO_OBJID, SPC_SP_AGENCY_INFO_STRUCT, SPC_MINIMAL_CRITERIA_OBJID, SPC_MINIMAL_CRITERIA_STRUCT,
+    SPC_FINANCIAL_CRITERIA_OBJID, SPC_FINANCIAL_CRITERIA_STRUCT, SPC_STATEMENT_TYPE_OBJID, SPC_STATEMENT_TYPE_STRUCT,
+    CAT_NAMEVALUE_OBJID, CAT_NAMEVALUE_STRUCT, CAT_MEMBERINFO_OBJID, CAT_MEMBERINFO_STRUCT,
+    CAT_MEMBERINFO2_OBJID, CAT_MEMBERINFO2_STRUCT, SPC_SP_OPUS_INFO_OBJID, SPC_SP_OPUS_INFO_STRUCT,
+    szOID_INTENT_TO_SEAL, INTENT_TO_SEAL_ATTRIBUTE_STRUCT, szOID_SEALING_SIGNATURE, SEALING_SIGNATURE_ATTRIBUTE_STRUCT,
+    szOID_SEALING_TIMESTAMP, SEALING_TIMESTAMP_ATTRIBUTE_STRUCT,
+};
+
+static HRESULT WINTRUST_AddSips(void)
+{
+    HRESULT ret = S_OK;
+    DWORD i;
+
+    for (i = 0; i < ARRAY_SIZE(WINTRUST_Sips); i++)
+    {
+        if (!WINTRUST_SIPPAddProvider(&WINTRUST_Sips[i], WINTRUST_SipMagicNumbers[i]))
+            ret = S_FALSE;
+    }
+    return ret;
+}
+
+HRESULT WINAPI SoftpubDllUnregisterServer(void);
+
+static void WINTRUST_RemoveSips(void)
+{
+    DWORD i;
+
+    for (i = 0; i < ARRAY_SIZE(WINTRUST_Sips); i++)
+        CryptSIPRemoveProvider(&WINTRUST_Sips[i]);
+}
+
+#endif
 /***********************************************************************
  *              DllRegisterServer (WINTRUST.@)
  */
@@ -1011,8 +1196,19 @@ HRESULT WINAPI DllRegisterServer(void)
     static const CHAR CatNameValueDecode[]             = "WVTAsn1CatNameValueDecode";
     static const CHAR CatMemberInfoEncode[]            = "WVTAsn1CatMemberInfoEncode";
     static const CHAR CatMemberInfoDecode[]            = "WVTAsn1CatMemberInfoDecode";
+#ifdef __REACTOS__
+    static const CHAR CatMemberInfo2Encode[]           = "WVTAsn1CatMemberInfo2Encode";
+    static const CHAR CatMemberInfo2Decode[]           = "WVTAsn1CatMemberInfo2Decode";
+    static const CHAR IntentToSealEncode[]             = "WVTAsn1IntentToSealAttributeEncode";
+    static const CHAR IntentToSealDecode[]             = "WVTAsn1IntentToSealAttributeDecode";
+    static const CHAR SealingSignatureEncode[]         = "WVTAsn1SealingSignatureAttributeEncode";
+    static const CHAR SealingSignatureDecode[]         = "WVTAsn1SealingSignatureAttributeDecode";
+    static const CHAR SealingTimestampEncode[]         = "WVTAsn1SealingTimestampAttributeEncode";
+    static const CHAR SealingTimestampDecode[]         = "WVTAsn1SealingTimestampAttributeDecode";
+#endif
     static const CHAR SpcSpOpusInfoEncode[]            = "WVTAsn1SpcSpOpusInfoEncode";
     static const CHAR SpcSpOpusInfoDecode[]            = "WVTAsn1SpcSpOpusInfoDecode";
+#ifndef __REACTOS__
     static GUID Unknown1 = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
     static GUID Unknown2 = { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
     static GUID Unknown3 = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
@@ -1022,6 +1218,7 @@ HRESULT WINAPI DllRegisterServer(void)
     static WCHAR MagicNumber2[] = {'M','S','C','F', 0};
     static WCHAR MagicNumber3[] = {'0','x','0','0','0','0','4','5','5','0', 0};
     static WCHAR CafeBabe[] = {'0','x','c','a','f','e','b','a','b','e', 0};
+#endif
 
     HRESULT CryptRegisterRes = S_OK;
     HRESULT TrustProviderRes = S_OK;
@@ -1075,6 +1272,16 @@ HRESULT WINAPI DllRegisterServer(void)
     WINTRUST_REGISTEROID(CAT_NAMEVALUE_STRUCT, CatNameValueEncode, CatNameValueDecode);
     WINTRUST_REGISTEROID(CAT_MEMBERINFO_OBJID, CatMemberInfoEncode, CatMemberInfoDecode);
     WINTRUST_REGISTEROID(CAT_MEMBERINFO_STRUCT, CatMemberInfoEncode, CatMemberInfoDecode);
+#ifdef __REACTOS__
+    WINTRUST_REGISTEROID(CAT_MEMBERINFO2_OBJID, CatMemberInfo2Encode, CatMemberInfo2Decode);
+    WINTRUST_REGISTEROID(CAT_MEMBERINFO2_STRUCT, CatMemberInfo2Encode, CatMemberInfo2Decode);
+    WINTRUST_REGISTEROID(szOID_INTENT_TO_SEAL, IntentToSealEncode, IntentToSealDecode);
+    WINTRUST_REGISTEROID(INTENT_TO_SEAL_ATTRIBUTE_STRUCT, IntentToSealEncode, IntentToSealDecode);
+    WINTRUST_REGISTEROID(szOID_SEALING_SIGNATURE, SealingSignatureEncode, SealingSignatureDecode);
+    WINTRUST_REGISTEROID(SEALING_SIGNATURE_ATTRIBUTE_STRUCT, SealingSignatureEncode, SealingSignatureDecode);
+    WINTRUST_REGISTEROID(szOID_SEALING_TIMESTAMP, SealingTimestampEncode, SealingTimestampDecode);
+    WINTRUST_REGISTEROID(SEALING_TIMESTAMP_ATTRIBUTE_STRUCT, SealingTimestampEncode, SealingTimestampDecode);
+#endif
     WINTRUST_REGISTEROID(SPC_SP_OPUS_INFO_OBJID, SpcSpOpusInfoEncode, SpcSpOpusInfoDecode);
     WINTRUST_REGISTEROID(SPC_SP_OPUS_INFO_STRUCT, SpcSpOpusInfoEncode,  SpcSpOpusInfoDecode);
 
@@ -1105,10 +1312,16 @@ add_trust_providers:
         TrustProviderRes = S_FALSE;
     if (!WINTRUST_RegisterHttpsProv())
         TrustProviderRes = S_FALSE;
+#ifndef __REACTOS__
     if (!WINTRUST_RegisterOfficeSignVerify())
         TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterDriverVerify())
         TrustProviderRes = S_FALSE;
+#ifdef __REACTOS__
+    if (!WINTRUST_RegisterConfigCiVerify())
+        TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterGenChainVerify())
         TrustProviderRes = S_FALSE;
 
@@ -1122,6 +1335,9 @@ add_trust_providers:
      * parts failed or not.
      */
 
+#ifdef __REACTOS__
+    SIPAddProviderRes = WINTRUST_AddSips();
+#else
     if (!WINTRUST_SIPPAddProvider(&Unknown1, NULL))
         SIPAddProviderRes = S_FALSE;
     if (!WINTRUST_SIPPAddProvider(&Unknown2, MagicNumber2))
@@ -1134,6 +1350,7 @@ add_trust_providers:
         SIPAddProviderRes = S_FALSE;
     if (!WINTRUST_SIPPAddProvider(&Unknown6, CafeBabe))
         SIPAddProviderRes = S_FALSE;
+#endif
 
     /* Native does a CryptSIPRemoveProvider here for {941C2937-1292-11D1-85BE-00C04FC295EE}.
      * This SIP Provider is however not found on up-to-date window install and native will
@@ -1164,8 +1381,23 @@ add_trust_providers:
  */
 HRESULT WINAPI DllUnregisterServer(void)
 {
+#ifdef __REACTOS__
+    DWORD i;
+
+    TRACE("\n");
+
+    for (i = 0; i < ARRAY_SIZE(WINTRUST_CodecOids); i++)
+    {
+        CryptUnregisterOIDFunction(X509_ASN_ENCODING, CRYPT_OID_ENCODE_OBJECT_FUNC, WINTRUST_CodecOids[i]);
+        CryptUnregisterOIDFunction(X509_ASN_ENCODING, CRYPT_OID_DECODE_OBJECT_FUNC, WINTRUST_CodecOids[i]);
+    }
+    SoftpubDllUnregisterServer();
+    WINTRUST_RemoveSips();
+    return S_OK;
+#else
      FIXME("stub\n");
      return S_OK;
+#endif
 }
 
 /***********************************************************************
@@ -1205,10 +1437,16 @@ HRESULT WINAPI SoftpubDllRegisterServer(void)
         TrustProviderRes = S_FALSE;
     if (!WINTRUST_RegisterHttpsProv())
         TrustProviderRes = S_FALSE;
+#ifndef __REACTOS__
     if (!WINTRUST_RegisterOfficeSignVerify())
         TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterDriverVerify())
         TrustProviderRes = S_FALSE;
+#ifdef __REACTOS__
+    if (!WINTRUST_RegisterConfigCiVerify())
+        TrustProviderRes = S_FALSE;
+#endif
     if (!WINTRUST_RegisterGenChainVerify())
         TrustProviderRes = S_FALSE;
 
@@ -1223,8 +1461,18 @@ HRESULT WINAPI SoftpubDllRegisterServer(void)
  */
 HRESULT WINAPI SoftpubDllUnregisterServer(void)
 {
+#ifdef __REACTOS__
+    DWORD i;
+
+    TRACE("\n");
+
+    for (i = 0; i < ARRAY_SIZE(WINTRUST_SoftpubActions); i++)
+        WintrustRemoveActionID(&WINTRUST_SoftpubActions[i]);
+    return S_OK;
+#else
      FIXME("stub\n");
      return S_OK;
+#endif
 }
 
 /***********************************************************************
@@ -1258,8 +1506,14 @@ HRESULT WINAPI mscat32DllUnregisterServer(void)
  */
 HRESULT WINAPI mssip32DllRegisterServer(void)
 {
+#ifdef __REACTOS__
+    TRACE("\n");
+
+    return WINTRUST_AddSips();
+#else
      FIXME("stub\n");
      return S_OK;
+#endif
 }
 
 /***********************************************************************
@@ -1267,6 +1521,13 @@ HRESULT WINAPI mssip32DllRegisterServer(void)
  */
 HRESULT WINAPI mssip32DllUnregisterServer(void)
 {
+#ifdef __REACTOS__
+    TRACE("\n");
+
+    WINTRUST_RemoveSips();
+    return S_OK;
+#else
      FIXME("stub\n");
      return S_OK;
+#endif
 }

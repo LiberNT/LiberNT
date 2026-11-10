@@ -356,7 +356,7 @@ if(REACTOS_USE_WDDM AND (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000))
 endif()
 
 if(ARCH STREQUAL "amd64")
-    list(APPEND KMTEST_DRV_SOURCE ntos_ke/amd64/KeSwitchHandoff.c)
+    list(APPEND KMTEST_DRV_SOURCE ntos_ke/amd64/KeSwitchHandoff.c ntos_ke/amd64/KeTrapFilterX87.c ntos_ke/amd64/KeXState.c)
 endif()
 
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")

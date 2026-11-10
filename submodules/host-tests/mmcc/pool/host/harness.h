@@ -9,9 +9,9 @@
 
 #pragma once
 
-#include <nvs/pool/include/poolenv.h>
-#include <nvs/pool/include/poolheap.h>
-#include <nvs/pool/include/pooltrack.h>
+#include <mm/pool/include/poolenv.h>
+#include <mm/pool/include/poolheap.h>
+#include <mm/pool/include/pooltrack.h>
 
 #include <pthread.h>
 #include <time.h>

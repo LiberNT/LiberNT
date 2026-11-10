@@ -21,12 +21,16 @@ static INT_PTR CALLBACK DonePageProc(HWND, UINT, WPARAM, LPARAM);
 
 static const SETUP_PAGE_INFO SetupPages[SETUP_PAGE_COUNT] =
 {
-    { IDD_LANGUAGEPAGE, LanguagePageProc, IDS_LANGUAGETITLE, IDS_LANGUAGESUBTITLE,    SETUP_PAGE_SKIP_UNATTEND },
+    { IDD_UPGRADEPAGE,  UpgradePageProc,  IDS_UPGRADETITLE,  IDS_UPGRADESUBTITLE,
+      SETUP_PAGE_SKIP_UNATTEND | SETUP_PAGE_OPTIONAL },
+    { IDD_LANGUAGEPAGE, LanguagePageProc, IDS_LANGUAGETITLE, IDS_LANGUAGESUBTITLE,
+      SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND | SETUP_PAGE_SKIP_UPGRADE },
     { IDD_INSTALLTYPEPAGE, InstallTypePageProc, IDS_TYPETITLE, IDS_TYPESUBTITLE,
-      SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND | SETUP_PAGE_OPTIONAL },
+      SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND | SETUP_PAGE_OPTIONAL | SETUP_PAGE_SKIP_UPGRADE },
     { IDD_DISKPAGE,     DiskPageProc,     IDS_DRIVETITLE,    IDS_DISKSUBTITLE,
-      SETUP_PAGE_BACK | SETUP_PAGE_OPTIONAL },
-    { IDD_ACCOUNTPAGE,  AccountPageProc,  IDS_ACCOUNTTITLE,  IDS_ACCOUNTZONESUBTITLE, SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND },
+      SETUP_PAGE_BACK | SETUP_PAGE_OPTIONAL | SETUP_PAGE_SKIP_UPGRADE },
+    { IDD_ACCOUNTPAGE,  AccountPageProc,  IDS_ACCOUNTTITLE,  IDS_ACCOUNTZONESUBTITLE,
+      SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND | SETUP_PAGE_SKIP_UPGRADE },
     { IDD_READYPAGE,    ReadyPageProc,    IDS_READYTITLE,    IDS_READYSUBTITLE,       SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND },
     { IDD_PROCESSPAGE,  InstallPageProc,  IDS_PROCESSTITLE,  IDS_PROCESSSUBTITLE,     0 },
     { IDD_FINISHPAGE,   DonePageProc,     IDS_DONETITLE,     0,                       0 },
@@ -86,6 +90,13 @@ FillSummary(
     WCHAR Changes[2048];
     WCHAR Target[96];
     WCHAR Size[32];
+
+    if (pSetupData->bUpgrade)
+    {
+        DescribeUpgrade(Text, ARRAYSIZE(Text));
+        SetDlgItemTextW(hwndDlg, IDC_READY_SUMMARY, Text);
+        return;
+    }
 
     Text[0] = UNICODE_NULL;
     if (InstallPartition)
@@ -151,7 +162,9 @@ ReadyPageProc(
         case SPN_SETACTIVE:
             FillSummary(hwndDlg, pSetupData);
             CheckDlgButton(hwndDlg, IDC_CONFIRM_INSTALL, BST_UNCHECKED);
-            SetupFrameSetButtonText(hwndDlg, IDC_FRAME_NEXT, IDS_INSTALLBTN);
+            if (pSetupData->bUpgrade)
+                SetupFrameSetTitle(hwndDlg, IDS_UPGRADE_READYTITLE, IDS_UPGRADE_READYSUBTITLE);
+            SetupFrameSetButtonText(hwndDlg, IDC_FRAME_NEXT, pSetupData->bUpgrade ? IDS_UPGRADEBTN : IDS_INSTALLBTN);
             SetupFrameSetButtons(hwndDlg, TRUE, FALSE);
             SetFocus(GetDlgItem(hwndDlg, IDC_CONFIRM_INSTALL));
             return TRUE;
@@ -339,7 +352,9 @@ DonePageProc(
             else
                 TextId = Success ? IDS_FINISH_NO_REBOOT : IDS_ABORT_NO_REBOOT;
 
-            SetupFrameSetTitle(hwndDlg, Success ? IDS_DONETITLE : IDS_ABORTTITLE, 0);
+            SetupFrameSetTitle(hwndDlg,
+                               Success ? (pSetupData->bUpgrade ? IDS_UPGRADE_DONETITLE : IDS_DONETITLE) : IDS_ABORTTITLE,
+                               0);
             SetResText(GetDlgItem(hwndDlg, IDC_FINISHTEXT), TextId);
             SetupFrameSetButtonText(hwndDlg, IDC_FRAME_NEXT, IDS_RESTARTBTN);
             SetupFrameSetButtonText(hwndDlg, IDCANCEL, Success ? IDS_POSTPONEBTN : IDS_CLOSEBTN);

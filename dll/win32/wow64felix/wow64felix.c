@@ -116,6 +116,7 @@ FelixFatal(
     _In_ PCSTR Message)
 {
     DbgPrint("WOW64FELIX: %s: %08lx\n", Message, Status);
+    Felix86NtReportError(Message, Status);
     NtTerminateProcess(NtCurrentProcess(), Status);
     for (;;) NtYieldExecution();
 }
@@ -496,13 +497,19 @@ BTCpuProcessInit(VOID)
     SIZE_T Size = PAGE_SIZE;
     ULONG OldProtect;
     NTSTATUS Status;
+    const char *Error;
 
     if (!RtlPcToFileHeader((PVOID)BTCpuProcessInit, &Base)) FelixFatal(STATUS_INVALID_IMAGE_FORMAT, "no module");
     Headers = RtlImageNtHeader(Base);
     FelixModuleBase = (ULONG_PTR)Base;
     FelixModuleEnd = FelixModuleBase + Headers->OptionalHeader.SizeOfImage;
 
-    if (Felix86NtInitialize()) FelixFatal(STATUS_NOT_SUPPORTED, "the processor cannot run felix86");
+    Error = Felix86NtInitialize();
+    if (Error)
+    {
+        Felix86NtReportError(Error, STATUS_NOT_SUPPORTED);
+        FelixFatal(STATUS_NOT_SUPPORTED, Error);
+    }
     Status = RtlInitializeCriticalSection(&FelixSuspendLock);
     if (!NT_SUCCESS(Status)) FelixFatal(Status, "cannot initialize the suspend lock");
 

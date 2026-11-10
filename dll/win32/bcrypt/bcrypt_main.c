@@ -4314,6 +4314,7 @@ static NTSTATUS verify_signature_rsa( const struct key *key, const void *padding
     }
 
     if (error == SYMCRYPT_SIGNATURE_VERIFICATION_FAILURE) return STATUS_INVALID_SIGNATURE;
+    if (error == SYMCRYPT_INVALID_ARGUMENT) return STATUS_INVALID_PARAMETER;
     if (error) return STATUS_INTERNAL_ERROR;
     return STATUS_SUCCESS;
 }

@@ -90,7 +90,7 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/welcome_config/)
     add_custom_target(converted_welcome_i18n_files DEPENDS ${_converted_welcome_i18n_files})
 endif()
 
-# freeldr.ini (FREELDR_BOOTCD_INI is prepared by boot/boot_images.cmake)
+# freeldr.ini (FREELDR_BOOTCD_INI is prepared by sdk/cmake/boot_images.cmake)
 set(_boot_media_freeldr_ini "${FREELDR_BOOTCD_INI}")
 add_cd_file(FILE ${_boot_media_freeldr_ini} DESTINATION root NO_CAB NAME_ON_CD freeldr.ini FOR bootcd livecd)
 

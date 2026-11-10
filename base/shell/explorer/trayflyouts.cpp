@@ -7225,6 +7225,18 @@ TfyCollectAdapterRows(TFYNETCACHE *pCache)
     HeapFree(hProcessHeap, 0, pAddresses);
 }
 
+static BOOL
+TfyWlanRowBetter(const TFYNETROW *pLeft, const TFYNETROW *pRight)
+{
+    if (!pLeft->bConnected != !pRight->bConnected)
+        return pLeft->bConnected;
+    if (pLeft->nSignal != pRight->nSignal)
+        return pLeft->nSignal > pRight->nSignal;
+    if (!pLeft->bHasProfile != !pRight->bHasProfile)
+        return pLeft->bHasProfile;
+    return lstrcmpiW(pLeft->szName, pRight->szName) < 0;
+}
+
 static VOID
 TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
 {
@@ -7290,14 +7302,15 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
         if (pfnList(hWlan, pGuid, 0, NULL, &pNetworks) != ERROR_SUCCESS || !pNetworks)
             continue;
 
-        for (DWORD n = 0;
-             n < pNetworks->dwNumberOfItems && pCache->nWlan < _countof(pCache->Wlan);
-             n++)
+        for (DWORD n = 0; n < pNetworks->dwNumberOfItems; n++)
         {
             WLAN_AVAILABLE_NETWORK *pNet = &pNetworks->Network[n];
             WCHAR szSsid[DOT11_SSID_MAX_LENGTH + 1];
             UINT cch;
             BOOL bDuplicate = FALSE;
+            TFYNETROW Row;
+            TFYNETROW *pRow = &Row;
+            DWORD iWorst = 0;
 
             if (pNet->dot11Ssid.uSSIDLength == 0)
                 continue;
@@ -7330,7 +7343,6 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
             if (bDuplicate)
                 continue;
 
-            TFYNETROW *pRow = &pCache->Wlan[pCache->nWlan++];
             ZeroMemory(pRow, sizeof(*pRow));
             pRow->nType = 2;
             pRow->ifGuid = *pGuid;
@@ -7346,6 +7358,18 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
                 StringCchCopyW(pRow->szProfile, _countof(pRow->szProfile), pNet->strProfileName);
             if (pRow->bConnected)
                 StringCchCopyW(pRow->szStatus, _countof(pRow->szStatus), L"Connected");
+            if (pCache->nWlan < _countof(pCache->Wlan))
+            {
+                pCache->Wlan[pCache->nWlan++] = Row;
+                continue;
+            }
+            for (DWORD r = 1; r < pCache->nWlan; r++)
+            {
+                if (TfyWlanRowBetter(&pCache->Wlan[iWorst], &pCache->Wlan[r]))
+                    iWorst = r;
+            }
+            if (TfyWlanRowBetter(&Row, &pCache->Wlan[iWorst]))
+                pCache->Wlan[iWorst] = Row;
         }
         pfnFree(pNetworks);
     }
@@ -7356,9 +7380,7 @@ TfyCollectWlanRows(TFYNETCACHE *pCache, BOOL bScan)
         {
             TFYNETROW *pLeft = &pCache->Wlan[a];
             TFYNETROW *pRight = &pCache->Wlan[b];
-            if ((pRight->bConnected && !pLeft->bConnected) ||
-                (pRight->bConnected == pLeft->bConnected &&
-                 pRight->nSignal > pLeft->nSignal))
+            if (TfyWlanRowBetter(pRight, pLeft))
             {
                 TFYNETROW tmp = *pLeft;
                 *pLeft = *pRight;
@@ -7530,6 +7552,7 @@ public:
     BOOL m_bWlanLoading;
     ULONGLONG m_SpinT0;
     RECT m_rcWlanArea;
+    RECT m_rcWlanThumb;
     BOOL m_bConnecting;
     BOOL m_bTracking;
     int m_nIfaces;
@@ -7573,6 +7596,7 @@ public:
                         m_bFrameStarted(FALSE), m_bReveal(FALSE), m_chPassword(0)
     {
         SetRectEmpty(&m_rcBack);
+        SetRectEmpty(&m_rcWlanThumb);
         ZeroMemory(&m_Pal, sizeof(m_Pal));
         ZeroMemory(&m_rcAnchor, sizeof(m_rcAnchor));
         ZeroMemory(&m_size, sizeof(m_size));
@@ -7867,6 +7891,8 @@ public:
         int nListTop;
         int nWlanTotal = 0;
         int nWlanIdx = 0;
+        int yScrollTop = -1;
+        int yScrollBottom = -1;
 
         m_size.cx = cx;
         m_nVisRows = TFY_NET_WIFIROWS;
@@ -7941,7 +7967,22 @@ public:
                 }
             }
             SetRect(&row.rc, Sc(8), y, cx - Sc(8), yb);
+            if ((int)i >= m_iWlanFirst)
+            {
+                if (yScrollTop < 0)
+                    yScrollTop = y;
+                yScrollBottom = yb;
+            }
             y = yb + Sc(2);
+        }
+        SetRectEmpty(&m_rcWlanThumb);
+        if (nWlanTotal > m_nVisRows && yScrollTop >= 0)
+        {
+            int nTrack = yScrollBottom - yScrollTop;
+            int nThumb = max(Sc(24), MulDiv(nTrack, m_nVisRows, nWlanTotal));
+            int yThumb = yScrollTop + MulDiv(nTrack - nThumb, m_nWlanScroll, nWlanTotal - m_nVisRows);
+
+            SetRect(&m_rcWlanThumb, cx - Sc(6), yThumb, cx - Sc(3), yThumb + nThumb);
         }
         if (y < nListTop + Sc(48) * 3)
             y = nListTop + Sc(48) * 3;
@@ -8630,15 +8671,15 @@ public:
 
             cyMid = row.rc.top + nHeadH / 2;
             SetRect(&rcIcon, row.rc.left + Sc(12), cyMid - Sc(10), row.rc.left + Sc(32), cyMid + Sc(10));
-            nWifi = row.nSignal >= 75 ? IDI_FLU_WIFI1 :
-                    row.nSignal >= 50 ? IDI_FLU_WIFI2 :
-                    row.nSignal >= 25 ? IDI_FLU_WIFI3 : IDI_FLU_WIFI4;
-            TfyDrawFluent(hdc, &rcIcon, nWifi);
             if (row.bSecure)
-            {
-                RECT rcLock = { rcIcon.right - Sc(7), rcIcon.bottom - Sc(9), rcIcon.right + Sc(3), rcIcon.bottom + Sc(1) };
-                TfyDrawFluent(hdc, &rcLock, IDI_FLU_LOCK);
-            }
+                nWifi = row.nSignal >= 75 ? IDI_FLU_WIFI1_LOCK :
+                        row.nSignal >= 50 ? IDI_FLU_WIFI2_LOCK :
+                        row.nSignal >= 25 ? IDI_FLU_WIFI3_LOCK : IDI_FLU_WIFI4_LOCK;
+            else
+                nWifi = row.nSignal >= 75 ? IDI_FLU_WIFI1 :
+                        row.nSignal >= 50 ? IDI_FLU_WIFI2 :
+                        row.nSignal >= 25 ? IDI_FLU_WIFI3 : IDI_FLU_WIFI4;
+            TfyDrawFluent(hdc, &rcIcon, nWifi);
 
             SetRect(&rcName, row.rc.left + Sc(44), row.rc.top, row.bConnected ? row.rcInfo.left - Sc(8) : row.rc.right - Sc(12),
                     row.rc.top + nHeadH);
@@ -8695,6 +8736,12 @@ public:
                 DrawButton(hdc, &row.rcButton, RowButtonText(row),
                            m_iHotBtn == 1, !row.bConnected && !IsConnectingRow(row));
             }
+        }
+
+        if (!IsRectEmpty(&m_rcWlanThumb))
+        {
+            TfyFillRound(hdc, &m_rcWlanThumb, (m_rcWlanThumb.right - m_rcWlanThumb.left) / 2,
+                         TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 140), m_Pal.PanelBg);
         }
 
         if (m_bWlanLoading)

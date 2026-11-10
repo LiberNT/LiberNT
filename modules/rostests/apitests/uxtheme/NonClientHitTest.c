@@ -42,6 +42,14 @@ icon_hit_test(BOOL ClientCaption)
 
     AdjustWindowRectEx(&Frame, WS_OVERLAPPEDWINDOW, FALSE, 0);
     GetWindowRect(Window, &WindowRect);
+    if (ClientCaption)
+    {
+        POINT Origin = { 0, 0 };
+
+        SetWindowPos(Window, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        ClientToScreen(Window, &Origin);
+        ok(Origin.y == WindowRect.top, "client top %ld, window top %ld\n", Origin.y, WindowRect.top);
+    }
     Point.x = WindowRect.left - Frame.left + 4;
     Point.y = WindowRect.top - Frame.top - GetSystemMetrics(SM_CYCAPTION) / 2;
     Hit = SendMessageW(Window, WM_NCHITTEST, 0, MAKELPARAM(Point.x, Point.y));
@@ -62,10 +70,10 @@ START_TEST(NonClientHitTest)
     ok(RegisterClassW(&Class) != 0, "RegisterClassW failed, error %lu\n", GetLastError());
 
     Hit = icon_hit_test(FALSE);
-    ok(Hit == HTSYSMENU, "caption icon hit %Id, expected HTSYSMENU\n", Hit);
+    ok(Hit == HTSYSMENU, "caption icon hit %ld, expected HTSYSMENU\n", (LONG)Hit);
 
     Hit = icon_hit_test(TRUE);
-    ok(Hit == HTCLIENT, "client over the caption icon hit %Id, expected HTCLIENT\n", Hit);
+    ok(Hit == HTCLIENT, "client over the caption icon hit %ld, expected HTCLIENT\n", (LONG)Hit);
 
     UnregisterClassW(L"NonClientHitTest", GetModuleHandleW(NULL));
 }

@@ -160,7 +160,11 @@ static BOOL CRYPT_GetLengthIndefinite(const BYTE *pbEncoded, DWORD cbEncoded,
         }
         else if (lenLen + 2 > cbEncoded)
         {
+#ifdef __REACTOS__
+            SetLastError(CRYPT_E_ASN1_EOD);
+#else
             SetLastError(CRYPT_E_ASN1_CORRUPT);
+#endif
             ret = FALSE;
         }
         else

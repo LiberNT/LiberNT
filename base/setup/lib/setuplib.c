@@ -222,6 +222,13 @@ CheckUnattendedSetup(
         INF_FreeData(Value);
     }
 
+    if (SpInfFindFirstLine(UnattendInf, L"Unattend", L"Upgrade", &Context) &&
+        INF_GetData(&Context, NULL, &Value))
+    {
+        pSetupData->Upgrade = (_wcsicmp(Value, L"yes") == 0);
+        INF_FreeData(Value);
+    }
+
     /* Check if Unattend setup is enabled */
     if (!SpInfFindFirstLine(UnattendInf, L"Unattend", L"UnattendSetupEnabled", &Context))
     {
@@ -1142,6 +1149,7 @@ UpdateRegistry(
     BOOLEAN Success;
     BOOLEAN ShouldRepairRegistry = FALSE;
     BOOLEAN Delete;
+    PVOID KeptSettings = NULL;
 
     if (RepairUpdateFlag)
     {
@@ -1218,6 +1226,8 @@ DoUpdate:
             DPRINT1("No update needed for the registry!\n");
             goto Cleanup;
         }
+
+        KeptSettings = RegSaveKeptSettings(pSetupData->SetupInf, L"HiveInfs.Upgrade.Keep");
     }
 
     do
@@ -1353,6 +1363,9 @@ DoUpdate:
 #endif
 
 Cleanup:
+    RegRestoreKeptSettings(KeptSettings);
+    KeptSettings = NULL;
+
     //
     // TODO: Unload all the registry stuff, perform cleanup,
     // and copy the created hive files into .sav files.

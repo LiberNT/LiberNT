@@ -1005,6 +1005,13 @@ HRESULT map_nsresult(nsresult nsres)
     return E_FAIL;
 }
 
+HRESULT map_selector_nsresult(nsresult nsres, DispatchEx *dispex)
+{
+    if(nsres == NS_ERROR_DOM_SYNTAX_ERR && dispex_compat_mode(dispex) >= COMPAT_MODE_IE9)
+        return MSHTML_E_DOM_SYNTAX;
+    return map_nsresult(nsres);
+}
+
 HRESULT return_nsstr(nsresult nsres, nsAString *nsstr, BSTR *p)
 {
     const PRUnichar *str;
@@ -1104,6 +1111,10 @@ HRESULT variant_to_nsstr(VARIANT *v, BOOL hex_int, nsAString *nsstr)
     case VT_I4:
         wsprintfW(buf, hex_int ? L"#%06x" : L"%d", V_I4(v));
         nsAString_Init(nsstr, buf);
+        break;
+
+    case VT_BOOL:
+        nsAString_InitDepend(nsstr, V_BOOL(v) ? L"true" : L"false");
         break;
 
     case VT_R8:

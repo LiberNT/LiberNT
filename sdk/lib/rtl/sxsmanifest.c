@@ -1440,8 +1440,7 @@ SxmCheckAttributes(
         Seen = SxmFindSeen(State, SxmSetDependency, &Name, NULL);
         if (Seen)
         {
-            if (Seen->Version[0] != Version[0] || Seen->Version[1] != Version[1] ||
-                Seen->Version[2] != Version[2] || Seen->Version[3] != Version[3])
+            if (Seen->Version[0] != Version[0] || Seen->Version[1] != Version[1])
             {
                 return SxmFail(State);
             }

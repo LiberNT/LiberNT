@@ -155,8 +155,8 @@
 @ stdcall CryptMsgCalculateEncodedLength(long long long ptr str long)
 @ stdcall CryptMsgClose(ptr)
 @ stdcall CryptMsgControl(ptr long long ptr)
-@ stub CryptMsgCountersign
-@ stub CryptMsgCountersignEncoded
+@ stdcall CryptMsgCountersign(ptr long long ptr)
+@ stdcall CryptMsgCountersignEncoded(long ptr long long ptr ptr ptr)
 @ stdcall CryptMsgDuplicate(ptr)
 @ stdcall CryptMsgEncodeAndSignCTL(long ptr ptr long ptr ptr)
 @ stdcall CryptMsgGetAndVerifySigner(ptr long ptr long ptr ptr)
@@ -176,6 +176,7 @@
 @ stdcall -stub CryptRetrieveTimeStamp(wstr long long str ptr ptr long ptr ptr ptr)
 @ stdcall CryptSIPAddProvider(ptr)
 @ stdcall CryptSIPCreateIndirectData(ptr ptr ptr)
+@ stdcall CryptSIPGetCaps(ptr ptr)
 @ stdcall CryptSIPGetSignedDataMsg(ptr ptr long ptr ptr)
 @ stdcall CryptSIPLoad(ptr long ptr)
 @ stdcall CryptSIPPutSignedDataMsg(ptr long ptr long ptr)

@@ -43,6 +43,7 @@ extern "C" {
 #include <gdiplus.h>
 
 #include "resource.h"
+#include "hardware_text.h"
 
 /* ------------------------------------------------------------------ */
 /*  Small POD vector (no STL in this codebase)                         */
@@ -177,6 +178,9 @@ struct Theme
     HFONT fMed;       /* 15                            */
     HFONT fMedSemi;
     HFONT fBig;       /* 26 light  perf big values     */
+    HFONT fPerfTitle;
+    HFONT fPerfHardware;
+    HFONT fPerfValue;
 };
 
 extern Theme g_t;
@@ -331,6 +335,9 @@ struct GraphStyle
     COLORREF secondLine;  /* 0 = same as primary          */
     BOOL     grid;        /* draw background grid           */
     BOOL     border;
+    int      gridColumns;
+    int      gridRows;
+    BOOL     neutralGrid;
     double   yMax;        /* value mapped to top; <=0 auto  */
     const HistRing* second; /* optional dotted series       */
 };

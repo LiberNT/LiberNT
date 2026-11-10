@@ -70,6 +70,7 @@ extern void func_NtCreateKey(void);
 extern void func_NtCreateKeyCached(void);
 extern void func_NtCreateProfile(void);
 extern void func_NtCreateSection(void);
+extern void func_NtCreateSection_CachedRead(void);
 extern void func_NtCreateSection_ConcurrentImage(void);
 extern void func_NtCreateThread(void);
 extern void func_NtCreateThreadWin32(void);
@@ -267,6 +268,7 @@ const struct test winetest_testlist[] =
     { "NtCreateKeyCached",              func_NtCreateKeyCached },
     { "NtCreateProfile",                func_NtCreateProfile },
     { "NtCreateSection",                func_NtCreateSection },
+    { "NtCreateSection_CachedRead", func_NtCreateSection_CachedRead },
     { "NtCreateSection_ConcurrentImage", func_NtCreateSection_ConcurrentImage },
     { "NtCreateThread",                 func_NtCreateThread },
     { "NtCreateThreadWin32",            func_NtCreateThreadWin32 },

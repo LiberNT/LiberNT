@@ -282,11 +282,11 @@ LiberNT/
 ├── hal/             # طبقات تجريد العتاد لـ x86 وArm وArm64 وPowerPC وRISC-V
 ├── media/           # الخطوط والسمات وملفات INF والأصوات والهوية البصرية
 ├── modules/         # تطبيقات اختيارية واختبارات وخلفيات
-├── ntoskrnl/        # نواة NT والطبقة التنفيذية
+├── ntos/            # نواة NT والطبقة التنفيذية
 ├── sdk/             # الترويسات والمكتبات وأدوات البناء
 ├── submodules/      # وصفات المكونات الخارجية ورقعها
 ├── subsystems/      # CSRSS ونظام Windows الفرعي
-├── win32ss/         # win32k وUSER وGDI وبرامج تشغيل العرض
+│   └── win/win32k/  # win32k وUSER وGDI وبرامج تشغيل العرض
 ├── configure.sh     # يجهّز البناء على Linux وmacOS وWSL2
 └── configure.cmd    # يجهّز البناء على Windows
 ```

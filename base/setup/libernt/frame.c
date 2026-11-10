@@ -21,6 +21,7 @@ typedef struct _SETUP_FRAME
     INT PageCount;
     HWND Pages[SETUP_MAX_PAGES];
     INT Current;
+    INT First;
     INT Restart;
     HBITMAP hWatermark;
     SIZE Watermark;
@@ -186,7 +187,7 @@ FrameShowPage(
     _In_ INT Page)
 {
     HWND hPage = Frame.Pages[Page];
-    BOOL Back = !!(Frame.PageInfo[Page].Flags & SETUP_PAGE_BACK);
+    BOOL Back = (Page > Frame.First) && (Frame.PageInfo[Page].Flags & SETUP_PAGE_BACK);
     BOOL Cancel = !(Frame.PageInfo[Page].Flags & SETUP_PAGE_NO_CANCEL);
 
     if (Frame.Current >= 0)
@@ -222,6 +223,8 @@ FrameSkipPage(
     _In_ INT Page)
 {
     if (Frame.SetupData->bUnattend && (Frame.PageInfo[Page].Flags & SETUP_PAGE_SKIP_UNATTEND))
+        return TRUE;
+    if (Frame.SetupData->bUpgrade && (Frame.PageInfo[Page].Flags & SETUP_PAGE_SKIP_UPGRADE))
         return TRUE;
     return (Frame.PageInfo[Page].Flags & SETUP_PAGE_OPTIONAL) &&
            SendMessageW(Frame.Pages[Page], SPN_QUERYSKIP, 0, 0);
@@ -268,9 +271,9 @@ FrameBack(VOID)
         return;
 
     Page = Current - 1;
-    while (Page > 0 && FrameSkipPage(Page))
+    while (Page > Frame.First && FrameSkipPage(Page))
         Page--;
-    if (Page >= 0)
+    if (Page >= Frame.First)
         FrameShowPage(Page);
 }
 
@@ -482,7 +485,8 @@ SetupFrameProc(
             }
 
             FrameCenter(hwnd);
-            Page = (Frame.Restart >= 0) ? Frame.Restart : FrameNextPage(0);
+            Frame.First = FrameNextPage(0);
+            Page = (Frame.Restart >= 0) ? Frame.Restart : Frame.First;
             Frame.Restart = -1;
             FrameShowPage(Page);
             return FALSE;

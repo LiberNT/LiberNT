@@ -1575,6 +1575,22 @@ SmpInitializeDosDevices(VOID)
     return Status;
 }
 
+static
+BOOLEAN
+SmpIsKnownDllFile(IN PCUNICODE_STRING FileName)
+{
+    PLIST_ENTRY NextEntry;
+    PSMP_REGISTRY_VALUE RegEntry;
+
+    for (NextEntry = SmpKnownDllsList.Flink; NextEntry != &SmpKnownDllsList; NextEntry = NextEntry->Flink)
+    {
+        RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
+        if (RtlEqualUnicodeString(&RegEntry->Value, FileName, TRUE)) return TRUE;
+    }
+
+    return FALSE;
+}
+
 VOID
 NTAPI
 SmpProcessModuleImports(IN PVOID Unused,
@@ -1612,6 +1628,8 @@ SmpProcessModuleImports(IN PVOID Unused,
     RtlStringCbCopyNW(DllName,
                       ImportUnicodeString.MaximumLength - (ImportUnicodeString.Length + sizeof(UNICODE_NULL)),
                       ImportUnicodeString.Buffer, Length);
+
+    if (SmpIsKnownDllFile(&ImportUnicodeString)) return;
 
     /* Add the DLL to the list */
     SmpSaveRegistryValue(&SmpKnownDllsList, DllName, DllValue, TRUE);
@@ -1725,12 +1743,10 @@ SmpInitializeKnownDllsInternal(IN PUNICODE_STRING Directory,
     ASSERT(NT_SUCCESS(Status1));
 
     /* Now loop the known DLLs */
-    NextEntry = SmpKnownDllsList.Flink;
-    while (NextEntry != &SmpKnownDllsList)
+    for (NextEntry = SmpKnownDllsList.Flink; NextEntry != &SmpKnownDllsList; NextEntry = NextEntry->Flink)
     {
-        /* Get the entry and move on */
+        /* Get the entry */
         RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
-        NextEntry = NextEntry->Flink;
 
         DPRINT("Processing known DLL: %wZ-%wZ\n", &RegEntry->Name, &RegEntry->Value);
 
@@ -1844,32 +1860,63 @@ Quickie:
     return Status;
 }
 
-NTSTATUS
-NTAPI
-SmpInitializeKnownDlls(VOID)
+static
+VOID
+SmpFreeKnownDllsAfter(IN PLIST_ENTRY LastKept)
 {
-    NTSTATUS Status;
     PSMP_REGISTRY_VALUE RegEntry;
-    UNICODE_STRING KnownDllsName;
-    PLIST_ENTRY Head, NextEntry;
+    PLIST_ENTRY NextEntry;
 
-    /* Call the internal function */
-    RtlInitUnicodeString(&KnownDllsName, L"\\KnownDlls");
-    Status = SmpInitializeKnownDllsInternal(&KnownDllsName, &SmpKnownDllPath);
-
-    /* Wipe out the list regardless of success */
-    Head = &SmpKnownDllsList;
-    while (!IsListEmpty(Head))
+    while (LastKept->Flink != &SmpKnownDllsList)
     {
-        /* Remove this entry */
-        NextEntry = RemoveHeadList(Head);
-
-        /* Free it */
+        NextEntry = RemoveHeadList(LastKept);
         RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
         RtlFreeHeap(RtlGetProcessHeap(), 0, RegEntry->AnsiValue);
         RtlFreeHeap(RtlGetProcessHeap(), 0, RegEntry->Value.Buffer);
         RtlFreeHeap(RtlGetProcessHeap(), 0, RegEntry);
     }
+}
+
+static
+VOID
+SmpInitializeKnownDlls32(VOID)
+{
+    WCHAR PathBuffer[MAX_PATH];
+    UNICODE_STRING KnownDllsName, Path;
+    NTSTATUS Status;
+
+    Status = RtlStringCbCopyW(PathBuffer, sizeof(PathBuffer), SharedUserData->NtSystemRoot);
+    if (NT_SUCCESS(Status)) Status = RtlStringCbCatW(PathBuffer, sizeof(PathBuffer), L"\\SysWOW64");
+    if (!NT_SUCCESS(Status)) return;
+
+    RtlInitUnicodeString(&Path, PathBuffer);
+    RtlInitUnicodeString(&KnownDllsName, L"\\KnownDlls32");
+    Status = SmpInitializeKnownDllsInternal(&KnownDllsName, &Path);
+    if (!NT_SUCCESS(Status)) DPRINT1("SMSS: Unable to initialize %wZ - Status == %lx\n", &KnownDllsName, Status);
+}
+
+NTSTATUS
+NTAPI
+SmpInitializeKnownDlls(VOID)
+{
+    NTSTATUS Status;
+    UNICODE_STRING KnownDllsName;
+    PLIST_ENTRY LastRegistryEntry;
+
+    LastRegistryEntry = SmpKnownDllsList.Blink;
+
+    /* Call the internal function */
+    RtlInitUnicodeString(&KnownDllsName, L"\\KnownDlls");
+    Status = SmpInitializeKnownDllsInternal(&KnownDllsName, &SmpKnownDllPath);
+
+    if (sizeof(PVOID) == sizeof(ULONGLONG))
+    {
+        SmpFreeKnownDllsAfter(LastRegistryEntry);
+        SmpInitializeKnownDlls32();
+    }
+
+    /* Wipe out the list regardless of success */
+    SmpFreeKnownDllsAfter(&SmpKnownDllsList);
 
     /* All done */
     return Status;

@@ -79,6 +79,8 @@ __C_specific_handler_call_handler PROC FRAME
     movdqa xmm14, [r11 + CxXmm14]
     movdqa xmm15, [r11 + CxXmm15]
     ldmxcsr [r11 + CxMxCsr]
+    test byte ptr [r11 + CxSegCs], MODE_MASK
+    jz CshControlWordLoaded
     mov ax, word ptr [r11 + CxFltSave + LfControlWord]
     cmp ax, word ptr [rsp + 196]
     je CshControlWordLoaded

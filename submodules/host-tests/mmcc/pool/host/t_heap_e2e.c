@@ -20,7 +20,7 @@
 #endif
 
 #define E2E_SLOTS          8192
-#define SMP_THREADS        8
+#define SMP_THREADS        32
 #define SMP_LOCAL_SLOTS    512
 #define SMP_MAILBOXES      256
 
@@ -95,6 +95,111 @@ Verify(PVOID Block)
 
 static BOOLEAN EnumCheck(PVOID Context, PVOID Block, PPOOL_BLOCK_INFO Info);
 
+typedef struct _HEAP_GROWTH
+{
+    PPOOL_HEAP Heap;
+    PPOOL_VA_REGION NewRegion;
+    volatile LONG Ready;
+    volatile LONG Go;
+    volatile LONG Stop;
+    volatile LONG Operations;
+    volatile LONG Seen[4];
+} HEAP_GROWTH;
+
+typedef struct _HEAP_GROWTH_WORKER
+{
+    HEAP_GROWTH *Growth;
+    ULONG Index;
+} HEAP_GROWTH_WORKER;
+
+static
+void *
+HeapGrowthWorker(void *Argument)
+{
+    HEAP_GROWTH_WORKER *Worker = Argument;
+    HEAP_GROWTH *Growth = Worker->Growth;
+    ULONG Round = 0;
+
+    PoolHostProcessor = Worker->Index;
+    __atomic_add_fetch(&Growth->Ready, 1, __ATOMIC_RELEASE);
+    while (!__atomic_load_n(&Growth->Go, __ATOMIC_ACQUIRE))
+        sched_yield();
+
+    while (!__atomic_load_n(&Growth->Stop, __ATOMIC_ACQUIRE))
+    {
+        SIZE_T Size = (Round++ & 15) ? 2 * PAGE_SIZE : POOL_RANGE_MAX_BYTES + PAGE_SIZE;
+        PVOID Block = PoolHeapAllocate(Growth->Heap, Size, 'worG', 0);
+        ULONG Count = PoolHeapRegionCount(Growth->Heap);
+
+        CHECK(Count == 1 || Count == 2);
+        if (Block != NULL)
+        {
+            CHECK(PoolHeapContains(Growth->Heap, Block));
+            CHECK(PoolHeapFree(Growth->Heap, Block, NULL));
+        }
+        if (Count == 2)
+        {
+            CHECK(PoolHeapContains(Growth->Heap, (PVOID)Growth->NewRegion->Base));
+            __atomic_store_n(&Growth->Seen[Worker->Index], 1, __ATOMIC_RELEASE);
+        }
+        __atomic_add_fetch(&Growth->Operations, 1, __ATOMIC_RELAXED);
+    }
+    return NULL;
+}
+
+static
+void
+TestHeapGrowth(void)
+{
+    TEST_ARENA Arena, Second;
+    POOL_VA_REGION Region, NewRegion;
+    HEAP_GROWTH Growth = {0};
+    HEAP_GROWTH_WORKER Workers[4];
+    pthread_t Threads[4];
+    double Deadline = NowSeconds() + 30;
+    ULONG i;
+
+    ArenaCreate(&Arena, 64 * POOL_UNIT_SIZE);
+    ArenaCreate(&Second, 64 * POOL_UNIT_SIZE);
+    POOL_ASSERT(PoolVaRegionInitialize(&Region, Arena.Base, Arena.Bytes, FALSE, &Arena.Backing) == STATUS_SUCCESS);
+    POOL_ASSERT(PoolVaRegionInitialize(&NewRegion, Second.Base, Second.Bytes, FALSE, &Second.Backing) == STATUS_SUCCESS);
+    POOL_ASSERT(PoolHeapCreate(&Growth.Heap, &Region, 7, 4, 1, 0) == STATUS_SUCCESS);
+    Growth.NewRegion = &NewRegion;
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+    {
+        Workers[i] = (HEAP_GROWTH_WORKER){ &Growth, i };
+        POOL_ASSERT(pthread_create(&Threads[i], NULL, HeapGrowthWorker, &Workers[i]) == 0);
+    }
+    while (__atomic_load_n(&Growth.Ready, __ATOMIC_ACQUIRE) != RTL_NUMBER_OF(Threads))
+    {
+        POOL_ASSERT(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    __atomic_store_n(&Growth.Go, 1, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&Growth.Operations, __ATOMIC_RELAXED) < 1000)
+    {
+        POOL_ASSERT(NowSeconds() < Deadline);
+        sched_yield();
+    }
+    POOL_ASSERT(PoolHeapAddRegion(Growth.Heap, &NewRegion) == STATUS_SUCCESS);
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+    {
+        while (!__atomic_load_n(&Growth.Seen[i], __ATOMIC_ACQUIRE))
+        {
+            POOL_ASSERT(NowSeconds() < Deadline);
+            sched_yield();
+        }
+    }
+    __atomic_store_n(&Growth.Stop, 1, __ATOMIC_RELEASE);
+    for (i = 0; i < RTL_NUMBER_OF(Threads); i++)
+        POOL_ASSERT(pthread_join(Threads[i], NULL) == 0);
+    CHECK(PoolHeapRegionCount(Growth.Heap) == 2);
+    PoolHeapTrim(Growth.Heap);
+    CHECK(Arena.Errors == 0 && Second.Errors == 0);
+    ArenaDestroy(&Second);
+    ArenaDestroy(&Arena);
+}
+
 void
 TestHeap(void)
 {
@@ -112,6 +217,7 @@ TestHeap(void)
     ULONG i;
     int Foreign;
 
+    TestHeapGrowth();
     ArenaCreate(&Arena, 1024 * POOL_UNIT_SIZE);
     CHECK(PoolVaRegionInitialize(&Region, Arena.Base, Arena.Bytes, FALSE, &Arena.Backing) == STATUS_SUCCESS);
     CHECK(PoolHeapCreate(&Heap, &Region, 7, 4, 0xFEEDFACECAFEBEEFULL, POOL_HEAP_POISON_ON_FREE) == STATUS_SUCCESS);
@@ -435,7 +541,7 @@ TestSmp(void)
 
     ArenaCreate(&Arena, 1024 * POOL_UNIT_SIZE);
     CHECK(PoolVaRegionInitialize(&Region, Arena.Base, Arena.Bytes, FALSE, &Arena.Backing) == STATUS_SUCCESS);
-    CHECK(PoolHeapCreate(&Heap, &Region, 0, SMP_THREADS, 42, POOL_HEAP_POISON_ON_FREE) == STATUS_SUCCESS);
+    CHECK(PoolHeapCreate(&Heap, &Region, 0, 16, 42, POOL_HEAP_POISON_ON_FREE) == STATUS_SUCCESS);
 
     for (i = 0; i <= SMP_THREADS; i++)
     {
@@ -448,10 +554,11 @@ TestSmp(void)
     }
 
     Start = NowSeconds();
-    pthread_create(&Trimmer, NULL, SmpTrimmer, &Contexts[SMP_THREADS]);
+    i = pthread_create(&Trimmer, NULL, SmpTrimmer, &Contexts[SMP_THREADS]);
+    CHECK(i == 0);
     RunThreads(SMP_THREADS, SmpWorker, Args);
     __atomic_store_n(&Stop, 1, __ATOMIC_SEQ_CST);
-    pthread_join(Trimmer, NULL);
+    if (i == 0) CHECK(pthread_join(Trimmer, NULL) == 0);
 
     for (i = 0; i < SMP_MAILBOXES; i++)
     {

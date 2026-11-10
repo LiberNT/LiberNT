@@ -283,8 +283,10 @@ DISPEX_IDISPATCH_IMPL(HTMLMetaElement, IHTMLMetaElement,
 static HRESULT WINAPI HTMLMetaElement_put_httpEquiv(IHTMLMetaElement *iface, BSTR v)
 {
     HTMLMetaElement *This = impl_from_IHTMLMetaElement(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_w(v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_string_attr_setter(&This->element, L"http-equiv", v);
 }
 
 static HRESULT WINAPI HTMLMetaElement_get_httpEquiv(IHTMLMetaElement *iface, BSTR *p)
@@ -405,7 +407,7 @@ static const NodeImplVtbl HTMLMetaElementImplVtbl = {
 static void HTMLMetaElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 {
     static const dispex_hook_t hooks[] = {
-        {DISPID_IHTMLMETAELEMENT_HTTPEQUIV, .noattr = TRUE},
+        {DISPID_IHTMLMETAELEMENT_HTTPEQUIV, .attr_name = L"http-equiv"},
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLMetaElement_tid, hooks);

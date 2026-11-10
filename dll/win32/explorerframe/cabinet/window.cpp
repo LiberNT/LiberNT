@@ -31,6 +31,8 @@
 #define WM_CABINET_FOCUSVIEW (WM_APP + 3)
 #define IDT_CABINET_STATUS 1
 #define IDT_CABINET_SEARCH 2
+#define IDT_CABINET_SELECTION 3
+#define CABINET_SELECTION_IDLE_MS 200
 
 HINSTANCE
 CabinetModule()
@@ -102,6 +104,7 @@ CCabinetWindow::CCabinetWindow() :
     m_DetailsBar(NULL),
     m_ViewBar(NULL),
     m_Status(NULL),
+    m_SelectionMousePosition(),
     m_DetailsIcon(NULL),
     m_DetailsName(NULL),
     m_DetailsList(NULL),
@@ -930,6 +933,32 @@ DetailsPropertyText(IShellItem2 *item, REFPROPERTYKEY key)
     return text;
 }
 
+static BOOL
+GetSelectionItemSize(IShellItem *item, ULONGLONG *size)
+{
+    PWSTR path = NULL;
+    WIN32_FILE_ATTRIBUTE_DATA data;
+    IShellItem2 *item2 = NULL;
+    BOOL found = FALSE;
+
+    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+    {
+        if (GetFileAttributesExW(path, GetFileExInfoStandard, &data) &&
+            !(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            *size = ((ULONGLONG)data.nFileSizeHigh << 32) | data.nFileSizeLow;
+            found = TRUE;
+        }
+        CoTaskMemFree(path);
+    }
+    if (!found && SUCCEEDED(item->QueryInterface(IID_PPV_ARG(IShellItem2, &item2))))
+    {
+        found = SUCCEEDED(item2->GetUInt64(PKEY_Size, size));
+        item2->Release();
+    }
+    return found;
+}
+
 void
 CCabinetWindow::UpdateDetails()
 {
@@ -980,19 +1009,16 @@ CCabinetWindow::UpdateDetails()
             for (DWORD i = 0; i < itemCount && i < 4096; i++)
             {
                 IShellItem *one = NULL;
-                IShellItem2 *one2 = NULL;
                 ULONGLONG oneSize = 0;
-                if (SUCCEEDED(items->GetItemAt(i, &one)) &&
-                    SUCCEEDED(one->QueryInterface(IID_PPV_ARG(IShellItem2, &one2))) &&
-                    SUCCEEDED(one2->GetUInt64(PKEY_Size, &oneSize)))
+                if (SUCCEEDED(items->GetItemAt(i, &one)))
                 {
-                    size += oneSize;
-                    haveSize = TRUE;
-                }
-                if (one2)
-                    one2->Release();
-                if (one)
+                    if (GetSelectionItemSize(one, &oneSize))
+                    {
+                        size += oneSize;
+                        haveSize = TRUE;
+                    }
                     one->Release();
+                }
             }
             items->Release();
         }
@@ -2181,6 +2207,10 @@ CCabinetWindow::OnViewCreated(IExplorerBrowser *browser, IShellView *view)
 void
 CCabinetWindow::OnSelectionChanged()
 {
+    if ((GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0) &&
+        DeferSelectionUpdate())
+        return;
+
     UpdateStatus();
     UpdateCommands();
     UpdateDetails();
@@ -2411,9 +2441,21 @@ CCabinetWindow::UpdateViewToggles()
                  MAKELONG(mode == FVM_ICON && size >= 96, 0));
 }
 
-void
-CCabinetWindow::UpdateStatus()
+BOOL
+CCabinetWindow::DeferSelectionUpdate()
 {
+    if (!GetCursorPos(&m_SelectionMousePosition))
+        return FALSE;
+    return SetTimer(m_hwnd, IDT_CABINET_SELECTION, CABINET_SELECTION_IDLE_MS, NULL) != 0;
+}
+
+void
+CCabinetWindow::UpdateStatus(BOOL mouseIdle)
+{
+    if (!mouseIdle && (GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0) &&
+        DeferSelectionUpdate())
+        return;
+
     IShellView *view = CurrentView();
     IFolderView *folderView = NULL;
     int count = 0, selected = 0;
@@ -2436,19 +2478,16 @@ CCabinetWindow::UpdateStatus()
             for (DWORD i = 0; i < itemCount; i++)
             {
                 IShellItem *item = NULL;
-                IShellItem2 *item2 = NULL;
                 ULONGLONG size = 0;
-                if (SUCCEEDED(array->GetItemAt(i, &item)) &&
-                    SUCCEEDED(item->QueryInterface(IID_PPV_ARG(IShellItem2, &item2))) &&
-                    SUCCEEDED(item2->GetUInt64(PKEY_Size, &size)))
+                if (SUCCEEDED(array->GetItemAt(i, &item)))
                 {
-                    selectedSize += size;
-                    haveSize = TRUE;
-                }
-                if (item2)
-                    item2->Release();
-                if (item)
+                    if (GetSelectionItemSize(item, &size))
+                    {
+                        selectedSize += size;
+                        haveSize = TRUE;
+                    }
                     item->Release();
+                }
             }
             array->Release();
         }
@@ -3346,6 +3385,23 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             FocusView();
             return 0;
         case WM_TIMER:
+            if (wParam == IDT_CABINET_SELECTION)
+            {
+                POINT position;
+                if ((GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0) &&
+                    GetCursorPos(&position) &&
+                    (position.x != m_SelectionMousePosition.x || position.y != m_SelectionMousePosition.y))
+                {
+                    m_SelectionMousePosition = position;
+                    return 0;
+                }
+                KillTimer(m_hwnd, IDT_CABINET_SELECTION);
+                UpdateStatus(TRUE);
+                UpdateCommands();
+                UpdateDetails();
+                UpdatePreview();
+                return 0;
+            }
             if (wParam == IDT_CABINET_STATUS)
             {
                 KillTimer(m_hwnd, IDT_CABINET_STATUS);

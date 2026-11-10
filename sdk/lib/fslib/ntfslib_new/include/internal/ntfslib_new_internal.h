@@ -1446,6 +1446,17 @@ typedef struct IndexSearchKey
     BOOLEAN CaseSensitive;
 } IndexSearchKey, *PIndexSearchKey;
 
+NTSTATUS
+NtfsFindIndexInsertionPoint(
+    _In_ PVolume DiskVolume,
+    _In_ PIndexNodeHeader Header,
+    _In_ ULONG HeaderBytes,
+    _In_ const IndexSearchKey* Key,
+    _Out_ PULONG InsertionOffset,
+    _Out_ PULONGLONG ChildVcn,
+    _Out_ PBOOLEAN Descend,
+    _Out_opt_ PBOOLEAN FoundExact = NULL);
+
 typedef class Directory : BTree
 {
 public:

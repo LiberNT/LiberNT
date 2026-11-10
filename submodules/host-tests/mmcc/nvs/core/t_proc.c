@@ -8,7 +8,7 @@
  */
 
 #include "mmharness.h"
-#include <nvs/include/miproc.h>
+#include <mm/include/miproc.h>
 
 static
 NTSTATUS
@@ -164,10 +164,16 @@ ProcLifecycle(void)
     for (i = 0; i < 300; i += 13)
         CHECK(UserRead64(&World, 0, Base + i * 4096ULL, &Status) == i);
 
+    MI_MUTEX_ACQUIRE(&Manager.Lock);
+    Manager.TrimCursor = &Process[1].SystemLink;
+    MI_MUTEX_RELEASE(&Manager.Lock);
     for (i = 0; i < 3; i++)
     {
         WorldAttach(&World, i, NULL);
         MiProcessDelete(&Manager, &Process[i]);
+        CHECK(Manager.ProcessCount == 2 - i);
+        CHECK(Manager.TrimCursor == (i == 0 ? &Process[1].SystemLink :
+                                     i == 1 ? &Process[2].SystemLink : &Manager.ProcessList));
     }
 
     CHECK(Manager.ProcessCount == 0);

@@ -139,6 +139,37 @@ typedef struct SIP_DISPATCH_INFO_ {
 typedef BOOL (WINAPI *pfnIsFileSupported)(HANDLE,GUID *);
 typedef BOOL (WINAPI *pfnIsFileSupportedName)(WCHAR *,GUID *);
 
+typedef struct _SIP_CAP_SET_V2
+{
+  DWORD cbSize;
+  DWORD dwVersion;
+  BOOL isMultiSign;
+  DWORD dwReserved;
+} SIP_CAP_SET_V2, *PSIP_CAP_SET_V2;
+
+typedef struct _SIP_CAP_SET_V3
+{
+  DWORD cbSize;
+  DWORD dwVersion;
+  BOOL isMultiSign;
+  union
+  {
+    DWORD dwFlags;
+    DWORD dwReserved;
+  } DUMMYUNIONNAME;
+} SIP_CAP_SET_V3, *PSIP_CAP_SET_V3;
+
+typedef SIP_CAP_SET_V3 SIP_CAP_SET;
+typedef PSIP_CAP_SET_V3 PSIP_CAP_SET;
+
+#define SIP_CAP_SET_VERSION_2 2
+#define SIP_CAP_SET_VERSION_3 3
+#define SIP_CAP_SET_CUR_VER   3
+
+#define SIP_CAP_FLAG_SEALING 0x00000001
+
+typedef BOOL (WINAPI *pCryptSIPGetCaps)(SIP_SUBJECTINFO *,SIP_CAP_SET *);
+
 #pragma pack(push,8)
 typedef struct SIP_ADD_NEWPROVIDER_
 {
@@ -176,6 +207,7 @@ BOOL WINAPI CryptSIPRetrieveSubjectGuid(LPCWSTR,HANDLE,GUID *);
 BOOL WINAPI CryptSIPRetrieveSubjectGuidForCatalogFile(LPCWSTR,HANDLE,GUID *);
 BOOL WINAPI CryptSIPAddProvider(SIP_ADD_NEWPROVIDER *);
 BOOL WINAPI CryptSIPRemoveProvider(GUID *);
+BOOL WINAPI CryptSIPGetCaps(SIP_SUBJECTINFO *,SIP_CAP_SET *);
 
 #ifdef __cplusplus
 } /* extern "C" */
