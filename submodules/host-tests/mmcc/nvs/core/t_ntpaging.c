@@ -70,7 +70,7 @@ Submit(PFILE_OBJECT Object, PMDL Mdl, PLARGE_INTEGER Offset, KEVENT *Event, PIO_
     CHECK(Mdl->MdlFlags == (MDL_PAGES_LOCKED | (Write ? 0 : MDL_IO_PAGE_READ)));
     CHECK(Mdl->ByteCount > 0 && Mdl->ByteCount <=
           (Write ? MI_MAX_FILE_WRITE_PAGES : MI_MAX_FILE_IO_PAGES) * PAGE_SIZE);
-    CHECK(Mdl->Size == sizeof(MDL) + sizeof(PFN_NUMBER) * (Mdl->ByteCount / PAGE_SIZE));
+    CHECK((SIZE_T)Mdl->Size == sizeof(MDL) + sizeof(PFN_NUMBER) * (Mdl->ByteCount / PAGE_SIZE));
     File->Length = Mdl->ByteCount;
     File->Offset = Offset->QuadPart;
     File->Write = Write;

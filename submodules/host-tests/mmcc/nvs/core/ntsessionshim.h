@@ -17,8 +17,8 @@
 #define STATUS_ALREADY_COMMITTED ((NTSTATUS)0xC0000021)
 #define STATUS_PROCESS_IS_TERMINATING ((NTSTATUS)0xC000010A)
 #define ASSERT MI_ASSERT
-#define InterlockedIncrement(p) (MI_ATOMIC_ADD32(p, 1) + 1)
-#define InterlockedDecrement(p) (MI_ATOMIC_ADD32(p, -1) - 1)
+#define InterlockedIncrement(p) __sync_add_and_fetch((p), 1)
+#define InterlockedDecrement(p) __sync_sub_and_fetch((p), 1)
 #define InterlockedCompareExchange(p, n, o) MI_ATOMIC_CAS32(p, n, o)
 #define InterlockedExchange(p, n) __atomic_exchange_n(p, n, __ATOMIC_SEQ_CST)
 #define InterlockedAnd(p, n) __atomic_fetch_and(p, n, __ATOMIC_SEQ_CST)

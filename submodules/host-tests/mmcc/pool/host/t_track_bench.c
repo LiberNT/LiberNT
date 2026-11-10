@@ -240,7 +240,7 @@ TestBench(void)
 
     for (s = 0; s < RTL_NUMBER_OF(Sizes); s++)
     {
-        char Label[16];
+        char Label[24];
 
         if (Sizes[s])
             snprintf(Label, sizeof(Label), "%zu", Sizes[s]);
