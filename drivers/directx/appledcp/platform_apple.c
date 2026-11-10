@@ -8,6 +8,7 @@
 #include "softgpu.h"
 #include "softgpu_2d_core.h"
 #include "appledcp.h"
+#include <reactos/drivers/appleagx.h>
 
 typedef struct _APPLE_DCP_CONTEXT
 {
@@ -21,6 +22,7 @@ typedef struct _APPLE_DCP_CONTEXT
     ULONG Width;
     ULONG Height;
     ULONG Pitch;
+    BOOLEAN Accelerated;
 } APPLE_DCP_CONTEXT, *PAPPLE_DCP_CONTEXT;
 
 static
@@ -56,6 +58,50 @@ DcpPlatformLogModes(
                      Color[Index].Valid ? "" : " (not valid)");
         }
     }
+}
+
+/* The graphics processor is asked how far it has come. Rendering on it is offered only once its
+ * firmware is ready; until then the software renderer keeps the desktop, which is what the panel
+ * is showing today. */
+static
+BOOLEAN
+DcpPlatformGraphicsReady(VOID)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(APPLE_AGX_DEVICE_NAME);
+    APPLE_AGX_REPORT Report = { 0 };
+    IO_STATUS_BLOCK IoStatus;
+    PDEVICE_OBJECT Device;
+    PFILE_OBJECT File;
+    KEVENT Event;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    Status = IoGetDeviceObjectPointer(&Name, FILE_READ_DATA, &File, &Device);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_APPLE_AGX_QUERY_STATE, Device, NULL, 0, &Report, sizeof(Report),
+                                        FALSE, &Event, &IoStatus);
+    if (Irp)
+    {
+        Status = IoCallDriver(Device, Irp);
+        if (Status == STATUS_PENDING)
+        {
+            KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+            Status = IoStatus.Status;
+        }
+    }
+    else
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    ObDereferenceObject(File);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+    DbgPrint("appledcp: the graphics processor is at stage %lu (%s%lu.%lu, %lu cores, %lu kHz)\n", Report.State,
+             Report.State >= APPLE_AGX_STATE_IDENTIFIED ? "revision " : "", Report.Revision >> 8,
+             Report.Revision & 0xff, Report.ActiveCores, Report.TopKilohertz);
+    return Report.State == APPLE_AGX_STATE_READY;
 }
 
 static
@@ -144,6 +190,7 @@ DcpPlatformStart(
     Status = DcpSetSurface(Context->Dcp, &Layer);
     if (!NT_SUCCESS(Status))
         Status = DcpSwapLayer(Context->Dcp, &Layer);
+    Context->Accelerated = DcpPlatformGraphicsReady();
     DbgPrint("appledcp: %lux%lu BGRA surface at %I64x (device address %I64x) on the panel: %lx\n", Context->Width,
              Context->Height, Context->SurfacePhysical.QuadPart, Context->SurfaceIova, Status);
     return Status;

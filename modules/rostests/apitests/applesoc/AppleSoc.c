@@ -3247,6 +3247,105 @@ TestAgxEncodeCompute(VOID)
     ok_int(Word, 0);
 }
 
+static UCHAR AgxWork[APPLE_AGX_COMPUTE_WORK_SIZE];
+
+static
+VOID
+TestAgxComputeWork(VOID)
+{
+    APPLE_AGX_COMPUTE_REFS Refs;
+    ULONG64 Register[APPLE_AGX_COMPUTE_REGISTER_COUNT];
+    ULONG64 Value;
+    ULONG Index, Word;
+    USHORT Half;
+
+    RtlZeroMemory(&Refs, sizeof(Refs));
+    Refs.Notifier = 0xfffffc2100018000ULL;
+    Refs.Manager = 0xfffffc2100024000ULL;
+    Refs.FirmwareStamp = 0xfffffc210001c000ULL;
+    Refs.UserStamp = 0xfffffc2d00100000ULL;
+    Refs.WorkClient = 0xfffffc2d00200000ULL;
+    Refs.Sequence = 0xfffffc2140008000ULL;
+    Refs.Timestamps = 0xfffffc2140010000ULL;
+    Refs.Tail = 0xfffffc2140014000ULL;
+    Refs.Preempt = 0xfffffc2d00300000ULL;
+    Refs.StreamEnd = 0xfffffc2d00400100ULL;
+    for (Index = 0; Index < APPLE_AGX_COMPUTE_REGISTER_COUNT; ++Index)
+        Register[Index] = 0x1000ULL * (Index + 1);
+
+    RtlFillMemory(AgxWork, sizeof(AgxWork), 0x5a);
+    ok_hex(AppleAgxEncodeComputeWork(AgxWork, &Refs, Register, 7, 3, 0x1234), STATUS_SUCCESS);
+
+    /* What kind of work it is, which context it belongs to and how completion is signalled. */
+    RtlCopyMemory(&Word, AgxWork + 0x000, sizeof(Word));
+    ok_int(Word, APPLE_AGX_WORK_COMPUTE);
+    RtlCopyMemory(&Value, AgxWork + 0x004, sizeof(Value));
+    ok(Value == 2, "The ordinal is %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxWork + 0x010, sizeof(Word));
+    ok_int(Word, 7);
+    RtlCopyMemory(&Value, AgxWork + 0x014, sizeof(Value));
+    ok(Value == Refs.Notifier, "The notifier is at %I64x\n", Value);
+
+    /* Every register is written beside the selector the firmware writes it to. */
+    for (Index = 0; Index < APPLE_AGX_COMPUTE_REGISTER_COUNT; ++Index)
+    {
+        ULONG At = APPLE_AGX_COMPUTE_REGISTERS + APPLE_AGX_REGISTER_RECORD * Index;
+
+        RtlCopyMemory(&Word, AgxWork + At, sizeof(Word));
+        ok(Word == AppleAgxComputeSelectors()[Index], "Register %lu selects %lx\n", Index, Word);
+        RtlCopyMemory(&Value, AgxWork + At + 4, sizeof(Value));
+        ok(Value == Register[Index], "Register %lu carries %I64x\n", Index, Value);
+    }
+    ok_hex(AppleAgxComputeSelectors()[0], 0x1a510);
+    ok_hex(AppleAgxComputeSelectors()[APPLE_AGX_COMPUTE_REGISTER_COUNT - 1], 0x0d411);
+
+    /* Where the registers, the sequence and the command stream are. */
+    RtlCopyMemory(&Value, AgxWork + 0x720, sizeof(Value));
+    ok(Value == Refs.WorkClient + APPLE_AGX_COMPUTE_REGISTERS, "The registers are at %I64x\n", Value);
+    RtlCopyMemory(&Half, AgxWork + 0x728, sizeof(Half));
+    ok_int(Half, APPLE_AGX_COMPUTE_REGISTER_COUNT);
+    RtlCopyMemory(&Half, AgxWork + 0x72a, sizeof(Half));
+    ok_int(Half, APPLE_AGX_COMPUTE_REGISTER_COUNT * APPLE_AGX_REGISTER_RECORD);
+    RtlCopyMemory(&Value, AgxWork + 0x760, sizeof(Value));
+    ok(Value == Refs.Sequence, "The sequence is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxWork + 0x768, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_COMPUTE_SEQUENCE_SIZE);
+    RtlCopyMemory(&Value, AgxWork + 0x794, sizeof(Value));
+    ok(Value == Refs.Preempt, "The preemption buffer is at %I64x\n", Value);
+    /* The stream end is named one word short of itself. */
+    RtlCopyMemory(&Value, AgxWork + 0x79c, sizeof(Value));
+    ok(Value == Refs.StreamEnd - 4, "The command stream ends at %I64x\n", Value);
+
+    /* The stamps, the event slot and the timestamp cells. */
+    RtlCopyMemory(&Value, AgxWork + 0x7e8, sizeof(Value));
+    ok(Value == Refs.UserStamp, "The user stamp is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxWork + 0x7f0, sizeof(Value));
+    ok(Value == Refs.FirmwareStamp, "The firmware stamp is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxWork + 0x7f8, sizeof(Word));
+    ok_hex(Word, 0x1234);
+    RtlCopyMemory(&Word, AgxWork + 0x7fc, sizeof(Word));
+    ok_int(Word, APPLE_AGX_EVENT_SLOT);
+    RtlCopyMemory(&Word, AgxWork + 0x808, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_COMPUTE_UUID);
+    RtlCopyMemory(&Value, AgxWork + 0x818, sizeof(Value));
+    ok(Value == Refs.Timestamps, "The first cell is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxWork + 0x820, sizeof(Value));
+    ok(Value == Refs.Timestamps + 8, "The second cell is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxWork + 0x83e, sizeof(Value));
+    ok(Value == Refs.Manager, "The allocator is at %I64x\n", Value);
+    RtlCopyMemory(&Value, AgxWork + 0x857, sizeof(Value));
+    ok(Value == Refs.Tail, "The tail is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxWork + 0x7e0, sizeof(Word));
+    ok_hex(Word, 0xffffffff);
+
+    /* Work that names nothing to run is refused. */
+    Refs.Sequence = 0;
+    ok_hex(AppleAgxEncodeComputeWork(AgxWork, &Refs, Register, 0, 1, 0), STATUS_INVALID_PARAMETER);
+    Refs.Sequence = 0xfffffc2140008000ULL;
+    ok_hex(AppleAgxEncodeComputeWork(AgxWork, &Refs, NULL, 0, 1, 0), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxEncodeComputeWork(AgxWork, &Refs, Register, 0, 1, 0), STATUS_SUCCESS);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -4388,6 +4487,7 @@ START_TEST(AppleSoc)
     TestAgxQueue();
     TestAgxPools();
     TestAgxEncodeCompute();
+    TestAgxComputeWork();
     TestSpmi();
     TestAtcphy();
     TestPcie();

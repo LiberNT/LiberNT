@@ -11,6 +11,7 @@
 #include <reactos/drivers/applepmp.h>
 #include <reactos/drivers/applertkit.h>
 #include <reactos/drivers/appleuat.h>
+#include <reactos/drivers/appleagx.h>
 #include <reactos/drivers/appleagxinit.h>
 #include <reactos/drivers/fdtdrv.h>
 
@@ -77,6 +78,7 @@ typedef struct _APPLE_AGX
     APPLE_AGX_RING DevCtl;
     BOOLEAN Bound;
     ULONG Drained;
+    APPLE_AGX_REPORT Reported;
     PVOID AdtCopy;
     ULONG AdtLength;
     APPLE_ADT Adt;
@@ -553,6 +555,7 @@ AgxHandInitialData(
                  Agx->Description.States, Top, Status);
         if (!NT_SUCCESS(Status))
             return Status;
+        Agx->Reported.TopKilohertz = Top;
     }
     Status = AppleAgxMapRegisters(&Agx->Init);
     if (!NT_SUCCESS(Status))
@@ -576,6 +579,7 @@ AgxHandInitialData(
             UCHAR Request[APPLE_AGX_DEVCTL_RECORD] = { 0 };
 
             AgxDrainRings(Agx);
+            Agx->Reported.State = APPLE_AGX_STATE_READY;
             DbgPrint("appleagx: the firmware is ready after %lu ms, %lu records read\n", Waited, Agx->Drained);
             DbgPrint("appleagx: the device control ring answers an empty request: %lx\n",
                      AgxSubmit(Agx, &Agx->DevCtl, APPLE_AGX_DOORBELL_DEVCTL, Request, AGX_LISTEN_MS));
@@ -610,6 +614,8 @@ AgxBootFirmware(
     Agx->Rtkit.Receive = AgxReceive;
     WRITE_REGISTER_ULONG((volatile ULONG *)(Agx->Asc + AGX_ASC_CONTROL), Control | AGX_ASC_CONTROL_RUN);
     Status = AppleRtkitBoot(&Agx->Rtkit, AGX_BOOT_TIMEOUT_MS);
+    if (NT_SUCCESS(Status))
+        Agx->Reported.State = APPLE_AGX_STATE_STARTED;
     DbgPrint("appleagx: firmware boot %lx, RTKit %lu, endpoints %08lx %08lx, control %08lx\n", Status,
              Agx->Rtkit.Version, Agx->Rtkit.Endpoints[0], Agx->Rtkit.Endpoints[1],
              READ_REGISTER_ULONG((volatile ULONG *)(Agx->Asc + AGX_ASC_CONTROL)));
@@ -646,6 +652,7 @@ AgxAdoptAddressSpace(
         return Status;
     }
     Agx->Owned = TRUE;
+    Agx->Reported.State = APPLE_AGX_STATE_ADOPTED;
     DbgPrint("appleagx: address tables installed, context 0 lower %I64x upper %I64x, host window at %I64x\n",
              Agx->Adopted.Lower.TopPhysical, Agx->Adopted.KernelRootPhysical, APPLE_UAT_HOST_BASE);
     return STATUS_SUCCESS;
@@ -775,6 +782,13 @@ AgxStart(
     DbgPrint("appleagx: %s%s revision %lu.%lu, %lu clusters of %lu cores, %lu active (masks %08lx %08lx %08lx)\n",
              AgxGeneration(Version), AgxVariant(Version), (Version >> 8) & 0xff, Version & 0xff, ClusterCount,
              CoresPerCluster, Active, Masks[0], Masks[1], Masks[2]);
+    Agx->Reported.State = APPLE_AGX_STATE_IDENTIFIED;
+    Agx->Reported.Generation = (Version >> 24) & 0xff;
+    Agx->Reported.Variant = (Version >> 16) & 0xff;
+    Agx->Reported.Revision = Version & 0xffff;
+    Agx->Reported.Clusters = ClusterCount;
+    Agx->Reported.CoresPerCluster = CoresPerCluster;
+    Agx->Reported.ActiveCores = Active;
     DbgPrint("appleagx: coprocessor control %08lx (%s), firmware not started\n", Control,
              (Control & AGX_ASC_CONTROL_RUN) ? "running" : "halted");
     AgxOpenAdt(Agx);
@@ -786,6 +800,39 @@ AgxStart(
     if (NT_SUCCESS(AgxAdoptAddressSpace(Agx)))
         AgxBootFirmware(Agx, Control);
     return STATUS_SUCCESS;
+}
+
+/* The display driver asks how far the graphics processor has come; rendering on it is offered
+ * only once its firmware is ready, so until then the answer keeps the software path in use. */
+static
+NTSTATUS
+NTAPI
+AgxDeviceControl(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PAPPLE_AGX Agx = DeviceObject->DeviceExtension;
+    NTSTATUS Status = STATUS_INVALID_DEVICE_REQUEST;
+
+    Irp->IoStatus.Information = 0;
+    if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_APPLE_AGX_QUERY_STATE)
+    {
+        if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(APPLE_AGX_REPORT))
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            Agx->Reported.Records = Agx->Drained;
+            RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Agx->Reported, sizeof(Agx->Reported));
+            Irp->IoStatus.Information = sizeof(Agx->Reported);
+            Status = STATUS_SUCCESS;
+        }
+    }
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
 }
 
 static
@@ -876,12 +923,13 @@ AgxAddDevice(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PDEVICE_OBJECT Pdo)
 {
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(APPLE_AGX_DEVICE_NAME);
     PAPPLE_AGX Agx;
     PDEVICE_OBJECT Fdo;
     NTSTATUS Status;
 
-    Status = IoCreateDevice(DriverObject, sizeof(APPLE_AGX), NULL, FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN, FALSE,
-                            &Fdo);
+    Status = IoCreateDevice(DriverObject, sizeof(APPLE_AGX), &Name, FILE_DEVICE_VIDEO, FILE_DEVICE_SECURE_OPEN,
+                            FALSE, &Fdo);
     if (!NT_SUCCESS(Status))
         return Status;
     Agx = Fdo->DeviceExtension;
@@ -910,6 +958,7 @@ DriverEntry(
     UNREFERENCED_PARAMETER(RegistryPath);
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; ++Index)
         DriverObject->MajorFunction[Index] = AgxPassThrough;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = AgxDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_PNP] = AgxPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = AgxPower;
     DriverObject->DriverExtension->AddDevice = AgxAddDevice;

@@ -474,6 +474,16 @@ typedef struct _APPLE_AGX_COMPUTE_REFS
     ULONG64 Manager;
     ULONG64 Work;
     ULONG64 Scratch[5];
+    /* What the work item itself names: its own client address, its sequence, the stamps the
+     * host and the firmware watch, the internal timestamp cells, the tail and the preemption
+     * buffer, and where the command stream it runs ends. */
+    ULONG64 WorkClient;
+    ULONG64 Sequence;
+    ULONG64 UserStamp;
+    ULONG64 Timestamps;
+    ULONG64 Tail;
+    ULONG64 Preempt;
+    ULONG64 StreamEnd;
 } APPLE_AGX_COMPUTE_REFS, *PAPPLE_AGX_COMPUTE_REFS;
 
 typedef struct _APPLE_AGX_ATTACHMENT
@@ -492,3 +502,21 @@ AppleAgxEncodeCompute(
     _In_ ULONG Context,
     _In_ ULONG Stamp,
     _In_ BOOLEAN Faults);
+
+#define APPLE_AGX_COMPUTE_REGISTER_COUNT 22
+#define APPLE_AGX_REGISTER_RECORD       12
+#define APPLE_AGX_EVENT_SLOT            2
+
+const ULONG *
+NTAPI
+AppleAgxComputeSelectors(VOID);
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeComputeWork(
+    _Out_writes_bytes_(APPLE_AGX_COMPUTE_WORK_SIZE) PVOID Work,
+    _In_ const APPLE_AGX_COMPUTE_REFS *Refs,
+    _In_reads_(APPLE_AGX_COMPUTE_REGISTER_COUNT) const ULONG64 *Register,
+    _In_ ULONG Context,
+    _In_ ULONG Ordinal,
+    _In_ ULONG Stamp);

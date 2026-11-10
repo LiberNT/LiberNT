@@ -895,3 +895,77 @@ AppleAgxEncodeCompute(
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
+
+/* The registers a compute command is run with: the firmware writes each value to the selector
+ * beside it. */
+static const ULONG AgxComputeSelectors[APPLE_AGX_COMPUTE_REGISTER_COUNT] =
+{
+    0x1a510, 0x1a420, 0x1a4d0, 0x1a4d8, 0x1a4e0, 0x1a4e8, 0x1a440, 0x1a458, 0x12091, 0x101d9,
+    0x1a089, 0x1a091, 0x1a059, 0x1a061, 0x1a0b9, 0x1a0c1, 0x101d1, 0x0d479, 0x1a0e9, 0x107a1,
+    0x0a599, 0x0d411,
+};
+
+const ULONG *
+NTAPI
+AppleAgxComputeSelectors(VOID)
+{
+    return AgxComputeSelectors;
+}
+
+/* The work item itself: what kind of work it is, the registers it runs with, the sequence that
+ * runs it, the stamps that mark it finished and the allocator it draws memory from. */
+NTSTATUS
+NTAPI
+AppleAgxEncodeComputeWork(
+    _Out_writes_bytes_(APPLE_AGX_COMPUTE_WORK_SIZE) PVOID Work,
+    _In_ const APPLE_AGX_COMPUTE_REFS *Refs,
+    _In_reads_(APPLE_AGX_COMPUTE_REGISTER_COUNT) const ULONG64 *Register,
+    _In_ ULONG Context,
+    _In_ ULONG Ordinal,
+    _In_ ULONG Stamp)
+{
+    ULONG Index;
+
+    if (!Work || !Register || !Refs->Notifier || !Refs->WorkClient || !Refs->Sequence ||
+        !Refs->Manager || !Refs->UserStamp || !Refs->FirmwareStamp || !Refs->Timestamps ||
+        !Refs->Tail || !Refs->StreamEnd)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlZeroMemory(Work, APPLE_AGX_COMPUTE_WORK_SIZE);
+    AgxWriteLong(Work, 0x000, APPLE_AGX_WORK_COMPUTE);
+    AgxWriteQuad(Work, 0x004, Ordinal - 1);
+    AgxWriteLong(Work, 0x010, Context);
+    AgxWriteQuad(Work, 0x014, Refs->Notifier);
+    for (Index = 0; Index < APPLE_AGX_COMPUTE_REGISTER_COUNT; ++Index)
+    {
+        ULONG At = APPLE_AGX_COMPUTE_REGISTERS + APPLE_AGX_REGISTER_RECORD * Index;
+
+        AgxWriteLong(Work, At, AgxComputeSelectors[Index]);
+        AgxWriteQuad(Work, At + 4, Register[Index]);
+    }
+    AgxWriteQuad(Work, 0x720, Refs->WorkClient + APPLE_AGX_COMPUTE_REGISTERS);
+    AgxWriteWord(Work, 0x728, APPLE_AGX_COMPUTE_REGISTER_COUNT);
+    AgxWriteWord(Work, 0x72a, APPLE_AGX_COMPUTE_REGISTER_COUNT * APPLE_AGX_REGISTER_RECORD);
+    AgxWriteQuad(Work, 0x760, Refs->Sequence);
+    AgxWriteLong(Work, 0x768, APPLE_AGX_COMPUTE_SEQUENCE_SIZE);
+    AgxWriteQuad(Work, 0x794, Refs->Preempt);
+    AgxWriteQuad(Work, 0x79c, Refs->StreamEnd - 4);
+    AgxWriteQuad(Work, 0x7c4, 0x154024201ULL);
+    AgxWriteLong(Work, 0x7e0, 0xffffffff);
+    AgxWriteQuad(Work, 0x7e8, Refs->UserStamp);
+    AgxWriteQuad(Work, 0x7f0, Refs->FirmwareStamp);
+    AgxWriteLong(Work, 0x7f8, Stamp);
+    AgxWriteLong(Work, 0x7fc, APPLE_AGX_EVENT_SLOT);
+    AgxWriteLong(Work, 0x804, 1);
+    AgxWriteLong(Work, 0x808, APPLE_AGX_COMPUTE_UUID);
+    AgxWriteLong(Work, 0x80c, Ordinal - 1);
+    AgxWriteQuad(Work, 0x818, Refs->Timestamps);
+    AgxWriteQuad(Work, 0x820, Refs->Timestamps + 8);
+    AgxWriteQuad(Work, 0x83e, Refs->Manager);
+    AgxWriteQuad(Work, 0x847, 0xad0000ULL);
+    AgxWriteQuad(Work, 0x84f, 0x1600000ULL);
+    AgxWriteQuad(Work, 0x857, Refs->Tail);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
