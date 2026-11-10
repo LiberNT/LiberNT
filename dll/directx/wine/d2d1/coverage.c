@@ -341,6 +341,9 @@ static void d2d_coverage_strip(struct d2d_coverage *coverage, const D2D1_POINT_2
     size_t i, j;
     float dx, dy, l, d;
 
+    if (count < 2)
+        return;
+
     for (i = 0; i < count; ++i)
     {
         if (i)
