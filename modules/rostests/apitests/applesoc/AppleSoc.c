@@ -87,6 +87,24 @@ MmAllocateContiguousMemorySpecifyCache(SIZE_T Size, PHYSICAL_ADDRESS Low, PHYSIC
 }
 
 static
+VOID
+MmFreeContiguousMemorySpecifyCache(PVOID Virtual, SIZE_T Size, MEMORY_CACHING_TYPE Type)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < SimAllocationCount; ++Index)
+    {
+        if (SimAllocations[Index].Virtual == (PUCHAR)Virtual)
+        {
+            HeapFree(GetProcessHeap(), 0, SimAllocations[Index].Virtual);
+            SimAllocations[Index].Virtual = NULL;
+            SimAllocations[Index].Size = 0;
+            return;
+        }
+    }
+}
+
+static
 PHYSICAL_ADDRESS
 MmGetPhysicalAddress(PVOID Virtual)
 {
@@ -815,6 +833,7 @@ PcieSleepMs(ULONG Milliseconds)
 #include "../../../../sdk/lib/drivers/fdtdrv/fdtdrv.c"
 #include "../../../../sdk/lib/drivers/applertkit/pmgr.c"
 #include "../../../../sdk/lib/drivers/applertkit/dart.c"
+#include "../../../../sdk/lib/drivers/applertkit/uat.c"
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
 #include "../../../../sdk/lib/drivers/applertkit/pcie.c"
@@ -1536,6 +1555,100 @@ TestPmpPower(VOID)
     ok(ApplePmpPowerMessage(0x0e, APPLE_PMP_DEVICE_GRAPHICS, TRUE) !=
        ApplePmpPowerMessage(APPLE_PMP_SET_POWER, APPLE_PMP_DEVICE_GRAPHICS, TRUE), "Two opcodes encode alike\n");
     ok(ApplePmpPowerReply(0x0e) != ApplePmpPowerReply(APPLE_PMP_SET_POWER), "Two opcodes acknowledge alike\n");
+}
+
+static
+VOID
+TestUat(VOID)
+{
+    const APPLE_UAT_PROTECTION Shared = { APPLE_UAT_ACCESS_BOTH, APPLE_UAT_MEMORY_UNCACHED, TRUE, TRUE };
+    const APPLE_UAT_PROTECTION Private = { APPLE_UAT_ACCESS_FIRMWARE, APPLE_UAT_MEMORY_CACHED, FALSE, FALSE };
+    const APPLE_UAT_PROTECTION Device = { APPLE_UAT_ACCESS_GPU, APPLE_UAT_MEMORY_DEVICE, TRUE, FALSE };
+    APPLE_UAT_PROTECTION Read;
+    APPLE_UAT uat;
+    ULONG64 Physical, Entry;
+    ULONG Access, Memory, Index;
+    NTSTATUS Status;
+
+    ok_hex(AppleUatCreate(&uat, TRUE, "test"), STATUS_SUCCESS);
+    ok_int(uat.Tables, 1);
+    ok(uat.TopPhysical != 0, "The table root has no address\n");
+
+    /* A leaf carries the address, the owner, the caching and the execute rules, and nothing else. */
+    Entry = AppleUatEntry(0x80000000ULL, &Shared, TRUE);
+    ok((Entry & 0x3) == 3, "A leaf must be a page entry: %I64x\n", Entry);
+    ok((Entry & 0x0000fffffffff000ULL) == 0x80000000ULL, "A leaf lost its address: %I64x\n", Entry);
+    ok((Entry & (1ULL << 10)) != 0, "A leaf must be marked accessed: %I64x\n", Entry);
+    ok((Entry & (1ULL << 11)) == 0, "A global leaf must not be marked non-global: %I64x\n", Entry);
+    ok((AppleUatEntry(0x80000000ULL, &Shared, FALSE) & (1ULL << 11)) != 0,
+       "A non-global leaf must be marked so\n");
+    ok((Entry >> 52) & 0x8, "A leaf must allow the processor to reach it: %I64x\n", Entry >> 52);
+
+    /* Every owner and caching combination survives the round trip through a leaf. */
+    for (Access = 0; Access <= 3; ++Access)
+    {
+        for (Memory = 0; Memory <= 7; ++Memory)
+        {
+            APPLE_UAT_PROTECTION Any;
+
+            Any.Access = (UCHAR)Access;
+            Any.Memory = (UCHAR)Memory;
+            Any.NoExecuteUser = (Access & 1) != 0;
+            Any.NoExecutePrivileged = (Memory & 1) != 0;
+            ok_hex(AppleUatMap(&uat, 0x100000ULL + (ULONG64)(Access * 8 + Memory) * APPLE_UAT_PAGE_SIZE,
+                               0x40000000ULL, APPLE_UAT_PAGE_SIZE, &Any), STATUS_SUCCESS);
+            ok(AppleUatTranslate(&uat, 0x100000ULL + (ULONG64)(Access * 8 + Memory) * APPLE_UAT_PAGE_SIZE,
+                                 &Physical, &Read), "A mapping was lost\n");
+            ok(Read.Access == Any.Access && Read.Memory == Any.Memory &&
+               Read.NoExecuteUser == Any.NoExecuteUser && Read.NoExecutePrivileged == Any.NoExecutePrivileged,
+               "Access %lu memory %lu came back as %u/%u/%u/%u\n", Access, Memory, Read.Access, Read.Memory,
+               Read.NoExecuteUser, Read.NoExecutePrivileged);
+        }
+    }
+
+    /* A range spanning several leaf tables, its offsets, and the refusal to overwrite. */
+    Status = AppleUatMap(&uat, 0x2000000ULL, 0x50000000ULL, 4 * APPLE_UAT_PAGE_SIZE, &Private);
+    ok_hex(Status, STATUS_SUCCESS);
+    for (Index = 0; Index < 4; ++Index)
+    {
+        ok(AppleUatTranslate(&uat, 0x2000000ULL + (ULONG64)Index * APPLE_UAT_PAGE_SIZE, &Physical, NULL) &&
+           Physical == 0x50000000ULL + (ULONG64)Index * APPLE_UAT_PAGE_SIZE, "Page %lu maps to %I64x\n", Index,
+           Physical);
+    }
+    ok(AppleUatTranslate(&uat, 0x2000000ULL + 0x40, &Physical, NULL) && Physical == 0x50000040ULL,
+       "An offset inside a page resolves to %I64x\n", Physical);
+    ok(!AppleUatTranslate(&uat, 0x2000000ULL + 4 * APPLE_UAT_PAGE_SIZE, &Physical, NULL),
+       "The page after the range is mapped\n");
+    ok_hex(AppleUatMap(&uat, 0x2000000ULL, 0x60000000ULL, APPLE_UAT_PAGE_SIZE, &Private),
+           STATUS_CONFLICTING_ADDRESSES);
+    ok(AppleUatTranslate(&uat, 0x2000000ULL, &Physical, NULL) && Physical == 0x50000000ULL,
+       "The refused mapping changed the address to %I64x\n", Physical);
+
+    /* A top level boundary, so the walk has to build a second branch. */
+    ok_hex(AppleUatMap(&uat, 0x1000000000ULL, 0x70000000ULL, APPLE_UAT_PAGE_SIZE, &Device), STATUS_SUCCESS);
+    ok(AppleUatTranslate(&uat, 0x1000000000ULL, &Physical, &Read) && Physical == 0x70000000ULL,
+       "The far mapping resolves to %I64x\n", Physical);
+    ok_int(Read.Memory, APPLE_UAT_MEMORY_DEVICE);
+
+    /* Addresses the three levels cannot index, and misaligned requests. */
+    ok_hex(AppleUatMap(&uat, APPLE_UAT_MAX_ADDRESS, 0x70000000ULL, APPLE_UAT_PAGE_SIZE, &Device),
+           STATUS_INVALID_PARAMETER);
+    ok(!AppleUatTranslate(&uat, APPLE_UAT_MAX_ADDRESS, &Physical, NULL), "An unreachable address resolved\n");
+    ok_hex(AppleUatMap(&uat, 0x3000ULL, 0x70000000ULL, APPLE_UAT_PAGE_SIZE, &Device), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatMap(&uat, 0x3000000ULL, 0x70000040ULL, APPLE_UAT_PAGE_SIZE, &Device), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatMap(&uat, 0x3000000ULL, 0x70000000ULL, 0x40, &Device), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatMap(&uat, 0x3000000ULL, 0x70000000ULL, 0, &Device), STATUS_INVALID_PARAMETER);
+
+    /* Unmapping frees the address again and leaves its neighbours alone. */
+    ok_hex(AppleUatUnmap(&uat, 0x2000000ULL, APPLE_UAT_PAGE_SIZE), STATUS_SUCCESS);
+    ok(!AppleUatTranslate(&uat, 0x2000000ULL, &Physical, NULL), "An unmapped page still resolves\n");
+    ok(AppleUatTranslate(&uat, 0x2000000ULL + APPLE_UAT_PAGE_SIZE, &Physical, NULL),
+       "Unmapping took its neighbour with it\n");
+    ok_hex(AppleUatMap(&uat, 0x2000000ULL, 0x60000000ULL, APPLE_UAT_PAGE_SIZE, &Private), STATUS_SUCCESS);
+
+    AppleUatDestroy(&uat);
+    ok_int(uat.Tables, 0);
+    ok(uat.Top == NULL, "The table root survived destruction\n");
 }
 
 static
@@ -2666,6 +2779,7 @@ START_TEST(AppleSoc)
     TestDartLowWindowM3Memory();
     TestDartAdopt();
     TestPmpPower();
+    TestUat();
     TestSpmi();
     TestAtcphy();
     TestPcie();
