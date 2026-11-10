@@ -26,6 +26,7 @@
 #include "softgpu.h"
 #include "softgpu_2d_core.h"
 #include "vsync_policy_core.h"
+#include "slab_handoff_core.h"
 
 /* CONSTANTS *****************************************************************/
 
@@ -176,6 +177,41 @@ typedef struct _SOFTGPU_DIAGNOSTIC_PAYLOAD
     ULONG AdapterContextAvailable;
 } SOFTGPU_DIAGNOSTIC_PAYLOAD, *PSOFTGPU_DIAGNOSTIC_PAYLOAD;
 
+static FAST_MUTEX SoftGpuSlabHandoffLock;
+static SOFTGPU_SLAB_HANDOFF SoftGpuSlabHandoff;
+
+static VOID
+SoftGpuFreeSlab(
+    _In_ const SOFTGPU_SLAB *Slab)
+{
+    PAGED_CODE();
+
+    if (!SoftGpuSlabIsEmpty(Slab))
+        MmFreeContiguousMemorySpecifyCache(Slab->Base, Slab->Size, Slab->CacheType);
+}
+
+static BOOLEAN
+SoftGpuTakeParkedSlab(
+    _In_ SIZE_T Size,
+    _In_ PHYSICAL_ADDRESS HighestAddress,
+    _In_ MEMORY_CACHING_TYPE CacheType,
+    _Out_ PSOFTGPU_SLAB Adopted)
+{
+    BOOLEAN Taken;
+
+    PAGED_CODE();
+
+    ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+    Taken = SoftGpuSlabHandoffTake(&SoftGpuSlabHandoff,
+                                   Size,
+                                   (ULONGLONG)HighestAddress.QuadPart,
+                                   CacheType,
+                                   Adopted);
+    ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+    ASSERT(Taken == !SoftGpuSlabIsEmpty(Adopted));
+    return Taken;
+}
+
 static NTSTATUS
 SoftGpuAllocateFrameBuffer(
     _Inout_ PSOFTGPU_DEVICE Device,
@@ -192,6 +228,7 @@ SoftGpuAllocateFrameBuffer(
     SIZE_T OldFrameBufferSize;
     MEMORY_CACHING_TYPE NewCacheType;
     MEMORY_CACHING_TYPE OldCacheType;
+    SOFTGPU_SLAB Parked;
 
     if (Device == NULL ||
         ((Device->FrameBuffer == NULL) !=
@@ -231,12 +268,22 @@ SoftGpuAllocateFrameBuffer(
         HighAddress.QuadPart = (LONGLONG)-1;
     SkipBytes.QuadPart = 0;
     NewCacheType = SoftGpuPlatformSegmentCacheType();
-    NewFrameBuffer = MmAllocateContiguousMemorySpecifyCache(
-                         AllocationSize,
-                         LowAddress,
-                         HighAddress,
-                         SkipBytes,
-                         NewCacheType);
+    if (SoftGpuTakeParkedSlab(AllocationSize, HighestAddress, NewCacheType, &Parked))
+    {
+        DPRINT1("SOFTGPU: adopted the %Iu-byte slab of a stopped adapter at 0x%I64x\n",
+                Parked.Size, Parked.Physical.QuadPart);
+        NewFrameBuffer = Parked.Base;
+        AllocationSize = Parked.Size;
+    }
+    else
+    {
+        NewFrameBuffer = MmAllocateContiguousMemorySpecifyCache(
+                             AllocationSize,
+                             LowAddress,
+                             HighAddress,
+                             SkipBytes,
+                             NewCacheType);
+    }
     if (NewFrameBuffer == NULL)
     {
         DPRINT1("SOFTGPU: failed to allocate %Iu-byte framebuffer\n",
@@ -341,6 +388,7 @@ DriverEntry(
            DriverObject, RegistryPath);
 
     RtlZeroMemory(&InitData, sizeof(InitData));
+    ExInitializeFastMutex(&SoftGpuSlabHandoffLock);
 
     InitData.Version = SOFTGPU_DECLARED_INTERFACE_VERSION;
 
@@ -1101,9 +1149,8 @@ SoftGpuQueryAcpiPanel(
  *
  * IRQL: PASSIVE_LEVEL
  */
-NTSTATUS
-APIENTRY
-SoftGpuDdiStartDevice(
+static NTSTATUS
+SoftGpuStartDevice(
     _In_  PVOID             MiniportDeviceContext,
     _In_  PDXGK_START_INFO  DxgkStartInfo,
     _In_  PDXGK_INTERFACE   DxgkInterface,
@@ -1427,6 +1474,39 @@ CleanupStart:
     return Status;
 }
 
+NTSTATUS
+APIENTRY
+SoftGpuDdiStartDevice(
+    _In_  PVOID             MiniportDeviceContext,
+    _In_  PDXGK_START_INFO  DxgkStartInfo,
+    _In_  PDXGK_INTERFACE   DxgkInterface,
+    _Out_ PULONG            NumberOfVideoPresentSources,
+    _Out_ PULONG            NumberOfChildren)
+{
+    SOFTGPU_SLAB Release;
+    NTSTATUS Status;
+    BOOLEAN Unadopted;
+
+    PAGED_CODE();
+
+    ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+    SoftGpuSlabHandoffBeginStart(&SoftGpuSlabHandoff);
+    ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+
+    Status = SoftGpuStartDevice(MiniportDeviceContext,
+                                DxgkStartInfo,
+                                DxgkInterface,
+                                NumberOfVideoPresentSources,
+                                NumberOfChildren);
+
+    ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+    Unadopted = SoftGpuSlabHandoffEndStart(&SoftGpuSlabHandoff, &Release);
+    ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+    if (Unadopted)
+        SoftGpuFreeSlab(&Release);
+    return Status;
+}
+
 
 /* =========================================================================
  * DxgkDdiStopDevice
@@ -1506,9 +1586,18 @@ SoftGpuDdiStopDevice(
 
     if (Device->FrameBuffer != NULL)
     {
-        MmFreeContiguousMemorySpecifyCache(Device->FrameBuffer,
-                                           Device->FrameBufferSize,
-                                           Device->FrameBufferCacheType);
+        SOFTGPU_SLAB Slab;
+        BOOLEAN Parked;
+
+        Slab.Base = Device->FrameBuffer;
+        Slab.Size = Device->FrameBufferSize;
+        Slab.Physical = Device->FrameBufferPhys;
+        Slab.CacheType = Device->FrameBufferCacheType;
+        ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+        Parked = SoftGpuSlabHandoffPark(&SoftGpuSlabHandoff, &Slab);
+        ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+        if (!Parked)
+            SoftGpuFreeSlab(&Slab);
         Device->FrameBuffer = NULL;
         Device->FrameBufferSize = 0;
         Device->FrameBufferPhys.QuadPart = 0;

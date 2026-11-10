@@ -343,6 +343,7 @@ if(REACTOS_USE_WDDM)
         directx/DxgkWddmAbi.c
         directx/SoftGpu2DPolicy.c
         directx/SoftGpuVidPnPolicy.c
+        directx/SoftGpuSlabHandoff.c
         directx/SoftGpuVsyncPolicy.c)
     set(KMTEST_DXGK_WDDM_ABI TRUE)
     set(KMTEST_SOFTGPU_2D_POLICY TRUE)
