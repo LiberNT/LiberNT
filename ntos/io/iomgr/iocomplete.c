@@ -308,7 +308,8 @@ IopCompleteRequest(
     /* The file is the wait object of synchronous I/O and of I/O issued without an event */
     if (Deliver &&
         FileObject != NULL &&
-        ((FileObject->Flags & FO_SYNCHRONOUS_IO) || Irp->UserEvent == NULL))
+        ((FileObject->Flags & FO_SYNCHRONOUS_IO) ||
+         ((Irp->UserEvent == NULL) && !(FileObject->Flags & FO_SKIP_SET_EVENT))))
     {
         KeSetEvent(&FileObject->Event, 0, FALSE);
     }
