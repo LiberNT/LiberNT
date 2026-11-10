@@ -321,19 +321,6 @@ LxSignalTerminate(
 
 static
 BOOLEAN
-LxSignalTakenByCurrent(
-    _In_ PLX_PROCESS Target,
-    _In_opt_ PLX_THREAD TargetThread,
-    _In_ ULONG64 Bit)
-{
-    PLX_THREAD Current = LxCurrentThread();
-
-    return (Current != NULL) && (Current->Process == Target) && (Target->Mm == Target) &&
-           ((TargetThread == NULL) || (TargetThread == Current)) && !(Current->SigMask & Bit);
-}
-
-static
-BOOLEAN
 LxSignalBlocked(
     _In_ PLX_PROCESS Process,
     _In_opt_ PLX_THREAD TargetThread,
@@ -818,7 +805,7 @@ LxSignalSend(
     if (!Blocked &&
         ((Signal == LX_SIGKILL) ||
          ((Handler == LX_SIG_DFL) && !LxSignalStopsByDefault(Signal) && (ReadNoFence(&Target->Traced) == 0))) &&
-        !((Signal != LX_SIGKILL) && LxSignalDumpsCore(Signal) && LxSignalTakenByCurrent(Target, TargetThread, Bit)))
+        !((Signal != LX_SIGKILL) && LxSignalDumpsCore(Signal) && (Target->Mm == Target)))
     {
         if ((Signal == LX_SIGKILL) && (ReadNoFence(&Target->Traced) != 0) && (Target->Mm == Target) &&
             (Target->VmUsers == 0))
