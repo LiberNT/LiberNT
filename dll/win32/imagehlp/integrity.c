@@ -246,6 +246,13 @@ static BOOL IMAGEHLP_GetCertificateOffset( HANDLE handle, DWORD num,
     r = IMAGEHLP_GetSecurityDirOffset( handle, &sd_VirtualAddr, &size );
     if( !r )
         return FALSE;
+#ifdef __REACTOS__
+    if( !size )
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+#endif
 
     offset = 0;
     /* take the n'th certificate */
@@ -278,7 +285,12 @@ static BOOL IMAGEHLP_GetCertificateOffset( HANDLE handle, DWORD num,
             offset += 8 - (len % 8);
 
         if( offset >= size )
+        {
+#ifdef __REACTOS__
+            SetLastError( ERROR_INVALID_PARAMETER );
+#endif
             return FALSE;
+        }
     }
 
     *pdwOfs = sd_VirtualAddr + offset;
@@ -449,6 +461,17 @@ BOOL WINAPI ImageAddCertificate(
 
         if (sd_VirtualAddr == INVALID_SET_FILE_POINTER)
             return FALSE;
+#ifdef __REACTOS__
+
+        if (sd_VirtualAddr % 8)
+        {
+            static const BYTE padding[8];
+
+            if (!WriteFile(FileHandle, padding, 8 - (sd_VirtualAddr % 8), &count, NULL))
+                return FALSE;
+            sd_VirtualAddr += count;
+        }
+#endif
     }
 
     /* Write the certificate to the file */

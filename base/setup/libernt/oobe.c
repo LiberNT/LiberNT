@@ -961,6 +961,51 @@ StoragePageProc(
     return FALSE;
 }
 
+static BOOL
+UpgradeInstalledCopy(VOID)
+{
+    WCHAR SystemDrive[MAX_PATH];
+    WCHAR Architecture[32];
+    WCHAR Path[MAX_PATH];
+    WCHAR CommandLine[MAX_PATH + 16];
+    STARTUPINFOW StartupInfo;
+    PROCESS_INFORMATION ProcessInfo;
+    DWORD ExitCode = ERROR_GEN_FAILURE;
+
+    if (!GetEnvironmentVariableW(L"SystemDrive", SystemDrive, ARRAYSIZE(SystemDrive)) ||
+        !GetEnvironmentVariableW(L"PROCESSOR_ARCHITECTURE", Architecture, ARRAYSIZE(Architecture)) ||
+        FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%s\\%s\\libernt.exe", SystemDrive,
+                                _wcsicmp(Architecture, L"x86") == 0 ? L"I386" : Architecture)) ||
+        GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES ||
+        FAILED(StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" /upgrade", Path)))
+    {
+        return FALSE;
+    }
+
+    ScheduleFirstBootSetup();
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    if (CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &StartupInfo, &ProcessInfo))
+    {
+        WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+        if (!GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode))
+            ExitCode = GetLastError();
+        CloseHandle(ProcessInfo.hThread);
+        CloseHandle(ProcessInfo.hProcess);
+    }
+    else
+    {
+        ExitCode = GetLastError();
+    }
+
+    DPRINT1("Upgrade of the installed copy finished with %lu\n", ExitCode);
+    if (ExitCode == ERROR_SUCCESS)
+        return TRUE;
+
+    EndFirstBootSetup();
+    return FALSE;
+}
+
 static VOID
 InstallUnattendedComponents(VOID)
 {
@@ -1021,6 +1066,13 @@ wWinMain(
     SetupData.AutoDaylight = TRUE;
     OobeAppCount = LoadOobeApps(&OobeApps, ComponentsOnly);
     DPRINT1("First-boot setup lists %lu components\n", OobeAppCount);
+
+    if (!ComponentsOnly && UpgradeInstalledCopy())
+    {
+        if (SUCCEEDED(hrCom))
+            CoUninitialize();
+        return OOBE_SKIPPED;
+    }
 
     if (!ComponentsOnly)
     {

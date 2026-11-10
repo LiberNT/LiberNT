@@ -20,6 +20,9 @@ DefaultDestDir = 12
 [GenericMfg]
 %USB\Class_01&SubClass_01.DeviceDesc% = usbaudio_Inst, USB\Class_01&SubClass_01
 %USB\Class_01&SubClass_01&Prot_00.DeviceDesc% = usbaudio_Inst, USB\Class_01&SubClass_01&Prot_00
+%USB\Class_01&SubClass_00.DeviceDesc% = usbaudio_Inst, USB\Class_01&SubClass_00
+%USB\Class_01&SubClass_00&Prot_20.DeviceDesc% = usbaudio_Inst, USB\Class_01&SubClass_00&Prot_20
+%USB\Class_01&SubClass_00&Prot_00.DeviceDesc% = usbaudio_Inst, USB\Class_01&SubClass_00&Prot_00
 
 ;------------------------- USB AUDIO CLASS DRIVER -----------------------
 
@@ -51,3 +54,6 @@ LiberNT = "LiberNT Project"
 GenericMfg = "(Generic USB Audio devices)"
 USB\Class_01&SubClass_01.DeviceDesc = "USB Audio Control Device"
 USB\Class_01&SubClass_01&Prot_00.DeviceDesc = "USB Audio Control Device"
+USB\Class_01&SubClass_00.DeviceDesc = "USB Audio Function Device"
+USB\Class_01&SubClass_00&Prot_20.DeviceDesc = "USB Audio 2.0 Device"
+USB\Class_01&SubClass_00&Prot_00.DeviceDesc = "USB Audio Function Device"

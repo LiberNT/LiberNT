@@ -2286,6 +2286,14 @@ BOOL WINAPI RSAENH_CPCreateHash(HCRYPTPROV hProv, ALG_ID Algid, HCRYPTKEY hKey, 
     TRACE("(hProv=%08Ix, Algid=%08x, hKey=%08Ix, dwFlags=%08lx, phHash=%p)\n", hProv, Algid, hKey,
           dwFlags, phHash);
 
+#ifdef __REACTOS__
+    if (GET_ALG_CLASS(Algid) != ALG_CLASS_HASH && Algid != CALG_SCHANNEL_MASTER_HASH)
+    {
+        SetLastError(ERROR_NOT_SUPPORTED);
+        return FALSE;
+    }
+
+#endif
     peaAlgidInfo = get_algid_info(hProv, Algid);
     if (!peaAlgidInfo) return FALSE;
 

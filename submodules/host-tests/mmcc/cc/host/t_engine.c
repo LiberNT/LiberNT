@@ -21,6 +21,12 @@ ReadCheck(PCC_MAP Map, ULONG64 Offset, ULONG Length, const UCHAR *Expected)
     ULONG i;
     int Bad = 0;
 
+    if (Buffer == NULL)
+    {
+        CHECK(Buffer != NULL);
+        return;
+    }
+
     CHECK(CcCopyRange(Map, Offset, Length, FALSE, MoveToBuffer, &Move, &Moved) == STATUS_SUCCESS);
     CHECK(Moved == Length);
     for (i = 0; i < Length; i++)
@@ -136,6 +142,12 @@ TestDirty(void)
     ULONG Flushed;
     ULONG i;
 
+    if (Data == NULL)
+    {
+        CHECK(Data != NULL);
+        return;
+    }
+
     for (i = 0; i < 3 * MB; i++)
         Data[i] = (UCHAR)(i * 7 + 1);
 
@@ -235,6 +247,16 @@ TestBcb(void)
     CHECK(CcBcbAcquire(&Map, 4200, 100, TRUE, FALSE, &Pinned, &Created) == STATUS_SUCCESS && Created);
     CHECK(Pinned != First);
     CcBcbPin(Pinned);
+    CHECK(CcBcbAcquire(&Map, 4200, 100, TRUE, FALSE, &Second, &Created) == STATUS_SUCCESS && !Created);
+    CHECK(Second == Pinned && Pinned->ReferenceCount == 2);
+    CcBcbPin(Second);
+    CHECK(Pinned->PinCount == 2);
+    CcBcbUnpin(Second);
+    CcBcbDereference(Second);
+    CHECK(Pinned->PinCount == 1 && Pinned->ReferenceCount == 1);
+    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, TRUE, &Second, &Created) == STATUS_SUCCESS && Second == First);
+    CcBcbDereference(Second);
+    Second = First;
 
     CHECK(CcBcbAcquire(&Map, CC_VIEW_SIZE - 3000, 9000, FALSE, FALSE, &Spanning, &Created) == STATUS_SUCCESS);
     CHECK(Created && Spanning->OwnBase != NULL && Spanning->View == NULL);
@@ -253,6 +275,8 @@ TestBcb(void)
     CHECK(Map.DirtyPages == 1);
 
     CHECK(CcBcbCompleteFlush(&Map, 0, (ULONG64)-1, Generation));
+    CHECK(CcBcbCompleteFlush(&Map, 0, (ULONG64)-1, CcBcbBeginFlush(&Map)));
+    CHECK(Pinned->Dirty && Pinned->PinCount == 1);
     CcBcbUnpin(Pinned);
     CcBcbDereference(Pinned);
     CHECK(CcBcbRangeBusy(&Map, 0, 8192));

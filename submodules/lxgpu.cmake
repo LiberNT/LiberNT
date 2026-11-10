@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 Ahmed ARIF <arif.ing@outlook.com>
-# Linux subsystem GPU renderer: lxgpu.exe with virglrenderer and libepoxy (MIT, pinned upstream release
-# sources) built against the ReactOS SDK, packaged next to lxwinhost.exe, which starts it.
+# GPU renderer of the Linux subsystem: lxgpu.exe with virglrenderer (OpenGL and the venus Vulkan renderer)
+# and libepoxy, MIT, from pinned upstream release sources with the Windows patch below, built with the
+# LiberNT SDK and packaged next to lxwinhost.exe, which starts it.
 
 if(ARM64EC_RUNTIME)
     return()
@@ -29,6 +30,7 @@ else()
 endif()
 
 find_program(LXGPU_NINJA NAMES ninja REQUIRED)
+find_program(LXGPU_PATCH NAMES patch REQUIRED)
 find_program(LXGPU_PYTHON NAMES python3 python REQUIRED)
 find_program(LXGPU_STRIP NAMES llvm-strip HINTS "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
 execute_process(COMMAND "${LXGPU_PYTHON}" -c "import yaml" RESULT_VARIABLE _lxgpu_python_status
@@ -45,6 +47,10 @@ set(LXGPU_VIRGL_SOURCE_DIR "${LXGPU_WORK_DIR}/virglrenderer-source")
 set(LXGPU_EPOXY_SOURCE_DIR "${LXGPU_WORK_DIR}/libepoxy-source")
 set(LXGPU_BINARY_DIR "${LXGPU_WORK_DIR}/build")
 set(LXGPU_EXE "${LXGPU_WORK_DIR}/lxgpu.exe")
+set(LXGPU_VIRGL_PATCH "${CMAKE_CURRENT_LIST_DIR}/lxgpu/virglrenderer-windows.patch")
+# the hash in the patch command makes ExternalProject patch again when the patch changes
+file(SHA256 "${LXGPU_VIRGL_PATCH}" _lxgpu_virgl_patch_sha256)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LXGPU_VIRGL_PATCH}")
 set(LXGPU_LICENSES "${LXGPU_WORK_DIR}/lxgpu-licenses.zip")
 
 set(_lxgpu_sdk_targets
@@ -61,6 +67,12 @@ ExternalProject_Add(lxgpu-virglrenderer-source
     URL_HASH SHA256=1fc34ffbf2a4f5cf161228f13242e28283bd818901d7daf0027e6ae5fcaeaf9b
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     SOURCE_DIR "${LXGPU_VIRGL_SOURCE_DIR}"
+    PATCH_COMMAND ${CMAKE_COMMAND}
+        -DPATCH_EXECUTABLE=${LXGPU_PATCH}
+        -DSOURCE_DIR=<SOURCE_DIR>
+        -DPATCH_FILE=${LXGPU_VIRGL_PATCH}
+        -DPATCH_SHA256=${_lxgpu_virgl_patch_sha256}
+        -P ${CMAKE_CURRENT_LIST_DIR}/lxgpu/apply-patch.cmake
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND "")

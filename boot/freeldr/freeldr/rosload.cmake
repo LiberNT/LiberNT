@@ -15,8 +15,8 @@ list(APPEND ROSLOAD_SOURCE
     settingsmenu.c
     oslist.c
     lib/rtl/libsupp.c
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmboot.c
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/config.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmboot.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/config.c
     ntldr/startup.c
     ntldr/conversion.c
     ntldr/headless.c

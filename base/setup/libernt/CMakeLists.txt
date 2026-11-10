@@ -2,6 +2,7 @@
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib
 #    ${REACTOS_SOURCE_DIR}/base/setup/lib
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers
     ${REACTOS_SOURCE_DIR}/sdk/lib/tzlib)
@@ -17,6 +18,7 @@ list(APPEND SOURCE
     langpage.c
     libernt.c
     selftest.c
+    upgrade.c
     wizard.c
     libernt.h)
 
@@ -51,3 +53,19 @@ target_link_libraries(oobe uuid tzlib)
 add_importlibs(oobe advapi32 gdi32 user32 comctl32 dwmapi setupapi ole32 oleaut32 msi wintrust crypt32 bcrypt netapi32 samlib userenv syssetup msvcrt kernel32 ntdll)
 add_cd_file(TARGET oobe DESTINATION reactos/system32/oobe FOR all)
 add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/oobeapps.inf DESTINATION reactos/system32/oobe FOR all)
+
+list(APPEND UPDATE_SOURCE
+    frame.c
+    updagent.c
+    updbcd.c
+    updzip.c
+    libernt.h)
+
+add_rc_deps(lntupdate.rc ${libernt_rc_deps})
+add_executable(lntupdate ${UPDATE_SOURCE} lntupdate.rc)
+add_pch(lntupdate libernt.h UPDATE_SOURCE)
+set_module_type(lntupdate win32gui UNICODE)
+target_link_libraries(lntupdate uuid zlib)
+add_importlibs(lntupdate advapi32 gdi32 user32 comctl32 dwmapi shell32 shlwapi setupapi ole32 oleaut32 bcrypt msvcrt kernel32 ntdll)
+add_cd_file(TARGET lntupdate DESTINATION reactos/system32 FOR all)
+add_registry_inf(lntupdate.inf)

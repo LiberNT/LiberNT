@@ -29,18 +29,38 @@
 #define LX_DRM_IOCTL_VIRTGPU_TO_HOST        0xC02C6447
 #define LX_DRM_IOCTL_VIRTGPU_WAIT           0xC0086448
 #define LX_DRM_IOCTL_VIRTGPU_GET_CAPS       0xC0186449
+#define LX_DRM_IOCTL_VIRTGPU_RESOURCE_CREATE_BLOB 0xC030644A
+#define LX_DRM_IOCTL_VIRTGPU_CONTEXT_INIT   0xC010644B
 
 #define LX_VIRTGPU_PARAM_3D_FEATURES        1
 #define LX_VIRTGPU_PARAM_CAPSET_QUERY_FIX   2
+#define LX_VIRTGPU_PARAM_RESOURCE_BLOB      3
+#define LX_VIRTGPU_PARAM_HOST_VISIBLE       4
+#define LX_VIRTGPU_PARAM_CONTEXT_INIT       6
+#define LX_VIRTGPU_PARAM_SUPPORTED_CAPSET_IDS 7
+#define LX_VIRTGPU_EXECBUF_FENCE_FD_IN      0x01
+#define LX_VIRTGPU_EXECBUF_FENCE_FD_OUT     0x02
+#define LX_VIRTGPU_EXECBUF_RING_IDX         0x04
+#define LX_VIRTGPU_CONTEXT_PARAM_CAPSET_ID  1
+#define LX_VIRTGPU_CONTEXT_PARAM_NUM_RINGS  2
+#define LX_VIRTGPU_CONTEXT_PARAM_POLL_RINGS_MASK 3
+#define LX_VIRTGPU_CONTEXT_PARAM_DEBUG_NAME 4
+#define LX_VIRTGPU_BLOB_MEM_HOST3D          2
+#define LX_VIRTGPU_BLOB_FLAGS               0x7
+#define LX_DRM_MAX_RINGS                    64
+#define LX_DRM_MAX_CONTEXT_PARAMS           16
 #define LX_VIRTGPU_PARAM_MAX                8
 #define LX_VIRTGPU_WAIT_NOWAIT              1
 #define LX_VIRTGPU_CAPSET_VIRGL             1
 #define LX_VIRTGPU_CAPSET_VIRGL2            2
+#define LX_VIRTGPU_CAPSET_VENUS             4
 #define LX_DRM_MAX_COMMAND                  (8 * 1024 * 1024)
 #define LX_DRM_MAX_BO_HANDLES               4096
 #define LX_DRM_MAP_SHIFT                    32
 #define LX_DRM_WAIT_TIMEOUT                 (-15LL * 10000000LL)
 #define LX_DRM_REPLY_TIMEOUT                (-30LL * 10000000LL)
+#define LX_GPU_MAX_QUEUED                   (32 * 1024 * 1024)
+#define LX_GPU_DRAIN_POLL                   (-100LL * 10000LL)
 
 typedef struct _LX_GPU_REQUEST
 {
@@ -66,6 +86,9 @@ typedef struct _LX_GPU_CHANNEL
     LIST_ENTRY Pending;
     LIST_ENTRY Waiting;
     BOOLEAN HostAttached;
+    ULONG Generation;
+    ULONG64 QueuedBytes;
+    KEVENT DrainEvent;
     ULONG NextSerial;
     volatile LONG Done;
     KEVENT DoneEvent;
@@ -73,9 +96,37 @@ typedef struct _LX_GPU_CHANNEL
     volatile LONG NextCtxId;
     FAST_MUTEX BoLock;
     LIST_ENTRY Bos;
+    LIST_ENTRY Fences;
     PUCHAR Caps;
     ULONG CapsLength;
+    PUCHAR VenusCaps;
+    ULONG VenusCapsLength;
+    volatile LONG VenusState;
 } LX_GPU_CHANNEL, *PLX_GPU_CHANNEL;
+
+typedef struct _LX_GPU_FENCE
+{
+    LIST_ENTRY Link;
+    PLX_GPU_CHANNEL Channel;
+    ULONG CtxId;
+    ULONG RingIdx;
+    BOOLEAN Global;
+    BOOLEAN Queued;
+    volatile LONG Signaled;
+    ULONG Serial;
+    LX_POLL_HEAD Poll;
+} LX_GPU_FENCE, *PLX_GPU_FENCE;
+
+typedef struct _LX_DRM_EXECBUFFER_HEAD
+{
+    ULONG Flags;
+    ULONG Size;
+    ULONG64 Command;
+    ULONG64 BoHandles;
+    ULONG NumBoHandles;
+    LONG FenceFd;
+    ULONG Rest[8];
+} LX_DRM_EXECBUFFER_HEAD, *PLX_DRM_EXECBUFFER_HEAD;
 
 typedef struct _LX_GPU_HOST
 {
@@ -91,6 +142,8 @@ typedef struct _LX_DRM_BO
     ULONG64 Size;
     PVOID Section;
     volatile LONG Busy;
+    ULONG CtxId;
+    ULONG BlobMem;
 } LX_DRM_BO, *PLX_DRM_BO;
 
 typedef struct _LX_DRM_FILE
@@ -100,6 +153,9 @@ typedef struct _LX_DRM_FILE
     PLX_DRM_BO *Handles;
     ULONG Capacity;
     ULONG CtxId;
+    ULONG Capset;
+    ULONG NumRings;
+    ULONG Generation;
 } LX_DRM_FILE, *PLX_DRM_FILE;
 
 static LIST_ENTRY LxGpuChannels;
@@ -164,7 +220,9 @@ LxGpuChannelGet(
         InitializeListHead(&Channel->Pending);
         InitializeListHead(&Channel->Waiting);
         InitializeListHead(&Channel->Bos);
+        InitializeListHead(&Channel->Fences);
         KeInitializeEvent(&Channel->DoneEvent, NotificationEvent, FALSE);
+        KeInitializeEvent(&Channel->DrainEvent, NotificationEvent, TRUE);
         ExInitializeFastMutex(&Channel->BoLock);
         InsertTailList(&LxGpuChannels, &Channel->Link);
     }
@@ -201,6 +259,8 @@ LxGpuChannelRelease(
     ExReleaseFastMutex(&LxGpuChannelsLock);
     if (Channel->Caps != NULL)
         LxFree(Channel->Caps);
+    if (Channel->VenusCaps != NULL)
+        LxFree(Channel->VenusCaps);
     LxFree(Channel);
 }
 
@@ -261,20 +321,38 @@ LxGpuTakePending(
 
 static
 LONG
-LxGpuSend(
+LxGpuSendFenced(
     _In_ PLX_GPU_CHANNEL Channel,
-    _In_ PLX_GPU_REQUEST Request)
+    _In_ PLX_GPU_REQUEST Request,
+    _Inout_opt_ PLX_GPU_FENCE Fence)
 {
+    LARGE_INTEGER Timeout;
     PIRP Irp;
     KIRQL Irql;
 
-    KeAcquireSpinLock(&Channel->Lock, &Irql);
-    if (!Channel->HostAttached)
+    for (;;)
     {
+        KeAcquireSpinLock(&Channel->Lock, &Irql);
+        if (!Channel->HostAttached)
+        {
+            KeReleaseSpinLock(&Channel->Lock, Irql);
+            return -LX_ENODEV;
+        }
+        if ((Channel->QueuedBytes == 0) || (Channel->QueuedBytes + Request->Size <= LX_GPU_MAX_QUEUED))
+            break;
+        KeClearEvent(&Channel->DrainEvent);
         KeReleaseSpinLock(&Channel->Lock, Irql);
-        return -LX_ENODEV;
+        Timeout.QuadPart = LX_GPU_DRAIN_POLL;
+        KeWaitForSingleObject(&Channel->DrainEvent, Executive, KernelMode, FALSE, &Timeout);
     }
+    Channel->QueuedBytes += Request->Size;
     Request->Message->Serial = ++Channel->NextSerial;
+    if (Fence != NULL)
+    {
+        Fence->Serial = Request->Message->Serial;
+        Fence->Queued = TRUE;
+        InsertTailList(&Channel->Fences, &Fence->Link);
+    }
     InterlockedIncrement(&Request->RefCount);
     InsertTailList(&Channel->ToHost, &Request->Link);
     Irp = LxGpuTakePending(Channel);
@@ -287,6 +365,84 @@ LxGpuSend(
     }
     return 0;
 }
+
+static
+LONG
+LxGpuSend(
+    _In_ PLX_GPU_CHANNEL Channel,
+    _In_ PLX_GPU_REQUEST Request)
+{
+    return LxGpuSendFenced(Channel, Request, NULL);
+}
+
+static
+VOID
+LxGpuSignalFences(
+    _In_ PLX_GPU_CHANNEL Channel,
+    _In_ BOOLEAN All,
+    _In_ BOOLEAN Global,
+    _In_ ULONG CtxId,
+    _In_ ULONG RingIdx,
+    _In_ ULONG Completed)
+{
+    PLIST_ENTRY Entry, Next;
+    KIRQL Irql;
+
+    KeAcquireSpinLock(&Channel->Lock, &Irql);
+    for (Entry = Channel->Fences.Flink; Entry != &Channel->Fences; Entry = Next)
+    {
+        PLX_GPU_FENCE Fence = CONTAINING_RECORD(Entry, LX_GPU_FENCE, Link);
+
+        Next = Entry->Flink;
+        if (!All && ((Fence->Global != Global) || (!Global && ((Fence->CtxId != CtxId) || (Fence->RingIdx != RingIdx))) ||
+                     ((LONG)(Completed - Fence->Serial) < 0)))
+        {
+            continue;
+        }
+        RemoveEntryList(&Fence->Link);
+        Fence->Queued = FALSE;
+        InterlockedExchange(&Fence->Signaled, 1);
+        LxPollWake(&Fence->Poll, LX_POLLIN | LX_POLLRDNORM);
+    }
+    KeReleaseSpinLock(&Channel->Lock, Irql);
+}
+
+static
+ULONG
+LxGpuFencePoll(
+    _In_ PLX_FILE File,
+    _In_opt_ PLX_POLL_ENTRY Entry)
+{
+    PLX_GPU_FENCE Fence = File->Object;
+
+    if (Entry != NULL)
+        LxPollAdd(&Fence->Poll, Entry);
+    return ReadNoFence(&Fence->Signaled) ? (LX_POLLIN | LX_POLLRDNORM) : 0;
+}
+
+static
+VOID
+LxGpuFenceRelease(
+    _In_ PLX_FILE File)
+{
+    PLX_GPU_FENCE Fence = File->Object;
+    KIRQL Irql;
+
+    if (Fence == NULL)
+        return;
+    File->Object = NULL;
+    KeAcquireSpinLock(&Fence->Channel->Lock, &Irql);
+    if (Fence->Queued)
+        RemoveEntryList(&Fence->Link);
+    KeReleaseSpinLock(&Fence->Channel->Lock, Irql);
+    LxGpuChannelRelease(Fence->Channel);
+    LxFree(Fence);
+}
+
+static const LX_FILE_OPS LxGpuFenceOps =
+{
+    NULL, NULL, NULL, LxGpuFencePoll, LxAnonStat, NULL, NULL, NULL, LxGpuFenceRelease
+};
 
 static
 LONG
@@ -348,6 +504,7 @@ LxDrmBoRelease(
     if (Request != NULL)
     {
         ((PLX_GPU_RES_MSG)Request->Message)->ResId = Bo->ResId;
+        ((PLX_GPU_RES_MSG)Request->Message)->CtxId = Bo->CtxId;
         LxGpuSend(Channel, Request);
         LxGpuRequestRelease(Request);
     }
@@ -416,20 +573,28 @@ LxDrmHandleAdd(
 }
 
 static
+BOOLEAN
+LxDrmHasVenus(
+    _In_ PLX_GPU_CHANNEL Channel);
+
+static
 LONG
-LxDrmEnsureContext(
-    _In_ PLX_DRM_FILE Drm)
+LxDrmCreateContext(
+    _In_ PLX_DRM_FILE Drm,
+    _In_ ULONG Capset,
+    _In_ ULONG NumRings,
+    _In_ BOOLEAN Explicit)
 {
     PLX_GPU_REQUEST Request;
     LONG Error;
 
-    if (ReadNoFence((PLONG)&Drm->CtxId) != 0)
+    if (!Explicit && (ReadNoFence((PLONG)&Drm->CtxId) != 0))
         return 0;
     ExAcquireFastMutex(&Drm->Lock);
     if (Drm->CtxId != 0)
     {
         ExReleaseFastMutex(&Drm->Lock);
-        return 0;
+        return Explicit ? -LX_EEXIST : 0;
     }
     Request = LxGpuRequestAlloc(LX_GPU_CTX_CREATE, sizeof(LX_GPU_CTX_MSG));
     if (Request == NULL)
@@ -438,10 +603,14 @@ LxDrmEnsureContext(
         return -LX_ENOMEM;
     }
     ((PLX_GPU_CTX_MSG)Request->Message)->CtxId = (ULONG)InterlockedIncrement(&Drm->Channel->NextCtxId);
-    ((PLX_GPU_CTX_MSG)Request->Message)->Capset = LX_VIRTGPU_CAPSET_VIRGL2;
+    ((PLX_GPU_CTX_MSG)Request->Message)->Capset = Capset;
     Error = LxGpuCall(Drm->Channel, Request);
     if (Error == 0)
+    {
+        Drm->Capset = Capset;
+        Drm->NumRings = NumRings;
         Drm->CtxId = ((PLX_GPU_CTX_MSG)Request->Message)->CtxId;
+    }
     ExReleaseFastMutex(&Drm->Lock);
     LxGpuRequestRelease(Request);
     return Error;
@@ -449,26 +618,85 @@ LxDrmEnsureContext(
 
 static
 LONG
-LxDrmFetchCaps(
-    _In_ PLX_GPU_CHANNEL Channel)
+LxDrmEnsureContext(
+    _In_ PLX_DRM_FILE Drm)
 {
+    return LxDrmCreateContext(Drm, LX_VIRTGPU_CAPSET_VIRGL2, 0, FALSE);
+}
+
+static
+LONG64
+LxDrmContextInit(
+    _In_ PLX_DRM_FILE Drm,
+    _In_ ULONG64 Argument)
+{
+    struct
+    {
+        ULONG NumParams;
+        ULONG Pad;
+        ULONG64 Params;
+    } Init;
+    ULONG64 Param[2];
+    ULONG Index, Capset = LX_VIRTGPU_CAPSET_VIRGL2, NumRings = 0;
+
+    if (LxCopyFromUser(&Init, Argument, sizeof(Init)) != 0)
+        return -LX_EFAULT;
+    if (Init.NumParams > LX_DRM_MAX_CONTEXT_PARAMS)
+        return -LX_EINVAL;
+    for (Index = 0; Index < Init.NumParams; Index++)
+    {
+        if (LxCopyFromUser(Param, Init.Params + Index * sizeof(Param), sizeof(Param)) != 0)
+            return -LX_EFAULT;
+        switch (Param[0])
+        {
+            case LX_VIRTGPU_CONTEXT_PARAM_CAPSET_ID:
+                Capset = (ULONG)Param[1];
+                break;
+            case LX_VIRTGPU_CONTEXT_PARAM_NUM_RINGS:
+                if (Param[1] > LX_DRM_MAX_RINGS)
+                    return -LX_EINVAL;
+                NumRings = (ULONG)Param[1];
+                break;
+            case LX_VIRTGPU_CONTEXT_PARAM_POLL_RINGS_MASK:
+            case LX_VIRTGPU_CONTEXT_PARAM_DEBUG_NAME:
+                break;
+            default:
+                return -LX_EINVAL;
+        }
+    }
+    if ((Capset != LX_VIRTGPU_CAPSET_VIRGL) && (Capset != LX_VIRTGPU_CAPSET_VIRGL2) &&
+        ((Capset != LX_VIRTGPU_CAPSET_VENUS) || !LxDrmHasVenus(Drm->Channel)))
+    {
+        return -LX_EINVAL;
+    }
+    return LxDrmCreateContext(Drm, Capset, NumRings, TRUE);
+}
+
+static
+LONG
+LxDrmFetchCaps(
+    _In_ PLX_GPU_CHANNEL Channel,
+    _In_ ULONG Capset)
+{
+    PUCHAR *Slot = (Capset == LX_VIRTGPU_CAPSET_VENUS) ? &Channel->VenusCaps : &Channel->Caps;
+    PULONG SlotLength = (Capset == LX_VIRTGPU_CAPSET_VENUS) ? &Channel->VenusCapsLength : &Channel->CapsLength;
     PLX_GPU_REQUEST Request;
     PUCHAR Caps;
     LONG Error;
 
-    if (ReadPointerNoFence((PVOID *)&Channel->Caps) != NULL)
+    if (ReadPointerNoFence((PVOID *)Slot) != NULL)
         return 0;
     Request = LxGpuRequestAlloc(LX_GPU_GET_CAPS, sizeof(LX_GPU_CAPS_MSG));
     if (Request == NULL)
         return -LX_ENOMEM;
-    ((PLX_GPU_CAPS_MSG)Request->Message)->Capset = LX_VIRTGPU_CAPSET_VIRGL2;
+    ((PLX_GPU_CAPS_MSG)Request->Message)->Capset = Capset;
     Error = LxGpuCall(Channel, Request);
     if ((Error == 0) && (Request->ReplyLength != 0))
     {
         Caps = Request->Reply;
         Request->Reply = NULL;
-        Channel->CapsLength = Request->ReplyLength;
-        if (InterlockedCompareExchangePointer((PVOID *)&Channel->Caps, Caps, NULL) != NULL)
+        *SlotLength = Request->ReplyLength;
+        if (InterlockedCompareExchangePointer((PVOID *)Slot, Caps, NULL) != NULL)
             LxFree(Caps);
     }
     else if (Error == 0)
@@ -477,6 +705,16 @@ LxDrmFetchCaps(
     }
     LxGpuRequestRelease(Request);
     return Error;
+}
+
+static
+BOOLEAN
+LxDrmHasVenus(
+    _In_ PLX_GPU_CHANNEL Channel)
+{
+    if (ReadNoFence(&Channel->VenusState) == 0)
+        InterlockedExchange(&Channel->VenusState, (LxDrmFetchCaps(Channel, LX_VIRTGPU_CAPSET_VENUS) == 0) ? 1 : -1);
+    return ReadNoFence(&Channel->VenusState) > 0;
 }
 
 static
@@ -549,6 +787,89 @@ LxDrmResourceCreate(
 }
 
 static
+LONG64
+LxDrmResourceCreateBlob(
+    _In_ PLX_DRM_FILE Drm,
+    _In_ ULONG64 Argument)
+{
+    struct
+    {
+        ULONG BlobMem;
+        ULONG BlobFlags;
+        ULONG BoHandle;
+        ULONG ResHandle;
+        ULONG64 Size;
+        ULONG Pad;
+        ULONG CmdSize;
+        ULONG64 Cmd;
+        ULONG64 BlobId;
+    } Args;
+    PLX_GPU_REQUEST Request;
+    PLX_GPU_BLOB_MSG Message;
+    PLX_DRM_BO Bo;
+    ULONG Handle;
+    LONG Error;
+
+    if (LxCopyFromUser(&Args, Argument, sizeof(Args)) != 0)
+        return -LX_EFAULT;
+    /* TODO: guest blob memory and blob creation commands */
+    if ((Args.BlobMem != LX_VIRTGPU_BLOB_MEM_HOST3D) || (Args.Size == 0) || (Args.CmdSize != 0) ||
+        (Args.BlobFlags & ~LX_VIRTGPU_BLOB_FLAGS))
+    {
+        return -LX_EINVAL;
+    }
+    if ((ReadNoFence((PLONG)&Drm->CtxId) == 0) || (Drm->Capset != LX_VIRTGPU_CAPSET_VENUS))
+        return -LX_EINVAL;
+    Bo = LxAlloc(sizeof(*Bo));
+    Request = LxGpuRequestAlloc(LX_GPU_BLOB_CREATE, sizeof(LX_GPU_BLOB_MSG));
+    if ((Bo == NULL) || (Request == NULL))
+    {
+        if (Bo != NULL)
+            LxFree(Bo);
+        if (Request != NULL)
+            LxGpuRequestRelease(Request);
+        return -LX_ENOMEM;
+    }
+    RtlZeroMemory(Bo, sizeof(*Bo));
+    Bo->RefCount = 1;
+    Bo->Size = LX_ALIGN_UP(Args.Size, LX_PAGE_SIZE);
+    Bo->Channel = Drm->Channel;
+    Bo->CtxId = Drm->CtxId;
+    Bo->BlobMem = Args.BlobMem;
+    Bo->ResId = (ULONG)InterlockedIncrement(&Drm->Channel->NextResId);
+    Message = (PLX_GPU_BLOB_MSG)Request->Message;
+    Message->CtxId = Drm->CtxId;
+    Message->ResId = Bo->ResId;
+    Message->BlobMem = Args.BlobMem;
+    Message->BlobFlags = Args.BlobFlags;
+    Message->BlobId = Args.BlobId;
+    Message->Size = Args.Size;
+    Error = LxGpuCall(Drm->Channel, Request);
+    if ((Error == 0) && (Request->Section == NULL))
+        Error = -LX_EINVAL;
+    if (Error != 0)
+    {
+        LxGpuRequestRelease(Request);
+        LxFree(Bo);
+        return Error;
+    }
+    Bo->Section = Request->Section;
+    Request->Section = NULL;
+    LxGpuRequestRelease(Request);
+    InterlockedIncrement(&Drm->Channel->RefCount);
+    ExAcquireFastMutex(&Drm->Channel->BoLock);
+    InsertTailList(&Drm->Channel->Bos, &Bo->Link);
+    ExReleaseFastMutex(&Drm->Channel->BoLock);
+    Error = LxDrmHandleAdd(Drm, Bo, &Handle);
+    LxDrmBoRelease(Bo);
+    if (Error != 0)
+        return Error;
+    Args.BoHandle = Handle;
+    Args.ResHandle = Bo->ResId;
+    return (LxCopyToUser(Argument, &Args, sizeof(Args)) != 0) ? -LX_EFAULT : 0;
+}
+
+static
 LONG
 LxDrmCollectBos(
     _In_ PLX_DRM_FILE Drm,
@@ -582,41 +903,100 @@ LxDrmCollectBos(
 }
 
 static
+BOOLEAN
+LxGpuFenceSignaled(
+    _In_ PVOID Context)
+{
+    return ReadNoFence(&((PLX_GPU_FENCE)Context)->Signaled) != 0;
+}
+
+static
+LONG
+LxDrmWaitInFence(
+    _In_ PLX_DRM_FILE Drm,
+    _In_ LONG Fd,
+    _In_ BOOLEAN Global,
+    _In_ ULONG RingIdx)
+{
+    PLX_FILE File = LxFdGet(LxCurrentThread()->Process, Fd);
+    PLX_GPU_FENCE Fence;
+    LONG Error = 0;
+
+    if (File == NULL)
+        return -LX_EINVAL;
+    if (File->Ops != &LxGpuFenceOps)
+    {
+        LxFileDereference(File);
+        return -LX_EINVAL;
+    }
+    Fence = File->Object;
+    if ((Fence->Channel != Drm->Channel) || (Fence->Global != Global) ||
+        (!Global && ((Fence->CtxId != Drm->CtxId) || (Fence->RingIdx != RingIdx))))
+    {
+        while ((Error == 0) && !LxGpuFenceSignaled(Fence))
+            Error = (LONG)LxWaitHead(&Fence->Poll, LxGpuFenceSignaled, Fence, NULL);
+    }
+    LxFileDereference(File);
+    return Error;
+}
+
+static
 LONG64
 LxDrmExecbuffer(
     _In_ PLX_DRM_FILE Drm,
     _In_ ULONG64 Argument)
 {
-    struct
-    {
-        ULONG Flags;
-        ULONG Size;
-        ULONG64 Command;
-        ULONG64 BoHandles;
-        ULONG NumBoHandles;
-        LONG FenceFd;
-        ULONG Rest[8];
-    } Args;
+    LX_DRM_EXECBUFFER_HEAD Args;
     PLX_GPU_REQUEST Request;
     PLX_GPU_SUBMIT_MSG Message;
+    PLX_GPU_FENCE Fence = NULL;
+    PLX_FILE FenceFile = NULL;
     PLX_DRM_BO *Bos;
     PULONG ResIds;
-    ULONG Index;
-    LONG Error;
+    ULONG Index, RingIdx = 0;
+    BOOLEAN Venus;
+    LONG Error, Fd = -1;
 
     if (LxCopyFromUser(&Args, Argument, sizeof(Args)) != 0)
         return -LX_EFAULT;
-    /* TODO: fence fds, rings and syncobjs; Mesa does not use them while the DRM version is 0.0 */
-    if (Args.Flags != 0)
+    /* TODO: syncobjs */
+    if (Args.Flags & ~(LX_VIRTGPU_EXECBUF_FENCE_FD_IN | LX_VIRTGPU_EXECBUF_FENCE_FD_OUT | LX_VIRTGPU_EXECBUF_RING_IDX))
         return -LX_EINVAL;
-    if ((Args.Size == 0) || (Args.Size > LX_DRM_MAX_COMMAND) || (Args.Size & 3) ||
+    Error = LxDrmEnsureContext(Drm);
+    if (Error != 0)
+        return Error;
+    Venus = (Drm->Capset == LX_VIRTGPU_CAPSET_VENUS);
+    if (((Args.Size == 0) && !Venus) || (Args.Size > LX_DRM_MAX_COMMAND) || (Args.Size & 3) ||
         (Args.NumBoHandles > LX_DRM_MAX_BO_HANDLES))
     {
         return -LX_EINVAL;
     }
-    Error = LxDrmEnsureContext(Drm);
-    if (Error != 0)
-        return Error;
+    if (Args.Flags & LX_VIRTGPU_EXECBUF_RING_IDX)
+    {
+        RingIdx = Args.Rest[0];
+        if (RingIdx >= max(Drm->NumRings, 1))
+            return -LX_EINVAL;
+    }
+    if (Args.Flags & LX_VIRTGPU_EXECBUF_FENCE_FD_IN)
+    {
+        Error = LxDrmWaitInFence(Drm, Args.FenceFd, !Venus, RingIdx);
+        if (Error != 0)
+            return Error;
+    }
+    if (Args.Flags & LX_VIRTGPU_EXECBUF_FENCE_FD_OUT)
+    {
+        FenceFile = LxAnonFileCreate(&LxGpuFenceOps, LX_O_RDONLY, "sync_file", sizeof(LX_GPU_FENCE));
+        if (FenceFile == NULL)
+            return -LX_ENOMEM;
+        Fence = FenceFile->Object;
+        RtlZeroMemory(Fence, sizeof(*Fence));
+        LxPollHeadInit(&Fence->Poll);
+        Fence->Channel = Drm->Channel;
+        Fence->CtxId = Drm->CtxId;
+        Fence->RingIdx = RingIdx;
+        Fence->Global = !Venus;
+        InterlockedIncrement(&Drm->Channel->RefCount);
+    }
     Request = LxGpuRequestAlloc(LX_GPU_SUBMIT, sizeof(LX_GPU_SUBMIT_MSG) + Args.NumBoHandles * sizeof(ULONG) + Args.Size);
     Bos = LxAlloc(max(Args.NumBoHandles, 1) * sizeof(PLX_DRM_BO));
     if ((Request == NULL) || (Bos == NULL))
@@ -625,28 +1005,52 @@ LxDrmExecbuffer(
             LxGpuRequestRelease(Request);
         if (Bos != NULL)
             LxFree(Bos);
+        if (FenceFile != NULL)
+            LxFileDereference(FenceFile);
         return -LX_ENOMEM;
     }
     Message = (PLX_GPU_SUBMIT_MSG)Request->Message;
     Message->CtxId = Drm->CtxId;
     Message->Length = Args.Size;
     Message->ResCount = Args.NumBoHandles;
+    Message->RingIdx = RingIdx;
     ResIds = (PULONG)(Message + 1);
     Error = LxDrmCollectBos(Drm, Args.BoHandles, Args.NumBoHandles, Bos, ResIds);
-    if ((Error == 0) && (LxCopyFromUser(ResIds + Args.NumBoHandles, Args.Command, Args.Size) != 0))
+    if ((Error == 0) && (Args.Size != 0) &&
+        (LxCopyFromUser(ResIds + Args.NumBoHandles, Args.Command, Args.Size) != 0))
+    {
         Error = -LX_EFAULT;
+    }
+    if ((Error == 0) && (FenceFile != NULL))
+    {
+        Fd = LxFdInstall(LxCurrentThread()->Process, FenceFile, 0, TRUE);
+        if (Fd < 0)
+            Error = Fd;
+    }
     if (Error == 0)
-        Error = LxGpuSend(Drm->Channel, Request);
+        Error = LxGpuSendFenced(Drm->Channel, Request, Fence);
     for (Index = 0; Index < Args.NumBoHandles; Index++)
     {
         if (Bos[Index] == NULL)
             continue;
-        if (Error == 0)
+        if ((Error == 0) && !Venus)
             InterlockedExchange(&Bos[Index]->Busy, (LONG)Request->Message->Serial);
         LxDrmBoRelease(Bos[Index]);
     }
     LxFree(Bos);
     LxGpuRequestRelease(Request);
+    if (FenceFile != NULL)
+    {
+        if ((Error != 0) && (Fd >= 0))
+            LxFdClose(LxCurrentThread()->Process, Fd);
+        LxFileDereference(FenceFile);
+        if (Error == 0)
+        {
+            Args.FenceFd = Fd;
+            if (LxCopyToUser(Argument, &Args, FIELD_OFFSET(LX_DRM_EXECBUFFER_HEAD, Rest)) != 0)
+                Error = -LX_EFAULT;
+        }
+    }
     return Error;
 }
 
@@ -837,7 +1241,15 @@ LxDrmIoctl(
     ULONG64 Pair[2];
     ULONG Small[4];
     PLX_DRM_BO Bo;
+    BOOLEAN Current;
     LONG Error;
+    KIRQL Irql;
+
+    KeAcquireSpinLock(&Drm->Channel->Lock, &Irql);
+    Current = Drm->Channel->HostAttached && (Drm->Channel->Generation == Drm->Generation);
+    KeReleaseSpinLock(&Drm->Channel->Lock, Irql);
+    if (!Current)
+        return -LX_ENODEV;
 
     switch (Request)
     {
@@ -867,7 +1279,9 @@ LxDrmIoctl(
             {
                 return -LX_EFAULT;
             }
-            Version.Major = Version.Minor = Version.Patch = 0;
+            Version.Major = 0;
+            Version.Minor = 1;
+            Version.Patch = 0;
             Version.NameLength = sizeof(Name) - 1;
             Version.DateLength = sizeof(Date) - 1;
             Version.DescLength = sizeof(Desc) - 1;
@@ -910,7 +1324,25 @@ LxDrmIoctl(
                 return -LX_EFAULT;
             if ((Pair[0] == 0) || (Pair[0] > LX_VIRTGPU_PARAM_MAX))
                 return -LX_EINVAL;
-            Value = ((Pair[0] == LX_VIRTGPU_PARAM_3D_FEATURES) || (Pair[0] == LX_VIRTGPU_PARAM_CAPSET_QUERY_FIX)) ? 1 : 0;
+            switch (Pair[0])
+            {
+                case LX_VIRTGPU_PARAM_3D_FEATURES:
+                case LX_VIRTGPU_PARAM_CAPSET_QUERY_FIX:
+                    Value = 1;
+                    break;
+                case LX_VIRTGPU_PARAM_RESOURCE_BLOB:
+                case LX_VIRTGPU_PARAM_HOST_VISIBLE:
+                case LX_VIRTGPU_PARAM_CONTEXT_INIT:
+                    Value = LxDrmHasVenus(Drm->Channel) ? 1 : 0;
+                    break;
+                case LX_VIRTGPU_PARAM_SUPPORTED_CAPSET_IDS:
+                    Value = (1 << LX_VIRTGPU_CAPSET_VIRGL) | (1 << LX_VIRTGPU_CAPSET_VIRGL2) |
+                            (LxDrmHasVenus(Drm->Channel) ? (1 << LX_VIRTGPU_CAPSET_VENUS) : 0);
+                    break;
+                default:
+                    Value = 0;
+                    break;
+            }
             return (LxCopyToUser(Pair[1], &Value, sizeof(Value)) != 0) ? -LX_EFAULT : 0;
         }
 
@@ -927,9 +1359,16 @@ LxDrmIoctl(
 
             if (LxCopyFromUser(&Caps, Argument, sizeof(Caps)) != 0)
                 return -LX_EFAULT;
+            if (Caps.CapSetId == LX_VIRTGPU_CAPSET_VENUS)
+            {
+                if (!LxDrmHasVenus(Drm->Channel))
+                    return -LX_EINVAL;
+                return (LxCopyToUser(Caps.Address, Drm->Channel->VenusCaps,
+                                     min(Caps.Size, Drm->Channel->VenusCapsLength)) != 0) ? -LX_EFAULT : 0;
+            }
             if ((Caps.CapSetId != LX_VIRTGPU_CAPSET_VIRGL) && (Caps.CapSetId != LX_VIRTGPU_CAPSET_VIRGL2))
                 return -LX_EINVAL;
-            Error = LxDrmFetchCaps(Drm->Channel);
+            Error = LxDrmFetchCaps(Drm->Channel, LX_VIRTGPU_CAPSET_VIRGL2);
             if (Error != 0)
                 return Error;
             return (LxCopyToUser(Caps.Address, Drm->Channel->Caps, min(Caps.Size, Drm->Channel->CapsLength)) != 0) ?
@@ -939,6 +1378,12 @@ LxDrmIoctl(
         case LX_DRM_IOCTL_VIRTGPU_RESOURCE_CREATE:
             return LxDrmResourceCreate(Drm, Argument);
 
+        case LX_DRM_IOCTL_VIRTGPU_RESOURCE_CREATE_BLOB:
+            return LxDrmResourceCreateBlob(Drm, Argument);
+
+        case LX_DRM_IOCTL_VIRTGPU_CONTEXT_INIT:
+            return LxDrmContextInit(Drm, Argument);
+
         case LX_DRM_IOCTL_VIRTGPU_RESOURCE_INFO:
             if (LxCopyFromUser(Small, Argument, sizeof(Small)) != 0)
                 return -LX_EFAULT;
@@ -947,7 +1392,7 @@ LxDrmIoctl(
                 return -LX_ENOENT;
             Small[1] = Bo->ResId;
             Small[2] = (ULONG)Bo->Size;
-            Small[3] = 0;
+            Small[3] = Bo->BlobMem;
             LxDrmBoRelease(Bo);
             return (LxCopyToUser(Argument, Small, sizeof(Small)) != 0) ? -LX_EFAULT : 0;
 
@@ -1050,6 +1495,7 @@ LxDrmOpen(
     PLX_DRM_FILE Drm;
     PLX_FILE File;
     BOOLEAN Attached;
+    ULONG Generation;
     KIRQL Irql;
 
     if ((Minor != 0) && (Minor != 128))
@@ -1059,6 +1505,7 @@ LxDrmOpen(
         return NULL;
     KeAcquireSpinLock(&Channel->Lock, &Irql);
     Attached = Channel->HostAttached;
+    Generation = Channel->Generation;
     KeReleaseSpinLock(&Channel->Lock, Irql);
     Drm = Attached ? LxAlloc(sizeof(*Drm)) : NULL;
     File = (Drm != NULL) ? LxFileAlloc(&LxDrmOps, Flags & (LX_O_ACCMODE | LX_O_NONBLOCK), LX_S_IFCHR) : NULL;
@@ -1071,6 +1518,7 @@ LxDrmOpen(
     }
     RtlZeroMemory(Drm, sizeof(*Drm));
     Drm->Channel = Channel;
+    Drm->Generation = Generation;
     ExInitializeFastMutex(&Drm->Lock);
     File->Object = Drm;
     File->Path = LxStrDup(Path);
@@ -1159,6 +1607,8 @@ LxGpuHostCleanup(
     Channel->HostAttached = FALSE;
     while (!IsListEmpty(&Channel->ToHost))
         InsertTailList(&Purge, RemoveHeadList(&Channel->ToHost));
+    Channel->QueuedBytes = 0;
+    KeSetEvent(&Channel->DrainEvent, IO_NO_INCREMENT, FALSE);
     while (!IsListEmpty(&Channel->Waiting))
         InsertTailList(&Purge, RemoveHeadList(&Channel->Waiting));
     while ((Irp = LxGpuTakePending(Channel)) != NULL)
@@ -1172,6 +1622,7 @@ LxGpuHostCleanup(
     InterlockedExchange(&Channel->Done, (LONG)Channel->NextSerial);
     KeReleaseSpinLock(&Channel->Lock, Irql);
     KeSetEvent(&Channel->DoneEvent, IO_NO_INCREMENT, FALSE);
+    LxGpuSignalFences(Channel, TRUE, FALSE, 0, 0, 0);
     while (!IsListEmpty(&Purge))
     {
         PLX_GPU_REQUEST Request = CONTAINING_RECORD(RemoveHeadList(&Purge), LX_GPU_REQUEST, Link);
@@ -1229,7 +1680,10 @@ LxGpuHostAttach(
     KeAcquireSpinLock(&Channel->Lock, &Irql);
     Busy = Channel->HostAttached;
     if (!Busy)
+    {
         Channel->HostAttached = TRUE;
+        Channel->Generation++;
+    }
     KeReleaseSpinLock(&Channel->Lock, Irql);
     if (Busy)
     {
@@ -1267,6 +1721,8 @@ LxGpuHostReceive(
             return STATUS_BUFFER_OVERFLOW;
         }
         RemoveEntryList(&Request->Link);
+        Channel->QueuedBytes -= Request->Size;
+        KeSetEvent(&Channel->DrainEvent, IO_NO_INCREMENT, FALSE);
         if (Request->Sync)
             InsertTailList(&Channel->Waiting, &Request->Link);
         else
@@ -1327,6 +1783,16 @@ LxGpuHostSend(
             return STATUS_INVALID_PARAMETER;
         InterlockedExchange(&Channel->Done, (LONG)((PLX_GPU_DONE_MSG)Header)->Completed);
         KeSetEvent(&Channel->DoneEvent, IO_NO_INCREMENT, FALSE);
+        LxGpuSignalFences(Channel, FALSE, TRUE, 0, 0, ((PLX_GPU_DONE_MSG)Header)->Completed);
+        return STATUS_SUCCESS;
+    }
+    if (Header->Type == LX_GPU_RING_DONE)
+    {
+        PLX_GPU_RING_DONE_MSG Done = (PLX_GPU_RING_DONE_MSG)Header;
+
+        if (Length < sizeof(LX_GPU_RING_DONE_MSG))
+            return STATUS_INVALID_PARAMETER;
+        LxGpuSignalFences(Channel, FALSE, FALSE, Done->CtxId, Done->RingIdx, (ULONG)Done->FenceId);
         return STATUS_SUCCESS;
     }
     if (Header->Type != LX_GPU_REPLY)
@@ -1349,6 +1815,22 @@ LxGpuHostSend(
     if (Request == NULL)
         return STATUS_NOT_FOUND;
     Request->Status = Header->Status;
+    if ((Request->Message->Type == LX_GPU_BLOB_CREATE) && (Header->Status == 0))
+    {
+        PVOID Section = NULL;
+
+        if ((Length < sizeof(*Header) + sizeof(LX_GPU_BLOB_REPLY)) ||
+            !NT_SUCCESS(ObReferenceObjectByHandle(
+                (HANDLE)(ULONG_PTR)((PLX_GPU_BLOB_REPLY)(Header + 1))->Section, SECTION_MAP_READ | SECTION_MAP_WRITE,
+                MmSectionObjectType, UserMode, &Section, NULL)))
+        {
+            Request->Status = -LX_EINVAL;
+        }
+        else
+        {
+            Request->Section = Section;
+        }
+    }
     if (Length > sizeof(*Header))
     {
         Request->Reply = LxAlloc(Length - sizeof(*Header));

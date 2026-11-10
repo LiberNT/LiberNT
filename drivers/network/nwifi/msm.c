@@ -12,7 +12,10 @@
 
 /* Forward declarations. */
 static VOID NwifiAggregateBssList(_In_ PNWIFI_MSM Msm);
-static NDIS_STATUS NwifiMsmDisconnectLower(_In_ PNWIFI_MSM Msm);
+static NDIS_STATUS NwifiMsmDisconnectLower(_In_ PNWIFI_MSM Msm,
+                                           _In_ NWIFI_NOTIFICATION_CODE Code,
+                                           _In_ NDIS_STATUS Status);
+static KDEFERRED_ROUTINE NwifiMsmHandshakeDpc;
 
 /* ===========================================================================
  *  Small helpers
@@ -76,6 +79,8 @@ NwifiMsmCreate(
     Msm->LinkSpeedKbps = (ULONG)(NWIFI_DEFAULT_LINK_SPEED / 1000ULL);
     KeInitializeSpinLock(&Msm->WorkItemLock);
     KeInitializeEvent(&Msm->WorkItemsDrainedEvent, NotificationEvent, TRUE);
+    KeInitializeTimer(&Msm->HandshakeTimer);
+    KeInitializeDpc(&Msm->HandshakeDpc, NwifiMsmHandshakeDpc, Msm);
 
     Adapter->MsmContext = Msm;
     return NDIS_STATUS_SUCCESS;
@@ -159,6 +164,8 @@ NwifiMsmDestroy(
     KeAcquireSpinLock(&Msm->WorkItemLock, &OldIrql);
     Msm->WorkItemsHalting = 1;
     KeReleaseSpinLock(&Msm->WorkItemLock, OldIrql);
+    KeCancelTimer(&Msm->HandshakeTimer);
+    KeFlushQueuedDpcs();
     NwifiSupplicantStop(Msm);
     KeWaitForSingleObject(&Msm->WorkItemsDrainedEvent,
                           Executive,
@@ -199,6 +206,85 @@ NwifiMsmScanWorker(
     NwifiQueueNotification(Msm->Adapter->InterfaceIndex,
                            NwifiNotifyScanComplete, ScanStatus);
     NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
+}
+
+static
+VOID
+NTAPI
+NwifiMsmHandshakeWorker(
+    _In_opt_ PVOID WorkItemContext,
+    _In_     NDIS_HANDLE NdisIoWorkItemHandle)
+{
+    PNWIFI_MSM Msm = (PNWIFI_MSM)WorkItemContext;
+    BOOLEAN Expired;
+    BOOLEAN Reassociated = FALSE;
+    BOOLEAN Started;
+
+    if (Msm == NULL)
+    {
+        return;
+    }
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Expired = Msm->State == NwifiMsmHandshaking &&
+              Msm->HandshakeDeadline != 0 &&
+              KeQueryInterruptTime() >= Msm->HandshakeDeadline;
+    if (Expired)
+    {
+        Msm->HandshakeDeadline = 0;
+        Msm->State = NwifiMsmIdle;
+        Reassociated = Msm->Reassociating;
+        Msm->Reassociating = FALSE;
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+
+    if (Expired)
+    {
+        Started = NwifiSupplicantKeyExchangeStarted(Msm);
+        DPRINT1("NWIFI: 4-way handshake did not %s within %u ms, disconnecting\n",
+                Started ? "complete" : "start", NWIFI_HANDSHAKE_TIMEOUT_MS);
+        NwifiSupplicantStop(Msm);
+        NwifiMsmDisconnectLower(Msm,
+                                Reassociated ? NwifiNotifyDisconnected : NwifiNotifyConnectComplete,
+                                Started ? NWIFI_STATUS_KEY_SUCCESS_TIMEOUT : NWIFI_STATUS_KEY_START_TIMEOUT);
+    }
+    NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
+}
+
+static
+VOID
+NTAPI
+NwifiMsmHandshakeDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PNWIFI_MSM Msm = (PNWIFI_MSM)DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (Msm != NULL)
+    {
+        NwifiMsmQueueWorkItem(Msm, NwifiMsmHandshakeWorker, Msm);
+    }
+}
+
+static
+VOID
+NwifiMsmStartHandshake(
+    _In_ PNWIFI_MSM Msm)
+{
+    LARGE_INTEGER Due;
+
+    Due.QuadPart = -(LONGLONG)NWIFI_HANDSHAKE_TIMEOUT_MS * 10000;
+    NdisAcquireSpinLock(&Msm->Lock);
+    Msm->State = NwifiMsmHandshaking;
+    Msm->HandshakeDeadline = KeQueryInterruptTime() + (ULONG64)NWIFI_HANDSHAKE_TIMEOUT_MS * 10000;
+    NdisReleaseSpinLock(&Msm->Lock);
+    KeSetTimer(&Msm->HandshakeTimer, Due, &Msm->HandshakeDpc);
 }
 
 /* ===========================================================================
@@ -598,7 +684,7 @@ NwifiMsmConnect(
     if (Connected)
     {
         NwifiSupplicantResetSession(Msm);
-        NwifiMsmDisconnectLower(Msm);
+        NwifiMsmDisconnectLower(Msm, NwifiNotifyDisconnected, NDIS_STATUS_SUCCESS);
     }
 
     NdisAcquireSpinLock(&Msm->Lock);
@@ -749,20 +835,17 @@ NwifiMsmDisconnect(
     _In_ PNWIFI_MSM Msm)
 {
     NwifiSupplicantStop(Msm);
-    return NwifiMsmDisconnectLower(Msm);
+    return NwifiMsmDisconnectLower(Msm, NwifiNotifyDisconnected, NDIS_STATUS_SUCCESS);
 }
 
 static
 NDIS_STATUS
 NwifiMsmDisconnectLower(
-    _In_ PNWIFI_MSM Msm)
+    _In_ PNWIFI_MSM Msm,
+    _In_ NWIFI_NOTIFICATION_CODE Code,
+    _In_ NDIS_STATUS Status)
 {
     PNWIFI_ADAPTER Adapter = Msm->Adapter;
-    NDIS_STATUS Status;
-
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
-                                    OID_DOT11_DISCONNECT_REQUEST,
-                                    NULL, 0, NULL);
 
     NdisAcquireSpinLock(&Msm->Lock);
     Msm->State = NwifiMsmIdle;
@@ -773,9 +856,11 @@ NwifiMsmDisconnectLower(
     NdisReleaseSpinLock(&Adapter->DataLock);
 
     NwifiIndicateLinkState(Adapter, FALSE);
-    NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyDisconnected,
-                           NDIS_STATUS_SUCCESS);
-    return Status;
+    NwifiQueueNotification(Adapter->InterfaceIndex, Code, Status);
+
+    return NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+                                  OID_DOT11_DISCONNECT_REQUEST,
+                                  NULL, 0, NULL);
 }
 
 /* ===========================================================================
@@ -800,11 +885,13 @@ NwifiMsmLinkUp(
         return;
     }
     Msm->State = Secure ? NwifiMsmConnectedSecure : NwifiMsmConnectedOpen;
+    Msm->HandshakeDeadline = 0;
     Reassociated = Msm->Reassociating;
     Msm->Reassociating = FALSE;
     RtlCopyMemory(Bssid, Msm->CurrentBssid, IEEE80211_ADDR_LEN);
     Ssid = Msm->CurrentSsid;
     NdisReleaseSpinLock(&Msm->Lock);
+    KeCancelTimer(&Msm->HandshakeTimer);
 
     NdisAcquireSpinLock(&Adapter->DataLock);
     RtlCopyMemory(Adapter->Bssid, Bssid, IEEE80211_ADDR_LEN);
@@ -957,23 +1044,15 @@ NwifiMsmIndicateStatus(
                             NwifiSupplicantSetAssociation(Msm, P->MacAddr, RequestIes, RequestIeLength);
                         }
 
-                        NdisAcquireSpinLock(&Msm->Lock);
-                        Msm->State = NwifiMsmHandshaking;
-                        NdisReleaseSpinLock(&Msm->Lock);
+                        NwifiMsmStartHandshake(Msm);
                         NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyAuthenticating, NDIS_STATUS_SUCCESS);
                         DPRINT1("NWIFI: associated, awaiting 4-way handshake\n");
                     }
                 }
                 else
                 {
+                    /* One candidate failed; the connection or roaming completion reports the outcome. */
                     DPRINT1("NWIFI: association failed status 0x%08X\n", P->uStatus);
-                    NdisAcquireSpinLock(&Msm->Lock);
-                    Msm->State = NwifiMsmIdle;
-                    NdisReleaseSpinLock(&Msm->Lock);
-                    NwifiSupplicantStop(Msm);
-                    NwifiQueueNotification(Adapter->InterfaceIndex,
-                                           NwifiNotifyConnectComplete,
-                                           NDIS_STATUS_DOT11_ASSOCIATION_COMPLETION);
                 }
             }
             break;
@@ -1003,7 +1082,9 @@ NwifiMsmIndicateStatus(
                     NwifiIndicateLinkState(Adapter, FALSE);
                     NwifiQueueNotification(Adapter->InterfaceIndex,
                                            NwifiNotifyConnectComplete,
-                                           NDIS_STATUS_DOT11_CONNECTION_COMPLETION);
+                                           P->uStatus == DOT11_CONNECTION_STATUS_FAILURE
+                                               ? NDIS_STATUS_DOT11_ASSOCIATION_COMPLETION
+                                               : NDIS_STATUS_DOT11_CONNECTION_COMPLETION);
                 }
                 /* On success the link is brought up by the association
                  * completion (open) or the handshake completion (secure). */

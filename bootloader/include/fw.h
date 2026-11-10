@@ -42,6 +42,12 @@ FwReadBootFile(
     _In_ PCWSTR Path,
     _Out_ PULONG Size);
 
+BOOLEAN
+FwWriteBootFile(
+    _In_ PCWSTR Path,
+    _In_reads_bytes_(Size) const VOID* Data,
+    _In_ ULONG Size);
+
 PVOID
 FwReadDeviceFile(
     _In_ PVOID Device,

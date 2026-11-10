@@ -16,6 +16,9 @@
 #define WINDOWS_NT_KEY L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
 #define ADVANCED_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"
 #define DATA_COLLECTION_KEY L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection"
+#define UPDATE_KEY L"SOFTWARE\\LiberNT\\Update"
+#define UPDATE_REQUEST L"\\$LiberNT.~BT\\upgrade.ini"
+#define UPDATE_INVENTORY L"\\servicing\\LiberNT.files"
 
 static std::wstring
 DriverValue(HKEY key, LPCWSTR name)
@@ -575,4 +578,112 @@ BuildPrivacy(PageBuilder &page)
                         ShowError(host->Window(), ERROR_ACCESS_DENIED);
                 }).Enabled = admin && level != 0;
     page.Text(Str(IDS_DIAGNOSTICS_NOTE));
+}
+
+static std::wstring
+UpdateCheckTime()
+{
+    ULONGLONG value = 0;
+    DWORD size = sizeof(value);
+    FILETIME utc, local;
+    SYSTEMTIME system;
+    WCHAR date[64], time[64];
+
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, UPDATE_KEY, L"LastCheck", RRF_RT_REG_QWORD, NULL, &value, &size) !=
+            ERROR_SUCCESS ||
+        value == 0)
+    {
+        return Str(IDS_UPDATE_NEVER);
+    }
+
+    utc.dwLowDateTime = (DWORD)value;
+    utc.dwHighDateTime = (DWORD)(value >> 32);
+    if (!FileTimeToLocalFileTime(&utc, &local) || !FileTimeToSystemTime(&local, &system) ||
+        !GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &system, NULL, date, _countof(date), NULL) ||
+        !GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &system, NULL, time, _countof(time)))
+    {
+        return Str(IDS_UPDATE_NEVER);
+    }
+    return Printf(L"%s %s", date, time);
+}
+
+static void
+ReadInstalledRelease(std::wstring &version, ULONG &build)
+{
+    WCHAR path[MAX_PATH];
+    CHAR text[512];
+    DWORD read = 0;
+    HANDLE file;
+    PCSTR line, end, number;
+
+    build = 0;
+    version.clear();
+    if (!GetWindowsDirectoryW(path, _countof(path)) || wcscat_s(path, _countof(path), UPDATE_INVENTORY) != 0)
+        return;
+    file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+    if (!ReadFile(file, text, sizeof(text) - 1, &read, NULL))
+        read = 0;
+    CloseHandle(file);
+    text[read] = '\0';
+
+    if (strncmp(text, "; LiberNT ", 10) == 0)
+    {
+        line = text + 10;
+        end = strpbrk(line, "\r\n");
+        version.assign(line, end ? end : line + strlen(line));
+    }
+    number = strstr(text, "\n; Build ");
+    if (number)
+        build = strtoul(number + 10, NULL, 10);
+}
+
+static std::wstring
+StagedUpdate()
+{
+    WCHAR path[MAX_PATH], name[128] = L"";
+
+    if (!GetEnvironmentVariableW(L"SystemDrive", path, MAX_PATH - _countof(UPDATE_REQUEST)) ||
+        wcscat_s(path, _countof(path), UPDATE_REQUEST) != 0 ||
+        GetPrivateProfileIntW(L"Upgrade", L"TagId", 0, path) == 0)
+    {
+        return std::wstring();
+    }
+    GetPrivateProfileStringW(L"Upgrade", L"TagName", L"", name, _countof(name), path);
+    return name;
+}
+
+void
+BuildUpdate(PageBuilder &page)
+{
+    SettingsHost *host = page.Host;
+    std::wstring staged = page.Indexing ? std::wstring() : StagedUpdate();
+    std::wstring version;
+    ULONG build = 0;
+    bool admin = IsAdmin();
+
+    if (!page.Indexing)
+        ReadInstalledRelease(version, build);
+
+    page.Hero(Str(staged.empty() ? IDS_UPDATE_TITLE : IDS_UPDATE_RESTART),
+              staged.empty() ? Format(IDS_UPDATE_LAST_CHECK, page.Indexing ? L"" : UpdateCheckTime().c_str())
+                             : Format(IDS_UPDATE_STAGED, staged.c_str()),
+              L"arrow_sync_circle_20_regular");
+    page.Button(Str(IDS_UPDATE_CHECK), Str(IDS_UPDATE_CHECK_DESC), L"arrow_download_20_regular",
+                Str(staged.empty() ? IDS_UPDATE_CHECK_BUTTON : IDS_UPDATE_OPEN_BUTTON),
+                [](int) { Launch(L"lntupdate.exe"); }).Enabled = admin;
+
+    page.Group(Str(IDS_UPDATE_INSTALLED));
+    page.Info(Str(IDS_UPDATE_VERSION), version.empty() ? Str(IDS_UPDATE_EARLIER) : version, L"info_20_regular");
+    page.Info(Str(IDS_UPDATE_BUILD), build ? Printf(L"%lu", build) : Str(IDS_UPDATE_LOCAL_BUILD));
+
+    page.Group(Str(IDS_UPDATE_OPTIONS));
+    page.Toggle(Str(IDS_UPDATE_AUTOMATIC), Str(IDS_UPDATE_AUTOMATIC_DESC), L"arrow_sync_20_regular",
+                ReadDword(HKEY_LOCAL_MACHINE, UPDATE_KEY, L"Enabled", 1) != 0,
+                [host](int on)
+                {
+                    if (!WriteDword(HKEY_LOCAL_MACHINE, UPDATE_KEY, L"Enabled", on != 0))
+                        ShowError(host->Window(), ERROR_ACCESS_DENIED);
+                }).Enabled = admin;
 }

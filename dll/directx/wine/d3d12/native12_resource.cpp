@@ -855,6 +855,11 @@ HRESULT Native12Resource::InitializePlaced(Native12Heap *parent, UINT64 offset, 
             device->driver_device, NULL, &resource_args, session);
     driver.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizes.Resource ? sizes.Resource : 1);
     if (!driver.pDrvPrivate) return E_OUTOFMEMORY;
+    if (sizes.Heap)
+    {
+        driver_heap.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizes.Heap);
+        if (!driver_heap.pDrvPrivate) return E_OUTOFMEMORY;
+    }
 
     D3D12DDI_CLEAR_VALUES clear = {};
     if (clear_value)
@@ -869,7 +874,7 @@ HRESULT Native12Resource::InitializePlaced(Native12Heap *parent, UINT64 offset, 
     }
     D3D12DDI_HRTRESOURCE runtime = {};
     runtime.handle = identity;
-    HRESULT hr = device->functions.pfnCreateHeapAndResource(device->driver_device, NULL, parent->driver, runtime,
+    HRESULT hr = device->functions.pfnCreateHeapAndResource(device->driver_device, NULL, driver_heap, runtime,
             &resource_args, clear_value ? &clear : NULL, session, driver);
     if (FAILED(hr))
     {

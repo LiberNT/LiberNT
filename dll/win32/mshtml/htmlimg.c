@@ -626,6 +626,8 @@ static void *HTMLImgElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLImgElement, riid))
         return &This->IHTMLImgElement_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -687,6 +689,8 @@ static void HTMLImgElement_init_dispex_info(dispex_data_t *info, compat_mode_t m
     const dispex_hook_t *const img_hooks = img_ie11_hooks + 1;
 
     dispex_info_add_interface(info, IHTMLImgElement_tid, mode >= COMPAT_MODE_IE11 ? img_ie11_hooks : img_hooks);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }

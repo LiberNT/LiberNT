@@ -1807,3 +1807,11 @@ SymbolicName=VIDEO_ENGINE_TIMEOUT_DETECTED
 Language=English
 A display engine failed to respond within the permitted interval.
 .
+
+MessageId=0x1DB
+Severity=Success
+Facility=System
+SymbolicName=IPI_WATCHDOG_TIMEOUT
+Language=English
+A processor remained in an interprocessor interrupt loop beyond the permitted time.
+.

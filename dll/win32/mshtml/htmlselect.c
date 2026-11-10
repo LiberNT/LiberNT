@@ -329,8 +329,25 @@ static const NodeImplVtbl HTMLOptionElementImplVtbl = {
     .get_attr_col          = HTMLElement_get_attr_col,
 };
 
+static HRESULT option_databinding_hook(DispatchEx *dispex, WORD flags, DISPPARAMS *dp, VARIANT *res,
+        EXCEPINFO *ei, IServiceProvider *caller)
+{
+    if(!(flags & DISPATCH_PROPERTYGET) || (dp && dp->cArgs))
+        return S_FALSE;
+
+    V_VT(res) = VT_BSTR;
+    V_BSTR(res) = NULL;
+    return S_OK;
+}
+
 static void HTMLOptionElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 {
+    static const dispex_hook_t databinding_ie9_hooks[] = {
+        {DISPID_IHTMLDATABINDING_DATAFLD,      option_databinding_hook},
+        {DISPID_IHTMLDATABINDING_DATASRC,      option_databinding_hook},
+        {DISPID_IHTMLDATABINDING_DATAFORMATAS, option_databinding_hook},
+        {DISPID_UNKNOWN}
+    };
     static const dispex_hook_t option_hooks[] = {
         {DISPID_IHTMLOPTIONELEMENT_DEFAULTSELECTED, .noattr = TRUE},
         {DISPID_IHTMLOPTIONELEMENT_TEXT,            .noattr = TRUE},
@@ -339,6 +356,8 @@ static void HTMLOptionElement_init_dispex_info(dispex_data_t *info, compat_mode_
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLOptionElement_tid, option_hooks);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, mode >= COMPAT_MODE_IE9 ? databinding_ie9_hooks : NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -1091,6 +1110,8 @@ static void *HTMLSelectElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLSelectElement_iface;
     if(IsEqualGUID(&IID_IWineHTMLSelectPrivate, riid))
         return &This->IWineHTMLSelectPrivate_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -1206,6 +1227,8 @@ static void HTMLSelectElement_init_dispex_info(dispex_data_t *info, compat_mode_
     dispex_info_add_interface(info, IHTMLSelectElement_tid, select_hooks);
     if(mode >= COMPAT_MODE_IE10)
         dispex_info_add_interface(info, IWineHTMLSelectPrivate_tid, NULL);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }

@@ -1,4 +1,6 @@
-
+add_rc_deps(camera.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/lang/en-US.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/lang/ru-RU.rc)
 add_executable(camera camera.c camera.rc)
 set_module_type(camera win32gui UNICODE)
 target_link_libraries(camera mfuuid uuid wine)

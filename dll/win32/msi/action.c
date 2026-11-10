@@ -91,6 +91,23 @@ static void ui_actioninfo(MSIPACKAGE *package, const WCHAR *action, BOOL start, 
     if (!start) package->LastActionResult = rc;
 }
 
+#ifdef __REACTOS__
+static INT action_result(UINT rc)
+{
+    switch (rc)
+    {
+    case ERROR_FUNCTION_NOT_CALLED: return 0;
+    case ERROR_SUCCESS: return 1;
+    case ERROR_INSTALL_USEREXIT: return 2;
+    case ERROR_INSTALL_SUSPEND: return 4;
+    case ERROR_INVALID_HANDLE_STATE: return 6;
+    case ERROR_INVALID_DATA: return 7;
+    case ERROR_INSTALL_ALREADY_RUNNING: return 8;
+    default: return 3;
+    }
+}
+#endif
+
 enum parse_state
 {
     state_whitespace,
@@ -530,7 +547,11 @@ static UINT ACTION_HandleCustomAction(MSIPACKAGE *package, LPCWSTR action)
         return ERROR_INSTALL_USEREXIT;
     ui_actioninfo(package, action, TRUE, 0);
     arc = ACTION_CustomAction(package, action);
+#ifdef __REACTOS__
+    uirc = action_result(arc);
+#else
     uirc = !arc;
+#endif
 
     if (arc == ERROR_FUNCTION_NOT_CALLED && needs_ui_sequence(package))
     {
@@ -5623,7 +5644,11 @@ static UINT ACTION_ExecuteAction(MSIPACKAGE *package)
         rc = ACTION_ProcessExecSequence(package, exec_sequence);
 
         /* Send return value and INSTALLEND. */
+#ifdef __REACTOS__
+        ui_actioninfo(package, action, FALSE, action_result(rc));
+#else
         ui_actioninfo(package, action, FALSE, !rc);
+#endif
         uirow = MSI_CreateRecord(3);
         if (!uirow)
         {
@@ -5633,7 +5658,11 @@ static UINT ACTION_ExecuteAction(MSIPACKAGE *package)
         MSI_RecordSetStringW(uirow, 0, NULL);
         MSI_RecordSetStringW(uirow, 1, productname);
         MSI_RecordSetStringW(uirow, 2, package->ProductCode);
+#ifdef __REACTOS__
+        MSI_RecordSetInteger(uirow, 3, action_result(rc));
+#else
         MSI_RecordSetInteger(uirow, 3, !rc);
+#endif
         MSI_ProcessMessage(package, INSTALLMESSAGE_INSTALLEND, uirow);
         msiobj_release(&uirow->hdr);
     }
@@ -7982,7 +8011,11 @@ static UINT ACTION_HandleStandardAction(MSIPACKAGE *package, LPCWSTR action)
             {
                 ui_actioninfo( package, action, TRUE, 0 );
                 rc = StandardActions[i].handler( package );
+#ifdef __REACTOS__
+                ui_actioninfo( package, action, FALSE, action_result( rc ) );
+#else
                 ui_actioninfo( package, action, FALSE, !rc );
+#endif
 #ifdef __REACTOS__
                 if (rc == ERROR_FUNCTION_NOT_CALLED)
                     rc = ERROR_SUCCESS;
@@ -8083,6 +8116,75 @@ static UINT ACTION_PerformEndAction( MSIPACKAGE *package, const WCHAR *action, U
     return rc;
 }
 
+#ifdef __REACTOS__
+static void enable_shutdown_privilege(void)
+{
+    TOKEN_PRIVILEGES privileges;
+    HANDLE token;
+
+    if (!OpenProcessToken( GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &token ))
+        return;
+    privileges.PrivilegeCount = 1;
+    privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    if (LookupPrivilegeValueW( NULL, L"SeShutdownPrivilege", &privileges.Privileges[0].Luid ))
+        AdjustTokenPrivileges( token, FALSE, &privileges, 0, NULL, NULL );
+    CloseHandle( token );
+}
+
+static UINT restart_after_install( MSIPACKAGE *package, UINT rc )
+{
+    WCHAR *reboot, *prompt, *product;
+    MSIRECORD *record;
+    WCHAR mode, prompt_mode;
+    UINT declined;
+    INT answer = 0;
+    int error;
+
+    reboot = msi_dup_property( package->db, L"REBOOT" );
+    mode = reboot ? towupper( reboot[0] ) : 0;
+    free( reboot );
+
+    if (rc == ERROR_INSTALL_SUSPEND)
+    {
+        if (mode == 'R')
+            return rc;
+        error = MSIERR_RESTARTSUSPENDED;
+        declined = rc;
+    }
+    else if (rc == ERROR_SUCCESS && (package->need_reboot_at_end || mode == 'F'))
+    {
+        if (mode == 'S' || mode == 'R')
+            return ERROR_SUCCESS_REBOOT_REQUIRED;
+        error = MSIERR_RESTARTREQUIRED;
+        declined = ERROR_SUCCESS_REBOOT_REQUIRED;
+    }
+    else
+        return rc;
+
+    prompt = msi_dup_property( package->db, L"REBOOTPROMPT" );
+    prompt_mode = prompt ? towupper( prompt[0] ) : 0;
+    free( prompt );
+    if (prompt_mode != 'S')
+    {
+        if (!(record = MSI_CreateRecord( 2 )))
+            return declined;
+        product = msi_dup_property( package->db, L"ProductName" );
+        MSI_RecordSetInteger( record, 1, error );
+        MSI_RecordSetStringW( record, 2, product );
+        answer = MSI_ProcessMessage( package, INSTALLMESSAGE_USER | MB_YESNO, record );
+        free( product );
+        msiobj_release( &record->hdr );
+    }
+
+    if (answer != 0 && answer != IDYES)
+        return declined;
+    if (!ExitWindowsEx( EWX_REBOOT, SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_INSTALLATION |
+                        SHTDN_REASON_FLAG_PLANNED ))
+        WARN( "restart failed: %lu\n", GetLastError() );
+    return ERROR_SUCCESS_REBOOT_INITIATED;
+}
+#endif
+
 /****************************************************
  * TOP level entry points
  *****************************************************/
@@ -8093,6 +8195,10 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     WCHAR *reinstall = NULL, *productcode, *action;
     UINT rc;
     DWORD len = 0;
+
+#ifdef __REACTOS__
+    enable_shutdown_privilege();
+#endif
 
     if (szPackagePath)
     {
@@ -8225,8 +8331,12 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     }
 #endif
 
+#ifdef __REACTOS__
+    return restart_after_install( package, rc );
+#else
     if (rc == ERROR_SUCCESS && package->need_reboot_at_end)
         return ERROR_SUCCESS_REBOOT_REQUIRED;
 
     return rc;
+#endif
 }

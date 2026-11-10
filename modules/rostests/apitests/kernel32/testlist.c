@@ -3,6 +3,7 @@
 #include <apitest.h>
 
 extern void func_ActCtxWithXmlNamespaces(void);
+extern void func_ActCtxDependencyVersions(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_BaseSetLastNTError(void);
 extern void func_BaseThreadInitThunk(void);
@@ -14,6 +15,7 @@ extern void func_ConsoleInputSignal(void);
 extern void func_ConsoleDbcsCells(void);
 extern void func_ConsoleProcessInheritance(void);
 extern void func_ConsoleVirtualTerminal(void);
+extern void func_CopyContext(void);
 extern void func_CreateAfterMissingName(void);
 extern void func_CreateDirectoryRoot(void);
 extern void func_CreateProcess(void);
@@ -55,6 +57,7 @@ extern void func_IsDBCSLeadByteEx(void);
 extern void func_JapaneseCalendar(void);
 extern void func_JobObject(void);
 extern void func_JobObjectUI(void);
+extern void func_KnownDlls(void);
 extern void func_LCMapString(void);
 extern void func_LoadLibraryExW(void);
 extern void func_LockFileEx(void);
@@ -120,6 +123,7 @@ const struct test winetest_testlist[] =
 {
     { "SetFileAllocationInfo", func_SetFileAllocationInfo },
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
+    { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "BaseSetLastNTError",          func_BaseSetLastNTError },
     { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
@@ -131,6 +135,7 @@ const struct test winetest_testlist[] =
     { "ConsoleDbcsCells",            func_ConsoleDbcsCells },
     { "ConsoleProcessInheritance",   func_ConsoleProcessInheritance },
     { "ConsoleVirtualTerminal",      func_ConsoleVirtualTerminal },
+    { "CopyContext",                 func_CopyContext },
     { "CreateAfterMissingName",      func_CreateAfterMissingName },
     { "CreateDirectoryRoot",         func_CreateDirectoryRoot },
     { "CreateProcess",               func_CreateProcess },
@@ -172,6 +177,7 @@ const struct test winetest_testlist[] =
     { "JapaneseCalendar",            func_JapaneseCalendar },
     { "JobObject",                   func_JobObject },
     { "JobObjectUI",                 func_JobObjectUI },
+    { "KnownDlls",                   func_KnownDlls },
     { "LCMapString",                 func_LCMapString },
     { "LoadLibraryExW",              func_LoadLibraryExW },
     { "LockFileEx",                  func_LockFileEx },

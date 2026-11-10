@@ -304,6 +304,10 @@ HRESULT Function_get_value(script_ctx_t*,jsdisp_t*,jsval_t*);
 struct _function_code_t *Function_get_code(jsdisp_t*);
 
 HRESULT throw_error(script_ctx_t*,HRESULT,const WCHAR*);
+#ifdef __REACTOS__
+HRESULT throw_host_error(script_ctx_t*,HRESULT);
+HRESULT throw_host_object_error(script_ctx_t*,IWineJSDispatchHost*,HRESULT);
+#endif
 jsdisp_t *create_builtin_error(script_ctx_t *ctx);
 void handle_dispatch_exception(script_ctx_t *ctx, EXCEPINFO *ei);
 
@@ -610,6 +614,22 @@ static inline HRESULT disp_call_value(script_ctx_t *ctx, IDispatch *disp, jsval_
 #define JS_E_ARRAYBUFFER_EXPECTED    MAKE_JSERROR(IDS_ARRAYBUFFER_EXPECTED)
 #define JS_E_PROP_DESC_MISMATCH      MAKE_JSERROR(IDS_PROP_DESC_MISMATCH)
 #define JS_E_INVALID_WRITABLE_PROP_DESC MAKE_JSERROR(IDS_INVALID_WRITABLE_PROP_DESC)
+#ifdef __REACTOS__
+#define JS_E_OVERFLOW                MAKE_JSERROR(IDS_OVERFLOW)
+#define JS_E_OUT_OF_MEMORY           MAKE_JSERROR(IDS_OUT_OF_MEMORY)
+#define JS_E_ARRAY_LOCKED            MAKE_JSERROR(IDS_ARRAY_LOCKED)
+#define JS_E_TYPE_MISMATCH           MAKE_JSERROR(IDS_TYPE_MISMATCH)
+#define JS_E_DISK_FULL               MAKE_JSERROR(IDS_DISK_FULL)
+#define JS_E_PERMISSION_DENIED       MAKE_JSERROR(IDS_PERMISSION_DENIED)
+#define JS_E_PATH_NOT_FOUND          MAKE_JSERROR(IDS_PATH_NOT_FOUND)
+#define JS_E_NO_AUTOMATION           MAKE_JSERROR(IDS_NO_AUTOMATION)
+#define JS_E_AUTOMATION_FILE_NOT_FOUND MAKE_JSERROR(IDS_AUTOMATION_FILE_NOT_FOUND)
+#define JS_E_NO_NAMED_ARGS           MAKE_JSERROR(IDS_NO_NAMED_ARGS)
+#define JS_E_NO_LOCALE               MAKE_JSERROR(IDS_NO_LOCALE)
+#define JS_E_NAMED_ARG_NOT_FOUND     MAKE_JSERROR(IDS_NAMED_ARG_NOT_FOUND)
+#define JS_E_WRONG_ARG_COUNT         MAKE_JSERROR(IDS_WRONG_ARG_COUNT)
+#define JS_E_UNSUPPORTED_AUTOMATION_TYPE MAKE_JSERROR(IDS_UNSUPPORTED_AUTOMATION_TYPE)
+#endif
 
 static inline BOOL is_jscript_error(HRESULT hres)
 {

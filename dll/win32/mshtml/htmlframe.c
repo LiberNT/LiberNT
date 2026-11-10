@@ -834,6 +834,8 @@ static void *HTMLFrameElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLFrameElement3, riid))
         return &This->IHTMLFrameElement3_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->framebase.element.IHTMLDatabinding_iface;
 
     return HTMLFrameBase_QI(&This->framebase, riid);
 }
@@ -921,6 +923,8 @@ static void HTMLFrameElement_init_dispex_info(dispex_data_t *info, compat_mode_t
     dispex_info_add_interface(info, IHTMLFrameBase_tid, NULL);
     dispex_info_add_interface(info, IHTMLFrameBase2_tid, base2_hooks);
     dispex_info_add_interface(info, IHTMLFrameElement3_tid, hooks);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -1281,6 +1285,8 @@ static void *HTMLIFrame_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLIFrameElement2_iface;
     if(IsEqualGUID(&IID_IHTMLIFrameElement3, riid))
         return &This->IHTMLIFrameElement3_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->framebase.element.IHTMLDatabinding_iface;
 
     return HTMLFrameBase_QI(&This->framebase, riid);
 }
@@ -1368,6 +1374,8 @@ static void HTMLIFrameElement_init_dispex_info(dispex_data_t *info, compat_mode_
     dispex_info_add_interface(info, IHTMLFrameBase_tid, NULL);
     dispex_info_add_interface(info, IHTMLFrameBase2_tid, base2_hooks);
     dispex_info_add_interface(info, IHTMLIFrameElement3_tid, hooks);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }

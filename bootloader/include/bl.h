@@ -153,10 +153,12 @@ typedef struct _BM_ENTRY
 
 #define BM_FILE_NAME_CHARS 64
 #define BM_STARTUP_OPTION  L"STARTUP="
+#define BM_UNDO_UPDATE_OPTION L"UNDOUPDATE"
 
 typedef struct _BM_STARTUP
 {
     ULONG Profile;
+    BOOLEAN UndoUpdate;
 } BM_STARTUP, *PBM_STARTUP;
 
 typedef struct _OSL_PARAMETERS

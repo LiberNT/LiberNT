@@ -97,6 +97,42 @@ ReferenceFindEmptyRange(
     return Found;
 }
 
+static
+void
+VadRejectsOutOfOrderDescendant(void)
+{
+    MI_VAD_ROOT Invalid;
+    MI_VAD_NODE Nodes[4] = {0};
+
+    MiVadRootInitialize(&Invalid, 0, 200);
+    Invalid.Root = &Nodes[0];
+    Invalid.NodeCount = RTL_NUMBER_OF(Nodes);
+    Nodes[0].StartingVpn = Nodes[0].EndingVpn = 100;
+    Nodes[0].Left = &Nodes[1];
+    Nodes[0].Right = &Nodes[2];
+    Nodes[0].Height = 3;
+    Nodes[0].SubtreeFirstVpn = 50;
+    Nodes[0].SubtreeLastVpn = 150;
+    Nodes[0].MaxGap = ~0ULL - 10;
+    Nodes[1].Parent = &Nodes[0];
+    Nodes[1].StartingVpn = Nodes[1].EndingVpn = 50;
+    Nodes[1].Right = &Nodes[3];
+    Nodes[1].Height = 2;
+    Nodes[1].SubtreeFirstVpn = 50;
+    Nodes[1].SubtreeLastVpn = 110;
+    Nodes[1].MaxGap = 59;
+    Nodes[2].Parent = &Nodes[0];
+    Nodes[2].StartingVpn = Nodes[2].EndingVpn = 150;
+    Nodes[2].Height = 1;
+    Nodes[2].SubtreeFirstVpn = Nodes[2].SubtreeLastVpn = 150;
+    Nodes[3].Parent = &Nodes[1];
+    Nodes[3].StartingVpn = Nodes[3].EndingVpn = 110;
+    Nodes[3].Height = 1;
+    Nodes[3].SubtreeFirstVpn = Nodes[3].SubtreeLastVpn = 110;
+
+    CHECK(MiVadCheck(&Invalid) != 0);
+}
+
 void
 TestVad(void)
 {
@@ -105,6 +141,7 @@ TestVad(void)
     PMI_VAD_NODE Node, Prev;
     ULONG LiveCount = 0;
 
+    VadRejectsOutOfOrderDescendant();
     MiVadRootInitialize(&Tree, 0x10, 0x7FFFFFFF);
 
     for (i = 0; i < 1000; i++)

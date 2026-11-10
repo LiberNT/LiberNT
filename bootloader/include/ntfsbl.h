@@ -37,6 +37,39 @@ NTSTATUS
 NtfsBlCreateDirectory(
     _In_ PCSTR Path);
 
+NTSTATUS
+NtfsBlOpenFile(
+    _In_ PCSTR Path,
+    _Out_ PVOID* File,
+    _Out_opt_ PULONGLONG Size,
+    _Out_opt_ PBOOLEAN IsDirectory);
+
+NTSTATUS
+NtfsBlReadFileAt(
+    _In_ PVOID File,
+    _In_ ULONGLONG Offset,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG Read);
+
+VOID
+NtfsBlCloseFile(
+    _In_opt_ PVOID File);
+
+NTSTATUS
+NtfsBlDeleteFile(
+    _In_ PCSTR Path,
+    _In_ BOOLEAN IsDirectory);
+
+NTSTATUS
+NtfsBlSetDirty(
+    _In_ BOOLEAN Dirty);
+
+NTSTATUS
+NtfsBlQuerySpace(
+    _Out_ PULONGLONG FreeBytes,
+    _Out_ PULONG ClusterSize);
+
 #ifdef __cplusplus
 }
 #endif

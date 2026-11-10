@@ -115,6 +115,14 @@ IDI_FLU_SPK2_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_2
 IDI_FLU_SPKMUTE_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_mute_light.ico"
 IDI_FLU_SPK3_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_3_light.ico"
 IDI_FLU_WIFIWARN_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_warn_light.ico"
+IDI_FLU_WIFI1_LOCK  ICON "../../../dll/shellext/netshell/res/tray/wifi_1_lock.ico"
+IDI_FLU_WIFI2_LOCK  ICON "../../../dll/shellext/netshell/res/tray/wifi_2_lock.ico"
+IDI_FLU_WIFI3_LOCK  ICON "../../../dll/shellext/netshell/res/tray/wifi_3_lock.ico"
+IDI_FLU_WIFI4_LOCK  ICON "../../../dll/shellext/netshell/res/tray/wifi_4_lock.ico"
+IDI_FLU_WIFI1_LOCK_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_1_lock_light.ico"
+IDI_FLU_WIFI2_LOCK_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_2_lock_light.ico"
+IDI_FLU_WIFI3_LOCK_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_3_lock_light.ico"
+IDI_FLU_WIFI4_LOCK_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_4_lock_light.ico"
 
 
 /*******************************************************************************\

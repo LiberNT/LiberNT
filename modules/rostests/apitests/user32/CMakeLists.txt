@@ -29,6 +29,7 @@ list(APPEND SOURCE
     DialogDpiChangeBehavior.c
     DM_REPOSITION.c
     Dpi.c
+    DpiHostingBehavior.c
     DrawIconEx.c
     DrawText.c
     desktop.c
@@ -108,6 +109,7 @@ list(APPEND SOURCE
     WindowDisplayAffinity.c
     WindowRegionFrame.c
     ShellWindowQueries.c
+    ShellWindowZOrder.c
     ShowWindow.c
     SwitchToThisWindow.c
     SystemMenu.c

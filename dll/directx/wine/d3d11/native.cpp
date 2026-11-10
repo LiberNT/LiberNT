@@ -257,7 +257,6 @@ public:
     LONG children = 0;
     LONG multithread_protected = FALSE;
     bool clearing = false;
-    ID3D11SamplerState *default_sampler = NULL;
     ID3D11BlendState *default_blend_state = NULL;
     ID3D11DepthStencilState *default_depth_stencil_state = NULL;
     ID3D11RasterizerState *default_rasterizer_state = NULL;
@@ -320,6 +319,7 @@ public:
     D3D10DDI_HBLENDSTATE default_blend = {};
     D3D10DDI_HDEPTHSTENCILSTATE default_depth = {};
     D3D10DDI_HRASTERIZERSTATE default_rasterizer = {};
+    D3D10DDI_HSAMPLER default_sampler = {};
 
     D3D10DDI_HRTRESOURCE AllocateResourceIdentity()
     {
@@ -373,7 +373,6 @@ public:
     void ChildAddRef() { Retain(); InterlockedIncrement(&children); }
     void ChildRelease() { InterlockedDecrement(&children); MaybeDestroy(); Drop(); }
     void MaybeDestroy();
-    D3D10DDI_HSAMPLER DefaultSamplerHandle();
     HRESULT OpenSharedResourceData(D3DKMT_OPENRESOURCE &open, const NativeSharedResourceData &data, REFIID iid, void **out);
     void Unimplemented(const char *method) { FIXME("Native D3D11 %s is not implemented.\n", method); operation_error = E_NOTIMPL; }
     void BeginCall() { operation_error = removed_reason; }
@@ -2179,6 +2178,14 @@ static HRESULT CreateNativeDefaultState(NativeDevice *device, const Desc &desc,
     return device->operation_error;
 }
 
+static void NativeNormalizeSamplerDesc(D3D11_SAMPLER_DESC *desc)
+{
+    if (!D3D11_DECODE_IS_ANISOTROPIC_FILTER(desc->Filter)) desc->MaxAnisotropy = 0;
+    if (!D3D11_DECODE_IS_COMPARISON_FILTER(desc->Filter)) desc->ComparisonFunc = D3D11_COMPARISON_NEVER;
+    if (desc->AddressU != D3D11_TEXTURE_ADDRESS_BORDER && desc->AddressV != D3D11_TEXTURE_ADDRESS_BORDER
+            && desc->AddressW != D3D11_TEXTURE_ADDRESS_BORDER) memset(desc->BorderColor, 0, sizeof(desc->BorderColor));
+}
+
 HRESULT NativeDevice::InitializeDefaultStates()
 {
     if (!functions.pfnCalcPrivateBlendStateSize || !functions.pfnCreateBlendState
@@ -2222,8 +2229,19 @@ HRESULT NativeDevice::InitializeDefaultStates()
     rasterizer.CullMode = D3D10_DDI_CULL_BACK;
     rasterizer.DepthClipEnable = TRUE;
     D3D10DDI_HRTRASTERIZERSTATE runtime_rasterizer = {&default_rasterizer};
-    return CreateNativeDefaultState(this, rasterizer, default_rasterizer, runtime_rasterizer,
+    hr = CreateNativeDefaultState(this, rasterizer, default_rasterizer, runtime_rasterizer,
             functions.pfnCalcPrivateRasterizerStateSize, functions.pfnCreateRasterizerState);
+    if (FAILED(hr) || !functions.pfnCalcPrivateSamplerSize || !functions.pfnCreateSampler
+            || !functions.pfnDestroySampler) return hr;
+
+    D3D11_SAMPLER_DESC sampler = {D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP,
+            D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_TEXTURE_ADDRESS_CLAMP, 0.0f, 1, D3D11_COMPARISON_NEVER,
+            {1.0f, 1.0f, 1.0f, 1.0f}, -FLT_MAX, FLT_MAX};
+    NativeNormalizeSamplerDesc(&sampler);
+    static_assert(sizeof(sampler) == sizeof(D3D10_DDI_SAMPLER_DESC), "Sampler descriptor ABI");
+    D3D10DDI_HRTSAMPLER runtime_sampler = {&default_sampler};
+    return CreateNativeDefaultState(this, *reinterpret_cast<const D3D10_DDI_SAMPLER_DESC *>(&sampler),
+            default_sampler, runtime_sampler, functions.pfnCalcPrivateSamplerSize, functions.pfnCreateSampler);
 }
 
 HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_flags,
@@ -2526,6 +2544,17 @@ NativeDevice::~NativeDevice()
         functions.pfnDestroyRasterizerState(driver_device, default_rasterizer);
         HeapFree(GetProcessHeap(), 0, default_rasterizer.pDrvPrivate);
     }
+    if (default_sampler.pDrvPrivate)
+    {
+        const D3D10DDI_HSAMPLER empty[D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
+        const PFND3D10DDI_SETSAMPLERS set[] = {functions.pfnVsSetSamplers, functions.pfnPsSetSamplers,
+                functions.pfnGsSetSamplers, functions.pfnHsSetSamplers, functions.pfnDsSetSamplers,
+                functions.pfnCsSetSamplers};
+        for (UINT stage = 0; stage < ARRAYSIZE(set); ++stage)
+            if (set[stage]) set[stage](driver_device, 0, ARRAYSIZE(empty), empty);
+        functions.pfnDestroySampler(driver_device, default_sampler);
+        HeapFree(GetProcessHeap(), 0, default_sampler.pDrvPrivate);
+    }
     if (driver_created && functions.pfnDestroyDevice) functions.pfnDestroyDevice(driver_device);
     if (runtime_device && destroy_callbacks)
     {
@@ -2614,12 +2643,6 @@ void NativeDevice::MaybeDestroy()
         context->ReleaseContextState();
     }
     clearing = false;
-    if (default_sampler)
-    {
-        NativeSampler *state = static_cast<NativeSampler *>(default_sampler);
-        default_sampler = NULL;
-        state->Drop();
-    }
     NativeDropDefault(default_blend_state);
     NativeDropDefault(default_depth_stencil_state);
     NativeDropDefault(default_rasterizer_state);
@@ -4929,6 +4952,16 @@ void STDMETHODCALLTYPE NativeContext::CopyResource(ID3D11Resource *dst, ID3D11Re
 }
 
 /* Copies into 4:2:0 planar textures are ignored unless every box edge and the destination are even. */
+static bool NativeBoxInside(const NativeTextureInfo *texture, UINT subresource, const D3D11_BOX *box)
+{
+    if (!box) return true;
+    UINT level = subresource % texture->desc.MipLevels, edge = NativeBlockEdge(texture->desc.Format);
+    UINT width = max(1u, texture->desc.Width >> level), height = max(1u, texture->desc.Height >> level);
+    width = (width + edge - 1) / edge * edge;
+    height = (height + edge - 1) / edge * edge;
+    return box->right <= width && box->bottom <= height && box->back <= max(1u, texture->depth >> level);
+}
+
 static bool NativeChromaRegionAligned(DXGI_FORMAT format, const D3D11_BOX *box, UINT x, UINT y)
 {
     /* TODO: the alignment rule for P010, P016 and the other subsampled formats */
@@ -4949,6 +4982,7 @@ void STDMETHODCALLTYPE NativeContext::CopySubresourceRegion(ID3D11Resource *dst,
         Record([=](NativeContext *context) { context->CopySubresourceRegion(destination.Get(), dst_subresource, x, y, z, source.Get(), src_subresource, region.Data()); });
         return;
     }
+    if (box && (box->left >= box->right || box->top >= box->bottom || box->front >= box->back)) return;
 
     if (NativeBuffer *db = GetNativeBuffer(dst, device))
     {
@@ -5056,7 +5090,8 @@ void STDMETHODCALLTYPE NativeContext::UpdateSubresource(ID3D11Resource *resource
     NativeTextureInfo *texture = GetNativeTexture(resource, device, &info);
     if (!texture || !data || texture->desc.Usage != D3D11_USAGE_DEFAULT
             || subresource >= texture->desc.MipLevels * texture->desc.ArraySize) return;
-    if (!NativeChromaRegionAligned(texture->desc.Format, box, 0, 0)) return;
+    /* FIXME: an update box past the subresource is dropped; Windows 11 behaviour (drop or clip) is unmeasured */
+    if (!NativeChromaRegionAligned(texture->desc.Format, box, 0, 0) || !NativeBoxInside(texture, subresource, box)) return;
     NativeLock guard(device);
     NativeWaitPendingRelease(resource, device);
     device->functions.pfnResourceUpdateSubresourceUP(device->driver_device, texture->handle,
@@ -5298,10 +5333,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateSamplerState(const D3D11_SAMPLER_D
     if (!functions.pfnCalcPrivateSamplerSize || !functions.pfnCreateSampler || !functions.pfnDestroySampler)
         return E_NOTIMPL;
     D3D11_SAMPLER_DESC desc = *input;
-    if (!D3D11_DECODE_IS_ANISOTROPIC_FILTER(desc.Filter)) desc.MaxAnisotropy = 0;
-    if (!D3D11_DECODE_IS_COMPARISON_FILTER(desc.Filter)) desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    if (desc.AddressU != D3D11_TEXTURE_ADDRESS_BORDER && desc.AddressV != D3D11_TEXTURE_ADDRESS_BORDER
-            && desc.AddressW != D3D11_TEXTURE_ADDRESS_BORDER) memset(desc.BorderColor, 0, sizeof(desc.BorderColor));
+    NativeNormalizeSamplerDesc(&desc);
     if (!out) return S_FALSE;
     NativeLock guard(this);
     if ((*out = NativeFindState<ID3D11SamplerState>(this, NativeSamplerKind, desc))) return S_OK;
@@ -5323,24 +5355,6 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateSamplerState(const D3D11_SAMPLER_D
     state->cache_entry.Insert(NativeStateBucket(this, NativeSamplerKind, desc), state, &state->desc, sizeof(desc));
     *out = state;
     return S_OK;
-}
-
-D3D10DDI_HSAMPLER NativeDevice::DefaultSamplerHandle()
-{
-    static const D3D11_SAMPLER_DESC desc = {D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP,
-            D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_TEXTURE_ADDRESS_CLAMP, 0.0f, 1, D3D11_COMPARISON_NEVER,
-            {1.0f, 1.0f, 1.0f, 1.0f}, -FLT_MAX, FLT_MAX};
-    D3D10DDI_HSAMPLER handle = {};
-    ID3D11SamplerState *state = NULL;
-
-    if (!default_sampler && !clearing && SUCCEEDED(CreateSamplerState(&desc, &state)))
-    {
-        static_cast<NativeSampler *>(state)->Retain();
-        default_sampler = state;
-        state->Release();
-    }
-    if (default_sampler) handle = static_cast<NativeSampler *>(default_sampler)->handle;
-    return handle;
 }
 
 HRESULT STDMETHODCALLTYPE NativeDevice::CreateBlendState(const D3D11_BLEND_DESC *input, ID3D11BlendState **out)
@@ -6397,7 +6411,7 @@ void NativeContext::SetSamplers(UINT stage, UINT start, UINT count, ID3D11Sample
     }
     if (!deferred)
     {
-        for (UINT i = 0; i < count; ++i) if (!states[i]) handles[i] = device->DefaultSamplerHandle();
+        for (UINT i = 0; i < count; ++i) if (!states[i]) handles[i] = device->default_sampler;
         set(device->driver_device, start, count, handles);
     }
     for (UINT i = 0; i < count; ++i) ReplaceObject(samplers[stage][start + i], states[i]);

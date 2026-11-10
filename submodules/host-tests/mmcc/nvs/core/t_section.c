@@ -8,7 +8,7 @@
  */
 
 #include "mmharness.h"
-#include <nvs/include/misys.h>
+#include <mm/include/misys.h>
 
 #define KB64 0x10000ULL
 
@@ -273,6 +273,63 @@ SectionUnmapBatch(void)
         World.Machine.Fault = Fault;
         CHECK(MiPtCheck(&Space) == 0);
     }
+    for (Cpu = 1; Cpu < 4; Cpu++)
+        WorldAttach(&World, Cpu, NULL);
+    SpaceDestroy(&World, 0, &Space);
+    MiSegmentDereference(Segment);
+    WorldExpectClean(&World, 256);
+    FileDestroy(&File);
+    WorldDestroy(&World);
+}
+
+static
+void
+SectionFullUnmapBatches(void)
+{
+    TEST_WORLD World;
+    TEST_FILE File;
+    MI_ADDRESS_SPACE Space;
+    PMI_SEGMENT Segment;
+    ULONG64 Base = 0x40000000;
+    LONG64 Invalidations;
+    ULONG Cpu, Page;
+    NTSTATUS Status;
+    MACHINE_FAULT_ROUTINE Fault;
+
+    WorldCreate(&World, 256, 4, 100000);
+    World.Machine.StrictTlb = TRUE;
+    FileCreate(&File, 4 * KB64);
+    SpaceCreate(&World, 0, &Space);
+    for (Cpu = 1; Cpu < 4; Cpu++)
+        WorldAttach(&World, Cpu, &Space);
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, 4 * KB64, MI_PROT_READWRITE,
+                                     &TestFileOps, &File, NULL, 0, &Segment)));
+    CHECK(NT_SUCCESS(Map(&Space, Segment, &Base, 0, 4 * KB64, MI_PROT_READONLY)));
+    for (Page = 0; Page < 64; Page++)
+    {
+        for (Cpu = 0; Cpu < 4; Cpu++)
+        {
+            CHECK(UserRead64(&World, Cpu, Base + (ULONG64)Page * PAGE_SIZE, &Status) ==
+                  *(ULONG64 *)(File.Data + (ULONG64)Page * PAGE_SIZE));
+            CHECK(NT_SUCCESS(Status));
+        }
+    }
+    Invalidations = World.Machine.TlbInvalidations;
+    CHECK(NT_SUCCESS(MiUnmapView(&Space, Base)));
+    CHECK(World.Machine.TlbInvalidations == Invalidations + 2);
+    CHECK(Space.ResidentPages == 0 && Space.PrivatePages == 0 && Segment->MappedViews == 0);
+    Fault = World.Machine.Fault;
+    World.Machine.Fault = NULL;
+    for (Page = 0; Page < 64; Page++)
+    {
+        for (Cpu = 0; Cpu < 4; Cpu++)
+        {
+            UserRead64(&World, Cpu, Base + (ULONG64)Page * PAGE_SIZE, &Status);
+            CHECK(Status == STATUS_ACCESS_VIOLATION);
+        }
+    }
+    World.Machine.Fault = Fault;
+    CHECK(MiPtCheck(&Space) == 0);
     for (Cpu = 1; Cpu < 4; Cpu++)
         WorldAttach(&World, Cpu, NULL);
     SpaceDestroy(&World, 0, &Space);
@@ -1810,6 +1867,7 @@ TestSection(void)
     SectionVadCache();
     SectionConcurrentChurn();
     SectionUnmapBatch();
+    SectionFullUnmapBatches();
     SectionSharedDataFile();
     SectionSparseDataFile();
     SectionPageFileBacked();

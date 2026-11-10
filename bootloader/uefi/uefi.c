@@ -485,6 +485,45 @@ FwReadBootFile(
 }
 
 BOOLEAN
+FwWriteBootFile(
+    _In_ PCWSTR Path,
+    _In_reads_bytes_(Size) const VOID* Data,
+    _In_ ULONG Size)
+{
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystem;
+    EFI_FILE_PROTOCOL* Root;
+    EFI_FILE_PROTOCOL* File;
+    EFI_HANDLE Device = FwGetBootDeviceHandle();
+    UINTN Length = Size;
+    BOOLEAN Written = FALSE;
+
+    if (!Device ||
+        EFI_ERROR(BootServices->HandleProtocol(Device, &FwFileSystemGuid, (VOID**)&FileSystem)) ||
+        EFI_ERROR(FileSystem->OpenVolume(FileSystem, &Root)))
+    {
+        return FALSE;
+    }
+
+    if (!EFI_ERROR(Root->Open(Root, &File, (CHAR16*)Path, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE, 0)))
+        File->Delete(File);
+
+    if (!EFI_ERROR(Root->Open(Root,
+                              &File,
+                              (CHAR16*)Path,
+                              EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
+                              0)))
+    {
+        Written = !EFI_ERROR(File->Write(File, &Length, (VOID*)Data)) && Length == Size &&
+                  !EFI_ERROR(File->Flush(File));
+        File->Close(File);
+    }
+
+    Root->Close(Root);
+    return Written;
+}
+
+BOOLEAN
 FwScanFileVolumes(
     _In_ PCWSTR Path,
     _Inout_ PFW_VOLUME_SCAN Scan,

@@ -1,6 +1,6 @@
 
 add_definitions(-D__WINESRC__ -D_UXTHEME_)
-include_directories(${REACTOS_SOURCE_DIR}/win32ss/include)
+include_directories(${REACTOS_SOURCE_DIR}/subsystems/win/win32k/include)
 
 spec2def(uxtheme.dll uxtheme.spec ADD_IMPORTLIB)
 

@@ -70,6 +70,8 @@ struct _LX_TMPFS_INODE
     BOOLEAN Mapped;
     ULONG64 SquashInode;
     volatile LONG SquashPending;
+    PVOID Private;
+    PLX_TMPFS_PRIVATE_RELEASE PrivateRelease;
 };
 
 struct _LX_TMPFS
@@ -273,6 +275,8 @@ LxTmpfsInodeFree(
     LxTmpfsStoreDereference(Inode->Store);
     LxFree(Inode->LinkTarget);
     LxFree(Inode->Xattr);
+    if (Inode->PrivateRelease != NULL)
+        Inode->PrivateRelease(Inode->Private);
     InterlockedDecrement(&Inode->Fs->Inodes);
     LxFree(Inode);
 }
@@ -663,17 +667,26 @@ LxTmpfsSquashAdd(
     LX_SQUASHFS_INODE Info;
     PLX_TMPFS_DIRENT Entry;
     PSTR Target = NULL;
+    PUCHAR Xattr = NULL;
+    ULONG XattrLength = 0;
     LONG Error;
 
     Error = LxSquashfsReadInode(Directory->Fs->Squash, Reference, &Info);
     if ((Error == 0) && ((Info.Mode & LX_S_IFMT) == LX_S_IFLNK))
         Error = LxSquashfsReadLink(Directory->Fs->Squash, &Info, &Target);
     if (Error == 0)
+        Error = LxSquashfsReadXattrs(Directory->Fs->Squash, &Info, &Xattr, &XattrLength);
+    if (Error == 0)
         Error = LxTmpfsInodeCreate(Directory->Fs, Info.Mode, Info.Uid, Info.Gid, Info.Device, Target, &Inode);
     LxFree(Target);
     if (Error != 0)
+    {
+        LxFree(Xattr);
         return Error;
+    }
     LxTmpfsSquashApply(Inode, Reference, &Info);
+    Inode->Xattr = Xattr;
+    Inode->XattrLength = XattrLength;
     Entry = LxTmpfsDirentAllocate(Name, Length);
     if (Entry == NULL)
     {
@@ -763,6 +776,8 @@ LxTmpfsCreateSquashfs(
     LX_SQUASHFS_INODE Info;
     ULONG64 Root = LxSquashfsRoot(Squash);
     PLX_TMPFS Fs;
+    PUCHAR Xattr = NULL;
+    ULONG XattrLength = 0;
     LONG Error;
 
     *Result = NULL;
@@ -771,12 +786,20 @@ LxTmpfsCreateSquashfs(
         return Error;
     if ((Info.Mode & LX_S_IFMT) != LX_S_IFDIR)
         return -LX_EINVAL;
+    Error = LxSquashfsReadXattrs(Squash, &Info, &Xattr, &XattrLength);
+    if (Error != 0)
+        return Error;
     Fs = LxTmpfsCreate(Info.Mode & 07777);
     if (Fs == NULL)
+    {
+        LxFree(Xattr);
         return -LX_ENOMEM;
+    }
     Fs->Limit = MAXULONG64;
     Fs->InodeLimit = MAXLONG;
     LxTmpfsSquashApply(Fs->Root, Root, &Info);
+    Fs->Root->Xattr = Xattr;
+    Fs->Root->XattrLength = XattrLength;
     Fs->Squash = Squash;
     Fs->SquashMounted = 1;
     *Result = Fs;
@@ -1548,6 +1571,42 @@ LxTmpfsXattrRead(
         RtlCopyMemory(Buffer, Inode->Xattr, *Length);
     LxTmpfsUnlock(Inode->Fs);
     return 0;
+}
+
+LONG
+LxTmpfsSetPrivate(
+    _In_ PLX_TMPFS_INODE Inode,
+    _In_ PVOID Object,
+    _In_ PLX_TMPFS_PRIVATE_RELEASE Release)
+{
+    LONG Error = 0;
+
+    LxTmpfsLockExclusive(Inode->Fs);
+    if (Inode->PrivateRelease != NULL)
+    {
+        Error = -LX_EEXIST;
+    }
+    else
+    {
+        Inode->Private = Object;
+        Inode->PrivateRelease = Release;
+    }
+    LxTmpfsUnlock(Inode->Fs);
+    return Error;
+}
+
+PVOID
+LxTmpfsGetPrivate(
+    _In_ PLX_TMPFS_INODE Inode,
+    _In_ PLX_TMPFS_PRIVATE_RELEASE Release)
+{
+    PVOID Object = NULL;
+
+    LxTmpfsLockShared(Inode->Fs);
+    if (Inode->PrivateRelease == Release)
+        Object = Inode->Private;
+    LxTmpfsUnlock(Inode->Fs);
+    return Object;
 }
 
 LONG

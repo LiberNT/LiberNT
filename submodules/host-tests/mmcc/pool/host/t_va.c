@@ -64,12 +64,16 @@ TestVa(void)
 
     Meta = PoolVaAllocateMetadata(&Region, 100);
     CHECK(Meta != NULL && ((ULONG_PTR)Meta % POOL_CACHE_ALIGNMENT) == 0);
-    memset(Meta, 0x11, 100);
+    if (Meta != NULL)
+        memset(Meta, 0x11, 100);
     Meta = PoolVaAllocateMetadata(&Region, 3 * POOL_UNIT_SIZE / 2);
     CHECK(Meta != NULL);
-    memset(Meta, 0x22, 3 * POOL_UNIT_SIZE / 2);
-    CHECK(PoolVaUnit(&Region, Meta)->State == PoolUnitMetadata ||
-          PoolVaUnit(&Region, Meta)->State == PoolUnitTail);
+    if (Meta != NULL)
+    {
+        memset(Meta, 0x22, 3 * POOL_UNIT_SIZE / 2);
+        CHECK(PoolVaUnit(&Region, Meta)->State == PoolUnitMetadata ||
+              PoolVaUnit(&Region, Meta)->State == PoolUnitTail);
+    }
 
     ArenaFailAfter(&Arena, 0);
     CHECK(PoolVaAllocateMetadata(&Region, 4 * POOL_UNIT_SIZE) == NULL);
@@ -77,5 +81,16 @@ TestVa(void)
 
     CHECK(Region.CommittedPages == Arena.CommittedPages);
     CHECK(Arena.Errors == 0);
+    {
+        ULONG_PTR OldNext = Region.MetadataNext;
+        ULONG_PTR OldCommitted = Region.MetadataCommitted;
+        ULONG_PTR OldEnd = Region.MetadataEnd;
+        SIZE_T OldUnits = Region.UnitsInUse;
+
+        CHECK(PoolVaAllocateMetadata(&Region, (SIZE_T)-POOL_CACHE_ALIGNMENT) == NULL);
+        CHECK(PoolVaAllocateMetadata(&Region, (SIZE_T)-1) == NULL);
+        CHECK(Region.MetadataNext == OldNext && Region.MetadataCommitted == OldCommitted &&
+              Region.MetadataEnd == OldEnd && Region.UnitsInUse == OldUnits);
+    }
     ArenaDestroy(&Arena);
 }

@@ -26,6 +26,8 @@ add_executable(dxgi_apitest
     shared_dimensions.cpp
     keyedmutex_kill.cpp
     d3d10_bindings.cpp
+    d3d10_create.cpp
+    copy_regions.cpp
     adapter_outputs.cpp
     counters.cpp
     query_order.cpp
@@ -35,6 +37,7 @@ add_executable(dxgi_apitest
     wait_vblank.cpp
     dwm_render.cpp
     viewport_levels.cpp
+    sampler_default.cpp
     testlist.c)
 
 target_include_directories(dxgi_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/system/dwm)

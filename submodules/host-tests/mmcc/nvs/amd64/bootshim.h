@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include <nvs/include/mienv.h>
+#include <mm/include/mienv.h>
 
 typedef enum _TYPE_OF_MEMORY
 {

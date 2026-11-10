@@ -16,7 +16,12 @@
 #include <string.h>
 #include <virglrenderer.h>
 #include <virgl_hw.h>
+#include <vkr_renderer.h>
 #include "lxgpu.h"
+
+#define LX_ATTACH_RETRIES 100
+#define LX_ATTACH_RETRY_MS 100
+#define LX_RECEIVE_BUFFER (288 * 1024)
 
 struct iovec
 {
@@ -42,6 +47,24 @@ typedef struct _LX_ATTACHMENT
 
 BOOL WINAPI epoxy_dll_main(HINSTANCE Instance, DWORD Reason, LPVOID Reserved);
 
+static LONG LxEpoxyReady;
+
+static
+VOID
+NTAPI
+LxThreadNotify(PVOID Module, DWORD Reason, PVOID Reserved)
+{
+    if (((Reason == DLL_THREAD_ATTACH) || (Reason == DLL_THREAD_DETACH)) &&
+        (InterlockedCompareExchange(&LxEpoxyReady, 0, 0) != 0))
+    {
+        epoxy_dll_main((HINSTANCE)Module, Reason, Reserved);
+    }
+}
+
+/* the statically linked libepoxy gets the thread notifications its DllMain would get (GL on renderer threads) */
+__attribute__((section(".CRT$XLF"), used)) static const PIMAGE_TLS_CALLBACK LxThreadCallback = LxThreadNotify;
+void *lxgpu_vulkan_loader(void);
+
 static HANDLE LxDevice;
 static HDC LxDc;
 static HGLRC LxRootContext;
@@ -49,8 +72,12 @@ static PFNWGLCREATECONTEXTATTRIBSARBPROC LxCreateContextAttribs;
 static LX_RESOURCE *LxResources;
 static LX_ATTACHMENT *LxAttachments;
 static LONG LxPendingFences;
+static HANDLE LxPollEvent;
 static FILE *LxLog;
 static BOOL LxVerbose;
+static BOOL LxVenus;
+static PUCHAR LxVenusContexts;
+static ULONG LxVenusContextCount;
 
 static
 void
@@ -109,7 +136,7 @@ LxWriteFence(void *Cookie, uint32_t Fence)
     LX_GPU_DONE_MSG Done = { { LX_GPU_DONE, sizeof(Done), 0, 0 }, Fence, 0 };
 
     (void)Cookie;
-    if (LxPendingFences > 0)
+    if ((LxPollEvent == NULL) && (LxPendingFences > 0))
         LxPendingFences--;
     if (LxVerbose)
         LxTrace("fence %u done\n", Fence);
@@ -140,9 +167,17 @@ static
 int
 LxMakeCurrent(void *Cookie, int Scanout, virgl_renderer_gl_context Context)
 {
+    static BOOL (WINAPI *MakeCurrent)(HDC, HGLRC);
+    BOOL Ok;
+
     (void)Cookie;
     (void)Scanout;
-    return wglMakeCurrent(LxDc, (HGLRC)Context) ? 0 : -1;
+    /* epoxy's own wrapper dispatches through the calling thread's table, still empty on a new thread */
+    if (MakeCurrent == NULL)
+        MakeCurrent = (BOOL (WINAPI *)(HDC, HGLRC))GetProcAddress(GetModuleHandleW(L"opengl32.dll"), "wglMakeCurrent");
+    Ok = (MakeCurrent != NULL) && MakeCurrent(LxDc, (HGLRC)Context);
+    epoxy_handle_external_wglMakeCurrent();
+    return Ok ? 0 : -1;
 }
 
 static
@@ -151,6 +186,94 @@ LxVirglLog(enum virgl_log_level_flags Level, const char *Message, void *Data)
 {
     (void)Data;
     LxTrace("virgl[%d]: %s", (int)Level, Message);
+}
+
+static
+void
+LxRetireFence(uint32_t CtxId, uint32_t RingIdx, uint64_t FenceId)
+{
+    LX_GPU_RING_DONE_MSG Done = { { LX_GPU_RING_DONE, sizeof(Done), 0, 0 }, CtxId, RingIdx, FenceId };
+
+    if (LxVerbose)
+        LxTrace("ring fence ctx %u ring %u id %llu done\n", CtxId, RingIdx, (unsigned long long)FenceId);
+    LxSend(&Done, sizeof(Done));
+}
+
+static
+BOOL
+LxIsVenusContext(ULONG CtxId)
+{
+    return (CtxId < LxVenusContextCount) && LxVenusContexts[CtxId];
+}
+
+static
+BOOL
+LxSetVenusContext(ULONG CtxId, BOOL Venus)
+{
+    if (CtxId >= LxVenusContextCount)
+    {
+        ULONG Count = max(CtxId + 1, LxVenusContextCount * 2);
+        PUCHAR Contexts = realloc(LxVenusContexts, Count);
+
+        if (Contexts == NULL)
+            return FALSE;
+        memset(Contexts + LxVenusContextCount, 0, Count - LxVenusContextCount);
+        LxVenusContexts = Contexts;
+        LxVenusContextCount = Count;
+    }
+    LxVenusContexts[CtxId] = (UCHAR)Venus;
+    return TRUE;
+}
+
+static
+BOOL
+LxInitializeVenus(void)
+{
+    static const struct vkr_renderer_callbacks Callbacks = { LxVirglLog, LxRetireFence };
+
+    if (lxgpu_vulkan_loader() == NULL)
+    {
+        LxTrace("no Vulkan loader, venus disabled\n");
+        return FALSE;
+    }
+    return vkr_renderer_init(VKR_RENDERER_THREAD_SYNC | VKR_RENDERER_ASYNC_FENCE_CB, &Callbacks);
+}
+
+static
+void
+LxCreateBlob(PLX_GPU_BLOB_MSG Message)
+{
+    LX_GPU_BLOB_REPLY Blob = { 0 };
+    enum virgl_resource_fd_type FdType;
+    struct virgl_resource_vulkan_info VulkanInfo;
+    uint32_t MapInfo = 0;
+    int Fd = -1;
+    BOOL Created = FALSE;
+
+    if (LxIsVenusContext(Message->CtxId))
+    {
+        Created = vkr_renderer_create_resource(Message->CtxId, Message->ResId, Message->BlobId, Message->Size,
+                                               Message->BlobFlags, &FdType, &Fd, &MapInfo, &VulkanInfo);
+    }
+    if (Created && (Fd < 0))
+    {
+        vkr_renderer_destroy_resource(Message->CtxId, Message->ResId);
+        Created = FALSE;
+    }
+    if (LxVerbose || !Created)
+    {
+        LxTrace("blob ctx %u res %u id %llu size %llu flags %x -> %d\n", Message->CtxId, Message->ResId,
+                (unsigned long long)Message->BlobId, (unsigned long long)Message->Size, Message->BlobFlags, Created);
+    }
+    if (!Created)
+    {
+        LxReply(Message->Header.Serial, -22, NULL, 0);
+        return;
+    }
+    Blob.Section = (ULONG64)(LONG_PTR)Fd;
+    Blob.MapInfo = MapInfo;
+    LxReply(Message->Header.Serial, 0, &Blob, sizeof(Blob));
+    CloseHandle((HANDLE)(LONG_PTR)Fd);
 }
 
 static
@@ -168,6 +291,7 @@ LxInitializeRenderer(void)
     WNDCLASSW Class = { 0 };
     HGLRC Legacy;
     HWND Window;
+    int PollFd;
 
     Class.lpfnWndProc = DefWindowProcW;
     Class.hInstance = GetModuleHandleW(NULL);
@@ -191,7 +315,14 @@ LxInitializeRenderer(void)
     wglMakeCurrent(LxDc, LxRootContext);
     LxTrace("GL %s / %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
     virgl_set_log_callback(LxVirglLog, NULL, NULL);
-    return virgl_renderer_init(&LxDc, 0, &Callbacks) == 0;
+    if (virgl_renderer_init(&LxDc, VIRGL_RENDERER_THREAD_SYNC | VIRGL_RENDERER_ASYNC_FENCE_CB, &Callbacks) != 0)
+        return FALSE;
+    PollFd = virgl_renderer_get_poll_fd();
+    LxPollEvent = (PollFd >= 0) ? (HANDLE)(intptr_t)PollFd : NULL;
+    LxTrace("fence sync thread %s\n", (LxPollEvent != NULL) ? "enabled" : "disabled");
+    LxVenus = LxInitializeVenus();
+    LxTrace("venus %s\n", LxVenus ? "enabled" : "disabled");
+    return TRUE;
 }
 
 static
@@ -329,6 +460,16 @@ LxDispatch(PLX_GPU_HEADER Header)
             uint32_t MaxVersion = 0, MaxSize = 0;
             void *Caps;
 
+            if (Message->Capset == LX_GPU_CAPSET_VENUS)
+            {
+                MaxSize = LxVenus ? (uint32_t)vkr_get_capset(NULL, 0) : 0;
+                Caps = (MaxSize != 0) ? calloc(1, MaxSize) : NULL;
+                if (Caps != NULL)
+                    vkr_get_capset(Caps, 0);
+                LxReply(Header->Serial, (Caps != NULL) ? 0 : -22, Caps, (Caps != NULL) ? MaxSize : 0);
+                free(Caps);
+                break;
+            }
             virgl_renderer_get_cap_set(Message->Capset, &MaxVersion, &MaxSize);
             Caps = (MaxSize != 0) ? calloc(1, MaxSize) : NULL;
             if (Caps == NULL)
@@ -337,6 +478,9 @@ LxDispatch(PLX_GPU_HEADER Header)
                 break;
             }
             virgl_renderer_fill_caps(Message->Capset, MaxVersion, Caps);
+            /* FIXME: coherent persistent GL buffers need host blob mappings the Linux side cannot map yet */
+            if ((Message->Capset == LX_GPU_CAPSET_VIRGL2) && (MaxSize >= sizeof(struct virgl_caps_v2)))
+                ((union virgl_caps *)Caps)->v2.capability_bits &= ~VIRGL_CAP_ARB_BUFFER_STORAGE;
             LxReply(Header->Serial, 0, Caps, MaxSize);
             free(Caps);
             break;
@@ -345,7 +489,24 @@ LxDispatch(PLX_GPU_HEADER Header)
         case LX_GPU_CTX_CREATE:
         {
             PLX_GPU_CTX_MSG Message = (PLX_GPU_CTX_MSG)Header;
-            int Result = virgl_renderer_context_create(Message->CtxId, 5, "lxgpu");
+            int Result = -1;
+
+            if (Message->Capset == LX_GPU_CAPSET_VENUS)
+            {
+                if (LxVenus && LxSetVenusContext(Message->CtxId, TRUE) &&
+                    vkr_renderer_create_context(Message->CtxId, LX_GPU_CAPSET_VENUS, 5, "lxgpu"))
+                {
+                    Result = 0;
+                }
+                else
+                {
+                    LxSetVenusContext(Message->CtxId, FALSE);
+                }
+            }
+            else
+            {
+                Result = virgl_renderer_context_create(Message->CtxId, 5, "lxgpu");
+            }
 
             if (LxVerbose || (Result != 0))
                 LxTrace("context %u -> %d\n", Message->CtxId, Result);
@@ -354,6 +515,12 @@ LxDispatch(PLX_GPU_HEADER Header)
         }
 
         case LX_GPU_CTX_DESTROY:
+            if (LxIsVenusContext(((PLX_GPU_CTX_MSG)Header)->CtxId))
+            {
+                vkr_renderer_destroy_context(((PLX_GPU_CTX_MSG)Header)->CtxId);
+                LxSetVenusContext(((PLX_GPU_CTX_MSG)Header)->CtxId, FALSE);
+                break;
+            }
             LxForget(((PLX_GPU_CTX_MSG)Header)->CtxId, 0);
             virgl_renderer_context_destroy(((PLX_GPU_CTX_MSG)Header)->CtxId);
             break;
@@ -363,7 +530,14 @@ LxDispatch(PLX_GPU_HEADER Header)
             break;
 
         case LX_GPU_RES_UNREF:
-            LxDestroyResource(((PLX_GPU_RES_MSG)Header)->ResId);
+            if (LxIsVenusContext(((PLX_GPU_RES_MSG)Header)->CtxId))
+                vkr_renderer_destroy_resource(((PLX_GPU_RES_MSG)Header)->CtxId, ((PLX_GPU_RES_MSG)Header)->ResId);
+            else
+                LxDestroyResource(((PLX_GPU_RES_MSG)Header)->ResId);
+            break;
+
+        case LX_GPU_BLOB_CREATE:
+            LxCreateBlob((PLX_GPU_BLOB_MSG)Header);
             break;
 
         case LX_GPU_SUBMIT:
@@ -373,6 +547,20 @@ LxDispatch(PLX_GPU_HEADER Header)
             ULONG Index;
             int Result;
 
+            if (LxIsVenusContext(Message->CtxId))
+            {
+                BOOL Submitted = (Message->Length == 0) ||
+                                 vkr_renderer_submit_cmd(Message->CtxId, ResIds + Message->ResCount, Message->Length);
+
+                if (LxVerbose || !Submitted)
+                {
+                    LxTrace("venus submit ctx %u ring %u %u bytes -> %d\n", Message->CtxId, Message->RingIdx,
+                            Message->Length, Submitted);
+                }
+                if (!vkr_renderer_submit_fence(Message->CtxId, 0, Message->RingIdx, Header->Serial))
+                    LxRetireFence(Message->CtxId, Message->RingIdx, Header->Serial);
+                break;
+            }
             for (Index = 0; Index < Message->ResCount; Index++)
                 LxAttach(Message->CtxId, ResIds[Index]);
             Result = virgl_renderer_submit_cmd(ResIds + Message->ResCount, (int)Message->CtxId,
@@ -380,7 +568,7 @@ LxDispatch(PLX_GPU_HEADER Header)
             if (LxVerbose || (Result != 0))
                 LxTrace("submit ctx %u %u dwords -> %d\n", Message->CtxId, Message->Length / 4, Result);
             if (virgl_renderer_create_fence((int)Header->Serial, Message->CtxId) == 0)
-                LxPendingFences++;
+                LxPendingFences += (LxPollEvent == NULL);
             break;
         }
 
@@ -410,10 +598,36 @@ LxDispatch(PLX_GPU_HEADER Header)
                         Message->ResId, Message->CtxId, Box.w, Box.h, Result);
             }
             if (virgl_renderer_create_fence((int)Header->Serial, Message->CtxId) == 0)
-                LxPendingFences++;
+                LxPendingFences += (LxPollEvent == NULL);
             break;
         }
     }
+}
+
+static
+BOOL
+LxAttachChannel(PCWSTR Nt, HANDLE Event, HANDLE Parent)
+{
+    OVERLAPPED Overlapped = { 0 };
+    DWORD Bytes, Attempt;
+
+    Overlapped.hEvent = Event;
+    for (Attempt = 0; Attempt < LX_ATTACH_RETRIES; Attempt++)
+    {
+        if (DeviceIoControl(LxDevice, IOCTL_LX_GPU_ATTACH, (PVOID)Nt, (DWORD)(wcslen(Nt) * sizeof(WCHAR)), NULL, 0,
+                            &Bytes, &Overlapped) ||
+            ((GetLastError() == ERROR_IO_PENDING) && GetOverlappedResult(LxDevice, &Overlapped, &Bytes, TRUE)))
+        {
+            return TRUE;
+        }
+        if (GetLastError() != ERROR_BUSY)
+            return FALSE;
+        if (Parent == NULL)
+            Sleep(LX_ATTACH_RETRY_MS);
+        else if (WaitForSingleObject(Parent, LX_ATTACH_RETRY_MS) == WAIT_OBJECT_0)
+            return FALSE;
+    }
+    return FALSE;
 }
 
 static
@@ -421,17 +635,19 @@ int
 LxServe(PCWSTR Root, HANDLE Parent)
 {
     WCHAR Full[MAX_PATH], Nt[MAX_PATH + 8];
+    CHAR Utf8[3 * (MAX_PATH + 8)];
     OVERLAPPED Overlapped = { 0 };
     PUCHAR Buffer;
-    HANDLE Waits[2];
-    DWORD Bytes, WaitCount = (Parent != NULL) ? 2 : 1;
+    HANDLE Waits[3];
+    DWORD Bytes, WaitCount = 1, ParentIndex = MAXDWORD, PollIndex = MAXDWORD;
     BOOL Pending = FALSE;
+    ULONG Capacity = LX_RECEIVE_BUFFER;
     int Result = -1;
 
-    if (!GetFullPathNameW(Root, MAX_PATH, Full, NULL))
+    if (!GetFullPathNameW(Root, MAX_PATH, Full, NULL) || (wcslen(Full) + 4 >= ARRAYSIZE(Nt)))
         return 1;
-    _snwprintf(Nt, MAX_PATH + 8, L"\\??\\%s", Full);
-    Nt[MAX_PATH + 7] = UNICODE_NULL;
+    wcscpy(Nt, L"\\??\\");
+    wcscat(Nt, Full);
     if (!LxInitializeRenderer())
     {
         LxTrace("renderer init failed\n");
@@ -445,26 +661,53 @@ LxServe(PCWSTR Root, HANDLE Parent)
         return 3;
     }
     Overlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    if ((Overlapped.hEvent == NULL) ||
-        (!DeviceIoControl(LxDevice, IOCTL_LX_GPU_ATTACH, Nt, (DWORD)(wcslen(Nt) * sizeof(WCHAR)), NULL, 0, &Bytes,
-                          &Overlapped) &&
-         !((GetLastError() == ERROR_IO_PENDING) && GetOverlappedResult(LxDevice, &Overlapped, &Bytes, TRUE))))
+    if ((Overlapped.hEvent == NULL) || !LxAttachChannel(Nt, Overlapped.hEvent, Parent))
     {
         LxTrace("attach failed %lu\n", GetLastError());
         return 4;
     }
-    LxTrace("attached %ls\n", Nt);
-    Buffer = malloc(LX_GPU_MAX_MESSAGE);
+    if (!WideCharToMultiByte(CP_UTF8, 0, Nt, -1, Utf8, sizeof(Utf8), NULL, NULL))
+        Utf8[0] = '\0';
+    LxTrace("attached %s\n", Utf8);
+    Buffer = malloc(Capacity);
     if (Buffer == NULL)
         return 1;
     Waits[0] = Overlapped.hEvent;
-    Waits[1] = Parent;
+    if (Parent != NULL)
+    {
+        ParentIndex = WaitCount;
+        Waits[WaitCount++] = Parent;
+    }
+    if (LxPollEvent != NULL)
+    {
+        PollIndex = WaitCount;
+        Waits[WaitCount++] = LxPollEvent;
+    }
     timeBeginPeriod(1);
     while (Result < 0)
     {
         ResetEvent(Overlapped.hEvent);
-        if (!DeviceIoControl(LxDevice, IOCTL_LX_GPU_RECEIVE, NULL, 0, Buffer, LX_GPU_MAX_MESSAGE, &Bytes, &Overlapped))
+        if (!DeviceIoControl(LxDevice, IOCTL_LX_GPU_RECEIVE, NULL, 0, Buffer, Capacity, &Bytes, &Overlapped))
         {
+            if (GetLastError() == ERROR_MORE_DATA)
+            {
+                PUCHAR Grown = NULL;
+
+                if (!GetOverlappedResult(LxDevice, &Overlapped, &Bytes, FALSE) && (GetLastError() == ERROR_MORE_DATA) &&
+                    (Bytes > Capacity) && (Bytes <= LX_GPU_MAX_MESSAGE))
+                {
+                    Grown = realloc(Buffer, Bytes);
+                }
+                if (Grown == NULL)
+                {
+                    LxTrace("receive buffer of %lu bytes failed\n", Bytes);
+                    Result = 5;
+                    break;
+                }
+                Buffer = Grown;
+                Capacity = Bytes;
+                continue;
+            }
             if (GetLastError() != ERROR_IO_PENDING)
             {
                 LxTrace("receive failed %lu\n", GetLastError());
@@ -477,7 +720,7 @@ LxServe(PCWSTR Root, HANDLE Parent)
         {
             DWORD Wait = WaitForMultipleObjects(WaitCount, Waits, FALSE, (LxPendingFences > 0) ? 1 : INFINITE);
 
-            if (Wait == WAIT_OBJECT_0 + 1)
+            if (Wait == WAIT_OBJECT_0 + ParentIndex)
             {
                 LxTrace("window host exited\n");
                 Result = 0;
@@ -499,9 +742,21 @@ LxServe(PCWSTR Root, HANDLE Parent)
         if ((Result < 0) && (Bytes >= sizeof(LX_GPU_HEADER)))
             LxDispatch((PLX_GPU_HEADER)Buffer);
         virgl_renderer_poll();
+        if (Capacity > LX_RECEIVE_BUFFER)
+        {
+            PUCHAR Shrunk = realloc(Buffer, LX_RECEIVE_BUFFER);
+
+            if (Shrunk != NULL)
+            {
+                Buffer = Shrunk;
+                Capacity = LX_RECEIVE_BUFFER;
+            }
+        }
     }
-    if (Pending && (CancelIoEx(LxDevice, &Overlapped) || (GetLastError() != ERROR_NOT_FOUND)))
-        GetOverlappedResult(LxDevice, &Overlapped, &Bytes, TRUE);
+    CloseHandle(LxDevice);
+    LxDevice = NULL;
+    if (Pending)
+        WaitForSingleObject(Overlapped.hEvent, INFINITE);
     free(Buffer);
     return Result;
 }
@@ -517,6 +772,7 @@ main(void)
     /* libepoxy is linked statically: its DllMain allocates the TLS slots of the per-thread dispatch tables */
     if (!epoxy_dll_main(GetModuleHandleW(NULL), DLL_PROCESS_ATTACH, NULL))
         return 1;
+    InterlockedExchange(&LxEpoxyReady, 1);
     Arguments = CommandLineToArgvW(GetCommandLineW(), &Count);
     if (Arguments == NULL)
         return 1;

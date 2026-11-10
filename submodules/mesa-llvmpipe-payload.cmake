@@ -10,6 +10,8 @@ if(ARM64EC_RUNTIME)
     return()
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/payload-download.cmake")
+
 set(MESA_LLVMPIPE_PAYLOAD_RELEASE "26.2.2-1")
 set(MESA_LLVMPIPE_PAYLOAD_SHA256_amd64 "17f354520ebbe3c67ea62432e9c456964a915e1571f09b250f300f82ace60f4b")
 set(MESA_LLVMPIPE_PAYLOAD_SHA256_arm64 "552b71226dc9fbe21ccc4f8eb1e3ff36b3af554e35c09a68af61d3de003f90c0")
@@ -32,22 +34,10 @@ else()
         message(FATAL_ERROR "No published LLVMpipe payload for ${ARCH} release ${MESA_LLVMPIPE_PAYLOAD_RELEASE}; set MESA_LLVMPIPE_PAYLOAD or MESA_LLVMPIPE_FROM_SOURCE.")
     endif()
     set(_payload_zip "${_payload_dir}/${_payload_name}")
-    set(_payload_have_hash "")
-    if(EXISTS "${_payload_zip}")
-        file(SHA256 "${_payload_zip}" _payload_have_hash)
-    endif()
-    if(NOT _payload_have_hash STREQUAL _payload_hash)
-        set(_payload_url "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-${MESA_LLVMPIPE_PAYLOAD_RELEASE}/${_payload_name}")
-        message(STATUS "Downloading ${_payload_url}")
-        file(DOWNLOAD "${_payload_url}" "${_payload_zip}"
-            EXPECTED_HASH SHA256=${_payload_hash}
-            TLS_VERIFY ON
-            STATUS _payload_status)
-        list(GET _payload_status 0 _payload_code)
-        if(NOT _payload_code EQUAL 0)
-            file(REMOVE "${_payload_zip}")
-            message(FATAL_ERROR "Downloading the LLVMpipe payload failed: ${_payload_status}")
-        endif()
+    libernt_download_payload(LiberNT/LiberNT "mesa-llvmpipe-${MESA_LLVMPIPE_PAYLOAD_RELEASE}" "${_payload_name}"
+        "${_payload_zip}" "${_payload_hash}" _payload_error)
+    if(NOT _payload_error STREQUAL "")
+        message(FATAL_ERROR "Downloading the LLVMpipe payload failed: ${_payload_error}")
     endif()
 endif()
 

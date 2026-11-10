@@ -844,6 +844,7 @@ InstallBootloaderFiles(
     WCHAR SrcPath[MAX_PATH];
     WCHAR DstPath[MAX_PATH];
 
+    /* FIXME: A preinstalled image has no \loader directory, so Setup started from it cannot write the BIOS boot code. */
     /* Copy FreeLoader to the system partition, always overwriting the older version */
     CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2, SourceRootPath->Buffer, L"\\loader\\freeldr.sys");
     CombinePaths(DstPath, ARRAYSIZE(DstPath), 2, SystemRootPath->Buffer, L"freeldr.sys");
@@ -1679,8 +1680,9 @@ static
 NTSTATUS
 InstallFirmwareBootEntry(
     _In_ PCUNICODE_STRING SystemRootPath,
-    _In_ BOOLEAN AfterWindows)
+    _In_ ULONG_PTR Options)
 {
+    BOOLEAN AfterWindows = !!(Options & BOOT_OPTION_AFTER_WINDOWS);
     STORAGE_DEVICE_NUMBER DeviceNumber;
     UCHAR Option[EFI_LOAD_OPTION_MAX];
     UCHAR Existing[EFI_LOAD_OPTION_MAX];
@@ -1768,7 +1770,7 @@ InstallFirmwareBootEntry(
         Status = SetFirmwareVariable(Name, Option, OptionSize);
     }
 
-    if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) && !(Found && (Options & BOOT_OPTION_KEEP_ORDER)))
     {
         for (i = 0, j = 0; i < OrderCount; i++)
         {
@@ -1801,7 +1803,7 @@ InstallBcdFromTemplate(
     _In_ PCUNICODE_STRING SystemRootPath,
     _In_ PCUNICODE_STRING SourceRootPath,
     _In_ PCUNICODE_STRING DestinationArcPath,
-    _In_ BOOLEAN AfterWindows,
+    _In_ ULONG_PTR Options,
     _Out_opt_ PBOOLEAN FirmwareEntry,
     _Out_ PNTSTATUS Status)
 {
@@ -1860,7 +1862,7 @@ InstallBcdFromTemplate(
         return TRUE;
     }
 
-    EntryStatus = InstallFirmwareBootEntry(SystemRootPath, AfterWindows);
+    EntryStatus = InstallFirmwareBootEntry(SystemRootPath, Options);
     if (!NT_SUCCESS(EntryStatus))
         DPRINT1("Writing the firmware boot entry failed (Status %lx)\n", EntryStatus);
     else if (FirmwareEntry)
@@ -1874,7 +1876,7 @@ InstallEfiSystemPartition(
     _In_ PCUNICODE_STRING SystemRootPath,
     _In_ PCUNICODE_STRING SourceRootPath,
     _In_ PCUNICODE_STRING DestinationArcPath,
-    _In_ BOOLEAN AfterWindows)
+    _In_ ULONG_PTR Options)
 {
     NTSTATUS Status;
     WCHAR SrcDir[MAX_PATH];
@@ -1897,7 +1899,7 @@ InstallEfiSystemPartition(
         return Status;
     }
 
-    if (InstallBcdFromTemplate(SystemRootPath, SourceRootPath, DestinationArcPath, AfterWindows,
+    if (InstallBcdFromTemplate(SystemRootPath, SourceRootPath, DestinationArcPath, Options,
                                &FirmwareEntry, &Status))
     {
         if (NT_SUCCESS(Status) && FallbackKept && !FirmwareEntry)
@@ -1951,7 +1953,7 @@ InstallFatBootcodeToPartition(
         return Status;
     }
 
-    InstallBcdFromTemplate(SystemRootPath, SourceRootPath, DestinationArcPath, FALSE, NULL, &Status);
+    InstallBcdFromTemplate(SystemRootPath, SourceRootPath, DestinationArcPath, 0, NULL, &Status);
 
     /* Prepare for possibly updating 'freeldr.ini' */
     DoesFreeLdrExist = DoesFileExist_2(SystemRootPath->Buffer, L"freeldr.ini");
@@ -2507,9 +2509,8 @@ InstallBootManagerAndBootEntriesWorker(
     BOOLEAN IsBIOS = ((ArchType == ARCH_PcAT) || (ArchType == ARCH_NEC98x86));
     UCHAR InstallType = (Options & 0x03);
 
-    if (DiskStyle == PARTITION_STYLE_GPT)
-        return InstallEfiSystemPartition(SystemRootPath, SourceRootPath, DestinationArcPath,
-                                         !!(Options & BOOT_OPTION_AFTER_WINDOWS));
+    if (DiskStyle == PARTITION_STYLE_GPT || IsUefiFirmware())
+        return InstallEfiSystemPartition(SystemRootPath, SourceRootPath, DestinationArcPath, Options);
 
     // FIXME: We currently only support BIOS-based PCs
     // TODO: Support other platforms

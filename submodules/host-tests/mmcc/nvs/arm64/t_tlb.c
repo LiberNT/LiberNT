@@ -7,8 +7,8 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <nvs/include/mienv.h>
-#include <nvs/arch/arm64/tlbops.h>
+#include <mm/include/mienv.h>
+#include <mm/arch/arm64/tlbops.h>
 #include <pthread.h>
 
 typedef struct _TEST_TRACE

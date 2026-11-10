@@ -26,8 +26,8 @@ add_definitions(
 include_directories(
     ${HAL_ARM64_SOURCE_DIR}/include
     ${HAL_COMMON_DIR}/include
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/include
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/include/internal
+    ${REACTOS_SOURCE_DIR}/ntos/include
+    ${REACTOS_SOURCE_DIR}/ntos/include/internal
     ${REACTOS_SOURCE_DIR}/sdk/include
     ${HAL_ARM64_SOURCE_DIR}/gic
     ${CMAKE_CURRENT_BINARY_DIR})
@@ -74,22 +74,6 @@ add_library(hal MODULE
     ${SOURCES}
     ${CMAKE_CURRENT_BINARY_DIR}/hal.def)
 reactos_hal_setup(hal 0)
-
-# Ship the explicit HAL name used by the UP-kernel boot entries.
-add_library(halup MODULE
-    ${SOURCES}
-    ${CMAKE_CURRENT_BINARY_DIR}/hal.def)
-reactos_hal_setup(halup 0)
-
-# Ship halmacpi.dll on ARM64 to match the livecd_wim.ini LiveCD_Wim_Macpi boot option
-add_library(halmacpi MODULE
-    ${SOURCES}
-    ${CMAKE_CURRENT_BINARY_DIR}/hal.def)
-reactos_hal_setup(halmacpi 0)
-
-if(MSVC)
-    set_property(GLOBAL APPEND PROPERTY _SPEC2DEF_FORWARD_USERS_hal halup halmacpi)
-endif()
 
 # halacpi.c names PCI devices from the shared tables
 set_source_files_properties(${HAL_ARM64_SOURCE_DIR}/acpi/halacpi.c PROPERTIES

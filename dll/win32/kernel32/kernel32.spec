@@ -114,6 +114,7 @@
 @ stdcall -stub -version=0x600+ ConvertSystemTimeToCalDateTime(ptr long ptr)
 @ stdcall ConvertThreadToFiber(ptr)
 @ stdcall ConvertThreadToFiberEx(ptr long)
+@ stdcall -version=0x601+ CopyContext(ptr long ptr) kernelbase.CopyContext
 @ stdcall CopyFileA(str str long)
 @ stdcall CopyFileExA(str str ptr ptr ptr long)
 @ stdcall CopyFileExW(wstr wstr ptr ptr ptr long)

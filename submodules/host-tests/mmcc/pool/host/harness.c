@@ -23,6 +23,7 @@
 #endif
 
 _Thread_local ULONG PoolHostProcessor;
+_Thread_local volatile int *PoolHostLockBlocked;
 int TestFailures;
 int TestChecks;
 
@@ -149,13 +150,19 @@ void
 RunThreads(ULONG Count, void *(*Routine)(void *), void **Args)
 {
     pthread_t Threads[64];
-    ULONG i;
+    ULONG i, Started = 0;
 
+    POOL_ASSERT(Count <= RTL_NUMBER_OF(Threads));
     for (i = 0; i < Count; i++)
-        pthread_create(&Threads[i], NULL, Routine, Args[i]);
+    {
+        int Status = pthread_create(&Threads[i], NULL, Routine, Args[i]);
+        CHECK(Status == 0);
+        if (Status != 0) break;
+        Started++;
+    }
 
-    for (i = 0; i < Count; i++)
-        pthread_join(Threads[i], NULL);
+    for (i = 0; i < Started; i++)
+        CHECK(pthread_join(Threads[i], NULL) == 0);
 }
 
 typedef struct _TEST_ENTRY

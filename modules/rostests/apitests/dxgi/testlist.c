@@ -22,6 +22,8 @@ extern void func_feature_support(void);
 extern void func_shared_dimensions(void);
 extern void func_keyedmutex_kill(void);
 extern void func_d3d10_bindings(void);
+extern void func_d3d10_create(void);
+extern void func_copy_regions(void);
 extern void func_adapter_outputs(void);
 extern void func_counters(void);
 extern void func_query_order(void);
@@ -40,6 +42,7 @@ extern void func_copy_depth_stencil(void);
 extern void func_volume_readback(void);
 extern void func_viewport_levels(void);
 extern void func_wait_vblank(void);
+extern void func_sampler_default(void);
 
 const struct test winetest_testlist[] =
 {
@@ -64,6 +67,8 @@ const struct test winetest_testlist[] =
     { "shared_dimensions", func_shared_dimensions },
     { "keyedmutex_kill", func_keyedmutex_kill },
     { "d3d10_bindings", func_d3d10_bindings },
+    { "d3d10_create", func_d3d10_create },
+    { "copy_regions", func_copy_regions },
     { "adapter_outputs", func_adapter_outputs },
     { "counters", func_counters },
     { "query_order", func_query_order },
@@ -82,5 +87,6 @@ const struct test winetest_testlist[] =
     { "volume_readback", func_volume_readback },
     { "viewport_levels", func_viewport_levels },
     { "wait_vblank", func_wait_vblank },
+    { "sampler_default", func_sampler_default },
     { 0, 0 }
 };

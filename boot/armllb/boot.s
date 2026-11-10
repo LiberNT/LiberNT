@@ -7,8 +7,8 @@
  */
 
     .title "ARM LLB Entry Point"
-    .include "ntoskrnl/include/internal/arm/kxarm.h"
-    .include "ntoskrnl/include/internal/arm/ksarm.h"
+    .include "ntos/include/internal/arm/kxarm.h"
+    .include "ntos/include/internal/arm/ksarm.h"
 
     NESTED_ENTRY _start
     PROLOG_END _start

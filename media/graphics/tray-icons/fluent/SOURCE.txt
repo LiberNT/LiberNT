@@ -10,6 +10,13 @@ Files used, copied unmodified and rasterized by render-tray-icons.py:
 - assets/Bluetooth/SVG/ic_fluent_bluetooth_28_regular.svg
 - assets/Bluetooth/SVG/ic_fluent_bluetooth_32_regular.svg
 - assets/Bluetooth/SVG/ic_fluent_bluetooth_48_regular.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_12_filled.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_16_filled.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_20_filled.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_24_filled.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_28_filled.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_32_filled.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_48_filled.svg
 - assets/Speaker 0/SVG/ic_fluent_speaker_0_16_regular.svg
 - assets/Speaker 0/SVG/ic_fluent_speaker_0_20_regular.svg
 - assets/Speaker 0/SVG/ic_fluent_speaker_0_24_regular.svg

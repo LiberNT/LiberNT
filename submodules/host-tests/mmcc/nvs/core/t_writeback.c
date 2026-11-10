@@ -302,6 +302,61 @@ WritebackConcurrentRedirty(BOOLEAN ModifiedWriter)
     WorldDestroy(&World);
 }
 
+typedef struct _PAGEFILE_PUBLICATION_TEST
+{
+    TEST_WORLD *World;
+    volatile LONG Started;
+    volatile LONG Stop;
+} PAGEFILE_PUBLICATION_TEST;
+
+static BOOLEAN
+PagefilePublicationExpand(PMI_SYSTEM System, LONG64 Pages, LONG64 Limit, BOOLEAN Wait)
+{
+    UNREFERENCED_PARAMETER(System);
+    UNREFERENCED_PARAMETER(Pages);
+    UNREFERENCED_PARAMETER(Limit);
+    UNREFERENCED_PARAMETER(Wait);
+    return FALSE;
+}
+
+static void *
+PagefilePublicationReader(void *Context)
+{
+    PAGEFILE_PUBLICATION_TEST *Test = Context;
+
+    MiHostCpu = 1;
+    __atomic_store_n(&Test->Started, 1, __ATOMIC_RELEASE);
+    while (!__atomic_load_n(&Test->Stop, __ATOMIC_ACQUIRE))
+    {
+        MiWriteModifiedPages(&Test->World->System, 0);
+        if (MiChargeSystemCommit(&Test->World->System, 1, FALSE))
+            MI_ATOMIC_ADD64(&Test->World->System.CommittedPages, -1);
+    }
+    return NULL;
+}
+
+static void
+PagefilePublication(void)
+{
+    TEST_WORLD World;
+    PAGEFILE_PUBLICATION_TEST Test = {0};
+    pthread_t Reader;
+
+    WorldCreate(&World, 128, 2, 1000);
+    Test.World = &World;
+    MI_ASSERT(pthread_create(&Reader, NULL, PagefilePublicationReader, &Test) == 0);
+    while (!__atomic_load_n(&Test.Started, __ATOMIC_ACQUIRE))
+        sched_yield();
+    WorldAttachPageFile(&World, 128);
+    MI_ATOMIC_WRITE_POINTER(&World.System.ExpandCommit, PagefilePublicationExpand);
+    __atomic_store_n(&Test.Stop, 1, __ATOMIC_RELEASE);
+    MI_ASSERT(pthread_join(Reader, NULL) == 0);
+    CHECK(World.System.PageFile == &World.Paging.PageFile);
+    CHECK(MiWriteModifiedPages(&World.System, 0) == 0);
+    WorldExpectClean(&World, 128);
+    WorldDestroy(&World);
+}
+
 void
 TestWriteback(void)
 {
@@ -314,6 +369,7 @@ TestWriteback(void)
     ULONG64 i;
     ULONG Calls;
 
+    PagefilePublication();
     WritebackSizeReentry();
     WritebackFailureProgress();
     WritebackPastUnwritablePages();

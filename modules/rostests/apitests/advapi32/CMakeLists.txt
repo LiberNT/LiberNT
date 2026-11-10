@@ -4,6 +4,7 @@ list(APPEND SOURCE
     ControlServiceEx.c
     CopySid.c
     CreateService.c
+    CryptCreateHash.c
     DuplicateTokenEx.c
     EnableTraceEx.c
     EnumerateTraceGuidsEx.c
@@ -24,6 +25,7 @@ list(APPEND SOURCE
     RegCreateKeyTransacted.c
     RegEnumKey.c
     RegEnumValueW.c
+    RegFlushKey.c
     RegOpenKeyExW.c
     RegOpenKeyTransacted.c
     RegQueryInfoKey.c

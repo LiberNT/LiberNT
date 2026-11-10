@@ -164,6 +164,33 @@ struct wintrust_step
     DWORD              error_index;
 };
 
+#ifdef __REACTOS__
+static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
+ DWORD numSteps, CRYPT_PROVIDER_DATA *provData)
+{
+    DWORD i, err = ERROR_SUCCESS, first = ERROR_SUCCESS;
+    BOOL has_final = FALSE;
+    HRESULT ret;
+
+    for (i = 0; i < numSteps; i++)
+    {
+        ret = steps[i].func(provData);
+        if (steps[i].error_index == TRUSTERROR_STEP_FINAL_WVTINIT && ret != S_OK)
+        {
+            provData->psPfns->pfnCleanupPolicy = NULL;
+            return ret;
+        }
+        if (steps[i].error_index == TRUSTERROR_STEP_FINAL_POLICYPROV)
+        {
+            has_final = TRUE;
+            err = ret;
+        }
+        else if (!first && ret != S_OK)
+            first = provData->padwTrustStepErrors[steps[i].error_index];
+    }
+    return has_final ? err : first;
+}
+#else
 static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
  DWORD numSteps, CRYPT_PROVIDER_DATA *provData)
 {
@@ -177,7 +204,45 @@ static DWORD WINTRUST_ExecuteSteps(const struct wintrust_step *steps,
     }
     return err;
 }
+#endif
 
+#ifdef __REACTOS__
+void WINTRUST_FreeSgnr(CRYPT_PROVIDER_DATA *data, CRYPT_PROVIDER_SGNR *sgnr)
+{
+    DWORD i;
+
+    for (i = 0; i < sgnr->csCounterSigners; i++)
+        WINTRUST_FreeSgnr(data, &sgnr->pasCounterSigners[i]);
+    data->psPfns->pfnFree(sgnr->pasCounterSigners);
+    for (i = 0; i < sgnr->csCertChain; i++)
+        CertFreeCertificateContext(sgnr->pasCertChain[i].pCert);
+    data->psPfns->pfnFree(sgnr->pasCertChain);
+    data->psPfns->pfnFree(sgnr->psSigner);
+    CertFreeCertificateChain(sgnr->pChainContext);
+}
+
+static void WINTRUST_FreeProviderData(CRYPT_PROVIDER_DATA *provData)
+{
+    if (provData->hProv)
+        CryptReleaseContext(provData->hProv, 0);
+    free(provData->padwTrustStepErrors);
+    free(provData->pPDSip);
+    free(provData->psPfns);
+    free(provData);
+}
+
+static void WINTRUST_SetUiFunctions(CRYPT_PROVIDER_DATA *provData)
+{
+    CRYPT_PROVUI_FUNCS *ui = (CRYPT_PROVUI_FUNCS *)(provData->psPfns + 1);
+    CRYPT_PROVUI_DATA *uiData = (CRYPT_PROVUI_DATA *)(ui + 1);
+
+    ui->cbStruct = sizeof(*ui);
+    ui->psUIData = uiData;
+    uiData->cbStruct = sizeof(*uiData);
+    provData->psPfns->psUIpfns = ui;
+}
+
+#endif
 static CRYPT_PROVIDER_DATA *WINTRUST_AllocateProviderData(void)
 {
     CRYPT_PROVIDER_DATA *provData;
@@ -197,10 +262,20 @@ static CRYPT_PROVIDER_DATA *WINTRUST_AllocateProviderData(void)
         goto oom;
     provData->pPDSip->cbStruct = sizeof(PROVDATA_SIP);
 
+#ifdef __REACTOS__
+    provData->psPfns = calloc(1, sizeof(CRYPT_PROVIDER_FUNCTIONS) + sizeof(CRYPT_PROVUI_FUNCS) + sizeof(CRYPT_PROVUI_DATA));
+#else
     provData->psPfns = calloc(1, sizeof(CRYPT_PROVIDER_FUNCTIONS));
+#endif
     if (!provData->psPfns)
         goto oom;
     provData->psPfns->cbStruct = sizeof(CRYPT_PROVIDER_FUNCTIONS);
+#ifdef __REACTOS__
+    GetSystemTimeAsFileTime(&provData->sftSystemTime);
+    provData->dwEncoding = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    if (!CryptAcquireContextW(&provData->hProv, NULL, MS_ENH_RSA_AES_PROV_W, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
+        provData->hProv = 0;
+#endif
     return provData;
 
 oom:
@@ -265,11 +340,21 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
         return ERROR_OUTOFMEMORY;
 
     ret = WintrustLoadFunctionPointers(actionID, provData->psPfns);
+#ifdef __REACTOS__
+    if (ret && !WINTRUST_AddTrustStepsFromFunctions(verifySteps, provData->psPfns))
+    {
+        SetLastError(TRUST_E_PROVIDER_UNKNOWN);
+        ret = FALSE;
+    }
+#endif
     if (!ret)
     {
         err = GetLastError();
         goto error;
     }
+#ifdef __REACTOS__
+    WINTRUST_SetUiFunctions(provData);
+#endif
 
     data->hWVTStateData = provData;
     provData->pWintrustData = data;
@@ -280,14 +365,22 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
     provData->hWndParent = hwnd;
     provData->pgActionID = actionID;
     WintrustGetRegPolicyFlags(&provData->dwRegPolicySettings);
+#ifdef __REACTOS__
+    provData->dwProvFlags = CPD_USE_NT5_CHAIN_FLAG;
+    if (WVT_ISINSTRUCT(WINTRUST_DATA, data->cbStruct, dwProvFlags))
+        provData->dwProvFlags |= data->dwProvFlags;
+    /* TODO: INFO_NEEDED: where Windows 11 reads this value from; it reports 1 for every action measured */
+    provData->dwRegSecuritySettings = 1;
+#endif
 
     numSteps = WINTRUST_AddTrustStepsFromFunctions(verifySteps,
      provData->psPfns);
     err = WINTRUST_ExecuteSteps(verifySteps, numSteps, provData);
 #ifdef __REACTOS__
-    while (err && provData->pSigState && !provData->pSigState->fNoMoreSigs)
+    while (err && provData->pSigState && provData->pSigState->fFirstAttemptMade &&
+           !provData->pSigState->fNoMoreSigs)
     {
-        DWORD i, j, first;
+        DWORD i, first;
 
         for (first = 0; first < numSteps; first++)
             if (verifySteps[first].error_index == TRUSTERROR_STEP_FINAL_SIGPROV)
@@ -296,13 +389,7 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
             break;
 
         for (i = 0; i < provData->csSigners; i++)
-        {
-            for (j = 0; j < provData->pasSigners[i].csCertChain; j++)
-                CertFreeCertificateContext(provData->pasSigners[i].pasCertChain[j].pCert);
-            provData->psPfns->pfnFree(provData->pasSigners[i].pasCertChain);
-            provData->psPfns->pfnFree(provData->pasSigners[i].psSigner);
-            CertFreeCertificateChain(provData->pasSigners[i].pChainContext);
-        }
+            WINTRUST_FreeSgnr(provData, &provData->pasSigners[i]);
         provData->psPfns->pfnFree(provData->pasSigners);
         provData->pasSigners = NULL;
         provData->csSigners = 0;
@@ -316,14 +403,23 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
     {
         err = TRUST_E_NOSIGNATURE;
     }
+    if (provData->pPDSip && provData->pPDSip->pSip)
+    {
+        provData->psPfns->pfnFree(provData->pPDSip->pSip);
+        provData->pPDSip->pSip = NULL;
+    }
 #endif
     goto done;
 
 error:
+#ifdef __REACTOS__
+    WINTRUST_FreeProviderData(provData);
+#else
     free(provData->padwTrustStepErrors);
     free(provData->pPDSip);
     free(provData->psPfns);
     free(provData);
+#endif
 
 done:
     TRACE("returning %08lx\n", err);
@@ -343,10 +439,14 @@ static LONG WINTRUST_DefaultClose(HWND hwnd, GUID *actionID,
         if (provData->psPfns->pfnCleanupPolicy)
             err = provData->psPfns->pfnCleanupPolicy(provData);
 
+#ifdef __REACTOS__
+        WINTRUST_FreeProviderData(provData);
+#else
         free(provData->padwTrustStepErrors);
         free(provData->pPDSip);
         free(provData->psPfns);
         free(provData);
+#endif
         data->hWVTStateData = NULL;
     }
     TRACE("returning %08lx\n", err);
@@ -491,6 +591,9 @@ static LONG WINTRUST_CertVerify(HWND hwnd, GUID *actionID,
         err = GetLastError();
         goto error;
     }
+#ifdef __REACTOS__
+    WINTRUST_SetUiFunctions(provData);
+#endif
     if (!provData->psPfns->pfnObjectTrust)
         provData->psPfns->pfnObjectTrust = WINTRUST_CertVerifyObjTrust;
     /* Not sure why, but native skips the policy check */
@@ -508,10 +611,14 @@ static LONG WINTRUST_CertVerify(HWND hwnd, GUID *actionID,
     goto done;
 
 error:
+#ifdef __REACTOS__
+    WINTRUST_FreeProviderData(provData);
+#else
     free(provData->padwTrustStepErrors);
     free(provData->pPDSip);
     free(provData->psPfns);
     free(provData);
+#endif
 
 done:
     TRACE("returning %08lx\n", err);
@@ -1033,15 +1140,38 @@ BOOL WINAPI WINTRUST_AddSgnr(CRYPT_PROVIDER_DATA *data,
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+#ifdef __REACTOS__
+    if (fCounterSigner)
+    {
+        CRYPT_PROVIDER_SGNR *signer, *counters;
+
+        if (idxSigner >= data->csSigners)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        signer = &data->pasSigners[idxSigner];
+        counters = realloc(signer->pasCounterSigners, (signer->csCounterSigners + 1) * sizeof(*counters));
+        if (!counters)
+        {
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
+        signer->pasCounterSigners = counters;
+        memset(&counters[signer->csCounterSigners], 0, sizeof(*counters));
+        memcpy(&counters[signer->csCounterSigners], sgnr, sgnr->cbStruct);
+        signer->csCounterSigners++;
+        return TRUE;
+    }
+    if (sgnr->cbStruct != sizeof(CRYPT_PROVIDER_SGNR))
+        idxSigner = data->csSigners;
+#else
     if (fCounterSigner)
     {
         FIXME("unimplemented for counter signers\n");
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
-#ifdef __REACTOS__
-    if (sgnr->cbStruct != sizeof(CRYPT_PROVIDER_SGNR))
-        idxSigner = data->csSigners;
 #endif
     data->pasSigners = realloc(data->pasSigners,
      (data->csSigners + 1) * sizeof(CRYPT_PROVIDER_SGNR));
@@ -1083,11 +1213,40 @@ BOOL WINAPI WINTRUST_AddSgnr(CRYPT_PROVIDER_DATA *data,
 BOOL WINAPI WINTRUST_AddCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,
  BOOL fCounterSigner, DWORD idxCounterSigner, PCCERT_CONTEXT pCert2Add)
 {
+#ifndef __REACTOS__
     BOOL ret = FALSE;
+#endif
 
     TRACE("(%p, %ld, %d, %ld, %p)\n", data, idxSigner, fCounterSigner,
      idxSigner, pCert2Add);
 
+#ifdef __REACTOS__
+    {
+        CRYPT_PROVIDER_SGNR *sgnr;
+        CRYPT_PROVIDER_CERT *chain;
+
+        if (idxSigner >= data->csSigners || (fCounterSigner &&
+         idxCounterSigner >= data->pasSigners[idxSigner].csCounterSigners))
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        sgnr = fCounterSigner ? &data->pasSigners[idxSigner].pasCounterSigners[idxCounterSigner] :
+         &data->pasSigners[idxSigner];
+        chain = realloc(sgnr->pasCertChain, (sgnr->csCertChain + 1) * sizeof(*chain));
+        if (!chain)
+        {
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
+        sgnr->pasCertChain = chain;
+        memset(&chain[sgnr->csCertChain], 0, sizeof(*chain));
+        chain[sgnr->csCertChain].cbStruct = sizeof(CRYPT_PROVIDER_CERT);
+        chain[sgnr->csCertChain].pCert = CertDuplicateCertificateContext(pCert2Add);
+        sgnr->csCertChain++;
+        return TRUE;
+    }
+#else
     if (fCounterSigner)
     {
         FIXME("unimplemented for counter signers\n");
@@ -1112,6 +1271,7 @@ BOOL WINAPI WINTRUST_AddCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,
     else
         SetLastError(ERROR_OUTOFMEMORY);
     return ret;
+#endif
 }
 
 BOOL WINAPI WINTRUST_AddPrivData(CRYPT_PROVIDER_DATA *data,
@@ -1160,6 +1320,9 @@ BOOL WINAPI WINTRUST_AddPrivData(CRYPT_PROVIDER_DATA *data,
  */
 BOOL WINAPI OpenPersonalTrustDBDialog(HWND hwnd)
 {
+#ifdef __REACTOS__
+    return OpenPersonalTrustDBDialogEx(hwnd, 0, NULL);
+#else
     CRYPTUI_CERT_MGR_STRUCT uiCertMgr;
 
     uiCertMgr.dwSize = sizeof(uiCertMgr);
@@ -1168,8 +1331,609 @@ BOOL WINAPI OpenPersonalTrustDBDialog(HWND hwnd)
     uiCertMgr.pwszTitle = NULL;
     uiCertMgr.pszInitUsageOID = NULL;
     return CryptUIDlgCertMgr(&uiCertMgr);
+#endif
 }
 
+#ifdef __REACTOS__
+/***********************************************************************
+ *		OpenPersonalTrustDBDialogEx (WINTRUST.@)
+ */
+BOOL WINAPI OpenPersonalTrustDBDialogEx(HWND hwnd, DWORD flags, PVOID *reserved)
+{
+    CRYPTUI_CERT_MGR_STRUCT uiCertMgr;
+
+    TRACE("(%p %#lx %p)\n", hwnd, flags, reserved);
+
+    if (flags & WT_TRUSTDBDIALOG_NO_UI_FLAG)
+        return TRUE;
+
+    uiCertMgr.dwSize = sizeof(uiCertMgr);
+    uiCertMgr.hwndParent = hwnd;
+    uiCertMgr.dwFlags = CRYPTUI_CERT_MGR_PUBLISHER_TAB;
+    if (flags & WT_TRUSTDBDIALOG_ONLY_PUB_TAB_FLAG)
+        uiCertMgr.dwFlags |= CRYPTUI_CERT_MGR_SINGLE_TAB_FLAG;
+    uiCertMgr.pwszTitle = NULL;
+    uiCertMgr.pszInitUsageOID = NULL;
+    return CryptUIDlgCertMgr(&uiCertMgr);
+}
+
+/***********************************************************************
+ *		WTHelperCertIsSelfSigned (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperCertIsSelfSigned(DWORD dwEncoding, CERT_INFO *pCert)
+{
+    TRACE("(%#lx %p)\n", dwEncoding, pCert);
+
+    return CertCompareCertificateName(dwEncoding, &pCert->Subject, &pCert->Issuer);
+}
+
+static BOOL WINTRUST_AuthorityNamesIssuer(PCCERT_CONTEXT child, PCCERT_CONTEXT issuer)
+{
+    CERT_AUTHORITY_KEY_ID2_INFO *info2;
+    CERT_AUTHORITY_KEY_ID_INFO *info;
+    PCERT_EXTENSION ext;
+    BOOL ret = FALSE;
+    DWORD size, i;
+
+    if ((ext = CertFindExtension(szOID_AUTHORITY_KEY_IDENTIFIER, child->pCertInfo->cExtension,
+                                 child->pCertInfo->rgExtension)) &&
+        CryptDecodeObjectEx(child->dwCertEncodingType, X509_AUTHORITY_KEY_ID, ext->Value.pbData, ext->Value.cbData,
+                            CRYPT_DECODE_ALLOC_FLAG, NULL, &info, &size))
+    {
+        ret = info->CertIssuer.cbData && info->CertSerialNumber.cbData &&
+              CertCompareCertificateName(child->dwCertEncodingType, &info->CertIssuer, &issuer->pCertInfo->Issuer) &&
+              CertCompareIntegerBlob(&info->CertSerialNumber, &issuer->pCertInfo->SerialNumber);
+        LocalFree(info);
+    }
+    if (!ret && (ext = CertFindExtension(szOID_AUTHORITY_KEY_IDENTIFIER2, child->pCertInfo->cExtension,
+                                         child->pCertInfo->rgExtension)) &&
+        CryptDecodeObjectEx(child->dwCertEncodingType, X509_AUTHORITY_KEY_ID2, ext->Value.pbData, ext->Value.cbData,
+                            CRYPT_DECODE_ALLOC_FLAG, NULL, &info2, &size))
+    {
+        if (info2->AuthorityCertSerialNumber.cbData &&
+            CertCompareIntegerBlob(&info2->AuthorityCertSerialNumber, &issuer->pCertInfo->SerialNumber))
+        {
+            for (i = 0; !ret && i < info2->AuthorityCertIssuer.cAltEntry; i++)
+            {
+                ret = info2->AuthorityCertIssuer.rgAltEntry[i].dwAltNameChoice == CERT_ALT_NAME_DIRECTORY_NAME &&
+                      CertCompareCertificateName(child->dwCertEncodingType,
+                                                 &info2->AuthorityCertIssuer.rgAltEntry[i].DirectoryName,
+                                                 &issuer->pCertInfo->Issuer);
+            }
+        }
+        LocalFree(info2);
+    }
+    return ret;
+}
+
+static DWORD WINTRUST_IssuerConfidence(PCCERT_CONTEXT child, PCCERT_CONTEXT issuer, FILETIME *time)
+{
+    DWORD confidence = 0;
+
+    if (CryptVerifyCertificateSignatureEx(0, child->dwCertEncodingType, CRYPT_VERIFY_CERT_SIGN_SUBJECT_CERT,
+                                          (void *)child, CRYPT_VERIFY_CERT_SIGN_ISSUER_CERT, (void *)issuer, 0, NULL))
+        confidence |= CERT_CONFIDENCE_SIG;
+    if (!CertVerifyTimeValidity(time, issuer->pCertInfo))
+        confidence |= CERT_CONFIDENCE_TIME;
+    if (CertVerifyValidityNesting(child->pCertInfo, issuer->pCertInfo))
+        confidence |= CERT_CONFIDENCE_TIMENEST;
+    if (WINTRUST_AuthorityNamesIssuer(child, issuer))
+    {
+        confidence |= CERT_CONFIDENCE_AUTHIDEXT;
+        if (confidence & CERT_CONFIDENCE_SIG)
+            confidence |= CERT_CONFIDENCE_HYGIENE;
+    }
+    return confidence;
+}
+
+/***********************************************************************
+ *		WTHelperCertFindIssuerCertificate (WINTRUST.@)
+ */
+PCCERT_CONTEXT WINAPI WTHelperCertFindIssuerCertificate(PCCERT_CONTEXT pChildContext, DWORD chStores,
+                                                        HCERTSTORE *pahStores, FILETIME *psftVerifyAsOf,
+                                                        DWORD dwEncoding, DWORD *pdwConfidence, DWORD *pdwError)
+{
+    PCCERT_CONTEXT best = NULL, candidate;
+    DWORD i, confidence, best_confidence = 0;
+
+    TRACE("(%p %lu %p %p %#lx %p %p)\n", pChildContext, chStores, pahStores, psftVerifyAsOf, dwEncoding,
+          pdwConfidence, pdwError);
+
+    if (!chStores || !pahStores)
+        return NULL;
+
+    for (i = 0; i < chStores; i++)
+    {
+        candidate = NULL;
+        while ((candidate = CertFindCertificateInStore(pahStores[i], dwEncoding, 0, CERT_FIND_SUBJECT_NAME,
+                                                       &pChildContext->pCertInfo->Issuer, candidate)))
+        {
+            if (CertCompareCertificate(dwEncoding, candidate->pCertInfo, pChildContext->pCertInfo))
+                continue;
+            confidence = WINTRUST_IssuerConfidence(pChildContext, candidate, psftVerifyAsOf);
+            if (best && confidence <= best_confidence)
+                continue;
+            CertFreeCertificateContext(best);
+            best = CertDuplicateCertificateContext(candidate);
+            best_confidence = confidence;
+        }
+    }
+    if (pdwConfidence)
+        *pdwConfidence = best_confidence;
+    if (pdwError)
+        *pdwError = best && !(best_confidence & CERT_CONFIDENCE_SIG) ? TRUST_E_CERT_SIGNATURE : ERROR_SUCCESS;
+    return best;
+}
+
+static const WCHAR *const WINTRUST_KnownStores[] = { L"Root", L"Trust", L"CA", L"My", L"TrustedPublisher" };
+
+static BOOL WINTRUST_OpenKnownStore(HCRYPTPROV hProv, DWORD index, HCERTSTORE *store)
+{
+    *store = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, hProv, CERT_SYSTEM_STORE_CURRENT_USER,
+                           WINTRUST_KnownStores[index]);
+    return *store != NULL;
+}
+
+/***********************************************************************
+ *		TrustOpenStores (WINTRUST.@)
+ */
+BOOL WINAPI TrustOpenStores(HCRYPTPROV hProv, DWORD *pchStores, HCERTSTORE *pahStores, DWORD dwFlags)
+{
+    DWORD i;
+
+    TRACE("(%Ix %p %p %#lx)\n", hProv, pchStores, pahStores, dwFlags);
+
+    if (!pchStores || dwFlags)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!pahStores || *pchStores < ARRAY_SIZE(WINTRUST_KnownStores))
+    {
+        BOOL ret = !pahStores;
+
+        *pchStores = ARRAY_SIZE(WINTRUST_KnownStores);
+        SetLastError(ERROR_MORE_DATA);
+        return ret;
+    }
+    for (i = 0; i < ARRAY_SIZE(WINTRUST_KnownStores); i++)
+    {
+        if (!WINTRUST_OpenKnownStore(hProv, i, &pahStores[i]))
+        {
+            while (i)
+                CertCloseStore(pahStores[--i], 0);
+            return FALSE;
+        }
+    }
+    *pchStores = ARRAY_SIZE(WINTRUST_KnownStores);
+    return TRUE;
+}
+
+/***********************************************************************
+ *		WTHelperOpenKnownStores (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperOpenKnownStores(CRYPT_PROVIDER_DATA *pProvData)
+{
+    HCERTSTORE store;
+    BOOL ret = TRUE;
+    DWORD i;
+
+    TRACE("(%p)\n", pProvData);
+
+    if (!pProvData)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    for (i = 0; ret && i < ARRAY_SIZE(WINTRUST_KnownStores); i++)
+    {
+        if (!(ret = WINTRUST_OpenKnownStore(pProvData->hProv, i, &store)))
+            break;
+        ret = pProvData->psPfns->pfnAddStore2Chain(pProvData, store);
+        CertCloseStore(store, 0);
+    }
+    return ret;
+}
+
+/***********************************************************************
+ *		WTHelperIsInRootStore (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperIsInRootStore(CRYPT_PROVIDER_DATA *pProvData, PCCERT_CONTEXT pCertContext)
+{
+    PCCERT_CONTEXT found;
+
+    TRACE("(%p %p)\n", pProvData, pCertContext);
+
+    if (!pProvData || !pCertContext || !pProvData->chStores)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!(found = CertFindCertificateInStore(pProvData->pahStores[0], pCertContext->dwCertEncodingType, 0,
+                                             CERT_FIND_EXISTING, pCertContext, NULL)))
+        return FALSE;
+    CertFreeCertificateContext(found);
+    return TRUE;
+}
+
+/***********************************************************************
+ *		WTHelperCheckCertUsage (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperCheckCertUsage(PCCERT_CONTEXT pCertContext, LPCSTR pszRequestedUsageOID)
+{
+    CERT_ENHKEY_USAGE *usage;
+    DWORD size = 0, i;
+    BOOL ret = FALSE;
+
+    TRACE("(%p %s)\n", pCertContext, debugstr_a(pszRequestedUsageOID));
+
+    if (!pCertContext || !pszRequestedUsageOID)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return TRUE;
+    }
+    if (!CertGetEnhancedKeyUsage(pCertContext, 0, NULL, &size) || !(usage = malloc(size)))
+        return FALSE;
+    if (CertGetEnhancedKeyUsage(pCertContext, 0, usage, &size))
+    {
+        ret = !usage->cUsageIdentifier && GetLastError() == CRYPT_E_NOT_FOUND;
+        for (i = 0; !ret && i < usage->cUsageIdentifier; i++)
+            ret = !strcmp(usage->rgpszUsageIdentifier[i], pszRequestedUsageOID);
+    }
+    free(usage);
+    if (!ret)
+        SetLastError(CERT_E_WRONG_USAGE);
+    return ret;
+}
+
+static BOOL WINTRUST_ChainIsMicrosoft(PCCERT_CHAIN_CONTEXT chain)
+{
+    CERT_CHAIN_POLICY_STATUS status = { sizeof(status) };
+    CERT_CHAIN_POLICY_PARA para = { sizeof(para) };
+
+    return chain && CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_MICROSOFT_ROOT, chain, &para, &status) &&
+           !status.dwError;
+}
+
+/***********************************************************************
+ *		WTHelperIsChainedToMicrosoft (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperIsChainedToMicrosoft(PCCERT_CONTEXT pCertContext, HCERTSTORE hStore, DWORD dwFlags)
+{
+    CERT_CHAIN_PARA para = { sizeof(para) };
+    PCCERT_CHAIN_CONTEXT chain;
+    BOOL ret;
+
+    TRACE("(%p %p %#lx)\n", pCertContext, hStore, dwFlags);
+
+    if (!pCertContext || !hStore)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    /* TODO: INFO_NEEDED: the meaning of dwFlags; 0, 1, 2 and ~0 give the same result on Windows 11 */
+    if (!CertGetCertificateChain(NULL, pCertContext, NULL, hStore, &para, 0, NULL, &chain))
+        return FALSE;
+    ret = WINTRUST_ChainIsMicrosoft(chain);
+    CertFreeCertificateChain(chain);
+    return ret;
+}
+
+/***********************************************************************
+ *		WTHelperIsChainedToMicrosoftFromStateData (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperIsChainedToMicrosoftFromStateData(HANDLE hStateData, DWORD dwFlags)
+{
+    CRYPT_PROVIDER_DATA *data = hStateData;
+
+    TRACE("(%p %#lx)\n", hStateData, dwFlags);
+
+    if (!data)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    return data->csSigners && WINTRUST_ChainIsMicrosoft(data->pasSigners[0].pChainContext);
+}
+
+/***********************************************************************
+ *		GetAuthenticodeSha256Hash (WINTRUST.@)
+ */
+HRESULT WINAPI GetAuthenticodeSha256Hash(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3)
+{
+    TRACE("(%p %p %p)\n", pvParam1, pvParam2, pvParam3);
+
+    /* TODO: INFO_NEEDED: the parameters Windows 11 accepts; every file, mapping, module and process handle tried fails */
+    SetLastError(ERROR_INVALID_HANDLE);
+    return E_INVALIDARG;
+}
+
+/***********************************************************************
+ *		ConfigCiPackageFamilyNameCheck (WINTRUST.@)
+ */
+DWORD WINAPI ConfigCiPackageFamilyNameCheck(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3)
+{
+    TRACE("(%p %p %p)\n", pvParam1, pvParam2, pvParam3);
+
+    /* TODO: INFO_NEEDED: the meaning of the result; Windows 11 returns 0x10000000 for every package family name tried */
+    return 0x10000000;
+}
+
+/***********************************************************************
+ *		ConfigCiFinalPolicy (WINTRUST.@)
+ */
+HRESULT WINAPI ConfigCiFinalPolicy(CRYPT_PROVIDER_DATA *pProvData)
+{
+    static const GUID ConfigCiAction = { 0x6078065b, 0x8f22, 0x4b13, { 0xbd,0x9b,0x5b,0x76,0x27,0x76,0xf3,0x86 } };
+
+    TRACE("(%p)\n", pProvData);
+
+    if (!pProvData || !pProvData->pgActionID || !IsEqualGUID(pProvData->pgActionID, &ConfigCiAction))
+        return E_INVALIDARG;
+    /* TODO: INFO_NEEDED: Windows 11 asks the active code integrity policy; LiberNT enforces none and allows the subject */
+    return S_OK;
+}
+
+/***********************************************************************
+ *		SrpCheckSmartlockerEAandProcessToken (WINTRUST.@)
+ */
+BOOL WINAPI SrpCheckSmartlockerEAandProcessToken(HANDLE hFile, HANDLE hToken, PVOID pvResult)
+{
+    TRACE("(%p %p %p)\n", hFile, hToken, pvResult);
+
+    /* TODO: INFO_NEEDED: the result for a file that carries the SmartLocker extended attribute */
+    return FALSE;
+}
+
+/***********************************************************************
+ *		WTValidateBioSignaturePolicy (WINTRUST.@)
+ */
+HRESULT WINAPI WTValidateBioSignaturePolicy(PVOID pvPolicy, BOOLEAN *pfValid)
+{
+    TRACE("(%p %p)\n", pvPolicy, pfValid);
+
+    *pfValid = FALSE;
+    /* TODO: INFO_NEEDED: the policy structure Windows 11 accepts; a zeroed one gives E_INVALIDARG */
+    return E_INVALIDARG;
+}
+
+/***********************************************************************
+ *		WTGetBioSignatureInfo (WINTRUST.@)
+ */
+HRESULT WINAPI WTGetBioSignatureInfo(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3, PVOID pvParam4, PVOID pvParam5,
+                                     PVOID pvParam6)
+{
+    TRACE("(%p %p %p %p %p %p)\n", pvParam1, pvParam2, pvParam3, pvParam4, pvParam5, pvParam6);
+
+    /* TODO: INFO_NEEDED: the parameters Windows 11 accepts; every set tried gives E_INVALIDARG */
+    return E_INVALIDARG;
+}
+
+/***********************************************************************
+ *		WTGetPluginSignatureInfo (WINTRUST.@)
+ */
+HRESULT WINAPI WTGetPluginSignatureInfo(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3, PVOID pvParam4, PVOID pvParam5,
+                                        PVOID pvParam6)
+{
+    TRACE("(%p %p %p %p %p %p)\n", pvParam1, pvParam2, pvParam3, pvParam4, pvParam5, pvParam6);
+
+    /* TODO: INFO_NEEDED: the parameters Windows 11 accepts; every set tried gives E_INVALIDARG */
+    return E_INVALIDARG;
+}
+
+/***********************************************************************
+ *		WTIsFirstConfigCiResultPreferred (WINTRUST.@)
+ */
+HRESULT WINAPI WTIsFirstConfigCiResultPreferred(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3)
+{
+    TRACE("(%p %p %p)\n", pvParam1, pvParam2, pvParam3);
+
+    if (!pvParam1 || !pvParam2 || !pvParam3)
+        return E_INVALIDARG;
+    /* TODO: INFO_NEEDED: the comparison; Windows 11 prefers the first result for every pair tried */
+    *(BOOLEAN *)pvParam3 = TRUE;
+    return S_OK;
+}
+
+/***********************************************************************
+ *		WTLogConfigCiSignerEvent (WINTRUST.@)
+ */
+HRESULT WINAPI WTLogConfigCiSignerEvent(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3, PVOID pvParam4)
+{
+    TRACE("(%p %p %p %p)\n", pvParam1, pvParam2, pvParam3, pvParam4);
+
+    if (!pvParam1)
+        return E_INVALIDARG;
+    /* TODO: INFO_NEEDED: the event Windows 11 logs; only NULL parameters were measured */
+    return S_OK;
+}
+
+/***********************************************************************
+ *		TrustDecode (WINTRUST.@)
+ */
+BOOL WINAPI TrustDecode(DWORD dwModuleId, BYTE **ppbRet, DWORD *pcbRet, DWORD dwErrorId, DWORD dwEncoding,
+                        LPCSTR pcszOID, const void *pvData, DWORD cbData, DWORD dwFlags)
+{
+    TRACE("(%lu %p %p %#lx %#lx %s %p %lu %#lx)\n", dwModuleId, ppbRet, pcbRet, dwErrorId, dwEncoding,
+          debugstr_a(pcszOID), pvData, cbData, dwFlags);
+
+    if (!ppbRet || !pcbRet)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (CryptDecodeObjectEx(dwEncoding, pcszOID, pvData, cbData, dwFlags | CRYPT_DECODE_ALLOC_FLAG, NULL, ppbRet,
+                            pcbRet))
+        return TRUE;
+    *ppbRet = NULL;
+    *pcbRet = 0;
+    return FALSE;
+}
+
+/***********************************************************************
+ *		TrustFreeDecode (WINTRUST.@)
+ */
+VOID WINAPI TrustFreeDecode(DWORD dwModuleId, BYTE **pbAllocated)
+{
+    TRACE("(%lu %p)\n", dwModuleId, pbAllocated);
+
+    if (!pbAllocated)
+        return;
+    LocalFree(*pbAllocated);
+    *pbAllocated = NULL;
+}
+
+/***********************************************************************
+ *		WTHelperGetAgencyInfo (WINTRUST.@)
+ */
+BOOL WINAPI WTHelperGetAgencyInfo(PCCERT_CONTEXT pCert, DWORD *pcbAgencyInfo, SPC_SP_AGENCY_INFO *pAgencyInfo)
+{
+    PCERT_EXTENSION ext;
+    DWORD needed = 0;
+
+    TRACE("(%p %p %p)\n", pCert, pcbAgencyInfo, pAgencyInfo);
+
+    if (!pCert || !pcbAgencyInfo)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!(ext = CertFindExtension(SPC_SP_AGENCY_INFO_OBJID, pCert->pCertInfo->cExtension,
+                                  pCert->pCertInfo->rgExtension)))
+    {
+        *pcbAgencyInfo = 0;
+        return FALSE;
+    }
+    if (!CryptDecodeObject(X509_ASN_ENCODING, SPC_SP_AGENCY_INFO_OBJID, ext->Value.pbData, ext->Value.cbData, 0, NULL,
+                           &needed))
+        return FALSE;
+    if (!pAgencyInfo || *pcbAgencyInfo < needed)
+    {
+        /* FIXME: Windows 11 decodes into a non-NULL buffer whatever size the caller gave; LiberNT refuses */
+        *pcbAgencyInfo = needed;
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+    *pcbAgencyInfo = needed;
+    return CryptDecodeObject(X509_ASN_ENCODING, SPC_SP_AGENCY_INFO_OBJID, ext->Value.pbData, ext->Value.cbData, 0,
+                             pAgencyInfo, pcbAgencyInfo);
+}
+
+/***********************************************************************
+ *		AddPersonalTrustDBPages (WINTRUST.@)
+ */
+BOOL WINAPI AddPersonalTrustDBPages(PVOID pvReserved, DWORD dwFlags, PVOID pvParam)
+{
+    TRACE("(%p %#lx %p)\n", pvReserved, dwFlags, pvParam);
+
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
+}
+
+/***********************************************************************
+ *		CatalogCompactHashDatabase (WINTRUST.@)
+ */
+BOOL WINAPI CatalogCompactHashDatabase(PVOID pvParam1, PVOID pvParam2, PVOID pvParam3, DWORD dwParam4)
+{
+    TRACE("(%p %p %p %#lx)\n", pvParam1, pvParam2, pvParam3, dwParam4);
+
+    return TRUE;
+}
+
+/***********************************************************************
+ *		TrustFindIssuerCertificate (WINTRUST.@)
+ */
+PCCERT_CONTEXT WINAPI TrustFindIssuerCertificate(PCCERT_CONTEXT pChildContext, DWORD dwEncoding, DWORD chStores,
+                                                 HCERTSTORE *pahStores, FILETIME *psftVerifyAsOf,
+                                                 DWORD *pdwConfidence, DWORD *pdwError, DWORD dwFlags)
+{
+    TRACE("(%p %#lx %lu %p %p %p %p %#lx)\n", pChildContext, dwEncoding, chStores, pahStores, psftVerifyAsOf,
+          pdwConfidence, pdwError, dwFlags);
+
+    if (!pChildContext || dwFlags)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    return WTHelperCertFindIssuerCertificate(pChildContext, chStores, pahStores, psftVerifyAsOf, dwEncoding,
+                                             pdwConfidence, pdwError);
+}
+
+/***********************************************************************
+ *		WTHelperGetFileHash (WINTRUST.@)
+ */
+LONG WINAPI WTHelperGetFileHash(LPCWSTR pwszFilename, DWORD dwFlags, PVOID pvReserved, BYTE *pbFileHash,
+                                DWORD *pcbFileHash, ALG_ID *pHashAlgid)
+{
+    GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO file = { sizeof(file) };
+    WINTRUST_DATA data = { sizeof(data) };
+    SPC_INDIRECT_DATA_CONTENT *indirect = NULL;
+    CRYPT_PROVIDER_DATA *prov;
+    const char *oid;
+    LONG ret;
+
+    TRACE("(%s %#lx %p %p %p %p)\n", debugstr_w(pwszFilename), dwFlags, pvReserved, pbFileHash, pcbFileHash,
+          pHashAlgid);
+
+    file.pcwszFilePath = pwszFilename;
+    data.dwUIChoice = WTD_UI_NONE;
+    data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    data.dwUnionChoice = WTD_CHOICE_FILE;
+    data.pFile = &file;
+    data.dwStateAction = WTD_STATEACTION_VERIFY;
+    ret = WinVerifyTrust(INVALID_HANDLE_VALUE, &action, &data);
+    prov = WTHelperProvDataFromStateData(data.hWVTStateData);
+    if (!ret && prov && prov->pPDSip)
+        indirect = (SPC_INDIRECT_DATA_CONTENT *)prov->pPDSip->psIndirectData;
+
+    if (!indirect)
+    {
+        if (pcbFileHash)
+            *pcbFileHash = 0;
+        ret = TRUST_E_NOSIGNATURE;
+    }
+    else
+    {
+        oid = indirect->DigestAlgorithm.pszObjId;
+        if (pHashAlgid)
+            *pHashAlgid = (!strcmp(oid, szOID_OIWSEC_sha1) || !strcmp(oid, szOID_RSA_MD5)) ?
+                          CertOIDToAlgId(oid) : CALG_OID_INFO_CNG_ONLY;
+        if (pbFileHash && *pcbFileHash < indirect->Digest.cbData)
+            ret = ERROR_MORE_DATA;
+        else if (pbFileHash)
+            memcpy(pbFileHash, indirect->Digest.pbData, indirect->Digest.cbData);
+        *pcbFileHash = indirect->Digest.cbData;
+    }
+
+    data.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust(INVALID_HANDLE_VALUE, &action, &data);
+    return ret;
+}
+
+/***********************************************************************
+ *		WTHelperCertCheckValidSignature (WINTRUST.@)
+ */
+HRESULT WINAPI WTHelperCertCheckValidSignature(CRYPT_PROVIDER_DATA *pProvData)
+{
+    static const DWORD steps[] =
+    {
+        TRUSTERROR_STEP_FINAL_WVTINIT, TRUSTERROR_STEP_FINAL_INITPROV, TRUSTERROR_STEP_FINAL_OBJPROV,
+        TRUSTERROR_STEP_FINAL_SIGPROV, TRUSTERROR_STEP_FINAL_CERTPROV, TRUSTERROR_STEP_FINAL_CERTCHKPROV,
+        TRUSTERROR_STEP_FINAL_POLICYPROV,
+    };
+    DWORD i;
+
+    TRACE("(%p)\n", pProvData);
+
+    for (i = 0; i < ARRAY_SIZE(steps); i++)
+    {
+        if (steps[i] < pProvData->cdwTrustStepErrors && pProvData->padwTrustStepErrors[steps[i]])
+            return pProvData->padwTrustStepErrors[steps[i]];
+    }
+    return S_OK;
+}
+#else
 /***********************************************************************
  *		WTHelperCertCheckValidSignature
  */
@@ -1178,6 +1942,7 @@ HRESULT WINAPI WTHelperCertCheckValidSignature(CRYPT_PROVIDER_DATA *pProvData)
     FIXME("Stub\n");
     return S_OK;
 }
+#endif
 
 /***********************************************************************
  *              IsCatalogFile
@@ -1197,14 +1962,203 @@ BOOL WINAPI IsCatalogFile(HANDLE hFile, WCHAR *pwszFileName)
 /***********************************************************************
  *              FindCertsByIssuer
  */
+#ifdef __REACTOS__
+/* TODO: INFO_NEEDED: the 32-bit FindCertsByIssuer layout; only the 64-bit one was measured */
+#define WINTRUST_ALIGN_PTR(x) (((x) + sizeof(DWORD_PTR) - 1) & ~(DWORD_PTR)(sizeof(DWORD_PTR) - 1))
+
+struct wintrust_issuer_chain
+{
+    PCCERT_CHAIN_CONTEXT chain;
+    DWORD cert_count;
+    CRYPT_KEY_PROV_INFO *key;
+};
+
+static CRYPT_KEY_PROV_INFO *WINTRUST_GetKeyProvInfo(PCCERT_CONTEXT cert)
+{
+    CRYPT_KEY_PROV_INFO *info;
+    DWORD size = 0;
+
+    if (!CertGetCertificateContextProperty(cert, CERT_KEY_PROV_INFO_PROP_ID, NULL, &size) || !(info = malloc(size)))
+        return NULL;
+    if (!CertGetCertificateContextProperty(cert, CERT_KEY_PROV_INFO_PROP_ID, info, &size))
+    {
+        free(info);
+        return NULL;
+    }
+    return info;
+}
+
+static DWORD WINTRUST_IssuerChainLength(PCCERT_CHAIN_CONTEXT chain, CERT_NAME_BLOB *issuer)
+{
+    PCERT_SIMPLE_CHAIN simple = chain->rgpChain[0];
+    DWORD i;
+
+    for (i = 0; i < simple->cElement; i++)
+    {
+        if (CertCompareCertificateName(X509_ASN_ENCODING, &simple->rgpElement[i]->pCertContext->pCertInfo->Issuer,
+                                       issuer))
+            return i + 1 < simple->cElement ? i + 2 : i + 1;
+    }
+    return 0;
+}
+
+static DWORD_PTR WINTRUST_PackKeyProvInfo(const CRYPT_KEY_PROV_INFO *info, BYTE *base, DWORD_PTR offset)
+{
+    CRYPT_KEY_PROV_INFO *copy = base ? (CRYPT_KEY_PROV_INFO *)(base + offset) : NULL;
+    DWORD_PTR size;
+    DWORD i;
+
+    if (copy)
+        *copy = *info;
+    offset += sizeof(*info);
+    if (info->pwszContainerName)
+    {
+        size = (wcslen(info->pwszContainerName) + 1) * sizeof(WCHAR);
+        if (copy)
+        {
+            memcpy(base + offset, info->pwszContainerName, size);
+            copy->pwszContainerName = (WCHAR *)(base + offset);
+        }
+        offset += size;
+    }
+    if (info->pwszProvName)
+    {
+        size = (wcslen(info->pwszProvName) + 1) * sizeof(WCHAR);
+        if (copy)
+        {
+            memcpy(base + offset, info->pwszProvName, size);
+            copy->pwszProvName = (WCHAR *)(base + offset);
+        }
+        offset += size;
+    }
+    if (info->cProvParam)
+    {
+        offset = WINTRUST_ALIGN_PTR(offset);
+        if (copy)
+            copy->rgProvParam = (CRYPT_KEY_PROV_PARAM *)(base + offset);
+        offset += info->cProvParam * sizeof(CRYPT_KEY_PROV_PARAM);
+        for (i = 0; i < info->cProvParam; i++)
+        {
+            offset = WINTRUST_ALIGN_PTR(offset);
+            if (copy)
+            {
+                copy->rgProvParam[i] = info->rgProvParam[i];
+                copy->rgProvParam[i].pbData = base + offset;
+                memcpy(base + offset, info->rgProvParam[i].pbData, info->rgProvParam[i].cbData);
+            }
+            offset += info->rgProvParam[i].cbData;
+        }
+    }
+    return offset;
+}
+
+static DWORD_PTR WINTRUST_PackIssuerChains(const struct wintrust_issuer_chain *found, DWORD count, BYTE *base)
+{
+    CERT_CHAIN *chains = (CERT_CHAIN *)base;
+    DWORD_PTR offset = count * sizeof(CERT_CHAIN), blobs, key;
+    PCCERT_CONTEXT cert;
+    DWORD i, j;
+
+    for (i = 0; i < count; i++)
+    {
+        blobs = WINTRUST_ALIGN_PTR(offset);
+        key = WINTRUST_ALIGN_PTR(blobs + found[i].cert_count * sizeof(CERT_BLOB));
+        offset = WINTRUST_PackKeyProvInfo(found[i].key, base, key);
+        if (base)
+        {
+            chains[i].cCerts = found[i].cert_count;
+            chains[i].certs = (CERT_BLOB *)(base + blobs);
+            chains[i].keyLocatorInfo = *(CRYPT_KEY_PROV_INFO *)(base + key);
+        }
+        for (j = 0; j < found[i].cert_count; j++)
+        {
+            cert = found[i].chain->rgpChain[0]->rgpElement[j]->pCertContext;
+            offset = WINTRUST_ALIGN_PTR(offset);
+            if (base)
+            {
+                chains[i].certs[j].cbData = cert->cbCertEncoded;
+                chains[i].certs[j].pbData = base + offset;
+                memcpy(base + offset, cert->pbCertEncoded, cert->cbCertEncoded);
+            }
+            offset += cert->cbCertEncoded;
+        }
+    }
+    return WINTRUST_ALIGN_PTR(offset);
+}
+#endif
+
 HRESULT WINAPI FindCertsByIssuer(PCERT_CHAIN pCertChains, DWORD *pcbCertChains,
  DWORD *pcCertChains, BYTE* pbEncodedIssuerName, DWORD cbEncodedIssuerName,
  LPCWSTR pwszPurpose, DWORD dwKeySpec)
 {
+#ifdef __REACTOS__
+    CERT_NAME_BLOB issuer = { cbEncodedIssuerName, pbEncodedIssuerName };
+    CERT_CHAIN_PARA para = { sizeof(para) };
+    struct wintrust_issuer_chain *found = NULL, *grown;
+    PCCERT_CONTEXT cert = NULL;
+    PCCERT_CHAIN_CONTEXT chain;
+    CRYPT_KEY_PROV_INFO *key;
+    DWORD count = 0, length, i;
+    DWORD_PTR size;
+    HCERTSTORE store;
+    HRESULT ret;
+
+    TRACE("(%p, %p, %p, %p, %ld, %s, %ld)\n", pCertChains, pcbCertChains, pcCertChains, pbEncodedIssuerName,
+          cbEncodedIssuerName, debugstr_w(pwszPurpose), dwKeySpec);
+
+    store = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, 0, CERT_SYSTEM_STORE_CURRENT_USER | CERT_STORE_READONLY_FLAG,
+                          L"My");
+    while (store && (cert = CertEnumCertificatesInStore(store, cert)))
+    {
+        if (!(key = WINTRUST_GetKeyProvInfo(cert)))
+            continue;
+        chain = NULL;
+        length = 0;
+        if (key->dwKeySpec == dwKeySpec && CertGetCertificateChain(NULL, cert, NULL, NULL, &para, 0, NULL, &chain))
+            length = WINTRUST_IssuerChainLength(chain, &issuer);
+        if (length && (grown = realloc(found, (count + 1) * sizeof(*found))))
+        {
+            found = grown;
+            found[count].chain = chain;
+            found[count].cert_count = length;
+            found[count].key = key;
+            count++;
+            continue;
+        }
+        if (chain)
+            CertFreeCertificateChain(chain);
+        free(key);
+    }
+
+    size = count ? WINTRUST_PackIssuerChains(found, count, NULL) : 0;
+    if (!count)
+        ret = CRYPT_E_NOT_FOUND;
+    else if (pCertChains && *pcbCertChains < size)
+        ret = HRESULT_FROM_WIN32(ERROR_BAD_LENGTH);
+    else
+    {
+        if (pCertChains)
+            WINTRUST_PackIssuerChains(found, count, (BYTE *)pCertChains);
+        ret = S_OK;
+    }
+    *pcbCertChains = (DWORD)size;
+    *pcCertChains = count;
+
+    for (i = 0; i < count; i++)
+    {
+        CertFreeCertificateChain(found[i].chain);
+        free(found[i].key);
+    }
+    free(found);
+    if (store)
+        CertCloseStore(store, 0);
+    return ret;
+#else
     FIXME("(%p, %p, %p, %p, %ld, %s, %ld): stub\n", pCertChains, pcbCertChains,
      pcCertChains, pbEncodedIssuerName, cbEncodedIssuerName,
      debugstr_w(pwszPurpose), dwKeySpec);
     return E_FAIL;
+#endif
 }
 
 /***********************************************************************

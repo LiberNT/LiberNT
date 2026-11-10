@@ -60,12 +60,13 @@ extern PPROCESSOR_IDENTITY HalpProcessorIdentity;
  */
 FORCEINLINE
 VOID
-ApicRequestGlobalInterrupt(
+ApicRequestGlobalInterruptLevel(
     _In_ UCHAR DestinationProcessor,
     _In_ UCHAR Vector,
     _In_ APIC_MT MessageType,
     _In_ APIC_TGM TriggerMode,
-    _In_ APIC_DSH DestinationShortHand)
+    _In_ APIC_DSH DestinationShortHand,
+    _In_ ULONG Level)
 {
     ULONG Flags;
     APIC_INTERRUPT_COMMAND_REGISTER Icr;
@@ -77,7 +78,7 @@ ApicRequestGlobalInterrupt(
     Icr.MessageType = MessageType;
     Icr.DestinationMode = APIC_DM_Physical;
     Icr.DeliveryStatus = 0;
-    Icr.Level = 1;
+    Icr.Level = Level;
     Icr.TriggerMode = TriggerMode;
     Icr.RemoteReadStatus = 0;
     Icr.DestinationShortHand = DestinationShortHand;
@@ -93,7 +94,6 @@ ApicRequestGlobalInterrupt(
     Flags = __readeflags();
     _disable();
 
-    /* Wait for the APIC to be idle */
     do
     {
         IcrStatus.Long0 = ApicRead(APIC_ICR0);
@@ -115,6 +115,23 @@ ApicRequestGlobalInterrupt(
     }
 }
 
+FORCEINLINE
+VOID
+ApicRequestGlobalInterrupt(
+    _In_ UCHAR DestinationProcessor,
+    _In_ UCHAR Vector,
+    _In_ APIC_MT MessageType,
+    _In_ APIC_TGM TriggerMode,
+    _In_ APIC_DSH DestinationShortHand)
+{
+    ApicRequestGlobalInterruptLevel(DestinationProcessor,
+                                    Vector,
+                                    MessageType,
+                                    TriggerMode,
+                                    DestinationShortHand,
+                                    1);
+}
+
 
 /* SMP SUPPORT FUNCTIONS ******************************************************/
 
@@ -123,26 +140,33 @@ ApicStartApplicationProcessor(
     _In_ ULONG NTProcessorNumber,
     _In_ PHYSICAL_ADDRESS StartupLoc)
 {
+    UCHAR LapicId, StartupVector;
+
     ASSERT(StartupLoc.HighPart == 0);
     ASSERT((StartupLoc.QuadPart & 0xFFF) == 0);
     ASSERT((StartupLoc.QuadPart & 0xFFF00FFF) == 0);
 
-    /* INIT IPI */
-    ApicRequestGlobalInterrupt(HalpProcessorIdentity[NTProcessorNumber].LapicId, 0,
-        APIC_MT_INIT, APIC_TGM_Edge, APIC_DSH_Destination);
+    /* Intel MP spec 1.4 B.4: INIT (level, deassert), 10 ms, STARTUP twice */
+    LapicId = HalpProcessorIdentity[NTProcessorNumber].LapicId;
+    StartupVector = (UCHAR)((StartupLoc.LowPart) >> 12);
+
+    ApicRequestGlobalInterruptLevel(LapicId, 0,
+        APIC_MT_INIT, APIC_TGM_Level, APIC_DSH_Destination, 1);
 
     KeStallExecutionProcessor(10000);
 
-    /* Startup IPI */
-    ApicRequestGlobalInterrupt(HalpProcessorIdentity[NTProcessorNumber].LapicId, (StartupLoc.LowPart) >> 12,
+    ApicRequestGlobalInterruptLevel(LapicId, 0,
+        APIC_MT_INIT, APIC_TGM_Level, APIC_DSH_Destination, 0);
+
+    KeStallExecutionProcessor(200);
+
+    ApicRequestGlobalInterrupt(LapicId, StartupVector,
         APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination);
 
-    if (KeGetCurrentPrcb()->CpuVendor != CPU_AMD)
-    {
-        KeStallExecutionProcessor(200);
-        ApicRequestGlobalInterrupt(HalpProcessorIdentity[NTProcessorNumber].LapicId, (StartupLoc.LowPart) >> 12,
-            APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination);
-    }
+    KeStallExecutionProcessor(200);
+
+    ApicRequestGlobalInterrupt(LapicId, StartupVector,
+        APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination);
 }
 
 /* HAL IPI FUNCTIONS **********************************************************/

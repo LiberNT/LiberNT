@@ -11619,6 +11619,210 @@ interface IHTMLUniqueName : IDispatch
     [propget, id(DISPID_IHTMLUNIQUENAME_UNIQUEID), hidden]      \
     BSTR uniqueID()
 
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3051045d-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLElement5 : IDispatch
+{
+    [id(DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTENODE)]
+    HRESULT getAttributeNode([in] BSTR bstrname, [retval, out] IHTMLDOMAttribute2 **ppretAttribute);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_SETATTRIBUTENODE)]
+    HRESULT setAttributeNode([in] IHTMLDOMAttribute2 *pattr, [retval, out] IHTMLDOMAttribute2 **ppretAttribute);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_REMOVEATTRIBUTENODE)]
+    HRESULT removeAttributeNode([in] IHTMLDOMAttribute2 *pattr, [retval, out] IHTMLDOMAttribute2 **ppretAttribute);
+
+    [id(DISPID_IHTMLELEMENT5_HASATTRIBUTE)]
+    HRESULT hasAttribute([in] BSTR name, [retval, out] VARIANT_BOOL *pfHasAttribute);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ROLE), displaybind, bindable]
+    HRESULT role([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ROLE), displaybind, bindable]
+    HRESULT role([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIABUSY), displaybind, bindable]
+    HRESULT ariaBusy([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIABUSY), displaybind, bindable]
+    HRESULT ariaBusy([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIACHECKED), displaybind, bindable]
+    HRESULT ariaChecked([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIACHECKED), displaybind, bindable]
+    HRESULT ariaChecked([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIADISABLED), displaybind, bindable]
+    HRESULT ariaDisabled([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIADISABLED), displaybind, bindable]
+    HRESULT ariaDisabled([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAEXPANDED), displaybind, bindable]
+    HRESULT ariaExpanded([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAEXPANDED), displaybind, bindable]
+    HRESULT ariaExpanded([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAHASPOPUP), displaybind, bindable]
+    HRESULT ariaHaspopup([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAHASPOPUP), displaybind, bindable]
+    HRESULT ariaHaspopup([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAHIDDEN), displaybind, bindable]
+    HRESULT ariaHidden([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAHIDDEN), displaybind, bindable]
+    HRESULT ariaHidden([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAINVALID), displaybind, bindable]
+    HRESULT ariaInvalid([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAINVALID), displaybind, bindable]
+    HRESULT ariaInvalid([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAMULTISELECTABLE), displaybind, bindable]
+    HRESULT ariaMultiselectable([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAMULTISELECTABLE), displaybind, bindable]
+    HRESULT ariaMultiselectable([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAPRESSED), displaybind, bindable]
+    HRESULT ariaPressed([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAPRESSED), displaybind, bindable]
+    HRESULT ariaPressed([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAREADONLY), displaybind, bindable]
+    HRESULT ariaReadonly([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAREADONLY), displaybind, bindable]
+    HRESULT ariaReadonly([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAREQUIRED), displaybind, bindable]
+    HRESULT ariaRequired([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAREQUIRED), displaybind, bindable]
+    HRESULT ariaRequired([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIASECRET), displaybind, bindable]
+    HRESULT ariaSecret([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIASECRET), displaybind, bindable]
+    HRESULT ariaSecret([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIASELECTED), displaybind, bindable]
+    HRESULT ariaSelected([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIASELECTED), displaybind, bindable]
+    HRESULT ariaSelected([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTE)]
+    HRESULT getAttribute([in] BSTR strAttributeName, [retval, out] VARIANT *AttributeValue);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_SETATTRIBUTE)]
+    HRESULT setAttribute([in] BSTR strAttributeName, [in] VARIANT AttributeValue);
+
+    [id(DISPID_IHTMLELEMENT5_IE8_REMOVEATTRIBUTE)]
+    HRESULT removeAttribute([in] BSTR strAttributeName, [retval, out] VARIANT_BOOL *pfSuccess);
+
+    [propget, id(DISPID_IHTMLELEMENT5_IE8_ATTRIBUTES)]
+    HRESULT attributes([retval, out] IHTMLAttributeCollection3 **p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAVALUENOW), displaybind, bindable]
+    HRESULT ariaValuenow([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAVALUENOW), displaybind, bindable]
+    HRESULT ariaValuenow([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAPOSINSET), displaybind, bindable]
+    HRESULT ariaPosinset([in] short v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAPOSINSET), displaybind, bindable]
+    HRESULT ariaPosinset([retval, out] short *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIASETSIZE), displaybind, bindable]
+    HRESULT ariaSetsize([in] short v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIASETSIZE), displaybind, bindable]
+    HRESULT ariaSetsize([retval, out] short *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIALEVEL), displaybind, bindable]
+    HRESULT ariaLevel([in] short v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIALEVEL), displaybind, bindable]
+    HRESULT ariaLevel([retval, out] short *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAVALUEMIN), displaybind, bindable]
+    HRESULT ariaValuemin([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAVALUEMIN), displaybind, bindable]
+    HRESULT ariaValuemin([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAVALUEMAX), displaybind, bindable]
+    HRESULT ariaValuemax([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAVALUEMAX), displaybind, bindable]
+    HRESULT ariaValuemax([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIACONTROLS), displaybind, bindable]
+    HRESULT ariaControls([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIACONTROLS), displaybind, bindable]
+    HRESULT ariaControls([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIADESCRIBEDBY), displaybind, bindable]
+    HRESULT ariaDescribedby([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIADESCRIBEDBY), displaybind, bindable]
+    HRESULT ariaDescribedby([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAFLOWTO), displaybind, bindable]
+    HRESULT ariaFlowto([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAFLOWTO), displaybind, bindable]
+    HRESULT ariaFlowto([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIALABELLEDBY), displaybind, bindable]
+    HRESULT ariaLabelledby([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIALABELLEDBY), displaybind, bindable]
+    HRESULT ariaLabelledby([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAACTIVEDESCENDANT), displaybind, bindable]
+    HRESULT ariaActivedescendant([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAACTIVEDESCENDANT), displaybind, bindable]
+    HRESULT ariaActivedescendant([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIAOWNS), displaybind, bindable]
+    HRESULT ariaOwns([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIAOWNS), displaybind, bindable]
+    HRESULT ariaOwns([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLELEMENT5_HASATTRIBUTES)]
+    HRESULT hasAttributes([retval, out] VARIANT_BOOL *pfHasAttributes);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIALIVE), displaybind, bindable]
+    HRESULT ariaLive([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIALIVE), displaybind, bindable]
+    HRESULT ariaLive([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLELEMENT5_ARIARELEVANT), displaybind, bindable]
+    HRESULT ariaRelevant([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLELEMENT5_ARIARELEVANT), displaybind, bindable]
+    HRESULT ariaRelevant([retval, out] BSTR *p);
+}
+
 #define WINE_IHTMLELEMENT5_DISPINTERFACE_DECL                           \
     [id(DISPID_IHTMLELEMENT5_IE8_GETATTRIBUTENODE)]                     \
     IHTMLDOMAttribute2 *ie8_getAttributeNode([in] BSTR bstrname);       \
@@ -13140,6 +13344,26 @@ interface IHTMLFormElement : IDispatch
         [retval, out] IDispatch **pdisp);
 }
 
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050F4F6-98B5-11CF-BB82-00AA00BDCE0B)
+]
+interface IHTMLFormElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFORMELEMENT2_ACCEPTCHARSET), displaybind, bindable]
+    HRESULT acceptCharset([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFORMELEMENT2_ACCEPTCHARSET), displaybind, bindable]
+    HRESULT acceptCharset([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLFORMELEMENT2_URNS)]
+    HRESULT urns(
+        [in] VARIANT urn,
+        [retval, out] IDispatch **pUrnColl);
+}
+
 /*****************************************************************************
  *    DispHTMLFormElement dispinterface
  */
@@ -13624,7 +13848,7 @@ coclass HTMLFormElement
     [source]            dispinterface HTMLFormElementEvents2;
     WINE_HTMLELEMENT_INTERFACES;
     interface IHTMLFormElement;
- /* interface IHTMLFormElement2; */
+    interface IHTMLFormElement2;
  /* interface IHTMLFormElement3; */
  /* interface IHTMLSubmitData; */
  /* interface IHTMLFormElement4; */
@@ -16978,6 +17202,1042 @@ coclass HTMLTitleElement
     [source]          dispinterface HTMLElementEvents2;
     WINE_HTMLELEMENT_INTERFACES;
     interface IHTMLTitleElement;
+}
+
+/*****************************************************************************
+ *    IHTMLBaseElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f204-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBaseElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    HRESULT href([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    HRESULT href([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    HRESULT target([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    HRESULT target([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBaseElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(30510420-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBaseElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    HRESULT href([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    HRESULT href([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBaseFontElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f202-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBaseFontElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([in] LONG v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([out, retval] LONG *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFontElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1d9-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFontElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    HRESULT face([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    HRESULT size([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLListElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f822-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLListElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    HRESULT compact([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    HRESULT compact([out, retval] VARIANT_BOOL *p);
+}
+
+/*****************************************************************************
+ *    IHTMLUListElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1dd-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLUListElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLULISTELEMENT_COMPACT), displaybind, bindable]
+    HRESULT compact([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLULISTELEMENT_COMPACT), displaybind, bindable]
+    HRESULT compact([out, retval] VARIANT_BOOL *p);
+
+    [propput, id(DISPID_IHTMLULISTELEMENT_TYPE), displaybind, bindable]
+    HRESULT type([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLULISTELEMENT_TYPE), displaybind, bindable]
+    HRESULT type([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLOListElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1de-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLOListElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLOLISTELEMENT_COMPACT), displaybind, bindable]
+    HRESULT compact([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLOLISTELEMENT_COMPACT), displaybind, bindable]
+    HRESULT compact([out, retval] VARIANT_BOOL *p);
+
+    [propput, id(DISPID_IHTMLOLISTELEMENT_START), displaybind, bindable]
+    HRESULT start([in] LONG v);
+
+    [propget, id(DISPID_IHTMLOLISTELEMENT_START), displaybind, bindable]
+    HRESULT start([out, retval] LONG *p);
+
+    [propput, id(DISPID_IHTMLOLISTELEMENT_TYPE), displaybind, bindable]
+    HRESULT type([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOLISTELEMENT_TYPE), displaybind, bindable]
+    HRESULT type([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLLIElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1e0-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLLIElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLLIELEMENT_TYPE), displaybind, bindable]
+    HRESULT type([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLLIELEMENT_TYPE), displaybind, bindable]
+    HRESULT type([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLLIELEMENT_VALUE), displaybind, bindable]
+    HRESULT value([in] LONG v);
+
+    [propget, id(DISPID_IHTMLLIELEMENT_VALUE), displaybind, bindable]
+    HRESULT value([out, retval] LONG *p);
+}
+
+/*****************************************************************************
+ *    IHTMLDListElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f1-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLDListElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLDLISTELEMENT_COMPACT), bindable]
+    HRESULT compact([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLDLISTELEMENT_COMPACT), bindable]
+    HRESULT compact([out, retval] VARIANT_BOOL *p);
+}
+
+/*****************************************************************************
+ *    IHTMLDDElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f2-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLDDElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLDDELEMENT_NOWRAP), displaybind, bindable]
+    HRESULT noWrap([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLDDELEMENT_NOWRAP), displaybind, bindable]
+    HRESULT noWrap([out, retval] VARIANT_BOOL *p);
+}
+
+/*****************************************************************************
+ *    IHTMLDTElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f3-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLDTElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLDTELEMENT_NOWRAP), displaybind, bindable]
+    HRESULT noWrap([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLDTELEMENT_NOWRAP), displaybind, bindable]
+    HRESULT noWrap([out, retval] VARIANT_BOOL *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLUListElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f538-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLUListElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    void compact(VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    VARIANT_BOOL compact();
+
+    [propput, id(DISPID_IHTMLULISTELEMENT_TYPE), displaybind, bindable]
+    void type(BSTR v);
+
+    [propget, id(DISPID_IHTMLULISTELEMENT_TYPE), displaybind, bindable]
+    BSTR type();
+}
+
+/*****************************************************************************
+ *    HTMLUListElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f269-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLUListElement
+{
+    [default]         dispinterface DispHTMLUListElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLListElement2;
+    interface IHTMLUListElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLOListElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f52a-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLOListElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    void compact(VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    VARIANT_BOOL compact();
+
+    [propput, id(DISPID_IHTMLOLISTELEMENT_START), displaybind, bindable]
+    void start(LONG v);
+
+    [propget, id(DISPID_IHTMLOLISTELEMENT_START), displaybind, bindable]
+    LONG start();
+
+    [propput, id(DISPID_IHTMLOLISTELEMENT_TYPE), displaybind, bindable]
+    void type(BSTR v);
+
+    [propget, id(DISPID_IHTMLOLISTELEMENT_TYPE), displaybind, bindable]
+    BSTR type();
+}
+
+/*****************************************************************************
+ *    HTMLOListElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f270-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLOListElement
+{
+    [default]         dispinterface DispHTMLOListElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLListElement2;
+    interface IHTMLOListElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLLIElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f523-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLLIElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLLIELEMENT_TYPE), displaybind, bindable]
+    void type(BSTR v);
+
+    [propget, id(DISPID_IHTMLLIELEMENT_TYPE), displaybind, bindable]
+    BSTR type();
+
+    [propput, id(DISPID_IHTMLLIELEMENT_VALUE), displaybind, bindable]
+    void value(LONG v);
+
+    [propget, id(DISPID_IHTMLLIELEMENT_VALUE), displaybind, bindable]
+    LONG value();
+}
+
+/*****************************************************************************
+ *    HTMLLIElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f273-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLLIElement
+{
+    [default]         dispinterface DispHTMLLIElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLLIElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLDListElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f53b-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLDListElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    void compact(VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLLISTELEMENT2_COMPACT), bindable]
+    VARIANT_BOOL compact();
+}
+
+/*****************************************************************************
+ *    HTMLDListElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27d-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLDListElement
+{
+    [default]         dispinterface DispHTMLDListElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLListElement2;
+    interface IHTMLDListElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLDDElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f50b-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLDDElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLDDELEMENT_NOWRAP), displaybind, bindable]
+    void noWrap(VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLDDELEMENT_NOWRAP), displaybind, bindable]
+    VARIANT_BOOL noWrap();
+}
+
+/*****************************************************************************
+ *    HTMLDDElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27f-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLDDElement
+{
+    [default]         dispinterface DispHTMLDDElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLDDElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLDTElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f50d-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLDTElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLDTELEMENT_NOWRAP), displaybind, bindable]
+    void noWrap(VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLDTELEMENT_NOWRAP), displaybind, bindable]
+    VARIANT_BOOL noWrap();
+}
+
+/*****************************************************************************
+ *    HTMLDTElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27c-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLDTElement
+{
+    [default]         dispinterface DispHTMLDTElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLDTElement;
+}
+
+/*****************************************************************************
+ *    IHTMLPhraseElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f20a-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLPhraseElement : IDispatch
+{
+}
+
+/*****************************************************************************
+ *    IHTMLPhraseElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f824-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLPhraseElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    HRESULT dateTime([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    HRESULT dateTime([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLPhraseElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3051043d-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLPhraseElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    HRESULT cite([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBlockElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f208-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBlockElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBlockElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f823-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBlockElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    HRESULT cite([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    HRESULT width([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    HRESULT width([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBlockElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(30510494-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBlockElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    HRESULT cite([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    HRESULT cite([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLBRElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f0-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLBRElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    HRESULT clear([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLParaElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f5-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLParaElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    HRESULT align([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLHeaderElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f6-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLHeaderElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    HRESULT align([out, retval] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLBaseElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f518-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBaseElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    void href(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_HREF), displaybind, bindable]
+    BSTR href();
+
+    [propput, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    void target(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT_TARGET), displaybind, bindable]
+    BSTR target();
+
+    [propput, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    void ie8_href(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEELEMENT2_IE8_HREF), displaybind, bindable]
+    BSTR ie8_href();
+}
+
+/*****************************************************************************
+ *    HTMLBaseElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f276-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBaseElement
+{
+    [default]         dispinterface DispHTMLBaseElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBaseElement;
+    interface IHTMLBaseElement2;
+}
+
+/*****************************************************************************
+ *    DispHTMLBaseFontElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f504-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBaseFontElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    void color(VARIANT v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_COLOR), displaybind, bindable]
+    VARIANT color();
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    void face(BSTR v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_FACE), displaybind, bindable]
+    BSTR face();
+
+    [propput, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    void size(LONG v);
+
+    [propget, id(DISPID_IHTMLBASEFONTELEMENT_SIZE), displaybind, bindable]
+    LONG size();
+}
+
+/*****************************************************************************
+ *    HTMLBaseFontElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f282-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBaseFontElement
+{
+    [default]         dispinterface DispHTMLBaseFontElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBaseFontElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLFontElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f512-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLFontElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    void color(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_COLOR), displaybind, bindable]
+    VARIANT color();
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    void face(BSTR v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_FACE), displaybind, bindable]
+    BSTR face();
+
+    [propput, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    void size(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFONTELEMENT_SIZE), displaybind, bindable]
+    VARIANT size();
+}
+
+/*****************************************************************************
+ *    HTMLFontElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27b-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLFontElement
+{
+    [default]         dispinterface DispHTMLFontElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLFontElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLPhraseElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f52d-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLPhraseElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    void cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_CITE), displaybind, bindable]
+    BSTR cite();
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    void dateTime(BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT2_DATETIME), displaybind, bindable]
+    BSTR dateTime();
+
+    [propput, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    void ie8_cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLPHRASEELEMENT3_IE8_CITE)]
+    BSTR ie8_cite();
+}
+
+/*****************************************************************************
+ *    HTMLPhraseElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f26e-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLPhraseElement
+{
+    [default]         dispinterface DispHTMLPhraseElement;
+    [source, default] dispinterface HTMLElementEvents;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLPhraseElement;
+    interface IHTMLPhraseElement2;
+    interface IHTMLPhraseElement3;
+}
+
+/*****************************************************************************
+ *    DispHTMLBlockElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f506-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBlockElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    void cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_CITE), displaybind, bindable]
+    BSTR cite();
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    void width(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT2_WIDTH), displaybind, bindable]
+    BSTR width();
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    void ie8_cite(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT3_IE8_CITE)]
+    BSTR ie8_cite();
+}
+
+/*****************************************************************************
+ *    HTMLBlockElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f281-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBlockElement
+{
+    [default]         dispinterface DispHTMLBlockElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBlockElement;
+    interface IHTMLBlockElement2;
+    interface IHTMLBlockElement3;
+}
+
+/*****************************************************************************
+ *    DispHTMLBRElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f53a-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLBRElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBRELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+}
+
+/*****************************************************************************
+ *    HTMLBRElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f280-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLBRElement
+{
+    [default]         dispinterface DispHTMLBRElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBRElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLParaElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f52c-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLParaElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+
+    [propput, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLPARAELEMENT_ALIGN), bindable]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLParaElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f26f-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLParaElement
+{
+    [default]         dispinterface DispHTMLParaElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBlockElement;
+    interface IHTMLParaElement;
+}
+
+/*****************************************************************************
+ *    DispHTMLHeaderElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f515-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLHeaderElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    void clear(BSTR v);
+
+    [propget, id(DISPID_IHTMLBLOCKELEMENT_CLEAR), displaybind, bindable]
+    BSTR clear();
+
+    [propput, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLHEADERELEMENT_ALIGN), bindable]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLHeaderElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27a-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLHeaderElement
+{
+    [default]         dispinterface DispHTMLHeaderElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLBlockElement;
+    interface IHTMLHeaderElement;
 }
 
 /*****************************************************************************
@@ -26725,6 +27985,164 @@ interface IHTMLTableSection : IDispatch
 }
 
 /*****************************************************************************
+ *    IHTMLTableSection2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f5c7-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableSection2 : IDispatch
+{
+    [id(DISPID_IHTMLTABLESECTION2_MOVEROW)]
+    HRESULT moveRow(
+            [defaultvalue(-1), in] LONG indexFrom,
+            [defaultvalue(-1), in] LONG indexTo,
+            [retval, out] IDispatch **row);
+}
+
+/*****************************************************************************
+ *    IHTMLTableSection3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82b-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableSection3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableSection4 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c5-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableSection4 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_INSERTROW)]
+    HRESULT insertRow(
+            [defaultvalue(-1), in] LONG index,
+            [retval, out] IDispatch **row);
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_DELETEROW)]
+    HRESULT deleteRow([defaultvalue(-1), in] LONG index);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCol interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f23a-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCol : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECOL_SPAN)]
+    HRESULT span([in] LONG v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_SPAN)]
+    HRESULT span([retval, out] LONG *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    HRESULT width([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    HRESULT width([retval, out] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    HRESULT align([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    HRESULT vAlign([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    HRESULT vAlign([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCol2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82a-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCol2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCol3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c4-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCol3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
  *    IHTMLTableRow interface
  */
 [
@@ -26787,6 +28205,80 @@ interface IHTMLTableRow : IDispatch
 
     [id(DISPID_IHTMLTABLEROW_DELETECELL)]
     HRESULT deleteCell([in, defaultvalue(-1)] LONG index);
+}
+
+/*****************************************************************************
+ *    IHTMLTableRow2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f4a1-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableRow2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLEROW2_HEIGHT)]
+    HRESULT height([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLEROW2_HEIGHT)]
+    HRESULT height([retval, out] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableRow3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82c-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableRow3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLEROW3_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW3_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLEROW3_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW3_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableRow4 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c6-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableRow4 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_INSERTCELL)]
+    HRESULT insertCell(
+            [defaultvalue(-1), in] LONG index,
+            [retval, out] IDispatch **row);
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_DELETECELL)]
+    HRESULT deleteCell([defaultvalue(-1), in] LONG index);
 }
 
 /*****************************************************************************
@@ -26874,6 +28366,78 @@ interface IHTMLTableCell : IDispatch
 
     [propget, id(DISPID_IHTMLTABLECELL_CELLINDEX)]
     HRESULT cellIndex([retval, out] long *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCell2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82d-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCell2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECELL2_ABBR), displaybind, bindable]
+    HRESULT abbr([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_ABBR), displaybind, bindable]
+    HRESULT abbr([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_AXIS), displaybind, bindable]
+    HRESULT axis([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_AXIS), displaybind, bindable]
+    HRESULT axis([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_HEADERS), displaybind, bindable]
+    HRESULT headers([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_HEADERS), displaybind, bindable]
+    HRESULT headers([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL2_SCOPE), displaybind, bindable]
+    HRESULT scope([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL2_SCOPE), displaybind, bindable]
+    HRESULT scope([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    IHTMLTableCell3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305106c7-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLTableCell3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLTABLECELL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL3_IE9_CH), displaybind, bindable]
+    HRESULT ch([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLTABLECELL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECELL3_IE9_CHOFF), displaybind, bindable]
+    HRESULT chOff([retval, out] BSTR *p);
 }
 
 /*****************************************************************************
@@ -27129,6 +28693,24 @@ methods:
 
     [propget, id(DISPID_IHTMLTABLEROW3_CHOFF), displaybind, bindable]
     BSTR chOff();
+
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    void ie9_ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CH), displaybind, bindable]
+    BSTR ie9_ch();
+
+    [propput, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    void ie9_chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLEROW4_IE9_CHOFF), displaybind, bindable]
+    BSTR ie9_chOff();
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_INSERTCELL)]
+    IDispatch *ie9_insertCell([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLEROW4_IE9_DELETECELL)]
+    void ie9_deleteCell([in, defaultvalue(-1)] LONG index);
 }
 
 /*****************************************************************************
@@ -27146,9 +28728,9 @@ coclass HTMLTableRow
     WINE_HTMLELEMENT_INTERFACES;
     interface IHTMLTableRow;
  /* interface IHTMLTableRowMetrics; */
- /* interface IHTMLTableRow2; */
- /* interface IHTMLTableRow3; */
- /* interface IHTMLTableRow4; */
+    interface IHTMLTableRow2;
+    interface IHTMLTableRow3;
+    interface IHTMLTableRow4;
 }
 
 /*****************************************************************************
@@ -27304,8 +28886,183 @@ coclass HTMLTableCell
     interface IHTMLControlElement;
     interface IHTMLTextContainer;
     interface IHTMLTableCell;
- /* interface IHTMLTableCell2; */
- /* interface IHTMLTableCell3; */
+    interface IHTMLTableCell2;
+    interface IHTMLTableCell3;
+}
+
+/*****************************************************************************
+ *    DispHTMLTableCol dispinterface
+ */
+[
+    hidden,
+    uuid(3050f533-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLTableCol
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLTABLECOL_SPAN)]
+    void span(LONG v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_SPAN)]
+    LONG span();
+
+    [propput, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    void width(VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_WIDTH)]
+    VARIANT width();
+
+    [propput, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_ALIGN)]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    void vAlign(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL_VALIGN)]
+    BSTR vAlign();
+
+    [propput, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    void ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CH), displaybind, bindable]
+    BSTR ch();
+
+    [propput, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    void chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL2_CHOFF), displaybind, bindable]
+    BSTR chOff();
+
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    void ie9_ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CH), displaybind, bindable]
+    BSTR ie9_ch();
+
+    [propput, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    void ie9_chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECOL3_IE9_CHOFF), displaybind, bindable]
+    BSTR ie9_chOff();
+}
+
+/*****************************************************************************
+ *    HTMLTableCol coclass
+ */
+[
+    noncreatable,
+    uuid(3050f26c-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLTableCol
+{
+    [default]         dispinterface DispHTMLTableCol;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLTableCol;
+    interface IHTMLTableCol2;
+    interface IHTMLTableCol3;
+}
+
+/*****************************************************************************
+ *    DispHTMLTableSection dispinterface
+ */
+[
+    hidden,
+    uuid(3050f534-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLTableSection
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLTABLESECTION_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION_ALIGN)]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLTABLESECTION_VALIGN)]
+    void vAlign(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION_VALIGN)]
+    BSTR vAlign();
+
+    [propput, id(DISPID_IHTMLTABLESECTION_BGCOLOR)]
+    void bgColor(VARIANT v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION_BGCOLOR)]
+    VARIANT bgColor();
+
+    [propget, id(DISPID_IHTMLTABLESECTION_ROWS)]
+    IHTMLElementCollection *rows();
+
+    [id(DISPID_IHTMLTABLESECTION_INSERTROW)]
+    IDispatch *insertRow([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLESECTION_DELETEROW)]
+    void deleteRow([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLESECTION2_MOVEROW)]
+    IDispatch *moveRow(
+            [in, defaultvalue(-1)] LONG indexFrom,
+            [in, defaultvalue(-1)] LONG indexTo);
+
+    [propput, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    void ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CH), displaybind, bindable]
+    BSTR ch();
+
+    [propput, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    void chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION3_CHOFF), displaybind, bindable]
+    BSTR chOff();
+
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    void ie9_ch(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CH), displaybind, bindable]
+    BSTR ie9_ch();
+
+    [propput, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    void ie9_chOff(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLESECTION4_IE9_CHOFF), displaybind, bindable]
+    BSTR ie9_chOff();
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_INSERTROW)]
+    IDispatch *ie9_insertRow([in, defaultvalue(-1)] LONG index);
+
+    [id(DISPID_IHTMLTABLESECTION4_IE9_DELETEROW)]
+    void ie9_deleteRow([in, defaultvalue(-1)] LONG index);
+}
+
+/*****************************************************************************
+ *    HTMLTableSection coclass
+ */
+[
+    noncreatable,
+    uuid(3050f2e9-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLTableSection
+{
+    [default]         dispinterface DispHTMLTableSection;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLTableSection;
+    interface IHTMLTableSection2;
+    interface IHTMLTableSection3;
+    interface IHTMLTableSection4;
 }
 
 /*****************************************************************************
@@ -27643,7 +29400,7 @@ dispinterface DispHTMLDivElement
 {
 properties:
 methods:
-    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+    WINE_HTMLDATAELEMENT_DISPINTERFACE_DECL;
 
     [propput, id(DISPID_IHTMLDIVELEMENT_ALIGN), displaybind, bindable]
     void align(BSTR v);
@@ -27656,6 +29413,172 @@ methods:
 
     [propget, id(DISPID_IHTMLDIVELEMENT_NOWRAP), displaybind, bindable]
     VARIANT_BOOL noWrap();
+}
+
+/*****************************************************************************
+ *    HTMLDivElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f27e-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLDivElement
+{
+    [default]         dispinterface DispHTMLDivElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLTextContainerEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    [source]          dispinterface HTMLTextContainerEvents2;
+    WINE_HTMLDATAELEMENT_INTERFACES;
+    interface IHTMLDivElement;
+    interface IHTMLControlElement;
+    interface IHTMLTextContainer;
+}
+
+/*****************************************************************************
+ *    IHTMLSpanElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f3f3-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLSpanElement : IDispatch
+{
+}
+
+/*****************************************************************************
+ *    DispHTMLSpanElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f548-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLSpanElement
+{
+properties:
+methods:
+    WINE_HTMLDATAELEMENT_DISPINTERFACE_DECL;
+}
+
+/*****************************************************************************
+ *    HTMLSpanElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f3f5-98b4-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLSpanElement
+{
+    [default]         dispinterface DispHTMLSpanElement;
+    [source, default] dispinterface HTMLElementEvents;
+    WINE_HTMLDATAELEMENT_INTERFACES;
+    interface IHTMLPhraseElement;
+    interface IHTMLSpanElement;
+    interface IHTMLControlElement;
+}
+
+/*****************************************************************************
+ *    IHTMLHRElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f1f4-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLHRElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    HRESULT align([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    HRESULT color([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    HRESULT noShade([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    HRESULT noShade([out, retval] VARIANT_BOOL *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    HRESULT width([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    HRESULT width([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    HRESULT size([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    HRESULT size([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLHRElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f53d-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLHRElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_ALIGN), displaybind, bindable]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    void color(VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_COLOR), displaybind, bindable]
+    VARIANT color();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    void noShade(VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_NOSHADE), bindable]
+    VARIANT_BOOL noShade();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    void width(VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_WIDTH)]
+    VARIANT width();
+
+    [propput, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    void size(VARIANT v);
+
+    [propget, id(DISPID_IHTMLHRELEMENT_SIZE)]
+    VARIANT size();
+}
+
+/*****************************************************************************
+ *    HTMLHRElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f252-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLHRElement
+{
+    [default]         dispinterface DispHTMLHRElement;
+    [source, default] dispinterface HTMLElementEvents;
+    [source]          dispinterface HTMLElementEvents2;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLHRElement;
 }
 
 /*****************************************************************************
@@ -28422,6 +30345,273 @@ coclass HTMLIFrame
     interface IHTMLIFrameElement2;
     interface IHTMLIFrameElement3;
  /* interface IGetSVGDocument; */
+}
+
+/*****************************************************************************
+ *    IHTMLFrameSetElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f319-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameSetElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    HRESULT rows([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    HRESULT rows([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    HRESULT cols([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    HRESULT cols([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    HRESULT border([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    HRESULT border([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    HRESULT frameBorder([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    HRESULT frameBorder([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    HRESULT frameSpacing([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    HRESULT frameSpacing([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    HRESULT name([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    HRESULT name([out, retval] BSTR *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONLOAD), displaybind, bindable]
+    HRESULT onload([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONLOAD), displaybind, bindable]
+    HRESULT onload([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    HRESULT onunload([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    HRESULT onunload([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    HRESULT onbeforeunload([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    HRESULT onbeforeunload([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameSetElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f5c6-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameSetElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    HRESULT onbeforeprint([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    HRESULT onbeforeprint([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    HRESULT onafterprint([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    HRESULT onafterprint([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameSetElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(30510796-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameSetElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    HRESULT onhashchange([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    HRESULT onhashchange([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    HRESULT onmessage([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    HRESULT onmessage([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    HRESULT onoffline([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    HRESULT onoffline([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    HRESULT ononline([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    HRESULT ononline([out, retval] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    HRESULT onstorage([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    HRESULT onstorage([out, retval] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLFrameSetSite dispinterface
+ */
+[
+    hidden,
+    uuid(3050f514-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLFrameSetSite
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    void rows(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ROWS), displaybind, bindable]
+    BSTR rows();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    void cols(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_COLS), displaybind, bindable]
+    BSTR cols();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    void border(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDER)]
+    VARIANT border();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    void borderColor(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_BORDERCOLOR)]
+    VARIANT borderColor();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    void frameBorder(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMEBORDER)]
+    BSTR frameBorder();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    void frameSpacing(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_FRAMESPACING)]
+    VARIANT frameSpacing();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    void name(BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_NAME), displaybind, bindable]
+    BSTR name();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    void onunload(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONUNLOAD), displaybind, bindable]
+    VARIANT onunload();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    void onbeforeunload(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT_ONBEFOREUNLOAD), displaybind, bindable]
+    VARIANT onbeforeunload();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    void onbeforeprint(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONBEFOREPRINT), displaybind, bindable]
+    VARIANT onbeforeprint();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    void onafterprint(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT2_ONAFTERPRINT), displaybind, bindable]
+    VARIANT onafterprint();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    void onhashchange(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONHASHCHANGE), displaybind, bindable]
+    VARIANT onhashchange();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    void onmessage(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONMESSAGE), displaybind, bindable]
+    VARIANT onmessage();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    void onoffline(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONOFFLINE), displaybind, bindable]
+    VARIANT onoffline();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    void ononline(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONONLINE), displaybind, bindable]
+    VARIANT ononline();
+
+    [propput, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    void onstorage(VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMESETELEMENT3_ONSTORAGE), displaybind, bindable]
+    VARIANT onstorage();
+}
+
+/*****************************************************************************
+ *    HTMLFrameSetSite coclass
+ */
+[
+    noncreatable,
+    uuid(3050f31a-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLFrameSetSite
+{
+    [default]         dispinterface DispHTMLFrameSetSite;
+ /* [source, default] dispinterface HTMLControlElementEvents; */
+ /* [source]          dispinterface HTMLControlElementEvents2; */
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLControlElement;
+    interface IHTMLFrameSetElement;
+    interface IHTMLFrameSetElement2;
+    interface IHTMLFrameSetElement3;
 }
 
 /*****************************************************************************
@@ -30284,6 +32474,58 @@ coclass DOMParser
 {
     [default] dispinterface DispDOMParser;
     interface IDOMParser;
+}
+
+/*****************************************************************************
+ *    IDOMException interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3051072b-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IDOMException : IDispatch
+{
+    [propput, id(DISPID_IDOMEXCEPTION_CODE)]
+    HRESULT code([in] LONG v);
+
+    [propget, id(DISPID_IDOMEXCEPTION_CODE)]
+    HRESULT code([retval, out] LONG *p);
+
+    [propget, id(DISPID_IDOMEXCEPTION_MESSAGE)]
+    HRESULT message([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispDOMException dispinterface
+ */
+[
+    hidden,
+    uuid(30590094-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispDOMException
+{
+properties:
+methods:
+    [propput, id(DISPID_IDOMEXCEPTION_CODE)]
+    void code(LONG v);
+
+    [propget, id(DISPID_IDOMEXCEPTION_CODE)]
+    LONG code();
+
+    [propget, id(DISPID_IDOMEXCEPTION_MESSAGE)]
+    BSTR message();
+}
+
+[
+    noncreatable,
+    uuid(3051072c-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass DOMException
+{
+    [default] dispinterface DispDOMException;
+    interface IDOMException;
 }
 
 /*****************************************************************************

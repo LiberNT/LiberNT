@@ -21,12 +21,16 @@ EmuCoreInitialize(VOID)
 {
     PIMAGE_NT_HEADERS Headers;
     PVOID Base;
+    const char *Error;
 
     if (!RtlPcToFileHeader((PVOID)EmuCoreInitialize, &Base)) return STATUS_INVALID_IMAGE_FORMAT;
     Headers = RtlImageNtHeader(Base);
     Felix86NtModuleBase = (ULONG_PTR)Base;
     Felix86NtModuleEnd = Felix86NtModuleBase + Headers->OptionalHeader.SizeOfImage;
-    return Felix86NtInitialize() ? STATUS_NOT_SUPPORTED : STATUS_SUCCESS;
+    Error = Felix86NtInitialize();
+    if (!Error) return STATUS_SUCCESS;
+    Felix86NtReportError(Error, STATUS_NOT_SUPPORTED);
+    return STATUS_NOT_SUPPORTED;
 }
 
 NTSTATUS

@@ -12,7 +12,7 @@ endif()
 
 option(FREELDR_WIM_RAMDISK "Enable FreeLDR boot.wim ramdisk decompression support" OFF)
 
-include(boot_images.cmake)
+include(${REACTOS_SOURCE_DIR}/sdk/cmake/boot_images.cmake)
 
 add_subdirectory(bootdata)
 add_subdirectory(freeldr)

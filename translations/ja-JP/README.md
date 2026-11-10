@@ -254,11 +254,11 @@ LiberNT/
 ├── hal/             # x86、Arm、Arm64、PowerPC、RISC-V 用のハードウェア抽象化レイヤー
 ├── media/           # フォント、テーマ、INF ファイル、サウンド、ブランド素材
 ├── modules/         # オプションのアプリケーション、テスト、壁紙
-├── ntoskrnl/        # NT カーネルとエグゼクティブ
+├── ntos/            # NT カーネルとエグゼクティブ
 ├── sdk/             # ヘッダー、ライブラリ、ビルドツール
 ├── submodules/      # 外部コンポーネントのレシピとパッチ
 ├── subsystems/      # CSRSS と Windows サブシステム
-├── win32ss/         # win32k、USER、GDI、ディスプレイドライバー
+│   └── win/win32k/  # win32k、USER、GDI、ディスプレイドライバー
 ├── configure.sh     # Linux、macOS、WSL2 でビルドを構成する
 └── configure.cmd    # Windows でビルドを構成する
 ```

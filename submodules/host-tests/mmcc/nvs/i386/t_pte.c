@@ -1,10 +1,10 @@
-#include <nvs/include/mienv.h>
-#include <nvs/arch/i386/hardware.h>
+#include <mm/include/mienv.h>
+#include <mm/arch/i386/hardware.h>
 
 static ULONG Checks, Failures;
 static MI_PTE Roots[2][1024];
 
-#define CHECK(e) do { Checks++; if (!(e)) { if (Failures++ < 20) fprintf(stderr, "%u: %s\n", __LINE__, #e); } } while (0)
+#define CHECK(e) do { Checks++; if (!(e)) { if (Failures++ < 20) fprintf(stderr, "%d: %s\n", __LINE__, #e); } } while (0)
 
 PVOID MiArchMapFrame(ULONG64 Frame) { MI_ASSERT(Frame < 2); return Roots[Frame]; }
 VOID MiArchUnmapFrame(PVOID Mapping) { UNREFERENCED_PARAMETER(Mapping); }
@@ -39,6 +39,7 @@ int main(void)
             CHECK(!!(Pte & MI_I386_PTE_GLOBAL) == !!((Flags & MI_LEAF_GLOBAL) && !(Flags & MI_LEAF_USER)));
             CHECK(!!(Pte & MI_I386_PTE_WRITE) == !!(MI_PROT_IS_WRITABLE(Protection) &&
                                                      (Flags & (MI_LEAF_DIRTY | MI_LEAF_HARDWARE_DIRTY))));
+            CHECK(MiArchPteIsHardwareWritable(Pte) == !!(Pte & MI_I386_PTE_WRITE));
             CHECK(MiArchPteIsDirty(Pte) == !!(MI_PROT_IS_WRITABLE(Protection) && (Flags & MI_LEAF_DIRTY)));
             Updated = MiArchPteSetDirty(Pte, TRUE);
             CHECK(MiArchPteFrame(Updated) == Frame);
@@ -50,6 +51,9 @@ int main(void)
         }
     }
 
+    CHECK(MiArchPteIsHardwareWritable(MI_I386_PTE_PRESENT | MI_I386_PTE_WRITE));
+    CHECK(!MiArchPteIsHardwareWritable(MI_I386_PTE_PRESENT | MI_I386_PTE_WRITABLE));
+    CHECK(!MiArchPteIsHardwareWritable(MI_I386_PTE_WRITE));
     CHECK(MiArchPteMakeLeaf(0x100000, MI_PROT_READWRITE, 0) == 0);
     CHECK(MiArchPteMakeTable(0x100000, 0) == 0);
     CHECK(MiArchPteMakeBlock(1, MI_PROT_READWRITE, 0) == 0);

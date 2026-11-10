@@ -74,6 +74,22 @@ TestSemaphoreLimit(VOID)
     ok_eq_hex(RaisedStatus, STATUS_SEMAPHORE_LIMIT_EXCEEDED);
     ok_eq_long(State, -1L);
     ok_eq_long(KeReadStateSemaphore(&Semaphore), 2L);
+
+    KeInitializeSemaphore(&Semaphore, MAXLONG, MAXLONG);
+    RaisedStatus = STATUS_SUCCESS;
+    State = -1;
+    _SEH2_TRY
+    {
+        State = KeReleaseSemaphore(&Semaphore, IO_NO_INCREMENT, 1, FALSE);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        RaisedStatus = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    ok_eq_hex(RaisedStatus, STATUS_SEMAPHORE_LIMIT_EXCEEDED);
+    ok_eq_long(State, -1L);
+    ok_eq_long(KeReadStateSemaphore(&Semaphore), MAXLONG);
 }
 
 static KSEMAPHORE WaiterSemaphore;

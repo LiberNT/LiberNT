@@ -8,9 +8,16 @@
 #include <apitest.h>
 #include <windows.h>
 #include <uxtheme.h>
+#include <vssym32.h>
+#include <reactos/dwmframe.h>
 
 #define CAPTURE_WIDTH 200
 #define TEXT_LEFT 32
+#define BUTTON_WIDTH 46
+#define BUTTON_HEIGHT 32
+#define BUTTON_KEY 0x00202020u
+
+typedef BOOL (WINAPI *PFN_THEME_DWM_DRAW_CAPTION_BUTTON)(HDC, const RECT *, UINT, ULONG, BOOL, BOOL);
 
 static void
 flush_messages(DWORD Timeout)
@@ -286,4 +293,104 @@ START_TEST(CustomCaptionInset)
     }
     UnregisterClassW(Class.lpszClassName, Class.hInstance);
     DeleteObject(Blue);
+}
+
+static BOOL
+render_caption_button(PFN_THEME_DWM_DRAW_CAPTION_BUTTON Draw, HTHEME Theme, UINT Button, ULONG State,
+                      DWORD *Pixels)
+{
+    static const int Parts[DWM_CAPTION_BUTTONS] = { WP_CLOSEBUTTON, WP_MAXBUTTON, WP_MINBUTTON };
+    RECT Rect = { 0, 0, BUTTON_WIDTH, BUTTON_HEIGHT };
+    BITMAPINFO Info;
+    HBITMAP Bitmap, Old;
+    DWORD *Bits = NULL;
+    BOOL Drawn;
+    HDC Dc;
+    int i;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    Info.bmiHeader.biWidth = BUTTON_WIDTH;
+    Info.bmiHeader.biHeight = -BUTTON_HEIGHT;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+    Dc = CreateCompatibleDC(NULL);
+    Bitmap = Dc ? CreateDIBSection(Dc, &Info, DIB_RGB_COLORS, (void **)&Bits, NULL, 0) : NULL;
+    if (!Bitmap || !Bits)
+    {
+        if (Bitmap)
+            DeleteObject(Bitmap);
+        if (Dc)
+            DeleteDC(Dc);
+        return FALSE;
+    }
+    for (i = 0; i < BUTTON_WIDTH * BUTTON_HEIGHT; i++)
+        Bits[i] = BUTTON_KEY;
+    Old = SelectObject(Dc, Bitmap);
+    if (Draw)
+        Drawn = Draw(Dc, &Rect, Button, State, TRUE, TRUE);
+    else
+        Drawn = SUCCEEDED(DrawThemeBackground(Theme, Dc, Parts[Button],
+                                              (State & DWM_CAPTION_STATE_HOT(Button)) ? CBS_HOT : CBS_NORMAL,
+                                              &Rect, NULL));
+    GdiFlush();
+    for (i = 0; i < BUTTON_WIDTH * BUTTON_HEIGHT; i++)
+        Pixels[i] = Bits[i] & 0x00FFFFFFu;
+    SelectObject(Dc, Old);
+    DeleteObject(Bitmap);
+    DeleteDC(Dc);
+    return Drawn;
+}
+
+START_TEST(DwmCaptionButton)
+{
+    static const char *Names[DWM_CAPTION_BUTTONS] = { "close", "maximize", "minimize" };
+    PFN_THEME_DWM_DRAW_CAPTION_BUTTON Draw;
+    DWORD Dwm[BUTTON_WIDTH * BUTTON_HEIGHT], Theme[BUTTON_WIDTH * BUTTON_HEIGHT];
+    COLORREF Fill;
+    HTHEME Window;
+    BOOL DarkCaption;
+    UINT Button, Hot;
+
+    Draw = (PFN_THEME_DWM_DRAW_CAPTION_BUTTON)GetProcAddress(GetModuleHandleW(L"uxtheme.dll"),
+                                                            "ThemeDwmDrawCaptionButton");
+    if (!Draw)
+    {
+        skip("ThemeDwmDrawCaptionButton is not exported\n");
+        return;
+    }
+    if (!IsThemeActive())
+    {
+        skip("Visual styles are not active\n");
+        return;
+    }
+    Window = OpenThemeDataEx(NULL, L"WINDOW", OTD_NONCLIENT);
+    ok(Window != NULL, "OpenThemeDataEx(WINDOW) failed\n");
+    if (!Window)
+        return;
+    DarkCaption = SUCCEEDED(GetThemeColor(Window, WP_CAPTION, FS_ACTIVE, TMT_FILLCOLORHINT, &Fill)) &&
+                  (GetRValue(Fill) * 299 + GetGValue(Fill) * 587 + GetBValue(Fill) * 114) / 1000 < 128;
+    trace("caption fill hint %06lx, dark caption %d\n", Fill, DarkCaption);
+    for (Button = 0; Button < DWM_CAPTION_BUTTONS; Button++)
+    {
+        for (Hot = 0; Hot < 2; Hot++)
+        {
+            ULONG State = Hot ? DWM_CAPTION_STATE_HOT(Button) : 0;
+            BOOL Same;
+
+            ok(render_caption_button(Draw, NULL, Button, State, Dwm),
+               "the DWM %s button (hot %u) was not drawn\n", Names[Button], Hot);
+            ok(render_caption_button(NULL, Window, Button, State, Theme),
+               "the theme %s button (hot %u) was not drawn\n", Names[Button], Hot);
+            Same = !memcmp(Dwm, Theme, sizeof(Dwm));
+            if (DarkCaption)
+                ok(Same, "a dark window's DWM %s button (hot %u) differs from the dark theme's\n",
+                   Names[Button], Hot);
+            else
+                ok(!Same, "a dark window's DWM %s button (hot %u) kept the light theme's\n",
+                   Names[Button], Hot);
+        }
+    }
+    CloseThemeData(Window);
 }

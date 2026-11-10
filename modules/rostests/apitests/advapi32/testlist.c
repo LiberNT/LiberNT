@@ -6,6 +6,7 @@ extern void func_AddMandatoryAce(void);
 extern void func_ControlServiceEx(void);
 extern void func_CopySid(void);
 extern void func_CreateService(void);
+extern void func_CryptCreateHash(void);
 extern void func_DuplicateTokenEx(void);
 extern void func_EnableTraceEx(void);
 extern void func_EnumerateTraceGuidsEx(void);
@@ -28,6 +29,7 @@ extern void func_RegCreateKeyEx(void);
 extern void func_RegCreateKeyTransacted(void);
 extern void func_RegEnumKey(void);
 extern void func_RegEnumValueW(void);
+extern void func_RegFlushKey(void);
 extern void func_RegOpenKeyExW(void);
 extern void func_RegOpenKeyTransacted(void);
 extern void func_RegQueryInfoKey(void);
@@ -48,6 +50,7 @@ const struct test winetest_testlist[] =
     { "ControlServiceEx", func_ControlServiceEx },
     { "CopySid", func_CopySid },
     { "CreateService", func_CreateService },
+    { "CryptCreateHash", func_CryptCreateHash },
     { "DuplicateTokenEx", func_DuplicateTokenEx },
     { "EnableTraceEx", func_EnableTraceEx },
     { "EnumerateTraceGuidsEx", func_EnumerateTraceGuidsEx },
@@ -70,6 +73,7 @@ const struct test winetest_testlist[] =
     { "RegCreateKeyTransacted", func_RegCreateKeyTransacted },
     { "RegEnumKey", func_RegEnumKey },
     { "RegEnumValueW", func_RegEnumValueW },
+    { "RegFlushKey", func_RegFlushKey },
     { "RegQueryInfoKey", func_RegQueryInfoKey },
     { "RegOpenKeyExW", func_RegOpenKeyExW },
     { "RegOpenKeyTransacted", func_RegOpenKeyTransacted },

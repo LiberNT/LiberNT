@@ -29,6 +29,8 @@ list(APPEND SOURCE
     page_settings.cpp
     main.cpp
     battery_telemetry.h
+    hardware_text.h
+    performance_layout.h
     app.h)
 
 file(GLOB taskmgr11_rc_deps res/*.*)

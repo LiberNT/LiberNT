@@ -20,7 +20,7 @@ add_definitions(-DDXGKDDI_INTERFACE_VERSION=0xF003)
 
 # rpi5vc4_v3d_exec.c reuses the offline-compiled terrain shader blobs from
 # the XPDM miniport tree (local quote-includes shadow same-named headers).
-include_directories(${REACTOS_SOURCE_DIR}/win32ss/drivers/miniport/rpi5vc4)
+include_directories(${REACTOS_SOURCE_DIR}/subsystems/win/win32k/drivers/miniport/rpi5vc4)
 
 list(APPEND SOURCE
     rpi5vc4.c

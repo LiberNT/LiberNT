@@ -9,12 +9,12 @@
 
 #include "usbaudio.h"
 
-#define PACKET_COUNT 10
+#define PACKET_COUNT 32
+#define FEEDBACK_PACKET_COUNT 8
 #define CAPTURE_IRP_COUNT 8
 #define RENDER_IRP_COUNT 12
 #define MAX_PIN_IRP_COUNT RENDER_IRP_COUNT
 #define MAXIMUM_ISO_PACKET_COUNT 1024
-#define USB_AUDIO_PACKETS_PER_SECOND 1000
 
 typedef struct
 {
@@ -379,6 +379,50 @@ UsbAudioFormatSupportsSampleRate(
 
 static
 BOOLEAN
+UsbAudioFormatMatchesConnectionFormatUac2(
+    IN PDEVICE_EXTENSION DeviceExtension,
+    IN PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor,
+    IN PKSDATARANGE ConnectionFormat)
+{
+    PUSB_AUDIO2_STREAMING_INTERFACE_DESCRIPTOR General;
+    PUSB_AUDIO2_STREAMING_FORMAT_TYPE_DESCRIPTOR Format;
+    USB_AUDIO_PCM_FORMAT PcmFormat;
+
+    if (!UsbAudioGetPcmWaveFormat(ConnectionFormat, &PcmFormat))
+        return FALSE;
+
+    General = (PUSB_AUDIO2_STREAMING_INTERFACE_DESCRIPTOR)
+        UsbAudioFindStreamingClassDescriptor(DeviceExtension->ConfigurationDescriptor,
+                                             InterfaceDescriptor,
+                                             0x01);
+    Format = (PUSB_AUDIO2_STREAMING_FORMAT_TYPE_DESCRIPTOR)
+        UsbAudioFindStreamingClassDescriptor(DeviceExtension->ConfigurationDescriptor,
+                                             InterfaceDescriptor,
+                                             0x02);
+
+    if (!General || !Format ||
+        General->bLength < sizeof(*General) ||
+        Format->bLength < sizeof(*Format) ||
+        General->bFormatType != USB_AUDIO2_FORMAT_TYPE_I ||
+        Format->bFormatType != USB_AUDIO2_FORMAT_TYPE_I ||
+        !(General->bmFormats & USB_AUDIO2_FORMAT_PCM) ||
+        !Format->bSubslotSize)
+    {
+        return FALSE;
+    }
+
+    if (Format->bSubslotSize * 8 != PcmFormat.WaveFormat->wBitsPerSample ||
+        General->bNrChannels != PcmFormat.WaveFormat->nChannels ||
+        Format->bBitResolution != PcmFormat.ValidBitsPerSample)
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+BOOLEAN
 UsbAudioFormatMatchesConnectionFormat(
     IN PUSB_AUDIO_STREAMING_FORMAT_TYPE_DESCRIPTOR FormatDescriptor,
     IN PKSDATARANGE ConnectionFormat)
@@ -526,6 +570,10 @@ UsbAudioSetFormat(
 
     if (UsbAudioGetPcmWaveFormat(Pin->ConnectionFormat, &PcmFormat))
     {
+        UacFeedbackInit(&PinContext->Feedback,
+                        PcmFormat.WaveFormat->nSamplesPerSec,
+                        PinContext->PacketRate);
+
         SampleRateBuffer[2] = (PcmFormat.WaveFormat->nSamplesPerSec >> 16) & 0xFF;
         SampleRateBuffer[1] = (PcmFormat.WaveFormat->nSamplesPerSec >> 8) & 0xFF;
         SampleRateBuffer[0] = (PcmFormat.WaveFormat->nSamplesPerSec >> 0) & 0xFF;
@@ -548,6 +596,37 @@ UsbAudioSetFormat(
                 Pin->Id);
         FreeFunction(SampleRateBuffer);
         return STATUS_INVALID_DEVICE_STATE;
+    }
+
+    if (PinContext->DeviceExtension->AudioVersion >= USB_AUDIO_VERSION_2)
+    {
+        ULONG SampleRate = PcmFormat.WaveFormat->nSamplesPerSec;
+
+        if (!PinContext->ClockId)
+        {
+            DPRINT1("UsbAudioSetFormat: no clock source for pin %lu\n", Pin->Id);
+            FreeFunction(SampleRateBuffer);
+            return STATUS_INVALID_DEVICE_STATE;
+        }
+
+        SampleRateBuffer[0] = (UCHAR)(SampleRate & 0xFF);
+        SampleRateBuffer[1] = (UCHAR)((SampleRate >> 8) & 0xFF);
+        SampleRateBuffer[2] = (UCHAR)((SampleRate >> 16) & 0xFF);
+        SampleRateBuffer[3] = (UCHAR)((SampleRate >> 24) & 0xFF);
+
+        Status = UsbAudioGetSetProperty(PinContext->LowerDevice,
+                                        USB_AUDIO_SET_CUR,
+                                        USB_AUDIO2_CS_SAMPLING_FREQ << 8,
+                                        ((USHORT)PinContext->ClockId << 8) |
+                                            PinContext->DeviceExtension->AudioControlInterfaceNumber,
+                                        SampleRateBuffer,
+                                        sizeof(ULONG),
+                                        USBD_TRANSFER_DIRECTION_OUT);
+        DPRINT1("UsbAudioSetFormat: clock %u rate %lu status %lx\n",
+                PinContext->ClockId, SampleRate, Status);
+
+        FreeFunction(SampleRateBuffer);
+        return Status;
     }
 
     StreamingEndpointDescriptor =
@@ -593,6 +672,81 @@ UsbAudioSetFormat(
     return Status;
 }
 
+static
+VOID
+UsbAudioInitializePinStreaming(
+    IN PKSPIN Pin,
+    IN PPIN_CONTEXT PinContext,
+    IN PDEVICE_EXTENSION DeviceExtension,
+    IN PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor,
+    IN UCHAR TerminalId)
+{
+    PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor;
+    PUSB_COMMON_DESCRIPTOR CommonDescriptor;
+    PUSB_ENDPOINT_DESCRIPTOR EndpointDescriptor;
+    PUCHAR ConfigurationEnd;
+    ULONG Index;
+
+    PinContext->PacketRate = 1000;
+    PinContext->FeedbackPipeHandle = NULL;
+    PinContext->FeedbackInterval = 0;
+    PinContext->ClockId = 0;
+
+    ConfigurationDescriptor = DeviceExtension->ConfigurationDescriptor;
+
+    EndpointDescriptor = UsbAudioFindStreamingEndpoint(ConfigurationDescriptor,
+                                                       InterfaceDescriptor,
+                                                       Pin->DataFlow);
+    if (EndpointDescriptor)
+    {
+        PinContext->PacketRate = UsbAudioGetStreamingPacketRate(DeviceExtension, EndpointDescriptor);
+        PinContext->FeedbackInterval = EndpointDescriptor->bInterval;
+    }
+
+    if (DeviceExtension->AudioVersion >= USB_AUDIO_VERSION_2)
+        PinContext->ClockId = UsbAudioGetTerminalClockId(DeviceExtension, TerminalId);
+
+    if (!DeviceExtension->InterfaceInfo)
+        return;
+
+    ConfigurationEnd = (PUCHAR)ConfigurationDescriptor +
+                       ConfigurationDescriptor->wTotalLength;
+    CommonDescriptor = (PUSB_COMMON_DESCRIPTOR)((PUCHAR)InterfaceDescriptor +
+                                                InterfaceDescriptor->bLength);
+
+    while ((PUCHAR)CommonDescriptor + 3 <= ConfigurationEnd &&
+           CommonDescriptor->bLength >= 3 &&
+           (PUCHAR)CommonDescriptor + CommonDescriptor->bLength <= ConfigurationEnd)
+    {
+        if (CommonDescriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
+            break;
+
+        if (CommonDescriptor->bDescriptorType == USB_ENDPOINT_DESCRIPTOR_TYPE)
+        {
+            EndpointDescriptor = (PUSB_ENDPOINT_DESCRIPTOR)CommonDescriptor;
+            if (USB_ENDPOINT_DIRECTION_IN(EndpointDescriptor->bEndpointAddress) &&
+                (EndpointDescriptor->bmAttributes & USB_ENDPOINT_TYPE_MASK) ==
+                    USB_ENDPOINT_TYPE_ISOCHRONOUS &&
+                (EndpointDescriptor->bmAttributes & 0x30) == 0x10)
+            {
+                for (Index = 0; Index < DeviceExtension->InterfaceInfo->NumberOfPipes; Index++)
+                {
+                    if (DeviceExtension->InterfaceInfo->Pipes[Index].EndpointAddress ==
+                        EndpointDescriptor->bEndpointAddress)
+                    {
+                        PinContext->FeedbackPipeHandle =
+                            DeviceExtension->InterfaceInfo->Pipes[Index].PipeHandle;
+                        break;
+                    }
+                }
+            }
+        }
+
+        CommonDescriptor = (PUSB_COMMON_DESCRIPTOR)((PUCHAR)CommonDescriptor +
+                                                    CommonDescriptor->bLength);
+    }
+}
+
 NTSTATUS
 USBAudioSelectAudioStreamingInterface(
     IN PKSPIN Pin,
@@ -633,12 +787,32 @@ USBAudioSelectAudioStreamingInterface(
     {
         if (InterfaceDescriptor->bInterfaceSubClass == 0x02 /* AUDIO_STREAMING */ && InterfaceDescriptor->bNumEndpoints > 0)
         {
-            StreamingInterfaceDescriptor = (PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(ConfigurationDescriptor, ConfigurationDescriptor->wTotalLength, InterfaceDescriptor, USB_AUDIO_CONTROL_TERMINAL_DESCRIPTOR_TYPE);
-            if (StreamingInterfaceDescriptor != NULL)
+            if (DeviceExtension->AudioVersion >= USB_AUDIO_VERSION_2)
             {
-                ASSERT(StreamingInterfaceDescriptor->bDescriptorSubtype == 0x01);
-                ASSERT(StreamingInterfaceDescriptor->wFormatTag == WAVE_FORMAT_PCM);
-                if (StreamingInterfaceDescriptor->bTerminalLink == TerminalDescriptor->bTerminalID)
+                PUSB_AUDIO2_STREAMING_INTERFACE_DESCRIPTOR GeneralDescriptor;
+
+                GeneralDescriptor = (PUSB_AUDIO2_STREAMING_INTERFACE_DESCRIPTOR)
+                    UsbAudioFindStreamingClassDescriptor(ConfigurationDescriptor,
+                                                         InterfaceDescriptor,
+                                                         0x01);
+                if (GeneralDescriptor != NULL &&
+                    GeneralDescriptor->bLength >= sizeof(*GeneralDescriptor) &&
+                    GeneralDescriptor->bTerminalLink == TerminalDescriptor->bTerminalID &&
+                    UsbAudioFormatMatchesConnectionFormatUac2(DeviceExtension,
+                                                              InterfaceDescriptor,
+                                                              Pin->ConnectionFormat))
+                {
+                    Found = TRUE;
+                    break;
+                }
+            }
+            else
+            {
+                StreamingInterfaceDescriptor = (PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(ConfigurationDescriptor, ConfigurationDescriptor->wTotalLength, InterfaceDescriptor, USB_AUDIO_CONTROL_TERMINAL_DESCRIPTOR_TYPE);
+                if (StreamingInterfaceDescriptor != NULL &&
+                    StreamingInterfaceDescriptor->bDescriptorSubtype == 0x01 &&
+                    StreamingInterfaceDescriptor->wFormatTag == WAVE_FORMAT_PCM &&
+                    StreamingInterfaceDescriptor->bTerminalLink == TerminalDescriptor->bTerminalID)
                 {
                     FormatDescriptor = UsbAudioFindFormatTypeDescriptor(ConfigurationDescriptor,
                                                                         InterfaceDescriptor);
@@ -654,7 +828,6 @@ USBAudioSelectAudioStreamingInterface(
                         Found = TRUE;
                         break;
                     }
-
                 }
             }
         }
@@ -705,6 +878,11 @@ USBAudioSelectAudioStreamingInterface(
          /* copy interface info */
          RtlCopyMemory(DeviceExtension->InterfaceInfo, &Urb->UrbSelectInterface.Interface, Urb->UrbSelectInterface.Interface.Length);
          PinContext->InterfaceDescriptor = InterfaceDescriptor;
+         UsbAudioInitializePinStreaming(Pin,
+                                        PinContext,
+                                        DeviceExtension,
+                                        InterfaceDescriptor,
+                                        TerminalDescriptor->bTerminalID);
      }
 
      /* free urb */
@@ -750,6 +928,14 @@ CaptureGateOnWorkItem(
     } while (Count);
 }
 
+static
+ULONG
+UsbAudioGetRenderPacketSize(
+    IN PPIN_CONTEXT PinContext,
+    IN PWAVEFORMATEX WaveFormat,
+    IN ULONG InitialRemainder,
+    OUT PULONG FinalRemainder);
+
 NTSTATUS
 RenderInitializeUrbAndIrp(
     IN PKSPIN Pin,
@@ -762,8 +948,6 @@ RenderInitializeUrbAndIrp(
     IN ULONG InitialRemainder,
     OUT PULONG FinalRemainder)
 {
-    ULONG BlockAlign;
-    ULONG Frames;
     ULONG Index;
     ULONG Offset;
     ULONG PacketSize;
@@ -779,7 +963,6 @@ RenderInitializeUrbAndIrp(
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
-    BlockAlign = WaveFormat->nBlockAlign;
     Remainder = InitialRemainder;
     Offset = 0;
 
@@ -825,22 +1008,17 @@ RenderInitializeUrbAndIrp(
 
     for (Index = 0; Index < PacketCount; Index++)
     {
-        Frames = WaveFormat->nSamplesPerSec / USB_AUDIO_PACKETS_PER_SECOND;
-        Remainder += WaveFormat->nSamplesPerSec % USB_AUDIO_PACKETS_PER_SECOND;
-        if (Remainder >= USB_AUDIO_PACKETS_PER_SECOND)
-        {
-            Frames++;
-            Remainder -= USB_AUDIO_PACKETS_PER_SECOND;
-        }
-
-        if (!Frames || Frames > MAXULONG / BlockAlign)
+        PacketSize = UsbAudioGetRenderPacketSize(PinContext,
+                                                 WaveFormat,
+                                                 Remainder,
+                                                 &Remainder);
+        if (!PacketSize)
         {
             FreeFunction(Urb);
             Irp->Tail.Overlay.DriverContext[0] = NULL;
             return STATUS_INVALID_BUFFER_SIZE;
         }
 
-        PacketSize = Frames * BlockAlign;
         if (PacketSize > PinContext->MaxPacketSize ||
             PacketSize > TransferBufferSize - Offset)
         {
@@ -874,20 +1052,40 @@ RenderInitializeUrbAndIrp(
 static
 ULONG
 UsbAudioGetRenderPacketSize(
+    IN PPIN_CONTEXT PinContext,
     IN PWAVEFORMATEX WaveFormat,
     IN ULONG InitialRemainder,
     OUT PULONG FinalRemainder)
 {
     ULONG Frames;
     ULONG Remainder;
+    ULONGLONG Feedback = 0;
 
-    Frames = WaveFormat->nSamplesPerSec / USB_AUDIO_PACKETS_PER_SECOND;
-    Remainder = InitialRemainder +
-                WaveFormat->nSamplesPerSec % USB_AUDIO_PACKETS_PER_SECOND;
-    if (Remainder >= USB_AUDIO_PACKETS_PER_SECOND)
+    if (!PinContext || !WaveFormat->nBlockAlign || !PinContext->PacketRate)
+        return 0;
+
+    Feedback = PinContext->FeedbackValue;
+
+    if (Feedback)
     {
-        Frames++;
-        Remainder -= USB_AUDIO_PACKETS_PER_SECOND;
+        ULONGLONG Accumulator = (ULONGLONG)InitialRemainder + Feedback;
+
+        Frames = (ULONG)(Accumulator >> 16);
+        Remainder = (ULONG)(Accumulator & 0xFFFF);
+
+        if (Frames > PinContext->MaxPacketSize / WaveFormat->nBlockAlign)
+            Frames = PinContext->MaxPacketSize / WaveFormat->nBlockAlign;
+    }
+    else
+    {
+        Frames = WaveFormat->nSamplesPerSec / PinContext->PacketRate;
+        Remainder = InitialRemainder +
+                    WaveFormat->nSamplesPerSec % PinContext->PacketRate;
+        if (Remainder >= PinContext->PacketRate)
+        {
+            Frames++;
+            Remainder -= PinContext->PacketRate;
+        }
     }
 
     *FinalRemainder = Remainder;
@@ -900,6 +1098,7 @@ UsbAudioGetRenderPacketSize(
 static
 ULONG
 UsbAudioGetRenderTransferSize(
+    IN PPIN_CONTEXT PinContext,
     IN PWAVEFORMATEX WaveFormat,
     IN ULONG InitialRemainder,
     IN ULONG AvailableBytes,
@@ -915,7 +1114,8 @@ UsbAudioGetRenderTransferSize(
 
     while (Count < MaximumPacketCount)
     {
-        PacketSize = UsbAudioGetRenderPacketSize(WaveFormat,
+        PacketSize = UsbAudioGetRenderPacketSize(PinContext,
+                                                 WaveFormat,
                                                  Remainder,
                                                  &Remainder);
         if (!PacketSize || PacketSize > MaximumPacketSize ||
@@ -1342,7 +1542,8 @@ InitCapturePin(
 
             for (PipeIndex = 0; PipeIndex < PinContext->InterfaceDescriptor->bNumEndpoints; PipeIndex++)
             {
-                if (PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].PipeType == UsbdPipeTypeIsochronous)
+                if (PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].PipeType == UsbdPipeTypeIsochronous &&
+                    USB_ENDPOINT_DIRECTION_IN(PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].EndpointAddress))
                 {
                     PipeHandle = PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].PipeHandle;
                     break;
@@ -1387,6 +1588,129 @@ InitCapturePin(
     return Status;
 }
 
+static
+NTSTATUS
+NTAPI
+UsbAudioFeedbackComplete(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PIRP Irp,
+    IN PVOID Context)
+{
+    PPIN_CONTEXT PinContext = Context;
+    PUCHAR Buffer;
+    ULONG Value = 0;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (!PinContext)
+        return STATUS_MORE_PROCESSING_REQUIRED;
+
+    if (NT_SUCCESS(Irp->IoStatus.Status) && PinContext->FeedbackBuffer)
+    {
+        PURB Urb = (PURB)Irp->Tail.Overlay.DriverContext[0];
+        ULONG PacketIndex;
+
+        for (PacketIndex = 0; Urb && PacketIndex < Urb->UrbIsochronousTransfer.NumberOfPackets; PacketIndex++)
+        {
+            PUSBD_ISO_PACKET_DESCRIPTOR Packet =
+                &Urb->UrbIsochronousTransfer.IsoPacket[PacketIndex];
+
+            if (!USBD_SUCCESS(Packet->Status) || !Packet->Length)
+                continue;
+
+            Buffer = (PUCHAR)PinContext->FeedbackBuffer + Packet->Offset;
+
+            if (PinContext->DeviceExtension->HighSpeed)
+            {
+                Value = ((ULONG)Buffer[0]) |
+                        ((ULONG)Buffer[1] << 8) |
+                        ((ULONG)Buffer[2] << 16) |
+                        ((ULONG)Buffer[3] << 24);
+            }
+            else
+            {
+                /* UAC2 full-speed feedback is Q10.14 frames per 1 ms frame */
+                Value = (((ULONG)Buffer[0]) |
+                         ((ULONG)Buffer[1] << 8) |
+                         ((ULONG)Buffer[2] << 16)) << 2;
+            }
+        }
+
+        if (Value)
+        {
+            Value = UacNormalizeFeedback(PinContext->DeviceExtension->HighSpeed,
+                                         Value,
+                                         PinContext->Feedback.NominalQ16);
+            UacFeedbackFeed(&PinContext->Feedback, Value);
+
+            if (!PinContext->FeedbackValue)
+            {
+                DPRINT1("USBAudio: feedback rate=%lu (Q16.16 frames per interval)\n", Value);
+            }
+            PinContext->FeedbackValue = PinContext->Feedback.CurrentQ16;
+        }
+    }
+
+    PinContext->FeedbackPending = FALSE;
+    KeSetEvent(&PinContext->FeedbackEvent, IO_NO_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+VOID
+UsbAudioSubmitFeedbackRequest(
+    IN PPIN_CONTEXT PinContext)
+{
+    PURB Urb;
+    PIRP Irp;
+    PIO_STACK_LOCATION IoStack;
+    ULONG Length;
+    ULONG Index;
+
+    if (!PinContext || !PinContext->FeedbackPipeHandle ||
+        !PinContext->FeedbackIrp || PinContext->FeedbackPending ||
+        PinContext->Closing)
+    {
+        return;
+    }
+
+    Urb = PinContext->FeedbackUrb;
+    Length = PinContext->DeviceExtension->HighSpeed ? 4 : 3;
+
+    RtlZeroMemory(Urb, GET_ISO_URB_SIZE(FEEDBACK_PACKET_COUNT));
+    Urb->UrbIsochronousTransfer.Hdr.Function = URB_FUNCTION_ISOCH_TRANSFER;
+    Urb->UrbIsochronousTransfer.Hdr.Length = GET_ISO_URB_SIZE(FEEDBACK_PACKET_COUNT);
+    Urb->UrbIsochronousTransfer.PipeHandle = PinContext->FeedbackPipeHandle;
+    Urb->UrbIsochronousTransfer.TransferFlags = USBD_TRANSFER_DIRECTION_IN |
+                                                USBD_START_ISO_TRANSFER_ASAP;
+    Urb->UrbIsochronousTransfer.TransferBufferLength = Length * FEEDBACK_PACKET_COUNT;
+    Urb->UrbIsochronousTransfer.TransferBuffer = PinContext->FeedbackBuffer;
+    Urb->UrbIsochronousTransfer.NumberOfPackets = FEEDBACK_PACKET_COUNT;
+    Urb->UrbIsochronousTransfer.StartFrame = 0;
+
+    for (Index = 0; Index < FEEDBACK_PACKET_COUNT; Index++)
+        Urb->UrbIsochronousTransfer.IsoPacket[Index].Offset = Index * Length;
+
+    Irp = PinContext->FeedbackIrp;
+    IoReuseIrp(Irp, STATUS_SUCCESS);
+    IoSetCompletionRoutine(Irp,
+                           UsbAudioFeedbackComplete,
+                           PinContext,
+                           TRUE,
+                           TRUE,
+                           TRUE);
+    IoStack = IoGetNextIrpStackLocation(Irp);
+    IoStack->DeviceObject = PinContext->LowerDevice;
+    IoStack->MajorFunction = IRP_MJ_INTERNAL_DEVICE_CONTROL;
+    IoStack->Parameters.DeviceIoControl.IoControlCode = IOCTL_INTERNAL_USB_SUBMIT_URB;
+    IoStack->Parameters.Others.Argument1 = Urb;
+    Irp->Tail.Overlay.DriverContext[0] = Urb;
+
+    KeClearEvent(&PinContext->FeedbackEvent);
+    PinContext->FeedbackPending = TRUE;
+    IoCallDriver(PinContext->LowerDevice, Irp);
+}
+
 NTSTATUS
 InitStreamPin(
     IN PKSPIN Pin)
@@ -1425,7 +1749,8 @@ InitStreamPin(
              PipeIndex < PinContext->InterfaceDescriptor->bNumEndpoints;
              PipeIndex++)
         {
-            if (PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].PipeType == UsbdPipeTypeIsochronous)
+            if (PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].PipeType == UsbdPipeTypeIsochronous &&
+                !USB_ENDPOINT_DIRECTION_IN(PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].EndpointAddress))
             {
                 PinContext->DataPipeHandle =
                     PinContext->DeviceExtension->InterfaceInfo->Pipes[PipeIndex].PipeHandle;
@@ -1441,6 +1766,55 @@ InitStreamPin(
                 PinContext->DeviceExtension->InterfaceInfo->Pipes[0].PipeHandle;
             PinContext->MaxPacketSize =
                 PinContext->DeviceExtension->InterfaceInfo->Pipes[0].MaximumPacketSize;
+        }
+    }
+
+    KeInitializeEvent(&PinContext->FeedbackEvent, NotificationEvent, TRUE);
+    PinContext->FeedbackPending = FALSE;
+    PinContext->FeedbackValue = 0;
+    UacFeedbackInit(&PinContext->Feedback, WaveFormatEx->WaveFormatEx.nSamplesPerSec, PinContext->PacketRate);
+    PinContext->FeedbackIrp = NULL;
+    PinContext->FeedbackUrb = NULL;
+    PinContext->FeedbackBuffer = NULL;
+
+    if (PinContext->FeedbackPipeHandle)
+    {
+        PinContext->FeedbackBuffer = AllocFunction(sizeof(ULONG) * FEEDBACK_PACKET_COUNT);
+        PinContext->FeedbackUrb = AllocFunction(GET_ISO_URB_SIZE(FEEDBACK_PACKET_COUNT));
+        PinContext->FeedbackIrp = AllocFunction(IoSizeOfIrp(PinContext->DeviceExtension->LowerDevice->StackSize));
+        if (PinContext->FeedbackBuffer && PinContext->FeedbackUrb && PinContext->FeedbackIrp)
+        {
+            NTSTATUS BagStatus;
+
+            IoInitializeIrp(PinContext->FeedbackIrp,
+                            IoSizeOfIrp(PinContext->DeviceExtension->LowerDevice->StackSize),
+                            PinContext->DeviceExtension->LowerDevice->StackSize);
+            BagStatus = KsAddItemToObjectBag(Pin->Bag, PinContext->FeedbackBuffer, ExFreePool);
+            if (NT_SUCCESS(BagStatus))
+                BagStatus = KsAddItemToObjectBag(Pin->Bag, PinContext->FeedbackUrb, ExFreePool);
+            if (NT_SUCCESS(BagStatus))
+                BagStatus = KsAddItemToObjectBag(Pin->Bag, PinContext->FeedbackIrp, ExFreePool);
+            if (!NT_SUCCESS(BagStatus))
+            {
+                FreeFunction(PinContext->FeedbackBuffer);
+                FreeFunction(PinContext->FeedbackUrb);
+                FreeFunction(PinContext->FeedbackIrp);
+                PinContext->FeedbackBuffer = NULL;
+                PinContext->FeedbackUrb = NULL;
+                PinContext->FeedbackIrp = NULL;
+            }
+        }
+        else
+        {
+            if (PinContext->FeedbackBuffer)
+                FreeFunction(PinContext->FeedbackBuffer);
+            if (PinContext->FeedbackUrb)
+                FreeFunction(PinContext->FeedbackUrb);
+            if (PinContext->FeedbackIrp)
+                FreeFunction(PinContext->FeedbackIrp);
+            PinContext->FeedbackBuffer = NULL;
+            PinContext->FeedbackUrb = NULL;
+            PinContext->FeedbackIrp = NULL;
         }
     }
 
@@ -1692,6 +2066,17 @@ USBAudioPinClose(
             PinContext->StarvationWorker = NULL;
         }
 
+        if (PinContext->FeedbackIrp)
+        {
+            if (PinContext->FeedbackPending)
+                IoCancelIrp(PinContext->FeedbackIrp);
+            KeWaitForSingleObject(&PinContext->FeedbackEvent,
+                                  Executive,
+                                  KernelMode,
+                                  FALSE,
+                                  NULL);
+        }
+
         PinCancelPendingIrps(PinContext);
     }
 
@@ -1726,6 +2111,7 @@ UsbAudioRenderComplete(
 
     /* get urb */
     Urb = Irp->Tail.Overlay.DriverContext[0];
+
     TransferBuffer = Irp->Tail.Overlay.DriverContext[2];
     Irp->Tail.Overlay.DriverContext[0] = NULL;
     Irp->Tail.Overlay.DriverContext[1] = NULL;
@@ -1919,12 +2305,15 @@ PinRenderProcess(
         return STATUS_INVALID_PARAMETER;
     }
 
+    UsbAudioSubmitFeedbackRequest(PinContext);
+
     for (;;)
     {
         if (!PinContext->RenderPendingPacketSize)
         {
             PinContext->RenderPendingPacketSize =
-                UsbAudioGetRenderPacketSize(&WaveFormatEx->WaveFormatEx,
+                UsbAudioGetRenderPacketSize(PinContext,
+                                            &WaveFormatEx->WaveFormatEx,
                                             PinContext->RenderPacketRemainder,
                                             &FinalRemainder);
             if (!PinContext->RenderPendingPacketSize ||
@@ -2038,6 +2427,7 @@ PinRenderProcess(
             break;
 
         TransferSize = UsbAudioGetRenderTransferSize(
+            PinContext,
             &WaveFormatEx->WaveFormatEx,
             PinContext->RenderPacketRemainder,
             Remaining,

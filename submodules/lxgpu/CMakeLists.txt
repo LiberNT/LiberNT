@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 Ahmed ARIF <arif.ing@outlook.com>
-# Nested build of the Linux subsystem GPU renderer against the ReactOS SDK: libepoxy and virglrenderer
-# (MIT, upstream release sources unchanged) as static libraries linked into lxgpu.exe.
+# Nested build of the GPU renderer of the Linux subsystem with the LiberNT SDK: libepoxy and virglrenderer
+# (MIT, upstream release sources; virglrenderer carries virglrenderer-windows.patch) as static libraries
+# linked into lxgpu.exe.
 
 cmake_minimum_required(VERSION 3.24)
 project(lxgpu C)
@@ -84,6 +85,7 @@ file(WRITE "${_gen}/virgl/config.h"
     "#define HAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT 1\n"
     "#define HAVE_FUNC_ATTRIBUTE_WEAK 1\n"
     "#define HAVE_TIMESPEC_GET 1\n"
+    "#define ENABLE_VENUS 1\n"
     "#define CHECK_GL_ERRORS 1\n"
     "#define UTIL_ARCH_LITTLE_ENDIAN 1\n"
     "#define UTIL_ARCH_BIG_ENDIAN 0\n"
@@ -103,7 +105,25 @@ add_custom_command(
             "${VIRGL_SOURCE_DIR}/src/gallium/auxiliary/util/u_format.yaml")
 
 set(_virgl "${VIRGL_SOURCE_DIR}/src")
+set(_venus_generated)
+foreach(_object buffer command_buffer descriptor_set device_memory image pipeline query_pool queue render_pass)
+    list(APPEND _venus_generated "${_gen}/venus/vkr_${_object}_gen.h")
+endforeach()
+add_custom_command(
+    OUTPUT ${_venus_generated}
+    COMMAND "${LXGPU_PYTHON}" "${_virgl}/venus/vkr_device_object.py" -o "${_gen}/venus" "${_virgl}/venus/vkr_device_object.json"
+    DEPENDS "${_virgl}/venus/vkr_device_object.py" "${_virgl}/venus/vkr_device_object.json"
+    VERBATIM)
+set(_venus_sources)
+foreach(_file acceleration_structure allocator buffer command_buffer common context cs descriptor_set device
+              device_memory host_copy image instance physical_device pipeline query_pool queue render_pass renderer
+              ring transport)
+    list(APPEND _venus_sources "${_virgl}/venus/vkr_${_file}.c")
+endforeach()
+
 add_library(virglrenderer STATIC
+    ${_venus_sources}
+    ${_venus_generated}
     "${_virgl}/gallium/auxiliary/cso_cache/cso_cache.c"
     "${_virgl}/gallium/auxiliary/cso_cache/cso_hash.c"
     "${_virgl}/gallium/auxiliary/tgsi/tgsi_build.c"
@@ -150,7 +170,8 @@ target_include_directories(virglrenderer
     PUBLIC "${_virgl}" "${_gen}/virgl"
     PRIVATE "${_virgl}/gallium/include" "${_virgl}/gallium/auxiliary" "${_virgl}/gallium/auxiliary/util"
             "${VIRGL_SOURCE_DIR}" "${_virgl}/venus" "${_virgl}/drm" "${_virgl}/drm/drm-uapi" "${_virgl}/mesa"
-            "${_virgl}/mesa/compat" "${_virgl}/mesa/pipe" "${_virgl}/mesa/util")
+            "${_virgl}/mesa/compat" "${_virgl}/mesa/pipe" "${_virgl}/mesa/util" "${_virgl}/venus/venus-protocol"
+            "${_gen}/venus")
 target_compile_options(virglrenderer PRIVATE -std=gnu11 -O2 -fno-strict-aliasing -Wno-deprecated-declarations
                                              -imacros "${_gen}/virgl/config.h"
                                              -include "${CMAKE_CURRENT_SOURCE_DIR}/compat.h")
@@ -158,7 +179,7 @@ target_compile_definitions(virglrenderer PRIVATE NDEBUG HAVE_CONFIG_H=1)
 target_link_libraries(virglrenderer PUBLIC epoxy)
 
 add_executable(lxgpu "${LXGPU_SOURCE_DIR}/lxgpu.c")
-target_include_directories(lxgpu PRIVATE "${LXGPU_INCLUDE_DIR}")
+target_include_directories(lxgpu PRIVATE "${LXGPU_INCLUDE_DIR}" "${_virgl}/venus")
 target_compile_options(lxgpu PRIVATE -O2)
 target_link_libraries(lxgpu PRIVATE virglrenderer epoxy opengl32 winmm shell32 user32 gdi32)
 target_link_options(lxgpu PRIVATE -Wl,--subsystem,windows)

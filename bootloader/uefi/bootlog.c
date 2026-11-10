@@ -11,6 +11,8 @@
 #define BOOTLOG_BYTES  4096
 
 static EFI_GUID BootLogFileSystemGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
+static EFI_GUID BootLogBlockIoGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
+static EFI_GUID BootLogDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
 static EFI_FILE_PROTOCOL* BootLogRoot;
 static EFI_FILE_PROTOCOL* BootLogFile;
 static BOOLEAN BootLogEnabled;
@@ -33,6 +35,32 @@ BootLogTplAllowed(VOID)
 
 static
 BOOLEAN
+BootLogVolumeWritable(
+    _In_ EFI_HANDLE Device)
+{
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_BLOCK_IO_PROTOCOL* BlockIo;
+    EFI_DEVICE_PATH_PROTOCOL* Node;
+
+    if (!EFI_ERROR(BootServices->HandleProtocol(Device, &BootLogBlockIoGuid, (VOID**)&BlockIo)) &&
+        BlockIo->Media->ReadOnly)
+    {
+        return FALSE;
+    }
+
+    if (EFI_ERROR(BootServices->HandleProtocol(Device, &BootLogDevicePathGuid, (VOID**)&Node)))
+        return TRUE;
+
+    for (; !IsDevicePathEnd(Node); Node = NextDevicePathNode(Node))
+    {
+        if (DevicePathType(Node) == MEDIA_DEVICE_PATH && DevicePathSubType(Node) == MEDIA_CDROM_DP)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static
+BOOLEAN
 BootLogOpen(VOID)
 {
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystem;
@@ -44,6 +72,7 @@ BootLogOpen(VOID)
 
     Device = FwGetBootDeviceHandle();
     if (!Device ||
+        !BootLogVolumeWritable(Device) ||
         EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Device,
                                                                   &BootLogFileSystemGuid,
                                                                   (VOID**)&FileSystem)) ||

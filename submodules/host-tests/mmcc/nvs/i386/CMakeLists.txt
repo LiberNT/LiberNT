@@ -1,5 +1,5 @@
 foreach(TARGET mm_i386_pte mm_i386_pte_asan)
-    add_executable(${TARGET} t_pte.c ${MMCC_KERNEL_ROOT}/nvs/arch/i386/pte.c)
+    add_executable(${TARGET} t_pte.c ${MMCC_KERNEL_ROOT}/mm/arch/i386/pte.c)
     target_compile_definitions(${TARGET} PRIVATE MM_HOST_TEST MI_ARCH_PTE_BYTES=4)
     target_include_directories(${TARGET} PRIVATE ${MMCC_KERNEL_ROOT})
     target_compile_options(${TARGET} PRIVATE -Wall -Wextra -Werror -g -O1)

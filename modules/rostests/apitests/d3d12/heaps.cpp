@@ -263,6 +263,55 @@ static void TestGpuUploadUnsupported(ID3D12Device *device)
     ok(hr == E_INVALIDARG, "unsupported GPU upload heap: %#lx\n", hr);
 }
 
+static void TestPlacedMap(ID3D12Device *device)
+{
+    D3D12_HEAP_DESC heap_desc = {};
+    D3D12_RESOURCE_DESC desc = BufferDesc(D3D12_RESOURCE_FLAG_NONE);
+    ID3D12Resource *buffers[4] = {};
+    ID3D12Heap *heap = NULL;
+    void *first[4] = {}, *again;
+    HRESULT hr;
+    UINT i;
+
+    heap_desc.SizeInBytes = ARRAYSIZE(buffers) * D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    heap_desc.Properties.Type = D3D12_HEAP_TYPE_UPLOAD;
+    heap_desc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+    hr = device->CreateHeap(&heap_desc, __uuidof(ID3D12Heap), reinterpret_cast<void **>(&heap));
+    ok(hr == S_OK, "upload heap: %#lx\n", hr);
+    if (FAILED(hr)) return;
+    desc.Width = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+    for (i = 0; i < ARRAYSIZE(buffers); ++i)
+    {
+        hr = device->CreatePlacedResource(heap, i * D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT, &desc,
+                D3D12_RESOURCE_STATE_GENERIC_READ, NULL, __uuidof(ID3D12Resource), reinterpret_cast<void **>(&buffers[i]));
+        ok(hr == S_OK, "placed buffer %u: %#lx\n", i, hr);
+    }
+    for (i = 0; i < ARRAYSIZE(buffers); ++i)
+    {
+        if (!buffers[i]) continue;
+        hr = buffers[i]->Map(0, NULL, &first[i]);
+        ok(hr == S_OK && first[i], "map of placed buffer %u: %#lx, %p\n", i, hr, first[i]);
+        if (SUCCEEDED(hr)) *static_cast<UINT *>(first[i]) = 0x1234u + i;
+    }
+    for (i = 0; i < ARRAYSIZE(buffers); ++i)
+    {
+        if (!first[i]) continue;
+        again = NULL;
+        hr = buffers[i]->Map(0, NULL, &again);
+        ok(hr == S_OK && again == first[i], "second map of placed buffer %u: %#lx, %p, expected %p\n", i, hr,
+                again, first[i]);
+        if (SUCCEEDED(hr))
+        {
+            ok(*static_cast<UINT *>(again) == 0x1234u + i, "placed buffer %u holds %#x\n", i, *static_cast<UINT *>(again));
+            buffers[i]->Unmap(0, NULL);
+        }
+        buffers[i]->Unmap(0, NULL);
+    }
+    for (i = 0; i < ARRAYSIZE(buffers); ++i)
+        if (buffers[i]) buffers[i]->Release();
+    heap->Release();
+}
+
 static void RunHeaps(void *)
 {
     D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16 = {};
@@ -288,6 +337,7 @@ static void RunHeaps(void *)
 
     TestCustomHeapProperties(device, architecture);
     TestCommittedFlags(device);
+    TestPlacedMap(device);
 
     hr = CreateCommitted(device, upload, D3D12_HEAP_FLAG_TOOLS_USE_MANUAL_WRITE_TRACKING,
             BufferDesc(D3D12_RESOURCE_FLAG_NONE), D3D12_RESOURCE_STATE_GENERIC_READ, NULL);

@@ -102,11 +102,11 @@ def text_between(source, first, last, path, include_last):
 
 
 EXTRACTS = {
-    "w32registry.h": ("win32ss/user/ntuser/misc/registry.c",
+    "w32registry.h": ("subsystems/win/win32k/user/ntuser/misc/registry.c",
                       ["RegOpenKey", "RegQueryValue", "RegReadDWORD"]),
-    "w32display.h": ("win32ss/user/ntuser/display.c",
+    "w32display.h": ("subsystems/win/win32k/user/ntuser/display.c",
                      ["InitDisplayDriver", "InitVideo"]),
-    "w32device.h": ("win32ss/gdi/eng/device.c",
+    "w32device.h": ("subsystems/win/win32k/gdi/eng/device.c",
                     ["EngpHasVgaDriver", "EngpLinkGraphicsDevice",
                      "EngpUnlinkGraphicsDevice", "EngpIsGraphicsDeviceRegistered",
                      "EngpFreeGraphicsDevice", "EngpUpdateGraphicsDeviceList",
@@ -115,20 +115,20 @@ EXTRACTS = {
                      "EngpGetDisplayDriverAccelerationLevel",
                      "EngpRegisterGraphicsDevice", "EngpFindGraphicsDevice",
                      "EngDeviceIoControl"]),
-    "w32ldev.h": ("win32ss/gdi/eng/ldevobj.c",
+    "w32ldev.h": ("subsystems/win/win32k/gdi/eng/ldevobj.c",
                   ["LDEVOBJ_ulGetDriverModes", "LDEVOBJ_bModeListedByEarlierDriver",
                    "LDEVOBJ_bBuildDevmodeList", "LDEVOBJ_bGetClosestMode",
                    "LDEVOBJ_bProbeAndCaptureDevmode"]),
-    "w32mdev.h": ("win32ss/gdi/eng/mdevobj.c", ["MDEVOBJ_Create", "MDEVOBJ_vDestroy"]),
-    "w32pdev.h": ("win32ss/gdi/eng/pdevobj.c", ["PDEVOBJ_lChangeDisplaySettings"]),
-    "w32winsta.h": ("win32ss/user/ntuser/winsta.c", ["co_IntInitializeDesktopGraphics"]),
-    "w32guicheck.h": ("win32ss/user/ntuser/guicheck.c",
+    "w32mdev.h": ("subsystems/win/win32k/gdi/eng/mdevobj.c", ["MDEVOBJ_Create", "MDEVOBJ_vDestroy"]),
+    "w32pdev.h": ("subsystems/win/win32k/gdi/eng/pdevobj.c", ["PDEVOBJ_lChangeDisplaySettings"]),
+    "w32winsta.h": ("subsystems/win/win32k/user/ntuser/winsta.c", ["co_IntInitializeDesktopGraphics"]),
+    "w32guicheck.h": ("subsystems/win/win32k/user/ntuser/guicheck.c",
                       ["co_AddGuiApp", "RemoveGuiApp", "co_IntGraphicsCheck"]),
-    "w32windc.h": ("win32ss/user/ntuser/windc.c", ["DceCreateDisplayDC"]),
-    "w32ntuser.h": ("win32ss/user/ntuser/ntuser.c", ["UserInitialize"]),
-    "cddmodes.h": ("win32ss/drivers/displays/cdd/screen.c",
+    "w32windc.h": ("subsystems/win/win32k/user/ntuser/windc.c", ["DceCreateDisplayDC"]),
+    "w32ntuser.h": ("subsystems/win/win32k/user/ntuser/ntuser.c", ["UserInitialize"]),
+    "cddmodes.h": ("subsystems/win/win32k/drivers/displays/cdd/screen.c",
                    ["RcddGetAvailableModes", "RcddGetModes"]),
-    "fbmodes.h": ("win32ss/drivers/displays/framebuf/screen.c",
+    "fbmodes.h": ("subsystems/win/win32k/drivers/displays/framebuf/screen.c",
                   ["GetAvailableModes", "DrvGetModes"]),
     "dxgdisplay.h": ("drivers/directx/dxgkrnl/display.c",
                      ["DxgkpRegWriteDword", "DxgkpRegWriteString",
@@ -138,7 +138,7 @@ EXTRACTS = {
     "dxgpost.h": ("drivers/directx/dxgkrnl/adapter.c",
                   ["DxgkpValidatePostDisplayInformation",
                    "DxgkpAcquirePostDisplayOwnership"]),
-    "ntinbv.h": ("ntoskrnl/inbv/inbv.c",
+    "ntinbv.h": ("ntos/inbv/inbv.c",
                  ["InbvGetGopFrameBufferInfo", "InbvHasValidGopFrameBuffer"]),
     "softgpupost.h": ("sdk/lib/drivers/softgpu/platform_common.c",
                       ["SoftGpuValidatePostDisplayInfo", "SoftGpuAcquirePostDisplay"]),
@@ -150,12 +150,12 @@ def generate(root, work):
         source = (root / relative).read_text(errors="surrogateescape")
         (work / header).write_text("".join(function(source, name, relative) for name in names))
 
-    device = (root / "win32ss/gdi/eng/device.c").read_text()
+    device = (root / "subsystems/win/win32k/gdi/eng/device.c").read_text()
     (work / "w32deviceglobals.h").write_text(text_between(
         device, "static PGRAPHICS_DEVICE gpPrimaryGraphicsDevice;",
         "static ULONG giDevNum = 1;", "device.c", True))
 
-    guicheck = (root / "win32ss/user/ntuser/guicheck.c").read_text()
+    guicheck = (root / "subsystems/win/win32k/user/ntuser/guicheck.c").read_text()
     (work / "w32guiglobals.h").write_text(text_between(
         guicheck, "static LONG NrGuiAppsRunning", ";", "guicheck.c", True))
 

@@ -227,6 +227,14 @@ OslHttpSync(
     _In_opt_ PCSTR Address);
 
 VOID
+OslInstallImage(
+    _In_ PDK_DEVICE OsDevice,
+    _In_z_ PCSTR SystemRoot,
+    _In_z_ PCSTR ImagePath,
+    _In_opt_z_ PCSTR ImageHash,
+    _In_ BOOLEAN Undo);
+
+VOID
 OslHiberMarkOwned(
     _In_ ULONG64 BasePage,
     _In_ ULONG64 PageCount);

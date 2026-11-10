@@ -8,6 +8,18 @@ Signature = "$Windows NT$"
 
 [AddReg]
 
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetCaps"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetCaps"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{C689AAB9-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{C689AAB9-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetCaps"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{C689AABA-8E78-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{C689AABA-8E78-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetCaps"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{DE351A42-8E59-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{DE351A42-8E59-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetCaps"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{DE351A43-8E59-11D0-8C47-00C04FC295EE}","Dll",0x00000000,"WINTRUST.DLL"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Cryptography\OID\EncodingType 0\CryptSIPDllGetCaps\{DE351A43-8E59-11D0-8C47-00C04FC295EE}","FuncName",0x00000000,"CryptSIPGetCaps"
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectX","InstalledVersion",0x00000001, 0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x00
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectX","Version",0x00000000,"4.09.00.0904"
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\.NETFramework","InstallRoot",0x00000000,"C:\Windows\Microsoft.NET\Framework\"

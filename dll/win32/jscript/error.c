@@ -368,6 +368,10 @@ static jsstr_t *format_error_message(HRESULT error, const WCHAR *arg)
         return jsstr_empty();
 
     len = LoadStringW(jscript_hinstance, HRESULT_CODE(error), (WCHAR*)&res, 0);
+#ifdef __REACTOS__
+    if(!len)
+        len = LoadStringW(jscript_hinstance, IDS_UNKNOWN_ERROR, (WCHAR*)&res, 0);
+#endif
 
     pos = wmemchr(res, '|', len);
     if(pos && arg)
@@ -409,6 +413,82 @@ HRESULT throw_error(script_ctx_t *ctx, HRESULT error, const WCHAR *str)
     return DISP_E_EXCEPTION;
 }
 
+#ifdef __REACTOS__
+static const struct {
+    HRESULT hres;
+    HRESULT error;
+} host_errors[] = {
+    { E_NOINTERFACE,            JS_E_NO_AUTOMATION },
+    { E_NOTIMPL,                JS_E_INVALID_ACTION },
+    { E_OUTOFMEMORY,            JS_E_OUT_OF_MEMORY },
+    { E_INVALIDARG,             JS_E_INVALIDARG },
+    { E_ACCESSDENIED,           JS_E_PERMISSION_DENIED },
+    { DISP_E_UNKNOWNINTERFACE,  JS_E_INVALID_PROPERTY },
+    { DISP_E_MEMBERNOTFOUND,    JS_E_INVALID_PROPERTY },
+    { DISP_E_PARAMNOTFOUND,     JS_E_NAMED_ARG_NOT_FOUND },
+    { DISP_E_TYPEMISMATCH,      JS_E_TYPE_MISMATCH },
+    { DISP_E_UNKNOWNNAME,       JS_E_INVALID_PROPERTY },
+    { DISP_E_NONAMEDARGS,       JS_E_NO_NAMED_ARGS },
+    { DISP_E_BADVARTYPE,        JS_E_UNSUPPORTED_AUTOMATION_TYPE },
+    { DISP_E_OVERFLOW,          JS_E_OVERFLOW },
+    { DISP_E_BADINDEX,          JS_E_SUBSCRIPT_OUT_OF_RANGE },
+    { DISP_E_UNKNOWNLCID,       JS_E_NO_LOCALE },
+    { DISP_E_ARRAYISLOCKED,     JS_E_ARRAY_LOCKED },
+    { DISP_E_BADPARAMCOUNT,     JS_E_WRONG_ARG_COUNT },
+    { DISP_E_PARAMNOTOPTIONAL,  JS_E_MISSING_ARG },
+    { DISP_E_NOTACOLLECTION,    JS_E_OBJECT_NOT_COLLECTION },
+    { CO_E_CLASSSTRING,         JS_E_CANNOT_CREATE_OBJ },
+    { REGDB_E_CLASSNOTREG,      JS_E_CANNOT_CREATE_OBJ },
+    { MK_E_UNAVAILABLE,         JS_E_CANNOT_CREATE_OBJ },
+    { CO_E_SERVER_EXEC_FAILURE, JS_E_CANNOT_CREATE_OBJ },
+    { STG_E_FILENOTFOUND,       JS_E_AUTOMATION_FILE_NOT_FOUND },
+    { STG_E_PATHNOTFOUND,       JS_E_PATH_NOT_FOUND },
+    { STG_E_ACCESSDENIED,       JS_E_PERMISSION_DENIED },
+    { STG_E_INSUFFICIENTMEMORY, JS_E_OUT_OF_MEMORY },
+    { STG_E_MEDIUMFULL,         JS_E_DISK_FULL },
+};
+
+HRESULT throw_host_error(script_ctx_t *ctx, HRESULT error)
+{
+    unsigned i;
+
+    for(i = 0; i < ARRAY_SIZE(host_errors); i++) {
+        if(host_errors[i].hres == error)
+            return throw_error(ctx, host_errors[i].error, NULL);
+    }
+
+    throw_error(ctx, error, NULL);
+    ctx->ei->host_error = TRUE;
+    return DISP_E_EXCEPTION;
+}
+
+
+HRESULT throw_host_object_error(script_ctx_t *ctx, IWineJSDispatchHost *host, HRESULT error)
+{
+    IDispatch *disp;
+    VARIANT v;
+    jsval_t val;
+    HRESULT hres;
+
+    hres = IWineJSDispatchHost_CreateErrorObject(host, error, &disp);
+    if(hres != S_OK)
+        return FAILED(hres) ? hres : error;
+
+    V_VT(&v) = VT_DISPATCH;
+    V_DISPATCH(&v) = disp;
+    hres = variant_to_jsval(ctx, &v, &val);
+    IDispatch_Release(disp);
+    if(FAILED(hres))
+        return hres;
+
+    reset_ei(ctx->ei);
+    ctx->ei->error = JS_E_EXCEPTION_THROWN;
+    ctx->ei->valid_value = TRUE;
+    ctx->ei->value = val;
+    return DISP_E_EXCEPTION;
+}
+
+#endif
 void handle_dispatch_exception(script_ctx_t *ctx, EXCEPINFO *ei)
 {
     TRACE("%08lx %s %s\n", ei->scode, debugstr_w(ei->bstrSource), debugstr_w(ei->bstrDescription));
@@ -423,6 +503,7 @@ void handle_dispatch_exception(script_ctx_t *ctx, EXCEPINFO *ei)
         ctx->ei->message = jsstr_alloc_len(ei->bstrDescription, SysStringLen(ei->bstrDescription));
 #ifdef __REACTOS__
     ctx->ei->host_info = TRUE;
+    ctx->ei->host_error = TRUE;
     if(ei->bstrHelpFile)
         ctx->ei->help_file = jsstr_alloc_len(ei->bstrHelpFile, SysStringLen(ei->bstrHelpFile));
     ctx->ei->help_context = ei->dwHelpContext;
@@ -469,7 +550,11 @@ jsdisp_t *create_builtin_error(script_ctx_t *ctx)
 
     assert(FAILED(ei->error) && ei->error != DISP_E_EXCEPTION);
 
+#ifdef __REACTOS__
+    if(is_jscript_error(ei->error) && !ei->host_error) {
+#else
     if(is_jscript_error(ei->error)) {
+#endif
         switch(ei->error) {
         case JS_E_SYNTAX:
         case JS_E_MISSING_SEMICOLON:
@@ -527,6 +612,11 @@ jsdisp_t *create_builtin_error(script_ctx_t *ctx)
         case JS_E_ARRAYBUFFER_EXPECTED:
         case JS_E_PROP_DESC_MISMATCH:
         case JS_E_INVALID_WRITABLE_PROP_DESC:
+#ifdef __REACTOS__
+        case JS_E_TYPE_MISMATCH:
+        case JS_E_WRONG_ARG_COUNT:
+        case JS_E_UNSUPPORTED_AUTOMATION_TYPE:
+#endif
             constr = ctx->type_error_constr;
             break;
 
@@ -538,6 +628,9 @@ jsdisp_t *create_builtin_error(script_ctx_t *ctx)
         case JS_E_TYPEDARRAY_INVALID_SUBARRAY:
         case JS_E_DATAVIEW_INVALID_ACCESS:
         case JS_E_DATAVIEW_INVALID_OFFSET:
+#ifdef __REACTOS__
+        case JS_E_OVERFLOW:
+#endif
             constr = ctx->range_error_constr;
             break;
 

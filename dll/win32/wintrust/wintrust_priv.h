@@ -19,6 +19,10 @@
 #define __WINTRUST_PRIV_H__
 
 BOOL WINAPI WINTRUST_AddStore(CRYPT_PROVIDER_DATA *data, HCERTSTORE store);
+#ifdef __REACTOS__
+void WINTRUST_FreeSgnr(CRYPT_PROVIDER_DATA *data, CRYPT_PROVIDER_SGNR *sgnr);
+struct CRYPTCATATTRIBUTE_ *catalog_alloc_attribute(const WCHAR *name, DWORD flags, DWORD size, const BYTE *data);
+#endif
 BOOL WINAPI WINTRUST_AddSgnr(CRYPT_PROVIDER_DATA *data,
  BOOL fCounterSigner, DWORD idxSigner, CRYPT_PROVIDER_SGNR *sgnr);
 BOOL WINAPI WINTRUST_AddCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,

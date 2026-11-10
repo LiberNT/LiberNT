@@ -25,6 +25,7 @@
 #include "winbase.h"
 #include "winuser.h"
 #include "ole2.h"
+#include "mshtmdid.h"
 
 #include "wine/debug.h"
 
@@ -108,18 +109,23 @@ static const event_target_vtbl_t HTMLGenericElement_event_target_vtbl = {
     .handle_event       = HTMLElement_handle_event
 };
 
-static const tid_t HTMLUnknownElement_iface_tids[] = {
-    IHTMLGenericElement_tid,
-    0
-};
+static void HTMLGenericElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    static const dispex_hook_t hooks[] = {
+        {DISPID_IHTMLGENERICELEMENT_RECORDSET, .noattr = TRUE},
+        {DISPID_UNKNOWN}
+    };
+    dispex_info_add_interface(info, IHTMLGenericElement_tid, hooks);
+
+    HTMLElement_init_dispex_info(info, mode);
+}
 
 dispex_static_data_t HTMLUnknownElement_dispex = {
     .id           = OBJID_HTMLUnknownElement,
     .prototype_id = OBJID_HTMLElement,
     .vtbl         = &HTMLGenericElement_event_target_vtbl.dispex_vtbl,
     .disp_tid     = DispHTMLGenericElement_tid,
-    .iface_tids   = HTMLUnknownElement_iface_tids,
-    .init_info    = HTMLElement_init_dispex_info,
+    .init_info    = HTMLGenericElement_init_dispex_info,
 };
 
 HRESULT HTMLGenericElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)

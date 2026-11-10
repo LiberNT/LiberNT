@@ -8,7 +8,7 @@
  */
 
 #include "mmharness.h"
-#include <nvs/include/misys.h>
+#include <mm/include/misys.h>
 
 static void
 CloneBasic(void)

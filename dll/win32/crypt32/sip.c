@@ -108,6 +108,9 @@ BOOL WINAPI CryptSIPRemoveProvider(GUID *pgProv)
     CRYPT_SIPREMOVEPROV( L"VerifyIndirectData\\" );
     CRYPT_SIPREMOVEPROV( L"IsMyFileType\\" );
     CRYPT_SIPREMOVEPROV( L"IsMyFileType2\\" );
+#ifdef __REACTOS__
+    CRYPT_SIPREMOVEPROV( L"GetCaps\\" );
+#endif
 
 #undef CRYPT_SIPREMOVEPROV
 
@@ -215,6 +218,12 @@ BOOL WINAPI CryptSIPAddProvider(SIP_ADD_NEWPROVIDER *psNewProv)
     CRYPT_SIPADDPROV( L"VerifyIndirectData\\", pwszVerifyFuncName );
     CRYPT_SIPADDPROV( L"IsMyFileType\\", pwszIsFunctionName );
     CRYPT_SIPADDPROV( L"IsMyFileType2\\", pwszIsFunctionNameFmt2 );
+#ifdef __REACTOS__
+    if (psNewProv->cbStruct > FIELD_OFFSET(SIP_ADD_NEWPROVIDER, pwszGetCapFuncName))
+    {
+        CRYPT_SIPADDPROV( L"GetCaps\\", pwszGetCapFuncName );
+    }
+#endif
 
 #undef CRYPT_SIPADDPROV
 
@@ -864,3 +873,34 @@ BOOL WINAPI CryptSIPRetrieveSubjectGuidForCatalogFile(LPCWSTR filename, HANDLE h
     return FALSE;
 #endif
 }
+
+#ifdef __REACTOS__
+/***********************************************************************
+ *             CryptSIPGetCaps (CRYPT32.@)
+ */
+BOOL WINAPI CryptSIPGetCaps(SIP_SUBJECTINFO *pSubjInfo, SIP_CAP_SET *pCaps)
+{
+    pCryptSIPGetCaps get_caps;
+    HMODULE lib = NULL;
+    BOOL ret;
+
+    TRACE("(%p %p)\n", pSubjInfo, pCaps);
+
+    if (!pSubjInfo || !pSubjInfo->pgSubjectType || !pCaps)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!CRYPT_IsSIPCached(pSubjInfo->pgSubjectType) && !CRYPT_LoadSIP(pSubjInfo->pgSubjectType))
+        return FALSE;
+    get_caps = CRYPT_LoadSIPFunc(pSubjInfo->pgSubjectType, L"GetCaps\\", &lib);
+    if (!get_caps)
+    {
+        SetLastError(TRUST_E_SUBJECT_FORM_UNKNOWN);
+        return FALSE;
+    }
+    ret = get_caps(pSubjInfo, pCaps);
+    FreeLibrary(lib);
+    return ret;
+}
+#endif

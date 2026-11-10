@@ -1,0 +1,168 @@
+/*
+ * PROJECT:     LiberNT host-native tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     MDL allocation cache failure regression
+ */
+
+#include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef uint32_t ULONG;
+typedef uint64_t ULONG64;
+typedef uintptr_t SIZE_T;
+typedef int64_t LONG64;
+typedef uintptr_t PFN_NUMBER, MI_FRAME_NUMBER;
+typedef PFN_NUMBER *PPFN_NUMBER;
+typedef struct { int64_t QuadPart; } PHYSICAL_ADDRESS;
+typedef int MEMORY_CACHING_TYPE, MI_CACHE_TYPE;
+typedef struct
+{
+    ULONG ByteCount, MdlFlags;
+    void *Process;
+    PFN_NUMBER Pages[64];
+} MDL, *PMDL;
+
+static struct
+{
+    struct
+    {
+        ULONG FrameCount, DirectFrames;
+        struct { ULONG CacheFlags; } Pfn[64];
+    } Pfn;
+    int SystemSpace;
+} MiSystem;
+static int Commit, Freed, Discarded, FailCache, NextFrame;
+
+#define _In_
+#define NTAPI
+#define PAGE_SHIFT 12
+#define PAGE_SIZE 4096
+#define PASSIVE_LEVEL 0
+#define MM_ALLOCATE_AND_HOT_REMOVE 0x100
+#define MM_ALLOCATE_FULLY_REQUIRED 0x4
+#define MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS 0x20
+#define MM_ALLOCATE_FAST_LARGE_PAGES 0x40
+#define MM_DONT_ZERO_ALLOCATION 1
+#define MI_LEAF_NOCACHE 8
+#define MI_LEAF_WRITECOMBINE 16
+#define MI_FRAME_INVALID 0xffffffffU
+#define MI_MDL_PFN_END ((PFN_NUMBER)-1)
+#define MDL_PAGES_LOCKED 1
+#define MiCacheNone 1
+#define MiCacheWriteCombined 2
+#define TAG_MDL 1
+#define TRUE 1
+#define FALSE 0
+#define NT_SUCCESS(Status) ((Status) >= 0)
+#define BYTES_TO_PAGES(Bytes) (((Bytes) + PAGE_SIZE - 1) >> PAGE_SHIFT)
+#define ASSERT assert
+#define MI_ZERO_PAGE(Page) memset((Page), 0, PAGE_SIZE)
+
+static MI_CACHE_TYPE MiCacheTypeFromNt(MEMORY_CACHING_TYPE Type) { return Type; }
+static int KeGetCurrentIrql(void) { return PASSIVE_LEVEL; }
+static PMDL MmCreateMdl(void *Memory, void *Address, SIZE_T Bytes)
+{
+    (void)Memory;
+    (void)Address;
+    (void)Bytes;
+    return calloc(1, sizeof(MDL));
+}
+static PPFN_NUMBER MmGetMdlPfnArray(PMDL Mdl) { return Mdl->Pages; }
+static int MiChargeCommit(void *Space, LONG64 Pages)
+{
+    (void)Space;
+    Commit += (int)Pages;
+    return TRUE;
+}
+static void MiReturnCommit(void *Space, LONG64 Pages)
+{
+    (void)Space;
+    Commit -= (int)Pages;
+}
+static ULONG MiPfnAllocateContiguous(void *Db, ULONG Count, ULONG Low, ULONG High, ULONG Boundary)
+{
+    (void)Db;
+    (void)Count;
+    (void)Low;
+    (void)High;
+    (void)Boundary;
+    return MI_FRAME_INVALID;
+}
+static ULONG MiPfnAllocatePageInRange(void *Db, ULONG Low, ULONG High, ULONG *Cursor)
+{
+    (void)Db;
+    (void)Low;
+    (void)High;
+    (void)Cursor;
+    return (ULONG)NextFrame++;
+}
+static unsigned char PageBytes[PAGE_SIZE];
+static void *MiArchMapFrame(ULONG Frame)
+{
+    (void)Frame;
+    return PageBytes;
+}
+static int MiPfnSetCacheFrames(void *Db, const MI_FRAME_NUMBER *Frames, ULONG Count, ULONG Flags)
+{
+    ULONG Index;
+
+    (void)Db;
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (FailCache && Index == 2)
+            return -1;
+        MiSystem.Pfn.Pfn[Frames[Index]].CacheFlags = Flags;
+    }
+    return 0;
+}
+static void MiPfnShareDecrement(void *Db, ULONG Frame, int Delete)
+{
+    (void)Db;
+    (void)Delete;
+    MiSystem.Pfn.Pfn[Frame].CacheFlags = 0;
+    Freed++;
+}
+static void ExFreePoolWithTag(void *Buffer, int Tag)
+{
+    (void)Tag;
+    Discarded++;
+    free(Buffer);
+}
+@NTMDL_FUNCTION@
+int
+main(void)
+{
+    PHYSICAL_ADDRESS Low = {0}, High = {(64LL << PAGE_SHIFT) - 1}, Skip = {0};
+    PMDL Mdl;
+    ULONG Index;
+
+    MiSystem.Pfn.FrameCount = 64;
+    MiSystem.Pfn.DirectFrames = 64;
+    FailCache = 1;
+    Mdl = MmAllocatePagesForMdlEx(Low, High, Skip, 3 * PAGE_SIZE, MiCacheNone,
+                                  MM_DONT_ZERO_ALLOCATION | MM_ALLOCATE_FULLY_REQUIRED);
+    if (Mdl != NULL || Commit != 0 || Freed != 3 || Discarded != 1)
+        return 1;
+    for (Index = 0; Index < 3; Index++)
+        if (MiSystem.Pfn.Pfn[Index].CacheFlags != 0)
+            return 2;
+
+    FailCache = 0;
+    NextFrame = 0;
+    Freed = 0;
+    Mdl = MmAllocatePagesForMdlEx(Low, High, Skip, 3 * PAGE_SIZE, MiCacheNone,
+                                  MM_DONT_ZERO_ALLOCATION | MM_ALLOCATE_FULLY_REQUIRED);
+    if (Mdl == NULL || Mdl->ByteCount != 3 * PAGE_SIZE || !(Mdl->MdlFlags & MDL_PAGES_LOCKED) || Commit != 3)
+        return 3;
+    for (Index = 0; Index < 3; Index++)
+    {
+        if (MiSystem.Pfn.Pfn[Index].CacheFlags != MI_LEAF_NOCACHE)
+            return 4;
+        MiPfnShareDecrement(&MiSystem.Pfn, (ULONG)Mdl->Pages[Index], TRUE);
+        MiReturnCommit(&MiSystem.SystemSpace, 1);
+    }
+    ExFreePoolWithTag(Mdl, TAG_MDL);
+    return Commit == 0 && Freed == 3 ? 0 : 5;
+}

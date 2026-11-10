@@ -667,6 +667,8 @@ static void *HTMLObjectElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLObjectElement2_iface;
     if(IsEqualGUID(&IID_IWineHTMLObjectPrivate, riid))
         return &This->IWineHTMLObjectPrivate_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->plugin_container.element.IHTMLDatabinding_iface;
     if(IsEqualGUID(&IID_HTMLPluginContainer, riid)) {
         /* Special pseudo-interface returning HTMLPluginContainer struct. */
         return &This->plugin_container;
@@ -730,12 +732,15 @@ static void HTMLObjectElement_init_dispex_info(dispex_data_t *info, compat_mode_
         {DISPID_IHTMLOBJECTELEMENT_BASEHREF, .noattr = TRUE},
         {DISPID_IHTMLOBJECTELEMENT_FORM,     .noattr = TRUE},
         {DISPID_IHTMLOBJECTELEMENT_ALTHTML,  .noattr = TRUE},
+        {DISPID_IHTMLOBJECTELEMENT_RECORDSET, .noattr = TRUE},
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLObjectElement2_tid, NULL);
     dispex_info_add_interface(info, IHTMLObjectElement_tid, hooks);
     if(mode >= COMPAT_MODE_IE10)
         dispex_info_add_interface(info, IWineHTMLObjectPrivate_tid, NULL);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }

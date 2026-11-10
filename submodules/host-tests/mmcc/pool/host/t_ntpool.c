@@ -7,12 +7,13 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <nvs/pool/ex/expool.h>
+#include <mm/pool/ex/expool.h>
 
 #define ARENA_BYTES (128 * 1024 * 1024)
 #define TAG_TEST 0x74507845
 
 _Thread_local ULONG PoolHostProcessor;
+_Thread_local volatile int *PoolHostLockBlocked;
 ULONG KeNumberProcessors = 1;
 int MiSystem;
 static EPROCESS SystemProcess, TestProcess;
@@ -27,7 +28,7 @@ extern POOL_KM_LAYOUT MiPoolLayout;
 ULONG64 KeQueryInterruptTime(VOID) { return 1; }
 KIRQL KeGetCurrentIrql(VOID) { return 0; }
 _Noreturn VOID KeBugCheckEx(ULONG Code, ULONG_PTR A, ULONG_PTR B, ULONG_PTR C, ULONG_PTR D)
-{ fprintf(stderr, "bugcheck %x %zx %zx %zx %zx\n", Code, A, B, C, D); abort(); }
+{ fprintf(stderr, "bugcheck %x %zx %zx %zx %zx\n", Code, (size_t)A, (size_t)B, (size_t)C, (size_t)D); abort(); }
 _Noreturn VOID ExRaiseStatus(NTSTATUS Status) { fprintf(stderr, "raise %x\n", Status); abort(); }
 BOOLEAN MmUseSpecialPool(SIZE_T Size, ULONG Tag) { return FALSE; }
 PVOID MmAllocateSpecialPool(SIZE_T Size, ULONG Tag, POOL_TYPE Type, ULONG Mode) { return NULL; }
@@ -100,6 +101,12 @@ int main(void)
     CHECK(posix_memalign((void **)&Arena, POOL_UNIT_SIZE, ARENA_BYTES) == 0);
     Protection = calloc(ARENA_BYTES / PAGE_SIZE, 1);
     CHECK(Arena != NULL && Protection != NULL);
+    if (Arena == NULL || Protection == NULL)
+    {
+        free(Protection);
+        free(Arena);
+        return 1;
+    }
     memset(Arena, 0, ARENA_BYTES);
     memset(Protection, MI_PROT_READWRITE, (4 * 1024 * 1024) / PAGE_SIZE);
     MiPoolLayout.NonPagedResidentBase = Arena;
@@ -131,6 +138,32 @@ int main(void)
     CHECK(Usage.Allocations[0] == 160 && Usage.Allocations[1] == 20);
     CHECK(Usage.Allocations[0] == Usage.Frees[0] && Usage.Allocations[1] == Usage.Frees[1]);
     CHECK(Usage.Bytes[0] == 0 && Usage.Bytes[1] == 0);
+    for (ULONG i = 0; i < RTL_NUMBER_OF(Sizes); i++)
+    {
+        PVOID Block = ExAllocatePoolWithQuotaTag(NonPagedPoolNx, Sizes[i], TAG_TEST);
+        POOL_BLOCK_INFO Info;
+        PPOOL_HEAP Heap;
+        ULONG HeapIndex;
+
+        CHECK(Block != NULL);
+        if (Block == NULL) continue;
+        Heap = ExpPoolHeapFromAddress(Block, &HeapIndex);
+        if (Heap == NULL || !PoolHeapQuery(Heap, Block, &Info))
+        {
+            CHECK(FALSE);
+            ExFreePoolWithTag(Block, TAG_TEST);
+            continue;
+        }
+        CHECK((Info.Flags & EX_POOL_BLOCK_QUOTA) != 0 && Info.Trailer == (ULONG_PTR)&TestProcess);
+        CHECK(TestProcess.References == 1 && TestProcess.Quota[0] == Info.Size);
+        ExReturnPoolQuota(Block);
+        CHECK(TestProcess.References == 0 && TestProcess.Quota[0] == 0);
+        CHECK(PoolHeapQuery(Heap, Block, &Info));
+        CHECK((Info.Flags & EX_POOL_BLOCK_QUOTA) == 0 && Info.Trailer == 0);
+        ExReturnPoolQuota(Block);
+        ExFreePoolWithTag(Block, TAG_TEST);
+        CHECK(TestProcess.References == 0 && TestProcess.Quota[0] == 0);
+    }
     free(Protection);
     free(Arena);
     printf("NT pool: %u checks, %u failures\n", Checks, Failures);

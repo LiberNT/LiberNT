@@ -1948,12 +1948,8 @@ static HRESULT SHELL_InvokeFolderDelegateExecute(LPSHELLEXECUTEINFOW sei, LPCWST
 
     if (StrIsNullOrEmpty(pszParsingName))
         return S_FALSE;
-    if (pszParsingName[0] != ':' || pszParsingName[1] != ':')
-    {
-        DWORD attribs = GetFileAttributesW(pszParsingName);
-        if (attribs == INVALID_FILE_ATTRIBUTES || !(attribs & FILE_ATTRIBUTE_DIRECTORY))
-            return S_FALSE;
-    }
+    if (!(SHGetAttributes(NULL, (LPCITEMIDLIST)sei->lpIDList, SFGAO_FOLDER) & SFGAO_FOLDER))
+        return S_FALSE;
 
     if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"Folder", 0, KEY_READ, &hkFolder) != ERROR_SUCCESS)
         return S_FALSE;

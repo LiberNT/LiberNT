@@ -533,6 +533,39 @@ const WL_INTERFACE zxdg_toplevel_decoration_v1_interface =
     "zxdg_toplevel_decoration_v1", 1, 3, zxdg_toplevel_decoration_v1_requests, 1, zxdg_toplevel_decoration_v1_events
 };
 
+static const WL_MESSAGE org_kde_kwin_server_decoration_manager_requests[] =
+{
+    { "create", "no", 0, 1 },
+};
+
+static const WL_MESSAGE org_kde_kwin_server_decoration_manager_events[] =
+{
+    { "default_mode", "u", 0, 1 },
+};
+
+const WL_INTERFACE org_kde_kwin_server_decoration_manager_interface =
+{
+    "org_kde_kwin_server_decoration_manager", 1, 1, org_kde_kwin_server_decoration_manager_requests, 1,
+    org_kde_kwin_server_decoration_manager_events
+};
+
+static const WL_MESSAGE org_kde_kwin_server_decoration_requests[] =
+{
+    { "release", "", 1, 1 },
+    { "request_mode", "u", 0, 1 },
+};
+
+static const WL_MESSAGE org_kde_kwin_server_decoration_events[] =
+{
+    { "mode", "u", 0, 1 },
+};
+
+const WL_INTERFACE org_kde_kwin_server_decoration_interface =
+{
+    "org_kde_kwin_server_decoration", 1, 2, org_kde_kwin_server_decoration_requests, 1,
+    org_kde_kwin_server_decoration_events
+};
+
 static const WL_MESSAGE wp_cursor_shape_manager_v1_requests[] =
 {
     { "destroy", "", 1, 1 },

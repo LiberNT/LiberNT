@@ -33,10 +33,126 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
+typedef struct {
+    const WCHAR *name;
+    const WCHAR *value;
+} table_keyword_t;
+
+static const table_keyword_t table_align_keywords[] = {
+    {L"left", L"left"}, {L"center", L"center"}, {L"middle", L"center"}, {L"right", L"right"}, {NULL}
+};
+
+static const table_keyword_t table_valign_keywords[] = {
+    {L"top", L"top"}, {L"middle", L"middle"}, {L"center", L"middle"}, {L"bottom", L"bottom"}, {L"baseline", L"baseline"}, {NULL}
+};
+
+static const WCHAR *find_table_keyword(const WCHAR *v, const table_keyword_t *keywords)
+{
+    for(; keywords->name; keywords++) {
+        if(!wcsicmp(v, keywords->name))
+            return keywords->value;
+    }
+    return NULL;
+}
+
+static HRESULT put_table_keyword(HTMLElement *elem, const WCHAR *name, BSTR v, const table_keyword_t *keywords)
+{
+    const WCHAR *keyword;
+
+    if(!v || !*v)
+        return element_remove_attribute(elem, name);
+    if(!(keyword = find_table_keyword(v, keywords)))
+        return E_INVALIDARG;
+    return elem_put_reflected_string(elem, name, (BSTR)keyword);
+}
+
+static HRESULT get_table_keyword(HTMLElement *elem, const WCHAR *name, BSTR *p, const table_keyword_t *keywords,
+        const WCHAR *ie9_invalid)
+{
+    const WCHAR *keyword = NULL;
+    HRESULT hres;
+    BSTR val;
+
+    hres = elem_get_attr_string(elem, name, &val);
+    if(FAILED(hres))
+        return hres;
+    if(val) {
+        keyword = find_table_keyword(val, keywords);
+        if(!keyword && dispex_compat_mode(&elem->node.event_target.dispex) >= COMPAT_MODE_IE9)
+            keyword = ie9_invalid;
+    }
+    SysFreeString(val);
+    if(!keyword) {
+        *p = NULL;
+        return S_OK;
+    }
+    return (*p = SysAllocString(keyword)) ? S_OK : E_OUTOFMEMORY;
+}
+
+static BOOL parse_table_length(const WCHAR *v, WCHAR *buf, size_t size)
+{
+    double val;
+    WCHAR *end;
+
+    while(iswspace(*v))
+        v++;
+    if(*v == '+')
+        v++;
+    if(!iswdigit(*v) && (*v != '.' || !iswdigit(v[1])))
+        return FALSE;
+    val = wcstod(v, &end);
+    while(iswspace(*end))
+        end++;
+    if(val < 1.0 || val > INT_MAX)
+        return FALSE;
+    swprintf(buf, size, *end == '%' ? L"%d%%" : L"%d", (int)val);
+    return TRUE;
+}
+
+static HRESULT put_table_length(HTMLElement *elem, const WCHAR *name, VARIANT *v)
+{
+    WCHAR buf[16];
+    VARIANT str;
+    HRESULT hres;
+    BOOL valid;
+
+    if(V_VT(v) == VT_NULL || (V_VT(v) == VT_BSTR && (!V_BSTR(v) || !*V_BSTR(v))))
+        return element_remove_attribute(elem, name);
+
+    V_VT(&str) = VT_EMPTY;
+    hres = VariantChangeType(&str, v, 0, VT_BSTR);
+    if(FAILED(hres))
+        return hres;
+    valid = parse_table_length(V_BSTR(&str), buf, ARRAY_SIZE(buf));
+    VariantClear(&str);
+    if(!valid)
+        return E_INVALIDARG;
+    return elem_put_reflected_string(elem, name, buf);
+}
+
+static HRESULT get_table_length(HTMLElement *elem, const WCHAR *name, VARIANT *p)
+{
+    WCHAR buf[16];
+    HRESULT hres;
+    BSTR val;
+
+    V_VT(p) = VT_BSTR;
+    V_BSTR(p) = NULL;
+    hres = elem_get_attr_string(elem, name, &val);
+    if(FAILED(hres) || !val)
+        return hres;
+    if(parse_table_length(val, buf, ARRAY_SIZE(buf)) && !(V_BSTR(p) = SysAllocString(buf)))
+        hres = E_OUTOFMEMORY;
+    SysFreeString(val);
+    return hres;
+}
+
 struct HTMLTableCell {
     HTMLElement element;
 
     IHTMLTableCell IHTMLTableCell_iface;
+    IHTMLTableCell2 IHTMLTableCell2_iface;
+    IHTMLTableCell3 IHTMLTableCell3_iface;
 
     nsIDOMHTMLTableCellElement *nscell;
 };
@@ -168,47 +284,19 @@ static HRESULT WINAPI HTMLTableCell_get_vAlign(IHTMLTableCell *iface, BSTR *p)
 static HRESULT WINAPI HTMLTableCell_put_bgColor(IHTMLTableCell *iface, VARIANT v)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    nsAString strColor;
-    nsresult nsres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
-    if(!variant_to_nscolor(&v, &strColor))
-        return S_OK;
-
-    nsres = nsIDOMHTMLTableCellElement_SetBgColor(This->nscell, &strColor);
-    nsAString_Finish(&strColor);
-    if(NS_FAILED(nsres)) {
-        ERR("SetBgColor(%s) failed: %08lx\n", debugstr_variant(&v), nsres);
-        return E_FAIL;
-    }
-
-    return S_OK;
+    return elem_put_color_attr(&This->element, L"bgColor", &v);
 }
 
 static HRESULT WINAPI HTMLTableCell_get_bgColor(IHTMLTableCell *iface, VARIANT *p)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    nsAString strColor;
-    nsresult nsres;
-    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    nsAString_Init(&strColor, NULL);
-    nsres = nsIDOMHTMLTableCellElement_GetBgColor(This->nscell, &strColor);
-
-    if(NS_SUCCEEDED(nsres)) {
-        const PRUnichar *color;
-        nsAString_GetData(&strColor, &color);
-        V_VT(p) = VT_BSTR;
-        hres = nscolor_to_str(color, &V_BSTR(p));
-    }else {
-        ERR("GetBgColor failed: %08lx\n", nsres);
-        hres = E_FAIL;
-    }
-    nsAString_Finish(&strColor);
-    return hres;
+    return elem_get_color_attr(&This->element, L"bgColor", p);
 }
 
 static HRESULT WINAPI HTMLTableCell_put_noWrap(IHTMLTableCell *iface, VARIANT_BOOL v)
@@ -242,15 +330,19 @@ static HRESULT WINAPI HTMLTableCell_get_background(IHTMLTableCell *iface, BSTR *
 static HRESULT WINAPI HTMLTableCell_put_borderColor(IHTMLTableCell *iface, VARIANT v)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_variant(&v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return elem_put_color_attr(&This->element, L"borderColor", &v);
 }
 
 static HRESULT WINAPI HTMLTableCell_get_borderColor(IHTMLTableCell *iface, VARIANT *p)
 {
     HTMLTableCell *This = impl_from_IHTMLTableCell(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_color_attr(&This->element, L"borderColor", p);
 }
 
 static HRESULT WINAPI HTMLTableCell_put_borderColorLight(IHTMLTableCell *iface, VARIANT v)
@@ -393,6 +485,170 @@ static const IHTMLTableCellVtbl HTMLTableCellVtbl = {
     HTMLTableCell_get_cellIndex
 };
 
+static inline HTMLTableCell *impl_from_IHTMLTableCell2(IHTMLTableCell2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableCell, IHTMLTableCell2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableCell2, IHTMLTableCell2,
+                      impl_from_IHTMLTableCell2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableCell2_put_abbr(IHTMLTableCell2 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"abbr", v);
+}
+
+static HRESULT WINAPI HTMLTableCell2_get_abbr(IHTMLTableCell2 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"abbr", p);
+}
+
+static HRESULT WINAPI HTMLTableCell2_put_axis(IHTMLTableCell2 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"axis", v);
+}
+
+static HRESULT WINAPI HTMLTableCell2_get_axis(IHTMLTableCell2 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"axis", p);
+}
+
+static HRESULT WINAPI HTMLTableCell2_put_ch(IHTMLTableCell2 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"ch", v);
+}
+
+static HRESULT WINAPI HTMLTableCell2_get_ch(IHTMLTableCell2 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"ch", p);
+}
+
+static HRESULT WINAPI HTMLTableCell2_put_chOff(IHTMLTableCell2 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"choff", v);
+}
+
+static HRESULT WINAPI HTMLTableCell2_get_chOff(IHTMLTableCell2 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"choff", p);
+}
+
+static HRESULT WINAPI HTMLTableCell2_put_headers(IHTMLTableCell2 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"headers", v);
+}
+
+static HRESULT WINAPI HTMLTableCell2_get_headers(IHTMLTableCell2 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"headers", p);
+}
+
+static HRESULT WINAPI HTMLTableCell2_put_scope(IHTMLTableCell2 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"scope", v);
+}
+
+static HRESULT WINAPI HTMLTableCell2_get_scope(IHTMLTableCell2 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"scope", p);
+}
+
+static const IHTMLTableCell2Vtbl HTMLTableCell2Vtbl = {
+    HTMLTableCell2_QueryInterface,
+    HTMLTableCell2_AddRef,
+    HTMLTableCell2_Release,
+    HTMLTableCell2_GetTypeInfoCount,
+    HTMLTableCell2_GetTypeInfo,
+    HTMLTableCell2_GetIDsOfNames,
+    HTMLTableCell2_Invoke,
+    HTMLTableCell2_put_abbr,
+    HTMLTableCell2_get_abbr,
+    HTMLTableCell2_put_axis,
+    HTMLTableCell2_get_axis,
+    HTMLTableCell2_put_ch,
+    HTMLTableCell2_get_ch,
+    HTMLTableCell2_put_chOff,
+    HTMLTableCell2_get_chOff,
+    HTMLTableCell2_put_headers,
+    HTMLTableCell2_get_headers,
+    HTMLTableCell2_put_scope,
+    HTMLTableCell2_get_scope,
+};
+
+static inline HTMLTableCell *impl_from_IHTMLTableCell3(IHTMLTableCell3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableCell, IHTMLTableCell3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableCell3, IHTMLTableCell3,
+                      impl_from_IHTMLTableCell3(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableCell3_put_ch(IHTMLTableCell3 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"char", v);
+}
+
+static HRESULT WINAPI HTMLTableCell3_get_ch(IHTMLTableCell3 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"char", p);
+}
+
+static HRESULT WINAPI HTMLTableCell3_put_chOff(IHTMLTableCell3 *iface, BSTR v)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"charoff", v);
+}
+
+static HRESULT WINAPI HTMLTableCell3_get_chOff(IHTMLTableCell3 *iface, BSTR *p)
+{
+    HTMLTableCell *This = impl_from_IHTMLTableCell3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"charoff", p);
+}
+
+static const IHTMLTableCell3Vtbl HTMLTableCell3Vtbl = {
+    HTMLTableCell3_QueryInterface,
+    HTMLTableCell3_AddRef,
+    HTMLTableCell3_Release,
+    HTMLTableCell3_GetTypeInfoCount,
+    HTMLTableCell3_GetTypeInfo,
+    HTMLTableCell3_GetIDsOfNames,
+    HTMLTableCell3_Invoke,
+    HTMLTableCell3_put_ch,
+    HTMLTableCell3_get_ch,
+    HTMLTableCell3_put_chOff,
+    HTMLTableCell3_get_chOff,
+};
+
 static inline HTMLTableCell *HTMLTableCell_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLTableCell, element.node.event_target.dispex);
@@ -404,6 +660,10 @@ static void *HTMLTableCell_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLTableCell, riid))
         return &This->IHTMLTableCell_iface;
+    if(IsEqualGUID(&IID_IHTMLTableCell2, riid))
+        return &This->IHTMLTableCell2_iface;
+    if(IsEqualGUID(&IID_IHTMLTableCell3, riid))
+        return &This->IHTMLTableCell3_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -438,6 +698,9 @@ static void HTMLTableCellElement_init_dispex_info(dispex_data_t *info, compat_mo
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLTableCell_tid, hooks);
+    if(mode >= COMPAT_MODE_IE9)
+        dispex_info_add_interface(info, IHTMLTableCell3_tid, NULL);
+    dispex_info_add_interface(info, IHTMLTableCell2_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -479,6 +742,8 @@ HRESULT HTMLTableCell_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLE
         return E_OUTOFMEMORY;
 
     ret->IHTMLTableCell_iface.lpVtbl = &HTMLTableCellVtbl;
+    ret->IHTMLTableCell2_iface.lpVtbl = &HTMLTableCell2Vtbl;
+    ret->IHTMLTableCell3_iface.lpVtbl = &HTMLTableCell3Vtbl;
     ret->element.node.vtbl = &HTMLTableCellImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLTableDataCellElement_dispex);
@@ -494,6 +759,9 @@ struct HTMLTableRow {
     HTMLElement element;
 
     IHTMLTableRow IHTMLTableRow_iface;
+    IHTMLTableRow2 IHTMLTableRow2_iface;
+    IHTMLTableRow3 IHTMLTableRow3_iface;
+    IHTMLTableRow4 IHTMLTableRow4_iface;
 
     nsIDOMHTMLTableRowElement *nsrow;
 };
@@ -577,49 +845,19 @@ static HRESULT WINAPI HTMLTableRow_get_vAlign(IHTMLTableRow *iface, BSTR *p)
 static HRESULT WINAPI HTMLTableRow_put_bgColor(IHTMLTableRow *iface, VARIANT v)
 {
     HTMLTableRow *This = impl_from_IHTMLTableRow(iface);
-    nsAString val;
-    nsresult nsres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
-    if (!variant_to_nscolor(&v, &val))
-        return S_OK;
-
-    nsres = nsIDOMHTMLTableRowElement_SetBgColor(This->nsrow, &val);
-    nsAString_Finish(&val);
-
-    if (NS_FAILED(nsres)){
-        ERR("Set BgColor(%s) failed!\n", debugstr_variant(&v));
-        return E_FAIL;
-    }
-
-    return S_OK;
+    return elem_put_color_attr(&This->element, L"bgColor", &v);
 }
 
 static HRESULT WINAPI HTMLTableRow_get_bgColor(IHTMLTableRow *iface, VARIANT *p)
 {
     HTMLTableRow *This = impl_from_IHTMLTableRow(iface);
-    nsAString strColor;
-    nsresult nsres;
-    HRESULT hres;
-    const PRUnichar *color;
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    nsAString_Init(&strColor, NULL);
-    nsres = nsIDOMHTMLTableRowElement_GetBgColor(This->nsrow, &strColor);
-
-    if(NS_SUCCEEDED(nsres)) {
-       nsAString_GetData(&strColor, &color);
-       V_VT(p) = VT_BSTR;
-       hres = nscolor_to_str(color, &V_BSTR(p));
-    }else {
-       ERR("SetBgColor failed: %08lx\n", nsres);
-       hres = E_FAIL;
-    }
-
-    nsAString_Finish(&strColor);
-    return hres;
+    return elem_get_color_attr(&This->element, L"bgColor", p);
 }
 
 static HRESULT WINAPI HTMLTableRow_put_borderColor(IHTMLTableRow *iface, VARIANT v)
@@ -779,6 +1017,197 @@ static const IHTMLTableRowVtbl HTMLTableRowVtbl = {
     HTMLTableRow_deleteCell
 };
 
+static inline HTMLTableRow *impl_from_IHTMLTableRow2(IHTMLTableRow2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableRow, IHTMLTableRow2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableRow2, IHTMLTableRow2,
+                      impl_from_IHTMLTableRow2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableRow2_put_height(IHTMLTableRow2 *iface, VARIANT v)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+    return put_table_length(&This->element, L"height", &v);
+}
+
+static HRESULT WINAPI HTMLTableRow2_get_height(IHTMLTableRow2 *iface, VARIANT *p)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return get_table_length(&This->element, L"height", p);
+}
+
+static const IHTMLTableRow2Vtbl HTMLTableRow2Vtbl = {
+    HTMLTableRow2_QueryInterface,
+    HTMLTableRow2_AddRef,
+    HTMLTableRow2_Release,
+    HTMLTableRow2_GetTypeInfoCount,
+    HTMLTableRow2_GetTypeInfo,
+    HTMLTableRow2_GetIDsOfNames,
+    HTMLTableRow2_Invoke,
+    HTMLTableRow2_put_height,
+    HTMLTableRow2_get_height,
+};
+
+static inline HTMLTableRow *impl_from_IHTMLTableRow3(IHTMLTableRow3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableRow, IHTMLTableRow3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableRow3, IHTMLTableRow3,
+                      impl_from_IHTMLTableRow3(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableRow3_put_ch(IHTMLTableRow3 *iface, BSTR v)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"ch", v);
+}
+
+static HRESULT WINAPI HTMLTableRow3_get_ch(IHTMLTableRow3 *iface, BSTR *p)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"ch", p);
+}
+
+static HRESULT WINAPI HTMLTableRow3_put_chOff(IHTMLTableRow3 *iface, BSTR v)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"choff", v);
+}
+
+static HRESULT WINAPI HTMLTableRow3_get_chOff(IHTMLTableRow3 *iface, BSTR *p)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"choff", p);
+}
+
+static const IHTMLTableRow3Vtbl HTMLTableRow3Vtbl = {
+    HTMLTableRow3_QueryInterface,
+    HTMLTableRow3_AddRef,
+    HTMLTableRow3_Release,
+    HTMLTableRow3_GetTypeInfoCount,
+    HTMLTableRow3_GetTypeInfo,
+    HTMLTableRow3_GetIDsOfNames,
+    HTMLTableRow3_Invoke,
+    HTMLTableRow3_put_ch,
+    HTMLTableRow3_get_ch,
+    HTMLTableRow3_put_chOff,
+    HTMLTableRow3_get_chOff,
+};
+
+static inline HTMLTableRow *impl_from_IHTMLTableRow4(IHTMLTableRow4 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableRow, IHTMLTableRow4_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableRow4, IHTMLTableRow4,
+                      impl_from_IHTMLTableRow4(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableRow4_put_ch(IHTMLTableRow4 *iface, BSTR v)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow4(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"char", v);
+}
+
+static HRESULT WINAPI HTMLTableRow4_get_ch(IHTMLTableRow4 *iface, BSTR *p)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow4(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"char", p);
+}
+
+static HRESULT WINAPI HTMLTableRow4_put_chOff(IHTMLTableRow4 *iface, BSTR v)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow4(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"charoff", v);
+}
+
+static HRESULT WINAPI HTMLTableRow4_get_chOff(IHTMLTableRow4 *iface, BSTR *p)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow4(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"charoff", p);
+}
+
+static HRESULT get_row_cell_count(HTMLTableRow *This, LONG *ret)
+{
+    nsIDOMHTMLCollection *nscol;
+    nsresult nsres;
+    UINT32 len;
+
+    nsres = nsIDOMHTMLTableRowElement_GetCells(This->nsrow, &nscol);
+    if(NS_FAILED(nsres))
+        return map_nsresult(nsres);
+    nsres = nsIDOMHTMLCollection_GetLength(nscol, &len);
+    nsIDOMHTMLCollection_Release(nscol);
+    if(NS_FAILED(nsres))
+        return map_nsresult(nsres);
+    *ret = len;
+    return S_OK;
+}
+
+static HRESULT WINAPI HTMLTableRow4_insertCell(IHTMLTableRow4 *iface, LONG index, IDispatch **row)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow4(iface);
+    HRESULT hres;
+    LONG count;
+
+    TRACE("(%p)->(%ld %p)\n", This, index, row);
+
+    hres = get_row_cell_count(This, &count);
+    if(FAILED(hres))
+        return hres;
+    if(index < -1 || index > count)
+        return MSHTML_E_INDEX_SIZE;
+    if(dispex_compat_mode(&This->element.node.event_target.dispex) < COMPAT_MODE_IE9)
+        return E_UNEXPECTED;
+    return IHTMLTableRow_insertCell(&This->IHTMLTableRow_iface, index, row);
+}
+
+static HRESULT WINAPI HTMLTableRow4_deleteCell(IHTMLTableRow4 *iface, LONG index)
+{
+    HTMLTableRow *This = impl_from_IHTMLTableRow4(iface);
+    HRESULT hres;
+    LONG count;
+
+    TRACE("(%p)->(%ld)\n", This, index);
+
+    hres = get_row_cell_count(This, &count);
+    if(FAILED(hres))
+        return hres;
+    if(index == -1 && !count)
+        return S_OK;
+    if(index < -1 || index >= count)
+        return MSHTML_E_INDEX_SIZE;
+    if(dispex_compat_mode(&This->element.node.event_target.dispex) < COMPAT_MODE_IE9)
+        return E_UNEXPECTED;
+    return IHTMLTableRow_deleteCell(&This->IHTMLTableRow_iface, index);
+}
+
+static const IHTMLTableRow4Vtbl HTMLTableRow4Vtbl = {
+    HTMLTableRow4_QueryInterface,
+    HTMLTableRow4_AddRef,
+    HTMLTableRow4_Release,
+    HTMLTableRow4_GetTypeInfoCount,
+    HTMLTableRow4_GetTypeInfo,
+    HTMLTableRow4_GetIDsOfNames,
+    HTMLTableRow4_Invoke,
+    HTMLTableRow4_put_ch,
+    HTMLTableRow4_get_ch,
+    HTMLTableRow4_put_chOff,
+    HTMLTableRow4_get_chOff,
+    HTMLTableRow4_insertCell,
+    HTMLTableRow4_deleteCell,
+};
+
 static inline HTMLTableRow *HTMLTableRow_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLTableRow, element.node.event_target.dispex);
@@ -790,6 +1219,12 @@ static void *HTMLTableRow_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLTableRow, riid))
         return &This->IHTMLTableRow_iface;
+    if(IsEqualGUID(&IID_IHTMLTableRow2, riid))
+        return &This->IHTMLTableRow2_iface;
+    if(IsEqualGUID(&IID_IHTMLTableRow3, riid))
+        return &This->IHTMLTableRow3_iface;
+    if(IsEqualGUID(&IID_IHTMLTableRow4, riid))
+        return &This->IHTMLTableRow4_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -826,6 +1261,8 @@ static void HTMLTableRowElement_init_dispex_info(dispex_data_t *info, compat_mod
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLTableRow_tid, hooks);
+    dispex_info_add_interface(info, IHTMLTableRow2_tid, NULL);
+    dispex_info_add_interface(info, mode >= COMPAT_MODE_IE9 ? IHTMLTableRow4_tid : IHTMLTableRow3_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -860,6 +1297,9 @@ HRESULT HTMLTableRow_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLEl
         return E_OUTOFMEMORY;
 
     ret->IHTMLTableRow_iface.lpVtbl = &HTMLTableRowVtbl;
+    ret->IHTMLTableRow2_iface.lpVtbl = &HTMLTableRow2Vtbl;
+    ret->IHTMLTableRow3_iface.lpVtbl = &HTMLTableRow3Vtbl;
+    ret->IHTMLTableRow4_iface.lpVtbl = &HTMLTableRow4Vtbl;
     ret->element.node.vtbl = &HTMLTableRowImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLTableRowElement_dispex);
@@ -1104,62 +1544,37 @@ static HRESULT WINAPI HTMLTable_get_background(IHTMLTable *iface, BSTR *p)
 static HRESULT WINAPI HTMLTable_put_bgColor(IHTMLTable *iface, VARIANT v)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    nsAString val;
-    nsresult nsres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
 
-    if(!variant_to_nscolor(&v, &val))
-        return S_OK;
-
-    nsres = nsIDOMHTMLTableElement_SetBgColor(This->nstable, &val);
-    nsAString_Finish(&val);
-    if (NS_FAILED(nsres)){
-        ERR("Set BgColor(%s) failed!\n", debugstr_variant(&v));
-        return E_FAIL;
-    }
-
-    return S_OK;
+    return elem_put_color_attr(&This->element, L"bgColor", &v);
 }
 
 static HRESULT WINAPI HTMLTable_get_bgColor(IHTMLTable *iface, VARIANT *p)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    nsAString strColor;
-    nsresult nsres;
-    HRESULT hres;
-    const PRUnichar *color;
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    nsAString_Init(&strColor, NULL);
-    nsres = nsIDOMHTMLTableElement_GetBgColor(This->nstable, &strColor);
-
-    if(NS_SUCCEEDED(nsres)) {
-       nsAString_GetData(&strColor, &color);
-       V_VT(p) = VT_BSTR;
-       hres = nscolor_to_str(color, &V_BSTR(p));
-    }else {
-       ERR("SetBgColor failed: %08lx\n", nsres);
-       hres = E_FAIL;
-    }
-
-    nsAString_Finish(&strColor);
-    return hres;
+    return elem_get_color_attr(&This->element, L"bgColor", p);
 }
 
 static HRESULT WINAPI HTMLTable_put_borderColor(IHTMLTable *iface, VARIANT v)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%s)\n", This, debugstr_variant(&v));
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return elem_put_color_attr(&This->element, L"borderColor", &v);
 }
 
 static HRESULT WINAPI HTMLTable_get_borderColor(IHTMLTable *iface, VARIANT *p)
 {
     HTMLTable *This = impl_from_IHTMLTable(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_color_attr(&This->element, L"borderColor", p);
 }
 
 static HRESULT WINAPI HTMLTable_put_borderColorLight(IHTMLTable *iface, VARIANT v)
@@ -1642,6 +2057,8 @@ static void *HTMLTable_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLTable2_iface;
     if(IsEqualGUID(&IID_IHTMLTable3, riid))
         return &This->IHTMLTable3_iface;
+    if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
+        return &This->element.IHTMLDatabinding_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -1692,6 +2109,8 @@ static void HTMLTableElement_init_dispex_info(dispex_data_t *info, compat_mode_t
     };
     dispex_info_add_interface(info, IHTMLTable_tid, table_hooks);
     dispex_info_add_interface(info, IHTMLTable2_tid, table2_hooks);
+    if(mode < COMPAT_MODE_IE11)
+        dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -1740,6 +2159,774 @@ HRESULT HTMLTable_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLEleme
 
     nsres = nsIDOMElement_QueryInterface(nselem, &IID_nsIDOMHTMLTableElement, (void**)&ret->nstable);
     assert(nsres == NS_OK);
+
+    *elem = &ret->element;
+    return S_OK;
+}
+
+typedef struct {
+    HTMLElement element;
+
+    IHTMLTableCol IHTMLTableCol_iface;
+    IHTMLTableCol2 IHTMLTableCol2_iface;
+    IHTMLTableCol3 IHTMLTableCol3_iface;
+} HTMLTableColElement;
+
+static inline HTMLTableColElement *impl_from_IHTMLTableCol(IHTMLTableCol *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableColElement, IHTMLTableCol_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableCol, IHTMLTableCol,
+                      impl_from_IHTMLTableCol(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableCol_put_span(IHTMLTableCol *iface, LONG v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    WCHAR buf[12];
+
+    TRACE("(%p)->(%ld)\n", This, v);
+
+    if(v < 1 || v > 1000)
+        return CTL_E_INVALIDPROPERTYVALUE;
+    swprintf(buf, ARRAY_SIZE(buf), L"%ld", v);
+    return elem_put_reflected_string(&This->element, L"span", buf);
+}
+
+static HRESULT WINAPI HTMLTableCol_get_span(IHTMLTableCol *iface, LONG *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    HRESULT hres;
+    LONG val;
+    BSTR str;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    hres = elem_get_attr_string(&This->element, L"span", &str);
+    if(FAILED(hres))
+        return hres;
+    val = str ? wcstol(str, NULL, 10) : 1;
+    SysFreeString(str);
+    *p = val < 1 || val > 1000 ? 1 : val;
+    return S_OK;
+}
+
+static HRESULT WINAPI HTMLTableCol_put_width(IHTMLTableCol *iface, VARIANT v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+    return put_table_length(&This->element, L"width", &v);
+}
+
+static HRESULT WINAPI HTMLTableCol_get_width(IHTMLTableCol *iface, VARIANT *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return get_table_length(&This->element, L"width", p);
+}
+
+static HRESULT WINAPI HTMLTableCol_put_align(IHTMLTableCol *iface, BSTR v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return put_table_keyword(&This->element, L"align", v, table_align_keywords);
+}
+
+static HRESULT WINAPI HTMLTableCol_get_align(IHTMLTableCol *iface, BSTR *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return get_table_keyword(&This->element, L"align", p, table_align_keywords, NULL);
+}
+
+static HRESULT WINAPI HTMLTableCol_put_vAlign(IHTMLTableCol *iface, BSTR v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return put_table_keyword(&This->element, L"valign", v, table_valign_keywords);
+}
+
+static HRESULT WINAPI HTMLTableCol_get_vAlign(IHTMLTableCol *iface, BSTR *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return get_table_keyword(&This->element, L"valign", p, table_valign_keywords, L"top");
+}
+
+static const IHTMLTableColVtbl HTMLTableColVtbl = {
+    HTMLTableCol_QueryInterface,
+    HTMLTableCol_AddRef,
+    HTMLTableCol_Release,
+    HTMLTableCol_GetTypeInfoCount,
+    HTMLTableCol_GetTypeInfo,
+    HTMLTableCol_GetIDsOfNames,
+    HTMLTableCol_Invoke,
+    HTMLTableCol_put_span,
+    HTMLTableCol_get_span,
+    HTMLTableCol_put_width,
+    HTMLTableCol_get_width,
+    HTMLTableCol_put_align,
+    HTMLTableCol_get_align,
+    HTMLTableCol_put_vAlign,
+    HTMLTableCol_get_vAlign,
+};
+
+static inline HTMLTableColElement *impl_from_IHTMLTableCol2(IHTMLTableCol2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableColElement, IHTMLTableCol2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableCol2, IHTMLTableCol2,
+                      impl_from_IHTMLTableCol2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableCol2_put_ch(IHTMLTableCol2 *iface, BSTR v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"ch", v);
+}
+
+static HRESULT WINAPI HTMLTableCol2_get_ch(IHTMLTableCol2 *iface, BSTR *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"ch", p);
+}
+
+static HRESULT WINAPI HTMLTableCol2_put_chOff(IHTMLTableCol2 *iface, BSTR v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol2(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"choff", v);
+}
+
+static HRESULT WINAPI HTMLTableCol2_get_chOff(IHTMLTableCol2 *iface, BSTR *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol2(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"choff", p);
+}
+
+static const IHTMLTableCol2Vtbl HTMLTableCol2Vtbl = {
+    HTMLTableCol2_QueryInterface,
+    HTMLTableCol2_AddRef,
+    HTMLTableCol2_Release,
+    HTMLTableCol2_GetTypeInfoCount,
+    HTMLTableCol2_GetTypeInfo,
+    HTMLTableCol2_GetIDsOfNames,
+    HTMLTableCol2_Invoke,
+    HTMLTableCol2_put_ch,
+    HTMLTableCol2_get_ch,
+    HTMLTableCol2_put_chOff,
+    HTMLTableCol2_get_chOff,
+};
+
+static inline HTMLTableColElement *impl_from_IHTMLTableCol3(IHTMLTableCol3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableColElement, IHTMLTableCol3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableCol3, IHTMLTableCol3,
+                      impl_from_IHTMLTableCol3(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableCol3_put_ch(IHTMLTableCol3 *iface, BSTR v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"char", v);
+}
+
+static HRESULT WINAPI HTMLTableCol3_get_ch(IHTMLTableCol3 *iface, BSTR *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"char", p);
+}
+
+static HRESULT WINAPI HTMLTableCol3_put_chOff(IHTMLTableCol3 *iface, BSTR v)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"charoff", v);
+}
+
+static HRESULT WINAPI HTMLTableCol3_get_chOff(IHTMLTableCol3 *iface, BSTR *p)
+{
+    HTMLTableColElement *This = impl_from_IHTMLTableCol3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"charoff", p);
+}
+
+static const IHTMLTableCol3Vtbl HTMLTableCol3Vtbl = {
+    HTMLTableCol3_QueryInterface,
+    HTMLTableCol3_AddRef,
+    HTMLTableCol3_Release,
+    HTMLTableCol3_GetTypeInfoCount,
+    HTMLTableCol3_GetTypeInfo,
+    HTMLTableCol3_GetIDsOfNames,
+    HTMLTableCol3_Invoke,
+    HTMLTableCol3_put_ch,
+    HTMLTableCol3_get_ch,
+    HTMLTableCol3_put_chOff,
+    HTMLTableCol3_get_chOff,
+};
+
+static inline HTMLTableColElement *HTMLTableCol_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableColElement, element.node.event_target.dispex);
+}
+
+static void *HTMLTableCol_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLTableColElement *This = HTMLTableCol_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLTableCol, riid))
+        return &This->IHTMLTableCol_iface;
+    if(IsEqualGUID(&IID_IHTMLTableCol2, riid))
+        return &This->IHTMLTableCol2_iface;
+    if(IsEqualGUID(&IID_IHTMLTableCol3, riid))
+        return &This->IHTMLTableCol3_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLTableColImplVtbl = {
+    .clsid                 = &CLSID_HTMLTableCol,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col,
+};
+
+static const event_target_vtbl_t HTMLTableColElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLTableCol_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+static void HTMLTableColElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    dispex_info_add_interface(info, IHTMLTableCol_tid, NULL);
+    dispex_info_add_interface(info, mode >= COMPAT_MODE_IE9 ? IHTMLTableCol3_tid : IHTMLTableCol2_tid, NULL);
+
+    HTMLElement_init_dispex_info(info, mode);
+}
+
+dispex_static_data_t HTMLTableColElement_dispex = {
+    .id           = OBJID_HTMLTableColElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLTableColElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLTableCol_tid,
+    .init_info    = HTMLTableColElement_init_dispex_info,
+};
+
+HRESULT HTMLTableCol_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLTableColElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLTableCol_iface.lpVtbl = &HTMLTableColVtbl;
+    ret->IHTMLTableCol2_iface.lpVtbl = &HTMLTableCol2Vtbl;
+    ret->IHTMLTableCol3_iface.lpVtbl = &HTMLTableCol3Vtbl;
+    ret->element.node.vtbl = &HTMLTableColImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLTableColElement_dispex);
+
+    *elem = &ret->element;
+    return S_OK;
+}
+
+typedef struct {
+    HTMLElement element;
+
+    IHTMLTableSection IHTMLTableSection_iface;
+    IHTMLTableSection2 IHTMLTableSection2_iface;
+    IHTMLTableSection3 IHTMLTableSection3_iface;
+    IHTMLTableSection4 IHTMLTableSection4_iface;
+} HTMLTableSectionElement;
+
+static HRESULT get_section_row(HTMLTableSectionElement *This, LONG index, nsIDOMNode **ret, LONG *count)
+{
+    nsIDOMHTMLTableRowElement *nsrow;
+    nsIDOMNode *iter, *next;
+    nsresult nsres;
+    LONG n = 0;
+
+    *ret = NULL;
+    nsres = nsIDOMNode_GetFirstChild(This->element.node.nsnode, &iter);
+    if(NS_FAILED(nsres))
+        return map_nsresult(nsres);
+
+    while(iter) {
+        nsres = nsIDOMNode_QueryInterface(iter, &IID_nsIDOMHTMLTableRowElement, (void**)&nsrow);
+        if(NS_SUCCEEDED(nsres)) {
+            nsIDOMHTMLTableRowElement_Release(nsrow);
+            if(n++ == index) {
+                nsIDOMNode_AddRef(iter);
+                *ret = iter;
+            }
+        }
+        nsres = nsIDOMNode_GetNextSibling(iter, &next);
+        nsIDOMNode_Release(iter);
+        iter = NS_SUCCEEDED(nsres) ? next : NULL;
+    }
+
+    *count = n;
+    return S_OK;
+}
+
+static BOOL section_is_detached_quirks(HTMLTableSectionElement *This)
+{
+    nsIDOMHTMLTableElement *nstable;
+    nsIDOMNode *parent;
+    nsresult nsres;
+
+    if(dispex_compat_mode(&This->element.node.event_target.dispex) >= COMPAT_MODE_IE9)
+        return FALSE;
+
+    nsres = nsIDOMNode_GetParentNode(This->element.node.nsnode, &parent);
+    if(NS_FAILED(nsres) || !parent)
+        return TRUE;
+    nsres = nsIDOMNode_QueryInterface(parent, &IID_nsIDOMHTMLTableElement, (void**)&nstable);
+    nsIDOMNode_Release(parent);
+    if(NS_FAILED(nsres))
+        return TRUE;
+    nsIDOMHTMLTableElement_Release(nstable);
+    return FALSE;
+}
+
+static HRESULT section_insert_row(HTMLTableSectionElement *This, LONG index, BOOL ie9, IDispatch **row)
+{
+    nsIDOMNode *ref, *nsnode;
+    HTMLElement *elem;
+    nsresult nsres;
+    HRESULT hres;
+    LONG count;
+
+    if(!ie9 && section_is_detached_quirks(This)) {
+        *row = NULL;
+        return S_OK;
+    }
+
+    hres = get_section_row(This, index, &ref, &count);
+    if(FAILED(hres))
+        return hres;
+    if(index < -1 || index > count || (ie9 && dispex_compat_mode(&This->element.node.event_target.dispex) < COMPAT_MODE_IE9)) {
+        if(ref)
+            nsIDOMNode_Release(ref);
+        if(index < -1 || index > count)
+            return ie9 ? MSHTML_E_INDEX_SIZE : E_INVALIDARG;
+        return E_UNEXPECTED;
+    }
+
+    hres = create_element(This->element.node.doc, L"tr", &elem);
+    if(FAILED(hres)) {
+        if(ref)
+            nsIDOMNode_Release(ref);
+        return hres;
+    }
+
+    if(ref) {
+        nsres = nsIDOMNode_InsertBefore(This->element.node.nsnode, elem->node.nsnode, ref, &nsnode);
+        nsIDOMNode_Release(ref);
+    }else {
+        nsres = nsIDOMNode_AppendChild(This->element.node.nsnode, elem->node.nsnode, &nsnode);
+    }
+    if(NS_FAILED(nsres)) {
+        IHTMLElement_Release(&elem->IHTMLElement_iface);
+        return map_nsresult(nsres);
+    }
+    nsIDOMNode_Release(nsnode);
+
+    *row = (IDispatch*)&elem->IHTMLElement_iface;
+    return S_OK;
+}
+
+static HRESULT section_delete_row(HTMLTableSectionElement *This, LONG index, BOOL ie9)
+{
+    nsIDOMNode *ref, *nsnode;
+    nsresult nsres;
+    HRESULT hres;
+    LONG count;
+
+    if(!ie9 && section_is_detached_quirks(This))
+        return S_OK;
+
+    hres = get_section_row(This, index, &ref, &count);
+    if(FAILED(hres))
+        return hres;
+    if(!count && index == -1)
+        return S_OK;
+    if(index == -1)
+        hres = get_section_row(This, count - 1, &ref, &count);
+    if(FAILED(hres))
+        return hres;
+    if(!ref)
+        return ie9 ? MSHTML_E_INDEX_SIZE : E_INVALIDARG;
+    if(ie9 && dispex_compat_mode(&This->element.node.event_target.dispex) < COMPAT_MODE_IE9) {
+        nsIDOMNode_Release(ref);
+        return E_UNEXPECTED;
+    }
+
+    nsres = nsIDOMNode_RemoveChild(This->element.node.nsnode, ref, &nsnode);
+    nsIDOMNode_Release(ref);
+    if(NS_FAILED(nsres))
+        return map_nsresult(nsres);
+    nsIDOMNode_Release(nsnode);
+    return S_OK;
+}
+
+static inline HTMLTableSectionElement *impl_from_IHTMLTableSection(IHTMLTableSection *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableSectionElement, IHTMLTableSection_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableSection, IHTMLTableSection,
+                      impl_from_IHTMLTableSection(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableSection_put_align(IHTMLTableSection *iface, BSTR v)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return put_table_keyword(&This->element, L"align", v, table_align_keywords);
+}
+
+static HRESULT WINAPI HTMLTableSection_get_align(IHTMLTableSection *iface, BSTR *p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return get_table_keyword(&This->element, L"align", p, table_align_keywords, NULL);
+}
+
+static HRESULT WINAPI HTMLTableSection_put_vAlign(IHTMLTableSection *iface, BSTR v)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return put_table_keyword(&This->element, L"valign", v, table_valign_keywords);
+}
+
+static HRESULT WINAPI HTMLTableSection_get_vAlign(IHTMLTableSection *iface, BSTR *p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return get_table_keyword(&This->element, L"valign", p, table_valign_keywords, L"top");
+}
+
+static HRESULT WINAPI HTMLTableSection_put_bgColor(IHTMLTableSection *iface, VARIANT v)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+    return elem_put_color_attr(&This->element, L"bgcolor", &v);
+}
+
+static HRESULT WINAPI HTMLTableSection_get_bgColor(IHTMLTableSection *iface, VARIANT *p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_color_attr(&This->element, L"bgcolor", p);
+}
+
+static HRESULT WINAPI HTMLTableSection_get_rows(IHTMLTableSection *iface, IHTMLElementCollection **p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    IHTMLElementCollection *col;
+    nsIDOMNodeList *nslist;
+    IDispatch *disp;
+    nsresult nsres;
+    HRESULT hres;
+    VARIANT tag;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    /* FIXME: in quirks mode, the length of the rows of a section outside a table returns S_FALSE */
+    nsres = nsIDOMNode_GetChildNodes(This->element.node.nsnode, &nslist);
+    if(NS_FAILED(nsres))
+        return map_nsresult(nsres);
+    col = create_collection_from_nodelist(nslist, &This->element.node.event_target.dispex);
+    nsIDOMNodeList_Release(nslist);
+    if(!col)
+        return E_OUTOFMEMORY;
+
+    V_VT(&tag) = VT_BSTR;
+    V_BSTR(&tag) = SysAllocString(L"tr");
+    if(!V_BSTR(&tag)) {
+        IHTMLElementCollection_Release(col);
+        return E_OUTOFMEMORY;
+    }
+    hres = IHTMLElementCollection_tags(col, tag, &disp);
+    SysFreeString(V_BSTR(&tag));
+    IHTMLElementCollection_Release(col);
+    if(FAILED(hres))
+        return hres;
+
+    hres = IDispatch_QueryInterface(disp, &IID_IHTMLElementCollection, (void**)p);
+    IDispatch_Release(disp);
+    return hres;
+}
+
+static HRESULT WINAPI HTMLTableSection_insertRow(IHTMLTableSection *iface, LONG index, IDispatch **row)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%ld %p)\n", This, index, row);
+    return section_insert_row(This, index, FALSE, row);
+}
+
+static HRESULT WINAPI HTMLTableSection_deleteRow(IHTMLTableSection *iface, LONG index)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection(iface);
+    TRACE("(%p)->(%ld)\n", This, index);
+    return section_delete_row(This, index, FALSE);
+}
+
+static const IHTMLTableSectionVtbl HTMLTableSectionVtbl = {
+    HTMLTableSection_QueryInterface,
+    HTMLTableSection_AddRef,
+    HTMLTableSection_Release,
+    HTMLTableSection_GetTypeInfoCount,
+    HTMLTableSection_GetTypeInfo,
+    HTMLTableSection_GetIDsOfNames,
+    HTMLTableSection_Invoke,
+    HTMLTableSection_put_align,
+    HTMLTableSection_get_align,
+    HTMLTableSection_put_vAlign,
+    HTMLTableSection_get_vAlign,
+    HTMLTableSection_put_bgColor,
+    HTMLTableSection_get_bgColor,
+    HTMLTableSection_get_rows,
+    HTMLTableSection_insertRow,
+    HTMLTableSection_deleteRow,
+};
+
+static inline HTMLTableSectionElement *impl_from_IHTMLTableSection2(IHTMLTableSection2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableSectionElement, IHTMLTableSection2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableSection2, IHTMLTableSection2,
+                      impl_from_IHTMLTableSection2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableSection2_moveRow(IHTMLTableSection2 *iface, LONG indexFrom, LONG indexTo, IDispatch **row)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection2(iface);
+    /* TODO: move the row */
+    FIXME("(%p)->(%ld %ld %p)\n", This, indexFrom, indexTo, row);
+    return E_NOTIMPL;
+}
+
+static const IHTMLTableSection2Vtbl HTMLTableSection2Vtbl = {
+    HTMLTableSection2_QueryInterface,
+    HTMLTableSection2_AddRef,
+    HTMLTableSection2_Release,
+    HTMLTableSection2_GetTypeInfoCount,
+    HTMLTableSection2_GetTypeInfo,
+    HTMLTableSection2_GetIDsOfNames,
+    HTMLTableSection2_Invoke,
+    HTMLTableSection2_moveRow,
+};
+
+static inline HTMLTableSectionElement *impl_from_IHTMLTableSection3(IHTMLTableSection3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableSectionElement, IHTMLTableSection3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableSection3, IHTMLTableSection3,
+                      impl_from_IHTMLTableSection3(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableSection3_put_ch(IHTMLTableSection3 *iface, BSTR v)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"ch", v);
+}
+
+static HRESULT WINAPI HTMLTableSection3_get_ch(IHTMLTableSection3 *iface, BSTR *p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"ch", p);
+}
+
+static HRESULT WINAPI HTMLTableSection3_put_chOff(IHTMLTableSection3 *iface, BSTR v)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection3(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"choff", v);
+}
+
+static HRESULT WINAPI HTMLTableSection3_get_chOff(IHTMLTableSection3 *iface, BSTR *p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection3(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"choff", p);
+}
+
+static const IHTMLTableSection3Vtbl HTMLTableSection3Vtbl = {
+    HTMLTableSection3_QueryInterface,
+    HTMLTableSection3_AddRef,
+    HTMLTableSection3_Release,
+    HTMLTableSection3_GetTypeInfoCount,
+    HTMLTableSection3_GetTypeInfo,
+    HTMLTableSection3_GetIDsOfNames,
+    HTMLTableSection3_Invoke,
+    HTMLTableSection3_put_ch,
+    HTMLTableSection3_get_ch,
+    HTMLTableSection3_put_chOff,
+    HTMLTableSection3_get_chOff,
+};
+
+static inline HTMLTableSectionElement *impl_from_IHTMLTableSection4(IHTMLTableSection4 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableSectionElement, IHTMLTableSection4_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableSection4, IHTMLTableSection4,
+                      impl_from_IHTMLTableSection4(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableSection4_put_ch(IHTMLTableSection4 *iface, BSTR v)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection4(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"char", v);
+}
+
+static HRESULT WINAPI HTMLTableSection4_get_ch(IHTMLTableSection4 *iface, BSTR *p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection4(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"char", p);
+}
+
+static HRESULT WINAPI HTMLTableSection4_put_chOff(IHTMLTableSection4 *iface, BSTR v)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection4(iface);
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+    return elem_put_reflected_string(&This->element, L"charoff", v);
+}
+
+static HRESULT WINAPI HTMLTableSection4_get_chOff(IHTMLTableSection4 *iface, BSTR *p)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection4(iface);
+    TRACE("(%p)->(%p)\n", This, p);
+    return elem_get_attr_string(&This->element, L"charoff", p);
+}
+
+static HRESULT WINAPI HTMLTableSection4_insertRow(IHTMLTableSection4 *iface, LONG index, IDispatch **row)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection4(iface);
+    TRACE("(%p)->(%ld %p)\n", This, index, row);
+    return section_insert_row(This, index, TRUE, row);
+}
+
+static HRESULT WINAPI HTMLTableSection4_deleteRow(IHTMLTableSection4 *iface, LONG index)
+{
+    HTMLTableSectionElement *This = impl_from_IHTMLTableSection4(iface);
+    TRACE("(%p)->(%ld)\n", This, index);
+    return section_delete_row(This, index, TRUE);
+}
+
+static const IHTMLTableSection4Vtbl HTMLTableSection4Vtbl = {
+    HTMLTableSection4_QueryInterface,
+    HTMLTableSection4_AddRef,
+    HTMLTableSection4_Release,
+    HTMLTableSection4_GetTypeInfoCount,
+    HTMLTableSection4_GetTypeInfo,
+    HTMLTableSection4_GetIDsOfNames,
+    HTMLTableSection4_Invoke,
+    HTMLTableSection4_put_ch,
+    HTMLTableSection4_get_ch,
+    HTMLTableSection4_put_chOff,
+    HTMLTableSection4_get_chOff,
+    HTMLTableSection4_insertRow,
+    HTMLTableSection4_deleteRow,
+};
+
+static inline HTMLTableSectionElement *HTMLTableSection_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableSectionElement, element.node.event_target.dispex);
+}
+
+static void *HTMLTableSection_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLTableSectionElement *This = HTMLTableSection_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLTableSection, riid))
+        return &This->IHTMLTableSection_iface;
+    if(IsEqualGUID(&IID_IHTMLTableSection2, riid))
+        return &This->IHTMLTableSection2_iface;
+    if(IsEqualGUID(&IID_IHTMLTableSection3, riid))
+        return &This->IHTMLTableSection3_iface;
+    if(IsEqualGUID(&IID_IHTMLTableSection4, riid))
+        return &This->IHTMLTableSection4_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLTableSectionImplVtbl = {
+    .clsid                 = &CLSID_HTMLTableSection,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col,
+};
+
+static const event_target_vtbl_t HTMLTableSectionElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLTableSection_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+static void HTMLTableSectionElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    static const dispex_hook_t hooks[] = {
+        {DISPID_IHTMLTABLESECTION_ROWS, .noattr = TRUE},
+        {DISPID_UNKNOWN}
+    };
+    if(mode >= COMPAT_MODE_IE9)
+        dispex_info_add_interface(info, IHTMLTableSection4_tid, NULL);
+    dispex_info_add_interface(info, IHTMLTableSection_tid, hooks);
+    dispex_info_add_interface(info, IHTMLTableSection2_tid, NULL);
+    if(mode < COMPAT_MODE_IE9)
+        dispex_info_add_interface(info, IHTMLTableSection3_tid, NULL);
+
+    HTMLElement_init_dispex_info(info, mode);
+}
+
+dispex_static_data_t HTMLTableSectionElement_dispex = {
+    .id           = OBJID_HTMLTableSectionElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLTableSectionElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLTableSection_tid,
+    .init_info    = HTMLTableSectionElement_init_dispex_info,
+};
+
+HRESULT HTMLTableSection_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLTableSectionElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLTableSection_iface.lpVtbl = &HTMLTableSectionVtbl;
+    ret->IHTMLTableSection2_iface.lpVtbl = &HTMLTableSection2Vtbl;
+    ret->IHTMLTableSection3_iface.lpVtbl = &HTMLTableSection3Vtbl;
+    ret->IHTMLTableSection4_iface.lpVtbl = &HTMLTableSection4Vtbl;
+    ret->element.node.vtbl = &HTMLTableSectionImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLTableSectionElement_dispex);
 
     *elem = &ret->element;
     return S_OK;

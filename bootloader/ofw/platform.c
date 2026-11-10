@@ -818,6 +818,19 @@ FwReadBootFile(
     return FsReadFile(&Device, Path, Size);
 }
 
+BOOLEAN
+FwWriteBootFile(
+    _In_ PCWSTR Path,
+    _In_reads_bytes_(Size) const VOID* Data,
+    _In_ ULONG Size)
+{
+    UNREFERENCED_PARAMETER(Path);
+    UNREFERENCED_PARAMETER(Data);
+    UNREFERENCED_PARAMETER(Size);
+    /* TODO: write boot files on Open Firmware; until then the starts of an update entry are not counted */
+    return FALSE;
+}
+
 PVOID
 FwReadDeviceFile(
     _In_ PVOID Device,

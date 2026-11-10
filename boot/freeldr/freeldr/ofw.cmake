@@ -31,8 +31,8 @@ list(APPEND OFWLDR_BOOTMGR_SOURCE
 add_asm_files(ofwfreeldr_common_asm ${FREELDR_COMMON_ASM_SOURCE} ${OFWLDR_COMMON_ASM_SOURCE})
 
 list(APPEND FREELDR_NTLDR_SOURCE
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmboot.c
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/config.c
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmboot.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/config.c
     ntldr/startup.c
     ntldr/conversion.c
     ntldr/headless.c
