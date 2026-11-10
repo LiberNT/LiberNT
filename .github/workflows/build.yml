@@ -1,8 +1,11 @@
 name: Build
-on: [push, pull_request]
+on:
+  push:
+    branches: [main-nt10]
+  pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
