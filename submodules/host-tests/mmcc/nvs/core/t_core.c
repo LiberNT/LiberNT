@@ -533,6 +533,9 @@ TestPageTable(void)
     LONG64 Available;
     ULONG i;
 
+    if (MiArchDescribe()->VirtualAddressBits > 32)
+        CHECK(MiArchDescribe()->SharedUserDataReadOnly);
+
     WorldCreate(&World, 8192, 2, 100000);
     System = &World.System;
     Available = (LONG64)MiPfnAvailablePages(&System->Pfn);

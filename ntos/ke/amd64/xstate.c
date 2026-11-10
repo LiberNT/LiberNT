@@ -306,7 +306,7 @@ KiInitializeXStateConfiguration(
                     SharedUserData->XState.Size);
 
             /* The problem is likely the VM, but to be safe, we adjust the size */
-            SharedUserData->XState.AllFeatureSize = ExtStateSubLeaf.Ebx.XSaveAreaSize;
+            MmWriteableSharedUserData->XState.AllFeatureSize = ExtStateSubLeaf.Ebx.XSaveAreaSize;
         }
     }
 }
