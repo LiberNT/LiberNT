@@ -733,10 +733,6 @@ private:
         if (SUCCEEDED(SHGetImageList(SHIL_SMALL, IID_PPV_ARG(IImageList, &m_ImageList))))
             TreeView_SetImageList(m_Tree, reinterpret_cast<HIMAGELIST>(m_ImageList.p), TVSIL_NORMAL);
 
-        HFONT Font = reinterpret_cast<HFONT>(SendMessageW(::GetParent(m_hWnd), WM_GETFONT, 0, 0));
-        if (!Font)
-            Font = reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-        SendMessageW(m_Tree, WM_SETFONT, reinterpret_cast<WPARAM>(Font), TRUE);
         return 0;
     }
 

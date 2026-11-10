@@ -1833,7 +1833,7 @@ CCabinetWindow::CreateNavigationPane()
         CabinetPalette palette;
 
         if (tree)
-            TreeView_SetItemHeight(tree, Scale(26));
+            TreeView_SetItemHeight(tree, max(Scale(26), TreeView_GetItemHeight(tree)));
         CabinetGetPalette(&palette);
         SetNavigationBackground(palette.Body);
     }
