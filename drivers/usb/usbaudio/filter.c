@@ -2756,6 +2756,42 @@ UsbAudioReadSampleFrequency(
            ((ULONG)Frequency[2] << 16);
 }
 
+PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR
+UsbAudioFindPcmStreamingGeneral(
+    IN PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
+    IN PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor)
+{
+    PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR General;
+    PUSB_COMMON_DESCRIPTOR CommonDescriptor;
+    PUCHAR DescriptorEnd;
+
+    if (InterfaceDescriptor->bInterfaceProtocol != 0)
+        return NULL;
+
+    DescriptorEnd = (PUCHAR)ConfigurationDescriptor + ConfigurationDescriptor->wTotalLength;
+    CommonDescriptor = (PUSB_COMMON_DESCRIPTOR)((PUCHAR)InterfaceDescriptor + InterfaceDescriptor->bLength);
+    while ((PUCHAR)CommonDescriptor + sizeof(USB_COMMON_DESCRIPTOR) <= DescriptorEnd &&
+           CommonDescriptor->bLength != 0 &&
+           (PUCHAR)CommonDescriptor + CommonDescriptor->bLength <= DescriptorEnd &&
+           CommonDescriptor->bDescriptorType != USB_INTERFACE_DESCRIPTOR_TYPE)
+    {
+        General = (PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR)CommonDescriptor;
+        if (CommonDescriptor->bDescriptorType == USB_AUDIO_CONTROL_TERMINAL_DESCRIPTOR_TYPE &&
+            CommonDescriptor->bLength >= sizeof(USB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR) &&
+            General->bDescriptorSubtype == 0x01)
+        {
+            if (General->wFormatTag == WAVE_FORMAT_PCM || General->wFormatTag == 0 || General->wFormatTag >= 64)
+                return General;
+            DPRINT1("usbaudio: interface %u alternate setting %u uses format tag %x\n",
+                    InterfaceDescriptor->bInterfaceNumber, InterfaceDescriptor->bAlternateSetting,
+                    General->wFormatTag);
+            return NULL;
+        }
+        CommonDescriptor = (PUSB_COMMON_DESCRIPTOR)((PUCHAR)CommonDescriptor + CommonDescriptor->bLength);
+    }
+    return NULL;
+}
+
 PUSB_COMMON_DESCRIPTOR
 UsbAudioFindStreamingClassDescriptor(
     IN PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
@@ -3196,10 +3232,8 @@ UsbAudioGetDataRangesUac1(
         if (Descriptor->bInterfaceSubClass == 0x02 && /* AUDIO_STREAMING */
             Descriptor->bNumEndpoints > 0)
         {
-            StreamingInterfaceDescriptor = (PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(ConfigurationDescriptor, ConfigurationDescriptor->wTotalLength, Descriptor, USB_AUDIO_CONTROL_TERMINAL_DESCRIPTOR_TYPE);
-            if (StreamingInterfaceDescriptor != NULL &&
-                StreamingInterfaceDescriptor->bDescriptorSubtype == 0x01 &&
-                StreamingInterfaceDescriptor->wFormatTag == WAVE_FORMAT_PCM)
+            StreamingInterfaceDescriptor = UsbAudioFindPcmStreamingGeneral(ConfigurationDescriptor, Descriptor);
+            if (StreamingInterfaceDescriptor != NULL)
             {
                 if (StreamingInterfaceDescriptor->bTerminalLink == bTerminalID)
                 {
@@ -3251,10 +3285,8 @@ UsbAudioGetDataRangesUac1(
         if (Descriptor->bInterfaceSubClass == 0x02 && /* AUDIO_STREAMING */
             Descriptor->bNumEndpoints > 0)
         {
-            StreamingInterfaceDescriptor = (PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(ConfigurationDescriptor, ConfigurationDescriptor->wTotalLength, Descriptor, USB_AUDIO_CONTROL_TERMINAL_DESCRIPTOR_TYPE);
-            if (StreamingInterfaceDescriptor != NULL &&
-                StreamingInterfaceDescriptor->bDescriptorSubtype == 0x01 &&
-                StreamingInterfaceDescriptor->wFormatTag == WAVE_FORMAT_PCM)
+            StreamingInterfaceDescriptor = UsbAudioFindPcmStreamingGeneral(ConfigurationDescriptor, Descriptor);
+            if (StreamingInterfaceDescriptor != NULL)
             {
                 if (StreamingInterfaceDescriptor->bTerminalLink == bTerminalID)
                 {
