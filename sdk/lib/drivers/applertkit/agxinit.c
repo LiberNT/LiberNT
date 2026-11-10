@@ -1927,3 +1927,87 @@ AppleAgxDescribeParams(
     Params->CommandTimestampFrequencyHz = APPLE_AGX_TIMESTAMP_HZ;
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeVm(
+    _In_ const DRM_ASAHI_VM_CREATE *Create,
+    _Out_ PAPPLE_AGX_VM_RANGES Ranges)
+{
+    ULONG64 Start, End, Half;
+
+    if (!Create || !Ranges || Create->Pad || Create->KernelStart < APPLE_AGX_USER_VA_START ||
+        Create->KernelEnd > APPLE_AGX_USER_VA_END || Create->KernelStart >= Create->KernelEnd ||
+        Create->KernelEnd - Create->KernelStart < APPLE_AGX_KERNEL_VA_MIN ||
+        ((Create->KernelStart | Create->KernelEnd) & (APPLE_UAT_PAGE_SIZE - 1)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Start = (Create->KernelStart + APPLE_AGX_BUFFER_PAGE - 1) & ~(APPLE_AGX_BUFFER_PAGE - 1);
+    End = Create->KernelEnd & ~(APPLE_AGX_BUFFER_PAGE - 1);
+    Half = ((End - Start) >> 1) & ~(APPLE_AGX_BUFFER_PAGE - 1);
+    Ranges->UserStart = APPLE_AGX_USER_VA_START;
+    Ranges->UserEnd = APPLE_AGX_USER_VA_END;
+    Ranges->KernelStart = Start;
+    Ranges->KernelGpuEnd = Start + Half;
+    Ranges->KernelEnd = End;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxGemSize(
+    _In_ const DRM_ASAHI_GEM_CREATE *Create,
+    _Out_ PULONG64 Size)
+{
+    if (!Create || !Size || !Create->Size || Create->Pad ||
+        (Create->Flags & ~(DRM_ASAHI_GEM_WRITEBACK | DRM_ASAHI_GEM_VM_PRIVATE)) ||
+        (!(Create->Flags & DRM_ASAHI_GEM_VM_PRIVATE) && Create->VmId) ||
+        Create->Size > MAXULONG64 - (APPLE_UAT_PAGE_SIZE - 1))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    *Size = (Create->Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxCheckBind(
+    _In_ const DRM_ASAHI_GEM_BIND_OP *Op,
+    _In_ const APPLE_AGX_VM_RANGES *Ranges,
+    _In_ ULONG64 ObjectSize,
+    _Out_ PAPPLE_UAT_PROTECTION Protection)
+{
+    const ULONG MapFlags = DRM_ASAHI_BIND_READ | DRM_ASAHI_BIND_WRITE | DRM_ASAHI_BIND_SINGLE_PAGE;
+    ULONG64 End, Accessed;
+
+    if (!Op || !Ranges || !Protection || !Op->Range ||
+        ((Op->Addr | Op->Range | Op->Offset) & (APPLE_UAT_PAGE_SIZE - 1)) || Op->Addr + Op->Range < Op->Addr)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    End = Op->Addr + Op->Range;
+    if (Op->Addr < Ranges->UserStart || End > Ranges->UserEnd ||
+        (Op->Addr < Ranges->KernelEnd && End > Ranges->KernelStart))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlZeroMemory(Protection, sizeof(*Protection));
+    if (Op->Flags & DRM_ASAHI_BIND_UNBIND)
+    {
+        if (Op->Offset || Op->Flags != DRM_ASAHI_BIND_UNBIND || Op->Handle)
+            return STATUS_INVALID_PARAMETER;
+        return STATUS_SUCCESS;
+    }
+    if ((Op->Flags & ~MapFlags) || !(Op->Flags & (DRM_ASAHI_BIND_READ | DRM_ASAHI_BIND_WRITE)))
+        return STATUS_INVALID_PARAMETER;
+    Accessed = (Op->Flags & DRM_ASAHI_BIND_SINGLE_PAGE) ? APPLE_UAT_PAGE_SIZE : Op->Range;
+    if (Op->Offset + Accessed < Op->Offset || Op->Offset + Accessed > ObjectSize)
+        return STATUS_INVALID_PARAMETER;
+    Protection->Access = APPLE_UAT_ACCESS_GPU;
+    Protection->Memory = APPLE_UAT_MEMORY_UNCACHED;
+    Protection->Read = (Op->Flags & DRM_ASAHI_BIND_READ) != 0;
+    Protection->Write = (Op->Flags & DRM_ASAHI_BIND_WRITE) != 0;
+    return STATUS_SUCCESS;
+}

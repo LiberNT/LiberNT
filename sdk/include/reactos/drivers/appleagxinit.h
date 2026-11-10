@@ -949,3 +949,34 @@ AppleAgxDescribeParams(
     _In_ ULONG ChipId,
     _In_ ULONG MaxKilohertz,
     _Out_ PDRM_ASAHI_PARAMS_GLOBAL Params);
+
+#define APPLE_AGX_BUFFER_PAGE           0x8000ULL
+
+typedef struct _APPLE_AGX_VM_RANGES
+{
+    ULONG64 UserStart;
+    ULONG64 UserEnd;
+    ULONG64 KernelStart;
+    ULONG64 KernelGpuEnd;
+    ULONG64 KernelEnd;
+} APPLE_AGX_VM_RANGES, *PAPPLE_AGX_VM_RANGES;
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeVm(
+    _In_ const DRM_ASAHI_VM_CREATE *Create,
+    _Out_ PAPPLE_AGX_VM_RANGES Ranges);
+
+NTSTATUS
+NTAPI
+AppleAgxGemSize(
+    _In_ const DRM_ASAHI_GEM_CREATE *Create,
+    _Out_ PULONG64 Size);
+
+NTSTATUS
+NTAPI
+AppleAgxCheckBind(
+    _In_ const DRM_ASAHI_GEM_BIND_OP *Op,
+    _In_ const APPLE_AGX_VM_RANGES *Ranges,
+    _In_ ULONG64 ObjectSize,
+    _Out_ PAPPLE_UAT_PROTECTION Protection);

@@ -4363,6 +4363,127 @@ TestAgxParams(VOID)
 
 static
 VOID
+TestAgxMemoryCalls(VOID)
+{
+    DRM_ASAHI_VM_CREATE Vm;
+    DRM_ASAHI_GEM_CREATE Gem;
+    DRM_ASAHI_GEM_BIND_OP Op, Bad;
+    APPLE_AGX_VM_RANGES Ranges;
+    APPLE_UAT_PROTECTION Protection;
+    ULONG64 Size;
+
+    RtlZeroMemory(&Vm, sizeof(Vm));
+    Vm.KernelStart = 0x1000000000ULL;
+    Vm.KernelEnd = 0x1040000000ULL;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_SUCCESS);
+    ok(Ranges.UserStart == 0x4000 && Ranges.UserEnd == 0x2ffffff8000ULL, "The user range is %I64x..%I64x\n",
+       Ranges.UserStart, Ranges.UserEnd);
+    ok(Ranges.KernelStart == 0x1000000000ULL, "The kernel range starts at %I64x\n", Ranges.KernelStart);
+    ok(Ranges.KernelGpuEnd == 0x1020000000ULL, "The GPU-only half ends at %I64x\n", Ranges.KernelGpuEnd);
+    ok(Ranges.KernelEnd == 0x1040000000ULL, "The kernel range ends at %I64x\n", Ranges.KernelEnd);
+    Vm.KernelStart = 0x1000004000ULL;
+    Vm.KernelEnd = 0x102000c000ULL;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_SUCCESS);
+    ok(Ranges.KernelStart == 0x1000008000ULL, "The aligned kernel range starts at %I64x\n", Ranges.KernelStart);
+    ok(Ranges.KernelEnd == 0x1020008000ULL, "The aligned kernel range ends at %I64x\n", Ranges.KernelEnd);
+    ok(Ranges.KernelGpuEnd == 0x1010008000ULL, "The GPU-only half ends at %I64x\n", Ranges.KernelGpuEnd);
+    Vm.KernelStart = 0x1000000000ULL;
+    Vm.KernelEnd = 0x101fffc000ULL;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_INVALID_PARAMETER);
+    Vm.KernelEnd = 0x1040002000ULL;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_INVALID_PARAMETER);
+    Vm.KernelStart = 0;
+    Vm.KernelEnd = 0x40000000ULL;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_INVALID_PARAMETER);
+    Vm.KernelStart = 0x2ffe0000000ULL;
+    Vm.KernelEnd = 0x30000000000ULL;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_INVALID_PARAMETER);
+    Vm.KernelStart = 0x1000000000ULL;
+    Vm.KernelEnd = 0x1040000000ULL;
+    Vm.Pad = 1;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_INVALID_PARAMETER);
+    Vm.Pad = 0;
+    ok_hex(AppleAgxDescribeVm(&Vm, &Ranges), STATUS_SUCCESS);
+
+    RtlZeroMemory(&Gem, sizeof(Gem));
+    Gem.Size = 0x5001;
+    ok_hex(AppleAgxGemSize(&Gem, &Size), STATUS_SUCCESS);
+    ok(Size == 0x8000, "The object takes %I64x bytes\n", Size);
+    Gem.Flags = DRM_ASAHI_GEM_WRITEBACK | DRM_ASAHI_GEM_VM_PRIVATE;
+    Gem.VmId = 3;
+    ok_hex(AppleAgxGemSize(&Gem, &Size), STATUS_SUCCESS);
+    Gem.Flags = DRM_ASAHI_GEM_WRITEBACK;
+    ok_hex(AppleAgxGemSize(&Gem, &Size), STATUS_INVALID_PARAMETER);
+    Gem.VmId = 0;
+    Gem.Flags = 4;
+    ok_hex(AppleAgxGemSize(&Gem, &Size), STATUS_INVALID_PARAMETER);
+    Gem.Flags = 0;
+    Gem.Size = 0;
+    ok_hex(AppleAgxGemSize(&Gem, &Size), STATUS_INVALID_PARAMETER);
+    Gem.Size = MAXULONG64;
+    ok_hex(AppleAgxGemSize(&Gem, &Size), STATUS_INVALID_PARAMETER);
+
+    RtlZeroMemory(&Op, sizeof(Op));
+    Op.Flags = DRM_ASAHI_BIND_READ | DRM_ASAHI_BIND_WRITE;
+    Op.Handle = 1;
+    Op.Offset = 0x4000;
+    Op.Range = 0x8000;
+    Op.Addr = 0x2000000000ULL;
+    ok_hex(AppleAgxCheckBind(&Op, &Ranges, 0xc000, &Protection), STATUS_SUCCESS);
+    ok_int(Protection.Access, APPLE_UAT_ACCESS_GPU);
+    ok_int(Protection.Memory, APPLE_UAT_MEMORY_UNCACHED);
+    ok_int(Protection.Read, TRUE);
+    ok_int(Protection.Write, TRUE);
+    ok_hex(AppleAgxCheckBind(&Op, &Ranges, 0x8000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad = Op;
+    Bad.Flags = DRM_ASAHI_BIND_READ;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_SUCCESS);
+    ok_int(Protection.Write, FALSE);
+    Bad.Flags = DRM_ASAHI_BIND_WRITE;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_SUCCESS);
+    ok_int(Protection.Read, FALSE);
+    Bad.Flags = DRM_ASAHI_BIND_SINGLE_PAGE;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad.Flags = DRM_ASAHI_BIND_READ | DRM_ASAHI_BIND_SINGLE_PAGE;
+    Bad.Range = 0x100000;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0x8000, &Protection), STATUS_SUCCESS);
+    Bad.Flags = DRM_ASAHI_BIND_READ | 0x10;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0x100000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad = Op;
+    Bad.Addr = 0x2000002000ULL;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad = Op;
+    Bad.Range = 0;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad = Op;
+    Bad.Addr = 0x103fffc000ULL;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad.Addr = 0x0fffffc000ULL;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad.Addr = 0x0fffff8000ULL;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_SUCCESS);
+    Bad.Addr = 0x2ffffff4000ULL;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_INVALID_PARAMETER);
+    Bad.Addr = 0;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0xc000, &Protection), STATUS_INVALID_PARAMETER);
+
+    RtlZeroMemory(&Bad, sizeof(Bad));
+    Bad.Flags = DRM_ASAHI_BIND_UNBIND;
+    Bad.Range = 0x8000;
+    Bad.Addr = 0x2000000000ULL;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0, &Protection), STATUS_SUCCESS);
+    Bad.Handle = 1;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0, &Protection), STATUS_INVALID_PARAMETER);
+    Bad.Handle = 0;
+    Bad.Offset = 0x4000;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0, &Protection), STATUS_INVALID_PARAMETER);
+    Bad.Offset = 0;
+    Bad.Flags = DRM_ASAHI_BIND_UNBIND | DRM_ASAHI_BIND_READ;
+    ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0, &Protection), STATUS_INVALID_PARAMETER);
+}
+
+static
+VOID
 TestAgxParameterBuffer(VOID)
 {
     APPLE_AGX_PARAMETER_BUFFER Buffer;
@@ -5594,6 +5715,7 @@ START_TEST(AppleSoc)
     TestAgxTranslateRender();
     TestAgxBuildRender();
     TestAgxParams();
+    TestAgxMemoryCalls();
     TestSpmi();
     TestAtcphy();
     TestPcie();
