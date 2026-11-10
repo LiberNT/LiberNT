@@ -1,0 +1,78 @@
+; LiberNT Virtual WiFi Bus Driver Installation File
+; Native 802.11 miniport INFs include the [VWiFiBus.*] sections of this file
+; through Include/Needs directives; the section names are the contract those
+; INFs rely on and must not be renamed.
+; Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = System
+ClassGUID   = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider    = %LiberNT%
+PnpLockdown = 1
+DriverVer   = 06/02/2026,1.0.0.0
+
+[DestinationDirs]
+VWiFiBus.CopyFilesInternal = 12
+
+[Manufacturer]
+%LiberNT% = VWiFiBusMfg,NTamd64,NTARM64
+
+[VWiFiBusMfg]
+%vwifibus.DeviceDesc% = VWiFiBus
+%vwifibus.DeviceDesc% = VWiFiBus.CopyFiles
+%vwifibus.DeviceDesc% = VWiFiBus.PnPFilterRegistration
+
+[VWiFiBusMfg.NTamd64]
+%vwifibus.DeviceDesc% = VWiFiBus
+%vwifibus.DeviceDesc% = VWiFiBus.CopyFiles
+%vwifibus.DeviceDesc% = VWiFiBus.PnPFilterRegistration
+
+[VWiFiBusMfg.NTARM64]
+%vwifibus.DeviceDesc% = VWiFiBus
+%vwifibus.DeviceDesc% = VWiFiBus.CopyFiles
+%vwifibus.DeviceDesc% = VWiFiBus.PnPFilterRegistration
+
+[VWiFiBus]
+CopyFiles = VWiFiBus.CopyFilesInternal
+
+[VWiFiBus.CopyFilesInternal]
+
+[VWiFiBus.HW]
+AddReg = PnPFilterRegistration
+
+[PnPFilterRegistration]
+HKR,,"UpperFilters",0x00010000,"vwifibus"
+
+[VWiFiBus.Services]
+AddService = vwifibus,,vwifibus_Service_Inst
+
+[vwifibus_Service_Inst]
+DisplayName    = %vwifibus.ServiceDesc%
+ServiceType    = 1      ; SERVICE_KERNEL_DRIVER
+StartType      = 3      ; SERVICE_DEMAND_START
+ErrorControl   = 1      ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\vwifibus.sys
+
+[VWiFiBus.Interfaces]
+
+[VWiFiBus.PnPFilterRegistration]
+Needs = VWiFiBus.PnPFilterRegistration.HW
+
+[VWiFiBus.PnPFilterRegistration.HW]
+AddReg = PnPFilterRegistration
+
+[VWiFiBus.CopyFiles]
+CopyFiles = VWiFiBus.CopyFilesInternal
+
+[SourceDisksNames]
+1 = %DiskName%
+
+[SourceDisksFiles]
+vwifibus.sys = 1
+
+[Strings]
+LiberNT               = "LiberNT Team"
+vwifibus.DeviceDesc   = "Virtual WiFi Bus Device"
+vwifibus.ServiceDesc  = "LiberNT Virtual WiFi Bus Driver"
+DiskName              = "LiberNT Virtual WiFi Bus Driver Installation Disk"
