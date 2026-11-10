@@ -31,7 +31,16 @@ IntCreatePrimarySurface(VOID)
 VOID FASTCALL
 IntDestroyPrimarySurface(VOID)
 {
-    UNIMPLEMENTED;
+    PSURFACE pSurface;
+
+    if (gpmdev == NULL || gpmdev->ppdevGlobal == NULL)
+        return;
+
+    /* Give back the reference IntCreatePrimarySurface took, so that the
+     * device can let its driver free the surface once nothing draws on it */
+    pSurface = gpmdev->ppdevGlobal->pSurface;
+    if (pSurface != NULL)
+        SURFACE_ShareUnlockSurface(pSurface);
 }
 
 PPDEVOBJ FASTCALL
