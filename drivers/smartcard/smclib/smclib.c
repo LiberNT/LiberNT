@@ -547,7 +547,11 @@ SmcSetProtocol(
         return STATUS_INVALID_DEVICE_STATE;
 
     if (Reader->CurrentState == SCARD_SPECIFIC && (Card->Protocol.Selected & Minor) != 0)
+    {
+        *(PULONG)SmartcardExtension->IoRequest.ReplyBuffer = Card->Protocol.Selected;
+        *SmartcardExtension->IoRequest.Information = sizeof(ULONG);
         return STATUS_SUCCESS;
+    }
 
     if (!(Minor & SCARD_PROTOCOL_Tx) && SmartcardExtension->ReaderFunction[RDF_ATR_PARSE] != NULL)
     {
