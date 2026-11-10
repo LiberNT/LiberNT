@@ -254,9 +254,9 @@ BEGIN
     LTEXT "%s", IDC_SPACEAVAIL, 90, 92, 104, 9
     LTEXT "&Αρχικό μέγεθος (MB):", -1, 22, 118, 68, 9
     LTEXT "Μέγιστο μέ&γεθος (MB):", -1, 22, 131, 68, 9
-    AUTORADIOBUTTON "&Προσαρμογή μεγέ&θους", IDC_CUSTOM, 20, 105, 54, 9, WS_GROUP
-    AUTORADIOBUTTON "Δια&χείριση μεγέθους από το σύστημα", IDC_SYSMANSIZE, 20, 145, 100, 9
-    AUTORADIOBUTTON "Χωρίς αρχείο σε&λιδοποίησης", IDC_NOPAGEFILE, 20, 158, 106, 9
+    AUTORADIOBUTTON "&Προσαρμογή μεγέ&θους", IDC_CUSTOM, 20, 104, 54, 12, WS_GROUP
+    AUTORADIOBUTTON "Δια&χείριση μεγέθους από το σύστημα", IDC_SYSMANSIZE, 20, 144, 100, 12
+    AUTORADIOBUTTON "Χωρίς αρχείο σε&λιδοποίησης", IDC_NOPAGEFILE, 20, 157, 106, 12
     EDITTEXT IDC_INITIALSIZE, 100, 114, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     EDITTEXT IDC_MAXSIZE, 100, 129, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     PUSHBUTTON "&Ορισμός", IDC_SET, 158, 154, 50, 15

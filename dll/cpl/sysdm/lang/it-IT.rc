@@ -254,9 +254,9 @@ BEGIN
     LTEXT "%s", IDC_SPACEAVAIL, 88, 92, 100, 9
     LTEXT "&Dimensione iniziale (MB):", -1, 22, 118, 80, 9
     LTEXT "Dimensione massima (MB):", -1, 22, 131, 86, 9
-    AUTORADIOBUTTON "&Dimensione personalizzata", IDC_CUSTOM, 20, 105, 96, 9, WS_GROUP
-    AUTORADIOBUTTON "Dimensione gestita dal sistema", IDC_SYSMANSIZE, 20, 145, 110, 9
-    AUTORADIOBUTTON "&Nessun file di paginazione", IDC_NOPAGEFILE, 20, 158, 94, 9
+    AUTORADIOBUTTON "&Dimensione personalizzata", IDC_CUSTOM, 20, 104, 96, 12, WS_GROUP
+    AUTORADIOBUTTON "Dimensione gestita dal sistema", IDC_SYSMANSIZE, 20, 144, 110, 12
+    AUTORADIOBUTTON "&Nessun file di paginazione", IDC_NOPAGEFILE, 20, 157, 94, 12
     EDITTEXT IDC_INITIALSIZE, 110, 114, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     EDITTEXT IDC_MAXSIZE, 110, 129, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     PUSHBUTTON "Conferma", IDC_SET, 158, 154, 50, 15

@@ -264,9 +264,9 @@ BEGIN
     LTEXT "%s", IDC_SPACEAVAIL, 102, 92, 104, 8
     LTEXT "R&ozmiar początkowy (MB):", -1, 22, 118, 96, 8
     LTEXT "Rozmiar &maksymalny (MB):", -1, 22, 131, 96, 8
-    AUTORADIOBUTTON "&Rozmiar niestandardowy:", IDC_CUSTOM, 20, 105, 132, 8, WS_GROUP
-    AUTORADIOBUTTON "Rozmiar &kontrolowany przez system", IDC_SYSMANSIZE, 20, 145, 132, 8
-    AUTORADIOBUTTON "&Bez pliku stronicowania", IDC_NOPAGEFILE, 20, 158, 132, 8
+    AUTORADIOBUTTON "&Rozmiar niestandardowy:", IDC_CUSTOM, 20, 103, 132, 12, WS_GROUP
+    AUTORADIOBUTTON "Rozmiar &kontrolowany przez system", IDC_SYSMANSIZE, 20, 143, 132, 12
+    AUTORADIOBUTTON "&Bez pliku stronicowania", IDC_NOPAGEFILE, 20, 156, 132, 12
     EDITTEXT IDC_INITIALSIZE, 126, 114, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     EDITTEXT IDC_MAXSIZE, 126, 129, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     PUSHBUTTON "Ustaw", IDC_SET, 158, 154, 50, 15
