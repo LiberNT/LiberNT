@@ -39,7 +39,7 @@ RndisGetCurrentProcessorNumber(VOID)
 #if (NTDDI_VERSION >= NTDDI_WIN7)
     return (CCHAR)KeGetCurrentProcessorIndex();
 #else
-    return (CCHAR)KeGetCurrentProcessorNumber();
+    return (CCHAR)KeGetCurrentProcessorIndex();
 #endif
 }
 

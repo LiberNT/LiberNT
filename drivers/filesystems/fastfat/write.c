@@ -33,7 +33,7 @@ Abstract:
 //
 
 #define CollectWriteStats(VCB,OPEN_TYPE,BYTE_COUNT) {                                        \
-    PFILESYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorNumber() % FatData.NumberProcessors].Common; \
+    PFILESYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorIndex() % FatData.NumberProcessors].Common; \
     if (((OPEN_TYPE) == UserFileOpen)) {                                                     \
         Stats->UserFileWrites += 1;                                                          \
         Stats->UserFileWriteBytes += (ULONG)(BYTE_COUNT);                                    \
@@ -791,7 +791,7 @@ Return Value:
             //  Keep track of meta-data disk ios.
             //
 
-            Vcb->Statistics[KeGetCurrentProcessorNumber() % FatData.NumberProcessors].Common.MetaDataDiskWrites += Vcb->Bpb.Fats;
+            Vcb->Statistics[KeGetCurrentProcessorIndex() % FatData.NumberProcessors].Common.MetaDataDiskWrites += Vcb->Bpb.Fats;
 
             _SEH2_TRY {
 

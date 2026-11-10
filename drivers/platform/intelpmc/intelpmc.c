@@ -356,7 +356,7 @@ IntelPmcDisableC1AutoDemote(
 {
 #if defined(_M_IX86) || defined(_M_AMD64)
     PINTELPMC_DEVICE_EXTENSION DeviceExtension = (PINTELPMC_DEVICE_EXTENSION)Context;
-    ULONG Processor = KeGetCurrentProcessorNumber();
+    ULONG Processor = KeGetCurrentProcessorIndex();
     ULONGLONG Value;
 
     if (Processor < MAXIMUM_PROCESSORS)
@@ -380,7 +380,7 @@ IntelPmcRestoreC1AutoDemote(
 {
 #if defined(_M_IX86) || defined(_M_AMD64)
     PINTELPMC_DEVICE_EXTENSION DeviceExtension = (PINTELPMC_DEVICE_EXTENSION)Context;
-    ULONG Processor = KeGetCurrentProcessorNumber();
+    ULONG Processor = KeGetCurrentProcessorIndex();
 
     if (Processor < MAXIMUM_PROCESSORS && DeviceExtension->SavedCStateValid[Processor])
         __writemsr(INTELPMC_MSR_PKG_CST_CONFIG, DeviceExtension->SavedCState[Processor]);

@@ -1216,7 +1216,7 @@ RndisGetCurrentCpuStats(
     {
         return NULL;
     }
-    CpuIndex = KeGetCurrentProcessorNumber();
+    CpuIndex = KeGetCurrentProcessorIndex();
     if (CpuIndex >= Adapter->NumCpus)
     {
         CpuIndex = 0;
