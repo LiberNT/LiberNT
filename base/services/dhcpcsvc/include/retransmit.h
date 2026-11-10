@@ -17,3 +17,4 @@
 time_t dhcp_retransmit_interval(time_t interval);
 unsigned long dhcp_retransmit_delay_ms(time_t interval, unsigned long random);
 int dhcp_discover_restarts(time_t interval);
+int dhcp_discover_broadcast(unsigned int cycle);

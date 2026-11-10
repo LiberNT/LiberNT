@@ -67,6 +67,7 @@ typedef union _IP_HEADER {
 #define IPv4_MF_MASK            0x2000 /* More fragments (host byte order) */
 #define IPv4_DF_MASK            0x4000 /* Don't fragment (host byte order) */
 #define IPv4_MAX_HEADER_SIZE    60
+#define IP_DHCP_CLIENT_PORT     68
 
 /* Packet completion handler prototype */
 typedef VOID (*PACKET_COMPLETION_ROUTINE)(

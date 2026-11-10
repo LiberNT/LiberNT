@@ -75,6 +75,18 @@ TestRestart(void)
 }
 
 static void
+TestBroadcastFlag(void)
+{
+    /* Windows 11 sends its first discovery cycle without BOOTP_BROADCAST and toggles it on each new xid. */
+    static const int Expected[] = { 0, 1, 0, 1 };
+    unsigned Cycle;
+
+    for (Cycle = 0; Cycle < sizeof(Expected) / sizeof(Expected[0]); Cycle++)
+        assert(dhcp_discover_broadcast(Cycle) == Expected[Cycle]);
+    assert(dhcp_discover_broadcast(UINT_MAX) == 1);
+}
+
+static void
 TestWindows11Schedule(void)
 {
     unsigned Cycle, Index;
@@ -98,6 +110,7 @@ main(void)
     TestIntervals();
     TestJitter();
     TestRestart();
+    TestBroadcastFlag();
     TestWindows11Schedule();
     printf("dhcpcsvc.retransmit: ok\n");
     return 0;

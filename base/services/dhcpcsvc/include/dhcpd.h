@@ -220,6 +220,7 @@ struct client_state {
 	u_int16_t		  secs;
 	time_t			  first_sending;
 	time_t			  interval;
+	unsigned int		  discover_cycle;
 	struct string_list	 *medium;
 	struct dhcp_packet	  packet;
 	int			  packet_length;
