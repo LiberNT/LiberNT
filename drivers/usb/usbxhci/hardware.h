@@ -307,10 +307,13 @@ typedef struct DECLSPEC_ALIGN(32) _XHCI_ENDPOINT_CONTEXT {
 } XHCI_ENDPOINT_CONTEXT, *PXHCI_ENDPOINT_CONTEXT;
 
 typedef struct DECLSPEC_ALIGN(16) _XHCI_STREAM_CONTEXT {
-    ULONG StreamInfo;
-    ULONG Reserved;
     ULONGLONG TrDequeuePointer;
+    ULONG StoppedEdtla;
+    ULONG Reserved;
 } XHCI_STREAM_CONTEXT, *PXHCI_STREAM_CONTEXT;
+
+C_ASSERT(FIELD_OFFSET(XHCI_STREAM_CONTEXT, StoppedEdtla) == 0x08);
+C_ASSERT(sizeof(XHCI_STREAM_CONTEXT) == 0x10);
 
 typedef struct DECLSPEC_ALIGN(64) _XHCI_DEVICE_CONTEXT {
     XHCI_SLOT_CONTEXT SlotContext;
@@ -368,6 +371,7 @@ typedef struct DECLSPEC_ALIGN(64) _XHCI_INPUT_CONTEXT {
 
 #define XHCI_STREAM_CTX_TYPE_MASK          0x7u
 #define XHCI_STREAM_CTX_TYPE_PRIMARY       0x1u
+#define XHCI_STREAM_CTX_TYPE_SHIFT         1
 
 /* Endpoint context state values (EpInfo bits 0:2) */
 #define XHCI_EPCTX_STATE_MASK              0x7u
