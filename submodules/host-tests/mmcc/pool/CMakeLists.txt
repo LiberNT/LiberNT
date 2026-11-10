@@ -71,12 +71,21 @@ endforeach()
 target_compile_options(pool_nt_asan PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
 target_link_options(pool_nt_asan PRIVATE -fsanitize=address,undefined)
 
-option(POOL_EXPANSION_TSAN "Run the pool expansion ThreadSanitizer regression" OFF)
-if(POOL_EXPANSION_TSAN AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-    find_package(Python3 QUIET COMPONENTS Interpreter)
-    if(Python3_Interpreter_FOUND)
-        add_test(NAME pool.expansion_tsan COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/host/expansion-race-test.py
-            --source ${POOL_ROOT}/ex/exinit.c --cc ${CMAKE_C_COMPILER})
-    endif()
-endif()
+find_package(Threads REQUIRED)
+foreach(TARGET pool_nt_envelope pool_nt_envelope_asan pool_nt_envelope_tsan)
+    add_executable(${TARGET} host/t_ntpool_envelope.c ${POOL_ENGINE}
+        ${POOL_ROOT}/ex/exinit.c ${POOL_ROOT}/ex/exalloc.c
+        ${POOL_ROOT}/ex/exfree.c ${POOL_ROOT}/ex/exquota.c
+        ${POOL_ROOT}/backing/mmbacking.c)
+    target_compile_definitions(${TARGET} PRIVATE POOL_HOST_TEST)
+    target_compile_options(${TARGET} PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-multichar -g -O1)
+    target_link_libraries(${TARGET} PRIVATE Threads::Threads)
+    foreach(AREA nx exec large exhaust contend smp)
+        add_test(NAME ${TARGET}.${AREA} COMMAND ${TARGET} ${AREA})
+    endforeach()
+endforeach()
+target_compile_options(pool_nt_envelope_asan PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+target_link_options(pool_nt_envelope_asan PRIVATE -fsanitize=address,undefined)
+target_compile_options(pool_nt_envelope_tsan PRIVATE -fsanitize=thread)
+target_link_options(pool_nt_envelope_tsan PRIVATE -fsanitize=thread)
+

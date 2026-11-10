@@ -26,15 +26,20 @@
 #define EX_POOL_BOOT_SLOTS          16
 #define EX_POOL_BLOCK_QUOTA         0x01
 #define EX_POOL_FLAG_SPECIAL_POOL   0x20
+#define EX_POOL_GROW_MINIMUM        ((SIZE_T)16 << POOL_UNIT_SHIFT)
 
 typedef struct _EX_POOL_STATE
 {
     PPOOL_HEAP Heap[EX_POOL_HEAP_COUNT];
-    POOL_VA_REGION Region[EX_POOL_HEAP_COUNT][2];
+    POOL_VA_REGION Region[EX_POOL_HEAP_COUNT][POOL_MAX_REGIONS];
     POOL_TAG_TRACKER Tracker;
     volatile LONG TrackerExpanding;
-    volatile LONG ExpansionPending;
-    volatile LONG ExpansionAttaching;
+    POOL_LOCK GrowLock;
+    ULONG_PTR SharedLow;
+    ULONG_PTR SharedHigh;
+    ULONG RegionsUsed[EX_POOL_HEAP_COUNT];
+    SIZE_T GrownBytes[EX_POOL_HEAP_COUNT];
+    volatile LONG Generation[EX_POOL_HEAP_COUNT];
 } EX_POOL_STATE, *PEX_POOL_STATE;
 
 extern EX_POOL_STATE ExpPoolState;
@@ -66,6 +71,6 @@ ExpPoolTypeFromHeap(_In_ ULONG HeapIndex)
 }
 
 PVOID ExpPoolAllocate(_In_ ULONG HeapIndex, _In_ SIZE_T NumberOfBytes, _In_ ULONG Tag, _In_ ULONG HeapFlags);
-BOOLEAN ExpPoolAttachExpansion(VOID);
+BOOLEAN ExpPoolGrow(_In_ ULONG HeapIndex, _In_ SIZE_T NumberOfBytes, _In_ LONG Generation);
 PPOOL_HEAP ExpPoolHeapFromAddress(_In_ PVOID Block, _Out_ PULONG HeapIndex);
 VOID MiDumpPoolConsumers(_In_ BOOLEAN CalledFromDbg, _In_ ULONG Tag, _In_ ULONG Mask, _In_ ULONG Flags);

@@ -13,10 +13,8 @@ typedef struct _POOL_KM_LAYOUT
 {
     PVOID NonPagedResidentBase;
     SIZE_T NonPagedResidentBytes;
-    PVOID NonPagedExpansionBase;
-    SIZE_T NonPagedExpansionBytes;
-    PVOID ExecutableBase;
-    SIZE_T ExecutableBytes;
+    PVOID NonPagedSharedBase;
+    SIZE_T NonPagedSharedBytes;
     PVOID PagedBase;
     SIZE_T PagedBytes;
 } POOL_KM_LAYOUT, *PPOOL_KM_LAYOUT;

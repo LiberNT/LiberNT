@@ -111,12 +111,10 @@ int main(void)
     memset(Protection, MI_PROT_READWRITE, (4 * 1024 * 1024) / PAGE_SIZE);
     MiPoolLayout.NonPagedResidentBase = Arena;
     MiPoolLayout.NonPagedResidentBytes = 4 * 1024 * 1024;
-    MiPoolLayout.NonPagedExpansionBase = Arena + MiPoolLayout.NonPagedResidentBytes;
-    MiPoolLayout.NonPagedExpansionBytes = 28 * 1024 * 1024;
+    MiPoolLayout.NonPagedSharedBase = Arena + MiPoolLayout.NonPagedResidentBytes;
+    MiPoolLayout.NonPagedSharedBytes = 60 * 1024 * 1024;
     MiPoolLayout.PagedBase = Arena + 64 * 1024 * 1024;
     MiPoolLayout.PagedBytes = 64 * 1024 * 1024;
-    MiPoolLayout.ExecutableBase = Arena + 32 * 1024 * 1024;
-    MiPoolLayout.ExecutableBytes = 32 * 1024 * 1024;
     InitializePool(NonPagedPool, 0);
     InitializePool(PagedPool, 0);
     for (ULONG j = 0; j < 20; j++)

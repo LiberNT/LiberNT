@@ -20,7 +20,7 @@
 
 #define POOL_MAX_SLOTS               64
 #define POOL_MAX_SHARDS              16
-#define POOL_MAX_REGIONS             4
+#define POOL_MAX_REGIONS             16
 
 #define POOL_ALIGNMENT               16
 #define POOL_CACHE_ALIGNMENT         128
