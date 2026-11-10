@@ -47,10 +47,9 @@ RTL_RESOURCE NotificationListLock;
 DWORD WINAPI
 RpcServerThread(LPVOID lpParameter)
 {
+    HANDLE hReady = lpParameter;
     RPC_STATUS Status;
     BOOLEAN RegisteredProtSeq = FALSE;
-
-    UNREFERENCED_PARAMETER(lpParameter);
 
     DPRINT("RpcServerThread() called\n");
 
@@ -78,7 +77,11 @@ RpcServerThread(LPVOID lpParameter)
 
     /* Make sure there's a usable endpoint */
     if (RegisteredProtSeq == FALSE)
+    {
+        if (hReady)
+            SetEvent(hReady);
         return 0;
+    }
 
     Status = RpcServerRegisterIf(pnp_v1_0_s_ifspec,
                                  NULL,
@@ -86,6 +89,8 @@ RpcServerThread(LPVOID lpParameter)
     if (Status != RPC_S_OK)
     {
         DPRINT1("RpcServerRegisterIf() failed (Status %lx)\n", Status);
+        if (hReady)
+            SetEvent(hReady);
         return 0;
     }
 
@@ -100,12 +105,18 @@ RpcServerThread(LPVOID lpParameter)
 
     Status = RpcServerListen(1,
                              20,
-                             FALSE);
+                             TRUE);
+    if (hReady)
+        SetEvent(hReady);
     if (Status != RPC_S_OK)
     {
         DPRINT1("RpcServerListen() failed (Status %lx)\n", Status);
         return 0;
     }
+
+    Status = RpcMgmtWaitServerListen();
+    if (Status != RPC_S_OK)
+        DPRINT1("RpcMgmtWaitServerListen() failed (Status %lx)\n", Status);
 
     DPRINT("RpcServerThread() done\n");
 
