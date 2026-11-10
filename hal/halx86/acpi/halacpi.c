@@ -25,7 +25,7 @@ BOOLEAN HalpPicVectorOverrideValid[16];
 
 /* This determines the HAL type */
 BOOLEAN HalDisableFirmwareMapper = TRUE;
-PWCHAR HalHardwareIdString = L"acpipic_up";
+PWCHAR HalHardwareIdString = L"acpiapic";
 PWCHAR HalName = L"ACPI Compatible Eisa/Isa HAL";
 
 /* PRIVATE FUNCTIONS **********************************************************/
