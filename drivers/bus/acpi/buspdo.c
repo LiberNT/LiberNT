@@ -3821,10 +3821,6 @@ Bus_PDO_QueryDeviceId(
             }
             else
             {
-                length += BuspFormatClassCodeIds(Device,
-                                                 &temp[length],
-                                                 RTL_NUMBER_OF(temp) - length);
-
                 if (Device->flags.compatible_ids && Device->pnp.cid_list)
                 {
                     for (i = 0; i < Device->pnp.cid_list->Count; i++)
@@ -3842,6 +3838,11 @@ Bus_PDO_QueryDeviceId(
                         temp[length++] = UNICODE_NULL;
                     }
                 }
+
+                /* Membership of a class is less specific than a _CID, so it ranks after every _CID */
+                length += BuspFormatClassCodeIds(Device,
+                                                 &temp[length],
+                                                 RTL_NUMBER_OF(temp) - length);
 
                 if (length == 0)
                     break; /* No compatible IDs */
