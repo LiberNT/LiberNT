@@ -666,7 +666,8 @@ CmUnloadKey(
         CmpEnumerateOpenSubKeys(Kcb, TRUE, TRUE);
     }
 
-    if (Kcb->RefCount > 1 && (Flags & REG_FORCE_UNLOAD) == 0)
+    if (Kcb->RefCount > ((CmHive->RootKcb == Kcb) ? 2UL : 1UL) &&
+        (Flags & REG_FORCE_UNLOAD) == 0)
     {
         return STATUS_CANNOT_DELETE;
     }
