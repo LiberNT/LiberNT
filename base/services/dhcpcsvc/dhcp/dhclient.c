@@ -200,7 +200,7 @@ state_reboot(void *ipp)
 	make_request(ip, ip->client->active);
 	ip->client->destination = iaddr_broadcast;
 	ip->client->first_sending = GetMonotonicTime();
-	ip->client->interval = ip->client->config->initial_interval;
+	ip->client->interval = 0;
 
 	/* Zap the medium list... */
 	ip->client->medium = NULL;
@@ -234,7 +234,9 @@ state_init(void *ipp)
 	ip->client->destination = iaddr_broadcast;
 	ip->client->state = S_SELECTING;
 	ip->client->first_sending = GetMonotonicTime();
-	ip->client->interval = ip->client->config->initial_interval;
+	ip->client->interval = 0;
+	add_timeout(ip->client->first_sending + ip->client->config->timeout + 1,
+	    discover_panic, ip);
 
 	if (AdapterFindInfo(ip))
 		AdapterFindInfo(ip)->ApipaWaitStart = 0;
@@ -336,7 +338,7 @@ freeit:
 	ip->client->destination = iaddr_broadcast;
 	ip->client->state = S_REQUESTING;
 	ip->client->first_sending = cur_time;
-	ip->client->interval = ip->client->config->initial_interval;
+	ip->client->interval = 0;
 
 	/* Make a DHCPREQUEST packet from the lease we picked. */
 	make_request(ip, picked);
@@ -1371,6 +1373,15 @@ dhcpnak(struct packet *packet)
 	state_init(ip);
 }
 
+void
+discover_panic(void *ipp)
+{
+	struct interface_info *ip = ipp;
+
+	if (ip->client->state == S_SELECTING)
+		state_panic(ip);
+}
+
 /* Send out a DHCPDISCOVER packet, and set a timeout to send out another
    one after the right interval has expired.  If we don't get an offer by
    the time we reach the panic interval, call the panic function. */
@@ -1381,20 +1392,22 @@ send_discover(void *ipp)
 	struct interface_info *ip = ipp;
 	int interval, increase = 1;
         time_t cur_time;
+	ULONGLONG now;
+	ULONG delay, seed = (ULONG)GetTickCount();
 
         DH_DbgPrint(MID_TRACE,("Doing discover on interface %p\n",ip));
 
         cur_time = GetMonotonicTime();
 
+	if (dhcp_discover_restarts(ip->client->interval)) {
+		make_discover(ip, ip->client->active);
+		ip->client->xid = ip->client->packet.xid;
+		ip->client->first_sending = cur_time;
+		ip->client->interval = 0;
+	}
+
 	/* Figure out how long it's been since we started transmitting. */
 	interval = cur_time - ip->client->first_sending;
-
-	/* If we're past the panic timeout, call the script and tell it
-	   we haven't found anything for this interface yet. */
-	if (interval > ip->client->config->timeout) {
-		state_panic(ip);
-        ip->client->first_sending = cur_time;
-	}
 
 	/* If we're selecting media, try the whole list before doing
 	   the exponential backoff, but if we've already received an
@@ -1419,40 +1432,12 @@ send_discover(void *ipp)
                 /* XXX Support other media types eventually */
 	}
 
-	/*
-	 * If we're supposed to increase the interval, do so.  If it's
-	 * currently zero (i.e., we haven't sent any packets yet), set
-	 * it to one; otherwise, add to it a random number between zero
-	 * and two times itself.  On average, this means that it will
-	 * double with every transmission.
-	 */
-	if (increase) {
-		if (!ip->client->interval)
-			ip->client->interval =
-			    ip->client->config->initial_interval;
-		else {
-			ip->client->interval += (rand() >> 2) %
-			    (2 * ip->client->interval);
-		}
-
-		/* Don't backoff past cutoff. */
-		if (ip->client->interval >
-		    ip->client->config->backoff_cutoff)
-			ip->client->interval =
-				((ip->client->config->backoff_cutoff / 2)
-				 + ((rand() >> 2) %
-				    ip->client->config->backoff_cutoff));
-	} else if (!ip->client->interval)
+	if (increase || !ip->client->interval)
 		ip->client->interval =
-			ip->client->config->initial_interval;
+		    dhcp_retransmit_interval(ip->client->interval);
+	delay = dhcp_retransmit_delay_ms(ip->client->interval, RtlRandom(&seed));
 
-	/* If the backoff would take us to the panic timeout, just use that
-	   as the interval. */
-	if (cur_time + ip->client->interval >
-	    ip->client->first_sending + ip->client->config->timeout)
-		ip->client->interval =
-			(ip->client->first_sending +
-			 ip->client->config->timeout) - cur_time + 1;
+	now = GetTickCount64();
 
 	/* Record the number of seconds since we started sending. */
 	if (interval < 65536)
@@ -1469,10 +1454,10 @@ send_discover(void *ipp)
 	(void)send_packet(ip, &ip->client->packet, ip->client->packet_length,
 	    inaddr_any, &sockaddr_broadcast, NULL);
 
-        DH_DbgPrint(MID_TRACE,("discover timeout: now %x -> then %x\n",
-                               cur_time, cur_time + ip->client->interval));
+        DH_DbgPrint(MID_TRACE,("discover timeout: now %I64u -> then %I64u\n",
+                               now, now + delay));
 
-	add_timeout(cur_time + ip->client->interval, send_discover, ip);
+	add_timeout_ms(now + delay, send_discover, ip);
 }
 
 /*
@@ -1678,6 +1663,8 @@ send_request(void *ipp)
 	struct in_addr from;
 	int interval;
         time_t cur_time;
+	ULONGLONG now, deadline;
+	ULONG delay, seed = (ULONG)GetTickCount();
 
         cur_time = GetMonotonicTime();
 
@@ -1738,8 +1725,13 @@ send_request(void *ipp)
             return;
 	}
 
+	/* TODO: RFC 2131 4.4.5 RENEWING/REBINDING retransmission (half the time left to T2 or expiry, at least 60 s) */
 	/* Do the exponential backoff... */
-	if (!ip->client->interval)
+	if (ip->client->state == S_REQUESTING ||
+	    ip->client->state == S_REBOOTING)
+		ip->client->interval =
+		    dhcp_retransmit_interval(ip->client->interval);
+	else if (!ip->client->interval)
 		ip->client->interval = ip->client->config->initial_interval;
 	else
 		ip->client->interval += ((rand() >> 2) %
@@ -1752,13 +1744,21 @@ send_request(void *ipp)
 		    ((ip->client->config->backoff_cutoff / 2) +
 		    ((rand() >> 2) % ip->client->interval));
 
+	if (ip->client->state == S_REQUESTING ||
+	    ip->client->state == S_REBOOTING)
+		delay = dhcp_retransmit_delay_ms(ip->client->interval,
+		    RtlRandom(&seed));
+	else
+		delay = (ULONG)ip->client->interval * 1000;
+
 	/* If the backoff would take us to the expiry time, just set the
 	   timeout to the expiry time. */
-	if (ip->client->state != S_REQUESTING &&
-	    cur_time + ip->client->interval >
-	    ip->client->active->expiry)
-		ip->client->interval =
-		    ip->client->active->expiry - cur_time + 1;
+	now = GetTickCount64();
+	if (ip->client->state != S_REQUESTING) {
+		deadline = (ULONGLONG)(ip->client->active->expiry + 1) * 1000;
+		if (now + delay > deadline)
+			delay = (ULONG)(deadline > now ? deadline - now : 0);
+	}
 
 	/* If the lease T2 time has elapsed, or if we're not yet bound,
 	   broadcast the DHCPREQUEST rather than unicasting. */
@@ -1798,7 +1798,7 @@ send_request(void *ipp)
 	(void) send_packet(ip, &ip->client->packet, ip->client->packet_length,
 	    from, &destination, NULL);
 
-	add_timeout(cur_time + ip->client->interval, send_request, ip);
+	add_timeout_ms(now + delay, send_request, ip);
 }
 
 void
@@ -1908,6 +1908,7 @@ make_discover(struct interface_info *ip, struct client_lease *lease)
 	ip->client->packet.hops = 0;
 	ip->client->packet.xid = RtlRandom(&foo);
 	ip->client->packet.secs = 0; /* filled in by send_discover. */
+	/* FIXME: Windows 11 sends the first discovery cycle without BOOTP_BROADCAST and toggles it on each restart; tcpip cannot take unicast replies before an address is configured */
 	ip->client->packet.flags = htons(BOOTP_BROADCAST);
 
 	memset(&(ip->client->packet.ciaddr),

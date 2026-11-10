@@ -16,6 +16,7 @@ list(APPEND SOURCE
     dhcp/dispatch.c
     dhcp/hash.c
     dhcp/options.c
+    dhcp/retransmit.c
     dhcp/socket.c
     dhcp/tables.c
     dhcp/util.c

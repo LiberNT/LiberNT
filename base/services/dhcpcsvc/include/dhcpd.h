@@ -409,6 +409,7 @@ void dhcpack(struct packet *);
 void dhcpnak(struct packet *);
 
 void send_discover(void *);
+void discover_panic(void *);
 void send_request(void *);
 void send_decline(void *);
 void send_release(void *);
