@@ -1092,20 +1092,6 @@ HalpAcpiAccessConfigEcam(
         return FALSE;
     }
 
-    //
-    // Single-bus allocations expose only BDF xx:00.0 (firmware single-function
-    // ECAM quirk); report any other device/function absent. Multi-bus unaffected.
-    //
-    if (Allocation->StartBusNumber == Allocation->EndBusNumber &&
-        (Slot.u.bits.DeviceNumber != 0 || Slot.u.bits.FunctionNumber != 0))
-    {
-        if (!Write)
-        {
-            RtlFillMemory(Buffer, Length, 0xFF);
-        }
-        return TRUE;
-    }
-
     BusCount = (ULONGLONG)(Allocation->EndBusNumber - Allocation->StartBusNumber + 1);
     WindowLength = BusCount << 20;
     if (!BusCount || !WindowLength)
