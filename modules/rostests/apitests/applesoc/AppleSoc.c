@@ -2755,6 +2755,97 @@ TestAgxRing(VOID)
 
 static
 VOID
+TestAgxRegisters(VOID)
+{
+    ULONG64 HandoffPhysical, ContextsPhysical, RootPhysical, LevelPhysical, Physical;
+    APPLE_UAT_ADOPTED Adopted;
+    APPLE_AGX_INIT Init;
+    PVOID Hwdata;
+    ULONG Index, Set;
+
+    /* The windows of this part, at the addresses its firmware reaches them by. */
+    ok(AppleAgxIoMap(0)->Physical == 0x290d00000ULL && AppleAgxIoMap(0)->Size == 0x144000 &&
+       AppleAgxIoMap(0)->Slot == 0 && AppleAgxIoMap(0)->Address == 0xfffffc2068000000ULL,
+       "The first window is %I64x+%lx at %I64x slot %u\n", AppleAgxIoMap(0)->Physical,
+       AppleAgxIoMap(0)->Size, AppleAgxIoMap(0)->Address, AppleAgxIoMap(0)->Slot);
+    /* The graphics block's own ranges, which the machine's tree names as well. */
+    ok(AppleAgxIoMap(3)->Physical == 0x290000000ULL && AppleAgxIoMap(3)->Slot == 3,
+       "The register range is %I64x slot %u\n", AppleAgxIoMap(3)->Physical, AppleAgxIoMap(3)->Slot);
+    /* The window the machine's tree points its software interrupt into. */
+    ok(AppleAgxIoMap(2)->Physical == 0x351014000ULL, "The interrupt window is %I64x\n",
+       AppleAgxIoMap(2)->Physical);
+    /* One window is reached at an offset inside its page. */
+    ok(AppleAgxIoMap(1)->Address == 0xfffffc2068149000ULL, "The second window is at %I64x\n",
+       AppleAgxIoMap(1)->Address);
+    ok(AppleAgxIoMap(APPLE_AGX_IOMAPS) == NULL, "A window past the last one was described\n");
+    for (Index = 0; Index < APPLE_AGX_IOMAPS; ++Index)
+    {
+        ok(AppleAgxIoMap(Index)->Slot < APPLE_AGX_IOMAP_SLOTS && AppleAgxIoMap(Index)->Size != 0 &&
+           (AppleAgxIoMap(Index)->Physical & (APPLE_UAT_PAGE_SIZE - 1)) == 0,
+           "Window %lu is %I64x+%lx slot %u\n", Index, AppleAgxIoMap(Index)->Physical,
+           AppleAgxIoMap(Index)->Size, AppleAgxIoMap(Index)->Slot);
+    }
+
+    UatFirmwarePage(&HandoffPhysical);
+    UatFirmwarePage(&ContextsPhysical);
+    UatFirmwarePage(&RootPhysical);
+    UatFirmwarePage(&LevelPhysical);
+    RtlZeroMemory(&Init, sizeof(Init));
+    ok_hex(AppleUatAdopt(&Adopted, HandoffPhysical, ContextsPhysical, RootPhysical, LevelPhysical, "test"),
+           STATUS_SUCCESS);
+    ok_hex(AppleUatAdoptedInstall(&Adopted), STATUS_SUCCESS);
+    Init.Adopted = &Adopted;
+    Hwdata = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, APPLE_AGX_HWDATA_SIZE);
+    Init.Virtual[APPLE_AGX_OBJECT_HWDATA] = Hwdata;
+    ok(Hwdata != NULL, "The hardware description was not simulated\n");
+    if (!Hwdata)
+        return;
+
+    /* Every window is both mapped for the firmware and recorded in its own slot. */
+    ok_hex(AppleAgxMapRegisters(&Init), STATUS_SUCCESS);
+    for (Index = 0; Index < APPLE_AGX_IOMAPS; ++Index)
+    {
+        const APPLE_AGX_IOMAP *Map = AppleAgxIoMap(Index);
+        ULONG At = APPLE_AGX_HWDATA_IOMAPS + (ULONG)Map->Slot * APPLE_AGX_HWDATA_IOMAP_STRIDE;
+        ULONG64 Recorded = 0;
+        ULONG Total = 0, Writable = 0;
+
+        RtlCopyMemory(&Recorded, (PUCHAR)Hwdata + At + APPLE_AGX_IOMAP_PHYSICAL, sizeof(Recorded));
+        ok(Recorded == Map->Physical, "Slot %u records %I64x\n", Map->Slot, Recorded);
+        RtlCopyMemory(&Recorded, (PUCHAR)Hwdata + At + APPLE_AGX_IOMAP_ADDRESS, sizeof(Recorded));
+        ok(Recorded == Map->Address, "Slot %u is reached at %I64x\n", Map->Slot, Recorded);
+        RtlCopyMemory(&Total, (PUCHAR)Hwdata + At + APPLE_AGX_IOMAP_TOTAL, sizeof(Total));
+        RtlCopyMemory(&Writable, (PUCHAR)Hwdata + At + APPLE_AGX_IOMAP_WRITABLE, sizeof(Writable));
+        ok(Total == Map->Size && Writable == 1, "Slot %u records %lu bytes, writable %lu\n", Map->Slot,
+           Total, Writable);
+        /* The window really translates, from the page its address falls in. */
+        ok(AppleUatAdoptedTranslate(&Adopted, Map->Address & ~(APPLE_UAT_PAGE_SIZE - 1), &Physical) &&
+           Physical == Map->Physical, "Slot %u translates to %I64x, not %I64x\n", Map->Slot, Physical,
+           Map->Physical);
+    }
+
+    /* A slot no window uses is left alone. */
+    for (Index = 0, Set = 0; Index < APPLE_AGX_IOMAP_SLOTS; ++Index)
+    {
+        ULONG At = APPLE_AGX_HWDATA_IOMAPS + Index * APPLE_AGX_HWDATA_IOMAP_STRIDE;
+        ULONG64 Recorded = 0;
+
+        RtlCopyMemory(&Recorded, (PUCHAR)Hwdata + At, sizeof(Recorded));
+        if (Recorded)
+            ++Set;
+    }
+    ok_int(Set, APPLE_AGX_IOMAPS);
+
+    /* Without a hardware description there is nowhere to record a window. */
+    Init.Virtual[APPLE_AGX_OBJECT_HWDATA] = NULL;
+    ok_hex(AppleAgxMapRegisters(&Init), STATUS_INVALID_DEVICE_STATE);
+
+    HeapFree(GetProcessHeap(), 0, Hwdata);
+    AppleUatAdoptedRelease(&Adopted);
+}
+
+static
+VOID
 TestSpmi(VOID)
 {
     static const UCHAR Offset[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 };
@@ -3889,6 +3980,7 @@ START_TEST(AppleSoc)
     TestAgxInitLayout();
     TestAgxInitWrite();
     TestAgxRing();
+    TestAgxRegisters();
     TestSpmi();
     TestAtcphy();
     TestPcie();

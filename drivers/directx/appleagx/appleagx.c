@@ -540,6 +540,12 @@ AgxHandInitialData(
         DbgPrint("appleagx: the initial data was not written: %lx\n", Status);
         return Status;
     }
+    Status = AppleAgxMapRegisters(&Agx->Init);
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("appleagx: the firmware's register windows were not mapped: %lx\n", Status);
+        return Status;
+    }
     AgxBindRings(Agx);
     DbgPrint("appleagx: initial data of %lu pages written, root at %I64x\n", Agx->Init.Allocations,
              AppleAgxInitMessage() & APPLE_AGX_MESSAGE_ADDRESS_MASK);

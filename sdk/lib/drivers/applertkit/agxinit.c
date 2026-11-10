@@ -492,3 +492,70 @@ AppleAgxRingDoorbell(
 {
     return APPLE_AGX_DOORBELL_BASE | Channel;
 }
+
+/* The register windows of this part, at the addresses its firmware was built to reach them by.
+ * The first two are the graphics block's own ranges, which the machine's tree also names. */
+static const APPLE_AGX_IOMAP AgxIoMaps[APPLE_AGX_IOMAPS] =
+{
+    { 0x290d00000ULL, 0xfffffc2068000000ULL, 0x144000,  0 },
+    { 0x20e100000ULL, 0xfffffc2068149000ULL, 0x4000,    1 },
+    { 0x351014000ULL, 0xfffffc2068150000ULL, 0x4000,    2 },
+    { 0x290000000ULL, 0xfffffc2068158000ULL, 0x20000,   3 },
+    { 0x3502bc000ULL, 0xfffffc206817c000ULL, 0x4000,    7 },
+    { 0x290e08000ULL, 0xfffffc2068184000ULL, 0x8000,    9 },
+    { 0x220000000ULL, 0xfffffc2068190000ULL, 0x12c000, 11 },
+    { 0x35104c000ULL, 0xfffffc20682c0000ULL, 0x4000,   12 },
+    { 0x3503d0000ULL, 0xfffffc20682c8000ULL, 0x4000,   18 },
+    { 0x3503c0000ULL, 0xfffffc20682d0000ULL, 0x4000,   19 },
+    { 0x3503d8000ULL, 0xfffffc20682d8000ULL, 0x4000,   20 },
+    { 0x293000000ULL, 0xfffffc20682e0000ULL, 0x400000, 23 },
+    { 0x30945c000ULL, 0xfffffc20686e4000ULL, 0x4000,   25 },
+    { 0x350280000ULL, 0xfffffc20686ec000ULL, 0x8000,   26 },
+    { 0x290e5c000ULL, 0xfffffc20686f8000ULL, 0x4000,   29 },
+};
+
+const APPLE_AGX_IOMAP *
+NTAPI
+AppleAgxIoMap(
+    _In_ ULONG Index)
+{
+    return Index < APPLE_AGX_IOMAPS ? &AgxIoMaps[Index] : NULL;
+}
+
+/* Each window is mapped as device memory and then recorded in the hardware description, so the
+ * firmware both reaches it and knows where it is. */
+NTSTATUS
+NTAPI
+AppleAgxMapRegisters(
+    _Inout_ PAPPLE_AGX_INIT Init)
+{
+    const APPLE_UAT_PROTECTION Device = { APPLE_UAT_ACCESS_FIRMWARE, APPLE_UAT_MEMORY_DEVICE, FALSE, TRUE };
+    PVOID Hwdata = Init->Virtual[APPLE_AGX_OBJECT_HWDATA];
+    ULONG Index;
+    NTSTATUS Status;
+
+    if (!Hwdata)
+        return STATUS_INVALID_DEVICE_STATE;
+    for (Index = 0; Index < APPLE_AGX_IOMAPS; ++Index)
+    {
+        const APPLE_AGX_IOMAP *Map = &AgxIoMaps[Index];
+        SIZE_T Length = ((SIZE_T)Map->Size + APPLE_UAT_PAGE_SIZE - 1) & ~(SIZE_T)(APPLE_UAT_PAGE_SIZE - 1);
+        ULONG Record = APPLE_AGX_HWDATA_IOMAPS + (ULONG)Map->Slot * APPLE_AGX_HWDATA_IOMAP_STRIDE;
+
+        if (Map->Slot >= APPLE_AGX_IOMAP_SLOTS ||
+            Record + APPLE_AGX_HWDATA_IOMAP_STRIDE > APPLE_AGX_HWDATA_SIZE)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+        Status = AppleUatAdoptedMap(Init->Adopted, Map->Address & ~(APPLE_UAT_PAGE_SIZE - 1), Map->Physical,
+                                   Length, &Device);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        AgxWriteQuad(Hwdata, Record + APPLE_AGX_IOMAP_PHYSICAL, Map->Physical);
+        AgxWriteQuad(Hwdata, Record + APPLE_AGX_IOMAP_ADDRESS, Map->Address);
+        AgxWriteLong(Hwdata, Record + APPLE_AGX_IOMAP_TOTAL, Map->Size);
+        AgxWriteLong(Hwdata, Record + APPLE_AGX_IOMAP_WRITABLE, 1);
+    }
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}

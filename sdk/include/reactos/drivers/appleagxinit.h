@@ -251,3 +251,31 @@ ULONG64
 NTAPI
 AppleAgxRingDoorbell(
     _In_ ULONG Channel);
+
+/* The register windows the firmware reaches through its own address space. One record per slot in
+ * the hardware description: the physical address, the address the firmware uses, the size. */
+#define APPLE_AGX_IOMAPS                15
+#define APPLE_AGX_IOMAP_SLOTS           32
+#define APPLE_AGX_IOMAP_PHYSICAL        0x00
+#define APPLE_AGX_IOMAP_ADDRESS         0x08
+#define APPLE_AGX_IOMAP_TOTAL           0x10
+#define APPLE_AGX_IOMAP_ELEMENT         0x14
+#define APPLE_AGX_IOMAP_WRITABLE        0x18
+
+typedef struct _APPLE_AGX_IOMAP
+{
+    ULONG64 Physical;
+    ULONG64 Address;
+    ULONG Size;
+    UCHAR Slot;
+} APPLE_AGX_IOMAP, *PAPPLE_AGX_IOMAP;
+
+const APPLE_AGX_IOMAP *
+NTAPI
+AppleAgxIoMap(
+    _In_ ULONG Index);
+
+NTSTATUS
+NTAPI
+AppleAgxMapRegisters(
+    _Inout_ PAPPLE_AGX_INIT Init);
