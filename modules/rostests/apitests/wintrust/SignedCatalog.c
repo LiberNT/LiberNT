@@ -206,6 +206,7 @@ CreateSignedCatalog(VOID)
 {
     WCHAR Cdf[MAX_PATH], Unsigned[MAX_PATH];
     char Text[1024];
+    int Length;
     CRYPTCATCDF *CatalogCdf;
     CRYPTCATMEMBER *Member = NULL;
     CRYPTCATATTRIBUTE *Attribute = NULL;
@@ -217,10 +218,13 @@ CreateSignedCatalog(VOID)
 
     swprintf(Cdf, RTL_NUMBER_OF(Cdf), L"%lslntwtsig.cdf", TempDir);
     swprintf(Unsigned, RTL_NUMBER_OF(Unsigned), L"%lslntwtsig-unsigned.cat", TempDir);
-    sprintf(Text, "[CatalogHeader]\r\nName=%ls\r\nResultDir=%ls\r\nPublicVersion=0x0000001\r\nEncodingType=0x00010001\r\n"
+    Length = snprintf(Text, sizeof(Text), "[CatalogHeader]\r\nName=%ls\r\nResultDir=%ls\r\nPublicVersion=0x0000001\r\nEncodingType=0x00010001\r\n"
                   "CATATTR1=0x10010001:OSAttr:%ls\r\n[CatalogFiles]\r\nmember=%ls\r\nmemberATTR1=0x10010001:OSAttr:%ls\r\n",
             L"lntwtsig-unsigned.cat", TempDir, TEST_OS_ATTR, MemberPath, TEST_OS_ATTR);
-    if (!WriteBytes(Cdf, Text, (DWORD)strlen(Text)))
+    ok(Length > 0 && Length < (int)sizeof(Text), "CDF text length %d\n", Length);
+    if (Length <= 0 || Length >= (int)sizeof(Text))
+        return FALSE;
+    if (!WriteBytes(Cdf, Text, (DWORD)Length))
         return FALSE;
 
     CatalogCdf = CryptCATCDFOpen(Cdf, NULL);
