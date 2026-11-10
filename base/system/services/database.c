@@ -2375,6 +2375,101 @@ Quit:
 static DWORD
 ScmLoadService(PSERVICE Service,
                DWORD argc,
+               const PCWSTR* argv);
+
+
+static
+DWORD
+ScmWaitForDependency(
+    _In_ PSERVICE Dependency)
+{
+    ULONGLONG Deadline = GetTickCount64() + PipeTimeout;
+    ULONGLONG Now;
+    DWORD dwState;
+
+    EnterCriticalSection(&ScmStatusChangeLock);
+    for (;;)
+    {
+        dwState = Dependency->Status.dwCurrentState;
+        Now = GetTickCount64();
+        if (dwState != SERVICE_START_PENDING || Now >= Deadline)
+            break;
+        SleepConditionVariableCS(&ScmStatusChanged, &ScmStatusChangeLock, (DWORD)(Deadline - Now));
+    }
+    LeaveCriticalSection(&ScmStatusChangeLock);
+
+    if (dwState == SERVICE_RUNNING)
+        return ERROR_SUCCESS;
+    DPRINT1("Dependency %S of a starting service is in state %lu\n", Dependency->lpServiceName, dwState);
+    return ERROR_SERVICE_DEPENDENCY_FAIL;
+}
+
+
+static
+DWORD
+ScmStartDependencies(
+    _In_ PSERVICE Service)
+{
+    static ULONG Depth;
+    PSERVICE Dependency;
+    LPWSTR lpServices = NULL;
+    LPWSTR lpName;
+    HKEY hServiceKey;
+    DWORD dwError = ERROR_SUCCESS;
+
+    if (ScmOpenServiceKey(Service->lpServiceName, KEY_READ, &hServiceKey) != ERROR_SUCCESS)
+        return ERROR_SUCCESS;
+    ScmReadString(hServiceKey, L"DependOnService", &lpServices);
+    RegCloseKey(hServiceKey);
+    if (lpServices == NULL)
+        return ERROR_SUCCESS;
+
+    /* TODO: DependOnGroup is not checked before a start. */
+    if (++Depth > 32)
+    {
+        dwError = ERROR_CIRCULAR_DEPENDENCY;
+        goto Done;
+    }
+    for (lpName = lpServices; *lpName != UNICODE_NULL; lpName += wcslen(lpName) + 1)
+    {
+        Dependency = ScmGetServiceEntryByName(lpName);
+        if (Dependency == NULL)
+        {
+            DPRINT1("Service %S depends on the missing service %S\n", Service->lpServiceName, lpName);
+            dwError = ERROR_SERVICE_DEPENDENCY_DELETED;
+            break;
+        }
+        if (Dependency == Service)
+            continue;
+        if (Dependency->Status.dwCurrentState == SERVICE_STOPPED)
+        {
+            if (Dependency->dwStartType == SERVICE_DISABLED)
+            {
+                dwError = ERROR_SERVICE_DEPENDENCY_FAIL;
+                break;
+            }
+            dwError = ScmLoadService(Dependency, 0, NULL);
+            if (dwError != ERROR_SUCCESS && dwError != ERROR_SERVICE_ALREADY_RUNNING)
+            {
+                dwError = dwError == ERROR_CIRCULAR_DEPENDENCY ? dwError : ERROR_SERVICE_DEPENDENCY_FAIL;
+                break;
+            }
+        }
+        dwError = ScmWaitForDependency(Dependency);
+        if (dwError != ERROR_SUCCESS)
+            break;
+    }
+
+Done:
+    --Depth;
+    HeapFree(GetProcessHeap(), 0, lpServices);
+    return dwError;
+}
+
+
+static DWORD
+ScmLoadService(PSERVICE Service,
+               DWORD argc,
                const PCWSTR* argv)
 {
     PSERVICE_GROUP Group = Service->lpGroup;
@@ -2400,7 +2495,12 @@ ScmLoadService(PSERVICE Service,
 
     DPRINT("Service->Type: %lu\n", Service->Status.dwServiceType);
 
-    if (Service->Status.dwServiceType & SERVICE_DRIVER)
+    dwError = ScmStartDependencies(Service);
+    if (dwError != ERROR_SUCCESS)
+    {
+        DPRINT1("Service %S cannot start, its dependencies failed: %lu\n", Service->lpServiceName, dwError);
+    }
+    else if (Service->Status.dwServiceType & SERVICE_DRIVER)
     {
         /* Start the driver */
         dwError = ScmStartDriver(Service);

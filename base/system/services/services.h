@@ -308,6 +308,8 @@ DWORD ScmQueryServiceLockStatusA(OUT LPQUERY_SERVICE_LOCK_STATUSA lpLockStatus,
 VOID ScmStartRpcServer(VOID);
 VOID ScmInitServiceNotify(VOID);
 VOID ScmNotifyServiceStatus(PSERVICE lpService);
+extern CRITICAL_SECTION ScmStatusChangeLock;
+extern CONDITION_VARIABLE ScmStatusChanged;
 DWORD ScmReadFailureActions(HKEY hServiceKey,
                             PSERVICE_FAILURE_ACTIONS_VALUE *lpValue,
                             LPDWORD lpActionCount);
