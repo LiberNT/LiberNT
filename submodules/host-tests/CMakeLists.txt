@@ -16,9 +16,14 @@ option(HOST_TEST_NTDLL "Build native NT loader and runtime tests" ON)
 option(HOST_TEST_RTL "Build native kernel runtime library tests" ON)
 option(HOST_TEST_I8042 "Build native PS/2 controller tests" ON)
 option(HOST_TEST_DHCPCSVC "Build native DHCP client tests" ON)
+option(HOST_TEST_NDIS "Build native NDIS WDI tests" ON)
 
 if(BUILD_TESTING AND HOST_TEST_DHCPCSVC)
     add_subdirectory(dhcpcsvc)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_NDIS)
+    add_subdirectory(ndis)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_I8042)
