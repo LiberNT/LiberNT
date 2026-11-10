@@ -125,10 +125,10 @@ CreateFile_(WPD_TEST_DEVICE *Test, LPCWSTR ParentId, LPCWSTR Name, const BYTE *D
 }
 
 static void
-DeleteObject_(WPD_TEST_DEVICE *Test, LPCWSTR ObjectId, DWORD Options)
+DeleteObject_(WPD_TEST_DEVICE *Test, LPCWSTR ObjectId, DWORD Options, HRESULT Expected)
 {
     IPortableDevicePropVariantCollection *Ids, *Results = NULL;
-    PROPVARIANT Value;
+    PROPVARIANT Value, Result;
     HRESULT hr;
 
     hr = CoCreateInstance(&CLSID_PortableDevicePropVariantCollection, NULL, CLSCTX_INPROC_SERVER,
@@ -140,10 +140,15 @@ DeleteObject_(WPD_TEST_DEVICE *Test, LPCWSTR ObjectId, DWORD Options)
     Value.pwszVal = (LPWSTR)ObjectId;
     IPortableDevicePropVariantCollection_Add(Ids, &Value);
     hr = IPortableDeviceContent_Delete(Test->Content, Options, Ids, &Results);
-    ok(hr == S_OK, "Delete(%ls) hr 0x%08lX\n", ObjectId, hr);
+    ok(hr == (Expected == S_OK ? S_OK : S_FALSE), "Delete(%ls) hr 0x%08lX\n", ObjectId, hr);
     if (Results)
     {
         WpdDumpPropVariants("delete results ", Results, 0);
+        PropVariantInit(&Result);
+        hr = IPortableDevicePropVariantCollection_GetAt(Results, 0, &Result);
+        ok(hr == S_OK && Result.vt == VT_ERROR && Result.scode == Expected, "Delete(%ls) result %u 0x%08lX\n",
+           ObjectId, Result.vt, Result.scode);
+        PropVariantClear(&Result);
         IPortableDevicePropVariantCollection_Release(Results);
     }
     IPortableDevicePropVariantCollection_Release(Ids);
@@ -281,7 +286,7 @@ START_TEST(Transfer)
                 IPortableDeviceValues_Release(Values);
             }
         }
-        DeleteObject_(&Test, ObjectId, PORTABLE_DEVICE_DELETE_NO_RECURSION);
+        DeleteObject_(&Test, ObjectId, PORTABLE_DEVICE_DELETE_NO_RECURSION, S_OK);
         CoTaskMemFree(ObjectId);
     }
     HeapFree(GetProcessHeap(), 0, Data);
@@ -307,8 +312,9 @@ START_TEST(Transfer)
                 DumpChildren(&Test, FolderId);
                 CoTaskMemFree(ObjectId);
             }
-            DeleteObject_(&Test, FolderId, PORTABLE_DEVICE_DELETE_NO_RECURSION);
-            DeleteObject_(&Test, FolderId, PORTABLE_DEVICE_DELETE_WITH_RECURSION);
+            DeleteObject_(&Test, FolderId, PORTABLE_DEVICE_DELETE_NO_RECURSION,
+                          HRESULT_FROM_WIN32(ERROR_DIR_NOT_EMPTY));
+            DeleteObject_(&Test, FolderId, PORTABLE_DEVICE_DELETE_WITH_RECURSION, S_OK);
             CoTaskMemFree(FolderId);
         }
     }
