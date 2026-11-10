@@ -5,7 +5,7 @@
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 #
 
-add_library(appleagx MODULE appleagx.c appleagx.rc)
+add_library(appleagx MODULE appleagx.c agxengine.c appleagx.rc)
 set_module_type(appleagx kernelmodedriver)
 target_link_libraries(appleagx applertkit fdtdrv ${PSEH_LIB})
 add_importlibs(appleagx ntoskrnl hal)

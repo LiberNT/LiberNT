@@ -5,15 +5,9 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include <ntddk.h>
+#include "appleagxp.h"
 #include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appleadt.h>
 #include <reactos/drivers/applepmp.h>
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/appleuat.h>
-#include <reactos/drivers/appleagx.h>
-#include <reactos/drivers/appleagxinit.h>
-#include <reactos/drivers/fdtdrv.h>
 #include <pseh/pseh2.h>
 
 #define AGX_TAG                     'xgAA'
@@ -30,18 +24,10 @@
 #define AGX_ID_CLUSTERS             0x1c
 #define AGX_CORE_MASKS              0x1500
 #define AGX_MAX_CORE_MASKS          3
-#define AGX_REGION_CONTEXTS         0
-#define AGX_REGION_KERNEL_ROOT      1
-#define AGX_REGION_HANDOFF          2
-#define AGX_REGION_HOST_LEVEL       3
-#define AGX_REGION_FIRMWARE_TEXT    4
-#define AGX_REGION_FIRMWARE_DATA    5
-#define AGX_REGIONS                 6
 #define AGX_BOOT_TIMEOUT_MS         2000
 #define AGX_LISTEN_MS               500
 #define AGX_READY_TIMEOUT_MS        3000
 #define AGX_DEVCTL_TIMEOUT_MS       2000
-#define AGX_MAX_SHARED              8
 #define AGX_SHARED_ALIGN            0x1000
 #define AGX_ADT_MAX_LENGTH          0x200000
 #define AGX_PART                    "gpu,t6030"
@@ -49,88 +35,10 @@
 #define AGX_PMP_POLL_MS             100
 
 #define AGX_CLIENT_TAG              'cGxA'
-#define AGX_MAX_VMS                 16
-#define AGX_MAX_OBJECTS             4096
 #define AGX_FIRST_BINDINGS          64
 #define AGX_MAX_BINDINGS            65536
 #define AGX_MAX_BIND_OPS            4096
 
-typedef struct _AGX_OBJECT
-{
-    LONG References;
-    ULONG Flags;
-    ULONG VmId;
-    ULONG64 Size;
-    PMDL Mdl;
-    PVOID UserAddress;
-} AGX_OBJECT, *PAGX_OBJECT;
-
-typedef struct _AGX_VM
-{
-    APPLE_AGX_VM_RANGES Ranges;
-    APPLE_UAT Uat;
-    APPLE_AGX_BINDINGS Bindings;
-} AGX_VM, *PAGX_VM;
-
-typedef struct _AGX_CLIENT
-{
-    FAST_MUTEX Lock;
-    PEPROCESS Process;
-    PAGX_VM Vm[AGX_MAX_VMS];
-    PAGX_OBJECT Object[AGX_MAX_OBJECTS];
-} AGX_CLIENT, *PAGX_CLIENT;
-
-typedef struct _AGX_SHARED
-{
-    PVOID Virtual;
-    ULONG64 Physical;
-    ULONG Size;
-} AGX_SHARED, *PAGX_SHARED;
-
-typedef struct _APPLE_AGX
-{
-    PFILE_OBJECT PmpFile;
-    PDEVICE_OBJECT Pmp;
-    PDEVICE_OBJECT Self;
-    PDEVICE_OBJECT Pdo;
-    PDEVICE_OBJECT Lower;
-    FDT_DRIVER_TREE Tree;
-    BOOLEAN TreeOpen;
-    PUCHAR Asc;
-    ULONG AscSize;
-    PUCHAR Id;
-    ULONG IdSize;
-    PUCHAR Core;
-    ULONG CoreSize;
-    ULONG64 RegionBase[AGX_REGIONS];
-    ULONG64 RegionSize[AGX_REGIONS];
-    APPLE_UAT_ADOPTED Adopted;
-    BOOLEAN Owned;
-    APPLE_AGX_INIT Init;
-    BOOLEAN Initialised;
-    APPLE_AGX_RING Event;
-    APPLE_AGX_RING Trace;
-    APPLE_AGX_RING Stats;
-    APPLE_AGX_RING DevCtl;
-    BOOLEAN Bound;
-    ULONG Drained;
-    APPLE_AGX_REPORT Reported;
-    ULONG IdVersion;
-    ULONG64 CoreWord;
-    ULONG ChipId;
-    KEVENT StopEvent;
-    PKTHREAD StartThread;
-    PVOID AdtCopy;
-    ULONG AdtLength;
-    APPLE_ADT Adt;
-    APPLE_AGX_DESCRIPTION Description;
-    BOOLEAN Described;
-    PUCHAR Mailbox;
-    ULONG MailboxSize;
-    APPLE_RTKIT Rtkit;
-    AGX_SHARED Shared[AGX_MAX_SHARED];
-    ULONG SharedCount;
-} APPLE_AGX, *PAPPLE_AGX;
 
 static const CHAR *const AgxRegionNames[AGX_REGIONS] = {
     "ttbs", "pagetables", "handoff", "pagetables-l2", "firmware-text", "firmware-data"
@@ -427,7 +335,6 @@ AgxShmemSetup(
 }
 
 /* The firmware produces on the receive rings and asks over the mailbox for them to be drained. */
-static
 VOID
 AgxDrainRings(
     _Inout_ PAPPLE_AGX Agx)
@@ -439,10 +346,10 @@ AgxDrainRings(
         return;
     while (AppleAgxRingTake(&Agx->Event, Record) && Taken < APPLE_AGX_RING_SLOTS)
     {
-        ULONG64 Head;
+        ULONG Words[APPLE_AGX_RECORD_WORDS];
 
-        RtlCopyMemory(&Head, Record, sizeof(Head));
-        DbgPrint("appleagx: event %I64x\n", Head);
+        RtlCopyMemory(Words, Record, sizeof(Words));
+        AgxEngineEvent(Agx, Words);
         ++Taken;
     }
     while (AppleAgxRingTake(&Agx->Stats, Record) && Taken < 2 * APPLE_AGX_RING_SLOTS)
@@ -511,6 +418,15 @@ AgxSubmit(
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
     }
     return STATUS_IO_TIMEOUT;
+}
+
+NTSTATUS
+AgxDeviceControlPost(
+    _Inout_ PAPPLE_AGX Agx,
+    _In_ const VOID *Record,
+    _In_ ULONG Timeout)
+{
+    return AgxSubmit(Agx, &Agx->DevCtl, APPLE_AGX_DOORBELL_DEVCTL, Record, Timeout);
 }
 
 /* The firmware imports its globals and starts on two device controls; only then does it say it
@@ -645,6 +561,10 @@ AgxHandInitialData(
             if (!NT_SUCCESS(Status))
                 return Status;
             AgxDrainRings(Agx);
+            Status = AgxEngineStart(Agx);
+            DbgPrint("appleagx: render and compute queues built: %lx\n", Status);
+            if (!NT_SUCCESS(Status))
+                return Status;
             Agx->Reported.State = APPLE_AGX_STATE_READY;
             return STATUS_SUCCESS;
         }
@@ -733,6 +653,7 @@ AgxStop(
         ObDereferenceObject(Agx->StartThread);
         Agx->StartThread = NULL;
     }
+    AgxEngineStop(Agx);
     Agx->Bound = FALSE;
     if (Agx->Initialised)
         AppleAgxInitRelease(&Agx->Init);
@@ -1087,6 +1008,7 @@ AgxVmFree(
         Vm->Bindings.Reference(Vm->Bindings.Entry[Vm->Bindings.Count - 1].Object, -1);
         --Vm->Bindings.Count;
     }
+    AgxEngineRelease(Vm);
     AppleUatDestroy(&Vm->Uat);
     ExFreePoolWithTag(Vm->Bindings.Entry, AGX_CLIENT_TAG);
     ExFreePoolWithTag(Vm, AGX_CLIENT_TAG);
@@ -1271,6 +1193,8 @@ AgxVmBind(
                     return STATUS_INVALID_PARAMETER;
             }
             Status = AppleAgxCheckBind(&Op, &Vm->Ranges, Object ? Object->Size : 0, &Protection);
+            if (NT_SUCCESS(Status) && Object && AppleAgxClientReserved(Op.Addr, Op.Range))
+                Status = STATUS_CONFLICTING_ADDRESSES;
             if (!NT_SUCCESS(Status) || Pass == 0)
             {
                 if (!NT_SUCCESS(Status))
@@ -1283,6 +1207,52 @@ AgxVmBind(
                 return Status;
         }
     }
+    return STATUS_SUCCESS;
+}
+
+/* Every queue runs on the device's own render and compute queues; what a client queue keeps is
+ * the address space it runs in and where its shaders are. */
+static
+NTSTATUS
+AgxQueueCreate(
+    _Inout_ PAGX_CLIENT Client,
+    _Inout_ PDRM_ASAHI_QUEUE_CREATE Create)
+{
+    PAGX_VM Vm = AgxClientVm(Client, Create->VmId);
+    PAGX_QUEUE Queue;
+    ULONG Index;
+
+    if (!Vm || Create->Flags || Create->Priority > DRM_ASAHI_PRIORITY_MEDIUM ||
+        (Create->UscExecBase & 0xffffffffULL) || Create->UscExecBase < Vm->Ranges.UserStart ||
+        Create->UscExecBase > Vm->Ranges.UserEnd || Vm->Ranges.UserEnd - Create->UscExecBase < 0x100000000ULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    for (Index = 0; Index < AGX_MAX_QUEUES && Client->Queue[Index]; ++Index)
+        ;
+    if (Index == AGX_MAX_QUEUES)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Queue = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Queue), AGX_CLIENT_TAG);
+    if (!Queue)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Queue->VmId = Create->VmId;
+    Queue->Priority = Create->Priority;
+    Queue->UscBase = Create->UscExecBase;
+    Client->Queue[Index] = Queue;
+    Create->QueueId = Index + 1;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+AgxQueueDestroy(
+    _Inout_ PAGX_CLIENT Client,
+    _In_ const DRM_ASAHI_QUEUE_DESTROY *Destroy)
+{
+    if (Destroy->Pad || !Destroy->QueueId || Destroy->QueueId > AGX_MAX_QUEUES || !Client->Queue[Destroy->QueueId - 1])
+        return STATUS_INVALID_PARAMETER;
+    ExFreePoolWithTag(Client->Queue[Destroy->QueueId - 1], AGX_CLIENT_TAG);
+    Client->Queue[Destroy->QueueId - 1] = NULL;
     return STATUS_SUCCESS;
 }
 
@@ -1309,6 +1279,9 @@ AgxClientControl(
         case IOCTL_APPLE_AGX_GEM_CLOSE:
         case IOCTL_APPLE_AGX_GEM_MAP: Size = sizeof(APPLE_AGX_GEM_HANDLE); break;
         case IOCTL_APPLE_AGX_VM_BIND: Size = sizeof(DRM_ASAHI_VM_BIND); break;
+        case IOCTL_APPLE_AGX_QUEUE_CREATE: Size = sizeof(DRM_ASAHI_QUEUE_CREATE); break;
+        case IOCTL_APPLE_AGX_QUEUE_DESTROY: Size = sizeof(DRM_ASAHI_QUEUE_DESTROY); break;
+        case IOCTL_APPLE_AGX_SUBMIT: Size = sizeof(DRM_ASAHI_SUBMIT); break;
         default: return STATUS_INVALID_DEVICE_REQUEST;
     }
     if (InputLength < Size)
@@ -1337,13 +1310,22 @@ AgxClientControl(
         case IOCTL_APPLE_AGX_GEM_MAP:
             Status = AgxGemMap(Client, Buffer);
             break;
+        case IOCTL_APPLE_AGX_QUEUE_CREATE:
+            Status = AgxQueueCreate(Client, Buffer);
+            break;
+        case IOCTL_APPLE_AGX_QUEUE_DESTROY:
+            Status = AgxQueueDestroy(Client, Buffer);
+            break;
+        case IOCTL_APPLE_AGX_SUBMIT:
+            Status = AgxSubmitCommands(Client->Agx, Client, Buffer, InputLength);
+            break;
         default:
             Status = AgxVmBind(Client, Buffer, InputLength);
             break;
     }
     ExReleaseFastMutex(&Client->Lock);
     if (NT_SUCCESS(Status) && Code != IOCTL_APPLE_AGX_VM_BIND && Code != IOCTL_APPLE_AGX_VM_DESTROY &&
-        Code != IOCTL_APPLE_AGX_GEM_CLOSE)
+        Code != IOCTL_APPLE_AGX_GEM_CLOSE && Code != IOCTL_APPLE_AGX_QUEUE_DESTROY && Code != IOCTL_APPLE_AGX_SUBMIT)
     {
         *Written = min(OutputLength, Size);
     }
@@ -1361,7 +1343,6 @@ AgxCreate(
     PAGX_CLIENT Client;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    UNREFERENCED_PARAMETER(DeviceObject);
     Client = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Client), AGX_CLIENT_TAG);
     if (!Client)
     {
@@ -1370,6 +1351,7 @@ AgxCreate(
     else
     {
         ExInitializeFastMutex(&Client->Lock);
+        Client->Agx = DeviceObject->DeviceExtension;
         Client->Process = PsGetCurrentProcess();
         ObReferenceObject(Client->Process);
         Stack->FileObject->FsContext = Client;
@@ -1398,6 +1380,14 @@ AgxCleanup(
         {
             if (Client->Object[Index])
                 AgxGemClose(Client, Index + 1);
+        }
+        for (Index = 0; Index < AGX_MAX_QUEUES; ++Index)
+        {
+            if (Client->Queue[Index])
+            {
+                ExFreePoolWithTag(Client->Queue[Index], AGX_CLIENT_TAG);
+                Client->Queue[Index] = NULL;
+            }
         }
         for (Index = 0; Index < AGX_MAX_VMS; ++Index)
         {
@@ -1613,6 +1603,7 @@ AgxAddDevice(
     Agx->Self = Fdo;
     Agx->Pdo = Pdo;
     KeInitializeEvent(&Agx->StopEvent, NotificationEvent, FALSE);
+    ExInitializeFastMutex(&Agx->Engine.Lock);
     Agx->Lower = IoAttachDeviceToDeviceStack(Fdo, Pdo);
     if (!Agx->Lower)
     {

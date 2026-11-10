@@ -40,11 +40,29 @@ What was taken is the description of the interface:
       - the vertex and fragment work items: their register values, state and parameter blocks
       - the tiling parameters of a frame (queue/render.rs), the compact-pointer window
         (g15/encode.rs, g15/hw.rs), the ISP macrotile size and the scene object
+      - the queue-info scheduling row, the scheduling context's initial bytes, the render and
+        compute allocators' identities and seeding, the parameter buffer's lists, maximum,
+        InitBM and C1 records and its growth request and reply (g15/fw/graph.rs,
+        g15/fw/buffer.rs, g15/fw/work.rs, g15/fw/channels.rs, g15/graph.rs, g15/pools.rs)
+      - the fixed client addresses the firmware objects are aliased at in every client address
+        space, the cache classes of each object and the client leaf words (g15/hw.rs,
+        g15/slots.rs, g15/vm.rs)
+      - the compute registers of this processor (g15/hw.rs, g15/encode.rs)
+      - the order the firmware is started in, device controls 0x13 and 9 before readiness
+        (g15/boot.rs), and the order a render or compute is published in: images, thresholds
+        and counters, the queue cursors, then the records and doorbells, fragment before vertex
+        (g15/engine.rs)
+
+  drivers/directx/appleagx/agxengine.c
+      - what the above describes, put together: the objects, the publication order and the
+        completion stamps; the scheduling, slot rotation, growth reserve and recovery of the
+        reference are not taken
 
 The render commands the driver accepts follow Mesa's copy of the same driver's user interface,
 include/drm-uapi/asahi_drm.h (SPDX-License-Identifier: MIT; Copyright (C) The Asahi Linux
 Contributors, 2018-2023 Collabora Ltd., 2014-2018 Broadcom), mirrored with NT types in
-sdk/include/reactos/drivers/appleagxuapi.h so that Mesa's Apple drivers can submit to it. Its
+sdk/include/reactos/drivers/appleagxuapi.h so that Mesa's Apple drivers can submit to it: render
+and compute commands, attachments, queues and the submission with its command headers. Its
 layout was measured by compiling Mesa's header, and the mirror asserts every offset. The global
 parameters it answers take the G15S user address range, the kernel range minimum, the command and
 attachment limits and the timestamp rate from g15/hw.rs, g15/params.rs and file.rs of the same
