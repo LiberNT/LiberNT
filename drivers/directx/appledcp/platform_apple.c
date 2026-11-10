@@ -1,0 +1,340 @@
+/*
+ * PROJECT:     LiberNT Apple Display Coprocessor Driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Apple silicon display coprocessor platform provider for the software GPU engine
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include "softgpu.h"
+#include "softgpu_2d_core.h"
+#include "appledcp.h"
+
+typedef struct _APPLE_DCP_CONTEXT
+{
+    PAPPLE_DCP Dcp;
+    PVOID SurfaceAllocation;
+    SIZE_T SurfaceAllocationSize;
+    PUCHAR Surface;
+    PHYSICAL_ADDRESS SurfacePhysical;
+    SIZE_T SurfaceSize;
+    ULONG64 SurfaceIova;
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+} APPLE_DCP_CONTEXT, *PAPPLE_DCP_CONTEXT;
+
+static
+VOID
+DcpPlatformLogModes(
+    _Inout_ PAPPLE_DCP Dcp)
+{
+    DCP_TIMING_MODE Timing[DCP_MAX_TIMING_MODES];
+    DCP_COLOR_MODE Color[DCP_MAX_COLOR_MODES];
+    ULONG TimingCount, ColorCount, Index;
+    BOOLEAN Connected;
+
+    if (NT_SUCCESS(DcpGetHotPlug(Dcp, &Connected, &TimingCount, &ColorCount)))
+    {
+        DbgPrint("appledcp: panel %s, %lu timing modes, %lu color modes\n", Connected ? "connected" : "absent",
+                 TimingCount, ColorCount);
+    }
+    if (NT_SUCCESS(DcpGetTimingModes(Dcp, Timing, RTL_NUMBER_OF(Timing), &TimingCount)))
+    {
+        for (Index = 0; Index < TimingCount; ++Index)
+        {
+            DbgPrint("appledcp: timing mode %lu: %lux%lu at %u.%02lu Hz%s\n", Index, Timing[Index].Width,
+                     Timing[Index].Height, Timing[Index].FpsInteger, ((ULONG)Timing[Index].FpsFraction * 100) >> 16,
+                     Timing[Index].Valid ? "" : " (not valid)");
+        }
+    }
+    if (NT_SUCCESS(DcpGetColorModes(Dcp, Color, RTL_NUMBER_OF(Color), &ColorCount)))
+    {
+        for (Index = 0; Index < ColorCount; ++Index)
+        {
+            DbgPrint("appledcp: color mode %lu: colorimetry %lu, EOTF %lu, encoding %lu, %lu bpp%s\n", Index,
+                     Color[Index].Colorimetry, Color[Index].Eotf, Color[Index].Encoding, Color[Index].Bpp,
+                     Color[Index].Valid ? "" : " (not valid)");
+        }
+    }
+}
+
+static
+VOID
+DcpPlatformRelease(
+    _In_ PAPPLE_DCP_CONTEXT Context)
+{
+    if (Context->Dcp)
+        DcpClose(Context->Dcp);
+    if (Context->SurfaceAllocation && !Context->SurfaceIova)
+        MmFreeContiguousMemorySpecifyCache(Context->SurfaceAllocation, Context->SurfaceAllocationSize, MmWriteCombined);
+    ExFreePoolWithTag(Context, APPLE_DCP_TAG);
+}
+
+static
+NTSTATUS
+DcpPlatformStart(
+    _Inout_ PAPPLE_DCP_CONTEXT Context,
+    _In_ PDXGK_INTERFACE DxgkInterface)
+{
+    DXGK_DISPLAY_INFORMATION PostDisplay;
+    DXGK_DEVICE_INFO Information;
+    PHYSICAL_ADDRESS Low, High, Boundary;
+    ULONGLONG VisibleLength;
+    ULONG64 Physical;
+    DCP_LAYER Layer;
+    SIZE_T Skip;
+    NTSTATUS Status;
+
+    if (!DxgkInterface->DxgkCbGetDeviceInformation)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    Status = DxgkInterface->DxgkCbGetDeviceInformation(DxgkInterface->DeviceHandle, &Information);
+    if (!NT_SUCCESS(Status) || !Information.PhysicalDeviceObject)
+        return NT_SUCCESS(Status) ? STATUS_DEVICE_CONFIGURATION_ERROR : Status;
+    Status = DcpOpen(Information.PhysicalDeviceObject, &Context->Dcp);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = DcpStartDisplayService(Context->Dcp);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    DcpPlatformLogModes(Context->Dcp);
+
+    Status = SoftGpuAcquirePostDisplay(DxgkInterface, &PostDisplay, &VisibleLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!PostDisplay.Width || !PostDisplay.Height)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    DbgPrint("appledcp: boot display %lux%lu, pitch %lu, format %lu at %I64x\n", PostDisplay.Width,
+             PostDisplay.Height, PostDisplay.Pitch, PostDisplay.ColorFormat, PostDisplay.PhysicAddress.QuadPart);
+
+    Context->Width = PostDisplay.Width;
+    Context->Height = PostDisplay.Height;
+    Context->Pitch = Context->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+    Context->SurfaceSize = ((SIZE_T)Context->Pitch * Context->Height + DCP_DART_PAGE_SIZE - 1) &
+                           ~(SIZE_T)(DCP_DART_PAGE_SIZE - 1);
+    Context->SurfaceAllocationSize = Context->SurfaceSize + DCP_DART_PAGE_SIZE - PAGE_SIZE;
+    Low.QuadPart = 0;
+    High.QuadPart = -1;
+    Boundary.QuadPart = 0;
+    Context->SurfaceAllocation = MmAllocateContiguousMemorySpecifyCache(Context->SurfaceAllocationSize, Low, High,
+                                                                        Boundary, MmWriteCombined);
+    if (!Context->SurfaceAllocation)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Physical = (ULONG64)MmGetPhysicalAddress(Context->SurfaceAllocation).QuadPart;
+    Skip = (SIZE_T)(((Physical + DCP_DART_PAGE_SIZE - 1) & ~(ULONG64)(DCP_DART_PAGE_SIZE - 1)) - Physical);
+    Context->Surface = (PUCHAR)Context->SurfaceAllocation + Skip;
+    Context->SurfacePhysical.QuadPart = (LONGLONG)(Physical + Skip);
+    RtlZeroMemory(Context->Surface, Context->SurfaceSize);
+    KeMemoryBarrier();
+
+    Status = DcpMapSurface(Context->Dcp, (ULONG64)Context->SurfacePhysical.QuadPart, Context->SurfaceSize,
+                           &Context->SurfaceIova);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Layer, sizeof(Layer));
+    Layer.Planes[0].Address = Context->SurfaceIova;
+    Layer.Planes[0].Stride = Context->Pitch;
+    Layer.Planes[0].AddressFormat = DCP_ADDRESS_FORMAT_PLANAR;
+    Layer.PlaneCount = 1;
+    Layer.Width = Context->Width;
+    Layer.Height = Context->Height;
+    Layer.SurfaceFormat = DCP_SURFACE_FORMAT_BGRA;
+    Layer.Colorspace = DCP_COLORSPACE_SRGB;
+    Layer.Eotf = DCP_EOTF_GAMMA_SDR;
+    Status = DcpSetSurface(Context->Dcp, &Layer);
+    if (!NT_SUCCESS(Status))
+        Status = DcpSwapLayer(Context->Dcp, &Layer);
+    DbgPrint("appledcp: %lux%lu BGRA surface at %I64x (device address %I64x) on the panel: %lx\n", Context->Width,
+             Context->Height, Context->SurfacePhysical.QuadPart, Context->SurfaceIova, Status);
+    return Status;
+}
+
+NTSTATUS
+SoftGpuPlatformValidatePdo(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject)
+{
+    return PhysicalDeviceObject != NULL ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+}
+
+NTSTATUS
+SoftGpuPlatformQueryStart(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PDXGK_INTERFACE DxgkInterface,
+    _Out_ PSOFTGPU_PLATFORM_CONFIG Config)
+{
+    PAPPLE_DCP_CONTEXT Context;
+    SIZE_T WorkingSetSize;
+    NTSTATUS Status;
+
+    if (Device == NULL || DxgkInterface == NULL || Config == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    RtlZeroMemory(Config, sizeof(*Config));
+    Context = Device->PlatformContext;
+    if (!Context)
+    {
+        Context = ExAllocatePoolZero(NonPagedPool, sizeof(*Context), APPLE_DCP_TAG);
+        if (!Context)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        Status = DcpPlatformStart(Context, DxgkInterface);
+        if (!NT_SUCCESS(Status))
+        {
+            DbgPrint("appledcp: the display coprocessor cannot drive the panel: %lx\n", Status);
+            DcpPlatformRelease(Context);
+            return Status;
+        }
+        Device->PlatformContext = Context;
+    }
+
+    Config->Width = Context->Width;
+    Config->Height = Context->Height;
+    Config->Format = D3DDDIFMT_X8R8G8B8;
+    Config->ScanoutPhysicalAddress = Context->SurfacePhysical;
+    Config->ScanoutPitch = Context->Pitch;
+    Config->ScanoutSize = Context->SurfaceSize;
+
+    Status = SoftGpu2dComputeAllocationSlabSize(Config->Width,
+                                                Config->Height,
+                                                APPLE_DCP_WORKING_SURFACE_COUNT,
+                                                MAXULONG_PTR,
+                                                &WorkingSetSize);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Config->MinimumAllocationSlabSize = min(WorkingSetSize, SOFTGPU_MAX_ALLOCATION_SLAB_SIZE);
+    return STATUS_SUCCESS;
+}
+
+ULONG
+SoftGpuPlatformDmaBufferPrivateDataSize(VOID)
+{
+    return 0;
+}
+
+ULONG
+SoftGpuPlatformDmaBufferSegmentSet(VOID)
+{
+    return 0;
+}
+
+NTSTATUS
+SoftGpuPlatformStartScanout(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+SoftGpuPlatformStopScanout(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PAPPLE_DCP_CONTEXT Context;
+
+    if (Device == NULL || Device->PlatformContext == NULL)
+        return STATUS_SUCCESS;
+    Context = Device->PlatformContext;
+    Device->PlatformContext = NULL;
+    /* FIXME: the panel keeps scanning this surface after the adapter stops; the boot framebuffer is not restored. */
+    DcpPlatformRelease(Context);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+SoftGpuPlatformSetPrimary(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ PHYSICAL_ADDRESS PrimaryAddress,
+    _In_ ULONG Pitch,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ BOOLEAN Visible)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(PrimaryAddress);
+    UNREFERENCED_PARAMETER(Pitch);
+    UNREFERENCED_PARAMETER(Width);
+    UNREFERENCED_PARAMETER(Height);
+    UNREFERENCED_PARAMETER(Visible);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+SoftGpuPlatformPresentDisplayOnly(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const DXGKARG_PRESENT_DISPLAYONLY *PresentDisplayOnly)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(PresentDisplayOnly);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+SoftGpuPlatformUpdatePointer(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return STATUS_NOT_SUPPORTED;
+}
+
+VOID
+SoftGpuPlatformScanoutWritten(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const RECT *Rect)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(Rect);
+    KeMemoryBarrier();
+}
+
+VOID
+SoftGpuPlatformFillNodeMetadata(
+    _In_ ULONG NodeOrdinal,
+    _Out_ DXGKARG_GETNODEMETADATA *GetNodeMetadata)
+{
+    static const WCHAR FriendlyName[] = L"3D";
+
+    UNREFERENCED_PARAMETER(NodeOrdinal);
+    GetNodeMetadata->EngineType = DXGK_ENGINE_TYPE_3D;
+    RtlCopyMemory(GetNodeMetadata->FriendlyName, FriendlyName, sizeof(FriendlyName));
+}
+
+VOID
+SoftGpuPlatformInitializeTiming(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    if (Device != NULL)
+        InterlockedExchange(&Device->ScanoutVBlankAvailable, 0);
+}
+
+BOOLEAN
+SoftGpuPlatformWaitForVerticalBlank(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return FALSE;
+}
+
+NTSTATUS
+SoftGpuPlatformQueryScanLine(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PDXGKARG_GETSCANLINE GetScanLine)
+{
+    if (Device == NULL || GetScanLine == NULL || GetScanLine->VidPnTargetId != 0)
+        return STATUS_INVALID_PARAMETER;
+    return STATUS_NOT_SUPPORTED;
+}
+
+MEMORY_CACHING_TYPE
+SoftGpuPlatformSegmentCacheType(VOID)
+{
+    return MmCached;
+}
+
+NTSTATUS
+SoftGpuPlatformQueryDescriptor(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(DeviceDescriptor);
+    return STATUS_MONITOR_NO_DESCRIPTOR;
+}

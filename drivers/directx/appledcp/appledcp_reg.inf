@@ -1,0 +1,17 @@
+; PROJECT:     LiberNT Apple Display Coprocessor Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Apple silicon display driver service registration
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp","Group",0x00000000,"Video"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp","ImagePath",0x00020000,"system32\drivers\appledcp.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp","UserModeDriverName",0x00010000,"softgpuum.dll"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp","UserModeDriverNameWow",0x00010000,"softgpuum.dll"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp\Video","Service",0x00000000,"appledcp"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp\Device0","InstalledDisplayDrivers",0x00010000,"framebuf"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp\Device0","Device Description",0x00000000,"Apple Silicon Display (WDDM)"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledcp\Device0","VgaCompatible",0x00010001,0x00000000
