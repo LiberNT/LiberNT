@@ -1,0 +1,42 @@
+; PROJECT:     LiberNT Apple Graphics Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider = %LiberNT%
+DriverVer = 11/10/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg,NTarm64
+
+[StdMfg.NTarm64]
+%AppleAgx.DeviceDesc% = AppleAgx_Inst,FDT\apple_agx-t6030
+
+[AppleAgx_Inst.NT]
+CopyFiles = AppleAgx_CopyFiles
+
+[AppleAgx_CopyFiles]
+appleagx.sys
+
+[AppleAgx_Inst.NT.Services]
+AddService = appleagx,0x00000002,AppleAgx_Service
+
+[AppleAgx_Service]
+DisplayName = %AppleAgx.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\appleagx.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+AppleAgx.DeviceDesc = "Apple Graphics Processor"
+AppleAgx.ServiceDesc = "Apple Graphics Driver"
