@@ -325,8 +325,8 @@ AppleDartPhysicalStream(
     PUCHAR Base;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Dart, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8110-dart"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Dart, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,t8110-dart"))
     {
         DbgPrint("%s: DART %lx is not a t8110 DART\n", Owner, Dart);
         return STATUS_NOT_SUPPORTED;
@@ -380,7 +380,7 @@ AppleDartMapStream(
 {
     ULONG Cells;
 
-    if (Dart == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1)
+    if (Dart == FDT_NO_NODE || !FdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     return AppleDartPhysicalStream(Tree, Dart, Sid, Owner);
 }
@@ -397,14 +397,14 @@ AppleDartMapPhysical(
     ULONG64 Phandle, Sid;
     NTSTATUS Status;
 
-    Iommus = RiscvFdtGetProperty(&Tree->Fdt, Node, "iommus", &Length);
+    Iommus = FdtGetProperty(&Tree->Fdt, Node, "iommus", &Length);
     if (!Iommus)
         return STATUS_SUCCESS;
-    for (Index = 0; RiscvFdtReadCells(Iommus, Length, Index, 1, &Phandle); Index += 1 + Cells)
+    for (Index = 0; FdtReadCells(Iommus, Length, Index, 1, &Phandle); Index += 1 + Cells)
     {
         Dart = FdtDriverFindPhandle(Tree, (ULONG)Phandle);
-        if (Dart == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1 ||
-            !RiscvFdtReadCells(Iommus, Length, Index + 1, 1, &Sid))
+        if (Dart == FDT_NO_NODE || !FdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1 ||
+            !FdtReadCells(Iommus, Length, Index + 1, 1, &Sid))
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         Status = AppleDartPhysicalStream(Tree, Dart, (ULONG)Sid, Owner);
         if (!NT_SUCCESS(Status))
@@ -431,10 +431,10 @@ AppleDartMapLow(
     NTSTATUS Status = STATUS_SUCCESS;
 
     *Iova = 0;
-    if (Dart == RISCV_FDT_NO_NODE || !Length || !RiscvFdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1)
+    if (Dart == FDT_NO_NODE || !Length || !FdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1)
         return STATUS_INVALID_PARAMETER;
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Dart, "compatible", &RegisterLength);
-    if (!RiscvFdtStringListContains(Compatible, RegisterLength, "apple,t8110-dart"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Dart, "compatible", &RegisterLength);
+    if (!FdtStringListContains(Compatible, RegisterLength, "apple,t8110-dart"))
         return STATUS_NOT_SUPPORTED;
     Base = FdtDriverMapReg(Tree, Dart, 0, NULL, &Size);
     if (!Base)
@@ -509,13 +509,13 @@ AppleDartUnmapLow(
     PUCHAR Base;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    if (Dart == RISCV_FDT_NO_NODE || !Length || Iova < DART_LOW_WINDOW_BASE || Iova + Length < Iova ||
-        Iova + Length > DART_LOW_WINDOW_END || !RiscvFdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1)
+    if (Dart == FDT_NO_NODE || !Length || Iova < DART_LOW_WINDOW_BASE || Iova + Length < Iova ||
+        Iova + Length > DART_LOW_WINDOW_END || !FdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1)
     {
         return STATUS_INVALID_PARAMETER;
     }
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Dart, "compatible", &RegisterLength);
-    if (!RiscvFdtStringListContains(Compatible, RegisterLength, "apple,t8110-dart"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Dart, "compatible", &RegisterLength);
+    if (!FdtStringListContains(Compatible, RegisterLength, "apple,t8110-dart"))
         return STATUS_NOT_SUPPORTED;
     Base = FdtDriverMapReg(Tree, Dart, 0, NULL, &Size);
     if (!Base)
@@ -658,13 +658,13 @@ AppleDartAdopt(
     PUCHAR Base;
 
     RtlZeroMemory(Adopted, sizeof(*Adopted));
-    if (Dart == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1 ||
+    if (Dart == FDT_NO_NODE || !FdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1 ||
         WindowEnd <= WindowBase || (WindowBase & (DART_PAGE_SIZE - 1)))
     {
         return STATUS_INVALID_PARAMETER;
     }
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Dart, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8110-dart"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Dart, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,t8110-dart"))
         return STATUS_NOT_SUPPORTED;
     Base = FdtDriverMapReg(Tree, Dart, 0, &Physical, &Size);
     if (!Base)

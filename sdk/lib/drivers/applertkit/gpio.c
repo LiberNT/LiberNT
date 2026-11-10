@@ -28,9 +28,9 @@ AppleGpioIsController(
     const VOID *Compatible;
     ULONG Length;
 
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
-    return RiscvFdtStringListContains(Compatible, Length, "apple,t8103-pinctrl") ||
-           RiscvFdtStringListContains(Compatible, Length, "apple,pinctrl");
+    Compatible = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
+    return FdtStringListContains(Compatible, Length, "apple,t8103-pinctrl") ||
+           FdtStringListContains(Compatible, Length, "apple,pinctrl");
 }
 
 static
@@ -45,7 +45,7 @@ AppleGpioMapController(
     *Size = 0;
     if (!AppleGpioIsController(Tree, Controller) || !NT_SUCCESS(ApplePmgrPowerOnDevice(Tree, Controller)))
         return NULL;
-    if (!RiscvFdtReadU32(&Tree->Fdt, Controller, "apple,npins", &Pins))
+    if (!FdtReadU32(&Tree->Fdt, Controller, "apple,npins", &Pins))
         return NULL;
     return FdtDriverMapReg(Tree, Controller, 0, NULL, Size);
 }
@@ -74,16 +74,16 @@ AppleGpioApplyPinctrl(
     ULONG64 Value;
     PUCHAR Registers;
 
-    States = RiscvFdtGetProperty(&Tree->Fdt, Node, "pinctrl-0", &StatesLength);
-    for (Index = 0; States && RiscvFdtReadCells(States, StatesLength, Index, 1, &Value); ++Index)
+    States = FdtGetProperty(&Tree->Fdt, Node, "pinctrl-0", &StatesLength);
+    for (Index = 0; States && FdtReadCells(States, StatesLength, Index, 1, &Value); ++Index)
     {
-        if ((State = FdtDriverFindPhandle(Tree, (ULONG)Value)) == RISCV_FDT_NO_NODE ||
-            (Controller = FdtDriverFindParentNode(Tree, State)) == RISCV_FDT_NO_NODE ||
-            !RiscvFdtReadU32(&Tree->Fdt, Controller, "apple,npins", &Pins) ||
+        if ((State = FdtDriverFindPhandle(Tree, (ULONG)Value)) == FDT_NO_NODE ||
+            (Controller = FdtDriverFindParentNode(Tree, State)) == FDT_NO_NODE ||
+            !FdtReadU32(&Tree->Fdt, Controller, "apple,npins", &Pins) ||
             (Registers = AppleGpioMapController(Tree, Controller, &Size)) == NULL)
             return STATUS_DEVICE_CONFIGURATION_ERROR;
-        Pinmux = RiscvFdtGetProperty(&Tree->Fdt, State, "pinmux", &PinmuxLength);
-        for (Entry = 0; Pinmux && RiscvFdtReadCells(Pinmux, PinmuxLength, Entry, 1, &Value); ++Entry)
+        Pinmux = FdtGetProperty(&Tree->Fdt, State, "pinmux", &PinmuxLength);
+        for (Entry = 0; Pinmux && FdtReadCells(Pinmux, PinmuxLength, Entry, 1, &Value); ++Entry)
         {
             ULONG Pin = (ULONG)Value & 0xffff, Function = (ULONG)Value >> 16;
 
@@ -113,14 +113,14 @@ AppleGpioOpen(
     ULONG64 Phandle, Pin, Flags;
 
     RtlZeroMemory(Gpio, sizeof(*Gpio));
-    Specifier = RiscvFdtGetProperty(&Tree->Fdt, Node, Property, &Length);
-    if (!Specifier || !RiscvFdtReadCells(Specifier, Length, 0, 1, &Phandle))
+    Specifier = FdtGetProperty(&Tree->Fdt, Node, Property, &Length);
+    if (!Specifier || !FdtReadCells(Specifier, Length, 0, 1, &Phandle))
         return STATUS_NOT_FOUND;
-    if ((Controller = FdtDriverFindPhandle(Tree, (ULONG)Phandle)) == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadU32(&Tree->Fdt, Controller, "#gpio-cells", &Cells) || Cells != 2 ||
-        !RiscvFdtReadU32(&Tree->Fdt, Controller, "apple,npins", &Pins) ||
-        !RiscvFdtReadCells(Specifier, Length, 1, 1, &Pin) ||
-        !RiscvFdtReadCells(Specifier, Length, 2, 1, &Flags) || Pin >= Pins)
+    if ((Controller = FdtDriverFindPhandle(Tree, (ULONG)Phandle)) == FDT_NO_NODE ||
+        !FdtReadU32(&Tree->Fdt, Controller, "#gpio-cells", &Cells) || Cells != 2 ||
+        !FdtReadU32(&Tree->Fdt, Controller, "apple,npins", &Pins) ||
+        !FdtReadCells(Specifier, Length, 1, 1, &Pin) ||
+        !FdtReadCells(Specifier, Length, 2, 1, &Flags) || Pin >= Pins)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     Gpio->Registers = AppleGpioMapController(Tree, Controller, &Gpio->Size);
     if (!Gpio->Registers)

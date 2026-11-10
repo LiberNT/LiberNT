@@ -444,15 +444,15 @@ SmcRebootCell(
     ULONG Node, CellsLength, NamesLength, Cursor = 0, NameLength, Index;
 
     Node = FdtDriverFindChild(&Device->Tree, Device->Tree.Node, "apple,smc-reboot");
-    if (Node == RISCV_FDT_NO_NODE)
+    if (Node == FDT_NO_NODE)
         return 0;
-    Cells = RiscvFdtGetProperty(&Device->Tree.Fdt, Node, "nvmem-cells", &CellsLength);
-    Names = RiscvFdtGetProperty(&Device->Tree.Fdt, Node, "nvmem-cell-names", &NamesLength);
+    Cells = FdtGetProperty(&Device->Tree.Fdt, Node, "nvmem-cells", &CellsLength);
+    Names = FdtGetProperty(&Device->Tree.Fdt, Node, "nvmem-cell-names", &NamesLength);
     for (Index = 0; Cells && Index < CellsLength / sizeof(ULONG); ++Index)
     {
-        Name = RiscvFdtNextString(Names, NamesLength, &Cursor, &NameLength);
+        Name = FdtNextString(Names, NamesLength, &Cursor, &NameLength);
         if (Name && NameLength == strlen(Wanted) && !memcmp(Name, Wanted, NameLength))
-            return RiscvFdtReadBigEndian32(&Cells[Index]);
+            return FdtReadBigEndian32(&Cells[Index]);
     }
     return 0;
 }
@@ -545,7 +545,7 @@ SmcSyncClock(
     NTSTATUS Status;
 
     Node = FdtDriverFindChild(&Device->Tree, Device->Tree.Node, "apple,smc-rtc");
-    if (Node == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Device->Tree.Fdt, Node, "nvmem-cells", &Phandle))
+    if (Node == FDT_NO_NODE || !FdtReadU32(&Device->Tree.Fdt, Node, "nvmem-cells", &Phandle))
         return;
     Status = SmcReadKey(Device, APPLE_SMC_KEY('C', 'L', 'K', 'M'), Counter, sizeof(Counter));
     if (NT_SUCCESS(Status))
@@ -632,8 +632,8 @@ SmcStartHardware(
         DbgPrint("applesmc: device tree unavailable: %lx\n", Status);
         return Status;
     }
-    if (!RiscvFdtReadU32(&Device->Tree.Fdt, Device->Tree.Node, "mboxes", &Phandle) ||
-        (MboxNode = FdtDriverFindPhandle(&Device->Tree, Phandle)) == RISCV_FDT_NO_NODE)
+    if (!FdtReadU32(&Device->Tree.Fdt, Device->Tree.Node, "mboxes", &Phandle) ||
+        (MboxNode = FdtDriverFindPhandle(&Device->Tree, Phandle)) == FDT_NO_NODE)
     {
         DbgPrint("applesmc: the SMC has no mailbox\n");
         return STATUS_DEVICE_CONFIGURATION_ERROR;

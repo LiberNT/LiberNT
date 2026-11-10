@@ -7,12 +7,12 @@
 
 #pragma once
 
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 typedef struct _FDT_DRIVER_TREE
 {
     PUCHAR Blob;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Node;
 } FDT_DRIVER_TREE, *PFDT_DRIVER_TREE;
 

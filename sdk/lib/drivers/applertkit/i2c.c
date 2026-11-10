@@ -136,16 +136,16 @@ AppleI2cOpen(
     NTSTATUS Status;
 
     RtlZeroMemory(I2c, sizeof(*I2c));
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8103-i2c") &&
-        !RiscvFdtStringListContains(Compatible, Length, "apple,i2c"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,t8103-i2c") &&
+        !FdtStringListContains(Compatible, Length, "apple,i2c"))
         return STATUS_NOT_SUPPORTED;
-    Clocks = RiscvFdtGetProperty(&Tree->Fdt, Node, "clocks", &Length);
-    if (!Clocks || !RiscvFdtReadCells(Clocks, Length, 0, 1, &Phandle) ||
-        (Clock = FdtDriverFindPhandle(Tree, (ULONG)Phandle)) == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadU32(&Tree->Fdt, Clock, "clock-frequency", &Reference) || !Reference)
+    Clocks = FdtGetProperty(&Tree->Fdt, Node, "clocks", &Length);
+    if (!Clocks || !FdtReadCells(Clocks, Length, 0, 1, &Phandle) ||
+        (Clock = FdtDriverFindPhandle(Tree, (ULONG)Phandle)) == FDT_NO_NODE ||
+        !FdtReadU32(&Tree->Fdt, Clock, "clock-frequency", &Reference) || !Reference)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
-    if (!RiscvFdtReadU32(&Tree->Fdt, Node, "clock-frequency", &Frequency) || !Frequency)
+    if (!FdtReadU32(&Tree->Fdt, Node, "clock-frequency", &Frequency) || !Frequency)
         Frequency = I2C_DEFAULT_FREQUENCY;
     Divider = (Reference + 16 * Frequency - 1) / (16 * Frequency);
     if (Divider < 4 || Divider > I2C_CONTROL_DIVIDER)

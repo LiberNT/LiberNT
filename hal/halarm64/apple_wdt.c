@@ -47,14 +47,14 @@ static const HAL_ARM64_SYSTEM_RESET AppleWdtSystemReset =
 
 VOID
 AppleWdtProbe(
-    _In_ PRISCV_FDT Fdt)
+    _In_ PFDT Fdt)
 {
     static const PCSTR Compatibles[] = { "apple,t8103-wdt", "apple,wdt" };
     ULONG Node, Parent, Match;
     ULONG64 Length;
 
     if (!HalpArm64FindDeviceTreeNode(Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
-        !RiscvFdtReadReg(Fdt, Node, Parent, 0, &AppleWdtPhysical, &Length) ||
+        !FdtReadReg(Fdt, Node, Parent, 0, &AppleWdtPhysical, &Length) ||
         Length < APPLE_WDT_WD1_CTRL + sizeof(ULONG))
     {
         AppleWdtPhysical = 0;

@@ -74,7 +74,7 @@ BcmBtMapDma(
     NTSTATUS Status;
 
     *Iova = 0;
-    if (Dev->DartNode == RISCV_FDT_NO_NODE)
+    if (Dev->DartNode == FDT_NO_NODE)
     {
         if (Physical + Length > BCMBT_DMA_WINDOW_SIZE)
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -105,7 +105,7 @@ BcmBtUnmapDma(
 {
     ULONG Attempt;
 
-    if (Dev->DartNode == RISCV_FDT_NO_NODE || !Iova)
+    if (Dev->DartNode == FDT_NO_NODE || !Iova)
         return;
     for (Attempt = 0; Attempt < BCMBT_DART_RETRIES; Attempt++)
     {
@@ -137,7 +137,7 @@ BcmBtTakeBlock(
     if (*Next == Dev->BlockCount)
     {
         Low.QuadPart = 0;
-        High.QuadPart = BcmBtHighestDmaAddress(Dev->DartNode != RISCV_FDT_NO_NODE);
+        High.QuadPart = BcmBtHighestDmaAddress(Dev->DartNode != FDT_NO_NODE);
         Boundary.QuadPart = 0;
         Block->Va = MmAllocateContiguousMemorySpecifyCache(Size, Low, High, Boundary, MmNonCached);
         if (!Block->Va)

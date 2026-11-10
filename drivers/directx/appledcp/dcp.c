@@ -567,9 +567,9 @@ DcpLogFirmware(
     const CHAR *Version;
     ULONG Chosen, Length;
 
-    if (!RiscvFdtFindNode(&Dcp->Tree.Fdt, "/chosen", &Chosen, NULL))
+    if (!FdtFindNode(&Dcp->Tree.Fdt, "/chosen", &Chosen, NULL))
         return;
-    Version = RiscvFdtGetProperty(&Dcp->Tree.Fdt, Chosen, "asahi,os-fw-version", &Length);
+    Version = FdtGetProperty(&Dcp->Tree.Fdt, Chosen, "asahi,os-fw-version", &Length);
     if (Version && Length && Version[Length - 1] == '\0')
         DbgPrint("appledcp: firmware set %s\n", Version);
 }
@@ -585,9 +585,9 @@ DcpAdopt(
     const VOID *Iommus;
     ULONG Length;
 
-    Iommus = RiscvFdtGetProperty(&Dcp->Tree.Fdt, Dcp->Tree.Node, Property, &Length);
-    if (!Iommus || !RiscvFdtReadCells(Iommus, Length, 0, 1, &Phandle) ||
-        !RiscvFdtReadCells(Iommus, Length, 1, 1, &Sid))
+    Iommus = FdtGetProperty(&Dcp->Tree.Fdt, Dcp->Tree.Node, Property, &Length);
+    if (!Iommus || !FdtReadCells(Iommus, Length, 0, 1, &Phandle) ||
+        !FdtReadCells(Iommus, Length, 1, 1, &Sid))
     {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
@@ -639,8 +639,8 @@ DcpOpen(
         goto Fail;
     Dcp->TreeOpen = TRUE;
     DcpLogFirmware(Dcp);
-    if (!RiscvFdtReadU32(&Dcp->Tree.Fdt, Dcp->Tree.Node, "mboxes", &MailboxPhandle) ||
-        (MailboxNode = FdtDriverFindPhandle(&Dcp->Tree, MailboxPhandle)) == RISCV_FDT_NO_NODE)
+    if (!FdtReadU32(&Dcp->Tree.Fdt, Dcp->Tree.Node, "mboxes", &MailboxPhandle) ||
+        (MailboxNode = FdtDriverFindPhandle(&Dcp->Tree, MailboxPhandle)) == FDT_NO_NODE)
     {
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
         goto Fail;

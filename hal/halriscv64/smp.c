@@ -8,7 +8,7 @@
 #include <ntifs.h>
 #include <arc/arc.h>
 #include <ndk/halfuncs.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include "halp.h"
 
 ULONG_PTR HalpRiscvHartIds[MAXIMUM_PROCESSORS];
@@ -38,29 +38,29 @@ static PULONG64 HalpRiscvStartupPages;
 static PHYSICAL_ADDRESS HalpRiscvStartupPhysical;
 
 static BOOLEAN
-HalpRiscvCompatibleHart(const RISCV_FDT *Fdt, ULONG Cpu)
+HalpRiscvCompatibleHart(const FDT *Fdt, ULONG Cpu)
 {
     static const CHAR *Required[] = {"i", "m", "a", "f", "d", "c", "zicsr", "zifencei"};
     const CHAR *Isa;
     const VOID *Property;
     ULONG Length, Index, Letters = 0;
 
-    Property = RiscvFdtGetProperty(Fdt, Cpu, "mmu-type", &Length);
-    if (!RiscvFdtStringListContains(Property, Length, "riscv,sv39") &&
-        !RiscvFdtStringListContains(Property, Length, "riscv,sv48") &&
-        !RiscvFdtStringListContains(Property, Length, "riscv,sv57")) return FALSE;
-    Property = RiscvFdtGetProperty(Fdt, Cpu, "riscv,isa-extensions", &Length);
+    Property = FdtGetProperty(Fdt, Cpu, "mmu-type", &Length);
+    if (!FdtStringListContains(Property, Length, "riscv,sv39") &&
+        !FdtStringListContains(Property, Length, "riscv,sv48") &&
+        !FdtStringListContains(Property, Length, "riscv,sv57")) return FALSE;
+    Property = FdtGetProperty(Fdt, Cpu, "riscv,isa-extensions", &Length);
     if (Property)
     {
         for (Index = 0; Index < RTL_NUMBER_OF(Required); ++Index)
-            if (!RiscvFdtStringListContains(Property, Length, Required[Index])) return FALSE;
-        Property = RiscvFdtGetProperty(Fdt, Cpu, "riscv,isa-base", &Length);
-        return RiscvFdtStringListContains(Property, Length, "rv64i");
+            if (!FdtStringListContains(Property, Length, Required[Index])) return FALSE;
+        Property = FdtGetProperty(Fdt, Cpu, "riscv,isa-base", &Length);
+        return FdtStringListContains(Property, Length, "rv64i");
     }
 
     /* Legacy ISA strings predate the separate Zicsr/Zifencei extensions.
      * Optional extension names after '_' must not supply base ISA letters. */
-    Isa = RiscvFdtGetProperty(Fdt, Cpu, "riscv,isa", &Length);
+    Isa = FdtGetProperty(Fdt, Cpu, "riscv,isa", &Length);
     if (!Isa || Length < 5 || memcmp(Isa, "rv64", 4)) return FALSE;
     for (Index = 4; Index < Length && Isa[Index] && Isa[Index] != '_'; ++Index)
     {
@@ -76,12 +76,12 @@ HalpRiscvCompatibleHart(const RISCV_FDT *Fdt, ULONG Cpu)
 }
 
 static BOOLEAN
-HalpRiscvCpuMapNodeIs(const RISCV_FDT *Fdt, ULONG Node, const CHAR *Prefix, ULONG PrefixLength)
+HalpRiscvCpuMapNodeIs(const FDT *Fdt, ULONG Node, const CHAR *Prefix, ULONG PrefixLength)
 {
     const CHAR *Name;
     ULONG Length, Index;
 
-    Name = RiscvFdtNodeName(Fdt, Node, &Length);
+    Name = FdtNodeName(Fdt, Node, &Length);
     if (!Name || Length <= PrefixLength)
         return FALSE;
     for (Index = 0; Index < PrefixLength; ++Index)
@@ -92,20 +92,20 @@ HalpRiscvCpuMapNodeIs(const RISCV_FDT *Fdt, ULONG Node, const CHAR *Prefix, ULON
 }
 
 static BOOLEAN
-HalpRiscvCpuMapHasSmt(const RISCV_FDT *Fdt, ULONG Node, ULONG Depth)
+HalpRiscvCpuMapHasSmt(const FDT *Fdt, ULONG Node, ULONG Depth)
 {
     ULONG Child, Thread, Threads;
 
-    for (Child = RiscvFdtFirstChild(Fdt, Node);
-         Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node);
+         Child != FDT_NO_NODE;
+         Child = FdtNextSibling(Fdt, Child))
     {
         if (HalpRiscvCpuMapNodeIs(Fdt, Child, "core", 4))
         {
             Threads = 0;
-            for (Thread = RiscvFdtFirstChild(Fdt, Child);
-                 Thread != RISCV_FDT_NO_NODE;
-                 Thread = RiscvFdtNextSibling(Fdt, Thread))
+            for (Thread = FdtFirstChild(Fdt, Child);
+                 Thread != FDT_NO_NODE;
+                 Thread = FdtNextSibling(Fdt, Thread))
             {
                 if (HalpRiscvCpuMapNodeIs(Fdt, Thread, "thread", 6)) ++Threads;
             }
@@ -136,7 +136,7 @@ HalIsHyperThreadingEnabled(VOID)
 BOOLEAN
 HalpRiscvDiscoverHarts(PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Cpus, Cpu, Length, Index;
     ULONG64 Hart, Size;
     const VOID *Property;
@@ -148,22 +148,22 @@ HalpRiscvDiscoverHarts(PLOADER_PARAMETER_BLOCK LoaderBlock)
                       HalpRiscvSbiExtensionAvailable(RISCV_SBI_EXTENSION_IPI) &&
                       HalpRiscvSbiExtensionAvailable(RISCV_SBI_EXTENSION_RFENCE);
     if (!HalpRiscvHasSmp) return TRUE;
-    if (!RiscvFdtOpen((const VOID *)(ULONG_PTR)Block->DeviceTree,
+    if (!FdtOpen((const VOID *)(ULONG_PTR)Block->DeviceTree,
                       Block->DeviceTreeSize, &Fdt) ||
-        !RiscvFdtFindNode(&Fdt, "/cpus", &Cpus, NULL)) return FALSE;
-    if (RiscvFdtFindNode(&Fdt, "/cpus/cpu-map", &Cpu, NULL))
+        !FdtFindNode(&Fdt, "/cpus", &Cpus, NULL)) return FALSE;
+    if (FdtFindNode(&Fdt, "/cpus/cpu-map", &Cpu, NULL))
         HalpRiscvSmtEnabled = HalpRiscvCpuMapHasSmt(&Fdt, Cpu, 0);
 
-    for (Cpu = RiscvFdtFirstChild(&Fdt, Cpus);
-         Cpu != RISCV_FDT_NO_NODE;
-         Cpu = RiscvFdtNextSibling(&Fdt, Cpu))
+    for (Cpu = FdtFirstChild(&Fdt, Cpus);
+         Cpu != FDT_NO_NODE;
+         Cpu = FdtNextSibling(&Fdt, Cpu))
     {
-        Property = RiscvFdtGetProperty(&Fdt, Cpu, "device_type", &Length);
-        if (!RiscvFdtStringListContains(Property, Length, "cpu")) continue;
-        Property = RiscvFdtGetProperty(&Fdt, Cpu, "status", &Length);
-        if (Property && !RiscvFdtStringListContains(Property, Length, "okay") &&
-            !RiscvFdtStringListContains(Property, Length, "ok")) continue;
-        if (!RiscvFdtReadReg(&Fdt, Cpu, Cpus, 0, &Hart, &Size)) return FALSE;
+        Property = FdtGetProperty(&Fdt, Cpu, "device_type", &Length);
+        if (!FdtStringListContains(Property, Length, "cpu")) continue;
+        Property = FdtGetProperty(&Fdt, Cpu, "status", &Length);
+        if (Property && !FdtStringListContains(Property, Length, "okay") &&
+            !FdtStringListContains(Property, Length, "ok")) continue;
+        if (!FdtReadReg(&Fdt, Cpu, Cpus, 0, &Hart, &Size)) return FALSE;
         if (Hart == Block->BootHartId) continue;
         if (!HalpRiscvCompatibleHart(&Fdt, Cpu))
         {

@@ -637,7 +637,7 @@ HalpArm64WakeParkedCpu(
 static
 BOOLEAN
 HalpArm64ReadDeviceTreeCpu(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG Node,
     _In_ ULONG AddressCells,
     _Out_ PULONG64 Mpidr,
@@ -647,21 +647,21 @@ HalpArm64ReadDeviceTreeCpu(
     ULONG Length;
 
     *Release = 0;
-    Property = RiscvFdtGetProperty(Fdt, Node, "device_type", &Length);
-    if (!RiscvFdtStringListContains(Property, Length, "cpu"))
+    Property = FdtGetProperty(Fdt, Node, "device_type", &Length);
+    if (!FdtStringListContains(Property, Length, "cpu"))
         return FALSE;
-    Property = RiscvFdtGetProperty(Fdt, Node, "status", &Length);
-    if (Property && !RiscvFdtStringListContains(Property, Length, "okay") &&
-        !RiscvFdtStringListContains(Property, Length, "ok"))
+    Property = FdtGetProperty(Fdt, Node, "status", &Length);
+    if (Property && !FdtStringListContains(Property, Length, "okay") &&
+        !FdtStringListContains(Property, Length, "ok"))
         return FALSE;
-    Property = RiscvFdtGetProperty(Fdt, Node, "reg", &Length);
-    if (!RiscvFdtReadCells(Property, Length, 0, AddressCells, Mpidr))
+    Property = FdtGetProperty(Fdt, Node, "reg", &Length);
+    if (!FdtReadCells(Property, Length, 0, AddressCells, Mpidr))
         return FALSE;
-    Property = RiscvFdtGetProperty(Fdt, Node, "enable-method", &Length);
-    if (RiscvFdtStringListContains(Property, Length, "spin-table"))
+    Property = FdtGetProperty(Fdt, Node, "enable-method", &Length);
+    if (FdtStringListContains(Property, Length, "spin-table"))
     {
-        Property = RiscvFdtGetProperty(Fdt, Node, "cpu-release-addr", &Length);
-        if (!RiscvFdtReadCells(Property, Length, 0, (Length >= 8) ? 2 : 1, Release))
+        Property = FdtGetProperty(Fdt, Node, "cpu-release-addr", &Length);
+        if (!FdtReadCells(Property, Length, 0, (Length >= 8) ? 2 : 1, Release))
             *Release = 0;
     }
     return TRUE;
@@ -670,7 +670,7 @@ HalpArm64ReadDeviceTreeCpu(
 static
 VOID
 HalpArm64DiscoverDeviceTreePsci(
-    _In_ PRISCV_FDT Fdt)
+    _In_ PFDT Fdt)
 {
     static const PCSTR Compatibles[] = { "arm,psci-1.0", "arm,psci-0.2" };
     const VOID *Method;
@@ -679,10 +679,10 @@ HalpArm64DiscoverDeviceTreePsci(
     if (HalpArm64PsciInfo.Present ||
         !HalpArm64FindDeviceTreeNode(Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match))
         return;
-    Method = RiscvFdtGetProperty(Fdt, Node, "method", &Length);
-    if (RiscvFdtStringListContains(Method, Length, "hvc"))
+    Method = FdtGetProperty(Fdt, Node, "method", &Length);
+    if (FdtStringListContains(Method, Length, "hvc"))
         HalpArm64PsciInfo.UseHvc = TRUE;
-    else if (!RiscvFdtStringListContains(Method, Length, "smc"))
+    else if (!FdtStringListContains(Method, Length, "smc"))
         return;
     HalpArm64PsciInfo.Present = TRUE;
     DPRINT1("[arm64][HAL] Device tree: PSCI through %s\n", HalpArm64PsciInfo.UseHvc ? "HVC" : "SMC");
@@ -692,22 +692,22 @@ VOID
 HalpArm64DiscoverDeviceTreeCpus(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Cpus, Node, AddressCells, SizeCells, Count = 1, SpinTable = 0;
     ULONG64 Self = ARM64_READ_SYSREG(MPIDR_EL1) & 0xFF00FFFFFFULL, Mpidr, Release;
 
     if (HalpArm64GicInfo.GiccEntryCount || !HalpArm64OpenDeviceTree(LoaderBlock, &Fdt) ||
-        !RiscvFdtFindNode(&Fdt, "/cpus", &Cpus, NULL))
+        !FdtFindNode(&Fdt, "/cpus", &Cpus, NULL))
         return;
     HalpArm64DiscoverDeviceTreePsci(&Fdt);
-    RiscvFdtGetCellCounts(&Fdt, Cpus, &AddressCells, &SizeCells);
+    FdtGetCellCounts(&Fdt, Cpus, &AddressCells, &SizeCells);
     if (AddressCells == 0 || AddressCells > 2)
         return;
     RtlZeroMemory(&HalpArm64GicInfo.GiccEntries[0], sizeof(HalpArm64GicInfo.GiccEntries[0]));
     HalpArm64GicInfo.GiccEntries[0].Mpidr = Self;
     HalpArm64GicInfo.GiccEntries[0].Flags = 1;
-    for (Node = RiscvFdtFirstChild(&Fdt, Cpus); Node != RISCV_FDT_NO_NODE && Count < MAXIMUM_PROCESSORS;
-         Node = RiscvFdtNextSibling(&Fdt, Node))
+    for (Node = FdtFirstChild(&Fdt, Cpus); Node != FDT_NO_NODE && Count < MAXIMUM_PROCESSORS;
+         Node = FdtNextSibling(&Fdt, Node))
     {
         if (!HalpArm64ReadDeviceTreeCpu(&Fdt, Node, AddressCells, &Mpidr, &Release) ||
             (Mpidr & 0xFF00FFFFFFULL) == Self)

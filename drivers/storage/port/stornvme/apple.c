@@ -453,10 +453,10 @@ AnsFindAdapter(_In_ PVOID DeviceExtension,
         goto Failure;
     }
     Ans->Coproc = FdtDriverMapReg(&Ans->Tree, Node, 1, NULL, &Ans->CoprocSize);
-    if (RiscvFdtReadU32(&Ans->Tree.Fdt, Node, "mboxes", &Phandle))
+    if (FdtReadU32(&Ans->Tree.Fdt, Node, "mboxes", &Phandle))
         Ans->Mailbox = FdtDriverMapReg(&Ans->Tree, FdtDriverFindPhandle(&Ans->Tree, Phandle), 0, NULL,
                                        &Ans->MailboxSize);
-    if (RiscvFdtReadU32(&Ans->Tree.Fdt, Node, "apple,sart", &Phandle))
+    if (FdtReadU32(&Ans->Tree.Fdt, Node, "apple,sart", &Phandle))
         Ans->Sart = FdtDriverMapReg(&Ans->Tree, FdtDriverFindPhandle(&Ans->Tree, Phandle), 0, NULL, &Ans->SartSize);
     if (!Ans->Coproc || !Ans->Mailbox || !Ans->Sart)
     {

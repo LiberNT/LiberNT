@@ -811,8 +811,8 @@ BcmBtEvtDeviceAdd(
 
     Dev = BcmBtGetDevice(Device);
     Dev->Device = Device;
-    Dev->DartNode = RISCV_FDT_NO_NODE;
-    Dev->Tree.Node = RISCV_FDT_NO_NODE;
+    Dev->DartNode = FDT_NO_NODE;
+    Dev->Tree.Node = FDT_NO_NODE;
     KeInitializeSpinLock(&Dev->RingLock);
     KeInitializeSpinLock(&Dev->PacketLock);
     InitializeListHead(&Dev->RxPackets);

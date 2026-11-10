@@ -49,33 +49,33 @@ AppleNcoOpen(
     _Out_ PAPPLE_NCO Nco)
 {
     const VOID *Clocks, *Compatible;
-    ULONG Length, Entry, Cell = 0, Provider = RISCV_FDT_NO_NODE, Cells = 0, Parent, Size, Channel;
+    ULONG Length, Entry, Cell = 0, Provider = FDT_NO_NODE, Cells = 0, Parent, Size, Channel;
     ULONG64 Value, Base, RegSize;
     PHYSICAL_ADDRESS Physical;
 
     RtlZeroMemory(Nco, sizeof(*Nco));
-    Clocks = RiscvFdtGetProperty(&Tree->Fdt, Node, "clocks", &Length);
-    for (Entry = 0; Clocks && RiscvFdtReadCells(Clocks, Length, Cell, 1, &Value); ++Entry)
+    Clocks = FdtGetProperty(&Tree->Fdt, Node, "clocks", &Length);
+    for (Entry = 0; Clocks && FdtReadCells(Clocks, Length, Cell, 1, &Value); ++Entry)
     {
         Provider = FdtDriverFindPhandle(Tree, (ULONG)Value);
-        if (Provider == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Tree->Fdt, Provider, "#clock-cells", &Cells))
+        if (Provider == FDT_NO_NODE || !FdtReadU32(&Tree->Fdt, Provider, "#clock-cells", &Cells))
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         if (Entry == Index)
             break;
         Cell += 1 + Cells;
     }
-    if (!Clocks || Entry != Index || Provider == RISCV_FDT_NO_NODE || Cells != 1 ||
-        !RiscvFdtReadCells(Clocks, Length, Cell + 1, 1, &Value))
+    if (!Clocks || Entry != Index || Provider == FDT_NO_NODE || Cells != 1 ||
+        !FdtReadCells(Clocks, Length, Cell + 1, 1, &Value))
         return STATUS_NOT_FOUND;
     Channel = (ULONG)Value;
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Provider, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8103-nco") &&
-        !RiscvFdtStringListContains(Compatible, Length, "apple,nco"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Provider, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,t8103-nco") &&
+        !FdtStringListContains(Compatible, Length, "apple,nco"))
         return STATUS_NOT_SUPPORTED;
-    Clocks = RiscvFdtGetProperty(&Tree->Fdt, Provider, "clocks", &Length);
-    if (!Clocks || !RiscvFdtReadCells(Clocks, Length, 0, 1, &Value) ||
-        (Parent = FdtDriverFindPhandle(Tree, (ULONG)Value)) == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadU32(&Tree->Fdt, Parent, "clock-frequency", &Nco->ParentRate) || !Nco->ParentRate ||
+    Clocks = FdtGetProperty(&Tree->Fdt, Provider, "clocks", &Length);
+    if (!Clocks || !FdtReadCells(Clocks, Length, 0, 1, &Value) ||
+        (Parent = FdtDriverFindPhandle(Tree, (ULONG)Value)) == FDT_NO_NODE ||
+        !FdtReadU32(&Tree->Fdt, Parent, "clock-frequency", &Nco->ParentRate) || !Nco->ParentRate ||
         !FdtDriverReadReg(Tree, Provider, 0, &Base, &RegSize) ||
         RegSize < NCO_CHANNEL_SPAN || Channel > (RegSize - NCO_CHANNEL_SPAN) / NCO_CHANNEL_STRIDE)
         return STATUS_DEVICE_CONFIGURATION_ERROR;

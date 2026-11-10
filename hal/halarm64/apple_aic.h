@@ -17,7 +17,7 @@ AppleAicInterruptProbe(
 
 VOID
 AppleWdtProbe(
-    _In_ PRISCV_FDT Fdt);
+    _In_ PFDT Fdt);
 
 VOID
 AppleWdtPhase1MapRuntimeMmio(VOID);

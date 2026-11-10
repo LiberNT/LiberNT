@@ -253,8 +253,8 @@ PmpStart(
     if (!NT_SUCCESS(Status))
         return Status;
     Pmp->TreeOpen = TRUE;
-    if (!RiscvFdtReadU32(&Pmp->Tree.Fdt, Pmp->Tree.Node, "mboxes", &MailboxPhandle) ||
-        (MailboxNode = FdtDriverFindPhandle(&Pmp->Tree, MailboxPhandle)) == RISCV_FDT_NO_NODE)
+    if (!FdtReadU32(&Pmp->Tree.Fdt, Pmp->Tree.Node, "mboxes", &MailboxPhandle) ||
+        (MailboxNode = FdtDriverFindPhandle(&Pmp->Tree, MailboxPhandle)) == FDT_NO_NODE)
     {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }

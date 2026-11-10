@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -169,45 +169,45 @@ KiRiscvParseIsaString(
 static
 BOOLEAN
 KiRiscvReadCellValue(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_z_ const CHAR *Name,
     _Out_ PULONG64 Value)
 {
     ULONG Length;
-    const VOID *Property = RiscvFdtGetProperty(Fdt, Node, Name, &Length);
+    const VOID *Property = FdtGetProperty(Fdt, Node, Name, &Length);
 
     *Value = 0;
     if ((Property == NULL) || ((Length != 4) && (Length != 8)))
         return FALSE;
-    return RiscvFdtReadCells(Property, Length, 0, Length / 4, Value);
+    return FdtReadCells(Property, Length, 0, Length / 4, Value);
 }
 
 static
 ULONG
 KiRiscvFindBootHartNode(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Cpus,
     _In_ ULONG64 HartId)
 {
     ULONG Child;
 
-    for (Child = RiscvFdtFirstChild(Fdt, Cpus);
-         Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Cpus);
+         Child != FDT_NO_NODE;
+         Child = FdtNextSibling(Fdt, Child))
     {
         ULONG NameLength;
-        const CHAR *Name = RiscvFdtNodeName(Fdt, Child, &NameLength);
+        const CHAR *Name = FdtNodeName(Fdt, Child, &NameLength);
         ULONGLONG Address, Size;
 
-        if ((Name == NULL) || !RiscvFdtNameMatches(Name, NameLength, "cpu", 3))
+        if ((Name == NULL) || !FdtNameMatches(Name, NameLength, "cpu", 3))
             continue;
-        if (!RiscvFdtReadReg(Fdt, Child, Cpus, 0, &Address, &Size))
+        if (!FdtReadReg(Fdt, Child, Cpus, 0, &Address, &Size))
             continue;
         if (Address == HartId)
             return Child;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 VOID
@@ -217,7 +217,7 @@ KiRiscvIdentifyProcessor(
 {
     PRISCV64_LOADER_BLOCK RiscvBlock = &LoaderBlock->u.Riscv64;
     PKI_RISCV_PROCESSOR_FEATURES Features = &KiRiscvProcessorFeatures;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Cpus, Cpu, Length, Cursor, EntryLength;
     const VOID *Property;
     const CHAR *Entry;
@@ -247,10 +247,10 @@ KiRiscvIdentifyProcessor(
         Features->MachineImplId = Result.Value;
 
     if (!(RiscvBlock->Flags & RISCV64_LOADER_FLAG_DEVICE_TREE_VALID) ||
-        !RiscvFdtOpen((const VOID *)(ULONG_PTR)RiscvBlock->DeviceTree,
+        !FdtOpen((const VOID *)(ULONG_PTR)RiscvBlock->DeviceTree,
                       (SIZE_T)RiscvBlock->DeviceTreeSize,
                       &Fdt) ||
-        !RiscvFdtFindNode(&Fdt, "/cpus", &Cpus, NULL))
+        !FdtFindNode(&Fdt, "/cpus", &Cpus, NULL))
     {
         return;
     }
@@ -259,12 +259,12 @@ KiRiscvIdentifyProcessor(
         Features->TimebaseFrequency = Value;
 
     Cpu = KiRiscvFindBootHartNode(&Fdt, Cpus, RiscvBlock->BootHartId);
-    if (Cpu == RISCV_FDT_NO_NODE)
+    if (Cpu == FDT_NO_NODE)
         return;
 
-    Property = RiscvFdtGetProperty(&Fdt, Cpu, "compatible", &Length);
+    Property = FdtGetProperty(&Fdt, Cpu, "compatible", &Length);
     Cursor = 0;
-    while ((Entry = RiscvFdtNextString(Property, Length, &Cursor, &EntryLength)) != NULL)
+    while ((Entry = FdtNextString(Property, Length, &Cursor, &EntryLength)) != NULL)
     {
         if (EntryLength != 0 && strncmp(Entry, "riscv", EntryLength + 1))
         {
@@ -272,23 +272,23 @@ KiRiscvIdentifyProcessor(
             break;
         }
     }
-    Property = RiscvFdtGetProperty(&Fdt, Cpu, "riscv,isa-base", &Length);
+    Property = FdtGetProperty(&Fdt, Cpu, "riscv,isa-base", &Length);
     if (Property != NULL)
         KiRiscvCopyBoundedString(Features->IsaBase, sizeof(Features->IsaBase), Property, Length);
-    Property = RiscvFdtGetProperty(&Fdt, Cpu, "mmu-type", &Length);
+    Property = FdtGetProperty(&Fdt, Cpu, "mmu-type", &Length);
     if (Property != NULL)
         KiRiscvCopyBoundedString(Features->MmuType, sizeof(Features->MmuType), Property, Length);
 
-    Property = RiscvFdtGetProperty(&Fdt, Cpu, "riscv,isa-extensions", &Length);
+    Property = FdtGetProperty(&Fdt, Cpu, "riscv,isa-extensions", &Length);
     if (Property != NULL)
     {
         Cursor = 0;
-        while ((Entry = RiscvFdtNextString(Property, Length, &Cursor, &EntryLength)) != NULL)
+        while ((Entry = FdtNextString(Property, Length, &Cursor, &EntryLength)) != NULL)
             KiRiscvAddExtension(Features, Entry, EntryLength);
     }
     else
     {
-        Property = RiscvFdtGetProperty(&Fdt, Cpu, "riscv,isa", &Length);
+        Property = FdtGetProperty(&Fdt, Cpu, "riscv,isa", &Length);
         if (Property != NULL)
             KiRiscvParseIsaString(Features, Property, Length);
     }

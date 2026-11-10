@@ -187,14 +187,14 @@ AppleAudioFindLinkChild(
     ULONG Child, Length;
     const CHAR *ChildName;
 
-    for (Child = RiscvFdtFirstChild(&Tree->Fdt, Link); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(&Tree->Fdt, Child))
+    for (Child = FdtFirstChild(&Tree->Fdt, Link); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&Tree->Fdt, Child))
     {
-        ChildName = RiscvFdtNodeName(&Tree->Fdt, Child, &Length);
-        if (ChildName && RiscvFdtNameMatches(ChildName, Length, Name, (ULONG)strlen(Name)))
+        ChildName = FdtNodeName(&Tree->Fdt, Child, &Length);
+        if (ChildName && FdtNameMatches(ChildName, Length, Name, (ULONG)strlen(Name)))
             return Child;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
@@ -215,54 +215,54 @@ AppleAudioFindNodes(
     ULONG Link, Child, Length, NamesLength, Cursor = 0, EntryLength, Index, DmaCells;
     ULONG64 Value;
 
-    for (Link = RiscvFdtFirstChild(&Tree->Fdt, Tree->Node); Link != RISCV_FDT_NO_NODE;
-         Link = RiscvFdtNextSibling(&Tree->Fdt, Link))
+    for (Link = FdtFirstChild(&Tree->Fdt, Tree->Node); Link != FDT_NO_NODE;
+         Link = FdtNextSibling(&Tree->Fdt, Link))
     {
-        Name = RiscvFdtGetProperty(&Tree->Fdt, Link, "link-name", &Length);
+        Name = FdtGetProperty(&Tree->Fdt, Link, "link-name", &Length);
         if (Name && Length == sizeof(APPLE_AUDIO_LINK_NAME) && !memcmp(Name, APPLE_AUDIO_LINK_NAME, Length))
             break;
     }
-    if (Link == RISCV_FDT_NO_NODE)
+    if (Link == FDT_NO_NODE)
         return STATUS_NOT_FOUND;
 
-    if ((Child = AppleAudioFindLinkChild(Tree, Link, "cpu")) == RISCV_FDT_NO_NODE ||
-        (Dai = RiscvFdtGetProperty(&Tree->Fdt, Child, "sound-dai", &Length)) == NULL ||
-        Length != 2 * sizeof(ULONG) || !RiscvFdtReadCells(Dai, Length, 0, 1, &Value) ||
-        (*McaNode = FdtDriverFindPhandle(Tree, (ULONG)Value)) == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadCells(Dai, Length, 1, 1, &Value))
+    if ((Child = AppleAudioFindLinkChild(Tree, Link, "cpu")) == FDT_NO_NODE ||
+        (Dai = FdtGetProperty(&Tree->Fdt, Child, "sound-dai", &Length)) == NULL ||
+        Length != 2 * sizeof(ULONG) || !FdtReadCells(Dai, Length, 0, 1, &Value) ||
+        (*McaNode = FdtDriverFindPhandle(Tree, (ULONG)Value)) == FDT_NO_NODE ||
+        !FdtReadCells(Dai, Length, 1, 1, &Value))
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     *Port = (ULONG)Value;
-    if ((Child = AppleAudioFindLinkChild(Tree, Link, "codec")) == RISCV_FDT_NO_NODE ||
-        (Dai = RiscvFdtGetProperty(&Tree->Fdt, Child, "sound-dai", &Length)) == NULL ||
-        Length != sizeof(ULONG) || !RiscvFdtReadCells(Dai, Length, 0, 1, &Value) ||
-        (*CodecNode = FdtDriverFindPhandle(Tree, (ULONG)Value)) == RISCV_FDT_NO_NODE)
+    if ((Child = AppleAudioFindLinkChild(Tree, Link, "codec")) == FDT_NO_NODE ||
+        (Dai = FdtGetProperty(&Tree->Fdt, Child, "sound-dai", &Length)) == NULL ||
+        Length != sizeof(ULONG) || !FdtReadCells(Dai, Length, 0, 1, &Value) ||
+        (*CodecNode = FdtDriverFindPhandle(Tree, (ULONG)Value)) == FDT_NO_NODE)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
-    Names = RiscvFdtGetProperty(&Tree->Fdt, *McaNode, "dma-names", &NamesLength);
-    Dmas = RiscvFdtGetProperty(&Tree->Fdt, *McaNode, "dmas", &Length);
-    for (Index = 0; Names && (Name = RiscvFdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
+    Names = FdtGetProperty(&Tree->Fdt, *McaNode, "dma-names", &NamesLength);
+    Dmas = FdtGetProperty(&Tree->Fdt, *McaNode, "dmas", &Length);
+    for (Index = 0; Names && (Name = FdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
     {
         if (EntryLength == strlen(Wanted) && !memcmp(Name, Wanted, EntryLength))
             break;
     }
-    if (!Names || !Name || !Dmas || !RiscvFdtReadCells(Dmas, Length, 2 * Index, 1, &Value) ||
-        (*AdmacNode = FdtDriverFindPhandle(Tree, (ULONG)Value)) == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadU32(&Tree->Fdt, *AdmacNode, "#dma-cells", &DmaCells) || DmaCells != 1 ||
-        !RiscvFdtReadCells(Dmas, Length, 2 * Index + 1, 1, &Value))
+    if (!Names || !Name || !Dmas || !FdtReadCells(Dmas, Length, 2 * Index, 1, &Value) ||
+        (*AdmacNode = FdtDriverFindPhandle(Tree, (ULONG)Value)) == FDT_NO_NODE ||
+        !FdtReadU32(&Tree->Fdt, *AdmacNode, "#dma-cells", &DmaCells) || DmaCells != 1 ||
+        !FdtReadCells(Dmas, Length, 2 * Index + 1, 1, &Value))
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     *DmaChannel = (ULONG)Value;
     if (!CaptureChannel)
         return STATUS_SUCCESS;
     *CaptureChannel = MAXULONG;
     Cursor = 0;
-    for (Index = 0; (Name = RiscvFdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
+    for (Index = 0; (Name = FdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
     {
         if (EntryLength == strlen(Capture) && !memcmp(Name, Capture, EntryLength))
             break;
     }
-    if (Name && RiscvFdtReadCells(Dmas, Length, 2 * Index, 1, &Value) &&
+    if (Name && FdtReadCells(Dmas, Length, 2 * Index, 1, &Value) &&
         FdtDriverFindPhandle(Tree, (ULONG)Value) == *AdmacNode &&
-        RiscvFdtReadCells(Dmas, Length, 2 * Index + 1, 1, &Value))
+        FdtReadCells(Dmas, Length, 2 * Index + 1, 1, &Value))
         *CaptureChannel = (ULONG)Value;
     return STATUS_SUCCESS;
 }
@@ -467,9 +467,9 @@ AppleAudioHwOpen(
     if (!NT_SUCCESS(Status))
         goto Fail;
 
-    Iommus = RiscvFdtGetProperty(&Hw->Tree.Fdt, Hw->AdmacNode, "iommus", &Length);
-    if (Iommus && RiscvFdtReadCells(Iommus, Length, 0, 1, &Value) &&
-        (Dart = FdtDriverFindPhandle(&Hw->Tree, (ULONG)Value)) != RISCV_FDT_NO_NODE)
+    Iommus = FdtGetProperty(&Hw->Tree.Fdt, Hw->AdmacNode, "iommus", &Length);
+    if (Iommus && FdtReadCells(Iommus, Length, 0, 1, &Value) &&
+        (Dart = FdtDriverFindPhandle(&Hw->Tree, (ULONG)Value)) != FDT_NO_NODE)
     {
         Status = ApplePmgrPowerOnDevice(&Hw->Tree, Dart);
         if (!NT_SUCCESS(Status))
@@ -503,8 +503,8 @@ AppleAudioHwOpen(
     if (Hw->DmaChannel[APPLE_AUDIO_CAPTURE] >= Hw->Admac.ChannelCount || !(Hw->DmaChannel[APPLE_AUDIO_CAPTURE] & 1))
         Hw->DmaChannel[APPLE_AUDIO_CAPTURE] = MAXULONG;
 
-    if ((I2cNode = FdtDriverFindParentNode(&Hw->Tree, Hw->CodecNode)) == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadU32(&Hw->Tree.Fdt, Hw->CodecNode, "reg", &Address) || Address > 0x7f)
+    if ((I2cNode = FdtDriverFindParentNode(&Hw->Tree, Hw->CodecNode)) == FDT_NO_NODE ||
+        !FdtReadU32(&Hw->Tree.Fdt, Hw->CodecNode, "reg", &Address) || Address > 0x7f)
     {
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
         goto Fail;

@@ -6,7 +6,7 @@
  */
 
 #include <ntifs.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include "halp.h"
 
 #define RISCV_PCI_MAX_RANGES 8
@@ -78,7 +78,7 @@ HalpRiscvRangesOverlap(ULONG64 Base1, ULONG64 Size1, ULONG64 Base2, ULONG64 Size
 }
 
 static BOOLEAN
-HalpRiscvFdtRegByName(const RISCV_FDT *Fdt, ULONG Node, ULONG Parent, const CHAR *Name,
+HalpRiscvFdtRegByName(const FDT *Fdt, ULONG Node, ULONG Parent, const CHAR *Name,
                       PULONG64 Address, PULONG64 Size)
 {
     const VOID *Names;
@@ -86,40 +86,40 @@ HalpRiscvFdtRegByName(const RISCV_FDT *Fdt, ULONG Node, ULONG Parent, const CHAR
     ULONG Length, Cursor = 0, EntryLength, Index = 0;
     SIZE_T NameLength = strlen(Name);
 
-    Names = RiscvFdtGetProperty(Fdt, Node, "reg-names", &Length);
-    while ((Entry = RiscvFdtNextString(Names, Length, &Cursor, &EntryLength)) != NULL)
+    Names = FdtGetProperty(Fdt, Node, "reg-names", &Length);
+    while ((Entry = FdtNextString(Names, Length, &Cursor, &EntryLength)) != NULL)
     {
         if (EntryLength == NameLength && RtlEqualMemory(Entry, Name, NameLength))
-            return RiscvFdtReadReg(Fdt, Node, Parent, Index, Address, Size);
+            return FdtReadReg(Fdt, Node, Parent, Index, Address, Size);
         ++Index;
     }
     return FALSE;
 }
 
 static BOOLEAN
-HalpRiscvPldaInitialize(const RISCV_FDT *Fdt, ULONG Soc, ULONG Node, RISCV_PCI_HOST *Host, PULONG IntcPhandle)
+HalpRiscvPldaInitialize(const FDT *Fdt, ULONG Soc, ULONG Node, RISCV_PCI_HOST *Host, PULONG IntcPhandle)
 {
     const VOID *Property;
     ULONG Length, Parent, Child;
     ULONG64 BridgeSize;
 
-    Host->DmaCoherent = !RiscvFdtGetProperty(Fdt, Node, "dma-noncoherent", &Length) &&
-                        !RiscvFdtGetProperty(Fdt, Soc, "dma-noncoherent", &Length);
+    Host->DmaCoherent = !FdtGetProperty(Fdt, Node, "dma-noncoherent", &Length) &&
+                        !FdtGetProperty(Fdt, Soc, "dma-noncoherent", &Length);
 
-    Property = RiscvFdtGetProperty(Fdt, Node, "interrupts", &Length);
+    Property = FdtGetProperty(Fdt, Node, "interrupts", &Length);
     if (!Property || Length != sizeof(ULONG) ||
-        (!RiscvFdtReadU32(Fdt, Node, "interrupt-parent", &Parent) &&
-         !RiscvFdtReadU32(Fdt, Soc, "interrupt-parent", &Parent)))
+        (!FdtReadU32(Fdt, Node, "interrupt-parent", &Parent) &&
+         !FdtReadU32(Fdt, Soc, "interrupt-parent", &Parent)))
         return FALSE;
-    Host->IntxSource = RiscvFdtReadBigEndian32(Property);
+    Host->IntxSource = FdtReadBigEndian32(Property);
     if (!HalpRiscvPlicHasSource(Parent, Host->IntxSource))
         return FALSE;
 
     *IntcPhandle = 0;
-    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE; Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node); Child != FDT_NO_NODE; Child = FdtNextSibling(Fdt, Child))
     {
-        if (RiscvFdtGetProperty(Fdt, Child, "interrupt-controller", &Length) &&
-            RiscvFdtReadU32(Fdt, Child, "phandle", IntcPhandle))
+        if (FdtGetProperty(Fdt, Child, "interrupt-controller", &Length) &&
+            FdtReadU32(Fdt, Child, "phandle", IntcPhandle))
             break;
     }
     if (!*IntcPhandle)
@@ -136,39 +136,39 @@ HalpRiscvPldaInitialize(const RISCV_FDT *Fdt, ULONG Soc, ULONG Node, RISCV_PCI_H
 BOOLEAN
 HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Root, Soc, Parent, Node, Length, Value, Index, Other, Entry, Phandle, Source, IntcPhandle = 0;
     const VOID *Property;
     RISCV_PCI_HOST *Host = &HalpRiscvPciHost;
     BOOLEAN Virt, Plda;
 
-    if (!RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
+    if (!FdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
         return FALSE;
-    Root = RiscvFdtRootNode(&Fdt);
-    Property = RiscvFdtGetProperty(&Fdt, Root, "compatible", &Length);
-    Virt = RiscvFdtStringListContains(Property, Length, "riscv-virtio");
-    if (!Virt && !RiscvFdtStringListContains(Property, Length, "starfive,jh7110"))
+    Root = FdtRootNode(&Fdt);
+    Property = FdtGetProperty(&Fdt, Root, "compatible", &Length);
+    Virt = FdtStringListContains(Property, Length, "riscv-virtio");
+    if (!Virt && !FdtStringListContains(Property, Length, "starfive,jh7110"))
         return TRUE;
 
     /* This PMA contract is for QEMU virt, not all generic ECAM hardware.
      * Its /soc has an identity translation to the CPU physical address space. */
-    if (!RiscvFdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
+    if (!FdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
         return FALSE;
-    Property = RiscvFdtGetProperty(&Fdt, Soc, "ranges", &Length);
+    Property = FdtGetProperty(&Fdt, Soc, "ranges", &Length);
     if (!Property || Length ||
-        !RiscvFdtReadU32(&Fdt, Soc, "#address-cells", &Value) || Value != 2 ||
-        !RiscvFdtReadU32(&Fdt, Soc, "#size-cells", &Value) || Value != 2)
+        !FdtReadU32(&Fdt, Soc, "#address-cells", &Value) || Value != 2 ||
+        !FdtReadU32(&Fdt, Soc, "#size-cells", &Value) || Value != 2)
         return FALSE;
 
-    for (Node = RiscvFdtFirstChild(&Fdt, Soc); Node != RISCV_FDT_NO_NODE; Node = RiscvFdtNextSibling(&Fdt, Node))
+    for (Node = FdtFirstChild(&Fdt, Soc); Node != FDT_NO_NODE; Node = FdtNextSibling(&Fdt, Node))
     {
-        Property = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
-        Plda = !Virt && RiscvFdtStringListContains(Property, Length, "starfive,jh7110-pcie");
-        if (!Plda && !(Virt && RiscvFdtStringListContains(Property, Length, "pci-host-ecam-generic")))
+        Property = FdtGetProperty(&Fdt, Node, "compatible", &Length);
+        Plda = !Virt && FdtStringListContains(Property, Length, "starfive,jh7110-pcie");
+        if (!Plda && !(Virt && FdtStringListContains(Property, Length, "pci-host-ecam-generic")))
             continue;
-        Property = RiscvFdtGetProperty(&Fdt, Node, "status", &Length);
-        if (Property && !RiscvFdtStringListContains(Property, Length, "okay") &&
-            !RiscvFdtStringListContains(Property, Length, "ok"))
+        Property = FdtGetProperty(&Fdt, Node, "status", &Length);
+        if (Property && !FdtStringListContains(Property, Length, "okay") &&
+            !FdtStringListContains(Property, Length, "ok"))
             continue;
         if (HalpRiscvPciHostPresent)
         {
@@ -180,24 +180,24 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
 
         /* QEMU virt marks this host coherent. A different board may still
          * enumerate PCI, but our direct DMA adapter must reject it. */
-        Property = RiscvFdtGetProperty(&Fdt, Node, "dma-coherent", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "dma-coherent", &Length);
         if (Property && Length != 0)
             return FALSE;
         Host->DmaCoherent = (Property != NULL);
         if (Plda && !HalpRiscvPldaInitialize(&Fdt, Soc, Node, Host, &IntcPhandle))
             return FALSE;
 
-        if (!RiscvFdtReadU32(&Fdt, Node, "#address-cells", &Value) || Value != 3 ||
-            !RiscvFdtReadU32(&Fdt, Node, "#size-cells", &Value) || Value != 2 ||
-            !RiscvFdtReadU32(&Fdt, Node, "#interrupt-cells", &Value) || Value != 1)
+        if (!FdtReadU32(&Fdt, Node, "#address-cells", &Value) || Value != 3 ||
+            !FdtReadU32(&Fdt, Node, "#size-cells", &Value) || Value != 2 ||
+            !FdtReadU32(&Fdt, Node, "#interrupt-cells", &Value) || Value != 1)
             return FALSE;
 
-        Property = RiscvFdtGetProperty(&Fdt, Node, "interrupt-map-mask", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "interrupt-map-mask", &Length);
         if (!Property || Length != 4 * sizeof(ULONG))
             return FALSE;
         for (Index = 0; Index < 4; ++Index)
-            Host->InterruptMask[Index] = RiscvFdtReadBigEndian32((const UCHAR *)Property + Index * sizeof(ULONG));
-        Property = RiscvFdtGetProperty(&Fdt, Node, "interrupt-map", &Length);
+            Host->InterruptMask[Index] = FdtReadBigEndian32((const UCHAR *)Property + Index * sizeof(ULONG));
+        Property = FdtGetProperty(&Fdt, Node, "interrupt-map", &Length);
         if (!Property || !Length || Length % (6 * sizeof(ULONG)) ||
             Length / (6 * sizeof(ULONG)) > RISCV_PCI_MAX_INTX_ROUTES)
             return FALSE;
@@ -208,10 +208,10 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
             const UCHAR *Cells = (const UCHAR *)Property + Entry * 6 * sizeof(ULONG);
 
             for (Index = 0; Index < 3; ++Index)
-                Route->Address[Index] = RiscvFdtReadBigEndian32(Cells + Index * sizeof(ULONG));
-            Route->Pin = RiscvFdtReadBigEndian32(Cells + 3 * sizeof(ULONG));
-            Phandle = RiscvFdtReadBigEndian32(Cells + 4 * sizeof(ULONG));
-            Source = RiscvFdtReadBigEndian32(Cells + 5 * sizeof(ULONG));
+                Route->Address[Index] = FdtReadBigEndian32(Cells + Index * sizeof(ULONG));
+            Route->Pin = FdtReadBigEndian32(Cells + 3 * sizeof(ULONG));
+            Phandle = FdtReadBigEndian32(Cells + 4 * sizeof(ULONG));
+            Source = FdtReadBigEndian32(Cells + 5 * sizeof(ULONG));
             if (Route->Pin < 1 || Route->Pin > 4)
                 return FALSE;
             if (Plda)
@@ -228,10 +228,10 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
         }
         if (!Plda)
         {
-            Property = RiscvFdtGetProperty(&Fdt, Node, "reg", &Length);
+            Property = FdtGetProperty(&Fdt, Node, "reg", &Length);
             if (!Property || Length != 4 * sizeof(ULONG) ||
-                !RiscvFdtReadCells(Property, Length, 0, 2, &Host->ConfigAddress) ||
-                !RiscvFdtReadCells(Property, Length, 2, 2, &Host->ConfigSize) ||
+                !FdtReadCells(Property, Length, 0, 2, &Host->ConfigAddress) ||
+                !FdtReadCells(Property, Length, 2, 2, &Host->ConfigSize) ||
                 !HalpRiscvDeviceRangeValid(Host->ConfigAddress, Host->ConfigSize) ||
                 (Host->ConfigAddress & (RISCV_PCI_BUS_SIZE - 1)))
                 return FALSE;
@@ -239,13 +239,13 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
 
         Host->FirstBus = 0;
         Host->LastBus = 255;
-        Property = RiscvFdtGetProperty(&Fdt, Node, "bus-range", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "bus-range", &Length);
         if (Property)
         {
             if (Length != 2 * sizeof(ULONG))
                 return FALSE;
-            Host->FirstBus = RiscvFdtReadBigEndian32(Property);
-            Host->LastBus = RiscvFdtReadBigEndian32((const UCHAR *)Property + sizeof(ULONG));
+            Host->FirstBus = FdtReadBigEndian32(Property);
+            Host->LastBus = FdtReadBigEndian32((const UCHAR *)Property + sizeof(ULONG));
         }
         if (Plda && Host->FirstBus <= Host->LastBus &&
             Host->ConfigSize / RISCV_PCI_BUS_SIZE < (ULONG64)Host->LastBus - Host->FirstBus + 1)
@@ -256,17 +256,17 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
         /* Only map the buses the firmware assigned, not unused reg padding. */
         Host->ConfigSize = (ULONG64)(Host->LastBus - Host->FirstBus + 1) * RISCV_PCI_BUS_SIZE;
 
-        Property = RiscvFdtGetProperty(&Fdt, Node, "linux,pci-domain", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "linux,pci-domain", &Length);
         if (Property)
         {
             if (Length != sizeof(ULONG))
                 return FALSE;
-            Host->Segment = RiscvFdtReadBigEndian32(Property);
+            Host->Segment = FdtReadBigEndian32(Property);
             if (Host->Segment > MAXUSHORT)
                 return FALSE;
         }
 
-        Property = RiscvFdtGetProperty(&Fdt, Node, "ranges", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "ranges", &Length);
         if (!Property || !Length || Length % (7 * sizeof(ULONG)) ||
             Length / (7 * sizeof(ULONG)) > RISCV_PCI_MAX_RANGES)
             return FALSE;
@@ -274,13 +274,13 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
         for (Index = 0; Index < Host->RangeCount; ++Index)
         {
             RISCV_PCI_RANGE *Range = &Host->Ranges[Index];
-            ULONG Flags = RiscvFdtReadBigEndian32((const UCHAR *)Property + Index * 7 * sizeof(ULONG));
+            ULONG Flags = FdtReadBigEndian32((const UCHAR *)Property + Index * 7 * sizeof(ULONG));
             ULONG Space = (Flags >> 24) & 3;
 
             if ((Flags & ~0xC3000000UL) || Space == 0 ||
-                !RiscvFdtReadCells(Property, Length, Index * 7 + 1, 2, &Range->BusAddress) ||
-                !RiscvFdtReadCells(Property, Length, Index * 7 + 3, 2, &Range->PhysicalAddress) ||
-                !RiscvFdtReadCells(Property, Length, Index * 7 + 5, 2, &Range->Size) ||
+                !FdtReadCells(Property, Length, Index * 7 + 1, 2, &Range->BusAddress) ||
+                !FdtReadCells(Property, Length, Index * 7 + 3, 2, &Range->PhysicalAddress) ||
+                !FdtReadCells(Property, Length, Index * 7 + 5, 2, &Range->Size) ||
                 !HalpRiscvDeviceRangeValid(Range->PhysicalAddress, Range->Size) ||
                 Range->Size - 1 > MAXULONGLONG - Range->BusAddress ||
                 (Space != 3 && (Range->BusAddress > MAXULONG || Range->Size - 1 > MAXULONG - Range->BusAddress)) ||

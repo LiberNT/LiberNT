@@ -10,7 +10,7 @@
 #define WIN32_NO_STATUS
 #include <ndk/ntndk.h>
 #include <winreg.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include <reactos/drivers/applepmp.h>
 
 #define UNIT_TEST
@@ -1221,27 +1221,27 @@ ResetSimulation(PFDT_DRIVER_TREE Tree)
     BuildSocTree();
     memset(Tree, 0, sizeof(*Tree));
     Tree->Blob = Builder.Blob;
-    ok(RiscvFdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The test tree did not open\n");
+    ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The test tree did not open\n");
 }
 
 static
 ULONG
 FindNode(PFDT_DRIVER_TREE Tree, const CHAR *Compatible)
 {
-    ULONG Node = RiscvFdtRootNode(&Tree->Fdt), Length;
+    ULONG Node = FdtRootNode(&Tree->Fdt), Length;
     const VOID *Property;
 
-    while (Node != RISCV_FDT_NO_NODE)
+    while (Node != FDT_NO_NODE)
     {
-        if (RiscvFdtToken(&Tree->Fdt, Node) == RISCV_FDT_BEGIN_NODE)
+        if (FdtReadToken(&Tree->Fdt, Node) == FDT_BEGIN_NODE)
         {
-            Property = RiscvFdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
-            if (RiscvFdtStringListContains(Property, Length, Compatible))
+            Property = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
+            if (FdtStringListContains(Property, Length, Compatible))
                 return Node;
         }
-        Node = RiscvFdtSkipToken(&Tree->Fdt, Node);
+        Node = FdtSkipToken(&Tree->Fdt, Node);
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 #define PMGR(Offset) SimRegions[0].Data[(Offset) / sizeof(ULONG)]
@@ -2846,7 +2846,7 @@ HalArm64TranslateDeviceTreeInterrupt(
     PBOOLEAN EdgeTriggered)
 {
     SimTranslateCalls++;
-    if (!RiscvFdtStringListContains(Compatible, CompatibleLength, "apple,t8122-aic3") || CellCount != 3 || Cells[0])
+    if (!FdtStringListContains(Compatible, CompatibleLength, "apple,t8122-aic3") || CellCount != 3 || Cells[0])
         return FALSE;
     *Gsi = 32 + Cells[1];
     *EdgeTriggered = (Cells[2] & 3) != 0;
@@ -2992,7 +2992,7 @@ ResetAudioSimulation(PFDT_DRIVER_TREE Tree, ULONG I2cFrequency)
        "The audio tree overflowed the builder (%lu, %lu)\n", Builder.StructureSize, Builder.StringsSize);
     memset(Tree, 0, sizeof(*Tree));
     Tree->Blob = Builder.Blob;
-    ok(RiscvFdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The audio tree did not open\n");
+    ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The audio tree did not open\n");
 }
 
 #define I2C(Offset) SimRegions[SIM_I2C_INDEX].Data[(Offset) / sizeof(ULONG)]
@@ -3008,14 +3008,14 @@ FindChildNode(PFDT_DRIVER_TREE Tree, ULONG Parent, const CHAR *Name)
     ULONG Child, Length;
     const CHAR *ChildName;
 
-    for (Child = RiscvFdtFirstChild(&Tree->Fdt, Parent); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(&Tree->Fdt, Child))
+    for (Child = FdtFirstChild(&Tree->Fdt, Parent); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&Tree->Fdt, Child))
     {
-        ChildName = RiscvFdtNodeName(&Tree->Fdt, Child, &Length);
-        if (ChildName && RiscvFdtNameMatches(ChildName, Length, Name, (ULONG)strlen(Name)))
+        ChildName = FdtNodeName(&Tree->Fdt, Child, &Length);
+        if (ChildName && FdtNameMatches(ChildName, Length, Name, (ULONG)strlen(Name)))
             return Child;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
@@ -3030,7 +3030,7 @@ TestGpio(VOID)
     ResetAudioSimulation(&Tree, 0);
     I2c = FindNode(&Tree, "apple,t8103-i2c");
     Codec = FindChildNode(&Tree, I2c, "codec");
-    ok(Codec != RISCV_FDT_NO_NODE, "No codec node\n");
+    ok(Codec != FDT_NO_NODE, "No codec node\n");
 
     PINCTRL(4 * 0x2b) = 0x00000180;
     PINCTRL(4 * 0x2a) = 0x0000000f;

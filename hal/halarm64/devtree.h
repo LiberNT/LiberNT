@@ -7,16 +7,16 @@
 
 #pragma once
 
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 BOOLEAN
 HalpArm64OpenDeviceTree(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock,
-    _Out_ PRISCV_FDT Fdt);
+    _Out_ PFDT Fdt);
 
 BOOLEAN
 HalpArm64FindDeviceTreeNode(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_reads_(Count) const PCSTR *Compatibles,
     _In_ ULONG Count,
     _Out_ PULONG Node,
@@ -25,7 +25,7 @@ HalpArm64FindDeviceTreeNode(
 
 ULONG
 HalpArm64FindDeviceTreePhandle(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG Phandle);
 
 VOID

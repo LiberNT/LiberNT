@@ -94,7 +94,7 @@ HalpArm64DiscoverGicFromDeviceTree(
         "arm,pl390",
     };
     static const UCHAR Versions[] = { 3, 2, 2, 2, 1, 1 };
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONGLONG Address;
     ULONGLONG Size;
     ULONG Node;
@@ -105,7 +105,7 @@ HalpArm64DiscoverGicFromDeviceTree(
 
     if (!HalpArm64OpenDeviceTree(LoaderBlock, &Fdt) ||
         !HalpArm64FindDeviceTreeNode(&Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
-        !RiscvFdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) ||
+        !FdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) ||
         Address == 0)
     {
         return;
@@ -117,12 +117,12 @@ HalpArm64DiscoverGicFromDeviceTree(
 
     if (Versions[Match] >= 3)
     {
-        if (!RiscvFdtReadU32(&Fdt, Node, "#redistributor-regions", &Regions) || Regions == 0)
+        if (!FdtReadU32(&Fdt, Node, "#redistributor-regions", &Regions) || Regions == 0)
             Regions = 1;
 
         for (Index = 0; Index < Regions && Index < HALP_ARM64_MAX_GICR_REGIONS; Index++)
         {
-            if (!RiscvFdtReadReg(&Fdt, Node, Parent, Index + 1, &Address, &Size) ||
+            if (!FdtReadReg(&Fdt, Node, Parent, Index + 1, &Address, &Size) ||
                 Address == 0 || Size == 0 || Size > MAXULONG)
             {
                 break;
@@ -132,27 +132,27 @@ HalpArm64DiscoverGicFromDeviceTree(
         }
         HalpArm64GicInfo.GicrRegionCount = Index;
     }
-    else if (RiscvFdtReadReg(&Fdt, Node, Parent, 1, &Address, &Size) && Address != 0)
+    else if (FdtReadReg(&Fdt, Node, Parent, 1, &Address, &Size) && Address != 0)
     {
         HalpArm64GicInfo.GiccBase = Address;
     }
 
-    for (Index = RiscvFdtFirstChild(&Fdt, Node);
-         Index != RISCV_FDT_NO_NODE && HalpArm64GicInfo.MsiFrameCount < HALP_ARM64_MAX_MSI_FRAMES;
-         Index = RiscvFdtNextSibling(&Fdt, Index))
+    for (Index = FdtFirstChild(&Fdt, Node);
+         Index != FDT_NO_NODE && HalpArm64GicInfo.MsiFrameCount < HALP_ARM64_MAX_MSI_FRAMES;
+         Index = FdtNextSibling(&Fdt, Index))
     {
         HALP_ARM64_GIC_MSI_FRAME_ENTRY *Frame = &HalpArm64GicInfo.MsiFrames[HalpArm64GicInfo.MsiFrameCount];
         ULONG Length, SpiBase, SpiCount;
-        const VOID *Compatible = RiscvFdtGetProperty(&Fdt, Index, "compatible", &Length);
+        const VOID *Compatible = FdtGetProperty(&Fdt, Index, "compatible", &Length);
 
-        if (!RiscvFdtStringListContains(Compatible, Length, "arm,gic-v2m-frame") ||
-            !RiscvFdtReadReg(&Fdt, Index, Node, 0, &Address, &Size) || !Address)
+        if (!FdtStringListContains(Compatible, Length, "arm,gic-v2m-frame") ||
+            !FdtReadReg(&Fdt, Index, Node, 0, &Address, &Size) || !Address)
             continue;
         RtlZeroMemory(Frame, sizeof(*Frame));
         Frame->MsiFrameId = HalpArm64GicInfo.MsiFrameCount;
         Frame->BaseAddress = Address;
-        if (RiscvFdtReadU32(&Fdt, Index, "arm,msi-base-spi", &SpiBase) &&
-            RiscvFdtReadU32(&Fdt, Index, "arm,msi-num-spis", &SpiCount) && SpiBase <= MAXUSHORT && SpiCount <= MAXUSHORT)
+        if (FdtReadU32(&Fdt, Index, "arm,msi-base-spi", &SpiBase) &&
+            FdtReadU32(&Fdt, Index, "arm,msi-num-spis", &SpiCount) && SpiBase <= MAXUSHORT && SpiCount <= MAXUSHORT)
         {
             Frame->SpiBase = (USHORT)SpiBase;
             Frame->SpiCount = (USHORT)SpiCount;

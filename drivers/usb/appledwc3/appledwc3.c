@@ -180,7 +180,7 @@ AppleDwc3Prepare(
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
         goto Done;
     }
-    Extension->RoleSwitch = RiscvFdtGetProperty(&Tree.Fdt, Tree.Node, "usb-role-switch", &Length) != NULL;
+    Extension->RoleSwitch = FdtGetProperty(&Tree.Fdt, Tree.Node, "usb-role-switch", &Length) != NULL;
     Status = AppleDwc3FindResources(Extension, Resources);
     if (!NT_SUCCESS(Status))
         goto Done;

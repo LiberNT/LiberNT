@@ -7,7 +7,7 @@
 
 #include <ntifs.h>
 #include <ndk/haltypes.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include "halp.h"
 
 #define RISCV_CCACHE_FLUSH64 0x200
@@ -57,26 +57,26 @@ HalpRiscvInitializeExternalCache(
     _In_reads_bytes_(DeviceTreeSize) const VOID *DeviceTree,
     _In_ SIZE_T DeviceTreeSize)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Root, Soc, Parent, Node, Length, Line;
     ULONG64 Address, Size;
     const VOID *Property;
 
-    if (!RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
+    if (!FdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
         return;
-    Root = RiscvFdtRootNode(&Fdt);
-    if (!RiscvFdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
+    Root = FdtRootNode(&Fdt);
+    if (!FdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
         return;
 
-    for (Node = RiscvFdtFirstChild(&Fdt, Soc);
-         Node != RISCV_FDT_NO_NODE;
-         Node = RiscvFdtNextSibling(&Fdt, Node))
+    for (Node = FdtFirstChild(&Fdt, Soc);
+         Node != FDT_NO_NODE;
+         Node = FdtNextSibling(&Fdt, Node))
     {
-        Property = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
-        if (RiscvFdtStringListContains(Property, Length, "sifive,ccache0") &&
-            RiscvFdtReadReg(&Fdt, Node, Soc, 0, &Address, &Size) &&
+        Property = FdtGetProperty(&Fdt, Node, "compatible", &Length);
+        if (FdtStringListContains(Property, Length, "sifive,ccache0") &&
+            FdtReadReg(&Fdt, Node, Soc, 0, &Address, &Size) &&
             Size >= RISCV_CCACHE_FLUSH64 + sizeof(ULONG64) && !(Address & (PAGE_SIZE - 1)) &&
-            RiscvFdtReadU32(&Fdt, Node, "cache-block-size", &Line) &&
+            FdtReadU32(&Fdt, Node, "cache-block-size", &Line) &&
             Line >= 16 && Line <= PAGE_SIZE && !(Line & (Line - 1)))
         {
             HalpRiscvCcacheAddress = Address;

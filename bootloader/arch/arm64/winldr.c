@@ -17,7 +17,7 @@
 #include <reactos/arm64/acpi.h>
 #include <reactos/arm64/early_uart.h>
 #include <Fdt.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 extern EFI_SYSTEM_TABLE *GlobalSystemTable;
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
@@ -898,7 +898,7 @@ static const PCSTR Arm64DeviceTreeInterruptControllers[] =
 
 static BOOLEAN
 Arm64FindDeviceTreeInterruptController(
-    PRISCV_FDT Fdt,
+    PFDT Fdt,
     ULONG Node,
     ULONG Parent,
     ULONG Depth,
@@ -910,12 +910,12 @@ Arm64FindDeviceTreeInterruptController(
     ULONG Child;
     ULONG Index;
 
-    Compatible = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
-    if (Compatible && Parent != RISCV_FDT_NO_NODE)
+    Compatible = FdtGetProperty(Fdt, Node, "compatible", &Length);
+    if (Compatible && Parent != FDT_NO_NODE)
     {
         for (Index = 0; Index < RTL_NUMBER_OF(Arm64DeviceTreeInterruptControllers); Index++)
         {
-            if (RiscvFdtStringListContains(Compatible, Length, Arm64DeviceTreeInterruptControllers[Index]))
+            if (FdtStringListContains(Compatible, Length, Arm64DeviceTreeInterruptControllers[Index]))
             {
                 *Found = Node;
                 *FoundParent = Parent;
@@ -925,7 +925,7 @@ Arm64FindDeviceTreeInterruptController(
     }
     if (Depth >= 8)
         return FALSE;
-    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE; Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node); Child != FDT_NO_NODE; Child = FdtNextSibling(Fdt, Child))
     {
         if (Arm64FindDeviceTreeInterruptController(Fdt, Child, Node, Depth + 1, Found, FoundParent))
             return TRUE;
@@ -941,23 +941,23 @@ Arm64AddDeviceTreeInterruptRanges(
 {
     ULONGLONG Address;
     ULONGLONG Size;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Parent;
     ULONG Node;
     ULONG Regions;
     ULONG Index;
 
     if (Arm64LocateAcpiTable(APIC_SIGNATURE, sizeof(ARM64_ACPI_MADT)) ||
-        !RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt) ||
-        !Arm64FindDeviceTreeInterruptController(&Fdt, RiscvFdtRootNode(&Fdt), RISCV_FDT_NO_NODE, 0, &Node, &Parent))
+        !FdtOpen(DeviceTree, DeviceTreeSize, &Fdt) ||
+        !Arm64FindDeviceTreeInterruptController(&Fdt, FdtRootNode(&Fdt), FDT_NO_NODE, 0, &Node, &Parent))
     {
         return;
     }
-    if (!RiscvFdtReadU32(&Fdt, Node, "#redistributor-regions", &Regions) || Regions == 0)
+    if (!FdtReadU32(&Fdt, Node, "#redistributor-regions", &Regions) || Regions == 0)
         Regions = 1;
     for (Index = 0; Index <= Regions && Index < ARM64_LOADER_MAX_EARLY_DEVICE_RANGES; Index++)
     {
-        if (RiscvFdtReadReg(&Fdt, Node, Parent, Index, &Address, &Size) && Size != 0)
+        if (FdtReadReg(&Fdt, Node, Parent, Index, &Address, &Size) && Size != 0)
         {
             Arm64AddEarlyDeviceRange(LoaderBlock, Address, Size);
             TRACE("ARM64: interrupt controller range %llx+%llx\n", Address, Size);
@@ -989,7 +989,7 @@ Arm64CaptureDeviceTree(PLOADER_PARAMETER_BLOCK LoaderBlock)
         }
     }
     if (!FirmwareDeviceTree ||
-        !RiscvFdtValidateHeader(FirmwareDeviceTree, RISCV_FDT_MAXIMUM_SIZE, &DeviceTreeSize))
+        !FdtValidateHeader(FirmwareDeviceTree, FDT_MAXIMUM_SIZE, &DeviceTreeSize))
     {
         return;
     }
@@ -1000,7 +1000,7 @@ Arm64CaptureDeviceTree(PLOADER_PARAMETER_BLOCK LoaderBlock)
         return;
     }
     RtlCopyMemory(Copy, FirmwareDeviceTree, DeviceTreeSize);
-    if (!RiscvFdtValidateHeader(Copy, DeviceTreeSize, NULL))
+    if (!FdtValidateHeader(Copy, DeviceTreeSize, NULL))
     {
         ERR("ARM64: the device tree copy failed validation\n");
         return;

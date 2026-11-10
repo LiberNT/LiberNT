@@ -147,15 +147,15 @@ ApplePdFindNamedChild(
     const CHAR *Text;
     ULONG Child, Length, NameLength = (ULONG)strlen(Name);
 
-    for (Child = RiscvFdtFirstChild(&Device->Tree.Fdt, Node); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(&Device->Tree.Fdt, Child))
+    for (Child = FdtFirstChild(&Device->Tree.Fdt, Node); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&Device->Tree.Fdt, Child))
     {
-        Text = RiscvFdtNodeName(&Device->Tree.Fdt, Child, &Length);
+        Text = FdtNodeName(&Device->Tree.Fdt, Child, &Length);
         if (Text && Length >= NameLength && !memcmp(Text, Name, NameLength) &&
             (Length == NameLength || Text[NameLength] == '\0'))
             return Child;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
@@ -168,18 +168,18 @@ ApplePdFindUsbController(
     ULONG64 Base = 0, Size;
 
     Node = FdtDriverFindChild(&Device->Tree, PortNode, "usb-c-connector");
-    if (Node != RISCV_FDT_NO_NODE)
+    if (Node != FDT_NO_NODE)
         Node = ApplePdFindNamedChild(Device, Node, "ports");
-    if (Node != RISCV_FDT_NO_NODE)
+    if (Node != FDT_NO_NODE)
         Node = ApplePdFindNamedChild(Device, Node, "port@0");
-    if (Node != RISCV_FDT_NO_NODE)
+    if (Node != FDT_NO_NODE)
         Node = ApplePdFindNamedChild(Device, Node, "endpoint");
-    if (Node == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Device->Tree.Fdt, Node, "remote-endpoint", &Phandle))
+    if (Node == FDT_NO_NODE || !FdtReadU32(&Device->Tree.Fdt, Node, "remote-endpoint", &Phandle))
         return 0;
     Node = FdtDriverFindPhandle(&Device->Tree, Phandle);
-    for (Depth = 0; Depth < 3 && Node != RISCV_FDT_NO_NODE; ++Depth)
+    for (Depth = 0; Depth < 3 && Node != FDT_NO_NODE; ++Depth)
         Node = FdtDriverFindParentNode(&Device->Tree, Node);
-    if (Node == RISCV_FDT_NO_NODE || !FdtDriverReadReg(&Device->Tree, Node, 0, &Base, &Size))
+    if (Node == FDT_NO_NODE || !FdtDriverReadReg(&Device->Tree, Node, 0, &Base, &Size))
         return 0;
     return Base;
 }
@@ -266,16 +266,16 @@ ApplePdFindInterrupt(
     const ULONG *Interrupts, *CellCount;
     ULONG Cursor = 0, Index, Cells, NamesLength, Length, EntryLength;
 
-    CellCount = RiscvFdtGetProperty(&Device->Tree.Fdt, Device->Tree.Node, "#interrupt-cells", &Length);
-    Cells = (CellCount && Length >= sizeof(ULONG)) ? RiscvFdtReadBigEndian32(CellCount) : 0;
-    Names = RiscvFdtGetProperty(&Device->Tree.Fdt, Node, "interrupt-names", &NamesLength);
-    Interrupts = RiscvFdtGetProperty(&Device->Tree.Fdt, Node, "interrupts", &Length);
+    CellCount = FdtGetProperty(&Device->Tree.Fdt, Device->Tree.Node, "#interrupt-cells", &Length);
+    Cells = (CellCount && Length >= sizeof(ULONG)) ? FdtReadBigEndian32(CellCount) : 0;
+    Names = FdtGetProperty(&Device->Tree.Fdt, Node, "interrupt-names", &NamesLength);
+    Interrupts = FdtGetProperty(&Device->Tree.Fdt, Node, "interrupts", &Length);
     if (!Cells || !Interrupts)
         return MAXULONG;
-    for (Index = 0; (Entry = RiscvFdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
+    for (Index = 0; (Entry = FdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
     {
         if (EntryLength == strlen(Name) && !memcmp(Entry, Name, EntryLength))
-            return (Length >= (Index + 1) * Cells * sizeof(ULONG)) ? RiscvFdtReadBigEndian32(&Interrupts[Index * Cells])
+            return (Length >= (Index + 1) * Cells * sizeof(ULONG)) ? FdtReadBigEndian32(&Interrupts[Index * Cells])
                                                                    : MAXULONG;
     }
     return MAXULONG;
@@ -291,11 +291,11 @@ ApplePdReadLabel(
     const CHAR *Text;
     ULONG Child, Length;
 
-    Text = RiscvFdtNodeName(&Device->Tree.Fdt, Node, &Length);
-    for (Child = RiscvFdtFirstChild(&Device->Tree.Fdt, Node); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(&Device->Tree.Fdt, Child))
+    Text = FdtNodeName(&Device->Tree.Fdt, Node, &Length);
+    for (Child = FdtFirstChild(&Device->Tree.Fdt, Node); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&Device->Tree.Fdt, Child))
     {
-        const CHAR *Candidate = RiscvFdtGetProperty(&Device->Tree.Fdt, Child, "label", &Length);
+        const CHAR *Candidate = FdtGetProperty(&Device->Tree.Fdt, Child, "label", &Length);
 
         if (Candidate && Length > 1)
         {
@@ -360,18 +360,18 @@ ApplePdStartHardware(
     if (!NT_SUCCESS(Status))
         return Status;
     Device->TreeOpen = TRUE;
-    for (Child = RiscvFdtFirstChild(&Device->Tree.Fdt, Device->Tree.Node);
-         Child != RISCV_FDT_NO_NODE && Device->PortCount < APPLE_PD_MAX_PORTS;
-         Child = RiscvFdtNextSibling(&Device->Tree.Fdt, Child))
+    for (Child = FdtFirstChild(&Device->Tree.Fdt, Device->Tree.Node);
+         Child != FDT_NO_NODE && Device->PortCount < APPLE_PD_MAX_PORTS;
+         Child = FdtNextSibling(&Device->Tree.Fdt, Child))
     {
-        Compatible = RiscvFdtGetProperty(&Device->Tree.Fdt, Child, "compatible", &Length);
-        Reg = RiscvFdtGetProperty(&Device->Tree.Fdt, Child, "reg", &RegLength);
-        if (!RiscvFdtStringListContains(Compatible, Length, "apple,sn201202x") || !Reg || RegLength < sizeof(ULONG))
+        Compatible = FdtGetProperty(&Device->Tree.Fdt, Child, "compatible", &Length);
+        Reg = FdtGetProperty(&Device->Tree.Fdt, Child, "reg", &RegLength);
+        if (!FdtStringListContains(Compatible, Length, "apple,sn201202x") || !Reg || RegLength < sizeof(ULONG))
             continue;
         Port = &Device->Ports[Device->PortCount++];
         RtlZeroMemory(Port, sizeof(*Port));
         Port->Pd.Spmi = &Device->Spmi;
-        Port->Pd.Sid = (UCHAR)(RiscvFdtReadBigEndian32(Reg) & 0x0f);
+        Port->Pd.Sid = (UCHAR)(FdtReadBigEndian32(Reg) & 0x0f);
         Port->Pd.WakeInterrupt = ApplePdFindInterrupt(Device, Child, "wake");
         ApplePdReadLabel(Device, Child, Port->Label);
         Port->UsbController = ApplePdFindUsbController(Device, Child);

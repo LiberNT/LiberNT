@@ -62,9 +62,9 @@ AppleSpmiOpen(
     NTSTATUS Status;
 
     RtlZeroMemory(Spmi, sizeof(*Spmi));
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8103-spmi") &&
-        !RiscvFdtStringListContains(Compatible, Length, "apple,spmi"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,t8103-spmi") &&
+        !FdtStringListContains(Compatible, Length, "apple,spmi"))
         return STATUS_NOT_SUPPORTED;
     Status = ApplePmgrPowerOnDevice(Tree, Node);
     if (!NT_SUCCESS(Status))
@@ -280,30 +280,30 @@ AppleNvmemLocateCell(
     const VOID *Compatible;
 
     RtlZeroMemory(Cell, sizeof(*Cell));
-    if ((Node = FdtDriverFindPhandle(Tree, Phandle)) == RISCV_FDT_NO_NODE ||
-        (Layout = FdtDriverFindParentNode(Tree, Node)) == RISCV_FDT_NO_NODE)
+    if ((Node = FdtDriverFindPhandle(Tree, Phandle)) == FDT_NO_NODE ||
+        (Layout = FdtDriverFindParentNode(Tree, Node)) == FDT_NO_NODE)
         return STATUS_NOT_FOUND;
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Layout, "compatible", &Length);
-    Pmic = RiscvFdtStringListContains(Compatible, Length, "fixed-layout") ? FdtDriverFindParentNode(Tree, Layout) : Layout;
-    if (Pmic == RISCV_FDT_NO_NODE || (*Controller = FdtDriverFindParentNode(Tree, Pmic)) == RISCV_FDT_NO_NODE)
+    Compatible = FdtGetProperty(&Tree->Fdt, Layout, "compatible", &Length);
+    Pmic = FdtStringListContains(Compatible, Length, "fixed-layout") ? FdtDriverFindParentNode(Tree, Layout) : Layout;
+    if (Pmic == FDT_NO_NODE || (*Controller = FdtDriverFindParentNode(Tree, Pmic)) == FDT_NO_NODE)
         return STATUS_NOT_FOUND;
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Pmic, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,spmi-nvmem"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Pmic, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,spmi-nvmem"))
         return STATUS_DEVICE_CONFIGURATION_ERROR;
-    Reg = RiscvFdtGetProperty(&Tree->Fdt, Pmic, "reg", &Length);
-    Value = (Reg && Length >= sizeof(ULONG)) ? RiscvFdtReadBigEndian32(Reg) : MAXULONG;
-    if (Value > 0xf || !RiscvFdtReadReg(&Tree->Fdt, Node, Layout, 0, &Address, &Size) ||
+    Reg = FdtGetProperty(&Tree->Fdt, Pmic, "reg", &Length);
+    Value = (Reg && Length >= sizeof(ULONG)) ? FdtReadBigEndian32(Reg) : MAXULONG;
+    if (Value > 0xf || !FdtReadReg(&Tree->Fdt, Node, Layout, 0, &Address, &Size) ||
         !Size || Size > sizeof(Cell->Data) || Address + Size > 0x10000)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     *Sid = (UCHAR)Value;
     Cell->Address = (ULONG)Address;
     Cell->Length = (ULONG)Size;
     Cell->BitCount = Cell->Length * 8;
-    Bits = RiscvFdtGetProperty(&Tree->Fdt, Node, "bits", &Length);
+    Bits = FdtGetProperty(&Tree->Fdt, Node, "bits", &Length);
     if (Bits && Length >= 2 * sizeof(ULONG))
     {
-        Cell->BitOffset = RiscvFdtReadBigEndian32(&Bits[0]);
-        Cell->BitCount = RiscvFdtReadBigEndian32(&Bits[1]);
+        Cell->BitOffset = FdtReadBigEndian32(&Bits[0]);
+        Cell->BitCount = FdtReadBigEndian32(&Bits[1]);
         if (!Cell->BitCount || Cell->BitCount > 32 || Cell->BitOffset + Cell->BitCount > Cell->Length * 8)
             return STATUS_DEVICE_CONFIGURATION_ERROR;
     }

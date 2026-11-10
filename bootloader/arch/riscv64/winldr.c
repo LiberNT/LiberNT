@@ -11,8 +11,8 @@
 #include <Fdt.h>
 #include <RiscVBoot.h>
 #include <ndk/ketypes.h>
-#include <reactos/riscv64/fdt.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdt.h>
+#include <libernt/fdtlib.h>
 
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
@@ -551,8 +551,8 @@ RiscvCaptureDeviceTree(VOID)
         }
     }
 
-    if (!RiscvFdtValidateHeader(FirmwareDeviceTree,
-                                RISCV_FDT_MAXIMUM_SIZE,
+    if (!FdtValidateHeader(FirmwareDeviceTree,
+                                FDT_MAXIMUM_SIZE,
                                 &DeviceTreeSize))
     {
         ERR("RISC-V: UEFI did not provide a supported flattened device tree\n");
@@ -569,7 +569,7 @@ RiscvCaptureDeviceTree(VOID)
     RtlCopyMemory(RiscvLoaderState.DeviceTree,
                   FirmwareDeviceTree,
                   DeviceTreeSize);
-    if (!RiscvFdtValidateHeader(RiscvLoaderState.DeviceTree,
+    if (!FdtValidateHeader(RiscvLoaderState.DeviceTree,
                                 DeviceTreeSize,
                                 NULL))
     {
@@ -616,7 +616,7 @@ static
 VOID
 RiscvDiscoverEarlyConsole(VOID)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Chosen;
     ULONG Node;
     ULONG Parent;
@@ -631,7 +631,7 @@ RiscvDiscoverEarlyConsole(VOID)
     RiscvLoaderState.EarlyConsoleInterface = RISCV64_EARLY_CONSOLE_NONE;
     RiscvLoaderState.EarlyDeviceRangeCount = 0;
 
-    if (!RiscvFdtOpen(RiscvLoaderState.DeviceTree,
+    if (!FdtOpen(RiscvLoaderState.DeviceTree,
                       RiscvLoaderState.DeviceTreeSize,
                       &Fdt))
     {
@@ -639,30 +639,30 @@ RiscvDiscoverEarlyConsole(VOID)
         return;
     }
 
-    if (!RiscvFdtFindNode(&Fdt, "/chosen", &Chosen, NULL))
+    if (!FdtFindNode(&Fdt, "/chosen", &Chosen, NULL))
     {
         TRACE("RISC-V: early console: no /chosen node\n");
         return;
     }
 
-    Path = RiscvFdtGetProperty(&Fdt, Chosen, "stdout-path", &Length);
+    Path = FdtGetProperty(&Fdt, Chosen, "stdout-path", &Length);
     if (!Path || Length == 0 || Path[Length - 1] != '\0')
     {
         TRACE("RISC-V: early console: /chosen/stdout-path is absent\n");
         return;
     }
 
-    if (!RiscvFdtResolvePath(&Fdt, Path, &Node, &Parent, NULL) ||
-        Parent == RISCV_FDT_NO_NODE)
+    if (!FdtResolvePath(&Fdt, Path, &Node, &Parent, NULL) ||
+        Parent == FDT_NO_NODE)
     {
         TRACE("RISC-V: early console: stdout-path '%s' does not resolve\n", Path);
         return;
     }
 
-    Compatible = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
+    Compatible = FdtGetProperty(&Fdt, Node, "compatible", &Length);
     for (Index = 0; Index < RTL_NUMBER_OF(RiscvConsoleCompatibles); ++Index)
     {
-        if (RiscvFdtStringListContains(Compatible,
+        if (FdtStringListContains(Compatible,
                                        Length,
                                        RiscvConsoleCompatibles[Index]))
         {
@@ -675,7 +675,7 @@ RiscvDiscoverEarlyConsole(VOID)
         return;
     }
 
-    if (!RiscvFdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) || Size == 0)
+    if (!FdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) || Size == 0)
     {
         TRACE("RISC-V: early console: '%s' has no usable reg\n", Path);
         return;
@@ -689,11 +689,11 @@ RiscvDiscoverEarlyConsole(VOID)
     }
 
     RiscvLoaderState.EarlyConsoleRegisterShift = 0;
-    if (RiscvFdtReadU32(&Fdt, Node, "reg-shift", &Value))
+    if (FdtReadU32(&Fdt, Node, "reg-shift", &Value))
         RiscvLoaderState.EarlyConsoleRegisterShift = Value;
 
     RiscvLoaderState.EarlyConsoleRegisterWidth = 1;
-    if (RiscvFdtReadU32(&Fdt, Node, "reg-io-width", &Value))
+    if (FdtReadU32(&Fdt, Node, "reg-io-width", &Value))
     {
         if (Value != 1 && Value != 2 && Value != 4)
         {

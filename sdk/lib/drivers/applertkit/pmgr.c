@@ -44,19 +44,19 @@ ApplePmgrMapDomain(
     const VOID *Compatible;
 
     RtlZeroMemory(Mapping, sizeof(*Mapping));
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Domain, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,pmgr-pwrstate") &&
-        !RiscvFdtStringListContains(Compatible, Length, "apple,t8103-pmgr-pwrstate"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Domain, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,pmgr-pwrstate") &&
+        !FdtStringListContains(Compatible, Length, "apple,t8103-pmgr-pwrstate"))
         return FALSE;
-    if ((Pmgr = FdtDriverFindParentNode(Tree, Domain)) == RISCV_FDT_NO_NODE ||
+    if ((Pmgr = FdtDriverFindParentNode(Tree, Domain)) == FDT_NO_NODE ||
         !FdtDriverReadReg(Tree, Pmgr, 0, &Base, &Size) ||
-        !RiscvFdtReadReg(&Tree->Fdt, Domain, Pmgr, 0, &Offset, &OffsetSize) ||
+        !FdtReadReg(&Tree->Fdt, Domain, Pmgr, 0, &Offset, &OffsetSize) ||
         Offset + sizeof(ULONG) > Size)
         return FALSE;
     Mapping->Physical = Base + Offset;
-    Mapping->Label = (PCSTR)RiscvFdtGetProperty(&Tree->Fdt, Domain, "label", &Length);
+    Mapping->Label = (PCSTR)FdtGetProperty(&Tree->Fdt, Domain, "label", &Length);
     if (!Mapping->Label || !Length || Mapping->Label[Length - 1])
-        Mapping->Label = RiscvFdtNodeName(&Tree->Fdt, Domain, &Length);
+        Mapping->Label = FdtNodeName(&Tree->Fdt, Domain, &Length);
     Physical.QuadPart = (LONGLONG)Mapping->Physical;
     Mapping->Register = MmMapIoSpace(Physical, sizeof(ULONG), MmNonCached);
     return Mapping->Register != NULL;
@@ -99,7 +99,7 @@ ApplePmgrPowerOnDomain(
         DPRINT1("Apple PMGR: power domain node %lx cannot be mapped\n", Domain);
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
-    ClockGatedIsEnough = RiscvFdtGetProperty(&Tree->Fdt, Domain, "apple,externally-clocked", &Length) != NULL;
+    ClockGatedIsEnough = FdtGetProperty(&Tree->Fdt, Domain, "apple,externally-clocked", &Length) != NULL;
     Value = READ_REGISTER_ULONG(Mapping.Register);
     if (PMGR_PS_ACTUAL(Value) == PMGR_PS_ACTIVE && !(Value & (PMGR_DEV_DISABLE | PMGR_PS_RESET)))
     {
@@ -142,11 +142,11 @@ ApplePmgrPowerOnDomains(
 
     if (Depth > PMGR_MAX_DEPTH)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
-    Domains = RiscvFdtGetProperty(&Tree->Fdt, Node, "power-domains", &Length);
-    for (Index = 0; Domains && RiscvFdtReadCells(Domains, Length, Index, 1, &Phandle); ++Index)
+    Domains = FdtGetProperty(&Tree->Fdt, Node, "power-domains", &Length);
+    for (Index = 0; Domains && FdtReadCells(Domains, Length, Index, 1, &Phandle); ++Index)
     {
         Domain = FdtDriverFindPhandle(Tree, (ULONG)Phandle);
-        if (Domain == RISCV_FDT_NO_NODE)
+        if (Domain == FDT_NO_NODE)
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         Status = ApplePmgrPowerOnDomain(Tree, Domain, Depth);
         if (!NT_SUCCESS(Status))
@@ -173,8 +173,8 @@ ApplePmgrResetDevice(
     PMGR_DOMAIN Mapping;
     ULONG Phandle, Domain, Value;
 
-    if (!RiscvFdtReadU32(&Tree->Fdt, Node, "resets", &Phandle) ||
-        (Domain = FdtDriverFindPhandle(Tree, Phandle)) == RISCV_FDT_NO_NODE ||
+    if (!FdtReadU32(&Tree->Fdt, Node, "resets", &Phandle) ||
+        (Domain = FdtDriverFindPhandle(Tree, Phandle)) == FDT_NO_NODE ||
         !ApplePmgrMapDomain(Tree, Domain, &Mapping))
         return STATUS_NOT_FOUND;
     Value = READ_REGISTER_ULONG(Mapping.Register);

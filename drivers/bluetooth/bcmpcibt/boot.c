@@ -131,7 +131,7 @@ BcmBtReadPlatform(
 
     if (Dev->HaveTree)
         return STATUS_SUCCESS;
-    Dev->DartNode = RISCV_FDT_NO_NODE;
+    Dev->DartNode = FDT_NO_NODE;
     Status = FdtDriverOpenAlias("bluetooth0", &Dev->Tree);
     if (!NT_SUCCESS(Status))
     {
@@ -140,10 +140,10 @@ BcmBtReadPlatform(
     }
     Dev->HaveTree = TRUE;
 
-    Value = RiscvFdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "brcm,board-type", &Length);
+    Value = FdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "brcm,board-type", &Length);
     if (Value && Length && Length <= sizeof(Dev->BoardType) && ((const CHAR *)Value)[Length - 1] == ANSI_NULL)
         RtlCopyMemory(Dev->BoardType, Value, Length);
-    Value = RiscvFdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "local-bd-address", &Length);
+    Value = FdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "local-bd-address", &Length);
     if (Value && Length == sizeof(Dev->PlatformAddress))
     {
         const UCHAR *Address = Value;
@@ -151,25 +151,25 @@ BcmBtReadPlatform(
         RtlCopyMemory(Dev->PlatformAddress, Address, sizeof(Dev->PlatformAddress));
         Dev->HavePlatformAddress = (Address[0] | Address[1] | Address[2] | Address[3] | Address[4] | Address[5]) != 0;
     }
-    Value = RiscvFdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "reg", &Length);
-    if (Value && RiscvFdtReadCells(Value, Length, 0, 1, &Reg))
+    Value = FdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "reg", &Length);
+    if (Value && FdtReadCells(Value, Length, 0, 1, &Reg))
         Rid = (ULONG)(Reg >> 8) & 0xFFFF;
 
-    for (Node = FdtDriverFindParentNode(&Dev->Tree, Dev->Tree.Node); Node != RISCV_FDT_NO_NODE;
+    for (Node = FdtDriverFindParentNode(&Dev->Tree, Dev->Tree.Node); Node != FDT_NO_NODE;
          Node = FdtDriverFindParentNode(&Dev->Tree, Node))
     {
-        if (!RiscvFdtGetProperty(&Dev->Tree.Fdt, Node, "iommu-map", &Length))
+        if (!FdtGetProperty(&Dev->Tree.Fdt, Node, "iommu-map", &Length))
             continue;
         if (ApplePcieFindStream(&Dev->Tree, Node, Rid, &Phandle, &Dev->Sid))
             Dev->DartNode = FdtDriverFindPhandle(&Dev->Tree, Phandle);
         break;
     }
 
-    if (!RiscvFdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "brcm,taurus-bf-cal-blob", &Length))
+    if (!FdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, "brcm,taurus-bf-cal-blob", &Length))
         Length = 0;
     DPRINT1("BCMBT: board type '%s', %s address, %lu-byte beamforming calibration, requester %04lx, DART %s stream %lu\n",
             Dev->BoardType, Dev->HavePlatformAddress ? "platform" : "no platform", Length, Rid,
-            Dev->DartNode == RISCV_FDT_NO_NODE ? "none" : "found", Dev->Sid);
+            Dev->DartNode == FDT_NO_NODE ? "none" : "found", Dev->Sid);
     if (!Dev->BoardType[0])
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     return STATUS_SUCCESS;
@@ -207,7 +207,7 @@ BcmBtBootFirmware(
     if (!NT_SUCCESS(Status))
         return Status;
     Low.QuadPart = 0;
-    High.QuadPart = BcmBtHighestDmaAddress(Dev->DartNode != RISCV_FDT_NO_NODE);
+    High.QuadPart = BcmBtHighestDmaAddress(Dev->DartNode != FDT_NO_NODE);
     Boundary.QuadPart = 0;
     Dev->FirmwareSize = ROUND_TO_PAGES(ImageSize);
     Dev->Firmware = MmAllocateContiguousMemorySpecifyCache(Dev->FirmwareSize, Low, High, Boundary, MmNonCached);
@@ -349,7 +349,7 @@ BcmBtSendCalibration(
     ULONG Size, Chunks, Index;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    Blob = RiscvFdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, Property, &Size);
+    Blob = FdtGetProperty(&Dev->Tree.Fdt, Dev->Tree.Node, Property, &Size);
     if (!Blob || !Size)
     {
         DPRINT1("BCMBT: the firmware tree carries no %s; the controller cannot be calibrated\n", Property);

@@ -4,7 +4,7 @@
 /* Device-tree-discovered Goldfish RTC on QEMU virt. Register contract:
  * https://github.com/qemu/qemu/blob/v10.2.0/hw/rtc/goldfish_rtc.c */
 #include <ntifs.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include "halp.h"
 
 #define RTC_UNIX_EPOCH 116444736000000000ULL
@@ -15,34 +15,34 @@ static KSPIN_LOCK HalpRtcLock;
 BOOLEAN
 HalpRiscvInitializeRtc(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Root, Soc, Parent, Node, Length, Cells;
     ULONG64 Address, Size;
     const VOID *Property;
 
-    if (!RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt)) return FALSE;
-    Root = RiscvFdtRootNode(&Fdt);
-    Property = RiscvFdtGetProperty(&Fdt, Root, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Property, Length, "riscv-virtio")) return TRUE;
-    if (!RiscvFdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
+    if (!FdtOpen(DeviceTree, DeviceTreeSize, &Fdt)) return FALSE;
+    Root = FdtRootNode(&Fdt);
+    Property = FdtGetProperty(&Fdt, Root, "compatible", &Length);
+    if (!FdtStringListContains(Property, Length, "riscv-virtio")) return TRUE;
+    if (!FdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
         return FALSE;
-    if (!RiscvFdtReadU32(&Fdt, Soc, "#address-cells", &Cells) || Cells != 2 ||
-        !RiscvFdtReadU32(&Fdt, Soc, "#size-cells", &Cells) || Cells != 2)
+    if (!FdtReadU32(&Fdt, Soc, "#address-cells", &Cells) || Cells != 2 ||
+        !FdtReadU32(&Fdt, Soc, "#size-cells", &Cells) || Cells != 2)
         return FALSE;
-    Property = RiscvFdtGetProperty(&Fdt, Soc, "ranges", &Length);
+    Property = FdtGetProperty(&Fdt, Soc, "ranges", &Length);
     if (!Property || Length) return FALSE;
-    for (Node = RiscvFdtFirstChild(&Fdt, Soc); Node != RISCV_FDT_NO_NODE;
-         Node = RiscvFdtNextSibling(&Fdt, Node))
+    for (Node = FdtFirstChild(&Fdt, Soc); Node != FDT_NO_NODE;
+         Node = FdtNextSibling(&Fdt, Node))
     {
-        Property = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
-        if (!RiscvFdtStringListContains(Property, Length, "google,goldfish-rtc")) continue;
-        Property = RiscvFdtGetProperty(&Fdt, Node, "status", &Length);
-        if (Property && !RiscvFdtStringListContains(Property, Length, "okay") &&
-            !RiscvFdtStringListContains(Property, Length, "ok")) continue;
-        Property = RiscvFdtGetProperty(&Fdt, Node, "reg", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "compatible", &Length);
+        if (!FdtStringListContains(Property, Length, "google,goldfish-rtc")) continue;
+        Property = FdtGetProperty(&Fdt, Node, "status", &Length);
+        if (Property && !FdtStringListContains(Property, Length, "okay") &&
+            !FdtStringListContains(Property, Length, "ok")) continue;
+        Property = FdtGetProperty(&Fdt, Node, "reg", &Length);
         if (HalpRtcAddress.QuadPart || !Property || Length != 16 ||
-            !RiscvFdtReadCells(Property, Length, 0, 2, &Address) ||
-            !RiscvFdtReadCells(Property, Length, 2, 2, &Size) ||
+            !FdtReadCells(Property, Length, 0, 2, &Address) ||
+            !FdtReadCells(Property, Length, 2, 2, &Size) ||
             !Address || Address > MAXLONGLONG - PAGE_SIZE ||
             (Address & (PAGE_SIZE - 1)) || Size < 8 || Size > PAGE_SIZE)
             return FALSE;

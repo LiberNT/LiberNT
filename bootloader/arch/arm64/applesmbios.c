@@ -10,7 +10,7 @@
 #include <blefi.h>
 #include <arc/loaderblk.h>
 #include <Fdt.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #define SMBIOS3_ENTRY_LENGTH        0x18
 #define SMBIOS_MAX_STRINGS          32
@@ -115,40 +115,40 @@ AppleCopyString(
 static
 ULONG
 AppleFindPhandle(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG Phandle)
 {
     ULONG Node, Value;
 
-    for (Node = RiscvFdtRootNode(Fdt); Node != RISCV_FDT_NO_NODE && Node < Fdt->StructureSize;
-         Node = RiscvFdtSkipToken(Fdt, Node))
+    for (Node = FdtRootNode(Fdt); Node != FDT_NO_NODE && Node < Fdt->StructureSize;
+         Node = FdtSkipToken(Fdt, Node))
     {
-        if (RiscvFdtToken(Fdt, Node) == RISCV_FDT_BEGIN_NODE && RiscvFdtReadU32(Fdt, Node, "phandle", &Value) &&
+        if (FdtReadToken(Fdt, Node) == FDT_BEGIN_NODE && FdtReadU32(Fdt, Node, "phandle", &Value) &&
             Value == Phandle)
             return Node;
-        if (RiscvFdtToken(Fdt, Node) == RISCV_FDT_END)
+        if (FdtReadToken(Fdt, Node) == FDT_END)
             break;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
 ULONG
 AppleMaxOppMHz(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG Table)
 {
     const UCHAR *Hz;
     ULONG Opp, Length, MHz, Max = 0;
     ULONGLONG Value;
 
-    for (Opp = RiscvFdtFirstChild(Fdt, Table); Opp != RISCV_FDT_NO_NODE; Opp = RiscvFdtNextSibling(Fdt, Opp))
+    for (Opp = FdtFirstChild(Fdt, Table); Opp != FDT_NO_NODE; Opp = FdtNextSibling(Fdt, Opp))
     {
-        Hz = RiscvFdtGetProperty(Fdt, Opp, "opp-hz", &Length);
+        Hz = FdtGetProperty(Fdt, Opp, "opp-hz", &Length);
         if (Hz && Length == 8)
-            Value = ((ULONGLONG)RiscvFdtReadBigEndian32(Hz) << 32) | RiscvFdtReadBigEndian32(Hz + 4);
+            Value = ((ULONGLONG)FdtReadBigEndian32(Hz) << 32) | FdtReadBigEndian32(Hz + 4);
         else if (Hz && Length == 4)
-            Value = RiscvFdtReadBigEndian32(Hz);
+            Value = FdtReadBigEndian32(Hz);
         else
             continue;
         MHz = (ULONG)(Value / 1000000);
@@ -161,7 +161,7 @@ AppleMaxOppMHz(
 static
 BOOLEAN
 AppleReadIdentity(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _Out_ PAPPLE_SMBIOS_IDENTITY Identity)
 {
     const CHAR *Compatible, *Entry, *Model, *Type;
@@ -171,11 +171,11 @@ AppleReadIdentity(
     CHAR Soc[16] = "";
 
     RtlZeroMemory(Identity, sizeof(*Identity));
-    Root = RiscvFdtRootNode(Fdt);
-    Compatible = RiscvFdtGetProperty(Fdt, Root, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,arm-platform"))
+    Root = FdtRootNode(Fdt);
+    Compatible = FdtGetProperty(Fdt, Root, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,arm-platform"))
         return FALSE;
-    while ((Entry = RiscvFdtNextString(Compatible, Length, &Cursor, &EntryLength)) != NULL)
+    while ((Entry = FdtNextString(Compatible, Length, &Cursor, &EntryLength)) != NULL)
     {
         if (EntryLength <= 6 || memcmp(Entry, "apple,", 6))
             continue;
@@ -208,7 +208,7 @@ AppleReadIdentity(
         RtlStringCbPrintfA(Identity->Processor, sizeof(Identity->Processor), "Apple %s", Soc);
     }
 
-    Type = RiscvFdtGetProperty(Fdt, Root, "chassis-type", &TypeLength);
+    Type = FdtGetProperty(Fdt, Root, "chassis-type", &TypeLength);
     for (Index = 0; Type && Index < RTL_NUMBER_OF(AppleChassisTypes); ++Index)
     {
         if (TypeLength == strlen(AppleChassisTypes[Index].Name) + 1 &&
@@ -216,7 +216,7 @@ AppleReadIdentity(
             Identity->Chassis = AppleChassisTypes[Index].Type;
     }
 
-    Model = RiscvFdtGetProperty(Fdt, Root, "model", &ModelLength);
+    Model = FdtGetProperty(Fdt, Root, "model", &ModelLength);
     if (Model && ModelLength > 1 && Model[ModelLength - 1] == ANSI_NULL)
     {
         ModelLength--;
@@ -234,20 +234,20 @@ AppleReadIdentity(
             AppleCopyString(Identity->Family, sizeof(Identity->Family), Model, Index);
     }
 
-    if (!RiscvFdtFindNode(Fdt, "/cpus", &Cpus, NULL))
-        Cpus = RISCV_FDT_NO_NODE;
-    for (Child = (Cpus == RISCV_FDT_NO_NODE) ? RISCV_FDT_NO_NODE : RiscvFdtFirstChild(Fdt, Cpus);
-         Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(Fdt, Child))
+    if (!FdtFindNode(Fdt, "/cpus", &Cpus, NULL))
+        Cpus = FDT_NO_NODE;
+    for (Child = (Cpus == FDT_NO_NODE) ? FDT_NO_NODE : FdtFirstChild(Fdt, Cpus);
+         Child != FDT_NO_NODE;
+         Child = FdtNextSibling(Fdt, Child))
     {
         ULONG Opp, MHz;
 
-        Type = RiscvFdtGetProperty(Fdt, Child, "device_type", &TypeLength);
+        Type = FdtGetProperty(Fdt, Child, "device_type", &TypeLength);
         if (!Type || TypeLength != sizeof("cpu") || memcmp(Type, "cpu", sizeof("cpu")))
             continue;
         Identity->Cores++;
-        if (RiscvFdtReadU32(Fdt, Child, "operating-points-v2", &Opp) &&
-            (Opp = AppleFindPhandle(Fdt, Opp)) != RISCV_FDT_NO_NODE &&
+        if (FdtReadU32(Fdt, Child, "operating-points-v2", &Opp) &&
+            (Opp = AppleFindPhandle(Fdt, Opp)) != FDT_NO_NODE &&
             (MHz = AppleMaxOppMHz(Fdt, Opp)) > Identity->MaxMHz)
             Identity->MaxMHz = MHz;
     }
@@ -409,7 +409,7 @@ AppleFindDeviceTree(
 
         if (!memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)))
         {
-            if (!RiscvFdtValidateHeader(Entry->VendorTable, RISCV_FDT_MAXIMUM_SIZE, DeviceTreeSize))
+            if (!FdtValidateHeader(Entry->VendorTable, FDT_MAXIMUM_SIZE, DeviceTreeSize))
                 return NULL;
             return Entry->VendorTable;
         }
@@ -429,10 +429,10 @@ Arm64InstallAppleSmbios(VOID)
     UINTN Pages;
     const VOID *DeviceTree;
     PUCHAR Out, NewEntry;
-    RISCV_FDT Fdt;
+    FDT Fdt;
 
     DeviceTree = AppleFindDeviceTree(&DeviceTreeSize);
-    if (!DeviceTree || !RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt) || !AppleReadIdentity(&Fdt, &Identity))
+    if (!DeviceTree || !FdtOpen(DeviceTree, DeviceTreeSize, &Fdt) || !AppleReadIdentity(&Fdt, &Identity))
         return;
     Entry = FwGetSmbiosEntryPoint();
     if (!Entry || !AppleLocateTable(Entry, &Table, &TableSize, &Major, &Minor, &DocRev))

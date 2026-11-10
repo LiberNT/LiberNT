@@ -452,7 +452,7 @@ HalpCompatibleListContains(
     ULONG Cursor = 0, EntryLength, Index;
     const CHAR *Entry;
 
-    while ((Entry = RiscvFdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
     {
         for (Index = 0; Index < Count; ++Index)
         {
@@ -557,41 +557,41 @@ HalQueryPciRoutedInterrupt(
     const CHAR *Compatible;
     const VOID *Blob;
     BOOLEAN Edge;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG BlobSize;
 
     *Gsi = 0;
     if (HalAcpiGetTable(NULL, 'PCAF') || !HalpArm64GetDeviceTree(&Blob, &BlobSize) || !Blob ||
-        !RiscvFdtOpen(Blob, BlobSize, &Fdt) ||
+        !FdtOpen(Blob, BlobSize, &Fdt) ||
         !HalpArm64FindDeviceTreeNode(&Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
         Pin < 1 || Pin > 4 || Device > 31 || Function > 7 || Bus > 255)
         return FALSE;
-    if (RiscvFdtReadU32(&Fdt, Node, "linux,pci-domain", &Domain) && Domain != Segment)
+    if (FdtReadU32(&Fdt, Node, "linux,pci-domain", &Domain) && Domain != Segment)
         return FALSE;
-    Map = RiscvFdtGetProperty(&Fdt, Node, "interrupt-map", &Length);
-    MaskProperty = RiscvFdtGetProperty(&Fdt, Node, "interrupt-map-mask", &MaskLength);
+    Map = FdtGetProperty(&Fdt, Node, "interrupt-map", &Length);
+    MaskProperty = FdtGetProperty(&Fdt, Node, "interrupt-map-mask", &MaskLength);
     if (!Map || !MaskProperty || MaskLength != 4 * sizeof(ULONG))
         return FALSE;
     Address[0] = (Bus << 16) | (Device << 11) | (Function << 8);
     Address[1] = Address[2] = 0;
     Address[3] = Pin;
     for (Index = 0; Index < 4; ++Index)
-        Mask[Index] = RiscvFdtReadBigEndian32(MaskProperty + Index * sizeof(ULONG));
+        Mask[Index] = FdtReadBigEndian32(MaskProperty + Index * sizeof(ULONG));
     for (Offset = 0; Offset + 5 * sizeof(ULONG) <= Length;)
     {
         BOOLEAN Hit = TRUE;
 
         for (Index = 0; Index < 4; ++Index)
         {
-            if ((Address[Index] ^ RiscvFdtReadBigEndian32(Map + Offset + Index * sizeof(ULONG))) & Mask[Index])
+            if ((Address[Index] ^ FdtReadBigEndian32(Map + Offset + Index * sizeof(ULONG))) & Mask[Index])
                 Hit = FALSE;
         }
-        Controller = HalpArm64FindDeviceTreePhandle(&Fdt, RiscvFdtReadBigEndian32(Map + Offset + 4 * sizeof(ULONG)));
-        if (Controller == RISCV_FDT_NO_NODE)
+        Controller = HalpArm64FindDeviceTreePhandle(&Fdt, FdtReadBigEndian32(Map + Offset + 4 * sizeof(ULONG)));
+        if (Controller == FDT_NO_NODE)
             return FALSE;
-        if (!RiscvFdtReadU32(&Fdt, Controller, "#address-cells", &ParentAddressCells))
+        if (!FdtReadU32(&Fdt, Controller, "#address-cells", &ParentAddressCells))
             ParentAddressCells = 0;
-        if (!RiscvFdtReadU32(&Fdt, Controller, "#interrupt-cells", &ParentInterruptCells) ||
+        if (!FdtReadU32(&Fdt, Controller, "#interrupt-cells", &ParentInterruptCells) ||
             ParentInterruptCells == 0 || ParentInterruptCells > RTL_NUMBER_OF(Cells))
             return FALSE;
         Offset += (5 + ParentAddressCells) * sizeof(ULONG);
@@ -600,8 +600,8 @@ HalQueryPciRoutedInterrupt(
         if (Hit)
         {
             for (Index = 0; Index < ParentInterruptCells; ++Index)
-                Cells[Index] = RiscvFdtReadBigEndian32(Map + Offset + Index * sizeof(ULONG));
-            Compatible = RiscvFdtGetProperty(&Fdt, Controller, "compatible", &CompatibleLength);
+                Cells[Index] = FdtReadBigEndian32(Map + Offset + Index * sizeof(ULONG));
+            Compatible = FdtGetProperty(&Fdt, Controller, "compatible", &CompatibleLength);
             return Compatible &&
                    HalpTranslateDeviceTreeInterrupt(Compatible, CompatibleLength, Cells, ParentInterruptCells, Gsi, &Edge);
         }

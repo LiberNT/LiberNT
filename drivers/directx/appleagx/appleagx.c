@@ -167,18 +167,18 @@ AgxOpenAdt(
     const VOID *Label, *Compatible;
     ULONG Length;
 
-    if (!RiscvFdtFindNode(&Agx->Tree.Fdt, "/reserved-memory", &Reserved, NULL))
+    if (!FdtFindNode(&Agx->Tree.Fdt, "/reserved-memory", &Reserved, NULL))
         return;
-    for (Node = RiscvFdtFirstChild(&Agx->Tree.Fdt, Reserved); Node != RISCV_FDT_NO_NODE;
-         Node = RiscvFdtNextSibling(&Agx->Tree.Fdt, Node))
+    for (Node = FdtFirstChild(&Agx->Tree.Fdt, Reserved); Node != FDT_NO_NODE;
+         Node = FdtNextSibling(&Agx->Tree.Fdt, Node))
     {
-        Compatible = RiscvFdtGetProperty(&Agx->Tree.Fdt, Node, "compatible", &Length);
-        if (!Compatible || !RiscvFdtStringListContains(Compatible, Length, "phram"))
+        Compatible = FdtGetProperty(&Agx->Tree.Fdt, Node, "compatible", &Length);
+        if (!Compatible || !FdtStringListContains(Compatible, Length, "phram"))
             continue;
-        Label = RiscvFdtGetProperty(&Agx->Tree.Fdt, Node, "label", &Length);
+        Label = FdtGetProperty(&Agx->Tree.Fdt, Node, "label", &Length);
         if (!Label || Length != sizeof("adt") || !RtlEqualMemory(Label, "adt", sizeof("adt")))
             continue;
-        if (!RiscvFdtReadReg(&Agx->Tree.Fdt, Node, Reserved, 0, &Base, &Size) || !Size ||
+        if (!FdtReadReg(&Agx->Tree.Fdt, Node, Reserved, 0, &Base, &Size) || !Size ||
             Size > AGX_ADT_MAX_LENGTH)
         {
             continue;
@@ -264,15 +264,15 @@ AgxReadRegions(
     ULONG Length, Index, Node;
     ULONG64 Phandle, Base, Size;
 
-    Regions = RiscvFdtGetProperty(&Agx->Tree.Fdt, Agx->Tree.Node, "memory-region", &Length);
+    Regions = FdtGetProperty(&Agx->Tree.Fdt, Agx->Tree.Node, "memory-region", &Length);
     if (!Regions)
         return;
     for (Index = 0; Index < AGX_REGIONS; ++Index)
     {
-        if (!RiscvFdtReadCells(Regions, Length, Index, 1, &Phandle))
+        if (!FdtReadCells(Regions, Length, Index, 1, &Phandle))
             break;
         Node = FdtDriverFindPhandle(&Agx->Tree, (ULONG)Phandle);
-        if (Node == RISCV_FDT_NO_NODE || !RiscvFdtReadReg(&Agx->Tree.Fdt, Node, Agx->Tree.Node, 0, &Base, &Size))
+        if (Node == FDT_NO_NODE || !FdtReadReg(&Agx->Tree.Fdt, Node, Agx->Tree.Node, 0, &Base, &Size))
             continue;
         Agx->RegionBase[Index] = Base;
         Agx->RegionSize[Index] = Size;
@@ -552,8 +552,8 @@ AgxStart(
     Agx->AscSize = AGX_SGX_WINDOW_SIZE;
     Agx->IdSize = AGX_SGX_WINDOW_SIZE;
     Agx->CoreSize = AGX_SGX_WINDOW_SIZE;
-    if (RiscvFdtReadU32(&Agx->Tree.Fdt, Agx->Tree.Node, "mboxes", &MailboxPhandle) &&
-        (MailboxNode = FdtDriverFindPhandle(&Agx->Tree, MailboxPhandle)) != RISCV_FDT_NO_NODE)
+    if (FdtReadU32(&Agx->Tree.Fdt, Agx->Tree.Node, "mboxes", &MailboxPhandle) &&
+        (MailboxNode = FdtDriverFindPhandle(&Agx->Tree, MailboxPhandle)) != FDT_NO_NODE)
     {
         Agx->Mailbox = FdtDriverMapReg(&Agx->Tree, MailboxNode, 0, NULL, &Agx->MailboxSize);
     }

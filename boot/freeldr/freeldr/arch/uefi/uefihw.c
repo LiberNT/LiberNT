@@ -14,7 +14,7 @@
 #endif
 #include <reactos/arc/loaderblk.h>
 #include <Fdt.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(HWDETECT);
@@ -440,7 +440,7 @@ UefiGetDeviceTreeModel(
 {
     EFI_GUID DeviceTreeGuid = FDT_TABLE_GUID;
     const CHAR *Model;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Size, Length;
     UINTN Index;
 
@@ -449,12 +449,12 @@ UefiGetDeviceTreeModel(
         EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
 
         if (memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)) ||
-            !RiscvFdtValidateHeader(Entry->VendorTable, RISCV_FDT_MAXIMUM_SIZE, &Size) ||
-            !RiscvFdtOpen(Entry->VendorTable, Size, &Fdt))
+            !FdtValidateHeader(Entry->VendorTable, FDT_MAXIMUM_SIZE, &Size) ||
+            !FdtOpen(Entry->VendorTable, Size, &Fdt))
         {
             continue;
         }
-        Model = RiscvFdtGetProperty(&Fdt, RiscvFdtRootNode(&Fdt), "model", &Length);
+        Model = FdtGetProperty(&Fdt, FdtRootNode(&Fdt), "model", &Length);
         if (Model && Length > 1 && Model[Length - 1] == ANSI_NULL)
             return NT_SUCCESS(RtlStringCbCopyA(Buffer, BufferSize, Model));
     }

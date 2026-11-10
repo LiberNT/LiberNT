@@ -150,7 +150,7 @@ PcieNodeEnabled(
     const CHAR *Status;
     ULONG Length;
 
-    Status = RiscvFdtGetProperty(&Tree->Fdt, Node, "status", &Length);
+    Status = FdtGetProperty(&Tree->Fdt, Node, "status", &Length);
     if (!Status)
         return TRUE;
     return (Length == sizeof("okay") && !memcmp(Status, "okay", sizeof("okay"))) ||
@@ -166,7 +166,7 @@ PcieIsPciNode(
     const CHAR *Type;
     ULONG Length;
 
-    Type = RiscvFdtGetProperty(&Tree->Fdt, Node, "device_type", &Length);
+    Type = FdtGetProperty(&Tree->Fdt, Node, "device_type", &Length);
     return Type && Length == sizeof("pci") && !memcmp(Type, "pci", sizeof("pci"));
 }
 
@@ -179,19 +179,19 @@ PcieApplyPinmux(
     const UCHAR *Phandles, *Pinmux;
     ULONG Length, PinmuxLength, Group, Controller, Index, Entry, Pin;
 
-    Phandles = RiscvFdtGetProperty(&Tree->Fdt, Pcie->Node, "pinctrl-0", &Length);
+    Phandles = FdtGetProperty(&Tree->Fdt, Pcie->Node, "pinctrl-0", &Length);
     if (!Phandles || Length < sizeof(ULONG))
         return;
-    Group = FdtDriverFindPhandle(Tree, RiscvFdtReadBigEndian32(Phandles));
-    if (Group == RISCV_FDT_NO_NODE)
+    Group = FdtDriverFindPhandle(Tree, FdtReadBigEndian32(Phandles));
+    if (Group == FDT_NO_NODE)
         return;
     Controller = FdtDriverFindParentNode(Tree, Group);
-    if (Controller == RISCV_FDT_NO_NODE || Controller != Pcie->PinctrlNode || !Pcie->Pinctrl.Base)
+    if (Controller == FDT_NO_NODE || Controller != Pcie->PinctrlNode || !Pcie->Pinctrl.Base)
         return;
-    Pinmux = RiscvFdtGetProperty(&Tree->Fdt, Group, "pinmux", &PinmuxLength);
+    Pinmux = FdtGetProperty(&Tree->Fdt, Group, "pinmux", &PinmuxLength);
     for (Index = 0; Pinmux && Index + sizeof(ULONG) <= PinmuxLength; Index += sizeof(ULONG))
     {
-        Entry = RiscvFdtReadBigEndian32(Pinmux + Index);
+        Entry = FdtReadBigEndian32(Pinmux + Index);
         Pin = Entry & 0xFFFF;
         if ((Pin + 1) * sizeof(ULONG) > Pcie->Pinctrl.Size || (Entry >> 16) > 3)
             continue;
@@ -213,13 +213,13 @@ PcieReadGpio(
     const UCHAR *Spec;
     ULONG Length;
 
-    Spec = RiscvFdtGetProperty(&Tree->Fdt, Node, Property, &Length);
+    Spec = FdtGetProperty(&Tree->Fdt, Node, Property, &Length);
     if (!Spec || Length < 3 * sizeof(ULONG))
         return FALSE;
-    *Controller = FdtDriverFindPhandle(Tree, RiscvFdtReadBigEndian32(Spec));
-    *Pin = RiscvFdtReadBigEndian32(Spec + 4);
-    *ActiveLow = (RiscvFdtReadBigEndian32(Spec + 8) & 1) != 0;
-    return *Controller != RISCV_FDT_NO_NODE;
+    *Controller = FdtDriverFindPhandle(Tree, FdtReadBigEndian32(Spec));
+    *Pin = FdtReadBigEndian32(Spec + 4);
+    *ActiveLow = (FdtReadBigEndian32(Spec + 8) & 1) != 0;
+    return *Controller != FDT_NO_NODE;
 }
 
 static
@@ -261,7 +261,7 @@ PcieBringUpLink(
     _Inout_ PAPPLE_PCIE Pcie,
     _Inout_ PAPPLE_PCIE_PORT Port)
 {
-    ULONG ResetController, ResetPin, PwrenController = RISCV_FDT_NO_NODE, PwrenPin = 0, Length, Waited;
+    ULONG ResetController, ResetPin, PwrenController = FDT_NO_NODE, PwrenPin = 0, Length, Waited;
     BOOLEAN ResetActiveLow, PwrenActiveLow = FALSE, Pwren;
     const VOID *Compatible;
     NTSTATUS Status;
@@ -276,13 +276,13 @@ PcieBringUpLink(
     PcieSetResetPin(Pcie, ResetPin, ResetActiveLow, TRUE);
     if (Pwren)
     {
-        Compatible = RiscvFdtGetProperty(&Tree->Fdt, PwrenController, "compatible", &Length);
+        Compatible = FdtGetProperty(&Tree->Fdt, PwrenController, "compatible", &Length);
         if (!Pcie->SetSmcGpio ||
-            (!RiscvFdtStringListContains(Compatible, Length, "apple,smc-gpio") &&
-             !RiscvFdtStringListContains(Compatible, Length, "apple,smc-low-gpio")))
+            (!FdtStringListContains(Compatible, Length, "apple,smc-gpio") &&
+             !FdtStringListContains(Compatible, Length, "apple,smc-low-gpio")))
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         Status = Pcie->SetSmcGpio(Pcie->SmcGpioContext,
-                                  RiscvFdtStringListContains(Compatible, Length, "apple,smc-low-gpio"),
+                                  FdtStringListContains(Compatible, Length, "apple,smc-low-gpio"),
                                   (UCHAR)PwrenPin, !PwrenActiveLow);
         if (!NT_SUCCESS(Status))
             return Status;
@@ -326,7 +326,7 @@ ApplePcieOpen(
 
     RtlZeroMemory(Pcie, sizeof(*Pcie));
     Pcie->Node = Node;
-    Pcie->PinctrlNode = RISCV_FDT_NO_NODE;
+    Pcie->PinctrlNode = FDT_NO_NODE;
     Status = ApplePmgrPowerOnDevice(Tree, Node);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -334,48 +334,48 @@ ApplePcieOpen(
     if (Index == MAXULONG || !FdtDriverReadReg(Tree, Node, Index, &Pcie->ConfigBase, &Pcie->ConfigSize))
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     Pcie->LastBus = 255;
-    BusRange = RiscvFdtGetProperty(&Tree->Fdt, Node, "bus-range", &Length);
+    BusRange = FdtGetProperty(&Tree->Fdt, Node, "bus-range", &Length);
     if (BusRange && Length == 2 * sizeof(ULONG))
     {
-        Pcie->FirstBus = RiscvFdtReadBigEndian32(BusRange);
-        Pcie->LastBus = RiscvFdtReadBigEndian32(BusRange + sizeof(ULONG));
+        Pcie->FirstBus = FdtReadBigEndian32(BusRange);
+        Pcie->LastBus = FdtReadBigEndian32(BusRange + sizeof(ULONG));
     }
     if (Pcie->FirstBus > Pcie->LastBus || Pcie->LastBus > 255)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
-    Ranges = RiscvFdtGetProperty(&Tree->Fdt, Node, "ranges", &Length);
+    Ranges = FdtGetProperty(&Tree->Fdt, Node, "ranges", &Length);
     for (Index = 0; Ranges && (Index + 1) * 7 * sizeof(ULONG) <= Length && Pcie->WindowCount < APPLE_PCIE_MAX_WINDOWS;
          ++Index)
     {
         const UCHAR *Entry = Ranges + Index * 7 * sizeof(ULONG);
-        ULONG Flags = RiscvFdtReadBigEndian32(Entry);
-        ULONG64 Size = ((ULONG64)RiscvFdtReadBigEndian32(Entry + 20) << 32) | RiscvFdtReadBigEndian32(Entry + 24);
+        ULONG Flags = FdtReadBigEndian32(Entry);
+        ULONG64 Size = ((ULONG64)FdtReadBigEndian32(Entry + 20) << 32) | FdtReadBigEndian32(Entry + 24);
 
         if (((Flags >> 24) & 3) < 2 || !Size || Size > MAXULONG)
             continue;
-        Pcie->Windows[Pcie->WindowCount].BusBase = ((ULONG64)RiscvFdtReadBigEndian32(Entry + 4) << 32) |
-                                                   RiscvFdtReadBigEndian32(Entry + 8);
+        Pcie->Windows[Pcie->WindowCount].BusBase = ((ULONG64)FdtReadBigEndian32(Entry + 4) << 32) |
+                                                   FdtReadBigEndian32(Entry + 8);
         Pcie->Windows[Pcie->WindowCount].Size = (ULONG)Size;
         Pcie->Windows[Pcie->WindowCount].Prefetchable = (Flags & 0x40000000) != 0;
         Pcie->WindowCount++;
     }
-    Ranges = RiscvFdtGetProperty(&Tree->Fdt, Node, "msi-ranges", &Length);
-    Pcie->MsiVectors = (Ranges && Length >= sizeof(ULONG)) ? RiscvFdtReadBigEndian32(Ranges + Length - sizeof(ULONG)) : 0;
+    Ranges = FdtGetProperty(&Tree->Fdt, Node, "msi-ranges", &Length);
+    Pcie->MsiVectors = (Ranges && Length >= sizeof(ULONG)) ? FdtReadBigEndian32(Ranges + Length - sizeof(ULONG)) : 0;
     if (Pcie->MsiVectors > PCIE_MAX_MSI_VECTORS)
         Pcie->MsiVectors = PCIE_MAX_MSI_VECTORS;
 
-    for (Child = RiscvFdtFirstChild(&Tree->Fdt, Node);
-         Child != RISCV_FDT_NO_NODE && Pcie->PortCount < APPLE_PCIE_MAX_PORTS;
-         Child = RiscvFdtNextSibling(&Tree->Fdt, Child))
+    for (Child = FdtFirstChild(&Tree->Fdt, Node);
+         Child != FDT_NO_NODE && Pcie->PortCount < APPLE_PCIE_MAX_PORTS;
+         Child = FdtNextSibling(&Tree->Fdt, Child))
     {
         if (!PcieIsPciNode(Tree, Child) || !PcieNodeEnabled(Tree, Child))
             continue;
         Port = &Pcie->Ports[Pcie->PortCount];
         RtlZeroMemory(Port, sizeof(*Port));
         Port->Node = Child;
-        BusRange = RiscvFdtGetProperty(&Tree->Fdt, Child, "bus-range", &Length);
-        Port->Bus = (BusRange && Length >= sizeof(ULONG)) ? RiscvFdtReadBigEndian32(BusRange) : MAXULONG;
-        Ranges = RiscvFdtGetProperty(&Tree->Fdt, Child, "reg", &Length);
-        Port->Index = (Ranges && Length >= sizeof(ULONG)) ? (RiscvFdtReadBigEndian32(Ranges) >> 11) & 0x1F : MAXULONG;
+        BusRange = FdtGetProperty(&Tree->Fdt, Child, "bus-range", &Length);
+        Port->Bus = (BusRange && Length >= sizeof(ULONG)) ? FdtReadBigEndian32(BusRange) : MAXULONG;
+        Ranges = FdtGetProperty(&Tree->Fdt, Child, "reg", &Length);
+        Port->Index = (Ranges && Length >= sizeof(ULONG)) ? (FdtReadBigEndian32(Ranges) >> 11) & 0x1F : MAXULONG;
         if (Port->Index >= APPLE_PCIE_MAX_PORTS)
             continue;
         PortName[4] = (CHAR)('0' + Port->Index);
@@ -386,14 +386,14 @@ ApplePcieOpen(
             PcieUnmap(&Port->Registers);
             continue;
         }
-        if (Pcie->PinctrlNode == RISCV_FDT_NO_NODE &&
+        if (Pcie->PinctrlNode == FDT_NO_NODE &&
             PcieReadGpio(Tree, Child, "reset-gpios", &Controller, &Pin, &ActiveLow))
             Pcie->PinctrlNode = Controller;
         Pcie->PortCount++;
     }
     if (!Pcie->PortCount)
         return STATUS_NO_SUCH_DEVICE;
-    if (Pcie->PinctrlNode != RISCV_FDT_NO_NODE && NT_SUCCESS(ApplePmgrPowerOnDevice(Tree, Pcie->PinctrlNode)))
+    if (Pcie->PinctrlNode != FDT_NO_NODE && NT_SUCCESS(ApplePmgrPowerOnDevice(Tree, Pcie->PinctrlNode)))
     {
         Pcie->Pinctrl.Base = FdtDriverMapReg(Tree, Pcie->PinctrlNode, 0, NULL, &Pcie->Pinctrl.Size);
         PcieApplyPinmux(Tree, Pcie);
@@ -484,18 +484,18 @@ ApplePcieFindStream(
 
     *Phandle = 0;
     *Sid = 0;
-    Map = RiscvFdtGetProperty(&Tree->Fdt, PcieNode, "iommu-map", &Length);
+    Map = FdtGetProperty(&Tree->Fdt, PcieNode, "iommu-map", &Length);
     if (!Map || Length % (4 * sizeof(ULONG)))
         return FALSE;
-    RiscvFdtReadU32(&Tree->Fdt, PcieNode, "iommu-map-mask", &Mask);
+    FdtReadU32(&Tree->Fdt, PcieNode, "iommu-map-mask", &Mask);
     for (Entry = 0; Entry < Length / (4 * sizeof(ULONG)); ++Entry)
     {
-        Base = RiscvFdtReadBigEndian32(Map + Entry * 16);
-        Span = RiscvFdtReadBigEndian32(Map + Entry * 16 + 12);
+        Base = FdtReadBigEndian32(Map + Entry * 16);
+        Span = FdtReadBigEndian32(Map + Entry * 16 + 12);
         if ((Rid & Mask) >= Base && (Rid & Mask) - Base < Span)
         {
-            *Phandle = RiscvFdtReadBigEndian32(Map + Entry * 16 + 4);
-            *Sid = RiscvFdtReadBigEndian32(Map + Entry * 16 + 8) + (Rid & Mask) - Base;
+            *Phandle = FdtReadBigEndian32(Map + Entry * 16 + 4);
+            *Sid = FdtReadBigEndian32(Map + Entry * 16 + 8) + (Rid & Mask) - Base;
             return TRUE;
         }
     }

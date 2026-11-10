@@ -8,7 +8,7 @@
 #include <bl.h>
 #include <arm64.h>
 #include <Fdt.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #define APPLE_WDT_WD1_CUR_TIME   0x10
 #define APPLE_WDT_WD1_BITE_TIME  0x14
@@ -21,7 +21,7 @@ static ULONGLONG Arm64FirmwareWatchdogBase;
 static
 BOOLEAN
 Arm64FindAppleWatchdog(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG Node,
     _In_ ULONG Parent,
     _In_ ULONG Depth,
@@ -32,10 +32,10 @@ Arm64FindAppleWatchdog(
     ULONG Length;
     ULONG Child;
 
-    Compatible = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
-    if (Compatible && Parent != RISCV_FDT_NO_NODE &&
-        (RiscvFdtStringListContains(Compatible, Length, "apple,t8103-wdt") ||
-         RiscvFdtStringListContains(Compatible, Length, "apple,wdt")))
+    Compatible = FdtGetProperty(Fdt, Node, "compatible", &Length);
+    if (Compatible && Parent != FDT_NO_NODE &&
+        (FdtStringListContains(Compatible, Length, "apple,t8103-wdt") ||
+         FdtStringListContains(Compatible, Length, "apple,wdt")))
     {
         *Found = Node;
         *FoundParent = Parent;
@@ -43,7 +43,7 @@ Arm64FindAppleWatchdog(
     }
     if (Depth >= 8)
         return FALSE;
-    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE; Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node); Child != FDT_NO_NODE; Child = FdtNextSibling(Fdt, Child))
     {
         if (Arm64FindAppleWatchdog(Fdt, Child, Node, Depth + 1, Found, FoundParent))
             return TRUE;
@@ -58,15 +58,15 @@ Arm64FindFirmwareWatchdog(
 {
     ULONGLONG Address;
     ULONGLONG Size;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Parent;
     ULONG Node;
     ULONG Control;
 
     Arm64FirmwareWatchdogBase = 0;
-    if (!RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt) ||
-        !Arm64FindAppleWatchdog(&Fdt, RiscvFdtRootNode(&Fdt), RISCV_FDT_NO_NODE, 0, &Node, &Parent) ||
-        !RiscvFdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) ||
+    if (!FdtOpen(DeviceTree, DeviceTreeSize, &Fdt) ||
+        !Arm64FindAppleWatchdog(&Fdt, FdtRootNode(&Fdt), FDT_NO_NODE, 0, &Node, &Parent) ||
+        !FdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) ||
         Address == 0 || Size < APPLE_WDT_REGISTER_SPAN)
     {
         return;

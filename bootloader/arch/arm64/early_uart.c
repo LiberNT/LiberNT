@@ -17,7 +17,7 @@
 
 #include <reactos/arm64/early_uart.h>
 #include <Fdt.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 /*
  * Global runtime-detected UART state.
@@ -685,7 +685,7 @@ EarlyUartLocateDeviceTreeAddress(_Out_ ARM64_UART_INTERFACE *UartInterface)
     const CHAR *Path;
     ULONGLONG Address;
     ULONGLONG Size;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Chosen;
     ULONG Parent;
     ULONG Length;
@@ -701,7 +701,7 @@ EarlyUartLocateDeviceTreeAddress(_Out_ ARM64_UART_INTERFACE *UartInterface)
         EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
 
         if (!memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)) &&
-            RiscvFdtOpen(Entry->VendorTable, RISCV_FDT_MAXIMUM_SIZE, &Fdt))
+            FdtOpen(Entry->VendorTable, FDT_MAXIMUM_SIZE, &Fdt))
         {
             break;
         }
@@ -711,30 +711,30 @@ EarlyUartLocateDeviceTreeAddress(_Out_ ARM64_UART_INTERFACE *UartInterface)
         EarlyUartDiagPuts("[EUART] FDT: not found\n");
         return 0;
     }
-    if (!RiscvFdtFindNode(&Fdt, "/chosen", &Chosen, NULL))
+    if (!FdtFindNode(&Fdt, "/chosen", &Chosen, NULL))
     {
         EarlyUartDiagPuts("[EUART] FDT: no /chosen\n");
         return 0;
     }
-    Path = RiscvFdtGetProperty(&Fdt, Chosen, "stdout-path", &Length);
+    Path = FdtGetProperty(&Fdt, Chosen, "stdout-path", &Length);
     if (!Path)
-        Path = RiscvFdtGetProperty(&Fdt, Chosen, "linux,stdout-path", &Length);
+        Path = FdtGetProperty(&Fdt, Chosen, "linux,stdout-path", &Length);
     if (!Path || Length == 0 || Path[Length - 1] != '\0' ||
-        !RiscvFdtResolvePath(&Fdt, Path, &Node, &Parent, NULL) || Parent == RISCV_FDT_NO_NODE)
+        !FdtResolvePath(&Fdt, Path, &Node, &Parent, NULL) || Parent == FDT_NO_NODE)
     {
         EarlyUartDiagPuts("[EUART] FDT: no resolvable stdout-path\n");
         return 0;
     }
-    Compatible = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
-    if (RiscvFdtStringListContains(Compatible, Length, "arm,pl011"))
+    Compatible = FdtGetProperty(&Fdt, Node, "compatible", &Length);
+    if (FdtStringListContains(Compatible, Length, "arm,pl011"))
     {
         Interface = Arm64UartPl011;
     }
-    else if (RiscvFdtStringListContains(Compatible, Length, "ns16550a") ||
-             RiscvFdtStringListContains(Compatible, Length, "ns16550"))
+    else if (FdtStringListContains(Compatible, Length, "ns16550a") ||
+             FdtStringListContains(Compatible, Length, "ns16550"))
     {
-        if ((RiscvFdtReadU32(&Fdt, Node, "reg-shift", &Value) && Value != 0) ||
-            (RiscvFdtReadU32(&Fdt, Node, "reg-io-width", &Value) && Value != 1))
+        if ((FdtReadU32(&Fdt, Node, "reg-shift", &Value) && Value != 0) ||
+            (FdtReadU32(&Fdt, Node, "reg-io-width", &Value) && Value != 1))
         {
             EarlyUartDiagPuts("[EUART] FDT: ns16550 register layout not supported\n");
             return 0;
@@ -746,7 +746,7 @@ EarlyUartLocateDeviceTreeAddress(_Out_ ARM64_UART_INTERFACE *UartInterface)
         EarlyUartDiagPuts("[EUART] FDT: stdout-path has no supported compatible\n");
         return 0;
     }
-    if (!RiscvFdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) || Address == 0 || Size == 0)
+    if (!FdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) || Address == 0 || Size == 0)
     {
         EarlyUartDiagPuts("[EUART] FDT: stdout-path has no usable reg\n");
         return 0;

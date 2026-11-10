@@ -601,7 +601,7 @@ static HAL_ARM64_MSI_DOORBELL AppleAicPcieDoorbell;
 static
 VOID
 AppleAicProbePcieMsi(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG AicNode)
 {
     static const PCSTR Compatibles[] = { "apple,t6020-pcie", "apple,pcie" };
@@ -609,17 +609,17 @@ AppleAicProbePcieMsi(
     ULONG Node, Parent, Match, Length, Cells, Phandle;
 
     if (!HalpArm64FindDeviceTreeNode(Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
-        !RiscvFdtReadU32(Fdt, AicNode, "#interrupt-cells", &Cells) || Cells != 3 ||
-        !RiscvFdtReadU32(Fdt, AicNode, "phandle", &Phandle))
+        !FdtReadU32(Fdt, AicNode, "#interrupt-cells", &Cells) || Cells != 3 ||
+        !FdtReadU32(Fdt, AicNode, "phandle", &Phandle))
         return;
-    Ranges = RiscvFdtGetProperty(Fdt, Node, "msi-ranges", &Length);
-    if (!Ranges || Length != (2 + Cells) * sizeof(ULONG) || RiscvFdtReadBigEndian32(Ranges) != Phandle ||
-        RiscvFdtReadBigEndian32(Ranges + sizeof(ULONG)) != 0)
+    Ranges = FdtGetProperty(Fdt, Node, "msi-ranges", &Length);
+    if (!Ranges || Length != (2 + Cells) * sizeof(ULONG) || FdtReadBigEndian32(Ranges) != Phandle ||
+        FdtReadBigEndian32(Ranges + sizeof(ULONG)) != 0)
         return;
     AppleAicPcieDoorbell.Name = "Apple PCIe";
     AppleAicPcieDoorbell.Address = APPLE_PCIE_MSI_DOORBELL;
-    AppleAicPcieDoorbell.FirstVector = AIC_FIRST_DEVICE_INTID + RiscvFdtReadBigEndian32(Ranges + 2 * sizeof(ULONG));
-    AppleAicPcieDoorbell.VectorCount = RiscvFdtReadBigEndian32(Ranges + (1 + Cells) * sizeof(ULONG));
+    AppleAicPcieDoorbell.FirstVector = AIC_FIRST_DEVICE_INTID + FdtReadBigEndian32(Ranges + 2 * sizeof(ULONG));
+    AppleAicPcieDoorbell.VectorCount = FdtReadBigEndian32(Ranges + (1 + Cells) * sizeof(ULONG));
     if (AppleAicPcieDoorbell.FirstVector + AppleAicPcieDoorbell.VectorCount <= AIC_FIRST_DEVICE_INTID + AIC_MAX_DEVICE_IRQS)
         HalpArm64RegisterMsiDoorbell(&AppleAicPcieDoorbell);
 }
@@ -631,7 +631,7 @@ AppleAicInterruptProbe(
 {
     static const PCSTR Compatibles[] = { "apple,t8122-aic3", "apple,aic2" };
     static const ULONG IrqCfgOffsets[] = { AIC3_IRQ_CFG, AIC2_IRQ_CFG };
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Node;
     ULONG Parent;
     ULONG Match;
@@ -646,8 +646,8 @@ AppleAicInterruptProbe(
         return FALSE;
     }
     IrqCfgOffset = IrqCfgOffsets[Match];
-    if (!RiscvFdtReadReg(&Fdt, Node, Parent, 0, &AppleAicCorePhysical, &AppleAicCoreLength) ||
-        !RiscvFdtReadReg(&Fdt, Node, Parent, 1, &AppleAicEventPhysical, &AppleAicEventLength) ||
+    if (!FdtReadReg(&Fdt, Node, Parent, 0, &AppleAicCorePhysical, &AppleAicCoreLength) ||
+        !FdtReadReg(&Fdt, Node, Parent, 1, &AppleAicEventPhysical, &AppleAicEventLength) ||
         AppleAicCoreLength <= IrqCfgOffset || AppleAicEventLength < sizeof(ULONG))
     {
         DPRINT1("[AIC] interrupt controller node has no usable core and event registers\n");

@@ -127,9 +127,9 @@ AppleMcaOpen(
     ULONG Length;
 
     RtlZeroMemory(Mca, sizeof(*Mca));
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8103-mca") &&
-        !RiscvFdtStringListContains(Compatible, Length, "apple,mca"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "apple,t8103-mca") &&
+        !FdtStringListContains(Compatible, Length, "apple,mca"))
         return STATUS_NOT_SUPPORTED;
     Mca->Clusters = FdtDriverMapReg(Tree, Node, 0, NULL, &Mca->ClustersSize);
     Mca->Switch = FdtDriverMapReg(Tree, Node, 1, NULL, &Mca->SwitchSize);

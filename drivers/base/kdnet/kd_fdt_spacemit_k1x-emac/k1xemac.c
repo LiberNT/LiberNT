@@ -6,7 +6,7 @@
  */
 
 #include "kdk1x.h"
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #define K1X_RING_PAGES          2
 #define K1X_MDIO_WAIT           1000
@@ -337,7 +337,7 @@ K1xArmReceive(
 static
 BOOLEAN
 K1xReadCell(
-    _In_ const RISCV_FDT *Tree,
+    _In_ const FDT *Tree,
     _In_ ULONG Node,
     _In_z_ const CHAR *Name,
     _Out_ PULONG Value)
@@ -345,7 +345,7 @@ K1xReadCell(
     const UCHAR *Cell;
     ULONG Length;
 
-    Cell = RiscvFdtGetProperty(Tree, Node, Name, &Length);
+    Cell = FdtGetProperty(Tree, Node, Name, &Length);
     if (!Cell || Length != sizeof(ULONG))
         return FALSE;
 
@@ -356,19 +356,19 @@ K1xReadCell(
 static
 BOOLEAN
 K1xHasProperty(
-    _In_ const RISCV_FDT *Tree,
+    _In_ const FDT *Tree,
     _In_ ULONG Node,
     _In_z_ const CHAR *Name)
 {
     ULONG Length;
 
-    return RiscvFdtGetProperty(Tree, Node, Name, &Length) != NULL;
+    return FdtGetProperty(Tree, Node, Name, &Length) != NULL;
 }
 
 static
 BOOLEAN
 K1xReadAddress(
-    _In_ const RISCV_FDT *Tree,
+    _In_ const FDT *Tree,
     _In_ ULONG Node,
     _In_z_ const CHAR *Name,
     _Out_writes_(MAC_ADDRESS_SIZE) PUCHAR Address)
@@ -377,7 +377,7 @@ K1xReadAddress(
     ULONG Length, i;
     BOOLEAN Valid = FALSE;
 
-    Property = RiscvFdtGetProperty(Tree, Node, Name, &Length);
+    Property = FdtGetProperty(Tree, Node, Name, &Length);
     if (!Property || Length != MAC_ADDRESS_SIZE || (Property[0] & 1))
         return FALSE;
 
@@ -402,15 +402,15 @@ K1xReadConfiguration(
     ULONGLONG Base, Size;
     const CHAR *Mode;
     UCHAR Suggested[MAC_ADDRESS_SIZE];
-    RISCV_FDT Tree;
+    FDT Tree;
     ULONG Node, Port, Length, Value, i;
 
     for (i = 0; i < MAC_ADDRESS_SIZE; i++)
         Suggested[i] = Address[i];
 
     Node = Description->Node;
-    if (!RiscvFdtOpen(Description->Blob, Description->Size, &Tree) ||
-        !RiscvFdtReadReg(&Tree, Node, Description->Parent, 0, &Base, &Size))
+    if (!FdtOpen(Description->Blob, Description->Size, &Tree) ||
+        !FdtReadReg(&Tree, Node, Description->Parent, 0, &Base, &Size))
     {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
@@ -440,14 +440,14 @@ K1xReadConfiguration(
     if (K1xReadCell(&Tree, Node, "phy-addr", &Value) && Value < K1X_PHY_COUNT)
         Adapter->PhyAddress = (UCHAR)Value;
 
-    Mode = RiscvFdtGetProperty(&Tree, Node, "phy-mode", &Length);
+    Mode = FdtGetProperty(&Tree, Node, "phy-mode", &Length);
     if (Mode && Length >= 2)
     {
         Adapter->Rgmii = Mode[0] == 'r' && Mode[1] == 'g';
-        Adapter->PhyTxDelay = RiscvFdtStringListContains(Mode, Length, "rgmii-id") ||
-                              RiscvFdtStringListContains(Mode, Length, "rgmii-txid");
-        Adapter->PhyRxDelay = RiscvFdtStringListContains(Mode, Length, "rgmii-id") ||
-                              RiscvFdtStringListContains(Mode, Length, "rgmii-rxid");
+        Adapter->PhyTxDelay = FdtStringListContains(Mode, Length, "rgmii-id") ||
+                              FdtStringListContains(Mode, Length, "rgmii-txid");
+        Adapter->PhyRxDelay = FdtStringListContains(Mode, Length, "rgmii-id") ||
+                              FdtStringListContains(Mode, Length, "rgmii-rxid");
     }
 
     Adapter->ReferenceClockFromPhy = K1xHasProperty(&Tree, Node, "ref-clock-from-phy");

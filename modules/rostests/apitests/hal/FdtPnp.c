@@ -11,7 +11,7 @@
 #include <ndk/ntndk.h>
 #include <winreg.h>
 #include <wchar.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #define UNIT_TEST
 
@@ -116,7 +116,7 @@ NTAPI
 HalpTranslateDeviceTreeInterrupt(const CHAR *Compatible, ULONG CompatibleLength, const ULONG *Cells,
                                  ULONG CellCount, PULONG Gsi, PBOOLEAN EdgeTriggered)
 {
-    if (!RiscvFdtStringListContains(Compatible, CompatibleLength, "test,aic") || CellCount != 3 || Cells[0] != 0)
+    if (!FdtStringListContains(Compatible, CompatibleLength, "test,aic") || CellCount != 3 || Cells[0] != 0)
         return FALSE;
     *Gsi = 32 + Cells[1];
     *EdgeTriggered = (Cells[2] & 3) != 0;
@@ -229,7 +229,7 @@ FindDevice(PHALP_FDT_DEVICE_NODE Devices, ULONG Count, const CHAR *Name)
 
     for (Index = 0; Index < Count; ++Index)
     {
-        NodeName = RiscvFdtNodeName(&HalpFdt, Devices[Index].Node, &Length);
+        NodeName = FdtNodeName(&HalpFdt, Devices[Index].Node, &Length);
         if (NodeName && Length == strlen(Name) && !memcmp(NodeName, Name, Length))
             return Index;
     }

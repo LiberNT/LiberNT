@@ -1130,17 +1130,17 @@ MtpFindInterfaceNode(
     const CHAR *Name;
 
     HidNode = FdtDriverFindChild(&Device->Tree, Device->Tree.Node, "apple,dockchannel-hid");
-    if (HidNode == RISCV_FDT_NO_NODE)
-        return RISCV_FDT_NO_NODE;
+    if (HidNode == FDT_NO_NODE)
+        return FDT_NO_NODE;
     Length = (ULONG)strlen(Device->Interfaces[Index].Name);
-    for (Child = RiscvFdtFirstChild(&Device->Tree.Fdt, HidNode); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(&Device->Tree.Fdt, Child))
+    for (Child = FdtFirstChild(&Device->Tree.Fdt, HidNode); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&Device->Tree.Fdt, Child))
     {
-        Name = RiscvFdtNodeName(&Device->Tree.Fdt, Child, &NameLength);
+        Name = FdtNodeName(&Device->Tree.Fdt, Child, &NameLength);
         if (Name && NameLength == Length && !memcmp(Name, Device->Interfaces[Index].Name, Length))
             return Child;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
@@ -1163,9 +1163,9 @@ MtpLoadFirmware(
 
     RtlZeroMemory(Buffer, sizeof(*Buffer));
     Node = MtpFindInterfaceNode(Device, Index);
-    if (Node == RISCV_FDT_NO_NODE)
+    if (Node == FDT_NO_NODE)
         return STATUS_NOT_FOUND;
-    Name = RiscvFdtGetProperty(&Device->Tree.Fdt, Node, "firmware-name", &Length);
+    Name = FdtGetProperty(&Device->Tree.Fdt, Node, "firmware-name", &Length);
     if (!Name || !Length || Name[Length - 1] != '\0')
         return STATUS_NOT_FOUND;
     Status = RtlStringCbPrintfW(PathBuffer, sizeof(PathBuffer), L"\\SystemRoot\\System32\\drivers\\firmware\\%S", Name);
@@ -1330,25 +1330,25 @@ MtpPulseGpio(
     NTSTATUS Status;
 
     HidNode = FdtDriverFindChild(&Device->Tree, Device->Tree.Node, "apple,dockchannel-hid");
-    if (HidNode == RISCV_FDT_NO_NODE ||
+    if (HidNode == FDT_NO_NODE ||
         !NT_SUCCESS(RtlStringCbPrintfA(Property, sizeof(Property), "apple,%s-gpios", Interface->GpioName)))
         return FALSE;
-    Spec = RiscvFdtGetProperty(&Device->Tree.Fdt, HidNode, Property, &Length);
+    Spec = FdtGetProperty(&Device->Tree.Fdt, HidNode, Property, &Length);
     if (!Spec || Length < 12)
     {
         DbgPrint("applemtp: no %s property for the GPIO request\n", Property);
         return FALSE;
     }
-    Controller = FdtDriverFindPhandle(&Device->Tree, RiscvFdtReadBigEndian32(Spec));
-    Compatible = Controller == RISCV_FDT_NO_NODE ? NULL :
-                 RiscvFdtGetProperty(&Device->Tree.Fdt, Controller, "compatible", &CompatibleLength);
+    Controller = FdtDriverFindPhandle(&Device->Tree, FdtReadBigEndian32(Spec));
+    Compatible = Controller == FDT_NO_NODE ? NULL :
+                 FdtGetProperty(&Device->Tree.Fdt, Controller, "compatible", &CompatibleLength);
     if (!Compatible)
         return FALSE;
-    Gpio.LowBank = RiscvFdtStringListContains(Compatible, CompatibleLength, "apple,smc-low-gpio");
-    if (!Gpio.LowBank && !RiscvFdtStringListContains(Compatible, CompatibleLength, "apple,smc-gpio"))
+    Gpio.LowBank = FdtStringListContains(Compatible, CompatibleLength, "apple,smc-low-gpio");
+    if (!Gpio.LowBank && !FdtStringListContains(Compatible, CompatibleLength, "apple,smc-gpio"))
         return FALSE;
-    Gpio.Pin = (UCHAR)RiscvFdtReadBigEndian32(Spec + 4);
-    ActiveLow = (RiscvFdtReadBigEndian32(Spec + 8) & 1) != 0;
+    Gpio.Pin = (UCHAR)FdtReadBigEndian32(Spec + 4);
+    ActiveLow = (FdtReadBigEndian32(Spec + 8) & 1) != 0;
 
     Gpio.Value = !ActiveLow;
     for (Waited = 0; ; Waited += MTP_SMC_WAIT_STEP_MS)
@@ -1842,24 +1842,24 @@ MtpStartHardware(
     }
     FifoNode = Device->Tree.Node;
     HidNode = FdtDriverFindChild(&Device->Tree, FifoNode, "apple,dockchannel-hid");
-    if (HidNode == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadU32(&Device->Tree.Fdt, HidNode, "apple,helper-cpu", &Phandle) ||
-        (HelperNode = FdtDriverFindPhandle(&Device->Tree, Phandle)) == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadU32(&Device->Tree.Fdt, HelperNode, "mboxes", &Phandle) ||
-        (MboxNode = FdtDriverFindPhandle(&Device->Tree, Phandle)) == RISCV_FDT_NO_NODE)
+    if (HidNode == FDT_NO_NODE ||
+        !FdtReadU32(&Device->Tree.Fdt, HidNode, "apple,helper-cpu", &Phandle) ||
+        (HelperNode = FdtDriverFindPhandle(&Device->Tree, Phandle)) == FDT_NO_NODE ||
+        !FdtReadU32(&Device->Tree.Fdt, HelperNode, "mboxes", &Phandle) ||
+        (MboxNode = FdtDriverFindPhandle(&Device->Tree, Phandle)) == FDT_NO_NODE)
     {
         DbgPrint("applemtp: the DockChannel HID description is incomplete\n");
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
-    Iommus = RiscvFdtGetProperty(&Device->Tree.Fdt, HidNode, "iommus", &Length);
+    Iommus = FdtGetProperty(&Device->Tree.Fdt, HidNode, "iommus", &Length);
     if (!Iommus || Length < 8 ||
-        (DartNode = FdtDriverFindPhandle(&Device->Tree, RiscvFdtReadBigEndian32(Iommus))) == RISCV_FDT_NO_NODE)
+        (DartNode = FdtDriverFindPhandle(&Device->Tree, FdtReadBigEndian32(Iommus))) == FDT_NO_NODE)
     {
         DbgPrint("applemtp: the DockChannel HID has no DART\n");
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
-    Device->DartSid = RiscvFdtReadBigEndian32(Iommus + 4);
-    if (!RiscvFdtReadU32(&Device->Tree.Fdt, HidNode, "apple,fifo-size", &Device->FifoSize))
+    Device->DartSid = FdtReadBigEndian32(Iommus + 4);
+    if (!FdtReadU32(&Device->Tree.Fdt, HidNode, "apple,fifo-size", &Device->FifoSize))
         Device->FifoSize = 0x800;
 
     Device->Asc = MtpMap(Device, HelperNode, 0, "MTP ASC", NULL, &Device->AscSize);

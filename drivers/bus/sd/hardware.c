@@ -865,8 +865,8 @@ SdBusGl9755ApplyPlatformConfig(
 
     if (NT_SUCCESS(FdtDriverOpenByCompatible("pci17a0,9755", &Tree)))
     {
-        InvertCd = RiscvFdtGetProperty(&Tree.Fdt, Tree.Node, "cd-inverted", &Length) != NULL;
-        InvertWp = RiscvFdtGetProperty(&Tree.Fdt, Tree.Node, "wp-inverted", &Length) != NULL;
+        InvertCd = FdtGetProperty(&Tree.Fdt, Tree.Node, "cd-inverted", &Length) != NULL;
+        InvertWp = FdtGetProperty(&Tree.Fdt, Tree.Node, "wp-inverted", &Length) != NULL;
         FdtDriverClose(&Tree);
     }
     if (!NT_SUCCESS(SdBusQueryPciBusInterface(FdoExtension, &Bus)))

@@ -26,7 +26,7 @@ FdtDriverLoadBlob(
     NTSTATUS Status;
 
     RtlZeroMemory(Tree, sizeof(*Tree));
-    Tree->Node = RISCV_FDT_NO_NODE;
+    Tree->Node = FDT_NO_NODE;
     InitializeObjectAttributes(&Attributes, &SystemKey, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
     Status = ZwOpenKey(&Key, KEY_QUERY_VALUE, &Attributes);
     if (!NT_SUCCESS(Status))
@@ -48,7 +48,7 @@ FdtDriverLoadBlob(
         goto Done;
     }
     RtlCopyMemory(Tree->Blob, Info->Data, Info->DataLength);
-    if (!RiscvFdtOpen(Tree->Blob, Info->DataLength, &Tree->Fdt))
+    if (!FdtOpen(Tree->Blob, Info->DataLength, &Tree->Fdt))
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
 
 Done:
@@ -92,7 +92,7 @@ FdtDriverOpen(
     for (Index = 0; Index < sizeof(Path) - 1 && Index < PathInfo->DataLength / sizeof(WCHAR) && Wide[Index]; ++Index)
         Path[Index] = (CHAR)Wide[Index];
     Path[Index] = '\0';
-    if (!RiscvFdtFindNode(&Tree->Fdt, Path, &Tree->Node, NULL))
+    if (!FdtFindNode(&Tree->Fdt, Path, &Tree->Node, NULL))
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
 
 Done:
@@ -114,12 +114,12 @@ FdtDriverOpenByCompatible(
     Status = FdtDriverLoadBlob(Tree);
     if (!NT_SUCCESS(Status))
         return Status;
-    for (Offset = RiscvFdtRootNode(&Tree->Fdt); Offset != RISCV_FDT_NO_NODE; Offset = RiscvFdtSkipToken(&Tree->Fdt, Offset))
+    for (Offset = FdtRootNode(&Tree->Fdt); Offset != FDT_NO_NODE; Offset = FdtSkipToken(&Tree->Fdt, Offset))
     {
-        if (RiscvFdtToken(&Tree->Fdt, Offset) != RISCV_FDT_BEGIN_NODE)
+        if (FdtReadToken(&Tree->Fdt, Offset) != FDT_BEGIN_NODE)
             continue;
-        List = RiscvFdtGetProperty(&Tree->Fdt, Offset, "compatible", &Length);
-        if (List && RiscvFdtStringListContains(List, Length, Compatible))
+        List = FdtGetProperty(&Tree->Fdt, Offset, "compatible", &Length);
+        if (List && FdtStringListContains(List, Length, Compatible))
         {
             Tree->Node = Offset;
             return STATUS_SUCCESS;
@@ -139,7 +139,7 @@ FdtDriverOpenAlias(
 
     Status = FdtDriverLoadBlob(Tree);
     if (NT_SUCCESS(Status) &&
-        !RiscvFdtResolvePath(&Tree->Fdt, PathOrAlias, &Tree->Node, NULL, NULL))
+        !FdtResolvePath(&Tree->Fdt, PathOrAlias, &Tree->Node, NULL, NULL))
     {
         Status = STATUS_NOT_FOUND;
     }
@@ -156,7 +156,7 @@ FdtDriverClose(
     if (Tree->Blob)
         ExFreePoolWithTag(Tree->Blob, FDT_DRIVER_TAG);
     RtlZeroMemory(Tree, sizeof(*Tree));
-    Tree->Node = RISCV_FDT_NO_NODE;
+    Tree->Node = FDT_NO_NODE;
 }
 
 ULONG
@@ -165,20 +165,20 @@ FdtDriverFindPhandle(
     _In_ PFDT_DRIVER_TREE Tree,
     _In_ ULONG Phandle)
 {
-    ULONG Offset = RiscvFdtRootNode(&Tree->Fdt), Value;
+    ULONG Offset = FdtRootNode(&Tree->Fdt), Value;
 
     if (!Phandle || Phandle == MAXULONG)
-        return RISCV_FDT_NO_NODE;
-    while (Offset != RISCV_FDT_NO_NODE)
+        return FDT_NO_NODE;
+    while (Offset != FDT_NO_NODE)
     {
-        if (RiscvFdtToken(&Tree->Fdt, Offset) == RISCV_FDT_BEGIN_NODE &&
-            RiscvFdtReadU32(&Tree->Fdt, Offset, "phandle", &Value) && Value == Phandle)
+        if (FdtReadToken(&Tree->Fdt, Offset) == FDT_BEGIN_NODE &&
+            FdtReadU32(&Tree->Fdt, Offset, "phandle", &Value) && Value == Phandle)
         {
             return Offset;
         }
-        Offset = RiscvFdtSkipToken(&Tree->Fdt, Offset);
+        Offset = FdtSkipToken(&Tree->Fdt, Offset);
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 ULONG
@@ -190,15 +190,15 @@ FdtDriverFindChild(
 {
     ULONG Child, Length;
 
-    for (Child = RiscvFdtFirstChild(&Tree->Fdt, Node); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(&Tree->Fdt, Child))
+    for (Child = FdtFirstChild(&Tree->Fdt, Node); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&Tree->Fdt, Child))
     {
-        const VOID *List = RiscvFdtGetProperty(&Tree->Fdt, Child, "compatible", &Length);
+        const VOID *List = FdtGetProperty(&Tree->Fdt, Child, "compatible", &Length);
 
-        if (List && RiscvFdtStringListContains(List, Length, Compatible))
+        if (List && FdtStringListContains(List, Length, Compatible))
             return Child;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
@@ -212,15 +212,15 @@ FdtDriverFindParent(
 {
     ULONG Child, Next;
 
-    for (Child = RiscvFdtFirstChild(&Tree->Fdt, Bus); Child != RISCV_FDT_NO_NODE; Child = Next)
+    for (Child = FdtFirstChild(&Tree->Fdt, Bus); Child != FDT_NO_NODE; Child = Next)
     {
-        Next = RiscvFdtNextSibling(&Tree->Fdt, Child);
+        Next = FdtNextSibling(&Tree->Fdt, Child);
         if (Child == Node)
         {
             *Parent = Bus;
             return TRUE;
         }
-        if (Child < Node && (Next == RISCV_FDT_NO_NODE || Node < Next))
+        if (Child < Node && (Next == FDT_NO_NODE || Node < Next))
             return Depth < 8 && FdtDriverFindParent(Tree, Child, Node, Depth + 1, Parent);
     }
     return FALSE;
@@ -233,28 +233,28 @@ FdtDriverTranslate(
     _In_ ULONG Bus,
     _Inout_ PULONG64 Address)
 {
-    ULONG Root = RiscvFdtRootNode(&Tree->Fdt), Length, ChildCells, ParentCells, SizeCells, Unused, Stride, Entry;
+    ULONG Root = FdtRootNode(&Tree->Fdt), Length, ChildCells, ParentCells, SizeCells, Unused, Stride, Entry;
     ULONG GrandParent, Depth;
     ULONG64 ChildBase, ParentBase, Size;
     const VOID *Ranges;
 
     for (Depth = 0; Bus != Root && Depth < 8; ++Depth)
     {
-        Ranges = RiscvFdtGetProperty(&Tree->Fdt, Bus, "ranges", &Length);
+        Ranges = FdtGetProperty(&Tree->Fdt, Bus, "ranges", &Length);
         if (!Ranges || !FdtDriverFindParent(Tree, Root, Bus, 0, &GrandParent))
             return FALSE;
         if (Length)
         {
             BOOLEAN Found = FALSE;
 
-            RiscvFdtGetCellCounts(&Tree->Fdt, Bus, &ChildCells, &SizeCells);
-            RiscvFdtGetCellCounts(&Tree->Fdt, GrandParent, &ParentCells, &Unused);
+            FdtGetCellCounts(&Tree->Fdt, Bus, &ChildCells, &SizeCells);
+            FdtGetCellCounts(&Tree->Fdt, GrandParent, &ParentCells, &Unused);
             Stride = ChildCells + ParentCells + SizeCells;
             for (Entry = 0; Stride && (Entry + 1) * Stride * sizeof(ULONG) <= Length; ++Entry)
             {
-                if (!RiscvFdtReadCells(Ranges, Length, Entry * Stride, ChildCells, &ChildBase) ||
-                    !RiscvFdtReadCells(Ranges, Length, Entry * Stride + ChildCells, ParentCells, &ParentBase) ||
-                    !RiscvFdtReadCells(Ranges, Length, Entry * Stride + ChildCells + ParentCells, SizeCells, &Size))
+                if (!FdtReadCells(Ranges, Length, Entry * Stride, ChildCells, &ChildBase) ||
+                    !FdtReadCells(Ranges, Length, Entry * Stride + ChildCells, ParentCells, &ParentBase) ||
+                    !FdtReadCells(Ranges, Length, Entry * Stride + ChildCells + ParentCells, SizeCells, &Size))
                     return FALSE;
                 if (*Address >= ChildBase && *Address - ChildBase < Size)
                 {
@@ -282,8 +282,8 @@ FdtDriverReadReg(
 {
     ULONG Parent;
 
-    if (!FdtDriverFindParent(Tree, RiscvFdtRootNode(&Tree->Fdt), Node, 0, &Parent) ||
-        !RiscvFdtReadReg(&Tree->Fdt, Node, Parent, Index, Address, Size))
+    if (!FdtDriverFindParent(Tree, FdtRootNode(&Tree->Fdt), Node, 0, &Parent) ||
+        !FdtReadReg(&Tree->Fdt, Node, Parent, Index, Address, Size))
         return FALSE;
     return FdtDriverTranslate(Tree, Parent, Address);
 }
@@ -300,8 +300,8 @@ FdtDriverFindRegIndex(
     ULONG Length, Cursor = 0, EntryLength, Index = 0;
     SIZE_T NameLength = strlen(Name);
 
-    Names = RiscvFdtGetProperty(&Tree->Fdt, Node, "reg-names", &Length);
-    while ((Entry = RiscvFdtNextString(Names, Length, &Cursor, &EntryLength)) != NULL)
+    Names = FdtGetProperty(&Tree->Fdt, Node, "reg-names", &Length);
+    while ((Entry = FdtNextString(Names, Length, &Cursor, &EntryLength)) != NULL)
     {
         if (EntryLength == NameLength && !memcmp(Entry, Name, EntryLength))
             return Index;
@@ -351,7 +351,7 @@ FdtDriverOpenByAddress(
     NTSTATUS Status;
 
     RtlZeroMemory(Tree, sizeof(*Tree));
-    Tree->Node = RISCV_FDT_NO_NODE;
+    Tree->Node = FDT_NO_NODE;
     InitializeObjectAttributes(&Attributes, &SystemKey, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
     Status = ZwOpenKey(&Key, KEY_QUERY_VALUE, &Attributes);
     if (!NT_SUCCESS(Status))
@@ -373,21 +373,21 @@ FdtDriverOpenByAddress(
         goto Done;
     }
     RtlCopyMemory(Tree->Blob, Info->Data, Info->DataLength);
-    if (!RiscvFdtOpen(Tree->Blob, Info->DataLength, &Tree->Fdt))
+    if (!FdtOpen(Tree->Blob, Info->DataLength, &Tree->Fdt))
     {
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
         goto Done;
     }
     Status = STATUS_NOT_FOUND;
-    for (Offset = RiscvFdtRootNode(&Tree->Fdt); Offset != RISCV_FDT_NO_NODE; Offset = RiscvFdtSkipToken(&Tree->Fdt, Offset))
+    for (Offset = FdtRootNode(&Tree->Fdt); Offset != FDT_NO_NODE; Offset = FdtSkipToken(&Tree->Fdt, Offset))
     {
         const VOID *List;
         ULONG64 Base, Size;
 
-        if (RiscvFdtToken(&Tree->Fdt, Offset) != RISCV_FDT_BEGIN_NODE)
+        if (FdtReadToken(&Tree->Fdt, Offset) != FDT_BEGIN_NODE)
             continue;
-        List = RiscvFdtGetProperty(&Tree->Fdt, Offset, "compatible", &Length);
-        if (!List || !RiscvFdtStringListContains(List, Length, Compatible))
+        List = FdtGetProperty(&Tree->Fdt, Offset, "compatible", &Length);
+        if (!List || !FdtStringListContains(List, Length, Compatible))
             continue;
         if (FdtDriverReadReg(Tree, Offset, 0, &Base, &Size) && Base == Address)
         {
@@ -413,5 +413,5 @@ FdtDriverFindParentNode(
 {
     ULONG Parent;
 
-    return FdtDriverFindParent(Tree, RiscvFdtRootNode(&Tree->Fdt), Node, 0, &Parent) ? Parent : RISCV_FDT_NO_NODE;
+    return FdtDriverFindParent(Tree, FdtRootNode(&Tree->Fdt), Node, 0, &Parent) ? Parent : FDT_NO_NODE;
 }

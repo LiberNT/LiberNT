@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/riscv64/fdt.h>
+#include <libernt/fdt.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -300,15 +300,15 @@ KiRiscvValidateLoaderBlock(
         return KiRiscvStartupInvalidSharedDataMapping;
     }
     if ((RiscvBlock->DeviceTree & (PAGE_SIZE - 1)) ||
-        (RiscvBlock->DeviceTreeSize < RISCV_FDT_HEADER_SIZE) ||
-        (RiscvBlock->DeviceTreeSize > RISCV_FDT_MAXIMUM_SIZE) ||
+        (RiscvBlock->DeviceTreeSize < FDT_HEADER_SIZE) ||
+        (RiscvBlock->DeviceTreeSize > FDT_MAXIMUM_SIZE) ||
         !KiRiscvValidateMappedRange(RiscvBlock,
                                     RiscvBlock->DeviceTree,
                                     (SIZE_T)RiscvBlock->DeviceTreeSize))
     {
         return KiRiscvStartupInvalidDeviceTreeMapping;
     }
-    if (!RiscvFdtValidateHeader(
+    if (!FdtValidateHeader(
             (PVOID)(ULONG_PTR)RiscvBlock->DeviceTree,
             (SIZE_T)RiscvBlock->DeviceTreeSize,
             &DeviceTreeSize) ||

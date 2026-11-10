@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntifs.h>
 #endif
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include "../include/halpnp.h"
 #include "../include/halfdt.h"
 
@@ -31,7 +31,7 @@ typedef struct _HALP_FDT_RESOURCES
     BOOLEAN InterruptEdge[HALP_FDT_MAX_INTERRUPTS];
 } HALP_FDT_RESOURCES, *PHALP_FDT_RESOURCES;
 
-static RISCV_FDT HalpFdt;
+static FDT HalpFdt;
 static BOOLEAN HalpFdtOpened;
 
 static const CHAR *const HalpFdtIgnoredCompatibles[] =
@@ -61,10 +61,10 @@ HalpFdtEnabled(
     _In_ ULONG Node)
 {
     ULONG Length;
-    const VOID *Status = RiscvFdtGetProperty(&HalpFdt, Node, "status", &Length);
+    const VOID *Status = FdtGetProperty(&HalpFdt, Node, "status", &Length);
 
-    return !Status || RiscvFdtStringListContains(Status, Length, "okay") ||
-           RiscvFdtStringListContains(Status, Length, "ok");
+    return !Status || FdtStringListContains(Status, Length, "okay") ||
+           FdtStringListContains(Status, Length, "ok");
 }
 
 static
@@ -74,9 +74,9 @@ HalpFdtIsCompatible(
     _In_z_ const CHAR *Name)
 {
     ULONG Length;
-    const VOID *Compatible = RiscvFdtGetProperty(&HalpFdt, Node, "compatible", &Length);
+    const VOID *Compatible = FdtGetProperty(&HalpFdt, Node, "compatible", &Length);
 
-    return Compatible && RiscvFdtStringListContains(Compatible, Length, Name);
+    return Compatible && FdtStringListContains(Compatible, Length, Name);
 }
 
 static
@@ -87,7 +87,7 @@ HalpFdtHasProperty(
 {
     ULONG Length;
 
-    return RiscvFdtGetProperty(&HalpFdt, Node, Name, &Length) != NULL;
+    return FdtGetProperty(&HalpFdt, Node, Name, &Length) != NULL;
 }
 
 static
@@ -95,20 +95,20 @@ ULONG
 HalpFdtFindPhandle(
     _In_ ULONG Phandle)
 {
-    ULONG Offset = RiscvFdtRootNode(&HalpFdt), Value;
+    ULONG Offset = FdtRootNode(&HalpFdt), Value;
 
     if (!Phandle || Phandle == MAXULONG)
-        return RISCV_FDT_NO_NODE;
-    while (Offset != RISCV_FDT_NO_NODE)
+        return FDT_NO_NODE;
+    while (Offset != FDT_NO_NODE)
     {
-        if (RiscvFdtToken(&HalpFdt, Offset) == RISCV_FDT_BEGIN_NODE &&
-            RiscvFdtReadU32(&HalpFdt, Offset, "phandle", &Value) && Value == Phandle)
+        if (FdtReadToken(&HalpFdt, Offset) == FDT_BEGIN_NODE &&
+            FdtReadU32(&HalpFdt, Offset, "phandle", &Value) && Value == Phandle)
         {
             return Offset;
         }
-        Offset = RiscvFdtSkipToken(&HalpFdt, Offset);
+        Offset = FdtSkipToken(&HalpFdt, Offset);
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
@@ -121,15 +121,15 @@ HalpFdtFindParent(
 {
     ULONG Child, Next;
 
-    for (Child = RiscvFdtFirstChild(&HalpFdt, Bus); Child != RISCV_FDT_NO_NODE; Child = Next)
+    for (Child = FdtFirstChild(&HalpFdt, Bus); Child != FDT_NO_NODE; Child = Next)
     {
-        Next = RiscvFdtNextSibling(&HalpFdt, Child);
+        Next = FdtNextSibling(&HalpFdt, Child);
         if (Child == Node)
         {
             *Parent = Bus;
             return TRUE;
         }
-        if (Child < Node && (Next == RISCV_FDT_NO_NODE || Node < Next))
+        if (Child < Node && (Next == FDT_NO_NODE || Node < Next))
             return Depth < 8 && HalpFdtFindParent(Child, Node, Depth + 1, Parent);
     }
     return FALSE;
@@ -141,13 +141,13 @@ HalpFdtIsDevice(
     _In_ ULONG Node)
 {
     ULONG Length, Index;
-    const CHAR *Compatible = RiscvFdtGetProperty(&HalpFdt, Node, "compatible", &Length);
+    const CHAR *Compatible = FdtGetProperty(&HalpFdt, Node, "compatible", &Length);
 
     if (!Compatible || Length < 2 || Compatible[Length - 1] != '\0' || !HalpFdtEnabled(Node))
         return FALSE;
     for (Index = 0; Index < RTL_NUMBER_OF(HalpFdtIgnoredCompatibles); ++Index)
     {
-        if (RiscvFdtStringListContains(Compatible, Length, HalpFdtIgnoredCompatibles[Index]))
+        if (FdtStringListContains(Compatible, Length, HalpFdtIgnoredCompatibles[Index]))
             return FALSE;
     }
     return !HalpFdtHasProperty(Node, "interrupt-controller") || HalpFdtHasProperty(Node, "gpio-controller") ||
@@ -160,14 +160,14 @@ HalpFdtIsIgnoredRootNode(
     _In_ ULONG Node)
 {
     ULONG NameLength, Index, EntryLength;
-    const CHAR *Name = RiscvFdtNodeName(&HalpFdt, Node, &NameLength);
+    const CHAR *Name = FdtNodeName(&HalpFdt, Node, &NameLength);
 
     if (!Name)
         return TRUE;
     for (Index = 0; Index < RTL_NUMBER_OF(HalpFdtIgnoredRootNodes); ++Index)
     {
         EntryLength = (ULONG)strlen(HalpFdtIgnoredRootNodes[Index]);
-        if (RiscvFdtNameMatches(Name, NameLength, HalpFdtIgnoredRootNodes[Index], EntryLength))
+        if (FdtNameMatches(Name, NameLength, HalpFdtIgnoredRootNodes[Index], EntryLength))
             return TRUE;
     }
     return FALSE;
@@ -184,8 +184,8 @@ HalpFdtWalk(
 {
     ULONG Node;
 
-    for (Node = RiscvFdtFirstChild(&HalpFdt, Bus); Node != RISCV_FDT_NO_NODE && *Count < MaximumCount;
-         Node = RiscvFdtNextSibling(&HalpFdt, Node))
+    for (Node = FdtFirstChild(&HalpFdt, Bus); Node != FDT_NO_NODE && *Count < MaximumCount;
+         Node = FdtNextSibling(&HalpFdt, Node))
     {
         if (Depth == 0 && HalpFdtIsIgnoredRootNode(Node))
             continue;
@@ -213,25 +213,25 @@ HalpFdtTranslateAddress(
     ULONG64 ChildBase, ParentBase, Size;
     const VOID *Ranges;
 
-    if (Parent == RiscvFdtRootNode(&HalpFdt))
+    if (Parent == FdtRootNode(&HalpFdt))
         return TRUE;
-    Ranges = RiscvFdtGetProperty(&HalpFdt, Parent, "ranges", &Length);
+    Ranges = FdtGetProperty(&HalpFdt, Parent, "ranges", &Length);
     if (!Ranges)
         return FALSE;
     if (!Length)
         return TRUE;
-    if (!HalpFdtFindParent(RiscvFdtRootNode(&HalpFdt), Parent, 0, &GrandParent))
+    if (!HalpFdtFindParent(FdtRootNode(&HalpFdt), Parent, 0, &GrandParent))
         return FALSE;
-    RiscvFdtGetCellCounts(&HalpFdt, Parent, &ChildCells, &SizeCells);
-    RiscvFdtGetCellCounts(&HalpFdt, GrandParent, &ParentCells, &Unused);
+    FdtGetCellCounts(&HalpFdt, Parent, &ChildCells, &SizeCells);
+    FdtGetCellCounts(&HalpFdt, GrandParent, &ParentCells, &Unused);
     Stride = ChildCells + ParentCells + SizeCells;
     if (!Stride)
         return FALSE;
     for (Entry = 0; (Entry + 1) * Stride * sizeof(ULONG) <= Length; ++Entry)
     {
-        if (!RiscvFdtReadCells(Ranges, Length, Entry * Stride, ChildCells, &ChildBase) ||
-            !RiscvFdtReadCells(Ranges, Length, Entry * Stride + ChildCells, ParentCells, &ParentBase) ||
-            !RiscvFdtReadCells(Ranges, Length, Entry * Stride + ChildCells + ParentCells, SizeCells, &Size))
+        if (!FdtReadCells(Ranges, Length, Entry * Stride, ChildCells, &ChildBase) ||
+            !FdtReadCells(Ranges, Length, Entry * Stride + ChildCells, ParentCells, &ParentBase) ||
+            !FdtReadCells(Ranges, Length, Entry * Stride + ChildCells + ParentCells, SizeCells, &Size))
         {
             return FALSE;
         }
@@ -252,19 +252,19 @@ HalpFdtInterruptParent(
 {
     ULONG Phandle, Current = Node, Up;
 
-    if (RiscvFdtReadU32(&HalpFdt, Node, "interrupt-parent", &Phandle))
+    if (FdtReadU32(&HalpFdt, Node, "interrupt-parent", &Phandle))
         return HalpFdtFindPhandle(Phandle);
-    for (Current = Parent; Current != RISCV_FDT_NO_NODE; Current = Up)
+    for (Current = Parent; Current != FDT_NO_NODE; Current = Up)
     {
-        if (RiscvFdtReadU32(&HalpFdt, Current, "interrupt-parent", &Phandle))
+        if (FdtReadU32(&HalpFdt, Current, "interrupt-parent", &Phandle))
             return HalpFdtFindPhandle(Phandle);
-        if (Current == RiscvFdtRootNode(&HalpFdt) ||
-            !HalpFdtFindParent(RiscvFdtRootNode(&HalpFdt), Current, 0, &Up))
+        if (Current == FdtRootNode(&HalpFdt) ||
+            !HalpFdtFindParent(FdtRootNode(&HalpFdt), Current, 0, &Up))
         {
             break;
         }
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static
@@ -279,16 +279,16 @@ HalpFdtAddInterrupt(
     const CHAR *Compatible;
     BOOLEAN Edge;
 
-    if (Controller == RISCV_FDT_NO_NODE || CellCount == 0 || CellCount > HALP_FDT_MAX_CELLS ||
+    if (Controller == FDT_NO_NODE || CellCount == 0 || CellCount > HALP_FDT_MAX_CELLS ||
         Resources->InterruptCount >= HALP_FDT_MAX_INTERRUPTS)
     {
         return;
     }
-    Compatible = RiscvFdtGetProperty(&HalpFdt, Controller, "compatible", &Length);
+    Compatible = FdtGetProperty(&HalpFdt, Controller, "compatible", &Length);
     if (!Compatible || !Length)
         return;
     for (Index = 0; Index < CellCount; ++Index)
-        Cells[Index] = RiscvFdtReadBigEndian32(Specifier + Index * sizeof(ULONG));
+        Cells[Index] = FdtReadBigEndian32(Specifier + Index * sizeof(ULONG));
     if (!HalpTranslateDeviceTreeInterrupt(Compatible, Length, Cells, CellCount, &Gsi, &Edge))
         return;
     Resources->Interrupt[Resources->InterruptCount] = Gsi;
@@ -312,7 +312,7 @@ HalpFdtDescribe(
 
     for (Index = 0; Index < HALP_FDT_MAX_MEMORY; ++Index)
     {
-        if (!RiscvFdtReadReg(&HalpFdt, Node, Parent, Index, &Address, &Size))
+        if (!FdtReadReg(&HalpFdt, Node, Parent, Index, &Address, &Size))
             break;
         if (!Size || Size > MAXULONG || Address + Size < Address || !HalpFdtTranslateAddress(Parent, &Address))
             continue;
@@ -320,15 +320,15 @@ HalpFdtDescribe(
         Resources->MemorySize[Resources->MemoryCount++] = Size;
     }
 
-    Property = RiscvFdtGetProperty(&HalpFdt, Node, "interrupts-extended", &Length);
+    Property = FdtGetProperty(&HalpFdt, Node, "interrupts-extended", &Length);
     if (Property)
     {
         for (Offset = 0; Offset + sizeof(ULONG) <= Length;)
         {
-            Controller = HalpFdtFindPhandle(RiscvFdtReadBigEndian32(Property + Offset));
-            if (Controller == RISCV_FDT_NO_NODE)
+            Controller = HalpFdtFindPhandle(FdtReadBigEndian32(Property + Offset));
+            if (Controller == FDT_NO_NODE)
                 break;
-            if (!RiscvFdtReadU32(&HalpFdt, Controller, "#interrupt-cells", &CellCount))
+            if (!FdtReadU32(&HalpFdt, Controller, "#interrupt-cells", &CellCount))
                 CellCount = 1;
             Offset += sizeof(ULONG);
             if (CellCount == 0 || Offset + CellCount * sizeof(ULONG) > Length)
@@ -339,13 +339,13 @@ HalpFdtDescribe(
         return TRUE;
     }
 
-    Property = RiscvFdtGetProperty(&HalpFdt, Node, "interrupts", &Length);
+    Property = FdtGetProperty(&HalpFdt, Node, "interrupts", &Length);
     if (Property)
     {
         Controller = HalpFdtInterruptParent(Node, Parent);
-        if (Controller == RISCV_FDT_NO_NODE)
+        if (Controller == FDT_NO_NODE)
             return TRUE;
-        if (!RiscvFdtReadU32(&HalpFdt, Controller, "#interrupt-cells", &CellCount))
+        if (!FdtReadU32(&HalpFdt, Controller, "#interrupt-cells", &CellCount))
             CellCount = 1;
         if (CellCount == 0)
             return TRUE;
@@ -402,25 +402,25 @@ HalpFdtDescribePciHost(
         Host = &Local;
     RtlZeroMemory(Host, sizeof(*Host));
     Host->LastBus = 255;
-    Property = RiscvFdtGetProperty(&HalpFdt, Node, "bus-range", &Length);
+    Property = FdtGetProperty(&HalpFdt, Node, "bus-range", &Length);
     if (Property && Length == 2 * sizeof(ULONG))
     {
-        Host->FirstBus = RiscvFdtReadBigEndian32(Property);
-        Host->LastBus = RiscvFdtReadBigEndian32((const UCHAR *)Property + sizeof(ULONG));
+        Host->FirstBus = FdtReadBigEndian32(Property);
+        Host->LastBus = FdtReadBigEndian32((const UCHAR *)Property + sizeof(ULONG));
     }
     if (Host->FirstBus > Host->LastBus || Host->LastBus > 255)
         return FALSE;
-    RiscvFdtGetCellCounts(&HalpFdt, Parent, &ParentCells, &Unused);
-    Property = RiscvFdtGetProperty(&HalpFdt, Node, "ranges", &Length);
+    FdtGetCellCounts(&HalpFdt, Parent, &ParentCells, &Unused);
+    Property = FdtGetProperty(&HalpFdt, Node, "ranges", &Length);
     for (Entry = 0; Property && ParentCells <= 2 && (Entry + 1) * (5 + ParentCells) * sizeof(ULONG) <= Length &&
          Host->WindowCount < HALP_FDT_MAX_PCI_WINDOWS; ++Entry)
     {
         ULONG Base = Entry * (5 + ParentCells);
 
-        Flags = RiscvFdtReadBigEndian32((const UCHAR *)Property + Base * sizeof(ULONG));
-        if (!RiscvFdtReadCells(Property, Length, Base + 1, 2, &BusAddress) ||
-            !RiscvFdtReadCells(Property, Length, Base + 3, ParentCells, &CpuAddress) ||
-            !RiscvFdtReadCells(Property, Length, Base + 3 + ParentCells, 2, &Size))
+        Flags = FdtReadBigEndian32((const UCHAR *)Property + Base * sizeof(ULONG));
+        if (!FdtReadCells(Property, Length, Base + 1, 2, &BusAddress) ||
+            !FdtReadCells(Property, Length, Base + 3, ParentCells, &CpuAddress) ||
+            !FdtReadCells(Property, Length, Base + 3 + ParentCells, 2, &Size))
             break;
         if (((Flags >> 24) & 3) < 2 || !Size || Size > MAXULONG || BusAddress != CpuAddress ||
             !HalpFdtTranslateAddress(Parent, &CpuAddress))
@@ -446,7 +446,7 @@ HalpFdtInitialize(VOID)
 
     if (HalpFdtOpened)
         return TRUE;
-    if (!HalpQueryDeviceTree(&Blob, &Size) || !Blob || !RiscvFdtOpen(Blob, Size, &HalpFdt))
+    if (!HalpQueryDeviceTree(&Blob, &Size) || !Blob || !FdtOpen(Blob, Size, &HalpFdt))
         return FALSE;
     HalpFdtOpened = TRUE;
 
@@ -469,7 +469,7 @@ HalpFdtEnumerateDevices(
 
     if (!HalpFdtOpened)
         return 0;
-    HalpFdtWalk(RiscvFdtRootNode(&HalpFdt), 0, Devices, MaximumCount, &Count);
+    HalpFdtWalk(FdtRootNode(&HalpFdt), 0, Devices, MaximumCount, &Count);
     return Count;
 }
 
@@ -503,7 +503,7 @@ HalpFdtQueryId(
             *Id = Ids;
             return STATUS_SUCCESS;
         }
-        Name = RiscvFdtNodeName(&HalpFdt, Node, &NameLength);
+        Name = FdtNodeName(&HalpFdt, Node, &NameLength);
         if (!Name || !NameLength || NameLength >= HALP_FDT_MAX_NAME)
             return STATUS_NOT_SUPPORTED;
         Ids = HalpFdtAllocateString(NameLength + 1);
@@ -531,8 +531,8 @@ HalpFdtQueryId(
         return STATUS_SUCCESS;
     }
 
-    List = RiscvFdtGetProperty(&HalpFdt, Node, "compatible", &Length);
-    while ((Entry = RiscvFdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    List = FdtGetProperty(&HalpFdt, Node, "compatible", &Length);
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
     {
         Characters += RTL_NUMBER_OF(Prefix) + EntryLength;
         if (!All)
@@ -545,7 +545,7 @@ HalpFdtQueryId(
         return STATUS_INSUFFICIENT_RESOURCES;
     Out = Ids;
     Cursor = 0;
-    while ((Entry = RiscvFdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
     {
         RtlCopyMemory(Out, Prefix, sizeof(Prefix) - sizeof(WCHAR));
         Out += RTL_NUMBER_OF(Prefix) - 1;
@@ -566,7 +566,7 @@ HalpFdtQueryDeviceText(
     _Out_ PWCHAR *Text)
 {
     ULONG NameLength, Index;
-    const CHAR *Name = RiscvFdtNodeName(&HalpFdt, Node, &NameLength);
+    const CHAR *Name = FdtNodeName(&HalpFdt, Node, &NameLength);
     PWCHAR Buffer;
 
     *Text = NULL;
@@ -762,13 +762,13 @@ HalpFdtWriteNode(
     _In_ ULONG Node,
     _In_ ULONG Depth)
 {
-    ULONG Offset = RiscvFdtSkipToken(&HalpFdt, Node), Child;
+    ULONG Offset = FdtSkipToken(&HalpFdt, Node), Child;
 
-    while (Offset != RISCV_FDT_NO_NODE)
+    while (Offset != FDT_NO_NODE)
     {
-        ULONG Token = RiscvFdtToken(&HalpFdt, Offset);
+        ULONG Token = FdtReadToken(&HalpFdt, Offset);
 
-        if (Token == RISCV_FDT_PROPERTY)
+        if (Token == FDT_PROPERTY)
         {
             const UCHAR *Header = HalpFdt.Blob + HalpFdt.StructureOffset + Offset + sizeof(ULONG);
             WCHAR Name[HALP_FDT_MAX_NAME];
@@ -778,8 +778,8 @@ HalpFdtWriteNode(
 
             if (Offset > HalpFdt.StructureSize - 3 * sizeof(ULONG))
                 break;
-            ValueLength = RiscvFdtReadBigEndian32(Header);
-            NameOffset = RiscvFdtReadBigEndian32(Header + sizeof(ULONG));
+            ValueLength = FdtReadBigEndian32(Header);
+            NameOffset = FdtReadBigEndian32(Header + sizeof(ULONG));
             if (NameOffset >= HalpFdt.StringsSize ||
                 ValueLength > HalpFdt.StructureSize - (Offset + 3 * sizeof(ULONG)))
                 break;
@@ -794,23 +794,23 @@ HalpFdtWriteNode(
                 ZwSetValueKey(Key, &ValueName, 0, REG_BINARY, (PVOID)(Header + 2 * sizeof(ULONG)), ValueLength);
             }
         }
-        else if (Token != RISCV_FDT_NOP)
+        else if (Token != FDT_NOP)
         {
             break;
         }
-        Offset = RiscvFdtSkipToken(&HalpFdt, Offset);
+        Offset = FdtSkipToken(&HalpFdt, Offset);
     }
 
     if (!Depth)
         return;
-    for (Child = RiscvFdtFirstChild(&HalpFdt, Node); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(&HalpFdt, Child))
+    for (Child = FdtFirstChild(&HalpFdt, Node); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&HalpFdt, Child))
     {
         WCHAR Name[HALP_FDT_MAX_NAME];
         OBJECT_ATTRIBUTES Attributes;
         UNICODE_STRING KeyName;
         ULONG NameLength, Index;
-        const CHAR *Source = RiscvFdtNodeName(&HalpFdt, Child, &NameLength);
+        const CHAR *Source = FdtNodeName(&HalpFdt, Child, &NameLength);
         HANDLE ChildKey;
 
         if (!Source || !NameLength || NameLength >= HALP_FDT_MAX_NAME)
@@ -838,17 +838,17 @@ HalpFdtBuildPath(
     ULONG Chain[HALP_FDT_MAX_DEPTH + 4], Depth = 0, Current = Node, Parent, Used = 0, Index, Level, NameLength;
     const CHAR *Name;
 
-    while (Current != RiscvFdtRootNode(&HalpFdt))
+    while (Current != FdtRootNode(&HalpFdt))
     {
         if (Depth >= RTL_NUMBER_OF(Chain) ||
-            !HalpFdtFindParent(RiscvFdtRootNode(&HalpFdt), Current, 0, &Parent))
+            !HalpFdtFindParent(FdtRootNode(&HalpFdt), Current, 0, &Parent))
             return FALSE;
         Chain[Depth++] = Current;
         Current = Parent;
     }
     for (Level = Depth; Level-- > 0;)
     {
-        Name = RiscvFdtNodeName(&HalpFdt, Chain[Level], &NameLength);
+        Name = FdtNodeName(&HalpFdt, Chain[Level], &NameLength);
         if (!Name || Used + NameLength + 2 > Capacity)
             return FALSE;
         Path[Used++] = L'/';

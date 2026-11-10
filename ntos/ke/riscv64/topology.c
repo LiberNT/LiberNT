@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -27,13 +27,13 @@ static ULONG KiRiscvHartTopologyCount;
 
 static ULONG
 KiRiscvReadCacheValue(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_z_ const CHAR *Name)
 {
     ULONG Value;
 
-    return RiscvFdtReadU32(Fdt, Node, Name, &Value) ? Value : 0;
+    return FdtReadU32(Fdt, Node, Name, &Value) ? Value : 0;
 }
 
 static VOID
@@ -65,7 +65,7 @@ KiRiscvAddCache(
 
 static VOID
 KiRiscvAddNodeCaches(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ UCHAR Level,
     _Inout_ PKI_RISCV_HART_TOPOLOGY Hart)
@@ -73,7 +73,7 @@ KiRiscvAddNodeCaches(
     ULONG Line;
     ULONG Length;
 
-    if (RiscvFdtGetProperty(Fdt, Node, "cache-unified", &Length) != NULL)
+    if (FdtGetProperty(Fdt, Node, "cache-unified", &Length) != NULL)
     {
         Line = KiRiscvReadCacheValue(Fdt, Node, "cache-line-size");
         if (Line == 0)
@@ -101,51 +101,51 @@ KiRiscvAddNodeCaches(
 
 static ULONG
 KiRiscvFindPhandle(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Phandle)
 {
-    ULONG Offset = RiscvFdtRootNode(Fdt);
+    ULONG Offset = FdtRootNode(Fdt);
     ULONG Value;
 
-    while (Offset != RISCV_FDT_NO_NODE)
+    while (Offset != FDT_NO_NODE)
     {
-        ULONG Token = RiscvFdtToken(Fdt, Offset);
+        ULONG Token = FdtReadToken(Fdt, Offset);
 
-        if (Token == RISCV_FDT_END)
+        if (Token == FDT_END)
             break;
-        if ((Token == RISCV_FDT_BEGIN_NODE) &&
-            (RiscvFdtReadU32(Fdt, Offset, "phandle", &Value) ||
-             RiscvFdtReadU32(Fdt, Offset, "linux,phandle", &Value)) &&
+        if ((Token == FDT_BEGIN_NODE) &&
+            (FdtReadU32(Fdt, Offset, "phandle", &Value) ||
+             FdtReadU32(Fdt, Offset, "linux,phandle", &Value)) &&
             (Value == Phandle))
         {
             return Offset;
         }
-        Offset = RiscvFdtSkipToken(Fdt, Offset);
+        Offset = FdtSkipToken(Fdt, Offset);
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 VOID
 NTAPI
 KiRiscvCaptureCacheTopology(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Cpus)
 {
     ULONG Child;
 
     KiRiscvHartTopologyCount = 0;
-    for (Child = RiscvFdtFirstChild(Fdt, Cpus);
-         (Child != RISCV_FDT_NO_NODE) && (KiRiscvHartTopologyCount < MAXIMUM_PROCESSORS);
-         Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Cpus);
+         (Child != FDT_NO_NODE) && (KiRiscvHartTopologyCount < MAXIMUM_PROCESSORS);
+         Child = FdtNextSibling(Fdt, Child))
     {
         PKI_RISCV_HART_TOPOLOGY Hart = &KiRiscvHartTopology[KiRiscvHartTopologyCount];
         ULONG NameLength, Node, Phandle, Depth, Level;
-        const CHAR *Name = RiscvFdtNodeName(Fdt, Child, &NameLength);
+        const CHAR *Name = FdtNodeName(Fdt, Child, &NameLength);
         ULONG64 Address, Size;
 
-        if ((Name == NULL) || !RiscvFdtNameMatches(Name, NameLength, "cpu", 3))
+        if ((Name == NULL) || !FdtNameMatches(Name, NameLength, "cpu", 3))
             continue;
-        if (!RiscvFdtReadReg(Fdt, Child, Cpus, 0, &Address, &Size))
+        if (!FdtReadReg(Fdt, Child, Cpus, 0, &Address, &Size))
             continue;
 
         RtlZeroMemory(Hart, sizeof(*Hart));
@@ -156,12 +156,12 @@ KiRiscvCaptureCacheTopology(
         Level = 1;
         for (Depth = 0; Depth < KI_RISCV_CACHE_CHAIN_DEPTH; ++Depth)
         {
-            if (!RiscvFdtReadU32(Fdt, Node, "next-level-cache", &Phandle))
+            if (!FdtReadU32(Fdt, Node, "next-level-cache", &Phandle))
                 break;
             Node = KiRiscvFindPhandle(Fdt, Phandle);
-            if (Node == RISCV_FDT_NO_NODE)
+            if (Node == FDT_NO_NODE)
                 break;
-            if (!RiscvFdtReadU32(Fdt, Node, "cache-level", &Level) || (Level < 2) || (Level > 0xFF))
+            if (!FdtReadU32(Fdt, Node, "cache-level", &Level) || (Level < 2) || (Level > 0xFF))
                 Level = Depth + 2;
             KiRiscvAddNodeCaches(Fdt, Node, (UCHAR)Level, Hart);
         }

@@ -194,13 +194,13 @@ AtcApplyTunable(
     const UCHAR *Property;
     ULONG Length, Count, Index, Offset, Mask, Value;
 
-    Property = RiscvFdtGetProperty(&Tree->Fdt, Node, Name, &Length);
+    Property = FdtGetProperty(&Tree->Fdt, Node, Name, &Length);
     if (!Property || !Length || Length % (3 * sizeof(ULONG)))
         return 0;
     Count = Length / (3 * sizeof(ULONG));
     for (Index = 0; Index < Count; ++Index)
     {
-        Offset = RiscvFdtReadBigEndian32(Property + Index * 12);
+        Offset = FdtReadBigEndian32(Property + Index * 12);
         if ((Offset & 3) || Region->Size < sizeof(ULONG) || Offset > Region->Size - sizeof(ULONG))
             return 0;
     }
@@ -208,9 +208,9 @@ AtcApplyTunable(
     {
         ULONG Old;
 
-        Offset = RiscvFdtReadBigEndian32(Property + Index * 12);
-        Mask = RiscvFdtReadBigEndian32(Property + Index * 12 + 4);
-        Value = RiscvFdtReadBigEndian32(Property + Index * 12 + 8);
+        Offset = FdtReadBigEndian32(Property + Index * 12);
+        Mask = FdtReadBigEndian32(Property + Index * 12 + 4);
+        Value = FdtReadBigEndian32(Property + Index * 12 + 8);
         Old = AtcRead(Region, Offset);
         if (((Old & ~Mask) | Value) != Old)
             AtcWrite(Region, Offset, (Old & ~Mask) | Value);
@@ -317,14 +317,14 @@ AppleAtcphyOpen(
     ULONG Length;
 
     RtlZeroMemory(Phy, sizeof(*Phy));
-    Phys = RiscvFdtGetProperty(&Tree->Fdt, ConsumerNode, "phys", &Length);
+    Phys = FdtGetProperty(&Tree->Fdt, ConsumerNode, "phys", &Length);
     if (!Phys || Length < sizeof(ULONG))
         return STATUS_NOT_FOUND;
-    Phy->Node = FdtDriverFindPhandle(Tree, RiscvFdtReadBigEndian32(Phys));
-    if (Phy->Node == RISCV_FDT_NO_NODE)
+    Phy->Node = FdtDriverFindPhandle(Tree, FdtReadBigEndian32(Phys));
+    if (Phy->Node == FDT_NO_NODE)
         return STATUS_NOT_FOUND;
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Phy->Node, "compatible", &Length);
-    Phy->HasAusPllTop = !Compatible || !RiscvFdtStringListContains(Compatible, Length, "apple,t8122-atcphy");
+    Compatible = FdtGetProperty(&Tree->Fdt, Phy->Node, "compatible", &Length);
+    Phy->HasAusPllTop = !Compatible || !FdtStringListContains(Compatible, Length, "apple,t8122-atcphy");
     if (!AtcMapRegion(Tree, Phy->Node, "core", ATCPHY_CORE_SPAN, &Phy->Core) ||
         !AtcMapRegion(Tree, Phy->Node, "axi2af", sizeof(ULONG), &Phy->Axi2af) ||
         !AtcMapRegion(Tree, Phy->Node, "usb2phy", USB2PHY_SPAN, &Phy->Usb2Phy) ||

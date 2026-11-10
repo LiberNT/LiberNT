@@ -14,12 +14,12 @@
 BOOLEAN
 HalpArm64OpenDeviceTree(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock,
-    _Out_ PRISCV_FDT Fdt)
+    _Out_ PFDT Fdt)
 {
     if (!LoaderBlock || !LoaderBlock->u.Arm64.DeviceTree)
         return FALSE;
 
-    return RiscvFdtOpen((const VOID *)(ULONG_PTR)LoaderBlock->u.Arm64.DeviceTree,
+    return FdtOpen((const VOID *)(ULONG_PTR)LoaderBlock->u.Arm64.DeviceTree,
                         (SIZE_T)LoaderBlock->u.Arm64.DeviceTreeSize,
                         Fdt);
 }
@@ -27,7 +27,7 @@ HalpArm64OpenDeviceTree(
 static
 BOOLEAN
 HalpArm64FindDeviceTreeNodeBelow(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG Node,
     _In_ ULONG Parent,
     _In_ ULONG Depth,
@@ -42,12 +42,12 @@ HalpArm64FindDeviceTreeNodeBelow(
     ULONG Index;
     ULONG Child;
 
-    Compatible = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
-    if (Compatible && Parent != RISCV_FDT_NO_NODE)
+    Compatible = FdtGetProperty(Fdt, Node, "compatible", &Length);
+    if (Compatible && Parent != FDT_NO_NODE)
     {
         for (Index = 0; Index < Count; Index++)
         {
-            if (RiscvFdtStringListContains(Compatible, Length, Compatibles[Index]))
+            if (FdtStringListContains(Compatible, Length, Compatibles[Index]))
             {
                 *Found = Node;
                 *FoundParent = Parent;
@@ -60,7 +60,7 @@ HalpArm64FindDeviceTreeNodeBelow(
     if (Depth >= HALP_FDT_MAXIMUM_DEPTH)
         return FALSE;
 
-    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE; Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node); Child != FDT_NO_NODE; Child = FdtNextSibling(Fdt, Child))
     {
         if (HalpArm64FindDeviceTreeNodeBelow(Fdt, Child, Node, Depth + 1, Compatibles, Count, Found, FoundParent, Match))
             return TRUE;
@@ -71,22 +71,22 @@ HalpArm64FindDeviceTreeNodeBelow(
 
 BOOLEAN
 HalpArm64FindDeviceTreeNode(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_reads_(Count) const PCSTR *Compatibles,
     _In_ ULONG Count,
     _Out_ PULONG Node,
     _Out_ PULONG Parent,
     _Out_ PULONG Match)
 {
-    ULONG Root = RiscvFdtRootNode(Fdt);
+    ULONG Root = FdtRootNode(Fdt);
 
-    *Node = RISCV_FDT_NO_NODE;
-    *Parent = RISCV_FDT_NO_NODE;
+    *Node = FDT_NO_NODE;
+    *Parent = FDT_NO_NODE;
     *Match = 0;
-    if (Root == RISCV_FDT_NO_NODE)
+    if (Root == FDT_NO_NODE)
         return FALSE;
 
-    return HalpArm64FindDeviceTreeNodeBelow(Fdt, Root, RISCV_FDT_NO_NODE, 0, Compatibles, Count, Node, Parent, Match);
+    return HalpArm64FindDeviceTreeNodeBelow(Fdt, Root, FDT_NO_NODE, 0, Compatibles, Count, Node, Parent, Match);
 }
 
 static PVOID HalpArm64DeviceTreeCopy;
@@ -96,7 +96,7 @@ VOID
 HalpArm64CaptureDeviceTree(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     PVOID Copy;
 
     if (HalpArm64DeviceTreeCopy || !HalpArm64OpenDeviceTree(LoaderBlock, &Fdt))
@@ -121,19 +121,19 @@ HalpArm64GetDeviceTree(
 
 ULONG
 HalpArm64FindDeviceTreePhandle(
-    _In_ PRISCV_FDT Fdt,
+    _In_ PFDT Fdt,
     _In_ ULONG Phandle)
 {
     ULONG Node, Value;
 
     if (!Phandle || Phandle == MAXULONG)
-        return RISCV_FDT_NO_NODE;
-    for (Node = RiscvFdtRootNode(Fdt); Node != RISCV_FDT_NO_NODE; Node = RiscvFdtSkipToken(Fdt, Node))
+        return FDT_NO_NODE;
+    for (Node = FdtRootNode(Fdt); Node != FDT_NO_NODE; Node = FdtSkipToken(Fdt, Node))
     {
-        if (RiscvFdtToken(Fdt, Node) == RISCV_FDT_BEGIN_NODE &&
-            (RiscvFdtReadU32(Fdt, Node, "phandle", &Value) || RiscvFdtReadU32(Fdt, Node, "linux,phandle", &Value)) &&
+        if (FdtReadToken(Fdt, Node) == FDT_BEGIN_NODE &&
+            (FdtReadU32(Fdt, Node, "phandle", &Value) || FdtReadU32(Fdt, Node, "linux,phandle", &Value)) &&
             Value == Phandle)
             return Node;
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }

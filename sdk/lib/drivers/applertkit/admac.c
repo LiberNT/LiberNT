@@ -94,25 +94,25 @@ AppleAdmacQueryInterrupt(
     *InterruptIndex = 0;
     *Gsi = 0;
     *EdgeTriggered = FALSE;
-    Property = RiscvFdtGetProperty(&Tree->Fdt, Node, "interrupts-extended", &Length);
+    Property = FdtGetProperty(&Tree->Fdt, Node, "interrupts-extended", &Length);
     for (Index = 0; Property && Index < ADMAC_INTERRUPT_OUTPUTS && Offset + sizeof(ULONG) <= Length; ++Index)
     {
-        if (!RiscvFdtReadCells(Property, Length, Offset / sizeof(ULONG), 1, &Value))
+        if (!FdtReadCells(Property, Length, Offset / sizeof(ULONG), 1, &Value))
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         Offset += sizeof(ULONG);
         if (!Value)
             continue;
-        if ((Controller = FdtDriverFindPhandle(Tree, (ULONG)Value)) == RISCV_FDT_NO_NODE ||
-            !RiscvFdtReadU32(&Tree->Fdt, Controller, "#interrupt-cells", &CellCount) ||
+        if ((Controller = FdtDriverFindPhandle(Tree, (ULONG)Value)) == FDT_NO_NODE ||
+            !FdtReadU32(&Tree->Fdt, Controller, "#interrupt-cells", &CellCount) ||
             !CellCount || CellCount > ADMAC_MAX_CELLS || Offset + CellCount * sizeof(ULONG) > Length)
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         for (Cell = 0; Cell < CellCount; ++Cell)
         {
-            if (!RiscvFdtReadCells(Property, Length, Offset / sizeof(ULONG) + Cell, 1, &Value))
+            if (!FdtReadCells(Property, Length, Offset / sizeof(ULONG) + Cell, 1, &Value))
                 return STATUS_DEVICE_CONFIGURATION_ERROR;
             Cells[Cell] = (ULONG)Value;
         }
-        Compatible = RiscvFdtGetProperty(&Tree->Fdt, Controller, "compatible", &CompatibleLength);
+        Compatible = FdtGetProperty(&Tree->Fdt, Controller, "compatible", &CompatibleLength);
         if (!Compatible ||
             !HalArm64TranslateDeviceTreeInterrupt(Compatible, CompatibleLength, Cells, CellCount,
                                                   Gsi, EdgeTriggered))
@@ -135,13 +135,13 @@ AppleAdmacOpen(
     NTSTATUS Status;
 
     RtlZeroMemory(Admac, sizeof(*Admac));
-    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
-    if (RiscvFdtStringListContains(Compatible, Length, "apple,t8122-admac"))
+    Compatible = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
+    if (FdtStringListContains(Compatible, Length, "apple,t8122-admac"))
         Admac->SetFifoLimits = TRUE;
-    else if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8103-admac") &&
-             !RiscvFdtStringListContains(Compatible, Length, "apple,admac"))
+    else if (!FdtStringListContains(Compatible, Length, "apple,t8103-admac") &&
+             !FdtStringListContains(Compatible, Length, "apple,admac"))
         return STATUS_NOT_SUPPORTED;
-    if (!RiscvFdtReadU32(&Tree->Fdt, Node, "dma-channels", &Admac->ChannelCount) ||
+    if (!FdtReadU32(&Tree->Fdt, Node, "dma-channels", &Admac->ChannelCount) ||
         !Admac->ChannelCount || Admac->ChannelCount > ADMAC_MAX_CHANNELS)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     Status = AppleAdmacQueryInterrupt(Tree, Node, &Admac->InterruptIndex, &Admac->InterruptGsi, &Admac->InterruptEdge);
