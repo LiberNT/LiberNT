@@ -830,6 +830,13 @@ PcieSleepMs(ULONG Milliseconds)
     SimSleptMs += Milliseconds;
 }
 
+static
+VOID
+UatSleepMs(ULONG Milliseconds)
+{
+    SimSleptMs += Milliseconds;
+}
+
 #include "../../../../sdk/lib/drivers/fdtdrv/fdtdrv.c"
 #include "../../../../sdk/lib/drivers/applertkit/pmgr.c"
 #include "../../../../sdk/lib/drivers/applertkit/dart.c"
@@ -1577,7 +1584,9 @@ TestUat(VOID)
     /* A leaf carries the address, the owner, the caching and the execute rules, and nothing else. */
     Entry = AppleUatEntry(0x80000000ULL, &Shared, TRUE);
     ok((Entry & 0x3) == 3, "A leaf must be a page entry: %I64x\n", Entry);
-    ok((Entry & 0x0000fffffffff000ULL) == 0x80000000ULL, "A leaf lost its address: %I64x\n", Entry);
+    ok((Entry & APPLE_UAT_OUTPUT_MASK) == 0x80000000ULL, "A leaf lost its address: %I64x\n", Entry);
+    ok(APPLE_UAT_OUTPUT_MASK == 0x3ffffffc000ULL, "A leaf addresses %I64x\n", (ULONG64)APPLE_UAT_OUTPUT_MASK);
+    ok_int(APPLE_UAT_ROOT_ENTRIES, 64);
     ok((Entry & (1ULL << 10)) != 0, "A leaf must be marked accessed: %I64x\n", Entry);
     ok((Entry & (1ULL << 11)) == 0, "A global leaf must not be marked non-global: %I64x\n", Entry);
     ok((AppleUatEntry(0x80000000ULL, &Shared, FALSE) & (1ULL << 11)) != 0,
@@ -1593,16 +1602,15 @@ TestUat(VOID)
 
             Any.Access = (UCHAR)Access;
             Any.Memory = (UCHAR)Memory;
-            Any.NoExecuteUser = (Access & 1) != 0;
-            Any.NoExecutePrivileged = (Memory & 1) != 0;
+            Any.Read = (Access & 1) != 0;
+            Any.Write = (Memory & 1) != 0;
             ok_hex(AppleUatMap(&uat, 0x100000ULL + (ULONG64)(Access * 8 + Memory) * APPLE_UAT_PAGE_SIZE,
                                0x40000000ULL, APPLE_UAT_PAGE_SIZE, &Any), STATUS_SUCCESS);
             ok(AppleUatTranslate(&uat, 0x100000ULL + (ULONG64)(Access * 8 + Memory) * APPLE_UAT_PAGE_SIZE,
                                  &Physical, &Read), "A mapping was lost\n");
-            ok(Read.Access == Any.Access && Read.Memory == Any.Memory &&
-               Read.NoExecuteUser == Any.NoExecuteUser && Read.NoExecutePrivileged == Any.NoExecutePrivileged,
-               "Access %lu memory %lu came back as %u/%u/%u/%u\n", Access, Memory, Read.Access, Read.Memory,
-               Read.NoExecuteUser, Read.NoExecutePrivileged);
+            ok(Read.Access == Any.Access && Read.Memory == Any.Memory && Read.Read == Any.Read &&
+               Read.Write == Any.Write, "Access %lu memory %lu came back as %u/%u/%u/%u\n", Access, Memory,
+               Read.Access, Read.Memory, Read.Read, Read.Write);
         }
     }
 
@@ -1630,10 +1638,24 @@ TestUat(VOID)
        "The far mapping resolves to %I64x\n", Physical);
     ok_int(Read.Memory, APPLE_UAT_MEMORY_DEVICE);
 
-    /* Addresses the three levels cannot index, and misaligned requests. */
-    ok_hex(AppleUatMap(&uat, APPLE_UAT_MAX_ADDRESS, 0x70000000ULL, APPLE_UAT_PAGE_SIZE, &Device),
+    /* The firmware's own addresses carry a tag above the translated bits, as the hardware ignores it. */
+    ok_hex(AppleUatMap(&uat, 0xfffffc2040000000ULL, 0x78000000ULL, APPLE_UAT_PAGE_SIZE, &Shared), STATUS_SUCCESS);
+    ok(AppleUatTranslate(&uat, 0xfffffc2040000000ULL, &Physical, NULL) && Physical == 0x78000000ULL,
+       "A firmware address resolves to %I64x\n", Physical);
+    ok(AppleUatTranslate(&uat, 0x2040000000ULL, &Physical, NULL) && Physical == 0x78000000ULL,
+       "The tag changed the translation to %I64x\n", Physical);
+    ok_hex(AppleUatMap(&uat, 0x2040000000ULL, 0x79000000ULL, APPLE_UAT_PAGE_SIZE, &Shared),
+           STATUS_CONFLICTING_ADDRESSES);
+
+    /* The last page the input range can name, the page past it, and an address the output cannot hold. */
+    ok_hex(AppleUatMap(&uat, APPLE_UAT_ADDRESS_MASK + 1 - APPLE_UAT_PAGE_SIZE, 0x7a000000ULL, APPLE_UAT_PAGE_SIZE,
+                       &Shared), STATUS_SUCCESS);
+    ok_hex(AppleUatMap(&uat, APPLE_UAT_ADDRESS_MASK + 1 - APPLE_UAT_PAGE_SIZE, 0x7a000000ULL,
+                       2 * APPLE_UAT_PAGE_SIZE, &Shared), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatMap(&uat, 0x4000000ULL, 1ULL << APPLE_UAT_OUTPUT_BITS, APPLE_UAT_PAGE_SIZE, &Shared),
            STATUS_INVALID_PARAMETER);
-    ok(!AppleUatTranslate(&uat, APPLE_UAT_MAX_ADDRESS, &Physical, NULL), "An unreachable address resolved\n");
+
+    /* Misaligned requests. */
     ok_hex(AppleUatMap(&uat, 0x3000ULL, 0x70000000ULL, APPLE_UAT_PAGE_SIZE, &Device), STATUS_INVALID_PARAMETER);
     ok_hex(AppleUatMap(&uat, 0x3000000ULL, 0x70000040ULL, APPLE_UAT_PAGE_SIZE, &Device), STATUS_INVALID_PARAMETER);
     ok_hex(AppleUatMap(&uat, 0x3000000ULL, 0x70000000ULL, 0x40, &Device), STATUS_INVALID_PARAMETER);
@@ -1649,6 +1671,141 @@ TestUat(VOID)
     AppleUatDestroy(&uat);
     ok_int(uat.Tables, 0);
     ok(uat.Top == NULL, "The table root survived destruction\n");
+}
+
+static
+PULONG64
+UatFirmwarePage(
+    _Out_ PULONG64 Physical)
+{
+    PHYSICAL_ADDRESS Low, High, Boundary;
+    PULONG64 Page;
+
+    Low.QuadPart = 0;
+    High.QuadPart = -1;
+    Boundary.QuadPart = APPLE_UAT_PAGE_SIZE;
+    Page = MmAllocateContiguousMemorySpecifyCache(APPLE_UAT_PAGE_SIZE, Low, High, Boundary, MmNonCached);
+    if (!Page)
+    {
+        *Physical = 0;
+        return NULL;
+    }
+    RtlZeroMemory(Page, APPLE_UAT_PAGE_SIZE);
+    *Physical = (ULONG64)MmGetPhysicalAddress(Page).QuadPart;
+    return Page;
+}
+
+static
+VOID
+TestUatAdopt(VOID)
+{
+    const APPLE_UAT_PROTECTION Shared = { APPLE_UAT_ACCESS_BOTH, APPLE_UAT_MEMORY_UNCACHED, TRUE, TRUE };
+    ULONG64 HandoffPhysical, ContextsPhysical, RootPhysical, LevelPhysical, Physical;
+    PULONG64 Handoff, Contexts, Root, Level;
+    APPLE_UAT_ADOPTED Adopted;
+    ULONG Index, Set;
+
+    Handoff = UatFirmwarePage(&HandoffPhysical);
+    Contexts = UatFirmwarePage(&ContextsPhysical);
+    Root = UatFirmwarePage(&RootPhysical);
+    Level = UatFirmwarePage(&LevelPhysical);
+    ok(Handoff && Contexts && Root && Level, "The firmware pages were not simulated\n");
+    if (!Handoff || !Contexts || !Root || !Level)
+        return;
+
+    /* The firmware owns the first two entries of its root and the host must not disturb them. */
+    Root[0] = 0xfeed000000000003ULL;
+    Root[1] = 0xfeed000000004003ULL;
+    for (Index = 2; Index < APPLE_UAT_ROOT_ENTRIES; ++Index)
+        Root[Index] = 0xdead000000000003ULL;
+    for (Index = 0; Index < APPLE_UAT_TABLE_ENTRIES; ++Index)
+        Level[Index] = 0xdead000000000003ULL;
+    for (Index = 0; Index < 2 * APPLE_UAT_CONTEXTS; ++Index)
+        Contexts[Index] = 0xdead000000000001ULL;
+
+    ok_hex(AppleUatAdopt(&Adopted, HandoffPhysical + 1, ContextsPhysical, RootPhysical, LevelPhysical, "test"),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdopt(&Adopted, 0, ContextsPhysical, RootPhysical, LevelPhysical, "test"),
+           STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdopt(&Adopted, HandoffPhysical, ContextsPhysical, RootPhysical, LevelPhysical, "test"),
+           STATUS_SUCCESS);
+    ok(Adopted.Lower.TopPhysical != 0 && Adopted.Host.TopPhysical != 0, "The host tables have no root\n");
+
+    /* A silent firmware is reported rather than waited for for ever. */
+    SimSleptMs = 0;
+    ok_hex(AppleUatAdoptedHandshake(&Adopted), STATUS_DEVICE_NOT_READY);
+    ok(SimSleptMs >= 1000, "Waited %lu ms for the firmware\n", SimSleptMs);
+    ok(Handoff[0] == 0x4b1d000000000002ULL, "The host magic is %I64x\n", Handoff[0]);
+    ok(*(PULONG)((PUCHAR)Handoff + 0x18) == 0xffffffffUL, "The slot is %08lx\n",
+       *(PULONG)((PUCHAR)Handoff + 0x18));
+
+    /* Once the firmware answers, the flush requests are cleared and nothing past them is touched. */
+    Handoff[1] = 0x4b1d000000000002ULL;
+    for (Index = 0; Index < 0x618 / sizeof(ULONG64); ++Index)
+        Handoff[0x20 / sizeof(ULONG64) + Index] = 0xdeadbeefdeadbeefULL;
+    ((PUCHAR)Handoff)[0x638] = 0x5a;
+    ok_hex(AppleUatAdoptedHandshake(&Adopted), STATUS_SUCCESS);
+    for (Index = 0, Set = 0; Index < 0x618 / sizeof(ULONG64); ++Index)
+    {
+        if (Handoff[0x20 / sizeof(ULONG64) + Index])
+            ++Set;
+    }
+    ok_int(Set, 0);
+    ok_int(((PUCHAR)Handoff)[0x638], 0x5a);
+
+    /* The install leaves the firmware's own entries alone and publishes the host window. */
+    ok_hex(AppleUatAdoptedInstall(&Adopted), STATUS_SUCCESS);
+    ok(Root[0] == 0xfeed000000000003ULL && Root[1] == 0xfeed000000004003ULL,
+       "The install changed the firmware entries to %I64x %I64x\n", Root[0], Root[1]);
+    ok(Root[2] == ((LevelPhysical & APPLE_UAT_OUTPUT_MASK) | 3), "The window entry is %I64x\n", Root[2]);
+    for (Index = 3, Set = 0; Index < APPLE_UAT_ROOT_ENTRIES; ++Index)
+    {
+        if (Root[Index])
+            ++Set;
+    }
+    ok_int(Set, 0);
+    ok(Contexts[0] == ((Adopted.Lower.TopPhysical & APPLE_UAT_OUTPUT_MASK) | 1),
+       "The lower half of context 0 is %I64x\n", Contexts[0]);
+    ok(Contexts[1] == ((RootPhysical & APPLE_UAT_OUTPUT_MASK) | 1), "The upper half of context 0 is %I64x\n",
+       Contexts[1]);
+    for (Index = 2, Set = 0; Index < 2 * APPLE_UAT_CONTEXTS; ++Index)
+    {
+        if (Contexts[Index])
+            ++Set;
+    }
+    ok_int(Set, 0);
+    for (Index = 0, Set = 0; Index < APPLE_UAT_TABLE_ENTRIES; ++Index)
+    {
+        if (Level[Index])
+            ++Set;
+    }
+    ok_int(Set, 0);
+
+    /* A mapping in the window appears in the level the firmware walks, at the slot of its address. */
+    ok_hex(AppleUatAdoptedMap(&Adopted, APPLE_UAT_HOST_BASE + 0x8000000ULL, 0x30000000ULL,
+                              2 * APPLE_UAT_PAGE_SIZE, &Shared), STATUS_SUCCESS);
+    ok(AppleUatAdoptedTranslate(&Adopted, APPLE_UAT_HOST_BASE + 0x8000000ULL, &Physical) &&
+       Physical == 0x30000000ULL, "The window mapping resolves to %I64x\n", Physical);
+    ok(Level[4] != 0, "The window level has no entry for the mapping\n");
+    for (Index = 0, Set = 0; Index < APPLE_UAT_TABLE_ENTRIES; ++Index)
+    {
+        if (Level[Index])
+            ++Set;
+    }
+    ok_int(Set, 1);
+
+    /* Addresses outside the window belong to the firmware and are refused. */
+    ok_hex(AppleUatAdoptedMap(&Adopted, APPLE_UAT_HOST_BASE - APPLE_UAT_PAGE_SIZE, 0x30000000ULL,
+                              APPLE_UAT_PAGE_SIZE, &Shared), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdoptedMap(&Adopted, APPLE_UAT_HOST_BASE + APPLE_UAT_HOST_SIZE, 0x30000000ULL,
+                              APPLE_UAT_PAGE_SIZE, &Shared), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdoptedMap(&Adopted, APPLE_UAT_HOST_BASE + APPLE_UAT_HOST_SIZE - APPLE_UAT_PAGE_SIZE,
+                              0x30000000ULL, 2 * APPLE_UAT_PAGE_SIZE, &Shared), STATUS_INVALID_PARAMETER);
+
+    AppleUatAdoptedRelease(&Adopted);
+    ok(Adopted.Handoff == NULL && Adopted.Contexts == NULL && Adopted.KernelRoot == NULL &&
+       Adopted.HostLevel == NULL, "The firmware pages are still mapped\n");
+    ok(Adopted.Lower.Top == NULL && Adopted.Host.Top == NULL, "The host tables survived the release\n");
 }
 
 static
@@ -2780,6 +2937,7 @@ START_TEST(AppleSoc)
     TestDartAdopt();
     TestPmpPower();
     TestUat();
+    TestUatAdopt();
     TestSpmi();
     TestAtcphy();
     TestPcie();
