@@ -282,8 +282,12 @@ void WINAPI NDRSContextMarshall2(RPC_BINDING_HANDLE hBinding,
         ndr->attributes = 0;
         RpcContextHandle_GetUuid(SContext, &ndr->uuid);
 
+#ifdef __REACTOS__
+        RpcServerAssoc_ReleaseContextHandle(binding->Assoc, SContext, RPCRT4_RemoveThreadContextHandle(SContext));
+#else
         RPCRT4_RemoveThreadContextHandle(SContext);
         RpcServerAssoc_ReleaseContextHandle(binding->Assoc, SContext, TRUE);
+#endif
     }
     else
     {
@@ -291,11 +295,15 @@ void WINAPI NDRSContextMarshall2(RPC_BINDING_HANDLE hBinding,
             RpcRaiseException(RPC_X_SS_CONTEXT_MISMATCH);
         memset(ndr, 0, sizeof(*ndr));
 
+#ifdef __REACTOS__
+        if (!RpcServerAssoc_ReleaseContextHandle(binding->Assoc, SContext, RPCRT4_RemoveThreadContextHandle(SContext)))
+#else
         RPCRT4_RemoveThreadContextHandle(SContext);
         /* Note: release the context handle twice in this case to release
          * one ref being kept around for the data and one ref for the
          * unmarshall/marshall sequence */
         if (!RpcServerAssoc_ReleaseContextHandle(binding->Assoc, SContext, TRUE))
+#endif
             return; /* this is to cope with the case of the data not being valid
                      * before and so not having a further reference */
         RpcServerAssoc_ReleaseContextHandle(binding->Assoc, SContext, FALSE);
@@ -338,6 +346,9 @@ NDR_SCONTEXT WINAPI NDRSContextUnmarshall2(RPC_BINDING_HANDLE hBinding,
     NDR_SCONTEXT SContext;
     RPC_STATUS status;
     const ndr_context_handle *context_ndr = pBuff;
+#ifdef __REACTOS__
+    BOOL allocated;
+#endif
 
     TRACE("(%p %p %08lx %p %lu)\n",
           hBinding, pBuff, DataRepresentation, CtxGuard, Flags);
@@ -345,8 +356,13 @@ NDR_SCONTEXT WINAPI NDRSContextUnmarshall2(RPC_BINDING_HANDLE hBinding,
     if (!binding->server || !binding->Assoc)
         RpcRaiseException(RPC_S_INVALID_BINDING);
 
+#ifdef __REACTOS__
+    allocated = !pBuff || (!context_ndr->attributes && UuidIsNil((UUID *)&context_ndr->uuid, &status));
+    if (allocated)
+#else
     if (!pBuff || (!context_ndr->attributes &&
                    UuidIsNil((UUID *)&context_ndr->uuid, &status)))
+#endif
         status = RpcServerAssoc_AllocateContextHandle(binding->Assoc, CtxGuard,
                                                       &SContext);
     else
@@ -366,6 +382,10 @@ NDR_SCONTEXT WINAPI NDRSContextUnmarshall2(RPC_BINDING_HANDLE hBinding,
     if (status != RPC_S_OK)
         RpcRaiseException(status);
 
+#ifdef __REACTOS__
+    RPCRT4_PushThreadContextHandle(SContext, allocated || !(Flags & RPC_CONTEXT_HANDLE_DONT_SERIALIZE));
+#else
     RPCRT4_PushThreadContextHandle(SContext);
+#endif
     return SContext;
 }

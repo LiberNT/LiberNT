@@ -513,6 +513,9 @@ RPC_STATUS RpcServerAssoc_FindContextHandle(RpcAssoc *assoc, const UUID *uuid,
             {
                 LeaveCriticalSection(&assoc->cs);
                 TRACE("found %p\n", context_handle);
+#ifdef __REACTOS__
+                if (!(Flags & RPC_CONTEXT_HANDLE_DONT_SERIALIZE))
+#endif
                 EnterCriticalSection(&context_handle->lock);
                 return RPC_S_OK;
             }
