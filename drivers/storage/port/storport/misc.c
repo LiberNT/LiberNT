@@ -52,6 +52,8 @@ GetBusInterface(
         return PNPISABus;
     else if (RtlCompareMemory(&Guid, &GUID_BUS_TYPE_INTERNAL, sizeof(GUID)) == sizeof(GUID))
         return Internal;
+    else if (RtlCompareMemory(&Guid, &GUID_BUS_TYPE_ACPI, sizeof(GUID)) == sizeof(GUID))
+        return ACPIBus;
 
     return InterfaceTypeUndefined;
 }

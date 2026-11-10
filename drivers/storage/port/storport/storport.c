@@ -2489,6 +2489,9 @@ StorPortGetBusData(
 
     Interface = &MiniportExtension->Miniport->DeviceExtension->BusInterface;
 
+    if (!MiniportExtension->Miniport->DeviceExtension->BusInitialized || Interface->GetBusData == NULL)
+        return 0;
+
     if (BusDataType == 4)
         BusDataType = 0;
 
@@ -3403,6 +3406,9 @@ StorPortSetBusDataByOffset(
             DeviceExtension, MiniportExtension);
 
     Interface = &MiniportExtension->Miniport->DeviceExtension->BusInterface;
+
+    if (!MiniportExtension->Miniport->DeviceExtension->BusInitialized || Interface->SetBusData == NULL)
+        return 0;
 
     /* Miniports pass PCIConfiguration; the bus interface speaks WHICHSPACE. */
     if (BusDataType == PCIConfiguration)
