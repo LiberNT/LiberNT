@@ -2011,3 +2011,121 @@ AppleAgxCheckBind(
     Protection->Write = (Op->Flags & DRM_ASAHI_BIND_WRITE) != 0;
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+AppleAgxBindingInsert(
+    _Inout_ PAPPLE_AGX_BINDINGS Bindings,
+    _In_ const APPLE_AGX_BINDING *Binding)
+{
+    ULONG Index;
+
+    if (!Bindings || !Binding || !Binding->Range || !Binding->Object ||
+        Binding->Address + Binding->Range < Binding->Address)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    for (Index = 0; Index < Bindings->Count; ++Index)
+    {
+        const APPLE_AGX_BINDING *Entry = &Bindings->Entry[Index];
+
+        if (Binding->Address < Entry->Address + Entry->Range && Entry->Address < Binding->Address + Binding->Range)
+            return STATUS_CONFLICTING_ADDRESSES;
+    }
+    if (Bindings->Count >= Bindings->Capacity)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Bindings->Entry[Bindings->Count++] = *Binding;
+    if (Bindings->Reference)
+        Bindings->Reference(Binding->Object, 1);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxBindingRemove(
+    _Inout_ PAPPLE_AGX_BINDINGS Bindings,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Range)
+{
+    ULONG64 End = Address + Range;
+    ULONG Index, Splits = 0;
+
+    if (!Bindings || !Range || End < Address)
+        return STATUS_INVALID_PARAMETER;
+    for (Index = 0; Index < Bindings->Count; ++Index)
+    {
+        const APPLE_AGX_BINDING *Entry = &Bindings->Entry[Index];
+
+        if (Address > Entry->Address && End < Entry->Address + Entry->Range)
+            ++Splits;
+    }
+    if (Bindings->Count + Splits > Bindings->Capacity)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    for (Index = 0; Index < Bindings->Count;)
+    {
+        PAPPLE_AGX_BINDING Entry = &Bindings->Entry[Index];
+        ULONG64 EntryEnd = Entry->Address + Entry->Range;
+
+        if (End <= Entry->Address || Address >= EntryEnd)
+        {
+            ++Index;
+            continue;
+        }
+        if (Address <= Entry->Address && End >= EntryEnd)
+        {
+            PVOID Object = Entry->Object;
+
+            Bindings->Entry[Index] = Bindings->Entry[--Bindings->Count];
+            if (Bindings->Reference)
+                Bindings->Reference(Object, -1);
+            continue;
+        }
+        if (Address > Entry->Address && End < EntryEnd)
+        {
+            APPLE_AGX_BINDING Tail = *Entry;
+
+            Tail.Address = End;
+            Tail.Range = EntryEnd - End;
+            if (!Tail.SinglePage)
+                Tail.Offset += End - Entry->Address;
+            Entry->Range = Address - Entry->Address;
+            Bindings->Entry[Bindings->Count++] = Tail;
+            if (Bindings->Reference)
+                Bindings->Reference(Tail.Object, 1);
+        }
+        else if (Address <= Entry->Address)
+        {
+            if (!Entry->SinglePage)
+                Entry->Offset += End - Entry->Address;
+            Entry->Range = EntryEnd - End;
+            Entry->Address = End;
+        }
+        else
+        {
+            Entry->Range = Address - Entry->Address;
+        }
+        ++Index;
+    }
+    return STATUS_SUCCESS;
+}
+
+const APPLE_AGX_BINDING *
+NTAPI
+AppleAgxBindingFind(
+    _In_ const APPLE_AGX_BINDINGS *Bindings,
+    _In_ ULONG64 Address)
+{
+    ULONG Index;
+
+    if (!Bindings)
+        return NULL;
+    for (Index = 0; Index < Bindings->Count; ++Index)
+    {
+        const APPLE_AGX_BINDING *Entry = &Bindings->Entry[Index];
+
+        if (Address >= Entry->Address && Address - Entry->Address < Entry->Range)
+            return Entry;
+    }
+    return NULL;
+}

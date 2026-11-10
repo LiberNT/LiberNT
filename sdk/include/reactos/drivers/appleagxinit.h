@@ -980,3 +980,41 @@ AppleAgxCheckBind(
     _In_ const APPLE_AGX_VM_RANGES *Ranges,
     _In_ ULONG64 ObjectSize,
     _Out_ PAPPLE_UAT_PROTECTION Protection);
+
+typedef VOID (NTAPI *PAPPLE_AGX_REFERENCE)(_In_ PVOID Object, _In_ LONG Delta);
+
+typedef struct _APPLE_AGX_BINDING
+{
+    ULONG64 Address;
+    ULONG64 Range;
+    ULONG64 Offset;
+    PVOID Object;
+    BOOLEAN SinglePage;
+} APPLE_AGX_BINDING, *PAPPLE_AGX_BINDING;
+
+typedef struct _APPLE_AGX_BINDINGS
+{
+    PAPPLE_AGX_BINDING Entry;
+    ULONG Count;
+    ULONG Capacity;
+    PAPPLE_AGX_REFERENCE Reference;
+} APPLE_AGX_BINDINGS, *PAPPLE_AGX_BINDINGS;
+
+NTSTATUS
+NTAPI
+AppleAgxBindingInsert(
+    _Inout_ PAPPLE_AGX_BINDINGS Bindings,
+    _In_ const APPLE_AGX_BINDING *Binding);
+
+NTSTATUS
+NTAPI
+AppleAgxBindingRemove(
+    _Inout_ PAPPLE_AGX_BINDINGS Bindings,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Range);
+
+const APPLE_AGX_BINDING *
+NTAPI
+AppleAgxBindingFind(
+    _In_ const APPLE_AGX_BINDINGS *Bindings,
+    _In_ ULONG64 Address);

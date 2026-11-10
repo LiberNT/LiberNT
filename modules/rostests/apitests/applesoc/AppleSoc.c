@@ -4482,6 +4482,97 @@ TestAgxMemoryCalls(VOID)
     ok_hex(AppleAgxCheckBind(&Bad, &Ranges, 0, &Protection), STATUS_INVALID_PARAMETER);
 }
 
+static LONG AgxObjectReferences[2];
+
+static
+VOID
+NTAPI
+AgxCountReference(
+    _In_ PVOID Object,
+    _In_ LONG Delta)
+{
+    *(PLONG)Object += Delta;
+}
+
+static
+VOID
+TestAgxBindings(VOID)
+{
+    APPLE_AGX_BINDING Entry[4], New;
+    APPLE_AGX_BINDINGS Bindings;
+    const APPLE_AGX_BINDING *Found;
+
+    Bindings.Entry = Entry;
+    Bindings.Count = 0;
+    Bindings.Capacity = 4;
+    Bindings.Reference = AgxCountReference;
+    AgxObjectReferences[0] = AgxObjectReferences[1] = 0;
+
+    RtlZeroMemory(&New, sizeof(New));
+    New.Address = 0x100000;
+    New.Range = 0x40000;
+    New.Offset = 0x8000;
+    New.Object = &AgxObjectReferences[0];
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_SUCCESS);
+    ok_int(AgxObjectReferences[0], 1);
+    New.Address = 0x13c000;
+    New.Range = 0x4000;
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_CONFLICTING_ADDRESSES);
+    New.Address = 0xfc000;
+    New.Range = 0x8000;
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_CONFLICTING_ADDRESSES);
+    New.Address = 0x140000;
+    New.Range = 0x10000;
+    New.Offset = 0;
+    New.Object = &AgxObjectReferences[1];
+    New.SinglePage = TRUE;
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_SUCCESS);
+    ok_int(Bindings.Count, 2);
+
+    ok_hex(AppleAgxBindingRemove(&Bindings, 0x110000, 0x8000), STATUS_SUCCESS);
+    ok_int(Bindings.Count, 3);
+    ok_int(AgxObjectReferences[0], 2);
+    Found = AppleAgxBindingFind(&Bindings, 0x100000);
+    ok(Found && Found->Address == 0x100000 && Found->Range == 0x10000 && Found->Offset == 0x8000,
+       "The head is %I64x+%I64x at offset %I64x\n", Found ? Found->Address : 0, Found ? Found->Range : 0,
+       Found ? Found->Offset : 0);
+    ok(AppleAgxBindingFind(&Bindings, 0x110000) == NULL, "The removed hole is still bound\n");
+    ok(AppleAgxBindingFind(&Bindings, 0x117fff) == NULL, "The end of the hole is still bound\n");
+    Found = AppleAgxBindingFind(&Bindings, 0x118000);
+    ok(Found && Found->Address == 0x118000 && Found->Range == 0x28000 && Found->Offset == 0x20000,
+       "The tail is %I64x+%I64x at offset %I64x\n", Found ? Found->Address : 0, Found ? Found->Range : 0,
+       Found ? Found->Offset : 0);
+
+    ok_hex(AppleAgxBindingRemove(&Bindings, 0x130000, 0x14000), STATUS_SUCCESS);
+    ok_int(Bindings.Count, 3);
+    Found = AppleAgxBindingFind(&Bindings, 0x118000);
+    ok(Found && Found->Range == 0x18000, "The trimmed tail ends at %I64x\n", Found ? Found->Address + Found->Range : 0);
+    Found = AppleAgxBindingFind(&Bindings, 0x144000);
+    ok(Found && Found->Address == 0x144000 && Found->Range == 0xc000 && Found->Offset == 0 && Found->SinglePage,
+       "The trimmed single page binding is %I64x+%I64x at offset %I64x\n", Found ? Found->Address : 0,
+       Found ? Found->Range : 0, Found ? Found->Offset : 0);
+    ok_int(AgxObjectReferences[1], 1);
+
+    New.Address = 0x200000;
+    New.Range = 0x4000;
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_SUCCESS);
+    ok_int(AgxObjectReferences[1], 2);
+    ok_hex(AppleAgxBindingRemove(&Bindings, 0x104000, 0x4000), STATUS_INSUFFICIENT_RESOURCES);
+    ok_int(Bindings.Count, 4);
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_CONFLICTING_ADDRESSES);
+    New.Address = 0x300000;
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_INSUFFICIENT_RESOURCES);
+    ok_int(AgxObjectReferences[1], 2);
+
+    ok_hex(AppleAgxBindingRemove(&Bindings, 0, 0x1000000), STATUS_SUCCESS);
+    ok_int(Bindings.Count, 0);
+    ok_int(AgxObjectReferences[0], 0);
+    ok_int(AgxObjectReferences[1], 0);
+    ok_hex(AppleAgxBindingRemove(&Bindings, 0x1000, 0), STATUS_INVALID_PARAMETER);
+    New.Object = NULL;
+    ok_hex(AppleAgxBindingInsert(&Bindings, &New), STATUS_INVALID_PARAMETER);
+}
+
 static
 VOID
 TestAgxParameterBuffer(VOID)
@@ -5716,6 +5807,7 @@ START_TEST(AppleSoc)
     TestAgxBuildRender();
     TestAgxParams();
     TestAgxMemoryCalls();
+    TestAgxBindings();
     TestSpmi();
     TestAtcphy();
     TestPcie();
