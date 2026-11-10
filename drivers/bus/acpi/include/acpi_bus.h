@@ -162,7 +162,8 @@ struct acpi_device_flags {
 	UINT32			wake_capable:1;
 	UINT32			force_power_state:1;
 	UINT32			processor_id:1;
-	UINT32			reserved:19;
+	UINT32			class_code:1;
+	UINT32			reserved:18;
 };
 
 /* Plug and Play */
@@ -171,6 +172,7 @@ typedef char			acpi_bus_id[8];
 typedef unsigned long		acpi_bus_address;
 typedef char			*acpi_hardware_id;
 typedef char			acpi_unique_id[9];
+typedef char			acpi_class_code[ACPI_PCICLS_STRING_SIZE];
 typedef char			acpi_device_name[40];
 typedef char			acpi_device_class[20];
 
@@ -179,6 +181,7 @@ struct acpi_device_pnp {
 	acpi_bus_address	bus_address;	                      /* _ADR */
 	acpi_hardware_id	hardware_id;	                      /* _HID */
 	ACPI_PNP_DEVICE_ID_LIST *cid_list;		     /* _CIDs */
+	acpi_class_code		class_code;	                      /* _CLS */
 	acpi_unique_id		unique_id;	                      /* _UID */
 	UINT32			processor_id;
 	acpi_device_name	device_name;	         /* Driver-determined */

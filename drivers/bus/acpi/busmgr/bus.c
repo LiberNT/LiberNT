@@ -1518,6 +1518,11 @@ acpi_bus_add (
 			else
 				DPRINT("Memory allocation error\n");
 		}
+		if ((info->Valid & ACPI_VALID_CLS) && info->ClassCode.String) {
+			snprintf(device->pnp.class_code, sizeof(device->pnp.class_code),
+				"%s", info->ClassCode.String);
+			device->flags.class_code = 1;
+		}
 		if (info->Valid & ACPI_VALID_ADR) {
 			device->pnp.bus_address = info->Address;
 			device->flags.bus_address = 1;

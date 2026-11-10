@@ -3583,30 +3583,25 @@ Bus_PDO_QueryDeviceCaps(
 static
 ULONG
 BuspFormatClassCodeIds(
-    _In_ ACPI_HANDLE Handle,
-    _Out_writes_(BufferLength) PWCHAR Buffer,
+    _In_ struct acpi_device *Device,
+    _Out_writes_to_(BufferLength, return) PWCHAR Buffer,
     _In_ ULONG BufferLength)
 {
-    ACPI_DEVICE_INFO *Info = NULL;
     ULONG Value[3] = { 0 };
     ULONG Length = 0;
     ULONG i;
 
-    if (!Handle || BufferLength < 2 * sizeof("ACPI\\CLS_0000&SUBCLS_0000&PI_00") + 1)
-        return 0;
+    C_ASSERT(ACPI_PCICLS_STRING_SIZE >= 7);
 
-    if (ACPI_FAILURE(AcpiGetObjectInfo(Handle, &Info)) || !Info)
-        return 0;
-
-    if (!(Info->Valid & ACPI_VALID_CLS) || !Info->ClassCode.String || Info->ClassCode.Length < 7)
+    if (!Device->flags.class_code ||
+        BufferLength < 2 * RTL_NUMBER_OF("ACPI\\CLS_0000&SUBCLS_0000&PI_00") + 1)
     {
-        ACPI_FREE(Info);
         return 0;
     }
 
     for (i = 0; i < 6; i++)
     {
-        CHAR Digit = Info->ClassCode.String[i];
+        CHAR Digit = Device->pnp.class_code[i];
         ULONG Nibble;
 
         if (Digit >= '0' && Digit <= '9')
@@ -3616,15 +3611,10 @@ BuspFormatClassCodeIds(
         else if (Digit >= 'a' && Digit <= 'f')
             Nibble = Digit - 'a' + 10;
         else
-        {
-            ACPI_FREE(Info);
             return 0;
-        }
 
         Value[i / 2] = (Value[i / 2] << 4) | Nibble;
     }
-
-    ACPI_FREE(Info);
 
     /* TODO: the vendor-qualified _CLS identifiers (ACPI\VEN_vvv&CLS_...) are not reported */
     Length += (ULONG)swprintf(&Buffer[Length],
@@ -3831,7 +3821,7 @@ Bus_PDO_QueryDeviceId(
             }
             else
             {
-                length += BuspFormatClassCodeIds(DeviceData->AcpiHandle,
+                length += BuspFormatClassCodeIds(Device,
                                                  &temp[length],
                                                  RTL_NUMBER_OF(temp) - length);
 
