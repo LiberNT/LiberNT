@@ -1261,7 +1261,8 @@ LxSignalQueue(
     Result = LxCopyFromUser(&Info, InfoPointer, sizeof(Info));
     if (Result != 0)
         return Result;
-    if (((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)) && (Tgid != LxPidNr(Call->Process, Call->Process)))
+    if (((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)) &&
+        (Tgid != ((Tid != 0) ? LxPidNr(Call->Process, Call->Process) : LxTidNr(Call->Process, Call->Thread))))
         return -LX_EPERM;
     Info.Signo = Signal;
     if (LxSignalInfoHasUid(Signal, &Info))
@@ -1280,8 +1281,9 @@ LxSignalQueue(
     else
     {
         Target = LxProcessLookupNr(Call->Process, Tgid);
-        if (Target == NULL)
+        if ((Target == NULL) && (LxThreadLookupNr(Call->Process, Tgid, &Target) == NULL))
             return -LX_ESRCH;
+        ASSERT(Target != NULL);
     }
 
     Result = LxSignalPermitted(Call->Process, Target, Signal);
