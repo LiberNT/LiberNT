@@ -40,6 +40,7 @@
 #define AGX_BOOT_TIMEOUT_MS         2000
 #define AGX_LISTEN_MS               500
 #define AGX_READY_TIMEOUT_MS        3000
+#define AGX_DEVCTL_TIMEOUT_MS       2000
 #define AGX_MAX_SHARED              8
 #define AGX_SHARED_ALIGN            0x1000
 #define AGX_ADT_MAX_LENGTH          0x200000
@@ -512,6 +513,23 @@ AgxSubmit(
     return STATUS_IO_TIMEOUT;
 }
 
+/* The firmware imports its globals and starts on two device controls; only then does it say it
+ * is ready. */
+static
+NTSTATUS
+AgxDeviceControlOp(
+    _Inout_ PAPPLE_AGX Agx,
+    _In_ ULONG Opcode)
+{
+    ULONG Request[APPLE_AGX_RECORD_WORDS] = { 0 };
+    NTSTATUS Status;
+
+    Request[0] = Opcode;
+    Status = AgxSubmit(Agx, &Agx->DevCtl, APPLE_AGX_DOORBELL_DEVCTL, Request, AGX_DEVCTL_TIMEOUT_MS);
+    DbgPrint("appleagx: device control %#lx: %lx\n", Opcode, Status);
+    return Status;
+}
+
 /* The rings live inside the initial data, so they are bound once it is in place. */
 static
 VOID
@@ -611,18 +629,23 @@ AgxHandInitialData(
         DbgPrint("appleagx: the firmware was not told where its initial data is\n");
         return STATUS_IO_TIMEOUT;
     }
+    Status = AgxDeviceControlOp(Agx, APPLE_AGX_DEVCTL_IMPORT_GLOBALS);
+    if (NT_SUCCESS(Status))
+        Status = AgxDeviceControlOp(Agx, APPLE_AGX_DEVCTL_START);
+    if (!NT_SUCCESS(Status))
+        return Status;
     for (Waited = 0; Waited < AGX_READY_TIMEOUT_MS; Waited += 10)
     {
         AgxListen(Agx, 10);
+        AgxDrainRings(Agx);
         if (AppleAgxInitReady(&Agx->Init))
         {
-            UCHAR Request[APPLE_AGX_DEVCTL_RECORD] = { 0 };
-
+            DbgPrint("appleagx: the firmware is ready after %lu ms, %lu records read\n", Waited, Agx->Drained);
+            Status = AgxDeviceControlOp(Agx, APPLE_AGX_DEVCTL_IMPORT_GLOBALS);
+            if (!NT_SUCCESS(Status))
+                return Status;
             AgxDrainRings(Agx);
             Agx->Reported.State = APPLE_AGX_STATE_READY;
-            DbgPrint("appleagx: the firmware is ready after %lu ms, %lu records read\n", Waited, Agx->Drained);
-            DbgPrint("appleagx: the device control ring answers an empty request: %lx\n",
-                     AgxSubmit(Agx, &Agx->DevCtl, APPLE_AGX_DOORBELL_DEVCTL, Request, AGX_LISTEN_MS));
             return STATUS_SUCCESS;
         }
     }
