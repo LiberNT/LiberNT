@@ -65,15 +65,7 @@ ExpPoolHeapHasRoom(
 
     for (i = 0; i < Count; i++)
     {
-        PPOOL_VA_REGION Region = Heap->Region[i];
-        KIRQL OldIrql;
-        SIZE_T Free;
-
-        POOL_LOCK_ACQUIRE(&Region->Lock, &OldIrql);
-        POOL_ASSERT(Region->UnitsInUse <= Region->UnitCount);
-        Free = Region->UnitCount - Region->UnitsInUse;
-        POOL_LOCK_RELEASE(&Region->Lock, OldIrql);
-        if (Free >= Units)
+        if (PoolVaHasRun(Heap->Region[i], Units))
             return TRUE;
     }
 
@@ -146,31 +138,33 @@ ExpPoolExtend(
     return STATUS_SUCCESS;
 }
 
-BOOLEAN
+EX_POOL_GROWTH
 ExpPoolGrow(
     _In_ ULONG HeapIndex,
     _In_ SIZE_T NumberOfBytes,
     _In_ LONG Generation)
 {
     SIZE_T Units = ExpPoolUnitsFor(NumberOfBytes);
-    BOOLEAN Grown;
+    EX_POOL_GROWTH Growth;
     KIRQL OldIrql;
 
     if (HeapIndex == EX_POOL_HEAP_PAGED || Units == 0)
-        return FALSE;
+        return ExpPoolGrowthFailed;
 
     POOL_ASSERT(HeapIndex == EX_POOL_HEAP_NONPAGED || HeapIndex == EX_POOL_HEAP_EXECUTABLE);
     POOL_ASSERT(ExpPoolState.Heap[HeapIndex] != NULL);
 
     POOL_LOCK_ACQUIRE(&ExpPoolState.GrowLock, &OldIrql);
     if ((LONG)POOL_LOAD_ACQUIRE32(&ExpPoolState.Generation[HeapIndex]) != Generation)
-        Grown = TRUE;
+        Growth = ExpPoolGrowthExtended;
     else if (ExpPoolHeapHasRoom(ExpPoolState.Heap[HeapIndex], Units))
-        Grown = FALSE;
+        Growth = ExpPoolGrowthRoom;
+    else if (NT_SUCCESS(ExpPoolExtend(HeapIndex, Units)))
+        Growth = ExpPoolGrowthExtended;
     else
-        Grown = (BOOLEAN)NT_SUCCESS(ExpPoolExtend(HeapIndex, Units));
+        Growth = ExpPoolGrowthFailed;
     POOL_LOCK_RELEASE(&ExpPoolState.GrowLock, OldIrql);
-    return Grown;
+    return Growth;
 }
 
 CODE_SEG("INIT")

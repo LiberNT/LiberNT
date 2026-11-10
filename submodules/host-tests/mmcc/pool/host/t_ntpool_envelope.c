@@ -18,6 +18,9 @@
 #define CONTEND_EXEC_BYTES  (24 * MB)
 #define PAGED_BYTES         (64 * MB)
 #define BLOCK_BYTES         (64 * 1024)
+#define FRAGMENT_BYTES      (768 * 1024)
+#define FRAGMENT_BIG_BYTES  (5 * MB / 2)
+#define FRAGMENT_CAPACITY   128
 #define HEAVY_BYTES         (36 * MB)
 #define SMP_THREADS         4
 #define SMP_BYTES           (10 * MB)
@@ -248,6 +251,59 @@ static int Exhaust(VOID)
     return 0;
 }
 
+static int Fragment(VOID)
+{
+    PPOOL_HEAP Heap = ExpPoolState.Heap[EX_POOL_HEAP_NONPAGED];
+    PVOID Blocks[FRAGMENT_CAPACITY] = { NULL };
+    PPOOL_VA_REGION Region;
+    SIZE_T Count = 0, Holes = 0, i;
+    PVOID Big;
+
+    while (PoolHeapRegionCount(Heap) < 2 && Count < FRAGMENT_CAPACITY)
+    {
+        PVOID Block = Allocate(FALSE, FRAGMENT_BYTES);
+
+        CHECK(Block != NULL);
+        if (Block == NULL)
+            break;
+        Blocks[Count++] = Block;
+    }
+    CHECK(PoolHeapRegionCount(Heap) == 2);
+    if (PoolHeapRegionCount(Heap) != 2)
+        return 1;
+
+    Region = Heap->Region[1];
+    while (Region->UnitsInUse < Region->UnitCount && Count < FRAGMENT_CAPACITY)
+    {
+        PVOID Block = Allocate(FALSE, FRAGMENT_BYTES);
+
+        CHECK(Block != NULL);
+        if (Block == NULL)
+            break;
+        Blocks[Count++] = Block;
+    }
+    CHECK(Region->UnitsInUse == Region->UnitCount);
+
+    for (i = 0; i < Count; i += 2)
+    {
+        if (PoolVaContains(Region, Blocks[i]))
+        {
+            ExFreePoolWithTag(Blocks[i], TAG_TEST);
+            Blocks[i] = NULL;
+            Holes++;
+        }
+    }
+    CHECK(Holes >= 3);
+
+    Big = Allocate(FALSE, FRAGMENT_BIG_BYTES);
+    CheckBlock(Big, FRAGMENT_BIG_BYTES, FALSE);
+    CheckRegions();
+    if (Big != NULL)
+        ExFreePoolWithTag(Big, TAG_TEST);
+    Drain(Blocks, Count);
+    return 0;
+}
+
 static int Contend(VOID)
 {
     SIZE_T NxCapacity = CONTEND_NX_BYTES / BLOCK_BYTES, ExecCapacity = CONTEND_EXEC_BYTES / BLOCK_BYTES;
@@ -323,6 +379,8 @@ int main(int argc, char **argv)
         Status = Large();
     else if (strcmp(Area, "exhaust") == 0)
         Status = Exhaust();
+    else if (strcmp(Area, "fragment") == 0)
+        Status = Fragment();
     else if (strcmp(Area, "contend") == 0)
         Status = Contend();
     else if (strcmp(Area, "smp") == 0)
