@@ -1,5 +1,6 @@
 
 add_subdirectory(appinitdll)
+add_subdirectory(loaderwait)
 add_subdirectory(muitest)
 add_subdirectory(redirptest)
 add_subdirectory(werhandler)

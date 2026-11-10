@@ -92,6 +92,16 @@ static BOOL CallLoadLibraryLoaded(void)
     return TRUE;
 }
 
+static BOOL CallLoadLibraryNtdll(void)
+{
+    HMODULE Module = LoadLibraryW(L"ntdll.dll");
+
+    if (!Module)
+        return FALSE;
+    FreeLibrary(Module);
+    return TRUE;
+}
+
 static BOOL CallLoadLibraryNew(void)
 {
     HMODULE Module = LoadLibraryW(L"mpr.dll");
@@ -158,6 +168,85 @@ static void TestCall(
     CloseHandle(Job.Done);
 }
 
+typedef struct _LOADER_WAIT_JOB
+{
+    WCHAR *Path;
+    HANDLE Go;
+    HMODULE Module;
+    BOOL Initialized;
+} LOADER_WAIT_JOB;
+
+static DWORD WINAPI LoadLoaderWait(PVOID Context)
+{
+    LOADER_WAIT_JOB *Job = Context;
+    BOOL (WINAPI *Initialized)(void);
+
+    if (WaitForSingleObject(Job->Go, 10000) != WAIT_OBJECT_0)
+        return 1;
+    Job->Module = LoadLibraryW(Job->Path);
+    Initialized = Job->Module ? (PVOID)GetProcAddress(Job->Module, "LoaderWaitInitialized") : NULL;
+    Job->Initialized = Initialized && Initialized();
+    return 0;
+}
+
+static void TestLoadDuringAttach(void)
+{
+    LOADER_WAIT_JOB FirstJob = { 0 }, SecondJob = { 0 };
+    HANDLE Attaching, Proceed, First, Second;
+    WCHAR Path[MAX_PATH], Name[64], *Slash;
+    DWORD WaitSecond;
+
+    GetModuleFileNameW(NULL, Path, RTL_NUMBER_OF(Path));
+    Slash = wcsrchr(Path, L'\\');
+    if (!Slash || Slash - Path + 16 >= RTL_NUMBER_OF(Path))
+        return;
+    wcscpy(Slash + 1, L"loaderwait.dll");
+    _snwprintf(Name, RTL_NUMBER_OF(Name), L"LoaderWaitAttaching-%lu", GetCurrentProcessId());
+    Attaching = CreateEventW(NULL, TRUE, FALSE, Name);
+    _snwprintf(Name, RTL_NUMBER_OF(Name), L"LoaderWaitProceed-%lu", GetCurrentProcessId());
+    Proceed = CreateEventW(NULL, TRUE, FALSE, Name);
+    FirstJob.Path = SecondJob.Path = Path;
+    FirstJob.Go = CreateEventW(NULL, TRUE, FALSE, NULL);
+    SecondJob.Go = CreateEventW(NULL, TRUE, FALSE, NULL);
+    First = CreateThread(NULL, 0, LoadLoaderWait, &FirstJob, 0, NULL);
+    Second = CreateThread(NULL, 0, LoadLoaderWait, &SecondJob, 0, NULL);
+    ok(Attaching && Proceed && FirstJob.Go && SecondJob.Go && First && Second, "setup failed with %lu\n",
+       GetLastError());
+    if (!Attaching || !Proceed || !FirstJob.Go || !SecondJob.Go || !First || !Second)
+        return;
+
+    SetEvent(FirstJob.Go);
+    if (WaitForSingleObject(Attaching, 5000) == WAIT_OBJECT_0)
+    {
+        SetEvent(SecondJob.Go);
+        WaitSecond = WaitForSingleObject(Second, 500);
+        ok(WaitSecond == WAIT_TIMEOUT, "LoadLibrary returned while DllMain ran on another thread (%lu)\n",
+           WaitSecond);
+    }
+    else
+    {
+        skip("loaderwait.dll did not start its DLL_PROCESS_ATTACH\n");
+        SetEvent(SecondJob.Go);
+    }
+    SetEvent(Proceed);
+    ok(WaitForSingleObject(First, 5000) == WAIT_OBJECT_0, "the first load did not finish\n");
+    ok(WaitForSingleObject(Second, 5000) == WAIT_OBJECT_0, "the second load did not finish\n");
+    ok(FirstJob.Module != NULL && SecondJob.Module == FirstJob.Module, "the loads gave %p and %p\n",
+       FirstJob.Module, SecondJob.Module);
+    ok(FirstJob.Initialized, "the first load returned before DllMain finished\n");
+    ok(SecondJob.Initialized, "the second load returned before DllMain finished\n");
+    if (FirstJob.Module)
+        FreeLibrary(FirstJob.Module);
+    if (SecondJob.Module)
+        FreeLibrary(SecondJob.Module);
+    CloseHandle(First);
+    CloseHandle(Second);
+    CloseHandle(FirstJob.Go);
+    CloseHandle(SecondJob.Go);
+    CloseHandle(Attaching);
+    CloseHandle(Proceed);
+}
+
 static void TestModuleFileNameLimits(void)
 {
     WCHAR Name[MAX_PATH], Short[4];
@@ -195,6 +284,7 @@ START_TEST(LoaderLock)
     HMODULE Module;
 
     TestModuleFileNameLimits();
+    TestLoadDuringAttach();
 
     ok(Lock != NULL && Unlock != NULL, "LdrLockLoaderLock/LdrUnlockLoaderLock not exported\n");
     if (!Lock || !Unlock)
@@ -209,6 +299,7 @@ START_TEST(LoaderLock)
     TestCall(Lock, Unlock, CallGetModuleFileName, "GetModuleFileName", TRUE);
     TestCall(Lock, Unlock, CallRaiseException, "RaiseException", TRUE);
     TestCall(Lock, Unlock, CallLoadLibraryLoaded, "LoadLibrary loaded", TRUE);
+    TestCall(Lock, Unlock, CallLoadLibraryNtdll, "LoadLibrary ntdll", TRUE);
 
     if (GetModuleHandleW(L"mpr.dll"))
     {
