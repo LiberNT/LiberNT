@@ -103,16 +103,20 @@ static void STDMETHODCALLTYPE d2d_gradient_GetGradientStops(ID2D1GradientStopCol
 
 static D2D1_GAMMA STDMETHODCALLTYPE d2d_gradient_GetColorInterpolationGamma(ID2D1GradientStopCollection *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct d2d_gradient *gradient = impl_from_ID2D1GradientStopCollection(iface);
 
-    return D2D1_GAMMA_1_0;
+    TRACE("iface %p.\n", iface);
+
+    return gradient->gamma;
 }
 
 static D2D1_EXTEND_MODE STDMETHODCALLTYPE d2d_gradient_GetExtendMode(ID2D1GradientStopCollection *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct d2d_gradient *gradient = impl_from_ID2D1GradientStopCollection(iface);
 
-    return D2D1_EXTEND_MODE_CLAMP;
+    TRACE("iface %p.\n", iface);
+
+    return gradient->extend_mode;
 }
 
 static const struct ID2D1GradientStopCollectionVtbl d2d_gradient_vtbl =
@@ -193,10 +197,8 @@ HRESULT d2d_gradient_create(ID2D1Factory *factory, ID3D11Device1 *device, const 
         return E_OUTOFMEMORY;
     }
 
-    if (gamma != D2D1_GAMMA_2_2)
-        FIXME("Ignoring gamma %#x.\n", gamma);
-    if (extend_mode != D2D1_EXTEND_MODE_CLAMP)
-        FIXME("Ignoring extend mode %#x.\n", extend_mode);
+    gradient->gamma = gamma;
+    gradient->extend_mode = extend_mode;
 
     gradient->ID2D1GradientStopCollection_iface.lpVtbl = &d2d_gradient_vtbl;
     gradient->refcount = 1;
@@ -1404,6 +1406,8 @@ BOOL d2d_brush_fill_cb(const struct d2d_brush *brush, struct d2d_brush_cb *cb)
             d2d_point_transform(&cb->u.linear.start, &b, brush->u.linear.start.x, brush->u.linear.start.y);
             d2d_point_transform(&cb->u.linear.end, &b, brush->u.linear.end.x, brush->u.linear.end.y);
             cb->u.linear.stop_count = brush->u.linear.gradient->stop_count;
+            cb->u.linear.extend_mode = brush->u.linear.gradient->extend_mode;
+            cb->u.linear.gamma = brush->u.linear.gradient->gamma;
 
             return TRUE;
 
@@ -1446,6 +1450,8 @@ BOOL d2d_brush_fill_cb(const struct d2d_brush *brush, struct d2d_brush_cb *cb)
             d2d_point_set(&cb->u.radial.rb, t * -sin_theta, t * cos_theta);
 
             cb->u.radial.stop_count = brush->u.radial.gradient->stop_count;
+            cb->u.radial.extend_mode = brush->u.radial.gradient->extend_mode;
+            cb->u.radial.gamma = brush->u.radial.gradient->gamma;
 
             return TRUE;
 

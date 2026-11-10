@@ -53,6 +53,7 @@ enum d2d_shape_type
     D2D_SHAPE_TYPE_ARC_OUTLINE,
     D2D_SHAPE_TYPE_TRIANGLE,
     D2D_SHAPE_TYPE_CURVE,
+    D2D_SHAPE_TYPE_TRIANGLE_AA,
     D2D_SHAPE_TYPE_COUNT,
 };
 
@@ -67,6 +68,100 @@ struct d2d_clip_stack
     D2D1_RECT_F *stack;
     size_t size;
     size_t count;
+};
+
+#define D2D_COVERAGE_TILE_SHIFT 4
+#define D2D_COVERAGE_TILE (1 << D2D_COVERAGE_TILE_SHIFT)
+
+struct d2d_coverage_run
+{
+    int x, y, width, height;
+    BOOL edge;
+    size_t tile;
+};
+
+struct d2d_coverage
+{
+    float *accum;
+    size_t accum_size;
+    BYTE *flags;
+    size_t flags_size;
+    BYTE *tiles;
+    size_t tiles_size;
+    struct d2d_coverage_run *runs;
+    size_t runs_size;
+    size_t run_count;
+    size_t edge_count;
+    int width;
+    int height;
+    int tile_cols;
+    int tile_rows;
+    BYTE *rowflags;
+    size_t rowflags_size;
+    int rowflag_cols;
+    BOOL dirty;
+};
+
+struct d2d_face;
+struct d2d_flat
+{
+    D2D1_POINT_2F *vertices;
+    size_t vertex_count;
+    struct d2d_face *faces;
+    size_t face_count;
+    size_t *contours;
+    size_t contour_count;
+    float max_scale;
+};
+
+struct d2d_geometry;
+void d2d_coverage_cleanup(struct d2d_coverage *coverage);
+BOOL d2d_geometry_get_device_bounds(const struct d2d_geometry *geometry, BOOL outline,
+        const D2D1_MATRIX_3X2_F *world, D2D1_RECT_F *bounds);
+BOOL d2d_geometry_is_pixel_aligned_rect(const struct d2d_geometry *geometry, const D2D1_MATRIX_3X2_F *world);
+BOOL d2d_coverage_clip_is_fractional(const D2D1_RECT_F *clip);
+BOOL d2d_rect_is_pixel_aligned(const D2D1_RECT_F *rect, const D2D1_MATRIX_3X2_F *world);
+struct d2d_face;
+#define D2D_CONVEX_MAX_POINTS 136
+#define D2D_CONVEX_MAX_VERTICES 544
+#define D2D_CONVEX_MAX_FACES 816
+
+struct d2d_aa_vertex
+{
+    float x, y, a;
+};
+
+size_t d2d_convex_aa_polygon(D2D1_POINT_2F *local, size_t count, const D2D1_MATRIX_3X2_F *geometry_transform,
+        const D2D1_MATRIX_3X2_F *world, const D2D1_MATRIX_3X2_F *from_device, float stroke_width,
+        struct d2d_aa_vertex *vertices, struct d2d_face *faces, size_t *face_count);
+size_t d2d_geometry_convex_aa(const struct d2d_geometry *geometry, const D2D1_MATRIX_3X2_F *world,
+        const D2D1_MATRIX_3X2_F *from_device, float stroke_width, struct d2d_aa_vertex *vertices,
+        struct d2d_face *faces, size_t *face_count);
+void d2d_path_cache_free(void);
+struct d2d_device_context;
+void d2d_device_context_state_out(struct d2d_device_context *context);
+BOOL d2d_geometry_polygon_aa(const struct d2d_geometry *geometry, const D2D1_MATRIX_3X2_F *world,
+        const D2D1_MATRIX_3X2_F *from_device, struct d2d_aa_vertex **vertices, size_t *vertex_count,
+        struct d2d_face **faces, size_t *face_count);
+BOOL d2d_geometry_rasterize(const struct d2d_geometry *geometry, BOOL outline, float stroke_width,
+        const D2D1_MATRIX_3X2_F *world, const RECT *area, const D2D1_RECT_F *clip, struct d2d_coverage *coverage);
+
+struct d2d_device_context_layer
+{
+    struct d2d_bitmap *bitmap;
+    struct d2d_bitmap *target;
+    D2D1_LAYER_PARAMETERS1 parameters;
+    D2D1_MATRIX_3X2_F transform;
+    BOOL active;
+    BOOL clip;
+};
+
+struct d2d_layer_stack
+{
+    struct d2d_device_context_layer *stack;
+    size_t size;
+    size_t count;
+    size_t initialized;
 };
 
 struct d2d_error_state
@@ -97,6 +192,8 @@ struct d2d_brush_cb
             D2D1_POINT_2F start;
             D2D1_POINT_2F end;
             unsigned int stop_count;
+            unsigned int extend_mode;
+            unsigned int gamma;
         } linear;
         struct
         {
@@ -105,7 +202,9 @@ struct d2d_brush_cb
             D2D1_POINT_2F ra;
             D2D1_POINT_2F rb;
             unsigned int stop_count;
-            float pad[3];
+            unsigned int extend_mode;
+            unsigned int gamma;
+            float pad;
         } radial;
         struct
         {
@@ -120,7 +219,13 @@ struct d2d_ps_cb
 {
     BOOL outline;
     BOOL is_arc;
-    BOOL pad[2];
+    BOOL mask;
+    BOOL pad;
+    INT mask_origin[2];
+    INT pad2[2];
+    float clip[4];
+    BOOL clip_on;
+    BOOL pad3[3];
     struct d2d_brush_cb colour_brush;
     struct d2d_brush_cb opacity_brush;
 };
@@ -170,6 +275,14 @@ struct d2d_indexed_objects
     size_t count;
 };
 
+struct d2d_glyph_atlas;
+
+struct d2d_stream
+{
+    ID3D11Buffer *buffer;
+    UINT size, pos, bind;
+};
+
 struct d2d_device_context
 {
     ID2D1DeviceContext6 ID2D1DeviceContext6_iface;
@@ -186,6 +299,22 @@ struct d2d_device_context
     struct d2d_device *device;
     ID3D11Device1 *d3d_device;
     ID3DDeviceContextState *d3d_state;
+    ID3DDeviceContextState *prev_state;
+    BOOL state_in;
+    struct
+    {
+        BOOL valid;
+        ID3D11InputLayout *il;
+        ID3D11VertexShader *vs;
+        ID3D11PixelShader *ps;
+        ID3D11Buffer *vs_cb, *ps_cb, *ib, *vb;
+        ID3D11RasterizerState *rs;
+        ID3D11BlendState *bs;
+        ID3D11RenderTargetView *rtv;
+        UINT ib_offset, vb_offset, vb_stride;
+        D3D11_VIEWPORT vp;
+        D3D11_RECT scissor;
+    } sh;
     struct
     {
         ID2D1Image *object;
@@ -219,6 +348,20 @@ struct d2d_device_context
     D2D1_RENDER_TARGET_PROPERTIES desc;
     D2D1_SIZE_U pixel_size;
     struct d2d_clip_stack clip_stack;
+    struct d2d_layer_stack layer_stack;
+    struct d2d_coverage coverage;
+    ID3D11Texture2D *mask_texture;
+    ID3D11ShaderResourceView *mask_srv;
+    UINT mask_width, mask_height;
+    BOOL mask_active;
+    BOOL ps_clip_on;
+    int mask_x, mask_y;
+    struct d2d_stream vb_stream, ib_stream;
+    struct d2d_glyph_atlas *glyph_atlas[2];
+    UINT draw_vb_offset, draw_ib_offset;
+    struct d2d_vs_cb vs_shadow;
+    struct d2d_ps_cb ps_shadow;
+    BOOL vs_shadow_valid, ps_shadow_valid;
 
     struct d2d_indexed_objects vertex_buffers;
 };
@@ -312,6 +455,8 @@ struct d2d_gradient
     ID3D11ShaderResourceView *view;
     D2D1_GRADIENT_STOP *stops;
     UINT32 stop_count;
+    D2D1_GAMMA gamma;
+    D2D1_EXTEND_MODE extend_mode;
 };
 
 HRESULT d2d_gradient_create(ID2D1Factory *factory, ID3D11Device1 *device, const D2D1_GRADIENT_STOP *stops,
@@ -547,6 +692,17 @@ struct d2d_geometry
         size_t arc_vertices_size;
         size_t arc_vertex_count;
     } fill;
+
+    struct
+    {
+        BOOL valid;
+        D2D1_RECT_F rect;
+        float radius_x, radius_y;
+    } convex;
+    BOOL fill_polygon;
+    size_t *fill_contours;
+    size_t fill_contour_count;
+    struct d2d_flat flat;
 
     struct
     {

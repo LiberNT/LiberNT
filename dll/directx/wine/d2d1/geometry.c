@@ -2723,6 +2723,95 @@ static BOOL d2d_geometry_apply_intersections(struct d2d_geometry *geometry,
 /* Intersect the geometry's segments with themselves. This uses the
  * straightforward approach of testing everything against everything, but
  * there certainly exist more scalable algorithms for this. */
+struct d2d_line_seg
+{
+    float min_x, max_x, min_y, max_y;
+    size_t figure_idx, vertex_idx;
+};
+
+static int d2d_line_seg_compare(const void *a, const void *b)
+{
+    const struct d2d_line_seg *l = a, *r = b;
+
+    return (l->min_x > r->min_x) - (l->min_x < r->min_x);
+}
+
+static int d2d_geometry_intersect_self_lines(struct d2d_geometry *geometry, BOOL *ret)
+{
+    struct d2d_geometry_intersections intersections = {0};
+    struct d2d_line_seg *segs;
+    size_t count = 0, total = 0, i, j, f, v, next;
+    struct d2d_segment_idx idx_p, idx_q;
+
+    for (f = 0; f < geometry->u.path.figure_count; ++f)
+    {
+        const struct d2d_figure *figure = &geometry->u.path.figures[f];
+
+        if (figure->bezier_control_count)
+            return FALSE;
+        for (v = 0; v < figure->vertex_count; ++v)
+        {
+            if (d2d_vertex_type_is_bezier(figure->vertex_types[v]))
+                return FALSE;
+            if (figure->vertex_types[v] != D2D_VERTEX_TYPE_END)
+                ++total;
+        }
+    }
+    if (total < 32 || !(segs = malloc(total * sizeof(*segs))))
+        return FALSE;
+
+    for (f = 0; f < geometry->u.path.figure_count; ++f)
+    {
+        const struct d2d_figure *figure = &geometry->u.path.figures[f];
+
+        for (v = 0; v < figure->vertex_count; ++v)
+        {
+            const D2D1_POINT_2F *a, *b;
+
+            if (figure->vertex_types[v] == D2D_VERTEX_TYPE_END)
+                continue;
+            next = v + 1 == figure->vertex_count ? 0 : v + 1;
+            a = &figure->vertices[v];
+            b = &figure->vertices[next];
+            segs[count].min_x = min(a->x, b->x);
+            segs[count].max_x = max(a->x, b->x);
+            segs[count].min_y = min(a->y, b->y);
+            segs[count].max_y = max(a->y, b->y);
+            segs[count].figure_idx = f;
+            segs[count].vertex_idx = v;
+            ++count;
+        }
+    }
+    qsort(segs, count, sizeof(*segs), d2d_line_seg_compare);
+
+    idx_p.control_idx = 0;
+    idx_q.control_idx = 0;
+    *ret = FALSE;
+    for (i = 0; i < count; ++i)
+    {
+        for (j = i + 1; j < count && segs[j].min_x <= segs[i].max_x; ++j)
+        {
+            if (segs[j].max_y < segs[i].min_y || segs[j].min_y > segs[i].max_y)
+                continue;
+            idx_p.figure_idx = segs[i].figure_idx;
+            idx_p.vertex_idx = segs[i].vertex_idx;
+            idx_q.figure_idx = segs[j].figure_idx;
+            idx_q.vertex_idx = segs[j].vertex_idx;
+            if (!d2d_geometry_intersect_line_line(geometry, &intersections, &idx_p, &idx_q))
+                goto done;
+        }
+    }
+
+    qsort(intersections.intersections, intersections.intersection_count,
+            sizeof(*intersections.intersections), d2d_geometry_intersections_compare);
+    *ret = d2d_geometry_apply_intersections(geometry, &intersections);
+
+done:
+    free(intersections.intersections);
+    free(segs);
+    return TRUE;
+}
+
 static BOOL d2d_geometry_intersect_self(struct d2d_geometry *geometry)
 {
     struct d2d_geometry_intersections intersections = {0};
@@ -2735,6 +2824,12 @@ static BOOL d2d_geometry_intersect_self(struct d2d_geometry *geometry)
     if (!geometry->u.path.figure_count)
         return TRUE;
 
+    {
+        BOOL handled_ret;
+
+        if (d2d_geometry_intersect_self_lines(geometry, &handled_ret))
+            return handled_ret;
+    }
     for (idx_p.figure_idx = 0; idx_p.figure_idx < geometry->u.path.figure_count; ++idx_p.figure_idx)
     {
         figure_p = &geometry->u.path.figures[idx_p.figure_idx];
@@ -2808,6 +2903,581 @@ done:
     return ret;
 }
 
+#define D2D_EAR_MAX_NODES 6144
+#define D2D_EAR_MAX_VERTICES 4096
+
+
+
+static double d2d_ear_cross(const D2D1_POINT_2F *a, const D2D1_POINT_2F *b, const D2D1_POINT_2F *c)
+{
+    return ((double)b->x - a->x) * ((double)c->y - a->y) - ((double)b->y - a->y) * ((double)c->x - a->x);
+}
+
+static BOOL d2d_ear_same_point(const D2D1_POINT_2F *a, const D2D1_POINT_2F *b)
+{
+    return a->x == b->x && a->y == b->y;
+}
+
+/* Clip ears off a weakly simple polygon given as a ring of nodes that refer to
+ * vertices; bridge nodes may share coordinates. The polygon must be counter-
+ * clockwise. Returns the number of triangles, or 0 on failure. */
+static size_t d2d_ear_clip(const D2D1_POINT_2F *v, const unsigned short *vi, size_t nn,
+        struct d2d_face *faces, double *tri_area)
+{
+    unsigned short prev[D2D_EAR_MAX_NODES], next[D2D_EAR_MAX_NODES], rlist[D2D_EAR_MAX_NODES];
+    unsigned char reflex[D2D_EAR_MAX_NODES];
+    size_t i, j, k, m, r, rcount = 0, remaining = nn, guard = 0, count = 0;
+
+    *tri_area = 0.0;
+    if (nn < 3 || nn > D2D_EAR_MAX_NODES)
+        return 0;
+    for (i = 0; i < nn; ++i)
+    {
+        prev[i] = i ? i - 1 : nn - 1;
+        next[i] = i + 1 == nn ? 0 : i + 1;
+    }
+    for (i = 0; i < nn; ++i)
+    {
+        reflex[i] = d2d_ear_cross(&v[vi[prev[i]]], &v[vi[i]], &v[vi[next[i]]]) <= 0.0;
+        if (reflex[i])
+            rlist[rcount++] = i;
+    }
+
+    i = 0;
+    while (remaining > 3)
+    {
+        const D2D1_POINT_2F *pa, *pb, *pc;
+        BOOL ear;
+
+        if (guard++ > 2 * nn * nn)
+            return 0;
+        j = prev[i];
+        k = next[i];
+        ear = !reflex[i];
+        pa = &v[vi[j]];
+        pb = &v[vi[i]];
+        pc = &v[vi[k]];
+        for (r = 0; ear && r < rcount; ++r)
+        {
+            const D2D1_POINT_2F *pm;
+            double d1, d2, d3;
+
+            m = rlist[r];
+            if (!reflex[m] || m == i || m == j || m == k)
+                continue;
+            pm = &v[vi[m]];
+            if (d2d_ear_same_point(pm, pa) || d2d_ear_same_point(pm, pb) || d2d_ear_same_point(pm, pc))
+                continue;
+            d1 = d2d_ear_cross(pa, pb, pm);
+            d2 = d2d_ear_cross(pb, pc, pm);
+            d3 = d2d_ear_cross(pc, pa, pm);
+            if (d1 >= 0.0 && d2 >= 0.0 && d3 >= 0.0)
+                ear = FALSE;
+        }
+        if (!ear)
+        {
+            i = k;
+            continue;
+        }
+
+        faces[count].v[0] = vi[j];
+        faces[count].v[1] = vi[i];
+        faces[count].v[2] = vi[k];
+        ++count;
+        *tri_area += 0.5 * d2d_ear_cross(pa, pb, pc);
+        next[j] = k;
+        prev[k] = j;
+        --remaining;
+        {
+            unsigned char was_j = reflex[j], was_k = reflex[k];
+
+            reflex[j] = d2d_ear_cross(&v[vi[prev[j]]], &v[vi[j]], &v[vi[next[j]]]) <= 0.0;
+            reflex[k] = d2d_ear_cross(&v[vi[prev[k]]], &v[vi[k]], &v[vi[next[k]]]) <= 0.0;
+            if ((reflex[j] && !was_j) || (reflex[k] && !was_k))
+                return 0;
+        }
+        if (rcount && (remaining & 15) == 0)
+        {
+            size_t w = 0;
+
+            for (r = 0; r < rcount; ++r)
+                if (reflex[rlist[r]])
+                    rlist[w++] = rlist[r];
+            rcount = w;
+        }
+        i = k;
+    }
+
+    faces[count].v[0] = vi[prev[i]];
+    faces[count].v[1] = vi[i];
+    faces[count].v[2] = vi[next[i]];
+    ++count;
+    *tri_area += 0.5 * d2d_ear_cross(&v[vi[prev[i]]], &v[vi[i]], &v[vi[next[i]]]);
+    return count;
+}
+
+/* Cleans a figure into a duplicate-free polygon without collinear vertices.
+ * Returns the vertex count, or 0 if the figure is not usable. The signed area
+ * is returned in "area" (positive for counter-clockwise). */
+static size_t d2d_polygon_prepare(const D2D1_POINT_2F *src, size_t count, D2D1_POINT_2F *v, double *area)
+{
+    size_t n = 0, i, j;
+
+    if (count < 3 || count > D2D_EAR_MAX_VERTICES)
+        return 0;
+    for (i = 0; i < count; ++i)
+    {
+        if (n && !memcmp(&v[n - 1], &src[i], sizeof(*v)))
+            continue;
+        v[n++] = src[i];
+    }
+    if (n > 1 && !memcmp(&v[n - 1], &v[0], sizeof(*v)))
+        --n;
+    if (n < 3)
+        return 0;
+
+    for (i = 0; i < n && n >= 3;)
+    {
+        const D2D1_POINT_2F *pa = &v[i ? i - 1 : n - 1], *pb = &v[i], *pc = &v[i + 1 == n ? 0 : i + 1];
+        double ux = (double)pb->x - pa->x, uy = (double)pb->y - pa->y;
+        double wx = (double)pc->x - pb->x, wy = (double)pc->y - pb->y;
+        double cross = ux * wy - uy * wx, dot = ux * wx + uy * wy;
+
+        if (fabs(cross) <= 1e-7 * sqrt((ux * ux + uy * uy) * (wx * wx + wy * wy)) && dot > 0.0)
+        {
+            memmove(&v[i], &v[i + 1], (n - i - 1) * sizeof(*v));
+            --n;
+            i = i ? i - 1 : 0;
+            continue;
+        }
+        ++i;
+    }
+    if (n < 3)
+        return 0;
+
+    {
+        unsigned short table[2 * D2D_EAR_MAX_VERTICES];
+        const size_t mask = 2 * D2D_EAR_MAX_VERTICES - 1;
+        size_t h;
+        UINT32 bx, by;
+
+        memset(table, 0xff, sizeof(table));
+        for (i = 0; i < n; ++i)
+        {
+            memcpy(&bx, &v[i].x, sizeof(bx));
+            memcpy(&by, &v[i].y, sizeof(by));
+            h = ((size_t)(bx * 2654435761u) ^ (size_t)(by * 40503u)) & mask;
+            while (table[h] != 0xffff)
+            {
+                if (!memcmp(&v[table[h]], &v[i], sizeof(*v)))
+                    return 0;
+                h = (h + 1) & mask;
+            }
+            table[h] = i;
+        }
+    }
+
+    *area = 0.0;
+    for (i = 0; i < n; ++i)
+    {
+        j = i + 1 == n ? 0 : i + 1;
+        *area += (double)v[i].x * v[j].y - (double)v[j].x * v[i].y;
+    }
+    *area *= 0.5;
+    if (fabs(*area) < 1e-9)
+        return 0;
+    return n;
+}
+
+static size_t d2d_figure_prepare(const struct d2d_figure *figure, D2D1_POINT_2F *v, double *area)
+{
+    size_t count = figure->vertex_count;
+
+    if (count && figure->vertex_types[count - 1] == D2D_VERTEX_TYPE_END)
+        --count;
+    return d2d_polygon_prepare(figure->vertices, count, v, area);
+}
+
+#define D2D_FLAT_TOLERANCE 0.05f
+#define D2D_FLAT_SCALE 4.0f
+#define D2D_FLAT_MAX_SEGMENTS 64
+
+static size_t d2d_figure_flatten(const struct d2d_figure *figure, D2D1_POINT_2F *out, size_t cap, float *max_scale)
+{
+    const size_t count = figure->vertex_count;
+    BOOL end = count && figure->vertex_types[count - 1] == D2D_VERTEX_TYPE_END;
+    size_t n = 0, c = 0, i, j, k, seg;
+
+    for (i = 0; i < count; ++i)
+    {
+        const D2D1_POINT_2F *a = &figure->vertices[i];
+
+        if (!(end && i == count - 1))
+        {
+            if (n >= cap)
+                return 0;
+            out[n++] = *a;
+        }
+        if (d2d_vertex_type_is_bezier(figure->vertex_types[i]))
+        {
+            const D2D1_POINT_2F *ctl, *b;
+            float dx, dy, len, supported;
+
+            if (c >= figure->bezier_control_count || i + 1 >= count)
+                return 0;
+            ctl = &figure->bezier_controls[c++];
+            j = i + 1;
+            if (!memcmp(&figure->vertices[j], ctl, sizeof(*ctl)))
+            {
+                if (j + 1 >= count)
+                    return 0;
+                ++j;
+            }
+            b = &figure->vertices[j];
+            dx = a->x - 2.0f * ctl->x + b->x;
+            dy = a->y - 2.0f * ctl->y + b->y;
+            len = sqrtf(dx * dx + dy * dy);
+            seg = (size_t)ceilf(sqrtf(len * D2D_FLAT_SCALE / (4.0f * D2D_FLAT_TOLERANCE)));
+            seg = max(1, min(seg, D2D_FLAT_MAX_SEGMENTS));
+            supported = len > 0.0f ? 4.0f * D2D_FLAT_TOLERANCE * seg * seg / len : 1e30f;
+            if (supported < *max_scale)
+                *max_scale = supported;
+            if (n + seg > cap)
+                return 0;
+            for (k = 1; k < seg; ++k)
+            {
+                float t = (float)k / seg, u = 1.0f - t;
+
+                out[n].x = u * u * a->x + 2.0f * u * t * ctl->x + t * t * b->x;
+                out[n].y = u * u * a->y + 2.0f * u * t * ctl->y + t * t * b->y;
+                ++n;
+            }
+            if (j == i + 2)
+                ++i;
+        }
+    }
+    return n;
+}
+
+static void d2d_ear_reverse(D2D1_POINT_2F *v, size_t n)
+{
+    D2D1_POINT_2F tmp;
+    size_t i;
+
+    for (i = 0; i < n / 2; ++i)
+    {
+        tmp = v[i];
+        v[i] = v[n - 1 - i];
+        v[n - 1 - i] = tmp;
+    }
+}
+
+static BOOL d2d_ear_point_in_polygon(const D2D1_POINT_2F *poly, size_t n, const D2D1_POINT_2F *p)
+{
+    BOOL inside = FALSE;
+    size_t i, j;
+
+    for (i = 0, j = n - 1; i < n; j = i++)
+    {
+        if ((poly[i].y > p->y) != (poly[j].y > p->y)
+                && p->x < (poly[j].x - poly[i].x) * (p->y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)
+            inside = !inside;
+    }
+    return inside;
+}
+
+static BOOL d2d_path_geometry_triangulate_simple(struct d2d_geometry *geometry, BOOL flat)
+{
+    const size_t fcount = geometry->u.path.figure_count;
+    D2D1_POINT_2F *pts = NULL, *tmp = NULL;
+    size_t *offset = NULL, *size = NULL, *container = NULL, *contours = NULL;
+    unsigned char *is_hole = NULL;
+    double *areas = NULL;
+    struct d2d_face *faces = NULL;
+    unsigned short *nodes = NULL;
+    size_t total_v = 0, total_f = 0, i, j, k, nc = 0;
+    BOOL has_curves = FALSE, has_holes = FALSE, ok = FALSE;
+    D2D1_POINT_2F *flatbuf = NULL;
+    float max_scale = 1e30f;
+
+    if (!fcount || fcount > 256)
+        return FALSE;
+    if (!(tmp = malloc(D2D_EAR_MAX_VERTICES * sizeof(*tmp))))
+        return FALSE;
+    if (flat && !(flatbuf = malloc(D2D_EAR_MAX_VERTICES * sizeof(*flatbuf))))
+    {
+        free(tmp);
+        return FALSE;
+    }
+    offset = calloc(fcount, sizeof(*offset));
+    size = calloc(fcount, sizeof(*size));
+    container = calloc(fcount, sizeof(*container));
+    is_hole = calloc(fcount, sizeof(*is_hole));
+    areas = calloc(fcount, sizeof(*areas));
+    if (!offset || !size || !container || !is_hole || !areas)
+        goto done;
+
+    for (i = 0; i < fcount; ++i)
+    {
+        const struct d2d_figure *figure = &geometry->u.path.figures[i];
+        D2D1_POINT_2F *np;
+        size_t n;
+
+        if (figure->flags & D2D_FIGURE_FLAG_HOLLOW)
+            goto done;
+        if (flat)
+        {
+            size_t fn = d2d_figure_flatten(figure, flatbuf, D2D_EAR_MAX_VERTICES, &max_scale);
+
+            if (!fn || !(n = d2d_polygon_prepare(flatbuf, fn, tmp, &areas[i])))
+                goto done;
+        }
+        else if (!(n = d2d_figure_prepare(figure, tmp, &areas[i])))
+            goto done;
+        if (!(np = realloc(pts, (total_v + n) * sizeof(*np))))
+            goto done;
+        pts = np;
+        memcpy(&pts[total_v], tmp, n * sizeof(*tmp));
+        offset[i] = total_v;
+        size[i] = n;
+        total_v += n;
+        has_curves |= figure->bezier_control_count != 0;
+    }
+    if (total_v > 0xfff0)
+        goto done;
+
+    for (i = 0; i < fcount; ++i)
+        container[i] = ~(size_t)0;
+    for (i = 0; i < fcount; ++i)
+    {
+        for (j = 0; j < fcount; ++j)
+        {
+            const D2D1_RECT_F *bi = &geometry->u.path.figures[i].bounds, *bj = &geometry->u.path.figures[j].bounds;
+            BOOL i_in_j;
+
+            if (i == j || !d2d_rect_check_overlap(bi, bj))
+                continue;
+            i_in_j = bi->left >= bj->left && bi->right <= bj->right && bi->top >= bj->top && bi->bottom <= bj->bottom
+                    && d2d_ear_point_in_polygon(&pts[offset[j]], size[j], &pts[offset[i]]);
+            if (!i_in_j)
+            {
+                BOOL j_in_i = bj->left >= bi->left && bj->right <= bi->right && bj->top >= bi->top
+                        && bj->bottom <= bi->bottom && d2d_ear_point_in_polygon(&pts[offset[i]], size[i], &pts[offset[j]]);
+
+                if (!j_in_i)
+                    goto done;
+                continue;
+            }
+            if (container[i] != ~(size_t)0)
+                goto done;
+            container[i] = j;
+        }
+    }
+    for (i = 0; i < fcount; ++i)
+    {
+        if (container[i] == ~(size_t)0)
+            continue;
+        if (container[container[i]] != ~(size_t)0)
+            goto done;
+        if (geometry->u.path.fill_mode != D2D1_FILL_MODE_ALTERNATE && (areas[i] > 0.0) == (areas[container[i]] > 0.0))
+            goto done;
+        is_hole[i] = TRUE;
+        has_holes = TRUE;
+    }
+    if (flat && has_holes)
+        goto done;
+
+    for (i = 0; i < fcount; ++i)
+    {
+        if (is_hole[i] ? areas[i] > 0.0 : areas[i] < 0.0)
+        {
+            d2d_ear_reverse(&pts[offset[i]], size[i]);
+            areas[i] = -areas[i];
+        }
+    }
+
+    if (!(faces = malloc((total_v + 2 * fcount) * sizeof(*faces))) || !(nodes = malloc(D2D_EAR_MAX_NODES * sizeof(*nodes))))
+        goto done;
+
+    for (i = 0; i < fcount; ++i)
+    {
+        size_t nn = 0, holes[64], hole_count = 0, c;
+        double expected = fabs(areas[i]), tri_area;
+
+        if (is_hole[i])
+            continue;
+        for (j = 0; j < fcount; ++j)
+            if (is_hole[j] && container[j] == i)
+            {
+                if (hole_count == ARRAY_SIZE(holes))
+                    goto done;
+                holes[hole_count++] = j;
+            }
+        for (j = 0; j < size[i]; ++j)
+            nodes[nn++] = offset[i] + j;
+
+        for (c = 0; c < hole_count; ++c)
+        {
+            size_t best = c, h, m, p, r, n_h;
+            double best_x;
+
+            for (j = c + 1; j < hole_count; ++j)
+            {
+                double xa = -1e300, xb = -1e300;
+
+                for (k = 0; k < size[holes[j]]; ++k)
+                    xa = max(xa, pts[offset[holes[j]] + k].x);
+                for (k = 0; k < size[holes[best]]; ++k)
+                    xb = max(xb, pts[offset[holes[best]] + k].x);
+                if (xa > xb)
+                    best = j;
+            }
+            h = holes[best];
+            holes[best] = holes[c];
+            holes[c] = h;
+            n_h = size[h];
+            expected -= fabs(areas[h]);
+
+            m = 0;
+            for (k = 1; k < n_h; ++k)
+                if (pts[offset[h] + k].x > pts[offset[h] + m].x)
+                    m = k;
+            {
+                const D2D1_POINT_2F *pm = &pts[offset[h] + m];
+                size_t found = ~(size_t)0;
+                size_t e;
+
+                best_x = 1e300;
+                for (e = 0; e < nn; ++e)
+                {
+                    const D2D1_POINT_2F *a = &pts[nodes[e]], *b = &pts[nodes[e + 1 == nn ? 0 : e + 1]];
+                    double x;
+
+                    if (a->y == b->y || (a->y > pm->y) == (b->y > pm->y))
+                    {
+                        if (!(a->y == pm->y && b->y != pm->y))
+                            continue;
+                    }
+                    x = a->x + (double)(pm->y - a->y) * (b->x - a->x) / (b->y - a->y);
+                    if (a->y == pm->y)
+                        x = a->x;
+                    if (x >= pm->x && x < best_x)
+                    {
+                        best_x = x;
+                        found = a->x > b->x ? e : (e + 1 == nn ? 0 : e + 1);
+                        if (a->y == pm->y)
+                            found = e;
+                    }
+                }
+                if (found == ~(size_t)0)
+                    goto done;
+                p = found;
+
+                {
+                    const D2D1_POINT_2F *pp = &pts[nodes[p]];
+                    D2D1_POINT_2F ip = {(float)best_x, pm->y};
+                    double best_tan = 1e300;
+
+                    for (e = 0; e < nn; ++e)
+                    {
+                        const D2D1_POINT_2F *q = &pts[nodes[e]];
+                        const D2D1_POINT_2F *qa = &pts[nodes[e ? e - 1 : nn - 1]], *qb = &pts[nodes[e + 1 == nn ? 0 : e + 1]];
+                        double d1, d2, d3, tanv;
+
+                        if (e == p || q->x < pm->x || d2d_ear_cross(qa, q, qb) > 0.0)
+                            continue;
+                        if (d2d_ear_same_point(q, pm) || d2d_ear_same_point(q, pp))
+                            continue;
+                        d1 = d2d_ear_cross(pm, &ip, q);
+                        d2 = d2d_ear_cross(&ip, pp, q);
+                        d3 = d2d_ear_cross(pp, pm, q);
+                        if (!((d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0)))
+                            continue;
+                        tanv = fabs((double)q->y - pm->y) / ((double)q->x - pm->x + 1e-30);
+                        if (tanv < best_tan)
+                        {
+                            best_tan = tanv;
+                            p = e;
+                        }
+                    }
+                }
+            }
+
+            if (nn + n_h + 2 > D2D_EAR_MAX_NODES)
+                goto done;
+            memmove(&nodes[p + 1 + n_h + 2], &nodes[p + 1], (nn - p - 1) * sizeof(*nodes));
+            for (r = 0; r < n_h; ++r)
+                nodes[p + 1 + r] = offset[h] + (m + r) % n_h;
+            nodes[p + 1 + n_h] = offset[h] + m;
+            nodes[p + 2 + n_h] = nodes[p];
+            nn += n_h + 2;
+        }
+
+        j = d2d_ear_clip(pts, nodes, nn, &faces[total_f], &tri_area);
+        if (!j)
+            goto done;
+        if (j != nn - 2 || fabs(tri_area - expected) > 1e-4 * fabs(areas[i]) + 1e-9)
+        {
+            goto done;
+        }
+        total_f += j;
+    }
+
+    if (!(contours = malloc(fcount * sizeof(*contours))))
+        goto done;
+    for (i = 0; i < fcount; ++i)
+        contours[nc++] = size[i];
+
+    if (flat)
+    {
+        free(geometry->flat.vertices);
+        free(geometry->flat.faces);
+        free(geometry->flat.contours);
+        geometry->flat.vertices = pts;
+        pts = NULL;
+        geometry->flat.vertex_count = total_v;
+        geometry->flat.faces = faces;
+        faces = NULL;
+        geometry->flat.face_count = total_f;
+        geometry->flat.contours = contours;
+        contours = NULL;
+        geometry->flat.contour_count = nc;
+        geometry->flat.max_scale = max_scale;
+        ok = TRUE;
+        goto done;
+    }
+
+    free(geometry->fill.vertices);
+    geometry->fill.vertices = pts;
+    pts = NULL;
+    geometry->fill.vertex_count = total_v;
+    free(geometry->fill.faces);
+    geometry->fill.faces = faces;
+    faces = NULL;
+    geometry->fill.faces_size = total_v + 2 * fcount;
+    geometry->fill.face_count = total_f;
+    geometry->fill_polygon = !has_curves && !has_holes;
+    free(geometry->fill_contours);
+    geometry->fill_contours = contours;
+    geometry->fill_contour_count = nc;
+    contours = NULL;
+    ok = TRUE;
+
+done:
+    free(flatbuf);
+    free(contours);
+    free(nodes);
+    free(faces);
+    free(pts);
+    free(tmp);
+    free(offset);
+    free(size);
+    free(container);
+    free(is_hole);
+    free(areas);
+    return ok;
+}
+
 static HRESULT d2d_path_geometry_triangulate(struct d2d_geometry *geometry)
 {
     struct d2d_cdt_edge_ref left_edge, right_edge;
@@ -2817,6 +3487,13 @@ static HRESULT d2d_path_geometry_triangulate(struct d2d_geometry *geometry)
 #ifdef __i386__
     unsigned int control_word_x87, mask = 0;
 #endif
+
+    if (d2d_path_geometry_triangulate_simple(geometry, FALSE))
+    {
+        if (geometry->fill.bezier_vertex_count && !geometry->fill.arc_vertex_count)
+            d2d_path_geometry_triangulate_simple(geometry, TRUE);
+        return S_OK;
+    }
 
     for (i = 0, vertex_count = 0; i < geometry->u.path.figure_count; ++i)
     {
@@ -3257,6 +3934,10 @@ static void d2d_geometry_cleanup(struct d2d_geometry *geometry)
     free(geometry->fill.bezier_vertices);
     free(geometry->fill.faces);
     free(geometry->fill.vertices);
+    free(geometry->fill_contours);
+    free(geometry->flat.vertices);
+    free(geometry->flat.faces);
+    free(geometry->flat.contours);
     ID2D1Factory_Release(geometry->factory);
 }
 
@@ -3717,10 +4398,361 @@ static HRESULT d2d_geometry_resolve_beziers(struct d2d_geometry *geometry)
     return S_OK;
 }
 
+
+#define D2D_PATH_CACHE_SETS 256
+#define D2D_PATH_CACHE_MAX_KEY (256 * 1024)
+
+struct d2d_path_cache_figure
+{
+    D2D1_POINT_2F *vertices;
+    enum d2d_vertex_type *types;
+    size_t vertex_count;
+    D2D1_POINT_2F *controls;
+    size_t control_count;
+    D2D1_POINT_2F *original;
+    size_t original_count;
+    D2D1_RECT_F bounds;
+};
+
+struct d2d_path_cache_entry
+{
+    UINT64 hash;
+    unsigned char *key;
+    size_t key_size;
+    ULONG stamp;
+    size_t figure_count;
+    struct d2d_path_cache_figure *figures;
+    D2D1_POINT_2F *fill_vertices;
+    size_t fill_vertex_count;
+    struct d2d_face *faces;
+    size_t face_count;
+    struct d2d_curve_vertex *beziers;
+    size_t bezier_count;
+    BOOL fill_polygon;
+    size_t *contours;
+    size_t contour_count;
+    struct d2d_flat flat;
+};
+
+static struct d2d_path_cache_entry d2d_path_cache[D2D_PATH_CACHE_SETS][2];
+static SRWLOCK d2d_path_cache_lock = SRWLOCK_INIT;
+static ULONG d2d_path_cache_clock;
+
+static void d2d_path_cache_entry_clear(struct d2d_path_cache_entry *entry)
+{
+    size_t i;
+
+    for (i = 0; i < entry->figure_count; ++i)
+    {
+        free(entry->figures[i].vertices);
+        free(entry->figures[i].types);
+        free(entry->figures[i].controls);
+        free(entry->figures[i].original);
+    }
+    free(entry->figures);
+    free(entry->fill_vertices);
+    free(entry->faces);
+    free(entry->beziers);
+    free(entry->contours);
+    free(entry->flat.vertices);
+    free(entry->flat.faces);
+    free(entry->flat.contours);
+    free(entry->key);
+    memset(entry, 0, sizeof(*entry));
+}
+
+void d2d_path_cache_free(void)
+{
+    size_t i, j;
+
+    AcquireSRWLockExclusive(&d2d_path_cache_lock);
+    for (i = 0; i < D2D_PATH_CACHE_SETS; ++i)
+        for (j = 0; j < 2; ++j)
+            d2d_path_cache_entry_clear(&d2d_path_cache[i][j]);
+    ReleaseSRWLockExclusive(&d2d_path_cache_lock);
+}
+
+static void *d2d_dup(const void *src, size_t size)
+{
+    void *p;
+
+    if (!size)
+        return NULL;
+    if ((p = malloc(size)))
+        memcpy(p, src, size);
+    return p;
+}
+
+static unsigned char *d2d_path_cache_make_key(const struct d2d_geometry *geometry, size_t *key_size, UINT64 *hash)
+{
+    size_t size = 2 * sizeof(UINT32), i, pos = 0;
+    unsigned char *key;
+    UINT64 h = 1469598103934665603ull;
+    UINT32 v;
+
+    for (i = 0; i < geometry->u.path.figure_count; ++i)
+    {
+        const struct d2d_figure *f = &geometry->u.path.figures[i];
+
+        size += 4 * sizeof(UINT32) + sizeof(f->bounds) + f->vertex_count * (sizeof(*f->vertices) + sizeof(*f->vertex_types))
+                + (f->bezier_control_count + f->original_bezier_control_count) * sizeof(*f->bezier_controls);
+        if (size > D2D_PATH_CACHE_MAX_KEY)
+            return NULL;
+    }
+    if (!(key = malloc(size)))
+        return NULL;
+
+#define PUT(ptr, len) do { memcpy(key + pos, (ptr), (len)); pos += (len); } while (0)
+    v = geometry->u.path.fill_mode;
+    PUT(&v, 4);
+    v = geometry->u.path.figure_count;
+    PUT(&v, 4);
+    for (i = 0; i < geometry->u.path.figure_count; ++i)
+    {
+        const struct d2d_figure *f = &geometry->u.path.figures[i];
+
+        v = f->flags;
+        PUT(&v, 4);
+        v = f->vertex_count;
+        PUT(&v, 4);
+        v = f->bezier_control_count;
+        PUT(&v, 4);
+        v = f->original_bezier_control_count;
+        PUT(&v, 4);
+        PUT(&f->bounds, sizeof(f->bounds));
+        PUT(f->vertices, f->vertex_count * sizeof(*f->vertices));
+        PUT(f->vertex_types, f->vertex_count * sizeof(*f->vertex_types));
+        PUT(f->bezier_controls, f->bezier_control_count * sizeof(*f->bezier_controls));
+        PUT(f->original_bezier_controls, f->original_bezier_control_count * sizeof(*f->original_bezier_controls));
+    }
+#undef PUT
+
+    for (i = 0; i + 8 <= size; i += 8)
+    {
+        UINT64 w;
+
+        memcpy(&w, key + i, 8);
+        h = (h ^ w) * 1099511628211ull;
+        h ^= h >> 29;
+    }
+    for (; i < size; ++i)
+        h = (h ^ key[i]) * 1099511628211ull;
+    *key_size = size;
+    *hash = h;
+    return key;
+}
+
+static BOOL d2d_flat_dup(struct d2d_flat *dst, const struct d2d_flat *src)
+{
+    *dst = *src;
+    dst->vertices = d2d_dup(src->vertices, src->vertex_count * sizeof(*src->vertices));
+    dst->faces = d2d_dup(src->faces, src->face_count * sizeof(*src->faces));
+    dst->contours = d2d_dup(src->contours, src->contour_count * sizeof(*src->contours));
+    if ((src->vertex_count && !dst->vertices) || (src->face_count && !dst->faces)
+            || (src->contour_count && !dst->contours))
+    {
+        free(dst->vertices);
+        free(dst->faces);
+        free(dst->contours);
+        memset(dst, 0, sizeof(*dst));
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL d2d_path_cache_apply(struct d2d_geometry *geometry, const unsigned char *key, size_t key_size, UINT64 hash)
+{
+    struct d2d_path_cache_entry *set = d2d_path_cache[hash % D2D_PATH_CACHE_SETS], *e = NULL;
+    D2D1_POINT_2F *fv = NULL;
+    struct d2d_face *faces = NULL;
+    struct d2d_curve_vertex *bez = NULL;
+    size_t *contours = NULL, i, w;
+    struct d2d_flat flat = {0};
+    struct { D2D1_POINT_2F *v; enum d2d_vertex_type *t; D2D1_POINT_2F *c; D2D1_POINT_2F *o; } *tmp = NULL;
+    BOOL ok = FALSE;
+
+    AcquireSRWLockExclusive(&d2d_path_cache_lock);
+    for (w = 0; w < 2; ++w)
+        if (set[w].key && set[w].hash == hash && set[w].key_size == key_size
+                && !memcmp(set[w].key, key, key_size))
+        {
+            e = &set[w];
+            break;
+        }
+    if (!e)
+        goto out;
+    e->stamp = ++d2d_path_cache_clock;
+    if (e->figure_count != geometry->u.path.figure_count)
+        goto out;
+
+    if (!(tmp = calloc(e->figure_count ? e->figure_count : 1, sizeof(*tmp))))
+        goto out;
+    for (i = 0; i < e->figure_count; ++i)
+    {
+        const struct d2d_path_cache_figure *cf = &e->figures[i];
+
+        tmp[i].v = d2d_dup(cf->vertices, cf->vertex_count * sizeof(*cf->vertices));
+        tmp[i].t = d2d_dup(cf->types, cf->vertex_count * sizeof(*cf->types));
+        tmp[i].c = d2d_dup(cf->controls, cf->control_count * sizeof(*cf->controls));
+        tmp[i].o = d2d_dup(cf->original, cf->original_count * sizeof(*cf->original));
+        if ((cf->vertex_count && (!tmp[i].v || !tmp[i].t)) || (cf->control_count && !tmp[i].c)
+                || (cf->original_count && !tmp[i].o))
+            goto out;
+    }
+    fv = d2d_dup(e->fill_vertices, e->fill_vertex_count * sizeof(*fv));
+    faces = d2d_dup(e->faces, e->face_count * sizeof(*faces));
+    bez = d2d_dup(e->beziers, e->bezier_count * sizeof(*bez));
+    contours = d2d_dup(e->contours, e->contour_count * sizeof(*contours));
+    if ((e->fill_vertex_count && !fv) || (e->face_count && !faces) || (e->bezier_count && !bez)
+            || (e->contour_count && !contours))
+        goto out;
+    if (!d2d_flat_dup(&flat, &e->flat))
+        goto out;
+
+    for (i = 0; i < e->figure_count; ++i)
+    {
+        struct d2d_figure *f = &geometry->u.path.figures[i];
+        const struct d2d_path_cache_figure *cf = &e->figures[i];
+
+        free(f->vertices);
+        free(f->vertex_types);
+        free(f->bezier_controls);
+        free(f->original_bezier_controls);
+        f->vertices = tmp[i].v;
+        f->vertices_size = cf->vertex_count;
+        f->vertex_types = tmp[i].t;
+        f->vertex_types_size = cf->vertex_count;
+        f->vertex_count = cf->vertex_count;
+        f->bezier_controls = tmp[i].c;
+        f->bezier_controls_size = cf->control_count;
+        f->bezier_control_count = cf->control_count;
+        f->original_bezier_controls = tmp[i].o;
+        f->original_bezier_controls_size = cf->original_count;
+        f->original_bezier_control_count = cf->original_count;
+        f->bounds = cf->bounds;
+        tmp[i].v = NULL;
+        tmp[i].t = NULL;
+        tmp[i].c = NULL;
+        tmp[i].o = NULL;
+    }
+    free(geometry->fill.vertices);
+    free(geometry->fill.faces);
+    free(geometry->fill.bezier_vertices);
+    free(geometry->fill_contours);
+    free(geometry->flat.vertices);
+    free(geometry->flat.faces);
+    free(geometry->flat.contours);
+    geometry->flat = flat;
+    memset(&flat, 0, sizeof(flat));
+    geometry->fill.vertices = fv;
+    geometry->fill.vertex_count = e->fill_vertex_count;
+    geometry->fill.faces = faces;
+    geometry->fill.faces_size = e->face_count;
+    geometry->fill.face_count = e->face_count;
+    geometry->fill.bezier_vertices = bez;
+    geometry->fill.bezier_vertices_size = e->bezier_count;
+    geometry->fill.bezier_vertex_count = e->bezier_count;
+    geometry->fill_polygon = e->fill_polygon;
+    geometry->fill_contours = contours;
+    geometry->fill_contour_count = e->contour_count;
+    fv = NULL;
+    faces = NULL;
+    bez = NULL;
+    contours = NULL;
+    ok = TRUE;
+
+out:
+    if (tmp)
+    {
+        for (i = 0; i < geometry->u.path.figure_count && i < (e ? e->figure_count : 0); ++i)
+        {
+            free(tmp[i].v);
+            free(tmp[i].t);
+            free(tmp[i].c);
+            free(tmp[i].o);
+        }
+        free(tmp);
+    }
+    free(fv);
+    free(faces);
+    free(bez);
+    free(contours);
+    free(flat.vertices);
+    free(flat.faces);
+    free(flat.contours);
+    ReleaseSRWLockExclusive(&d2d_path_cache_lock);
+    return ok;
+}
+
+static void d2d_path_cache_insert(const struct d2d_geometry *geometry, unsigned char *key, size_t key_size, UINT64 hash)
+{
+    struct d2d_path_cache_entry *set = d2d_path_cache[hash % D2D_PATH_CACHE_SETS], ne = {0}, *victim;
+    size_t i;
+
+    ne.hash = hash;
+    ne.key = key;
+    ne.key_size = key_size;
+    ne.figure_count = geometry->u.path.figure_count;
+    if (ne.figure_count && !(ne.figures = calloc(ne.figure_count, sizeof(*ne.figures))))
+        goto fail;
+    for (i = 0; i < ne.figure_count; ++i)
+    {
+        const struct d2d_figure *f = &geometry->u.path.figures[i];
+        struct d2d_path_cache_figure *cf = &ne.figures[i];
+
+        cf->vertex_count = f->vertex_count;
+        cf->control_count = f->bezier_control_count;
+        cf->original_count = f->original_bezier_control_count;
+        cf->bounds = f->bounds;
+        cf->vertices = d2d_dup(f->vertices, f->vertex_count * sizeof(*f->vertices));
+        cf->types = d2d_dup(f->vertex_types, f->vertex_count * sizeof(*f->vertex_types));
+        cf->controls = d2d_dup(f->bezier_controls, f->bezier_control_count * sizeof(*f->bezier_controls));
+        cf->original = d2d_dup(f->original_bezier_controls, f->original_bezier_control_count
+                * sizeof(*f->original_bezier_controls));
+        if ((f->vertex_count && (!cf->vertices || !cf->types)) || (f->bezier_control_count && !cf->controls)
+                || (f->original_bezier_control_count && !cf->original))
+            goto fail;
+    }
+    ne.fill_vertex_count = geometry->fill.vertex_count;
+    ne.fill_vertices = d2d_dup(geometry->fill.vertices, ne.fill_vertex_count * sizeof(*ne.fill_vertices));
+    ne.face_count = geometry->fill.face_count;
+    ne.faces = d2d_dup(geometry->fill.faces, ne.face_count * sizeof(*ne.faces));
+    ne.bezier_count = geometry->fill.bezier_vertex_count;
+    ne.beziers = d2d_dup(geometry->fill.bezier_vertices, ne.bezier_count * sizeof(*ne.beziers));
+    ne.fill_polygon = geometry->fill_polygon;
+    ne.contour_count = geometry->fill_contour_count;
+    ne.contours = d2d_dup(geometry->fill_contours, ne.contour_count * sizeof(*ne.contours));
+    if ((ne.fill_vertex_count && !ne.fill_vertices) || (ne.face_count && !ne.faces)
+            || (ne.bezier_count && !ne.beziers) || (ne.contour_count && !ne.contours))
+        goto fail;
+    if (!d2d_flat_dup(&ne.flat, &geometry->flat))
+        goto fail;
+    if (geometry->fill.arc_vertex_count)
+        goto fail;
+
+    AcquireSRWLockExclusive(&d2d_path_cache_lock);
+    victim = &set[0];
+    if (set[0].key && (!set[1].key || (LONG)(set[1].stamp - set[0].stamp) < 0))
+        victim = &set[1];
+    d2d_path_cache_entry_clear(victim);
+    ne.stamp = ++d2d_path_cache_clock;
+    *victim = ne;
+    ReleaseSRWLockExclusive(&d2d_path_cache_lock);
+    return;
+
+fail:
+    ne.key = NULL;
+    d2d_path_cache_entry_clear(&ne);
+    free(key);
+}
+
 static HRESULT STDMETHODCALLTYPE d2d_geometry_sink_Close(ID2D1GeometrySink *iface)
 {
     struct d2d_geometry *geometry = impl_from_ID2D1GeometrySink(iface);
     HRESULT hr = E_FAIL;
+    unsigned char *cache_key;
+    size_t cache_key_size = 0;
+    UINT64 cache_hash = 0;
 
     TRACE("iface %p.\n", iface);
 
@@ -3735,12 +4767,27 @@ static HRESULT STDMETHODCALLTYPE d2d_geometry_sink_Close(ID2D1GeometrySink *ifac
 
     geometry->u.path.state = D2D_GEOMETRY_STATE_CLOSED;
 
-    if (!d2d_geometry_intersect_self(geometry))
-        goto done;
-    if (FAILED(hr = d2d_geometry_resolve_beziers(geometry)))
-        goto done;
-    if (FAILED(hr = d2d_path_geometry_triangulate(geometry)))
-        goto done;
+    if ((cache_key = d2d_path_cache_make_key(geometry, &cache_key_size, &cache_hash))
+            && d2d_path_cache_apply(geometry, cache_key, cache_key_size, cache_hash))
+    {
+        free(cache_key);
+        return S_OK;
+    }
+
+    {
+        BOOL ok;
+        ok = d2d_geometry_intersect_self(geometry);
+        if (!ok)
+            goto done;
+    }
+    {
+        if (FAILED(hr = d2d_geometry_resolve_beziers(geometry)))
+            goto done;
+    }
+    {
+        if (FAILED(hr = d2d_path_geometry_triangulate(geometry)))
+            goto done;
+    }
 
 done:
     if (FAILED(hr))
@@ -3751,6 +4798,10 @@ done:
         d2d_path_geometry_free_figures(geometry);
         d2d_geometry_set_error(geometry, hr);
     }
+    if (SUCCEEDED(hr) && cache_key)
+        d2d_path_cache_insert(geometry, cache_key, cache_key_size, cache_hash);
+    else
+        free(cache_key);
     return hr;
 }
 
@@ -5062,6 +6113,13 @@ HRESULT d2d_ellipse_geometry_init(struct d2d_geometry *geometry, ID2D1Factory *f
     d2d_geometry_init(geometry, factory, &identity, (ID2D1GeometryVtbl *)&d2d_ellipse_geometry_vtbl,
             &d2d_ellipse_geometry_ops);
     geometry->u.ellipse.ellipse = *ellipse;
+    geometry->convex.valid = TRUE;
+    geometry->convex.rect.left = ellipse->point.x - fabsf(ellipse->radiusX);
+    geometry->convex.rect.right = ellipse->point.x + fabsf(ellipse->radiusX);
+    geometry->convex.rect.top = ellipse->point.y - fabsf(ellipse->radiusY);
+    geometry->convex.rect.bottom = ellipse->point.y + fabsf(ellipse->radiusY);
+    geometry->convex.radius_x = fabsf(ellipse->radiusX);
+    geometry->convex.radius_y = fabsf(ellipse->radiusY);
 
     if (!(geometry->fill.vertices = malloc(4 * sizeof(*geometry->fill.vertices))))
         goto fail;
@@ -5542,6 +6600,11 @@ HRESULT d2d_rectangle_geometry_init(struct d2d_geometry *geometry, ID2D1Factory 
     d2d_geometry_init(geometry, factory, &identity, (ID2D1GeometryVtbl *)&d2d_rectangle_geometry_vtbl,
             &d2d_rectangle_geometry_ops);
     geometry->u.rectangle.rect = *rect;
+    geometry->convex.valid = TRUE;
+    geometry->convex.rect.left = min(rect->left, rect->right);
+    geometry->convex.rect.right = max(rect->left, rect->right);
+    geometry->convex.rect.top = min(rect->top, rect->bottom);
+    geometry->convex.rect.bottom = max(rect->top, rect->bottom);
 
     if (!(geometry->fill.vertices = malloc(4 * sizeof(*geometry->fill.vertices))))
         goto fail;
@@ -5931,6 +6994,15 @@ HRESULT d2d_rounded_rectangle_geometry_init(struct d2d_geometry *geometry,
     d2d_geometry_init(geometry, factory, &identity, (ID2D1GeometryVtbl *)&d2d_rounded_rectangle_geometry_vtbl,
             &d2d_rounded_rectangle_geometry_ops);
     geometry->u.rounded_rectangle.rounded_rect = *rounded_rect;
+    geometry->convex.valid = TRUE;
+    geometry->convex.rect.left = min(rounded_rect->rect.left, rounded_rect->rect.right);
+    geometry->convex.rect.right = max(rounded_rect->rect.left, rounded_rect->rect.right);
+    geometry->convex.rect.top = min(rounded_rect->rect.top, rounded_rect->rect.bottom);
+    geometry->convex.rect.bottom = max(rounded_rect->rect.top, rounded_rect->rect.bottom);
+    geometry->convex.radius_x = min(fabsf(rounded_rect->radiusX),
+            0.5f * (geometry->convex.rect.right - geometry->convex.rect.left));
+    geometry->convex.radius_y = min(fabsf(rounded_rect->radiusY),
+            0.5f * (geometry->convex.rect.bottom - geometry->convex.rect.top));
 
     if (!(geometry->fill.vertices = malloc(8 * sizeof(*geometry->fill.vertices))))
         goto fail;
@@ -6323,6 +7395,7 @@ void d2d_transformed_geometry_init(struct d2d_geometry *geometry, ID2D1Factory *
     geometry->u.transformed.transform = *transform;
     geometry->fill = src_impl->fill;
     geometry->outline = src_impl->outline;
+    geometry->convex = src_impl->convex;
 }
 
 static inline struct d2d_geometry *impl_from_ID2D1GeometryGroup(ID2D1GeometryGroup *iface)

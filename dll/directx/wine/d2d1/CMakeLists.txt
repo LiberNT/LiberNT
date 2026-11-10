@@ -5,6 +5,7 @@ list(APPEND SOURCE
     bitmap_render_target.c
     brush.c
     command_list.c
+    coverage.c
     dc_render_target.c
     device.c
     effect.c

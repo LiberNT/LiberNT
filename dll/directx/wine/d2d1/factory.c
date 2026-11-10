@@ -1697,5 +1697,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
         d2d_settings_init();
+    if (reason == DLL_PROCESS_DETACH && !reserved)
+        d2d_path_cache_free();
     return TRUE;
 }
