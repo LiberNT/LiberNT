@@ -673,7 +673,12 @@ ScReconnect(
         return Result;
     Reader = Card->Reader;
     EnterCriticalSection(&ScLock);
-    Result = Reader->Removed ? SCARD_E_READER_UNAVAILABLE : ScClaimReader(Reader, Card, ShareMode);
+    if (Reader->Removed)
+        Result = SCARD_E_READER_UNAVAILABLE;
+    else if (ShareMode != SCARD_SHARE_DIRECT && Reader->State <= SCARD_ABSENT)
+        Result = SCARD_W_REMOVED_CARD;
+    else
+        Result = ScClaimReader(Reader, Card, ShareMode);
     LeaveCriticalSection(&ScLock);
     if (Result == SCARD_S_SUCCESS && ShareMode != SCARD_SHARE_DIRECT)
     {

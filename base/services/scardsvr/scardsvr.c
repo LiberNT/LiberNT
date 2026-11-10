@@ -134,6 +134,12 @@ ScPowerCard(
     if (Minor != SCARD_POWER_DOWN && Error != ERROR_SUCCESS)
     {
         DPRINT1("SCARDSVR: powering the card in '%s' failed %lu\n", Reader->Name, Error);
+        if (ScIoctl(Reader, IOCTL_SMARTCARD_GET_STATE, NULL, 0, &State, sizeof(State), &Returned) == ERROR_SUCCESS &&
+            State <= SCARD_ABSENT)
+        {
+            ScUpdateCard(Reader, State, NULL, 0, FALSE);
+            return SCARD_W_REMOVED_CARD;
+        }
         ScUpdateCard(Reader, SCARD_SWALLOWED, NULL, 0, TRUE);
         return Error == ERROR_NOT_READY ? SCARD_W_REMOVED_CARD : SCARD_W_UNRESPONSIVE_CARD;
     }
