@@ -1,0 +1,164 @@
+/*
+ * PROJECT:     LiberNT Smart Card Service
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Private interface between winscard and the smart card resource manager
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ms-dtyp.idl>
+
+cpp_quote("#define SCARDSVR_ENDPOINT L\"scardsvr\"")
+cpp_quote("#define SCARDSVR_MAX_ATR 36")
+cpp_quote("#define SCARDSVR_MAX_NAMES 65536")
+cpp_quote("#define SCARDSVR_MAX_BUFFER 65544")
+
+[
+    uuid(6a7543cd-c212-427b-835d-9c88bb6b3509),
+    version(1.0),
+    pointer_default(unique)
+]
+interface scardsvr
+{
+    typedef [context_handle_noserialize] void *SCARDSVR_SESSION;
+
+    typedef struct _SCARDSVR_READER_IN
+    {
+        [string] char *Reader;
+        DWORD CurrentState;
+    } SCARDSVR_READER_IN;
+
+    typedef struct _SCARDSVR_READER_OUT
+    {
+        DWORD EventState;
+        DWORD AtrLength;
+        BYTE Atr[36];
+    } SCARDSVR_READER_OUT;
+
+    LONG ScOpenSession(
+        [in] handle_t Binding,
+        [out] SCARDSVR_SESSION *Session);
+
+    LONG ScCloseSession(
+        [in, out] SCARDSVR_SESSION *Session);
+
+    LONG ScEstablishContext(
+        [in] SCARDSVR_SESSION Session,
+        [in] DWORD Scope,
+        [out] ULONGLONG *Context);
+
+    LONG ScReleaseContext(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Context);
+
+    LONG ScIsValidContext(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Context);
+
+    LONG ScGetStatusChange(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Context,
+        [in] DWORD Timeout,
+        [in, range(0, 256)] DWORD Count,
+        [in, size_is(Count)] SCARDSVR_READER_IN *In,
+        [out, size_is(Count)] SCARDSVR_READER_OUT *Out);
+
+    LONG ScCancel(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Context);
+
+    LONG ScListReaders(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Context,
+        [in, string, unique] char *Groups,
+        [in, range(0, 65536)] DWORD Size,
+        [out, size_is(Size), length_is(*Returned)] BYTE *Readers,
+        [out] DWORD *Returned);
+
+    LONG ScListReaderGroups(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Context,
+        [in, range(0, 65536)] DWORD Size,
+        [out, size_is(Size), length_is(*Returned)] BYTE *Groups,
+        [out] DWORD *Returned);
+
+    LONG ScConnect(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Context,
+        [in, string] char *Reader,
+        [in] DWORD ShareMode,
+        [in] DWORD PreferredProtocols,
+        [out] ULONGLONG *Card,
+        [out] DWORD *Protocol);
+
+    LONG ScReconnect(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in] DWORD ShareMode,
+        [in] DWORD PreferredProtocols,
+        [in] DWORD Initialization,
+        [out] DWORD *Protocol);
+
+    LONG ScDisconnect(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in] DWORD Disposition);
+
+    LONG ScBeginTransaction(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card);
+
+    LONG ScEndTransaction(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in] DWORD Disposition);
+
+    LONG ScStatus(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in, range(0, 65536)] DWORD NamesSize,
+        [out, size_is(NamesSize), length_is(*NamesReturned)] BYTE *Names,
+        [out] DWORD *NamesReturned,
+        [out] DWORD *State,
+        [out] DWORD *Protocol,
+        [out] BYTE Atr[36],
+        [out] DWORD *AtrLength);
+
+    LONG ScTransmit(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in] DWORD SendProtocol,
+        [in] DWORD SendPciLength,
+        [in, range(0, 65544)] DWORD SendLength,
+        [in, size_is(SendLength)] BYTE *Send,
+        [in, range(0, 65544)] DWORD ReceiveSize,
+        [out, size_is(ReceiveSize), length_is(*Received)] BYTE *Receive,
+        [out] DWORD *Received,
+        [out] DWORD *ReceiveProtocol,
+        [out] DWORD *ReceivePciLength);
+
+    LONG ScControl(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in] DWORD Code,
+        [in, range(0, 65544)] DWORD InLength,
+        [in, unique, size_is(InLength)] BYTE *In,
+        [in, range(0, 65544)] DWORD OutSize,
+        [out, size_is(OutSize), length_is(*Returned)] BYTE *Out,
+        [out] DWORD *Returned);
+
+    LONG ScGetAttrib(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in] DWORD AttributeId,
+        [in, range(0, 65536)] DWORD Size,
+        [out, size_is(Size), length_is(*Returned)] BYTE *Attribute,
+        [out] DWORD *Returned,
+        [out] DWORD *Length);
+
+    LONG ScSetAttrib(
+        [in] SCARDSVR_SESSION Session,
+        [in] ULONGLONG Card,
+        [in] DWORD AttributeId,
+        [in, range(0, 65536)] DWORD Length,
+        [in, size_is(Length)] BYTE *Attribute);
+}

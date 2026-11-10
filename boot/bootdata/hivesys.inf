@@ -2479,6 +2479,15 @@ HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","ObjectName",0x00000000,"LocalS
 HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","Start",0x00010001,0x00000002
 HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","Type",0x00010001,0x00000110
 
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","DependOnService",0x00010000,"RPCSS","PlugPlay"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","DisplayName",0x00000000,"Smart Card"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Description",0x00000000,"Manages access to smart cards read by this computer."
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ImagePath",0x00020000,"%SystemRoot%\system32\scardsvr.exe"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Type",0x00010001,0x00000010
+
 ; Simple TCP services
 HKLM,"SYSTEM\CurrentControlSet\Services\tcpsvcs","Description",0x00000000,%TCPSVCS_SERVICE_DECRIPTION%
 HKLM,"SYSTEM\CurrentControlSet\Services\tcpsvcs","DisplayName",0x00000000,%TCPSVCS_SERVICE%
