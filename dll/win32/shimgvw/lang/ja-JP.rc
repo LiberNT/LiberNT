@@ -18,7 +18,7 @@ BEGIN
     IDS_TOOLTIP_ROT_COUNCW "反時計回りに回転 (Ctrl+L)"
     IDS_TOOLTIP_ROT_CWSAVE "時計回りに回転して保存 (劣化あり)"
     IDS_TOOLTIP_ROT_CCWSAVE "反時計回りに回転して保存 (劣化あり)"
-    IDS_TOOLTIP_DELETE "Delete (DEL)"
+    IDS_TOOLTIP_DELETE "削除 (Del)"
     IDS_TOOLTIP_PRINT "印刷 (Ctrl+P)"
     IDS_TOOLTIP_SAVEAS "名前を付けて保存... (Ctrl+S)"
     IDS_TOOLTIP_MODIFY "変更 (Ctrl+E)"

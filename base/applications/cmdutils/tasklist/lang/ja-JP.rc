@@ -24,8 +24,8 @@ BEGIN
     IDS_HEADER_SESSION, "セッション#"
     IDS_HEADER_MEMUSAGE, "メモリ使用量"
     IDS_MEMORY_STR, "%s K"
-    IDS_FILTER_INVALID, "ERROR: The search filter cannot be recognized.\n"
-    IDS_VALUE_EXPECTED, "ERROR: Invalid syntax. Value expected for '%1'.\n"
-    IDS_TYPE_HELP, "Type ""TASKLIST /?"" for usage.\n"
-    IDS_NO_MATCHING_TASKS, "INFO: No tasks are running which match the specified criteria.\n"
+    IDS_FILTER_INVALID, "エラー: 検索フィルターを認識できません。\n"
+    IDS_VALUE_EXPECTED, "エラー: 無効な構文です。'%1' には値が必要です。\n"
+    IDS_TYPE_HELP, "使用法を表示するには ""TASKLIST /?"" と入力してください。\n"
+    IDS_NO_MATCHING_TASKS, "情報: 指定された条件に一致するタスクは実行されていません。\n"
 END

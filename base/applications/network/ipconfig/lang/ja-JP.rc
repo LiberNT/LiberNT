@@ -31,7 +31,7 @@ BEGIN
     IDS_DHCPYES             "\tDHCP 有効 . . . . . . . . . . . . : はい\n"
     IDS_AUTOCONFIGNO        "\t自動設定有効. . . . . . . . . . . : いいえ\n"
     IDS_AUTOCONFIGYES       "\t自動設定有効. . . . . . . . . . . : はい\n"
-    IDS_IPADDRESS           "\tIP アドレス . . . . . . . . . . . : %hs\n"
+    IDS_IPADDRESS           "\tIPv4 アドレス . . . . . . . . . . : %hs\n"
     IDS_SUBNETMASK          "\tサブネットマスク. . . . . . . . . : %hs\n"
     IDS_DEFAULTGATEWAY      "\tデフォルトゲートウェイ. . . . . . : %hs\n"
     IDS_DHCPSERVER          "\tDHCP サーバー . . . . . . . . . . : %hs\n"
@@ -40,17 +40,17 @@ BEGIN
     IDS_SECONDARYWINSSERVER "\tセカンダリ WINS サーバー. . . . . : %hs\n"
     IDS_LEASEOBTAINED       "\tリース取得. . . . . . . . . . . . : %s\n"
     IDS_LEASEEXPIRES        "\tリース期限. . . . . . . . . . . . : %s\n"
-    IDS_IPV6ADDRESS         "\tIPv6 Address. . . . . . . . . . . : %hs"
-    IDS_TEMPIPV6ADDRESS     "\tTemporary IPv6 Address. . . . . . : %hs"
-    IDS_LINKLOCALIPV6ADDRESS "\tLink-local IPv6 Address . . . . . : %hs"
+    IDS_IPV6ADDRESS         "\tIPv6 アドレス . . . . . . . . . . : %hs"
+    IDS_TEMPIPV6ADDRESS     "\t一時 IPv6 アドレス. . . . . . . . : %hs"
+    IDS_LINKLOCALIPV6ADDRESS "\tリンクローカル IPv6 アドレス. . . : %hs"
     IDS_DHCPV6IAID          "\tDHCPv6 IAID . . . . . . . . . . . : %lu\n"
-    IDS_DHCPV6DUID          "\tDHCPv6 Client DUID. . . . . . . . : %hs\n"
-    IDS_ADDRPREFERRED       "(Preferred) \n"
-    IDS_ADDRTENTATIVE       "(Tentative) \n"
-    IDS_ADDRDEPRECATED      "(Deprecated) \n"
-    IDS_ADDRDUPLICATE       "(Duplicate) \n"
+    IDS_DHCPV6DUID          "\tDHCPv6 クライアント DUID. . . . . : %hs\n"
+    IDS_ADDRPREFERRED       "(優先) \n"
+    IDS_ADDRTENTATIVE       "(暫定) \n"
+    IDS_ADDRDEPRECATED      "(非推奨) \n"
+    IDS_ADDRDUPLICATE       "(重複) \n"
     IDS_ADDREND             "\n"
-    IDS_CONNDNSSUFFIXLIST   "\tConnection-specific DNS Suffix Search List :\n"
+    IDS_CONNDNSSUFFIXLIST   "\t接続固有の DNS サフィックス検索の一覧:\n"
 END
 
 STRINGTABLE
@@ -102,8 +102,8 @@ BEGIN
     IDS_DHCPRELEASED        "アダプタ %ls に対する IP アドレス はすでに解放されています。\n"
     IDS_DHCPRELEASEERROR    "インターフェース %ls の解放中にエラーが起きました: "
     IDS_DHCPRENEWERROR      "インターフェース %ls の更新中にエラーが起きました: "
-    IDS_DHCPSETIDERROR      "Attempt to set the class id for adapter %ls failed: "
-    IDS_DHCPSETIDSUCCESS    "Successfully set the class id for adapter %ls.\n"
+    IDS_DHCPSETIDERROR      "アダプター %ls のクラス ID を設定できませんでした: "
+    IDS_DHCPSETIDSUCCESS    "アダプター %ls のクラス ID を設定しました。\n"
 END
 
 STRINGTABLE
@@ -147,5 +147,5 @@ setclassid の場合、classid が指定されていなければ、classid は�
     > ipconfig /release *Con*    ... すべてのマッチする接続を解放します。\n\
                                      例 ""Local Area Connection 1"" または\n\
                                         ""Local Area Connection 2""\n"
-    IDS_CMDLINEERROR "\nError: unrecongnized or incomplete command line.\n"
+    IDS_CMDLINEERROR "\nエラー: コマンド ラインが認識できないか、不完全です。\n"
 END

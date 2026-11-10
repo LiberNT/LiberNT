@@ -182,7 +182,7 @@ BEGIN
     IDS_NETWORKCOMPONENTTITLE "ネットワーク コンポーネント"
     IDS_NETWORKCOMPONENTSUBTITLE "あなたのコンピュータで使われるネットワーク コンポーネントを決定して下さい。新しいコンポーネントを追加するには、インストールをクリックして下さい。"
     IDS_NETWORKDOMAINTITLE "ワークグループかコンピュータ ドメイン"
-    IDS_NETWORKDOMAINSUBTITLE "ドメインは、ネットワーク管理者によって定義された、コンピュータのグループです。ワークグループは、同じワークグループの名前を共有するコンピュータのグループです。"
+    IDS_NETWORKDOMAINSUBTITLE "このコンピューターをワークグループの一部として使うか、ネットワーク ドメインの一部として使うかを指定してください。"
     IDS_REACTOS_SETUP "LiberNT セットアップ"
     IDS_WZD_DOMAIN_NAME "セットアップは、あなたがあなたのドメインかワークグループの名前を入力するまで続行できません。"
 END
