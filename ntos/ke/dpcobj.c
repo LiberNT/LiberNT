@@ -129,13 +129,18 @@ KiPopDpc(
 {
     PSINGLE_LIST_ENTRY Entry;
     PKDPC Dpc;
+    KIRQL OldIrql;
 
+    /* The queue is also filled from an interrupt service routine of this
+     * processor, so nothing of that level may interrupt the queue lock */
+    OldIrql = KfRaiseIrql(HIGH_LEVEL);
     KeAcquireSpinLockAtDpcLevel(KiDpcQueueLock(DpcData));
 
     Entry = DpcData->DpcList.ListHead.Next;
     if (Entry == NULL)
     {
         KeReleaseSpinLockFromDpcLevel(KiDpcQueueLock(DpcData));
+        KeLowerIrql(OldIrql);
         return NULL;
     }
 
@@ -162,6 +167,7 @@ KiPopDpc(
     WritePointerRelease(&Dpc->DpcData, NULL);
 
     KeReleaseSpinLockFromDpcLevel(KiDpcQueueLock(DpcData));
+    KeLowerIrql(OldIrql);
     return Dpc;
 }
 
@@ -615,6 +621,14 @@ KiRetireDpcList(
     Prcb->DpcRoutineActive = TRUE;
     Prcb->DpcWatchdogCount = 0;
 
+    /*
+     * The caller arrives from a trap gate, which left interrupts off, and
+     * switches the stack under us. A deferred routine runs with interrupts
+     * enabled, so that one taking its time still lets the clock in; the
+     * caller gets them back off for the stack it has to put back.
+     */
+    _enable();
+
     for (;;)
     {
         if (DpcData->DpcQueueDepth == 0)
@@ -646,6 +660,8 @@ KiRetireDpcList(
                          (ULONG_PTR)Dpc);
         }
     }
+
+    _disable();
 
     DpcData->ActiveDpc = NULL;
     Prcb->DpcRoutineActive = FALSE;
