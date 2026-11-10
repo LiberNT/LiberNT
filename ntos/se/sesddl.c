@@ -13,6 +13,11 @@
 
 #define SEP_SDDL_REVISION 1
 
+/* ERROR_INVALID_PARAMETER and ERROR_UNKNOWN_REVISION, which winerror.h
+ * spells out for a caller in user mode but no kernel header carries */
+#define SEP_SDDL_WIN32_INVALID_PARAMETER 87
+#define SEP_SDDL_WIN32_UNKNOWN_REVISION  1305
+
 /* One entry a string named, before anything is laid out for it */
 typedef struct _SEP_SDDL_ACE
 {
@@ -558,11 +563,16 @@ SeConvertStringSecurityDescriptorToSecurityDescriptor(
 
     PAGED_CODE();
 
-    *SecurityDescriptor = NULL;
-    if (SecurityDescriptorSize != NULL) *SecurityDescriptorSize = 0;
-
+    /*
+     * The string is read by the same parser that answers a caller in user
+     * mode, so what it has to say about a string it cannot read is a Win32
+     * error carried in a status. The caller's pointer and size are written
+     * only when there is a descriptor to write.
+     */
     if (StringSecurityDescriptorRevision != SEP_SDDL_REVISION)
-        return STATUS_UNKNOWN_REVISION;
+        return NTSTATUS_FROM_WIN32(SEP_SDDL_WIN32_UNKNOWN_REVISION);
+
+    if (SecurityDescriptorSize != NULL) *SecurityDescriptorSize = 0;
 
     /* Every entry opens a bracket, so that is how many there can be */
     for (Index = 0; StringSecurityDescriptor[Index] != UNICODE_NULL; Index++)
@@ -716,6 +726,9 @@ SeConvertStringSecurityDescriptorToSecurityDescriptor(
     if (GroupOwned) ExFreePoolWithTag(Group, TAG_SID);
 
     ExFreePoolWithTag(Aces, TAG_SD);
+
+    if (Status == STATUS_INVALID_PARAMETER)
+        Status = NTSTATUS_FROM_WIN32(SEP_SDDL_WIN32_INVALID_PARAMETER);
 
     return Status;
 }
