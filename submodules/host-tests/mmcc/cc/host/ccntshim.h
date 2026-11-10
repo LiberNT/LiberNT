@@ -35,7 +35,7 @@
 
 typedef LONG64 LONGLONG;
 typedef union _LARGE_INTEGER { LONG64 QuadPart; } LARGE_INTEGER, *PLARGE_INTEGER;
-typedef struct _SECTION_OBJECT_POINTERS { PVOID SharedCacheMap; PVOID DataSectionObject; PVOID ImageSectionObject; } SECTION_OBJECT_POINTERS, *PSECTION_OBJECT_POINTERS;
+typedef struct _SECTION_OBJECT_POINTERS { PVOID DataSectionObject; PVOID SharedCacheMap; PVOID ImageSectionObject; } SECTION_OBJECT_POINTERS, *PSECTION_OBJECT_POINTERS;
 typedef struct _FILE_OBJECT
 {
     PSECTION_OBJECT_POINTERS SectionObjectPointer;

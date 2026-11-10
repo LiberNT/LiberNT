@@ -25,7 +25,7 @@ TestNtLayout(void)
     CC_NT_MAP Map = { 0 };
     TEST_FILE Backing;
     CC_CACHE Cache;
-    SECTION_OBJECT_POINTERS Pointers = { &Map };
+    SECTION_OBJECT_POINTERS Pointers = { .SharedCacheMap = &Map };
     FILE_OBJECT File = { .SectionObjectPointer = &Pointers };
     CC_VIEW_RANGE Range;
     LARGE_INTEGER Offset = { .QuadPart = 128 };
