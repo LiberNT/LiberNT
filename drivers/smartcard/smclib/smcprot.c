@@ -579,6 +579,12 @@ SmartcardT0Request(
 
     SmartcardExtension->T0.Lc = Data[4];
     SmartcardExtension->T0.Le = 0;
+    if (SmartcardExtension->T0.Lc != 0 && Length == 6 + SmartcardExtension->T0.Lc)
+    {
+        SmartcardExtension->T0.Le = Data[Length - 1] != 0 ? Data[Length - 1] : 256;
+        Request->BufferLength--;
+        return STATUS_SUCCESS;
+    }
     if (Length != 5 + SmartcardExtension->T0.Lc)
         return STATUS_INVALID_PARAMETER;
 
