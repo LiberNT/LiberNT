@@ -131,6 +131,7 @@ void DuplicatesTest()
 
     First = 1;
     Second = 2;
+    OutLength = sizeof(OutData);
     RtlInitUnicodeString(&ShortName, L"LONGFI~1.TXT");
     RtlInitUnicodeString(&LongName, L"Longfilename.txt");
     RtlInitUnicodeString(&ShortName2, L"LONGFI~2.TXT");
