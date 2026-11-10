@@ -146,6 +146,55 @@ PiBuildInstancePath(
 }
 
 static
+VOID
+PiSetDwordValue(
+    _In_ HANDLE Key,
+    _In_ PCWSTR ValueName,
+    _In_ ULONG Data)
+{
+    UNICODE_STRING Name;
+
+    RtlInitUnicodeString(&Name, ValueName);
+
+    ZwSetValueKey(Key, &Name, 0, REG_DWORD, &Data, sizeof(Data));
+}
+
+#define PI_CAPABILITY_RAW_DEVICE_OK 0x00000040
+
+/* The Capabilities value carries the CM_DEVCAP_* bits of cfgmgr32.h */
+static
+VOID
+PiSaveCapabilities(
+    _In_ HANDLE InstanceKey,
+    _In_ PDEVICE_CAPABILITIES Capabilities)
+{
+    ULONG Flags = 0;
+
+    if (Capabilities->LockSupported) Flags |= 0x00000001;
+    if (Capabilities->EjectSupported) Flags |= 0x00000002;
+    if (Capabilities->Removable) Flags |= 0x00000004;
+    if (Capabilities->DockDevice) Flags |= 0x00000008;
+    if (Capabilities->UniqueID) Flags |= 0x00000010;
+    if (Capabilities->SilentInstall) Flags |= 0x00000020;
+    if (Capabilities->RawDeviceOK) Flags |= PI_CAPABILITY_RAW_DEVICE_OK;
+    if (Capabilities->SurpriseRemovalOK) Flags |= 0x00000080;
+    if (Capabilities->HardwareDisabled) Flags |= 0x00000100;
+    if (Capabilities->NonDynamic) Flags |= 0x00000200;
+
+    PiSetDwordValue(InstanceKey, L"Capabilities", Flags);
+
+    if (Capabilities->UINumber != MAXULONG)
+    {
+        PiSetDwordValue(InstanceKey, L"UINumber", Capabilities->UINumber);
+    }
+
+    if (Capabilities->Address != MAXULONG)
+    {
+        PiSetDwordValue(InstanceKey, L"Address", Capabilities->Address);
+    }
+}
+
+static
 NTSTATUS
 PiQueryAndSaveIds(
     _In_ PDEVICE_NODE DeviceNode,
@@ -229,13 +278,103 @@ PiQueryAndSaveIds(
     return STATUS_SUCCESS;
 }
 
+typedef struct _PI_DRIVER_LIST
+{
+    PDRIVER_OBJECT *Drivers;
+    ULONG Count;
+    ULONG Capacity;
+    ULONG FunctionIndex;
+} PI_DRIVER_LIST, *PPI_DRIVER_LIST;
+
+static
 NTSTATUS
-FASTCALL
-IopAttachFilterDrivers(
-    IN PDEVICE_NODE DeviceNode,
-    IN HANDLE EnumSubKey,
-    IN HANDLE ClassKey,
-    IN BOOLEAN Lower)
+PiDriverListAppend(
+    _Inout_ PPI_DRIVER_LIST List,
+    _In_ PDRIVER_OBJECT DriverObject)
+{
+    PDRIVER_OBJECT *Drivers;
+    ULONG Capacity;
+
+    if (List->Count == List->Capacity)
+    {
+        Capacity = (List->Capacity == 0) ? 4 : List->Capacity * 2;
+
+        Drivers = ExAllocatePoolZero(PagedPool,
+                                     Capacity * sizeof(PDRIVER_OBJECT),
+                                     TAG_IO_DEVNODE);
+        if (Drivers == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        if (List->Drivers != NULL)
+        {
+            RtlCopyMemory(Drivers, List->Drivers, List->Count * sizeof(PDRIVER_OBJECT));
+            ExFreePoolWithTag(List->Drivers, TAG_IO_DEVNODE);
+        }
+
+        List->Drivers = Drivers;
+        List->Capacity = Capacity;
+    }
+
+    List->Drivers[List->Count++] = DriverObject;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+PiDriverListFree(
+    _Inout_ PPI_DRIVER_LIST List)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < List->Count; Index++)
+    {
+        ObDereferenceObject(List->Drivers[Index]);
+    }
+
+    if (List->Drivers != NULL) ExFreePoolWithTag(List->Drivers, TAG_IO_DEVNODE);
+
+    RtlZeroMemory(List, sizeof(*List));
+}
+
+static
+NTSTATUS
+PiResolveServiceDriver(
+    _In_ PUNICODE_STRING ServiceName,
+    _Out_ PDRIVER_OBJECT *DriverObject,
+    _Out_opt_ PBOOLEAN NoServiceKey)
+{
+    HANDLE ServicesKey;
+    HANDLE ServiceKey;
+    NTSTATUS Status;
+
+    *DriverObject = NULL;
+    if (NoServiceKey != NULL) *NoServiceKey = FALSE;
+
+    Status = IopOpenRegistryKeyEx(&ServicesKey,
+                                  NULL,
+                                  (PUNICODE_STRING)&IopServicesName,
+                                  KEY_READ);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = IopOpenRegistryKeyEx(&ServiceKey, ServicesKey, ServiceName, KEY_READ);
+    ZwClose(ServicesKey);
+    if (!NT_SUCCESS(Status))
+    {
+        if (NoServiceKey != NULL) *NoServiceKey = TRUE;
+        return Status;
+    }
+
+    Status = IopLoadDriverForPnp(ServiceKey, DriverObject);
+    ZwClose(ServiceKey);
+
+    return Status;
+}
+
+static
+NTSTATUS
+PiCollectFilters(
+    _Inout_ PPI_DRIVER_LIST List,
+    _In_opt_ HANDLE Key,
+    _In_ PCWSTR ValueName)
 {
     PKEY_VALUE_FULL_INFORMATION Information = NULL;
     PUNICODE_STRING Filters = NULL;
@@ -243,212 +382,262 @@ IopAttachFilterDrivers(
     ULONG FilterCount = 0;
     NTSTATUS Status;
     ULONG Index;
-    HANDLE Keys[2];
-    ULONG Which;
 
     PAGED_CODE();
 
-    Keys[0] = EnumSubKey;
-    Keys[1] = ClassKey;
+    if (Key == NULL) return STATUS_SUCCESS;
 
-    for (Which = 0; Which < RTL_NUMBER_OF(Keys); Which++)
+    Status = IopGetRegistryValue(Key, (PWSTR)ValueName, &Information);
+    if (!NT_SUCCESS(Status)) return STATUS_SUCCESS;
+
+    Status = PnpRegMultiSzToUnicodeStrings(Information, &Filters, &FilterCount);
+    ExFreePool(Information);
+    if (!NT_SUCCESS(Status)) return STATUS_SUCCESS;
+
+    for (Index = 0; Index < FilterCount; Index++)
     {
-        if (Keys[Which] == NULL) continue;
-
-        Status = IopGetRegistryValue(Keys[Which],
-                                     Lower ? L"LowerFilters"
-                                           : L"UpperFilters",
-                                     &Information);
-        if (!NT_SUCCESS(Status)) continue;
-
-        Status = PnpRegMultiSzToUnicodeStrings(Information,
-                                               &Filters,
-                                               &FilterCount);
-        ExFreePool(Information);
-        Information = NULL;
-
-        if (!NT_SUCCESS(Status)) continue;
-
-        for (Index = 0; Index < FilterCount; Index++)
+        Status = PiResolveServiceDriver(&Filters[Index], &DriverObject, NULL);
+        if (!NT_SUCCESS(Status))
         {
-            HANDLE ServiceHandle;
+            /* Before the system drivers can load, the whole stack waits for them */
+            if (!PnPBootDriversInitialized) break;
 
-            Status = IopOpenRegistryKeyEx(&ServiceHandle,
-                                          NULL,
-                                          (PUNICODE_STRING)&IopServicesName,
-                                          KEY_READ);
-            if (!NT_SUCCESS(Status)) continue;
-
-            Status = IopOpenRegistryKeyEx(&ServiceHandle,
-                                          ServiceHandle,
-                                          &Filters[Index],
-                                          KEY_READ);
-            if (!NT_SUCCESS(Status)) continue;
-
-            Status = IopLoadDriverForPnp(ServiceHandle, &DriverObject);
-            ZwClose(ServiceHandle);
-
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("PnP: the filter %wZ did not load (%lx)\n",
-                        &Filters[Index],
-                        Status);
-                continue;
-            }
-
-            if (IoGetDrvObjExtension(DriverObject)->AddDevice != NULL)
-            {
-                IoGetDrvObjExtension(DriverObject)->AddDevice(
-                    DriverObject,
-                    DeviceNode->PhysicalDeviceObject);
-            }
-
-            ObDereferenceObject(DriverObject);
+            DPRINT1("PnP: the filter %wZ did not load (%lx)\n", &Filters[Index], Status);
+            Status = STATUS_SUCCESS;
+            continue;
         }
 
-        PnpFreeUnicodeStringList(Filters, FilterCount);
-        Filters = NULL;
-        FilterCount = 0;
+        Status = PiDriverListAppend(List, DriverObject);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(DriverObject);
+            break;
+        }
     }
 
-    return STATUS_SUCCESS;
+    PnpFreeUnicodeStringList(Filters, FilterCount);
+    return Status;
 }
 
+static
+ULONG
+PiGetDwordValue(
+    _In_ HANDLE Key,
+    _In_ PCWSTR ValueName,
+    _In_ ULONG Default)
+{
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    ULONG Value = Default;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopGetRegistryValue(Key, (PWSTR)ValueName, &Information)))
+        return Default;
+
+    if ((Information->Type == REG_DWORD) &&
+        (Information->DataLength == sizeof(ULONG)))
+    {
+        Value = *(PULONG)((PUCHAR)Information + Information->DataOffset);
+    }
+
+    ExFreePool(Information);
+    return Value;
+}
+
+static
 NTSTATUS
-IopConfigureDeviceFromDriverDatabase(
-    _In_ PDEVICE_NODE DeviceNode,
-    _In_ HANDLE InstanceKey)
+PiCollectFunctionDriver(
+    _Inout_ PDEVICE_NODE DeviceNode,
+    _In_ HANDLE InstanceKey,
+    _Inout_ PPI_DRIVER_LIST List)
 {
     PKEY_VALUE_FULL_INFORMATION Information = NULL;
     PDRIVER_OBJECT DriverObject;
     UNICODE_STRING ServiceName;
-    UNICODE_STRING ClassName;
+    BOOLEAN NoServiceKey;
     NTSTATUS Status;
-    HANDLE ServicesKey = NULL;
-    HANDLE ServiceKey = NULL;
-    HANDLE ClassKey = NULL;
     PWCHAR Buffer;
 
     PAGED_CODE();
 
-    Status = IopGetRegistryValue(InstanceKey, L"ClassGUID", &Information);
-    if (NT_SUCCESS(Status))
-    {
-        if (Information->Type == REG_SZ &&
-            Information->DataLength > sizeof(WCHAR))
-        {
-            ClassName.Buffer = (PWCHAR)((PUCHAR)Information +
-                                        Information->DataOffset);
-            ClassName.Length =
-                (USHORT)(Information->DataLength - sizeof(WCHAR));
-            ClassName.MaximumLength = ClassName.Length;
-
-            Status = IopOpenRegistryKeyEx(
-                &ClassKey,
-                NULL,
-                (PUNICODE_STRING)&IopControlClassName,
-                KEY_READ);
-            if (NT_SUCCESS(Status))
-            {
-                HANDLE Specific;
-
-                Status = IopOpenRegistryKeyEx(&Specific,
-                                              ClassKey,
-                                              &ClassName,
-                                              KEY_READ);
-                ZwClose(ClassKey);
-
-                ClassKey = NT_SUCCESS(Status) ? Specific : NULL;
-            }
-            else
-            {
-                ClassKey = NULL;
-            }
-        }
-
-        ExFreePool(Information);
-        Information = NULL;
-    }
-
-    IopAttachFilterDrivers(DeviceNode, InstanceKey, ClassKey, TRUE);
-
     Status = IopGetRegistryValue(InstanceKey, L"Service", &Information);
-    if (!NT_SUCCESS(Status) ||
+    if (!NT_SUCCESS(Status)) Information = NULL;
+
+    if (Information == NULL ||
         Information->Type != REG_SZ ||
         Information->DataLength <= sizeof(WCHAR))
     {
         if (Information != NULL) ExFreePool(Information);
-        if (ClassKey != NULL) ZwClose(ClassKey);
 
         PiSetDevNodeFlag(DeviceNode, DNF_NO_SERVICE);
-
         return STATUS_SUCCESS;
     }
 
-    ServiceName.Buffer = (PWCHAR)((PUCHAR)Information +
-                                  Information->DataOffset);
+    PiClearDevNodeFlag(DeviceNode, DNF_NO_SERVICE);
+
+    ServiceName.Buffer = (PWCHAR)((PUCHAR)Information + Information->DataOffset);
     ServiceName.Length = (USHORT)(Information->DataLength - sizeof(WCHAR));
     ServiceName.MaximumLength = ServiceName.Length;
 
-    Buffer = ExAllocatePoolZero(NonPagedPool,
-                                ServiceName.Length + sizeof(WCHAR),
-                                TAG_IO_DEVNODE);
-    if (Buffer != NULL)
+    if (DeviceNode->ServiceName.Buffer == NULL)
     {
-        RtlCopyMemory(Buffer, ServiceName.Buffer, ServiceName.Length);
+        Buffer = ExAllocatePoolZero(NonPagedPool,
+                                    ServiceName.Length + sizeof(WCHAR),
+                                    TAG_IO_DEVNODE);
+        if (Buffer != NULL)
+        {
+            RtlCopyMemory(Buffer, ServiceName.Buffer, ServiceName.Length);
 
-        DeviceNode->ServiceName.Buffer = Buffer;
-        DeviceNode->ServiceName.Length = ServiceName.Length;
-        DeviceNode->ServiceName.MaximumLength =
-            ServiceName.Length + sizeof(WCHAR);
+            DeviceNode->ServiceName.Buffer = Buffer;
+            DeviceNode->ServiceName.Length = ServiceName.Length;
+            DeviceNode->ServiceName.MaximumLength = ServiceName.Length + sizeof(WCHAR);
+        }
     }
 
-    Status = IopOpenRegistryKeyEx(&ServicesKey,
-                                  NULL,
-                                  (PUNICODE_STRING)&IopServicesName,
-                                  KEY_READ);
-    if (NT_SUCCESS(Status))
-    {
-        Status = IopOpenRegistryKeyEx(&ServiceKey,
-                                      ServicesKey,
-                                      &ServiceName,
-                                      KEY_READ);
-        ZwClose(ServicesKey);
-    }
-
+    Status = PiResolveServiceDriver(&ServiceName, &DriverObject, &NoServiceKey);
     ExFreePool(Information);
 
-    if (!NT_SUCCESS(Status))
+    if (NoServiceKey)
     {
-        if (ClassKey != NULL) ZwClose(ClassKey);
         PiSetDevNodeProblem(DeviceNode, CM_PROB_DEVICE_NOT_THERE);
         return Status;
     }
 
-    Status = IopLoadDriverForPnp(ServiceKey, &DriverObject);
-    ZwClose(ServiceKey);
-
     if (!NT_SUCCESS(Status))
     {
-        if (ClassKey != NULL) ZwClose(ClassKey);
-        PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_DRIVER_ENTRY);
+        /* Only boot drivers run before the system root exists; the device gets another pass */
+        if (PnPBootDriversInitialized)
+        {
+            PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_DRIVER_ENTRY);
+        }
+
         return Status;
     }
 
-    if (IoGetDrvObjExtension(DriverObject)->AddDevice != NULL)
+    Status = PiDriverListAppend(List, DriverObject);
+    if (!NT_SUCCESS(Status))
     {
-        Status = IoGetDrvObjExtension(DriverObject)->AddDevice(
-            DriverObject,
-            DeviceNode->PhysicalDeviceObject);
-        if (!NT_SUCCESS(Status))
+        ObDereferenceObject(DriverObject);
+        return Status;
+    }
+
+    List->FunctionIndex = List->Count - 1;
+    return STATUS_SUCCESS;
+}
+
+static
+HANDLE
+PiOpenDeviceClassKey(
+    _In_ HANDLE InstanceKey)
+{
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    UNICODE_STRING ClassName;
+    HANDLE ClassRoot;
+    HANDLE ClassKey = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = IopGetRegistryValue(InstanceKey, L"ClassGUID", &Information);
+    if (!NT_SUCCESS(Status)) return NULL;
+
+    if (Information->Type == REG_SZ && Information->DataLength > sizeof(WCHAR))
+    {
+        ClassName.Buffer = (PWCHAR)((PUCHAR)Information + Information->DataOffset);
+        ClassName.Length = (USHORT)(Information->DataLength - sizeof(WCHAR));
+        ClassName.MaximumLength = ClassName.Length;
+
+        Status = IopOpenRegistryKeyEx(&ClassRoot,
+                                      NULL,
+                                      (PUNICODE_STRING)&IopControlClassName,
+                                      KEY_READ);
+        if (NT_SUCCESS(Status))
         {
-            PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_ADD);
+            Status = IopOpenRegistryKeyEx(&ClassKey, ClassRoot, &ClassName, KEY_READ);
+            if (!NT_SUCCESS(Status)) ClassKey = NULL;
+
+            ZwClose(ClassRoot);
         }
     }
 
-    ObDereferenceObject(DriverObject);
+    ExFreePool(Information);
+    return ClassKey;
+}
 
-    IopAttachFilterDrivers(DeviceNode, InstanceKey, ClassKey, FALSE);
+/* Every driver of the stack is found before any of them sees the device */
+static
+NTSTATUS
+PiCollectDeviceDrivers(
+    _Inout_ PDEVICE_NODE DeviceNode,
+    _In_ HANDLE InstanceKey,
+    _In_opt_ HANDLE ClassKey,
+    _Inout_ PPI_DRIVER_LIST List)
+{
+    NTSTATUS Status;
+
+    Status = PiCollectFilters(List, InstanceKey, L"LowerFilters");
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PiCollectFilters(List, ClassKey, L"LowerFilters");
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PiCollectFunctionDriver(DeviceNode, InstanceKey, List);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PiCollectFilters(List, InstanceKey, L"UpperFilters");
+    if (!NT_SUCCESS(Status)) return Status;
+
+    return PiCollectFilters(List, ClassKey, L"UpperFilters");
+}
+
+static
+NTSTATUS
+PiAttachDeviceDrivers(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ HANDLE InstanceKey)
+{
+    PDRIVER_ADD_DEVICE AddDevice;
+    PI_DRIVER_LIST List;
+    NTSTATUS AddStatus;
+    NTSTATUS Status;
+    HANDLE ClassKey;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(&List, sizeof(List));
+    List.FunctionIndex = MAXULONG;
+
+    ClassKey = PiOpenDeviceClassKey(InstanceKey);
+
+    Status = PiCollectDeviceDrivers(DeviceNode, InstanceKey, ClassKey, &List);
+
+    /*
+     * A device with nothing to drive it is not a device that runs: it waits
+     * for an installation, and only a bus that says its children may run raw
+     * lets one start without a function driver.
+     */
+    if (NT_SUCCESS(Status) &&
+        (List.FunctionIndex == MAXULONG) &&
+        !(PiGetDwordValue(InstanceKey, L"Capabilities", 0) & PI_CAPABILITY_RAW_DEVICE_OK))
+    {
+        PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_INSTALL);
+    }
+
+    for (Index = 0; NT_SUCCESS(Status) && Index < List.Count; Index++)
+    {
+        AddDevice = IoGetDrvObjExtension(List.Drivers[Index])->AddDevice;
+        if (AddDevice == NULL) continue;
+
+        AddStatus = AddDevice(List.Drivers[Index], DeviceNode->PhysicalDeviceObject);
+        if (Index == List.FunctionIndex && !NT_SUCCESS(AddStatus))
+        {
+            PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_ADD);
+            Status = AddStatus;
+        }
+    }
+
+    PiDriverListFree(&List);
 
     if (ClassKey != NULL) ZwClose(ClassKey);
 
@@ -813,6 +1002,8 @@ PiRunDeviceAction(
             case PiActionQueryRemoveDevice:
                 Status = PiQueryRemoveDevice(Request->DeviceObject,
                                              &RemoveData);
+                if (Request->RemoveData != NULL)
+                    *Request->RemoveData = RemoveData;
                 break;
 
             case PiActionRemoveDevice:
@@ -903,6 +1094,22 @@ PiQueueDeviceAction(
     _In_opt_ PKEVENT CompletionEvent,
     _Out_opt_ NTSTATUS *CompletionStatus)
 {
+    PiQueueDeviceActionEx(DeviceObject,
+                          Action,
+                          CompletionEvent,
+                          CompletionStatus,
+                          NULL);
+}
+
+/* The same, for an action whose answer is more than a status */
+VOID
+PiQueueDeviceActionEx(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_ACTION Action,
+    _In_opt_ PKEVENT CompletionEvent,
+    _Out_opt_ NTSTATUS *CompletionStatus,
+    _Out_opt_ PPI_QUERY_REMOVE_DATA RemoveData)
+{
     PIOP_DEVICE_ACTION_REQUEST Request;
     BOOLEAN Queue = FALSE;
     KIRQL OldIrql;
@@ -931,6 +1138,7 @@ PiQueueDeviceAction(
     Request->Action = Action;
     Request->CompletionEvent = CompletionEvent;
     Request->CompletionStatus = CompletionStatus;
+    Request->RemoveData = RemoveData;
 
     KeAcquireSpinLock(&IopDeviceActionLock, &OldIrql);
 
@@ -957,6 +1165,16 @@ PiPerformSyncDeviceAction(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ DEVICE_ACTION Action)
 {
+    return PiPerformSyncDeviceActionEx(DeviceObject, Action, NULL);
+}
+
+/* The same, for an action whose answer is more than a status */
+NTSTATUS
+PiPerformSyncDeviceActionEx(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_ACTION Action,
+    _Out_opt_ PPI_QUERY_REMOVE_DATA RemoveData)
+{
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
     KEVENT Event;
 
@@ -964,7 +1182,7 @@ PiPerformSyncDeviceAction(
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
-    PiQueueDeviceAction(DeviceObject, Action, &Event, &Status);
+    PiQueueDeviceActionEx(DeviceObject, Action, &Event, &Status, RemoveData);
 
     KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
 

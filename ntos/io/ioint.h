@@ -44,6 +44,7 @@ typedef struct _IOP_DEVICE_ACTION_REQUEST
     DEVICE_ACTION Action;
     PKEVENT CompletionEvent;
     NTSTATUS *CompletionStatus;
+    struct _PI_QUERY_REMOVE_DATA *RemoveData;
 } IOP_DEVICE_ACTION_REQUEST, *PIOP_DEVICE_ACTION_REQUEST;
 
 typedef struct _IOP_PNP_NOTIFY_ENTRY

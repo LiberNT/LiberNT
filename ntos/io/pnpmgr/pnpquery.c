@@ -438,9 +438,19 @@ PiQueryRemoveDevice(
     Status = IopSynchronousCall(DeviceObject, &StackLocation, &Information);
     if (NT_SUCCESS(Status)) return STATUS_SUCCESS;
 
+    /* Whoever answered the query keeps the device: everything the query
+     * reached is told to put it back the way it was */
+    RtlZeroMemory(&StackLocation, sizeof(StackLocation));
+    StackLocation.MajorFunction = IRP_MJ_PNP;
+    StackLocation.MinorFunction = IRP_MN_CANCEL_REMOVE_DEVICE;
+    IopSynchronousCall(DeviceObject, &StackLocation, &Information);
+
     RemoveData->VetoType = PNP_VetoDevice;
 
-    return Status;
+    DeviceNode = IopGetDeviceNode(DeviceObject);
+    if (DeviceNode != NULL) RemoveData->VetoName = DeviceNode->InstancePath;
+
+    return STATUS_PLUGPLAY_QUERY_VETOED;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
