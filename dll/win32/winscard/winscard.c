@@ -585,6 +585,10 @@ static LONG map_states_inA( const SCARD_READERSTATEA *src, struct reader_state *
     {
         if (src[i].szReader && ansi_to_utf8( src[i].szReader, (char **)&dst[i].reader ) < 0)
             return SCARD_E_NO_MEMORY;
+#ifdef __REACTOS__
+        dst[i].current_state = src[i].dwCurrentState;
+        dst[i].userdata = (ULONG_PTR)src[i].pvUserData;
+#endif
     }
     return SCARD_S_SUCCESS;
 }
@@ -648,6 +652,10 @@ static LONG map_states_inW( SCARD_READERSTATEW *src, struct reader_state *dst, D
     {
         if (src[i].szReader && utf16_to_utf8( src[i].szReader, (char **)&dst[i].reader ) < 0)
             return SCARD_E_NO_MEMORY;
+#ifdef __REACTOS__
+        dst[i].current_state = src[i].dwCurrentState;
+        dst[i].userdata = (ULONG_PTR)src[i].pvUserData;
+#endif
     }
     return SCARD_S_SUCCESS;
 }
