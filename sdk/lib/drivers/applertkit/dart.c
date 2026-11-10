@@ -543,3 +543,290 @@ AppleDartUnmapLow(
     MmUnmapIoSpace(Base, Size);
     return Status;
 }
+
+static
+PULONG64
+AppleDartAdoptedTable(
+    _Inout_ PAPPLE_DART_ADOPTED Adopted,
+    _In_ ULONG64 Physical,
+    _Out_ PBOOLEAN Mapped)
+{
+    PHYSICAL_ADDRESS Address;
+    ULONG Index;
+
+    PULONG64 Table;
+
+    *Mapped = FALSE;
+    for (Index = 0; Index < Adopted->OwnTables; ++Index)
+    {
+        if (Adopted->OwnPhysical[Index] == Physical)
+            return Adopted->OwnVirtual[Index];
+    }
+    for (Index = 0; Index < Adopted->ForeignTables; ++Index)
+    {
+        if (Adopted->ForeignPhysical[Index] == Physical)
+            return Adopted->ForeignVirtual[Index];
+    }
+    Address.QuadPart = (LONGLONG)Physical;
+    Table = MmMapIoSpace(Address, DART_PAGE_SIZE, MmCached);
+    if (Table && Adopted->ForeignTables < RTL_NUMBER_OF(Adopted->ForeignPhysical))
+    {
+        Adopted->ForeignPhysical[Adopted->ForeignTables] = Physical;
+        Adopted->ForeignVirtual[Adopted->ForeignTables] = Table;
+        Adopted->ForeignTables++;
+        return Table;
+    }
+    *Mapped = Table != NULL;
+    return Table;
+}
+
+static
+VOID
+AppleDartAdoptedTableDone(
+    _In_ PULONG64 Table,
+    _In_ BOOLEAN Mapped)
+{
+    if (Table && Mapped)
+        MmUnmapIoSpace(Table, DART_PAGE_SIZE);
+}
+
+static
+ULONG64
+AppleDartAdoptedWalk(
+    _Inout_ PAPPLE_DART_ADOPTED Adopted,
+    _In_ ULONG64 Iova,
+    _In_ BOOLEAN Create)
+{
+    ULONG64 TablePhysical = Adopted->TopPhysical, Entry, ChildPhysical;
+    PHYSICAL_ADDRESS Low, High, Boundary;
+    PULONG64 Table, Child;
+    BOOLEAN Mapped;
+    ULONG Level, Slot;
+
+    for (Level = Adopted->Levels; Level > 1; --Level)
+    {
+        Slot = (ULONG)(Iova >> (DART_PAGE_SHIFT + (Level - 1) * DART_LEVEL_BITS)) & (DART_TABLE_ENTRIES - 1);
+        Table = AppleDartAdoptedTable(Adopted, TablePhysical, &Mapped);
+        if (!Table)
+            return 0;
+        Entry = Table[Slot];
+        if (!(Entry & DART_PTE_VALID))
+        {
+            if (!Create || Adopted->OwnTables == RTL_NUMBER_OF(Adopted->OwnPhysical))
+            {
+                AppleDartAdoptedTableDone(Table, Mapped);
+                return 0;
+            }
+            Low.QuadPart = 0;
+            High.QuadPart = -1;
+            Boundary.QuadPart = DART_PAGE_SIZE;
+            Child = MmAllocateContiguousMemorySpecifyCache(DART_PAGE_SIZE, Low, High, Boundary, MmCached);
+            if (!Child)
+            {
+                AppleDartAdoptedTableDone(Table, Mapped);
+                return 0;
+            }
+            RtlZeroMemory(Child, DART_PAGE_SIZE);
+            ChildPhysical = (ULONG64)MmGetPhysicalAddress(Child).QuadPart;
+            Adopted->OwnPhysical[Adopted->OwnTables] = ChildPhysical;
+            Adopted->OwnVirtual[Adopted->OwnTables] = Child;
+            Adopted->OwnTables++;
+            KeMemoryBarrier();
+            Entry = AppleDartEntry(ChildPhysical) | DART_PTE_VALID;
+            Table[Slot] = Entry;
+        }
+        AppleDartAdoptedTableDone(Table, Mapped);
+        TablePhysical = (Entry & DART_PTE_ADDRESS_MASK) << 4;
+    }
+    return TablePhysical;
+}
+
+NTSTATUS
+NTAPI
+AppleDartAdopt(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Dart,
+    _In_ ULONG Sid,
+    _In_ ULONG64 WindowBase,
+    _In_ ULONG64 WindowEnd,
+    _In_z_ PCSTR Owner,
+    _Out_ PAPPLE_DART_ADOPTED Adopted)
+{
+    ULONG Length, Size, Cells, Params3, Streams, Tcr, Ttbr;
+    const VOID *Compatible;
+    ULONG64 Physical;
+    PUCHAR Base;
+
+    RtlZeroMemory(Adopted, sizeof(*Adopted));
+    if (Dart == RISCV_FDT_NO_NODE || !RiscvFdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1 ||
+        WindowEnd <= WindowBase || (WindowBase & (DART_PAGE_SIZE - 1)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Compatible = RiscvFdtGetProperty(&Tree->Fdt, Dart, "compatible", &Length);
+    if (!RiscvFdtStringListContains(Compatible, Length, "apple,t8110-dart"))
+        return STATUS_NOT_SUPPORTED;
+    Base = FdtDriverMapReg(Tree, Dart, 0, &Physical, &Size);
+    if (!Base)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Params3 = AppleDartRead(Base, DART_T8110_PARAMS3);
+    Streams = AppleDartRead(Base, DART_T8110_PARAMS4) & 0x1ff;
+    Tcr = Sid < Streams ? AppleDartRead(Base, DART_T8110_TCR + 4 * Sid) : 0;
+    Ttbr = Sid < Streams ? AppleDartRead(Base, DART_T8110_TTBR + 4 * Sid) : 0;
+    DbgPrint("%s: DART %I64x stream %lu of %lu left by the firmware: tcr %08lx ttbr %08lx params %08lx protect %08lx\n",
+             Owner, Physical, Sid, Streams, Tcr, Ttbr, Params3, AppleDartRead(Base, DART_T8110_PROTECT));
+    if (Sid >= Streams || !(Tcr & DART_T8110_TCR_TRANSLATE) ||
+        (Tcr & DART_T8110_TCR_BYPASS) == DART_T8110_TCR_BYPASS || !(Ttbr & DART_T8110_TTBR_VALID))
+    {
+        MmUnmapIoSpace(Base, Size);
+        return STATUS_DEVICE_NOT_READY;
+    }
+    Adopted->Base = Base;
+    Adopted->BaseSize = Size;
+    Adopted->Sid = Sid;
+    Adopted->Levels = (Tcr & DART_T8110_TCR_FOUR_LEVEL) ? 3 : 2;
+    Adopted->InputBits = (Params3 >> 16) & 0x3f;
+    Adopted->TopPhysical = (ULONG64)(Ttbr >> 2) << DART_PAGE_SHIFT;
+    Adopted->NextIova = WindowBase;
+    Adopted->EndIova = WindowEnd;
+    Adopted->Owner = Owner;
+    /* The tables index only the levels the stream has; a device address above them has no slot. */
+    if (WindowEnd - 1 >= (1ULL << min(Adopted->InputBits, DART_PAGE_SHIFT + Adopted->Levels * DART_LEVEL_BITS)))
+    {
+        DbgPrint("%s: DART window %I64x-%I64x is beyond %lu-bit addresses with %lu levels\n", Owner, WindowBase,
+                 WindowEnd, Adopted->InputBits, Adopted->Levels);
+        AppleDartAdoptedRelease(Adopted);
+        return STATUS_NOT_SUPPORTED;
+    }
+    return STATUS_SUCCESS;
+}
+
+BOOLEAN
+NTAPI
+AppleDartAdoptedTranslate(
+    _Inout_ PAPPLE_DART_ADOPTED Adopted,
+    _In_ ULONG64 Iova,
+    _Out_ PULONG64 Physical)
+{
+    ULONG64 Leaf, Entry;
+    PULONG64 Table;
+    BOOLEAN Mapped;
+
+    *Physical = 0;
+    Leaf = AppleDartAdoptedWalk(Adopted, Iova, FALSE);
+    if (!Leaf)
+        return FALSE;
+    Table = AppleDartAdoptedTable(Adopted, Leaf, &Mapped);
+    if (!Table)
+        return FALSE;
+    Entry = Table[(Iova >> DART_PAGE_SHIFT) & (DART_TABLE_ENTRIES - 1)];
+    AppleDartAdoptedTableDone(Table, Mapped);
+    if (!(Entry & DART_PTE_VALID))
+        return FALSE;
+    *Physical = ((Entry & DART_PTE_ADDRESS_MASK) << 4) | (Iova & (DART_PAGE_SIZE - 1));
+    return TRUE;
+}
+
+BOOLEAN
+NTAPI
+AppleDartAdoptedRangeFree(
+    _Inout_ PAPPLE_DART_ADOPTED Adopted,
+    _In_ ULONG64 Iova,
+    _In_ SIZE_T Length)
+{
+    ULONG64 First = Iova & ~(DART_PAGE_SIZE - 1), Last = (Iova + Length + DART_PAGE_SIZE - 1) & ~(DART_PAGE_SIZE - 1);
+    ULONG64 Page, Unused;
+
+    if (!Length || Last <= First)
+        return FALSE;
+    for (Page = First; Page < Last; Page += DART_PAGE_SIZE)
+    {
+        if (AppleDartAdoptedTranslate(Adopted, Page, &Unused))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+NTSTATUS
+NTAPI
+AppleDartAdoptedMapAt(
+    _Inout_ PAPPLE_DART_ADOPTED Adopted,
+    _In_ ULONG64 Iova,
+    _In_ ULONG64 Physical,
+    _In_ SIZE_T Length)
+{
+    ULONG64 First, Last, Page, Leaf;
+    PULONG64 Table;
+    BOOLEAN Mapped;
+
+    First = Physical & ~(DART_PAGE_SIZE - 1);
+    Last = (Physical + Length + DART_PAGE_SIZE - 1) & ~(DART_PAGE_SIZE - 1);
+    if (!Length || Last <= First || (Iova & (DART_PAGE_SIZE - 1)) != (Physical & (DART_PAGE_SIZE - 1)))
+        return STATUS_INVALID_PARAMETER;
+    Iova &= ~(DART_PAGE_SIZE - 1);
+    if (!AppleDartAdoptedRangeFree(Adopted, Iova, (SIZE_T)(Last - First)))
+        return STATUS_CONFLICTING_ADDRESSES;
+    for (Page = 0; Page < Last - First; Page += DART_PAGE_SIZE)
+    {
+        Leaf = AppleDartAdoptedWalk(Adopted, Iova + Page, TRUE);
+        Table = Leaf ? AppleDartAdoptedTable(Adopted, Leaf, &Mapped) : NULL;
+        if (!Table)
+        {
+            DbgPrint("%s: DART stream %lu has no table for device address %I64x\n", Adopted->Owner, Adopted->Sid,
+                     Iova + Page);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        Table[((Iova + Page) >> DART_PAGE_SHIFT) & (DART_TABLE_ENTRIES - 1)] =
+            AppleDartEntry(First + Page) | DART_PTE_SUBPAGE_END | DART_PTE_VALID;
+        AppleDartAdoptedTableDone(Table, Mapped);
+    }
+    AppleDartFlush(Adopted->Base, Adopted->Sid, Adopted->Owner);
+    DbgPrint("%s: DART stream %lu maps %I64x+%Ix at device address %I64x\n", Adopted->Owner, Adopted->Sid, Physical,
+             Length, Iova + (Physical - First));
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleDartAdoptedMap(
+    _Inout_ PAPPLE_DART_ADOPTED Adopted,
+    _In_ ULONG64 Physical,
+    _In_ SIZE_T Length,
+    _Out_ PULONG64 Iova)
+{
+    ULONG64 First, Span, Start;
+    NTSTATUS Status;
+
+    *Iova = 0;
+    First = Physical & ~(DART_PAGE_SIZE - 1);
+    Span = ((Physical + Length + DART_PAGE_SIZE - 1) & ~(DART_PAGE_SIZE - 1)) - First;
+    if (!Length || !Span)
+        return STATUS_INVALID_PARAMETER;
+    for (Start = Adopted->NextIova; Start + Span <= Adopted->EndIova; Start += DART_PAGE_SIZE)
+    {
+        if (!AppleDartAdoptedRangeFree(Adopted, Start, (SIZE_T)Span))
+            continue;
+        Status = AppleDartAdoptedMapAt(Adopted, Start + (Physical - First), Physical, Length);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Adopted->NextIova = Start + Span;
+        *Iova = Start + (Physical - First);
+        return STATUS_SUCCESS;
+    }
+    return STATUS_INSUFFICIENT_RESOURCES;
+}
+
+VOID
+NTAPI
+AppleDartAdoptedRelease(
+    _Inout_ PAPPLE_DART_ADOPTED Adopted)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Adopted->ForeignTables; ++Index)
+        MmUnmapIoSpace(Adopted->ForeignVirtual[Index], DART_PAGE_SIZE);
+    Adopted->ForeignTables = 0;
+    if (Adopted->Base)
+        MmUnmapIoSpace(Adopted->Base, Adopted->BaseSize);
+    Adopted->Base = NULL;
+}
