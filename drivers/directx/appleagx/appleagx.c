@@ -79,6 +79,9 @@ typedef struct _APPLE_AGX
     BOOLEAN Bound;
     ULONG Drained;
     APPLE_AGX_REPORT Reported;
+    ULONG IdVersion;
+    ULONG64 CoreWord;
+    ULONG ChipId;
     PVOID AdtCopy;
     ULONG AdtLength;
     APPLE_ADT Adt;
@@ -782,6 +785,8 @@ AgxStart(
     DbgPrint("appleagx: %s%s revision %lu.%lu, %lu clusters of %lu cores, %lu active (masks %08lx %08lx %08lx)\n",
              AgxGeneration(Version), AgxVariant(Version), (Version >> 8) & 0xff, Version & 0xff, ClusterCount,
              CoresPerCluster, Active, Masks[0], Masks[1], Masks[2]);
+    Agx->IdVersion = Version;
+    Agx->CoreWord = Masks[0] | ((ULONG64)Masks[1] << 32);
     Agx->Reported.State = APPLE_AGX_STATE_IDENTIFIED;
     Agx->Reported.Generation = (Version >> 24) & 0xff;
     Agx->Reported.Variant = (Version >> 16) & 0xff;
@@ -792,6 +797,8 @@ AgxStart(
     DbgPrint("appleagx: coprocessor control %08lx (%s), firmware not started\n", Control,
              (Control & AGX_ASC_CONTROL_RUN) ? "running" : "halted");
     AgxOpenAdt(Agx);
+    if (Agx->AdtCopy)
+        AppleAdtReadU32(&Agx->Adt, AppleAdtPath(&Agx->Adt, "/chosen"), "chip-id", &Agx->ChipId);
     if (!AgxReadAdt(Agx))
         AgxReadRegions(Agx);
     AgxReportFirmware(Agx);
@@ -806,6 +813,38 @@ AgxStart(
  * only once its firmware is ready, so until then the answer keeps the software path in use. */
 static
 NTSTATUS
+AgxGetParams(
+    _In_ PAPPLE_AGX Agx,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG_PTR Written)
+{
+    DRM_ASAHI_PARAMS_GLOBAL Params;
+    ULONG Kilohertz = Agx->Reported.TopKilohertz, Index;
+    NTSTATUS Status;
+
+    *Written = 0;
+    if (Agx->Reported.State < APPLE_AGX_STATE_IDENTIFIED)
+        return STATUS_DEVICE_NOT_READY;
+    if (InputLength >= sizeof(ULONG) && *(PULONG)Buffer != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (Agx->Described)
+    {
+        for (Index = 0; Index < Agx->Description.States; ++Index)
+            Kilohertz = max(Kilohertz, Agx->Description.State[Index].Frequency / 1000);
+    }
+    Status = AppleAgxDescribeParams(Agx->IdVersion, Agx->Reported.Clusters, Agx->CoreWord, Agx->ChipId, Kilohertz,
+                                    &Params);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    *Written = min(OutputLength, sizeof(Params));
+    RtlCopyMemory(Buffer, &Params, *Written);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 NTAPI
 AgxDeviceControl(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -816,7 +855,14 @@ AgxDeviceControl(
     NTSTATUS Status = STATUS_INVALID_DEVICE_REQUEST;
 
     Irp->IoStatus.Information = 0;
-    if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_APPLE_AGX_QUERY_STATE)
+    if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_APPLE_AGX_GET_PARAMS)
+    {
+        Status = AgxGetParams(Agx, Irp->AssociatedIrp.SystemBuffer,
+                              Stack->Parameters.DeviceIoControl.InputBufferLength,
+                              Stack->Parameters.DeviceIoControl.OutputBufferLength,
+                              &Irp->IoStatus.Information);
+    }
+    else if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_APPLE_AGX_QUERY_STATE)
     {
         if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(APPLE_AGX_REPORT))
         {

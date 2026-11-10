@@ -11,6 +11,7 @@
 
 /* Asked by the display driver before it sends anything to the graphics processor. */
 #define IOCTL_APPLE_AGX_QUERY_STATE CTL_CODE(FILE_DEVICE_VIDEO, 0x920, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_APPLE_AGX_GET_PARAMS  CTL_CODE(FILE_DEVICE_VIDEO, 0x921, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 /* How far the graphics processor has come. Rendering is offered only when it is ready. */
 #define APPLE_AGX_STATE_ABSENT      0
