@@ -605,7 +605,7 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
                 Adapter->DhclientConfig.timeout = DHCP_PANIC_TIMEOUT;
                 Adapter->DhclientConfig.initial_interval = DHCP_DISCOVER_INTERVAL;
                 Adapter->DhclientConfig.retry_interval = DHCP_DISCOVER_INTERVAL;
-                Adapter->DhclientConfig.select_interval = 1;
+                Adapter->DhclientConfig.select_interval = 0;
                 Adapter->DhclientConfig.reboot_timeout = DHCP_REBOOT_TIMEOUT;
                 Adapter->DhclientConfig.backoff_cutoff = DHCP_BACKOFF_MAX;
                 Adapter->DhclientState.interval =
