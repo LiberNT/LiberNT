@@ -3075,6 +3075,76 @@ TestAgxQueue(VOID)
     ok_int(AppleAgxQueueDone(&Queue), 0);
 }
 
+static UCHAR AgxManager[APPLE_AGX_MANAGER_SIZE];
+static UCHAR AgxPoolTable[APPLE_AGX_POOLS * APPLE_AGX_POOL_STRIDE];
+static ULONG64 AgxFreelist[APPLE_AGX_FREELIST_SEEDS];
+
+static
+VOID
+TestAgxPools(VOID)
+{
+    const ULONG64 First = 0xfffffc2d00000000ULL;
+    ULONG64 Value;
+    ULONG Index, Seeds = 0, Word;
+
+    /* The allocator names its freelist, its pool table and its counter. */
+    RtlFillMemory(AgxManager, sizeof(AgxManager), 0x5a);
+    ok_hex(AppleAgxDescribeManager(AgxManager, 0xfffffc2d10000000ULL, 0xfffffc2d20000000ULL,
+                                   0xfffffc2100020000ULL), STATUS_SUCCESS);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_ID, sizeof(Word));
+    ok_int(Word, APPLE_AGX_MANAGER_COMPUTE_ID);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_INDEX, sizeof(Word));
+    ok_int(Word, APPLE_AGX_MANAGER_COMPUTE_INDEX);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_ONE, sizeof(Word));
+    ok_int(Word, 1);
+    RtlCopyMemory(&Value, AgxManager + APPLE_AGX_MANAGER_FREELIST, sizeof(Value));
+    ok(Value == 0xfffffc2d10000000ULL, "The freelist is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_UNKNOWN_1C, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_MANAGER_UNKNOWN_1C_VALUE);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_SEEDS_A, sizeof(Word));
+    ok_int(Word, APPLE_AGX_FREELIST_SEEDS);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_SEEDS_B, sizeof(Word));
+    ok_int(Word, APPLE_AGX_FREELIST_SEEDS);
+    RtlCopyMemory(&Value, AgxManager + APPLE_AGX_MANAGER_POOL_TABLE, sizeof(Value));
+    ok(Value == 0xfffffc2d20000000ULL, "The pool table is at %I64x\n", Value);
+    RtlCopyMemory(&Word, AgxManager + APPLE_AGX_MANAGER_UNKNOWN_44, sizeof(Word));
+    ok_hex(Word, APPLE_AGX_MANAGER_UNKNOWN_44_VALUE);
+    RtlCopyMemory(&Value, AgxManager + APPLE_AGX_MANAGER_COUNTER, sizeof(Value));
+    ok(Value == 0xfffffc2100020000ULL, "The counter is at %I64x\n", Value);
+    ok_hex(AppleAgxDescribeManager(AgxManager, 0, 1, 1), STATUS_INVALID_PARAMETER);
+
+    /* Every pool is named with its valid bit, and only the first eight are broken into units. */
+    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, First, &Seeds), STATUS_SUCCESS);
+    ok_int(Seeds, APPLE_AGX_FREELIST_SEEDS);
+    for (Index = 0; Index < APPLE_AGX_POOLS; ++Index)
+    {
+        RtlCopyMemory(&Value, AgxPoolTable + Index * APPLE_AGX_POOL_STRIDE, sizeof(Value));
+        ok(Value == ((First + (ULONG64)Index * APPLE_AGX_POOL_SIZE) | APPLE_AGX_POOL_VALID),
+           "Pool %lu is %I64x\n", Index, Value);
+    }
+    /* The rest of a row is left alone. */
+    RtlCopyMemory(&Value, AgxPoolTable + 8, sizeof(Value));
+    ok(Value == 0, "A pool row carries %I64x past its address\n", Value);
+
+    /* The freelist walks every unit of each seeded pool in turn. */
+    ok(AgxFreelist[0] == First, "The first unit is %I64x\n", AgxFreelist[0]);
+    ok(AgxFreelist[1] == First + APPLE_AGX_POOL_UNIT, "The second unit is %I64x\n", AgxFreelist[1]);
+    ok(AgxFreelist[1023] == First + 1023 * APPLE_AGX_POOL_UNIT, "The last unit of the first pool is %I64x\n",
+       AgxFreelist[1023]);
+    ok(AgxFreelist[1024] == First + APPLE_AGX_POOL_SIZE, "The first unit of the second pool is %I64x\n",
+       AgxFreelist[1024]);
+    ok(AgxFreelist[APPLE_AGX_FREELIST_SEEDS - 1] ==
+       First + (APPLE_AGX_SEEDED_POOLS - 1) * (ULONG64)APPLE_AGX_POOL_SIZE +
+           1023 * APPLE_AGX_POOL_UNIT, "The last seed is %I64x\n",
+       AgxFreelist[APPLE_AGX_FREELIST_SEEDS - 1]);
+    /* The seeded pools are exactly the memory the firmware may hand out. */
+    ok_int(APPLE_AGX_SEEDED_POOLS * (APPLE_AGX_POOL_SIZE / APPLE_AGX_POOL_UNIT), APPLE_AGX_FREELIST_SEEDS);
+
+    ok_hex(AppleAgxSeedPools(AgxPoolTable, AgxFreelist, First + 1, &Seeds), STATUS_INVALID_PARAMETER);
+    ok_int(Seeds, 0);
+    ok_hex(AppleAgxSeedPools(NULL, AgxFreelist, First, &Seeds), STATUS_INVALID_PARAMETER);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -4214,6 +4284,7 @@ START_TEST(AppleSoc)
     TestAgxRegisters();
     TestAgxStates();
     TestAgxQueue();
+    TestAgxPools();
     TestSpmi();
     TestAtcphy();
     TestPcie();

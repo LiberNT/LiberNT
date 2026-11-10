@@ -407,3 +407,45 @@ AppleAgxDescribeGraph(
     _In_ PVOID JobList,
     _In_ ULONG64 JobListAddress,
     _In_ PVOID SchedContext);
+
+/* The allocator the firmware takes a compute workgroup's memory from: a table of pools and a
+ * freelist seeded with every unit of the first of them. */
+#define APPLE_AGX_MANAGER_SIZE          0x84
+#define APPLE_AGX_MANAGER_ID            0x00
+#define APPLE_AGX_MANAGER_INDEX         0x08
+#define APPLE_AGX_MANAGER_ONE           0x0c
+#define APPLE_AGX_MANAGER_FREELIST      0x14
+#define APPLE_AGX_MANAGER_UNKNOWN_1C    0x1c
+#define APPLE_AGX_MANAGER_UNKNOWN_1C_VALUE 0x80000
+#define APPLE_AGX_MANAGER_SEEDS_A       0x24
+#define APPLE_AGX_MANAGER_SEEDS_B       0x2c
+#define APPLE_AGX_MANAGER_POOL_TABLE    0x34
+#define APPLE_AGX_MANAGER_UNKNOWN_44    0x44
+#define APPLE_AGX_MANAGER_UNKNOWN_44_VALUE 0x40
+#define APPLE_AGX_MANAGER_COUNTER       0x48
+#define APPLE_AGX_MANAGER_COMPUTE_ID    3
+#define APPLE_AGX_MANAGER_COMPUTE_INDEX 2
+
+#define APPLE_AGX_POOLS                 22
+#define APPLE_AGX_POOL_SIZE             0x400000
+#define APPLE_AGX_POOL_STRIDE           0x40
+#define APPLE_AGX_POOL_VALID            (1ULL << 62)
+#define APPLE_AGX_POOL_UNIT             0x1000
+#define APPLE_AGX_SEEDED_POOLS          8
+#define APPLE_AGX_FREELIST_SEEDS        8192
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeManager(
+    _Out_writes_bytes_(APPLE_AGX_MANAGER_SIZE) PVOID Manager,
+    _In_ ULONG64 Freelist,
+    _In_ ULONG64 PoolTable,
+    _In_ ULONG64 Counter);
+
+NTSTATUS
+NTAPI
+AppleAgxSeedPools(
+    _Out_writes_bytes_(APPLE_AGX_POOLS *APPLE_AGX_POOL_STRIDE) PVOID PoolTable,
+    _Out_writes_bytes_(APPLE_AGX_FREELIST_SEEDS * 8) PVOID Freelist,
+    _In_ ULONG64 FirstPool,
+    _Out_ PULONG Seeds);

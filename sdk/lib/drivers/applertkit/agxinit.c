@@ -747,3 +747,70 @@ AppleAgxDescribeGraph(
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeManager(
+    _Out_writes_bytes_(APPLE_AGX_MANAGER_SIZE) PVOID Manager,
+    _In_ ULONG64 Freelist,
+    _In_ ULONG64 PoolTable,
+    _In_ ULONG64 Counter)
+{
+    if (!Manager || !Freelist || !PoolTable || !Counter)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(Manager, APPLE_AGX_MANAGER_SIZE);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_ID, APPLE_AGX_MANAGER_COMPUTE_ID);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_INDEX, APPLE_AGX_MANAGER_COMPUTE_INDEX);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_ONE, 1);
+    AgxWriteQuad(Manager, APPLE_AGX_MANAGER_FREELIST, Freelist);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_UNKNOWN_1C, APPLE_AGX_MANAGER_UNKNOWN_1C_VALUE);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_SEEDS_A, APPLE_AGX_FREELIST_SEEDS);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_SEEDS_B, APPLE_AGX_FREELIST_SEEDS);
+    AgxWriteQuad(Manager, APPLE_AGX_MANAGER_POOL_TABLE, PoolTable);
+    AgxWriteLong(Manager, APPLE_AGX_MANAGER_UNKNOWN_44, APPLE_AGX_MANAGER_UNKNOWN_44_VALUE);
+    AgxWriteQuad(Manager, APPLE_AGX_MANAGER_COUNTER, Counter);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+/* Every pool is named in the table; only the first few are broken into units for the freelist,
+ * which is what a large workgroup's memory comes out of. */
+NTSTATUS
+NTAPI
+AppleAgxSeedPools(
+    _Out_writes_bytes_(APPLE_AGX_POOLS *APPLE_AGX_POOL_STRIDE) PVOID PoolTable,
+    _Out_writes_bytes_(APPLE_AGX_FREELIST_SEEDS * 8) PVOID Freelist,
+    _In_ ULONG64 FirstPool,
+    _Out_ PULONG Seeds)
+{
+    ULONG Pool, Unit, Index = 0;
+    ULONG Units = APPLE_AGX_POOL_SIZE / APPLE_AGX_POOL_UNIT;
+
+    *Seeds = 0;
+    if (!PoolTable || !Freelist || !FirstPool || (FirstPool & (APPLE_AGX_POOL_UNIT - 1)))
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(PoolTable, APPLE_AGX_POOLS * APPLE_AGX_POOL_STRIDE);
+    RtlZeroMemory(Freelist, (SIZE_T)APPLE_AGX_FREELIST_SEEDS * sizeof(ULONG64));
+    for (Pool = 0; Pool < APPLE_AGX_POOLS; ++Pool)
+    {
+        ULONG64 At = FirstPool + (ULONG64)Pool * APPLE_AGX_POOL_SIZE;
+
+        AgxWriteQuad(PoolTable, Pool * APPLE_AGX_POOL_STRIDE, At | APPLE_AGX_POOL_VALID);
+    }
+    for (Pool = 0; Pool < APPLE_AGX_SEEDED_POOLS; ++Pool)
+    {
+        ULONG64 At = FirstPool + (ULONG64)Pool * APPLE_AGX_POOL_SIZE;
+
+        for (Unit = 0; Unit < Units; ++Unit)
+        {
+            if (Index == APPLE_AGX_FREELIST_SEEDS)
+                return STATUS_INVALID_PARAMETER;
+            AgxWriteQuad(Freelist, Index * (ULONG)sizeof(ULONG64),
+                         At + (ULONG64)Unit * APPLE_AGX_POOL_UNIT);
+            ++Index;
+        }
+    }
+    KeMemoryBarrier();
+    *Seeds = Index;
+    return Index == APPLE_AGX_FREELIST_SEEDS ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+}
