@@ -2778,6 +2778,15 @@ TestAgxRegisters(VOID)
     ok(AppleAgxIoMap(1)->Address == 0xfffffc2068149000ULL, "The second window is at %I64x\n",
        AppleAgxIoMap(1)->Address);
     ok(AppleAgxIoMap(APPLE_AGX_IOMAPS) == NULL, "A window past the last one was described\n");
+    /* Thirteen of the fifteen windows were checked against the ranges this machine reports, and
+     * slot 23 starts inside the graphics block's own range; slot 1 lies below every reported
+     * range and is the one this table cannot vouch for. */
+    ok(AppleAgxIoMap(1)->Physical == 0x20e100000ULL, "The unconfirmed window moved to %I64x\n",
+       AppleAgxIoMap(1)->Physical);
+    ok(AppleAgxIoMap(6)->Physical == 0x220000000ULL && AppleAgxIoMap(6)->Slot == 11,
+       "Slot 11 is %I64x at index 6\n", AppleAgxIoMap(6)->Physical);
+    ok(AppleAgxIoMap(11)->Physical == 0x293000000ULL && AppleAgxIoMap(11)->Slot == 23,
+       "Slot 23 is %I64x at index 11\n", AppleAgxIoMap(11)->Physical);
     for (Index = 0; Index < APPLE_AGX_IOMAPS; ++Index)
     {
         ok(AppleAgxIoMap(Index)->Slot < APPLE_AGX_IOMAP_SLOTS && AppleAgxIoMap(Index)->Size != 0 &&

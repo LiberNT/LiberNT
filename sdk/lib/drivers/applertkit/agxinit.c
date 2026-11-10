@@ -498,6 +498,7 @@ AppleAgxRingDoorbell(
 static const APPLE_AGX_IOMAP AgxIoMaps[APPLE_AGX_IOMAPS] =
 {
     { 0x290d00000ULL, 0xfffffc2068000000ULL, 0x144000,  0 },
+    /* FIXME: this window lies below every range this machine reports; it is mapped unconfirmed. */
     { 0x20e100000ULL, 0xfffffc2068149000ULL, 0x4000,    1 },
     { 0x351014000ULL, 0xfffffc2068150000ULL, 0x4000,    2 },
     { 0x290000000ULL, 0xfffffc2068158000ULL, 0x20000,   3 },
