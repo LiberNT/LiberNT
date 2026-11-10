@@ -60,6 +60,7 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
     STRING DebugString;
     CHAR Buffer[512];
     SIZE_T Length = 0, PrefixLength = 0;
+    INT Printed = 0;
     EXCEPTION_RECORD ExceptionRecord;
 
     /* Check if we should print it or not */
@@ -84,10 +85,10 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
         RtlCopyMemory(Buffer, Prefix, PrefixLength);
 
         /* Do the printf */
-        Length = _vsnprintf(Buffer + PrefixLength,
-                            sizeof(Buffer) - PrefixLength,
-                            Format,
-                            ap);
+        Printed = _vsnprintf(Buffer + PrefixLength,
+                             sizeof(Buffer) - PrefixLength,
+                             Format,
+                             ap);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -99,7 +100,7 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
     _SEH2_END;
 
     /* Check if we went past the buffer */
-    if (Length == MAXULONG)
+    if (Printed < 0)
     {
         /* Terminate it if we went over-board */
         Buffer[sizeof(Buffer) - 2] = '\n';
@@ -111,7 +112,7 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
     else
     {
         /* Add the prefix */
-        Length += PrefixLength;
+        Length = (SIZE_T)Printed + PrefixLength;
     }
 
     /* Build the string */
