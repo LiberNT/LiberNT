@@ -727,6 +727,8 @@ LX_SYSCALL(LxSysPselect6)
         Result = LxCopyFromUser(&Timeout, Call->Args[4], sizeof(Timeout));
         if (Result != 0)
             return Result;
+        if ((Timeout.Seconds < 0) || (Timeout.Nanoseconds < 0) || (Timeout.Nanoseconds >= 1000000000))
+            return -LX_EINVAL;
     }
     if (Call->Args[5] != 0)
     {
