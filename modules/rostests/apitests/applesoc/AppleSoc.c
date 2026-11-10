@@ -3026,6 +3026,48 @@ TestAgxQueue(VOID)
         ok(Value == 0, "The record's first word is %I64x\n", Value);
     }
 
+    /* The objects the graph shares: the notifier, the job list and the scheduling context. */
+    {
+        UCHAR Notifier[APPLE_AGX_NOTIFIER_SIZE], List[APPLE_AGX_JOB_LIST_SIZE];
+        UCHAR Context[APPLE_AGX_SCHED_CONTEXT_SIZE];
+        ULONG Mask = 0;
+
+        RtlFillMemory(Notifier, sizeof(Notifier), 0x5a);
+        RtlFillMemory(List, sizeof(List), 0x5a);
+        RtlFillMemory(Context, sizeof(Context), 0x5a);
+        ok_hex(AppleAgxDescribeGraph(Notifier, 0xfffffc2100018000ULL, List, 0xfffffc210000c000ULL, Context),
+               STATUS_SUCCESS);
+        RtlCopyMemory(&Value, Notifier + APPLE_AGX_NOTIFIER_THRESHOLD, sizeof(Value));
+        ok(Value == 0xfffffc2100018000ULL, "The notifier signals through %I64x\n", Value);
+        RtlCopyMemory(&Mask, Notifier + APPLE_AGX_NOTIFIER_UNKNOWN_10, sizeof(Mask));
+        ok_hex(Mask, APPLE_AGX_NOTIFIER_UNKNOWN_10_VALUE);
+        for (Index = 0, Read = 0; Index < 8; ++Index)
+        {
+            if (Notifier[APPLE_AGX_NOTIFIER_MASK + Index] == 0xff)
+                ++Read;
+        }
+        ok_int(Read, 8);
+        ok_int(Notifier[APPLE_AGX_NOTIFIER_MASK + 8], 0);
+        RtlCopyMemory(&Value, List + APPLE_AGX_JOB_LIST_SELF, sizeof(Value));
+        ok(Value == 0xfffffc210000c000ULL, "The job list names itself %I64x\n", Value);
+        RtlCopyMemory(&Value, List, sizeof(Value));
+        ok(Value == 0, "The job list starts with %I64x\n", Value);
+        for (Index = 0, Read = 0; Index < sizeof(Context); ++Index)
+        {
+            if (Context[Index])
+                ++Read;
+        }
+        ok_int(Read, 0);
+        ok_hex(AppleAgxDescribeGraph(NULL, 1, List, 1, Context), STATUS_INVALID_PARAMETER);
+        ok_hex(AppleAgxDescribeGraph(Notifier, 0, List, 1, Context), STATUS_INVALID_PARAMETER);
+    }
+
+    /* The sequence opcodes the firmware interprets. */
+    ok_hex(APPLE_AGX_OP_COMPUTE_START, 0x0b);
+    ok_hex(APPLE_AGX_OP_COMPUTE_FINALIZE, 0x0c);
+    ok_hex(APPLE_AGX_OP_END, 0x40000002);
+    ok_hex(APPLE_AGX_OP_TIMESTAMP, 0x80000003);
+
     /* A queue with nothing of its own is refused rather than described. */
     RtlZeroMemory(&Queue, sizeof(Queue));
     ok_hex(AppleAgxQueueDescribe(&Queue), STATUS_INVALID_PARAMETER);

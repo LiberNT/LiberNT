@@ -720,3 +720,30 @@ AppleAgxSubmitRecord(
     ((PUCHAR)Record)[APPLE_AGX_SUBMIT_EVENT] = Event;
     ((PUCHAR)Record)[APPLE_AGX_SUBMIT_NEW_QUEUE] = NewQueue ? 1 : 0;
 }
+
+/* The objects every queue of the graph shares: what the firmware signals completion through, the
+ * list it keeps its jobs on and the context it schedules them in. */
+NTSTATUS
+NTAPI
+AppleAgxDescribeGraph(
+    _In_ PVOID Notifier,
+    _In_ ULONG64 Threshold,
+    _In_ PVOID JobList,
+    _In_ ULONG64 JobListAddress,
+    _In_ PVOID SchedContext)
+{
+    ULONG Index;
+
+    if (!Notifier || !JobList || !SchedContext || !Threshold || !JobListAddress)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(Notifier, APPLE_AGX_NOTIFIER_SIZE);
+    AgxWriteQuad(Notifier, APPLE_AGX_NOTIFIER_THRESHOLD, Threshold);
+    AgxWriteLong(Notifier, APPLE_AGX_NOTIFIER_UNKNOWN_10, APPLE_AGX_NOTIFIER_UNKNOWN_10_VALUE);
+    for (Index = 0; Index < 8; ++Index)
+        ((PUCHAR)Notifier)[APPLE_AGX_NOTIFIER_MASK + Index] = 0xff;
+    RtlZeroMemory(JobList, APPLE_AGX_JOB_LIST_SIZE);
+    AgxWriteQuad(JobList, APPLE_AGX_JOB_LIST_SELF, JobListAddress);
+    RtlZeroMemory(SchedContext, APPLE_AGX_SCHED_CONTEXT_SIZE);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}

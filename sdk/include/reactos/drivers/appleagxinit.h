@@ -386,3 +386,24 @@ AppleAgxSubmitRecord(
     _In_ USHORT Head,
     _In_ UCHAR Event,
     _In_ BOOLEAN NewQueue);
+
+/* The opcodes of the sequence the firmware interprets for a piece of work. */
+#define APPLE_AGX_OP_BARRIER            4
+#define APPLE_AGX_OP_VERTEX_START       5
+#define APPLE_AGX_OP_VERTEX_FINALIZE    6
+#define APPLE_AGX_OP_FRAGMENT_START     7
+#define APPLE_AGX_OP_FRAGMENT_FINALIZE  8
+#define APPLE_AGX_OP_COMPUTE_START      0x0b
+#define APPLE_AGX_OP_COMPUTE_FINALIZE   0x0c
+#define APPLE_AGX_OP_TIMESTAMP_END      3
+#define APPLE_AGX_OP_TIMESTAMP          0x80000003
+#define APPLE_AGX_OP_END                0x40000002
+
+NTSTATUS
+NTAPI
+AppleAgxDescribeGraph(
+    _In_ PVOID Notifier,
+    _In_ ULONG64 Threshold,
+    _In_ PVOID JobList,
+    _In_ ULONG64 JobListAddress,
+    _In_ PVOID SchedContext);
