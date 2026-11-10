@@ -1626,6 +1626,26 @@ PortPdoPnp(
             break;
         }
 
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+            ASSERT(PdoExtension->FdoExtension != NULL);
+            Status = PortSendDeviceUsageNotification(PdoExtension->FdoExtension->Device,
+                                                     Stack->Parameters.UsageNotification.Type,
+                                                     Stack->Parameters.UsageNotification.InPath);
+            if (NT_SUCCESS(Status))
+            {
+                PortAdjustUsageCount(&PdoExtension->Usage, Stack);
+                IoInvalidateDeviceState(DeviceObject);
+            }
+            break;
+
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:
+            if (PortIsInUsagePath(&PdoExtension->Usage))
+            {
+                Information |= PNP_DEVICE_NOT_DISABLEABLE;
+                Status = STATUS_SUCCESS;
+            }
+            break;
+
         default:
             break;
     }

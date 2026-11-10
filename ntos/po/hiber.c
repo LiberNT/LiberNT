@@ -928,7 +928,7 @@ PopHiberOpenFile(
     if (NT_SUCCESS(Status))
         PopHiber.InHibernationPath = TRUE;
     else
-        /* FIXME: Windows keeps no hibernation file when a driver in its path fails the usage notification; storport and scsiport do not handle it yet */
+        /* FIXME: Windows keeps no hibernation file when a driver in its path fails the usage notification; scsiport does not handle it yet */
         DPRINT1("Hibernation path usage notification failed: 0x%08lx\n", Status);
 
     PopHiber.Capacity = Size;

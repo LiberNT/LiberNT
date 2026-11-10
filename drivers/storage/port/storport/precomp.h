@@ -107,6 +107,13 @@ typedef struct _PORT_HMB_BLOCK
     SIZE_T Bytes;
 } PORT_HMB_BLOCK, *PPORT_HMB_BLOCK;
 
+typedef struct _PORT_USAGE_COUNTS
+{
+    volatile LONG PagingFiles;
+    volatile LONG HibernationFiles;
+    volatile LONG DumpFiles;
+} PORT_USAGE_COUNTS, *PPORT_USAGE_COUNTS;
+
 typedef struct _FDO_DEVICE_EXTENSION
 {
     EXTENSION_TYPE ExtensionType;
@@ -207,6 +214,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     KEVENT RequestsDrained;
     DEVICE_POWER_STATE DevicePowerState;
     SYSTEM_POWER_STATE SystemPowerState;
+    PORT_USAGE_COUNTS Usage;
 } FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 NTSTATUS PortInitializeDma(_In_ PFDO_DEVICE_EXTENSION FdoExtension,
@@ -243,6 +251,7 @@ typedef struct _PDO_DEVICE_EXTENSION
     CHAR ModelNumber[STOR_MODEL_NUMBER_LENGTH + 1];
     CHAR FirmwareRevision[STOR_FIRMWARE_REVISION_LENGTH + 1];
     struct _PORT_DUMP_CONTEXT *DumpContext;
+    PORT_USAGE_COUNTS Usage;
 
 } PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
 
@@ -480,6 +489,21 @@ QueryBusInterface(
     USHORT Version,
     PBUS_INTERFACE_STANDARD Interface,
     PVOID InterfaceSpecificData);
+
+VOID
+PortAdjustUsageCount(
+    _Inout_ PPORT_USAGE_COUNTS Usage,
+    _In_ PIO_STACK_LOCATION Stack);
+
+BOOLEAN
+PortIsInUsagePath(
+    _In_ PPORT_USAGE_COUNTS Usage);
+
+NTSTATUS
+PortSendDeviceUsageNotification(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_USAGE_NOTIFICATION_TYPE Type,
+    _In_ BOOLEAN InPath);
 
 BOOLEAN
 TranslateResourceListAddress(

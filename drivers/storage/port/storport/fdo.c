@@ -1552,10 +1552,24 @@ PortFdoPnp(
 
         case IRP_MN_QUERY_PNP_DEVICE_STATE: /* 0x14 */
             DPRINT("IRP_MJ_PNP / IRP_MN_QUERY_PNP_DEVICE_STATE\n");
+            if (PortIsInUsagePath(&DeviceExtension->Usage))
+            {
+                Irp->IoStatus.Information |= PNP_DEVICE_NOT_DISABLEABLE;
+                Irp->IoStatus.Status = STATUS_SUCCESS;
+            }
             return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
 
         case IRP_MN_DEVICE_USAGE_NOTIFICATION: /* 0x16 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_DEVICE_USAGE_NOTIFICATION\n");
+            if (!IoForwardIrpSynchronously(DeviceExtension->LowerDevice, Irp))
+            {
+                Status = STATUS_UNSUCCESSFUL;
+                break;
+            }
+            Status = Irp->IoStatus.Status;
+            Information = Irp->IoStatus.Information;
+            if (NT_SUCCESS(Status))
+                PortAdjustUsageCount(&DeviceExtension->Usage, Stack);
             break;
 
         case IRP_MN_SURPRISE_REMOVAL: /* 0x17 */
