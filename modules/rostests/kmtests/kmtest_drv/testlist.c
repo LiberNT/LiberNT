@@ -63,6 +63,7 @@ KMT_TESTFUNC Test_SoftGpu2DPolicy;
 KMT_TESTFUNC Test_SoftGpuVidPnPolicy;
 #endif
 #ifdef KMT_SOFTGPU_VSYNC_POLICY
+KMT_TESTFUNC Test_SoftGpuSlabHandoff;
 KMT_TESTFUNC Test_SoftGpuVsyncPolicy;
 #endif
 KMT_TESTFUNC Test_Example;
@@ -427,6 +428,7 @@ const KMT_TEST TestList[] =
     { "SoftGpuVidPnPolicy",                Test_SoftGpuVidPnPolicy },
 #endif
 #ifdef KMT_SOFTGPU_VSYNC_POLICY
+    { "SoftGpuSlabHandoff",                Test_SoftGpuSlabHandoff },
     { "SoftGpuVsyncPolicy",                Test_SoftGpuVsyncPolicy },
 #endif
     { "ExCallback",                         Test_ExCallback },
