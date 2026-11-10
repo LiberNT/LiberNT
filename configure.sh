@@ -65,6 +65,9 @@ USER_BUILD_TYPE_FLAG=0
 RUN_MENUCONFIG=0
 SKIP_FEEDS_UPDATE=0
 
+# The only part of the FEX feed that KDBG needs on x86 targets.
+KDB_ZYDIS_FEED_PATHS=External/zydis,External/zydis/dependencies/zycore
+
 usage() {
 	echo "Usage: configure.sh [options]"
 	echo "  --clang              Use RosBE Clang/LLVM from ~/.local/opt/rosbe/llvm"
@@ -238,11 +241,14 @@ sync_feeds() {
 	[ -x "$REACTOS_SOURCE_DIR/scripts/feeds" ] || fail "missing $REACTOS_SOURCE_DIR/scripts/feeds"
 
 	FEEDS_WANTED=mesa
+	FEEDS_WANT_KDB_ZYDIS=0
 	if [ "$ARCH" = "arm64" ] && fex_arm64ec_enabled; then
 		FEEDS_WANTED="$FEEDS_WANTED fex-arm64ec"
 	elif kdb_zydis_enabled; then
 		# KDBG takes its disassembler from the FEX feed even without ARM64EC.
-		FEEDS_WANTED="$FEEDS_WANTED fex-arm64ec"
+		# Only Zydis is built then, so the feed is updated separately below with
+		# the rest of FEX's nested submodules left uninitialized.
+		FEEDS_WANT_KDB_ZYDIS=1
 	fi
 	if ffmpeg_enabled; then
 		FEEDS_WANTED="$FEEDS_WANTED ffmpeg"
@@ -255,6 +261,11 @@ sync_feeds() {
 	# shellcheck disable=SC2086
 	"$REACTOS_SOURCE_DIR/scripts/feeds" update $FEEDS_WANTED ||
 		fail "could not update the source feeds; pass --no-feeds-update to skip"
+
+	[ "$FEEDS_WANT_KDB_ZYDIS" = "1" ] || return 0
+	echo "Updating source feeds: fex-arm64ec ($KDB_ZYDIS_FEED_PATHS)"
+	"$REACTOS_SOURCE_DIR/scripts/feeds" update --paths "$KDB_ZYDIS_FEED_PATHS" fex-arm64ec ||
+		fail "could not update the fex-arm64ec feed; pass --no-feeds-update to skip"
 }
 
 # KDBG on x86 uses the Zydis and Zycore revisions vendored with FEX. Verify
