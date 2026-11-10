@@ -167,22 +167,7 @@ CmpAttachSecurityCell(
 
     if (OldCell != HCELL_NIL && OldCell != NewCell)
     {
-        PCM_KEY_SECURITY Old = (PCM_KEY_SECURITY)HvGetCell(Hive, OldCell);
-        ULONG Remaining = 0;
-
-        if (Old != NULL)
-        {
-            Remaining = Old->ReferenceCount;
-            HvReleaseCell(Hive, OldCell);
-        }
-
         CmpDereferenceSecurityCell(Hive, OldCell);
-
-        if (Remaining <= 1)
-        {
-            CmpInvalidateSecurityCacheEntry(
-                CONTAINING_RECORD(Hive, CMHIVE, Hive), OldCell);
-        }
     }
 
     *SecurityCell = NewCell;

@@ -324,6 +324,16 @@ CmpInvalidateSecurityCacheEntry(
     CmpRemoveSecurityCacheIndex(Hive, Index);
 }
 
+VOID
+NTAPI
+CmpRemoveFromSecurityCache(
+    _In_ PHHIVE Hive,
+    _In_ HCELL_INDEX SecurityCell)
+{
+    CmpInvalidateSecurityCacheEntry(CONTAINING_RECORD(Hive, CMHIVE, Hive),
+                                    SecurityCell);
+}
+
 /*
  * Looks through what the hive already says about access for a descriptor that
  * says exactly the same thing, so one cell can serve many keys.
