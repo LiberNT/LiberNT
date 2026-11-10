@@ -27,12 +27,15 @@ DefaultDestDir = 12 ; DIRID_DRIVERS
 
 [STORAHCI.NTx86]
 %SATA_AHCI.DeviceDesc%=storahci_Inst, PCI\CC_010601; Standard SATA AHCI Controller
+%SATA_AHCI.DeviceDesc%=storahci_Inst, ACPI\CLS_0001&SUBCLS_0006&PI_01; AHCI controller enumerated by ACPI
 
 [STORAHCI.NTamd64]
 %SATA_AHCI.DeviceDesc%=storahci_Inst, PCI\CC_010601; Standard SATA AHCI Controller
+%SATA_AHCI.DeviceDesc%=storahci_Inst, ACPI\CLS_0001&SUBCLS_0006&PI_01; AHCI controller enumerated by ACPI
 
 [STORAHCI.NTarm64]
 %SATA_AHCI.DeviceDesc%=storahci_Inst, PCI\CC_010601; Standard SATA AHCI Controller
+%SATA_AHCI.DeviceDesc%=storahci_Inst, ACPI\CLS_0001&SUBCLS_0006&PI_01; AHCI controller enumerated by ACPI
 
 [ControlFlags]
 ExcludeFromSelect = *
