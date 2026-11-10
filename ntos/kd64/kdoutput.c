@@ -50,6 +50,19 @@ KdpReleaseLock(
 }
 
 /*
+ * Takes the print lock away from whoever held it. Only the bugcheck path may
+ * do this, once every other processor is held and the one that crashed is the
+ * only one left: a crash inside a print would otherwise spin here, and the
+ * machine would say nothing about why it stopped.
+ */
+VOID
+NTAPI
+KdpResetPrintLock(VOID)
+{
+    KdpPrintSpinLock = 0;
+}
+
+/*
  * Appends to the circular log. The log is the only record of what was printed
  * that survives into a crash dump, so it is written whether or not anyone is
  * listening.
