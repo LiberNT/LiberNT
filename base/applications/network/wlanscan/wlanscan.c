@@ -41,7 +41,13 @@ AuthName(DOT11_AUTH_ALGORITHM Auth)
         case DOT11_AUTH_ALGO_WPA_PSK:          return L"WPA-PSK";
         case DOT11_AUTH_ALGO_RSNA:             return L"WPA2";
         case DOT11_AUTH_ALGO_RSNA_PSK:         return L"WPA2-PSK";
-        default:                               return L"?";
+        case DOT11_AUTH_ALGO_WPA_NONE:         return L"WPA-None";
+        case DOT11_AUTH_ALGO_WPA3_ENT_192:     return L"WPA3-Ent192";
+        case DOT11_AUTH_ALGO_WPA3_SAE:         return L"WPA3-SAE";
+        case DOT11_AUTH_ALGO_OWE:              return L"OWE";
+        case DOT11_AUTH_ALGO_WPA3_ENT:         return L"WPA3-Ent";
+        default:
+            return (Auth >= DOT11_AUTH_ALGO_IHV_START) ? L"IHV" : L"?";
     }
 }
 
