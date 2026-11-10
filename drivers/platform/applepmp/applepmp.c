@@ -12,6 +12,8 @@
 
 #define PMP_TAG                     'pPpA'
 #define PMP_ENDPOINT                0x20
+#define PMP_CPU_CONTROL             0x44
+#define PMP_CPU_CONTROL_RUN          0x10
 #define PMP_BOOT_TIMEOUT_MS         2000
 #define PMP_REPLY_TIMEOUT_MS        2000
 
@@ -159,7 +161,7 @@ NTSTATUS
 PmpStart(
     _Inout_ PAPPLE_PMP Pmp)
 {
-    ULONG MailboxPhandle, MailboxNode;
+    ULONG MailboxPhandle, MailboxNode, Control;
     NTSTATUS Status;
 
     Status = FdtDriverOpen(Pmp->Pdo, &Pmp->Tree);
@@ -182,9 +184,20 @@ PmpStart(
     Pmp->Rtkit.Context = Pmp;
     Pmp->Rtkit.ShmemSetup = PmpShmemSetup;
     Pmp->Rtkit.Receive = PmpReceive;
-    Status = AppleRtkitWake(&Pmp->Rtkit, PMP_BOOT_TIMEOUT_MS);
-    DbgPrint("applepmp: SRAM %I64x+%lx, wake %lx, RTKit %lu, endpoints %08lx %08lx\n", Pmp->SramBase, Pmp->SramSize,
-             Status, Pmp->Rtkit.Version, Pmp->Rtkit.Endpoints[0], Pmp->Rtkit.Endpoints[1]);
+    /* The boot loader leaves this processor halted with its firmware in SRAM; it is started here. */
+    Control = READ_REGISTER_ULONG((volatile ULONG *)(Pmp->Coproc + PMP_CPU_CONTROL));
+    if (Control & PMP_CPU_CONTROL_RUN)
+    {
+        Status = AppleRtkitWake(&Pmp->Rtkit, PMP_BOOT_TIMEOUT_MS);
+    }
+    else
+    {
+        WRITE_REGISTER_ULONG((volatile ULONG *)(Pmp->Coproc + PMP_CPU_CONTROL), Control | PMP_CPU_CONTROL_RUN);
+        Status = AppleRtkitBoot(&Pmp->Rtkit, PMP_BOOT_TIMEOUT_MS);
+    }
+    DbgPrint("applepmp: SRAM %I64x+%lx, control %08lx, %s %lx, RTKit %lu, endpoints %08lx %08lx\n", Pmp->SramBase,
+             Pmp->SramSize, Control, (Control & PMP_CPU_CONTROL_RUN) ? "wake" : "boot", Status, Pmp->Rtkit.Version,
+             Pmp->Rtkit.Endpoints[0], Pmp->Rtkit.Endpoints[1]);
     if (!NT_SUCCESS(Status))
         return Status;
     if (!AppleRtkitHasEndpoint(&Pmp->Rtkit, PMP_ENDPOINT))
