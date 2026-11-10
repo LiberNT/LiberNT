@@ -7,6 +7,7 @@
 
 #include <ntddk.h>
 #include <reactos/drivers/applertkit.h>
+#include <reactos/drivers/appledart.h>
 #include <reactos/drivers/applepmp.h>
 #include <reactos/drivers/fdtdrv.h>
 
@@ -19,6 +20,8 @@
 #define PMP_MAX_SHARED              4
 #define PMP_SHARED_PAGE_SIZE        0x4000
 #define PMP_SHARED_ADDRESS_BITS     44
+#define PMP_DART_WINDOW_BASE        0x10000000ULL
+#define PMP_DART_WINDOW_END         0x20000000ULL
 
 typedef struct _PMP_SHARED
 {
@@ -26,6 +29,7 @@ typedef struct _PMP_SHARED
     SIZE_T AllocationSize;
     PVOID Virtual;
     ULONG64 Physical;
+    ULONG64 Iova;
     ULONG Size;
 } PMP_SHARED, *PPMP_SHARED;
 
@@ -45,6 +49,8 @@ typedef struct _APPLE_PMP
     ULONG SramSize;
     PMP_SHARED Shared[PMP_MAX_SHARED];
     ULONG SharedCount;
+    APPLE_DART_ADOPTED Dart;
+    BOOLEAN DartAdopted;
     APPLE_RTKIT Rtkit;
     FAST_MUTEX Lock;
     BOOLEAN Running;
@@ -53,7 +59,6 @@ typedef struct _APPLE_PMP
     volatile BOOLEAN Lost;
 } APPLE_PMP, *PAPPLE_PMP;
 
-/* The processor reaches memory without an IOMMU, so the address it is given is a physical one. */
 static
 PPMP_SHARED
 PmpAllocateShared(
@@ -123,13 +128,21 @@ PmpShmemSetup(
     *Preassigned = TRUE;
     if (*Iova)
     {
-        if (!Pmp->Sram || *Iova < Pmp->SramBase || *Iova + Size > Pmp->SramBase + Pmp->SramSize)
+        ULONG64 Physical = *Iova;
+
+        if (Pmp->DartAdopted && !AppleDartAdoptedTranslate(&Pmp->Dart, *Iova, &Physical))
         {
-            DbgPrint("applepmp: endpoint %u asked for %lu bytes at %I64x, outside its own memory\n", Endpoint, Size,
-                     *Iova);
+            DbgPrint("applepmp: endpoint %u asked for %lu bytes at device address %I64x, which is not mapped\n",
+                     Endpoint, Size, *Iova);
             return FALSE;
         }
-        *Virtual = Pmp->Sram + (*Iova - Pmp->SramBase);
+        if (!Pmp->Sram || Physical < Pmp->SramBase || Physical + Size > Pmp->SramBase + Pmp->SramSize)
+        {
+            DbgPrint("applepmp: endpoint %u asked for %lu bytes at %I64x (%I64x), outside its own memory\n", Endpoint,
+                     Size, *Iova, Physical);
+            return FALSE;
+        }
+        *Virtual = Pmp->Sram + (Physical - Pmp->SramBase);
         return TRUE;
     }
     Shared = PmpAllocateShared(Pmp, Size);
@@ -138,10 +151,23 @@ PmpShmemSetup(
         DbgPrint("applepmp: endpoint %u asked for %lu bytes that could not be allocated\n", Endpoint, Size);
         return FALSE;
     }
-    *Iova = Shared->Physical;
+    Shared->Iova = Shared->Physical;
+    if (Pmp->DartAdopted)
+    {
+        NTSTATUS Status = AppleDartAdoptedMap(&Pmp->Dart, Shared->Physical, Shared->Size, &Shared->Iova);
+
+        if (!NT_SUCCESS(Status))
+        {
+            DbgPrint("applepmp: endpoint %u buffer at %I64x was not mapped for the processor: %lx\n", Endpoint,
+                     Shared->Physical, Status);
+            return FALSE;
+        }
+    }
+    *Iova = Shared->Iova;
     *Virtual = Shared->Virtual;
     *Preassigned = FALSE;
-    DbgPrint("applepmp: endpoint %u gets %lu bytes at %I64x\n", Endpoint, Shared->Size, Shared->Physical);
+    DbgPrint("applepmp: endpoint %u gets %lu bytes at %I64x, device address %I64x\n", Endpoint, Shared->Size,
+             Shared->Physical, Shared->Iova);
     return TRUE;
 }
 
@@ -226,7 +252,14 @@ PmpStop(
     _Inout_ PAPPLE_PMP Pmp)
 {
     Pmp->Running = FALSE;
-    PmpFreeShared(Pmp);
+    if (!Pmp->Coproc ||
+        !(READ_REGISTER_ULONG((volatile ULONG *)(Pmp->Coproc + PMP_CPU_CONTROL)) & PMP_CPU_CONTROL_RUN))
+    {
+        PmpFreeShared(Pmp);
+    }
+    if (Pmp->DartAdopted)
+        AppleDartAdoptedRelease(&Pmp->Dart);
+    Pmp->DartAdopted = FALSE;
     if (Pmp->Sram)
         MmUnmapIoSpace(Pmp->Sram, Pmp->SramSize);
     Pmp->Sram = NULL;
@@ -239,6 +272,35 @@ PmpStop(
     if (Pmp->TreeOpen)
         FdtDriverClose(&Pmp->Tree);
     Pmp->TreeOpen = FALSE;
+}
+
+static
+NTSTATUS
+PmpAdoptDart(
+    _Inout_ PAPPLE_PMP Pmp)
+{
+    const VOID *Iommus;
+    ULONG64 Phandle, Sid;
+    ULONG Length;
+    NTSTATUS Status;
+
+    Iommus = FdtGetProperty(&Pmp->Tree.Fdt, Pmp->Tree.Node, "iommus", &Length);
+    if (!Iommus)
+    {
+        DbgPrint("applepmp: the tree gives the processor no IOMMU, its buffers are given by physical address\n");
+        return STATUS_SUCCESS;
+    }
+    if (!FdtReadCells(Iommus, Length, 0, 1, &Phandle) || !FdtReadCells(Iommus, Length, 1, 1, &Sid))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    Status = AppleDartAdopt(&Pmp->Tree, FdtDriverFindPhandle(&Pmp->Tree, (ULONG)Phandle), (ULONG)Sid,
+                            PMP_DART_WINDOW_BASE, PMP_DART_WINDOW_END, "applepmp", &Pmp->Dart);
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("applepmp: the processor's DART stream %I64u was not adopted: %lx\n", Sid, Status);
+        return Status;
+    }
+    Pmp->DartAdopted = TRUE;
+    return STATUS_SUCCESS;
 }
 
 static
@@ -263,6 +325,10 @@ PmpStart(
     Pmp->Mailbox = FdtDriverMapReg(&Pmp->Tree, MailboxNode, 0, NULL, &Pmp->MailboxSize);
     if (!Pmp->Coproc || !Pmp->Sram || !Pmp->Mailbox)
         return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = PmpAdoptDart(Pmp);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     Pmp->Rtkit.Name = "applepmp";
     Pmp->Rtkit.Mailbox = Pmp->Mailbox;
