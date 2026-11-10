@@ -437,6 +437,9 @@ DWORD netconn_secure_connect( struct netconn *conn, WCHAR *hostname, DWORD secur
         free(conn->ssl_write_buf);
         conn->ssl_write_buf = NULL;
         DeleteSecurityContext(&ctx);
+#ifdef __REACTOS__
+        if (status == SEC_E_OK && res != ERROR_OUTOFMEMORY) return res;
+#endif
         return ERROR_WINHTTP_SECURE_CHANNEL_ERROR;
     }
 
