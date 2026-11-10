@@ -38,6 +38,35 @@ PiIsRemovingRenamedStack(VOID)
     return IopRemovingRenamedStack;
 }
 
+/* The bus driver tells which bus the device sits on and its number there */
+static
+VOID
+PiQueryBusInformation(
+    _Inout_ PDEVICE_NODE DeviceNode)
+{
+    IO_STACK_LOCATION StackLocation;
+    PPNP_BUS_INFORMATION Information = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(&StackLocation, sizeof(StackLocation));
+
+    StackLocation.MajorFunction = IRP_MJ_PNP;
+    StackLocation.MinorFunction = IRP_MN_QUERY_BUS_INFORMATION;
+
+    Status = IopSynchronousCall(DeviceNode->PhysicalDeviceObject,
+                                &StackLocation,
+                                (PVOID *)&Information);
+    if (!NT_SUCCESS(Status) || Information == NULL) return;
+
+    DeviceNode->ChildBusTypeIndex = IopGetBusTypeGuidIndex(&Information->BusTypeGuid);
+    DeviceNode->ChildInterfaceType = Information->LegacyBusType;
+    DeviceNode->ChildBusNumber = Information->BusNumber;
+
+    ExFreePool(Information);
+}
+
 static
 NTSTATUS
 PiIrpQueryId(
@@ -95,7 +124,8 @@ NTSTATUS
 PiBuildInstancePath(
     _In_ PDEVICE_NODE DeviceNode,
     _In_ PWSTR DeviceId,
-    _In_ PWSTR InstanceId)
+    _In_ PWSTR InstanceId,
+    _In_ BOOLEAN UniqueId)
 {
     UNICODE_STRING Prefix;
     UNICODE_STRING Path;
@@ -106,13 +136,14 @@ PiBuildInstancePath(
 
     RtlInitEmptyUnicodeString(&Prefix, NULL, 0);
 
-    if (InstanceId == NULL || *InstanceId == UNICODE_NULL)
+    /* An identifier the bus cannot promise is unique is made so by its parent */
+    if (!UniqueId)
     {
         IopGetParentIdPrefix(DeviceNode, &Prefix);
     }
 
     Length = (USHORT)((wcslen(DeviceId) + 1) * sizeof(WCHAR)) +
-             Prefix.Length +
+             Prefix.Length + sizeof(WCHAR) +
              (USHORT)((InstanceId != NULL)
                           ? wcslen(InstanceId) * sizeof(WCHAR)
                           : 0) +
@@ -135,8 +166,11 @@ PiBuildInstancePath(
     if (Prefix.Length != 0)
     {
         RtlAppendUnicodeStringToString(&Path, &Prefix);
-        ExFreePool(Prefix.Buffer);
+        if (InstanceId != NULL && *InstanceId != UNICODE_NULL)
+            RtlAppendUnicodeToString(&Path, L"&");
     }
+
+    if (Prefix.Buffer != NULL) ExFreePool(Prefix.Buffer);
 
     if (InstanceId != NULL) RtlAppendUnicodeToString(&Path, InstanceId);
 
@@ -194,6 +228,87 @@ PiSaveCapabilities(
     }
 }
 
+/*
+ * Every device belongs to a container: the one its bus names for it, the one
+ * its parent belongs to, or, at the root of the tree, the machine itself.
+ * The GUID of the machine's container is the one Windows uses for it.
+ */
+static
+VOID
+PiSaveContainerId(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ HANDLE InstanceKey)
+{
+    static CONST UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"ContainerID");
+    static CONST GUID MachineContainer =
+        {0x00000000, 0x0000, 0x0000, {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    UNICODE_STRING ContainerId;
+    PDEVICE_NODE Parent;
+    HANDLE ParentKey;
+    PWSTR Queried = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    /* What the bus says about its child comes first */
+    Status = PiIrpQueryId(DeviceNode, BusQueryContainerID, &Queried);
+    if (NT_SUCCESS(Status) && Queried != NULL && Queried[0] != UNICODE_NULL)
+    {
+        RtlInitUnicodeString(&ContainerId, Queried);
+        ZwSetValueKey(InstanceKey,
+                      (PUNICODE_STRING)&ValueName,
+                      0,
+                      REG_SZ,
+                      ContainerId.Buffer,
+                      ContainerId.Length + sizeof(WCHAR));
+        ExFreePool(Queried);
+        return;
+    }
+
+    if (Queried != NULL) ExFreePool(Queried);
+
+    /* Otherwise the device is part of whatever its parent is part of */
+    Parent = DeviceNode->Parent;
+    if (Parent != NULL && Parent->InstancePath.Length != 0 &&
+        NT_SUCCESS(PnpDeviceObjectToDeviceInstance(Parent->PhysicalDeviceObject,
+                                                   &ParentKey,
+                                                   KEY_READ)))
+    {
+        Status = IopGetRegistryValue(ParentKey, L"ContainerID", &Information);
+        ZwClose(ParentKey);
+
+        if (NT_SUCCESS(Status))
+        {
+            if (Information->Type == REG_SZ && Information->DataLength != 0)
+            {
+                ZwSetValueKey(InstanceKey,
+                              (PUNICODE_STRING)&ValueName,
+                              0,
+                              REG_SZ,
+                              (PUCHAR)Information + Information->DataOffset,
+                              Information->DataLength);
+                ExFreePool(Information);
+                return;
+            }
+
+            ExFreePool(Information);
+        }
+    }
+
+    Status = RtlStringFromGUID(&MachineContainer, &ContainerId);
+    if (!NT_SUCCESS(Status)) return;
+
+    ZwSetValueKey(InstanceKey,
+                  (PUNICODE_STRING)&ValueName,
+                  0,
+                  REG_SZ,
+                  ContainerId.Buffer,
+                  ContainerId.Length + sizeof(WCHAR));
+
+    RtlFreeUnicodeString(&ContainerId);
+}
+
 static
 NTSTATUS
 PiQueryAndSaveIds(
@@ -204,6 +319,9 @@ PiQueryAndSaveIds(
     PWSTR InstanceId = NULL;
     PWSTR HardwareIds = NULL;
     PWSTR CompatibleIds = NULL;
+    DEVICE_CAPABILITIES Capabilities;
+    BOOLEAN HaveCapabilities;
+    BOOLEAN UniqueId;
     UNICODE_STRING KeyPath;
     NTSTATUS Status;
     HANDLE EnumKey;
@@ -224,7 +342,14 @@ PiQueryAndSaveIds(
     Status = PiIrpQueryId(DeviceNode, BusQueryInstanceID, &InstanceId);
     if (!NT_SUCCESS(Status)) InstanceId = NULL;
 
-    Status = PiBuildInstancePath(DeviceNode, DeviceId, InstanceId);
+    UniqueId = FALSE;
+    HaveCapabilities = NT_SUCCESS(IopQueryDeviceCapabilities(DeviceNode, &Capabilities));
+    if (HaveCapabilities)
+    {
+        UniqueId = (BOOLEAN)Capabilities.UniqueID;
+    }
+
+    Status = PiBuildInstancePath(DeviceNode, DeviceId, InstanceId, UniqueId);
 
     if (InstanceId != NULL) ExFreePool(InstanceId);
     ExFreePool(DeviceId);
@@ -254,6 +379,8 @@ PiQueryAndSaveIds(
 
     if (!NT_SUCCESS(Status)) return Status;
 
+    if (HaveCapabilities) PiSaveCapabilities(EnumKey, &Capabilities);
+
     Status = PiIrpQueryId(DeviceNode, BusQueryHardwareIDs, &HardwareIds);
     if (NT_SUCCESS(Status) && HardwareIds != NULL)
     {
@@ -267,6 +394,13 @@ PiQueryAndSaveIds(
         PiSetMultiSzValue(EnumKey, L"CompatibleIDs", CompatibleIds);
         ExFreePool(CompatibleIds);
     }
+
+    PiSaveContainerId(DeviceNode, EnumKey);
+
+    /* A device the registry knows no driver for is configured from the driver database */
+    IopConfigureDeviceFromDriverDatabase(DeviceNode);
+
+    PiQueryBusInformation(DeviceNode);
 
     PiSetDevNodeText(DeviceNode, EnumKey);
     IopSetDeviceInstanceData(EnumKey, DeviceNode);
@@ -667,7 +801,7 @@ PiDevNodeAddDrivers(
         if (!NT_SUCCESS(Status)) return;
     }
 
-    Status = IopConfigureDeviceFromDriverDatabase(DeviceNode, InstanceKey);
+    Status = PiAttachDeviceDrivers(DeviceNode, InstanceKey);
 
     ZwClose(InstanceKey);
 
@@ -722,6 +856,11 @@ PiProcessStartDevice(
     IopUpdateResourceMapForPnPDevice(DeviceNode);
 
     PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
+
+    InbvIndicateProgress();
+
+    /* A device that just started is asked for its children */
+    PiSetDevNodeFlag(DeviceNode, DNF_REENUMERATE);
 
     IopQueueDeviceInstallEvent(&GUID_DEVICE_ARRIVAL,
                                &DeviceNode->InstancePath);
@@ -946,6 +1085,10 @@ PiRunDeviceAction(
         switch (Request->Action)
         {
             case PiActionEnumRootDevices:
+                PiSetDevNodeFlag(DeviceNode, DNF_REENUMERATE);
+                PiDevNodeStateMachine(DeviceNode);
+                break;
+
             case PiActionEnumDeviceTree:
                 PiDevNodeStateMachine(DeviceNode);
                 break;
