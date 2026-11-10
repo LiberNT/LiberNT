@@ -279,3 +279,28 @@ NTSTATUS
 NTAPI
 AppleAgxMapRegisters(
     _Inout_ PAPPLE_AGX_INIT Init);
+
+/* The two operating point tables the firmware runs the graphics block by, built from the
+ * performance states the machine publishes. Each table names nine of them. */
+#define APPLE_AGX_DVFS_STATES           9
+#define APPLE_AGX_HWDATA_CHECK_A38      0xa38
+#define APPLE_AGX_HWDATA_DVFS_MHZ_A     0xb5c
+#define APPLE_AGX_HWDATA_DVFS_MHZ_B     0xf9c
+#define APPLE_AGX_HWDATA_DVFS_MHZ_B2    0x1350
+#define APPLE_AGX_HWDATA_DVFS_CORE_MV   0xb9c
+#define APPLE_AGX_HWDATA_DVFS_SRAM_MV   0xd9c
+#define APPLE_AGX_HWDATA_DVFS_STRIDE    0x20
+#define APPLE_AGX_HWDATA_DVFS_REPEAT    8
+#define APPLE_AGX_HWDATA_TOP_MHZ        0x4dc4
+
+const UCHAR *
+NTAPI
+AppleAgxDvfsStates(
+    _In_ BOOLEAN Second);
+
+NTSTATUS
+NTAPI
+AppleAgxWriteStates(
+    _Inout_ PAPPLE_AGX_INIT Init,
+    _In_ const APPLE_AGX_DESCRIPTION *Description,
+    _Out_ PULONG TopKilohertz);

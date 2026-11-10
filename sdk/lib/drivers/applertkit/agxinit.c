@@ -8,6 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
+#include <reactos/drivers/appleadt.h>
 #include <reactos/drivers/appleuat.h>
 #include <reactos/drivers/appleagxinit.h>
 
@@ -558,5 +559,77 @@ AppleAgxMapRegisters(
         AgxWriteLong(Hwdata, Record + APPLE_AGX_IOMAP_WRITABLE, 1);
     }
     KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+/* Each table takes nine of the machine's performance states, and the two take different ones. */
+static const UCHAR AgxDvfsA[APPLE_AGX_DVFS_STATES] = { 0, 1, 2, 3, 5, 7, 9, 11, 13 };
+static const UCHAR AgxDvfsB[APPLE_AGX_DVFS_STATES] = { 0, 1, 2, 3, 4, 6, 8, 10, 12 };
+
+const UCHAR *
+NTAPI
+AppleAgxDvfsStates(
+    _In_ BOOLEAN Second)
+{
+    return Second ? AgxDvfsB : AgxDvfsA;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxWriteStates(
+    _Inout_ PAPPLE_AGX_INIT Init,
+    _In_ const APPLE_AGX_DESCRIPTION *Description,
+    _Out_ PULONG TopKilohertz)
+{
+    PVOID Hwdata = Init->Virtual[APPLE_AGX_OBJECT_HWDATA];
+    ULONG State, Repeat, Top;
+
+    *TopKilohertz = 0;
+    if (!Hwdata)
+        return STATUS_INVALID_DEVICE_STATE;
+    for (State = 0; State < APPLE_AGX_DVFS_STATES; ++State)
+    {
+        if (AgxDvfsA[State] >= Description->States || AgxDvfsB[State] >= Description->States)
+            return STATUS_INVALID_PARAMETER;
+    }
+    /* The firmware steps through these in order, so a table that does not rise is refused. */
+    for (State = 1; State < APPLE_AGX_DVFS_STATES; ++State)
+    {
+        const APPLE_AGX_STATE *A = &Description->State[AgxDvfsA[State]];
+        const APPLE_AGX_STATE *PreviousA = &Description->State[AgxDvfsA[State - 1]];
+        const APPLE_AGX_STATE *B = &Description->State[AgxDvfsB[State]];
+        const APPLE_AGX_STATE *PreviousB = &Description->State[AgxDvfsB[State - 1]];
+
+        if (A->Frequency <= PreviousA->Frequency || B->Frequency <= PreviousB->Frequency ||
+            A->Millivolts < PreviousA->Millivolts ||
+            Description->SramState[AgxDvfsA[State]].Millivolts <
+                Description->SramState[AgxDvfsA[State - 1]].Millivolts)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
+    for (State = 0; State < APPLE_AGX_DVFS_STATES; ++State)
+    {
+        ULONG A = AgxDvfsA[State], B = AgxDvfsB[State];
+        ULONG MegahertzA = Description->State[A].Frequency / 1000000;
+        ULONG MegahertzB = Description->State[B].Frequency / 1000000;
+
+        AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_DVFS_MHZ_A + 4 * State, MegahertzA);
+        AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_DVFS_MHZ_B + 4 * State, MegahertzB);
+        AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_DVFS_MHZ_B2 + 4 * State, MegahertzB);
+        for (Repeat = 0; Repeat < APPLE_AGX_HWDATA_DVFS_REPEAT; ++Repeat)
+        {
+            AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_DVFS_CORE_MV + APPLE_AGX_HWDATA_DVFS_STRIDE * State +
+                                     4 * Repeat, Description->State[A].Millivolts);
+            AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_DVFS_SRAM_MV + APPLE_AGX_HWDATA_DVFS_STRIDE * State +
+                                     4 * Repeat, Description->SramState[A].Millivolts);
+        }
+    }
+    Top = Description->State[AgxDvfsA[APPLE_AGX_DVFS_STATES - 1]].Frequency / 1000000;
+    AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_TOP_MHZ, Top);
+    AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_CHECK_A38, 1);
+    AgxWriteLong(Hwdata, APPLE_AGX_HWDATA_DVFS_COUNT, APPLE_AGX_DVFS_STATES - 1);
+    KeMemoryBarrier();
+    *TopKilohertz = Top * 1000;
     return STATUS_SUCCESS;
 }

@@ -80,6 +80,8 @@ typedef struct _APPLE_AGX
     PVOID AdtCopy;
     ULONG AdtLength;
     APPLE_ADT Adt;
+    APPLE_AGX_DESCRIPTION Description;
+    BOOLEAN Described;
     PUCHAR Mailbox;
     ULONG MailboxSize;
     APPLE_RTKIT Rtkit;
@@ -237,6 +239,8 @@ AgxReadAdt(
         DbgPrint("appleagx: the machine's tree does not describe the graphics processor: %lx\n", Status);
         return FALSE;
     }
+    Agx->Description = Description;
+    Agx->Described = TRUE;
     for (Index = 0; Index < APPLE_AGX_REGIONS; ++Index)
     {
         Agx->RegionBase[Index] = Description.RegionBase[Index];
@@ -539,6 +543,16 @@ AgxHandInitialData(
     {
         DbgPrint("appleagx: the initial data was not written: %lx\n", Status);
         return Status;
+    }
+    if (Agx->Described)
+    {
+        ULONG Top = 0;
+
+        Status = AppleAgxWriteStates(&Agx->Init, &Agx->Description, &Top);
+        DbgPrint("appleagx: %lu operating points of %lu, up to %lu kHz: %lx\n", APPLE_AGX_DVFS_STATES,
+                 Agx->Description.States, Top, Status);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
     Status = AppleAgxMapRegisters(&Agx->Init);
     if (!NT_SUCCESS(Status))

@@ -2855,6 +2855,83 @@ TestAgxRegisters(VOID)
 
 static
 VOID
+TestAgxStates(VOID)
+{
+    APPLE_AGX_DESCRIPTION Description;
+    APPLE_AGX_INIT Init;
+    PVOID Hwdata;
+    ULONG Index, Top = 0, Repeat;
+
+    /* The nine states each table names, and that they are not the same nine. */
+    ok(AppleAgxDvfsStates(FALSE)[0] == 0 && AppleAgxDvfsStates(FALSE)[4] == 5 &&
+       AppleAgxDvfsStates(FALSE)[8] == 13, "The first table names %u/%u/%u\n",
+       AppleAgxDvfsStates(FALSE)[0], AppleAgxDvfsStates(FALSE)[4], AppleAgxDvfsStates(FALSE)[8]);
+    ok(AppleAgxDvfsStates(TRUE)[4] == 4 && AppleAgxDvfsStates(TRUE)[8] == 12,
+       "The second table names %u/%u\n", AppleAgxDvfsStates(TRUE)[4], AppleAgxDvfsStates(TRUE)[8]);
+
+    RtlZeroMemory(&Description, sizeof(Description));
+    Description.States = 14;
+    for (Index = 0; Index < Description.States; ++Index)
+    {
+        Description.State[Index].Frequency = (Index + 1) * 100000000;
+        Description.State[Index].Millivolts = 600 + Index * 10;
+        Description.SramState[Index].Millivolts = 800 + Index * 5;
+    }
+    RtlZeroMemory(&Init, sizeof(Init));
+    Hwdata = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, APPLE_AGX_HWDATA_SIZE);
+    Init.Virtual[APPLE_AGX_OBJECT_HWDATA] = Hwdata;
+    ok(Hwdata != NULL, "The hardware description was not simulated\n");
+    if (!Hwdata)
+        return;
+
+    ok_hex(AppleAgxWriteStates(&Init, &Description, &Top), STATUS_SUCCESS);
+    /* The top state of the first table is state 13: 1400 MHz. */
+    ok_int(Top, 1400000);
+    ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_TOP_MHZ), 1400);
+    ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_DVFS_COUNT), APPLE_AGX_DVFS_STATES - 1);
+    ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_CHECK_A38), 1);
+
+    AgxInitBuffers[APPLE_AGX_OBJECT_HWDATA] = Hwdata;
+    for (Index = 0; Index < APPLE_AGX_DVFS_STATES; ++Index)
+    {
+        ULONG A = AppleAgxDvfsStates(FALSE)[Index], B = AppleAgxDvfsStates(TRUE)[Index];
+
+        ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_DVFS_MHZ_A + 4 * Index), (A + 1) * 100);
+        ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_DVFS_MHZ_B + 4 * Index), (B + 1) * 100);
+        ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_DVFS_MHZ_B2 + 4 * Index), (B + 1) * 100);
+        /* One voltage per state, written into all eight of the state's cells. */
+        for (Repeat = 0; Repeat < APPLE_AGX_HWDATA_DVFS_REPEAT; ++Repeat)
+        {
+            ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_DVFS_CORE_MV +
+                                                        APPLE_AGX_HWDATA_DVFS_STRIDE * Index + 4 * Repeat),
+                   600 + A * 10);
+            ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_DVFS_SRAM_MV +
+                                                        APPLE_AGX_HWDATA_DVFS_STRIDE * Index + 4 * Repeat),
+                   800 + A * 5);
+        }
+    }
+
+    /* A machine whose states do not rise, or has too few of them, is refused. */
+    Description.State[5].Frequency = Description.State[3].Frequency;
+    ok_hex(AppleAgxWriteStates(&Init, &Description, &Top), STATUS_INVALID_PARAMETER);
+    ok_int(Top, 0);
+    Description.State[5].Frequency = 600000000;
+    Description.SramState[5].Millivolts = 1;
+    ok_hex(AppleAgxWriteStates(&Init, &Description, &Top), STATUS_INVALID_PARAMETER);
+    Description.SramState[5].Millivolts = 825;
+    Description.States = 13;
+    ok_hex(AppleAgxWriteStates(&Init, &Description, &Top), STATUS_INVALID_PARAMETER);
+    Description.States = 14;
+    ok_hex(AppleAgxWriteStates(&Init, &Description, &Top), STATUS_SUCCESS);
+    Init.Virtual[APPLE_AGX_OBJECT_HWDATA] = NULL;
+    ok_hex(AppleAgxWriteStates(&Init, &Description, &Top), STATUS_INVALID_DEVICE_STATE);
+
+    HeapFree(GetProcessHeap(), 0, Hwdata);
+    AgxInitBuffers[APPLE_AGX_OBJECT_HWDATA] = NULL;
+}
+
+static
+VOID
 TestSpmi(VOID)
 {
     static const UCHAR Offset[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 };
@@ -3990,6 +4067,7 @@ START_TEST(AppleSoc)
     TestAgxInitWrite();
     TestAgxRing();
     TestAgxRegisters();
+    TestAgxStates();
     TestSpmi();
     TestAtcphy();
     TestPcie();
