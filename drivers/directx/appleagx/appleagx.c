@@ -1256,6 +1256,55 @@ AgxQueueDestroy(
     return STATUS_SUCCESS;
 }
 
+/* A timestamp buffer is bound for the firmware to write the times a command asks for; the object
+ * stays alive for as long as it is bound. */
+static
+NTSTATUS
+AgxBindObject(
+    _Inout_ PAGX_CLIENT Client,
+    _Inout_ PDRM_ASAHI_GEM_BIND_OBJECT Bind)
+{
+    PAGX_OBJECT Object;
+    PAGX_BOUND Bound;
+    ULONG64 Address;
+    ULONG Index;
+    NTSTATUS Status;
+
+    if (Bind->Pad || Bind->VmId)
+        return STATUS_INVALID_PARAMETER;
+    if (Bind->Op == DRM_ASAHI_BIND_OBJECT_OP_UNBIND)
+    {
+        if (!Bind->ObjectHandle || Bind->ObjectHandle > AGX_MAX_BOUND || !Client->Bound[Bind->ObjectHandle - 1].Object)
+            return STATUS_INVALID_PARAMETER;
+        Bound = &Client->Bound[Bind->ObjectHandle - 1];
+        AgxEngineUnmapArena(Client->Agx, Bound->Address, Bound->Range);
+        AgxObjectReference(Bound->Object, -1);
+        RtlZeroMemory(Bound, sizeof(*Bound));
+        return STATUS_SUCCESS;
+    }
+    Object = AgxClientObject(Client, Bind->Handle);
+    if (Bind->Op != DRM_ASAHI_BIND_OBJECT_OP_BIND || Bind->Flags != DRM_ASAHI_BIND_OBJECT_USAGE_TIMESTAMPS ||
+        !Object || (Object->Flags & DRM_ASAHI_GEM_VM_PRIVATE) || !Bind->Range ||
+        ((Bind->Offset | Bind->Range) & (APPLE_UAT_PAGE_SIZE - 1)) || Bind->Offset >= Object->Size ||
+        Bind->Range > Object->Size - Bind->Offset)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    for (Index = 0; Index < AGX_MAX_BOUND && Client->Bound[Index].Object; ++Index)
+        ;
+    if (Index == AGX_MAX_BOUND)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = AgxEngineMapArena(Client->Agx, Object->Mdl, Bind->Offset, Bind->Range, &Address);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    AgxObjectReference(Object, 1);
+    Client->Bound[Index].Object = Object;
+    Client->Bound[Index].Address = Address;
+    Client->Bound[Index].Range = Bind->Range;
+    Bind->ObjectHandle = Index + 1;
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 AgxClientControl(
@@ -1282,6 +1331,7 @@ AgxClientControl(
         case IOCTL_APPLE_AGX_QUEUE_CREATE: Size = sizeof(DRM_ASAHI_QUEUE_CREATE); break;
         case IOCTL_APPLE_AGX_QUEUE_DESTROY: Size = sizeof(DRM_ASAHI_QUEUE_DESTROY); break;
         case IOCTL_APPLE_AGX_SUBMIT: Size = sizeof(DRM_ASAHI_SUBMIT); break;
+        case IOCTL_APPLE_AGX_GEM_BIND_OBJECT: Size = sizeof(DRM_ASAHI_GEM_BIND_OBJECT); break;
         default: return STATUS_INVALID_DEVICE_REQUEST;
     }
     if (InputLength < Size)
@@ -1318,6 +1368,9 @@ AgxClientControl(
             break;
         case IOCTL_APPLE_AGX_SUBMIT:
             Status = AgxSubmitCommands(Client->Agx, Client, Buffer, InputLength);
+            break;
+        case IOCTL_APPLE_AGX_GEM_BIND_OBJECT:
+            Status = AgxBindObject(Client, Buffer);
             break;
         default:
             Status = AgxVmBind(Client, Buffer, InputLength);
@@ -1376,6 +1429,15 @@ AgxCleanup(
     if (Client)
     {
         ExAcquireFastMutex(&Client->Lock);
+        for (Index = 0; Index < AGX_MAX_BOUND; ++Index)
+        {
+            if (Client->Bound[Index].Object)
+            {
+                AgxEngineUnmapArena(Client->Agx, Client->Bound[Index].Address, Client->Bound[Index].Range);
+                AgxObjectReference(Client->Bound[Index].Object, -1);
+                RtlZeroMemory(&Client->Bound[Index], sizeof(Client->Bound[Index]));
+            }
+        }
         for (Index = 0; Index < AGX_MAX_OBJECTS; ++Index)
         {
             if (Client->Object[Index])

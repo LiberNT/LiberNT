@@ -508,6 +508,142 @@ AgxEngineRelease(
 }
 
 static
+BOOLEAN
+AgxArenaTest(
+    _In_ PAGX_ENGINE Engine,
+    _In_ ULONG Page)
+{
+    return (Engine->Arena[Page / 8] & (1 << (Page % 8))) != 0;
+}
+
+static
+VOID
+AgxArenaSet(
+    _Inout_ PAGX_ENGINE Engine,
+    _In_ ULONG First,
+    _In_ ULONG Count,
+    _In_ BOOLEAN Used)
+{
+    ULONG Page;
+
+    for (Page = First; Page < First + Count; ++Page)
+    {
+        if (Used)
+            Engine->Arena[Page / 8] |= (UCHAR)(1 << (Page % 8));
+        else
+            Engine->Arena[Page / 8] &= (UCHAR)~(1 << (Page % 8));
+    }
+}
+
+/* A timestamp buffer is mapped into the firmware's timestamp arena, which the firmware writes the
+ * requested start and end times into. */
+NTSTATUS
+AgxEngineMapArena(
+    _Inout_ PAPPLE_AGX Agx,
+    _In_ PMDL Mdl,
+    _In_ ULONG64 Offset,
+    _In_ ULONG64 Range,
+    _Out_ PULONG64 Address)
+{
+    PAGX_ENGINE Engine = &Agx->Engine;
+    PPFN_NUMBER Frames = MmGetMdlPfnArray(Mdl);
+    APPLE_UAT_PROTECTION Protection;
+    ULONG Pages = (ULONG)(Range / APPLE_UAT_PAGE_SIZE), First, Page;
+    ULONG64 At;
+    NTSTATUS Status = STATUS_NO_MEMORY;
+
+    *Address = 0;
+    if (!Range || ((Offset | Range) & (APPLE_UAT_PAGE_SIZE - 1)) || Range > APPLE_AGX_TIMESTAMPS_SIZE)
+        return STATUS_INVALID_PARAMETER;
+    ExAcquireFastMutex(&Engine->Lock);
+    if (!Engine->Ready)
+    {
+        ExReleaseFastMutex(&Engine->Lock);
+        return STATUS_DEVICE_NOT_READY;
+    }
+    for (First = 0; First + Pages <= AGX_ARENA_PAGES; ++First)
+    {
+        for (Page = 0; Page < Pages && !AgxArenaTest(Engine, First + Page); ++Page)
+            ;
+        if (Page == Pages)
+            break;
+        First += Page;
+    }
+    if (First + Pages <= AGX_ARENA_PAGES)
+    {
+        AppleAgxClassProtection(APPLE_AGX_CLASS_SHARED, &Protection);
+        At = APPLE_AGX_TIMESTAMP_ARENA + (ULONG64)First * APPLE_UAT_PAGE_SIZE;
+        for (Page = 0; Page < Pages; ++Page)
+        {
+            Status = AppleUatAdoptedMap(&Agx->Adopted, At + (ULONG64)Page * APPLE_UAT_PAGE_SIZE,
+                                        (ULONG64)Frames[(Offset + (ULONG64)Page * APPLE_UAT_PAGE_SIZE) >> PAGE_SHIFT]
+                                            << PAGE_SHIFT,
+                                        APPLE_UAT_PAGE_SIZE, &Protection);
+            if (!NT_SUCCESS(Status))
+                break;
+        }
+        if (NT_SUCCESS(Status))
+        {
+            AgxArenaSet(Engine, First, Pages, TRUE);
+            *Address = At;
+        }
+        else if (Page)
+        {
+            AppleUatUnmap(&Agx->Adopted.Host, At, (SIZE_T)Page * APPLE_UAT_PAGE_SIZE);
+        }
+    }
+    ExReleaseFastMutex(&Engine->Lock);
+    return Status;
+}
+
+/* Nothing the firmware may still write is unmapped: every submission has completed before the
+ * client lock that guards an unbind is released. */
+VOID
+AgxEngineUnmapArena(
+    _Inout_ PAPPLE_AGX Agx,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Range)
+{
+    PAGX_ENGINE Engine = &Agx->Engine;
+
+    ASSERT(Address >= APPLE_AGX_TIMESTAMP_ARENA && Range &&
+           Address - APPLE_AGX_TIMESTAMP_ARENA + Range <= APPLE_AGX_TIMESTAMPS_SIZE);
+    ExAcquireFastMutex(&Engine->Lock);
+    if (Engine->Ready)
+    {
+        AppleUatUnmap(&Agx->Adopted.Host, Address, (SIZE_T)Range);
+        AppleUatInvalidateAll();
+        AgxArenaSet(Engine, (ULONG)((Address - APPLE_AGX_TIMESTAMP_ARENA) / APPLE_UAT_PAGE_SIZE),
+                    (ULONG)(Range / APPLE_UAT_PAGE_SIZE), FALSE);
+    }
+    ExReleaseFastMutex(&Engine->Lock);
+}
+
+static
+NTSTATUS
+AgxResolveTimestamp(
+    _In_ PAGX_CLIENT Client,
+    _In_ const DRM_ASAHI_TIMESTAMP *Timestamp,
+    _Out_ PULONG64 Address)
+{
+    const AGX_BOUND *Bound;
+
+    *Address = 0;
+    if (!Timestamp->Handle)
+        return STATUS_SUCCESS;
+    if (Timestamp->Handle > AGX_MAX_BOUND)
+        return STATUS_INVALID_PARAMETER;
+    Bound = &Client->Bound[Timestamp->Handle - 1];
+    if (!Bound->Object || (Timestamp->Offset % 8) || Timestamp->Offset >= Bound->Range ||
+        Bound->Range - Timestamp->Offset < 8)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    *Address = Bound->Address + Timestamp->Offset;
+    return STATUS_SUCCESS;
+}
+
+static
 VOID
 AgxSleep(VOID)
 {
@@ -668,7 +804,8 @@ NTSTATUS
 AgxRunRender(
     _Inout_ PAPPLE_AGX Agx,
     _In_ const DRM_ASAHI_CMD_RENDER *Command,
-    _In_ ULONG64 UscBase)
+    _In_ ULONG64 UscBase,
+    _In_reads_(4) const ULONG64 *UserTimestamps)
 {
     PAGX_ENGINE Engine = &Agx->Engine;
     PAPPLE_AGX_OBJECT Item = Engine->Item;
@@ -739,7 +876,10 @@ AgxRunRender(
     Job.Preempt[2] = Item[AgxPassPre2].Client;
     Job.PageCount = APPLE_AGX_PB_PAGES_PER_BLOCK * APPLE_AGX_PB_INITIAL_BLOCKS;
     Job.QueueCommands = (ULONG)(Ordinal - 1);
-    /* TODO: the start and end timestamps a render asks for are not written. */
+    Job.UserTimestamps[0][0] = UserTimestamps[0];
+    Job.UserTimestamps[0][1] = UserTimestamps[1];
+    Job.UserTimestamps[1][0] = UserTimestamps[2];
+    Job.UserTimestamps[1][1] = UserTimestamps[3];
     Status = AppleAgxBuildRender(&Job, &Render, Engine->Context, Ordinal);
     if (NT_SUCCESS(Status))
     {
@@ -799,7 +939,8 @@ AgxRunCompute(
     _Inout_ PAPPLE_AGX Agx,
     _In_ const DRM_ASAHI_CMD_COMPUTE *Command,
     _In_reads_(Attachments) const APPLE_AGX_ATTACHMENT *Attachment,
-    _In_ ULONG Attachments)
+    _In_ ULONG Attachments,
+    _In_reads_(2) const ULONG64 *UserTimestamps)
 {
     PAGX_ENGINE Engine = &Agx->Engine;
     PAPPLE_AGX_OBJECT Item = Engine->Item;
@@ -842,7 +983,8 @@ AgxRunCompute(
     Refs.Tail = Item[AgxSlotTail].Address;
     Refs.Preempt = Item[AgxSlotPreempt].Client;
     Refs.StreamEnd = Command->CdmCtrlStreamEnd;
-    /* TODO: the start and end timestamps a compute command asks for are not written. */
+    Refs.UserTimestamps[0] = UserTimestamps[0];
+    Refs.UserTimestamps[1] = UserTimestamps[1];
     Status = AppleAgxEncodeComputeWork(Item[AgxSlotWork].Virtual, &Refs, Register, Engine->Context, (ULONG)Ordinal,
                                        Stamp);
     if (NT_SUCCESS(Status))
@@ -948,11 +1090,13 @@ static
 NTSTATUS
 AgxRunStream(
     _Inout_ PAPPLE_AGX Agx,
+    _In_ PAGX_CLIENT Client,
     _In_reads_bytes_(Length) const VOID *Stream,
     _In_ ULONG Length,
     _In_ ULONG64 UscBase)
 {
     APPLE_AGX_ATTACHMENT Attachment[APPLE_AGX_MAX_ATTACHMENTS];
+    ULONG64 Timestamps[4];
     DRM_ASAHI_ATTACHMENT Source;
     DRM_ASAHI_CMD_RENDER Render;
     DRM_ASAHI_CMD_COMPUTE Compute;
@@ -976,12 +1120,24 @@ AgxRunStream(
             case DRM_ASAHI_CMD_TYPE_RENDER:
                 RtlZeroMemory(&Render, sizeof(Render));
                 RtlCopyMemory(&Render, Command.Payload, min(Command.Size, sizeof(Render)));
-                Status = AgxRunRender(Agx, &Render, UscBase);
+                Status = AgxResolveTimestamp(Client, &Render.TsVtx.Start, &Timestamps[0]);
+                if (NT_SUCCESS(Status))
+                    Status = AgxResolveTimestamp(Client, &Render.TsVtx.End, &Timestamps[1]);
+                if (NT_SUCCESS(Status))
+                    Status = AgxResolveTimestamp(Client, &Render.TsFrag.Start, &Timestamps[2]);
+                if (NT_SUCCESS(Status))
+                    Status = AgxResolveTimestamp(Client, &Render.TsFrag.End, &Timestamps[3]);
+                if (NT_SUCCESS(Status))
+                    Status = AgxRunRender(Agx, &Render, UscBase, Timestamps);
                 break;
             case DRM_ASAHI_CMD_TYPE_COMPUTE:
                 RtlZeroMemory(&Compute, sizeof(Compute));
                 RtlCopyMemory(&Compute, Command.Payload, min(Command.Size, sizeof(Compute)));
-                Status = AgxRunCompute(Agx, &Compute, Attachment, Attachments);
+                Status = AgxResolveTimestamp(Client, &Compute.Ts.Start, &Timestamps[0]);
+                if (NT_SUCCESS(Status))
+                    Status = AgxResolveTimestamp(Client, &Compute.Ts.End, &Timestamps[1]);
+                if (NT_SUCCESS(Status))
+                    Status = AgxRunCompute(Agx, &Compute, Attachment, Attachments, Timestamps);
                 break;
             default:
                 break;
@@ -1033,7 +1189,7 @@ AgxSubmitCommands(
     if (NT_SUCCESS(Status))
     {
         Engine->Context = Vm->Slot;
-        Status = AgxRunStream(Agx, Stream, Submit->CmdbufSize, Queue->UscBase);
+        Status = AgxRunStream(Agx, Client, Stream, Submit->CmdbufSize, Queue->UscBase);
         Unbound = AppleUatAdoptedUnbindSlot(&Agx->Adopted, Vm->Slot);
         ASSERT(NT_SUCCESS(Unbound));
         Engine->Context = 0;

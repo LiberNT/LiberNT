@@ -32,6 +32,8 @@
 #define AGX_CHANNEL_FS              1
 #define AGX_CHANNEL_COMPUTE         2
 #define AGX_CHANNELS                3
+#define AGX_MAX_BOUND               64
+#define AGX_ARENA_PAGES             (APPLE_AGX_TIMESTAMPS_SIZE / APPLE_UAT_PAGE_SIZE)
 
 typedef struct _AGX_OBJECT
 {
@@ -61,6 +63,13 @@ typedef struct _AGX_QUEUE
     ULONG64 UscBase;
 } AGX_QUEUE, *PAGX_QUEUE;
 
+typedef struct _AGX_BOUND
+{
+    PAGX_OBJECT Object;
+    ULONG64 Address;
+    ULONG64 Range;
+} AGX_BOUND, *PAGX_BOUND;
+
 typedef struct _AGX_CLIENT
 {
     FAST_MUTEX Lock;
@@ -69,6 +78,7 @@ typedef struct _AGX_CLIENT
     PAGX_VM Vm[AGX_MAX_VMS];
     PAGX_OBJECT Object[AGX_MAX_OBJECTS];
     PAGX_QUEUE Queue[AGX_MAX_QUEUES];
+    AGX_BOUND Bound[AGX_MAX_BOUND];
 } AGX_CLIENT, *PAGX_CLIENT;
 
 typedef struct _AGX_SHARED
@@ -187,6 +197,7 @@ struct _AGX_ENGINE
     ULONG Errors;
     ULONG LastError[APPLE_AGX_RECORD_WORDS];
     ULONG Context;
+    UCHAR Arena[AGX_ARENA_PAGES / 8];
 };
 
 typedef struct _APPLE_AGX
@@ -261,6 +272,20 @@ AgxEngineEvent(
 VOID
 AgxEngineRelease(
     _Inout_ PAGX_VM Vm);
+
+NTSTATUS
+AgxEngineMapArena(
+    _Inout_ PAPPLE_AGX Agx,
+    _In_ PMDL Mdl,
+    _In_ ULONG64 Offset,
+    _In_ ULONG64 Range,
+    _Out_ PULONG64 Address);
+
+VOID
+AgxEngineUnmapArena(
+    _Inout_ PAPPLE_AGX Agx,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Range);
 
 NTSTATUS
 AgxSubmitCommands(
