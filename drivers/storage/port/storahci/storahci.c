@@ -2644,7 +2644,7 @@ AhciHwUnitControl(
  */
 ULONG NTAPI DriverEntry(__in PVOID DriverObject, __in PVOID RegistryPath)
 {
-    ULONG status;
+    ULONG pciStatus, acpiStatus;
     // initialize the hardware data structure
     HW_INITIALIZATION_DATA hwInitializationData = {0};
 
@@ -2674,25 +2674,26 @@ ULONG NTAPI DriverEntry(__in PVOID DriverObject, __in PVOID RegistryPath)
     hwInitializationData.DeviceExtensionSize = sizeof(AHCI_ADAPTER_EXTENSION);
 
     // register our hw init data
-    status = StorPortInitialize(DriverObject,
-                                RegistryPath,
-                                &hwInitializationData,
-                                NULL);
+    pciStatus = StorPortInitialize(DriverObject,
+                                   RegistryPath,
+                                   &hwInitializationData,
+                                   NULL);
 
-    NT_ASSERT(status == STATUS_SUCCESS);
-    if (status != STATUS_SUCCESS)
-        return status;
-
+    /* TODO: only the first memory range is requested; an ACPI adapter whose ABAR is not its first range will not start */
     hwInitializationData.NumberOfAccessRanges = 1;
     hwInitializationData.AdapterInterfaceType = ACPIBus;
 
-    status = StorPortInitialize(DriverObject,
-                                RegistryPath,
-                                &hwInitializationData,
-                                NULL);
+    acpiStatus = StorPortInitialize(DriverObject,
+                                    RegistryPath,
+                                    &hwInitializationData,
+                                    NULL);
 
-    NT_ASSERT(status == STATUS_SUCCESS);
-    return status;
+    /* Invalid initialization data is a bug here; a failed allocation is not */
+    NT_ASSERT(pciStatus != STATUS_INVALID_PARAMETER && pciStatus != STATUS_REVISION_MISMATCH);
+    NT_ASSERT(acpiStatus != STATUS_INVALID_PARAMETER && acpiStatus != STATUS_REVISION_MISMATCH);
+
+    // one registered bus type is enough to drive the adapters on it
+    return (pciStatus == STATUS_SUCCESS) ? pciStatus : acpiStatus;
 }// -- DriverEntry();
 
 /**
