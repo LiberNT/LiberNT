@@ -330,6 +330,30 @@ MiSegmentChargeCommit(
 }
 
 static
+MI_PTE
+MiSegmentSettledOriginalPte(
+    _In_ PMI_SYSTEM System,
+    _In_ ULONG Frame,
+    _In_ PMI_PTE Proto)
+{
+    PMI_PFN Entry = &System->Pfn.Pfn[Frame];
+
+    for (;;)
+    {
+        KIRQL OldIrql = MiPfnLock(&System->Pfn, Frame);
+        MI_PTE OriginalPte = Entry->OriginalPte;
+        BOOLEAN Busy = (BOOLEAN)((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_IN_FLIGHT) != 0);
+
+        MI_ASSERT(Entry->PteAddress == (ULONG64)(ULONG_PTR)Proto);
+        MI_ASSERT(Entry->State == MiPageActive && Entry->ReferenceCount != 0);
+        MiPfnUnlock(&System->Pfn, Frame, OldIrql);
+        if (!Busy)
+            return OriginalPte;
+        MI_PAUSE();
+    }
+}
+
+static
 VOID
 MiSegmentDiscardPage(
     _Inout_ PMI_SEGMENT Segment,
@@ -341,6 +365,7 @@ MiSegmentDiscardPage(
     {
         MI_PTE Pte = MiArchPteRead(Proto);
         MI_SOFT_KIND Kind = MiSoftKind(Pte);
+        MI_PTE OriginalPte;
         ULONG Frame;
 
         if (Kind == MiSoftPageFile)
@@ -361,10 +386,11 @@ MiSegmentDiscardPage(
         if (!MiPfnReactivate(&System->Pfn, Frame, (ULONG64)(ULONG_PTR)Proto))
             continue;
 
-        if (MiSoftKind(System->Pfn.Pfn[Frame].OriginalPte) == MiSoftPageFile)
+        OriginalPte = MiSegmentSettledOriginalPte(System, Frame, Proto);
+        if (MiSoftKind(OriginalPte) == MiSoftPageFile)
             MiArchPteWrite(Proto, MiSoftMake(MiSoftDemandZero, MiSoftProtection(Pte), 0));
         else
-            MiArchPteWrite(Proto, System->Pfn.Pfn[Frame].OriginalPte);
+            MiArchPteWrite(Proto, OriginalPte);
 
         MiReleasePageBacking(System, Frame);
         MiPfnShareDecrement(&System->Pfn, Frame, TRUE);

@@ -8,6 +8,7 @@
  */
 
 #include "mmharness.h"
+#include <time.h>
 #include <mm/include/misys.h>
 
 #define KB64 0x10000ULL
@@ -1860,6 +1861,74 @@ SectionSparseDataFile(void)
     WorldDestroy(&World);
 }
 
+typedef struct _SECTION_PURGE_IN_FLIGHT
+{
+    PMI_SEGMENT Segment;
+    volatile LONG Done;
+} SECTION_PURGE_IN_FLIGHT;
+
+static void *
+SectionPurgeInFlightWorker(void *Context)
+{
+    SECTION_PURGE_IN_FLIGHT *State = Context;
+
+    MiHostCpu = 0;
+    MachineCpu = 0;
+    MiSegmentPurge(State->Segment, 0, PAGE_SIZE);
+    __atomic_store_n(&State->Done, 1, __ATOMIC_RELEASE);
+    return NULL;
+}
+
+static
+void
+SectionPurgeWaitsForWriter(void)
+{
+    struct timespec Pause = { 0, 500000 };
+    SECTION_PURGE_IN_FLIGHT State;
+    MI_ADDRESS_SPACE Space;
+    PMI_SEGMENT Segment;
+    TEST_WORLD World;
+    TEST_FILE File;
+    pthread_t Worker;
+    ULONG64 Base = 0x40000000;
+    MI_PTE OriginalPte;
+    ULONG Frame;
+    ULONG Spin;
+
+    WorldCreate(&World, 256, 1, 100000);
+    FileCreate(&File, KB64);
+    SpaceCreate(&World, 0, &Space);
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, KB64, MI_PROT_READWRITE,
+                                     &TestFileOps, &File, NULL, 0, &Segment)));
+    CHECK(NT_SUCCESS(Map(&Space, Segment, &Base, 0, KB64, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 8, 0x5A5A5A5A)));
+    CHECK(NT_SUCCESS(MiUnmapView(&Space, Base)));
+
+    Frame = MiPfnTakeModified(&World.System.Pfn);
+    CHECK(Frame != MI_FRAME_INVALID);
+    if (Frame != MI_FRAME_INVALID)
+    {
+        CHECK((World.PfnArray[Frame].Flags & MI_PFN_FLAG_IN_FLIGHT) != 0);
+        OriginalPte = World.PfnArray[Frame].OriginalPte;
+        State.Segment = Segment;
+        State.Done = 0;
+        MI_ASSERT(pthread_create(&Worker, NULL, SectionPurgeInFlightWorker, &State) == 0);
+        for (Spin = 0; Spin < 200 && !__atomic_load_n(&State.Done, __ATOMIC_ACQUIRE); Spin++)
+            nanosleep(&Pause, NULL);
+        CHECK(!__atomic_load_n(&State.Done, __ATOMIC_ACQUIRE));
+        MiPfnWriteComplete(&World.System.Pfn, Frame, OriginalPte, TRUE);
+        MI_ASSERT(pthread_join(Worker, NULL) == 0);
+        CHECK(__atomic_load_n(&State.Done, __ATOMIC_ACQUIRE));
+        CHECK(!MiSegmentIsResident(Segment, 0, PAGE_SIZE));
+    }
+
+    SpaceDestroy(&World, 0, &Space);
+    MiSegmentDereference(Segment);
+    WorldExpectClean(&World, 256);
+    FileDestroy(&File);
+    WorldDestroy(&World);
+}
+
 void
 TestSection(void)
 {
@@ -1867,6 +1936,7 @@ TestSection(void)
     SectionVadCache();
     SectionConcurrentChurn();
     SectionUnmapBatch();
+    SectionPurgeWaitsForWriter();
     SectionFullUnmapBatches();
     SectionSharedDataFile();
     SectionSparseDataFile();
