@@ -995,6 +995,17 @@ UatSleepMs(ULONG Milliseconds)
     SimSleptMs += Milliseconds;
 }
 
+static ULONG SimInvalidatedAsid;
+static ULONG SimInvalidations;
+
+static
+VOID
+UatInvalidateAsid(ULONG Asid)
+{
+    SimInvalidatedAsid = Asid;
+    ++SimInvalidations;
+}
+
 #include "../../../../sdk/lib/drivers/fdtdrv/fdtdrv.c"
 #include "../../../../sdk/lib/drivers/applertkit/pmgr.c"
 #include "../../../../sdk/lib/drivers/applertkit/dart.c"
@@ -1864,6 +1875,7 @@ TestUatAdopt(VOID)
     ULONG64 HandoffPhysical, ContextsPhysical, RootPhysical, LevelPhysical, Physical;
     PULONG64 Handoff, Contexts, Root, Level;
     APPLE_UAT_ADOPTED Adopted;
+    APPLE_UAT Client;
     ULONG Index, Set;
 
     Handoff = UatFirmwarePage(&HandoffPhysical);
@@ -1962,6 +1974,29 @@ TestUatAdopt(VOID)
                               APPLE_UAT_PAGE_SIZE, &Shared), STATUS_INVALID_PARAMETER);
     ok_hex(AppleUatAdoptedMap(&Adopted, APPLE_UAT_HOST_BASE + APPLE_UAT_HOST_SIZE - APPLE_UAT_PAGE_SIZE,
                               0x30000000ULL, 2 * APPLE_UAT_PAGE_SIZE, &Shared), STATUS_INVALID_PARAMETER);
+
+    ok_hex(AppleUatCreate(&Client, FALSE, "test"), STATUS_SUCCESS);
+    SimInvalidations = 0;
+    ok_hex(AppleUatAdoptedBindSlot(&Adopted, 5, Client.TopPhysical), STATUS_SUCCESS);
+    ok(Contexts[10] == (Client.TopPhysical | 1 | (5ULL << 48)), "The lower half of slot 5 is %I64x\n", Contexts[10]);
+    ok(Contexts[11] == ((RootPhysical & APPLE_UAT_OUTPUT_MASK) | 1 | (5ULL << 48)),
+       "The upper half of slot 5 is %I64x\n", Contexts[11]);
+    ok_int(SimInvalidatedAsid, 5);
+    ok_int(SimInvalidations, 1);
+    ok(Contexts[0] == ((Adopted.Lower.TopPhysical & APPLE_UAT_OUTPUT_MASK) | 1), "Context 0 became %I64x\n",
+       Contexts[0]);
+    ok(Contexts[12] == 0 && Contexts[13] == 0, "Slot 6 became %I64x %I64x\n", Contexts[12], Contexts[13]);
+    ok_int(*(PULONG)((PUCHAR)Handoff + 0x10) & 0xff, 0);
+    ok_hex(AppleUatAdoptedUnbindSlot(&Adopted, 5), STATUS_SUCCESS);
+    ok(Contexts[10] == 0 && Contexts[11] == 0, "Slot 5 still holds %I64x %I64x\n", Contexts[10], Contexts[11]);
+    ok_int(SimInvalidations, 2);
+    ok_hex(AppleUatAdoptedBindSlot(&Adopted, 0, Client.TopPhysical), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdoptedBindSlot(&Adopted, APPLE_UAT_CONTEXTS, Client.TopPhysical), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdoptedBindSlot(&Adopted, 5, Client.TopPhysical + 0x1000), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdoptedBindSlot(&Adopted, 5, 1ULL << 42), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleUatAdoptedUnbindSlot(&Adopted, 0), STATUS_INVALID_PARAMETER);
+    ok_int(SimInvalidations, 2);
+    AppleUatDestroy(&Client);
 
     AppleUatAdoptedRelease(&Adopted);
     ok(Adopted.Handoff == NULL && Adopted.Contexts == NULL && Adopted.KernelRoot == NULL &&

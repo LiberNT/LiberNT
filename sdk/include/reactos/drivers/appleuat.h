@@ -153,3 +153,16 @@ VOID
 NTAPI
 AppleUatAdoptedRelease(
     _Inout_ PAPPLE_UAT_ADOPTED Adopted);
+
+NTSTATUS
+NTAPI
+AppleUatAdoptedBindSlot(
+    _Inout_ PAPPLE_UAT_ADOPTED Adopted,
+    _In_ ULONG Slot,
+    _In_ ULONG64 RootPhysical);
+
+NTSTATUS
+NTAPI
+AppleUatAdoptedUnbindSlot(
+    _Inout_ PAPPLE_UAT_ADOPTED Adopted,
+    _In_ ULONG Slot);

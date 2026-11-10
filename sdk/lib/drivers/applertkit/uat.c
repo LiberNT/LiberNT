@@ -40,6 +40,7 @@
 #define UAT_HANDOFF_POLL_MS         10
 #define UAT_HANDOFF_SPIN_US         1
 #define UAT_CONTEXT_VALID           1ULL
+#define UAT_CONTEXT_ASID_SHIFT      48
 #define UAT_HOST_INDEX \
     ((ULONG)((APPLE_UAT_HOST_BASE & APPLE_UAT_ADDRESS_MASK) >> \
              (APPLE_UAT_PAGE_SHIFT + (APPLE_UAT_LEVELS - 1) * APPLE_UAT_LEVEL_BITS)))
@@ -54,6 +55,19 @@ UatSleepMs(
 
     Interval.QuadPart = -10000LL * Milliseconds;
     KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+}
+#endif
+
+#ifndef UNIT_TEST
+static
+VOID
+UatInvalidateAsid(
+    _In_ ULONG Asid)
+{
+    ULONG64 Operand = (ULONG64)Asid << UAT_CONTEXT_ASID_SHIFT;
+
+    __asm__ __volatile__(".arch armv8.4-a\n\tdsb sy\n\ttlbi aside1os, %0\n\tdsb sy\n\tisb"
+                         : : "r"(Operand) : "memory");
 }
 #endif
 
@@ -552,4 +566,46 @@ AppleUatAdoptedRelease(
     if (Adopted->Handoff)
         MmUnmapIoSpace(Adopted->Handoff, APPLE_UAT_PAGE_SIZE);
     Adopted->Handoff = NULL;
+}
+
+NTSTATUS
+NTAPI
+AppleUatAdoptedBindSlot(
+    _Inout_ PAPPLE_UAT_ADOPTED Adopted,
+    _In_ ULONG Slot,
+    _In_ ULONG64 RootPhysical)
+{
+    ULONG64 Asid = (ULONG64)Slot << UAT_CONTEXT_ASID_SHIFT;
+
+    if (!Adopted->Handoff || !Adopted->Contexts || !Slot || Slot >= APPLE_UAT_CONTEXTS || !RootPhysical ||
+        (RootPhysical & (APPLE_UAT_PAGE_SIZE - 1)) || (RootPhysical & ~APPLE_UAT_OUTPUT_MASK))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (!AppleUatHandoffLock(Adopted))
+        return STATUS_IO_TIMEOUT;
+    Adopted->Contexts[2 * Slot] = RootPhysical | UAT_CONTEXT_VALID | Asid;
+    Adopted->Contexts[2 * Slot + 1] = (Adopted->KernelRootPhysical & APPLE_UAT_OUTPUT_MASK) | UAT_CONTEXT_VALID | Asid;
+    KeMemoryBarrier();
+    AppleUatHandoffUnlock(Adopted);
+    UatInvalidateAsid(Slot);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleUatAdoptedUnbindSlot(
+    _Inout_ PAPPLE_UAT_ADOPTED Adopted,
+    _In_ ULONG Slot)
+{
+    if (!Adopted->Handoff || !Adopted->Contexts || !Slot || Slot >= APPLE_UAT_CONTEXTS)
+        return STATUS_INVALID_PARAMETER;
+    if (!AppleUatHandoffLock(Adopted))
+        return STATUS_IO_TIMEOUT;
+    Adopted->Contexts[2 * Slot] = 0;
+    Adopted->Contexts[2 * Slot + 1] = 0;
+    KeMemoryBarrier();
+    AppleUatHandoffUnlock(Adopted);
+    UatInvalidateAsid(Slot);
+    return STATUS_SUCCESS;
 }
