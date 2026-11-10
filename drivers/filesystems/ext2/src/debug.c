@@ -149,7 +149,7 @@ Ext2Printf(
     _vsnprintf(&Buffer[0], DBG_BUF_LEN, DebugMessage, ap);
 
     DbgPrint(DRIVER_NAME":~%d: %2.2d:%2.2d:%2.2d:%3.3d %8.8x:   %s",
-             KeGetCurrentProcessorNumber(),
+             KeGetCurrentProcessorIndex(),
              TimeFields.Hour, TimeFields.Minute,
              TimeFields.Second, TimeFields.Milliseconds,
              PsGetCurrentThread(), Buffer);
@@ -176,7 +176,7 @@ Ext2NiPrintf(
     _vsnprintf(&Buffer[0], 0x100, DebugMessage, ap);
 
     DbgPrint(DRIVER_NAME":~%d: %2.2d:%2.2d:%2.2d:%3.3d %8.8x: %s",
-             KeGetCurrentProcessorNumber(),
+             KeGetCurrentProcessorIndex(),
              TimeFields.Hour, TimeFields.Minute,
              TimeFields.Second, TimeFields.Milliseconds,
              PsGetCurrentThread(), Buffer);
