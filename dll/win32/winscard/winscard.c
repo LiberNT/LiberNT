@@ -33,7 +33,8 @@
 WINE_DEFAULT_DEBUG_CHANNEL(winscard);
 
 #ifdef __REACTOS__
-#define UNIX_CALL( func, params ) ((void)(params), SCARD_E_NO_SERVICE)
+LONG ScardBackendCall( ULONG func, void *params );
+#define UNIX_CALL( func, params ) ScardBackendCall( unix_ ## func, params )
 #else
 #define UNIX_CALL( func, params ) WINE_UNIX_CALL( unix_ ## func, params )
 #endif
