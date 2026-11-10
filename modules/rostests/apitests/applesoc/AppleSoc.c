@@ -3437,6 +3437,159 @@ static UCHAR AgxPbManager[APPLE_AGX_PB_MANAGER_SIZE];
 static UCHAR AgxBlockControl[APPLE_AGX_BLOCK_CONTROL_SIZE];
 static UCHAR AgxMisc[APPLE_AGX_MISC_SIZE];
 
+static UCHAR AgxRenderSequence[APPLE_AGX_SEQUENCE_STORAGE];
+
+static
+ULONG64
+SeqQuad(
+    _In_ ULONG Offset)
+{
+    ULONG64 Value;
+
+    RtlCopyMemory(&Value, AgxRenderSequence + Offset, sizeof(Value));
+    return Value;
+}
+
+static
+ULONG
+SeqLong(
+    _In_ ULONG Offset)
+{
+    ULONG Value;
+
+    RtlCopyMemory(&Value, AgxRenderSequence + Offset, sizeof(Value));
+    return Value;
+}
+
+static
+ULONG
+SeqNonZeroFrom(
+    _In_ ULONG Offset)
+{
+    ULONG Count = 0;
+
+    for (; Offset < sizeof(AgxRenderSequence); ++Offset)
+        Count += AgxRenderSequence[Offset] != 0;
+    return Count;
+}
+
+static
+VOID
+TestAgxRenderSequences(VOID)
+{
+    APPLE_AGX_RENDER_REFS Refs, Bad;
+    ULONG64 Tail;
+    ULONG Index;
+
+    RtlZeroMemory(&Refs, sizeof(Refs));
+    Refs.Work = 0xfffffc2140000000ULL;
+    Refs.Sequence = 0xfffffc2140010000ULL;
+    Refs.Hwdata = 0xfffffc20406f0000ULL;
+    Refs.Notifier = 0xfffffc2100018000ULL;
+    Refs.Queue = 0xfffffc2100000000ULL;
+    Refs.Scene = 0xfffffc2100030000ULL;
+    Refs.Manager = 0xfffffc2100024000ULL;
+    Refs.Pool = 0xfffffc2100040000ULL;
+    Refs.FirmwareStamp = 0xfffffc210001c000ULL;
+    Refs.Scratch = 0xfffffc2140100000ULL;
+    Refs.ScratchBytes = 0x10000;
+
+    RtlFillMemory(AgxRenderSequence, sizeof(AgxRenderSequence), 0x5a);
+    ok_hex(AppleAgxEncodeVertexSequence(AgxRenderSequence, &Refs, 9, 0x4321), STATUS_SUCCESS);
+    Tail = Refs.Work + 0x8a8;
+    ok_hex(SeqLong(0x00), 5);
+    ok(SeqQuad(0x14) == Refs.Work + 0x40, "The vertex registers are at %I64x\n", SeqQuad(0x14));
+    ok(SeqQuad(0x1c) == Refs.Manager, "The manager is at %I64x\n", SeqQuad(0x1c));
+    ok(SeqQuad(0x24) == Refs.Scene, "The scene is at %I64x\n", SeqQuad(0x24));
+    ok(SeqQuad(0x2c) == Refs.Hwdata + 0x1884, "The vertex statistics are at %I64x\n", SeqQuad(0x2c));
+    ok(SeqQuad(0x34) == Refs.Queue, "The queue is at %I64x\n", SeqQuad(0x34));
+    ok(SeqQuad(0x3c) == Refs.Work + 0x84c, "The sampler array is at %I64x\n", SeqQuad(0x3c));
+    ok_int(SeqLong(0x44), 9);
+    ok(SeqQuad(0x64) == Refs.Work + 0x784, "The vertex state is at %I64x\n", SeqQuad(0x64));
+    ok(SeqQuad(0x6c) == Refs.Work + 0x890, "The scratch state is at %I64x\n", SeqQuad(0x6c));
+    ok(SeqQuad(0x78) == 0x7a000000000000ULL, "The retained identifier is %I64x\n", SeqQuad(0x78));
+    ok(SeqQuad(0x18c) == Refs.Pool, "The pool is at %I64x\n", SeqQuad(0x18c));
+    ok(SeqQuad(0x1a4) == Refs.Scratch, "The scratch is at %I64x\n", SeqQuad(0x1a4));
+    ok(SeqQuad(0x1b4) == 1, "The flag before the notifier is %I64x\n", SeqQuad(0x1b4));
+    ok(SeqQuad(0x1bc) == Refs.Notifier + 0xa8, "The notifier mask is at %I64x\n", SeqQuad(0x1bc));
+    ok_hex(SeqLong(0x1cc), 0x80000003);
+    ok(SeqQuad(0x1cc + 0x04) == Tail, "The start time is at %I64x\n", SeqQuad(0x1d0));
+    ok(SeqQuad(0x1cc + 0x14) == Tail + 0x08, "The start packet selects %I64x\n", SeqQuad(0x1e0));
+    ok(SeqQuad(0x1cc + 0x2c) == Tail + 0x58, "The completion is at %I64x\n", SeqQuad(0x1f8));
+    ok_hex(SeqLong(0x1cc + 0x34), 0x7a0000);
+    ok_int(SeqLong(0x208), 1);
+    ok_hex(SeqLong(0x20c), 3);
+    ok(SeqQuad(0x20c + 0x14) == Tail + 0x10, "The end packet selects %I64x\n", SeqQuad(0x220));
+    ok(SeqQuad(0x20c + 0x1c) == Refs.Queue, "The end packet names the queue at %I64x\n", SeqQuad(0x228));
+    ok_hex(SeqLong(0x248), 6);
+    ok(SeqQuad(0x248 + 0x04) == Refs.Scene, "FinalizeTA names the scene at %I64x\n", SeqQuad(0x24c));
+    ok(SeqQuad(0x248 + 0x14) == Refs.Hwdata + 0x1884, "FinalizeTA statistics at %I64x\n", SeqQuad(0x25c));
+    ok_int(SeqLong(0x248 + 0x2c), 9);
+    ok_hex(SeqLong(0x248 + 0x40), 0x7a0000);
+    ok(SeqQuad(0x248 + 0x44) == Refs.FirmwareStamp, "The firmware stamp is at %I64x\n", SeqQuad(0x28c));
+    ok_hex(SeqLong(0x248 + 0x4c), 0x4321);
+    ok(SeqQuad(0x248 + 0x74) == Refs.Sequence + 0x18c, "The pool field is at %I64x\n", SeqQuad(0x2bc));
+    ok_hex(SeqLong(0x248 + 0x7c), (ULONG)-0x248);
+    ok(SeqQuad(0x248 + 0x84) == Tail + 0x50, "The request is at %I64x\n", SeqQuad(0x2cc));
+    ok_hex(SeqLong(0x2d4), 0x40000002);
+    ok_int(SeqNonZeroFrom(0x2d8), 0);
+
+    RtlFillMemory(AgxRenderSequence, sizeof(AgxRenderSequence), 0x5a);
+    ok_hex(AppleAgxEncodeFragmentSequence(AgxRenderSequence, &Refs, 9, 0x4321, 3), STATUS_SUCCESS);
+    Tail = Refs.Work + 0xbf0;
+    ok_hex(SeqLong(0x00), 7);
+    ok(SeqQuad(0x14) == Refs.Work + 0x80, "The fragment registers are at %I64x\n", SeqQuad(0x14));
+    ok(SeqQuad(0x1c) == Refs.Scene, "The scene is at %I64x\n", SeqQuad(0x1c));
+    ok(SeqQuad(0x24) == Refs.Hwdata + 0x24c8, "The fragment statistics are at %I64x\n", SeqQuad(0x24));
+    ok(SeqQuad(0x2c) == Refs.Work + 0xb70, "The busy word is at %I64x\n", SeqQuad(0x2c));
+    ok(SeqQuad(0x34) == Refs.Work + 0xb74, "The sixth structure is at %I64x\n", SeqQuad(0x34));
+    ok(SeqQuad(0x3c) == Refs.Work + 0xba0, "The seventh structure is at %I64x\n", SeqQuad(0x3c));
+    ok(SeqQuad(0x44) == Refs.Queue, "The queue is at %I64x\n", SeqQuad(0x44));
+    ok(SeqQuad(0x4c) == Refs.Work, "The command is at %I64x\n", SeqQuad(0x4c));
+    ok_int(SeqLong(0x54), 9);
+    ok_int(SeqLong(0x58), 1);
+    ok(SeqQuad(0x68) == 3, "The queue holds %I64u commands\n", SeqQuad(0x68));
+    ok(SeqQuad(0x74) == Refs.Work + 0xa58, "The scratch flag is at %I64x\n", SeqQuad(0x74));
+    ok(SeqQuad(0x7c) == Refs.Work + 0xbd8, "The scratch state is at %I64x\n", SeqQuad(0x7c));
+    ok_hex(SeqLong(0x98), 0x3d0000);
+    ok(SeqQuad(0x1a4) == Refs.Pool, "The pool is at %I64x\n", SeqQuad(0x1a4));
+    ok(SeqQuad(0x1bc) == Refs.Scratch, "The scratch is at %I64x\n", SeqQuad(0x1bc));
+    ok(SeqQuad(0x1d4) == Refs.Notifier + 0xa8, "The notifier mask is at %I64x\n", SeqQuad(0x1d4));
+    ok_hex(SeqLong(0x1dc), 0x80000003);
+    ok(SeqQuad(0x1dc + 0x04) == Tail, "The start time is at %I64x\n", SeqQuad(0x1e0));
+    ok_hex(SeqLong(0x1dc + 0x34), 0x3d0000);
+    ok_int(SeqLong(0x218), 1);
+    ok_hex(SeqLong(0x21c), 3);
+    ok(SeqQuad(0x21c + 0x2c) == Tail + 0x58, "The completion is at %I64x\n", SeqQuad(0x248));
+    ok_hex(SeqLong(0x258), 8);
+    ok_hex(SeqLong(0x258 + 0x04), 0x3d0000);
+    ok(SeqQuad(0x258 + 0x0c) == Refs.FirmwareStamp, "The firmware stamp is at %I64x\n", SeqQuad(0x264));
+    ok_hex(SeqLong(0x258 + 0x14), 0x4321);
+    ok(SeqQuad(0x258 + 0x24) == Refs.Manager, "Finalize3D names the manager at %I64x\n", SeqQuad(0x27c));
+    ok(SeqQuad(0x258 + 0x2c) == 1, "Finalize3D flag is %I64x\n", SeqQuad(0x284));
+    ok(SeqQuad(0x258 + 0x54) == Refs.Work, "Finalize3D names the command at %I64x\n", SeqQuad(0x2ac));
+    ok(SeqQuad(0x258 + 0x5c) == 9, "Finalize3D context is %I64x\n", SeqQuad(0x2b4));
+    ok(SeqQuad(0x258 + 0x9c) == Refs.Sequence + 0x1a4, "The pool field is at %I64x\n", SeqQuad(0x2f4));
+    ok_hex(SeqLong(0x258 + 0xa4), (ULONG)-0x258);
+    ok_int(SeqLong(0x258 + 0xa8), 1);
+    ok(SeqQuad(0x258 + 0xac) == Tail + 0x50, "The request is at %I64x\n", SeqQuad(0x304));
+    ok_hex(SeqLong(0x30c), 0x40000002);
+    ok_int(SeqNonZeroFrom(0x310), 0);
+
+    ok_hex(AppleAgxEncodeVertexSequence(AgxRenderSequence, &Refs, 64, 0), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxEncodeFragmentSequence(AgxRenderSequence, &Refs, 64, 0, 0), STATUS_INVALID_PARAMETER);
+    for (Index = 0; Index < 10; ++Index)
+    {
+        Bad = Refs;
+        ((PULONG64)&Bad)[Index] = 0;
+        ok_hex(AppleAgxEncodeVertexSequence(AgxRenderSequence, &Bad, 0, 0), STATUS_INVALID_PARAMETER);
+    }
+    Bad = Refs;
+    Bad.ScratchBytes = 0xffff;
+    ok_hex(AppleAgxEncodeFragmentSequence(AgxRenderSequence, &Bad, 0, 0, 0), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxEncodeVertexSequence(AgxRenderSequence, &Bad, 0, 0), STATUS_SUCCESS);
+}
+
 static
 VOID
 TestAgxParameterBuffer(VOID)
@@ -4662,6 +4815,7 @@ START_TEST(AppleSoc)
     TestAgxComputeWork();
     TestAgxRenderRegisters();
     TestAgxParameterBuffer();
+    TestAgxRenderSequences();
     TestSpmi();
     TestAtcphy();
     TestPcie();

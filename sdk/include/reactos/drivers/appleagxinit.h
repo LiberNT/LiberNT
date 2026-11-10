@@ -562,6 +562,61 @@ AppleAgxWriteRegisters(
     _In_ ULONG WorkType,
     _In_ const ULONG64 *Value);
 
+#define APPLE_AGX_SEQUENCE_STORAGE          0x1000
+#define APPLE_AGX_VERTEX_TIMESTAMP_START    0x1cc
+#define APPLE_AGX_VERTEX_TIMESTAMP_END      0x20c
+#define APPLE_AGX_VERTEX_POOL               0x18c
+#define APPLE_AGX_VERTEX_STATE              0x784
+#define APPLE_AGX_VERTEX_SAMPLER            0x84c
+#define APPLE_AGX_VERTEX_SCRATCH_STATE      0x890
+#define APPLE_AGX_VERTEX_UUID               0x7a0000
+#define APPLE_AGX_FRAGMENT_TIMESTAMP_START  0x1dc
+#define APPLE_AGX_FRAGMENT_TIMESTAMP_END    0x21c
+#define APPLE_AGX_FRAGMENT_POOL             0x1a4
+#define APPLE_AGX_FRAGMENT_BUSY             0xb70
+#define APPLE_AGX_FRAGMENT_STRUCT6          0xb74
+#define APPLE_AGX_FRAGMENT_STRUCT7          0xba0
+#define APPLE_AGX_FRAGMENT_SCRATCH_FLAG     0xa58
+#define APPLE_AGX_FRAGMENT_SCRATCH_STATE    0xbd8
+#define APPLE_AGX_FRAGMENT_UUID             0x3d0000
+#define APPLE_AGX_FRAGMENT_SCRATCH_MIN      0x10000
+#define APPLE_AGX_TAIL_PAIR                 0x08
+#define APPLE_AGX_TAIL_END                  0x10
+#define APPLE_AGX_TAIL_REQUEST              0x50
+#define APPLE_AGX_TAIL_COMPLETE             0x58
+
+typedef struct _APPLE_AGX_RENDER_REFS
+{
+    ULONG64 Work;
+    ULONG64 Sequence;
+    ULONG64 Hwdata;
+    ULONG64 Notifier;
+    ULONG64 Queue;
+    ULONG64 Scene;
+    ULONG64 Manager;
+    ULONG64 Pool;
+    ULONG64 FirmwareStamp;
+    ULONG64 Scratch;
+    ULONG64 ScratchBytes;
+} APPLE_AGX_RENDER_REFS, *PAPPLE_AGX_RENDER_REFS;
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeVertexSequence(
+    _Out_writes_bytes_(APPLE_AGX_SEQUENCE_STORAGE) PVOID Sequence,
+    _In_ const APPLE_AGX_RENDER_REFS *Refs,
+    _In_ ULONG Context,
+    _In_ ULONG Stamp);
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeFragmentSequence(
+    _Out_writes_bytes_(APPLE_AGX_SEQUENCE_STORAGE) PVOID Sequence,
+    _In_ const APPLE_AGX_RENDER_REFS *Refs,
+    _In_ ULONG Context,
+    _In_ ULONG Stamp,
+    _In_ ULONG QueueCommands);
+
 /* The tiler's parameter buffer: pages the firmware hands out in blocks, the list it records them
  * on and the control it keeps the live producer in. */
 #define APPLE_AGX_PB_PAGES              16384

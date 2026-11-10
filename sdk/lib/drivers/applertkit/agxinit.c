@@ -1107,3 +1107,160 @@ AppleAgxDescribeBlockControl(
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
+
+static
+BOOLEAN
+AgxRenderRefsValid(
+    _In_ const APPLE_AGX_RENDER_REFS *Refs)
+{
+    return Refs->Work && Refs->Sequence && Refs->Hwdata && Refs->Notifier && Refs->Queue &&
+           Refs->Scene && Refs->Manager && Refs->Pool && Refs->FirmwareStamp && Refs->Scratch;
+}
+
+static
+VOID
+AgxWriteTimestamps(
+    _Inout_ PVOID Sequence,
+    _In_ ULONG Start,
+    _In_ ULONG End,
+    _In_ ULONG64 Tail,
+    _In_ ULONG64 Queue,
+    _In_ ULONG Uuid)
+{
+    const ULONG At[2] = { Start, End };
+    const ULONG Opcode[2] = { APPLE_AGX_OP_TIMESTAMP, APPLE_AGX_OP_TIMESTAMP_END };
+    const ULONG64 Selected[2] = { Tail + APPLE_AGX_TAIL_PAIR, Tail + APPLE_AGX_TAIL_END };
+    ULONG Index;
+
+    for (Index = 0; Index < 2; ++Index)
+    {
+        AgxWriteLong(Sequence, At[Index], Opcode[Index]);
+        AgxWriteQuad(Sequence, At[Index] + 0x04, Tail);
+        AgxWriteQuad(Sequence, At[Index] + 0x0c, Tail + APPLE_AGX_TAIL_PAIR);
+        AgxWriteQuad(Sequence, At[Index] + 0x14, Selected[Index]);
+        AgxWriteQuad(Sequence, At[Index] + 0x1c, Queue);
+        AgxWriteQuad(Sequence, At[Index] + 0x2c, Tail + APPLE_AGX_TAIL_COMPLETE);
+        AgxWriteLong(Sequence, At[Index] + 0x34, Uuid);
+    }
+    AgxWriteLong(Sequence, End - 4, 1);
+}
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeVertexSequence(
+    _Out_writes_bytes_(APPLE_AGX_SEQUENCE_STORAGE) PVOID Sequence,
+    _In_ const APPLE_AGX_RENDER_REFS *Refs,
+    _In_ ULONG Context,
+    _In_ ULONG Stamp)
+{
+    const ULONG Final = APPLE_AGX_VERTEX_FINALIZE_AT;
+    ULONG64 Tail, Stats, Sampler, State;
+
+    if (!Sequence || !Refs || !AgxRenderRefsValid(Refs) || Context >= APPLE_UAT_CONTEXTS)
+        return STATUS_INVALID_PARAMETER;
+    Tail = Refs->Work + APPLE_AGX_VERTEX_TAIL;
+    Stats = Refs->Hwdata + APPLE_AGX_VERTEX_HWDATA;
+    Sampler = Refs->Work + APPLE_AGX_VERTEX_SAMPLER;
+    State = Refs->Work + APPLE_AGX_VERTEX_STATE;
+    RtlZeroMemory(Sequence, APPLE_AGX_SEQUENCE_STORAGE);
+    AgxWriteLong(Sequence, 0x00, APPLE_AGX_OP_VERTEX_START);
+    AgxWriteQuad(Sequence, 0x14, Refs->Work + APPLE_AGX_VERTEX_REGISTERS);
+    AgxWriteQuad(Sequence, 0x1c, Refs->Manager);
+    AgxWriteQuad(Sequence, 0x24, Refs->Scene);
+    AgxWriteQuad(Sequence, 0x2c, Stats);
+    AgxWriteQuad(Sequence, 0x34, Refs->Queue);
+    AgxWriteQuad(Sequence, 0x3c, Sampler);
+    AgxWriteLong(Sequence, 0x44, Context);
+    AgxWriteQuad(Sequence, 0x64, State);
+    AgxWriteQuad(Sequence, 0x6c, Refs->Work + APPLE_AGX_VERTEX_SCRATCH_STATE);
+    AgxWriteQuad(Sequence, 0x78, (ULONG64)APPLE_AGX_VERTEX_UUID << 32);
+    AgxWriteQuad(Sequence, APPLE_AGX_VERTEX_POOL, Refs->Pool);
+    AgxWriteQuad(Sequence, 0x1a4, Refs->Scratch);
+    AgxWriteQuad(Sequence, 0x1b4, 1);
+    AgxWriteQuad(Sequence, 0x1bc, Refs->Notifier + APPLE_AGX_NOTIFIER_MASK);
+    AgxWriteTimestamps(Sequence, APPLE_AGX_VERTEX_TIMESTAMP_START, APPLE_AGX_VERTEX_TIMESTAMP_END, Tail,
+                       Refs->Queue, APPLE_AGX_VERTEX_UUID);
+    AgxWriteLong(Sequence, Final, APPLE_AGX_OP_VERTEX_FINALIZE);
+    AgxWriteQuad(Sequence, Final + 0x04, Refs->Scene);
+    AgxWriteQuad(Sequence, Final + 0x0c, Refs->Manager);
+    AgxWriteQuad(Sequence, Final + 0x14, Stats);
+    AgxWriteQuad(Sequence, Final + 0x1c, Refs->Queue);
+    AgxWriteQuad(Sequence, Final + 0x24, Sampler);
+    AgxWriteLong(Sequence, Final + 0x2c, Context);
+    AgxWriteQuad(Sequence, Final + 0x34, State);
+    AgxWriteLong(Sequence, Final + 0x40, APPLE_AGX_VERTEX_UUID);
+    AgxWriteQuad(Sequence, Final + 0x44, Refs->FirmwareStamp);
+    AgxWriteLong(Sequence, Final + 0x4c, Stamp);
+    AgxWriteQuad(Sequence, Final + 0x74, Refs->Sequence + APPLE_AGX_VERTEX_POOL);
+    AgxWriteLong(Sequence, Final + 0x7c, (ULONG)(0u - Final));
+    AgxWriteQuad(Sequence, Final + 0x84, Tail + APPLE_AGX_TAIL_REQUEST);
+    AgxWriteLong(Sequence, APPLE_AGX_VERTEX_END_AT, APPLE_AGX_OP_END);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxEncodeFragmentSequence(
+    _Out_writes_bytes_(APPLE_AGX_SEQUENCE_STORAGE) PVOID Sequence,
+    _In_ const APPLE_AGX_RENDER_REFS *Refs,
+    _In_ ULONG Context,
+    _In_ ULONG Stamp,
+    _In_ ULONG QueueCommands)
+{
+    const ULONG Final = APPLE_AGX_FRAGMENT_FINALIZE_AT;
+    ULONG64 Tail, Stats, Busy, Struct7, Flag;
+
+    if (!Sequence || !Refs || !AgxRenderRefsValid(Refs) || Context >= APPLE_UAT_CONTEXTS ||
+        Refs->ScratchBytes < APPLE_AGX_FRAGMENT_SCRATCH_MIN)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Tail = Refs->Work + APPLE_AGX_FRAGMENT_TAIL;
+    Stats = Refs->Hwdata + APPLE_AGX_FRAGMENT_HWDATA;
+    Busy = Refs->Work + APPLE_AGX_FRAGMENT_BUSY;
+    Struct7 = Refs->Work + APPLE_AGX_FRAGMENT_STRUCT7;
+    Flag = Refs->Work + APPLE_AGX_FRAGMENT_SCRATCH_FLAG;
+    RtlZeroMemory(Sequence, APPLE_AGX_SEQUENCE_STORAGE);
+    AgxWriteLong(Sequence, 0x00, APPLE_AGX_OP_FRAGMENT_START);
+    AgxWriteQuad(Sequence, 0x14, Refs->Work + APPLE_AGX_FRAGMENT_REGISTERS);
+    AgxWriteQuad(Sequence, 0x1c, Refs->Scene);
+    AgxWriteQuad(Sequence, 0x24, Stats);
+    AgxWriteQuad(Sequence, 0x2c, Busy);
+    AgxWriteQuad(Sequence, 0x34, Refs->Work + APPLE_AGX_FRAGMENT_STRUCT6);
+    AgxWriteQuad(Sequence, 0x3c, Struct7);
+    AgxWriteQuad(Sequence, 0x44, Refs->Queue);
+    AgxWriteQuad(Sequence, 0x4c, Refs->Work);
+    AgxWriteLong(Sequence, 0x54, Context);
+    AgxWriteLong(Sequence, 0x58, 1);
+    AgxWriteQuad(Sequence, 0x68, QueueCommands);
+    AgxWriteQuad(Sequence, 0x74, Flag);
+    AgxWriteQuad(Sequence, 0x7c, Refs->Work + APPLE_AGX_FRAGMENT_SCRATCH_STATE);
+    AgxWriteLong(Sequence, 0x98, APPLE_AGX_FRAGMENT_UUID);
+    AgxWriteQuad(Sequence, APPLE_AGX_FRAGMENT_POOL, Refs->Pool);
+    AgxWriteQuad(Sequence, 0x1bc, Refs->Scratch);
+    AgxWriteQuad(Sequence, 0x1d4, Refs->Notifier + APPLE_AGX_NOTIFIER_MASK);
+    AgxWriteTimestamps(Sequence, APPLE_AGX_FRAGMENT_TIMESTAMP_START, APPLE_AGX_FRAGMENT_TIMESTAMP_END, Tail,
+                       Refs->Queue, APPLE_AGX_FRAGMENT_UUID);
+    AgxWriteLong(Sequence, Final, APPLE_AGX_OP_FRAGMENT_FINALIZE);
+    AgxWriteLong(Sequence, Final + 0x04, APPLE_AGX_FRAGMENT_UUID);
+    AgxWriteQuad(Sequence, Final + 0x0c, Refs->FirmwareStamp);
+    AgxWriteLong(Sequence, Final + 0x14, Stamp);
+    AgxWriteQuad(Sequence, Final + 0x1c, Refs->Scene);
+    AgxWriteQuad(Sequence, Final + 0x24, Refs->Manager);
+    AgxWriteQuad(Sequence, Final + 0x2c, 1);
+    AgxWriteQuad(Sequence, Final + 0x34, Stats);
+    AgxWriteQuad(Sequence, Final + 0x3c, Struct7);
+    AgxWriteQuad(Sequence, Final + 0x44, Busy);
+    AgxWriteQuad(Sequence, Final + 0x4c, Refs->Queue);
+    AgxWriteQuad(Sequence, Final + 0x54, Refs->Work);
+    AgxWriteQuad(Sequence, Final + 0x5c, Context);
+    AgxWriteQuad(Sequence, Final + 0x64, Flag);
+    AgxWriteQuad(Sequence, Final + 0x9c, Refs->Sequence + APPLE_AGX_FRAGMENT_POOL);
+    AgxWriteLong(Sequence, Final + 0xa4, (ULONG)(0u - Final));
+    AgxWriteLong(Sequence, Final + 0xa8, 1);
+    AgxWriteQuad(Sequence, Final + 0xac, Tail + APPLE_AGX_TAIL_REQUEST);
+    AgxWriteLong(Sequence, APPLE_AGX_FRAGMENT_END_AT, APPLE_AGX_OP_END);
+    KeMemoryBarrier();
+    return STATUS_SUCCESS;
+}
