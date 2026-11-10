@@ -18,8 +18,12 @@
 
 #include "d2d1_private.h"
 #include <d3dcompiler.h>
+#include <float.h>
+
 
 WINE_DEFAULT_DEBUG_CHANNEL(d2d);
+
+static void d2d_glyph_atlas_destroy(struct d2d_glyph_atlas *atlas);
 
 #define INITIAL_CLIP_STACK_SIZE 4
 
@@ -116,14 +120,107 @@ static void d2d_clip_stack_pop(struct d2d_clip_stack *stack)
     --stack->count;
 }
 
-static void d2d_device_context_draw(struct d2d_device_context *render_target, enum d2d_shape_type shape_type,
+static void d2d_device_context_discard_layers(struct d2d_device_context *context);
+
+static BOOL d2d_device_context_stream_write(struct d2d_device_context *context, struct d2d_stream *stream,
+        const void *data, UINT size, UINT *offset)
+{
+    D3D11_MAPPED_SUBRESOURCE map_desc;
+    ID3D11DeviceContext *d3d_context;
+    D3D11_BUFFER_DESC desc;
+    D3D11_MAP map_type;
+    HRESULT hr;
+
+    size = (size + 15) & ~15u;
+    if (size > stream->size)
+    {
+        if (stream->buffer)
+            ID3D11Buffer_Release(stream->buffer);
+        stream->buffer = NULL;
+        stream->size = max(size, max(stream->size * 2, 65536));
+        stream->pos = 0;
+
+        desc.ByteWidth = stream->size;
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.BindFlags = stream->bind;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        desc.MiscFlags = 0;
+        desc.StructureByteStride = 0;
+        if (FAILED(hr = ID3D11Device1_CreateBuffer(context->d3d_device, &desc, NULL, &stream->buffer)))
+        {
+            WARN("Failed to create stream buffer, hr %#lx.\n", hr);
+            stream->size = 0;
+            return FALSE;
+        }
+    }
+
+    map_type = D3D11_MAP_WRITE_NO_OVERWRITE;
+    if (!stream->pos || stream->pos + size > stream->size)
+    {
+        map_type = D3D11_MAP_WRITE_DISCARD;
+        stream->pos = 0;
+    }
+
+    if (context->cs)
+        EnterCriticalSection(context->cs);
+    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
+    hr = ID3D11DeviceContext_Map(d3d_context, (ID3D11Resource *)stream->buffer, 0, map_type, 0, &map_desc);
+    if (SUCCEEDED(hr))
+    {
+        memcpy((BYTE *)map_desc.pData + stream->pos, data, size);
+        ID3D11DeviceContext_Unmap(d3d_context, (ID3D11Resource *)stream->buffer, 0);
+    }
+    ID3D11DeviceContext_Release(d3d_context);
+    if (context->cs)
+        LeaveCriticalSection(context->cs);
+    if (FAILED(hr))
+    {
+        WARN("Failed to map stream buffer, hr %#lx.\n", hr);
+        return FALSE;
+    }
+
+    *offset = stream->pos;
+    stream->pos += size;
+    return TRUE;
+}
+
+static BOOL d2d_device_context_stream_vertices(struct d2d_device_context *context, const void *vertices,
+        UINT vertices_size)
+{
+    context->vb_stream.bind = D3D11_BIND_VERTEX_BUFFER;
+    return d2d_device_context_stream_write(context, &context->vb_stream, vertices, vertices_size,
+            &context->draw_vb_offset);
+}
+
+static BOOL d2d_device_context_stream_indexed(struct d2d_device_context *context, const void *faces,
+        UINT faces_size, const void *vertices, UINT vertices_size)
+{
+    context->ib_stream.bind = D3D11_BIND_INDEX_BUFFER;
+    if (!d2d_device_context_stream_write(context, &context->ib_stream, faces, faces_size,
+            &context->draw_ib_offset))
+        return FALSE;
+    return d2d_device_context_stream_vertices(context, vertices, vertices_size);
+}
+
+
+static void d2d_device_context_draw_real(struct d2d_device_context *render_target, enum d2d_shape_type shape_type,
+        ID3D11Buffer *ib, unsigned int index_count, ID3D11Buffer *vb, unsigned int vb_stride,
+        struct d2d_brush *brush, struct d2d_brush *opacity_brush);
+static void d2d_device_context_draw(struct d2d_device_context *rt, enum d2d_shape_type st,
+        ID3D11Buffer *ib, unsigned int ic, ID3D11Buffer *vb, unsigned int vs,
+        struct d2d_brush *b, struct d2d_brush *o)
+{
+    d2d_device_context_draw_real(rt, st, ib, ic, vb, vs, b, o);
+}
+static void d2d_device_context_draw_real(struct d2d_device_context *render_target, enum d2d_shape_type shape_type,
         ID3D11Buffer *ib, unsigned int index_count, ID3D11Buffer *vb, unsigned int vb_stride,
         struct d2d_brush *brush, struct d2d_brush *opacity_brush)
 {
     struct d2d_shape_resources *shape_resources = &render_target->shape_resources[shape_type];
-    ID3DDeviceContextState *prev_state;
     ID3D11Device1 *device = render_target->d3d_device;
     ID3D11DeviceContext1 *context;
+    UINT ib_offset;
+    typeof(render_target->sh) *sh;
     ID3D11Buffer *vs_cb = render_target->vs_cb, *ps_cb = render_target->ps_cb;
     D3D11_RECT scissor_rect;
     unsigned int offset;
@@ -140,27 +237,80 @@ static void d2d_device_context_draw(struct d2d_device_context *render_target, en
         EnterCriticalSection(render_target->cs);
 
     ID3D11Device1_GetImmediateContext1(device, &context);
-    ID3D11DeviceContext1_SwapDeviceContextState(context, render_target->d3d_state, &prev_state);
+    if (!render_target->state_in)
+    {
+        ID3D11DeviceContext1_SwapDeviceContextState(context, render_target->d3d_state, &render_target->prev_state);
+        render_target->state_in = TRUE;
+    }
+    sh = &render_target->sh;
 
-    ID3D11DeviceContext1_IASetInputLayout(context, shape_resources->il);
-    ID3D11DeviceContext1_IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    ID3D11DeviceContext1_IASetIndexBuffer(context, ib, DXGI_FORMAT_R16_UINT, 0);
-    offset = 0;
-    ID3D11DeviceContext1_IASetVertexBuffers(context, 0, 1, &vb, &vb_stride, &offset);
-    ID3D11DeviceContext1_VSSetConstantBuffers(context, 0, 1, &vs_cb);
-    ID3D11DeviceContext1_VSSetShader(context, shape_resources->vs, NULL, 0);
-    ID3D11DeviceContext1_PSSetConstantBuffers(context, 0, 1, &ps_cb);
-    ID3D11DeviceContext1_PSSetShader(context, render_target->ps, NULL, 0);
-    ID3D11DeviceContext1_RSSetViewports(context, 1, &vp);
+    if (!sh->valid)
+        ID3D11DeviceContext1_IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    if (sh->il != shape_resources->il)
+        ID3D11DeviceContext1_IASetInputLayout(context, sh->il = shape_resources->il);
+    offset = render_target->draw_vb_offset;
+    ib_offset = render_target->draw_ib_offset;
+    render_target->draw_ib_offset = 0;
+    render_target->draw_vb_offset = 0;
+    if (!sh->valid || sh->ib != ib || sh->ib_offset != ib_offset)
+    {
+        ID3D11DeviceContext1_IASetIndexBuffer(context, ib, DXGI_FORMAT_R16_UINT, ib_offset);
+        sh->ib = ib;
+        sh->ib_offset = ib_offset;
+    }
+    if (!sh->valid || sh->vb != vb || sh->vb_offset != offset || sh->vb_stride != vb_stride)
+    {
+        ID3D11DeviceContext1_IASetVertexBuffers(context, 0, 1, &vb, &vb_stride, &offset);
+        sh->vb = vb;
+        sh->vb_offset = offset;
+        sh->vb_stride = vb_stride;
+    }
+    if (sh->vs_cb != vs_cb)
+    {
+        ID3D11DeviceContext1_VSSetConstantBuffers(context, 0, 1, &vs_cb);
+        sh->vs_cb = vs_cb;
+    }
+    if (sh->vs != shape_resources->vs)
+        ID3D11DeviceContext1_VSSetShader(context, sh->vs = shape_resources->vs, NULL, 0);
+    if (sh->ps_cb != ps_cb)
+    {
+        ID3D11DeviceContext1_PSSetConstantBuffers(context, 0, 1, &ps_cb);
+        sh->ps_cb = ps_cb;
+    }
+    if (sh->ps != render_target->ps)
+        ID3D11DeviceContext1_PSSetShader(context, sh->ps = render_target->ps, NULL, 0);
+    if (sh->vp.Width != vp.Width || sh->vp.Height != vp.Height || !sh->valid)
+    {
+        ID3D11DeviceContext1_RSSetViewports(context, 1, &vp);
+        sh->vp = vp;
+    }
+    if (render_target->mask_active)
+    {
+        scissor_rect.left = 0;
+        scissor_rect.top = 0;
+        scissor_rect.right = render_target->pixel_size.width;
+        scissor_rect.bottom = render_target->pixel_size.height;
+    }
+    else
     if (render_target->clip_stack.count)
     {
         const D2D1_RECT_F *clip_rect;
 
         clip_rect = &render_target->clip_stack.stack[render_target->clip_stack.count - 1];
+        if (render_target->ps_shadow_valid && render_target->ps_shadow.clip_on)
+        {
+            scissor_rect.left = floorf(clip_rect->left);
+            scissor_rect.top = floorf(clip_rect->top);
+            scissor_rect.right = ceilf(clip_rect->right);
+            scissor_rect.bottom = ceilf(clip_rect->bottom);
+        }
+        else
+        {
         scissor_rect.left = ceilf(clip_rect->left - 0.5f);
         scissor_rect.top = ceilf(clip_rect->top - 0.5f);
         scissor_rect.right = ceilf(clip_rect->right - 0.5f);
         scissor_rect.bottom = ceilf(clip_rect->bottom - 0.5f);
+        }
     }
     else
     {
@@ -169,32 +319,61 @@ static void d2d_device_context_draw(struct d2d_device_context *render_target, en
         scissor_rect.right = render_target->pixel_size.width;
         scissor_rect.bottom = render_target->pixel_size.height;
     }
-    ID3D11DeviceContext1_RSSetScissorRects(context, 1, &scissor_rect);
-    ID3D11DeviceContext1_RSSetState(context, render_target->rs);
-    ID3D11DeviceContext1_OMSetRenderTargets(context, 1, &render_target->target.bitmap->rtv, NULL);
+    if (!sh->valid || memcmp(&sh->scissor, &scissor_rect, sizeof(scissor_rect)))
+    {
+        ID3D11DeviceContext1_RSSetScissorRects(context, 1, &scissor_rect);
+        sh->scissor = scissor_rect;
+    }
+    if (sh->rs != render_target->rs)
+        ID3D11DeviceContext1_RSSetState(context, sh->rs = render_target->rs);
+    if (sh->rtv != render_target->target.bitmap->rtv)
+    {
+        ID3D11DeviceContext1_OMSetRenderTargets(context, 1, &render_target->target.bitmap->rtv, NULL);
+        sh->rtv = render_target->target.bitmap->rtv;
+    }
     if (brush)
     {
-        ID3D11DeviceContext1_OMSetBlendState(context, render_target->bs, NULL, D3D11_DEFAULT_SAMPLE_MASK);
+        if (sh->bs != render_target->bs)
+            ID3D11DeviceContext1_OMSetBlendState(context, sh->bs = render_target->bs, NULL, D3D11_DEFAULT_SAMPLE_MASK);
         d2d_brush_bind_resources(brush, render_target, 0);
     }
-    else
+    else if (sh->bs)
     {
-        ID3D11DeviceContext1_OMSetBlendState(context, NULL, NULL, D3D11_DEFAULT_SAMPLE_MASK);
+        ID3D11DeviceContext1_OMSetBlendState(context, sh->bs = NULL, NULL, D3D11_DEFAULT_SAMPLE_MASK);
     }
+    sh->valid = TRUE;
     if (opacity_brush)
         d2d_brush_bind_resources(opacity_brush, render_target, 1);
+    if (render_target->mask_active)
+        ID3D11DeviceContext1_PSSetShaderResources(context, 4, 1, &render_target->mask_srv);
 
     if (ib)
         ID3D11DeviceContext1_DrawIndexed(context, index_count, 0, 0);
     else
         ID3D11DeviceContext1_Draw(context, index_count, 0);
 
-    ID3D11DeviceContext1_SwapDeviceContextState(context, prev_state, NULL);
     ID3D11DeviceContext1_Release(context);
-    ID3DDeviceContextState_Release(prev_state);
 
     if (render_target->cs)
         LeaveCriticalSection(render_target->cs);
+}
+
+void d2d_device_context_state_out(struct d2d_device_context *context)
+{
+    ID3D11DeviceContext1 *d3d_context;
+
+    if (!context->state_in)
+        return;
+    if (context->cs)
+        EnterCriticalSection(context->cs);
+    ID3D11Device1_GetImmediateContext1(context->d3d_device, &d3d_context);
+    ID3D11DeviceContext1_SwapDeviceContextState(d3d_context, context->prev_state, NULL);
+    ID3D11DeviceContext1_Release(d3d_context);
+    ID3DDeviceContextState_Release(context->prev_state);
+    context->prev_state = NULL;
+    context->state_in = FALSE;
+    if (context->cs)
+        LeaveCriticalSection(context->cs);
 }
 
 static void d2d_device_context_set_error(struct d2d_device_context *context, HRESULT code)
@@ -271,12 +450,30 @@ static ULONG STDMETHODCALLTYPE d2d_device_context_inner_Release(IUnknown *iface)
         unsigned int i, j, k;
 
         d2d_clip_stack_cleanup(&context->clip_stack);
+        d2d_device_context_discard_layers(context);
+        for (i = 0; i < context->layer_stack.initialized; ++i)
+        {
+            if (context->layer_stack.stack[i].bitmap)
+                ID2D1Bitmap1_Release(&context->layer_stack.stack[i].bitmap->ID2D1Bitmap1_iface);
+        }
+        free(context->layer_stack.stack);
+        d2d_coverage_cleanup(&context->coverage);
+        if (context->mask_srv)
+            ID3D11ShaderResourceView_Release(context->mask_srv);
+        if (context->mask_texture)
+            ID3D11Texture2D_Release(context->mask_texture);
         IDWriteRenderingParams_Release(context->default_text_rendering_params);
         if (context->text_rendering_params)
             IDWriteRenderingParams_Release(context->text_rendering_params);
         if (context->bs)
             ID3D11BlendState_Release(context->bs);
         ID3D11RasterizerState_Release(context->rs);
+        d2d_glyph_atlas_destroy(context->glyph_atlas[0]);
+        d2d_glyph_atlas_destroy(context->glyph_atlas[1]);
+        if (context->vb_stream.buffer)
+            ID3D11Buffer_Release(context->vb_stream.buffer);
+        if (context->ib_stream.buffer)
+            ID3D11Buffer_Release(context->ib_stream.buffer);
         ID3D11Buffer_Release(context->vb);
         ID3D11Buffer_Release(context->ib);
         ID3D11Buffer_Release(context->ps_cb);
@@ -298,6 +495,7 @@ static ULONG STDMETHODCALLTYPE d2d_device_context_inner_Release(IUnknown *iface)
                 }
             }
         }
+        d2d_device_context_state_out(context);
         if (context->d3d_state)
             ID3DDeviceContextState_Release(context->d3d_state);
         if (context->target.object)
@@ -576,6 +774,67 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateMesh(ID2D1DeviceContex
     return hr;
 }
 
+static HRESULT d2d_device_context_update_ps_cb(struct d2d_device_context *context,
+        struct d2d_brush *brush, struct d2d_brush *opacity_brush, BOOL outline, BOOL is_arc);
+static HRESULT d2d_device_context_update_vs_cb(struct d2d_device_context *context,
+        const D2D_MATRIX_3X2_F *geometry_transform, float stroke_width);
+
+static void d2d_device_context_request_gpu_clip(struct d2d_device_context *context)
+{
+    context->ps_clip_on = context->clip_stack.count && d2d_coverage_clip_is_fractional(
+            &context->clip_stack.stack[context->clip_stack.count - 1]);
+}
+
+static BOOL d2d_device_context_draw_line_aa(struct d2d_device_context *context, D2D1_POINT_2F p0, D2D1_POINT_2F p1,
+        struct d2d_brush *brush, float stroke_width)
+{
+    D2D1_MATRIX_3X2_F world, to_device, from_device, identity = {{{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f}}};
+    struct d2d_aa_vertex vertices[D2D_CONVEX_MAX_VERTICES];
+    struct d2d_face faces[D2D_CONVEX_MAX_FACES];
+    D2D1_POINT_2F quad[4];
+    size_t vertex_count, face_count;
+    float dx, dy, len, hw;
+
+    if (context->drawing_state.antialiasMode != D2D1_ANTIALIAS_MODE_PER_PRIMITIVE || !(stroke_width > 0.0f))
+        return FALSE;
+    dx = p1.x - p0.x;
+    dy = p1.y - p0.y;
+    len = sqrtf(dx * dx + dy * dy);
+    if (!(len > 1e-4f))
+        return FALSE;
+    hw = stroke_width * 0.5f / len;
+
+    quad[0].x = p0.x + dy * hw;
+    quad[0].y = p0.y - dx * hw;
+    quad[1].x = p1.x + dy * hw;
+    quad[1].y = p1.y - dx * hw;
+    quad[2].x = p1.x - dy * hw;
+    quad[2].y = p1.y + dx * hw;
+    quad[3].x = p0.x - dy * hw;
+    quad[3].y = p0.y + dx * hw;
+
+    world = context->drawing_state.transform;
+    to_device._11 = context->desc.dpiX / 96.0f;
+    to_device._12 = to_device._21 = to_device._31 = to_device._32 = 0.0f;
+    to_device._22 = context->desc.dpiY / 96.0f;
+    d2d_matrix_multiply(&world, &to_device);
+    if (!d2d_matrix_invert(&from_device, &world))
+        return FALSE;
+
+    if (!(vertex_count = d2d_convex_aa_polygon(quad, 4, &identity, &world, &from_device, 0.0f,
+            vertices, faces, &face_count)))
+        return FALSE;
+
+    d2d_device_context_request_gpu_clip(context);
+    if (SUCCEEDED(d2d_device_context_update_vs_cb(context, &identity, 0.0f))
+            && SUCCEEDED(d2d_device_context_update_ps_cb(context, brush, NULL, FALSE, FALSE))
+            && d2d_device_context_stream_indexed(context, faces, face_count * sizeof(*faces),
+            vertices, vertex_count * sizeof(*vertices)))
+        d2d_device_context_draw(context, D2D_SHAPE_TYPE_TRIANGLE_AA, context->ib_stream.buffer,
+                face_count * 3, context->vb_stream.buffer, sizeof(*vertices), brush, NULL);
+    return TRUE;
+}
+
 static void STDMETHODCALLTYPE d2d_device_context_DrawLine(ID2D1DeviceContext6 *iface,
         D2D1_POINT_2F p0, D2D1_POINT_2F p1, ID2D1Brush *brush, float stroke_width, ID2D1StrokeStyle *stroke_style)
 {
@@ -595,6 +854,10 @@ static void STDMETHODCALLTYPE d2d_device_context_DrawLine(ID2D1DeviceContext6 *i
         d2d_command_list_draw_line(context->target.command_list, context, p0, p1, brush, stroke_width, stroke_style);
         return;
     }
+
+    if (!stroke_style && context->target.type != D2D_TARGET_UNKNOWN
+            && d2d_device_context_draw_line_aa(context, p0, p1, unsafe_impl_from_ID2D1Brush(brush), stroke_width))
+        return;
 
     if (FAILED(hr = ID2D1Factory_CreatePathGeometry(context->factory, &geometry)))
     {
@@ -649,6 +912,58 @@ static void STDMETHODCALLTYPE d2d_device_context_DrawRectangle(ID2D1DeviceContex
     ID2D1RectangleGeometry_Release(geometry);
 }
 
+static HRESULT d2d_device_context_update_ps_cb(struct d2d_device_context *context,
+        struct d2d_brush *brush, struct d2d_brush *opacity_brush, BOOL outline, BOOL is_arc);
+static HRESULT d2d_device_context_update_vs_cb(struct d2d_device_context *context,
+        const D2D_MATRIX_3X2_F *geometry_transform, float stroke_width);
+
+static BOOL d2d_device_context_fill_rectangle(struct d2d_device_context *context, const D2D1_RECT_F *rect,
+        struct d2d_brush *brush, struct d2d_brush *opacity_brush)
+{
+    static const D2D_MATRIX_3X2_F identity = {{{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f}}};
+    D2D1_MATRIX_3X2_F world, to_device;
+    D2D1_POINT_2F quad[4];
+
+    if (context->target.type != D2D_TARGET_BITMAP || !brush)
+        return FALSE;
+    if (!(rect->right > rect->left && rect->bottom > rect->top))
+        return FALSE;
+
+    if (context->drawing_state.antialiasMode == D2D1_ANTIALIAS_MODE_PER_PRIMITIVE)
+    {
+        world = context->drawing_state.transform;
+        to_device._11 = context->desc.dpiX / 96.0f;
+        to_device._12 = to_device._21 = to_device._31 = to_device._32 = 0.0f;
+        to_device._22 = context->desc.dpiY / 96.0f;
+        d2d_matrix_multiply(&world, &to_device);
+        if (!d2d_rect_is_pixel_aligned(rect, &world))
+            return FALSE;
+    }
+    else if (context->drawing_state.antialiasMode != D2D1_ANTIALIAS_MODE_ALIASED)
+    {
+        return FALSE;
+    }
+
+    quad[0].x = rect->left;
+    quad[0].y = rect->top;
+    quad[1].x = rect->left;
+    quad[1].y = rect->bottom;
+    quad[2].x = rect->right;
+    quad[2].y = rect->top;
+    quad[3].x = rect->right;
+    quad[3].y = rect->bottom;
+
+    d2d_device_context_request_gpu_clip(context);
+    if (FAILED(d2d_device_context_update_vs_cb(context, &identity, 0.0f))
+            || FAILED(d2d_device_context_update_ps_cb(context, brush, opacity_brush, FALSE, FALSE))
+            || !d2d_device_context_stream_vertices(context, quad, sizeof(quad)))
+        return FALSE;
+
+    d2d_device_context_draw(context, D2D_SHAPE_TYPE_TRIANGLE, context->ib, 6, context->vb_stream.buffer,
+            sizeof(*quad), brush, opacity_brush);
+    return TRUE;
+}
+
 static void STDMETHODCALLTYPE d2d_device_context_FillRectangle(ID2D1DeviceContext6 *iface,
         const D2D1_RECT_F *rect, ID2D1Brush *brush)
 {
@@ -667,7 +982,13 @@ static void STDMETHODCALLTYPE d2d_device_context_FillRectangle(ID2D1DeviceContex
         return;
     }
 
-    if (FAILED(hr = ID2D1Factory_CreateRectangleGeometry(context->factory, rect, &geometry)))
+    if (d2d_device_context_fill_rectangle(context, rect, unsafe_impl_from_ID2D1Brush(brush), NULL))
+        return;
+
+    {
+        hr = ID2D1Factory_CreateRectangleGeometry(context->factory, rect, &geometry);
+    }
+    if (FAILED(hr))
     {
         ERR("Failed to create geometry, hr %#lx.\n", hr);
         return;
@@ -772,34 +1093,57 @@ static HRESULT d2d_device_context_update_ps_cb(struct d2d_device_context *contex
 {
     D3D11_MAPPED_SUBRESOURCE map_desc;
     ID3D11DeviceContext *d3d_context;
-    struct d2d_ps_cb *cb_data;
+    struct d2d_ps_cb cb_data;
     HRESULT hr;
 
-    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
+    memset(&cb_data, 0, sizeof(cb_data));
+    cb_data.outline = outline;
+    cb_data.is_arc = is_arc;
+    cb_data.mask = context->mask_active;
+    cb_data.mask_origin[0] = context->mask_x;
+    cb_data.mask_origin[1] = context->mask_y;
+    {
+        BOOL want = context->ps_clip_on;
 
+        context->ps_clip_on = FALSE;
+        if (want && context->clip_stack.count)
+        {
+        const D2D1_RECT_F *clip = &context->clip_stack.stack[context->clip_stack.count - 1];
+
+        cb_data.clip_on = TRUE;
+        cb_data.clip[0] = clip->left;
+        cb_data.clip[1] = clip->top;
+        cb_data.clip[2] = clip->right;
+        cb_data.clip[3] = clip->bottom;
+        }
+    }
+    if (!d2d_brush_fill_cb(brush, &cb_data.colour_brush))
+        WARN("Failed to initialize colour brush buffer.\n");
+    if (!d2d_brush_fill_cb(opacity_brush, &cb_data.opacity_brush))
+        WARN("Failed to initialize opacity brush buffer.\n");
+
+    if (context->ps_shadow_valid && !memcmp(&context->ps_shadow, &cb_data, sizeof(cb_data)))
+        return S_OK;
+
+    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
     if (FAILED(hr = ID3D11DeviceContext_Map(d3d_context, (ID3D11Resource *)context->ps_cb,
             0, D3D11_MAP_WRITE_DISCARD, 0, &map_desc)))
     {
         WARN("Failed to map constant buffer, hr %#lx.\n", hr);
+        context->ps_shadow_valid = FALSE;
         ID3D11DeviceContext_Release(d3d_context);
         return hr;
     }
 
-    cb_data = map_desc.pData;
-    cb_data->outline = outline;
-    cb_data->is_arc = is_arc;
-    cb_data->pad[0] = 0;
-    cb_data->pad[1] = 0;
-    if (!d2d_brush_fill_cb(brush, &cb_data->colour_brush))
-        WARN("Failed to initialize colour brush buffer.\n");
-    if (!d2d_brush_fill_cb(opacity_brush, &cb_data->opacity_brush))
-        WARN("Failed to initialize opacity brush buffer.\n");
-
+    memcpy(map_desc.pData, &cb_data, sizeof(cb_data));
     ID3D11DeviceContext_Unmap(d3d_context, (ID3D11Resource *)context->ps_cb, 0);
     ID3D11DeviceContext_Release(d3d_context);
+    context->ps_shadow = cb_data;
+    context->ps_shadow_valid = TRUE;
 
-    return hr;
+    return S_OK;
 }
+
 
 static HRESULT d2d_device_context_update_vs_cb(struct d2d_device_context *context,
         const D2D_MATRIX_3X2_F *geometry_transform, float stroke_width)
@@ -807,57 +1151,67 @@ static HRESULT d2d_device_context_update_vs_cb(struct d2d_device_context *contex
     D3D11_MAPPED_SUBRESOURCE map_desc;
     ID3D11DeviceContext *d3d_context;
     const D2D1_MATRIX_3X2_F *w;
-    struct d2d_vs_cb *cb_data;
+    struct d2d_vs_cb cb_data;
     float tmp_x, tmp_y;
     HRESULT hr;
 
-    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
-
-    if (FAILED(hr = ID3D11DeviceContext_Map(d3d_context, (ID3D11Resource *)context->vs_cb,
-            0, D3D11_MAP_WRITE_DISCARD, 0, &map_desc)))
-    {
-        WARN("Failed to map constant buffer, hr %#lx.\n", hr);
-        ID3D11DeviceContext_Release(d3d_context);
-        return hr;
-    }
-
-    cb_data = map_desc.pData;
-    cb_data->transform_geometry._11 = geometry_transform->_11;
-    cb_data->transform_geometry._21 = geometry_transform->_21;
-    cb_data->transform_geometry._31 = geometry_transform->_31;
-    cb_data->transform_geometry.pad0 = 0.0f;
-    cb_data->transform_geometry._12 = geometry_transform->_12;
-    cb_data->transform_geometry._22 = geometry_transform->_22;
-    cb_data->transform_geometry._32 = geometry_transform->_32;
-    cb_data->transform_geometry.stroke_width = stroke_width;
+    memset(&cb_data, 0, sizeof(cb_data));
+    cb_data.transform_geometry._11 = geometry_transform->_11;
+    cb_data.transform_geometry._21 = geometry_transform->_21;
+    cb_data.transform_geometry._31 = geometry_transform->_31;
+    cb_data.transform_geometry._12 = geometry_transform->_12;
+    cb_data.transform_geometry._22 = geometry_transform->_22;
+    cb_data.transform_geometry._32 = geometry_transform->_32;
+    cb_data.transform_geometry.stroke_width = stroke_width;
 
     w = &context->drawing_state.transform;
 
     tmp_x = context->desc.dpiX / 96.0f;
-    cb_data->transform_rtx.x = w->_11 * tmp_x;
-    cb_data->transform_rtx.y = w->_21 * tmp_x;
-    cb_data->transform_rtx.z = w->_31 * tmp_x;
-    cb_data->transform_rtx.w = 2.0f / context->pixel_size.width;
+    cb_data.transform_rtx.x = w->_11 * tmp_x;
+    cb_data.transform_rtx.y = w->_21 * tmp_x;
+    cb_data.transform_rtx.z = w->_31 * tmp_x;
+    cb_data.transform_rtx.w = 2.0f / context->pixel_size.width;
 
     tmp_y = context->desc.dpiY / 96.0f;
-    cb_data->transform_rty.x = w->_12 * tmp_y;
-    cb_data->transform_rty.y = w->_22 * tmp_y;
-    cb_data->transform_rty.z = w->_32 * tmp_y;
-    cb_data->transform_rty.w = -2.0f / context->pixel_size.height;
+    cb_data.transform_rty.x = w->_12 * tmp_y;
+    cb_data.transform_rty.y = w->_22 * tmp_y;
+    cb_data.transform_rty.z = w->_32 * tmp_y;
+    cb_data.transform_rty.w = -2.0f / context->pixel_size.height;
 
+    if (context->vs_shadow_valid && !memcmp(&context->vs_shadow, &cb_data, sizeof(cb_data)))
+        return S_OK;
+
+    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
+    if (FAILED(hr = ID3D11DeviceContext_Map(d3d_context, (ID3D11Resource *)context->vs_cb,
+            0, D3D11_MAP_WRITE_DISCARD, 0, &map_desc)))
+    {
+        WARN("Failed to map constant buffer, hr %#lx.\n", hr);
+        context->vs_shadow_valid = FALSE;
+        ID3D11DeviceContext_Release(d3d_context);
+        return hr;
+    }
+
+    memcpy(map_desc.pData, &cb_data, sizeof(cb_data));
     ID3D11DeviceContext_Unmap(d3d_context, (ID3D11Resource *)context->vs_cb, 0);
     ID3D11DeviceContext_Release(d3d_context);
+    context->vs_shadow = cb_data;
+    context->vs_shadow_valid = TRUE;
 
     return S_OK;
 }
 
+
+static BOOL d2d_device_context_draw_coverage(struct d2d_device_context *context,
+        const struct d2d_geometry *geometry, struct d2d_brush *brush, struct d2d_brush *opacity_brush,
+        BOOL outline, float stroke_width);
+
 static void d2d_device_context_draw_geometry(struct d2d_device_context *render_target,
         const struct d2d_geometry *geometry, struct d2d_brush *brush, float stroke_width)
 {
-    D3D11_SUBRESOURCE_DATA buffer_data;
-    D3D11_BUFFER_DESC buffer_desc;
-    ID3D11Buffer *ib, *vb;
     HRESULT hr;
+
+    if (d2d_device_context_draw_coverage(render_target, geometry, brush, NULL, TRUE, stroke_width))
+        return;
 
     if (FAILED(hr = d2d_device_context_update_vs_cb(render_target, &geometry->transform, stroke_width)))
     {
@@ -871,106 +1225,46 @@ static void d2d_device_context_draw_geometry(struct d2d_device_context *render_t
         return;
     }
 
-    buffer_desc.Usage = D3D11_USAGE_DEFAULT;
-    buffer_desc.CPUAccessFlags = 0;
-    buffer_desc.MiscFlags = 0;
-
-    buffer_data.SysMemPitch = 0;
-    buffer_data.SysMemSlicePitch = 0;
-
     if (geometry->outline.face_count)
     {
-        buffer_desc.ByteWidth = geometry->outline.face_count * sizeof(*geometry->outline.faces);
-        buffer_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-        buffer_data.pSysMem = geometry->outline.faces;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &ib)))
-        {
-            WARN("Failed to create index buffer, hr %#lx.\n", hr);
+        if (!d2d_device_context_stream_indexed(render_target,
+                geometry->outline.faces, geometry->outline.face_count * sizeof(*geometry->outline.faces),
+                geometry->outline.vertices, geometry->outline.vertex_count * sizeof(*geometry->outline.vertices)))
             return;
-        }
 
-        buffer_desc.ByteWidth = geometry->outline.vertex_count * sizeof(*geometry->outline.vertices);
-        buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        buffer_data.pSysMem = geometry->outline.vertices;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &vb)))
-        {
-            ERR("Failed to create vertex buffer, hr %#lx.\n", hr);
-            ID3D11Buffer_Release(ib);
-            return;
-        }
-
-        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_OUTLINE, ib, 3 * geometry->outline.face_count, vb,
+        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_OUTLINE, render_target->ib_stream.buffer,
+                3 * geometry->outline.face_count, render_target->vb_stream.buffer,
                 sizeof(*geometry->outline.vertices), brush, NULL);
-
-        ID3D11Buffer_Release(vb);
-        ID3D11Buffer_Release(ib);
     }
 
     if (geometry->outline.bezier_face_count)
     {
-        buffer_desc.ByteWidth = geometry->outline.bezier_face_count * sizeof(*geometry->outline.bezier_faces);
-        buffer_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-        buffer_data.pSysMem = geometry->outline.bezier_faces;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &ib)))
-        {
-            WARN("Failed to create curves index buffer, hr %#lx.\n", hr);
+        if (!d2d_device_context_stream_indexed(render_target,
+                geometry->outline.bezier_faces,
+                geometry->outline.bezier_face_count * sizeof(*geometry->outline.bezier_faces),
+                geometry->outline.beziers, geometry->outline.bezier_count * sizeof(*geometry->outline.beziers)))
             return;
-        }
 
-        buffer_desc.ByteWidth = geometry->outline.bezier_count * sizeof(*geometry->outline.beziers);
-        buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        buffer_data.pSysMem = geometry->outline.beziers;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &vb)))
-        {
-            ERR("Failed to create curves vertex buffer, hr %#lx.\n", hr);
-            ID3D11Buffer_Release(ib);
-            return;
-        }
-
-        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_BEZIER_OUTLINE, ib,
-                3 * geometry->outline.bezier_face_count, vb,
+        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_BEZIER_OUTLINE, render_target->ib_stream.buffer,
+                3 * geometry->outline.bezier_face_count, render_target->vb_stream.buffer,
                 sizeof(*geometry->outline.beziers), brush, NULL);
-
-        ID3D11Buffer_Release(vb);
-        ID3D11Buffer_Release(ib);
     }
 
     if (geometry->outline.arc_face_count)
     {
-        buffer_desc.ByteWidth = geometry->outline.arc_face_count * sizeof(*geometry->outline.arc_faces);
-        buffer_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-        buffer_data.pSysMem = geometry->outline.arc_faces;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &ib)))
-        {
-            WARN("Failed to create arcs index buffer, hr %#lx.\n", hr);
+        if (!d2d_device_context_stream_indexed(render_target,
+                geometry->outline.arc_faces,
+                geometry->outline.arc_face_count * sizeof(*geometry->outline.arc_faces),
+                geometry->outline.arcs, geometry->outline.arc_count * sizeof(*geometry->outline.arcs)))
             return;
-        }
-
-        buffer_desc.ByteWidth = geometry->outline.arc_count * sizeof(*geometry->outline.arcs);
-        buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        buffer_data.pSysMem = geometry->outline.arcs;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &vb)))
-        {
-            ERR("Failed to create arcs vertex buffer, hr %#lx.\n", hr);
-            ID3D11Buffer_Release(ib);
-            return;
-        }
 
         if (SUCCEEDED(d2d_device_context_update_ps_cb(render_target, brush, NULL, TRUE, TRUE)))
-            d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_ARC_OUTLINE, ib,
-                    3 * geometry->outline.arc_face_count, vb,
+            d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_ARC_OUTLINE, render_target->ib_stream.buffer,
+                    3 * geometry->outline.arc_face_count, render_target->vb_stream.buffer,
                     sizeof(*geometry->outline.arcs), brush, NULL);
-
-        ID3D11Buffer_Release(vb);
-        ID3D11Buffer_Release(ib);
     }
 }
+
 
 static void STDMETHODCALLTYPE d2d_device_context_DrawGeometry(ID2D1DeviceContext6 *iface,
         ID2D1Geometry *geometry, ID2D1Brush *brush, float stroke_width, ID2D1StrokeStyle *stroke_style)
@@ -1011,20 +1305,304 @@ static void STDMETHODCALLTYPE d2d_device_context_DrawGeometry(ID2D1DeviceContext
     d2d_device_context_draw_geometry(context, geometry_impl, brush_impl, stroke_width);
 }
 
+static BOOL d2d_device_context_ensure_mask_texture(struct d2d_device_context *context, UINT width, UINT height)
+{
+    D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc;
+    D3D11_TEXTURE2D_DESC desc;
+    HRESULT hr;
+
+    if (context->mask_texture && context->mask_width >= width && context->mask_height >= height)
+        return TRUE;
+
+    width = max(width, context->mask_width);
+    height = max(height, context->mask_height);
+    width = (width + 63) & ~63u;
+    height = (height + 63) & ~63u;
+
+    if (context->mask_srv)
+        ID3D11ShaderResourceView_Release(context->mask_srv);
+    if (context->mask_texture)
+        ID3D11Texture2D_Release(context->mask_texture);
+    context->mask_srv = NULL;
+    context->mask_texture = NULL;
+    context->mask_width = context->mask_height = 0;
+
+    memset(&desc, 0, sizeof(desc));
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DYNAMIC;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    if (FAILED(hr = ID3D11Device1_CreateTexture2D(context->d3d_device, &desc, NULL, &context->mask_texture)))
+    {
+        WARN("Failed to create coverage mask texture, hr %#lx.\n", hr);
+        return FALSE;
+    }
+
+    memset(&srv_desc, 0, sizeof(srv_desc));
+    srv_desc.Format = desc.Format;
+    srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srv_desc.Texture2D.MipLevels = 1;
+    if (FAILED(hr = ID3D11Device1_CreateShaderResourceView(context->d3d_device,
+            (ID3D11Resource *)context->mask_texture, &srv_desc, &context->mask_srv)))
+    {
+        WARN("Failed to create coverage mask view, hr %#lx.\n", hr);
+        ID3D11Texture2D_Release(context->mask_texture);
+        context->mask_texture = NULL;
+        return FALSE;
+    }
+
+    context->mask_width = width;
+    context->mask_height = height;
+    return TRUE;
+}
+
+static BOOL d2d_device_context_upload_coverage(struct d2d_device_context *context, UINT width, UINT height)
+{
+    const struct d2d_coverage *coverage = &context->coverage;
+    D3D11_MAPPED_SUBRESOURCE map_desc;
+    ID3D11DeviceContext *d3d_context;
+    HRESULT hr;
+    size_t i;
+
+    if (!d2d_device_context_ensure_mask_texture(context, width, height))
+        return FALSE;
+
+    if (context->cs)
+        EnterCriticalSection(context->cs);
+    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
+    hr = ID3D11DeviceContext_Map(d3d_context, (ID3D11Resource *)context->mask_texture, 0,
+            D3D11_MAP_WRITE_DISCARD, 0, &map_desc);
+    if (SUCCEEDED(hr))
+    {
+        for (i = 0; i < coverage->run_count; ++i)
+        {
+            const struct d2d_coverage_run *run = &coverage->runs[i];
+            const BYTE *tile = &coverage->tiles[run->tile * D2D_COVERAGE_TILE * D2D_COVERAGE_TILE];
+            int x, row, w;
+
+            if (!run->edge)
+                continue;
+
+            for (x = run->x; x < run->x + run->width; x += D2D_COVERAGE_TILE)
+            {
+                w = min(D2D_COVERAGE_TILE, run->x + run->width - x);
+                for (row = 0; row < run->height; ++row)
+                    memcpy((BYTE *)map_desc.pData + (size_t)(run->y + row) * map_desc.RowPitch + x,
+                            tile + row * D2D_COVERAGE_TILE, w);
+                tile += D2D_COVERAGE_TILE * D2D_COVERAGE_TILE;
+            }
+        }
+        ID3D11DeviceContext_Unmap(d3d_context, (ID3D11Resource *)context->mask_texture, 0);
+    }
+    ID3D11DeviceContext_Release(d3d_context);
+    if (context->cs)
+        LeaveCriticalSection(context->cs);
+    if (FAILED(hr))
+        WARN("Failed to map coverage mask texture, hr %#lx.\n", hr);
+
+    return SUCCEEDED(hr);
+}
+
+static void d2d_device_context_draw_coverage_runs(struct d2d_device_context *context,
+        const struct d2d_geometry *geometry, struct d2d_brush *brush, struct d2d_brush *opacity_brush,
+        const D2D1_MATRIX_3X2_F *from_device, const RECT *area, BOOL edge)
+{
+    enum {chunk = 256};
+    const struct d2d_coverage *coverage = &context->coverage;
+    D2D1_POINT_2F vertices[4 * chunk];
+    struct d2d_face faces[2 * chunk];
+    size_t i, count = 0;
+    UINT16 base;
+    float x0, y0, x1, y1;
+
+    context->mask_active = edge;
+    context->mask_x = area->left;
+    context->mask_y = area->top;
+
+    for (i = 0; i <= coverage->run_count; ++i)
+    {
+        if (i < coverage->run_count && coverage->runs[i].edge != edge)
+            continue;
+        if (i < coverage->run_count)
+        {
+            const struct d2d_coverage_run *run = &coverage->runs[i];
+
+            x0 = area->left + run->x;
+            y0 = area->top + run->y;
+            x1 = x0 + run->width;
+            y1 = y0 + run->height;
+            base = count * 4;
+            d2d_point_transform(&vertices[base], from_device, x0, y0);
+            d2d_point_transform(&vertices[base + 1], from_device, x0, y1);
+            d2d_point_transform(&vertices[base + 2], from_device, x1, y0);
+            d2d_point_transform(&vertices[base + 3], from_device, x1, y1);
+            faces[count * 2].v[0] = base;
+            faces[count * 2].v[1] = base + 1;
+            faces[count * 2].v[2] = base + 2;
+            faces[count * 2 + 1].v[0] = base + 2;
+            faces[count * 2 + 1].v[1] = base + 1;
+            faces[count * 2 + 1].v[2] = base + 3;
+            if (++count < chunk)
+                continue;
+        }
+        if (!count)
+            continue;
+
+        if (SUCCEEDED(d2d_device_context_update_vs_cb(context, &geometry->transform, 0.0f))
+                && SUCCEEDED(d2d_device_context_update_ps_cb(context, brush, opacity_brush, FALSE, FALSE))
+                && d2d_device_context_stream_indexed(context, faces, count * 2 * sizeof(*faces),
+                vertices, count * 4 * sizeof(*vertices)))
+            d2d_device_context_draw(context, D2D_SHAPE_TYPE_TRIANGLE, context->ib_stream.buffer, count * 6,
+                    context->vb_stream.buffer, sizeof(*vertices), brush, opacity_brush);
+        count = 0;
+    }
+
+    context->mask_active = FALSE;
+}
+
+static BOOL d2d_device_context_draw_coverage(struct d2d_device_context *context,
+        const struct d2d_geometry *geometry, struct d2d_brush *brush, struct d2d_brush *opacity_brush,
+        BOOL outline, float stroke_width)
+{
+    D2D1_MATRIX_3X2_F world, to_device, from_device;
+    const D2D1_RECT_F *clip_rect = NULL;
+    D2D1_RECT_F bounds;
+    float margin = 0.0f;
+    RECT area;
+
+    if (context->drawing_state.antialiasMode != D2D1_ANTIALIAS_MODE_PER_PRIMITIVE)
+        return FALSE;
+    if (outline)
+    {
+        if (!geometry->outline.face_count && !geometry->outline.bezier_count && !geometry->outline.arc_count)
+            return FALSE;
+    }
+    else if (!geometry->fill.face_count && !geometry->fill.bezier_vertex_count && !geometry->fill.arc_vertex_count)
+    {
+        return FALSE;
+    }
+
+    world = context->drawing_state.transform;
+    to_device._11 = context->desc.dpiX / 96.0f;
+    to_device._12 = to_device._21 = to_device._31 = to_device._32 = 0.0f;
+    to_device._22 = context->desc.dpiY / 96.0f;
+    d2d_matrix_multiply(&world, &to_device);
+
+    if (!outline && d2d_geometry_is_pixel_aligned_rect(geometry, &world)
+            && !(context->clip_stack.count && d2d_coverage_clip_is_fractional(
+            &context->clip_stack.stack[context->clip_stack.count - 1])))
+        return FALSE;
+
+    to_device = geometry->transform;
+    d2d_matrix_multiply(&to_device, &world);
+    if (!d2d_matrix_invert(&from_device, &to_device))
+        return FALSE;
+    if (geometry->convex.valid)
+    {
+        struct d2d_aa_vertex vertices[D2D_CONVEX_MAX_VERTICES];
+        struct d2d_face faces[D2D_CONVEX_MAX_FACES];
+        size_t vertex_count, face_count;
+
+        if ((vertex_count = d2d_geometry_convex_aa(geometry, &world, &from_device,
+                outline ? stroke_width : 0.0f, vertices, faces, &face_count)))
+        {
+            d2d_device_context_request_gpu_clip(context);
+            if (SUCCEEDED(d2d_device_context_update_vs_cb(context, &geometry->transform, 0.0f))
+                    && SUCCEEDED(d2d_device_context_update_ps_cb(context, brush, opacity_brush, FALSE, FALSE))
+                    && d2d_device_context_stream_indexed(context, faces, face_count * sizeof(*faces),
+                    vertices, vertex_count * sizeof(*vertices)))
+                d2d_device_context_draw(context, D2D_SHAPE_TYPE_TRIANGLE_AA, context->ib_stream.buffer,
+                        face_count * 3, context->vb_stream.buffer, sizeof(*vertices), brush, opacity_brush);
+            return TRUE;
+        }
+    }
+
+    if (!outline && !geometry->fill.arc_vertex_count && (geometry->fill_polygon || geometry->flat.vertex_count))
+    {
+        struct d2d_aa_vertex *vertices;
+        struct d2d_face *faces;
+        size_t vertex_count, face_count;
+
+        if (d2d_geometry_polygon_aa(geometry, &world, &from_device, &vertices, &vertex_count, &faces, &face_count))
+        {
+            BOOL drawn = FALSE;
+
+            d2d_device_context_request_gpu_clip(context);
+            if (SUCCEEDED(d2d_device_context_update_vs_cb(context, &geometry->transform, 0.0f))
+                    && SUCCEEDED(d2d_device_context_update_ps_cb(context, brush, opacity_brush, FALSE, FALSE))
+                    && d2d_device_context_stream_indexed(context, faces, face_count * sizeof(*faces),
+                    vertices, vertex_count * sizeof(*vertices)))
+            {
+                d2d_device_context_draw(context, D2D_SHAPE_TYPE_TRIANGLE_AA, context->ib_stream.buffer,
+                        face_count * 3, context->vb_stream.buffer, sizeof(*vertices), brush, opacity_brush);
+                drawn = TRUE;
+            }
+            free(faces);
+            free(vertices);
+            if (drawn)
+                return TRUE;
+        }
+    }
+
+    if (!d2d_geometry_get_device_bounds(geometry, outline, &world, &bounds))
+        return FALSE;
+
+    if (outline)
+    {
+        const D2D1_MATRIX_3X2_F *g = &geometry->transform;
+        float scale = fabsf(world._11) + fabsf(world._12) + fabsf(world._21) + fabsf(world._22);
+
+        scale *= fabsf(g->_11) + fabsf(g->_12) + fabsf(g->_21) + fabsf(g->_22);
+        margin = ceilf(stroke_width * scale) * 2.0f + 2.0f;
+    }
+
+    area.left = 0;
+    area.top = 0;
+    area.right = context->pixel_size.width;
+    area.bottom = context->pixel_size.height;
+    if (context->clip_stack.count)
+    {
+        const D2D1_RECT_F *clip = &context->clip_stack.stack[context->clip_stack.count - 1];
+
+        area.left = max(area.left, (LONG)floorf(clip->left));
+        area.top = max(area.top, (LONG)floorf(clip->top));
+        area.right = min(area.right, (LONG)ceilf(clip->right));
+        area.bottom = min(area.bottom, (LONG)ceilf(clip->bottom));
+        clip_rect = clip;
+    }
+    area.left = max(area.left, (LONG)floorf(bounds.left - margin));
+    area.top = max(area.top, (LONG)floorf(bounds.top - margin));
+    area.right = min(area.right, (LONG)ceilf(bounds.right + margin));
+    area.bottom = min(area.bottom, (LONG)ceilf(bounds.bottom + margin));
+    if (area.right <= area.left || area.bottom <= area.top)
+        return TRUE;
+
+    if (!d2d_geometry_rasterize(geometry, outline, stroke_width, &world, &area, clip_rect, &context->coverage))
+        return FALSE;
+    if (!context->coverage.run_count)
+        return TRUE;
+    if (context->coverage.edge_count && !d2d_device_context_upload_coverage(context, area.right - area.left,
+            area.bottom - area.top))
+        return FALSE;
+
+    d2d_device_context_draw_coverage_runs(context, geometry, brush, opacity_brush, &from_device, &area, FALSE);
+    d2d_device_context_draw_coverage_runs(context, geometry, brush, opacity_brush, &from_device, &area, TRUE);
+
+    return TRUE;
+}
+
 static void d2d_device_context_fill_geometry(struct d2d_device_context *render_target,
         const struct d2d_geometry *geometry, struct d2d_brush *brush, struct d2d_brush *opacity_brush)
 {
-    D3D11_SUBRESOURCE_DATA buffer_data;
-    D3D11_BUFFER_DESC buffer_desc;
-    ID3D11Buffer *ib, *vb;
     HRESULT hr;
 
-    buffer_desc.Usage = D3D11_USAGE_DEFAULT;
-    buffer_desc.CPUAccessFlags = 0;
-    buffer_desc.MiscFlags = 0;
-
-    buffer_data.SysMemPitch = 0;
-    buffer_data.SysMemSlicePitch = 0;
+    if (d2d_device_context_draw_coverage(render_target, geometry, brush, opacity_brush, FALSE, 0.0f))
+        return;
 
     if (FAILED(hr = d2d_device_context_update_vs_cb(render_target, &geometry->transform, 0.0f)))
     {
@@ -1040,71 +1618,39 @@ static void d2d_device_context_fill_geometry(struct d2d_device_context *render_t
 
     if (geometry->fill.face_count)
     {
-        buffer_desc.ByteWidth = geometry->fill.face_count * sizeof(*geometry->fill.faces);
-        buffer_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-        buffer_data.pSysMem = geometry->fill.faces;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &ib)))
-        {
-            WARN("Failed to create index buffer, hr %#lx.\n", hr);
+        if (!d2d_device_context_stream_indexed(render_target,
+                geometry->fill.faces, geometry->fill.face_count * sizeof(*geometry->fill.faces),
+                geometry->fill.vertices, geometry->fill.vertex_count * sizeof(*geometry->fill.vertices)))
             return;
-        }
 
-        buffer_desc.ByteWidth = geometry->fill.vertex_count * sizeof(*geometry->fill.vertices);
-        buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        buffer_data.pSysMem = geometry->fill.vertices;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &vb)))
-        {
-            ERR("Failed to create vertex buffer, hr %#lx.\n", hr);
-            ID3D11Buffer_Release(ib);
-            return;
-        }
-
-        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_TRIANGLE, ib, 3 * geometry->fill.face_count, vb,
+        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_TRIANGLE, render_target->ib_stream.buffer,
+                3 * geometry->fill.face_count, render_target->vb_stream.buffer,
                 sizeof(*geometry->fill.vertices), brush, opacity_brush);
-
-        ID3D11Buffer_Release(vb);
-        ID3D11Buffer_Release(ib);
     }
 
     if (geometry->fill.bezier_vertex_count)
     {
-        buffer_desc.ByteWidth = geometry->fill.bezier_vertex_count * sizeof(*geometry->fill.bezier_vertices);
-        buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        buffer_data.pSysMem = geometry->fill.bezier_vertices;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &vb)))
-        {
-            ERR("Failed to create curves vertex buffer, hr %#lx.\n", hr);
+        if (!d2d_device_context_stream_vertices(render_target, geometry->fill.bezier_vertices,
+                geometry->fill.bezier_vertex_count * sizeof(*geometry->fill.bezier_vertices)))
             return;
-        }
 
-        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_CURVE, NULL, geometry->fill.bezier_vertex_count, vb,
-                sizeof(*geometry->fill.bezier_vertices), brush, opacity_brush);
-
-        ID3D11Buffer_Release(vb);
+        d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_CURVE, NULL, geometry->fill.bezier_vertex_count,
+                render_target->vb_stream.buffer, sizeof(*geometry->fill.bezier_vertices), brush, opacity_brush);
     }
 
     if (geometry->fill.arc_vertex_count)
     {
-        buffer_desc.ByteWidth = geometry->fill.arc_vertex_count * sizeof(*geometry->fill.arc_vertices);
-        buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        buffer_data.pSysMem = geometry->fill.arc_vertices;
-
-        if (FAILED(hr = ID3D11Device1_CreateBuffer(render_target->d3d_device, &buffer_desc, &buffer_data, &vb)))
-        {
-            ERR("Failed to create arc vertex buffer, hr %#lx.\n", hr);
+        if (!d2d_device_context_stream_vertices(render_target, geometry->fill.arc_vertices,
+                geometry->fill.arc_vertex_count * sizeof(*geometry->fill.arc_vertices)))
             return;
-        }
 
         if (SUCCEEDED(d2d_device_context_update_ps_cb(render_target, brush, opacity_brush, FALSE, TRUE)))
-            d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_CURVE, NULL, geometry->fill.arc_vertex_count, vb,
-                    sizeof(*geometry->fill.arc_vertices), brush, opacity_brush);
-
-        ID3D11Buffer_Release(vb);
+            d2d_device_context_draw(render_target, D2D_SHAPE_TYPE_CURVE, NULL, geometry->fill.arc_vertex_count,
+                    render_target->vb_stream.buffer, sizeof(*geometry->fill.arc_vertices), brush, opacity_brush);
     }
 }
+
+
 
 static void STDMETHODCALLTYPE d2d_device_context_FillGeometry(ID2D1DeviceContext6 *iface,
         ID2D1Geometry *geometry, ID2D1Brush *brush, ID2D1Brush *opacity_brush)
@@ -1422,7 +1968,7 @@ static HRESULT d2d_device_context_get_glyph_run_analysis(struct d2d_device_conte
         D2D1_POINT_2F baseline_origin, const DWRITE_GLYPH_RUN *glyph_run,
         DWRITE_RENDERING_MODE rendering_mode, DWRITE_MEASURING_MODE measuring_mode,
         DWRITE_TEXT_ANTIALIAS_MODE antialias_mode, DWRITE_TEXTURE_TYPE *texture_type,
-        IDWriteGlyphRunAnalysis **result)
+        IDWriteGlyphRunAnalysis **result, float shift_x, float shift_y)
 {
     IDWriteGlyphRunAnalysis *analysis;
     IDWriteFactory2 *dwrite_factory;
@@ -1445,12 +1991,12 @@ static HRESULT d2d_device_context_get_glyph_run_analysis(struct d2d_device_conte
     scale_x = context->desc.dpiX / 96.0f;
     m.m11 = transform->_11 * scale_x;
     m.m21 = transform->_21 * scale_x;
-    m.dx  = transform->_31 * scale_x;
+    m.dx  = transform->_31 * scale_x - shift_x;
 
     scale_y = context->desc.dpiY / 96.0f;
     m.m12 = transform->_12 * scale_y;
     m.m22 = transform->_22 * scale_y;
-    m.dy  = transform->_32 * scale_y;
+    m.dy  = transform->_32 * scale_y - shift_y;
 
     hr = IDWriteFactory2_CreateGlyphRunAnalysis(dwrite_factory, glyph_run, &m, rendering_mode,
             measuring_mode, DWRITE_GRID_FIT_MODE_DEFAULT, antialias_mode, baseline_origin.x,
@@ -1470,6 +2016,317 @@ static HRESULT d2d_device_context_get_glyph_run_analysis(struct d2d_device_conte
     *result = analysis;
 
     return S_OK;
+}
+
+#define D2D_GLYPH_PAD 3
+#define D2D_GLYPH_ENTRIES 2048
+#define D2D_GLYPH_KEY_MAX 1024
+
+struct d2d_glyph_entry
+{
+    UINT64 hash;
+    void *key;
+    UINT32 key_size;
+    IDWriteFontFace *face;
+    UINT32 x, y;
+    RECT bounds;
+};
+
+struct d2d_glyph_atlas
+{
+    ID2D1Bitmap *bitmap;
+    ID2D1BitmapBrush *brush;
+    float dpi_x, dpi_y;
+    UINT32 width, height, shelf_x, shelf_y, shelf_h, count;
+    struct d2d_glyph_entry entries[D2D_GLYPH_ENTRIES];
+};
+
+struct d2d_glyph_key
+{
+    void *font_face;
+    float em_size, m[4], frac_x, frac_y, dpi_x, dpi_y;
+    UINT32 count, flags, rendering_mode, measuring_mode, antialias_mode;
+};
+
+static void d2d_glyph_atlas_clear(struct d2d_glyph_atlas *atlas)
+{
+    UINT32 i;
+
+    for (i = 0; i < D2D_GLYPH_ENTRIES; ++i)
+    {
+        if (!atlas->entries[i].key)
+            continue;
+        free(atlas->entries[i].key);
+        IDWriteFontFace_Release(atlas->entries[i].face);
+        memset(&atlas->entries[i], 0, sizeof(atlas->entries[i]));
+    }
+    atlas->count = atlas->shelf_x = atlas->shelf_y = atlas->shelf_h = 0;
+}
+
+static void d2d_glyph_atlas_destroy(struct d2d_glyph_atlas *atlas)
+{
+    if (!atlas)
+        return;
+    d2d_glyph_atlas_clear(atlas);
+    if (atlas->brush)
+        ID2D1BitmapBrush_Release(atlas->brush);
+    if (atlas->bitmap)
+        ID2D1Bitmap_Release(atlas->bitmap);
+    free(atlas);
+}
+
+static struct d2d_glyph_atlas *d2d_device_context_get_glyph_atlas(struct d2d_device_context *context,
+        BOOL cleartype)
+{
+    struct d2d_glyph_atlas *atlas = context->glyph_atlas[cleartype];
+    D2D1_BITMAP_PROPERTIES bitmap_desc;
+    D2D1_BRUSH_PROPERTIES brush_desc;
+    D2D1_SIZE_U size;
+
+    if (atlas && atlas->dpi_x == context->desc.dpiX && atlas->dpi_y == context->desc.dpiY)
+        return atlas;
+
+    d2d_glyph_atlas_destroy(atlas);
+    context->glyph_atlas[cleartype] = NULL;
+    if (!(atlas = calloc(1, sizeof(*atlas))))
+        return NULL;
+
+    atlas->dpi_x = context->desc.dpiX;
+    atlas->dpi_y = context->desc.dpiY;
+    atlas->width = cleartype ? 3072 : 2048;
+    atlas->height = 1024;
+    size.width = atlas->width;
+    size.height = atlas->height;
+    bitmap_desc.pixelFormat.format = DXGI_FORMAT_A8_UNORM;
+    bitmap_desc.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bitmap_desc.dpiX = context->desc.dpiX * (cleartype ? 3.0f : 1.0f);
+    bitmap_desc.dpiY = context->desc.dpiY;
+    brush_desc.opacity = 1.0f;
+    brush_desc.transform = identity;
+    if (FAILED(d2d_device_context_CreateBitmap(&context->ID2D1DeviceContext6_iface,
+            size, NULL, 0, &bitmap_desc, &atlas->bitmap))
+            || FAILED(d2d_device_context_CreateBitmapBrush(&context->ID2D1DeviceContext6_iface,
+            atlas->bitmap, NULL, &brush_desc, &atlas->brush)))
+    {
+        d2d_glyph_atlas_destroy(atlas);
+        return NULL;
+    }
+
+    context->glyph_atlas[cleartype] = atlas;
+    return atlas;
+}
+
+static BOOL d2d_glyph_atlas_alloc(struct d2d_glyph_atlas *atlas, UINT32 width, UINT32 height,
+        UINT32 *x, UINT32 *y)
+{
+    width = (width + 2) / 3 * 3;
+    if (width > atlas->width || height > atlas->height)
+        return FALSE;
+
+    if (atlas->shelf_x + width > atlas->width)
+    {
+        atlas->shelf_y += atlas->shelf_h;
+        atlas->shelf_x = atlas->shelf_h = 0;
+    }
+    if (atlas->shelf_y + height > atlas->height)
+        return FALSE;
+
+    *x = atlas->shelf_x;
+    *y = atlas->shelf_y;
+    atlas->shelf_x += width;
+    atlas->shelf_h = max(atlas->shelf_h, height);
+    return TRUE;
+}
+
+static BOOL d2d_device_context_draw_glyph_run_cached(struct d2d_device_context *context,
+        D2D1_POINT_2F baseline_origin, const DWRITE_GLYPH_RUN *glyph_run, struct d2d_brush *brush,
+        DWRITE_RENDERING_MODE rendering_mode, DWRITE_MEASURING_MODE measuring_mode,
+        DWRITE_TEXT_ANTIALIAS_MODE antialias_mode)
+{
+    BOOL cleartype = !(rendering_mode == DWRITE_RENDERING_MODE_ALIASED
+            || antialias_mode == DWRITE_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    const D2D1_MATRIX_3X2_F *world = &context->drawing_state.transform;
+    float scale_x = context->desc.dpiX / 96.0f, scale_y = context->desc.dpiY / 96.0f;
+    BYTE key_buffer[D2D_GLYPH_KEY_MAX];
+    struct d2d_glyph_key *key = (struct d2d_glyph_key *)key_buffer;
+    struct d2d_glyph_entry *entry = NULL;
+    struct d2d_glyph_atlas *atlas;
+    float dev_x, dev_y, shift_x, shift_y;
+    UINT32 key_size, count, slot, i;
+    D2D1_MATRIX_3X2_F saved;
+    struct d2d_brush *opacity;
+    D2D1_RECT_F run_rect;
+    UINT64 hash;
+    BYTE *p;
+
+    count = glyph_run->glyphCount;
+    key_size = sizeof(*key) + count * (sizeof(UINT16) + (glyph_run->glyphAdvances ? sizeof(float) : 0)
+            + (glyph_run->glyphOffsets ? sizeof(DWRITE_GLYPH_OFFSET) : 0));
+    if (!count || key_size > sizeof(key_buffer))
+        return FALSE;
+
+    dev_x = (baseline_origin.x * world->_11 + baseline_origin.y * world->_21 + world->_31) * scale_x;
+    dev_y = (baseline_origin.x * world->_12 + baseline_origin.y * world->_22 + world->_32) * scale_y;
+    shift_x = floorf(dev_x);
+    shift_y = floorf(dev_y);
+
+    memset(key, 0, sizeof(*key));
+    key->font_face = glyph_run->fontFace;
+    key->em_size = glyph_run->fontEmSize;
+    key->m[0] = world->_11 * scale_x;
+    key->m[1] = world->_12 * scale_y;
+    key->m[2] = world->_21 * scale_x;
+    key->m[3] = world->_22 * scale_y;
+    key->frac_x = dev_x - shift_x;
+    key->frac_y = dev_y - shift_y;
+    key->dpi_x = context->desc.dpiX;
+    key->dpi_y = context->desc.dpiY;
+    key->count = count;
+    key->flags = (glyph_run->isSideways ? 1 : 0) | (glyph_run->bidiLevel << 1)
+            | (glyph_run->glyphAdvances ? 0x100 : 0) | (glyph_run->glyphOffsets ? 0x200 : 0);
+    key->rendering_mode = rendering_mode;
+    key->measuring_mode = measuring_mode;
+    key->antialias_mode = antialias_mode;
+    p = (BYTE *)(key + 1);
+    memcpy(p, glyph_run->glyphIndices, count * sizeof(UINT16));
+    p += count * sizeof(UINT16);
+    if (glyph_run->glyphAdvances)
+    {
+        memcpy(p, glyph_run->glyphAdvances, count * sizeof(float));
+        p += count * sizeof(float);
+    }
+    if (glyph_run->glyphOffsets)
+        memcpy(p, glyph_run->glyphOffsets, count * sizeof(DWRITE_GLYPH_OFFSET));
+
+    hash = 14695981039346656037ull;
+    for (i = 0; i < key_size; ++i)
+        hash = (hash ^ key_buffer[i]) * 1099511628211ull;
+
+    if (!(atlas = d2d_device_context_get_glyph_atlas(context, cleartype)))
+        return FALSE;
+
+    for (slot = hash % D2D_GLYPH_ENTRIES, i = 0; i < D2D_GLYPH_ENTRIES; ++i, slot = (slot + 1) % D2D_GLYPH_ENTRIES)
+    {
+        if (!atlas->entries[slot].key)
+            break;
+        if (atlas->entries[slot].hash == hash && atlas->entries[slot].key_size == key_size
+                && !memcmp(atlas->entries[slot].key, key_buffer, key_size))
+        {
+            entry = &atlas->entries[slot];
+            break;
+        }
+    }
+
+    if (!entry)
+    {
+        IDWriteGlyphRunAnalysis *analysis;
+        DWRITE_TEXTURE_TYPE texture_type;
+        UINT32 width, height, pw, ph, x, y, row;
+        BYTE *alpha = NULL, *padded = NULL;
+        D2D1_RECT_U upload;
+        RECT bounds;
+
+        if (FAILED(d2d_device_context_get_glyph_run_analysis(context, baseline_origin, glyph_run,
+                rendering_mode, measuring_mode, antialias_mode, &texture_type, &analysis, shift_x, shift_y)))
+            return FALSE;
+
+        if (FAILED(IDWriteGlyphRunAnalysis_GetAlphaTextureBounds(analysis, texture_type, &bounds)))
+        {
+            IDWriteGlyphRunAnalysis_Release(analysis);
+            return FALSE;
+        }
+
+        width = bounds.right - bounds.left;
+        height = bounds.bottom - bounds.top;
+        if (!width || !height)
+        {
+            IDWriteGlyphRunAnalysis_Release(analysis);
+            return TRUE;
+        }
+        if (cleartype)
+            width *= 3;
+        pw = width + 2 * D2D_GLYPH_PAD;
+        ph = height + 2 * D2D_GLYPH_PAD;
+
+        alpha = calloc(height, width);
+        padded = calloc(ph, pw);
+        if (!alpha || !padded
+                || FAILED(IDWriteGlyphRunAnalysis_CreateAlphaTexture(analysis, texture_type, &bounds,
+                alpha, height * width)))
+        {
+            free(alpha);
+            free(padded);
+            IDWriteGlyphRunAnalysis_Release(analysis);
+            return FALSE;
+        }
+        IDWriteGlyphRunAnalysis_Release(analysis);
+
+        if (!d2d_glyph_atlas_alloc(atlas, pw, ph, &x, &y))
+        {
+            d2d_glyph_atlas_clear(atlas);
+            if (!d2d_glyph_atlas_alloc(atlas, pw, ph, &x, &y))
+            {
+                free(alpha);
+                free(padded);
+                return FALSE;
+            }
+            slot = hash % D2D_GLYPH_ENTRIES;
+        }
+        if (atlas->count >= D2D_GLYPH_ENTRIES * 3 / 4)
+        {
+            d2d_glyph_atlas_clear(atlas);
+            d2d_glyph_atlas_alloc(atlas, pw, ph, &x, &y);
+            slot = hash % D2D_GLYPH_ENTRIES;
+        }
+        while (atlas->entries[slot].key)
+            slot = (slot + 1) % D2D_GLYPH_ENTRIES;
+
+        for (row = 0; row < height; ++row)
+            memcpy(padded + (row + D2D_GLYPH_PAD) * pw + D2D_GLYPH_PAD, alpha + row * width, width);
+        upload.left = x;
+        upload.top = y;
+        upload.right = x + pw;
+        upload.bottom = y + ph;
+        ID2D1Bitmap_CopyFromMemory(atlas->bitmap, &upload, padded, pw);
+        free(alpha);
+        free(padded);
+
+        entry = &atlas->entries[slot];
+        if (!(entry->key = malloc(key_size)))
+            return FALSE;
+        memcpy(entry->key, key_buffer, key_size);
+        entry->key_size = key_size;
+        entry->hash = hash;
+        entry->face = glyph_run->fontFace;
+        IDWriteFontFace_AddRef(entry->face);
+        entry->x = x + D2D_GLYPH_PAD;
+        entry->y = y + D2D_GLYPH_PAD;
+        entry->bounds = bounds;
+        ++atlas->count;
+    }
+
+    d2d_rect_set(&run_rect, (entry->bounds.left + shift_x) / scale_x, (entry->bounds.top + shift_y) / scale_y,
+            (entry->bounds.right + shift_x) / scale_x, (entry->bounds.bottom + shift_y) / scale_y);
+
+    opacity = unsafe_impl_from_ID2D1Brush((ID2D1Brush *)atlas->brush);
+    opacity->transform._31 = run_rect.left - entry->x * 96.0f / (atlas->dpi_x * (cleartype ? 3.0f : 1.0f));
+    opacity->transform._32 = run_rect.top - entry->y * 96.0f / atlas->dpi_y;
+
+    saved = context->drawing_state.transform;
+    context->drawing_state.transform = identity;
+    if (!d2d_device_context_fill_rectangle(context, &run_rect, brush, opacity))
+    {
+        ID2D1RectangleGeometry *geometry;
+
+        if (SUCCEEDED(ID2D1Factory_CreateRectangleGeometry(context->factory, &run_rect, &geometry)))
+        {
+            d2d_device_context_fill_geometry(context, unsafe_impl_from_ID2D1Geometry((ID2D1Geometry *)geometry),
+                    brush, opacity);
+            ID2D1RectangleGeometry_Release(geometry);
+        }
+    }
+    context->drawing_state.transform = saved;
+    return TRUE;
 }
 
 static void d2d_device_context_draw_glyph_run_bitmap(struct d2d_device_context *context,
@@ -1493,8 +2350,12 @@ static void d2d_device_context_draw_glyph_run_bitmap(struct d2d_device_context *
     RECT bounds;
     HRESULT hr;
 
+    if (d2d_device_context_draw_glyph_run_cached(context, baseline_origin, glyph_run,
+            unsafe_impl_from_ID2D1Brush(brush), rendering_mode, measuring_mode, antialias_mode))
+        return;
+
     hr = d2d_device_context_get_glyph_run_analysis(context, baseline_origin, glyph_run,
-            rendering_mode, measuring_mode, antialias_mode, &texture_type, &analysis);
+            rendering_mode, measuring_mode, antialias_mode, &texture_type, &analysis, 0.0f, 0.0f);
     if (FAILED(hr))
     {
         ERR("Failed to create glyph run analysis, hr %#lx.\n", hr);
@@ -1830,31 +2691,234 @@ static void STDMETHODCALLTYPE d2d_device_context_GetTags(ID2D1DeviceContext6 *if
     *tag2 = render_target->drawing_state.tag2;
 }
 
+static void STDMETHODCALLTYPE d2d_device_context_PushAxisAlignedClip(ID2D1DeviceContext6 *iface,
+        const D2D1_RECT_F *clip_rect, D2D1_ANTIALIAS_MODE antialias_mode);
+
+static BOOL d2d_layer_bitmap_matches(const struct d2d_bitmap *bitmap, const struct d2d_bitmap *target,
+        const struct d2d_device_context *context)
+{
+    return bitmap->pixel_size.width == target->pixel_size.width
+            && bitmap->pixel_size.height == target->pixel_size.height
+            && bitmap->format.format == target->format.format
+            && bitmap->dpi_x == context->desc.dpiX && bitmap->dpi_y == context->desc.dpiY;
+}
+
+static void d2d_device_context_layer_release(struct d2d_device_context_layer *layer)
+{
+    if (layer->parameters.geometricMask)
+        ID2D1Geometry_Release(layer->parameters.geometricMask);
+    if (layer->parameters.opacityBrush)
+        ID2D1Brush_Release(layer->parameters.opacityBrush);
+    layer->parameters.geometricMask = NULL;
+    layer->parameters.opacityBrush = NULL;
+}
+
+static void d2d_device_context_compose_layer(struct d2d_device_context *context,
+        const struct d2d_device_context_layer *layer, BOOL apply_parameters)
+{
+    D2D1_BITMAP_BRUSH_PROPERTIES1 bitmap_brush_desc;
+    ID2D1TransformedGeometry *transformed = NULL;
+    ID2D1RectangleGeometry *rectangle = NULL;
+    struct d2d_brush *brush, *opacity_brush;
+    D2D1_MATRIX_3X2_F transform;
+    D2D1_BRUSH_PROPERTIES brush_desc;
+    D2D1_ANTIALIAS_MODE antialias_mode;
+    D2D1_RECT_F rect;
+    HRESULT hr;
+
+    if (!d2d_matrix_invert(&brush_desc.transform, &layer->transform))
+        return;
+    brush_desc.opacity = apply_parameters ? layer->parameters.opacity : 1.0f;
+    bitmap_brush_desc.extendModeX = D2D1_EXTEND_MODE_CLAMP;
+    bitmap_brush_desc.extendModeY = D2D1_EXTEND_MODE_CLAMP;
+    bitmap_brush_desc.interpolationMode = D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
+    if (FAILED(hr = d2d_bitmap_brush_create(context->factory, (ID2D1Bitmap *)&layer->bitmap->ID2D1Bitmap1_iface,
+            &bitmap_brush_desc, &brush_desc, &brush)))
+    {
+        ERR("Failed to create layer brush, hr %#lx.\n", hr);
+        return;
+    }
+
+    if (apply_parameters && layer->parameters.geometricMask)
+    {
+        hr = ID2D1Factory_CreateTransformedGeometry(context->factory, layer->parameters.geometricMask,
+                &layer->parameters.maskTransform, &transformed);
+    }
+    else
+    {
+        d2d_rect_set(&rect, 0.0f, 0.0f, layer->bitmap->pixel_size.width * 96.0f / layer->bitmap->dpi_x,
+                layer->bitmap->pixel_size.height * 96.0f / layer->bitmap->dpi_y);
+        if (SUCCEEDED(hr = ID2D1Factory_CreateRectangleGeometry(context->factory, &rect, &rectangle)))
+        {
+            hr = ID2D1Factory_CreateTransformedGeometry(context->factory, (ID2D1Geometry *)rectangle,
+                    &brush_desc.transform, &transformed);
+            ID2D1RectangleGeometry_Release(rectangle);
+        }
+    }
+
+    if (SUCCEEDED(hr))
+    {
+        opacity_brush = apply_parameters ? unsafe_impl_from_ID2D1Brush(layer->parameters.opacityBrush) : NULL;
+        transform = context->drawing_state.transform;
+        context->drawing_state.transform = layer->transform;
+        antialias_mode = context->drawing_state.antialiasMode;
+        context->drawing_state.antialiasMode = apply_parameters && layer->parameters.geometricMask
+                ? layer->parameters.maskAntialiasMode : D2D1_ANTIALIAS_MODE_ALIASED;
+        d2d_device_context_fill_geometry(context, unsafe_impl_from_ID2D1Geometry((ID2D1Geometry *)transformed),
+                brush, opacity_brush);
+        context->drawing_state.antialiasMode = antialias_mode;
+        context->drawing_state.transform = transform;
+        ID2D1TransformedGeometry_Release(transformed);
+    }
+    else
+    {
+        ERR("Failed to create layer geometry, hr %#lx.\n", hr);
+    }
+
+    ID2D1Brush_Release(&brush->ID2D1Brush_iface);
+}
+
+static void d2d_device_context_push_layer(struct d2d_device_context *context,
+        const D2D1_LAYER_PARAMETERS1 *parameters)
+{
+    static const float transparent[4];
+    struct d2d_layer_stack *stack = &context->layer_stack;
+    struct d2d_device_context_layer *layer;
+    D2D1_BITMAP_PROPERTIES1 bitmap_desc;
+    ID3D11DeviceContext *d3d_context;
+    struct d2d_bitmap *target;
+    HRESULT hr;
+
+    if (!d2d_array_reserve((void **)&stack->stack, &stack->size, stack->count + 1, sizeof(*stack->stack)))
+    {
+        d2d_device_context_set_error(context, E_OUTOFMEMORY);
+        return;
+    }
+    if (stack->count == stack->initialized)
+        memset(&stack->stack[stack->initialized++], 0, sizeof(*stack->stack));
+
+    layer = &stack->stack[stack->count++];
+    layer->parameters = *parameters;
+    layer->transform = context->drawing_state.transform;
+    layer->target = NULL;
+    layer->active = FALSE;
+    layer->clip = FALSE;
+    if (layer->parameters.geometricMask)
+        ID2D1Geometry_AddRef(layer->parameters.geometricMask);
+    if (layer->parameters.opacityBrush)
+        ID2D1Brush_AddRef(layer->parameters.opacityBrush);
+
+    if (context->target.type != D2D_TARGET_BITMAP || FAILED(context->error.code))
+        return;
+
+    target = context->target.bitmap;
+    if (layer->bitmap && !d2d_layer_bitmap_matches(layer->bitmap, target, context))
+    {
+        ID2D1Bitmap1_Release(&layer->bitmap->ID2D1Bitmap1_iface);
+        layer->bitmap = NULL;
+    }
+    if (!layer->bitmap)
+    {
+        bitmap_desc.pixelFormat.format = target->format.format;
+        bitmap_desc.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+        bitmap_desc.dpiX = context->desc.dpiX;
+        bitmap_desc.dpiY = context->desc.dpiY;
+        bitmap_desc.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
+        bitmap_desc.colorContext = NULL;
+        if (FAILED(hr = d2d_bitmap_create(context, target->pixel_size, NULL, 0, &bitmap_desc, &layer->bitmap)))
+        {
+            WARN("Failed to create layer bitmap, hr %#lx.\n", hr);
+            layer->bitmap = NULL;
+            d2d_device_context_set_error(context, hr);
+            return;
+        }
+    }
+
+    if (context->cs)
+        EnterCriticalSection(context->cs);
+    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
+    if (parameters->layerOptions & D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND)
+        ID3D11DeviceContext_CopyResource(d3d_context, layer->bitmap->resource, target->resource);
+    else
+        ID3D11DeviceContext_ClearRenderTargetView(d3d_context, layer->bitmap->rtv, transparent);
+    ID3D11DeviceContext_Release(d3d_context);
+    if (context->cs)
+        LeaveCriticalSection(context->cs);
+
+    if (parameters->contentBounds.left > -FLT_MAX || parameters->contentBounds.top > -FLT_MAX
+            || parameters->contentBounds.right < FLT_MAX || parameters->contentBounds.bottom < FLT_MAX)
+    {
+        d2d_device_context_PushAxisAlignedClip(&context->ID2D1DeviceContext6_iface, &parameters->contentBounds,
+                D2D1_ANTIALIAS_MODE_ALIASED);
+        layer->clip = TRUE;
+    }
+
+    layer->target = target;
+    layer->active = TRUE;
+    context->target.bitmap = layer->bitmap;
+}
+
+static void d2d_device_context_pop_layer(struct d2d_device_context *context, BOOL apply_parameters)
+{
+    struct d2d_device_context_layer *layer = &context->layer_stack.stack[--context->layer_stack.count];
+
+    if (layer->active)
+    {
+        context->target.bitmap = layer->target;
+        d2d_device_context_compose_layer(context, layer, apply_parameters);
+        if (layer->clip)
+            d2d_clip_stack_pop(&context->clip_stack);
+    }
+    d2d_device_context_layer_release(layer);
+}
+
+static void d2d_device_context_discard_layers(struct d2d_device_context *context)
+{
+    struct d2d_layer_stack *stack = &context->layer_stack;
+
+    while (stack->count)
+    {
+        struct d2d_device_context_layer *layer = &stack->stack[--stack->count];
+
+        if (layer->active)
+        {
+            context->target.bitmap = layer->target;
+            if (layer->clip)
+                d2d_clip_stack_pop(&context->clip_stack);
+        }
+        d2d_device_context_layer_release(layer);
+    }
+}
+
 static void STDMETHODCALLTYPE d2d_device_context_PushLayer(ID2D1DeviceContext6 *iface,
         const D2D1_LAYER_PARAMETERS *layer_parameters, ID2D1Layer *layer)
 {
     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+    D2D1_LAYER_PARAMETERS1 parameters;
 
-    FIXME("iface %p, layer_parameters %p, layer %p stub!\n", iface, layer_parameters, layer);
+    TRACE("iface %p, layer_parameters %p, layer %p.\n", iface, layer_parameters, layer);
+
+    memcpy(&parameters, layer_parameters, sizeof(*layer_parameters));
+    parameters.layerOptions = D2D1_LAYER_OPTIONS1_NONE;
 
     if (context->target.type == D2D_TARGET_COMMAND_LIST)
-    {
-        D2D1_LAYER_PARAMETERS1 parameters;
-
-        memcpy(&parameters, layer_parameters, sizeof(*layer_parameters));
-        parameters.layerOptions = D2D1_LAYER_OPTIONS1_NONE;
         d2d_command_list_push_layer(context->target.command_list, context, &parameters);
-    }
+    else
+        d2d_device_context_push_layer(context, &parameters);
 }
 
 static void STDMETHODCALLTYPE d2d_device_context_PopLayer(ID2D1DeviceContext6 *iface)
 {
     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
 
-    FIXME("iface %p stub!\n", iface);
+    TRACE("iface %p.\n", iface);
 
     if (context->target.type == D2D_TARGET_COMMAND_LIST)
         d2d_command_list_pop_layer(context->target.command_list);
+    else if (!context->layer_stack.count)
+        d2d_device_context_set_error(context, D2DERR_PUSH_POP_UNBALANCED);
+    else
+        d2d_device_context_pop_layer(context, TRUE);
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_device_context_Flush(ID2D1DeviceContext6 *iface, D2D1_TAG *tag1, D2D1_TAG *tag2)
@@ -1863,6 +2927,7 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_Flush(ID2D1DeviceContext6 *i
 
     FIXME("iface %p, tag1 %p, tag2 %p stub!\n", iface, tag1, tag2);
 
+    d2d_device_context_state_out(context);
     if (context->ops && context->ops->device_context_present)
         context->ops->device_context_present(context->outer_unknown);
 
@@ -1964,6 +3029,43 @@ static void STDMETHODCALLTYPE d2d_device_context_PopAxisAlignedClip(ID2D1DeviceC
     d2d_clip_stack_pop(&context->clip_stack);
 }
 
+static BOOL d2d_device_context_clear_target(struct d2d_device_context *context, const D2D1_COLOR_F *colour)
+{
+    ID3D11DeviceContext *d3d_context;
+    float c[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    if (context->clip_stack.count)
+    {
+        const D2D1_RECT_F *clip = &context->clip_stack.stack[context->clip_stack.count - 1];
+
+        if (clip->left > 0.5f || clip->top > 0.5f
+                || clip->right < context->pixel_size.width - 0.5f || clip->bottom < context->pixel_size.height - 0.5f)
+            return FALSE;
+    }
+
+    if (colour)
+    {
+        c[0] = colour->r;
+        c[1] = colour->g;
+        c[2] = colour->b;
+        c[3] = colour->a;
+    }
+    if (context->desc.pixelFormat.alphaMode == D2D1_ALPHA_MODE_IGNORE)
+        c[3] = 1.0f;
+    c[0] *= c[3];
+    c[1] *= c[3];
+    c[2] *= c[3];
+
+    if (context->cs)
+        EnterCriticalSection(context->cs);
+    ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
+    ID3D11DeviceContext_ClearRenderTargetView(d3d_context, context->target.bitmap->rtv, c);
+    ID3D11DeviceContext_Release(d3d_context);
+    if (context->cs)
+        LeaveCriticalSection(context->cs);
+    return TRUE;
+}
+
 static void STDMETHODCALLTYPE d2d_device_context_Clear(ID2D1DeviceContext6 *iface, const D2D1_COLOR_F *colour)
 {
     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
@@ -1991,6 +3093,10 @@ static void STDMETHODCALLTYPE d2d_device_context_Clear(ID2D1DeviceContext6 *ifac
         return;
     }
 
+    if (d2d_device_context_clear_target(context, colour))
+        return;
+    context->vs_shadow_valid = FALSE;
+    context->ps_shadow_valid = FALSE;
     ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
 
     if (FAILED(hr = ID3D11DeviceContext_Map(d3d_context, (ID3D11Resource *)context->vs_cb,
@@ -2076,6 +3182,15 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_EndDraw(ID2D1DeviceContext6 
         return E_NOTIMPL;
     }
 
+    if (context->layer_stack.count)
+    {
+        while (context->layer_stack.count)
+            d2d_device_context_pop_layer(context, FALSE);
+        if (SUCCEEDED(context->error.code))
+            d2d_device_context_set_error(context, D2DERR_PUSH_POP_UNBALANCED);
+    }
+
+    d2d_device_context_state_out(context);
     if (tag1)
         *tag1 = context->error.tag1;
     if (tag2)
@@ -2524,7 +3639,7 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_GetGlyphRunWorldBounds(ID2D1
     else
     {
         if (FAILED(hr = d2d_device_context_get_glyph_run_analysis(context, baseline_origin,
-                glyph_run, rendering_mode, measuring_mode, antialias_mode, &texture_type, &analysis)))
+                glyph_run, rendering_mode, measuring_mode, antialias_mode, &texture_type, &analysis, 0.0f, 0.0f)))
         {
             return hr;
         }
@@ -2558,6 +3673,7 @@ static void d2d_device_context_reset_target(struct d2d_device_context *context)
     if (!context->target.object)
         return;
 
+    d2d_device_context_discard_layers(context);
     IUnknown_Release(context->target.object);
     memset(&context->target, 0, sizeof(context->target));
 
@@ -2812,10 +3928,12 @@ static void STDMETHODCALLTYPE d2d_device_context_ID2D1DeviceContext_PushLayer(ID
 {
     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
 
-    FIXME("iface %p, layer_parameters %p, layer %p stub!\n", iface, layer_parameters, layer);
+    TRACE("iface %p, layer_parameters %p, layer %p.\n", iface, layer_parameters, layer);
 
     if (context->target.type == D2D_TARGET_COMMAND_LIST)
         d2d_command_list_push_layer(context->target.command_list, context, layer_parameters);
+    else
+        d2d_device_context_push_layer(context, layer_parameters);
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_device_context_InvalidateEffectInputRectangle(ID2D1DeviceContext6 *iface,
@@ -3736,6 +4854,11 @@ static const D3D11_INPUT_ELEMENT_DESC shape_il_desc_triangle[] =
 {
     {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
 };
+static const D3D11_INPUT_ELEMENT_DESC shape_il_desc_triangle_aa[] =
+{
+    {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+    {"COVERAGE", 0, DXGI_FORMAT_R32_FLOAT,    0, 8, D3D11_INPUT_PER_VERTEX_DATA, 0},
+};
 static const D3D11_INPUT_ELEMENT_DESC shape_il_desc_curve[] =
 {
     {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -3960,6 +5083,28 @@ static const char shape_vs_code_triangle[] =
     "            * float2(transform_rtx.w, transform_rty.w);\n"
     "    o.position = float4(position + float2(-1.0f, 1.0f), 0.0f, 1.0f);\n"
     "}\n";
+static const char shape_vs_code_triangle_aa[] =
+    "float3x2 transform_geometry;\n"
+    "float4 transform_rtx;\n"
+    "float4 transform_rty;\n"
+    "\n"
+    "struct output\n"
+    "{\n"
+    "    float2 p : WORLD_POSITION;\n"
+    "    float4 b : BEZIER;\n"
+    "    nointerpolation float2x2 stroke_transform : STROKE_TRANSFORM;\n"
+    "    float4 position : SV_POSITION;\n"
+    "};\n"
+    "\n"
+    "void main(float2 position : POSITION, float coverage : COVERAGE, out struct output o)\n"
+    "{\n"
+    "    o.p = mul(float3(position, 1.0f), transform_geometry);\n"
+    "    o.b = float4(1.0, 0.0, 1.0, coverage);\n"
+    "    o.stroke_transform = float2x2(1.0, 0.0, 0.0, 1.0);\n"
+    "    position = mul(float2x3(transform_rtx.xyz, transform_rty.xyz), float3(o.p, 1.0f))\n"
+    "            * float2(transform_rtx.w, transform_rty.w);\n"
+    "    o.position = float4(position + float2(-1.0f, 1.0f), 0.0f, 1.0f);\n"
+    "}\n";
 static const char shape_vs_code_curve[] =
     "float3x2 transform_geometry;\n"
     "float4 transform_rtx;\n"
@@ -3991,6 +5136,11 @@ static const char shape_ps_code[] =
     "\n"
     "bool outline;\n"
     "bool is_arc;\n"
+    "bool mask;\n"
+    "bool mask_pad;\n"
+    "int2 mask_origin;\n"
+    "float4 clip_rect;\n"
+    "bool clip_on;\n"
     "struct brush\n"
     "{\n"
     "    uint type;\n"
@@ -4000,6 +5150,7 @@ static const char shape_ps_code[] =
     "\n"
     "SamplerState s0, s1;\n"
     "Texture2D t0, t1;\n"
+    "Texture2D t4 : register(t4);\n"
     "Buffer<float4> b0, b1;\n"
     "\n"
     "struct input\n"
@@ -4009,50 +5160,88 @@ static const char shape_ps_code[] =
     "    nointerpolation float2x2 stroke_transform : STROKE_TRANSFORM;\n"
     "};\n"
     "\n"
-    "float4 sample_gradient(Buffer<float4> gradient, uint stop_count, float position)\n"
+    "float3 srgb_to_linear(float3 c)\n"
+    "{\n"
+    "    return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);\n"
+    "}\n"
+    "\n"
+    "float3 linear_to_srgb(float3 c)\n"
+    "{\n"
+    "    return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1.0 / 2.4) - 0.055;\n"
+    "}\n"
+    "\n"
+    "float extend_position(float position, uint extend_mode)\n"
+    "{\n"
+    "    if (extend_mode == 1)\n"
+    "        return position - floor(position);\n"
+    "    if (extend_mode == 2)\n"
+    "    {\n"
+    "        position = position - 2.0 * floor(position * 0.5);\n"
+    "        return position > 1.0 ? 2.0 - position : position;\n"
+    "    }\n"
+    "    return position;\n"
+    "}\n"
+    "\n"
+    "float4 sample_gradient(Buffer<float4> gradient, uint stop_count, uint extend_mode, uint gamma, float position)\n"
     "{\n"
     "    float4 c_low, c_high;\n"
     "    float p_low, p_high;\n"
     "    uint i;\n"
     "\n"
+    "    position = extend_position(position, extend_mode);\n"
+    "\n"
     "    p_low = gradient.Load(0).x;\n"
     "    c_low = gradient.Load(1);\n"
     "    c_high = c_low;\n"
+    "    if (gamma)\n"
+    "        c_low.rgb = srgb_to_linear(c_low.rgb);\n"
+    "    c_high = c_low;\n"
     "\n"
-    "    if (position < p_low)\n"
-    "        return c_low;\n"
-    "\n"
-    "    [loop]\n"
-    "    for (i = 1; i < stop_count; ++i)\n"
+    "    if (position >= p_low)\n"
     "    {\n"
-    "        p_high = gradient.Load(i * 2).x;\n"
-    "        c_high = gradient.Load(i * 2 + 1);\n"
+    "        [loop]\n"
+    "        for (i = 1; i < stop_count; ++i)\n"
+    "        {\n"
+    "            p_high = gradient.Load(i * 2).x;\n"
+    "            c_high = gradient.Load(i * 2 + 1);\n"
+    "            if (gamma)\n"
+    "                c_high.rgb = srgb_to_linear(c_high.rgb);\n"
     "\n"
-    "        if (position >= p_low && position <= p_high)\n"
-    "            return lerp(c_low, c_high, (position - p_low) / (p_high - p_low));\n"
+    "            if (position >= p_low && position <= p_high)\n"
+    "            {\n"
+    "                c_low = lerp(c_low, c_high, (position - p_low) / (p_high - p_low));\n"
+    "                break;\n"
+    "            }\n"
     "\n"
-    "        p_low = p_high;\n"
-    "        c_low = c_high;\n"
+    "            p_low = p_high;\n"
+    "            c_low = c_high;\n"
+    "        }\n"
+    "        if (i == stop_count)\n"
+    "            c_low = c_high;\n"
     "    }\n"
     "\n"
-    "    return c_high;\n"
+    "    if (gamma)\n"
+    "        c_low.rgb = linear_to_srgb(c_low.rgb);\n"
+    "    return c_low;\n"
     "}\n"
-    "\n"
     "float4 brush_linear(struct brush brush, Buffer<float4> gradient, float2 position)\n"
     "{\n"
     "    float2 start, end, v_p, v_q;\n"
     "    uint stop_count;\n"
+    "    uint extend_mode, gamma;\n"
     "    float p;\n"
     "\n"
     "    start = brush.data[0].xy;\n"
     "    end = brush.data[0].zw;\n"
     "    stop_count = asuint(brush.data[1].x);\n"
+    "    extend_mode = asuint(brush.data[1].y);\n"
+    "    gamma = asuint(brush.data[1].z);\n"
     "\n"
     "    v_p = position - start;\n"
     "    v_q = end - start;\n"
     "    p = dot(v_q, v_p) / dot(v_q, v_q);\n"
     "\n"
-    "    return sample_gradient(gradient, stop_count, p);\n"
+    "    return sample_gradient(gradient, stop_count, extend_mode, gamma, p);\n"
     "}\n"
     "\n"
     "float4 brush_radial(struct brush brush, Buffer<float4> gradient, float2 position)\n"
@@ -4060,12 +5249,15 @@ static const char shape_ps_code[] =
     "    float2 centre, offset, ra, rb, v_p, v_q, r;\n"
     "    float b, c, l, t;\n"
     "    uint stop_count;\n"
+    "    uint extend_mode, gamma;\n"
     "\n"
     "    centre = brush.data[0].xy;\n"
     "    offset = brush.data[0].zw;\n"
     "    ra = brush.data[1].xy;\n"
     "    rb = brush.data[1].zw;\n"
     "    stop_count = asuint(brush.data[2].x);\n"
+    "    extend_mode = asuint(brush.data[2].y);\n"
+    "    gamma = asuint(brush.data[2].z);\n"
     "\n"
     "    /* Project onto ra, rb. */\n"
     "    r = float2(dot(ra, ra), dot(rb, rb));\n"
@@ -4085,7 +5277,7 @@ static const char shape_ps_code[] =
     "    c = dot(v_q, v_q) - 1.0;\n"
     "    t = -b + sqrt(b * b - c);\n"
     "\n"
-    "    return sample_gradient(gradient, stop_count, l / t);\n"
+    "    return sample_gradient(gradient, stop_count, extend_mode, gamma, l / t);\n"
     "}\n"
     "\n"
     "float4 brush_bitmap(struct brush brush, Texture2D t, SamplerState s, float2 position)\n"
@@ -4107,26 +5299,39 @@ static const char shape_ps_code[] =
     "    return colour;\n"
     "}\n"
     "\n"
+    "float4 premultiply(float4 colour)\n"
+    "{\n"
+    "    return float4(colour.rgb * colour.a, colour.a);\n"
+    "}\n"
+    "\n"
     "float4 sample_brush(struct brush brush, Texture2D t, SamplerState s, Buffer<float4> b, float2 position)\n"
     "{\n"
     "    if (brush.type == BRUSH_TYPE_SOLID)\n"
     "        return brush.data[0] * brush.opacity;\n"
     "    if (brush.type == BRUSH_TYPE_LINEAR)\n"
-    "        return brush_linear(brush, b, position) * brush.opacity;\n"
+    "        return premultiply(brush_linear(brush, b, position)) * brush.opacity;\n"
     "    if (brush.type == BRUSH_TYPE_RADIAL)\n"
-    "        return brush_radial(brush, b, position) * brush.opacity;\n"
+    "        return premultiply(brush_radial(brush, b, position)) * brush.opacity;\n"
     "    if (brush.type == BRUSH_TYPE_BITMAP)\n"
     "        return brush_bitmap(brush, t, s, position) * brush.opacity;\n"
     "    return float4(0.0, 0.0, 0.0, brush.opacity);\n"
     "}\n"
     "\n"
-    "float4 main(struct input i) : SV_Target\n"
+    "float4 main(struct input i, float4 pos : SV_POSITION) : SV_Target\n"
     "{\n"
     "    float4 colour;\n"
     "\n"
     "    colour = sample_brush(colour_brush, t0, s0, b0, i.p);\n"
     "    if (opacity_brush.type < BRUSH_TYPE_COUNT)\n"
     "        colour *= sample_brush(opacity_brush, t1, s1, b1, i.p).a;\n"
+    "    if (mask)\n"
+    "        colour *= t4.Load(int3(int2(pos.xy) - mask_origin, 0)).x;\n"
+    "    if (clip_on)\n"
+    "    {\n"
+    "        float2 q = pos.xy - 0.5;\n"
+    "        colour *= saturate(min(q.x + 1.0, clip_rect.z) - max(q.x, clip_rect.x))\n"
+    "                * saturate(min(q.y + 1.0, clip_rect.w) - max(q.y, clip_rect.y));\n"
+    "    }\n"
     "\n"
     "    if (outline)\n"
     "    {\n"
@@ -4171,6 +5376,7 @@ static const char shape_ps_code[] =
     "    }\n"
     "    else\n"
     "    {\n"
+    "        colour *= i.b.w;\n"
     "        /* Evaluate the implicit form of the curve in texture space.\n"
     "         * \"i.b.z\" determines which side of the curve is shaded. */\n"
     "        if (!is_arc)\n"
@@ -4206,6 +5412,8 @@ shape_info[] =
      "triangle",                    shape_vs_code_triangle,       sizeof(shape_vs_code_triangle) - 1},
     {D2D_SHAPE_TYPE_CURVE,          shape_il_desc_curve,          ARRAY_SIZE(shape_il_desc_curve),
      "curve",                       shape_vs_code_curve,          sizeof(shape_vs_code_curve) - 1},
+    {D2D_SHAPE_TYPE_TRIANGLE_AA,    shape_il_desc_triangle_aa,    ARRAY_SIZE(shape_il_desc_triangle_aa),
+     "triangle_aa",                 shape_vs_code_triangle_aa,    sizeof(shape_vs_code_triangle_aa) - 1},
 };
 
 static HRESULT d2d_device_context_init(struct d2d_device_context *render_target,
