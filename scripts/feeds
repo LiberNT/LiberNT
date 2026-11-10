@@ -24,7 +24,7 @@ fail() {
 
 usage() {
 	cat >&2 <<'USAGE'
-Usage: scripts/feeds <command> [feed ...]
+Usage: scripts/feeds <command> [options] [feed ...]
 
 Commands:
   update [feed ...]   Clone missing feeds and fast-forward them to their branch
@@ -32,6 +32,11 @@ Commands:
   status [feed ...]   Report each feed's checked-out revision without network
                       access.
   list                Print the configured feeds.
+
+Options:
+  --paths <list>      Initialize only these nested submodule paths, comma
+                      separated, instead of the ones feeds.conf declares for
+                      the requested feeds. An empty list initializes none.
 USAGE
 	exit 2
 }
@@ -128,6 +133,8 @@ feed_update() {
 	_nested=$4
 	_dir="$FEEDS_DIR/$_name"
 
+	[ "$NESTED_OVERRIDE_SET" = "0" ] || _nested=$NESTED_OVERRIDE
+
 	if [ ! -e "$_dir/.git" ]; then
 		if [ -e "$_dir" ] && [ -n "$(ls -A "$_dir" 2>/dev/null)" ]; then
 			fail "$_dir exists but is not a Git checkout; move it aside"
@@ -179,6 +186,35 @@ feed_status() {
 [ $# -ge 1 ] || usage
 _command=$1
 shift
+
+NESTED_OVERRIDE=
+NESTED_OVERRIDE_SET=0
+while [ $# -ge 1 ]; do
+	case "$1" in
+		--paths)
+			shift
+			[ $# -ge 1 ] || fail "missing path list after --paths"
+			NESTED_OVERRIDE=$1
+			NESTED_OVERRIDE_SET=1
+			shift
+			;;
+		--paths=*)
+			NESTED_OVERRIDE=${1#--paths=}
+			NESTED_OVERRIDE_SET=1
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-*)
+			usage
+			;;
+		*)
+			break
+			;;
+	esac
+done
 
 _lines=$(feed_lines "$@") || exit 1
 [ -n "$_lines" ] || fail "no feeds configured in $FEEDS_CONF"
