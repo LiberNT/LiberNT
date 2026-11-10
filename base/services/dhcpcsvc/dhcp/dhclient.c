@@ -616,7 +616,7 @@ set_dhcp_router_discovery(PDHCP_ADAPTER Adapter, BOOLEAN Enable)
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\Ip");
     OBJECT_ATTRIBUTES Attributes;
     IO_STATUS_BLOCK Iosb;
-    IP4_INTERFACE_INFO Info;
+    IP4_INTERFACE_INFO Info = { 0 };
     HANDLE File;
 
     InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
@@ -624,7 +624,6 @@ set_dhcp_router_discovery(PDHCP_ADAPTER Adapter, BOOLEAN Enable)
                                FILE_SYNCHRONOUS_IO_NONALERT)))
         return;
 
-    memset(&Info, 0, sizeof(Info));
     Info.Index = Adapter->IfMib.dwIndex;
     if (NT_SUCCESS(NtDeviceIoControlFile(File, NULL, NULL, NULL, &Iosb, IOCTL_IP_QUERY_INTERFACE,
                                          &Info, sizeof(Info), &Info, sizeof(Info))) &&
@@ -665,7 +664,7 @@ set_route_lifetime(const MIB_IPFORWARDROW *Route, ULONG Lifetime)
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\Ip");
     OBJECT_ATTRIBUTES Attributes;
     IO_STATUS_BLOCK Iosb;
-    IP4_ROUTE_INFO Info;
+    IP4_ROUTE_INFO Info = { 0 };
     HANDLE File;
 
     InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
@@ -673,7 +672,6 @@ set_route_lifetime(const MIB_IPFORWARDROW *Route, ULONG Lifetime)
                                FILE_SYNCHRONOUS_IO_NONALERT)))
         return;
 
-    memset(&Info, 0, sizeof(Info));
     Info.Index = Route->dwForwardIfIndex;
     Info.Destination = Route->dwForwardDest;
     Info.Mask = Route->dwForwardMask;
@@ -686,9 +684,8 @@ set_route_lifetime(const MIB_IPFORWARDROW *Route, ULONG Lifetime)
 static ULONGLONG
 link_local_timeout(PDHCP_ADAPTER Adapter)
 {
-    MIB_IPINTERFACE_ROW Row;
+    MIB_IPINTERFACE_ROW Row = { 0 };
 
-    memset(&Row, 0, sizeof(Row));
     Row.Family = AF_INET;
     Row.InterfaceIndex = Adapter->IfMib.dwIndex;
     if (GetIpInterfaceEntry(&Row) != NO_ERROR)
@@ -1515,9 +1512,12 @@ state_panic(void *ipp)
 
     cur_time = GetMonotonicTime();
 
-    strcat(szKeyNameBuffer, Adapter->DhclientInfo.name);
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, szKeyNameBuffer, 0, KEY_WRITE, &hKey) != ERROR_SUCCESS)
-        hKey = NULL;
+    if (Adapter)
+    {
+        strcat(szKeyNameBuffer, Adapter->DhclientInfo.name);
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, szKeyNameBuffer, 0, KEY_WRITE, &hKey) != ERROR_SUCCESS)
+            hKey = NULL;
+    }
 
     if (Adapter && !Adapter->NteContext)
     {
@@ -1684,7 +1684,7 @@ void
 send_request(void *ipp)
 {
 	struct interface_info *ip = ipp;
-	struct sockaddr_in destination;
+	struct sockaddr_in destination = { 0 };
 	struct in_addr from;
 	int interval;
         time_t cur_time;
@@ -1787,7 +1787,6 @@ send_request(void *ipp)
 
 	/* If the lease T2 time has elapsed, or if we're not yet bound,
 	   broadcast the DHCPREQUEST rather than unicasting. */
-	memset(&destination, 0, sizeof(destination));
 	if (ip->client->state == S_REQUESTING ||
 	    ip->client->state == S_REBOOTING ||
 	    cur_time > ip->client->active->rebind)
@@ -1844,10 +1843,9 @@ void
 send_release(void *ipp)
 {
 	struct interface_info *ip = ipp;
-	struct sockaddr_in destination;
+	struct sockaddr_in destination = { 0 };
 	struct in_addr from;
 
-	memset(&destination, 0, sizeof(destination));
 	memcpy(&destination.sin_addr.s_addr,
 		   ip->client->destination.iabuf,
 		   sizeof(destination.sin_addr.s_addr));
@@ -1869,13 +1867,11 @@ void
 make_discover(struct interface_info *ip, struct client_lease *lease)
 {
 	unsigned char discover = DHCPDISCOVER;
-	struct tree_cache *options[256];
-	struct tree_cache option_elements[256];
+	struct tree_cache *options[256] = { NULL };
+	struct tree_cache option_elements[256] = { 0 };
 	int i;
 	ULONG foo = (ULONG) GetTickCount();
 
-	memset(option_elements, 0, sizeof(option_elements));
-	memset(options, 0, sizeof(options));
 	memset(&ip->client->packet, 0, sizeof(ip->client->packet));
 
 	/* Set DHCP_MESSAGE_TYPE to DHCPDISCOVER */
@@ -1953,11 +1949,10 @@ void
 make_request(struct interface_info *ip, struct client_lease * lease)
 {
 	unsigned char request = DHCPREQUEST;
-	struct tree_cache *options[256];
+	struct tree_cache *options[256] = { NULL };
 	struct tree_cache option_elements[256];
 	int i;
 
-	memset(options, 0, sizeof(options));
 	memset(&ip->client->packet, 0, sizeof(ip->client->packet));
 
 	/* Set DHCP_MESSAGE_TYPE to DHCPREQUEST */
@@ -2054,13 +2049,12 @@ make_request(struct interface_info *ip, struct client_lease * lease)
 void
 make_decline(struct interface_info *ip, struct client_lease *lease)
 {
-	struct tree_cache *options[256], message_type_tree;
+	struct tree_cache *options[256] = { NULL }, message_type_tree;
 	struct tree_cache requested_address_tree;
 	struct tree_cache server_id_tree, client_id_tree;
 	unsigned char decline = DHCPDECLINE;
 	int i;
 
-	memset(options, 0, sizeof(options));
 	memset(&ip->client->packet, 0, sizeof(ip->client->packet));
 
 	/* Set DHCP_MESSAGE_TYPE to DHCPDECLINE */
@@ -2128,12 +2122,11 @@ make_decline(struct interface_info *ip, struct client_lease *lease)
 void
 make_release(struct interface_info *ip, struct client_lease *lease)
 {
-	struct tree_cache *options[256], message_type_tree;
+	struct tree_cache *options[256] = { NULL }, message_type_tree;
 	struct tree_cache server_id_tree, client_id_tree;
 	unsigned char release = DHCPRELEASE;
 	int i;
 
-	memset(options, 0, sizeof(options));
 	memset(&ip->client->packet, 0, sizeof(ip->client->packet));
 
 	/* Set DHCP_MESSAGE_TYPE to DHCPRELEASE */
