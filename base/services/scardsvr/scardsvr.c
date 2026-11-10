@@ -253,16 +253,19 @@ ScTrackReader(
         if (First || Present != WasPresent)
         {
             EnterCriticalSection(&ScLock);
-            if (!First)
+            if (!First || Present)
                 ++Reader->Events;
             Reader->Mute = FALSE;
             LeaveCriticalSection(&ScLock);
-            ScUpdateCard(Reader, State, NULL, 0, FALSE);
             if (Present && State < SCARD_NEGOTIABLE)
             {
                 EnterCriticalSection(&Reader->IoLock);
                 ScPowerCard(Reader, SCARD_RESET_CARD);
                 LeaveCriticalSection(&Reader->IoLock);
+            }
+            else
+            {
+                ScUpdateCard(Reader, State, NULL, 0, FALSE);
             }
             DPRINT1("SCARDSVR: '%s' card %s, state %lu\n", Reader->Name, Present ? "present" : "absent",
                     Reader->State);
