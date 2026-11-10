@@ -242,7 +242,7 @@ NTSTATUS TiCreateFileObject(
         Status = FileOpenAddress(&Request, Address, Protocol, DeviceObject == RawIPDeviceObject, Shared, Exclusive, NULL);
         if (NT_SUCCESS(Status))
         {
-            IrpSp->FileObject->FsContext2 = (PVOID)TDI_TRANSPORT_ADDRESS_FILE;
+            IrpSp->FileObject->FsContext2 = (PVOID)(ULONG_PTR)TDI_TRANSPORT_ADDRESS_FILE;
             Context->Handle.AddressHandle = Request.Handle.AddressHandle;
         }
 
@@ -281,7 +281,7 @@ NTSTATUS TiCreateFileObject(
         Status = FileOpenConnection(&Request, ClientContext);
         if (NT_SUCCESS(Status))
         {
-            IrpSp->FileObject->FsContext2 = (PVOID)TDI_CONNECTION_FILE;
+            IrpSp->FileObject->FsContext2 = (PVOID)(ULONG_PTR)TDI_CONNECTION_FILE;
             Context->Handle.ConnectionContext = Request.Handle.ConnectionContext;
         }
     }
@@ -291,7 +291,7 @@ NTSTATUS TiCreateFileObject(
         Status = FileOpenControlChannel(&Request);
         if (NT_SUCCESS(Status))
         {
-            IrpSp->FileObject->FsContext2 = (PVOID)TDI_CONTROL_CHANNEL_FILE;
+            IrpSp->FileObject->FsContext2 = (PVOID)(ULONG_PTR)TDI_CONTROL_CHANNEL_FILE;
             Context->Handle.ControlChannel = Request.Handle.ControlChannel;
         }
     }
@@ -1204,9 +1204,11 @@ VOID NTAPI TiUnload(
 
     if (TCPDeviceObject)
     {
-        UNICODE_STRING strTcpLinkName = RTL_CONSTANT_STRING(L"\\DosDevices\\Tcp");
-        UNICODE_STRING strTcp6DeviceName = RTL_CONSTANT_STRING(DD_TCPV6_DEVICE_NAME);
+        UNICODE_STRING strTcpLinkName;
+        UNICODE_STRING strTcp6DeviceName;
 
+        RtlInitUnicodeString(&strTcpLinkName, L"\\DosDevices\\Tcp");
+        RtlInitUnicodeString(&strTcp6DeviceName, DD_TCPV6_DEVICE_NAME);
         IoDeleteSymbolicLink(&strTcpLinkName);
         IoDeleteSymbolicLink(&strTcp6DeviceName);
         IoDeleteDevice(TCPDeviceObject);
@@ -1214,16 +1216,18 @@ VOID NTAPI TiUnload(
 
     if (UDPDeviceObject)
     {
-        UNICODE_STRING strUdp6DeviceName = RTL_CONSTANT_STRING(DD_UDPV6_DEVICE_NAME);
+        UNICODE_STRING strUdp6DeviceName;
 
+        RtlInitUnicodeString(&strUdp6DeviceName, DD_UDPV6_DEVICE_NAME);
         IoDeleteSymbolicLink(&strUdp6DeviceName);
         IoDeleteDevice(UDPDeviceObject);
     }
 
     if (RawIPDeviceObject)
     {
-        UNICODE_STRING strRaw6DeviceName = RTL_CONSTANT_STRING(DD_RAWIPV6_DEVICE_NAME);
+        UNICODE_STRING strRaw6DeviceName;
 
+        RtlInitUnicodeString(&strRaw6DeviceName, DD_RAWIPV6_DEVICE_NAME);
         IoDeleteSymbolicLink(&strRaw6DeviceName);
         IoDeleteDevice(RawIPDeviceObject);
     }
@@ -1256,19 +1260,29 @@ DriverEntry(
  */
 {
     NTSTATUS Status;
-    UNICODE_STRING strIpDeviceName = RTL_CONSTANT_STRING(DD_IP_DEVICE_NAME);
-    UNICODE_STRING strIp6DeviceName = RTL_CONSTANT_STRING(DD_IPV6_DEVICE_NAME);
-    UNICODE_STRING strRawDeviceName = RTL_CONSTANT_STRING(DD_RAWIP_DEVICE_NAME);
-    UNICODE_STRING strUdpDeviceName = RTL_CONSTANT_STRING(DD_UDP_DEVICE_NAME);
-    UNICODE_STRING strTcpDeviceName = RTL_CONSTANT_STRING(DD_TCP_DEVICE_NAME);
-    UNICODE_STRING strTcpLinkName = RTL_CONSTANT_STRING(L"\\DosDevices\\Tcp");
-    UNICODE_STRING strTcp6DeviceName = RTL_CONSTANT_STRING(DD_TCPV6_DEVICE_NAME);
-    UNICODE_STRING strUdp6DeviceName = RTL_CONSTANT_STRING(DD_UDPV6_DEVICE_NAME);
-    UNICODE_STRING strRaw6DeviceName = RTL_CONSTANT_STRING(DD_RAWIPV6_DEVICE_NAME);
-    UNICODE_STRING strNdisDeviceName = RTL_CONSTANT_STRING(TCPIP_PROTOCOL_NAME);
+    UNICODE_STRING strIpDeviceName;
+    UNICODE_STRING strIp6DeviceName;
+    UNICODE_STRING strRawDeviceName;
+    UNICODE_STRING strUdpDeviceName;
+    UNICODE_STRING strTcpDeviceName;
+    UNICODE_STRING strTcpLinkName;
+    UNICODE_STRING strTcp6DeviceName;
+    UNICODE_STRING strUdp6DeviceName;
+    UNICODE_STRING strRaw6DeviceName;
+    UNICODE_STRING strNdisDeviceName;
     NDIS_STATUS NdisStatus;
     LARGE_INTEGER DueTime;
 
+    RtlInitUnicodeString(&strIpDeviceName, DD_IP_DEVICE_NAME);
+    RtlInitUnicodeString(&strIp6DeviceName, DD_IPV6_DEVICE_NAME);
+    RtlInitUnicodeString(&strRawDeviceName, DD_RAWIP_DEVICE_NAME);
+    RtlInitUnicodeString(&strUdpDeviceName, DD_UDP_DEVICE_NAME);
+    RtlInitUnicodeString(&strTcpDeviceName, DD_TCP_DEVICE_NAME);
+    RtlInitUnicodeString(&strTcpLinkName, L"\\DosDevices\\Tcp");
+    RtlInitUnicodeString(&strTcp6DeviceName, DD_TCPV6_DEVICE_NAME);
+    RtlInitUnicodeString(&strUdp6DeviceName, DD_UDPV6_DEVICE_NAME);
+    RtlInitUnicodeString(&strRaw6DeviceName, DD_RAWIPV6_DEVICE_NAME);
+    RtlInitUnicodeString(&strNdisDeviceName, TCPIP_PROTOCOL_NAME);
     InitializeListHead(&TiChangeIrps);
     KeInitializeSpinLock(&TiChangeLock);
 
