@@ -348,3 +348,107 @@ AppleAdtIsCompatible(
     }
     return FALSE;
 }
+
+static const CHAR *const AgxRegionBase[APPLE_AGX_REGIONS] = {
+    "gpu-region-base", "gfx-shared-region-base", "gfx-handoff-base", "gfx-shared-l2-region-base"
+};
+
+static const CHAR *const AgxRegionSize[APPLE_AGX_REGIONS] = {
+    "gpu-region-size", "gfx-shared-region-size", "gfx-handoff-size", "gfx-shared-l2-region-size"
+};
+
+static
+BOOLEAN
+AgxStates(
+    _In_ PAPPLE_ADT Adt,
+    _In_ ULONG Node,
+    _In_z_ PCSTR Name,
+    _Out_writes_(APPLE_AGX_MAX_STATES) PAPPLE_AGX_STATE State,
+    _Out_ PULONG Count)
+{
+    const UCHAR *Values;
+    ULONG Length, Index;
+
+    *Count = 0;
+    Values = AppleAdtGetProperty(Adt, Node, Name, &Length);
+    if (!Values || !Length || Length % sizeof(APPLE_AGX_STATE))
+        return FALSE;
+    *Count = Length / (ULONG)sizeof(APPLE_AGX_STATE);
+    if (*Count > APPLE_AGX_MAX_STATES)
+    {
+        *Count = 0;
+        return FALSE;
+    }
+    for (Index = 0; Index < *Count; ++Index)
+        RtlCopyMemory(&State[Index], Values + Index * sizeof(APPLE_AGX_STATE), sizeof(APPLE_AGX_STATE));
+    return TRUE;
+}
+
+/* The regions and segments move with the firmware the boot chain loaded, so they are read and
+ * checked together: each region page aligned, none overlapping, the text where the processor
+ * expects it and the data right behind it. */
+NTSTATUS
+NTAPI
+AppleAgxDescribe(
+    _In_ PAPPLE_ADT Adt,
+    _In_z_ PCSTR Part,
+    _In_ ULONG PageSize,
+    _Out_ PAPPLE_AGX_DESCRIPTION Description)
+{
+    APPLE_AGX_SEGMENT Segment[2];
+    const VOID *Ranges;
+    ULONG Node, Index, Other, Length, Count;
+
+    RtlZeroMemory(Description, sizeof(*Description));
+    if (!Adt->Base || !PageSize || (PageSize & (PageSize - 1)))
+        return STATUS_INVALID_PARAMETER;
+    Node = AppleAdtPath(Adt, "/arm-io/sgx");
+    if (Node == APPLE_ADT_NO_NODE || !AppleAdtIsCompatible(Adt, Node, Part))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    for (Index = 0; Index < APPLE_AGX_REGIONS; ++Index)
+    {
+        if (!AppleAdtReadU64(Adt, Node, AgxRegionBase[Index], &Description->RegionBase[Index]) ||
+            !AppleAdtReadU64(Adt, Node, AgxRegionSize[Index], &Description->RegionSize[Index]))
+        {
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        }
+        if (!Description->RegionBase[Index] || !Description->RegionSize[Index] ||
+            ((Description->RegionBase[Index] | Description->RegionSize[Index]) & (PageSize - 1)) ||
+            Description->RegionBase[Index] + Description->RegionSize[Index] < Description->RegionBase[Index])
+        {
+            return STATUS_INVALID_ADDRESS;
+        }
+    }
+    for (Index = 0; Index < APPLE_AGX_REGIONS; ++Index)
+    {
+        for (Other = Index + 1; Other < APPLE_AGX_REGIONS; ++Other)
+        {
+            if (Description->RegionBase[Index] <
+                    Description->RegionBase[Other] + Description->RegionSize[Other] &&
+                Description->RegionBase[Other] <
+                    Description->RegionBase[Index] + Description->RegionSize[Index])
+            {
+                return STATUS_CONFLICTING_ADDRESSES;
+            }
+        }
+    }
+    Node = AppleAdtPath(Adt, "/arm-io/gfx-asc/iop-gfx-nub");
+    Ranges = (Node == APPLE_ADT_NO_NODE) ? NULL : AppleAdtGetProperty(Adt, Node, "segment-ranges", &Length);
+    if (Ranges && Length >= sizeof(Segment))
+    {
+        RtlCopyMemory(Segment, Ranges, sizeof(Segment));
+        Description->Text = Segment[0];
+        Description->Data = Segment[1];
+        Description->SegmentsKnown = TRUE;
+        Description->SegmentsPlaced = Segment[0].Virtual == APPLE_AGX_FIRMWARE_UPPER &&
+                                      Segment[1].Virtual == Segment[0].Virtual + Segment[0].Size &&
+                                      Segment[0].Size != 0 && Segment[1].Size != 0 &&
+                                      ((Segment[0].Physical | Segment[1].Physical) & (PageSize - 1)) == 0;
+    }
+    Node = AppleAdtPath(Adt, "/arm-io/sgx");
+    if (!AgxStates(Adt, Node, "perf-states", Description->State, &Description->States))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    if (AgxStates(Adt, Node, "perf-states-sram", Description->SramState, &Count) && Count != Description->States)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    return STATUS_SUCCESS;
+}

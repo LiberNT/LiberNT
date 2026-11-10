@@ -90,3 +90,50 @@ AppleAdtIsCompatible(
     _In_ PAPPLE_ADT Adt,
     _In_ ULONG Node,
     _In_z_ PCSTR Compatible);
+
+/* What the graphics driver needs from the machine's tree: the regions, the loaded
+ * firmware segments and the operating points of the firmware the boot chain loaded. */
+#define APPLE_AGX_REGIONS           4
+#define APPLE_AGX_MAX_STATES        16
+#define APPLE_AGX_FIRMWARE_UPPER    0xfffffc0000000000ULL
+
+#define APPLE_AGX_REGION_TABLE      0
+#define APPLE_AGX_REGION_ROOT       1
+#define APPLE_AGX_REGION_HANDOFF    2
+#define APPLE_AGX_REGION_WINDOW     3
+
+typedef struct _APPLE_AGX_SEGMENT
+{
+    ULONG64 Physical;
+    ULONG64 Virtual;
+    ULONG64 Remap;
+    ULONG Size;
+    ULONG Flags;
+} APPLE_AGX_SEGMENT, *PAPPLE_AGX_SEGMENT;
+
+typedef struct _APPLE_AGX_STATE
+{
+    ULONG Frequency;
+    ULONG Millivolts;
+} APPLE_AGX_STATE, *PAPPLE_AGX_STATE;
+
+typedef struct _APPLE_AGX_DESCRIPTION
+{
+    ULONG64 RegionBase[APPLE_AGX_REGIONS];
+    ULONG64 RegionSize[APPLE_AGX_REGIONS];
+    APPLE_AGX_SEGMENT Text;
+    APPLE_AGX_SEGMENT Data;
+    APPLE_AGX_STATE State[APPLE_AGX_MAX_STATES];
+    APPLE_AGX_STATE SramState[APPLE_AGX_MAX_STATES];
+    ULONG States;
+    BOOLEAN SegmentsKnown;
+    BOOLEAN SegmentsPlaced;
+} APPLE_AGX_DESCRIPTION, *PAPPLE_AGX_DESCRIPTION;
+
+NTSTATUS
+NTAPI
+AppleAgxDescribe(
+    _In_ PAPPLE_ADT Adt,
+    _In_z_ PCSTR Part,
+    _In_ ULONG PageSize,
+    _Out_ PAPPLE_AGX_DESCRIPTION Description);

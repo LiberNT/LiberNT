@@ -1978,6 +1978,151 @@ TestAdt(VOID)
     ok_hex(AppleAdtFirstChild(&Adt, AppleAdtPath(&Adt, "/arm-io/sgx")), APPLE_ADT_NO_NODE);
 }
 
+#define ADT_BREAK_ALIGN         0x01
+#define ADT_BREAK_OVERLAP       0x02
+#define ADT_BREAK_MISSING       0x04
+#define ADT_BREAK_TEXT_VA       0x08
+#define ADT_BREAK_STATE_SIZE    0x10
+#define ADT_BREAK_SRAM_COUNT    0x20
+#define ADT_BREAK_PART          0x40
+
+/* The graphics half of this machine's exported tree, with one defect at a time. */
+static
+VOID
+AdtBuildGraphics(
+    _In_ ULONG Break)
+{
+    ULONG64 Base[4] = { 0x108fffb8000ULL, 0x108fff78000ULL, 0x108fff70000ULL, 0x108fff74000ULL };
+    ULONG64 Size[4] = { 0x4000, 0x40000, 0x4000, 0x4000 };
+    static const CHAR *const BaseNames[4] = { "gpu-region-base", "gfx-shared-region-base", "gfx-handoff-base",
+                                              "gfx-shared-l2-region-base" };
+    static const CHAR *const SizeNames[4] = { "gpu-region-size", "gfx-shared-region-size", "gfx-handoff-size",
+                                              "gfx-shared-l2-region-size" };
+    APPLE_AGX_SEGMENT Segment[2];
+    ULONG States[8] = { 338712192, 0x280, 618434688, 0x2a8, 795836672, 0x2b7, 831528960, 0x2df };
+    ULONG Sram[8] = { 338712192, 0x32a, 618434688, 0x32a, 795836672, 0x32a, 831528960, 0x32a };
+    ULONG Properties = (Break & ADT_BREAK_MISSING) ? 6 : 8;
+    ULONG StateLength = (Break & ADT_BREAK_STATE_SIZE) ? sizeof(States) - 4 : sizeof(States);
+    ULONG SramLength = (Break & ADT_BREAK_SRAM_COUNT) ? sizeof(Sram) - 8 : sizeof(Sram);
+    ULONG Index;
+
+    if (Break & ADT_BREAK_ALIGN)
+        Base[2] += 0x1000;
+    if (Break & ADT_BREAK_OVERLAP)
+        Size[2] = 0x10000;
+    RtlZeroMemory(Segment, sizeof(Segment));
+    Segment[0].Physical = 0x100009d8000ULL;
+    Segment[0].Virtual = (Break & ADT_BREAK_TEXT_VA) ? 0xfffffc0000004000ULL : APPLE_AGX_FIRMWARE_UPPER;
+    Segment[0].Remap = Segment[0].Physical;
+    Segment[0].Size = 0x5c000;
+    Segment[0].Flags = 1;
+    Segment[1].Physical = 0x100018e8000ULL;
+    Segment[1].Virtual = APPLE_AGX_FIRMWARE_UPPER + 0x5c000;
+    Segment[1].Remap = Segment[1].Physical;
+    Segment[1].Size = 0x114000;
+
+    AdtUsed = 0;
+    AdtPutU32(1);
+    AdtPutU32(1);
+    AdtPutName("device-tree");
+    AdtPutU32(1);
+    AdtPutU32(2);
+    AdtPutName("arm-io");
+    AdtPutU32(4 + Properties);
+    AdtPutU32(0);
+    AdtPutName("sgx");
+    AdtPutProperty("compatible", (Break & ADT_BREAK_PART) ? "gpu,t6031" : "gpu,t6030", 10);
+    for (Index = 0; Index < Properties / 2; ++Index)
+    {
+        AdtPutProperty(BaseNames[Index], &Base[Index], sizeof(Base[Index]));
+        AdtPutProperty(SizeNames[Index], &Size[Index], sizeof(Size[Index]));
+    }
+    AdtPutProperty("perf-states", States, StateLength);
+    AdtPutProperty("perf-states-sram", Sram, SramLength);
+    AdtPutU32(1);
+    AdtPutU32(1);
+    AdtPutName("gfx-asc");
+    AdtPutU32(2);
+    AdtPutU32(0);
+    AdtPutName("iop-gfx-nub");
+    AdtPutProperty("segment-ranges", Segment, sizeof(Segment));
+}
+
+static
+VOID
+TestAgxDescribe(VOID)
+{
+    APPLE_AGX_DESCRIPTION Description;
+    APPLE_ADT Adt;
+
+    /* The tree of this machine, read whole. */
+    AdtBuildGraphics(0);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The graphics tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_SUCCESS);
+    ok(Description.RegionBase[APPLE_AGX_REGION_TABLE] == 0x108fffb8000ULL, "The address table is at %I64x\n",
+       Description.RegionBase[APPLE_AGX_REGION_TABLE]);
+    ok(Description.RegionBase[APPLE_AGX_REGION_ROOT] == 0x108fff78000ULL, "The root is at %I64x\n",
+       Description.RegionBase[APPLE_AGX_REGION_ROOT]);
+    ok(Description.RegionBase[APPLE_AGX_REGION_HANDOFF] == 0x108fff70000ULL, "The handoff page is at %I64x\n",
+       Description.RegionBase[APPLE_AGX_REGION_HANDOFF]);
+    ok(Description.RegionBase[APPLE_AGX_REGION_WINDOW] == 0x108fff74000ULL, "The window level is at %I64x\n",
+       Description.RegionBase[APPLE_AGX_REGION_WINDOW]);
+    ok(Description.RegionSize[APPLE_AGX_REGION_ROOT] == 0x40000, "The root region is %I64x bytes\n",
+       Description.RegionSize[APPLE_AGX_REGION_ROOT]);
+    ok(Description.SegmentsKnown && Description.SegmentsPlaced, "The segments are %s and %s\n",
+       Description.SegmentsKnown ? "known" : "unknown", Description.SegmentsPlaced ? "placed" : "misplaced");
+    ok(Description.Text.Physical == 0x100009d8000ULL && Description.Text.Size == 0x5c000,
+       "The text is at %I64x+%lx\n", Description.Text.Physical, Description.Text.Size);
+    ok(Description.Data.Physical == 0x100018e8000ULL && Description.Data.Size == 0x114000,
+       "The data is at %I64x+%lx\n", Description.Data.Physical, Description.Data.Size);
+    ok_int(Description.States, 4);
+    ok(Description.State[0].Frequency == 338712192 && Description.State[0].Millivolts == 0x280,
+       "The first state is %lu Hz at %lu mV\n", Description.State[0].Frequency, Description.State[0].Millivolts);
+    ok(Description.State[3].Frequency == 831528960 && Description.State[3].Millivolts == 0x2df,
+       "The last state is %lu Hz at %lu mV\n", Description.State[3].Frequency, Description.State[3].Millivolts);
+    ok_int(Description.SramState[0].Millivolts, 0x32a);
+
+    /* Every defect is refused, and nothing is reported as usable. */
+    AdtBuildGraphics(ADT_BREAK_ALIGN);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_INVALID_ADDRESS);
+    ok_int(Description.States, 0);
+
+    AdtBuildGraphics(ADT_BREAK_OVERLAP);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_CONFLICTING_ADDRESSES);
+
+    AdtBuildGraphics(ADT_BREAK_MISSING);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_DEVICE_CONFIGURATION_ERROR);
+
+    AdtBuildGraphics(ADT_BREAK_STATE_SIZE);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_DEVICE_CONFIGURATION_ERROR);
+
+    AdtBuildGraphics(ADT_BREAK_SRAM_COUNT);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_DEVICE_CONFIGURATION_ERROR);
+
+    AdtBuildGraphics(ADT_BREAK_PART);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_DEVICE_CONFIGURATION_ERROR);
+
+    /* A firmware the boot chain placed wrongly is reported, not used. */
+    AdtBuildGraphics(ADT_BREAK_TEXT_VA);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_SUCCESS);
+    ok(Description.SegmentsKnown && !Description.SegmentsPlaced, "A misplaced text segment was accepted\n");
+
+    /* A tree with nothing in it, and a page size that is not a power of two. */
+    AdtBuildGraphics(0);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x3000, &Description), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0, &Description), STATUS_INVALID_PARAMETER);
+    RtlZeroMemory(&Adt, sizeof(Adt));
+    ok_hex(AppleAgxDescribe(&Adt, "gpu,t6030", 0x4000, &Description), STATUS_INVALID_PARAMETER);
+}
+
 static
 VOID
 TestSpmi(VOID)
@@ -3109,6 +3254,7 @@ START_TEST(AppleSoc)
     TestUat();
     TestUatAdopt();
     TestAdt();
+    TestAgxDescribe();
     TestSpmi();
     TestAtcphy();
     TestPcie();
