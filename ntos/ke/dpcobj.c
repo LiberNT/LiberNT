@@ -31,8 +31,14 @@ ULONG KiAdjustDpcThreshold = 20;
 /* The rate the adjustment aims for. */
 ULONG KiIdealDpcRate = 20;
 
-/* How long a single DPC may run before the watchdog treats it as stuck. */
-ULONG KiDPCTimeout = 110;
+/*
+ * How long a single deferred routine may run before the watchdog treats it as
+ * stuck, in seconds, and how long the processor may spend in them altogether.
+ * FIXME: the limits Windows 11 uses are not published; these are the figures
+ * its documentation and its own watchdog behaviour describe.
+ */
+ULONG KiDPCTimeoutSeconds = 20;
+ULONG KiDPCWatchdogSeconds = 120;
 
 /* How long an interrupt service routine may run, in microseconds. */
 ULONG KiTimeLimitIsrMicroseconds;

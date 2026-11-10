@@ -254,7 +254,8 @@ extern BOOLEAN KiTimeAdjustmentEnabled;
 extern BOOLEAN KiRelaxedTiming;
 extern LONG KiTickOffset;
 extern ULONG KiFreezeFlag;
-extern ULONG KiDPCTimeout;
+extern ULONG KiDPCTimeoutSeconds;
+extern ULONG KiDPCWatchdogSeconds;
 extern PGDI_BATCHFLUSH_ROUTINE KeGdiFlushUserBatch;
 
 NTSTATUS

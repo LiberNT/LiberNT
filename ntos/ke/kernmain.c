@@ -198,6 +198,23 @@ KiComputeReciprocal(
  * scheduling queues start out empty.
  */
 CODE_SEG("INIT")
+/*
+ * The clock ticks a watchdog limit of so many seconds comes to. The clock may
+ * not be running yet, in which case the default period is what it will be.
+ */
+static
+ULONG
+KiWatchdogTicks(
+    _In_ ULONG Seconds)
+{
+    ULONG Increment = (KeMaximumIncrement != 0) ? KeMaximumIncrement
+                                                : KeTimeIncrement;
+
+    if (Increment == 0) return 0;
+
+    return (ULONG)(((ULONGLONG)Seconds * 10 * 1000 * 1000) / Increment);
+}
+
 VOID
 NTAPI
 KiInitSpinLocks(
@@ -301,12 +318,13 @@ KiInitSpinLocks(
     Prcb->AdjustDpcThreshold = KiAdjustDpcThreshold;
 
     /*
-     * The watchdog limits, in clock ticks. One routine is given the timeout
-     * and the whole pass four times as long: a pass made of many short
-     * routines is not stuck, but one that never ends is.
+     * The watchdog limits, counted in clock ticks of whatever length the
+     * platform's clock runs at. One routine is given the shorter limit and a
+     * whole pass the longer one: a pass made of many short routines is not
+     * stuck, but one that never ends is.
      */
-    Prcb->DpcTimeLimit = KiDPCTimeout;
-    Prcb->DpcWatchdogPeriod = (LONG)(KiDPCTimeout * 4);
+    Prcb->DpcTimeLimit = KiWatchdogTicks(KiDPCTimeoutSeconds);
+    Prcb->DpcWatchdogPeriod = (LONG)KiWatchdogTicks(KiDPCWatchdogSeconds);
     Prcb->DpcTimeCount = 0;
     Prcb->DpcWatchdogCount = 0;
     Prcb->DpcRequestRate = 0;
