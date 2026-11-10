@@ -79,6 +79,17 @@ UCHAR IopSetOperationLength[FileMaximumInformation] =
     [FileCaseSensitiveInformation] = sizeof(FILE_CASE_SENSITIVE_INFORMATION)
 };
 
+/*
+ * A class whose buffer is not read as a sequence of ULONGs: the one-byte
+ * disposition, and the priority hint the documentation asks to be eight-byte
+ * aligned. Every other class takes a ULONG's alignment.
+ */
+UCHAR IopSetOperationAlignment[FileMaximumInformation] =
+{
+    [FileDispositionInformation] = TYPE_ALIGNMENT(FILE_DISPOSITION_INFORMATION),
+    [FileIoPriorityHintInformation] = sizeof(ULONGLONG)
+};
+
 ACCESS_MASK IopQueryOperationAccess[FileMaximumInformation] =
 {
     [FileBasicInformation] = FILE_READ_ATTRIBUTES,
@@ -850,9 +861,13 @@ NtSetInformationFile(
 
     if (PreviousMode != KernelMode)
     {
+        ULONG Alignment = IopSetOperationAlignment[FileInformationClass];
+
+        if (Alignment == 0) Alignment = sizeof(ULONG);
+
         _SEH2_TRY
         {
-            ProbeForRead(FileInformation, Length, sizeof(ULONG));
+            ProbeForRead(FileInformation, Length, Alignment);
             ProbeForWriteIoStatusBlock(IoStatusBlock);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
