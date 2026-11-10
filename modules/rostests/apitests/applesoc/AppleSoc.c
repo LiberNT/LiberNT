@@ -4031,6 +4031,118 @@ TestAgxScene(VOID)
 
 static
 VOID
+TestAgxTranslateRender(VOID)
+{
+    DRM_ASAHI_CMD_RENDER Command, Bad;
+    APPLE_AGX_RENDER_STATE Render;
+    const ULONG64 Usc = 0x1d00000000ULL;
+
+    ok_int(sizeof(DRM_ASAHI_CMD_RENDER), 0xf0);
+    RtlZeroMemory(&Command, sizeof(Command));
+    Command.Flags = DRM_ASAHI_RENDER_DBIAS_IS_INT;
+    Command.IspZlsPixels = 0x04370777;
+    Command.VdmCtrlStreamBase = 0x1040001000ULL;
+    Command.IspScissorBase = 0x1800000000ULL;
+    Command.IspDbiasBase = 0x1800001000ULL;
+    Command.IspOclqryBase = 0x1800002000ULL;
+    Command.Depth.Base = 0x1900000000ULL;
+    Command.Depth.CompBase = 0x1b00000000ULL;
+    Command.Depth.Stride = 0x2000;
+    Command.Depth.CompStride = 0x400;
+    Command.Stencil.Base = 0x1a00000000ULL;
+    Command.Stencil.CompBase = 0x1c00000000ULL;
+    Command.Stencil.Stride = 0x1000;
+    Command.Stencil.CompStride = 0x200;
+    Command.ZlsCtrl = 0x41;
+    Command.PppMultisamplectl = 0x22;
+    Command.PppCtrl = 0x201;
+    Command.WidthPx = 1920;
+    Command.HeightPx = 1080;
+    Command.Layers = 1;
+    Command.UtileWidthPx = 32;
+    Command.UtileHeightPx = 32;
+    Command.Samples = 1;
+    Command.SampleSizeB = 8;
+    Command.IspMergeUpperX = 0x3f800000;
+    Command.IspMergeUpperY = 0x40000000;
+    Command.Bg.Usc = 0x1047;
+    Command.Bg.RsrcSpec = 0x11;
+    Command.Eot.Usc = 0x2000;
+    Command.Eot.RsrcSpec = 0x22;
+    Command.PartialBg.Usc = 0x3010;
+    Command.PartialBg.RsrcSpec = 0x33;
+    Command.PartialEot.Usc = 0x4000;
+    Command.PartialEot.RsrcSpec = 0x44;
+    Command.IspBgobjdepth = 0x3f800000;
+    Command.IspBgobjvals = 0x80;
+
+    ok_hex(AppleAgxTranslateRender(&Command, Usc, 2, &Render), STATUS_SUCCESS);
+    ok_int(Render.Geometry.Blocks, 192);
+    ok(Render.Geometry.TpcBytes == 0xc000, "The TPC takes %I64x bytes\n", Render.Geometry.TpcBytes);
+    ok(Render.Vdm == 0x40001000ULL, "The VDM stream is %I64x\n", Render.Vdm);
+    ok(Render.Multisample == 0x22, "The multisample control is %I64x\n", Render.Multisample);
+    ok_hex(Render.Ppp, 0x201);
+    ok_int(Render.ProcessEmptyTiles, FALSE);
+    ok(Render.Fragment.Background.Address == Usc + 0x1040, "The background program is at %I64x\n",
+       Render.Fragment.Background.Address);
+    ok(Render.Fragment.Background.Resources == 0x11, "The background resources are %I64x\n",
+       Render.Fragment.Background.Resources);
+    ok(Render.Fragment.EndOfTile.Address == Usc + 0x2000, "The end of tile program is at %I64x\n",
+       Render.Fragment.EndOfTile.Address);
+    ok(Render.Fragment.PartialBackground.Address == Usc + 0x3000, "The partial background is at %I64x\n",
+       Render.Fragment.PartialBackground.Address);
+    ok(Render.Fragment.PartialEndOfTile.Resources == 0x44, "The partial end of tile resources are %I64x\n",
+       Render.Fragment.PartialEndOfTile.Resources);
+    ok_hex(Render.Fragment.IspControl, 0x4c000);
+    ok_hex(Render.Fragment.TilebufferControl, 4);
+    ok_hex(Render.Fragment.MirrorTilebufferControl, 4);
+    ok(Render.Fragment.TileMode == 0x280, "The tile mode is %I64x\n", Render.Fragment.TileMode);
+    ok_hex(Render.Fragment.MirrorTileMode, 0x280);
+    ok(Render.Fragment.Depth.Stride == 0x2000, "The depth stride is %I64x\n", Render.Fragment.Depth.Stride);
+    ok(Render.Fragment.DepthCompression.Base == 0x1b00000000ULL, "The depth compression is at %I64x\n",
+       Render.Fragment.DepthCompression.Base);
+    ok(Render.Fragment.StencilCompression.Stride == 0x200, "The stencil compression stride is %I64x\n",
+       Render.Fragment.StencilCompression.Stride);
+    ok(Render.Fragment.Query == 0x1800002000ULL, "The query is at %I64x\n", Render.Fragment.Query);
+    ok_hex(Render.Fragment.DepthDimensions, 0x04370777);
+    ok_hex(Render.Fragment.DepthClear, 0x3f800000);
+    ok_hex(Render.Fragment.StencilClear, 0x80);
+    ok_int(Render.Fragment.SampleSize, 8);
+    ok_hex(Render.Fragment.MergeUpper[1], 0x40000000);
+
+    Bad = Command;
+    Bad.Flags = DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES;
+    Bad.Layers = 3;
+    Bad.Samples = 4;
+    Bad.UtileWidthPx = 16;
+    Bad.UtileHeightPx = 16;
+    Bad.SampleSizeB = 16;
+    ok_hex(AppleAgxTranslateRender(&Bad, Usc, 2, &Render), STATUS_SUCCESS);
+    ok_hex(Render.Fragment.TilebufferControl, 0x40008);
+    ok(Render.Fragment.TileMode == 0x10281, "The layered tile mode is %I64x\n", Render.Fragment.TileMode);
+    ok_hex(Render.Fragment.IspControl, 0xc000);
+    ok_int(Render.ProcessEmptyTiles, TRUE);
+    ok_int(Render.Fragment.ProcessEmptyTiles, TRUE);
+
+    Bad = Command;
+    Bad.Flags = 0x8;
+    ok_hex(AppleAgxTranslateRender(&Bad, Usc, 2, &Render), STATUS_INVALID_PARAMETER);
+    Bad = Command;
+    Bad.VdmCtrlStreamBase = 0x0040001000ULL;
+    ok_hex(AppleAgxTranslateRender(&Bad, Usc, 2, &Render), STATUS_INVALID_PARAMETER);
+    Bad.VdmCtrlStreamBase = 0x1040001002ULL;
+    ok_hex(AppleAgxTranslateRender(&Bad, Usc, 2, &Render), STATUS_INVALID_PARAMETER);
+    Bad = Command;
+    Bad.WidthPx = 0;
+    ok_hex(AppleAgxTranslateRender(&Bad, Usc, 2, &Render), STATUS_INVALID_PARAMETER);
+    Bad = Command;
+    Bad.Samples = 8;
+    ok_hex(AppleAgxTranslateRender(&Bad, Usc, 2, &Render), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleAgxTranslateRender(&Command, 0, 2, &Render), STATUS_INVALID_PARAMETER);
+}
+
+static
+VOID
 TestAgxParameterBuffer(VOID)
 {
     APPLE_AGX_PARAMETER_BUFFER Buffer;
@@ -5259,6 +5371,7 @@ START_TEST(AppleSoc)
     TestAgxVertexWork();
     TestAgxFragmentWork();
     TestAgxScene();
+    TestAgxTranslateRender();
     TestSpmi();
     TestAtcphy();
     TestPcie();

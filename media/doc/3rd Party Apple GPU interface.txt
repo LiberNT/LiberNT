@@ -41,6 +41,12 @@ What was taken is the description of the interface:
       - the tiling parameters of a frame (queue/render.rs), the compact-pointer window
         (g15/encode.rs, g15/hw.rs), the ISP macrotile size and the scene object
 
+The render commands the driver accepts follow Mesa's copy of the same driver's user interface,
+include/drm-uapi/asahi_drm.h (SPDX-License-Identifier: MIT; Copyright (C) The Asahi Linux
+Contributors, 2018-2023 Collabora Ltd., 2014-2018 Broadcom), mirrored with NT types in
+sdk/include/reactos/drivers/appleagxuapi.h so that Mesa's Apple drivers can submit to it. Its
+layout was measured by compiling Mesa's header, and the mirror asserts every offset.
+
 Not every file of that driver offers the MIT option. m3/agx_render.rs and m3/agx_render_state.rs
 are GPL-2.0-only; nothing was taken from them. The same frame geometry and compact-pointer rule
 were taken from the dual-licensed files named above instead.

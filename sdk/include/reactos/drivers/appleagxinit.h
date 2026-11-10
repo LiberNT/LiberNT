@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <reactos/drivers/appleagxuapi.h>
+
 /* The firmware endpoint, its doorbell for the initial data and its request to drain the rings. */
 #define APPLE_AGX_EP_FIRMWARE           0x20
 #define APPLE_AGX_EP_DOORBELL           0x21
@@ -834,3 +836,21 @@ AppleAgxDescribeScene(
     _In_ ULONG64 ManagerMisc,
     _In_ ULONG64 UserBuffer,
     _In_ ULONG64 UserBytes);
+
+typedef struct _APPLE_AGX_RENDER_STATE
+{
+    APPLE_AGX_GEOMETRY Geometry;
+    APPLE_AGX_FRAGMENT_STATE Fragment;
+    ULONG64 Vdm;
+    ULONG64 Multisample;
+    ULONG Ppp;
+    BOOLEAN ProcessEmptyTiles;
+} APPLE_AGX_RENDER_STATE, *PAPPLE_AGX_RENDER_STATE;
+
+NTSTATUS
+NTAPI
+AppleAgxTranslateRender(
+    _In_ const DRM_ASAHI_CMD_RENDER *Command,
+    _In_ ULONG64 UscBase,
+    _In_ ULONG Clusters,
+    _Out_ PAPPLE_AGX_RENDER_STATE Render);

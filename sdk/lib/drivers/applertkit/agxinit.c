@@ -1665,3 +1665,80 @@ AppleAgxDescribeScene(
     KeMemoryBarrier();
     return STATUS_SUCCESS;
 }
+
+static
+VOID
+AgxTranslateProgram(
+    _Out_ PAPPLE_AGX_PROGRAM Program,
+    _In_ const DRM_ASAHI_BG_EOT *Source,
+    _In_ ULONG64 UscBase)
+{
+    Program->Address = UscBase + (Source->Usc & ~63u);
+    Program->Resources = Source->RsrcSpec;
+}
+
+NTSTATUS
+NTAPI
+AppleAgxTranslateRender(
+    _In_ const DRM_ASAHI_CMD_RENDER *Command,
+    _In_ ULONG64 UscBase,
+    _In_ ULONG Clusters,
+    _Out_ PAPPLE_AGX_RENDER_STATE Render)
+{
+    const ULONG Known = DRM_ASAHI_RENDER_VERTEX_SCRATCH | DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES |
+                        DRM_ASAHI_RENDER_NO_VERTEX_CLUSTERING | DRM_ASAHI_RENDER_DBIAS_IS_INT;
+    PAPPLE_AGX_FRAGMENT_STATE State;
+    ULONG64 Bytes;
+    ULONG Tilebuffer, TileMode;
+    NTSTATUS Status;
+
+    if (!Command || !Render || !UscBase || (Command->Flags & ~Known))
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(Render, sizeof(*Render));
+    Status = AppleAgxDescribeGeometry(Command->WidthPx, Command->HeightPx, Command->UtileWidthPx,
+                                      Command->UtileHeightPx, Command->Samples, Command->Layers, Clusters,
+                                      &Render->Geometry);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!AgxCompact(Command->VdmCtrlStreamBase, &Render->Vdm) || (Render->Vdm & 3))
+        return STATUS_INVALID_PARAMETER;
+    Render->Multisample = Command->PppMultisamplectl;
+    Render->Ppp = Command->PppCtrl;
+    Render->ProcessEmptyTiles = (Command->Flags & DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES) != 0;
+
+    Bytes = (ULONG64)Command->SampleSizeB * Command->UtileWidthPx * Command->UtileHeightPx * Command->Samples;
+    Tilebuffer = (ULONG)((Bytes + 2047) / 2048) | ((ULONG)(Render->Geometry.UtileConfig & 3) << 17);
+    TileMode = 0x280 | (Command->Layers > 1 ? 1 : 0) | (Render->ProcessEmptyTiles ? 0x10000 : 0);
+
+    State = &Render->Fragment;
+    State->Multisample = Command->PppMultisamplectl;
+    State->MergeUpper[0] = Command->IspMergeUpperX;
+    State->MergeUpper[1] = Command->IspMergeUpperY;
+    AgxTranslateProgram(&State->EndOfTile, &Command->Eot, UscBase);
+    AgxTranslateProgram(&State->Background, &Command->Bg, UscBase);
+    AgxTranslateProgram(&State->PartialEndOfTile, &Command->PartialEot, UscBase);
+    AgxTranslateProgram(&State->PartialBackground, &Command->PartialBg, UscBase);
+    State->Scissor = Command->IspScissorBase;
+    State->DepthBias = Command->IspDbiasBase;
+    State->Query = Command->IspOclqryBase;
+    State->IspControl = 0xc000 | (Command->Flags & DRM_ASAHI_RENDER_DBIAS_IS_INT);
+    State->TilebufferControl = Tilebuffer;
+    State->MirrorTilebufferControl = Tilebuffer;
+    State->TileMode = TileMode;
+    State->MirrorTileMode = TileMode;
+    State->Depth.Base = Command->Depth.Base;
+    State->Depth.Stride = Command->Depth.Stride;
+    State->DepthCompression.Base = Command->Depth.CompBase;
+    State->DepthCompression.Stride = Command->Depth.CompStride;
+    State->Stencil.Base = Command->Stencil.Base;
+    State->Stencil.Stride = Command->Stencil.Stride;
+    State->StencilCompression.Base = Command->Stencil.CompBase;
+    State->StencilCompression.Stride = Command->Stencil.CompStride;
+    State->ZlsControl = Command->ZlsCtrl;
+    State->DepthDimensions = Command->IspZlsPixels;
+    State->DepthClear = Command->IspBgobjdepth;
+    State->StencilClear = Command->IspBgobjvals;
+    State->SampleSize = Command->SampleSizeB;
+    State->ProcessEmptyTiles = Render->ProcessEmptyTiles;
+    return STATUS_SUCCESS;
+}
