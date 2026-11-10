@@ -218,4 +218,8 @@ BEGIN
     IDS_TRAYWND_UNDO_CASCADE "「重ねて表示」を元に戻す(&U)"
     IDS_TRAYWND_UNDO_TILE "「ウィンドウを並べて表示」を元に戻す(&U)"
     IDS_TRAYDESKBTN_TOOLTIP "デスクトップ / ウィンドウを表示"
+    IDS_TRAYCHEVRON_TOOLTIP "隠れているインジケーターを表示します"
+    IDS_TRAYCLOCK_NEWNOTIFICATION "%u 件の新しい通知"
+    IDS_TRAYCLOCK_NEWNOTIFICATIONS "%u 件の新しい通知"
+    IDS_TRAYQUICKSETTINGS_TOOLTIP "クイック設定"
 END

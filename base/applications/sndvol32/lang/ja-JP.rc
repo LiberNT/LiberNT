@@ -21,7 +21,7 @@ STRINGTABLE
 BEGIN
     IDS_SNDVOL32 "音量調整"
     IDS_NOMIXERDEVICES "アクティブなミキサーが利用できません ! アプリケーションを終了します。"
-    IDS_SELECT "&Select"
+    IDS_SELECT "選択(&S)"
     IDS_ADVANCED_CONTROLS "%s の高度な調整"
     IDS_OTHER_CONTROLS1 "&1  %s"
     IDS_OTHER_CONTROLS2 "&2  %s"

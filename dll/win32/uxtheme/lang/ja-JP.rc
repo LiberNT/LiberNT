@@ -16,4 +16,5 @@ BEGIN
     IDS_INACTIVEWIN "非アクティブ ウィンドウ"
     IDS_OK "OK"
     IDS_WINTEXT "ウィンドウ テキスト"
+    IDS_ERR_UNKNOWN_PROPERTY "Primitive、enum、または type である必要があります: %1"
 END

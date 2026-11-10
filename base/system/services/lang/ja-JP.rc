@@ -16,8 +16,8 @@ BEGIN
     IDS_SERVICE_RUNNING "実行中"
     IDS_SERVICE_STOPPED "停止"
     IDS_SERVICE_PAUSED  "一時停止"
-    IDS_RECOVERY_NONE        "No action"
-    IDS_RECOVERY_RESTART     "Restart the service"
-    IDS_RECOVERY_REBOOT      "Restart the computer"
-    IDS_RECOVERY_RUN_COMMAND "Run the configured recovery program"
+    IDS_RECOVERY_NONE        "何もしない"
+    IDS_RECOVERY_RESTART     "サービスを再起動する"
+    IDS_RECOVERY_REBOOT      "コンピューターを再起動する"
+    IDS_RECOVERY_RUN_COMMAND "構成された回復プログラムを実行する"
 END
