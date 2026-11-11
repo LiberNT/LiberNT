@@ -739,7 +739,20 @@ SepAccessCheckByType(
 
         Status = SepPrepareCheck(&Context, &Wanted, &Already,
                                  &SubjectContext, &Used, PreviousMode);
-        if (NT_SUCCESS(Status))
+        if (Status == STATUS_PRIVILEGE_NOT_HELD || (NT_SUCCESS(Status) && Wanted == 0 && Already == 0))
+        {
+            ULONG Index;
+
+            /* A missing privilege, or asking for nothing, refuses the access and still answers the question */
+            for (Index = 0; Index < Entries; Index++)
+            {
+                Granted[Index] = 0;
+                Results[Index] = NT_SUCCESS(Status) ? STATUS_ACCESS_DENIED : Status;
+            }
+
+            Status = STATUS_SUCCESS;
+        }
+        else if (NT_SUCCESS(Status))
         {
             Status = SepCheckList(&Context, Wanted, Already, Entries,
                                   Granted, Results);
@@ -763,14 +776,16 @@ SepAccessCheckByType(
         Needed = (ULONG)(FIELD_OFFSET(PRIVILEGE_SET, Privilege) +
                          (SIZE_T)Count * sizeof(LUID_AND_ATTRIBUTES));
 
+        /* The caller's set always has to hold at least one privilege, and its length is only told back when too short */
+        if (Needed < sizeof(PRIVILEGE_SET)) Needed = sizeof(PRIVILEGE_SET);
+
         _SEH2_TRY
         {
             if (ReturnPrivilegeSet)
             {
-                *PrivilegeSetLength = Needed;
-
                 if (SetLength < Needed)
                 {
+                    *PrivilegeSetLength = Needed;
                     Status = STATUS_BUFFER_TOO_SMALL;
                 }
                 else

@@ -182,7 +182,80 @@ Quit:
     }
 }
 
+static
+VOID
+AccessCheckAnswerTest(VOID)
+{
+    static SID_IDENTIFIER_AUTHORITY WorldAuthority = {SECURITY_WORLD_SID_AUTHORITY};
+    static GENERIC_MAPPING Mapping = {FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS};
+    ULONG AclBuffer[64];
+    ULONG SetBuffer[64];
+    PACL Dacl = (PACL)AclBuffer;
+    PPRIVILEGE_SET PrivilegeSet = (PPRIVILEGE_SET)SetBuffer;
+    SECURITY_DESCRIPTOR Sd;
+    PSID WorldSid = NULL;
+    ACCESS_MASK GrantedAccess;
+    NTSTATUS AccessStatus;
+    NTSTATUS Status;
+    ULONG Length;
+    HANDLE Token;
+
+    Token = GetToken();
+    if (Token == NULL)
+    {
+        skip("Failed to get token, skipping tests\n");
+        return;
+    }
+
+    Status = RtlAllocateAndInitializeSid(&WorldAuthority, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &WorldSid);
+    if (!NT_SUCCESS(Status))
+    {
+        skip("Failed to create World SID, skipping tests\n");
+        NtClose(Token);
+        return;
+    }
+
+    RtlCreateAcl(Dacl, sizeof(AclBuffer), ACL_REVISION);
+    RtlAddAccessAllowedAce(Dacl, ACL_REVISION, FILE_ALL_ACCESS, WorldSid);
+    RtlCreateSecurityDescriptor(&Sd, SECURITY_DESCRIPTOR_REVISION);
+    RtlSetOwnerSecurityDescriptor(&Sd, WorldSid, FALSE);
+    RtlSetGroupSecurityDescriptor(&Sd, WorldSid, FALSE);
+    RtlSetDaclSecurityDescriptor(&Sd, TRUE, Dacl, FALSE);
+
+    Length = sizeof(PRIVILEGE_SET) - 1;
+    GrantedAccess = AccessStatus = 0x1abe11ed;
+    Status = NtAccessCheck(&Sd, Token, FILE_READ_DATA, &Mapping, PrivilegeSet, &Length, &GrantedAccess, &AccessStatus);
+    ok_hex(Status, STATUS_BUFFER_TOO_SMALL);
+    ok_long(Length, sizeof(PRIVILEGE_SET));
+    ok_hex(GrantedAccess, 0x1abe11ed);
+    ok_hex(AccessStatus, 0x1abe11ed);
+
+    Length = sizeof(SetBuffer);
+    Status = NtAccessCheck(&Sd, Token, FILE_READ_DATA, &Mapping, PrivilegeSet, &Length, &GrantedAccess, &AccessStatus);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_long(Length, sizeof(SetBuffer));
+    ok_hex(AccessStatus, STATUS_SUCCESS);
+    ok_hex(GrantedAccess, FILE_READ_DATA);
+    ok_long(PrivilegeSet->PrivilegeCount, 0);
+
+    GrantedAccess = AccessStatus = 0x1abe11ed;
+    Status = NtAccessCheck(&Sd, Token, 0, &Mapping, PrivilegeSet, &Length, &GrantedAccess, &AccessStatus);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok(!NT_SUCCESS(AccessStatus), "Asking for no access got 0x%08lx\n", AccessStatus);
+    ok_hex(GrantedAccess, 0);
+
+    GrantedAccess = AccessStatus = 0x1abe11ed;
+    Status = NtAccessCheck(&Sd, Token, ACCESS_SYSTEM_SECURITY, &Mapping, PrivilegeSet, &Length, &GrantedAccess, &AccessStatus);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_hex(AccessStatus, STATUS_PRIVILEGE_NOT_HELD);
+    ok_hex(GrantedAccess, 0);
+
+    RtlFreeSid(WorldSid);
+    NtClose(Token);
+}
+
 START_TEST(NtAccessCheck)
 {
     AccessCheckEmptyMappingTest();
+    AccessCheckAnswerTest();
 }
