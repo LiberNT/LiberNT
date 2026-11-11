@@ -83,7 +83,11 @@ static volatile KSYSTEM_TIME KiSystemTimeValue;
 /* How much interrupt time has been left out of the bias-free reading, which is
    what a caller measuring elapsed time while the machine slept has to exclude. */
 static ULONGLONG KiInterruptTimeBias;
-static volatile LONG64 KiCounterInterruptBias = -1;
+
+/* The interrupt time last written and the counter read with it, under a sequence that is odd while they change */
+static volatile LONG KiTickSnapshotSequence;
+static volatile ULONGLONG KiTickSnapshotTime;
+static volatile LONGLONG KiTickSnapshotCounter;
 
 /* Interrupt time stops moving while the debugger has the machine. */
 static BOOLEAN KiInterruptTimeFrozen;
@@ -344,9 +348,8 @@ KeQuerySystemTime(
 }
 
 /*
- * How far into the current clock period the counter says the time is. The
- * counter runs from when the processor was reset and the interrupt time from
- * when the clock started, so the gap between them is taken once and kept; the
+ * How far into the current clock period the counter says the time is,
+ * measured from the counter reading taken when the clock last moved; the
  * answer is held inside one period so that a time read from it is never behind
  * the clock nor ahead of the next tick.
  */
@@ -357,24 +360,46 @@ KiCounterOffsetInPeriod(
     _In_ LARGE_INTEGER Counter,
     _In_ LARGE_INTEGER Frequency)
 {
+    ULONGLONG SnapshotTime;
+    LONGLONG SnapshotCounter;
     ULONGLONG Elapsed;
-    LONG64 Bias;
+    LONG Sequence;
 
-    Elapsed = (ULONGLONG)Counter.QuadPart * 10000000ULL /
+    do
+    {
+        Sequence = KiTickSnapshotSequence;
+        KeMemoryBarrier();
+        SnapshotTime = KiTickSnapshotTime;
+        SnapshotCounter = KiTickSnapshotCounter;
+        KeMemoryBarrier();
+    } while ((Sequence & 1) || (Sequence != KiTickSnapshotSequence));
+
+    if (Sequence == 0) return 0;
+
+    /* The caller's tick has been overtaken since it read the counter, so the whole period has passed */
+    if (SnapshotTime != Interrupt) return KeMaximumIncrement;
+
+    if (Counter.QuadPart <= SnapshotCounter) return 0;
+
+    Elapsed = (ULONGLONG)(Counter.QuadPart - SnapshotCounter) * 10000000ULL /
               (ULONGLONG)Frequency.QuadPart;
 
-    Bias = KiCounterInterruptBias;
-    if (Bias < 0)
-    {
-        Bias = (Elapsed > Interrupt) ? (LONG64)(Elapsed - Interrupt) : 0;
-        InterlockedCompareExchange64(&KiCounterInterruptBias, Bias, -1);
-        Bias = KiCounterInterruptBias;
-    }
+    return min(Elapsed, (ULONGLONG)KeMaximumIncrement);
+}
 
-    Elapsed -= min(Elapsed, (ULONGLONG)Bias);
-    if (Elapsed <= Interrupt) return 0;
+static
+VOID
+KiWriteInterruptTime(
+    _In_ LARGE_INTEGER Interrupt)
+{
+    LARGE_INTEGER Counter = KeQueryPerformanceCounter(NULL);
 
-    return min(Elapsed - Interrupt, (ULONGLONG)KeMaximumIncrement);
+    InterlockedIncrement(&KiTickSnapshotSequence);
+    KiTickSnapshotTime = (ULONGLONG)Interrupt.QuadPart;
+    KiTickSnapshotCounter = Counter.QuadPart;
+    InterlockedIncrement(&KiTickSnapshotSequence);
+
+    KiWriteSystemTime(&KiInterruptTimeValue, Interrupt);
 }
 
 /*
@@ -484,7 +509,7 @@ KiUpdateSharedTime(
     InterruptTime = KiGetInterruptTime() + Increment;
 
     Interrupt.QuadPart = (LONGLONG)InterruptTime;
-    KiWriteSystemTime(&KiInterruptTimeValue, Interrupt);
+    KiWriteInterruptTime(Interrupt);
     KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, InterruptTime),
                         Interrupt);
 
@@ -977,7 +1002,7 @@ KiResumeClockTime(
     LARGE_INTEGER Interrupt, System;
 
     Interrupt.QuadPart = (LONGLONG)(KiGetInterruptTime() + SleepTime);
-    KiWriteSystemTime(&KiInterruptTimeValue, Interrupt);
+    KiWriteInterruptTime(Interrupt);
     KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, InterruptTime),
                         Interrupt);
 

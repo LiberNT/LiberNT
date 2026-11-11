@@ -154,6 +154,7 @@ list(APPEND SOURCE
     SecureBootFlag.c
     TerminateProcess.c
     ExitedClientId.c
+    SleepTickRounding.c
     ThreadPowerThrottling.c
     ThreadPreferredUILanguages.c
     ProcessPowerThrottling.c
