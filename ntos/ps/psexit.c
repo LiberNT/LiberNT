@@ -440,11 +440,12 @@ PspTerminateThreadByPointer(
  * Ends every thread of a process. The process is marked as going first, so
  * no new thread can be made into it while its threads are being ended.
  */
+static
 NTSTATUS
-NTAPI
-PspTerminateProcess(
+PspTerminateProcessThreads(
     _In_ PEPROCESS Process,
-    _In_ NTSTATUS ExitStatus)
+    _In_ NTSTATUS ExitStatus,
+    _In_ BOOLEAN EndCaller)
 {
     PETHREAD Thread;
     PETHREAD Self = PsGetCurrentThread();
@@ -482,12 +483,21 @@ PspTerminateProcess(
         Thread = PsGetNextProcessThread(Process, Thread);
     }
 
-    if (THREAD_TO_PROCESS(Self) == Process)
+    if (EndCaller && THREAD_TO_PROCESS(Self) == Process)
     {
         PspTerminateThreadByPointer(Self, ExitStatus, TRUE);
     }
 
     return Status;
+}
+
+NTSTATUS
+NTAPI
+PspTerminateProcess(
+    _In_ PEPROCESS Process,
+    _In_ NTSTATUS ExitStatus)
+{
+    return PspTerminateProcessThreads(Process, ExitStatus, TRUE);
 }
 
 NTSTATUS
@@ -792,7 +802,10 @@ NtTerminateProcess(
         return STATUS_PROCESS_IS_TERMINATING;
     }
 
-    Status = PspTerminateProcess(Process, ExitStatus);
+    /* No handle ends every other thread of the caller's process and leaves the caller running */
+    Status = PspTerminateProcessThreads(Process,
+                                        ExitStatus,
+                                        (BOOLEAN)(ProcessHandle != NULL));
     ObDereferenceObject(Process);
 
     /* Nothing was running in it, so there was nothing to end */
