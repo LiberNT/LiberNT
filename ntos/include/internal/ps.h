@@ -731,6 +731,10 @@ PspArchSetInstrumentationCallback(
     _In_ ULONG Length,
     _In_ KPROCESSOR_MODE PreviousMode);
 
+BOOLEAN
+NTAPI
+PspArchManagesExecutableWrites(VOID);
+
 VOID
 NTAPI
 PspArchInitializeUserThreadStartup(

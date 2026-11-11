@@ -375,6 +375,13 @@ NtSetInformationProcess(
     if (ProcessInformationClass >= MaxProcessInfoClass)
         return STATUS_INVALID_INFO_CLASS;
 
+    /* The class exists only where the processor lets writes to code be managed */
+    if ((ProcessInformationClass == ProcessManageWritesToExecutableMemory) &&
+        !PspArchManagesExecutableWrites())
+    {
+        return STATUS_INVALID_INFO_CLASS;
+    }
+
     Status = PspCheckInformationClass(&PspSetProcessClasses[ProcessInformationClass],
                                       ProcessInformation,
                                       ProcessInformationLength,
@@ -1056,6 +1063,7 @@ NtSetInformationProcess(
                 break;
             }
 
+            /* FIXME: the memory manager raises no exception on a write to executable memory; the request is only recorded */
             Process->ManageExecutableMemoryWrites =
                 Writes.ProcessEnableWriteExceptions ? 1 : 0;
             Status = STATUS_SUCCESS;

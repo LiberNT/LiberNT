@@ -405,6 +405,15 @@ QuerySetProcessValidator(
                     break;
                 }
 #endif
+
+#ifdef _M_AMD64
+                /* Only an arm64 host manages writes to executable memory */
+                case ProcessManageWritesToExecutableMemory:
+                {
+                    SpecialStatus = STATUS_INVALID_INFO_CLASS;
+                    break;
+                }
+#endif
             }
 
             /* Set the information */

@@ -160,6 +160,13 @@ PsArchInitializeUserThreadContext(
  * stack and handed to the loader, which continues into it once the process is
  * set up; the image base comes along so the loader can find itself.
  */
+BOOLEAN
+NTAPI
+PspArchManagesExecutableWrites(VOID)
+{
+    return FALSE;
+}
+
 VOID
 NTAPI
 PspArchInitializeUserThreadStartup(
