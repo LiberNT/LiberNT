@@ -7,6 +7,7 @@
 
 #include <ntoskrnl.h>
 #include "../ioint.h"
+#include <loader_firmware.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -175,6 +176,81 @@ PpInitSystem(VOID)
 }
 
 CODE_SEG("INIT")
+static
+VOID
+PiSetFirmwareResourceValue(
+    _In_ HANDLE Key,
+    _In_ PCWSTR Name,
+    _In_ ULONG Value)
+{
+    UNICODE_STRING ValueName;
+
+    RtlInitUnicodeString(&ValueName, Name);
+    ZwSetValueKey(Key, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
+}
+
+/* Each firmware resource the loader found in the ESRT gets HARDWARE\UEFI\ESRT\{guid} with the values Windows 11
+ * writes there, which the UEFI bus driver of the ACPI_HAL\UEFI device enumerates */
+CODE_SEG("INIT")
+static
+VOID
+PiInitFirmwareResources(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    UNICODE_STRING EsrtName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\HARDWARE\\UEFI\\ESRT");
+    PLOADER_FIRMWARE_RESOURCE Resource;
+    UNICODE_STRING ResourceName;
+    PLIST_ENTRY ListHead, Entry;
+    HANDLE EsrtKey, ResourceKey;
+    WCHAR Name[39];
+
+    PAGED_CODE();
+
+    if (LoaderBlock == NULL || LoaderBlock->FirmwareInformation.FirmwareTypeEfi == 0) return;
+
+    ListHead = &LoaderBlock->FirmwareInformation.u.EfiInformation.FirmwareResourceList;
+    if (ListHead->Flink == NULL || IsListEmpty(ListHead)) return;
+
+    if (!NT_SUCCESS(IopCreateDeviceKeyPath(&EsrtName, REG_OPTION_VOLATILE, &EsrtKey))) return;
+
+    for (Entry = ListHead->Flink; Entry != ListHead; Entry = Entry->Flink)
+    {
+        Resource = CONTAINING_RECORD(Entry, LOADER_FIRMWARE_RESOURCE, ListEntry);
+
+        RtlStringCchPrintfW(Name,
+                            RTL_NUMBER_OF(Name),
+                            L"{%08lx-%04hx-%04hx-%02x%02x-%02x%02x%02x%02x%02x%02x}",
+                            Resource->FirmwareClass.Data1,
+                            Resource->FirmwareClass.Data2,
+                            Resource->FirmwareClass.Data3,
+                            Resource->FirmwareClass.Data4[0],
+                            Resource->FirmwareClass.Data4[1],
+                            Resource->FirmwareClass.Data4[2],
+                            Resource->FirmwareClass.Data4[3],
+                            Resource->FirmwareClass.Data4[4],
+                            Resource->FirmwareClass.Data4[5],
+                            Resource->FirmwareClass.Data4[6],
+                            Resource->FirmwareClass.Data4[7]);
+        RtlInitUnicodeString(&ResourceName, Name);
+
+        if (!NT_SUCCESS(IopCreateRegistryKeyEx(&ResourceKey, EsrtKey, &ResourceName, KEY_ALL_ACCESS,
+                                               REG_OPTION_VOLATILE, NULL)))
+        {
+            continue;
+        }
+
+        PiSetFirmwareResourceValue(ResourceKey, L"Type", Resource->FirmwareType);
+        PiSetFirmwareResourceValue(ResourceKey, L"Version", Resource->FirmwareVersion);
+        PiSetFirmwareResourceValue(ResourceKey, L"LowestSupportedVersion", Resource->LowestSupportedFirmwareVersion);
+        PiSetFirmwareResourceValue(ResourceKey, L"LastAttemptVersion", Resource->LastAttemptVersion);
+        PiSetFirmwareResourceValue(ResourceKey, L"LastAttemptStatus", Resource->LastAttemptStatus);
+        ZwClose(ResourceKey);
+    }
+
+    ZwClose(EsrtKey);
+}
+
+CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 IopInitializePlugPlayServices(VOID)
@@ -187,6 +263,8 @@ IopInitializePlugPlayServices(VOID)
     PAGED_CODE();
 
     if (IopRootDeviceNode == NULL) return STATUS_UNSUCCESSFUL;
+
+    PiInitFirmwareResources(KeLoaderBlock);
 
     Status = IopCreateRegistryKeyEx(&ControlKey,
                                     NULL,

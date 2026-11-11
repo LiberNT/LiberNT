@@ -143,6 +143,56 @@ CheckBasicDisplayFallback(VOID)
     LocateStarted(L"ROOT\\BASICDISPLAY\\0000", &Node);
 }
 
+/* With an ESRT the HAL reports ACPI_HAL\UEFI, and each firmware resource has HARDWARE\UEFI\ESRT\{guid} with the
+ * values Windows 11 writes there; without one there is neither */
+static VOID CheckFirmwareResources(VOID)
+{
+    static const PCWSTR Values[] = { L"Type", L"Version", L"LowestSupportedVersion", L"LastAttemptVersion",
+                                     L"LastAttemptStatus" };
+    WCHAR Name[64];
+    DWORD Index, Value, Length, Size, Type, Resources = 0;
+    DEVINST Uefi;
+    HKEY Esrt, Resource;
+    BOOL Device;
+    LONG Error;
+    ULONG Item;
+
+    Device = (CM_Locate_DevNodeW(&Uefi, (DEVINSTID_W)L"ACPI_HAL\\UEFI\\0", CM_LOCATE_DEVNODE_NORMAL) == CR_SUCCESS);
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"HARDWARE\\UEFI\\ESRT", 0, KEY_READ, &Esrt);
+    if (!Device)
+    {
+        ok(Error != ERROR_SUCCESS, "Firmware resources are published without an ACPI_HAL\\UEFI device\n");
+        if (Error == ERROR_SUCCESS)
+            RegCloseKey(Esrt);
+        return;
+    }
+
+    ok(Error == ERROR_SUCCESS, "ACPI_HAL\\UEFI exists but HARDWARE\\UEFI\\ESRT does not (%ld)\n", Error);
+    if (Error != ERROR_SUCCESS)
+        return;
+
+    for (Index = 0;; Index++)
+    {
+        Length = RTL_NUMBER_OF(Name);
+        if (RegEnumKeyExW(Esrt, Index, Name, &Length, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (RegOpenKeyExW(Esrt, Name, 0, KEY_QUERY_VALUE, &Resource) != ERROR_SUCCESS)
+            continue;
+        Resources++;
+        for (Item = 0; Item < RTL_NUMBER_OF(Values); Item++)
+        {
+            Size = sizeof(Value);
+            ok(RegQueryValueExW(Resource, Values[Item], NULL, &Type, (PBYTE)&Value, &Size) == ERROR_SUCCESS && Type == REG_DWORD,
+               "The firmware resource %ls has no %ls value\n", Name, Values[Item]);
+        }
+        RegCloseKey(Resource);
+    }
+    RegCloseKey(Esrt);
+
+    ok(Resources != 0, "HARDWARE\\UEFI\\ESRT lists no firmware resource\n");
+    trace("%lu firmware resources\n", Resources);
+}
+
 START_TEST(IoDeviceTree)
 {
 #if defined(_M_IX86) || defined(_M_AMD64)
@@ -151,4 +201,5 @@ START_TEST(IoDeviceTree)
     CheckRootDevices();
     CheckAcpiInstances();
     CheckBasicDisplayFallback();
+    CheckFirmwareResources();
 }
