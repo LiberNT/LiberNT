@@ -2231,6 +2231,7 @@ KdbpCliInterpretInitFile(VOID)
         if ((*Line == ANSI_NULL) || (*Line == '#'))
             continue;
 
+        KdbpPagerReset();
         KdbpPrint("kdb:> %s\n", Line);
         if (KdbpCliInterpretCommand(Line))
             return;
