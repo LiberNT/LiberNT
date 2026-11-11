@@ -364,7 +364,8 @@ NtAdjustPrivilegesToken(
     if (Request != NULL) ExFreePoolWithTag(Request, TAG_SE);
     ObDereferenceObject(Token);
 
-    if (ReturnLength != NULL)
+    /* Without a previous state to report there is no length to report either */
+    if (PreviousState != NULL && ReturnLength != NULL)
     {
         _SEH2_TRY
         {
