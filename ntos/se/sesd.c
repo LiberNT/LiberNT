@@ -319,11 +319,31 @@ SepInheritAcl(
     return STATUS_SUCCESS;
 }
 
-/* Whoever the caller speaks for may be handed an object */
+/* The parts of a SACL that are read and set on their own, apart from its audit entries */
+#define SEP_SACL_PARTS (LABEL_SECURITY_INFORMATION | ATTRIBUTE_SECURITY_INFORMATION | \
+                        SCOPE_SECURITY_INFORMATION)
+
+/* Which part of a SACL an entry belongs to */
+static
+SECURITY_INFORMATION
+SepSaclPartOf(
+    _In_ UCHAR AceType)
+{
+    switch (AceType)
+    {
+        case SYSTEM_MANDATORY_LABEL_ACE_TYPE: return LABEL_SECURITY_INFORMATION;
+        case SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE: return ATTRIBUTE_SECURITY_INFORMATION;
+        case SYSTEM_SCOPED_POLICY_ID_ACE_TYPE: return SCOPE_SECURITY_INFORMATION;
+        default: return SACL_SECURITY_INFORMATION;
+    }
+}
+
+/* Whether a SACL holds an entry of the named parts */
 static
 BOOLEAN
-SepAclHasLabel(
-    _In_opt_ PACL Acl)
+SepAclHasParts(
+    _In_opt_ PACL Acl,
+    _In_ SECURITY_INFORMATION Parts)
 {
     PACE_HEADER Ace;
     ULONG Index;
@@ -333,25 +353,26 @@ SepAclHasLabel(
     for (Index = 0; Index < Acl->AceCount; Index++)
     {
         if (!NT_SUCCESS(RtlGetAce(Acl, Index, (PVOID *)&Ace))) return FALSE;
-        if (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE) return TRUE;
+        if (SepSaclPartOf(Ace->AceType) & Parts) return TRUE;
     }
 
     return FALSE;
 }
 
-/* An ACL holding the mandatory label entries of one list and every other entry of another */
+/* An ACL holding the entries of the named parts of one list and every other entry of another */
 static
 NTSTATUS
-SepBuildLabelSacl(
-    _In_opt_ PACL Labels,
+SepBuildPartSacl(
+    _In_opt_ PACL Parts,
+    _In_ SECURITY_INFORMATION Which,
     _In_opt_ PACL Others,
-    _In_ BOOLEAN LabelsLast,
+    _In_ BOOLEAN PartsLast,
     _Out_ PACL *NewSacl)
 {
     UCHAR Revision = ACL_REVISION;
     ULONG Length = sizeof(ACL);
-    BOOLEAN LabelPass;
-    BOOLEAN Label;
+    BOOLEAN PartPass;
+    BOOLEAN Part;
     PACE_HEADER Ace;
     NTSTATUS Status = STATUS_SUCCESS;
     PACL Source;
@@ -363,18 +384,18 @@ SepBuildLabelSacl(
 
     for (Pass = 0; Pass < 2; Pass++)
     {
-        LabelPass = ((Pass == 0) != LabelsLast);
-        Source = LabelPass ? Labels : Others;
+        PartPass = ((Pass == 0) != PartsLast);
+        Source = PartPass ? Parts : Others;
         if (Source == NULL) continue;
 
-        if (LabelPass && Source->AclRevision > Revision) Revision = Source->AclRevision;
+        if (PartPass && Source->AclRevision > Revision) Revision = Source->AclRevision;
 
         for (Index = 0; Index < Source->AceCount; Index++)
         {
             if (!NT_SUCCESS(RtlGetAce(Source, Index, (PVOID *)&Ace))) return STATUS_INVALID_ACL;
 
-            Label = (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE);
-            if (Label != LabelPass) continue;
+            Part = (SepSaclPartOf(Ace->AceType) & Which) != 0;
+            if (Part != PartPass) continue;
 
             Length += Ace->AceSize;
             if (Source->AclRevision > Revision) Revision = Source->AclRevision;
@@ -390,8 +411,8 @@ SepBuildLabelSacl(
 
     for (Pass = 0; NT_SUCCESS(Status) && Pass < 2; Pass++)
     {
-        LabelPass = ((Pass == 0) != LabelsLast);
-        Source = LabelPass ? Labels : Others;
+        PartPass = ((Pass == 0) != PartsLast);
+        Source = PartPass ? Parts : Others;
         if (Source == NULL) continue;
 
         for (Index = 0; NT_SUCCESS(Status) && Index < Source->AceCount; Index++)
@@ -399,8 +420,8 @@ SepBuildLabelSacl(
             Status = RtlGetAce(Source, Index, (PVOID *)&Ace);
             if (!NT_SUCCESS(Status)) break;
 
-            Label = (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE);
-            if (Label != LabelPass) continue;
+            Part = (SepSaclPartOf(Ace->AceType) & Which) != 0;
+            if (Part != PartPass) continue;
 
             Status = RtlAddAce(Sacl, Revision, MAXULONG, Ace, Ace->AceSize);
         }
@@ -678,7 +699,7 @@ SepAddCreatorLabel(
 
     Rid = SepGetTokenIntegrityRid(Token);
     if (Rid >= SECURITY_MANDATORY_MEDIUM_RID) return STATUS_SUCCESS;
-    if (Settled->SaclPresent && SepAclHasLabel(Settled->Sacl)) return STATUS_SUCCESS;
+    if (Settled->SaclPresent && SepAclHasParts(Settled->Sacl, LABEL_SECURITY_INFORMATION)) return STATUS_SUCCESS;
 
     RtlInitializeSid(LabelSid, &SeMandatoryLabelAuthority, 1);
     *RtlSubAuthoritySid(LabelSid, 0) = Rid;
@@ -699,7 +720,8 @@ SepAddCreatorLabel(
     }
 
     if (NT_SUCCESS(Status))
-        Status = SepBuildLabelSacl(Label, Settled->SaclPresent ? Settled->Sacl : NULL, FALSE, &Sacl);
+        Status = SepBuildPartSacl(Label, LABEL_SECURITY_INFORMATION,
+                                  Settled->SaclPresent ? Settled->Sacl : NULL, FALSE, &Sacl);
 
     ExFreePoolWithTag(Label, TAG_ACL);
     if (!NT_SUCCESS(Status)) return Status;
@@ -910,7 +932,7 @@ SeQuerySecurityDescriptorInfo(
     SECURITY_INFORMATION Wanted = *SecurityInformation;
     SEP_SD_PARTS Held;
     SEP_SD_PARTS Told;
-    PACL LabelSacl = NULL;
+    PACL PartSacl = NULL;
     ULONG Control = 0;
     ULONG Needed = 0;
     NTSTATUS Status;
@@ -942,16 +964,16 @@ SeQuerySecurityDescriptorInfo(
         Control |= Held.Control & (SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED |
                                    SE_SACL_AUTO_INHERIT_REQ | SE_SACL_PROTECTED);
     }
-    else if ((Wanted & LABEL_SECURITY_INFORMATION) && Held.SaclPresent)
+    else if ((Wanted & SEP_SACL_PARTS) && Held.SaclPresent)
     {
-        /* Asking for the label shows the label entries of the SACL and nothing else */
+        /* Asking for the label, the resource attributes or the scoped policies shows those entries of the SACL and nothing else */
         if (Held.Sacl != NULL)
         {
-            Status = SepBuildLabelSacl(Held.Sacl, NULL, FALSE, &LabelSacl);
+            Status = SepBuildPartSacl(Held.Sacl, Wanted & SEP_SACL_PARTS, NULL, FALSE, &PartSacl);
             if (!NT_SUCCESS(Status)) return Status;
         }
 
-        Told.Sacl = LabelSacl;
+        Told.Sacl = PartSacl;
         Told.SaclPresent = TRUE;
         Control |= SE_SACL_PRESENT;
         Control |= Held.Control & (SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
@@ -973,7 +995,7 @@ SeQuerySecurityDescriptorInfo(
                                &Told);
     }
 
-    if (LabelSacl != NULL) ExFreePoolWithTag(LabelSacl, TAG_ACL);
+    if (PartSacl != NULL) ExFreePoolWithTag(PartSacl, TAG_ACL);
     return Status;
 }
 
@@ -1117,13 +1139,13 @@ SeSetSecurityDescriptorInfoEx(
             Next.Sacl = ReadSacl;
         }
 
-        /* Setting the SACL keeps the object's label unless the label is set as well */
-        if (NT_SUCCESS(Status) && !(Wanted & LABEL_SECURITY_INFORMATION) &&
-            Held.SaclPresent && SepAclHasLabel(Held.Sacl))
+        /* Setting the SACL keeps the object's label, resource attributes and scoped policies unless they are set as well */
+        if (NT_SUCCESS(Status) && Held.SaclPresent &&
+            SepAclHasParts(Held.Sacl, SEP_SACL_PARTS & ~Wanted))
         {
             PACL Merged = NULL;
 
-            Status = SepBuildLabelSacl(Held.Sacl, ReadSacl, TRUE, &Merged);
+            Status = SepBuildPartSacl(Held.Sacl, SEP_SACL_PARTS & ~Wanted, ReadSacl, TRUE, &Merged);
             if (NT_SUCCESS(Status))
             {
                 if (ReadSacl != NULL) ExFreePoolWithTag(ReadSacl, TAG_ACL);
@@ -1133,13 +1155,14 @@ SeSetSecurityDescriptorInfoEx(
             }
         }
     }
-    else if (NT_SUCCESS(Status) && (Wanted & LABEL_SECURITY_INFORMATION))
+    else if (NT_SUCCESS(Status) && (Wanted & SEP_SACL_PARTS))
     {
-        /* A label is set by replacing the label entries of the SACL; whatever else it holds stays */
-        Status = SepBuildLabelSacl(Given.SaclPresent ? Given.Sacl : NULL,
-                                   Held.SaclPresent ? Held.Sacl : NULL,
-                                   FALSE,
-                                   &ReadSacl);
+        /* A part is set by replacing its entries of the SACL; whatever else it holds stays */
+        Status = SepBuildPartSacl(Given.SaclPresent ? Given.Sacl : NULL,
+                                  Wanted & SEP_SACL_PARTS,
+                                  Held.SaclPresent ? Held.Sacl : NULL,
+                                  FALSE,
+                                  &ReadSacl);
         Next.Sacl = ReadSacl;
         Next.SaclPresent = TRUE;
         Control &= ~(SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
