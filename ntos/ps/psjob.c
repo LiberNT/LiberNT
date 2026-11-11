@@ -138,6 +138,9 @@ PspTerminateJobMember(
 {
     NTSTATUS ExitStatus = (NTSTATUS)(ULONG_PTR)Context;
 
+    /* A process already on its way out is left to finish: its last thread may be the one closing the job */
+    if (Process->ProcessExiting) return STATUS_SUCCESS;
+
     PspTerminateProcess(Process, ExitStatus);
     return STATUS_SUCCESS;
 }
@@ -370,6 +373,11 @@ PspAssignProcessToJob(
     InsertTailList(&Job->ProcessListHead, &Process->JobLinks);
     Job->TotalProcesses++;
     Job->ActiveProcesses++;
+
+    PspSendJobMessageLocked(Job,
+                            JOB_OBJECT_MSG_NEW_PROCESS,
+                            Process->UniqueProcessId,
+                            FALSE);
 
     Status = PspAddProcessToJobLimits(Process, Job);
 
@@ -1593,9 +1601,26 @@ NtSetInformationJobObject(
 
                 if (Job->CompletionPort == NULL)
                 {
+                    PLIST_ENTRY Entry;
+
                     Job->CompletionPort = Completion;
                     Job->CompletionKey = Port.CompletionKey;
                     Completion = NULL;
+
+                    /* The processes already in the job are reported as if they had just joined */
+                    for (Entry = Job->ProcessListHead.Flink;
+                         Entry != &Job->ProcessListHead;
+                         Entry = Entry->Flink)
+                    {
+                        PEPROCESS Member = CONTAINING_RECORD(Entry, EPROCESS, JobLinks);
+
+                        if (Member->AccountingFolded) continue;
+
+                        PspSendJobMessageLocked(Job,
+                                                JOB_OBJECT_MSG_NEW_PROCESS,
+                                                Member->UniqueProcessId,
+                                                FALSE);
+                    }
                 }
                 else
                 {
