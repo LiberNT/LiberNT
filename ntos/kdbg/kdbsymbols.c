@@ -263,7 +263,8 @@ KdbSymDescribeAddress(
 
     *Displacement = 0;
 
-    if (!KdbpSymFindModule(Address, 0, &LdrEntry))
+    /* No image holds address zero, and the lookup would read it as an index */
+    if ((Address == NULL) || !KdbpSymFindModule(Address, 0, &LdrEntry))
         return FALSE;
 
     KdbpModuleName(LdrEntry, ModuleName, ModuleNameLength);
