@@ -263,6 +263,9 @@ KiDispatchExceptionToUser(
     TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
     TrapFrame->SegSs = KGDT64_R3_DATA | RPL_MASK;
 
+    /* The dispatcher runs without the alignment checking the faulting code may have asked for */
+    TrapFrame->EFlags &= ~EFLAGS_ALIGN_CHECK;
+
     /* Set RIP to the User-mode Dispatcher */
     TrapFrame->Rip = (ULONG64)KeUserExceptionDispatcher;
     KiInstrumentTrapFrame(TrapFrame);

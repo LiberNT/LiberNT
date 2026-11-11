@@ -776,6 +776,17 @@ FUNC KiAlignmentFault
     /* We have an error code */
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
+    /* Only user mode can take an alignment check */
+    test byte ptr [rbp + KTRAP_FRAME_SegCs], MODE_MASK
+    jz KiAlignmentFaultFatal
+
+    sti
+
+    DispatchException STATUS_DATATYPE_MISALIGNMENT, 0, 0, 0, 0
+
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
+
+KiAlignmentFaultFatal:
     /* Bugcheck */
     Fatal EXCEPTION_ALIGNMENT_CHECK
 #ifdef _USE_ML

@@ -209,6 +209,9 @@ KiInitializeCpu(PKIPCR Pcr)
 
     __writecr0(__readcr0() | CR0_NE);
 
+    /* Let user mode ask for alignment checking */
+    __writecr0(__readcr0() | CR0_AM);
+
     /* Check if XSAVE is supported */
     if (FeatureBits & KF_XSTATE)
     {
