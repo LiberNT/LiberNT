@@ -547,6 +547,11 @@ PopSleepDeviceTraverse(
     Stack->Parameters.Power.ShutdownType = Traverse->PowerAction;
     IoSetCompletionRoutine(Irp, PopSleepIrpCompletion, IrpContext, TRUE, TRUE, TRUE);
 
+    DPRINT1("Sending the S%u %s request to %wZ\n",
+            Traverse->SystemState - PowerSystemWorking,
+            Traverse->MinorFunction == IRP_MN_QUERY_POWER ? "query" : "set",
+            &DeviceNode->InstancePath);
+
     InterlockedIncrement(&Traverse->Pending);
     PoCallDriver(TopDeviceObject, Irp);
     return STATUS_SUCCESS;

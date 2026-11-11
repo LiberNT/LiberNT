@@ -69,6 +69,8 @@ IopSendShutdownIrp(
 
     PAGED_CODE();
 
+    DPRINT1("Shutdown: sending the shutdown request to %wZ\n", &DeviceObject->DriverObject->DriverName);
+
     TopDevice = IoGetAttachedDeviceReference(DeviceObject);
 
     KeInitializeEvent(&Event, SynchronizationEvent, FALSE);

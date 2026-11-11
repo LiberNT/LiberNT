@@ -225,29 +225,40 @@ PopGracefulShutdown(
 
     PAGED_CODE();
 
+    DPRINT1("Shutdown: running the queued shutdown work\n");
     PopProcessShutDownLists();
 
     /* TODO: the processes still running are not asked to stop first */
 
+    DPRINT1("Shutdown: closing the boot log\n");
     KdpLogWatchdogDisable();
     KdShutdownBootLog();
 
+    DPRINT1("Shutdown: notifying the drivers registered for shutdown\n");
     IoShutdownSystem(0);
+    DPRINT1("Shutdown: flushing the registry\n");
     CmShutdownSystem();
+    DPRINT1("Shutdown: flushing the cache\n");
     CcShutdownSystem();
+    DPRINT1("Shutdown: stopping the memory manager\n");
     MmShutdownSystem(0);
 
+    DPRINT1("Shutdown: flushing the volumes\n");
     PopFlushVolumes(TRUE);
 
+    DPRINT1("Shutdown: notifying the file systems\n");
     IoShutdownSystem(1);
+    DPRINT1("Shutdown: notifying the last-chance drivers\n");
     IoShutdownSystem(2);
 
     Action = PopShutdownAction;
     if (Action == PowerActionShutdown && PopShutdownPowerOffPolicy)
         Action = PowerActionShutdownOff;
 
+    DPRINT1("Shutdown: powering the devices down for action %d\n", Action);
     PopShutdownSendDevices(Action);
 
+    DPRINT1("Shutdown: handing the machine to the firmware\n");
     if (Action == PowerActionShutdownReset)
         HalReturnToFirmware(HalRebootRoutine);
     else if (Action == PowerActionShutdownOff)
