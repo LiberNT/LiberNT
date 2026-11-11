@@ -15,6 +15,7 @@ list(APPEND SOURCE
     CallbackCallingConventions.c
     CallbackMayRunLong.c
     Arm64ThreadContext.c
+    ConsoleCommandHistory.c
     ConsoleCP.c
     ConsoleFontInfo.c
     ConsoleInputSignal.c

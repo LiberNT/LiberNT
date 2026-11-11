@@ -420,24 +420,6 @@ GetConsoleSelectionInfo(
 
 BOOL
 WINAPI
-SetConsoleNumberOfCommandsA(
-    _In_ DWORD dwNumCommands,
-    _In_ LPCSTR lpExeName)
-{
-    return ConsoleNotImplemented();
-}
-
-BOOL
-WINAPI
-SetConsoleNumberOfCommandsW(
-    _In_ DWORD dwNumCommands,
-    _In_ LPCWSTR lpExeName)
-{
-    return ConsoleNotImplemented();
-}
-
-BOOL
-WINAPI
 GetConsoleHistoryInfo(
     _Out_ PCONSOLE_HISTORY_INFO lpConsoleHistoryInfo)
 {

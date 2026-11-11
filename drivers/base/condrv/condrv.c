@@ -102,6 +102,7 @@ struct _CD_SERVER
     LONG ScratchBusy;
     ULONG ScratchSize;
     PUCHAR Scratch;
+    HANDLE DeliveredProcessId;
 };
 
 typedef struct _CD_FILE
@@ -133,6 +134,7 @@ typedef struct _CD_REQUEST
     NTSTATUS Status;
     ULONG_PTR Information;
     PVOID OutBuffer;
+    HANDLE ProcessId;
     KEVENT Done;
 } CD_REQUEST, *PCD_REQUEST;
 
@@ -844,6 +846,7 @@ CdQueueIrp(
     Request->InData = InSize ? InData : NULL;
     Request->InSize = InSize;
     Request->OutSize = OutSize;
+    Request->ProcessId = PsGetCurrentProcessId();
 
     Irp->Tail.Overlay.DriverContext[0] = Request;
     Irp->Tail.Overlay.DriverContext[1] = NULL;
@@ -1247,6 +1250,7 @@ CdServerGetNext(
             *Information = sizeof(Reply) + Request->InSize;
             Request->InData = NULL;
             Request->Delivered = TRUE;
+            Server->DeliveredProcessId = Request->ProcessId;
             if (Request->Async)
             {
                 PLIST_ENTRY Entry = Request->Entry.Flink;
@@ -1351,6 +1355,19 @@ CdServerIoctl(
 
         case IOCTL_CONDRV_SETUP_INPUT:
             return STATUS_NOT_SUPPORTED;
+
+        case IOCTL_CONDRV_GET_CLIENT_PROCESS:
+        {
+            PULONG ProcessId = Irp->AssociatedIrp.SystemBuffer;
+
+            if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(*ProcessId))
+                return STATUS_INVALID_PARAMETER;
+            OldIrql = ExAcquireSpinLockShared(&CdLock);
+            *ProcessId = HandleToULong(Server->DeliveredProcessId);
+            ExReleaseSpinLockShared(&CdLock, OldIrql);
+            Irp->IoStatus.Information = sizeof(*ProcessId);
+            return STATUS_SUCCESS;
+        }
 
         case IOCTL_CONDRV_GET_PROCESS_LIST:
         {
@@ -2401,6 +2418,7 @@ CdFastIoDeviceControl(
     if (!Request)
         return FALSE;
     RtlZeroMemory(Request, sizeof(*Request));
+    Request->ProcessId = PsGetCurrentProcessId();
     if (InputBufferLength)
         Request->InData = Request + 1;
     if (OutputBufferLength)
