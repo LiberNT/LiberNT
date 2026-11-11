@@ -330,6 +330,7 @@ KdInitSystem(
     }
 
     Status = KdpInitializeProviders(BootPhase);
+    KdpLogWatchdogInitialize(LoaderBlock);
     return NT_SUCCESS(Status);
 }
 

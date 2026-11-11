@@ -229,6 +229,7 @@ PopGracefulShutdown(
 
     /* TODO: the processes still running are not asked to stop first */
 
+    KdpLogWatchdogDisable();
     KdShutdownBootLog();
 
     IoShutdownSystem(0);

@@ -510,6 +510,8 @@ KeUpdateSystemTime(
     if (!ClockOwner)
         return;
 
+    KdpLogWatchdogCheck(InterruptTime);
+
     if (KdDebuggerEnabled && KdPollBreakIn())
         DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
 

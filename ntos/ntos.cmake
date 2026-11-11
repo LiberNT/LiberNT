@@ -361,11 +361,10 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/alpc/alpccompl.c
     ${REACTOS_SOURCE_DIR}/ntos/alpc/alpclpc.c)
 
+list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdwatchdog.c)
+
 if(DBG)
     list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/se/sedebug.c)
-    if(KDBG)
-        list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdwatchdog.c)
-    endif()
 endif()
 
 list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/ex/zw.S)

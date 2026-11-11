@@ -601,6 +601,7 @@ KdpDprintf(
     KdpDprintfBuffer[KDP_TIMESTAMP_BYTES + Length] = ANSI_NULL;
 
     KdpStampLine(KdpDprintfBuffer, (USHORT)Length, FALSE, &Output);
+    KdpLogWatchdogNotePrint();
 
     KdpAppendToLog(Output.Buffer, Output.Length);
 
@@ -662,6 +663,7 @@ KdpPrint(
     }
 
     KdpStampLine(Line, Length, (BOOLEAN)(PreviousMode != KernelMode), &Output);
+    KdpLogWatchdogNotePrint();
 
     KdpAppendToLog(Output.Buffer, Output.Length);
     KdpPrintToCallbacks(ComponentId, Level, String, Length, PreviousMode);
