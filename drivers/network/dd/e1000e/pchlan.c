@@ -17,6 +17,8 @@ static const struct
     ULONG Generation;
 } E1000PchDevices[] =
 {
+    { 0x10EA, E1000_PCH_IBX },
+    { 0x10EB, E1000_PCH_IBX },
     { 0x15A0, E1000_PCH_LPT },
     { 0x15F9, E1000_PCH_TGP },
 };
@@ -54,6 +56,132 @@ E1000PchFlush(
     _In_ PE1000_ADAPTER Adapter)
 {
     E1000_READ_REG(Adapter, E1000_REG_STATUS);
+}
+
+static
+USHORT
+E1000PchReadFlash16(
+    _In_ PE1000_ADAPTER Adapter,
+    _In_ ULONG Register)
+{
+    return READ_REGISTER_USHORT((PUSHORT)(Adapter->FlashBase + Register));
+}
+
+static
+VOID
+E1000PchWriteFlash16(
+    _In_ PE1000_ADAPTER Adapter,
+    _In_ ULONG Register,
+    _In_ USHORT Value)
+{
+    WRITE_REGISTER_USHORT((PUSHORT)(Adapter->FlashBase + Register), Value);
+}
+
+static
+BOOLEAN
+E1000PchReadFlash(
+    _In_ PE1000_ADAPTER Adapter,
+    _In_ ULONG LinearAddress,
+    _In_ ULONG Bytes,
+    _Out_ PULONG Data)
+{
+    ULONG Attempt, Wait;
+    USHORT Status, Control;
+
+    ASSERT(Adapter->FlashBase != NULL);
+    ASSERT(Bytes == 1 || Bytes == 2);
+    ASSERT(!(LinearAddress & ~E1000_PCH_FLASH_LINEAR_ADDR_MASK));
+
+    *Data = 0;
+    for (Attempt = 0; Attempt < E1000_PCH_FLASH_CYCLE_RETRIES; Attempt++)
+    {
+        Status = E1000PchReadFlash16(Adapter, E1000_PCH_FLASH_HSFSTS);
+        if (!(Status & E1000_PCH_HSFSTS_FLDESVALID))
+            return FALSE;
+        E1000PchWriteFlash16(Adapter, E1000_PCH_FLASH_HSFSTS, Status | E1000_PCH_HSFSTS_FLCERR | E1000_PCH_HSFSTS_DAEL);
+
+        for (Wait = 0; (Status & E1000_PCH_HSFSTS_FLCINPROG) && Wait < E1000_PCH_FLASH_CYCLE_TIMEOUT_US; Wait++)
+        {
+            NdisStallExecution(1);
+            Status = E1000PchReadFlash16(Adapter, E1000_PCH_FLASH_HSFSTS);
+        }
+        if (Status & E1000_PCH_HSFSTS_FLCINPROG)
+            return FALSE;
+        E1000PchWriteFlash16(Adapter, E1000_PCH_FLASH_HSFSTS, Status | E1000_PCH_HSFSTS_FLCDONE);
+
+        Control = E1000PchReadFlash16(Adapter, E1000_PCH_FLASH_HSFCTL);
+        Control &= ~(E1000_PCH_HSFCTL_FLDBCOUNT_MASK | E1000_PCH_HSFCTL_FLCYCLE_MASK | E1000_PCH_HSFCTL_FLCGO);
+        Control |= (USHORT)(((Bytes - 1) << E1000_PCH_HSFCTL_FLDBCOUNT_SHIFT) & E1000_PCH_HSFCTL_FLDBCOUNT_MASK);
+        E1000PchWriteFlash16(Adapter, E1000_PCH_FLASH_HSFCTL, Control);
+        WRITE_REGISTER_ULONG((PULONG)(Adapter->FlashBase + E1000_PCH_FLASH_FADDR), LinearAddress);
+        E1000PchWriteFlash16(Adapter, E1000_PCH_FLASH_HSFCTL, Control | E1000_PCH_HSFCTL_FLCGO);
+
+        for (Wait = 0; Wait < E1000_PCH_FLASH_CYCLE_TIMEOUT_US; Wait++)
+        {
+            Status = E1000PchReadFlash16(Adapter, E1000_PCH_FLASH_HSFSTS);
+            if (Status & E1000_PCH_HSFSTS_FLCDONE)
+                break;
+            NdisStallExecution(1);
+        }
+
+        if ((Status & E1000_PCH_HSFSTS_FLCDONE) && !(Status & E1000_PCH_HSFSTS_FLCERR))
+        {
+            *Data = READ_REGISTER_ULONG((PULONG)(Adapter->FlashBase + E1000_PCH_FLASH_FDATA0));
+            if (Bytes == 1)
+                *Data &= 0xFF;
+            else
+                *Data &= 0xFFFF;
+            return TRUE;
+        }
+        if (!(Status & E1000_PCH_HSFSTS_FLCERR))
+            return FALSE;
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
+E1000PchReadNvm(
+    _In_ PE1000_ADAPTER Adapter,
+    _In_ ULONG Offset,
+    _Out_ PUSHORT Data)
+{
+    ULONG Gfpreg, First, Last, Base, BankBytes, Signature, Value;
+
+    ASSERT(Adapter->PchGeneration == E1000_PCH_IBX);
+
+    *Data = 0;
+    if (Adapter->FlashBase == NULL)
+        return FALSE;
+
+    Gfpreg = READ_REGISTER_ULONG((PULONG)(Adapter->FlashBase + E1000_PCH_FLASH_GFPREG));
+    First = Gfpreg & E1000_PCH_FLASH_GFPREG_BASE_MASK;
+    Last = (Gfpreg >> 16) & E1000_PCH_FLASH_GFPREG_BASE_MASK;
+    if (Last < First)
+        return FALSE;
+
+    Base = First << E1000_PCH_FLASH_SECTOR_SHIFT;
+    BankBytes = ((Last + 1 - First) << E1000_PCH_FLASH_SECTOR_SHIFT) / 2;
+    if (Offset >= BankBytes / sizeof(USHORT))
+        return FALSE;
+
+    if (!E1000PchReadFlash(Adapter, Base + E1000_PCH_NVM_SIG_WORD * sizeof(USHORT) + 1, 1, &Signature))
+        return FALSE;
+    if ((Signature & E1000_PCH_NVM_SIG_MASK) != E1000_PCH_NVM_SIG_VALUE)
+    {
+        Base += BankBytes;
+        if (!E1000PchReadFlash(Adapter, Base + E1000_PCH_NVM_SIG_WORD * sizeof(USHORT) + 1, 1, &Signature) ||
+            (Signature & E1000_PCH_NVM_SIG_MASK) != E1000_PCH_NVM_SIG_VALUE)
+        {
+            return FALSE;
+        }
+    }
+
+    if (!E1000PchReadFlash(Adapter, Base + Offset * sizeof(USHORT), 2, &Value))
+        return FALSE;
+    *Data = (USHORT)Value;
+    return TRUE;
 }
 
 static
@@ -208,6 +336,122 @@ E1000PchWritePhy(
 }
 
 static
+USHORT
+E1000PchReadKumeran(
+    _In_ PE1000_ADAPTER Adapter,
+    _In_ ULONG Offset)
+{
+    ASSERT(Adapter->PchPhyBusy != 0);
+
+    E1000_WRITE_REG(Adapter, E1000_PCH_REG_KMRNCTRLSTA,
+                    ((Offset << E1000_PCH_KMRNCTRLSTA_OFFSET_SHIFT) & E1000_PCH_KMRNCTRLSTA_OFFSET_MASK) |
+                    E1000_PCH_KMRNCTRLSTA_REN);
+    E1000PchFlush(Adapter);
+    NdisStallExecution(2);
+    return (USHORT)E1000_READ_REG(Adapter, E1000_PCH_REG_KMRNCTRLSTA);
+}
+
+static
+VOID
+E1000PchWriteKumeran(
+    _In_ PE1000_ADAPTER Adapter,
+    _In_ ULONG Offset,
+    _In_ USHORT Data)
+{
+    ASSERT(Adapter->PchPhyBusy != 0);
+
+    E1000_WRITE_REG(Adapter, E1000_PCH_REG_KMRNCTRLSTA,
+                    ((Offset << E1000_PCH_KMRNCTRLSTA_OFFSET_SHIFT) & E1000_PCH_KMRNCTRLSTA_OFFSET_MASK) | Data);
+    E1000PchFlush(Adapter);
+    NdisStallExecution(2);
+}
+
+static
+VOID
+E1000PchConfigureK1(
+    _In_ PE1000_ADAPTER Adapter,
+    _In_ BOOLEAN Enable)
+{
+    ULONG Ctrl, CtrlExt;
+    USHORT Value;
+
+    ASSERT(Adapter->PchPhyBusy != 0);
+
+    Value = E1000PchReadKumeran(Adapter, E1000_PCH_KMRN_K1_CONFIG);
+    if (Enable)
+        Value |= E1000_PCH_KMRN_K1_ENABLE;
+    else
+        Value &= ~E1000_PCH_KMRN_K1_ENABLE;
+    E1000PchWriteKumeran(Adapter, E1000_PCH_KMRN_K1_CONFIG, Value);
+    NdisStallExecution(20);
+
+    Ctrl = E1000_READ_REG(Adapter, E1000_REG_CTRL);
+    CtrlExt = E1000_READ_REG(Adapter, E1000_REG_CTRL_EXT);
+    E1000_WRITE_REG(Adapter, E1000_REG_CTRL, (Ctrl & ~E1000_PCH_CTRL_SPEED_MASK) | E1000_PCH_CTRL_FORCE_SPEED);
+    E1000_WRITE_REG(Adapter, E1000_REG_CTRL_EXT, CtrlExt | E1000_PCH_CTRL_EXT_SPEED_BYPASS);
+    E1000PchFlush(Adapter);
+    NdisStallExecution(20);
+    E1000_WRITE_REG(Adapter, E1000_REG_CTRL, Ctrl);
+    E1000_WRITE_REG(Adapter, E1000_REG_CTRL_EXT, CtrlExt);
+    E1000PchFlush(Adapter);
+    NdisStallExecution(20);
+}
+
+static
+VOID
+E1000PchIbxK1Workaround(
+    _Inout_ PE1000_ADAPTER Adapter,
+    _In_ BOOLEAN Link)
+{
+    BOOLEAN Enable = Adapter->PchNvmK1Enabled;
+    USHORT Status;
+
+    ASSERT(Adapter->PchGeneration == E1000_PCH_IBX);
+
+    if (!E1000PchAcquirePhy(Adapter))
+        return;
+
+    if (Link)
+    {
+        if (Adapter->PchPhyId == E1000_PCH_IBX_PHY_ID &&
+            E1000PchReadPhy(Adapter, E1000_PCH_PHY_IBX_M_STATUS, &Status))
+        {
+            Status &= E1000_PCH_PHY_IBX_M_STATUS_LINK_UP |
+                      E1000_PCH_PHY_IBX_M_STATUS_AN_COMPLETE |
+                      E1000_PCH_PHY_IBX_M_STATUS_SPEED_MASK;
+            if (Status == (E1000_PCH_PHY_IBX_M_STATUS_LINK_UP |
+                           E1000_PCH_PHY_IBX_M_STATUS_AN_COMPLETE |
+                           E1000_PCH_PHY_IBX_M_STATUS_SPEED_1000))
+            {
+                Enable = FALSE;
+            }
+        }
+    }
+
+    if (E1000PchWritePhy(Adapter, E1000_PCH_PHY_IBX_LINK_STALL,
+                         Link ? E1000_PCH_PHY_IBX_LINK_STALL_UP : E1000_PCH_PHY_IBX_LINK_STALL_DOWN))
+    {
+        E1000PchConfigureK1(Adapter, Enable);
+    }
+
+    E1000PchReleasePhy(Adapter);
+}
+
+static
+BOOLEAN
+E1000PchSetMdioSlowMode(
+    _In_ PE1000_ADAPTER Adapter)
+{
+    USHORT Value;
+
+    ASSERT(Adapter->PchPhyBusy != 0);
+
+    if (!E1000PchReadPhy(Adapter, E1000_PCH_PHY_KMRN_MODE_CTRL, &Value))
+        return FALSE;
+    return E1000PchWritePhy(Adapter, E1000_PCH_PHY_KMRN_MODE_CTRL, Value | E1000_PCH_PHY_KMRN_MODE_MDIO_SLOW);
+}
+
+static
 BOOLEAN
 E1000PchResetBlocked(
     _In_ PE1000_ADAPTER Adapter)
@@ -255,11 +499,15 @@ BOOLEAN
 E1000PchPhyIsAccessible(
     _Inout_ PE1000_ADAPTER Adapter)
 {
-    USHORT High, Low, Value;
+    USHORT High, Low = 0, Value;
     ULONG Attempt, PhyId = 0, MacValue;
 
-    for (Attempt = 0; Attempt < 2 && !PhyId; Attempt++)
+    ASSERT(Adapter->PchPhyBusy != 0);
+
+    for (Attempt = 0; Attempt < 3 && !PhyId; Attempt++)
     {
+        if (Attempt == 2 && (Adapter->PchGeneration >= E1000_PCH_LPT || !E1000PchSetMdioSlowMode(Adapter)))
+            break;
         if (!E1000PchReadPhy(Adapter, E1000_PCH_MII_PHYSID1, &High) || High == 0xFFFF)
             continue;
         if (!E1000PchReadPhy(Adapter, E1000_PCH_MII_PHYSID2, &Low) || Low == 0xFFFF)
@@ -270,6 +518,10 @@ E1000PchPhyIsAccessible(
     if (!PhyId)
         return FALSE;
     Adapter->PchPhyId = PhyId;
+    Adapter->PchPhyRevision = Low & ~E1000_PCH_PHY_REVISION_MASK;
+
+    if (Adapter->PchGeneration < E1000_PCH_LPT)
+        return TRUE;
 
     if (!(E1000_READ_REG(Adapter, E1000_REG_FWSM) & E1000_PCH_FWSM_FW_VALID))
     {
@@ -305,6 +557,12 @@ E1000PchToggleLanPhyPc(
     Value &= ~E1000_PCH_CTRL_LANPHYPC_OVERRIDE;
     E1000_WRITE_REG(Adapter, E1000_REG_CTRL, Value);
     E1000PchFlush(Adapter);
+
+    if (Adapter->PchGeneration < E1000_PCH_LPT)
+    {
+        E1000PchDelay(E1000_PCH_IBX_LANPHYPC_DELAY_MS * 1000);
+        return;
+    }
 
     Deadline = E1000PchDeadline(E1000_PCH_LANPHYPC_TIMEOUT_MS);
     do
@@ -411,7 +669,15 @@ E1000PchPreparePhy(
     }
 
     Accessible = E1000PchPhyIsAccessible(Adapter);
-    if (!Accessible)
+    if (Adapter->PchGeneration == E1000_PCH_IBX)
+    {
+        if (!(E1000_READ_REG(Adapter, E1000_REG_FWSM) & E1000_PCH_FWSM_FW_VALID) && !Blocked)
+        {
+            E1000PchToggleLanPhyPc(Adapter);
+            Accessible = E1000PchPhyIsAccessible(Adapter);
+        }
+    }
+    else if (!Accessible)
     {
         Value = E1000_READ_REG(Adapter, E1000_REG_CTRL_EXT);
         E1000_WRITE_REG(Adapter, E1000_REG_CTRL_EXT, Value | E1000_PCH_CTRL_EXT_FORCE_SMBUS);
@@ -419,7 +685,7 @@ E1000PchPreparePhy(
         Accessible = E1000PchPhyIsAccessible(Adapter);
     }
 
-    if (!Accessible && !Blocked)
+    if (Adapter->PchGeneration != E1000_PCH_IBX && !Accessible && !Blocked)
     {
         E1000PchToggleLanPhyPc(Adapter);
         Accessible = E1000PchPhyIsAccessible(Adapter);
@@ -447,11 +713,115 @@ E1000PchPreparePhy(
         Blocked = E1000PchResetBlocked(Adapter);
     }
 
-    DPRINT1("E1000: Chipset LAN PHY id 0x%08lx %s, management firmware %s, PHY reset %s\n",
+    DPRINT1("E1000: Chipset LAN PHY id 0x%08lx revision %lu %s, management firmware %s, PHY reset %s\n",
             Adapter->PchPhyId,
+            Adapter->PchPhyRevision,
             Accessible ? "reachable" : "not reachable",
             (E1000_READ_REG(Adapter, E1000_REG_FWSM) & E1000_PCH_FWSM_FW_VALID) ? "present" : "absent",
             Blocked ? "blocked by it" : "allowed");
+}
+
+static
+VOID
+E1000PchIbxPhyWorkarounds(
+    _Inout_ PE1000_ADAPTER Adapter)
+{
+    USHORT Value;
+
+    ASSERT(Adapter->PchGeneration == E1000_PCH_IBX);
+
+    if (!E1000PchAcquirePhy(Adapter))
+        return;
+
+    if (Adapter->PchPhyId == E1000_PCH_IBX_PHY_ID)
+    {
+        E1000PchSetMdioSlowMode(Adapter);
+        if (Adapter->PchPhyRevision == 1 || Adapter->PchPhyRevision == 2)
+        {
+            E1000PchWritePhy(Adapter, E1000_PCH_PHY_IBX_PREAMBLE_CTRL, E1000_PCH_PHY_IBX_PREAMBLE_NO_EARLY);
+            E1000PchWritePhy(Adapter, E1000_PCH_PHY_KMRN_FIFO_CTRLSTA, E1000_PCH_PHY_KMRN_FIFO_PREAMBLE_SSC);
+        }
+    }
+
+    Value = 0;
+    E1000PchMdic(Adapter, E1000_PCH_PHY_ADDRESS_PORT, E1000_PCH_PHY_PAGE_SELECT, TRUE, &Value);
+    E1000PchReleasePhy(Adapter);
+
+    E1000PchIbxK1Workaround(Adapter, TRUE);
+
+    if (!E1000PchAcquirePhy(Adapter))
+        return;
+
+    if (E1000PchReadPhy(Adapter, E1000_PCH_PHY_PORT_GEN_CFG, &Value))
+        E1000PchWritePhy(Adapter, E1000_PCH_PHY_PORT_GEN_CFG, Value & E1000_PCH_PHY_PORT_GEN_CFG_IBX_MASK);
+
+    if (E1000PchWritePhy(Adapter, E1000_PCH_MII_EMI_ADDR, E1000_PCH_EMI_IBX_MSE_THRESHOLD))
+        E1000PchWritePhy(Adapter, E1000_PCH_MII_EMI_DATA, E1000_PCH_EMI_IBX_MSE_THRESHOLD_HIGH);
+
+    E1000PchReleasePhy(Adapter);
+}
+
+static
+VOID
+E1000PchIbxLoadPhyConfig(
+    _Inout_ PE1000_ADAPTER Adapter)
+{
+    ULONG ExtCnf, Size, Word, Index, Page = 0;
+    USHORT Data, Address, Value;
+
+    ASSERT(Adapter->PchGeneration == E1000_PCH_IBX);
+
+    if (!(E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM) & E1000_PCH_FEXTNVM_SW_CONFIG))
+        return;
+
+    ExtCnf = E1000_READ_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL);
+    if (ExtCnf & E1000_PCH_EXTCNF_CTRL_LCD_WRITE_ENABLE)
+        return;
+
+    Size = (E1000_READ_REG(Adapter, E1000_PCH_REG_EXTCNF_SIZE) & E1000_PCH_EXTCNF_SIZE_LENGTH_MASK) >>
+           E1000_PCH_EXTCNF_SIZE_LENGTH_SHIFT;
+    if (Size == 0)
+        return;
+    Word = ((ExtCnf & E1000_PCH_EXTCNF_CTRL_POINTER_MASK) >> E1000_PCH_EXTCNF_CTRL_POINTER_SHIFT) * 2;
+
+    if (!E1000PchAcquirePhy(Adapter))
+        return;
+
+    if (!(ExtCnf & E1000_PCH_EXTCNF_CTRL_OEM_WRITE_ENABLE))
+    {
+        if (E1000PchReadPhy(Adapter, E1000_PCH_PHY_SMB_ADDR, &Value))
+        {
+            Value &= ~E1000_PCH_PHY_SMB_ADDR_MASK;
+            Value |= (USHORT)((E1000_READ_REG(Adapter, E1000_PCH_REG_STRAP) & E1000_PCH_STRAP_SMBUS_ADDRESS_MASK) >>
+                              E1000_PCH_STRAP_SMBUS_ADDRESS_SHIFT);
+            Value |= E1000_PCH_PHY_SMB_ADDR_PEC_EN | E1000_PCH_PHY_SMB_ADDR_VALID;
+            E1000PchWritePhy(Adapter, E1000_PCH_PHY_SMB_ADDR, Value);
+        }
+        E1000PchWritePhy(Adapter, E1000_PCH_PHY_LED_CONFIG, (USHORT)E1000_READ_REG(Adapter, E1000_PCH_REG_LEDCTL));
+    }
+
+    for (Index = 0; Index < Size; Index++)
+    {
+        if (!E1000PchReadNvm(Adapter, Word + Index * 2, &Data) ||
+            !E1000PchReadNvm(Adapter, Word + Index * 2 + 1, &Address))
+        {
+            break;
+        }
+
+        if (Address == E1000_PCH_PHY_PAGE_SELECT)
+        {
+            Page = Data;
+            continue;
+        }
+
+        if (!E1000PchWritePhy(Adapter, Page | (Address & MAX_PHY_REG_ADDRESS), Data))
+            break;
+    }
+
+    E1000PchReleasePhy(Adapter);
+
+    DPRINT1("E1000: Chipset LAN PHY configuration from NVM word 0x%lx: %lu of %lu entries applied\n",
+            Word, Index, Size);
 }
 
 static
@@ -464,6 +834,12 @@ E1000PchApplyOemBits(
 
     if (!(E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM) & E1000_PCH_FEXTNVM_SW_CONFIG))
         return;
+
+    if (Adapter->PchGeneration == E1000_PCH_IBX &&
+        (E1000_READ_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL) & E1000_PCH_EXTCNF_CTRL_OEM_WRITE_ENABLE))
+    {
+        return;
+    }
 
     if (!E1000PchAcquirePhy(Adapter))
         return;
@@ -495,6 +871,12 @@ E1000PchApplyLinkSettings(
         return;
 
     Status = E1000_READ_REG(Adapter, E1000_REG_STATUS);
+    if (Adapter->PchGeneration == E1000_PCH_IBX)
+    {
+        E1000PchIbxK1Workaround(Adapter, (Status & E1000_STATUS_LU) != 0);
+        return;
+    }
+
     if (Status & E1000_STATUS_LU)
     {
         Speed = Status & E1000_STATUS_SPEEDMASK;
@@ -639,6 +1021,13 @@ E1000PchRecognize(
             Adapter->IsPchLan = TRUE;
             Adapter->PchGeneration = E1000PchDevices[Index].Generation;
             Adapter->IsPCIe = FALSE;
+            if (Adapter->PchGeneration == E1000_PCH_IBX && Adapter->FlashBase == NULL &&
+                Adapter->FlashAddress.QuadPart != 0)
+            {
+                Adapter->FlashBase = MmMapIoSpace(Adapter->FlashAddress, Adapter->FlashLength, MmNonCached);
+                if (Adapter->FlashBase == NULL)
+                    DPRINT1("E1000: Chipset LAN flash registers could not be mapped\n");
+            }
             return TRUE;
         }
     }
@@ -665,8 +1054,11 @@ E1000PchResetHardware(
 
     if (KeGetCurrentIrql() < DISPATCH_LEVEL)
     {
-        Value = E1000_READ_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL);
-        E1000_WRITE_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL, Value | E1000_PCH_EXTCNF_CTRL_GATE_PHY_CFG);
+        if (Adapter->PchGeneration != E1000_PCH_IBX)
+        {
+            Value = E1000_READ_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL);
+            E1000_WRITE_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL, Value | E1000_PCH_EXTCNF_CTRL_GATE_PHY_CFG);
+        }
         E1000PchDisableUlp(Adapter);
         E1000PchPreparePhy(Adapter);
     }
@@ -685,6 +1077,20 @@ E1000PchResetHardware(
     E1000_WRITE_REG(Adapter, E1000_REG_TCTL, E1000_TCTL_PSP);
     E1000PchFlush(Adapter);
     E1000PchDelay(10000);
+
+    if (Adapter->PchGeneration == E1000_PCH_IBX)
+    {
+        if (E1000PchReadNvm(Adapter, E1000_PCH_NVM_K1_CONFIG, &PhyValue))
+            Adapter->PchNvmK1Enabled = (PhyValue & E1000_PCH_NVM_K1_ENABLE) != 0;
+        else
+            DPRINT1("E1000: Chipset LAN NVM could not be read, K1 stays disabled\n");
+
+        DPRINT1("E1000: Chipset LAN NVM K1 %s, FEXTNVM=0x%08lx EXTCNF_CTRL=0x%08lx EXTCNF_SIZE=0x%08lx\n",
+                Adapter->PchNvmK1Enabled ? "enabled" : "disabled",
+                E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM),
+                E1000_READ_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL),
+                E1000_READ_REG(Adapter, E1000_PCH_REG_EXTCNF_SIZE));
+    }
 
     Blocked = E1000PchResetBlocked(Adapter);
     Value = E1000_READ_REG(Adapter, E1000_REG_CTRL);
@@ -707,6 +1113,9 @@ E1000PchResetHardware(
         if (!E1000PchResetBlocked(Adapter))
         {
             E1000PchDelay(10000);
+            if (Adapter->PchGeneration == E1000_PCH_IBX)
+                E1000PchIbxPhyWorkarounds(Adapter);
+
             if (E1000PchAcquirePhy(Adapter))
             {
                 if (E1000PchReadPhy(Adapter, E1000_PCH_PHY_PORT_GEN_CFG, &PhyValue))
@@ -714,12 +1123,19 @@ E1000PchResetHardware(
                 E1000PchReleasePhy(Adapter);
             }
 
+            if (Adapter->PchGeneration == E1000_PCH_IBX)
+                E1000PchIbxLoadPhyConfig(Adapter);
+
             E1000PchApplyOemBits(Adapter);
 
-            if (E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM) & E1000_PCH_FEXTNVM_SW_CONFIG)
+            if (Adapter->PchGeneration != E1000_PCH_IBX &&
+                (E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM) & E1000_PCH_FEXTNVM_SW_CONFIG))
                 DPRINT1("E1000: Chipset LAN expects PHY settings from its NVM configuration region, which is not applied\n");
         }
     }
+
+    if (Adapter->PchGeneration == E1000_PCH_IBX)
+        E1000_WRITE_REG(Adapter, E1000_PCH_REG_CRC_OFFSET, E1000_PCH_IBX_CRC_OFFSET);
 
     E1000_WRITE_REG(Adapter, E1000_REG_IMC, 0xFFFFFFFF);
     E1000_READ_REG(Adapter, E1000_REG_ICR);
@@ -754,8 +1170,11 @@ E1000PchResetHardware(
     Value = E1000_READ_REG(Adapter, E1000_PCH_REG_RFCTL);
     E1000_WRITE_REG(Adapter, E1000_PCH_REG_RFCTL, Value | E1000_PCH_RFCTL_NFSW_DIS | E1000_PCH_RFCTL_NFSR_DIS);
 
-    Value = E1000_READ_REG(Adapter, E1000_PCH_REG_PBECCSTS);
-    E1000_WRITE_REG(Adapter, E1000_PCH_REG_PBECCSTS, Value | E1000_PCH_PBECCSTS_ECC_ENABLE);
+    if (Adapter->PchGeneration >= E1000_PCH_LPT)
+    {
+        Value = E1000_READ_REG(Adapter, E1000_PCH_REG_PBECCSTS);
+        E1000_WRITE_REG(Adapter, E1000_PCH_REG_PBECCSTS, Value | E1000_PCH_PBECCSTS_ECC_ENABLE);
+    }
 
     for (Index = 0; Index < E1000_PCH_MTA_REG_COUNT; Index++)
         E1000_WRITE_REG_ARRAY(Adapter, E1000_REG_MTA, Index, 0);
