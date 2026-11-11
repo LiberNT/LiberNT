@@ -62,7 +62,7 @@ ExpProbeSystemInfoBuffer(
 
     _SEH2_TRY
     {
-        if ((Buffer != NULL) && (BufferLength != 0))
+        if (BufferLength != 0)
         {
             ProbeForWrite(Buffer, BufferLength, Alignment);
         }
@@ -768,6 +768,9 @@ NtQuerySystemInformation(
     Status = ExpProbeSystemInfoBuffer(SystemInformation,
                                       Length,
                                       UnsafeResultLength,
+                                      (SystemInformationClass ==
+                                       SystemKernelDebuggerInformation) ?
+                                      TYPE_ALIGNMENT(SYSTEM_KERNEL_DEBUGGER_INFORMATION) :
                                       sizeof(ULONG),
                                       PreviousMode);
     if (!NT_SUCCESS(Status))
