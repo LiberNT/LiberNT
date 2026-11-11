@@ -50,13 +50,6 @@ ULONG
 NTAPI
 KdbpArchHardwareBreakPointCount(VOID);
 
-/* Moves a context to its caller; CallerFrame says its program counter is a return address */
-BOOLEAN
-NTAPI
-KdbpArchUnwindFrame(
-    _Inout_ PCONTEXT Context,
-    _In_ BOOLEAN CallerFrame);
-
 /* kdbsymbols.c */
 
 BOOLEAN

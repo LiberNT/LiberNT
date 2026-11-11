@@ -873,7 +873,7 @@ KdbpBackTrace(
     KdbSymPrintAddress((PVOID)Pc, Context);
     KdbPuts("\n");
 
-    while ((Depth < Limit) && !KdbpIsOutputAborted() && KdbpArchUnwindFrame(&Walk, (Depth != 0)))
+    while ((Depth < Limit) && !KdbpIsOutputAborted() && KiUnwindFrame(&Walk, (Depth != 0)))
     {
         Pc = (ULONG_PTR)KeGetContextPc(&Walk);
 

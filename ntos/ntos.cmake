@@ -394,6 +394,7 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/ldt.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/mtrr.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/patpge.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/i386/stackwalk.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/thrdini.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/traphdlr.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/usercall.c
@@ -423,6 +424,7 @@ elseif(ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/kiinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/krnlinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/spinlock.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/stackwalk.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/thrdini.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/amd64/psarchctx.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/stubs.c

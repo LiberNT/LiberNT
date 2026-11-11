@@ -186,6 +186,49 @@ KeBugCheckUnicodeToAnsi(
     return Ansi;
 }
 
+BOOLEAN
+NTAPI
+KiReadValidMemory(
+    _Out_writes_bytes_(Size) PVOID Buffer,
+    _In_ ULONG_PTR Address,
+    _In_ ULONG Size)
+{
+    ULONG_PTR Page;
+    ULONG_PTR LastPage;
+
+    if ((Size == 0) || (Address + Size - 1 < Address))
+        return FALSE;
+
+    LastPage = (Address + Size - 1) >> PAGE_SHIFT;
+    for (Page = Address >> PAGE_SHIFT; ; Page++)
+    {
+        if (!MmIsAddressValid((PVOID)(Page << PAGE_SHIFT)))
+            return FALSE;
+
+        if (Page == LastPage)
+            break;
+    }
+
+    RtlCopyMemory(Buffer, (PVOID)Address, Size);
+    return TRUE;
+}
+
+BOOLEAN
+NTAPI
+KiUnwindFrameRecord(
+    _Inout_ PCONTEXT Context)
+{
+    ULONG_PTR Frame = (ULONG_PTR)KeGetContextFrameRegister(Context);
+    ULONG_PTR Record[2];
+
+    if ((Frame == 0) || !KiReadValidMemory(Record, Frame, sizeof(Record)) || (Record[1] == 0))
+        return FALSE;
+
+    KeSetContextPc(Context, Record[1]);
+    KeSetContextFrameRegister(Context, (Record[0] > Frame) ? Record[0] : 0);
+    return TRUE;
+}
+
 /*
  * Names the image an address belongs to. Answers its base address, or NULL
  * where the address is in no loaded image at all, which for a stop parameter
@@ -573,6 +616,44 @@ KeRosCaptureUserStackBackTrace(
     return Captured;
 }
 
+static
+VOID
+KiReportBugCheckBackTrace(
+    _In_ PCONTEXT Context)
+{
+    static CONTEXT Walk;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    CHAR Line[128];
+    CHAR AnsiName[32];
+    BOOLEAN InKernel;
+    ULONG_PTR Pc;
+    PVOID Base;
+    ULONG Index;
+
+    Walk = *Context;
+    KiDisplayAndLogBugCheckString("\r\nBacktrace:\r\n");
+
+    for (Index = 0; Index < KI_BUGCHECK_FRAMES; Index++)
+    {
+        if ((Index != 0) && !KiUnwindFrame(&Walk, (Index != 1)))
+            break;
+
+        Pc = (ULONG_PTR)KeGetContextPc(&Walk);
+        Base = KiPcToFileHeader((PVOID)Pc, &LdrEntry, FALSE, &InKernel);
+        if (Base != NULL)
+        {
+            KeBugCheckUnicodeToAnsi(&LdrEntry->BaseDllName, AnsiName, sizeof(AnsiName));
+            _snprintf(Line, sizeof(Line), "#%02lu %s+0x%Ix\r\n", Index, AnsiName, Pc - (ULONG_PTR)Base);
+        }
+        else
+        {
+            _snprintf(Line, sizeof(Line), "#%02lu %p\r\n", Index, (PVOID)Pc);
+        }
+
+        KiDisplayAndLogBugCheckString(Line);
+    }
+}
+
 /*
  * Says why the system stopped, as debug output. Where the screen shows it is
  * the debugger's business, not this routine's.
@@ -634,6 +715,9 @@ KiReportBugCheck(
             KiDisplayAndLogBugCheckString(Line);
         }
     }
+
+    if (Context != NULL)
+        KiReportBugCheckBackTrace(Context);
 
     KiDumpParameterImages("\r\nParameters point into: ",
                           &KiBugCheckData[1],

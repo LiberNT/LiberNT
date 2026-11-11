@@ -1017,6 +1017,26 @@ VOID
 KiDisplayAndLogBugCheckString(
     _In_z_ PCSTR String);
 
+BOOLEAN
+NTAPI
+KiReadValidMemory(
+    _Out_writes_bytes_(Size) PVOID Buffer,
+    _In_ ULONG_PTR Address,
+    _In_ ULONG Size);
+
+/* Moves a context to its caller without taking a lock; CallerFrame says its program counter is a return address */
+BOOLEAN
+NTAPI
+KiUnwindFrame(
+    _Inout_ PCONTEXT Context,
+    _In_ BOOLEAN CallerFrame);
+
+/* The same through a chain of records holding the caller's frame pointer and then the return address */
+BOOLEAN
+NTAPI
+KiUnwindFrameRecord(
+    _Inout_ PCONTEXT Context);
+
 #ifdef _WIN64
 /* Architecture register dump for the bugcheck screen and log. */
 VOID

@@ -156,31 +156,4 @@ KdbpArchSetHardwareBreakPoint(
     return STATUS_SUCCESS;
 }
 
-BOOLEAN
-NTAPI
-KdbpArchUnwindFrame(
-    _Inout_ PCONTEXT Context,
-    _In_ BOOLEAN CallerFrame)
-{
-    ULONG_PTR Frame = (ULONG_PTR)KeGetContextFrameRegister(Context);
-    ULONG_PTR Next = 0;
-    ULONG_PTR Return = 0;
-
-    UNREFERENCED_PARAMETER(CallerFrame);
-
-    if (Frame == 0)
-        return FALSE;
-
-    if (!NT_SUCCESS(KdbpSafeReadMemory(&Next, (PVOID)Frame, sizeof(Next))) ||
-        !NT_SUCCESS(KdbpSafeReadMemory(&Return, (PVOID)(Frame + sizeof(ULONG_PTR)), sizeof(Return))) ||
-        (Return == 0))
-    {
-        return FALSE;
-    }
-
-    KeSetContextPc(Context, Return);
-    KeSetContextFrameRegister(Context, (Next > Frame) ? Next : 0);
-    return TRUE;
-}
-
 /* EOF */
