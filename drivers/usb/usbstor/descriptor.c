@@ -241,24 +241,10 @@ USBSTOR_SelectConfigurationAndInterface(
     PURB Urb;
     PUSBD_INTERFACE_LIST_ENTRY InterfaceList;
 
-    if (DeviceExtension->Uas)
+    Status = USBSTOR_ScanConfigurationDescriptor(DeviceExtension->ConfigurationDescriptor, &InterfaceDescriptor, &InEndpointDescriptor, &OutEndpointDescriptor);
+    if (!NT_SUCCESS(Status))
     {
-        UCHAR Endpoint[UAS_PIPES];
-        BOOLEAN Streams;
-
-        if (!USBSTOR_UasScanConfiguration(DeviceExtension->ConfigurationDescriptor, &InterfaceDescriptor, Endpoint,
-                                          &Streams))
-        {
-            return STATUS_DEVICE_CONFIGURATION_ERROR;
-        }
-    }
-    else
-    {
-        Status = USBSTOR_ScanConfigurationDescriptor(DeviceExtension->ConfigurationDescriptor, &InterfaceDescriptor, &InEndpointDescriptor, &OutEndpointDescriptor);
-        if (!NT_SUCCESS(Status))
-        {
-            return Status;
-        }
+        return Status;
     }
 
     // now allocate one interface entry and terminating null entry
@@ -320,9 +306,6 @@ USBSTOR_GetPipeHandles(
 {
     ULONG Index;
     BOOLEAN BulkInFound = FALSE, BulkOutFound = FALSE;
-
-    if (DeviceExtension->Uas)
-        return STATUS_SUCCESS;
 
     // enumerate all pipes and extract bulk-in / bulk-out pipe handle
     for (Index = 0; Index < DeviceExtension->InterfaceInformation->NumberOfPipes; Index++)

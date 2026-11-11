@@ -11,7 +11,6 @@ list(APPEND SOURCE
     queue.c
     error.c
     scsi.c
-    uas.c
     usbstor.c)
 
 list(APPEND PCH_SKIP_SOURCE
@@ -23,7 +22,7 @@ add_library(usbstor MODULE
     usbstor.rc)
 
 set_module_type(usbstor kernelmodedriver)
-target_link_libraries(usbstor sptilib ${PSEH_LIB})
+target_link_libraries(usbstor sptilib usbdex ${PSEH_LIB})
 add_importlibs(usbstor ntoskrnl hal usbd)
 add_pch(usbstor usbstor.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET usbstor DESTINATION reactos/system32/drivers NO_CAB FOR all)
