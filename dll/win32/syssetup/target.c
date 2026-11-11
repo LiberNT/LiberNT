@@ -1225,6 +1225,7 @@ ConfigureTargetSystem(
             return RtlNtStatusToDosError(Status);
     }
     CreateMachineGuid();
+    CreateSystemIdSeed(TRUE);
 
     ReportTargetPhase(5);
     RegisterTargetComponents();
