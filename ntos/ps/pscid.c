@@ -48,34 +48,12 @@ PspLookupCidObject(
         return STATUS_INVALID_CID;
     }
 
-    /*
-     * A process or thread that is being torn down is already gone as far as
-     * a caller is concerned, so its rundown protection decides whether the
-     * identifier still names anything.
-     */
-    if (ObjectType == PsProcessType)
+    /* A process or thread that has exited is still named until its object is deleted */
+    if (!ObReferenceObjectSafe(Found))
     {
-        if (!ExAcquireRundownProtection(&((PEPROCESS)Found)->RundownProtect))
-        {
-            ExUnlockHandleTableEntry(PspCidTable, Entry);
-            KeLeaveCriticalRegion();
-            return STATUS_INVALID_CID;
-        }
-
-        ObReferenceObject(Found);
-        ExReleaseRundownProtection(&((PEPROCESS)Found)->RundownProtect);
-    }
-    else
-    {
-        if (!ExAcquireRundownProtection(&((PETHREAD)Found)->RundownProtect))
-        {
-            ExUnlockHandleTableEntry(PspCidTable, Entry);
-            KeLeaveCriticalRegion();
-            return STATUS_INVALID_CID;
-        }
-
-        ObReferenceObject(Found);
-        ExReleaseRundownProtection(&((PETHREAD)Found)->RundownProtect);
+        ExUnlockHandleTableEntry(PspCidTable, Entry);
+        KeLeaveCriticalRegion();
+        return STATUS_INVALID_CID;
     }
 
     ExUnlockHandleTableEntry(PspCidTable, Entry);

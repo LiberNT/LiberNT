@@ -285,13 +285,6 @@ PspExitThread(
 
     PspRunLegoRoutine(&Thread->Tcb);
 
-    /* The identifier is given back last: until now the thread still has one */
-    if (Thread->Cid.UniqueThread != NULL)
-    {
-        PspRemoveCid(Thread->Cid.UniqueThread);
-        Thread->Cid.UniqueThread = NULL;
-    }
-
     /* The scheduler does not come back to a terminated thread */
     KeTerminateThread(0);
 }

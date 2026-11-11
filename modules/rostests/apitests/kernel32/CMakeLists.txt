@@ -127,7 +127,10 @@ list(APPEND SOURCE
     SystemFirmware.c
     SystemFileCacheSize.c
     TerminateProcess.c
+    TerminateThread.c
+    ExitedClientId.c
     ThreadPowerThrottling.c
+    ThreadPreferredUILanguages.c
     ProcessPowerThrottling.c
     TransactedFileApis.c
     TunnelCache.c

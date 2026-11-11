@@ -124,7 +124,10 @@ extern void func_SynchronizationBarrier(void);
 extern void func_SystemFirmware(void);
 extern void func_SystemFileCacheSize(void);
 extern void func_TerminateProcess(void);
+extern void func_TerminateThread(void);
+extern void func_ExitedClientId(void);
 extern void func_ThreadPowerThrottling(void);
+extern void func_ThreadPreferredUILanguages(void);
 extern void func_ProcessPowerThrottling(void);
 extern void func_TransactedFileApis(void);
 extern void func_TunnelCache(void);
@@ -264,7 +267,10 @@ const struct test winetest_testlist[] =
     { "SystemFirmware",              func_SystemFirmware },
     { "SystemFileCacheSize",         func_SystemFileCacheSize },
     { "TerminateProcess",            func_TerminateProcess },
+    { "TerminateThread",             func_TerminateThread },
+    { "ExitedClientId",              func_ExitedClientId },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
+    { "ThreadPreferredUILanguages",  func_ThreadPreferredUILanguages },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
     { "TransactedFileApis",          func_TransactedFileApis },
     { "TunnelCache",                 func_TunnelCache },
