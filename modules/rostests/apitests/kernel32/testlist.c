@@ -58,6 +58,7 @@ extern void func_GetSystemWow64Directory(void);
 extern void func_GetTempFileName(void);
 extern void func_GetTempPath2(void);
 extern void func_GetThreadTimes(void);
+extern void func_GetUILanguageInfo(void);
 extern void func_GetVolumeInformation(void);
 extern void func_GetWsChangesEx(void);
 extern void func_HeapLowFragmentation(void);
@@ -130,6 +131,7 @@ extern void func_SystemFileCacheSize(void);
 extern void func_TerminateProcess(void);
 extern void func_ExitedClientId(void);
 extern void func_ThreadPowerThrottling(void);
+extern void func_ThreadPreferredUILanguages(void);
 extern void func_ProcessPowerThrottling(void);
 extern void func_TransactedFileApis(void);
 extern void func_TunnelCache(void);
@@ -206,6 +208,7 @@ const struct test winetest_testlist[] =
     { "GetTempFileName",             func_GetTempFileName },
     { "GetTempPath2",                func_GetTempPath2 },
     { "GetThreadTimes",              func_GetThreadTimes },
+    { "GetUILanguageInfo",           func_GetUILanguageInfo },
     { "GetVolumeInformation",        func_GetVolumeInformation },
     { "GetWsChangesEx",              func_GetWsChangesEx },
     { "HeapLowFragmentation",        func_HeapLowFragmentation },
@@ -275,6 +278,7 @@ const struct test winetest_testlist[] =
     { "TerminateProcess",            func_TerminateProcess },
     { "ExitedClientId",              func_ExitedClientId },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
+    { "ThreadPreferredUILanguages",  func_ThreadPreferredUILanguages },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
     { "TransactedFileApis",          func_TransactedFileApis },
     { "TunnelCache",                 func_TunnelCache },

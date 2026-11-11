@@ -719,10 +719,6 @@ LdrpGetNeutralResourceModule(
     _In_ PVOID BaseAddress,
     _Out_ PVOID *ResourceBase);
 
-LANGID
-NTAPI
-RtlpGetThreadUILanguage(VOID);
-
 PVOID
 NTAPI
 LdrpGetResourceModuleForEntry(
@@ -737,5 +733,9 @@ LdrpUnloadAlternateResourceModule(
 BOOLEAN
 NTAPI
 LdrpFlushAlternateResourceModules(VOID);
+
+VOID
+NTAPI
+RtlpFreeThreadPreferredUILanguages(VOID);
 
 /* EOF */

@@ -60,6 +60,7 @@ list(APPEND SOURCE
     GetTempFileName.c
     GetTempPath2.c
     GetThreadTimes.c
+    GetUILanguageInfo.c
     GetVolumeInformation.c
     GetWsChangesEx.c
     HeapLowFragmentation.c
@@ -133,6 +134,7 @@ list(APPEND SOURCE
     TerminateProcess.c
     ExitedClientId.c
     ThreadPowerThrottling.c
+    ThreadPreferredUILanguages.c
     ProcessPowerThrottling.c
     TransactedFileApis.c
     TunnelCache.c

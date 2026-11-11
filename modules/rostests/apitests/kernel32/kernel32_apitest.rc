@@ -6,3 +6,4 @@
 #include <FormatMessage.rc>
 
 #include "ResourceUILanguage.rc"
+#include "ThreadPreferredUILanguages.rc"

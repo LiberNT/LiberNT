@@ -1454,6 +1454,8 @@ LdrShutdownThread(VOID)
     RtlProcessFlsData(Teb->FlsData, 2);
     Teb->FlsData = NULL;
 
+    RtlpFreeThreadPreferredUILanguages();
+
     /* Check for Fiber data */
 #if (NTDDI_VERSION >= NTDDI_WIN7)
     if (Teb->ReservedPad2)
@@ -1470,12 +1472,6 @@ LdrShutdownThread(VOID)
 
     /* Free the activation context stack */
     RtlFreeThreadActivationContextStack();
-
-    if (Teb->PreferredLanguages)
-    {
-        RtlFreeHeap(RtlGetProcessHeap(), 0, Teb->PreferredLanguages);
-        Teb->PreferredLanguages = NULL;
-    }
 
 #if defined(_M_ARM64)
     /* CHPE: notify the emulator that this thread is terminating */

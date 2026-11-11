@@ -10,6 +10,7 @@
 /* INCLUDES *****************************************************************/
 
 #include <ntdll.h>
+#include <winnls.h>
 #include <apisets.h>
 #include <reactos/chpe.h>
 
@@ -632,6 +633,28 @@ IMAGE_RESOURCE_DIRECTORY *find_first_entry( IMAGE_RESOURCE_DIRECTORY *dir,
                                             void *root, int want_dir );
 int push_language( USHORT *list, ULONG pos, WORD lang );
 
+static int push_thread_ui_languages( USHORT *list, int pos )
+{
+    WCHAR languages[5 * 5 + 1];
+    ULONG count, size = RTL_NUMBER_OF(languages);
+    PCWSTR current;
+
+    if (!NT_SUCCESS(RtlGetThreadPreferredUILanguages( MUI_THREAD_LANGUAGES | MUI_LANGUAGE_ID, &count, languages, &size )))
+        return pos;
+
+    for (current = languages; *current; current += wcslen( current ) + 1)
+    {
+        UNICODE_STRING string;
+        ULONG value;
+
+        RtlInitUnicodeString( &string, current );
+        if (!NT_SUCCESS(RtlUnicodeStringToInteger( &string, 16, &value ))) continue;
+        pos = push_language( list, pos, (WORD)value );
+        pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(value), SUBLANG_NEUTRAL ) );
+    }
+    return pos;
+}
+
 /**********************************************************************
  *  find_entry
  *
@@ -643,7 +666,7 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
     ULONG size;
     void *root;
     IMAGE_RESOURCE_DIRECTORY *resdirptr;
-    USHORT list[10];  /* list of languages to try */
+    USHORT list[20];  /* list of languages to try */
     int i, pos = 0;
     LANGID ui_language;
 
@@ -678,13 +701,8 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
         /* user defaults, unless SYS_DEFAULT sublanguage specified  */
         if (SUBLANGID(info->Language) != SUBLANG_SYS_DEFAULT)
         {
-            /* 4. thread UI language */
-            ui_language = RtlpGetThreadUILanguage();
-            if (ui_language)
-            {
-                pos = push_language( list, pos, ui_language );
-                pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(ui_language), SUBLANG_NEUTRAL ) );
-            }
+            /* 4. thread UI languages */
+            pos = push_thread_ui_languages( list, pos );
 
             if (NT_SUCCESS(NtQueryDefaultUILanguage(&ui_language)))
             {

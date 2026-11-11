@@ -774,13 +774,125 @@ LANGID
 WINAPI
 GetThreadUILanguage(VOID)
 {
-    WCHAR Languages[32];
-    ULONG Count = 0, Size = _countof(Languages);
+    static const DWORD Flags = MUI_MERGE_SYSTEM_FALLBACK | MUI_MERGE_USER_FALLBACK | MUI_LANGUAGE_ID;
+    UNICODE_STRING String;
+    PWSTR Languages;
+    ULONG Count, Size = 0, Value;
+    LANGID LanguageId = 0;
 
-    if (NT_SUCCESS(RtlGetThreadPreferredUILanguages(MUI_LANGUAGE_ID, &Count, Languages, &Size)) && Count)
-        return (LANGID)wcstoul(Languages, NULL, 16);
+    if (NT_SUCCESS(RtlGetThreadPreferredUILanguages(Flags, &Count, NULL, &Size)) && Size)
+    {
+        Languages = RtlAllocateHeap(RtlGetProcessHeap(), 0, Size * sizeof(WCHAR));
+        if (Languages)
+        {
+            if (NT_SUCCESS(RtlGetThreadPreferredUILanguages(Flags, &Count, Languages, &Size)) && Languages[0])
+            {
+                RtlInitUnicodeString(&String, Languages);
+                if (NT_SUCCESS(RtlUnicodeStringToInteger(&String, 16, &Value)))
+                    LanguageId = (LANGID)Value;
+            }
+            RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
+        }
+    }
 
-    return GetUserDefaultUILanguage();
+    return LanguageId ? LanguageId : GetUserDefaultUILanguage();
+}
+
+typedef struct _K32_UI_LANGUAGE_SEARCH
+{
+    LANGID LanguageId;
+    BOOL Found;
+} K32_UI_LANGUAGE_SEARCH, *PK32_UI_LANGUAGE_SEARCH;
+
+static
+BOOL
+CALLBACK
+K32FindUILanguage(
+    _In_ LPWSTR Language,
+    _In_ LONG_PTR Param)
+{
+    PK32_UI_LANGUAGE_SEARCH Search = (PK32_UI_LANGUAGE_SEARCH)Param;
+
+    if ((LANGID)wcstoul(Language, NULL, 16) != Search->LanguageId)
+        return TRUE;
+
+    Search->Found = TRUE;
+    return FALSE;
+}
+
+static
+BOOL
+K32IsInstalledUILanguage(
+    _In_ LANGID LanguageId)
+{
+    K32_UI_LANGUAGE_SEARCH Search = { LanguageId, FALSE };
+    DWORD Error = GetLastError();
+
+    EnumUILanguagesW(K32FindUILanguage, 0, (LONG_PTR)&Search);
+    SetLastError(Error);
+    return Search.Found;
+}
+
+static
+BOOL
+K32ParseUILanguageId(
+    _In_ PCWSTR Language,
+    _Out_ PULONG Value)
+{
+    ULONG Index;
+
+    *Value = 0;
+    if (wcslen(Language) != 4)
+        return FALSE;
+
+    for (Index = 0; Index < 4; Index++)
+    {
+        WCHAR Character = Language[Index];
+
+        if (Character >= L'0' && Character <= L'9')
+            *Value = (*Value << 4) | (Character - L'0');
+        else if (Character >= L'A' && Character <= L'F')
+            *Value = (*Value << 4) | (Character - L'A' + 10);
+        else if (Character >= L'a' && Character <= L'f')
+            *Value = (*Value << 4) | (Character - L'a' + 10);
+        else
+            return FALSE;
+    }
+
+    return *Value != LANGIDFROMLCID(LOCALE_CUSTOM_UNSPECIFIED);
+}
+
+static
+BOOL
+K32GetUILanguageId(
+    _In_ DWORD Flags,
+    _In_ PCWSTR Language,
+    _Out_ LANGID *LanguageId)
+{
+    WCHAR NameBuffer[LOCALE_NAME_MAX_LENGTH];
+    UNICODE_STRING Name;
+    ULONG Value;
+    LCID Lcid;
+
+    if (Flags & MUI_LANGUAGE_ID)
+    {
+        Name.Buffer = NameBuffer;
+        Name.Length = 0;
+        Name.MaximumLength = sizeof(NameBuffer);
+        if (!K32ParseUILanguageId(Language, &Value) ||
+            !NT_SUCCESS(RtlLcidToLocaleName(MAKELCID(Value, SORT_DEFAULT), &Name, RTL_LOCALE_ALLOW_NEUTRAL_NAMES, FALSE)))
+        {
+            return FALSE;
+        }
+        *LanguageId = (LANGID)Value;
+        return TRUE;
+    }
+
+    if (!NT_SUCCESS(RtlLocaleNameToLcid(Language, &Lcid, RTL_LOCALE_ALLOW_NEUTRAL_NAMES)))
+        return FALSE;
+
+    *LanguageId = LANGIDFROMLCID(Lcid);
+    return TRUE;
 }
 
 /*
@@ -795,9 +907,66 @@ GetUILanguageInfo(
     PDWORD pcchFallbackLanguages,
     PDWORD pdwAttributes)
 {
-    DPRINT1("%x %p %p %p %p\n", dwFlags, pwmszLanguage, pwszFallbackLanguages, pcchFallbackLanguages, pdwAttributes);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    PCWSTR Language;
+    LANGID LanguageId;
+    ULONG Count = 0, Value;
+
+    if ((dwFlags & ~(MUI_LANGUAGE_ID | MUI_LANGUAGE_NAME)) ||
+        ((dwFlags & MUI_LANGUAGE_ID) && (dwFlags & MUI_LANGUAGE_NAME)) ||
+        !pwmszLanguage || !pwmszLanguage[0] || !pdwAttributes ||
+        (pcchFallbackLanguages && *pcchFallbackLanguages && !pwszFallbackLanguages))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    for (Language = pwmszLanguage; *Language; Language += wcslen(Language) + 1)
+    {
+        if ((dwFlags & MUI_LANGUAGE_ID) ? !K32ParseUILanguageId(Language, &Value)
+                                        : wcslen(Language) >= LOCALE_NAME_MAX_LENGTH)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        Count++;
+    }
+
+    for (Language = pwmszLanguage; *Language; Language += wcslen(Language) + 1)
+    {
+        if (!K32GetUILanguageId(dwFlags, Language, &LanguageId) ||
+            (Language == pwmszLanguage && !K32IsInstalledUILanguage(LanguageId)))
+        {
+            /* FIXME: the documented ERROR_OBJECT_NAME_NOT_FOUND is not defined by the SDK; reported through STATUS_OBJECT_NAME_NOT_FOUND */
+            BaseSetLastNTError(STATUS_OBJECT_NAME_NOT_FOUND);
+            return FALSE;
+        }
+    }
+
+    /* TODO: partially localized and LIP languages, their fallback languages and the relation lists that name them */
+    if (Count > 1)
+    {
+        BaseSetLastNTError(STATUS_OBJECT_NAME_NOT_FOUND);
+        return FALSE;
+    }
+
+    *pdwAttributes = MUI_FULL_LANGUAGE | MUI_LANGUAGE_INSTALLED | MUI_LANGUAGE_LICENSED;
+    if (!pcchFallbackLanguages)
+        return TRUE;
+
+    if (pwszFallbackLanguages && *pcchFallbackLanguages < 2)
+    {
+        *pcchFallbackLanguages = 2;
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    if (pwszFallbackLanguages)
+    {
+        pwszFallbackLanguages[0] = UNICODE_NULL;
+        pwszFallbackLanguages[1] = UNICODE_NULL;
+    }
+    *pcchFallbackLanguages = 2;
+    return TRUE;
 }
 
 

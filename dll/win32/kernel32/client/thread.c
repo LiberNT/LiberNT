@@ -1073,26 +1073,40 @@ LANGID
 WINAPI
 SetThreadUILanguage(IN LANGID LangId)
 {
-    static const WCHAR HexDigits[] = L"0123456789abcdef";
-    WCHAR Languages[6];
+    WCHAR Language[LOCALE_NAME_MAX_LENGTH + 1];
+    UNICODE_STRING Name;
     NTSTATUS Status;
-    INT i;
+    ULONG Count;
 
-    /* LangId == 0 selects a language best supporting the console; keep the
-     * thread's current UI language in that case, like modern Windows. */
     if (LangId == 0)
+    {
+        RtlSetThreadPreferredUILanguages(MUI_CONSOLE_FILTER, NULL, NULL);
         return GetThreadUILanguage();
+    }
 
-    for (i = 0; i < 4; i++)
-        Languages[i] = HexDigits[(LangId >> (12 - 4 * i)) & 0xF];
-    Languages[4] = UNICODE_NULL;
-    Languages[5] = UNICODE_NULL;
-    Status = RtlSetThreadPreferredUILanguages(MUI_LANGUAGE_ID, Languages, NULL);
+    Name.Buffer = Language;
+    Name.Length = 0;
+    Name.MaximumLength = (LOCALE_NAME_MAX_LENGTH - 1) * sizeof(WCHAR);
+    if (LangId == LANGIDFROMLCID(LOCALE_SYSTEM_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_USER_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_CUSTOM_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_CUSTOM_UI_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_CUSTOM_UNSPECIFIED) ||
+        !NT_SUCCESS(RtlLcidToLocaleName(MAKELCID(LangId, SORT_DEFAULT), &Name, RTL_LOCALE_ALLOW_NEUTRAL_NAMES, FALSE)))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    Language[Name.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    Language[Name.Length / sizeof(WCHAR) + 1] = UNICODE_NULL;
+
+    Status = RtlSetThreadPreferredUILanguages(MUI_LANGUAGE_NAME, Language, &Count);
     if (!NT_SUCCESS(Status))
     {
         BaseSetLastNTError(Status);
-        return GetThreadUILanguage();
+        return 0;
     }
+
     return LangId;
 }
 
