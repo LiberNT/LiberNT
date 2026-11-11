@@ -589,7 +589,7 @@ KiTimerListExpire(
         if (DpcCount < MAX_TIMER_DPCS &&
             Dpc->Type == DpcObject &&
             (Dpc->Number == 0 ||
-             Dpc->Number == MAXIMUM_PROCESSORS + KeGetCurrentProcessorNumber()))
+             Dpc->Number == KI_DPC_TARGET_PROCESSOR_OFFSET + KeGetCurrentProcessorNumber()))
         {
             DpcEntries[DpcCount].Dpc = Dpc;
             DpcEntries[DpcCount].Routine = Dpc->DeferredRoutine;

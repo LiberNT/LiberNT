@@ -748,7 +748,7 @@ PoInitializePrcb(
     Prcb->PowerState.IdleFunction = PopIdle0;
 
     KeInitializeDpc(&Prcb->PowerState.PerfDpc, PopPerfIdleDpc, Prcb);
-    KeSetTargetProcessorDpc(&Prcb->PowerState.PerfDpc, (CCHAR)Prcb->Number);
+    KiSetTargetProcessorDpc(&Prcb->PowerState.PerfDpc, (CCHAR)Prcb->Number);
     KeInitializeTimerEx(&Prcb->PowerState.PerfTimer, SynchronizationTimer);
 }
 

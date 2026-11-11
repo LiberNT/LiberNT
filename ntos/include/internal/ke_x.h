@@ -29,6 +29,16 @@ KeGetPreviousMode(VOID)
 }
 #endif
 
+/* Kernel setup targets a processor that KeNumberProcessors may not count yet */
+FORCEINLINE
+VOID
+KiSetTargetProcessorDpc(
+    _Inout_ PKDPC Dpc,
+    _In_ CCHAR Number)
+{
+    Dpc->Number = (USHORT)(KI_DPC_TARGET_PROCESSOR_OFFSET + Number);
+}
+
 FORCEINLINE
 VOID
 KiRequestDispatchInterrupt(

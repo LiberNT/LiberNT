@@ -260,7 +260,7 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
 
     /* Initialize the Timer Expiration DPC */
     KeInitializeDpc(&KiTimerExpireDpc, KiTimerExpiration, NULL);
-    KeSetTargetProcessorDpc(&KiTimerExpireDpc, 0);
+    KiSetTargetProcessorDpc(&KiTimerExpireDpc, 0);
 
     /* Initialize Profiling data */
     KeInitializeSpinLock(&KiProfileLock);

@@ -412,7 +412,7 @@ KiInitSystem(VOID)
     }
 
     KeInitializeDpc(&KiTimerExpireDpc, KiTimerExpiration, NULL);
-    KeSetTargetProcessorDpc(&KiTimerExpireDpc, 0);
+    KiSetTargetProcessorDpc(&KiTimerExpireDpc, 0);
 
     KeServiceDescriptorTable[0].Base = MainSSDT;
     KeServiceDescriptorTable[0].Count = NULL;

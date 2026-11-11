@@ -377,10 +377,12 @@ KeSetTargetProcessorDpc(
     _In_ CCHAR Number)
 {
     ASSERT_DPC(Dpc);
-    ASSERT(Number >= 0);
-    ASSERT(Number < MAXIMUM_PROCESSORS);
 
-    Dpc->Number = (USHORT)(MAXIMUM_PROCESSORS + Number);
+    /* A processor that does not exist, or a DPC already queued, keeps the target it has */
+    if ((Number < 0) || ((UCHAR)Number >= (UCHAR)KeNumberProcessors) || (Dpc->DpcData != NULL))
+        return;
+
+    KiSetTargetProcessorDpc(Dpc, Number);
 }
 
 /*
@@ -411,9 +413,9 @@ KeInsertQueueDpc(
     OldIrql = KfRaiseIrql(HIGH_LEVEL);
     CurrentPrcb = KeGetCurrentPrcb();
 
-    if (Dpc->Number >= MAXIMUM_PROCESSORS)
+    if (Dpc->Number >= KI_DPC_TARGET_PROCESSOR_OFFSET)
     {
-        Processor = (ULONG)(Dpc->Number - MAXIMUM_PROCESSORS);
+        Processor = (ULONG)(Dpc->Number - KI_DPC_TARGET_PROCESSOR_OFFSET);
         Prcb = KiProcessorBlock[Processor];
     }
     else

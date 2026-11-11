@@ -855,7 +855,7 @@ KiArm64StartLocalTimer(VOID)
     if (Cpu == 0 && !KiArm64ClockDeadlineReady)
     {
         KeInitializeDpc(&KiArm64ClockDeadlineDpc, KiArm64ClockDeadlineDpcRoutine, NULL);
-        KeSetTargetProcessorDpc(&KiArm64ClockDeadlineDpc, 0);
+        KiSetTargetProcessorDpc(&KiArm64ClockDeadlineDpc, 0);
         KeSetImportanceDpc(&KiArm64ClockDeadlineDpc, HighImportance);
         InterlockedExchange(&KiArm64ClockDeadlineReady, 1);
         KiArm64ReprogramClock();

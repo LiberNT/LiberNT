@@ -8,6 +8,10 @@
 #define KI_USER_MODE_CALLBACK_ENTRY KiCallUserMode
 #endif
 
+#ifndef KI_DPC_TARGET_PROCESSOR_OFFSET
+#define KI_DPC_TARGET_PROCESSOR_OFFSET MAXIMUM_PROCESSORS
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {

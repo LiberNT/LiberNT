@@ -6,6 +6,9 @@
 
 #pragma once
 
+/* Windows 11 ARM64 encodes an explicit DPC target as 0x800 plus the processor index */
+#define KI_DPC_TARGET_PROCESSOR_OFFSET 0x800
+
 #define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
 
