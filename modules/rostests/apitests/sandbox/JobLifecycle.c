@@ -289,6 +289,52 @@ TestEndOfJobTime(void)
     CloseHandle(Job);
 }
 
+static void
+CheckUiRestrictionChain(HANDLE Outer, HANDLE Restricted, HANDLE Plain)
+{
+    JOBOBJECT_BASIC_UI_RESTRICTIONS Ui = { JOB_OBJECT_UILIMIT_HANDLES };
+    PROCESS_INFORMATION Info;
+
+    ok(SetInformationJobObject(Outer, JobObjectBasicUIRestrictions, &Ui, sizeof(Ui)) &&
+       SetInformationJobObject(Restricted, JobObjectBasicUIRestrictions, &Ui, sizeof(Ui)),
+       "UI restrictions failed %lu\n", GetLastError());
+
+    ok(SbxSpawnChild("JobLifecycle", "noop", NULL, NULL, NULL, CREATE_SUSPENDED, &Info),
+       "child spawn failed %lu\n", GetLastError());
+    if (!Info.hProcess) return;
+
+    ok(AssignProcessToJobObject(Outer, Info.hProcess), "outer assignment failed %lu\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    ok(!AssignProcessToJobObject(Restricted, Info.hProcess) && GetLastError() == ERROR_NOT_SUPPORTED,
+       "second UI-restricted job on the chain: %lu\n", GetLastError());
+
+    ok(AssignProcessToJobObject(Plain, Info.hProcess), "unrestricted nested job refused %lu\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    ok(!SetInformationJobObject(Plain, JobObjectBasicUIRestrictions, &Ui, sizeof(Ui)) &&
+       GetLastError() == ERROR_NOT_SUPPORTED,
+       "UI restrictions under a restricted job: %lu\n", GetLastError());
+
+    TerminateProcess(Info.hProcess, 0);
+    CloseProcessInformation(&Info);
+}
+
+static void
+TestUiRestrictionChain(void)
+{
+    HANDLE Outer = CreateJobObjectW(NULL, NULL);
+    HANDLE Restricted = CreateJobObjectW(NULL, NULL);
+    HANDLE Plain = CreateJobObjectW(NULL, NULL);
+
+    ok(Outer && Restricted && Plain, "CreateJobObject failed %lu\n", GetLastError());
+    if (Outer && Restricted && Plain) CheckUiRestrictionChain(Outer, Restricted, Plain);
+
+    if (Plain) CloseHandle(Plain);
+    if (Restricted) CloseHandle(Restricted);
+    if (Outer) CloseHandle(Outer);
+}
+
 START_TEST(JobLifecycle)
 {
     char **Arguments;
@@ -306,4 +352,5 @@ START_TEST(JobLifecycle)
     TestKillOnJobClose();
     TestCompletionPortLifecycle();
     TestEndOfJobTime();
+    TestUiRestrictionChain();
 }

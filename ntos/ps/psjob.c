@@ -111,6 +111,40 @@ PspIsJobWithin(
     return FALSE;
 }
 
+/* Whether the job or one it is nested in restricts the desktop. Entered with the job hierarchy lock held. */
+static
+BOOLEAN
+PspIsJobChainUiRestricted(
+    _In_opt_ PEJOB Job)
+{
+    for (; Job != NULL; Job = Job->ParentJob)
+    {
+        if (Job->UIRestrictionsClass != 0) return TRUE;
+    }
+
+    return FALSE;
+}
+
+/* Whether a job nested below this one restricts the desktop. Entered with the job hierarchy lock held. */
+static
+BOOLEAN
+PspIsJobTreeUiRestricted(
+    _In_ PEJOB Job)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Job->ChildJobListHead.Flink;
+         Entry != &Job->ChildJobListHead;
+         Entry = Entry->Flink)
+    {
+        PEJOB Child = CONTAINING_RECORD(Entry, EJOB, SiblingJobLinks);
+
+        if (Child->UIRestrictionsClass != 0 || PspIsJobTreeUiRestricted(Child)) return TRUE;
+    }
+
+    return FALSE;
+}
+
 /* Entered with the job hierarchy lock held */
 static
 NTSTATUS
@@ -473,6 +507,13 @@ PspAssignProcessToJob(
         {
             Nest = TRUE;
         }
+    }
+
+    /* One job of a chain may restrict the desktop, not two */
+    if (NT_SUCCESS(Status) && Current != NULL && Job->UIRestrictionsClass != 0 &&
+        PspIsJobChainUiRestricted(Current))
+    {
+        Status = STATUS_NOT_SUPPORTED;
     }
 
     if (NT_SUCCESS(Status))
@@ -875,6 +916,39 @@ PsSetJobUIRestrictionsClass(
     PspInvokeW32JobCallout(Job,
                            PsW32JobCalloutSetInformation,
                            (PVOID)(ULONG_PTR)UIRestrictionsClass);
+}
+
+/* A job may restrict the desktop only while no job above or below it does */
+static
+NTSTATUS
+PspSetJobUiRestrictions(
+    _Inout_ PEJOB Job,
+    _In_ ULONG UIRestrictionsClass)
+{
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&PspJobListLock, TRUE);
+
+    if (UIRestrictionsClass != 0 &&
+        (PspIsJobChainUiRestricted(Job->ParentJob) || PspIsJobTreeUiRestricted(Job)))
+    {
+        ExReleaseResourceLite(&PspJobListLock);
+        KeLeaveCriticalRegion();
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+    Job->UIRestrictionsClass = UIRestrictionsClass;
+    ExReleaseResourceLite(&Job->JobLock);
+
+    ExReleaseResourceLite(&PspJobListLock);
+    KeLeaveCriticalRegion();
+
+    PspInvokeW32JobCallout(Job,
+                           PsW32JobCalloutSetInformation,
+                           (PVOID)(ULONG_PTR)UIRestrictionsClass);
+    return STATUS_SUCCESS;
 }
 
 /* SYSTEM CALLS ***************************************************************/
@@ -1889,9 +1963,7 @@ NtSetInformationJobObject(
                 break;
             }
 
-            PsSetJobUIRestrictionsClass(Job,
-                                        Restrictions.UIRestrictionsClass);
-            Status = STATUS_SUCCESS;
+            Status = PspSetJobUiRestrictions(Job, Restrictions.UIRestrictionsClass);
             break;
 
         case JobObjectEndOfJobTimeInformation:
