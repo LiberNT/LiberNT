@@ -105,14 +105,14 @@ static UCHAR KiQpcSystemTimeIncrementShift;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
-FORCEINLINE
+static __inline
 ULONGLONG
 KiGetInterruptTime(VOID)
 {
     return (ULONGLONG)KiReadSystemTime(&KiInterruptTimeValue).QuadPart;
 }
 
-FORCEINLINE
+static __inline
 ULONGLONG
 KiGetSystemTime(VOID)
 {
