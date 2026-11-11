@@ -5059,14 +5059,20 @@ static BOOL CRYPT_AsnDecodeGeneralizedTime(const BYTE *pbEncoded,
                     if (ret && len > 0 && (*pbEncoded == '.' ||
                      *pbEncoded == ','))
                     {
-                        BYTE digits;
+                        WORD scale = 100;
 
                         pbEncoded++;
                         len--;
-                        /* workaround macro weirdness */
-                        digits = min(len, 3);
-                        CRYPT_TIME_GET_DIGITS(pbEncoded, len, digits,
-                         sysTime.wMilliseconds);
+                        if (!len || !isdigit(*pbEncoded))
+                        {
+                            SetLastError(CRYPT_E_ASN1_CORRUPT);
+                            ret = FALSE;
+                        }
+                        for (; ret && len > 0 && isdigit(*pbEncoded); pbEncoded++, len--)
+                        {
+                            sysTime.wMilliseconds += (*pbEncoded - '0') * scale;
+                            scale /= 10;
+                        }
                     }
                     if (ret)
                         ret = CRYPT_AsnDecodeTimeZone(pbEncoded, len,

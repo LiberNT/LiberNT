@@ -6,6 +6,7 @@ list(APPEND SOURCE
     ChainRevocation.c
     Countersign.c
     CryptProtectMemory.c
+    GeneralizedTime.c
     RevocationTimeout.c
     testlist.c)
 
