@@ -521,9 +521,11 @@ IopLinkDeviceInterface(
 
     DeviceName = NameInfo->Name;
 
-    IoCreateSymbolicLink(SymbolicLinkName, &DeviceName);
+    Status = IoCreateSymbolicLink(SymbolicLinkName, &DeviceName);
 
     ExFreePoolWithTag(NameInfo, TAG_IO_NAME);
+
+    if (!NT_SUCCESS(Status)) return Status;
 
     IopSetInterfaceLinked(Interface, PhysicalDeviceObject, TRUE);
 
@@ -578,6 +580,12 @@ IoSetDeviceInterfaceState(
     if (Enable)
     {
         Status = IopLinkDeviceInterface(Interface, PhysicalDeviceObject, SymbolicLinkName);
+        if (!NT_SUCCESS(Status))
+        {
+            KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
+            Interface->Enabled = FALSE;
+            KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+        }
     }
     else
     {

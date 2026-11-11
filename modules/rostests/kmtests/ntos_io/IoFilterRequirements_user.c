@@ -20,6 +20,7 @@
 #define TEST_CONNECTION_ID_LOW 0x5A7E
 
 static const GUID TestClass = {0x4d36e97d, 0xe325, 0x11ce, {0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18}};
+static const GUID ChildInterfaceGuid = { 0x5e1a6a42, 0x8c3b, 0x4b21, { 0x9c, 0x7e, 0x3f, 0x2d, 0x8a, 0x61, 0xb0, 0xc4 } };
 static const WCHAR BusHardwareIds[] = L"ROOT\\KMTESTFILTERREQ\0";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
@@ -28,7 +29,7 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
                                  L"BusRelationsQueried", L"StartDmaV3", L"StartConnection", L"BusStateQueried", L"FailBus",
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
-                                 L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing" };
+                                 L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -91,6 +92,24 @@ static BOOL ChildStarted(DEVINST Bus, DWORD Timeout)
     } while (GetTickCount() - Start < Timeout);
 
     return FALSE;
+}
+
+/* The path of the child's interface while the child is present */
+static BOOL ChildInterface(PWSTR Path, ULONG Length)
+{
+    return CM_Get_Device_Interface_ListW((LPGUID)&ChildInterfaceGuid, NULL, Path, Length, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) ==
+               CR_SUCCESS &&
+           *Path != UNICODE_NULL;
+}
+
+static DWORD OpenInterface(PCWSTR Path)
+{
+    HANDLE File = CreateFileW(Path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+
+    if (File == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    CloseHandle(File);
+    return ERROR_SUCCESS;
 }
 
 static BOOL InstallChild(PCWSTR InfPath)
@@ -295,6 +314,7 @@ static VOID CheckReinstall(DEVINST Bus, PCWSTR InfPath)
 static VOID CheckReplug(DEVINST Bus)
 {
     WCHAR Before[MAX_DEVICE_ID_LEN] = L"", After[MAX_DEVICE_ID_LEN] = L"";
+    WCHAR Interface[2 * MAX_PATH] = L"";
     DWORD Start, Removes = 0, Value = 0;
     DEVINST Child;
     HANDLE File;
@@ -322,6 +342,8 @@ static VOID CheckReplug(DEVINST Bus)
        CM_Get_Device_IDW(Child, After, RTL_NUMBER_OF(After), 0) == CR_SUCCESS && !wcscmp(Before, After),
        "The child plugged in again is %ls, not %ls\n", After, Before);
     ok(!ReadValue(L"ChildFdoRemoves", &Value) || Value == Removes, "The old stack was removed while a handle was open\n");
+    ok(ChildInterface(Interface, RTL_NUMBER_OF(Interface)), "The child plugged in again has no present interface\n");
+    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
 
     CloseHandle(File);
 
@@ -336,6 +358,7 @@ static VOID CheckReplug(DEVINST Bus)
  * again, it starts */
 static VOID CheckRemoveTwice(DEVINST Bus)
 {
+    WCHAR Interface[2 * MAX_PATH] = L"";
     WCHAR VetoName[MAX_PATH];
     PNP_VETO_TYPE VetoType;
     DWORD Removes = 0, Queries = 0, Value = 0;
@@ -347,9 +370,14 @@ static VOID CheckRemoveTwice(DEVINST Bus)
         return;
     }
 
+    ok(ChildInterface(Interface, RTL_NUMBER_OF(Interface)), "The child has no present interface\n");
+    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
+
     ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
                 (ULONG)CR_SUCCESS);
     ok(ReadValue(L"ChildPdoRemoves", &Removes), "The child got no remove request\n");
+    /* The PnP manager retires the interface its driver left enabled, link included (Windows 11) */
+    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_FILE_NOT_FOUND);
     ok(ReadValue(L"ChildPdoQueryRemoves", &Queries), "The child was not asked whether it can be removed\n");
 
     CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK);
@@ -358,6 +386,7 @@ static VOID CheckRemoveTwice(DEVINST Bus)
 
     ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The removed child did not start again\n");
+    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
 }
 
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */

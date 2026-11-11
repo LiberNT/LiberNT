@@ -32,7 +32,10 @@ typedef struct _TEST_EXTENSION
     BOOLEAN ReportChange;
     BOOLEAN Removed;
     BOOLEAN Missing;
+    UNICODE_STRING Interface;
 } TEST_EXTENSION, *PTEST_EXTENSION;
+
+static const GUID ChildInterfaceGuid = { 0x5e1a6a42, 0x8c3b, 0x4b21, { 0x9c, 0x7e, 0x3f, 0x2d, 0x8a, 0x61, 0xb0, 0xc4 } };
 
 static WCHAR ServicePath[260];
 static BOOLEAN EjectRequested;
@@ -234,6 +237,12 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             Record(L"StartCount", (ULONG)Starts);
             Record(L"StartDmaV3", StartedDmaV3(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartConnection", StartedConnection(Stack->Parameters.StartDevice.AllocatedResources));
+            /* The child leaves disabling its interface to the PnP manager when it goes */
+            if (NT_SUCCESS(Status) && Extension->Interface.Buffer == NULL &&
+                NT_SUCCESS(IoRegisterDeviceInterface(Extension->Pdo, &ChildInterfaceGuid, NULL, &Extension->Interface)))
+            {
+                Record(L"ChildInterfaceEnabled", NT_SUCCESS(IoSetDeviceInterfaceState(&Extension->Interface, TRUE)));
+            }
             if (Starts == 1)
             {
                 Extension->ReportChange = TRUE;
@@ -261,6 +270,7 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             Irp->IoStatus.Status = STATUS_SUCCESS;
             Status = Pass(Extension, Irp);
             IoDetachDevice(Extension->Lower);
+            RtlFreeUnicodeString(&Extension->Interface);
             IoDeleteDevice(DeviceObject);
             return Status;
 
