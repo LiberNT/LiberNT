@@ -9,11 +9,6 @@
 #define NDEBUG
 #include <debug.h>
 
-/* GLOBALS ********************************************************************/
-
-/* The event the session manager is told to set when the clock has slipped */
-PKEVENT ExpTimeSlipEvent = NULL;
-
 /* PRIVATE DATA ***************************************************************/
 
 #define EXP_SYSSET_TAG 'teSE'
@@ -346,12 +341,7 @@ ExpSetTimeSlipEvent(
     }
 
     /* Only one event is remembered; a second one replaces the first. */
-    if (ExpTimeSlipEvent != NULL)
-    {
-        ObDereferenceObject(ExpTimeSlipEvent);
-    }
-
-    ExpTimeSlipEvent = Event;
+    KdUpdateTimeSlipEvent(Event);
 
     return STATUS_SUCCESS;
 }

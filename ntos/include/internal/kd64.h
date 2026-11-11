@@ -207,6 +207,12 @@ KdpTimeSlipDpcRoutine(
     IN PVOID SystemArgument2
 );
 
+VOID
+NTAPI
+KdUpdateTimeSlipEvent(
+    _In_opt_ PKEVENT Event
+);
+
 //
 // Debug Trap Handlers
 //

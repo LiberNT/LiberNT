@@ -372,6 +372,25 @@ KdpTimeSlipWork(
 
 VOID
 NTAPI
+KdUpdateTimeSlipEvent(
+    _In_opt_ PKEVENT Event)
+{
+    PKEVENT Previous;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    KeAcquireSpinLock(&KdpTimeSlipEventLock, &OldIrql);
+    Previous = KdpTimeSlipEvent;
+    KdpTimeSlipEvent = Event;
+    KeReleaseSpinLock(&KdpTimeSlipEventLock, OldIrql);
+
+    if (Previous != NULL)
+        ObDereferenceObject(Previous);
+}
+
+VOID
+NTAPI
 KdpTimeSlipDpcRoutine(
     _In_ PKDPC Dpc,
     _In_opt_ PVOID DeferredContext,
