@@ -7,6 +7,7 @@
 
 #ifndef UNIT_TEST
 #include <ntddk.h>
+#include <reactos/arm64/sysreg.h>
 #endif
 #include <reactos/drivers/appleuat.h>
 
@@ -66,8 +67,15 @@ UatInvalidateAsid(
 {
     ULONG64 Operand = (ULONG64)Asid << UAT_CONTEXT_ASID_SHIFT;
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    ARM64_DSB(SY);
+    ARM64_TLBI(ASIDE1OS, Operand);
+    ARM64_DSB(SY);
+    ARM64_ISB();
+#else
     __asm__ __volatile__(".arch armv8.4-a\n\tdsb sy\n\ttlbi aside1os, %0\n\tdsb sy\n\tisb"
                          : : "r"(Operand) : "memory");
+#endif
 }
 #endif
 
@@ -76,7 +84,14 @@ VOID
 NTAPI
 AppleUatInvalidateAll(VOID)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    ARM64_DSB(SY);
+    ARM64_TLBI_ALL(VMALLE1OS);
+    ARM64_DSB(SY);
+    ARM64_ISB();
+#else
     __asm__ __volatile__(".arch armv8.4-a\n\tdsb sy\n\ttlbi vmalle1os\n\tdsb sy\n\tisb" : : : "memory");
+#endif
 }
 #endif
 
