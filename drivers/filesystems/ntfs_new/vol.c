@@ -483,6 +483,7 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     if (TargetDeviceObject->AlignmentRequirement > FSDeviceObject->AlignmentRequirement)
         FSDeviceObject->AlignmentRequirement = TargetDeviceObject->AlignmentRequirement;
     FSDeviceObject->SectorSize = (USHORT)DiskGeometry.BytesPerSector;
+    /* TODO: Transactional NTFS; until it exists the volume sets no DO_SUPPORTS_TRANSACTIONS and reports no FILE_SUPPORTS_TRANSACTIONS */
 
     // Set up FastIo dispatch table for this volume
     FSDeviceObject->DriverObject->FastIoDispatch = &FastIoDispatch;
