@@ -250,6 +250,7 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
  * disables it and the desktop reverts to classic direct drawing. */
 volatile BOOL          g_DwmAttached = FALSE;
 volatile LONGLONG      g_DwmLastFrameTime = 0;
+static volatile LONGLONG g_DwmWakePendingTime = 0;
 static LONGLONG        g_DwmWatchdogLastCheck = 0;
 static LONGLONG        g_DwmWatchdogStart = 0;
 /* Damage wake event for dwm (referenced from dwm's handle), so dwm blocks
@@ -456,7 +457,10 @@ static VOID
 IntCompositionDwmWake(VOID)
 {
     if (g_DwmWakeEvent != NULL)
+    {
+        InterlockedCompareExchange64(&g_DwmWakePendingTime, (LONGLONG)KeQueryInterruptTime(), 0);
         KeSetEvent(g_DwmWakeEvent, IO_NO_INCREMENT, FALSE);
+    }
 }
 
 VOID
@@ -474,6 +478,13 @@ IntCompositionMarkDamage(_In_ BOOL bFull)
         InterlockedExchange(&g_CompositionFullDamage, TRUE);
     InterlockedExchange(&g_CompositionDamaged, TRUE);
     IntCompositionDwmWake();
+}
+
+static VOID
+IntCompositionMarkPending(VOID)
+{
+    if (!InterlockedExchange(&g_CompositionDamaged, TRUE))
+        IntCompositionDwmWake();
 }
 
 /* Flush waiters capture only their process's outstanding publications. The
@@ -904,9 +915,14 @@ IntCompositionFreeDxSurface(_Inout_ PWND_REDIRECT r)
                 Publication->SurfaceId == SurfaceId)
             {
                 if (Publication->Delivered)
+                {
                     Publication->Retired = TRUE;
+                    IntCompositionMarkPending();
+                }
                 else
+                {
                     IntCompositionCompleteDxPublication(Publication);
+                }
             }
         }
         ObDereferenceObject(r->DxReadyEvent);
@@ -926,6 +942,7 @@ IntCompositionFreeDxSurface(_Inout_ PWND_REDIRECT r)
                     Publication->UpdateId == r->DxPublishedUpdateId)
                 {
                     Publication->Retired = TRUE;
+                    IntCompositionMarkPending();
                     break;
                 }
             }
@@ -2244,7 +2261,7 @@ IntCompositionDamageBacking(_In_opt_ PSURFACE psurf,
                     else if ((LONGLONG)KeQueryInterruptTime() - g_Redirects[i].BatchStart <
                              COMPOSITION_DC_HOLD_100NS)
                     {
-                        InterlockedExchange(&g_CompositionDamaged, TRUE);
+                        IntCompositionMarkPending();
                         return;
                     }
                 }
@@ -3068,6 +3085,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     if (Input.BufBytes < DWM_FRAME_BYTES)
         return STATUS_BUFFER_TOO_SMALL;
 
+    InterlockedExchange64(&g_DwmWakePendingTime, 0);
+
     /* The previous frame's imports and GPU reads have completed before DWM
      * pulls another frame. Release the FRONT handles kept alive for it. */
     IntCompositionReleaseFrameSurfaces();
@@ -3671,6 +3690,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     Frame.FullDamage = fullDamage ? 1 : 0;
     Frame.Dirty = (fullDamage || PositionDamageValid || ReadyDamage ||
                    AnimRunning) ? 1 : 0;
+    Frame.IdleRetryMs = PaintDamageDeferred ? DWM_DEFERRED_RETRY_MS : 0;
+    ASSERT(Frame.IdleRetryMs == 0 || InterlockedCompareExchange(&g_CompositionDamaged, FALSE, FALSE) != FALSE);
     Frame.DmgL = rcDmg.left;
     Frame.DmgT = rcDmg.top;
     Frame.DmgR = rcDmg.right;
@@ -5360,6 +5381,7 @@ VOID
 IntCompositionWatchdog(VOID)
 {
     LONGLONG Now;
+    LONGLONG WakePending;
 
     if (g_DwmGpuOutputWindow == NULL && g_DwmGpuOutputOwner.Generation != 0)
         (VOID)IntCompositionReleaseGpuOutput(TRUE);
@@ -5371,7 +5393,10 @@ IntCompositionWatchdog(VOID)
     if (Now - g_DwmWatchdogLastCheck > (50LL * 1000000LL))
         g_DwmWatchdogStart = Now;
     g_DwmWatchdogLastCheck = Now;
-    if (Now - max(g_DwmLastFrameTime, g_DwmWatchdogStart) <= (300LL * 1000000LL))
+    WakePending = InterlockedCompareExchange64(&g_DwmWakePendingTime, 0, 0);
+    if (WakePending == 0)
+        return;
+    if (Now - max(max(g_DwmLastFrameTime, WakePending), g_DwmWatchdogStart) <= (300LL * 1000000LL))
         return; /* alive within 30 s */
 
     ERR("DWM went silent - tearing down composition, reverting to direct draw\n");

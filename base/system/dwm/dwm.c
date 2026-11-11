@@ -4475,8 +4475,9 @@ DwmComposeLoop(HANDLE hStopEvent)
         {
             HANDLE WaitHandles[2] = {hStopEvent, hWake};
 
-            if (MsgWaitForMultipleObjects(ARRAYSIZE(WaitHandles), WaitHandles,
-                                          FALSE, 200, QS_ALLINPUT) == WAIT_OBJECT_0)
+            if (MsgWaitForMultipleObjects(ARRAYSIZE(WaitHandles), WaitHandles, FALSE,
+                                          hdr->IdleRetryMs != 0 ? hdr->IdleRetryMs : INFINITE,
+                                          QS_ALLINPUT) == WAIT_OBJECT_0)
                 break;
             continue;
         }
