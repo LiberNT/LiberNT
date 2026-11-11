@@ -1701,6 +1701,13 @@ USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
         goto ExitWithError;
     }
 
+    UsbPortResources->Reserved &= ~USBPORT_RES_DMA_NONCOHERENT;
+    if (DmaAdapter->DmaOperations->GetDmaAlignment &&
+        DmaAdapter->DmaOperations->GetDmaAlignment(DmaAdapter) > 1)
+    {
+        UsbPortResources->Reserved |= USBPORT_RES_DMA_NONCOHERENT;
+    }
+
     Status = USBPORT_CreateWorkerThread(FdoDevice);
     if (!NT_SUCCESS(Status))
         goto ExitWithError;
