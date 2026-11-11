@@ -383,6 +383,7 @@ NtCreateSymbolicLinkObject(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     POBJECT_SYMBOLIC_LINK SymbolicLink;
     UNICODE_STRING Captured;
+    USHORT Stored;
     NTSTATUS Status;
     HANDLE Handle;
     PWCHAR Buffer;
@@ -397,6 +398,8 @@ NtCreateSymbolicLinkObject(
             Captured = ProbeForReadUnicodeString(LinkTarget);
             if (Captured.Length != 0)
                 ProbeForRead(Captured.Buffer, Captured.Length, sizeof(WCHAR));
+            if (Captured.MaximumLength > Captured.Length + sizeof(UNICODE_NULL))
+                ProbeForRead(Captured.Buffer, Captured.MaximumLength, sizeof(WCHAR));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -418,14 +421,23 @@ NtCreateSymbolicLinkObject(
 
     /* The link keeps a copy of its target, terminated only when the caller's
      * own buffer had the room for a terminator */
+    Stored = (Captured.MaximumLength >= Captured.Length + sizeof(UNICODE_NULL)) ?
+             Captured.Length + sizeof(UNICODE_NULL) : Captured.Length;
+
+    /* Strings after the first terminator are kept too: DefineDosDevice stacks earlier targets there */
+    if (Captured.MaximumLength > Stored)
+        Stored = Captured.MaximumLength & ~(sizeof(WCHAR) - 1);
+
     Buffer = ExAllocatePoolWithTag(PagedPool,
-                                   Captured.Length + sizeof(UNICODE_NULL),
+                                   max(Stored, Captured.Length + sizeof(UNICODE_NULL)),
                                    TAG_SYMLINK_TARGET);
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     _SEH2_TRY
     {
-        RtlCopyMemory(Buffer, Captured.Buffer, Captured.Length);
+        RtlCopyMemory(Buffer,
+                      Captured.Buffer,
+                      (Stored > Captured.Length + sizeof(UNICODE_NULL)) ? Stored : Captured.Length);
         Status = STATUS_SUCCESS;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -460,9 +472,7 @@ NtCreateSymbolicLinkObject(
     KeQuerySystemTime(&SymbolicLink->CreationTime);
     SymbolicLink->LinkTarget.Buffer = Buffer;
     SymbolicLink->LinkTarget.Length = Captured.Length;
-    SymbolicLink->LinkTarget.MaximumLength =
-        (Captured.MaximumLength >= Captured.Length + sizeof(UNICODE_NULL)) ?
-        Captured.Length + sizeof(UNICODE_NULL) : Captured.Length;
+    SymbolicLink->LinkTarget.MaximumLength = Stored;
     RtlInitEmptyUnicodeString(&SymbolicLink->LinkTargetRemaining, NULL, 0);
     SymbolicLink->LinkTargetObject = NULL;
     SymbolicLink->DosDeviceDriveIndex = 0;
