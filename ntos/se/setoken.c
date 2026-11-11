@@ -1665,6 +1665,7 @@ NtDuplicateToken(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PSECURITY_QUALITY_OF_SERVICE Qos = NULL;
     SECURITY_IMPERSONATION_LEVEL Level = SecurityAnonymous;
+    OBJECT_HANDLE_INFORMATION HandleInformation;
     PTOKEN Token = NULL;
     PTOKEN New = NULL;
     BOOLEAN QosPresent = FALSE;
@@ -1704,9 +1705,12 @@ NtDuplicateToken(
                                        SeTokenObjectType,
                                        PreviousMode,
                                        (PVOID *)&Token,
-                                       NULL);
+                                       &HandleInformation);
     if (NT_SUCCESS(Status))
     {
+        /* Asking for no access asks for the access the existing handle has */
+        if (DesiredAccess == 0) DesiredAccess = HandleInformation.GrantedAccess;
+
         if (Token->TokenType == TokenImpersonation &&
             TokenType == TokenImpersonation &&
             Level > Token->ImpersonationLevel)
