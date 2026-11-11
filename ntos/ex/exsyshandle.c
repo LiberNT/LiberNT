@@ -34,18 +34,23 @@ typedef struct _EXP_HANDLE_WALK
 static
 UCHAR
 ExpHandleAttributes(
-    _In_ ULONG_PTR ObAttributes)
+    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry)
 {
     UCHAR Attributes = 0;
 
-    if (ObAttributes & OBJ_INHERIT)
+    if (HandleTableEntry->ObAttributes & OBJ_INHERIT)
     {
         Attributes |= OBJ_INHERIT;
     }
 
-    if (ObAttributes & OBJ_AUDIT_OBJECT_CLOSE)
+    if (HandleTableEntry->ObAttributes & OBJ_AUDIT_OBJECT_CLOSE)
     {
         Attributes |= OBJ_AUDIT_OBJECT_CLOSE;
+    }
+
+    if (HandleTableEntry->GrantedAccess & ObpAccessProtectCloseBit)
+    {
+        Attributes |= OBJ_PROTECT_CLOSE;
     }
 
     return Attributes;
@@ -96,11 +101,11 @@ ExpWriteHandleEntry(
         Info->Object = &Header->Body;
         Info->UniqueProcessId = Walk->UniqueProcessId;
         Info->HandleValue = (ULONG_PTR)Handle;
-        Info->GrantedAccess = HandleTableEntry->GrantedAccess;
+        Info->GrantedAccess = HandleTableEntry->GrantedAccess &
+                              ~ObpAccessProtectCloseBit;
         Info->CreatorBackTraceIndex = 0;
         Info->ObjectTypeIndex = Header->TypeIndex;
-        Info->HandleAttributes =
-            ExpHandleAttributes(HandleTableEntry->ObAttributes);
+        Info->HandleAttributes = ExpHandleAttributes(HandleTableEntry);
         Info->Reserved = 0;
     }
     else
@@ -112,11 +117,11 @@ ExpWriteHandleEntry(
         Info->UniqueProcessId = (USHORT)Walk->UniqueProcessId;
         Info->CreatorBackTraceIndex = 0;
         Info->ObjectTypeIndex = Header->TypeIndex;
-        Info->HandleAttributes =
-            ExpHandleAttributes(HandleTableEntry->ObAttributes);
+        Info->HandleAttributes = ExpHandleAttributes(HandleTableEntry);
         Info->HandleValue = (USHORT)(ULONG_PTR)Handle;
         Info->Object = &Header->Body;
-        Info->GrantedAccess = HandleTableEntry->GrantedAccess;
+        Info->GrantedAccess = HandleTableEntry->GrantedAccess &
+                              ~ObpAccessProtectCloseBit;
     }
 
     Walk->Used += Needed;

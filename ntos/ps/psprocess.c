@@ -294,6 +294,10 @@ PspInsertProcess(
     Status = PspInsertCid(Process, &Process->UniqueProcessId);
     if (!NT_SUCCESS(Status)) return Status;
 
+    /* The handle table was made before the process had an identifier */
+    if (Process->ObjectTable != NULL)
+        Process->ObjectTable->UniqueProcessId = HandleToUlong(Process->UniqueProcessId);
+
     KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&PspActiveProcessLock);
     InsertTailList(&PsActiveProcessHead, &Process->ActiveProcessLinks);
