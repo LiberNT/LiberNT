@@ -162,6 +162,7 @@ KMT_TESTFUNC Test_HalBusData;
 KMT_TESTFUNC Test_HalMessageState;
 KMT_TESTFUNC Test_HalPortIo;
 #endif
+KMT_TESTFUNC Test_HalDmaAlignment;
 KMT_TESTFUNC Test_HalSystemInfo;
 KMT_TESTFUNC Test_IoContainerId;
 KMT_TESTFUNC Test_IoDriverKeyOpen;
@@ -555,6 +556,7 @@ const KMT_TEST TestList[] =
     { "-HalMessageState",                   Test_HalMessageState },
     { "HalPortIo",                          Test_HalPortIo },
 #endif
+    { "HalDmaAlignment",                    Test_HalDmaAlignment },
     { "HalSystemInfo",                      Test_HalSystemInfo },
     { "IoContainerId",                      Test_IoContainerId },
     { "-IoDriverKeyOpen",                   Test_IoDriverKeyOpen },

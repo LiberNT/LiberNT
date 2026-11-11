@@ -4375,6 +4375,8 @@ HalpArm64GetDmaAlignment(
     _In_ PDMA_ADAPTER DmaAdapter)
 {
     UNREFERENCED_PARAMETER(DmaAdapter);
+    if (HalpArm64DmaCoherency.SystemCoherent)
+        return 1;
     /* ARM64 typically requires cache-line alignment for DMA */
     return HalpArm64GetCacheLineSize();
 }
