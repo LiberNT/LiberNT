@@ -1356,11 +1356,27 @@ NtSetInformationFile(
     StackPtr->Parameters.SetFile.Length = Length;
     StackPtr->Parameters.SetFile.FileInformationClass = FileInformationClass;
 
-    if (FileInformationClass == FileRenameInformation ||
-        FileInformationClass == FileLinkInformation ||
-        FileInformationClass == FileMoveClusterInformation ||
-        FileInformationClass == FileRenameInformationEx ||
-        FileInformationClass == FileLinkInformationEx)
+    if ((FileInformationClass == FileRenameInformation ||
+         FileInformationClass == FileLinkInformation ||
+         FileInformationClass == FileMoveClusterInformation ||
+         FileInformationClass == FileRenameInformationEx ||
+         FileInformationClass == FileLinkInformationEx) &&
+        !((PFILE_RENAME_INFORMATION)Buffer)->RootDirectory &&
+        (((PFILE_RENAME_INFORMATION)Buffer)->FileNameLength < sizeof(WCHAR) ||
+         ((PFILE_RENAME_INFORMATION)Buffer)->FileName[0] != OBJ_NAME_PATH_SEPARATOR))
+    {
+        if (FileInformationClass == FileRenameInformation ||
+            FileInformationClass == FileLinkInformation)
+        {
+            StackPtr->Parameters.SetFile.ReplaceIfExists =
+                ((PFILE_RENAME_INFORMATION)Buffer)->ReplaceIfExists;
+        }
+    }
+    else if (FileInformationClass == FileRenameInformation ||
+             FileInformationClass == FileLinkInformation ||
+             FileInformationClass == FileMoveClusterInformation ||
+             FileInformationClass == FileRenameInformationEx ||
+             FileInformationClass == FileLinkInformationEx)
     {
         Irp->Tail.Overlay.CurrentStackLocation = StackPtr;
         Irp->CurrentLocation--;
