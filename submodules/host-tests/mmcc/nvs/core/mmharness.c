@@ -155,6 +155,8 @@ PagingWrite(PVOID Context, ULONG64 Slot, PVOID PageBuffer)
         return STATUS_UNEXPECTED_IO_ERROR;
 
     MachineCopyFromRam(MachineCurrent, Paging->Store + Slot * PAGE_SIZE, PageBuffer, PAGE_SIZE);
+    if (Paging->AfterWrite != NULL)
+        Paging->AfterWrite(Paging->AfterWriteContext);
     __sync_fetch_and_add(&Paging->WriteCalls, 1);
     return STATUS_SUCCESS;
 }
@@ -172,7 +174,10 @@ PagingWriteFrames(PVOID Context, ULONG64 Slot, const ULONG *Frames, ULONG PageCo
         return STATUS_UNEXPECTED_IO_ERROR;
 
     for (i = 0; i < PageCount; i++)
-        memcpy(Paging->Store + (Slot + i) * PAGE_SIZE, MachineFrame(MachineCurrent, Frames[i]), PAGE_SIZE);
+        MachineCopyFromRam(MachineCurrent, Paging->Store + (Slot + i) * PAGE_SIZE, MachineFrame(MachineCurrent, Frames[i]),
+                           PAGE_SIZE);
+    if (Paging->AfterWrite != NULL)
+        Paging->AfterWrite(Paging->AfterWriteContext);
     __sync_fetch_and_add(&Paging->WriteCalls, 1);
     return STATUS_SUCCESS;
 }
