@@ -885,20 +885,13 @@ ScheduleFirstBootSetup(VOID)
     RegCloseKey(hKey);
 }
 
-static BOOL
-ExpandStorageAndRestart(
+static VOID
+ExpandStorage(
     _In_ HWND hwndDlg)
 {
     WCHAR Text[512];
     HCURSOR hCursor;
     DWORD Error;
-
-    if (SetupMessage(GetParent(hwndDlg), TD_INFORMATION_ICON, TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON, IDOK,
-                     MAKEINTRESOURCEW(IDS_OOBE_EXPAND_RESTART),
-                     MAKEINTRESOURCEW(IDS_OOBE_EXPAND_RESTART_TEXT)) != IDOK)
-    {
-        return FALSE;
-    }
 
     hCursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
     Error = RunExpandStorage(L"/y");
@@ -908,21 +901,7 @@ ExpandStorageAndRestart(
     {
         LoadPrintfW(Text, ARRAYSIZE(Text), IDS_OOBE_EXPAND_FAILED, Error);
         SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_OK_BUTTON, IDOK, NULL, Text);
-        return TRUE;
     }
-
-    ScheduleFirstBootSetup();
-    EnableTokenPrivilege(SE_SHUTDOWN_NAME);
-    if (!ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OPERATINGSYSTEM | SHTDN_REASON_MINOR_RECONFIG |
-                                   SHTDN_REASON_FLAG_PLANNED))
-    {
-        DPRINT1("Restart after the storage expansion failed, error %lu\n", GetLastError());
-        EndFirstBootSetup();
-        return TRUE;
-    }
-
-    EndDialog(GetParent(hwndDlg), IDCANCEL);
-    return FALSE;
 }
 
 static INT_PTR
@@ -952,9 +931,9 @@ StoragePageProc(
             return TRUE;
 
         case SPN_WIZNEXT:
-            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT,
-                              (IsDlgButtonChecked(hwndDlg, IDC_EXPANDNOW) == BST_CHECKED &&
-                               !ExpandStorageAndRestart(hwndDlg)) ? -1 : 0);
+            if (IsDlgButtonChecked(hwndDlg, IDC_EXPANDNOW) == BST_CHECKED)
+                ExpandStorage(hwndDlg);
+            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, 0);
             return TRUE;
     }
 

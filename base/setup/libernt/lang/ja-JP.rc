@@ -69,9 +69,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "今すぐドライブ C: を拡張して再起動する(&E)", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "今すぐドライブ C: を拡張する(&E)", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "後で行う(&N)", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "LiberNT は拡張を完了するために一度再起動し、その後このセットアップがもう一度開きます。", IDC_STATIC, 0, 60, 290, 18
     LTEXT "後で行うこともできます。管理者としてコマンド プロンプトで lntexpandstorage を実行してください。次に表示されるコンポーネントには、1 GB を超える空き領域が必要です。", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -280,8 +279,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "ストレージ全体を使う"
     IDS_OOBE_STORAGESUBTITLE "LiberNT は、ドライブ C: を実行中のストレージ デバイス全体に広げることができます。"
     IDS_OOBE_STORAGE_INFO "ドライブ C: は %I64u MB で、空きは %I64u MB です。ストレージ デバイスの残りの部分はまだ使われていません。"
-    IDS_OOBE_EXPAND_RESTART "ドライブ C: を拡張するため LiberNT を再起動します"
-    IDS_OOBE_EXPAND_RESTART_TEXT "ドライブ C: をストレージ デバイス全体に広げた後、LiberNT が再起動します。再起動後、このセットアップがもう一度開きます。"
     IDS_OOBE_EXPAND_FAILED "ドライブ C: を拡張できませんでした (lntexpandstorage の終了コード %lu)。セットアップは続行します。後でコマンド プロンプトから lntexpandstorage を実行して、もう一度試すことができます。"
     IDS_OOBE_APPS_SPACE "選んだコンポーネントには約 %lu MB 必要です。ドライブ C: の空きは %I64u MB です。"
     IDS_OOBE_APPS_NOSPACE "選んだコンポーネントに必要な空き領域が足りません"

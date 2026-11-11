@@ -69,9 +69,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "&Расширить диск C: сейчас и перезагрузить", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Расширить диск C: сейчас", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "&Не сейчас", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "Для завершения LiberNT перезагрузится один раз, после чего эта программа настройки откроется снова.", IDC_STATIC, 0, 60, 290, 18
     LTEXT "Это можно сделать и позже: запустите lntexpandstorage в командной строке от имени администратора. Предлагаемым далее компонентам нужно более 1 ГБ свободного места.", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -280,8 +279,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "Используйте все хранилище"
     IDS_OOBE_STORAGESUBTITLE "LiberNT может увеличить диск C: на все устройство хранения, с которого он работает."
     IDS_OOBE_STORAGE_INFO "Диск C: имеет размер %I64u МБ, свободно %I64u МБ. Остальная часть устройства хранения пока не используется."
-    IDS_OOBE_EXPAND_RESTART "LiberNT перезагрузится, чтобы расширить диск C:"
-    IDS_OOBE_EXPAND_RESTART_TEXT "Диск C: увеличится на все устройство хранения, затем LiberNT перезагрузится. После перезагрузки эта программа настройки откроется снова."
     IDS_OOBE_EXPAND_FAILED "LiberNT не удалось расширить диск C: (код выхода lntexpandstorage: %lu). Настройка продолжается; позже можно повторить попытку с помощью lntexpandstorage в командной строке."
     IDS_OOBE_APPS_SPACE "Выбранным компонентам нужно около %lu МБ. На диске C: свободно %I64u МБ."
     IDS_OOBE_APPS_NOSPACE "Недостаточно свободного места для выбранных компонентов"

@@ -69,9 +69,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "&Agrandir le lecteur C: maintenant et redémarrer", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Agrandir le lecteur C: maintenant", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "&Pas maintenant", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "LiberNT redémarre une fois pour terminer, puis cette configuration s'ouvre à nouveau.", IDC_STATIC, 0, 60, 290, 18
     LTEXT "Vous pouvez aussi le faire plus tard : exécutez lntexpandstorage dans l'invite de commandes en tant qu'administrateur. Les composants proposés ensuite nécessitent plus de 1 Go d'espace libre.", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -280,8 +279,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "Utiliser tout votre espace de stockage"
     IDS_OOBE_STORAGESUBTITLE "LiberNT peut agrandir le lecteur C: jusqu'à remplir le périphérique de stockage d'où il s'exécute."
     IDS_OOBE_STORAGE_INFO "Le lecteur C: fait %I64u Mo, dont %I64u Mo libres. Le reste du périphérique de stockage n'est pas encore utilisé."
-    IDS_OOBE_EXPAND_RESTART "LiberNT redémarre pour agrandir le lecteur C:"
-    IDS_OOBE_EXPAND_RESTART_TEXT "Le lecteur C: s'agrandit pour remplir le périphérique de stockage, puis LiberNT redémarre. Cette configuration s'ouvre à nouveau après le redémarrage."
     IDS_OOBE_EXPAND_FAILED "LiberNT n'a pas pu agrandir le lecteur C: (code de sortie de lntexpandstorage : %lu). La configuration continue ; vous pourrez réessayer plus tard avec lntexpandstorage dans l'invite de commandes."
     IDS_OOBE_APPS_SPACE "Les composants sélectionnés nécessitent environ %lu Mo. Le lecteur C: dispose de %I64u Mo libres."
     IDS_OOBE_APPS_NOSPACE "Espace libre insuffisant pour les composants sélectionnés"

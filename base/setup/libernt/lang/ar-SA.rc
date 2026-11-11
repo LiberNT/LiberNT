@@ -69,9 +69,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "&توسيع محرك الأقراص C: الآن وإعادة التشغيل", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&توسيع محرك الأقراص C: الآن", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "&ليس الآن", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "يُعاد تشغيل LiberNT مرة واحدة للانتهاء، ثم يُفتح هذا الإعداد مرة أخرى.", IDC_STATIC, 0, 60, 290, 18
     LTEXT "يمكنك أيضًا القيام بذلك لاحقًا: شغّل lntexpandstorage في موجه الأوامر كمسؤول. تحتاج المكونات التي يعرضها هذا الإعداد بعد ذلك إلى أكثر من 1 غيغابايت من المساحة الحرة.", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -280,8 +279,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "استخدم كل مساحة التخزين"
     IDS_OOBE_STORAGESUBTITLE "يمكن لـ LiberNT توسيع محرك الأقراص C: ليملأ جهاز التخزين الذي يعمل منه."
     IDS_OOBE_STORAGE_INFO "حجم محرك الأقراص C: هو %I64u ميغابايت منها %I64u ميغابايت حرة. بقية جهاز التخزين غير مستخدمة بعد."
-    IDS_OOBE_EXPAND_RESTART "يُعاد تشغيل LiberNT لتوسيع محرك الأقراص C:"
-    IDS_OOBE_EXPAND_RESTART_TEXT "يتوسع محرك الأقراص C: ليملأ جهاز التخزين، ثم يُعاد تشغيل LiberNT. يُفتح هذا الإعداد مرة أخرى بعد إعادة التشغيل."
     IDS_OOBE_EXPAND_FAILED "تعذّر على LiberNT توسيع محرك الأقراص C: (رمز خروج lntexpandstorage هو %lu). يستمر الإعداد؛ يمكنك المحاولة لاحقًا باستخدام lntexpandstorage في موجه الأوامر."
     IDS_OOBE_APPS_SPACE "تحتاج المكونات المحددة إلى نحو %lu ميغابايت. يحتوي محرك الأقراص C: على %I64u ميغابايت حرة."
     IDS_OOBE_APPS_NOSPACE "لا توجد مساحة حرة كافية للمكونات المحددة"

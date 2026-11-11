@@ -69,9 +69,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "立即扩展驱动器 C: 并重新启动(&E)", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "立即扩展驱动器 C:(&E)", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "暂不(&N)", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "LiberNT 会重新启动一次以完成操作，然后此设置程序会再次打开。", IDC_STATIC, 0, 60, 290, 18
     LTEXT "你也可以稍后执行此操作：以管理员身份在命令提示符中运行 lntexpandstorage。接下来提供的组件需要超过 1 GB 的可用空间。", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -280,8 +279,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "使用全部存储空间"
     IDS_OOBE_STORAGESUBTITLE "LiberNT 可以扩大驱动器 C:，使其占满运行 LiberNT 的存储设备。"
     IDS_OOBE_STORAGE_INFO "驱动器 C: 大小为 %I64u MB，可用 %I64u MB。存储设备的其余部分尚未使用。"
-    IDS_OOBE_EXPAND_RESTART "LiberNT 将重新启动以扩展驱动器 C:"
-    IDS_OOBE_EXPAND_RESTART_TEXT "驱动器 C: 将扩大到占满存储设备，然后 LiberNT 重新启动。重新启动后，此设置程序会再次打开。"
     IDS_OOBE_EXPAND_FAILED "LiberNT 无法扩展驱动器 C: (lntexpandstorage 退出代码 %lu)。设置将继续；你可以稍后在命令提示符中使用 lntexpandstorage 重试。"
     IDS_OOBE_APPS_SPACE "所选组件大约需要 %lu MB。驱动器 C: 有 %I64u MB 可用空间。"
     IDS_OOBE_APPS_NOSPACE "可用空间不足，无法安装所选组件"

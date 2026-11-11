@@ -69,9 +69,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "&Espandi l'unità C: ora e riavvia", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Espandi l'unità C: ora", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "&Non ora", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "LiberNT si riavvia una volta per completare, poi questa configurazione si riapre.", IDC_STATIC, 0, 60, 290, 18
     LTEXT "Puoi farlo anche più tardi: esegui lntexpandstorage nel Prompt dei comandi come amministratore. I componenti proposti in seguito richiedono più di 1 GB di spazio libero.", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -280,8 +279,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "Usa tutto lo spazio di archiviazione"
     IDS_OOBE_STORAGESUBTITLE "LiberNT può espandere l'unità C: fino a occupare il dispositivo di archiviazione da cui viene eseguito."
     IDS_OOBE_STORAGE_INFO "L'unità C: è di %I64u MB con %I64u MB liberi. Il resto del dispositivo di archiviazione non è ancora usato."
-    IDS_OOBE_EXPAND_RESTART "LiberNT si riavvia per espandere l'unità C:"
-    IDS_OOBE_EXPAND_RESTART_TEXT "L'unità C: viene espansa fino a occupare il dispositivo di archiviazione, poi LiberNT si riavvia. Questa configurazione si riapre dopo il riavvio."
     IDS_OOBE_EXPAND_FAILED "LiberNT non è riuscito a espandere l'unità C: (codice di uscita di lntexpandstorage: %lu). La configurazione continua; puoi riprovare più tardi con lntexpandstorage nel Prompt dei comandi."
     IDS_OOBE_APPS_SPACE "I componenti selezionati richiedono circa %lu MB. L'unità C: ha %I64u MB liberi."
     IDS_OOBE_APPS_NOSPACE "Spazio libero insufficiente per i componenti selezionati"

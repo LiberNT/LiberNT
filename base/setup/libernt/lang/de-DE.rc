@@ -69,9 +69,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "Laufwerk C: jetzt &erweitern und neu starten", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "Laufwerk C: jetzt &erweitern", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "&Nicht jetzt", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "LiberNT startet zum Abschluss einmal neu, danach wird dieses Setup erneut geöffnet.", IDC_STATIC, 0, 60, 290, 18
     LTEXT "Sie können das auch später tun: Führen Sie lntexpandstorage in der Eingabeaufforderung als Administrator aus. Die als Nächstes angebotenen Komponenten benötigen mehr als 1 GB freien Speicher.", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -280,8 +279,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "Den gesamten Speicher nutzen"
     IDS_OOBE_STORAGESUBTITLE "LiberNT kann Laufwerk C: auf das gesamte Speichergerät vergrößern, von dem es ausgeführt wird."
     IDS_OOBE_STORAGE_INFO "Laufwerk C: hat %I64u MB, davon %I64u MB frei. Der Rest des Speichergeräts wird noch nicht genutzt."
-    IDS_OOBE_EXPAND_RESTART "LiberNT startet neu, um Laufwerk C: zu erweitern"
-    IDS_OOBE_EXPAND_RESTART_TEXT "Laufwerk C: wird auf das gesamte Speichergerät vergrößert, danach startet LiberNT neu. Dieses Setup wird nach dem Neustart erneut geöffnet."
     IDS_OOBE_EXPAND_FAILED "LiberNT konnte Laufwerk C: nicht erweitern (Exitcode von lntexpandstorage: %lu). Setup wird fortgesetzt; Sie können es später mit lntexpandstorage in der Eingabeaufforderung erneut versuchen."
     IDS_OOBE_APPS_SPACE "Die ausgewählten Komponenten benötigen etwa %lu MB. Laufwerk C: hat %I64u MB frei."
     IDS_OOBE_APPS_NOSPACE "Nicht genügend freier Speicher für die ausgewählten Komponenten"
