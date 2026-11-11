@@ -382,8 +382,7 @@ CmpDoCreate(
 
     RtlZeroMemory(Node, FIELD_OFFSET(CM_KEY_NODE, Name));
 
-    Node->Signature = (Flags & KEY_SYM_LINK) ? CM_LINK_NODE_SIGNATURE
-                                             : CM_KEY_NODE_SIGNATURE;
+    Node->Signature = CM_KEY_NODE_SIGNATURE;
     Node->Flags = Flags;
     Node->Parent = Cell;
     Node->Security = HCELL_NIL;
