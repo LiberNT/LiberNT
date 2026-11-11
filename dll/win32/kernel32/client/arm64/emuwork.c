@@ -61,3 +61,12 @@ BasepPostEmulatorWork(
         Entry->args[1] = Argument1;
     RtlWow64PushCrossProcessWorkOntoWorkList(&List->work_list, Entry, &Unused);
 }
+
+NTSTATUS
+WINAPI
+BasepSuspendWow64Thread(
+    _In_ HANDLE Thread,
+    _Out_ PULONG PreviousSuspendCount)
+{
+    return RtlWow64SuspendThread(Thread, PreviousSuspendCount);
+}

@@ -1410,6 +1410,7 @@
 @ stdcall Wow64GetThreadContext(long ptr)
 @ stdcall Wow64RevertWow64FsRedirection(ptr) kernel32.Wow64RevertWow64FsRedirection
 @ stdcall Wow64SetThreadContext(long ptr)
+@ stdcall Wow64SuspendThread(ptr) kernel32.Wow64SuspendThread
 @ stdcall WriteConsoleA(long ptr long ptr ptr)
 @ stdcall WriteConsoleInputA(long ptr long ptr)
 @ stdcall WriteConsoleInputW(long ptr long ptr)

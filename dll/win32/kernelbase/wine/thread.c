@@ -793,6 +793,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH TlsSetValue( DWORD index, LPVOID value )
 BOOL WINAPI Wow64GetThreadContext( HANDLE handle, WOW64_CONTEXT *context)
 {
 #ifdef __i386__
+    if (!is_wow64) return set_ntstatus( STATUS_NOT_IMPLEMENTED );
     return set_ntstatus( NtGetContextThread( handle, (CONTEXT *)context ));
 #elif defined(__x86_64__) || (defined(__REACTOS__) && defined(_WIN64))
     return set_ntstatus( RtlWow64GetThreadContext( handle, context ));
@@ -808,6 +809,7 @@ BOOL WINAPI Wow64GetThreadContext( HANDLE handle, WOW64_CONTEXT *context)
 BOOL WINAPI Wow64SetThreadContext( HANDLE handle, const WOW64_CONTEXT *context)
 {
 #ifdef __i386__
+    if (!is_wow64) return set_ntstatus( STATUS_NOT_IMPLEMENTED );
     return set_ntstatus( NtSetContextThread( handle, (const CONTEXT *)context ));
 #elif defined(__x86_64__) || (defined(__REACTOS__) && defined(_WIN64))
     return set_ntstatus( RtlWow64SetThreadContext( handle, context ));

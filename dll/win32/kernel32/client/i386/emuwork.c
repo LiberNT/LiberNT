@@ -43,3 +43,25 @@ BasepPostEmulatorWork(
     UNREFERENCED_PARAMETER(Argument0);
     UNREFERENCED_PARAMETER(Argument1);
 }
+
+NTSTATUS
+WINAPI
+BasepSuspendWow64Thread(
+    _In_ HANDLE Thread,
+    _Out_ PULONG PreviousSuspendCount)
+{
+    ULONG_PTR Wow64Peb = 0;
+    NTSTATUS Status;
+
+    *PreviousSuspendCount = 0;
+
+    Status = NtQueryInformationProcess(NtCurrentProcess(),
+                                       ProcessWow64Information,
+                                       &Wow64Peb,
+                                       sizeof(Wow64Peb),
+                                       NULL);
+    if (!NT_SUCCESS(Status) || !Wow64Peb)
+        return STATUS_NOT_IMPLEMENTED;
+
+    return NtSuspendThread(Thread, PreviousSuspendCount);
+}

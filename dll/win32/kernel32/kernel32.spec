@@ -1416,7 +1416,7 @@
 @ stdcall -version=0x600+ Wow64GetThreadContext(ptr ptr) kernelbase.Wow64GetThreadContext
 @ stdcall Wow64RevertWow64FsRedirection(ptr)
 @ stdcall -version=0x600+ Wow64SetThreadContext(ptr ptr) kernelbase.Wow64SetThreadContext
-@ stub -version=0x600+ Wow64SuspendThread
+@ stdcall -version=0x600+ Wow64SuspendThread(ptr)
 @ stdcall WriteConsoleA(long ptr long ptr ptr) kernelbase.WriteConsoleA
 @ stdcall WriteConsoleInputA(long ptr long ptr) kernelbase.WriteConsoleInputA
 @ stdcall WriteConsoleInputVDMA(long long long long) kernelbase.WriteConsoleInputVDMA

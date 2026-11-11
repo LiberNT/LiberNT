@@ -463,6 +463,19 @@ BasepPostEmulatorWork(
     _In_ ULONG Argument0,
     _In_ ULONG Argument1);
 
+NTSTATUS
+WINAPI
+BasepSuspendWow64Thread(
+    _In_ HANDLE Thread,
+    _Out_ PULONG PreviousSuspendCount);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlWow64SuspendThread(
+    _In_ HANDLE ThreadHandle,
+    _Out_ PULONG PreviousSuspendCount);
+
 VOID
 NTAPI
 BasepLocateExeLdrEntry(IN PLDR_DATA_TABLE_ENTRY Entry,

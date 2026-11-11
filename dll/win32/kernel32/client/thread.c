@@ -730,6 +730,23 @@ SuspendThread(IN HANDLE hThread)
     return PreviousSuspendCount;
 }
 
+DWORD
+WINAPI
+Wow64SuspendThread(IN HANDLE hThread)
+{
+    ULONG PreviousSuspendCount;
+    NTSTATUS Status;
+
+    Status = BasepSuspendWow64Thread(hThread, &PreviousSuspendCount);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return -1;
+    }
+
+    return PreviousSuspendCount;
+}
+
 /*
  * @implemented
  */
