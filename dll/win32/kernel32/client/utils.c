@@ -1361,6 +1361,7 @@ BasepQuerySaferTransparentEnabled(HANDLE RootDirectory, PCWSTR KeyPath)
     return Value;
 }
 
+/* TODO: TransparentEnabled 2 (all software files) does not make the loader check DLLs against the policy */
 static BOOLEAN
 BasepIsSaferEnforced(VOID)
 {
