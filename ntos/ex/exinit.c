@@ -924,6 +924,7 @@ ExpInitializeExecutive(
     }
 
     ExpReadLoadOptions(LoaderBlock);
+    ExpFirmwareType = LoaderBlock->FirmwareInformation.FirmwareTypeEfi ? FirmwareTypeUefi : FirmwareTypeBios;
     ExpInitializeSystemRoot(LoaderBlock);
     ExpInitializeImageNumbers(LoaderBlock);
 
