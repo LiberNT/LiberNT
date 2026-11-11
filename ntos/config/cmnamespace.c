@@ -287,6 +287,15 @@ CmpGetNextName(
     RemainingName->Buffer += i;
     RemainingName->Length -= NextName->Length;
 
+    Count = RemainingName->Length / sizeof(WCHAR);
+
+    for (i = 0; i < Count; i++)
+    {
+        if (RemainingName->Buffer[i] != OBJ_NAME_PATH_SEPARATOR) break;
+    }
+
+    if (i == Count) RemainingName->Length = 0;
+
     if (RemainingName->Length == 0) *LastName = TRUE;
     return TRUE;
 }
