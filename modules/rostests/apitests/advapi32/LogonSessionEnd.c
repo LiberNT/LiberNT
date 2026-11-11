@@ -10,9 +10,13 @@
 #include <winuser.h>
 #include <aclapi.h>
 #include <lm.h>
+#include <ndk/lpcfuncs.h>
+#include <ndk/obfuncs.h>
+#include <srmp.h>
 
 #define TEST_USER L"LntLogoffTest"
 #define TEST_PASSWORD L"Lnt!Logoff#2026q"
+#define CYCLES 16
 
 typedef NTSTATUS (NTAPI *PLSA_ENUMERATE_LOGON_SESSIONS)(PULONG, PLUID *);
 typedef NTSTATUS (NTAPI *PLSA_FREE_RETURN_BUFFER)(PVOID);
@@ -21,26 +25,89 @@ static PLSA_ENUMERATE_LOGON_SESSIONS pLsaEnumerateLogonSessions;
 static PLSA_FREE_RETURN_BUFFER pLsaFreeReturnBuffer;
 
 static
-BOOL
-IsSessionListed(
-    _In_ PLUID LogonId)
+ULONG
+CountListed(
+    _In_reads_(IdCount) const LUID *LogonIds,
+    _In_ ULONG IdCount)
 {
     PLUID Sessions = NULL;
-    ULONG Count = 0, Index;
-    BOOL Listed = FALSE;
+    ULONG Count = 0, Index, Id, Listed = 0;
     NTSTATUS Status;
 
     Status = pLsaEnumerateLogonSessions(&Count, &Sessions);
     ok(Status == STATUS_SUCCESS, "LsaEnumerateLogonSessions failed 0x%lx\n", Status);
-    if (Status != STATUS_SUCCESS) return FALSE;
+    if (Status != STATUS_SUCCESS) return 0;
 
-    for (Index = 0; Index < Count && !Listed; Index++)
+    for (Id = 0; Id < IdCount; Id++)
     {
-        Listed = (Sessions[Index].LowPart == LogonId->LowPart && Sessions[Index].HighPart == LogonId->HighPart);
+        for (Index = 0; Index < Count; Index++)
+        {
+            if (Sessions[Index].LowPart != LogonIds[Id].LowPart || Sessions[Index].HighPart != LogonIds[Id].HighPart)
+                continue;
+
+            Listed++;
+            break;
+        }
     }
 
     pLsaFreeReturnBuffer(Sessions);
     return Listed;
+}
+
+static
+ULONG
+WaitForSessionsToEnd(
+    _In_reads_(IdCount) const LUID *LogonIds,
+    _In_ ULONG IdCount)
+{
+    ULONGLONG Deadline = GetTickCount64() + 2000;
+    ULONG Listed;
+
+    /* The authority hears of the last token going and ends the session after the fact */
+    do
+    {
+        Listed = CountListed(LogonIds, IdCount);
+        if (Listed == 0) break;
+        Sleep(1);
+    } while (GetTickCount64() < Deadline);
+
+    return Listed;
+}
+
+static
+BOOL
+ForgeSessionEnd(
+    _In_ PLUID LogonId)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\SeLsaCommandPort");
+    ALPC_PORT_ATTRIBUTES Attributes;
+    LSAP_RM_API_MESSAGE Message, Reply;
+    LARGE_INTEGER Timeout;
+    HANDLE Port = NULL;
+    NTSTATUS Status;
+    SIZE_T Length;
+
+    ZeroMemory(&Attributes, sizeof(Attributes));
+    Attributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+    Attributes.SecurityQos.Length = sizeof(Attributes.SecurityQos);
+    Attributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    Attributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Attributes.SecurityQos.EffectiveOnly = TRUE;
+
+    Timeout.QuadPart = -500 * 10000LL;
+    Status = NtAlpcConnectPort(&Port, &Name, NULL, &Attributes, ALPC_SYNC_CONNECTION, NULL, NULL, NULL, NULL, NULL, &Timeout);
+    if (Status != STATUS_SUCCESS || Port == NULL) return FALSE;
+
+    ZeroMemory(&Message, sizeof(Message));
+    Message.Header.u1.s1.TotalLength = (CSHORT)(sizeof(PORT_MESSAGE) + sizeof(ULONG) + sizeof(LUID));
+    Message.Header.u1.s1.DataLength = Message.Header.u1.s1.TotalLength - (CSHORT)sizeof(PORT_MESSAGE);
+    Message.ApiNumber = LsapLogonSessionDeletedApi;
+    Message.u.LogonLuid = *LogonId;
+
+    Length = sizeof(Reply);
+    NtAlpcSendWaitReceivePort(Port, ALPC_MSGFLG_SYNC_REQUEST, &Message.Header, NULL, &Reply.Header, &Length, NULL, &Timeout);
+    NtClose(Port);
+    return TRUE;
 }
 
 static
@@ -194,11 +261,10 @@ START_TEST(LogonSessionEnd)
     USER_INFO_1 UserInfo;
     NET_API_STATUS NetStatus;
     HMODULE Secur32;
-    LUID First, Second;
-    ULONGLONG Deadline;
+    LUID First, Second, Batch[CYCLES];
+    ULONG Cycle, Started = 0;
     HANDLE Token;
     char **Arguments;
-    BOOL Listed;
     int Count;
 
     Count = winetest_get_mainargs(&Arguments);
@@ -230,7 +296,9 @@ START_TEST(LogonSessionEnd)
 
     if (LogOn(&Token, &First))
     {
-        ok(IsSessionListed(&First), "the new logon session is not listed\n");
+        ok(CountListed(&First, 1) == 1, "the new logon session is not listed\n");
+        ok(!ForgeSessionEnd(&First), "a user-mode client got the authority's command port\n");
+        ok(CountListed(&First, 1) == 1, "a forged notice ended a live logon session\n");
         RunChildWithToken(Token);
         CloseHandle(Token);
     }
@@ -242,15 +310,15 @@ START_TEST(LogonSessionEnd)
         CloseHandle(Token);
     }
 
-    /* The authority hears of the last token going and ends the session after the fact */
-    Deadline = GetTickCount64() + 2000;
-    do
+    ok(WaitForSessionsToEnd(&First, 1) == 0, "the first logon session outlived its last token\n");
+
+    for (Cycle = 0; Cycle < CYCLES; Cycle++)
     {
-        Listed = IsSessionListed(&First);
-        if (!Listed) break;
-        Sleep(1);
-    } while (GetTickCount64() < Deadline);
-    ok(!Listed, "the first logon session outlived its last token\n");
+        if (!LogOn(&Token, &Batch[Started])) break;
+        CloseHandle(Token);
+        Started++;
+    }
+    ok(WaitForSessionsToEnd(Batch, Started) == 0, "logon sessions of %lu logons and logoffs outlived their tokens\n", Started);
 
     NetUserDel(NULL, TEST_USER);
 }
