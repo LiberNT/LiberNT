@@ -271,6 +271,7 @@ static SystemIdentificationSource read_system_id( BYTE *id )
 
     /* TODO: Mix in the publisher ID of a packaged caller; every unpackaged app gets the same ID. */
     /* FIXME: Any caller can read the seed and derive another publisher's ID; Windows derives it out of reach (INFO_NEEDED). */
+    /* FIXME: Windows 11 returns different ID bytes on every call (undocumented structure, INFO_NEEDED); these never change. */
     if (BCryptHash( BCRYPT_SHA256_ALG_HANDLE, NULL, 0, seed, sizeof(seed), id, SYSTEM_ID_BYTES ))
         source = SystemIdentificationSource_None;
     SecureZeroMemory( seed, sizeof(seed) );

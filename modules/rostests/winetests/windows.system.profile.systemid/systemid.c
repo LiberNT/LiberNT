@@ -129,36 +129,6 @@ static void test_SystemIdentification_Statics(void)
         todo_wine
         ok( !empty_id, "got empty system_id.\n" );
     }
-#ifdef __REACTOS__
-    {
-        SystemIdentificationSource system_id_source2 = 0xdeadbeef;
-        ISystemIdentificationInfo *system_id_info2;
-        IBufferByteAccess *byte_access2;
-        IBuffer *system_id_buffer3;
-        UINT32 capacity2 = 0;
-        BYTE *system_id2;
-
-        hr = ISystemIdentificationStatics_GetSystemIdForPublisher( system_id_statics, &system_id_info2 );
-        ok( hr == S_OK, "got hr %#lx.\n", hr );
-        hr = ISystemIdentificationInfo_get_Source( system_id_info2, &system_id_source2 );
-        ok( hr == S_OK, "got hr %#lx.\n", hr );
-        ok( system_id_source2 == system_id_source, "got source %u, then %u.\n", system_id_source, system_id_source2 );
-        hr = ISystemIdentificationInfo_get_Id( system_id_info2, &system_id_buffer3 );
-        ok( hr == S_OK, "got hr %#lx.\n", hr );
-        hr = IBuffer_get_Capacity( system_id_buffer3, &capacity2 );
-        ok( hr == S_OK, "got hr %#lx.\n", hr );
-        ok( capacity2 == capacity, "got capacity %u, then %u.\n", capacity, capacity2 );
-        hr = IBuffer_QueryInterface( system_id_buffer3, &IID_IBufferByteAccess, (void **)&byte_access2 );
-        ok( hr == S_OK, "got hr %#lx.\n", hr );
-        hr = IBufferByteAccess_Buffer( byte_access2, &system_id2 );
-        ok( hr == S_OK, "got hr %#lx.\n", hr );
-        if (capacity2 == capacity)
-            ok( !memcmp( system_id, system_id2, capacity ), "the system ID changed between two calls.\n" );
-        IBufferByteAccess_Release( byte_access2 );
-        IBuffer_Release( system_id_buffer3 );
-        ISystemIdentificationInfo_Release( system_id_info2 );
-    }
-#endif
     ref = IBufferByteAccess_Release( byte_access );
     todo_wine
     ok( ref == 3, "got ref %ld.\n", ref );
