@@ -862,7 +862,16 @@ KeSetSystemTime(
         Timer->TimerListEntry.Blink = NULL;
 
         /* The due time was an absolute system time; shift it and re-derive */
-        Timer->DueTime.QuadPart -= (ULONGLONG)Difference.QuadPart;
+        if ((Difference.QuadPart > 0) &&
+            (Timer->DueTime.QuadPart <= (ULONGLONG)Difference.QuadPart))
+        {
+            /* A due time the change moves before the machine started has already passed */
+            Timer->DueTime.QuadPart = 0;
+        }
+        else
+        {
+            Timer->DueTime.QuadPart -= (ULONGLONG)Difference.QuadPart;
+        }
         Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
         Timer->Header.Hand = (UCHAR)Hand;
         Timer->Header.Inserted = TRUE;
