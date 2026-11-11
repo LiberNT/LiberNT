@@ -9,9 +9,11 @@
 #include <apitest.h>
 
 extern void func_EmbeddedPointers(void);
+extern void func_ServerRestart(void);
 
 const struct test winetest_testlist[] =
 {
     { "EmbeddedPointers", func_EmbeddedPointers },
+    { "ServerRestart", func_ServerRestart },
     { 0, 0 }
 };
