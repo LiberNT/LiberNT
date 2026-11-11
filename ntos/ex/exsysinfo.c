@@ -1406,18 +1406,21 @@ NtQuerySystemInformation(
                 ULONG Room;
                 USHORT Node;
 
-                if (Length < Header)
+                if (Length < sizeof(Numa->HighestNodeNumber))
                 {
                     ResultLength = Header;
                     Status = STATUS_INFO_LENGTH_MISMATCH;
                     break;
                 }
 
-                /* A caller may ask for the header alone, or for as many nodes as it has room for */
+                /* A caller may ask for the highest node alone, the header, or as many nodes as it has room for */
+                Numa->HighestNodeNumber = KeQueryHighestNodeNumber();
+                ResultLength = sizeof(Numa->HighestNodeNumber);
+                if (Length < Header) break;
+
                 Room = (Length - Header) / sizeof(Numa->ActiveProcessorsAffinityMask[0]);
                 if (Room > MAXIMUM_NUMA_NODES) Room = MAXIMUM_NUMA_NODES;
 
-                Numa->HighestNodeNumber = KeQueryHighestNodeNumber();
                 Numa->Reserved = 0;
 
                 for (Node = 0; Node < Room; Node++)
@@ -1430,7 +1433,64 @@ NtQuerySystemInformation(
                 break;
             }
 
+            case SystemNumaAvailableMemory:
+            {
+                PSYSTEM_NUMA_INFORMATION Numa = SystemInformation;
+                const ULONG Header = FIELD_OFFSET(SYSTEM_NUMA_INFORMATION,
+                                                  AvailableMemory);
+                ULONG Room;
+                USHORT Node;
+
+                if (Length < Header)
+                {
+                    ResultLength = Header;
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                Room = (Length - Header) / sizeof(Numa->AvailableMemory[0]);
+                if (Room > MAXIMUM_NUMA_NODES) Room = MAXIMUM_NUMA_NODES;
+
+                Numa->HighestNodeNumber = KeQueryHighestNodeNumber();
+                Numa->Reserved = 0;
+
+                /* TODO: the memory manager keeps no free count per node, so a machine with several nodes reports all of it on node 0 */
+                for (Node = 0; Node < Room; Node++)
+                {
+                    Numa->AvailableMemory[Node] = (Node == 0) ? ((ULONGLONG)MmAvailablePages << PAGE_SHIFT) : 0;
+                }
+
+                ResultLength = Header + Room * sizeof(Numa->AvailableMemory[0]);
+                break;
+            }
+
             case SystemNumaProximityNodeInformation:
+            {
+                PSYSTEM_NUMA_PROXIMITY_MAP Map = SystemInformation;
+                ULONG ProximityId;
+                USHORT Node;
+
+                ResultLength = sizeof(SYSTEM_NUMA_PROXIMITY_MAP);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ProximityId = Map->NodeProximityId;
+                Status = STATUS_NOT_FOUND;
+                for (Node = 0; Node < KeNumberNodes; Node++)
+                {
+                    if (KeNodeBlock[Node] != NULL && KeNodeBlock[Node]->ProximityId == ProximityId)
+                    {
+                        Map->NodeNumber = Node;
+                        Status = STATUS_SUCCESS;
+                        break;
+                    }
+                }
+                break;
+            }
+
             case SystemNodeDistanceInformation:
             {
                 ResultLength = sizeof(ULONG);
