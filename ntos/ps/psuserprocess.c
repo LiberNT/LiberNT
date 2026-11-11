@@ -943,6 +943,7 @@ PspBuildProcessParameters32(
 #define PSP_WOW64_X86_CODE_SELECTOR 0x23
 #define PSP_WOW64_X86_DATA_SELECTOR 0x2B
 #define PSP_WOW64_X86_TEB_SELECTOR  0x53
+#define PSP_WOW64_X86_MXCSR         0x1F80
 
 static
 NTSTATUS
@@ -963,7 +964,7 @@ PspCreateWow64CpuArea(
     CpuInit.Context.FloatSave.ControlWord = 0x27F;
     CpuInit.Context.FloatSave.TagWord = 0xFFFF;
     FxSave->ControlWord = 0x27F;
-    FxSave->MxCsr = INITIAL_MXCSR;
+    FxSave->MxCsr = PSP_WOW64_X86_MXCSR;
     CpuInit.Context.EFlags = 0x202;
     CpuInit.Context.SegCs = PSP_WOW64_X86_CODE_SELECTOR;
     CpuInit.Context.SegDs = PSP_WOW64_X86_DATA_SELECTOR;
